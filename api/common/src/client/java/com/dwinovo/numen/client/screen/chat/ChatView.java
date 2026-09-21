@@ -4,6 +4,7 @@ import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.llm.ConvoLog;
 import com.dwinovo.numen.agent.llm.ConvoState;
 import com.dwinovo.numen.agent.conversation.Conversation;
+import com.dwinovo.numen.agent.conversation.Mentions;
 import com.dwinovo.numen.agent.conversation.Transcript;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
@@ -29,6 +30,8 @@ import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.client.resources.PlayerSkin;
 import net.minecraft.client.resources.language.I18n;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 
@@ -74,6 +77,8 @@ public final class ChatView {
     private static final float REVEAL_CPS = 80f;
     private static final int REVEAL_MAX_LAG = 120;
     private static final String[] SPIN = {"|", "/", "-", "\\"};
+    /** 连发合并里代表主人的那一格——主人不是同伴,没有 UUID。 */
+    private static final UUID OWNER = net.minecraft.Util.NIL_UUID;
 
     // ---- palette: re-read from the CURRENT theme each frame (loadPalette), so the
     // Settings picker recolours the transcript live. Field names keep the constant
@@ -82,6 +87,8 @@ public final class ChatView {
     private int AI_FILL, AI_BORDER, OWN_FILL, OWN_BORDER, QUEUED_FILL, QUEUED_BORDER, CHIP_FILL;
     /** 机器行的左缘竖线色(工具/思考过程共用)。 */
     private int TRACE_BAR;
+    /** 主人话里 @ 到的名字。 */
+    private int MENTION;
 
     private void loadPalette() {
         UiTheme t = UiTheme.current();
@@ -100,6 +107,7 @@ public final class ChatView {
         QUEUED_BORDER = t.queuedBorder();
         CHIP_FILL = t.chipFill();
         TRACE_BAR = t.surfaceBorder();
+        MENTION = t.cta();
     }
 
     private static ResourceLocation spr(String n) {
@@ -233,19 +241,20 @@ public final class ChatView {
         List<Block> out = new ArrayList<>();
         int innerW = bubbleMaxW - PAD_H * 2;
         int chipTextW = bubbleMaxW - PAD_H * 2 - ICON_W;
-        Boolean lastSide = null;
+        UUID last = null;
         for (McpTranscript.Line ln : McpTranscript.view(id)) {
             switch (ln.kind()) {
                 case OWNER -> {
-                    boolean first = lastSide == null || !lastSide;
-                    out.add(bubble(true, null, ln.text(), TXT, OWN_FILL, OWN_BORDER, innerW, first, null));
-                    lastSide = true;
+                    boolean first = !OWNER.equals(last);
+                    out.add(bubble(true, null, Nb.colored(ln.text(), TXT), OWN_FILL, OWN_BORDER,
+                            innerW, first, null));
+                    last = OWNER;
                 }
                 case SAY -> {
-                    boolean first = lastSide == null || lastSide;
-                    out.add(bubble(false, first ? speaker(id) : null, ln.text(),
-                            TXT, AI_FILL, AI_BORDER, innerW, first, id));
-                    lastSide = false;
+                    boolean first = !id.equals(last);
+                    out.add(bubble(false, first ? speaker(id) : null, Nb.colored(ln.text(), TXT),
+                            AI_FILL, AI_BORDER, innerW, first, id));
+                    last = id;
                 }
                 case TOOL -> out.add(new Chip(List.of(new ChipRow(
                         ln.error() ? "✗" : "✔", ln.error() ? FAIL : OK,
@@ -316,7 +325,7 @@ public final class ChatView {
      *  {@code showAvatar} false = a consecutive message from the same side (head hidden);
      *  {@code who} = the companion whose face goes on it (null on the owner's side). */
     private record Bubble(boolean own, String label, List<FormattedCharSequence> lines,
-                          int maxLineW, int textColor, int fill, int border,
+                          int maxLineW, int fill, int border,
                           boolean showAvatar, UUID who) implements Block {}
 
     /** A run of tool calls. {@code foldKey} non-null = finished group, clickable to expand/fold. */
@@ -387,9 +396,10 @@ public final class ChatView {
         }
         int innerW = bubbleMaxW - PAD_H * 2;
         List<LlmToolCall> group = new ArrayList<>();
-        // Consecutive same-side messages group like a chat app: avatar + name only on
-        // the first of a run. Chips don't break a run; notices do. null = run broken.
-        Boolean lastSide = null;
+        // 连发合并(聊天软件的惯例):同一个人接连说的话只在第一句画头像和名字。多人会话里
+        // "同一个人"按说话的那只算,不按左右哪一侧——换了一只就得重新亮名字。
+        // 工具行不打断连发,提示行打断。null = 连发已断。
+        UUID last = null;
         int msgIndex = -1;
         for (Transcript.Entry entry : source) {
             msgIndex++;
@@ -399,24 +409,24 @@ public final class ChatView {
                     flushTools(out, group, done, failed, bubbleMaxW);
                     if (ConvoLog.PERSONA_DIVIDER.equals(u.content())) {
                         notice(out, I18n.get("numen.chat.persona_changed"));
-                        lastSide = null;
+                        last = null;
                         continue;
                     }
                     if (ConvoLog.COMPACT_DIVIDER.equals(u.content())) {
                         notice(out, I18n.get("numen.chat.compacted"));
-                        lastSide = null;
+                        last = null;
                         continue;
                     }
                     if (ConvoLog.CLEAR_DIVIDER.equals(u.content())) {
                         notice(out, I18n.get("numen.chat.cleared"));
-                        lastSide = null;
+                        last = null;
                         continue;
                     }
                     String shown = ownerText(u.content());   // owner's words only, never injected content
                     if (shown.isEmpty()) continue;
-                    boolean first = lastSide == null || !lastSide;
-                    out.add(bubble(true, null, shown, TXT, OWN_FILL, OWN_BORDER, innerW, first, null));
-                    lastSide = true;
+                    boolean first = !OWNER.equals(last);
+                    out.add(bubble(true, null, mentionsLit(shown), OWN_FILL, OWN_BORDER, innerW, first, null));
+                    last = OWNER;
                 }
                 case ConvoState.Msg.Assistant a -> {
                     AssistantTurn turn = a.turn();
@@ -429,10 +439,10 @@ public final class ChatView {
                     String spoken = ChatDisplayModes.current().assistantText(turn.content());
                     if (!spoken.isBlank()) {
                         flushTools(out, group, done, failed, bubbleMaxW);   // spoken reply breaks the fold
-                        boolean first = lastSide == null || lastSide;
-                        out.add(bubble(false, first ? speaker(entry.companion()) : null, spoken,
-                                TXT, AI_FILL, AI_BORDER, innerW, first, entry.companion()));
-                        lastSide = false;
+                        boolean first = !entry.companion().equals(last);
+                        out.add(bubble(false, first ? speaker(entry.companion()) : null,
+                                Nb.colored(spoken, TXT), AI_FILL, AI_BORDER, innerW, first, entry.companion()));
+                        last = entry.companion();
                     }
                     group.addAll(turn.toolCalls());
                 }
@@ -440,7 +450,7 @@ public final class ChatView {
                 case ConvoState.Msg.Halt h -> {
                     flushTools(out, group, done, failed, bubbleMaxW);
                     notice(out, I18n.get("numen.chat.halted", h.reason()));
-                    lastSide = null;
+                    last = null;
                 }
             }
         }
@@ -455,11 +465,11 @@ public final class ChatView {
             }
             // The in-flight reply, typed out live (chunk stream → EntityAgentLoop.livePartial).
             if (!liveShown.isEmpty()) {
-                boolean first = lastSide == null || lastSide;
                 UUID her = lp.entityUuid();
-                out.add(bubble(false, first ? speaker(her) : null, liveShown,
-                        TXT, AI_FILL, AI_BORDER, innerW, first, her));
-                lastSide = false;
+                boolean first = !her.equals(last);
+                out.add(bubble(false, first ? speaker(her) : null, Nb.colored(liveShown, TXT),
+                        AI_FILL, AI_BORDER, innerW, first, her));
+                last = her;
             }
             // Prompts still waiting for a protocol-valid splice point — visible immediately
             // so a queued message never feels swallowed.
@@ -467,9 +477,10 @@ public final class ChatView {
             for (String queued : status.queuedPreview()) {
                 String shown = ownerText(queued);
                 if (shown.isEmpty()) continue;
-                boolean first = lastSide == null || !lastSide;
-                out.add(bubble(true, null, "⌛ " + shown, FAINT, QUEUED_FILL, QUEUED_BORDER, innerW, first, null));
-                lastSide = true;
+                boolean first = !OWNER.equals(last);
+                out.add(bubble(true, null, Nb.colored("⌛ " + shown, FAINT), QUEUED_FILL, QUEUED_BORDER,
+                        innerW, first, null));
+                last = OWNER;
             }
             if (status.phase() == com.dwinovo.numen.agent.loop.Phase.COMPACT) notice(out, I18n.get("numen.chat.compacting"));
         }
@@ -479,12 +490,34 @@ public final class ChatView {
         return out;
     }
 
-    private Bubble bubble(boolean own, String label, String text, int color, int fill, int border,
+    private Bubble bubble(boolean own, String label, Component body, int fill, int border,
                           int innerW, boolean showAvatar, UUID who) {
-        List<FormattedCharSequence> lines = font.split(Nb.colored(text, color), innerW);
+        List<FormattedCharSequence> lines = font.split(body, innerW);
         int maxW = 0;
         for (FormattedCharSequence l : lines) maxW = Math.max(maxW, font.width(l));
-        return new Bubble(own, label, lines, maxW, color, fill, border, showAvatar, who);
+        return new Bubble(own, label, lines, maxW, fill, border, showAvatar, who);
+    }
+
+    /**
+     * 主人的话,{@code @} 到的名字画亮。用的是路由那一份匹配({@link Mentions#spans}),所以亮的
+     * 正好是会醒的,不是"长得像名字"。名字按此刻名册,改过名之后旧记录里的不亮。
+     */
+    private Component mentionsLit(String text) {
+        List<Mentions.Member> members = new ArrayList<>();
+        for (UUID m : Conversations.instance().membersAlive(conv.get())) {
+            members.add(new Mentions.Member(m, speaker(m)));
+        }
+        List<Mentions.Span> spans = Mentions.spans(text, members);
+        if (spans.isEmpty()) return Nb.colored(text, TXT);
+        MutableComponent out = Component.empty();
+        int at = 0;
+        for (Mentions.Span s : spans) {
+            if (s.start() > at) out.append(Nb.colored(text.substring(at, s.start()), TXT));
+            out.append(Nb.colored(text.substring(s.start(), s.end()), MENTION));
+            at = s.end();
+        }
+        if (at < text.length()) out.append(Nb.colored(text.substring(at), TXT));
+        return out;
     }
 
     /** Advance the typewriter: filter the live partial, ease the reveal toward the
@@ -665,7 +698,7 @@ public final class ChatView {
 
     private static PlayerSkin ownerSkin() {
         AbstractClientPlayer p = Minecraft.getInstance().player;
-        return p != null ? p.getSkin() : DefaultPlayerSkin.get(net.minecraft.Util.NIL_UUID);
+        return p != null ? p.getSkin() : DefaultPlayerSkin.get(OWNER);
     }
 
     // ---- text helpers ----

@@ -85,6 +85,10 @@ public final class NumenScreen extends Screen {
     private static final int PAD = 8;
     private static final int LINE_H = 10;
     private static final int PLAN_W = 122;
+    /** 成员抬头那一行:脸的边长、脸与脸的间距、右上角 × 的边长。 */
+    private static final int MEMBER_AV = 18;
+    private static final int MEMBER_GAP = 5;
+    private static final int MEMBER_X_BOX = 7;
     private static final int MAX_PROMPT = 1024;
 
     // ---- palette: static but REFRESHABLE — the theme picker calls repaint() and every
@@ -138,6 +142,9 @@ public final class NumenScreen extends Screen {
     private int editTrashX = -1;
     /** 头部「＋ 拉人」的横座标;有人可拉才画。 */
     private int editPlusX = -1;
+    /** 成员抬头那一行本帧画了谁(与 membersAlive 同序),点击按它判命中;空 = 本帧没画。 */
+    private final List<UUID> memberRowFaces = new ArrayList<>();
+    private int memberRowX, memberRowY;
 
     private boolean overEditPencil(double mx, double my) {
         return overIcon(editPencilX, mx, my);
@@ -974,6 +981,7 @@ public final class NumenScreen extends Screen {
                     }
                 }
             }
+            if (tab == Tab.CHAT && memberRowClicked(mouseX, mouseY)) return true;
             if (tab == Tab.CHAT && inputBar != null
                     && inputBar.mouseClicked(mouseX, mouseY, button)) {
                 return true;
@@ -1044,6 +1052,7 @@ public final class NumenScreen extends Screen {
     private void renderInner(GuiGraphics g, int mouseX, int mouseY, float partial) {
         super.render(g, mouseX, mouseY, partial);
         pendingTip = null;   // recollected each frame by the section renderers
+        memberRowFaces.clear();   // 只有多人会话的聊天页会再填上
 
         drawWorkspace(g);                // rail column + panel chrome, in the CURRENT theme's colours
         renderRail(g, mouseX, mouseY);   // avatars + status + summon tile on the rail column
@@ -1491,6 +1500,64 @@ public final class NumenScreen extends Screen {
     }
 
     /**
+     * 成员抬头那一行(会话没有单一的主时):每个还在的成员一张脸,话头上的那些框亮——话头是"谁会醒",
+     * 得看得见;话头空着 = 全体,那就全亮。悬停给名字、右上角出一个 × 移出;只剩一个不给移,
+     * 那一步是解散,在垃圾桶上。
+     */
+    private int renderMemberRow(GuiGraphics g, int bodyY, int mouseX, int mouseY) {
+        memberRowFaces.addAll(Conversations.instance().membersAlive(conv));
+        memberRowX = left + PAD;
+        memberRowY = bodyY;
+        List<UUID> floor = conv.floor();
+        boolean quiet = !modalOpen() && !overlayOpen();
+        boolean droppable = memberRowFaces.size() > 1;
+        for (int i = 0; i < memberRowFaces.size(); i++) {
+            UUID m = memberRowFaces.get(i);
+            int fx = memberFaceX(i);
+            boolean lit = floor.isEmpty() || floor.contains(m);
+            boolean hovered = quiet && mouseX >= fx && mouseX < fx + MEMBER_AV
+                    && mouseY >= bodyY && mouseY < bodyY + MEMBER_AV;
+            com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
+                    fx - 2, bodyY - 2, MEMBER_AV + 4, MEMBER_AV + 4, FIELD, lit ? CTA : BORDER);
+            CompanionFace.draw(g, m, skinFor(m), fx, bodyY, MEMBER_AV);
+            if (!hovered) continue;
+            boolean overX = droppable && overMemberX(i, mouseX, mouseY);
+            if (droppable) {
+                int bx = fx + MEMBER_AV - MEMBER_X_BOX + 2, by = bodyY - 2;
+                g.fill(bx, by, bx + MEMBER_X_BOX, by + MEMBER_X_BOX,
+                        overX ? UiTheme.mix(FAIL, 0xFFFFFFFF, 0.35f) : FAIL);
+                txt(g, Component.literal("×"), bx + (MEMBER_X_BOX - font.width("×")) / 2, by - 1, 0xFFFFFFFF);
+            }
+            pendingTip = java.util.List.of(Component.literal(
+                    overX ? I18n.get(ModLanguageData.Keys.CONVO_DROP, nameFor(m)) : nameFor(m)));
+            pendingTipX = mouseX;
+            pendingTipY = mouseY;
+        }
+        return bodyY + MEMBER_AV + 6;
+    }
+
+    private int memberFaceX(int i) {
+        return memberRowX + i * (MEMBER_AV + MEMBER_GAP);
+    }
+
+    private boolean overMemberX(int i, double mx, double my) {
+        int bx = memberFaceX(i) + MEMBER_AV - MEMBER_X_BOX + 2, by = memberRowY - 2;
+        return mx >= bx && mx < bx + MEMBER_X_BOX && my >= by && my < by + MEMBER_X_BOX;
+    }
+
+    /** 成员脸上的 × 被点了:移出。只剩一个时没有 ×——见 {@link #renderMemberRow}。 */
+    private boolean memberRowClicked(double mx, double my) {
+        if (memberRowFaces.size() <= 1) return false;
+        for (int i = 0; i < memberRowFaces.size(); i++) {
+            if (overMemberX(i, mx, my)) {
+                conv = Conversations.instance().drop(conv, memberRowFaces.get(i));
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * 输入行此刻占多高:平时一行;她在等主人点头时是答复框的高度——答复框和输入框同级,正文往上让,不压在对话流上。
      */
     private int inputH() {
@@ -1514,6 +1581,8 @@ public final class NumenScreen extends Screen {
             int planX = transX + transW + 8;
             com.dwinovo.numen.client.screen.chat.PlanCard.render(
                     g, font, lp, planX - 4, bodyY, PLAN_W + 4, bodyBottom);
+        } else {
+            bodyY = renderMemberRow(g, bodyY, mouseX, mouseY);
         }
         // 外脑驱动中:对话流换成现场——同一套气泡语法,画的是现场缓冲(主人的话、
         // 外脑的 say 与动作行),顶上一条"谁接进来了"的知情行。

@@ -144,6 +144,7 @@ public final class ModLanguageData {
         public static final String CONVO_DISSOLVE         = "numen.convo.dissolve";
         public static final String CONVO_DISSOLVE_TITLE   = "numen.convo.dissolve_title";
         public static final String CONVO_DISSOLVE_WARNING = "numen.convo.dissolve_warning";
+        public static final String CONVO_DROP             = "numen.convo.drop";
 
         // Skin library tab (upload png → MineSkin-signed textures).
         public static final String SKIN_TITLE           = "numen.skin.title";
@@ -456,6 +457,7 @@ public final class ModLanguageData {
         adder.add(Keys.CONVO_DISSOLVE,         "Dissolve");
         adder.add(Keys.CONVO_DISSOLVE_TITLE,   "Dissolve \"%s\"?");
         adder.add(Keys.CONVO_DISSOLVE_WARNING, "What was said stays in each companion's own log");
+        adder.add(Keys.CONVO_DROP,             "Remove %s from this conversation");
         adder.add(Keys.SKIN_TITLE,           "Skins");
         adder.add(Keys.SKIN_ADD,             "New");
         adder.add(Keys.SKIN_EMPTY,           "No skins yet. Click New, then drag a skin png into the window.");
@@ -811,6 +813,7 @@ public final class ModLanguageData {
         adder.add(Keys.CONVO_DISSOLVE,         "解散");
         adder.add(Keys.CONVO_DISSOLVE_TITLE,   "解散「%s」?");
         adder.add(Keys.CONVO_DISSOLVE_WARNING, "说过的话留在各自的记录里,不会丢");
+        adder.add(Keys.CONVO_DROP,             "把 %s 移出这个会话");
         adder.add(Keys.SKIN_TITLE,           "皮肤库");
         adder.add(Keys.SKIN_ADD,             "新建");
         adder.add(Keys.SKIN_EMPTY,           "还没有皮肤。点右上角\"新建\",再把皮肤 png 拖进游戏窗口。");

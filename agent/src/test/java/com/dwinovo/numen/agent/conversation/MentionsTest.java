@@ -115,6 +115,27 @@ class MentionsTest {
                 "说到她不等于喊她");
     }
 
+    // ---- 区间:面板把名字画亮用的就是这一份匹配 ----
+
+    @Test
+    void spansCoverExactlyTheMentionedNames() {
+        String line = "@小柚 和 @阿岚 一起去";
+        List<Mentions.Span> spans = Mentions.spans(line, GROUP);
+        assertEquals(2, spans.size());
+        assertEquals("@小柚", line.substring(spans.get(0).start(), spans.get(0).end()));
+        assertEquals(List.of(YOU), spans.get(0).whom());
+        assertEquals("@阿岚", line.substring(spans.get(1).start(), spans.get(1).end()));
+        assertEquals(List.of(LAN), spans.get(1).whom());
+    }
+
+    @Test
+    void spansComeInOrderOfAppearance() {
+        List<Mentions.Span> spans = Mentions.spans("@阿岚 先,@小柚 后", GROUP);
+        assertTrue(spans.get(0).start() < spans.get(1).start());
+        assertEquals(List.of(LAN), spans.get(0).whom());
+        assertEquals(List.of(YOU), spans.get(1).whom());
+    }
+
     @Test
     void anUnknownNameMentionsNobody() {
         assertEquals(List.of(), Mentions.mentioned("@谁啊 在吗", GROUP));

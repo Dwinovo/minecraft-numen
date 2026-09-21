@@ -73,12 +73,25 @@ public final class Mentions {
         return new Routing(List.copyOf(all), List.of());
     }
 
+    /** 话里被 {@code @} 到的一段:{@code [start, end)} 是原文里的区间,{@code whom} 是这个名字喊到的那些。 */
+    public record Span(int start, int end, List<UUID> whom) {}
+
+    /** 话里 {@code @} 到了谁,按出现先后。 */
+    public static List<UUID> mentioned(String text, List<Member> members) {
+        LinkedHashSet<UUID> out = new LinkedHashSet<>();
+        for (Span s : spans(text, members)) {
+            out.addAll(s.whom());
+        }
+        return List.copyOf(out);
+    }
+
     /**
-     * 话里 {@code @} 到了谁,按出现先后。
+     * 话里所有 {@code @名字} 的区间,按出现先后。路由用它定谁醒,面板用它把名字画亮——同一份匹配,
+     * 亮的正好是会醒的。
      *
      * <p>长名字先试,匹配掉的区间不再参与——{@code @Anna} 因此不会又被 {@code Ann} 认领一次。
      */
-    public static List<UUID> mentioned(String text, List<Member> members) {
+    public static List<Span> spans(String text, List<Member> members) {
         if (text == null || text.isEmpty() || members == null || members.isEmpty()) {
             return List.of();
         }
@@ -99,8 +112,8 @@ public final class Mentions {
         List<String> names = new ArrayList<>(byName.keySet());
         names.sort(Comparator.comparingInt(String::length).reversed());
 
-        // 位置 → 喊到的那些,用来还原"话里出现的先后"
-        Map<Integer, List<UUID>> hits = new java.util.TreeMap<>();
+        // 位置 → 那一段,用来还原"话里出现的先后"
+        Map<Integer, Span> hits = new java.util.TreeMap<>();
         for (String name : names) {
             String needle = "@" + name;
             int from = 0;
@@ -117,14 +130,10 @@ public final class Mentions {
                 for (int i = at; i < end; i++) {
                     eaten[i] = true;
                 }
-                hits.put(at, byName.get(name));
+                hits.put(at, new Span(at, end, List.copyOf(byName.get(name))));
             }
         }
-        LinkedHashSet<UUID> out = new LinkedHashSet<>();
-        for (List<UUID> owners : hits.values()) {
-            out.addAll(owners);
-        }
-        return List.copyOf(out);
+        return List.copyOf(hits.values());
     }
 
     /** 这一段是不是已经被更长的名字吃掉了。 */
