@@ -86,8 +86,8 @@ public final class PlanCard {
     /** Parse the most recent todowrite call's todos array, or null. */
     private static JsonArray latestPlan(EntityAgentLoop loop) {
         JsonArray latest = null;
-        for (ConvoState.Msg m : loop.display()) {
-            if (m instanceof ConvoState.Msg.Assistant a) {
+        for (com.dwinovo.numen.agent.llm.ConvoLog.Line line : loop.display()) {
+            if (line.msg() instanceof ConvoState.Msg.Assistant a) {
                 for (LlmToolCall tc : a.turn().toolCalls()) {
                     if (!"todowrite".equals(tc.name())) continue;
                     try {

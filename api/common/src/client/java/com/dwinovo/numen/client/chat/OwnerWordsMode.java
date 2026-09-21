@@ -1,7 +1,6 @@
 package com.dwinovo.numen.client.chat;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import com.dwinovo.numen.agent.llm.ConvoLog;
 
 /**
  * 看<b>对话</b>:主人和她说过的话,别的都不是这一份的内容。
@@ -17,18 +16,12 @@ import java.util.regex.Pattern;
  */
 public final class OwnerWordsMode implements ChatDisplayMode {
 
-    private static final Pattern QUERY = Pattern.compile("(?s)<query>(.*?)</query>");
-
     @Override
     public String userText(String raw) {
         if (raw == null) return "";
-        Matcher m = QUERY.matcher(raw);
-        StringBuilder b = new StringBuilder();
-        while (m.find()) {
-            if (b.length() > 0) b.append('\n');
-            b.append(m.group(1));
-        }
-        if (b.length() > 0) return b.toString().strip();
+        // <query> 怎么认只有一处(ConvoLog.queries):面板、归并都从那里取,别各写一份正则
+        java.util.List<String> queries = ConvoLog.queries(raw);
+        if (!queries.isEmpty()) return String.join("\n", queries).strip();
         return stripInjectedDirectives(raw);   // legacy / untagged owner message
     }
 

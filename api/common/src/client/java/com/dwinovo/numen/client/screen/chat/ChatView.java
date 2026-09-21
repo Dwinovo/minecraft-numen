@@ -3,6 +3,8 @@ package com.dwinovo.numen.client.screen.chat;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.llm.ConvoLog;
 import com.dwinovo.numen.agent.llm.ConvoState;
+import com.dwinovo.numen.agent.conversation.Transcript;
+import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.client.agent.ClientNumenLookup;
@@ -350,11 +352,11 @@ public final class ChatView {
     private List<Block> build(int bubbleMaxW) {
         List<Block> out = new ArrayList<>();
         EntityAgentLoop lp = loop.get();
-        List<ConvoState.Msg> source = lp.display();
+        List<Transcript.Entry> source = transcript();
         Set<String> done = new HashSet<>();
         Set<String> failed = new HashSet<>();
-        for (ConvoState.Msg m : source) {
-            if (m instanceof ConvoState.Msg.Tool t) {
+        for (Transcript.Entry e : source) {
+            if (e.msg() instanceof ConvoState.Msg.Tool t) {
                 done.add(t.toolCallId());
                 // 成败判据的单一真源(展示层不猜字符串)。
                 if (com.dwinovo.numen.agent.llm.ToolOutcome.failed(t.content())) {
@@ -364,10 +366,10 @@ public final class ChatView {
         }
         // 没有结果、派发器也不再攥着的调用永远等不到结果了(被打断、死了、游戏关掉时还在跑):
         // 按失败画,不能一直转圈。"还在跑"只问派发器,不从历史长什么样去猜。
-        for (ConvoState.Msg m : source) {
-            if (m instanceof ConvoState.Msg.Assistant a) {
+        for (Transcript.Entry e : source) {
+            if (e.msg() instanceof ConvoState.Msg.Assistant a) {
                 for (LlmToolCall tc : a.turn().toolCalls()) {
-                    if (!done.contains(tc.id()) && !lp.isToolCallOutstanding(tc.id())) {
+                    if (!done.contains(tc.id()) && !outstanding(e.companion(), tc.id())) {
                         done.add(tc.id());
                         failed.add(tc.id());
                     }
@@ -380,8 +382,9 @@ public final class ChatView {
         // the first of a run. Chips don't break a run; notices do. null = run broken.
         Boolean lastSide = null;
         int msgIndex = -1;
-        for (ConvoState.Msg msg : source) {
+        for (Transcript.Entry entry : source) {
             msgIndex++;
+            ConvoState.Msg msg = entry.msg();
             switch (msg) {
                 case ConvoState.Msg.User u -> {
                     flushTools(out, group, done, failed, bubbleMaxW);
@@ -418,7 +421,7 @@ public final class ChatView {
                     if (!spoken.isBlank()) {
                         flushTools(out, group, done, failed, bubbleMaxW);   // spoken reply breaks the fold
                         boolean first = lastSide == null || lastSide;
-                        out.add(bubble(false, first ? name.get() : null, spoken,
+                        out.add(bubble(false, first ? speaker(entry.companion()) : null, spoken,
                                 TXT, AI_FILL, AI_BORDER, innerW, first));
                         lastSide = false;
                     }
@@ -657,6 +660,31 @@ public final class ChatView {
 
     private static String ownerText(String s) {
         return ChatDisplayModes.current().userText(s);
+    }
+
+    /**
+     * 这个面板画的会话:成员各自的日志按会话印归并成一条时间线。单成员时就是她一本日志——
+     * 同一条路,没有"单聊另一条路"。循环还没起来的成员这一刻没有记录可读,跳过。
+     */
+    private List<Transcript.Entry> transcript() {
+        com.dwinovo.numen.client.agent.Conversations convos =
+                com.dwinovo.numen.client.agent.Conversations.instance();
+        com.dwinovo.numen.agent.conversation.Conversation conv = convos.of(uuid.get());
+        java.util.Map<UUID, List<ConvoLog.Line>> logs = new java.util.LinkedHashMap<>();
+        for (UUID member : convos.membersAlive(conv)) {
+            AgentLoopRegistry.get(member).ifPresent(l -> logs.put(member, l.display()));
+        }
+        return Transcript.merge(convos.tagOf(conv), logs);
+    }
+
+    /** 这次调用还在她那条循环的派发器手里没有——"还在跑"只问派发器,不从历史长什么样去猜。 */
+    private static boolean outstanding(UUID companion, String callId) {
+        return AgentLoopRegistry.get(companion).map(l -> l.isToolCallOutstanding(callId)).orElse(false);
+    }
+
+    /** 气泡上的名字:名册名。多人会话里每条回复各标各的说话人。 */
+    private static String speaker(UUID companion) {
+        return com.dwinovo.numen.client.agent.NumenRoster.instance().name(companion);
     }
 
     private String fitOneLine(String s, int pxWidth) {

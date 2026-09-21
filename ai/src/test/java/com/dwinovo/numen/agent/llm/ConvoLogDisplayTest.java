@@ -30,7 +30,7 @@ class ConvoLogDisplayTest {
     void whatIsShownLiveIsWhatIsReadBackFromDisk(@TempDir Path dir) {
         ConvoLog log = ConvoLog.atFile(dir.resolve("chat.jsonl"));
         List<ConvoState.Msg> live = new ArrayList<>();
-        log.onDisplay(live::add);
+        log.onDisplay(l -> live.add(l.msg()));
 
         log.append(USER, null);
         log.append(CALL, null);
@@ -46,6 +46,21 @@ class ConvoLogDisplayTest {
                 new ConvoState.Msg.User(ConvoLog.COMPACT_DIVIDER), REPLY,
                 new ConvoState.Msg.User(ConvoLog.PERSONA_DIVIDER),
                 new ConvoState.Msg.User(ConvoLog.CLEAR_DIVIDER)), live);
+    }
+
+    /** 归并多本日志靠的就是这两样:什么时候记的、记在哪个会话名下。 */
+    @Test
+    void eachLineCarriesWhenAndWhereItWasWritten(@TempDir Path dir) {
+        ConvoLog log = ConvoLog.atFile(dir.resolve("chat.jsonl"));
+        log.append(USER, "G");
+        log.append(REPLY, null);
+
+        List<ConvoLog.Line> lines = log.loadLines(100);
+        assertEquals(2, lines.size());
+        assertEquals("G", lines.get(0).conv());
+        assertEquals(null, lines.get(1).conv(), "没盖印 = 就他俩");
+        assertEquals(USER, lines.get(0).msg());
+        assertEquals(true, lines.get(0).ts() > 0, "时间戳跟着记录");
     }
 
     @Test
@@ -66,7 +81,7 @@ class ConvoLogDisplayTest {
         // 日志路径是个目录:写不进去。这一局照样得看得见刚发生的事,只是下次读盘读不回来。
         ConvoLog log = ConvoLog.atFile(dir);
         List<ConvoState.Msg> live = new ArrayList<>();
-        log.onDisplay(live::add);
+        log.onDisplay(l -> live.add(l.msg()));
 
         log.append(USER, null);
 

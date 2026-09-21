@@ -129,6 +129,14 @@ public final class Conversations extends JsonLibrary<Conversation> {
         return conv;
     }
 
+    /**
+     * 记录上盖的会话印:落过盘的会话是它的 id;没落盘的(单成员、没人动过)是 null = "就他俩"。
+     * 盖印(送话时)和读印(面板归并时)都问这一处。
+     */
+    public String tagOf(Conversation conv) {
+        return get(conv.id()) != null ? conv.id() : null;
+    }
+
     // ---- 说 ----
 
     /**
@@ -164,7 +172,7 @@ public final class Conversations extends JsonLibrary<Conversation> {
         if (persisted) {
             next = save(next.spoken());
         }
-        String tag = persisted ? conv.id() : null;
+        String tag = tagOf(conv);
         for (UUID m : routing.awake()) {
             AgentLoopRegistry.get(m).ifPresent(l -> l.inConversation(tag));
         }

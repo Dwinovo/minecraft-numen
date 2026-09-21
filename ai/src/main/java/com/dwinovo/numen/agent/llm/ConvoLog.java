@@ -89,7 +89,7 @@ public final class ConvoLog {
 
     private final Path file;
     /** 面板对话记录的去处(见 {@link #onDisplay});没接就不显示。 */
-    private java.util.function.Consumer<ConvoState.Msg> displaySink = msg -> { };
+    private java.util.function.Consumer<Line> displaySink = line -> { };
 
     private ConvoLog(Path file) {
         this.file = file;
@@ -106,11 +106,11 @@ public final class ConvoLog {
     }
 
     /**
-     * 这份日志写下的每一条,换成面板对话记录里的样子交给 {@code sink}——换法与读盘的 {@link #loadDisplay}
-     * 是同一个({@link #displayOf}),所以这一局边写边看到的,和下次进游戏读回来的一条不差。
+     * 这份日志写下的每一条,换成面板对话记录里的样子交给 {@code sink}——换法与读盘的 {@link #loadLines}
+     * 是同一个({@link #lineOf}),所以这一局边写边看到的,和下次进游戏读回来的一条不差。
      * 写盘失败也照样交:这一局得看得见刚发生的事。
      */
-    public void onDisplay(java.util.function.Consumer<ConvoState.Msg> sink) {
+    public void onDisplay(java.util.function.Consumer<Line> sink) {
         this.displaySink = sink;
     }
 
@@ -193,7 +193,7 @@ public final class ConvoLog {
         } catch (IOException ex) {
             AiLog.LOG.warn("[numen-convo] failed to append to {}: {}", file, ex.toString());
         }
-        ConvoState.Msg shown = displayOf(record);
+        Line shown = lineOf(record);
         if (shown != null) {
             displaySink.accept(shown);
         }
@@ -415,9 +415,23 @@ public final class ConvoLog {
      * happened" view — history is never lost to compaction or clearing.
      */
     public List<ConvoState.Msg> loadDisplay(int limit) {
+        List<ConvoState.Msg> out = new ArrayList<>();
+        for (Line line : loadLines(limit)) out.add(line.msg());
+        return out;
+    }
+
+    /**
+     * 面板对话记录的一行:消息本身,加上它是什么时候记的、记在哪个会话名下。把成员各自的日志
+     * 归并成一个会话的视图,靠的就是这两样(按时间交错、按会话过滤),消息自己不带。
+     * {@code conv} 为 null = 就他俩(她的单成员会话)。
+     */
+    public record Line(long ts, String conv, ConvoState.Msg msg) {}
+
+    /** 同 {@link #loadDisplay},每行连着时间戳与会话印。 */
+    public List<Line> loadLines(int limit) {
         if (!Files.isRegularFile(file)) return List.of();
 
-        List<ConvoState.Msg> all = new ArrayList<>();
+        List<Line> all = new ArrayList<>();
         try {
             for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
                 if (line.isBlank()) continue;
@@ -426,7 +440,7 @@ public final class ConvoLog {
                     AiLog.LOG.warn("[numen-convo] skipping unparsable line in {}", file.getFileName());
                     continue;
                 }
-                ConvoState.Msg shown = displayOf(o);
+                Line shown = lineOf(o);
                 if (shown != null) all.add(shown);
             }
         } catch (IOException ex) {
@@ -435,6 +449,30 @@ public final class ConvoLog {
         }
         if (all.size() <= limit) return all;
         return new ArrayList<>(all.subList(all.size() - limit, all.size()));
+    }
+
+    /** 一条记录在面板里的样子,连同它的时间戳与会话印;不显示的记录返回 null。 */
+    private static Line lineOf(JsonObject record) {
+        ConvoState.Msg shown = displayOf(record);
+        if (shown == null) return null;
+        long ts = record.has("ts") && record.get("ts").isJsonPrimitive() ? record.get("ts").getAsLong() : 0L;
+        String conv = record.has("conv") && record.get("conv").isJsonPrimitive()
+                ? record.get("conv").getAsString() : null;
+        return new Line(ts, conv, shown);
+    }
+
+    private static final java.util.regex.Pattern QUERY = java.util.regex.Pattern.compile("(?s)<query>(.*?)</query>");
+
+    /**
+     * 一条 user 消息里主人的原话——{@code <query>} 标记里的那些,按出现顺序;没有标记则空。
+     * {@code <query>} 怎么认<b>只有这一处</b>:面板剥记号、归并去重都从这里取,别各写一份正则。
+     */
+    public static List<String> queries(String content) {
+        List<String> out = new ArrayList<>();
+        if (content == null) return out;
+        java.util.regex.Matcher m = QUERY.matcher(content);
+        while (m.find()) out.add(m.group(1));
+        return out;
     }
 
     /**

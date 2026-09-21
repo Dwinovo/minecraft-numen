@@ -133,7 +133,7 @@ public final class EntityAgentLoop {
      * 面板的对话记录:读盘那一截,加上之后日志写下的每一条(经 {@link ConvoLog#onDisplay},与读盘同一个换法)。
      * 整理记忆换的是 {@link #convo}(模型看到的),这里只多一条分隔——主人看得见的记录不会消失。
      */
-    private final List<ConvoState.Msg> display = new ArrayList<>();
+    private final List<ConvoLog.Line> display = new ArrayList<>();
 
     /** 表现层(打字机/气泡/说话位/语音)与 token 台账,循环之外的两件事。 */
     private final TurnPresenter presenter;
@@ -232,7 +232,7 @@ public final class EntityAgentLoop {
         }
         // 面板的对话记录:读盘那一截在前,之后日志写下的每一条经同一个换法接上(分隔、切断点都在里面)。
         // 读的是原始文件顺序,不是整理后的模型视图——主人的聊天记录不会因为整理记忆而消失。
-        display.addAll(log.loadDisplay(ConvoLog.DEFAULT_LOAD_LIMIT));
+        display.addAll(log.loadLines(ConvoLog.DEFAULT_LOAD_LIMIT));
         log.onDisplay(display::add);
         List<ConvoState.Msg> history = log.load(ConvoLog.DEFAULT_LOAD_LIMIT);
         if (history.isEmpty()) return;
@@ -281,7 +281,7 @@ public final class EntityAgentLoop {
     }
 
     /** Read-only physical transcript for the GUI (see {@link #display}). */
-    public List<ConvoState.Msg> display() {
+    public List<ConvoLog.Line> display() {
         return java.util.Collections.unmodifiableList(display);
     }
 
@@ -369,8 +369,8 @@ public final class EntityAgentLoop {
                 names.add(NumenRoster.instance().name(m));
             }
         }
-        return names.isEmpty() ? "" : "\n<audience turn=\"" + conv.turn() + "\">"
-                + com.dwinovo.numen.event.NumenEvents.escape(String.join("、", names)) + "</audience>";
+        return names.isEmpty() ? "" : "\n" + com.dwinovo.numen.agent.conversation.Audience.line(
+                conv.turn(), com.dwinovo.numen.event.NumenEvents.escape(String.join("、", names)));
     }
 
     /**
