@@ -52,7 +52,8 @@ import java.util.UUID;
  * UUID so it works at any distance.
  *
  * <h2>Chat tab</h2>
- * A scrollable transcript on the left + a live PLAN panel on the right. Tool calls
+ * A scrollable transcript that takes the full width; her latest plan is a one-line strip
+ * under the header that unfolds over the transcript on click (PlanStrip). Tool calls
  * show a spinner while running and a green check once their result lands — the raw
  * tool-result JSON is NOT shown (it only flips the call to done), keeping the chat
  * readable. The plan is the companion's latest {@code todowrite}.
@@ -85,7 +86,6 @@ public final class NumenScreen extends Screen {
     private static final int FIELD_INSET_Y = 4;
     private static final int PAD = 8;
     private static final int LINE_H = 10;
-    private static final int PLAN_W = 122;
     /** 成员抬头那一行:脸的边长、脸与脸的间距、右上角 × 的边长。 */
     private static final int MEMBER_AV = 18;
     private static final int MEMBER_GAP = 5;
@@ -143,6 +143,9 @@ public final class NumenScreen extends Screen {
     private int editTrashX = -1;
     /** 头部「＋ 拉人」的横座标;有人可拉才画。 */
     private int editPlusX = -1;
+    /** 计划细带本帧画在哪(顶边);-1 = 没画(没计划/不是单成员)。点它展开清单。 */
+    private int planStripY = -1;
+    private boolean planOpen;
     /** 成员抬头那一行本帧画了谁(与 membersAlive 同序),点击按它判命中;空 = 本帧没画。 */
     private final List<UUID> memberRowFaces = new ArrayList<>();
     private int memberRowX, memberRowY;
@@ -335,6 +338,7 @@ public final class NumenScreen extends Screen {
         SelectedCompanion.set(c);
         if (same) return;
         inputBar = null; savedInput = "";       // don't carry typed text across conversations
+        planOpen = false;
         chatView.reset();
         rebuild();
         if (tab == Tab.ITEMS && solo() != null) requestInventory();
@@ -814,6 +818,7 @@ public final class NumenScreen extends Screen {
     private void selectTab(Tab t) {
         if (t == tab) return;
         tab = t;
+        planOpen = false;
         chatView.reset();
         if (t == Tab.ITEMS) requestInventory();
         rebuild();
@@ -1027,6 +1032,16 @@ public final class NumenScreen extends Screen {
                         return true;
                     }
                 }
+            }
+            if (tab == Tab.CHAT && planStripY >= 0 && mouseY >= planStripY
+                    && mouseY < planStripY + com.dwinovo.numen.client.screen.chat.PlanStrip.H
+                    && mouseX >= left + PAD && mouseX < left + panelW - PAD) {
+                planOpen = !planOpen;
+                return true;
+            }
+            if (tab == Tab.CHAT && planOpen) {
+                planOpen = false;   // 展开的清单盖在对话流上:点别处只负责收起
+                return true;
             }
             if (tab == Tab.CHAT && memberRowClicked(mouseX, mouseY)) return true;
             if (tab == Tab.CHAT && inputBar != null
@@ -1731,19 +1746,20 @@ public final class NumenScreen extends Screen {
         int bodyY = top + HEADER_H + 4;
         int bodyBottom = top + panelH - inputH() - PAD - 6;
         int transX = left + PAD;
-        // 目标行、计划卡、外脑现场、整理进度都是一只同伴的;会话没有单一的主时对话流占满整行
+        int transW = panelW - PAD * 2;   // 对话流永远占满整行;附属信息在抬头下按行排、按需展开
+        // 目标行、计划带、外脑现场、整理进度都是一只同伴的;会话没有单一的主时是成员行
         EntityAgentLoop lp = loop();
-        int transW = panelW - PAD * 2 - (lp == null ? 0 : PLAN_W + 8);
+        planStripY = -1;
 
         if (lp != null) {
             // 长期目标一行:她一轮接一轮在做的那件事。常驻在正文上方——目标是"现在的驱动力",
             // 不是聊天记录里的一条,埋进对话流就翻不到了。
-            bodyY = renderGoalLine(g, bodyY, panelW - PAD * 2);
-
-            // right-side PLAN card + the bubble transcript
-            int planX = transX + transW + 8;
-            com.dwinovo.numen.client.screen.chat.PlanCard.render(
-                    g, font, lp, planX - 4, bodyY, PLAN_W + 4, bodyBottom);
+            bodyY = renderGoalLine(g, bodyY, transW);
+            // 计划一条细带:没计划一个像素不占;点它在对话流上展开清单
+            int afterStrip = com.dwinovo.numen.client.screen.chat.PlanStrip.render(
+                    g, font, lp, transX, bodyY, transW, planOpen);
+            planStripY = afterStrip == bodyY ? -1 : bodyY;
+            bodyY = afterStrip;
         } else {
             bodyY = renderMemberRow(g, bodyY, mouseX, mouseY);
         }
@@ -1753,6 +1769,9 @@ public final class NumenScreen extends Screen {
             chatView.renderExternal(g, transX, bodyY, transW, bodyBottom - bodyY);
         } else {
             chatView.render(g, transX, bodyY, transW, bodyBottom - bodyY);
+        }
+        if (planOpen && planStripY >= 0) {
+            com.dwinovo.numen.client.screen.chat.PlanStrip.renderOpen(g, font, lp, transX, bodyY, transW, bodyBottom);
         }
 
         boolean noticeLive = micNotice != null && micNoticeUntil > System.currentTimeMillis();
