@@ -3,12 +3,16 @@ package com.dwinovo.numen.client.screen.chat;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.llm.ConvoLog;
 import com.dwinovo.numen.agent.llm.ConvoState;
+import com.dwinovo.numen.agent.conversation.Conversation;
 import com.dwinovo.numen.agent.conversation.Transcript;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.client.agent.ClientNumenLookup;
+import com.dwinovo.numen.client.agent.Conversations;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
+import com.dwinovo.numen.client.agent.KnownSkins;
+import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.client.chat.ChatDisplayModes;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
@@ -105,9 +109,9 @@ public final class ChatView {
     private static final ResourceLocation SCROLL_THUMB = spr("scroll_thumb");
 
     private final Font font;
+    /** 就他俩那只的大脑;会话没有单一的主时 null——在飞的回复、排队的话、整理进度都是一只同伴的。 */
     private final Supplier<EntityAgentLoop> loop;
-    private final Supplier<String> name;
-    private final Supplier<UUID> uuid;
+    private final Supplier<Conversation> conv;
 
     // ---- scroll + fold state ----
     private float scrollPos;
@@ -125,11 +129,15 @@ public final class ChatView {
     // geometry of the last render, for click / wheel hit-testing
     private int gx, gy, gw, gh;
 
-    public ChatView(Font font, Supplier<EntityAgentLoop> loop, Supplier<String> name, Supplier<UUID> uuid) {
+    public ChatView(Font font, Supplier<EntityAgentLoop> loop, Supplier<Conversation> conv) {
         this.font = font;
         this.loop = loop;
-        this.name = name;
-        this.uuid = uuid;
+        this.conv = conv;
+    }
+
+    /** 就他俩时是她;否则 null。 */
+    private UUID solo() {
+        return Conversations.instance().soloOf(conv.get());
     }
 
     /** Forget scroll + fold state (companion or tab switch). */
@@ -212,7 +220,7 @@ public final class ChatView {
                 cx, y + 14, who == null ? FAINT : OK);
         g.fill(cx, y + 26, cx + cw, y + 27, CHIP_FILL);
 
-        UUID id = uuid.get();
+        UUID id = solo();
         if (McpTranscript.isEmpty(id)) {
             renderConsoleGuide(g, mcp, cx, y + EXT_HEADER_H + 2, cw, who != null);
             return;
@@ -230,13 +238,13 @@ public final class ChatView {
             switch (ln.kind()) {
                 case OWNER -> {
                     boolean first = lastSide == null || !lastSide;
-                    out.add(bubble(true, null, ln.text(), TXT, OWN_FILL, OWN_BORDER, innerW, first));
+                    out.add(bubble(true, null, ln.text(), TXT, OWN_FILL, OWN_BORDER, innerW, first, null));
                     lastSide = true;
                 }
                 case SAY -> {
                     boolean first = lastSide == null || lastSide;
-                    out.add(bubble(false, first ? name.get() : null, ln.text(),
-                            TXT, AI_FILL, AI_BORDER, innerW, first));
+                    out.add(bubble(false, first ? speaker(id) : null, ln.text(),
+                            TXT, AI_FILL, AI_BORDER, innerW, first, id));
                     lastSide = false;
                 }
                 case TOOL -> out.add(new Chip(List.of(new ChipRow(
@@ -305,10 +313,11 @@ public final class ChatView {
     private sealed interface Block permits Bubble, Chip, Notice {}
 
     /** One spoken message. {@code label} non-null = companion side (name above the bubble);
-     *  {@code showAvatar} false = a consecutive message from the same side (head hidden). */
+     *  {@code showAvatar} false = a consecutive message from the same side (head hidden);
+     *  {@code who} = the companion whose face goes on it (null on the owner's side). */
     private record Bubble(boolean own, String label, List<FormattedCharSequence> lines,
                           int maxLineW, int textColor, int fill, int border,
-                          boolean showAvatar) implements Block {}
+                          boolean showAvatar, UUID who) implements Block {}
 
     /** A run of tool calls. {@code foldKey} non-null = finished group, clickable to expand/fold. */
     private record Chip(List<ChipRow> rows, String foldKey) implements Block {}
@@ -406,7 +415,7 @@ public final class ChatView {
                     String shown = ownerText(u.content());   // owner's words only, never injected content
                     if (shown.isEmpty()) continue;
                     boolean first = lastSide == null || !lastSide;
-                    out.add(bubble(true, null, shown, TXT, OWN_FILL, OWN_BORDER, innerW, first));
+                    out.add(bubble(true, null, shown, TXT, OWN_FILL, OWN_BORDER, innerW, first, null));
                     lastSide = true;
                 }
                 case ConvoState.Msg.Assistant a -> {
@@ -422,7 +431,7 @@ public final class ChatView {
                         flushTools(out, group, done, failed, bubbleMaxW);   // spoken reply breaks the fold
                         boolean first = lastSide == null || lastSide;
                         out.add(bubble(false, first ? speaker(entry.companion()) : null, spoken,
-                                TXT, AI_FILL, AI_BORDER, innerW, first));
+                                TXT, AI_FILL, AI_BORDER, innerW, first, entry.companion()));
                         lastSide = false;
                     }
                     group.addAll(turn.toolCalls());
@@ -436,46 +445,53 @@ public final class ChatView {
             }
         }
         flushTools(out, group, done, failed, bubbleMaxW);
-        // 在飞的思考流:展开着实时长(它正在发生,折起来就看不见了);回合落库后
-        // 由上面那条 committed 的思考块接管,永不双份。
-        String liveReasoning = lp.liveReasoning();
-        if (!liveReasoning.isBlank()) {
-            out.add(reasoningChip(liveReasoning, null, innerW, true));
+        // 下面这些都是一只同伴此刻的状态,会话没有单一的主时没有
+        if (lp != null) {
+            // 在飞的思考流:展开着实时长(它正在发生,折起来就看不见了);回合落库后
+            // 由上面那条 committed 的思考块接管,永不双份。
+            String liveReasoning = lp.liveReasoning();
+            if (!liveReasoning.isBlank()) {
+                out.add(reasoningChip(liveReasoning, null, innerW, true));
+            }
+            // The in-flight reply, typed out live (chunk stream → EntityAgentLoop.livePartial).
+            if (!liveShown.isEmpty()) {
+                boolean first = lastSide == null || lastSide;
+                UUID her = lp.entityUuid();
+                out.add(bubble(false, first ? speaker(her) : null, liveShown,
+                        TXT, AI_FILL, AI_BORDER, innerW, first, her));
+                lastSide = false;
+            }
+            // Prompts still waiting for a protocol-valid splice point — visible immediately
+            // so a queued message never feels swallowed.
+            var status = lp.status();
+            for (String queued : status.queuedPreview()) {
+                String shown = ownerText(queued);
+                if (shown.isEmpty()) continue;
+                boolean first = lastSide == null || !lastSide;
+                out.add(bubble(true, null, "⌛ " + shown, FAINT, QUEUED_FILL, QUEUED_BORDER, innerW, first, null));
+                lastSide = true;
+            }
+            if (status.phase() == com.dwinovo.numen.agent.loop.Phase.COMPACT) notice(out, I18n.get("numen.chat.compacting"));
         }
-        // The in-flight reply, typed out live (chunk stream → EntityAgentLoop.livePartial).
-        if (!liveShown.isEmpty()) {
-            boolean first = lastSide == null || lastSide;
-            out.add(bubble(false, first ? name.get() : null, liveShown,
-                    TXT, AI_FILL, AI_BORDER, innerW, first));
-            lastSide = false;
+        if (out.isEmpty()) {
+            notice(out, I18n.get("numen.chat.empty", conv.get().displayName(NumenRoster.instance()::name)));
         }
-        // Prompts still waiting for a protocol-valid splice point — visible immediately
-        // so a queued message never feels swallowed.
-        var status = lp.status();
-        for (String queued : status.queuedPreview()) {
-            String shown = ownerText(queued);
-            if (shown.isEmpty()) continue;
-            boolean first = lastSide == null || !lastSide;
-            out.add(bubble(true, null, "⌛ " + shown, FAINT, QUEUED_FILL, QUEUED_BORDER, innerW, first));
-            lastSide = true;
-        }
-        if (status.phase() == com.dwinovo.numen.agent.loop.Phase.COMPACT) notice(out, I18n.get("numen.chat.compacting"));
-        if (out.isEmpty()) notice(out, I18n.get("numen.chat.empty", name.get()));
         return out;
     }
 
     private Bubble bubble(boolean own, String label, String text, int color, int fill, int border,
-                          int innerW, boolean showAvatar) {
+                          int innerW, boolean showAvatar, UUID who) {
         List<FormattedCharSequence> lines = font.split(Nb.colored(text, color), innerW);
         int maxW = 0;
         for (FormattedCharSequence l : lines) maxW = Math.max(maxW, font.width(l));
-        return new Bubble(own, label, lines, maxW, color, fill, border, showAvatar);
+        return new Bubble(own, label, lines, maxW, color, fill, border, showAvatar, who);
     }
 
     /** Advance the typewriter: filter the live partial, ease the reveal toward the
      *  full length, and cache "revealed text + blinking caret". */
     private void updateLive(float dt, long now) {
-        String full = ChatDisplayModes.current().assistantText(loop.get().livePartial());
+        EntityAgentLoop lp = loop.get();
+        String full = lp == null ? "" : ChatDisplayModes.current().assistantText(lp.livePartial());
         if (full.isEmpty()) {
             revealed = 0;
             liveShown = "";
@@ -604,9 +620,9 @@ public final class ChatView {
                     AV + 4, AV + 4, b.fill(), b.border());
             // 主人自己那侧画的是玩家本人,不是同伴——改外观的插件不该接管它
             if (b.own()) {
-                PlayerFaceRenderer.draw(g, skin(true), avX, bubTop, AV);
+                PlayerFaceRenderer.draw(g, ownerSkin(), avX, bubTop, AV);
             } else {
-                CompanionFace.draw(g, uuid.get(), skin(false), avX, bubTop, AV);
+                CompanionFace.draw(g, b.who(), KnownSkins.of(b.who()), avX, bubTop, AV);
             }
         }
         NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), bx, bubTop, bw, bh,
@@ -647,13 +663,9 @@ public final class ChatView {
         Nb.text(g, font, seq, x, y);
     }
 
-    private PlayerSkin skin(boolean own) {
-        if (own) {
-            AbstractClientPlayer p = Minecraft.getInstance().player;
-            if (p != null) return p.getSkin();
-            return DefaultPlayerSkin.get(uuid.get());
-        }
-        return com.dwinovo.numen.client.agent.KnownSkins.of(uuid.get());
+    private static PlayerSkin ownerSkin() {
+        AbstractClientPlayer p = Minecraft.getInstance().player;
+        return p != null ? p.getSkin() : DefaultPlayerSkin.get(net.minecraft.Util.NIL_UUID);
     }
 
     // ---- text helpers ----
@@ -667,14 +679,13 @@ public final class ChatView {
      * 同一条路,没有"单聊另一条路"。循环还没起来的成员这一刻没有记录可读,跳过。
      */
     private List<Transcript.Entry> transcript() {
-        com.dwinovo.numen.client.agent.Conversations convos =
-                com.dwinovo.numen.client.agent.Conversations.instance();
-        com.dwinovo.numen.agent.conversation.Conversation conv = convos.of(uuid.get());
+        Conversations convos = Conversations.instance();
+        Conversation c = conv.get();
         java.util.Map<UUID, List<ConvoLog.Line>> logs = new java.util.LinkedHashMap<>();
-        for (UUID member : convos.membersAlive(conv)) {
+        for (UUID member : convos.membersAlive(c)) {
             AgentLoopRegistry.get(member).ifPresent(l -> logs.put(member, l.display()));
         }
-        return Transcript.merge(convos.tagOf(conv), logs);
+        return Transcript.merge(convos.tagOf(c), logs);
     }
 
     /** 这次调用还在她那条循环的派发器手里没有——"还在跑"只问派发器,不从历史长什么样去猜。 */
@@ -684,7 +695,7 @@ public final class ChatView {
 
     /** 气泡上的名字:名册名。多人会话里每条回复各标各的说话人。 */
     private static String speaker(UUID companion) {
-        return com.dwinovo.numen.client.agent.NumenRoster.instance().name(companion);
+        return NumenRoster.instance().name(companion);
     }
 
     private String fitOneLine(String s, int pxWidth) {

@@ -11,10 +11,9 @@ import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -73,20 +72,45 @@ public final class Conversations extends JsonLibrary<Conversation> {
 
     // ---- 取 ----
 
-    /** 跟这一只说话的那个会话。存过就用存的,没存过现构一个——见类头"落盘按需"。 */
+    /**
+     * 跟这一只说话的那个会话。成员表正好只有她的那条落盘记录有就用,没有就现构一个(不落盘)。
+     *
+     * <p>现构的那个 id 就是她的 UUID:面板每帧重列左栏、每次说话都现构一遍,身份得稳定才认得出
+     * "还是同一个"。落盘的会话 id 永远另起(见 {@link #pullIn}),不会撞上。
+     */
     public Conversation of(UUID companion) {
-        return of(List.of(companion));
-    }
-
-    /** 成员表正好是这些人的那个会话;没有就现构一个(不落盘)。 */
-    public Conversation of(List<UUID> members) {
-        Set<UUID> want = new LinkedHashSet<>(members);
         for (Conversation c : list()) {
-            if (new LinkedHashSet<>(c.members()).equals(want)) {
+            if (c.members().equals(List.of(companion))) {
                 return c;
             }
         }
-        return Conversation.of(members);
+        return new Conversation(companion.toString(), null, List.of(companion), List.of(), 0);
+    }
+
+    /**
+     * 左栏列的那些:名册上每只一个,再加落过盘、还有活人的会话。按 id 去重——名册那一只的
+     * "就他俩"要是落过盘,它已经在后一批里,不列两次。
+     */
+    public List<Conversation> all() {
+        Map<String, Conversation> out = new LinkedHashMap<>();
+        for (NumenRoster.Entry e : NumenRoster.instance().entries()) {
+            Conversation c = of(e.uuid());
+            out.put(c.id(), c);
+        }
+        for (Conversation c : list()) {
+            if (!membersAlive(c).isEmpty()) {
+                out.putIfAbsent(c.id(), c);
+            }
+        }
+        return new ArrayList<>(out.values());
+    }
+
+    /**
+     * 就他俩时是她;落过盘的会话没有单一的主,null。背包、用量、目标、人设、遣散这些同伴专属的
+     * 东西只在这时有主——判据是"落没落盘",不是人数:三人会话遣散掉两只,剩下的仍是一个会话。
+     */
+    public UUID soloOf(Conversation conv) {
+        return tagOf(conv) == null ? conv.members().get(0) : null;
     }
 
     /** 这只同伴在哪些会话里。 */
@@ -102,13 +126,19 @@ public final class Conversations extends JsonLibrary<Conversation> {
 
     // ---- 改(改了才落盘) ----
 
-    /** 往会话里拉一个人。<b>没有"建群"这个动作</b>,拉进第二个人它自然就是多人会话。 */
+    /**
+     * 往会话里拉一个人。<b>没有"建群"这个动作</b>,拉进第二个人它自然就是多人会话。
+     *
+     * <p>从"就他俩"拉人是另起一个会话:她俩的私聊照旧在,新会话另有 id——就他俩的 id 是她的
+     * UUID,落盘的会话不能占这个号,不然 {@link #tagOf} 会把她的私聊也认成落过盘的。
+     * 从落过盘的会话拉人是扩这个会话:名字、发言号、记录上的印都还是它的。
+     */
     public Conversation pullIn(Conversation conv, UUID companion) {
         List<UUID> members = new ArrayList<>(conv.members());
         if (!members.contains(companion)) {
             members.add(companion);
         }
-        return save(conv.withMembers(members));
+        return save(tagOf(conv) != null ? conv.withMembers(members) : Conversation.of(members));
     }
 
     /** 把一个人移出会话。 */

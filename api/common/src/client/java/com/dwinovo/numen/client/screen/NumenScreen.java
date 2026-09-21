@@ -5,10 +5,12 @@ import com.dwinovo.numen.agent.llm.NumenLlmClient;
 
 import com.dwinovo.numen.agent.llm.ConvoLog;
 import com.dwinovo.numen.agent.llm.ConvoState;
+import com.dwinovo.numen.agent.conversation.Conversation;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.client.agent.ClientNumenLookup;
+import com.dwinovo.numen.client.agent.Conversations;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.client.data.ClientNumenState;
@@ -154,8 +156,11 @@ public final class NumenScreen extends Screen {
     private static final net.minecraft.resources.ResourceLocation CHEVRON_UP = railSpr("chevron_up");
     private static final net.minecraft.resources.ResourceLocation CHEVRON_DOWN = railSpr("chevron_down");
 
-    private UUID uuid;       // active companion (mutable — the rail switches it in place)
-    private String name;
+    /**
+     * 面板对着的会话(左栏切换就地换);null = 空面板(没同伴,或只开设置页)。
+     * 就他俩时它就是那只同伴本身,见 {@link #solo()}——面板没有第二个"当前是谁"。
+     */
+    private Conversation conv;
     private Tab tab = Tab.CHAT;
 
 
@@ -195,7 +200,7 @@ public final class NumenScreen extends Screen {
                         @Override public int panelW() { return panelW; }
                         @Override public int panelH() { return panelH; }
                         @Override public int railX() { return railX; }
-                        @Override public UUID uuid() { return uuid; }
+                        @Override public UUID uuid() { return solo(); }
                         @Override public void tip(List<Component> lines, int x, int y) {
                             pendingTip = lines;
                             pendingTipX = x;
@@ -226,30 +231,32 @@ public final class NumenScreen extends Screen {
     /** Chat transcript view (bubbles + tool chips + eased scroll); reset on companion/tab switch. */
     private final com.dwinovo.numen.client.screen.chat.ChatView chatView =
             new com.dwinovo.numen.client.screen.chat.ChatView(
-                    Minecraft.getInstance().font, this::loop, () -> name, () -> uuid);
+                    Minecraft.getInstance().font, this::loop, () -> conv);
     private int railScroll;        // index of the first visible rail avatar (wheel-scroll when many companions)
 
     /** Re-request the backpack every ~1 s while the Items tab is open. */
     private static final int INV_REFRESH_TICKS = 20;
     private int tickCounter;
 
-    private NumenScreen(UUID uuid, String name) {
-        super(Component.literal(name == null ? "Numen" : "Numen - " + name));
-        this.uuid = uuid;
-        this.name = name;
+    private NumenScreen(Conversation conv) {
+        super(Component.literal(titleOf(conv)));
+        this.conv = conv;
+    }
+
+    private static String titleOf(Conversation c) {
+        return c == null ? "Numen" : "Numen - " + c.displayName(NumenRoster.instance()::name);
     }
 
     /** Open the panel focused on a specific companion. */
-    public static void open(UUID uuid, String name) {
-        Minecraft.getInstance().setScreen(new NumenScreen(uuid, name));
+    public static void open(UUID uuid) {
+        Minecraft.getInstance().setScreen(new NumenScreen(Conversations.instance().of(uuid)));
     }
 
     /** {@code /numen settings} 入口:直接落在设置页(全局配置与同伴无关,空面板也能用)。 */
     public static void openSettings() {
         var entries = NumenRoster.instance().entries();
-        NumenRoster.Entry first = entries.isEmpty() ? null : entries.get(0);
-        NumenScreen screen = first == null
-                ? new NumenScreen(null, null) : new NumenScreen(first.uuid(), first.name());
+        NumenScreen screen = new NumenScreen(
+                entries.isEmpty() ? null : Conversations.instance().of(entries.get(0).uuid()));
         screen.tab = Tab.SETTINGS;
         Minecraft.getInstance().setScreen(screen);
     }
@@ -261,28 +268,51 @@ public final class NumenScreen extends Screen {
     public static void openWorkspace() {
         var asking = com.dwinovo.numen.client.consent.ConsentCards.first();
         if (asking != null) {
-            Minecraft.getInstance().setScreen(new NumenScreen(asking.companion(),
-                    NumenRoster.instance().name(asking.companion())));
+            Minecraft.getInstance().setScreen(
+                    new NumenScreen(Conversations.instance().of(asking.companion())));
             return;
         }
         var entries = NumenRoster.instance().entries();
-        if (entries.isEmpty()) { Minecraft.getInstance().setScreen(new NumenScreen(null, null)); return; }
-        NumenRoster.Entry first = entries.get(0);
-        Minecraft.getInstance().setScreen(new NumenScreen(first.uuid(), first.name()));
+        Minecraft.getInstance().setScreen(new NumenScreen(
+                entries.isEmpty() ? null : Conversations.instance().of(entries.get(0).uuid())));
     }
 
-    /** Switch the panel to another companion in place (left-rail click) — no reopen. */
-    private void switchTo(UUID u, String n) {
-        if (java.util.Objects.equals(u, uuid)) return;
-        inputBar = null; savedInput = "";       // don't carry typed text across companions
-        uuid = u; name = n;
+    /** Switch the panel to another conversation in place (left-rail click) — no reopen. */
+    private void switchTo(Conversation c) {
+        if (sameAs(c, conv)) return;
+        inputBar = null; savedInput = "";       // don't carry typed text across conversations
+        conv = c;
         chatView.reset();
         rebuild();
-        if (tab == Tab.ITEMS && u != null) requestInventory();
+        if (tab == Tab.ITEMS && solo() != null) requestInventory();
     }
 
+    private static boolean sameAs(Conversation a, Conversation b) {
+        return a == null ? b == null : b != null && a.id().equals(b.id());
+    }
+
+    /**
+     * 就他俩时是她;落过盘的会话没有单一的主,null——那时背包、用量、目标行、人设、遣散这些
+     * 同伴专属的东西没有主,不画。判据在 {@link Conversations#soloOf}。
+     */
+    private UUID solo() {
+        return conv == null ? null : Conversations.instance().soloOf(conv);
+    }
+
+    /** 抬头上的名字:主人起的,或拼成员名。 */
+    private String name() {
+        return conv == null ? null : conv.displayName(NumenRoster.instance()::name);
+    }
+
+    /** 就他俩那只的大脑;会话没有单一的主时 null。 */
     private EntityAgentLoop loop() {
-        return AgentLoopRegistry.getOrCreate(uuid);
+        UUID her = solo();
+        return her == null ? null : AgentLoopRegistry.getOrCreate(her);
+    }
+
+    /** 左栏列的会话:每帧现取,名册一变它就跟着变。 */
+    private static List<Conversation> rail() {
+        return Conversations.instance().all();
     }
 
     @Override
@@ -329,7 +359,7 @@ public final class NumenScreen extends Screen {
         if (summoning) { buildSummonCard(); return; }
         if (editing) { buildEditCard(); return; }
         switch (tab) {
-            case CHAT -> { if (uuid != null) buildChatWidgets(); }
+            case CHAT -> { if (conv != null) buildChatWidgets(); }
             case SETTINGS -> settings.buildWidgets();
             case ITEMS -> { /* no widgets */ }
         }
@@ -422,9 +452,12 @@ public final class NumenScreen extends Screen {
 
     /** 编辑卡的宿主面:身份、网络动作(模式/皮肤发包)与关卡留在屏幕这边。 */
     private final class EditHost implements CompanionEditPanel.Host {
-        @Override public UUID uuid() { return uuid; }
+        @Override public UUID uuid() { return solo(); }
 
-        @Override public String name() { return name == null ? "?" : name; }
+        @Override public String name() {
+            String n = NumenScreen.this.name();
+            return n == null ? "?" : n;
+        }
 
         @Override public void onClose() {
             editing = false;
@@ -439,18 +472,18 @@ public final class NumenScreen extends Screen {
 
         @Override public boolean currentCreative() {
             for (NumenRoster.Entry e : NumenRoster.instance().entries()) {
-                if (e.uuid().equals(uuid)) return e.creative();
+                if (e.uuid().equals(solo())) return e.creative();
             }
             return false;
         }
 
         @Override public void setCreative(boolean creative) {
             Services.NETWORK.sendToServer(
-                    new com.dwinovo.numen.network.payload.SetGameModePayload(uuid, creative));
+                    new com.dwinovo.numen.network.payload.SetGameModePayload(solo(), creative));
         }
 
         @Override public void applySkin(String skinId) {
-            UUID target = uuid;   // 异步查询窗口内可能切换同伴:皮肤落到点选择时的那只
+            UUID target = solo();   // 异步查询窗口内可能切换同伴:皮肤落到点选择时的那只
             var entry = com.dwinovo.numen.client.skin.SkinLibrary.instance().get(skinId);
             if (entry != null && entry.signed()) {
                 sendSkin(target, entry.value(), entry.signature());
@@ -458,7 +491,7 @@ public final class NumenScreen extends Screen {
             }
             // 按名字:本机查同名正版(与召唤同一条路);查不到发空值 = 回原版默认皮肤。
             // 保存即关卡,查询过程不占 UI;失败的原因进聊天框留痕。
-            String n = name;
+            String n = NumenScreen.this.name();
             com.dwinovo.numen.client.skin.MojangSkinLookup.fetch(n)
                     .thenAccept(r -> Minecraft.getInstance().execute(() -> {
                         if (r.problem() != null) {
@@ -499,14 +532,13 @@ public final class NumenScreen extends Screen {
                 () -> {
                     Services.NETWORK.sendToServer(
                             new com.dwinovo.numen.network.payload.DismissRequestPayload(target));
-                    if (target.equals(uuid)) {   // 走的是当前这只:跳到另一只/回空屏
-                        NumenRoster.Entry next = firstOther(target);
+                    if (target.equals(solo())) {   // 走的是当前这只:跳到另一个会话/回空屏
+                        Conversation next = firstOther(conv);
                         if (next != null) {
-                            switchTo(next.uuid(), next.name());
+                            switchTo(next);
                             return;
                         }
-                        uuid = null;
-                        name = null;
+                        conv = null;
                     }
                     rebuild();
                 });
@@ -523,10 +555,10 @@ public final class NumenScreen extends Screen {
         return summoning || editing;
     }
 
-    /** First roster companion that isn't {@code exclude}, or null if none. */
-    private NumenRoster.Entry firstOther(UUID exclude) {
-        for (NumenRoster.Entry e : NumenRoster.instance().entries()) {
-            if (!e.uuid().equals(exclude)) return e;
+    /** First rail conversation that isn't {@code exclude}, or null if none. */
+    private Conversation firstOther(Conversation exclude) {
+        for (Conversation c : rail()) {
+            if (!sameAs(c, exclude)) return c;
         }
         return null;
     }
@@ -576,17 +608,24 @@ public final class NumenScreen extends Screen {
 
         @Override public void onMicToggle() { NumenScreen.this.onMicToggle(); }
 
-        @Override public void onAbort() { loop().abort(); }
+        @Override public void onAbort() {
+            var l = loop();
+            if (l != null) l.abort();
+        }
 
-        @Override public boolean canAbort() { return loop().status().canInterrupt(); }
+        @Override public boolean canAbort() {
+            var l = loop();
+            return l != null && l.status().canInterrupt();
+        }
 
         @Override public String hint() {
             if (micNotice != null && micNoticeUntil > System.currentTimeMillis()) return micNotice;
-            return I18n.get("numen.chat.hint", name == null ? "" : name);
+            String n = NumenScreen.this.name();
+            return I18n.get("numen.chat.hint", n == null ? "" : n);
         }
 
         @Override public EntityAgentLoop loop() {
-            return uuid == null ? null : NumenScreen.this.loop();
+            return NumenScreen.this.loop();
         }
 
         /** 只注册事件,不进 renderables——画面归 NumenUI。见 {@code McTextInput}。 */
@@ -685,8 +724,9 @@ public final class NumenScreen extends Screen {
 
     /** The active companion's current persona name (green marker in the list), or null. */
     private String activePersonaName() {
-        if (uuid == null) return null;
-        return AgentLoopRegistry.get(uuid).map(EntityAgentLoop::personaName).orElse(null);
+        UUID her = solo();
+        if (her == null) return null;
+        return AgentLoopRegistry.get(her).map(EntityAgentLoop::personaName).orElse(null);
     }
 
     @Override
@@ -702,9 +742,10 @@ public final class NumenScreen extends Screen {
     private void requestInventory() {
         // No companion selected (empty roster / hotkey-opened blank panel) → nothing to fetch.
         // The payload's UUID stream-codec can't encode null, so this guard also prevents a crash.
-        if (uuid == null) return;
+        UUID her = solo();
+        if (her == null) return;
         if (Minecraft.getInstance().getConnection() != null) {
-            Services.NETWORK.sendToServer(new RequestStatePayload(uuid));
+            Services.NETWORK.sendToServer(new RequestStatePayload(her));
         }
     }
 
@@ -715,8 +756,7 @@ public final class NumenScreen extends Screen {
      */
     private void submitChat(String text) {
         if (text == null || text.isBlank()) return;
-        var convos = com.dwinovo.numen.client.agent.Conversations.instance();
-        convos.say(convos.of(uuid), text);
+        conv = Conversations.instance().say(conv, text).conversation();
         if (inputBar != null) inputBar.setText("");
         chatView.pinToBottom();
     }
@@ -810,19 +850,19 @@ public final class NumenScreen extends Screen {
             }
             int rail = railIndexAt((int) mouseX, (int) mouseY);
             if (rail >= 0) {
-                List<NumenRoster.Entry> entries = NumenRoster.instance().entries();
-                if (rail < entries.size()) {
+                List<Conversation> items = rail();
+                if (rail < items.size()) {
                     boolean wasSummoning = summoning;
                     summoning = false;
-                    NumenRoster.Entry e = entries.get(rail);
-                    if (e.uuid().equals(uuid)) {
+                    Conversation c = items.get(rail);
+                    if (sameAs(c, conv)) {
                         // 侧栏是纯切换器(Discord 语法):点当前头像不再有动作,
                         // 编辑入口在头部名字旁的铅笔;模态开着时当逃生口收卡。
                         if (editing) { editing = false; rebuild(); }
                         else if (wasSummoning) rebuild();
                     } else {
                         editing = false;
-                        switchTo(e.uuid(), e.name());
+                        switchTo(c);
                     }
                 }
                 return true;
@@ -833,11 +873,11 @@ public final class NumenScreen extends Screen {
                 return super.mouseClicked(mouseX, mouseY, button);
             }
             if (tab == Tab.SETTINGS && settings.mouseClicked(mouseX, mouseY)) return true;
-            if (uuid != null && !dismissOpen() && overEditTrash(mouseX, mouseY)) {
-                openDismissConfirm(uuid);   // 危险操作的闸是确认卡,不是把入口藏起来
+            if (solo() != null && !dismissOpen() && overEditTrash(mouseX, mouseY)) {
+                openDismissConfirm(solo());   // 危险操作的闸是确认卡,不是把入口藏起来
                 return true;
             }
-            if (uuid != null && !dismissOpen() && overEditPencil(mouseX, mouseY)) {
+            if (solo() != null && !dismissOpen() && overEditPencil(mouseX, mouseY)) {
                 editing = true;
                 editPanel().reset();   // 开卡:草稿从当下真相取基线
                 rebuild();
@@ -927,15 +967,18 @@ public final class NumenScreen extends Screen {
         renderRail(g, mouseX, mouseY);   // avatars + status + summon tile on the rail column
 
         // 头部一行四个成员从右往左让位:tab(定宽) ← 用量 ← 人设名(可整个消失) ← 名字(最后裁)。
+        // 用量、图标、复活倒计时、人设名都是一只同伴的:会话没有单一的主时抬头只有名字
+        UUID her = solo();
         int headerLimit = tabX[0] - 8;
-        if (!modalOpen() && !dismissOpen() && tab == Tab.CHAT && uuid != null) {
+        if (!modalOpen() && !dismissOpen() && tab == Tab.CHAT && her != null) {
             headerLimit = renderUsage(g, mouseX, mouseY) - 8;
         }
         // 名字旁的两枚图标 = 改与删("名字在哪,编辑就在哪"的资料页定式;改与删并排、分开点,
         // 是列表/资料页的通行习惯)。它们是入口,名字先给它们让出这 36px,免得名字一长就没处点。
-        boolean nameIcons = uuid != null && !modalOpen() && !dismissOpen();
+        boolean nameIcons = her != null && !modalOpen() && !dismissOpen();
         int nameRoom = headerLimit - (left + PAD) - (nameIcons ? ICON_PITCH * 2 : 0);
-        String nm = clip(name == null ? "Numen" : name, Math.max(24, nameRoom));
+        String title = name();
+        String nm = clip(title == null ? "Numen" : title, Math.max(24, nameRoom));
         txt(g, Component.literal(nm), left + PAD, top + 7, ON_BAND);
         int afterName = left + PAD + font.width(nm) + 6;
         editPencilX = editTrashX = -1;
@@ -960,10 +1003,10 @@ public final class NumenScreen extends Screen {
             }
             afterName += ICON_PITCH * 2;
         }
-        if (uuid != null && NumenRoster.instance().isDead(uuid)) {   // active companion dead — respawn countdown
+        if (her != null && NumenRoster.instance().isDead(her)) {   // active companion dead — respawn countdown
             // 倒计时归零还没回来 = 周围没有能站的地方,复活在重试。继续显示"0"就是
             // 一个数字卡死不动,教科书级的"看起来坏了"——说清楚在等什么。
-            long rem = NumenRoster.instance().remainingMs(uuid);
+            long rem = NumenRoster.instance().remainingMs(her);
             String rs = rem <= 0 ? I18n.get(ModLanguageData.Keys.RESPAWN_BLOCKED)
                     : I18n.get("numen.respawn", (int) Math.ceil(rem / 1000.0));
             if (afterName < headerLimit) {
@@ -981,17 +1024,21 @@ public final class NumenScreen extends Screen {
         // 背景不可交互)。
         switch (tab) {
             case SETTINGS -> settings.render(g, mouseX, mouseY);   // global — works with no companion
-            case CHAT -> { if (uuid != null) renderChat(g, mouseX, mouseY); else emptyHint(g); }
+            case CHAT -> { if (conv != null) renderChat(g, mouseX, mouseY); else emptyHint(g); }
             case ITEMS -> {
-                if (uuid != null) {
+                if (her != null) {
                     com.dwinovo.numen.client.screen.items.ItemsView.render(
-                            g, font, uuid, left, top, panelW, panelH, HEADER_H, mouseX, mouseY);
+                            g, font, her, left, top, panelW, panelH, HEADER_H, mouseX, mouseY);
+                } else if (conv != null) {
+                    // 背包是一只同伴的;会话没有单一的主,这页没东西可画,说清楚去哪看
+                    txt(g, Component.translatable("numen.items.pick_one"),
+                            left + PAD, top + HEADER_H + 10, TXT_FAINT);
                 } else {
                     emptyHint(g);
                 }
             }
         }
-        if (!modalOpen() && tab == Tab.CHAT && uuid != null) {
+        if (!modalOpen() && tab == Tab.CHAT && her != null) {
             // 没绑模型/没填 key:她停在 BLOCKED,原因一直挂在输入行上面,绑好了自己消失
             var status = loop().status();
             if (status.hold() == com.dwinovo.numen.agent.loop.Hold.BLOCKED && status.holdReason() != null) {
@@ -1023,8 +1070,8 @@ public final class NumenScreen extends Screen {
             com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), modalCardX(), modalCardY(),
                     modalCardW(), modalCardBottom() - modalCardY(),
                     UiTheme.current().aiFill(), UiTheme.current().aiBorder());
-            if (uuid != null) {
-                CompanionFace.draw(g, uuid, skinFor(uuid), modalX(), modalY0() + 6, 18);
+            if (her != null) {
+                CompanionFace.draw(g, her, skinFor(her), modalX(), modalY0() + 6, 18);
             }
             editPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
                     com.dwinovo.numen.client.screen.settings.HostThemeColors.current(),
@@ -1078,19 +1125,21 @@ public final class NumenScreen extends Screen {
 
     // ---- left companion rail ----
 
-    /** The folded-in roster (on the merged sprite's rail column): one avatar head per companion below the
-     *  green header, active one framed gold, a status dot each, + tile at the bottom. */
+    /** The folded-in roster (on the merged sprite's rail column): one tile per conversation below the
+     *  green header — a companion's face, or stacked faces for a multi-member one — active one framed
+     *  gold, a status dot on each companion, + tile at the bottom. */
     private void renderRail(GuiGraphics g, int mouseX, int mouseY) {
-        List<NumenRoster.Entry> entries = NumenRoster.instance().entries();
+        List<Conversation> items = rail();
         int ax = railX + (RAIL_W - RAIL_AV) / 2;
         railScroll = Math.clamp(railScroll, 0, maxRailScroll());     // keep valid as the roster grows/shrinks
         int first = railScroll;
         int startY = railStartY();
-        for (int i = first; i < entries.size(); i++) {
+        for (int i = first; i < items.size(); i++) {
             int ay = startY + (i - first) * RAIL_SLOT;
             if (ay + RAIL_AV > railBottomEdge()) break;
-            NumenRoster.Entry e = entries.get(i);
-            boolean active = e.uuid().equals(uuid);
+            Conversation c = items.get(i);
+            UUID her = Conversations.instance().soloOf(c);
+            boolean active = sameAs(c, conv);
             boolean hovered = mouseX >= ax && mouseX < ax + RAIL_AV
                     && mouseY >= ay && mouseY < ay + RAIL_AV;
             boolean railQuiet = !dismissOpen() && !modalOpen();
@@ -1098,30 +1147,32 @@ public final class NumenScreen extends Screen {
             // 悬停未选中出短条 = 可切换。悬停的容器反应与"+"号同语法:边框亮 CTA。
             com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), ax - 2, ay - 2, RAIL_AV + 4, RAIL_AV + 4,
                     FIELD, !active && hovered && railQuiet ? CTA : BORDER);
-            CompanionFace.draw(g, e.uuid(), skinFor(e.uuid()), ax, ay, RAIL_AV);
+            drawFaces(g, c, her, ax, ay);
             int pillH = active ? RAIL_AV - 6 : (hovered && railQuiet ? 8 : 0);
             if (pillH > 0) {
                 int py2 = ay + (RAIL_AV - pillH) / 2;
                 g.fill(railX + 1, py2, railX + 3, py2 + pillH, ACCENT);
             }
             if (hovered && !active && railQuiet) {
-                // 未选中悬停给名字(即时渲染,无网页式延迟);当前那只的名字在头部常驻。
-                pendingTip = java.util.List.of(Component.literal(e.name()));
+                // 未选中悬停给名字(即时渲染,无网页式延迟);当前那个的名字在头部常驻。
+                pendingTip = java.util.List.of(Component.literal(c.displayName(NumenRoster.instance()::name)));
                 pendingTipX = mouseX;
                 pendingTipY = mouseY;
             }
-            if (e.dead()) {                                           // dead — dim veil + respawn countdown
+            // 状态点、复活倒计时、等点头的"!"都是一只同伴的事;会话格上只有脸
+            if (her == null) continue;
+            if (NumenRoster.instance().isDead(her)) {                 // dead — dim veil + respawn countdown
                 g.fill(ax, ay, ax + RAIL_AV, ay + RAIL_AV, 0xB0101010);
-                long rem = e.remainingMs();
+                long rem = NumenRoster.instance().remainingMs(her);
                 // 头像太小写不下字:归零改画一个"等"字记号,细节交给上面的头部行
-                String c = rem <= 0 ? "…" : String.valueOf((int) Math.ceil(rem / 1000.0));
-                txt(g, Component.literal(c), ax + (RAIL_AV - font.width(c)) / 2, ay + (RAIL_AV - 8) / 2, CTA);
+                String cd = rem <= 0 ? "…" : String.valueOf((int) Math.ceil(rem / 1000.0));
+                txt(g, Component.literal(cd), ax + (RAIL_AV - font.width(cd)) / 2, ay + (RAIL_AV - 8) / 2, CTA);
             } else {
                 int d = ax + RAIL_AV - 6, e2 = ay + RAIL_AV - 6;     // status LED, bottom-right
-                g.fill(d, e2, d + 5, e2 + 5, statusColor(e.uuid()));
+                g.fill(d, e2, d + 5, e2 + 5, statusColor(her));
                 Nb.border(g, d, e2, 5, 5, 1, BORDER);
             }
-            if (com.dwinovo.numen.client.consent.ConsentCards.pending(e.uuid()) != null) {
+            if (com.dwinovo.numen.client.consent.ConsentCards.pending(her) != null) {
                 // 她在等主人点头:右上角一枚"!",没选中她的时候也看得见
                 int bx = ax + RAIL_AV - 7, by = ay - 1;
                 g.fill(bx, by, bx + 8, by + 10, CTA);
@@ -1147,6 +1198,21 @@ public final class NumenScreen extends Screen {
         g.fill(pcx - 1, pcy - 5, pcx + 1, pcy + 5, plusColor);
     }
 
+    /** 会话格的脸:一个人是她的脸,多个人是叠脸(前两张,右下错开)——同一条规则,没有两种图标。 */
+    private void drawFaces(GuiGraphics g, Conversation c, UUID her, int ax, int ay) {
+        if (her != null) {
+            CompanionFace.draw(g, her, skinFor(her), ax, ay, RAIL_AV);
+            return;
+        }
+        List<UUID> faces = Conversations.instance().membersAlive(c);
+        int size = 18;
+        int step = RAIL_AV - size;
+        for (int k = 0; k < Math.min(2, faces.size()); k++) {
+            UUID m = faces.get(k);
+            CompanionFace.draw(g, m, skinFor(m), ax + k * step, ay + k * step, size);
+        }
+    }
+
     /** Scroll-affordance chevron sprite (amber pixel-art triangle, up = more above / down = more below).
      *  Blitted at its native 11×6 so the pixels stay crisp (no scaling, no AA). */
     private void chevron(GuiGraphics g, int cx, int y, boolean up) {
@@ -1167,13 +1233,13 @@ public final class NumenScreen extends Screen {
     }
 
     private int maxRailScroll() {
-        return Math.max(0, NumenRoster.instance().entries().size() - railVisibleSlots());
+        return Math.max(0, rail().size() - railVisibleSlots());
     }
 
     /** Y of the first (visible) avatar: centred vertically when the whole roster fits, top-aligned once
      *  it overflows and scrolls. Fixes the big bottom gap + the first avatar poking past the top edge. */
     private int railStartY() {
-        int n = NumenRoster.instance().entries().size();
+        int n = rail().size();
         if (n > railVisibleSlots()) return top + RAIL_TOP;          // scrolling — top-align
         int blockH = Math.max(0, n - 1) * RAIL_SLOT + RAIL_AV;
         int span = railBottomEdge() - (top + RAIL_TOP);
@@ -1200,14 +1266,14 @@ public final class NumenScreen extends Screen {
         return com.dwinovo.numen.client.agent.KnownSkins.of(u);
     }
 
-    /** Roster index of the avatar under (mx,my), or -1. */
+    /** Rail index of the tile under (mx,my), or -1. */
     private int railIndexAt(int mx, int my) {
         int ax = railX + (RAIL_W - RAIL_AV) / 2;
         if (mx < ax || mx >= ax + RAIL_AV) return -1;
-        List<NumenRoster.Entry> entries = NumenRoster.instance().entries();
+        int n = rail().size();
         int first = Math.clamp(railScroll, 0, maxRailScroll());
         int startY = railStartY();
-        for (int i = first; i < entries.size(); i++) {
+        for (int i = first; i < n; i++) {
             int ay = startY + (i - first) * RAIL_SLOT;
             if (ay + RAIL_AV > railBottomEdge()) break;
             if (my >= ay && my < ay + RAIL_AV) return i;
@@ -1336,19 +1402,23 @@ public final class NumenScreen extends Screen {
         int bodyY = top + HEADER_H + 4;
         int bodyBottom = top + panelH - inputH() - PAD - 6;
         int transX = left + PAD;
-        int transW = panelW - PAD * 2 - PLAN_W - 8;
+        // 目标行、计划卡、外脑现场、整理进度都是一只同伴的;会话没有单一的主时对话流占满整行
+        EntityAgentLoop lp = loop();
+        int transW = panelW - PAD * 2 - (lp == null ? 0 : PLAN_W + 8);
 
-        // 长期目标一行:她一轮接一轮在做的那件事。常驻在正文上方——目标是"现在的驱动力",
-        // 不是聊天记录里的一条,埋进对话流就翻不到了。
-        bodyY = renderGoalLine(g, bodyY, panelW - PAD * 2);
+        if (lp != null) {
+            // 长期目标一行:她一轮接一轮在做的那件事。常驻在正文上方——目标是"现在的驱动力",
+            // 不是聊天记录里的一条,埋进对话流就翻不到了。
+            bodyY = renderGoalLine(g, bodyY, panelW - PAD * 2);
 
-        // right-side PLAN card + the bubble transcript
-        int planX = transX + transW + 8;
-        com.dwinovo.numen.client.screen.chat.PlanCard.render(
-                g, font, loop(), planX - 4, bodyY, PLAN_W + 4, bodyBottom);
+            // right-side PLAN card + the bubble transcript
+            int planX = transX + transW + 8;
+            com.dwinovo.numen.client.screen.chat.PlanCard.render(
+                    g, font, lp, planX - 4, bodyY, PLAN_W + 4, bodyBottom);
+        }
         // 外脑驱动中:对话流换成现场——同一套气泡语法,画的是现场缓冲(主人的话、
         // 外脑的 say 与动作行),顶上一条"谁接进来了"的知情行。
-        if (com.dwinovo.numen.mcp.server.McpMode.instance().driving()) {
+        if (lp != null && com.dwinovo.numen.mcp.server.McpMode.instance().driving()) {
             chatView.renderExternal(g, transX, bodyY, transW, bodyBottom - bodyY);
         } else {
             chatView.render(g, transX, bodyY, transW, bodyBottom - bodyY);
@@ -1366,9 +1436,8 @@ public final class NumenScreen extends Screen {
 
         // 整理记忆:一条随摘要流回来的字数逼近满格的进度条。摘要多长事先不知道,所以它
         // 报的是"还在动",不是"完成了百分之几"——永远差一点,收尾时整条消失。
-        var status = loop().status();
-        if (status.phase() == com.dwinovo.numen.agent.loop.Phase.COMPACT) {
-            double p = status.compactProgress();
+        if (lp != null && lp.status().phase() == com.dwinovo.numen.agent.loop.Phase.COMPACT) {
+            double p = lp.status().compactProgress();
             int bw = panelW - PAD * 2;
             int by = top + panelH - inputH() - PAD - 8;
             txt(g, Component.literal("整理记忆… " + Math.round(p * 100) + "%"),
