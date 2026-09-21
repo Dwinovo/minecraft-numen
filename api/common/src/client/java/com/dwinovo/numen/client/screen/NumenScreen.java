@@ -52,8 +52,9 @@ import java.util.UUID;
  * UUID so it works at any distance.
  *
  * <h2>Chat tab</h2>
- * A scrollable transcript that takes the full width; her latest plan is a one-line strip
- * under the header that unfolds over the transcript on click (PlanStrip). Tool calls
+ * A scrollable transcript that takes the full width, from the name band down to a dim status line
+ * above the input (pi's footer + working indicator in one): spinner while she works, her goal, her
+ * plan ("计划 2/5", click to unfold upward over the transcript), context percent on the right. Tool calls
  * show a spinner while running and a green check once their result lands — the raw
  * tool-result JSON is NOT shown (it only flips the call to done), keeping the chat
  * readable. The plan is the companion's latest {@code todowrite}.
@@ -143,9 +144,12 @@ public final class NumenScreen extends Screen {
     private int editTrashX = -1;
     /** 头部「＋ 拉人」的横座标;有人可拉才画。 */
     private int editPlusX = -1;
-    /** 计划细带本帧画在哪(顶边);-1 = 没画(没计划/不是单成员)。点它展开清单。 */
-    private int planStripY = -1;
+    /** 状态行(输入框上方那一行)的高度:转圈、目标、计划、上下文水位都在这一行。 */
+    private static final int STATUS_H = 11;
+    /** 计划那一段本帧画在状态行的哪一截;宽 0 = 没画。点它展开清单。 */
+    private int planStripX, planStripY, planStripW;
     private boolean planOpen;
+    private static final String[] SPIN = {"|", "/", "-", "\\"};
     /** 成员抬头那一行本帧画了谁(与 membersAlive 同序),点击按它判命中;空 = 本帧没画。 */
     private final List<UUID> memberRowFaces = new ArrayList<>();
     private int memberRowX, memberRowY;
@@ -1033,9 +1037,8 @@ public final class NumenScreen extends Screen {
                     }
                 }
             }
-            if (tab == Tab.CHAT && planStripY >= 0 && mouseY >= planStripY
-                    && mouseY < planStripY + com.dwinovo.numen.client.screen.chat.PlanStrip.H
-                    && mouseX >= left + PAD && mouseX < left + panelW - PAD) {
+            if (tab == Tab.CHAT && planStripW > 0 && mouseY >= planStripY && mouseY < planStripY + STATUS_H
+                    && mouseX >= planStripX && mouseX < planStripX + planStripW) {
                 planOpen = !planOpen;
                 return true;
             }
@@ -1242,9 +1245,6 @@ public final class NumenScreen extends Screen {
         // 用量、图标、复活倒计时、人设名都是一只同伴的:会话没有单一的主时抬头只有名字
         UUID her = solo();
         int headerLimit = tabX[0] - 8;
-        if (!modalOpen() && !overlayOpen() && tab == Tab.CHAT && her != null) {
-            headerLimit = renderUsage(g, mouseX, mouseY) - 8;
-        }
         // 名字旁的图标 = 改与删("名字在哪,编辑就在哪"的资料页定式;改与删并排、分开点,
         // 是列表/资料页的通行习惯),再加「＋」邀请。它们作用在左栏选中的那一格:铅笔与垃圾桶
         // 就他俩时改她/遣散,落过盘的会话改名/解散;「＋」有人可请才画。它们是入口,名字先给
@@ -1325,14 +1325,6 @@ public final class NumenScreen extends Screen {
                 } else {
                     emptyHint(g);
                 }
-            }
-        }
-        if (!modalOpen() && tab == Tab.CHAT && her != null) {
-            // 没绑模型/没填 key:她停在 BLOCKED,原因一直挂在输入行上面,绑好了自己消失
-            var status = loop().status();
-            if (status.hold() == com.dwinovo.numen.agent.loop.Hold.BLOCKED && status.holdReason() != null) {
-                txt(g, Component.literal(status.holdReason()),
-                        left + PAD, top + panelH - inputH() - PAD - 11, FAIL);
             }
         }
         if (summoning) {
@@ -1604,80 +1596,75 @@ public final class NumenScreen extends Screen {
      *
      * <p>命中率只看<b>最近一轮</b>:累计命中率会被历史稀释,看不出"刚才那轮把缓存打穿了"。
      */
-    private int renderUsage(GuiGraphics g, int mouseX, int mouseY) {
-        var loop = loop();
-        var sum = loop.usageTotals();
-        int pct = loop.contextPercent();
-        if (sum.total() <= 0 && pct <= 0) return tabX[0];
-
+    /**
+     * 用量明细:{@code ↑输入 ↓输出 R缓存读 W缓存写 CH命中率 占用/窗口}。每段有值才出现——服务商不报缓存
+     * 的话那三段自然消失。它是给想知道的人看的,所以住在状态行水位数字的悬停提示里,不常驻。
+     * 命中率只看<b>最近一轮</b>:累计命中率会被历史稀释,看不出"刚才那轮把缓存打穿了"。
+     */
+    private String usageDetail(EntityAgentLoop lp) {
+        var sum = lp.usageTotals();
         List<String> parts = new java.util.ArrayList<>();
-        List<Integer> colors = new java.util.ArrayList<>();
-        if (sum.input() > 0) {
-            parts.add("↑" + TokenFormat.tokens(sum.input()));
-            colors.add(TXT_FAINT);
-        }
-        if (sum.output() > 0) {
-            parts.add("↓" + TokenFormat.tokens(sum.output()));
-            colors.add(TXT_FAINT);
-        }
-        if (sum.cacheRead() > 0) {
-            parts.add("R" + TokenFormat.tokens(sum.cacheRead()));
-            colors.add(OK);
-        }
-        if (sum.cacheWrite() > 0) {
-            parts.add("W" + TokenFormat.tokens(sum.cacheWrite()));
-            colors.add(TXT_MUTED);
-        }
-        double hit = loop.lastUsage().cacheHitRate();
-        if (sum.reportsCache() && hit >= 0) {
-            parts.add("CH" + TokenFormat.percent1(hit) + "%");
-            colors.add(hit >= 0.7 ? OK : hit >= 0.3 ? RUN : FAIL);
-        }
-        if (pct > 0) {
-            parts.add(pct + "%/" + TokenFormat.tokens(loop.modelWindow()));
-            colors.add(pct > 90 ? FAIL : pct > 70 ? RUN : TXT_FAINT);
-        }
-        if (parts.isEmpty()) return tabX[0];
-
-        int gap = font.width(" ");
-        int total = -gap;
-        for (String part : parts) {
-            total += font.width(part) + gap;
-        }
-        int tx = tabX[0] - 10 - total;
-        int x = tx;
-        for (int k = 0; k < parts.size(); k++) {
-            txt(g, Component.literal(parts.get(k)), x, top + 7, colors.get(k));
-            x += font.width(parts.get(k)) + gap;
-        }
-        return tx;
+        if (sum.input() > 0) parts.add("↑" + TokenFormat.tokens(sum.input()));
+        if (sum.output() > 0) parts.add("↓" + TokenFormat.tokens(sum.output()));
+        if (sum.cacheRead() > 0) parts.add("R" + TokenFormat.tokens(sum.cacheRead()));
+        if (sum.cacheWrite() > 0) parts.add("W" + TokenFormat.tokens(sum.cacheWrite()));
+        double hit = lp.lastUsage().cacheHitRate();
+        if (sum.reportsCache() && hit >= 0) parts.add("CH" + TokenFormat.percent1(hit) + "%");
+        parts.add(lp.contextPercent() + "%/" + TokenFormat.tokens(lp.modelWindow()));
+        return String.join(" ", parts);
     }
 
-    /** 画目标行;没有目标就一个像素都不占。返回正文该从哪儿开始。 */
-    private int renderGoalLine(GuiGraphics g, int bodyY, int w) {
-        var goal = loop().goal();
-        if (goal == null) {
-            return bodyY;
+    /**
+     * 状态行:输入框上方一行暗色小字,pi 的 footer 与 working 指示合成一行。左边依次是她在忙时的转圈、
+     * 长期目标(◆)、计划("▸ 计划 2/5 · 那一步",点开往上展开);右边是上下文水位,悬停出用量明细。
+     * 目标只显示目标本身,不显示评估器那句"还差什么"——没达成就静默接着干,不该每轮在主人眼前刷判词;
+     * 第几轮、跑了多久在悬停里。
+     */
+    private void renderStatusLine(GuiGraphics g, EntityAgentLoop lp, int y, int mouseX, int mouseY) {
+        int x = left + PAD;
+        int right = left + panelW - PAD;
+        boolean quiet = !modalOpen() && !overlayOpen();
+        // 右:水位
+        int pct = lp.contextPercent();
+        String pctS = pct + "%";
+        int pctX = right - font.width(pctS);
+        txt(g, Component.literal(pctS), pctX, y, pct > 90 ? FAIL : pct > 70 ? RUN : TXT_FAINT);
+        if (quiet && mouseY >= y && mouseY < y + STATUS_H && mouseX >= pctX && mouseX < right) {
+            pendingTip = java.util.List.of(Component.literal(usageDetail(lp)));
+            pendingTipX = mouseX;
+            pendingTipY = mouseY;
         }
-        // 目标只有"在"和"不在"两种,所以不需要状态色——它在,就是在跑。
-        // 显示目标本身,不显示评估器那句"还差什么":没达成就静默接着干,不该每轮在主人
-        // 眼前刷一句判词。想知道进度就 /goal 主动问。
-        String head = "◆ 第 " + goal.turnsExecuted() + " 轮 · ";
-        String tail = "  " + com.dwinovo.numen.agent.goal.GoalPrompts.elapsed(
-                goal.elapsedMs(System.currentTimeMillis()));
-        int room = w - font.width(head) - font.width(tail);
-        String body = goal.objective();
-        String full = body;
-        while (body.length() > 1 && font.width(body + "…") > room) {
-            body = body.substring(0, body.length() - 1);
+        int limit = pctX - 8;
+        // 左:转圈
+        if (lp.status().busy()) {
+            txt(g, Component.literal(SPIN[(int) ((System.currentTimeMillis() / 120) % 4)]), x, y, RUN);
+            x += 8;
         }
-        if (!body.equals(full)) {
-            body = body + "…";
+        // 目标;计划先量好自己至少要多少,目标把剩下的用完
+        var goal = lp.goal();
+        int planMin = 0;
+        if (goal != null) {
+            String head = "◆ ";
+            String body = goal.objective();
+            int room = limit - x - font.width(head) - 70;   // 给计划留最短一截
+            String full = body;
+            while (body.length() > 1 && font.width(body + "…") > room) body = body.substring(0, body.length() - 1);
+            if (!body.equals(full)) body = body + "…";
+            String line = head + body;
+            txt(g, Component.literal(line), x, y, RUN);
+            int w = font.width(line);
+            if (quiet && mouseY >= y && mouseY < y + STATUS_H && mouseX >= x && mouseX < x + w) {
+                pendingTip = java.util.List.of(Component.literal("第 " + goal.turnsExecuted() + " 轮 · "
+                        + com.dwinovo.numen.agent.goal.GoalPrompts.elapsed(goal.elapsedMs(System.currentTimeMillis()))));
+                pendingTipX = mouseX;
+                pendingTipY = mouseY;
+            }
+            x += w + 8;
         }
-        txt(g, Component.literal(head + body), left + PAD, bodyY, RUN);
-        txt(g, Component.literal(tail),
-                left + PAD + w - font.width(tail), bodyY, TXT_FAINT);
-        return bodyY + 11;
+        // 计划
+        planStripX = x;
+        planStripY = y;
+        planStripW = com.dwinovo.numen.client.screen.chat.PlanStrip.render(g, font, lp, x, y, Math.max(0, limit - x), planOpen);
     }
 
     /**
@@ -1744,24 +1731,29 @@ public final class NumenScreen extends Screen {
 
     private void renderChat(GuiGraphics g, int mouseX, int mouseY) {
         int bodyY = top + HEADER_H + 4;
-        int bodyBottom = top + panelH - inputH() - PAD - 6;
         int transX = left + PAD;
-        int transW = panelW - PAD * 2;   // 对话流永远占满整行;附属信息在抬头下按行排、按需展开
-        // 目标行、计划带、外脑现场、整理进度都是一只同伴的;会话没有单一的主时是成员行
+        int transW = panelW - PAD * 2;   // 对话流永远占满整行;附属信息在底部一行、按需展开
         EntityAgentLoop lp = loop();
-        planStripY = -1;
+        planStripW = 0;
+        // 输入框上方那一行:状态行住这儿;整理记忆的进度、没绑模型的原因、命令的回话、麦克风提示
+        // 也都落这一行——它们是一时的、比状态要紧,谁在场谁占,状态行让开。
+        int dockY = top + panelH - inputH() - PAD - STATUS_H;
+        boolean compacting = lp != null && lp.status().phase() == com.dwinovo.numen.agent.loop.Phase.COMPACT;
+        boolean blocked = lp != null && lp.status().hold() == com.dwinovo.numen.agent.loop.Hold.BLOCKED
+                && lp.status().holdReason() != null;
+        boolean cmdLive = cmdReplyUntil > System.currentTimeMillis() && !cmdReply.isEmpty();
+        boolean noticeLive = micNotice != null && micNoticeUntil > System.currentTimeMillis();
+        if (!noticeLive && micNoticeUntil != 0) {   // 过期一次性复位(占位文案由输入行现取)
+            micNoticeUntil = 0;
+            micNotice = null;
+        }
+        boolean noticeLine = noticeLive && inputBar != null && !inputBar.text().isEmpty();
+        boolean statusLine = lp != null && !compacting && !blocked && !cmdLive && !noticeLine;
+        // 正文的底:单成员时给状态行让一行(它常驻,像 pi 的页脚);会话没有单一的主时没有状态行
+        int bodyBottom = dockY - (lp != null ? 2 : 6);
 
-        if (lp != null) {
-            // 长期目标一行:她一轮接一轮在做的那件事。常驻在正文上方——目标是"现在的驱动力",
-            // 不是聊天记录里的一条,埋进对话流就翻不到了。
-            bodyY = renderGoalLine(g, bodyY, transW);
-            // 计划一条细带:没计划一个像素不占;点它在对话流上展开清单
-            int afterStrip = com.dwinovo.numen.client.screen.chat.PlanStrip.render(
-                    g, font, lp, transX, bodyY, transW, planOpen);
-            planStripY = afterStrip == bodyY ? -1 : bodyY;
-            bodyY = afterStrip;
-        } else {
-            bodyY = renderMemberRow(g, bodyY, mouseX, mouseY);
+        if (lp == null) {
+            bodyY = renderMemberRow(g, bodyY, mouseX, mouseY);   // 谁在场,Discord 也放顶上
         }
         // 外脑驱动中:对话流换成现场——同一套气泡语法,画的是现场缓冲(主人的话、
         // 外脑的 say 与动作行),顶上一条"谁接进来了"的知情行。
@@ -1770,23 +1762,25 @@ public final class NumenScreen extends Screen {
         } else {
             chatView.render(g, transX, bodyY, transW, bodyBottom - bodyY);
         }
-        if (planOpen && planStripY >= 0) {
-            com.dwinovo.numen.client.screen.chat.PlanStrip.renderOpen(g, font, lp, transX, bodyY, transW, bodyBottom);
-        }
 
-        boolean noticeLive = micNotice != null && micNoticeUntil > System.currentTimeMillis();
-        if (!noticeLive && micNoticeUntil != 0) {   // 过期一次性复位(占位文案由输入行现取)
-            micNoticeUntil = 0;
-            micNotice = null;
+        if (statusLine) {
+            renderStatusLine(g, lp, dockY, mouseX, mouseY);
+            if (planOpen && planStripW > 0) {
+                // 清单从状态行往上长,盖在对话流上——和补全弹层同一个方向
+                com.dwinovo.numen.client.screen.chat.PlanStrip.renderOpen(g, font, lp, transX, transW, dockY - 3, bodyY);
+            }
         }
         // 框里已有文字时占位不显示,这条兜底行接管(用醒目的 FAIL 色)
-        if (noticeLive && inputBar != null && !inputBar.text().isEmpty()) {
-            txt(g, Component.literal(micNotice), left + PAD, top + panelH - inputH() - PAD - 11, FAIL);
+        if (noticeLine) {
+            txt(g, Component.literal(micNotice), left + PAD, dockY, FAIL);
         }
-
+        // 没绑模型/没填 key:她停在 BLOCKED,原因一直挂在输入行上面,绑好了自己消失
+        if (blocked && !compacting) {
+            txt(g, Component.literal(lp.status().holdReason()), left + PAD, dockY, FAIL);
+        }
         // 整理记忆:一条随摘要流回来的字数逼近满格的进度条。摘要多长事先不知道,所以它
         // 报的是"还在动",不是"完成了百分之几"——永远差一点,收尾时整条消失。
-        if (lp != null && lp.status().phase() == com.dwinovo.numen.agent.loop.Phase.COMPACT) {
+        if (compacting) {
             double p = lp.status().compactProgress();
             int bw = panelW - PAD * 2;
             int by = top + panelH - inputH() - PAD - 8;
@@ -1794,8 +1788,8 @@ public final class NumenScreen extends Screen {
                     left + PAD, by - 11, TXT_MUTED);
             g.fill(left + PAD, by, left + PAD + bw, by + 3, FIELD);
             g.fill(left + PAD, by, left + PAD + (int) Math.round(bw * p), by + 3, ACCENT);
-        } else if (cmdReplyUntil > System.currentTimeMillis() && !cmdReply.isEmpty()) {
-            int ly = top + panelH - inputH() - PAD - 11;
+        } else if (cmdLive) {
+            int ly = dockY;
             for (int i = cmdReply.size() - 1; i >= 0 && ly > bodyY; i--, ly -= 10) {
                 txt(g, Component.literal(cmdReply.get(i)), left + PAD, ly, TXT_MUTED);
             }
