@@ -49,7 +49,24 @@ public class BuildGameTests {
     private static void runBuildCase(GameTestHelper helper, String name,
                                      List<BlockPos> relCells, int cobbleStacks) {
         ServerLevel level = helper.getLevel();
-        BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 2));
+        Dispatched build = dispatchBuild(helper, name, new BlockPos(2, 2, 2), relCells, cobbleStacks);
+        helper.succeedWhen(() -> {
+            for (BlockPos cell : build.cells()) {
+                helper.assertTrue(level.getBlockState(cell).is(Blocks.COBBLESTONE),
+                        "structure incomplete at " + cell.toShortString());
+            }
+            CompanionFactory.despawn(level.getServer(), build.companion());
+        });
+    }
+
+    /** 一份派出去的圆石建造:她、任务记录、目标格。判据由用例自己定。 */
+    private record Dispatched(NumenPlayer companion, BuildTaskRecord record, List<BlockPos> cells) {}
+
+    /** 派一份圆石建造:rel 出生、按需发圆石,不传分层——走生产默认的自动分层。 */
+    private static Dispatched dispatchBuild(GameTestHelper helper, String name, BlockPos spawnRel,
+                                            List<BlockPos> relCells, int cobbleStacks) {
+        ServerLevel level = helper.getLevel();
+        BlockPos spawn = helper.absolutePos(spawnRel);
         NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
                 name, UUID.randomUUID(), level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
@@ -63,17 +80,11 @@ public class BuildGameTests {
         }
         var ctx = TaskDispatch.ctx("gametest-build", companion);
         long deadline = ctx.deadline(Math.max(1200L, targets.size() * 400L));
-        TaskDispatch.setTask(companion,
-                new BuildTaskRecord(ctx.toolCallId(), deadline, targets, com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY), null, reply -> {});
-
-        List<BlockPos> cells = targets.stream().map(BuildTaskRecord.Target::pos).toList();
-        helper.succeedWhen(() -> {
-            for (BlockPos cell : cells) {
-                helper.assertTrue(level.getBlockState(cell).is(Blocks.COBBLESTONE),
-                        "structure incomplete at " + cell.toShortString());
-            }
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
+        BuildTaskRecord record = new BuildTaskRecord(ctx.toolCallId(), deadline, targets,
+                com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY);
+        TaskDispatch.setTask(companion, record, null, reply -> {});
+        return new Dispatched(companion, record,
+                targets.stream().map(BuildTaskRecord.Target::pos).toList());
     }
 
     /** 形状 DSL:空心圆柱(半径 3、高 4 的塔筒)。几何由 build_shape 的展开器
@@ -1993,6 +2004,91 @@ public class BuildGameTests {
     public static void build_platform(GameTestHelper helper) {
         runBuildCase(helper, "gametest_paver",
                 boxCells(new BlockPos(5, 2, 5), 9, 1, 9, false), 3);
+    }
+
+    /**
+     * 赴工地不从图纸里抄近路。她在一道还是空气的墙的东边,巡视起点在墙的西北角外——直线过去
+     * 必穿墙的格子,而那些格子是空气,寻路本来乐意穿。穿过去的后果是:一条腿走到一半被截断,
+     * 她就站在了自己要砌的那格里,收工时那格永远"有人站着"。日式小屋差的两格门口台阶就是这么来的。
+     *
+     * <p>判据:整场建造里她的脚和头从不落在任何一个图纸格里,而且墙照样砌完。
+     */
+    @GameTest(template = "floor20", timeoutTicks = 6000, batch = "numen_build")
+    public static void build_walks_around_the_blueprint_not_through_it(GameTestHelper helper) {
+        List<BlockPos> wall = new ArrayList<>();
+        for (int z = 4; z <= 16; z++) {
+            wall.add(new BlockPos(6, 2, z));
+        }
+        ServerLevel level = helper.getLevel();
+        Dispatched build = dispatchBuild(helper, "gametest_detour", new BlockPos(10, 2, 10), wall, 1);
+        java.util.Set<BlockPos> blueprint = new java.util.HashSet<>(build.cells());
+        BlockPos[] trespass = {null};
+        helper.onEachTick(() -> {
+            if (trespass[0] != null) {
+                return;
+            }
+            BlockPos feet = build.companion().blockPosition();
+            if (blueprint.contains(feet)) {
+                trespass[0] = feet;
+            } else if (blueprint.contains(feet.above())) {
+                trespass[0] = feet.above();
+            }
+        });
+        helper.succeedWhen(() -> {
+            var result = build.record().getResult();
+            helper.assertTrue(result != null, "build has not finished");
+            helper.assertTrue(result.success(), "build failed: " + result.message());
+            for (BlockPos cell : build.cells()) {
+                helper.assertTrue(level.getBlockState(cell).is(Blocks.COBBLESTONE),
+                        "structure incomplete at " + cell.toShortString());
+            }
+            helper.assertTrue(trespass[0] == null, "she stood in a blueprint cell at "
+                    + (trespass[0] == null ? "-" : trespass[0].toShortString()));
+            CompanionFactory.despawn(level.getServer(), build.companion());
+        });
+    }
+
+    /**
+     * 被外力挪进图纸里也得盖完。工地格对寻路是重价不是禁区,为的就是这一刻:她被推进、
+     * 挤进、掉进还没砌的格子里时,得能自己走出来再把脚下那格补上——禁区的话她在原地
+     * 一步也走不出去,三遍零进展后就报"有人站着"。
+     */
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
+    public static void build_finishes_the_cells_she_was_pushed_into(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Dispatched build = dispatchBuild(helper, "gametest_shoved", new BlockPos(2, 2, 2),
+                boxCells(new BlockPos(8, 2, 8), 5, 1, 5, false), 1);
+        BlockPos[] shovedInto = {null};
+        helper.onEachTick(() -> {
+            if (shovedInto[0] != null || build.record().completed() < 5) {
+                return;
+            }
+            // 挑离她最远、还是空气的那格,把她整个人挪进去——脚就踩在自己要放的那格里
+            BlockPos feet = build.companion().blockPosition();
+            BlockPos target = null;
+            for (BlockPos cell : build.cells()) {
+                if (level.getBlockState(cell).isAir()
+                        && (target == null || cell.distSqr(feet) > target.distSqr(feet))) {
+                    target = cell;
+                }
+            }
+            if (target == null) {
+                return;
+            }
+            build.companion().teleportTo(target.getX() + 0.5, target.getY(), target.getZ() + 0.5);
+            shovedInto[0] = target;
+        });
+        helper.succeedWhen(() -> {
+            helper.assertTrue(shovedInto[0] != null, "she was never pushed in - the case did not run");
+            var result = build.record().getResult();
+            helper.assertTrue(result != null, "build has not finished");
+            helper.assertTrue(result.success(), "build failed: " + result.message());
+            for (BlockPos cell : build.cells()) {
+                helper.assertTrue(level.getBlockState(cell).is(Blocks.COBBLESTONE),
+                        "structure incomplete at " + cell.toShortString());
+            }
+            CompanionFactory.despawn(level.getServer(), build.companion());
+        });
     }
 
     /** 建造批次(重):创造同伴照真实社区图纸把整栋日式小屋盖出来。 */

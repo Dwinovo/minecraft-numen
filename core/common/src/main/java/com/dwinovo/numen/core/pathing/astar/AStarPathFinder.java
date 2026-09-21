@@ -69,7 +69,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         int numNodes = 0;
         int numEmptyChunk = 0;
         boolean isFavoring = !favoring.isEmpty();
-        // 按位置的代价表:踩(stand)与穿(pass)两栏在这里叠加到落点——规划查询给上一条路的
+        // 按位置的代价表:踩(stand)叠到落点,穿(pass)叠到身体占的两格——规划查询给上一条路的
         // 格子加价出备选就靠它;FORBID 的格早在移动原语的可站/可穿判定里排除了
         com.dwinovo.numen.core.pathing.spec.PositionCosts positions = calcContext.spec.positions();
         boolean hasPositional = !positions.isEmpty();
@@ -155,8 +155,12 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                     actionCost *= favoring.calculate(hashCode);
                 }
                 if (hasPositional) {
-                    long cell = BlockPos.asLong(res.x, res.y, res.z);
-                    actionCost += positions.stand(cell) + positions.pass(cell);
+                    // 踩叠在落点(脚下那格);穿叠在身体占的两格——脚与头。与 CellClass 里
+                    // 硬禁的口径一致:那边对每个身体格都查 pass,软代价不能只算脚不算头,
+                    // 否则一格头高的工地格拦不住她从下面钻过去。
+                    long feet = BlockPos.asLong(res.x, res.y, res.z);
+                    long head = BlockPos.asLong(res.x, res.y + 1, res.z);
+                    actionCost += positions.stand(feet) + positions.pass(feet) + positions.pass(head);
                 }
                 PathNode neighbor = getNodeAtPosition(res.x, res.y, res.z, hashCode);
                 double tentativeCost = currentNode.cost + actionCost;

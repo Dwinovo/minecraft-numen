@@ -6,6 +6,7 @@ import com.dwinovo.numen.core.pathing.bridge.ContextFactory;
 import com.dwinovo.numen.core.pathing.cache.LoadedOnlyView;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
+import com.dwinovo.numen.core.pathing.moves.ActionCosts;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
 import com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest;
 import com.dwinovo.numen.core.pathing.moves.MovementHelper;
@@ -71,6 +72,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private static final int LAYER_PAUSE_TICKS = 18;
     /** 巡视路线离工地包围盒的外扩格数。 */
     private static final int SITE_MARGIN = 2;
+    /**
+     * 踩进或穿过工地格的代价:一步抵一百格路。任何绕行都比穿过去便宜,所以赴工地、
+     * 巡场永远绕着图纸走;但它不是 FORBID——被外力挪进图纸里(挤、推、掉落)时,
+     * 她还得能走出来,走出来那几步就是她付的这份价。
+     */
+    private static final double SITE_BODY_COST = ActionCosts.WALK_ONE_BLOCK_COST * 100;
     /** 挑落脚点时往前看多少格,决定她该站到哪一侧去。 */
     private static final int WANDER_LOOKAHEAD_CELLS = 120;
     /** 换个地方站:让她绕着工地动起来,而不是钉在原地。 */
@@ -1197,11 +1204,15 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 寻路对工地格的双重禁令:<b>不许拆、不许占</b>。
+     * 寻路对工地格的三条禁令:<b>不许拆、不许埋、不许站进去</b>。
      *
      * <p>不许拆——否则她会为了抄近路把自己刚砌好的墙打个洞穿过去,一边建一边拆。
-     * 不许占——否则寻路会拿垫柱材料把某个目标格填上,那格从此和图纸对不上,还得
+     * 不许埋——否则寻路会拿垫柱材料把某个目标格填上,那格从此和图纸对不上,还得
      * 先拆再放。
+     * 不许站进去——否则赴工地、巡场都会从还是空气的图纸格里抄近路,一条腿走到一半
+     * 被截断,她就站在了自己要放的那格里:身体占着的格放不下,收工时报"有人站着"。
+     * 日式小屋那次差的两格门口台阶,病根就是这个。前两条是硬禁,第三条是重价
+     * ({@link #SITE_BODY_COST}):被外力挪进去时她还得走得出来。
      */
     private LongSet protectedCells() {
         if (siteCells == null) {
@@ -1212,10 +1223,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     private LongOpenHashSet siteCells;
 
-    /** 把工地格的两条禁令并进这次寻路的规格——对本任务起的每一次寻路都生效。 */
+    /** 把工地格的三条禁令并进这次寻路的规格——对本任务起的每一次寻路都生效。 */
     private RouteSpec withSite(RouteSpec spec) {
         if (sitePins == null) {
-            sitePins = PositionCosts.protect(protectedCells());
+            PositionCosts.Builder body = PositionCosts.builder();
+            protectedCells().forEach((long cell) -> body.stand(cell, SITE_BODY_COST).pass(cell, SITE_BODY_COST));
+            sitePins = PositionCosts.protect(protectedCells()).plus(body.build());
         }
         return spec.withPositions(spec.positions().plus(sitePins));
     }
