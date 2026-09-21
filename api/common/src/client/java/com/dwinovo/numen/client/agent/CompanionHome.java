@@ -163,6 +163,17 @@ public final class CompanionHome {
         return dir(entityUuid).resolve(MEMORY);
     }
 
+    /**
+     * 群名册的落点:{@code companions/groups.json}。
+     *
+     * <p>它不跟模型配置库、声线库放在一起,因为那几个库<b>只装配置、不装绑定</b>——正因如此
+     * 才能原样分享给别人。而一个群就是一串同伴 UUID,是彻头彻尾的绑定,只能住在
+     * {@code companions/} 下面,跟着这台机器上的这些同伴。
+     */
+    public static Path groups() {
+        return numenRoot().resolve(DIR).resolve("groups.json");
+    }
+
     // ---- 长期目标 ----
 
     /** 读这只同伴的长期目标;没有(或正文为空)则 null。 */
