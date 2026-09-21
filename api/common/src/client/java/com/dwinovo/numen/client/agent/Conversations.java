@@ -6,7 +6,6 @@ import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.Delivery;
 import com.dwinovo.numen.api.NumenGateway;
 import com.dwinovo.numen.client.data.JsonLibrary;
-import com.dwinovo.numen.event.NumenEvents;
 import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
 
@@ -246,8 +245,7 @@ public final class Conversations extends JsonLibrary<Conversation> {
         for (UUID m : routing.awake()) {
             AgentLoopRegistry.get(m).ifPresent(l -> l.inConversation(tag));
         }
-        String heard = overheardLine(ownerName() + " → " + addressees(routing, members), text,
-                persisted ? Map.of("turn", String.valueOf(next.turn())) : Map.of());
+        String heard = overheardLine(ownerName() + " → " + addressees(routing, members), text);
         boolean reached = false;
         for (Mentions.Member m : members) {
             Delivery d = routing.awake().contains(m.uuid())
@@ -284,7 +282,7 @@ public final class Conversations extends JsonLibrary<Conversation> {
             return;   // 没人跟她说过话,或者那是个单成员会话:没人要告诉
         }
         String name = NumenRoster.instance().name(speaker);
-        String line = overheardLine(name == null ? "?" : name, said, Map.of());
+        String line = overheardLine(name == null ? "?" : name, said);
         for (UUID m : membersAlive(conv)) {
             if (!m.equals(speaker)) {
                 NumenGateway.emit(m, EventTypes.TALK, line);
@@ -305,12 +303,9 @@ public final class Conversations extends JsonLibrary<Conversation> {
         if (tell.isEmpty()) {
             return;
         }
-        Minecraft mc = Minecraft.getInstance();
-        long dayTime = mc.level == null ? 0L : mc.level.getDayTime();
-        String line = NumenEvents.entry(dayTime, EventTypes.LEFT, Map.of(),
-                name + " was dismissed by the owner and is gone", System.currentTimeMillis(), false).text();
+        // 只给正文:<event kind="left" day t> 的壳由投递口拼(EntityAgentLoop.submitEvent),这里拼一层就是两层
         for (UUID m : tell) {
-            NumenGateway.emit(m, EventTypes.LEFT, line);
+            NumenGateway.emit(m, EventTypes.LEFT, name + " was dismissed by the owner and is gone");
         }
     }
 
@@ -358,15 +353,12 @@ public final class Conversations extends JsonLibrary<Conversation> {
     // ---- 拼 ----
 
     /**
-     * 旁听到的那一行。<b>经 {@link NumenEvents#entry} 这个唯一的构造口拼</b>——
-     * {@code <event kind="talk" day t>} 的形状、属性转义、游戏内时间戳全由它统一盖上,
-     * 这里不另写一份格式,也就不会跟别处跑偏。
+     * 旁听到的那一行的<b>正文</b>:{@code [谁] 说了什么}。{@code <event kind="talk" day t>} 的壳、转义、
+     * 游戏内时间戳由投递口盖({@code EntityAgentLoop.submitEvent}),这里不拼——拼了就是两层壳,
+     * 里面那层还被转义成一串实体符号。
      */
-    private static String overheardLine(String speaker, String text, Map<String, String> attrs) {
-        Minecraft mc = Minecraft.getInstance();
-        long dayTime = mc.level == null ? 0L : mc.level.getDayTime();
-        return NumenEvents.entry(dayTime, EventTypes.TALK, attrs,
-                "[" + speaker + "] " + text, System.currentTimeMillis(), false).text();
+    private static String overheardLine(String speaker, String text) {
+        return "[" + speaker + "] " + text;
     }
 
     /** 这句话喊的是谁——旁听的人得知道主人在跟谁说话。 */
