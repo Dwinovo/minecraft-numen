@@ -135,6 +135,16 @@ public final class ModLanguageData {
         public static final String EDIT_PROVIDER_UNBOUND = "numen.edit.provider_unbound";
         public static final String EDIT_MODE_LOCKED      = "numen.edit.mode_locked";
 
+        // Conversation header: pull-in picker, rename card, dissolve confirm.
+        public static final String CONVO_PULL_IN          = "numen.convo.pull_in";
+        public static final String CONVO_PULL_TITLE       = "numen.convo.pull_title";
+        public static final String CONVO_PULL_CONFIRM     = "numen.convo.pull_confirm";
+        public static final String CONVO_RENAME           = "numen.convo.rename";
+        public static final String CONVO_NAME_LABEL       = "numen.convo.name_label";
+        public static final String CONVO_DISSOLVE         = "numen.convo.dissolve";
+        public static final String CONVO_DISSOLVE_TITLE   = "numen.convo.dissolve_title";
+        public static final String CONVO_DISSOLVE_WARNING = "numen.convo.dissolve_warning";
+
         // Skin library tab (upload png → MineSkin-signed textures).
         public static final String SKIN_TITLE           = "numen.skin.title";
         public static final String SKIN_ADD             = "numen.skin.add";
@@ -438,6 +448,14 @@ public final class ModLanguageData {
         adder.add(Keys.EDIT_DISMISS,          "Dismiss");
         adder.add(Keys.EDIT_PROVIDER_UNBOUND, "(unbound)");
         adder.add(Keys.EDIT_MODE_LOCKED,      "No cheat/OP permission — her mode can't be changed");
+        adder.add(Keys.CONVO_PULL_IN,          "Pull in");
+        adder.add(Keys.CONVO_PULL_TITLE,       "Pull into this conversation");
+        adder.add(Keys.CONVO_PULL_CONFIRM,     "Pull in");
+        adder.add(Keys.CONVO_RENAME,           "Rename");
+        adder.add(Keys.CONVO_NAME_LABEL,       "Name");
+        adder.add(Keys.CONVO_DISSOLVE,         "Dissolve");
+        adder.add(Keys.CONVO_DISSOLVE_TITLE,   "Dissolve \"%s\"?");
+        adder.add(Keys.CONVO_DISSOLVE_WARNING, "What was said stays in each companion's own log");
         adder.add(Keys.SKIN_TITLE,           "Skins");
         adder.add(Keys.SKIN_ADD,             "New");
         adder.add(Keys.SKIN_EMPTY,           "No skins yet. Click New, then drag a skin png into the window.");
@@ -785,6 +803,14 @@ public final class ModLanguageData {
         adder.add(Keys.EDIT_DISMISS,          "遣散");
         adder.add(Keys.EDIT_PROVIDER_UNBOUND, "(未绑定)");
         adder.add(Keys.EDIT_MODE_LOCKED,      "没有作弊/OP 权限,改不了同伴的模式");
+        adder.add(Keys.CONVO_PULL_IN,          "拉人");
+        adder.add(Keys.CONVO_PULL_TITLE,       "拉进这个会话");
+        adder.add(Keys.CONVO_PULL_CONFIRM,     "拉进来");
+        adder.add(Keys.CONVO_RENAME,           "改名");
+        adder.add(Keys.CONVO_NAME_LABEL,       "名字");
+        adder.add(Keys.CONVO_DISSOLVE,         "解散");
+        adder.add(Keys.CONVO_DISSOLVE_TITLE,   "解散「%s」?");
+        adder.add(Keys.CONVO_DISSOLVE_WARNING, "说过的话留在各自的记录里,不会丢");
         adder.add(Keys.SKIN_TITLE,           "皮肤库");
         adder.add(Keys.SKIN_ADD,             "新建");
         adder.add(Keys.SKIN_EMPTY,           "还没有皮肤。点右上角\"新建\",再把皮肤 png 拖进游戏窗口。");

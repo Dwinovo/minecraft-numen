@@ -113,6 +113,17 @@ public final class Conversations extends JsonLibrary<Conversation> {
         return tagOf(conv) == null ? conv.members().get(0) : null;
     }
 
+    /** 名册上还不在这个会话里的那些:「＋ 拉人」列的就是她们。 */
+    public List<UUID> pullable(Conversation conv) {
+        List<UUID> out = new ArrayList<>();
+        for (NumenRoster.Entry e : NumenRoster.instance().entries()) {
+            if (!conv.has(e.uuid())) {
+                out.add(e.uuid());
+            }
+        }
+        return out;
+    }
+
     /** 这只同伴在哪些会话里。 */
     public List<Conversation> containing(UUID companion) {
         List<Conversation> out = new ArrayList<>();
@@ -151,6 +162,19 @@ public final class Conversations extends JsonLibrary<Conversation> {
     /** 主人起的名(空白 = 退回拼成员名)。 */
     public Conversation rename(Conversation conv, String name) {
         return save(conv.withName(name));
+    }
+
+    /**
+     * 解散:删掉这条记录。说过的话留在成员各自的日志里,所以不丢历史。
+     * 还站在这个场面里的成员退回"就他俩"——不然她下一句话会盖一个已经不存在的印,哪个视图都看不见。
+     */
+    public void dissolve(Conversation conv) {
+        remove(conv.id());
+        for (UUID m : conv.members()) {
+            AgentLoopRegistry.get(m)
+                    .filter(l -> conv.id().equals(l.conversation()))
+                    .ifPresent(l -> l.inConversation(null));
+        }
     }
 
     /** 主人动过它,从此它有持久记录。 */

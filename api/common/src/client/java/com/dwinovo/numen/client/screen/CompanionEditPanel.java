@@ -28,7 +28,7 @@ import java.util.Objects;
  * 真源取一次({@link #reset()});皮肤的当前选择记在绑定里(与档案/声线同模)。
  * 卡里只有"改",底部一对取消/保存;"删"在头部名字旁的垃圾桶上,不在这张卡里。
  */
-public final class CompanionEditPanel {
+public final class CompanionEditPanel implements ModalCard {
 
     /** 屏幕侧的面:身份、网络动作与关卡。 */
     public interface Host {
@@ -103,6 +103,12 @@ public final class CompanionEditPanel {
         draft.voiceId = origVoice;
         draft.creative = origCreative;
         draft.skinId = origSkin;
+    }
+
+    /** 卡高:标题、三排选择、一对钮。 */
+    @Override
+    public int height() {
+        return 164;
     }
 
     public void build(int x, int y, int w, int h, int dropBottom) {
