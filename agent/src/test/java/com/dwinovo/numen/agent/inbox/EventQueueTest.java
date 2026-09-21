@@ -405,4 +405,49 @@ class EventQueueTest {
         q.push(EventTypes.QUERY, null, T0, true);
         assertTrue(q.isEmpty());
     }
+
+    // ---- 捎带(AMBIENT):听得见,但不为它开一轮 ----
+
+    /** 群聊的不变量守在这一处:发送方怎么标,旁听到的话都不是急件。 */
+    @Test
+    void overheardTalkIsNeverUrgentNoMatterWhatTheSenderSays() {
+        EventQueue q = fresh();
+        assertFalse(q.push(EventTypes.TALK, "<event kind=\"talk\">[阿岚] 我去东边</event>", T0, true),
+                "捎带的条目不可能是急件");
+        assertFalse(q.shouldDrain(T0, 1), "主动性拉到最高也不该为一句旁听开一轮");
+    }
+
+    /** 攒多少条、躺多久都不算数——熟度只数那些本来就该叫醒她的。 */
+    @Test
+    void overheardTalkNeverRipens() {
+        EventQueue q = fresh();
+        for (int i = 0; i < EventQueue.thresholdOf(1) * 3; i++) {
+            q.push(EventTypes.TALK, "<event kind=\"talk\">[阿岚] 第" + i + "句</event>", T0, false);
+        }
+        assertFalse(q.shouldDrain(T0, 1), "条数再多也不开轮");
+        assertFalse(q.shouldDrain(T0 + EventQueue.maxWaitMsOf(1) * 10, 1), "躺再久也不开轮");
+    }
+
+    /** 但别的事把她叫醒时,躺着的旁听跟着那一轮一起走——这就是它免费的原因。 */
+    @Test
+    void overheardTalkRidesAlongOnSomeoneElsesWakeUp() {
+        EventQueue q = fresh();
+        q.push(EventTypes.TALK, "<event kind=\"talk\">[阿岚] 我去东边</event>", T0, false);
+        assertFalse(q.shouldDrain(T0, 1));
+
+        q.push(EventTypes.QUERY, "<query>回来吃饭</query>", T0 + 1, false);
+        assertTrue(q.shouldDrain(T0 + 1, 1), "主人说话了,这一轮该开");
+
+        List<String> out = EventQueue.render(q.takeEntries(T0 + 1), T0 + 1);
+        assertTrue(String.join("\n", out).contains("[阿岚] 我去东边"), "旁听到的话要跟着这一轮进去");
+    }
+
+    /** 队里只剩旁听时不是"空",只是不值得开轮——别让它被当成没有东西可取。 */
+    @Test
+    void aQueueHoldingOnlyOverheardTalkIsStillNotEmpty() {
+        EventQueue q = fresh();
+        q.push(EventTypes.TALK, "<event kind=\"talk\">[阿岚] 在吗</event>", T0, false);
+        assertFalse(q.isEmpty());
+        assertFalse(q.shouldDrain(T0, 1));
+    }
 }

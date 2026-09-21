@@ -76,6 +76,16 @@ public final class EventTypes {
     public static final String REFLEX = "reflex";
     /** 队列满了丢掉了几条——丢弃可以,无声消失不行。 */
     public static final String DROPPED = "dropped";
+    /**
+     * 场面上别人说的话:群聊里主人对别人说的那句,以及别的同伴说出口的那句。
+     *
+     * <p>走 {@link Delivery#AMBIENT}——她听得见,但不会为此醒来。<b>唤醒只能由主人点名产生</b>,
+     * 这是群聊的不变量(见 {@code docs/group-chat.md} §二):同伴的话若能唤醒同伴,两个模型就能
+     * 自己聊下去,而每一轮都是两份账单。
+     *
+     * <p>不进聊天流:面板画群聊时归并的是各人的对话日志,这里再画一遍就是同一句话的第二个出处。
+     */
+    public static final String TALK = "talk";
 
     /** 一类条目什么时候交给大脑。 */
     public enum Delivery {
@@ -84,7 +94,15 @@ public final class EventTypes {
         /** 接续:回合进行中只在本来要停时接上;闲时同样参与熟度判断。 */
         FOLLOW_UP,
         /** 控制命令:不是给模型的文本,闲时由循环自己执行(整理记忆、清空上下文)。 */
-        CONTROL
+        CONTROL,
+        /**
+         * 捎带:回合进行中与 {@link #STEER} 一样在下一个边界注入;闲着时<b>不参与熟度判断</b>。
+         *
+         * <p>"她该听见,但不值得为它把她叫醒"——捎带的条目躺在队里等下次别的事叫醒她,
+         * 跟着那一轮一起走。因此它是<b>免费</b>的:不额外唤醒就不额外花钱。
+         * 这一档的条目永不为急件,由 {@link EventQueue#push} 守死。
+         */
+        AMBIENT
     }
 
     /**
@@ -152,6 +170,8 @@ public final class EventTypes {
         register(event(DIMENSION_CHANGE, false));
         register(event(REFLEX, false));
         register(event(DROPPED, false));
+        // 旁听到的话:捎带投递、不进聊天流,其余与世界的事同一行(原文、打断不清、不是主人说的)。
+        register(new Type(TALK, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
     }
 
     private EventTypes() {}

@@ -95,7 +95,11 @@ public final class EventQueue {
         if (text == null || text.isBlank()) {
             return false;
         }
-        boolean effective = EventTypes.get(type).alwaysUrgent() || urgent;
+        EventTypes.Type kind = EventTypes.get(type);
+        // 捎带的条目永不为急件。"旁听不唤醒"是群聊的不变量,靠发送方自觉守不住——
+        // 一处写死,发送方怎么标都一样。
+        boolean effective = kind.delivery() != EventTypes.Delivery.AMBIENT
+                && (kind.alwaysUrgent() || urgent);
         entries.add(new Entry(type, text, now, effective));
         while (entries.size() > cap) {
             entries.remove(0);
@@ -136,15 +140,26 @@ public final class EventQueue {
      * @param level 主动性档位 1~10,见 {@link #thresholdOf} / {@link #maxWaitMsOf}
      */
     public boolean shouldDrain(long now, int level) {
-        if (entries.isEmpty()) {
-            return false;
-        }
+        int waiting = 0;
+        long oldest = Long.MAX_VALUE;
         for (Entry e : entries) {
             if (e.urgent()) {
                 return true;
             }
+            // 捎带的不算数:它自己不值得开一轮。躺着等下次别的事叫醒她,跟着那一轮一起走。
+            if (EventTypes.get(e.type()).delivery() == EventTypes.Delivery.AMBIENT) {
+                continue;
+            }
+            waiting++;
+            if (e.ts() > 0 && e.ts() < oldest) {
+                oldest = e.ts();
+            }
         }
-        return entries.size() >= thresholdOf(level) || oldestAgeMs(now) >= maxWaitMsOf(level);
+        if (waiting == 0) {
+            return false;
+        }
+        long age = oldest == Long.MAX_VALUE ? 0L : Math.max(0L, now - oldest);
+        return waiting >= thresholdOf(level) || age >= maxWaitMsOf(level);
     }
 
     /**
