@@ -117,8 +117,6 @@ public final class ChatView {
     private static final ResourceLocation SCROLL_THUMB = spr("scroll_thumb");
 
     private final Font font;
-    /** 就他俩那只的大脑;会话没有单一的主时 null——在飞的回复、排队的话、整理进度都是一只同伴的。 */
-    private final Supplier<EntityAgentLoop> loop;
     private final Supplier<Conversation> conv;
 
     // ---- scroll + fold state ----
@@ -127,19 +125,21 @@ public final class ChatView {
     private boolean pinBottom = true;
     private int lastMaxScroll;
     private long lastFrameMs;
-    /** Typewriter state: how much of the live partial is revealed, and the string
-     *  (text + blinking caret) the current frame shows — build() reads the cache so
-     *  click-time rebuilds see the same geometry. */
-    private float revealed;
-    private String liveShown = "";
+    /** 打字机:每个成员在飞的回复各自露出多少、这一帧显示成什么(正文 + 闪烁光标)。
+     *  build() 读的是缓存,点击时的重建和渲染看到同一份几何。 */
+    private final java.util.Map<UUID, Live> live = new java.util.LinkedHashMap<>();
+
+    private static final class Live {
+        float revealed;
+        String shown = "";
+    }
     /** Completed tool-call groups the user clicked open (keyed by the group's first call id). */
     private final Set<String> expandedGroups = new HashSet<>();
     // geometry of the last render, for click / wheel hit-testing
     private int gx, gy, gw, gh;
 
-    public ChatView(Font font, Supplier<EntityAgentLoop> loop, Supplier<Conversation> conv) {
+    public ChatView(Font font, Supplier<Conversation> conv) {
         this.font = font;
-        this.loop = loop;
         this.conv = conv;
     }
 
@@ -154,8 +154,7 @@ public final class ChatView {
         scrollTarget = 0;
         pinBottom = true;
         lastFrameMs = 0;
-        revealed = 0;
-        liveShown = "";
+        live.clear();
         expandedGroups.clear();
     }
 
@@ -256,10 +255,14 @@ public final class ChatView {
                             AI_FILL, AI_BORDER, innerW, first, id));
                     last = id;
                 }
-                case TOOL -> out.add(new Chip(List.of(new ChipRow(
-                        ln.error() ? "✗" : "✔", ln.error() ? FAIL : OK,
-                        Nb.colored(fitOneLine(ln.text(), chipTextW), ln.error() ? FAIL : TOOL)
-                                .getVisualOrderText())), null));
+                case TOOL -> {
+                    boolean first = !id.equals(last);
+                    out.add(new Chip(List.of(new ChipRow(
+                            ln.error() ? "✗" : "✔", ln.error() ? FAIL : OK,
+                            Nb.colored(fitOneLine(ln.text(), chipTextW), ln.error() ? FAIL : TOOL)
+                                    .getVisualOrderText())), null, first ? speaker(id) : null, id));
+                    last = id;
+                }
             }
         }
         return out;
@@ -328,8 +331,10 @@ public final class ChatView {
                           int maxLineW, int fill, int border,
                           boolean showAvatar, UUID who) implements Block {}
 
-    /** A run of tool calls. {@code foldKey} non-null = finished group, clickable to expand/fold. */
-    private record Chip(List<ChipRow> rows, String foldKey) implements Block {}
+    /** A run of tool calls (or a reasoning block). {@code foldKey} non-null = finished group,
+     *  clickable to expand/fold. {@code who} = 干这些活的那只;{@code label} non-null = 她这一轮连发
+     *  的第一块,脸和名字画在它上面——多人会话里工具行也得认得出是谁的。 */
+    private record Chip(List<ChipRow> rows, String foldKey, String label, UUID who) implements Block {}
 
     private record ChipRow(String icon, int iconColor, FormattedCharSequence text) {}
 
@@ -344,7 +349,7 @@ public final class ChatView {
     private int heightOf(Block b) {
         return switch (b) {
             case Bubble bb -> (bb.label() != null ? LABEL_H : 0) + bb.lines().size() * LINE_H + PAD_V * 2;
-            case Chip c -> c.rows().size() * LINE_H + PAD_V * 2;
+            case Chip c -> (c.label() != null ? LABEL_H : 0) + c.rows().size() * LINE_H + PAD_V * 2;
             case Notice ignored -> LINE_H;
         };
     }
@@ -367,9 +372,17 @@ public final class ChatView {
      * ——请求里临时挂载、从未入过记录的东西(如 {@code <current_task>})混进来的话,
      * 画出来的会是一条<b>从未存在过</b>的消息。
      */
+    /** 一次 build 的手头:输出、攒着的工具调用与它们的主人、连发的上一位。 */
+    private static final class Feed {
+        final List<Block> out = new ArrayList<>();
+        final List<LlmToolCall> group = new ArrayList<>();
+        UUID groupWho;
+        UUID last;
+    }
+
     private List<Block> build(int bubbleMaxW) {
-        List<Block> out = new ArrayList<>();
-        EntityAgentLoop lp = loop.get();
+        Feed f = new Feed();
+        List<Block> out = f.out;
         List<Transcript.Entry> source = transcript();
         Set<String> done = new HashSet<>();
         Set<String> failed = new HashSet<>();
@@ -395,95 +408,110 @@ public final class ChatView {
             }
         }
         int innerW = bubbleMaxW - PAD_H * 2;
-        List<LlmToolCall> group = new ArrayList<>();
-        // 连发合并(聊天软件的惯例):同一个人接连说的话只在第一句画头像和名字。多人会话里
-        // "同一个人"按说话的那只算,不按左右哪一侧——换了一只就得重新亮名字。
-        // 工具行不打断连发,提示行打断。null = 连发已断。
-        UUID last = null;
+        // 连发合并(聊天软件的惯例):同一个人接连的话和活只在第一块画头像和名字。多人会话里
+        // "同一个人"按那只算,不按左右哪一侧——换了一只就得重新亮名字。工具行是她的活,
+        // 算在她的连发里;提示行打断。f.last == null = 连发已断。
         int msgIndex = -1;
         for (Transcript.Entry entry : source) {
             msgIndex++;
             ConvoState.Msg msg = entry.msg();
             switch (msg) {
                 case ConvoState.Msg.User u -> {
-                    flushTools(out, group, done, failed, bubbleMaxW);
+                    flushTools(f, done, failed, bubbleMaxW);
                     if (ConvoLog.PERSONA_DIVIDER.equals(u.content())) {
                         notice(out, I18n.get("numen.chat.persona_changed"));
-                        last = null;
+                        f.last = null;
                         continue;
                     }
                     if (ConvoLog.COMPACT_DIVIDER.equals(u.content())) {
                         notice(out, I18n.get("numen.chat.compacted"));
-                        last = null;
+                        f.last = null;
                         continue;
                     }
                     if (ConvoLog.CLEAR_DIVIDER.equals(u.content())) {
                         notice(out, I18n.get("numen.chat.cleared"));
-                        last = null;
+                        f.last = null;
                         continue;
                     }
                     String shown = ownerText(u.content());   // owner's words only, never injected content
                     if (shown.isEmpty()) continue;
-                    boolean first = !OWNER.equals(last);
+                    boolean first = !OWNER.equals(f.last);
                     out.add(bubble(true, null, mentionsLit(shown), OWN_FILL, OWN_BORDER, innerW, first, null));
-                    last = OWNER;
+                    f.last = OWNER;
                 }
                 case ConvoState.Msg.Assistant a -> {
+                    UUID who = entry.companion();
+                    // 换了一只:前一只攒着的工具行先收口,两只的活不折进同一块
+                    if (!who.equals(f.groupWho)) flushTools(f, done, failed, bubbleMaxW);
                     AssistantTurn turn = a.turn();
                     // 思考在说话之前:落库的思考默认折叠(它是过程不是结论,想看再展开)。
                     String reasoned = turn.reasoning();
                     if (reasoned != null && !reasoned.isBlank()) {
-                        flushTools(out, group, done, failed, bubbleMaxW);
-                        out.add(reasoningChip(reasoned, "reason#" + msgIndex, innerW, false));
+                        flushTools(f, done, failed, bubbleMaxW);
+                        boolean first = !who.equals(f.last);
+                        out.add(reasoningChip(reasoned, "reason#" + msgIndex, innerW, false,
+                                first ? speaker(who) : null, who));
+                        f.last = who;
                     }
                     String spoken = ChatDisplayModes.current().assistantText(turn.content());
                     if (!spoken.isBlank()) {
-                        flushTools(out, group, done, failed, bubbleMaxW);   // spoken reply breaks the fold
-                        boolean first = !entry.companion().equals(last);
-                        out.add(bubble(false, first ? speaker(entry.companion()) : null,
-                                Nb.colored(spoken, TXT), AI_FILL, AI_BORDER, innerW, first, entry.companion()));
-                        last = entry.companion();
+                        flushTools(f, done, failed, bubbleMaxW);   // spoken reply breaks the fold
+                        boolean first = !who.equals(f.last);
+                        out.add(bubble(false, first ? speaker(who) : null,
+                                Nb.colored(spoken, TXT), AI_FILL, AI_BORDER, innerW, first, who));
+                        f.last = who;
                     }
-                    group.addAll(turn.toolCalls());
+                    f.group.addAll(turn.toolCalls());
+                    f.groupWho = who;
                 }
                 case ConvoState.Msg.Tool ignored -> { /* result drives done/fail, not a block */ }
                 case ConvoState.Msg.Halt h -> {
-                    flushTools(out, group, done, failed, bubbleMaxW);
+                    flushTools(f, done, failed, bubbleMaxW);
                     notice(out, I18n.get("numen.chat.halted", h.reason()));
-                    last = null;
+                    f.last = null;
                 }
             }
         }
-        flushTools(out, group, done, failed, bubbleMaxW);
-        // 下面这些都是一只同伴此刻的状态,会话没有单一的主时没有
-        if (lp != null) {
+        flushTools(f, done, failed, bubbleMaxW);
+        // 在飞的状态按成员各自的循环取:单成员就是她一个,多人各画各的。
+        java.util.Set<String> queued = new java.util.LinkedHashSet<>();
+        boolean compacting = false;
+        for (UUID her : Conversations.instance().membersAlive(conv.get())) {
+            EntityAgentLoop lp = AgentLoopRegistry.get(her).orElse(null);
+            if (lp == null) continue;
             // 在飞的思考流:展开着实时长(它正在发生,折起来就看不见了);回合落库后
             // 由上面那条 committed 的思考块接管,永不双份。
             String liveReasoning = lp.liveReasoning();
             if (!liveReasoning.isBlank()) {
-                out.add(reasoningChip(liveReasoning, null, innerW, true));
+                boolean first = !her.equals(f.last);
+                out.add(reasoningChip(liveReasoning, null, innerW, true, first ? speaker(her) : null, her));
+                f.last = her;
             }
             // The in-flight reply, typed out live (chunk stream → EntityAgentLoop.livePartial).
-            if (!liveShown.isEmpty()) {
-                UUID her = lp.entityUuid();
-                boolean first = !her.equals(last);
-                out.add(bubble(false, first ? speaker(her) : null, Nb.colored(liveShown, TXT),
+            Live l = live.get(her);
+            if (l != null && !l.shown.isEmpty()) {
+                boolean first = !her.equals(f.last);
+                out.add(bubble(false, first ? speaker(her) : null, Nb.colored(l.shown, TXT),
                         AI_FILL, AI_BORDER, innerW, first, her));
-                last = her;
+                f.last = her;
             }
-            // Prompts still waiting for a protocol-valid splice point — visible immediately
-            // so a queued message never feels swallowed.
+            // 排着的话:主人一句话复制进每个醒着的成员的队列,按原文去重,画一次
             var status = lp.status();
-            for (String queued : status.queuedPreview()) {
-                String shown = ownerText(queued);
-                if (shown.isEmpty()) continue;
-                boolean first = !OWNER.equals(last);
-                out.add(bubble(true, null, Nb.colored("⌛ " + shown, FAINT), QUEUED_FILL, QUEUED_BORDER,
-                        innerW, first, null));
-                last = OWNER;
+            for (String q : status.queuedPreview()) {
+                String shown = ownerText(q);
+                if (!shown.isEmpty()) queued.add(shown);
             }
-            if (status.phase() == com.dwinovo.numen.agent.loop.Phase.COMPACT) notice(out, I18n.get("numen.chat.compacting"));
+            compacting |= status.phase() == com.dwinovo.numen.agent.loop.Phase.COMPACT;
         }
+        // Prompts still waiting for a protocol-valid splice point — visible immediately
+        // so a queued message never feels swallowed.
+        for (String shown : queued) {
+            boolean first = !OWNER.equals(f.last);
+            out.add(bubble(true, null, Nb.colored("⌛ " + shown, FAINT), QUEUED_FILL, QUEUED_BORDER,
+                    innerW, first, null));
+            f.last = OWNER;
+        }
+        if (compacting) notice(out, I18n.get("numen.chat.compacting"));
         if (out.isEmpty()) {
             notice(out, I18n.get("numen.chat.empty", conv.get().displayName(NumenRoster.instance()::name)));
         }
@@ -519,17 +547,21 @@ public final class ChatView {
     /** Advance the typewriter: filter the live partial, ease the reveal toward the
      *  full length, and cache "revealed text + blinking caret". */
     private void updateLive(float dt, long now) {
-        EntityAgentLoop lp = loop.get();
-        String full = lp == null ? "" : ChatDisplayModes.current().assistantText(lp.livePartial());
-        if (full.isEmpty()) {
-            revealed = 0;
-            liveShown = "";
-            return;
+        List<UUID> members = Conversations.instance().membersAlive(conv.get());
+        live.keySet().retainAll(members);
+        for (UUID her : members) {
+            EntityAgentLoop lp = AgentLoopRegistry.get(her).orElse(null);
+            String full = lp == null ? "" : ChatDisplayModes.current().assistantText(lp.livePartial());
+            if (full.isEmpty()) {
+                live.remove(her);
+                continue;
+            }
+            Live l = live.computeIfAbsent(her, k -> new Live());
+            if (l.revealed > full.length()) l.revealed = full.length();
+            if (full.length() - l.revealed > REVEAL_MAX_LAG) l.revealed = full.length() - REVEAL_MAX_LAG;
+            l.revealed = Math.min(full.length(), l.revealed + dt * REVEAL_CPS);
+            l.shown = cut(full, (int) l.revealed) + (((now / 500) & 1) == 0 ? "_" : "");
         }
-        if (revealed > full.length()) revealed = full.length();
-        if (full.length() - revealed > REVEAL_MAX_LAG) revealed = full.length() - REVEAL_MAX_LAG;
-        revealed = Math.min(full.length(), revealed + dt * REVEAL_CPS);
-        liveShown = cut(full, (int) revealed) + (((now / 500) & 1) == 0 ? "_" : "");
     }
 
     /** Cut at {@code n} chars without splitting a surrogate pair. */
@@ -546,8 +578,8 @@ public final class ChatView {
     /** Emit the chip for a run of consecutive tool calls. A single call is one unfoldable chip;
      *  a run stays EXPANDED while any call still runs (live spinners) and auto-folds to a
      *  "N steps · names" summary once done — unless clicked open ({@link #expandedGroups}). */
-    private void flushTools(List<Block> out, List<LlmToolCall> group,
-                            Set<String> done, Set<String> failed, int chipMaxW) {
+    private void flushTools(Feed f, Set<String> done, Set<String> failed, int chipMaxW) {
+        List<LlmToolCall> group = f.group;
         if (group.isEmpty()) return;
         int textW = chipMaxW - PAD_H * 2 - ICON_W;
         long t = System.currentTimeMillis();
@@ -578,8 +610,11 @@ public final class ChatView {
                         Nb.colored(fitOneLine(summary, textW), anyFail ? FAIL : TOOL).getVisualOrderText()));
             }
         }
-        out.add(new Chip(List.copyOf(rows), foldKey));
+        boolean first = !f.groupWho.equals(f.last);
+        f.out.add(new Chip(List.copyOf(rows), foldKey, first ? speaker(f.groupWho) : null, f.groupWho));
+        f.last = f.groupWho;
         group.clear();
+        f.groupWho = null;
     }
 
     /**
@@ -587,7 +622,7 @@ public final class ChatView {
      * 推理文本。{@code live}=在飞,展开着实时长且不可折(正在发生的事折起来
      * 就看不见);已落库的默认折叠成一行摘要,点开看全文——它是过程不是结论。
      */
-    private Chip reasoningChip(String text, String foldKey, int innerW, boolean live) {
+    private Chip reasoningChip(String text, String foldKey, int innerW, boolean live, String label, UUID who) {
         String flat = text.replaceAll("\\s+", " ").trim();
         List<ChipRow> rows = new ArrayList<>();
         boolean expanded = live || (foldKey != null && expandedGroups.contains(foldKey));
@@ -595,14 +630,14 @@ public final class ChatView {
             // 不报字数:中英混排的 length() 一半是字一半是字符,数出来没有意义。
             rows.add(new ChipRow("▸", MUTED,
                     Nb.colored(I18n.get("numen.chat.reasoning") + " ▸", MUTED).getVisualOrderText()));
-            return new Chip(List.copyOf(rows), foldKey);
+            return new Chip(List.copyOf(rows), foldKey, label, who);
         }
         rows.add(new ChipRow(live ? SPIN[(int) ((System.currentTimeMillis() / 120) % 4)] : "▾", MUTED,
                 Nb.colored(I18n.get("numen.chat.reasoning"), MUTED).getVisualOrderText()));
         for (FormattedCharSequence line : font.split(Nb.colored(flat, FAINT), innerW - ICON_W)) {
             rows.add(new ChipRow(" ", MUTED, line));
         }
-        return new Chip(List.copyOf(rows), foldKey);
+        return new Chip(List.copyOf(rows), foldKey, label, who);
     }
 
     private ChipRow toolRow(LlmToolCall tc, Set<String> done, Set<String> failed, long t, int textW) {
@@ -672,6 +707,15 @@ public final class ChatView {
         int maxW = 0;
         for (ChipRow r : c.rows()) maxW = Math.max(maxW, font.width(r.text()));
         int cx = x + EDGE + AV + AV_GAP;
+        if (c.label() != null) {
+            // 她这一轮的第一块:名字在上、脸在左——和气泡同一套,所以谁在干活一眼认得出
+            draw(g, Nb.colored(c.label(), MUTED).getVisualOrderText(), cx + 2, y);
+            y += LABEL_H;
+            int avX = x + EDGE;
+            NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), avX - 2, y - 2,
+                    AV + 4, AV + 4, AI_FILL, AI_BORDER);
+            CompanionFace.draw(g, c.who(), KnownSkins.of(c.who()), avX, y, AV);
+        }
         int cw = NumenStyle.TRACE_INDENT + ICON_W + maxW + PAD_H;
         int ch = c.rows().size() * LINE_H + PAD_V * 2;
         // 极淡底衬出块的范围(半透明再减半),左缘竖线是"这是过程"的记号

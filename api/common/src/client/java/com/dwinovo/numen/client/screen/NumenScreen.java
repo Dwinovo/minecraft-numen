@@ -250,7 +250,7 @@ public final class NumenScreen extends Screen {
     /** Chat transcript view (bubbles + tool chips + eased scroll); reset on companion/tab switch. */
     private final com.dwinovo.numen.client.screen.chat.ChatView chatView =
             new com.dwinovo.numen.client.screen.chat.ChatView(
-                    Minecraft.getInstance().font, this::loop, () -> conv);
+                    Minecraft.getInstance().font, () -> conv);
     private int railScroll;        // index of the first visible rail avatar (wheel-scroll when many companions)
 
     // ---- 侧栏拖拽:把一格拖到另一格上 = 把前者的人拉进后者那个会话(手机桌面合并成文件夹的手势)。
