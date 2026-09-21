@@ -124,4 +124,20 @@ class MentionsTest {
     void sayingTheSameNameTwiceStillWakesHerOnce() {
         assertEquals(List.of(YOU), Mentions.mentioned("@小柚 你听见没 @小柚", GROUP));
     }
+
+    /**
+     * 两只同伴重名时,喊那个名字就是把她们都喊上。
+     *
+     * <p>名字不是唯一的(召唤时不拦重名),而"按成员顺序挑第一只"挑中谁完全取决于建群时
+     * 勾选的先后——主人看不见那个顺序,也就无从预料谁会应声。宁可两只都来。
+     */
+    @Test
+    void twoCompanionsSharingANameBothWakeUp() {
+        UUID one = UUID.randomUUID();
+        UUID two = UUID.randomUUID();
+        List<Mentions.Member> twins = List.of(
+                new Mentions.Member(one, "小柚"),
+                new Mentions.Member(two, "小柚"));
+        assertEquals(List.of(one, two), Mentions.mentioned("@小柚 过来", twins));
+    }
 }

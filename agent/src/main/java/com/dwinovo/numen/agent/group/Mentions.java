@@ -2,9 +2,11 @@ package com.dwinovo.numen.agent.group;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -82,18 +84,25 @@ public final class Mentions {
         }
         String haystack = text.toLowerCase(Locale.ROOT);
         boolean[] eaten = new boolean[haystack.length()];
-        List<Member> byLength = new ArrayList<>(members);
-        byLength.sort(Comparator.comparingInt((Member m) -> m.name() == null ? 0 : m.name().length())
-                .reversed());
 
-        // UUID → 第一次出现的位置,用来还原"话里出现的先后"
-        List<int[]> hits = new ArrayList<>();
-        List<UUID> owners = new ArrayList<>();
-        for (Member m : byLength) {
-            if (m.name() == null || m.name().isBlank()) {
+        // 先按名字归拢:两只同伴同名时,喊那个名字就是把她们都喊上——总比按成员顺序
+        // 任选一只好,那个"第一只"完全是任意的。
+        Map<String, List<UUID>> byName = new LinkedHashMap<>();
+        for (Member m : members) {
+            if (m == null || m.name() == null || m.name().isBlank()) {
                 continue;
             }
-            String needle = "@" + m.name().toLowerCase(Locale.ROOT);
+            byName.computeIfAbsent(m.name().toLowerCase(Locale.ROOT), k -> new ArrayList<>())
+                    .add(m.uuid());
+        }
+        // 长名字先试,吃掉的那一段不再参与——@Anna 因此不会又被 @Ann 认领一次
+        List<String> names = new ArrayList<>(byName.keySet());
+        names.sort(Comparator.comparingInt(String::length).reversed());
+
+        // 位置 → 喊到的那些,用来还原"话里出现的先后"
+        Map<Integer, List<UUID>> hits = new java.util.TreeMap<>();
+        for (String name : names) {
+            String needle = "@" + name;
             int from = 0;
             while (true) {
                 int at = haystack.indexOf(needle, from);
@@ -108,18 +117,12 @@ public final class Mentions {
                 for (int i = at; i < end; i++) {
                     eaten[i] = true;
                 }
-                hits.add(new int[]{at});
-                owners.add(m.uuid());
+                hits.put(at, byName.get(name));
             }
         }
-        List<Integer> order = new ArrayList<>();
-        for (int i = 0; i < hits.size(); i++) {
-            order.add(i);
-        }
-        order.sort(Comparator.comparingInt(i -> hits.get(i)[0]));
         LinkedHashSet<UUID> out = new LinkedHashSet<>();
-        for (int i : order) {
-            out.add(owners.get(i));
+        for (List<UUID> owners : hits.values()) {
+            out.addAll(owners);
         }
         return List.copyOf(out);
     }
