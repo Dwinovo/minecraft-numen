@@ -318,8 +318,9 @@ public final class NumenScreen extends Screen {
                     new NumenScreen(Conversations.instance().of(asking.companion())));
             return;
         }
-        // 开在当前交互对象上(准星指着的、转盘选的、唯一的那个);多个可选又没选过时落在第一个
-        Conversation target = SelectedCompanion.resolveTarget();
+        // 开在当前交互对象上(转盘选的、面板上次对着的);没选过就落在第一只。
+        // 不看准星:准星是 Y/V"走到跟前说话"的规矩,开面板时正好看着谁不该把选择改成她的私聊。
+        Conversation target = SelectedCompanion.get();
         if (target == null) {
             var entries = NumenRoster.instance().entries();
             target = entries.isEmpty() ? null : Conversations.instance().of(entries.get(0).uuid());
