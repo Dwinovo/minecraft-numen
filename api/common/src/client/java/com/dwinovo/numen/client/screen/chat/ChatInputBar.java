@@ -360,10 +360,9 @@ public final class ChatInputBar {
                     return true;
                 }
                 case KeyCodes.ENTER -> {
-                    // 命令:回车 = 就要选中这条,现在执行;想接着打参数请按 Tab。
-                    // `@` 名字:回车只把名字填上,话还没说完——发出去的是"@小柚 "没有意义。
-                    boolean filled = fillSelected();
-                    if (filled && !commandMode(field.value())) return true;
+                    // 回车一次到位:补上选中的那条就发——命令是执行,@ 名字是把话说出去。
+                    // 想补上接着打请按 Tab。两颗键分工明确之后,"补全了没有"就不再影响回车干什么了。
+                    fillSelected();
                     send();
                     return true;
                 }
