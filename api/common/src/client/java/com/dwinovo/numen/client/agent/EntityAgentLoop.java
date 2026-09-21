@@ -76,6 +76,15 @@ public final class EntityAgentLoop {
     private final ConvoState convo;
     /** 她自己写的札记;索引作为 {@code <memory>} 注入。 */
     private final com.dwinovo.numen.agent.memory.NoteBook notes;
+    /**
+     * 她此刻在哪个会话里——最后一次是被哪个会话叫醒的。<b>null = 就他俩</b>(她的单成员会话)。
+     *
+     * <p>这是群聊那套设计里唯一新增的状态,而且只住在这一处:{@code Conversations.say} 是唯一的写者,
+     * 读它的有两个——记录盖印(见 {@link ConvoLog#append}),以及她说出口的话该让谁听见。
+     * 两个读者同一个事实,不各存一份。会话态,重进游戏后主人一开口就重新定下来。
+     */
+    private volatile String conversation;
+
     /** 札记索引上次贴进历史时的版本。 */
     private int memoryRevisionInHistory = -1;
     /** 历史里那份还在不在:开一局时不在,压缩/清空把它吃掉之后也不在。 */
@@ -144,7 +153,7 @@ public final class EntityAgentLoop {
     EntityAgentLoop(UUID entityUuid) {
         this.entityUuid = entityUuid;
         this.log = ConvoLog.atFile(CompanionHome.chat(entityUuid));
-        this.convo = new ConvoState(log::append);
+        this.convo = new ConvoState(msg -> log.append(msg, conversation));
         this.notes = com.dwinovo.numen.agent.memory.NoteBook.of(entityUuid);
         this.runtime = new RuntimeState(entityUuid);
         this.queue = new EventQueue(JsonlJournal.atFile(CompanionHome.inbox(entityUuid)));
@@ -167,6 +176,16 @@ public final class EntityAgentLoop {
         loop.subscribe(this::onTranscriptBoundary);
         loop.subscribe(runtime::on);
         restoreFromDisk();
+    }
+
+    /** 主人在哪个会话里跟她说的话。{@code Conversations.say} 独家调用。 */
+    public void inConversation(String conversationId) {
+        this.conversation = conversationId;
+    }
+
+    /** 她此刻在哪个会话里;null = 就他俩。 */
+    public String conversation() {
+        return conversation;
     }
 
     /**

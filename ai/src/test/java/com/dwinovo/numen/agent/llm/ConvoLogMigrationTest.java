@@ -139,7 +139,7 @@ class ConvoLogMigrationTest {
     @Test
     void aCurrentFileIsLeftAlone(@TempDir Path dir) throws IOException {
         ConvoLog log = ConvoLog.atFile(dir.resolve("chat.jsonl"));
-        log.append(new ConvoState.Msg.User("<current_task>这是新版写的原文</current_task>"));
+        log.append(new ConvoState.Msg.User("<current_task>这是新版写的原文</current_task>"), null);
         byte[] before = Files.readAllBytes(log.file());
 
         log.migrateIfNeeded();

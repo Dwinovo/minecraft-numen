@@ -155,11 +155,11 @@ public final class Conversations extends JsonLibrary<Conversation> {
         }
         Conversation next = conv.withFloor(routing.floor());
         boolean persisted = get(conv.id()) != null;
-        if (persisted) {
-            // 被叫醒的那几只从此在这个场面里,她们接下来说的话就属于这里
-            for (UUID m : routing.awake()) {
-                inConversation.put(m, conv.id());
-            }
+        // 被叫醒的那几只从此在这个场面里:接下来她说的话属于这里,记录也盖这个印。
+        // 没落盘的会话盖 null = "就他俩",于是旧记录天然落在单聊视图里,不需要迁移。
+        String tag = persisted ? conv.id() : null;
+        for (UUID m : routing.awake()) {
+            AgentLoopRegistry.get(m).ifPresent(l -> l.inConversation(tag));
         }
         return new Said(persisted ? save(next) : next, reached);
     }
@@ -172,17 +172,6 @@ public final class Conversations extends JsonLibrary<Conversation> {
     public record Said(Conversation conversation, boolean reached) {}
 
     /**
-     * 她此刻在哪个会话里——最后一次是被哪个会话叫醒的。
-     *
-     * <p>这是整套设计里<b>唯一新增的状态</b>。它回答一件事:她说出口的话该让谁听见。
-     * 人也是这样的——在哪个场合被搭话就在哪个场合回话。
-     *
-     * <p>只记<b>落过盘的会话</b>:没落盘的一定是单成员的(拉人就会存),
-     * 而单成员会话根本没别人要告诉。会话态,不落盘——重进游戏后主人一开口就重新定下来。
-     */
-    private final java.util.Map<UUID, String> inConversation = new java.util.HashMap<>();
-
-    /**
      * 她说出口的那一句,推给<b>叫醒她的那个会话</b>里的其他人。
      *
      * <p>她自己不推——那已经在她日志里了,再推一条就是同一句话的第二个出处。
@@ -192,7 +181,11 @@ public final class Conversations extends JsonLibrary<Conversation> {
         if (said == null || said.isBlank()) {
             return;
         }
-        Conversation conv = get(inConversation.get(speaker));
+        // "她在哪个会话里"只住在循环那一处，这里去问，不另存一份
+        Conversation conv = AgentLoopRegistry.get(speaker)
+                .map(EntityAgentLoop::conversation)
+                .map(this::get)
+                .orElse(null);
         if (conv == null) {
             return;   // 没人跟她说过话,或者那是个单成员会话:没人要告诉
         }

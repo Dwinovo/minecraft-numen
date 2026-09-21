@@ -119,10 +119,19 @@ public final class ConvoLog {
     /**
      * Append one message as a single JSONL line (with a {@code ts}); a {@link ConvoState.Msg.Halt} is written as
      * a {@code halt} event. Best-effort: failures only warn.
+     *
+     * <p>{@code conversation} 盖成一个 {@code conv} 字段，与 {@code ts} 同族的记录级元数据：
+     * 这一行是在哪个会话里记下的。<b>null = 就他俩</b>（她的单成员会话），所以
+     * 这个功能之前的旧记录天然就落在单聊视图里，不需要迁移。
+     *
+     * <p>模型不读它——她的上下文就是一条流；只有面板拿它切视图。
      */
-    public void append(ConvoState.Msg msg) {
+    public void append(ConvoState.Msg msg, String conversation) {
         JsonObject o = encode(msg);
         o.addProperty("ts", System.currentTimeMillis());
+        if (conversation != null && !conversation.isBlank()) {
+            o.addProperty("conv", conversation);
+        }
         writeLine(o);
     }
 

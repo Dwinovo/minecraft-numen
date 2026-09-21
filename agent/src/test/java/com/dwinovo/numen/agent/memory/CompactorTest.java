@@ -143,7 +143,8 @@ class CompactorTest {
 
     @Test
     void clearingEmptiesTheContextButKeepsTheRecord(@TempDir Path dir) {
-        ConvoState convo = new ConvoState(ConvoLog.atFile(dir.resolve("chat.jsonl"))::append);
+        ConvoLog sink = ConvoLog.atFile(dir.resolve("chat.jsonl"));
+        ConvoState convo = new ConvoState(m -> sink.append(m, null));
         convo.addUser("你好");
         Compactor c = compactor(convo, dir);
         ConvoLog log = ConvoLog.atFile(dir.resolve("chat.jsonl"));

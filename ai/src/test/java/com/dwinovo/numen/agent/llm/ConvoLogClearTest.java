@@ -55,9 +55,9 @@ class ConvoLogClearTest {
     @Test
     void appendedBoundaryRoundTripsAndDeletesNothing(@TempDir Path dir) throws IOException {
         ConvoLog log = ConvoLog.atFile(dir.resolve("chat.jsonl"));
-        log.append(new ConvoState.Msg.User("去挖点铁"));
+        log.append(new ConvoState.Msg.User("去挖点铁"), null);
         log.appendClearBoundary();
-        log.append(new ConvoState.Msg.User("新的开始"));
+        log.append(new ConvoState.Msg.User("新的开始"), null);
 
         assertEquals(1, log.load(100).size());
         assertEquals(3, log.loadDisplay(100).size());

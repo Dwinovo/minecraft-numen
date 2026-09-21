@@ -32,12 +32,12 @@ class ConvoLogDisplayTest {
         List<ConvoState.Msg> live = new ArrayList<>();
         log.onDisplay(live::add);
 
-        log.append(USER);
-        log.append(CALL);
-        log.append(RESULT);
-        log.append(HALT);
+        log.append(USER, null);
+        log.append(CALL, null);
+        log.append(RESULT, null);
+        log.append(HALT, null);
         log.appendCompactSummary("[摘要] 挖过铁", List.of(), null);
-        log.append(REPLY);
+        log.append(REPLY, null);
         log.appendPersonaDivider();
         log.appendClearBoundary();
 
@@ -54,8 +54,8 @@ class ConvoLogDisplayTest {
         ConvoState.Msg thought = new ConvoState.Msg.Assistant(new AssistantTurn("先去矿洞", List.of(), null,
                 "背包里没镐,得先合成一把"));
         ConvoLog log = ConvoLog.atFile(dir.resolve("chat.jsonl"));
-        log.append(USER);
-        log.append(thought);
+        log.append(USER, null);
+        log.append(thought, null);
 
         assertEquals(List.of(USER, thought), log.load(100), "模型视图");
         assertEquals(List.of(USER, thought), log.loadDisplay(100), "面板视图");
@@ -68,7 +68,7 @@ class ConvoLogDisplayTest {
         List<ConvoState.Msg> live = new ArrayList<>();
         log.onDisplay(live::add);
 
-        log.append(USER);
+        log.append(USER, null);
 
         assertEquals(List.of(USER), live);
     }

@@ -66,7 +66,7 @@ class ConvoLogPoisonTest {
         ConvoLog source = logWith(dir, POISONED);
         Path copy = dir.resolve("copy.jsonl");
         ConvoLog target = ConvoLog.atFile(copy);
-        source.load(100).forEach(target::append);
+        source.load(100).forEach(m -> target.append(m, null));
 
         String written = Files.readString(copy, StandardCharsets.UTF_8);
         assertFalse(written.contains("{\\\"x\\\": "), "写出去的还带着半截 JSON:\n" + written);

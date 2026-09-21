@@ -31,9 +31,9 @@ class ConvoLogHaltTest {
     @Test
     void aHaltRoundTripsIntoBothViews(@TempDir Path dir) {
         ConvoLog log = ConvoLog.atFile(dir.resolve("chat.jsonl"));
-        log.append(USER);
-        log.append(CALL);
-        log.append(HALT);
+        log.append(USER, null);
+        log.append(CALL, null);
+        log.append(HALT, null);
 
         assertEquals(List.of(USER, CALL, HALT), log.load(100), "模型视图照实回放切断点");
         assertEquals(List.of(USER, CALL, HALT), log.loadDisplay(100), "面板视图画成中断分隔");
@@ -42,7 +42,7 @@ class ConvoLogHaltTest {
     @Test
     void aHaltIsAnEventRecordOnDisk(@TempDir Path dir) throws IOException {
         ConvoLog log = ConvoLog.atFile(dir.resolve("chat.jsonl"));
-        log.append(HALT);
+        log.append(HALT, null);
 
         String last = Files.readAllLines(log.file(), StandardCharsets.UTF_8).get(1);
         assertTrue(last.startsWith("{\"type\":\"halt\",\"reason\":\"你死了(被僵尸杀死)\""),
@@ -52,7 +52,7 @@ class ConvoLogHaltTest {
     @Test
     void aHaltPreservedAcrossCompactionComesBack(@TempDir Path dir) {
         ConvoLog log = ConvoLog.atFile(dir.resolve("chat.jsonl"));
-        log.append(USER);
+        log.append(USER, null);
         log.appendCompactSummary("[摘要] 她去挖铁", List.of(USER, CALL, HALT), new JsonObject());
 
         assertEquals(List.of(new ConvoState.Msg.User("[摘要] 她去挖铁"), USER, CALL, HALT), log.load(100));
@@ -61,9 +61,9 @@ class ConvoLogHaltTest {
     @Test
     void theRestoredHistoryBecomesAValidRequestWithTheRealReason(@TempDir Path dir) {
         ConvoLog log = ConvoLog.atFile(dir.resolve("chat.jsonl"));
-        log.append(USER);
-        log.append(CALL);
-        log.append(HALT);
+        log.append(USER, null);
+        log.append(CALL, null);
+        log.append(HALT, null);
 
         List<ConvoState.Msg> wire = ProtocolView.forWire(log.load(100));
 
