@@ -126,8 +126,7 @@ final class TurnPresenter {
         String shown = ChatDisplayModes.current().assistantText(text);
         if (shown.isBlank()) shown = text;   // 全是动作记号也别无声吞掉——原样示人
         McpTranscript.say(entityUuid, shown);
-        ChatLines.companion(speakerName(), shown);
-        SpeechBubbles.say(entityUuid, shown);
+        spoke(shown);
         VoiceLibrary.Entry cfg = VoiceLibrary.instance().resolve(entityUuid);
         if (cfg == null) return;
         if (voice == null) voice = new VoicePipeline(entityUuid);
@@ -194,11 +193,23 @@ final class TurnPresenter {
         // 超长折叠,悬停看全文,完整记录在 G 面板。开工前没话说就不动气泡——上一句正文泡留着走完
         // 生命周期,身体动起来本身就是反馈;最终回复滤完为空(全是动作记号)时收起思考泡。
         if (!shown.isBlank()) {
-            SpeechBubbles.say(entityUuid, shown);
-            ChatLines.companion(speakerName(), shown);
+            spoke(shown);
         } else if (!turn.hasToolCalls()) {
             SpeechBubbles.clear(entityUuid);
         }
+    }
+
+    /**
+     * 她说出口了——<b>唯一的一处</b>。头顶气泡是主显示,聊天框回显一份当日志,
+     * 同一个会话里的其他同伴旁听到一份。
+     *
+     * <p>内脑回复与外脑 say 走同一条——"她说了什么"只能有一个出处,
+     * 否则旁听到的和主人听见的会开始对不上。
+     */
+    private void spoke(String shown) {
+        SpeechBubbles.say(entityUuid, shown);
+        ChatLines.companion(speakerName(), shown);
+        com.dwinovo.numen.client.agent.Conversations.instance().heard(entityUuid, shown);
     }
 
     /** 调用失败而且不再重试:必须让主人看见——沉进日志就是"已读不回"。 */

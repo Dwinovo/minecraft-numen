@@ -154,8 +154,14 @@ public final class Conversations extends JsonLibrary<Conversation> {
             reached |= d != Delivery.REJECTED;
         }
         Conversation next = conv.withFloor(routing.floor());
-        // 只有已经落过盘的会话才把话头写回去:没人动过的会话没东西可存(见类头)
-        return new Said(get(conv.id()) != null ? save(next) : next, reached);
+        boolean persisted = get(conv.id()) != null;
+        if (persisted) {
+            // 被叫醒的那几只从此在这个场面里,她们接下来说的话就属于这里
+            for (UUID m : routing.awake()) {
+                inConversation.put(m, conv.id());
+            }
+        }
+        return new Said(persisted ? save(next) : next, reached);
     }
 
     /**
@@ -166,12 +172,29 @@ public final class Conversations extends JsonLibrary<Conversation> {
     public record Said(Conversation conversation, boolean reached) {}
 
     /**
-     * 她说出口的那一句,推给同一个会话里的其他人。她自己不推——那已经在她日志里了,
-     * 再推一条就是同一句话的第二个出处。
+     * 她此刻在哪个会话里——最后一次是被哪个会话叫醒的。
+     *
+     * <p>这是整套设计里<b>唯一新增的状态</b>。它回答一件事:她说出口的话该让谁听见。
+     * 人也是这样的——在哪个场合被搭话就在哪个场合回话。
+     *
+     * <p>只记<b>落过盘的会话</b>:没落盘的一定是单成员的(拉人就会存),
+     * 而单成员会话根本没别人要告诉。会话态,不落盘——重进游戏后主人一开口就重新定下来。
      */
-    public void heard(Conversation conv, UUID speaker, String said) {
+    private final java.util.Map<UUID, String> inConversation = new java.util.HashMap<>();
+
+    /**
+     * 她说出口的那一句,推给<b>叫醒她的那个会话</b>里的其他人。
+     *
+     * <p>她自己不推——那已经在她日志里了,再推一条就是同一句话的第二个出处。
+     * 她同时在多个会话里时,这句话只属于其中一个场面——不串台。
+     */
+    public void heard(UUID speaker, String said) {
         if (said == null || said.isBlank()) {
             return;
+        }
+        Conversation conv = get(inConversation.get(speaker));
+        if (conv == null) {
+            return;   // 没人跟她说过话,或者那是个单成员会话:没人要告诉
         }
         String name = NumenRoster.instance().name(speaker);
         String line = overheardLine(name == null ? "?" : name, said);
