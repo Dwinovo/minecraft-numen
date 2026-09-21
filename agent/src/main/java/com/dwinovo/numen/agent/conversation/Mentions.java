@@ -1,4 +1,4 @@
-package com.dwinovo.numen.agent.group;
+package com.dwinovo.numen.agent.conversation;
 
 import java.util.ArrayList;
 import java.util.Comparator;

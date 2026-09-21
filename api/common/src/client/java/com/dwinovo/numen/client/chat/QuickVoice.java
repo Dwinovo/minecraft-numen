@@ -69,8 +69,8 @@ public final class QuickVoice {
             if (said.isEmpty()) flash("没听清,再试一次");
             return;
         }
-        Delivery sent = NumenGateway.emit(t.uuid(), com.dwinovo.numen.agent.inbox.EventTypes.QUERY, said);
-        if (sent != Delivery.REJECTED) {
+        var convos = com.dwinovo.numen.client.agent.Conversations.instance();
+        if (convos.say(convos.of(t.uuid()), said).reached()) {
             ChatLines.owner(t.name(), said, true);
         } else {
             flash(t.name() + " 没能收到——它可能不在线");

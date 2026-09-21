@@ -96,8 +96,8 @@ public class CompanionChatScreen extends Screen {
     /** 输入行的宿主:说话走 Gateway 然后关屏;命令的回话闪在准星提示层,屏也关。 */
     private final class BarHost implements ChatInputBar.Host {
         @Override public void onSend(String text) {
-            Delivery sent = NumenGateway.emit(companionUuid, com.dwinovo.numen.agent.inbox.EventTypes.QUERY, text);
-            if (sent != Delivery.REJECTED) {
+            var convos = com.dwinovo.numen.client.agent.Conversations.instance();
+            if (convos.say(convos.of(companionUuid), text).reached()) {
                 ChatLines.owner(companionName, text, false);
             } else {
                 com.dwinovo.numen.client.hud.TalkHint.flash(companionName + " 没能收到——它可能不在线", 3000);

@@ -1,4 +1,4 @@
-package com.dwinovo.numen.agent.group;
+package com.dwinovo.numen.agent.conversation;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -22,16 +22,16 @@ import java.util.function.Function;
  *
  * <p>纯 JVM,不碰 Minecraft。
  */
-public record CompanionGroup(String id, String name, List<UUID> members, List<UUID> floor) {
+public record Conversation(String id, String name, List<UUID> members, List<UUID> floor) {
 
-    public CompanionGroup {
+    public Conversation {
         members = List.copyOf(members == null ? List.of() : members);
         floor = List.copyOf(floor == null ? List.of() : floor);
     }
 
     /** 新建一个群:名字先空着,显示时拼成员名;话头空着 = 全体。 */
-    public static CompanionGroup of(List<UUID> members) {
-        return new CompanionGroup(UUID.randomUUID().toString(), null, dedup(members), List.of());
+    public static Conversation of(List<UUID> members) {
+        return new Conversation(UUID.randomUUID().toString(), null, dedup(members), List.of());
     }
 
     /**
@@ -57,20 +57,20 @@ public record CompanionGroup(String id, String name, List<UUID> members, List<UU
     }
 
     /** 主人起的名(空白 = 退回拼成员名)。 */
-    public CompanionGroup withName(String newName) {
-        return new CompanionGroup(id, newName == null || newName.isBlank() ? null : newName.strip(),
+    public Conversation withName(String newName) {
+        return new Conversation(id, newName == null || newName.isBlank() ? null : newName.strip(),
                 members, keepMembers(floor, dedup(members)));
     }
 
     /** 换成员。话头里已经不在群里的那些跟着掉——话头只可能落在成员身上。 */
-    public CompanionGroup withMembers(List<UUID> newMembers) {
+    public Conversation withMembers(List<UUID> newMembers) {
         List<UUID> ms = dedup(newMembers);
-        return new CompanionGroup(id, name, ms, keepMembers(floor, ms));
+        return new Conversation(id, name, ms, keepMembers(floor, ms));
     }
 
     /** 转话头(空 = 回到全体)。不在群里的一律不收。 */
-    public CompanionGroup withFloor(List<UUID> next) {
-        return new CompanionGroup(id, name, members, keepMembers(dedup(next), members));
+    public Conversation withFloor(List<UUID> next) {
+        return new Conversation(id, name, members, keepMembers(dedup(next), members));
     }
 
     public boolean has(UUID companion) {
@@ -93,7 +93,7 @@ public record CompanionGroup(String id, String name, List<UUID> members, List<UU
     }
 
     /** 读一条;id 或成员读不出来则 null——半条群比没有更麻烦。 */
-    public static CompanionGroup fromJson(JsonObject o) {
+    public static Conversation fromJson(JsonObject o) {
         if (o == null || !o.has("id") || !o.get("id").isJsonPrimitive()) {
             return null;
         }
@@ -103,7 +103,7 @@ public record CompanionGroup(String id, String name, List<UUID> members, List<UU
         }
         String name = o.has("name") && o.get("name").isJsonPrimitive()
                 ? o.get("name").getAsString() : null;
-        return new CompanionGroup(o.get("id").getAsString(), name, members,
+        return new Conversation(o.get("id").getAsString(), name, members,
                 keepMembers(readUuids(o, "floor"), members));
     }
 

@@ -715,7 +715,8 @@ public final class NumenScreen extends Screen {
      */
     private void submitChat(String text) {
         if (text == null || text.isBlank()) return;
-        com.dwinovo.numen.api.NumenGateway.emit(uuid, com.dwinovo.numen.agent.inbox.EventTypes.QUERY, text);
+        var convos = com.dwinovo.numen.client.agent.Conversations.instance();
+        convos.say(convos.of(uuid), text);
         if (inputBar != null) inputBar.setText("");
         chatView.pinToBottom();
     }

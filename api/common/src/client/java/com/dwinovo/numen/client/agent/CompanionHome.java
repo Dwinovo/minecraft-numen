@@ -84,6 +84,7 @@ public final class CompanionHome {
     /** 落点只剩迁移在用:工作方块记忆已经并进札记,搬进来的旧文件随遣散一起消失。 */
     private static final String BLOCKS = "blocks.json";
     private static final String MEMORY = "memory";
+    private static final String CONVERSATIONS = "conversations.json";
     private static final String GOAL = "goal.json";
     private static final String WORLD = "world";
 
@@ -164,14 +165,14 @@ public final class CompanionHome {
     }
 
     /**
-     * 群名册的落点:{@code companions/groups.json}。
+     * 会话名册的落点:{@code companions/conversations.json}。
      *
      * <p>它不跟模型配置库、声线库放在一起,因为那几个库<b>只装配置、不装绑定</b>——正因如此
-     * 才能原样分享给别人。而一个群就是一串同伴 UUID,是彻头彻尾的绑定,只能住在
+     * 才能原样分享给别人。而一个会话就是一串同伴 UUID,是彻头彻尾的绑定,只能住在
      * {@code companions/} 下面,跟着这台机器上的这些同伴。
      */
-    public static Path groups() {
-        return numenRoot().resolve(DIR).resolve("groups.json");
+    public static Path conversations() {
+        return numenRoot().resolve(DIR).resolve(CONVERSATIONS);
     }
 
     // ---- 长期目标 ----
