@@ -137,23 +137,39 @@ public final class Conversations extends JsonLibrary<Conversation> {
      * <p>路由见 {@link Mentions}:点了名的醒,其余的旁听。旁听走 {@link EventTypes#TALK},
      * 是捎带投递,不会把人叫醒——这是群聊唯一的那条不变量。
      *
+     * <p><b>整个作为一个单元在主线程上跑。</b>拨发言号、定场面、送话三步之间不许插进第二句:
+     * 语音转写在别的线程回调,要是各自往主线程排队,连说两句就可能共一个发言号。不在主线程
+     * 就把整个调用交给主线程,自己按"已交出"返回——和 {@link NumenGateway#emit} 的
+     * {@code HANDED_OFF} 同一口径。
+     *
      * @return 说完之后的会话,以及有没有人收下
      */
     public Said say(Conversation conv, String text) {
+        Minecraft mc = Minecraft.getInstance();
+        if (!mc.isSameThread()) {
+            mc.execute(() -> say(conv, text));
+            return new Said(conv, true);
+        }
         List<Mentions.Member> members = named(conv);
         if (members.isEmpty() || text == null || text.isBlank()) {
             return new Said(conv, false);
         }
         Mentions.Routing routing = Mentions.route(text, members, conv.floor());
         boolean persisted = get(conv.id()) != null;
-        // 先定场面,再送话:被叫醒的那几只从此在这个场面里——接下来她说的话属于这里,记录盖这个印,
-        // 而且她收到这句话那一刻就得知道还有谁在听(EntityAgentLoop.audienceLine 读的就是它)。
+        // 先拨号落盘,再定场面,最后送话:被叫醒的那几只从此在这个场面里——接下来她说的话属于这里,
+        // 记录盖这个印;她收到这句话那一刻就得知道还有谁在听、这是第几句
+        // (EntityAgentLoop.audienceLine 读的就是落盘后的这份会话)。
         // 没落盘的会话盖 null = "就他俩",于是旧记录天然落在单聊视图里,不需要迁移。
+        Conversation next = conv.withFloor(routing.floor());
+        if (persisted) {
+            next = save(next.spoken());
+        }
         String tag = persisted ? conv.id() : null;
         for (UUID m : routing.awake()) {
             AgentLoopRegistry.get(m).ifPresent(l -> l.inConversation(tag));
         }
-        String heard = overheardLine(ownerName() + " → " + addressees(routing, members), text);
+        String heard = overheardLine(ownerName() + " → " + addressees(routing, members), text,
+                persisted ? Map.of("turn", String.valueOf(next.turn())) : Map.of());
         boolean reached = false;
         for (Mentions.Member m : members) {
             Delivery d = routing.awake().contains(m.uuid())
@@ -161,8 +177,7 @@ public final class Conversations extends JsonLibrary<Conversation> {
                     : NumenGateway.emit(m.uuid(), EventTypes.TALK, heard);
             reached |= d != Delivery.REJECTED;
         }
-        Conversation next = conv.withFloor(routing.floor());
-        return new Said(persisted ? save(next) : next, reached);
+        return new Said(next, reached);
     }
 
     /**
@@ -191,7 +206,7 @@ public final class Conversations extends JsonLibrary<Conversation> {
             return;   // 没人跟她说过话,或者那是个单成员会话:没人要告诉
         }
         String name = NumenRoster.instance().name(speaker);
-        String line = overheardLine(name == null ? "?" : name, said);
+        String line = overheardLine(name == null ? "?" : name, said, Map.of());
         for (UUID m : membersAlive(conv)) {
             if (!m.equals(speaker)) {
                 NumenGateway.emit(m, EventTypes.TALK, line);
@@ -228,10 +243,10 @@ public final class Conversations extends JsonLibrary<Conversation> {
      * {@code <event kind="talk" day t>} 的形状、属性转义、游戏内时间戳全由它统一盖上,
      * 这里不另写一份格式,也就不会跟别处跑偏。
      */
-    private static String overheardLine(String speaker, String text) {
+    private static String overheardLine(String speaker, String text, Map<String, String> attrs) {
         Minecraft mc = Minecraft.getInstance();
         long dayTime = mc.level == null ? 0L : mc.level.getDayTime();
-        return NumenEvents.entry(dayTime, EventTypes.TALK, Map.of(),
+        return NumenEvents.entry(dayTime, EventTypes.TALK, attrs,
                 "[" + speaker + "] " + text, System.currentTimeMillis(), false).text();
     }
 

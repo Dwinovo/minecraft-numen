@@ -348,9 +348,10 @@ public final class EntityAgentLoop {
     }
 
     /**
-     * 这句话还有谁听得见——会话里除她之外还活着的成员。挂在 {@code <query>} 标记<b>外面</b>:
-     * 模型看得到,聊天流只画标记里的内容(见 {@code OwnerWordsMode})。就他俩时什么都不挂——
-     * 没人听得见,说了反而是噪音。
+     * 这句话还有谁听得见——会话里除她之外还活着的成员,以及这是会话里的第几句(发言号,
+     * 见 {@code Conversation#turn}:同一句话的 N 份副本靠它归并成一条)。挂在 {@code <query>}
+     * 标记<b>外面</b>:模型看得到,聊天流只画标记里的内容(见 {@code OwnerWordsMode})。
+     * 就他俩时什么都不挂——没人听得见,说了反而是噪音。
      *
      * <p>不做成 {@code <query>} 的属性:那个标记是裸字面量,面板和日志都按 {@code "<query>"} 原样找。
      */
@@ -368,7 +369,7 @@ public final class EntityAgentLoop {
                 names.add(NumenRoster.instance().name(m));
             }
         }
-        return names.isEmpty() ? "" : "\n<audience>"
+        return names.isEmpty() ? "" : "\n<audience turn=\"" + conv.turn() + "\">"
                 + com.dwinovo.numen.event.NumenEvents.escape(String.join("、", names)) + "</audience>";
     }
 

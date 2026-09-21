@@ -72,7 +72,8 @@ class ConversationTest {
 
     @Test
     void itSurvivesARoundTripThroughJson() {
-        Conversation g = Conversation.of(List.of(YOU, LAN)).withName("挖矿队").withFloor(List.of(LAN));
+        Conversation g = Conversation.of(List.of(YOU, LAN)).withName("挖矿队").withFloor(List.of(LAN))
+                .spoken().spoken();
         Conversation back = Conversation.fromJson(
                 JsonParser.parseString(g.toJson().toString()).getAsJsonObject());
 
@@ -80,6 +81,18 @@ class ConversationTest {
         assertEquals("挖矿队", back.name());
         assertEquals(List.of(YOU, LAN), back.members());
         assertEquals(List.of(LAN), back.floor());
+        assertEquals(2, back.turn(), "发言号跟着落盘");
+    }
+
+    /** 同一句话复制进 N 本日志,时间戳各盖各的、原文可能重复;能把它们归成一条的只有发言号。 */
+    @Test
+    void everySpokenLineGetsTheNextTurnNumber() {
+        Conversation g = Conversation.of(List.of(YOU, LAN));
+        assertEquals(0, g.turn());
+        assertEquals(1, g.spoken().turn());
+        assertEquals(1, g.spoken().withFloor(List.of(YOU)).turn(), "转话头不动发言号");
+        assertEquals(1, g.spoken().withMembers(List.of(YOU, MEI)).turn(), "换成员不动发言号");
+        assertEquals(1, g.spoken().withName("挖矿队").turn(), "改名不动发言号");
     }
 
     @Test

@@ -10,11 +10,17 @@ import java.util.UUID;
 import java.util.function.Function;
 
 /**
- * 一个群:<b>一个名字 + 一串同伴 + 当前话头</b>。就这些。
+ * 一个会话:<b>一个名字 + 一串同伴 + 当前话头 + 发言号</b>。就这些。
  *
  * <h2>群没有自己的对话历史</h2>
  * 每只同伴的对话日志里本来就有她说出口的话和主人的话;群再存一份就是同一句话的第二个出处。
  * 面板要画群聊时按时间归并成员各自的日志。顺带白捡一个好处:<b>解散群不会丢历史</b>。
+ *
+ * <h2>发言号</h2>
+ * 主人在多人会话里说的每一句,会被复制进每个醒着的成员的日志,各自盖各自的时间戳——
+ * 时间戳对不上,原文又可能重复("好"说两遍),所以拿它们去重是猜。发言号是 {@code say}
+ * 送话之前拨一次、落盘一次的计数:同一句话的 N 份副本号相同,两句不同的话号不同。
+ * 视图按(会话 + 发言号 + 原文)归并,不看时间,不会误合也不会漏合。单成员会话用不到它。
  *
  * <h2>话头是一组人,不是一个人</h2>
  * {@code @A @B 一起去挖铁} 之后的"小心点"该让两只都听见,所以话头记的是<b>上一次被点名的那些</b>。
@@ -22,7 +28,7 @@ import java.util.function.Function;
  *
  * <p>纯 JVM,不碰 Minecraft。
  */
-public record Conversation(String id, String name, List<UUID> members, List<UUID> floor) {
+public record Conversation(String id, String name, List<UUID> members, List<UUID> floor, int turn) {
 
     public Conversation {
         members = List.copyOf(members == null ? List.of() : members);
@@ -31,7 +37,7 @@ public record Conversation(String id, String name, List<UUID> members, List<UUID
 
     /** 新建一个群:名字先空着,显示时拼成员名;话头空着 = 全体。 */
     public static Conversation of(List<UUID> members) {
-        return new Conversation(UUID.randomUUID().toString(), null, dedup(members), List.of());
+        return new Conversation(UUID.randomUUID().toString(), null, dedup(members), List.of(), 0);
     }
 
     /**
@@ -59,18 +65,23 @@ public record Conversation(String id, String name, List<UUID> members, List<UUID
     /** 主人起的名(空白 = 退回拼成员名)。 */
     public Conversation withName(String newName) {
         return new Conversation(id, newName == null || newName.isBlank() ? null : newName.strip(),
-                members, keepMembers(floor, dedup(members)));
+                members, keepMembers(floor, dedup(members)), turn);
     }
 
     /** 换成员。话头里已经不在群里的那些跟着掉——话头只可能落在成员身上。 */
     public Conversation withMembers(List<UUID> newMembers) {
         List<UUID> ms = dedup(newMembers);
-        return new Conversation(id, name, ms, keepMembers(floor, ms));
+        return new Conversation(id, name, ms, keepMembers(floor, ms), turn);
     }
 
     /** 转话头(空 = 回到全体)。不在群里的一律不收。 */
     public Conversation withFloor(List<UUID> next) {
-        return new Conversation(id, name, members, keepMembers(dedup(next), members));
+        return new Conversation(id, name, members, keepMembers(dedup(next), members), turn);
+    }
+
+    /** 主人又说了一句:发言号拨一。 */
+    public Conversation spoken() {
+        return new Conversation(id, name, members, floor, turn + 1);
     }
 
     public boolean has(UUID companion) {
@@ -89,6 +100,9 @@ public record Conversation(String id, String name, List<UUID> members, List<UUID
         if (!floor.isEmpty()) {
             o.add("floor", uuids(floor));
         }
+        if (turn > 0) {
+            o.addProperty("turn", turn);
+        }
         return o;
     }
 
@@ -103,8 +117,9 @@ public record Conversation(String id, String name, List<UUID> members, List<UUID
         }
         String name = o.has("name") && o.get("name").isJsonPrimitive()
                 ? o.get("name").getAsString() : null;
+        int turn = o.has("turn") && o.get("turn").isJsonPrimitive() ? o.get("turn").getAsInt() : 0;
         return new Conversation(o.get("id").getAsString(), name, members,
-                keepMembers(readUuids(o, "floor"), members));
+                keepMembers(readUuids(o, "floor"), members), Math.max(0, turn));
     }
 
     private static JsonArray uuids(List<UUID> list) {

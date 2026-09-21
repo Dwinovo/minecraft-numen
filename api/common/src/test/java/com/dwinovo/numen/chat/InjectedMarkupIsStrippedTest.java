@@ -55,7 +55,7 @@ class InjectedMarkupIsStrippedTest {
     @Test
     void theAudienceAfterAQueryStaysOutOfTheChatFlow() {
         EventQueue q = new EventQueue(EventQueue.Journal.NONE);
-        q.push(EventTypes.QUERY, "<query>去挖铁</query>\n<audience>阿岚、小梅</audience>", T0, true);
+        q.push(EventTypes.QUERY, "<query>去挖铁</query>\n<audience turn=\"17\">阿岚、小梅</audience>", T0, true);
 
         assertEquals("去挖铁", new OwnerWordsMode().userText(render(q)), "谁在听不是主人说的话");
     }
