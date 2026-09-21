@@ -343,7 +343,33 @@ public final class EntityAgentLoop {
         }
         // Wrap the owner's words in <query> so the model can always tell real user input apart from
         // anything else numen injects into the same user turn (events, and future world-state/reminders).
-        return deliver(new EventQueue.Entry(EventTypes.QUERY, wire, System.currentTimeMillis(), false));
+        return deliver(new EventQueue.Entry(EventTypes.QUERY, wire + audienceLine(),
+                System.currentTimeMillis(), false));
+    }
+
+    /**
+     * 这句话还有谁听得见——会话里除她之外还活着的成员。挂在 {@code <query>} 标记<b>外面</b>:
+     * 模型看得到,聊天流只画标记里的内容(见 {@code OwnerWordsMode})。就他俩时什么都不挂——
+     * 没人听得见,说了反而是噪音。
+     *
+     * <p>不做成 {@code <query>} 的属性:那个标记是裸字面量,面板和日志都按 {@code "<query>"} 原样找。
+     */
+    private String audienceLine() {
+        if (conversation == null) {
+            return "";
+        }
+        com.dwinovo.numen.agent.conversation.Conversation conv = Conversations.instance().get(conversation);
+        if (conv == null) {
+            return "";
+        }
+        List<String> names = new ArrayList<>();
+        for (UUID m : Conversations.instance().membersAlive(conv)) {
+            if (!m.equals(entityUuid)) {
+                names.add(NumenRoster.instance().name(m));
+            }
+        }
+        return names.isEmpty() ? "" : "\n<audience>"
+                + com.dwinovo.numen.event.NumenEvents.escape(String.join("、", names)) + "</audience>";
     }
 
     /**

@@ -51,6 +51,15 @@ class InjectedMarkupIsStrippedTest {
         assertTrue(new OwnerWordsMode().userText(render(q)).isEmpty(), "续跑那句漏出来了");
     }
 
+    /** 场合挂在 {@code <query>} 外面(见 {@code EntityAgentLoop.audienceLine}):模型看得到,面板只画标记里的话。 */
+    @Test
+    void theAudienceAfterAQueryStaysOutOfTheChatFlow() {
+        EventQueue q = new EventQueue(EventQueue.Journal.NONE);
+        q.push(EventTypes.QUERY, "<query>去挖铁</query>\n<audience>阿岚、小梅</audience>", T0, true);
+
+        assertEquals("去挖铁", new OwnerWordsMode().userText(render(q)), "谁在听不是主人说的话");
+    }
+
     @Test
     void ownerWordsSurviveAGoalInjectionInTheSameBatch() {
         // 同一条消息里既有目标注入又有主人的话:剥掉前者,后者一个字不能少

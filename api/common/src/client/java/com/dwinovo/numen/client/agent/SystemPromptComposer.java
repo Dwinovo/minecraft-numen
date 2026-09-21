@@ -6,7 +6,7 @@ import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.platform.Services;
 
 /**
- * 系统提示:只放会话内稳定的那几层——人设、操作核心、技能表、本能名册、札记的规矩、说话规则——
+ * 系统提示:只放会话内稳定的那几层——人设、操作核心、技能表、本能名册、札记的规矩、场面的规矩、说话规则——
  * 好让它成为字节级稳定的缓存前缀。会变的东西不在这里:背包、效果、当前任务挂在每一轮的
  * {@link RuntimeState} 里,她一写就变的札记索引随注入的 user 消息进历史。
  */
@@ -45,6 +45,8 @@ final class SystemPromptComposer {
         }
         // 札记的规矩:她有记忆这件事、什么值得记。规矩不变所以在前缀里,内容会变所以在注入块里。
         sb.append(NumenPrompts.MEMORY);
+        // 场面的规矩:<audience> 是什么、旁听到的话是什么、她的话叫不醒别人。谁在场随每句话注入。
+        sb.append(NumenPrompts.CONVERSATION);
         // 怎么说话压在最末尾:长度与语气离生成位置越近,越不容易在长对话里被冲淡(见 NumenPrompts)
         sb.append(NumenPrompts.SPEAKING);
         return sb.toString();

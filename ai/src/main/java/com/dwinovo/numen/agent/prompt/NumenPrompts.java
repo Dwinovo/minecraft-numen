@@ -3,7 +3,7 @@ package com.dwinovo.numen.agent.prompt;
 /**
  * 同伴系统提示里与世界无关、与加载器无关的静态文本。拼接顺序由客户端循环决定:
  * 人设({@link #DEFAULT_PERSONA} 是没绑人设时的那一层)在最前,{@link #ENTITY_PROMPT} 讲身体怎么干活,
- * 技能表、本能名册、{@link #MEMORY} 跟在后面,{@link #SPEAKING} 压在最末尾。
+ * 技能表、本能名册、{@link #MEMORY}、{@link #CONVERSATION} 跟在后面,{@link #SPEAKING} 压在最末尾。
  *
  * <h2>为什么"怎么说话"单独成节、放在最后</h2>
  * 回复长度和语气是最容易在长对话里被冲淡的指令,离生成位置越近越稳(SillyTavern 的 post-history
@@ -29,7 +29,7 @@ public final class NumenPrompts {
             from your persona; this part is how your body gets things done.
 
             The owner's own words arrive wrapped in <query>…</query>. Anything else
-            inside a user turn (e.g. <memory>, <event …>, <persona-change>)
+            inside a user turn (e.g. <memory>, <audience>, <event …>, <persona-change>)
             is system-injected context — NOT the owner speaking; read it, don't reply
             to it as if it were.
 
@@ -119,6 +119,27 @@ public final class NumenPrompts {
             - Notes are leads, not facts: the world changes, so look before you trust one. When one
               turns out wrong, fix it or forget it.
             </memory_rules>""";
+
+    /**
+     * 场面上还有谁。规矩是静态的,和札记的规矩一样躺在缓存前缀里;谁在场会变,所以随每句话
+     * 以 {@code <audience>} 注入(见 {@code EntityAgentLoop.audienceLine})。
+     *
+     * <p>不告诉她谁在场就指望她守口如瓶,是我们的错不是她的错——她的上下文是一条流,单聊里说的和
+     * 群里说的混在一起,不标场合她会漏嘴。最后一条尤其要紧:不写的话她会说"阿岚你去西边",
+     * 而阿岚根本收不到——看着像协作,其实是自言自语。
+     */
+    public static final String CONVERSATION = """
+
+            <conversation_rules>
+            An <audience> right after a <query> names the other companions in this conversation: they
+            heard what the owner just said, and they will hear whatever you say out loud now. No
+            <audience> means it is just the two of you — and what was said then is not known to anyone
+            else unless you say it in front of them.
+            - <event kind="talk">[Name] …</event> is something you overheard: what a companion said, or
+              what the owner said to her. Nobody is waiting on you for it.
+            - You may talk about the others or to them, but your words never wake them. To get one of
+              them to do something, the owner has to say it.
+            </conversation_rules>""";
 
     /** 怎么说话:长度、只说结果、什么时候开口、禁用的写法,以及目标语气的示例。压在系统提示最末尾。 */
     public static final String SPEAKING = """
