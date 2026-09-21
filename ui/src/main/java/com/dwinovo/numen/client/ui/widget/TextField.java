@@ -119,6 +119,16 @@ public final class TextField extends Widget {
 
     public int cursor() { return host != null ? host.cursor() : cursor; }
 
+    /** 把光标放到 {@code pos}。宿主想把光标留在改动处而不是末尾时用(如整体删掉一个 @名字)。 */
+    public void setCursor(int pos) {
+        if (host != null) {
+            host.setCursor(pos);
+            return;
+        }
+        cursor = Math.max(0, Math.min(pos, value.length()));
+        viewStart = Math.min(viewStart, cursor);
+    }
+
     /** 光标移到末尾。补全之后要接着往下打,光标留在原处会插在半截。 */
     public void cursorToEnd() {
         if (host != null) {

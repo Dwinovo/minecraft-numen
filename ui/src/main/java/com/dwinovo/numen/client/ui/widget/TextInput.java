@@ -26,6 +26,9 @@ public interface TextInput {
     /** 光标在第几个字符前。画光标竖线与算视窗要用。 */
     int cursor();
 
+    /** 把光标放到 {@code pos}(夹在文本范围内),不选中任何东西。 */
+    void setCursor(int pos);
+
     boolean focused();
 
     void setFocused(boolean f);

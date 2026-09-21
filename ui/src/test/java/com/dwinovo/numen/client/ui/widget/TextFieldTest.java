@@ -117,6 +117,8 @@ class TextFieldTest {
         private String text;
         private final Consumer<String> onChange;
         private boolean focused;
+        /** -1 = 没人定位过,光标在末尾(香草 setValue 的行为)。 */
+        private int cursor = -1;
 
         FakeInput(String initial, Consumer<String> onChange) {
             this.text = initial;
@@ -131,7 +133,8 @@ class TextFieldTest {
 
         @Override public String text() { return text; }
         @Override public void setText(String s) { text = s; }
-        @Override public int cursor() { return text.length(); }
+        @Override public int cursor() { return cursor < 0 ? text.length() : Math.min(cursor, text.length()); }
+        @Override public void setCursor(int pos) { cursor = Math.max(0, Math.min(pos, text.length())); }
         @Override public boolean focused() { return focused; }
         @Override public void setFocused(boolean f) { focused = f; }
         @Override public void moveTo(int x, int y, int w, int h) {}

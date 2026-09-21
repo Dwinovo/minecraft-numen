@@ -361,9 +361,10 @@ public final class ChatInputBar {
                     return true;
                 }
                 case KeyCodes.ENTER -> {
-                    // 回车一次到位:补上选中的那条就发——命令是执行,@ 名字是把话说出去。
-                    // 想补上接着打请按 Tab。两颗键分工明确之后,"补全了没有"就不再影响回车干什么了。
-                    fillSelected();
+                    // 命令:回车 = 就要选中这条,现在执行;想接着打参数请按 Tab。
+                    // @ 名字:回车只把名字填上——弹层关了(光标不在 @ 词上)回车才发,话还没说完。
+                    boolean filled = fillSelected();
+                    if (filled && !commandMode(field.value())) return true;
                     send();
                     return true;
                 }
@@ -374,7 +375,51 @@ public final class ChatInputBar {
             send();
             return true;
         }
+        if (field != null && field.isFocused() && mentionKey(keyCode, modifiers)) {
+            return true;
+        }
         return ui.keyPressed(keyCode, modifiers);
+    }
+
+    /**
+     * {@code @名字}是一个整体(Discord、微信里 @ 出来的都是一整块):退格/删除一下整个去掉,
+     * 左右键一步跨过。段就是换色的那些段——同一份判断,亮的那块就是整块。
+     */
+    private boolean mentionKey(int keyCode, int modifiers) {
+        if (KeyCodes.ctrl(modifiers)) return false;
+        String text = field.value();
+        if (commandMode(text)) return false;
+        int cur = field.cursor();
+        for (TextField.Span sp : highlights(text)) {
+            switch (keyCode) {
+                case KeyCodes.BACKSPACE -> {
+                    if (cur != sp.end()) continue;
+                    field.setValue(text.substring(0, sp.start()) + text.substring(sp.end()));
+                    field.setCursor(sp.start());
+                    return true;
+                }
+                case KeyCodes.DELETE -> {
+                    if (cur != sp.start()) continue;
+                    field.setValue(text.substring(0, sp.start()) + text.substring(sp.end()));
+                    field.setCursor(sp.start());
+                    return true;
+                }
+                case KeyCodes.LEFT -> {
+                    if (cur != sp.end()) continue;
+                    field.setCursor(sp.start());
+                    return true;
+                }
+                case KeyCodes.RIGHT -> {
+                    if (cur != sp.start()) continue;
+                    field.setCursor(sp.end());
+                    return true;
+                }
+                default -> {
+                    return false;
+                }
+            }
+        }
+        return false;
     }
 
     // ---- 补全 ----
