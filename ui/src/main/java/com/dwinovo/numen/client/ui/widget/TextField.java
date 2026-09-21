@@ -5,7 +5,9 @@ import com.dwinovo.numen.client.ui.KeyCodes;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
 
+import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * 单行文本输入。支持:光标移动/删改、Home/End、Ctrl+V 粘贴(API key 场景
@@ -29,9 +31,8 @@ public final class TextField extends Widget {
     private Label labelWidget;
     /** 视窗左缘对应的字符下标(水平滚动)。 */
     private int viewStart;
-    /** 首词高亮的引导字符;0 = 不高亮。见 {@link #leadingToken}。 */
-    private char tokenMarker;
-    private int tokenColor;
+    /** 哪些段换色画,由宿主按内容算;null = 全按正文色。见 {@link #highlight}。 */
+    private Function<String, List<Span>> highlighter;
 
     /**
      * 宿主提供的真编辑器;为空表示这个框自己管编辑(纯内存,无输入法)。
@@ -70,15 +71,15 @@ public final class TextField extends Widget {
         return this;
     }
 
+    /** 一段要换色画的文字:整串里的 {@code [start, end)} 与颜色。互不重叠、按位置升序。 */
+    public record Span(int start, int end, int argb) {}
+
     /**
-     * 首词高亮:文本以 {@code marker} 开头时,第一个词(到空白为止)换个颜色画。
-     *
-     * <p>斜杠命令用它把 {@code /名字} 和后面的参数分开——一眼看出自己打的是命令还是
-     * 一句话。掩码模式下不生效:那种场景里内容本来就不该被看出结构。
+     * 局部换色:宿主拿整串文本算出哪些段换什么颜色——斜杠命令的首词、{@code @} 到的名字。
+     * 内容里什么算一段是宿主的事,框只管照着画。掩码模式下不生效:那种场景里内容本来就不该被看出结构。
      */
-    public TextField leadingToken(char marker, int argb) {
-        this.tokenMarker = marker;
-        this.tokenColor = argb;
+    public TextField highlight(Function<String, List<Span>> highlighter) {
+        this.highlighter = highlighter;
         return this;
     }
 
@@ -187,37 +188,29 @@ public final class TextField extends Widget {
         }
     }
 
-    /** 画可见的那一段。开了首词高亮就拆成两笔,否则一笔画完。 */
+    /** 画可见的那一段:换色的段与正文段交替各画一笔,没有换色的段就一笔画完。 */
     private void drawVisible(IDrawSurface s, String visible, int tx, int ty, int normal) {
-        int end = tokenEnd();
-        // end 是整串里的下标,visible 是从 viewStart 开始的那截 —— 换算到同一坐标系。
-        int cut = Math.max(0, Math.min(end - viewStart, visible.length()));
-        if (cut <= 0) {
-            s.drawText(visible, tx, ty, normal, false);
-            return;
-        }
-        String token = visible.substring(0, cut);
-        s.drawText(token, tx, ty, tokenColor, false);
-        if (cut < visible.length()) {
-            s.drawText(visible.substring(cut), tx + s.textWidth(token), ty, normal, false);
-        }
-    }
-
-    /** 首词在整串里的结束下标(不含);没开高亮或不是首词开头则 0。 */
-    private int tokenEnd() {
-        // 读 value() 而不是内部的 value:绑了宿主之后文本住在那边,读内部的会得到空串,
-        // 斜杠命令的高亮会整个失效。
-        String value = value();
-        if (tokenMarker == 0 || masked || value.length() == 0
-                || value.charAt(0) != tokenMarker) {
-            return 0;
-        }
-        for (int i = 1; i < value.length(); i++) {
-            if (Character.isWhitespace(value.charAt(i))) {
-                return i;
+        // 读 value() 而不是内部的 value:绑了宿主之后文本住在那边,读内部的会得到空串,高亮会整个失效。
+        List<Span> spans = highlighter == null || masked ? List.of() : highlighter.apply(value());
+        int x = tx;
+        int at = 0;   // visible 里画到哪了;段的下标是整串的,减 viewStart 换算到同一坐标系
+        for (Span sp : spans) {
+            int a = Math.max(at, sp.start() - viewStart);
+            int b = Math.min(visible.length(), sp.end() - viewStart);
+            if (b <= a) continue;
+            if (a > at) {
+                String plain = visible.substring(at, a);
+                s.drawText(plain, x, ty, normal, false);
+                x += s.textWidth(plain);
             }
+            String run = visible.substring(a, b);
+            s.drawText(run, x, ty, sp.argb(), false);
+            x += s.textWidth(run);
+            at = b;
         }
-        return value.length();
+        if (at < visible.length()) {
+            s.drawText(visible.substring(at), x, ty, normal, false);
+        }
     }
 
     private int textY(IDrawSurface s) {

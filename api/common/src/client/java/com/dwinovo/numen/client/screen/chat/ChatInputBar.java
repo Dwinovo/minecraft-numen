@@ -14,6 +14,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -182,7 +183,7 @@ public final class ChatInputBar {
             draft = v;
             refreshCandidates();
         }).placeholder(host.hint())
-                .leadingToken(com.dwinovo.numen.client.command.ChatCommands.PREFIX, CMD_COLOR));
+                .highlight(this::highlights));
         field.setBounds(x, y, inW, h);
         fieldX = x;
         fieldY = y;
@@ -406,9 +407,31 @@ public final class ChatInputBar {
         selected = firstEnabled();
     }
 
-    /** 这串输入是命令还是话——候选从哪来、回车干什么,都由它定。 */
+    /** 这串输入是命令还是话——候选从哪来、框里哪段换色,都由它定。 */
     private static boolean commandMode(String text) {
         return com.dwinovo.numen.client.command.ChatCommands.isCommand(text);
+    }
+
+    /**
+     * 输入框里换色的段:命令的首词换命令色(定死的),话里 {@code @} 到的名字换强调色——
+     * 用的是路由那一份匹配({@link com.dwinovo.numen.agent.conversation.Mentions#spans}),
+     * 亮的正好是发出去会醒的,和记录里画亮的一样。
+     */
+    private List<TextField.Span> highlights(String text) {
+        if (commandMode(text)) {
+            int end = 1;
+            while (end < text.length() && !Character.isWhitespace(text.charAt(end))) end++;
+            return List.of(new TextField.Span(0, end, CMD_COLOR));
+        }
+        var conv = host.conversation();
+        if (conv == null) return List.of();
+        int color = com.dwinovo.numen.client.screen.UiTheme.current().cta();
+        List<TextField.Span> out = new ArrayList<>();
+        for (var sp : com.dwinovo.numen.agent.conversation.Mentions.spans(text,
+                com.dwinovo.numen.client.agent.Conversations.instance().named(conv))) {
+            out.add(new TextField.Span(sp.start(), sp.end(), color));
+        }
+        return out;
     }
 
     private int firstEnabled() {

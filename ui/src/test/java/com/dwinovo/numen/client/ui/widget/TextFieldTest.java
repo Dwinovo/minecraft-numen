@@ -170,4 +170,33 @@ class TextFieldTest {
         host.get().type("12");
         assertFalse(f.hasError());   // 用户一开始修改错误标记就撤下,宿主模式也一样
     }
+    @Test
+    void highlightedSpansAreDrawnAsSeparateRunsInTheirOwnColour() {
+        // 宿主说哪几段换色,框就拆成几笔:正文 / 换色段 / 正文,颜色各归各的
+        TextField f = new TextField("@小柚 去挖铁 @阿岚", s -> {})
+                .highlight(t -> java.util.List.of(
+                        new TextField.Span(0, 3, 0xFF112233),
+                        new TextField.Span(8, 11, 0xFF112233)));
+        f.setBounds(0, 0, 200, 14);
+        RecordingSurface s = new RecordingSurface();
+        f.render(s, WidgetTestSupport.C, 0, 0, 0);
+        assertEquals(java.util.List.of("@小柚", " 去挖铁 ", "@阿岚"), s.runs);
+        assertEquals(java.util.List.of(0xFF112233, WidgetTestSupport.C.textPrimary(), 0xFF112233), s.colours);
+    }
+
+    /** 记下每一笔的文字与颜色(每字符 6px,与 FakeSurface 同一量尺)。 */
+    private static final class RecordingSurface implements com.dwinovo.numen.client.ui.IDrawSurface {
+        final java.util.List<String> runs = new java.util.ArrayList<>();
+        final java.util.List<Integer> colours = new java.util.ArrayList<>();
+
+        @Override public void fillRect(int x, int y, int w, int h, int argb) {}
+        @Override public void drawText(String t, int x, int y, int argb, boolean shadow) {
+            runs.add(t);
+            colours.add(argb);
+        }
+        @Override public int textWidth(String t) { return t.length() * 6; }
+        @Override public int lineHeight() { return 9; }
+        @Override public void pushScissor(int x, int y, int w, int h) {}
+        @Override public void popScissor() {}
+    }
 }
