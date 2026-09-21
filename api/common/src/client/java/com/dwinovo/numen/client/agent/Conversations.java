@@ -37,6 +37,9 @@ public final class Conversations extends JsonLibrary<Conversation> {
 
     private static Conversations instance;
 
+    /** 当前交互对象的 id(见 {@link #select});随会话一起落盘,重进游戏还是对着上次那个。 */
+    private String selectedId;
+
     private Conversations(java.nio.file.Path file) {
         super(file);
     }
@@ -67,6 +70,56 @@ public final class Conversations extends JsonLibrary<Conversation> {
     @Override
     protected JsonObject writeEntry(Conversation entry) {
         return entry.toJson();
+    }
+
+    @Override
+    protected void readExtra(JsonObject root) {
+        selectedId = root.has("selected") && root.get("selected").isJsonPrimitive()
+                ? root.get("selected").getAsString() : null;
+    }
+
+    @Override
+    protected void writeExtra(JsonObject root) {
+        if (selectedId != null) {
+            root.addProperty("selected", selectedId);
+        }
+    }
+
+    @Override
+    protected void resetExtra() {
+        selectedId = null;
+    }
+
+    // ---- 当前交互对象 ----
+
+    /** 选中这个会话:转盘确认、G 面板开在谁身上或切到谁,都走这里。落盘。 */
+    public void select(Conversation conv) {
+        if (conv == null || conv.id().equals(selectedId)) {
+            return;
+        }
+        selectedId = conv.id();
+        save();
+    }
+
+    /**
+     * 选中的那个,此刻的最新一份——落过盘的从库里取(改名、拉人后成员表变了);"就他俩"
+     * (id 就是她的 UUID)看她还在不在名册上;解散了的、遣散了的、别的存档里的,都是 null。
+     */
+    public Conversation selected() {
+        if (selectedId == null) {
+            return null;
+        }
+        Conversation saved = get(selectedId);
+        if (saved != null) {
+            return membersAlive(saved).isEmpty() ? null : saved;
+        }
+        UUID her;
+        try {
+            her = UUID.fromString(selectedId);
+        } catch (IllegalArgumentException notUuid) {
+            return null;
+        }
+        return NumenRoster.instance().name(her) != null ? of(her) : null;
     }
 
     // ---- 取 ----
@@ -121,22 +174,6 @@ public final class Conversations extends JsonLibrary<Conversation> {
             }
         }
         return out;
-    }
-
-    /**
-     * 这个会话此刻的最新一份——快捷键攥着的是转盘关上那一刻的快照,成员表、名字之后可能变了。
-     * 落过盘的从库里取;"就他俩"(id 就是她的 UUID)看她还在不在名册上;落过盘又解散了的是 null。
-     */
-    public Conversation current(Conversation conv) {
-        Conversation saved = get(conv.id());
-        if (saved != null) {
-            return membersAlive(saved).isEmpty() ? null : saved;
-        }
-        if (conv.members().size() == 1 && conv.id().equals(conv.members().get(0).toString())) {
-            UUID her = conv.members().get(0);
-            return NumenRoster.instance().name(her) != null ? of(her) : null;
-        }
-        return null;
     }
 
     /** 这只同伴在哪些会话里。 */
