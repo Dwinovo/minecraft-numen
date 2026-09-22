@@ -245,13 +245,17 @@ public final class NumenScreen extends Screen {
         float e = com.dwinovo.numen.client.ui.Anim.easeOutCubic(p);
         int x = left + PAD, y = top + STATUS_Y;
         int room = limit - x;
-        // 旧的往上淡出、新的从下面淡入:两个字号都不变,只动 2px——够看出"换了",不够晃眼
+        // 换行式过渡:旧字往上滑出一整行、新字从下面滑入一整行,裁剪框只露这一行——任一时刻只看得见一行,
+        // 不会两行字叠在一起(交叉淡出会叠)。滑的同时也淡,边缘不生硬。
+        int lh = font.lineHeight;
+        g.enableScissor(x, y - 1, limit, y + lh + 1);
         if (statusPrevText != null && p < 1f) {
-            txt(g, Component.literal(clip(statusPrevText, room)), x, y - Math.round(2 * e), fade(ON_BAND_FAINT, 1f - e));
+            txt(g, Component.literal(clip(statusPrevText, room)), x, y - Math.round(lh * e), fade(ON_BAND_FAINT, 1f - e));
         }
         if (st != null && e > 0.02f) {
-            txt(g, Component.literal(clip(st.text(), room)), x, y + Math.round(2 * (1f - e)), fade(ON_BAND_FAINT, e));
+            txt(g, Component.literal(clip(st.text(), room)), x, y + Math.round(lh * (1f - e)), fade(ON_BAND_FAINT, e));
         }
+        g.disableScissor();
     }
 
     private String lastStatusText;
