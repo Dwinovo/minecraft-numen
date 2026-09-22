@@ -78,7 +78,8 @@ public final class NumenScreen extends Screen {
     private static final int RAIL_SLOT = 32;     // vertical pitch per avatar
     private static final int RAIL_TOP = 12;      // top margin before the first avatar (clears the active crown)
     private static final int RAIL_BOT_GAP = 6;   // gap kept above the pinned "+" tile
-    private static final int HEADER_H = 22;
+    /** 抬头两行:名字一行、状态一行(Telegram 的"在线 / 正在输入…"),页签在右侧居中。 */
+    private static final int HEADER_H = 30;
     private static final int INPUT_H = 18;
     /** Text fields are inset inside their field box: the EditBox is shrunk by this much
      *  (so vanilla's top-left unbordered text lands padded + centred) and the card is
@@ -183,8 +184,81 @@ public final class NumenScreen extends Screen {
                 && my >= iconTop() - 1 && my < iconTop() + ICON_N + 1;
     }
 
-    /** 图标顶边:与名字共一条中线(名字画在 top+7,行高 9)。 */
-    private int iconTop() { return top + 7 + (font.lineHeight - ICON_N) / 2; }
+    /** 名字那一行的顶边;状态行在它下面。 */
+    private static final int NAME_Y = 6;
+    private static final int STATUS_Y = 17;
+
+    /** 图标顶边:与名字共一条中线(行高 9)。 */
+    private int iconTop() { return top + NAME_Y + (font.lineHeight - ICON_N) / 2; }
+
+    // ---- 抬头第二行:换字时交叉淡出,不硬切。键是"哪种状态",字可以每帧变(倒计时、动点) ----
+    private static final int STATUS_FADE_MS = 180;
+    private String statusKey, statusPrevKey, statusPrevText;
+    private long statusSwitchMs;
+
+    /** 抬头第二行此刻该说什么:键定淡入淡出,字是这一帧的。 */
+    private record HeaderStatus(String key, String text) {}
+
+    private HeaderStatus headerStatus(UUID her, long now) {
+        if (conv == null) return null;
+        if (her == null) {
+            return new HeaderStatus("members", I18n.get(ModLanguageData.Keys.HEADER_MEMBERS,
+                    Conversations.instance().membersAlive(conv).size()));
+        }
+        if (NumenRoster.instance().isDead(her)) {
+            // 倒计时归零还没回来 = 周围没有能站的地方,复活在重试。继续显示"0"就是一个数字卡死不动——说清楚在等什么。
+            long rem = NumenRoster.instance().remainingMs(her);
+            return new HeaderStatus("respawn", rem <= 0 ? I18n.get(ModLanguageData.Keys.RESPAWN_BLOCKED)
+                    : I18n.get("numen.respawn", (int) Math.ceil(rem / 1000.0)));
+        }
+        var st = AgentLoopRegistry.get(her).map(EntityAgentLoop::status).orElse(null);
+        if (st == null) return new HeaderStatus("online", I18n.get(ModLanguageData.Keys.HEADER_ONLINE));
+        if (st.phase() == com.dwinovo.numen.agent.loop.Phase.COMPACT) {
+            return new HeaderStatus("compacting", I18n.get(ModLanguageData.Keys.HEADER_COMPACTING) + dots(now));
+        }
+        if (st.phase() == com.dwinovo.numen.agent.loop.Phase.MODEL) {
+            return new HeaderStatus("typing", I18n.get(ModLanguageData.Keys.HEADER_TYPING) + dots(now));
+        }
+        if (st.busy()) return new HeaderStatus("busy", I18n.get(ModLanguageData.Keys.HEADER_BUSY) + dots(now));
+        return new HeaderStatus("online", I18n.get(ModLanguageData.Keys.HEADER_ONLINE));
+    }
+
+    /** "正在输入…"的点:一个、两个、三个轮着来——Telegram 那样,让"正在"活着。 */
+    private static String dots(long now) {
+        return ".".repeat(1 + (int) ((now / 350) % 3));
+    }
+
+    private void renderStatusText(GuiGraphics g, UUID her, int limit) {
+        long now = System.currentTimeMillis();
+        HeaderStatus st = headerStatus(her, now);
+        String key = st == null ? null : st.key();
+        if (!java.util.Objects.equals(key, statusKey)) {
+            statusPrevKey = statusKey;
+            statusPrevText = statusPrevKey == null ? null : lastStatusText;
+            statusKey = key;
+            statusSwitchMs = now;
+        }
+        lastStatusText = st == null ? null : st.text();
+        float p = Math.min(1f, (now - statusSwitchMs) / (float) STATUS_FADE_MS);
+        float e = com.dwinovo.numen.client.ui.Anim.easeOutCubic(p);
+        int x = left + PAD, y = top + STATUS_Y;
+        int room = limit - x;
+        // 旧的往上淡出、新的从下面淡入:两个字号都不变,只动 2px——够看出"换了",不够晃眼
+        if (statusPrevText != null && p < 1f) {
+            txt(g, Component.literal(clip(statusPrevText, room)), x, y - Math.round(2 * e), fade(ON_BAND_FAINT, 1f - e));
+        }
+        if (st != null && e > 0.02f) {
+            txt(g, Component.literal(clip(st.text(), room)), x, y + Math.round(2 * (1f - e)), fade(ON_BAND_FAINT, e));
+        }
+    }
+
+    private String lastStatusText;
+
+    /** 按比例压透明度。字体把接近全透明的颜色当不透明画,所以压到底时直接不画(调用方判)。 */
+    private static int fade(int argb, float f) {
+        int a = Math.max(8, Math.round((argb >>> 24) * Math.max(0f, Math.min(1f, f))));
+        return (argb & 0xFFFFFF) | (a << 24);
+    }
 
     private static final net.minecraft.resources.ResourceLocation CHEVRON_UP = railSpr("chevron_up");
     private static final net.minecraft.resources.ResourceLocation CHEVRON_DOWN = railSpr("chevron_down");
@@ -864,7 +938,7 @@ public final class NumenScreen extends Screen {
         int x0 = railX, y0 = top, x1 = railX + RAIL_W + panelW, y1 = top + panelH;
         g.fill(x0, y0, x1, y1, t.border());                          // frame + rail divider base
         g.fill(x0 + 3, y0 + 3, x0 + RAIL_W, y1 - 3, t.ground());     // rail column
-        g.fill(left + 3, y0 + 3, x1 - 3, y0 + 20, t.band());         // header band (underline = border gap)
+        g.fill(left + 3, y0 + 3, x1 - 3, y0 + HEADER_H - 2, t.band());   // header band (underline = border gap)
         g.fill(left + 3, y0 + HEADER_H, x1 - 3, y1 - 3, t.ground()); // panel ground
         for (int dy = y0 + HEADER_H + 7; dy < y1 - 5; dy += 16) {    // dot grid (translucent theme dot)
             for (int dx = left + 10; dx < x1 - 5; dx += 16) {
@@ -1269,7 +1343,7 @@ public final class NumenScreen extends Screen {
         int nameRoom = headerLimit - (left + PAD) - ICON_PITCH * iconCount;
         String title = name();
         String nm = clip(title == null ? "Numen" : title, Math.max(24, nameRoom));
-        txt(g, Component.literal(nm), left + PAD, top + 7, ON_BAND);
+        txt(g, Component.literal(nm), left + PAD, top + NAME_Y, ON_BAND);
         int afterName = left + PAD + font.width(nm) + 6;
         editPencilX = editTrashX = editPlusX = -1;
         if (nameIcons && afterName + ICON_PITCH * iconCount <= headerLimit) {
@@ -1305,21 +1379,12 @@ public final class NumenScreen extends Screen {
             }
             afterName += ICON_PITCH * iconCount;
         }
-        if (her != null && NumenRoster.instance().isDead(her)) {   // active companion dead — respawn countdown
-            // 倒计时归零还没回来 = 周围没有能站的地方,复活在重试。继续显示"0"就是
-            // 一个数字卡死不动,教科书级的"看起来坏了"——说清楚在等什么。
-            long rem = NumenRoster.instance().remainingMs(her);
-            String rs = rem <= 0 ? I18n.get(ModLanguageData.Keys.RESPAWN_BLOCKED)
-                    : I18n.get("numen.respawn", (int) Math.ceil(rem / 1000.0));
-            if (afterName < headerLimit) {
-                txt(g, Component.literal(clip(rs, headerLimit - afterName)), afterName, top + 7, ON_BAND);
-            }
-        } else {
-            String pn = activePersonaName();                   // current persona, faint, right after the name
-            if (pn != null && afterName + font.width("…") <= headerLimit) {
-                txt(g, Component.literal(clip(pn, headerLimit - afterName)), afterName, top + 7, ON_BAND_FAINT);
-            }
+        String pn = activePersonaName();                   // current persona, faint, right after the name
+        if (pn != null && afterName + font.width("…") <= headerLimit) {
+            txt(g, Component.literal(clip(pn, headerLimit - afterName)), afterName, top + NAME_Y, ON_BAND_FAINT);
         }
+        // 第二行:在线 / 正在输入… / 复活倒计时 / N 位成员
+        renderStatusText(g, her, headerLimit);
         renderTabs(g, mouseX, mouseY);
 
         // 当前 tab 内容永远渲染——召唤模态时它是暗幕下的背景(widgets 只建了召唤卡的,
@@ -1599,7 +1664,7 @@ public final class NumenScreen extends Screen {
             boolean hover = mouseX >= tabX[i] && mouseX < tabX[i] + tabW[i]
                     && mouseY >= top && mouseY < top + HEADER_H;
             int color = (active || hover) ? ON_BAND : (0x00FFFFFF & ON_BAND) | 0xA0000000;   // dim on band
-            txt(g, Component.literal(labels[i]), tabX[i] + 5, top + 7, color);
+            txt(g, Component.literal(labels[i]), tabX[i] + 5, top + (HEADER_H - font.lineHeight) / 2 + 1, color);
             if (active) {                                                                     // gold CTA underline
                 g.fill(tabX[i] + 3, top + HEADER_H - 4, tabX[i] + tabW[i] - 3, top + HEADER_H - 1, ACCENT);
             }
@@ -1641,7 +1706,7 @@ public final class NumenScreen extends Screen {
 
     /**
      * 状态行:输入框上方一行,不写字——界面元素替字说话,想知道细节悬停。pi 的 footer 与 working
-     * 指示合成一行。左起:她在忙时一枚呼吸的圈;有长期目标时一面旗(悬停出目标、第几轮、跑了多久);
+     * 指示合成一行(她在忙这件事在抬头第二行说)。左起:有长期目标时一面旗(悬停出目标、第几轮、跑了多久);
      * 有计划时一枚清单图标 + 一格一条待办的小格(悬停出正在做的那步,点开往上展开清单)。
      * 右:上下文水位一条横条,按占用填色(悬停出用量明细)。
      * 目标不把评估器那句"还差什么"摆出来——没达成就静默接着干,不该每轮在主人眼前刷判词。
@@ -1662,12 +1727,6 @@ public final class NumenScreen extends Screen {
             tip(java.util.List.of(Component.literal(usageDetail(lp))), mouseX, mouseY);
         }
         int limit = gx - 8;
-        // 左:她在忙——一枚呼吸的圈
-        if (lp.status().busy()) {
-            com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.LOADER,
-                    x, iy, ICON_N, pulse(RUN, now));
-            x += ICON_N + 6;
-        }
         // 目标——一面旗
         var goal = lp.goal();
         if (goal != null) {
@@ -1695,11 +1754,6 @@ public final class NumenScreen extends Screen {
         pendingTipY = y;
     }
 
-    /** 呼吸:透明度在 0x90–0xFF 之间来回——"正在"是活的,不是一个死图标。 */
-    private static int pulse(int argb, long nowMs) {
-        int a = 0x90 + (int) (0x6F * (0.5 + 0.5 * Math.sin(nowMs / 250.0)));
-        return (argb & 0xFFFFFF) | (a << 24);
-    }
 
     /**
      * 成员抬头那一行(会话没有单一的主时):每个还在的成员一张脸。悬停给名字、右上角出一个 × 移出;

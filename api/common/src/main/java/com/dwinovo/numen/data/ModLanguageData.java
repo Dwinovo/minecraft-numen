@@ -146,6 +146,17 @@ public final class ModLanguageData {
         public static final String CONVO_DISSOLVE_WARNING = "numen.convo.dissolve_warning";
         public static final String CONVO_DROP             = "numen.convo.drop";
 
+        // Header status line (Telegram's "online / typing…") and transcript date chips.
+        public static final String HEADER_ONLINE          = "numen.header.online";
+        public static final String HEADER_TYPING          = "numen.header.typing";
+        public static final String HEADER_BUSY            = "numen.header.busy";
+        public static final String HEADER_COMPACTING      = "numen.header.compacting";
+        public static final String HEADER_MEMBERS         = "numen.header.members";
+        public static final String CHAT_TODAY             = "numen.chat.today";
+        public static final String CHAT_YESTERDAY         = "numen.chat.yesterday";
+        public static final String CHAT_DATE_MD           = "numen.chat.date_md";
+        public static final String CHAT_DATE_YMD          = "numen.chat.date_ymd";
+
         // Skin library tab (upload png → MineSkin-signed textures).
         public static final String SKIN_TITLE           = "numen.skin.title";
         public static final String SKIN_ADD             = "numen.skin.add";
@@ -458,6 +469,15 @@ public final class ModLanguageData {
         adder.add(Keys.CONVO_DISSOLVE_TITLE,   "Dissolve \"%s\"?");
         adder.add(Keys.CONVO_DISSOLVE_WARNING, "What was said stays in each companion's own log");
         adder.add(Keys.CONVO_DROP,             "Remove %s from this conversation");
+        adder.add(Keys.HEADER_ONLINE,          "online");
+        adder.add(Keys.HEADER_TYPING,          "typing");
+        adder.add(Keys.HEADER_BUSY,            "busy");
+        adder.add(Keys.HEADER_COMPACTING,      "tidying memory");
+        adder.add(Keys.HEADER_MEMBERS,         "%s members");
+        adder.add(Keys.CHAT_TODAY,             "Today");
+        adder.add(Keys.CHAT_YESTERDAY,         "Yesterday");
+        adder.add(Keys.CHAT_DATE_MD,           "%s/%s");
+        adder.add(Keys.CHAT_DATE_YMD,          "%s/%s/%s");
         adder.add(Keys.SKIN_TITLE,           "Skins");
         adder.add(Keys.SKIN_ADD,             "New");
         adder.add(Keys.SKIN_EMPTY,           "No skins yet. Click New, then drag a skin png into the window.");
@@ -814,6 +834,15 @@ public final class ModLanguageData {
         adder.add(Keys.CONVO_DISSOLVE_TITLE,   "解散「%s」?");
         adder.add(Keys.CONVO_DISSOLVE_WARNING, "说过的话留在各自的记录里,不会丢");
         adder.add(Keys.CONVO_DROP,             "把 %s 移出这个会话");
+        adder.add(Keys.HEADER_ONLINE,          "在线");
+        adder.add(Keys.HEADER_TYPING,          "正在输入");
+        adder.add(Keys.HEADER_BUSY,            "正在忙");
+        adder.add(Keys.HEADER_COMPACTING,      "整理记忆");
+        adder.add(Keys.HEADER_MEMBERS,         "%s 位成员");
+        adder.add(Keys.CHAT_TODAY,             "今天");
+        adder.add(Keys.CHAT_YESTERDAY,         "昨天");
+        adder.add(Keys.CHAT_DATE_MD,           "%s月%s日");
+        adder.add(Keys.CHAT_DATE_YMD,          "%s年%s月%s日");
         adder.add(Keys.SKIN_TITLE,           "皮肤库");
         adder.add(Keys.SKIN_ADD,             "新建");
         adder.add(Keys.SKIN_EMPTY,           "还没有皮肤。点右上角\"新建\",再把皮肤 png 拖进游戏窗口。");

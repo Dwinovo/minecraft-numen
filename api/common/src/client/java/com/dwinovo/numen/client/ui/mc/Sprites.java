@@ -38,8 +38,7 @@ public final class Sprites {
     public static final ResourceLocation STOP = icon("icon_stop");
     /** 抬头的「＋」(邀请),和铅笔、垃圾桶同一套。 */
     public static final ResourceLocation PLUS = icon("icon_plus");
-    /** 状态行:她在忙、她的目标、她的计划。 */
-    public static final ResourceLocation LOADER = icon("icon_loader");
+    /** 状态行:她的目标、她的计划。 */
     public static final ResourceLocation FLAG = icon("icon_flag");
     public static final ResourceLocation PLAN = icon("icon_plan");
 
