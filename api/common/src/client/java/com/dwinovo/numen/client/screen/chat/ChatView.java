@@ -902,7 +902,7 @@ public final class ChatView {
     private void face(GuiGraphics g, UUID who, int x, int y, int fill) {
         faces.add(new Face(who, x, y));
         if (hoverX >= x - 2 && hoverX < x + AV + 2 && hoverY >= y - 2 && hoverY < y + AV + 2) {
-            NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), x - 2, y - 2, AV + 4, AV + 4, 0, MENTION);
+            Nb.border(g, x - 2, y - 2, AV + 4, AV + 4, 1, MENTION);   // 只描边,脸照样看得见
         }
     }
 

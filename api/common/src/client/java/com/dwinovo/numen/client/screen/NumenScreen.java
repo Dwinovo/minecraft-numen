@@ -234,7 +234,7 @@ public final class NumenScreen extends Screen {
         return ".".repeat(1 + (int) ((now / 350) % 3));
     }
 
-    private void renderStatusText(GuiGraphics g, UUID her, int limit) {
+    private void renderStatusText(GuiGraphics g, UUID her, int x, int limit) {
         long now = System.currentTimeMillis();
         HeaderStatus st = headerStatus(her, now);
         String key = st == null ? null : st.key();
@@ -247,7 +247,7 @@ public final class NumenScreen extends Screen {
         lastStatusText = st == null ? null : st.text();
         float p = Math.min(1f, (now - statusSwitchMs) / (float) STATUS_FADE_MS);
         float e = com.dwinovo.numen.client.ui.Anim.easeOutCubic(p);
-        int x = left + PAD, y = top + STATUS_Y;
+        int y = top + STATUS_Y;
         int room = limit - x;
         // 换行式过渡:旧字往上滑出一整行、新字从下面滑入一整行,裁剪框只露这一行——任一时刻只看得见一行,
         // 不会两行字叠在一起(交叉淡出会叠)。滑的同时也淡,边缘不生硬。
@@ -988,7 +988,7 @@ public final class NumenScreen extends Screen {
 
     /** 设置页抬头的 ←。 */
     private boolean backAt(double mx, double my) {
-        return tab == Tab.SETTINGS && mx >= left + PAD - 3 && mx < left + PAD + ICON_N + 3
+        return tab != Tab.CHAT && mx >= left + PAD - 3 && mx < left + PAD + ICON_N + 3
                 && my >= top + 3 && my < top + HEADER_H;
     }
 
@@ -1439,13 +1439,21 @@ public final class NumenScreen extends Screen {
         // 用量、图标、复活倒计时、人设名都是一只同伴的:会话没有单一的主时抬头只有名字
         UUID her = solo();
         int headerLimit = left + panelW - PAD;
-        if (tab == Tab.SETTINGS) {
-            // 设置页的抬头:← 回到对话 + 标题(Telegram 设置页那一条)
+        if (tab != Tab.CHAT) {
+            // 盖着的页的抬头(Telegram 设置页/资料页那一条):← 回到对话,后面是这页的标题——
+            // 设置页是"设置",资料页是她的名字 + 状态
             boolean hotBack = backAt(mouseX, mouseY) && !modalOpen() && !overlayOpen();
             com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.BACK,
                     left + PAD, top + (HEADER_H - ICON_N) / 2, ICON_N, hotBack ? CTA : ON_BAND);
-            txt(g, Component.literal(I18n.get("numen.tab.settings")), left + PAD + ICON_N + 6,
-                    top + (HEADER_H - font.lineHeight) / 2 + 1, ON_BAND);
+            int tx = left + PAD + ICON_N + 6;
+            if (tab == Tab.SETTINGS) {
+                txt(g, Component.literal(I18n.get("numen.tab.settings")), tx,
+                        top + (HEADER_H - font.lineHeight) / 2 + 1, ON_BAND);
+            } else {
+                String who = profileOf == null ? "?" : nameFor(profileOf);
+                txt(g, Component.literal(clip(who, headerLimit - tx)), tx, top + NAME_Y, ON_BAND);
+                renderStatusText(g, profileOf, tx, headerLimit);
+            }
             editPencilX = editTrashX = editPlusX = -1;
             nameRight = left + PAD;
             renderOverlayPage(g, mouseX, mouseY);
@@ -1508,8 +1516,12 @@ public final class NumenScreen extends Screen {
             txt(g, Component.literal(clip(pn, headerLimit - afterName)), afterName, top + NAME_Y, ON_BAND_FAINT);
         }
         // 第二行:在线 / 正在输入… / 复活倒计时 / N 位成员
-        renderStatusText(g, her, headerLimit);
+        renderStatusText(g, her, left + PAD, headerLimit);
         renderOverlayPage(g, mouseX, mouseY);
+        // 对话里悬停的那张脸:提示能点开资料
+        if (tab == Tab.CHAT && !modalOpen() && !overlayOpen() && chatView.faceAt(mouseX, mouseY) != null) {
+            tip(java.util.List.of(Component.translatable(ModLanguageData.Keys.HEADER_PROFILE)), mouseX, mouseY);
+        }
         if (summoning) {
             // 召唤模态:暗幕 + 居中卡(与确认卡同族),卡内由 SummonPanel 自绘。
             g.fill(railX, top, railX + railW + panelW, top + panelH,
