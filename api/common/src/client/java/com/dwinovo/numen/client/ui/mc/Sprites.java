@@ -38,6 +38,9 @@ public final class Sprites {
     public static final ResourceLocation STOP = icon("icon_stop");
     /** 抬头的「＋」(邀请),和铅笔、垃圾桶同一套。 */
     public static final ResourceLocation PLUS = icon("icon_plus");
+    /** 左栏顶上的 ☰(设置)与设置页抬头的 ←(回到对话)。 */
+    public static final ResourceLocation MENU = icon("icon_menu");
+    public static final ResourceLocation BACK = icon("icon_back");
     /** 状态行:她的目标、她的计划。 */
     public static final ResourceLocation FLAG = icon("icon_flag");
     public static final ResourceLocation PLAN = icon("icon_plan");

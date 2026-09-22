@@ -152,6 +152,8 @@ public final class ModLanguageData {
         public static final String HEADER_BUSY            = "numen.header.busy";
         public static final String HEADER_COMPACTING      = "numen.header.compacting";
         public static final String HEADER_MEMBERS         = "numen.header.members";
+        /** 点抬头名字打开的资料页(Telegram 的个人信息),和左栏 ☰ 的设置。 */
+        public static final String HEADER_PROFILE         = "numen.header.profile";
         public static final String CHAT_TODAY             = "numen.chat.today";
         public static final String CHAT_YESTERDAY         = "numen.chat.yesterday";
         public static final String CHAT_DATE_MD           = "numen.chat.date_md";
@@ -276,8 +278,6 @@ public final class ModLanguageData {
         adder.add(Keys.KEY_CATEGORY_NUMEN, "Numen");
 
         // --- consolidated into the datagen source (persona / mcp / reasoning / tabs / status ...) ---
-        adder.add("numen.tab.chat", "Chat");
-        adder.add("numen.tab.status", "Status");
         adder.add("numen.tab.settings", "Settings");
         adder.add("numen.settings.nav.llm", "Models");
         adder.add("numen.settings.nav.mcp", "MCP Tools");
@@ -428,7 +428,6 @@ public final class ModLanguageData {
         adder.add("numen.dismiss.title", "Delete companion \"%s\"?");
         adder.add("numen.dismiss.warning", "Permanent · backpack drops in place · cannot be undone");
         adder.add("numen.empty.no_companions", "No companions. Click + to summon one.");
-        adder.add("numen.items.pick_one", "A backpack belongs to one companion — pick her on the left.");
         adder.add("numen.respawn", "· reviving %ss");
         adder.add("numen.status.loading", "loading…");
         adder.add("numen.status.asleep", "asleep — chat to wake it.");
@@ -477,6 +476,7 @@ public final class ModLanguageData {
         adder.add(Keys.HEADER_BUSY,            "busy");
         adder.add(Keys.HEADER_COMPACTING,      "tidying memory");
         adder.add(Keys.HEADER_MEMBERS,         "%s members");
+        adder.add(Keys.HEADER_PROFILE,         "Profile");
         adder.add(Keys.CHAT_TODAY,             "Today");
         adder.add(Keys.CHAT_YESTERDAY,         "Yesterday");
         adder.add(Keys.CHAT_DATE_MD,           "%s/%s");
@@ -645,8 +645,6 @@ public final class ModLanguageData {
         adder.add(Keys.KEY_QUICK_VOICE, "快捷语音(按住)");
 
         // --- consolidated into the datagen source (persona / mcp / reasoning / tabs / status ...) ---
-        adder.add("numen.tab.chat", "对话");
-        adder.add("numen.tab.status", "状态");
         adder.add("numen.tab.settings", "设置");
         adder.add("numen.settings.nav.llm", "模型接入");
         adder.add("numen.settings.nav.mcp", "工具扩展");
@@ -795,7 +793,6 @@ public final class ModLanguageData {
         adder.add("numen.dismiss.title", "删除同伴 \"%s\"？");
         adder.add("numen.dismiss.warning", "永久删除 · 背包会掉落在原地 · 无法撤销");
         adder.add("numen.empty.no_companions", "还没有同伴。点 + 召唤一个。");
-        adder.add("numen.items.pick_one", "背包是每只同伴自己的,在左栏选中她来看。");
         adder.add("numen.respawn", "· 复活中 %ss");
         adder.add("numen.status.loading", "加载中…");
         adder.add("numen.status.asleep", "休眠中 —— 对它说话唤醒。");
@@ -844,6 +841,7 @@ public final class ModLanguageData {
         adder.add(Keys.HEADER_BUSY,            "正在忙");
         adder.add(Keys.HEADER_COMPACTING,      "整理记忆");
         adder.add(Keys.HEADER_MEMBERS,         "%s 位成员");
+        adder.add(Keys.HEADER_PROFILE,         "资料");
         adder.add(Keys.CHAT_TODAY,             "今天");
         adder.add(Keys.CHAT_YESTERDAY,         "昨天");
         adder.add(Keys.CHAT_DATE_MD,           "%s月%s日");

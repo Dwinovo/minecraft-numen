@@ -61,6 +61,10 @@ import java.util.UUID;
  */
 public final class NumenScreen extends Screen {
 
+    /**
+     * 面板此刻对着什么(Telegram 没有页签):CHAT 是对话;ITEMS 是点抬头名字从右边滑进来的资料页
+     * (背包、体征);SETTINGS 是左栏顶上 ☰ 从左边滑进来的设置页。滑入滑出都有过渡,见 overlayT。
+     */
     private enum Tab { CHAT, ITEMS, SETTINGS }
 
     // ---- layout ----
@@ -77,7 +81,7 @@ public final class NumenScreen extends Screen {
     private static final int RAIL_NARROW_W = 40; // 窗口装不下时收成只有脸的窄栏(Telegram 缩窗口时会话列表就这么塌)
     private static final int RAIL_AV = 26;       // 脸的边长
     private static final int RAIL_SLOT = 34;     // 行高:脸 + 上下各 4
-    private static final int RAIL_TOP = 3;       // 第一行贴着面板描边内侧
+    private static final int RAIL_TOP = 3 + 22;  // 第一行在 ☰ 那一条下面(RAIL_BAR_H)
     private static final int RAIL_BOT_GAP = 6;   // 最后一行与「+」之间留的缝
     private static final int RAIL_FACE_X = 5;    // 脸离左栏左缘
     /** 抬头两行:名字一行、状态一行(Telegram 的"在线 / 正在输入…"),页签在右侧居中。 */
@@ -275,6 +279,13 @@ public final class NumenScreen extends Screen {
      */
     private Conversation conv;
     private Tab tab = Tab.CHAT;
+    /** 盖在对话上的那页(资料或设置)滑进来多少像素(0 = 全在外面,panelW = 全进来);按趋近走。 */
+    private float overlayT;
+    /** 正在滑的是哪页;收回去的过程中 tab 已经是 CHAT,它记着该往哪边收。 */
+    private Tab overlayKind = Tab.ITEMS;
+    private long lastOverlayFrameMs;
+    /** 左栏顶上那一条:☰。 */
+    private static final int RAIL_BAR_H = 22;
 
 
     /** 召唤页的皮肤下拉:null = 默认(按名字找同名正版)。 */
@@ -344,8 +355,6 @@ public final class NumenScreen extends Screen {
     private int panelW = PANEL_MIN_W, panelH = PANEL_MIN_H;   // resolved in init() from the window size
     /** 左栏此刻的宽:完整或窄,init() 按窗口定。 */
     private int railW = RAIL_FULL_W;
-    private final int[] tabX = new int[3];   // left x of each tab label, for click hit-testing
-    private final int[] tabW = new int[3];
 
     /** Chat transcript view (bubbles + tool chips + eased scroll); reset on companion/tab switch. */
     private final com.dwinovo.numen.client.screen.chat.ChatView chatView =
@@ -405,6 +414,7 @@ public final class NumenScreen extends Screen {
         NumenScreen screen = new NumenScreen(
                 entries.isEmpty() ? null : Conversations.instance().of(entries.get(0).uuid()));
         screen.tab = Tab.SETTINGS;
+        screen.overlayKind = Tab.SETTINGS;   // 从命令开的:直接开在设置页,init 里把它摆到位
         Minecraft.getInstance().setScreen(screen);
     }
 
@@ -435,6 +445,7 @@ public final class NumenScreen extends Screen {
         conv = c;   // 同一个会话也换成最新的那份——成员表、名字可能刚变
         SelectedCompanion.set(c);
         if (same) return;
+        if (tab == Tab.ITEMS && Conversations.instance().soloOf(c) == null) selectTab(Tab.CHAT);   // 群没有资料页
         inputBar = null; savedInput = "";       // don't carry typed text across conversations
         planOpen = false;
         planShownH = 0f;
@@ -487,25 +498,8 @@ public final class NumenScreen extends Screen {
         this.railX = Math.max(0, (this.width - composite) / 2);
         this.left = railX + railW;
         this.top = Math.max(0, (this.height - panelH) / 2);
-        layoutTabs();
+        overlayT = tab == Tab.CHAT ? 0f : panelW;   // 开屏就在哪页就摆在哪,不从外面滑
         rebuild();
-    }
-
-    private static String[] tabLabels() {
-        return new String[]{
-                I18n.get("numen.tab.chat"), I18n.get("numen.tab.status"), I18n.get("numen.tab.settings")};
-    }
-
-    private void layoutTabs() {
-        String[] labels = tabLabels();
-        int x = left + panelW - PAD;
-        for (int i = labels.length - 1; i >= 0; i--) {
-            int w = font.width(labels[i]) + 10;
-            x -= w;
-            tabX[i] = x;
-            tabW[i] = w;
-            x -= 4;
-        }
     }
 
     /** Rebuild the widgets for the active tab. */
@@ -789,6 +783,41 @@ public final class NumenScreen extends Screen {
         rebuild();
     }
 
+    /**
+     * 抬头下面的正文:对话永远在底下;资料页从右、设置页从左滑进来盖住它(Telegram 在窄窗口下就是
+     * 这样整页滑),滑的过程裁在正文区里。滑到位之前不接鼠标——mouseClickedInner 按 tab 路由,
+     * 半路的点击落在还没到位的页上也只是这一帧的事。
+     */
+    private void renderOverlayPage(GuiGraphics g, int mouseX, int mouseY, UUID her) {
+        long now = System.currentTimeMillis();
+        float dt = lastOverlayFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastOverlayFrameMs) / 1000f);
+        lastOverlayFrameMs = now;
+        overlayT = com.dwinovo.numen.client.ui.Anim.approach(overlayT, tab == Tab.CHAT ? 0f : panelW, 16f, dt);
+        if (tab == Tab.CHAT || overlayT < panelW - 0.5f) {
+            if (conv != null) renderChat(g, mouseX, mouseY); else emptyHint(g);
+        }
+        if (overlayT <= 0.5f) return;
+        int dx = overlayKind == Tab.ITEMS ? Math.round(panelW - overlayT) : -Math.round(panelW - overlayT);
+        int bodyTop = top + HEADER_H, bodyBottom = top + panelH - 3;
+        g.enableScissor(left + 3, bodyTop, left + panelW - 3, bodyBottom);
+        g.pose().pushPose();
+        g.pose().translate(dx, 0, 0);
+        UiTheme t = UiTheme.current();
+        g.fill(left + 3, bodyTop, left + panelW - 3, bodyBottom, t.ground());   // 底板盖住下面的对话
+        if (overlayKind == Tab.SETTINGS) {
+            settings.render(g, mouseX - dx, mouseY);   // global — works with no companion
+        } else if (her != null) {
+            com.dwinovo.numen.client.screen.items.ItemsView.render(
+                    g, font, her, left, top, panelW, panelH, HEADER_H, mouseX - dx, mouseY);
+        }
+        g.pose().popPose();
+        g.disableScissor();
+        overlayDx = dx;
+    }
+
+    /** 盖着的那页这一帧偏了多少(滑动中);设置页的真控件跟着它画。 */
+    private int overlayDx;
+
     /** 屏幕级浮层(确认卡)在场——屏幕据此屏蔽背景交互。 */
     private boolean overlayOpen() {
         return overlayUi.hasOverlay();
@@ -920,12 +949,43 @@ public final class NumenScreen extends Screen {
     private void selectTab(Tab t) {
         if (t == tab) return;
         tab = t;
+        if (t != Tab.CHAT) overlayKind = t;   // 收回去时 tab 已是 CHAT,靠它记住往哪边收
         planOpen = false;
         planShownH = 0f;
         chatView.reset();
         if (t == Tab.ITEMS) requestInventory();
         rebuild();
     }
+
+    /** 点抬头名字:资料页开/收(就他俩才有资料页)。 */
+    private void toggleInfo() {
+        if (solo() == null) return;
+        selectTab(tab == Tab.ITEMS ? Tab.CHAT : Tab.ITEMS);
+    }
+
+    /** 左栏 ☰:设置页开/收。 */
+    private void toggleSettings() {
+        selectTab(tab == Tab.SETTINGS ? Tab.CHAT : Tab.SETTINGS);
+    }
+
+    /** ☰ 在左栏顶上那一条的左端。 */
+    private boolean railMenuAt(double mx, double my) {
+        int x = railX + 3 + PAD, y = top + 3 + (RAIL_BAR_H - ICON_N) / 2;
+        return mx >= x - 3 && mx < x + ICON_N + 3 && my >= y - 3 && my < y + ICON_N + 3;
+    }
+
+    /** 设置页抬头的 ←。 */
+    private boolean backAt(double mx, double my) {
+        return tab == Tab.SETTINGS && mx >= left + PAD - 3 && mx < left + PAD + ICON_N + 3
+                && my >= top + 3 && my < top + HEADER_H;
+    }
+
+    /** 抬头上名字与状态那一块(点它开资料页);图标那一截不算。 */
+    private boolean overName(double mx, double my) {
+        return tab != Tab.SETTINGS && solo() != null && mx >= left + PAD && mx < nameRight
+                && my >= top + 3 && my < top + HEADER_H - 2;
+    }
+    private int nameRight;
 
     /** Shadowless placeholder for an empty, unfocused field — the EditBox's own hint renders with a shadow. */
     private void placeholder(GuiGraphics g, EditBox f, String text) {
@@ -1041,6 +1101,10 @@ public final class NumenScreen extends Screen {
         if (tab == Tab.CHAT && inputBar != null && inputBar.keyPressed(keyCode, modifiers)) {
             return true;
         }
+        if (k == 256 && tab != Tab.CHAT) {   // Esc 先收盖着的那页(资料/设置),再一次才关面板
+            selectTab(Tab.CHAT);
+            return true;
+        }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
@@ -1090,6 +1154,12 @@ public final class NumenScreen extends Screen {
             if (cardOpen && modalCard.mouseClicked(mouseX, mouseY, button)) {
                 return true;
             }
+            if (railMenuAt(mouseX, mouseY)) {   // ☰ → 设置页开/收(模态开着时也当逃生口)
+                summoning = false;
+                cardOpen = false;
+                toggleSettings();
+                return true;
+            }
             if (railPlusAt((int) mouseX, (int) mouseY)) {   // + → start the summon name prompt
                 summoning = !summoning;
                 cardOpen = false;
@@ -1128,14 +1198,13 @@ public final class NumenScreen extends Screen {
                 openInvite();
                 return true;
             }
-            int my = (int) mouseY;
-            if (my >= top && my < top + HEADER_H) {
-                for (int i = 0; i < 3; i++) {
-                    if (mouseX >= tabX[i] && mouseX < tabX[i] + tabW[i]) {
-                        selectTab(Tab.values()[i]);
-                        return true;
-                    }
-                }
+            if (backAt(mouseX, mouseY)) {   // 设置页的 ← → 回到对话
+                selectTab(Tab.CHAT);
+                return true;
+            }
+            if (!overlayOpen() && overName(mouseX, mouseY)) {   // 名字 → 资料页开/收
+                toggleInfo();
+                return true;
             }
             if (tab == Tab.CHAT && planStripW > 0 && mouseY >= planStripY && mouseY < planStripY + STATUS_H
                     && mouseX >= planStripX && mouseX < planStripX + planStripW) {
@@ -1350,7 +1419,19 @@ public final class NumenScreen extends Screen {
         // 头部一行四个成员从右往左让位:tab(定宽) ← 用量 ← 人设名(可整个消失) ← 名字(最后裁)。
         // 用量、图标、复活倒计时、人设名都是一只同伴的:会话没有单一的主时抬头只有名字
         UUID her = solo();
-        int headerLimit = tabX[0] - 8;
+        int headerLimit = left + panelW - PAD;
+        if (tab == Tab.SETTINGS) {
+            // 设置页的抬头:← 回到对话 + 标题(Telegram 设置页那一条)
+            boolean hotBack = backAt(mouseX, mouseY) && !modalOpen() && !overlayOpen();
+            com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.BACK,
+                    left + PAD, top + (HEADER_H - ICON_N) / 2, ICON_N, hotBack ? CTA : ON_BAND);
+            txt(g, Component.literal(I18n.get("numen.tab.settings")), left + PAD + ICON_N + 6,
+                    top + (HEADER_H - font.lineHeight) / 2 + 1, ON_BAND);
+            editPencilX = editTrashX = editPlusX = -1;
+            nameRight = left + PAD;
+            renderOverlayPage(g, mouseX, mouseY, her);
+            return;
+        }
         // 名字旁的图标 = 改与删("名字在哪,编辑就在哪"的资料页定式;改与删并排、分开点,
         // 是列表/资料页的通行习惯),再加「＋」邀请。它们作用在左栏选中的那一格:铅笔与垃圾桶
         // 就他俩时改她/遣散,落过盘的会话改名/解散;「＋」有人可请才画。它们是入口,名字先给
@@ -1361,7 +1442,13 @@ public final class NumenScreen extends Screen {
         int nameRoom = headerLimit - (left + PAD) - ICON_PITCH * iconCount;
         String title = name();
         String nm = clip(title == null ? "Numen" : title, Math.max(24, nameRoom));
-        txt(g, Component.literal(nm), left + PAD, top + NAME_Y, ON_BAND);
+        nameRight = left + PAD + font.width(nm);
+        boolean hotName = her != null && !modalOpen() && !overlayOpen() && overName(mouseX, mouseY);
+        // 名字可点(就他俩时):点开资料页;悬停亮一档,像个能点的东西
+        txt(g, Component.literal(nm), left + PAD, top + NAME_Y, hotName ? CTA : ON_BAND);
+        if (hotName) {
+            tip(java.util.List.of(Component.translatable(ModLanguageData.Keys.HEADER_PROFILE)), mouseX, mouseY);
+        }
         int afterName = left + PAD + font.width(nm) + 6;
         editPencilX = editTrashX = editPlusX = -1;
         if (nameIcons && afterName + ICON_PITCH * iconCount <= headerLimit) {
@@ -1403,26 +1490,7 @@ public final class NumenScreen extends Screen {
         }
         // 第二行:在线 / 正在输入… / 复活倒计时 / N 位成员
         renderStatusText(g, her, headerLimit);
-        renderTabs(g, mouseX, mouseY);
-
-        // 当前 tab 内容永远渲染——召唤模态时它是暗幕下的背景(widgets 只建了召唤卡的,
-        // 背景不可交互)。
-        switch (tab) {
-            case SETTINGS -> settings.render(g, mouseX, mouseY);   // global — works with no companion
-            case CHAT -> { if (conv != null) renderChat(g, mouseX, mouseY); else emptyHint(g); }
-            case ITEMS -> {
-                if (her != null) {
-                    com.dwinovo.numen.client.screen.items.ItemsView.render(
-                            g, font, her, left, top, panelW, panelH, HEADER_H, mouseX, mouseY);
-                } else if (conv != null) {
-                    // 背包是一只同伴的;会话没有单一的主,这页没东西可画,说清楚去哪看
-                    txt(g, Component.translatable("numen.items.pick_one"),
-                            left + PAD, top + HEADER_H + 10, TXT_FAINT);
-                } else {
-                    emptyHint(g);
-                }
-            }
-        }
+        renderOverlayPage(g, mouseX, mouseY, her);
         if (summoning) {
             // 召唤模态:暗幕 + 居中卡(与确认卡同族),卡内由 SummonPanel 自绘。
             g.fill(railX, top, railX + railW + panelW, top + panelH,
@@ -1474,8 +1542,18 @@ public final class NumenScreen extends Screen {
                         eb.isFocused() ? UiTheme.current().cta() : UiTheme.current().aiBorder());
             }
         }
+        boolean sliding = tab == Tab.SETTINGS && overlayDx != 0;
+        if (sliding) {
+            g.enableScissor(left + 3, top + HEADER_H, left + panelW - 3, top + panelH - 3);
+            g.pose().pushPose();
+            g.pose().translate(overlayDx, 0, 0);
+        }
         for (AbstractWidget w : overlay) {
             w.render(g, mouseX, mouseY, partial);
+        }
+        if (sliding) {
+            g.pose().popPose();
+            g.disableScissor();
         }
         // Settings-tab overlay pass: field placeholders, voice-form row labels, and the form
         // dropdowns' open lists (drawn last so they sit above the fields) — see SettingsView.
@@ -1529,6 +1607,14 @@ public final class NumenScreen extends Screen {
         updateShrink(mouseX, mouseY);   // 它会把 lastRailFrameMs 推到现在,所以 dt 先算
         Conversation dragged = railDragging && railPressed < items.size() ? items.get(railPressed) : null;
         boolean railQuiet = !overlayOpen() && !modalOpen() && !railDragging;
+        // 顶上一条:☰ 开设置(Telegram 会话列表顶上那一条的左端);设置页开着时亮着
+        {
+            int mx0 = rowX + PAD, my0 = top + 3 + (RAIL_BAR_H - ICON_N) / 2;
+            boolean hotMenu = railMenuAt(mouseX, mouseY) && !overlayOpen();
+            com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.MENU, mx0, my0, ICON_N,
+                    tab == Tab.SETTINGS || hotMenu ? CTA : TXT_MUTED);
+            g.fill(rowX, top + 3 + RAIL_BAR_H - 1, rowX + rowW, top + 3 + RAIL_BAR_H, t.border());
+        }
         // 选中底先画(滑动的),行的内容压在它上面
         int activeIdx = -1;
         for (int i = 0; i < items.size(); i++) if (sameAs(items.get(i), conv)) { activeIdx = i; break; }
@@ -1724,20 +1810,6 @@ public final class NumenScreen extends Screen {
     private void emptyHint(GuiGraphics g) {
         txt(g, Component.translatable("numen.empty.no_companions"),
                 left + PAD, top + HEADER_H + 10, TXT_FAINT);
-    }
-
-    private void renderTabs(GuiGraphics g, int mouseX, int mouseY) {
-        String[] labels = tabLabels();
-        for (int i = 0; i < 3; i++) {
-            boolean active = tab == Tab.values()[i];
-            boolean hover = mouseX >= tabX[i] && mouseX < tabX[i] + tabW[i]
-                    && mouseY >= top && mouseY < top + HEADER_H;
-            int color = (active || hover) ? ON_BAND : (0x00FFFFFF & ON_BAND) | 0xA0000000;   // dim on band
-            txt(g, Component.literal(labels[i]), tabX[i] + 5, top + (HEADER_H - font.lineHeight) / 2 + 1, color);
-            if (active) {                                                                     // gold CTA underline
-                g.fill(tabX[i] + 3, top + HEADER_H - 4, tabX[i] + tabW[i] - 3, top + HEADER_H - 1, ACCENT);
-            }
-        }
     }
 
     // ---- chat transcript + plan ----
