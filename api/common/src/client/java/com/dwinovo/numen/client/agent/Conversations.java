@@ -72,10 +72,21 @@ public final class Conversations extends JsonLibrary<Conversation> {
         return entry.toJson();
     }
 
+    /** 每个会话主人看到哪了(最后看到的那条的时间戳);左栏据此数未读。随会话一起落盘。 */
+    private final Map<String, Long> seen = new java.util.HashMap<>();
+
     @Override
     protected void readExtra(JsonObject root) {
         selectedId = root.has("selected") && root.get("selected").isJsonPrimitive()
                 ? root.get("selected").getAsString() : null;
+        seen.clear();
+        if (root.has("seen") && root.get("seen").isJsonObject()) {
+            for (var e : root.getAsJsonObject("seen").entrySet()) {
+                if (e.getValue().isJsonPrimitive()) {
+                    seen.put(e.getKey(), e.getValue().getAsLong());
+                }
+            }
+        }
     }
 
     @Override
@@ -83,11 +94,33 @@ public final class Conversations extends JsonLibrary<Conversation> {
         if (selectedId != null) {
             root.addProperty("selected", selectedId);
         }
+        if (!seen.isEmpty()) {
+            JsonObject o = new JsonObject();
+            for (var e : seen.entrySet()) {
+                o.addProperty(e.getKey(), e.getValue());
+            }
+            root.add("seen", o);
+        }
     }
 
     @Override
     protected void resetExtra() {
         selectedId = null;
+        seen.clear();
+    }
+
+    // ---- 看到哪了 ----
+
+    public long lastSeen(Conversation conv) {
+        return seen.getOrDefault(conv.id(), 0L);
+    }
+
+    /** 主人看到了这一条(及之前的)。只在更晚时记并落盘——面板每帧都会调,不能每帧写盘。 */
+    public void markSeen(Conversation conv, long ts) {
+        if (ts > lastSeen(conv)) {
+            seen.put(conv.id(), ts);
+            save();
+        }
     }
 
     // ---- 当前交互对象 ----

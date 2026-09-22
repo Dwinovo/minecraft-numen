@@ -29,7 +29,8 @@ public final class ConversationPreview {
     /** 一行:显示文本(多人会话里带说话人),和它的时间戳。 */
     public record Line(String text, long ts) {}
 
-    private record Cached(int lines, Line line) {}
+    /** {@code saidAt} = 她们每句可见的话的时间戳,升序;数未读只比大小,不每帧重新解析。 */
+    private record Cached(int lines, Line line, List<Long> saidAt) {}
 
     private static final Map<String, Cached> CACHE = new HashMap<>();
 
@@ -37,6 +38,19 @@ public final class ConversationPreview {
 
     /** 这个会话最后一句;还没说过话是 null。 */
     public static Line last(Conversation c) {
+        return cached(c).line();
+    }
+
+    /** {@code since} 之后她们说了几句(主人自己的话不算未读)。 */
+    public static int unread(Conversation c, long since) {
+        int n = 0;
+        for (long ts : cached(c).saidAt()) {
+            if (ts > since) n++;
+        }
+        return n;
+    }
+
+    private static Cached cached(Conversation c) {
         Conversations convos = Conversations.instance();
         Map<UUID, List<ConvoLog.Line>> logs = new LinkedHashMap<>();
         int total = 0;
@@ -49,11 +63,18 @@ public final class ConversationPreview {
         }
         Cached hit = CACHE.get(c.id());
         if (hit != null && hit.lines() == total) {
-            return hit.line();
+            return hit;
         }
         boolean group = convos.soloOf(c) == null;
         Line out = null;
         List<Transcript.Entry> merged = Transcript.merge(convos.tagOf(c), logs);
+        List<Long> saidAt = new java.util.ArrayList<>();
+        for (Transcript.Entry e : merged) {
+            if (e.ts() > 0 && e.msg() instanceof ConvoState.Msg.Assistant a
+                    && !ChatDisplayModes.current().assistantText(a.turn().content()).isBlank()) {
+                saidAt.add(e.ts());
+            }
+        }
         for (int i = merged.size() - 1; i >= 0 && out == null; i--) {
             Transcript.Entry e = merged.get(i);
             if (e.msg() instanceof ConvoState.Msg.User u) {
@@ -70,8 +91,9 @@ public final class ConversationPreview {
                 }
             }
         }
-        CACHE.put(c.id(), new Cached(total, out));
-        return out;
+        Cached fresh = new Cached(total, out, List.copyOf(saidAt));
+        CACHE.put(c.id(), fresh);
+        return fresh;
     }
 
     /** 压成一行:换行变空格,好塞进一行淡字里。 */
