@@ -149,6 +149,16 @@ public final class NumenScreen extends Screen {
     /** 计划那一段本帧画在状态行的哪一截;宽 0 = 没画。点它展开清单。 */
     private int planStripX, planStripY, planStripW;
     private boolean planOpen;
+    /** 清单的过渡:这一帧露出多高(像素),按帧率无关的趋近往目标走;收起是往 0 走,走完才不画。 */
+    private float planShownH;
+    private long lastDockFrameMs;
+    /**
+     * 悬停提示延迟出:和网页一样,指针停住一会儿才出,扫过去不闪。同一条提示从第一次出现起计时,
+     * 内容一变重新计——所以键是提示的文字本身。
+     */
+    private static final int TIP_DELAY_MS = 400;
+    private String tipKey;
+    private long tipSince;
     /** 成员抬头那一行本帧画了谁(与 membersAlive 同序),点击按它判命中;空 = 本帧没画。 */
     private final List<UUID> memberRowFaces = new ArrayList<>();
     private int memberRowX, memberRowY;
@@ -1393,9 +1403,19 @@ public final class NumenScreen extends Screen {
                 com.dwinovo.numen.client.screen.settings.HostThemeColors.current(),
                 mouseX, mouseY, net.minecraft.Util.getMillis());
 
-        // Hovered MCP / skill row tooltip — drawn last so nothing paints over it.
+        // Hovered tooltip — drawn last so nothing paints over it; only after the pointer has rested a while.
         if (pendingTip != null && !overlayOpen()) {
-            g.renderComponentTooltip(font, pendingTip, pendingTipX, pendingTipY);
+            String key = pendingTip.toString();
+            long now = System.currentTimeMillis();
+            if (!key.equals(tipKey)) {
+                tipKey = key;
+                tipSince = now;
+            }
+            if (now - tipSince >= TIP_DELAY_MS) {
+                g.renderComponentTooltip(font, pendingTip, pendingTipX, pendingTipY);
+            }
+        } else {
+            tipKey = null;
         }
     }
 
@@ -1448,7 +1468,7 @@ public final class NumenScreen extends Screen {
                 g.fill(railX + 1, py2, railX + 3, py2 + pillH, ACCENT);
             }
             if (hovered && !active && railQuiet) {
-                // 未选中悬停给名字(即时渲染,无网页式延迟);当前那个的名字在头部常驻。
+                // 未选中悬停给名字;当前那个的名字在头部常驻。
                 pendingTip = java.util.List.of(Component.literal(c.displayName(NumenRoster.instance()::name)));
                 pendingTipX = mouseX;
                 pendingTipY = mouseY;
