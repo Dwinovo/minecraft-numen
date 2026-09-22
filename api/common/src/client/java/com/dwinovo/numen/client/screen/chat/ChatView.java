@@ -122,7 +122,6 @@ public final class ChatView {
     private static ResourceLocation spr(String n) {
         return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, n);
     }
-    private static final ResourceLocation SCROLL_TRACK = spr("scroll_track");
     private static final ResourceLocation SCROLL_THUMB = spr("scroll_thumb");
     private static final ResourceLocation CHEVRON_DOWN = spr("chevron_down");
     /** 回到底部的浮钮(Telegram 翻上去时右下角那枚):边长,以及淡入淡出的进度(像素,趋近)。 */
@@ -257,8 +256,7 @@ public final class ChatView {
             int thumbH = Math.max(12, h * h / (h + lastMaxScroll));
             int thumbY = y + Math.round((h - thumbH) * (scrollPos / lastMaxScroll));
             g.setColor(1f, 1f, 1f, barShown / 8f);
-            g.blitSprite(SCROLL_TRACK, x + w - SB_W, y, SB_W, h);
-            g.blitSprite(SCROLL_THUMB, x + w - SB_W, thumbY, SB_W, thumbH);
+            g.blitSprite(SCROLL_THUMB, x + w - SB_W, thumbY, SB_W, thumbH);   // 只有滑块,没有槽(Telegram)
             g.setColor(1f, 1f, 1f, 1f);
         }
         // 翻上去超过半屏就浮出"回到底部":淡入淡出按趋近走,不硬切;点它回到最新
