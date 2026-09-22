@@ -131,6 +131,50 @@ public final class ChatView {
     /** 滚动条只在滚动时和指针在对话流上时出现(Telegram),淡入淡出按趋近走。 */
     private float barShown;
     private long lastScrollMs;
+    /** 滑块贴哪条右缘(宿主给正文区的右缘,不是气泡区的);-1 = 气泡区自己的右缘。 */
+    private int barRight = -1;
+    /** 正拖着滑块;{@code barGrab} 是按下时指针离滑块顶边多远,拖的时候保持这个差。 */
+    private boolean barDragging;
+    private int barGrab;
+
+    public void scrollbarRight(int x) {
+        barRight = x;
+    }
+
+    private int barX() {
+        return (barRight > 0 ? barRight : gx + gw) - SB_W;
+    }
+
+    private int thumbH() {
+        return Math.max(12, gh * gh / (gh + lastMaxScroll));
+    }
+
+    private int thumbY() {
+        return gy + Math.round((gh - thumbH()) * (scrollPos / Math.max(1, lastMaxScroll)));
+    }
+
+    /** 直接跳到某个滚动位置(拖滑块、点槽):不走趋近,手在哪滑块就在哪。 */
+    private void scrollTo(float target) {
+        scrollTarget = Math.clamp(Math.round(target), 0, lastMaxScroll);
+        scrollPos = scrollTarget;
+        pinBottom = scrollTarget >= lastMaxScroll;
+        lastScrollMs = System.currentTimeMillis();
+    }
+
+    /** 拖滑块:按下时按住的那一点相对滑块的位置不变。 */
+    public boolean mouseDragged(double mx, double my) {
+        if (!barDragging) return false;
+        int th = thumbH();
+        float span = Math.max(1, gh - th);
+        scrollTo((float) (my - barGrab - gy) / span * lastMaxScroll);
+        return true;
+    }
+
+    public boolean mouseReleased() {
+        if (!barDragging) return false;
+        barDragging = false;
+        return true;
+    }
 
     private final Font font;
     private final Supplier<Conversation> conv;
@@ -248,15 +292,13 @@ public final class ChatView {
         }
         g.disableScissor();
 
-        boolean overBody = hoverX >= x && hoverX < x + w && hoverY >= y && hoverY < y + h;
+        boolean overBody = hoverX >= x && hoverX < barX() + SB_W && hoverY >= y && hoverY < y + h;
         boolean wantBar = lastMaxScroll > 0
-                && (overBody || frameNow - lastScrollMs < 800 || Math.abs(scrollPos - scrollTarget) > 0.5f);
+                && (overBody || barDragging || frameNow - lastScrollMs < 800 || Math.abs(scrollPos - scrollTarget) > 0.5f);
         barShown = Anim.approach(barShown, wantBar ? 8f : 0f, 14f, dt);
         if (barShown > 0.5f && lastMaxScroll > 0) {
-            int thumbH = Math.max(12, h * h / (h + lastMaxScroll));
-            int thumbY = y + Math.round((h - thumbH) * (scrollPos / lastMaxScroll));
             g.setColor(1f, 1f, 1f, barShown / 8f);
-            g.blitSprite(SCROLL_THUMB, x + w - SB_W, thumbY, SB_W, thumbH);   // 只有滑块,没有槽(Telegram)
+            g.blitSprite(SCROLL_THUMB, barX(), thumbY(), SB_W, thumbH());   // 只有滑块,没有槽,贴正文区右缘(Telegram)
             g.setColor(1f, 1f, 1f, 1f);
         }
         // 翻上去超过半屏就浮出"回到底部":淡入淡出按趋近走,不硬切;点它回到最新
@@ -384,6 +426,19 @@ public final class ChatView {
     public boolean mouseClicked(double mx, double my) {
         if (jumpShown > JUMP / 2f && mx >= jumpX && mx < jumpX + JUMP && my >= jumpY && my < jumpY + JUMP) {
             pinToBottom();
+            return true;
+        }
+        // 滚动条那一列:按在滑块上开始拖;按在空处滑块先跳到指针下再开始拖(Telegram)
+        if (lastMaxScroll > 0 && mx >= barX() - 2 && mx < barX() + SB_W + 2 && my >= gy && my < gy + gh) {
+            int th = thumbH();
+            int ty = thumbY();
+            if (my < ty || my >= ty + th) {
+                scrollTo((float) (my - gy - th / 2.0) / Math.max(1, gh - th) * lastMaxScroll);
+                ty = thumbY();
+            }
+            barGrab = (int) my - ty;
+            barDragging = true;
+            lastScrollMs = System.currentTimeMillis();
             return true;
         }
         if (McpMode.instance().driving()) return false;   // 现场视图没有可折叠的块

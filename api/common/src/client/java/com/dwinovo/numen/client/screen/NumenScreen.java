@@ -1257,6 +1257,9 @@ public final class NumenScreen extends Screen {
             return true;
         }
         // 声线表单的音量滑条拖动(NumenUI 面板)。
+        if (tab == Tab.CHAT && !modalOpen() && !overlayOpen() && chatView.mouseDragged(mx, my)) {
+            return true;   // 拖对话流的滑块
+        }
         if (tab == Tab.SETTINGS && !modalOpen() && settings.mouseDragged(mx, my, dx, dy)) {
             return true;
         }
@@ -1281,6 +1284,9 @@ public final class NumenScreen extends Screen {
             } else {
                 flyBack(items.get(pressed), pressed);
             }
+            return true;
+        }
+        if (tab == Tab.CHAT && chatView.mouseReleased()) {
             return true;
         }
         if (tab == Tab.SETTINGS && !modalOpen() && settings.mouseReleased(mx, my, button)) {
@@ -2027,6 +2033,7 @@ public final class NumenScreen extends Screen {
         if (lp != null && com.dwinovo.numen.mcp.server.McpMode.instance().driving()) {
             chatView.renderExternal(g, transX, bodyY, transW, bodyBottom - bodyY);
         } else {
+            chatView.scrollbarRight(left + panelW - 4);   // 滑块贴正文区右缘,不是气泡区的
             chatView.render(g, transX, bodyY, transW, bodyBottom - bodyY, mouseX, mouseY);
         }
 
