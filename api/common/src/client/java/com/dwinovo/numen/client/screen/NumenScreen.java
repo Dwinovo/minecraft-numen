@@ -68,12 +68,13 @@ public final class NumenScreen extends Screen {
     // ——行宽超过阅读舒适区就不再跟了。
     // 不学原版的固定尺寸(箱子/工作台从不随窗口伸缩):那样大窗口下是大面板稀内容,
     // 字的视觉占比被稀释,显小显散。
-    private static final int PANEL_MIN_W = 380;
+    private static final int PANEL_MIN_W = 300;
     private static final int PANEL_MIN_H = 232;
-    private static final int PANEL_MAX_W = PANEL_MIN_W;
+    private static final int PANEL_MAX_W = 380;
     private static final int PANEL_MAX_H = PANEL_MIN_H;
     // 左栏 = 会话列表(Telegram):一行一个会话——脸、名字、最后一句、时间;选中行整行高亮,点行切换,底部「+」召唤。
-    private static final int RAIL_W = 132;       // 左栏宽
+    private static final int RAIL_FULL_W = 132;  // 左栏宽(完整:脸 + 名字 + 最后一句)
+    private static final int RAIL_NARROW_W = 40; // 窗口装不下时收成只有脸的窄栏(Telegram 缩窗口时会话列表就这么塌)
     private static final int RAIL_AV = 26;       // 脸的边长
     private static final int RAIL_SLOT = 34;     // 行高:脸 + 上下各 4
     private static final int RAIL_TOP = 3;       // 第一行贴着面板描边内侧
@@ -337,6 +338,8 @@ public final class NumenScreen extends Screen {
     // geometry resolved in init()
     private int left, top, railX;
     private int panelW = PANEL_MIN_W, panelH = PANEL_MIN_H;   // resolved in init() from the window size
+    /** 左栏此刻的宽:完整或窄,init() 按窗口定。 */
+    private int railW = RAIL_FULL_W;
     private final int[] tabX = new int[3];   // left x of each tab label, for click hit-testing
     private final int[] tabW = new int[3];
 
@@ -471,11 +474,14 @@ public final class NumenScreen extends Screen {
         com.dwinovo.numen.client.ui.mc.McTextInput.mountVia(this::addWidget, this::setFocused);
         // 窗口留 12px 边距后能给多大给多大,夹在上下限之间;窗口比下限还小时
         // railX/top 至少钳到 0,保证头部(标题/tab/关闭途径)永远可见可点。
-        panelW = Math.clamp(this.width - RAIL_W - 24, PANEL_MIN_W, PANEL_MAX_W);
+        int avail = this.width - 24;
+        // 完整的左栏 + 最窄的正文都装不下,左栏就收成只有脸的窄栏;正文再按窗口在上下限之间伸缩
+        railW = avail >= RAIL_FULL_W + PANEL_MIN_W ? RAIL_FULL_W : RAIL_NARROW_W;
+        panelW = Math.clamp(avail - railW, PANEL_MIN_W, PANEL_MAX_W);
         panelH = Math.clamp(this.height - 24, PANEL_MIN_H, PANEL_MAX_H);
-        int composite = RAIL_W + panelW;        // rail flush against the panel — one merged sprite
+        int composite = railW + panelW;        // rail flush against the panel — one merged sprite
         this.railX = Math.max(0, (this.width - composite) / 2);
-        this.left = railX + RAIL_W;
+        this.left = railX + railW;
         this.top = Math.max(0, (this.height - panelH) / 2);
         layoutTabs();
         rebuild();
@@ -737,7 +743,7 @@ public final class NumenScreen extends Screen {
 
     /** 遣散确认:危险操作的最后一道闸——卡外点击吞掉、Esc 取消、删除钮红色。 */
     private void openDismissConfirm(UUID target) {
-        dismissDialog.open(overlayUi, railX, top, RAIL_W + panelW, panelH,
+        dismissDialog.open(overlayUi, railX, top, railW + panelW, panelH,
                 I18n.get("numen.dismiss.title", nameFor(target)),
                 I18n.get("numen.dismiss.warning"),
                 I18n.get("numen.gui.settings.cancel"), I18n.get("numen.dismiss.delete"),
@@ -759,7 +765,7 @@ public final class NumenScreen extends Screen {
 
     /** 解散确认:记录留在成员各自的日志里,所以副文本说的是"不会丢",不是"无法撤销"。 */
     private void openDissolveConfirm(Conversation target) {
-        dismissDialog.open(overlayUi, railX, top, RAIL_W + panelW, panelH,
+        dismissDialog.open(overlayUi, railX, top, railW + panelW, panelH,
                 I18n.get(ModLanguageData.Keys.CONVO_DISSOLVE_TITLE,
                         target.displayName(NumenRoster.instance()::name)),
                 I18n.get(ModLanguageData.Keys.CONVO_DISSOLVE_WARNING),
@@ -936,10 +942,10 @@ public final class NumenScreen extends Screen {
      *  old WARM-baked workspace sprite so a theme switch recolours the whole frame. */
     private void drawWorkspace(GuiGraphics g) {
         UiTheme t = UiTheme.current();
-        int x0 = railX, y0 = top, x1 = railX + RAIL_W + panelW, y1 = top + panelH;
+        int x0 = railX, y0 = top, x1 = railX + railW + panelW, y1 = top + panelH;
         g.fill(x0, y0, x1, y1, t.border());                          // frame + rail divider base
-        g.fill(x0 + 3, y0 + 3, x0 + RAIL_W, y1 - 3, t.ground());     // 左栏列
-        g.fill(x0 + RAIL_W, y0 + 3, x0 + RAIL_W + 1, y1 - 3, t.border());   // 列表与正文之间一道竖线
+        g.fill(x0 + 3, y0 + 3, x0 + railW, y1 - 3, t.ground());     // 左栏列
+        g.fill(x0 + railW, y0 + 3, x0 + railW + 1, y1 - 3, t.border());   // 列表与正文之间一道竖线
         g.fill(left + 3, y0 + 3, x1 - 3, y0 + HEADER_H - 2, t.band());   // header band (underline = border gap)
         g.fill(left + 3, y0 + HEADER_H, x1 - 3, y1 - 3, t.ground()); // panel ground
         for (int dy = y0 + HEADER_H + 7; dy < y1 - 5; dy += 16) {    // dot grid (translucent theme dot)
@@ -1306,7 +1312,7 @@ public final class NumenScreen extends Screen {
         // 设置页第一段:表单下拉 + 声线表单整体滚动(顺位与拆分前一致)。
         if (sy != 0 && tab == Tab.SETTINGS && settings.mouseScrolledEarly(mx, my, sy)) return true;
         // Wheel over the left rail column scrolls the roster (works on any tab).
-        if (sy != 0 && mx >= railX && mx < railX + RAIL_W && maxRailScroll() > 0) {
+        if (sy != 0 && mx >= railX && mx < railX + railW && maxRailScroll() > 0) {
             railScroll = Math.clamp((long) (railScroll - sy), 0, maxRailScroll());
             return true;
         }
@@ -1415,7 +1421,7 @@ public final class NumenScreen extends Screen {
         }
         if (summoning) {
             // 召唤模态:暗幕 + 居中卡(与确认卡同族),卡内由 SummonPanel 自绘。
-            g.fill(railX, top, railX + RAIL_W + panelW, top + panelH,
+            g.fill(railX, top, railX + railW + panelW, top + panelH,
                     (UiTheme.current().border() & 0xFFFFFF) | 0x99000000);
             com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), modalCardX(), modalCardY(),
                     modalCardW(), modalCardBottom() - modalCardY(),
@@ -1432,7 +1438,7 @@ public final class NumenScreen extends Screen {
         }
         if (cardOpen) {
             // 模态卡:同款暗幕 + 居中卡;卡里的东西(含脸)由卡自己画。
-            g.fill(railX, top, railX + RAIL_W + panelW, top + panelH,
+            g.fill(railX, top, railX + railW + panelW, top + panelH,
                     (UiTheme.current().border() & 0xFFFFFF) | 0x99000000);
             com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), modalCardX(), modalCardY(),
                     modalCardW(), modalCardBottom() - modalCardY(),
@@ -1510,7 +1516,7 @@ public final class NumenScreen extends Screen {
     private void renderRail(GuiGraphics g, int mouseX, int mouseY) {
         List<Conversation> items = rail();
         UiTheme t = UiTheme.current();
-        int rowX = railX + 3, rowW = RAIL_W - 3;
+        int rowX = railX + 3, rowW = railW - 3;
         railScroll = Math.clamp(railScroll, 0, maxRailScroll());     // keep valid as the roster grows/shrinks
         int first = railScroll;
         int startY = railStartY();
@@ -1565,6 +1571,12 @@ public final class NumenScreen extends Screen {
             if (railDragging && i == railPressed) {
                 g.fill(rowX, ay, rowX + rowW, ay + RAIL_SLOT, 0x90101010);
             }
+            if (railW < RAIL_FULL_W) {
+                // 窄栏:只有脸;名字靠悬停
+                if (hovered && !active && railQuiet) {
+                    tip(java.util.List.of(Component.literal(c.displayName(NumenRoster.instance()::name))), mouseX, mouseY);
+                }
+            } else {
             // 名字一行、最后一句一行;时间在名字那行的右端
             int tx = fx + RAIL_AV + 6;
             int nameColor = active ? ON_BAND : TXT;
@@ -1579,6 +1591,7 @@ public final class NumenScreen extends Screen {
             }
             String preview = last == null ? I18n.get(ModLanguageData.Keys.RAIL_EMPTY) : last.text();
             txt(g, Component.literal(clip(preview, textRight - tx)), tx, ay + 18, last == null ? TXT_FAINT : dimColor);
+            }
             // 状态点、复活倒计时、等点头的"!"都是一只同伴的事;会话行上只有脸
             if (her == null) continue;
             if (NumenRoster.instance().isDead(her)) {                 // dead — dim veil + respawn countdown
@@ -1600,10 +1613,10 @@ public final class NumenScreen extends Screen {
             }
         }
         // 「+」召唤:列表右下角一格(Telegram 的"新消息"浮钮位置)。纯代码绘制,跟主题走色。
-        int px = railX + RAIL_W - PAD - RAIL_AV;
+        int px = railX + railW - PAD - RAIL_AV;
         int py = top + panelH - PAD - RAIL_AV;
         // scroll cues — gold chevrons when the list overflows in either direction
-        int cx = railX + RAIL_W / 2;
+        int cx = railX + railW / 2;
         if (railScroll > 0) chevron(g, cx, top + 1, true);
         if (railScroll < maxRailScroll()) chevron(g, cx, py - 9, false);
         boolean plusHot = summoning || (mouseX >= px && mouseX < px + RAIL_AV
@@ -1659,7 +1672,7 @@ public final class NumenScreen extends Screen {
     }
 
     private boolean railPlusAt(int mx, int my) {
-        int px = railX + RAIL_W - PAD - RAIL_AV;
+        int px = railX + railW - PAD - RAIL_AV;
         int py = top + panelH - PAD - RAIL_AV;
         return mx >= px && mx < px + RAIL_AV && my >= py && my < py + RAIL_AV;
     }
@@ -1680,7 +1693,7 @@ public final class NumenScreen extends Screen {
 
     /** 指针下那一行的下标(整行都算),不在行上则 -1。 */
     private int railIndexAt(int mx, int my) {
-        if (mx < railX + 3 || mx >= railX + RAIL_W) return -1;
+        if (mx < railX + 3 || mx >= railX + railW) return -1;
         int n = rail().size();
         int first = Math.clamp(railScroll, 0, maxRailScroll());
         int startY = railStartY();
