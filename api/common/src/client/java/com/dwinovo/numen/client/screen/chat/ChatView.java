@@ -474,11 +474,13 @@ public final class ChatView {
         }
         flushTools(f, done, failed, bubbleMaxW);
         // 在飞的状态按成员各自的循环取:单成员就是她一个,多人各画各的。
+        // 只画她此刻所在的会话里的:她在群里想着,私聊页不该也看见——和落库的行同一条印的规矩。
+        String tag = Conversations.instance().tagOf(conv.get());
         java.util.Set<String> queued = new java.util.LinkedHashSet<>();
         boolean compacting = false;
         for (UUID her : Conversations.instance().membersAlive(conv.get())) {
             EntityAgentLoop lp = AgentLoopRegistry.get(her).orElse(null);
-            if (lp == null) continue;
+            if (lp == null || !java.util.Objects.equals(lp.conversation(), tag)) continue;
             // 在飞的思考流:展开着实时长(它正在发生,折起来就看不见了);回合落库后
             // 由上面那条 committed 的思考块接管,永不双份。
             String liveReasoning = lp.liveReasoning();
