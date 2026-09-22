@@ -184,6 +184,8 @@ public final class ChatView {
     private int scrollTarget;
     private boolean pinBottom = true;
     private int lastMaxScroll;
+    /** 刚切进来的第一帧直接落到最底(Telegram 打开会话就停在最新一条),不从顶上滚下来;之后再平滑。 */
+    private boolean snapNext;
     private long lastFrameMs;
     /** 打字机:每个成员在飞的回复各自露出多少、这一帧显示成什么(正文 + 闪烁光标)。
      *  build() 读的是缓存,点击时的重建和渲染看到同一份几何。 */
@@ -246,6 +248,7 @@ public final class ChatView {
         scrollPos = 0;
         scrollTarget = 0;
         pinBottom = true;
+        snapNext = true;
         lastFrameMs = 0;
         live.clear();
         expandedGroups.clear();
@@ -281,6 +284,10 @@ public final class ChatView {
         lastMaxScroll = Math.max(0, content - h);
         if (pinBottom) scrollTarget = lastMaxScroll;
         scrollTarget = Math.clamp(scrollTarget, 0, lastMaxScroll);
+        if (snapNext) {
+            scrollPos = scrollTarget;
+            snapNext = false;
+        }
         scrollPos = Anim.approach(scrollPos, scrollTarget, SCROLL_RATE, dt);
 
         g.enableScissor(x, y, x + w, y + h);
