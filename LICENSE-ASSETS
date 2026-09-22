@@ -23,7 +23,7 @@ pixelarticons (https://github.com/halfmage/pixelarticons) with
 
   - `api/common/src/main/resources/assets/numen_api/textures/gui/sprites/
     icon_copy.png`, `icon_refresh.png`, `icon_edit.png`, `icon_delete.png`,
-    `icon_plus.png`, `icon_flag.png`, `icon_list.png`, `icon_loader.png`
+    `icon_plus.png`, `icon_flag.png`, `icon_plan.png`, `icon_loader.png`
 
     MIT License
 

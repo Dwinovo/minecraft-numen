@@ -352,6 +352,7 @@ public final class NumenScreen extends Screen {
         if (same) return;
         inputBar = null; savedInput = "";       // don't carry typed text across conversations
         planOpen = false;
+        planShownH = 0f;
         chatView.reset();
         rebuild();
         if (tab == Tab.ITEMS && solo() != null) requestInventory();
@@ -832,6 +833,7 @@ public final class NumenScreen extends Screen {
         if (t == tab) return;
         tab = t;
         planOpen = false;
+        planShownH = 0f;
         chatView.reset();
         if (t == Tab.ITEMS) requestInventory();
         rebuild();
@@ -1676,7 +1678,7 @@ public final class NumenScreen extends Screen {
         planStripX = x;
         planStripY = y;
         planStripW = com.dwinovo.numen.client.screen.chat.PlanStrip.render(g, lp, x, iy, Math.max(0, limit - x), planOpen, now);
-        if (planStripW > 0 && hover && mouseX >= x && mouseX < x + planStripW) {
+        if (planStripW > 0 && hover && !planOpen && mouseX >= x && mouseX < x + planStripW) {
             String step = com.dwinovo.numen.client.screen.chat.PlanStrip.currentStep(lp);
             if (step != null) tip(java.util.List.of(Component.literal(step)), mouseX, mouseY);
         }
@@ -1792,9 +1794,15 @@ public final class NumenScreen extends Screen {
 
         if (statusLine) {
             renderStatusLine(g, lp, dockY, mouseX, mouseY);
-            if (planOpen && planStripW > 0) {
-                // 清单从状态行往上长,盖在对话流上——和补全弹层同一个方向
-                com.dwinovo.numen.client.screen.chat.PlanStrip.renderOpen(g, font, lp, transX, transW, dockY - 3, bodyY);
+            // 清单从状态行往上长,盖在对话流上——和补全弹层同一个方向;展开/收起都有过渡,收完才不画
+            long now = System.currentTimeMillis();
+            float dt = lastDockFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastDockFrameMs) / 1000f);
+            lastDockFrameMs = now;
+            boolean want = planOpen && planStripW > 0;
+            if (want || planShownH > 0f) {
+                int fullH = com.dwinovo.numen.client.screen.chat.PlanStrip.renderOpen(
+                        g, font, lp, transX, transW, dockY - 3, bodyY, Math.round(planShownH), now);
+                planShownH = com.dwinovo.numen.client.ui.Anim.approach(planShownH, want ? fullH : 0f, 16f, dt);
             }
         }
         // 框里已有文字时占位不显示,这条兜底行接管(用醒目的 FAIL 色)

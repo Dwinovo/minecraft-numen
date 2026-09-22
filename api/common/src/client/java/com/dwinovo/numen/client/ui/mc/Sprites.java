@@ -41,7 +41,7 @@ public final class Sprites {
     /** 状态行:她在忙、她的目标、她的计划。 */
     public static final ResourceLocation LOADER = icon("icon_loader");
     public static final ResourceLocation FLAG = icon("icon_flag");
-    public static final ResourceLocation LIST = icon("icon_list");
+    public static final ResourceLocation PLAN = icon("icon_plan");
 
     public static ResourceLocation icon(String name) {
         return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, name);

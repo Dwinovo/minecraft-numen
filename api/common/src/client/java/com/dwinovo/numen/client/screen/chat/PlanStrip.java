@@ -48,7 +48,7 @@ public final class PlanStrip {
             return 0;
         }
         UiTheme th = UiTheme.current();
-        Sprites.draw(g, Sprites.LIST, x, y, Sprites.SIZE, open ? th.cta() : th.textDim());
+        Sprites.draw(g, Sprites.PLAN, x, y, Sprites.SIZE, open ? th.cta() : th.textDim());
         int bx = x + Sprites.SIZE + 4;
         int by = y + (Sprites.SIZE - SEG_H) / 2;
         int n = todos.size();
@@ -104,52 +104,72 @@ public final class PlanStrip {
         return (argb & 0xFFFFFF) | (a << 24);
     }
 
-    /** 展开态:清单从 {@code bottom} 往上长、盖在对话流上;高度贴内容,顶不过 {@code top}。 */
-    public static void renderOpen(GuiGraphics g, Font font, EntityAgentLoop loop, int x, int w, int bottom, int top) {
+    /**
+     * 展开态:清单从 {@code bottom} 往上长、盖在对话流上;高度贴内容,顶不过 {@code top}。
+     * 每条前面是和状态行同一套的色块(做完实色、正在做呼吸、没做淡),不用字符当图标。
+     *
+     * @param shownH 这一帧露出多高(展开/收起的过渡由宿主按帧推进);超出内容高按内容高算
+     * @return 内容的完整高度——宿主拿它当过渡的目标
+     */
+    public static int renderOpen(GuiGraphics g, Font font, EntityAgentLoop loop, int x, int w, int bottom, int top,
+                                 int shownH, long nowMs) {
         JsonArray todos = latestPlan(loop);
         if (todos == null || todos.isEmpty()) {
-            return;
+            return 0;
         }
         UiTheme th = UiTheme.current();
-        int TXT = th.text(), MUTED = th.textDim(), FAINT = th.faint(), OK = th.ok(), RUN = th.run();
+        int TXT = th.text(), MUTED = th.textDim(), FAINT = th.faint();
         int ix = x + PAD;
-        int iw = w - PAD * 2;
+        int iw = w - PAD * 2 - 12;
         // 先量后画:框贴内容,顶不过 top
         int contentH = PAD;
         for (int i = 0; i < todos.size(); i++) {
             if (!todos.get(i).isJsonObject()) continue;
             JsonObject it = todos.get(i).getAsJsonObject();
-            int n = font.split(Nb.colored(str(it, "content"), TXT), iw - 10).size();
+            int n = font.split(Nb.colored(str(it, "content"), TXT), iw).size();
             contentH += Math.max(1, Math.min(2, n)) * LINE_H;
             if (bottom - (contentH + PAD) <= top) break;
         }
-        int y = Math.max(top, bottom - (contentH + PAD - 2));
-        NumenStyle.box(new McDrawSurface(g, font), x, y, w, bottom - y, th.aiFill(), th.aiBorder());
-        int ly = y + PAD;
+        int fullH = Math.min(bottom - top, contentH + PAD - 2);
+        int h = Math.min(fullH, shownH);
+        if (h <= 0) {
+            return fullH;
+        }
+        // 过渡时只露下面这一截:框从状态行往上长,里面的行跟着框的顶边一起露出来
+        int y = bottom - h;
+        g.enableScissor(x, y, x + w, bottom);
+        int boxY = bottom - fullH;
+        NumenStyle.box(new McDrawSurface(g, font), x, boxY, w, fullH, th.aiFill(), th.aiBorder());
+        int ly = boxY + PAD;
         for (int i = 0; i < todos.size() && ly + LINE_H < bottom; i++) {
             if (!todos.get(i).isJsonObject()) continue;
             JsonObject it = todos.get(i).getAsJsonObject();
             String status = str(it, "status");
             String content = str(it, "content");
-            String glyph = switch (status) { case "completed" -> "✔"; case "in_progress" -> "▸"; default -> "○"; };
-            int glyphColor = switch (status) { case "completed" -> OK; case "in_progress" -> RUN; default -> FAINT; };
-            Nb.text(g, font, glyph, ix, ly, glyphColor);
+            int mark = switch (status) {
+                case "completed" -> th.ok();
+                case "in_progress" -> pulse(th.run(), nowMs);
+                default -> th.faint();
+            };
+            g.fill(ix, ly + 2, ix + 6, ly + 8, mark);
             // 层次:正在做的最亮,做完的退后,还没做的最淡
             int textColor = switch (status) {
                 case "in_progress" -> TXT;
                 case "completed" -> MUTED;
                 default -> FAINT;
             };
-            List<FormattedCharSequence> lines = font.split(Nb.colored(content, textColor), iw - 10);
+            List<FormattedCharSequence> lines = font.split(Nb.colored(content, textColor), iw);
             int sub = 0;
             for (FormattedCharSequence seq : lines) {
                 if (ly + LINE_H >= bottom) break;
-                Nb.text(g, font, seq, ix + 10, ly);
+                Nb.text(g, font, seq, ix + 12, ly);
                 ly += LINE_H;
                 if (++sub >= 2) break;   // 每条最多两行
             }
             if (lines.isEmpty()) ly += LINE_H;
         }
+        g.disableScissor();
+        return fullH;
     }
 
     /** 最近一次 todowrite 的 todos;没有则 null。 */
