@@ -135,6 +135,32 @@ public final class ChatView {
     }
     /** Completed tool-call groups the user clicked open (keyed by the group's first call id). */
     private final Set<String> expandedGroups = new HashSet<>();
+    /**
+     * 排版缓存:同一段字、同一宽度只 split 一次。块每帧重建是为了活着的东西(转圈、在飞的字)不用另设
+     * 失效,但 font.split 是这一路里最贵的一步——历史消息每帧重排一遍,思考一长整个界面就卡。
+     * 键是带样式的文本 + 宽度,主人的话里 @ 亮不亮、主题换没换色都在键里。访问序 LRU,上限一千段。
+     */
+    private final java.util.Map<SplitKey, List<FormattedCharSequence>> splits =
+            new java.util.LinkedHashMap<>(256, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(java.util.Map.Entry<SplitKey, List<FormattedCharSequence>> e) {
+                    return size() > 1024;
+                }
+            };
+    /** 思考正文压成一行的缓存(正则 + 拷贝,每帧对几 KB 的思考跑一遍也不便宜)。同样 LRU。 */
+    private final java.util.Map<String, String> flattened =
+            new java.util.LinkedHashMap<>(64, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(java.util.Map.Entry<String, String> e) {
+                    return size() > 256;
+                }
+            };
+
+    private record SplitKey(Component text, int width) {}
+
+    private List<FormattedCharSequence> split(Component text, int width) {
+        return splits.computeIfAbsent(new SplitKey(text, width), k -> font.split(k.text(), k.width()));
+    }
     // geometry of the last render, for click / wheel hit-testing
     private int gx, gy, gw, gh;
 
@@ -156,6 +182,8 @@ public final class ChatView {
         lastFrameMs = 0;
         live.clear();
         expandedGroups.clear();
+        splits.clear();
+        flattened.clear();
     }
 
     /** Re-pin to the bottom (a message was just sent). */
@@ -522,7 +550,7 @@ public final class ChatView {
 
     private Bubble bubble(boolean own, String label, Component body, int fill, int border,
                           int innerW, boolean showAvatar, UUID who) {
-        List<FormattedCharSequence> lines = font.split(body, innerW);
+        List<FormattedCharSequence> lines = split(body, innerW);
         int maxW = 0;
         for (FormattedCharSequence l : lines) maxW = Math.max(maxW, font.width(l));
         return new Bubble(own, label, lines, maxW, fill, border, showAvatar, who);
@@ -625,7 +653,6 @@ public final class ChatView {
      * 就看不见);已落库的默认折叠成一行摘要,点开看全文——它是过程不是结论。
      */
     private Chip reasoningChip(String text, String foldKey, int innerW, boolean live, String label, UUID who) {
-        String flat = text.replaceAll("\\s+", " ").trim();
         List<ChipRow> rows = new ArrayList<>();
         boolean expanded = live || (foldKey != null && expandedGroups.contains(foldKey));
         if (!expanded) {
@@ -636,7 +663,8 @@ public final class ChatView {
         }
         rows.add(new ChipRow(live ? SPIN[(int) ((System.currentTimeMillis() / 120) % 4)] : "▾", MUTED,
                 Nb.colored(I18n.get("numen.chat.reasoning"), MUTED).getVisualOrderText()));
-        for (FormattedCharSequence line : font.split(Nb.colored(flat, FAINT), innerW - ICON_W)) {
+        String flat = flattened.computeIfAbsent(text, t -> t.replaceAll("\\s+", " ").trim());
+        for (FormattedCharSequence line : split(Nb.colored(flat, FAINT), innerW - ICON_W)) {
             rows.add(new ChipRow(" ", MUTED, line));
         }
         return new Chip(List.copyOf(rows), foldKey, label, who);
