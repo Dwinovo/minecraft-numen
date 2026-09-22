@@ -35,6 +35,10 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -60,6 +64,11 @@ public final class ChatView {
     // ---- metrics ----
     private static final int LINE_H = 10;
     private static final int LABEL_H = 9;       // companion name line above its bubble
+    /** 时间戳放不进最后一行右侧时,单独占的一行(小字)。 */
+    private static final int TIME_H = 8;
+    /** 新消息飞入:从下面 8px 淡入,220ms easeOut——Telegram 那种"升上来"。 */
+    private static final int ENTER_MS = 220;
+    private static final int ENTER_DY = 8;
     private static final int AV = 18;           // avatar face size
     private static final int AV_GAP = 5;        // avatar ↔ bubble
     private static final int PAD_H = 5;         // bubble text inset
@@ -163,6 +172,9 @@ public final class ChatView {
     }
     // geometry of the last render, for click / wheel hit-testing
     private int gx, gy, gw, gh;
+    /** 每条记录第一次被看见的时刻(与归并后的记录同序);0 = 打开时就有的历史,不飞入。 */
+    private final List<Long> born = new ArrayList<>();
+    private long frameNow;
 
     public ChatView(Font font, Supplier<Conversation> conv) {
         this.font = font;
@@ -184,6 +196,7 @@ public final class ChatView {
         expandedGroups.clear();
         splits.clear();
         flattened.clear();
+        born.clear();
     }
 
     /** Re-pin to the bottom (a message was just sent). */
@@ -198,6 +211,7 @@ public final class ChatView {
         long now = System.currentTimeMillis();
         float dt = lastFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastFrameMs) / 1000f);
         lastFrameMs = now;
+        frameNow = now;
         updateLive(dt, now);
         renderBlocks(g, x, y, w, h, build(bubbleMaxW(w)), dt);
     }
@@ -274,13 +288,13 @@ public final class ChatView {
                 case OWNER -> {
                     boolean first = !OWNER.equals(last);
                     out.add(bubble(true, null, Nb.colored(ln.text(), TXT), OWN_FILL, OWN_BORDER,
-                            innerW, first, null));
+                            innerW, first, null, null, -1));
                     last = OWNER;
                 }
                 case SAY -> {
                     boolean first = !id.equals(last);
                     out.add(bubble(false, first ? speaker(id) : null, Nb.colored(ln.text(), TXT),
-                            AI_FILL, AI_BORDER, innerW, first, id));
+                            AI_FILL, AI_BORDER, innerW, first, id, null, -1));
                     last = id;
                 }
                 case TOOL -> {
@@ -288,7 +302,7 @@ public final class ChatView {
                     out.add(new Chip(List.of(new ChipRow(
                             ln.error() ? "✗" : "✔", ln.error() ? FAIL : OK,
                             Nb.colored(fitOneLine(ln.text(), chipTextW), ln.error() ? FAIL : TOOL)
-                                    .getVisualOrderText())), null, first ? speaker(id) : null, id));
+                                    .getVisualOrderText())), null, first ? speaker(id) : null, id, -1));
                     last = id;
                 }
             }
@@ -350,19 +364,24 @@ public final class ChatView {
 
     // ---- blocks ----
 
-    private sealed interface Block permits Bubble, Chip, Notice {}
+    private sealed interface Block permits Bubble, Chip, Notice, Divider {}
 
     /** One spoken message. {@code label} non-null = companion side (name above the bubble);
      *  {@code showAvatar} false = a consecutive message from the same side (head hidden);
-     *  {@code who} = the companion whose face goes on it (null on the owner's side). */
+     *  {@code who} = the companion whose face goes on it (null on the owner's side);
+     *  {@code time} = 时间戳贴在气泡右下角(Telegram),放得进最后一行右侧就 {@code timeInline},
+     *  放不进单独占一小行;{@code entry} = 归并后的记录序号,新来的按它飞入(-1 = 不飞)。 */
     private record Bubble(boolean own, String label, List<FormattedCharSequence> lines,
                           int maxLineW, int fill, int border,
-                          boolean showAvatar, UUID who) implements Block {}
+                          boolean showAvatar, UUID who, String time, boolean timeInline, int entry) implements Block {}
 
     /** A run of tool calls (or a reasoning block). {@code foldKey} non-null = finished group,
      *  clickable to expand/fold. {@code who} = 干这些活的那只;{@code label} non-null = 她这一轮连发
      *  的第一块,脸和名字画在它上面——多人会话里工具行也得认得出是谁的。 */
-    private record Chip(List<ChipRow> rows, String foldKey, String label, UUID who) implements Block {}
+    private record Chip(List<ChipRow> rows, String foldKey, String label, UUID who, int entry) implements Block {}
+
+    /** 日期分隔:一天的第一条上面一枚居中的日期小牌(今天 / 昨天 / 几月几日)。 */
+    private record Divider(String text) implements Block {}
 
     private record ChipRow(String icon, int iconColor, FormattedCharSequence text) {}
 
@@ -376,9 +395,11 @@ public final class ChatView {
 
     private int heightOf(Block b) {
         return switch (b) {
-            case Bubble bb -> (bb.label() != null ? LABEL_H : 0) + bb.lines().size() * LINE_H + PAD_V * 2;
+            case Bubble bb -> (bb.label() != null ? LABEL_H : 0) + bb.lines().size() * LINE_H + PAD_V * 2
+                    + (bb.time() != null && !bb.timeInline() ? TIME_H : 0);
             case Chip c -> (c.label() != null ? LABEL_H : 0) + c.rows().size() * LINE_H + PAD_V * 2;
             case Notice ignored -> LINE_H;
+            case Divider ignored -> LINE_H + 4;
         };
     }
 
@@ -405,6 +426,7 @@ public final class ChatView {
         final List<Block> out = new ArrayList<>();
         final List<LlmToolCall> group = new ArrayList<>();
         UUID groupWho;
+        int groupEntry = -1;
         UUID last;
     }
 
@@ -436,13 +458,28 @@ public final class ChatView {
             }
         }
         int innerW = bubbleMaxW - PAD_H * 2;
+        // 新来的记录记下第一次被看见的时刻,画的时候按它飞入;打开面板时就在的历史不飞
+        if (born.size() > source.size()) born.clear();   // 记录被清了(/clear):从头记
+        boolean opening = born.isEmpty();
+        while (born.size() < source.size()) born.add(opening ? 0L : frameNow);
         // 连发合并(聊天软件的惯例):同一个人接连的话和活只在第一块画头像和名字。多人会话里
         // "同一个人"按那只算,不按左右哪一侧——换了一只就得重新亮名字。工具行是她的活,
         // 算在她的连发里;提示行打断。f.last == null = 连发已断。
         int msgIndex = -1;
+        LocalDate lastDay = null;
         for (Transcript.Entry entry : source) {
             msgIndex++;
             ConvoState.Msg msg = entry.msg();
+            // 日期分隔:换了一天,先收口、插一枚日期小牌、连发断开
+            if (entry.ts() > 0) {
+                LocalDate day = Instant.ofEpochMilli(entry.ts()).atZone(ZoneId.systemDefault()).toLocalDate();
+                if (!day.equals(lastDay)) {
+                    flushTools(f, done, failed, bubbleMaxW);
+                    out.add(new Divider(dayLabel(day)));
+                    f.last = null;
+                    lastDay = day;
+                }
+            }
             switch (msg) {
                 case ConvoState.Msg.User u -> {
                     flushTools(f, done, failed, bubbleMaxW);
@@ -464,7 +501,8 @@ public final class ChatView {
                     String shown = ownerText(u.content());   // owner's words only, never injected content
                     if (shown.isEmpty()) continue;
                     boolean first = !OWNER.equals(f.last);
-                    out.add(bubble(true, null, mentionsLit(shown), OWN_FILL, OWN_BORDER, innerW, first, null));
+                    out.add(bubble(true, null, mentionsLit(shown), OWN_FILL, OWN_BORDER, innerW, first, null,
+                            clock(entry.ts()), msgIndex));
                     f.last = OWNER;
                 }
                 case ConvoState.Msg.Assistant a -> {
@@ -478,7 +516,7 @@ public final class ChatView {
                         flushTools(f, done, failed, bubbleMaxW);
                         boolean first = !who.equals(f.last);
                         out.add(reasoningChip(reasoned, "reason#" + msgIndex, innerW, false,
-                                first ? speaker(who) : null, who));
+                                first ? speaker(who) : null, who, msgIndex));
                         f.last = who;
                     }
                     String spoken = ChatDisplayModes.current().assistantText(turn.content());
@@ -486,11 +524,13 @@ public final class ChatView {
                         flushTools(f, done, failed, bubbleMaxW);   // spoken reply breaks the fold
                         boolean first = !who.equals(f.last);
                         out.add(bubble(false, first ? speaker(who) : null,
-                                Nb.colored(spoken, TXT), AI_FILL, AI_BORDER, innerW, first, who));
+                                Nb.colored(spoken, TXT), AI_FILL, AI_BORDER, innerW, first, who,
+                                clock(entry.ts()), msgIndex));
                         f.last = who;
                     }
                     f.group.addAll(turn.toolCalls());
                     f.groupWho = who;
+                    f.groupEntry = msgIndex;
                 }
                 case ConvoState.Msg.Tool ignored -> { /* result drives done/fail, not a block */ }
                 case ConvoState.Msg.Halt h -> {
@@ -514,7 +554,7 @@ public final class ChatView {
             String liveReasoning = lp.liveReasoning();
             if (!liveReasoning.isBlank()) {
                 boolean first = !her.equals(f.last);
-                out.add(reasoningChip(liveReasoning, null, innerW, true, first ? speaker(her) : null, her));
+                out.add(reasoningChip(liveReasoning, null, innerW, true, first ? speaker(her) : null, her, -1));
                 f.last = her;
             }
             // The in-flight reply, typed out live (chunk stream → EntityAgentLoop.livePartial).
@@ -522,7 +562,7 @@ public final class ChatView {
             if (l != null && !l.shown.isEmpty()) {
                 boolean first = !her.equals(f.last);
                 out.add(bubble(false, first ? speaker(her) : null, Nb.colored(l.shown, TXT),
-                        AI_FILL, AI_BORDER, innerW, first, her));
+                        AI_FILL, AI_BORDER, innerW, first, her, null, -1));
                 f.last = her;
             }
             // 排着的话:主人一句话复制进每个醒着的成员的队列,按原文去重,画一次
@@ -538,7 +578,7 @@ public final class ChatView {
         for (String shown : queued) {
             boolean first = !OWNER.equals(f.last);
             out.add(bubble(true, null, Nb.colored("⌛ " + shown, FAINT), QUEUED_FILL, QUEUED_BORDER,
-                    innerW, first, null));
+                    innerW, first, null, null, -1));
             f.last = OWNER;
         }
         if (compacting) notice(out, I18n.get("numen.chat.compacting"));
@@ -549,11 +589,37 @@ public final class ChatView {
     }
 
     private Bubble bubble(boolean own, String label, Component body, int fill, int border,
-                          int innerW, boolean showAvatar, UUID who) {
+                          int innerW, boolean showAvatar, UUID who, String time, int entry) {
         List<FormattedCharSequence> lines = split(body, innerW);
         int maxW = 0;
         for (FormattedCharSequence l : lines) maxW = Math.max(maxW, font.width(l));
-        return new Bubble(own, label, lines, maxW, fill, border, showAvatar, who);
+        boolean inline = false;
+        if (time != null) {
+            // 时间戳挤在最后一行右侧(Telegram):放得下就同一行,放不下自己占一小行
+            int tw = font.width(time) + 6;
+            int last = lines.isEmpty() ? 0 : font.width(lines.get(lines.size() - 1));
+            inline = last + tw <= innerW;
+            maxW = Math.max(maxW, inline ? last + tw : tw);
+        }
+        return new Bubble(own, label, lines, maxW, fill, border, showAvatar, who, time, inline, entry);
+    }
+
+    /** {@code HH:mm},本机时区;没有时间戳的旧记录不标。 */
+    private static String clock(long ts) {
+        if (ts <= 0) return null;
+        LocalTime t = Instant.ofEpochMilli(ts).atZone(ZoneId.systemDefault()).toLocalTime();
+        return String.format("%02d:%02d", t.getHour(), t.getMinute());
+    }
+
+    /** 日期小牌上的字:今天、昨天,再往前是几月几日,跨年带年。 */
+    private static String dayLabel(LocalDate day) {
+        LocalDate today = LocalDate.now(ZoneId.systemDefault());
+        if (day.equals(today)) return I18n.get(com.dwinovo.numen.data.ModLanguageData.Keys.CHAT_TODAY);
+        if (day.equals(today.minusDays(1))) return I18n.get(com.dwinovo.numen.data.ModLanguageData.Keys.CHAT_YESTERDAY);
+        if (day.getYear() == today.getYear()) {
+            return I18n.get(com.dwinovo.numen.data.ModLanguageData.Keys.CHAT_DATE_MD, day.getMonthValue(), day.getDayOfMonth());
+        }
+        return I18n.get(com.dwinovo.numen.data.ModLanguageData.Keys.CHAT_DATE_YMD, day.getYear(), day.getMonthValue(), day.getDayOfMonth());
     }
 
     /**
@@ -641,10 +707,11 @@ public final class ChatView {
             }
         }
         boolean first = !f.groupWho.equals(f.last);
-        f.out.add(new Chip(List.copyOf(rows), foldKey, first ? speaker(f.groupWho) : null, f.groupWho));
+        f.out.add(new Chip(List.copyOf(rows), foldKey, first ? speaker(f.groupWho) : null, f.groupWho, f.groupEntry));
         f.last = f.groupWho;
         group.clear();
         f.groupWho = null;
+        f.groupEntry = -1;
     }
 
     /**
@@ -652,14 +719,14 @@ public final class ChatView {
      * 推理文本。{@code live}=在飞,展开着实时长且不可折(正在发生的事折起来
      * 就看不见);已落库的默认折叠成一行摘要,点开看全文——它是过程不是结论。
      */
-    private Chip reasoningChip(String text, String foldKey, int innerW, boolean live, String label, UUID who) {
+    private Chip reasoningChip(String text, String foldKey, int innerW, boolean live, String label, UUID who, int entry) {
         List<ChipRow> rows = new ArrayList<>();
         boolean expanded = live || (foldKey != null && expandedGroups.contains(foldKey));
         if (!expanded) {
             // 不报字数:中英混排的 length() 一半是字一半是字符,数出来没有意义。
             rows.add(new ChipRow("▸", MUTED,
                     Nb.colored(I18n.get("numen.chat.reasoning") + " ▸", MUTED).getVisualOrderText()));
-            return new Chip(List.copyOf(rows), foldKey, label, who);
+            return new Chip(List.copyOf(rows), foldKey, label, who, entry);
         }
         rows.add(new ChipRow(live ? SPIN[(int) ((System.currentTimeMillis() / 120) % 4)] : "▾", MUTED,
                 Nb.colored(I18n.get("numen.chat.reasoning"), MUTED).getVisualOrderText()));
@@ -667,7 +734,7 @@ public final class ChatView {
         for (FormattedCharSequence line : split(Nb.colored(flat, FAINT), innerW - ICON_W)) {
             rows.add(new ChipRow(" ", MUTED, line));
         }
-        return new Chip(List.copyOf(rows), foldKey, label, who);
+        return new Chip(List.copyOf(rows), foldKey, label, who, entry);
     }
 
     private ChipRow toolRow(LlmToolCall tc, Set<String> done, Set<String> failed, long t, int textW) {
@@ -682,7 +749,39 @@ public final class ChatView {
     // ---- drawing ----
 
     private void drawBlock(GuiGraphics g, Block b, int x, int y, int w) {
+        // 新来的块飞入:从下面 8px 升上来、同时淡入。整块一起动——框、脸、字用同一个透明度
+        int entry = switch (b) {
+            case Bubble bb -> bb.entry();
+            case Chip c -> c.entry();
+            default -> -1;
+        };
+        float e = 1f;
+        if (entry >= 0 && entry < born.size() && born.get(entry) > 0) {
+            long age = frameNow - born.get(entry);
+            if (age < ENTER_MS) e = Anim.easeOutCubic(age / (float) ENTER_MS);
+        }
+        if (e < 1f) {
+            g.pose().pushPose();
+            g.pose().translate(0, Math.round(ENTER_DY * (1f - e)), 0);
+            g.setColor(1f, 1f, 1f, Math.max(0.05f, e));
+        }
+        drawBlockBody(g, b, x, y, w);
+        if (e < 1f) {
+            g.setColor(1f, 1f, 1f, 1f);
+            g.pose().popPose();
+        }
+    }
+
+    private void drawBlockBody(GuiGraphics g, Block b, int x, int y, int w) {
         switch (b) {
+            case Divider d -> {
+                // 居中的日期小牌:一圈描边、极淡底,和工具行同一层的"这不是话"
+                int tw = font.width(d.text());
+                int bx = x + (w - SB_W - tw) / 2 - 5;
+                NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), bx, y, tw + 10, LINE_H + 4,
+                        (CHIP_FILL & 0xFFFFFF) | (((CHIP_FILL >>> 24) / 2) << 24), TRACE_BAR);
+                draw(g, Nb.colored(d.text(), MUTED).getVisualOrderText(), bx + 5, y + 3);
+            }
             case Notice n -> {
                 FormattedCharSequence line = Nb.colored(fitOneLine(n.text(), w - SB_W), FAINT).getVisualOrderText();
                 int tw = font.width(line);
@@ -695,7 +794,8 @@ public final class ChatView {
 
     private void drawBubble(GuiGraphics g, Bubble b, int x, int y, int w) {
         int bw = b.maxLineW() + PAD_H * 2;
-        int bh = b.lines().size() * LINE_H + PAD_V * 2;
+        boolean timeLine = b.time() != null && !b.timeInline();
+        int bh = b.lines().size() * LINE_H + PAD_V * 2 + (timeLine ? TIME_H : 0);
         int bubTop = y + (b.label() != null ? LABEL_H : 0);
         int avX, bx;
         if (b.own()) {
@@ -725,6 +825,12 @@ public final class ChatView {
         for (FormattedCharSequence l : b.lines()) {
             draw(g, l, bx + PAD_H, ty);
             ty += LINE_H;
+        }
+        if (b.time() != null) {
+            // 时间戳贴右下角:同一行就压在最后一行的右侧,否则在下面自己一小行
+            int tx = bx + bw - PAD_H - font.width(b.time());
+            int tyy = b.timeInline() ? ty - LINE_H + 1 : ty - 1;
+            draw(g, Nb.colored(b.time(), FAINT).getVisualOrderText(), tx, tyy);
         }
     }
 
