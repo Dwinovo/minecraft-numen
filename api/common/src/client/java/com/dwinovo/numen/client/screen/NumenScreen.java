@@ -157,8 +157,11 @@ public final class NumenScreen extends Screen {
      * 内容一变重新计——所以键是提示的文字本身。
      */
     private static final int TIP_DELAY_MS = 400;
+    /** 从一条提示挪到旁边另一条,这么久之内免延迟(Radix 的 skipDelay):扫过一排图标时后面的立刻出。 */
+    private static final int TIP_SKIP_MS = 300;
     private String tipKey;
     private long tipSince;
+    private long tipLastShownMs;
     /** 成员抬头那一行本帧画了谁(与 membersAlive 同序),点击按它判命中;空 = 本帧没画。 */
     private final List<UUID> memberRowFaces = new ArrayList<>();
     private int memberRowX, memberRowY;
@@ -1411,10 +1414,12 @@ public final class NumenScreen extends Screen {
             long now = System.currentTimeMillis();
             if (!key.equals(tipKey)) {
                 tipKey = key;
-                tipSince = now;
+                // 上一条提示刚消失不久 = 指针是从它挪过来的:不再等
+                tipSince = now - tipLastShownMs <= TIP_SKIP_MS ? now - TIP_DELAY_MS : now;
             }
             if (now - tipSince >= TIP_DELAY_MS) {
                 g.renderComponentTooltip(font, pendingTip, pendingTipX, pendingTipY);
+                tipLastShownMs = now;
             }
         } else {
             tipKey = null;
