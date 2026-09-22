@@ -129,6 +129,9 @@ public final class ChatView {
     private static final int JUMP = 18;
     private float jumpShown;
     private int jumpX, jumpY;
+    /** 滚动条只在滚动时和指针在对话流上时出现(Telegram),淡入淡出按趋近走。 */
+    private float barShown;
+    private long lastScrollMs;
 
     private final Font font;
     private final Supplier<Conversation> conv;
@@ -246,11 +249,17 @@ public final class ChatView {
         }
         g.disableScissor();
 
-        if (lastMaxScroll > 0) {
+        boolean overBody = hoverX >= x && hoverX < x + w && hoverY >= y && hoverY < y + h;
+        boolean wantBar = lastMaxScroll > 0
+                && (overBody || frameNow - lastScrollMs < 800 || Math.abs(scrollPos - scrollTarget) > 0.5f);
+        barShown = Anim.approach(barShown, wantBar ? 8f : 0f, 14f, dt);
+        if (barShown > 0.5f && lastMaxScroll > 0) {
             int thumbH = Math.max(12, h * h / (h + lastMaxScroll));
             int thumbY = y + Math.round((h - thumbH) * (scrollPos / lastMaxScroll));
+            g.setColor(1f, 1f, 1f, barShown / 8f);
             g.blitSprite(SCROLL_TRACK, x + w - SB_W, y, SB_W, h);
             g.blitSprite(SCROLL_THUMB, x + w - SB_W, thumbY, SB_W, thumbH);
+            g.setColor(1f, 1f, 1f, 1f);
         }
         // 翻上去超过半屏就浮出"回到底部":淡入淡出按趋近走,不硬切;点它回到最新
         boolean far = lastMaxScroll - scrollTarget > h / 2;
@@ -280,6 +289,7 @@ public final class ChatView {
     public void renderExternal(GuiGraphics g, int x, int y, int w, int h) {
         loadPalette();
         long now = System.currentTimeMillis();
+        frameNow = now;
         float dt = lastFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastFrameMs) / 1000f);
         lastFrameMs = now;
         McpMode mcp = McpMode.instance();
@@ -327,11 +337,12 @@ public final class ChatView {
                     out.add(new Chip(List.of(new ChipRow(
                             ln.error() ? "✗" : "✔", ln.error() ? FAIL : OK,
                             Nb.colored(fitOneLine(ln.text(), chipTextW), ln.error() ? FAIL : TOOL)
-                                    .getVisualOrderText())), null, first ? speaker(id) : null, id, -1));
+                                    .getVisualOrderText())), null, first ? speaker(id) : null, id, -1, false));
                     last = id;
                 }
             }
         }
+        settleAvatars(out);
         return out;
     }
 
@@ -365,6 +376,7 @@ public final class ChatView {
 
     /** Wheel anywhere on the chat tab scrolls the transcript (parity with the old list). */
     public boolean mouseScrolled(double sy) {
+        lastScrollMs = System.currentTimeMillis();
         scrollTarget = Math.clamp((long) (scrollTarget - sy * LINE_H * 3), 0, lastMaxScroll);
         pinBottom = scrollTarget >= lastMaxScroll;
         return true;
@@ -402,12 +414,19 @@ public final class ChatView {
      *  放不进单独占一小行;{@code entry} = 归并后的记录序号,新来的按它飞入(-1 = 不飞)。 */
     private record Bubble(boolean own, String label, List<FormattedCharSequence> lines,
                           int maxLineW, int fill, int border,
-                          boolean showAvatar, UUID who, String time, boolean timeInline, int entry) implements Block {}
+                          boolean showAvatar, UUID who, String time, boolean timeInline, int entry) implements Block {
+        Bubble withAvatar(boolean on) {
+            return new Bubble(own, label, lines, maxLineW, fill, border, on, who, time, timeInline, entry);
+        }
+    }
 
     /** A run of tool calls (or a reasoning block). {@code foldKey} non-null = finished group,
      *  clickable to expand/fold. {@code who} = 干这些活的那只;{@code label} non-null = 她这一轮连发
      *  的第一块,脸和名字画在它上面——多人会话里工具行也得认得出是谁的。 */
-    private record Chip(List<ChipRow> rows, String foldKey, String label, UUID who, int entry) implements Block {}
+    private record Chip(List<ChipRow> rows, String foldKey, String label, UUID who, int entry,
+                        boolean showAvatar) implements Block {
+        Chip withAvatar(boolean on) { return new Chip(rows, foldKey, label, who, entry, on); }
+    }
 
     /** 日期分隔:一天的第一条上面一枚居中的日期小牌(今天 / 昨天 / 几月几日)。 */
     private record Divider(String text) implements Block {}
@@ -614,7 +633,32 @@ public final class ChatView {
         if (out.isEmpty()) {
             notice(out, I18n.get("numen.chat.empty", conv.get().displayName(NumenRoster.instance()::name)));
         }
+        settleAvatars(out);
         return out;
+    }
+
+    /**
+     * Telegram 的排法:名字在这一组的第一块上面,脸贴在这一组的<b>最后一块</b>旁边(底部对齐)。
+     * 建块时只知道"是不是第一块",所以脸在这儿补:同一个人连着的块算一组,提示行、日期牌把组断开。
+     */
+    private void settleAvatars(List<Block> out) {
+        for (int i = 0; i < out.size(); i++) {
+            UUID who = speakerOf(out.get(i));
+            if (who == null) continue;
+            boolean last = i + 1 >= out.size() || !who.equals(speakerOf(out.get(i + 1)));
+            Block b = out.get(i);
+            if (b instanceof Bubble bb && bb.showAvatar() != last) out.set(i, bb.withAvatar(last));
+            else if (b instanceof Chip c && c.showAvatar() != last) out.set(i, c.withAvatar(last));
+        }
+    }
+
+    /** 这一块是谁的:主人用 {@link #OWNER} 代表;提示行、日期牌不是谁的。 */
+    private static UUID speakerOf(Block b) {
+        return switch (b) {
+            case Bubble bb -> bb.own() ? OWNER : bb.who();
+            case Chip c -> c.who();
+            default -> null;
+        };
     }
 
     private Bubble bubble(boolean own, String label, Component body, int fill, int border,
@@ -736,7 +780,7 @@ public final class ChatView {
             }
         }
         boolean first = !f.groupWho.equals(f.last);
-        f.out.add(new Chip(List.copyOf(rows), foldKey, first ? speaker(f.groupWho) : null, f.groupWho, f.groupEntry));
+        f.out.add(new Chip(List.copyOf(rows), foldKey, first ? speaker(f.groupWho) : null, f.groupWho, f.groupEntry, false));
         f.last = f.groupWho;
         group.clear();
         f.groupWho = null;
@@ -755,7 +799,7 @@ public final class ChatView {
             // 不报字数:中英混排的 length() 一半是字一半是字符,数出来没有意义。
             rows.add(new ChipRow("▸", MUTED,
                     Nb.colored(I18n.get("numen.chat.reasoning") + " ▸", MUTED).getVisualOrderText()));
-            return new Chip(List.copyOf(rows), foldKey, label, who, entry);
+            return new Chip(List.copyOf(rows), foldKey, label, who, entry, false);
         }
         rows.add(new ChipRow(live ? SPIN[(int) ((System.currentTimeMillis() / 120) % 4)] : "▾", MUTED,
                 Nb.colored(I18n.get("numen.chat.reasoning"), MUTED).getVisualOrderText()));
@@ -763,7 +807,7 @@ public final class ChatView {
         for (FormattedCharSequence line : split(Nb.colored(flat, FAINT), innerW - ICON_W)) {
             rows.add(new ChipRow(" ", MUTED, line));
         }
-        return new Chip(List.copyOf(rows), foldKey, label, who, entry);
+        return new Chip(List.copyOf(rows), foldKey, label, who, entry, false);
     }
 
     private ChipRow toolRow(LlmToolCall tc, Set<String> done, Set<String> failed, long t, int textW) {
@@ -828,7 +872,7 @@ public final class ChatView {
         int bubTop = y + (b.label() != null ? LABEL_H : 0);
         int avX, bx;
         if (b.own()) {
-            avX = x + w - SB_W - 3 - AV;
+            avX = x + w - SB_W - 5 - AV;   // 框比脸宽 2px,再让 2px 别压着滚动条
             bx = avX - AV_GAP - bw;
         } else {
             avX = x + EDGE;
@@ -838,15 +882,17 @@ public final class ChatView {
             draw(g, Nb.colored(b.label(), MUTED).getVisualOrderText(), bx + 2, y);
         }
         if (b.showAvatar()) {
+            // 脸贴在气泡底部(Telegram):这一块是这一组的最后一块,脸和最后一句齐底
+            int avY = bubTop + bh - AV;
             // 头像框纯代码绘制,继承所在气泡的配色——AI/主人两侧色调天然分明,且跟主题走。
-            NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), avX - 2, bubTop - 2,
+            NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), avX - 2, avY - 2,
                     AV + 4, AV + 4, b.fill(), b.border());
             // 主人自己那侧画的是玩家本人,不是同伴——改外观的插件不该接管它
             if (b.own()) {
-                PlayerFaceRenderer.draw(g, ownerSkin(), avX, bubTop, AV);
+                PlayerFaceRenderer.draw(g, ownerSkin(), avX, avY, AV);
             } else {
-                CompanionFace.draw(g, b.who(), KnownSkins.of(b.who()), avX, bubTop, AV);
-                face(g, b.who(), avX, bubTop, b.fill());
+                CompanionFace.draw(g, b.who(), KnownSkins.of(b.who()), avX, avY, AV);
+                face(g, b.who(), avX, avY, b.fill());
             }
         }
         NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), bx, bubTop, bw, bh,
@@ -860,7 +906,8 @@ public final class ChatView {
             // 时间戳贴右下角:同一行就压在最后一行的右侧,否则在下面自己一小行
             int tx = bx + bw - PAD_H - font.width(b.time());
             int tyy = b.timeInline() ? ty - LINE_H + 1 : ty - 1;
-            draw(g, Nb.colored(b.time(), FAINT).getVisualOrderText(), tx, tyy);
+            // 出向气泡是强调色底,时间戳用半透明白(Telegram);别人的用淡字
+            draw(g, Nb.colored(b.time(), b.own() ? 0xB0FFFFFF : FAINT).getVisualOrderText(), tx, tyy);
         }
     }
 
@@ -874,14 +921,18 @@ public final class ChatView {
         for (ChipRow r : c.rows()) maxW = Math.max(maxW, font.width(r.text()));
         int cx = x + EDGE + AV + AV_GAP;
         if (c.label() != null) {
-            // 她这一轮的第一块:名字在上、脸在左——和气泡同一套,所以谁在干活一眼认得出
+            // 她这一组的第一块:名字在上——和气泡同一套,谁在干活一眼认得出
             draw(g, Nb.colored(c.label(), MUTED).getVisualOrderText(), cx + 2, y);
             y += LABEL_H;
-            int avX = x + EDGE;
-            NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), avX - 2, y - 2,
+        }
+        if (c.showAvatar()) {
+            // 这一组的最后一块:脸贴在它的底部
+            int ch0 = c.rows().size() * LINE_H + PAD_V * 2;
+            int avX = x + EDGE, avY = y + ch0 - AV;
+            NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), avX - 2, avY - 2,
                     AV + 4, AV + 4, AI_FILL, AI_BORDER);
-            CompanionFace.draw(g, c.who(), KnownSkins.of(c.who()), avX, y, AV);
-            face(g, c.who(), avX, y, AI_FILL);
+            CompanionFace.draw(g, c.who(), KnownSkins.of(c.who()), avX, avY, AV);
+            face(g, c.who(), avX, avY, AI_FILL);
         }
         int cw = NumenStyle.TRACE_INDENT + ICON_W + maxW + PAD_H;
         int ch = c.rows().size() * LINE_H + PAD_V * 2;
