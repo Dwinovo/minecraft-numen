@@ -156,6 +156,9 @@ public final class ModLanguageData {
         public static final String CHAT_YESTERDAY         = "numen.chat.yesterday";
         public static final String CHAT_DATE_MD           = "numen.chat.date_md";
         public static final String CHAT_DATE_YMD          = "numen.chat.date_ymd";
+        /** 左栏最后一句里"你说的"那个前缀。 */
+        public static final String RAIL_YOU               = "numen.rail.you";
+        public static final String RAIL_EMPTY             = "numen.rail.empty";
 
         // Skin library tab (upload png → MineSkin-signed textures).
         public static final String SKIN_TITLE           = "numen.skin.title";
@@ -478,6 +481,8 @@ public final class ModLanguageData {
         adder.add(Keys.CHAT_YESTERDAY,         "Yesterday");
         adder.add(Keys.CHAT_DATE_MD,           "%s/%s");
         adder.add(Keys.CHAT_DATE_YMD,          "%s/%s/%s");
+        adder.add(Keys.RAIL_YOU,               "You");
+        adder.add(Keys.RAIL_EMPTY,             "No messages yet");
         adder.add(Keys.SKIN_TITLE,           "Skins");
         adder.add(Keys.SKIN_ADD,             "New");
         adder.add(Keys.SKIN_EMPTY,           "No skins yet. Click New, then drag a skin png into the window.");
@@ -843,6 +848,8 @@ public final class ModLanguageData {
         adder.add(Keys.CHAT_YESTERDAY,         "昨天");
         adder.add(Keys.CHAT_DATE_MD,           "%s月%s日");
         adder.add(Keys.CHAT_DATE_YMD,          "%s年%s月%s日");
+        adder.add(Keys.RAIL_YOU,               "你");
+        adder.add(Keys.RAIL_EMPTY,             "还没说过话");
         adder.add(Keys.SKIN_TITLE,           "皮肤库");
         adder.add(Keys.SKIN_ADD,             "新建");
         adder.add(Keys.SKIN_EMPTY,           "还没有皮肤。点右上角\"新建\",再把皮肤 png 拖进游戏窗口。");

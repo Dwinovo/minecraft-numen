@@ -72,12 +72,13 @@ public final class NumenScreen extends Screen {
     private static final int PANEL_MIN_H = 232;
     private static final int PANEL_MAX_W = PANEL_MIN_W;
     private static final int PANEL_MAX_H = PANEL_MIN_H;
-    // Left companion rail (folded-in roster): one avatar per Numen, click to switch, + to summon.
-    private static final int RAIL_W = 46;        // left rail column width (baked into the workspace sprite)
-    private static final int RAIL_AV = 26;       // avatar tile size
-    private static final int RAIL_SLOT = 32;     // vertical pitch per avatar
-    private static final int RAIL_TOP = 12;      // top margin before the first avatar (clears the active crown)
-    private static final int RAIL_BOT_GAP = 6;   // gap kept above the pinned "+" tile
+    // 左栏 = 会话列表(Telegram):一行一个会话——脸、名字、最后一句、时间;选中行整行高亮,点行切换,底部「+」召唤。
+    private static final int RAIL_W = 132;       // 左栏宽
+    private static final int RAIL_AV = 26;       // 脸的边长
+    private static final int RAIL_SLOT = 34;     // 行高:脸 + 上下各 4
+    private static final int RAIL_TOP = 3;       // 第一行贴着面板描边内侧
+    private static final int RAIL_BOT_GAP = 6;   // 最后一行与「+」之间留的缝
+    private static final int RAIL_FACE_X = 5;    // 脸离左栏左缘
     /** 抬头两行:名字一行、状态一行(Telegram 的"在线 / 正在输入…"),页签在右侧居中。 */
     private static final int HEADER_H = 30;
     private static final int INPUT_H = 18;
@@ -937,7 +938,8 @@ public final class NumenScreen extends Screen {
         UiTheme t = UiTheme.current();
         int x0 = railX, y0 = top, x1 = railX + RAIL_W + panelW, y1 = top + panelH;
         g.fill(x0, y0, x1, y1, t.border());                          // frame + rail divider base
-        g.fill(x0 + 3, y0 + 3, x0 + RAIL_W, y1 - 3, t.ground());     // rail column
+        g.fill(x0 + 3, y0 + 3, x0 + RAIL_W, y1 - 3, t.ground());     // 左栏列
+        g.fill(x0 + RAIL_W, y0 + 3, x0 + RAIL_W + 1, y1 - 3, t.border());   // 列表与正文之间一道竖线
         g.fill(left + 3, y0 + 3, x1 - 3, y0 + HEADER_H - 2, t.band());   // header band (underline = border gap)
         g.fill(left + 3, y0 + HEADER_H, x1 - 3, y1 - 3, t.ground()); // panel ground
         for (int dy = y0 + HEADER_H + 7; dy < y1 - 5; dy += 16) {    // dot grid (translucent theme dot)
@@ -1220,22 +1222,22 @@ public final class NumenScreen extends Screen {
         for (int i = 0; i < items.size(); i++) {
             if (sameAs(items.get(i), result)) { to = i; break; }
         }
-        int toY = railTileY(to);
-        if (toY < 0) toY = railTileY(fromIndex);   // 合并后那格滚出了视野:缩回原地
+        int[] face = railFaceAt(to);
+        if (face == null) face = railFaceAt(fromIndex);   // 合并后那行滚出了视野:缩回原地
+        if (face == null) return;
         // 残影落进叠脸格的右下那一张——和悬停预览里它长出来的位置是同一个,松手不跳
-        int ax = railX + (RAIL_W - RAIL_AV) / 2;
         ghost = new Ghost(dragged, (int) dragX - RAIL_AV / 2, (int) dragY - RAIL_AV / 2, RAIL_AV,
-                ax + RAIL_STEP, toY + RAIL_STEP, RAIL_SMALL, System.currentTimeMillis(), 220);
+                face[0] + RAIL_STEP, face[1] + RAIL_STEP, RAIL_SMALL, System.currentTimeMillis(), 220);
         shrinkIndex = -1;
         shrinkPx = 0f;
     }
 
     /** 拖到半路松手(空处或自己那格):飞回原位。 */
     private void flyBack(Conversation dragged, int fromIndex) {
-        int y = railTileY(fromIndex);
-        if (y < 0) return;
+        int[] face = railFaceAt(fromIndex);
+        if (face == null) return;
         ghost = new Ghost(dragged, (int) dragX - RAIL_AV / 2, (int) dragY - RAIL_AV / 2, RAIL_AV,
-                railX + (RAIL_W - RAIL_AV) / 2, y, RAIL_AV, System.currentTimeMillis(), 150);
+                face[0], face[1], RAIL_AV, System.currentTimeMillis(), 150);
     }
 
     /** 每帧推进悬停预览:指针在哪格上就往那格缩;移开或没在拖就退回来。换了格从头缩。 */
@@ -1253,11 +1255,17 @@ public final class NumenScreen extends Screen {
         if (shrinkPx <= 0f && over < 0) shrinkIndex = -1;
     }
 
-    /** 第 i 格的顶边;没画出来(滚出视野)是 -1。 */
+    /** 第 i 行的顶边;没画出来(滚出视野)是 -1。 */
     private int railTileY(int i) {
         if (i < 0) return -1;
         int y = railStartY() + (i - railScroll) * RAIL_SLOT;
-        return i >= railScroll && y + RAIL_AV <= railBottomEdge() ? y : -1;
+        return i >= railScroll && y + RAIL_SLOT <= railBottomEdge() ? y : -1;
+    }
+
+    /** 第 i 行里脸的左上角;行没画出来是 null。 */
+    private int[] railFaceAt(int i) {
+        int y = railTileY(i);
+        return y < 0 ? null : new int[]{railX + 3 + RAIL_FACE_X, y + (RAIL_SLOT - RAIL_AV) / 2};
     }
 
     /** 拖着的那张脸跟着指针;残影按 easeOut 飞向落点,动完清掉。 */
@@ -1496,92 +1504,130 @@ public final class NumenScreen extends Screen {
     /** The folded-in roster (on the merged sprite's rail column): one tile per conversation below the
      *  green header — a companion's face, or stacked faces for a multi-member one — active one framed
      *  gold, a status dot on each companion, + tile at the bottom. */
+    /** 选中底的纵坐标:切换时从上一行滑到这一行(Telegram),不是瞬移。 */
+    private float selY = Float.NaN;
+
     private void renderRail(GuiGraphics g, int mouseX, int mouseY) {
         List<Conversation> items = rail();
-        int ax = railX + (RAIL_W - RAIL_AV) / 2;
+        UiTheme t = UiTheme.current();
+        int rowX = railX + 3, rowW = RAIL_W - 3;
         railScroll = Math.clamp(railScroll, 0, maxRailScroll());     // keep valid as the roster grows/shrinks
         int first = railScroll;
         int startY = railStartY();
-        updateShrink(mouseX, mouseY);
+        long now = System.currentTimeMillis();
+        float dt = lastRailFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastRailFrameMs) / 1000f);
+        updateShrink(mouseX, mouseY);   // 它会把 lastRailFrameMs 推到现在,所以 dt 先算
         Conversation dragged = railDragging && railPressed < items.size() ? items.get(railPressed) : null;
+        boolean railQuiet = !overlayOpen() && !modalOpen() && !railDragging;
+        // 选中底先画(滑动的),行的内容压在它上面
+        int activeIdx = -1;
+        for (int i = 0; i < items.size(); i++) if (sameAs(items.get(i), conv)) { activeIdx = i; break; }
+        int activeY = railTileY(activeIdx);
+        if (activeY >= 0) {
+            selY = Float.isNaN(selY) ? activeY : com.dwinovo.numen.client.ui.Anim.approach(selY, activeY, 18f, dt);
+            g.enableScissor(rowX, top + RAIL_TOP, rowX + rowW, railBottomEdge());
+            g.fill(rowX, Math.round(selY), rowX + rowW, Math.round(selY) + RAIL_SLOT, t.band());
+            g.disableScissor();
+        } else {
+            selY = Float.NaN;
+        }
+        int textRight = rowX + rowW - 5;
         for (int i = first; i < items.size(); i++) {
             int ay = startY + (i - first) * RAIL_SLOT;
-            if (ay + RAIL_AV > railBottomEdge()) break;
+            if (ay + RAIL_SLOT > railBottomEdge()) break;
             Conversation c = items.get(i);
             UUID her = Conversations.instance().soloOf(c);
-            boolean active = sameAs(c, conv);
-            boolean hovered = mouseX >= ax && mouseX < ax + RAIL_AV
-                    && mouseY >= ay && mouseY < ay + RAIL_AV;
-            // 拖拽中:指针下的另一格是落点,边框亮;原格压暗;悬停的短条与名字都不出
+            boolean active = i == activeIdx;
+            boolean hovered = mouseX >= rowX && mouseX < rowX + rowW && mouseY >= ay && mouseY < ay + RAIL_SLOT;
+            // 拖拽中:指针下的另一行是落点,整行亮一道左缘条;原行压暗
             boolean dropTarget = railDragging && hovered && i != railPressed;
-            boolean railQuiet = !overlayOpen() && !modalOpen() && !railDragging;
-            // 选中关系用左缘指示条说话(Discord 服务器栏同语法):长条 = 当前,
-            // 悬停未选中出短条 = 可切换。悬停的容器反应与"+"号同语法:边框亮 CTA。
-            com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), ax - 2, ay - 2, RAIL_AV + 4, RAIL_AV + 4,
-                    FIELD, dropTarget || (!active && hovered && railQuiet) ? CTA : BORDER);
+            if (!active && hovered && railQuiet) {
+                g.fill(rowX, ay, rowX + rowW, ay + RAIL_SLOT, t.aiFill());
+            }
+            if (dropTarget) {
+                g.fill(rowX, ay, rowX + 2, ay + RAIL_SLOT, CTA);
+            }
+            int fx = rowX + RAIL_FACE_X, fy = ay + (RAIL_SLOT - RAIL_AV) / 2;
+            com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
+                    fx - 1, fy - 1, RAIL_AV + 2, RAIL_AV + 2, FIELD, active ? t.band() : BORDER);
             if (i == shrinkIndex && shrinkPx > 0f && dragged != null) {
                 // 合并预览:原来的脸缩向左上角,拖着的那张从右下角长出来,长满就是叠脸格的样子
                 float p = shrinkPx / RAIL_STEP;
-                com.dwinovo.numen.client.skin.ConversationFaces.draw(g, c, ax, ay, Math.round(RAIL_AV - shrinkPx));
+                com.dwinovo.numen.client.skin.ConversationFaces.draw(g, c, fx, fy, Math.round(RAIL_AV - shrinkPx));
                 int grow = Math.round(p * RAIL_SMALL);
                 if (grow > 2) {
                     com.dwinovo.numen.client.skin.ConversationFaces.draw(g, dragged,
-                            ax + RAIL_AV - grow, ay + RAIL_AV - grow, grow);
+                            fx + RAIL_AV - grow, fy + RAIL_AV - grow, grow);
                 }
             } else {
-                com.dwinovo.numen.client.skin.ConversationFaces.draw(g, c, ax, ay, RAIL_AV);
+                com.dwinovo.numen.client.skin.ConversationFaces.draw(g, c, fx, fy, RAIL_AV);
             }
             if (railDragging && i == railPressed) {
-                g.fill(ax, ay, ax + RAIL_AV, ay + RAIL_AV, 0x90101010);
+                g.fill(rowX, ay, rowX + rowW, ay + RAIL_SLOT, 0x90101010);
             }
-            int pillH = active ? RAIL_AV - 6 : (hovered && railQuiet ? 8 : 0);
-            if (pillH > 0) {
-                int py2 = ay + (RAIL_AV - pillH) / 2;
-                g.fill(railX + 1, py2, railX + 3, py2 + pillH, ACCENT);
+            // 名字一行、最后一句一行;时间在名字那行的右端
+            int tx = fx + RAIL_AV + 6;
+            int nameColor = active ? ON_BAND : TXT;
+            int dimColor = active ? ON_BAND_FAINT : TXT_MUTED;
+            var last = com.dwinovo.numen.client.screen.chat.ConversationPreview.last(c);
+            String when = last == null ? "" : whenLabel(last.ts(), now);
+            int whenW = when.isEmpty() ? 0 : font.width(when) + 4;
+            txt(g, Component.literal(clip(c.displayName(NumenRoster.instance()::name), textRight - tx - whenW)),
+                    tx, ay + 6, nameColor);
+            if (!when.isEmpty()) {
+                txt(g, Component.literal(when), textRight - font.width(when), ay + 6, active ? ON_BAND_FAINT : TXT_FAINT);
             }
-            if (hovered && !active && railQuiet) {
-                // 未选中悬停给名字;当前那个的名字在头部常驻。
-                pendingTip = java.util.List.of(Component.literal(c.displayName(NumenRoster.instance()::name)));
-                pendingTipX = mouseX;
-                pendingTipY = mouseY;
-            }
-            // 状态点、复活倒计时、等点头的"!"都是一只同伴的事;会话格上只有脸
+            String preview = last == null ? I18n.get(ModLanguageData.Keys.RAIL_EMPTY) : last.text();
+            txt(g, Component.literal(clip(preview, textRight - tx)), tx, ay + 18, last == null ? TXT_FAINT : dimColor);
+            // 状态点、复活倒计时、等点头的"!"都是一只同伴的事;会话行上只有脸
             if (her == null) continue;
             if (NumenRoster.instance().isDead(her)) {                 // dead — dim veil + respawn countdown
-                g.fill(ax, ay, ax + RAIL_AV, ay + RAIL_AV, 0xB0101010);
+                g.fill(fx, fy, fx + RAIL_AV, fy + RAIL_AV, 0xB0101010);
                 long rem = NumenRoster.instance().remainingMs(her);
-                // 头像太小写不下字:归零改画一个"等"字记号,细节交给上面的头部行
+                // 头像太小写不下字:归零改画一个"等"字记号,细节在抬头第二行
                 String cd = rem <= 0 ? "…" : String.valueOf((int) Math.ceil(rem / 1000.0));
-                txt(g, Component.literal(cd), ax + (RAIL_AV - font.width(cd)) / 2, ay + (RAIL_AV - 8) / 2, CTA);
+                txt(g, Component.literal(cd), fx + (RAIL_AV - font.width(cd)) / 2, fy + (RAIL_AV - 8) / 2, CTA);
             } else {
-                int d = ax + RAIL_AV - 6, e2 = ay + RAIL_AV - 6;     // status LED, bottom-right
+                int d = fx + RAIL_AV - 6, e2 = fy + RAIL_AV - 6;     // status LED, bottom-right
                 g.fill(d, e2, d + 5, e2 + 5, statusColor(her));
                 Nb.border(g, d, e2, 5, 5, 1, BORDER);
             }
             if (com.dwinovo.numen.client.consent.ConsentCards.pending(her) != null) {
-                // 她在等主人点头:右上角一枚"!",没选中她的时候也看得见
-                int bx = ax + RAIL_AV - 7, by = ay - 1;
+                // 她在等主人点头:脸的右上角一枚"!",没选中她的时候也看得见
+                int bx = fx + RAIL_AV - 7, by = fy - 1;
                 g.fill(bx, by, bx + 8, by + 10, CTA);
                 txt(g, Component.literal("!"), bx + (8 - font.width("!")) / 2 + 1, by + 1, ON_CTA);
             }
         }
-        // "+" 召唤格:纯代码绘制(框 + 双矩形十字),跟主题走色——十字是几何,烘焙成
-        // 贴图换主题就变色盲。像素画类贴图(头像框/箭头/心饼)不在此列,那是刻意的像素风。
-        // 召唤流程开着或悬停时边框与十字亮 CTA。
+        // 「+」召唤:列表右下角一格(Telegram 的"新消息"浮钮位置)。纯代码绘制,跟主题走色。
+        int px = railX + RAIL_W - PAD - RAIL_AV;
         int py = top + panelH - PAD - RAIL_AV;
-        // scroll cues — gold chevrons when the roster overflows the rail in either direction
-        int cx = ax + RAIL_AV / 2;
+        // scroll cues — gold chevrons when the list overflows in either direction
+        int cx = railX + RAIL_W / 2;
         if (railScroll > 0) chevron(g, cx, top + 1, true);
         if (railScroll < maxRailScroll()) chevron(g, cx, py - 9, false);
-        boolean plusHot = summoning || (mouseX >= ax && mouseX < ax + RAIL_AV
+        boolean plusHot = summoning || (mouseX >= px && mouseX < px + RAIL_AV
                 && mouseY >= py && mouseY < py + RAIL_AV);
-        com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), ax, py, RAIL_AV, RAIL_AV,
+        com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), px, py, RAIL_AV, RAIL_AV,
                 FIELD, plusHot ? CTA : BORDER);
-        int pcx = ax + RAIL_AV / 2;
+        int pcx = px + RAIL_AV / 2;
         int pcy = py + RAIL_AV / 2;
         int plusColor = plusHot ? CTA : TXT_MUTED;
         g.fill(pcx - 5, pcy - 1, pcx + 5, pcy + 1, plusColor);
         g.fill(pcx - 1, pcy - 5, pcx + 1, pcy + 5, plusColor);
+    }
+
+    /** 列表里那句话的时间:今天给时分,再往前给日期(Telegram)。 */
+    private static String whenLabel(long ts, long now) {
+        if (ts <= 0) return "";
+        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+        java.time.LocalDate day = java.time.Instant.ofEpochMilli(ts).atZone(zone).toLocalDate();
+        java.time.LocalDate today = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate();
+        if (day.equals(today)) {
+            java.time.LocalTime t = java.time.Instant.ofEpochMilli(ts).atZone(zone).toLocalTime();
+            return String.format("%02d:%02d", t.getHour(), t.getMinute());
+        }
+        return I18n.get(ModLanguageData.Keys.CHAT_DATE_MD, day.getMonthValue(), day.getDayOfMonth());
     }
 
     /** Scroll-affordance chevron sprite (amber pixel-art triangle, up = more above / down = more below).
@@ -1591,15 +1637,15 @@ public final class NumenScreen extends Screen {
                 up ? CHEVRON_UP : CHEVRON_DOWN, cx - 5, y, 11, 6);
     }
 
-    /** Bottom edge an avatar may reach (a gap above the pinned "+" tile). */
+    /** 最后一行的底边最多到哪(「+」上面留一道缝)。 */
     private int railBottomEdge() {
         return top + panelH - PAD - RAIL_AV - RAIL_BOT_GAP;
     }
 
-    /** How many avatar slots fit in the rail above the pinned "+" tile. */
+    /** 「+」上面装得下几行。 */
     private int railVisibleSlots() {
         int slots = 0;
-        while (top + RAIL_TOP + slots * RAIL_SLOT + RAIL_AV <= railBottomEdge()) slots++;
+        while (top + RAIL_TOP + (slots + 1) * RAIL_SLOT <= railBottomEdge()) slots++;
         return Math.max(1, slots);
     }
 
@@ -1607,20 +1653,15 @@ public final class NumenScreen extends Screen {
         return Math.max(0, rail().size() - railVisibleSlots());
     }
 
-    /** Y of the first (visible) avatar: centred vertically when the whole roster fits, top-aligned once
-     *  it overflows and scrolls. Fixes the big bottom gap + the first avatar poking past the top edge. */
+    /** 第一行(可见的)的顶边:列表从上往下排(Telegram),不居中。 */
     private int railStartY() {
-        int n = rail().size();
-        if (n > railVisibleSlots()) return top + RAIL_TOP;          // scrolling — top-align
-        int blockH = Math.max(0, n - 1) * RAIL_SLOT + RAIL_AV;
-        int span = railBottomEdge() - (top + RAIL_TOP);
-        return top + RAIL_TOP + Math.max(0, (span - blockH) / 2);   // centre the block
+        return top + RAIL_TOP;
     }
 
     private boolean railPlusAt(int mx, int my) {
-        int ax = railX + (RAIL_W - RAIL_AV) / 2;
+        int px = railX + RAIL_W - PAD - RAIL_AV;
         int py = top + panelH - PAD - RAIL_AV;
-        return mx >= ax && mx < ax + RAIL_AV && my >= py && my < py + RAIL_AV;
+        return mx >= px && mx < px + RAIL_AV && my >= py && my < py + RAIL_AV;
     }
 
     /** idle = green, working/compacting = amber, queued = gold; faint if no loop yet. */
@@ -1637,17 +1678,16 @@ public final class NumenScreen extends Screen {
         return com.dwinovo.numen.client.agent.KnownSkins.of(u);
     }
 
-    /** Rail index of the tile under (mx,my), or -1. */
+    /** 指针下那一行的下标(整行都算),不在行上则 -1。 */
     private int railIndexAt(int mx, int my) {
-        int ax = railX + (RAIL_W - RAIL_AV) / 2;
-        if (mx < ax || mx >= ax + RAIL_AV) return -1;
+        if (mx < railX + 3 || mx >= railX + RAIL_W) return -1;
         int n = rail().size();
         int first = Math.clamp(railScroll, 0, maxRailScroll());
         int startY = railStartY();
         for (int i = first; i < n; i++) {
             int ay = startY + (i - first) * RAIL_SLOT;
-            if (ay + RAIL_AV > railBottomEdge()) break;
-            if (my >= ay && my < ay + RAIL_AV) return i;
+            if (ay + RAIL_SLOT > railBottomEdge()) break;
+            if (my >= ay && my < ay + RAIL_SLOT) return i;
         }
         return -1;
     }
