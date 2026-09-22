@@ -98,6 +98,8 @@ public final class ChatView {
     private int TRACE_BAR;
     /** 主人话里 @ 到的名字。 */
     private int MENTION;
+    /** 未读角标上的数字色。 */
+    private int ON_CTA;
 
     private void loadPalette() {
         UiTheme t = UiTheme.current();
@@ -117,6 +119,7 @@ public final class ChatView {
         CHIP_FILL = t.chipFill();
         TRACE_BAR = t.surfaceBorder();
         MENTION = t.cta();
+        ON_CTA = t.onCta();
     }
 
     private static ResourceLocation spr(String n) {
@@ -124,8 +127,11 @@ public final class ChatView {
     }
     private static final ResourceLocation SCROLL_THUMB = spr("scroll_thumb");
     private static final ResourceLocation CHEVRON_DOWN = spr("chevron_down");
-    /** 回到底部的浮钮(Telegram 翻上去时右下角那枚):边长,以及淡入淡出的进度(像素,趋近)。 */
-    private static final int JUMP = 18;
+    /**
+     * 回到最新的浮钮(Telegram 翻上去时右下角那枚):边长、离右缘和底边的距离,
+     * 以及露出的进度 0..1(趋近)——它从底边下面滑上来,被对话流裁掉,不是原地淡入。
+     */
+    private static final int JUMP = 18, JUMP_INSET = 6;
     private float jumpShown;
     private int jumpX, jumpY;
     /** 滚动条只在滚动时和指针在对话流上时出现(Telegram),淡入淡出按趋近走。 */
@@ -275,6 +281,31 @@ public final class ChatView {
         frameNow = now;
         updateLive(dt, now);
         renderBlocks(g, x, y, w, h, build(bubbleMaxW(w)), dt);
+        // 看过 = 视图停在底部时的最后一条;翻上去后来的话算未读,挂在"回到最新"钮上,左栏角标也据此消
+        Conversation c = conv.get();
+        var latest = ConversationPreview.last(c);
+        if (pinBottom && latest != null) Conversations.instance().markSeen(c, latest.ts());
+        renderJump(g, x, y, h, dt, ConversationPreview.unread(c, Conversations.instance().lastSeen(c)));
+    }
+
+    /** "回到最新"钮:翻上去超过半屏、或底下有没看过的话就浮出;从底边滑上来,顶上压一枚未读数。 */
+    private void renderJump(GuiGraphics g, int x, int y, int h, float dt, int unread) {
+        boolean want = lastMaxScroll - scrollTarget > h / 2 || unread > 0;
+        jumpShown = Anim.approach(jumpShown, want ? 1f : 0f, 16f, dt);
+        if (jumpShown <= 0.02f) return;
+        int right = barX() + SB_W;
+        jumpX = right - JUMP_INSET - JUMP;
+        jumpY = y + h - Math.round(jumpShown * (JUMP + JUMP_INSET));
+        g.enableScissor(x, y, right, y + h);
+        NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), jumpX, jumpY, JUMP, JUMP,
+                AI_FILL, AI_BORDER);
+        g.blitSprite(CHEVRON_DOWN, jumpX + (JUMP - 11) / 2, jumpY + (JUMP - 6) / 2, 11, 6);
+        if (unread > 0) {
+            String n = UnreadBadge.label(unread);
+            int bw = UnreadBadge.width(font, n);
+            UnreadBadge.draw(g, font, n, jumpX + (JUMP - bw) / 2, jumpY - UnreadBadge.H / 2, MENTION, ON_CTA);
+        }
+        g.disableScissor();
     }
 
     /** 滚动 + 裁剪 + 逐块绘制——对话视图与外脑现场视图共用的那台机器。 */
@@ -306,19 +337,6 @@ public final class ChatView {
         if (barShown > 0.5f && lastMaxScroll > 0) {
             g.setColor(1f, 1f, 1f, barShown / 8f);
             g.blitSprite(SCROLL_THUMB, barX(), thumbY(), SB_W, thumbH());   // 只有滑块,没有槽,贴正文区右缘(Telegram)
-            g.setColor(1f, 1f, 1f, 1f);
-        }
-        // 翻上去超过半屏就浮出"回到底部":淡入淡出按趋近走,不硬切;点它回到最新
-        boolean far = lastMaxScroll - scrollTarget > h / 2;
-        jumpShown = Anim.approach(jumpShown, far ? JUMP : 0f, 16f, dt);
-        if (jumpShown > 0.5f) {
-            jumpX = x + w - SB_W - 6 - JUMP;
-            jumpY = y + h - 6 - JUMP;
-            float a = jumpShown / JUMP;
-            g.setColor(1f, 1f, 1f, a);
-            NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), jumpX, jumpY, JUMP, JUMP,
-                    AI_FILL, AI_BORDER);
-            g.blitSprite(CHEVRON_DOWN, jumpX + (JUMP - 11) / 2, jumpY + (JUMP - 6) / 2, 11, 6);
             g.setColor(1f, 1f, 1f, 1f);
         }
     }
@@ -357,6 +375,7 @@ public final class ChatView {
             return;
         }
         renderBlocks(g, x, y + EXT_HEADER_H, w, h - EXT_HEADER_H, buildExternal(id, bubbleMaxW(w)), dt);
+        renderJump(g, x, y + EXT_HEADER_H, h - EXT_HEADER_H, dt, 0);   // 现场缓冲没有未读一说
     }
 
     /** 现场缓冲 → 可画的块。与 {@link #build} 同一套 Block 词汇,只是来源不同。 */
@@ -431,7 +450,9 @@ public final class ChatView {
 
     /** Toggle the fold of a completed tool chip under the mouse. */
     public boolean mouseClicked(double mx, double my) {
-        if (jumpShown > JUMP / 2f && mx >= jumpX && mx < jumpX + JUMP && my >= jumpY && my < jumpY + JUMP) {
+        // 钮连同顶上的角标一起算点中
+        if (jumpShown > 0.5f && mx >= jumpX && mx < jumpX + JUMP
+                && my >= jumpY - UnreadBadge.H / 2 && my < jumpY + JUMP && my < gy + gh) {
             pinToBottom();
             return true;
         }

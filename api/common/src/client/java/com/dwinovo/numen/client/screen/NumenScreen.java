@@ -1725,11 +1725,9 @@ public final class NumenScreen extends Screen {
             int unread = active ? 0 : com.dwinovo.numen.client.screen.chat.ConversationPreview.unread(
                     c, Conversations.instance().lastSeen(c));
             if (unread > 0) {
-                String n = unread > 99 ? "99+" : String.valueOf(unread);
-                int bw = font.width(n) + 6;
-                int bx = textRight - bw;
-                g.fill(bx, ay + 16, bx + bw, ay + 27, CTA);
-                txt(g, Component.literal(n), bx + 3, ay + 18, ON_CTA);
+                String n = com.dwinovo.numen.client.screen.chat.UnreadBadge.label(unread);
+                int bx = textRight - com.dwinovo.numen.client.screen.chat.UnreadBadge.width(font, n);
+                com.dwinovo.numen.client.screen.chat.UnreadBadge.draw(g, font, n, bx, ay + 16, CTA, ON_CTA);
                 previewRight = bx - 4;
             }
             String preview = last == null ? I18n.get(ModLanguageData.Keys.RAIL_EMPTY) : last.text();
@@ -2005,9 +2003,6 @@ public final class NumenScreen extends Screen {
         int transW = panelW - PAD * 2;   // 对话流永远占满整行;附属信息在底部一行、按需展开
         EntityAgentLoop lp = loop();
         planStripW = 0;
-        // 正在看的会话:看到的最后一条记下来,左栏的未读角标据此消
-        var latest = com.dwinovo.numen.client.screen.chat.ConversationPreview.last(conv);
-        if (latest != null) Conversations.instance().markSeen(conv, latest.ts());
         // 输入框上方那一行:状态行住这儿;整理记忆的进度、没绑模型的原因、命令的回话、麦克风提示
         // 也都落这一行——它们是一时的、比状态要紧,谁在场谁占,状态行让开。
         int dockY = top + panelH - inputH() - PAD - STATUS_H;
