@@ -124,6 +124,11 @@ public final class ChatView {
     }
     private static final ResourceLocation SCROLL_TRACK = spr("scroll_track");
     private static final ResourceLocation SCROLL_THUMB = spr("scroll_thumb");
+    private static final ResourceLocation CHEVRON_DOWN = spr("chevron_down");
+    /** 回到底部的浮钮(Telegram 翻上去时右下角那枚):边长,以及淡入淡出的进度(像素,趋近)。 */
+    private static final int JUMP = 18;
+    private float jumpShown;
+    private int jumpX, jumpY;
 
     private final Font font;
     private final Supplier<Conversation> conv;
@@ -240,6 +245,19 @@ public final class ChatView {
             g.blitSprite(SCROLL_TRACK, x + w - SB_W, y, SB_W, h);
             g.blitSprite(SCROLL_THUMB, x + w - SB_W, thumbY, SB_W, thumbH);
         }
+        // 翻上去超过半屏就浮出"回到底部":淡入淡出按趋近走,不硬切;点它回到最新
+        boolean far = lastMaxScroll - scrollTarget > h / 2;
+        jumpShown = Anim.approach(jumpShown, far ? JUMP : 0f, 16f, dt);
+        if (jumpShown > 0.5f) {
+            jumpX = x + w - SB_W - 6 - JUMP;
+            jumpY = y + h - 6 - JUMP;
+            float a = jumpShown / JUMP;
+            g.setColor(1f, 1f, 1f, a);
+            NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), jumpX, jumpY, JUMP, JUMP,
+                    AI_FILL, AI_BORDER);
+            g.blitSprite(CHEVRON_DOWN, jumpX + (JUMP - 11) / 2, jumpY + (JUMP - 6) / 2, 11, 6);
+            g.setColor(1f, 1f, 1f, 1f);
+        }
     }
 
     // ---- 外脑驱动中:聊天区画现场缓冲 ----
@@ -347,6 +365,10 @@ public final class ChatView {
 
     /** Toggle the fold of a completed tool chip under the mouse. */
     public boolean mouseClicked(double mx, double my) {
+        if (jumpShown > JUMP / 2f && mx >= jumpX && mx < jumpX + JUMP && my >= jumpY && my < jumpY + JUMP) {
+            pinToBottom();
+            return true;
+        }
         if (McpMode.instance().driving()) return false;   // 现场视图没有可折叠的块
         if (gw == 0 || mx < gx || mx >= gx + gw || my < gy || my >= gy + gh) return false;
         loadPalette();
