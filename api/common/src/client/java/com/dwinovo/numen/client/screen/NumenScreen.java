@@ -1465,8 +1465,17 @@ public final class NumenScreen extends Screen {
         // 它们让位,免得名字一长就没处点。
         boolean nameIcons = conv != null && !modalOpen() && !overlayOpen();
         boolean plusIcon = nameIcons && !Conversations.instance().pullable(conv).isEmpty();
-        int iconCount = nameIcons ? (plusIcon ? 3 : 2) : 0;
-        int nameRoom = headerLimit - (left + PAD) - ICON_PITCH * iconCount;
+        // 图标靠抬头右端排(Telegram 的操作图标一律在右),从右往左:＋、垃圾桶、铅笔;名字占剩下的
+        editPencilX = editTrashX = editPlusX = -1;
+        int iconsLeft = headerLimit;
+        if (nameIcons) {
+            int rx = headerLimit - ICON_N;
+            if (plusIcon) { editPlusX = rx; rx -= ICON_PITCH; }
+            editTrashX = rx;
+            editPencilX = rx - ICON_PITCH;
+            iconsLeft = editPencilX - 8;
+        }
+        int nameRoom = iconsLeft - (left + PAD);
         String title = name();
         String nm = clip(title == null ? "Numen" : title, Math.max(24, nameRoom));
         nameRight = left + PAD + font.width(nm);
@@ -1477,15 +1486,12 @@ public final class NumenScreen extends Screen {
             tip(java.util.List.of(Component.translatable(ModLanguageData.Keys.HEADER_PROFILE)), mouseX, mouseY);
         }
         int afterName = left + PAD + font.width(nm) + 6;
-        editPencilX = editTrashX = editPlusX = -1;
-        if (nameIcons && afterName + ICON_PITCH * iconCount <= headerLimit) {
-            editPencilX = afterName;
+        if (nameIcons) {
             boolean hotPencil = overEditPencil(mouseX, mouseY);
             com.dwinovo.numen.client.ui.mc.Sprites.draw(g,
                     com.dwinovo.numen.client.ui.mc.Sprites.EDIT, editPencilX, iconTop(), ICON_N,
                     hotPencil ? CTA : 0xFFFFFFFF);
             // 垃圾桶常态就是危险色:红的那个是删,不用点开才知道。
-            editTrashX = afterName + ICON_PITCH;
             boolean hotTrash = overEditTrash(mouseX, mouseY);
             com.dwinovo.numen.client.ui.mc.Sprites.draw(g,
                     com.dwinovo.numen.client.ui.mc.Sprites.DELETE, editTrashX, iconTop(), ICON_N,
@@ -1493,7 +1499,6 @@ public final class NumenScreen extends Screen {
             boolean hotPlus = false;
             if (plusIcon) {
                 // 「＋」和铅笔、垃圾桶同一套贴图,三枚一个家族
-                editPlusX = afterName + ICON_PITCH * 2;
                 hotPlus = overEditPlus(mouseX, mouseY);
                 com.dwinovo.numen.client.ui.mc.Sprites.draw(g,
                         com.dwinovo.numen.client.ui.mc.Sprites.PLUS, editPlusX, iconTop(), ICON_N,
@@ -1509,11 +1514,10 @@ public final class NumenScreen extends Screen {
                 pendingTipX = mouseX;
                 pendingTipY = mouseY;
             }
-            afterName += ICON_PITCH * iconCount;
         }
         String pn = activePersonaName();                   // current persona, faint, right after the name
-        if (pn != null && afterName + font.width("…") <= headerLimit) {
-            txt(g, Component.literal(clip(pn, headerLimit - afterName)), afterName, top + NAME_Y, ON_BAND_FAINT);
+        if (pn != null && afterName + font.width("…") <= iconsLeft) {
+            txt(g, Component.literal(clip(pn, iconsLeft - afterName)), afterName, top + NAME_Y, ON_BAND_FAINT);
         }
         // 第二行:在线 / 正在输入… / 复活倒计时 / N 位成员
         renderStatusText(g, her, left + PAD, headerLimit);
