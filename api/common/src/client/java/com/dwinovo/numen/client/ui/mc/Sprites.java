@@ -36,6 +36,12 @@ public final class Sprites {
     public static final ResourceLocation MIC = icon("icon_mic");
     public static final ResourceLocation SEND = icon("icon_send");
     public static final ResourceLocation STOP = icon("icon_stop");
+    /** 抬头的「＋」(邀请),和铅笔、垃圾桶同一套。 */
+    public static final ResourceLocation PLUS = icon("icon_plus");
+    /** 状态行:她在忙、她的目标、她的计划。 */
+    public static final ResourceLocation LOADER = icon("icon_loader");
+    public static final ResourceLocation FLAG = icon("icon_flag");
+    public static final ResourceLocation LIST = icon("icon_list");
 
     public static ResourceLocation icon(String name) {
         return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, name);

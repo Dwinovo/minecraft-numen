@@ -144,12 +144,11 @@ public final class NumenScreen extends Screen {
     private int editTrashX = -1;
     /** 头部「＋ 拉人」的横座标;有人可拉才画。 */
     private int editPlusX = -1;
-    /** 状态行(输入框上方那一行)的高度:转圈、目标、计划、上下文水位都在这一行。 */
-    private static final int STATUS_H = 11;
+    /** 状态行(输入框上方那一行)的高度:图标一格高加一点呼吸。她在忙、目标、计划、上下文水位都在这一行。 */
+    private static final int STATUS_H = 14;
     /** 计划那一段本帧画在状态行的哪一截;宽 0 = 没画。点它展开清单。 */
     private int planStripX, planStripY, planStripW;
     private boolean planOpen;
-    private static final String[] SPIN = {"|", "/", "-", "\\"};
     /** 成员抬头那一行本帧画了谁(与 membersAlive 同序),点击按它判命中;空 = 本帧没画。 */
     private final List<UUID> memberRowFaces = new ArrayList<>();
     private int memberRowX, memberRowY;
@@ -1272,13 +1271,12 @@ public final class NumenScreen extends Screen {
                     hotTrash ? UiTheme.mix(FAIL, 0xFFFFFFFF, 0.35f) : FAIL);
             boolean hotPlus = false;
             if (plusIcon) {
-                // 「＋」是几何,和侧栏的召唤格同一画法,跟主题走色
+                // 「＋」和铅笔、垃圾桶同一套贴图,三枚一个家族
                 editPlusX = afterName + ICON_PITCH * 2;
                 hotPlus = overEditPlus(mouseX, mouseY);
-                int pcx = editPlusX + ICON_N / 2, pcy = iconTop() + ICON_N / 2;
-                int plusColor = hotPlus ? CTA : 0xFFFFFFFF;
-                g.fill(pcx - 4, pcy - 1, pcx + 4, pcy + 1, plusColor);
-                g.fill(pcx - 1, pcy - 4, pcx + 1, pcy + 4, plusColor);
+                com.dwinovo.numen.client.ui.mc.Sprites.draw(g,
+                        com.dwinovo.numen.client.ui.mc.Sprites.PLUS, editPlusX, iconTop(), ICON_N,
+                        hotPlus ? CTA : 0xFFFFFFFF);
             }
             // 图标不写字,就得能问出来——每枚都报自己是干嘛的。
             if (hotPencil || hotTrash || hotPlus) {
@@ -1615,56 +1613,65 @@ public final class NumenScreen extends Screen {
     }
 
     /**
-     * 状态行:输入框上方一行暗色小字,pi 的 footer 与 working 指示合成一行。左边依次是她在忙时的转圈、
-     * 长期目标(◆)、计划("▸ 计划 2/5 · 那一步",点开往上展开);右边是上下文水位,悬停出用量明细。
-     * 目标只显示目标本身,不显示评估器那句"还差什么"——没达成就静默接着干,不该每轮在主人眼前刷判词;
-     * 第几轮、跑了多久在悬停里。
+     * 状态行:输入框上方一行,不写字——界面元素替字说话,想知道细节悬停。pi 的 footer 与 working
+     * 指示合成一行。左起:她在忙时一枚呼吸的圈;有长期目标时一面旗(悬停出目标、第几轮、跑了多久);
+     * 有计划时一枚清单图标 + 一格一条待办的小格(悬停出正在做的那步,点开往上展开清单)。
+     * 右:上下文水位一条横条,按占用填色(悬停出用量明细)。
+     * 目标不把评估器那句"还差什么"摆出来——没达成就静默接着干,不该每轮在主人眼前刷判词。
      */
     private void renderStatusLine(GuiGraphics g, EntityAgentLoop lp, int y, int mouseX, int mouseY) {
         int x = left + PAD;
         int right = left + panelW - PAD;
-        boolean quiet = !modalOpen() && !overlayOpen();
-        // 右:水位
-        int pct = lp.contextPercent();
-        String pctS = pct + "%";
-        int pctX = right - font.width(pctS);
-        txt(g, Component.literal(pctS), pctX, y, pct > 90 ? FAIL : pct > 70 ? RUN : TXT_FAINT);
-        if (quiet && mouseY >= y && mouseY < y + STATUS_H && mouseX >= pctX && mouseX < right) {
-            pendingTip = java.util.List.of(Component.literal(usageDetail(lp)));
-            pendingTipX = mouseX;
-            pendingTipY = mouseY;
+        int iy = y + (STATUS_H - ICON_N) / 2;
+        long now = System.currentTimeMillis();
+        boolean hover = !modalOpen() && !overlayOpen() && mouseY >= y && mouseY < y + STATUS_H;
+        // 右:水位——32×4 的横条,占用越高越往警示色走
+        int pct = Math.max(0, Math.min(100, lp.contextPercent()));
+        int gw = 32, gh = 4;
+        int gx = right - gw, gy = y + (STATUS_H - gh) / 2;
+        g.fill(gx, gy, gx + gw, gy + gh, FIELD);
+        g.fill(gx, gy, gx + gw * pct / 100, gy + gh, pct > 90 ? FAIL : pct > 70 ? RUN : TXT_MUTED);
+        if (hover && mouseX >= gx && mouseX < right) {
+            tip(java.util.List.of(Component.literal(usageDetail(lp))), mouseX, mouseY);
         }
-        int limit = pctX - 8;
-        // 左:转圈
+        int limit = gx - 8;
+        // 左:她在忙——一枚呼吸的圈
         if (lp.status().busy()) {
-            txt(g, Component.literal(SPIN[(int) ((System.currentTimeMillis() / 120) % 4)]), x, y, RUN);
-            x += 8;
+            com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.LOADER,
+                    x, iy, ICON_N, pulse(RUN, now));
+            x += ICON_N + 6;
         }
-        // 目标;计划先量好自己至少要多少,目标把剩下的用完
+        // 目标——一面旗
         var goal = lp.goal();
-        int planMin = 0;
         if (goal != null) {
-            String head = "◆ ";
-            String body = goal.objective();
-            int room = limit - x - font.width(head) - 70;   // 给计划留最短一截
-            String full = body;
-            while (body.length() > 1 && font.width(body + "…") > room) body = body.substring(0, body.length() - 1);
-            if (!body.equals(full)) body = body + "…";
-            String line = head + body;
-            txt(g, Component.literal(line), x, y, RUN);
-            int w = font.width(line);
-            if (quiet && mouseY >= y && mouseY < y + STATUS_H && mouseX >= x && mouseX < x + w) {
-                pendingTip = java.util.List.of(Component.literal("第 " + goal.turnsExecuted() + " 轮 · "
-                        + com.dwinovo.numen.agent.goal.GoalPrompts.elapsed(goal.elapsedMs(System.currentTimeMillis()))));
-                pendingTipX = mouseX;
-                pendingTipY = mouseY;
+            com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.FLAG, x, iy, ICON_N, CTA);
+            if (hover && mouseX >= x && mouseX < x + ICON_N) {
+                tip(java.util.List.of(Component.literal(goal.objective()),
+                        Component.literal("第 " + goal.turnsExecuted() + " 轮 · "
+                                + com.dwinovo.numen.agent.goal.GoalPrompts.elapsed(goal.elapsedMs(now)))), mouseX, mouseY);
             }
-            x += w + 8;
+            x += ICON_N + 6;
         }
-        // 计划
+        // 计划——清单图标 + 小格
         planStripX = x;
         planStripY = y;
-        planStripW = com.dwinovo.numen.client.screen.chat.PlanStrip.render(g, font, lp, x, y, Math.max(0, limit - x), planOpen);
+        planStripW = com.dwinovo.numen.client.screen.chat.PlanStrip.render(g, lp, x, iy, Math.max(0, limit - x), planOpen, now);
+        if (planStripW > 0 && hover && mouseX >= x && mouseX < x + planStripW) {
+            String step = com.dwinovo.numen.client.screen.chat.PlanStrip.currentStep(lp);
+            if (step != null) tip(java.util.List.of(Component.literal(step)), mouseX, mouseY);
+        }
+    }
+
+    private void tip(List<Component> lines, int x, int y) {
+        pendingTip = lines;
+        pendingTipX = x;
+        pendingTipY = y;
+    }
+
+    /** 呼吸:透明度在 0x90–0xFF 之间来回——"正在"是活的,不是一个死图标。 */
+    private static int pulse(int argb, long nowMs) {
+        int a = 0x90 + (int) (0x6F * (0.5 + 0.5 * Math.sin(nowMs / 250.0)));
+        return (argb & 0xFFFFFF) | (a << 24);
     }
 
     /**
