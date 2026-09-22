@@ -177,6 +177,10 @@ public final class ChatView {
     }
     // geometry of the last render, for click / wheel hit-testing
     private int gx, gy, gw, gh;
+    /** 这一帧画出来的脸(气泡旁、工具行旁):点哪张开哪只的资料页(Telegram 点消息头像看资料)。 */
+    private record Face(UUID who, int x, int y) {}
+    private final List<Face> faces = new ArrayList<>();
+    private int hoverX = -1, hoverY = -1;
     /** 每条记录第一次被看见的时刻(与归并后的记录同序);0 = 打开时就有的历史,不飞入。 */
     private final List<Long> born = new ArrayList<>();
     private long frameNow;
@@ -211,8 +215,11 @@ public final class ChatView {
 
     // ---- render ----
 
-    public void render(GuiGraphics g, int x, int y, int w, int h) {
+    public void render(GuiGraphics g, int x, int y, int w, int h, int mouseX, int mouseY) {
         loadPalette();
+        hoverX = mouseX;
+        hoverY = mouseY;
+        faces.clear();
         long now = System.currentTimeMillis();
         float dt = lastFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastFrameMs) / 1000f);
         lastFrameMs = now;
@@ -839,6 +846,7 @@ public final class ChatView {
                 PlayerFaceRenderer.draw(g, ownerSkin(), avX, bubTop, AV);
             } else {
                 CompanionFace.draw(g, b.who(), KnownSkins.of(b.who()), avX, bubTop, AV);
+                face(g, b.who(), avX, bubTop, b.fill());
             }
         }
         NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), bx, bubTop, bw, bh,
@@ -873,6 +881,7 @@ public final class ChatView {
             NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), avX - 2, y - 2,
                     AV + 4, AV + 4, AI_FILL, AI_BORDER);
             CompanionFace.draw(g, c.who(), KnownSkins.of(c.who()), avX, y, AV);
+            face(g, c.who(), avX, y, AI_FILL);
         }
         int cw = NumenStyle.TRACE_INDENT + ICON_W + maxW + PAD_H;
         int ch = c.rows().size() * LINE_H + PAD_V * 2;
@@ -887,6 +896,23 @@ public final class ChatView {
             draw(g, r.text(), cx + NumenStyle.TRACE_INDENT + ICON_W, ty);
             ty += LINE_H;
         }
+    }
+
+    /** 记下这张脸能点;指针在它上面时描一圈强调色边,像个能点的东西。 */
+    private void face(GuiGraphics g, UUID who, int x, int y, int fill) {
+        faces.add(new Face(who, x, y));
+        if (hoverX >= x - 2 && hoverX < x + AV + 2 && hoverY >= y - 2 && hoverY < y + AV + 2) {
+            NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), x - 2, y - 2, AV + 4, AV + 4, 0, MENTION);
+        }
+    }
+
+    /** 指针下那张脸是谁的;不在脸上是 null。只认对话流可见区里的。 */
+    public UUID faceAt(double mx, double my) {
+        if (mx < gx || mx >= gx + gw || my < gy || my >= gy + gh) return null;
+        for (Face f : faces) {
+            if (mx >= f.x() - 2 && mx < f.x() + AV + 2 && my >= f.y() - 2 && my < f.y() + AV + 2) return f.who();
+        }
+        return null;
     }
 
     /** Shadowless draw — the colour is baked into the sequence's Style (see {@link Nb}). */

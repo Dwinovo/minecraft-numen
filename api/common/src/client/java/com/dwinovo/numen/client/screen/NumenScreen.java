@@ -445,7 +445,7 @@ public final class NumenScreen extends Screen {
         conv = c;   // 同一个会话也换成最新的那份——成员表、名字可能刚变
         SelectedCompanion.set(c);
         if (same) return;
-        if (tab == Tab.ITEMS && Conversations.instance().soloOf(c) == null) selectTab(Tab.CHAT);   // 群没有资料页
+        if (tab == Tab.ITEMS) selectTab(Tab.CHAT);   // 换了会话,资料页收起(Telegram 也这样)
         inputBar = null; savedInput = "";       // don't carry typed text across conversations
         planOpen = false;
         planShownH = 0f;
@@ -788,7 +788,7 @@ public final class NumenScreen extends Screen {
      * 这样整页滑),滑的过程裁在正文区里。滑到位之前不接鼠标——mouseClickedInner 按 tab 路由,
      * 半路的点击落在还没到位的页上也只是这一帧的事。
      */
-    private void renderOverlayPage(GuiGraphics g, int mouseX, int mouseY, UUID her) {
+    private void renderOverlayPage(GuiGraphics g, int mouseX, int mouseY) {
         long now = System.currentTimeMillis();
         float dt = lastOverlayFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastOverlayFrameMs) / 1000f);
         lastOverlayFrameMs = now;
@@ -806,9 +806,9 @@ public final class NumenScreen extends Screen {
         g.fill(left + 3, bodyTop, left + panelW - 3, bodyBottom, t.ground());   // 底板盖住下面的对话
         if (overlayKind == Tab.SETTINGS) {
             settings.render(g, mouseX - dx, mouseY);   // global — works with no companion
-        } else if (her != null) {
+        } else if (profileOf != null) {
             com.dwinovo.numen.client.screen.items.ItemsView.render(
-                    g, font, her, left, top, panelW, panelH, HEADER_H, mouseX - dx, mouseY);
+                    g, font, profileOf, left, top, panelW, panelH, HEADER_H, mouseX - dx, mouseY);
         }
         g.pose().popPose();
         g.disableScissor();
@@ -957,10 +957,22 @@ public final class NumenScreen extends Screen {
         rebuild();
     }
 
-    /** 点抬头名字:资料页开/收(就他俩才有资料页)。 */
-    private void toggleInfo() {
-        if (solo() == null) return;
-        selectTab(tab == Tab.ITEMS ? Tab.CHAT : Tab.ITEMS);
+    /** 资料页对着哪只:点抬头名字是就他俩那只,点对话里的脸是那张脸的主人(群里点谁看谁)。 */
+    private UUID profileOf;
+
+    /** 资料页开/收:同一只再点是收,换一只是直接换页里的人。 */
+    private void toggleInfo(UUID who) {
+        if (who == null) return;
+        if (tab == Tab.ITEMS && who.equals(profileOf)) {
+            selectTab(Tab.CHAT);
+            return;
+        }
+        profileOf = who;
+        if (tab == Tab.ITEMS) {
+            requestInventory();
+        } else {
+            selectTab(Tab.ITEMS);
+        }
     }
 
     /** 左栏 ☰:设置页开/收。 */
@@ -1051,7 +1063,7 @@ public final class NumenScreen extends Screen {
     private void requestInventory() {
         // No companion selected (empty roster / hotkey-opened blank panel) → nothing to fetch.
         // The payload's UUID stream-codec can't encode null, so this guard also prevents a crash.
-        UUID her = solo();
+        UUID her = tab == Tab.ITEMS ? profileOf : solo();
         if (her == null) return;
         if (Minecraft.getInstance().getConnection() != null) {
             Services.NETWORK.sendToServer(new RequestStatePayload(her));
@@ -1203,7 +1215,7 @@ public final class NumenScreen extends Screen {
                 return true;
             }
             if (!overlayOpen() && overName(mouseX, mouseY)) {   // 名字 → 资料页开/收
-                toggleInfo();
+                toggleInfo(solo());
                 return true;
             }
             if (tab == Tab.CHAT && planStripW > 0 && mouseY >= planStripY && mouseY < planStripY + STATUS_H
@@ -1219,6 +1231,13 @@ public final class NumenScreen extends Screen {
             if (tab == Tab.CHAT && inputBar != null
                     && inputBar.mouseClicked(mouseX, mouseY, button)) {
                 return true;
+            }
+            if (tab == Tab.CHAT) {
+                UUID who = chatView.faceAt(mouseX, mouseY);   // 消息旁的脸 → 她的资料页
+                if (who != null) {
+                    toggleInfo(who);
+                    return true;
+                }
             }
             if (tab == Tab.CHAT && chatView.mouseClicked(mouseX, mouseY)) return true;
         }
@@ -1429,7 +1448,7 @@ public final class NumenScreen extends Screen {
                     top + (HEADER_H - font.lineHeight) / 2 + 1, ON_BAND);
             editPencilX = editTrashX = editPlusX = -1;
             nameRight = left + PAD;
-            renderOverlayPage(g, mouseX, mouseY, her);
+            renderOverlayPage(g, mouseX, mouseY);
             return;
         }
         // 名字旁的图标 = 改与删("名字在哪,编辑就在哪"的资料页定式;改与删并排、分开点,
@@ -1490,7 +1509,7 @@ public final class NumenScreen extends Screen {
         }
         // 第二行:在线 / 正在输入… / 复活倒计时 / N 位成员
         renderStatusText(g, her, headerLimit);
-        renderOverlayPage(g, mouseX, mouseY, her);
+        renderOverlayPage(g, mouseX, mouseY);
         if (summoning) {
             // 召唤模态:暗幕 + 居中卡(与确认卡同族),卡内由 SummonPanel 自绘。
             g.fill(railX, top, railX + railW + panelW, top + panelH,
@@ -1992,7 +2011,7 @@ public final class NumenScreen extends Screen {
         if (lp != null && com.dwinovo.numen.mcp.server.McpMode.instance().driving()) {
             chatView.renderExternal(g, transX, bodyY, transW, bodyBottom - bodyY);
         } else {
-            chatView.render(g, transX, bodyY, transW, bodyBottom - bodyY);
+            chatView.render(g, transX, bodyY, transW, bodyBottom - bodyY, mouseX, mouseY);
         }
 
         if (statusLine) {
