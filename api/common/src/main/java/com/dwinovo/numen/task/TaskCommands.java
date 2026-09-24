@@ -28,8 +28,8 @@ public final class TaskCommands {
     private static final int MAX_REASON_LENGTH = 200;
 
     private static final Param<String> TASK_ID = Param.optional("task_id", ArgType.word(),
-            "What to cancel: a task id (e.g. t42) or a timer id "
-                    + "(e.g. tm3). Omit to stop the background task, whatever it is.");
+            "What to cancel: a task id (e.g. t42) or a timer id (e.g. tm3).")
+            .whenOmitted("stop the background task, whatever it is");
     private static final Param<Integer> AFTER_S = Param.required("after_s",
             ArgType.integer(TimerRegistry.MIN_SECONDS, TimerRegistry.MAX_SECONDS),
             "Delay in world-time seconds ("
@@ -50,6 +50,10 @@ public final class TaskCommands {
     private static void actions(CommandGroup task) {
         task.server("status", "What you have in flight: the background task and your pending timers.",
                 TaskCommands::status)
+                .example("numen task status")
+                .note("Instant and read-only; it does not touch your body.")
+                .note("Usually not needed: a task ends with its own task_finished event and a timer fires on its own.")
+                .seeAlso("numen task stop")
                 .promote("task_status", "Read what you have in flight: the background task (id, what it is, "
                         + "running/queued, elapsed time and remaining budget) and your pending timers (id, "
                         + "seconds left, reason). Instant. Normally you don't need it — a task announces its "
@@ -57,6 +61,12 @@ public final class TaskCommands {
                         + "asks how things are going, or before deciding what to task_stop.");
         task.server("stop", "Cancel the background task, or a task or timer by its id.",
                 TaskCommands::stop, TASK_ID)
+                .example("numen task stop")
+                .example("numen task stop --task_id tm3")
+                .note("Instant; does not ask your owner. A stopped task winds down and reports as a task_finished "
+                        + "event with status=stopped.")
+                .note("When nothing matches it fails and lists what is pending.")
+                .seeAlso("numen task status")
                 .promote("task_stop", "Cancel something you dispatched. With no id: aborts the background "
                         + "task (the one <current_task> / task_status shows) so the body frees up; its "
                         + "wind-down arrives as a task_finished event with status=stopped. With an id: cancels "
@@ -64,6 +74,13 @@ public final class TaskCommands {
                         + "nothing matches.");
         task.server("timer", "Set a one-shot reminder that fires after a delay in world time.",
                 TaskCommands::timer, AFTER_S, REASON)
+                .example("numen task timer 300 collect the iron from the furnace")
+                .note("Returns at once and never occupies your body; your owner is told when and why.")
+                .note("It only reminds you. Work you dispatched sends its own task_finished; don't set a timer "
+                        + "to watch it.")
+                .note("At most " + TimerRegistry.MAX_PER_COMPANION + " pending. World time stops while a "
+                        + "single-player world is paused.")
+                .seeAlso("numen task status", "numen task stop")
                 .promote("set_timer", "Set a one-shot reminder that fires after a delay in world time. "
                         + "Returns immediately and never occupies the body — she keeps doing whatever she is "
                         + "doing. Use it for things the world will not announce on its own: a furnace "

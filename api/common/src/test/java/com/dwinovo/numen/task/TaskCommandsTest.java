@@ -89,7 +89,28 @@ class TaskCommandsTest {
                   <after_s> (integer 1-1200) — Delay in world-time seconds (1-1200; out-of-range values are clamped).
                   <reason...> (text, the rest of the line) — What to look at or decide when it fires. The owner \
                 sees this too, so name the thing: "collect the iron from the furnace" beats "check back".
+                  Examples:
+                    numen task timer 300 collect the iron from the furnace
+                  Notes:
+                    Returns at once and never occupies your body; your owner is told when and why.
+                    It only reminds you. Work you dispatched sends its own task_finished; don't set a timer to watch it.
+                    At most 8 pending. World time stops while a single-player world is paused.
+                  See also: numen task status, numen task stop
                   Shortcut tool: set_timer.""", help("numen task timer --help"));
+        assertEquals("""
+                numen task stop [--task_id <word>]
+                  Cancel the background task, or a task or timer by its id.
+                  --task_id <word> (word; optional) — What to cancel: a task id (e.g. t42) or a timer id (e.g. tm3). \
+                Omit to stop the background task, whatever it is.
+                  Examples:
+                    numen task stop
+                    numen task stop --task_id tm3
+                  Notes:
+                    Instant; does not ask your owner. A stopped task winds down and reports as a task_finished event \
+                with status=stopped.
+                    When nothing matches it fails and lists what is pending.
+                  See also: numen task status
+                  Shortcut tool: task_stop.""", help("numen task stop --help"));
     }
 
     private static void assertListing(String name, String description, Map<String, Object> schema) {
