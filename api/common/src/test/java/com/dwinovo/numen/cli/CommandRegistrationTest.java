@@ -4,16 +4,21 @@ import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.task.TaskResult;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.dwinovo.numen.cli.CliFixture.door;
 import static com.dwinovo.numen.cli.CliFixture.onClient;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 登记处的规矩:一个组名只有一个主人,别人的组下挂不上东西;名字、参数、快捷工具名写错或撞了,都在登记的那一刻炸。
+ * 登记处的规矩:一个组名只有一个主人,别人的组下挂不上东西;名字、参数、快捷工具名、帮助正文写错或撞了,都在登记的
+ * 那一刻炸。相关命令指向别的组,在命令树第一次被读时对着全部的组查;那之后登记的组在自己登记那一刻查。
  */
 class CommandRegistrationTest {
 
@@ -76,6 +81,61 @@ class CommandRegistrationTest {
                 g -> g.server("x", "x.", OK, word, word)));
         assertThrows(IllegalArgumentException.class, () -> Param.required("Bad", ArgType.word(), "x."));
         assertThrows(IllegalArgumentException.class, () -> Param.required("ok", ArgType.word(), " "));
+    }
+
+    @Test
+    void atFirstReadEveryReferenceIsResolvedAgainstAllGroupsWhateverTheirOrder() {
+        CommandGroup early = new CommandGroup("gt_early", "Registered first.");
+        early.server("go", "Go.", OK).example("numen gt_early go").seeAlso("numen gt_late come");
+        early.close();
+        CommandGroup late = new CommandGroup("gt_late", "Registered after the group that points at it.");
+        late.server("come", "Come.", OK).example("numen gt_late come");
+        late.close();
+
+        IllegalStateException missing = assertThrows(IllegalStateException.class,
+                () -> NumenCli.checkSeeAlso(List.of(early), Map.of("gt_early", early)));
+        assertTrue(missing.getMessage().contains("numen gt_early go -> numen gt_late come"), missing.getMessage());
+        assertDoesNotThrow(() -> NumenCli.checkSeeAlso(List.of(early, late), Map.of("gt_early", early, "gt_late", late)),
+                "指向后登记的组:到齐之后一起查就认");
+    }
+
+    @Test
+    void onceTheTreeIsInUseAGroupsReferencesAreCheckedAsItRegisters() {
+        NumenApi numen = door();
+        NumenCli.index();
+        Param<String> line = Param.required("line", ArgType.text(), "The rest.");
+        numen.registerCommands("gt_see_target", "Pointed at from another group.",
+                g -> g.server("go", "Go.", OK).example("numen gt_see_target go"));
+        numen.registerCommands("gt_see_direct", "A group that is one action.",
+                g -> g.serverDirect("Echo.", OK, line).example("numen gt_see_direct hello"));
+
+        assertDoesNotThrow(() -> numen.registerCommands("gt_see_ok", "Points at real actions.", g -> {
+            g.server("first", "First.", OK).example("numen gt_see_ok first")
+                    .seeAlso("numen gt_see_ok second", "numen gt_see_target go", "numen gt_see_direct");
+            g.server("second", "Second.", OK).example("numen gt_see_ok second");
+        }), "同组(哪怕写在后面)、别组、直接就是动作的组都认");
+        assertTrue(onClient("numen gt_see_ok first --help").message()
+                .endsWith("\n  See also: numen gt_see_ok second, numen gt_see_target go, numen gt_see_direct"));
+
+        IllegalStateException broken = assertThrows(IllegalStateException.class, () -> numen.registerCommands(
+                "gt_see_broken", "Points at nothing.", g -> g.server("go", "Go.", OK).example("numen gt_see_broken go")
+                        .seeAlso("numen gt_see_target come", "numen gt_nowhere go", "gt_see_target go")));
+        assertEquals("相关命令指向不存在的动作: numen gt_see_broken go -> numen gt_see_target come; "
+                + "numen gt_see_broken go -> numen gt_nowhere go; numen gt_see_broken go -> gt_see_target go",
+                broken.getMessage(), "写不存在的动作、不存在的组、漏了 numen,一次列全");
+        assertFalse(onClient("numen gt_see_broken --help").success(), "查不过的组没有挂上树");
+    }
+
+    @Test
+    void helpContentIsCheckedWhenWritten() {
+        assertThrows(IllegalArgumentException.class, () -> door().registerCommands("gt_blank_help", "x.",
+                g -> g.server("x", "x.", OK).example(" ")));
+        assertThrows(IllegalArgumentException.class, () -> door().registerCommands("gt_blank_note", "x.",
+                g -> g.server("x", "x.", OK).example("numen gt_blank_note x").note("")));
+        AtomicReference<Action> leaked = new AtomicReference<>();
+        door().registerCommands("gt_help_closed", "Closed after its block.",
+                g -> leaked.set(g.server("x", "x.", OK).example("numen gt_help_closed x")));
+        assertThrows(IllegalStateException.class, () -> leaked.get().note("Too late."), "封口之后不能再补帮助");
     }
 
     @Test

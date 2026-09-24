@@ -44,7 +44,7 @@ class DirectGroupTest {
 
     private static final String ACTION_HELP = """
             numen gt_direct <line...>
-            Echo the line back.
+              Echo the line back.
               <line...> (text, the rest of the line) — What to echo.""";
 
     @Test

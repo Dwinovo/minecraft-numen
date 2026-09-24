@@ -12,15 +12,17 @@ import java.util.Set;
  *
  * <pre>{@code
  * numen.registerCommands("ftbquests", "Your quest book: chapters, quests, submitting.", quests -> {
- *     quests.server("submit", "Hand in the items a quest asks for.", Quests::submit, QUEST);
+ *     quests.server("submit", "Hand in the items a quest asks for.", Quests::submit, QUEST)
+ *           .example("numen ftbquests submit 15CDF6A098B95FDA");
  *     quests.client("list", "List the quests you can work on now.", Quests::list)
+ *           .example("numen ftbquests list")
  *           .promote("list_quests", "…");
  * });
  * }</pre>
  *
  * <p>它不给任何通向别的组或根的把手,所以插件<b>够不着别人的节点</b>——"不能往别人的节点下嫁接"由形状保证,
  * 不靠约定。组名撞了、动作名撞了、快捷工具名撞了,都在登记的那一刻抛出。登记块返回后这一组就封口,
- * 之后再往里加或再提升都会抛。
+ * 之后再往里加、再提升、再补帮助都会抛。
  *
  * <p>一组也可以直接就是一个动作({@link #serverDirect}):参数紧跟在组名后面,没有动作名,这一组也就不再有
  * 别的动作——具名动作会和它的参数抢同一个位置。

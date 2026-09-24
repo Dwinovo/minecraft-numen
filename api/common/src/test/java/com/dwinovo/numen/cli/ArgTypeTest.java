@@ -123,14 +123,14 @@ class ArgTypeTest {
                 .build()), new Gson().toJson(tool.parameterSchema()));
         assertEquals("""
                 numen gt_types make <x> <recipe> <model> [--have_only <boolean>] [--search <string>] [--depth <integer>]
-                Make something.
+                  Make something.
                   <x> (integer) — Block X.
                   <recipe> (id, e.g. minecraft:oak_log) — Which recipe.
                   <model> (string, quote it if it has spaces) — Which model.
                   --have_only <boolean> (true or false; optional) — Only what you can make.
                   --search <string> (string, quote it if it has spaces; optional) — Narrow the list.
                   --depth <integer> (integer; optional) — How far down.
-                Shortcut tool: gt_types_make.""", onClient("numen gt_types make --help").message());
+                  Shortcut tool: gt_types_make.""", onClient("numen gt_types make --help").message());
     }
 
     private static CommandArgs read(String json) {

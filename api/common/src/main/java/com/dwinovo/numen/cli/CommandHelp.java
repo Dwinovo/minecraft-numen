@@ -8,7 +8,8 @@ import java.util.List;
  * 帮助的样子。它是模型读的界面,措辞有单元测试的快照守着。每一层的文字都取自登记时写的说明与参数表——
  * 语法只有这一个来源,技能里不抄。
  *
- * <p>三层:根(列出各组,一组一句)、组(列出动作,一行用法一句说明)、动作(用法、说明、逐个参数)。
+ * <p>三层:根(列出各组,一组一句)、组(列出动作,一行用法一句说明)、动作(用法、说明、逐个参数、例子、注意、
+ * 相关命令)。帮助每次都进上下文,所以只有最后一层是全量:例子与注意只写在动作的帮助里,组的帮助仍一行一个动作。
  * 前两层是可翻页的 {@link Listing}。带目录的动作({@link Action#catalog})的帮助后面接着那张目录,同样分页。
  * 解析出错时附上的就是出错那一层的第一页或动作帮助。
  */
@@ -39,9 +40,12 @@ final class CommandHelp {
                 path + " " + NumenCli.HELP_FLAG);
     }
 
-    /** 动作:用法、说明、逐个参数;提升过的注明快捷工具名。 */
+    /**
+     * 动作,给全:用法;缩进一格依次是一句说明、逐个参数(类型的完整称呼,说明接取值提示)、例子、注意、相关命令;
+     * 提升过的最后注明快捷工具名。没有注意、没有相关命令时那一块不出现。
+     */
     static String action(Action action) {
-        StringBuilder sb = new StringBuilder(action.usage()).append('\n').append(action.summary());
+        StringBuilder sb = new StringBuilder(action.usage()).append("\n  ").append(action.summary());
         for (Param<?> p : action.params()) {
             sb.append("\n  ");
             if (p.required()) {
@@ -49,12 +53,28 @@ final class CommandHelp {
             } else {
                 sb.append("--").append(p.name()).append(" <").append(p.type().kind()).append("> (").append(p.type().hint()).append("; optional)");
             }
-            sb.append(" — ").append(p.description());
+            sb.append(" — ").append(p.explained());
+        }
+        block(sb, "Examples:", action.examples());
+        block(sb, "Notes:", action.notes());
+        if (!action.seeAlso().isEmpty()) {
+            sb.append("\n  See also: ").append(String.join(", ", action.seeAlso()));
         }
         if (action.toolName() != null) {
-            sb.append("\nShortcut tool: ").append(action.toolName()).append('.');
+            sb.append("\n  Shortcut tool: ").append(action.toolName()).append('.');
         }
         return sb.toString();
+    }
+
+    /** 带标题的一块,一行一条,再缩进一格;没有条目时整块不出现。 */
+    private static void block(StringBuilder sb, String title, List<String> lines) {
+        if (lines.isEmpty()) {
+            return;
+        }
+        sb.append("\n  ").append(title);
+        for (String line : lines) {
+            sb.append("\n    ").append(line);
+        }
     }
 
     /** 带目录的动作:动作的帮助,接着目录的标题与这具身体此刻的条目。 */

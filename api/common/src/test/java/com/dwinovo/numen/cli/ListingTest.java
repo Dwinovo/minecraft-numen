@@ -53,7 +53,7 @@ class ListingTest {
     void thePageFlagReadsTheSameAsInHelp() {
         assertEquals("""
                 numen gt_listing rows [--page <integer>]
-                List the rows.
+                  List the rows.
                   --page <integer> (integer 1-99; optional) — Which page of the list.""",
                 onClient("numen gt_listing rows --help").message());
     }

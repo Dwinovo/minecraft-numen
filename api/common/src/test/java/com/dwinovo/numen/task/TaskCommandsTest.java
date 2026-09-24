@@ -85,11 +85,11 @@ class TaskCommandsTest {
                 numen task <action> --help explains one action.""", help("numen task --help"));
         assertEquals("""
                 numen task timer <after_s> <reason...>
-                Set a one-shot reminder that fires after a delay in world time.
+                  Set a one-shot reminder that fires after a delay in world time.
                   <after_s> (integer 1-1200) — Delay in world-time seconds (1-1200; out-of-range values are clamped).
                   <reason...> (text, the rest of the line) — What to look at or decide when it fires. The owner \
                 sees this too, so name the thing: "collect the iron from the furnace" beats "check back".
-                Shortcut tool: set_timer.""", help("numen task timer --help"));
+                  Shortcut tool: set_timer.""", help("numen task timer --help"));
     }
 
     private static void assertListing(String name, String description, Map<String, Object> schema) {

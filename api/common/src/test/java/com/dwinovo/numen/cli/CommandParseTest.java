@@ -38,7 +38,7 @@ class CommandParseTest {
 
     private static final String TAKE_HELP = """
             numen gt_parse take <count> <item> [--from <word>] [--limit <integer>]
-            Take some items.
+              Take some items.
               <count> (integer 1-64) — How many.
               <item> (word) — Which item.
               --from <word> (word; optional) — Where to take them from.

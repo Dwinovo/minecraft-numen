@@ -7,6 +7,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -23,6 +24,21 @@ import java.util.regex.Pattern;
  *
  * <p>一组也可以直接就是一个动作({@link CommandGroup#serverDirect}):它没有动作名,参数紧跟在组名后面
  * ({@code numen mc <command...>})。
+ *
+ * <h2>帮助正文也登记在这里</h2>
+ * 动作的帮助除了用法、说明、参数,还有三块,都接在登记处返回的这个动作上写:
+ * <pre>{@code
+ * quests.server("submit", "Hand in a quest's items from your own inventory.", QuestSubmit::submit, QUEST_ID)
+ *       .example("numen ftbquests submit 15CDF6A098B95FDA")
+ *       .note("Takes the items from YOUR inventory; FTB decides what counts.")
+ *       .seeAlso("numen ftbquests list", "numen ftbquests show");
+ * }</pre>
+ * <ul>
+ *   <li>{@link #example}:一整行真实可用的命令,可以多个。模型照着例子写,比读语法可靠。</li>
+ *   <li>{@link #note}:可选,多条。写会不会问主人、是不是长活、会动她的什么、不会做什么。</li>
+ *   <li>{@link #seeAlso}:可选。做完这件事下一步通常用的动作,同组别组都行,写整条路径。引用在命令树第一次被读时
+ *       查(那时各模组的组都已登记完),理由见 {@link NumenCli}。</li>
+ * </ul>
  */
 public final class Action implements Command<CommandSource> {
 
@@ -57,6 +73,9 @@ public final class Action implements Command<CommandSource> {
     private final List<Param<?>> params;
     private final OnServer onServer;
     private final OnClient onClient;
+    private final List<String> examples = new ArrayList<>();
+    private final List<String> notes = new ArrayList<>();
+    private final List<String> seeAlso = new ArrayList<>();
     private String toolName;
     private String toolDescription;
     private String catalogTitle;
@@ -87,6 +106,34 @@ public final class Action implements Command<CommandSource> {
         this.toolName = toolName;
         this.toolDescription = description;
         return this;
+    }
+
+    /** 一个例子:一整行真实可用的命令,帮助里原样列出。可以调多次,按调用顺序列。 */
+    public Action example(String line) {
+        examples.add(requireText(line, "例子"));
+        return this;
+    }
+
+    /** 一条注意:会不会问主人、是不是长活、会动她的什么、不会做什么。可以调多次,按调用顺序列。 */
+    public Action note(String text) {
+        notes.add(requireText(text, "注意"));
+        return this;
+    }
+
+    /** 相关命令:下一步通常用的动作,写整条路径,如 {@code numen ftbquests list}。可以调多次。 */
+    public Action seeAlso(String... paths) {
+        for (String path : paths) {
+            seeAlso.add(requireText(path, "相关命令"));
+        }
+        return this;
+    }
+
+    private String requireText(String text, String what) {
+        group.requireOpen();
+        if (text == null || text.isBlank()) {
+            throw new IllegalArgumentException(path() + " 的" + what + "是空的");
+        }
+        return text;
     }
 
     /**
@@ -190,6 +237,19 @@ public final class Action implements Command<CommandSource> {
 
     String summary() {
         return summary;
+    }
+
+    List<String> examples() {
+        return examples;
+    }
+
+    List<String> notes() {
+        return notes;
+    }
+
+    /** 相关命令的整条路径,按登记顺序。 */
+    List<String> seeAlso() {
+        return seeAlso;
     }
 
     /** {@code numen <组> <动作>};组直接就是这个动作时是 {@code numen <组>}。 */

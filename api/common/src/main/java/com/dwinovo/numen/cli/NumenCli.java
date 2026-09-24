@@ -12,6 +12,8 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.tree.CommandNode;
 import com.mojang.brigadier.tree.LiteralCommandNode;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -46,6 +48,8 @@ public final class NumenCli {
             LiteralArgumentBuilder.<CommandSource>literal(ROOT)
                     .then(helpNode(HELP, NumenCli::rootListing))
                     .then(helpNode(HELP_FLAG, NumenCli::rootListing)));
+    /** 树被读过了没有;读过之后登记的组在登记那一刻就查相关命令(见 {@link #inUse()})。 */
+    private static boolean inUse;
 
     private NumenCli() {}
 
@@ -53,7 +57,8 @@ public final class NumenCli {
      * 登记一个命令组。{@code NumenApi.registerCommands} 背后就是它;插件经那扇门来,不直接调。
      *
      * <p>组名谁先登记归谁,撞了当场抛出——插件只在自己的组里加动作,碰不到别人的(见 {@link CommandGroup})。
-     * 登记块跑完后:组挂上树,提升过的动作按登记顺序进工具表(工具名撞了由 {@link ToolRegistry} 当场抛出)。
+     * 登记块跑完后:查过每个动作的例子(见 {@link CommandGroup#close}),组挂上树,提升过的动作按登记顺序进工具表
+     * (工具名撞了由 {@link ToolRegistry} 当场抛出)。树已经被读过时,这一组的相关命令也在这时查(见 {@link #inUse()})。
      */
     @Internal
     public static synchronized void register(String name, String summary, Consumer<CommandGroup> actions) {
@@ -73,6 +78,11 @@ public final class NumenCli {
         if (group.actions().isEmpty()) {
             throw new IllegalArgumentException("命令组 " + name + " 一个动作都没有");
         }
+        if (inUse) {
+            Map<String, CommandGroup> known = new TreeMap<>(GROUPS);
+            known.put(name, group);
+            checkSeeAlso(List.of(group), known);
+        }
         GROUPS.put(name, group);
         ROOT_NODE.addChild(group.node().build());
         for (Action a : group.actions()) {
@@ -87,6 +97,7 @@ public final class NumenCli {
      * 一个组都没有时是空串。
      */
     public static String index() {
+        inUse();
         if (GROUPS.isEmpty()) {
             return "";
         }
@@ -101,6 +112,7 @@ public final class NumenCli {
 
     /** 跑一行命令:解析、执行,或回一条附着用法的失败。结果经 {@code source} 恰好回一次。 */
     static void run(String line, CommandSource source) {
+        inUse();
         ParseResults<CommandSource> parse = DISPATCHER.parse(line.strip(), source);
         try {
             if (parse.getReader().canRead() && parse.getExceptions().isEmpty()) {
@@ -113,6 +125,51 @@ public final class NumenCli {
         } catch (CommandSyntaxException e) {
             source.reply(TaskResult.fail(e.getMessage() + "\n" + helpAt(parse)).toJson());
         }
+    }
+
+    /**
+     * 登记期到命令树第一次被读(执行一行、系统提示要索引)为止;第一次读之前把各组的相关命令查一遍。
+     *
+     * <p>为什么是这个时机:相关命令可以指向别的组,而组谁先登记由加载器排模组的顺序决定——在引用方登记那一刻查,
+     * 被指的组可能还没来,结论就随加载顺序变。各模组都在加载期登记,树却要等世界起来、模型开口才第一次被读,
+     * 那时加载期的组都已到齐,一次查全不会漏。查不过就抛出,而且不记作已查:下一次读还会再查、再抛,不会带着
+     * 断掉的引用接着用。在这之后才登记的组(测试夹具这类)在它自己登记那一刻查,它能指向的组那时都已经在了。
+     */
+    private static synchronized void inUse() {
+        if (!inUse) {
+            checkSeeAlso(GROUPS.values(), GROUPS);
+            inUse = true;
+        }
+    }
+
+    /** {@code groups} 里每条相关命令都要在 {@code known} 里找到它指的动作;找不到的一次列全,抛出。 */
+    static void checkSeeAlso(Collection<CommandGroup> groups, Map<String, CommandGroup> known) {
+        List<String> broken = new ArrayList<>();
+        for (CommandGroup group : groups) {
+            for (Action action : group.actions()) {
+                for (String path : action.seeAlso()) {
+                    if (resolve(path, known) == null) {
+                        broken.add(action.path() + " -> " + path);
+                    }
+                }
+            }
+        }
+        if (!broken.isEmpty()) {
+            throw new IllegalStateException("相关命令指向不存在的动作: " + String.join("; ", broken));
+        }
+    }
+
+    /** 一条整路径指的动作:{@code numen <组> <动作>},或直接就是一个动作的组 {@code numen <组>};没有是 null。 */
+    private static Action resolve(String path, Map<String, CommandGroup> groups) {
+        String[] words = path.split(" ");
+        if (words.length < 2 || words.length > 3 || !ROOT.equals(words[0])) {
+            return null;
+        }
+        CommandGroup group = groups.get(words[1]);
+        if (group == null) {
+            return null;
+        }
+        return words.length == 2 ? group.direct() : group.action(words[2]);
     }
 
     /**
