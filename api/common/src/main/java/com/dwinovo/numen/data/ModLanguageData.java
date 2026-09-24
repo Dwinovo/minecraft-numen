@@ -516,6 +516,9 @@ public final class ModLanguageData {
         adder.add("numen.chat.reasoning_now", "Thinking");
         adder.add("numen.menu.copy", "Copy text");
         adder.add("numen.menu.reply", "Reply");
+        adder.add("numen.menu.pin", "Pin");
+        adder.add("numen.menu.unpin", "Unpin");
+        adder.add("numen.menu.read", "Mark as read");
         adder.add("numen.chat.reply_to", "Reply to %s");
         adder.add("numen.profile.persona", "Persona");
         adder.add("numen.profile.persona_default", "Default persona");
@@ -913,6 +916,9 @@ public final class ModLanguageData {
         adder.add("numen.chat.reasoning_now", "思考中");
         adder.add("numen.menu.copy", "复制文字");
         adder.add("numen.menu.reply", "引用回复");
+        adder.add("numen.menu.pin", "置顶");
+        adder.add("numen.menu.unpin", "取消置顶");
+        adder.add("numen.menu.read", "标为已读");
         adder.add("numen.chat.reply_to", "回复 %s");
         adder.add("numen.profile.persona", "人设");
         adder.add("numen.profile.persona_default", "默认人设");

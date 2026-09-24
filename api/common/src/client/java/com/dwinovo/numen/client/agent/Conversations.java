@@ -76,6 +76,8 @@ public final class Conversations extends JsonLibrary<Conversation> {
     private final Map<String, Long> seen = new java.util.HashMap<>();
     /** 每个会话里打了一半没发的话(Telegram 的草稿):切走时留下,切回来拿回;左栏标"草稿"。随会话一起落盘。 */
     private final Map<String, String> drafts = new java.util.HashMap<>();
+    /** 置顶的会话(Telegram 左栏置顶),按置顶的先后排在最上面。随会话一起落盘。 */
+    private final List<String> pinned = new ArrayList<>();
 
     @Override
     protected void readExtra(JsonObject root) {
@@ -87,6 +89,12 @@ public final class Conversations extends JsonLibrary<Conversation> {
                 if (e.getValue().isJsonPrimitive()) {
                     seen.put(e.getKey(), e.getValue().getAsLong());
                 }
+            }
+        }
+        pinned.clear();
+        if (root.has("pinned") && root.get("pinned").isJsonArray()) {
+            for (var e : root.getAsJsonArray("pinned")) {
+                if (e.isJsonPrimitive()) pinned.add(e.getAsString());
             }
         }
         drafts.clear();
@@ -111,6 +119,11 @@ public final class Conversations extends JsonLibrary<Conversation> {
             }
             root.add("seen", o);
         }
+        if (!pinned.isEmpty()) {
+            com.google.gson.JsonArray a = new com.google.gson.JsonArray();
+            pinned.forEach(a::add);
+            root.add("pinned", a);
+        }
         if (!drafts.isEmpty()) {
             JsonObject o = new JsonObject();
             for (var e : drafts.entrySet()) {
@@ -125,6 +138,7 @@ public final class Conversations extends JsonLibrary<Conversation> {
         selectedId = null;
         seen.clear();
         drafts.clear();
+        pinned.clear();
     }
 
     // ---- 看到哪了 ----
@@ -139,6 +153,18 @@ public final class Conversations extends JsonLibrary<Conversation> {
             seen.put(conv.id(), ts);
             save();
         }
+    }
+
+    // ---- 置顶 ----
+
+    public boolean pinned(Conversation conv) {
+        return pinned.contains(conv.id());
+    }
+
+    /** 置顶或取消置顶;新置顶的排在已置顶的最下面。落盘。 */
+    public void togglePin(Conversation conv) {
+        if (!pinned.remove(conv.id())) pinned.add(conv.id());
+        save();
     }
 
     // ---- 草稿 ----
@@ -220,7 +246,14 @@ public final class Conversations extends JsonLibrary<Conversation> {
                 out.putIfAbsent(c.id(), c);
             }
         }
-        return new ArrayList<>(out.values());
+        // 置顶的按置顶先后排最上面,其余照原来的顺序
+        List<Conversation> sorted = new ArrayList<>();
+        for (String id : pinned) {
+            Conversation c = out.remove(id);
+            if (c != null) sorted.add(c);
+        }
+        sorted.addAll(out.values());
+        return sorted;
     }
 
     /**
@@ -288,6 +321,7 @@ public final class Conversations extends JsonLibrary<Conversation> {
      */
     public void dissolve(Conversation conv) {
         drafts.remove(conv.id());
+        pinned.remove(conv.id());
         remove(conv.id());
         for (UUID m : conv.members()) {
             AgentLoopRegistry.get(m)

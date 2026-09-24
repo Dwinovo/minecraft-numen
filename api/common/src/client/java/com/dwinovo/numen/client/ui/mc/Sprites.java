@@ -60,6 +60,9 @@ public final class Sprites {
     public static final ResourceLocation HEART = icon("icon_heart");
     /** 消息右键菜单里的引用回复。 */
     public static final ResourceLocation REPLY = icon("icon_reply");
+    /** 左栏行的右键菜单:置顶(置顶的行右端也挂这枚)、标为已读。 */
+    public static final ResourceLocation PIN = icon("icon_pin");
+    public static final ResourceLocation READ = icon("icon_read");
     /** 左栏顶上的 ☰(设置)与设置页抬头的 ←(回到对话)。 */
     public static final ResourceLocation MENU = icon("icon_menu");
     public static final ResourceLocation BACK = icon("icon_back");

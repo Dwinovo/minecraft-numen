@@ -1180,6 +1180,24 @@ public final class NumenScreen extends Screen {
         contextMenu.open(overlayUi, items, (int) mx, (int) my, mx + 120 < this.width);
     }
 
+    private void openRailMenu(Conversation c, double mx, double my) {
+        Conversations convos = Conversations.instance();
+        UUID her = convos.soloOf(c);
+        java.util.List<PopupMenu.Item> items = new java.util.ArrayList<>();
+        items.add(new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.PIN,
+                I18n.get(convos.pinned(c) ? "numen.menu.unpin" : "numen.menu.pin"), false, () -> convos.togglePin(c)));
+        var last = com.dwinovo.numen.client.screen.chat.ConversationPreview.last(c);
+        if (last != null && com.dwinovo.numen.client.screen.chat.ConversationPreview.unread(c, convos.lastSeen(c)) > 0) {
+            items.add(new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.READ, I18n.get("numen.menu.read"),
+                    false, () -> convos.markSeen(c, last.ts())));
+        }
+        items.add(PopupMenu.SEPARATOR);
+        items.add(new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.DELETE,
+                I18n.get(her != null ? ModLanguageData.Keys.EDIT_DISMISS : ModLanguageData.Keys.CONVO_DISSOLVE),
+                true, () -> { if (her != null) openDismissConfirm(her); else openDissolveConfirm(c); }));
+        openContextMenu(items, mx, my);
+    }
+
     private void openMessageMenu(com.dwinovo.numen.client.screen.chat.ChatView.Picked p, double mx, double my) {
         String who = p.who() == null ? Minecraft.getInstance().getUser().getName() : nameFor(p.who());
         java.util.List<PopupMenu.Item> items = new java.util.ArrayList<>();
@@ -1399,6 +1417,13 @@ public final class NumenScreen extends Screen {
             // (卡上字段/按钮),侧栏/页签/背景列表全部屏蔽。
             if (button == 0 && settings.mouseClicked(mouseX, mouseY)) return true;
             return super.mouseClicked(mouseX, mouseY, button);
+        }
+        if (button == 1 && !modalOpen()) {   // 右键左栏一行:置顶、标为已读、遣散/解散
+            int row = railIndexAt((int) mouseX, (int) mouseY);
+            if (row >= 0 && row < rail().size()) {
+                openRailMenu(rail().get(row), mouseX, mouseY);
+                return true;
+            }
         }
         if (button == 1 && !modalOpen() && tab == Tab.CHAT && conv != null) {   // 右键一条话:复制、引用回复
             var picked = chatView.bubbleAt(mouseX, mouseY);
@@ -1957,6 +1982,12 @@ public final class NumenScreen extends Screen {
                 int bx = textRight - com.dwinovo.numen.client.screen.chat.UnreadBadge.width(font, n);
                 com.dwinovo.numen.client.screen.chat.UnreadBadge.draw(g, font, n, bx, ay + 16, CTA, ON_CTA);
                 previewRight = bx - 4;
+            } else if (Conversations.instance().pinned(c)) {
+                // 置顶的行没有未读时右端挂一枚置顶图标(Telegram 同一个位置)
+                int px = textRight - ICON_N;
+                com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.PIN,
+                        px, ay + 16, ICON_N, dimColor);
+                previewRight = px - 4;
             }
             // 第二行:她此刻在干什么 > 没发出去的草稿 > 最后一句。换的时候和抬头第二行一样上下滑,只露一行
             String act = railActivity(c, now);
