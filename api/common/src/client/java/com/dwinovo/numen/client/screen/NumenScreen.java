@@ -1146,12 +1146,11 @@ public final class NumenScreen extends Screen {
         if (t != null) tip(java.util.List.of(Component.literal(t)), mouseX, mouseY);
     }
 
-    /** 群资料页上的点击:点人推她的资料页,× 移出,＋ 邀请。 */
+    /** 群资料页上的点击:点人推她的资料页,＋ 邀请。 */
     private boolean membersClicked(double mx, double my) {
         if (tab != Tab.MEMBERS || conv == null || membersPage == null) return false;
         switch (membersPage.click(mx, my)) {
             case MembersPage.Hit.Open o -> pushProfile(o.who());
-            case MembersPage.Hit.Drop d -> conv = Conversations.instance().drop(conv, d.who());
             case MembersPage.Hit.Invite ignored -> openInvite();
             case null -> { return false; }
         }
@@ -1178,6 +1177,20 @@ public final class NumenScreen extends Screen {
     private void openContextMenu(java.util.List<PopupMenu.Item> items, double mx, double my) {
         if (contextMenu == null) contextMenu = new PopupMenu(font);
         contextMenu.open(overlayUi, items, (int) mx, (int) my, mx + 120 < this.width);
+    }
+
+    private void openMemberMenu(UUID who, double mx, double my) {
+        java.util.List<PopupMenu.Item> items = new java.util.ArrayList<>();
+        items.add(new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.USER,
+                I18n.get(ModLanguageData.Keys.MENU_PROFILE), false, () -> pushProfile(who)));
+        if (membersPage.droppable()) {
+            Conversation c = conv;
+            items.add(PopupMenu.SEPARATOR);
+            items.add(new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.USER_X,
+                    I18n.get(ModLanguageData.Keys.CONVO_DROP, nameFor(who)), true,
+                    () -> conv = Conversations.instance().drop(c, who)));
+        }
+        openContextMenu(items, mx, my);
     }
 
     private void openRailMenu(Conversation c, double mx, double my) {
@@ -1417,6 +1430,13 @@ public final class NumenScreen extends Screen {
             // (卡上字段/按钮),侧栏/页签/背景列表全部屏蔽。
             if (button == 0 && settings.mouseClicked(mouseX, mouseY)) return true;
             return super.mouseClicked(mouseX, mouseY, button);
+        }
+        if (button == 1 && !modalOpen() && tab == Tab.MEMBERS && membersPage != null && conv != null) {
+            UUID who = membersPage.rowAt(mouseX, mouseY);   // 右键群成员:查看资料、移出
+            if (who != null) {
+                openMemberMenu(who, mouseX, mouseY);
+                return true;
+            }
         }
         if (button == 1 && !modalOpen()) {   // 右键左栏一行:置顶、标为已读、遣散/解散
             int row = railIndexAt((int) mouseX, (int) mouseY);

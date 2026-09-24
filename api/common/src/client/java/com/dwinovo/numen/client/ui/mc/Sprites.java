@@ -63,6 +63,8 @@ public final class Sprites {
     /** 左栏行的右键菜单:置顶(置顶的行右端也挂这枚)、标为已读。 */
     public static final ResourceLocation PIN = icon("icon_pin");
     public static final ResourceLocation READ = icon("icon_read");
+    /** 群成员右键菜单里的移出。 */
+    public static final ResourceLocation USER_X = icon("icon_user_x");
     /** 左栏顶上的 ☰(设置)与设置页抬头的 ←(回到对话)。 */
     public static final ResourceLocation MENU = icon("icon_menu");
     public static final ResourceLocation BACK = icon("icon_back");

@@ -17,15 +17,13 @@ import java.util.function.Function;
 
 /**
  * 群资料页(Telegram 点群名打开的那页):标题行"N 位成员",右端 ＋ 邀请;下面成员一行一个——
- * 脸、名字、此刻在干什么。点一行开她的资料页;悬停时行尾出 ×,点它把她移出。只剩一个时没有 ×,
- * 那一步是解散,不在这里。
+ * 脸、名字、此刻在干什么。点一行开她的资料页;右键一行是菜单(查看资料、移出),由宿主开。
  */
 final class MembersPage {
 
-    /** 点中了什么:开谁的资料、移出谁、邀请。 */
+    /** 点中了什么:开谁的资料、邀请。 */
     sealed interface Hit {
         record Open(UUID who) implements Hit {}
-        record Drop(UUID who) implements Hit {}
         record Invite() implements Hit {}
     }
 
@@ -59,7 +57,6 @@ final class MembersPage {
             Sprites.draw(g, Sprites.USER_PLUS, plusX(), y + (HEAD_H - Sprites.SIZE) / 2, Sprites.SIZE,
                     hot ? t.cta() : t.textDim());
         }
-        boolean droppable = rows.size() > 1;
         for (int i = 0; i < rows.size(); i++) {
             UUID m = rows.get(i);
             int ry = rowY(i);
@@ -67,38 +64,35 @@ final class MembersPage {
             if (hovered) g.fill(x, ry, x + w, ry + ROW_H, t.aiFill());
             CompanionFace.draw(g, m, KnownSkins.of(m), x + FACE_X, ry + (ROW_H - AV) / 2, AV);
             int tx = x + FACE_X + AV + 8;
-            int room = (droppable ? dropX() - 4 : x + w - 4) - tx;
+            int room = x + w - 4 - tx;
             Nb.text(g, font, Nb.clip(font, NumenRoster.instance().name(m), room), tx, ry + 5, t.text());
             Nb.text(g, font, Nb.clip(font, status.apply(m), room), tx, ry + 16, t.faint());
-            if (hovered && droppable) {
-                boolean overX = overDrop(i, mouseX, mouseY);
-                Nb.text(g, font, "×", dropX(), ry + (ROW_H - font.lineHeight) / 2 + 1,
-                        overX ? t.fail() : t.textDim());
-            }
         }
     }
 
-    /** 指针下该给的提示:× 是"移出谁",＋ 是"邀请";别处没有。 */
+    /** 指针下该给的提示:＋ 是"邀请";别处没有。 */
     String tipAt(double mx, double my) {
-        if (canInvite && overInvite(mx, my)) return I18n.get(ModLanguageData.Keys.CONVO_INVITE);
-        if (rows.size() > 1) {
-            for (int i = 0; i < rows.size(); i++) {
-                if (overDrop(i, mx, my)) {
-                    return I18n.get(ModLanguageData.Keys.CONVO_DROP, NumenRoster.instance().name(rows.get(i)));
-                }
-            }
-        }
-        return null;
+        return canInvite && overInvite(mx, my) ? I18n.get(ModLanguageData.Keys.CONVO_INVITE) : null;
     }
 
     Hit click(double mx, double my) {
         if (canInvite && overInvite(mx, my)) return new Hit.Invite();
+        UUID who = rowAt(mx, my);
+        return who == null ? null : new Hit.Open(who);
+    }
+
+    /** 指针下那一行是谁;不在行上是 null。 */
+    UUID rowAt(double mx, double my) {
         for (int i = 0; i < rows.size(); i++) {
             int ry = rowY(i);
-            if (mx < x || mx >= x + w || my < ry || my >= ry + ROW_H) continue;
-            return rows.size() > 1 && overDrop(i, mx, my) ? new Hit.Drop(rows.get(i)) : new Hit.Open(rows.get(i));
+            if (mx >= x && mx < x + w && my >= ry && my < ry + ROW_H) return rows.get(i);
         }
         return null;
+    }
+
+    /** 还剩不止一个:才能移出——只剩一个时那一步是解散。 */
+    boolean droppable() {
+        return rows.size() > 1;
     }
 
     private int rowY(int i) {
@@ -109,17 +103,8 @@ final class MembersPage {
         return x + w - 4 - Sprites.SIZE;
     }
 
-    private int dropX() {
-        return x + w - 4 - font.width("×");
-    }
-
     private boolean overInvite(double mx, double my) {
         int px = plusX(), py = y + (HEAD_H - Sprites.SIZE) / 2;
         return mx >= px - 3 && mx < px + Sprites.SIZE + 3 && my >= py - 3 && my < py + Sprites.SIZE + 3;
-    }
-
-    private boolean overDrop(int i, double mx, double my) {
-        int ry = rowY(i);
-        return mx >= dropX() - 4 && mx < x + w && my >= ry && my < ry + ROW_H;
     }
 }
