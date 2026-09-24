@@ -5,6 +5,7 @@ import com.dwinovo.numen.core.Constants;
 import java.nio.file.Path;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * 内嵌联动的闸门:<b>目标模组在场才装,不在就当不存在</b>。
@@ -44,14 +45,31 @@ public final class Gate {
     }
 
     /**
+     * 带技能的联动。
+     *
      * @param modId   目标模组;不在就整块跳过
      * @param plugin  联动的模块名({@code plugins/} 下的目录名),用来定位它自带的技能
      * @param body    延迟到判据为真之后才求值——理由见类注释
      */
     public void open(String modId, String plugin, Function<Path, Runnable> body) {
         if (!modLoaded.test(modId)) return;
+        install(modId, () -> body.apply(skillsRoot(plugin)).run());
+    }
+
+    /**
+     * 不带技能的联动(它补的是已有的能力,用法由那个能力自己的描述讲清,比如穿戴来源):不去找技能目录,
+     * 也就不会为"没有技能"报警。
+     *
+     * @param body 延迟到判据为真之后才求值——理由见类注释
+     */
+    public void open(String modId, Supplier<Runnable> body) {
+        if (!modLoaded.test(modId)) return;
+        install(modId, () -> body.get().run());
+    }
+
+    private void install(String modId, Runnable run) {
         try {
-            body.apply(skillsRoot(plugin)).run();
+            run.run();
             Constants.LOG.info("[numen] 联动已接上:{}", modId);
         } catch (Throwable t) {
             // 一个联动接不上不能带倒整个模组,也不能带倒别的联动
@@ -60,8 +78,8 @@ public final class Gate {
     }
 
     /**
-     * 一个联动自带的技能根:{@code plugins/<模块名>/skills/};jar 里没有就 null,联动照装、
-     * 只是不带技能——留一条 warn,不能悄悄少了。
+     * 一个带技能的联动自带的技能根:{@code plugins/<模块名>/skills/};jar 里没有就 null,联动照装、
+     * 只是不带技能——留一条 warn,说好要带的不能悄悄少了。
      *
      * <p>目录就叫 {@code skills},但必须挂在 {@code plugins/<模块名>/} 底下——jar 是平的,
      * 源码树里 {@code plugins/ysm/} 那层前缀打包时就没了。直接放 {@code skills/} 的话会和
