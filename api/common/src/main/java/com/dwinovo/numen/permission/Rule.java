@@ -26,6 +26,10 @@ import java.util.stream.Collectors;
  * 同形。动词是 {@link Action.Kind#verb} 或 {@code *};项是信号名、方块/实体种类 id
  * ({@code minecraft:chest})、标签({@code #minecraft:beds})、某一只实体({@code entity:<uuid>})
  * 或 {@code *};{@code !} 取反。全仓只在这一个类里解析。
+ *
+ * <p>{@code command} 的项不一样:除了 {@code *},每一项都是指令的根名({@code command(msg)}、
+ * {@code command(!tp)}),认的是 {@link Action.CommandLine#names}。信号说的是方块与实体,一条指令没有它们,
+ * 所以指令规则里不写信号。
  */
 public final class Rule {
 
@@ -66,7 +70,7 @@ public final class Rule {
         }
         List<Term> terms = new ArrayList<>();
         for (String piece : inner.split("&")) {
-            terms.add(Term.parse(piece.trim(), raw));
+            terms.add(Term.parse(piece.trim(), kind, raw));
         }
         return new Rule(text, kind, terms);
     }
@@ -140,7 +144,8 @@ public final class Rule {
      *   <li>同一个动词;</li>
      *   <li>对象:实体认那一只({@code attack(named)} 某只狼 → {@code attack(entity:<uuid>)});方块与物品认种类
      *       id,并留着问出它的那一行的条件({@code break(placed)} 挖圆石 →
-     *       {@code break(placed & minecraft:cobblestone)});</li>
+     *       {@code break(placed & minecraft:cobblestone)});指令认她打的那个根名(没有规则说到的 {@code setblock …}
+     *       → {@code command(setblock)});</li>
      *   <li>撤不回的信号({@link Signals#irreversible})这一次不成立、不读活世界时却按成立算的,取反钉上
      *       ({@code break(block_entity)} 空箱子 → {@code break(block_entity & minecraft:chest & !contents)}):
      *       卡上这一条没标撤不回,记下的规则就盖不到撤不回的情形。</li>
@@ -167,9 +172,9 @@ public final class Rule {
                 }
             }
         }
-        ResourceLocation id = entity ? null : Term.subjectId(action);
-        if (id != null && !terms.contains(id.toString())) {
-            terms.add(id.toString());
+        String subject = entity ? null : Term.subject(action);
+        if (subject != null && !terms.contains(subject)) {
+            terms.add(subject);
         }
         Facts blind = new Facts(facts.view(), facts.placed(), null, facts.actor());
         for (Signals s : Signals.values()) {
@@ -198,15 +203,17 @@ public final class Rule {
     // ==================== 项 ====================
 
     private static final class Term {
-        private enum Type { ANY, SIGNAL, TAG, ID, ENTITY }
+        private enum Type { ANY, SIGNAL, TAG, ID, ENTITY, COMMAND }
 
         final Type type;
         final boolean negated;
         final Signals signal;
         final ResourceLocation id;
         final UUID uuid;
-        /** 这一项的原文({@code !placed}、{@code minecraft:chest})。 */
+        /** 这一项的原文({@code !placed}、{@code minecraft:chest});指令项的原文就是根名。 */
         final String text;
+        /** 不带 {@code !} 的那一截。 */
+        final String body;
 
         private Term(Type type, boolean negated, Signals signal, ResourceLocation id, UUID uuid, String body) {
             this.type = type;
@@ -214,10 +221,12 @@ public final class Rule {
             this.signal = signal;
             this.id = id;
             this.uuid = uuid;
+            this.body = body;
             this.text = (negated ? "!" : "") + body;
         }
 
-        static Term parse(String raw, String rule) {
+        /** @param kind 这条规则的动词;{@code *} 为 null */
+        static Term parse(String raw, Action.Kind kind, String rule) {
             boolean negated = raw.startsWith("!");
             String body = negated ? raw.substring(1).trim() : raw;
             if (body.isEmpty()) {
@@ -225,6 +234,13 @@ public final class Rule {
             }
             if (body.equals("*")) {
                 return new Term(Type.ANY, negated, null, null, null, body);
+            }
+            if (kind == Action.Kind.COMMAND) {
+                if (body.startsWith("/") || body.chars().anyMatch(Character::isWhitespace)) {
+                    throw new IllegalArgumentException("bad command name '" + body + "' in rule '" + rule
+                            + "'; write the command's root name without the slash, e.g. command(setblock)");
+                }
+                return new Term(Type.COMMAND, negated, null, null, null, body);
             }
             if (body.startsWith("#")) {
                 ResourceLocation id = ResourceLocation.tryParse(body.substring(1));
@@ -263,6 +279,7 @@ public final class Rule {
                 case TAG -> tagHit(action);
                 case ID -> idHit(action);
                 case ENTITY -> action.entity() != null && uuid.equals(action.entity().getUUID());
+                case COMMAND -> action.command() != null && action.command().names().contains(body);
             };
             return negated != hit;
         }
@@ -274,12 +291,17 @@ public final class Rule {
                 case TAG -> "is #" + id;
                 case ID -> "is " + id;
                 case ENTITY -> "is entity " + uuid;
+                case COMMAND -> "runs /" + body;
             };
         }
 
         /** 给主人看的这一项;只对正项、非 {@code *} 调。 */
         Component shown(Action action, Facts facts) {
-            return type == Type.SIGNAL ? signal.shown(action, facts) : Component.literal(text);
+            return switch (type) {
+                case SIGNAL -> signal.shown(action, facts);
+                case COMMAND -> Component.literal("/" + body);
+                default -> Component.literal(text);
+            };
         }
 
         /** 挖/右键看格子上的方块,放看要放的方块,实体动作看实体种类,拿/丢看物品。 */
@@ -296,6 +318,15 @@ public final class Rule {
 
         private boolean idHit(Action a) {
             return id.equals(subjectId(a));
+        }
+
+        /** "允许并记住"钉上的对象:指令是她打的那个根名,其余是 {@link #subjectId}。没有对象为 null。 */
+        static String subject(Action a) {
+            if (a.command() != null) {
+                return a.command().root();
+            }
+            ResourceLocation id = subjectId(a);
+            return id == null ? null : id.toString();
         }
 
         /** 种类项认的那个 id:挖/右键/拿看格子上的方块,放看要放的方块,实体动作看实体种类,其余看物品。 */

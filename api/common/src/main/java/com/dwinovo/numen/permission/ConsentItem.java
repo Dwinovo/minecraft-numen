@@ -28,9 +28,11 @@ import java.util.Map;
  * @param pos          方块动作的格子;实体动作与丢弃为 null——实体认的是那一只({@code entityId}),不是它脚下的格:
  *                     它走一步清单就不该变,否则同一件事会被当成新的征询重发
  * @param entityId     实体动作的实体 id;其余为 {@link #NO_ENTITY}
- * @param subject      方块、实体种类或物品的 id 路径({@code oak_log}、{@code wolf}、{@code diamond})
- * @param icon         给主人看的图标:方块的物品形态、物品本身;实体与没有物品形态的方块为 null
- * @param name         给主人看的名字(没有图标时显示):方块、物品的名字,实体的名字(起了名的就是那个名字)
+ * @param subject      方块、实体种类或物品的 id 路径({@code oak_log}、{@code wolf}、{@code diamond});指令是带 {@code /}
+ *                     的整行({@code /setblock 1 64 2 stone})
+ * @param icon         给主人看的图标:方块的物品形态、物品本身;实体、指令与没有物品形态的方块为 null
+ * @param name         给主人看的名字(没有图标时显示):方块、物品的名字,实体的名字(起了名的就是那个名字),
+ *                     指令的整行
  * @param rule         问的是哪一行规则的原文;没有任何一行覆盖时为空串
  * @param cause        为什么要问:那一行规则的自述({@code placed by a player})
  * @param shownCause   给主人看的为什么要问:命中那行规则就这个动作说的那一版({@link Rule#shown}),哪一行都没说到就说没有规则
@@ -119,7 +121,7 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
 
     /**
      * 主人对这一条的同意覆盖不覆盖这个动作:同一个动词、同一行规则问出来的,而且是同一种东西——
-     * 方块与物品认种类,实体认那一只。于是挖一堆主人放的原木只问一次,换成主人放的箱子另问;
+     * 方块与物品认种类,实体认那一只,指令认整行。于是挖一堆主人放的原木只问一次,换成主人放的箱子另问;
      * 点头打的是这只狼,别的狼另问。
      *
      * @param hit 这个动作此刻命中的那行 ask 规则;没有任何一行覆盖时为 null
@@ -167,10 +169,14 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
         return String.join("; ", texts);
     }
 
-    /** 方块与物品动作的对象:挖、右键、拿看格子上的方块,放、丢看物品。 */
+    /** 方块、物品与指令动作的对象:挖、右键、拿看格子上的方块,放、丢看物品,指令就是那一整行。 */
     private record Subject(String id, Item icon, Component name) {
 
         static Subject of(Action action) {
+            if (action.command() != null) {
+                String line = "/" + action.command().line();
+                return new Subject(line, null, Component.literal(line));
+            }
             BlockState state = action.state();
             if (state != null && action.kind() != Action.Kind.PLACE) {
                 Item form = state.getBlock().asItem();

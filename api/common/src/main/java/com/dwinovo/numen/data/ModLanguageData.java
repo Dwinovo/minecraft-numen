@@ -83,7 +83,7 @@ public final class ModLanguageData {
         public static final String CONSENT_CHOSE          = "numen.consent.chose";
         public static final String CONSENT_DENIED_SAYING  = "numen.consent.denied_saying";
         public static final String CONSENT_ANSWERED_ELSEWHERE = "numen.consent.answered_elsewhere";
-        /** 清单一堆前面那个短动词,后接 {@code break}、{@code attack}……。 */
+        /** 清单一堆前面那个短动词,后接 {@code break}、{@code attack}、{@code command}……。 */
         public static final String CONSENT_VERB_PREFIX    = "numen.consent.verb.";
         /** 征询那条的问话:一件事是"想挖 [原木]×6,可以吗?"(%s 是动词加东西),几件事是一句总问。 */
         public static final String CONSENT_ASK            = "numen.consent.ask";
@@ -699,6 +699,7 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_VERB_PREFIX + "use_entity", "use");
         adder.add(Keys.CONSENT_VERB_PREFIX + "take",       "take from");
         adder.add(Keys.CONSENT_VERB_PREFIX + "drop",       "drop");
+        adder.add(Keys.CONSENT_VERB_PREFIX + "command",    "run");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "placed",       "placed by a player");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "block_entity", "functional block");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "contents",     "has things inside");
@@ -1132,6 +1133,7 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_VERB_PREFIX + "use_entity", "用");
         adder.add(Keys.CONSENT_VERB_PREFIX + "take",       "拿");
         adder.add(Keys.CONSENT_VERB_PREFIX + "drop",       "丢");
+        adder.add(Keys.CONSENT_VERB_PREFIX + "command",    "执行");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "placed",       "玩家放的");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "block_entity", "功能方块");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "contents",     "装着东西");

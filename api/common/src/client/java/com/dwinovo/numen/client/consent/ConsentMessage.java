@@ -98,7 +98,8 @@ public final class ConsentMessage {
             ConsentRequestPayload.Line line = lines.get(0);
             int ty = y + textDy;
             Nb.text(g, font, askBefore(), x, ty, main(th, line));
-            int x1 = drawThing(g, font, th, line, x + font.width(askBefore()), ty);
+            int x1 = drawThing(g, font, th, line, x + font.width(askBefore()), ty,
+                    w - font.width(askBefore()) - font.width(askAfter()));
             Nb.text(g, font, Nb.clip(font, askAfter(), x + w - x1), x1, ty, main(th, line));
             Nb.text(g, font, Nb.clip(font, line.cause().getString(), w), x, ty + ROW_H, soft(th, line));
             return;
@@ -108,7 +109,7 @@ public final class ConsentMessage {
         for (int i = 0; i < Math.min(MAX_ROWS, lines.size()); i++) {
             ConsentRequestPayload.Line line = lines.get(i);
             int ty = y + (i + 1) * ROW_H + textDy;
-            int x1 = drawThing(g, font, th, line, x, ty);
+            int x1 = drawThing(g, font, th, line, x, ty, w);
             Nb.text(g, font, Nb.clip(font, " · " + line.cause().getString(), x + w - x1), x1, ty, soft(th, line));
         }
         if (lines.size() > MAX_ROWS) {
@@ -130,11 +131,15 @@ public final class ConsentMessage {
         return thingWidth(font, line) + font.width(" · " + line.cause().getString());
     }
 
-    /** 一件事本身:动词、图标(没有图标写名字)、数量。返回画完的右缘。 */
+    /**
+     * 一件事本身:动词、图标(没有图标写名字)、数量。名字在 {@code room} 里放不下就截短——一条指令可以很长,
+     * 不能冲出气泡。返回画完的右缘。
+     */
     private static int drawThing(GuiGraphics g, Font font, UiTheme th, ConsentRequestPayload.Line line,
-                                 int lx, int textY) {
+                                 int lx, int textY, int room) {
         int main = main(th, line);
         String verb = verb(line);
+        String count = count(line);
         Nb.text(g, font, verb, lx, textY, main);
         lx += font.width(verb) + 4;
         if (line.icon() != null) {
@@ -146,11 +151,11 @@ public final class ConsentMessage {
             pose.popPose();
             lx += ICON + 1;
         } else {
-            String shown = line.name().getString();
+            String shown = Nb.clip(font, line.name().getString(),
+                    room - font.width(verb) - 4 - font.width(count));
             Nb.text(g, font, shown, lx, textY, main);
             lx += font.width(shown);
         }
-        String count = count(line);
         Nb.text(g, font, count, lx, textY, main);
         return lx + font.width(count);
     }

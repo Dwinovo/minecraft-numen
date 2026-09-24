@@ -171,8 +171,8 @@ interface Reflex {
 内容。五个零件:
 
 **动作(Action)。** 身体要对世界做的一件具体的事及其目标:`break(pos)`、`place(pos, block)`、
-`attack(entity)`、`use_block(pos)`、`use_entity(entity)`、`take(container, item)`、`drop(item)`。
-不带工具名、不带 JSON。
+`attack(entity)`、`use_block(pos)`、`use_entity(entity)`、`take(container, item)`、`drop(item)`、
+`command(整行)`。不带工具名、不带 JSON。
 
 **信号(Signal)。** 给动作贴事实的函数,每个只回答一个通用问题,不按种类枚举:
 
@@ -195,7 +195,7 @@ deny 行与主人选的 observe;其余一律问。身体的物理与安全判断
 挖不动)不属权限,不经裁决。
 
 **规则(Rule)。** deny、allow、ask 三张表。一条规则一行字符串 `动作(信号 & 信号 & !信号)`,
-项也可以是方块或实体种类 id、`#标签`、`entity:<uuid>`。查的顺序 deny → allow → ask → 都不中
+项也可以是方块或实体种类 id、`#标签`、`entity:<uuid>`;`command` 的项是指令根名(`command(msg)`),别名同认。查的顺序 deny → allow → ask → 都不中
 也问(allow 在 ask 之前,因为"允许并记住"存的是从 ask 行里抠出来的更细的 allow 行)。出厂:
 deny 空;allow 为 `break(!placed & !block_entity & !#minecraft:beds & !#minecraft:doors &
 !#minecraft:trapdoors & !#minecraft:fence_gates)`、`place(!hazard_item)`、

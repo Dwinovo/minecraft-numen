@@ -61,8 +61,8 @@
 `ProtectedAction` / `ProtectionRule` 同形。
 
 **动作(Action)。** 身体要对世界做的一件具体的事及其目标:`break(pos)`、`place(pos, block)`、
-`attack(entity)`、`use_block(pos)`、`use_entity(entity)`、`take(container, item)`、`drop(item)`。
-不带工具名、不带 JSON。
+`attack(entity)`、`use_block(pos)`、`use_entity(entity)`、`take(container, item)`、`drop(item)`、
+`command(整行)`(以她的身份执行一条游戏指令,见下文"指令")。不带工具名、不带 JSON。
 
 **信号(Signal)。** 给动作贴事实的函数,每个只回答一个通用问题:
 
@@ -104,7 +104,19 @@ break(placed)          攻击/挖掘/放置四个动词 × 信号
 attack(owned)
 place(hazard_item & near_placed)
 break(#minecraft:beds) 也接受方块标签与 id,给主人写细规则用
+command(msg)           指令按根名写
 ```
+
+**指令。** `command` 的项除了 `*` 都是指令的根名,不写斜杠:`allow command(msg)`、`allow command(trigger)`、
+`ask command(setblock)`、`deny command(tp)`、`ask command(!msg & !trigger)`。信号说的是方块与实体,一条指令没有
+它们,所以指令规则里不写信号(`*(placed)` 这类通配动词的行也就碰不到指令)。
+
+- 根名在服务器的指令树上认:与她打的那个根同指一个节点的根都算它的别名(`tp` 与 `teleport`,`msg` 与
+  `tell`、`w`),写哪一个都盖得住其余的——`deny command(tp)` 不会被 `teleport` 绕过去。
+- 只认根:`execute … run setblock …` 的根是 `execute`,由 `command(execute)` 那几行裁决。
+- 出厂表不写任何指令,代码里也没有"安全指令"名单:主人没写过的指令一律问。
+- 能不能执行是服务器的事(她的权限等级,她不是 OP 就没有 `/give`);权限层只在服务器让她执行的指令上再问
+  主人要不要,不放宽也不收紧。
 
 出厂默认表:
 
@@ -216,7 +228,7 @@ allow 行把日常动作一行一行写明:自然方块、不危险的放置、�
 `ConsentItem.remember`),卡片与命令答复走同一个入口写进主人层:
 
 - 同一个动词;
-- 对象:实体认那一只(`entity:<uuid>`);方块与物品认种类 id,并留着问出它的那一行的条件;
+- 对象:实体认那一只(`entity:<uuid>`);方块与物品认种类 id,指令认她打的那个根名,并留着问出它的那一行的条件;
 - 撤不回的信号这一次不成立、不读活世界时却按成立算的,取反钉上:卡上这一条没标撤不回,记下的规则就
   盖不到撤不回的情形。记下的这一行一定盖得住这次问的动作。
 
@@ -225,6 +237,7 @@ allow 行把日常动作一行一行写明:自然方块、不危险的放置、�
 | `break(placed)` 挖了圆石 | `allow break(placed & minecraft:cobblestone)`:我放的圆石随便挖 |
 | `attack(named)` 某只狼 | `allow attack(entity:<uuid>)`:这一只可以 |
 | `break(block_entity)` 空箱子 | `allow break(block_entity & minecraft:chest & !contents)` |
+| 没有规则说到的 `setblock 0 64 0 stone` | `allow command(setblock)`:她以后的 setblock 都不再问 |
 | 主人写的 `ask break(!placed & !block_entity)` 挖了石头 | `allow break(!placed & !block_entity & minecraft:stone)` |
 
 撤不回的也记得住——记不记由主人决定,卡片只负责把"撤不回"标出来。
