@@ -25,10 +25,10 @@ public final class NumenTlm {
     /** 由 {@code Builtin} 在确认车万女仆在场后调用。 */
     public static void install(IEventBus modBus, Path skillsRoot) {
         NumenPlugins.register(numen -> {
-            numen.onClient(() -> {
-                numen.registerTool(new ListMaidModelsTool());
-                numen.registerTool(new WearMaidModelTool());
+            // 命令树两侧都登记(帮助要它的说明),动作本身只在主人客户端跑
+            TlmCommands.install(numen);
 
+            numen.onClient(() -> {
                 Wardrobe.bind(numen.configDir());
                 Wardrobe.load();
 
