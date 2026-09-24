@@ -2,6 +2,7 @@ package com.dwinovo.numen.plugins.ysm;
 
 import com.dwinovo.numen.api.CompanionEvent;
 import com.dwinovo.numen.api.NumenPlugins;
+import com.dwinovo.numen.task.TaskFactory;
 
 import java.nio.file.Path;
 
@@ -29,6 +30,8 @@ public final class NumenYsm {
 
         NumenPlugins.register(numen -> {
             YsmCommands.install(numen, ysm);
+            // numen ysm switch 派下来的换装由谁来跑
+            TaskFactory.register(SwitchRecord.class, (player, record) -> new SwitchTask(ysm, record));
 
             if (skillsRoot != null) numen.bundleSkills(skillsRoot);
 

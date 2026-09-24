@@ -4,13 +4,17 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.ParseResults;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.suggestion.Suggestion;
+import net.minecraft.ChatFormatting;
+import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -153,9 +157,11 @@ public final class Ysm {
      *
      * <p>贴图由调用方从 {@link #textures} 里挑好再传,这里不补占位符:{@code -} 只有 2.6 起
      * 才认,2.4.1 会把它当贴图名原样存下、模型渲染成紫黑格——1.21 只有 2.4.1 可用,真机撞见过。
+     *
+     * @return YSM 对这条命令说的话(换好了、要授权、没有这个模型……);它在几种情况下什么都不说
      */
-    public void setModel(MinecraftServer server, String playerName, Look look) {
-        run(server, "ysm model set " + arg(playerName) + " " + arg(look.model()) + " " + arg(look.texture()));
+    public List<String> setModel(MinecraftServer server, String playerName, Look look) {
+        return run(server, "ysm model set " + arg(playerName) + " " + arg(look.model()) + " " + arg(look.texture()));
     }
 
     public void playAnimation(MinecraftServer server, String playerName, String animation) {
@@ -174,8 +180,52 @@ public final class Ysm {
         run(server, "ysm auth " + arg(playerName) + " add " + arg(modelId));
     }
 
-    private static void run(MinecraftServer server, String command) {
-        server.getCommands().performPrefixedCommand(source(server), command);
+    /**
+     * 以服务器的身份执行一条 YSM 命令,返回它对执行者说的每一句话(去掉颜色码)。
+     *
+     * <p>命令什么时候真正执行,看调用方在哪:不在任何一条指令的执行当中(服务器刻里跑的任务、网络包送来的调用)
+     * 时,这里返回前它已经执行完;在另一条指令的执行当中(控制台、{@code /numen debug}、{@code /test} 调进来的)时,
+     * 原版的指令队列把它排到那条指令之后,这里返回时它还没跑,也就还什么都没说。要以执行结果为准的事
+     * (换模型要回读身上穿的)因此放在任务里做,见 {@link SwitchTask}。
+     */
+    private static List<String> run(MinecraftServer server, String command) {
+        Heard heard = new Heard(server);
+        server.getCommands().performPrefixedCommand(source(server).withSource(heard), command);
+        return heard.lines;
+    }
+
+    /**
+     * 命令回话的去处:YSM 对执行者说的每一句都收下。要不要知会管理员、记进服务器日志,照服务器自己的来,
+     * 和直接以服务器身份执行时一样。
+     */
+    private static final class Heard implements CommandSource {
+
+        private final MinecraftServer server;
+        private final List<String> lines = new ArrayList<>();
+
+        Heard(MinecraftServer server) {
+            this.server = server;
+        }
+
+        @Override
+        public void sendSystemMessage(Component message) {
+            lines.add(ChatFormatting.stripFormatting(message.getString()));
+        }
+
+        @Override
+        public boolean acceptsSuccess() {
+            return true;
+        }
+
+        @Override
+        public boolean acceptsFailure() {
+            return true;
+        }
+
+        @Override
+        public boolean shouldInformAdmins() {
+            return server.shouldInformAdmins();
+        }
     }
 
     /**

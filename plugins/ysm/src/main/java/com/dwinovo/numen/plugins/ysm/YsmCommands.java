@@ -7,6 +7,7 @@ import com.dwinovo.numen.cli.CommandGroup;
 import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.task.TaskDispatch;
 import com.dwinovo.numen.task.TaskResult;
 
 import java.util.LinkedHashMap;
@@ -92,15 +93,12 @@ final class YsmCommands {
     }
 
     /**
-     * 换一身模型。
+     * 换一身模型:这里先把写不通的当场拒掉(YSM 不认的模型、定不了默认贴图),写得通的交给任务槽里的一次短任务
+     * ({@link SwitchTask}),在那里执行 YSM 的命令、回读她身上穿的,成败以回读为准。
      *
      * <h2>能换成什么由 YSM 判,不由这里判</h2>
      * 命令刻意不传 {@code ignore_auth},YSM 会按同伴自己的授权表检查;而那张表由 {@link OwnerSync} 持续镜像成主人的。
      * 所以"主人没有的模型同伴也要不到"是 YSM 在拦——这里不写这个 if,也就不会有"我们的判断和 YSM 的判断不一致"。
-     *
-     * <h2>为什么要回读</h2>
-     * 命令以服务器身份执行,它的成功/失败回执进的是服务器控制台,这里收不到。所以执行完回读一次同伴的 NBT:
-     * 模型真变了才算成功。不回读的话,越权被拦时模型会以为自己换好了。
      */
     private void switchModel(ServerSource src, CommandArgs args) {
         String model = args.get(MODEL);
@@ -127,17 +125,7 @@ final class YsmCommands {
             texture = textures.get(0);
         }
 
-        ysm.setModel(server, me, new Ysm.Look(model, texture));
-
-        // 回读:以身体的实际状态为准,不信命令跑过就是成功了
-        var now = ysm.readLook(src.companion());
-        if (now != null && model.equals(now.model())) {
-            src.reply(TaskResult.ok("换好了:" + model).toJson());
-        } else {
-            src.reply(TaskResult.fail(
-                    "没换成 '" + model + "'。要么这个模型不存在,要么主人没有它的授权;"
-                  + "现在穿的还是 " + (now == null ? "(读不到)" : now.model())).toJson());
-        }
+        TaskDispatch.runSync(src.companion(), new SwitchRecord(src, new Ysm.Look(model, texture)), src::reply);
     }
 
     /**

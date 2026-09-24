@@ -280,6 +280,7 @@ numen.registerCommands("go", "Getting around.", go ->
 | `play_emote` | `numen ysm emote <animation>`(`stop` 停下,照 YSM 自己的写法) |
 
 - **"留空表示另一件事"拆成两个动作。** 工具贵,才把穿和脱塞进一个参数;命令不花工具表的钱,一个动作一个意思。
+- **`ysm switch` 是任务槽里的一次同步短任务**(`runSync`,和 `numen mc` 同一种):成败以回读她身上穿的为准,回读之前 YSM 的命令必须已经执行完。原版的指令在另一条指令的执行当中被调起时排到那条之后(控制台、`/numen debug`、`/test` 调进来的都是这样,生产专用服上实测回读早于 YSM 设上),任务在服务器刻里跑,不在任何指令的执行当中,命令当场执行完。没换成时把 YSM 对这条命令说的话原样带回。
 - **新参数类型**:
   - `integer()`:不设范围的整数,方块坐标用。
   - `bool()`:`true` / `false`,当标志也要写值。
