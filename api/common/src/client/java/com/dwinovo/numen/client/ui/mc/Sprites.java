@@ -56,10 +56,9 @@ public final class Sprites {
     public static final ResourceLocation VOLUME = icon("icon_volume");
     public static final ResourceLocation SHIRT = icon("icon_shirt");
     public static final ResourceLocation BRUSH = icon("icon_brush");
-    /** 资料页的资料行:上下文、距离、游戏模式(人设、模型、声线用上面那几枚)。 */
-    public static final ResourceLocation DATABASE = icon("icon_database");
+    /** 资料页:在哪、背包那一行(简介用 PERSONA,她记得的事用 BOOK)。 */
     public static final ResourceLocation MAP_PIN = icon("icon_map_pin");
-    public static final ResourceLocation GAMEPAD = icon("icon_gamepad");
+    public static final ResourceLocation BACKPACK = icon("icon_backpack");
     /** 资料页的操作块:发消息。 */
     public static final ResourceLocation MESSAGE = icon("icon_message");
     /** 消息右键菜单里的引用回复。 */

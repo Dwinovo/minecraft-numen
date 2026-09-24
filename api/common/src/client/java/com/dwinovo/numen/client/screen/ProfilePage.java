@@ -1,7 +1,10 @@
 package com.dwinovo.numen.client.screen;
 
+import com.dwinovo.numen.agent.conversation.Conversation;
+import com.dwinovo.numen.agent.memory.NoteBook;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.client.agent.ClientNumenLookup;
+import com.dwinovo.numen.client.agent.Conversations;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.agent.KnownSkins;
 import com.dwinovo.numen.client.agent.NumenRoster;
@@ -10,6 +13,7 @@ import com.dwinovo.numen.client.skin.CompanionFace;
 import com.dwinovo.numen.client.ui.Anim;
 import com.dwinovo.numen.client.ui.mc.Sprites;
 import com.dwinovo.numen.data.ModLanguageData;
+import com.dwinovo.numen.persona.PersonaLibrary;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -18,6 +22,7 @@ import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 
@@ -27,29 +32,40 @@ import java.util.UUID;
 import java.util.function.Function;
 
 /**
- * 同伴资料页,照 Telegram 资料页的顺序排,整页可滚:
+ * 同伴资料页,照 Telegram 资料页的想法排:先是"这个人",再是"你们之间的东西",配置收在后面。整页可滚。
  * <ol>
- *   <li>顶部居中:她的大头像(Telegram 资料页那样)、名字、状态、心与鸡腿,下面一排操作块(发消息、编辑);</li>
- *   <li>资料行:左一枚图标,值在上、它是什么在下(人设、模型、声线、上下文、距离、游戏模式);</li>
- *   <li>物品:装备与副手、合成格、背包与快捷栏(Telegram 的共享媒体那一节);</li>
- *   <li>页底一行红字:遣散。</li>
+ *   <li>顶部居中:大头像、名字、此刻在干什么(没在干活才说在线/忙碌),体征,一排操作块(发消息、编辑);</li>
+ *   <li>资料:简介(她人设的开头一段)、在你哪边多远;</li>
+ *   <li>她记得的事:最新几条札记(Telegram 的共享媒体那一节,我们这里最有意思的是她记住了什么);</li>
+ *   <li>共同群聊:她在哪几个群里,点了进去;</li>
+ *   <li>背包:收成一行"背包 · N 件",点开往下展开格子;</li>
+ *   <li>设置:人设、模型、声线、游戏模式、上下文,一行一项、左名右值,点了开编辑卡;</li>
+ *   <li>页底红字:遣散。</li>
  * </ol>
- * 节与节之间隔一道深色宽缝(Telegram 的分节)。悬停物品的提示最后画,不被后画的格子盖住。
+ * 节与节之间隔一道深色宽缝(Telegram 的分节),节头是强调色小字。
  */
 final class ProfilePage {
 
-    /** 点中了什么。 */
-    enum Hit { MESSAGE, EDIT, DISMISS }
+    /** 点中了什么:发消息、编辑、遣散、进某个群。 */
+    sealed interface Hit {
+        record Message() implements Hit {}
+        record Edit() implements Hit {}
+        record Dismiss() implements Hit {}
+        record Open(Conversation conversation) implements Hit {}
+    }
 
     /** 大头像的边长:脸是 8×8 像素,取整数倍放大才不糊。 */
     private static final int AVATAR = 48;
     private static final int ICON = 9;
     private static final int SLOT = 18;
     private static final int TILE_H = 30;
-    private static final int ROW_H = 21;
+    /** 两行的资料(值 + 它是什么)与一行的设置项。 */
+    private static final int ROW_H = 21, LINE_ROW_H = 15;
     private static final int GAP_H = 7;
     private static final int PAD = 8;
     private static final int TEXT_DX = Sprites.SIZE + 10;
+    /** 她记得的事摆几条;多的说"还有 N 条"。 */
+    private static final int NOTES_SHOWN = 3;
     private static final EquipmentSlot[] ARMOR = {
             EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
 
@@ -65,19 +81,30 @@ final class ProfilePage {
     private float scroll, scrollTarget;
     private int contentH, viewH;
     private long lastFrameMs;
+    /** 背包那一节开着没有,和它展开到多高(像素,按趋近走)。 */
+    private boolean itemsOpen;
+    private float itemsShown;
     /** 这一帧可点的几块在哪。 */
     private record Rect(Hit hit, int x, int y, int w, int h) {}
     private final List<Rect> rects = new ArrayList<>();
     private int viewX, viewY, viewW;
+    /** 背包那一行这一帧的顶边;点它是页内开合。 */
+    private int itemsRowY = Integer.MIN_VALUE;
+    /** 札记按"哪一本、写过几次"缓存:索引要读盘,不能每帧读。 */
+    private UUID notesOf;
+    private int notesRevision = -1;
+    private List<NoteBook.Note> notes = List.of();
 
     ProfilePage(Font font) {
         this.font = font;
     }
 
-    /** 换了人:回到顶上。 */
+    /** 换了人:回到顶上,背包收起。 */
     void reset() {
         scroll = 0;
         scrollTarget = 0;
+        itemsOpen = false;
+        itemsShown = 0;
     }
 
     boolean scroll(double sy) {
@@ -85,12 +112,35 @@ final class ProfilePage {
         return true;
     }
 
+    /** 点击:背包那一行在页内开合(返回 null,但这一下算吃掉了,见 {@link #consumes});别的交给宿主。 */
     Hit click(double mx, double my) {
-        if (mx < viewX || mx >= viewX + viewW || my < viewY || my >= viewY + viewH) return null;
+        if (!inView(mx, my)) return null;
+        if (overItemsRow(my)) {
+            itemsOpen = !itemsOpen;
+            return null;
+        }
         for (Rect r : rects) {
             if (mx >= r.x() && mx < r.x() + r.w() && my >= r.y() && my < r.y() + r.h()) return r.hit();
         }
         return null;
+    }
+
+    /** 这一下落在页里能点的地方(宿主据此判断点击有没有被吃掉)。 */
+    boolean consumes(double mx, double my) {
+        if (!inView(mx, my)) return false;
+        if (overItemsRow(my)) return true;
+        for (Rect r : rects) {
+            if (mx >= r.x() && mx < r.x() + r.w() && my >= r.y() && my < r.y() + r.h()) return true;
+        }
+        return false;
+    }
+
+    private boolean inView(double mx, double my) {
+        return mx >= viewX && mx < viewX + viewW && my >= viewY && my < viewY + viewH;
+    }
+
+    private boolean overItemsRow(double my) {
+        return my >= itemsRowY && my < itemsRowY + LINE_ROW_H + 4;
     }
 
     /** {@code live} = 整页在场、没有模态压着:这时才亮悬停。{@code status} 是抬头第二行那句(在线、正在输入…)。 */
@@ -115,21 +165,23 @@ final class ProfilePage {
         AbstractClientPlayer e = ClientNumenLookup.resolve(who);
         EntityAgentLoop loop = AgentLoopRegistry.get(who).orElse(null);
         ItemStack[] hover = {ItemStack.EMPTY};
-        String usageTip = null;
+        String tip = null;
         int cx = x + w / 2;
-        int iw = w - PAD * 2;   // 里面东西的宽
+        int iw = w - PAD * 2;
 
         g.enableScissor(x, y, x + w, y + h);
-        int cy = y + 8 - Math.round(scroll);
+        int cy = y + 10 - Math.round(scroll);
 
-        // ---- 顶部:大头像,名字、状态、体征、操作块 ----
+        // ---- 顶部:大头像、名字、此刻在干什么、体征、操作块 ----
         CompanionFace.draw(g, who, KnownSkins.of(who), cx - AVATAR / 2, cy, AVATAR);
         cy += AVATAR + 7;
         Component name = Component.literal(NumenRoster.instance().name(who)).withStyle(ChatFormatting.BOLD);
         Nb.text(g, font, name, cx - font.width(name) / 2, cy, t.text());
         cy += 12;
-        String st = status.apply(who);
-        Nb.text(g, font, st, cx - font.width(st) / 2, cy, t.textDim());
+        // 手上有活就说她在干什么(强调色,这是她此刻最要紧的一句),没有才是在线/忙碌
+        String doing = loop != null ? loop.status().activity() : null;
+        String st = Nb.clip(font, doing != null ? I18n.get("numen.profile.doing", doing) : status.apply(who), iw);
+        Nb.text(g, font, st, cx - font.width(st) / 2, cy, doing != null ? t.accent() : t.textDim());
         cy += 13;
         if (e != null) {
             int food = snap != null && snap.loaded() ? snap.foodLevel() : 0;
@@ -139,51 +191,24 @@ final class ProfilePage {
             cy += ICON + 8;
         }
         int tileW = (iw - 6) / 2;
-        tile(g, t, Hit.MESSAGE, Sprites.MESSAGE, I18n.get("numen.profile.message"), x + PAD, cy, tileW, mouseX, mouseY);
-        tile(g, t, Hit.EDIT, Sprites.EDIT, I18n.get(ModLanguageData.Keys.EDIT_TITLE), x + PAD + tileW + 6, cy, tileW,
+        tile(g, t, new Hit.Message(), Sprites.MESSAGE, I18n.get("numen.profile.message"), x + PAD, cy, tileW,
                 mouseX, mouseY);
+        tile(g, t, new Hit.Edit(), Sprites.EDIT, I18n.get(ModLanguageData.Keys.EDIT_TITLE), x + PAD + tileW + 6, cy,
+                tileW, mouseX, mouseY);
         cy += TILE_H + 8;
 
-        // ---- 资料行 ----
+        // ---- 资料:简介、在哪 ----
         cy = gap(g, t, x, w, cy);
-        String persona = loop != null && loop.personaName() != null && !loop.personaName().isBlank()
-                ? loop.personaName() : I18n.get("numen.profile.persona_default");
-        infoRow(g, t, Sprites.PERSONA, persona, t.text(), I18n.get("numen.profile.persona"), x + PAD, cy, iw);
-        cy += ROW_H;
-        // 模型:值是型号(要紧的那个),小字是"模型 · 条目名"——条目 ID 不糊给用户
-        String model = I18n.get("numen.profile.model_none");
-        String modelCaption = I18n.get("numen.profile.model");
-        if (loop != null && loop.providerEntryId() != null && !loop.providerEntryId().isBlank()) {
-            var entry = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().get(loop.providerEntryId());
-            if (entry == null) {
-                model = I18n.get("numen.profile.model_deleted");
-            } else {
-                model = entry.model() == null || entry.model().isBlank() ? entry.name() : entry.model();
-                modelCaption = I18n.get("numen.profile.model_of", entry.name());
+        List<FormattedCharSequence> bio = bio(loop, iw - TEXT_DX);
+        if (!bio.isEmpty()) {
+            Sprites.draw(g, Sprites.PERSONA, x + PAD, cy + 2, Sprites.SIZE, t.textDim());
+            int by = cy + 1;
+            for (FormattedCharSequence line : bio) {
+                Nb.text(g, font, line, x + PAD + TEXT_DX, by);
+                by += 10;
             }
-        }
-        infoRow(g, t, Sprites.CPU, model, t.text(), modelCaption, x + PAD, cy, iw);
-        cy += ROW_H;
-        var voice = com.dwinovo.numen.client.voice.VoiceLibrary.instance().resolve(who);
-        infoRow(g, t, Sprites.VOLUME, voice != null ? voice.name() : I18n.get("numen.profile.voice_none"), t.text(),
-                I18n.get("numen.profile.voice"), x + PAD, cy, iw);
-        cy += ROW_H;
-        if (loop != null) {
-            // 上下文:值是一条水位 + 百分比,占用越高越往警示色走;悬停出用量明细
-            int pct = Math.clamp(loop.contextPercent(), 0, 100);
-            int barColor = pct < 60 ? t.ok() : pct < 85 ? t.run() : t.fail();
-            infoRow(g, t, Sprites.DATABASE, "", t.text(),
-                    I18n.get("numen.profile.context", loop.display().size(),
-                            com.dwinovo.numen.client.ui.TokenFormat.tokens(loop.totalTokensUsed())),
-                    x + PAD, cy, iw);
-            int bx = x + PAD + TEXT_DX, barW = 60;
-            com.dwinovo.numen.client.ui.StackedBar.draw(
-                    new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
-                    bx, cy + 2, barW, 5, t.field(), 100,   // 只有一段的堆叠条:分母是容量 100
-                    List.of(new com.dwinovo.numen.client.ui.StackedBar.Segment(pct, barColor)));
-            Nb.text(g, font, pct + "%", bx + barW + 5, cy + 1, t.text());
-            if (mouseX >= x && mouseX < x + w && mouseY >= cy && mouseY < cy + ROW_H) usageTip = usageDetail(loop);
-            cy += ROW_H;
+            Nb.text(g, font, I18n.get("numen.profile.bio"), x + PAD + TEXT_DX, by, t.faint());
+            cy = by + 12;
         }
         Minecraft mc = Minecraft.getInstance();
         String where;
@@ -194,24 +219,133 @@ final class ProfilePage {
         } else {
             where = I18n.get("numen.profile.away");
         }
-        infoRow(g, t, Sprites.MAP_PIN, where, t.text(), I18n.get("numen.profile.distance"), x + PAD, cy, iw);
-        cy += ROW_H;
+        infoRow(g, t, Sprites.MAP_PIN, where, I18n.get("numen.profile.distance"), x + PAD, cy, iw);
+        cy += ROW_H + 4;
+
+        // ---- 她记得的事 ----
+        cy = gap(g, t, x, w, cy);
+        List<NoteBook.Note> all = notes(who);
+        cy = sectionHead(g, t, I18n.get("numen.profile.memories"), all.isEmpty() ? "" : String.valueOf(all.size()),
+                x + PAD, cy, iw);
+        if (all.isEmpty()) {
+            Nb.text(g, font, I18n.get("numen.profile.memories_none"), x + PAD, cy, t.faint());
+            cy += 14;
+        } else {
+            for (int i = 0; i < Math.min(NOTES_SHOWN, all.size()); i++) {
+                NoteBook.Note n = all.get(i);
+                infoRow(g, t, Sprites.BOOK, n.description(),
+                        I18n.get("numen.profile.note_meta", n.day(), n.type()), x + PAD, cy, iw);
+                cy += ROW_H;
+            }
+            if (all.size() > NOTES_SHOWN) {
+                Nb.text(g, font, I18n.get("numen.profile.memories_more", all.size() - NOTES_SHOWN),
+                        x + PAD + TEXT_DX, cy, t.faint());
+                cy += 12;
+            }
+            cy += 2;
+        }
+
+        // ---- 共同群聊:她在的那几个群,点了进去 ----
+        List<Conversation> groups = new ArrayList<>();
+        for (Conversation c : Conversations.instance().all()) {
+            if (Conversations.instance().soloOf(c) == null && c.has(who)) groups.add(c);
+        }
+        if (!groups.isEmpty()) {
+            cy = gap(g, t, x, w, cy);
+            cy = sectionHead(g, t, I18n.get("numen.profile.groups"), String.valueOf(groups.size()), x + PAD, cy, iw);
+            for (Conversation c : groups) {
+                boolean hot = mouseX >= x && mouseX < x + w && mouseY >= cy - 2 && mouseY < cy + 18;
+                if (hot) g.fill(x, cy - 2, x + w, cy + 18, t.over());
+                com.dwinovo.numen.client.skin.ConversationFaces.draw(g, c, x + PAD - 3, cy - 1, 18);
+                Nb.text(g, font, Nb.clip(font, c.displayName(NumenRoster.instance()::name), iw - TEXT_DX),
+                        x + PAD + TEXT_DX, cy + 4, t.text());
+                rects.add(new Rect(new Hit.Open(c), x, cy - 2, w, 20));
+                cy += 20;
+            }
+            cy += 2;
+        }
+
+        // ---- 背包:一行,点开往下展开 ----
+        cy = gap(g, t, x, w, cy);
+        int count = 0;
+        if (snap != null && snap.loaded()) {
+            for (ItemStack it : snap.items()) if (!it.isEmpty()) count++;
+        }
+        itemsRowY = cy - 2;
+        boolean hotItems = mouseX >= x && mouseX < x + w && overItemsRow(mouseY);
+        if (hotItems) g.fill(x, cy - 2, x + w, cy + LINE_ROW_H + 2, t.over());
+        Sprites.draw(g, Sprites.BACKPACK, x + PAD, cy + (LINE_ROW_H - Sprites.SIZE) / 2, Sprites.SIZE, t.textDim());
+        Nb.text(g, font, I18n.get("numen.profile.backpack", count), x + PAD + TEXT_DX, cy + 4, t.text());
+        String arrow = itemsOpen ? "▾" : "▸";
+        Nb.text(g, font, arrow, x + w - PAD - font.width(arrow), cy + 4, t.textDim());
+        cy += LINE_ROW_H + 4;
+        int gridH = 2 * SLOT + 6 + 3 * SLOT + 4 + SLOT + 8;
+        itemsShown = Anim.approach(itemsShown, itemsOpen ? gridH : 0f, 16f, dt);
+        if (itemsShown > 0.5f) {
+            int shown = Math.round(itemsShown);
+            g.enableScissor(x, Math.max(y, cy), x + w, Math.min(y + h, cy + shown));
+            drawItems(g, t, snap, e, cx, cy, mouseX, mouseY, hover);
+            g.disableScissor();
+            cy += shown;
+        }
+
+        // ---- 设置:一行一项,左名右值,点了开编辑卡 ----
+        cy = gap(g, t, x, w, cy);
+        cy = sectionHead(g, t, I18n.get("numen.profile.settings"), "", x + PAD, cy, iw);
+        String persona = loop != null && loop.personaName() != null && !loop.personaName().isBlank()
+                ? loop.personaName() : I18n.get("numen.profile.persona_default");
+        cy = settingRow(g, t, I18n.get("numen.profile.persona"), persona, x, cy, w, mouseX, mouseY);
+        String model = I18n.get("numen.profile.model_none");
+        if (loop != null && loop.providerEntryId() != null && !loop.providerEntryId().isBlank()) {
+            var entry = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().get(loop.providerEntryId());
+            model = entry == null ? I18n.get("numen.profile.model_deleted")
+                    : entry.model() == null || entry.model().isBlank() ? entry.name() : entry.model();
+        }
+        cy = settingRow(g, t, I18n.get("numen.profile.model"), model, x, cy, w, mouseX, mouseY);
+        var voice = com.dwinovo.numen.client.voice.VoiceLibrary.instance().resolve(who);
+        cy = settingRow(g, t, I18n.get("numen.profile.voice"),
+                voice != null ? voice.name() : I18n.get("numen.profile.voice_none"), x, cy, w, mouseX, mouseY);
         var conn = mc.getConnection();
         var info = conn == null ? null : conn.getPlayerInfo(who);
         if (info != null) {
-            String mode = I18n.get(info.getGameMode() == net.minecraft.world.level.GameType.CREATIVE
-                    ? "numen.profile.creative" : "numen.profile.survival");
-            infoRow(g, t, Sprites.GAMEPAD, mode, t.text(), I18n.get("numen.profile.mode"), x + PAD, cy, iw);
-            cy += ROW_H;
+            cy = settingRow(g, t, I18n.get("numen.profile.mode"), I18n.get(
+                    info.getGameMode() == net.minecraft.world.level.GameType.CREATIVE
+                            ? "numen.profile.creative" : "numen.profile.survival"), x, cy, w, mouseX, mouseY);
+        }
+        if (loop != null) {
+            int rowTop = cy;
+            cy = settingRow(g, t, I18n.get("numen.profile.context"),
+                    I18n.get("numen.profile.context_value", Math.clamp(loop.contextPercent(), 0, 100),
+                            loop.display().size()), x, cy, w, mouseX, mouseY);
+            if (mouseX >= x && mouseX < x + w && mouseY >= rowTop && mouseY < cy) tip = usageDetail(loop);
         }
         cy += 4;
 
-        // ---- 物品:装备与副手、合成格,下面背包与快捷栏 ----
+        // ---- 页底:遣散(红字,点了还要过确认卡) ----
         cy = gap(g, t, x, w, cy);
-        Nb.text(g, font, I18n.get("numen.profile.items"), x + PAD, cy, t.accent());
-        cy += 13;
+        boolean hot = mouseX >= x && mouseX < x + w && mouseY >= cy - 2 && mouseY < cy + LINE_ROW_H + 2;
+        if (hot) g.fill(x, cy - 2, x + w, cy + LINE_ROW_H + 2, t.over());
+        Sprites.draw(g, Sprites.DELETE, x + PAD, cy + (LINE_ROW_H - Sprites.SIZE) / 2, Sprites.SIZE, t.fail());
+        Nb.text(g, font, I18n.get(ModLanguageData.Keys.EDIT_DISMISS), x + PAD + TEXT_DX, cy + 4, t.fail());
+        rects.add(new Rect(new Hit.Dismiss(), x, cy - 2, w, LINE_ROW_H + 4));
+        cy += LINE_ROW_H + 12;
+
+        contentH = cy + Math.round(scroll) - y;
+        // 滚动条:只有滑块,内容超出一屏才画
+        if (contentH > viewH) {
+            int th = Math.max(12, viewH * viewH / contentH);
+            int ty = y + Math.round((viewH - th) * (scroll / Math.max(1, contentH - viewH)));
+            g.fill(x + w - 3, ty, x + w - 1, ty + th, (t.textDim() & 0xFFFFFF) | 0x60000000);
+        }
+        g.disableScissor();
+        if (!hover[0].isEmpty()) g.renderTooltip(font, hover[0], mouseX, mouseY);
+        else if (tip != null) g.renderTooltip(font, Component.literal(tip), mouseX, mouseY);
+    }
+
+    /** 背包格子:左盔甲 2×2 + 副手,右合成 2×2 → 结果;下面 3×9 背包与快捷栏。 */
+    private void drawItems(GuiGraphics g, UiTheme t, ClientNumenState.Snapshot snap, AbstractClientPlayer e,
+                           int cx, int cy, int mouseX, int mouseY, ItemStack[] hover) {
         int gx = cx - 9 * SLOT / 2;
-        // 左:盔甲 2×2(头胸 / 腿脚)+ 副手;右:合成 2×2 → 结果。两边都占两行高
         for (int i = 0; i < ARMOR.length; i++) {
             int sx = gx + (i % 2) * SLOT, sy = cy + (i / 2) * SLOT;
             slot(g, t, sx, sy);
@@ -231,46 +365,84 @@ final class ProfilePage {
         Nb.text(g, font, "→", crx + 2 * SLOT + 3, midY + 5, t.faint());
         slot(g, t, resX, midY);
         collect(g, craft.size() > 4 ? craft.get(4) : ItemStack.EMPTY, resX + 1, midY + 1, mouseX, mouseY, hover);
-        cy += 2 * SLOT + 6;
+        int sy0 = cy + 2 * SLOT + 6;
         if (snap == null || !snap.loaded() || snap.items().isEmpty()) {
             String hint = I18n.get(snap == null ? "numen.status.loading" : "numen.status.asleep");
-            Nb.text(g, font, hint, gx, cy + 4, t.faint());
-            cy += 16;
-        } else {
-            List<ItemStack> items = snap.items();
-            for (int i = 9; i < 36; i++) {
-                int col = (i - 9) % 9, row = (i - 9) / 9;
-                slot(g, t, gx + col * SLOT, cy + row * SLOT);
-                collect(g, items.get(i), gx + col * SLOT + 1, cy + row * SLOT + 1, mouseX, mouseY, hover);
-            }
-            int hotY = cy + 3 * SLOT + 4;
-            for (int i = 0; i < 9; i++) {
-                slot(g, t, gx + i * SLOT, hotY);
-                collect(g, items.get(i), gx + i * SLOT + 1, hotY + 1, mouseX, mouseY, hover);
-            }
-            cy = hotY + SLOT + 8;
+            Nb.text(g, font, hint, gx, sy0 + 4, t.faint());
+            return;
         }
-
-        // ---- 页底:遣散(红字,点了还要过确认卡) ----
-        cy = gap(g, t, x, w, cy);
-        int dy = cy;
-        boolean hot = mouseX >= x && mouseX < x + w && mouseY >= dy && mouseY < dy + ROW_H;
-        if (hot) g.fill(x, dy, x + w, dy + ROW_H, t.over());
-        Sprites.draw(g, Sprites.DELETE, x + PAD, dy + (ROW_H - Sprites.SIZE) / 2, Sprites.SIZE, t.fail());
-        Nb.text(g, font, I18n.get(ModLanguageData.Keys.EDIT_DISMISS), x + PAD + TEXT_DX, dy + (ROW_H - 8) / 2, t.fail());
-        rects.add(new Rect(Hit.DISMISS, x, dy, w, ROW_H));
-        cy += ROW_H + 8;
-
-        contentH = cy + Math.round(scroll) - y;
-        // 滚动条:只有滑块,内容超出一屏才画
-        if (contentH > viewH) {
-            int th = Math.max(12, viewH * viewH / contentH);
-            int ty = y + Math.round((viewH - th) * (scroll / Math.max(1, contentH - viewH)));
-            g.fill(x + w - 3, ty, x + w - 1, ty + th, (t.textDim() & 0xFFFFFF) | 0x60000000);
+        List<ItemStack> items = snap.items();
+        for (int i = 9; i < 36; i++) {
+            int col = (i - 9) % 9, row = (i - 9) / 9;
+            slot(g, t, gx + col * SLOT, sy0 + row * SLOT);
+            collect(g, items.get(i), gx + col * SLOT + 1, sy0 + row * SLOT + 1, mouseX, mouseY, hover);
         }
-        g.disableScissor();
-        if (!hover[0].isEmpty()) g.renderTooltip(font, hover[0], mouseX, mouseY);
-        else if (usageTip != null) g.renderTooltip(font, Component.literal(usageTip), mouseX, mouseY);
+        int hotY = sy0 + 3 * SLOT + 4;
+        for (int i = 0; i < 9; i++) {
+            slot(g, t, gx + i * SLOT, hotY);
+            collect(g, items.get(i), gx + i * SLOT + 1, hotY + 1, mouseX, mouseY, hover);
+        }
+    }
+
+    /** 她的札记,新的在前;同一本写过几次没变就不重读。 */
+    private List<NoteBook.Note> notes(UUID who) {
+        NoteBook book = NoteBook.of(who);
+        if (!who.equals(notesOf) || book.revision() != notesRevision) {
+            notesOf = who;
+            notesRevision = book.revision();
+            notes = book.index();
+        }
+        return notes;
+    }
+
+    /** 简介:她人设的开头一段(跳过标题行),最多两行,再长截短。没有人设正文是空。 */
+    private List<FormattedCharSequence> bio(EntityAgentLoop loop, int width) {
+        if (loop == null || loop.personaId() == null) return List.of();
+        var persona = PersonaLibrary.instance().get(loop.personaId());
+        if (persona == null || persona.text() == null) return List.of();
+        StringBuilder para = new StringBuilder();
+        for (String line : persona.text().split("\n")) {
+            String s = line.strip();
+            if (s.startsWith("#")) continue;
+            if (s.isEmpty()) {
+                if (para.length() > 0) break;
+                continue;
+            }
+            if (para.length() > 0) para.append(' ');
+            para.append(s);
+        }
+        if (para.length() == 0) return List.of();
+        int ink = UiTheme.current().text();
+        List<FormattedCharSequence> lines = font.split(Nb.colored(para.toString(), ink), width);
+        if (lines.size() <= 2) return lines;
+        // 超出两行:第二行截短补省略号
+        StringBuilder second = new StringBuilder();
+        lines.get(1).accept((idx, style, cp) -> {
+            second.appendCodePoint(cp);
+            return true;
+        });
+        return List.of(lines.get(0),
+                Nb.colored(Nb.clip(font, second + "…", width), ink).getVisualOrderText());
+    }
+
+    /** 节头:强调色小字,右端可带一个淡色的数。返回下面内容的顶边。 */
+    private int sectionHead(GuiGraphics g, UiTheme t, String title, String count, int x, int y, int w) {
+        Nb.text(g, font, title, x, y, t.accent());
+        if (!count.isEmpty()) Nb.text(g, font, count, x + w - font.width(count), y, t.faint());
+        return y + 14;
+    }
+
+    /** 一行设置:左边名字,右边值(淡字);整行点了开编辑卡。返回下一行的顶边。 */
+    private int settingRow(GuiGraphics g, UiTheme t, String label, String value, int x, int y, int w,
+                           int mouseX, int mouseY) {
+        boolean hot = mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + LINE_ROW_H;
+        if (hot) g.fill(x, y, x + w, y + LINE_ROW_H, t.over());
+        int ty = y + (LINE_ROW_H - 8) / 2;
+        Nb.text(g, font, label, x + PAD, ty, t.text());
+        String v = Nb.clip(font, value, w - PAD * 2 - font.width(label) - 12);
+        Nb.text(g, font, v, x + w - PAD - font.width(v), ty, t.textDim());
+        rects.add(new Rect(new Hit.Edit(), x, y, w, LINE_ROW_H));
+        return y + LINE_ROW_H;
     }
 
     /** 操作块(Telegram 名字下面那排):上图标、下字,浅底,悬停深一档。 */
@@ -290,11 +462,11 @@ final class ProfilePage {
     }
 
     /** 一行资料:左一枚图标,值在上、它是什么在下;放不下就截短。 */
-    private void infoRow(GuiGraphics g, UiTheme t, ResourceLocation icon, String value, int valueColor,
-                         String caption, int x, int y, int w) {
+    private void infoRow(GuiGraphics g, UiTheme t, ResourceLocation icon, String value, String caption,
+                         int x, int y, int w) {
         Sprites.draw(g, icon, x, y + (ROW_H - Sprites.SIZE) / 2 - 1, Sprites.SIZE, t.textDim());
         int tx = x + TEXT_DX, room = w - TEXT_DX;
-        if (!value.isEmpty()) Nb.text(g, font, Nb.clip(font, value, room), tx, y + 1, valueColor);
+        Nb.text(g, font, Nb.clip(font, value, room), tx, y + 1, t.text());
         Nb.text(g, font, Nb.clip(font, caption, room), tx, y + 11, t.faint());
     }
 

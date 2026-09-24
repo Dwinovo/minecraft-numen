@@ -1252,21 +1252,26 @@ public final class NumenScreen extends Screen {
                 });
     }
 
-    /** 资料页上的点击:发消息回到和她的对话,编辑开她的编辑卡,遣散先过确认卡。 */
+    /** 资料页上的点击:发消息回到和她的对话,编辑开她的编辑卡,点群进那个群,遣散先过确认卡;背包开合页内自己管。 */
     private boolean profileClicked(double mx, double my) {
         if (tab != Tab.ITEMS || profilePage == null || profileOf == null) return false;
+        boolean eaten = profilePage.consumes(mx, my);
         ProfilePage.Hit hit = profilePage.click(mx, my);
-        if (hit == null) return false;
+        if (hit == null) return eaten;
         UUID who = profileOf;
         switch (hit) {
-            case MESSAGE -> {
-                switchTo(Conversations.instance().of(who));
-                selectTab(Tab.CHAT);   // 本来就在和她的对话里时 switchTo 什么都不做,这里收起资料页
-            }
-            case EDIT -> editCompanion(who);
-            case DISMISS -> openDismissConfirm(who);
+            case ProfilePage.Hit.Message ignored -> openConversation(Conversations.instance().of(who));
+            case ProfilePage.Hit.Edit ignored -> editCompanion(who);
+            case ProfilePage.Hit.Dismiss ignored -> openDismissConfirm(who);
+            case ProfilePage.Hit.Open open -> openConversation(open.conversation());
         }
         return true;
+    }
+
+    /** 从资料页进一个会话:切过去并收起资料页(本来就在那个会话里时 switchTo 什么都不做,收页得自己来)。 */
+    private void openConversation(Conversation c) {
+        switchTo(c);
+        selectTab(Tab.CHAT);
     }
 
     /** 群资料页:成员一行一个。垫在底下时也画,只是不亮悬停、不接点击。 */
