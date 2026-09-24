@@ -507,13 +507,13 @@ public final class ChatView {
             switch (ln.kind()) {
                 case OWNER -> {
                     boolean first = !OWNER.equals(last);
-                    out.add(bubble(true, null, Nb.colored(ln.text(), TXT), OWN_FILL,
+                    out.add(bubble(true, null, rich(ln.text(), List.of()), OWN_FILL,
                             innerW, first, null, null, -1, ln.text(), null));
                     last = OWNER;
                 }
                 case SAY -> {
                     boolean first = !id.equals(last);
-                    out.add(bubble(false, first ? label(id) : null, Nb.colored(ln.text(), TXT),
+                    out.add(bubble(false, first ? label(id) : null, rich(ln.text(), List.of()),
                             AI_FILL, innerW, first, id, null, -1, ln.text(), null));
                     last = id;
                 }
@@ -586,6 +586,12 @@ public final class ChatView {
             barGrab = (int) my - ty;
             barDragging = true;
             lastScrollMs = System.currentTimeMillis();
+            return true;
+        }
+        net.minecraft.network.chat.Style link = linkAt(mx, my);
+        if (link != null) {
+            // 点链接走原版聊天那一套:看"聊天链接"选项、按需先弹确认框,确认完回到这个面板
+            net.minecraft.client.Minecraft.getInstance().screen.handleComponentClicked(link);
             return true;
         }
         if (McpMode.instance().driving()) return false;   // 现场视图没有可折叠的块
@@ -684,6 +690,24 @@ public final class ChatView {
                 }
                 String shown = Quote.parse(ownerText(c)).body();
                 if (!shown.isBlank()) return shown;
+            }
+        }
+        return null;
+    }
+
+    /** 指针下那个链接的样式(带着打开网址的点击事件);不在链接上是 null。只认对话流可见区里的气泡正文。 */
+    private net.minecraft.network.chat.Style linkAt(double mx, double my) {
+        if (mx < gx || mx >= gx + gw || my < gy || my >= gy + gh) return null;
+        for (Hit h : hits) {
+            Bubble b = h.b();
+            int textTop = h.y() + PAD_V + 1 + (b.quote() != null ? QUOTE_H : 0);
+            if (mx < h.x() + PAD_H || mx >= h.x() + h.w() || my < textTop) continue;
+            int row = (int) ((my - textTop) / LINE_H);
+            if (row >= b.lines().size()) continue;
+            var st = font.getSplitter().componentStyleAtWidth(b.lines().get(row), (int) (mx - h.x() - PAD_H));
+            if (st != null && st.getClickEvent() != null
+                    && st.getClickEvent().getAction() == net.minecraft.network.chat.ClickEvent.Action.OPEN_URL) {
+                return st;
             }
         }
         return null;
@@ -898,7 +922,9 @@ public final class ChatView {
                     if (shown.isEmpty()) continue;
                     boolean first = !OWNER.equals(f.last);
                     Quote q = Quote.parse(shown);   // 引用回复:第一行画成气泡顶上的引用条
-                    out.add(bubble(true, null, mentionsLit(q.body()), OWN_FILL, innerW, first, null,
+                    out.add(bubble(true, null,
+                            rich(q.body(), Mentions.spans(q.body(), Conversations.instance().named(conv.get()))),
+                            OWN_FILL, innerW, first, null,
                             clock(entry.ts()), msgIndex, q.body(), q.quoted() ? q : null));
                     f.last = OWNER;
                 }
@@ -922,7 +948,7 @@ public final class ChatView {
                         }
                         boolean first = !who.equals(f.last);
                         out.add(bubble(false, first ? label(who) : null,
-                                Nb.colored(spoken, TXT), AI_FILL, innerW, first, who,
+                                rich(spoken, List.of()), AI_FILL, innerW, first, who,
                                 clock(entry.ts()), msgIndex, spoken, null));
                         f.last = who;
                     }
@@ -1109,20 +1135,32 @@ public final class ChatView {
     }
 
     /**
-     * 主人的话,{@code @} 到的名字画亮。用的是路由那一份匹配({@link Mentions#spans}),所以亮的
-     * 正好是会醒的,不是"长得像名字"。名字按此刻名册,改过名之后旧记录里的不亮。
+     * 气泡正文:http/https 链接({@link ChatLinks})画成强调色加下划线,带着原版的打开网址点击事件,
+     * 点了由 {@link #mouseClicked} 交给原版确认打开;主人的话里 {@code @} 到的名字画亮——{@code mentions}
+     * 用的是路由那一份匹配({@link Mentions#spans}),所以亮的正好是会醒的,不是"长得像名字";名字按此刻名册,
+     * 改过名之后旧记录里的不亮。两样重叠时算链接。
      */
-    private Component mentionsLit(String text) {
-        List<Mentions.Span> spans = Mentions.spans(text, Conversations.instance().named(conv.get()));
-        if (spans.isEmpty()) return Nb.colored(text, TXT);
+    private Component rich(String text, List<Mentions.Span> mentions) {
+        List<ChatLinks.Span> links = ChatLinks.find(text);
+        if (links.isEmpty() && mentions.isEmpty()) return Nb.colored(text, TXT);
+        // 每个字属于哪一段:0 正文,-1 @ 到的名字,k + 1 第 k 个链接
+        int[] mark = new int[text.length()];
+        for (Mentions.Span m : mentions) java.util.Arrays.fill(mark, m.start(), m.end(), -1);
+        for (int k = 0; k < links.size(); k++) java.util.Arrays.fill(mark, links.get(k).start(), links.get(k).end(), k + 1);
         MutableComponent out = Component.empty();
-        int at = 0;
-        for (Mentions.Span s : spans) {
-            if (s.start() > at) out.append(Nb.colored(text.substring(at, s.start()), TXT));
-            out.append(Nb.colored(text.substring(s.start(), s.end()), MENTION));
-            at = s.end();
+        for (int i = 0; i < mark.length; ) {
+            int j = i;
+            while (j < mark.length && mark[j] == mark[i]) j++;
+            String part = text.substring(i, j);
+            if (mark[i] > 0) {
+                var click = new net.minecraft.network.chat.ClickEvent(
+                        net.minecraft.network.chat.ClickEvent.Action.OPEN_URL, links.get(mark[i] - 1).url());
+                out.append(Nb.colored(part, MENTION).copy().withStyle(st -> st.withUnderlined(true).withClickEvent(click)));
+            } else {
+                out.append(Nb.colored(part, mark[i] < 0 ? MENTION : TXT));
+            }
+            i = j;
         }
-        if (at < text.length()) out.append(Nb.colored(text.substring(at), TXT));
         return out;
     }
 
