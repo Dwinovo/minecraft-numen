@@ -4,9 +4,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 内联键盘的排法(Telegram 消息下面挂的那排按钮,{@code ReplyKeyboard::resize}):一行里的键等宽、键与键隔一道缝,
- * 一行放不下就换行,各行的键数尽量一样多(四个键放不下一行时是两行两个,不是三个加一个)。
- * 纯几何:宿主给每个键上那行字的宽与键盘的宽,回每个键的矩形(相对键盘左上角),画和点都照它。
+ * 内联键盘的排法(Telegram 消息下面挂的那排按钮,{@code ReplyKeyboard::resize}):哪几个键同一行由发消息的一方定,
+ * 一行里的键平分这一行的宽、键与键隔一道缝,行与行也隔一道缝;键盘与消息同宽,字放不下由宿主截短。
+ * 纯几何:宿主给每一行各个键上那行字的宽与键盘的宽,回每个键的矩形(相对键盘左上角,按行、按行里的次序排),
+ * 画和点都照它。
  */
 public final class InlineKeyboard {
 
@@ -20,30 +21,28 @@ public final class InlineKeyboard {
     }
 
     /**
-     * 全部键排成一行要多宽:每个键都按最宽的那行字加两边留白算(等宽),再加键间的缝。
+     * 键盘不截字要多宽:最挤的那一行里,每个键都按这一行最宽的字加两边留白算(一行等宽),再加键间的缝。
      *
+     * @param rows 每一行各个键上那行字的宽
      * @param pad  字到键边的留白(一边)
      * @param skip 键与键、行与行之间的缝
      */
-    public static int naturalWidth(int[] textWidths, int pad, int skip) {
-        int n = textWidths.length;
-        return n == 0 ? 0 : n * (widest(textWidths) + pad * 2) + (n - 1) * skip;
+    public static int naturalWidth(int[][] rows, int pad, int skip) {
+        int w = 0;
+        for (int[] row : rows) {
+            if (row.length == 0) continue;
+            w = Math.max(w, row.length * (widest(row) + pad * 2) + (row.length - 1) * skip);
+        }
+        return w;
     }
 
-    /**
-     * 排成几行、每个键在哪。一行能放几个按最宽的字算;放不下全部就分几行,再把键平摊到各行。
-     * 一行里的键平分这一行的宽(Telegram 按浮点累加再取整,缝不会越排越歪)。
-     */
-    public static List<Key> layout(int[] textWidths, int width, int pad, int skip, int keyH) {
-        int n = textWidths.length;
-        List<Key> out = new ArrayList<>(n);
-        if (n == 0) return out;
-        int fit = Math.max(1, Math.min(n, (width + skip) / (widest(textWidths) + pad * 2 + skip)));
-        int rows = (n + fit - 1) / fit;
-        int perRow = (n + rows - 1) / rows;
+    /** 每个键在哪:一行里的键平分这一行的宽(Telegram 按浮点累加再取整,缝不会越排越歪)。 */
+    public static List<Key> layout(int[][] rows, int width, int skip, int keyH) {
+        List<Key> out = new ArrayList<>();
         int y = 0;
-        for (int first = 0; first < n; first += perRow) {
-            int k = Math.min(perRow, n - first);
+        for (int[] row : rows) {
+            int k = row.length;
+            if (k == 0) continue;
             double each = (width - (k - 1) * skip) / (double) k;
             double x = 0;
             for (int i = 0; i < k; i++) {

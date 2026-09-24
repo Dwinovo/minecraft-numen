@@ -14,6 +14,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.resources.language.I18n;
+import net.minecraft.locale.Language;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.List;
@@ -23,25 +24,26 @@ import java.util.List;
  *
  * <pre>
  * ┌──────────────────────────────┐
- * │ 挖 [原木]×6 · dwinovo 放的     │  ← 气泡里的清单:动词、图标(没有图标写名字)、数量、理由;撤不回的整行警示色
- * │                        87 秒 │  ← 挂着时是剩下的秒数,底边一道缩短的线;收起后是到的时刻
+ * │ 想挖 [原木]×6,可以吗?         │  ← 一件事:一句问话(图标没有就写名字),下一行淡字是为什么;撤不回的整条是警示色
+ * │ dwinovo 放的            87 秒 │  ← 挂着时是剩下的秒数,底边一道缩短的线;收起后是到的时刻。放得下就挂在最后一行
  * └──────────────────────────────┘
- * [1   允许   ] [2  以后都允许 ]      ← 内联按钮:半透明底,等宽,放不下就换行;左上角的序号就是数字键
- * [3   拒绝   ] [4 说一句再拒绝]
+ * [    允许    ] [ 以后都允许  ]      ← 内联按钮:半透明底白字,两行两个,一行里等宽
+ * [    拒绝    ] [说一句再拒绝 ]
  *        [你选了「允许」]              ← 答完:选中的那个键留着,别的淡下去,下面长出一条服务消息写结果
  * </pre>
  *
+ * <p>几件事一起问时,第一行是一句总问,下面每件一行(动词、图标、数量、为什么)。
+ *
  * <p>气泡外形与结果那条服务消息由宿主画(对话流里是她的气泡与对话流的服务消息,快捷对话里是输入卡那一套框),
- * 这里只管气泡里的清单、下面的键盘,以及结果写什么、露出几成。按钮的底与字就是服务消息那一对颜色(Telegram 的
- * 内联按钮也是 msgServiceBg / msgServiceFg);几何照 {@code msgBotKbButton}(键间 2px 的缝)按 MC 的字号缩;
- * 序号照 Telegram 的快捷按钮模式标在键的左上角。键盘选中框(↑↓ 选、回车按)Telegram 没有,只在数字键此刻归这条
- * 消息时淡入。
+ * 这里只管气泡里的字、下面的键盘,以及结果写什么、露出几成。按钮的底与字就是服务消息那一对颜色(Telegram 的
+ * 内联按钮也是 msgServiceBg / msgServiceFg);几何照 {@code msgBotKbButton}(键间 2px 的缝)按 MC 的字号缩。
+ * 和 Telegram 一样只用指针按:没有序号、没有键盘选中。
  */
 public final class ConsentMessage {
 
-    /** 清单一行的高:物品图标画成 12 像素,比一行字高一点。 */
+    /** 正文一行的高:物品图标画成 12 像素,比一行字高一点。 */
     private static final int ROW_H = 13;
-    /** 清单最多列几堆,其余计数。 */
+    /** 几件事一起问时最多列几件,其余计数。 */
     private static final int MAX_ROWS = 3;
     /** 图标画成 12 像素(物品原图 16)。 */
     private static final float ICON_SCALE = 0.75f;
@@ -54,49 +56,86 @@ public final class ConsentMessage {
     private static final int SETTLE_MS = 220;
     /** 按下去那一圈漾开再淡掉。 */
     private static final int RIPPLE_MS = 400;
-    /** 悬停与选中框的淡入淡出:每秒走完几遍。 */
+    /** 悬停的淡入淡出:每秒走完几遍。 */
     private static final float FADE_RATE = 8f;
 
     private ConsentMessage() {}
 
-    // ---- 清单 ----
+    // ---- 正文 ----
 
-    public static int listHeight(ConsentCards.Card card) {
+    /** 正文有几行:一件事是问话加为什么;几件事是一句总问加每件一行(最多 {@link #MAX_ROWS},其余计数)。 */
+    private static int rows(ConsentCards.Card card) {
         int n = card.request().lines().size();
-        return ROW_H * (Math.min(MAX_ROWS, n) + (n > MAX_ROWS ? 1 : 0));
+        return n <= 1 ? 2 : 1 + Math.min(MAX_ROWS, n) + (n > MAX_ROWS ? 1 : 0);
     }
 
-    /** 清单不截短时最宽的那一行。 */
+    public static int listHeight(ConsentCards.Card card) {
+        return ROW_H * rows(card);
+    }
+
+    /** 正文不截短时最宽的那一行。 */
     public static int listWidth(Font font, ConsentCards.Card card) {
-        List<ConsentRequestPayload.Line> lines = card.request().lines();
-        int w = lines.size() > MAX_ROWS ? font.width("+" + (lines.size() - MAX_ROWS)) : 0;
-        for (int i = 0; i < Math.min(MAX_ROWS, lines.size()); i++) {
-            ConsentRequestPayload.Line line = lines.get(i);
-            w = Math.max(w, font.width(verb(line)) + 4 + (line.icon() != null ? ICON + 1 : font.width(line.name()))
-                    + font.width(count(line)) + font.width(" · " + line.cause().getString()));
-        }
+        int w = 0;
+        for (int r = 0; r < rows(card); r++) w = Math.max(w, rowWidth(font, card, r));
         return w;
+    }
+
+    /** 最后一行多宽:宿主拿它决定时间挂在这一行还是另起一行(Telegram 放得下就挂在末行右下)。 */
+    public static int lastRowWidth(Font font, ConsentCards.Card card) {
+        return rowWidth(font, card, rows(card) - 1);
+    }
+
+    /** 正文最后一行的字从哪一行起画({@code y} 是正文顶):时间挂在末行时和它对齐。 */
+    public static int lastRowTextY(Font font, ConsentCards.Card card, int y) {
+        return y + (rows(card) - 1) * ROW_H + (ROW_H - font.lineHeight) / 2 + 1;
     }
 
     public static void drawList(GuiGraphics g, Font font, ConsentCards.Card card, int x, int y, int w) {
         UiTheme th = UiTheme.current();
         List<ConsentRequestPayload.Line> lines = card.request().lines();
         int textDy = (ROW_H - font.lineHeight) / 2 + 1;
+        if (lines.size() <= 1) {
+            ConsentRequestPayload.Line line = lines.get(0);
+            int ty = y + textDy;
+            Nb.text(g, font, askBefore(), x, ty, main(th, line));
+            int x1 = drawThing(g, font, th, line, x + font.width(askBefore()), ty);
+            Nb.text(g, font, Nb.clip(font, askAfter(), x + w - x1), x1, ty, main(th, line));
+            Nb.text(g, font, Nb.clip(font, line.cause().getString(), w), x, ty + ROW_H, soft(th, line));
+            return;
+        }
+        Nb.text(g, font, Nb.clip(font, I18n.get(ModLanguageData.Keys.CONSENT_ASK_MANY), w), x, y + textDy,
+                th.text());
         for (int i = 0; i < Math.min(MAX_ROWS, lines.size()); i++) {
-            drawRow(g, font, th, lines.get(i), x, y + i * ROW_H + textDy, w);
+            ConsentRequestPayload.Line line = lines.get(i);
+            int ty = y + (i + 1) * ROW_H + textDy;
+            int x1 = drawThing(g, font, th, line, x, ty);
+            Nb.text(g, font, Nb.clip(font, " · " + line.cause().getString(), x + w - x1), x1, ty, soft(th, line));
         }
         if (lines.size() > MAX_ROWS) {
-            Nb.text(g, font, "+" + (lines.size() - MAX_ROWS), x, y + MAX_ROWS * ROW_H + textDy, th.textDim());
+            Nb.text(g, font, "+" + (lines.size() - MAX_ROWS), x, y + (MAX_ROWS + 1) * ROW_H + textDy,
+                    th.textDim());
         }
     }
 
-    private static void drawRow(GuiGraphics g, Font font, UiTheme th, ConsentRequestPayload.Line line,
-                                int lx, int textY, int width) {
-        int end = lx + width;
-        int main = line.irreversible() ? th.fail() : th.text();
-        int soft = line.irreversible() ? th.fail() : th.textDim();
+    private static int rowWidth(Font font, ConsentCards.Card card, int r) {
+        List<ConsentRequestPayload.Line> lines = card.request().lines();
+        if (lines.size() <= 1) {
+            ConsentRequestPayload.Line line = lines.get(0);
+            return r == 0 ? font.width(askBefore()) + thingWidth(font, line) + font.width(askAfter())
+                    : font.width(line.cause().getString());
+        }
+        if (r == 0) return font.width(I18n.get(ModLanguageData.Keys.CONSENT_ASK_MANY));
+        if (r > MAX_ROWS) return font.width("+" + (lines.size() - MAX_ROWS));
+        ConsentRequestPayload.Line line = lines.get(r - 1);
+        return thingWidth(font, line) + font.width(" · " + line.cause().getString());
+    }
+
+    /** 一件事本身:动词、图标(没有图标写名字)、数量。返回画完的右缘。 */
+    private static int drawThing(GuiGraphics g, Font font, UiTheme th, ConsentRequestPayload.Line line,
+                                 int lx, int textY) {
+        int main = main(th, line);
         String verb = verb(line);
-        Nb.text(g, font, verb, lx, textY, soft);
+        Nb.text(g, font, verb, lx, textY, main);
         lx += font.width(verb) + 4;
         if (line.icon() != null) {
             var pose = g.pose();
@@ -113,8 +152,33 @@ public final class ConsentMessage {
         }
         String count = count(line);
         Nb.text(g, font, count, lx, textY, main);
-        lx += font.width(count);
-        Nb.text(g, font, Nb.clip(font, " · " + line.cause().getString(), end - lx), lx, textY, soft);
+        return lx + font.width(count);
+    }
+
+    private static int thingWidth(Font font, ConsentRequestPayload.Line line) {
+        return font.width(verb(line)) + 4 + (line.icon() != null ? ICON + 1 : font.width(line.name().getString()))
+                + font.width(count(line));
+    }
+
+    private static int main(UiTheme th, ConsentRequestPayload.Line line) {
+        return line.irreversible() ? th.fail() : th.text();
+    }
+
+    private static int soft(UiTheme th, ConsentRequestPayload.Line line) {
+        return line.irreversible() ? th.fail() : th.textDim();
+    }
+
+    /** 问话里那件事前面的一截:一件事的问话把动词、图标、数量嵌在这句中间({@code %s} 那里)。 */
+    private static String askBefore() {
+        String ask = Language.getInstance().getOrDefault(ModLanguageData.Keys.CONSENT_ASK);
+        return ask.substring(0, Math.max(0, ask.indexOf("%s")));
+    }
+
+    /** 问话里那件事后面的一截。 */
+    private static String askAfter() {
+        String ask = Language.getInstance().getOrDefault(ModLanguageData.Keys.CONSENT_ASK);
+        int at = ask.indexOf("%s");
+        return at < 0 ? "" : ask.substring(at + 2);
     }
 
     private static String verb(ConsentRequestPayload.Line line) {
@@ -125,13 +189,14 @@ public final class ConsentMessage {
         return line.count() > 1 ? "×" + line.count() : "";
     }
 
-    /** 清单压成一行字(没有图标):输入框上方那条"说一句再拒绝"提示栏的第二行。 */
+    /** 问话压成一行字(没有图标):输入框上方那条"说一句再拒绝"提示栏的第二行。 */
     public static String summary(ConsentCards.Card card) {
         List<ConsentRequestPayload.Line> lines = card.request().lines();
         if (lines.isEmpty()) return "";
         ConsentRequestPayload.Line head = lines.get(0);
         String more = lines.size() > 1 ? " +" + (lines.size() - 1) : "";
-        return verb(head) + " " + head.name().getString() + count(head) + " · " + head.cause().getString() + more;
+        return I18n.get(ModLanguageData.Keys.CONSENT_ASK, verb(head) + " " + head.name().getString() + count(head))
+                + more;
     }
 
     // ---- 挂着的时间 ----
@@ -151,7 +216,7 @@ public final class ConsentMessage {
         return (float) Math.min(1.0, (double) ticksLeft(card) / ConsentDesk.TIMEOUT_TICKS);
     }
 
-    /** 这条的强调色:清单里有撤不回的事是警示色。 */
+    /** 这条的强调色:有撤不回的事是警示色。 */
     public static int tone(ConsentCards.Card card) {
         UiTheme th = UiTheme.current();
         return card.irreversible() ? th.fail() : th.accent();
@@ -159,17 +224,24 @@ public final class ConsentMessage {
 
     // ---- 内联键盘 ----
 
-    private static int[] labelWidths(Font font) {
-        int[] widths = new int[ConsentCards.BUTTONS];
-        for (int i = 0; i < widths.length; i++) widths[i] = font.width(ConsentCards.Card.label(i));
+    /** 两行两个:允许、以后都允许;拒绝、说一句再拒绝。格子里是键号,也就是 {@link ConsentCards.Card#label} 的次序。 */
+    private static final int[][] ROWS = {{0, 1}, {2, 3}};
+
+    private static int[][] labelWidths(Font font) {
+        int[][] widths = new int[ROWS.length][];
+        for (int r = 0; r < ROWS.length; r++) {
+            widths[r] = new int[ROWS[r].length];
+            for (int i = 0; i < ROWS[r].length; i++) widths[r][i] = font.width(ConsentCards.Card.label(ROWS[r][i]));
+        }
         return widths;
     }
 
+    /** 各键的矩形,按键号排(排法按行给,{@link #ROWS} 行内、行间都是键号递增)。 */
     private static List<InlineKeyboard.Key> keys(Font font, int w) {
-        return InlineKeyboard.layout(labelWidths(font), w, KEY_PAD, GAP, KEY_H);
+        return InlineKeyboard.layout(labelWidths(font), w, GAP, KEY_H);
     }
 
-    /** 四个键排成一行要多宽:气泡被它撑宽(Telegram 的键盘与气泡同宽)。 */
+    /** 键盘不截字要多宽:气泡被它撑宽(Telegram 的键盘与气泡同宽)。 */
     public static int keyboardWidth(Font font) {
         return InlineKeyboard.naturalWidth(labelWidths(font), KEY_PAD, GAP);
     }
@@ -184,9 +256,9 @@ public final class ConsentMessage {
         long now = System.currentTimeMillis();
         float dt = card.frameAt == 0 ? 0f : Math.min(0.1f, (now - card.frameAt) / 1000f);
         card.frameAt = now;
-        card.armedShown = fade(card.armedShown, card.armed && card.selected() >= 0, dt);
         float settled = reveal(card);
-        // 宿主此刻的透明度(对话流里新消息飞入时整块在淡入):字的淡入淡出乘在它上面,画完还给它
+        // 宿主此刻的透明度(对话流里新消息飞入时整块在淡入):字的颜色直接带上它,不动着色器——字是攒着一起画的,
+        // 着色器在哪一刻生效说不准
         float base = RenderSystem.getShaderColor()[3];
         List<InlineKeyboard.Key> keys = keys(font, w);
         for (int i = 0; i < keys.size(); i++) {
@@ -205,16 +277,10 @@ public final class ConsentMessage {
             if (i == card.pressedKey) {
                 drawRipple(g, card, k, kx, ky, now, th);
             }
-            if (i == card.selected() && card.armedShown > 0f) {
-                Nb.border(g, kx, ky, k.w(), k.h(), 1, withAlpha(th.serviceFg(), card.armedShown * alpha));
-            }
             String label = Nb.clip(font, ConsentCards.Card.label(i), k.w() - KEY_PAD * 2);
             int ty = ky + (k.h() - font.lineHeight) / 2 + 1;
-            g.setColor(1f, 1f, 1f, base * alpha * 0.6f);
-            Nb.text(g, font, String.valueOf(i + 1), kx + 3, ky + 2, th.serviceFg());
-            g.setColor(1f, 1f, 1f, base * alpha);
-            Nb.text(g, font, label, kx + (k.w() - font.width(label)) / 2, ty, th.serviceFg());
-            g.setColor(1f, 1f, 1f, base);
+            Nb.text(g, font, label, kx + (k.w() - font.width(label)) / 2, ty,
+                    withAlpha(th.serviceFg(), base * alpha));
         }
     }
 

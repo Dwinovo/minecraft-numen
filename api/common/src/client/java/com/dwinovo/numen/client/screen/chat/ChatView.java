@@ -758,10 +758,11 @@ public final class ChatView {
      * 她的征询(Telegram 带内联按钮的消息):她那一侧的气泡里是清单,下面挂按钮,答完再挂一条结果。它不是对话记录
      * 里的一条,按到的时刻排进时间线,算在她的连发里;清单、按钮与结果条的画法和点法归 {@link ConsentMessage}。
      * {@code w} 是气泡与键盘共用的宽(Telegram 的键盘与气泡同宽,气泡被键盘撑宽);{@code label}、{@code runEnd}
-     * 与话的气泡同义。
+     * 与话的气泡同义;{@code timeInline} = 右下角那一小行放得进正文最后一行右侧(和话的气泡一样)。
      */
-    private record Consent(ConsentCards.Card card, String label, int w, boolean runEnd) implements Block {
-        Consent withRunEnd(boolean on) { return new Consent(card, label, w, on); }
+    private record Consent(ConsentCards.Card card, String label, int w, boolean runEnd, boolean timeInline)
+            implements Block {
+        Consent withRunEnd(boolean on) { return new Consent(card, label, w, on, timeInline); }
     }
 
     private record ChipRow(String icon, int iconColor, FormattedCharSequence text) {}
@@ -783,7 +784,7 @@ public final class ChatView {
             case Notice n -> n.lines().size() * LINE_H + SERVICE_PAD_V * 2;
             case Divider ignored -> LINE_H + SERVICE_PAD_V * 2;
             case UnreadBar ignored -> LINE_H + SERVICE_PAD_V * 2;
-            case Consent c -> (c.label() != null ? LABEL_H : 0) + consentBubbleH(c.card()) + ConsentMessage.GAP
+            case Consent c -> (c.label() != null ? LABEL_H : 0) + consentBubbleH(c) + ConsentMessage.GAP
                     + ConsentMessage.keyboardHeight(font, c.w()) + consentResultH(c.card());
         };
     }
@@ -796,8 +797,8 @@ public final class ChatView {
     }
 
     /** 征询那条的气泡本身多高(不含上面的名字):清单,下面一小行是剩下的秒数(收起后是到的时刻)。 */
-    private static int consentBubbleH(ConsentCards.Card card) {
-        return PAD_V * 2 + ConsentMessage.listHeight(card) + TIME_H;
+    private static int consentBubbleH(Consent c) {
+        return PAD_V * 2 + ConsentMessage.listHeight(c.card()) + (c.timeInline() ? 0 : TIME_H);
     }
 
     /** 征询收起后键盘下面那条服务消息(连同上面的缝)此刻多高:收起的那一刻从零长出来。 */
@@ -818,9 +819,12 @@ public final class ChatView {
     }
 
     private Consent consent(ConsentCards.Card card, String label, int bubbleMaxW) {
-        int text = Math.max(ConsentMessage.listWidth(font, card), font.width(consentMeta(card)));
+        // 右下角那一小行挤在正文最后一行右侧(Telegram):放得下就同一行,放不下自己占一小行
+        int tw = font.width(consentMeta(card)) + 6;
+        int last = ConsentMessage.lastRowWidth(font, card);
+        int text = Math.max(ConsentMessage.listWidth(font, card), last + tw);
         int w = Math.min(bubbleMaxW, Math.max(text + PAD_H * 2, ConsentMessage.keyboardWidth(font)));
-        return new Consent(card, label, w, false);
+        return new Consent(card, label, w, false, last + tw <= w - PAD_H * 2);
     }
 
     private int totalHeight(List<Block> blocks) {
@@ -942,7 +946,7 @@ public final class ChatView {
         // 算在她的连发里;提示行打断。f.last == null = 连发已断。
         int msgIndex = -1;
         LocalDate lastDay = null;
-        // 她的征询按到的时刻排进时间线。只在和她的私聊里:征询问的是她的身体,输入行的数字键也只对着就她俩的会话
+        // 她的征询按到的时刻排进时间线。只在和她的私聊里:征询问的是她的身体
         List<ConsentCards.Card> asks = ConsentCards.history(solo());
         int asked = 0;
         for (Transcript.Entry entry : source) {
@@ -1406,19 +1410,20 @@ public final class ChatView {
     }
 
     /**
-     * 征询那条:和话、清单同一份气泡外形(名字、脸、底色、尾巴),里面是清单与右下角的秒数,挂着时底边一道缩短的线;
+     * 征询那条:和话、清单同一份气泡外形(名字、脸、底色、尾巴),里面是问话与右下角的秒数,挂着时底边一道缩短的线;
      * 气泡下面贴着内联按钮(Telegram 的键盘挂在气泡外面、与气泡同宽),收起后再下面一条服务消息写结果。
      */
     private void drawConsent(GuiGraphics g, Consent c, int x, int y, int w) {
         ConsentCards.Card card = c.card();
         int bx = x + EDGE + faceCol();
-        int bh = consentBubbleH(card);
+        int bh = consentBubbleH(c);
         int bubTop = y + (c.label() != null ? LABEL_H : 0);
         bubbleFrame(g, false, c.label(), card.companion(), c.runEnd(), x, y, bx, c.w(), bh, AI_FILL);
         ConsentMessage.drawList(g, font, card, bx + PAD_H, bubTop + PAD_V, c.w() - PAD_H * 2);
         String meta = consentMeta(card);
-        draw(g, Nb.colored(meta, IN_META).getVisualOrderText(), bx + c.w() - PAD_H - font.width(meta),
-                bubTop + PAD_V + ConsentMessage.listHeight(card));
+        int metaY = c.timeInline() ? ConsentMessage.lastRowTextY(font, card, bubTop + PAD_V)
+                : bubTop + PAD_V + ConsentMessage.listHeight(card);
+        draw(g, Nb.colored(meta, IN_META).getVisualOrderText(), bx + c.w() - PAD_H - font.width(meta), metaY);
         if (card.waiting()) {
             g.fill(bx, bubTop + bh - 1, bx + Math.round(c.w() * ConsentMessage.timeLeft(card)), bubTop + bh,
                     ConsentMessage.tone(card));
@@ -1439,7 +1444,7 @@ public final class ChatView {
 
     /** 征询那条的按钮从哪一行起:名字、气泡下面隔一道缝。画和点都照它。 */
     private static int consentKeysTop(Consent c, int y) {
-        return y + (c.label() != null ? LABEL_H : 0) + consentBubbleH(c.card()) + ConsentMessage.GAP;
+        return y + (c.label() != null ? LABEL_H : 0) + consentBubbleH(c) + ConsentMessage.GAP;
     }
 
     /** 一行的服务消息(日期牌、未读消息)。对话里的日期牌和翻页时浮在顶上的是同一枚。 */

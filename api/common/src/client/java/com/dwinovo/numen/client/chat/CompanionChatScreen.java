@@ -42,8 +42,8 @@ import java.util.UUID;
  * <p>样子照 Telegram 的输入区:窗口底色的一条、浮起的细描边;左端是说给谁——会话头像(群是群头像)加名字,
  * 一道分隔线隔开输入框。开屏时整条自下浮起 {@link #OPEN_MS},不硬切。
  *
- * <p>有征询挂着时按对话键先答征询(对象是最早在等的那位,见 {@code NumenKeys}):她问的那条(清单 + 内联按钮,
- * 见 {@link ConsentMessage})浮在输入卡上面,点按钮、按数字键、"说一句再拒绝"后打字回车都和 G 面板一样;答完
+ * <p>有征询挂着时按对话键先答征询(对象是最早在等的那位,见 {@code NumenKeys}):她问的那条(问话 + 内联按钮,
+ * 见 {@link ConsentMessage})浮在输入卡上面,点按钮、"说一句再拒绝"后打字回车都和 G 面板一样;答完
  * 还有别的同伴在等就换到她,都答完且输入框是空的就关屏——和说完一句一样。
  */
 public class CompanionChatScreen extends Screen {
@@ -87,7 +87,7 @@ public class CompanionChatScreen extends Screen {
         return null;
     }
 
-    /** 就他俩那只的大脑(补全、征询的数字键);会话没有单一的主时 null。 */
+    /** 就他俩那只的大脑(补全、征询);会话没有单一的主时 null。 */
     private EntityAgentLoop loop() {
         UUID her = Conversations.instance().soloOf(conv);
         return her == null ? null : AgentLoopRegistry.getOrCreate(her);

@@ -26,7 +26,7 @@ import java.util.UUID;
  * 收起的不扔:征询是对话流里她的一条消息(Telegram 带内联按钮的那种,见 {@link ConsentMessage}),答完按钮停在
  * 选中的那个上、下面写着结果,所以每只同伴按到的先后留一串,断线才清。
  *
- * <p>"挂没挂着"只读这里:对话流里那条消息、输入行的数字键与提示栏、世界轮廓、面板侧栏的标记、派发器的兜底豁免
+ * <p>"挂没挂着"只读这里:对话流里那条消息、输入行的提示栏、世界轮廓、面板侧栏的标记、派发器的兜底豁免
  * 都问 {@link #pending}。客户端主线程读写。
  */
 public final class ConsentCards {
@@ -44,15 +44,12 @@ public final class ConsentCards {
     private ConsentCards() {}
 
     /**
-     * 一条征询,从她问出口到收起。按钮的选中(数字键、↑↓)与"正在写那一句"也记在这里——对话流里的消息画它,
-     * 输入行按键改它,两边看的是同一份。
+     * 一条征询,从她问出口到收起。"正在写那一句"也记在这里——对话流里的消息画它,输入行改它,两边看的是同一份。
      */
     public static final class Card {
         private final ConsentRequestPayload request;
         private final long arrivedAt;
         private final boolean irreversible;
-        /** 键盘选中的那个键;{@code -1} = 还没选(清单里有撤不回的事时不给默认选中)。 */
-        private int selected;
         /** 点了"说一句再拒绝",输入框上方挂着提示栏。 */
         private boolean writing;
         /** 主人点的哪个键;{@code -1} = 还在等,或没等到主人答复就收了。 */
@@ -64,9 +61,6 @@ public final class ConsentCards {
         private long settledAt;
 
         // ---- 画面上的过渡,归 ConsentMessage ----
-        /** 数字键、↑↓、回车此刻归不归这条(输入框空着、没在写那一句);每帧由输入行给。 */
-        boolean armed;
-        float armedShown;
         final float[] over = new float[BUTTONS];
         /** 按下去的那一圈(Telegram 的按钮波纹):哪个键、什么时候、按在键里哪一点。 */
         int pressedKey = -1;
@@ -78,7 +72,6 @@ public final class ConsentCards {
             this.request = request;
             this.arrivedAt = arrivedAt;
             this.irreversible = request.lines().stream().anyMatch(ConsentRequestPayload.Line::irreversible);
-            this.selected = irreversible ? -1 : 0;
         }
 
         public ConsentRequestPayload request() {
@@ -106,10 +99,6 @@ public final class ConsentCards {
             return settledAt;
         }
 
-        public int selected() {
-            return selected;
-        }
-
         public boolean writing() {
             return writing;
         }
@@ -135,21 +124,9 @@ public final class ConsentCards {
             });
         }
 
-        /** 输入行告诉它:数字键、↑↓、回车此刻归不归它。 */
-        public void arm(boolean on) {
-            armed = on && waiting();
-        }
-
-        /** ↑↓:在四个键里挪;还没选时第一下落在第一个。 */
-        public void move(int dir) {
-            if (!waiting()) return;
-            selected = selected < 0 ? 0 : Math.max(0, Math.min(BUTTONS - 1, selected + dir));
-        }
-
-        /** 按下一个键(点、数字键、回车):前三个直接答;第四个去写那一句。 */
+        /** 点了一个键:前三个直接答;第四个去写那一句。 */
         public void press(int key) {
             if (!waiting() || key < 0 || key >= BUTTONS) return;
-            selected = key;
             if (key == NOTE) {
                 writing = true;
             } else {
@@ -170,7 +147,6 @@ public final class ConsentCards {
 
         private void settle() {
             writing = false;
-            armed = false;
             settledAt = System.currentTimeMillis();
         }
     }

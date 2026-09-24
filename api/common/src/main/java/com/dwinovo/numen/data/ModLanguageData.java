@@ -85,6 +85,9 @@ public final class ModLanguageData {
         public static final String CONSENT_ANSWERED_ELSEWHERE = "numen.consent.answered_elsewhere";
         /** 清单一堆前面那个短动词,后接 {@code break}、{@code attack}……。 */
         public static final String CONSENT_VERB_PREFIX    = "numen.consent.verb.";
+        /** 征询那条的问话:一件事是"想挖 [原木]×6,可以吗?"(%s 是动词加东西),几件事是一句总问。 */
+        public static final String CONSENT_ASK            = "numen.consent.ask";
+        public static final String CONSENT_ASK_MANY       = "numen.consent.ask_many";
         /** 信号给主人看的自述,后接规则里的信号名({@code placed}……)。 */
         public static final String PERMISSION_SIGNAL_PREFIX = "numen.permission.signal.";
         public static final String PERMISSION_PLACED_BY   = "numen.permission.placed_by";
@@ -687,13 +690,15 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_CHOSE,          "You chose “%s”");
         adder.add(Keys.CONSENT_DENIED_SAYING,  "You said no: %s");
         adder.add(Keys.CONSENT_ANSWERED_ELSEWHERE, "Answered elsewhere");
-        adder.add(Keys.CONSENT_VERB_PREFIX + "break",      "Break");
-        adder.add(Keys.CONSENT_VERB_PREFIX + "place",      "Place");
-        adder.add(Keys.CONSENT_VERB_PREFIX + "attack",     "Attack");
-        adder.add(Keys.CONSENT_VERB_PREFIX + "use_block",  "Use");
-        adder.add(Keys.CONSENT_VERB_PREFIX + "use_entity", "Use");
-        adder.add(Keys.CONSENT_VERB_PREFIX + "take",       "Take from");
-        adder.add(Keys.CONSENT_VERB_PREFIX + "drop",       "Drop");
+        adder.add(Keys.CONSENT_ASK,            "May I %s?");
+        adder.add(Keys.CONSENT_ASK_MANY,       "May I do these?");
+        adder.add(Keys.CONSENT_VERB_PREFIX + "break",      "break");
+        adder.add(Keys.CONSENT_VERB_PREFIX + "place",      "place");
+        adder.add(Keys.CONSENT_VERB_PREFIX + "attack",     "attack");
+        adder.add(Keys.CONSENT_VERB_PREFIX + "use_block",  "use");
+        adder.add(Keys.CONSENT_VERB_PREFIX + "use_entity", "use");
+        adder.add(Keys.CONSENT_VERB_PREFIX + "take",       "take from");
+        adder.add(Keys.CONSENT_VERB_PREFIX + "drop",       "drop");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "placed",       "placed by a player");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "block_entity", "functional block");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "contents",     "has things inside");
@@ -1118,6 +1123,8 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_CHOSE,          "你选了「%s」");
         adder.add(Keys.CONSENT_DENIED_SAYING,  "你拒绝了:%s");
         adder.add(Keys.CONSENT_ANSWERED_ELSEWHERE, "已在别处答复");
+        adder.add(Keys.CONSENT_ASK,            "想%s,可以吗?");
+        adder.add(Keys.CONSENT_ASK_MANY,       "想做这几件事,可以吗?");
         adder.add(Keys.CONSENT_VERB_PREFIX + "break",      "挖");
         adder.add(Keys.CONSENT_VERB_PREFIX + "place",      "放");
         adder.add(Keys.CONSENT_VERB_PREFIX + "attack",     "打");

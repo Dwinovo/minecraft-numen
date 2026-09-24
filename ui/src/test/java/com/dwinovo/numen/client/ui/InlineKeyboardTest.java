@@ -7,49 +7,45 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** 内联键盘:一行等宽、放不下换行、各行平摊、缝不越排越歪。 */
+/** 内联键盘:行由发消息的一方定、一行等宽贴满、行间隔缝、缝不越排越歪。 */
 class InlineKeyboardTest {
 
-    /** 四个键,最宽的字 70;留白 8、缝 2 → 每个键至少 86 宽。 */
-    private static final int[] LABELS = {30, 60, 30, 70};
+    /** 两行两个;最宽的字 70,留白 8、缝 2。 */
+    private static final int[][] ROWS = {{30, 60}, {30, 70}};
 
     @Test
-    void wideEnoughPutsEveryKeyInOneEqualRow() {
-        List<InlineKeyboard.Key> keys = InlineKeyboard.layout(LABELS, 400, 8, 2, 16);
+    void keysInARowShareItsWidthEquallyAndReachTheRightEdge() {
+        List<InlineKeyboard.Key> keys = InlineKeyboard.layout(ROWS, 201, 2, 16);
         assertEquals(4, keys.size());
-        for (InlineKeyboard.Key k : keys) {
-            assertEquals(0, k.y());
-            assertTrue(Math.abs(k.w() - keys.get(0).w()) <= 1, "一行里的键等宽: " + keys);
+        for (int row = 0; row < 2; row++) {
+            InlineKeyboard.Key a = keys.get(row * 2), b = keys.get(row * 2 + 1);
+            assertEquals(a.y(), b.y(), "同一行");
+            assertTrue(Math.abs(a.w() - b.w()) <= 1, "一行里的键等宽: " + keys);
+            assertEquals(0, a.x());
+            assertEquals(201, b.x() + b.w(), "最后一个键贴着右缘");
+            assertEquals(2, b.x() - (a.x() + a.w()), "键间一道缝");
         }
-        InlineKeyboard.Key last = keys.get(3);
-        assertEquals(400, last.x() + last.w(), "最后一个键贴着右缘");
-        assertEquals(16, InlineKeyboard.height(keys));
     }
 
     @Test
-    void naturalWidthIsOneRowOfWidestKeys() {
-        assertEquals(4 * 86 + 3 * 2, InlineKeyboard.naturalWidth(LABELS, 8, 2));
-        assertEquals(4, InlineKeyboard.layout(LABELS, InlineKeyboard.naturalWidth(LABELS, 8, 2), 8, 2, 16)
-                .stream().filter(k -> k.y() == 0).count(), "正好这么宽时一行放得下");
-    }
-
-    @Test
-    void threeFitButRowsAreBalancedTwoAndTwo() {
-        List<InlineKeyboard.Key> keys = InlineKeyboard.layout(LABELS, 270, 8, 2, 16);
-        assertEquals(0, keys.get(1).y());
-        assertEquals(18, keys.get(2).y(), "第三个键换到第二行");
-        assertEquals(18, keys.get(3).y());
+    void rowsStackWithAGapBetween() {
+        List<InlineKeyboard.Key> keys = InlineKeyboard.layout(ROWS, 200, 2, 16);
+        assertEquals(0, keys.get(0).y());
+        assertEquals(18, keys.get(2).y(), "第二行在第一行下面隔一道缝");
         assertEquals(34, InlineKeyboard.height(keys));
-        assertEquals(keys.get(0).w(), keys.get(2).w(), "两行一样宽");
     }
 
     @Test
-    void tooNarrowStacksOnePerRow() {
-        List<InlineKeyboard.Key> keys = InlineKeyboard.layout(LABELS, 80, 8, 2, 16);
-        for (int i = 0; i < 4; i++) {
-            assertEquals(i * 18, keys.get(i).y());
-            assertEquals(80, keys.get(i).w());
-        }
+    void naturalWidthIsTheWidestRowOfEqualKeys() {
+        assertEquals(2 * 86 + 2, InlineKeyboard.naturalWidth(ROWS, 8, 2));
+        assertEquals(3 * 26 + 2 * 2, InlineKeyboard.naturalWidth(new int[][] {{10}, {5, 10, 5}}, 8, 2),
+                "按最挤的那一行算");
+    }
+
+    @Test
+    void aRowOfOneTakesTheWholeWidth() {
+        List<InlineKeyboard.Key> keys = InlineKeyboard.layout(new int[][] {{40}}, 120, 2, 16);
+        assertEquals(new InlineKeyboard.Key(0, 0, 120, 16), keys.get(0));
     }
 
     @Test

@@ -37,8 +37,8 @@ import java.util.Set;
  * 不搞两条语音路。
  *
  * <p>她在等主人点头的时候,征询是对话流里她的一条消息,下面挂一排内联按钮({@link ConsentMessage})。这条输入行
- * 不让位,只在输入框空着时把数字键、↑↓、回车借给那排按钮(Telegram 的快捷按钮模式,键上标着序号);点了
- * "说一句再拒绝"就在输入框上方挂一条提示栏(和引用栏同一条),这时发出去的那句就是拒绝的理由。挂没挂着只看
+ * 不让位,按钮只用指针点(和 Telegram 一样);点了"说一句再拒绝"就在输入框上方挂一条提示栏(和引用栏同一条),
+ * 这时发出去的那句就是拒绝的理由。挂没挂着只看
  * {@link ConsentCards},不各自判断。
  */
 public final class ChatInputBar {
@@ -257,8 +257,7 @@ public final class ChatInputBar {
     }
 
     /**
-     * 每帧同步可按性、占位文案与征询:叫停的可用性是活的;点了"说一句再拒绝"就把提示栏换上、光标给输入框;
-     * 数字键此刻归不归那排按钮告诉那条征询(它据此画选中框)。
+     * 每帧同步可按性、占位文案与征询:叫停的可用性是活的;点了"说一句再拒绝"就把提示栏换上、光标给输入框。
      */
     public void refreshEnablement() {
         if (field == null) return;
@@ -280,15 +279,6 @@ public final class ChatInputBar {
         field.placeholder(note != null
                 ? I18n.get(ModLanguageData.Keys.CONSENT_NOTE_ROW, ConsentCards.name(note.companion()))
                 : host.hint());
-        if (card != null) card.arm(keysToConsent(card));
-    }
-
-    /**
-     * 数字键、↑↓、回车此刻归不归那排按钮:输入框接着字、空着、没开面板、没在写那一句。
-     * 框里一有字就还给输入框——打的话不会被当成选项吞掉。
-     */
-    private boolean keysToConsent(ConsentCards.Card card) {
-        return !card.writing() && panel == null && field.isFocused() && field.value().isEmpty();
     }
 
     /** 收起输入框上方那条栏:引用或"说一句再拒绝"。 */
@@ -386,18 +376,6 @@ public final class ChatInputBar {
             }
             panel.keyPressed(keyCode, modifiers);
             return true;
-        }
-        // 她在等主人点头、输入框空着:↑↓ 在那排按钮里选,回车按选中的那个
-        ConsentCards.Card card = waiting();
-        if (card != null && keysToConsent(card)) {
-            if (keyCode == KeyCodes.UP || keyCode == KeyCodes.DOWN) {
-                card.move(keyCode == KeyCodes.UP ? -1 : 1);
-                return true;
-            }
-            if (keyCode == KeyCodes.ENTER && !KeyCodes.shift(modifiers) && card.selected() >= 0) {
-                card.press(card.selected());
-                return true;
-            }
         }
         // 弹层在场时先归它:↑↓ 选、Tab 补/循环、Esc 收、回车先补再谈发送。
         if (popupOpen()) {
@@ -588,12 +566,6 @@ public final class ChatInputBar {
     public boolean charTyped(char ch) {
         // 面板在场时输入框是隐着的,打进去的字看不见也用不上——直接吞掉。
         if (panel != null) return true;
-        // 她在等主人点头、输入框空着:数字键按那排按钮上标着这个序号的键
-        ConsentCards.Card card = waiting();
-        if (card != null && keysToConsent(card) && ch >= '1' && ch < '1' + ConsentCards.BUTTONS) {
-            card.press(ch - '1');
-            return true;
-        }
         return ui.charTyped(ch);
     }
 
