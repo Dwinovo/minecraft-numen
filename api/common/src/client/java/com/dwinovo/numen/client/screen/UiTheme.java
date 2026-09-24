@@ -102,10 +102,19 @@ public record UiTheme(
     public int surfaceBorder() { return isDark() ? mix(ground, 0xFFFFFFFF, 0.18f) : mix(ground, border, 0.14f); }
     /** Owner bubble: the CTA warmth, desaturated for body text. */
     public int ownFill() { return isDark() ? mix(cta, 0xFF000000, 0.35f) : mix(cta, 0xFFFFFFFF, 0.4f); }
-    public int ownBorder() { return isDark() ? mix(cta, 0xFF000000, 0.55f) : mix(cta, border, 0.15f); }
     /** Queued prompt: a half-present owner bubble. */
     public int queuedFill() { return (ownFill() & 0xFFFFFF) | 0x80000000; }
-    public int queuedBorder() { return (ownBorder() & 0xFFFFFF) | 0x80000000; }
+
+    /** 群里成员名字色的种数:Telegram 的七色(红、橙、紫、绿、青、蓝、粉),按人取模挑一种。 */
+    public static final int PEER_COLORS = 7;
+    private static final int[] PEER_NAME = {
+            0xFFC03D33, 0xFFCE671B, 0xFF8544D6, 0xFF4FAD2D, 0xFF2996AD, 0xFF168ACD, 0xFFCD4073};
+
+    /** 第 {@code i} 种成员名字色;暗地面上往白里提亮,和 Telegram 夜间主题一样读得清。 */
+    public int peerName(int i) {
+        int c = PEER_NAME[Math.floorMod(i, PEER_COLORS)];
+        return isDark() ? mix(c, 0xFFFFFFFF, 0.35f) : c;
+    }
     /** Tool chip: translucent wash — status, not a message(暗主题下用亮色洗)。 */
     public int chipFill() { return isDark() ? 0x28FFFFFF : (border & 0xFFFFFF) | 0x22000000; }
     /** Sidebar card (plan panel): a fainter wash of the same tone. */
