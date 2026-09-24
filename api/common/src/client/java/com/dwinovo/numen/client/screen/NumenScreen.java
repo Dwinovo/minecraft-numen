@@ -1236,6 +1236,15 @@ public final class NumenScreen extends Screen {
         inputBar.quote(who, p.text());
     }
 
+    /** 按左栏的顺序切到上一个或下一个会话,到头绕回去。 */
+    private void stepConversation(int dir) {
+        List<Conversation> items = rail();
+        if (items.isEmpty()) return;
+        int at = -1;
+        for (int i = 0; i < items.size(); i++) if (sameAs(items.get(i), conv)) { at = i; break; }
+        switchTo(items.get(Math.floorMod(at + dir, items.size())));
+    }
+
     /** 召唤卡:每次开都是新的一张(默认/无/生存)。 */
     private void openSummon() {
         summoning = true;
@@ -1381,6 +1390,16 @@ public final class NumenScreen extends Screen {
             if (k == 256) { cardOpen = false; rebuild(); return true; } // Esc 收卡,不关面板
             if (modalCard.keyPressed(keyCode, modifiers)) return true;
             return super.keyPressed(keyCode, scanCode, modifiers);
+        }
+        // Alt+↑/↓、Ctrl+Tab / Ctrl+Shift+Tab:切到上一个、下一个会话(Telegram 桌面版的键)
+        boolean altArrow = com.dwinovo.numen.client.ui.KeyCodes.alt(modifiers)
+                && (k == com.dwinovo.numen.client.ui.KeyCodes.UP || k == com.dwinovo.numen.client.ui.KeyCodes.DOWN);
+        boolean ctrlTab = com.dwinovo.numen.client.ui.KeyCodes.ctrl(modifiers) && k == com.dwinovo.numen.client.ui.KeyCodes.TAB;
+        if ((altArrow || ctrlTab) && conv != null) {
+            boolean back = k == com.dwinovo.numen.client.ui.KeyCodes.UP
+                    || (ctrlTab && com.dwinovo.numen.client.ui.KeyCodes.shift(modifiers));
+            stepConversation(back ? -1 : 1);
+            return true;
         }
         if (tab == Tab.CHAT && inputBar != null && inputBar.keyPressed(keyCode, modifiers)) {
             return true;

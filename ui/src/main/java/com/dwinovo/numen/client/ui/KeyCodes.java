@@ -25,9 +25,19 @@ public final class KeyCodes {
     public static final int KEY_X = 88;
 
     /** GLFW 修饰键位掩码。 */
+    public static final int MOD_SHIFT = 0x1;
     public static final int MOD_CTRL = 0x2;
+    public static final int MOD_ALT = 0x4;
 
     public static boolean ctrl(int modifiers) {
         return (modifiers & MOD_CTRL) != 0;
+    }
+
+    public static boolean shift(int modifiers) {
+        return (modifiers & MOD_SHIFT) != 0;
+    }
+
+    public static boolean alt(int modifiers) {
+        return (modifiers & MOD_ALT) != 0;
     }
 }
