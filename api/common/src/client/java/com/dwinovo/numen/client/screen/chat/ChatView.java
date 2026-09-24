@@ -67,6 +67,9 @@ public final class ChatView {
     private static final int ENTER_DY = 8;
     private static final int AV = 18;           // avatar face size
     private static final int AV_GAP = 5;        // avatar ↔ bubble
+    /** 气泡尾巴自底向上每一行伸出多长;最长那行就是尾巴的宽 {@code TAIL},比脸和气泡之间的缝窄。 */
+    private static final int[] TAIL_STEPS = {4, 2, 1};
+    private static final int TAIL = 4;
     private static final int PAD_H = 5;         // bubble text inset
     private static final int PAD_V = 4;         // 1 line → 18px bubble = exactly the avatar height
     /** 块与块之间:换了人、日期牌、提示行前后拉开 {@code BLOCK_GAP};同一个人接连的块只隔 {@code RUN_GAP}。 */
@@ -506,15 +509,14 @@ public final class ChatView {
         for (McpTranscript.Line ln : McpTranscript.view(id)) {
             switch (ln.kind()) {
                 case OWNER -> {
-                    boolean first = !OWNER.equals(last);
                     out.add(bubble(true, null, rich(ln.text(), List.of()), OWN_FILL,
-                            innerW, first, null, null, -1, ln.text(), null));
+                            innerW, null, null, -1, ln.text(), null));
                     last = OWNER;
                 }
                 case SAY -> {
                     boolean first = !id.equals(last);
                     out.add(bubble(false, first ? label(id) : null, rich(ln.text(), List.of()),
-                            AI_FILL, innerW, first, id, null, -1, ln.text(), null));
+                            AI_FILL, innerW, id, null, -1, ln.text(), null));
                     last = id;
                 }
                 case TOOL -> {
@@ -527,7 +529,7 @@ public final class ChatView {
                 }
             }
         }
-        settleAvatars(out);
+        settleRuns(out);
         return out;
     }
 
@@ -624,15 +626,15 @@ public final class ChatView {
     private sealed interface Block permits Bubble, Checklist, Chip, Notice, Divider, UnreadBar {}
 
     /** One spoken message. {@code label} non-null = companion side (name above the bubble);
-     *  {@code showAvatar} false = a consecutive message from the same side (head hidden);
+     *  {@code runEnd} = 这一块是这个人连发的最后一块(群里脸贴它旁边,气泡带尾巴);
      *  {@code who} = the companion whose face goes on it (null on the owner's side);
      *  {@code time} = 时间戳贴在气泡右下角(Telegram),放得进最后一行右侧就 {@code timeInline},
      *  放不进单独占一小行;{@code entry} = 归并后的记录序号,新来的按它飞入(-1 = 不飞)。 */
     private record Bubble(boolean own, String label, List<FormattedCharSequence> lines,
                           int maxLineW, int fill,
-                          boolean showAvatar, UUID who, String time, boolean timeInline, int entry,
+                          boolean runEnd, UUID who, String time, boolean timeInline, int entry,
                           String raw, Quote quote) implements Block {
-        Bubble withAvatar(boolean on) {
+        Bubble withRunEnd(boolean on) {
             return new Bubble(own, label, lines, maxLineW, fill, on, who, time, timeInline, entry, raw, quote);
         }
     }
@@ -644,8 +646,8 @@ public final class ChatView {
      */
     private record Checklist(UUID who, String label, List<PlanChecklist.Item> items, String header,
                              List<CheckRow> rows, int maxLineW, String time, boolean timeInline, int entry,
-                             boolean showAvatar) implements Block {
-        Checklist withAvatar(boolean on) {
+                             boolean runEnd) implements Block {
+        Checklist withRunEnd(boolean on) {
             return new Checklist(who, label, items, header, rows, maxLineW, time, timeInline, entry, on);
         }
     }
@@ -726,10 +728,10 @@ public final class ChatView {
 
     /** A run of tool calls (or a reasoning block). {@code foldKey} non-null = finished group,
      *  clickable to expand/fold. {@code who} = 干这些活的那只;{@code label} non-null = 她这一轮连发
-     *  的第一块,脸和名字画在它上面——多人会话里工具行也得认得出是谁的。 */
+     *  的第一块,名字画在它上面——多人会话里工具行也得认得出是谁的;{@code runEnd} = 连发的最后一块,群里脸贴它旁边。 */
     private record Chip(List<ChipRow> rows, String foldKey, String label, UUID who, int entry,
-                        boolean showAvatar) implements Block {
-        Chip withAvatar(boolean on) { return new Chip(rows, foldKey, label, who, entry, on); }
+                        boolean runEnd) implements Block {
+        Chip withRunEnd(boolean on) { return new Chip(rows, foldKey, label, who, entry, on); }
     }
 
     /** 日期分隔:一天的第一条上面一枚居中的服务消息(今天 / 昨天 / 几月几日)。 */
@@ -920,11 +922,10 @@ public final class ChatView {
                     }
                     String shown = ownerText(u.content());   // owner's words only, never injected content
                     if (shown.isEmpty()) continue;
-                    boolean first = !OWNER.equals(f.last);
                     Quote q = Quote.parse(shown);   // 引用回复:第一行画成气泡顶上的引用条
                     out.add(bubble(true, null,
                             rich(q.body(), Mentions.spans(q.body(), Conversations.instance().named(conv.get()))),
-                            OWN_FILL, innerW, first, null,
+                            OWN_FILL, innerW, null,
                             clock(entry.ts()), msgIndex, q.body(), q.quoted() ? q : null));
                     f.last = OWNER;
                 }
@@ -948,7 +949,7 @@ public final class ChatView {
                         }
                         boolean first = !who.equals(f.last);
                         out.add(bubble(false, first ? label(who) : null,
-                                rich(spoken, List.of()), AI_FILL, innerW, first, who,
+                                rich(spoken, List.of()), AI_FILL, innerW, who,
                                 clock(entry.ts()), msgIndex, spoken, null));
                         f.last = who;
                     }
@@ -989,7 +990,7 @@ public final class ChatView {
                 flushProcess(f, done, failed, bubbleMaxW);
                 boolean first = !her.equals(f.last);
                 out.add(bubble(false, first ? label(her) : null, Nb.colored(l.shown, TXT),
-                        AI_FILL, innerW, first, her, null, -1, l.shown, null));
+                        AI_FILL, innerW, her, null, -1, l.shown, null));
                 f.last = her;
             }
             // 排着的话:主人一句话复制进每个醒着的成员的队列,按原文去重,画一次
@@ -1004,35 +1005,33 @@ public final class ChatView {
         // Prompts still waiting for a protocol-valid splice point — visible immediately
         // so a queued message never feels swallowed.
         for (String shown : queued) {
-            boolean first = !OWNER.equals(f.last);
             String body = Quote.parse(shown).body();
             out.add(bubble(true, null, Nb.colored("⌛ " + body, FAINT), QUEUED_FILL,
-                    innerW, first, null, null, -1, body, null));
+                    innerW, null, null, -1, body, null));
             f.last = OWNER;
         }
         if (compacting) notice(out, I18n.get("numen.chat.compacting"), bubbleMaxW);
         if (out.isEmpty()) {
             notice(out, I18n.get("numen.chat.empty", conv.get().displayName(NumenRoster.instance()::name)), bubbleMaxW);
         }
-        settleAvatars(out);
+        settleRuns(out);
         return out;
     }
 
     /**
-     * Telegram 的排法:群里别人的名字在这一组的第一块上面,脸贴在这一组的<b>最后一块</b>旁边(底部对齐)。
-     * 建块时只知道"是不是第一块",所以脸在这儿补:同一个人连着的块算一组,提示行、日期牌把组断开。
+     * Telegram 的排法:群里别人的名字在这一组的第一块上面,脸贴在这一组的<b>最后一块</b>旁边(底部对齐),
+     * 最后一块气泡还带一条小尾巴。建块时只知道"是不是第一块",所以"最后一块"在这儿补:同一个人连着的块算一组,
+     * 提示行、日期牌把组断开。
      */
-    private void settleAvatars(List<Block> out) {
+    private void settleRuns(List<Block> out) {
         for (int i = 0; i < out.size(); i++) {
             UUID who = speakerOf(out.get(i));
             if (who == null) continue;
-            // 主人自己的话永远不带脸;私聊里谁的都不带
-            boolean last = group && !OWNER.equals(who)
-                    && (i + 1 >= out.size() || !who.equals(speakerOf(out.get(i + 1))));
+            boolean end = i + 1 >= out.size() || !who.equals(speakerOf(out.get(i + 1)));
             Block b = out.get(i);
-            if (b instanceof Bubble bb && bb.showAvatar() != last) out.set(i, bb.withAvatar(last));
-            else if (b instanceof Checklist c && c.showAvatar() != last) out.set(i, c.withAvatar(last));
-            else if (b instanceof Chip c && c.showAvatar() != last) out.set(i, c.withAvatar(last));
+            if (b instanceof Bubble bb && bb.runEnd() != end) out.set(i, bb.withRunEnd(end));
+            else if (b instanceof Checklist c && c.runEnd() != end) out.set(i, c.withRunEnd(end));
+            else if (b instanceof Chip c && c.runEnd() != end) out.set(i, c.withRunEnd(end));
         }
     }
 
@@ -1047,7 +1046,7 @@ public final class ChatView {
     }
 
     private Bubble bubble(boolean own, String label, Component body, int fill,
-                          int innerW, boolean showAvatar, UUID who, String time, int entry,
+                          int innerW, UUID who, String time, int entry,
                           String raw, Quote quote) {
         List<FormattedCharSequence> lines = split(body, innerW);
         int maxW = 0;
@@ -1064,7 +1063,7 @@ public final class ChatView {
             inline = last + tw <= innerW;
             maxW = Math.max(maxW, inline ? last + tw : tw);
         }
-        return new Bubble(own, label, lines, maxW, fill, showAvatar, who, time, inline, entry, raw, quote);
+        return new Bubble(own, label, lines, maxW, fill, false, who, time, inline, entry, raw, quote);
     }
 
     /**
@@ -1342,12 +1341,12 @@ public final class ChatView {
         int qh = b.quote() != null ? QUOTE_H : 0;
         int bh = qh + b.lines().size() * LINE_H + PAD_V * 2 + (timeLine ? TIME_H : 0);
         int bubTop = y + (b.label() != null ? LABEL_H : 0);
-        // 自己的贴右缘;别人的在脸那一列右边(私聊没有那一列)
-        int bx = b.own() ? x + w - EDGE - bw : x + EDGE + faceCol();
+        // 自己的贴右缘(留出尾巴的宽);别人的在脸那一列右边(私聊那一列只有尾巴宽)
+        int bx = b.own() ? x + w - TAIL - bw : x + EDGE + faceCol();
         if (b.label() != null) {
             draw(g, Nb.colored(b.label(), nameColor(b.who())).getVisualOrderText(), bx + 2, y);
         }
-        if (b.showAvatar()) {
+        if (group && !b.own() && b.runEnd()) {
             // 脸贴在气泡底部(Telegram):这一块是这一组的最后一块,脸和最后一句齐底
             int avX = x + EDGE, avY = bubTop + bh - AV;
             CompanionFace.draw(g, b.who(), KnownSkins.of(b.who()), avX, avY, AV);
@@ -1355,6 +1354,7 @@ public final class ChatView {
         }
         // 气泡只有底色、没有描边(Telegram):和地面分开靠色块,不靠框线
         g.fill(bx, bubTop, bx + bw, bubTop + bh, b.fill());
+        if (b.runEnd()) tail(g, b.own(), b.own() ? bx + bw : bx, bubTop + bh, b.fill());
         hits.add(new Hit(bx, bubTop, bw, bh, b, drawingIndex));
         if (b.quote() != null) {
             // 引用条(Telegram 回复的样子):一道强调色竖线、谁(强调色)、那句(和时间同一档淡字)
@@ -1389,12 +1389,13 @@ public final class ChatView {
         if (c.label() != null) {
             draw(g, Nb.colored(c.label(), nameColor(c.who())).getVisualOrderText(), bx + 2, y);
         }
-        if (c.showAvatar()) {
+        if (group && c.runEnd()) {
             int avX = x + EDGE, avY = bubTop + bh - AV;
             CompanionFace.draw(g, c.who(), KnownSkins.of(c.who()), avX, avY, AV);
             face(g, c.who(), avX, avY);
         }
         g.fill(bx, bubTop, bx + bw, bubTop + bh, AI_FILL);
+        if (c.runEnd()) tail(g, false, bx, bubTop + bh, AI_FILL);
         int tx = bx + PAD_H;
         int ty = bubTop + PAD_V + 1;
         draw(g, Nb.colored(c.header(), MENTION).getVisualOrderText(), tx, ty);
@@ -1446,7 +1447,7 @@ public final class ChatView {
             draw(g, Nb.colored(c.label(), nameColor(c.who())).getVisualOrderText(), cx + 2, y);
             y += LABEL_H;
         }
-        if (c.showAvatar()) {
+        if (group && c.runEnd()) {
             // 这一组的最后一块:脸贴在它的底部
             int ch0 = c.rows().size() * LINE_H + PAD_V * 2;
             int avX = x + EDGE, avY = y + ch0 - AV;
@@ -1465,6 +1466,19 @@ public final class ChatView {
                     cx + NumenStyle.TRACE_INDENT, ty);
             draw(g, r.text(), cx + NumenStyle.TRACE_INDENT + ICON_W, ty);
             ty += LINE_H;
+        }
+    }
+
+    /**
+     * 气泡的小尾巴(Telegram 连发只有最后一条有):贴在靠脸那一侧的底角往外伸,自底向上一级比一级短,
+     * 方角像素台阶,不画弧。{@code right} = 主人的,伸向右下;{@code edgeX} 是气泡那一侧的边。
+     */
+    private static void tail(GuiGraphics g, boolean right, int edgeX, int bottom, int fill) {
+        for (int k = 0; k < TAIL_STEPS.length; k++) {
+            int y = bottom - 1 - k;
+            int len = TAIL_STEPS[k];
+            if (right) g.fill(edgeX, y, edgeX + len, y + 1, fill);
+            else g.fill(edgeX - len, y, edgeX, y + 1, fill);
         }
     }
 
@@ -1530,9 +1544,9 @@ public final class ChatView {
         return UiTheme.current().peerName(companion.hashCode());
     }
 
-    /** 气泡左边留给脸的那一列:群里要认人才有,私聊和外脑现场没有。 */
+    /** 气泡左边留的那一列:群里放脸(尾巴伸在脸和气泡之间的缝里);私聊和外脑现场不画脸,只留尾巴那几像素。 */
     private int faceCol() {
-        return group ? AV + AV_GAP : 0;
+        return group ? AV + AV_GAP : TAIL;
     }
 
     private static String toolLine(LlmToolCall tc) {
