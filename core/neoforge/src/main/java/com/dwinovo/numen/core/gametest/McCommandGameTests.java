@@ -113,6 +113,8 @@ public class McCommandGameTests {
         helper.succeedWhen(() -> {
             helper.assertTrue(give.done(), "give has not finished");
             helper.assertTrue(give.succeeded(), "give failed: " + give.outcome());
+            helper.assertTrue(give.task().getToolName().equals("mc"),
+                    "the task is not named after the command group: " + give.task().getToolName());
             helper.assertTrue(give.outcome().contains("Gave 2 [Diamond] to gametest_mc_op"),
                     "the reply does not carry the server's echo: " + give.outcome());
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 2, "no diamonds in the inventory");

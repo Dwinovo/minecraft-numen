@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.task.command;
 
+import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskRecord;
 
 /**
@@ -10,11 +11,9 @@ public final class McCommandTaskRecord extends TaskRecord {
     /** 整行,不带前导 {@code /}。 */
     public final String line;
 
-    /**
-     * @param toolName 调用进来时用的工具名({@code numen})
-     */
-    public McCommandTaskRecord(String toolName, String toolCallId, long deadlineGameTime, String line) {
-        super(toolName, toolCallId, deadlineGameTime);
+    /** 名字与调用 id 取自这次调用的源:从 {@code numen} 进来就叫 {@code mc}。 */
+    public McCommandTaskRecord(ServerSource source, long deadlineGameTime, String line) {
+        super(source, deadlineGameTime);
         this.line = line;
     }
 

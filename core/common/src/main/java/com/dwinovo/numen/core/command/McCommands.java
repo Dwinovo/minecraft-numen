@@ -73,8 +73,8 @@ public final class McCommands {
             src.reply(TaskResult.fail(problem).toJson());
             return;
         }
-        runSync(her, new McCommandTaskRecord(src.toolName(), src.toolCallId(),
-                ctx(src.toolCallId(), her).deadline(TIMEOUT_TICKS), line), src::reply);
+        runSync(her, new McCommandTaskRecord(src, ctx(src.toolCallId(), her).deadline(TIMEOUT_TICKS), line),
+                src::reply);
     }
 
     /**
