@@ -40,7 +40,8 @@ import com.dwinovo.numen.core.task.move.MoveToTaskRecord;
  * <ul>
  *   <li>tools — each a {@link com.dwinovo.numen.agent.tool.NumenTool} (raw) and
  *       added to the global {@link ToolRegistry} (order preserved for prompt
- *       caching);</li>
+ *       caching), or a command group registered through the plugin door, whose
+ *       promoted actions enter the registry at that same point;</li>
  *   <li>task runners — each {@code TaskRecord} type a world-action tool emits is
  *       paired with the {@code CompanionTask} that runs it, via
  *       {@link CompanionTaskFactory#register}.</li>
@@ -118,9 +119,9 @@ public final class NumenCore {
         ToolRegistry.register(new com.dwinovo.numen.core.tools.interact.SleepTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.interact.InteractEntityTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.EatItemTool());
-        ToolRegistry.register(new com.dwinovo.numen.task.TaskStatusTool());
-        ToolRegistry.register(new com.dwinovo.numen.task.TaskStopTool());
-        ToolRegistry.register(new com.dwinovo.numen.task.SetTimerTool());
+        // 引擎的 numen task 命令组,和插件走同一扇门;它提升出的 task_status / task_stop / set_timer 就在这里进表,
+        // 工具表的顺序不变。
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.task.TaskCommands::install);
         ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.DropItemsTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.TakeItemsTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.interact.InspectGuiTool());

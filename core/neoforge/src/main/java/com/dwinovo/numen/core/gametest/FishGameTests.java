@@ -85,7 +85,7 @@ public class FishGameTests {
 
         helper.startSequence()
                 .thenWaitUntil(() -> helper.assertTrue(companion.fishing != null, "she has not cast yet"))
-                .thenExecute(() -> stop.set(call(companion, "task_stop", args())))
+                .thenExecute(() -> stop.set(command(companion, "numen task stop")))
                 .thenWaitUntil(() -> helper.assertTrue(stop.get().succeeded() && fish.done()
                                 && fish.task().getState() == com.dwinovo.numen.task.TaskState.CANCELLED,
                         "fishing was not stopped: " + stop.get().reply() + " / " + fish.outcome()))

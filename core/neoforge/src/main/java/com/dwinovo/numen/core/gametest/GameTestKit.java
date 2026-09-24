@@ -256,6 +256,11 @@ public final class GameTestKit {
         return new ToolRun(toolName, replied, CompanionTickDispatcher.taskOf(body.getUUID(), id));
     }
 
+    /** 按模型的样子写一行命令:就是调一次 {@code numen} 工具,和 {@link #call} 同一个入口。 */
+    static ToolRun command(NumenPlayer body, String line) {
+        return call(body, "numen", args("command", line));
+    }
+
     /** 拼工具参数:键、值交替;值是字符串、数字、布尔、列表(成 JSON 数组)或现成的 JSON。 */
     static JsonObject args(Object... keyValues) {
         JsonObject out = new JsonObject();
