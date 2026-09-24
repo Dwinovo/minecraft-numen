@@ -261,6 +261,14 @@ public final class ModLanguageData {
         public static final String FOLDER_SOLO  = "numen.folder.solo";
         public static final String FOLDER_GROUP = "numen.folder.group";
         public static final String FOLDER_EMPTY = "numen.folder.empty";
+        public static final String FOLDER_NEW            = "numen.folder.new";
+        public static final String FOLDER_EDIT           = "numen.folder.edit";
+        public static final String FOLDER_DELETE         = "numen.folder.delete";
+        public static final String FOLDER_DELETE_TITLE   = "numen.folder.delete_title";
+        public static final String FOLDER_DELETE_WARNING = "numen.folder.delete_warning";
+        public static final String FOLDER_ADD_TO         = "numen.folder.add_to";
+        public static final String FOLDER_NAME           = "numen.folder.name";
+        public static final String FOLDER_CHATS          = "numen.folder.chats";
     }
 
     /** Loader-side providers funnel both English and Simplified Chinese through here. */
@@ -687,6 +695,14 @@ public final class ModLanguageData {
         adder.add(Keys.FOLDER_SOLO,  "Private");
         adder.add(Keys.FOLDER_GROUP, "Groups");
         adder.add(Keys.FOLDER_EMPTY, "No chats in this folder");
+        adder.add(Keys.FOLDER_NEW,            "New folder");
+        adder.add(Keys.FOLDER_EDIT,           "Edit folder");
+        adder.add(Keys.FOLDER_DELETE,         "Delete folder");
+        adder.add(Keys.FOLDER_DELETE_TITLE,   "Delete folder \"%s\"?");
+        adder.add(Keys.FOLDER_DELETE_WARNING, "The chats in it won't be deleted");
+        adder.add(Keys.FOLDER_ADD_TO,         "Add to folder…");
+        adder.add(Keys.FOLDER_NAME,           "Folder name");
+        adder.add(Keys.FOLDER_CHATS,          "Chats in this folder");
     }
 
     private static void addZh(Adder adder) {
@@ -1102,5 +1118,13 @@ public final class ModLanguageData {
         adder.add(Keys.FOLDER_SOLO,  "私聊");
         adder.add(Keys.FOLDER_GROUP, "群聊");
         adder.add(Keys.FOLDER_EMPTY, "这个分组里还没有会话");
+        adder.add(Keys.FOLDER_NEW,            "新建分组");
+        adder.add(Keys.FOLDER_EDIT,           "编辑分组");
+        adder.add(Keys.FOLDER_DELETE,         "删除分组");
+        adder.add(Keys.FOLDER_DELETE_TITLE,   "删除分组「%s」?");
+        adder.add(Keys.FOLDER_DELETE_WARNING, "里面的会话不会被删除");
+        adder.add(Keys.FOLDER_ADD_TO,         "加入分组…");
+        adder.add(Keys.FOLDER_NAME,           "分组名");
+        adder.add(Keys.FOLDER_CHATS,          "包含的会话");
     }
 }

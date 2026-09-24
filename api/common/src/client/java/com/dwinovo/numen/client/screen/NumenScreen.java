@@ -1382,6 +1382,8 @@ public final class NumenScreen extends Screen {
             items.add(new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.READ, I18n.get("numen.menu.read"),
                     false, () -> convos.markSeen(c, last.ts())));
         }
+        items.add(new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.FOLDER,
+                I18n.get(ModLanguageData.Keys.FOLDER_ADD_TO), false, () -> openAddToFolderMenu(c, mx, my)));
         items.add(PopupMenu.SEPARATOR);
         items.add(new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.DELETE,
                 I18n.get(her != null ? ModLanguageData.Keys.EDIT_DISMISS : ModLanguageData.Keys.CONVO_DISSOLVE),
@@ -1665,10 +1667,15 @@ public final class NumenScreen extends Screen {
                 return true;
             }
         }
-        if (button == 1 && !modalOpen()) {   // 右键左栏一行:置顶、标为已读、遣散/解散
+        if (button == 1 && !modalOpen()) {   // 右键左栏一行:置顶、标为已读、加入分组、遣散/解散
             int row = railIndexAt((int) mouseX, (int) mouseY);
             if (row >= 0 && row < rail().size()) {
                 openRailMenu(rail().get(row), mouseX, mouseY);
+                return true;
+            }
+            int folderTab = folderTabAt(mouseX, mouseY);   // 右键分组标签:编辑、新建、删除
+            if (folderTab >= 0) {
+                openFolderMenu(folderTabs().get(folderTab).id(), mouseX, mouseY);
                 return true;
             }
         }
@@ -2388,6 +2395,8 @@ public final class NumenScreen extends Screen {
     /** 标签里字两侧的留白;标签条两端的留白。 */
     private static final int FOLDER_TAB_PAD = 5;
     private static final int FOLDER_EDGE = 3;
+    /** 自建分组的名字在标签上最多这么宽,再长裁掉。 */
+    private static final int FOLDER_NAME_MAX = 60;
     /** 切分组时列表滑动的时长(Telegram dialogsFilterSlideDuration)。 */
     private static final int FOLDER_SLIDE_MS = 200;
 
@@ -2434,7 +2443,7 @@ public final class NumenScreen extends Screen {
             case ChatFolders.ALL -> I18n.get(ModLanguageData.Keys.FOLDER_ALL);
             case ChatFolders.SOLO -> I18n.get(ModLanguageData.Keys.FOLDER_SOLO);
             case ChatFolders.GROUP -> I18n.get(ModLanguageData.Keys.FOLDER_GROUP);
-            default -> throw new IllegalArgumentException(id);
+            default -> Nb.clip(font, Conversations.instance().customFolder(id).name(), FOLDER_NAME_MAX);
         };
     }
 
@@ -2504,6 +2513,92 @@ public final class NumenScreen extends Screen {
         // 滚到正中;第一个贴左(Telegram scrollToIndex)
         float center = tab.x() + Math.round(folderScroll) + tab.w() / 2f - (railX + 3);
         folderScrollTo = i == 0 ? 0f : Math.clamp(center - (railW - 3) / 2f, 0f, maxFolderScroll(tabs));
+    }
+
+    /**
+     * 右键分组标签的菜单(Telegram 同一个位置):自建的能编辑、删除;哪个标签上都能新建。
+     * 删除在最下面标红,点了还要过确认卡。
+     */
+    private void openFolderMenu(String id, double mx, double my) {
+        java.util.List<PopupMenu.Item> items = new java.util.ArrayList<>();
+        ChatFolders.Folder folder = Conversations.instance().customFolder(id);
+        if (folder != null) {
+            items.add(new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.EDIT,
+                    I18n.get(ModLanguageData.Keys.FOLDER_EDIT), false, () -> openFolderCard(folder)));
+        }
+        items.add(new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.FOLDER_PLUS,
+                I18n.get(ModLanguageData.Keys.FOLDER_NEW), false,
+                () -> openFolderCard(new ChatFolders.Folder(null, "", List.of()))));
+        if (folder != null) {
+            items.add(PopupMenu.SEPARATOR);
+            items.add(new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.DELETE,
+                    I18n.get(ModLanguageData.Keys.FOLDER_DELETE), true, () -> openDeleteFolderConfirm(folder)));
+        }
+        openContextMenu(items, mx, my);
+    }
+
+    /**
+     * 左栏一行菜单里的"加入分组…":换成一张列着自建分组的菜单,已经收着它的那几个前面打勾,点一下是放进去或
+     * 拿出来(Telegram 的 Add to folder);最下面新建一个分组,这一行预先勾好。
+     */
+    private void openAddToFolderMenu(Conversation c, double mx, double my) {
+        Conversations convos = Conversations.instance();
+        java.util.List<PopupMenu.Item> items = new java.util.ArrayList<>();
+        for (String id : convos.folderIds()) {
+            ChatFolders.Folder folder = convos.customFolder(id);
+            if (folder == null) continue;   // 全部、私聊、群聊按会话本身归,放不进也拿不出
+            boolean in = convos.inFolder(id, c);
+            items.add(new PopupMenu.Item(in ? com.dwinovo.numen.client.ui.mc.Sprites.CHECK
+                    : com.dwinovo.numen.client.ui.mc.Sprites.FOLDER,
+                    folder.name(), false, () -> convos.toggleInFolder(id, c)));
+        }
+        if (!items.isEmpty()) items.add(PopupMenu.SEPARATOR);
+        items.add(new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.FOLDER_PLUS,
+                I18n.get(ModLanguageData.Keys.FOLDER_NEW), false,
+                () -> openFolderCard(new ChatFolders.Folder(null, "", List.of(c.id())))));
+        openContextMenu(items, mx, my);
+    }
+
+    /** 分组卡开着时改的是哪个分组;新建时 id 为 null。 */
+    private ChatFolders.Folder folderDraft;
+    private FolderEditPanel folderEditPanel;
+
+    private void openFolderCard(ChatFolders.Folder draft) {
+        folderDraft = draft;
+        if (folderEditPanel == null) folderEditPanel = new FolderEditPanel(new FolderHost());
+        openCard(folderEditPanel);
+    }
+
+    /** 分组卡的宿主面:新建或改好的分组落库,关卡。 */
+    private final class FolderHost implements FolderEditPanel.Host {
+        @Override public ChatFolders.Folder draft() { return folderDraft; }
+
+        @Override public void onSave(String name, List<String> conversationIds) {
+            if (folderDraft.id() == null) {
+                Conversations.instance().createFolder(name, conversationIds);
+            } else {
+                Conversations.instance().editFolder(folderDraft.id(), name, conversationIds);
+            }
+        }
+
+        @Override public void onClose() {
+            cardOpen = false;
+            rebuild();
+        }
+    }
+
+    /** 删分组的确认卡:会话本身不受影响,所以副文本说的是"不会被删除"。删的是选中的那个就先滑回全部。 */
+    private void openDeleteFolderConfirm(ChatFolders.Folder folder) {
+        dismissDialog.open(overlayUi, railX, top, railW + panelW, panelH,
+                I18n.get(ModLanguageData.Keys.FOLDER_DELETE_TITLE, folder.name()),
+                I18n.get(ModLanguageData.Keys.FOLDER_DELETE_WARNING),
+                I18n.get("numen.gui.settings.cancel"), I18n.get(ModLanguageData.Keys.FOLDER_DELETE),
+                () -> {
+                    if (folder.id().equals(Conversations.instance().folder())) selectFolder(ChatFolders.ALL);
+                    Conversations.instance().deleteFolder(folder.id());
+                    rebuild();
+                });
+        rebuild();
     }
 
     private void renderFolderStrip(GuiGraphics g, int mouseX, int mouseY, float dt) {

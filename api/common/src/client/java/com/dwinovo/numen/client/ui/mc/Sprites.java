@@ -73,6 +73,10 @@ public final class Sprites {
     public static final ResourceLocation BACK = icon("icon_back");
     /** 置顶条展开后目标那一行的旗子。 */
     public static final ResourceLocation FLAG = icon("icon_flag");
+    /** 会话分组:左栏行菜单里的"加入分组…"、分组菜单里的新建分组,以及已经在里面的那个分组前的勾。 */
+    public static final ResourceLocation FOLDER = icon("icon_folder");
+    public static final ResourceLocation FOLDER_PLUS = icon("icon_folder_plus");
+    public static final ResourceLocation CHECK = icon("icon_check");
 
     public static ResourceLocation icon(String name) {
         return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, name);

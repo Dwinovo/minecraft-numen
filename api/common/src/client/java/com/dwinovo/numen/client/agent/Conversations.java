@@ -78,7 +78,7 @@ public final class Conversations extends JsonLibrary<Conversation> {
     private final Map<String, String> drafts = new java.util.HashMap<>();
     /** 置顶的会话(Telegram 左栏置顶),按置顶的先后排在最上面。随会话一起落盘。 */
     private final List<String> pinned = new ArrayList<>();
-    /** 会话分组(Telegram 的 Chat Folders):选中哪个分组。随会话一起落盘。 */
+    /** 会话分组(Telegram 的 Chat Folders):主人建的分组、选中哪个分组。随会话一起落盘。 */
     private final ChatFolders folders = new ChatFolders();
 
     @Override
@@ -191,7 +191,33 @@ public final class Conversations extends JsonLibrary<Conversation> {
 
     /** 这个会话在不在这个分组里;私聊/群聊按 {@link #soloOf} 分。 */
     public boolean inFolder(String folderId, Conversation conv) {
-        return folders.includes(folderId, soloOf(conv) != null);
+        return folders.includes(folderId, conv.id(), soloOf(conv) != null);
+    }
+
+    /** 主人建的那个分组;内置的是 null。 */
+    public ChatFolders.Folder customFolder(String id) {
+        return folders.get(id);
+    }
+
+    /** 建一个分组(起名、收哪些会话)。落盘。 */
+    public void createFolder(String name, List<String> conversationIds) {
+        folders.create(name, conversationIds);
+        save();
+    }
+
+    /** 改分组的名字和收哪些会话。落盘。 */
+    public void editFolder(String id, String name, List<String> conversationIds) {
+        if (folders.edit(id, name, conversationIds)) save();
+    }
+
+    /** 删分组;里面的会话不受影响。落盘。 */
+    public void deleteFolder(String id) {
+        if (folders.delete(id)) save();
+    }
+
+    /** 把这个会话放进分组,已经在里面就拿出来。落盘。 */
+    public void toggleInFolder(String folderId, Conversation conv) {
+        if (folders.toggle(folderId, conv.id())) save();
     }
 
     // ---- 草稿 ----
@@ -349,6 +375,7 @@ public final class Conversations extends JsonLibrary<Conversation> {
     public void dissolve(Conversation conv) {
         drafts.remove(conv.id());
         pinned.remove(conv.id());
+        folders.forget(conv.id());
         remove(conv.id());
         for (UUID m : conv.members()) {
             AgentLoopRegistry.get(m)
