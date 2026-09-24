@@ -505,7 +505,7 @@ public final class ChatView {
                     boolean first = !id.equals(last);
                     out.add(new Chip(List.of(new ChipRow(
                             ln.error() ? "✗" : "✔", ln.error() ? FAIL : OK,
-                            Nb.colored(fitOneLine(ln.text(), chipTextW), ln.error() ? FAIL : TOOL)
+                            Nb.colored(Nb.clip(font, ln.text(), chipTextW), ln.error() ? FAIL : TOOL)
                                     .getVisualOrderText())), null, first ? label(id) : null, id, -1, false));
                     last = id;
                 }
@@ -1046,7 +1046,7 @@ public final class ChatView {
                     ? (liveThought ? I18n.get("numen.chat.reasoning_now") : toolLine(runningCall))
                     : processSummary(thought, calls);
             rows.add(new ChipRow(running ? SPIN[(int) ((t / 120) % 4)] : (open ? "▾" : "▸"), running ? RUN : MUTED,
-                    Nb.colored(fitOneLine(head, textW), anyFail && !running ? FAIL : TOOL).getVisualOrderText()));
+                    Nb.colored(Nb.clip(font, head, textW), anyFail && !running ? FAIL : TOOL).getVisualOrderText()));
             if (open) {
                 for (Piece pc : ps) {
                     if (pc.call() != null) {
@@ -1089,7 +1089,7 @@ public final class ChatView {
         String icon = running ? SPIN[(int) ((t / 120) % 4)] : (fail ? "✗" : "✔");
         int ic = running ? RUN : (fail ? FAIL : OK);
         return new ChipRow(icon, ic,
-                Nb.colored(fitOneLine(toolLine(tc), textW), fail ? FAIL : TOOL).getVisualOrderText());
+                Nb.colored(Nb.clip(font, toolLine(tc), textW), fail ? FAIL : TOOL).getVisualOrderText());
     }
 
     // ---- drawing ----
@@ -1122,7 +1122,7 @@ public final class ChatView {
         switch (b) {
             case Divider d -> drawDayChip(g, d.text(), x, y, w);
             case Notice n -> {
-                FormattedCharSequence line = Nb.colored(fitOneLine(n.text(), w - SB_W), FAINT).getVisualOrderText();
+                FormattedCharSequence line = Nb.colored(Nb.clip(font, n.text(), w - SB_W), FAINT).getVisualOrderText();
                 int tw = font.width(line);
                 draw(g, line, x + (w - SB_W - tw) / 2, y);
             }
@@ -1172,8 +1172,8 @@ public final class ChatView {
             int dim = b.own() ? UiTheme.mix(b.fill(), 0xFFFFFFFF, 0.55f) : FAINT;
             g.fill(qx, qy, qx + 2, qy + QUOTE_H - 3, ink);
             int room = bw - PAD_H * 2 - QUOTE_IN;
-            draw(g, Nb.colored(fitOneLine(b.quote().who(), room), ink).getVisualOrderText(), qx + QUOTE_IN, qy);
-            draw(g, Nb.colored(fitOneLine(b.quote().snippet(), room), dim).getVisualOrderText(), qx + QUOTE_IN, qy + 9);
+            draw(g, Nb.colored(Nb.clip(font, b.quote().who(), room), ink).getVisualOrderText(), qx + QUOTE_IN, qy);
+            draw(g, Nb.colored(Nb.clip(font, b.quote().snippet(), room), dim).getVisualOrderText(), qx + QUOTE_IN, qy + 9);
         }
         int ty = bubTop + PAD_V + 1 + qh;
         for (FormattedCharSequence l : b.lines()) {
@@ -1290,12 +1290,6 @@ public final class ChatView {
     /** 气泡左边留给脸的那一列:群里要认人才有,私聊和外脑现场没有。 */
     private int faceCol() {
         return group ? AV + AV_GAP : 0;
-    }
-
-    private String fitOneLine(String s, int pxWidth) {
-        if (font.width(s) <= pxWidth) return s;
-        while (s.length() > 1 && font.width(s + "…") > pxWidth) s = s.substring(0, s.length() - 1);
-        return s + "…";
     }
 
     private static String toolLine(LlmToolCall tc) {

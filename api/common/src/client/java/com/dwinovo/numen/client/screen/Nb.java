@@ -36,15 +36,9 @@ public final class Nb {
         g.drawString(font, seq, x, y, -1, false);
     }
 
-    /** 截短到 {@code maxW} 像素放得下,截了就补一个省略号。 */
+    /** 截短到 {@code maxW} 像素放得下,截了就补一个省略号;就是 {@link com.dwinovo.numen.client.ui.TextClip},量宽用 MC 字体。 */
     public static String clip(Font font, String s, int maxW) {
-        if (font.width(s) <= maxW) return s;
-        StringBuilder b = new StringBuilder();
-        for (int i = 0; i < s.length(); i++) {
-            if (font.width(b.toString() + s.charAt(i) + "…") > maxW) break;
-            b.append(s.charAt(i));
-        }
-        return b + "…";
+        return com.dwinovo.numen.client.ui.TextClip.fit(font::width, s, maxW);
     }
 
     /** Square thick border = four filled edge rects (no rounded corners). */

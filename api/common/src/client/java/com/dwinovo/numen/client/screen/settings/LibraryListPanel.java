@@ -296,7 +296,7 @@ public final class LibraryListPanel<T> {
             tx = rx + 2 + rowIconSize + 4;
         }
         s.drawText(row.name() == null ? "" : row.name(), tx, ry + 3, c.textPrimary(), false);
-        s.drawText(clip(s, row.meta(), rw - EDIT_ZONE - 6 - (tx - rx)), tx, ry + 13,
+        s.drawText(com.dwinovo.numen.client.ui.TextClip.fit(s, row.meta(), rw - EDIT_ZONE - 6 - (tx - rx)), tx, ry + 13,
                 row.metaDanger() ? c.danger() : c.textMuted(), false);
 
         int iconY = ry + (rh - s.lineHeight()) / 2 + 1;
@@ -391,15 +391,6 @@ public final class LibraryListPanel<T> {
                     noticeSuccess(net.minecraft.network.chat.Component
                             .translatable("numen.gui.list.deleted", name).getString());
                 });
-    }
-
-    private static String clip(IDrawSurface s, String text, int maxW) {
-        if (s.textWidth(text) <= maxW) return text;
-        String cut = text;
-        while (!cut.isEmpty() && s.textWidth(cut + "…") > maxW) {
-            cut = cut.substring(0, cut.length() - 1);
-        }
-        return cut + "…";
     }
 
     private static String t(String key) {

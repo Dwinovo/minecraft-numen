@@ -92,19 +92,8 @@ final class CommandPopup {
         if (room <= 0) {
             return;
         }
-        String clipped = clip(s, note, room);
+        String clipped = com.dwinovo.numen.client.ui.TextClip.fit(s, note, room);
         s.drawText(clipped, x + w - s.textWidth(clipped), textY,
                 row.enabled() ? c.textMuted() : c.danger(), false);
-    }
-
-    private static String clip(IDrawSurface s, String text, int maxW) {
-        if (s.textWidth(text) <= maxW) {
-            return text;
-        }
-        String out = text;
-        while (out.length() > 1 && s.textWidth(out + "…") > maxW) {
-            out = out.substring(0, out.length() - 1);
-        }
-        return out + "…";
     }
 }

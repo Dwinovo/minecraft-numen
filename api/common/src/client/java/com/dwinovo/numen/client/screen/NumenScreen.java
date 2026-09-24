@@ -234,10 +234,10 @@ public final class NumenScreen extends Screen {
         int lh = font.lineHeight;
         g.enableScissor(x, y - 1, limit, y + lh + 1);
         if (statusPrevText != null && p < 1f) {
-            txt(g, Component.literal(clip(statusPrevText, room)), x, y - Math.round(lh * e), fade(ON_BAND_FAINT, 1f - e));
+            txt(g, Component.literal(Nb.clip(font, statusPrevText, room)), x, y - Math.round(lh * e), fade(ON_BAND_FAINT, 1f - e));
         }
         if (st != null && e > 0.02f) {
-            txt(g, Component.literal(clip(st.text(), room)), x, y + Math.round(lh * (1f - e)), fade(ON_BAND_FAINT, e));
+            txt(g, Component.literal(Nb.clip(font, st.text(), room)), x, y + Math.round(lh * (1f - e)), fade(ON_BAND_FAINT, e));
         }
         g.disableScissor();
     }
@@ -1423,11 +1423,6 @@ public final class NumenScreen extends Screen {
     }
 
     /** 显示过滤统一走 {@link com.dwinovo.numen.client.chat.ChatDisplayMode}(可整体切换)。 */
-    /** Truncate {@code s} with an ellipsis so it fits in {@code maxW} px. */
-    private String clip(String s, int maxW) {
-        return Nb.clip(font, s, maxW);
-    }
-
     /** The active companion's current persona name (green marker in the list), or null. */
     private String activePersonaName() {
         UUID her = solo();
@@ -1936,11 +1931,11 @@ public final class NumenScreen extends Screen {
                         top + (HEADER_H - font.lineHeight) / 2 + 1, ON_BAND);
             } else if (tab == Tab.MEMBERS) {
                 String title = name();
-                txt(g, Component.literal(clip(title == null ? "?" : title, headerLimit - tx)), tx, top + NAME_Y, ON_BAND);
+                txt(g, Component.literal(Nb.clip(font, title == null ? "?" : title, headerLimit - tx)), tx, top + NAME_Y, ON_BAND);
                 renderStatusText(g, null, tx, headerLimit);
             } else {
                 String who = profileOf == null ? "?" : nameFor(profileOf);
-                txt(g, Component.literal(clip(who, headerLimit - tx)), tx, top + NAME_Y, ON_BAND);
+                txt(g, Component.literal(Nb.clip(font, who, headerLimit - tx)), tx, top + NAME_Y, ON_BAND);
                 renderStatusText(g, profileOf, tx, headerLimit);
             }
             moreX = -1;
@@ -1954,7 +1949,7 @@ public final class NumenScreen extends Screen {
         int iconsLeft = moreX >= 0 ? moreX - 8 : headerLimit;
         int nameRoom = iconsLeft - (left + PAD);
         String title = name();
-        String nm = clip(title == null ? "Numen" : title, Math.max(24, nameRoom));
+        String nm = Nb.clip(font, title == null ? "Numen" : title, Math.max(24, nameRoom));
         nameRight = left + PAD + font.width(nm);
         boolean hotName = !modalOpen() && !overlayOpen() && overName(mouseX, mouseY);
         // 名字可点:就他俩开她的资料页,群开群资料页;悬停亮一档,像个能点的东西
@@ -1973,7 +1968,7 @@ public final class NumenScreen extends Screen {
         }
         String pn = activePersonaName();                   // current persona, faint, right after the name
         if (pn != null && afterName + font.width("…") <= iconsLeft) {
-            txt(g, Component.literal(clip(pn, iconsLeft - afterName)), afterName, top + NAME_Y, ON_BAND_FAINT);
+            txt(g, Component.literal(Nb.clip(font, pn, iconsLeft - afterName)), afterName, top + NAME_Y, ON_BAND_FAINT);
         }
         // 第二行:在线 / 正在输入… / 复活倒计时 / N 位成员
         renderStatusText(g, her, left + PAD, headerLimit);
@@ -2174,7 +2169,7 @@ public final class NumenScreen extends Screen {
             var last = com.dwinovo.numen.client.screen.chat.ConversationPreview.last(c);
             String when = last == null ? "" : whenLabel(last.ts(), now);
             int whenW = when.isEmpty() ? 0 : font.width(when) + 4;
-            txt(g, Component.literal(clip(c.displayName(NumenRoster.instance()::name), textRight - tx - whenW)),
+            txt(g, Component.literal(Nb.clip(font, c.displayName(NumenRoster.instance()::name), textRight - tx - whenW)),
                     tx, ay + 6, nameColor);
             if (!when.isEmpty()) {
                 txt(g, Component.literal(when), textRight - font.width(when), ay + 6, active ? dimColor : TXT_FAINT);
@@ -2210,14 +2205,14 @@ public final class NumenScreen extends Screen {
                 if (!draft.isEmpty()) {
                     String pre = I18n.get(ModLanguageData.Keys.RAIL_DRAFT) + ": ";
                     txt(g, Component.literal(pre), tx, y0, fade(FAIL, k));
-                    txt(g, Component.literal(clip(draft, pw - font.width(pre))), tx + font.width(pre), y0, fade(dimColor, k));
+                    txt(g, Component.literal(Nb.clip(font, draft, pw - font.width(pre))), tx + font.width(pre), y0, fade(dimColor, k));
                 } else {
                     String preview = last == null ? I18n.get(ModLanguageData.Keys.RAIL_EMPTY) : last.text();
-                    txt(g, Component.literal(clip(preview, pw)), tx, y0, fade(last == null ? TXT_FAINT : dimColor, k));
+                    txt(g, Component.literal(Nb.clip(font, preview, pw)), tx, y0, fade(last == null ? TXT_FAINT : dimColor, k));
                 }
             }
             if (e > 0.03f && railActText.containsKey(c.id())) {
-                txt(g, Component.literal(clip(railActText.get(c.id()), pw)), tx, py + Math.round(lh * (1f - e)),
+                txt(g, Component.literal(Nb.clip(font, railActText.get(c.id()), pw)), tx, py + Math.round(lh * (1f - e)),
                         fade(active ? TXT : CTA, e));
             }
             g.disableScissor();
