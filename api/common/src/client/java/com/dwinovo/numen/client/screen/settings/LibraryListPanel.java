@@ -5,7 +5,6 @@ import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
 import com.dwinovo.numen.client.ui.TextClip;
-import com.dwinovo.numen.client.ui.mc.McDrawSurface;
 import com.dwinovo.numen.client.ui.mc.Sprites;
 import com.dwinovo.numen.client.ui.widget.Button;
 import com.dwinovo.numen.client.ui.widget.ConfirmDialog;
@@ -244,8 +243,6 @@ public final class LibraryListPanel<T> {
         // 菜单开着:底下的行按右键那一点取悬停,被右键的那一行一直亮着;菜单自己按真实指针走
         boolean menuUp = menu.isOpen();
         ui.renderContent(s, c, menuUp ? menuX : mx, menuUp ? menuY : my, nowMs);
-        // 刚收起的菜单淡出那几帧;画在浮层下面——菜单里点了删除,确认卡的暗幕要盖住它
-        if (s instanceof McDrawSurface mc) menu.renderFading(mc.graphics(), mx, my);
         ui.renderOverlayLayer(s, c, mx, my, nowMs);
     }
 

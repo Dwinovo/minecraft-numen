@@ -18,7 +18,7 @@ import java.util.List;
  * 走 {@link UiRoot} 的浮层通道——开着时点外面、按 Esc 都是收起,背后什么都不接。
  *
  * <p>动效照 Telegram 的 PanelAnimation:200ms 里从锚住的那个角长开,宽从一半、高从三成长满,
- * 同时淡入;收起是 150ms 淡出。收起后浮层通道已经放手,淡出那几帧由宿主调 {@link #renderFading} 画。
+ * 同时淡入;收起是 150ms 淡出。收起后浮层通道已经放手,淡出那几帧由通道的退场({@link #renderLeaving})画。
  */
 public final class PopupMenu implements UiRoot.Overlay {
 
@@ -78,11 +78,13 @@ public final class PopupMenu implements UiRoot.Overlay {
         return open;
     }
 
-    /** 刚收起、还在淡出:浮层通道不再画它,宿主这几帧接着画。 */
-    public void renderFading(GuiGraphics g, int mouseX, int mouseY) {
+    /** 刚收起、还在淡出:浮层通道不再给它事件,淡出那几帧照画。 */
+    @Override
+    public boolean renderLeaving(IDrawSurface s, NumenTheme.Colors c, long nowMs) {
         long now = System.currentTimeMillis();
-        if (open || now - closedAt >= HIDE_MS) return;
-        draw(g, mouseX, mouseY, now, false);
+        if (now - closedAt >= HIDE_MS) return false;
+        draw(((McDrawSurface) s).graphics(), Integer.MIN_VALUE, Integer.MIN_VALUE, now, false);
+        return true;
     }
 
     @Override

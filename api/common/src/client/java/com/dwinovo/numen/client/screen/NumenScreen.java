@@ -2124,13 +2124,10 @@ public final class NumenScreen extends Screen {
         // Summon warn — shown only when 创建 was clicked and something is missing
         // (error at the action, never ambient text). Takes the hint line's spot.
 
-        // 屏幕级浮层(遣散确认卡):暗幕+卡压在一切之上,tooltip 之前。
+        // 屏幕级浮层(菜单、确认卡,连同刚收起还在淡出的):压在一切之上,tooltip 之前。
         overlayUi.render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
                 com.dwinovo.numen.client.screen.settings.HostThemeColors.current(),
                 mouseX, mouseY, net.minecraft.Util.getMillis());
-        if (headerMenu != null) headerMenu.renderFading(g, mouseX, mouseY);   // 刚收起的菜单淡出那几帧
-        if (mainMenu != null) mainMenu.renderFading(g, mouseX, mouseY);
-        if (contextMenu != null) contextMenu.renderFading(g, mouseX, mouseY);
 
         // Hovered tooltip — drawn last so nothing paints over it; only after the pointer has rested a while.
         if (pendingTip != null && !overlayOpen()) {
