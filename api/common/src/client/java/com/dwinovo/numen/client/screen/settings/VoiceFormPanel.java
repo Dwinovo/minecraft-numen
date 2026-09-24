@@ -3,7 +3,6 @@ package com.dwinovo.numen.client.screen.settings;
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
-import com.dwinovo.numen.client.ui.widget.Button;
 import com.dwinovo.numen.client.ui.widget.Dropdown;
 import com.dwinovo.numen.client.ui.widget.InlineAlert;
 import com.dwinovo.numen.client.ui.widget.Label;
@@ -79,7 +78,7 @@ public final class VoiceFormPanel {
             VoiceLibrary.BACKEND_DOUBAO);
     private static final String TEST_SENTENCE = "你好,我是你的同伴,这是我的声音。";
 
-    /** 滚动根:表单行(进裁剪区,可上下滚);固定根:✕/结果胶囊/按钮行(不动)。 */
+    /** 滚动根:表单行(进裁剪区,可上下滚);固定根:结果胶囊/按钮行(不动)。 */
     private final UiRoot ui = new UiRoot();
     private final UiRoot fixedUi = new UiRoot();
     private final Consumer<Draft> onSave;
@@ -91,7 +90,6 @@ public final class VoiceFormPanel {
 
     private Draft draft = new Draft();
     private TextField nameField;
-    private Button testButton;
     private InlineAlert resultAlert;
     /** 在途试听的作废闸:表单关闭/又点一次都 ++,迟到的回调对不上号就丢弃。 */
     private int testGen;
@@ -131,7 +129,7 @@ public final class VoiceFormPanel {
         int ry = y;
         Label nameLabel = labelWidget(x, ry, ModLanguageData.Keys.VOICE_FORM_NAME);
         ry += NumenStyle.LABEL_PITCH;
-        nameField = ui.add(new TextField(draft.name, v -> draft.name = v).withLabel(nameLabel));
+        nameField = ui.add(new TextField(draft.name, v -> draft.name = v).underlined(true).withLabel(nameLabel));
         nameField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
@@ -150,7 +148,7 @@ public final class VoiceFormPanel {
 
         ry = label(x, ry, ModLanguageData.Keys.VOICE_FORM_URL);
         TextField urlField = ui.add(new TextField(draft.url, v -> draft.url = v)
-                .placeholder(defaultUrl(draft.backend)));
+                .placeholder(defaultUrl(draft.backend)).underlined(true));
         urlField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
@@ -232,19 +230,11 @@ public final class VoiceFormPanel {
                 NumenStyle.footerTop(y, h) - NumenStyle.HEADER_GAP - y,
                 (ry + NumenStyle.CONTROL_H) - y);
 
-        // ---- 固定层:✕(卡片右上角落)/结果胶囊/按钮行——不随滚动 ----
-        Button close = fixedUi.add(new Button("✕", Button.Style.GHOST, onCancel));
-        close.setBounds(x + w - 8, y - 14, 14, 14);
-
-        int by = NumenStyle.footerTop(y, h);
+        // ---- 固定层:结果胶囊/按钮行——不随滚动 ----
         resultAlert = fixedUi.add(new InlineAlert());
         resultAlert.setBounds(x, y + 2, w, 24);
-        testButton = fixedUi.add(new Button(t(ModLanguageData.Keys.VOICE_TEST),
-                Button.Style.NORMAL, this::runVoiceTest));
-        testButton.setBounds(x + w - 54 - 58, by, 54, NumenStyle.CONTROL_H);
-        Button save = fixedUi.add(new Button(t("numen.gui.settings.save"),
-                Button.Style.ACCENT, this::save));
-        save.setBounds(x + w - 54, by, 54, NumenStyle.CONTROL_H);
+        DialogButtons.left(fixedUi, x, y, h, this::runVoiceTest, t(ModLanguageData.Keys.VOICE_TEST));
+        DialogButtons.cancelSave(fixedUi, x, y, w, h, onCancel, this::save);
     }
 
     // ---- 宿主转发面 ----
@@ -307,7 +297,7 @@ public final class VoiceFormPanel {
     private int textRow(int x, int ry, int w, String labelKey, String placeholder,
                         boolean masked, String initial, Consumer<String> onChange) {
         ry = label(x, ry, labelKey);
-        TextField f = ui.add(new TextField(initial, onChange).masked(masked));
+        TextField f = ui.add(new TextField(initial, onChange).masked(masked).underlined(true));
         if (!placeholder.isEmpty()) f.placeholder(placeholder);
         f.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         return ry + NumenStyle.ROW_PITCH;

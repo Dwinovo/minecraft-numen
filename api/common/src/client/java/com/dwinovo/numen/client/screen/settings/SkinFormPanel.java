@@ -84,6 +84,7 @@ public final class SkinFormPanel {
         ry += NumenStyle.LABEL_PITCH;
         nameField = ui.add(new TextField(draft.name, v -> draft.name = v)
                 .placeholder(t("numen.skin.name_placeholder"))   // 规则先说,别等报错才知道
+                .underlined(true)
                 .withLabel(nameLabel));
         nameField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
@@ -108,13 +109,9 @@ public final class SkinFormPanel {
         statusLabel.setBounds(x + pickW + 6, ry + 4, Math.max(0, w - pickW - 6), 9);
         refreshStatus();
 
-        Button close = ui.add(new Button("✕", Button.Style.GHOST, onCancel));
-        close.setBounds(x + w - 8, y - 14, 14, 14);
         resultAlert = ui.add(new InlineAlert());
         resultAlert.setBounds(x, y + 2, w, 24);
-        saveButton = ui.add(new Button(t("numen.gui.settings.save"),
-                Button.Style.ACCENT, this::save));
-        saveButton.setBounds(x + w - 54, NumenStyle.footerTop(y, h), 54, NumenStyle.CONTROL_H);
+        saveButton = DialogButtons.cancelSave(ui, x, y, w, h, onCancel, this::save);
         saveButton.setEnabled(!signing);
     }
 

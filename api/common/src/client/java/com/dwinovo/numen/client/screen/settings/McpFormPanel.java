@@ -65,7 +65,8 @@ public final class McpFormPanel {
         int ry = y;
         Label nameLabel = labelWidget(x, ry, "numen.mcp.form_name");
         ry += NumenStyle.LABEL_PITCH;
-        nameField = ui.add(new TextField(draft.name, v -> draft.name = v).placeholder("kfc").withLabel(nameLabel));
+        nameField = ui.add(new TextField(draft.name, v -> draft.name = v).placeholder("kfc")
+                .underlined(true).withLabel(nameLabel));
         nameField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
@@ -78,21 +79,19 @@ public final class McpFormPanel {
 
         ry = label(x, ry, draft.stdio ? "numen.mcp.form_command" : "numen.mcp.form_url");
         targetField = ui.add(new TextField(draft.target, v -> draft.target = v)
-                .placeholder(draft.stdio ? "cmd /c npx -y <server>" : "https://mcp.mcd.cn"));
+                .placeholder(draft.stdio ? "cmd /c npx -y <server>" : "https://mcp.mcd.cn")
+                .underlined(true));
         targetField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
         // 第四行:HTTP → 请求头 "Name: Value";stdio → 环境变量 "KEY=value"(';' 分隔)。
         ry = label(x, ry, draft.stdio ? "numen.mcp.form_env" : "numen.mcp.form_header");
         TextField extraField = ui.add(new TextField(draft.extra, v -> draft.extra = v)
-                .placeholder(draft.stdio ? "KEY=value; KEY2=value2" : "Authorization: Bearer <token>"));
+                .placeholder(draft.stdio ? "KEY=value; KEY2=value2" : "Authorization: Bearer <token>")
+                .underlined(true));
         extraField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
 
-        Button close = ui.add(new Button("✕", Button.Style.GHOST, onCancel));
-        close.setBounds(x + w - 8, y - 14, 14, 14);
-        Button save = ui.add(new Button(t("numen.gui.settings.save"),
-                Button.Style.ACCENT, this::save));
-        save.setBounds(x + w - 54, NumenStyle.footerTop(y, h), 54, NumenStyle.CONTROL_H);
+        DialogButtons.cancelSave(ui, x, y, w, h, onCancel, this::save);
     }
 
     // ---- 宿主转发面 ----

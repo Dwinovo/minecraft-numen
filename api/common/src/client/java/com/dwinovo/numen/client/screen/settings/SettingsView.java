@@ -19,7 +19,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
-import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 
@@ -71,11 +70,6 @@ public final class SettingsView {
     // ---- layout constants (mirror the screen's) ----
     private static final int PAD = 8;
     private static final int HEADER_H = 22;
-    private static final int FIELD_INSET_X = 5;
-    private static final int FIELD_INSET_Y = 4;
-    private static final int SET_SP = 33;     // form row pitch (5 rows + Save must fit)
-    private static final int LIST_ROW = 24;   // list row height(两行内容 9+9 加呼吸,贴行显挤)
-    private static final int TOG_W = 18, TOG_H = 10;
     /** 试听用的固定测试句(按当前表单参数就地合成)。 */
 
     private final Host host;
@@ -336,7 +330,7 @@ public final class SettingsView {
         return addingProvider || addingVoice || addingSkin || addingPersona || addingMcp;
     }
 
-    /** Esc while a form modal is up: close it back to the list (same semantics as the ✕ button). */
+    /** Esc while a form modal is up: close it back to the list (same as the card's 取消). */
     public boolean cancelForm() {
         if (!formActive()) return false;
         addingProvider = false; providerEditId = null;
@@ -360,35 +354,60 @@ public final class SettingsView {
     private int fx() { return cardX0() + 10; }
     /** Width of form content inside the card. */
     private int fw() { return cardX1() - cardX0() - 20; }
+    /** 卡顶标题的顶边(Telegram 对话框:左上角一行加粗标题)。 */
+    private int cardTitleY() { return cardY0() + 8; }
     /** Top y of form content (below the card's title row). */
-    private int fy0() { return cardY0() + 18; }
-    /** Right edge form buttons align to. */
-    private int fRight() { return cardX1() - 10; }
-    /** Bottom edge the form's save row sits above. */
-    private int fBottom() { return cardY1() - 10; }
+    private int fy0() { return cardTitleY() + 16; }
+    /** Bottom edge the form's button row sits on:纯字钮贴近卡底,和 Telegram 对话框底部那排一样。 */
+    private int fBottom() { return cardY1() - 6; }
 
-    /** 表单模态的暗幕 + 近全幅的框 + 卡顶标题。 */
+    /** 表单卡的出入场照 Telegram 对话框:开卡淡入,收卡淡出。 */
+    private static final int CARD_SHOW_MS = 200;
+    private static final int CARD_HIDE_MS = 150;
+    /** 上一帧表单卡在不在场;在场与否一变,就记下开卡或收卡的时刻。 */
+    private boolean cardUp;
+    private long cardShownAt, cardHiddenAt;
+    /** 最近画过的那张卡:收卡后淡出的那几帧还要照它画(表单面板的控件在下次开卡前原样留着)。 */
+    private Component cardTitle;
+    private CardBody cardBody;
+
+    /** 卡里的表单:五个表单面板的 render 签名都是这个。 */
+    private interface CardBody {
+        void render(com.dwinovo.numen.client.ui.IDrawSurface s, com.dwinovo.numen.client.ui.NumenTheme.Colors c,
+                    int mouseX, int mouseY, long nowMs);
+    }
+
+    /** 表单卡在场时,分区列表画完后压上这张卡(按开卡后过了多久淡入)。 */
+    private void formCard(GuiGraphics g, Component title, CardBody body) {
+        cardTitle = title;
+        cardBody = body;
+        float p = Math.min(1f, (System.currentTimeMillis() - cardShownAt) / (float) CARD_SHOW_MS);
+        drawCard(g, com.dwinovo.numen.client.ui.Anim.easeOutCubic(p), rawMouseX, rawMouseY);
+    }
+
+    /** 暗幕 + 近全幅的卡 + 卡里的表单,整体乘上 {@code alpha}。 */
+    private void drawCard(GuiGraphics g, float alpha, int mouseX, int mouseY) {
+        g.setColor(1f, 1f, 1f, Math.max(0.05f, alpha));
+        formModal(g, cardTitle);
+        cardBody.render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
+                mouseX, mouseY, net.minecraft.Util.getMillis());
+        g.setColor(1f, 1f, 1f, 1f);
+    }
+
+    /** 表单模态的暗幕 + 近全幅的框 + 卡顶标题。卡底是窗口底色(Telegram 对话框的 boxBg = windowBg)。 */
     private void formModal(GuiGraphics g, Component title) {
         UiTheme t = UiTheme.current();
         g.fill(host.railX(), top(), left() + panelW(), top() + panelH(),
                 (t.border() & 0xFFFFFF) | 0x99000000);
         com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()), cardX0(), cardY0(),
-                cardX1() - cardX0(), cardY1() - cardY0(), t.aiFill(), t.aiBorder());
-        txt(g, title, fx(), cardY0() + 6, TXT);
+                cardX1() - cardX0(), cardY1() - cardY0(), t.band(), t.aiBorder());
+        txt(g, title.copy().withStyle(net.minecraft.ChatFormatting.BOLD), fx(), cardTitleY(), TXT);
     }
 
     // ---- shared draw helpers (private copies — see NumenScreen's originals) ----
 
     private void txt(GuiGraphics g, Component c, int x, int y, int color) {
         Nb.text(g, font(), c, x, y, color);
-    }
-
-    /** Shadowless placeholder for an empty, unfocused field — the EditBox's own hint renders with a shadow. */
-    private void placeholder(GuiGraphics g, EditBox f, String text) {
-        if (f != null && f.visible && f.getValue().isEmpty() && !f.isFocused()
-                && text != null && !text.isEmpty()) {
-            txt(g, Component.literal(text), f.getX(), f.getY(), TXT_FAINT);
-        }
     }
 
     private static boolean nb(String s) {
@@ -445,6 +464,7 @@ public final class SettingsView {
 
     /** 各分区的表单与在途回调:换分区、退回首页都清掉。 */
     private void resetSectionState() {
+        cardBody = null;   // 表单卡随分区一起离开,不在别的分区上淡出
         addingMcp = false;
         addingPersona = false;
         personaEditId = null;
@@ -575,18 +595,9 @@ public final class SettingsView {
     }
 
     private void renderVoiceSection(GuiGraphics g, int mouseX, int mouseY) {
-        var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
-        if (addingVoice) {
-            // 表单模态:列表照常渲染作背景(不响应 hover),暗幕+表单卡压上。
-            voiceListPanel().render(surface, HostThemeColors.current(),
-                    -10000, -10000, net.minecraft.Util.getMillis());
-            formModal(g, Component.translatable(ModLanguageData.Keys.VOICE_TITLE));
-            voiceForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
-            return;
-        }
-        voiceListPanel().render(surface, HostThemeColors.current(),
+        voiceListPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
                 mouseX, mouseY, net.minecraft.Util.getMillis());
+        if (addingVoice) formCard(g, Component.translatable(ModLanguageData.Keys.VOICE_TITLE), voiceForm()::render);
     }
 
     private void beginEditVoice(com.dwinovo.numen.client.voice.VoiceLibrary.Entry e) {
@@ -949,7 +960,7 @@ public final class SettingsView {
                                     ModLanguageData.Keys.SKIN_SIGN_OK, signedName).getString());
                         }
                     },
-                    () -> {   // ✕ 关闭
+                    () -> {   // 取消
                         addingSkin = false;
                         skinForm.cancelPending();
                         host.rebuild();
@@ -971,17 +982,9 @@ public final class SettingsView {
     }
 
     private void renderSkinSection(GuiGraphics g, int mouseX, int mouseY) {
-        var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
-        if (addingSkin) {
-            skinListPanel().render(surface, HostThemeColors.current(),
-                    -10000, -10000, net.minecraft.Util.getMillis());
-            formModal(g, Component.translatable(ModLanguageData.Keys.SKIN_TITLE));
-            skinForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
-            return;
-        }
-        skinListPanel().render(surface, HostThemeColors.current(),
+        skinListPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
                 mouseX, mouseY, net.minecraft.Util.getMillis());
+        if (addingSkin) formCard(g, Component.translatable(ModLanguageData.Keys.SKIN_TITLE), skinForm()::render);
     }
 
     /** 皮肤 png 从系统拖进游戏窗口(皮肤表单打开时)。64×64 或旧版 64×32。 */
@@ -1024,6 +1027,11 @@ public final class SettingsView {
         float dt = lastPushMs == 0 ? 0.016f : Math.min(0.1f, (now - lastPushMs) / 1000f);
         lastPushMs = now;
         int w = panelW();
+        boolean up = formActive();
+        if (up != cardUp) {
+            cardUp = up;
+            if (up) cardShownAt = now; else cardHiddenAt = now;
+        }
         pushPx = com.dwinovo.numen.client.ui.Anim.approach(pushPx, inSection() ? w : 0f, 16f, dt);
         if (leaving && pushPx <= 0f) {
             section = null;
@@ -1139,21 +1147,17 @@ public final class SettingsView {
             case THEME -> themePanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
                     HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
         }
+        // 刚收起的表单卡:照最后那一帧再画几帧,淡出(卡已不接指针)
+        long sinceHidden = System.currentTimeMillis() - cardHiddenAt;
+        if (!cardUp && cardBody != null && sinceHidden < CARD_HIDE_MS) {
+            drawCard(g, 1f - sinceHidden / (float) CARD_HIDE_MS, -10000, -10000);
+        }
     }
 
     private void renderProviderSection(GuiGraphics g, int mouseX, int mouseY) {
-        var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
-        if (addingProvider) {
-            // 表单模态:列表照常渲染作背景(不响应 hover),暗幕+表单卡压在上面。
-            profileList().render(surface, HostThemeColors.current(),
-                    -10000, -10000, net.minecraft.Util.getMillis());
-            formModal(g, Component.translatable(ModLanguageData.Keys.PROVIDER_TITLE));
-            providerForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
-            return;
-        }
-        profileList().render(surface, HostThemeColors.current(),
+        profileList().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
                 mouseX, mouseY, net.minecraft.Util.getMillis());
+        if (addingProvider) formCard(g, Component.translatable(ModLanguageData.Keys.PROVIDER_TITLE), providerForm()::render);
     }
 
     private void beginEditProvider(com.dwinovo.numen.agent.llm.ProviderLibrary.Entry e) {
@@ -1184,17 +1188,12 @@ public final class SettingsView {
     // ---- MCP section: external server list with a live on/off switch per row ----
 
     private void renderMcpSection(GuiGraphics g, int mouseX, int mouseY) {
-        var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
+        mcpListPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
+                mouseX, mouseY, net.minecraft.Util.getMillis());
         if (addingMcp) {
-            mcpListPanel().render(surface, HostThemeColors.current(),
-                    -10000, -10000, net.minecraft.Util.getMillis());
-            formModal(g, Component.translatable("numen.mcp.title"));
-            mcpForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
+            formCard(g, Component.translatable("numen.mcp.title"), mcpForm()::render);
             return;
         }
-        mcpListPanel().render(surface, HostThemeColors.current(),
-                mouseX, mouseY, net.minecraft.Util.getMillis());
         // 悬停行体 → tooltip:工具名 + url/命令 + 错误(行尾开关上不弹)。
         var hovered = mcpListPanel().entryAtBody(mouseX, mouseY);
         if (hovered != null) {
@@ -1242,17 +1241,9 @@ public final class SettingsView {
     // ---- Persona section render + hit-test ----
 
     private void renderPersonaSection(GuiGraphics g, int mouseX, int mouseY) {
-        var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
-        if (addingPersona) {
-            personaListPanel().render(surface, HostThemeColors.current(),
-                    -10000, -10000, net.minecraft.Util.getMillis());
-            formModal(g, Component.translatable("numen.persona.title"));
-            personaForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
-            return;
-        }
-        personaListPanel().render(surface, HostThemeColors.current(),
+        personaListPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()), HostThemeColors.current(),
                 mouseX, mouseY, net.minecraft.Util.getMillis());
+        if (addingPersona) formCard(g, Component.translatable("numen.persona.title"), personaForm()::render);
     }
 
     private void beginEditPersona(PersonaLibrary.Persona p) {

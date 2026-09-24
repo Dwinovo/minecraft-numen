@@ -47,7 +47,7 @@ public final class ProfileFormPanel {
         public String proxy = "";
     }
 
-    /** 滚动根:表单行(进裁剪区,可上下滚);固定根:✕/结果胶囊/按钮行(不动)。 */
+    /** 滚动根:表单行(进裁剪区,可上下滚);固定根:结果胶囊/按钮行(不动)。 */
     private final UiRoot ui = new UiRoot();
     private final UiRoot fixedUi = new UiRoot();
     private final Consumer<Draft> onSave;
@@ -103,7 +103,7 @@ public final class ProfileFormPanel {
         int ry = y;
         Label nameLabel = labelWidget(x, ry, "numen.provider.form_name");
         ry += NumenStyle.LABEL_PITCH;
-        nameField = ui.add(new TextField(draft.name, v -> draft.name = v).withLabel(nameLabel));
+        nameField = ui.add(new TextField(draft.name, v -> draft.name = v).underlined(true).withLabel(nameLabel));
         nameField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
@@ -116,7 +116,8 @@ public final class ProfileFormPanel {
 
         Label keyLabel = labelWidget(x, ry, "numen.gui.settings.api_key");
         ry += NumenStyle.LABEL_PITCH;
-        keyField = ui.add(new TextField(draft.apiKey, v -> draft.apiKey = v).masked(true).withLabel(keyLabel));
+        keyField = ui.add(new TextField(draft.apiKey, v -> draft.apiKey = v).masked(true).underlined(true)
+                .withLabel(keyLabel));
         keyField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
@@ -125,14 +126,14 @@ public final class ProfileFormPanel {
         ry = label(x, ry, "numen.gui.settings.model");
         modelDropdown = ui.add(new Dropdown(List.of(), 0, this::onModelDropdownPicked));
         modelDropdown.setBounds(x, ry, w, NumenStyle.CONTROL_H);
-        modelField = ui.add(new TextField(draft.model, v -> draft.model = v));
+        modelField = ui.add(new TextField(draft.model, v -> draft.model = v).underlined(true));
         modelField.setBounds(x, ry, w - 17, NumenStyle.CONTROL_H);
         modelBackBtn = ui.add(new Button("▾", Button.Style.NORMAL, this::onModelBackToPresets));
         modelBackBtn.setBounds(x + w - 15, ry, 15, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
         ry = label(x, ry, "numen.gui.settings.base_url");
-        baseUrlField = ui.add(new TextField(draft.baseUrl, v -> draft.baseUrl = v));
+        baseUrlField = ui.add(new TextField(draft.baseUrl, v -> draft.baseUrl = v).underlined(true));
         baseUrlField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
@@ -140,14 +141,14 @@ public final class ProfileFormPanel {
         // 压缩闸门与面板水位都按这个窗口算——填错太小会提前压缩,填错太大会顶爆上游。
         ry = label(x, ry, ModLanguageData.Keys.GUI_PROVIDERS_CTX);
         ctxField = ui.add(new TextField(draft.ctx, v -> draft.ctx = v).numeric()
-                .placeholder(t(ModLanguageData.Keys.GUI_PROVIDERS_CTX_HINT)));
+                .placeholder(t(ModLanguageData.Keys.GUI_PROVIDERS_CTX_HINT)).underlined(true));
         ctxField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
         // 代理按档案走:国内外站点常需不同走线,留空跟随全局(/numen 里设)。
         ry = label(x, ry, ModLanguageData.Keys.GUI_PROVIDERS_PROXY);
         proxyField = ui.add(new TextField(draft.proxy, v -> draft.proxy = v)
-                .placeholder(t(ModLanguageData.Keys.GUI_PROVIDERS_PROXY_HINT)));
+                .placeholder(t(ModLanguageData.Keys.GUI_PROVIDERS_PROXY_HINT)).underlined(true));
         proxyField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
@@ -164,20 +165,13 @@ public final class ProfileFormPanel {
                 NumenStyle.footerTop(y, h) - NumenStyle.HEADER_GAP - y,
                 (ry + NumenStyle.CONTROL_H) - y);
 
-        // ---- 固定层:✕(卡片右上角落)/结果胶囊/按钮行——不随滚动 ----
-        Button close = fixedUi.add(new Button("✕", Button.Style.GHOST, onCancel));
-        close.setBounds(x + w - 8, y - 14, 14, 14);
-
-        int by = NumenStyle.footerTop(y, h);
+        // ---- 固定层:结果胶囊/按钮行——不随滚动 ----
         // 页面级 Alert:表单区左右居中、垂直偏上悬浮——操作结果的家(字段错误才内联)。
         resultAlert = fixedUi.add(new InlineAlert());
         resultAlert.setBounds(x, y + 2, w, 24);
-        checkButton = fixedUi.add(new Button(t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK),
-                Button.Style.NORMAL, this::runConnectivityCheck));
-        checkButton.setBounds(x + w - 54 - 58, by, 54, NumenStyle.CONTROL_H);
-        Button save = fixedUi.add(new Button(t("numen.gui.settings.save"),
-                Button.Style.ACCENT, this::save));
-        save.setBounds(x + w - 54, by, 54, NumenStyle.CONTROL_H);
+        checkButton = DialogButtons.left(fixedUi, x, y, h, this::runConnectivityCheck,
+                t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK), t(ModLanguageData.Keys.GUI_PROVIDERS_CHECKING));
+        DialogButtons.cancelSave(fixedUi, x, y, w, h, onCancel, this::save);
 
         refreshSiteDependent();
     }

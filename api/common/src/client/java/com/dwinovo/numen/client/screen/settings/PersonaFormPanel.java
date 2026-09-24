@@ -3,7 +3,6 @@ package com.dwinovo.numen.client.screen.settings;
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
-import com.dwinovo.numen.client.ui.widget.Button;
 import com.dwinovo.numen.client.ui.widget.Label;
 import com.dwinovo.numen.client.ui.widget.MultilineTextField;
 import com.dwinovo.numen.client.ui.widget.TextField;
@@ -62,6 +61,7 @@ public final class PersonaFormPanel {
         ry += NumenStyle.LABEL_PITCH;
         nameField = ui.add(new TextField(draft.name, v -> draft.name = v)
                 .placeholder("名称(即文件名),如 小焰")
+                .underlined(true)
                 .withLabel(nameLabel));
         nameField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
@@ -76,11 +76,7 @@ public final class PersonaFormPanel {
                 .withLabel(textLabel));
         textArea.setBounds(x, ry, w, NumenStyle.footerTop(y, h) - NumenStyle.HEADER_GAP - ry);
 
-        Button close = ui.add(new Button("✕", Button.Style.GHOST, onCancel));
-        close.setBounds(x + w - 8, y - 14, 14, 14);
-        Button save = ui.add(new Button(t("numen.gui.settings.save"),
-                Button.Style.ACCENT, this::save));
-        save.setBounds(x + w - 54, NumenStyle.footerTop(y, h), 54, NumenStyle.CONTROL_H);
+        DialogButtons.cancelSave(ui, x, y, w, h, onCancel, this::save);
     }
 
     // ---- 宿主转发面 ----
