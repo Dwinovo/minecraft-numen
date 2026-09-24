@@ -547,13 +547,25 @@ public final class ChatView {
      * ——请求里临时挂载、从未入过记录的东西(如 {@code <current_task>})混进来的话,
      * 画出来的会是一条<b>从未存在过</b>的消息。
      */
-    /** 一次 build 的手头:输出、攒着的工具调用与它们的主人、连发的上一位。 */
+    /** 过程里的一段:一次思考({@code live} = 还在往外流),或一次工具调用。 */
+    private record Piece(String thought, boolean live, LlmToolCall call) {}
+
+    /** 一次 build 的手头:输出、她攒着的这一段过程与它的主人、连发的上一位。 */
     private static final class Feed {
         final List<Block> out = new ArrayList<>();
-        final List<LlmToolCall> group = new ArrayList<>();
-        UUID groupWho;
-        int groupEntry = -1;
+        /** 她连着的思考和工具调用,中间没开口说话:收口时合成一行。 */
+        final List<Piece> process = new ArrayList<>();
+        UUID processWho;
+        int processEntry = -1;
         UUID last;
+    }
+
+    private static void addPiece(Feed f, UUID who, int entry, Piece p) {
+        if (f.process.isEmpty()) {
+            f.processWho = who;
+            f.processEntry = entry;
+        }
+        f.process.add(p);
     }
 
     private List<Block> build(int bubbleMaxW) {
@@ -600,7 +612,7 @@ public final class ChatView {
             if (entry.ts() > 0) {
                 LocalDate day = Instant.ofEpochMilli(entry.ts()).atZone(ZoneId.systemDefault()).toLocalDate();
                 if (!day.equals(lastDay)) {
-                    flushTools(f, done, failed, bubbleMaxW);
+                    flushProcess(f, done, failed, bubbleMaxW);
                     out.add(new Divider(dayLabel(day)));
                     f.last = null;
                     lastDay = day;
@@ -608,7 +620,7 @@ public final class ChatView {
             }
             switch (msg) {
                 case ConvoState.Msg.User u -> {
-                    flushTools(f, done, failed, bubbleMaxW);
+                    flushProcess(f, done, failed, bubbleMaxW);
                     if (ConvoLog.PERSONA_DIVIDER.equals(u.content())) {
                         notice(out, I18n.get("numen.chat.persona_changed"));
                         f.last = null;
@@ -633,40 +645,34 @@ public final class ChatView {
                 }
                 case ConvoState.Msg.Assistant a -> {
                     UUID who = entry.companion();
-                    // 换了一只:前一只攒着的工具行先收口,两只的活不折进同一块
-                    if (!who.equals(f.groupWho)) flushTools(f, done, failed, bubbleMaxW);
+                    // 换了一只:前一只攒着的过程先收口,两只的活不折进同一行
+                    if (!who.equals(f.processWho)) flushProcess(f, done, failed, bubbleMaxW);
                     AssistantTurn turn = a.turn();
-                    // 思考在说话之前:落库的思考默认折叠(它是过程不是结论,想看再展开)。
+                    // 思考在说话之前;它和前后的工具调用同属"她在干活",并进同一段过程
                     String reasoned = turn.reasoning();
                     if (reasoned != null && !reasoned.isBlank()) {
-                        flushTools(f, done, failed, bubbleMaxW);
-                        boolean first = !who.equals(f.last);
-                        out.add(reasoningChip(reasoned, "reason#" + msgIndex, innerW, false,
-                                first ? label(who) : null, who, msgIndex));
-                        f.last = who;
+                        addPiece(f, who, msgIndex, new Piece(reasoned, false, null));
                     }
                     String spoken = ChatDisplayModes.current().assistantText(turn.content());
                     if (!spoken.isBlank()) {
-                        flushTools(f, done, failed, bubbleMaxW);   // spoken reply breaks the fold
+                        flushProcess(f, done, failed, bubbleMaxW);   // 开口说话把过程收口
                         boolean first = !who.equals(f.last);
                         out.add(bubble(false, first ? label(who) : null,
                                 Nb.colored(spoken, TXT), AI_FILL, innerW, first, who,
                                 clock(entry.ts()), msgIndex));
                         f.last = who;
                     }
-                    f.group.addAll(turn.toolCalls());
-                    f.groupWho = who;
-                    f.groupEntry = msgIndex;
+                    for (LlmToolCall tc : turn.toolCalls()) addPiece(f, who, msgIndex, new Piece(null, false, tc));
                 }
                 case ConvoState.Msg.Tool ignored -> { /* result drives done/fail, not a block */ }
                 case ConvoState.Msg.Halt h -> {
-                    flushTools(f, done, failed, bubbleMaxW);
+                    flushProcess(f, done, failed, bubbleMaxW);
                     notice(out, I18n.get("numen.chat.halted", h.reason()));
                     f.last = null;
                 }
             }
         }
-        flushTools(f, done, failed, bubbleMaxW);
+        // 最后一段过程先不收口:她正在想的那段接在它后面,并成同一行
         // 在飞的状态按成员各自的循环取:单成员就是她一个,多人各画各的。
         // 只画她此刻所在的会话里的:她在群里想着,私聊页不该也看见——和落库的行同一条印的规矩。
         String tag = Conversations.instance().tagOf(conv.get());
@@ -675,17 +681,14 @@ public final class ChatView {
         for (UUID her : Conversations.instance().membersAlive(conv.get())) {
             EntityAgentLoop lp = AgentLoopRegistry.get(her).orElse(null);
             if (lp == null || !java.util.Objects.equals(lp.conversation(), tag)) continue;
-            // 在飞的思考流:展开着实时长(它正在发生,折起来就看不见了);回合落库后
-            // 由上面那条 committed 的思考块接管,永不双份。
+            if (!her.equals(f.processWho)) flushProcess(f, done, failed, bubbleMaxW);
+            // 在飞的思考流接在她这段过程末尾;回合落库后由落库的那段接管,永不双份。
             String liveReasoning = lp.liveReasoning();
-            if (!liveReasoning.isBlank()) {
-                boolean first = !her.equals(f.last);
-                out.add(reasoningChip(liveReasoning, null, innerW, true, first ? label(her) : null, her, -1));
-                f.last = her;
-            }
+            if (!liveReasoning.isBlank()) addPiece(f, her, -1, new Piece(liveReasoning, true, null));
             // The in-flight reply, typed out live (chunk stream → EntityAgentLoop.livePartial).
             Live l = live.get(her);
             if (l != null && !l.shown.isEmpty()) {
+                flushProcess(f, done, failed, bubbleMaxW);
                 boolean first = !her.equals(f.last);
                 out.add(bubble(false, first ? label(her) : null, Nb.colored(l.shown, TXT),
                         AI_FILL, innerW, first, her, null, -1));
@@ -699,6 +702,7 @@ public final class ChatView {
             }
             compacting |= status.phase() == com.dwinovo.numen.agent.loop.Phase.COMPACT;
         }
+        flushProcess(f, done, failed, bubbleMaxW);
         // Prompts still waiting for a protocol-valid splice point — visible immediately
         // so a queued message never feels swallowed.
         for (String shown : queued) {
@@ -824,70 +828,76 @@ public final class ChatView {
         out.add(new Notice(text));
     }
 
-    /** Emit the chip for a run of consecutive tool calls. A single call is one unfoldable chip;
-     *  a run stays EXPANDED while any call still runs (live spinners) and auto-folds to a
-     *  "N steps · names" summary once done — unless clicked open ({@link #expandedGroups}). */
-    private void flushTools(Feed f, Set<String> done, Set<String> failed, int chipMaxW) {
-        List<LlmToolCall> group = f.group;
-        if (group.isEmpty()) return;
+    /**
+     * 收口她这一段过程(连着的思考和工具调用,中间没开口):合成<b>一行</b>,点开才看每一步。
+     * 过程是旁白不是话,一轮干活只占一行,正文留给她说的话。在跑时这一行是转圈 + 眼下在干什么;
+     * 干完是"思考过程 · N 步 · 用了哪些",有一步失败整行标失败色。只有一次调用、没有思考时
+     * 那一行就是调用本身,没什么可展开的。
+     */
+    private void flushProcess(Feed f, Set<String> done, Set<String> failed, int chipMaxW) {
+        List<Piece> ps = f.process;
+        if (ps.isEmpty()) return;
         int textW = chipMaxW - PAD_H * 2 - ICON_W;
         long t = System.currentTimeMillis();
+        List<LlmToolCall> calls = new ArrayList<>();
+        boolean thought = false;
+        for (Piece pc : ps) {
+            if (pc.call() != null) calls.add(pc.call());
+            else thought = true;
+        }
+        boolean liveThought = ps.get(ps.size() - 1).live();
+        LlmToolCall runningCall = null;
+        for (LlmToolCall tc : calls) {
+            if (!done.contains(tc.id())) { runningCall = tc; break; }
+        }
         List<ChipRow> rows = new ArrayList<>();
         String foldKey = null;
-        if (group.size() == 1) {
-            rows.add(toolRow(group.get(0), done, failed, t, textW));
+        if (!thought && calls.size() == 1) {
+            rows.add(toolRow(calls.get(0), done, failed, t, textW));
         } else {
-            String key = group.get(0).id();
-            boolean running = group.stream().anyMatch(tc -> !done.contains(tc.id()));
-            if (!running) foldKey = key;
-            if (running || expandedGroups.contains(key)) {
-                if (!running) {
-                    rows.add(new ChipRow("▾", MUTED,
-                            Nb.colored(I18n.get("numen.chat.steps", group.size()), MUTED).getVisualOrderText()));
+            foldKey = "proc#" + f.processWho + "#" + f.processEntry;
+            boolean open = expandedGroups.contains(foldKey);
+            boolean running = liveThought || runningCall != null;
+            boolean anyFail = calls.stream().anyMatch(tc -> failed.contains(tc.id()));
+            String head = running
+                    ? (liveThought ? I18n.get("numen.chat.reasoning_now") : toolLine(runningCall))
+                    : processSummary(thought, calls);
+            rows.add(new ChipRow(running ? SPIN[(int) ((t / 120) % 4)] : (open ? "▾" : "▸"), running ? RUN : MUTED,
+                    Nb.colored(fitOneLine(head, textW), anyFail && !running ? FAIL : TOOL).getVisualOrderText()));
+            if (open) {
+                for (Piece pc : ps) {
+                    if (pc.call() != null) {
+                        rows.add(toolRow(pc.call(), done, failed, t, textW));
+                        continue;
+                    }
+                    String flat = flattened.computeIfAbsent(pc.thought(), s -> s.replaceAll("\\s+", " ").trim());
+                    for (FormattedCharSequence line : split(Nb.colored(flat, FAINT), textW)) {
+                        rows.add(new ChipRow(" ", MUTED, line));
+                    }
                 }
-                for (LlmToolCall tc : group) rows.add(toolRow(tc, done, failed, t, textW));
-            } else {
-                List<String> names = new ArrayList<>();
-                for (LlmToolCall tc : group) {
-                    String label = toolLabel(tc.name());
-                    if (!names.contains(label)) names.add(label);
-                }
-                boolean anyFail = group.stream().anyMatch(tc -> failed.contains(tc.id()));
-                String summary = I18n.get("numen.chat.steps", group.size())
-                        + " · " + String.join(" · ", names) + " ▸";
-                rows.add(new ChipRow(anyFail ? "✗" : "✔", anyFail ? FAIL : OK,
-                        Nb.colored(fitOneLine(summary, textW), anyFail ? FAIL : TOOL).getVisualOrderText()));
             }
         }
-        boolean first = !f.groupWho.equals(f.last);
-        f.out.add(new Chip(List.copyOf(rows), foldKey, first ? label(f.groupWho) : null, f.groupWho, f.groupEntry, false));
-        f.last = f.groupWho;
-        group.clear();
-        f.groupWho = null;
-        f.groupEntry = -1;
+        boolean first = !f.processWho.equals(f.last);
+        f.out.add(new Chip(List.copyOf(rows), foldKey, first ? label(f.processWho) : null,
+                f.processWho, f.processEntry, false));
+        f.last = f.processWho;
+        ps.clear();
+        f.processWho = null;
+        f.processEntry = -1;
     }
 
-    /**
-     * 思考块:与工具 chip 同一形制(同样的行、同样的折叠交互),只是内容是
-     * 推理文本。{@code live}=在飞,展开着实时长且不可折(正在发生的事折起来
-     * 就看不见);已落库的默认折叠成一行摘要,点开看全文——它是过程不是结论。
-     */
-    private Chip reasoningChip(String text, String foldKey, int innerW, boolean live, String label, UUID who, int entry) {
-        List<ChipRow> rows = new ArrayList<>();
-        boolean expanded = live || (foldKey != null && expandedGroups.contains(foldKey));
-        if (!expanded) {
-            // 不报字数:中英混排的 length() 一半是字一半是字符,数出来没有意义。
-            rows.add(new ChipRow("▸", MUTED,
-                    Nb.colored(I18n.get("numen.chat.reasoning") + " ▸", MUTED).getVisualOrderText()));
-            return new Chip(List.copyOf(rows), foldKey, label, who, entry, false);
+    /** 干完的一段过程的摘要:"思考过程 · N 步 · 用了哪些",没有的那半不写。 */
+    private String processSummary(boolean thought, List<LlmToolCall> calls) {
+        List<String> parts = new ArrayList<>();
+        if (thought) parts.add(I18n.get("numen.chat.reasoning"));
+        if (!calls.isEmpty()) {
+            parts.add(I18n.get("numen.chat.steps", calls.size()));
+            for (LlmToolCall tc : calls) {
+                String name = toolLabel(tc.name());
+                if (!parts.contains(name)) parts.add(name);
+            }
         }
-        rows.add(new ChipRow(live ? SPIN[(int) ((System.currentTimeMillis() / 120) % 4)] : "▾", MUTED,
-                Nb.colored(I18n.get("numen.chat.reasoning"), MUTED).getVisualOrderText()));
-        String flat = flattened.computeIfAbsent(text, t -> t.replaceAll("\\s+", " ").trim());
-        for (FormattedCharSequence line : split(Nb.colored(flat, FAINT), innerW - ICON_W)) {
-            rows.add(new ChipRow(" ", MUTED, line));
-        }
-        return new Chip(List.copyOf(rows), foldKey, label, who, entry, false);
+        return String.join(" · ", parts);
     }
 
     private ChipRow toolRow(LlmToolCall tc, Set<String> done, Set<String> failed, long t, int textW) {
