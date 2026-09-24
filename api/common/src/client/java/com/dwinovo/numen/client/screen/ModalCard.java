@@ -142,17 +142,12 @@ abstract class ModalCard {
         return d;
     }
 
-    /** 右下一排纯字钮:取消在左、主按钮在右,各自按字宽定宽。返回主按钮。 */
+    /** 右下一排纯字钮(摆法见 {@link DialogBox#placeButtons}):取消在左、主按钮在右。返回主按钮。 */
     protected Button buttons(String cancelLabel, Runnable onCancel, String okLabel, Runnable onOk) {
-        var font = Minecraft.getInstance().font;
-        int by = DialogBox.buttonTop(y, h);
-        int okW = DialogBox.buttonW(font.width(okLabel));
-        int cancelW = DialogBox.buttonW(font.width(cancelLabel));
-        int okX = x + w - DialogBox.BUTTON_RIGHT - okW;
         Button cancel = ui.add(new Button(cancelLabel, Button.Style.LINK, onCancel));
-        cancel.setBounds(okX - DialogBox.BUTTON_GAP - cancelW, by, cancelW, DialogBox.BUTTON_H);
         Button ok = ui.add(new Button(okLabel, Button.Style.LINK, onOk));
-        ok.setBounds(okX, by, okW, DialogBox.BUTTON_H);
+        DialogBox.placeButtons(Minecraft.getInstance().font::width, x + w - DialogBox.BUTTON_RIGHT,
+                DialogBox.buttonTop(y, h), ok, cancel);
         primary = ok;
         primaryAction = onOk;
         cancelAction = onCancel;

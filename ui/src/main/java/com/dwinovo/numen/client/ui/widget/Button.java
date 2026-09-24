@@ -10,8 +10,9 @@ public final class Button extends Widget {
     /**
      * GHOST = 幽灵钮(图标类):平时无底,悬停浮现浅底——主流模态 ✕ 的标准形态。
      * LINK = 对话框底部的纯字钮(Telegram 对话框的"取消""保存"):强调色的字,悬停浮出浅底。
+     * LINK_DANGER = 同一种纯字钮,红字(删除、遣散这类回不去的确定,Telegram 的 attentionBoxButton)。
      */
-    public enum Style { NORMAL, ACCENT, DANGER, GHOST, LINK }
+    public enum Style { NORMAL, ACCENT, DANGER, GHOST, LINK, LINK_DANGER }
 
     /**
      * 图标绘制回调:组件库不认识贴图(那是每版本适配层的事),宿主注入一段
@@ -35,6 +36,8 @@ public final class Button extends Widget {
     }
 
     public void setLabel(String label) { this.label = label; }
+
+    public String label() { return label; }
 
     /** 图标钮:图标居中替代文字(label 退为无障碍/tooltip 文案)。 */
     public Button icon(int size, IconDrawer drawer) {
@@ -63,13 +66,14 @@ public final class Button extends Widget {
         hoverT = NumenStyle.hoverStep(hoverT, hovered, dt);
         float t = enabled ? hoverT : 0f;
 
-        if (style == Style.GHOST || style == Style.LINK) {
+        if (style == Style.GHOST || style == Style.LINK || style == Style.LINK_DANGER) {
             if (t > 0.01f) {   // 浮现的浅底:半透明 hover 色按进度收放透明度
                 int bg = ((int) (((c.hover() >>> 24) & 0xFF) * t) << 24) | (c.hover() & 0xFFFFFF);
                 s.fillRect(x, y, w, h, bg);
             }
             int ghostColor = !enabled ? c.textMuted()
                     : style == Style.LINK ? c.accent()
+                    : style == Style.LINK_DANGER ? c.danger()
                     : NumenStyle.mixColor(c.textSecondary(), c.textPrimary(), t);
             if (icon != null) {   // 图标钮(复制、重新生成这类):图标居中替代文字
                 icon.draw(s, x + (w - iconSize) / 2, y + (h - iconSize) / 2, iconSize, ghostColor);

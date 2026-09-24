@@ -113,7 +113,7 @@ class NotificationWidgetsTest {
     }
 
     // 定点几何(与 ConfirmDialog / DialogBox 版式常数同步):dim 200×150,卡宽 min(224, 200)=200
-    // → cardX=0;单行文案 cardH=7+9+4+27=47 → cardY=51,buttonY=76;钮宽=字宽+21=33,
+    // → cardX=0;单行文案 cardH=7+9+4+28=48 → cardY=51,buttonY=76(钮高 18);钮宽=字宽+21=33,
     // confirmX=200-7-33=160,cancelX=160-4-33=123。常数变了这里跟着变——测试即几何文档。
     private static final int BTN_ROW_Y = 82;
     private static final int CONFIRM_CX = 170;

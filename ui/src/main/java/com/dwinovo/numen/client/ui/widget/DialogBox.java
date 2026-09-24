@@ -5,6 +5,8 @@ import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
 
+import java.util.function.ToIntFunction;
+
 /**
  * 对话框的外壳:暗幕 + 方角卡,以及它的出现与消失。确认卡({@link ConfirmDialog})和面板里召唤、编辑、
  * 改名、邀请那几张卡都画这一个,暗幕与卡的样子、动效、卡宽、边距、按钮行只在这里定。
@@ -35,8 +37,11 @@ public final class DialogBox {
     /** 没有标题的卡(确认卡):一段话上下的留白(boxPadding 上 14、下 8)。 */
     public static final int TEXT_TOP = 7;
     public static final int TEXT_BOTTOM = 4;
-    /** 按钮行(buttonPadding 6/10/10/10、buttonHeight 34):纯字钮靠右下,钮宽 = 字宽 + 30。 */
-    public static final int BUTTON_H = 17;
+    /**
+     * 按钮行(buttonPadding 6/10/10/10、buttonHeight 34):纯字钮靠右下,钮宽 = 字宽 + 30。
+     * 钮高取控件高:设置页的表单卡把收尾行排成控件高(见 {@link NumenStyle#footerTop}),同一种钮不该两种高。
+     */
+    public static final int BUTTON_H = NumenStyle.CONTROL_H;
     public static final int BUTTON_GAP = 4;
     public static final int BUTTON_RIGHT = 7;
     public static final int BUTTON_BOTTOM = 5;
@@ -50,6 +55,20 @@ public final class DialogBox {
     /** 按钮行的顶边:贴卡底。 */
     public static int buttonTop(int cardY, int cardH) {
         return cardY + cardH - BUTTON_BOTTOM - BUTTON_H;
+    }
+
+    /**
+     * 对话框底部那一排纯字钮({@link Button.Style#LINK} / {@link Button.Style#LINK_DANGER})的摆法,
+     * 模态卡、确认卡、设置页的表单卡都走这里:从右缘 {@code right} 往左摆,第一个在最右(主按钮),
+     * 钮宽按字宽,钮与钮隔 {@link #BUTTON_GAP},顶边 {@code top}。
+     */
+    public static void placeButtons(ToIntFunction<String> textWidth, int right, int top, Button... rightToLeft) {
+        int r = right;
+        for (Button b : rightToLeft) {
+            int bw = buttonW(textWidth.applyAsInt(b.label()));
+            b.setBounds(r - bw, top, bw, BUTTON_H);
+            r -= bw + BUTTON_GAP;
+        }
     }
 
     private boolean shown;
@@ -113,5 +132,19 @@ public final class DialogBox {
     public static int fade(int argb, float a) {
         int alpha = Math.round(((argb >>> 24) & 0xFF) * Math.max(0f, Math.min(1f, a)));
         return (alpha << 24) | (argb & 0xFFFFFF);
+    }
+
+    /** 整套颜色都乘上 {@code a}:画布没有整体不透明度,淡入淡出中的控件拿这套颜色画。 */
+    public static NumenTheme.Colors fade(NumenTheme.Colors c, float a) {
+        if (a >= 1f) return c;
+        return new NumenTheme.Colors(
+                fade(c.panelBg(), a), fade(c.sectionBg(), a), fade(c.divider(), a),
+                fade(c.textPrimary(), a), fade(c.textSecondary(), a), fade(c.textMuted(), a),
+                fade(c.accent(), a), fade(c.danger(), a), fade(c.success(), a), fade(c.warning(), a),
+                fade(c.inputBg(), a), fade(c.inputBorder(), a),
+                fade(c.hover(), a), fade(c.selected(), a),
+                fade(c.badgeBg(), a), fade(c.badgeText(), a),
+                fade(c.toastInfoBg(), a), fade(c.toastWarnBg(), a), fade(c.toastErrorBg(), a),
+                fade(c.toastText(), a));
     }
 }

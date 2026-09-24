@@ -24,15 +24,14 @@ public final class ConfirmDialog implements UiRoot.Overlay {
     private String message;
     /** 可选副文本(次级色小字):危险操作要说清后果,而不是只问一句"确定吗"。 */
     private String detail;
-    private String cancelLabel;
-    private String confirmLabel;
-    private Runnable onConfirm;
+    /** 右下的两颗纯字钮:取消是强调色,确定是红字(删这类回不去的)。几何在渲染时定,事件无画布也能判命中。 */
+    private Button cancel;
+    private Button confirm;
     private List<String> lines;
     private List<String> detailLines;
 
-    // 渲染时缓存的几何,事件无画布也能判命中
+    // 渲染时缓存的几何
     private int cardX, cardY, cardW, cardH;
-    private int cancelX, cancelW, confirmX, confirmW, buttonY;
     /** 正文与后果那段之间的空。 */
     private static final int DETAIL_GAP = 3;
 
@@ -54,9 +53,11 @@ public final class ConfirmDialog implements UiRoot.Overlay {
         this.dimW = dimW;
         this.dimH = dimH;
         this.message = message == null ? "" : message;
-        this.cancelLabel = cancelLabel;
-        this.confirmLabel = confirmLabel;
-        this.onConfirm = onConfirm;
+        this.cancel = new Button(cancelLabel, Button.Style.LINK, this::closeAndDetach);
+        this.confirm = new Button(confirmLabel, Button.Style.LINK_DANGER, () -> {
+            closeAndDetach();
+            if (onConfirm != null) onConfirm.run();
+        });
         this.lines = null;
         box.show();
         root.openOverlay(this);
@@ -69,17 +70,17 @@ public final class ConfirmDialog implements UiRoot.Overlay {
     @Override
     public void renderOverlay(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
         box.advance(nowMs);
-        draw(s, c, mouseX, mouseY);
+        draw(s, c, mouseX, mouseY, nowMs);
     }
 
     @Override
     public boolean renderLeaving(IDrawSurface s, NumenTheme.Colors c, long nowMs) {
         if (!box.advance(nowMs)) return false;
-        draw(s, c, Integer.MIN_VALUE, Integer.MIN_VALUE);   // 淡出中不接指针,也就不画悬停
+        draw(s, c, Integer.MIN_VALUE, Integer.MIN_VALUE, nowMs);   // 淡出中不接指针,也就不画悬停
         return true;
     }
 
-    private void draw(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY) {
+    private void draw(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
         cardW = Math.min(DialogBox.WIDTH, dimW);
         int textW = cardW - DialogBox.PAD_X * 2;
         if (lines == null) {
@@ -93,61 +94,35 @@ public final class ConfirmDialog implements UiRoot.Overlay {
                 + DialogBox.FOOTER_H;
         cardX = dimX + (dimW - cardW) / 2;
         cardY = dimY + (dimH - cardH) / 2;
-        buttonY = DialogBox.buttonTop(cardY, cardH);
-        confirmW = DialogBox.buttonW(s.textWidth(confirmLabel));
-        cancelW = DialogBox.buttonW(s.textWidth(cancelLabel));
-        confirmX = cardX + cardW - DialogBox.BUTTON_RIGHT - confirmW;
-        cancelX = confirmX - DialogBox.BUTTON_GAP - cancelW;
+        DialogBox.placeButtons(s::textWidth, cardX + cardW - DialogBox.BUTTON_RIGHT,
+                DialogBox.buttonTop(cardY, cardH), confirm, cancel);
         box.paint(s, c, dimX, dimY, dimW, dimH, cardX, cardY, cardW, cardH);
         float a = box.card();
         // 淡到几乎看不见就不画字:MC 把不透明度低于 4/255 的字当成不透明来画
         if (a < 0.02f) return;
+        NumenTheme.Colors fc = DialogBox.fade(c, a);
 
         int tx = cardX + DialogBox.PAD_X;
         int ty = cardY + DialogBox.TEXT_TOP;
         for (String line : lines) {
-            s.drawText(line, tx, ty, DialogBox.fade(c.textPrimary(), a), false);
+            s.drawText(line, tx, ty, fc.textPrimary(), false);
             ty += s.lineHeight();
         }
         if (detailLines != null) {
             ty += DETAIL_GAP;
             for (String line : detailLines) {
-                s.drawText(line, tx, ty, DialogBox.fade(c.textSecondary(), a), false);
+                s.drawText(line, tx, ty, fc.textSecondary(), false);
                 ty += s.lineHeight();
             }
         }
-        drawButton(s, c, a, cancelX, cancelW, cancelLabel, false,
-                hover(mouseX, mouseY, cancelX, cancelW));
-        drawButton(s, c, a, confirmX, confirmW, confirmLabel, true,
-                hover(mouseX, mouseY, confirmX, confirmW));
-    }
-
-    /** Telegram 对话框的按钮:纯字,取消是强调色,删这类回不去的是危险色;悬停浮出浅底。 */
-    private void drawButton(IDrawSurface s, NumenTheme.Colors c, float a, int bx, int bw, String label,
-                            boolean danger, boolean hovered) {
-        if (hovered) s.fillRect(bx, buttonY, bw, DialogBox.BUTTON_H, DialogBox.fade(c.hover(), a));
-        int color = danger ? c.danger() : c.accent();
-        s.drawText(label, bx + (bw - s.textWidth(label)) / 2,
-                buttonY + (DialogBox.BUTTON_H - s.lineHeight()) / 2 + 1, DialogBox.fade(color, a), false);
-    }
-
-    private boolean hover(double mx, double my, int bx, int bw) {
-        return mx >= bx && mx < bx + bw && my >= buttonY && my < buttonY + DialogBox.BUTTON_H;
+        cancel.render(s, fc, mouseX, mouseY, nowMs);
+        confirm.render(s, fc, mouseX, mouseY, nowMs);
     }
 
     @Override
     public boolean overlayClicked(double mx, double my, int button) {
-        if (hover(mx, my, confirmX, confirmW)) {
-            Runnable action = onConfirm;
-            closeAndDetach();
-            if (action != null) action.run();
-            return true;
-        }
-        if (hover(mx, my, cancelX, cancelW)) {
-            closeAndDetach();
-            return true;
-        }
-        return true;   // 模态:卡外点击一律吞掉,不关闭不透传——危险操作不给误触留门
+        if (!confirm.mouseClicked(mx, my, button)) cancel.mouseClicked(mx, my, button);
+        return true;   // 模态:卡上的钮照常按,卡外点击一律吞掉,不关闭不透传——危险操作不给误触留门
     }
 
     @Override
