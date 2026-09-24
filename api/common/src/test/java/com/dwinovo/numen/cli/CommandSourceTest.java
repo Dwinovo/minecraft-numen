@@ -44,7 +44,7 @@ class CommandSourceTest {
             g.server("remind", "Set a reminder.", (src, args) -> {
                 SERVER_CALLS.add(args);
                 src.reply(TaskResult.ok("reminder in " + args.get(AFTER) + "s: " + args.get(REASON),
-                        Map.of("tool", src.toolName())).toJson());
+                        Map.of("tool", src.toolName(), "task", src.taskName())).toJson());
             }, AFTER, REASON).promote("gt_side_remind", "Set a reminder, as a tool.");
             g.client("jot", "Jot something down on the owner's client.", (src, args) -> {
                 CLIENT_CALLS.add(args);
@@ -108,6 +108,10 @@ class CommandSourceTest {
         assertEquals(message(viaTool), message(viaCommand), "回执同一句话");
         assertEquals("gt_side_remind", data(viaTool).get("tool").getAsString(), "源对象带着进来时的工具名");
         assertEquals("numen", data(viaCommand).get("tool").getAsString());
+        assertEquals("gt_side_remind", data(viaTool).get("task").getAsString(),
+                "从快捷工具派下的活叫快捷工具名");
+        assertEquals("gt_side remind", data(viaCommand).get("task").getAsString(),
+                "从 numen 派下的活叫\"组 动作\",不叫 numen");
     }
 
     @Test

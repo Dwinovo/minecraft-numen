@@ -1,14 +1,27 @@
 package com.dwinovo.numen.core.gametest;
 
+import com.dwinovo.numen.api.NumenPlugins;
+import com.dwinovo.numen.cli.ArgType;
+import com.dwinovo.numen.cli.Param;
+import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.entity.CompanionFactory;
+import com.dwinovo.numen.entity.CompanionRegistry;
+import com.dwinovo.numen.entity.Companions;
 import com.dwinovo.numen.entity.EventOutbox;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.task.CompanionTickDispatcher;
+import com.dwinovo.numen.task.Task;
+import com.dwinovo.numen.task.TaskDispatch;
+import com.dwinovo.numen.task.TaskFactory;
+import com.dwinovo.numen.task.TaskRecord;
+import com.dwinovo.numen.task.TaskResult;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.task.TimerRegistry;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
@@ -17,6 +30,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
 import net.neoforged.neoforge.gametest.GameTestHolder;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
@@ -27,10 +41,65 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
  *
  * <p>三个动作各自提升成了快捷工具({@code task_status} / {@code task_stop} / {@code set_timer}):同一件事从工具和
  * 从命令各调一次,回执与世界上的结果一样。
+ *
+ * <p>命令派下的长活叫什么、重启后怎么接回来,用夹具组 {@code gt_long} 验:它唯一的动作 {@code linger} 派一件站着
+ * 数刻的后台活,并提升成快捷工具 {@code gt_linger}。
  */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
 public class TaskControlGameTests {
+
+    private static final Param<Integer> TICKS = Param.required("ticks", ArgType.integer(1, 1200),
+            "How long to stand, in ticks.");
+
+    static {
+        NumenPlugins.register(numen -> numen.registerCommands("gt_long",
+                "Test fixture: long work dispatched by a command.", g ->
+                        g.server("linger", "Stand still for a while, as background work.",
+                                (src, args) -> TaskDispatch.setTask(src, new LingerRecord(src, args.get(TICKS))),
+                                TICKS)
+                                .promote("gt_linger", "Stand still for a while, as background work.")));
+        TaskFactory.register(LingerRecord.class, (body, record) -> new Linger(record));
+    }
+
+    /** 夹具的活:站着数够刻数就算干完。名字与调用 id 取自派它的那次调用。 */
+    private static final class LingerRecord extends TaskRecord {
+        final int ticks;
+
+        LingerRecord(ServerSource source, int ticks) {
+            super(source, source.companion().level().getGameTime() + ticks + 200);
+            this.ticks = ticks;
+        }
+    }
+
+    private static final class Linger implements Task {
+        private final LingerRecord record;
+        private int stood;
+
+        Linger(LingerRecord record) {
+            this.record = record;
+        }
+
+        @Override
+        public TaskState tick(NumenPlayer companion) {
+            return ++stood >= record.ticks ? TaskState.SUCCESS : TaskState.RUNNING;
+        }
+
+        @Override
+        public void stop(NumenPlayer companion, StopReason why) {
+        }
+
+        @Override
+        public TaskResult result(TaskState terminal) {
+            return terminal == TaskState.SUCCESS ? TaskResult.ok("stood for " + stood + " ticks")
+                    : TaskResult.fail("stopped after " + stood + " ticks");
+        }
+
+        @Override
+        public String name() {
+            return "linger";
+        }
+    }
 
     /** 任务控制批次前置:和平难度 + 正午。 */
     @BeforeBatch(batch = "numen_tasks")
@@ -191,6 +260,97 @@ public class TaskControlGameTests {
             CompanionFactory.despawn(helper.getLevel().getServer(), viaToolBody);
             CompanionFactory.despawn(helper.getLevel().getServer(), viaCommandBody);
         });
+    }
+
+    /**
+     * 命令派下的长活叫"组 动作",快捷工具派下的叫快捷工具名:受理回执、任务记录、task_finished 三处都是这个名字,
+     * 而重启要重放的仍是那次调用本身(numen 与那一行命令)。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
+    public static void a_long_command_is_named_after_its_group_and_action(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        BlockPos at = helper.absolutePos(new BlockPos(2, 2, 2));
+        NumenPlayer viaCommandBody = Companions.summon(server, UUID.randomUUID(), "gametest_lingerer", level,
+                new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
+        NumenPlayer viaToolBody = spawnAt(helper, "gametest_tool_lingerer", new BlockPos(6, 2, 2), false);
+        ToolRun viaCommand = command(viaCommandBody, "numen gt_long linger 20");
+        ToolRun viaTool = call(viaToolBody, "gt_linger", args("ticks", 20));
+        CompanionRegistry.Entry recorded = CompanionRegistry.get(server).find(viaCommandBody.getUUID());
+        EventOutbox outbox = EventOutbox.get(server);
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(taskIn(viaCommand.reply()).equals("gt_long linger")
+                            && viaCommand.task().getToolName().equals("gt_long linger"),
+                    "the command's task is not named group + action: " + viaCommand.reply());
+            helper.assertTrue(taskIn(viaTool.reply()).equals("gt_linger")
+                            && viaTool.task().getToolName().equals("gt_linger"),
+                    "the shortcut's task is not named after the shortcut: " + viaTool.reply());
+            helper.assertTrue(recorded.taskTool().equals("numen")
+                            && recorded.taskArgs().contains("numen gt_long linger 20"),
+                    "the replay recipe is not the call itself: " + recorded.taskTool() + " " + recorded.taskArgs());
+            helper.assertTrue(finishedAs(outbox, viaCommandBody, "gt_long linger")
+                            && finishedAs(outbox, viaToolBody, "gt_linger"),
+                    "task_finished does not name the task: " + outbox.peek(viaCommandBody.getUUID()).entries()
+                            + " / " + outbox.peek(viaToolBody.getUUID()).entries());
+            outbox.forget(viaCommandBody.getUUID());
+            outbox.forget(viaToolBody.getUUID());
+            Companions.dismiss(server, viaCommandBody);
+            CompanionFactory.despawn(server, viaToolBody);
+        });
+    }
+
+    /**
+     * 重启后接回命令派下的长活:重放那一行命令,接回来的活照样叫"组 动作",收尾的 task_finished 也是这个名字。
+     * 重启用"休眠 + 把重启前落盘的那条记录放回去 + 复活"来演。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_tasks")
+    public static void a_restored_long_command_keeps_its_name(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        BlockPos at = helper.absolutePos(new BlockPos(2, 2, 2));
+        NumenPlayer first = Companions.summon(server, UUID.randomUUID(), "gametest_relingerer", level,
+                new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
+        UUID uuid = first.getUUID();
+        ToolRun before = command(first, "numen gt_long linger 1000");
+        CompanionRegistry registry = CompanionRegistry.get(server);
+        CompanionRegistry.Entry recorded = registry.find(uuid);
+        Companions.dormant(server, first);
+        registry.put(uuid, registry.find(uuid).doing(recorded.taskTool(), recorded.taskArgs()));
+        NumenPlayer second = Companions.respawn(server, uuid);
+        helper.assertTrue(second != null, "the body was not rebuilt");
+        EventOutbox outbox = EventOutbox.get(server);
+        AtomicReference<TaskRecord> restored = new AtomicReference<>();
+
+        helper.startSequence()
+                .thenWaitUntil(() -> {
+                    helper.assertTrue(before.task() != null, "the first dispatch failed: " + before.reply());
+                    TaskRecord now = CompanionTickDispatcher.currentTaskFor(uuid);
+                    helper.assertTrue(now != null && now != before.task(), "the task was not replayed");
+                    restored.set(now);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(restored.get().getToolName().equals("gt_long linger"),
+                        "the replayed task is named " + restored.get().getToolName()))
+                .thenExecute(() -> CompanionTickDispatcher.stopActive(second, TaskRecord.StopCause.TASK_STOP))
+                .thenWaitUntil(() -> helper.assertTrue(outbox.peek(uuid).entries().stream()
+                                .anyMatch(e -> e.type().equals("task_finished")
+                                        && e.text().contains("task=\"gt_long linger\"")
+                                        && e.text().contains(restored.get().publicId())),
+                        "the replayed task did not finish under its name: " + outbox.peek(uuid).entries()))
+                .thenExecute(() -> {
+                    outbox.forget(uuid);
+                    Companions.dismiss(server, second);
+                })
+                .thenSucceed();
+    }
+
+    private static String taskIn(String reply) {
+        return JsonParser.parseString(reply).getAsJsonObject().getAsJsonObject("data").get("task").getAsString();
+    }
+
+    private static boolean finishedAs(EventOutbox outbox, NumenPlayer body, String task) {
+        return outbox.peek(body.getUUID()).entries().stream().anyMatch(e -> e.type().equals("task_finished")
+                && e.text().contains("task=\"" + task + "\"") && e.text().contains("status=\"done\""));
     }
 
     /** 回执里只有表编号因人而异(全服一个计数器),把它抹成同一个记号再比。 */

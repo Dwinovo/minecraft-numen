@@ -118,7 +118,7 @@ public final class Action implements Command<CommandSource> {
         switch (source) {
             case ServerSource server -> {
                 if (onServer != null) {
-                    onServer.run(server, args);
+                    onServer.run(server.running(this), args);
                 } else {
                     server.reply(TaskResult.fail(path() + " runs on the owner's client, not on the server.").toJson());
                 }
@@ -194,7 +194,12 @@ public final class Action implements Command<CommandSource> {
 
     /** {@code numen <组> <动作>};组直接就是这个动作时是 {@code numen <组>}。 */
     String path() {
-        return NumenCli.ROOT + " " + group.name() + (name == null ? "" : " " + name);
+        return NumenCli.ROOT + " " + label();
+    }
+
+    /** {@code <组> <动作>},组直接就是这个动作时只是 {@code <组>}:从命令派下的活就叫这个名字。 */
+    String label() {
+        return group.name() + (name == null ? "" : " " + name);
     }
 
     /** 整行用法:路径 + 必填参数 + 标志。 */

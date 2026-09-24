@@ -1,4 +1,5 @@
 package com.dwinovo.numen.task;
+import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskResult;
 
 import java.util.concurrent.atomic.AtomicLong;
@@ -42,7 +43,10 @@ public abstract class TaskRecord {
     public static final long NO_DEADLINE = Long.MAX_VALUE / 2;
 
     private final long id;
-    /** Stable name of the originating tool (matches {@code NumenTool.name()}). */
+    /**
+     * 这件活叫什么:模型调的那个东西——工具派的是工具名({@code NumenTool.name()}),命令派的是
+     * {@link ServerSource#taskName()}(快捷工具名,或"组 动作")。回执、{@code task_finished}、{@code <current_task>} 都写它。
+     */
     private final String toolName;
     /**
      * The {@code id} field from the LLM's {@code tool_call} — must be echoed
@@ -74,6 +78,11 @@ public abstract class TaskRecord {
         this.toolName = toolName;
         this.toolCallId = toolCallId;
         this.deadlineGameTime = deadlineGameTime;
+    }
+
+    /** 命令派下的活:名字与调用 id 都取自这次调用的源,交给 {@link TaskDispatch#setTask(ServerSource, TaskRecord)}。 */
+    protected TaskRecord(ServerSource source, long deadlineGameTime) {
+        this(source.taskName(), source.toolCallId(), deadlineGameTime);
     }
 
     public final long getId() { return id; }
