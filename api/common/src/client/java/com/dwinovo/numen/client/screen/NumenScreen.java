@@ -966,6 +966,8 @@ public final class NumenScreen extends Screen {
     private final class ChatBarHost implements com.dwinovo.numen.client.screen.chat.ChatInputBar.Host {
         @Override public void onSend(String text) { submitChat(text); }
 
+        @Override public String lastSent() { return chatView.lastOwnText(); }
+
         @Override public void onMicToggle() { NumenScreen.this.onMicToggle(); }
 
         @Override public void onAbort() {

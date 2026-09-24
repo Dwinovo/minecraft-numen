@@ -549,6 +549,23 @@ public final class ChatView {
     /** 右键点中的那句:谁说的(主人自己是 null)、原文(引用条不算在内)。 */
     public record Picked(UUID who, String text) {}
 
+    /** 主人在这个会话里上一句说的话(引的那句不算);没说过是 null。 */
+    public String lastOwnText() {
+        List<Transcript.Entry> source = transcript();
+        for (int i = source.size() - 1; i >= 0; i--) {
+            if (source.get(i).msg() instanceof ConvoState.Msg.User u) {
+                String c = u.content();
+                if (ConvoLog.PERSONA_DIVIDER.equals(c) || ConvoLog.COMPACT_DIVIDER.equals(c)
+                        || ConvoLog.CLEAR_DIVIDER.equals(c)) {
+                    continue;
+                }
+                String shown = Quote.parse(ownerText(c)).body();
+                if (!shown.isBlank()) return shown;
+            }
+        }
+        return null;
+    }
+
     /** 指针下那个气泡;不在气泡上是 null。只认对话流可见区里的。 */
     public Picked bubbleAt(double mx, double my) {
         if (mx < gx || mx >= gx + gw || my < gy || my >= gy + gh) return null;

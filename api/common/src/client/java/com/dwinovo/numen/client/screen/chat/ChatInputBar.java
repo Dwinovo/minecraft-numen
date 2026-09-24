@@ -72,6 +72,9 @@ public final class ChatInputBar {
         /** 她等的那条征询没了(主人答了、超时、任务结束),输入行已经回到原样。在 {@link #tick} 里调。 */
         default void onConsentSettled() {}
 
+        /** 这个会话里主人上一句说的话(输入框空着时按 ↑ 取回来改);没有是 null。 */
+        default String lastSent() { return null; }
+
     }
 
     /** 右边那一格的宽。 */
@@ -415,6 +418,14 @@ public final class ChatInputBar {
                     return true;
                 }
                 default -> { }
+            }
+        }
+        if (keyCode == KeyCodes.UP && field != null && field.isFocused() && field.value().isEmpty()) {
+            // 空着按 ↑:把上一句拿回来改了再发(Telegram 按 ↑ 改上一条)
+            String last = host.lastSent();
+            if (last != null) {
+                setText(last);
+                return true;
             }
         }
         if (keyCode == KeyCodes.ESCAPE && quoteWho != null) {   // Esc 先收引用栏,再一次才关界面
