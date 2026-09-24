@@ -19,10 +19,12 @@ final class FtbqCommands {
     static final String GROUP = "ftbquests";
     static final String LIST = NumenCli.ROOT + " " + GROUP + " list";
     static final String SHOW = NumenCli.ROOT + " " + GROUP + " show";
+    static final String SUBMIT = NumenCli.ROOT + " " + GROUP + " submit";
 
     /** 客户端按主人的语言认标题,所以 show 编号、标题都收;标题可以带空格,吃掉余下整行。 */
     private static final Param<String> QUEST_NAMED = Param.required("quest", ArgType.text(),
-            "A quest's id, or its full title as list prints it.");
+            "Which quest.")
+            .values("its id, or its full title as " + LIST + " prints it");
     /**
      * submit 只收编号:它在服务端执行,服务端的任务书是回退语言,主人语言里的标题在那边对不上。
      * 编号是 FTB 的对象编号,两侧一样。
@@ -32,8 +34,9 @@ final class FtbqCommands {
 
     /** 短名是 FTB Teams 给队伍起的写法(显示名里的非字母数字换成下划线,再接 {@code #} 与编号前八位)。 */
     static final Param<String> TEAM = Param.optional("team", ArgType.string(),
-            "The party's short name, as the team_invite event gives it, e.g. Dwin_Party#1a2b3c4d. "
-                    + "Needed only when several parties have invited you.");
+            "Which party's invitation to accept.")
+            .values("the party's short name, as the team_invite event gives it, e.g. Dwin_Party#1a2b3c4d")
+            .whenOmitted("accept your only pending invitation; with several pending, name one");
 
     private FtbqCommands() {}
 
@@ -45,11 +48,32 @@ final class FtbqCommands {
 
     private static void actions(CommandGroup quests) {
         quests.client("list", "The quests you can work on now, what each still needs and who can do it.",
-                ClientBook::list, Listing.PAGE);
+                ClientBook::list, Listing.PAGE)
+                .example(LIST)
+                .example(LIST + " --page 2")
+                .note("Reads your owner's book: their team's progress, in their language. It changes nothing.")
+                .note("The first line says whether you are in that team; if not, what you do does not count "
+                        + "for this book.")
+                .seeAlso(SHOW, SUBMIT);
         quests.client("show", "One quest in full: description, dependencies, tasks, rewards.",
-                (src, args) -> ClientBook.show(src, args.get(QUEST_NAMED)), QUEST_NAMED);
+                (src, args) -> ClientBook.show(src, args.get(QUEST_NAMED)), QUEST_NAMED)
+                .example(SHOW + " 15CDF6A098B95FDA")
+                .example(SHOW + " Getting Started")
+                .seeAlso(SUBMIT);
         quests.server("submit", "Hand in a quest's items, experience or checkmarks from your own inventory.",
-                QuestSubmit::submit, QUEST_ID);
-        quests.server("join", "Accept a party invitation you have pending.", PartyJoin::join, TEAM);
+                QuestSubmit::submit, QUEST_ID)
+                .example(SUBMIT + " 15CDF6A098B95FDA")
+                .note("Takes the items from YOUR inventory and they do not come back; FTB decides what counts. "
+                        + "It does not ask your owner, so hand in only when they want you to.")
+                .note("Observation tasks are not supported. Completion and rewards arrive as quest_completed "
+                        + "and quest_reward_auto events.")
+                .seeAlso(LIST, SHOW);
+        quests.server("join", "Accept a party invitation you have pending.", PartyJoin::join, TEAM)
+                .example(NumenCli.ROOT + " " + GROUP + " join")
+                .example(NumenCli.ROOT + " " + GROUP + " join --team Dwin_Party#1a2b3c4d")
+                .note("It does not ask your owner: join only when they agree. You cannot join while you are "
+                        + "in another party.")
+                .note("Your quest progress merges into the party's; from then on what you do counts for it.")
+                .seeAlso(LIST);
     }
 }
