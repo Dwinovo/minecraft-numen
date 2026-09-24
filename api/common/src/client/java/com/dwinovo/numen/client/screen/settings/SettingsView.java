@@ -1269,8 +1269,13 @@ public final class SettingsView {
 
     /** The Settings tab's whole click chain — dropdown routing first (open lists overlay
      *  the fields), then theme rows / per-row toggles; on the home page, the section rows. Returns true = consumed. */
-    public boolean mouseClicked(double mouseX, double mouseY) {
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
         loadPalette();
+        if (button != 0) {
+            // 右键只有条目库的行认(弹出编辑/克隆/删除菜单);首页、退出途中、表单开着时都不接
+            LibraryListPanel<?> lib = section == null || leaving || formActive() ? null : libraryOf(section);
+            return lib != null && lib.mouseClicked(mouseX, mouseY, button);
+        }
         if (section == null) {   // 首页:点一行进那个分区
             Section s = listAt(mouseX, mouseY);
             if (s != null) selectSection(s);
@@ -1340,6 +1345,19 @@ public final class SettingsView {
             return true;
         }
         return false;
+    }
+
+    /** 这个分区是不是条目库(列表页);不是的给 null。 */
+    private LibraryListPanel<?> libraryOf(Section s) {
+        return switch (s) {
+            case PROVIDER -> profileList();
+            case VOICE -> voiceListPanel();
+            case PERSONA -> personaListPanel();
+            case SKIN -> skinListPanel();
+            case MCP -> mcpListPanel();
+            case SKILLS -> skillsListPanel();
+            case BRAIN, STT, THEME -> null;
+        };
     }
 
     /** Open the add-form PRE-FILLED with {@code name}'s current spec — saving REPLACES the entry. */

@@ -1660,7 +1660,7 @@ public final class NumenScreen extends Screen {
         if (!modalOpen() && tab == Tab.SETTINGS && settings.formActive()) {
             // 设置页的表单模态:先给表单自己的下拉路由,其余只放行 widget 通道
             // (卡上字段/按钮),侧栏/页签/背景列表全部屏蔽。
-            if (button == 0 && settings.mouseClicked(mouseX, mouseY)) return true;
+            if (button == 0 && settings.mouseClicked(mouseX, mouseY, button)) return true;
             return super.mouseClicked(mouseX, mouseY, button);
         }
         if (button == 1 && !modalOpen() && tab == Tab.MEMBERS && membersPage != null && conv != null) {
@@ -1681,6 +1681,9 @@ public final class NumenScreen extends Screen {
                 openFolderMenu(folderTabs().get(folderTab).id(), mouseX, mouseY);
                 return true;
             }
+        }
+        if (button == 1 && !modalOpen() && tab == Tab.SETTINGS && settings.mouseClicked(mouseX, mouseY, button)) {
+            return true;   // 右键设置里条目库的一行:编辑、克隆、删除
         }
         if (button == 1 && !modalOpen() && tab == Tab.CHAT && conv != null) {   // 右键一条话:复制、引用回复
             var picked = chatView.bubbleAt(mouseX, mouseY);
@@ -1761,7 +1764,7 @@ public final class NumenScreen extends Screen {
                 // 侧栏的 +/头像在上面已处理(保留为模态的逃生口)。
                 return super.mouseClicked(mouseX, mouseY, button);
             }
-            if (tab == Tab.SETTINGS && settings.mouseClicked(mouseX, mouseY)) return true;
+            if (tab == Tab.SETTINGS && settings.mouseClicked(mouseX, mouseY, button)) return true;
             if (conv != null && !overlayOpen() && overMore(mouseX, mouseY)) {
                 openHeaderMenu();
                 return true;
