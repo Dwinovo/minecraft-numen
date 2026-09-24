@@ -8,6 +8,7 @@ import com.dwinovo.numen.agent.conversation.Conversation;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
+import com.dwinovo.numen.client.agent.ChatFolders;
 import com.dwinovo.numen.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.client.agent.Conversations;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
@@ -80,7 +81,7 @@ public final class NumenScreen extends Screen {
     private static final int RAIL_NARROW_W = 40; // 窗口装不下时收成只有脸的窄栏(Telegram 缩窗口时会话列表就这么塌)
     private static final int RAIL_AV = 26;       // 脸的边长
     private static final int RAIL_SLOT = 34;     // 行高:脸 + 上下各 4
-    private static final int RAIL_TOP = 3 + 22;  // 第一行在 ☰ 那一条下面(RAIL_BAR_H)
+    private static final int RAIL_TOP = 3 + 22;  // ☰ 那一条(RAIL_BAR_H)的底边;分组标签条从这里往下长,列表在它下面
     private static final int RAIL_BOT_GAP = 10;   // 最后一行下面给"下面还有"的箭头留的缝
     private static final int RAIL_FACE_X = 5;    // 脸离左栏左缘
     /** 抬头两行:名字一行、状态一行(Telegram 的"在线 / 正在输入…"),页签在右侧居中。 */
@@ -465,14 +466,19 @@ public final class NumenScreen extends Screen {
         return her == null ? null : AgentLoopRegistry.getOrCreate(her);
     }
 
-    /** 左栏列的会话:每帧现取,名册一变它就跟着变。 */
+    /**
+     * 左栏列的会话:每帧现取,名册一变它就跟着变。选中的分组和搜索框的字在这一处叠着筛——
+     * 左栏、上下切会话、回车开第一个、拖拽合并认的都是这一份。
+     */
     private List<Conversation> rail() {
-        List<Conversation> all = Conversations.instance().all();
-        if (railQuery.isBlank()) return all;
+        Conversations convos = Conversations.instance();
+        String folder = convos.folder();
         // 搜索框里有字:只列名字对得上的(不分大小写)
         String q = railQuery.strip().toLowerCase(java.util.Locale.ROOT);
-        return all.stream()
-                .filter(c -> c.displayName(NumenRoster.instance()::name).toLowerCase(java.util.Locale.ROOT).contains(q))
+        return convos.all().stream()
+                .filter(c -> convos.inFolder(folder, c))
+                .filter(c -> q.isEmpty()
+                        || c.displayName(NumenRoster.instance()::name).toLowerCase(java.util.Locale.ROOT).contains(q))
                 .toList();
     }
 
@@ -1724,6 +1730,11 @@ public final class NumenScreen extends Screen {
                 openSummon();
                 return true;
             }
+            int folderTab = modalOpen() ? -1 : folderTabAt(mouseX, mouseY);
+            if (folderTab >= 0) {   // 分组标签:切过去
+                selectFolder(folderTabs().get(folderTab).id());
+                return true;
+            }
             int rail = railIndexAt((int) mouseX, (int) mouseY);
             if (rail >= 0) {
                 // 按下只记一笔:是点还是拖,松手时才知道(见 mouseReleased)
@@ -1945,6 +1956,11 @@ public final class NumenScreen extends Screen {
         }
         // 设置页第一段:表单下拉 + 声线表单整体滚动(顺位与拆分前一致)。
         if (sy != 0 && tab == Tab.SETTINGS && settings.mouseScrolledEarly(mx, my, sy)) return true;
+        // 分组标签条上的滚轮横着滚标签(Telegram 标签条吃掉滚轮,不往下面的列表传)
+        if (sy != 0 && overFolderStrip(mx, my)) {
+            folderScrollTo = Math.clamp(folderScrollTo - (float) sy * 20f, 0f, maxFolderScroll(folderTabs()));
+            return true;
+        }
         // Wheel over the left rail column scrolls the roster (works on any tab).
         if (sy != 0 && mx >= railX && mx < railX + railW && maxRailScroll() > 0) {
             railScroll = Math.clamp((long) (railScroll - sy), 0, maxRailScroll());
@@ -2154,13 +2170,12 @@ public final class NumenScreen extends Screen {
         UiTheme t = UiTheme.current();
         int rowX = railX + 3, rowW = railW - 3;
         railScroll = Math.clamp(railScroll, 0, maxRailScroll());     // keep valid as the roster grows/shrinks
-        int first = railScroll;
-        int startY = railStartY();
         long now = System.currentTimeMillis();
         float dt = lastRailFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastRailFrameMs) / 1000f);
         updateShrink(mouseX, mouseY);   // 它会把 lastRailFrameMs 推到现在,所以 dt 先算
-        Conversation dragged = railDragging && railPressed < items.size() ? items.get(railPressed) : null;
-        boolean railQuiet = !overlayOpen() && !modalOpen() && !railDragging;
+        // 分组标签条:宽栏露出,窄栏收起(Telegram 会话列窄到只剩头像时标签条随宽度收掉,选中的分组照样筛)
+        folderShown = Float.isNaN(folderShown) ? folderTarget()
+                : com.dwinovo.numen.client.ui.Anim.approach(folderShown, folderTarget(), 18f, dt);
         // 顶上一条:☰(Telegram 会话列表顶上那一条的左端),点开是召唤同伴、设置;菜单开着时亮着
         {
             int mx0 = rowX + PAD, my0 = top + 3 + (RAIL_BAR_H - ICON_N) / 2;
@@ -2175,48 +2190,96 @@ public final class NumenScreen extends Screen {
             } else {
                 renderSearch(g, mouseX, mouseY);
             }
-            g.fill(rowX, top + 3 + RAIL_BAR_H - 1, rowX + rowW, top + 3 + RAIL_BAR_H, t.border());
         }
-        if (items.isEmpty() && !railQuery.isBlank() && railW >= RAIL_FULL_W) {
-            txt(g, Component.translatable(ModLanguageData.Keys.RAIL_NO_MATCH), rowX + PAD, startY + 8, TXT_FAINT);
+        renderFolderStrip(g, mouseX, mouseY, dt);
+        // 标题区与列表之间一道线,跟着标签条上下
+        g.fill(rowX, railStartY() - 1, rowX + rowW, railStartY(), t.border());
+        // 切分组:旧列表整宽滑出、先淡掉,新列表从另一侧滑进、后淡入(Telegram 的 SlideAnimation,200ms)
+        g.enableScissor(rowX, railStartY(), rowX + rowW, railBottomEdge());
+        float p = slide == null ? 1f : Math.min(1f, (now - slide.startMs()) / (float) FOLDER_SLIDE_MS);
+        if (p >= 1f) slide = null;
+        if (slide != null) {
+            renderRows(g, slide.items(), slide.folder(), slide.scroll(),
+                    rowX - slide.dir() * Math.round(rowW * easeInCirc(p)), 1f - easeOutCirc(p),
+                    false, mouseX, mouseY, dt, now);
+            renderRows(g, items, Conversations.instance().folder(), railScroll,
+                    rowX + slide.dir() * Math.round(rowW * (1f - easeOutCirc(p))), easeInCirc(p),
+                    true, mouseX, mouseY, dt, now);
+        } else {
+            renderRows(g, items, Conversations.instance().folder(), railScroll, rowX, 1f, true, mouseX, mouseY, dt, now);
+        }
+        g.disableScissor();
+        // scroll cues — chevrons when the list overflows in either direction
+        int cx = railX + railW / 2;
+        if (railScroll > 0) chevron(g, cx, top + 1, true);
+        if (railScroll < maxRailScroll()) chevron(g, cx, railBottomEdge() + 2, false);
+    }
+
+    /**
+     * 左栏的行,左缘在 {@code x0}、整体透明度 {@code a}。平时只画一份;切分组时新旧两份各画一遍。
+     * {@code live} = 这是此刻的列表:悬停、拖拽、选中底的滑动、"在干什么"的进度都只跟着它走;
+     * 滑出去的那份只照原样画,不接这些。
+     */
+    private void renderRows(GuiGraphics g, List<Conversation> items, String folder, int first, int x0, float a,
+                            boolean live, int mouseX, int mouseY, float dt, long now) {
+        UiTheme t = UiTheme.current();
+        int rowW = railW - 3;
+        int startY = railStartY();
+        Conversation dragged = live && railDragging && railPressed < items.size() ? items.get(railPressed) : null;
+        boolean railQuiet = live && !overlayOpen() && !modalOpen() && !railDragging;
+        if (items.isEmpty() && railW >= RAIL_FULL_W) {
+            // 在搜:没有对得上的;没在搜、分组里本来就空:这个分组里还没有会话
+            if (!railQuery.isBlank()) {
+                txt(g, Component.translatable(ModLanguageData.Keys.RAIL_NO_MATCH), x0 + PAD, startY + 8, fade(TXT_FAINT, a));
+            } else if (!folder.equals(ChatFolders.ALL)) {
+                txt(g, Component.translatable(ModLanguageData.Keys.FOLDER_EMPTY), x0 + PAD, startY + 8, fade(TXT_FAINT, a));
+            }
         }
         // 选中底先画(滑动的),行的内容压在它上面
         int activeIdx = -1;
         for (int i = 0; i < items.size(); i++) if (sameAs(items.get(i), conv)) { activeIdx = i; break; }
-        int activeY = railTileY(activeIdx);
-        if (activeY >= 0) {
-            selY = Float.isNaN(selY) ? activeY : com.dwinovo.numen.client.ui.Anim.approach(selY, activeY, 18f, dt);
-            g.enableScissor(rowX, top + RAIL_TOP, rowX + rowW, railBottomEdge());
+        int activeY = startY + (activeIdx - first) * RAIL_SLOT;
+        boolean activeShown = activeIdx >= first && activeY + RAIL_SLOT <= railBottomEdge();
+        if (activeShown) {
+            float y = activeY;
+            if (live) {
+                selY = Float.isNaN(selY) ? activeY : com.dwinovo.numen.client.ui.Anim.approach(selY, activeY, 18f, dt);
+                y = selY;
+            }
             // 选中那一行整行填色(Telegram 的 dialogsBgActive)
-            g.fill(rowX, Math.round(selY), rowX + rowW, Math.round(selY) + RAIL_SLOT, t.active());
-            g.disableScissor();
-        } else {
+            g.fill(x0, Math.round(y), x0 + rowW, Math.round(y) + RAIL_SLOT, fade(t.active(), a));
+        } else if (live) {
             selY = Float.NaN;
         }
-        int textRight = rowX + rowW - 5;
+        int textRight = x0 + rowW - 5;
         for (int i = first; i < items.size(); i++) {
             int ay = startY + (i - first) * RAIL_SLOT;
             if (ay + RAIL_SLOT > railBottomEdge()) break;
             Conversation c = items.get(i);
             UUID her = Conversations.instance().soloOf(c);
             boolean active = i == activeIdx;
-            boolean hovered = mouseX >= rowX && mouseX < rowX + rowW && mouseY >= ay && mouseY < ay + RAIL_SLOT;
+            boolean hovered = live && mouseX >= x0 && mouseX < x0 + rowW && mouseY >= ay && mouseY < ay + RAIL_SLOT;
             // 拖拽中:指针下的另一行是落点,整行亮一道左缘条;原行压暗
             boolean dropTarget = railDragging && hovered && i != railPressed;
             if (!active && hovered && railQuiet) {
-                g.fill(rowX, ay, rowX + rowW, ay + RAIL_SLOT, t.over());
+                g.fill(x0, ay, x0 + rowW, ay + RAIL_SLOT, t.over());
             }
             if (dropTarget) {
-                g.fill(rowX, ay, rowX + 2, ay + RAIL_SLOT, CTA);
+                g.fill(x0, ay, x0 + 2, ay + RAIL_SLOT, CTA);
             }
-            int fx = rowX + RAIL_FACE_X, fy = ay + (RAIL_SLOT - RAIL_AV) / 2;
+            int fx = x0 + RAIL_FACE_X, fy = ay + (RAIL_SLOT - RAIL_AV) / 2;
             com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
-                    fx - 1, fy - 1, RAIL_AV + 2, RAIL_AV + 2, FIELD, active ? t.active() : BORDER);
-            if (i == shrinkIndex && shrinkPx > 0f && dragged != null) {
+                    fx - 1, fy - 1, RAIL_AV + 2, RAIL_AV + 2, fade(FIELD, a), fade(active ? t.active() : BORDER, a));
+            // 脸是贴图,透明度只能走着色(淡入淡出的那一份)
+            if (a < 1f) {
+                com.mojang.blaze3d.systems.RenderSystem.enableBlend();
+                g.setColor(1f, 1f, 1f, a);
+            }
+            if (live && i == shrinkIndex && shrinkPx > 0f && dragged != null) {
                 // 合并预览:原来的脸缩向左上角,拖着的那张从右下角长出来,长满就是叠脸格的样子
-                float p = shrinkPx / RAIL_STEP;
+                float sp = shrinkPx / RAIL_STEP;
                 com.dwinovo.numen.client.skin.ConversationFaces.draw(g, c, fx, fy, Math.round(RAIL_AV - shrinkPx));
-                int grow = Math.round(p * RAIL_SMALL);
+                int grow = Math.round(sp * RAIL_SMALL);
                 if (grow > 2) {
                     com.dwinovo.numen.client.skin.ConversationFaces.draw(g, dragged,
                             fx + RAIL_AV - grow, fy + RAIL_AV - grow, grow);
@@ -2224,8 +2287,9 @@ public final class NumenScreen extends Screen {
             } else {
                 com.dwinovo.numen.client.skin.ConversationFaces.draw(g, c, fx, fy, RAIL_AV);
             }
-            if (railDragging && i == railPressed) {
-                g.fill(rowX, ay, rowX + rowW, ay + RAIL_SLOT, 0x90101010);
+            if (a < 1f) g.setColor(1f, 1f, 1f, 1f);
+            if (live && railDragging && i == railPressed) {
+                g.fill(x0, ay, x0 + rowW, ay + RAIL_SLOT, 0x90101010);
             }
             if (railW < RAIL_FULL_W) {
                 // 窄栏:只有脸;名字靠悬停
@@ -2241,37 +2305,39 @@ public final class NumenScreen extends Screen {
             String when = last == null ? "" : whenLabel(last.ts(), now);
             int whenW = when.isEmpty() ? 0 : font.width(when) + 4;
             txt(g, Component.literal(Nb.clip(font, c.displayName(NumenRoster.instance()::name), textRight - tx - whenW)),
-                    tx, ay + 6, nameColor);
+                    tx, ay + 6, fade(nameColor, a));
             if (!when.isEmpty()) {
-                txt(g, Component.literal(when), textRight - font.width(when), ay + 6, active ? dimColor : TXT_FAINT);
+                txt(g, Component.literal(when), textRight - font.width(when), ay + 6, fade(active ? dimColor : TXT_FAINT, a));
             }
             // 未读角标(Telegram):她在别的会话里说了话,这一行右边一枚强调色计数;当前这行没有
             int previewRight = textRight;
-            int unread = active ? 0 : com.dwinovo.numen.client.screen.chat.ConversationPreview.unread(
-                    c, Conversations.instance().lastSeen(c));
+            int unread = railUnread(c);
             if (unread > 0) {
                 String n = com.dwinovo.numen.client.screen.chat.UnreadBadge.label(unread);
                 int bx = textRight - com.dwinovo.numen.client.screen.chat.UnreadBadge.width(font, n);
-                com.dwinovo.numen.client.screen.chat.UnreadBadge.draw(g, font, n, bx, ay + 16, CTA, ON_CTA);
+                com.dwinovo.numen.client.screen.chat.UnreadBadge.draw(g, font, n, bx, ay + 16, fade(CTA, a), fade(ON_CTA, a));
                 previewRight = bx - 4;
             } else if (Conversations.instance().pinned(c)) {
                 // 置顶的行没有未读时右端挂一枚置顶图标(Telegram 同一个位置)
                 int px = textRight - ICON_N;
                 com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.PIN,
-                        px, ay + 16, ICON_N, dimColor);
+                        px, ay + 16, ICON_N, fade(dimColor, a));
                 previewRight = px - 4;
             }
             // 第二行:她此刻在干什么 > 没发出去的草稿 > 最后一句。换的时候和抬头第二行一样上下滑,只露一行
-            String act = railActivity(c, now);
-            if (act != null) railActText.put(c.id(), act);
-            float at = Math.clamp(railActT.getOrDefault(c.id(), 0f) + (act != null ? dt : -dt) * 7f, 0f, 1f);
-            railActT.put(c.id(), at);
+            float at = railActT.getOrDefault(c.id(), 0f);
+            if (live) {
+                String act = railActivity(c, now);
+                if (act != null) railActText.put(c.id(), act);
+                at = Math.clamp(at + (act != null ? dt : -dt) * 7f, 0f, 1f);
+                railActT.put(c.id(), at);
+            }
             float e = com.dwinovo.numen.client.ui.Anim.easeOutCubic(at);
             int py = ay + 18, pw = previewRight - tx, lh = font.lineHeight;
             g.enableScissor(tx, py - 1, previewRight, py + lh + 1);
             if (e < 0.97f) {
                 int y0 = py - Math.round(lh * e);
-                float k = 1f - e;
+                float k = (1f - e) * a;
                 String draft = active ? "" : Conversations.instance().draft(c);
                 if (!draft.isEmpty()) {
                     String pre = I18n.get(ModLanguageData.Keys.RAIL_DRAFT) + ": ";
@@ -2284,34 +2350,211 @@ public final class NumenScreen extends Screen {
             }
             if (e > 0.03f && railActText.containsKey(c.id())) {
                 txt(g, Component.literal(Nb.clip(font, railActText.get(c.id()), pw)), tx, py + Math.round(lh * (1f - e)),
-                        fade(active ? t.onActive() : t.accent(), e));
+                        fade(active ? t.onActive() : t.accent(), e * a));
             }
             g.disableScissor();
             }
             // 状态点、复活倒计时、等点头的"!"都是一只同伴的事;会话行上只有脸
             if (her == null) continue;
             if (NumenRoster.instance().isDead(her)) {                 // dead — dim veil + respawn countdown
-                g.fill(fx, fy, fx + RAIL_AV, fy + RAIL_AV, 0xB0101010);
+                g.fill(fx, fy, fx + RAIL_AV, fy + RAIL_AV, fade(0xB0101010, a));
                 long rem = NumenRoster.instance().remainingMs(her);
                 // 头像太小写不下字:归零改画一个"等"字记号,细节在抬头第二行
                 String cd = rem <= 0 ? "…" : String.valueOf((int) Math.ceil(rem / 1000.0));
-                txt(g, Component.literal(cd), fx + (RAIL_AV - font.width(cd)) / 2, fy + (RAIL_AV - 8) / 2, CTA);
+                txt(g, Component.literal(cd), fx + (RAIL_AV - font.width(cd)) / 2, fy + (RAIL_AV - 8) / 2, fade(CTA, a));
             } else {
                 int d = fx + RAIL_AV - 6, e2 = fy + RAIL_AV - 6;     // status LED, bottom-right
-                g.fill(d, e2, d + 5, e2 + 5, statusColor(her));
-                Nb.border(g, d, e2, 5, 5, 1, BORDER);
+                g.fill(d, e2, d + 5, e2 + 5, fade(statusColor(her), a));
+                Nb.border(g, d, e2, 5, 5, 1, fade(BORDER, a));
             }
             if (com.dwinovo.numen.client.consent.ConsentCards.pending(her) != null) {
                 // 她在等主人点头:脸的右上角一枚"!",没选中她的时候也看得见
                 int bx = fx + RAIL_AV - 7, by = fy - 1;
-                g.fill(bx, by, bx + 8, by + 10, CTA);
-                txt(g, Component.literal("!"), bx + (8 - font.width("!")) / 2 + 1, by + 1, ON_CTA);
+                g.fill(bx, by, bx + 8, by + 10, fade(CTA, a));
+                txt(g, Component.literal("!"), bx + (8 - font.width("!")) / 2 + 1, by + 1, fade(ON_CTA, a));
             }
         }
-        // scroll cues — chevrons when the list overflows in either direction
-        int cx = railX + railW / 2;
-        if (railScroll > 0) chevron(g, cx, top + 1, true);
-        if (railScroll < maxRailScroll()) chevron(g, cx, railBottomEdge() + 2, false);
+    }
+
+    /** 左栏这一行的未读数:当前对着的那行没有(正看着)。行尾的角标和分组标签上的数都数它。 */
+    private int railUnread(Conversation c) {
+        return sameAs(c, conv) ? 0 : com.dwinovo.numen.client.screen.chat.ConversationPreview.unread(
+                c, Conversations.instance().lastSeen(c));
+    }
+
+    // ---- 分组标签条(Telegram 的 Chat Folders):☰ 与搜索框那一条下面一排标签 ----
+
+    private static final int FOLDER_H = 16;
+    /** 标签里字两侧的留白;标签条两端的留白。 */
+    private static final int FOLDER_TAB_PAD = 5;
+    private static final int FOLDER_EDGE = 3;
+    /** 切分组时列表滑动的时长(Telegram dialogsFilterSlideDuration)。 */
+    private static final int FOLDER_SLIDE_MS = 200;
+
+    /** 标签条露出多高(像素,按趋近走);NaN = 还没画过,第一帧直接摆到位,开面板不滑。 */
+    private float folderShown = Float.NaN;
+    /** 标签比栏宽时横着滚了多少,按趋近走向 {@link #folderScrollTo}。 */
+    private float folderScroll, folderScrollTo;
+    /**
+     * 强调色下划线的左缘(不含横滚)与宽,按趋近走:切分组时滑到新标签下面、宽度变成它的字宽
+     * (Telegram 的 barSnapToLabel)。NaN = 还没画过。
+     */
+    private float folderBarX = Float.NaN, folderBarW;
+    /** 切分组那一下滑出去的旧列表(Telegram 切分组时先截一张旧列表的图);滑完清掉。 */
+    private RailSlide slide;
+
+    /** @param dir 1 = 往右边的标签切,列表往左走;-1 反过来 */
+    private record RailSlide(List<Conversation> items, String folder, int scroll, int dir, long startMs) {}
+
+    /** 标签条上的一格:{@code x} 已经减去横滚。 */
+    private record FolderTab(String id, String label, int unread, int x, int w, int labelW) {}
+
+    private float folderTarget() {
+        return narrow() ? 0f : FOLDER_H;
+    }
+
+    /** 标签条此刻占多高。 */
+    private int folderStripH() {
+        return Math.round(Float.isNaN(folderShown) ? folderTarget() : folderShown);
+    }
+
+    /** 标签条的顶边:压在 ☰ 那一条的底线上,那道线跟着标签条挪到下面去。 */
+    private int folderStripY() {
+        return top + RAIL_TOP - 1;
+    }
+
+    /** 标签条整条露着才接鼠标;收起的途中、窄栏上都不接。 */
+    private boolean overFolderStrip(double mx, double my) {
+        return folderStripH() >= FOLDER_H && mx >= railX + 3 && mx < railX + railW
+                && my >= folderStripY() && my < folderStripY() + FOLDER_H;
+    }
+
+    private String folderLabel(String id) {
+        return switch (id) {
+            case ChatFolders.ALL -> I18n.get(ModLanguageData.Keys.FOLDER_ALL);
+            case ChatFolders.SOLO -> I18n.get(ModLanguageData.Keys.FOLDER_SOLO);
+            case ChatFolders.GROUP -> I18n.get(ModLanguageData.Keys.FOLDER_GROUP);
+            default -> throw new IllegalArgumentException(id);
+        };
+    }
+
+    /** 这个分组里有几个会话有未读——Telegram 标签上的数是"几个会话",不是几条。 */
+    private int folderUnread(String id) {
+        Conversations convos = Conversations.instance();
+        int n = 0;
+        for (Conversation c : convos.all()) {
+            if (convos.inFolder(id, c) && railUnread(c) > 0) n++;
+        }
+        return n;
+    }
+
+    private List<FolderTab> folderTabs() {
+        List<FolderTab> out = new ArrayList<>();
+        int x = railX + 3 + FOLDER_EDGE - Math.round(folderScroll);
+        for (String id : Conversations.instance().folderIds()) {
+            String label = folderLabel(id);
+            int unread = folderUnread(id);
+            int lw = font.width(label);
+            int w = FOLDER_TAB_PAD * 2 + lw + (unread > 0
+                    ? 3 + com.dwinovo.numen.client.screen.chat.UnreadBadge.width(font,
+                            com.dwinovo.numen.client.screen.chat.UnreadBadge.label(unread))
+                    : 0);
+            out.add(new FolderTab(id, label, unread, x, w, lw));
+            x += w;
+        }
+        return out;
+    }
+
+    private float maxFolderScroll(List<FolderTab> tabs) {
+        int total = FOLDER_EDGE * 2;
+        for (FolderTab tab : tabs) total += tab.w();
+        return Math.max(0, total - (railW - 3));
+    }
+
+    /** 指针下的标签(folderTabs 的下标),不在标签上是 -1。 */
+    private int folderTabAt(double mx, double my) {
+        if (!overFolderStrip(mx, my)) return -1;
+        List<FolderTab> tabs = folderTabs();
+        for (int i = 0; i < tabs.size(); i++) {
+            if (mx >= tabs.get(i).x() && mx < tabs.get(i).x() + tabs.get(i).w()) return i;
+        }
+        return -1;
+    }
+
+    /**
+     * 切到这个分组:旧列表记下来滑出去,新列表从另一侧滑进来;切到的标签滚到标签条正中。
+     * 再点当前分组是回到列表顶上(Telegram)。
+     */
+    private void selectFolder(String id) {
+        Conversations convos = Conversations.instance();
+        String was = convos.folder();
+        if (id.equals(was)) {
+            railScroll = 0;
+            return;
+        }
+        List<String> ids = convos.folderIds();
+        slide = new RailSlide(rail(), was, railScroll, ids.indexOf(id) > ids.indexOf(was) ? 1 : -1,
+                System.currentTimeMillis());
+        convos.selectFolder(id);
+        railScroll = 0;
+        selY = Float.NaN;   // 新列表里选中底直接落在它那一行,不从旧列表的位置滑过来
+        List<FolderTab> tabs = folderTabs();
+        int i = ids.indexOf(id);
+        FolderTab tab = tabs.get(i);
+        // 滚到正中;第一个贴左(Telegram scrollToIndex)
+        float center = tab.x() + Math.round(folderScroll) + tab.w() / 2f - (railX + 3);
+        folderScrollTo = i == 0 ? 0f : Math.clamp(center - (railW - 3) / 2f, 0f, maxFolderScroll(tabs));
+    }
+
+    private void renderFolderStrip(GuiGraphics g, int mouseX, int mouseY, float dt) {
+        int shown = folderStripH();
+        if (shown <= 0) return;
+        UiTheme t = UiTheme.current();
+        int x0 = railX + 3, x1 = railX + railW, y0 = folderStripY();
+        folderScrollTo = Math.clamp(folderScrollTo, 0f, maxFolderScroll(folderTabs()));
+        folderScroll = com.dwinovo.numen.client.ui.Anim.approach(folderScroll, folderScrollTo, 18f, dt);
+        List<FolderTab> tabs = folderTabs();
+        FolderTab on = tabs.get(Conversations.instance().folderIds().indexOf(Conversations.instance().folder()));
+        // 下划线在不含横滚的坐标里走,画的时候再减去横滚:滚标签条时它跟着标签走,不自己滑
+        float barX = on.x() + Math.round(folderScroll) + FOLDER_TAB_PAD;
+        if (Float.isNaN(folderBarX)) {
+            folderBarX = barX;
+            folderBarW = on.labelW();
+        }
+        folderBarX = com.dwinovo.numen.client.ui.Anim.approach(folderBarX, barX, 18f, dt);
+        folderBarW = com.dwinovo.numen.client.ui.Anim.approach(folderBarW, on.labelW(), 18f, dt);
+        int barL = Math.round(folderBarX - folderScroll), barW = Math.round(folderBarW);
+        g.enableScissor(x0, y0, x1, y0 + shown);
+        int ty = y0 + shown - FOLDER_H;   // 收起的途中整条往上缩进顶上那一条
+        boolean quiet = !overlayOpen() && !modalOpen() && !railDragging;
+        for (FolderTab tab : tabs) {
+            boolean hot = quiet && overFolderStrip(mouseX, mouseY) && mouseX >= tab.x() && mouseX < tab.x() + tab.w();
+            if (hot) g.fill(tab.x(), ty, tab.x() + tab.w(), ty + FOLDER_H, t.over());
+            int lx = tab.x() + FOLDER_TAB_PAD;
+            // 字色跟着下划线走:下划线压在谁的字下面谁就是强调色,滑过去的途中两边各插一半(Telegram 的 SettingsSlider)
+            int overlap = Math.min(barL + barW, lx + tab.labelW()) - Math.max(barL, lx);
+            float k = Math.max(0f, overlap) / (float) Math.max(1, Math.max(barW, tab.labelW()));
+            txt(g, Component.literal(tab.label()), lx, ty + 4, UiTheme.mix(TXT_MUTED, t.accent(), k));
+            if (tab.unread() > 0) {
+                com.dwinovo.numen.client.screen.chat.UnreadBadge.draw(g, font,
+                        com.dwinovo.numen.client.screen.chat.UnreadBadge.label(tab.unread()),
+                        lx + tab.labelW() + 3, ty + 2, CTA, ON_CTA);
+            }
+        }
+        g.fill(barL, ty + FOLDER_H - 2, barL + barW, ty + FOLDER_H, CTA);
+        g.disableScissor();
+    }
+
+    /**
+     * Telegram SlideAnimation 的两条曲线:滑进来的那份位移走 easeOut、透明度走 easeIn(先到位后显形);
+     * 滑出去的那份位移走 easeIn、透明度按 1 - easeOut 掉(先淡掉再走远)。
+     */
+    private static float easeOutCirc(float p) {
+        return (float) Math.sqrt(1 - (p - 1) * (p - 1));
+    }
+
+    private static float easeInCirc(float p) {
+        return 1f - (float) Math.sqrt(1 - p * p);
     }
 
     /** 左栏每行第二行"在干什么"的滑入进度,与最后一句(滑出去的时候还要画它)。 */
@@ -2365,7 +2608,7 @@ public final class NumenScreen extends Screen {
     /** 左栏装得下几行。 */
     private int railVisibleSlots() {
         int slots = 0;
-        while (top + RAIL_TOP + (slots + 1) * RAIL_SLOT <= railBottomEdge()) slots++;
+        while (railStartY() + (slots + 1) * RAIL_SLOT <= railBottomEdge()) slots++;
         return Math.max(1, slots);
     }
 
@@ -2373,9 +2616,9 @@ public final class NumenScreen extends Screen {
         return Math.max(0, rail().size() - railVisibleSlots());
     }
 
-    /** 第一行(可见的)的顶边:列表从上往下排(Telegram),不居中。 */
+    /** 第一行(可见的)的顶边:☰ 那一条、分组标签条下面,列表从上往下排(Telegram),不居中。 */
     private int railStartY() {
-        return top + RAIL_TOP;
+        return top + RAIL_TOP + folderStripH();
     }
 
     /** idle = green, working/compacting = amber, queued = gold; faint if no loop yet. */

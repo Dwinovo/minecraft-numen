@@ -78,6 +78,8 @@ public final class Conversations extends JsonLibrary<Conversation> {
     private final Map<String, String> drafts = new java.util.HashMap<>();
     /** 置顶的会话(Telegram 左栏置顶),按置顶的先后排在最上面。随会话一起落盘。 */
     private final List<String> pinned = new ArrayList<>();
+    /** 会话分组(Telegram 的 Chat Folders):选中哪个分组。随会话一起落盘。 */
+    private final ChatFolders folders = new ChatFolders();
 
     @Override
     protected void readExtra(JsonObject root) {
@@ -105,6 +107,7 @@ public final class Conversations extends JsonLibrary<Conversation> {
                 }
             }
         }
+        folders.read(root);
     }
 
     @Override
@@ -131,6 +134,7 @@ public final class Conversations extends JsonLibrary<Conversation> {
             }
             root.add("drafts", o);
         }
+        folders.write(root);
     }
 
     @Override
@@ -139,6 +143,7 @@ public final class Conversations extends JsonLibrary<Conversation> {
         seen.clear();
         drafts.clear();
         pinned.clear();
+        folders.clear();
     }
 
     // ---- 看到哪了 ----
@@ -165,6 +170,28 @@ public final class Conversations extends JsonLibrary<Conversation> {
     public void togglePin(Conversation conv) {
         if (!pinned.remove(conv.id())) pinned.add(conv.id());
         save();
+    }
+
+    // ---- 分组 ----
+
+    /** 标签条上的分组,按显示顺序。 */
+    public List<String> folderIds() {
+        return folders.ids();
+    }
+
+    /** 左栏此刻按哪个分组筛。 */
+    public String folder() {
+        return folders.active();
+    }
+
+    /** 切到这个分组。只在变了时落盘。 */
+    public void selectFolder(String id) {
+        if (folders.select(id)) save();
+    }
+
+    /** 这个会话在不在这个分组里;私聊/群聊按 {@link #soloOf} 分。 */
+    public boolean inFolder(String folderId, Conversation conv) {
+        return folders.includes(folderId, soloOf(conv) != null);
     }
 
     // ---- 草稿 ----

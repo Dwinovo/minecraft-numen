@@ -255,6 +255,12 @@ public final class ModLanguageData {
         public static final String STT_NO_MIC         = "numen.stt.no_mic";
         public static final String STT_SILENT         = "numen.stt.silent";
         public static final String STT_FAILED         = "numen.stt.failed";
+
+        // 会话分组(左栏顶上那排标签,Telegram 的 Chat Folders)
+        public static final String FOLDER_ALL   = "numen.folder.all";
+        public static final String FOLDER_SOLO  = "numen.folder.solo";
+        public static final String FOLDER_GROUP = "numen.folder.group";
+        public static final String FOLDER_EMPTY = "numen.folder.empty";
     }
 
     /** Loader-side providers funnel both English and Simplified Chinese through here. */
@@ -677,6 +683,10 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_SECONDS,        "%ss");
         adder.add(Keys.PERMISSION_SEPARATOR,   ", ");
         adder.add(Keys.PERMISSION_A_BLOCK,     "a block");
+        adder.add(Keys.FOLDER_ALL,   "All");
+        adder.add(Keys.FOLDER_SOLO,  "Private");
+        adder.add(Keys.FOLDER_GROUP, "Groups");
+        adder.add(Keys.FOLDER_EMPTY, "No chats in this folder");
     }
 
     private static void addZh(Adder adder) {
@@ -1088,5 +1098,9 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_SECONDS,        "%s 秒");
         adder.add(Keys.PERMISSION_SEPARATOR,   "、");
         adder.add(Keys.PERMISSION_A_BLOCK,     "方块");
+        adder.add(Keys.FOLDER_ALL,   "全部");
+        adder.add(Keys.FOLDER_SOLO,  "私聊");
+        adder.add(Keys.FOLDER_GROUP, "群聊");
+        adder.add(Keys.FOLDER_EMPTY, "这个分组里还没有会话");
     }
 }
