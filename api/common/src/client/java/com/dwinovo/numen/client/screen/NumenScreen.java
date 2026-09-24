@@ -1267,16 +1267,24 @@ public final class NumenScreen extends Screen {
         return true;
     }
 
-    /** 左栏 ☰ 的菜单(Telegram 的主菜单):召唤同伴、设置。 */
+    /** 左栏 ☰ 的菜单(Telegram 的主菜单):召唤同伴、设置,最下面一项夜间模式。 */
     private PopupMenu mainMenu;
 
     private void openMainMenu() {
         if (mainMenu == null) mainMenu = new PopupMenu(font);
+        // 夜间模式:亮的主题一键切到暗的,暗的切回亮的(Telegram 主菜单最下面那个开关)
+        boolean night = UiTheme.current().isDark();
         java.util.List<PopupMenu.Item> items = java.util.List.of(
                 new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.USER_PLUS,
                         I18n.get("numen.summon.title"), false, this::openSummon),
                 new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.SETTINGS,
-                        I18n.get("numen.tab.settings"), false, () -> selectTab(Tab.SETTINGS)));
+                        I18n.get("numen.tab.settings"), false, () -> selectTab(Tab.SETTINGS)),
+                PopupMenu.SEPARATOR,
+                new PopupMenu.Item(night ? com.dwinovo.numen.client.ui.mc.Sprites.SUN : com.dwinovo.numen.client.ui.mc.Sprites.MOON,
+                        I18n.get(night ? "numen.menu.day" : "numen.menu.night"), false, () -> {
+                            UiTheme.select(night ? UiTheme.LIGHT.id() : UiTheme.DARK.id());
+                            repaint();   // 屏幕的调色板常量重读新主题
+                        }));
         mainMenu.open(overlayUi, items, railX + 3 + PAD - 3, top + 3 + RAIL_BAR_H - 2, true);
         rebuild();
     }

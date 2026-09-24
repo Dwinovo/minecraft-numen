@@ -41,8 +41,10 @@ public final class Sprites {
     public static final ResourceLocation USER = icon("icon_user");
     public static final ResourceLocation USERS = icon("icon_users");
     public static final ResourceLocation USER_PLUS = icon("icon_user_plus");
-    /** ☰ 菜单里的设置。 */
+    /** ☰ 菜单里的设置、夜间模式(现在是亮的给月亮,暗的给太阳)。 */
     public static final ResourceLocation SETTINGS = icon("icon_settings");
+    public static final ResourceLocation MOON = icon("icon_moon");
+    public static final ResourceLocation SUN = icon("icon_sun");
     /** 左栏顶上搜索框里的放大镜。 */
     public static final ResourceLocation SEARCH = icon("icon_search");
     /** 设置首页每个分区的图标:模型、工具扩展、外接大脑、技能、人设、声线、皮肤、主题(语音输入用 MIC)。 */

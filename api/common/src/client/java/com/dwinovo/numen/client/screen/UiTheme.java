@@ -83,8 +83,8 @@ public record UiTheme(
     // chat-app family (bubbles/chips/cards) without hand-tuning 5×10 extra colours.
     // The mix ratios were fitted to reproduce WARM's original hand-picked values. ----
 
-    /** 暗色地面判定:派生公式原按亮地面拟合,暗主题下混色方向要反过来。 */
-    private boolean isDark() {
+    /** 暗色地面判定:派生公式原按亮地面拟合,暗主题下混色方向要反过来;☰ 菜单的夜间模式也按它说现在是哪边。 */
+    public boolean isDark() {
         int r = (ground >> 16) & 0xFF, g = (ground >> 8) & 0xFF, b = ground & 0xFF;
         return (r * 3 + g * 6 + b) / 10 < 96;
     }
