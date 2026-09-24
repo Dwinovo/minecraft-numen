@@ -283,7 +283,7 @@ public final class NumenScreen extends Screen {
     /** 召唤卡(NumenUI):名字 + 人设/模型配置/模式/声线/皮肤,见 SummonPanel。 */
     private SummonPanel summonPanel;
     /**
-     * 模态卡的槽:召唤、编辑同伴、改会话名、邀请同一时刻只开一张,当前 tab 内容照常渲染作背景。
+     * 模态卡的槽:召唤、编辑同伴、改会话名、邀请、分组同一时刻只开一张,当前 tab 内容照常渲染作背景。
      * 关卡时卡还留在槽里画完淡出({@link #cardBox}),淡没了才拆;这期间背景仍被挡着、卡也不接事件。
      */
     private ModalCard modalCard;
@@ -949,7 +949,7 @@ public final class NumenScreen extends Screen {
         }
     }
 
-    // ---- modal cards(召唤/编辑/改名/邀请): 居中卡 + 暗幕,当前 tab 内容照常渲染作背景 ----
+    // ---- modal cards(召唤/编辑/改名/邀请/分组): 居中卡 + 暗幕,当前 tab 内容照常渲染作背景 ----
     private int modalCardH() { return modalCard.height(); }
     private int modalCardW() { return Math.min(modalCard.width(), panelW - 24); }
     private int modalCardX() { return left + (panelW - modalCardW()) / 2; }
@@ -2559,8 +2559,7 @@ public final class NumenScreen extends Screen {
         }
 
         @Override public void onClose() {
-            cardOpen = false;
-            rebuild();
+            closeCard();
         }
     }
 

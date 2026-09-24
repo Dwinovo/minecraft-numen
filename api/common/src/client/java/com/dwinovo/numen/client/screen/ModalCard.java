@@ -22,10 +22,10 @@ import java.util.function.IntConsumer;
 
 /**
  * 面板里的居中卡:召唤({@link SummonPanel})、改她({@link CompanionEditPanel})、改会话名
- * ({@link ConversationEditPanel})、邀请({@link InvitePanel})。屏幕只认这一个面,暗幕、居中、
+ * ({@link ConversationEditPanel})、邀请({@link InvitePanel})、分组({@link FolderEditPanel})。屏幕只认这一个面,暗幕、居中、
  * 出没动效({@link DialogBox})、事件转发都只写一份。
  *
- * <p>卡里的版式也只在这里定一份,照 Telegram 的对话框,四张卡只说自己有哪几行:
+ * <p>卡里的版式也只在这里定一份,照 Telegram 的对话框,各张卡只说自己有哪几行:
  * <ul>
  *   <li>左上一行加粗的标题({@link #title});</li>
  *   <li>头部({@link #COVER_H}):左边一张脸,右边是名字或一个输入框——Telegram 编辑联系人、新建联系人那一块;</li>
@@ -35,7 +35,7 @@ import java.util.function.IntConsumer;
  * </ul>
  * 卡宽、边距、按钮行与确认卡共用 {@link DialogBox} 的那几个数;这里的几个数按同样的比例从 Telegram 折过来。
  *
- * <p>键盘也照 Telegram 的对话框,四张卡一样:Tab / Shift+Tab 在输入框之间走,回车 = 主按钮
+ * <p>键盘也照 Telegram 的对话框,每张卡一样:Tab / Shift+Tab 在输入框之间走,回车 = 主按钮
  * (主按钮置灰时不动),Esc = 取消;下拉展开着时 Esc 先收下拉。
  */
 abstract class ModalCard {
@@ -184,13 +184,13 @@ abstract class ModalCard {
         if (title != null) {
             bold(g, title, x + DialogBox.PAD_X, y + DialogBox.TITLE_TOP, w - DialogBox.PAD_X * 2, c.textPrimary());
         }
-        paint(s, c, mouseX, mouseY, alpha);
+        paint(s, c, mouseX, mouseY, nowMs, alpha);
         ui.render(s, c, mouseX, mouseY, nowMs);
         g.setColor(1f, 1f, 1f, 1f);
     }
 
     /** 控件之外卡自己画的东西(脸之类 MC 独有的);在控件下面。 */
-    protected void paint(McDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, float alpha) {}
+    protected void paint(McDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs, float alpha) {}
 
     /** 贴一枚图标:{@link Sprites#draw} 贴完会把着色器颜色复位,这里接着把卡的不透明度设回去。 */
     protected static void icon(GuiGraphics g, ResourceLocation sprite, int ix, int iy, int size, int argb, float alpha) {

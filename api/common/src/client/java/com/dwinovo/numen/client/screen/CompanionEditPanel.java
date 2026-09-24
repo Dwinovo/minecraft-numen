@@ -233,7 +233,7 @@ public final class CompanionEditPanel extends ModalCard {
 
     /** 头部:她的脸,旁边加粗的名字(脸是 MC 独有的东西,这一层可以画)。 */
     @Override
-    protected void paint(McDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, float alpha) {
+    protected void paint(McDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs, float alpha) {
         CompanionFace.draw(s.graphics(), host.uuid(), KnownSkins.of(host.uuid()), photoX(), photoY(coverTop), PHOTO);
         coverName(s, c, coverTop, host.name());
     }

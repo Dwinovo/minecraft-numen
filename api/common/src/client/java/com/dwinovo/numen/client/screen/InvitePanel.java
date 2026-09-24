@@ -106,7 +106,7 @@ public final class InvitePanel extends ModalCard {
     // ---- 宿主转发面 ----
 
     @Override
-    protected void paint(McDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, float alpha) {
+    protected void paint(McDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs, float alpha) {
         int hot = tileAt(mouseX, mouseY);
         for (int i = 0; i < everyone.size(); i++) {
             UUID who = everyone.get(i);

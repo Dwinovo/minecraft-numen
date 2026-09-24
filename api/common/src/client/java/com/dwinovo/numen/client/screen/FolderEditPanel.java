@@ -6,16 +6,14 @@ import com.dwinovo.numen.client.agent.Conversations;
 import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.client.skin.ConversationFaces;
 import com.dwinovo.numen.client.ui.Anim;
-import com.dwinovo.numen.client.ui.IDrawSurface;
-import com.dwinovo.numen.client.ui.KeyCodes;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
 import com.dwinovo.numen.client.ui.TextClip;
 import com.dwinovo.numen.client.ui.mc.McDrawSurface;
 import com.dwinovo.numen.client.ui.widget.Button;
+import com.dwinovo.numen.client.ui.widget.DialogBox;
 import com.dwinovo.numen.client.ui.widget.Label;
 import com.dwinovo.numen.client.ui.widget.TextField;
-import com.dwinovo.numen.client.ui.widget.UiRoot;
 import com.dwinovo.numen.data.ModLanguageData;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
@@ -28,11 +26,11 @@ import java.util.Set;
 /**
  * 分组卡(Telegram 的新建/编辑分组):一个名字框,下面一格格会话的头像,点一下收进来、再点拿出去;
  * 收尾 [取消][保存]。名字空着或一个会话都没勾时保存点不动——Telegram 也要名字、也要至少一个会话。
- * 和邀请卡同一族:头像格的画法、勾上的那枚角标都照它。
+ * 标题、字段、按钮行、键盘与出没都是 {@link ModalCard} 那一套;头像格的画法、勾上的那枚角标照邀请卡。
  *
  * <p>会话多了一屏放不下两行时,头像格上下滚。
  */
-public final class FolderEditPanel implements ModalCard {
+public final class FolderEditPanel extends ModalCard {
 
     /** 屏幕侧的面:改的是哪个分组、存、关卡。 */
     public interface Host {
@@ -52,10 +50,10 @@ public final class FolderEditPanel implements ModalCard {
     private static final int TILE_H = FACE + 4 + NAME_H + 5;
     /** 头像格露出的行数;更多就滚。 */
     private static final int ROWS = 2;
-    private static final int FOOTER_H = 16;
-    private static final int BTN_W = 52;
+    /** 名字字段到"会话"那行标签、标签到头像格的距离。 */
+    private static final int SECTION_GAP = 8;
+    private static final int LABEL_H = 12;
 
-    private final UiRoot ui = new UiRoot();
     private final Host host;
     private ChatFolders.Folder draft;
     private String name = "";
@@ -78,7 +76,7 @@ public final class FolderEditPanel implements ModalCard {
     }
 
     @Override
-    public void reset() {
+    void reset() {
         draft = host.draft();
         name = draft.name();
         everyone = Conversations.instance().all();
@@ -90,51 +88,30 @@ public final class FolderEditPanel implements ModalCard {
         scroll = scrollTo = 0f;
     }
 
+    /** 名字字段 + "会话"标签 + 两行头像格。 */
     @Override
-    public int width() {
-        return 320;
+    int height() {
+        return heightFor(FIELD_H + SECTION_GAP + LABEL_H + ROWS * TILE_H);
     }
 
     @Override
-    public int height() {
-        return 20 + NumenStyle.LABEL_PITCH + NumenStyle.ROW_PITCH + 2 + NumenStyle.LABEL_PITCH
-                + ROWS * TILE_H + 6 + FOOTER_H + 8;
-    }
+    protected void layout(int top) {
+        title(t(draft.id() == null ? ModLanguageData.Keys.FOLDER_NEW : ModLanguageData.Keys.FOLDER_EDIT));
+        int fx = x + DialogBox.PAD_X, fw = w - DialogBox.PAD_X * 2;
+        TextField nameField = field(fx, top, fw, t(ModLanguageData.Keys.FOLDER_NAME),
+                new TextField(name, v -> name = v));
+        int ry = top + FIELD_H + SECTION_GAP;
 
-    @Override
-    public void build(int x, int y, int w, int h, int dropBottom) {
-        ui.clear();
-        ui.setViewportHeight(dropBottom);
-
-        int ry = y;
-        Label title = ui.add(new Label(t(draft.id() == null ? ModLanguageData.Keys.FOLDER_NEW
-                : ModLanguageData.Keys.FOLDER_EDIT), Label.Role.PRIMARY));
-        title.setBounds(x, ry + 5, w, 9);
-        ry += 20;
-
-        Label nameLabel = ui.add(new Label(t(ModLanguageData.Keys.FOLDER_NAME), Label.Role.MUTED));
-        nameLabel.setBounds(x, ry, 200, 9);
-        ry += NumenStyle.LABEL_PITCH;
-        TextField nameField = ui.add(new TextField(name, v -> name = v).withLabel(nameLabel));
-        nameField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
-        ry += NumenStyle.ROW_PITCH + 2;
-
-        Label chatsLabel = ui.add(new Label(t(ModLanguageData.Keys.FOLDER_CHATS), Label.Role.MUTED));
-        chatsLabel.setBounds(x, ry, 200, 9);
-        ry += NumenStyle.LABEL_PITCH;
-        perRow = Math.max(1, (w + TILE_GAP) / (TILE_W + TILE_GAP));
+        Label chatsLabel = ui.add(new Label(t(ModLanguageData.Keys.FOLDER_CHATS), Label.Role.SECONDARY));
+        chatsLabel.setBounds(fx, ry, fw, 9);
+        ry += LABEL_H;
+        perRow = Math.max(1, (fw + TILE_GAP) / (TILE_W + TILE_GAP));
         gridW = perRow * TILE_W + (perRow - 1) * TILE_GAP;
-        gridX = x;
+        gridX = fx;
         gridY = ry;
-        ry += ROWS * TILE_H + 6;
 
-        int gap = 6;
-        int bx = x + w - (BTN_W * 2 + gap);   // Telegram 对话框的按钮靠右下
-        Button cancel = ui.add(new Button(t(ModLanguageData.Keys.GUI_SETTINGS_CANCEL),
-                Button.Style.LINK, host::onClose));
-        cancel.setBounds(bx, ry, BTN_W, FOOTER_H);
-        save = ui.add(new Button(t(ModLanguageData.Keys.GUI_SETTINGS_SAVE), Button.Style.LINK, this::confirm));
-        save.setBounds(bx + BTN_W + gap, ry, BTN_W, FOOTER_H);
+        save = buttons(t(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), host::onClose,
+                t(ModLanguageData.Keys.GUI_SETTINGS_SAVE), this::confirm);
         save.setEnabled(canSave());
         ui.requestFocus(nameField);
     }
@@ -168,7 +145,7 @@ public final class FolderEditPanel implements ModalCard {
     // ---- 宿主转发面 ----
 
     @Override
-    public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
+    protected void paint(McDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs, float alpha) {
         float dt = lastFrameMs == 0 ? 0.016f : Math.min(0.1f, (nowMs - lastFrameMs) / 1000f);
         lastFrameMs = nowMs;
         scroll = Anim.approach(scroll, scrollTo, 18f, dt);
@@ -183,9 +160,7 @@ public final class FolderEditPanel implements ModalCard {
             int fx = tx + (TILE_W - FACE) / 2, fy = ty + 2;
             int border = on ? c.accent() : hot == i ? NumenStyle.hoverBrighten(c.inputBorder()) : c.inputBorder();
             NumenStyle.box(s, fx - 2, fy - 2, FACE + 4, FACE + 4, c.inputBg(), border);
-            if (s instanceof McDrawSurface m) {
-                ConversationFaces.draw(m.graphics(), conv, fx, fy, FACE);
-            }
+            ConversationFaces.draw(s.graphics(), conv, fx, fy, FACE);
             if (on) {
                 // 勾上的右上角一小块强调色,和邀请卡同一个记号
                 s.fillRect(fx + FACE - 5, fy - 3, 7, 7, c.accent());
@@ -203,7 +178,6 @@ public final class FolderEditPanel implements ModalCard {
             s.fillRect(gridX + gridW + 4, barY, NumenStyle.SCROLLBAR_W, barH, c.inputBorder());
         }
         if (save != null) save.setEnabled(canSave());
-        ui.render(s, c, mouseX, mouseY, nowMs);
     }
 
     /** 鼠标下的那一格(everyone 下标),不在格上或滚出去了则 -1。 */
@@ -217,12 +191,7 @@ public final class FolderEditPanel implements ModalCard {
     }
 
     @Override
-    public String tooltipAt(double mx, double my) {
-        return null;
-    }
-
-    @Override
-    public boolean mouseClicked(double mx, double my, int button) {
+    boolean mouseClicked(double mx, double my, int button) {
         int i = tileAt(mx, my);
         if (button == 0 && i >= 0) {
             String id = everyone.get(i).id();
@@ -233,26 +202,12 @@ public final class FolderEditPanel implements ModalCard {
     }
 
     @Override
-    public boolean mouseScrolled(double mx, double my, double delta) {
+    boolean mouseScrolled(double mx, double my, double delta) {
         if (my >= gridY && my < gridY + ROWS * TILE_H && maxScroll() > 0) {
             scrollTo = Math.clamp(scrollTo - (float) delta * TILE_H, 0f, maxScroll());
             return true;
         }
         return ui.mouseScrolled(mx, my, delta);
-    }
-
-    @Override
-    public boolean keyPressed(int keyCode, int modifiers) {
-        if (keyCode == KeyCodes.ENTER) {
-            confirm();   // Enter 等于点保存;存不了就不动
-            return true;
-        }
-        return ui.keyPressed(keyCode, modifiers);
-    }
-
-    @Override
-    public boolean charTyped(char ch) {
-        return ui.charTyped(ch);
     }
 
     private static String t(String key) {

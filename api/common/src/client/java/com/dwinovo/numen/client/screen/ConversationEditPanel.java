@@ -76,7 +76,7 @@ public final class ConversationEditPanel extends ModalCard {
 
     /** 头部左边的群头像(左栏里那一个)。 */
     @Override
-    protected void paint(McDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, float alpha) {
+    protected void paint(McDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs, float alpha) {
         ConversationFaces.draw(s.graphics(), host.conversation(), photoX(), photoY(coverTop), PHOTO);
     }
 

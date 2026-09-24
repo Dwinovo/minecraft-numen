@@ -200,7 +200,7 @@ public final class SummonPanel extends ModalCard {
 
     /** 头部左边的空头像:她还没有脸,和 Telegram 新建联系人一样摆一个人形占位。 */
     @Override
-    protected void paint(McDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, float alpha) {
+    protected void paint(McDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs, float alpha) {
         int px = photoX(), py = photoY(coverTop);
         NumenStyle.box(s, px, py, PHOTO, PHOTO, c.sectionBg(), c.inputBorder());
         int size = Sprites.SIZE * 2;   // 整数倍放大,像素图才不糊
