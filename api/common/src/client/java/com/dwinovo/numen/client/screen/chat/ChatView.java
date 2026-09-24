@@ -1373,18 +1373,7 @@ public final class ChatView {
         int bubTop = y + (b.label() != null ? LABEL_H : 0);
         // 自己的贴右缘(留出尾巴的宽);别人的在脸那一列右边(私聊那一列只有尾巴宽)
         int bx = b.own() ? x + w - TAIL - bw : x + EDGE + faceCol();
-        if (b.label() != null) {
-            draw(g, Nb.colored(b.label(), nameColor(b.who())).getVisualOrderText(), bx + 2, y);
-        }
-        if (group && !b.own() && b.runEnd()) {
-            // 脸贴在气泡底部(Telegram):这一块是这一组的最后一块,脸和最后一句齐底
-            int avX = x + EDGE, avY = bubTop + bh - AV;
-            CompanionFace.draw(g, b.who(), KnownSkins.of(b.who()), avX, avY, AV);
-            face(g, b.who(), avX, avY);
-        }
-        // 气泡只有底色、没有描边(Telegram):和地面分开靠色块,不靠框线
-        g.fill(bx, bubTop, bx + bw, bubTop + bh, b.fill());
-        if (b.runEnd()) tail(g, b.own(), b.own() ? bx + bw : bx, bubTop + bh, b.fill());
+        bubbleFrame(g, b.own(), b.label(), b.who(), b.runEnd(), x, y, bx, bw, bh, b.fill());
         hits.add(new Hit(bx, bubTop, bw, bh, b, drawingIndex));
         if (b.quote() != null) {
             // 引用条(Telegram 回复的样子):一道强调色竖线、谁(强调色)、那句(和时间同一档淡字)
@@ -1410,22 +1399,33 @@ public final class ChatView {
         }
     }
 
+    /**
+     * 一块气泡的外形,话和清单共用:群里的名字在上(从 {@code y} 起占一行)、群里别人连发最后一块旁边贴脸
+     * (和气泡齐底)、底色、连发最后一块靠脸那侧的尾巴。气泡只有底色、没有描边(Telegram):和地面分开靠色块,
+     * 不靠框线。{@code bh} 是气泡本身的高,不含名字那一行。
+     */
+    private void bubbleFrame(GuiGraphics g, boolean own, String label, UUID who, boolean runEnd,
+                             int x, int y, int bx, int bw, int bh, int fill) {
+        int bubTop = y + (label != null ? LABEL_H : 0);
+        if (label != null) {
+            draw(g, Nb.colored(label, nameColor(who)).getVisualOrderText(), bx + 2, y);
+        }
+        if (group && !own && runEnd) {
+            int avX = x + EDGE, avY = bubTop + bh - AV;
+            CompanionFace.draw(g, who, KnownSkins.of(who), avX, avY, AV);
+            face(g, who, avX, avY);
+        }
+        g.fill(bx, bubTop, bx + bw, bubTop + bh, fill);
+        if (runEnd) tail(g, own, own ? bx + bw : bx, bubTop + bh, fill);
+    }
+
     /** 清单消息:她的气泡,抬头强调色"计划 2/5",下面一项一行,方格在每项第一行前面。 */
     private void drawChecklist(GuiGraphics g, Checklist c, int x, int y) {
         int bw = c.maxLineW() + PAD_H * 2;
         int bh = checklistH(c);
         int bubTop = y + (c.label() != null ? LABEL_H : 0);
         int bx = x + EDGE + faceCol();
-        if (c.label() != null) {
-            draw(g, Nb.colored(c.label(), nameColor(c.who())).getVisualOrderText(), bx + 2, y);
-        }
-        if (group && c.runEnd()) {
-            int avX = x + EDGE, avY = bubTop + bh - AV;
-            CompanionFace.draw(g, c.who(), KnownSkins.of(c.who()), avX, avY, AV);
-            face(g, c.who(), avX, avY);
-        }
-        g.fill(bx, bubTop, bx + bw, bubTop + bh, AI_FILL);
-        if (c.runEnd()) tail(g, false, bx, bubTop + bh, AI_FILL);
+        bubbleFrame(g, false, c.label(), c.who(), c.runEnd(), x, y, bx, bw, bh, AI_FILL);
         int tx = bx + PAD_H;
         int ty = bubTop + PAD_V + 1;
         draw(g, Nb.colored(c.header(), MENTION).getVisualOrderText(), tx, ty);
