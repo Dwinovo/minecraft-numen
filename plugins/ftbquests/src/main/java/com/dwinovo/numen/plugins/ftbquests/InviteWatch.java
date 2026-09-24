@@ -7,12 +7,13 @@ import dev.ftb.mods.ftbteams.api.TeamRank;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
-import java.util.Collection;
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * 有队伍邀请她入队时告诉她。
@@ -34,38 +35,44 @@ final class InviteWatch {
     private InviteWatch() {}
 
     static void onTickEnd(MinecraftServer server) {
-        if (!FTBTeamsAPI.api().isManagerLoaded()) {
-            return;
-        }
-        Collection<Team> teams = FTBTeamsAPI.api().getManager().getTeams();
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             if (!(player instanceof NumenPlayer her)) {
                 continue;
             }
             UUID id = her.getUUID();
             Set<UUID> told = TOLD.getOrDefault(id, Set.of());
-            Set<UUID> pending = null;
-            for (Team team : teams) {
-                // getPlayersByRank(NONE) 就是成员表本身;不用 getRankForPlayer——
-                // 它对"任何人可加入"的队伍一律答 INVITED,那不是有人邀请了她
-                if (!team.isPartyTeam() || team.getPlayersByRank(TeamRank.NONE).get(id) != TeamRank.INVITED) {
-                    continue;
-                }
-                if (pending == null) {
-                    pending = new HashSet<>();
-                }
-                pending.add(team.getId());
+            List<Team> pending = pending(id);
+            for (Team team : pending) {
                 if (!told.contains(team.getId())) {
                     FtbqEvents.invited(her, team.getShortName(), team.getName().getString(),
                             her.getOwnerUuid() != null && team.getMembers().contains(her.getOwnerUuid()));
                 }
             }
-            if (pending == null) {
+            if (pending.isEmpty()) {
                 TOLD.remove(id);
             } else {
-                TOLD.put(id, pending);
+                TOLD.put(id, pending.stream().map(Team::getId).collect(Collectors.toSet()));
             }
         }
+    }
+
+    /**
+     * 她此刻挂着的邀请:成员表里把她记成 {@link TeamRank#INVITED} 的队伍。"有人邀请了她"只从这里读——
+     * 刻末告诉她、{@code numen ftbquests join} 接受哪一个,都问这一处。
+     */
+    static List<Team> pending(UUID companion) {
+        if (!FTBTeamsAPI.api().isManagerLoaded()) {
+            return List.of();
+        }
+        List<Team> out = new ArrayList<>();
+        for (Team team : FTBTeamsAPI.api().getManager().getTeams()) {
+            // getPlayersByRank(NONE) 就是成员表本身;不用 getRankForPlayer——
+            // 它对"任何人可加入"的队伍一律答 INVITED,那不是有人邀请了她
+            if (team.isPartyTeam() && team.getPlayersByRank(TeamRank.NONE).get(companion) == TeamRank.INVITED) {
+                out.add(team);
+            }
+        }
+        return out;
     }
 
     static void forget(UUID companion) {

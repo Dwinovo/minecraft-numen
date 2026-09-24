@@ -7,11 +7,11 @@ import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.cli.Param;
 
 /**
- * {@code numen ftbquests}:她自己点不了的任务书按钮,在这里有一个入口。
+ * {@code numen ftbquests}:她自己点不了的任务书与组队按钮,在这里有一个入口。
  *
  * <p>读任务书({@code list}、{@code show})在主人的客户端上执行,见 {@link ClientBook};提交任务({@code submit})
- * 在服务端执行,动的是她的背包。都是长尾,不提升为快捷工具——装了 FTB 的世界里也不是每几轮就用一次,
- * 常驻工具表不值。
+ * 与接受邀请({@code join})在服务端执行,动的是她的背包与队伍。四个都是长尾,不提升为快捷工具——
+ * 装了 FTB 的世界里也不是每几轮就用一次,常驻工具表不值。
  */
 final class FtbqCommands {
 
@@ -35,7 +35,7 @@ final class FtbqCommands {
 
     static void install(NumenApi numen) {
         numen.registerCommands(GROUP,
-                "FTB Quests: your owner's quest book, handing in quests.",
+                "FTB Quests: your owner's quest book, handing in quests, accepting a party invitation.",
                 FtbqCommands::actions);
     }
 
@@ -49,5 +49,6 @@ final class FtbqCommands {
                 (src, args) -> ClientBook.show(src, args.get(QUEST_NAMED)), QUEST_NAMED);
         quests.server("submit", "Hand in a quest's items, experience or checkmarks from your own inventory.",
                 QuestSubmit::submit, QUEST_ID);
+        quests.server("join", "Accept the party invitation you have pending.", PartyJoin::join);
     }
 }
