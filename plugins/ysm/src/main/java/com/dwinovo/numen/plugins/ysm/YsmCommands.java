@@ -30,13 +30,16 @@ final class YsmCommands {
     /** YSM 自己的 {@code ysm play <玩家> stop} 就用这个词停下动作,这里照搬。 */
     private static final String STOP = "stop";
 
-    private static final Param<String> MODEL = Param.required("model", ArgType.string(),
-            "Model id exactly as " + line(OPTIONS) + " lists it, e.g. misc/1_alex.");
+    private static final Param<String> MODEL = Param.required("model", ArgType.string(), "The model to switch to.")
+            .values("a model id exactly as " + line(OPTIONS) + " lists it");
     private static final Param<String> TEXTURE = Param.optional("texture", ArgType.string(),
-            "Texture id from the model's textures in " + line(OPTIONS) + "; without it, the model's first one.");
+            "Which of the model's textures to wear.")
+            .values("a texture id from the textures " + line(OPTIONS) + " lists")
+            .whenOmitted("use the model's first texture");
     private static final Param<String> ANIMATION = Param.required("animation", ArgType.string(),
-            "Animation id of the model you wear, e.g. extra1 (YSM does not tell the server which ones a model has), "
-                    + "or " + STOP + " to go back to idle.");
+            "The animation to play.")
+            .values("an animation id of the model you wear, e.g. extra1 (YSM does not tell the server which ones "
+                    + "a model has), or " + STOP + " to go back to idle");
 
     private final Ysm ysm;
 
@@ -56,11 +59,26 @@ final class YsmCommands {
 
     private void actions(CommandGroup group) {
         group.server(OPTIONS, "Your model and texture now, the models you can switch to, and this model's "
-                + "textures.", this::options);
-        group.server(SWITCH, "Switch to another model. You can have exactly the models the owner is authorized for.",
-                this::switchModel, MODEL, TEXTURE);
+                + "textures.", this::options)
+                .example(line(OPTIONS))
+                .note("Read-only. Emotes are not listed: YSM does not tell the server which ones a model has.")
+                .seeAlso(line(SWITCH), line(EMOTE));
+        group.server(SWITCH, "Switch to another model.",
+                this::switchModel, MODEL, TEXTURE)
+                .example(line(SWITCH) + " misc/1_alex")
+                .example(line(SWITCH) + " \"抽象鸣潮 菲比.ysm\"")
+                .note("You can have exactly the models your owner is authorized for. A refusal comes from YSM, "
+                        + "so don't retry the same model.")
+                .note("Short, not background work: it comes back once your body shows the new look, or with what "
+                        + "YSM said. It does not ask your owner.")
+                .seeAlso(line(OPTIONS));
         group.server(EMOTE, "Play one of this model's emotes, or stop the one playing.",
-                this::emote, ANIMATION);
+                this::emote, ANIMATION)
+                .example(line(EMOTE) + " extra1")
+                .example(line(EMOTE) + " " + STOP)
+                .note("It only reports the command as sent: whether this model has that animation cannot be "
+                        + "checked, and a missing one does nothing.")
+                .seeAlso(line(OPTIONS));
     }
 
     /**
