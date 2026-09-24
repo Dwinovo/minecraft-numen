@@ -14,10 +14,10 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.List;
 
 /**
- * 弹出菜单(Telegram 抬头 ⋮ 点开的那种):一列"图标 + 字",危险的那项标红放最下面,前面一道分隔线。
+ * 弹出菜单(Telegram 抬头 ⋮、左上 ☰ 点开的那种):一列"图标 + 字",危险的那项标红放最下面,前面一道分隔线。
  * 走 {@link UiRoot} 的浮层通道——开着时点外面、按 Esc 都是收起,背后什么都不接。
  *
- * <p>动效照 Telegram 的 PanelAnimation:200ms 里从锚住的右上角长开,宽从一半、高从三成长满,
+ * <p>动效照 Telegram 的 PanelAnimation:200ms 里从锚住的那个角长开,宽从一半、高从三成长满,
  * 同时淡入;收起是 150ms 淡出。收起后浮层通道已经放手,淡出那几帧由宿主调 {@link #renderFading} 画。
  */
 final class PopupMenu implements UiRoot.Overlay {
@@ -40,7 +40,9 @@ final class PopupMenu implements UiRoot.Overlay {
     private final Font font;
     private UiRoot root;
     private List<Item> items = List.of();
-    private int right, top, w, h;
+    private int anchor, top, w, h;
+    /** true = 挂在锚点往右下长(☰ 在左上角);false = 往左下长(⋮ 在右上角)。 */
+    private boolean growRight;
     private boolean open;
     private long openedAt, closedAt;
 
@@ -48,12 +50,13 @@ final class PopupMenu implements UiRoot.Overlay {
         this.font = font;
     }
 
-    /** 挂在 {@code (right, top)} 往左下长开。 */
-    void open(UiRoot root, List<Item> items, int right, int top) {
+    /** 挂在 {@code (anchor, top)}:{@code growRight} 往右下长开,否则往左下。 */
+    void open(UiRoot root, List<Item> items, int anchor, int top, boolean growRight) {
         this.root = root;
         this.items = items;
-        this.right = right;
+        this.anchor = anchor;
         this.top = top;
+        this.growRight = growRight;
         int labelW = 0;
         int hh = PAD_V * 2;
         for (Item it : items) {
@@ -99,11 +102,12 @@ final class PopupMenu implements UiRoot.Overlay {
             alpha = 1f - (now - closedAt) / (float) HIDE_MS;
         }
         UiTheme t = UiTheme.current();
-        int x = right - cw;
+        int x = growRight ? anchor : anchor - cw;
         g.setColor(1f, 1f, 1f, Math.max(0.05f, alpha));
         NumenStyle.box(new McDrawSurface(g, font), x, top, cw, ch, t.aiFill(), t.aiBorder());
-        g.enableScissor(x + 1, top + 1, right - 1, top + ch - 1);
-        int left = right - w;
+        g.enableScissor(x + 1, top + 1, x + cw - 1, top + ch - 1);
+        int left = left();
+        int right = left + w;
         int y = top + PAD_V;
         for (Item it : items) {
             if (it == SEPARATOR) {
@@ -123,9 +127,14 @@ final class PopupMenu implements UiRoot.Overlay {
         g.setColor(1f, 1f, 1f, 1f);
     }
 
+    /** 长满时的左缘。 */
+    private int left() {
+        return growRight ? anchor : anchor - w;
+    }
+
     @Override
     public boolean overlayClicked(double mx, double my, int button) {
-        if (mx < right - w || mx >= right || my < top || my >= top + h) return false;   // 外面:浮层通道收起
+        if (mx < left() || mx >= left() + w || my < top || my >= top + h) return false;   // 外面:浮层通道收起
         int y = top + PAD_V;
         for (Item it : items) {
             int ih = it == SEPARATOR ? SEP_H : ROW_H;

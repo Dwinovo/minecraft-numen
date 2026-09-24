@@ -82,7 +82,7 @@ public final class NumenScreen extends Screen {
     private static final int RAIL_AV = 26;       // 脸的边长
     private static final int RAIL_SLOT = 34;     // 行高:脸 + 上下各 4
     private static final int RAIL_TOP = 3 + 22;  // 第一行在 ☰ 那一条下面(RAIL_BAR_H)
-    private static final int RAIL_BOT_GAP = 6;   // 最后一行与「+」之间留的缝
+    private static final int RAIL_BOT_GAP = 10;   // 最后一行下面给"下面还有"的箭头留的缝
     private static final int RAIL_FACE_X = 5;    // 脸离左栏左缘
     /** 抬头两行:名字一行、状态一行(Telegram 的"在线 / 正在输入…"),页签在右侧居中。 */
     private static final int HEADER_H = 30;
@@ -1020,7 +1020,7 @@ public final class NumenScreen extends Screen {
         items.add(new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.DELETE,
                 I18n.get(her != null ? ModLanguageData.Keys.EDIT_DISMISS : ModLanguageData.Keys.CONVO_DISSOLVE),
                 true, () -> { if (her != null) openDismissConfirm(her); else openDissolveConfirm(c); }));
-        headerMenu.open(overlayUi, items, moreX + ICON_N + 2, top + HEADER_H - 4);
+        headerMenu.open(overlayUi, items, moreX + ICON_N + 2, top + HEADER_H - 4, false);
     }
 
     /** 抬头名字:就他俩开她的资料页,群开群资料页。 */
@@ -1057,9 +1057,26 @@ public final class NumenScreen extends Screen {
         return true;
     }
 
-    /** 左栏 ☰:设置页开/收。 */
-    private void toggleSettings() {
-        selectTab(tab == Tab.SETTINGS ? Tab.CHAT : Tab.SETTINGS);
+    /** 左栏 ☰ 的菜单(Telegram 的主菜单):召唤同伴、设置。 */
+    private PopupMenu mainMenu;
+
+    private void openMainMenu() {
+        if (mainMenu == null) mainMenu = new PopupMenu(font);
+        java.util.List<PopupMenu.Item> items = java.util.List.of(
+                new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.USER_PLUS,
+                        I18n.get("numen.summon.title"), false, this::openSummon),
+                new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.SETTINGS,
+                        I18n.get("numen.tab.settings"), false, () -> selectTab(Tab.SETTINGS)));
+        mainMenu.open(overlayUi, items, railX + 3 + PAD - 3, top + 3 + RAIL_BAR_H - 2, true);
+        rebuild();
+    }
+
+    /** 召唤卡:每次开都是新的一张(默认/无/生存)。 */
+    private void openSummon() {
+        summoning = true;
+        cardOpen = false;
+        summonPanel().reset();
+        rebuild();
     }
 
     /** ☰ 在左栏顶上那一条的左端。 */
@@ -1242,17 +1259,10 @@ public final class NumenScreen extends Screen {
             if (cardOpen && modalCard.mouseClicked(mouseX, mouseY, button)) {
                 return true;
             }
-            if (railMenuAt(mouseX, mouseY)) {   // ☰ → 设置页开/收(模态开着时也当逃生口)
+            if (railMenuAt(mouseX, mouseY)) {   // ☰ → 菜单(模态开着时也当逃生口:先收模态)
                 summoning = false;
                 cardOpen = false;
-                toggleSettings();
-                return true;
-            }
-            if (railPlusAt((int) mouseX, (int) mouseY)) {   // + → start the summon name prompt
-                summoning = !summoning;
-                cardOpen = false;
-                if (summoning) summonPanel().reset();   // 每次开新召唤:默认/无/生存
-                rebuild();
+                openMainMenu();
                 return true;
             }
             int rail = railIndexAt((int) mouseX, (int) mouseY);
@@ -1646,6 +1656,7 @@ public final class NumenScreen extends Screen {
                 com.dwinovo.numen.client.screen.settings.HostThemeColors.current(),
                 mouseX, mouseY, net.minecraft.Util.getMillis());
         if (headerMenu != null) headerMenu.renderFading(g, mouseX, mouseY);   // 刚收起的菜单淡出那几帧
+        if (mainMenu != null) mainMenu.renderFading(g, mouseX, mouseY);
 
         // Hovered tooltip — drawn last so nothing paints over it; only after the pointer has rested a while.
         if (pendingTip != null && !overlayOpen()) {
@@ -1685,12 +1696,13 @@ public final class NumenScreen extends Screen {
         updateShrink(mouseX, mouseY);   // 它会把 lastRailFrameMs 推到现在,所以 dt 先算
         Conversation dragged = railDragging && railPressed < items.size() ? items.get(railPressed) : null;
         boolean railQuiet = !overlayOpen() && !modalOpen() && !railDragging;
-        // 顶上一条:☰ 开设置(Telegram 会话列表顶上那一条的左端);设置页开着时亮着
+        // 顶上一条:☰(Telegram 会话列表顶上那一条的左端),点开是召唤同伴、设置;菜单开着时亮着
         {
             int mx0 = rowX + PAD, my0 = top + 3 + (RAIL_BAR_H - ICON_N) / 2;
             boolean hotMenu = railMenuAt(mouseX, mouseY) && !overlayOpen();
+            boolean menuOpen = mainMenu != null && mainMenu.isOpen();
             com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.MENU, mx0, my0, ICON_N,
-                    tab == Tab.SETTINGS || hotMenu ? CTA : TXT_MUTED);
+                    menuOpen || hotMenu ? CTA : TXT_MUTED);
             g.fill(rowX, top + 3 + RAIL_BAR_H - 1, rowX + rowW, top + 3 + RAIL_BAR_H, t.border());
         }
         // 选中底先画(滑动的),行的内容压在它上面
@@ -1700,7 +1712,8 @@ public final class NumenScreen extends Screen {
         if (activeY >= 0) {
             selY = Float.isNaN(selY) ? activeY : com.dwinovo.numen.client.ui.Anim.approach(selY, activeY, 18f, dt);
             g.enableScissor(rowX, top + RAIL_TOP, rowX + rowW, railBottomEdge());
-            g.fill(rowX, Math.round(selY), rowX + rowW, Math.round(selY) + RAIL_SLOT, t.band());
+            // 选中那一行整行填色(Telegram),用主人自己那侧气泡的颜色——"你在这儿"
+            g.fill(rowX, Math.round(selY), rowX + rowW, Math.round(selY) + RAIL_SLOT, t.ownFill());
             g.disableScissor();
         } else {
             selY = Float.NaN;
@@ -1723,7 +1736,7 @@ public final class NumenScreen extends Screen {
             }
             int fx = rowX + RAIL_FACE_X, fy = ay + (RAIL_SLOT - RAIL_AV) / 2;
             com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
-                    fx - 1, fy - 1, RAIL_AV + 2, RAIL_AV + 2, FIELD, active ? t.band() : BORDER);
+                    fx - 1, fy - 1, RAIL_AV + 2, RAIL_AV + 2, FIELD, active ? t.ownFill() : BORDER);
             if (i == shrinkIndex && shrinkPx > 0f && dragged != null) {
                 // 合并预览:原来的脸缩向左上角,拖着的那张从右下角长出来,长满就是叠脸格的样子
                 float p = shrinkPx / RAIL_STEP;
@@ -1747,15 +1760,15 @@ public final class NumenScreen extends Screen {
             } else {
             // 名字一行、最后一句一行;时间在名字那行的右端
             int tx = fx + RAIL_AV + 6;
-            int nameColor = active ? ON_BAND : TXT;
-            int dimColor = active ? ON_BAND_FAINT : TXT_MUTED;
+            int nameColor = TXT;   // 选中底和自己的气泡同色,气泡里的字色在上面照样读得清
+            int dimColor = active ? UiTheme.mix(TXT, t.ownFill(), 0.35f) : TXT_MUTED;
             var last = com.dwinovo.numen.client.screen.chat.ConversationPreview.last(c);
             String when = last == null ? "" : whenLabel(last.ts(), now);
             int whenW = when.isEmpty() ? 0 : font.width(when) + 4;
             txt(g, Component.literal(clip(c.displayName(NumenRoster.instance()::name), textRight - tx - whenW)),
                     tx, ay + 6, nameColor);
             if (!when.isEmpty()) {
-                txt(g, Component.literal(when), textRight - font.width(when), ay + 6, active ? ON_BAND_FAINT : TXT_FAINT);
+                txt(g, Component.literal(when), textRight - font.width(when), ay + 6, active ? dimColor : TXT_FAINT);
             }
             // 未读角标(Telegram):她在别的会话里说了话,这一行右边一枚强调色计数;当前这行没有
             int previewRight = textRight;
@@ -1790,22 +1803,10 @@ public final class NumenScreen extends Screen {
                 txt(g, Component.literal("!"), bx + (8 - font.width("!")) / 2 + 1, by + 1, ON_CTA);
             }
         }
-        // 「+」召唤:列表右下角一格(Telegram 的"新消息"浮钮位置)。纯代码绘制,跟主题走色。
-        int px = railX + railW - PAD - RAIL_AV;
-        int py = top + panelH - PAD - RAIL_AV;
-        // scroll cues — gold chevrons when the list overflows in either direction
+        // scroll cues — chevrons when the list overflows in either direction
         int cx = railX + railW / 2;
         if (railScroll > 0) chevron(g, cx, top + 1, true);
-        if (railScroll < maxRailScroll()) chevron(g, cx, py - 9, false);
-        boolean plusHot = summoning || (mouseX >= px && mouseX < px + RAIL_AV
-                && mouseY >= py && mouseY < py + RAIL_AV);
-        com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), px, py, RAIL_AV, RAIL_AV,
-                FIELD, plusHot ? CTA : BORDER);
-        int pcx = px + RAIL_AV / 2;
-        int pcy = py + RAIL_AV / 2;
-        int plusColor = plusHot ? CTA : TXT_MUTED;
-        g.fill(pcx - 5, pcy - 1, pcx + 5, pcy + 1, plusColor);
-        g.fill(pcx - 1, pcy - 5, pcx + 1, pcy + 5, plusColor);
+        if (railScroll < maxRailScroll()) chevron(g, cx, railBottomEdge() + 2, false);
     }
 
     /** 列表里那句话的时间:今天给时分,再往前给日期(Telegram)。 */
@@ -1828,12 +1829,12 @@ public final class NumenScreen extends Screen {
                 up ? CHEVRON_UP : CHEVRON_DOWN, cx - 5, y, 11, 6);
     }
 
-    /** 最后一行的底边最多到哪(「+」上面留一道缝)。 */
+    /** 最后一行的底边最多到哪(下面留一道缝给箭头)。 */
     private int railBottomEdge() {
-        return top + panelH - PAD - RAIL_AV - RAIL_BOT_GAP;
+        return top + panelH - 3 - RAIL_BOT_GAP;
     }
 
-    /** 「+」上面装得下几行。 */
+    /** 左栏装得下几行。 */
     private int railVisibleSlots() {
         int slots = 0;
         while (top + RAIL_TOP + (slots + 1) * RAIL_SLOT <= railBottomEdge()) slots++;
@@ -1847,12 +1848,6 @@ public final class NumenScreen extends Screen {
     /** 第一行(可见的)的顶边:列表从上往下排(Telegram),不居中。 */
     private int railStartY() {
         return top + RAIL_TOP;
-    }
-
-    private boolean railPlusAt(int mx, int my) {
-        int px = railX + railW - PAD - RAIL_AV;
-        int py = top + panelH - PAD - RAIL_AV;
-        return mx >= px && mx < px + RAIL_AV && my >= py && my < py + RAIL_AV;
     }
 
     /** idle = green, working/compacting = amber, queued = gold; faint if no loop yet. */

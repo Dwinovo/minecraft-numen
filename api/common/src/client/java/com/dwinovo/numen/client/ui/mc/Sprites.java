@@ -41,6 +41,8 @@ public final class Sprites {
     public static final ResourceLocation USER = icon("icon_user");
     public static final ResourceLocation USERS = icon("icon_users");
     public static final ResourceLocation USER_PLUS = icon("icon_user_plus");
+    /** ☰ 菜单里的设置。 */
+    public static final ResourceLocation SETTINGS = icon("icon_settings");
     /** 左栏顶上的 ☰(设置)与设置页抬头的 ←(回到对话)。 */
     public static final ResourceLocation MENU = icon("icon_menu");
     public static final ResourceLocation BACK = icon("icon_back");
