@@ -876,18 +876,18 @@ public final class NumenScreen extends Screen {
 
         @Override public boolean currentCreative() {
             for (NumenRoster.Entry e : NumenRoster.instance().entries()) {
-                if (e.uuid().equals(solo())) return e.creative();
+                if (e.uuid().equals(editTarget)) return e.creative();
             }
             return false;
         }
 
         @Override public void setCreative(boolean creative) {
             Services.NETWORK.sendToServer(
-                    new com.dwinovo.numen.network.payload.SetGameModePayload(solo(), creative));
+                    new com.dwinovo.numen.network.payload.SetGameModePayload(editTarget, creative));
         }
 
         @Override public void applySkin(String skinId) {
-            UUID target = solo();   // 异步查询窗口内可能切换同伴:皮肤落到点选择时的那只
+            UUID target = editTarget;   // 异步查询窗口内可能切换同伴:皮肤落到点选择时的那只
             var entry = com.dwinovo.numen.client.skin.SkinLibrary.instance().get(skinId);
             if (entry != null && entry.signed()) {
                 sendSkin(target, entry.value(), entry.signature());
@@ -895,7 +895,7 @@ public final class NumenScreen extends Screen {
             }
             // 按名字:本机查同名正版(与召唤同一条路);查不到发空值 = 回原版默认皮肤。
             // 保存即关卡,查询过程不占 UI;失败的原因进聊天框留痕。
-            String n = NumenScreen.this.name();
+            String n = nameFor(target);
             com.dwinovo.numen.client.skin.MojangSkinLookup.fetch(n)
                     .thenAccept(r -> Minecraft.getInstance().execute(() -> {
                         if (r.problem() != null) {
