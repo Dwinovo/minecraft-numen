@@ -78,6 +78,8 @@ public final class Sprites {
     public static final ResourceLocation FOLDER_PLUS = icon("icon_folder_plus");
     /** 勾:分组菜单里已经在的那个分组前、设置条目库里当前同伴在用的那条行尾(强调色),右键菜单里"给她用"也是它。 */
     public static final ResourceLocation CHECK = icon("icon_check");
+    /** 征询的"说一句再拒绝":输入框上方那条提示栏的图标。 */
+    public static final ResourceLocation CANCEL = icon("icon_cancel");
 
     public static ResourceLocation icon(String name) {
         return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, name);

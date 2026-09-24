@@ -70,13 +70,19 @@ public final class ModLanguageData {
         public static final String GUI_PROVIDERS_THINKING_ON        = "numen.gui.providers.thinking.on";
         public static final String RESPAWN_BLOCKED                  = "numen.respawn.blocked";
 
-        // 征询:同伴等主人点头时取代输入行的答复框(ConsentPrompt)与右上角的 toast。
+        // 征询:同伴等主人点头时对话流里那条带内联按钮的消息(ConsentMessage)与右上角的 toast。
         public static final String CONSENT_ALLOW          = "numen.consent.allow";
         public static final String CONSENT_ALLOW_REMEMBER = "numen.consent.allow_remember";
         public static final String CONSENT_DENY           = "numen.consent.deny";
         public static final String CONSENT_NOTE_ROW       = "numen.consent.note_row";
         public static final String CONSENT_ASKING         = "numen.consent.asking";
         public static final String CONSENT_WITHDRAWN      = "numen.consent.withdrawn";
+        /** 第四个按钮与点了它之后输入框上方那条提示栏的抬头。 */
+        public static final String CONSENT_DENY_NOTE      = "numen.consent.deny_note";
+        /** 答完以后消息下面那条结果:点了哪个键、拒绝时说的那句、在别处(命令)答的。 */
+        public static final String CONSENT_CHOSE          = "numen.consent.chose";
+        public static final String CONSENT_DENIED_SAYING  = "numen.consent.denied_saying";
+        public static final String CONSENT_ANSWERED_ELSEWHERE = "numen.consent.answered_elsewhere";
         /** 清单一堆前面那个短动词,后接 {@code break}、{@code attack}……。 */
         public static final String CONSENT_VERB_PREFIX    = "numen.consent.verb.";
         /** 信号给主人看的自述,后接规则里的信号名({@code placed}……)。 */
@@ -677,6 +683,10 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_NOTE_ROW,       "No, tell %s what to do instead…");
         adder.add(Keys.CONSENT_ASKING,         "%s asks for your consent — press [%s] to answer");
         adder.add(Keys.CONSENT_WITHDRAWN,      "%s's request went away: %s");
+        adder.add(Keys.CONSENT_DENY_NOTE,      "Deny with a note");
+        adder.add(Keys.CONSENT_CHOSE,          "You chose “%s”");
+        adder.add(Keys.CONSENT_DENIED_SAYING,  "You said no: %s");
+        adder.add(Keys.CONSENT_ANSWERED_ELSEWHERE, "Answered elsewhere");
         adder.add(Keys.CONSENT_VERB_PREFIX + "break",      "Break");
         adder.add(Keys.CONSENT_VERB_PREFIX + "place",      "Place");
         adder.add(Keys.CONSENT_VERB_PREFIX + "attack",     "Attack");
@@ -1104,6 +1114,10 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_NOTE_ROW,       "不行,告诉 %s 该怎么做…");
         adder.add(Keys.CONSENT_ASKING,         "%s 请求你的同意,按 [%s] 答复");
         adder.add(Keys.CONSENT_WITHDRAWN,      "%s 的请求撤回了:%s");
+        adder.add(Keys.CONSENT_DENY_NOTE,      "说一句再拒绝");
+        adder.add(Keys.CONSENT_CHOSE,          "你选了「%s」");
+        adder.add(Keys.CONSENT_DENIED_SAYING,  "你拒绝了:%s");
+        adder.add(Keys.CONSENT_ANSWERED_ELSEWHERE, "已在别处答复");
         adder.add(Keys.CONSENT_VERB_PREFIX + "break",      "挖");
         adder.add(Keys.CONSENT_VERB_PREFIX + "place",      "放");
         adder.add(Keys.CONSENT_VERB_PREFIX + "attack",     "打");

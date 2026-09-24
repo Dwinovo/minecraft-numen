@@ -16,6 +16,8 @@ import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.agent.KnownSkins;
 import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.client.chat.ChatDisplayModes;
+import com.dwinovo.numen.client.consent.ConsentCards;
+import com.dwinovo.numen.client.consent.ConsentMessage;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.client.ui.Anim;
@@ -613,6 +615,9 @@ public final class ChatView {
         for (int i = 0; i < blocks.size(); i++) {
             Block b = blocks.get(i);
             int bh = heightOf(b);
+            if (b instanceof Consent c && my >= cy && my < cy + bh) {
+                return ConsentMessage.click(font, c.card(), gx + EDGE + faceCol(), consentKeysTop(c, cy), c.w(), mx, my);
+            }
             if (b instanceof Chip c && c.foldKey() != null && my >= cy && my < cy + bh) {
                 if (!expandedGroups.add(c.foldKey())) expandedGroups.remove(c.foldKey());
                 return true;
@@ -624,7 +629,7 @@ public final class ChatView {
 
     // ---- blocks ----
 
-    private sealed interface Block permits Bubble, Checklist, Chip, Notice, Divider, UnreadBar {}
+    private sealed interface Block permits Bubble, Checklist, Chip, Notice, Divider, UnreadBar, Consent {}
 
     /** One spoken message. {@code label} non-null = companion side (name above the bubble);
      *  {@code runEnd} = 这一块是这个人连发的最后一块(群里脸贴它旁边,气泡带尾巴);
@@ -749,6 +754,16 @@ public final class ChatView {
     /** "未读消息"那一条服务消息:打开时还没看过的第一句上面。 */
     private record UnreadBar() implements Block {}
 
+    /**
+     * 她的征询(Telegram 带内联按钮的消息):她那一侧的气泡里是清单,下面挂按钮,答完再挂一条结果。它不是对话记录
+     * 里的一条,按到的时刻排进时间线,算在她的连发里;清单、按钮与结果条的画法和点法归 {@link ConsentMessage}。
+     * {@code w} 是气泡与键盘共用的宽(Telegram 的键盘与气泡同宽,气泡被键盘撑宽);{@code label}、{@code runEnd}
+     * 与话的气泡同义。
+     */
+    private record Consent(ConsentCards.Card card, String label, int w, boolean runEnd) implements Block {
+        Consent withRunEnd(boolean on) { return new Consent(card, label, w, on); }
+    }
+
     private record ChipRow(String icon, int iconColor, FormattedCharSequence text) {}
 
     /** 居中的提示(整理过记忆、换了人设、清空、中断之类)画成服务消息;长的按气泡宽折行,{@code lines} 是折好的。 */
@@ -768,6 +783,8 @@ public final class ChatView {
             case Notice n -> n.lines().size() * LINE_H + SERVICE_PAD_V * 2;
             case Divider ignored -> LINE_H + SERVICE_PAD_V * 2;
             case UnreadBar ignored -> LINE_H + SERVICE_PAD_V * 2;
+            case Consent c -> (c.label() != null ? LABEL_H : 0) + consentBubbleH(c.card()) + ConsentMessage.GAP
+                    + ConsentMessage.keyboardHeight(font, c.w()) + consentResultH(c.card());
         };
     }
 
@@ -776,6 +793,34 @@ public final class ChatView {
         int lines = 1;
         for (CheckRow r : c.rows()) lines += r.lines().size();
         return lines * LINE_H + PAD_V * 2 + (c.time() != null && !c.timeInline() ? TIME_H : 0);
+    }
+
+    /** 征询那条的气泡本身多高(不含上面的名字):清单,下面一小行是剩下的秒数(收起后是到的时刻)。 */
+    private static int consentBubbleH(ConsentCards.Card card) {
+        return PAD_V * 2 + ConsentMessage.listHeight(card) + TIME_H;
+    }
+
+    /** 征询收起后键盘下面那条服务消息(连同上面的缝)此刻多高:收起的那一刻从零长出来。 */
+    private static int consentResultH(ConsentCards.Card card) {
+        return Math.round((ConsentMessage.GAP + LINE_H + SERVICE_PAD_V * 2) * ConsentMessage.reveal(card));
+    }
+
+    /** 征询气泡右下角那一小行:挂着时是还剩几秒,收起后和别的气泡一样是时刻。 */
+    private static String consentMeta(ConsentCards.Card card) {
+        return card.waiting() ? ConsentMessage.countdown(card) : clock(card.arrivedAt());
+    }
+
+    /** 她的一条征询接进她的连发:连发的第一块才带名字。 */
+    private void consent(Feed f, ConsentCards.Card card, int bubbleMaxW) {
+        UUID who = card.companion();
+        f.out.add(consent(card, who.equals(f.last) ? null : label(who), bubbleMaxW));
+        f.last = who;
+    }
+
+    private Consent consent(ConsentCards.Card card, String label, int bubbleMaxW) {
+        int text = Math.max(ConsentMessage.listWidth(font, card), font.width(consentMeta(card)));
+        int w = Math.min(bubbleMaxW, Math.max(text + PAD_H * 2, ConsentMessage.keyboardWidth(font)));
+        return new Consent(card, label, w, false);
     }
 
     private int totalHeight(List<Block> blocks) {
@@ -897,9 +942,16 @@ public final class ChatView {
         // 算在她的连发里;提示行打断。f.last == null = 连发已断。
         int msgIndex = -1;
         LocalDate lastDay = null;
+        // 她的征询按到的时刻排进时间线。只在和她的私聊里:征询问的是她的身体,输入行的数字键也只对着就她俩的会话
+        List<ConsentCards.Card> asks = ConsentCards.history(solo());
+        int asked = 0;
         for (Transcript.Entry entry : source) {
             msgIndex++;
             ConvoState.Msg msg = entry.msg();
+            while (asked < asks.size() && entry.ts() > 0 && asks.get(asked).arrivedAt() <= entry.ts()) {
+                flushProcess(f, done, failed, bubbleMaxW);
+                consent(f, asks.get(asked++), bubbleMaxW);
+            }
             // 日期分隔:换了一天,先收口、插一枚日期小牌、连发断开
             if (entry.ts() > 0) {
                 LocalDate day = Instant.ofEpochMilli(entry.ts()).atZone(ZoneId.systemDefault()).toLocalDate();
@@ -1011,6 +1063,10 @@ public final class ChatView {
             compacting |= status.phase() == com.dwinovo.numen.agent.loop.Phase.COMPACT;
         }
         flushProcess(f, done, failed, bubbleMaxW);
+        // 挂着的那条(和记录里最后一条之后才到的)排在她这段过程后面
+        while (asked < asks.size()) {
+            consent(f, asks.get(asked++), bubbleMaxW);
+        }
         // Prompts still waiting for a protocol-valid splice point — visible immediately
         // so a queued message never feels swallowed.
         for (String shown : queued) {
@@ -1062,6 +1118,7 @@ public final class ChatView {
             if (b instanceof Bubble bb && bb.runEnd() != end) out.set(i, bb.withRunEnd(end));
             else if (b instanceof Checklist c && c.runEnd() != end) out.set(i, c.withRunEnd(end));
             else if (b instanceof Chip c && c.runEnd() != end) out.set(i, c.withRunEnd(end));
+            else if (b instanceof Consent c && c.runEnd() != end) out.set(i, c.withRunEnd(end));
         }
     }
 
@@ -1071,6 +1128,7 @@ public final class ChatView {
             case Bubble bb -> bb.own() ? OWNER : bb.who();
             case Checklist c -> c.who();
             case Chip c -> c.who();
+            case Consent c -> c.card().companion();
             default -> null;
         };
     }
@@ -1315,9 +1373,12 @@ public final class ChatView {
             case Chip c -> c.entry();
             default -> -1;
         };
+        // 征询不是记录里的一条:按它到的时刻飞入
+        long bornAt = b instanceof Consent c ? c.card().arrivedAt()
+                : entry >= 0 && entry < born.size() ? born.get(entry) : 0L;
         float e = 1f;
-        if (entry >= 0 && entry < born.size() && born.get(entry) > 0) {
-            long age = frameNow - born.get(entry);
+        if (bornAt > 0) {
+            long age = frameNow - bornAt;
             if (age < ENTER_MS) e = Anim.easeOutCubic(age / (float) ENTER_MS);
         }
         if (e < 1f) {
@@ -1340,7 +1401,45 @@ public final class ChatView {
             case Bubble bb -> drawBubble(g, bb, x, y, w);
             case Checklist c -> drawChecklist(g, c, x, y);
             case Chip c -> drawChip(g, c, x, y);
+            case Consent c -> drawConsent(g, c, x, y, w);
         }
+    }
+
+    /**
+     * 征询那条:和话、清单同一份气泡外形(名字、脸、底色、尾巴),里面是清单与右下角的秒数,挂着时底边一道缩短的线;
+     * 气泡下面贴着内联按钮(Telegram 的键盘挂在气泡外面、与气泡同宽),收起后再下面一条服务消息写结果。
+     */
+    private void drawConsent(GuiGraphics g, Consent c, int x, int y, int w) {
+        ConsentCards.Card card = c.card();
+        int bx = x + EDGE + faceCol();
+        int bh = consentBubbleH(card);
+        int bubTop = y + (c.label() != null ? LABEL_H : 0);
+        bubbleFrame(g, false, c.label(), card.companion(), c.runEnd(), x, y, bx, c.w(), bh, AI_FILL);
+        ConsentMessage.drawList(g, font, card, bx + PAD_H, bubTop + PAD_V, c.w() - PAD_H * 2);
+        String meta = consentMeta(card);
+        draw(g, Nb.colored(meta, IN_META).getVisualOrderText(), bx + c.w() - PAD_H - font.width(meta),
+                bubTop + PAD_V + ConsentMessage.listHeight(card));
+        if (card.waiting()) {
+            g.fill(bx, bubTop + bh - 1, bx + Math.round(c.w() * ConsentMessage.timeLeft(card)), bubTop + bh,
+                    ConsentMessage.tone(card));
+        }
+        int ky = consentKeysTop(c, y);
+        ConsentMessage.drawKeyboard(g, font, card, bx, ky, c.w(), hoverX, hoverY);
+        float shown = ConsentMessage.reveal(card);
+        if (shown > 0f) {
+            // 收起后键盘下面一条服务消息写结果,随收起淡入;透明度乘在飞入的透明度上
+            float base = com.mojang.blaze3d.systems.RenderSystem.getShaderColor()[3];
+            String text = Nb.clip(font, ConsentMessage.result(card), w - SB_W - SERVICE_PAD_H * 2);
+            g.setColor(1f, 1f, 1f, base * shown);
+            drawService(g, List.of(Nb.colored(text, SERVICE_FG).getVisualOrderText()), x,
+                    ky + ConsentMessage.keyboardHeight(font, c.w()) + ConsentMessage.GAP, w);
+            g.setColor(1f, 1f, 1f, base);
+        }
+    }
+
+    /** 征询那条的按钮从哪一行起:名字、气泡下面隔一道缝。画和点都照它。 */
+    private static int consentKeysTop(Consent c, int y) {
+        return y + (c.label() != null ? LABEL_H : 0) + consentBubbleH(c.card()) + ConsentMessage.GAP;
     }
 
     /** 一行的服务消息(日期牌、未读消息)。对话里的日期牌和翻页时浮在顶上的是同一枚。 */

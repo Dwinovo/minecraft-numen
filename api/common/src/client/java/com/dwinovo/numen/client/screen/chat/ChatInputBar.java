@@ -1,6 +1,8 @@
 package com.dwinovo.numen.client.screen.chat;
 
 import com.dwinovo.numen.client.command.Completion;
+import com.dwinovo.numen.client.consent.ConsentCards;
+import com.dwinovo.numen.client.consent.ConsentMessage;
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.KeyCodes;
 import com.dwinovo.numen.client.ui.NumenStyle;
@@ -9,8 +11,10 @@ import com.dwinovo.numen.client.ui.mc.McDrawSurface;
 import com.dwinovo.numen.client.ui.widget.TextField;
 import com.dwinovo.numen.client.ui.widget.UiRoot;
 import com.dwinovo.numen.client.screen.Nb;
+import com.dwinovo.numen.data.ModLanguageData;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
@@ -31,10 +35,10 @@ import java.util.Set;
  * 宿主和带哪几颗键({@link Key}):快捷对话不带麦克风——快捷语音有自己的按住说话键,
  * 不搞两条语音路。
  *
- * <p>她在等主人点头的时候,整条输入行换成答复框({@link com.dwinovo.numen.client.consent.ConsentPrompt}):
- * 占满这一行的宽度,键都不画——和 pi 把编辑器整个换成选择框一样,问答挡住对话框,答完才回来。答复框的第四项
- * 就是这条输入行自己的输入框(写一句再拒绝),屏幕上始终只有一个真输入框。挂没挂着只看
- * {@link com.dwinovo.numen.client.consent.ConsentCards},宿主每刻调 {@link #tick} 对齐,不各自判断。
+ * <p>她在等主人点头的时候,征询是对话流里她的一条消息,下面挂一排内联按钮({@link ConsentMessage})。这条输入行
+ * 不让位,只在输入框空着时把数字键、↑↓、回车借给那排按钮(Telegram 的快捷按钮模式,键上标着序号);点了
+ * "说一句再拒绝"就在输入框上方挂一条提示栏(和引用栏同一条),这时发出去的那句就是拒绝的理由。挂没挂着只看
+ * {@link ConsentCards},不各自判断。
  */
 public final class ChatInputBar {
 
@@ -69,7 +73,7 @@ public final class ChatInputBar {
         /** 斜杠命令跑完回给主人的话;null = 这条命令不吭声(或已在原位开了面板)。画在哪、留多久是宿主的事。 */
         void onCommandReply(String reply);
 
-        /** 她等的那条征询没了(主人答了、超时、任务结束),输入行已经回到原样。在 {@link #tick} 里调。 */
+        /** 她等的那条征询收起了(主人答了、超时、任务结束)。在 {@link #tick} 里调。 */
         default void onConsentSettled() {}
 
         /** 这个会话里主人上一句说的话(输入框空着时按 ↑ 取回来改);没有是 null。 */
@@ -96,13 +100,19 @@ public final class ChatInputBar {
     /**
      * 引用回复:在回谁的哪一句;null = 没在回。输入行上面长出一条引用栏(Telegram 的回复栏),
      * 发出去时拼进正文(见 {@link com.dwinovo.numen.agent.conversation.Quote})。
-     * {@code quoteShown} 是那条栏露出多高,按趋近走;收起的途中还要画,所以谁和那句另记一份。
+     * 点了征询的"说一句再拒绝"时,同一个位置挂的是那条提示栏;两样同时只有一样(Telegram 的回复栏、编辑栏也互相顶替)。
+     * {@code barShown} 是那条栏露出多高,按趋近走;收起的途中还要画,所以图标、抬头和那句另记一份。
      */
     private String quoteWho, quoteText;
-    private String shownWho = "", shownText = "";
-    private float quoteShown;
-    private long quoteFrameMs;
-    private static final int QUOTE_BAR_H = 22;
+    private String shownTitle = "", shownText = "";
+    private ResourceLocation shownIcon = com.dwinovo.numen.client.ui.mc.Sprites.REPLY;
+    private float barShown;
+    private long barFrameMs;
+    private static final int BAR_H = 22;
+    /** 上一帧挂着提示栏的那条征询:刚点了"说一句再拒绝"(或换了一条)时把栏换成它的。 */
+    private ConsentCards.Card noteShown;
+    /** 上一刻这条输入行对着的那位挂着的征询:收起时告诉宿主。 */
+    private ConsentCards.Card asked;
     /** 右边那一格:这一帧是什么、上一样是什么、什么时候换的(换的那 150ms 两样都画)。 */
     private Act act, prevAct;
     private long actSince;
@@ -110,12 +120,6 @@ public final class ChatInputBar {
 
     /** 输入框自己的几何(弹层贴它上边长,面板占它的位)。 */
     private int fieldX, fieldY, fieldW, fieldH;
-    /** 整条输入行的几何:含左边让给宿主的那一截与右边的键——答复框占的就是这一整行。 */
-    private int barX, barY, barW, barH;
-    /** 她在等主人点头时取代整条输入行的答复框;null = 没在等。 */
-    private com.dwinovo.numen.client.consent.ConsentPrompt consent;
-    /** 答复框出来前输入框里的字,答复框收起时放回去——主人打到一半的话不因为她插进来一问就没了。 */
-    private String draftBeforeConsent = "";
     /** 开着的选择面板;非 null 时它<b>取代</b>输入框,键盘整个归它。 */
     /** 贴着输入框弹出来的那一层。装什么由命令决定(名单、读数卡…),见 Popup。 */
     private com.dwinovo.numen.client.ui.widget.Popup panel;
@@ -136,41 +140,46 @@ public final class ChatInputBar {
         ui.setInputFactory(com.dwinovo.numen.client.ui.mc.McTextInput.factory());
     }
 
-    /** 输入框内容(切换同伴时宿主取走暂存,回来再 setText 放回)。答复框在场时是它出来前的那段。 */
+    /** 输入框内容(切换同伴时宿主取走暂存,回来再 setText 放回)。 */
     public String text() {
-        if (consent != null) return draftBeforeConsent;
         return field != null ? field.value() : draft;
     }
 
     public void setText(String text) {
-        if (consent != null) {
-            draftBeforeConsent = text == null ? "" : text;
-            return;
-        }
         draft = text == null ? "" : text;
         if (field != null) field.setValue(draft);
         refreshCandidates();
     }
 
-    /** 答复框此刻是不是占着这一行(宿主据此不画自己围着输入行的那些东西)。 */
-    public boolean asking() {
-        return consent != null;
-    }
-
     /**
-     * 这一行此刻占多高:平时是 {@link #build} 给的那一行;答复框在场时是答复框的高度,底边不动、往上长。
-     * 宿主按它排上面的东西——答复框与输入框同级,占位置,不叠在别人身上。
+     * 这一行此刻占多高:{@link #build} 给的那一行,加上面长出来的引用栏或提示栏。底边不动、往上长;
+     * 宿主按它排上面的东西。
      */
     public int height() {
-        return consent != null ? consent.preferredHeight() : barH + Math.round(quoteShown);
+        return fieldH + Math.round(barShown);
     }
 
-    /** 回这一句:输入行上面出引用栏,光标回到输入框。 */
+    /** 这条输入行对着的那位挂着的征询;没有是 null。 */
+    private ConsentCards.Card waiting() {
+        var loop = host.loop();
+        return loop == null ? null : ConsentCards.pending(loop.entityUuid());
+    }
+
+    /** 挂着的征询正等主人写那一句(点了"说一句再拒绝");没有是 null。 */
+    private ConsentCards.Card noting() {
+        ConsentCards.Card card = waiting();
+        return card != null && card.writing() ? card : null;
+    }
+
+    /** 回这一句:输入行上面出引用栏(顶掉"说一句再拒绝"的提示栏),光标回到输入框。 */
     public void quote(String who, String text) {
+        ConsentCards.Card note = noting();
+        if (note != null) note.stopWriting();
         quoteWho = who;
         quoteText = text;
-        shownWho = who;
+        shownTitle = Component.translatable("numen.chat.reply_to", who).getString();
         shownText = text.replace('\n', ' ');
+        shownIcon = com.dwinovo.numen.client.ui.mc.Sprites.REPLY;
         if (field != null) ui.requestFocus(field);
     }
 
@@ -184,7 +193,7 @@ public final class ChatInputBar {
     public void restoreQuote(QuoteState q) {
         if (q == null) return;
         quote(q.who(), q.text());
-        quoteShown = QUOTE_BAR_H;
+        barShown = BAR_H;
     }
 
     private void cancelQuote() {
@@ -198,15 +207,11 @@ public final class ChatInputBar {
     }
 
     /**
-     * @param lead 左边让给宿主画的那一截(快捷对话的名字牌);输入框从它右边开始,答复框不让,占满整行
+     * @param lead 左边让给宿主画的那一截(快捷对话的名字牌);输入框从它右边开始
      */
     public void build(int x, int y, int w, int h, int lead) {
-        if (field != null && consent == null) draft = field.value();   // 重建不丢已输入的文字
+        if (field != null) draft = field.value();   // 重建不丢已输入的文字
         ui.clear();
-        barX = x;
-        barY = y;
-        barW = w;
-        barH = h;
         x += lead;
         w -= lead;
 
@@ -230,45 +235,20 @@ public final class ChatInputBar {
 
         ui.requestFocus(field);   // 开屏即可打字
         refreshCandidates();
-        syncConsent();
         refreshEnablement();
     }
 
-    /** 宿主每刻调:对齐她挂着的征询。 */
+    /** 宿主每刻调:她等的那条征询收起了就告诉宿主。 */
     public void tick() {
-        syncConsent();
+        ConsentCards.Card card = waiting();
+        if (asked != null && card == null) host.onConsentSettled();
+        asked = card;
     }
 
     /**
-     * 她挂着征询就用答复框取代整条输入行,换了一条就换一张框(正在写的那句留着),没了就放回原来的字并告诉宿主。
+     * 每帧同步可按性、占位文案与征询:叫停的可用性是活的;点了"说一句再拒绝"就把提示栏换上、光标给输入框;
+     * 数字键此刻归不归那排按钮告诉那条征询(它据此画选中框)。
      */
-    private void syncConsent() {
-        var loop = host.loop();
-        var asking = loop == null ? null
-                : com.dwinovo.numen.client.consent.ConsentCards.pending(loop.entityUuid());
-        if (consent != null && consent.request() == asking) return;
-        if (asking == null) {
-            if (consent != null) {
-                consent = null;
-                setText(draftBeforeConsent);
-                draftBeforeConsent = "";
-                ui.requestFocus(field);
-                refreshEnablement();
-                host.onConsentSettled();
-            }
-            return;
-        }
-        if (consent == null) {
-            // 开着的面板(/skills 之类)收起;那串命令已经用过了,不算没打完的话
-            draftBeforeConsent = panel != null ? "" : field.value();
-            panel = null;
-            field.setValue("");
-        }
-        consent = new com.dwinovo.numen.client.consent.ConsentPrompt(asking, consent, field::value);
-        refreshEnablement();
-    }
-
-    /** 每帧同步可按性、占位文案与几何:叫停的可用性是活的,答复框的高度随内容变。 */
     public void refreshEnablement() {
         if (field == null) return;
         boolean paged = panel != null;
@@ -276,18 +256,39 @@ public final class ChatInputBar {
         // 叫停除外:那是主人的急刹车,任何时候都得能按。
         field.setVisible(!paged);
         field.setEnabled(!paged);
-        field.placeholder(consent != null ? consent.noteHint() : host.hint());
-        field.underlined(consent != null);   // 在答复框里是第四项那一行的一部分,只画下划线
-        // 答复框在场:右边那一格不画,输入框挪进它的第四项,选中那一项才接字
-        if (consent != null) {
-            int ph = height();
-            consent.setBounds(barX, barY + barH - ph, barW, ph);
-            var box = consent.noteBox();
-            field.setBounds(box.x(), box.y(), box.w(), box.h());
-            ui.requestFocus(consent.writing() ? field : null);
-        } else {
-            field.setBounds(fieldX, fieldY, fieldW, fieldH);
+        ConsentCards.Card card = waiting();
+        ConsentCards.Card note = card != null && card.writing() ? card : null;
+        if (note != null && note != noteShown) {
+            cancelQuote();
+            shownTitle = I18n.get(ModLanguageData.Keys.CONSENT_DENY_NOTE);
+            shownText = ConsentMessage.summary(note);
+            shownIcon = com.dwinovo.numen.client.ui.mc.Sprites.CANCEL;
+            ui.requestFocus(field);
         }
+        noteShown = note;
+        field.placeholder(note != null
+                ? I18n.get(ModLanguageData.Keys.CONSENT_NOTE_ROW, ConsentCards.name(note.companion()))
+                : host.hint());
+        if (card != null) card.arm(keysToConsent(card));
+    }
+
+    /**
+     * 数字键、↑↓、回车此刻归不归那排按钮:输入框接着字、空着、没开面板、没在写那一句。
+     * 框里一有字就还给输入框——打的话不会被当成选项吞掉。
+     */
+    private boolean keysToConsent(ConsentCards.Card card) {
+        return !card.writing() && panel == null && field.isFocused() && field.value().isEmpty();
+    }
+
+    /** 收起输入框上方那条栏:引用或"说一句再拒绝"。 */
+    private void closeBar() {
+        ConsentCards.Card note = noting();
+        if (note != null) note.stopWriting();
+        cancelQuote();
+    }
+
+    private boolean barOpen() {
+        return quoteWho != null || noting() != null;
     }
 
     // ---- 选择面板(取代输入框的那一层) ----
@@ -321,12 +322,7 @@ public final class ChatInputBar {
     public void render(GuiGraphics g, int mouseX, int mouseY, long nowMs, NumenTheme.Colors c) {
         refreshEnablement();
         IDrawSurface s = new McDrawSurface(g, Minecraft.getInstance().font);
-        if (consent != null) {
-            consent.render(s, c, mouseX, mouseY, nowMs);
-            ui.render(s, c, mouseX, mouseY, nowMs);   // 只剩第四项里的输入框
-            return;
-        }
-        renderQuote(g, mouseX, mouseY, c);
+        renderBar(g, mouseX, mouseY, c);
         g.fill(fieldX, fieldY, actX + ACT_W, fieldY + fieldH, c.inputBg());   // 输入框和右边那一格同一条底
         ui.render(s, c, mouseX, mouseY, nowMs);
         renderAct(g, mouseX, mouseY, c);
@@ -334,13 +330,13 @@ public final class ChatInputBar {
         if (panel != null) {
             panel.render(s, c, mouseX, mouseY, nowMs);
         } else if (popupOpen()) {
-            CommandPopup.render(s, c, candidates, selected, fieldX, fieldY - 2 - Math.round(quoteShown), fieldW);
+            CommandPopup.render(s, c, candidates, selected, fieldX, fieldY - 2 - Math.round(barShown), fieldW);
         }
     }
 
     /** 悬停的那一格的提示文案(宿主自行绘制 tooltip:定位与样式是宿主的事)。 */
     public String tooltipAt(double mx, double my) {
-        if (consent != null || act == null || !overAct(mx, my) || !actEnabled(act)) return null;
+        if (act == null || !overAct(mx, my) || !actEnabled(act)) return null;
         return t(switch (act) {
             case SEND -> "numen.chat.send";
             case MIC, RECORDING -> "numen.chat.tip.mic";
@@ -349,11 +345,8 @@ public final class ChatInputBar {
     }
 
     public boolean mouseClicked(double mx, double my, int button) {
-        if (consent != null) {
-            return consent.contains(mx, my) && consent.mouseClicked(mx, my, button);
-        }
-        if (quoteWho != null && overQuoteClose(mx, my)) {
-            cancelQuote();
+        if (barOpen() && overBarClose(mx, my)) {
+            closeBar();
             return true;
         }
         if (act != null && overAct(mx, my)) {
@@ -370,13 +363,6 @@ public final class ChatInputBar {
     }
 
     public boolean keyPressed(int keyCode, int modifiers) {
-        // 答复框在场:上下、回车归它。在写第四项那一句时,编辑键照常落到真输入框——它的字与编辑键靠"这里不接、
-        // 屏幕往下传"才到得了宿主控件;没在写时除了 Esc(关界面,请求留着)一个都不往下漏。
-        if (consent != null) {
-            if (consent.keyPressed(keyCode, modifiers)) return true;
-            if (consent.writing()) return ui.keyPressed(keyCode, modifiers);
-            return keyCode != KeyCodes.ESCAPE;
-        }
         // 面板在场:键盘整个归它,一个都不往下漏。Esc 是回输入框,不是关整个界面。
         if (panel != null) {
             if (keyCode == KeyCodes.ESCAPE) {
@@ -385,6 +371,18 @@ public final class ChatInputBar {
             }
             panel.keyPressed(keyCode, modifiers);
             return true;
+        }
+        // 她在等主人点头、输入框空着:↑↓ 在那排按钮里选,回车按选中的那个
+        ConsentCards.Card card = waiting();
+        if (card != null && keysToConsent(card)) {
+            if (keyCode == KeyCodes.UP || keyCode == KeyCodes.DOWN) {
+                card.move(keyCode == KeyCodes.UP ? -1 : 1);
+                return true;
+            }
+            if (keyCode == KeyCodes.ENTER && card.selected() >= 0) {
+                card.press(card.selected());
+                return true;
+            }
         }
         // 弹层在场时先归它:↑↓ 选、Tab 补/循环、Esc 收、回车先补再谈发送。
         if (popupOpen()) {
@@ -428,8 +426,8 @@ public final class ChatInputBar {
                 return true;
             }
         }
-        if (keyCode == KeyCodes.ESCAPE && quoteWho != null) {   // Esc 先收引用栏,再一次才关界面
-            cancelQuote();
+        if (keyCode == KeyCodes.ESCAPE && barOpen()) {   // Esc 先收引用栏(或提示栏),再一次才关界面
+            closeBar();
             return true;
         }
         if (keyCode == KeyCodes.ENTER && field != null && field.isFocused()) {
@@ -487,8 +485,7 @@ public final class ChatInputBar {
 
     /** 弹层此刻该不该在。 */
     private boolean popupOpen() {
-        return consent == null && !dismissed && !candidates.isEmpty()
-                && field != null && field.isFocused();
+        return !dismissed && !candidates.isEmpty() && field != null && field.isFocused();
     }
 
     /**
@@ -573,14 +570,15 @@ public final class ChatInputBar {
     }
 
     public boolean charTyped(char ch) {
-        // 答复框在场:在写第四项那一句时字落到真输入框,否则字归它(数字键选),不往下漏。
-        if (consent != null) {
-            if (consent.writing()) return ui.charTyped(ch);
-            consent.charTyped(ch);
+        // 面板在场时输入框是隐着的,打进去的字看不见也用不上——直接吞掉。
+        if (panel != null) return true;
+        // 她在等主人点头、输入框空着:数字键按那排按钮上标着这个序号的键
+        ConsentCards.Card card = waiting();
+        if (card != null && keysToConsent(card) && ch >= '1' && ch < '1' + ConsentCards.BUTTONS) {
+            card.press(ch - '1');
             return true;
         }
-        // 面板在场时输入框是隐着的,打进去的字看不见也用不上——直接吞掉。
-        return panel != null || ui.charTyped(ch);
+        return ui.charTyped(ch);
     }
 
     /** 焦点给不给这条输入行:左栏搜索框在接字的时候,它得交出来。 */
@@ -595,9 +593,16 @@ public final class ChatInputBar {
     // ---- 内部 ----
 
     private void send() {
-        if (field == null || panel != null || consent != null) return;
+        if (field == null || panel != null) return;
         String text = field.value() == null ? "" : field.value().trim();
         if (text.isEmpty()) return;
+        // 挂着"说一句再拒绝"的提示栏:这句是拒绝的理由,连同拒绝送给她,不当成一句话
+        ConsentCards.Card note = noting();
+        if (note != null) {
+            note.denyWith(text);
+            setText("");
+            return;
+        }
         // 斜杠命令是主人对客户端说的话:在本地跑完就结束,不往下走。所以它不过宿主的
         // 发言闸门——查技能、看清单这些事没有理由要求先配好 API key。
         var loop = host.loop();
@@ -621,35 +626,37 @@ public final class ChatInputBar {
         host.onSend(text);
     }
 
-    /** 引用栏:从输入行上面长出来(和回到最新钮一样被裁着滑),一枚回复图标、一道竖线、回谁、那句,右端 × 收起。 */
-    private void renderQuote(GuiGraphics g, int mouseX, int mouseY, NumenTheme.Colors c) {
+    /**
+     * 输入行上面那条栏:从输入行上面长出来(和回到最新钮一样被裁着滑),一枚图标、一道竖线、抬头、那句,右端 × 收起。
+     * 引用时是回复图标、"回复 谁"、被引的那句;"说一句再拒绝"时是拒绝图标、这个键的名字、她问的是什么。
+     */
+    private void renderBar(GuiGraphics g, int mouseX, int mouseY, NumenTheme.Colors c) {
         long now = System.currentTimeMillis();
-        float dt = quoteFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - quoteFrameMs) / 1000f);
-        quoteFrameMs = now;
-        quoteShown = com.dwinovo.numen.client.ui.Anim.approach(quoteShown, quoteWho != null ? QUOTE_BAR_H : 0f, 18f, dt);
-        if (quoteShown < 0.5f) return;
+        float dt = barFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - barFrameMs) / 1000f);
+        barFrameMs = now;
+        boolean open = barOpen();
+        barShown = com.dwinovo.numen.client.ui.Anim.approach(barShown, open ? BAR_H : 0f, 18f, dt);
+        if (barShown < 0.5f) return;
         var font = Minecraft.getInstance().font;
         int right = actX + ACT_W;
-        int y0 = fieldY - QUOTE_BAR_H;
-        g.enableScissor(fieldX, fieldY - Math.round(quoteShown), right, fieldY);
+        int y0 = fieldY - BAR_H;
+        g.enableScissor(fieldX, fieldY - Math.round(barShown), right, fieldY);
         g.fill(fieldX, y0, right, fieldY, c.inputBg());
         int size = com.dwinovo.numen.client.ui.mc.Sprites.SIZE;
-        com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.REPLY,
-                fieldX + 5, y0 + (QUOTE_BAR_H - size) / 2, size, c.accent());
+        com.dwinovo.numen.client.ui.mc.Sprites.draw(g, shownIcon, fieldX + 5, y0 + (BAR_H - size) / 2, size, c.accent());
         int lx = fieldX + 24;
-        g.fill(lx, y0 + 3, lx + 2, y0 + QUOTE_BAR_H - 3, c.accent());
+        g.fill(lx, y0 + 3, lx + 2, y0 + BAR_H - 3, c.accent());
         int room = actX - lx - 12;
-        Nb.text(g, font, Nb.clip(font, Component.translatable("numen.chat.reply_to", shownWho).getString(), room),
-                lx + 6, y0 + 3, c.accent());
+        Nb.text(g, font, Nb.clip(font, shownTitle, room), lx + 6, y0 + 3, c.accent());
         Nb.text(g, font, Nb.clip(font, shownText, room), lx + 6, y0 + 12, c.textMuted());
-        boolean hot = quoteWho != null && overQuoteClose(mouseX, mouseY);
-        Nb.text(g, font, "×", actX + (ACT_W - font.width("×")) / 2, y0 + (QUOTE_BAR_H - 8) / 2,
+        boolean hot = open && overBarClose(mouseX, mouseY);
+        Nb.text(g, font, "×", actX + (ACT_W - font.width("×")) / 2, y0 + (BAR_H - 8) / 2,
                 hot ? c.textPrimary() : c.textMuted());
         g.disableScissor();
     }
 
-    private boolean overQuoteClose(double mx, double my) {
-        return mx >= actX && mx < actX + ACT_W && my >= fieldY - QUOTE_BAR_H && my < fieldY;
+    private boolean overBarClose(double mx, double my) {
+        return mx >= actX && mx < actX + ACT_W && my >= fieldY - BAR_H && my < fieldY;
     }
 
     /**

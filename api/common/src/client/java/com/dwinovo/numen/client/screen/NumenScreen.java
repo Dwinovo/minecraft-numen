@@ -405,7 +405,8 @@ public final class NumenScreen extends Screen {
 
     /**
      * Hotkey entry: open the workspace on the companion that is waiting for the owner's consent (the one the
-     * HUD hint names — its chat input is the answer box), else the first companion (or an empty panel to summon from).
+     * HUD hint names — her request sits in the chat with its buttons), else the first companion (or an empty panel
+     * to summon from).
      */
     public static void openWorkspace() {
         var asking = com.dwinovo.numen.client.consent.ConsentCards.first();
@@ -2794,7 +2795,7 @@ public final class NumenScreen extends Screen {
 
 
     /**
-     * 输入行此刻占多高:平时一行;她在等主人点头时是答复框的高度——答复框和输入框同级,正文往上让,不压在对话流上。
+     * 输入行此刻占多高:平时一行,上面长出引用栏(或"说一句再拒绝"的提示栏)时连它一起——正文往上让,不压在对话流上。
      */
     private int inputH() {
         return inputBar == null ? INPUT_H : inputBar.height();

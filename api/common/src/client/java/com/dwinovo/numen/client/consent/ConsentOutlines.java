@@ -37,7 +37,8 @@ public final class ConsentOutlines {
         VertexConsumer vc = buffers.getBuffer(RenderType.lines());
         poseStack.pushPose();
         poseStack.translate(-cam.x, -cam.y, -cam.z);
-        for (ConsentRequestPayload request : ConsentCards.all()) {
+        for (ConsentCards.Card card : ConsentCards.all()) {
+            ConsentRequestPayload request = card.request();
             for (long packed : request.blocks()) {
                 BlockPos pos = BlockPos.of(packed);
                 LevelRenderer.renderLineBox(poseStack, vc,
