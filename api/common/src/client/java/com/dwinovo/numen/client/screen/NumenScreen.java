@@ -486,9 +486,23 @@ public final class NumenScreen extends Screen {
     private com.dwinovo.numen.client.ui.widget.TextField searchField;
     private static final int SEARCH_H = 14;
 
-    private int searchBoxX() { return railX + 3 + PAD + ICON_N + 6; }
-    private int searchBoxY() { return top + 3 + (RAIL_BAR_H - SEARCH_H) / 2; }
-    private int searchBoxW() { return railX + railW - 5 - searchBoxX(); }
+    /**
+     * 窄栏(窗口小、左栏只剩脸)时 ☰ 旁边是一枚放大镜,点开搜索框浮在抬头左边(Telegram 窄栏也留着搜索);
+     * 宽栏时搜索框就住在 ☰ 右边那一格。
+     */
+    private boolean searchPopup;
+
+    private boolean narrow() { return railW < RAIL_FULL_W; }
+    private int searchBoxX() { return narrow() ? left + 4 : railX + 3 + PAD + ICON_N + 6; }
+    private int searchBoxY() { return narrow() ? top + 6 : top + 3 + (RAIL_BAR_H - SEARCH_H) / 2; }
+    private int searchBoxW() { return narrow() ? 140 : railX + railW - 5 - searchBoxX(); }
+    /** 窄栏上那枚放大镜。 */
+    private int searchIconX() { return railX + 3 + PAD + ICON_N + 2; }
+
+    private boolean overSearchIcon(double mx, double my) {
+        int ix = searchIconX(), iy = top + 3 + (RAIL_BAR_H - ICON_N) / 2;
+        return narrow() && mx >= ix - 1 && mx < ix + ICON_N + 1 && my >= iy - 3 && my < iy + ICON_N + 3;
+    }
 
     // ---- 对话里搜(Ctrl+F,Telegram 同一个键):对话流顶上滑下来一条搜索栏 ----
 
@@ -593,11 +607,11 @@ public final class NumenScreen extends Screen {
         g.disableScissor();
     }
 
-    /** 搜索框随控件一起重建;窄栏没地方放它。 */
+    /** 搜索框随控件一起重建;窄栏时只有点开了才有。 */
     private void buildSearch() {
         searchUi.clear();
         searchField = null;
-        if (railW < RAIL_FULL_W) {
+        if (narrow() && !searchPopup) {
             searchActive = false;
             return;
         }
@@ -613,7 +627,7 @@ public final class NumenScreen extends Screen {
     }
 
     private boolean overSearch(double mx, double my) {
-        return searchField != null && mx >= searchBoxX() && mx < searchBoxX() + searchBoxW()
+        return searchField != null && (!narrow() || searchPopup) && mx >= searchBoxX() && mx < searchBoxX() + searchBoxW()
                 && my >= searchBoxY() && my < searchBoxY() + SEARCH_H;
     }
 
@@ -623,10 +637,11 @@ public final class NumenScreen extends Screen {
         return !railQuery.isEmpty() && overSearch(mx, my) && mx >= cx;
     }
 
-    /** 搜索框交出焦点,输入框接回来(Telegram 点别处回到写消息)。 */
+    /** 搜索框交出焦点,输入框接回来(Telegram 点别处回到写消息);窄栏上没字的浮框跟着收起。 */
     private void blurSearch() {
         searchActive = false;
         searchUi.requestFocus(null);
+        if (narrow() && railQuery.isEmpty()) searchPopup = false;
         if (inputBar != null) inputBar.setFocused(true);
     }
 
@@ -638,7 +653,7 @@ public final class NumenScreen extends Screen {
     }
 
     private void renderSearch(GuiGraphics g, int mouseX, int mouseY) {
-        if (searchField == null) return;
+        if (searchField == null || narrow() && !searchPopup) return;
         int bx = searchBoxX(), by = searchBoxY(), bw = searchBoxW();
         boolean focused = searchField.isFocused();
         // 平时只是一块底色,接字时描一圈强调色——和别处输入框聚焦同一个说法
@@ -1674,6 +1689,12 @@ public final class NumenScreen extends Screen {
                 openMainMenu();
                 return true;
             }
+            if (!modalOpen() && overSearchIcon(mouseX, mouseY)) {   // 窄栏的放大镜:浮出搜索框
+                searchPopup = true;
+                searchActive = true;
+                rebuild();
+                return true;
+            }
             if (!modalOpen() && overSearchClear(mouseX, mouseY)) {
                 clearSearch();
                 return true;
@@ -2016,6 +2037,7 @@ public final class NumenScreen extends Screen {
         }
         // 抬头以下所有页共用一段:页面本身,再往上是模态卡、浮层、提示——盖着的页上开的卡也得画得出来
         renderOverlayPage(g, mouseX, mouseY);
+        if (narrow()) renderSearch(g, mouseX, mouseY);   // 窄栏的搜索框浮在抬头左边,压在页面上
         // 对话里悬停的那张脸:提示能点开资料
         if (tab == Tab.CHAT && !modalOpen() && !overlayOpen() && chatView.faceAt(mouseX, mouseY) != null) {
             tip(java.util.List.of(Component.translatable(ModLanguageData.Keys.HEADER_PROFILE)), mouseX, mouseY);
@@ -2146,7 +2168,13 @@ public final class NumenScreen extends Screen {
             boolean menuOpen = mainMenu != null && mainMenu.isOpen();
             com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.MENU, mx0, my0, ICON_N,
                     menuOpen || hotMenu ? CTA : TXT_MUTED);
-            renderSearch(g, mouseX, mouseY);
+            if (narrow()) {
+                boolean hotSearch = overSearchIcon(mouseX, mouseY) && !overlayOpen();
+                com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.SEARCH,
+                        searchIconX(), my0, ICON_N, searchPopup || hotSearch ? CTA : TXT_MUTED);
+            } else {
+                renderSearch(g, mouseX, mouseY);
+            }
             g.fill(rowX, top + 3 + RAIL_BAR_H - 1, rowX + rowW, top + 3 + RAIL_BAR_H, t.border());
         }
         if (items.isEmpty() && !railQuery.isBlank() && railW >= RAIL_FULL_W) {
