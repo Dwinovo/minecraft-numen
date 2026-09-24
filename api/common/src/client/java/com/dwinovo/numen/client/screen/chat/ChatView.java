@@ -416,11 +416,19 @@ public final class ChatView {
             if (b instanceof Divider d && cy < y) floatDay = d.text();   // 已经翻过顶的最近那枚日期牌
             if (cy + bh > y && cy < y + h) {
                 int drawn = hits.size();
+                drawingIndex = i;
                 drawBlock(g, b, x, cy, w);
                 if (i == current && hits.size() > drawn) {
                     // 停在的那个命中:气泡外描一圈强调色
                     Hit hit = hits.get(hits.size() - 1);
                     Nb.border(g, hit.x() - 1, hit.y() - 1, hit.w() + 2, hit.h() + 2, 1, MENTION);
+                }
+                long since = frameNow - flashAt;
+                if (i == flashIndex && since < FLASH_MS && hits.size() > drawn) {
+                    // 刚跳到的那句:盖一层强调色,先亮后退
+                    Hit hit = hits.get(hits.size() - 1);
+                    int a = Math.round(0x60 * (1f - since / (float) FLASH_MS));
+                    g.fill(hit.x(), hit.y(), hit.x() + hit.w(), hit.y() + hit.h(), (MENTION & 0xFFFFFF) | (a << 24));
                 }
             }
             cy += bh + gapAfter(blocks, i);
@@ -578,6 +586,14 @@ public final class ChatView {
         }
         if (McpMode.instance().driving()) return false;   // 现场视图没有可折叠的块
         if (gw == 0 || mx < gx || mx >= gx + gw || my < gy || my >= gy + gh) return false;
+        for (Hit h : hits) {
+            // 点在气泡顶上的引用条上:跳回被引的那句
+            Quote q = h.b().quote();
+            if (q != null && mx >= h.x() && mx < h.x() + h.w() && my >= h.y() && my < h.y() + PAD_V + QUOTE_H) {
+                jumpToQuoted(h.index(), q);
+                return true;
+            }
+        }
         loadPalette();
         int cy = gy + TOP_PAD - Math.round(scrollPos);
         List<Block> blocks = build(bubbleMaxW(gw));
@@ -616,7 +632,14 @@ public final class ChatView {
     private static final int QUOTE_IN = 6;
 
     /** 这一帧画出来的气泡在哪、是哪条:右键按它认点中的是哪句。 */
-    private record Hit(int x, int y, int w, int h, Bubble b) {}
+    private record Hit(int x, int y, int w, int h, Bubble b, int index) {}
+
+    /** 正在画第几块:记进 {@link Hit},点引用条时知道从哪一块往回找。 */
+    private int drawingIndex;
+    /** 刚跳到的那一块闪一下(Telegram 点回复条跳过去,那条亮一下再退):哪一块、什么时候开始闪。 */
+    private int flashIndex = -1;
+    private long flashAt;
+    private static final int FLASH_MS = 1200;
     private final List<Hit> hits = new ArrayList<>();
 
     /** 右键点中的那句:谁说的(主人自己是 null)、原文(引用条不算在内)。 */
@@ -692,6 +715,29 @@ public final class ChatView {
             sum += heightOf(blocks.get(i)) + (i > 0 ? gapAfter(blocks, i - 1) : 0);
         }
         return sum;
+    }
+
+    /**
+     * 从第 {@code from} 块往回找被引的那句(说话的人对得上、原文以引的那截开头),找到就把它滚到对话流上三分之一处、
+     * 闪一下。引的那截是压成一行、截短过的,所以比的是开头。找不到(那句已经在视图之外)就不动。
+     */
+    private void jumpToQuoted(int from, Quote q) {
+        List<Block> blocks = build(bubbleMaxW(gw));
+        String head = q.snippet().endsWith("…") ? q.snippet().substring(0, q.snippet().length() - 1) : q.snippet();
+        for (int j = Math.min(from, blocks.size()) - 1; j >= 0; j--) {
+            if (!(blocks.get(j) instanceof Bubble bb) || bb.raw() == null) continue;
+            String speaker = bb.own() ? net.minecraft.client.Minecraft.getInstance().getUser().getName() : speaker(bb.who());
+            String flat = bb.raw().replace('\r', ' ').replace('\n', ' ').strip();
+            if (!q.who().equals(speaker) || !flat.startsWith(head)) continue;
+            int y = TOP_PAD;
+            for (int k = 0; k < j; k++) y += heightOf(blocks.get(k)) + gapAfter(blocks, k);
+            scrollTarget = Math.clamp(y - gh / 3, 0, lastMaxScroll);
+            pinBottom = scrollTarget >= lastMaxScroll;
+            lastScrollMs = System.currentTimeMillis();
+            flashIndex = j;
+            flashAt = System.currentTimeMillis();
+            return;
+        }
     }
 
     /** "未读消息"那条的顶边离内容顶多远;没有那条是 -1。 */
@@ -1168,7 +1214,7 @@ public final class ChatView {
         }
         // 气泡只有底色、没有描边(Telegram):和地面分开靠色块,不靠框线
         g.fill(bx, bubTop, bx + bw, bubTop + bh, b.fill());
-        hits.add(new Hit(bx, bubTop, bw, bh, b));
+        hits.add(new Hit(bx, bubTop, bw, bh, b, drawingIndex));
         if (b.quote() != null) {
             // 引用条(Telegram 回复的样子):一道强调色竖线、谁(强调色)、那句(和时间同一档淡字)
             int qx = bx + PAD_H, qy = bubTop + PAD_V;
