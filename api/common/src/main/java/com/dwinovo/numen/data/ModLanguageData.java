@@ -154,6 +154,9 @@ public final class ModLanguageData {
         public static final String HEADER_MEMBERS         = "numen.header.members";
         /** 点抬头名字打开的资料页(Telegram 的个人信息),和左栏 ☰ 的设置。 */
         public static final String HEADER_PROFILE         = "numen.header.profile";
+        public static final String HEADER_MORE            = "numen.header.more";
+        public static final String MENU_PROFILE           = "numen.menu.profile";
+        public static final String MENU_GROUP_INFO        = "numen.menu.group_info";
         public static final String CHAT_TODAY             = "numen.chat.today";
         public static final String CHAT_YESTERDAY         = "numen.chat.yesterday";
         public static final String CHAT_DATE_MD           = "numen.chat.date_md";
@@ -477,6 +480,9 @@ public final class ModLanguageData {
         adder.add(Keys.HEADER_COMPACTING,      "tidying memory");
         adder.add(Keys.HEADER_MEMBERS,         "%s members");
         adder.add(Keys.HEADER_PROFILE,         "Profile");
+        adder.add(Keys.HEADER_MORE,            "More");
+        adder.add(Keys.MENU_PROFILE,           "View profile");
+        adder.add(Keys.MENU_GROUP_INFO,        "View group info");
         adder.add(Keys.CHAT_TODAY,             "Today");
         adder.add(Keys.CHAT_YESTERDAY,         "Yesterday");
         adder.add(Keys.CHAT_DATE_MD,           "%s/%s");
@@ -843,6 +849,9 @@ public final class ModLanguageData {
         adder.add(Keys.HEADER_COMPACTING,      "整理记忆");
         adder.add(Keys.HEADER_MEMBERS,         "%s 位成员");
         adder.add(Keys.HEADER_PROFILE,         "资料");
+        adder.add(Keys.HEADER_MORE,            "更多");
+        adder.add(Keys.MENU_PROFILE,           "查看资料");
+        adder.add(Keys.MENU_GROUP_INFO,        "查看群资料");
         adder.add(Keys.CHAT_TODAY,             "今天");
         adder.add(Keys.CHAT_YESTERDAY,         "昨天");
         adder.add(Keys.CHAT_DATE_MD,           "%s月%s日");

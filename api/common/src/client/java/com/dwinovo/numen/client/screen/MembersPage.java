@@ -56,7 +56,7 @@ final class MembersPage {
         Nb.text(g, font, I18n.get(ModLanguageData.Keys.HEADER_MEMBERS, rows.size()), x + FACE_X, y + 7, t.cta());
         if (canInvite) {
             boolean hot = live && overInvite(mouseX, mouseY);
-            Sprites.draw(g, Sprites.PLUS, plusX(), y + (HEAD_H - Sprites.SIZE) / 2, Sprites.SIZE,
+            Sprites.draw(g, Sprites.USER_PLUS, plusX(), y + (HEAD_H - Sprites.SIZE) / 2, Sprites.SIZE,
                     hot ? t.cta() : t.textDim());
         }
         boolean droppable = rows.size() > 1;

@@ -124,8 +124,6 @@ public final class NumenScreen extends Screen {
     }
     /** 图标格边长:与名字那一行的字齐高。 */
     private static final int ICON_N = com.dwinovo.numen.client.ui.mc.Sprites.SIZE;
-    /** 两枚图标的步进。 */
-    private static final int ICON_PITCH = ICON_N + 3;
 
     private static boolean[][] buildTrashMask() {
         boolean[][] m = new boolean[16][16];
@@ -141,12 +139,9 @@ public final class NumenScreen extends Screen {
         return m;
     }
 
-    /** 头部编辑铅笔的横座标;-1 = 本帧没画(无同伴/模态中),点不中。 */
-    private int editPencilX = -1;
-    /** 头部遣散垃圾桶的横座标;与铅笔同生同灭。 */
-    private int editTrashX = -1;
-    /** 头部「＋ 拉人」的横座标;有人可拉才画。 */
-    private int editPlusX = -1;
+    /** 抬头右端 ⋮ 的横座标;-1 = 本帧没画(没有会话/盖着别的页/模态中),点不中。 */
+    private int moreX = -1;
+    private PopupMenu headerMenu;
     /** 状态行(输入框上方那一行)的高度:图标一格高加一点呼吸。她在忙、目标、计划、上下文水位都在这一行。 */
     private static final int STATUS_H = 14;
     /** 计划那一段本帧画在状态行的哪一截;宽 0 = 没画。点它展开清单。 */
@@ -167,16 +162,8 @@ public final class NumenScreen extends Screen {
     private long tipLastShownMs;
     /** 成员抬头那一行本帧画了谁(与 membersAlive 同序),点击按它判命中;空 = 本帧没画。 */
 
-    private boolean overEditPencil(double mx, double my) {
-        return overIcon(editPencilX, mx, my);
-    }
-
-    private boolean overEditTrash(double mx, double my) {
-        return overIcon(editTrashX, mx, my);
-    }
-
-    private boolean overEditPlus(double mx, double my) {
-        return overIcon(editPlusX, mx, my);
+    private boolean overMore(double mx, double my) {
+        return overIcon(moreX, mx, my);
     }
 
     private boolean overIcon(int iconX, double mx, double my) {
@@ -1009,6 +996,33 @@ public final class NumenScreen extends Screen {
         selectTab(Tab.CHAT);
     }
 
+    /**
+     * 抬头 ⋮ 的菜单,作用在左栏选中的那一格:就他俩时是查看她的资料、编辑她、邀请、遣散;
+     * 群是查看群资料、改名、邀请、解散。邀请有人可请才有;遣散/解散在最下面标红,点了还要过确认卡。
+     */
+    private void openHeaderMenu() {
+        if (headerMenu == null) headerMenu = new PopupMenu(font);
+        UUID her = solo();
+        java.util.List<PopupMenu.Item> items = new java.util.ArrayList<>();
+        items.add(new PopupMenu.Item(her != null ? com.dwinovo.numen.client.ui.mc.Sprites.USER
+                : com.dwinovo.numen.client.ui.mc.Sprites.USERS,
+                I18n.get(her != null ? ModLanguageData.Keys.MENU_PROFILE : ModLanguageData.Keys.MENU_GROUP_INFO),
+                false, this::openInfo));
+        items.add(new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.EDIT,
+                I18n.get(her != null ? ModLanguageData.Keys.EDIT_TITLE : ModLanguageData.Keys.CONVO_RENAME),
+                false, this::openEditCard));
+        if (!Conversations.instance().pullable(conv).isEmpty()) {
+            items.add(new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.USER_PLUS,
+                    I18n.get(ModLanguageData.Keys.CONVO_INVITE), false, this::openInvite));
+        }
+        items.add(PopupMenu.SEPARATOR);
+        Conversation c = conv;
+        items.add(new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.DELETE,
+                I18n.get(her != null ? ModLanguageData.Keys.EDIT_DISMISS : ModLanguageData.Keys.CONVO_DISSOLVE),
+                true, () -> { if (her != null) openDismissConfirm(her); else openDissolveConfirm(c); }));
+        headerMenu.open(overlayUi, items, moreX + ICON_N + 2, top + HEADER_H - 4);
+    }
+
     /** 抬头名字:就他俩开她的资料页,群开群资料页。 */
     private void openInfo() {
         if (solo() != null) toggleInfo(solo()); else selectTab(Tab.MEMBERS);
@@ -1258,18 +1272,8 @@ public final class NumenScreen extends Screen {
                 return super.mouseClicked(mouseX, mouseY, button);
             }
             if (tab == Tab.SETTINGS && settings.mouseClicked(mouseX, mouseY)) return true;
-            // 名字旁的三枚图标作用在左栏选中的那一格:就他俩时是她,落过盘的会话是它;「＋」邀请
-            if (conv != null && !overlayOpen() && overEditTrash(mouseX, mouseY)) {
-                // 危险操作的闸是确认卡,不是把入口藏起来
-                if (solo() != null) openDismissConfirm(solo()); else openDissolveConfirm(conv);
-                return true;
-            }
-            if (conv != null && !overlayOpen() && overEditPencil(mouseX, mouseY)) {
-                openEditCard();
-                return true;
-            }
-            if (conv != null && !overlayOpen() && overEditPlus(mouseX, mouseY)) {
-                openInvite();
+            if (conv != null && !overlayOpen() && overMore(mouseX, mouseY)) {
+                openHeaderMenu();
                 return true;
             }
             if (backAt(mouseX, mouseY)) {   // 盖着的页的 ← 退一层
@@ -1525,27 +1529,15 @@ public final class NumenScreen extends Screen {
                 txt(g, Component.literal(clip(who, headerLimit - tx)), tx, top + NAME_Y, ON_BAND);
                 renderStatusText(g, profileOf, tx, headerLimit);
             }
-            editPencilX = editTrashX = editPlusX = -1;
+            moreX = -1;
             nameRight = left + PAD;
             renderOverlayPage(g, mouseX, mouseY);
             return;
         }
-        // 名字旁的图标 = 改与删("名字在哪,编辑就在哪"的资料页定式;改与删并排、分开点,
-        // 是列表/资料页的通行习惯),再加「＋」邀请。它们作用在左栏选中的那一格:铅笔与垃圾桶
-        // 就他俩时改她/遣散,落过盘的会话改名/解散;「＋」有人可请才画。它们是入口,名字先给
-        // 它们让位,免得名字一长就没处点。
-        boolean nameIcons = conv != null && !modalOpen() && !overlayOpen();
-        boolean plusIcon = nameIcons && !Conversations.instance().pullable(conv).isEmpty();
-        // 图标靠抬头右端排(Telegram 的操作图标一律在右),从右往左:＋、垃圾桶、铅笔;名字占剩下的
-        editPencilX = editTrashX = editPlusX = -1;
-        int iconsLeft = headerLimit;
-        if (nameIcons) {
-            int rx = headerLimit - ICON_N;
-            if (plusIcon) { editPlusX = rx; rx -= ICON_PITCH; }
-            editTrashX = rx;
-            editPencilX = rx - ICON_PITCH;
-            iconsLeft = editPencilX - 8;
-        }
+        // 抬头右端只有一枚 ⋮(Telegram):改、邀请、遣散/解散这些不常用的都收进它的菜单,
+        // 危险的那项在菜单最下面标红。名字占剩下的。
+        moreX = conv != null && !modalOpen() ? headerLimit - ICON_N : -1;
+        int iconsLeft = moreX >= 0 ? moreX - 8 : headerLimit;
         int nameRoom = iconsLeft - (left + PAD);
         String title = name();
         String nm = clip(title == null ? "Numen" : title, Math.max(24, nameRoom));
@@ -1557,34 +1549,13 @@ public final class NumenScreen extends Screen {
             tip(java.util.List.of(Component.translatable(ModLanguageData.Keys.HEADER_PROFILE)), mouseX, mouseY);
         }
         int afterName = left + PAD + font.width(nm) + 6;
-        if (nameIcons) {
-            boolean hotPencil = overEditPencil(mouseX, mouseY);
-            com.dwinovo.numen.client.ui.mc.Sprites.draw(g,
-                    com.dwinovo.numen.client.ui.mc.Sprites.EDIT, editPencilX, iconTop(), ICON_N,
-                    hotPencil ? CTA : 0xFFFFFFFF);
-            // 垃圾桶常态就是危险色:红的那个是删,不用点开才知道。
-            boolean hotTrash = overEditTrash(mouseX, mouseY);
-            com.dwinovo.numen.client.ui.mc.Sprites.draw(g,
-                    com.dwinovo.numen.client.ui.mc.Sprites.DELETE, editTrashX, iconTop(), ICON_N,
-                    hotTrash ? UiTheme.mix(FAIL, 0xFFFFFFFF, 0.35f) : FAIL);
-            boolean hotPlus = false;
-            if (plusIcon) {
-                // 「＋」和铅笔、垃圾桶同一套贴图,三枚一个家族
-                hotPlus = overEditPlus(mouseX, mouseY);
-                com.dwinovo.numen.client.ui.mc.Sprites.draw(g,
-                        com.dwinovo.numen.client.ui.mc.Sprites.PLUS, editPlusX, iconTop(), ICON_N,
-                        hotPlus ? CTA : 0xFFFFFFFF);
-            }
-            // 图标不写字,就得能问出来——每枚都报自己是干嘛的。
-            if (hotPencil || hotTrash || hotPlus) {
-                boolean she = her != null;
-                String key = hotPlus ? ModLanguageData.Keys.CONVO_INVITE
-                        : hotTrash ? (she ? ModLanguageData.Keys.EDIT_DISMISS : ModLanguageData.Keys.CONVO_DISSOLVE)
-                        : (she ? ModLanguageData.Keys.EDIT_TITLE : ModLanguageData.Keys.CONVO_RENAME);
-                pendingTip = java.util.List.of(Component.translatable(key));
-                pendingTipX = mouseX;
-                pendingTipY = mouseY;
-            }
+        if (moreX >= 0) {
+            // 菜单开着时 ⋮ 保持亮着:它是菜单挂着的那个点
+            boolean menuOpen = headerMenu != null && headerMenu.isOpen();
+            boolean hotMore = !overlayOpen() && overMore(mouseX, mouseY);
+            com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.MORE,
+                    moreX, iconTop(), ICON_N, hotMore || menuOpen ? CTA : ON_BAND);
+            if (hotMore) tip(java.util.List.of(Component.translatable(ModLanguageData.Keys.HEADER_MORE)), mouseX, mouseY);
         }
         String pn = activePersonaName();                   // current persona, faint, right after the name
         if (pn != null && afterName + font.width("…") <= iconsLeft) {
@@ -1674,6 +1645,7 @@ public final class NumenScreen extends Screen {
         overlayUi.render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
                 com.dwinovo.numen.client.screen.settings.HostThemeColors.current(),
                 mouseX, mouseY, net.minecraft.Util.getMillis());
+        if (headerMenu != null) headerMenu.renderFading(g, mouseX, mouseY);   // 刚收起的菜单淡出那几帧
 
         // Hovered tooltip — drawn last so nothing paints over it; only after the pointer has rested a while.
         if (pendingTip != null && !overlayOpen()) {

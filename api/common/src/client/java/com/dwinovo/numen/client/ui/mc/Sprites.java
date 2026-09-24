@@ -36,8 +36,11 @@ public final class Sprites {
     public static final ResourceLocation MIC = icon("icon_mic");
     public static final ResourceLocation SEND = icon("icon_send");
     public static final ResourceLocation STOP = icon("icon_stop");
-    /** 抬头的「＋」(邀请),和铅笔、垃圾桶同一套。 */
-    public static final ResourceLocation PLUS = icon("icon_plus");
+    /** 抬头右端的 ⋮(更多),以及它菜单里的查看资料、查看群资料、邀请。 */
+    public static final ResourceLocation MORE = icon("icon_more");
+    public static final ResourceLocation USER = icon("icon_user");
+    public static final ResourceLocation USERS = icon("icon_users");
+    public static final ResourceLocation USER_PLUS = icon("icon_user_plus");
     /** 左栏顶上的 ☰(设置)与设置页抬头的 ←(回到对话)。 */
     public static final ResourceLocation MENU = icon("icon_menu");
     public static final ResourceLocation BACK = icon("icon_back");
