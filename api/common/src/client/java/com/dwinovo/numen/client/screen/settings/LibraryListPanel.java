@@ -132,7 +132,7 @@ public final class LibraryListPanel<T> {
         return this;
     }
 
-    /** 行内启停开关(行右端的小开关;行体点击仍=编辑)。 */
+    /** 行内启停开关(行右端的小开关;有编辑的库行体点击仍=编辑,没有的整行都是开关)。 */
     public LibraryListPanel<T> withRowToggle(java.util.function.Predicate<T> isOn, Consumer<T> flip) {
         this.toggleOn = isOn;
         this.toggleFlip = flip;
@@ -346,7 +346,8 @@ public final class LibraryListPanel<T> {
     private boolean rowClicked(int index, double xInRow) {
         if (index < 0 || index >= entries.size()) return false;
         T e = entries.get(index);
-        if (toggleOn != null && xInRow >= listW - TOGGLE_ZONE) {
+        if (toggleOn != null && (onEdit == null || xInRow >= listW - TOGGLE_ZONE)) {
+            // 点开关翻转;没有编辑的库(技能)整行都是开关——Telegram 设置里带开关的行点哪儿都翻
             animRow = index;                                  // 从翻转前的位置起步滑动
             animKnob = toggleOn.test(e) ? 1f : 0f;
             toggleFlip.accept(e);

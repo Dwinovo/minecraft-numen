@@ -850,7 +850,7 @@ public final class SettingsView {
         return java.util.Map.copyOf(out);
     }
 
-    // ---- 技能列表:通用 LibraryListPanel 的纯开关形态(无新建/编辑/删除) ----
+    // ---- 技能列表:通用 LibraryListPanel 的纯开关形态(无新建/编辑/删除,一行一个技能,整行点了就翻开关) ----
     private LibraryListPanel<com.dwinovo.numen.agent.skill.SkillInfo> skillsListPanel;
 
     private LibraryListPanel<com.dwinovo.numen.agent.skill.SkillInfo> skillsListPanel() {

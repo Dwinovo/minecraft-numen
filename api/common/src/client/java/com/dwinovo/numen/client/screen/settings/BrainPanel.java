@@ -9,7 +9,6 @@ import com.dwinovo.numen.client.ui.widget.Button;
 import com.dwinovo.numen.client.ui.widget.ConfirmDialog;
 import com.dwinovo.numen.client.ui.widget.Disclosure;
 import com.dwinovo.numen.client.ui.widget.InlineAlert;
-import com.dwinovo.numen.client.ui.widget.Label;
 import com.dwinovo.numen.client.ui.widget.ScrollBox;
 import com.dwinovo.numen.client.ui.widget.TextField;
 import com.dwinovo.numen.client.ui.widget.Toggle;
@@ -34,8 +33,12 @@ import java.util.List;
  * 想细调的人点开就是。装不下就滚动({@link ScrollBox}),不再藏一层子页。
  *
  * <h2>两层:滚的与不滚的</h2>
- * 抬头(标题 + 主开关)、话筒那一行、收尾的复制提示词按钮固定不动,其余的行在滚动层里。
- * 手绘的几条(地址框、警示、说明、分隔线)也在滚动层,所以要减掉 {@link ScrollBox#offset()}。
+ * 总开关那一行、话筒那一行、收尾的复制提示词按钮固定不动,其余的行在滚动层里。
+ * 手绘的几条(地址与令牌的值、局域网警示)也在滚动层,所以要减掉 {@link ScrollBox#offset()}。
+ *
+ * <h2>版式</h2>
+ * 照 Telegram 设置行({@link SettingsRows}):一行一项,左标签右值或右开关,组与组之间一道宽缝——
+ * 总开关、接入信息、高级设置、拨了就生效的那一条,各是一组。
  *
  * <h2>草稿在字段上,不在控件上</h2>
  * 端口/局域网/超时/不暴露的工具是草稿,保存才落地;草稿记在本类字段上,折叠、展开、
@@ -76,7 +79,7 @@ public final class BrainPanel {
     private int dimX, dimY, dimW, dimH;
 
     /** 手绘几条的基线(滚动层坐标,画的时候减 {@link ScrollBox#offset()})。 */
-    private int endpointRow, lanRow, ruleRow;
+    private int endpointRow, tokenRow, lanRow;
     /** 话筒那一行的顶边(固定层):起服失败与回执胶囊落在这儿,平时空着。 */
     private int msgRow;
     /** 收尾行的顶边与复制提示词按钮的宽:那句令牌提醒紧挨着它画。 */
@@ -108,14 +111,15 @@ public final class BrainPanel {
         Font font = Minecraft.getInstance().font;
 
         // ---- 固定层 ----
-        // 这一页叫什么在面板抬头上;这一行是一条设置:左边说开关管什么,右边是开关
-        Label title = fixedUi.add(new Label(t("numen.brain.enable"), Label.Role.PRIMARY));
-        title.setBounds(x, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 9), w - 140, 9);
+        // 这一页叫什么在面板抬头上;第一行是一条设置:左边说开关管什么,右边是开关
+        SettingsRows.label(fixedUi, t("numen.brain.enable"), x, y, w - 140);
         // 开关回调只写配置,绝不在此重建——重建会 new 出滑块已在终点的新 Toggle,
         // 滑动动画连起步都来不及(真机教训:大脑区开关瞬时切换的病根)。
-        // 开关本身就是"开着还是关着",抬头不另写一句;开着时抬头右边报接上没接上(见 render)。
+        // 开关本身就是"开着还是关着",这一行不另写一句;开着时开关左边报接上没接上(见 render)。
         Toggle tog = fixedUi.add(new Toggle(mcp.enabled(), McpMode.instance()::setEnabled));
-        tog.setBounds(x + w - 24, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 11), 22, 11);
+        tog.setBounds(x + w - 24, SettingsRows.controlY(y, 11), 22, 11);
+        // 总开关自成一组,和下面接入要用的东西之间一道宽缝
+        SettingsRows.gap(fixedUi, x, y + SettingsRows.ROW_H, w);
 
         int footer = NumenStyle.footerTop(y, h);
         msgRow = footer - 5 - 9;
@@ -128,112 +132,108 @@ public final class BrainPanel {
         fixedUi.add(notice).setBounds(x, msgRow - 3, w, 15);
 
         // ---- 滚动层 ----
-        int top = NumenStyle.bodyTop(y);
+        // 一行一项,左标签右值(Telegram 设置行):地址、令牌的值是强调色的字,在 render 里右对齐画,
+        // 紧挨着它们的是作用在它们身上的图标钮——值右对齐贴着图标,动作就贴着它作用的那个东西。
+        int top = y + SettingsRows.ROW_H + SettingsRows.GAP_H;
         int ry = top;
-        // 地址是这一页的主角:带框的只读地址 + 复制,和 LM Studio 那类本地服务页同形。
         endpointRow = ry;
+        SettingsRows.label(ui, t("numen.brain.endpoint"), x, ry, labelW());
         iconButton(Sprites.COPY, t("numen.brain.copy"), x + w - ICON_BTN, ry,
                 () -> copy(McpMode.instance().endpoint()));
-        ry += NumenStyle.ROW_PITCH;
+        ry += SettingsRows.ROW_H;
 
-        // 令牌这一行:标签、令牌、两枚图标依次挨着排——动作贴着它作用的那个东西;
-        // 钉在行尾的话,眼睛得在中间那段空白上来回找。
-        int textY = NumenStyle.centerIn(ry, NumenStyle.CONTROL_H, 9);
-        String tokenLabel = t("numen.brain.token");
-        int tokenLabelW = font.width(tokenLabel);
-        ui.add(new Label(tokenLabel, Label.Role.MUTED)).setBounds(x, textY, tokenLabelW, 9);
-        boolean noToken = mcp.token().isBlank();
-        String token = tokenText();
-        int tokenX = x + tokenLabelW + 8;
-        int tokenW = Math.min(font.width(token), w - (tokenX - x) - ICON_PITCH * 2 - 6);
-        ui.add(new Label(token, noToken ? Label.Role.MUTED : Label.Role.PRIMARY))
-                .setBounds(tokenX, textY, tokenW, 9);
-        int iconX = tokenX + tokenW + 6;
+        tokenRow = ry;
+        SettingsRows.label(ui, t("numen.brain.token"), x, ry, labelW());
         // 没令牌时复制没得复制:留在原地置灰,这一行的排布不跟着跳。
-        iconButton(Sprites.COPY, t("numen.brain.copy"), iconX, ry,
-                () -> copy(McpMode.instance().token())).setEnabled(!noToken);
-        iconButton(Sprites.REFRESH, t("numen.brain.regenerate"), iconX + ICON_PITCH, ry,
+        iconButton(Sprites.COPY, t("numen.brain.copy"), x + w - ICON_BTN - ICON_PITCH, ry,
+                () -> copy(McpMode.instance().token())).setEnabled(!mcp.token().isBlank());
+        iconButton(Sprites.REFRESH, t("numen.brain.regenerate"), x + w - ICON_BTN, ry,
                 this::askRegenerate);
-        ry += NumenStyle.ROW_PITCH + 4;
+        ry += SettingsRows.ROW_H;
+        SettingsRows.gap(ui, x, ry, w);
+        ry += SettingsRows.GAP_H;
 
         Disclosure adv = ui.add(new Disclosure(t("numen.brain.advanced"), advanced, () -> {
             advanced = !advanced;
             scroll.toTop();     // 换了一份内容,上一份滚到哪儿了与这份无关
             build(this.x, this.y, this.w, this.h);
         }));
-        adv.setBounds(x, ry, w, NumenStyle.CONTROL_H);
-        int bottom = ry + NumenStyle.CONTROL_H;
+        adv.setBounds(x, SettingsRows.controlY(ry, NumenStyle.CONTROL_H), w, NumenStyle.CONTROL_H);
+        int bottom = ry + SettingsRows.ROW_H;
 
         if (advanced) {
-            ry += NumenStyle.ROW_PITCH + 4;
+            ry += SettingsRows.ROW_H;
             // 端口与「允许局域网」= 上面那条地址的两截。后者是 host 的人话面:关=127.0.0.1,
             // 开=0.0.0.0。玩家不必知道那五个字符,想绑具体网卡的高级用户改
             // config/numen/mcp_server.json —— 配置文件就是逃生舱。
-            rowLabel(t("numen.brain.port"), ry, w - NUM_FIELD_W - 8);
+            SettingsRows.label(ui, t("numen.brain.port"), x, ry, w - NUM_FIELD_W - 8);
             portText = portText != null ? portText : String.valueOf(cfg.port());
             portField = ui.add(new TextField(portText, v -> {
                 portText = v;
                 refreshSaveState();
-            }).numeric());
-            portField.setBounds(x + w - RIGHT_INSET - NUM_FIELD_W, ry, NUM_FIELD_W,
-                    NumenStyle.CONTROL_H);
-            ry += NumenStyle.ROW_PITCH;
+            }).numeric().underlined(true));
+            portField.setBounds(x + w - RIGHT_INSET - NUM_FIELD_W, SettingsRows.controlY(ry, NumenStyle.CONTROL_H),
+                    NUM_FIELD_W, NumenStyle.CONTROL_H);
+            ry += SettingsRows.ROW_H;
 
             lanRow = ry;
-            rowLabel(t("numen.brain.lan"), ry, w - 28);
+            SettingsRows.label(ui, t("numen.brain.lan"), x, ry, w - 28);
             Toggle lan = ui.add(new Toggle(lanNow(), on -> {
                 lanOn = on;
                 refreshSaveState();
             }));
-            lan.setBounds(x + w - 24, NumenStyle.centerIn(ry, NumenStyle.CONTROL_H, 11), 22, 11);
-            ry = noteBelow(lanRow) + 9 + 5;
+            lan.setBounds(x + w - 24, SettingsRows.controlY(ry, 11), 22, 11);
+            ry = noteBelow(lanRow) + 9 + 3;
 
-            rowLabel(t("numen.brain.timeout"), ry, w - NUM_FIELD_W - 8);
+            SettingsRows.label(ui, t("numen.brain.timeout"), x, ry, w - NUM_FIELD_W - 8);
             timeoutText = timeoutText != null ? timeoutText
                     : String.valueOf(cfg.callTimeoutSeconds());
             TextField timeoutField = ui.add(new TextField(timeoutText, v -> timeoutText = v)
-                    .numeric());
-            timeoutField.setBounds(x + w - RIGHT_INSET - NUM_FIELD_W, ry, NUM_FIELD_W,
-                    NumenStyle.CONTROL_H);
-            ry += NumenStyle.ROW_PITCH;
+                    .numeric().underlined(true));
+            timeoutField.setBounds(x + w - RIGHT_INSET - NUM_FIELD_W, SettingsRows.controlY(ry, NumenStyle.CONTROL_H),
+                    NUM_FIELD_W, NumenStyle.CONTROL_H);
+            ry += SettingsRows.ROW_H;
 
-            rowLabel(t("numen.brain.hidden_tools"), ry, HIDDEN_LABEL_W);
+            SettingsRows.label(ui, t("numen.brain.hidden_tools"), x, ry, HIDDEN_LABEL_W);
             hiddenText = hiddenText != null ? hiddenText : String.join(", ", cfg.hiddenTools());
             int hiddenW = w - RIGHT_INSET - HIDDEN_LABEL_W - 8;
             TextField hiddenField = ui.add(new TextField(hiddenText, v -> hiddenText = v)
-                    .placeholder(t("numen.brain.hidden_hint")));
-            hiddenField.setBounds(x + w - RIGHT_INSET - hiddenW, ry, hiddenW, NumenStyle.CONTROL_H);
-            ry += NumenStyle.ROW_PITCH;
+                    .placeholder(t("numen.brain.hidden_hint")).underlined(true));
+            hiddenField.setBounds(x + w - RIGHT_INSET - hiddenW, SettingsRows.controlY(ry, NumenStyle.CONTROL_H),
+                    hiddenW, NumenStyle.CONTROL_H);
+            ry += SettingsRows.ROW_H;
 
             saveButton = ui.add(new Button(saveLabel(), Button.Style.NORMAL, this::save));
-            saveButton.setBounds(x + w - RIGHT_INSET - SAVE_W, ry, SAVE_W, NumenStyle.CONTROL_H);
+            saveButton.setBounds(x + w - RIGHT_INSET - SAVE_W, SettingsRows.controlY(ry, NumenStyle.CONTROL_H),
+                    SAVE_W, NumenStyle.CONTROL_H);
             refreshSaveState();
-            ry += NumenStyle.CONTROL_H + 8;
+            ry += SettingsRows.ROW_H;
 
-            // 上面那四行要点保存才算数,下面这个拨了就算——中间画一道线,别让人以为还得保存。
-            ruleRow = ry;
-            ry += 7;
+            // 上面那四行要点保存才算数,下面这个拨了就算——分成两组,中间一道宽缝,别让人以为还得保存。
+            SettingsRows.gap(ui, x, ry, w);
+            ry += SettingsRows.GAP_H;
 
-            rowLabel(I18n.get("numen.brain.quiet_toggle", McpMode.QUIET_AFTER_MS / 60_000L),
-                    ry, w - 28);
+            SettingsRows.label(ui, I18n.get("numen.brain.quiet_toggle", McpMode.QUIET_AFTER_MS / 60_000L),
+                    x, ry, w - 28);
             Toggle quiet = ui.add(new Toggle(cfg.quietFallback(),
                     McpMode.instance()::setQuietFallback));
-            quiet.setBounds(x + w - 24, NumenStyle.centerIn(ry, NumenStyle.CONTROL_H, 11), 22, 11);
-            bottom = ry + NumenStyle.CONTROL_H;
+            quiet.setBounds(x + w - 24, SettingsRows.controlY(ry, 11), 22, 11);
+            bottom = ry + SettingsRows.ROW_H;
         }
 
         // 视口到话筒那一行为止;内容装不下就滚,装得下连拇指都不画。
-        scroll.measure(ui, x, top, w, msgRow - 4 - top, bottom - top);
+        // 视口左右各放宽一圈内边距:组间宽缝铺满整页宽,不能被裁在内容边上。
+        scroll.measure(ui, x - NumenStyle.PAD, top, w + NumenStyle.PAD * 2, msgRow - 4 - top, bottom - top);
     }
 
-    /** 高级设置里每一行的标签:行内垂直居中,左边沿对齐。 */
-    private void rowLabel(String text, int row, int labelW) {
-        Label label = ui.add(new Label(text, Label.Role.MUTED));
-        label.setBounds(x, NumenStyle.centerIn(row, NumenStyle.CONTROL_H, 9), labelW, 9);
+    /** 地址、令牌两行标签的宽:值从右往左排,标签只要自己那几个字。 */
+    private int labelW() {
+        Font font = Minecraft.getInstance().font;
+        return Math.max(font.width(t("numen.brain.endpoint")), font.width(t("numen.brain.token")));
     }
 
     /** 要解释的行下面那一句小灰字的顶边。 */
-    private static int noteBelow(int row) { return row + NumenStyle.CONTROL_H + 1; }
+    private static int noteBelow(int row) { return SettingsRows.controlY(row, NumenStyle.CONTROL_H) + NumenStyle.CONTROL_H + 1; }
 
     private boolean lanNow() {
         return lanOn != null ? lanOn : McpMode.instance().config().lanExposed();
@@ -334,7 +334,7 @@ public final class BrainPanel {
                     McpMode.instance().applySettings(cfg.host(), cfg.port(),
                             cfg.callTimeoutSeconds(), cfg.hiddenTools(), McpConfig.mintToken());
                     notice.show(InlineAlert.Severity.SUCCESS, t("numen.brain.saved"), 2_000);
-                    build(x, y, w, h);   // 新令牌长短不同,两枚图标得跟着挪
+                    build(x, y, w, h);   // 令牌从无到有时,复制钮得跟着亮起来
                 });
     }
 
@@ -350,14 +350,11 @@ public final class BrainPanel {
 
         scroll.beginClip(s);
         int dy = -scroll.offset();
-        // 地址框:只读,像输入框一样有个框,右边就是复制——一眼看出"这条是拿去填给 AI 的"。
-        int fieldW = w - ICON_BTN - 4;
-        NumenStyle.box(s, x, endpointRow + dy, fieldW, NumenStyle.CONTROL_H,
-                c.inputBg(), c.inputBorder());
-        s.drawText(TextClip.fit(s, mcp.endpoint(), fieldW - NumenStyle.FIELD_PAD * 2),
-                x + NumenStyle.FIELD_PAD,
-                NumenStyle.centerIn(endpointRow + dy, NumenStyle.CONTROL_H, s.lineHeight()),
-                c.textPrimary(), false);
+        // 地址与令牌:行右侧的值(Telegram 设置行右侧是强调色的字),右对齐贴着各自的图标钮
+        int valueX = x + labelW() + 8;
+        rightValue(s, mcp.endpoint(), valueX, x + w - ICON_BTN - 4, endpointRow + dy, c.accent());
+        rightValue(s, tokenText(), valueX, x + w - ICON_BTN - ICON_PITCH - 4, tokenRow + dy,
+                mcp.token().isBlank() ? c.textMuted() : c.accent());
         if (advanced) {
             // 绑到所有网卡这件事本身会成功,只是降级——按自家判据是 warning 不是 danger。
             // 但令牌为空时它就变成"这次保存不该发生",那才是 danger。
@@ -366,18 +363,17 @@ public final class BrainPanel {
                 s.drawText(t(noToken ? "numen.brain.lan_needs_token" : "numen.brain.lan_warn"),
                         x, noteBelow(lanRow) + dy, noToken ? c.danger() : c.warning(), false);
             }
-            s.fillRect(x, ruleRow + dy, w, 1, c.divider());
         }
         ui.renderContent(s, c, mouseX, mouseY, nowMs);
         scroll.endClip(s);
         scroll.renderThumb(s, c);
 
-        // 开着时抬头右边报一句接上没接上(等待接入 / 谁在用 · 多久前);关着时开关自己就说明了。
+        // 开着时开关左边报一句接上没接上(等待接入 / 谁在用 · 多久前);关着时开关自己就说明了。
         if (mcp.enabled()) {
             String badge = statusLine(mcp);
             int bw = Minecraft.getInstance().font.width(badge) + 8;
             Badge.draw(s, badge, x + w - 30 - bw,
-                    NumenStyle.centerIn(y, NumenStyle.HEADER_H, s.lineHeight()),
+                    SettingsRows.controlY(y, s.lineHeight()),
                     mcp.clientName() == null ? c.warning() : c.success(), 0xFFFFFFFF);
         }
         // 令牌就在提示词里,这句提醒紧挨着那个按钮——它是按钮的注脚,不是另起一行的公告。
@@ -394,6 +390,12 @@ public final class BrainPanel {
 
         ui.renderOverlayLayer(s, c, mouseX, mouseY, nowMs);
         fixedUi.render(s, c, mouseX, mouseY, nowMs);
+    }
+
+    /** 行右侧的值:在 {@code [left, right)} 里右对齐,放不下从尾部收口。 */
+    private static void rightValue(IDrawSurface s, String text, int left, int right, int rowY, int color) {
+        String shown = TextClip.fit(s, text, Math.max(0, right - left));
+        s.drawText(shown, right - s.textWidth(shown), SettingsRows.controlY(rowY, s.lineHeight()), color, false);
     }
 
     /** 悬停在哪枚图标上要说的一句;宿主画完这一分区再把它画在最上面。 */
@@ -438,7 +440,7 @@ public final class BrainPanel {
         Button b = ui.add(new Button(tip, Button.Style.GHOST, action)
                 .icon(Sprites.SIZE, Sprites.painter(sprite))
                 .tooltip(tip));
-        b.setBounds(bx, NumenStyle.centerIn(by, NumenStyle.CONTROL_H, ICON_BTN), ICON_BTN, ICON_BTN);
+        b.setBounds(bx, SettingsRows.controlY(by, ICON_BTN), ICON_BTN, ICON_BTN);
         iconButtons.add(b);
         return b;
     }
