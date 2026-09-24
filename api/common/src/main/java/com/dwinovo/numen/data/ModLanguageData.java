@@ -525,7 +525,6 @@ public final class ModLanguageData {
         adder.add("numen.chat.reasoning",    "Reasoning");
         adder.add("numen.chat.reasoning_now", "Thinking");
         adder.add("numen.pin.goal", "Goal");
-        adder.add("numen.pin.plan", "Plan %s/%s");
         adder.add("numen.pin.goal_meta", "Turn %s · %s");
         adder.add("numen.menu.copy", "Copy text");
         adder.add("numen.menu.reply", "Reply");
@@ -946,7 +945,6 @@ public final class ModLanguageData {
         adder.add("numen.chat.reasoning",    "思考过程");
         adder.add("numen.chat.reasoning_now", "思考中");
         adder.add("numen.pin.goal", "目标");
-        adder.add("numen.pin.plan", "计划 %s/%s");
         adder.add("numen.pin.goal_meta", "第 %s 轮 · %s");
         adder.add("numen.menu.copy", "复制文字");
         adder.add("numen.menu.reply", "引用回复");

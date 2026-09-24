@@ -53,11 +53,12 @@ import java.util.UUID;
  *
  * <h2>Chat tab</h2>
  * A scrollable transcript that takes the full width, from the name band down to a dim status line
- * above the input (pi's footer + working indicator in one): spinner while she works, her goal, her
- * plan ("计划 2/5", click to unfold upward over the transcript), context percent on the right. Tool calls
+ * above the input (pi's footer + working indicator in one): spinner while she works, context percent
+ * on the right. Her long-term goal is pinned under the header (click to unfold its details, × hides
+ * it for this session); her plan ({@code todowrite}) is a checklist message in the transcript. Tool calls
  * show a spinner while running and a green check once their result lands — the raw
  * tool-result JSON is NOT shown (it only flips the call to done), keeping the chat
- * readable. The plan is the companion's latest {@code todowrite}.
+ * readable.
  */
 public final class NumenScreen extends Screen {
 
@@ -132,14 +133,16 @@ public final class NumenScreen extends Screen {
     private static final int STATUS_H = 14;
     /** 那一行露出多高(像素,按趋近走):平时 0,不占地方。 */
     private float dockShown;
-    /** 置顶条(Telegram 的置顶消息)的高度、露出多高、这一帧的顶边;她有目标或计划时从抬头下面滑出来。 */
+    /** 置顶条(Telegram 的置顶消息)的高度、露出多高、这一帧的顶边;她有目标、主人没点 × 时从抬头下面滑出来。 */
     private static final int PIN_H = 26;
     private float pinShown;
     private int pinY;
     private long lastPinFrameMs;
-    /** 置顶条点开没有;展开的目标与清单这一帧露出多高(像素,按趋近走,收起是往 0 走,走完才不画)。 */
-    private boolean planOpen;
-    private float planShownH;
+    /** 置顶条上画的那个目标:目标清掉或被收起后,条滑走的那几帧还得画着它的字,不先变空再走。 */
+    private com.dwinovo.numen.agent.goal.GoalState pinGoal;
+    /** 置顶条点开没有;展开的目标详情这一帧露出多高(像素,按趋近走,收起是往 0 走,走完才不画)。 */
+    private boolean goalOpen;
+    private float goalShownH;
     /**
      * 悬停提示延迟出:和网页一样,指针停住一会儿才出,扫过去不闪。同一条提示从第一次出现起计时,
      * 内容一变重新计——所以键是提示的文字本身。
@@ -436,8 +439,8 @@ public final class NumenScreen extends Screen {
         findQuery = "";
         chatView.search(null);
         if (tab == Tab.ITEMS || tab == Tab.MEMBERS) selectTab(Tab.CHAT);   // 换了会话,资料页收起(Telegram 也这样)
-        planOpen = false;
-        planShownH = 0f;
+        goalOpen = false;
+        goalShownH = 0f;
         chatView.reset();
         rebuild();
         if (tab == Tab.ITEMS && solo() != null) requestInventory();
@@ -1171,8 +1174,8 @@ public final class NumenScreen extends Screen {
         baseTab = Tab.CHAT;   // 直接开关的页都垫在对话上;一层层推进去的见 pushProfile
         if (t != Tab.CHAT) overlayKind = t;   // 收回去时 tab 已是 CHAT,靠它记住往哪边收
         if (t == Tab.SETTINGS) settings.showList();   // 设置页每次从首页开始
-        planOpen = false;
-        planShownH = 0f;
+        goalOpen = false;
+        goalShownH = 0f;
         chatView.reset();
         if (t == Tab.ITEMS) requestInventory();
         rebuild();
@@ -1774,12 +1777,18 @@ public final class NumenScreen extends Screen {
             if (!overlayOpen() && membersClicked(mouseX, mouseY)) return true;
             if (!overlayOpen() && profileClicked(mouseX, mouseY)) return true;
             if (tab == Tab.CHAT && pinShown > PIN_H - 1 && mouseX >= left + 3 && mouseX < left + panelW - 3
-                    && mouseY >= pinY && mouseY < pinY + PIN_H) {   // 置顶条:点开/收起目标与清单
-                planOpen = !planOpen;
+                    && mouseY >= pinY && mouseY < pinY + PIN_H) {
+                if (mouseX >= pinCloseX()) {
+                    // ×:这个目标本局不再置顶,条滑走;换了新目标再出现
+                    com.dwinovo.numen.client.screen.chat.PinnedGoal.dismiss(pinGoal);
+                    goalOpen = false;
+                } else {
+                    goalOpen = !goalOpen;   // 点条本身:展开/收起目标详情
+                }
                 return true;
             }
-            if (tab == Tab.CHAT && planOpen) {
-                planOpen = false;   // 展开的清单盖在对话流上:点别处只负责收起
+            if (tab == Tab.CHAT && goalOpen) {
+                goalOpen = false;   // 展开的详情盖在对话流上:点别处只负责收起
                 return true;
             }
             if (tab == Tab.CHAT && inputBar != null
@@ -2781,13 +2790,11 @@ public final class NumenScreen extends Screen {
     // ---- chat transcript + plan ----
 
     /**
-     * 置顶条(Telegram 的置顶消息那一条):左一道强调色竖线;第一行强调色写"计划 2/5"加一排小格
-     * (只有目标时写"目标"),第二行是正在做的那一步,没有计划时是目标本身;右端一个箭头,点开往下展开。
+     * 置顶条(Telegram 的置顶消息那一条):左一道强调色竖线;第一行强调色写"目标",第二行是目标本身;
+     * 右端一个 ×,点了本局收起。点条本身往下展开目标详情。
      * 目标不把评估器那句"还差什么"摆出来——没达成就静默接着干,不该每轮在主人眼前刷判词。
      */
-    private void renderPin(GuiGraphics g, EntityAgentLoop lp,
-                           com.dwinovo.numen.client.screen.chat.PlanStrip.Progress progress,
-                           com.dwinovo.numen.agent.goal.GoalState goal, int y, int mouseX, int mouseY, long now) {
+    private void renderPin(GuiGraphics g, com.dwinovo.numen.agent.goal.GoalState goal, int y, int mouseX, int mouseY) {
         UiTheme t = UiTheme.current();
         int x = left + 3, w = panelW - 6;
         int shown = Math.round(pinShown);
@@ -2795,22 +2802,21 @@ public final class NumenScreen extends Screen {
         int py = y + shown - PIN_H;   // 从抬头下面滑下来
         boolean hot = !modalOpen() && !overlayOpen() && mouseX >= x && mouseX < x + w
                 && mouseY >= y && mouseY < y + shown;
+        boolean closeHot = hot && mouseX >= pinCloseX();
         g.fill(x, py, x + w, py + PIN_H, hot ? t.over() : t.band());
         g.fill(x, py + PIN_H - 1, x + w, py + PIN_H, t.surfaceBorder());
         g.fill(left + PAD, py + 4, left + PAD + 2, py + PIN_H - 4, CTA);
         int tx = left + PAD + 8;
-        int right = left + panelW - PAD - 12;
-        String label = com.dwinovo.numen.client.screen.chat.PlanStrip.label(progress);
-        txt(g, Component.literal(label), tx, py + 4, t.accent());
-        if (progress != null) {
-            int sx = tx + font.width(label) + 6;
-            com.dwinovo.numen.client.screen.chat.PlanStrip.segments(g, lp, sx, py + 6, right - sx, now);
-        }
-        String line = progress != null && progress.current() != null ? progress.current()
-                : goal != null ? goal.objective() : "";
-        txt(g, Component.literal(Nb.clip(font, line, right - tx)), tx, py + 14, TXT);
-        chevron(g, left + panelW - PAD - 5, py + (PIN_H - 6) / 2, planOpen);
+        txt(g, Component.literal(I18n.get("numen.pin.goal")), tx, py + 4, t.accent());
+        txt(g, Component.literal(Nb.clip(font, goal.objective(), pinCloseX() - 4 - tx)), tx, py + 14, TXT);
+        int cx = pinCloseX() + (left + panelW - 3 - pinCloseX() - font.width("×")) / 2;
+        txt(g, Component.literal("×"), cx, py + (PIN_H - 8) / 2, closeHot ? TXT : TXT_MUTED);
         g.disableScissor();
+    }
+
+    /** 置顶条右端 × 那一格的左缘:从这儿到条的右缘点下去是收起,不是展开。 */
+    private int pinCloseX() {
+        return left + panelW - PAD - 12;
     }
 
     private void tip(List<Component> lines, int x, int y) {
@@ -2833,15 +2839,15 @@ public final class NumenScreen extends Screen {
         long now = System.currentTimeMillis();
         float dt = lastPinFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastPinFrameMs) / 1000f);
         lastPinFrameMs = now;
-        // 置顶条(Telegram 的置顶消息):她有目标或计划时从抬头下面滑出来;对话流往下让
+        // 置顶条(Telegram 的置顶消息):她有目标、主人没点 × 时从抬头下面滑出来;对话流往下让
         int pinTop = top + HEADER_H + Math.round(findShown);
-        var progress = lp == null ? null : com.dwinovo.numen.client.screen.chat.PlanStrip.progress(lp);
         var goal = lp == null ? null : lp.goal();
-        boolean pinned = progress != null || goal != null;
-        if (!pinned) planOpen = false;
+        boolean pinned = goal != null && !com.dwinovo.numen.client.screen.chat.PinnedGoal.dismissed(goal);
+        if (pinned) pinGoal = goal;
+        else goalOpen = false;
         pinShown = com.dwinovo.numen.client.ui.Anim.approach(pinShown, pinned ? PIN_H : 0f, 18f, dt);
         pinY = pinTop;
-        if (pinShown > 0.5f && lp != null) renderPin(g, lp, progress, goal, pinTop, mouseX, mouseY, now);
+        if (pinShown > 0.5f && pinGoal != null) renderPin(g, pinGoal, pinTop, mouseX, mouseY);
         int bodyY = pinTop + 4 + Math.round(pinShown);
         int transX = left + PAD;
         int transW = panelW - PAD * 2;   // 对话流永远占满整行
@@ -2872,14 +2878,11 @@ public final class NumenScreen extends Screen {
             chatView.render(g, transX, bodyY, transW, bodyBottom - bodyY, mouseX, mouseY);
         }
 
-        // 置顶条点开:目标与清单从它下面往下长,盖在对话流上;展开/收起都有过渡,收完才不画
-        if (lp != null && (planOpen || planShownH > 0f)) {
-            String goalLine = goal == null ? null : goal.objective();
-            String goalMeta = goal == null ? null : I18n.get("numen.pin.goal_meta", goal.turnsExecuted(),
-                    com.dwinovo.numen.agent.goal.GoalPrompts.elapsed(goal.elapsedMs(now)));
-            int fullH = com.dwinovo.numen.client.screen.chat.PlanStrip.renderOpen(g, font, lp, goalLine, goalMeta,
-                    transX, transW, pinTop + PIN_H, bodyBottom, Math.round(planShownH), now);
-            planShownH = com.dwinovo.numen.client.ui.Anim.approach(planShownH, planOpen ? fullH : 0f, 16f, dt);
+        // 置顶条点开:目标详情从它下面往下长,盖在对话流上;展开/收起都有过渡,收完才不画
+        if (pinGoal != null && (goalOpen || goalShownH > 0f)) {
+            int fullH = com.dwinovo.numen.client.screen.chat.PinnedGoal.renderOpen(g, font, pinGoal,
+                    transX, transW, pinTop + PIN_H, bodyBottom, Math.round(goalShownH), now);
+            goalShownH = com.dwinovo.numen.client.ui.Anim.approach(goalShownH, goalOpen ? fullH : 0f, 16f, dt);
         }
         // 框里已有文字时占位不显示,这条兜底行接管(用醒目的 FAIL 色)
         if (noticeLine) {
