@@ -4,12 +4,18 @@ import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
+import com.dwinovo.numen.api.gear.GearSlot;
+import com.dwinovo.numen.api.gear.GearSource;
 import com.dwinovo.numen.entity.CompanionEvents;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.event.NumenEvents;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.item.ItemStack;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.Map;
@@ -88,8 +94,58 @@ public final class NumenPlugins {
      */
     private static final List<Function<UUID, String>> STATE = new CopyOnWriteArrayList<>();
 
-    /** 插件从身体上读的状态片段。见 {@link NumenApi#contributeBodyState}。 */
-    private static final List<Function<NumenPlayer, String>> BODY_STATE = new CopyOnWriteArrayList<>();
+    /**
+     * 登记过的穿戴来源,按登记顺序——那也是自动选位的优先级。见 {@link NumenApi#registerGear}。
+     * 原版四件甲由 core 在加载期最先登记,所以总在最前。
+     */
+    private static final List<GearSource> GEAR = new CopyOnWriteArrayList<>();
+
+    /**
+     * 身体状态片段。第一段是引擎自己从穿戴来源渲染的 {@code <worn>},其后是插件经
+     * {@link NumenApi#contributeBodyState} 登记的——同一条出错隔离、同一次变化检测。
+     */
+    private static final List<Function<NumenPlayer, String>> BODY_STATE =
+            new CopyOnWriteArrayList<>(List.of(NumenPlugins::worn));
+
+    /** 这具身体此刻所有的穿戴位置:各来源按登记顺序接起来。<b>引擎内部调用</b>(服务端主线程)。 */
+    public static List<GearSlot> gearSlots(NumenPlayer body) {
+        List<GearSlot> out = new ArrayList<>();
+        for (GearSource source : GEAR) {
+            out.addAll(source.slots(body));
+        }
+        return out;
+    }
+
+    /** 各来源认为这件该戴在哪类位置,合在一起;空集 = 不是穿戴物。<b>引擎内部调用</b>(服务端主线程)。 */
+    public static Set<String> gearKinds(NumenPlayer body, ItemStack stack) {
+        Set<String> out = new LinkedHashSet<>();
+        for (GearSource source : GEAR) {
+            out.addAll(source.kindsOf(body, stack));
+        }
+        return out;
+    }
+
+    /**
+     * {@code <worn>head: minecraft:iron_helmet; chest: empty; …; curios:ring: minecraft:gold_ring, empty</worn>}
+     *
+     * <p>空位也列出:这是模型知道自己有哪些槽名的唯一来源。只写物品 id,不写耐久和组件——变化检测按整段
+     * 字符串比,耐久一掉就推包是噪声。一个位置都没有时不出这一段。
+     */
+    private static String worn(NumenPlayer body) {
+        Map<String, List<String>> byName = new LinkedHashMap<>();
+        for (GearSlot slot : gearSlots(body)) {
+            ItemStack stack = slot.worn();
+            byName.computeIfAbsent(slot.name(), ignored -> new ArrayList<>()).add(stack.isEmpty() ? "empty"
+                    : BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+        }
+        if (byName.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder("<worn>");
+        byName.forEach((name, items) -> {
+            if (sb.length() > "<worn>".length()) sb.append("; ");
+            sb.append(name).append(": ").append(String.join(", ", items));
+        });
+        return sb.append("</worn>").toString();
+    }
 
     /** 汇总所有插件对这只同伴的客户端现算片段。<b>引擎内部调用</b>。 */
     public static String stateFragments(UUID companion) {
@@ -173,6 +229,11 @@ public final class NumenPlugins {
         @Override
         public void contributeBodyState(Function<NumenPlayer, String> fragment) {
             if (fragment != null) BODY_STATE.add(fragment);
+        }
+
+        @Override
+        public void registerGear(GearSource source) {
+            if (source != null) GEAR.add(source);
         }
 
         @Override

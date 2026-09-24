@@ -35,7 +35,8 @@ public final class GetSelfStatusTool implements NumenTool {
         // 本能名册不在这里:它在系统提示的 <instincts> 里,每次请求都在,不必再随这条描述发一遍。
         return "Read your body's condition in one call: name, game mode, HP / max HP, "
                 + "hunger / saturation, position, dimension, biome, the structures you are "
-                + "standing in, what you are wearing, what mods report about your body, and movement "
+                + "standing in, what is in your hands, what you wear (<worn>) and what mods report "
+                + "about your body, and movement "
                 + "state. ALWAYS call this before "
                 + "combat or planning decisions. It does NOT list your backpack — what you carry "
                 + "is already in front of you every turn; use inspect_gui when exact slots matter. "
@@ -78,8 +79,9 @@ public final class GetSelfStatusTool implements NumenTool {
         }
         root.add("structures", structures);
 
+        // 只报两只手:身上穿戴的归 body_state 里的 <worn> 一处管,原版的甲和模组的饰品同一份
         JsonObject equipment = new JsonObject();
-        for (EquipmentSlot slot : EquipmentSlot.values()) {
+        for (EquipmentSlot slot : new EquipmentSlot[]{EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND}) {
             ItemStack s = self.getItemBySlot(slot);
             if (s.isEmpty()) continue;
             JsonObject o = new JsonObject();
@@ -110,8 +112,8 @@ public final class GetSelfStatusTool implements NumenTool {
         // mind calmly planned an 870-block trip (frozen-ocean death, 2026-07-15).
         root.addProperty("air", self.getAirSupply() + "/" + self.getMaxAirSupply() + " ticks");
         root.addProperty("in_lava", self.isInLava());
-        // 插件从身体上读的状态片段(饰品栏、模组的装备位):"你的全部"里不能漏掉插件管的部位。
-        // 与挂进 runtime_state 的是同一个汇总,没有插件要说什么就不出这个字段。
+        // 身体状态片段:<worn>(穿戴位置,原版与模组同一份)打头,其后是插件从身体上读的片段。
+        // 与挂进 runtime_state 的是同一个汇总,一段都没有就不出这个字段。
         String bodyState = com.dwinovo.numen.api.NumenPlugins.bodyStateFragments(self);
         if (!bodyState.isEmpty()) {
             root.addProperty("body_state", bodyState);

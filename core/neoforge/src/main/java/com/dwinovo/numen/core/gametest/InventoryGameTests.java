@@ -386,6 +386,92 @@ public class InventoryGameTests {
         });
     }
 
+    /**
+     * 拿水桶不等于倒水:她低头对着地面,equip_item(water_bucket) 只把桶拿到主手,地上没有水、桶里的水还在。
+     * 倒水是改世界的动作,只能经权限层裁决,装备这条路上不许有第二个入口。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void equip_a_water_bucket_does_not_pour_it(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_waterbearer", new BlockPos(4, 2, 4), false);
+        companion.setXRot(90f);
+        companion.getInventory().add(new ItemStack(Items.WATER_BUCKET));
+        ToolRun equip = call(companion, "equip_item", args("item_id", "minecraft:water_bucket"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(equip.done(), "equip_item has not finished");
+            helper.assertTrue(equip.succeeded() && equip.outcome().contains("main hand"),
+                    "the reply does not say the bucket is in her main hand: " + equip.outcome());
+            helper.assertTrue(companion.getMainHandItem().is(Items.WATER_BUCKET),
+                    "the water bucket is not in her main hand: " + companion.getMainHandItem());
+            BlockPos feet = companion.blockPosition();
+            for (BlockPos p : BlockPos.betweenClosed(feet.offset(-3, -2, -3), feet.offset(3, 2, 3))) {
+                helper.assertTrue(helper.getLevel().getFluidState(p).isEmpty(), "water was poured at " + p);
+            }
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 拿雪球不等于扔雪球:equip_item(snowball) 之后四个雪球都还在,拿在主手,周围没有飞出去的雪球。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void equip_a_snowball_does_not_throw_it(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_snowkeeper", new BlockPos(4, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.SNOWBALL, 4));
+        ToolRun equip = call(companion, "equip_item", args("item_id", "minecraft:snowball"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(equip.done(), "equip_item has not finished");
+            helper.assertTrue(equip.succeeded() && equip.outcome().contains("main hand"),
+                    "the reply does not say the snowball is in her main hand: " + equip.outcome());
+            helper.assertTrue(companion.getInventory().countItem(Items.SNOWBALL) == 4,
+                    "a snowball left her inventory: " + companion.getInventory().countItem(Items.SNOWBALL));
+            helper.assertTrue(helper.getLevel().getEntitiesOfClass(
+                            net.minecraft.world.entity.projectile.Snowball.class,
+                            companion.getBoundingBox().inflate(16)).isEmpty(), "a snowball was thrown");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 绑定诅咒的头盔脱不下来:卸下失败,说出原因,头盔还戴着、背包里没多出它。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void unequip_a_cursed_helmet_is_refused(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_cursed", new BlockPos(4, 2, 4), false);
+        ItemStack helmet = new ItemStack(Items.IRON_HELMET);
+        helmet.enchant(level.registryAccess()
+                .registryOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT)
+                .getHolderOrThrow(net.minecraft.world.item.enchantment.Enchantments.BINDING_CURSE), 1);
+        companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, helmet);
+        ToolRun unequip = call(companion, "equip_item", args("action", "unequip", "slot", "head"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(unequip.done(), "unequip has not finished");
+            helper.assertTrue(!unequip.succeeded() && unequip.outcome().contains("binding"),
+                    "the failure does not name the curse of binding: " + unequip.outcome());
+            helper.assertTrue(companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
+                    .is(Items.IRON_HELMET), "the cursed helmet came off");
+            helper.assertTrue(companion.getInventory().countItem(Items.IRON_HELMET) == 1,
+                    "the cursed helmet was duplicated into her inventory");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 盾不是穿戴物:不给 slot 时进副手,回执说在副手。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void equip_a_shield_goes_to_the_offhand(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_shieldbearer", new BlockPos(4, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.SHIELD));
+        ToolRun equip = call(companion, "equip_item", args("item_id", "minecraft:shield"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(equip.done(), "equip_item has not finished");
+            helper.assertTrue(equip.succeeded() && equip.outcome().contains("offhand"),
+                    "the reply does not say the shield is in her off hand: " + equip.outcome());
+            helper.assertTrue(companion.getOffhandItem().is(Items.SHIELD), "the shield is not in her off hand");
+            helper.assertTrue(companion.getInventory().countItem(Items.SHIELD) == 1, "the shield was duplicated");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
     // ---- eat:没有、不能吃、金苹果、叫停、创造 ----
 
     /** 背包里没有面包还要吃:当场失败,说缺的是面包。 */

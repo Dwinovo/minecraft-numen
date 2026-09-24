@@ -31,7 +31,7 @@ import java.util.UUID;
  * 历史就永远不会过期</b>,只能每次现挂。同一条通道、同一份快照,不必为每样状态另开一路。
  * 骑乘同理:她坐没坐在船上决定了"再点一次船"是不是废话、goto 会驾船还是走路,
  * 模型必须实时看见。{@code vehicleType} 空串 = 没骑任何东西,{@code vehicleId} 相应为 -1。
- * 插件从身体上读的状态片段({@code bodyState},见 {@code NumenApi.contributeBodyState})同理:
+ * 身体状态片段({@code bodyState}:打头的 {@code <worn>} 与插件经 {@code NumenApi.contributeBodyState} 读的)同理:
  * 身体上的事实,同一份快照带过去;空串 = 没有插件要说什么。
  */
 public record NumenStatePayload(UUID uuid, boolean loaded, List<ItemStack> items,

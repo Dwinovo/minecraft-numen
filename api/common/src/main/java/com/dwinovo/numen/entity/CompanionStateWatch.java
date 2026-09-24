@@ -42,8 +42,8 @@ import java.util.UUID;
  * 时长照发,由客户端按收到的时刻自己往下扣:效果是确定性的倒计时,推算出来的秒数和真值
  * 一致,而重推只发生在"多了一种、少了一种、升了级"这三件真事上。
  *
- * <h2>插件的身体状态片段一并算</h2>
- * 插件从身体上读的那段描述({@code NumenApi.contributeBodyState})也是身体此刻的样子,
+ * <h2>身体状态片段一并算</h2>
+ * 身体状态片段(打头的 {@code <worn>} 与插件经 {@code NumenApi.contributeBodyState} 读的那段)也是身体此刻的样子,
  * 在这里和背包一起检查:整段字符串和上次不同才推。所以片段里不能有每 tick 都在变的值。
  */
 public final class CompanionStateWatch {
@@ -69,7 +69,7 @@ public final class CompanionStateWatch {
     private java.util.Set<String> lastEffects = java.util.Set.of();
     /** 上次见到的载具实体 id;-1 = 没骑。上下船是模型必须实时知道的身体事实。 */
     private int lastVehicleId = -1;
-    /** 上次见到的插件身体状态片段(拼好的整段);空串 = 没有插件要说什么。 */
+    /** 上次见到的身体状态片段(拼好的整段);空串 = 一段都没有。 */
     private String lastBodyState = "";
     private long lastSentTick;
     private boolean everSent;

@@ -57,6 +57,9 @@ public final class NumenCore {
         initialised = true;
         registerTools();
         registerTaskRunners();
+        // 原版四件甲是第一处穿戴来源,和模组的饰品栏走同一扇门;内嵌联动在这之后才开闸,所以原版排在最前
+        com.dwinovo.numen.api.NumenPlugins.register(numen ->
+                numen.registerGear(new com.dwinovo.numen.core.gear.VanillaArmor()));
         registerReflexes();
         enlistReflexRoster();
         Constants.LOG.info("[numen-core] registered {} tool(s), {} task type(s); survival chains enabled",

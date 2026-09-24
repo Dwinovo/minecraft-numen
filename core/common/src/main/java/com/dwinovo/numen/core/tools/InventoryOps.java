@@ -8,9 +8,9 @@ import com.dwinovo.numen.core.task.inventory.DropItemsTaskRecord;
 import com.dwinovo.numen.core.task.inventory.EatItemTaskRecord;
 import com.dwinovo.numen.core.task.inventory.EquipTaskRecord;
 import com.dwinovo.numen.core.task.inventory.UnequipTaskRecord;
+import com.dwinovo.numen.core.gear.Wardrobe;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
 
 import java.util.LinkedHashSet;
@@ -42,51 +42,32 @@ String action,
 String item_id,
 String slot,
             ToolContext ctx) {
+        // 只做参数翻译:槽名随身体而定(模组会加槽),是不是真有这个槽、穿不穿得上,都由 Wardrobe 在身上答
+        String slotName = slot == null || slot.isBlank() ? null : slot.toLowerCase();
+        boolean hasItem = item_id != null && !item_id.isBlank();
         if ("unequip".equalsIgnoreCase(action)) {
+            if (slotName == null && !hasItem) {
+                throw new IllegalArgumentException("slot is required for unequip — a slot name from "
+                        + "<worn>, mainhand, offhand or 'armor' (all four armor pieces) — unless you name "
+                        + "the worn item with item_id");
+            }
+            Item item = hasItem ? ToolArgs.parseItem(item_id) : null;
+            String label = slotName != null ? slotName : BuiltInRegistries.ITEM.getKey(item).getPath();
             return new UnequipTaskRecord(ctx.toolCallId(), ctx.deadline(EQUIP_TIMEOUT_TICKS),
-                    readUnequipSlots(slot), slot.toLowerCase());
+                    slotName, item, label);
         }
-        if (item_id == null || item_id.isBlank()) {
+        if (!hasItem) {
             throw new IllegalArgumentException(
                     "item_id is required to equip (to take gear off, use action=unequip with a slot)");
         }
-        EquipmentSlot equipSlot = readSlot(slot);
+        if (Wardrobe.ARMOR.equals(slotName)) {
+            throw new IllegalArgumentException(
+                    "slot=armor is only for action=unequip (it means all four armor pieces)");
+        }
 
         Item item = ToolArgs.parseItem(item_id);
         String label = BuiltInRegistries.ITEM.getKey(item).getPath();
-        return new EquipTaskRecord(ctx.toolCallId(), ctx.deadline(EQUIP_TIMEOUT_TICKS), item, equipSlot, label);
-    }
-
-    /** Parse the optional slot; {@code null} means auto-route. */
-    private static EquipmentSlot readSlot(String slot) {
-        if (slot == null) {
-            return null;
-        }
-        String name = slot.toLowerCase();
-        return switch (name) {
-            case "mainhand", "hand" -> EquipmentSlot.MAINHAND;
-            case "offhand" -> EquipmentSlot.OFFHAND;
-            case "head" -> EquipmentSlot.HEAD;
-            case "chest" -> EquipmentSlot.CHEST;
-            case "legs" -> EquipmentSlot.LEGS;
-            case "armor" -> throw new IllegalArgumentException(
-                    "slot=armor is only for action=unequip (it means all four armor pieces)");
-            case "feet" -> EquipmentSlot.FEET;
-            default -> throw new IllegalArgumentException("unknown slot: " + name);
-        };
-    }
-
-    /** 脱哪些槽:必填;{@code armor} 展开为四件甲。 */
-    private static List<EquipmentSlot> readUnequipSlots(String slot) {
-        if (slot == null || slot.isBlank()) {
-            throw new IllegalArgumentException(
-                    "slot is required for unequip ('armor' takes all four armor pieces off)");
-        }
-        if ("armor".equalsIgnoreCase(slot)) {
-            return List.of(EquipmentSlot.HEAD, EquipmentSlot.CHEST,
-                    EquipmentSlot.LEGS, EquipmentSlot.FEET);
-        }
-        return List.of(readSlot(slot));
+        return new EquipTaskRecord(ctx.toolCallId(), ctx.deadline(EQUIP_TIMEOUT_TICKS), item, slotName, label);
     }
 
     public TaskRecord eatItem(

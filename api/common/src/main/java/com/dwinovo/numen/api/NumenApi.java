@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.agent.tool.NumenTool;
+import com.dwinovo.numen.api.gear.GearSource;
 import com.dwinovo.numen.entity.NumenPlayer;
 
 import java.nio.file.Path;
@@ -89,8 +90,8 @@ public interface NumenApi {
      * 她随时知道自己现在是什么状态。
      *
      * <p><b>只放只有主人客户端才知道的事</b>——比如客户端渲染的外观。算的时候读得到的只是
-     * 客户端手里的数据:她走远了、换了维度,客户端里就没有她的实体。身体上的事实(饰品栏、
-     * 模组给的装备位)住在服务端,用 {@link #contributeBodyState};一个事实只从一边来,
+     * 客户端手里的数据:她走远了、换了维度,客户端里就没有她的实体。身体上的事实住在服务端:
+     * 穿戴位置用 {@link #registerGear},别的用 {@link #contributeBodyState};一个事实只从一边来,
      * 两边都报就是两个会对不上的答案。
      *
      * <pre>{@code
@@ -107,7 +108,8 @@ public interface NumenApi {
     /**
      * 服务端:从身体上读一段她此刻的状态,挂进 {@code <runtime_state>},也写进 {@code get_self_status}。
      *
-     * <p>给身体上的事实用——饰品栏里戴着什么、模组给的装备位上有什么。它和背包、状态效果同一条路:
+     * <p>给身体上的事实用——模组给她身上加的、背包和穿戴之外的东西。穿戴位置上戴着什么不走这里,
+     * 用 {@link #registerGear}:引擎把它渲染成 {@code <worn>},排在所有片段的最前面。它和背包、状态效果同一条路:
      * 引擎在检查身体有没有变化时一并算,和上次不同就随状态包推给主人的客户端,于是她走远了、
      * 换了维度也照样在请求里。只有主人客户端才知道的事(客户端渲染的外观)用 {@link #contributeState};
      * 一个事实只从一边来。
@@ -119,6 +121,18 @@ public interface NumenApi {
      * 会话历史。抛异常不会打断别的贡献者,但会记进日志。
      */
     void contributeBodyState(Function<NumenPlayer, String> fragment);
+
+    /**
+     * 服务端:登记一处能把东西穿戴在身上的来源——比如一个饰品栏模组的那些槽。
+     *
+     * <p>登记之后,{@code equip_item} 的穿、脱、自动选位就认得这些位置,每轮挂给模型的 {@code <worn>}
+     * 里也会列出它们(空位也列,那是她知道自己有哪些槽名的唯一来源)。原版四件甲也是这样登记的一处,
+     * 和你走同一扇门;登记顺序就是自动选位的优先级,原版在最前。穿戴的状态不必再用
+     * {@link #contributeBodyState} 报一遍——那就是同一个事实的两个来源。
+     *
+     * <p>穿戴发生在服务端,所以在 {@code NumenPlugins.register} 的块里直接调,别放进 {@link #onClient}。
+     */
+    void registerGear(GearSource source);
 
     /**
      * 登记一种事件——同伴身上会发生、她该知道的一种事(比如饰品插件的 {@code accessory_changed})。
