@@ -71,6 +71,10 @@ public final class Button extends Widget {
             int ghostColor = !enabled ? c.textMuted()
                     : style == Style.LINK ? c.accent()
                     : NumenStyle.mixColor(c.textSecondary(), c.textPrimary(), t);
+            if (icon != null) {   // 图标钮(复制、重新生成这类):图标居中替代文字
+                icon.draw(s, x + (w - iconSize) / 2, y + (h - iconSize) / 2, iconSize, ghostColor);
+                return;
+            }
             String ghostShown = com.dwinovo.numen.client.ui.TextClip.fit(s, label, w - 6);
             s.drawText(ghostShown, x + (w - s.textWidth(ghostShown)) / 2,
                     y + (h - s.lineHeight()) / 2 + 1, ghostColor, false);
