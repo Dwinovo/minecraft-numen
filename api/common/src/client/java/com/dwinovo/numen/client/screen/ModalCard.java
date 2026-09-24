@@ -198,6 +198,14 @@ abstract class ModalCard {
         g.setColor(1f, 1f, 1f, alpha);
     }
 
+    /**
+     * 收卡那一下交还焦点:淡出中的卡还在逐帧画,获焦的输入框每画一帧都会把屏幕的键盘焦点要回去
+     * (见 McTextInput),那几帧里打的字就落进一张正在消失的卡。
+     */
+    void release() {
+        ui.requestFocus(null);
+    }
+
     /** 悬停提示(宿主画 tooltip);没有则 null。 */
     String tooltipAt(double mx, double my) {
         return null;

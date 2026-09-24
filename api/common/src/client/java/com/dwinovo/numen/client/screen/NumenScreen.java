@@ -844,6 +844,7 @@ public final class NumenScreen extends Screen {
 
     /** 收卡:卡转进淡出,控件当场交还(重建一次,淡出中的卡不再建控件);淡没了 render 里再拆。 */
     private void closeCard() {
+        modalCard.release();
         cardBox.hide();
         rebuild();
     }
