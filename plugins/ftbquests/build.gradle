@@ -1,0 +1,28 @@
+plugins { id 'numen-plugin' }
+
+// 只接 NeoForge:本联动直接订阅 FTB Quests / FTB Teams 的 Architectury 事件、读它们的队伍与进度,
+// 编译对着 NeoForge 那份。
+neoForge { version = neoforge_version }
+
+repositories {
+    // FTB 全家与 Architectury 各自只从自己的仓库取,两个仓库也截不走别的坐标
+    exclusiveContent {
+        forRepository { maven { name = 'FTB'; url = 'https://maven.ftb.dev/releases' } }
+        filter { includeGroup 'dev.ftb.mods' }
+    }
+    exclusiveContent {
+        forRepository { maven { name = 'Architectury'; url = 'https://maven.architectury.dev/' } }
+        filter { includeGroup 'dev.architectury' }
+    }
+}
+
+dependencies {
+    // 瘦 api jar 取 NeoForge 那份:本联动本来就只跑在 NeoForge 上
+    compileOnly files(project(':api:neoforge').tasks.named('apiJar'))
+    // FTB 全家是 All Rights Reserved:只在编译期引用,运行时由玩家自己装的那份提供,
+    // 本模块不携带、不复制它们一个字节。Architectury 是 FTB 的事件总线所在。
+    compileOnly "dev.ftb.mods:ftb-quests-neoforge:${ftb_quests_version}"
+    compileOnly "dev.ftb.mods:ftb-teams-neoforge:${ftb_teams_version}"
+    compileOnly "dev.ftb.mods:ftb-library-neoforge:${ftb_library_version}"
+    compileOnly "dev.architectury:architectury-neoforge:${architectury_version}"
+}

@@ -37,6 +37,8 @@ public final class Builtin {
         gate.open("kaleidoscope_cookery", "kaleidoscope",
                 skills -> () -> com.dwinovo.numen.plugins.kaleidoscope.NumenKaleidoscope.install(skills));
         gate.open("curios", () -> com.dwinovo.numen.plugins.curios.NumenCurios::install);
+        gate.open("ftbquests", "ftbquests",
+                skills -> () -> com.dwinovo.numen.plugins.ftbquests.NumenFtbQuests.install(skills));
     }
 
     /** YSM 联动只写原版;它要的加载器专属的两件事,NeoForge 的答案在这里。 */

@@ -21,6 +21,7 @@ dependencies {
     compileOnly project(':plugins:tlm')
     compileOnly project(':plugins:kaleidoscope')
     compileOnly project(':plugins:curios')
+    compileOnly project(':plugins:ftbquests')
     // Bundle it into core's jar (Jar-in-Jar) so players install one file and get both mods.
     jarJar(project(':api:neoforge'))
 }
@@ -96,4 +97,5 @@ tasks.named('jar', Jar) {
     from({ project(':plugins:tlm').sourceSets.main.output })
     from({ project(':plugins:kaleidoscope').sourceSets.main.output })
     from({ project(':plugins:curios').sourceSets.main.output })
+    from({ project(':plugins:ftbquests').sourceSets.main.output })
 }
