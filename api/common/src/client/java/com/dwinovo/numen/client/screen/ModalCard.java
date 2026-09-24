@@ -4,9 +4,9 @@ import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenTheme;
 
 /**
- * 头部铅笔打开的那张居中卡。铅笔作用在左栏选中的那一格:就他俩时是改她
- * ({@link CompanionEditPanel}),落过盘的会话是改会话({@link ConversationEditPanel})。
- * 屏幕只认这一个面,暗幕、居中、Esc 收卡、事件转发都只写一份。
+ * 面板里的居中卡:召唤({@link SummonPanel})、改她({@link CompanionEditPanel})、改会话名
+ * ({@link ConversationEditPanel})、邀请({@link InvitePanel})。屏幕只认这一个面,暗幕、居中、
+ * 出没动效、Esc 收卡、事件转发都只写一份。
  */
 interface ModalCard {
 

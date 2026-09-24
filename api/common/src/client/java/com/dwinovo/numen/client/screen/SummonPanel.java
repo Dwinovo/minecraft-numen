@@ -27,7 +27,7 @@ import java.util.List;
  * 才解释——报错在动作处,不在氛围里);模式无 gamemode 权限时是置灰的继承档。
  * 校验错误内联在名字字段上,库为空的说明走页面级胶囊。
  */
-public final class SummonPanel {
+public final class SummonPanel implements ModalCard {
 
     /** 提交面:所有选择由面板收集,落库与发包留在宿主。 */
     public interface Host {
@@ -83,9 +83,21 @@ public final class SummonPanel {
     }
 
     /** 每次打开召唤流程:草稿归零(默认/无/生存)。 */
+    @Override
     public void reset() {
         draft = new Draft();
         draft.creative = host.canChooseMode() && draft.creative;
+    }
+
+    @Override
+    public int width() {
+        return 320;
+    }
+
+    /** 卡高:标题、名字、四排选择、一对钮。 */
+    @Override
+    public int height() {
+        return 208;
     }
 
     public void build(int x, int y, int w, int h, int dropBottom) {
@@ -234,7 +246,8 @@ public final class SummonPanel {
     }
 
     /** 悬停置灰模式格时的解释文案(宿主画 tooltip)。 */
-    public String modeTooltipAt(double mx, double my) {
+    @Override
+    public String tooltipAt(double mx, double my) {
         if (!modeInherited) return null;
         boolean over = mx >= modeBoxX && mx < modeBoxX + modeBoxW
                 && my >= modeBoxY && my < modeBoxY + NumenStyle.CONTROL_H;
