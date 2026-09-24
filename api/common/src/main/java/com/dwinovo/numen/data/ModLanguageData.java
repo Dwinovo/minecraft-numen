@@ -390,8 +390,7 @@ public final class ModLanguageData {
         adder.add("numen.chat.persona_changed", "─── persona switched ───");
         adder.add("numen.chat.halted", "─── interrupted: %s ───");
         adder.add("numen.chat.steps", "%s steps");
-        adder.add("numen.chat.plan", "PLAN");
-        adder.add("numen.chat.no_plan", "no plan yet");
+        adder.add("numen.chat.plan", "Plan %s/%s");
         // Tool-chip labels (convention: numen.tool.<tool name>; unknown/MCP tools fall back to the raw name).
         adder.add("numen.tool.build", "Build");
         adder.add("numen.tool.close_gui", "Close GUI");
@@ -812,8 +811,7 @@ public final class ModLanguageData {
         adder.add("numen.chat.persona_changed", "─── 人设已切换 ───");
         adder.add("numen.chat.halted", "─── 已中断：%s ───");
         adder.add("numen.chat.steps", "%s 步");
-        adder.add("numen.chat.plan", "计划");
-        adder.add("numen.chat.no_plan", "暂无计划");
+        adder.add("numen.chat.plan", "计划 %s/%s");
         // 工具 chip 标签(约定键 numen.tool.<工具名>;未知/MCP 工具回落原名)。
         adder.add("numen.tool.build", "建造");
         adder.add("numen.tool.close_gui", "关闭界面");

@@ -611,7 +611,7 @@ public final class ChatView {
 
     // ---- blocks ----
 
-    private sealed interface Block permits Bubble, Chip, Notice, Divider, UnreadBar {}
+    private sealed interface Block permits Bubble, Checklist, Chip, Notice, Divider, UnreadBar {}
 
     /** One spoken message. {@code label} non-null = companion side (name above the bubble);
      *  {@code showAvatar} false = a consecutive message from the same side (head hidden);
@@ -626,6 +626,26 @@ public final class ChatView {
             return new Bubble(own, label, lines, maxLineW, fill, on, who, time, timeInline, entry, raw, quote);
         }
     }
+
+    /**
+     * 她的一份计划,画成她说的一条清单消息(Telegram 的清单消息):她的气泡底色,抬头一行强调色"计划 2/5",
+     * 下面一项一行(长的折行),前面一个方格。{@code items} 留着比"是不是同一份";{@code rows} 是按这一刻的宽度
+     * 折好的行;{@code time}、{@code entry} 是第一次出现时的——同一份计划原地更新,不改它是哪一条。
+     */
+    private record Checklist(UUID who, String label, List<PlanChecklist.Item> items, String header,
+                             List<CheckRow> rows, int maxLineW, String time, boolean timeInline, int entry,
+                             boolean showAvatar) implements Block {
+        Checklist withAvatar(boolean on) {
+            return new Checklist(who, label, items, header, rows, maxLineW, time, timeInline, entry, on);
+        }
+    }
+
+    /** 清单里的一项:状态(画方格用)和折好的行。 */
+    private record CheckRow(PlanChecklist.State state, List<FormattedCharSequence> lines) {}
+
+    /** 清单的方格边长,和方格那一列的宽(方格 + 离字的缝)。 */
+    private static final int BOX = 7;
+    private static final int BOX_COL = BOX + 4;
 
     /** 气泡顶上的引用条:两行(谁、那句),左缘一道竖线;{@code QUOTE_IN} 是字离竖线多远。 */
     private static final int QUOTE_H = 20;
@@ -702,11 +722,19 @@ public final class ChatView {
             case Bubble bb -> (bb.label() != null ? LABEL_H : 0) + (bb.quote() != null ? QUOTE_H : 0)
                     + bb.lines().size() * LINE_H + PAD_V * 2
                     + (bb.time() != null && !bb.timeInline() ? TIME_H : 0);
+            case Checklist c -> (c.label() != null ? LABEL_H : 0) + checklistH(c);
             case Chip c -> (c.label() != null ? LABEL_H : 0) + c.rows().size() * LINE_H + PAD_V * 2;
             case Notice ignored -> LINE_H;
             case Divider ignored -> LINE_H + 4;
             case UnreadBar ignored -> LINE_H + 6;
         };
+    }
+
+    /** 清单气泡本身多高(不含上面的名字):抬头一行、每项折出的行、放不进最后一行的时间。 */
+    private static int checklistH(Checklist c) {
+        int lines = 1;
+        for (CheckRow r : c.rows()) lines += r.lines().size();
+        return lines * LINE_H + PAD_V * 2 + (c.time() != null && !c.timeInline() ? TIME_H : 0);
     }
 
     private int totalHeight(List<Block> blocks) {
@@ -779,6 +807,8 @@ public final class ChatView {
         int processEntry = -1;
         UUID last;
         boolean unreadPlaced;
+        /** 每只她最近那条清单消息在 {@code out} 里的位置:同一份计划改了状态就换掉那一块。 */
+        final java.util.Map<UUID, Integer> plans = new java.util.HashMap<>();
     }
 
     private static void addPiece(Feed f, UUID who, int entry, Piece p) {
@@ -855,6 +885,7 @@ public final class ChatView {
                     if (ConvoLog.CLEAR_DIVIDER.equals(u.content())) {
                         notice(out, I18n.get("numen.chat.cleared"));
                         f.last = null;
+                        f.plans.clear();   // 清空之后她不记得之前那份计划,再写就是新的一条
                         continue;
                     }
                     String shown = ownerText(u.content());   // owner's words only, never injected content
@@ -889,7 +920,15 @@ public final class ChatView {
                                 clock(entry.ts()), msgIndex, spoken, null));
                         f.last = who;
                     }
-                    for (LlmToolCall tc : turn.toolCalls()) addPiece(f, who, msgIndex, new Piece(null, false, tc));
+                    for (LlmToolCall tc : turn.toolCalls()) {
+                        // 写下的计划是她的一条清单消息,不进过程那一行;没被工具收下的那次仍是一次失败的调用
+                        List<PlanChecklist.Item> plan = failed.contains(tc.id()) ? null : PlanChecklist.of(tc);
+                        if (plan != null) {
+                            checklist(f, who, msgIndex, entry.ts(), plan, innerW, done, failed, bubbleMaxW);
+                        } else {
+                            addPiece(f, who, msgIndex, new Piece(null, false, tc));
+                        }
+                    }
                 }
                 case ConvoState.Msg.Tool ignored -> { /* result drives done/fail, not a block */ }
                 case ConvoState.Msg.Halt h -> {
@@ -960,6 +999,7 @@ public final class ChatView {
                     && (i + 1 >= out.size() || !who.equals(speakerOf(out.get(i + 1))));
             Block b = out.get(i);
             if (b instanceof Bubble bb && bb.showAvatar() != last) out.set(i, bb.withAvatar(last));
+            else if (b instanceof Checklist c && c.showAvatar() != last) out.set(i, c.withAvatar(last));
             else if (b instanceof Chip c && c.showAvatar() != last) out.set(i, c.withAvatar(last));
         }
     }
@@ -968,6 +1008,7 @@ public final class ChatView {
     private static UUID speakerOf(Block b) {
         return switch (b) {
             case Bubble bb -> bb.own() ? OWNER : bb.who();
+            case Checklist c -> c.who();
             case Chip c -> c.who();
             default -> null;
         };
@@ -992,6 +1033,55 @@ public final class ChatView {
             maxW = Math.max(maxW, inline ? last + tw : tw);
         }
         return new Bubble(own, label, lines, maxW, fill, showAvatar, who, time, inline, entry, raw, quote);
+    }
+
+    /**
+     * 她写下一份计划:和她最近那条清单是同一份(内容一样、只是状态变了)就在那一条上原地更新,
+     * 不往下挪;内容变了才是她新说的一条——先把攒着的过程收口,再接在后面。
+     */
+    private void checklist(Feed f, UUID who, int entry, long ts, List<PlanChecklist.Item> items, int innerW,
+                           Set<String> done, Set<String> failed, int bubbleMaxW) {
+        Integer at = f.plans.get(who);
+        if (at != null) {
+            Checklist prev = (Checklist) f.out.get(at);
+            if (PlanChecklist.sameItems(prev.items(), items)) {
+                f.out.set(at, checklist(who, prev.label(), items, innerW, prev.time(), prev.entry()));
+                return;
+            }
+        }
+        flushProcess(f, done, failed, bubbleMaxW);
+        boolean first = !who.equals(f.last);
+        f.out.add(checklist(who, first ? label(who) : null, items, innerW, clock(ts), entry));
+        f.plans.put(who, f.out.size() - 1);
+        f.last = who;
+    }
+
+    /** 折好一份清单:做完的和划掉的字退成气泡里的淡字、加删除线,还要做的照常。 */
+    private Checklist checklist(UUID who, String label, List<PlanChecklist.Item> items, int innerW,
+                                String time, int entry) {
+        String header = I18n.get("numen.chat.plan", PlanChecklist.done(items), items.size());
+        int maxW = font.width(header);
+        List<CheckRow> rows = new ArrayList<>(items.size());
+        int textW = innerW - BOX_COL;
+        for (PlanChecklist.Item it : items) {
+            boolean off = it.state() == PlanChecklist.State.COMPLETED || it.state() == PlanChecklist.State.CANCELLED;
+            Component text = off
+                    ? Nb.colored(it.content(), IN_META).copy().withStyle(net.minecraft.ChatFormatting.STRIKETHROUGH)
+                    : Nb.colored(it.content(), TXT);
+            List<FormattedCharSequence> lines = split(text, textW);
+            for (FormattedCharSequence l : lines) maxW = Math.max(maxW, BOX_COL + font.width(l));
+            rows.add(new CheckRow(it.state(), lines));
+        }
+        boolean inline = false;
+        if (time != null) {
+            // 时间和气泡一样贴右下角:放得进最后一项的右侧就同一行
+            int tw = font.width(time) + 6;
+            List<FormattedCharSequence> lastRow = rows.get(rows.size() - 1).lines();
+            int last = BOX_COL + (lastRow.isEmpty() ? 0 : font.width(lastRow.get(lastRow.size() - 1)));
+            inline = last + tw <= innerW;
+            maxW = Math.max(maxW, inline ? last + tw : tw);
+        }
+        return new Checklist(who, label, items, header, List.copyOf(rows), maxW, time, inline, entry, false);
     }
 
     /** {@code HH:mm},本机时区;没有时间戳的旧记录不标。 */
@@ -1148,6 +1238,7 @@ public final class ChatView {
         // 新来的块飞入:从下面 8px 升上来、同时淡入。整块一起动——框、脸、字用同一个透明度
         int entry = switch (b) {
             case Bubble bb -> bb.entry();
+            case Checklist c -> c.entry();
             case Chip c -> c.entry();
             default -> -1;
         };
@@ -1182,6 +1273,7 @@ public final class ChatView {
                 draw(g, Nb.colored(t, MUTED).getVisualOrderText(), x + (w - SB_W - font.width(t)) / 2, y + 4);
             }
             case Bubble bb -> drawBubble(g, bb, x, y, w);
+            case Checklist c -> drawChecklist(g, c, x, y);
             case Chip c -> drawChip(g, c, x, y);
         }
     }
@@ -1236,6 +1328,58 @@ public final class ChatView {
             int tyy = b.timeInline() ? ty - LINE_H + 1 : ty - 1;
             // 时间戳用气泡自己那一档淡色(Telegram 出向、入向各一色)
             draw(g, Nb.colored(b.time(), b.own() ? OUT_META : IN_META).getVisualOrderText(), tx, tyy);
+        }
+    }
+
+    /** 清单消息:她的气泡,抬头强调色"计划 2/5",下面一项一行,方格在每项第一行前面。 */
+    private void drawChecklist(GuiGraphics g, Checklist c, int x, int y) {
+        int bw = c.maxLineW() + PAD_H * 2;
+        int bh = checklistH(c);
+        int bubTop = y + (c.label() != null ? LABEL_H : 0);
+        int bx = x + EDGE + faceCol();
+        if (c.label() != null) {
+            draw(g, Nb.colored(c.label(), nameColor(c.who())).getVisualOrderText(), bx + 2, y);
+        }
+        if (c.showAvatar()) {
+            int avX = x + EDGE, avY = bubTop + bh - AV;
+            CompanionFace.draw(g, c.who(), KnownSkins.of(c.who()), avX, avY, AV);
+            face(g, c.who(), avX, avY);
+        }
+        g.fill(bx, bubTop, bx + bw, bubTop + bh, AI_FILL);
+        int tx = bx + PAD_H;
+        int ty = bubTop + PAD_V + 1;
+        draw(g, Nb.colored(c.header(), MENTION).getVisualOrderText(), tx, ty);
+        ty += LINE_H;
+        for (CheckRow r : c.rows()) {
+            checkBox(g, r.state(), tx, ty);
+            for (FormattedCharSequence l : r.lines()) {
+                draw(g, l, tx + BOX_COL, ty);
+                ty += LINE_H;
+            }
+        }
+        if (c.time() != null) {
+            int tyy = c.timeInline() ? ty - LINE_H + 1 : ty - 1;
+            draw(g, Nb.colored(c.time(), IN_META).getVisualOrderText(), bx + bw - PAD_H - font.width(c.time()), tyy);
+        }
+    }
+
+    /**
+     * 一项前面的方格(贴着字的第一行,与字同高):没做空心,正在做的边框呼吸(透明度来回,"正在做"是活的),
+     * 做完实心成功色、里面一枚白勾;划掉的空心,字已经划了线。
+     */
+    private void checkBox(GuiGraphics g, PlanChecklist.State state, int x, int y) {
+        switch (state) {
+            case COMPLETED -> {
+                g.fill(x, y, x + BOX, y + BOX, OK);
+                // 像素勾:短边两格往右下,长边三格往右上
+                int[][] tick = {{1, 3}, {2, 4}, {3, 3}, {4, 2}, {5, 1}};
+                for (int[] p : tick) g.fill(x + p[0], y + p[1], x + p[0] + 1, y + p[1] + 1, ON_CTA);
+            }
+            case IN_PROGRESS -> {
+                int a = 0x90 + (int) (0x6F * (0.5 + 0.5 * Math.sin(frameNow / 250.0)));
+                Nb.border(g, x, y, BOX, BOX, 1, (RUN & 0xFFFFFF) | (a << 24));
+            }
+            case PENDING, CANCELLED -> Nb.border(g, x, y, BOX, BOX, 1, IN_META);
         }
     }
 
