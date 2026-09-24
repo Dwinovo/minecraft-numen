@@ -24,11 +24,9 @@ public final class NumenKaleidoscope {
     /** 由 {@code Builtin} 在确认森罗在场后调用。 */
     public static void install(Path skillsRoot) {
         NumenPlugins.register(numen -> {
-            numen.registerTool(new KcRecipesTool());
-            numen.registerTool(new KcInspectTool());
-            numen.registerTool(new KcCookTool());
+            KaleidoscopeCommands.install(numen);
 
-            // kc_cook 派下来的记录由谁来跑
+            // numen kaleidoscope cook 派下来的记录由谁来跑
             TaskFactory.register(CookRecord.class, (player, record) -> new CookTask(record));
 
             // 事件两侧都要登记(服务端的发出口靠它挡,主人客户端的队列靠它投递),

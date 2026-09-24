@@ -137,7 +137,8 @@ final class PotCooker implements Cooker {
         }
         if (pot.getStatus() != IPot.PUT_INGREDIENT) {
             return "the pot at " + Cooker.where(pos) + " is busy (" + stage(pot.getStatus())
-                    + ", making " + Dish.idOf(pot.getResult().getItem()) + ") — kc_inspect it and wait or clear it";
+                    + ", making " + Dish.idOf(pot.getResult().getItem()) + ") — " + KaleidoscopeCommands.line(KaleidoscopeCommands.INSPECT)
+                    + " it and wait or clear it";
         }
         if (!contents().isEmpty()) {
             return "the pot at " + Cooker.where(pos) + " already has "

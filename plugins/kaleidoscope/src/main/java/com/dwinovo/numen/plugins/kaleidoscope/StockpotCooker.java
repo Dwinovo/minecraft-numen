@@ -124,7 +124,8 @@ final class StockpotCooker implements Cooker {
         int status = stockpot.getStatus();
         if (status == IStockpot.COOKING || status == IStockpot.FINISHED) {
             return "the stockpot at " + Cooker.where(pos) + " is busy (" + stage(status) + ", "
-                    + Dish.idOf(stockpot.getResult().getItem()) + ") — kc_inspect it and wait or empty it";
+                    + Dish.idOf(stockpot.getResult().getItem()) + ") — " + KaleidoscopeCommands.line(KaleidoscopeCommands.INSPECT)
+                    + " it and wait or empty it";
         }
         if (status == IStockpot.PUT_INGREDIENT) {
             if (!contents().isEmpty()) {

@@ -58,7 +58,7 @@ final class CookTask implements Task {
 
     @Override
     public String name() {
-        return "kc_cook";
+        return KaleidoscopeCommands.GROUP + " " + KaleidoscopeCommands.COOK;
     }
 
     @Override
@@ -83,7 +83,8 @@ final class CookTask implements Task {
             double away = Math.sqrt(cook.distanceToSqr(r.pos.getX() + 0.5, r.pos.getY() + 0.5, r.pos.getZ() + 0.5));
             return failed("the " + cooker.kind().id() + " at " + Cooker.where(r.pos) + " is "
                     + String.format("%.1f", away) + " blocks away — out of working reach."
-                    + " goto it first (goto stops right beside a solid block), then call kc_cook again.");
+                    + " goto it first (goto stops right beside a solid block), then run "
+                    + KaleidoscopeCommands.line(KaleidoscopeCommands.COOK) + " again.");
         }
         if (!permitted) {
             TaskState pending = permit(cook, level);
@@ -128,12 +129,14 @@ final class CookTask implements Task {
         Dish ordered = Dish.byId(level, r.recipe);
         if (ordered == null) {
             return failed("no pot or stockpot recipe has id " + r.recipe
-                    + " — take the exact id from kc_recipes, do not guess it");
+                    + " — take the exact id from " + KaleidoscopeCommands.line(KaleidoscopeCommands.RECIPES)
+                    + ", do not guess it");
         }
         int[] want = ordered.portions(level);
         if (want == null) {
             return failed(r.recipe + " is a flex recipe and no mix that fits the pot's 9 slots grades SUPERB"
-                    + " on this world, so there is no ratio to cook to — kc_recipes says the same");
+                    + " on this world, so there is no ratio to cook to — "
+                    + KaleidoscopeCommands.line(KaleidoscopeCommands.RECIPES) + " says the same");
         }
         dish = ordered;
         portions = want;

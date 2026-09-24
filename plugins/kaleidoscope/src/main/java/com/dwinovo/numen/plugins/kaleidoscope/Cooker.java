@@ -11,9 +11,9 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import java.util.Map;
 
 /**
- * 世界上的一格炊具。{@code kc_inspect} 读它,{@code kc_cook} 一刻一刻推它。
+ * 世界上的一格炊具。{@code numen kaleidoscope inspect} 读它,{@code numen kaleidoscope cook} 一刻一刻推它。
  *
- * <p>炒锅和汤锅的<b>全部</b>差别只在这条线的两个实现里:上面的工具与任务不知道谁要油谁要盖子。
+ * <p>炒锅和汤锅的<b>全部</b>差别只在这条线的两个实现里:上面的命令与任务不知道谁要油谁要盖子。
  */
 public interface Cooker {
 
@@ -21,7 +21,7 @@ public interface Cooker {
 
     BlockPos pos();
 
-    /** {@code kc_inspect} 的答案:这一格此刻是什么样子。 */
+    /** {@code numen kaleidoscope inspect} 的答案:这一格此刻是什么样子。 */
     Map<String, Object> report();
 
     /**
