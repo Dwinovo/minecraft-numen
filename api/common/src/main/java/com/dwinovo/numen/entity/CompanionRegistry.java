@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -40,28 +41,32 @@ public final class CompanionRegistry extends SavedData {
      *  空串 = 无皮肤,客户端回落原版默认皮肤(按 UUID 哈希抽取)。 */
     public record Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos,
                         String deathCause, long diedAt, String skinValue, String skinSig,
-                        String taskTool, String taskArgs, List<String> scaffoldMaterials) {
+                        String taskName, String taskTool, String taskArgs, List<String> scaffoldMaterials) {
         /** A live companion (not dead), no borrowed skin, idle, spending the default scaffolding. */
         public Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos) {
-            this(name, owner, dimension, pos, "", 0L, "", "", "", "", DEFAULT_SCAFFOLD);
+            this(name, owner, dimension, pos, "", 0L, "", "", "", "", "", DEFAULT_SCAFFOLD);
         }
 
-        /** 她现在在做什么(工具名 + 当时的参数);空串 = 闲着。见 {@code TaskPersistence}。 */
-        public Entry doing(String tool, String args) {
+        /**
+         * 她现在在做什么:这件活给模型看的名字,与重放它的那次调用(工具名 + 当时的参数);空串 = 闲着。
+         * 见 {@code TaskPersistence}。
+         */
+        public Entry doing(String task, String tool, String args) {
             return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,
-                    tool == null ? "" : tool, args == null ? "" : args, scaffoldMaterials);
+                    task == null ? "" : task, tool == null ? "" : tool, args == null ? "" : args,
+                    scaffoldMaterials);
         }
 
         /** 刷新落点(休眠/移动时的 respawn 提示),皮肤与死亡状态原样保留。 */
         public Entry movedTo(ResourceKey<Level> dimension, BlockPos pos) {
             return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,
-                    taskTool, taskArgs, scaffoldMaterials);
+                    taskName, taskTool, taskArgs, scaffoldMaterials);
         }
 
         /** 换上 Mojang 签名的皮肤数据(value+signature)。 */
         public Entry withSkin(String value, String sig) {
             return new Entry(name, owner, dimension, pos, deathCause, diedAt,
-                    value == null ? "" : value, sig == null ? "" : sig, taskTool, taskArgs,
+                    value == null ? "" : value, sig == null ? "" : sig, taskName, taskTool, taskArgs,
                     scaffoldMaterials);
         }
 
@@ -72,17 +77,17 @@ public final class CompanionRegistry extends SavedData {
          */
         public Entry withScaffoldMaterials(List<String> materials) {
             return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,
-                    taskTool, taskArgs, materials == null ? List.of() : List.copyOf(materials));
+                    taskName, taskTool, taskArgs, materials == null ? List.of() : List.copyOf(materials));
         }
 
         Entry dead(String cause, long at) {
             return new Entry(name, owner, dimension, pos, cause, at, skinValue, skinSig,
-                    taskTool, taskArgs, scaffoldMaterials);
+                    taskName, taskTool, taskArgs, scaffoldMaterials);
         }
 
         Entry alive() {
             return new Entry(name, owner, dimension, pos, "", 0L, skinValue, skinSig,
-                    taskTool, taskArgs, scaffoldMaterials);
+                    taskName, taskTool, taskArgs, scaffoldMaterials);
         }
 
         static final Codec<Entry> CODEC = RecordCodecBuilder.create(i -> i.group(
@@ -94,11 +99,16 @@ public final class CompanionRegistry extends SavedData {
                 Codec.LONG.optionalFieldOf("diedAt", 0L).forGetter(Entry::diedAt),
                 Codec.STRING.optionalFieldOf("skinValue", "").forGetter(Entry::skinValue),
                 Codec.STRING.optionalFieldOf("skinSig", "").forGetter(Entry::skinSig),
+                Codec.STRING.optionalFieldOf("taskName").forGetter(e -> Optional.of(e.taskName())),
                 Codec.STRING.optionalFieldOf("taskTool", "").forGetter(Entry::taskTool),
                 Codec.STRING.optionalFieldOf("taskArgs", "").forGetter(Entry::taskArgs),
                 Codec.STRING.listOf().optionalFieldOf("scaffold", DEFAULT_SCAFFOLD)
                         .forGetter(Entry::scaffoldMaterials)
-        ).apply(i, Entry::new));
+        ).apply(i, (name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig, taskName, taskTool,
+                    taskArgs, scaffold) ->
+                // 这个字段出现之前,落盘的只有重放用的调用,没有记名字;那时的活由工具派下,名字就是工具名
+                new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,
+                        taskName.orElse(taskTool), taskTool, taskArgs, scaffold)));
     }
 
     /**

@@ -100,7 +100,7 @@ public final class TaskDispatch {
         record.markAsync();
         CompanionTickDispatcher.currentSlotFor(id).put(companion, record);
         // 记下"她现在在做什么",服务器重启后照着重放一遍(见 TaskPersistence)。
-        TaskPersistence.remember(companion, replayTool, args);
+        TaskPersistence.remember(companion, record.getToolName(), replayTool, args);
         // 内置大脑靠 task_finished 事件收尾(别轮询);外部(MCP)夺舍收不到事件
         // (那条投给内置大脑,不是它),得自己轮询 task_status 到身体空闲,再感知确认。
         // 常驻的活没有终点,也就永远不会发 task_finished —— 回执必须说清楚,

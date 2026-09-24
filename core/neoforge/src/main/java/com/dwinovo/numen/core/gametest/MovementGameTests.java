@@ -567,7 +567,7 @@ public class MovementGameTests {
         UUID uuid = first.getUUID();
         com.dwinovo.numen.entity.Companions.dormant(server, first);
         var registry = com.dwinovo.numen.entity.CompanionRegistry.get(server);
-        registry.put(uuid, registry.find(uuid).doing("mine",
+        registry.put(uuid, registry.find(uuid).doing("mine", "mine",
                 "{\"block_ids\":[\"minecraft:stone\"],\"groups\":[\"g1\"],\"count\":1}"));
         NumenPlayer second = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
         helper.assertTrue(second != null, "the body was not rebuilt");

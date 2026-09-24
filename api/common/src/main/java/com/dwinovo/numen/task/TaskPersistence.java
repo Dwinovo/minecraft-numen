@@ -24,6 +24,9 @@ import net.minecraft.server.MinecraftServer;
  * 存两个字符串:{@code toolName} 与当时的 {@code args}。重建就是<b>把那次调用重放
  * 一遍</b>——工具作者一行都不用写,不需要给每个任务实现一套状态序列化。
  *
+ * <p>另存一个名字:受理时这件活叫什么({@link TaskRecord#getToolName})。它不总是工具名——命令派的活叫"组 动作",
+ * 重放用的工具却是 {@code numen}——接不回来时告诉她的 task_finished 用的就是它,和她受理时看到的是同一个名字。
+ *
  * <p>代价是<b>进度不保</b>:「挖 64 块」挖到 30 块重启,重放会重新挖 64 块。
  * 相比"回来发现啥也没干",多挖三十块是明显更小的损失;真在意精度的任务可以在
  * 自己的工具里把进度写进 args(那时它就是一次更精确的重放)。
@@ -40,8 +43,11 @@ public final class TaskPersistence {
 
     private TaskPersistence() {}
 
-    /** 记下她现在在做什么(换槽时调)。{@code toolName} 为 null = 记为空闲。 */
-    public static void remember(NumenPlayer companion, String toolName, JsonObject args) {
+    /**
+     * 记下她现在在做什么(换槽时调):{@code taskName} 是这件活的名字,{@code toolName} 与 {@code args} 是重放它的那次调用。
+     * 全为 null = 记为空闲。
+     */
+    public static void remember(NumenPlayer companion, String taskName, String toolName, JsonObject args) {
         MinecraftServer server = companion.level().getServer();
         if (server == null) {
             return;
@@ -51,14 +57,14 @@ public final class TaskPersistence {
         if (e == null) {
             return;
         }
-        reg.put(companion.getUUID(), e.doing(
+        reg.put(companion.getUUID(), e.doing(taskName,
                 toolName == null ? "" : toolName,
                 args == null ? "" : args.toString()));
     }
 
     /** 她做完了 / 被换掉了 —— 清掉记录,免得重启后凭空捡回一件旧活。 */
     public static void forget(NumenPlayer companion) {
-        remember(companion, null, null);
+        remember(companion, null, null, null);
     }
 
     /**
@@ -75,12 +81,13 @@ public final class TaskPersistence {
         if (e == null || e.taskTool().isBlank()) {
             return;
         }
+        String taskName = e.taskName();
         String toolName = e.taskTool();
         NumenTool tool = ToolRegistry.get(toolName);
         if (tool == null) {
             // 工具在版本更新里没了(比如两个攻击工具并成了一个)。<b>不做兼容转接</b>——
             // 旧参数未必对得上新工具的语义,猜错了她会去打错的东西。
-            abandon(companion, toolName, toolName + " 这个工具在这一版里已经不存在了。"
+            abandon(companion, taskName, toolName + " 这个工具在这一版里已经不存在了。"
                     + "看看现在有哪些工具,需要的话重新派一次。");
             return;
         }
@@ -90,7 +97,7 @@ public final class TaskPersistence {
                     ? new JsonObject()
                     : JsonParser.parseString(e.taskArgs()).getAsJsonObject();
         } catch (RuntimeException bad) {
-            abandon(companion, toolName, "重启前存下的参数读不了(" + bad.getMessage() + ")。需要的话重新派一次。");
+            abandon(companion, taskName, "重启前存下的参数读不了(" + bad.getMessage() + ")。需要的话重新派一次。");
             return;
         }
         Constants.LOG.info("[numen-task] {} 接回重启前的活:{} {}",
@@ -101,15 +108,15 @@ public final class TaskPersistence {
         tool.serve(REPLAY_CALL_ID + "-" + toolName, args, companion, reply -> {
             JsonObject result = JsonParser.parseString(reply).getAsJsonObject();
             if (!result.get("success").getAsBoolean()) {
-                abandon(companion, toolName, result.get("message").getAsString() + "。需要的话重新派一次。");
+                abandon(companion, taskName, result.get("message").getAsString() + "。需要的话重新派一次。");
             }
         });
     }
 
-    /** 这件活接不回来:记一笔,告诉她为什么,清掉记录。 */
-    private static void abandon(NumenPlayer companion, String toolName, String why) {
-        Constants.LOG.warn("[numen-task] 重启前她在做的 {} 没能接回来: {}", toolName, why);
-        NumenEvents.taskFinished(companion, REPLAY_CALL_ID + "-" + toolName, toolName, "failed",
+    /** 这件活接不回来:记一笔,以它受理时的名字告诉她为什么,清掉记录。 */
+    private static void abandon(NumenPlayer companion, String taskName, String why) {
+        Constants.LOG.warn("[numen-task] 重启前她在做的 {} 没能接回来: {}", taskName, why);
+        NumenEvents.taskFinished(companion, REPLAY_CALL_ID + "-" + taskName, taskName, "failed",
                 "这件活没能接回来:" + why);
         forget(companion);
     }

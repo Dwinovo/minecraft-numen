@@ -71,6 +71,33 @@ class CompanionRegistryTest {
     }
 
     @Test
+    void whatSheIsDoingSurvivesUnderItsName() {
+        // 命令派的活名字是"组 动作",重放用的工具是 numen:两样都得活过读档,接不回来时才说得出她受理的是什么
+        CompanionRegistry reg = new CompanionRegistry();
+        reg.put(A, entry("小焰", OWNER).doing("kaleidoscope cook", "numen",
+                "{\"command\":\"numen kaleidoscope cook 1 2 3 x\"}"));
+
+        CompanionRegistry.Entry back = roundTrip(reg).find(A);
+
+        assertEquals("kaleidoscope cook", back.taskName());
+        assertEquals("numen", back.taskTool());
+        assertEquals("{\"command\":\"numen kaleidoscope cook 1 2 3 x\"}", back.taskArgs());
+    }
+
+    @Test
+    void aTaskSavedBeforeItsNameWasRecordedIsNamedAfterItsTool() {
+        CompanionRegistry reg = new CompanionRegistry();
+        reg.put(A, entry("小焰", OWNER).doing("mine", "mine", "{}"));
+        CompoundTag tag = reg.save(new CompoundTag(), null);
+        tag.getCompound("companions").getCompound(A.toString()).remove("taskName");
+
+        CompanionRegistry.Entry back = CompanionRegistry.load(tag, null).find(A);
+
+        assertEquals("mine", back.taskName(), "那时的活由工具派下,名字就是工具名");
+        assertEquals("mine", back.taskTool());
+    }
+
+    @Test
     void garbageTagDegradesToEmptyRatherThanCrashing() {
         // 读档失败不该把服务器带崩;代价是这一档同伴丢了,但那是没得选的
         CompanionRegistry back = CompanionRegistry.load(new CompoundTag(), null);

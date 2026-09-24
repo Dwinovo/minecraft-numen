@@ -289,6 +289,8 @@ public class TaskControlGameTests {
             helper.assertTrue(recorded.taskTool().equals("numen")
                             && recorded.taskArgs().contains("numen gt_long linger 20"),
                     "the replay recipe is not the call itself: " + recorded.taskTool() + " " + recorded.taskArgs());
+            helper.assertTrue(recorded.taskName().equals("gt_long linger"),
+                    "the task is recorded under another name: " + recorded.taskName());
             helper.assertTrue(finishedAs(outbox, viaCommandBody, "gt_long linger")
                             && finishedAs(outbox, viaToolBody, "gt_linger"),
                     "task_finished does not name the task: " + outbox.peek(viaCommandBody.getUUID()).entries()
@@ -316,7 +318,7 @@ public class TaskControlGameTests {
         CompanionRegistry registry = CompanionRegistry.get(server);
         CompanionRegistry.Entry recorded = registry.find(uuid);
         Companions.dormant(server, first);
-        registry.put(uuid, registry.find(uuid).doing(recorded.taskTool(), recorded.taskArgs()));
+        registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskTool(), recorded.taskArgs()));
         NumenPlayer second = Companions.respawn(server, uuid);
         helper.assertTrue(second != null, "the body was not rebuilt");
         EventOutbox outbox = EventOutbox.get(server);
@@ -342,6 +344,43 @@ public class TaskControlGameTests {
                     Companions.dismiss(server, second);
                 })
                 .thenSucceed();
+    }
+
+    /**
+     * 重启后接不回来的命令长活:重放那一行被拒(这里把落盘的那一行改成写不通的),她收到的 task_finished 仍以受理时的
+     * 名字"组 动作"说这件活没接回来,不是重放用的工具名 numen。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
+    public static void an_abandoned_long_command_is_reported_under_its_name(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        BlockPos at = helper.absolutePos(new BlockPos(2, 2, 2));
+        NumenPlayer first = Companions.summon(server, UUID.randomUUID(), "gametest_unlingerer", level,
+                new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
+        UUID uuid = first.getUUID();
+        ToolRun before = command(first, "numen gt_long linger 1000");
+        CompanionRegistry registry = CompanionRegistry.get(server);
+        CompanionRegistry.Entry recorded = registry.find(uuid);
+        Companions.dormant(server, first);
+        registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskTool(),
+                "{\"command\":\"numen gt_long linger soon\"}"));
+        NumenPlayer second = Companions.respawn(server, uuid);
+        helper.assertTrue(second != null, "the body was not rebuilt");
+        EventOutbox outbox = EventOutbox.get(server);
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(before.task() != null, "the first dispatch failed: " + before.reply());
+            helper.assertTrue(registry.find(uuid).taskTool().isBlank(),
+                    "the task that cannot be replayed is still on record");
+            helper.assertTrue(outbox.peek(uuid).entries().stream()
+                            .anyMatch(e -> e.type().equals("task_finished")
+                                    && e.text().contains("task=\"gt_long linger\"")
+                                    && e.text().contains("status=\"failed\"")
+                                    && e.text().contains("没能接回来")),
+                    "she was not told under the task's name: " + outbox.peek(uuid).entries());
+            outbox.forget(uuid);
+            Companions.dismiss(server, second);
+        });
     }
 
     private static String taskIn(String reply) {
