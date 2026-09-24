@@ -131,7 +131,7 @@ public final class SettingsView {
                         String meta = (nb(e.provider()) ? e.provider() : "?") + " · "
                                 + (nb(e.model()) ? e.model() : "?")
                                 + (hasKey ? "" : " · " + I18n.get(ModLanguageData.Keys.PROVIDER_NO_KEY));
-                        // 行首绑定点:● = 当前同伴走这份档案(召唤后也能换,即时生效)
+                        // 行尾勾 = 当前同伴走这份档案(召唤后也能换,即时生效)
                         Boolean marked = host.uuid() == null ? null : e.id().equals(
                                 com.dwinovo.numen.client.agent.CompanionHome
                                         .binding(host.uuid()).providerId());
@@ -157,7 +157,7 @@ public final class SettingsView {
         return profileList;
     }
 
-    // ---- 声线列表:同一底盘,加标题行全局开关与行首绑定 ● ----
+    // ---- 声线列表:同一底盘,加标题行全局开关与绑定 ----
     private LibraryListPanel<com.dwinovo.numen.client.voice.VoiceLibrary.Entry> voiceListPanel;
 
     private LibraryListPanel<com.dwinovo.numen.client.voice.VoiceLibrary.Entry> voiceListPanel() {
@@ -173,7 +173,7 @@ public final class SettingsView {
                         else detail = nb(e.model()) ? e.model() : "?";
                         String meta = (nb(e.backend()) ? e.backend() : "openai") + " · " + detail
                                 + " · vol " + Math.round(e.volume() * 5.0f);
-                        // 行首绑定点:● = 本同伴正在用的声线;○ 点击换绑,再点 ● 解绑(闭嘴)。
+                        // 行尾勾 = 本同伴正在用的声线;右键菜单里换绑,或不再使用(闭嘴)。
                         Boolean marked = host.uuid() == null ? null : e.id().equals(
                                 com.dwinovo.numen.client.agent.CompanionHome.binding(host.uuid()).voiceId());
                         return new LibraryListPanel.Row(e.name(), meta, false, marked);
@@ -625,7 +625,7 @@ public final class SettingsView {
 
     // ---- Persona section: a library of reusable personas; apply one to the active companion ----
 
-    // ---- 人格列表:通用 LibraryListPanel + 预设行 ⧉ 克隆 + 标题行 ↻ 重扫 ----
+    // ---- 人格列表:通用 LibraryListPanel + 克隆(预设行点了就是克隆)+ 标题行 ↻ 重扫 ----
     private LibraryListPanel<PersonaLibrary.Persona> personaListPanel;
 
     private LibraryListPanel<PersonaLibrary.Persona> personaListPanel() {
@@ -637,7 +637,7 @@ public final class SettingsView {
                         String badge = p.preset() ? I18n.get("numen.persona.preset_badge") + " · " : "";
                         // 正文预览压成单行(MD 里的换行在 24px 行里没有意义)。
                         String meta = (badge + p.text()).replace('\n', ' ');
-                        // 行首绑定点:● = 本同伴的人设;预设行同样可绑
+                        // 行尾勾 = 本同伴的人设;预设行同样可绑
                         Boolean marked = host.uuid() == null ? null : p.id().equals(
                                 com.dwinovo.numen.client.agent.CompanionHome
                                         .binding(host.uuid()).personaId());
@@ -664,7 +664,7 @@ public final class SettingsView {
                                     AgentLoopRegistry.getOrCreate(host.uuid()).setPersona(null);
                                 }
                             })
-                    .withPresetClone(p -> PersonaLibrary.instance().clonePersona(p.id()))
+                    .withClone(p -> PersonaLibrary.instance().clonePersona(p.id()))
                     // ↻ 重扫 persona/ 目录——外部编辑器改完 md 不用重开面板。
                     .withTitleAction("↻", () -> PersonaLibrary.instance().reload());
         }
@@ -852,7 +852,7 @@ public final class SettingsView {
                                 ? I18n.get("numen.skill.no_desc") : sk.description();
                         return new LibraryListPanel.Row(sk.name(), desc, false, null);
                     },
-                    null, sk -> { }, () -> { }, sk -> { })
+                    null, null, null, null)
                     .withRowToggle(
                             sk -> !com.dwinovo.numen.agent.skill.SkillRegistry.instance().isDisabled(sk.name()),
                             sk -> {
@@ -1195,7 +1195,7 @@ public final class SettingsView {
         }
         mcpListPanel().render(surface, HostThemeColors.current(),
                 mouseX, mouseY, net.minecraft.Util.getMillis());
-        // 悬停行体 → tooltip:工具名 + url/命令 + 错误(行尾动作热区上不弹)。
+        // 悬停行体 → tooltip:工具名 + url/命令 + 错误(行尾开关上不弹)。
         var hovered = mcpListPanel().entryAtBody(mouseX, mouseY);
         if (hovered != null) {
             host.tip(mcpTooltip(hovered), mouseX, mouseY);
@@ -1288,7 +1288,7 @@ public final class SettingsView {
             return true;
         }
         // NumenUI 列表面板:删除确认卡开着时面板吃掉一切(模态);
-        // 平时接行/图标/开关/新建,没命中就往下放行。
+        // 平时接行/开关/新建,没命中就往下放行。
         if (section == Section.PROVIDER && !addingProvider
                 && profileList().mouseClicked(mouseX, mouseY, 0)) {
             return true;

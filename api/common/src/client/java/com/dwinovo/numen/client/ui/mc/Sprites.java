@@ -73,9 +73,10 @@ public final class Sprites {
     public static final ResourceLocation BACK = icon("icon_back");
     /** 置顶条展开后目标那一行的旗子。 */
     public static final ResourceLocation FLAG = icon("icon_flag");
-    /** 会话分组:左栏行菜单里的"加入分组…"、分组菜单里的新建分组,以及已经在里面的那个分组前的勾。 */
+    /** 会话分组:左栏行菜单里的"加入分组…"、分组菜单里的新建分组。 */
     public static final ResourceLocation FOLDER = icon("icon_folder");
     public static final ResourceLocation FOLDER_PLUS = icon("icon_folder_plus");
+    /** 勾:分组菜单里已经在的那个分组前、设置条目库里当前同伴在用的那条行尾(强调色),右键菜单里"给她用"也是它。 */
     public static final ResourceLocation CHECK = icon("icon_check");
 
     public static ResourceLocation icon(String name) {

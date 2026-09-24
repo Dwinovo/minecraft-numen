@@ -1,38 +1,43 @@
 package com.dwinovo.numen.client.screen.settings;
 
+import com.dwinovo.numen.client.screen.PopupMenu;
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
+import com.dwinovo.numen.client.ui.TextClip;
+import com.dwinovo.numen.client.ui.mc.McDrawSurface;
+import com.dwinovo.numen.client.ui.mc.Sprites;
 import com.dwinovo.numen.client.ui.widget.Button;
 import com.dwinovo.numen.client.ui.widget.ConfirmDialog;
 import com.dwinovo.numen.client.ui.widget.Label;
 import com.dwinovo.numen.client.ui.widget.ListView;
 import com.dwinovo.numen.client.ui.widget.Toggle;
 import com.dwinovo.numen.client.ui.widget.UiRoot;
+import com.dwinovo.numen.data.ModLanguageData;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
- * 具名条目库的列表分区(NumenUI):标题行+新建(可选全局开关)、条目行
- * (名称/元信息/✎✕ 热区/可选行首绑定 ●)、删除走 {@link ConfirmDialog} 模态闸。
- * 模型配置/声线/皮肤同构——差异全在构造参数(取数、行文案、删除动作),
- * 面板只管几何与交互。行体与 ✎ 同义(点行即编辑);✕ 先确认再删。
+ * 具名条目库的列表分区(NumenUI):标题行+新建(可选全局开关)、条目行、右键菜单,
+ * 删除走 {@link ConfirmDialog} 模态闸。模型配置/声线/人设/皮肤/工具扩展/技能同构——
+ * 差异全在构造参数(取数、行文案、删除动作),面板只管几何与交互。
  *
- * <p>开了 {@link #withBind} 的库,行首多一列绑定点:● = 当前同伴在用,○ = 点击换绑
- * 给它;有解绑动作的库再点 ● 即解绑(回默认)。改绑即时生效——这就是"已创建同伴的
- * 配置也能增删改查"的"改"字,不用遣散重召。
+ * <p>行照 Telegram 设置里的列表行:名字一行、说明淡字一行,行与行之间一道从文字左缘起的细线,
+ * 悬停浅底。点行就是编辑(只读预设行点了是克隆);右键一行弹菜单:编辑、克隆、给她用、删除
+ * ——删除标红放最下面,点了仍先过确认卡。当前同伴在用的那条在行右端挂一枚强调色的勾,
+ * 和 Telegram 列表里选中项一个样子;换绑、解绑在右键菜单里,即时生效,不用遣散重召。
  */
 public final class LibraryListPanel<T> {
 
     /** 一行的展示数据(每帧按条目现算,绑定标记等活状态即时反映)。
-     *  {@code marked}:TRUE=行左缘 accent 侧条(本同伴绑定中);null/FALSE=无标记。
-     *  侧条不占缩进——行内容永远与无标记库同列对齐。
-     *  {@code preset}=只读预设行:行尾 ⧉(克隆成自定义副本)替代 ✎✕,行体不可点。 */
+     *  {@code marked}:null = 没有选中的同伴(不谈绑定);TRUE = 当前同伴在用(行尾勾);FALSE = 没在用。
+     *  {@code preset}=只读预设行:点行克隆成自定义副本,菜单里没有编辑与删除。 */
     public record Row(String name, String meta, boolean metaDanger, Boolean marked, boolean preset) {
 
         public Row(String name, String meta, boolean metaDanger, Boolean marked) {
@@ -40,15 +45,24 @@ public final class LibraryListPanel<T> {
         }
     }
 
-    private static final int ROW_H = 24;
-    /** 行首绑定点的热区宽(开了 withBind 的库,行内容整体右移这么多)。 */
-    private static final int BIND_ZONE = 14;
-    /** 行尾图标热区左缘距行右缘:✕ 最右,✎ 在其左(与旧版热区同宽,肌肉记忆不换)。 */
-    private static final int DEL_ZONE = 14;
-    private static final int EDIT_ZONE = 26;
+    private static final int ROW_H = 26;
+    /** 行内容离行左右两缘的距离。 */
+    private static final int ROW_INSET = 4;
+    /** 行尾开关的几何,点击热区是它左边再宽出一截到行右缘。 */
+    private static final int TOGGLE_W = 20;
+    private static final int TOGGLE_H = 10;
+    private static final int TOGGLE_ZONE = TOGGLE_W + ROW_INSET + 4;
+    /** 行尾那样东西(勾/开关)到文字的间距。 */
+    private static final int TAIL_GAP = 6;
+    /** 右键菜单往右长开要留出的宽;右边放不下就往左长(与 NumenScreen 的右键菜单同一个判据值)。 */
+    private static final int MENU_ROOM = 120;
+    private static final Button.IconDrawer CHECK = Sprites.painter(Sprites.CHECK);
 
     private final UiRoot ui = new UiRoot();
     private final ConfirmDialog confirm = new ConfirmDialog();
+    private final PopupMenu menu = new PopupMenu(Minecraft.getInstance().font);
+    /** 右键点在哪:菜单开着时这一行一直亮着悬停底(Telegram 的右键菜单也这样指明作用在哪一行)。 */
+    private int menuX, menuY;
     /** 列表页轻回执(四层提示制式第③层):删除/克隆/签名成功一句话,自动淡出。
      *  跨 build 持久(host.rebuild 不吞在途消息)。 */
     private final com.dwinovo.numen.client.ui.widget.InlineAlert notice =
@@ -78,14 +92,12 @@ public final class LibraryListPanel<T> {
     private int animRow = -1;
     private float animKnob;
     private long lastAnimMs = -1;
-    // 可选的行内开关(MCP 服务器的启停):画在 ✕ 左侧,替代 ✎(行体点击仍=编辑)。
+    // 可选的行内开关(MCP 服务器的启停):画在行右端。
     private java.util.function.Predicate<T> toggleOn;
     private Consumer<T> toggleFlip;
-    /** 行内开关热区左缘距行右缘(占据 ✎ 的位置再宽些)。 */
-    private static final int TOGGLE_ZONE = 40;
-    // 可选的预设行克隆动作(人格库的 ⧉)。
+    // 可选的克隆动作(人设库):菜单里的"克隆",也是预设行点下去做的事。
     private Consumer<T> onClone;
-    // 可选的行首绑定动作:点 ○ 绑给当前同伴;onUnbind 为 null 的库不许解绑(必须有一个)。
+    // 可选的绑定动作:给当前同伴用;onUnbind 为 null 的库不许解绑(必须有一个)。
     private Consumer<T> onBind;
     private Consumer<T> onUnbind;
     // 可选的标题行附加按钮(人格库的 ↻ 重扫)。
@@ -97,7 +109,6 @@ public final class LibraryListPanel<T> {
     private List<T> entries = List.of();
     private int listW;
     private int dimX, dimY, dimW, dimH;
-    private int mouseX = -10000, mouseY = -10000;
 
     public LibraryListPanel(String addKey, String emptyKey,
                             Supplier<List<T>> source, Function<T, Row> rowOf,
@@ -121,21 +132,19 @@ public final class LibraryListPanel<T> {
         return this;
     }
 
-    /** 行内启停开关(✕ 左侧的小胶囊,替代 ✎ 图标;行体点击仍=编辑)。 */
+    /** 行内启停开关(行右端的小开关;行体点击仍=编辑)。 */
     public LibraryListPanel<T> withRowToggle(java.util.function.Predicate<T> isOn, Consumer<T> flip) {
         this.toggleOn = isOn;
         this.toggleFlip = flip;
         return this;
     }
 
-    /** 鼠标悬停的行条目(仅行体,行尾动作热区不算)——宿主 render 末尾取来画 tooltip。 */
+    /** 鼠标悬停的行条目(仅行体,行尾开关热区不算)——宿主 render 末尾取来画 tooltip。 */
     public T entryAtBody(double mx, double my) {
         if (list == null || ui.hasOverlay()) return null;
         int row = list.rowAt(my);
         if (row < 0 || row >= entries.size() || !list.contains(mx, my)) return null;
-        double xInRow = mx - list.x();
-        int actionFrom = toggleOn != null ? TOGGLE_ZONE : EDIT_ZONE;
-        if (xInRow >= listW - actionFrom) return null;
+        if (toggleOn != null && mx - list.x() >= listW - TOGGLE_ZONE) return null;
         return entries.get(row);
     }
 
@@ -146,16 +155,16 @@ public final class LibraryListPanel<T> {
         return this;
     }
 
-    /** 预设行(Row.preset)的 ⧉ 动作:克隆成可编辑副本并刷新列表。 */
-    public LibraryListPanel<T> withPresetClone(Consumer<T> onClone) {
+    /** 克隆成可编辑副本并刷新列表:右键菜单里的"克隆",也是只读预设行点下去做的事。 */
+    public LibraryListPanel<T> withClone(Consumer<T> onClone) {
         this.onClone = onClone;
         return this;
     }
 
     /**
-     * 行首绑定点:{@code onBind} 把该条目绑给当前同伴(即时生效);{@code onUnbind} 为
-     * null 表示这库不许解绑(如模型档案——同伴必须有一个端点)。只在 Row.marked 非 null
-     * (= 有同伴被选中)的行显示与响应。
+     * 绑定:{@code onBind} 把该条目给当前同伴用(即时生效);{@code onUnbind} 为 null 表示这库
+     * 不许解绑(如模型档案——同伴必须有一个端点)。只在 Row.marked 非 null(= 有同伴被选中)的行
+     * 出现在右键菜单里。
      */
     public LibraryListPanel<T> withBind(Consumer<T> onBind, Consumer<T> onUnbind) {
         this.onBind = onBind;
@@ -179,6 +188,7 @@ public final class LibraryListPanel<T> {
         this.listW = w;
         double keepScroll = list != null ? list.scrollY() : 0;
         ui.clear();
+        menu.closeOverlay();   // 浮层通道随重建清空了,开着的菜单跟着收起(淡出)
 
         // 这一页叫什么写在面板抬头上(Telegram 子页),这一行只放动作:左端"＋ 新建",右端开关与其它动作
         var font = Minecraft.getInstance().font;
@@ -230,10 +240,13 @@ public final class LibraryListPanel<T> {
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mx, int my, long nowMs) {
         if (list == null) return;
-        this.mouseX = mx;
-        this.mouseY = my;
         advanceRowToggleAnim(nowMs);
-        ui.render(s, c, mx, my, nowMs);
+        // 菜单开着:底下的行按右键那一点取悬停,被右键的那一行一直亮着;菜单自己按真实指针走
+        boolean menuUp = menu.isOpen();
+        ui.renderContent(s, c, menuUp ? menuX : mx, menuUp ? menuY : my, nowMs);
+        // 刚收起的菜单淡出那几帧;画在浮层下面——菜单里点了删除,确认卡的暗幕要盖住它
+        if (s instanceof McDrawSurface mc) menu.renderFading(mc.graphics(), mx, my);
+        ui.renderOverlayLayer(s, c, mx, my, nowMs);
     }
 
     /** 帧间隔归一化的趋近(与 Toggle 组件同一节律);到位即释放动画行。 */
@@ -250,15 +263,30 @@ public final class LibraryListPanel<T> {
         if (Math.abs(animKnob - target) < 0.01f) animRow = -1;
     }
 
+    /** 左键照常分发;右键在一行上弹出这一行的菜单。 */
     public boolean mouseClicked(double mx, double my, int button) {
-        return list != null && ui.mouseClicked(mx, my, button);
+        if (list == null) return false;
+        if (button != 1) return ui.mouseClicked(mx, my, button);
+        if (ui.hasOverlay()) {
+            // 菜单开着:右键点在菜单外就是收起(同左键);确认卡开着:卡上的键只认左键,右键吞掉
+            return !menu.isOpen() || ui.mouseClicked(mx, my, button);
+        }
+        int index = list.contains(mx, my) ? list.rowAt(my) : -1;
+        if (index < 0 || index >= entries.size()) return false;
+        List<PopupMenu.Item> items = menuItems(entries.get(index));
+        if (items.isEmpty()) return false;
+        menuX = (int) mx;
+        menuY = (int) my;
+        int screenW = Minecraft.getInstance().getWindow().getGuiScaledWidth();
+        menu.open(ui, items, menuX, menuY, mx + MENU_ROOM < screenW);
+        return true;
     }
 
     public boolean mouseScrolled(double mx, double my, double delta) {
         return list != null && ui.mouseScrolled(mx, my, delta);
     }
 
-    /** ESC 关删除确认(= 取消);其余键列表不吃。 */
+    /** ESC 收起菜单、关删除确认(= 取消);其余键列表不吃。 */
     public boolean keyPressed(int keyCode, int modifiers) {
         return list != null && ui.keyPressed(keyCode, modifiers);
     }
@@ -274,110 +302,102 @@ public final class LibraryListPanel<T> {
     private void renderRow(IDrawSurface s, NumenTheme.Colors c, T e, int index,
                            int rx, int ry, int rw, int rh, boolean selected, boolean hovered) {
         Row row = rowOf.apply(e);   // 行悬停底由 ListView 统一画(带淡入),这里只画内容
-        int tx = rx + 4;
-        if (onBind != null && row.marked() != null) {
-            // 绑定点列:● 在用 / ○ 可绑(悬停亮 CTA)。整库行一起缩进,列内对齐不乱。
-            boolean bound = Boolean.TRUE.equals(row.marked());
-            boolean overBind = hovered && mouseX >= rx && mouseX < rx + BIND_ZONE;
-            int dy = ry + (rh - 6) / 2;
-            int color = bound || overBind ? c.accent() : c.textMuted();
-            s.fillRect(rx + 4, dy, 6, 6, color);
-            if (!bound) {
-                s.fillRect(rx + 5, dy + 1, 4, 4, c.panelBg());   // 空心 = 未绑定
-            }
-            tx = rx + BIND_ZONE;
-        } else if (Boolean.TRUE.equals(row.marked())) {
-            // 绑定标记 = 行左缘 accent 侧条,不占缩进(行内容与无标记库同列对齐)。
-            s.fillRect(rx, ry + 2, 2, rh - 4, c.accent());
-        }
+        int tx = rx + ROW_INSET;
         if (rowIcon != null) {
             rowIcon.draw(s, e, rx + 2, ry + (rh - rowIconSize) / 2, rowIconSize);
             tx = rx + 2 + rowIconSize + 4;
         }
-        s.drawText(row.name() == null ? "" : row.name(), tx, ry + 3, c.textPrimary(), false);
-        s.drawText(com.dwinovo.numen.client.ui.TextClip.fit(s, row.meta(), rw - EDIT_ZONE - 6 - (tx - rx)), tx, ry + 13,
-                row.metaDanger() ? c.danger() : c.textMuted(), false);
-
-        int iconY = ry + (rh - s.lineHeight()) / 2 + 1;
-        boolean overDel = hovered && inZone(rx, rw, DEL_ZONE, 0);
-        if (row.preset()) {   // 只读预设:行尾唯一动作 = ⧉ 克隆成副本
-            s.drawText("⧉", rx + rw - DEL_ZONE + 2, iconY,
-                    overDel ? c.accent() : c.textMuted(), false);
-            return;
-        }
+        int tail = rx + rw - ROW_INSET;   // 行尾那样东西的右缘
+        int textRight = tail;
         if (toggleOn != null) {
             // 行内启停:与 Toggle 组件同制——关闭态描边环+灰轨道(浅面板上不隐形),
             // 翻转时滑块滑动、轨道色随之渐变(动画状态由面板持有,见 animRow)。
             boolean on = toggleOn.test(e);
             float knob = index == animRow ? animKnob : (on ? 1f : 0f);
-            int tx0 = rx + rw - (deleteMessage != null ? TOGGLE_ZONE : 24);
-            int ty = ry + (rh - 10) / 2;
-            s.fillRect(tx0, ty, 20, 10,
+            int tx0 = tail - TOGGLE_W;
+            int ty = ry + (rh - TOGGLE_H) / 2;
+            s.fillRect(tx0, ty, TOGGLE_W, TOGGLE_H,
                     NumenStyle.mixColor(c.textMuted(), c.accent(), knob));
             if (knob < 0.99f) {   // 关闭侧的浅底+灰纹随进度淡出
                 int fade = (int) (255 * (1f - knob));
-                s.fillRect(tx0 + 1, ty + 1, 18, 8,
+                s.fillRect(tx0 + 1, ty + 1, TOGGLE_W - 2, TOGGLE_H - 2,
                         (fade << 24) | (c.inputBg() & 0xFFFFFF));
-                s.fillRect(tx0 + 1, ty + 1, 18, 8,
+                s.fillRect(tx0 + 1, ty + 1, TOGGLE_W - 2, TOGGLE_H - 2,
                         ((int) (0x40 * (1f - knob)) << 24) | (c.textMuted() & 0xFFFFFF));
             }
             s.fillRect(tx0 + 2 + Math.round(9 * knob), ty + 2, 7, 6, 0xFFFFFFFF);
-        } else if (deleteMessage != null) {
-            boolean overEdit = hovered && inZone(rx, rw, EDIT_ZONE, DEL_ZONE);
-            s.drawText("✎", rx + rw - EDIT_ZONE + 2, iconY,
-                    overEdit ? c.accent() : c.textMuted(), false);
+            textRight = tx0 - TAIL_GAP;
+        } else if (Boolean.TRUE.equals(row.marked())) {
+            // 当前同伴在用:行右端一枚强调色的勾(Telegram 列表里选中项的样子)
+            CHECK.draw(s, tail - Sprites.SIZE, ry + (rh - Sprites.SIZE) / 2,
+                    Sprites.SIZE, c.accent());
+            textRight = tail - Sprites.SIZE - TAIL_GAP;
         }
-        if (deleteMessage != null) {
-            s.drawText("✕", rx + rw - DEL_ZONE + 2, iconY,
-                    overDel ? c.danger() : c.textMuted(), false);
+        int textW = textRight - tx;
+        s.drawText(TextClip.fit(s, row.name() == null ? "" : row.name(), textW), tx, ry + 4,
+                c.textPrimary(), false);
+        s.drawText(TextClip.fit(s, row.meta(), textW), tx, ry + 15,
+                row.metaDanger() ? c.danger() : c.textMuted(), false);
+        if (index < entries.size() - 1) {   // 行间细线从文字左缘起,最后一行下面不画
+            s.fillRect(tx, ry + rh - 1, rx + rw - tx, 1, c.divider());
         }
-    }
-
-    /** 鼠标横坐标是否落在距行右缘 [from, to) 的图标热区(from > to,都是距右缘距离)。 */
-    private boolean inZone(int rx, int rw, int from, int to) {
-        return mouseX >= rx + rw - from && mouseX < rx + rw - to;
     }
 
     private boolean rowClicked(int index, double xInRow) {
         if (index < 0 || index >= entries.size()) return false;
         T e = entries.get(index);
-        Row row = rowOf.apply(e);
-        // 绑定点最先判(预设行也能绑——预设人设一样可以给同伴用)。
-        if (onBind != null && row.marked() != null && xInRow < BIND_ZONE) {
-            if (Boolean.TRUE.equals(row.marked())) {
-                if (onUnbind != null) {
-                    onUnbind.accept(e);
-                    refresh();
-                    noticeSuccess(t("numen.gui.list.bind_cleared"));
-                }
-            } else {
-                onBind.accept(e);
-                refresh();
-                noticeSuccess(net.minecraft.network.chat.Component
-                        .translatable("numen.gui.list.bound", row.name()).getString());
-            }
-            return true;
-        }
-        if (row.preset()) {   // 预设行:只有 ⧉ 热区有动作,行体吞掉不编辑
-            if (xInRow >= listW - DEL_ZONE && onClone != null) {
-                onClone.accept(e);
-                refresh();
-                noticeSuccess(t("numen.gui.list.cloned"));
-            }
-            return true;
-        }
-        if (deleteMessage != null && xInRow >= listW - DEL_ZONE) {
-            askDelete(e);
-            return true;
-        }
         if (toggleOn != null && xInRow >= listW - TOGGLE_ZONE) {
             animRow = index;                                  // 从翻转前的位置起步滑动
             animKnob = toggleOn.test(e) ? 1f : 0f;
             toggleFlip.accept(e);
             return true;
         }
-        onEdit.accept(e);   // ✎ 与行体同义:点行即编辑(纯开关库传空实现)
+        if (rowOf.apply(e).preset()) {   // 只读预设:点行 = 克隆成可编辑副本
+            if (onClone != null) clone(e);
+            return true;
+        }
+        if (onEdit != null) onEdit.accept(e);
         return true;
+    }
+
+    /** 这一行的右键菜单:编辑、克隆、给她用/不再使用,删除标红放最下面、前面一道分隔线。 */
+    private List<PopupMenu.Item> menuItems(T e) {
+        Row row = rowOf.apply(e);
+        List<PopupMenu.Item> items = new ArrayList<>();
+        if (onEdit != null && !row.preset()) {
+            items.add(new PopupMenu.Item(Sprites.EDIT, t(ModLanguageData.Keys.EDIT_TITLE), false,
+                    () -> onEdit.accept(e)));
+        }
+        if (onClone != null) {
+            items.add(new PopupMenu.Item(Sprites.COPY, t("numen.menu.clone"), false, () -> clone(e)));
+        }
+        if (onBind != null && row.marked() != null) {
+            if (!row.marked()) {
+                items.add(new PopupMenu.Item(Sprites.CHECK, t("numen.menu.use"), false, () -> {
+                    onBind.accept(e);
+                    refresh();
+                    noticeSuccess(net.minecraft.network.chat.Component
+                            .translatable("numen.gui.list.bound", row.name()).getString());
+                }));
+            } else if (onUnbind != null) {
+                items.add(new PopupMenu.Item(Sprites.CHECK, t("numen.menu.stop_using"), false, () -> {
+                    onUnbind.accept(e);
+                    refresh();
+                    noticeSuccess(t("numen.gui.list.bind_cleared"));
+                }));
+            }
+        }
+        if (deleteMessage != null && !row.preset()) {
+            if (!items.isEmpty()) items.add(PopupMenu.SEPARATOR);
+            items.add(new PopupMenu.Item(Sprites.DELETE, t("numen.dismiss.delete"), true, () -> askDelete(e)));
+        }
+        return items;
+    }
+
+    private void clone(T e) {
+        onClone.accept(e);
+        refresh();
+        noticeSuccess(t("numen.gui.list.cloned"));
     }
 
     private void askDelete(T e) {

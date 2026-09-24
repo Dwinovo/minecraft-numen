@@ -20,12 +20,12 @@ import java.util.List;
  * <p>动效照 Telegram 的 PanelAnimation:200ms 里从锚住的那个角长开,宽从一半、高从三成长满,
  * 同时淡入;收起是 150ms 淡出。收起后浮层通道已经放手,淡出那几帧由宿主调 {@link #renderFading} 画。
  */
-final class PopupMenu implements UiRoot.Overlay {
+public final class PopupMenu implements UiRoot.Overlay {
 
     /** 一项;{@link #SEPARATOR} 是分隔线。{@code danger} = 红字红图标(删、遣散这类回不去的)。 */
-    record Item(ResourceLocation icon, String label, boolean danger, Runnable action) {}
+    public record Item(ResourceLocation icon, String label, boolean danger, Runnable action) {}
 
-    static final Item SEPARATOR = new Item(null, null, false, null);
+    public static final Item SEPARATOR = new Item(null, null, false, null);
 
     private static final int SHOW_MS = 200;
     private static final int HIDE_MS = 150;
@@ -46,12 +46,12 @@ final class PopupMenu implements UiRoot.Overlay {
     private boolean open;
     private long openedAt, closedAt;
 
-    PopupMenu(Font font) {
+    public PopupMenu(Font font) {
         this.font = font;
     }
 
     /** 挂在 {@code (anchor, top)}:{@code growRight} 往右下长开,否则往左下。 */
-    void open(UiRoot root, List<Item> items, int anchor, int top, boolean growRight) {
+    public void open(UiRoot root, List<Item> items, int anchor, int top, boolean growRight) {
         this.root = root;
         this.items = items;
         this.anchor = anchor;
@@ -74,12 +74,12 @@ final class PopupMenu implements UiRoot.Overlay {
         root.openOverlay(this);
     }
 
-    boolean isOpen() {
+    public boolean isOpen() {
         return open;
     }
 
     /** 刚收起、还在淡出:浮层通道不再画它,宿主这几帧接着画。 */
-    void renderFading(GuiGraphics g, int mouseX, int mouseY) {
+    public void renderFading(GuiGraphics g, int mouseX, int mouseY) {
         long now = System.currentTimeMillis();
         if (open || now - closedAt >= HIDE_MS) return;
         draw(g, mouseX, mouseY, now, false);

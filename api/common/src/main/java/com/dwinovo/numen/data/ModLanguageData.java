@@ -533,6 +533,9 @@ public final class ModLanguageData {
         adder.add("numen.menu.read", "Mark as read");
         adder.add("numen.menu.night", "Night mode");
         adder.add("numen.menu.day", "Day mode");
+        adder.add("numen.menu.clone", "Clone");
+        adder.add("numen.menu.use", "Use for her");
+        adder.add("numen.menu.stop_using", "Stop using");
         adder.add("numen.chat.reply_to", "Reply to %s");
         adder.add("numen.chat.unread_bar", "Unread messages");
         adder.add("numen.chat.find", "Search this chat");
@@ -953,6 +956,9 @@ public final class ModLanguageData {
         adder.add("numen.menu.read", "标为已读");
         adder.add("numen.menu.night", "夜间模式");
         adder.add("numen.menu.day", "日间模式");
+        adder.add("numen.menu.clone", "克隆");
+        adder.add("numen.menu.use", "给她用");
+        adder.add("numen.menu.stop_using", "不再使用");
         adder.add("numen.chat.reply_to", "回复 %s");
         adder.add("numen.chat.unread_bar", "未读消息");
         adder.add("numen.chat.find", "在对话里搜索");
