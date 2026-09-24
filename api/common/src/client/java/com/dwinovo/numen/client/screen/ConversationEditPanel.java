@@ -3,7 +3,6 @@ package com.dwinovo.numen.client.screen;
 import com.dwinovo.numen.agent.conversation.Conversation;
 import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.client.skin.ConversationFaces;
-import com.dwinovo.numen.client.ui.KeyCodes;
 import com.dwinovo.numen.client.ui.NumenTheme;
 import com.dwinovo.numen.client.ui.mc.McDrawSurface;
 import com.dwinovo.numen.client.ui.widget.TextField;
@@ -79,15 +78,6 @@ public final class ConversationEditPanel extends ModalCard {
     @Override
     protected void paint(McDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, float alpha) {
         ConversationFaces.draw(s.graphics(), host.conversation(), photoX(), photoY(coverTop), PHOTO);
-    }
-
-    @Override
-    boolean keyPressed(int keyCode, int modifiers) {
-        if (keyCode == KeyCodes.ENTER) {
-            save();   // Enter 是确认的兜底路径
-            return true;
-        }
-        return ui.keyPressed(keyCode, modifiers);
     }
 
     private static String t(String key) {

@@ -1587,8 +1587,7 @@ public final class NumenScreen extends Screen {
         }
         if (modalOpen()) {
             if (!cardLive()) return true;   // 淡出那几帧:键一概不接,免得 Esc 落到面板上把它整个关了
-            if (k == 256) { closeCard(); return true; } // Esc 收卡,不关面板
-            if (modalCard.keyPressed(keyCode, modifiers)) return true;
+            if (modalCard.keyPressed(keyCode, modifiers)) return true;   // Tab/回车/Esc 归卡(Esc 收卡,不关面板)
             return super.keyPressed(keyCode, scanCode, modifiers);
         }
         // Alt+↑/↓、Ctrl+Tab / Ctrl+Shift+Tab:切到上一个、下一个会话(Telegram 桌面版的键)

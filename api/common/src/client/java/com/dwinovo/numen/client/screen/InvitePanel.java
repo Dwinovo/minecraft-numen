@@ -5,7 +5,6 @@ import com.dwinovo.numen.client.agent.Conversations;
 import com.dwinovo.numen.client.agent.KnownSkins;
 import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.client.skin.CompanionFace;
-import com.dwinovo.numen.client.ui.KeyCodes;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
 import com.dwinovo.numen.client.ui.TextClip;
@@ -151,15 +150,6 @@ public final class InvitePanel extends ModalCard {
             return true;
         }
         return ui.mouseClicked(mx, my, button);
-    }
-
-    @Override
-    boolean keyPressed(int keyCode, int modifiers) {
-        if (keyCode == KeyCodes.ENTER) {
-            confirm();   // Enter 是确认的兜底路径;没勾就不动
-            return true;
-        }
-        return ui.keyPressed(keyCode, modifiers);
     }
 
     private static String t(String key) {

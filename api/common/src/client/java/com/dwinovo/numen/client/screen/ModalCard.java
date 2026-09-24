@@ -1,5 +1,6 @@
 package com.dwinovo.numen.client.screen;
 
+import com.dwinovo.numen.client.ui.KeyCodes;
 import com.dwinovo.numen.client.ui.NumenTheme;
 import com.dwinovo.numen.client.ui.mc.McDrawSurface;
 import com.dwinovo.numen.client.ui.mc.Sprites;
@@ -15,6 +16,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.IntConsumer;
 
@@ -32,6 +34,9 @@ import java.util.function.IntConsumer;
  *   <li>右下一排纯字钮({@link #buttons}):取消在左,主按钮在右。</li>
  * </ul>
  * 卡宽、边距、按钮行与确认卡共用 {@link DialogBox} 的那几个数;这里的几个数按同样的比例从 Telegram 折过来。
+ *
+ * <p>键盘也照 Telegram 的对话框,四张卡一样:Tab / Shift+Tab 在输入框之间走,回车 = 主按钮
+ * (主按钮置灰时不动),Esc = 取消;下拉展开着时 Esc 先收下拉。
  */
 abstract class ModalCard {
 
@@ -52,6 +57,12 @@ abstract class ModalCard {
     /** 卡的外框(build 时由屏幕给)。 */
     protected int x, y, w, h;
     private String title;
+    /** Tab 走的输入框,按排版的先后。 */
+    private final List<TextField> fields = new ArrayList<>();
+    /** 回车按的主按钮与它的动作、Esc 走的取消(都由 {@link #buttons} 登记)。 */
+    private Button primary;
+    private Runnable primaryAction;
+    private Runnable cancelAction;
 
     /** 每次开卡:草稿从当下真相取一次基线。 */
     abstract void reset();
@@ -78,6 +89,7 @@ abstract class ModalCard {
         ui.clear();
         ui.setViewportHeight(dropBottom);
         title = null;
+        fields.clear();
         layout(y + DialogBox.TITLE_H);
     }
 
@@ -119,6 +131,7 @@ abstract class ModalCard {
         l.setBounds(fx, fy, fw, 9);
         ui.add(field.underlined(true).withLabel(l));
         field.setBounds(fx, fy + FIELD_LABEL_H, fw, FIELD_H - FIELD_LABEL_H);
+        fields.add(field);
         return field;
     }
 
@@ -140,6 +153,9 @@ abstract class ModalCard {
         cancel.setBounds(okX - DialogBox.BUTTON_GAP - cancelW, by, cancelW, DialogBox.BUTTON_H);
         Button ok = ui.add(new Button(okLabel, Button.Style.LINK, onOk));
         ok.setBounds(okX, by, okW, DialogBox.BUTTON_H);
+        primary = ok;
+        primaryAction = onOk;
+        cancelAction = onCancel;
         return ok;
     }
 
@@ -195,8 +211,34 @@ abstract class ModalCard {
         return ui.mouseScrolled(mx, my, delta);
     }
 
-    boolean keyPressed(int keyCode, int modifiers) {
-        return ui.keyPressed(keyCode, modifiers);
+    /** Tab 走输入框、回车按主按钮、Esc 取消;其余键给获焦的控件。 */
+    final boolean keyPressed(int keyCode, int modifiers) {
+        switch (keyCode) {
+            case KeyCodes.ESCAPE -> {
+                if (ui.hasOverlay()) return ui.keyPressed(keyCode, modifiers);   // 先收展开的下拉
+                cancelAction.run();
+                return true;
+            }
+            case KeyCodes.TAB -> {
+                if (!ui.hasOverlay()) focusStep(KeyCodes.shift(modifiers) ? -1 : 1);
+                return true;   // 不给屏幕:原版的 Tab 会把焦点挪到底下的真输入框上,两边的焦点就对不上了
+            }
+            case KeyCodes.ENTER -> {
+                if (!ui.hasOverlay() && primary.enabled()) primaryAction.run();
+                return true;
+            }
+            default -> {
+                return ui.keyPressed(keyCode, modifiers);
+            }
+        }
+    }
+
+    /** 焦点往前或往后挪一个输入框,到头绕回;眼下没有输入框获焦时从头(或从尾)开始。 */
+    private void focusStep(int dir) {
+        if (fields.isEmpty()) return;
+        int at = fields.indexOf(ui.focusedWidget());
+        int next = at < 0 ? (dir > 0 ? 0 : fields.size() - 1) : Math.floorMod(at + dir, fields.size());
+        ui.requestFocus(fields.get(next));
     }
 
     boolean charTyped(char ch) {

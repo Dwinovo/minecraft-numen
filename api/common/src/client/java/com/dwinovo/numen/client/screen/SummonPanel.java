@@ -215,15 +215,6 @@ public final class SummonPanel extends ModalCard {
                 ? t(ModLanguageData.Keys.SUMMON_MODE_INHERIT_TIP) : null;
     }
 
-    @Override
-    boolean keyPressed(int keyCode, int modifiers) {
-        if (keyCode == com.dwinovo.numen.client.ui.KeyCodes.ENTER && !ui.hasOverlay()) {
-            submit();   // Enter 是确认的兜底路径
-            return true;
-        }
-        return ui.keyPressed(keyCode, modifiers);
-    }
-
     // ---- 内部 ----
 
     /** 提交后的等待态:胶囊说明在干嘛,创建钮自锁防重复点(异步查皮肤要一两秒)。 */
