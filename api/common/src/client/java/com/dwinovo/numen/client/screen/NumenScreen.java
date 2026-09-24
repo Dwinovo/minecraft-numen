@@ -383,6 +383,7 @@ public final class NumenScreen extends Screen {
         this.conv = conv;
         // 面板对着谁 = 当前交互对象:开在谁身上、切到谁,R/Y/V 就对着谁——一个"当前",不是两个
         if (conv != null) SelectedCompanion.set(conv);
+        if (conv != null) savedInput = Conversations.instance().draft(conv);   // 上次没发完的话还在
     }
 
     private static String titleOf(Conversation c) {
@@ -428,11 +429,15 @@ public final class NumenScreen extends Screen {
     /** Switch the panel to another conversation in place (left-rail click) — no reopen. */
     private void switchTo(Conversation c) {
         boolean same = sameAs(c, conv);
+        Conversation from = conv;
         conv = c;   // 同一个会话也换成最新的那份——成员表、名字可能刚变
         SelectedCompanion.set(c);
         if (same) return;
+        // 没发出去的话留在原来那个会话里(Telegram 的草稿),切到的会话拿回它自己的
+        if (from != null && inputBar != null) Conversations.instance().setDraft(from, inputBar.text());
+        inputBar = null;
+        savedInput = Conversations.instance().draft(c);
         if (tab == Tab.ITEMS || tab == Tab.MEMBERS) selectTab(Tab.CHAT);   // 换了会话,资料页收起(Telegram 也这样)
-        inputBar = null; savedInput = "";       // don't carry typed text across conversations
         planOpen = false;
         planShownH = 0f;
         chatView.reset();
@@ -2177,6 +2182,7 @@ public final class NumenScreen extends Screen {
 
     @Override
     public void removed() {
+        if (conv != null && inputBar != null) Conversations.instance().setDraft(conv, inputBar.text());
         com.dwinovo.numen.client.ui.mc.McTextInput.mountVia(null, null);
         super.removed();
     }

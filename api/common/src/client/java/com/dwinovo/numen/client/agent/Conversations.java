@@ -74,6 +74,8 @@ public final class Conversations extends JsonLibrary<Conversation> {
 
     /** 每个会话主人看到哪了(最后看到的那条的时间戳);左栏据此数未读。随会话一起落盘。 */
     private final Map<String, Long> seen = new java.util.HashMap<>();
+    /** 每个会话里打了一半没发的话(Telegram 的草稿):切走时留下,切回来拿回;左栏标"草稿"。随会话一起落盘。 */
+    private final Map<String, String> drafts = new java.util.HashMap<>();
 
     @Override
     protected void readExtra(JsonObject root) {
@@ -84,6 +86,14 @@ public final class Conversations extends JsonLibrary<Conversation> {
             for (var e : root.getAsJsonObject("seen").entrySet()) {
                 if (e.getValue().isJsonPrimitive()) {
                     seen.put(e.getKey(), e.getValue().getAsLong());
+                }
+            }
+        }
+        drafts.clear();
+        if (root.has("drafts") && root.get("drafts").isJsonObject()) {
+            for (var e : root.getAsJsonObject("drafts").entrySet()) {
+                if (e.getValue().isJsonPrimitive()) {
+                    drafts.put(e.getKey(), e.getValue().getAsString());
                 }
             }
         }
@@ -101,12 +111,20 @@ public final class Conversations extends JsonLibrary<Conversation> {
             }
             root.add("seen", o);
         }
+        if (!drafts.isEmpty()) {
+            JsonObject o = new JsonObject();
+            for (var e : drafts.entrySet()) {
+                o.addProperty(e.getKey(), e.getValue());
+            }
+            root.add("drafts", o);
+        }
     }
 
     @Override
     protected void resetExtra() {
         selectedId = null;
         seen.clear();
+        drafts.clear();
     }
 
     // ---- 看到哪了 ----
@@ -121,6 +139,21 @@ public final class Conversations extends JsonLibrary<Conversation> {
             seen.put(conv.id(), ts);
             save();
         }
+    }
+
+    // ---- 草稿 ----
+
+    /** 这个会话里没发出去的那句;没有是空串。 */
+    public String draft(Conversation conv) {
+        return drafts.getOrDefault(conv.id(), "");
+    }
+
+    /** 记下(空串 = 清掉)。只在变了时落盘。 */
+    public void setDraft(Conversation conv, String text) {
+        String t = text == null ? "" : text;
+        if (t.equals(draft(conv))) return;
+        if (t.isEmpty()) drafts.remove(conv.id()); else drafts.put(conv.id(), t);
+        save();
     }
 
     // ---- 当前交互对象 ----
@@ -254,6 +287,7 @@ public final class Conversations extends JsonLibrary<Conversation> {
      * 还站在这个场面里的成员退回"就他俩"——不然她下一句话会盖一个已经不存在的印,哪个视图都看不见。
      */
     public void dissolve(Conversation conv) {
+        drafts.remove(conv.id());
         remove(conv.id());
         for (UUID m : conv.members()) {
             AgentLoopRegistry.get(m)
