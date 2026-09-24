@@ -4,20 +4,19 @@ import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.KeyCodes;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
+import com.dwinovo.numen.client.ui.WrappedText;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * 多行文本输入(人格正文/聊天输入框的地基)。完整编辑体验:
+ * 多行文本输入(人格正文)。完整编辑体验:
  * 软换行(空格优先断行,CJK 逐字断)、光标四向移动(上下按目标列记忆)、
  * Home/End(行首尾)与 Ctrl+Home/End(全文首尾)、Shift+方向键与拖选选区、
  * Ctrl+A/C/X/V(粘贴保留换行)、回车换行、滚轮/自动滚动(光标始终可见)、
  * 占位符、可选长度上限。
  *
- * <p>换行几何依赖画布度量,首次 render 之后才有;之前的按键操作按纯
- * 换行符分行退化处理(实际交互顺序里 render 永远先来)。
+ * <p>换行几何({@link WrappedText},与聊天输入框的多行模式同一份)依赖画布度量,首次 render 之后才有;
+ * 之前的按键操作按纯换行符分行退化处理(实际交互顺序里 render 永远先来)。
  */
 public final class MultilineTextField extends Widget {
 
@@ -39,8 +38,8 @@ public final class MultilineTextField extends Widget {
 
     /** 最近一次 render 的画布——度量真源(MC 字体宽度渲染/交互一致)。 */
     private IDrawSurface measure;
-    /** 行跨度 [start,end)(end 不含换行符);永远至少一行。 */
-    private List<int[]> lines = List.of(new int[]{0, 0});
+    /** 折行几何(每行一段 [start,end),不含换行符;永远至少一行)。 */
+    private WrappedText layout = WrappedText.of("", 0, null);
     private boolean dirty = true;
     private int wrapW = -1;
 
@@ -125,32 +124,33 @@ public final class MultilineTextField extends Widget {
         int selMin = selMin(), selMax = selMax();
         s.pushScissor(x, y, w, h);
         int first = Math.max(0, scrollY / pitch);
-        int last = Math.min(lines.size() - 1, (scrollY + viewH() - 1) / pitch);
+        int last = Math.min(layout.lineCount() - 1, (scrollY + viewH() - 1) / pitch);
         for (int i = first; i <= last; i++) {
-            int[] span = lines.get(i);
+            int lineStart = layout.start(i), lineEnd = layout.end(i);
             int ly = lineTop(i);
             if (selMax > selMin) {   // 选区底色先画,逐行裁到本行跨度
-                int a = Math.max(span[0], selMin), b = Math.min(span[1], selMax);
-                if (a < b || (selMin <= span[1] && selMax > span[1] && endsSoft(i))) {
-                    int sx = x + NumenStyle.FIELD_PAD + widthOf(span[0], Math.max(a, span[0]));
-                    int ex = a < b ? sx + widthOf(a, b) : sx;
-                    if (selMax > span[1]) ex = Math.max(ex, x + NumenStyle.FIELD_PAD + widthOf(span[0], span[1]) + 3);
+                int a = Math.max(lineStart, selMin), b = Math.min(lineEnd, selMax);
+                if (a < b || (selMin <= lineEnd && selMax > lineEnd && layout.endsSoft(i))) {
+                    int sx = x + NumenStyle.FIELD_PAD + layout.widthOf(lineStart, Math.max(a, lineStart));
+                    int ex = a < b ? sx + layout.widthOf(a, b) : sx;
+                    if (selMax > lineEnd) {
+                        ex = Math.max(ex, x + NumenStyle.FIELD_PAD + layout.widthOf(lineStart, lineEnd) + 3);
+                    }
                     s.fillRect(sx, ly, Math.max(2, ex - sx), pitch,
                             (c.accent() & 0x00FFFFFF) | 0x40000000);
                 }
             }
-            s.drawText(value.substring(span[0], span[1]), x + NumenStyle.FIELD_PAD, ly + 1,
-                    c.textPrimary(), false);
+            s.drawText(layout.line(i), x + NumenStyle.FIELD_PAD, ly + 1, c.textPrimary(), false);
         }
 
         if (isFocused() && (nowMs / 500) % 2 == 0) {   // 光标 1Hz 闪烁
             int line = cursorLine();
-            int cx = x + NumenStyle.FIELD_PAD + widthOf(lines.get(line)[0], cursor);
+            int cx = x + NumenStyle.FIELD_PAD + layout.xOf(cursor);
             s.fillRect(cx, lineTop(line), 1, pitch - 1, c.textPrimary());
         }
         s.popScissor();
 
-        int contentH = lines.size() * pitch;
+        int contentH = layout.lineCount() * pitch;
         if (contentH > viewH()) {   // 滚动拇指
             int thumbH = Math.max(8, viewH() * viewH() / contentH);
             int thumbY = y + 2 + (viewH() - thumbH) * scrollY / (contentH - viewH());
@@ -189,7 +189,7 @@ public final class MultilineTextField extends Widget {
     @Override
     public boolean mouseScrolled(double mx, double my, double delta) {
         if (!contains(mx, my)) return false;
-        int contentH = lines.size() * pitch();
+        int contentH = layout.lineCount() * pitch();
         if (contentH <= viewH()) return false;
         scrollY = clampInt((int) Math.round(scrollY - delta * pitch() * 2), 0, contentH - viewH());
         return true;
@@ -304,11 +304,11 @@ public final class MultilineTextField extends Widget {
                 return true;
             }
             case KeyCodes.HOME -> {
-                moveCursor(lines.get(cursorLine())[0], shift);
+                moveCursor(layout.start(cursorLine()), shift);
                 return true;
             }
             case KeyCodes.END -> {
-                moveCursor(lines.get(cursorLine())[1], shift);
+                moveCursor(layout.end(cursorLine()), shift);
                 return true;
             }
             default -> {
@@ -358,14 +358,14 @@ public final class MultilineTextField extends Widget {
     private void verticalMove(int dir, boolean keepAnchor) {
         reflowIfNeeded();
         int line = cursorLine();
-        if (goalX < 0) goalX = widthOf(lines.get(line)[0], cursor);
+        if (goalX < 0) goalX = layout.xOf(cursor);
         int target = line + dir;
         if (target < 0) {
             cursor = 0;
-        } else if (target >= lines.size()) {
+        } else if (target >= layout.lineCount()) {
             cursor = value.length();
         } else {
-            cursor = indexAtX(target, goalX);
+            cursor = layout.indexAtX(target, goalX);
         }
         if (!keepAnchor) anchor = cursor;
         ensureCursorVisible();
@@ -400,104 +400,25 @@ public final class MultilineTextField extends Widget {
     private void reflowIfNeeded() {
         if (!dirty) return;
         dirty = false;
-        List<int[]> out = new ArrayList<>();
-        int len = value.length();
-        int hardStart = 0;
-        for (int i = 0; i <= len; i++) {
-            if (i == len || value.charAt(i) == '\n') {
-                wrapHardLine(out, hardStart, i);
-                hardStart = i + 1;
-            }
-        }
-        lines = out;
-    }
-
-    /** 一个硬行(无换行符)按宽度切成若干软行:空格优先断行,CJK 逐字断。 */
-    private void wrapHardLine(List<int[]> out, int start, int end) {
-        if (measure == null || innerW() <= 0 || start >= end) {
-            out.add(new int[]{start, end});
-            return;
-        }
-        int lineStart = start;
-        int width = 0;
-        int lastSpace = -1;
-        int i = start;
-        while (i < end) {
-            char ch = value.charAt(i);
-            int cw = measure.textWidth(String.valueOf(ch));
-            if (width + cw > innerW() && i > lineStart) {
-                int cut;
-                if (ch == ' ') {
-                    cut = i + 1;              // 压线的空格随行吞掉(行尾空格无需显示宽度)
-                    i = cut;
-                } else if (lastSpace > lineStart) {
-                    cut = lastSpace + 1;      // 回退到最近空格后断,词不劈两半
-                    i = cut;
-                } else {
-                    cut = i;                  // 整行无空格(CJK/长词):逐字断
-                }
-                out.add(new int[]{lineStart, cut});
-                lineStart = cut;
-                width = 0;
-                lastSpace = -1;
-                continue;                     // 回退过的字符从零重新累计宽度
-            }
-            if (ch == ' ') lastSpace = i;
-            width += cw;
-            i++;
-        }
-        out.add(new int[]{lineStart, end});
+        layout = WrappedText.of(value.toString(), innerW(), measure == null ? null : measure::textWidth);
     }
 
     /** 光标所在的视觉行:软换行边界上的光标归下一行行首(通用编辑器行为)。 */
     private int cursorLine() {
         reflowIfNeeded();
-        for (int i = 0; i < lines.size(); i++) {
-            int[] span = lines.get(i);
-            if (cursor < span[1]) return i;
-            if (cursor == span[1] && (i == lines.size() - 1 || endsHard(i))) return i;
-        }
-        return lines.size() - 1;
-    }
-
-    /** 行尾是硬换行(其后是 \n)? */
-    private boolean endsHard(int line) {
-        int end = lines.get(line)[1];
-        return end < value.length() && value.charAt(end) == '\n';
-    }
-
-    private boolean endsSoft(int line) {
-        return line < lines.size() - 1 && !endsHard(line);
-    }
-
-    private int widthOf(int from, int to) {
-        if (measure == null || from >= to) return 0;
-        return measure.textWidth(value.substring(from, to));
+        return layout.lineOf(cursor);
     }
 
     /** 屏幕坐标 → 文本下标(行外点击夹到最近行/行首行尾)。 */
     private int indexAt(double mx, double my) {
         reflowIfNeeded();
         int line = clampInt((int) Math.floor((my - y - 2 + scrollY) / (double) pitch()),
-                0, lines.size() - 1);
-        return indexAtX(line, (int) (mx - x - NumenStyle.FIELD_PAD));
-    }
-
-    /** 行内横坐标(px,相对文本左缘)→ 下标:落在字符前半归左,后半归右。 */
-    private int indexAtX(int line, int px) {
-        int[] span = lines.get(line);
-        if (measure == null) return span[1];
-        int width = 0;
-        for (int i = span[0]; i < span[1]; i++) {
-            int cw = measure.textWidth(String.valueOf(value.charAt(i)));
-            if (px < width + cw / 2) return i;
-            width += cw;
-        }
-        return span[1];
+                0, layout.lineCount() - 1);
+        return layout.indexAtX(line, (int) (mx - x - NumenStyle.FIELD_PAD));
     }
 
     private void clampScroll() {
-        int contentH = lines.size() * pitch();
+        int contentH = layout.lineCount() * pitch();
         scrollY = clampInt(scrollY, 0, Math.max(0, contentH - viewH()));
     }
 
