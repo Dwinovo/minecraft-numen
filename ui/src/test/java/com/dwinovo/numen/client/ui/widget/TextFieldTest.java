@@ -91,13 +91,33 @@ class TextFieldTest {
     }
 
     @Test
-    void placeholderShowsOnlyWhenEmptyAndUnfocused() {
+    void placeholderShowsWhileEmptyEvenWhenFocused() {
         UiRoot root = new UiRoot();
         TextField f = root.add(new TextField("", s -> {}).placeholder("默认基址"));
         f.setBounds(0, 0, 100, 14);
         WidgetTestSupport.FakeSurface s = new WidgetTestSupport.FakeSurface();
         f.render(s, WidgetTestSupport.C, 0, 0, 0);
-        assertTrue(s.texts.contains("默认基址"));
+        assertTrue(s.texts.contains("默认基址"), "没聚焦时有占位");
+        root.requestFocus(f);
+        WidgetTestSupport.FakeSurface focused = new WidgetTestSupport.FakeSurface();
+        f.render(focused, WidgetTestSupport.C, 0, 0, 0);
+        assertTrue(focused.texts.contains("默认基址"), "聚焦着、还没打字,占位还在");
+        f.setValue("x");
+        WidgetTestSupport.FakeSurface typed = new WidgetTestSupport.FakeSurface();
+        f.render(typed, WidgetTestSupport.C, 0, 0, 0);
+        assertTrue(!typed.texts.contains("默认基址"), "打了字占位让开");
+    }
+
+    @Test
+    void aBareFieldDrawsNoFrame() {
+        UiRoot root = new UiRoot();
+        TextField f = root.add(new TextField("", s -> {}).placeholder("写消息").bare(true));
+        f.setBounds(10, 20, 100, 14);
+        root.requestFocus(f);
+        WidgetTestSupport.FakeSurface s = new WidgetTestSupport.FakeSurface();
+        f.render(s, WidgetTestSupport.C, 0, 0, 500);   // 光标这一刻灭着
+        assertEquals(0, s.rects.size(), "不画框、不画底——底色是宿主那一整条的");
+        assertTrue(s.texts.contains("写消息"));
     }
 
     @Test

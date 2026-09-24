@@ -22,6 +22,8 @@ public final class TextField extends Widget {
     private boolean masked;
     /** 只画一道下划线、不画卡壳。见 {@link #underlined}。 */
     private boolean underlined;
+    /** 什么框都不画,底色由宿主给。见 {@link #bare}。 */
+    private boolean bare;
     private boolean numericOnly;
     private int cursor;
     /** 内联校验错误:字段红边 + 标签行右侧红字,驻留到用户开始修改。 */
@@ -62,6 +64,15 @@ public final class TextField extends Widget {
      */
     public TextField underlined(boolean underlined) {
         this.underlined = underlined;
+        return this;
+    }
+
+    /**
+     * 嵌在宿主画好的一整条底色里的输入框(Telegram 的输入区:输入框和旁边的键同一条底,没有框线):
+     * 不画框也不画底,聚焦不换色——聚焦由光标表明。
+     */
+    public TextField bare(boolean bare) {
+        this.bare = bare;
         return this;
     }
 
@@ -157,7 +168,7 @@ public final class TextField extends Widget {
         int border = error != null ? c.danger() : isFocused() ? c.accent() : c.inputBorder();
         if (underlined) {
             s.fillRect(x, y + h - 1, w, 1, border);
-        } else {
+        } else if (!bare) {
             NumenStyle.box(s, x, y, w, h, c.inputBg(), border);
         }
         if (labelWidget != null) labelWidget.setVisible(error == null);   // 出错时标签让位
@@ -183,9 +194,10 @@ public final class TextField extends Widget {
         int caret = Math.min(cursor(), raw.length());
         String display = masked ? "•".repeat(raw.length()) : raw;
 
-        if (display.isEmpty() && !isFocused()) {
+        if (display.isEmpty()) {
+            // 空着就给占位,聚焦着也给——打第一个字才让开(Telegram 的"写消息…"一直在)
             s.drawText(placeholder, x + pad, textY(s), c.textMuted(), false);
-            return;
+            if (!isFocused()) return;
         }
 
         ensureCursorVisible(s, display, innerW, caret);

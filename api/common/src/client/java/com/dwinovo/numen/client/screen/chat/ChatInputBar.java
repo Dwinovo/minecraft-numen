@@ -6,7 +6,6 @@ import com.dwinovo.numen.client.ui.KeyCodes;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
 import com.dwinovo.numen.client.ui.mc.McDrawSurface;
-import com.dwinovo.numen.client.ui.widget.Button;
 import com.dwinovo.numen.client.ui.widget.TextField;
 import com.dwinovo.numen.client.ui.widget.UiRoot;
 import net.minecraft.client.Minecraft;
@@ -19,10 +18,10 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 聊天输入行——NumenUI 版的瓤:[麦克风] 输入框 [发送][叫停]。
- * 图标钮走组件库的 Button 图标形态(贴图由本层注入,组件库不认识贴图);
- * 输入框走 TextField(Enter 发送)。锁定态(外接大脑模式)整排禁用只留叫停
- * ——那是主人的急刹车,外部 AI 抽风时更需要它。
+ * 聊天输入行——NumenUI 版的瓤:一整条底色,左边输入框,右边一格图标(Telegram 的输入区)。
+ * 那一格按状态换:有字是发送,空着是麦克风,她在忙时空着是叫停,录音中是停止录音——
+ * 同一个位置只放一件事,换的时候旧的缩小淡出、新的放大淡入。输入框走 TextField(Enter 发送),
+ * 不画框线,底色是这一整条的。
  *
  * <p>斜杠命令整个归这条输入行:补全弹层、面板类命令(/skills)在原位开面板、发送时
  * 的拦截("是 / 开头?在本地跑完,不往下走",见 {@code ChatCommands})。宿主只收到
@@ -38,8 +37,11 @@ import java.util.Set;
  */
 public final class ChatInputBar {
 
-    /** 输入框右侧可选的几颗键;顺序即布局。 */
+    /** 这条输入行右边那一格会轮到哪几种;G 面板全要,快捷对话不要麦克风(它有自己的按住说话键)。 */
     public enum Key { MIC, SEND, STOP }
+
+    /** 右边那一格此刻是什么。 */
+    private enum Act { SEND, MIC, RECORDING, STOP }
 
 
     /** 宿主回调面:说话/麦克风/叫停,以及"这几颗键此刻可不可按"。 */
@@ -71,8 +73,10 @@ public final class ChatInputBar {
 
     }
 
-    private static final int BTN_W = 22;
-    private static final int GAP = 4;
+    /** 右边那一格的宽。 */
+    private static final int ACT_W = 22;
+    /** 那一格换状态的过渡时长。 */
+    private static final int ACT_SWAP_MS = 150;
     /** 输入框里 {@code /命令} 那一截的颜色。定死不跟主题走——它标的是"这是命令不是话"
      *  这件事,换主题不该让它变得像普通文字。 */
     private static final int CMD_COLOR = 0xFFA6AEE9;
@@ -83,12 +87,12 @@ public final class ChatInputBar {
     private final Set<Key> wanted;
 
     private TextField field;
-    /** 缺席的键为 null(不在 {@link #wanted} 里)。 */
-    private Button micBtn, sendBtn, stopBtn;
-    /** 右侧那一串键,顺序即布局。 */
-    private Button[] keys = new Button[0];
     private String draft = "";
-    private ResourceLocation micIcon = com.dwinovo.numen.client.ui.mc.Sprites.MIC;
+    private boolean recording;
+    /** 右边那一格:这一帧是什么、上一样是什么、什么时候换的(换的那 150ms 两样都画)。 */
+    private Act act, prevAct;
+    private long actSince;
+    private int actX, actY, actH;
 
     /** 输入框自己的几何(弹层贴它上边长,面板占它的位)。 */
     private int fieldX, fieldY, fieldW, fieldH;
@@ -147,9 +151,9 @@ public final class ChatInputBar {
         return consent != null ? consent.preferredHeight() : barH;
     }
 
-    /** 录音中:麦克风图标换成停止方块——同一颗键,两种含义都一眼可读。 */
+    /** 录音中:右边那一格是停止录音。 */
     public void setRecording(boolean recording) {
-        micIcon = recording ? com.dwinovo.numen.client.ui.mc.Sprites.STOP : com.dwinovo.numen.client.ui.mc.Sprites.MIC;
+        this.recording = recording;
     }
 
     /**
@@ -165,33 +169,23 @@ public final class ChatInputBar {
         x += lead;
         w -= lead;
 
-        micBtn = wanted.contains(Key.MIC) ? ui.add(iconButton(null, "numen.chat.tip.mic",
-                Button.Style.NORMAL, host::onMicToggle)) : null;
-        sendBtn = wanted.contains(Key.SEND) ? ui.add(iconButton(com.dwinovo.numen.client.ui.mc.Sprites.SEND, "numen.chat.send",
-                Button.Style.ACCENT, this::send)) : null;
-        stopBtn = wanted.contains(Key.STOP) ? ui.add(iconButton(com.dwinovo.numen.client.ui.mc.Sprites.STOP, "numen.chat.tip.stop",
-                Button.Style.NORMAL, host::onAbort)) : null;
-        // 顺序即布局:输入框吃掉左边剩下的,这一串靠右排。加减一颗键只改这个数组,
-        // 不用回来重算"左几右几"那两个常数。
-        keys = java.util.stream.Stream.of(micBtn, sendBtn, stopBtn)
-                .filter(java.util.Objects::nonNull).toArray(Button[]::new);
-
-        int inW = w - (BTN_W + GAP) * keys.length;
+        int inW = w - ACT_W;
         // 编辑交给一个真 EditBox(只收事件、不自绘),画面仍归 NumenUI。
         // 这是输入法辅助模组能认出这个框的前提——见 McTextInput。
         field = ui.add(new TextField(draft, v -> {
             draft = v;
             refreshCandidates();
         }).placeholder(host.hint())
+                .bare(true)
                 .highlight(this::highlights));
         field.setBounds(x, y, inW, h);
         fieldX = x;
         fieldY = y;
         fieldW = inW;
         fieldH = h;
-        for (int i = 0; i < keys.length; i++) {
-            keys[i].setBounds(x + inW + GAP + i * (BTN_W + GAP), y, BTN_W, h);
-        }
+        actX = x + inW;
+        actY = y;
+        actH = h;
 
         ui.requestFocus(field);   // 开屏即可打字
         refreshCandidates();
@@ -243,11 +237,7 @@ public final class ChatInputBar {
         field.setEnabled(!paged);
         field.placeholder(consent != null ? consent.noteHint() : host.hint());
         field.underlined(consent != null);   // 在答复框里是第四项那一行的一部分,只画下划线
-        if (micBtn != null) micBtn.setEnabled(!paged);
-        if (sendBtn != null) sendBtn.setEnabled(!paged);
-        if (stopBtn != null) stopBtn.setEnabled(host.canAbort());
-        // 答复框在场:键一颗不画,输入框挪进它的第四项,选中那一项才接字
-        for (Button key : keys) key.setVisible(consent == null);
+        // 答复框在场:右边那一格不画,输入框挪进它的第四项,选中那一项才接字
         if (consent != null) {
             int ph = height();
             consent.setBounds(barX, barY + barH - ph, barW, ph);
@@ -295,7 +285,9 @@ public final class ChatInputBar {
             ui.render(s, c, mouseX, mouseY, nowMs);   // 只剩第四项里的输入框
             return;
         }
+        g.fill(fieldX, fieldY, actX + ACT_W, fieldY + fieldH, c.inputBg());   // 输入框和右边那一格同一条底
         ui.render(s, c, mouseX, mouseY, nowMs);
+        renderAct(g, mouseX, mouseY, c);
         // 面板与弹层都最后画:它俩要压在对话流上面。同时只会有一个。
         if (panel != null) {
             panel.render(s, c, mouseX, mouseY, nowMs);
@@ -304,18 +296,29 @@ public final class ChatInputBar {
         }
     }
 
-    /** 悬停的按钮提示文案(宿主自行绘制 tooltip:定位与样式是宿主的事)。 */
+    /** 悬停的那一格的提示文案(宿主自行绘制 tooltip:定位与样式是宿主的事)。 */
     public String tooltipAt(double mx, double my) {
-        if (consent != null) return null;
-        for (Button b : keys) {
-            if (b != null && b.enabled() && b.contains(mx, my)) return b.tooltip();
-        }
-        return null;
+        if (consent != null || act == null || !overAct(mx, my) || !actEnabled(act)) return null;
+        return t(switch (act) {
+            case SEND -> "numen.chat.send";
+            case MIC, RECORDING -> "numen.chat.tip.mic";
+            case STOP -> "numen.chat.tip.stop";
+        });
     }
 
     public boolean mouseClicked(double mx, double my, int button) {
         if (consent != null) {
             return consent.contains(mx, my) && consent.mouseClicked(mx, my, button);
+        }
+        if (act != null && overAct(mx, my)) {
+            if (actEnabled(act)) {
+                switch (act) {
+                    case SEND -> send();
+                    case MIC, RECORDING -> host.onMicToggle();
+                    case STOP -> host.onAbort();
+                }
+            }
+            return true;
         }
         return ui.mouseClicked(mx, my, button);
     }
@@ -551,15 +554,67 @@ public final class ChatInputBar {
         host.onSend(text);
     }
 
-    /** 图标钮:贴图绘制由本层(允许 import MC)注入,组件库只管几何与状态色。
-     *  {@code sprite} 传 null = 用活的麦克风图标(录音中换停止方块)。 */
-    private Button iconButton(ResourceLocation sprite, String tipKey,
-                              Button.Style style, Runnable action) {
-        return new Button(t(tipKey), style, action)
-                .icon(com.dwinovo.numen.client.ui.mc.Sprites.SIZE,
-                        com.dwinovo.numen.client.ui.mc.Sprites.painter(
-                                () -> sprite != null ? sprite : micIcon))
-                .tooltip(t(tipKey));
+    /**
+     * 右边那一格此刻是什么:录音中是停止录音;有字是发送;空着时她在忙是叫停,不忙是麦克风。
+     * 面板开着时输入框让位,只剩叫停(主人的急刹车任何时候都得能按);什么都做不了时是灰着的发送。
+     */
+    private Act currentAct() {
+        boolean paged = panel != null;
+        if (wanted.contains(Key.MIC) && recording) return Act.RECORDING;
+        if (!paged && !field.value().isBlank()) return Act.SEND;
+        if (wanted.contains(Key.STOP) && host.canAbort()) return Act.STOP;
+        if (!paged && wanted.contains(Key.MIC)) return Act.MIC;
+        return Act.SEND;
+    }
+
+    private boolean actEnabled(Act a) {
+        return switch (a) {
+            case SEND -> panel == null && !field.value().isBlank();
+            case MIC -> panel == null;
+            case RECORDING -> true;
+            case STOP -> host.canAbort();
+        };
+    }
+
+    private boolean overAct(double mx, double my) {
+        return mx >= actX && mx < actX + ACT_W && my >= actY && my < actY + actH;
+    }
+
+    /** 那一格:换状态时旧的缩小淡出、新的放大淡入(Telegram 发送键和麦克风互换的样子)。 */
+    private void renderAct(GuiGraphics g, int mouseX, int mouseY, NumenTheme.Colors c) {
+        long now = System.currentTimeMillis();
+        Act a = currentAct();
+        if (a != act) {
+            prevAct = act;
+            act = a;
+            actSince = now;
+        }
+        float p = prevAct == null ? 1f : Math.min(1f, (now - actSince) / (float) ACT_SWAP_MS);
+        if (p < 1f) drawAct(g, prevAct, 1f - p, false, c);
+        drawAct(g, act, p, overAct(mouseX, mouseY), c);
+    }
+
+    private void drawAct(GuiGraphics g, Act a, float k, boolean hover, NumenTheme.Colors c) {
+        if (k <= 0.02f) return;
+        boolean on = actEnabled(a);
+        ResourceLocation icon = switch (a) {
+            case SEND -> com.dwinovo.numen.client.ui.mc.Sprites.SEND;
+            case MIC -> com.dwinovo.numen.client.ui.mc.Sprites.MIC;
+            case RECORDING, STOP -> com.dwinovo.numen.client.ui.mc.Sprites.STOP;
+        };
+        // 发送是强调色(Telegram 蓝色纸飞机);录音中是危险色,一眼知道在录;其余是淡字色,悬停提亮
+        int rgb = !on ? c.textMuted()
+                : a == Act.SEND ? c.accent()
+                : a == Act.RECORDING ? c.danger()
+                : hover ? c.textPrimary() : c.textMuted();
+        int argb = (rgb & 0xFFFFFF) | (Math.round(255 * k * (on ? 1f : 0.5f)) << 24);
+        int size = com.dwinovo.numen.client.ui.mc.Sprites.SIZE;
+        float scale = 0.6f + 0.4f * k;
+        g.pose().pushPose();
+        g.pose().translate(actX + ACT_W / 2f, actY + actH / 2f, 0);
+        g.pose().scale(scale, scale, 1f);
+        com.dwinovo.numen.client.ui.mc.Sprites.draw(g, icon, -size / 2, -size / 2, size, argb);
+        g.pose().popPose();
     }
 
     private static String t(String key) {
