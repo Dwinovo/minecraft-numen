@@ -22,8 +22,12 @@ public final class RuleSet {
      *   <li>挖自然方块——不是玩家放的、没有方块实体、不是床门活板门栅栏门;</li>
      *   <li>放不危险的东西,或者离玩家的东西远的危险物;</li>
      *   <li>打没主人、没名字、不是村民的(敌对生物与野生动物);</li>
-     *   <li>开关门、开容器、按按钮;对没主人的实体右键;从容器拿东西。</li>
+     *   <li>开关门、开容器、按按钮;对没主人的实体右键;从容器拿东西;</li>
+     *   <li>执行 Numen 自己的指令——它们里面的挖、放、打各自按动作裁决,外层不再问一遍;</li>
+     *   <li>执行只读或只说话的指令:帮助、在线名单、动作消息、私信、队伍消息、种子、随机数。别名随根名认
+     *       ({@code tell}、{@code w} 归 {@code msg},{@code tm} 归 {@code teammsg}),见 {@link Action#command}。</li>
      * </ul>
+     * 其余指令没有一行说到,照旧问。
      */
     public static final List<String> FACTORY_ALLOW = List.of(
             "break(!placed & !block_entity & !#minecraft:beds & !#minecraft:doors"
@@ -33,7 +37,15 @@ public final class RuleSet {
             "attack(!owned & !named & !villager)",
             "use_block(*)",
             "use_entity(!owned)",
-            "take(*)");
+            "take(*)",
+            "command(numen)",
+            "command(help)",
+            "command(list)",
+            "command(me)",
+            "command(msg)",
+            "command(teammsg)",
+            "command(seed)",
+            "command(random)");
 
     /**
      * 出厂 ask 表原文。同一个动作命中几行时第一行作数,所以更具体的在前:装着东西的容器先于

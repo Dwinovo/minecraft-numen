@@ -27,8 +27,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * 执行游戏指令这个动作:{@code command(根名)} 的写法与匹配,别名同指一个节点就同认,裁决照三张表走、没有规则就问,
- * "允许并记住"钉上她打的那个根名,征询清单上给主人看的是整行,动词文案两种语言都有。指令树用一棵小 Brigadier 树
+ * 执行游戏指令这个动作:{@code command(根名)} 的写法与匹配,别名同指一个节点就同认,裁决照三张表走、出厂层放行
+ * Numen 自己的与只读、只说话的指令、其余没有规则就问,主人层压过出厂层,"允许并记住"钉上她打的那个根名、只写进
+ * 主人层,征询清单上给主人看的是整行,动词文案两种语言都有。指令树用一棵小 Brigadier 树
  * 代替服务器的——别名的认法只看节点的重定向。
  */
 @Tag("mc")
@@ -48,6 +49,9 @@ class CommandRuleTest {
                 .then(RequiredArgumentBuilder.argument("text", StringArgumentType.greedyString()).executes(c -> 1)));
         dispatcher.register(LiteralArgumentBuilder.literal("tell").redirect(msg));
         dispatcher.register(LiteralArgumentBuilder.literal("w").redirect(msg));
+        LiteralCommandNode<Object> teammsg = dispatcher.register(LiteralArgumentBuilder.literal("teammsg")
+                .then(RequiredArgumentBuilder.argument("text", StringArgumentType.greedyString()).executes(c -> 1)));
+        dispatcher.register(LiteralArgumentBuilder.literal("tm").redirect(teammsg));
         dispatcher.register(LiteralArgumentBuilder.literal("setblock")
                 .then(RequiredArgumentBuilder.argument("rest", StringArgumentType.greedyString()).executes(c -> 1)));
         tree = dispatcher.getRoot();
@@ -123,7 +127,7 @@ class CommandRuleTest {
     @Test
     void noRuleMeansAskAndTheOwnersRowsDecide() {
         Verdict factory = gate(Mode.ASK, List.of(), List.of(), List.of()).judge(run("give @s diamond"), null);
-        assertTrue(factory.asks(), "出厂表不写任何指令:没有规则就问");
+        assertTrue(factory.asks(), "give 没有一行规则说到:问");
         assertNull(factory.rule());
 
         Gate owner = gate(Mode.ASK, List.of("command(tp)"), List.of("command(setblock)"),
@@ -140,6 +144,61 @@ class CommandRuleTest {
                 .allowed());
         assertEquals(Verdict.Kind.DENY, gate(Mode.OBSERVE, List.of(), List.of(), List.of("command(*)"))
                 .judge(run("msg Steve hi"), null).kind(), "observe 连允许过的指令也不执行");
+    }
+
+    @Test
+    void theFactoryRowsAreCommandRulesLikeAnyOther() {
+        List<Rule> commands = RuleSet.factory().allow().stream()
+                .filter(r -> r.kind() == Action.Kind.COMMAND).toList();
+        assertEquals(List.of("command(numen)", "command(help)", "command(list)", "command(me)", "command(msg)",
+                "command(teammsg)", "command(seed)", "command(random)"),
+                commands.stream().map(Rule::toString).toList(), "出厂指令行与别的规则同一种写法、同一个解析");
+        assertTrue(RuleSet.factory().ask().stream().noneMatch(r -> r.kind() == Action.Kind.COMMAND),
+                "出厂 ask 表不写指令:没说到的本来就问");
+    }
+
+    @Test
+    void theFactoryLetsHerOwnAndReadOnlyCommandsRun() {
+        Gate bare = gate(Mode.ASK, List.of(), List.of(), List.of());
+        for (String line : List.of("numen goto 10 64 10", "help", "help give", "list", "me waves",
+                "msg Steve hi", "tell Steve hi", "w Steve hi", "teammsg regroup", "tm regroup", "seed",
+                "random value 1..6")) {
+            assertTrue(bare.judge(run(line), null).allowed(), "出厂放行 /" + line);
+        }
+        for (String line : List.of("setblock 0 64 0 stone", "give @s diamond", "tp 0 64 0")) {
+            Verdict verdict = bare.judge(run(line), null);
+            assertTrue(verdict.asks(), "没有规则说到的照旧问 /" + line);
+            assertNull(verdict.rule(), "问它的不是哪一行出厂规则 /" + line);
+        }
+    }
+
+    @Test
+    void theOwnersRowsOverrideTheFactoryOnes() {
+        Gate strict = gate(Mode.ASK, List.of("command(msg)"), List.of("command(help)"), List.of());
+        Verdict msg = strict.judge(run("msg Steve hi"), null);
+        assertEquals(Verdict.Kind.DENY, msg.kind(), "主人拒绝 msg 压过出厂放行");
+        assertTrue(msg.reason().contains("denied by rule command(msg)"), msg.reason());
+        assertEquals(Verdict.Kind.DENY, strict.judge(run("w Steve hi"), null).kind(), "别名 w 也绕不过去");
+        assertEquals("command(help)", strict.judge(run("help"), null).rule().toString(),
+                "主人的 ask 行压过出厂 allow 行");
+        assertTrue(strict.judge(run("list"), null).allowed(), "主人没说到的出厂行照旧放行");
+    }
+
+    @Test
+    void rememberingWritesTheOwnersLayerOnly() {
+        Gate bare = gate(Mode.ASK, List.of(), List.of(), List.of());
+        Action setblock = run("setblock 0 64 0 stone");
+        ConsentItem item = bare.consentItem(setblock, bare.judge(setblock, null), null);
+        PermissionStore store = new PermissionStore();
+        store.remember(List.of(item.remember()));
+
+        assertEquals(List.of(Rule.parse("command(setblock)")), store.rules().allow(), "以后都允许写进主人层");
+        assertEquals(RuleSet.FACTORY_ALLOW, RuleSet.factory().allow().stream().map(Rule::toString).toList(),
+                "出厂层不跟着变");
+        Gate after = new Gate(null, Mode.ASK, store.rules(), RuleSet.factory(), new PlacedBlocks(), List.of());
+        assertTrue(after.judge(run("setblock 1 64 1 dirt"), null).allowed(), "记住以后 setblock 不再问");
+        assertTrue(after.judge(run("help"), null).allowed(), "出厂行照旧放行");
+        assertTrue(after.judge(run("give @s diamond"), null).asks(), "别的照旧问");
     }
 
     // ==================== 征询与记住 ====================
