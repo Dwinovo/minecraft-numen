@@ -536,7 +536,7 @@ public final class ModLanguageData {
         adder.add("numen.profile.context_value", "%s%% · %s lines");
         adder.add("numen.profile.doing", "%s");
         adder.add("numen.profile.bio", "Bio");
-        adder.add("numen.profile.memories", "What she remembers");
+        adder.add("numen.profile.memories", "Memory");
         adder.add("numen.profile.memories_none", "Nothing remembered yet");
         adder.add("numen.profile.memories_more", "%s more");
         adder.add("numen.profile.note_meta", "Day %s · %s");
@@ -945,7 +945,7 @@ public final class ModLanguageData {
         adder.add("numen.profile.context_value", "%s%% · %s 条");
         adder.add("numen.profile.doing", "正在%s");
         adder.add("numen.profile.bio", "简介");
-        adder.add("numen.profile.memories", "她记得的事");
+        adder.add("numen.profile.memories", "记忆");
         adder.add("numen.profile.memories_none", "还没记下什么");
         adder.add("numen.profile.memories_more", "还有 %s 条");
         adder.add("numen.profile.note_meta", "第 %s 天 · %s");

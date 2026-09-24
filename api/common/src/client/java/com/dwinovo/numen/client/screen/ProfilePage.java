@@ -36,7 +36,7 @@ import java.util.function.Function;
  * <ol>
  *   <li>顶部居中:大头像、名字、此刻在干什么(没在干活才说在线/忙碌),体征,一排操作块(发消息、编辑);</li>
  *   <li>资料:简介(她人设的开头一段)、在你哪边多远;</li>
- *   <li>她记得的事:最新几条札记(Telegram 的共享媒体那一节,我们这里最有意思的是她记住了什么);</li>
+ *   <li>记忆:最新几条札记(Telegram 的共享媒体那一节,我们这里最有意思的是她记住了什么);</li>
  *   <li>共同群聊:她在哪几个群里,点了进去;</li>
  *   <li>背包:收成一行"背包 · N 件",点开往下展开格子;</li>
  *   <li>设置:人设、模型、声线、游戏模式、上下文,一行一项、左名右值,点了开编辑卡;</li>
@@ -64,7 +64,7 @@ final class ProfilePage {
     private static final int GAP_H = 7;
     private static final int PAD = 8;
     private static final int TEXT_DX = Sprites.SIZE + 10;
-    /** 她记得的事摆几条;多的说"还有 N 条"。 */
+    /** 记忆摆几条;多的说"还有 N 条"。 */
     private static final int NOTES_SHOWN = 3;
     private static final EquipmentSlot[] ARMOR = {
             EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
@@ -222,7 +222,7 @@ final class ProfilePage {
         infoRow(g, t, Sprites.MAP_PIN, where, I18n.get("numen.profile.distance"), x + PAD, cy, iw);
         cy += ROW_H + 4;
 
-        // ---- 她记得的事 ----
+        // ---- 记忆 ----
         cy = gap(g, t, x, w, cy);
         List<NoteBook.Note> all = notes(who);
         cy = sectionHead(g, t, I18n.get("numen.profile.memories"), all.isEmpty() ? "" : String.valueOf(all.size()),
