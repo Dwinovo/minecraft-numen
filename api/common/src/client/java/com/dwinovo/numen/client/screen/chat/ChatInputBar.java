@@ -25,8 +25,9 @@ import java.util.Set;
 /**
  * 聊天输入行——NumenUI 版的瓤:一整条底色,左边输入框,右边一格图标(Telegram 的输入区)。
  * 那一格按状态换:有字是发送,空着是麦克风,她在忙时空着是叫停,录音中是停止录音——
- * 同一个位置只放一件事,换的时候旧的缩小淡出、新的放大淡入。输入框走 TextField(Enter 发送),
- * 不画框线,底色是这一整条的。
+ * 同一个位置只放一件事,换的时候旧的缩小淡出、新的放大淡入。输入框走 TextField(回车发送,Shift+回车换行),
+ * 不画框线,底色是这一整条的;字多了随内容往上长(Telegram 的输入框),最多 {@link #MAX_LINES} 行,再多在框里滚,
+ * 底边与右边那一格不动。
  *
  * <p>斜杠命令整个归这条输入行:补全弹层、面板类命令(/skills)在原位开面板、发送时
  * 的拦截("是 / 开头?在本地跑完,不往下走",见 {@code ChatCommands})。宿主只收到
@@ -85,6 +86,8 @@ public final class ChatInputBar {
     private static final int ACT_W = 22;
     /** 那一格换状态的过渡时长。 */
     private static final int ACT_SWAP_MS = 150;
+    /** 输入框最多长到几行。 */
+    private static final int MAX_LINES = 5;
     /** 输入框里 {@code /命令} 那一截的颜色。定死不跟主题走——它标的是"这是命令不是话"
      *  这件事,换主题不该让它变得像普通文字。 */
     private static final int CMD_COLOR = 0xFFA6AEE9;
@@ -107,8 +110,9 @@ public final class ChatInputBar {
     private String shownTitle = "", shownText = "";
     private ResourceLocation shownIcon = com.dwinovo.numen.client.ui.mc.Sprites.REPLY;
     private float barShown;
-    private long barFrameMs;
     private static final int BAR_H = 22;
+    /** 上一帧的时刻:栏的长出、输入框的长高都按它算这一帧走多少。 */
+    private long frameMs;
     /** 上一帧挂着提示栏的那条征询:刚点了"说一句再拒绝"(或换了一条)时把栏换成它的。 */
     private ConsentCards.Card noteShown;
     /** 上一刻这条输入行对着的那位挂着的征询:收起时告诉宿主。 */
@@ -118,8 +122,11 @@ public final class ChatInputBar {
     private long actSince;
     private int actX, actY, actH;
 
-    /** 输入框自己的几何(弹层贴它上边长,面板占它的位)。 */
+    /** 输入框自己的几何(弹层贴它上边长,面板占它的位);随内容往上长,{@code fieldY}、{@code fieldH} 每帧跟着变。 */
     private int fieldX, fieldY, fieldW, fieldH;
+    /** 一行时的高与底边(往上长时底边不动),此刻露出多高(按趋近走)。 */
+    private int rowH, fieldBottom;
+    private float fieldShown;
     /** 开着的选择面板;非 null 时它<b>取代</b>输入框,键盘整个归它。 */
     /** 贴着输入框弹出来的那一层。装什么由命令决定(名单、读数卡…),见 Popup。 */
     private com.dwinovo.numen.client.ui.widget.Popup panel;
@@ -223,12 +230,16 @@ public final class ChatInputBar {
             refreshCandidates();
         }).placeholder(host.hint())
                 .bare(true)
+                .maxLines(MAX_LINES)
                 .highlight(this::highlights));
         field.setBounds(x, y, inW, h);
         fieldX = x;
         fieldY = y;
         fieldW = inW;
         fieldH = h;
+        rowH = h;
+        fieldBottom = y + h;
+        fieldShown = h;
         actX = x + inW;
         actY = y;
         actH = h;
@@ -321,8 +332,12 @@ public final class ChatInputBar {
 
     public void render(GuiGraphics g, int mouseX, int mouseY, long nowMs, NumenTheme.Colors c) {
         refreshEnablement();
+        long now = System.currentTimeMillis();
+        float dt = frameMs == 0 ? 0.016f : Math.min(0.1f, (now - frameMs) / 1000f);
+        frameMs = now;
+        grow(dt);
         IDrawSurface s = new McDrawSurface(g, Minecraft.getInstance().font);
-        renderBar(g, mouseX, mouseY, c);
+        renderBar(g, mouseX, mouseY, c, dt);
         g.fill(fieldX, fieldY, actX + ACT_W, fieldY + fieldH, c.inputBg());   // 输入框和右边那一格同一条底
         ui.render(s, c, mouseX, mouseY, nowMs);
         renderAct(g, mouseX, mouseY, c);
@@ -379,7 +394,7 @@ public final class ChatInputBar {
                 card.move(keyCode == KeyCodes.UP ? -1 : 1);
                 return true;
             }
-            if (keyCode == KeyCodes.ENTER && card.selected() >= 0) {
+            if (keyCode == KeyCodes.ENTER && !KeyCodes.shift(modifiers) && card.selected() >= 0) {
                 card.press(card.selected());
                 return true;
             }
@@ -408,6 +423,7 @@ public final class ChatInputBar {
                     return true;
                 }
                 case KeyCodes.ENTER -> {
+                    if (KeyCodes.shift(modifiers)) break;   // Shift+回车是换行,归输入框
                     // 命令:回车 = 就要选中这条,现在执行;想接着打参数请按 Tab。
                     // @ 名字:回车只把名字填上——弹层关了(光标不在 @ 词上)回车才发,话还没说完。
                     boolean filled = fillSelected();
@@ -430,7 +446,7 @@ public final class ChatInputBar {
             closeBar();
             return true;
         }
-        if (keyCode == KeyCodes.ENTER && field != null && field.isFocused()) {
+        if (keyCode == KeyCodes.ENTER && !KeyCodes.shift(modifiers) && field != null && field.isFocused()) {
             send();
             return true;
         }
@@ -581,6 +597,11 @@ public final class ChatInputBar {
         return ui.charTyped(ch);
     }
 
+    /** 输入框写满 {@link #MAX_LINES} 行以后,指针在它上面时滚轮在框里翻。 */
+    public boolean mouseScrolled(double mx, double my, double delta) {
+        return panel == null && ui.mouseScrolled(mx, my, delta);
+    }
+
     /** 焦点给不给这条输入行:左栏搜索框在接字的时候,它得交出来。 */
     public void setFocused(boolean on) {
         if (field != null) ui.requestFocus(on ? field : null);
@@ -630,10 +651,7 @@ public final class ChatInputBar {
      * 输入行上面那条栏:从输入行上面长出来(和回到最新钮一样被裁着滑),一枚图标、一道竖线、抬头、那句,右端 × 收起。
      * 引用时是回复图标、"回复 谁"、被引的那句;"说一句再拒绝"时是拒绝图标、这个键的名字、她问的是什么。
      */
-    private void renderBar(GuiGraphics g, int mouseX, int mouseY, NumenTheme.Colors c) {
-        long now = System.currentTimeMillis();
-        float dt = barFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - barFrameMs) / 1000f);
-        barFrameMs = now;
+    private void renderBar(GuiGraphics g, int mouseX, int mouseY, NumenTheme.Colors c, float dt) {
         boolean open = barOpen();
         barShown = com.dwinovo.numen.client.ui.Anim.approach(barShown, open ? BAR_H : 0f, 18f, dt);
         if (barShown < 0.5f) return;
@@ -653,6 +671,15 @@ public final class ChatInputBar {
         Nb.text(g, font, "×", actX + (ACT_W - font.width("×")) / 2, y0 + (BAR_H - 8) / 2,
                 hot ? c.textPrimary() : c.textMuted());
         g.disableScissor();
+    }
+
+    /** 输入框随内容往上长:一行一行长到 {@link #MAX_LINES} 行,底边不动,高度按趋近走(上面的东西跟着让)。 */
+    private void grow(float dt) {
+        float target = rowH + (field.visibleLines() - 1) * field.linePitch();
+        fieldShown = com.dwinovo.numen.client.ui.Anim.approach(fieldShown, target, 18f, dt);
+        fieldH = Math.round(fieldShown);
+        fieldY = fieldBottom - fieldH;
+        field.setBounds(fieldX, fieldY, fieldW, fieldH);
     }
 
     private boolean overBarClose(double mx, double my) {

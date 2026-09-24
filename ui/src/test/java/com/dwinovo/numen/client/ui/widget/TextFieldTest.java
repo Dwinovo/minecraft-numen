@@ -222,4 +222,77 @@ class TextFieldTest {
         @Override public void pushScissor(int x, int y, int w, int h) {}
         @Override public void popScissor() {}
     }
+
+    // ---- 多行(聊天输入框):假画布每字符 6px、行高 9 → 行距 10;宽 65 → 一行 9 字 ----
+
+    private static TextField multiline(String initial, int h) {
+        TextField f = new UiRoot().add(new TextField(initial, s -> {}).maxLines(5));
+        f.setBounds(0, 0, 65, h);
+        f.render(new WidgetTestSupport.FakeSurface(), WidgetTestSupport.C, -10, -10, 0);   // 首渲注入度量
+        return f;
+    }
+
+    @Test
+    void shiftEnterBreaksTheLineAndPlainEnterIsLeftToTheHost() {
+        TextField f = multiline("ab", 18);
+        f.keyPressed(KeyCodes.LEFT, 0);
+        assertTrue(f.keyPressed(KeyCodes.ENTER, KeyCodes.MOD_SHIFT));
+        assertEquals("a\nb", f.value());
+        assertEquals(2, f.cursor(), "光标到新行行首");
+        assertFalse(f.keyPressed(KeyCodes.ENTER, 0), "回车留给宿主发送");
+    }
+
+    @Test
+    void visibleLinesFollowWrappingAndStopAtTheCap() {
+        assertEquals(1, multiline("", 18).visibleLines());
+        assertEquals(2, multiline("aaaaaaaaaaaa", 18).visibleLines(), "12 字折成 9 + 3");
+        assertEquals(5, multiline("1\n2\n3\n4\n5\n6\n7", 18).visibleLines(), "最多五行,再多在框里滚");
+    }
+
+    @Test
+    void upAndDownKeepTheColumnAcrossAShortLine() {
+        TextField f = multiline("abcdefghi\nab\nabcdefghi", 38);
+        f.keyPressed(KeyCodes.UP, 0);
+        assertEquals(12, f.cursor(), "短行夹到行尾");
+        f.keyPressed(KeyCodes.UP, 0);
+        assertEquals(9, f.cursor(), "回到原来的列");
+    }
+
+    @Test
+    void overflowScrollsToKeepTheCursorLineShown() {
+        TextField f = new UiRoot().add(new TextField("1\n2\n3\n4\n5\n6\n7", s -> {}).maxLines(5));
+        f.setBounds(0, 0, 65, 58);
+        WidgetTestSupport.FakeSurface s = new WidgetTestSupport.FakeSurface();
+        f.render(s, WidgetTestSupport.C, -10, -10, 0);
+        assertEquals(java.util.List.of("3", "4", "5", "6", "7"), s.texts, "光标在末尾:露最后五行");
+        assertTrue(f.mouseScrolled(10, 10, 1), "写满以后滚轮在框里翻");
+        s.reset();
+        f.render(s, WidgetTestSupport.C, -10, -10, 0);
+        assertEquals("2", s.texts.get(0), "往上翻了一行,不被拽回光标那行");
+    }
+
+    @Test
+    void clickPlacesTheCursorOnTheWrappedLine() {
+        TextField f = multiline("abc\ndefgh", 28);
+        assertTrue(f.mouseClicked(4 + 13, 16, 0));
+        assertEquals(6, f.cursor(), "第二行、落在第三个字前");
+    }
+
+    @Test
+    void hostedShiftEnterWritesTheNewlineIntoTheHost() {
+        UiRoot root = new UiRoot();
+        AtomicReference<FakeInput> host = new AtomicReference<>();
+        root.setInputFactory((initial0, onChange) -> {
+            FakeInput in = new FakeInput(initial0, onChange);
+            host.set(in);
+            return in;
+        });
+        TextField f = root.add(new TextField("ab", s -> {}).maxLines(5));
+        f.setBounds(0, 0, 65, 18);
+        host.get().setCursor(1);
+        assertTrue(f.keyPressed(KeyCodes.ENTER, KeyCodes.MOD_SHIFT), "宿主的单行编辑器不管换行,这里接");
+        assertEquals("a\nb", host.get().text());
+        assertEquals(2, host.get().cursor());
+        assertFalse(f.keyPressed(KeyCodes.LEFT, 0), "其余编辑键照旧落到宿主控件");
+    }
 }

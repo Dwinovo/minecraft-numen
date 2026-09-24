@@ -252,6 +252,15 @@ public class CompanionChatScreen extends Screen {
     }
 
     @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        // 写满五行的输入框在框里翻
+        if (inputBar != null && scrollY != 0 && inputBar.mouseScrolled(mouseX, mouseY, scrollY)) {
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    @Override
     public void tick() {
         if (inputBar != null) {
             inputBar.tick();

@@ -1966,6 +1966,7 @@ public final class NumenScreen extends Screen {
             return true;
         }
         if (tab == Tab.CHAT && sy != 0) {
+            if (inputBar != null && inputBar.mouseScrolled(mx, my, sy)) return true;   // 写满五行的输入框在框里翻
             return chatView.mouseScrolled(sy);
         }
         if (tab == Tab.ITEMS && sy != 0 && profilePage != null) {
