@@ -126,10 +126,10 @@ class ArgTypeTest {
                 Make something.
                   <x> (integer) — Block X.
                   <recipe> (id, e.g. minecraft:oak_log) — Which recipe.
-                  <model> (string; quote it if it has spaces) — Which model.
-                  --have_only <boolean> (optional) — Only what you can make.
-                  --search <string> (optional) — Narrow the list.
-                  --depth <integer> (optional) — How far down.
+                  <model> (string, quote it if it has spaces) — Which model.
+                  --have_only <boolean> (true or false; optional) — Only what you can make.
+                  --search <string> (string, quote it if it has spaces; optional) — Narrow the list.
+                  --depth <integer> (integer; optional) — How far down.
                 Shortcut tool: gt_types_make.""", onClient("numen gt_types make --help").message());
     }
 

@@ -47,7 +47,7 @@ final class CommandHelp {
             if (p.required()) {
                 sb.append(p.usage()).append(" (").append(p.type().hint()).append(")");
             } else {
-                sb.append("--").append(p.name()).append(" <").append(p.type().kind()).append("> (optional)");
+                sb.append("--").append(p.name()).append(" <").append(p.type().kind()).append("> (").append(p.type().hint()).append("; optional)");
             }
             sb.append(" — ").append(p.description());
         }

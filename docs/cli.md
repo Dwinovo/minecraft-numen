@@ -285,6 +285,7 @@ numen.registerCommands("go", "Getting around.", go ->
   - `bool()`:`true` / `false`,当标志也要写值。
   - `id()`:资源 id,读成 `ResourceLocation`;字符集与合法性用原版 `ResourceLocation` 自己的规则,不写命名空间即 `minecraft:`。配方、女仆模型用它。
   - `string()`:一个值,到空格为止的任意字符(中文、`/`、大写都行),带空格就加引号。模组自己起的名字(YSM 的模型文件名、动作名,女仆包的角色名)用它,这些名字的字符集不归我们定。
+  - 动作帮助里每个参数都写出类型的完整称呼,必填的 `<model> (string, quote it if it has spaces)`,可选标志的 `--texture <string> (string, quote it if it has spaces; optional)`:"带空格要加引号"跟着类型走,哪个参数用了 `string()` 都有。
   - JSON 进来的值写成它在命令行上的样子再读:多数类型就是字面文字,`string()` 一律加上引号——JSON 的字符串本来就有边界,否则带空格的名字命令行收、JSON 拒。
 - **任务叫什么**:任务记录、受理回执、`task_finished`、`<current_task>` 写的名字是 `ServerSource.taskName()`:从快捷工具进来是快捷工具名,从 `numen` 进来是"组 动作"(如 `kaleidoscope cook`)。解析到动作、交给处理函数前,源对象先绑上那个动作。
   - 命令派的活用 `TaskRecord(ServerSource, deadline)` 起记录,名字与调用 id 都取自源;交 `TaskDispatch.setTask(source, record)`。

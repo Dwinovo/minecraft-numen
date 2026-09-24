@@ -41,8 +41,8 @@ class CommandParseTest {
             Take some items.
               <count> (integer 1-64) — How many.
               <item> (word) — Which item.
-              --from <word> (optional) — Where to take them from.
-              --limit <integer> (optional) — At most this many trips.""";
+              --from <word> (word; optional) — Where to take them from.
+              --limit <integer> (integer 1-10; optional) — At most this many trips.""";
 
     private static final String GROUP_HELP = """
             numen gt_parse: A group the parser tests poke at. Actions:

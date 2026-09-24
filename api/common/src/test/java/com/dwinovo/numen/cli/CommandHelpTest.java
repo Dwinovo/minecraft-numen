@@ -55,7 +55,7 @@ class CommandHelpTest {
                 numen gt_help walk <x> [--mode <word>]
                 Walk somewhere.
                   <x> (integer 0-100) — X coordinate.
-                  --mode <word> (optional) — How to walk.
+                  --mode <word> (word; optional) — How to walk.
                 Shortcut tool: gt_help_walk.""", onClient("numen gt_help walk --help").message());
         assertEquals("""
                 numen gt_help note <body...>

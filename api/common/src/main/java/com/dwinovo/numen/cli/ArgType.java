@@ -122,7 +122,7 @@ public final class ArgType<T> {
      * 角色名)用它——这些名字的字符集不归我们定。
      */
     public static ArgType<String> string() {
-        return new ArgType<>(ArgType::readString, "string", "string; quote it if it has spaces", false,
+        return new ArgType<>(ArgType::readString, "string", "string, quote it if it has spaces", false,
                 ArgType::stringField, ArgType::quoted);
     }
 
