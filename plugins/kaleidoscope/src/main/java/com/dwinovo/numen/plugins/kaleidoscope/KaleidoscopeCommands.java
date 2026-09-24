@@ -37,18 +37,19 @@ final class KaleidoscopeCommands {
     /** 一口锅两百多条配方,一次全发出去就是把这一轮的上下文塞满。 */
     private static final int MAX_ROWS = 30;
 
-    private static final Param<String> COOKWARE = Param.required("cookware", ArgType.word(),
-            "Which cookware: " + Arrays.stream(Cookware.values()).map(Cookware::id)
-                    .collect(Collectors.joining(" or ")) + ".");
+    private static final Param<String> COOKWARE = Param.required("cookware", ArgType.word(), "Which cookware.")
+            .values(Arrays.stream(Cookware.values()).map(Cookware::id).collect(Collectors.joining(" or ")));
     private static final Param<Boolean> HAVE_ONLY = Param.optional("have_only", ArgType.bool(),
-            "true = only dishes you can cook from your inventory right now.");
+            "true = only dishes you can cook from your inventory right now.")
+            .whenOmitted("list dishes whether you have the ingredients or not");
     private static final Param<String> NAME = Param.optional("name", ArgType.string(),
-            "Only recipes whose recipe or dish id contains this, e.g. rice.");
+            "Only recipes whose recipe or dish id contains this, e.g. rice.")
+            .whenOmitted("match every recipe");
     private static final Param<Integer> X = Param.required("x", ArgType.integer(), "Block X of the cookware.");
     private static final Param<Integer> Y = Param.required("y", ArgType.integer(), "Block Y of the cookware.");
     private static final Param<Integer> Z = Param.required("z", ArgType.integer(), "Block Z of the cookware.");
-    private static final Param<ResourceLocation> RECIPE = Param.required("recipe", ArgType.id(),
-            "Recipe id exactly as " + line(RECIPES) + " printed it, e.g. kaleidoscope_cookery:flex_pot/braised_beef.");
+    private static final Param<ResourceLocation> RECIPE = Param.required("recipe", ArgType.id(), "The dish to cook.")
+            .values("a recipe id exactly as " + line(RECIPES) + " prints it");
 
     private KaleidoscopeCommands() {}
 
@@ -64,14 +65,28 @@ final class KaleidoscopeCommands {
 
     private static void actions(CommandGroup kc) {
         kc.server(RECIPES, "What the cookware can cook: recipe id, ingredients with portions, carrier, kitchenware, "
-                        + "time. Flex recipes list THIS world's golden ratio.",
-                KaleidoscopeCommands::recipes, COOKWARE, HAVE_ONLY, NAME);
+                        + "time.",
+                KaleidoscopeCommands::recipes, COOKWARE, HAVE_ONLY, NAME)
+                .example(line(RECIPES) + " pot --have_only true")
+                .example(line(RECIPES) + " stockpot --name rice")
+                .note("Read-only. Shows at most " + MAX_ROWS + "; narrow it with --name or --have_only.")
+                .note("Flex recipes list THIS world's golden ratio; every save has its own.")
+                .seeAlso(line(INSPECT), line(COOK));
         kc.server(INSPECT, "Read one pot or stockpot from any distance: stage, contents, heat, ticks left, what it "
-                        + "waits for. Check it is free before cooking.",
-                KaleidoscopeCommands::inspect, X, Y, Z);
-        kc.server(COOK, "Cook one dish start to finish on the cookware at x y z (background work). It does not "
-                        + "walk: stand within reach first.",
-                KaleidoscopeCommands::cook, X, Y, Z, RECIPE);
+                        + "waits for.",
+                KaleidoscopeCommands::inspect, X, Y, Z)
+                .example(line(INSPECT) + " 120 64 -35")
+                .note("Read-only. Check a cookware is free before you cook on it.")
+                .seeAlso(line(COOK));
+        kc.server(COOK, "Cook one dish start to finish on the cookware at x y z.",
+                KaleidoscopeCommands::cook, X, Y, Z, RECIPE)
+                .example(line(COOK) + " 120 64 -35 kaleidoscope_cookery:flex_pot/braised_beef")
+                .note("Background work: returns at once, and the result arrives as a task_finished event. "
+                        + "One dish at a time.")
+                .note("It does not walk: stand within reach of the cookware first.")
+                .note("Uses the ingredients, oil and container from YOUR inventory. Asks your owner first when "
+                        + "their rules say so, for using the cookware and for taking the dish.")
+                .seeAlso(line(RECIPES), line(INSPECT), "numen task stop");
     }
 
     private static void recipes(ServerSource src, CommandArgs args) {
