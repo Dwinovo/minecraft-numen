@@ -104,10 +104,10 @@ public final class InvitePanel implements ModalCard {
         int gap = 6;
         int bx = x + w - (BTN_W * 2 + gap);
         Button cancel = ui.add(new Button(t(ModLanguageData.Keys.GUI_SETTINGS_CANCEL),
-                Button.Style.NORMAL, host::onClose));
+                Button.Style.LINK, host::onClose));
         cancel.setBounds(bx, fy, BTN_W, FOOTER_H);
         invite = ui.add(new Button(t(ModLanguageData.Keys.CONVO_INVITE_CONFIRM),
-                Button.Style.ACCENT, this::confirm));
+                Button.Style.LINK, this::confirm));
         invite.setBounds(bx + BTN_W + gap, fy, BTN_W, FOOTER_H);
         invite.setEnabled(!picked.isEmpty());
     }

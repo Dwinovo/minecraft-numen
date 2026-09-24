@@ -7,8 +7,11 @@ import com.dwinovo.numen.client.ui.NumenTheme;
 /** 按钮。Style 选语义色:普通/强调(主操作)/危险(删除类)。 */
 public final class Button extends Widget {
 
-    /** GHOST = 幽灵钮(图标类):平时无底,悬停浮现浅底——主流模态 ✕ 的标准形态。 */
-    public enum Style { NORMAL, ACCENT, DANGER, GHOST }
+    /**
+     * GHOST = 幽灵钮(图标类):平时无底,悬停浮现浅底——主流模态 ✕ 的标准形态。
+     * LINK = 对话框底部的纯字钮(Telegram 对话框的"取消""保存"):强调色的字,悬停浮出浅底。
+     */
+    public enum Style { NORMAL, ACCENT, DANGER, GHOST, LINK }
 
     /**
      * 图标绘制回调:组件库不认识贴图(那是每版本适配层的事),宿主注入一段
@@ -60,12 +63,13 @@ public final class Button extends Widget {
         hoverT = NumenStyle.hoverStep(hoverT, hovered, dt);
         float t = enabled ? hoverT : 0f;
 
-        if (style == Style.GHOST) {
+        if (style == Style.GHOST || style == Style.LINK) {
             if (t > 0.01f) {   // 浮现的浅底:半透明 hover 色按进度收放透明度
                 int bg = ((int) (((c.hover() >>> 24) & 0xFF) * t) << 24) | (c.hover() & 0xFFFFFF);
                 s.fillRect(x, y, w, h, bg);
             }
             int ghostColor = !enabled ? c.textMuted()
+                    : style == Style.LINK ? c.accent()
                     : NumenStyle.mixColor(c.textSecondary(), c.textPrimary(), t);
             String ghostShown = com.dwinovo.numen.client.ui.TextClip.fit(s, label, w - 6);
             s.drawText(ghostShown, x + (w - s.textWidth(ghostShown)) / 2,

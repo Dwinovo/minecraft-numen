@@ -102,12 +102,11 @@ public final class ConfirmDialog implements UiRoot.Overlay {
                 hover(mouseX, mouseY, confirmX));
     }
 
+    /** Telegram 对话框的按钮:纯字,取消是强调色,删这类回不去的是危险色;悬停浮出浅底。 */
     private void drawButton(IDrawSurface s, NumenTheme.Colors c, int bx, String label,
                             boolean danger, boolean hovered) {
-        int bg = danger ? c.danger() : hovered ? c.hover() : c.sectionBg();
-        if (danger && hovered) bg = NumenStyle.hoverBrighten(bg);
-        s.fillRect(bx, buttonY, BTN_W, BTN_H, bg);
-        int color = danger ? 0xFFFFFFFF : c.textPrimary();
+        if (hovered) s.fillRect(bx, buttonY, BTN_W, BTN_H, c.hover());
+        int color = danger ? c.danger() : c.accent();
         s.drawText(label, bx + (BTN_W - s.textWidth(label)) / 2,
                 buttonY + (BTN_H - s.lineHeight()) / 2 + 1, color, false);
     }

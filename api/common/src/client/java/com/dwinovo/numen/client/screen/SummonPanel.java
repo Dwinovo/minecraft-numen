@@ -207,12 +207,12 @@ public final class SummonPanel {
         alert.setBounds(x, y + 14, w, 24);
 
         int bw = 64, gap = 8;
-        int bx = x + (w - (bw * 2 + gap)) / 2;
+        int bx = x + w - (bw * 2 + gap);   // Telegram 对话框的按钮靠右下
         Button cancel = ui.add(new Button(t("numen.gui.settings.cancel"),
-                Button.Style.NORMAL, host::onCancel));
+                Button.Style.LINK, host::onCancel));
         cancel.setBounds(bx, ry, bw, 16);
         createButton = ui.add(new Button(t(ModLanguageData.Keys.SUMMON_CREATE),
-                Button.Style.ACCENT, this::submit));
+                Button.Style.LINK, this::submit));
         createButton.setBounds(bx + bw + gap, ry, bw, 16);
 
         ui.requestFocus(nameField);

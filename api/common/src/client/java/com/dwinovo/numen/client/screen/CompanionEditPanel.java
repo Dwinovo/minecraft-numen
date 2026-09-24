@@ -239,12 +239,12 @@ public final class CompanionEditPanel implements ModalCard {
         ry += NumenStyle.ROW_PITCH + 4;
 
         int bw = 64, gap = 8;
-        int bx = x + (w - (bw * 2 + gap)) / 2;
+        int bx = x + w - (bw * 2 + gap);   // Telegram 对话框的按钮靠右下
         Button cancel = ui.add(new Button(t("numen.gui.settings.cancel"),
-                Button.Style.NORMAL, host::onClose));
+                Button.Style.LINK, host::onClose));
         cancel.setBounds(bx, ry, bw, 16);
         Button save = ui.add(new Button(t(ModLanguageData.Keys.GUI_SETTINGS_SAVE),
-                Button.Style.ACCENT, this::save));
+                Button.Style.LINK, this::save));
         save.setBounds(bx + bw + gap, ry, bw, 16);
     }
 
