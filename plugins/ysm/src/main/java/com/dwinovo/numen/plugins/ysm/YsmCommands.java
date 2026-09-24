@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code numen ysm}:现在穿什么、能换成什么、能做哪些动作;换一身;做一个动作。三个都在服务端,全走 YSM 自己的
+ * {@code numen ysm}:现在穿什么、能换成什么;换一身;做一个动作。三个都在服务端,全走 YSM 自己的
  * 命令、命令补全与同伴的 NBT(见 {@link Ysm})。
  *
  * <p>都不提升成快捷工具:联动的动作是长尾,走 {@code numen} 这一个入口就够了。
@@ -35,7 +35,8 @@ final class YsmCommands {
     private static final Param<String> TEXTURE = Param.optional("texture", ArgType.string(),
             "Texture id from the model's textures in " + line(OPTIONS) + "; without it, the model's first one.");
     private static final Param<String> ANIMATION = Param.required("animation", ArgType.string(),
-            "Animation id from " + line(OPTIONS) + ", or " + STOP + " to go back to idle.");
+            "Animation id of the model you wear, e.g. extra1 (YSM does not tell the server which ones a model has), "
+                    + "or " + STOP + " to go back to idle.");
 
     private final Ysm ysm;
 
@@ -55,7 +56,7 @@ final class YsmCommands {
 
     private void actions(CommandGroup group) {
         group.server(OPTIONS, "Your model and texture now, the models you can switch to, and this model's "
-                + "textures and emotes.", this::options);
+                + "textures.", this::options);
         group.server(SWITCH, "Switch to another model. You can have exactly the models the owner is authorized for.",
                 this::switchModel, MODEL, TEXTURE);
         group.server(EMOTE, "Play one of this model's emotes, or stop the one playing.",
@@ -63,8 +64,8 @@ final class YsmCommands {
     }
 
     /**
-     * 现在穿什么、能换成什么、能做哪些动作——一次问清:三样本来就是同一个问题的三面。清单不写进帮助里:帮助跟着
-     * 玩家装的模型变,查询就该是查询。
+     * 现在穿什么、能换成什么、这身有哪几张贴图——一次问清:本来就是同一个问题的几面。清单不写进帮助里:帮助跟着
+     * 玩家装的模型变,查询就该是查询。这身模型有哪些动作不在里面:YSM 不告诉服务器(见 {@link Ysm})。
      */
     private void options(ServerSource src, CommandArgs args) {
         var server = src.companion().level().getServer();
@@ -76,19 +77,16 @@ final class YsmCommands {
         var look = ysm.readLook(src.companion());
         var models = ysm.models(server, me);
         var textures = look == null ? List.<String>of() : ysm.textures(server, me, look.model());
-        var emotes = ysm.emotes(server, me);
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("current_model", look == null ? "(读不到,YSM 可能没装)" : look.model());
         data.put("current_texture", look == null ? "" : look.texture());
         data.put("available_models", models);
         data.put("textures", textures);   // 当前模型的贴图 id,switch 的 --texture 从这里挑
-        data.put("emotes", emotes);
 
         String summary = look == null
                 ? "读不到当前模型,YSM 可能没装"
-                : "现在穿 " + look.model() + ",可换 " + models.size()
-                  + " 个模型,当前模型有 " + emotes.size() + " 个动作";
+                : "现在穿 " + look.model() + ",可换 " + models.size() + " 个模型";
         src.reply(TaskResult.ok(summary, data).toJson());
     }
 
@@ -129,7 +127,11 @@ final class YsmCommands {
     }
 
     /**
-     * 做一个动作。动作名不写死在这里:每个模型自带一套,清单问 YSM 自己的命令补全,跟着同伴现在穿的模型走。
+     * 做一个动作。动作名不写死在这里:每个模型自带一套。
+     *
+     * <h2>回执只说发出了</h2>
+     * YSM 的 play 命令是静默的,动作名不存在时它既不报错也不回执;服务端又拿不到这身模型的动作清单(见 {@link Ysm})。
+     * 所以这里核对不了她做没做成,回执照实说指令已发出、核对不了——不说"做了"。
      *
      * <p><b>音效不用我们管。</b> 模型作者可以把音效接在动画上(动画 JSON 里的 {@code sound_effects}),YSM 播动画时
      * 一并放。真机验过:同伴是服务端假玩家,但 YSM 照样给它放声音——播放路径没有区分真假玩家。所以这里只管发 play 命令。
@@ -147,15 +149,8 @@ final class YsmCommands {
             src.reply(TaskResult.ok("停下了").toJson());
             return;
         }
-        // YSM 的 play 命令是静默的:动作名不存在时它既不报错也不回执,所以先自己核一遍,
-        // 否则模型会以为做了、其实什么都没发生。
-        var known = ysm.emotes(server, me);
-        if (!known.isEmpty() && !known.contains(animation)) {
-            src.reply(TaskResult.fail(
-                    "当前模型没有 '" + animation + "' 这个动作,用 " + line(OPTIONS) + " 看有哪些").toJson());
-            return;
-        }
         ysm.playAnimation(server, me, animation);
-        src.reply(TaskResult.ok("做了 " + animation).toJson());
+        src.reply(TaskResult.ok("已发出播放 '" + animation + "' 的指令。YSM 不告诉服务器一个模型有哪些动作,"
+                + "核对不了现在这身模型有没有 '" + animation + "';没有的话身体不会有任何动作。").toJson());
     }
 }

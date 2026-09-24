@@ -33,10 +33,13 @@ import java.util.Set;
  *       对外的公开面,三个加载器上一字不差,而且目标参数用的是原版的
  *       {@code EntityArgument.players()},所以同伴(服务端假玩家)在玩家列表里就打得中。
  *       已在 1.21.1 + YSM 2.6.5 真机验过。</li>
- *   <li><b>命令补全</b>——有哪些模型、某个模型有哪些贴图、当前模型有哪些动作,都问命令树的
+ *   <li><b>命令补全</b>——有哪些模型、某个模型有哪些贴图,都问命令树的
  *       补全({@code ysm model set <玩家> <Tab>})。这是 YSM 自己维护的清单:目录里的、
  *       {@code .ysm} 打包的、zip 里的模型全在,格式和目录规则一概不用我们认,
- *       2.4.1 与 2.6.5 都挂了补全提供者。</li>
+ *       2.4.1 与 2.6.5 都挂了补全提供者。
+ *       动作名不问补全:{@code ysm play} 的动作补全不看目标是谁(2.6.5 反编译所见),专用服务器上一律是空的,
+ *       单人游戏里列的是主人客户端上那份兜底模型的动作——哪一边都不是她此刻这身模型的,所以一个模型有哪些
+ *       动作,服务端无从知道。</li>
  *   <li><b>NBT 键名</b>——它们是源码里的字符串字面量,混淆器不改字符串。存在哪一层
  *       随加载器而异,见 {@link Storage}。</li>
  * </ul>
@@ -126,11 +129,6 @@ public final class Ysm {
      */
     public List<String> textures(MinecraftServer server, String playerName, String model) {
         return suggestions(server, "ysm model set " + arg(playerName) + " " + arg(model) + " ");
-    }
-
-    /** 一个玩家现在这身模型能做的动作名。 */
-    public List<String> emotes(MinecraftServer server, String playerName) {
-        return suggestions(server, "ysm play " + arg(playerName) + " ");
     }
 
     /** 命令行敲到这里、按 Tab 会列出什么。补全提供者是同步的,在服务端线程上直接取。 */
