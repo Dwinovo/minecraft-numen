@@ -2,6 +2,7 @@ package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.api.gear.GearSource;
+import com.dwinovo.numen.cli.CommandGroup;
 import com.dwinovo.numen.entity.NumenPlayer;
 
 import java.nio.file.Path;
@@ -47,6 +48,32 @@ public interface NumenApi {
      * 渐进披露、同样按名字调用。
      */
     void registerTool(NumenTool tool);
+
+    /**
+     * 登记一组命令:{@code numen <namespace> <action> …}。模型经 {@code numen} 工具调用它们,不必为每个动作
+     * 多花一个工具定义;常用的动作可以 {@link com.dwinovo.numen.cli.Action#promote 提升}成快捷工具。
+     *
+     * <pre>{@code
+     * numen.registerCommands("mymod", "What your mod lets her do, in one sentence.", cmds -> {
+     *     cmds.server("status", "Read the machine she is looking at.", MyCommands::status);
+     *     cmds.server("start", "Start a machine by its id.", MyCommands::start, MACHINE_ID)
+     *         .promote("start_machine", "Start one of your mod's machines …");
+     *     cmds.client("recipes", "List recipes in the owner's language.", MyCommands::recipes);
+     * });
+     * }</pre>
+     *
+     * <p>{@code namespace} 用你的 mod id。一个组名只能登记一次,你只能往自己的组里加动作——引擎自带的组和
+     * 别的插件的组都够不着。每个动作选一侧执行:{@code server}(动身体、读世界)或 {@code client}(只有主人
+     * 客户端才有的数据)。命令树在两侧都登记,所以<b>在 {@code NumenPlugins.register} 的块里直接调</b>,别放进
+     * {@link #onClient}。
+     *
+     * @param namespace 一级命令名,小写英文,用你的 mod id
+     * @param summary   一句话说明,进系统提示里的命令索引和 {@code numen help}
+     * @param actions   往这一组里加动作;它返回后这一组就封口
+     * @throws IllegalArgumentException 组名已被占、名字不合规、动作或参数写错
+     * @throws IllegalStateException    提升成的工具名已被占
+     */
+    void registerCommands(String namespace, String summary, Consumer<CommandGroup> actions);
 
     /**
      * 把一个目录里的技能交给引擎。就地读,不复制:你的 jar 一卸载技能跟着消失。

@@ -6,6 +6,8 @@ import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.gear.GearSlot;
 import com.dwinovo.numen.api.gear.GearSource;
+import com.dwinovo.numen.cli.CommandGroup;
+import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.entity.CompanionEvents;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.event.NumenEvents;
@@ -206,6 +208,11 @@ public final class NumenPlugins {
         @Override
         public void registerTool(NumenTool tool) {
             ToolRegistry.register(tool);
+        }
+
+        @Override
+        public void registerCommands(String namespace, String summary, Consumer<CommandGroup> actions) {
+            NumenCli.register(namespace, summary, actions);
         }
 
         @Override
