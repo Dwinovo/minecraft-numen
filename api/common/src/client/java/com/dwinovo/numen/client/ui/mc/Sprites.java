@@ -71,9 +71,8 @@ public final class Sprites {
     /** 左栏顶上的 ☰(设置)与设置页抬头的 ←(回到对话)。 */
     public static final ResourceLocation MENU = icon("icon_menu");
     public static final ResourceLocation BACK = icon("icon_back");
-    /** 状态行:她的目标、她的计划。 */
+    /** 置顶条展开后目标那一行的旗子。 */
     public static final ResourceLocation FLAG = icon("icon_flag");
-    public static final ResourceLocation PLAN = icon("icon_plan");
 
     public static ResourceLocation icon(String name) {
         return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, name);

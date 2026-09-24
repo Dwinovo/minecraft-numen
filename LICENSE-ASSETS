@@ -23,7 +23,7 @@ pixelarticons (https://github.com/halfmage/pixelarticons) with
 
   - `api/common/src/main/resources/assets/numen_api/textures/gui/sprites/
     icon_copy.png`, `icon_refresh.png`, `icon_edit.png`, `icon_delete.png`,
-    `icon_flag.png`, `icon_plan.png`, `icon_menu.png`, `icon_back.png`,
+    `icon_flag.png`, `icon_menu.png`, `icon_back.png`,
     `icon_more.png`, `icon_user.png`, `icon_users.png`, `icon_user_plus.png`,
     `icon_settings.png`, `icon_search.png`, `icon_cpu.png`, `icon_plug.png`,
     `icon_robot.png`, `icon_book.png`, `icon_persona.png`, `icon_volume.png`,

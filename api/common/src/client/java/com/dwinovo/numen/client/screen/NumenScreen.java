@@ -127,14 +127,18 @@ public final class NumenScreen extends Screen {
     /** 抬头右端 ⋮ 的横座标;-1 = 本帧没画(没有会话/盖着别的页/模态中),点不中。 */
     private int moreX = -1;
     private PopupMenu headerMenu;
-    /** 状态行(输入框上方那一行)的高度:图标一格高加一点呼吸。她在忙、目标、计划、上下文水位都在这一行。 */
+    /** 输入框上方那一行的高度:只在有一时的提示(整理记忆、没绑模型、命令回话、麦克风)时滑出来。 */
     private static final int STATUS_H = 14;
-    /** 计划那一段本帧画在状态行的哪一截;宽 0 = 没画。点它展开清单。 */
-    private int planStripX, planStripY, planStripW;
+    /** 那一行露出多高(像素,按趋近走):平时 0,不占地方。 */
+    private float dockShown;
+    /** 置顶条(Telegram 的置顶消息)的高度、露出多高、这一帧的顶边;她有目标或计划时从抬头下面滑出来。 */
+    private static final int PIN_H = 26;
+    private float pinShown;
+    private int pinY;
+    private long lastPinFrameMs;
+    /** 置顶条点开没有;展开的目标与清单这一帧露出多高(像素,按趋近走,收起是往 0 走,走完才不画)。 */
     private boolean planOpen;
-    /** 清单的过渡:这一帧露出多高(像素),按帧率无关的趋近往目标走;收起是往 0 走,走完才不画。 */
     private float planShownH;
-    private long lastDockFrameMs;
     /**
      * 悬停提示延迟出:和网页一样,指针停住一会儿才出,扫过去不闪。同一条提示从第一次出现起计时,
      * 内容一变重新计——所以键是提示的文字本身。
@@ -1730,8 +1734,8 @@ public final class NumenScreen extends Screen {
             }
             if (!overlayOpen() && membersClicked(mouseX, mouseY)) return true;
             if (!overlayOpen() && profileClicked(mouseX, mouseY)) return true;
-            if (tab == Tab.CHAT && planStripW > 0 && mouseY >= planStripY && mouseY < planStripY + STATUS_H
-                    && mouseX >= planStripX && mouseX < planStripX + planStripW) {
+            if (tab == Tab.CHAT && pinShown > PIN_H - 1 && mouseX >= left + 3 && mouseX < left + panelW - 3
+                    && mouseY >= pinY && mouseY < pinY + PIN_H) {   // 置顶条:点开/收起目标与清单
                 planOpen = !planOpen;
                 return true;
             }
@@ -2411,37 +2415,36 @@ public final class NumenScreen extends Screen {
     // ---- chat transcript + plan ----
 
     /**
-     * 状态行:输入框上方一行,不写字——界面元素替字说话,想知道细节悬停。pi 的 footer 与 working
-     * 指示合成一行(她在忙这件事在抬头第二行说)。左起:有长期目标时一面旗(悬停出目标、第几轮、跑了多久);
-     * 有计划时一枚清单图标 + 一格一条待办的小格(悬停出正在做的那步,点开往上展开清单)。
-     * 上下文用量不在这儿:它在她的资料页,带着字说明是什么。
+     * 置顶条(Telegram 的置顶消息那一条):左一道强调色竖线;第一行强调色写"计划 2/5"加一排小格
+     * (只有目标时写"目标"),第二行是正在做的那一步,没有计划时是目标本身;右端一个箭头,点开往下展开。
      * 目标不把评估器那句"还差什么"摆出来——没达成就静默接着干,不该每轮在主人眼前刷判词。
      */
-    private void renderStatusLine(GuiGraphics g, EntityAgentLoop lp, int y, int mouseX, int mouseY) {
-        int x = left + PAD;
-        int limit = left + panelW - PAD;
-        int iy = y + (STATUS_H - ICON_N) / 2;
-        long now = System.currentTimeMillis();
-        boolean hover = !modalOpen() && !overlayOpen() && mouseY >= y && mouseY < y + STATUS_H;
-        // 目标——一面旗
-        var goal = lp.goal();
-        if (goal != null) {
-            com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.FLAG, x, iy, ICON_N, CTA);
-            if (hover && mouseX >= x && mouseX < x + ICON_N) {
-                tip(java.util.List.of(Component.literal(goal.objective()),
-                        Component.literal("第 " + goal.turnsExecuted() + " 轮 · "
-                                + com.dwinovo.numen.agent.goal.GoalPrompts.elapsed(goal.elapsedMs(now)))), mouseX, mouseY);
-            }
-            x += ICON_N + 6;
+    private void renderPin(GuiGraphics g, EntityAgentLoop lp,
+                           com.dwinovo.numen.client.screen.chat.PlanStrip.Progress progress,
+                           com.dwinovo.numen.agent.goal.GoalState goal, int y, int mouseX, int mouseY, long now) {
+        UiTheme t = UiTheme.current();
+        int x = left + 3, w = panelW - 6;
+        int shown = Math.round(pinShown);
+        g.enableScissor(x, y, x + w, y + shown);
+        int py = y + shown - PIN_H;   // 从抬头下面滑下来
+        boolean hot = !modalOpen() && !overlayOpen() && mouseX >= x && mouseX < x + w
+                && mouseY >= y && mouseY < y + shown;
+        g.fill(x, py, x + w, py + PIN_H, hot ? t.over() : t.band());
+        g.fill(x, py + PIN_H - 1, x + w, py + PIN_H, t.surfaceBorder());
+        g.fill(left + PAD, py + 4, left + PAD + 2, py + PIN_H - 4, CTA);
+        int tx = left + PAD + 8;
+        int right = left + panelW - PAD - 12;
+        String label = com.dwinovo.numen.client.screen.chat.PlanStrip.label(progress);
+        txt(g, Component.literal(label), tx, py + 4, t.accent());
+        if (progress != null) {
+            int sx = tx + font.width(label) + 6;
+            com.dwinovo.numen.client.screen.chat.PlanStrip.segments(g, lp, sx, py + 6, right - sx, now);
         }
-        // 计划——清单图标 + 小格
-        planStripX = x;
-        planStripY = y;
-        planStripW = com.dwinovo.numen.client.screen.chat.PlanStrip.render(g, lp, x, iy, Math.max(0, limit - x), planOpen, now);
-        if (planStripW > 0 && hover && !planOpen && mouseX >= x && mouseX < x + planStripW) {
-            String step = com.dwinovo.numen.client.screen.chat.PlanStrip.currentStep(lp);
-            if (step != null) tip(java.util.List.of(Component.literal(step)), mouseX, mouseY);
-        }
+        String line = progress != null && progress.current() != null ? progress.current()
+                : goal != null ? goal.objective() : "";
+        txt(g, Component.literal(Nb.clip(font, line, right - tx)), tx, py + 14, TXT);
+        chevron(g, left + panelW - PAD - 5, py + (PIN_H - 6) / 2, planOpen);
+        g.disableScissor();
     }
 
     private void tip(List<Component> lines, int x, int y) {
@@ -2460,14 +2463,26 @@ public final class NumenScreen extends Screen {
 
     private void renderChat(GuiGraphics g, int mouseX, int mouseY) {
         renderFind(g, mouseX, mouseY);
-        int bodyY = top + HEADER_H + 4 + Math.round(findShown);   // 搜索栏在时,对话流往下让
-        int transX = left + PAD;
-        int transW = panelW - PAD * 2;   // 对话流永远占满整行;附属信息在底部一行、按需展开
         EntityAgentLoop lp = loop();
-        planStripW = 0;
-        // 输入框上方那一行:状态行住这儿;整理记忆的进度、没绑模型的原因、命令的回话、麦克风提示
-        // 也都落这一行——它们是一时的、比状态要紧,谁在场谁占,状态行让开。
-        int dockY = top + panelH - inputH() - PAD - STATUS_H;
+        long now = System.currentTimeMillis();
+        float dt = lastPinFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastPinFrameMs) / 1000f);
+        lastPinFrameMs = now;
+        // 置顶条(Telegram 的置顶消息):她有目标或计划时从抬头下面滑出来;对话流往下让
+        int pinTop = top + HEADER_H + Math.round(findShown);
+        var progress = lp == null ? null : com.dwinovo.numen.client.screen.chat.PlanStrip.progress(lp);
+        var goal = lp == null ? null : lp.goal();
+        boolean pinned = progress != null || goal != null;
+        if (!pinned) planOpen = false;
+        pinShown = com.dwinovo.numen.client.ui.Anim.approach(pinShown, pinned ? PIN_H : 0f, 18f, dt);
+        pinY = pinTop;
+        if (pinShown > 0.5f && lp != null) renderPin(g, lp, progress, goal, pinTop, mouseX, mouseY, now);
+        int bodyY = pinTop + 4 + Math.round(pinShown);
+        int transX = left + PAD;
+        int transW = panelW - PAD * 2;   // 对话流永远占满整行
+        // 输入框上方那一行只给一时的提示:整理记忆的进度、没绑模型的原因、命令的回话、麦克风提示。
+        // 平时不占地方,有提示才滑出来(Telegram 的输入区上面没有常驻的一行)。
+        int inputTop = top + panelH - inputH() - PAD;
+        int dockY = inputTop - STATUS_H;
         boolean compacting = lp != null && lp.status().phase() == com.dwinovo.numen.agent.loop.Phase.COMPACT;
         boolean blocked = lp != null && lp.status().hold() == com.dwinovo.numen.agent.loop.Hold.BLOCKED
                 && lp.status().holdReason() != null;
@@ -2478,9 +2493,9 @@ public final class NumenScreen extends Screen {
             micNotice = null;
         }
         boolean noticeLine = noticeLive && inputBar != null && !inputBar.text().isEmpty();
-        boolean statusLine = lp != null && !compacting && !blocked && !cmdLive && !noticeLine;
-        // 正文的底:单成员时给状态行让一行(它常驻,像 pi 的页脚);会话没有单一的主时没有状态行
-        int bodyBottom = dockY - (lp != null ? 2 : 6);
+        boolean dock = compacting || blocked || cmdLive || noticeLine;
+        dockShown = com.dwinovo.numen.client.ui.Anim.approach(dockShown, dock ? STATUS_H : 0f, 18f, dt);
+        int bodyBottom = inputTop - 4 - Math.round(dockShown);
 
         // 外脑驱动中:对话流换成现场——同一套气泡语法,画的是现场缓冲(主人的话、
         // 外脑的 say 与动作行),顶上一条"谁接进来了"的知情行。
@@ -2491,18 +2506,14 @@ public final class NumenScreen extends Screen {
             chatView.render(g, transX, bodyY, transW, bodyBottom - bodyY, mouseX, mouseY);
         }
 
-        if (statusLine) {
-            renderStatusLine(g, lp, dockY, mouseX, mouseY);
-            // 清单从状态行往上长,盖在对话流上——和补全弹层同一个方向;展开/收起都有过渡,收完才不画
-            long now = System.currentTimeMillis();
-            float dt = lastDockFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastDockFrameMs) / 1000f);
-            lastDockFrameMs = now;
-            boolean want = planOpen && planStripW > 0;
-            if (want || planShownH > 0f) {
-                int fullH = com.dwinovo.numen.client.screen.chat.PlanStrip.renderOpen(
-                        g, font, lp, transX, transW, dockY - 3, bodyY, Math.round(planShownH), now);
-                planShownH = com.dwinovo.numen.client.ui.Anim.approach(planShownH, want ? fullH : 0f, 16f, dt);
-            }
+        // 置顶条点开:目标与清单从它下面往下长,盖在对话流上;展开/收起都有过渡,收完才不画
+        if (lp != null && (planOpen || planShownH > 0f)) {
+            String goalLine = goal == null ? null : goal.objective();
+            String goalMeta = goal == null ? null : I18n.get("numen.pin.goal_meta", goal.turnsExecuted(),
+                    com.dwinovo.numen.agent.goal.GoalPrompts.elapsed(goal.elapsedMs(now)));
+            int fullH = com.dwinovo.numen.client.screen.chat.PlanStrip.renderOpen(g, font, lp, goalLine, goalMeta,
+                    transX, transW, pinTop + PIN_H, bodyBottom, Math.round(planShownH), now);
+            planShownH = com.dwinovo.numen.client.ui.Anim.approach(planShownH, planOpen ? fullH : 0f, 16f, dt);
         }
         // 框里已有文字时占位不显示,这条兜底行接管(用醒目的 FAIL 色)
         if (noticeLine) {
