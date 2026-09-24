@@ -27,6 +27,8 @@ import java.util.List;
  * @param outMeta 主人的气泡里的时间(msgOutDateFg)
  * @param active  左栏选中行(dialogsBgActive)
  * @param onActive 选中行上的字
+ * @param serviceBg 服务消息的半透明底(msgServiceBg):日期牌、未读消息、清空记录之类的居中小条
+ * @param serviceFg 服务消息的字(msgServiceFg)
  */
 public record UiTheme(
         String id, String label,
@@ -35,7 +37,8 @@ public record UiTheme(
         int cta, int onCta, int accent,
         int aiFill, int ownFill, int inMeta, int outMeta,
         int active, int onActive,
-        int reply, int ok, int run, int fail) {
+        int reply, int ok, int run, int fail,
+        int serviceBg, int serviceFg) {
 
     /** 日间:Telegram 的 Day(蓝色版),聊天区用浅一档的蓝灰,淡字在上面照样读得清。 */
     public static final UiTheme LIGHT = new UiTheme("light", "Day",
@@ -44,7 +47,8 @@ public record UiTheme(
             0xFF40A7E3, 0xFFFFFFFF, 0xFF168ACD,
             0xFFFFFFFF, 0xFFDEF1FD, 0xFFA0ACB6, 0xFF86A8C2,
             0xFF419FD9, 0xFFFFFFFF,
-            0xFF1C7C9C, 0xFF4AB44A, 0xFFE0A030, 0xFFD14E4E);
+            0xFF1C7C9C, 0xFF4AB44A, 0xFFE0A030, 0xFFD14E4E,
+            0x59005180, 0xFFFFFFFF);
 
     /** 夜间:Telegram 的 night 主题原值。 */
     public static final UiTheme DARK = new UiTheme("dark", "Night",
@@ -53,7 +57,8 @@ public record UiTheme(
             0xFF5288C1, 0xFFFFFFFF, 0xFF6AB3F3,
             0xFF182533, 0xFF2B5278, 0xFF6D7F8F, 0xFF7DA8D3,
             0xFF2B5278, 0xFFFFFFFF,
-            0xFF6AB3F3, 0xFF57AB5A, 0xFFC79432, 0xFFEC3942);
+            0xFF6AB3F3, 0xFF57AB5A, 0xFFC79432, 0xFFEC3942,
+            0xD5213040, 0xFFFFFFFF);
 
     public static final List<UiTheme> ALL = List.of(LIGHT, DARK);
 

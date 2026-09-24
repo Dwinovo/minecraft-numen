@@ -46,8 +46,8 @@ import java.util.function.Supplier;
  * The chat transcript as a conversation: the owner's messages are right-aligned
  * bubbles, the companion's replies left-aligned bubbles — both with their real
  * skin avatar — and a run of consecutive tool calls folds into one chip
- * (click to expand once done). System notes (persona change / compaction / empty
- * hint) sit centred and faint. Scrolling is eased ({@link Anim#approach}) and
+ * (click to expand once done). Date chips, the unread bar and system notes (persona change /
+ * compaction / empty hint) are Telegram service messages: a centred translucent box, white text. Scrolling is eased ({@link Anim#approach}) and
  * pins to the bottom while the owner hasn't scrolled away.
  *
  * <p>Blocks are rebuilt every frame from the loop's PHYSICAL transcript (exactly
@@ -100,6 +100,8 @@ public final class ChatView {
     private int IN_META, OUT_META;
     /** 未读角标上的数字色。 */
     private int ON_CTA;
+    /** 服务消息(日期牌、未读消息、提示行)的半透明底与字(Telegram 的 msgServiceBg / msgServiceFg)。 */
+    private int SERVICE_BG, SERVICE_FG;
 
     private void loadPalette() {
         UiTheme t = UiTheme.current();
@@ -120,6 +122,8 @@ public final class ChatView {
         IN_META = t.inMeta();
         OUT_META = t.outMeta();
         ON_CTA = t.onCta();
+        SERVICE_BG = t.serviceBg();
+        SERVICE_FG = t.serviceFg();
     }
 
     private static ResourceLocation spr(String n) {
@@ -649,6 +653,9 @@ public final class ChatView {
 
     /** 气泡顶上的引用条:两行(谁、那句),左缘一道竖线;{@code QUOTE_IN} 是字离竖线多远。 */
     private static final int QUOTE_H = 20;
+    /** 服务消息里字离底边的距离:左右、上下(Telegram 的 msgServicePadding 按这里的字号缩)。 */
+    private static final int SERVICE_PAD_H = 5;
+    private static final int SERVICE_PAD_V = 2;
     private static final int QUOTE_IN = 6;
 
     /** 这一帧画出来的气泡在哪、是哪条:右键按它认点中的是哪句。 */
@@ -701,17 +708,16 @@ public final class ChatView {
         Chip withAvatar(boolean on) { return new Chip(rows, foldKey, label, who, entry, on); }
     }
 
-    /** 日期分隔:一天的第一条上面一枚居中的日期小牌(今天 / 昨天 / 几月几日)。 */
+    /** 日期分隔:一天的第一条上面一枚居中的服务消息(今天 / 昨天 / 几月几日)。 */
     private record Divider(String text) implements Block {}
 
-    /** "未读消息"那一条:横贯整行的淡色带,居中一行字。 */
+    /** "未读消息"那一条服务消息:打开时还没看过的第一句上面。 */
     private record UnreadBar() implements Block {}
 
     private record ChipRow(String icon, int iconColor, FormattedCharSequence text) {}
 
-    /** A centred, faint system note. */
-    /** 居中的一行提示(分隔、中断、整理中);画的时候按这一刻的宽度收口,长的切断原因不会画穿面板。 */
-    private record Notice(String text) implements Block {}
+    /** 居中的提示(整理过记忆、换了人设、清空、中断之类)画成服务消息;长的按气泡宽折行,{@code lines} 是折好的。 */
+    private record Notice(List<FormattedCharSequence> lines) implements Block {}
 
     private int bubbleMaxW(int w) {
         return w - EDGE - faceCol() - OPP_MARGIN - SB_W - 3;
@@ -724,9 +730,9 @@ public final class ChatView {
                     + (bb.time() != null && !bb.timeInline() ? TIME_H : 0);
             case Checklist c -> (c.label() != null ? LABEL_H : 0) + checklistH(c);
             case Chip c -> (c.label() != null ? LABEL_H : 0) + c.rows().size() * LINE_H + PAD_V * 2;
-            case Notice ignored -> LINE_H;
-            case Divider ignored -> LINE_H + 4;
-            case UnreadBar ignored -> LINE_H + 6;
+            case Notice n -> n.lines().size() * LINE_H + SERVICE_PAD_V * 2;
+            case Divider ignored -> LINE_H + SERVICE_PAD_V * 2;
+            case UnreadBar ignored -> LINE_H + SERVICE_PAD_V * 2;
         };
     }
 
@@ -873,17 +879,17 @@ public final class ChatView {
                 case ConvoState.Msg.User u -> {
                     flushProcess(f, done, failed, bubbleMaxW);
                     if (ConvoLog.PERSONA_DIVIDER.equals(u.content())) {
-                        notice(out, I18n.get("numen.chat.persona_changed"));
+                        notice(out, I18n.get("numen.chat.persona_changed"), bubbleMaxW);
                         f.last = null;
                         continue;
                     }
                     if (ConvoLog.COMPACT_DIVIDER.equals(u.content())) {
-                        notice(out, I18n.get("numen.chat.compacted"));
+                        notice(out, I18n.get("numen.chat.compacted"), bubbleMaxW);
                         f.last = null;
                         continue;
                     }
                     if (ConvoLog.CLEAR_DIVIDER.equals(u.content())) {
-                        notice(out, I18n.get("numen.chat.cleared"));
+                        notice(out, I18n.get("numen.chat.cleared"), bubbleMaxW);
                         f.last = null;
                         f.plans.clear();   // 清空之后她不记得之前那份计划,再写就是新的一条
                         continue;
@@ -933,7 +939,7 @@ public final class ChatView {
                 case ConvoState.Msg.Tool ignored -> { /* result drives done/fail, not a block */ }
                 case ConvoState.Msg.Halt h -> {
                     flushProcess(f, done, failed, bubbleMaxW);
-                    notice(out, I18n.get("numen.chat.halted", h.reason()));
+                    notice(out, I18n.get("numen.chat.halted", h.reason()), bubbleMaxW);
                     f.last = null;
                 }
             }
@@ -978,9 +984,9 @@ public final class ChatView {
                     innerW, first, null, null, -1, body, null));
             f.last = OWNER;
         }
-        if (compacting) notice(out, I18n.get("numen.chat.compacting"));
+        if (compacting) notice(out, I18n.get("numen.chat.compacting"), bubbleMaxW);
         if (out.isEmpty()) {
-            notice(out, I18n.get("numen.chat.empty", conv.get().displayName(NumenRoster.instance()::name)));
+            notice(out, I18n.get("numen.chat.empty", conv.get().displayName(NumenRoster.instance()::name)), bubbleMaxW);
         }
         settleAvatars(out);
         return out;
@@ -1147,8 +1153,8 @@ public final class ChatView {
         return s.substring(0, n);
     }
 
-    private void notice(List<Block> out, String text) {
-        out.add(new Notice(text));
+    private void notice(List<Block> out, String text, int maxW) {
+        out.add(new Notice(split(Nb.colored(text, SERVICE_FG), maxW - SERVICE_PAD_H * 2)));
     }
 
     /**
@@ -1262,29 +1268,34 @@ public final class ChatView {
     private void drawBlockBody(GuiGraphics g, Block b, int x, int y, int w) {
         switch (b) {
             case Divider d -> drawDayChip(g, d.text(), x, y, w);
-            case Notice n -> {
-                FormattedCharSequence line = Nb.colored(Nb.clip(font, n.text(), w - SB_W), FAINT).getVisualOrderText();
-                int tw = font.width(line);
-                draw(g, line, x + (w - SB_W - tw) / 2, y);
-            }
-            case UnreadBar ignored -> {
-                String t = I18n.get("numen.chat.unread_bar");
-                g.fill(x, y, x + w - SB_W, y + LINE_H + 6, (CHIP_FILL & 0xFFFFFF) | (((CHIP_FILL >>> 24) / 2) << 24));
-                draw(g, Nb.colored(t, MUTED).getVisualOrderText(), x + (w - SB_W - font.width(t)) / 2, y + 4);
-            }
+            case Notice n -> drawService(g, n.lines(), x, y, w);
+            case UnreadBar ignored -> drawDayChip(g, I18n.get("numen.chat.unread_bar"), x, y, w);
             case Bubble bb -> drawBubble(g, bb, x, y, w);
             case Checklist c -> drawChecklist(g, c, x, y);
             case Chip c -> drawChip(g, c, x, y);
         }
     }
 
-    /** 居中的日期小牌:一圈描边、极淡底,和工具行同一层的"这不是话"。对话里的和翻页时浮在顶上的是同一枚。 */
+    /** 一行的服务消息(日期牌、未读消息)。对话里的日期牌和翻页时浮在顶上的是同一枚。 */
     private void drawDayChip(GuiGraphics g, String text, int x, int y, int w) {
-        int tw = font.width(text);
-        int bx = x + (w - SB_W - tw) / 2 - 5;
-        NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), bx, y, tw + 10, LINE_H + 4,
-                (CHIP_FILL & 0xFFFFFF) | (((CHIP_FILL >>> 24) / 2) << 24), TRACE_BAR);
-        draw(g, Nb.colored(text, MUTED).getVisualOrderText(), bx + 5, y + 3);
+        drawService(g, List.of(Nb.colored(text, SERVICE_FG).getVisualOrderText()), x, y, w);
+    }
+
+    /**
+     * 服务消息(Telegram 的 service message):在对话流里居中的一块半透明底、白字,不是谁说的话。
+     * 几行各自居中;底贴最宽那行,四周留 {@code SERVICE_PAD_*}。方角,不画圆角。
+     */
+    private void drawService(GuiGraphics g, List<FormattedCharSequence> lines, int x, int y, int w) {
+        int maxW = 0;
+        for (FormattedCharSequence l : lines) maxW = Math.max(maxW, font.width(l));
+        int mid = x + (w - SB_W) / 2;
+        int bx = mid - maxW / 2 - SERVICE_PAD_H;
+        g.fill(bx, y, bx + maxW + SERVICE_PAD_H * 2, y + lines.size() * LINE_H + SERVICE_PAD_V * 2, SERVICE_BG);
+        int ty = y + SERVICE_PAD_V + 1;
+        for (FormattedCharSequence l : lines) {
+            draw(g, l, mid - font.width(l) / 2, ty);
+            ty += LINE_H;
+        }
     }
 
     private void drawBubble(GuiGraphics g, Bubble b, int x, int y, int w) {
