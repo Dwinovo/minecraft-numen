@@ -65,6 +65,12 @@ public final class Schema {
             return this;
         }
 
+        /** Optional integer with no bounds — dropped from {@code required}. */
+        public Builder optionalInteger(String name, String desc) {
+            props.put(name, base("integer", desc));
+            return this;
+        }
+
         /** Optional bounded integer — dropped from {@code required}. */
         public Builder optionalInteger(String name, String desc, int min, int max) {
             Map<String, Object> p = base("integer", desc);
