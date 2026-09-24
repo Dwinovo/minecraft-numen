@@ -36,6 +36,17 @@ public final class Nb {
         g.drawString(font, seq, x, y, -1, false);
     }
 
+    /** 截短到 {@code maxW} 像素放得下,截了就补一个省略号。 */
+    public static String clip(Font font, String s, int maxW) {
+        if (font.width(s) <= maxW) return s;
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            if (font.width(b.toString() + s.charAt(i) + "…") > maxW) break;
+            b.append(s.charAt(i));
+        }
+        return b + "…";
+    }
+
     /** Square thick border = four filled edge rects (no rounded corners). */
     public static void border(GuiGraphics g, int x, int y, int w, int h, int t, int color) {
         g.fill(x, y, x + w, y + t, color);

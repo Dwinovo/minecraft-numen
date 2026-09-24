@@ -65,7 +65,7 @@ public final class NumenScreen extends Screen {
      * 面板此刻对着什么(Telegram 没有页签):CHAT 是对话;ITEMS 是点抬头名字从右边滑进来的资料页
      * (背包、体征);SETTINGS 是左栏顶上 ☰ 从左边滑进来的设置页。滑入滑出都有过渡,见 overlayT。
      */
-    private enum Tab { CHAT, ITEMS, SETTINGS }
+    private enum Tab { CHAT, ITEMS, SETTINGS, MEMBERS }
 
     // ---- layout ----
     // 面板随窗口伸缩,两端夹住:下限保证小窗口下不挤,上限挡住大屏上的无限变宽
@@ -94,10 +94,6 @@ public final class NumenScreen extends Screen {
     private static final int FIELD_INSET_Y = 4;
     private static final int PAD = 8;
     private static final int LINE_H = 10;
-    /** 成员抬头那一行:脸的边长、脸与脸的间距、右上角 × 的边长。 */
-    private static final int MEMBER_AV = 18;
-    private static final int MEMBER_GAP = 5;
-    private static final int MEMBER_X_BOX = 7;
     private static final int MAX_PROMPT = 1024;
 
     // ---- palette: static but REFRESHABLE — the theme picker calls repaint() and every
@@ -170,8 +166,6 @@ public final class NumenScreen extends Screen {
     private long tipSince;
     private long tipLastShownMs;
     /** 成员抬头那一行本帧画了谁(与 membersAlive 同序),点击按它判命中;空 = 本帧没画。 */
-    private final List<UUID> memberRowFaces = new ArrayList<>();
-    private int memberRowX, memberRowY;
 
     private boolean overEditPencil(double mx, double my) {
         return overIcon(editPencilX, mx, my);
@@ -283,6 +277,12 @@ public final class NumenScreen extends Screen {
     private float overlayT;
     /** 正在滑的是哪页;收回去的过程中 tab 已经是 CHAT,它记着该往哪边收。 */
     private Tab overlayKind = Tab.ITEMS;
+    /**
+     * 滑着的那页底下垫的是哪页:平时是对话;从群资料页点人开她的资料时是群资料页——
+     * Telegram 一层层推进去,← 一层层退出来。
+     */
+    private Tab baseTab = Tab.CHAT;
+    private MembersPage membersPage;
     private long lastOverlayFrameMs;
     /** 左栏顶上那一条:☰。 */
     private static final int RAIL_BAR_H = 22;
@@ -445,7 +445,7 @@ public final class NumenScreen extends Screen {
         conv = c;   // 同一个会话也换成最新的那份——成员表、名字可能刚变
         SelectedCompanion.set(c);
         if (same) return;
-        if (tab == Tab.ITEMS) selectTab(Tab.CHAT);   // 换了会话,资料页收起(Telegram 也这样)
+        if (tab == Tab.ITEMS || tab == Tab.MEMBERS) selectTab(Tab.CHAT);   // 换了会话,资料页收起(Telegram 也这样)
         inputBar = null; savedInput = "";       // don't carry typed text across conversations
         planOpen = false;
         planShownH = 0f;
@@ -498,7 +498,7 @@ public final class NumenScreen extends Screen {
         this.railX = Math.max(0, (this.width - composite) / 2);
         this.left = railX + railW;
         this.top = Math.max(0, (this.height - panelH) / 2);
-        overlayT = tab == Tab.CHAT ? 0f : panelW;   // 开屏就在哪页就摆在哪,不从外面滑
+        overlayT = tab == baseTab ? 0f : panelW;   // 开屏就在哪页就摆在哪,不从外面滑
         rebuild();
     }
 
@@ -792,12 +792,14 @@ public final class NumenScreen extends Screen {
         long now = System.currentTimeMillis();
         float dt = lastOverlayFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastOverlayFrameMs) / 1000f);
         lastOverlayFrameMs = now;
-        overlayT = com.dwinovo.numen.client.ui.Anim.approach(overlayT, tab == Tab.CHAT ? 0f : panelW, 16f, dt);
-        if (tab == Tab.CHAT || overlayT < panelW - 0.5f) {
-            if (conv != null) renderChat(g, mouseX, mouseY); else emptyHint(g);
+        overlayT = com.dwinovo.numen.client.ui.Anim.approach(overlayT, tab == baseTab ? 0f : panelW, 16f, dt);
+        if (tab == baseTab || overlayT < panelW - 0.5f) {
+            if (baseTab == Tab.MEMBERS) renderMembers(g, mouseX, mouseY);
+            else if (conv != null) renderChat(g, mouseX, mouseY); else emptyHint(g);
         }
         if (overlayT <= 0.5f) return;
-        int dx = overlayKind == Tab.ITEMS ? Math.round(panelW - overlayT) : -Math.round(panelW - overlayT);
+        // 设置从左边滑进来(☰ 在左),资料页和群资料从右边(点的名字、脸在正文里)
+        int dx = overlayKind == Tab.SETTINGS ? -Math.round(panelW - overlayT) : Math.round(panelW - overlayT);
         int bodyTop = top + HEADER_H, bodyBottom = top + panelH - 3;
         g.enableScissor(left + 3, bodyTop, left + panelW - 3, bodyBottom);
         g.pose().pushPose();
@@ -806,6 +808,8 @@ public final class NumenScreen extends Screen {
         g.fill(left + 3, bodyTop, left + panelW - 3, bodyBottom, t.ground());   // 底板盖住下面的对话
         if (overlayKind == Tab.SETTINGS) {
             settings.render(g, mouseX - dx, mouseY);   // global — works with no companion
+        } else if (overlayKind == Tab.MEMBERS) {
+            renderMembers(g, mouseX - dx, mouseY);
         } else if (profileOf != null) {
             com.dwinovo.numen.client.screen.items.ItemsView.render(
                     g, font, profileOf, left, top, panelW, panelH, HEADER_H, mouseX - dx, mouseY);
@@ -949,6 +953,7 @@ public final class NumenScreen extends Screen {
     private void selectTab(Tab t) {
         if (t == tab) return;
         tab = t;
+        baseTab = Tab.CHAT;   // 直接开关的页都垫在对话上;一层层推进去的见 pushProfile
         if (t != Tab.CHAT) overlayKind = t;   // 收回去时 tab 已是 CHAT,靠它记住往哪边收
         planOpen = false;
         planShownH = 0f;
@@ -960,9 +965,13 @@ public final class NumenScreen extends Screen {
     /** 资料页对着哪只:点抬头名字是就他俩那只,点对话里的脸是那张脸的主人(群里点谁看谁)。 */
     private UUID profileOf;
 
-    /** 资料页开/收:同一只再点是收,换一只是直接换页里的人。 */
+    /** 资料页开/收:同一只再点是收,换一只是直接换页里的人;在群资料页里点是推进去一层。 */
     private void toggleInfo(UUID who) {
         if (who == null) return;
+        if (tab == Tab.MEMBERS) {
+            pushProfile(who);
+            return;
+        }
         if (tab == Tab.ITEMS && who.equals(profileOf)) {
             selectTab(Tab.CHAT);
             return;
@@ -973,6 +982,65 @@ public final class NumenScreen extends Screen {
         } else {
             selectTab(Tab.ITEMS);
         }
+    }
+
+    /** 群资料页里点了一个人:她的资料页从右边推进来,盖在群资料页上;← 退回群资料页。 */
+    private void pushProfile(UUID who) {
+        profileOf = who;
+        baseTab = Tab.MEMBERS;
+        overlayKind = Tab.ITEMS;
+        tab = Tab.ITEMS;
+        overlayT = 0f;
+        requestInventory();
+    }
+
+    /** ← 与 Esc:退一层。资料页底下垫着群资料页就退回群资料页,否则回对话。 */
+    private void back() {
+        if (tab == Tab.ITEMS && baseTab == Tab.MEMBERS) {
+            tab = Tab.MEMBERS;   // 资料页滑出去,露出底下的群资料页
+            return;
+        }
+        if (tab == Tab.MEMBERS && baseTab == Tab.MEMBERS) {
+            // 群资料页这时垫在底下:换成滑着的那页,再往外收
+            overlayKind = Tab.MEMBERS;
+            baseTab = Tab.CHAT;
+            overlayT = panelW;
+        }
+        selectTab(Tab.CHAT);
+    }
+
+    /** 抬头名字:就他俩开她的资料页,群开群资料页。 */
+    private void openInfo() {
+        if (solo() != null) toggleInfo(solo()); else selectTab(Tab.MEMBERS);
+    }
+
+    /** 群资料页:成员一行一个。垫在底下时也画,只是不亮悬停、不接点击。 */
+    private void renderMembers(GuiGraphics g, int mouseX, int mouseY) {
+        if (conv == null) return;
+        if (membersPage == null) membersPage = new MembersPage(font);
+        int bodyTop = top + HEADER_H;
+        g.fill(left + 3, bodyTop, left + panelW - 3, top + panelH - 3, UiTheme.current().ground());
+        boolean live = tab == Tab.MEMBERS && !modalOpen() && !overlayOpen()
+                && Math.abs(overlayT - (tab == baseTab ? 0f : panelW)) < 1f;
+        long now = System.currentTimeMillis();
+        membersPage.render(g, conv, left + PAD, bodyTop + 4, panelW - PAD * 2, mouseX, mouseY, live, m -> {
+            HeaderStatus s = headerStatus(m, now);
+            return s == null ? "" : s.text();
+        });
+        String t = live ? membersPage.tipAt(mouseX, mouseY) : null;
+        if (t != null) tip(java.util.List.of(Component.literal(t)), mouseX, mouseY);
+    }
+
+    /** 群资料页上的点击:点人推她的资料页,× 移出,＋ 邀请。 */
+    private boolean membersClicked(double mx, double my) {
+        if (tab != Tab.MEMBERS || conv == null || membersPage == null) return false;
+        switch (membersPage.click(mx, my)) {
+            case MembersPage.Hit.Open o -> pushProfile(o.who());
+            case MembersPage.Hit.Drop d -> conv = Conversations.instance().drop(conv, d.who());
+            case MembersPage.Hit.Invite ignored -> openInvite();
+            case null -> { return false; }
+        }
+        return true;
     }
 
     /** 左栏 ☰:设置页开/收。 */
@@ -994,7 +1062,7 @@ public final class NumenScreen extends Screen {
 
     /** 抬头上名字与状态那一块(点它开资料页);图标那一截不算。 */
     private boolean overName(double mx, double my) {
-        return tab != Tab.SETTINGS && solo() != null && mx >= left + PAD && mx < nameRight
+        return tab == Tab.CHAT && conv != null && mx >= left + PAD && mx < nameRight
                 && my >= top + 3 && my < top + HEADER_H - 2;
     }
     private int nameRight;
@@ -1034,13 +1102,7 @@ public final class NumenScreen extends Screen {
     /** 显示过滤统一走 {@link com.dwinovo.numen.client.chat.ChatDisplayMode}(可整体切换)。 */
     /** Truncate {@code s} with an ellipsis so it fits in {@code maxW} px. */
     private String clip(String s, int maxW) {
-        if (font.width(s) <= maxW) return s;
-        StringBuilder b = new StringBuilder();
-        for (int i = 0; i < s.length(); i++) {
-            if (font.width(b.toString() + s.charAt(i) + "…") > maxW) break;
-            b.append(s.charAt(i));
-        }
-        return b + "…";
+        return Nb.clip(font, s, maxW);
     }
 
     /** The active companion's current persona name (green marker in the list), or null. */
@@ -1113,8 +1175,8 @@ public final class NumenScreen extends Screen {
         if (tab == Tab.CHAT && inputBar != null && inputBar.keyPressed(keyCode, modifiers)) {
             return true;
         }
-        if (k == 256 && tab != Tab.CHAT) {   // Esc 先收盖着的那页(资料/设置),再一次才关面板
-            selectTab(Tab.CHAT);
+        if (k == 256 && tab != Tab.CHAT) {   // Esc 先退盖着的那页(资料/群资料/设置),退到对话再一次才关面板
+            back();
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
@@ -1210,14 +1272,15 @@ public final class NumenScreen extends Screen {
                 openInvite();
                 return true;
             }
-            if (backAt(mouseX, mouseY)) {   // 设置页的 ← → 回到对话
-                selectTab(Tab.CHAT);
+            if (backAt(mouseX, mouseY)) {   // 盖着的页的 ← 退一层
+                back();
                 return true;
             }
-            if (!overlayOpen() && overName(mouseX, mouseY)) {   // 名字 → 资料页开/收
-                toggleInfo(solo());
+            if (!overlayOpen() && overName(mouseX, mouseY)) {   // 名字 → 资料页 / 群资料页
+                openInfo();
                 return true;
             }
+            if (!overlayOpen() && membersClicked(mouseX, mouseY)) return true;
             if (tab == Tab.CHAT && planStripW > 0 && mouseY >= planStripY && mouseY < planStripY + STATUS_H
                     && mouseX >= planStripX && mouseX < planStripX + planStripW) {
                 planOpen = !planOpen;
@@ -1227,7 +1290,6 @@ public final class NumenScreen extends Screen {
                 planOpen = false;   // 展开的清单盖在对话流上:点别处只负责收起
                 return true;
             }
-            if (tab == Tab.CHAT && memberRowClicked(mouseX, mouseY)) return true;
             if (tab == Tab.CHAT && inputBar != null
                     && inputBar.mouseClicked(mouseX, mouseY, button)) {
                 return true;
@@ -1435,7 +1497,6 @@ public final class NumenScreen extends Screen {
     private void renderInner(GuiGraphics g, int mouseX, int mouseY, float partial) {
         super.render(g, mouseX, mouseY, partial);
         pendingTip = null;   // recollected each frame by the section renderers
-        memberRowFaces.clear();   // 只有多人会话的聊天页会再填上
 
         drawWorkspace(g);                // rail column + panel chrome, in the CURRENT theme's colours
         renderRail(g, mouseX, mouseY);   // avatars + status + summon tile on the rail column
@@ -1455,6 +1516,10 @@ public final class NumenScreen extends Screen {
             if (tab == Tab.SETTINGS) {
                 txt(g, Component.literal(I18n.get("numen.tab.settings")), tx,
                         top + (HEADER_H - font.lineHeight) / 2 + 1, ON_BAND);
+            } else if (tab == Tab.MEMBERS) {
+                String title = name();
+                txt(g, Component.literal(clip(title == null ? "?" : title, headerLimit - tx)), tx, top + NAME_Y, ON_BAND);
+                renderStatusText(g, null, tx, headerLimit);
             } else {
                 String who = profileOf == null ? "?" : nameFor(profileOf);
                 txt(g, Component.literal(clip(who, headerLimit - tx)), tx, top + NAME_Y, ON_BAND);
@@ -1485,8 +1550,8 @@ public final class NumenScreen extends Screen {
         String title = name();
         String nm = clip(title == null ? "Numen" : title, Math.max(24, nameRoom));
         nameRight = left + PAD + font.width(nm);
-        boolean hotName = her != null && !modalOpen() && !overlayOpen() && overName(mouseX, mouseY);
-        // 名字可点(就他俩时):点开资料页;悬停亮一档,像个能点的东西
+        boolean hotName = !modalOpen() && !overlayOpen() && overName(mouseX, mouseY);
+        // 名字可点:就他俩开她的资料页,群开群资料页;悬停亮一档,像个能点的东西
         txt(g, Component.literal(nm), left + PAD, top + NAME_Y, hotName ? CTA : ON_BAND);
         if (hotName) {
             tip(java.util.List.of(Component.translatable(ModLanguageData.Keys.HEADER_PROFILE)), mouseX, mouseY);
@@ -1936,61 +2001,6 @@ public final class NumenScreen extends Screen {
 
 
     /**
-     * 成员抬头那一行(会话没有单一的主时):每个还在的成员一张脸。悬停给名字、右上角出一个 × 移出;
-     * 只剩一个不给移,那一步是解散,在垃圾桶上。
-     */
-    private int renderMemberRow(GuiGraphics g, int bodyY, int mouseX, int mouseY) {
-        memberRowFaces.addAll(Conversations.instance().membersAlive(conv));
-        memberRowX = left + PAD;
-        memberRowY = bodyY;
-        boolean quiet = !modalOpen() && !overlayOpen();
-        boolean droppable = memberRowFaces.size() > 1;
-        for (int i = 0; i < memberRowFaces.size(); i++) {
-            UUID m = memberRowFaces.get(i);
-            int fx = memberFaceX(i);
-            boolean hovered = quiet && mouseX >= fx && mouseX < fx + MEMBER_AV
-                    && mouseY >= bodyY && mouseY < bodyY + MEMBER_AV;
-            com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
-                    fx - 2, bodyY - 2, MEMBER_AV + 4, MEMBER_AV + 4, FIELD, BORDER);
-            CompanionFace.draw(g, m, skinFor(m), fx, bodyY, MEMBER_AV);
-            if (!hovered) continue;
-            boolean overX = droppable && overMemberX(i, mouseX, mouseY);
-            if (droppable) {
-                int bx = fx + MEMBER_AV - MEMBER_X_BOX + 2, by = bodyY - 2;
-                g.fill(bx, by, bx + MEMBER_X_BOX, by + MEMBER_X_BOX,
-                        overX ? UiTheme.mix(FAIL, 0xFFFFFFFF, 0.35f) : FAIL);
-                txt(g, Component.literal("×"), bx + (MEMBER_X_BOX - font.width("×")) / 2, by - 1, 0xFFFFFFFF);
-            }
-            pendingTip = java.util.List.of(Component.literal(
-                    overX ? I18n.get(ModLanguageData.Keys.CONVO_DROP, nameFor(m)) : nameFor(m)));
-            pendingTipX = mouseX;
-            pendingTipY = mouseY;
-        }
-        return bodyY + MEMBER_AV + 6;
-    }
-
-    private int memberFaceX(int i) {
-        return memberRowX + i * (MEMBER_AV + MEMBER_GAP);
-    }
-
-    private boolean overMemberX(int i, double mx, double my) {
-        int bx = memberFaceX(i) + MEMBER_AV - MEMBER_X_BOX + 2, by = memberRowY - 2;
-        return mx >= bx && mx < bx + MEMBER_X_BOX && my >= by && my < by + MEMBER_X_BOX;
-    }
-
-    /** 成员脸上的 × 被点了:移出。只剩一个时没有 ×——见 {@link #renderMemberRow}。 */
-    private boolean memberRowClicked(double mx, double my) {
-        if (memberRowFaces.size() <= 1) return false;
-        for (int i = 0; i < memberRowFaces.size(); i++) {
-            if (overMemberX(i, mx, my)) {
-                conv = Conversations.instance().drop(conv, memberRowFaces.get(i));
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
      * 输入行此刻占多高:平时一行;她在等主人点头时是答复框的高度——答复框和输入框同级,正文往上让,不压在对话流上。
      */
     private int inputH() {
@@ -2020,9 +2030,6 @@ public final class NumenScreen extends Screen {
         // 正文的底:单成员时给状态行让一行(它常驻,像 pi 的页脚);会话没有单一的主时没有状态行
         int bodyBottom = dockY - (lp != null ? 2 : 6);
 
-        if (lp == null) {
-            bodyY = renderMemberRow(g, bodyY, mouseX, mouseY);   // 谁在场,Discord 也放顶上
-        }
         // 外脑驱动中:对话流换成现场——同一套气泡语法,画的是现场缓冲(主人的话、
         // 外脑的 say 与动作行),顶上一条"谁接进来了"的知情行。
         if (lp != null && com.dwinovo.numen.mcp.server.McpMode.instance().driving()) {
