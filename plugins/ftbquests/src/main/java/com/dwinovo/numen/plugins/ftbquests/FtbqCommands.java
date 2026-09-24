@@ -7,10 +7,11 @@ import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.cli.Param;
 
 /**
- * {@code numen ftbquests}:她自己翻不了的任务书,在这里有一个入口。
+ * {@code numen ftbquests}:她自己点不了的任务书按钮,在这里有一个入口。
  *
- * <p>读任务书({@code list}、{@code show})在主人的客户端上执行,见 {@link ClientBook}。都是长尾,不提升为
- * 快捷工具——装了 FTB 的世界里也不是每几轮就用一次,常驻工具表不值。
+ * <p>读任务书({@code list}、{@code show})在主人的客户端上执行,见 {@link ClientBook};提交任务({@code submit})
+ * 在服务端执行,动的是她的背包。都是长尾,不提升为快捷工具——装了 FTB 的世界里也不是每几轮就用一次,
+ * 常驻工具表不值。
  */
 final class FtbqCommands {
 
@@ -23,12 +24,18 @@ final class FtbqCommands {
     /** 客户端按主人的语言认标题,所以 show 编号、标题都收;标题可以带空格,吃掉余下整行。 */
     private static final Param<String> QUEST_NAMED = Param.required("quest", ArgType.text(),
             "A quest's id, or its full title as list prints it.");
+    /**
+     * submit 只收编号:它在服务端执行,服务端的任务书是回退语言,主人语言里的标题在那边对不上。
+     * 编号是 FTB 的对象编号,两侧一样。
+     */
+    static final Param<String> QUEST_ID = Param.required("quest", ArgType.word(),
+            "The quest's id, as list and show print it.");
 
     private FtbqCommands() {}
 
     static void install(NumenApi numen) {
         numen.registerCommands(GROUP,
-                "FTB Quests: your owner's quest book.",
+                "FTB Quests: your owner's quest book, handing in quests.",
                 FtbqCommands::actions);
     }
 
@@ -40,5 +47,7 @@ final class FtbqCommands {
                 }, PAGE);
         quests.client("show", "One quest in full: description, dependencies, tasks, rewards.",
                 (src, args) -> ClientBook.show(src, args.get(QUEST_NAMED)), QUEST_NAMED);
+        quests.server("submit", "Hand in a quest's items, experience or checkmarks from your own inventory.",
+                QuestSubmit::submit, QUEST_ID);
     }
 }
