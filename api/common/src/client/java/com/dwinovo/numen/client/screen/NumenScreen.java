@@ -865,7 +865,7 @@ public final class NumenScreen extends Screen {
         overlayT = com.dwinovo.numen.client.ui.Anim.approach(overlayT, tab == baseTab ? 0f : panelW, 16f, dt);
         if (tab == baseTab || overlayT < panelW - 0.5f) {
             if (baseTab == Tab.MEMBERS) renderMembers(g, mouseX, mouseY);
-            else if (conv != null) renderChat(g, mouseX, mouseY); else emptyHint(g);
+            else if (conv != null) renderChat(g, mouseX, mouseY); else emptyHint(g, mouseX, mouseY);
         }
         if (overlayT <= 0.5f) return;
         // 设置从左边滑进来(☰ 在左),资料页和群资料从右边(点的名字、脸在正文里)
@@ -1381,6 +1381,10 @@ public final class NumenScreen extends Screen {
                 return true;
             }
             if (searchActive) blurSearch();   // 点在别处:搜索框交回焦点,这一下照常往下走
+            if (!modalOpen() && overEmptyButton(mouseX, mouseY)) {   // 空面板的召唤钮
+                openSummon();
+                return true;
+            }
             int rail = railIndexAt((int) mouseX, (int) mouseY);
             if (rail >= 0) {
                 // 按下只记一笔:是点还是拖,松手时才知道(见 mouseReleased)
@@ -1998,9 +2002,38 @@ public final class NumenScreen extends Screen {
         return -1;
     }
 
-    private void emptyHint(GuiGraphics g) {
-        txt(g, Component.translatable("numen.empty.no_companions"),
-                left + PAD, top + HEADER_H + 10, TXT_FAINT);
+    /**
+     * 空面板(一只同伴都没有):正中一句话,下面一颗强调色的召唤钮——Telegram 空列表那颗"新消息"。
+     * 有了同伴以后召唤只留在 ☰ 菜单里,不常驻占地方。
+     */
+    private void emptyHint(GuiGraphics g, int mouseX, int mouseY) {
+        Component msg = Component.translatable("numen.empty.no_companions");
+        int cx = left + panelW / 2;
+        txt(g, msg, cx - font.width(msg) / 2, emptyButtonY() - 16, TXT_MUTED);
+        boolean hot = !modalOpen() && !overlayOpen() && overEmptyButton(mouseX, mouseY);
+        int bx = emptyButtonX(), by = emptyButtonY(), bw = emptyButtonW();
+        g.fill(bx, by, bx + bw, by + EMPTY_BTN_H, hot ? UiTheme.mix(CTA, 0xFFFFFFFF, 0.15f) : CTA);
+        String label = I18n.get("numen.summon.title");
+        txt(g, Component.literal(label), bx + (bw - font.width(label)) / 2, by + (EMPTY_BTN_H - 8) / 2, ON_CTA);
+    }
+
+    private static final int EMPTY_BTN_H = 18;
+
+    private int emptyButtonW() {
+        return font.width(I18n.get("numen.summon.title")) + 24;
+    }
+
+    private int emptyButtonX() {
+        return left + (panelW - emptyButtonW()) / 2;
+    }
+
+    private int emptyButtonY() {
+        return top + HEADER_H + (panelH - HEADER_H) / 2;
+    }
+
+    private boolean overEmptyButton(double mx, double my) {
+        return conv == null && tab == Tab.CHAT && mx >= emptyButtonX() && mx < emptyButtonX() + emptyButtonW()
+                && my >= emptyButtonY() && my < emptyButtonY() + EMPTY_BTN_H;
     }
 
     // ---- chat transcript + plan ----

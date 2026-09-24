@@ -432,7 +432,7 @@ public final class ModLanguageData {
         adder.add("numen.dismiss.delete", "Delete");
         adder.add("numen.dismiss.title", "Delete companion \"%s\"?");
         adder.add("numen.dismiss.warning", "Permanent · backpack drops in place · cannot be undone");
-        adder.add("numen.empty.no_companions", "No companions yet. Open the menu at the top left to summon one.");
+        adder.add("numen.empty.no_companions", "No companions yet");
         adder.add("numen.respawn", "· reviving %ss");
         adder.add("numen.status.loading", "loading…");
         adder.add("numen.status.asleep", "asleep — chat to wake it.");
@@ -825,7 +825,7 @@ public final class ModLanguageData {
         adder.add("numen.dismiss.delete", "删除");
         adder.add("numen.dismiss.title", "删除同伴 \"%s\"？");
         adder.add("numen.dismiss.warning", "永久删除 · 背包会掉落在原地 · 无法撤销");
-        adder.add("numen.empty.no_companions", "还没有同伴。点左上角的菜单召唤一个。");
+        adder.add("numen.empty.no_companions", "还没有同伴");
         adder.add("numen.respawn", "· 复活中 %ss");
         adder.add("numen.status.loading", "加载中…");
         adder.add("numen.status.asleep", "休眠中 —— 对它说话唤醒。");
