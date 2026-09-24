@@ -1960,7 +1960,7 @@ public final class NumenScreen extends Screen {
         int headerLimit = left + panelW - PAD;
         if (tab != Tab.CHAT) {
             // 盖着的页的抬头(Telegram 设置页/资料页那一条):← 回到对话,后面是这页的标题——
-            // 设置页是"设置",资料页是她的名字 + 状态
+            // 设置页是"设置",群资料页是群名 + 成员数,资料页是"资料"(她的名字和状态在页顶上)
             boolean hotBack = backAt(mouseX, mouseY) && !modalOpen() && !overlayOpen();
             com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.BACK,
                     left + PAD, top + (HEADER_H - ICON_N) / 2, ICON_N, hotBack ? CTA : ON_BAND);
@@ -1979,38 +1979,38 @@ public final class NumenScreen extends Screen {
             }
             moreX = -1;
             nameRight = left + PAD;
-            renderOverlayPage(g, mouseX, mouseY);
-            return;
+        } else {
+            // 抬头右端只有一枚 ⋮(Telegram):改、邀请、遣散/解散这些不常用的都收进它的菜单,
+            // 危险的那项在菜单最下面标红。名字占剩下的。
+            moreX = conv != null && !modalOpen() ? headerLimit - ICON_N : -1;
+            int iconsLeft = moreX >= 0 ? moreX - 8 : headerLimit;
+            int nameRoom = iconsLeft - (left + PAD);
+            String title = name();
+            String nm = Nb.clip(font, title == null ? "Numen" : title, Math.max(24, nameRoom));
+            nameRight = left + PAD + font.width(nm);
+            boolean hotName = !modalOpen() && !overlayOpen() && overName(mouseX, mouseY);
+            // 名字可点:就他俩开她的资料页,群开群资料页;悬停亮一档,像个能点的东西
+            txt(g, Component.literal(nm), left + PAD, top + NAME_Y, hotName ? CTA : ON_BAND);
+            if (hotName) {
+                tip(java.util.List.of(Component.translatable(ModLanguageData.Keys.HEADER_PROFILE)), mouseX, mouseY);
+            }
+            int afterName = left + PAD + font.width(nm) + 6;
+            if (moreX >= 0) {
+                // 菜单开着时 ⋮ 保持亮着:它是菜单挂着的那个点
+                boolean menuOpen = headerMenu != null && headerMenu.isOpen();
+                boolean hotMore = !overlayOpen() && overMore(mouseX, mouseY);
+                com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.MORE,
+                        moreX, iconTop(), ICON_N, hotMore || menuOpen ? CTA : ON_BAND);
+                if (hotMore) tip(java.util.List.of(Component.translatable(ModLanguageData.Keys.HEADER_MORE)), mouseX, mouseY);
+            }
+            String pn = activePersonaName();                   // current persona, faint, right after the name
+            if (pn != null && afterName + font.width("…") <= iconsLeft) {
+                txt(g, Component.literal(Nb.clip(font, pn, iconsLeft - afterName)), afterName, top + NAME_Y, ON_BAND_FAINT);
+            }
+            // 第二行:在线 / 正在输入… / 复活倒计时 / N 位成员
+            renderStatusText(g, her, left + PAD, headerLimit);
         }
-        // 抬头右端只有一枚 ⋮(Telegram):改、邀请、遣散/解散这些不常用的都收进它的菜单,
-        // 危险的那项在菜单最下面标红。名字占剩下的。
-        moreX = conv != null && !modalOpen() ? headerLimit - ICON_N : -1;
-        int iconsLeft = moreX >= 0 ? moreX - 8 : headerLimit;
-        int nameRoom = iconsLeft - (left + PAD);
-        String title = name();
-        String nm = Nb.clip(font, title == null ? "Numen" : title, Math.max(24, nameRoom));
-        nameRight = left + PAD + font.width(nm);
-        boolean hotName = !modalOpen() && !overlayOpen() && overName(mouseX, mouseY);
-        // 名字可点:就他俩开她的资料页,群开群资料页;悬停亮一档,像个能点的东西
-        txt(g, Component.literal(nm), left + PAD, top + NAME_Y, hotName ? CTA : ON_BAND);
-        if (hotName) {
-            tip(java.util.List.of(Component.translatable(ModLanguageData.Keys.HEADER_PROFILE)), mouseX, mouseY);
-        }
-        int afterName = left + PAD + font.width(nm) + 6;
-        if (moreX >= 0) {
-            // 菜单开着时 ⋮ 保持亮着:它是菜单挂着的那个点
-            boolean menuOpen = headerMenu != null && headerMenu.isOpen();
-            boolean hotMore = !overlayOpen() && overMore(mouseX, mouseY);
-            com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.MORE,
-                    moreX, iconTop(), ICON_N, hotMore || menuOpen ? CTA : ON_BAND);
-            if (hotMore) tip(java.util.List.of(Component.translatable(ModLanguageData.Keys.HEADER_MORE)), mouseX, mouseY);
-        }
-        String pn = activePersonaName();                   // current persona, faint, right after the name
-        if (pn != null && afterName + font.width("…") <= iconsLeft) {
-            txt(g, Component.literal(Nb.clip(font, pn, iconsLeft - afterName)), afterName, top + NAME_Y, ON_BAND_FAINT);
-        }
-        // 第二行:在线 / 正在输入… / 复活倒计时 / N 位成员
-        renderStatusText(g, her, left + PAD, headerLimit);
+        // 抬头以下所有页共用一段:页面本身,再往上是模态卡、浮层、提示——盖着的页上开的卡也得画得出来
         renderOverlayPage(g, mouseX, mouseY);
         // 对话里悬停的那张脸:提示能点开资料
         if (tab == Tab.CHAT && !modalOpen() && !overlayOpen() && chatView.faceAt(mouseX, mouseY) != null) {
