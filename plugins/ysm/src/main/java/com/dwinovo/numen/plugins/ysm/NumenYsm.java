@@ -28,9 +28,7 @@ public final class NumenYsm {
         OwnerSync sync = new OwnerSync(ysm);
 
         NumenPlugins.register(numen -> {
-            numen.registerTool(new ListOptionsTool(ysm));
-            numen.registerTool(new SwitchModelTool(ysm));
-            numen.registerTool(new PlayEmoteTool(ysm));
+            YsmCommands.install(numen, ysm);
 
             if (skillsRoot != null) numen.bundleSkills(skillsRoot);
 
