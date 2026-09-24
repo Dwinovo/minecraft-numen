@@ -5,6 +5,7 @@ import com.dwinovo.numen.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.client.data.ClientNumenState;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
+import com.dwinovo.numen.client.ui.mc.Sprites;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -19,9 +20,9 @@ import java.util.UUID;
 
 /**
  * Items 页:同伴的"人物卡",布局贴着原版物品栏的肌肉记忆走——左边
- * 盔甲柱 + 立绘,右边体征、合成、3×9 储物与快捷栏,底部一条横贯的
- * Agent 状态带。心/鸡腿用原版 HUD 贴图;槽位是统一的深色凹槽(半透黑,
- * 任何主题下都读得出"这是格子");卡片用当前主题色程序化绘制。
+ * 盔甲柱 + 立绘,右边体征、合成、3×9 储物与快捷栏;底下是资料行(Telegram 资料页那种:
+ * 左一枚图标,第一行是值,下面一行小字说它是什么,没有外框)。心/鸡腿用原版 HUD 贴图;
+ * 槽位是统一的深色凹槽(任何主题下都读得出"这是格子")。
  *
  * <p>tooltip 规矩:槽位循环里只<b>收集</b>悬停物品,整页画完最后才画
  * ——就地画会被后画的槽位盖住。
@@ -41,8 +42,11 @@ public final class ItemsView {
     private static final int RIGHT_W = 9 * SLOT;          // 162
     private static final int COMP_W = LEFT_W + GAP + RIGHT_W;   // 292
     private static final int TOP_H = 116;                 // 上半(立绘/储物)
-    private static final int AGENT_H = 46;                // Agent 状态带
-    private static final int COMP_H = TOP_H + 6 + AGENT_H;
+    /** 资料行:一行两排字(值 + 它是什么),两栏各三行。 */
+    private static final int ROW_H = 21;
+    private static final int INFO_GAP = 8;
+    private static final int INFO_H = 3 * ROW_H;
+    private static final int COMP_H = TOP_H + INFO_GAP + INFO_H;
 
     // 原版 HUD 贴图:心与鸡腿
     private static final ResourceLocation HEART_BG = ResourceLocation.withDefaultNamespace("hud/heart/container");
@@ -126,89 +130,127 @@ public final class ItemsView {
             }
         }
 
-        // ---- 底部:Agent 状态带(两栏信息 + 右上角模式芯片) ----
-        int aY = cTop + TOP_H + 6;
-        com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), startX, aY, COMP_W, AGENT_H,
-                th.surface(), th.surfaceBorder());
+        // ---- 底部:资料行,两栏各三行。左栏是她是谁(人设、模型、声线),右栏是她此刻怎样(上下文、距离、状态) ----
+        int aY = cTop + TOP_H + INFO_GAP;
         var loop = AgentLoopRegistry.get(uuid).orElse(null);
-        int c1 = startX + 8;
-        int c2 = startX + COMP_W / 2 + 4;
-        int lw = COMP_W / 2 - 16;
-        int ly = aY + 6;
-        // 人设行:8px 小脸 + 名字
-        com.dwinovo.numen.client.skin.CompanionFace.draw(
-                g, uuid, com.dwinovo.numen.client.agent.KnownSkins.of(uuid), c1, ly - 1, 8);
+        int c1 = startX, c2 = startX + COMP_W / 2;
+        int colW = COMP_W / 2 - 4;
         String persona = loop != null && loop.personaName() != null && !loop.personaName().isBlank()
-                ? loop.personaName() : "默认人设";
-        Nb.text(g, font, clip(font, persona, lw - 11), c1 + 11, ly, th.text());
-        // 模型行:条目 ID 解析回人读的名字(条目名 · 型号),别把主键糊给用户
-        String model = "未绑定模型";
+                ? loop.personaName() : I18n.get("numen.profile.persona_default");
+        infoRow(g, font, th, Sprites.PERSONA, persona, th.text(), I18n.get("numen.profile.persona"), c1, aY, colW);
+        // 模型:值是型号(要紧的那个),小字是"模型 · 条目名"——条目 ID 不糊给用户
+        String model = I18n.get("numen.profile.model_none");
+        String modelCaption = I18n.get("numen.profile.model");
         if (loop != null && loop.providerEntryId() != null && !loop.providerEntryId().isBlank()) {
-            var entry = com.dwinovo.numen.agent.llm.ProviderLibrary.instance()
-                    .get(loop.providerEntryId());
-            model = entry != null
-                    ? entry.name() + (entry.model() == null || entry.model().isBlank()
-                            ? "" : " · " + entry.model())
-                    : "条目已删除";
+            var entry = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().get(loop.providerEntryId());
+            if (entry == null) {
+                model = I18n.get("numen.profile.model_deleted");
+            } else {
+                model = entry.model() == null || entry.model().isBlank() ? entry.name() : entry.model();
+                modelCaption = I18n.get("numen.profile.model_of", entry.name());
+            }
         }
-        Nb.text(g, font, clip(font, "模型 " + model, lw), c1, ly + 12, th.textDim());
+        infoRow(g, font, th, Sprites.CPU, model, th.text(), modelCaption, c1, aY + ROW_H, colW);
         var voice = com.dwinovo.numen.client.voice.VoiceLibrary.instance().resolve(uuid);
-        Nb.text(g, font, clip(font, "声线 " + (voice != null ? voice.name() : "无"), lw),
-                c1, ly + 24, th.textDim());
+        infoRow(g, font, th, Sprites.VOLUME, voice != null ? voice.name() : I18n.get("numen.profile.voice_none"),
+                th.text(), I18n.get("numen.profile.voice"), c1, aY + 2 * ROW_H, colW);
+        String usageTip = null;
         if (loop != null) {
-            // 记忆行:水位条(绿→琥珀→红)+ 条数与累计消耗
-            Nb.text(g, font, "记忆", c2, ly, th.textDim());
-            int barX = c2 + 26, barW = 46, pct = Math.clamp(loop.contextPercent(), 0, 100);
+            // 上下文:值是一条水位 + 百分比,占用越高越往警示色走;悬停出用量明细
+            int pct = Math.clamp(loop.contextPercent(), 0, 100);
             int barColor = pct < 60 ? th.ok() : pct < 85 ? th.run() : th.fail();
-            // 水位是"只有一段"的堆叠条:分母是容量 100,不是各段之和
+            infoRow(g, font, th, Sprites.DATABASE, "", th.text(),
+                    I18n.get("numen.profile.context", loop.display().size(),
+                            com.dwinovo.numen.client.ui.TokenFormat.tokens(loop.totalTokensUsed())),
+                    c2, aY, colW);
+            int bx = c2 + TEXT_DX, barW = 40;
             com.dwinovo.numen.client.ui.StackedBar.draw(
                     new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
-                    barX, ly + 1, barW, 6, th.field(), 100,
-                    java.util.List.of(new com.dwinovo.numen.client.ui.StackedBar.Segment(
-                            pct, barColor)));
-            Nb.text(g, font, clip(font, loop.display().size() + "条·"
-                    + com.dwinovo.numen.client.ui.TokenFormat.tokens(loop.totalTokensUsed()), lw - 26 - barW - 8),
-                    barX + barW + 4, ly, th.textDim());
-            // 距离行:相对朝向的方位箭头——一眼知道她在哪边
+                    bx, aY + 2, barW, 5, th.field(), 100,   // 只有一段的堆叠条:分母是容量 100
+                    java.util.List.of(new com.dwinovo.numen.client.ui.StackedBar.Segment(pct, barColor)));
+            Nb.text(g, font, pct + "%", bx + barW + 4, aY + 1, th.text());
+            if (mouseX >= c2 && mouseX < c2 + colW && mouseY >= aY && mouseY < aY + ROW_H) {
+                usageTip = usageDetail(loop);
+            }
+            // 距离:相对朝向的方位箭头——一眼知道她在哪边
             Minecraft mc = Minecraft.getInstance();
             String where;
             if (e != null && mc.player != null) {
                 double dist = mc.player.distanceTo(e);
-                where = "距离 " + (dist < 1 ? "就在身边" : Math.round(dist) + " 米 " + bearingArrow(mc, e));
+                where = dist < 1 ? I18n.get("numen.profile.here")
+                        : I18n.get("numen.profile.meters", Math.round(dist), bearingArrow(mc, e));
             } else {
-                where = "距离 不在附近";
+                where = I18n.get("numen.profile.away");
             }
-            Nb.text(g, font, clip(font, where, lw), c2, ly + 12, th.textDim());
-            // 状态行:呼吸圆点 + 文案
+            infoRow(g, font, th, Sprites.MAP_PIN, where, th.text(), I18n.get("numen.profile.distance"),
+                    c2, aY + ROW_H, colW);
+            // 状态:呼吸圆点 + 文案,后面跟游戏模式(创建时选定,只读)
             String state;
             int stateColor;
             boolean alive;
             var status = loop.status();
             if (com.dwinovo.numen.mcp.server.McpMode.instance().driving()) {
-                state = "外接大脑驱动中"; stateColor = th.run(); alive = true;
+                state = I18n.get("numen.profile.state_external"); stateColor = th.run(); alive = true;
             } else if (status.phase() == com.dwinovo.numen.agent.loop.Phase.COMPACT) {
-                state = "整理记忆中"; stateColor = th.run(); alive = true;
+                state = I18n.get("numen.profile.state_compact"); stateColor = th.run(); alive = true;
             } else if (status.busy()) {
-                state = "忙碌中"; stateColor = th.run(); alive = true;
+                state = I18n.get("numen.profile.state_busy"); stateColor = th.run(); alive = true;
             } else if (!status.queuedPreview().isEmpty()) {
-                state = "积压 " + status.queuedPreview().size() + " 条"; stateColor = th.run(); alive = true;
-            } else { state = "空闲"; stateColor = th.ok(); alive = false; }
-            String dot = alive ? (System.currentTimeMillis() / 500 % 2 == 0 ? "●" : "○") : "●";
-            String stateText = dot + " " + state;
-            Nb.text(g, font, stateText, c2, ly + 24, stateColor);
-            // 游戏模式只读展示(创建时选定;切换交互待定)
-            var conn = Minecraft.getInstance().getConnection();
-            var info = conn == null ? null : conn.getPlayerInfo(uuid);
-            if (info != null) {
-                String modeText = " · " + (info.getGameMode() == net.minecraft.world.level.GameType.CREATIVE
-                        ? "创造" : "生存");
-                Nb.text(g, font, modeText, c2 + font.width(stateText), ly + 24, th.textDim());
+                state = I18n.get("numen.profile.state_queued", status.queuedPreview().size());
+                stateColor = th.run(); alive = true;
+            } else {
+                state = I18n.get("numen.profile.state_idle"); stateColor = th.ok(); alive = false;
             }
+            String dot = alive ? (System.currentTimeMillis() / 500 % 2 == 0 ? "●" : "○") : "●";
+            var conn = mc.getConnection();
+            var info = conn == null ? null : conn.getPlayerInfo(uuid);
+            String modeText = info == null ? "" : " · " + I18n.get(
+                    info.getGameMode() == net.minecraft.world.level.GameType.CREATIVE
+                            ? "numen.profile.creative" : "numen.profile.survival");
+            String stateText = dot + " " + state;
+            infoRow(g, font, th, Sprites.HEART, stateText, stateColor, I18n.get("numen.profile.state"),
+                    c2, aY + 2 * ROW_H, colW);
+            int after = c2 + TEXT_DX + font.width(stateText);
+            Nb.text(g, font, Nb.clip(font, modeText, c2 + colW - after), after, aY + 2 * ROW_H + 1, th.textDim());
         } else {
-            Nb.text(g, font, "○ 尚未对话", c2, ly, th.faint());
+            infoRow(g, font, th, Sprites.HEART, "○ " + I18n.get("numen.profile.not_started"), th.faint(),
+                    I18n.get("numen.profile.state"), c2, aY, colW);
         }
 
         tooltipLast(g, font, hover, mouseX, mouseY);
+        if (usageTip != null) g.renderTooltip(font, net.minecraft.network.chat.Component.literal(usageTip), mouseX, mouseY);
+    }
+
+    /** 资料行里字的左缘(图标右边)。 */
+    private static final int TEXT_DX = Sprites.SIZE + 7;
+
+    /** 一行资料:左一枚图标,第一行是值,下面一行小字说它是什么;放不下就截短。 */
+    private static void infoRow(GuiGraphics g, Font font, UiTheme th, ResourceLocation icon, String value,
+                                int valueColor, String caption, int x, int y, int w) {
+        Sprites.draw(g, icon, x, y + (ROW_H - Sprites.SIZE) / 2 - 1, Sprites.SIZE, th.textDim());
+        int tx = x + TEXT_DX, room = w - TEXT_DX;
+        if (!value.isEmpty()) Nb.text(g, font, Nb.clip(font, value, room), tx, y + 1, valueColor);
+        Nb.text(g, font, Nb.clip(font, caption, room), tx, y + 11, th.faint());
+    }
+
+    /**
+     * 用量明细:{@code ↑输入 ↓输出 R缓存读 W缓存写 CH命中率 占用/窗口}。每段有值才出现——服务商不报缓存
+     * 的话那三段自然消失。它是给想知道的人看的,住在上下文那一行的悬停提示里,不常驻。
+     * 命中率只看<b>最近一轮</b>:累计命中率会被历史稀释,看不出"刚才那轮把缓存打穿了"。
+     */
+    private static String usageDetail(com.dwinovo.numen.client.agent.EntityAgentLoop lp) {
+        var sum = lp.usageTotals();
+        List<String> parts = new java.util.ArrayList<>();
+        if (sum.input() > 0) parts.add("↑" + com.dwinovo.numen.client.ui.TokenFormat.tokens(sum.input()));
+        if (sum.output() > 0) parts.add("↓" + com.dwinovo.numen.client.ui.TokenFormat.tokens(sum.output()));
+        if (sum.cacheRead() > 0) parts.add("R" + com.dwinovo.numen.client.ui.TokenFormat.tokens(sum.cacheRead()));
+        if (sum.cacheWrite() > 0) parts.add("W" + com.dwinovo.numen.client.ui.TokenFormat.tokens(sum.cacheWrite()));
+        double hit = lp.lastUsage().cacheHitRate();
+        if (sum.reportsCache() && hit >= 0) {
+            parts.add("CH" + com.dwinovo.numen.client.ui.TokenFormat.percent1(hit) + "%");
+        }
+        parts.add(lp.contextPercent() + "%/" + com.dwinovo.numen.client.ui.TokenFormat.tokens(lp.modelWindow()));
+        return String.join(" ", parts);
     }
 
     /** 统一凹槽:从当前主题的地色向边框色压暗两档(边更深、内浅一档)——
@@ -248,12 +290,6 @@ public final class ItemsView {
         if (!hover[0].isEmpty()) {
             g.renderTooltip(font, hover[0], mouseX, mouseY);
         }
-    }
-
-    private static String clip(Font font, String s, int maxW) {
-        if (font.width(s) <= maxW) return s;
-        String out = font.plainSubstrByWidth(s, maxW - font.width("…"));
-        return out + "…";
     }
 
     /** 同伴相对主人朝向的八方位箭头(↑ = 正前方)。 */

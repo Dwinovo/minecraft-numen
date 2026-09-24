@@ -1,6 +1,5 @@
 package com.dwinovo.numen.client.screen;
 
-import com.dwinovo.numen.client.ui.TokenFormat;
 import com.dwinovo.numen.agent.llm.NumenLlmClient;
 
 import com.dwinovo.numen.agent.llm.ConvoLog;
@@ -2006,60 +2005,19 @@ public final class NumenScreen extends Screen {
 
     // ---- chat transcript + plan ----
 
-    /** 头部右侧(tab 左边)的上下文水位+累计消耗。恒定淡色——这是信息不是警报,
-     *  临近水位线会自动压缩,不需要玩家做任何事。返回文字左边界,标题据此让位。 */
-    /**
-     * 用量条:{@code ↑输入 ↓输出 R缓存读 W缓存写 CH命中率 占用%/窗口}。每段有值才出现
-     * ——服务商不报缓存的话那三段自然消失,不显示一排零。
-     *
-     * <h2>颜色只给有信息的段</h2>
-     * 输入输出是纯体量,知道多少并不改变什么,保持淡色;<b>命中率和上下文占用</b>才是
-     * 会让人想动手的两个数——前者低了说明前缀在被打穿,后者高了说明快要压缩。缓存读用
-     * 成功色,它代表省下来的那部分。全部上色等于全部没上色。
-     *
-     * <p>命中率只看<b>最近一轮</b>:累计命中率会被历史稀释,看不出"刚才那轮把缓存打穿了"。
-     */
-    /**
-     * 用量明细:{@code ↑输入 ↓输出 R缓存读 W缓存写 CH命中率 占用/窗口}。每段有值才出现——服务商不报缓存
-     * 的话那三段自然消失。它是给想知道的人看的,所以住在状态行水位数字的悬停提示里,不常驻。
-     * 命中率只看<b>最近一轮</b>:累计命中率会被历史稀释,看不出"刚才那轮把缓存打穿了"。
-     */
-    private String usageDetail(EntityAgentLoop lp) {
-        var sum = lp.usageTotals();
-        List<String> parts = new java.util.ArrayList<>();
-        if (sum.input() > 0) parts.add("↑" + TokenFormat.tokens(sum.input()));
-        if (sum.output() > 0) parts.add("↓" + TokenFormat.tokens(sum.output()));
-        if (sum.cacheRead() > 0) parts.add("R" + TokenFormat.tokens(sum.cacheRead()));
-        if (sum.cacheWrite() > 0) parts.add("W" + TokenFormat.tokens(sum.cacheWrite()));
-        double hit = lp.lastUsage().cacheHitRate();
-        if (sum.reportsCache() && hit >= 0) parts.add("CH" + TokenFormat.percent1(hit) + "%");
-        parts.add(lp.contextPercent() + "%/" + TokenFormat.tokens(lp.modelWindow()));
-        return String.join(" ", parts);
-    }
-
     /**
      * 状态行:输入框上方一行,不写字——界面元素替字说话,想知道细节悬停。pi 的 footer 与 working
      * 指示合成一行(她在忙这件事在抬头第二行说)。左起:有长期目标时一面旗(悬停出目标、第几轮、跑了多久);
      * 有计划时一枚清单图标 + 一格一条待办的小格(悬停出正在做的那步,点开往上展开清单)。
-     * 右:上下文水位一条横条,按占用填色(悬停出用量明细)。
+     * 上下文用量不在这儿:它在她的资料页,带着字说明是什么。
      * 目标不把评估器那句"还差什么"摆出来——没达成就静默接着干,不该每轮在主人眼前刷判词。
      */
     private void renderStatusLine(GuiGraphics g, EntityAgentLoop lp, int y, int mouseX, int mouseY) {
         int x = left + PAD;
-        int right = left + panelW - PAD;
+        int limit = left + panelW - PAD;
         int iy = y + (STATUS_H - ICON_N) / 2;
         long now = System.currentTimeMillis();
         boolean hover = !modalOpen() && !overlayOpen() && mouseY >= y && mouseY < y + STATUS_H;
-        // 右:水位——32×4 的横条,占用越高越往警示色走
-        int pct = Math.max(0, Math.min(100, lp.contextPercent()));
-        int gw = 32, gh = 4;
-        int gx = right - gw, gy = y + (STATUS_H - gh) / 2;
-        g.fill(gx, gy, gx + gw, gy + gh, FIELD);
-        g.fill(gx, gy, gx + gw * pct / 100, gy + gh, pct > 90 ? FAIL : pct > 70 ? RUN : TXT_MUTED);
-        if (hover && mouseX >= gx && mouseX < right) {
-            tip(java.util.List.of(Component.literal(usageDetail(lp))), mouseX, mouseY);
-        }
-        int limit = gx - 8;
         // 目标——一面旗
         var goal = lp.goal();
         if (goal != null) {

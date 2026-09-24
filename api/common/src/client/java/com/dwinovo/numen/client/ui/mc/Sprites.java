@@ -54,6 +54,10 @@ public final class Sprites {
     public static final ResourceLocation VOLUME = icon("icon_volume");
     public static final ResourceLocation SHIRT = icon("icon_shirt");
     public static final ResourceLocation BRUSH = icon("icon_brush");
+    /** 资料页的资料行:上下文、距离、状态(人设、模型、声线用上面那几枚)。 */
+    public static final ResourceLocation DATABASE = icon("icon_database");
+    public static final ResourceLocation MAP_PIN = icon("icon_map_pin");
+    public static final ResourceLocation HEART = icon("icon_heart");
     /** 左栏顶上的 ☰(设置)与设置页抬头的 ←(回到对话)。 */
     public static final ResourceLocation MENU = icon("icon_menu");
     public static final ResourceLocation BACK = icon("icon_back");
