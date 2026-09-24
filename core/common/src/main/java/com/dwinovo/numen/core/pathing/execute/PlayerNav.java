@@ -108,6 +108,8 @@ public final class PlayerNav {
      */
     private final RouteSpec spec;
 
+    /** 这次导航的派发口:状态机与查询口的每一次搜索都从它派出,"身体在等规划"只从它读。 */
+    private final NavSearches searches;
     /** 段规划状态机:搜索派发、段执行、无缝接段、失败自动重搜全在其内。 */
     private final PathingCore core;
     /** 只搜不走的查询口(无路探针走它),与状态机同一派发器、同一上下文来源。 */
@@ -319,9 +321,10 @@ public final class PlayerNav {
         this.revalidateGoalEachTick = revalidateGoalEachTick;
         RouteSpec provided = this.contextProvider.spec();
         this.spec = speed >= 1.0 ? provided : provided.withSprint(false);
-        this.core = new PathingCore(player, PoolSearchDispatcher.INSTANCE,
+        this.searches = new NavSearches(PoolSearchDispatcher.INSTANCE);
+        this.core = new PathingCore(player, searches,
                 this::searchContext, this::executionContext, spec, this::admits);
-        this.planner = new RoutePlanner(PoolSearchDispatcher.INSTANCE,
+        this.planner = new RoutePlanner(searches,
                 s -> this.contextProvider.forSearch(player, s), player.level(),
                 () -> Permission.gateFor(player));
     }
@@ -756,23 +759,23 @@ public final class PlayerNav {
     }
 
     /**
-     * 规划器在飞且当前无路段在执行——身体站着等异步搜索返回。任务层用它
+     * 本导航派出的搜索有结论还没取走,且当前无路段在执行——身体站着等异步搜索返回。任务层用它
      * 冻结任务 deadline:deadline 度量的是身体干活的刻,搜索的墙钟延迟不该
      * 折算成任务超时(tick 越快于真实时间,这笔折算越离谱,无上限 tick 的
-     * 测试服上足以在首次搜索返回前烧光整个预算)。
+     * 测试服上足以在首次搜索返回前烧光整个预算)。段搜索、候选路线查询、整路规划都经
+     * {@link NavSearches} 派出,这里只读它一处。
      */
     public boolean planningInFlight() {
-        return core.hasInProgressSearch() && core.getCurrent() == null;
+        return searches.waiting() && core.getCurrent() == null;
     }
 
     /** 停止导航:取消在飞搜索、丢段、清键停挖,并把身体停稳、松潜行。 */
     public void stop() {
         stopped = true;
         searchSatisfied = false;
-        if (probe != null) {
-            probe.cancel();
-            probe = null;
-        }
+        probe = null;
+        budgetPlan = null;
+        searches.cancelAll();
         core.forceCancel();
         InputDriver.halt(player);
         // 垫柱逐 tick 按着潜行,路径终止时没有别人替它松——这里兜底
