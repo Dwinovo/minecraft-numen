@@ -58,6 +58,7 @@ public class TaskControlGameTests {
                         g.server("linger", "Stand still for a while, as background work.",
                                 (src, args) -> TaskDispatch.setTask(src, new LingerRecord(src, args.get(TICKS))),
                                 TICKS)
+                                .example("numen gt_long linger 40")
                                 .promote("gt_linger", "Stand still for a while, as background work.")));
         TaskFactory.register(LingerRecord.class, (body, record) -> new Linger(record));
     }

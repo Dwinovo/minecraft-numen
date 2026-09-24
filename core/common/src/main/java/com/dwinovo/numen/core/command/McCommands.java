@@ -40,7 +40,7 @@ public final class McCommands {
     private static final long TIMEOUT_TICKS = 5 * 20;
 
     private static final Param<String> COMMAND = Param.required("command", ArgType.text(),
-            "The command as you would type it in chat, with or without the leading /, e.g. msg Steve on my way.");
+            "The command as you would type it in chat, with or without the leading /.");
 
     private McCommands() {}
 
@@ -48,10 +48,16 @@ public final class McCommands {
     public static void install(NumenApi numen) {
         numen.registerCommands("mc", "Run game commands as yourself; which ones you can use depends on the "
                 + "permission level the server gives you.", mc ->
-                mc.serverDirect("Run one game command as yourself, as a player typing it in chat. What the command "
-                                + "says comes back as the result; what it does to your body shows in your status. "
-                                + "A command waits for your owner's consent unless their rules allow it.",
+                mc.serverDirect("Run one game command as yourself, as a player typing it in chat.",
                                 McCommands::run, COMMAND)
+                        .example("numen mc msg Steve on my way")
+                        .example("numen mc give @s minecraft:bread 4")
+                        .note("Waits for your owner's consent unless their rules allow that command; a rule that "
+                                + "denies it fails the call with the rule.")
+                        .note("Which commands you may use is the server's call. One it refuses, or a mistake in the "
+                                + "line, fails at once without asking anyone.")
+                        .note("Runs at once, not as background work: what the command says comes back as the "
+                                + "result, and what it does to your body shows in your status.")
                         .catalog("Commands the server lets you run now:", McCommands::usable));
     }
 
