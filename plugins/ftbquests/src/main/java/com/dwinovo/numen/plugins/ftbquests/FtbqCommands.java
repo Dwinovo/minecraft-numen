@@ -30,6 +30,11 @@ final class FtbqCommands {
     static final Param<String> QUEST_ID = Param.required("quest", ArgType.word(),
             "The quest's id, as list and show print it.");
 
+    /** 短名是 FTB Teams 给队伍起的写法(显示名里的非字母数字换成下划线,再接 {@code #} 与编号前八位)。 */
+    static final Param<String> TEAM = Param.optional("team", ArgType.string(),
+            "The party's short name, as the team_invite event gives it, e.g. Dwin_Party#1a2b3c4d. "
+                    + "Needed only when several parties have invited you.");
+
     private FtbqCommands() {}
 
     static void install(NumenApi numen) {
@@ -45,6 +50,6 @@ final class FtbqCommands {
                 (src, args) -> ClientBook.show(src, args.get(QUEST_NAMED)), QUEST_NAMED);
         quests.server("submit", "Hand in a quest's items, experience or checkmarks from your own inventory.",
                 QuestSubmit::submit, QUEST_ID);
-        quests.server("join", "Accept the party invitation you have pending.", PartyJoin::join);
+        quests.server("join", "Accept a party invitation you have pending.", PartyJoin::join, TEAM);
     }
 }

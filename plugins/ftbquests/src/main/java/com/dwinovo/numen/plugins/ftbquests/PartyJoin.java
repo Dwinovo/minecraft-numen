@@ -13,7 +13,9 @@ import java.util.List;
 /**
  * {@code numen ftbquests join}:替她点邀请消息里的"接受"。
  *
- * <p>接受哪一个只看 {@link InviteWatch#pending}——告诉她"有人邀请你"的也是那一处。入队本身交给 FTB Teams 的
+ * <p>接受哪一个只看 {@link InviteWatch#pending}——告诉她"有人邀请你"的也是那一处。只挂着一个邀请时不必点名;
+ * 挂着几个时用 {@code --team} 点名那个队伍的短名(FTB 自己的写法,{@code team_invite} 事件的 {@code party}
+ * 与 {@code /ftbteams party join} 用的都是它),点的必须是她挂着的邀请之一。入队本身交给 FTB Teams 的
  * {@link PartyTeam#join},也就是 {@code /ftbteams party join} 在认过邀请之后调的那一个:满员、没命了、
  * 已经在别的队伍里,都由它判、由它拒,拒绝的原话照实转给她。不经那条命令,是因为命令的结果只会作为聊天消息
  * 发到她的假连接上,这里读不到;直接调同一个入队,成败就在返回值与异常里。
@@ -35,14 +37,20 @@ final class PartyJoin {
             src.reply(TaskResult.fail("No party has a pending invitation for you.").toJson());
             return;
         }
-        if (invites.size() > 1) {
-            src.reply(TaskResult.fail("Several parties have invited you: "
-                    + String.join(", ", invites.stream().map(PartyJoin::named).toList())
-                    + ". join only accepts an invitation when it is the only one you have; "
-                    + "ask your owner which party to join.").toJson());
+        String wanted = args.get(FtbqCommands.TEAM);
+        List<Team> chosen = wanted == null ? invites
+                : invites.stream().filter(team -> team.getShortName().equals(wanted)).toList();
+        if (chosen.isEmpty()) {
+            src.reply(TaskResult.fail("No pending invitation for you is from the party " + wanted
+                    + ". Your pending invitations: " + listed(invites) + ".").toJson());
             return;
         }
-        Team party = invites.get(0);
+        if (chosen.size() > 1) {
+            src.reply(TaskResult.fail("Several parties have invited you: " + listed(chosen)
+                    + ". Ask your owner which party to join, then name it with --team <short name>.").toJson());
+            return;
+        }
+        Team party = chosen.get(0);
         try {
             ((PartyTeam) party).join(her);
         } catch (CommandSyntaxException e) {
@@ -56,6 +64,10 @@ final class PartyJoin {
                 + " FTB merged the quest progress you had into the party's: each task keeps the larger count, "
                 + "and quests either side completed stay completed. From now on what you do counts for this party.")
                 .toJson());
+    }
+
+    private static String listed(List<Team> parties) {
+        return String.join(", ", parties.stream().map(PartyJoin::named).toList());
     }
 
     private static String named(Team party) {
