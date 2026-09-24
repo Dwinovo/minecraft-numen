@@ -267,6 +267,48 @@ public final class ChatView {
      * 这次看的时候那条一直在(Telegram 也是离开才消)。-1 = 下一帧现取;{@link Long#MAX_VALUE} = 打开时没有未读。
      */
     private long unreadSince = -1;
+    /** 对话里搜(Ctrl+F):小写的查询词,null = 没在搜。 */
+    private String query;
+    /** 这一帧命中的块:下标和离内容顶多远,从上到下。 */
+    private final List<Integer> matchBlocks = new ArrayList<>();
+    private final List<Integer> matchOffsets = new ArrayList<>();
+    /** 停在第几个命中上,从最新那个数起(0 = 最新);-1 = 还没跳。 */
+    private int matchAt = -1;
+    /** 刚改了查询词:下一帧算出命中就跳到最新那个(Telegram 边打边跳)。 */
+    private boolean jumpPending;
+
+    /** 换查询词;空 = 不搜了。 */
+    public void search(String q) {
+        query = q == null || q.isBlank() ? null : q.strip().toLowerCase(java.util.Locale.ROOT);
+        matchAt = -1;
+        jumpPending = query != null;
+    }
+
+    public int matchCount() {
+        return matchOffsets.size();
+    }
+
+    /** 停在第几个命中上(从最新数起,0 起);-1 = 还没跳。 */
+    public int matchAt() {
+        return matchAt;
+    }
+
+    /** 跳到下一个命中:{@code +1} 往旧的,{@code -1} 往新的;命中的那条停在对话流上三分之一处。 */
+    public void jumpMatch(int dir) {
+        int n = matchOffsets.size();
+        if (n == 0) return;
+        matchAt = Math.clamp(matchAt + dir, 0, n - 1);
+        int off = matchOffsets.get(n - 1 - matchAt);
+        scrollTarget = Math.clamp(off - gh / 3, 0, lastMaxScroll);
+        pinBottom = scrollTarget >= lastMaxScroll;
+        lastScrollMs = System.currentTimeMillis();
+    }
+
+    private boolean matches(Block b) {
+        return query != null && b instanceof Bubble bb && bb.raw() != null
+                && bb.raw().toLowerCase(java.util.Locale.ROOT).contains(query);
+    }
+
     /** 顶上浮着的日期牌:露出多少(0..1)、写的哪天(淡出的时候还要画它)。 */
     private float dayShown;
     private String floatingDay;
@@ -342,6 +384,25 @@ public final class ChatView {
         }
         scrollPos = Anim.approach(scrollPos, scrollTarget, SCROLL_RATE, dt);
 
+        // 搜索命中:先过一遍记下是哪几块、在哪;刚换了词就跳到最新那个
+        matchBlocks.clear();
+        matchOffsets.clear();
+        if (query != null) {
+            int off = TOP_PAD;
+            for (int i = 0; i < blocks.size(); i++) {
+                if (matches(blocks.get(i))) {
+                    matchBlocks.add(i);
+                    matchOffsets.add(off);
+                }
+                off += heightOf(blocks.get(i)) + gapAfter(blocks, i);
+            }
+            if (matchAt >= matchBlocks.size()) matchAt = matchBlocks.size() - 1;
+            if (jumpPending && !matchBlocks.isEmpty()) {
+                jumpPending = false;
+                jumpMatch(1);
+            }
+        }
+        int current = matchAt >= 0 ? matchBlocks.get(matchBlocks.size() - 1 - matchAt) : -1;
         g.enableScissor(x, y, x + w, y + h);
         int cy = y + TOP_PAD - Math.round(scrollPos);
         String floatDay = null;
@@ -349,7 +410,15 @@ public final class ChatView {
             Block b = blocks.get(i);
             int bh = heightOf(b);
             if (b instanceof Divider d && cy < y) floatDay = d.text();   // 已经翻过顶的最近那枚日期牌
-            if (cy + bh > y && cy < y + h) drawBlock(g, b, x, cy, w);
+            if (cy + bh > y && cy < y + h) {
+                int drawn = hits.size();
+                drawBlock(g, b, x, cy, w);
+                if (i == current && hits.size() > drawn) {
+                    // 停在的那个命中:气泡外描一圈强调色
+                    Hit hit = hits.get(hits.size() - 1);
+                    Nb.border(g, hit.x() - 1, hit.y() - 1, hit.w() + 2, hit.h() + 2, 1, MENTION);
+                }
+            }
             cy += bh + gapAfter(blocks, i);
         }
         // 翻的时候顶上浮一枚眼前这一屏是哪天(Telegram),停下来一会儿淡出

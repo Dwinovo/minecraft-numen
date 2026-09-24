@@ -521,6 +521,8 @@ public final class ModLanguageData {
         adder.add("numen.menu.read", "Mark as read");
         adder.add("numen.chat.reply_to", "Reply to %s");
         adder.add("numen.chat.unread_bar", "Unread messages");
+        adder.add("numen.chat.find", "Search this chat");
+        adder.add("numen.chat.find_none", "No results");
         adder.add("numen.profile.persona", "Persona");
         adder.add("numen.profile.persona_default", "Default persona");
         adder.add("numen.profile.model", "Model");
@@ -922,6 +924,8 @@ public final class ModLanguageData {
         adder.add("numen.menu.read", "标为已读");
         adder.add("numen.chat.reply_to", "回复 %s");
         adder.add("numen.chat.unread_bar", "未读消息");
+        adder.add("numen.chat.find", "在对话里搜索");
+        adder.add("numen.chat.find_none", "没有结果");
         adder.add("numen.profile.persona", "人设");
         adder.add("numen.profile.persona_default", "默认人设");
         adder.add("numen.profile.model", "模型");

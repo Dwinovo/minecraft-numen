@@ -21,6 +21,7 @@ public final class KeyCodes {
     public static final int ESCAPE = 256;
     public static final int KEY_A = 65;
     public static final int KEY_C = 67;
+    public static final int KEY_F = 70;
     public static final int KEY_V = 86;
     public static final int KEY_X = 88;
 

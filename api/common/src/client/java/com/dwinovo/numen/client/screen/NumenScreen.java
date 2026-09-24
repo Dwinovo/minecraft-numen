@@ -440,6 +440,10 @@ public final class NumenScreen extends Screen {
         inputBar = null;
         savedInput = Conversations.instance().draft(c);
         savedQuote = null;   // 引用是对着原来那个会话里的话,不跟过去
+        findOpen = false;     // 在对话里搜的那个词也是对着原来那个会话的
+        findActive = false;
+        findQuery = "";
+        chatView.search(null);
         if (tab == Tab.ITEMS || tab == Tab.MEMBERS) selectTab(Tab.CHAT);   // 换了会话,资料页收起(Telegram 也这样)
         planOpen = false;
         planShownH = 0f;
@@ -495,6 +499,109 @@ public final class NumenScreen extends Screen {
     private int searchBoxX() { return railX + 3 + PAD + ICON_N + 6; }
     private int searchBoxY() { return top + 3 + (RAIL_BAR_H - SEARCH_H) / 2; }
     private int searchBoxW() { return railX + railW - 5 - searchBoxX(); }
+
+    // ---- 对话里搜(Ctrl+F,Telegram 同一个键):对话流顶上滑下来一条搜索栏 ----
+
+    private boolean findOpen;
+    /** 搜索栏在接字;和左栏搜索框一样,控件重建时靠它把焦点带过去。 */
+    private boolean findActive;
+    private String findQuery = "";
+    private final com.dwinovo.numen.client.ui.widget.UiRoot findUi = new com.dwinovo.numen.client.ui.widget.UiRoot();
+    private com.dwinovo.numen.client.ui.widget.TextField findField;
+    /** 搜索栏露出多高(连下面那道缝);按趋近走。 */
+    private float findShown;
+    private long lastFindFrameMs;
+    private static final int FIND_H = 16;
+
+    private int findX() { return left + PAD; }
+    private int findY() { return top + HEADER_H + 3; }
+    private int findW() { return panelW - PAD * 2; }
+    /** 栏右端三枚:↑(往旧的)、↓(往新的)、×;各占一格。 */
+    private int findBtnX(int i) { return findX() + findW() - 12 * (3 - i); }
+
+    private void buildFind() {
+        findUi.clear();
+        findField = null;
+        if (!findOpen || tab != Tab.CHAT || conv == null) return;
+        var mc = net.minecraft.client.Minecraft.getInstance();
+        findUi.setClipboard(() -> mc.keyboardHandler.getClipboard(), s -> mc.keyboardHandler.setClipboard(s));
+        findUi.setInputFactory(com.dwinovo.numen.client.ui.mc.McTextInput.factory());
+        findField = findUi.add(new com.dwinovo.numen.client.ui.widget.TextField(findQuery, v -> {
+            findQuery = v;
+            chatView.search(v);
+        }).placeholder(I18n.get("numen.chat.find")).bare(true));
+        findField.setBounds(findX() + 16, findY() + 1, findW() - 16 - 12 * 3 - 44, FIND_H - 2);
+        if (findActive) findUi.requestFocus(findField);
+    }
+
+    private void openFind() {
+        findOpen = true;
+        findActive = true;
+        rebuild();
+    }
+
+    private void closeFind() {
+        findOpen = false;
+        findActive = false;
+        findQuery = "";
+        chatView.search(null);
+        findUi.clear();
+        findField = null;
+        if (inputBar != null) inputBar.setFocused(true);
+    }
+
+    private void blurFind() {
+        findActive = false;
+        findUi.requestFocus(null);
+        if (inputBar != null) inputBar.setFocused(true);
+    }
+
+    private boolean overFindBar(double mx, double my) {
+        return findField != null && mx >= findX() && mx < findX() + findW() && my >= findY() && my < findY() + FIND_H;
+    }
+
+    private int findButtonAt(double mx, double my) {
+        if (!overFindBar(mx, my)) return -1;
+        for (int i = 0; i < 3; i++) {
+            if (mx >= findBtnX(i) && mx < findBtnX(i) + 12) return i;
+        }
+        return -1;
+    }
+
+    /** 搜索栏:从抬头下面滑下来,一枚放大镜、输入框、"第几个/共几个"、↑ ↓ ×。 */
+    private void renderFind(GuiGraphics g, int mouseX, int mouseY) {
+        long now = System.currentTimeMillis();
+        float dt = lastFindFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastFindFrameMs) / 1000f);
+        lastFindFrameMs = now;
+        findShown = com.dwinovo.numen.client.ui.Anim.approach(findShown, findOpen ? FIND_H + 3 : 0f, 18f, dt);
+        if (findShown < 0.5f) return;
+        int x = findX(), y = findY(), w = findW();
+        // 收起的途中输入框已经拆了,外框照样画、跟着滑走,不硬切
+        boolean focused = findField != null && findField.isFocused();
+        g.enableScissor(left + 3, top + HEADER_H, left + panelW - 3, top + HEADER_H + Math.round(findShown));
+        int slide = Math.round(findShown) - (FIND_H + 3);   // 露一半时整条往上缩一半
+        g.pose().pushPose();
+        g.pose().translate(0, slide, 0);
+        com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
+                x, y, w, FIND_H, FIELD, focused ? CTA : FIELD);
+        com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.SEARCH,
+                x + 3, y + (FIND_H - ICON_N) / 2, ICON_N, focused ? CTA : TXT_FAINT);
+        if (findField != null) findUi.render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
+                com.dwinovo.numen.client.screen.settings.HostThemeColors.current(), mouseX, mouseY - slide,
+                net.minecraft.Util.getMillis());
+        int n = chatView.matchCount();
+        String count = findQuery.isBlank() ? ""
+                : n == 0 ? I18n.get("numen.chat.find_none")
+                : (chatView.matchAt() < 0 ? "" : (chatView.matchAt() + 1) + "/") + n;
+        txt(g, Component.literal(count), findBtnX(0) - 4 - font.width(count), y + (FIND_H - 8) / 2, TXT_MUTED);
+        int hot = slide == 0 ? findButtonAt(mouseX, mouseY) : -1;
+        chevron(g, findBtnX(0) + 6, y + 5, true);
+        chevron(g, findBtnX(1) + 6, y + 5, false);
+        if (hot == 0 || hot == 1) g.fill(findBtnX(hot), y + 1, findBtnX(hot) + 12, y + FIND_H - 1, 0x30FFFFFF);
+        txt(g, Component.literal("×"), findBtnX(2) + (12 - font.width("×")) / 2, y + (FIND_H - 8) / 2, hot == 2 ? TXT : TXT_MUTED);
+        g.pose().popPose();
+        g.disableScissor();
+    }
 
     /** 搜索框随控件一起重建;窄栏没地方放它。 */
     private void buildSearch() {
@@ -589,6 +696,7 @@ public final class NumenScreen extends Screen {
         inputBar = null;
         settings.clearWidgets();
         buildSearch();
+        buildFind();
         if (summoning) { buildSummonCard(); return; }
         if (cardOpen) { buildEditCard(); return; }
         switch (tab) {
@@ -596,7 +704,7 @@ public final class NumenScreen extends Screen {
             case SETTINGS -> settings.buildWidgets();
             case ITEMS -> { /* no widgets */ }
         }
-        if (searchActive && inputBar != null) inputBar.setFocused(false);   // 搜索框在接字,输入框别抢
+        if ((searchActive || findActive) && inputBar != null) inputBar.setFocused(false);   // 搜索框在接字,输入框别抢
     }
 
     private SummonPanel summonPanel() {
@@ -1360,6 +1468,34 @@ public final class NumenScreen extends Screen {
             if (overlayUi.keyPressed(keyCode, modifiers)) { rebuild(); return true; }
             return super.keyPressed(keyCode, scanCode, modifiers);
         }
+        if (findActive && findField != null && !modalOpen()) {
+            if (k == 256) {   // Esc:收起搜索栏
+                closeFind();
+                return true;
+            }
+            if (k == com.dwinovo.numen.client.ui.KeyCodes.ENTER || k == com.dwinovo.numen.client.ui.KeyCodes.UP) {
+                // 回车、↑ 往旧的找;Shift+回车往新的
+                chatView.jumpMatch(k == com.dwinovo.numen.client.ui.KeyCodes.ENTER
+                        && com.dwinovo.numen.client.ui.KeyCodes.shift(modifiers) ? -1 : 1);
+                return true;
+            }
+            if (k == com.dwinovo.numen.client.ui.KeyCodes.DOWN) {
+                chatView.jumpMatch(-1);
+                return true;
+            }
+            return findUi.keyPressed(keyCode, modifiers) || super.keyPressed(keyCode, scanCode, modifiers);
+        }
+        if (k == com.dwinovo.numen.client.ui.KeyCodes.KEY_F && com.dwinovo.numen.client.ui.KeyCodes.ctrl(modifiers)
+                && tab == Tab.CHAT && conv != null && !modalOpen()) {
+            if (findOpen) {   // 开着再按:光标回到搜索栏
+                findActive = true;
+                findUi.requestFocus(findField);
+                if (inputBar != null) inputBar.setFocused(false);
+            } else {
+                openFind();
+            }
+            return true;
+        }
         if (searchActive && searchField != null && !modalOpen()) {
             if (k == 256) {   // Esc:清空、交回输入框
                 clearSearch();
@@ -1406,6 +1542,10 @@ public final class NumenScreen extends Screen {
         if (tab == Tab.CHAT && inputBar != null && inputBar.keyPressed(keyCode, modifiers)) {
             return true;
         }
+        if (k == 256 && findOpen) {   // 搜索栏开着(光标不在它上面也算):Esc 先收它
+            closeFind();
+            return true;
+        }
         if (k == 256 && tab != Tab.CHAT) {   // Esc 先退盖着的那页(资料/群资料/设置),退到对话再一次才关面板
             back();
             return true;
@@ -1415,6 +1555,9 @@ public final class NumenScreen extends Screen {
 
     @Override
     public boolean charTyped(char ch, int modifiers) {
+        if (findActive && findField != null && !modalOpen()) {
+            return findUi.charTyped(ch) || super.charTyped(ch, modifiers);
+        }
         if (searchActive && searchField != null && !modalOpen()) {
             return searchUi.charTyped(ch) || super.charTyped(ch, modifiers);
         }
@@ -1500,6 +1643,20 @@ public final class NumenScreen extends Screen {
                 return true;
             }
             if (searchActive) blurSearch();   // 点在别处:搜索框交回焦点,这一下照常往下走
+            if (!modalOpen() && tab == Tab.CHAT && overFindBar(mouseX, mouseY)) {
+                switch (findButtonAt(mouseX, mouseY)) {
+                    case 0 -> chatView.jumpMatch(1);
+                    case 1 -> chatView.jumpMatch(-1);
+                    case 2 -> closeFind();
+                    default -> {   // 点在输入框上:接字
+                        findActive = true;
+                        findUi.mouseClicked(mouseX, mouseY, button);
+                        if (inputBar != null) inputBar.setFocused(false);
+                    }
+                }
+                return true;
+            }
+            if (findActive) blurFind();
             if (!modalOpen() && overEmptyButton(mouseX, mouseY)) {   // 空面板的召唤钮
                 openSummon();
                 return true;
@@ -2260,7 +2417,8 @@ public final class NumenScreen extends Screen {
     }
 
     private void renderChat(GuiGraphics g, int mouseX, int mouseY) {
-        int bodyY = top + HEADER_H + 4;
+        renderFind(g, mouseX, mouseY);
+        int bodyY = top + HEADER_H + 4 + Math.round(findShown);   // 搜索栏在时,对话流往下让
         int transX = left + PAD;
         int transW = panelW - PAD * 2;   // 对话流永远占满整行;附属信息在底部一行、按需展开
         EntityAgentLoop lp = loop();
