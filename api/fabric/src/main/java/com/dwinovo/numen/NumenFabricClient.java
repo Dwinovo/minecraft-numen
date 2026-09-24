@@ -86,7 +86,17 @@ public class NumenFabricClient implements ClientModInitializer {
                 (g, delta) -> {
                     com.dwinovo.numen.client.hud.TalkHint.render(g);
                     com.dwinovo.numen.client.hud.NumenHudToasts.render(g);
+                    com.dwinovo.numen.client.notify.MessageNotices.renderHud(g);
                 });
+        // 消息通知开着界面时画在界面上面、接点击(界面的事件每次 init 重置,所以在 init 之后挂)
+        net.fabricmc.fabric.api.client.screen.v1.ScreenEvents.AFTER_INIT.register((client, screen, w, h) -> {
+            net.fabricmc.fabric.api.client.screen.v1.ScreenEvents.afterRender(screen).register(
+                    (s, g, mouseX, mouseY, delta) ->
+                            com.dwinovo.numen.client.notify.MessageNotices.renderOver(g, mouseX, mouseY));
+            net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents.allowMouseClick(screen).register(
+                    (s, mouseX, mouseY, button) ->
+                            !com.dwinovo.numen.client.notify.MessageNotices.click(mouseX, mouseY, button));
+        });
         net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK
                 .register(client -> {
                     com.dwinovo.numen.client.NumenKeys.tick();

@@ -12,7 +12,7 @@ import java.nio.file.Path;
  * 主人的客户端偏好——{@code config/numen/ui.json}。
  *
  * <pre>
- * { "theme": "light", "talkHint": true, "initiative": 3 }
+ * { "theme": "light", "talkHint": true, "messageNotices": true, "initiative": 3 }
  * </pre>
  *
  * <p>跟 {@code UiTheme} 分开:那个类只管颜色,这里只管主人选了什么。混在一起的话,
@@ -27,6 +27,7 @@ public final class ClientPrefs {
 
     private static String theme = "light";
     private static boolean talkHint = true;
+    private static boolean messageNotices = true;
     private static int initiative = EventQueue.DEFAULT_LEVEL;
     /** 最近用过的斜杠命令名,最新在前。排序归命令层,这里只负责存。 */
     private static final java.util.List<String> recentCommands = new java.util.ArrayList<>();
@@ -43,6 +44,7 @@ public final class ClientPrefs {
             JsonObject o = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
             if (o.has("theme")) theme = o.get("theme").getAsString();
             if (o.has("talkHint")) talkHint = o.get("talkHint").getAsBoolean();
+            if (o.has("messageNotices")) messageNotices = o.get("messageNotices").getAsBoolean();
             if (o.has("initiative")) initiative = EventQueue.clampLevel(o.get("initiative").getAsInt());
             if (o.has("recentCommands") && o.get("recentCommands").isJsonArray()) {
                 for (var el : o.getAsJsonArray("recentCommands")) recentCommands.add(el.getAsString());
@@ -68,6 +70,16 @@ public final class ClientPrefs {
 
     public static void setTalkHint(boolean enabled) {
         talkHint = enabled;
+        persist();
+    }
+
+    /** 消息通知:她说了话、主人没在面板里看着那个会话时,右下角弹一张小卡。 */
+    public static boolean messageNotices() {
+        return messageNotices;
+    }
+
+    public static void setMessageNotices(boolean enabled) {
+        messageNotices = enabled;
         persist();
     }
 
@@ -104,6 +116,7 @@ public final class ClientPrefs {
             JsonObject o = new JsonObject();
             o.addProperty("theme", theme);
             o.addProperty("talkHint", talkHint);
+            o.addProperty("messageNotices", messageNotices);
             o.addProperty("initiative", initiative);
             com.google.gson.JsonArray recent = new com.google.gson.JsonArray();
             for (String name : recentCommands) recent.add(name);

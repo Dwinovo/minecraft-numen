@@ -210,6 +210,7 @@ final class TurnPresenter {
         SpeechBubbles.say(entityUuid, shown);
         ChatLines.companion(speakerName(), shown);
         com.dwinovo.numen.client.agent.Conversations.instance().heard(entityUuid, shown);
+        com.dwinovo.numen.client.notify.MessageNotices.spoke(entityUuid, shown);
     }
 
     /** 调用失败而且不再重试:必须让主人看见——沉进日志就是"已读不回"。 */

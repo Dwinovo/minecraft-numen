@@ -15,7 +15,7 @@ import net.minecraft.client.resources.language.I18n;
 
 /**
  * 主题分区——NumenUI 版的瓤:主题行(三色小样 + 名字 + 当前 ✔,点击即切换
- * 并写入 ui.json)+ 快捷对话提醒开关行。切主题即触发宿主调色板重读。
+ * 并写入 ui.json)+ 快捷对话提醒、消息通知两个开关行。切主题即触发宿主调色板重读。
  */
 public final class ThemePanel {
 
@@ -51,9 +51,18 @@ public final class ThemePanel {
         Label hintLabel = ui.add(new Label(label, Label.Role.SECONDARY));
         hintLabel.setBounds(x + 28, hy + 1, Minecraft.getInstance().font.width(label), 9);
 
+        // 消息通知开关行(默认开:她说了话、主人没在面板里看着那个会话时,右下角弹一张卡)。
+        int ny = hy + NumenStyle.ROW_PITCH;
+        Toggle notices = ui.add(new Toggle(com.dwinovo.numen.client.data.ClientPrefs.messageNotices(),
+                com.dwinovo.numen.client.data.ClientPrefs::setMessageNotices));
+        notices.setBounds(x, ny, 22, 11);
+        String noticesText = t(com.dwinovo.numen.data.ModLanguageData.Keys.SETTINGS_MESSAGE_NOTICES);
+        Label noticesLabel = ui.add(new Label(noticesText, Label.Role.SECONDARY));
+        noticesLabel.setBounds(x + 28, ny + 1, Minecraft.getInstance().font.width(noticesText), 9);
+
         // 主动性:她多久把攒下的世界变化说一次。这是"及时性"的旋钮,不是"话多话少"——
         // 拉小知道得及时、token 烧得快,拉大知道得晚、省。默认 3。
-        int sy = hy + NumenStyle.ROW_PITCH;
+        int sy = ny + NumenStyle.ROW_PITCH;
         Label initTitle = ui.add(new Label("主动性", Label.Role.SECONDARY));
         initTitle.setBounds(x, sy + 1, Minecraft.getInstance().font.width("主动性"), 9);
         Slider initiative = ui.add(new Slider(

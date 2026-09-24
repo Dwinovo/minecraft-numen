@@ -67,6 +67,8 @@ public class NumenNeoForgeClient {
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onClientTick);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onLoggingOut);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onRenderLevel);
+        NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onScreenRendered);
+        NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onScreenMousePressed);
     }
 
     static void onRenderLevel(net.neoforged.neoforge.client.event.RenderLevelStageEvent event) {
@@ -100,6 +102,23 @@ public class NumenNeoForgeClient {
         event.registerAboveAll(
                 ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_toasts"),
                 (g, delta) -> com.dwinovo.numen.client.hud.NumenHudToasts.render(g));
+        event.registerAboveAll(
+                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "message_notices"),
+                (g, delta) -> com.dwinovo.numen.client.notify.MessageNotices.renderHud(g));
+    }
+
+    /** 消息通知开着界面时画在界面上面。 */
+    static void onScreenRendered(net.neoforged.neoforge.client.event.ScreenEvent.Render.Post event) {
+        com.dwinovo.numen.client.notify.MessageNotices.renderOver(
+                event.getGuiGraphics(), event.getMouseX(), event.getMouseY());
+    }
+
+    /** 点在消息通知上的那一下归通知,界面不再处理。 */
+    static void onScreenMousePressed(net.neoforged.neoforge.client.event.ScreenEvent.MouseButtonPressed.Pre event) {
+        if (com.dwinovo.numen.client.notify.MessageNotices.click(
+                event.getMouseX(), event.getMouseY(), event.getButton())) {
+            event.setCanceled(true);
+        }
     }
 
     static void onClientTick(net.neoforged.neoforge.client.event.ClientTickEvent.Post event) {
