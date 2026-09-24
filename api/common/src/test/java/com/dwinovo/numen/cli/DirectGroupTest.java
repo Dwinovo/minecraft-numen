@@ -33,7 +33,7 @@ class DirectGroupTest {
                 g.serverDirect("Echo the line back.", (src, args) -> {
                     SEEN.set(args.get(LINE));
                     src.reply(TaskResult.ok("echo " + args.get(LINE)).toJson());
-                }, LINE).catalog("Things the server lists for you:", src -> {
+                }, LINE).example("numen gt_direct say hi").catalog("Things the server lists for you:", src -> {
                     List<String> lines = new ArrayList<>();
                     for (int i = 1; i <= 23; i++) {
                         lines.add(String.format("  /thing%02d for %s", i, src.toolCallId()));
@@ -45,7 +45,9 @@ class DirectGroupTest {
     private static final String ACTION_HELP = """
             numen gt_direct <line...>
               Echo the line back.
-              <line...> (text, the rest of the line) — What to echo.""";
+              <line...> (text, the rest of the line) — What to echo.
+              Examples:
+                numen gt_direct say hi""";
 
     @Test
     void theRestOfTheLineGoesToTheOneHandler() {

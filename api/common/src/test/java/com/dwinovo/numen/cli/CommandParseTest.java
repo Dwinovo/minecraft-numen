@@ -33,7 +33,7 @@ class CommandParseTest {
                 g.server("take", "Take some items.", (src, args) -> {
                     LAST.set(args);
                     src.reply(TaskResult.ok("took").toJson());
-                }, COUNT, ITEM, FROM, LIMIT));
+                }, COUNT, ITEM, FROM, LIMIT).example("numen gt_parse take 3 apple --from chest"));
     }
 
     private static final String TAKE_HELP = """
@@ -42,7 +42,9 @@ class CommandParseTest {
               <count> (integer 1-64) — How many.
               <item> (word) — Which item.
               --from <word> (word; optional) — Where to take them from.
-              --limit <integer> (integer 1-10; optional) — At most this many trips.""";
+              --limit <integer> (integer 1-10; optional) — At most this many trips.
+              Examples:
+                numen gt_parse take 3 apple --from chest""";
 
     private static final String GROUP_HELP = """
             numen gt_parse: A group the parser tests poke at. Actions:

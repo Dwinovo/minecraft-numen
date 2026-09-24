@@ -44,7 +44,9 @@ class ArgTypeTest {
                 g.server("make", "Make something.", (src, args) -> {
                     LAST.set(args);
                     src.reply(TaskResult.ok("made").toJson());
-                }, X, RECIPE, MODEL, HAVE_ONLY, SEARCH, DEPTH).promote("gt_types_make", "Make something, as a tool."));
+                }, X, RECIPE, MODEL, HAVE_ONLY, SEARCH, DEPTH)
+                        .example("numen gt_types make -12 stone \"抽象鸣潮 菲比.ysm\" --have_only true")
+                        .promote("gt_types_make", "Make something, as a tool."));
     }
 
     private static CommandArgs ran(String line) {
@@ -130,6 +132,8 @@ class ArgTypeTest {
                   --have_only <boolean> (true or false; optional) — Only what you can make.
                   --search <string> (string, quote it if it has spaces; optional) — Narrow the list.
                   --depth <integer> (integer; optional) — How far down.
+                  Examples:
+                    numen gt_types make -12 stone "抽象鸣潮 菲比.ysm" --have_only true
                   Shortcut tool: gt_types_make.""", onClient("numen gt_types make --help").message());
     }
 

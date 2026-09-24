@@ -2,6 +2,8 @@ package com.dwinovo.numen.cli;
 
 import com.dwinovo.numen.task.TaskResult;
 import com.mojang.brigadier.Command;
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.ParseResults;
 import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
@@ -34,7 +36,9 @@ import java.util.regex.Pattern;
  *       .seeAlso("numen ftbquests list", "numen ftbquests show");
  * }</pre>
  * <ul>
- *   <li>{@link #example}:一整行真实可用的命令,可以多个。模型照着例子写,比读语法可靠。</li>
+ *   <li>{@link #example}:至少一个,可以多个。模型照着例子写,比读语法可靠,所以缺了在登记那一刻抛出,
+ *       和名字不合规同一种把关;每个例子也在那一刻按这一组的树解析一遍,必须整行写得通、落在这个动作上,
+ *       例子与语法不会走样。</li>
  *   <li>{@link #note}:可选,多条。写会不会问主人、是不是长活、会动她的什么、不会做什么。</li>
  *   <li>{@link #seeAlso}:可选。做完这件事下一步通常用的动作,同组别组都行,写整条路径。引用在命令树第一次被读时
  *       查(那时各模组的组都已登记完),理由见 {@link NumenCli}。</li>
@@ -134,6 +138,23 @@ public final class Action implements Command<CommandSource> {
             throw new IllegalArgumentException(path() + " 的" + what + "是空的");
         }
         return text;
+    }
+
+    /**
+     * 例子的把关,登记块跑完时由组调用:至少一个;每个都在 {@code tree}(只有这一组的树)上整行解析通过,
+     * 落在这个动作上。这棵树的节点不设 {@code requires},解析用不到来源,源给 null。
+     */
+    void checkExamples(CommandDispatcher<CommandSource> tree) {
+        if (examples.isEmpty()) {
+            throw new IllegalArgumentException(path() + " 没写例子——模型照着例子写,每个动作至少一个");
+        }
+        for (String example : examples) {
+            ParseResults<CommandSource> parse = tree.parse(example, null);
+            if (parse.getReader().canRead() || !parse.getExceptions().isEmpty()
+                    || parse.getContext().getCommand() != this) {
+                throw new IllegalArgumentException(path() + " 的例子写不通,或者落在别的动作上: " + example);
+            }
+        }
     }
 
     /**

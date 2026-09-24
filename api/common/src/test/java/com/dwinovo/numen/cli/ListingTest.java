@@ -27,7 +27,7 @@ class ListingTest {
                     }
                     src.reply(new Listing("Rows (23):", rows, "That is all.", "numen gt_listing rows")
                             .result(args).toJson());
-                }, Listing.PAGE));
+                }, Listing.PAGE).example("numen gt_listing rows --page 2"));
     }
 
     @Test
@@ -54,7 +54,9 @@ class ListingTest {
         assertEquals("""
                 numen gt_listing rows [--page <integer>]
                   List the rows.
-                  --page <integer> (integer 1-99; optional) — Which page of the list.""",
+                  --page <integer> (integer 1-99; optional) — Which page of the list.
+                  Examples:
+                    numen gt_listing rows --page 2""",
                 onClient("numen gt_listing rows --help").message());
     }
 }

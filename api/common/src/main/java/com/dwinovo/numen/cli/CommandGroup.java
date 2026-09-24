@@ -1,5 +1,6 @@
 package com.dwinovo.numen.cli;
 
+import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 
 import java.util.ArrayList;
@@ -21,8 +22,8 @@ import java.util.Set;
  * }</pre>
  *
  * <p>它不给任何通向别的组或根的把手,所以插件<b>够不着别人的节点</b>——"不能往别人的节点下嫁接"由形状保证,
- * 不靠约定。组名撞了、动作名撞了、快捷工具名撞了,都在登记的那一刻抛出。登记块返回后这一组就封口,
- * 之后再往里加、再提升、再补帮助都会抛。
+ * 不靠约定。组名撞了、动作名撞了、快捷工具名撞了、动作没写例子或例子写不通,都在登记的那一刻抛出。
+ * 登记块返回后这一组就封口,之后再往里加、再提升、再补帮助都会抛。
  *
  * <p>一组也可以直接就是一个动作({@link #serverDirect}):参数紧跟在组名后面,没有动作名,这一组也就不再有
  * 别的动作——具名动作会和它的参数抢同一个位置。
@@ -128,8 +129,17 @@ public final class CommandGroup {
         }
     }
 
+    /**
+     * 登记块跑完:封口,再查每个动作的例子。例子在一棵只有这一组的树上解析——组这时还没挂上共享的树,
+     * 而例子只该用到这一组自己的语法。
+     */
     void close() {
         open = false;
+        CommandDispatcher<CommandSource> tree = new CommandDispatcher<>();
+        tree.register(LiteralArgumentBuilder.<CommandSource>literal(NumenCli.ROOT).then(node()));
+        for (Action a : actions) {
+            a.checkExamples(tree);
+        }
     }
 
     /**

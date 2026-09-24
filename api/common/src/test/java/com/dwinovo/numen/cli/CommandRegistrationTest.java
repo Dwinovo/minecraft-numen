@@ -27,7 +27,8 @@ class CommandRegistrationTest {
     @Test
     void aGroupNameHasOneOwnerAndOthersCannotGraftOntoIt() {
         NumenApi numen = door();
-        numen.registerCommands("gt_owned", "Owned by the first plugin.", g -> g.server("mine", "The owner's.", OK));
+        numen.registerCommands("gt_owned", "Owned by the first plugin.",
+                g -> g.server("mine", "The owner's.", OK).example("numen gt_owned mine"));
 
         assertThrows(IllegalArgumentException.class, () -> door().registerCommands("gt_owned", "Someone else's.",
                 g -> g.server("graft", "Grafted on.", OK)), "第二个插件拿同一个组名");
@@ -46,7 +47,7 @@ class CommandRegistrationTest {
         AtomicReference<Action> action = new AtomicReference<>();
         door().registerCommands("gt_closed", "Closed after its block.", g -> {
             leaked.set(g);
-            action.set(g.server("only", "The only action.", OK));
+            action.set(g.server("only", "The only action.", OK).example("numen gt_closed only"));
         });
         assertThrows(IllegalStateException.class, () -> leaked.get().server("late", "Too late.", OK));
         assertThrows(IllegalStateException.class, () -> action.get().promote("gt_closed_late", "Too late."));
@@ -127,6 +128,39 @@ class CommandRegistrationTest {
     }
 
     @Test
+    void everyActionNeedsAnExampleThatReadsAsThatAction() {
+        NumenApi numen = door();
+        Param<Integer> count = Param.required("count", ArgType.integer(1, 64), "How many.");
+        Param<String> from = Param.optional("from", ArgType.word(), "Where from.");
+        IllegalArgumentException none = assertThrows(IllegalArgumentException.class, () -> numen.registerCommands(
+                "gt_no_example", "x.", g -> g.server("go", "Go.", OK)));
+        assertEquals("numen gt_no_example go 没写例子——模型照着例子写,每个动作至少一个", none.getMessage());
+        assertFalse(onClient("numen gt_no_example --help").success(), "被拒的组没有挂上树");
+
+        for (String bad : new String[]{
+                "numen gt_bad_example take",              // 缺了必填参数
+                "numen gt_bad_example take many",         // 值读不通
+                "numen gt_bad_example take 3 --form x",   // 没有这个标志
+                "numen gt_bad_example take 3 extra",      // 多写了东西
+                "numen gt_bad_example give 3",            // 落在别的动作上
+                "numen gt_bad_example take --help",       // 落在帮助上
+                "numen gt_other take 3",                  // 别的组
+                "gt_bad_example take 3"}) {               // 漏了 numen
+            IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> numen.registerCommands(
+                    "gt_bad_example", "x.", g -> {
+                        g.server("take", "Take.", OK, count, from).example("numen gt_bad_example take 3").example(bad);
+                        g.server("give", "Give.", OK, count).example("numen gt_bad_example give 3");
+                    }), bad);
+            assertEquals("numen gt_bad_example take 的例子写不通,或者落在别的动作上: " + bad, e.getMessage());
+        }
+        assertDoesNotThrow(() -> numen.registerCommands("gt_bad_example", "x.", g -> {
+            g.server("take", "Take.", OK, count, from).example("numen gt_bad_example take 3")
+                    .example("numen gt_bad_example take 3 --from chest");
+            g.server("give", "Give.", OK, count).example("numen gt_bad_example give 3");
+        }), "写对了就能登记——前面几次被拒没有占住这个组名");
+    }
+
+    @Test
     void helpContentIsCheckedWhenWritten() {
         assertThrows(IllegalArgumentException.class, () -> door().registerCommands("gt_blank_help", "x.",
                 g -> g.server("x", "x.", OK).example(" ")));
@@ -141,9 +175,10 @@ class CommandRegistrationTest {
     @Test
     void aShortcutNameThatIsTakenBlowsUpAtRegistration() {
         NumenApi numen = door();
-        numen.registerCommands("gt_tool_a", "First.", g -> g.server("go", "Go.", OK).promote("gt_shared_tool", "Go."));
+        numen.registerCommands("gt_tool_a", "First.",
+                g -> g.server("go", "Go.", OK).example("numen gt_tool_a go").promote("gt_shared_tool", "Go."));
         assertThrows(IllegalStateException.class, () -> numen.registerCommands("gt_tool_b", "Second.",
-                g -> g.server("go", "Go.", OK).promote("gt_shared_tool", "Go too.")));
+                g -> g.server("go", "Go.", OK).example("numen gt_tool_b go").promote("gt_shared_tool", "Go too.")));
         assertThrows(IllegalStateException.class, () -> numen.registerCommands("gt_tool_c", "Third.", g -> {
             Action a = g.server("go", "Go.", OK).promote("gt_tool_c_go", "Go.");
             a.promote("gt_tool_c_again", "Again.");
