@@ -46,9 +46,33 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
         return this;
     }
 
-    private int popupWidth() { return popupW > 0 ? popupW : w; }
+    /** 选择行的标签;null = 框形态。见 {@link #row}。 */
+    private String rowLabel;
+    /** 选择行两端文字到行边的距离。 */
+    private int rowInset;
+    /** 选择行的弹层宽:按最长的一项量,画弹层时定。 */
+    private int rowPopupW;
 
-    private int popupX() { return popupW > 0 ? x + w - popupW : x; }
+    /**
+     * 选择行形态(Telegram 对话框里的那种):整行是一个钮,左边标签、右边当前值(强调色),悬停整行浮出浅底;
+     * 点开的弹层挂在行下,右缘对着当前值。{@code inset} 是两端文字到行边的距离。置灰时值是淡色、点不开。
+     */
+    public Dropdown row(String label, int inset) {
+        this.rowLabel = label;
+        this.rowInset = inset;
+        return this;
+    }
+
+    private int popupWidth() {
+        if (popupW > 0) return popupW;
+        return rowLabel != null && rowPopupW > 0 ? rowPopupW : w;
+    }
+
+    private int popupX() {
+        if (popupW > 0) return x + w - popupW;
+        // 选择行:弹层里的字(内缩 5)右缘与行上的当前值对齐
+        return rowLabel != null && rowPopupW > 0 ? Math.max(x, x + w - rowInset + 5 - rowPopupW) : x;
+    }
 
     public void setItems(List<String> items, int selected) {
         this.items = items;
@@ -77,6 +101,10 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
         long dt = lastFrameMs < 0 ? 1000 : nowMs - lastFrameMs;
         lastFrameMs = nowMs;
         hoverT = NumenStyle.hoverStep(hoverT, hovered || open, dt);
+        if (rowLabel != null) {
+            renderRow(s, c);
+            return;
+        }
         // 与输入框同一卡壳形制;展开描边亮 accent(=聚焦态)。悬停是"在底上叠一层"
         // 而非"换底色"——hover 是亮度感知的半透明叠加色(暗主题偏白/亮主题偏黑),
         // 拿它当实底填会整块发黑(真机教训),按进度收放透明度才对。
@@ -93,6 +121,20 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
         int arrowX = compact ? x + (w - s.textWidth("▼")) / 2 : x + w - 11;
         s.drawText(open ? "▲" : "▼", arrowX, y + (h - s.lineHeight()) / 2 + 1,
                 c.textMuted(), false);
+    }
+
+    /** 选择行:整行浅底随悬停收放,左标签、右当前值。 */
+    private void renderRow(IDrawSurface s, NumenTheme.Colors c) {
+        if (enabled && hoverT > 0.01f) {
+            int overlay = ((int) (((c.hover() >>> 24) & 0xFF) * hoverT) << 24) | (c.hover() & 0xFFFFFF);
+            s.fillRect(x, y, w, h, overlay);
+        }
+        int ty = y + (h - s.lineHeight()) / 2 + 1;
+        s.drawText(rowLabel, x + rowInset, ty, c.textPrimary(), false);
+        int room = w - rowInset * 2 - s.textWidth(rowLabel) - 8;
+        String value = com.dwinovo.numen.client.ui.TextClip.fit(s, selectedItem(), Math.max(0, room));
+        s.drawText(value, x + w - rowInset - s.textWidth(value), ty,
+                enabled ? c.accent() : c.textMuted(), false);
     }
 
     @Override
@@ -127,6 +169,11 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
     @Override
     public void renderOverlay(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
         rowHCached = rowH(s);
+        if (rowLabel != null) {
+            int widest = 0;
+            for (String it : items) widest = Math.max(widest, s.textWidth(it));
+            rowPopupW = Math.min(w, widest + 10 + NumenStyle.SCROLLBAR_W);
+        }
         popupScroll = Math.min(popupScroll, maxPopupScroll());
         int rows = popupRows();
         int py = y + h;

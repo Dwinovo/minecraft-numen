@@ -2,32 +2,32 @@ package com.dwinovo.numen.client.screen;
 
 import com.dwinovo.numen.agent.llm.ProviderLibrary;
 import com.dwinovo.numen.client.skin.SkinLibrary;
-import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
+import com.dwinovo.numen.client.ui.mc.McDrawSurface;
+import com.dwinovo.numen.client.ui.mc.Sprites;
 import com.dwinovo.numen.client.ui.widget.Button;
+import com.dwinovo.numen.client.ui.widget.DialogBox;
 import com.dwinovo.numen.client.ui.widget.Dropdown;
 import com.dwinovo.numen.client.ui.widget.InlineAlert;
-import com.dwinovo.numen.client.ui.widget.Label;
 import com.dwinovo.numen.client.ui.widget.TextField;
-import com.dwinovo.numen.client.ui.widget.UiRoot;
 import com.dwinovo.numen.client.voice.VoiceLibrary;
 import com.dwinovo.numen.data.ModLanguageData;
 import com.dwinovo.numen.persona.PersonaLibrary;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
-import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 召唤卡——NumenUI 版的瓤:名字 + 人设/模型配置/模式/声线/皮肤五个选择。
- * 人设与声线可空(首项"不配置/无"),模型配置必选(库空则不出下拉,点创建时
+ * 召唤卡——名字 + 人设/模型配置/模式/声线/皮肤五个选择。版式照 Telegram 的"新建联系人":
+ * 标题下面左边一张空头像、右边名字输入框,再往下一行一个选择,右下取消/创建。
+ * 人设与声线可空(首项"不配置/无"),模型配置必选(库空则那一行是空的,点创建时
  * 才解释——报错在动作处,不在氛围里);模式无 gamemode 权限时是置灰的继承档。
  * 校验错误内联在名字字段上,库为空的说明走页面级胶囊。
  */
-public final class SummonPanel implements ModalCard {
+public final class SummonPanel extends ModalCard {
 
     /** 提交面:所有选择由面板收集,落库与发包留在宿主。 */
     public interface Host {
@@ -56,7 +56,6 @@ public final class SummonPanel implements ModalCard {
     private static final String VOICE_NONE = "__none__";
     private static final String SKIN_DEFAULT = "__default__";
 
-    private final UiRoot ui = new UiRoot();
     private final Host host;
     private Draft draft = new Draft();
 
@@ -68,9 +67,10 @@ public final class SummonPanel implements ModalCard {
     private List<String> voiceIds = List.of();
     private List<String> skinIds = List.of();
     private boolean hasProviders;
-    private boolean hasVoices;
-    private int modeBoxX, modeBoxY, modeBoxW;
     private boolean modeInherited;
+    private Dropdown modePick;
+    /** 头部的顶边(layout 时定)。 */
+    private int coverTop;
 
     public SummonPanel(Host host) {
         this.host = host;
@@ -84,44 +84,29 @@ public final class SummonPanel implements ModalCard {
 
     /** 每次打开召唤流程:草稿归零(默认/无/生存)。 */
     @Override
-    public void reset() {
+    void reset() {
         draft = new Draft();
         draft.creative = host.canChooseMode() && draft.creative;
     }
 
+    /** 头部(名字)+ 五行选择。 */
     @Override
-    public int width() {
-        return 320;
+    int height() {
+        return heightFor(COVER_H + 5 * ROW_H);
     }
 
-    /** 卡高:标题、名字、四排选择、一对钮。 */
     @Override
-    public int height() {
-        return 208;
-    }
-
-    public void build(int x, int y, int w, int h, int dropBottom) {
+    protected void layout(int top) {
         // 人设下拉的数据源是 persona/ 目录:每次打开召唤面板重扫一遍。
         PersonaLibrary.instance().reload();
-        ui.clear();
-        ui.setViewportHeight(dropBottom);
-
-        int half = (w - 6) / 2;
-        int ry = y;
-        Label title = ui.add(new Label(t("numen.summon.title"), Label.Role.PRIMARY));
-        title.setBounds(x, ry, w, 9);
-        ry += 16;
-
-        Label nameLabel = labelWidget(x, ry, ModLanguageData.Keys.SUMMON_NAME);
-        ry += NumenStyle.LABEL_PITCH;
-        nameField = ui.add(new TextField(draft.name, v -> draft.name = v)
-                .placeholder(t(ModLanguageData.Keys.SUMMON_NAME_PLACEHOLDER))
-                .withLabel(nameLabel));   // 出错时标签让位,免得两串文字叠在一行
-        nameField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
-        ry += NumenStyle.ROW_PITCH;
+        title(t("numen.summon.title"));
+        coverTop = top;
+        nameField = field(coverRight(), coverFieldY(top), coverRightW(), t(ModLanguageData.Keys.SUMMON_NAME),
+                new TextField(draft.name, v -> draft.name = v)
+                        .placeholder(t(ModLanguageData.Keys.SUMMON_NAME_PLACEHOLDER)));
+        int ry = top + COVER_H;
 
         // 人设可空:首项"不配置"(没配的同伴用全局人设,全局也没配就用内置默认人设)。
-        ry = label(x, ry, ModLanguageData.Keys.SUMMON_PERSONA_LABEL);
         List<String> personaNames = new ArrayList<>();
         List<String> pIds = new ArrayList<>();
         pIds.add(PERSONA_NONE);
@@ -131,73 +116,61 @@ public final class SummonPanel implements ModalCard {
             personaNames.add(p.name());
         }
         personaIds = pIds;
-        Dropdown personaPick = ui.add(new Dropdown(personaNames,
+        select(ry, t(ModLanguageData.Keys.SUMMON_PERSONA_LABEL), personaNames,
                 Math.max(0, personaIds.indexOf(draft.personaId == null ? PERSONA_NONE : draft.personaId)),
                 i -> {
                     String id = personaIds.get(i);
                     draft.personaId = PERSONA_NONE.equals(id) ? null : id;
-                }));
-        personaPick.setBounds(x, ry, w, NumenStyle.CONTROL_H);
-        ry += NumenStyle.ROW_PITCH;
+                });
+        ry += ROW_H;
 
-        // 模型配置必选(无默认项无兜底):库空则不出下拉,点创建时解释。
-        int rowY = label(x, ry, ModLanguageData.Keys.PROVIDER_TITLE);
-        label(x + half + 6, ry, "numen.summon.mode");
-        var provEntries = ProviderLibrary.instance().list();
-        hasProviders = !provEntries.isEmpty();
-        if (hasProviders) {
-            List<String> provNames = new ArrayList<>();
-            List<String> ids = new ArrayList<>();
-            for (var e : provEntries) {
-                ids.add(e.id());
-                provNames.add(e.name());
-            }
-            providerIds = ids;
-            if (draft.providerId == null) draft.providerId = ids.get(0);
-            Dropdown provPick = ui.add(new Dropdown(provNames,
-                    Math.max(0, providerIds.indexOf(draft.providerId)),
-                    i -> draft.providerId = providerIds.get(i)));
-            provPick.setBounds(x, rowY, half, NumenStyle.CONTROL_H);
+        // 模型配置必选(无默认项无兜底):库空则这一行是空的、点不开,点创建时解释。
+        List<String> provNames = new ArrayList<>();
+        List<String> ids = new ArrayList<>();
+        for (var e : ProviderLibrary.instance().list()) {
+            ids.add(e.id());
+            provNames.add(e.name());
         }
+        hasProviders = !ids.isEmpty();
+        providerIds = ids;
+        if (hasProviders && draft.providerId == null) draft.providerId = ids.get(0);
+        select(ry, t(ModLanguageData.Keys.PROVIDER_TITLE), provNames,
+                Math.max(0, providerIds.indexOf(draft.providerId)),
+                i -> draft.providerId = providerIds.get(i));
+        ry += ROW_H;
+
+        // 无 gamemode 权限:继承主人当前档,这一行置灰(悬停给解释)。
         modeInherited = !host.canChooseMode();
-        if (modeInherited) {
-            // 无 gamemode 权限:继承主人当前档,画成置灰格(render 里带悬停解释)。
-            draft.creative = host.ownerCreative();
-            modeBoxX = x + half + 6;
-            modeBoxY = rowY;
-            modeBoxW = half;
-        } else {
-            Dropdown modePick = ui.add(new Dropdown(
-                    List.of(t(ModLanguageData.Keys.SUMMON_MODE_SURVIVAL),
-                            t(ModLanguageData.Keys.SUMMON_MODE_CREATIVE)),
-                    draft.creative ? 1 : 0, i -> draft.creative = i == 1));
-            modePick.setBounds(x + half + 6, rowY, half, NumenStyle.CONTROL_H);
-        }
-        ry = rowY + NumenStyle.ROW_PITCH;
+        String survival = t(ModLanguageData.Keys.SUMMON_MODE_SURVIVAL);
+        String creative = t(ModLanguageData.Keys.SUMMON_MODE_CREATIVE);
+        if (modeInherited) draft.creative = host.ownerCreative();
+        modePick = select(ry, t("numen.summon.mode"),
+                modeInherited
+                        ? List.of(I18n.get(ModLanguageData.Keys.SUMMON_MODE_INHERITED, draft.creative ? creative : survival))
+                        : List.of(survival, creative),
+                modeInherited ? 0 : draft.creative ? 1 : 0,
+                i -> draft.creative = i == 1);
+        modePick.setEnabled(!modeInherited);
+        ry += ROW_H;
 
         // 声线可空(首项"无");皮肤默认按名字找同名正版。
-        int rowY2 = label(x, ry, ModLanguageData.Keys.VOICE_SUMMON_LABEL);
-        label(x + half + 6, ry, ModLanguageData.Keys.SUMMON_SKIN);
-        var voiceEntries = VoiceLibrary.instance().list();
-        hasVoices = !voiceEntries.isEmpty();
-        if (hasVoices) {
-            List<String> voiceNames = new ArrayList<>();
-            List<String> ids = new ArrayList<>();
-            ids.add(VOICE_NONE);
-            voiceNames.add(t(ModLanguageData.Keys.VOICE_BIND_NONE));
-            for (var e : voiceEntries) {
-                ids.add(e.id());
-                voiceNames.add(e.name());
-            }
-            voiceIds = ids;
-            Dropdown voicePick = ui.add(new Dropdown(voiceNames,
-                    Math.max(0, voiceIds.indexOf(draft.voiceId == null ? VOICE_NONE : draft.voiceId)),
-                    i -> {
-                        String id = voiceIds.get(i);
-                        draft.voiceId = VOICE_NONE.equals(id) ? null : id;
-                    }));
-            voicePick.setBounds(x, rowY2, half, NumenStyle.CONTROL_H);
+        List<String> voiceNames = new ArrayList<>();
+        List<String> vIds = new ArrayList<>();
+        vIds.add(VOICE_NONE);
+        voiceNames.add(t(ModLanguageData.Keys.VOICE_BIND_NONE));
+        for (var e : VoiceLibrary.instance().list()) {
+            vIds.add(e.id());
+            voiceNames.add(e.name());
         }
+        voiceIds = vIds;
+        select(ry, t(ModLanguageData.Keys.VOICE_SUMMON_LABEL), voiceNames,
+                Math.max(0, voiceIds.indexOf(draft.voiceId == null ? VOICE_NONE : draft.voiceId)),
+                i -> {
+                    String id = voiceIds.get(i);
+                    draft.voiceId = VOICE_NONE.equals(id) ? null : id;
+                });
+        ry += ROW_H;
+
         List<String> skinNames = new ArrayList<>();
         List<String> sIds = new ArrayList<>();
         sIds.add(SKIN_DEFAULT);
@@ -209,60 +182,41 @@ public final class SummonPanel implements ModalCard {
             }
         }
         skinIds = sIds;
-        Dropdown skinPick = ui.add(new Dropdown(skinNames,
+        select(ry, t(ModLanguageData.Keys.SUMMON_SKIN), skinNames,
                 Math.max(0, skinIds.indexOf(draft.skinId == null ? SKIN_DEFAULT : draft.skinId)),
-                i -> draft.skinId = skinIds.get(i)));
-        skinPick.setBounds(x + half + 6, rowY2, half, NumenStyle.CONTROL_H);
-        ry = rowY2 + NumenStyle.ROW_PITCH + 4;
+                i -> draft.skinId = skinIds.get(i));
 
+        // 页面级胶囊浮在标题那一行上:出现时它比标题要紧
         alert = ui.add(new InlineAlert());
-        alert.setBounds(x, y + 14, w, 24);
+        alert.setBounds(x + DialogBox.PAD_X, y + 2, w - DialogBox.PAD_X * 2, DialogBox.TITLE_H);
 
-        int bw = 64, gap = 8;
-        int bx = x + w - (bw * 2 + gap);   // Telegram 对话框的按钮靠右下
-        Button cancel = ui.add(new Button(t("numen.gui.settings.cancel"),
-                Button.Style.LINK, host::onCancel));
-        cancel.setBounds(bx, ry, bw, 16);
-        createButton = ui.add(new Button(t(ModLanguageData.Keys.SUMMON_CREATE),
-                Button.Style.LINK, this::submit));
-        createButton.setBounds(bx + bw + gap, ry, bw, 16);
+        createButton = buttons(t(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), host::onCancel,
+                t(ModLanguageData.Keys.SUMMON_CREATE), this::submit);
 
         ui.requestFocus(nameField);
     }
 
     // ---- 宿主转发面 ----
 
-    public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
-        if (modeInherited) {   // 置灰的继承档(不是控件:点不了才是本意)
-            NumenStyle.box(s, modeBoxX, modeBoxY, modeBoxW, NumenStyle.CONTROL_H,
-                    c.sectionBg(), c.inputBorder());
-            s.drawText(I18n.get(ModLanguageData.Keys.SUMMON_MODE_INHERITED,
-                            t(draft.creative ? ModLanguageData.Keys.SUMMON_MODE_CREATIVE
-                                    : ModLanguageData.Keys.SUMMON_MODE_SURVIVAL)),
-                    modeBoxX + 5, modeBoxY + (NumenStyle.CONTROL_H - s.lineHeight()) / 2 + 1,
-                    c.textMuted(), false);
-        }
-        ui.render(s, c, mouseX, mouseY, nowMs);
-    }
-
-    /** 悬停置灰模式格时的解释文案(宿主画 tooltip)。 */
+    /** 头部左边的空头像:她还没有脸,和 Telegram 新建联系人一样摆一个人形占位。 */
     @Override
-    public String tooltipAt(double mx, double my) {
-        if (!modeInherited) return null;
-        boolean over = mx >= modeBoxX && mx < modeBoxX + modeBoxW
-                && my >= modeBoxY && my < modeBoxY + NumenStyle.CONTROL_H;
-        return over ? t(ModLanguageData.Keys.SUMMON_MODE_INHERIT_TIP) : null;
+    protected void paint(McDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, float alpha) {
+        int px = photoX(), py = photoY(coverTop);
+        NumenStyle.box(s, px, py, PHOTO, PHOTO, c.sectionBg(), c.inputBorder());
+        int size = Sprites.SIZE * 2;   // 整数倍放大,像素图才不糊
+        icon(s.graphics(), Sprites.USER, px + (PHOTO - size) / 2, py + (PHOTO - size) / 2, size,
+                c.textSecondary(), alpha);
     }
 
-    public boolean mouseClicked(double mx, double my, int button) {
-        return ui.mouseClicked(mx, my, button);
+    /** 悬停置灰模式行时的解释文案(宿主画 tooltip)。 */
+    @Override
+    String tooltipAt(double mx, double my) {
+        return modeInherited && modePick != null && modePick.contains(mx, my)
+                ? t(ModLanguageData.Keys.SUMMON_MODE_INHERIT_TIP) : null;
     }
 
-    public boolean mouseScrolled(double mx, double my, double delta) {
-        return ui.mouseScrolled(mx, my, delta);
-    }
-
-    public boolean keyPressed(int keyCode, int modifiers) {
+    @Override
+    boolean keyPressed(int keyCode, int modifiers) {
         if (keyCode == com.dwinovo.numen.client.ui.KeyCodes.ENTER && !ui.hasOverlay()) {
             submit();   // Enter 是确认的兜底路径
             return true;
@@ -270,21 +224,12 @@ public final class SummonPanel implements ModalCard {
         return ui.keyPressed(keyCode, modifiers);
     }
 
-    public boolean charTyped(char ch) {
-        return ui.charTyped(ch);
-    }
-
     // ---- 内部 ----
 
-    private int label(int lx, int ly, String key) {
-        labelWidget(lx, ly, key);
-        return ly + NumenStyle.LABEL_PITCH;
-    }
-
-    private Label labelWidget(int lx, int ly, String key) {
-        Label l = ui.add(new Label(t(key), Label.Role.MUTED));
-        l.setBounds(lx, ly, 200, 9);
-        return l;
+    /** 提交后的等待态:胶囊说明在干嘛,创建钮自锁防重复点(异步查皮肤要一两秒)。 */
+    public void setBusy(String message) {
+        if (alert != null) alert.show(InlineAlert.Severity.INFO, message);
+        if (createButton != null) createButton.setEnabled(false);
     }
 
     /**
@@ -292,12 +237,6 @@ public final class SummonPanel implements ModalCard {
      * 名字限定 Minecraft 官方命名规则(3~16 位英文/数字/下划线)——中文名在玩家
      * 系统各处容易出错,而且名字同时就是皮肤来源:同名正版玩家的皮肤会自动穿上。
      */
-    /** 提交后的等待态:胶囊说明在干嘛,创建钮自锁防重复点(异步查皮肤要一两秒)。 */
-    public void setBusy(String message) {
-        if (alert != null) alert.show(InlineAlert.Severity.INFO, message);
-        if (createButton != null) createButton.setEnabled(false);
-    }
-
     private void submit() {
         String n = draft.name == null ? "" : draft.name.trim();
         if (n.isEmpty()) {

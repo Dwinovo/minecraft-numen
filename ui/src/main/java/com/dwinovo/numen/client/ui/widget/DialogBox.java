@@ -7,7 +7,7 @@ import com.dwinovo.numen.client.ui.NumenTheme;
 
 /**
  * 对话框的外壳:暗幕 + 方角卡,以及它的出现与消失。确认卡({@link ConfirmDialog})和面板里召唤、编辑、
- * 改名、邀请那几张卡都画这一个,暗幕与卡的样子、动效只在这里定。
+ * 改名、邀请那几张卡都画这一个,暗幕与卡的样子、动效、卡宽、边距、按钮行只在这里定。
  *
  * <p>动效照 Telegram 的 box(lib_ui {@code layer_widget.cpp} 的 BackgroundWidget):暗幕和卡同一段
  * {@link #SHOW_MS},暗幕的不透明度走 easeOutCirc,卡的不透明度线性走;关的时候同一条路倒着走,走完才算没了。
@@ -19,6 +19,38 @@ public final class DialogBox {
     public static final int SHOW_MS = 200;
     /** 暗幕:Telegram 的 layerBg(#0000007F),日间夜间同一个值。 */
     public static final int SCRIM = 0x7F000000;
+
+    // ---- 版式:Telegram 的 box(lib_ui layers.style)折成 GUI 像素 ----
+    // 横向按字宽折 0.7:MC 字形比 Telegram 13px 的正文窄三成,折完一行装下的字数相当;
+    // 纵向按行高折 0.5:MC 一行 11,Telegram 正文一行 22。
+    /** boxWidth 320:确认卡这类只有一段话的。 */
+    public static final int WIDTH = 224;
+    /** boxWideWidth 364:编辑联系人、建群这类带字段的。 */
+    public static final int WIDE_WIDTH = 256;
+    /** boxPadding / boxRowPadding 左右 24:卡里文字、字段到卡边。 */
+    public static final int PAD_X = 17;
+    /** 标题一行高(boxTitleHeight 48),标题字的顶边(boxTitlePosition.y 13)。 */
+    public static final int TITLE_H = 24;
+    public static final int TITLE_TOP = 7;
+    /** 没有标题的卡(确认卡):一段话上下的留白(boxPadding 上 14、下 8)。 */
+    public static final int TEXT_TOP = 7;
+    public static final int TEXT_BOTTOM = 4;
+    /** 按钮行(buttonPadding 6/10/10/10、buttonHeight 34):纯字钮靠右下,钮宽 = 字宽 + 30。 */
+    public static final int BUTTON_H = 17;
+    public static final int BUTTON_GAP = 4;
+    public static final int BUTTON_RIGHT = 7;
+    public static final int BUTTON_BOTTOM = 5;
+    public static final int FOOTER_H = 5 + BUTTON_H + BUTTON_BOTTOM;
+
+    /** 纯字钮的宽:字宽 + 两侧留白。 */
+    public static int buttonW(int textW) {
+        return textW + 21;
+    }
+
+    /** 按钮行的顶边:贴卡底。 */
+    public static int buttonTop(int cardY, int cardH) {
+        return cardY + cardH - BUTTON_BOTTOM - BUTTON_H;
+    }
 
     private boolean shown;
     /** 线性进度 0(没了)~1(全在);两个方向都以同一速度走。 */

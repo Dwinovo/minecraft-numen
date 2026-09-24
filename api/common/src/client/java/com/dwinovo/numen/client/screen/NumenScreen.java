@@ -870,7 +870,7 @@ public final class NumenScreen extends Screen {
     }
 
     private void buildCard() {
-        modalCard.build(modalX(), modalY0() + 6, modalW(), modalCardBottom() - modalY0(),
+        modalCard.build(modalCardX(), modalCardY(), modalCardW(), modalCardBottom() - modalCardY(),
                 top + panelH - 2);
     }
 
@@ -954,10 +954,6 @@ public final class NumenScreen extends Screen {
     private int modalCardX() { return left + (panelW - modalCardW()) / 2; }
     private int modalCardY() { return top + Math.max(10, (panelH - modalCardH()) / 2); }
     private int modalCardBottom() { return modalCardY() + Math.min(modalCardH(), panelH - 20); }
-    /** 卡内内容左缘 / 宽 / 行基准(行偏移沿用原布局表)。 */
-    private int modalX() { return modalCardX() + 10; }
-    private int modalW() { return modalCardW() - 20; }
-    private int modalY0() { return modalCardY() + 2; }
 
     /** 遣散确认:危险操作的最后一道闸——卡外点击吞掉、Esc 取消、删除钮红色。 */
     private void openDismissConfirm(UUID target) {
@@ -2061,8 +2057,8 @@ public final class NumenScreen extends Screen {
             tip(java.util.List.of(Component.translatable(ModLanguageData.Keys.HEADER_PROFILE)), mouseX, mouseY);
         }
         if (modalCard != null) {
-            // 模态卡:暗幕 + 居中卡(与确认卡同一个 DialogBox),卡里的东西(含脸)由卡自己画;
-            // 卡里一切跟着卡的不透明度走(着色器颜色乘进去,脸和字一起淡)。
+            // 模态卡:暗幕 + 居中卡(与确认卡同一个 DialogBox),卡里的东西(含脸)由卡自己画,
+            // 跟着卡的不透明度一起淡。
             long now = net.minecraft.Util.getMillis();
             if (!cardBox.advance(now)) {   // 淡没了:这才拆,背景的控件接着建回来
                 modalCard = null;
@@ -2074,9 +2070,7 @@ public final class NumenScreen extends Screen {
                         modalCardX(), modalCardY(), modalCardW(), modalCardBottom() - modalCardY());
                 boolean live = cardBox.shown();
                 int mx = live ? mouseX : Integer.MIN_VALUE, my = live ? mouseY : Integer.MIN_VALUE;
-                g.setColor(1f, 1f, 1f, cardBox.card());
-                modalCard.render(s, c, mx, my, now);
-                g.setColor(1f, 1f, 1f, 1f);
+                modalCard.render(s, c, mx, my, now, cardBox.card());
                 String modeTip = live ? modalCard.tooltipAt(mouseX, mouseY) : null;
                 if (modeTip != null) {
                     pendingTip = java.util.List.of(Component.literal(modeTip));

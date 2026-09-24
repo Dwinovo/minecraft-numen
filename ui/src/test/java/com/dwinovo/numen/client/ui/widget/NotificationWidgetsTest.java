@@ -112,12 +112,12 @@ class NotificationWidgetsTest {
         assertTrue(fx.root.hasOverlay(), "卡外点击不关闭(危险操作不给误触留门)");
     }
 
-    // 定点几何(与 ConfirmDialog 布局常数同步):dim 200×150,卡 190 宽居中
-    // → cardX=5;单行文案 cardH=44 → cardY=53,buttonY=77;
-    // confirmX=137,cancelX=79。常数变了这里跟着变——测试即几何文档。
+    // 定点几何(与 ConfirmDialog / DialogBox 版式常数同步):dim 200×150,卡宽 min(224, 200)=200
+    // → cardX=0;单行文案 cardH=7+9+4+27=47 → cardY=51,buttonY=76;钮宽=字宽+21=33,
+    // confirmX=200-7-33=160,cancelX=160-4-33=123。常数变了这里跟着变——测试即几何文档。
     private static final int BTN_ROW_Y = 82;
-    private static final int CONFIRM_CX = 142;
-    private static final int CANCEL_CX = 84;
+    private static final int CONFIRM_CX = 170;
+    private static final int CANCEL_CX = 135;
 
     @Test
     void confirmRunsActionAndCloses() {

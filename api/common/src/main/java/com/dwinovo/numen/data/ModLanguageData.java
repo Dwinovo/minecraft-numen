@@ -271,6 +271,9 @@ public final class ModLanguageData {
         public static final String FOLDER_CHATS          = "numen.folder.chats";
         // 消息通知(右下角的小卡)
         public static final String SETTINGS_MESSAGE_NOTICES = "numen.settings.message_notices";
+        // 面板里的对话框卡的标题
+        public static final String EDIT_COMPANION_TITLE = "numen.edit.companion_title";
+        public static final String CONVO_EDIT_TITLE     = "numen.convo.edit_title";
     }
 
     /** Loader-side providers funnel both English and Simplified Chinese through here. */
@@ -707,6 +710,8 @@ public final class ModLanguageData {
         adder.add(Keys.FOLDER_NAME,           "Folder name");
         adder.add(Keys.FOLDER_CHATS,          "Chats in this folder");
         adder.add(Keys.SETTINGS_MESSAGE_NOTICES, "Message notifications (a card for chats you aren't viewing)");
+        adder.add(Keys.EDIT_COMPANION_TITLE,   "Edit companion");
+        adder.add(Keys.CONVO_EDIT_TITLE,       "Edit conversation");
     }
 
     private static void addZh(Adder adder) {
@@ -1132,5 +1137,7 @@ public final class ModLanguageData {
         adder.add(Keys.FOLDER_NAME,           "分组名");
         adder.add(Keys.FOLDER_CHATS,          "包含的会话");
         adder.add(Keys.SETTINGS_MESSAGE_NOTICES, "消息通知(没在看的会话里她说了话,右下角弹一张卡)");
+        adder.add(Keys.EDIT_COMPANION_TITLE,   "编辑同伴");
+        adder.add(Keys.CONVO_EDIT_TITLE,       "编辑会话");
     }
 }
