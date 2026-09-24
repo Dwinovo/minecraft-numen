@@ -29,7 +29,7 @@ import java.util.function.Function;
 /**
  * 同伴资料页,照 Telegram 资料页的顺序排,整页可滚:
  * <ol>
- *   <li>顶部居中:她的立体模型(Telegram 的大头像)、名字、状态、心与鸡腿,下面一排操作块(发消息、编辑);</li>
+ *   <li>顶部居中:她的大头像(Telegram 资料页那样)、名字、状态、心与鸡腿,下面一排操作块(发消息、编辑);</li>
  *   <li>资料行:左一枚图标,值在上、它是什么在下(人设、模型、声线、上下文、距离、游戏模式);</li>
  *   <li>物品:装备与副手、合成格、背包与快捷栏(Telegram 的共享媒体那一节);</li>
  *   <li>页底一行红字:遣散。</li>
@@ -41,7 +41,8 @@ final class ProfilePage {
     /** 点中了什么。 */
     enum Hit { MESSAGE, EDIT, DISMISS }
 
-    private static final int MODEL_W = 64, MODEL_H = 76;
+    /** 大头像的边长:脸是 8×8 像素,取整数倍放大才不糊。 */
+    private static final int AVATAR = 48;
     private static final int ICON = 9;
     private static final int SLOT = 18;
     private static final int TILE_H = 30;
@@ -121,15 +122,9 @@ final class ProfilePage {
         g.enableScissor(x, y, x + w, y + h);
         int cy = y + 8 - Math.round(scroll);
 
-        // ---- 顶部:立体模型当头像,名字、状态、体征、操作块 ----
-        int mx0 = cx - MODEL_W / 2;
-        if (e != null) {
-            net.minecraft.client.gui.screens.inventory.InventoryScreen.renderEntityInInventoryFollowsMouse(
-                    g, mx0, cy, mx0 + MODEL_W, cy + MODEL_H, 34, 0.0625f, mouseX, mouseY, e);
-        } else {
-            CompanionFace.draw(g, who, KnownSkins.of(who), cx - 24, cy + (MODEL_H - 48) / 2, 48);
-        }
-        cy += MODEL_H + 4;
+        // ---- 顶部:大头像,名字、状态、体征、操作块 ----
+        CompanionFace.draw(g, who, KnownSkins.of(who), cx - AVATAR / 2, cy, AVATAR);
+        cy += AVATAR + 7;
         Component name = Component.literal(NumenRoster.instance().name(who)).withStyle(ChatFormatting.BOLD);
         Nb.text(g, font, name, cx - font.width(name) / 2, cy, t.text());
         cy += 12;
