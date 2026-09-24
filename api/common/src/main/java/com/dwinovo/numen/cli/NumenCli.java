@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -131,6 +132,9 @@ public final class NumenCli {
         if (group == null) {
             return rootListing().first();
         }
+        if (group.direct() != null) {
+            return CommandHelp.action(group.direct());
+        }
         Action action = path.size() > 2 ? group.action(path.get(2)) : null;
         return action == null ? CommandHelp.group(group).first() : CommandHelp.action(action);
     }
@@ -139,11 +143,35 @@ public final class NumenCli {
         return CommandHelp.root(GROUPS.values());
     }
 
-    /** 一个显示列表的帮助节点:不带标志是第一页,{@code --page N} 翻页。 */
+    /** 一个显示列表的帮助节点:不带标志是第一页,{@code --page N} 翻页。在哪一侧解析就在哪一侧回。 */
     static LiteralArgumentBuilder<CommandSource> helpNode(String literal, Supplier<CommandHelp.Listing> listing) {
+        return pagedHelp(literal, (source, page) -> source.reply(TaskResult.ok(listing.get().page(page)).toJson()));
+    }
+
+    /**
+     * 列表只有服务端算得出的帮助节点(按这具身体此刻的样子列):客户端解析到它时把这次调用原样送去服务端,
+     * 服务端算出列表再翻页。
+     */
+    static LiteralArgumentBuilder<CommandSource> serverHelpNode(String literal,
+                                                               Function<ServerSource, CommandHelp.Listing> listing) {
+        return pagedHelp(literal, (source, page) -> {
+            switch (source) {
+                case ClientSource client -> client.forwardToServer();
+                case ServerSource server -> server.reply(TaskResult.ok(listing.apply(server).page(page)).toJson());
+            }
+        });
+    }
+
+    /** 回一页帮助;页码不存在时抛出,和别的解析错误一样附着用法回去。 */
+    @FunctionalInterface
+    private interface PageShown {
+        void show(CommandSource source, int page) throws CommandSyntaxException;
+    }
+
+    private static LiteralArgumentBuilder<CommandSource> pagedHelp(String literal, PageShown help) {
         Command<CommandSource> show = ctx -> {
             Integer page = CommandArgs.fromCommand(List.of(), ctx, FlagsArgument.valuesIn(ctx)).get(PAGE);
-            ctx.getSource().reply(TaskResult.ok(listing.get().page(page == null ? 1 : page)).toJson());
+            help.show(ctx.getSource(), page == null ? 1 : page);
             return Command.SINGLE_SUCCESS;
         };
         return LiteralArgumentBuilder.<CommandSource>literal(literal)

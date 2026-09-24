@@ -13,8 +13,8 @@ import java.util.List;
  * 语法只有这一个来源,技能里不抄。
  *
  * <p>三层:根(列出各组,一组一句)、组(列出动作,一行用法一句说明)、动作(用法、说明、逐个参数)。
- * 前两层是列表,每页 {@value #PAGE_SIZE} 行,超出时说还剩多少、下一页怎么翻({@code --page})。
- * 解析出错时附上的就是出错那一层的第一页或动作帮助。
+ * 前两层是列表,每页 {@value #PAGE_SIZE} 行,超出时说还剩多少、下一页怎么翻({@code --page})。带目录的动作
+ * ({@link Action#catalog})的帮助后面接着那张目录,同样分页。解析出错时附上的就是出错那一层的第一页或动作帮助。
  */
 final class CommandHelp {
 
@@ -25,7 +25,7 @@ final class CommandHelp {
 
     private CommandHelp() {}
 
-    /** 一张可翻页的列表:抬头、条目、结尾一句,以及翻页时要写的那条命令。 */
+    /** 一张可翻页的列表:抬头、条目、结尾一句(可以没有),以及翻页时要写的那条命令。 */
     record Listing(String head, List<String> lines, String foot, String again) {
 
         int pages() {
@@ -57,7 +57,7 @@ final class CommandHelp {
                         .append(lines.size() - to).append(" more: ").append(again)
                         .append(" --page ").append(page + 1).append(')');
             }
-            return sb.append('\n').append(foot).toString();
+            return foot.isEmpty() ? sb.toString() : sb.append('\n').append(foot).toString();
         }
     }
 
@@ -100,6 +100,12 @@ final class CommandHelp {
             sb.append("\nShortcut tool: ").append(action.toolName()).append('.');
         }
         return sb.toString();
+    }
+
+    /** 带目录的动作:动作的帮助,接着目录的标题与这具身体此刻的条目。 */
+    static Listing catalog(Action action, ServerSource source) {
+        return new Listing(action(action) + "\n" + action.catalogTitle(), action.catalogLines(source), "",
+                action.path() + " " + NumenCli.HELP_FLAG);
     }
 
     /** 一组一句:根帮助与系统提示索引共用。 */

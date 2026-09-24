@@ -20,6 +20,9 @@ import java.util.regex.Pattern;
  * 当场报解析错误;真正执行时,源对象在哪一侧、函数属于哪一侧,{@link #execute} 一处决定——客户端遇到服务端动作
  * 就把调用送过去,服务端遇到客户端动作如实拒绝。专用服务器上客户端动作的函数照样登记着(帮助要用它的说明),
  * 只是永远不会在那里被调用。
+ *
+ * <p>一组也可以直接就是一个动作({@link CommandGroup#serverDirect}):它没有动作名,参数紧跟在组名后面
+ * ({@code numen mc <command...>})。
  */
 public final class Action implements Command<CommandSource> {
 
@@ -38,7 +41,17 @@ public final class Action implements Command<CommandSource> {
         void run(ClientSource source, CommandArgs args);
     }
 
+    /**
+     * 帮助里一张只有服务端答得出的目录:按这一刻、这具身体算出来的条目,一行一条(比如服务器按她的权限等级
+     * 让她用的原版指令)。
+     */
+    @FunctionalInterface
+    public interface Catalog {
+        List<String> lines(ServerSource source);
+    }
+
     private final CommandGroup group;
+    /** 动作名;组直接就是这个动作时为 null。 */
     private final String name;
     private final String summary;
     private final List<Param<?>> params;
@@ -46,6 +59,8 @@ public final class Action implements Command<CommandSource> {
     private final OnClient onClient;
     private String toolName;
     private String toolDescription;
+    private String catalogTitle;
+    private Catalog catalog;
 
     Action(CommandGroup group, String name, String summary, List<Param<?>> params,
            OnServer onServer, OnClient onClient) {
@@ -71,6 +86,23 @@ public final class Action implements Command<CommandSource> {
         }
         this.toolName = toolName;
         this.toolDescription = description;
+        return this;
+    }
+
+    /**
+     * 帮助末尾再列一张目录,标题是 {@code title}。目录只有服务端答得出,所以这个动作的 {@code --help} 在客户端
+     * 解析到时把调用送去服务端,在那边算出来,和组的列表一样分页、认 {@code --page}。
+     */
+    public Action catalog(String title, Catalog lines) {
+        group.requireOpen();
+        if (this.catalog != null) {
+            throw new IllegalStateException(path() + " 已经有一张目录了");
+        }
+        if (title == null || title.isBlank() || lines == null) {
+            throw new IllegalArgumentException(path() + " 的目录要有标题和条目");
+        }
+        this.catalogTitle = title;
+        this.catalog = lines;
         return this;
     }
 
@@ -101,16 +133,22 @@ public final class Action implements Command<CommandSource> {
         }
     }
 
-    /**
-     * 这一格在 Brigadier 树上的样子:{@code --help};必填参数依次一格一格往下接,最后一格可执行;有可选参数的话,
-     * 可执行的那一格下面再挂一格标志尾巴,同样可执行。
-     */
+    /** 具名动作在 Brigadier 树上的那一格:动作名,下面是 {@link #fill} 挂的东西。 */
     LiteralArgumentBuilder<CommandSource> node() {
-        LiteralArgumentBuilder<CommandSource> node = LiteralArgumentBuilder.literal(name);
-        node.then(LiteralArgumentBuilder.<CommandSource>literal(NumenCli.HELP_FLAG).executes(ctx -> {
-            ctx.getSource().reply(TaskResult.ok(CommandHelp.action(this)).toJson());
-            return Command.SINGLE_SUCCESS;
-        }));
+        return fill(LiteralArgumentBuilder.<CommandSource>literal(name));
+    }
+
+    /**
+     * 往 {@code node} 下面挂这个动作:{@code --help};必填参数依次一格一格往下接,最后一格可执行;有可选参数的话,
+     * 可执行的那一格下面再挂一格标志尾巴,同样可执行。具名动作挂在自己那一格下,组直接就是它时挂在组那一格下。
+     */
+    <B extends ArgumentBuilder<CommandSource, B>> B fill(B node) {
+        node.then(catalog == null
+                ? LiteralArgumentBuilder.<CommandSource>literal(NumenCli.HELP_FLAG).executes(ctx -> {
+                    ctx.getSource().reply(TaskResult.ok(CommandHelp.action(this)).toJson());
+                    return Command.SINGLE_SUCCESS;
+                })
+                : NumenCli.serverHelpNode(NumenCli.HELP_FLAG, source -> CommandHelp.catalog(this, source)));
         List<Param<?>> required = positionals();
         if (required.isEmpty()) {
             executable(node);
@@ -154,9 +192,9 @@ public final class Action implements Command<CommandSource> {
         return summary;
     }
 
-    /** {@code numen <组> <动作>}。 */
+    /** {@code numen <组> <动作>};组直接就是这个动作时是 {@code numen <组>}。 */
     String path() {
-        return NumenCli.ROOT + " " + group.name() + " " + name;
+        return NumenCli.ROOT + " " + group.name() + (name == null ? "" : " " + name);
     }
 
     /** 整行用法:路径 + 必填参数 + 标志。 */
@@ -183,5 +221,15 @@ public final class Action implements Command<CommandSource> {
 
     String toolDescription() {
         return toolDescription;
+    }
+
+    /** 目录的标题;没有目录是 {@code null}。 */
+    String catalogTitle() {
+        return catalogTitle;
+    }
+
+    /** 这具身体此刻的目录条目。只在服务端调。 */
+    List<String> catalogLines(ServerSource source) {
+        return catalog.lines(source);
     }
 }
