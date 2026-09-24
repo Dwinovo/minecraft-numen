@@ -186,7 +186,8 @@ public final class LibraryListPanel<T> {
         title.setBounds(x, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 9), w - 70, 9);
         int actionRight = x + w;   // 标题行按钮从右往左排
         if (addKey != null) {
-            Button add = ui.add(new Button(t(addKey), Button.Style.ACCENT, onAdd));
+            // 新建是轻的:平时只有字,悬停才浮出底(Telegram 列表顶上的"添加"不是一整块色)
+            Button add = ui.add(new Button(t(addKey), Button.Style.GHOST, onAdd));
             add.setBounds(x + w - 56, y, 56, NumenStyle.HEADER_H);
             actionRight = x + w - 56 - 6;
         }
