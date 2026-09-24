@@ -267,6 +267,9 @@ public final class ChatView {
      * 这次看的时候那条一直在(Telegram 也是离开才消)。-1 = 下一帧现取;{@link Long#MAX_VALUE} = 打开时没有未读。
      */
     private long unreadSince = -1;
+    /** 顶上浮着的日期牌:露出多少(0..1)、写的哪天(淡出的时候还要画它)。 */
+    private float dayShown;
+    private String floatingDay;
 
     /** Re-pin to the bottom (a message was just sent). */
     public void pinToBottom() {
@@ -341,11 +344,22 @@ public final class ChatView {
 
         g.enableScissor(x, y, x + w, y + h);
         int cy = y + TOP_PAD - Math.round(scrollPos);
+        String floatDay = null;
         for (int i = 0; i < blocks.size(); i++) {
             Block b = blocks.get(i);
             int bh = heightOf(b);
+            if (b instanceof Divider d && cy < y) floatDay = d.text();   // 已经翻过顶的最近那枚日期牌
             if (cy + bh > y && cy < y + h) drawBlock(g, b, x, cy, w);
             cy += bh + gapAfter(blocks, i);
+        }
+        // 翻的时候顶上浮一枚眼前这一屏是哪天(Telegram),停下来一会儿淡出
+        boolean scrolling = frameNow - lastScrollMs < 900 || barDragging || Math.abs(scrollPos - scrollTarget) > 0.5f;
+        dayShown = Math.clamp(dayShown + (scrolling && floatDay != null ? dt : -dt) * 6f, 0f, 1f);
+        if (floatDay != null) floatingDay = floatDay;
+        if (dayShown > 0.02f && floatingDay != null) {
+            g.setColor(1f, 1f, 1f, dayShown);
+            drawDayChip(g, floatingDay, x, y + 3, w);
+            g.setColor(1f, 1f, 1f, 1f);
         }
         g.disableScissor();
 
@@ -1020,14 +1034,7 @@ public final class ChatView {
 
     private void drawBlockBody(GuiGraphics g, Block b, int x, int y, int w) {
         switch (b) {
-            case Divider d -> {
-                // 居中的日期小牌:一圈描边、极淡底,和工具行同一层的"这不是话"
-                int tw = font.width(d.text());
-                int bx = x + (w - SB_W - tw) / 2 - 5;
-                NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), bx, y, tw + 10, LINE_H + 4,
-                        (CHIP_FILL & 0xFFFFFF) | (((CHIP_FILL >>> 24) / 2) << 24), TRACE_BAR);
-                draw(g, Nb.colored(d.text(), MUTED).getVisualOrderText(), bx + 5, y + 3);
-            }
+            case Divider d -> drawDayChip(g, d.text(), x, y, w);
             case Notice n -> {
                 FormattedCharSequence line = Nb.colored(fitOneLine(n.text(), w - SB_W), FAINT).getVisualOrderText();
                 int tw = font.width(line);
@@ -1041,6 +1048,15 @@ public final class ChatView {
             case Bubble bb -> drawBubble(g, bb, x, y, w);
             case Chip c -> drawChip(g, c, x, y);
         }
+    }
+
+    /** 居中的日期小牌:一圈描边、极淡底,和工具行同一层的"这不是话"。对话里的和翻页时浮在顶上的是同一枚。 */
+    private void drawDayChip(GuiGraphics g, String text, int x, int y, int w) {
+        int tw = font.width(text);
+        int bx = x + (w - SB_W - tw) / 2 - 5;
+        NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), bx, y, tw + 10, LINE_H + 4,
+                (CHIP_FILL & 0xFFFFFF) | (((CHIP_FILL >>> 24) / 2) << 24), TRACE_BAR);
+        draw(g, Nb.colored(text, MUTED).getVisualOrderText(), bx + 5, y + 3);
     }
 
     private void drawBubble(GuiGraphics g, Bubble b, int x, int y, int w) {
