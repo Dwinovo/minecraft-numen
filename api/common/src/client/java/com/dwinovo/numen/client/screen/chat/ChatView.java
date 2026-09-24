@@ -268,6 +268,7 @@ public final class ChatView {
         lastFrameMs = 0;
         live.clear();
         expandedGroups.clear();
+        ticked.clear();
         splits.clear();
         flattened.clear();
         born.clear();
@@ -655,6 +656,14 @@ public final class ChatView {
     /** 清单里的一项:状态(画方格用)和折好的行。 */
     private record CheckRow(PlanChecklist.State state, List<FormattedCharSequence> lines) {}
 
+    /** 打勾的过渡:方格从中间往外填满,满了再出勾。 */
+    private static final int TICK_MS = 220;
+    /**
+     * 清单里每项第一次被看见打上勾的时刻,键见 {@link #tickKey};0 = 打开面板时就已经勾上,不播过渡。
+     * 勾又被取消就删掉,再勾上重新播。只按归并完的最终那份记({@link #settleTicks}),同一份计划前后几版不来回翻。
+     */
+    private final java.util.Map<String, Long> ticked = new java.util.HashMap<>();
+
     /** 清单的方格边长,和方格那一列的宽(方格 + 离字的缝)。 */
     private static final int BOX = 7;
     private static final int BOX_COL = BOX + 4;
@@ -1015,7 +1024,28 @@ public final class ChatView {
             notice(out, I18n.get("numen.chat.empty", conv.get().displayName(NumenRoster.instance()::name)), bubbleMaxW);
         }
         settleRuns(out);
+        settleTicks(out, opening);
         return out;
+    }
+
+    /** 清单里这一项的勾记在哪个键下:她、哪一条清单(第一次出现的记录序号)、第几项、内容。 */
+    private static String tickKey(Checklist c, int i) {
+        return c.who() + "#" + c.entry() + "#" + i + "#" + c.items().get(i).content();
+    }
+
+    /** 按这一遍的最终清单记下每项什么时候打上的勾;{@code opening} 时已经勾上的算历史,不播。 */
+    private void settleTicks(List<Block> out, boolean opening) {
+        for (Block b : out) {
+            if (!(b instanceof Checklist c)) continue;
+            for (int i = 0; i < c.items().size(); i++) {
+                String key = tickKey(c, i);
+                if (c.items().get(i).state() == PlanChecklist.State.COMPLETED) {
+                    ticked.computeIfAbsent(key, k -> opening ? 0L : frameNow);
+                } else {
+                    ticked.remove(key);
+                }
+            }
+        }
     }
 
     /**
@@ -1400,8 +1430,9 @@ public final class ChatView {
         int ty = bubTop + PAD_V + 1;
         draw(g, Nb.colored(c.header(), MENTION).getVisualOrderText(), tx, ty);
         ty += LINE_H;
-        for (CheckRow r : c.rows()) {
-            checkBox(g, r.state(), tx, ty);
+        for (int i = 0; i < c.rows().size(); i++) {
+            CheckRow r = c.rows().get(i);
+            checkBox(g, r.state(), ticked.getOrDefault(tickKey(c, i), 0L), tx, ty);
             for (FormattedCharSequence l : r.lines()) {
                 draw(g, l, tx + BOX_COL, ty);
                 ty += LINE_H;
@@ -1415,11 +1446,20 @@ public final class ChatView {
 
     /**
      * 一项前面的方格(贴着字的第一行,与字同高):没做空心,正在做的边框呼吸(透明度来回,"正在做"是活的),
-     * 做完实心成功色、里面一枚白勾;划掉的空心,字已经划了线。
+     * 做完实心成功色、里面一枚白勾——刚勾上的({@code tickedAt} 非 0)先从中间往外填满,满了才出勾;
+     * 划掉的空心,字已经划了线。
      */
-    private void checkBox(GuiGraphics g, PlanChecklist.State state, int x, int y) {
+    private void checkBox(GuiGraphics g, PlanChecklist.State state, long tickedAt, int x, int y) {
         switch (state) {
             case COMPLETED -> {
+                float e = tickedAt == 0L ? 1f : Anim.easeOutCubic((frameNow - tickedAt) / (float) TICK_MS);
+                if (e < 1f) {
+                    int size = 1 + 2 * Math.round((BOX - 1) / 2f * e);   // 奇数边长,始终居中
+                    int in = (BOX - size) / 2;
+                    Nb.border(g, x, y, BOX, BOX, 1, OK);
+                    g.fill(x + in, y + in, x + in + size, y + in + size, OK);
+                    return;
+                }
                 g.fill(x, y, x + BOX, y + BOX, OK);
                 // 像素勾:短边两格往右下,长边三格往右上
                 int[][] tick = {{1, 3}, {2, 4}, {3, 3}, {4, 2}, {5, 1}};
