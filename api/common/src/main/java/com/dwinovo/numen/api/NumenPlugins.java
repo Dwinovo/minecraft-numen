@@ -3,14 +3,23 @@ package com.dwinovo.numen.api;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
+import com.dwinovo.numen.api.persona.PersonaExtension;
 import com.dwinovo.numen.entity.CompanionEvents;
+import com.dwinovo.numen.entity.NumenPlayer;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.server.level.ServerPlayer;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.UUID;
 import java.util.function.BiFunction;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -37,6 +46,7 @@ public final class NumenPlugins {
     private static volatile boolean clientReady;
 
     private static final NumenApi API = new Impl();
+    private static final List<PersonaExtension> PERSONA_EXTENSIONS = new CopyOnWriteArrayList<>();
 
     private NumenPlugins() {}
 
@@ -97,6 +107,55 @@ public final class NumenPlugins {
         return sb.toString();
     }
 
+    /** Client-side persona parsing: extensions consume their own opaque blocks in registration order. */
+    public static ParsedPersona parsePersona(String markdown) {
+        String prompt = markdown == null ? "" : markdown;
+        Map<String, String> data = new LinkedHashMap<>();
+        for (PersonaExtension extension : PERSONA_EXTENSIONS) {
+            PersonaExtension.Parsed parsed = extension.parse(prompt);
+            if (parsed == null) throw new IllegalArgumentException(
+                    "Persona extension returned no parse result: " + extension.id());
+            prompt = parsed.promptText();
+            data.put(extension.id(), parsed.data());
+        }
+        return new ParsedPersona(prompt, data);
+    }
+
+    public static List<PersonaExtension> personaExtensions() {
+        return List.copyOf(PERSONA_EXTENSIONS);
+    }
+
+    /** Client-side persona serialization: each extension adds its opaque data to Markdown. */
+    public static String composePersona(String prompt, Map<String, String> data) {
+        String result = prompt == null ? "" : prompt.strip();
+        for (PersonaExtension extension : PERSONA_EXTENSIONS) {
+            String value = data == null ? null : data.get(extension.id());
+            if (value != null && !value.isBlank()) result = extension.compose(result, value);
+        }
+        return result;
+    }
+
+    /** Called by the summon packet after Numen has created or woken the companion. */
+    public static void applyPersonaData(ServerPlayer owner, NumenPlayer companion,
+                                        Map<String, String> data) {
+        if (data == null || data.isEmpty()) return;
+        for (PersonaExtension extension : PERSONA_EXTENSIONS) {
+            String value = data.get(extension.id());
+            if (value == null || value.isBlank()) continue;
+            try {
+                extension.onSummon(owner, companion, value);
+            } catch (RuntimeException e) {
+                Constants.LOG.error("[numen] persona extension {} failed during summon", extension.id(), e);
+            }
+        }
+    }
+
+    public record ParsedPersona(String promptText, Map<String, String> extensionData) {
+        public ParsedPersona {
+            extensionData = Map.copyOf(extensionData);
+        }
+    }
+
     private static final List<Runnable> PENDING = new ArrayList<>();
     private static final List<Path> PENDING_SKILLS = new ArrayList<>();
 
@@ -118,6 +177,47 @@ public final class NumenPlugins {
         @Override
         public void registerTool(NumenTool tool) {
             ToolRegistry.register(tool);
+        }
+
+        @Override
+        public void registerPersonaExtension(PersonaExtension extension) {
+            if (extension == null) return;
+            String id = extension.id();
+            if (id == null || !id.matches("[a-z0-9_.-]+:[a-z0-9_./-]+")) {
+                throw new IllegalArgumentException("Persona extension id must be namespaced: " + id);
+            }
+            synchronized (PERSONA_EXTENSIONS) {
+                if (PERSONA_EXTENSIONS.stream().anyMatch(existing -> existing.id().equals(id))) {
+                    throw new IllegalStateException("Duplicate persona extension: " + id);
+                }
+                PERSONA_EXTENSIONS.add(extension);
+            }
+        }
+
+        @Override
+        public <T extends CustomPacketPayload> void registerClientToServer(
+                CustomPacketPayload.Type<T> type,
+                StreamCodec<? super RegistryFriendlyByteBuf, T> codec,
+                BiConsumer<T, ServerPlayer> handler) {
+            com.dwinovo.numen.platform.Services.NETWORK.registerClientToServer(type, codec, handler);
+        }
+
+        @Override
+        public <T extends CustomPacketPayload> void registerServerToClient(
+                CustomPacketPayload.Type<T> type,
+                StreamCodec<? super RegistryFriendlyByteBuf, T> codec,
+                Consumer<T> handler) {
+            com.dwinovo.numen.platform.Services.NETWORK.registerServerToClient(type, codec, handler);
+        }
+
+        @Override
+        public void sendToServer(CustomPacketPayload payload) {
+            com.dwinovo.numen.platform.Services.NETWORK.sendToServer(payload);
+        }
+
+        @Override
+        public void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
+            com.dwinovo.numen.platform.Services.NETWORK.sendToPlayer(player, payload);
         }
 
         @Override

@@ -108,19 +108,30 @@ ToolRegistry.register(new SendQqMessageTool());
 
 `invoke` 通过唯一的动词 `ToolCall.complete(json)` 报告结果——同步报告，或把活儿交给别的线程/服务端身体之后再报告。`ToolRegistry.register` 遇到重名会抛异常，并保留注册顺序（稳定的工具顺序有利于提示词缓存）。
 
+### 附属模组扩展入口
+
+附属模组可以注册通用扩展，而不需要让 Numen 认识它自己的数据结构或玩法：
+
+- `PersonaExtension` 管理人设 Markdown 中属于该附属模组的命名空间数据。Numen 会从发给 AI 的正文中剥离这些数据，并在召唤时交给扩展；扩展负责验证和解释数据。
+- 客户端附属模组可通过 `NumenStatusPages.register(...)` 为同伴状态页添加页面，实现 `NumenStatusPage` 的渲染与输入回调。
+- `NumenApi` 提供附属模组自定义的客户端到服务端、服务端到客户端数据包注册和发送入口。
+- `NumenApi.contributeState(...)` 可为每轮请求补充附属模组拥有的运行时上下文。
+
 ### 哪些是稳定的
 
 公共 API 就是那些在 `package-info` 里明确声明为公共的包，沿用 Applied Energistics 2 的约定。这些包之外的一切、或包内标了 `@Internal` 的成员，都可能在任意版本变动。
 
 | 包 | 公共类型 | 作用 |
 |---|---|---|
-| `com.dwinovo.numen.api` | `NumenGateway`、`NumenActuator` | 喂输入 / 驱动同伴的两扇门 |
+| `com.dwinovo.numen.api` | `NumenGateway`、`NumenActuator`、`NumenApi`、`NumenPlugins` | 喂输入、驱动同伴与注册扩展 |
+| `com.dwinovo.numen.api.persona` | `PersonaExtension` | 人设扩展数据 |
+| `com.dwinovo.numen.client.api` | `NumenStatusPage`、`NumenStatusPages` | 客户端状态页扩展 |
 | `com.dwinovo.numen.agent.tool` | `NumenTool`、`ToolRegistry`、`ToolCall` | 工具契约 + 注册 |
 | `com.dwinovo.numen.agent.tool.api` | `ToolContext` | 服务端工具的单次调用上下文 |
 | `com.dwinovo.numen.task` | `TaskResult` | 工具交回的结果信封 |
 | `com.dwinovo.numen.entity` | `NumenPlayer` | 服务端的同伴身体 |
 
-其余一切——各家模型接入、对话回路、记忆、技能系统、网络、UI——都是 `@Internal`。需要一份完整的参考实现？[numen-core](https://github.com/Dwinovo/minecraft-numen) 的全部工具与技能都构建在这套 API 之上，没有走任何后门。
+除表中的 API 和上述扩展入口外，其余一切——各家模型接入、对话回路、记忆、技能系统、内部网络与 UI——都是 `@Internal`。需要一份完整的参考实现？[numen-core](https://github.com/Dwinovo/minecraft-numen) 的全部工具与技能都构建在这套 API 之上，没有走任何后门。
 
 ---
 

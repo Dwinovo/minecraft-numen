@@ -1096,7 +1096,7 @@ public final class EntityAgentLoop {
     /** 人设正文:库里现取(编辑立即生效);没绑或条目没了 → null,回落全局默认人格。 */
     private String personaText() {
         var p = persona();
-        return p == null ? null : p.text();
+        return p == null ? null : p.promptText();
     }
 
     /** 人设名(面板显示用),没绑或条目没了则 null。 */

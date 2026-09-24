@@ -23,6 +23,11 @@ public final class CompanionEvent<T> {
     /** 身体正在离开世界(休眠 / 注销 / 死亡后消失)。此刻它还在,之后就没了。 */
     public static final CompanionEvent<NumenPlayer> REMOVE = new CompanionEvent<>("companion_remove");
 
+    /** A companion's roster entry was permanently deleted, not merely unloaded or put to sleep. */
+    public static final CompanionEvent<Forgotten> FORGET = new CompanionEvent<>("companion_forget");
+
+    public record Forgotten(net.minecraft.server.MinecraftServer server, UUID companion) {}
+
     /** 身体刚死,尸体还没被清走。 */
     public static final CompanionEvent<NumenPlayer> DEATH = new CompanionEvent<>("companion_death");
 

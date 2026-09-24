@@ -1,6 +1,8 @@
 package com.dwinovo.numen.client.screen;
 
 import com.dwinovo.numen.client.ui.TokenFormat;
+import com.dwinovo.numen.client.api.NumenStatusPage;
+import com.dwinovo.numen.client.api.NumenStatusPages;
 import com.dwinovo.numen.agent.llm.NumenLlmClient;
 
 import com.dwinovo.numen.agent.llm.ConvoLog;
@@ -60,6 +62,7 @@ import java.util.UUID;
 public final class NumenScreen extends Screen {
 
     private enum Tab { CHAT, ITEMS, SETTINGS }
+    private static final String INVENTORY_PAGE_ID = "numen:inventory";
 
     // ---- layout ----
     // 面板随窗口伸缩,两端夹住:下限保证小窗口下不挤,上限挡住大屏上的无限变宽
@@ -174,6 +177,7 @@ public final class NumenScreen extends Screen {
     private UUID uuid;       // active companion (mutable — the rail switches it in place)
     private String name;
     private Tab tab = Tab.CHAT;
+    private String statusPageId = INVENTORY_PAGE_ID;
 
 
     /** 召唤页的皮肤下拉:null = 默认(按名字找同名正版)。 */
@@ -291,7 +295,7 @@ public final class NumenScreen extends Screen {
         uuid = u; name = n;
         chatView.reset();
         rebuild();
-        if (tab == Tab.ITEMS && u != null) requestInventory();
+        if (tab == Tab.ITEMS && u != null) requestActiveStatusPage();
     }
 
     private EntityAgentLoop loop() {
@@ -365,6 +369,10 @@ public final class NumenScreen extends Screen {
         @Override public void onCreate(SummonPanel.Draft d) {
             // 选择按名字记账;CompanionListPayload 在新同伴到达时套用。
             if (d.personaId != null) com.dwinovo.numen.persona.PersonaLibrary.pendSummon(d.name, d.personaId);
+            var selectedPersona = d.personaId == null ? null
+                    : com.dwinovo.numen.persona.PersonaLibrary.instance().get(d.personaId);
+            java.util.Map<String, String> personaData = selectedPersona == null
+                    ? java.util.Map.of() : selectedPersona.extensionData();
             com.dwinovo.numen.agent.llm.ProviderLibrary.pendSummon(d.name, d.providerId);
             if (d.voiceId != null) com.dwinovo.numen.client.voice.VoiceLibrary.pendSummon(d.name, d.voiceId);
             // 自定义皮肤:库里存好的签名数据现成,直接发。选了库条目的同时记账
@@ -376,7 +384,7 @@ public final class NumenScreen extends Screen {
             if (skinEntry != null && skinEntry.signed()) {
                 com.dwinovo.numen.Constants.LOG.info("[numen-skin] 召唤 {}: 用皮肤库条目「{}」",
                         d.name, skinEntry.name());
-                sendSummon(d, skinEntry.value(), skinEntry.signature());
+                sendSummon(d, skinEntry.value(), skinEntry.signature(), personaData);
                 return;
             }
             // 默认(按名字):在本机查 Mojang——走玩家自己的代理,失败也说得清原因
@@ -393,14 +401,15 @@ public final class NumenScreen extends Screen {
                         }
                         var skin = r.skin();
                         sendSummon(d, skin == null ? "" : skin.value(),
-                                skin == null ? "" : skin.signature());
+                                skin == null ? "" : skin.signature(), personaData);
                     }));
         }
 
-        private void sendSummon(SummonPanel.Draft d, String skinValue, String skinSig) {
+        private void sendSummon(SummonPanel.Draft d, String skinValue, String skinSig,
+                                java.util.Map<String, String> personaData) {
             Services.NETWORK.sendToServer(
                     new com.dwinovo.numen.network.payload.SummonRequestPayload(
-                            d.name, skinValue, skinSig, d.creative));
+                            d.name, skinValue, skinSig, d.creative, personaData));
             summoning = false;
             rebuild();   // 新同伴经 CompanionListPayload 到达——点它的头像即可开工
         }
@@ -657,8 +666,23 @@ public final class NumenScreen extends Screen {
         if (t == tab) return;
         tab = t;
         chatView.reset();
-        if (t == Tab.ITEMS) requestInventory();
+        if (t == Tab.ITEMS) requestActiveStatusPage();
         rebuild();
+    }
+
+    private void selectStatusPage(String selected) {
+        if (selected == null || statusPageId.equals(selected)) return;
+        statusPageId = selected;
+        requestActiveStatusPage();
+    }
+
+    private void requestActiveStatusPage() {
+        if (INVENTORY_PAGE_ID.equals(statusPageId)) {
+            requestInventory();
+            return;
+        }
+        NumenStatusPages.all().stream().filter(page -> page.id().equals(statusPageId)).findFirst()
+                .ifPresent(page -> { if (uuid != null) page.onSelected(uuid); });
     }
 
     /** Shadowless placeholder for an empty, unfocused field — the EditBox's own hint renders with a shadow. */
@@ -713,8 +737,82 @@ public final class NumenScreen extends Screen {
     @Override
     public void tick() {
         if (tab == Tab.ITEMS && ++tickCounter % INV_REFRESH_TICKS == 0) {
-            requestInventory();
+            if (INVENTORY_PAGE_ID.equals(statusPageId)) requestInventory();
+            else NumenStatusPages.all().stream().filter(page -> page.id().equals(statusPageId)).findFirst()
+                    .ifPresent(page -> { if (uuid != null) page.tick(uuid); });
         }
+    }
+
+    private int statusNavigationY() { return top + HEADER_H + 3; }
+    private int statusPageX() { return left + PAD; }
+    private int statusPageY() { return top + HEADER_H + 20; }
+    private int statusPageWidth() { return panelW - PAD * 2; }
+    private int statusPageHeight() { return panelH - HEADER_H - 28; }
+    private int statusButtonWidth(String label) { return font.width(label) + 14; }
+
+    private NumenStatusPage selectedStatusPage() {
+        return NumenStatusPages.all().stream()
+                .filter(page -> page.id().equals(statusPageId)).findFirst().orElse(null);
+    }
+
+    private boolean statusPageMouseClicked(double mouseX, double mouseY, int button) {
+        NumenStatusPage page = selectedStatusPage();
+        return page != null && mouseX >= statusPageX() && mouseX < statusPageX() + statusPageWidth()
+                && mouseY >= statusPageY() && mouseY < statusPageY() + statusPageHeight()
+                && page.mouseClicked(uuid, mouseX, mouseY, button);
+    }
+
+    private boolean statusNavigationClick(double mouseX, double mouseY) {
+        int x = left + PAD;
+        int y = statusNavigationY();
+        if (mouseY < y || mouseY >= y + 14) return false;
+        for (StatusPageButton button : statusPageButtons(x)) {
+            if (mouseX >= button.x() && mouseX < button.x() + button.width()) {
+                selectStatusPage(button.id());
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void renderStatusNavigation(GuiGraphics g, int mouseX, int mouseY) {
+        int y = statusNavigationY();
+        for (StatusPageButton button : statusPageButtons(left + PAD)) {
+            boolean hovered = mouseX >= button.x() && mouseX < button.x() + button.width()
+                    && mouseY >= y && mouseY < y + 14;
+            renderStatusButton(g, button.label(), button.x(), y, button.width(),
+                    statusPageId.equals(button.id()), hovered);
+        }
+    }
+
+    private List<StatusPageButton> statusPageButtons(int startX) {
+        List<StatusPageButton> buttons = new ArrayList<>();
+        int x = startX;
+        String inventory = I18n.get(ModLanguageData.Keys.STATUS_INVENTORY);
+        int width = statusButtonWidth(inventory);
+        buttons.add(new StatusPageButton(INVENTORY_PAGE_ID, inventory, x, width));
+        x += width + 4;
+        for (NumenStatusPage page : NumenStatusPages.all()) {
+            String label = page.title().getString();
+            width = statusButtonWidth(label);
+            if (x + width > left + panelW - PAD) break;
+            buttons.add(new StatusPageButton(page.id(), label, x, width));
+            x += width + 4;
+        }
+        return buttons;
+    }
+
+    private record StatusPageButton(String id, String label, int x, int width) {}
+
+    private void renderStatusButton(GuiGraphics g, String label, int x, int y, int width,
+                                    boolean selected, boolean hovered) {
+        UiTheme theme = UiTheme.current();
+        int fill = selected ? theme.cta() : hovered ? theme.aiFill() : theme.surface();
+        int textColor = selected ? theme.onCta() : theme.textDim();
+        com.dwinovo.numen.client.ui.RoundRect.card(g, x, y, x + width, y + 14, 3,
+                fill, selected ? theme.cta() : theme.surfaceBorder());
+        int textY = y + Math.max(2, (14 - font.lineHeight) / 2);
+        g.drawString(font, Nb.colored(label, textColor), x + 7, textY, -1, false);
     }
 
     private void requestInventory() {
@@ -866,6 +964,8 @@ public final class NumenScreen extends Screen {
                 return super.mouseClicked(event, doubleClick);
             }
             if (tab == Tab.SETTINGS && settings.mouseClicked(mouseX, mouseY)) return true;
+            if (tab == Tab.ITEMS && statusNavigationClick(mouseX, mouseY)) return true;
+            if (tab == Tab.ITEMS && uuid != null && statusPageMouseClicked(mouseX, mouseY, button)) return true;
             if (uuid != null && !dismissOpen() && overEditPencil(mouseX, mouseY)) {
                 editing = true;
                 editPanel().reset();   // 开卡:草稿从当下真相取基线
@@ -938,6 +1038,12 @@ public final class NumenScreen extends Screen {
         if (tab == Tab.CHAT && sy != 0) {
             return chatView.mouseScrolled(sy);
         }
+        if (tab == Tab.ITEMS && uuid != null && sy != 0
+                && mx >= statusPageX() && mx < statusPageX() + statusPageWidth()
+                && my >= statusPageY() && my < statusPageY() + statusPageHeight()) {
+            NumenStatusPage page = selectedStatusPage();
+            if (page != null && page.mouseScrolled(uuid, mx, my, sy)) return true;
+        }
         return super.mouseScrolled(mx, my, sx, sy);
     }
 
@@ -1000,8 +1106,21 @@ public final class NumenScreen extends Screen {
             case CHAT -> { if (uuid != null) renderChat(g, mouseX, mouseY); else emptyHint(g); }
             case ITEMS -> {
                 if (uuid != null) {
-                    com.dwinovo.numen.client.screen.items.ItemsView.render(
-                            g, font, uuid, left, top, panelW, panelH, HEADER_H, mouseX, mouseY);
+                    renderStatusNavigation(g, mouseX, mouseY);
+                    if (INVENTORY_PAGE_ID.equals(statusPageId)) {
+                        com.dwinovo.numen.client.screen.items.ItemsView.render(
+                                g, font, uuid, left, top, panelW, panelH, HEADER_H, mouseX, mouseY);
+                    } else {
+                        NumenStatusPage page = selectedStatusPage();
+                        if (page != null) {
+                            page.render(g, font, uuid, statusPageX(), statusPageY(),
+                                    statusPageWidth(), statusPageHeight(), mouseX, mouseY);
+                        } else {
+                            statusPageId = INVENTORY_PAGE_ID;
+                            com.dwinovo.numen.client.screen.items.ItemsView.render(
+                                    g, font, uuid, left, top, panelW, panelH, HEADER_H, mouseX, mouseY);
+                        }
+                    }
                 } else {
                     emptyHint(g);
                 }

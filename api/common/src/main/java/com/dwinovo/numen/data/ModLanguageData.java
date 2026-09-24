@@ -70,6 +70,9 @@ public final class ModLanguageData {
         public static final String GUI_PROVIDERS_THINKING_ON        = "numen.gui.providers.thinking.on";
         public static final String RESPAWN_BLOCKED                  = "numen.respawn.blocked";
 
+        // Read-only status page for the companion inventory.
+        public static final String STATUS_INVENTORY = "numen.status.inventory";
+
         /** Hotkey: open the companion roster panel (shown in Controls settings). */
         public static final String KEY_OPEN_ROSTER = "key.numen.open_roster";
 
@@ -400,6 +403,7 @@ public final class ModLanguageData {
         adder.add("numen.respawn", "· reviving %ss");
         adder.add("numen.status.loading", "loading…");
         adder.add("numen.status.asleep", "asleep — chat to wake it.");
+        adder.add(Keys.STATUS_INVENTORY, "Backpack");
 
         // Model-config section
         adder.add(Keys.PROVIDER_TITLE,          "Model Configs");
@@ -727,6 +731,7 @@ public final class ModLanguageData {
         adder.add("numen.respawn", "· 复活中 %ss");
         adder.add("numen.status.loading", "加载中…");
         adder.add("numen.status.asleep", "休眠中 —— 对它说话唤醒。");
+        adder.add(Keys.STATUS_INVENTORY, "背包");
 
         // Model-config section
         adder.add(Keys.PROVIDER_TITLE,          "模型配置");

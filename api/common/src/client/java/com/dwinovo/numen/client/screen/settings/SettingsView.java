@@ -591,7 +591,7 @@ public final class SettingsView {
                     p -> {
                         String badge = p.preset() ? I18n.get("numen.persona.preset_badge") + " · " : "";
                         // 正文预览压成单行(MD 里的换行在 24px 行里没有意义)。
-                        String meta = (badge + p.text()).replace('\n', ' ');
+                        String meta = (badge + p.promptText()).replace('\n', ' ');
                         // 行首绑定点:● = 本同伴的人设;预设行同样可绑
                         Boolean marked = host.uuid() == null ? null : p.id().equals(
                                 com.dwinovo.numen.client.agent.CompanionHome
@@ -646,7 +646,7 @@ public final class SettingsView {
 
     private void onPersonaSave(PersonaFormPanel.Draft d) {
         String name = d.name.trim();
-        String text = d.text.trim();
+        String text = PersonaLibrary.composeText(d.text, d.extensionData);
         var lib = PersonaLibrary.instance();
         if (personaEditId != null) {
             PersonaLibrary.Persona saved = lib.update(personaEditId, name, text);
@@ -1133,7 +1133,8 @@ public final class SettingsView {
         personaEditId = p.id();
         var d = new PersonaFormPanel.Draft();
         d.name = p.name();
-        d.text = p.text();
+        d.text = p.promptText();
+        d.extensionData.putAll(p.extensionData());
         personaDraft = d;
         host.rebuild();
     }

@@ -1,6 +1,7 @@
 package com.dwinovo.numen.persona;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.api.NumenPlugins;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -21,8 +22,9 @@ import java.util.stream.Stream;
 
 /**
  * 玩家的人设库:{@code config/numen/persona/} 目录,<b>一个 .md 文件就是一个人设</b>。
- * 文件名即人设名与 id(天然不重名),文件内容想写啥写啥——全文原样注入
- * {@code <persona>},零结构约束,UI 列表用正文截断做预览。
+ * 文件名即人设名与 id(天然不重名),正文自由编辑并注入 {@code <persona>}。可选的
+ * 插件注册的人设扩展数据会从提示正文剥离,并在召唤时作为不透明数据传给对应插件。
+ * UI 列表用提示正文截断做预览。
  *
  * <p>内置示例存在 jar 资源里({@code assets/numen_api/persona/}),目录中的
  * {@code .init} 哨兵文件缺失时(首次运行/被手动删除)从 jar 复制出缺失的示例并
@@ -34,7 +36,10 @@ import java.util.stream.Stream;
 public final class PersonaLibrary {
 
     /** One persona. {@code id == name == 文件名};{@code preset} 恒 false(示例落盘后就是普通文件)。 */
-    public record Persona(String id, String name, String text, boolean preset) {}
+    public record Persona(String id, String name, String text, boolean preset,
+                          String promptText, Map<String, String> extensionData) {
+        public Persona { extensionData = Map.copyOf(extensionData); }
+    }
 
     /** 哨兵文件:删掉它,下次启动重新从 jar 复制缺失的内置示例。 */
     private static final String INIT_MARKER = ".init";
@@ -81,8 +86,9 @@ public final class PersonaLibrary {
     /** 新建人设 = 写一个 .md。重名自动加 _2 后缀(文件名即身份)。 */
     public Persona create(String name, String text) {
         String id = uniqueName(sanitizeName(name));
+        Persona p = parsePersona(id, text, false, true);
+        if (p == null) return null;
         if (!write(id, text)) return null;
-        Persona p = new Persona(id, id, text, false);
         personas.put(id, p);
         return p;
     }
@@ -92,6 +98,8 @@ public final class PersonaLibrary {
         Persona old = personas.get(id);
         if (old == null) return null;
         String newId = sanitizeName(name);
+        Persona p = parsePersona(newId, text, false, true);
+        if (p == null) return null;
         if (!newId.equals(id)) {
             newId = uniqueName(newId);
             try {
@@ -102,9 +110,19 @@ public final class PersonaLibrary {
             personas.remove(id);
         }
         if (!write(newId, text)) return null;
-        Persona p = new Persona(newId, newId, text, false);
+        p = parsePersona(newId, text, false, false);
         personas.put(newId, p);
         return p;
+    }
+
+    /** Combine freeform prompt text with opaque blocks owned by registered persona extensions. */
+    public static String composeText(String promptText, Map<String, String> extensionData) {
+        return NumenPlugins.composePersona(promptText, extensionData);
+    }
+
+    /** Validate stored Markdown before the editor saves it. */
+    public static void validateText(String text) {
+        parsePersona("validation", text, false, true);
     }
 
     /** 删除人设文件。绑定跟着同伴走,这里不管;在用的同伴回落兜底快照,不会失忆。 */
@@ -170,7 +188,8 @@ public final class PersonaLibrary {
                         try {
                             String text = Files.readString(p, StandardCharsets.UTF_8).strip();
                             if (!text.isEmpty()) {
-                                personas.put(stem, new Persona(stem, stem, text, false));
+                                Persona persona = parsePersona(stem, text, false, false);
+                                personas.put(stem, persona);
                             }
                         } catch (IOException ex) {
                             Constants.LOG.warn("[numen-persona] 人设读取失败 {}: {}", p, ex.toString());
@@ -217,6 +236,18 @@ public final class PersonaLibrary {
         } catch (IOException ex) {
             Constants.LOG.warn("[numen-persona] 人设写盘失败 {}: {}", id, ex.toString());
             return false;
+        }
+    }
+
+    private static Persona parsePersona(String id, String source, boolean preset, boolean failOnInvalid) {
+        String text = source == null ? "" : source.strip();
+        try {
+            NumenPlugins.ParsedPersona parsed = NumenPlugins.parsePersona(text);
+            return new Persona(id, id, text, preset, parsed.promptText(), parsed.extensionData());
+        } catch (IllegalArgumentException ex) {
+            if (failOnInvalid) throw ex;
+            Constants.LOG.warn("[numen-persona] 人设 {} 的扩展数据无效,将正文原样保留: {}", id, ex.getMessage());
+            return new Persona(id, id, text, preset, text, Map.of());
         }
     }
 

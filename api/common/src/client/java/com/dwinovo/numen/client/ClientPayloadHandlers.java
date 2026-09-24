@@ -65,6 +65,7 @@ public final class ClientPayloadHandlers {
     }
 
     private static void handleCompanionList(CompanionListPayload p) {
+        com.dwinovo.numen.client.api.NumenStatusPages.worldChanged(p.worldId());
         java.util.Set<UUID> before = new java.util.HashSet<>();
         for (NumenRoster.Entry e : NumenRoster.instance().entries()) before.add(e.uuid());
 

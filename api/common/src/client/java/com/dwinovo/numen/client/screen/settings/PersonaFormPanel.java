@@ -8,15 +8,19 @@ import com.dwinovo.numen.client.ui.widget.Label;
 import com.dwinovo.numen.client.ui.widget.MultilineTextField;
 import com.dwinovo.numen.client.ui.widget.TextField;
 import com.dwinovo.numen.client.ui.widget.UiRoot;
+import com.dwinovo.numen.api.NumenPlugins;
+import com.dwinovo.numen.api.persona.PersonaExtension;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
 import java.util.function.Consumer;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
- * 人格的编辑表单——NumenUI 版的瓤:名称单行 + 正文多行编辑器
- * ({@link MultilineTextField}:软换行/选区/拖选/剪贴板/滚动)占满剩余高度。
- * 名称即文件名,正文是自由 Markdown;两者留空都是内联校验错误。
+ * 人格的编辑表单——名称、自由 Markdown 正文与插件贡献的扩展数据字段。
+ * 两个多行框都支持软换行、选区、拖选、剪贴板和滚动。
+ * 名称即文件名;名称和正文留空都是内联校验错误。
  * 编辑的是 {@link Draft} 草稿,保存才落盘(与旧表单同语义)。
  */
 import com.dwinovo.numen.data.ModLanguageData;
@@ -27,6 +31,7 @@ public final class PersonaFormPanel {
     public static final class Draft {
         public String name = "";
         public String text = "";
+        public final Map<String, String> extensionData = new LinkedHashMap<>();
     }
 
     private final UiRoot ui = new UiRoot();
@@ -36,6 +41,7 @@ public final class PersonaFormPanel {
     private Draft draft = new Draft();
     private TextField nameField;
     private MultilineTextField textArea;
+    private final Map<String, MultilineTextField> extensionAreas = new LinkedHashMap<>();
 
     public PersonaFormPanel(Consumer<Draft> onSave, Runnable onCancel) {
         this.onSave = onSave;
@@ -55,6 +61,7 @@ public final class PersonaFormPanel {
 
     public void build(int x, int y, int w, int h) {
         ui.clear();
+        extensionAreas.clear();
 
         int ry = y;
         Label nameLabel = ui.add(new Label(t("numen.persona.form_name"), Label.Role.MUTED));
@@ -69,12 +76,34 @@ public final class PersonaFormPanel {
         Label textLabel = ui.add(new Label(t("numen.persona.form_text"), Label.Role.MUTED));
         textLabel.setBounds(x, ry, 140, 9);
         ry += NumenStyle.LABEL_PITCH;
-        // 正文占满剩余高度(编辑器自带滚动),底部留出按钮行。
         textArea = ui.add(new MultilineTextField(draft.text, v -> draft.text = v)
                 .placeholder(t("numen.persona.text_placeholder"))
                 .maxLength(4096)
                 .withLabel(textLabel));
-        textArea.setBounds(x, ry, w, (y + h - 20) - ry);
+
+        int editorBottom = y + h - 20;
+        var extensions = NumenPlugins.personaExtensions();
+        int extensionHeight = extensions.isEmpty() ? 0
+                : Math.max(32, Math.min(68, (editorBottom - ry - 48) / extensions.size()));
+        int extensionAreaTotal = extensions.size() * (extensionHeight + NumenStyle.LABEL_PITCH + 3);
+        int promptHeight = Math.max(42, editorBottom - ry - extensionAreaTotal);
+        textArea.setBounds(x, ry, w, promptHeight);
+        ry += promptHeight + 3;
+
+        for (PersonaExtension extension : extensions) {
+            Label extensionLabel = ui.add(new Label(t(extension.editorLabelKey()), Label.Role.MUTED));
+            extensionLabel.setBounds(x, ry, w, 9);
+            ry += NumenStyle.LABEL_PITCH;
+            String initial = draft.extensionData.getOrDefault(extension.id(), "");
+            MultilineTextField area = ui.add(new MultilineTextField(initial,
+                    value -> draft.extensionData.put(extension.id(), value))
+                    .placeholder(t(extension.editorPlaceholderKey()))
+                    .maxLength(extension.editorMaxLength())
+                    .withLabel(extensionLabel));
+            area.setBounds(x, ry, w, extensionHeight);
+            extensionAreas.put(extension.id(), area);
+            ry += extensionHeight + 3;
+        }
 
         Button close = ui.add(new Button("✕", Button.Style.GHOST, onCancel));
         close.setBounds(x + w - 8, y - 14, 14, 14);
@@ -123,6 +152,14 @@ public final class PersonaFormPanel {
         }
         if (draft.text == null || draft.text.isBlank()) {
             textArea.setError(t(ModLanguageData.Keys.GUI_INLINE_REQUIRED));
+            ok = false;
+        }
+        try {
+            com.dwinovo.numen.persona.PersonaLibrary.validateText(
+                    com.dwinovo.numen.persona.PersonaLibrary.composeText(draft.text, draft.extensionData));
+        } catch (IllegalArgumentException ex) {
+            extensionAreas.values().stream().findFirst()
+                    .ifPresent(area -> area.setError(t("numen.gui.settings.invalid_value")));
             ok = false;
         }
         if (ok) onSave.accept(draft);

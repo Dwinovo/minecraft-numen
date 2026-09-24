@@ -1,6 +1,7 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.entity.Companions;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -9,6 +10,9 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Client → Server: the owner asked to summon a companion by name from the panel's
@@ -20,7 +24,8 @@ import net.minecraft.server.level.ServerPlayer;
  * 采用(签名自验证,客户端伪造不了);为空 = <b>名字就是皮肤来源</b>,服务端异步查
  * 同名正版玩家,查到穿其皮肤,查不到静默回落默认皮肤(日志可查,不打扰玩家)。
  */
-public record SummonRequestPayload(String name, String skinValue, String skinSig, boolean creative)
+public record SummonRequestPayload(String name, String skinValue, String skinSig, boolean creative,
+                                   Map<String, String> personaData)
         implements CustomPacketPayload {
 
     public static final int MAX_NAME = 16;
@@ -28,17 +33,76 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
      *  实测 1KB 上下,8KB 已是十倍余量;signature 固定 ~700B。 */
     public static final int MAX_SKIN_VALUE = 8192;
     public static final int MAX_SKIN_SIG = 2048;
+    public static final int MAX_PERSONA_EXTENSIONS = 8;
+    public static final int MAX_PERSONA_EXTENSION_ID = 96;
+    public static final int MAX_PERSONA_EXTENSION_DATA = 8192;
+    public static final int MAX_PERSONA_DATA_BYTES = 16 * 1024;
+
+    /** Keep callers that do not select a persona source-compatible. */
+    public SummonRequestPayload(String name, String skinValue, String skinSig, boolean creative) {
+        this(name, skinValue, skinSig, creative, Map.of());
+    }
 
     public static final Type<SummonRequestPayload> TYPE = new Type<>(
             Identifier.fromNamespaceAndPath(Constants.MOD_ID, "summon_request"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, SummonRequestPayload> STREAM_CODEC =
-            StreamCodec.composite(
-                    ByteBufCodecs.stringUtf8(MAX_NAME), SummonRequestPayload::name,
-                    ByteBufCodecs.stringUtf8(MAX_SKIN_VALUE), SummonRequestPayload::skinValue,
-                    ByteBufCodecs.stringUtf8(MAX_SKIN_SIG), SummonRequestPayload::skinSig,
-                    ByteBufCodecs.BOOL, SummonRequestPayload::creative,
-                    SummonRequestPayload::new);
+            StreamCodec.of(SummonRequestPayload::write, SummonRequestPayload::read);
+
+    public SummonRequestPayload {
+        personaData = Map.copyOf(personaData == null ? Map.of() : personaData);
+        validatePersonaData(personaData);
+    }
+
+    private static void write(RegistryFriendlyByteBuf buf, SummonRequestPayload payload) {
+        ByteBufCodecs.stringUtf8(MAX_NAME).encode(buf, payload.name());
+        ByteBufCodecs.stringUtf8(MAX_SKIN_VALUE).encode(buf, payload.skinValue());
+        ByteBufCodecs.stringUtf8(MAX_SKIN_SIG).encode(buf, payload.skinSig());
+        ByteBufCodecs.BOOL.encode(buf, payload.creative());
+        ByteBufCodecs.VAR_INT.encode(buf, payload.personaData().size());
+        payload.personaData().forEach((key, value) -> {
+            ByteBufCodecs.stringUtf8(MAX_PERSONA_EXTENSION_ID).encode(buf, key);
+            ByteBufCodecs.stringUtf8(MAX_PERSONA_EXTENSION_DATA).encode(buf, value);
+        });
+    }
+
+    private static SummonRequestPayload read(RegistryFriendlyByteBuf buf) {
+        String name = ByteBufCodecs.stringUtf8(MAX_NAME).decode(buf);
+        String skinValue = ByteBufCodecs.stringUtf8(MAX_SKIN_VALUE).decode(buf);
+        String skinSig = ByteBufCodecs.stringUtf8(MAX_SKIN_SIG).decode(buf);
+        boolean creative = ByteBufCodecs.BOOL.decode(buf);
+        int count = ByteBufCodecs.VAR_INT.decode(buf);
+        if (count < 0 || count > MAX_PERSONA_EXTENSIONS) {
+            throw new io.netty.handler.codec.DecoderException("Invalid persona extension count: " + count);
+        }
+        Map<String, String> data = new LinkedHashMap<>();
+        for (int i = 0; i < count; i++) {
+            String key = ByteBufCodecs.stringUtf8(MAX_PERSONA_EXTENSION_ID).decode(buf);
+            String value = ByteBufCodecs.stringUtf8(MAX_PERSONA_EXTENSION_DATA).decode(buf);
+            if (data.putIfAbsent(key, value) != null) {
+                throw new io.netty.handler.codec.DecoderException("Duplicate persona extension id: " + key);
+            }
+        }
+        return new SummonRequestPayload(name, skinValue, skinSig, creative, data);
+    }
+
+    private static void validatePersonaData(Map<String, String> data) {
+        if (data.size() > MAX_PERSONA_EXTENSIONS) {
+            throw new IllegalArgumentException("Too many persona extensions");
+        }
+        int bytes = 0;
+        for (Map.Entry<String, String> entry : data.entrySet()) {
+            if (entry.getKey().isBlank() || entry.getKey().length() > MAX_PERSONA_EXTENSION_ID
+                    || entry.getValue().length() > MAX_PERSONA_EXTENSION_DATA) {
+                throw new IllegalArgumentException("Persona extension data exceeds its limit");
+            }
+            bytes += entry.getKey().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+            bytes += entry.getValue().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+            if (bytes > MAX_PERSONA_DATA_BYTES) {
+                throw new IllegalArgumentException("Combined persona extension data exceeds its limit");
+            }
+        }
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {
@@ -77,6 +141,7 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
         try {
             ServerLevel level = (ServerLevel) owner.level();
             var body = Companions.summon(server, owner.getUUID(), name, level, owner.position(), skin);
+            if (body != null) NumenPlugins.applyPersonaData(owner, body, p.personaData());
             Companions.applyGameMode(owner, body, p.creative());
             Companions.syncRosterToOwner(server, owner);   // push the new roster to the owner
         } finally {

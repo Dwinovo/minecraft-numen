@@ -108,19 +108,30 @@ ToolRegistry.register(new SendQqMessageTool());
 
 `invoke` reports its result through the one verb, `ToolCall.complete(json)` — synchronously, or later after handing work off to another thread or the server body. `ToolRegistry.register` throws on a duplicate name and preserves registration order (stable tool order helps prompt caching).
 
+### Generic addon extension hooks
+
+Addons can register generic extensions without teaching Numen about their data structures or gameplay:
+
+- `PersonaExtension` owns namespaced data in persona Markdown. Numen strips it from the prompt text and forwards it to the extension during summon; the extension validates and interprets its own data.
+- Client addons can add companion status pages with `NumenStatusPages.register(...)` and implement rendering and input callbacks through `NumenStatusPage`.
+- `NumenApi` provides registration and sending for addon-owned client-to-server and server-to-client payloads.
+- `NumenApi.contributeState(...)` adds addon-owned runtime context to each request.
+
 ### What is stable
 
 The public API is the set of packages whose `package-info` declares them so, mirroring Applied Energistics 2's convention. Anything outside these packages — or annotated `@Internal` inside them — may change in any release.
 
 | Package | Public types | Role |
 |---|---|---|
-| `com.dwinovo.numen.api` | `NumenGateway`, `NumenActuator` | the two doors that feed / drive a companion |
+| `com.dwinovo.numen.api` | `NumenGateway`, `NumenActuator`, `NumenApi`, `NumenPlugins` | feed / drive companions and register extensions |
+| `com.dwinovo.numen.api.persona` | `PersonaExtension` | persona data extensions |
+| `com.dwinovo.numen.client.api` | `NumenStatusPage`, `NumenStatusPages` | client status-page extensions |
 | `com.dwinovo.numen.agent.tool` | `NumenTool`, `ToolRegistry`, `ToolCall` | the tool contract + registration |
 | `com.dwinovo.numen.agent.tool.api` | `ToolContext` | per-call context for a server-side tool |
 | `com.dwinovo.numen.task` | `TaskResult` | the result envelope a tool hands back |
 | `com.dwinovo.numen.entity` | `NumenPlayer` | the server-side companion body |
 
-Everything else — providers, agent loop, memory, skill system, networking, UI — is `@Internal`. For a full worked reference, [numen-core](https://github.com/Dwinovo/minecraft-numen) builds its entire tool and skill set on exactly this surface, with no back doors.
+Except for the listed APIs and extension hooks, providers, agent loop, memory, skill system, internal networking, and UI remain `@Internal`. For a full worked reference, [numen-core](https://github.com/Dwinovo/minecraft-numen) builds its entire tool and skill set on exactly this surface, with no back doors.
 
 ---
 

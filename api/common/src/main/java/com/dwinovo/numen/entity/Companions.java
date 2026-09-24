@@ -426,6 +426,8 @@ public final class Companions {
         CompanionRegistry reg = CompanionRegistry.get(server);
         EventOutbox outbox = EventOutbox.get(server);
         for (UUID uuid : uuids) {
+            CompanionEvents.fire(com.dwinovo.numen.api.CompanionEvent.FORGET,
+                    new com.dwinovo.numen.api.CompanionEvent.Forgotten(server, uuid));
             reg.remove(uuid);
             outbox.forget(uuid);   // 她攒的事件跟着走:没人会再收
             CompanionStateWatch.forget(uuid);   // 背包镜像同理:这个 UUID 不会再回来了

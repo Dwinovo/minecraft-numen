@@ -1,9 +1,15 @@
 package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.agent.tool.NumenTool;
+import com.dwinovo.numen.api.persona.PersonaExtension;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.server.level.ServerPlayer;
 
 import java.nio.file.Path;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -44,6 +50,27 @@ public interface NumenApi {
      * 渐进披露、同样按名字调用。
      */
     void registerTool(NumenTool tool);
+
+    /** Register an opaque persona-data extension. Numen stores and transports its data unchanged. */
+    void registerPersonaExtension(PersonaExtension extension);
+
+    /** Register a client-to-server addon payload; its handler runs on the server thread. */
+    <T extends CustomPacketPayload> void registerClientToServer(
+            CustomPacketPayload.Type<T> type,
+            StreamCodec<? super RegistryFriendlyByteBuf, T> codec,
+            BiConsumer<T, ServerPlayer> handler);
+
+    /** Register a server-to-client addon payload; its handler runs on the client thread. */
+    <T extends CustomPacketPayload> void registerServerToClient(
+            CustomPacketPayload.Type<T> type,
+            StreamCodec<? super RegistryFriendlyByteBuf, T> codec,
+            Consumer<T> handler);
+
+    /** Send an addon payload from the client to the server. */
+    void sendToServer(CustomPacketPayload payload);
+
+    /** Send an addon payload from the server to one player. */
+    void sendToPlayer(ServerPlayer player, CustomPacketPayload payload);
 
     /**
      * 把一个目录里的技能交给引擎。就地读,不复制:你的 jar 一卸载技能跟着消失。
