@@ -124,20 +124,6 @@ public final class NumenScreen extends Screen {
     /** 图标格边长:与名字那一行的字齐高。 */
     private static final int ICON_N = com.dwinovo.numen.client.ui.mc.Sprites.SIZE;
 
-    private static boolean[][] buildTrashMask() {
-        boolean[][] m = new boolean[16][16];
-        for (int x = 0; x < 16; x++) {
-            for (int y = 0; y < 16; y++) {
-                boolean handle = y == 3 && x >= 6 && x <= 9;
-                boolean lid = (y == 4 || y == 5) && x >= 3 && x <= 12;
-                boolean body = y >= 7 && y <= 14 && x >= 4 && x <= 11;
-                boolean rib = body && (x == 6 || x == 9) && y >= 8 && y <= 13;
-                m[x][y] = (handle || lid || body) && !rib;
-            }
-        }
-        return m;
-    }
-
     /** 抬头右端 ⋮ 的横座标;-1 = 本帧没画(没有会话/盖着别的页/模态中),点不中。 */
     private int moreX = -1;
     private PopupMenu headerMenu;
