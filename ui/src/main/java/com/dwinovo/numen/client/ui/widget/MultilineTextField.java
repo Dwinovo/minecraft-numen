@@ -113,10 +113,11 @@ public final class MultilineTextField extends Widget {
             s.drawText(error, x + w - s.textWidth(error), y - 10, c.danger(), false);
         }
 
-        if (value.isEmpty() && !isFocused()) {
+        if (value.isEmpty()) {
+            // 空着就给占位,聚焦着也给——打第一个字才让开(和单行输入框一样)
             s.drawText(placeholder, x + NumenStyle.FIELD_PAD, y + NumenStyle.FIELD_PAD,
                     c.textMuted(), false);
-            return;
+            if (!isFocused()) return;
         }
 
         clampScroll();

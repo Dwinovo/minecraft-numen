@@ -175,9 +175,17 @@ class MultilineTextFieldTest {
     }
 
     @Test
-    void placeholderShowsOnlyWhenEmptyAndUnfocused() {
+    void placeholderShowsWhileEmptyEvenWhenFocused() {
         MultilineTextField f = field("").placeholder("写点什么…");
         f.render(s, WidgetTestSupport.C, -10, -10, 0);
-        assertTrue(s.texts.contains("写点什么…"));
+        assertTrue(s.texts.contains("写点什么…"), "没聚焦时有占位");
+        root.requestFocus(f);
+        s.reset();
+        f.render(s, WidgetTestSupport.C, -10, -10, 0);
+        assertTrue(s.texts.contains("写点什么…"), "聚焦着、还没打字,占位还在");
+        f.charTyped('x');
+        s.reset();
+        f.render(s, WidgetTestSupport.C, -10, -10, 0);
+        assertTrue(!s.texts.contains("写点什么…"), "打了字占位让开");
     }
 }
