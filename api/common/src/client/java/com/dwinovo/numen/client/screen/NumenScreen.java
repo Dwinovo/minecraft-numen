@@ -465,8 +465,90 @@ public final class NumenScreen extends Screen {
     }
 
     /** 左栏列的会话:每帧现取,名册一变它就跟着变。 */
-    private static List<Conversation> rail() {
-        return Conversations.instance().all();
+    private List<Conversation> rail() {
+        List<Conversation> all = Conversations.instance().all();
+        if (railQuery.isBlank()) return all;
+        // 搜索框里有字:只列名字对得上的(不分大小写)
+        String q = railQuery.strip().toLowerCase(java.util.Locale.ROOT);
+        return all.stream()
+                .filter(c -> c.displayName(NumenRoster.instance()::name).toLowerCase(java.util.Locale.ROOT).contains(q))
+                .toList();
+    }
+
+    // ---- 左栏顶上的搜索框(Telegram ☰ 右边那一格) ----
+
+    /** 搜索框里的字;空 = 不筛。 */
+    private String railQuery = "";
+    /** 搜索框在接字。控件每次重建都跟着重建(真编辑器挂在屏幕的控件表上),这一位把焦点带过去。 */
+    private boolean searchActive;
+    private final com.dwinovo.numen.client.ui.widget.UiRoot searchUi = new com.dwinovo.numen.client.ui.widget.UiRoot();
+    private com.dwinovo.numen.client.ui.widget.TextField searchField;
+    private static final int SEARCH_H = 14;
+
+    private int searchBoxX() { return railX + 3 + PAD + ICON_N + 6; }
+    private int searchBoxY() { return top + 3 + (RAIL_BAR_H - SEARCH_H) / 2; }
+    private int searchBoxW() { return railX + railW - 5 - searchBoxX(); }
+
+    /** 搜索框随控件一起重建;窄栏没地方放它。 */
+    private void buildSearch() {
+        searchUi.clear();
+        searchField = null;
+        if (railW < RAIL_FULL_W) {
+            searchActive = false;
+            return;
+        }
+        var mc = net.minecraft.client.Minecraft.getInstance();
+        searchUi.setClipboard(() -> mc.keyboardHandler.getClipboard(), s -> mc.keyboardHandler.setClipboard(s));
+        searchUi.setInputFactory(com.dwinovo.numen.client.ui.mc.McTextInput.factory());
+        searchField = searchUi.add(new com.dwinovo.numen.client.ui.widget.TextField(railQuery, v -> {
+            railQuery = v;
+            railScroll = 0;
+        }).placeholder(I18n.get(ModLanguageData.Keys.RAIL_SEARCH)).bare(true));
+        searchField.setBounds(searchBoxX() + 16, searchBoxY(), searchBoxW() - 28, SEARCH_H);
+        if (searchActive) searchUi.requestFocus(searchField);
+    }
+
+    private boolean overSearch(double mx, double my) {
+        return searchField != null && mx >= searchBoxX() && mx < searchBoxX() + searchBoxW()
+                && my >= searchBoxY() && my < searchBoxY() + SEARCH_H;
+    }
+
+    /** 有字时框右端的 ×:清空。 */
+    private boolean overSearchClear(double mx, double my) {
+        int cx = searchBoxX() + searchBoxW() - 11;
+        return !railQuery.isEmpty() && overSearch(mx, my) && mx >= cx;
+    }
+
+    /** 搜索框交出焦点,输入框接回来(Telegram 点别处回到写消息)。 */
+    private void blurSearch() {
+        searchActive = false;
+        searchUi.requestFocus(null);
+        if (inputBar != null) inputBar.setFocused(true);
+    }
+
+    private void clearSearch() {
+        railQuery = "";
+        if (searchField != null) searchField.setValue("");
+        railScroll = 0;
+        blurSearch();
+    }
+
+    private void renderSearch(GuiGraphics g, int mouseX, int mouseY) {
+        if (searchField == null) return;
+        int bx = searchBoxX(), by = searchBoxY(), bw = searchBoxW();
+        boolean focused = searchField.isFocused();
+        // 平时只是一块底色,接字时描一圈强调色——和别处输入框聚焦同一个说法
+        com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
+                bx, by, bw, SEARCH_H, FIELD, focused ? CTA : FIELD);
+        com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.SEARCH,
+                bx + 3, by + 1, ICON_N, focused ? CTA : TXT_FAINT);
+        searchUi.render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
+                com.dwinovo.numen.client.screen.settings.HostThemeColors.current(),
+                mouseX, mouseY, net.minecraft.Util.getMillis());
+        if (!railQuery.isEmpty()) {
+            boolean hot = overSearchClear(mouseX, mouseY);
+            txt(g, Component.literal("×"), bx + bw - 9, by + (SEARCH_H - font.lineHeight) / 2 + 1, hot ? TXT : TXT_FAINT);
+        }
     }
 
     @Override
@@ -496,6 +578,7 @@ public final class NumenScreen extends Screen {
         overlay.clear();
         inputBar = null;
         settings.clearWidgets();
+        buildSearch();
         if (summoning) { buildSummonCard(); return; }
         if (cardOpen) { buildEditCard(); return; }
         switch (tab) {
@@ -503,6 +586,7 @@ public final class NumenScreen extends Screen {
             case SETTINGS -> settings.buildWidgets();
             case ITEMS -> { /* no widgets */ }
         }
+        if (searchActive && inputBar != null) inputBar.setFocused(false);   // 搜索框在接字,输入框别抢
     }
 
     private SummonPanel summonPanel() {
@@ -821,7 +905,7 @@ public final class NumenScreen extends Screen {
 
     /** First rail conversation that isn't {@code exclude}, or null if none. */
     private Conversation firstOther(Conversation exclude) {
-        for (Conversation c : rail()) {
+        for (Conversation c : Conversations.instance().all()) {   // 不管搜索框筛成什么样
             if (!sameAs(c, exclude)) return c;
         }
         return null;
@@ -1184,6 +1268,20 @@ public final class NumenScreen extends Screen {
             if (overlayUi.keyPressed(keyCode, modifiers)) { rebuild(); return true; }
             return super.keyPressed(keyCode, scanCode, modifiers);
         }
+        if (searchActive && searchField != null && !modalOpen()) {
+            if (k == 256) {   // Esc:清空、交回输入框
+                clearSearch();
+                return true;
+            }
+            if (k == com.dwinovo.numen.client.ui.KeyCodes.ENTER) {   // 回车:开第一个对得上的
+                List<Conversation> hits = rail();
+                if (!hits.isEmpty()) switchTo(hits.get(0));
+                clearSearch();
+                return true;
+            }
+            // 编辑键:这里不接的,落到屏幕上的真输入框
+            return searchUi.keyPressed(keyCode, modifiers) || super.keyPressed(keyCode, scanCode, modifiers);
+        }
         // 设置页的模态(删除确认卡 / 新建编辑表单卡):Esc 收起卡片而不是关掉整个面板。
         if (k == 256 && tab == Tab.SETTINGS && !modalOpen()
                 && settings.cancelForm()) {
@@ -1215,6 +1313,9 @@ public final class NumenScreen extends Screen {
 
     @Override
     public boolean charTyped(char ch, int modifiers) {
+        if (searchActive && searchField != null && !modalOpen()) {
+            return searchUi.charTyped(ch) || super.charTyped(ch, modifiers);
+        }
         if (tab == Tab.SETTINGS && !modalOpen() && settings.charTyped(ch)) {
             return true;
         }
@@ -1265,6 +1366,17 @@ public final class NumenScreen extends Screen {
                 openMainMenu();
                 return true;
             }
+            if (!modalOpen() && overSearchClear(mouseX, mouseY)) {
+                clearSearch();
+                return true;
+            }
+            if (!modalOpen() && overSearch(mouseX, mouseY)) {   // 搜索框:接字,输入框交出焦点
+                searchActive = true;
+                searchUi.mouseClicked(mouseX, mouseY, button);
+                if (inputBar != null) inputBar.setFocused(false);
+                return true;
+            }
+            if (searchActive) blurSearch();   // 点在别处:搜索框交回焦点,这一下照常往下走
             int rail = railIndexAt((int) mouseX, (int) mouseY);
             if (rail >= 0) {
                 // 按下只记一笔:是点还是拖,松手时才知道(见 mouseReleased)
@@ -1703,7 +1815,11 @@ public final class NumenScreen extends Screen {
             boolean menuOpen = mainMenu != null && mainMenu.isOpen();
             com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.MENU, mx0, my0, ICON_N,
                     menuOpen || hotMenu ? CTA : TXT_MUTED);
+            renderSearch(g, mouseX, mouseY);
             g.fill(rowX, top + 3 + RAIL_BAR_H - 1, rowX + rowW, top + 3 + RAIL_BAR_H, t.border());
+        }
+        if (items.isEmpty() && !railQuery.isBlank() && railW >= RAIL_FULL_W) {
+            txt(g, Component.translatable(ModLanguageData.Keys.RAIL_NO_MATCH), rowX + PAD, startY + 8, TXT_FAINT);
         }
         // 选中底先画(滑动的),行的内容压在它上面
         int activeIdx = -1;

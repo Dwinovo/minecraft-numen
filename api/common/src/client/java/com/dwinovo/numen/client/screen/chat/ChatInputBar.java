@@ -525,6 +525,11 @@ public final class ChatInputBar {
         return panel != null || ui.charTyped(ch);
     }
 
+    /** 焦点给不给这条输入行:左栏搜索框在接字的时候,它得交出来。 */
+    public void setFocused(boolean on) {
+        if (field != null) ui.requestFocus(on ? field : null);
+    }
+
     public boolean isFieldFocused() {
         return field != null && field.isFocused();
     }
