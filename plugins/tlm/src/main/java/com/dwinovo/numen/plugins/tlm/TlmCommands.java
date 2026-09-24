@@ -34,9 +34,11 @@ final class TlmCommands {
     private static final String ABSENT = "这里没装车万女仆,换不了模型";
 
     private static final Param<String> SEARCH = Param.optional("search", ArgType.string(),
-            "Character name, pack name or id to look for; without it you get one line per pack.");
+            "Character name, pack name or id to look for.")
+            .whenOmitted("get one line per pack instead of single models");
     private static final Param<ResourceLocation> MODEL = Param.required("model", ArgType.id(),
-            "Maid model id, exactly as " + line(MODELS) + " listed it.");
+            "The maid model to wear.")
+            .values("a model id exactly as " + line(MODELS) + " --search lists it");
 
     private TlmCommands() {}
 
@@ -52,11 +54,21 @@ final class TlmCommands {
 
     private static void actions(CommandGroup tlm) {
         tlm.client(MODELS, "Which maid model you wear now, and which are installed.",
-                TlmCommands::models, SEARCH);
-        tlm.client(WEAR, "Put on a maid model. It covers your whole body, hiding any other look.",
-                TlmCommands::wear, MODEL);
+                TlmCommands::models, SEARCH)
+                .example(line(MODELS))
+                .example(line(MODELS) + " --search 灵梦")
+                .note("Read-only. Runs on your owner's client, where the model packs are.")
+                .seeAlso(line(WEAR));
+        tlm.client(WEAR, "Put on a maid model.",
+                TlmCommands::wear, MODEL)
+                .example(line(WEAR) + " touhou_little_maid:hakurei_reimu")
+                .note("It covers your whole body: a YSM model or your own skin stops showing until you take it off.")
+                .note("It does not ask your owner; tell them what you changed into.")
+                .seeAlso(line(MODELS), line(REMOVE));
         tlm.client(REMOVE, "Take the maid model off; your other look shows again.",
-                TlmCommands::remove);
+                TlmCommands::remove)
+                .example(line(REMOVE))
+                .seeAlso(line(WEAR));
     }
 
     /**

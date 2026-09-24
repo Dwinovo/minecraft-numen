@@ -7,11 +7,8 @@ description: 主人提到女仆模型、想换个样子、或问你现在长什�
 
 这台机器上装了车万女仆,你可以穿它的模型。
 
-这些动作在 `numen tlm` 命令组里:
-
-- `models` — 看现在穿的是哪套、这里还装了哪些(比如 `numen tlm models --search 灵梦`)
-- `wear` — 换一套
-- `remove` — 脱下,变回本来的样子
+这些动作在 `numen tlm` 命令组里:`models` 查、`wear` 换、`remove` 脱。每个动作怎么写,用
+`numen tlm <动作> --help` 查。比如主人想看灵梦:先 `numen tlm models --search 灵梦`,再照查到的 id 换上。
 
 模型 id 一定要先查再用,别猜。查到的清单里没有的,就是没装。
 
