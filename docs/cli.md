@@ -1,6 +1,6 @@
 # Numen CLI:命令为底,工具是快捷方式
 
-状态:设计稿(09-24)。第十三节第 1 步(铺底座)与第 5 步(原版指令入口)已落地,落地时定下的细节见第十六、十七节。
+状态:设计稿(09-24)。第十三节第 1 步(铺底座)、第 2 步(三个联动插件)与第 5 步(原版指令入口)已落地,落地时定下的细节见第十六至十八节。
 
 ## 一、要解决的问题
 
@@ -181,7 +181,7 @@ numen.registerCommands("go", "Getting around.", go ->
    - 调度器、`numen` 工具、`--help` 与报错附用法、一行索引;
    - 两侧注册与分发;
    - 节点提升为快捷工具(schema 生成与同源调用)。
-2. **第一批迁移三个联动插件的 9 个工具**,放进 `kaleidoscope`、`tlm`、`ysm` 命名空间。量一量省了多少,验证"模型会不会查帮助、能不能一次写对"。
+2. **第一批迁移三个联动插件的工具**(已落地,见第十八节;实际注册的是 8 个,YSM 3 个),放进 `kaleidoscope`、`tlm`、`ysm` 命名空间。量一量省了多少,验证"模型会不会查帮助、能不能一次写对"。
 3. **新联动直接按命令做**:
    - FTB Quests(`docs/ftb-quests-integration.md` 里的查看、提交、入队,改为 `ftbquests` 的子命令);
    - Curios 走 `gear` 的扩展点(`docs/curios-gear-slots.md`)。
@@ -220,7 +220,7 @@ numen.registerCommands("go", "Getting around.", go ->
   - 标志只有一种机制:位置参数之后挂一格 Brigadier 参数节点(`FlagsArgument`),它读到行尾,逐个认标志名,值交给那个参数自己的类型在同一个读头上读。所以出错位置是整行里的真实位置,用法照样附上。
   - 每个标志都带值(布尔也写 `--x true`),分隔都是一个空格,和 Brigadier 分隔位置参数的规矩一致;写重、缺值、没声明的标志各有一句报错。
   - 吃掉余下整行的 `text` 只能是最后一个必填参数,且这个动作不能再有标志。
-- **参数类型**先开三种:`integer(min, max)`、`word`、`text`。以后要物品 id、坐标,就在 `ArgType` 加一种。
+- **参数类型**第 1 步开了三种:`integer(min, max)`、`word`、`text`;第 2 步补的见第十八节。要新的,就在 `ArgType` 加一种。
   - `integer` 的范围写进 schema 与帮助,读的时候不拦越界值:夹住还是拒绝、回执里怎么说,是动作自己的语义(`task timer` 夹住并说明你要的和实际定的)。
   - 快捷工具的 JSON 值取字面文字,交给同一个 Brigadier 类型整段读完。没声明的键拒掉;JSON `null` 等于没给。
 - **帮助是树上的普通节点**:根下的 `help` 与 `--help`,每组、每个动作下的 `--help`,和别的命令同一次解析认出来。组与根的列表每页 20 行,`--page N` 翻页,超出时说还剩几条、怎么翻。
@@ -230,7 +230,7 @@ numen.registerCommands("go", "Getting around.", go ->
   - 客户端先解析:帮助、解析错误当场回,客户端动作当场执行;服务端动作把这次调用原样经 `ServerToolTransport` 送去服务端,那边再解析、执行。
   - 服务端收到客户端动作如实拒绝。专用服务器上客户端动作照样登记(帮助要它的说明),处理函数永远不会在那里被调用。
   - 快捷工具提升自服务端动作时,调用照身体工具的路子直接送服务端,参数在那边读,读错的回执与所有身体工具同一种说法。
-- **长活**:`ServerSource` 带着这次调用本身(`toolName`、`args`:快捷工具名和它的 JSON,或 `numen` 和 `{"command": …}`)。长活交 `TaskDispatch.setTask` 时原样交过去,重启后的重放走同一个入口再来一遍。
+- **长活**:`ServerSource` 带着这次调用本身(`toolName`、`args`:快捷工具名和它的 JSON,或 `numen` 和 `{"command": …}`)。长活交 `TaskDispatch.setTask(source, record)`,重启后的重放记的就是这次调用,走同一个入口再来一遍。任务叫什么见第十八节。
 - **一行索引**:`NumenCli.index()` 生成 `<commands>` 块,组按名字排序,挂在系统提示的技能表之后;只随组的增减变。
 - **`numen` 工具由引擎在 `CommonClass` 登记**:插件的命令只依赖引擎,谁登记了命令都指望这个入口在。外脑(`NumenActuator` / MCP)读的就是同一张工具表,自然看到 `numen` 与各快捷工具。
 
@@ -261,3 +261,32 @@ numen.registerCommands("go", "Getting around.", go ->
   `allow command(她打的根名)`。
 - **提示词**:只有组的一句说明进 `<commands>` 索引;没写技能(想让她会某条指令时再写)。
 - **没做**:YSM 联动改走 `numen mc`(另一件事);任何写死的指令白名单或黑名单。
+
+## 十八、第 2 步落地时定下的细节
+
+三个联动插件的工具全部改成命令,都不提升(插件工具是长尾);旧工具类删掉,描述拆成组说明、动作说明、参数说明写在各插件的 `*Commands` 类里,技能里只留命令的例子。
+
+| 旧工具 | 命令 |
+|---|---|
+| `kc_recipes` | `numen kaleidoscope recipes <cookware> [--have_only] [--name]` |
+| `kc_inspect` | `numen kaleidoscope inspect <x> <y> <z>` |
+| `kc_cook` | `numen kaleidoscope cook <x> <y> <z> <recipe>`(长活) |
+| `list_maid_models` | `numen tlm models [--search]` |
+| `wear_maid_model`(给 model) | `numen tlm wear <model>` |
+| `wear_maid_model`(model 留空) | `numen tlm remove` |
+| `list_ysm_options` | `numen ysm options` |
+| `switch_model` | `numen ysm switch <model> [--texture]` |
+| `play_emote` | `numen ysm emote <animation>`(`stop` 停下,照 YSM 自己的写法) |
+
+- **"留空表示另一件事"拆成两个动作。** 工具贵,才把穿和脱塞进一个参数;命令不花工具表的钱,一个动作一个意思。
+- **新参数类型**:
+  - `integer()`:不设范围的整数,方块坐标用。
+  - `bool()`:`true` / `false`,当标志也要写值。
+  - `id()`:资源 id,读成 `ResourceLocation`;字符集与合法性用原版 `ResourceLocation` 自己的规则,不写命名空间即 `minecraft:`。配方、女仆模型用它。
+  - `string()`:一个值,到空格为止的任意字符(中文、`/`、大写都行),带空格就加引号。模组自己起的名字(YSM 的模型文件名、动作名,女仆包的角色名)用它,这些名字的字符集不归我们定。
+  - JSON 进来的值写成它在命令行上的样子再读:多数类型就是字面文字,`string()` 一律加上引号——JSON 的字符串本来就有边界,否则带空格的名字命令行收、JSON 拒。
+- **任务叫什么**:任务记录、受理回执、`task_finished`、`<current_task>` 写的名字是 `ServerSource.taskName()`:从快捷工具进来是快捷工具名,从 `numen` 进来是"组 动作"(如 `kaleidoscope cook`)。解析到动作、交给处理函数前,源对象先绑上那个动作。
+  - 命令派的活用 `TaskRecord(ServerSource, deadline)` 起记录,名字与调用 id 都取自源;交 `TaskDispatch.setTask(source, record)`。
+  - 记录的名字不是能重放的工具名,所以重放记的是那次调用本身(`numen` 与那一行命令)。工具派的活照旧 `setTask(companion, record, args, reply)`,记录以工具名命名,重放按这个名字找回工具。
+- **客户端动作的插件也在两侧登记命令**:`tlm` 的三个动作都在主人客户端执行,命令组照样在 `NumenPlugins.register` 块里直接登记(专用服务器上只为帮助),插件原来放在 `onClient` 里的登记工具那两行随之删掉。
+- **工具表的账**(字符数粗估,英文约 4 字符一个 token、中文一字一个):8 个旧工具定义约 4500 字符、约 1350 token;换成 `<commands>` 里三行,约 250 字符、约 60 token。三个插件都装时每轮少发约 1300 token。
