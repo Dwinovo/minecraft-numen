@@ -83,17 +83,17 @@ public abstract class AbstractNodeCostSearch {
      * 计算模板:跑 {@link #calculate0} → postProcess 装配 →
      * 加载边界截断(默认关)→ 部分路径截尾 → 按终点是否入目标分类。
      *
-     * @param primaryTimeout 已有可用部分路径时的预算(毫秒)
-     * @param failureTimeout 毫无可用结果时烧满的预算(毫秒)
+     * @param primaryNodes 已有可用部分路径时的预算(展开节点数)
+     * @param failureNodes 毫无可用结果时烧满的预算(展开节点数)
      */
-    public synchronized PathCalcResult calculate(long primaryTimeout, long failureTimeout) {
+    public synchronized PathCalcResult calculate(int primaryNodes, int failureNodes) {
         if (isFinished) {
             throw new IllegalStateException("搜索器一次性,不可复用");
         }
         cancelRequested = false;
         long tSearch = com.dwinovo.numen.core.pathing.util.NavProfiler.begin();
         try {
-            NavPath path = calculate0(primaryTimeout, failureTimeout)
+            NavPath path = calculate0(primaryNodes, failureNodes)
                     .map(NavPath::postProcess).orElse(null);
             if (cancelRequested) {
                 return new PathCalcResult(PathCalcResult.Type.CANCELLATION);
@@ -118,7 +118,7 @@ public abstract class AbstractNodeCostSearch {
         }
     }
 
-    protected abstract Optional<NavPath> calculate0(long primaryTimeout, long failureTimeout);
+    protected abstract Optional<NavPath> calculate0(int primaryNodes, int failureNodes);
 
     /** 节点到起点的距离平方(只用于比较,不开方)。 */
     protected double getDistFromStartSq(PathNode n) {

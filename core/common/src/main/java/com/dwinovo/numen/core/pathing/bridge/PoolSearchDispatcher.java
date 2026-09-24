@@ -33,16 +33,16 @@ public final class PoolSearchDispatcher implements SearchDispatcher {
     @Override
     public SearchHandle submit(BlockPos realStart, BlockPos start, Goal goal,
                                CalculationContext context, Favoring favoring,
-                               long primaryMs, long failureMs) {
+                               int primaryNodes, int failureNodes) {
         AStarPathFinder finder = new AStarPathFinder(
                 realStart, start.getX(), start.getY(), start.getZ(), goal, favoring, context);
         if (!context.safeForThreadedUse) {
             // 活世界上下文只能在本(主)线程读:原地算完,句柄即完成态
             return new PoolHandle(finder,
-                    CompletableFuture.completedFuture(finder.calculate(primaryMs, failureMs)));
+                    CompletableFuture.completedFuture(finder.calculate(primaryNodes, failureNodes)));
         }
         CompletableFuture<PathCalcResult> future =
-                PathPlannerPool.submit(() -> finder.calculate(primaryMs, failureMs));
+                PathPlannerPool.submit(() -> finder.calculate(primaryNodes, failureNodes));
         return new PoolHandle(finder, future);
     }
 

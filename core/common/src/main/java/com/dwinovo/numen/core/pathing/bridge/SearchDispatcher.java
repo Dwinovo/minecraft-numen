@@ -24,16 +24,16 @@ public interface SearchDispatcher {
      * @param context   冻结上下文({@link ContextFactory#forSearch});
      *                  传入未冻结上下文时实现须同步跑在调用线程
      * @param favoring  上一路径的成本折扣表(无则 {@link Favoring#empty()})
-     * @param primaryMs 已有可用部分路径后的预算(毫秒)
-     * @param failureMs 毫无可用结果时烧满的预算(毫秒)
+     * @param primaryNodes 已有可用部分路径后的预算(展开节点数)
+     * @param failureNodes 毫无可用结果时烧满的预算(展开节点数)
      */
     SearchHandle submit(BlockPos realStart, BlockPos start, Goal goal,
                         CalculationContext context, Favoring favoring,
-                        long primaryMs, long failureMs);
+                        int primaryNodes, int failureNodes);
 
     /** 起点即真实脚位的常用形态。 */
     default SearchHandle submit(BlockPos start, Goal goal, CalculationContext context,
-                                Favoring favoring, long primaryMs, long failureMs) {
-        return submit(start, start, goal, context, favoring, primaryMs, failureMs);
+                                Favoring favoring, int primaryNodes, int failureNodes) {
+        return submit(start, start, goal, context, favoring, primaryNodes, failureNodes);
     }
 }

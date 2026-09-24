@@ -122,7 +122,7 @@ public final class RoutePlanner {
             NavSettings settings = NavSettings.get();
             RouteSpec searchSpec = goal.protecting(spec.withPositions(spec.positions().plus(penalty)));
             inFlight = dispatcher.submit(realStart, start, goal.engineGoal(), contexts.apply(searchSpec),
-                    Favoring.empty(), settings.primaryTimeoutMS, settings.failureTimeoutMS);
+                    Favoring.empty(), settings.primaryNodes, settings.failureNodes);
             searches++;
         }
 

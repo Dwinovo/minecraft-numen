@@ -385,15 +385,15 @@ public final class PathingCore {
         // 每次派发都重新取样冻结快照:背包/工具/饥饿与规格的位置代价
         // (当前目标的 sacred 格)以派发一刻为准
         context = searchContextFactory.get();
-        long primaryTimeout;
-        long failureTimeout;
+        int primaryNodes;
+        int failureNodes;
         NavSettings settings = NavSettings.get();
         if (current == null) {
-            primaryTimeout = settings.primaryTimeoutMS;
-            failureTimeout = settings.failureTimeoutMS;
+            primaryNodes = settings.primaryNodes;
+            failureNodes = settings.failureNodes;
         } else {
-            primaryTimeout = settings.planAheadPrimaryTimeoutMS;
-            failureTimeout = settings.planAheadFailureTimeoutMS;
+            primaryNodes = settings.planAheadPrimaryNodes;
+            failureNodes = settings.planAheadFailureNodes;
         }
         // 躲谁由目标说了算:战斗目标自带威胁表(位置+每只自己的危险半径),
         // 别的导航照旧走全局开关(默认关)。
@@ -410,7 +410,7 @@ public final class PathingCore {
         inProgressStart = start;
         dispatches++;
         inProgress = dispatcher.submit(realStart, start, goal, context, favoring,
-                primaryTimeout, failureTimeout);
+                primaryNodes, failureNodes);
     }
 
     /**

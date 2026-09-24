@@ -24,7 +24,7 @@ class BestSoFarSelectionTest {
         }
 
         @Override
-        protected Optional<NavPath> calculate0(long primaryTimeout, long failureTimeout) {
+        protected Optional<NavPath> calculate0(int primaryNodes, int failureNodes) {
             return Optional.empty();
         }
     }

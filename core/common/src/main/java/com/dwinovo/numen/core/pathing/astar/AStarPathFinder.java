@@ -16,7 +16,7 @@ import static com.dwinovo.numen.core.pathing.moves.ActionCosts.COST_INF;
 
 /**
  * A* 主循环:遍历 22 个移动原语产边、favoring 修正动作成本、
- * 带最小改进阈值的松弛、chunk 边界计数与双轨墙钟超时。
+ * 带最小改进阈值的松弛、chunk 边界计数与双轨节点预算。
  */
 public final class AStarPathFinder extends AbstractNodeCostSearch {
 
@@ -47,7 +47,7 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
     }
 
     @Override
-    protected Optional<NavPath> calculate0(long primaryTimeout, long failureTimeout) {
+    protected Optional<NavPath> calculate0(int primaryNodes, int failureNodes) {
         startNode = getNodeAtPosition(startX, startY, startZ, PathNode.longHash(startX, startY, startZ));
         startNode.cost = 0;
         startNode.combinedCost = startNode.estimatedCostToGoal;
@@ -60,11 +60,8 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
             bestSoFar[i] = startNode;
         }
         MutableMoveResult res = new MutableMoveResult();
-        long startTime = System.currentTimeMillis();
-        long primaryTimeoutTime = startTime + primaryTimeout;
-        long failureTimeoutTime = startTime + failureTimeout;
-        // failing:尚无距起点 5 格以上的可用部分路径。找到之前烧满
-        // failureTimeout,找到之后只跑 primaryTimeout。
+        // failing:尚无距起点 5 格以上的可用部分路径。找到之前烧满 failureNodes,
+        // 找到之后展开到 primaryNodes 为止。预算按节点数计,为什么见 NavSettings。
         boolean failing = true;
         int numNodes = 0;
         int numEmptyChunk = 0;
@@ -73,21 +70,13 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         // 格子加价出备选就靠它;FORBID 的格早在移动原语的可站/可穿判定里排除了
         com.dwinovo.numen.core.pathing.spec.PositionCosts positions = calcContext.spec.positions();
         boolean hasPositional = !positions.isEmpty();
-        int timeCheckInterval = 1 << 6;
         // 循环前取样全部设置:计算中途改设置不改变本次搜索的行为
         int pathingMaxChunkBorderFetch = NavSettings.get().pathingMaxChunkBorderFetch;
         double minimumImprovement = NavSettings.get().minimumImprovementRepropagation ? MIN_IMPROVEMENT : 0;
-        // 节点硬上限:与时间预算同为循环出口,谁先到谁停。命中后落到下方 bestSoFar(...) 返回,
-        // 与超时收尾完全一致(有可用半程即 SEGMENT,否则 FAILURE)。见 NavSettings#maxNodesPerSearch。
-        int maxNodes = NavSettings.get().maxNodesPerSearch;
         Moves[] allMoves = Moves.values();
-        while (!openSet.isEmpty() && numNodes < maxNodes && numEmptyChunk < pathingMaxChunkBorderFetch && !cancelRequested) {
-            if ((numNodes & (timeCheckInterval - 1)) == 0) { // 每 64 节点查一次墙钟(约半毫秒)
-                long now = System.currentTimeMillis();
-                if (now - failureTimeoutTime >= 0 || (!failing && now - primaryTimeoutTime >= 0)) {
-                    break;
-                }
-            }
+        // 预算用完即停,落到下方 bestSoFar(...):有可用半程即 SEGMENT,否则 FAILURE
+        while (!openSet.isEmpty() && numNodes < failureNodes && (failing || numNodes < primaryNodes)
+                && numEmptyChunk < pathingMaxChunkBorderFetch && !cancelRequested) {
             PathNode currentNode = openSet.removeLowest();
             mostRecentConsidered = currentNode;
             numNodes++;
@@ -194,16 +183,15 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
             return Optional.empty();
         }
         if (NavSettings.get().profile) {
-            // Why did the loop stop? nodeCap = hit maxNodesPerSearch (gave up early — cap may be too low
-            // for this terrain); exhausted = openSet emptied (genuinely no reachable path); timeout = time
-            // budget; chunkBorder = ran into unloaded chunks. failing=true means no usable partial found
+            // Why did the loop stop? exhausted = openSet emptied (genuinely no reachable path);
+            // chunkBorder = ran into unloaded chunks; budget = spent its node budget (primaryNodes once a
+            // usable partial exists, failureNodes before). failing=true means no usable partial found
             // (this returns a FAILURE); failing=false means a best partial segment is returned.
-            String reason = numNodes >= maxNodes ? "nodeCap"
-                    : numEmptyChunk >= pathingMaxChunkBorderFetch ? "chunkBorder"
+            String reason = numEmptyChunk >= pathingMaxChunkBorderFetch ? "chunkBorder"
                     : openSet.isEmpty() ? "exhausted"
-                    : "timeout";
-            Constants.LOG.info("[nav-search] stop reason={} nodes={}/{} failing={} goal={}",
-                    reason, numNodes, maxNodes, failing, goal);
+                    : "budget";
+            Constants.LOG.info("[nav-search] stop reason={} nodes={} (primary {}, failure {}) failing={} goal={}",
+                    reason, numNodes, primaryNodes, failureNodes, failing, goal);
         }
         return bestSoFar(true, numNodes);
     }

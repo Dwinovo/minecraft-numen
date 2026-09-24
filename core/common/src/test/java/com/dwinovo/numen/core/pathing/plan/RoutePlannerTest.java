@@ -81,7 +81,7 @@ class RoutePlannerTest {
 
         @Override
         public SearchHandle submit(BlockPos realStart, BlockPos start, Goal goal, CalculationContext context,
-                                   Favoring favoring, long primaryMs, long failureMs) {
+                                   Favoring favoring, int primaryNodes, int failureNodes) {
             submissions++;
             NavPath path = script.pollFirst();
             PathCalcResult result = path == null
