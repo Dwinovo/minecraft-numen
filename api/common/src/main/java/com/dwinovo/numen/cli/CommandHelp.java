@@ -1,9 +1,5 @@
 package com.dwinovo.numen.cli;
 
-import com.mojang.brigadier.LiteralMessage;
-import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -13,53 +9,12 @@ import java.util.List;
  * 语法只有这一个来源,技能里不抄。
  *
  * <p>三层:根(列出各组,一组一句)、组(列出动作,一行用法一句说明)、动作(用法、说明、逐个参数)。
- * 前两层是列表,每页 {@value #PAGE_SIZE} 行,超出时说还剩多少、下一页怎么翻({@code --page})。带目录的动作
- * ({@link Action#catalog})的帮助后面接着那张目录,同样分页。解析出错时附上的就是出错那一层的第一页或动作帮助。
+ * 前两层是可翻页的 {@link Listing}。带目录的动作({@link Action#catalog})的帮助后面接着那张目录,同样分页。
+ * 解析出错时附上的就是出错那一层的第一页或动作帮助。
  */
 final class CommandHelp {
 
-    static final int PAGE_SIZE = 20;
-
-    private static final DynamicCommandExceptionType NO_PAGE = new DynamicCommandExceptionType(
-            what -> new LiteralMessage(String.valueOf(what)));
-
     private CommandHelp() {}
-
-    /** 一张可翻页的列表:抬头、条目、结尾一句(可以没有),以及翻页时要写的那条命令。 */
-    record Listing(String head, List<String> lines, String foot, String again) {
-
-        int pages() {
-            return Math.max(1, (lines.size() + PAGE_SIZE - 1) / PAGE_SIZE);
-        }
-
-        String page(int page) throws CommandSyntaxException {
-            if (page < 1 || page > pages()) {
-                throw NO_PAGE.create("no page " + page + "; " + again + " has "
-                        + (pages() == 1 ? "1 page" : "pages 1-" + pages()));
-            }
-            return render(page);
-        }
-
-        /** 第一页,永远存在:出错时附的用法就是它。 */
-        String first() {
-            return render(1);
-        }
-
-        private String render(int page) {
-            int from = (page - 1) * PAGE_SIZE;
-            int to = Math.min(lines.size(), from + PAGE_SIZE);
-            StringBuilder sb = new StringBuilder(head);
-            for (String line : lines.subList(from, to)) {
-                sb.append('\n').append(line);
-            }
-            if (to < lines.size()) {
-                sb.append("\n(page ").append(page).append(" of ").append(pages()).append(", ")
-                        .append(lines.size() - to).append(" more: ").append(again)
-                        .append(" --page ").append(page + 1).append(')');
-            }
-            return foot.isEmpty() ? sb.toString() : sb.append('\n').append(foot).toString();
-        }
-    }
 
     /** 根:各组一句。组按名字排序,与系统提示里的索引同一份条目。 */
     static Listing root(Collection<CommandGroup> groups) {

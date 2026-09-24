@@ -1,6 +1,7 @@
 package com.dwinovo.numen.plugins.ftbquests;
 
 import com.dwinovo.numen.cli.ClientSource;
+import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.task.TaskResult;
 import dev.ftb.mods.ftbquests.client.ClientQuestFile;
 import dev.ftb.mods.ftbquests.client.FTBQuestsClient;
@@ -23,8 +24,8 @@ final class ClientBook {
 
     private ClientBook() {}
 
-    static void list(ClientSource src, int page) {
-        src.reply(read(src, book -> book.list(page)));
+    static void list(ClientSource src, CommandArgs args) {
+        src.reply(read(src, book -> book.list().result(args).toJson()));
     }
 
     static void show(ClientSource src, String quest) {

@@ -39,9 +39,6 @@ public final class NumenCli {
     static final String HELP_FLAG = "--help";
     private static final String HELP = "help";
 
-    /** 列表翻页的标志,根与组的帮助都认它。 */
-    static final Param<Integer> PAGE = Param.optional("page", ArgType.integer(1, 99), "Which page of the list.");
-
     /** 按名字排序:根帮助与系统提示索引的顺序不随插件的加载先后变,字节稳定。 */
     private static final Map<String, CommandGroup> GROUPS = new TreeMap<>();
     private static final CommandDispatcher<CommandSource> DISPATCHER = new CommandDispatcher<>();
@@ -139,13 +136,13 @@ public final class NumenCli {
         return action == null ? CommandHelp.group(group).first() : CommandHelp.action(action);
     }
 
-    private static CommandHelp.Listing rootListing() {
+    private static Listing rootListing() {
         return CommandHelp.root(GROUPS.values());
     }
 
     /** 一个显示列表的帮助节点:不带标志是第一页,{@code --page N} 翻页。在哪一侧解析就在哪一侧回。 */
-    static LiteralArgumentBuilder<CommandSource> helpNode(String literal, Supplier<CommandHelp.Listing> listing) {
-        return pagedHelp(literal, (source, page) -> source.reply(TaskResult.ok(listing.get().page(page)).toJson()));
+    static LiteralArgumentBuilder<CommandSource> helpNode(String literal, Supplier<Listing> listing) {
+        return pagedHelp(literal, (source, args) -> source.reply(TaskResult.ok(listing.get().page(args)).toJson()));
     }
 
     /**
@@ -153,30 +150,29 @@ public final class NumenCli {
      * 服务端算出列表再翻页。
      */
     static LiteralArgumentBuilder<CommandSource> serverHelpNode(String literal,
-                                                               Function<ServerSource, CommandHelp.Listing> listing) {
-        return pagedHelp(literal, (source, page) -> {
+                                                               Function<ServerSource, Listing> listing) {
+        return pagedHelp(literal, (source, args) -> {
             switch (source) {
                 case ClientSource client -> client.forwardToServer();
-                case ServerSource server -> server.reply(TaskResult.ok(listing.apply(server).page(page)).toJson());
+                case ServerSource server -> server.reply(TaskResult.ok(listing.apply(server).page(args)).toJson());
             }
         });
     }
 
-    /** 回一页帮助;页码不存在时抛出,和别的解析错误一样附着用法回去。 */
+    /** 回 {@code --page} 要的那一页帮助;页码不存在时抛出,和别的解析错误一样附着用法回去。 */
     @FunctionalInterface
     private interface PageShown {
-        void show(CommandSource source, int page) throws CommandSyntaxException;
+        void show(CommandSource source, CommandArgs args) throws CommandSyntaxException;
     }
 
     private static LiteralArgumentBuilder<CommandSource> pagedHelp(String literal, PageShown help) {
         Command<CommandSource> show = ctx -> {
-            Integer page = CommandArgs.fromCommand(List.of(), ctx, FlagsArgument.valuesIn(ctx)).get(PAGE);
-            help.show(ctx.getSource(), page == null ? 1 : page);
+            help.show(ctx.getSource(), CommandArgs.fromCommand(List.of(), ctx, FlagsArgument.valuesIn(ctx)));
             return Command.SINGLE_SUCCESS;
         };
         return LiteralArgumentBuilder.<CommandSource>literal(literal)
                 .executes(show)
                 .then(RequiredArgumentBuilder.<CommandSource, Map<String, Object>>argument(
-                        FlagsArgument.NODE, new FlagsArgument(List.of(PAGE))).executes(show));
+                        FlagsArgument.NODE, new FlagsArgument(List.of(Listing.PAGE))).executes(show));
     }
 }

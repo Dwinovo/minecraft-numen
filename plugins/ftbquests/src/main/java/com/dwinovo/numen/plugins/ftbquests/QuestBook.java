@@ -1,5 +1,6 @@
 package com.dwinovo.numen.plugins.ftbquests;
 
+import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.task.TaskResult;
 import dev.ftb.mods.ftbquests.quest.BaseQuestFile;
 import dev.ftb.mods.ftbquests.quest.Quest;
@@ -32,8 +33,6 @@ import java.util.UUID;
  */
 final class QuestBook {
 
-    /** 列表每页几行,与命令帮助的分页一样。 */
-    static final int PAGE_SIZE = 20;
     /** 描述超过这么多字就截断:整段剧情塞进上下文不值,要细看的是条件和奖励。 */
     private static final int DESCRIPTION_LIMIT = 600;
 
@@ -67,35 +66,19 @@ final class QuestBook {
                 .toList();
     }
 
-    /** {@code list} 的第 {@code page} 页。页码越界是一条失败,说有几页。 */
-    String list(int page) {
+    /** {@code list} 的清单:能做的任务一行一个,头上说这是谁的书,末尾是钉住的、待领的与怎么看详情。 */
+    Listing list() {
         List<Quest> quests = workable();
-        int pages = Math.max(1, (quests.size() + PAGE_SIZE - 1) / PAGE_SIZE);
-        String again = FtbqCommands.LIST;
-        if (page < 1 || page > pages) {
-            return TaskResult.fail("no page " + page + "; " + again + " has "
-                    + (pages == 1 ? "1 page" : "pages 1-" + pages)).toJson();
+        List<String> rows = new ArrayList<>();
+        for (Quest quest : quests) {
+            rows.add("  " + row(quest));
         }
-        StringBuilder sb = new StringBuilder(whose()).append('\n');
-        if (quests.isEmpty()) {
-            sb.append("Nothing to work on right now: every quest in the book is done or still waiting on others.");
-        } else {
-            sb.append("Quests you can work on now (").append(quests.size()).append("):");
-        }
-        int from = (page - 1) * PAGE_SIZE;
-        int to = Math.min(quests.size(), from + PAGE_SIZE);
-        for (Quest quest : quests.subList(from, to)) {
-            sb.append("\n  ").append(row(quest));
-        }
-        if (to < quests.size()) {
-            sb.append("\n(page ").append(page).append(" of ").append(pages).append(", ")
-                    .append(quests.size() - to).append(" more: ").append(again)
-                    .append(" --page ").append(page + 1).append(')');
-        }
-        sb.append('\n').append(pinnedLine());
-        sb.append('\n').append(unclaimedLine());
-        sb.append('\n').append(FtbqCommands.SHOW).append(" <quest> shows one quest in full.");
-        return TaskResult.ok(sb.toString()).toJson();
+        String head = whose() + "\n" + (quests.isEmpty()
+                ? "Nothing to work on right now: every quest in the book is done or still waiting on others."
+                : "Quests you can work on now (" + quests.size() + "):");
+        String foot = pinnedLine() + "\n" + unclaimedLine() + "\n"
+                + FtbqCommands.SHOW + " <quest> shows one quest in full.";
+        return new Listing(head, rows, foot, FtbqCommands.LIST);
     }
 
     /** {@code show}:按编号或标题找一个书里找得到的任务,把它摊开。 */

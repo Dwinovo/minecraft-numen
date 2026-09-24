@@ -3,6 +3,7 @@ package com.dwinovo.numen.plugins.ftbquests;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandGroup;
+import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.cli.Param;
 
@@ -19,8 +20,6 @@ final class FtbqCommands {
     static final String LIST = NumenCli.ROOT + " " + GROUP + " list";
     static final String SHOW = NumenCli.ROOT + " " + GROUP + " show";
 
-    private static final Param<Integer> PAGE = Param.optional("page", ArgType.integer(1, 99),
-            "Which page of the list.");
     /** 客户端按主人的语言认标题,所以 show 编号、标题都收;标题可以带空格,吃掉余下整行。 */
     private static final Param<String> QUEST_NAMED = Param.required("quest", ArgType.text(),
             "A quest's id, or its full title as list prints it.");
@@ -41,10 +40,7 @@ final class FtbqCommands {
 
     private static void actions(CommandGroup quests) {
         quests.client("list", "The quests you can work on now, what each still needs and who can do it.",
-                (src, args) -> {
-                    Integer page = args.get(PAGE);
-                    ClientBook.list(src, page == null ? 1 : page);
-                }, PAGE);
+                ClientBook::list, Listing.PAGE);
         quests.client("show", "One quest in full: description, dependencies, tasks, rewards.",
                 (src, args) -> ClientBook.show(src, args.get(QUEST_NAMED)), QUEST_NAMED);
         quests.server("submit", "Hand in a quest's items, experience or checkmarks from your own inventory.",
