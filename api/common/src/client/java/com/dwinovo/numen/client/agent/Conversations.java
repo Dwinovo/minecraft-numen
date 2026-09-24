@@ -335,7 +335,8 @@ public final class Conversations extends JsonLibrary<Conversation> {
         if (members.isEmpty() || text == null || text.isBlank()) {
             return new Said(conv, false);
         }
-        Mentions.Routing routing = Mentions.route(text, members);
+        // 引的那句里可能有 @,那是别人当时的话,不算主人这次叫谁
+        Mentions.Routing routing = Mentions.route(com.dwinovo.numen.agent.conversation.Quote.parse(text).body(), members);
         boolean persisted = get(conv.id()) != null;
         // 先拨号落盘,再定场面,最后送话:被叫醒的那几只从此在这个场面里——接下来她说的话属于这里,
         // 记录盖这个印;她收到这句话那一刻就得知道还有谁在听、这是第几句

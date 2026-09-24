@@ -58,6 +58,8 @@ public final class Sprites {
     public static final ResourceLocation DATABASE = icon("icon_database");
     public static final ResourceLocation MAP_PIN = icon("icon_map_pin");
     public static final ResourceLocation HEART = icon("icon_heart");
+    /** 消息右键菜单里的引用回复。 */
+    public static final ResourceLocation REPLY = icon("icon_reply");
     /** 左栏顶上的 ☰(设置)与设置页抬头的 ←(回到对话)。 */
     public static final ResourceLocation MENU = icon("icon_menu");
     public static final ResourceLocation BACK = icon("icon_back");

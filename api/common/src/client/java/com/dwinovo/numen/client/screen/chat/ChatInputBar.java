@@ -8,6 +8,7 @@ import com.dwinovo.numen.client.ui.NumenTheme;
 import com.dwinovo.numen.client.ui.mc.McDrawSurface;
 import com.dwinovo.numen.client.ui.widget.TextField;
 import com.dwinovo.numen.client.ui.widget.UiRoot;
+import com.dwinovo.numen.client.screen.Nb;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
@@ -89,6 +90,16 @@ public final class ChatInputBar {
     private TextField field;
     private String draft = "";
     private boolean recording;
+    /**
+     * 引用回复:在回谁的哪一句;null = 没在回。输入行上面长出一条引用栏(Telegram 的回复栏),
+     * 发出去时拼进正文(见 {@link com.dwinovo.numen.agent.conversation.Quote})。
+     * {@code quoteShown} 是那条栏露出多高,按趋近走;收起的途中还要画,所以谁和那句另记一份。
+     */
+    private String quoteWho, quoteText;
+    private String shownWho = "", shownText = "";
+    private float quoteShown;
+    private long quoteFrameMs;
+    private static final int QUOTE_BAR_H = 22;
     /** 右边那一格:这一帧是什么、上一样是什么、什么时候换的(换的那 150ms 两样都画)。 */
     private Act act, prevAct;
     private long actSince;
@@ -148,7 +159,34 @@ public final class ChatInputBar {
      * 宿主按它排上面的东西——答复框与输入框同级,占位置,不叠在别人身上。
      */
     public int height() {
-        return consent != null ? consent.preferredHeight() : barH;
+        return consent != null ? consent.preferredHeight() : barH + Math.round(quoteShown);
+    }
+
+    /** 回这一句:输入行上面出引用栏,光标回到输入框。 */
+    public void quote(String who, String text) {
+        quoteWho = who;
+        quoteText = text;
+        shownWho = who;
+        shownText = text.replace('\n', ' ');
+        if (field != null) ui.requestFocus(field);
+    }
+
+    /** 重建输入行时把引用带过去(已经露全的就直接露全,不再长一遍)。 */
+    public record QuoteState(String who, String text) {}
+
+    public QuoteState quoteState() {
+        return quoteWho == null ? null : new QuoteState(quoteWho, quoteText);
+    }
+
+    public void restoreQuote(QuoteState q) {
+        if (q == null) return;
+        quote(q.who(), q.text());
+        quoteShown = QUOTE_BAR_H;
+    }
+
+    private void cancelQuote() {
+        quoteWho = null;
+        quoteText = null;
     }
 
     /** 录音中:右边那一格是停止录音。 */
@@ -285,6 +323,7 @@ public final class ChatInputBar {
             ui.render(s, c, mouseX, mouseY, nowMs);   // 只剩第四项里的输入框
             return;
         }
+        renderQuote(g, mouseX, mouseY, c);
         g.fill(fieldX, fieldY, actX + ACT_W, fieldY + fieldH, c.inputBg());   // 输入框和右边那一格同一条底
         ui.render(s, c, mouseX, mouseY, nowMs);
         renderAct(g, mouseX, mouseY, c);
@@ -292,7 +331,7 @@ public final class ChatInputBar {
         if (panel != null) {
             panel.render(s, c, mouseX, mouseY, nowMs);
         } else if (popupOpen()) {
-            CommandPopup.render(s, c, candidates, selected, fieldX, fieldY - 2, fieldW);
+            CommandPopup.render(s, c, candidates, selected, fieldX, fieldY - 2 - Math.round(quoteShown), fieldW);
         }
     }
 
@@ -309,6 +348,10 @@ public final class ChatInputBar {
     public boolean mouseClicked(double mx, double my, int button) {
         if (consent != null) {
             return consent.contains(mx, my) && consent.mouseClicked(mx, my, button);
+        }
+        if (quoteWho != null && overQuoteClose(mx, my)) {
+            cancelQuote();
+            return true;
         }
         if (act != null && overAct(mx, my)) {
             if (actEnabled(act)) {
@@ -373,6 +416,10 @@ public final class ChatInputBar {
                 }
                 default -> { }
             }
+        }
+        if (keyCode == KeyCodes.ESCAPE && quoteWho != null) {   // Esc 先收引用栏,再一次才关界面
+            cancelQuote();
+            return true;
         }
         if (keyCode == KeyCodes.ENTER && field != null && field.isFocused()) {
             send();
@@ -556,7 +603,42 @@ public final class ChatInputBar {
             host.onCommandReply(reply);
             return;
         }
+        if (quoteWho != null) {
+            text = com.dwinovo.numen.agent.conversation.Quote.compose(quoteWho, quoteText, text);
+            cancelQuote();
+        }
         host.onSend(text);
+    }
+
+    /** 引用栏:从输入行上面长出来(和回到最新钮一样被裁着滑),一枚回复图标、一道竖线、回谁、那句,右端 × 收起。 */
+    private void renderQuote(GuiGraphics g, int mouseX, int mouseY, NumenTheme.Colors c) {
+        long now = System.currentTimeMillis();
+        float dt = quoteFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - quoteFrameMs) / 1000f);
+        quoteFrameMs = now;
+        quoteShown = com.dwinovo.numen.client.ui.Anim.approach(quoteShown, quoteWho != null ? QUOTE_BAR_H : 0f, 18f, dt);
+        if (quoteShown < 0.5f) return;
+        var font = Minecraft.getInstance().font;
+        int right = actX + ACT_W;
+        int y0 = fieldY - QUOTE_BAR_H;
+        g.enableScissor(fieldX, fieldY - Math.round(quoteShown), right, fieldY);
+        g.fill(fieldX, y0, right, fieldY, c.inputBg());
+        int size = com.dwinovo.numen.client.ui.mc.Sprites.SIZE;
+        com.dwinovo.numen.client.ui.mc.Sprites.draw(g, com.dwinovo.numen.client.ui.mc.Sprites.REPLY,
+                fieldX + 5, y0 + (QUOTE_BAR_H - size) / 2, size, c.accent());
+        int lx = fieldX + 24;
+        g.fill(lx, y0 + 3, lx + 2, y0 + QUOTE_BAR_H - 3, c.accent());
+        int room = actX - lx - 12;
+        Nb.text(g, font, Nb.clip(font, Component.translatable("numen.chat.reply_to", shownWho).getString(), room),
+                lx + 6, y0 + 3, c.accent());
+        Nb.text(g, font, Nb.clip(font, shownText, room), lx + 6, y0 + 12, c.textMuted());
+        boolean hot = quoteWho != null && overQuoteClose(mouseX, mouseY);
+        Nb.text(g, font, "×", actX + (ACT_W - font.width("×")) / 2, y0 + (QUOTE_BAR_H - 8) / 2,
+                hot ? c.textPrimary() : c.textMuted());
+        g.disableScissor();
+    }
+
+    private boolean overQuoteClose(double mx, double my) {
+        return mx >= actX && mx < actX + ACT_W && my >= fieldY - QUOTE_BAR_H && my < fieldY;
     }
 
     /**

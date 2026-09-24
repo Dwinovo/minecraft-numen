@@ -5,6 +5,7 @@ import com.dwinovo.numen.agent.llm.ConvoLog;
 import com.dwinovo.numen.agent.llm.ConvoState;
 import com.dwinovo.numen.agent.conversation.Conversation;
 import com.dwinovo.numen.agent.conversation.Mentions;
+import com.dwinovo.numen.agent.conversation.Quote;
 import com.dwinovo.numen.agent.conversation.Transcript;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
@@ -307,6 +308,7 @@ public final class ChatView {
     /** 滚动 + 裁剪 + 逐块绘制——对话视图与外脑现场视图共用的那台机器。 */
     private void renderBlocks(GuiGraphics g, int x, int y, int w, int h, List<Block> blocks, float dt) {
         gx = x; gy = y; gw = w; gh = h;
+        hits.clear();
         int content = totalHeight(blocks);
         lastMaxScroll = Math.max(0, content - h);
         if (pinBottom) scrollTarget = lastMaxScroll;
@@ -386,13 +388,13 @@ public final class ChatView {
                 case OWNER -> {
                     boolean first = !OWNER.equals(last);
                     out.add(bubble(true, null, Nb.colored(ln.text(), TXT), OWN_FILL,
-                            innerW, first, null, null, -1));
+                            innerW, first, null, null, -1, ln.text(), null));
                     last = OWNER;
                 }
                 case SAY -> {
                     boolean first = !id.equals(last);
                     out.add(bubble(false, first ? label(id) : null, Nb.colored(ln.text(), TXT),
-                            AI_FILL, innerW, first, id, null, -1));
+                            AI_FILL, innerW, first, id, null, -1, ln.text(), null));
                     last = id;
                 }
                 case TOOL -> {
@@ -492,10 +494,33 @@ public final class ChatView {
      *  放不进单独占一小行;{@code entry} = 归并后的记录序号,新来的按它飞入(-1 = 不飞)。 */
     private record Bubble(boolean own, String label, List<FormattedCharSequence> lines,
                           int maxLineW, int fill,
-                          boolean showAvatar, UUID who, String time, boolean timeInline, int entry) implements Block {
+                          boolean showAvatar, UUID who, String time, boolean timeInline, int entry,
+                          String raw, Quote quote) implements Block {
         Bubble withAvatar(boolean on) {
-            return new Bubble(own, label, lines, maxLineW, fill, on, who, time, timeInline, entry);
+            return new Bubble(own, label, lines, maxLineW, fill, on, who, time, timeInline, entry, raw, quote);
         }
+    }
+
+    /** 气泡顶上的引用条:两行(谁、那句),左缘一道竖线;{@code QUOTE_IN} 是字离竖线多远。 */
+    private static final int QUOTE_H = 20;
+    private static final int QUOTE_IN = 6;
+
+    /** 这一帧画出来的气泡在哪、是哪条:右键按它认点中的是哪句。 */
+    private record Hit(int x, int y, int w, int h, Bubble b) {}
+    private final List<Hit> hits = new ArrayList<>();
+
+    /** 右键点中的那句:谁说的(主人自己是 null)、原文(引用条不算在内)。 */
+    public record Picked(UUID who, String text) {}
+
+    /** 指针下那个气泡;不在气泡上是 null。只认对话流可见区里的。 */
+    public Picked bubbleAt(double mx, double my) {
+        if (mx < gx || mx >= gx + gw || my < gy || my >= gy + gh) return null;
+        for (Hit h : hits) {
+            if (h.b().raw() != null && mx >= h.x() && mx < h.x() + h.w() && my >= h.y() && my < h.y() + h.h()) {
+                return new Picked(h.b().own() ? null : h.b().who(), h.b().raw());
+            }
+        }
+        return null;
     }
 
     /** A run of tool calls (or a reasoning block). {@code foldKey} non-null = finished group,
@@ -521,7 +546,8 @@ public final class ChatView {
 
     private int heightOf(Block b) {
         return switch (b) {
-            case Bubble bb -> (bb.label() != null ? LABEL_H : 0) + bb.lines().size() * LINE_H + PAD_V * 2
+            case Bubble bb -> (bb.label() != null ? LABEL_H : 0) + (bb.quote() != null ? QUOTE_H : 0)
+                    + bb.lines().size() * LINE_H + PAD_V * 2
                     + (bb.time() != null && !bb.timeInline() ? TIME_H : 0);
             case Chip c -> (c.label() != null ? LABEL_H : 0) + c.rows().size() * LINE_H + PAD_V * 2;
             case Notice ignored -> LINE_H;
@@ -639,8 +665,9 @@ public final class ChatView {
                     String shown = ownerText(u.content());   // owner's words only, never injected content
                     if (shown.isEmpty()) continue;
                     boolean first = !OWNER.equals(f.last);
-                    out.add(bubble(true, null, mentionsLit(shown), OWN_FILL, innerW, first, null,
-                            clock(entry.ts()), msgIndex));
+                    Quote q = Quote.parse(shown);   // 引用回复:第一行画成气泡顶上的引用条
+                    out.add(bubble(true, null, mentionsLit(q.body()), OWN_FILL, innerW, first, null,
+                            clock(entry.ts()), msgIndex, q.body(), q.quoted() ? q : null));
                     f.last = OWNER;
                 }
                 case ConvoState.Msg.Assistant a -> {
@@ -659,7 +686,7 @@ public final class ChatView {
                         boolean first = !who.equals(f.last);
                         out.add(bubble(false, first ? label(who) : null,
                                 Nb.colored(spoken, TXT), AI_FILL, innerW, first, who,
-                                clock(entry.ts()), msgIndex));
+                                clock(entry.ts()), msgIndex, spoken, null));
                         f.last = who;
                     }
                     for (LlmToolCall tc : turn.toolCalls()) addPiece(f, who, msgIndex, new Piece(null, false, tc));
@@ -691,7 +718,7 @@ public final class ChatView {
                 flushProcess(f, done, failed, bubbleMaxW);
                 boolean first = !her.equals(f.last);
                 out.add(bubble(false, first ? label(her) : null, Nb.colored(l.shown, TXT),
-                        AI_FILL, innerW, first, her, null, -1));
+                        AI_FILL, innerW, first, her, null, -1, l.shown, null));
                 f.last = her;
             }
             // 排着的话:主人一句话复制进每个醒着的成员的队列,按原文去重,画一次
@@ -707,8 +734,9 @@ public final class ChatView {
         // so a queued message never feels swallowed.
         for (String shown : queued) {
             boolean first = !OWNER.equals(f.last);
-            out.add(bubble(true, null, Nb.colored("⌛ " + shown, FAINT), QUEUED_FILL,
-                    innerW, first, null, null, -1));
+            String body = Quote.parse(shown).body();
+            out.add(bubble(true, null, Nb.colored("⌛ " + body, FAINT), QUEUED_FILL,
+                    innerW, first, null, null, -1, body, null));
             f.last = OWNER;
         }
         if (compacting) notice(out, I18n.get("numen.chat.compacting"));
@@ -746,10 +774,15 @@ public final class ChatView {
     }
 
     private Bubble bubble(boolean own, String label, Component body, int fill,
-                          int innerW, boolean showAvatar, UUID who, String time, int entry) {
+                          int innerW, boolean showAvatar, UUID who, String time, int entry,
+                          String raw, Quote quote) {
         List<FormattedCharSequence> lines = split(body, innerW);
         int maxW = 0;
         for (FormattedCharSequence l : lines) maxW = Math.max(maxW, font.width(l));
+        if (quote != null) {
+            maxW = Math.max(maxW, Math.min(innerW,
+                    QUOTE_IN + Math.max(font.width(quote.who()), font.width(quote.snippet()))));
+        }
         boolean inline = false;
         if (time != null) {
             // 时间戳挤在最后一行右侧(Telegram):放得下就同一行,放不下自己占一小行
@@ -758,7 +791,7 @@ public final class ChatView {
             inline = last + tw <= innerW;
             maxW = Math.max(maxW, inline ? last + tw : tw);
         }
-        return new Bubble(own, label, lines, maxW, fill, showAvatar, who, time, inline, entry);
+        return new Bubble(own, label, lines, maxW, fill, showAvatar, who, time, inline, entry, raw, quote);
     }
 
     /** {@code HH:mm},本机时区;没有时间戳的旧记录不标。 */
@@ -958,7 +991,8 @@ public final class ChatView {
     private void drawBubble(GuiGraphics g, Bubble b, int x, int y, int w) {
         int bw = b.maxLineW() + PAD_H * 2;
         boolean timeLine = b.time() != null && !b.timeInline();
-        int bh = b.lines().size() * LINE_H + PAD_V * 2 + (timeLine ? TIME_H : 0);
+        int qh = b.quote() != null ? QUOTE_H : 0;
+        int bh = qh + b.lines().size() * LINE_H + PAD_V * 2 + (timeLine ? TIME_H : 0);
         int bubTop = y + (b.label() != null ? LABEL_H : 0);
         // 自己的贴右缘;别人的在脸那一列右边(私聊没有那一列)
         int bx = b.own() ? x + w - EDGE - bw : x + EDGE + faceCol();
@@ -973,7 +1007,18 @@ public final class ChatView {
         }
         // 气泡只有底色、没有描边(Telegram):和地面分开靠色块,不靠框线
         g.fill(bx, bubTop, bx + bw, bubTop + bh, b.fill());
-        int ty = bubTop + PAD_V + 1;
+        hits.add(new Hit(bx, bubTop, bw, bh, b));
+        if (b.quote() != null) {
+            // 引用条(Telegram 回复的样子):一道竖线、谁、那句。自己的气泡是强调色底,线和字往白里提
+            int qx = bx + PAD_H, qy = bubTop + PAD_V;
+            int ink = b.own() ? UiTheme.mix(b.fill(), 0xFFFFFFFF, 0.85f) : MENTION;
+            int dim = b.own() ? UiTheme.mix(b.fill(), 0xFFFFFFFF, 0.55f) : FAINT;
+            g.fill(qx, qy, qx + 2, qy + QUOTE_H - 3, ink);
+            int room = bw - PAD_H * 2 - QUOTE_IN;
+            draw(g, Nb.colored(fitOneLine(b.quote().who(), room), ink).getVisualOrderText(), qx + QUOTE_IN, qy);
+            draw(g, Nb.colored(fitOneLine(b.quote().snippet(), room), dim).getVisualOrderText(), qx + QUOTE_IN, qy + 9);
+        }
+        int ty = bubTop + PAD_V + 1 + qh;
         for (FormattedCharSequence l : b.lines()) {
             draw(g, l, bx + PAD_H, ty);
             ty += LINE_H;

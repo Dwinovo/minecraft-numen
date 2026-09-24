@@ -283,6 +283,8 @@ public final class NumenScreen extends Screen {
     /** 聊天输入行(NumenUI):四颗图标钮 + 输入框,见 ChatInputBar。 */
     private com.dwinovo.numen.client.screen.chat.ChatInputBar inputBar;
     private String savedInput = "";
+    /** 重建输入行时带过去的引用(和 savedInput 一样只活过这一次重建)。 */
+    private com.dwinovo.numen.client.screen.chat.ChatInputBar.QuoteState savedQuote;
 
     // "+" summon flow:居中卡 + 暗幕,当前 tab 内容照常渲染作背景
     private boolean summoning;
@@ -437,6 +439,7 @@ public final class NumenScreen extends Screen {
         if (from != null && inputBar != null) Conversations.instance().setDraft(from, inputBar.text());
         inputBar = null;
         savedInput = Conversations.instance().draft(c);
+        savedQuote = null;   // 引用是对着原来那个会话里的话,不跟过去
         if (tab == Tab.ITEMS || tab == Tab.MEMBERS) selectTab(Tab.CHAT);   // 换了会话,资料页收起(Telegram 也这样)
         planOpen = false;
         planShownH = 0f;
@@ -577,7 +580,10 @@ public final class NumenScreen extends Screen {
 
     /** Rebuild the widgets for the active tab. */
     private void rebuild() {
-        if (inputBar != null) savedInput = inputBar.text();
+        if (inputBar != null) {
+            savedInput = inputBar.text();
+            savedQuote = inputBar.quoteState();
+        }
         clearWidgets();
         overlay.clear();
         inputBar = null;
@@ -952,6 +958,8 @@ public final class NumenScreen extends Screen {
             inputBar.setText(savedInput);
             savedInput = "";
         }
+        inputBar.restoreQuote(savedQuote);
+        savedQuote = null;
     }
 
     /** 输入行的宿主回调面:发言闸门与可按性判据都在屏幕这边。 */
@@ -1164,6 +1172,39 @@ public final class NumenScreen extends Screen {
         rebuild();
     }
 
+    /** 右键菜单(消息、左栏的行、群成员共用一个):挂在指针处,右边放不下就往左长。 */
+    private PopupMenu contextMenu;
+
+    private void openContextMenu(java.util.List<PopupMenu.Item> items, double mx, double my) {
+        if (contextMenu == null) contextMenu = new PopupMenu(font);
+        contextMenu.open(overlayUi, items, (int) mx, (int) my, mx + 120 < this.width);
+    }
+
+    private void openMessageMenu(com.dwinovo.numen.client.screen.chat.ChatView.Picked p, double mx, double my) {
+        String who = p.who() == null ? Minecraft.getInstance().getUser().getName() : nameFor(p.who());
+        java.util.List<PopupMenu.Item> items = new java.util.ArrayList<>();
+        items.add(new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.COPY, I18n.get("numen.menu.copy"), false,
+                () -> Minecraft.getInstance().keyboardHandler.setClipboard(p.text())));
+        if (inputBar != null) {
+            items.add(new PopupMenu.Item(com.dwinovo.numen.client.ui.mc.Sprites.REPLY, I18n.get("numen.menu.reply"),
+                    false, () -> replyTo(p, who)));
+        }
+        openContextMenu(items, mx, my);
+    }
+
+    /**
+     * 引用回复:输入行上面出引用栏。群里回的是她的话,就在开头替你写上 @ 她——看得见、删得掉,
+     * 谁回照旧只看 @,引用本身不叫醒谁。
+     */
+    private void replyTo(com.dwinovo.numen.client.screen.chat.ChatView.Picked p, String who) {
+        if (inputBar == null) return;
+        if (p.who() != null && solo() == null) {
+            String at = "@" + who;
+            if (!inputBar.text().contains(at)) inputBar.setText(at + " " + inputBar.text());
+        }
+        inputBar.quote(who, p.text());
+    }
+
     /** 召唤卡:每次开都是新的一张(默认/无/生存)。 */
     private void openSummon() {
         summoning = true;
@@ -1358,6 +1399,13 @@ public final class NumenScreen extends Screen {
             // (卡上字段/按钮),侧栏/页签/背景列表全部屏蔽。
             if (button == 0 && settings.mouseClicked(mouseX, mouseY)) return true;
             return super.mouseClicked(mouseX, mouseY, button);
+        }
+        if (button == 1 && !modalOpen() && tab == Tab.CHAT && conv != null) {   // 右键一条话:复制、引用回复
+            var picked = chatView.bubbleAt(mouseX, mouseY);
+            if (picked != null) {
+                openMessageMenu(picked, mouseX, mouseY);
+                return true;
+            }
         }
         if (button == 0) {
             // Summon dropdowns get first pick (their open lists overlay the panel).
@@ -1782,6 +1830,7 @@ public final class NumenScreen extends Screen {
                 mouseX, mouseY, net.minecraft.Util.getMillis());
         if (headerMenu != null) headerMenu.renderFading(g, mouseX, mouseY);   // 刚收起的菜单淡出那几帧
         if (mainMenu != null) mainMenu.renderFading(g, mouseX, mouseY);
+        if (contextMenu != null) contextMenu.renderFading(g, mouseX, mouseY);
 
         // Hovered tooltip — drawn last so nothing paints over it; only after the pointer has rested a while.
         if (pendingTip != null && !overlayOpen()) {

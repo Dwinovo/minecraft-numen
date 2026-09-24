@@ -78,7 +78,8 @@ public final class ConversationPreview {
         for (int i = merged.size() - 1; i >= 0 && out == null; i--) {
             Transcript.Entry e = merged.get(i);
             if (e.msg() instanceof ConvoState.Msg.User u) {
-                String t = flat(ChatDisplayModes.current().userText(u.content()));
+                String t = flat(com.dwinovo.numen.agent.conversation.Quote.parse(
+                        ChatDisplayModes.current().userText(u.content())).body());   // 引的那句不进预览
                 if (!t.isEmpty()) {
                     out = new Line(I18n.get(ModLanguageData.Keys.RAIL_YOU) + ": " + t, e.ts());
                 }
