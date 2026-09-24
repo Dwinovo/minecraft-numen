@@ -56,10 +56,12 @@ public final class Sprites {
     public static final ResourceLocation VOLUME = icon("icon_volume");
     public static final ResourceLocation SHIRT = icon("icon_shirt");
     public static final ResourceLocation BRUSH = icon("icon_brush");
-    /** 资料页的资料行:上下文、距离、状态(人设、模型、声线用上面那几枚)。 */
+    /** 资料页的资料行:上下文、距离、游戏模式(人设、模型、声线用上面那几枚)。 */
     public static final ResourceLocation DATABASE = icon("icon_database");
     public static final ResourceLocation MAP_PIN = icon("icon_map_pin");
-    public static final ResourceLocation HEART = icon("icon_heart");
+    public static final ResourceLocation GAMEPAD = icon("icon_gamepad");
+    /** 资料页的操作块:发消息。 */
+    public static final ResourceLocation MESSAGE = icon("icon_message");
     /** 消息右键菜单里的引用回复。 */
     public static final ResourceLocation REPLY = icon("icon_reply");
     /** 左栏行的右键菜单:置顶(置顶的行右端也挂这枚)、标为已读。 */

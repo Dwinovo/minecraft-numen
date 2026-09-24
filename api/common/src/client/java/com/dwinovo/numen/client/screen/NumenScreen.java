@@ -789,7 +789,17 @@ public final class NumenScreen extends Screen {
 
     /** 铅笔:开卡。作用在左栏选中的那一格——就他俩时改她,落过盘的会话改名。 */
     private void openEditCard() {
-        openCard(solo() != null ? editPanel() : convEditPanel());
+        if (solo() != null) {
+            editCompanion(solo());
+        } else {
+            openCard(convEditPanel());
+        }
+    }
+
+    /** 编辑这一只(抬头菜单、资料页的编辑块都走这里)。 */
+    private void editCompanion(UUID who) {
+        editTarget = who;
+        openCard(editPanel());
     }
 
     /** 「＋」:邀请卡。勾完就进去——请进来的那个会话成为面板对着的。 */
@@ -843,12 +853,14 @@ public final class NumenScreen extends Screen {
     }
 
     /** 编辑卡的宿主面:身份、网络动作(模式/皮肤发包)与关卡留在屏幕这边。 */
+    /** 编辑卡对着哪只:抬头菜单开的是就他俩那只,资料页开的是页上那只(群成员也一样)。 */
+    private UUID editTarget;
+
     private final class EditHost implements CompanionEditPanel.Host {
-        @Override public UUID uuid() { return solo(); }
+        @Override public UUID uuid() { return editTarget; }
 
         @Override public String name() {
-            String n = NumenScreen.this.name();
-            return n == null ? "?" : n;
+            return editTarget == null ? "?" : nameFor(editTarget);
         }
 
         @Override public void onClose() {
@@ -986,8 +998,7 @@ public final class NumenScreen extends Screen {
         } else if (overlayKind == Tab.MEMBERS) {
             renderMembers(g, mouseX - dx, mouseY);
         } else if (profileOf != null) {
-            com.dwinovo.numen.client.screen.items.ItemsView.render(
-                    g, font, profileOf, left, top, panelW, panelH, HEADER_H, mouseX - dx, mouseY);
+            renderProfile(g, mouseX - dx, mouseY);
         }
         g.pose().popPose();
         g.disableScissor();
@@ -1157,6 +1168,7 @@ public final class NumenScreen extends Screen {
             return;
         }
         profileOf = who;
+        if (profilePage != null) profilePage.reset();
         if (tab == Tab.ITEMS) {
             requestInventory();
         } else {
@@ -1167,6 +1179,7 @@ public final class NumenScreen extends Screen {
     /** 群资料页里点了一个人:她的资料页从右边推进来,盖在群资料页上;← 退回群资料页。 */
     private void pushProfile(UUID who) {
         profileOf = who;
+        if (profilePage != null) profilePage.reset();
         baseTab = Tab.MEMBERS;
         overlayKind = Tab.ITEMS;
         tab = Tab.ITEMS;
@@ -1223,6 +1236,37 @@ public final class NumenScreen extends Screen {
     /** 抬头名字:就他俩开她的资料页,群开群资料页。 */
     private void openInfo() {
         if (solo() != null) toggleInfo(solo()); else selectTab(Tab.MEMBERS);
+    }
+
+    /** 资料页(Telegram 资料页那样一整页可滚)。 */
+    private ProfilePage profilePage;
+
+    private void renderProfile(GuiGraphics g, int mouseX, int mouseY) {
+        if (profilePage == null) profilePage = new ProfilePage(font);
+        boolean live = tab == Tab.ITEMS && !modalOpen() && !overlayOpen() && Math.abs(overlayT - panelW) < 1f;
+        long now = System.currentTimeMillis();
+        profilePage.render(g, profileOf, left + 3, top + HEADER_H, panelW - 6, panelH - HEADER_H - 3,
+                mouseX, mouseY, live, m -> {
+                    HeaderStatus s = headerStatus(m, now);
+                    return s == null ? "" : s.text();
+                });
+    }
+
+    /** 资料页上的点击:发消息回到和她的对话,编辑开她的编辑卡,遣散先过确认卡。 */
+    private boolean profileClicked(double mx, double my) {
+        if (tab != Tab.ITEMS || profilePage == null || profileOf == null) return false;
+        ProfilePage.Hit hit = profilePage.click(mx, my);
+        if (hit == null) return false;
+        UUID who = profileOf;
+        switch (hit) {
+            case MESSAGE -> {
+                switchTo(Conversations.instance().of(who));
+                selectTab(Tab.CHAT);   // 本来就在和她的对话里时 switchTo 什么都不做,这里收起资料页
+            }
+            case EDIT -> editCompanion(who);
+            case DISMISS -> openDismissConfirm(who);
+        }
+        return true;
     }
 
     /** 群资料页:成员一行一个。垫在底下时也画,只是不亮悬停、不接点击。 */
@@ -1680,6 +1724,7 @@ public final class NumenScreen extends Screen {
                 return true;
             }
             if (!overlayOpen() && membersClicked(mouseX, mouseY)) return true;
+            if (!overlayOpen() && profileClicked(mouseX, mouseY)) return true;
             if (tab == Tab.CHAT && planStripW > 0 && mouseY >= planStripY && mouseY < planStripY + STATUS_H
                     && mouseX >= planStripX && mouseX < planStripX + planStripW) {
                 planOpen = !planOpen;
@@ -1878,6 +1923,9 @@ public final class NumenScreen extends Screen {
         if (tab == Tab.CHAT && sy != 0) {
             return chatView.mouseScrolled(sy);
         }
+        if (tab == Tab.ITEMS && sy != 0 && profilePage != null) {
+            return profilePage.scroll(sy);
+        }
         return super.mouseScrolled(mx, my, sx, sy);
     }
 
@@ -1920,9 +1968,9 @@ public final class NumenScreen extends Screen {
                 txt(g, Component.literal(Nb.clip(font, title == null ? "?" : title, headerLimit - tx)), tx, top + NAME_Y, ON_BAND);
                 renderStatusText(g, null, tx, headerLimit);
             } else {
-                String who = profileOf == null ? "?" : nameFor(profileOf);
-                txt(g, Component.literal(Nb.clip(font, who, headerLimit - tx)), tx, top + NAME_Y, ON_BAND);
-                renderStatusText(g, profileOf, tx, headerLimit);
+                // 资料页的名字和状态在页顶上(Telegram 资料页),抬头只说这是资料
+                txt(g, Component.translatable(ModLanguageData.Keys.HEADER_PROFILE), tx,
+                        top + (HEADER_H - font.lineHeight) / 2 + 1, ON_BAND);
             }
             moreX = -1;
             nameRight = left + PAD;
