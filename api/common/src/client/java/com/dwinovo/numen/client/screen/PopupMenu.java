@@ -104,7 +104,7 @@ final class PopupMenu implements UiRoot.Overlay {
         UiTheme t = UiTheme.current();
         int x = growRight ? anchor : anchor - cw;
         g.setColor(1f, 1f, 1f, Math.max(0.05f, alpha));
-        NumenStyle.box(new McDrawSurface(g, font), x, top, cw, ch, t.aiFill(), t.aiBorder());
+        NumenStyle.box(new McDrawSurface(g, font), x, top, cw, ch, t.band(), t.aiBorder());   // Telegram 菜单是窗口底色
         g.enableScissor(x + 1, top + 1, x + cw - 1, top + ch - 1);
         int left = left();
         int right = left + w;
@@ -116,7 +116,7 @@ final class PopupMenu implements UiRoot.Overlay {
                 continue;
             }
             boolean hot = live && alpha >= 1f && mouseX >= left && mouseX < right && mouseY >= y && mouseY < y + ROW_H;
-            if (hot) g.fill(left + 1, y, right - 1, y + ROW_H, t.chipFill());
+            if (hot) g.fill(left + 1, y, right - 1, y + ROW_H, t.over());
             int ink = it.danger() ? t.fail() : t.text();
             Sprites.draw(g, it.icon(), left + PAD_L, y + (ROW_H - Sprites.SIZE) / 2, Sprites.SIZE,
                     it.danger() ? t.fail() : t.textDim());

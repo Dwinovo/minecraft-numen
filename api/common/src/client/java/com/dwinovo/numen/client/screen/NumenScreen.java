@@ -980,7 +980,7 @@ public final class NumenScreen extends Screen {
         g.pose().pushPose();
         g.pose().translate(dx, 0, 0);
         UiTheme t = UiTheme.current();
-        g.fill(left + 3, bodyTop, left + panelW - 3, bodyBottom, t.ground());   // 底板盖住下面的对话
+        g.fill(left + 3, bodyTop, left + panelW - 3, bodyBottom, t.band());   // 盖着的页是窗口底色(Telegram 资料页、设置页),盖住下面的对话
         if (overlayKind == Tab.SETTINGS) {
             settings.render(g, mouseX - dx, mouseY);   // global — works with no companion
         } else if (overlayKind == Tab.MEMBERS) {
@@ -1230,7 +1230,7 @@ public final class NumenScreen extends Screen {
         if (conv == null) return;
         if (membersPage == null) membersPage = new MembersPage(font);
         int bodyTop = top + HEADER_H;
-        g.fill(left + 3, bodyTop, left + panelW - 3, top + panelH - 3, UiTheme.current().ground());
+        g.fill(left + 3, bodyTop, left + panelW - 3, top + panelH - 3, UiTheme.current().band());
         boolean live = tab == Tab.MEMBERS && !modalOpen() && !overlayOpen()
                 && Math.abs(overlayT - (tab == baseTab ? 0f : panelW)) < 1f;
         long now = System.currentTimeMillis();
@@ -1397,7 +1397,7 @@ public final class NumenScreen extends Screen {
         UiTheme t = UiTheme.current();
         int x0 = railX, y0 = top, x1 = railX + railW + panelW, y1 = top + panelH;
         g.fill(x0, y0, x1, y1, t.border());                          // frame + rail divider base
-        g.fill(x0 + 3, y0 + 3, x0 + railW, y1 - 3, t.ground());     // 左栏列
+        g.fill(x0 + 3, y0 + 3, x0 + railW, y1 - 3, t.band());       // 左栏列:窗口底色,聊天区才是聊天背景
         g.fill(x0 + railW, y0 + 3, x0 + railW + 1, y1 - 3, t.border());   // 列表与正文之间一道竖线
         g.fill(left + 3, y0 + 3, x1 - 3, y0 + HEADER_H - 2, t.band());   // header band (underline = border gap)
         g.fill(left + 3, y0 + HEADER_H, x1 - 3, y1 - 3, t.ground()); // panel ground
@@ -2102,8 +2102,8 @@ public final class NumenScreen extends Screen {
         if (activeY >= 0) {
             selY = Float.isNaN(selY) ? activeY : com.dwinovo.numen.client.ui.Anim.approach(selY, activeY, 18f, dt);
             g.enableScissor(rowX, top + RAIL_TOP, rowX + rowW, railBottomEdge());
-            // 选中那一行整行填色(Telegram),用主人自己那侧气泡的颜色——"你在这儿"
-            g.fill(rowX, Math.round(selY), rowX + rowW, Math.round(selY) + RAIL_SLOT, t.ownFill());
+            // 选中那一行整行填色(Telegram 的 dialogsBgActive)
+            g.fill(rowX, Math.round(selY), rowX + rowW, Math.round(selY) + RAIL_SLOT, t.active());
             g.disableScissor();
         } else {
             selY = Float.NaN;
@@ -2119,14 +2119,14 @@ public final class NumenScreen extends Screen {
             // 拖拽中:指针下的另一行是落点,整行亮一道左缘条;原行压暗
             boolean dropTarget = railDragging && hovered && i != railPressed;
             if (!active && hovered && railQuiet) {
-                g.fill(rowX, ay, rowX + rowW, ay + RAIL_SLOT, t.aiFill());
+                g.fill(rowX, ay, rowX + rowW, ay + RAIL_SLOT, t.over());
             }
             if (dropTarget) {
                 g.fill(rowX, ay, rowX + 2, ay + RAIL_SLOT, CTA);
             }
             int fx = rowX + RAIL_FACE_X, fy = ay + (RAIL_SLOT - RAIL_AV) / 2;
             com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
-                    fx - 1, fy - 1, RAIL_AV + 2, RAIL_AV + 2, FIELD, active ? t.ownFill() : BORDER);
+                    fx - 1, fy - 1, RAIL_AV + 2, RAIL_AV + 2, FIELD, active ? t.active() : BORDER);
             if (i == shrinkIndex && shrinkPx > 0f && dragged != null) {
                 // 合并预览:原来的脸缩向左上角,拖着的那张从右下角长出来,长满就是叠脸格的样子
                 float p = shrinkPx / RAIL_STEP;
@@ -2150,8 +2150,8 @@ public final class NumenScreen extends Screen {
             } else {
             // 名字一行、最后一句一行;时间在名字那行的右端
             int tx = fx + RAIL_AV + 6;
-            int nameColor = TXT;   // 选中底和自己的气泡同色,气泡里的字色在上面照样读得清
-            int dimColor = active ? UiTheme.mix(TXT, t.ownFill(), 0.35f) : TXT_MUTED;
+            int nameColor = active ? t.onActive() : TXT;
+            int dimColor = active ? UiTheme.mix(t.onActive(), t.active(), 0.25f) : TXT_MUTED;
             var last = com.dwinovo.numen.client.screen.chat.ConversationPreview.last(c);
             String when = last == null ? "" : whenLabel(last.ts(), now);
             int whenW = when.isEmpty() ? 0 : font.width(when) + 4;
@@ -2199,7 +2199,7 @@ public final class NumenScreen extends Screen {
             }
             if (e > 0.03f && railActText.containsKey(c.id())) {
                 txt(g, Component.literal(Nb.clip(font, railActText.get(c.id()), pw)), tx, py + Math.round(lh * (1f - e)),
-                        fade(active ? TXT : CTA, e));
+                        fade(active ? t.onActive() : t.accent(), e));
             }
             g.disableScissor();
             }

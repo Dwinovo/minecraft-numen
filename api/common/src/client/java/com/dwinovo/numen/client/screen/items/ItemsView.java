@@ -256,8 +256,8 @@ public final class ItemsView {
     /** 统一凹槽:从当前主题的地色向边框色压暗两档(边更深、内浅一档)——
      *  深色但同一家谱,切主题跟着换装,不是生硬的半透黑。 */
     private static void slot(GuiGraphics g, UiTheme th, int x, int y) {
-        g.fill(x, y, x + SLOT, y + SLOT, UiTheme.mix(th.ground(), th.border(), 0.62f));
-        g.fill(x + 1, y + 1, x + SLOT - 1, y + SLOT - 1, UiTheme.mix(th.ground(), th.border(), 0.34f));
+        g.fill(x, y, x + SLOT, y + SLOT, UiTheme.mix(th.band(), th.border(), 0.62f));
+        g.fill(x + 1, y + 1, x + SLOT - 1, y + SLOT - 1, UiTheme.mix(th.band(), th.border(), 0.34f));
     }
 
     /** A row of segmented icons for a 0..max stat (2 units per icon): vanilla HUD sprites. */

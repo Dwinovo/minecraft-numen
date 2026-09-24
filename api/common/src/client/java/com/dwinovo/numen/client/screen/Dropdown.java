@@ -80,7 +80,7 @@ public final class Dropdown {
                 Item it = items.get(scrollOff + i);
                 int ry = oy + 2 + i * ROW;
                 if (mouseX >= x && mouseX < x + w && mouseY >= ry && mouseY < ry + ROW) {
-                    g.fill(x + 2, ry, x + w - 2, ry + ROW, th.chipFill());
+                    g.fill(x + 2, ry, x + w - 2, ry + ROW, th.over());
                 }
                 // 选中行最深、其余退为次级——列表内的层级只靠字色。
                 Nb.text(g, font, it.label(), x + 6, ry + (ROW - 8) / 2,

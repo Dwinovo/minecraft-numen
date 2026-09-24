@@ -1041,7 +1041,7 @@ public final class SettingsView {
             int dx = Math.round(w - pushPx);
             g.pose().pushPose();
             g.pose().translate(dx, 0, 0);
-            g.fill(left() + 3, bodyTop, left() + w - 3, bodyBottom, UiTheme.current().ground());
+            g.fill(left() + 3, bodyTop, left() + w - 3, bodyBottom, UiTheme.current().band());
             renderSection(g, leaving ? -10000 : mouseX - dx, mouseY);
             g.pose().popPose();
         }
@@ -1060,7 +1060,7 @@ public final class SettingsView {
             }
             for (Section s : GROUPS[gi]) {
                 boolean hot = mouseX >= x && mouseX < right && mouseY >= y && mouseY < y + ITEM_H;
-                if (hot) g.fill(x, y, right, y + ITEM_H, t.aiFill());
+                if (hot) g.fill(x, y, right, y + ITEM_H, t.over());
                 int size = com.dwinovo.numen.client.ui.mc.Sprites.SIZE;
                 com.dwinovo.numen.client.ui.mc.Sprites.draw(g, iconOf(s), x + INNER, y + (ITEM_H - size) / 2, size,
                         hot ? TXT : TXT_MUTED);

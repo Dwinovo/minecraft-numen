@@ -95,7 +95,7 @@ public final class ProviderDropdown {
                 int idx = scrollOff + i;
                 int ry = oy + 2 + i * ROW;
                 if (mouseX >= x && mouseX < x + w && mouseY >= ry && mouseY < ry + ROW) {
-                    g.fill(x + 2, ry, x + w - 2, ry + ROW, th.chipFill());
+                    g.fill(x + 2, ry, x + w - 2, ry + ROW, th.over());
                 }
                 boolean add = idx >= options.size();
                 // 选中行最深、其余退为次级;"＋新增站点"行保持 run 蓝区分动作行。

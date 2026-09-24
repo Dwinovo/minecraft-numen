@@ -96,6 +96,8 @@ public final class ChatView {
     private int TRACE_BAR;
     /** 主人话里 @ 到的名字。 */
     private int MENTION;
+    /** 气泡里的时间:她的、主人的(Telegram 的 msgInDateFg / msgOutDateFg)。 */
+    private int IN_META, OUT_META;
     /** 未读角标上的数字色。 */
     private int ON_CTA;
 
@@ -114,7 +116,9 @@ public final class ChatView {
         QUEUED_FILL = t.queuedFill();
         CHIP_FILL = t.chipFill();
         TRACE_BAR = t.surfaceBorder();
-        MENTION = t.cta();
+        MENTION = t.accent();
+        IN_META = t.inMeta();
+        OUT_META = t.outMeta();
         ON_CTA = t.onCta();
     }
 
@@ -1166,10 +1170,10 @@ public final class ChatView {
         g.fill(bx, bubTop, bx + bw, bubTop + bh, b.fill());
         hits.add(new Hit(bx, bubTop, bw, bh, b));
         if (b.quote() != null) {
-            // 引用条(Telegram 回复的样子):一道竖线、谁、那句。自己的气泡是强调色底,线和字往白里提
+            // 引用条(Telegram 回复的样子):一道强调色竖线、谁(强调色)、那句(和时间同一档淡字)
             int qx = bx + PAD_H, qy = bubTop + PAD_V;
-            int ink = b.own() ? UiTheme.mix(b.fill(), 0xFFFFFFFF, 0.85f) : MENTION;
-            int dim = b.own() ? UiTheme.mix(b.fill(), 0xFFFFFFFF, 0.55f) : FAINT;
+            int ink = MENTION;
+            int dim = b.own() ? OUT_META : IN_META;
             g.fill(qx, qy, qx + 2, qy + QUOTE_H - 3, ink);
             int room = bw - PAD_H * 2 - QUOTE_IN;
             draw(g, Nb.colored(Nb.clip(font, b.quote().who(), room), ink).getVisualOrderText(), qx + QUOTE_IN, qy);
@@ -1184,8 +1188,8 @@ public final class ChatView {
             // 时间戳贴右下角:同一行就压在最后一行的右侧,否则在下面自己一小行
             int tx = bx + bw - PAD_H - font.width(b.time());
             int tyy = b.timeInline() ? ty - LINE_H + 1 : ty - 1;
-            // 出向气泡是强调色底,时间戳用半透明白(Telegram);别人的用淡字
-            draw(g, Nb.colored(b.time(), b.own() ? 0xB0FFFFFF : FAINT).getVisualOrderText(), tx, tyy);
+            // 时间戳用气泡自己那一档淡色(Telegram 出向、入向各一色)
+            draw(g, Nb.colored(b.time(), b.own() ? OUT_META : IN_META).getVisualOrderText(), tx, tyy);
         }
     }
 

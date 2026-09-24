@@ -61,7 +61,7 @@ final class MembersPage {
             UUID m = rows.get(i);
             int ry = rowY(i);
             boolean hovered = live && mouseX >= x && mouseX < x + w && mouseY >= ry && mouseY < ry + ROW_H;
-            if (hovered) g.fill(x, ry, x + w, ry + ROW_H, t.aiFill());
+            if (hovered) g.fill(x, ry, x + w, ry + ROW_H, t.over());
             CompanionFace.draw(g, m, KnownSkins.of(m), x + FACE_X, ry + (ROW_H - AV) / 2, AV);
             int tx = x + FACE_X + AV + 8;
             int room = x + w - 4 - tx;
