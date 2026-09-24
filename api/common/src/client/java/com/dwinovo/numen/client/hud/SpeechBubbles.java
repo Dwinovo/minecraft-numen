@@ -34,16 +34,21 @@ public final class SpeechBubbles {
     private static final long TEXT_LIFE_BASE_MS = 7_000;
     private static final long TEXT_LIFE_PER_CHAR_MS = 55;
     private static final long TEXT_LIFE_MAX_MS = 22_000;
+    /** 正文淡入(Telegram 的快动效)与到点前的淡出。 */
+    private static final long TEXT_FADE_IN_MS = 150;
+    private static final long TEXT_FADE_OUT_MS = 300;
 
     /**
      * 渲染方要画的东西——两条线可同时在场。
      *
      * @param text     未过期的正文;null = 这会儿没话
+     * @param textIn   正文刚说出口的淡入进度 0..1(换了一句从头来)
+     * @param textOut  正文快到点时的淡出 1..0(没到最后那一小段一直是 1)
      * @param asking   她挂着一条征询在等主人点头——画「等你点头」,压过下面两种
      * @param activity 正在执行的工具名;null = 没有工具在跑
      * @param waiting  在等模型回复(且没有工具在跑)——画「正在思考中」
      */
-    public record View(String text, boolean asking, String activity, boolean waiting) {
+    public record View(String text, float textIn, float textOut, boolean asking, String activity, boolean waiting) {
         public boolean hasText() {
             return text != null && !text.isEmpty();
         }
@@ -99,12 +104,16 @@ public final class SpeechBubbles {
 
         // 第一条线:正文(到点自己消失,与在不在忙无关)
         String text = null;
+        float textIn = 0f, textOut = 0f;
         Said said = SAID.get(entityUuid);
         if (said != null) {
-            if (said.expired(System.currentTimeMillis())) {
+            long now = System.currentTimeMillis();
+            if (said.expired(now)) {
                 SAID.remove(entityUuid);
             } else {
                 text = said.text();
+                textIn = Math.min(1f, (now - said.bornMs()) / (float) TEXT_FADE_IN_MS);
+                textOut = Math.min(1f, (said.bornMs() + said.lifeMs() - now) / (float) TEXT_FADE_OUT_MS);
             }
         }
 
@@ -123,6 +132,6 @@ public final class SpeechBubbles {
         if (text == null && !asking && activity == null && !waiting) {
             return null;   // 话说完了、活干完了:头顶就该干净
         }
-        return new View(text, asking, activity, waiting);
+        return new View(text, textIn, textOut, asking, activity, waiting);
     }
 }
