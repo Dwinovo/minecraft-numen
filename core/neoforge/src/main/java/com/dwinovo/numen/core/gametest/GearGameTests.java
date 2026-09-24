@@ -307,4 +307,34 @@ public class GearGameTests {
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
+
+    /**
+     * 遣散像死亡一样全掉在脚下:原版的头盔,和不在原版物品栏里的那处来源上戴着的,都落地各一件,
+     * 身上不再戴着。只丢原版物品栏的话,模组的饰品会跟着身体一起消失。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_gear")
+    public static void dismiss_drops_what_she_wears(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_farewell", new BlockPos(4, 2, 4), false);
+        NumenPlayer owner = presentOwner(helper, companion, "gametest_bereaved");
+        FakeGear gear = dress(companion);
+        gear.ring(1).worn = new ItemStack(Items.AMETHYST_SHARD);
+        companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+        net.minecraft.world.phys.AABB around = companion.getBoundingBox().inflate(4);
+        com.dwinovo.numen.network.payload.DismissRequestPayload.handle(
+                new com.dwinovo.numen.network.payload.DismissRequestPayload(companion.getUUID()), owner);
+
+        helper.succeedWhen(() -> {
+            var drops = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, around);
+            int shards = drops.stream().filter(e -> e.getItem().is(Items.AMETHYST_SHARD))
+                    .mapToInt(e -> e.getItem().getCount()).sum();
+            int helmets = drops.stream().filter(e -> e.getItem().is(Items.IRON_HELMET))
+                    .mapToInt(e -> e.getItem().getCount()).sum();
+            helper.assertTrue(shards == 1, "the worn shard did not drop exactly once: " + shards);
+            helper.assertTrue(helmets == 1, "the helmet did not drop exactly once: " + helmets);
+            helper.assertTrue(gear.ring(1).worn.isEmpty(), "the shard is still worn by a dismissed body");
+            drops.forEach(net.minecraft.world.entity.Entity::discard);
+            CompanionFactory.despawn(level.getServer(), owner);
+        });
+    }
 }

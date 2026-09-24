@@ -1,6 +1,8 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.api.NumenPlugins;
+import com.dwinovo.numen.api.gear.GearSlot;
 import com.dwinovo.numen.entity.CompanionRegistry;
 import com.dwinovo.numen.entity.Companions;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -12,12 +14,13 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.UUID;
 
 /**
  * Client → Server: the owner asked to permanently delete a companion from the panel (rail ✕ → confirm).
- * Like a death — the live body drops its whole inventory at its feet — then it's dismissed for good
+ * Like a death — the live body drops everything it carries and wears at its feet — then it's dismissed for good
  * (registry entry removed, won't return on login). A dormant (unloaded) companion has no body to drop
  * from, so it's just forgotten (its orphaned {@code .dat} keeps the items but nothing respawns it).
  */
@@ -42,7 +45,13 @@ public record DismissRequestPayload(UUID uuid) implements CustomPacketPayload {
         NumenPlayer body = NumenPlayer.findByUuid(server, p.uuid());
         if (body != null) {
             if (!body.isOwnedByPlayer(owner.getUUID())) return;   // not the caller's companion
-            body.getInventory().dropAll();                        // death-style: drop everything at its feet
+            // 像死亡一样全掉在脚下。穿戴的经各穿戴来源摘:模组的饰品栏不在原版物品栏里,
+            // 只 dropAll 的话它们会跟着身体一起消失
+            for (GearSlot slot : NumenPlugins.gearSlots(body)) {
+                ItemStack worn = slot.swap(ItemStack.EMPTY);
+                if (!worn.isEmpty()) body.drop(worn, true, false);
+            }
+            body.getInventory().dropAll();
             Companions.dismiss(server, body);                     // despawn + forget (no respawn)
         } else {
             // 休眠 / 没加载——先按注册表验归属,再除名。走 Companions.forget 而不是直接
