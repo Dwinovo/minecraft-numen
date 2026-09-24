@@ -69,7 +69,9 @@ public final class ChatView {
     private static final int AV_GAP = 5;        // avatar ↔ bubble
     private static final int PAD_H = 5;         // bubble text inset
     private static final int PAD_V = 4;         // 1 line → 18px bubble = exactly the avatar height
+    /** 块与块之间:换了人、日期牌、提示行前后拉开 {@code BLOCK_GAP};同一个人接连的块只隔 {@code RUN_GAP}。 */
     private static final int BLOCK_GAP = 6;
+    private static final int RUN_GAP = 2;
     private static final int TOP_PAD = 2;
     private static final int BOT_PAD = 2;
     private static final int SB_W = 4;          // scrollbar width
@@ -321,10 +323,11 @@ public final class ChatView {
 
         g.enableScissor(x, y, x + w, y + h);
         int cy = y + TOP_PAD - Math.round(scrollPos);
-        for (Block b : blocks) {
+        for (int i = 0; i < blocks.size(); i++) {
+            Block b = blocks.get(i);
             int bh = heightOf(b);
             if (cy + bh > y && cy < y + h) drawBlock(g, b, x, cy, w);
-            cy += bh + BLOCK_GAP;
+            cy += bh + gapAfter(blocks, i);
         }
         g.disableScissor();
 
@@ -472,13 +475,15 @@ public final class ChatView {
         if (gw == 0 || mx < gx || mx >= gx + gw || my < gy || my >= gy + gh) return false;
         loadPalette();
         int cy = gy + TOP_PAD - Math.round(scrollPos);
-        for (Block b : build(bubbleMaxW(gw))) {
+        List<Block> blocks = build(bubbleMaxW(gw));
+        for (int i = 0; i < blocks.size(); i++) {
+            Block b = blocks.get(i);
             int bh = heightOf(b);
             if (b instanceof Chip c && c.foldKey() != null && my >= cy && my < cy + bh) {
                 if (!expandedGroups.add(c.foldKey())) expandedGroups.remove(c.foldKey());
                 return true;
             }
-            cy += bh + BLOCK_GAP;
+            cy += bh + gapAfter(blocks, i);
         }
         return false;
     }
@@ -558,9 +563,16 @@ public final class ChatView {
     private int totalHeight(List<Block> blocks) {
         int sum = TOP_PAD + BOT_PAD;
         for (int i = 0; i < blocks.size(); i++) {
-            sum += heightOf(blocks.get(i)) + (i > 0 ? BLOCK_GAP : 0);
+            sum += heightOf(blocks.get(i)) + (i > 0 ? gapAfter(blocks, i - 1) : 0);
         }
         return sum;
+    }
+
+    /** 第 {@code i} 块下面留多宽:同一个人接着说(Telegram 连发几乎贴着)是窄缝,否则拉开。 */
+    private static int gapAfter(List<Block> blocks, int i) {
+        if (i + 1 >= blocks.size()) return BLOCK_GAP;
+        UUID a = speakerOf(blocks.get(i));
+        return a != null && a.equals(speakerOf(blocks.get(i + 1))) ? RUN_GAP : BLOCK_GAP;
     }
 
     /**
