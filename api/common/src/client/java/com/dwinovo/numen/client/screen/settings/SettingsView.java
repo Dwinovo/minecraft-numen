@@ -74,8 +74,6 @@ public final class SettingsView {
     private static final int FIELD_INSET_X = 5;
     private static final int FIELD_INSET_Y = 4;
     private static final int SET_SP = 33;     // form row pitch (5 rows + Save must fit)
-    private static final int NAV_W = 74;      // left sub-nav column width
-    private static final int NAV_SP = 20;     // sub-nav row pitch
     private static final int LIST_ROW = 24;   // list row height(两行内容 9+9 加呼吸,贴行显挤)
     private static final int TOG_W = 18, TOG_H = 10;
     /** 试听用的固定测试句(按当前表单参数就地合成)。 */
@@ -85,7 +83,24 @@ public final class SettingsView {
     // ---- palette: re-read from the CURRENT theme on every public entry (theme switch = live) ----
     private int BORDER, ACCENT, TXT, TXT_MUTED, TXT_FAINT, CTA, FIELD, OK, RUN, FAIL;
 
-    private Section section = Section.PROVIDER;
+    /** 在哪个分区;null = 设置首页(分区列表)。 */
+    private Section section;
+    /** 退回首页的途中:分区页正往右滑出去,滑完才把 {@link #section} 置空。 */
+    private boolean leaving;
+    /** 分区页推进来多少像素(0 = 在首页,panelW = 整页进来);按趋近走。 */
+    private float pushPx;
+    private long lastPushMs;
+
+    /**
+     * 设置首页的分组(Telegram 设置那一列一组一组的):她本身(模型、人设、声线、语音输入、皮肤)、
+     * 她能用的(技能、工具扩展、外接大脑)、界面(主题)。
+     */
+    private static final Section[][] GROUPS = {
+            {Section.PROVIDER, Section.PERSONA, Section.VOICE, Section.STT, Section.SKIN},
+            {Section.SKILLS, Section.MCP, Section.BRAIN},
+            {Section.THEME}};
+    private static final int ITEM_H = 20;
+    private static final int GROUP_GAP = 7;
     /** 未被模态屏蔽的真实鼠标坐标(表单卡内的 NumenUI 悬停用)。 */
     private int rawMouseX = -10000, rawMouseY = -10000;
 
@@ -243,17 +258,7 @@ public final class SettingsView {
     private McpFormPanel mcpForm;
     private McpFormPanel.Draft mcpDraft = new McpFormPanel.Draft();
 
-    // ---- 左侧子导航:NumenUI NavPanel(选中胶囊+竖条,悬停动效随 ListView) ----
-    private NavPanel navPanel;
-
-    private NavPanel navPanel() {
-        if (navPanel == null) {
-            navPanel = new NavPanel(i -> selectSection(Section.values()[i]));
-        }
-        return navPanel;
-    }
-
-    /** 子导航标签:与 Section 声明顺序严格对应。 */
+    /** 分区名:与 Section 声明顺序严格对应。 */
     private static List<String> navLabels() {
         return List.of(
                 I18n.get(ModLanguageData.Keys.PROVIDER_TITLE),
@@ -302,28 +307,23 @@ public final class SettingsView {
     private Font font() { return host.font(); }
 
     /*
-     * 设置页的格子:一块内容底板(1 像素描边),里面一条竖分隔线分出导航与正文,分隔线上下贴底板描边。
-     * 导航与正文离底板描边、离分隔线都是同一个内边距 INNER——导航的选中底、分区的抬头标题与按钮、
-     * 列表的边沿都落在这一圈上,不各算各的。
+     * 设置页的格子:首页与分区页都占满整页宽,直接铺在页面底色上,没有外框。
+     * 首页的行、分区的抬头标题与按钮、列表的边沿都落在同一圈内边距 INNER 上,不各算各的。
      */
-    /** 内容底板(导航 + 正文)的外框:面板左右与底边各内缩这么多,顶边在页签带下方。 */
+    /** 内容区离面板左右与底边内缩这么多,顶边在抬头下方。 */
     private static final int SURFACE_INSET = 5;
-    /** 底板描边、分隔线到里面东西的距离。 */
+    /** 内容区边缘到里面东西的距离。 */
     private static final int INNER = com.dwinovo.numen.client.ui.NumenStyle.PAD;
     private int surfaceY() { return top() + HEADER_H + 2; }
     private int innerLeft() { return left() + SURFACE_INSET + 1; }
     private int innerRight() { return left() + panelW() - SURFACE_INSET - 1; }
     private int innerTop() { return surfaceY() + 1; }
     private int innerBottom() { return top() + panelH() - SURFACE_INSET - 1; }
-    /** 导航与正文的竖分隔线。 */
-    private int dividerX() { return left() + PAD + NAV_W + 3; }
-    private int navX() { return innerLeft() + INNER; }
-
-    /** Left x of the section content area (right of the sub-nav column + divider). */
-    private int secX() { return dividerX() + 1 + INNER; }
+    /** Left x of the section content area(分区页整页宽)。 */
+    private int secX() { return innerLeft() + INNER; }
     /** Width of the section content area. */
     private int secW() { return innerRight() - INNER - secX(); }
-    /** Top y of section content;导航第一行与分区抬头行同一条顶边。 */
+    /** Top y of section content;首页第一行与分区抬头行同一条顶边。 */
     private int secY0() { return innerTop() + INNER; }
     /** Bottom y a list row may reach. */
     private int secBottom() { return innerBottom() - INNER; }
@@ -405,14 +405,41 @@ public final class SettingsView {
     public void clearWidgets() {
     }
 
+    /** 首页点了一个分区:它从右边推进来。 */
     private void selectSection(Section s) {
-        if (s == section) return;
         section = s;
+        leaving = false;
+        pushPx = 0f;
         if (sttPanel != null) sttPanel.reseed();   // 进分区从已存配置重播种
         if (s == Section.PERSONA) {
             // 人设是目录里的 .md 文件:进页先重扫,外部编辑器的修改即时可见。
             PersonaLibrary.instance().reload();
         }
+        resetSectionState();
+        host.rebuild();
+    }
+
+    /** 在某个分区里(不算正在退出去的)——← 和 Esc 先退回首页。 */
+    public boolean inSection() {
+        return section != null && !leaving;
+    }
+
+    /** 退回首页:分区页往右滑出去,滑完才换。表单开着时先由 {@link #cancelForm} 收。 */
+    public void leaveSection() {
+        if (inSection()) leaving = true;
+    }
+
+    /** 开设置页时从首页开始,不带动画。 */
+    public void showList() {
+        if (section == null) return;
+        section = null;
+        leaving = false;
+        pushPx = 0f;
+        resetSectionState();
+    }
+
+    /** 各分区的表单与在途回调:换分区、退回首页都清掉。 */
+    private void resetSectionState() {
         addingMcp = false;
         addingPersona = false;
         personaEditId = null;
@@ -423,7 +450,6 @@ public final class SettingsView {
         if (voiceForm != null) voiceForm.cancelPendingTest();   // 离开语音表单:在途试听回调作废
         addingSkin = false;
         if (skinForm != null) skinForm.cancelPending();   // 离开皮肤表单:在途 MineSkin 签名回调作废
-        host.rebuild();
     }
 
     // ---- delete-confirm modal (shared by the five sections that can delete) ----
@@ -431,8 +457,7 @@ public final class SettingsView {
     /** Dispatch widget building by the active section (skill/MCP lists render manually). */
     public void buildWidgets() {
         loadPalette();
-        navPanel().build(navX(), secY0(), dividerX() - INNER - navX(), secH(),
-                navLabels(), section.ordinal());
+        if (section == null) return;   // 首页是手画的一列,没有控件
         switch (section) {
             case SKILLS -> skillsListPanel().build(secX(), secY0(), secW(), secH(),
                     left(), top(), panelW(), panelH());
@@ -990,7 +1015,93 @@ public final class SettingsView {
 
     public void render(GuiGraphics g, int mouseX, int mouseY) {
         loadPalette();
-        // 任一模态(确认卡/表单卡)在场时整体屏蔽悬停坐标——暗幕下的列表行/导航
+        long now = System.currentTimeMillis();
+        float dt = lastPushMs == 0 ? 0.016f : Math.min(0.1f, (now - lastPushMs) / 1000f);
+        lastPushMs = now;
+        int w = panelW();
+        pushPx = com.dwinovo.numen.client.ui.Anim.approach(pushPx, inSection() ? w : 0f, 16f, dt);
+        if (leaving && pushPx <= 0f) {
+            section = null;
+            leaving = false;
+            resetSectionState();
+            host.rebuild();
+        }
+        int bodyTop = surfaceY(), bodyBottom = top() + panelH() - 3;
+        if (pushPx < w) {
+            // 首页:分区页推进来时它往左让出四分之一、压暗(Telegram 一层盖一层的样子)
+            int dx = -Math.round(pushPx * 0.25f);
+            g.pose().pushPose();
+            g.pose().translate(dx, 0, 0);
+            renderList(g, section == null ? mouseX - dx : -10000, mouseY);
+            g.pose().popPose();
+            int a = Math.round(0x70 * pushPx / w);
+            if (a > 0) g.fill(left() + 3, bodyTop, left() + w - 3, bodyBottom, a << 24);
+        }
+        if (section != null) {
+            int dx = Math.round(w - pushPx);
+            g.pose().pushPose();
+            g.pose().translate(dx, 0, 0);
+            g.fill(left() + 3, bodyTop, left() + w - 3, bodyBottom, UiTheme.current().ground());
+            renderSection(g, leaving ? -10000 : mouseX - dx, mouseY);
+            g.pose().popPose();
+        }
+    }
+
+    /** 设置首页:一行一个分区,图标 + 名字,组与组之间一道线。 */
+    private void renderList(GuiGraphics g, int mouseX, int mouseY) {
+        UiTheme t = UiTheme.current();
+        int x = innerLeft(), right = innerRight();
+        int y = secY0();
+        List<String> labels = navLabels();
+        for (int gi = 0; gi < GROUPS.length; gi++) {
+            if (gi > 0) {
+                g.fill(x, y + GROUP_GAP / 2, right, y + GROUP_GAP / 2 + 1, t.surfaceBorder());
+                y += GROUP_GAP;
+            }
+            for (Section s : GROUPS[gi]) {
+                boolean hot = mouseX >= x && mouseX < right && mouseY >= y && mouseY < y + ITEM_H;
+                if (hot) g.fill(x, y, right, y + ITEM_H, t.aiFill());
+                int size = com.dwinovo.numen.client.ui.mc.Sprites.SIZE;
+                com.dwinovo.numen.client.ui.mc.Sprites.draw(g, iconOf(s), x + INNER, y + (ITEM_H - size) / 2, size,
+                        hot ? TXT : TXT_MUTED);
+                txt(g, Component.literal(labels.get(s.ordinal())), x + INNER + size + 10,
+                        y + (ITEM_H - font().lineHeight) / 2 + 1, TXT);
+                y += ITEM_H;
+            }
+        }
+    }
+
+    /** 首页指针下那一行是哪个分区;不在行上是 null。 */
+    private Section listAt(double mx, double my) {
+        int x = innerLeft(), right = innerRight();
+        int y = secY0();
+        for (int gi = 0; gi < GROUPS.length; gi++) {
+            if (gi > 0) y += GROUP_GAP;
+            for (Section s : GROUPS[gi]) {
+                if (mx >= x && mx < right && my >= y && my < y + ITEM_H) return s;
+                y += ITEM_H;
+            }
+        }
+        return null;
+    }
+
+    private static net.minecraft.resources.ResourceLocation iconOf(Section s) {
+        return switch (s) {
+            case PROVIDER -> com.dwinovo.numen.client.ui.mc.Sprites.CPU;
+            case MCP -> com.dwinovo.numen.client.ui.mc.Sprites.PLUG;
+            case BRAIN -> com.dwinovo.numen.client.ui.mc.Sprites.ROBOT;
+            case SKILLS -> com.dwinovo.numen.client.ui.mc.Sprites.BOOK;
+            case PERSONA -> com.dwinovo.numen.client.ui.mc.Sprites.PERSONA;
+            case VOICE -> com.dwinovo.numen.client.ui.mc.Sprites.VOLUME;
+            case SKIN -> com.dwinovo.numen.client.ui.mc.Sprites.SHIRT;
+            case STT -> com.dwinovo.numen.client.ui.mc.Sprites.MIC;
+            case THEME -> com.dwinovo.numen.client.ui.mc.Sprites.BRUSH;
+        };
+    }
+
+    /** 分区页本身。 */
+    private void renderSection(GuiGraphics g, int mouseX, int mouseY) {
+        // 任一模态(确认卡/表单卡)在场时整体屏蔽悬停坐标——暗幕下的列表行
         // 不该亮悬停底,MCP 行 tooltip 也不该浮到暗幕上。
         // 但表单卡自己是活的:真实坐标另存一份,供卡内的 NumenUI 表单用
         // (否则表单里的下拉/按钮悬停被误杀)。
@@ -1000,16 +1111,6 @@ public final class SettingsView {
             mouseX = -10000;
             mouseY = -10000;
         }
-        // 内容底板:比地面亮一档的"纸面"垫住整个设置区(导航+正文),文字不再直接
-        // 铺在点纹地面上——点纹退成底板四周的氛围纹理,层级和对比度都立起来。
-        UiTheme th = UiTheme.current();
-        com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                left() + SURFACE_INSET, surfaceY(), panelW() - SURFACE_INSET * 2,
-                innerBottom() + 1 - surfaceY(),
-                th.surface(), th.surfaceBorder());
-        navPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
-        g.fill(dividerX(), innerTop(), dividerX() + 1, innerBottom(), BORDER);   // 导航与正文的竖分隔线,上下贴底板描边
         switch (section) {
             case MCP -> renderMcpSection(g, mouseX, mouseY);
             case SKILLS -> {
@@ -1162,16 +1263,22 @@ public final class SettingsView {
     // ---- input (called from the screen's mouseClicked / mouseScrolled) ----
 
     /** The Settings tab's whole click chain — dropdown routing first (open lists overlay
-     *  the fields), then the sub-nav / theme rows / per-row toggles. Returns true = consumed. */
+     *  the fields), then theme rows / per-row toggles; on the home page, the section rows. Returns true = consumed. */
     public boolean mouseClicked(double mouseX, double mouseY) {
         loadPalette();
+        if (section == null) {   // 首页:点一行进那个分区
+            Section s = listAt(mouseX, mouseY);
+            if (s != null) selectSection(s);
+            return s != null;
+        }
+        if (leaving) return true;   // 正在退出去的那页不接点击
         // 模型配置表单(NumenUI):事件整体交给表单面板(浮层打开时它优先吃掉一切)。
         if (section == Section.PROVIDER && addingProvider
                 && providerForm().mouseClicked(mouseX, mouseY, 0)) {
             return true;
         }
         // NumenUI 列表面板:删除确认卡开着时面板吃掉一切(模态);
-        // 平时接行/图标/开关/新建,没命中就放行给子导航。
+        // 平时接行/图标/开关/新建,没命中就往下放行。
         if (section == Section.PROVIDER && !addingProvider
                 && profileList().mouseClicked(mouseX, mouseY, 0)) {
             return true;
@@ -1225,10 +1332,6 @@ public final class SettingsView {
             return true;
         }
         if (section == Section.THEME && themePanel().mouseClicked(mouseX, mouseY, 0)) {
-            return true;
-        }
-        // 子导航(NumenUI):表单模态时在暗幕之下不放行。
-        if (!formActive() && navPanel().mouseClicked(mouseX, mouseY, 0)) {
             return true;
         }
         return false;

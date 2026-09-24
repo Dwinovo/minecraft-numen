@@ -1026,6 +1026,7 @@ public final class NumenScreen extends Screen {
         tab = t;
         baseTab = Tab.CHAT;   // 直接开关的页都垫在对话上;一层层推进去的见 pushProfile
         if (t != Tab.CHAT) overlayKind = t;   // 收回去时 tab 已是 CHAT,靠它记住往哪边收
+        if (t == Tab.SETTINGS) settings.showList();   // 设置页每次从首页开始
         planOpen = false;
         planShownH = 0f;
         chatView.reset();
@@ -1065,8 +1066,12 @@ public final class NumenScreen extends Screen {
         requestInventory();
     }
 
-    /** ← 与 Esc:退一层。资料页底下垫着群资料页就退回群资料页,否则回对话。 */
+    /** ← 与 Esc:退一层。设置的分区退回设置首页;资料页底下垫着群资料页就退回群资料页;否则回对话。 */
     private void back() {
+        if (tab == Tab.SETTINGS && settings.inSection()) {
+            settings.leaveSection();
+            return;
+        }
         if (tab == Tab.ITEMS && baseTab == Tab.MEMBERS) {
             tab = Tab.MEMBERS;   // 资料页滑出去,露出底下的群资料页
             return;
