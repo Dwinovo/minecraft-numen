@@ -167,8 +167,20 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      * {@code getCount()} 变小,账也跟着对。
      *
      * <p>实体没了(烧了、被主人捡了、自然消失)就自动出账,她自己再补一块——不需要超时或重试。
+     * 走不到的也出账,见 {@link #unreachableDrops}。
      */
     private final it.unimi.dsi.fastutil.ints.IntOpenHashSet ourDrops =
+            new it.unimi.dsi.fastutil.ints.IntOpenHashSet();
+
+    /**
+     * 走不到的掉落物(实体 id)。够数之后导航只奔地上的掉落物;这一批在完整的图上搜不出路、或她守着它们
+     * 卡住了,就说明它们一件也进不了包——砍树冠时原木常弹到树叶顶上,站在地上够不着,她也没有垫脚的方块。
+     *
+     * <p>它们从 {@link #ourDrops} 出账、不再当目标,够没够数只按还拿得到的算,她接着挖别的补上。不出账的话,
+     * "到手 + 在路上"永远够数:她不再挖,又捡不到,只能缺着数收工。记的是这一批,不挑哪一件顶罪——
+     * 目标里只有它们,搜不出路说的就是它们全体。
+     */
+    private final it.unimi.dsi.fastutil.ints.IntOpenHashSet unreachableDrops =
             new it.unimi.dsi.fastutil.ints.IntOpenHashSet();
 
     /** 已经记过账的格:每一格只在挖开它之后认一次。 */
@@ -533,6 +545,19 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      *  mining that ore walks us there anyway. Just-broken cells linger as members for
      *  {@link #DROP_LOITER_TICKS} so the spawning drop isn't left behind. */
     private List<BlockPos> droppedItems() {
+        List<BlockPos> out = new ArrayList<>();
+        for (ItemEntity ie : nearbyDrops()) {
+            BlockPos p = ie.blockPosition();
+            // 贴着某颗已知矿的掉落物不单独设目标——挖那颗矿自然会带身体过去。够数之后
+            // 不再去挖任何矿,这条捷径就不成立了,那时每一件都得自己走过去捡。
+            if (!quotaMet && nearKnownOre(p)) continue;
+            out.add(p);
+        }
+        return out;
+    }
+
+    /** 附近这件活要的掉落物:目标会掉的物品,不在 {@link #unreachableDrops} 里。 */
+    private List<ItemEntity> nearbyDrops() {
         Level level = player.level();
         // 搜集范围 = 服务端视距(身体周围的加载邻域),与目标扫描的事实边界同源。
         // 视距下限取原版 server.properties 的 3:PlayerList 的视距是发给客户端的同步值,
@@ -541,16 +566,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         int reach = level instanceof ServerLevel sl
                 ? Math.max(3, sl.getServer().getPlayerList().getViewDistance()) * 16 : 128;
         AABB box = new AABB(player.blockPosition()).inflate(reach);
-        List<BlockPos> out = new ArrayList<>();
-        for (ItemEntity ie : level.getEntitiesOfClass(ItemEntity.class, box)) {
-            if (!dropItems.contains(ie.getItem().getItem())) continue;
-            BlockPos p = ie.blockPosition();
-            // 贴着某颗已知矿的掉落物不单独设目标——挖那颗矿自然会带身体过去。够数之后
-            // 不再去挖任何矿,这条捷径就不成立了,那时每一件都得自己走过去捡。
-            if (!quotaMet && nearKnownOre(p)) continue;
-            out.add(p);
-        }
-        return out;
+        return level.getEntitiesOfClass(ItemEntity.class, box,
+                ie -> dropItems.contains(ie.getItem().getItem()) && !unreachableDrops.contains(ie.getId()));
     }
 
     /** 距任一已知矿位 3 格内(distSqr ≤ 9)——挖那颗矿自然会带身体过去。 */
@@ -696,7 +713,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         }
         AABB box = new AABB(cell).inflate(1.5);
         for (ItemEntity ie : player.level().getEntitiesOfClass(ItemEntity.class, box)) {
-            if (dropItems.contains(ie.getItem().getItem())) {
+            // 走不到的那几件躺在刚挖开的格子旁边也不再认领——认领了又会算进够数
+            if (dropItems.contains(ie.getItem().getItem()) && !unreachableDrops.contains(ie.getId())) {
                 ourDrops.add(ie.getId());
             }
         }
@@ -1029,9 +1047,15 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     /**
      * 剩下的一个都到不了,收工:挖到过就算成功,如实交代剩下多少没够着;一个没挖到就按 {@code NO_PATH} 失败。
      *
+     * <p>够数之后导航的目标只有地上的掉落物,这时到不了的是那批掉落物,不是还没挖的目标:把它们记进
+     * {@link #unreachableDrops},接着挖别的补上,不收工。
+     *
      * @param why 为什么到不了,原话进回执
      */
     private TaskState unreachable(String why) {
+        if (quotaMet && !knownOres.isEmpty()) {
+            return writeOffDrops(why);
+        }
         String where = player.blockPosition().toShortString();
         String what = knownOres.isEmpty() ? "the drops left on the ground"
                 : "the remaining " + knownOres.size() + " " + noun();
@@ -1043,6 +1067,22 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 + " (" + why + "); gathered 0. Move me somewhere else, or clear a way first."
                 + leftovers(null), FailureType.NO_PATH);
         return TaskState.FAILED;
+    }
+
+    /** 够数所靠的那批掉落物走不到:全部出账,清掉无路的局面与卡住的计时,下一刻按还拿得到的重新算够没够。 */
+    private TaskState writeOffDrops(String why) {
+        List<ItemEntity> lost = nearbyDrops();
+        for (ItemEntity ie : lost) {
+            unreachableDrops.add(ie.getId());
+            ourDrops.remove(ie.getId());
+        }
+        com.dwinovo.numen.core.Constants.LOG.info(
+                "[numen-task] mine 够数靠的 {} 件掉落物走不到({}),出账接着挖 | feet={} 名单 {} 个",
+                lost.size(), why, player.blockPosition().toShortString(), knownOres.size());
+        lastNoPath = null;
+        stopNav();
+        noteProgress();
+        return TaskState.RUNNING;
     }
 
     /** 挖不成的候选为什么挖不成,回执里的说法。 */
