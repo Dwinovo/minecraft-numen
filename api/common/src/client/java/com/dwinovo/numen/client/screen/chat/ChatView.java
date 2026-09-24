@@ -249,6 +249,7 @@ public final class ChatView {
 
     /** Forget scroll + fold state (companion or tab switch). */
     public void reset() {
+        unreadSince = -1;
         scrollPos = 0;
         scrollTarget = 0;
         pinBottom = true;
@@ -260,6 +261,12 @@ public final class ChatView {
         flattened.clear();
         born.clear();
     }
+
+    /**
+     * 打开这个会话那一刻主人看到哪了:之后她说的第一句前面横一条"未读消息",打开时停在那儿,不停在最底。
+     * 这次看的时候那条一直在(Telegram 也是离开才消)。-1 = 下一帧现取;{@link Long#MAX_VALUE} = 打开时没有未读。
+     */
+    private long unreadSince = -1;
 
     /** Re-pin to the bottom (a message was just sent). */
     public void pinToBottom() {
@@ -279,6 +286,11 @@ public final class ChatView {
         lastFrameMs = now;
         frameNow = now;
         updateLive(dt, now);
+        if (unreadSince < 0) {
+            Conversation opened = conv.get();
+            long seen = Conversations.instance().lastSeen(opened);
+            unreadSince = ConversationPreview.unread(opened, seen) > 0 ? seen : Long.MAX_VALUE;
+        }
         renderBlocks(g, x, y, w, h, build(bubbleMaxW(w)), dt);
         // 看过 = 视图停在底部时的最后一条;翻上去后来的话算未读,挂在"回到最新"钮上,左栏角标也据此消
         Conversation c = conv.get();
@@ -316,6 +328,12 @@ public final class ChatView {
         if (pinBottom) scrollTarget = lastMaxScroll;
         scrollTarget = Math.clamp(scrollTarget, 0, lastMaxScroll);
         if (snapNext) {
+            // 有未读:停在"未读消息"那条上(上面留一点),不停在最底
+            int bar = unreadBarOffset(blocks);
+            if (bar >= 0) {
+                scrollTarget = Math.clamp(bar - 6, 0, lastMaxScroll);
+                pinBottom = scrollTarget >= lastMaxScroll;
+            }
             scrollPos = scrollTarget;
             snapNext = false;
         }
@@ -490,7 +508,7 @@ public final class ChatView {
 
     // ---- blocks ----
 
-    private sealed interface Block permits Bubble, Chip, Notice, Divider {}
+    private sealed interface Block permits Bubble, Chip, Notice, Divider, UnreadBar {}
 
     /** One spoken message. {@code label} non-null = companion side (name above the bubble);
      *  {@code showAvatar} false = a consecutive message from the same side (head hidden);
@@ -539,6 +557,9 @@ public final class ChatView {
     /** 日期分隔:一天的第一条上面一枚居中的日期小牌(今天 / 昨天 / 几月几日)。 */
     private record Divider(String text) implements Block {}
 
+    /** "未读消息"那一条:横贯整行的淡色带,居中一行字。 */
+    private record UnreadBar() implements Block {}
+
     private record ChipRow(String icon, int iconColor, FormattedCharSequence text) {}
 
     /** A centred, faint system note. */
@@ -557,6 +578,7 @@ public final class ChatView {
             case Chip c -> (c.label() != null ? LABEL_H : 0) + c.rows().size() * LINE_H + PAD_V * 2;
             case Notice ignored -> LINE_H;
             case Divider ignored -> LINE_H + 4;
+            case UnreadBar ignored -> LINE_H + 6;
         };
     }
 
@@ -566,6 +588,16 @@ public final class ChatView {
             sum += heightOf(blocks.get(i)) + (i > 0 ? gapAfter(blocks, i - 1) : 0);
         }
         return sum;
+    }
+
+    /** "未读消息"那条的顶边离内容顶多远;没有那条是 -1。 */
+    private int unreadBarOffset(List<Block> blocks) {
+        int y = TOP_PAD;
+        for (int i = 0; i < blocks.size(); i++) {
+            if (blocks.get(i) instanceof UnreadBar) return y;
+            y += heightOf(blocks.get(i)) + gapAfter(blocks, i);
+        }
+        return -1;
     }
 
     /** 第 {@code i} 块下面留多宽:同一个人接着说(Telegram 连发几乎贴着)是窄缝,否则拉开。 */
@@ -596,6 +628,7 @@ public final class ChatView {
         UUID processWho;
         int processEntry = -1;
         UUID last;
+        boolean unreadPlaced;
     }
 
     private static void addPiece(Feed f, UUID who, int entry, Piece p) {
@@ -695,6 +728,11 @@ public final class ChatView {
                     String spoken = ChatDisplayModes.current().assistantText(turn.content());
                     if (!spoken.isBlank()) {
                         flushProcess(f, done, failed, bubbleMaxW);   // 开口说话把过程收口
+                        if (!f.unreadPlaced && entry.ts() > unreadSince) {
+                            out.add(new UnreadBar());   // 打开时还没看过的第一句
+                            f.unreadPlaced = true;
+                            f.last = null;
+                        }
                         boolean first = !who.equals(f.last);
                         out.add(bubble(false, first ? label(who) : null,
                                 Nb.colored(spoken, TXT), AI_FILL, innerW, first, who,
@@ -994,6 +1032,11 @@ public final class ChatView {
                 FormattedCharSequence line = Nb.colored(fitOneLine(n.text(), w - SB_W), FAINT).getVisualOrderText();
                 int tw = font.width(line);
                 draw(g, line, x + (w - SB_W - tw) / 2, y);
+            }
+            case UnreadBar ignored -> {
+                String t = I18n.get("numen.chat.unread_bar");
+                g.fill(x, y, x + w - SB_W, y + LINE_H + 6, (CHIP_FILL & 0xFFFFFF) | (((CHIP_FILL >>> 24) / 2) << 24));
+                draw(g, Nb.colored(t, MUTED).getVisualOrderText(), x + (w - SB_W - font.width(t)) / 2, y + 4);
             }
             case Bubble bb -> drawBubble(g, bb, x, y, w);
             case Chip c -> drawChip(g, c, x, y);
