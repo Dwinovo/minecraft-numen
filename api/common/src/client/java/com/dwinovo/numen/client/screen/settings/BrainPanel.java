@@ -108,7 +108,8 @@ public final class BrainPanel {
         Font font = Minecraft.getInstance().font;
 
         // ---- 固定层 ----
-        Label title = fixedUi.add(new Label(t("numen.brain.title"), Label.Role.PRIMARY));
+        // 这一页叫什么在面板抬头上;这一行是一条设置:左边说开关管什么,右边是开关
+        Label title = fixedUi.add(new Label(t("numen.brain.enable"), Label.Role.PRIMARY));
         title.setBounds(x, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 9), w - 140, 9);
         // 开关回调只写配置,绝不在此重建——重建会 new 出滑块已在终点的新 Toggle,
         // 滑动动画连起步都来不及(真机教训:大脑区开关瞬时切换的病根)。

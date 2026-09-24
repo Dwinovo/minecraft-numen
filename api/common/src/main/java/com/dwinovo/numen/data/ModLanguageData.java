@@ -249,7 +249,6 @@ public final class ModLanguageData {
 
         // STT (voice input)
         public static final String STT_NAV            = "numen.settings.nav.stt";
-        public static final String STT_TITLE          = "numen.stt.title";
         public static final String STT_MICROPHONE     = "numen.stt.microphone";
         public static final String STT_MIC_DEFAULT    = "numen.stt.mic_default";
         public static final String STT_NOT_CONFIGURED = "numen.stt.not_configured";
@@ -292,6 +291,7 @@ public final class ModLanguageData {
         adder.add("numen.settings.nav.theme", "Theme");
         // 外接大脑(我们当 MCP 服务器)——与"工具扩展"方向相反的那一半
         adder.add("numen.brain.title", "External Brain (MCP)");
+        adder.add("numen.brain.enable", "Enable external brain");
         adder.add("numen.brain.toggle", "External-brain mode");
         adder.add("numen.brain.start_failed", "Could not start the server: %s");
         adder.add("numen.brain.endpoint", "Endpoint");
@@ -333,9 +333,7 @@ public final class ModLanguageData {
         adder.add("numen.brain.saved", "✔ Saved");
         adder.add("numen.brain.port_range", "Port must be between 1 and 65535.");
         adder.add("numen.brain.port_taken", "Port %d is already in use.");
-        adder.add("numen.settings.theme.title", "Theme");
         adder.add(Keys.STT_NAV, "Voice input");
-        adder.add(Keys.STT_TITLE, "Voice input (STT)");
         adder.add(Keys.STT_MICROPHONE, "Microphone");
         adder.add(Keys.STT_MIC_DEFAULT, "(default microphone)");
         adder.add(Keys.STT_NOT_CONFIGURED, "Voice input not configured — set an STT API key in settings");
@@ -424,7 +422,6 @@ public final class ModLanguageData {
         adder.add("numen.mcp.connecting", "%s · connecting…");
         adder.add("numen.mcp.failed", "%s · failed");
         adder.add("numen.mcp.disabled", "%s · off");
-        adder.add("numen.skill.title", "Skills");
         adder.add("numen.skill.empty", "None · drop into config/numen/skills");
         adder.add("numen.skill.open_dir", "＋ Folder");
         adder.add("numen.skill.no_desc", "(no description)");
@@ -703,6 +700,7 @@ public final class ModLanguageData {
         adder.add("numen.settings.nav.theme", "主题");
         // 外接大脑(我们当 MCP 服务器)——与"工具扩展"方向相反的那一半
         adder.add("numen.brain.title", "外接大脑 (MCP)");
+        adder.add("numen.brain.enable", "开启外接大脑");
         adder.add("numen.brain.toggle", "外接大脑模式");
         adder.add("numen.brain.start_failed", "服务器启动失败:%s");
         adder.add("numen.brain.endpoint", "接入端点");
@@ -742,9 +740,7 @@ public final class ModLanguageData {
         adder.add("numen.brain.saved", "✔ 已保存");
         adder.add("numen.brain.port_range", "端口必须在 1 到 65535 之间。");
         adder.add("numen.brain.port_taken", "端口 %d 已被占用。");
-        adder.add("numen.settings.theme.title", "主题");
         adder.add(Keys.STT_NAV, "语音输入");
-        adder.add(Keys.STT_TITLE, "语音输入 (STT)");
         adder.add(Keys.STT_MICROPHONE, "麦克风");
         adder.add(Keys.STT_MIC_DEFAULT, "（默认麦克风）");
         adder.add(Keys.STT_NOT_CONFIGURED, "未配置语音输入 —— 请在设置里填入 STT 的 API Key");
@@ -833,7 +829,6 @@ public final class ModLanguageData {
         adder.add("numen.mcp.connecting", "%s · 连接中…");
         adder.add("numen.mcp.failed", "%s · 连接失败");
         adder.add("numen.mcp.disabled", "%s · 已停用");
-        adder.add("numen.skill.title", "技能");
         adder.add("numen.skill.empty", "无 · 放入 config/numen/skills");
         adder.add("numen.skill.open_dir", "＋ 目录");
         adder.add("numen.skill.no_desc", "(无描述)");

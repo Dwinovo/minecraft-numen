@@ -31,8 +31,6 @@ public final class ThemePanel {
 
     public void build(int x, int y, int w, int h) {
         ui.clear();
-        Label title = ui.add(new Label(t("numen.settings.theme.title"), Label.Role.PRIMARY));
-        title.setBounds(x, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 9), w, 9);
 
         list = ui.add(new ListView<UiTheme>(UiTheme.ALL, ROW_H, this::renderRow, null)
                 .rowClick((index, xInRow) -> {
@@ -40,7 +38,7 @@ public final class ThemePanel {
                     onThemeChanged.run();   // 屏幕的调色板常量重读新主题
                     return true;
                 }));
-        int body = NumenStyle.bodyTop(y);
+        int body = y;   // 这一页叫什么在面板抬头上,没有标题行
         int listH = Math.min(UiTheme.ALL.size() * ROW_H, y + h - body - 30);
         list.setBounds(x, body, w, listH);
 

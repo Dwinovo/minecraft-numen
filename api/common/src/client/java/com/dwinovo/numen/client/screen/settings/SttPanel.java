@@ -81,10 +81,7 @@ public final class SttPanel {
         SttProviders.Option opt = SttProviders.byId(provider);
         provider = opt.id();
 
-        Label title = ui.add(new Label(t(ModLanguageData.Keys.STT_TITLE), Label.Role.PRIMARY));
-        title.setBounds(x, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 9), w, 9);
-
-        int ry = NumenStyle.bodyTop(y);
+        int ry = y;   // 这一页叫什么在面板抬头上,没有标题行
         ry = label(x, ry, ModLanguageData.Keys.GUI_SETTINGS_PROVIDER);
         providerIds = new ArrayList<>();
         List<String> providerNames = new ArrayList<>();

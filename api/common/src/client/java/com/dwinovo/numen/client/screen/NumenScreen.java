@@ -1966,7 +1966,7 @@ public final class NumenScreen extends Screen {
                     left + PAD, top + (HEADER_H - ICON_N) / 2, ICON_N, hotBack ? CTA : ON_BAND);
             int tx = left + PAD + ICON_N + 6;
             if (tab == Tab.SETTINGS) {
-                txt(g, Component.literal(I18n.get("numen.tab.settings")), tx,
+                txt(g, Component.literal(settings.title()), tx,
                         top + (HEADER_H - font.lineHeight) / 2 + 1, ON_BAND);
             } else if (tab == Tab.MEMBERS) {
                 String title = name();

@@ -123,7 +123,7 @@ public final class SettingsView {
     private LibraryListPanel<com.dwinovo.numen.agent.llm.ProviderLibrary.Entry> profileList() {
         if (profileList == null) {
             profileList = new LibraryListPanel<>(
-                    ModLanguageData.Keys.PROVIDER_TITLE, ModLanguageData.Keys.PROVIDER_ADD,
+                    ModLanguageData.Keys.PROVIDER_ADD,
                     ModLanguageData.Keys.PROVIDER_EMPTY,
                     () -> com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list(),
                     e -> {
@@ -163,7 +163,7 @@ public final class SettingsView {
     private LibraryListPanel<com.dwinovo.numen.client.voice.VoiceLibrary.Entry> voiceListPanel() {
         if (voiceListPanel == null) {
             voiceListPanel = new LibraryListPanel<>(
-                    ModLanguageData.Keys.VOICE_TITLE, ModLanguageData.Keys.VOICE_ADD,
+                    ModLanguageData.Keys.VOICE_ADD,
                     ModLanguageData.Keys.VOICE_EMPTY,
                     () -> com.dwinovo.numen.client.voice.VoiceLibrary.instance().list(),
                     e -> {
@@ -419,6 +419,11 @@ public final class SettingsView {
         host.rebuild();
     }
 
+    /** 面板抬头写什么:在分区里是分区名(Telegram 子页),在首页是"设置"。 */
+    public String title() {
+        return inSection() ? navLabels().get(section.ordinal()) : I18n.get("numen.tab.settings");
+    }
+
     /** 在某个分区里(不算正在退出去的)——← 和 Esc 先退回首页。 */
     public boolean inSection() {
         return section != null && !leaving;
@@ -626,7 +631,7 @@ public final class SettingsView {
     private LibraryListPanel<PersonaLibrary.Persona> personaListPanel() {
         if (personaListPanel == null) {
             personaListPanel = new LibraryListPanel<>(
-                    "numen.persona.title", "numen.persona.add", "numen.persona.empty",
+                    "numen.persona.add", "numen.persona.empty",
                     () -> PersonaLibrary.instance().list(),
                     p -> {
                         String badge = p.preset() ? I18n.get("numen.persona.preset_badge") + " · " : "";
@@ -731,7 +736,7 @@ public final class SettingsView {
     private LibraryListPanel<com.dwinovo.numen.mcp.client.McpClientManager.ServerHandle> mcpListPanel() {
         if (mcpListPanel == null) {
             mcpListPanel = new LibraryListPanel<>(
-                    "numen.mcp.title", "numen.mcp.add", "numen.mcp.empty",
+                    "numen.mcp.add", "numen.mcp.empty",
                     com.dwinovo.numen.mcp.client.McpClientManager::servers,
                     h -> new LibraryListPanel.Row(h.name(), mcpMeta(h),
                             h.status() == com.dwinovo.numen.mcp.client.McpClientManager.Status.FAILED, null),
@@ -840,7 +845,7 @@ public final class SettingsView {
     private LibraryListPanel<com.dwinovo.numen.agent.skill.SkillInfo> skillsListPanel() {
         if (skillsListPanel == null) {
             skillsListPanel = new LibraryListPanel<com.dwinovo.numen.agent.skill.SkillInfo>(
-                    "numen.skill.title", null, "numen.skill.empty",
+                    null, "numen.skill.empty",
                     () -> new ArrayList<>(com.dwinovo.numen.agent.skill.SkillRegistry.instance().all()),
                     sk -> {
                         String desc = sk.description() == null
@@ -891,7 +896,7 @@ public final class SettingsView {
     private LibraryListPanel<com.dwinovo.numen.client.skin.SkinLibrary.Entry> skinListPanel() {
         if (skinListPanel == null) {
             skinListPanel = new LibraryListPanel<>(
-                    ModLanguageData.Keys.SKIN_TITLE, ModLanguageData.Keys.SKIN_ADD,
+                    ModLanguageData.Keys.SKIN_ADD,
                     ModLanguageData.Keys.SKIN_EMPTY,
                     () -> com.dwinovo.numen.client.skin.SkinLibrary.instance().list(),
                     e -> {

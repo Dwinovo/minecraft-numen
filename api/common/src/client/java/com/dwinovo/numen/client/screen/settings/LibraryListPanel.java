@@ -53,7 +53,6 @@ public final class LibraryListPanel<T> {
      *  跨 build 持久(host.rebuild 不吞在途消息)。 */
     private final com.dwinovo.numen.client.ui.widget.InlineAlert notice =
             new com.dwinovo.numen.client.ui.widget.InlineAlert();
-    private final String titleKey;
     private final String addKey;
     private final String emptyKey;
     private final Supplier<List<T>> source;
@@ -100,12 +99,11 @@ public final class LibraryListPanel<T> {
     private int dimX, dimY, dimW, dimH;
     private int mouseX = -10000, mouseY = -10000;
 
-    public LibraryListPanel(String titleKey, String addKey, String emptyKey,
+    public LibraryListPanel(String addKey, String emptyKey,
                             Supplier<List<T>> source, Function<T, Row> rowOf,
                             Function<T, String> deleteMessage,
                             Consumer<T> onDeleteConfirmed,
                             Runnable onAdd, Consumer<T> onEdit) {
-        this.titleKey = titleKey;
         this.addKey = addKey;
         this.emptyKey = emptyKey;
         this.source = source;
@@ -182,31 +180,32 @@ public final class LibraryListPanel<T> {
         double keepScroll = list != null ? list.scrollY() : 0;
         ui.clear();
 
-        Label title = ui.add(new Label(t(titleKey), Label.Role.PRIMARY));
-        title.setBounds(x, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 9), w - 70, 9);
-        int actionRight = x + w;   // 标题行按钮从右往左排
+        // 这一页叫什么写在面板抬头上(Telegram 子页),这一行只放动作:左端"＋ 新建",右端开关与其它动作
+        var font = Minecraft.getInstance().font;
         if (addKey != null) {
             // 新建是轻的:平时只有字,悬停才浮出底(Telegram 列表顶上的"添加"不是一整块色)
-            Button add = ui.add(new Button(t(addKey), Button.Style.GHOST, onAdd));
-            add.setBounds(x + w - 56, y, 56, NumenStyle.HEADER_H);
-            actionRight = x + w - 56 - 6;
+            String addLabel = "+ " + t(addKey);
+            Button add = ui.add(new Button(addLabel, Button.Style.GHOST, onAdd));
+            add.setBounds(x, y, font.width(addLabel) + 12, NumenStyle.HEADER_H);
         }
+        int actionRight = x + w;   // 右端的动作从右往左排
         if (titleAction != null) {
             // 宽随文案实测(写死会被长文案穿底/盖住邻钮)。
-            int aw = Math.max(18, Minecraft.getInstance().font.width(titleActionLabel) + 12);
+            int aw = Math.max(18, font.width(titleActionLabel) + 12);
             Button act = ui.add(new Button(titleActionLabel, Button.Style.NORMAL, () -> {
                 titleAction.run();
                 refresh();   // 动作(重扫等)可能改变条目集,当场刷新
             }));
             act.setBounds(actionRight - aw, y, aw, NumenStyle.HEADER_H);
+            actionRight -= aw + 6;
         }
 
         if (toggleGet != null) {
             Toggle tog = ui.add(new Toggle(toggleGet.get(), toggleSet));
-            int togX = x + w - 56 - 8 - 22;
+            int togX = actionRight - 22;
             tog.setBounds(togX, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 11), 22, 11);
             String label = t(toggleLabelKey);
-            int lw = Minecraft.getInstance().font.width(label);
+            int lw = font.width(label);
             Label togLabel = ui.add(new Label(label, Label.Role.MUTED));
             // 宽度=实测文本宽:标签后加在按钮之上,虚宽会盖住右侧新建钮吞掉点击。
             togLabel.setBounds(togX - lw - 4, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 9), lw, 9);
