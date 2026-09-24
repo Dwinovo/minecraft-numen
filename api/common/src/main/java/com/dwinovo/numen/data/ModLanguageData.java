@@ -165,6 +165,7 @@ public final class ModLanguageData {
         public static final String RAIL_YOU               = "numen.rail.you";
         public static final String RAIL_EMPTY             = "numen.rail.empty";
         public static final String RAIL_SEARCH            = "numen.rail.search";
+        public static final String RAIL_DRAFT             = "numen.rail.draft";
         public static final String RAIL_NO_MATCH          = "numen.rail.no_match";
 
         // Skin library tab (upload png → MineSkin-signed textures).
@@ -492,6 +493,7 @@ public final class ModLanguageData {
         adder.add(Keys.RAIL_YOU,               "You");
         adder.add(Keys.RAIL_EMPTY,             "No messages yet");
         adder.add(Keys.RAIL_SEARCH,            "Search");
+        adder.add(Keys.RAIL_DRAFT,             "Draft");
         adder.add(Keys.RAIL_NO_MATCH,          "No matches");
         adder.add(Keys.SKIN_TITLE,           "Skins");
         adder.add(Keys.SKIN_ADD,             "New");
@@ -885,6 +887,7 @@ public final class ModLanguageData {
         adder.add(Keys.RAIL_YOU,               "你");
         adder.add(Keys.RAIL_EMPTY,             "还没说过话");
         adder.add(Keys.RAIL_SEARCH,            "搜索");
+        adder.add(Keys.RAIL_DRAFT,             "草稿");
         adder.add(Keys.RAIL_NO_MATCH,          "没有对得上的会话");
         adder.add(Keys.SKIN_TITLE,           "皮肤库");
         adder.add(Keys.SKIN_ADD,             "新建");

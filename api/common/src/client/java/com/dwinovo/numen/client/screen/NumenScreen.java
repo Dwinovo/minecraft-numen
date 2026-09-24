@@ -1909,8 +1909,32 @@ public final class NumenScreen extends Screen {
                 com.dwinovo.numen.client.screen.chat.UnreadBadge.draw(g, font, n, bx, ay + 16, CTA, ON_CTA);
                 previewRight = bx - 4;
             }
-            String preview = last == null ? I18n.get(ModLanguageData.Keys.RAIL_EMPTY) : last.text();
-            txt(g, Component.literal(clip(preview, previewRight - tx)), tx, ay + 18, last == null ? TXT_FAINT : dimColor);
+            // 第二行:她此刻在干什么 > 没发出去的草稿 > 最后一句。换的时候和抬头第二行一样上下滑,只露一行
+            String act = railActivity(c, now);
+            if (act != null) railActText.put(c.id(), act);
+            float at = Math.clamp(railActT.getOrDefault(c.id(), 0f) + (act != null ? dt : -dt) * 7f, 0f, 1f);
+            railActT.put(c.id(), at);
+            float e = com.dwinovo.numen.client.ui.Anim.easeOutCubic(at);
+            int py = ay + 18, pw = previewRight - tx, lh = font.lineHeight;
+            g.enableScissor(tx, py - 1, previewRight, py + lh + 1);
+            if (e < 0.97f) {
+                int y0 = py - Math.round(lh * e);
+                float k = 1f - e;
+                String draft = active ? "" : Conversations.instance().draft(c);
+                if (!draft.isEmpty()) {
+                    String pre = I18n.get(ModLanguageData.Keys.RAIL_DRAFT) + ": ";
+                    txt(g, Component.literal(pre), tx, y0, fade(FAIL, k));
+                    txt(g, Component.literal(clip(draft, pw - font.width(pre))), tx + font.width(pre), y0, fade(dimColor, k));
+                } else {
+                    String preview = last == null ? I18n.get(ModLanguageData.Keys.RAIL_EMPTY) : last.text();
+                    txt(g, Component.literal(clip(preview, pw)), tx, y0, fade(last == null ? TXT_FAINT : dimColor, k));
+                }
+            }
+            if (e > 0.03f && railActText.containsKey(c.id())) {
+                txt(g, Component.literal(clip(railActText.get(c.id()), pw)), tx, py + Math.round(lh * (1f - e)),
+                        fade(active ? TXT : CTA, e));
+            }
+            g.disableScissor();
             }
             // 状态点、复活倒计时、等点头的"!"都是一只同伴的事;会话行上只有脸
             if (her == null) continue;
@@ -1936,6 +1960,29 @@ public final class NumenScreen extends Screen {
         int cx = railX + railW / 2;
         if (railScroll > 0) chevron(g, cx, top + 1, true);
         if (railScroll < maxRailScroll()) chevron(g, cx, railBottomEdge() + 2, false);
+    }
+
+    /** 左栏每行第二行"在干什么"的滑入进度,与最后一句(滑出去的时候还要画它)。 */
+    private final java.util.Map<String, Float> railActT = new java.util.HashMap<>();
+    private final java.util.Map<String, String> railActText = new java.util.HashMap<>();
+
+    /**
+     * 左栏这一行此刻该说她在干什么(Telegram 列表里的"正在输入…"):会话里有人在想、在干活、在整理记忆;
+     * 都没有是 null。只算她此刻所在的会话——在群里忙,私聊那行不跟着亮。群里带名字。
+     */
+    private String railActivity(Conversation c, long now) {
+        String tag = Conversations.instance().tagOf(c);
+        boolean group = Conversations.instance().soloOf(c) == null;
+        for (UUID m : Conversations.instance().membersAlive(c)) {
+            EntityAgentLoop lp = AgentLoopRegistry.get(m).orElse(null);
+            if (lp == null || !java.util.Objects.equals(lp.conversation(), tag)) continue;
+            HeaderStatus s = headerStatus(m, now);
+            if (s == null || !(s.key().equals("typing") || s.key().equals("busy") || s.key().equals("compacting"))) {
+                continue;
+            }
+            return group ? NumenRoster.instance().name(m) + " " + s.text() : s.text();
+        }
+        return null;
     }
 
     /** 列表里那句话的时间:今天给时分,再往前给日期(Telegram)。 */
