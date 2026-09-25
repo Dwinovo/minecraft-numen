@@ -164,7 +164,10 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      */
     private BlockPos haven;
 
-    /** 这一段逃跑路线是哪一刻算的。到点就重算,见 {@link #FLEE_REPLAN_TICKS}。 */
+    /**
+     * 这一段逃跑路线是在哪一刻({@link #workTicks()})派的。跑满 {@link #FLEE_REPLAN_TICKS} 刻就重算;等规划的刻
+     * 不算,否则慢于这个间隔的搜索每次都在出结论前被重算掐掉,她一步也跑不出去。
+     */
     private long havenPlannedAt;
 
     public AttackCompanionTask(NumenPlayer player, AttackTaskRecord record) {
@@ -853,13 +856,12 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             Constants.LOG.info("[numen-attack] 没有可跑的方向");
             return TaskState.RUNNING;
         }
-        long now = player.level().getGameTime();
-        if (nav != null && now - havenPlannedAt >= FLEE_REPLAN_TICKS) {
+        if (nav != null && workTicks() - havenPlannedAt >= FLEE_REPLAN_TICKS) {
             stopNav();   // 到点重算:落点不变,只让这一刻的怪进边成本
         }
         if (nav == null) {
             BlockPos landing = haven;
-            havenPlannedAt = now;
+            havenPlannedAt = workTicks();
             nav = PlayerNav.toGoal(player, () -> NavGoal.approachAvoiding(
                             NavGoal.nearGround(landing, HAVEN_ARRIVED),
                             Menace.AVOID_PENALTY, roadHazards()),

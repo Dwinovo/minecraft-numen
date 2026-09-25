@@ -56,8 +56,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
      *  at 0 anyway; this covers place maneuvers and replan gaps). */
     private static final int PROGRESS_GRACE_TICKS = 100;
     /** Hard check-in cap: even a healthy marathon yields (with a resumable result) after
-     *  this long, bounding how long the LLM goes without control. Renewals never push
-     *  the deadline past start + this. */
+     *  this many ticks of walking ({@link #workTicks()} — ticks spent waiting on the planner
+     *  don't count), bounding how long the LLM goes without control. Renewals never extend
+     *  the journey past this. */
     private static final long CHECK_IN_CAP_TICKS = 5 * 60 * 20;
     /** When the planner CAN'T reach the exact goal, a stop within this of the
      *  requested column still counts as "got there" (a teaching success, not a
@@ -76,11 +77,12 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     private final BlockPos blockTarget;   // only meaningful for BLOCK kind
 
     private double bestDist = Double.MAX_VALUE;   // closest we've gotten to the goal
-    private int settleTicks = 0;                  // ticks of no progress after the planner gave up
+    /** {@link #workTicks()} when she last got closer — the water-settle timer counts from here. */
+    private long closerAt;
     /** The one near-retry recovery rung has been consumed (ladder state — survives suspend). */
     private boolean nearRetried;
-    /** Absolute ceiling for lease renewals (start + {@link #CHECK_IN_CAP_TICKS}); 0 = unset. */
-    private long leaseCapGameTime;
+    /** Ceiling for lease renewals on the work clock (start + {@link #CHECK_IN_CAP_TICKS}); 0 = unset. */
+    private long leaseCapWork;
 
     /** FIND(就近方块)子系统:扫描/入册/契约/轮换全在组件里,此处只驱动。 */
     private NearestBlockFinder finder;
@@ -119,7 +121,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             if (reached()) return;
             long extra = Math.min(MAX_EXTRA_TICKS, 600 + (long) (repDistance() * TICKS_PER_BLOCK));
             r.extendDeadlineTo(player.level().getGameTime() + extra);
-            leaseCapGameTime = player.level().getGameTime() + CHECK_IN_CAP_TICKS;
+            leaseCapWork = workTicks() + CHECK_IN_CAP_TICKS;
             nav = PlayerNav.alongRoute(player, route, this::reached);
             com.dwinovo.numen.core.Constants.LOG.info(
                     "[numen-task] goto start kind=ROUTE id={} toward={} alter={}",
@@ -137,7 +139,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             long extra = Math.min(MAX_EXTRA_TICKS,
                     600 + (long) (repDistance() * TICKS_PER_BLOCK));
             r.extendDeadlineTo(player.level().getGameTime() + extra);
-            leaseCapGameTime = player.level().getGameTime() + CHECK_IN_CAP_TICKS;
+            leaseCapWork = workTicks() + CHECK_IN_CAP_TICKS;
             com.dwinovo.numen.core.Constants.LOG.info(
                     "[numen-task] goto start kind={} target={},{},{} 驾船先行",
                     r.kind, bx, by, bz);
@@ -157,7 +159,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             long findExtra = Math.min(MAX_EXTRA_TICKS,
                     600 + (long) NearestBlockFinder.BUDGET_BLOCKS * TICKS_PER_BLOCK);
             r.extendDeadlineTo(player.level().getGameTime() + findExtra);
-            leaseCapGameTime = player.level().getGameTime() + CHECK_IN_CAP_TICKS;
+            leaseCapWork = workTicks() + CHECK_IN_CAP_TICKS;
             finder.kickScan();
             com.dwinovo.numen.core.Constants.LOG.info(
                     "[numen-task] goto start kind=FIND block={}", r.block);
@@ -184,7 +186,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         // here — the progress lease below takes over once the journey is under way).
         long extra = Math.min(MAX_EXTRA_TICKS, 600 + (long) (repDistance() * TICKS_PER_BLOCK));
         r.extendDeadlineTo(player.level().getGameTime() + extra);
-        leaseCapGameTime = player.level().getGameTime() + CHECK_IN_CAP_TICKS;
+        leaseCapWork = workTicks() + CHECK_IN_CAP_TICKS;
         // 坐标形态的目标契约只在 MoveToTaskRecord.compile 一处成形,搜索与到达判定同一份
         nav = PlayerNav.to(player, this::compiled, WALK_SPEED, this::reached, terrain())
                 .withTerrainProbe();
@@ -274,9 +276,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         // consumption, NOT goal distance, is the liveness signal: healthy routes routinely
         // move away from the goal (skirting a lake, spiraling down), and the flat budget
         // above can't price terrain (a dig-heavy route once died 1 block short).
-        if (nav.stallTicks() <= PROGRESS_GRACE_TICKS && leaseCapGameTime > 0) {
-            long now = player.level().getGameTime();
-            r.extendDeadlineTo(Math.min(now + PROGRESS_LEASE_TICKS, leaseCapGameTime));
+        if (nav.stallTicks() <= PROGRESS_GRACE_TICKS) {
+            renewLease();
         }
         // Track passive progress toward the goal: the planner stops at the water surface
         // above an underwater target, but the body keeps drifting toward it on its own (it
@@ -284,9 +285,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         double d = repDistance();
         if (d < bestDist - 0.1) {
             bestDist = d;
-            settleTicks = 0;
-        } else {
-            settleTicks++;
+            closerAt = workTicks();
         }
         return switch (nav.tick()) {
             case RUNNING -> TaskState.RUNNING;
@@ -304,7 +303,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 // up only once it's stopped making progress (bobbing at the surface below an
                 // out-of-reach above-water target). So the body settles onto an underwater
                 // goal but bails under an unreachable air one. On land a failure is final.
-                if (player.isInWater() && settleTicks < MAX_SETTLE_TICKS) {
+                if (player.isInWater() && workTicks() - closerAt < MAX_SETTLE_TICKS) {
                     yield TaskState.RUNNING;
                 }
                 // Otherwise: as close as the terrain allows → (teaching) success or fail.
@@ -343,6 +342,15 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         };
     }
 
+    /** 续约:期限保持在租约窗口里,但这一程干活的刻数不超过 {@link #CHECK_IN_CAP_TICKS}。 */
+    private void renewLease() {
+        if (leaseCapWork <= 0) {
+            return;
+        }
+        long capLeft = leaseCapWork - workTicks();
+        r.extendDeadlineTo(player.level().getGameTime() + Math.min(PROGRESS_LEASE_TICKS, capLeft));
+    }
+
     /**
      * 船腿的一刻:驾船朝目标推进,终态(靠岸或搁浅)都走同一条接力——到不了目标的
      * 水路不算失败,只是"这条腿到此为止",剩下的路归步行段(步行导航起步自会下船)。
@@ -350,9 +358,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
      */
     private TaskState tickBoatLeg() {
         // 船腿的续约与步行段同一制式:还在消耗航线就把期限保持在租约窗口里
-        if (boatLeg.progressing() && leaseCapGameTime > 0) {
-            long now = player.level().getGameTime();
-            r.extendDeadlineTo(Math.min(now + PROGRESS_LEASE_TICKS, leaseCapGameTime));
+        if (boatLeg.progressing()) {
+            renewLease();
         }
         var status = boatLeg.tick();
         if (status == com.dwinovo.numen.core.pathing.execute.BoatNav.Status.RUNNING) {

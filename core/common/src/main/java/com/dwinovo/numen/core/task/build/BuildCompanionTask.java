@@ -128,7 +128,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private LongOpenHashSet observedCompleted;
     private boolean providerRegistered;
     private Phase phase = Phase.TRAVEL;
-    private int travelTicks;
+    /** 动身赴工地时的 {@link #workTicks()}。 */
+    private long travelSince;
 
     /** 工地包围盒(全体目标格的最小/最大角)。 */
     private BlockPos siteMin;
@@ -189,8 +190,11 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     /** 挪窝状态。 */
     private List<Vec3> wanderPoints = List.of();
     private int wanderIndex;
+    /** 两次挪窝之间干了几刻活。 */
     private int wanderTicks;
     private Vec3 wanderTarget;
+    /** 动身去这次挪窝落点时的 {@link #workTicks()}。 */
+    private long wanderSince;
 
     private String note = "done";
 
@@ -371,6 +375,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private TaskState tickTravel() {
         if (nav == null) {
             NavGoal goal = siteApproachGoal();
+            travelSince = workTicks();
             nav = PlayerNav.to(player,
                     () -> new GoalCompiler.Compiled(goal, protectedCells()),
                     WALK_SPEED, () -> false, this);
@@ -381,9 +386,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 yield TaskState.RUNNING;
             }
             case RUNNING -> {
-                // 预算只计"正在往那儿走"的刻;搜索在飞的刻是规划器的墙钟延迟,
-                // 在高 tps 的无头测试里折算尤其离谱,不计入。
-                if (!nav.planningInFlight() && ++travelTicks > TRAVEL_BUDGET_TICKS) {
+                // 预算只计"正在往那儿走"的刻(workTicks):等规划的刻长短看机器快慢,不计入。
+                if (workTicks() - travelSince > TRAVEL_BUDGET_TICKS) {
                     com.dwinovo.numen.core.Constants.LOG.debug(
                             "[numen-build] 赴工地超时,就地开工 feet={} 工地={}",
                             player.blockPosition().toShortString(), siteMin.toShortString());
@@ -1060,6 +1064,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         if (nav == null) {
             Vec3 dest = wanderTarget;
+            wanderSince = workTicks();
             nav = PlayerNav.to(player,
                     () -> new GoalCompiler.Compiled(
                             NavGoal.nearGround(BlockPos.containing(dest), 1.5),
@@ -1068,7 +1073,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         boolean done = switch (nav.tick()) {
             case ARRIVED, FAILED -> true;
-            case RUNNING -> !nav.planningInFlight() && ++wanderTicks > WANDER_WALK_TICKS;
+            case RUNNING -> workTicks() - wanderSince > WANDER_WALK_TICKS;
         };
         if (done) {
             stopNav();

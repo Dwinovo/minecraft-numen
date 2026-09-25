@@ -211,8 +211,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     /** The ore currently returning {@code NO_SHOT}, and for how many consecutive ticks. */
     private BlockPos noShotPos;
     private int noShotTicks;
-    /** 上一次真有进展(挖掉一格)或明显挪窝的时刻与位置 —— 卡死判定的量尺。 */
-    private long lastProgressTick;
+    /** 上一次真有进展(挖掉一格)或明显挪窝时的 {@link #workTicks()} 与位置 —— 卡死判定的量尺。 */
+    private long lastProgressWork;
     private BlockPos lastProgressPos;
 
     /** 目标图还没回来时连续无路的次数(见 {@link NoPathVerdict}),只用来让日志只打第一次。 */
@@ -296,7 +296,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             }
             runQuery();
         }
-        lastProgressTick = player.level().getGameTime();
+        lastProgressWork = workTicks();
         lastProgressPos = player.blockPosition();
         // 与 goto 的 start 日志对称:一任务一条,让日志里能看到任务确实启动了
         com.dwinovo.numen.core.Constants.LOG.info(
@@ -470,11 +470,10 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         }
 
         // 3) No ore known and nothing dropped nearby. A search still in flight, or none back
-        //    yet, means "don't know yet", not "nothing there" — wait for it before any verdict. 等搜索的刻不烧任务预算:读地形按真实时间分摊,而期限数游戏刻——
-        //    tick 远快于真实时间时(/tick rate、不限速的测试服),期限会在首查返回前烧光,
-        //    任务无声 TIMEOUT。与 nav 规划在飞的冻结(AbstractCompanionTask)同一条保护。
+        //    yet, means "don't know yet", not "nothing there" — wait for it before any verdict.
+        //    这样等着的刻是在等搜索,不算干活(awaitSearch)。
         if (!mapped || searchId != 0) {
-            r.extendDeadlineTo(r.getDeadlineGameTime() + 1);
+            awaitSearch();
             return TaskState.RUNNING;
         }
         //    Finish with whatever we gathered (the tool's contract: "fewer than count in
@@ -1010,36 +1009,30 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     /** 挖掉了一格,或者明显挪了窝 —— 两者都算进展,卡死计时重新起算。 */
     private void noteProgress() {
-        lastProgressTick = player.level().getGameTime();
+        lastProgressWork = workTicks();
         lastProgressPos = player.blockPosition();
     }
 
     /**
      * 真卡住了吗。<b>既没挖掉一格、也没挪出 {@link #STALL_MOVE} 格</b>,持续
-     * {@link #STALL_TICKS} 刻才算 —— 走远路去挖矿一刻都不算,她在动。
+     * {@link #STALL_TICKS} 刻才算 —— 走远路去挖矿一刻都不算,她在动。刻数是干活的刻
+     * ({@link #workTicks()}):等规划的刻不算卡住,往下挖 170 格的搜索还没回来时她只是在等路。
      *
      * @return 该收工就给终态,否则 null
      */
     private TaskState stalledOut() {
-        long now = player.level().getGameTime();
         if (lastProgressPos == null
                 || player.blockPosition().distSqr(lastProgressPos) > STALL_MOVE * STALL_MOVE) {
             noteProgress();
             return null;
         }
-        // 规划器在飞的刻不算卡住:搜索要花真实时间,而这把尺子数的是游戏刻。tick 远快于
-        // 真实时间时(/tick rate 200、不限速的测试服),往下挖 170 格的搜索还没回来,400 刻已经
-        // 烧完——她被判"够不着",其实只是在等路。与任务 deadline 的同一条保护(AbstractCompanionTask)。
-        if (nav != null && nav.planningInFlight()) {
-            lastProgressTick++;
-            return null;
-        }
-        if (now - lastProgressTick < STALL_TICKS) {
+        long idle = workTicks() - lastProgressWork;
+        if (idle < STALL_TICKS) {
             return null;
         }
         com.dwinovo.numen.core.Constants.LOG.info(
                 "[numen-task] mine 卡住 {} 刻:没挖掉任何一格、也没挪窝 | feet={} 名单 {} 个",
-                now - lastProgressTick, player.blockPosition().toShortString(), knownOres.size());
+                idle, player.blockPosition().toShortString(), knownOres.size());
         return unreachable("stuck there with nothing minable in place for " + STALL_TICKS / 20 + " seconds");
     }
 
