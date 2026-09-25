@@ -106,10 +106,9 @@ List<String> block_ids,
      */
     static String coverageNote(BlockSearch.ScanResult res) {
         List<String> notes = new ArrayList<>(3);
-        if (res.deadlineHit()) {
-            notes.add("time budget hit after " + res.columnsScanned() + "/" + res.columnsTotal()
-                    + " chunk columns — what came back is the area nearest you; "
-                    + "retry for fresh coverage or scan smaller");
+        String capped = res.sectionCapNote();
+        if (capped != null) {
+            notes.add(capped);
         }
         if (res.collectCapHit()) {
             notes.add("stopped at " + BlockSearch.MAX_COLLECT + " matching blocks — only the area nearest you "
@@ -134,7 +133,7 @@ List<String> block_ids,
         }
         JsonObject root = new JsonObject();
         root.add("groups", out);
-        // A total only when the walk actually covered the sphere. Cut short — hit the deadline or
+        // A total only when the walk actually covered the sphere. Cut short — hit the section cap or
         // the collect cap, skipped unloaded ground — whatever it saw is an artifact of stopping,
         // and a number in this slot gets read as "that is how much is there".
         if (res.coveredEverything()) {

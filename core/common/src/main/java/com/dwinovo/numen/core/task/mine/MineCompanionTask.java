@@ -215,15 +215,20 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private long lastProgressTick;
     private BlockPos lastProgressPos;
 
-    /** 地图不完整时连续无路的次数（见 {@link NoPathVerdict}）。 */
+    /** 目标图还没回来时连续无路的次数(见 {@link NoPathVerdict}),只用来让日志只打第一次。 */
     private int coldMapFails;
     /** 完整的图上搜不出路时的局面:从哪儿搜、要挖的格、地上的掉落物。同一个局面再撞上一次就收工。 */
     private record NoPathScene(BlockPos feet, Set<BlockPos> ores, Set<BlockPos> drops) {}
     /** 上一次搜不出路时的局面;还没有为 null。 */
     private NoPathScene lastNoPath;
-    /** 上一次搜索是否走完了(没被期限截断)。还没有搜索回来、或被截断时为 false——
-     *  终局判定("附近没有目标")必须等它为 true 才能下。 */
-    private boolean lastQueryComplete;
+    /**
+     * 目标图有了:至少一次查询已经回来(或点名用法不用查)。搜索按工作量收工,回来的就是这个问法在这个世界上
+     * 的完整答案——被节数上限截断也是确定的截断,重查不会更全。还没回来时,终局判定("附近没有目标"、
+     * "都够不着")得等它。
+     */
+    private boolean mapped;
+    /** 最近一次回来的查询被节数上限截断时的那句话({@link BlockSearch.ScanResult#sectionCapNote});没截断为 null。 */
+    private String capNote;
     /** 在飞的搜索句柄;0 表示没有。 */
     private int searchId;
     /** 回来了还没并进名单的搜索结果。 */
@@ -281,10 +286,10 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         if (byGroups()) {
             // 候选就是点名的格子,不用搜
             remaining.addAll(r.named.keySet());
-            lastQueryComplete = true;
+            mapped = true;
         } else {
             // 持有目标的登记,让共享索引在任务期间保持新鲜,并立即起首次搜索;冷区域的读地形由
-            // 每刻的读节配额分摊,首批结果回来前 onTick 的终局判定会等着(lastQueryComplete)。
+            // 每刻的读节配额分摊,首批结果回来前 onTick 的终局判定会等着({@link #mapped})。
             if (player.level() instanceof ServerLevel sl) {
                 BlockSearch.hold(sl, r.targets);
                 heldIn = sl;
@@ -324,9 +329,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
         // Maintain the ore list every tick — INCLUDING while a dig below is latched:
         // prune (cheap — knownOres is capped at 64) revalidates against the live world;
-        // a search is started on demand (list low / new chunk / slow heartbeat / last one
-        // cut short) instead of on a fixed rescan cadence — the block-change hook keeps
-        // the shared index current in between.
+        // a search is started on demand (list low / new chunk / slow heartbeat) instead of
+        // on a fixed rescan cadence — the block-change hook keeps the shared index current
+        // in between.
         long tUpkeep = NavProfiler.begin();
         absorbSearch();
         prune();
@@ -425,22 +430,19 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     return TaskState.RUNNING;   // a reachable shaft is handled next tick
                 }
                 case FAILED -> {
-                    // [ANCHOR nav-cold-map] 地图自己都说了还没查完，这个“没路”不算证据。
+                    // [ANCHOR nav-cold-map] 目标图还没回来，这个“没路”不算证据。
                     //
-                    // 世界刚加载时共用索引是冷的，第一次查询烧完预算也扫不完请求半径
-                    // ({@code complete=false})，名单里可能只有几十格外的一簇，而脚边那片还没进图。
-                    // 拿这种半张图上的无路去收工，是把“我还不知道”当成了“不可能”。
+                    // 首次查询回来之前,她只认得地上的掉落物;朝它们搜不出路,说明不了名单里将会有的
+                    // 那些目标。拿这种无路去收工，是把“我还不知道”当成了“不可能”。
                     //
                     // 跟上面 ARRIVED-dud 是同一条纪律：收工只该给真正失败的路。
-                    if (NoPathVerdict.of(lastQueryComplete, coldMapFails)
-                            == NoPathVerdict.Verdict.REQUERY) {
+                    if (NoPathVerdict.of(mapped) == NoPathVerdict.Verdict.REQUERY) {
                         if (++coldMapFails == 1) {
                             com.dwinovo.numen.core.Constants.LOG.info(
-                                    "[numen-task] mine nav failed ({}) 但目标图还没查完 —— 不收工，重查 | nearestOre={}",
+                                    "[numen-task] mine nav failed ({}) 但目标图还没回来 —— 不收工,等它 | nearestOre={}",
                                     nav.failType(), nearestOreInfo());
                         }
                         stopNav();
-                        queryCooldown = 0;   // 下一刻就接着建图，别干等冷却
                         return TaskState.RUNNING;
                     }
                     // [ANCHOR nav-failed] 完整图上真的没路。
@@ -467,12 +469,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             }
         }
 
-        // 3) No ore known and nothing dropped nearby. A search still in flight, or the last
-        //    one cut short, means "don't know yet", not "nothing there" — wait for it before
-        //    any verdict. 等搜索的刻不烧任务预算:读地形按真实时间分摊,而期限数游戏刻——
+        // 3) No ore known and nothing dropped nearby. A search still in flight, or none back
+        //    yet, means "don't know yet", not "nothing there" — wait for it before any verdict. 等搜索的刻不烧任务预算:读地形按真实时间分摊,而期限数游戏刻——
         //    tick 远快于真实时间时(/tick rate、不限速的测试服),期限会在首查返回前烧光,
         //    任务无声 TIMEOUT。与 nav 规划在飞的冻结(AbstractCompanionTask)同一条保护。
-        if (!lastQueryComplete || searchId != 0) {
+        if (!mapped || searchId != 0) {
             r.extendDeadlineTo(r.getDeadlineGameTime() + 1);
             return TaskState.RUNNING;
         }
@@ -831,8 +832,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         }
         if (knownOres.size() < QUERY_LOW_WATER
                 || ChunkPos.asLong(player.blockPosition()) != lastQueryChunk
-                || heartbeatTimer <= 0
-                || !lastQueryComplete) {
+                || heartbeatTimer <= 0) {
             runQuery();
         }
     }
@@ -863,13 +863,12 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // 终局判定永远等不到"没有在飞的搜索"
         queryCooldown = QUERY_MIN_GAP_TICKS;
         heartbeatTimer = QUERY_HEARTBEAT_TICKS;
-        lastQueryComplete = !res.deadlineHit();
-        if (lastQueryComplete) {
-            coldMapFails = 0;   // 图齐了，之前那几次无路不再算数
-        }
+        mapped = true;
+        coldMapFails = 0;
+        capNote = res.sectionCapNote();
         com.dwinovo.numen.core.Constants.LOG.debug(
-                "[numen-task] mine query feet={} raw={} complete={} known(before merge)={}",
-                player.blockPosition().toShortString(), res.matches().size(), lastQueryComplete,
+                "[numen-task] mine query feet={} raw={} capped={} known(before merge)={}",
+                player.blockPosition().toShortString(), res.matches().size(), capNote != null,
                 knownOres.size());
         mergeHits(res.matches());
     }
@@ -1149,8 +1148,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             fail("all " + r.named.size() + " cells of " + r.label + " were gone or had changed since the scan;"
                     + " gathered 0. scan_blocks again to see what is there now.", FailureType.TARGET_LOST);
         } else {
-            fail("no reachable " + r.label + " found in the loaded area around me",
-                    FailureType.MINED_OUT);
+            fail("no reachable " + r.label + " found in the loaded area around me"
+                    + (capNote == null ? "" : " (" + capNote + ")"), FailureType.MINED_OUT);
         }
         return TaskState.FAILED;
     }

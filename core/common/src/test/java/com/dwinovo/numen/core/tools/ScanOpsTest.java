@@ -34,8 +34,8 @@ class ScanOpsTest {
         }
     }
 
-    private static BlockSearch.ScanResult result(int scanned, int unloaded, int total, boolean deadlineHit) {
-        return new BlockSearch.ScanResult(List.of(), scanned, unloaded, total, deadlineHit, false, false);
+    private static BlockSearch.ScanResult result(int scanned, int unloaded, int total, boolean sectionCapHit) {
+        return new BlockSearch.ScanResult(List.of(), scanned, unloaded, total, sectionCapHit, false, false);
     }
 
     @Test
@@ -51,17 +51,17 @@ class ScanOpsTest {
     }
 
     @Test
-    void aDeadlineSaysHowFarTheWalkGot() {
+    void aSectionCapSaysHowFarTheWalkGot() {
         String note = ScanOps.coverageNote(result(180, 0, 625, true));
         assertTrue(note.contains("180/625"), note);
-        assertTrue(note.contains("time budget"), note);
+        assertTrue(note.contains("reads at most"), note);
     }
 
     /** Both limits can bite in one scan; neither may silently swallow the other. */
     @Test
-    void aDeadlineDoesNotHideTheUnsearchedColumns() {
+    void aSectionCapDoesNotHideTheUnsearchedColumns() {
         String note = ScanOps.coverageNote(result(180, 300, 625, true));
-        assertTrue(note.contains("time budget"), note);
+        assertTrue(note.contains("reads at most"), note);
         assertTrue(note.contains("300 of 625"), note);
     }
 
@@ -83,7 +83,7 @@ class ScanOpsTest {
         assertTrue(note.contains("12 of 625"), note);
     }
 
-    /** The collect cap cuts a scan short like the deadline does, and the model has to be told so. */
+    /** The collect cap cuts a scan short like the section cap does, and the model has to be told so. */
     @Test
     void theCollectCapSaysGroupsAtTheEdgeMayBeCutOff() {
         BlockSearch.ScanResult capped = new BlockSearch.ScanResult(List.of(), 3, 0, 625, false, false, true);

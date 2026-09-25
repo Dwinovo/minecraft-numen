@@ -47,6 +47,8 @@ final class NearestBlockFinder {
     private int scanId;
     /** 搜索回来的命中,等 {@link #drain()} 收割。 */
     private List<BlockScanner.Hit> hits;
+    /** 搜索被节数上限截断时的那句话({@link BlockSearch.ScanResult#sectionCapNote});没截断为 null。 */
+    private String capNote;
     private boolean scanDrained;
     /** 候选集编译出的导航契约(候选变动时重建)。 */
     private GoalCompiler.Compiled contract;
@@ -68,6 +70,7 @@ final class NearestBlockFinder {
                 NEAREST_WANTED, Set.of(target), res -> {
                     scanId = 0;
                     hits = res.matches();
+                    capNote = res.sectionCapNote();
                 });
     }
 
@@ -111,6 +114,11 @@ final class NearestBlockFinder {
 
     boolean hasCandidates() {
         return !candidates.isEmpty();
+    }
+
+    /** 搜索被节数上限截断时的那句话,失败回执照说;没截断为 null。 */
+    String capNote() {
+        return capNote;
     }
 
     /** 搜索已收割,且没有候选可给了。 */

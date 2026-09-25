@@ -460,7 +460,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             return null;
         }
         if (finder.exhausted()) {
-            fail("no " + r.block + " found in the loaded area around me — explore"
+            String capped = finder.capNote();
+            fail("no " + r.block + " found in the loaded area around me"
+                    + (capped == null ? "" : " (" + capped + ")") + " — explore"
                     + " closer to one, or give exact coordinates (scan_blocks/locate can find some).",
                     FailureType.NO_PATH);
             return TaskState.FAILED;
