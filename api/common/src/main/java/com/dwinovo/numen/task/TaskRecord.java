@@ -3,6 +3,7 @@ import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskResult;
 
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 /**
  * Mutable descriptor of an in-flight task. The {@link com.dwinovo.numen.agent.tool.NumenTool tool layer}
@@ -72,6 +73,12 @@ public abstract class TaskRecord {
     private boolean async;
     /** 首次进入 RUNNING 的游戏刻;task_status 用它报已耗时。-1 = 还没开跑。 */
     private long startedGameTime = -1;
+    /**
+     * 同步动作的回信口:派它的那次调用给的({@link TaskDispatch#runSync} 绑上),结算后的结果只从这里回——模型的调用、
+     * {@code /numen drive} 的发令人、主人点过头的调用(回执末尾交代允许了什么)各自拿到自己的那一份。异步的活受理时
+     * 已经回执过,收尾走 task_finished,没有它。
+     */
+    private Consumer<String> reply;
 
     protected TaskRecord(String toolName, String toolCallId, long deadlineGameTime) {
         this.id = ID_SOURCE.incrementAndGet();
@@ -101,6 +108,9 @@ public abstract class TaskRecord {
     public final String publicId() { return "t" + id; }
 
     public final void markAsync() { this.async = true; }
+
+    void replyTo(Consumer<String> reply) { this.reply = reply; }
+    Consumer<String> reply() { return reply; }
     public final boolean isAsync() { return async; }
 
     /**
