@@ -288,4 +288,46 @@ public class PerceptionGameTests {
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
+
+    /**
+     * 找方块的搜索按工作量收工,和每刻分到多少时间无关:每一刻都先让别的搜索把整刻的时间上限吃光,她这次
+     * 查询照样在有限的刻数里回来,带着结论(看满节数上限而截断,或走完)——不会因为机器慢、别人忙而永远挂着。
+     * mine"图回来之前不下够不着的结论"靠的就是这一条:图一定会回来。
+     *
+     * <p>单独一个批次:这条用例每刻都把共享的时间上限耗尽,和别的用例同批会拖慢它们的搜索。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_scan_budget")
+    public static void a_block_search_returns_even_when_every_tick_is_already_spent(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos sponge = helper.absolutePos(new BlockPos(12, 2, 12));
+        level.setBlockAndUpdate(sponge, Blocks.SPONGE.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_starved", new BlockPos(3, 2, 3), false);
+        java.util.concurrent.atomic.AtomicReference<com.dwinovo.numen.core.scan.BlockSearch.ScanResult> result =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        // 测试刻在服务端刻里先于刻末的找方块推进:这里先把本刻的时间上限整个耗掉
+        helper.onEachTick(() -> {
+            if (result.get() != null) {
+                return;
+            }
+            try (com.dwinovo.numen.core.scan.SearchBudget.Slice hog =
+                         com.dwinovo.numen.core.scan.SearchBudget.slice(level.getServer())) {
+                while (com.dwinovo.numen.core.scan.SearchBudget.withinTime()) {
+                    Thread.onSpinWait();
+                }
+            }
+        });
+        com.dwinovo.numen.core.scan.BlockSearch.start(companion.getUUID(), level, companion.blockPosition(), 24,
+                com.dwinovo.numen.core.scan.BlockSearch.MAX_COLLECT, java.util.Set.of(Blocks.SPONGE), result::set);
+
+        helper.succeedWhen(() -> {
+            var res = result.get();
+            helper.assertTrue(res != null, "the search never came back while every tick was already spent");
+            helper.assertTrue(res.matches().stream().anyMatch(h -> h.pos().equals(sponge)),
+                    "the sponge on the site was not found");
+            helper.assertTrue(res.sectionCapHit() || !res.stoppedEarly() && !res.collectCapHit(),
+                    "the search came back without a conclusion about its coverage");
+            level.removeBlock(sponge, false);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
 }
