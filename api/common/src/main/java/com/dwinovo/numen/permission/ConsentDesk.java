@@ -23,8 +23,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * <h2>征询</h2>
  * 同一只同伴同时只挂一条;新的顶掉旧的,旧的按拒绝收尾({@link #SUPERSEDED})。发起那一刻主人
  * 不在线,或者挂着的时候主人下线、到了 {@link #TIMEOUT_TICKS},都按拒绝收尾({@link #OWNER_ABSENT})。
- * 请求与撤回都推给主人的客户端({@link ConsentRequestPayload}),撤回带着为什么撤;答复经 {@link #answer} 回来。
- * 发起者每刻读自己那张 {@link Ticket},模型不参与。
+ * 请求与撤回都推给主人的客户端({@link ConsentRequestPayload}),撤回带着为什么撤({@link Withdrawal});答复经
+ * {@link #answer} 回来。发起者每刻读自己那张 {@link Ticket},模型不参与。
  *
  * <h2>附言</h2>
  * 附言只随拒绝:主人要她换个做法才会说,那句话就是拒绝的理由,随发起的任务收场送达。允许不带附言。
@@ -49,10 +49,36 @@ public final class ConsentDesk {
     public static final String OWNER_ABSENT = "主人不在场,无法征得同意";
     /** 同一只同伴又发起了一条。 */
     public static final String SUPERSEDED = "被新的请求顶替";
-    /** 发起的任务先结束了(干完、被换、叫停、身体离开)。 */
-    public static final String TASK_ENDED = "发起征询的任务已经结束";
-    /** 发起者撤回了(要做的事已经不用问)。 */
-    public static final String WITHDRAWN = "发起者撤回了这条征询";
+
+    /**
+     * 一条征询没等到主人在答复框里答就撤掉了,为什么。这是给主人看的那一句:主人的客户端按自己的语言显示
+     * ({@link #key},中英文案都在语言文件里),服务端只说是哪一种。撤掉的人说出真实的原因——发起的任务收场了,
+     * 还是等着的那条指令被主人叫停、她离开了世界、她死了——不由登记处猜。
+     *
+     * <p>模型读到的是另一件事:它只在自己的调用被拒时读理由({@link ConsentAnswer#words}),那是
+     * {@link #OWNER_ABSENT}、{@link #SUPERSEDED} 这几句;撤回的请求没有发起者再等它的结论。
+     */
+    public enum Withdrawal {
+        /** 主人离线,或到点没答复。 */
+        OWNER_ABSENT,
+        /** 她又发起了一条,顶掉了这条。 */
+        SUPERSEDED,
+        /** 发起者要做的事此刻已经不用问了。 */
+        UNNEEDED,
+        /** 发起它的任务收场了(干完、失败、超时、被新的活顶掉、她自己叫停)。 */
+        TASK_ENDED,
+        /** 主人按了停止:发起它的任务或指令一并叫停。 */
+        OWNER_STOPPED,
+        /** 她离开了世界(休眠、遣散)。 */
+        BODY_LEFT,
+        /** 她死了。 */
+        DIED;
+
+        /** 给主人看的文案在语言文件里的键。 */
+        public String key() {
+            return "numen.consent.gone." + name().toLowerCase(java.util.Locale.ROOT);
+        }
+    }
 
     /** {@link #reply} 的结局。 */
     public enum Reply {
@@ -72,8 +98,8 @@ public final class ConsentDesk {
 
         void show(ConsentRequest request);
 
-        /** 撤掉主人那边挂着的请求。{@code why} 是撤回的原因;主人自己答复的撤回为空串。 */
-        void clear(String why);
+        /** 撤掉主人那边挂着的请求。{@code why} 是撤回的原因;主人自己答复的撤回为 null。 */
+        void clear(Withdrawal why);
 
         void remember(List<Rule> allow);
     }
@@ -115,7 +141,7 @@ public final class ConsentDesk {
         }
         if (!line.ownerPresent()) {
             ticket.answer = new ConsentAnswer(ConsentAnswer.Decision.DENY, OWNER_ABSENT);
-            line.clear(OWNER_ABSENT);
+            line.clear(Withdrawal.OWNER_ABSENT);
             Constants.LOG.info("[numen-consent] {} ask #{} refused at once: owner offline", companion,
                     ticket.request.id());
             return ticket;
@@ -181,7 +207,7 @@ public final class ConsentDesk {
             answer = new ConsentAnswer(decision, "");
         }
         settle(ticket, answer);
-        line.clear("");
+        line.clear(null);
         Constants.LOG.info("[numen-consent] {} #{} answered {}{}", companion, requestId, decision,
                 said.isEmpty() ? "" : ": " + said);
         return true;
@@ -195,27 +221,35 @@ public final class ConsentDesk {
         if (!line.ownerPresent() || line.gameTime() >= pending.request.expiresAtGameTime()) {
             Constants.LOG.info("[numen-consent] {} #{} expired: {}", companion, pending.request.id(), OWNER_ABSENT);
             settle(pending, new ConsentAnswer(ConsentAnswer.Decision.DENY, OWNER_ABSENT));
-            line.clear(OWNER_ABSENT);
+            line.clear(Withdrawal.OWNER_ABSENT);
         }
     }
 
     /** 发起者不再需要这条答复(要做的事此刻已经不用问了):挂着的就撤回。 */
     public void withdraw(Ticket ticket) {
         if (pending == ticket) {
-            settle(ticket, new ConsentAnswer(ConsentAnswer.Decision.DENY, WITHDRAWN));
-            line.clear(WITHDRAWN);
+            withdrawPending(Withdrawal.UNNEEDED);
         }
     }
 
-    /** 发起的那一方收尾:清掉它名下的授权,撤回它没等到答复的请求。 */
-    public void release(Object scope) {
+    /**
+     * 发起的那一方收尾:清掉它名下的授权,撤回它没等到答复的请求。
+     *
+     * @param why 它挂着的请求因何撤回,主人看到的就是这一句——由收尾的一方按真实原因给
+     */
+    public void release(Object scope, Withdrawal why) {
         if (grants.remove(scope) != null) {
             rebuildGranted();
         }
         if (pending != null && pending.scope == scope) {
-            settle(pending, new ConsentAnswer(ConsentAnswer.Decision.DENY, TASK_ENDED));
-            line.clear(TASK_ENDED);
+            withdrawPending(why);
         }
+    }
+
+    /** 挂着的那条撤掉:按拒绝收尾(发起者已经不等它了,理由留空),主人那边收起并看到为什么。 */
+    private void withdrawPending(Withdrawal why) {
+        settle(pending, new ConsentAnswer(ConsentAnswer.Decision.DENY, ""));
+        line.clear(why);
     }
 
     /** 全部在册的任务期授权(不可变快照)。 */
@@ -283,7 +317,7 @@ public final class ConsentDesk {
         }
 
         @Override
-        public void clear(String why) {
+        public void clear(Withdrawal why) {
             ServerPlayer owner = body.resolveOwnerPlayer();
             if (owner != null) {
                 Services.NETWORK.sendToPlayer(owner, ConsentRequestPayload.none(body.getUUID(), why));

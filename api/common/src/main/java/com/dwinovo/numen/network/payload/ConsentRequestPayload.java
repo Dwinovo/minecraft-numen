@@ -2,6 +2,7 @@ package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.permission.Action;
+import com.dwinovo.numen.permission.ConsentDesk;
 import com.dwinovo.numen.permission.ConsentItem;
 import com.dwinovo.numen.permission.ConsentRequest;
 
@@ -36,11 +37,12 @@ import java.util.UUID;
  * @param blocks            要描轮廓的格子({@code BlockPos#asLong})
  * @param entities          要描轮廓的实体 id
  * @param expiresAtGameTime 到这一刻按拒绝(倒计时)
- * @param withdrawnBecause  撤回的原因(超时、任务结束……);主人自己答复的撤回和挂着的请求为空串
+ * @param withdrawnBecause  撤回的原因(超时、任务收场、主人按了停止……),主人的客户端按自己的语言显示;主人自己答复的
+ *                          撤回和挂着的请求为 null
  */
 public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequestPayload.Line> lines, List<String> remember,
                                     List<Long> blocks, List<Integer> entities, long expiresAtGameTime,
-                                    String withdrawnBecause)
+                                    ConsentDesk.Withdrawal withdrawnBecause)
         implements CustomPacketPayload {
 
     /**
@@ -82,13 +84,12 @@ public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequest
                     group.irreversible()));
         }
         return new ConsentRequestPayload(request.companion(), request.id(), lines,
-                ConsentItem.rememberedRows(request.items()), blocks, entities, request.expiresAtGameTime(), "");
+                ConsentItem.rememberedRows(request.items()), blocks, entities, request.expiresAtGameTime(), null);
     }
 
-    /** 这只同伴没有挂着的请求了;{@code why} 为什么撤,主人自己答复的为空串。 */
-    public static ConsentRequestPayload none(UUID companion, String why) {
-        return new ConsentRequestPayload(companion, 0L, List.of(), List.of(), List.of(), List.of(), 0L,
-                why == null ? "" : why);
+    /** 这只同伴没有挂着的请求了;{@code why} 为什么撤,主人自己答复的为 null。 */
+    public static ConsentRequestPayload none(UUID companion, ConsentDesk.Withdrawal why) {
+        return new ConsentRequestPayload(companion, 0L, List.of(), List.of(), List.of(), List.of(), 0L, why);
     }
 
     public boolean withdrawn() {
@@ -120,7 +121,10 @@ public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequest
             buf.writeVarInt(e);
         }
         buf.writeVarLong(p.expiresAtGameTime);
-        buf.writeUtf(p.withdrawnBecause);
+        buf.writeBoolean(p.withdrawnBecause != null);
+        if (p.withdrawnBecause != null) {
+            buf.writeEnum(p.withdrawnBecause);
+        }
     }
 
     private static ConsentRequestPayload read(RegistryFriendlyByteBuf buf) {
@@ -149,7 +153,7 @@ public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequest
         }
         long expiresAtGameTime = buf.readVarLong();
         return new ConsentRequestPayload(companion, id, lines, remember, blocks, entities, expiresAtGameTime,
-                buf.readUtf());
+                buf.readBoolean() ? buf.readEnum(ConsentDesk.Withdrawal.class) : null);
     }
 
     @Override

@@ -67,7 +67,8 @@ public final class PendingCommands {
                 continue;
             }
             pending.waiting.remove(w);
-            ConsentDesk.of(her).release(w);
+            // 它的请求刚有了结论,已经不挂着了:这里只清它名下的授权
+            ConsentDesk.of(her).release(w, ConsentDesk.Withdrawal.UNNEEDED);
             if (answer.allowed()) {
                 proceed(w, answer);
             } else {
@@ -89,24 +90,24 @@ public final class PendingCommands {
         }
     }
 
-    /** 主人按了停止,或身体要离开世界:撤掉征询,这些调用回执说被谁叫停、没有执行。 */
+    /** 主人按了停止,或身体要离开世界:撤掉征询(主人看到是谁叫停的),这些调用回执说被谁叫停、没有执行。 */
     public static void stop(NumenPlayer her, TaskRecord.StopCause cause) {
-        for (Waiting w : of(her).drain()) {
+        for (Waiting w : of(her).drain(cause.withdrawal())) {
             w.call.reply(TaskResult.cancelled(cause.words() + " — /" + w.line + " did not run").toJson());
         }
     }
 
     /** 她死了:撤掉征询,不回执——那条调用已由死因结算。 */
     public static void drop(NumenPlayer her) {
-        of(her).drain();
+        of(her).drain(ConsentDesk.Withdrawal.DIED);
     }
 
-    /** 全部取出,撤掉各自挂着的征询与授权。 */
-    private List<Waiting> drain() {
+    /** 全部取出,撤掉各自挂着的征询与授权;{@code why} 是主人看到的撤回原因。 */
+    private List<Waiting> drain(ConsentDesk.Withdrawal why) {
         List<Waiting> all = List.copyOf(waiting);
         waiting.clear();
         for (Waiting w : all) {
-            ConsentDesk.of(w.call.companion()).release(w);
+            ConsentDesk.of(w.call.companion()).release(w, why);
         }
         return all;
     }

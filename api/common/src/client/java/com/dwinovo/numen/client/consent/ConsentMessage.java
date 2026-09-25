@@ -337,10 +337,11 @@ public final class ConsentMessage {
         if (card.chosen() >= 0) {
             return I18n.get(ModLanguageData.Keys.CONSENT_CHOSE, ConsentCards.Card.label(card.chosen()));
         }
-        if (card.gone().isEmpty()) {
+        if (card.gone() == null) {
             return I18n.get(ModLanguageData.Keys.CONSENT_ANSWERED_ELSEWHERE);
         }
-        return I18n.get(ModLanguageData.Keys.CONSENT_WITHDRAWN, ConsentCards.name(card.companion()), card.gone());
+        return I18n.get(ModLanguageData.Keys.CONSENT_WITHDRAWN, ConsentCards.name(card.companion()),
+                I18n.get(card.gone().key()));
     }
 
     // ---- 小工具 ----

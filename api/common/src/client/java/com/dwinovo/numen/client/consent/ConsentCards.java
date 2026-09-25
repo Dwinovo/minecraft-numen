@@ -55,8 +55,8 @@ public final class ConsentCards {
         /** 主人点的哪个键;{@code -1} = 还在等,或没等到主人答复就收了。 */
         private int chosen = -1;
         private String note = "";
-        /** 没等到主人在这里答复就收了的原因;{@code null} = 不是这么收的,空串 = 主人在别处(命令)答了。 */
-        private String gone;
+        /** 没等到主人答复就撤了的原因;{@code null} = 不是这么收的(在这里按了键,或在别处答了)。 */
+        private ConsentDesk.Withdrawal gone;
         /** 收起的时刻;{@code 0} = 还挂着。 */
         private long settledAt;
 
@@ -111,7 +111,7 @@ public final class ConsentCards {
             return note;
         }
 
-        public String gone() {
+        public ConsentDesk.Withdrawal gone() {
             return gone;
         }
 
@@ -162,7 +162,7 @@ public final class ConsentCards {
             Card old = PENDING.get(companion);
             if (old != null) {
                 // 顶替时服务端直接推新的那条,不另推旧的撤回
-                old.gone = ConsentDesk.SUPERSEDED;
+                old.gone = ConsentDesk.Withdrawal.SUPERSEDED;
                 old.settle();
             } else {
                 NumenHudToasts.push(NumenToasts.Severity.WARN, I18n.get(ModLanguageData.Keys.CONSENT_ASKING,
@@ -179,9 +179,9 @@ public final class ConsentCards {
         }
         card.gone = p.withdrawnBecause();
         card.settle();
-        if (!card.gone.isEmpty()) {
+        if (card.gone != null) {
             NumenHudToasts.push(NumenToasts.Severity.WARN, I18n.get(ModLanguageData.Keys.CONSENT_WITHDRAWN,
-                    name(companion), card.gone));
+                    name(companion), I18n.get(card.gone.key())));
         }
     }
 

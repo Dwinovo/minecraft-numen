@@ -32,13 +32,13 @@ class ConsentDeskTest {
         boolean ownerOnline = true;
         final List<ConsentRequest> shown = new ArrayList<>();
         final List<Rule> remembered = new ArrayList<>();
-        final List<String> clears = new ArrayList<>();
+        final List<ConsentDesk.Withdrawal> clears = new ArrayList<>();
         int cleared;
 
         @Override public long gameTime() { return now; }
         @Override public boolean ownerPresent() { return ownerOnline; }
         @Override public void show(ConsentRequest request) { shown.add(request); }
-        @Override public void clear(String why) { cleared++; clears.add(why); }
+        @Override public void clear(ConsentDesk.Withdrawal why) { cleared++; clears.add(why); }
         @Override public void remember(List<Rule> allow) { remembered.addAll(allow); }
     }
 
@@ -85,7 +85,7 @@ class ConsentDeskTest {
         assertEquals("", answer.words(), "允许没有理由可说");
         assertEquals(List.of(log(1), log(2)), desk.granted(), "答应的清单记成任务期授权");
         assertNull(desk.pending());
-        assertEquals(List.of(""), line.clears, "主人自己答的,撤回不带原因");
+        assertEquals(java.util.Collections.singletonList(null), line.clears, "主人自己答的,撤回不带原因");
         assertFalse(desk.answer(ticket.request().id(), ConsentAnswer.Decision.DENY, ""), "同一个号不能答两次");
     }
 
@@ -148,12 +148,18 @@ class ConsentDeskTest {
         desk.tick();
         Task done = new Task();
         desk.ask(done, List.of(log(2)));
-        desk.release(done);
+        desk.release(done, ConsentDesk.Withdrawal.TASK_ENDED);
         ConsentDesk.Ticket unneeded = desk.ask(new Task(), List.of(log(3)));
         desk.withdraw(unneeded);
+        Object stopped = new Object();
+        desk.ask(stopped, List.of(log(4)));
+        desk.release(stopped, ConsentDesk.Withdrawal.OWNER_STOPPED);
+        ConsentDesk.Ticket answered = desk.ask(new Task(), List.of(log(5)));
+        desk.answer(answered.request().id(), ConsentAnswer.Decision.DENY, "");
 
-        assertEquals(List.of(ConsentDesk.OWNER_ABSENT, ConsentDesk.TASK_ENDED, ConsentDesk.WITHDRAWN), line.clears,
-                "没等到答复就撤的,主人那边看得到为什么");
+        assertEquals(java.util.Arrays.asList(ConsentDesk.Withdrawal.OWNER_ABSENT, ConsentDesk.Withdrawal.TASK_ENDED,
+                        ConsentDesk.Withdrawal.UNNEEDED, ConsentDesk.Withdrawal.OWNER_STOPPED, null), line.clears,
+                "没等到答复就撤的,主人那边看得到收尾的一方给的真实原因;主人自己答的没有原因");
     }
 
     @Test
@@ -209,10 +215,12 @@ class ConsentDeskTest {
         desk.answer(otherGrant.request().id(), ConsentAnswer.Decision.ALLOW_ONCE, "");
         ConsentDesk.Ticket open = desk.ask(done, List.of(log(2)));
 
-        desk.release(done);
+        desk.release(done, ConsentDesk.Withdrawal.TASK_ENDED);
 
         assertEquals(List.of(log(9)), desk.granted(), "只清收尾那个任务名下的");
-        assertEquals(ConsentDesk.TASK_ENDED, open.poll().words(), "它没等到的请求撤回");
+        assertFalse(open.poll().allowed(), "它没等到的请求按拒绝收尾");
+        assertEquals(ConsentDesk.Withdrawal.TASK_ENDED, line.clears.get(line.clears.size() - 1),
+                "主人那边收起,说是任务收场了");
         assertNull(desk.pending());
     }
 

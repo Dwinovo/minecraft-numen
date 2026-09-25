@@ -150,7 +150,8 @@ final class TaskSlot {
                     record.getToolName(), "interrupted", "任务因她死亡而中断");
         }
         if (record != null) {
-            com.dwinovo.numen.permission.ConsentDesk.of(companion).release(record);
+            com.dwinovo.numen.permission.ConsentDesk.of(companion).release(record,
+                    com.dwinovo.numen.permission.ConsentDesk.Withdrawal.DIED);
         }
         task = null;
         record = null;
@@ -159,12 +160,15 @@ final class TaskSlot {
 
     /**
      * 结算:结果进出箱,腾位。槽放开这条记录的同一刻,主人为它答应下来的任务期授权与它没等到答复的
-     * 征询一并清掉——授权的作用域就是任务,由放开任务的这一处收口。
+     * 征询一并清掉——授权的作用域就是任务,由放开任务的这一处收口。征询撤回的原因是叫停它的那一方
+     * (主人按了停止、身体离开世界……),没人叫停就是任务自己收场了。
      */
     private void settle(NumenPlayer companion) {
         TaskResult result = task.result(record.getState());
-        record.setResult(record.getStopCause() == null ? result : result.stoppedBy(record.getStopCause()));
-        com.dwinovo.numen.permission.ConsentDesk.of(companion).release(record);
+        TaskRecord.StopCause cause = record.getStopCause();
+        record.setResult(cause == null ? result : result.stoppedBy(cause));
+        com.dwinovo.numen.permission.ConsentDesk.of(companion).release(record,
+                cause == null ? com.dwinovo.numen.permission.ConsentDesk.Withdrawal.TASK_ENDED : cause.withdrawal());
         outbox.accept(record);
         task = null;
         record = null;

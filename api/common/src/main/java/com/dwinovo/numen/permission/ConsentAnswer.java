@@ -7,7 +7,8 @@ import java.util.List;
  *
  * @param decision 主人按的哪个键;超时、主人不在、被顶替、任务先结束都按 {@link Decision#DENY}
  * @param words    拒绝的理由:主人的附言原话(附言只随拒绝——主人要她换个做法才会说),没有附言时是登记处替
- *                 这次结局说的那句({@link ConsentDesk#OWNER_SAID_NO} 等);允许时为空串
+ *                 这次结局说的那句({@link ConsentDesk#OWNER_SAID_NO} 等);允许时,以及发起者已经不等它的撤回
+ *                 ({@link ConsentDesk#release}、{@link ConsentDesk#withdraw}),为空串
  */
 public record ConsentAnswer(Decision decision, String words) {
 

@@ -686,6 +686,14 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_NOTE_ROW,       "No, tell %s what to do instead…");
         adder.add(Keys.CONSENT_ASKING,         "%s asks for your consent — press [%s] to answer");
         adder.add(Keys.CONSENT_WITHDRAWN,      "%s's request went away: %s");
+        // 撤回的原因:服务端只说是哪一种(ConsentDesk.Withdrawal),主人的客户端按这里的文案显示
+        adder.add(com.dwinovo.numen.permission.ConsentDesk.Withdrawal.OWNER_ABSENT.key(), "no answer came in time");
+        adder.add(com.dwinovo.numen.permission.ConsentDesk.Withdrawal.SUPERSEDED.key(), "a newer request replaced it");
+        adder.add(com.dwinovo.numen.permission.ConsentDesk.Withdrawal.UNNEEDED.key(), "it no longer needs your answer");
+        adder.add(com.dwinovo.numen.permission.ConsentDesk.Withdrawal.TASK_ENDED.key(), "the task that asked has ended");
+        adder.add(com.dwinovo.numen.permission.ConsentDesk.Withdrawal.OWNER_STOPPED.key(), "you pressed Stop");
+        adder.add(com.dwinovo.numen.permission.ConsentDesk.Withdrawal.BODY_LEFT.key(), "she left the world");
+        adder.add(com.dwinovo.numen.permission.ConsentDesk.Withdrawal.DIED.key(), "she died");
         adder.add(Keys.CONSENT_DENY_NOTE,      "Deny with a note");
         adder.add(Keys.CONSENT_CHOSE,          "You chose “%s”");
         adder.add(Keys.CONSENT_DENIED_SAYING,  "You said no: %s");
@@ -1120,6 +1128,14 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_NOTE_ROW,       "不行,告诉 %s 该怎么做…");
         adder.add(Keys.CONSENT_ASKING,         "%s 请求你的同意,按 [%s] 答复");
         adder.add(Keys.CONSENT_WITHDRAWN,      "%s 的请求撤回了:%s");
+        // 撤回的原因:服务端只说是哪一种(ConsentDesk.Withdrawal),主人的客户端按这里的文案显示
+        adder.add(com.dwinovo.numen.permission.ConsentDesk.Withdrawal.OWNER_ABSENT.key(), "没等到你的答复");
+        adder.add(com.dwinovo.numen.permission.ConsentDesk.Withdrawal.SUPERSEDED.key(), "她又问了新的一条");
+        adder.add(com.dwinovo.numen.permission.ConsentDesk.Withdrawal.UNNEEDED.key(), "不用再问你了");
+        adder.add(com.dwinovo.numen.permission.ConsentDesk.Withdrawal.TASK_ENDED.key(), "发起它的任务已经收场");
+        adder.add(com.dwinovo.numen.permission.ConsentDesk.Withdrawal.OWNER_STOPPED.key(), "你按了停止");
+        adder.add(com.dwinovo.numen.permission.ConsentDesk.Withdrawal.BODY_LEFT.key(), "她离开了世界");
+        adder.add(com.dwinovo.numen.permission.ConsentDesk.Withdrawal.DIED.key(), "她死了");
         adder.add(Keys.CONSENT_DENY_NOTE,      "说一句再拒绝");
         adder.add(Keys.CONSENT_CHOSE,          "你选了「%s」");
         adder.add(Keys.CONSENT_DENIED_SAYING,  "你拒绝了:%s");

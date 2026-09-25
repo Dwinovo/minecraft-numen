@@ -1,5 +1,6 @@
 package com.dwinovo.numen.task;
 import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.permission.ConsentDesk;
 import com.dwinovo.numen.task.TaskResult;
 
 import java.util.concurrent.atomic.AtomicLong;
@@ -164,22 +165,32 @@ public abstract class TaskRecord {
 
     public final StopCause getStopCause() { return stopCause; }
 
-    /** 谁叫停的这件活,和模型读到的那句话。 */
+    /**
+     * 谁叫停的这件活:模型读到的那句话,以及它挂着的征询因此撤回时主人看到的原因。叫停一件活和叫停一条等着主人点头的
+     * 指令是同一件事,两处都从这里取。
+     */
     public enum StopCause {
-        OWNER("the owner pressed Stop"),
-        TASK_STOP("you stopped it with task_stop"),
-        COMMAND("stopped by a /numen command"),
-        REPLACED("a newer body action replaced it"),
-        BODY_LEFT("the body left the world");
+        OWNER("the owner pressed Stop", ConsentDesk.Withdrawal.OWNER_STOPPED),
+        TASK_STOP("you stopped it with task_stop", ConsentDesk.Withdrawal.TASK_ENDED),
+        COMMAND("stopped by a /numen command", ConsentDesk.Withdrawal.TASK_ENDED),
+        REPLACED("a newer body action replaced it", ConsentDesk.Withdrawal.TASK_ENDED),
+        BODY_LEFT("the body left the world", ConsentDesk.Withdrawal.BODY_LEFT);
 
         private final String words;
+        private final ConsentDesk.Withdrawal withdrawal;
 
-        StopCause(String words) {
+        StopCause(String words, ConsentDesk.Withdrawal withdrawal) {
             this.words = words;
+            this.withdrawal = withdrawal;
         }
 
         public String words() {
             return words;
+        }
+
+        /** 被叫停的这一方挂着的征询因此撤回,主人看到的原因。 */
+        public ConsentDesk.Withdrawal withdrawal() {
+            return withdrawal;
         }
     }
 
