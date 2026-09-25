@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.combat;
 
 import com.dwinovo.numen.core.pathing.goals.GoalAvoidEntities;
+import com.dwinovo.numen.core.scan.NearbyEntities;
 
 import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerLevel;
@@ -214,14 +215,7 @@ public final class Menace {
 
     /** 半径内所有活着的敌对生物,不管它有没有盯上她。 */
     public static List<Mob> hostilesAround(Entity self, double radius) {
-        List<Mob> found = new ArrayList<>();
-        for (Mob m : self.level().getEntitiesOfClass(Mob.class,
-                self.getBoundingBox().inflate(radius))) {
-            if (m != self && hostile(m) && m.isAlive() && self.distanceToSqr(m) <= radius * radius) {
-                found.add(m);
-            }
-        }
-        return found;
+        return NearbyEntities.within(self, radius, Mob.class, m -> hostile(m) && m.isAlive());
     }
 
     /**

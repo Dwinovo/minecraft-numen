@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.ToolArgs;
+import com.dwinovo.numen.core.scan.NearbyEntities;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.platform.Services;
 import com.dwinovo.numen.task.TaskResult;
@@ -26,7 +27,6 @@ import net.minecraft.world.item.crafting.SmithingRecipe;
 import net.minecraft.world.item.crafting.SmithingRecipeInput;
 import net.minecraft.world.item.crafting.StonecutterRecipe;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -55,8 +55,7 @@ String type_filter,
         String filter = readEnum("type_filter", type_filter,
                 List.of("hostile", "passive", "player", "all"));
 
-        AABB box = self.getBoundingBox().inflate(radius);
-        List<Entity> raw = self.level().getEntities(self, box);
+        List<Entity> raw = NearbyEntities.within(self, radius, Entity.class, e -> true);
 
         List<ScoredEntity> matched = new ArrayList<>(raw.size());
         for (Entity e : raw) {

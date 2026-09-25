@@ -5,14 +5,12 @@ import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.mixin.ItemEntityAccessor;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
+import com.dwinovo.numen.core.scan.NearbyEntities;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.TargetSet;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.phys.AABB;
 
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -149,16 +147,10 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
         return skipped.pick(matchingItems(), Comparator.comparingDouble(player::distanceToSqr)).orElse(null);
     }
 
-    /** Every drop in range that this sweep is after, tried or not. */
+    /** Every drop within the radius (a distance from her) that this sweep is after, tried or not. */
     private List<ItemEntity> matchingItems() {
-        AABB box = player.getBoundingBox().inflate(r.radius);
-        List<ItemEntity> candidates = new ArrayList<>();
-        for (Entity e : player.level().getEntities(player, box)) {
-            if (!(e instanceof ItemEntity ie) || ie.isRemoved()) continue;
-            if (!r.filter.isEmpty() && !r.filter.contains(ie.getItem().getItem())) continue;
-            candidates.add(ie);
-        }
-        return candidates;
+        return NearbyEntities.within(player, r.radius, ItemEntity.class,
+                ie -> !ie.isRemoved() && (r.filter.isEmpty() || r.filter.contains(ie.getItem().getItem())));
     }
 
     @Override
