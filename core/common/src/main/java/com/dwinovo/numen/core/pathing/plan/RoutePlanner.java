@@ -107,6 +107,8 @@ public final class RoutePlanner {
         /** 账单超出规格改动预算而作废的候选数,以及其中改动最少的那条改了几格。 */
         private int overBudget;
         private int cheapestChange = Integer.MAX_VALUE;
+        /** 收工的那次搜索没搜到目标时为什么停(见 {@link PathCalcResult#stop});攒够了候选才收工为 null。 */
+        private PathCalcResult.Stop unreached;
 
         private Query(BlockPos realStart, BlockPos start, GoalCompiler.Compiled goal, RouteSpec spec,
                       int wanted) {
@@ -155,6 +157,9 @@ public final class RoutePlanner {
                 searched.add(path);
                 covered.addAll(path.positions());
             }
+            if (path == null) {
+                unreached = calc.stop();
+            }
             if (path == null || searches >= wanted) {
                 result = List.copyOf(found);
                 return result;
@@ -175,6 +180,14 @@ public final class RoutePlanner {
         /** 作废的候选里改动最少的那条改了几格;没有作废的候选时无意义。 */
         public int cheapestChange() {
             return cheapestChange;
+        }
+
+        /**
+         * 收工的那次搜索没搜到目标时为什么停——"没有路"还是"没搜完"由它定,不由调用方猜。攒够了候选才收工、
+         * 或那次搜索被取消或出了异常时为 null。
+         */
+        public PathCalcResult.Stop unreached() {
+            return unreached;
         }
 
         public void cancel() {

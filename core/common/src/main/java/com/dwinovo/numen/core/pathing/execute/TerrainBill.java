@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.pathing.execute;
 
 import com.dwinovo.numen.core.pathing.astar.NavPath;
+import com.dwinovo.numen.core.pathing.astar.PathCalcResult;
 import com.dwinovo.numen.core.pathing.moves.Movement;
 import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.permission.ConsentItem;
@@ -218,20 +219,43 @@ public final class TerrainBill {
     }
 
     /**
-     * "按这次的规格没有路"的回执:哪儿到哪儿、多远,接着是候选清单,末尾告诉模型怎么选。
-     * goto 与 follow 的 TERRAIN_BLOCKED 文案只此一处。
+     * "按这次的规格没搜到路"的回执:哪儿到哪儿、多远、原规格那次搜索为什么停,接着是候选清单,末尾告诉模型
+     * 怎么选。goto 与 follow 的 TERRAIN_BLOCKED 文案只此一处。
      *
      * @param alteringAllowed 这次的规格本来就许改地形(候选是连要主人同意的格也算进去查出来的)
+     * @param cleanStop       原规格那次搜索为什么停(见 {@link #searchStopped})
      */
     public static String noCleanRoute(BlockPos from, BlockPos toward, boolean alteringAllowed,
-                                      Map<String, TerrainBill> byId) {
+                                      PathCalcResult.Stop cleanStop, Map<String, TerrainBill> byId) {
         return String.format(
-                "no route without %s (from %s toward %s, about %.0f blocks away). candidates:\n%s\n"
+                "found no route without %s (from %s toward %s, about %.0f blocks away; %s). candidates:\n%s\n"
                         + "choose one with goto route:<id>, or pick another destination. A route with cells"
                         + " needing consent asks the owner before I set off.",
                 alteringAllowed ? "touching what needs the owner's consent" : "altering terrain",
                 from.toShortString(), toward.toShortString(), Math.sqrt(from.distSqr(toward)),
-                listing(byId));
+                searchStopped(cleanStop), listing(byId));
+    }
+
+    /**
+     * 一次搜索没搜到路时,它为什么停、她下一步能怎么办——导航的失败回执与 {@code plan_route} 都用这一句。
+     *
+     * <p>只有搜遍了({@link PathCalcResult.Stop#EXHAUSTED})才证明没有路;预算用完、伸进没加载的区块只是没搜完,
+     * 说成"没有路"就是替世界下了一个搜索没有下的结论。原因由搜索结论自己带着,这里只管怎么说。
+     *
+     * @param stop 搜索结论里的停止原因;搜索没出结论(取消、异常)或失败不是搜索给的(规划与执行对不上)时为 null
+     */
+    public static String searchStopped(PathCalcResult.Stop stop) {
+        if (stop == null) {
+            return "the search gave no route I could use";
+        }
+        return switch (stop) {
+            case EXHAUSTED -> "every reachable cell was searched";
+            case BUDGET -> "the search used up its budget before finding one, so this is not proof there is"
+                    + " none; a nearer waypoint in that direction gets further";
+            case UNLOADED -> "the search reached chunks that are not loaded, so what lies past them is unknown;"
+                    + " walk toward it and try again";
+            case CUT_SHORT -> "the route it found no longer held end to end once the world changed; try again";
+        };
     }
 
     /** 预算内无路的说法:两处失败回执共用,数字口径一致。 */

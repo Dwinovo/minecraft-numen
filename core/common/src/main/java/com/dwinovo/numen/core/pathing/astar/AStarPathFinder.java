@@ -182,16 +182,18 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         if (cancelRequested) {
             return Optional.empty();
         }
+        // 为什么停,随结论交出去(PathCalcResult.Stop):开放集空了是走得到的都搜过了——但半路有伸进
+        // 没加载区块的边被跳过时,那边还没搜,只能算不知道;撞够了没加载的区块边界同理;
+        // 否则是节点预算用完(已有可用半程时按 primaryNodes,之前按 failureNodes)。
+        stop = numEmptyChunk >= pathingMaxChunkBorderFetch ? PathCalcResult.Stop.UNLOADED
+                : openSet.isEmpty()
+                        ? (numEmptyChunk > 0 ? PathCalcResult.Stop.UNLOADED : PathCalcResult.Stop.EXHAUSTED)
+                        : PathCalcResult.Stop.BUDGET;
         if (NavSettings.get().profile) {
-            // Why did the loop stop? exhausted = openSet emptied (genuinely no reachable path);
-            // chunkBorder = ran into unloaded chunks; budget = spent its node budget (primaryNodes once a
-            // usable partial exists, failureNodes before). failing=true means no usable partial found
-            // (this returns a FAILURE); failing=false means a best partial segment is returned.
-            String reason = numEmptyChunk >= pathingMaxChunkBorderFetch ? "chunkBorder"
-                    : openSet.isEmpty() ? "exhausted"
-                    : "budget";
+            // failing=true means no usable partial found (this returns a FAILURE); failing=false means a
+            // best partial segment is returned.
             Constants.LOG.info("[nav-search] stop reason={} nodes={} (primary {}, failure {}) failing={} goal={}",
-                    reason, numNodes, primaryNodes, failureNodes, failing, goal);
+                    stop, numNodes, primaryNodes, failureNodes, failing, goal);
         }
         return bestSoFar(true, numNodes);
     }

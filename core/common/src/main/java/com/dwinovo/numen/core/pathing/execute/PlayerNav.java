@@ -21,6 +21,7 @@ import com.dwinovo.numen.core.pathing.plan.RoutePlanner;
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.core.pathing.util.NavProfiler;
 import com.dwinovo.numen.core.pathing.astar.NavPath;
+import com.dwinovo.numen.core.pathing.astar.PathCalcResult;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -158,6 +159,8 @@ public final class PlayerNav {
     private RoutePlanner.Query probe;
     /** 在飞查询用的改动档:先 NATURAL,没路再 ANY。 */
     private RouteSpec.Alter probeAlter;
+    /** 引出查询的那次首段搜索为什么停——候选清单前那句"原规格下没搜到路"说的就是它。 */
+    private PathCalcResult.Stop cleanStop;
     /** 扣着的那段路要问主人的清单(采纳时出账算好)。 */
     private List<ConsentItem> heldConsent = List.of();
     /** 查询所针对的目标契约(候选记入路线簿时带上)。 */
@@ -505,13 +508,14 @@ public final class PlayerNav {
             // 找不到路:先查放宽一档的候选路线,把每条会动什么列出来再裁决——模型要的是带价签的
             // 选项,不是一句 no path。只走不改的先查自然改动;自然改动的直接查连要主人同意的格也算的
             boolean preserving = !spec.alter().mayAlter();
+            cleanStop = core.failedStop();
             if (terrainProbe && spec.alter() != RouteSpec.Alter.ANY
                     && submitProbe(compiled, preserving ? RouteSpec.Alter.NATURAL : RouteSpec.Alter.ANY)) {
                 InputDriver.halt(player);
                 return Status.RUNNING;
             }
             return fail(FailureType.NO_PATH, noPathAutopsy(navGoal,
-                    preserving ? " without altering terrain" : ""));
+                    preserving ? " without altering terrain" : "", TerrainBill.searchStopped(cleanStop)));
         }
 
         // 执行失败(段被取消,状态机已自动重搜):做放弃判定的记账
@@ -617,6 +621,7 @@ public final class PlayerNav {
         }
         boolean overBudget = probe.exceededBudget();
         int cheapestChange = probe.cheapestChange();
+        PathCalcResult.Stop probeStop = probe.unreached();
         probe = null;
         GoalCompiler.Compiled goal = probeGoal;
         probeGoal = null;
@@ -629,17 +634,21 @@ public final class PlayerNav {
             return Status.RUNNING;
         }
         if (candidates.isEmpty()) {
-            return fail(FailureType.NO_PATH, noPathAutopsy(goal.goal(), overBudget
-                    ? ", " + TerrainBill.overBudget(spec.alterBudget(), cheapestChange)
-                    : ", not even by digging or bridging"));
+            if (overBudget) {
+                return fail(FailureType.NO_PATH, noPathAutopsy(goal.goal(),
+                        ", " + TerrainBill.overBudget(spec.alterBudget(), cheapestChange), null));
+            }
+            return fail(FailureType.NO_PATH, noPathAutopsy(goal.goal(),
+                    probeStop == PathCalcResult.Stop.EXHAUSTED ? ", not even by digging or bridging" : "",
+                    TerrainBill.searchStopped(probeStop)));
         }
         boolean relaxed = probeAlter == RouteSpec.Alter.ANY
                 ? candidates.stream().anyMatch(c -> !c.bill().consentItems().isEmpty())
                 : candidates.stream().anyMatch(c -> !c.bill().isEmpty());
         if (!relaxed) {
             // 放宽一档搜出的路根本用不着放宽的那一档(不动地形、不碰要同意的格)——那是原规格
-            // 那次搜索自己的问题(预算、执行器不认账):如实说没路,别把放宽当万能解
-            return fail(FailureType.NO_PATH, noPathAutopsy(goal.goal(), ""));
+            // 那次搜索自己的问题(预算、执行器不认账):照它停下的原因如实说,别把放宽当万能解
+            return fail(FailureType.NO_PATH, noPathAutopsy(goal.goal(), "", TerrainBill.searchStopped(cleanStop)));
         }
         RouteBook book = RouteBook.of(player);
         long now = player.level().getGameTime();
@@ -650,7 +659,7 @@ public final class PlayerNav {
         }
         BlockPos feet = PathExecutor.playerFeet(player);
         BlockPos center = goal.goal().center();
-        String reason = TerrainBill.noCleanRoute(feet, center, spec.alter().mayAlter(), byId);
+        String reason = TerrainBill.noCleanRoute(feet, center, spec.alter().mayAlter(), cleanStop, byId);
         Constants.LOG.info("[numen-path] TERRAIN-BLOCKED start={} goal={} | {}",
                 feet.toShortString(), center.toShortString(), reason);
         return fail(FailureType.TERRAIN_BLOCKED, reason);
@@ -677,14 +686,17 @@ public final class PlayerNav {
         }
         boolean overBudget = budgetPlan.exceededBudget();
         int cheapestChange = budgetPlan.cheapestChange();
+        PathCalcResult.Stop planStop = budgetPlan.unreached();
         budgetPlan = null;
         budgetPlanned = true;
         if (reached.getAsBoolean()) {
             return Status.ARRIVED;
         }
         if (planned.isEmpty()) {
-            return fail(FailureType.NO_PATH, noPathAutopsy(compiled.goal(), overBudget
-                    ? ", " + TerrainBill.overBudget(spec.alterBudget(), cheapestChange) : ""));
+            return fail(FailureType.NO_PATH, overBudget
+                    ? noPathAutopsy(compiled.goal(),
+                            ", " + TerrainBill.overBudget(spec.alterBudget(), cheapestChange), null)
+                    : noPathAutopsy(compiled.goal(), "", TerrainBill.searchStopped(planStop)));
         }
         if (!planned.get(0).path().movements().isEmpty()) {
             core.seed(compiled.engineGoal(), planned.get(0).path());
@@ -693,19 +705,22 @@ public final class PlayerNav {
     }
 
     /**
-     * 空搜索结果的教学式验尸——直接喂给模型的人话:离目标多远、有无
-     * 搭路耗材、还有什么可解锁的手段。搜索器统计面未随异步句柄暴露,
-     * 此处按可得素材给结构化结论。
+     * 空搜索结果的教学式验尸——直接喂给模型的人话:离目标多远、搜索为什么停(搜遍了才是没有路)、
+     * 有无搭路耗材、还有什么可解锁的手段。
+     *
+     * @param qualifier 紧跟 "found no path to target" 之后的限定语(地形许可的说明),可为空串
+     * @param why       搜索为什么停({@link TerrainBill#searchStopped});限定语已经说清原因时为 null
      */
-    /** @param qualifier 紧跟 "no path to target" 之后的限定语(地形许可的说明),可为空串 */
-    private String noPathAutopsy(NavGoal goal, String qualifier) {
+    private String noPathAutopsy(NavGoal goal, String qualifier, String why) {
         BlockPos feet = PathExecutor.playerFeet(player);
         BlockPos center = goal.center();
         double dist = Math.sqrt(feet.distSqr(center));
-        StringBuilder r = new StringBuilder("no path to target").append(qualifier);
-        r.append(String.format(" (from %s toward %s, about %.0f blocks away;"
-                        + " the search burned its whole budget without finding a route",
+        StringBuilder r = new StringBuilder("found no path to target").append(qualifier);
+        r.append(String.format(" (from %s toward %s, about %.0f blocks away",
                 feet.toShortString(), center.toShortString(), dist));
+        if (why != null) {
+            r.append("; ").append(why);
+        }
         if (lastSearchContext != null && !lastSearchContext.hasThrowaway) {
             r.append("; carrying no scaffolding blocks to bridge or pillar with");
         }

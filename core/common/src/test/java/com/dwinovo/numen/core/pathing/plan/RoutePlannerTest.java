@@ -13,6 +13,7 @@ import com.dwinovo.numen.core.pathing.astar.NavPath;
 import com.dwinovo.numen.core.pathing.astar.PathCalcResult;
 import com.dwinovo.numen.core.pathing.bridge.SearchDispatcher;
 import com.dwinovo.numen.core.pathing.bridge.SearchHandle;
+import com.dwinovo.numen.core.pathing.execute.TerrainBill;
 import com.dwinovo.numen.core.pathing.goals.Goal;
 import com.dwinovo.numen.core.pathing.moves.ActionCosts;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
@@ -72,11 +73,15 @@ class RoutePlannerTest {
         @Override public int getMinBuildHeight() { return -64; }
     }
 
-    /** 按队列交路径的假派发器;记下每次提交时的规格。{@code stopsShort} 里的路按"只推进到半路"交。 */
+    /**
+     * 按队列交路径的假派发器;记下每次提交时的规格。{@code stopsShort} 里的路按"只推进到半路"交;
+     * 没搜到路(脚本空了、或半路)的结论按 {@code stop} 说的原因停。
+     */
     private static final class ScriptedDispatcher implements SearchDispatcher {
         final Deque<NavPath> script = new ArrayDeque<>();
         final Set<NavPath> stopsShort = new HashSet<>();
         final List<RouteSpec> specsSeen = new ArrayList<>();
+        PathCalcResult.Stop stop = PathCalcResult.Stop.EXHAUSTED;
         int submissions;
 
         @Override
@@ -85,9 +90,10 @@ class RoutePlannerTest {
             submissions++;
             NavPath path = script.pollFirst();
             PathCalcResult result = path == null
-                    ? new PathCalcResult(PathCalcResult.Type.FAILURE)
-                    : new PathCalcResult(stopsShort.contains(path)
-                            ? PathCalcResult.Type.SUCCESS_SEGMENT : PathCalcResult.Type.SUCCESS_TO_GOAL, path);
+                    ? new PathCalcResult(PathCalcResult.Type.FAILURE, null, stop)
+                    : stopsShort.contains(path)
+                    ? new PathCalcResult(PathCalcResult.Type.SUCCESS_SEGMENT, path, stop)
+                    : new PathCalcResult(PathCalcResult.Type.SUCCESS_TO_GOAL, path);
             return new SearchHandle() {
                 @Override public PathCalcResult poll() {
                     return result;
@@ -232,6 +238,54 @@ class RoutePlannerTest {
         assertNotNull(out);
         assertEquals(1, out.size());
         assertEquals(2, d.submissions);
+    }
+
+    /** 预算用完不是没有路:查询把搜索停下的原因原样交出来,回执据此说"没搜完"而不是"没有路"。 */
+    @Test
+    void aSearchThatRanOutOfBudgetIsNotProofOfNoRoute() {
+        ScriptedDispatcher d = new ScriptedDispatcher();
+        d.stop = PathCalcResult.Stop.BUDGET;
+        RoutePlanner.Query q = planner(d).plan(START, START, neverGoal(), RouteSpec.defaults(), 1);
+        List<RoutePlanner.Candidate> out = q.poll();
+        assertNotNull(out);
+        assertTrue(out.isEmpty());
+        assertEquals(PathCalcResult.Stop.BUDGET, q.unreached());
+        String why = TerrainBill.searchStopped(q.unreached());
+        assertTrue(why.contains("not proof"), why);
+        assertFalse(why.contains("every reachable cell"), why);
+    }
+
+    /** 只有搜遍了才说走得到的都搜过了。 */
+    @Test
+    void onlyAnExhaustedSearchSaysEveryReachableCellWasSearched() {
+        ScriptedDispatcher d = new ScriptedDispatcher();
+        RoutePlanner.Query q = planner(d).plan(START, START, neverGoal(), RouteSpec.defaults(), 1);
+        assertNotNull(q.poll());
+        assertEquals(PathCalcResult.Stop.EXHAUSTED, q.unreached());
+        assertTrue(TerrainBill.searchStopped(q.unreached()).contains("every reachable cell"));
+    }
+
+    /** 半路停下的搜索也带着原因:伸进没加载的区块,那边是不知道。 */
+    @Test
+    void aPartWaySearchCarriesWhyItStopped() {
+        ScriptedDispatcher d = new ScriptedDispatcher();
+        NavPath partWay = line(0, 10, 0);
+        d.script.add(partWay);
+        d.stopsShort.add(partWay);
+        d.stop = PathCalcResult.Stop.UNLOADED;
+        RoutePlanner.Query q = planner(d).plan(START, START, neverGoal(), RouteSpec.defaults(), 1);
+        assertTrue(q.poll().isEmpty());
+        assertEquals(PathCalcResult.Stop.UNLOADED, q.unreached());
+    }
+
+    /** 攒够了候选才收工的查询没有"为什么没搜到"。 */
+    @Test
+    void aQueryThatGotItsRoutesHasNoStopReason() {
+        ScriptedDispatcher d = new ScriptedDispatcher();
+        d.script.add(line(0, 10, 0));
+        RoutePlanner.Query q = planner(d).plan(START, START, neverGoal(), RouteSpec.defaults(), 1);
+        assertEquals(1, q.poll().size());
+        assertNull(q.unreached());
     }
 
     @Test

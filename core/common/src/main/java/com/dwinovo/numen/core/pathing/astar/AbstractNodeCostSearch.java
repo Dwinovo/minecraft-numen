@@ -62,6 +62,9 @@ public abstract class AbstractNodeCostSearch {
     /** 协作取消位:主循环按此退出。 */
     protected volatile boolean cancelRequested;
 
+    /** {@link #calculate0} 没搜到目标就停下时,停的原因;搜到了目标为 null。 */
+    protected PathCalcResult.Stop stop;
+
     protected AbstractNodeCostSearch(BlockPos realStart, int startX, int startY, int startZ,
                                      Goal goal, CalculationContext context) {
         this.realStart = realStart;
@@ -99,7 +102,7 @@ public abstract class AbstractNodeCostSearch {
                 return new PathCalcResult(PathCalcResult.Type.CANCELLATION);
             }
             if (path == null) {
-                return new PathCalcResult(PathCalcResult.Type.FAILURE);
+                return new PathCalcResult(PathCalcResult.Type.FAILURE, null, stop);
             }
             path = path.cutoffAtLoadedChunks(context.loadedTest);
             path = path.staticCutoff(goal);
@@ -107,7 +110,9 @@ public abstract class AbstractNodeCostSearch {
             if (goal.isInGoal(dest.getX(), dest.getY(), dest.getZ())) {
                 return new PathCalcResult(PathCalcResult.Type.SUCCESS_TO_GOAL, path);
             }
-            return new PathCalcResult(PathCalcResult.Type.SUCCESS_SEGMENT, path);
+            // 没到目标:搜索没搜到(stop 说为什么停),或者搜到了、到手的路却不完整
+            return new PathCalcResult(PathCalcResult.Type.SUCCESS_SEGMENT, path,
+                    stop != null ? stop : PathCalcResult.Stop.CUT_SHORT);
         } catch (Exception e) {
             Constants.LOG.error("路径计算异常", e);
             return new PathCalcResult(PathCalcResult.Type.EXCEPTION);

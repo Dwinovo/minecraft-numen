@@ -79,6 +79,8 @@ public final class PathingCore {
     private boolean safeToCancel = true;
     private boolean cancelRequested;
     private boolean calcFailedLastTick;
+    /** 上一 tick 首段失败时,那次搜索为什么停;失败不是搜索结论(孤儿段、夭折段)时为 null。 */
+    private PathCalcResult.Stop failedStop;
 
     /**
      * @param spec      这次导航的路线规格;段起点"脚下能不能站"按它判(两份上下文工厂建出的
@@ -224,6 +226,11 @@ public final class PathingCore {
         return calcFailedLastTick;
     }
 
+    /** 上一 tick 首段失败时搜索为什么停;失败不是搜索结论(孤儿段、夭折段)时为 null。 */
+    public PathCalcResult.Stop failedStop() {
+        return failedStop;
+    }
+
     public Goal getGoal() {
         return goal;
     }
@@ -277,6 +284,7 @@ public final class PathingCore {
         LIVE.put(player.getUUID(), this);
         expectedSegmentStart = pathStart();
         calcFailedLastTick = false;
+        failedStop = null;
         tickPath();
         harness.commitIfDirty();
         if (current != null) {
@@ -502,6 +510,7 @@ public final class PathingCore {
                     Constants.LOG.debug("首段计算失败");
                     orphanDiscards = 0;
                     calcFailedLastTick = true;
+                    failedStop = result.stop();
                 }
             }
         } else {

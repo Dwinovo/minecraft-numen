@@ -7,6 +7,7 @@ import java.util.function.Consumer;
 
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.Schema;
+import com.dwinovo.numen.core.pathing.astar.PathCalcResult;
 import com.dwinovo.numen.core.pathing.bridge.ContextFactory;
 import com.dwinovo.numen.core.pathing.bridge.PoolSearchDispatcher;
 import com.dwinovo.numen.core.pathing.execute.PathExecutor;
@@ -82,24 +83,36 @@ public final class PlanRouteTool implements NumenTool {
         BlockPos start = Movement.pathStart(companion, spec);
         RoutePlanner.Query query = planner.plan(feet, start, goal, spec, alternatives);
         RoutePlanner.deliver(query, candidates -> reply.accept(result(companion, goal, spec, feet, candidates,
-                query.exceededBudget() ? query.cheapestChange() : -1)));
+                query.exceededBudget() ? query.cheapestChange() : -1, query.unreached())));
     }
 
-    /** 回执:候选记进路线簿,清单文案由账单出;没路时说清在哪个规格下没路、下一步能试什么。 */
-    /** @param cheapestOverBudget 一条候选都没留下且是预算所致时,作废候选里最少的改动格数;否则 -1 */
+    /**
+     * 回执:候选记进路线簿,清单文案由账单出;没搜到路时说清在哪个规格下、搜索为什么停、下一步能试什么。
+     * 只有搜遍了才说没有路(见 {@link TerrainBill#searchStopped})。
+     *
+     * @param cheapestOverBudget 一条候选都没留下且是预算所致时,作废候选里最少的改动格数;否则 -1
+     * @param stop               收工的那次搜索为什么停({@link RoutePlanner.Query#unreached})
+     */
     private static String result(NumenPlayer companion, GoalCompiler.Compiled goal, RouteSpec spec,
                                  BlockPos feet, List<RoutePlanner.Candidate> candidates,
-                                 int cheapestOverBudget) {
+                                 int cheapestOverBudget, PathCalcResult.Stop stop) {
         BlockPos center = goal.goal().center();
         if (candidates.isEmpty()) {
-            String hint = cheapestOverBudget >= 0
-                    ? " — " + TerrainBill.overBudget(spec.alterBudget(), cheapestOverBudget)
-                            + "; raise alter_budget or pick another destination."
-                    : spec.alter().mayAlter()
-                    ? " — not even by digging or bridging; pick another destination or a nearer waypoint."
-                    : " without altering terrain; plan again with spec {alter:'natural'} to see what digging"
-                            + " or bridging would take, or pick another destination.";
-            return TaskResult.fail(String.format("no route from %s toward %s (about %.0f blocks away)%s",
+            String hint;
+            if (cheapestOverBudget >= 0) {
+                hint = " — " + TerrainBill.overBudget(spec.alterBudget(), cheapestOverBudget)
+                        + "; raise alter_budget or pick another destination.";
+            } else if (stop != PathCalcResult.Stop.EXHAUSTED) {
+                hint = " — " + TerrainBill.searchStopped(stop) + ".";
+            } else if (spec.alter().mayAlter()) {
+                hint = " — not even by digging or bridging (" + TerrainBill.searchStopped(stop)
+                        + "); pick another destination.";
+            } else {
+                hint = " without altering terrain (" + TerrainBill.searchStopped(stop) + "); plan again with"
+                        + " spec {alter:'natural'} to see what digging or bridging would take, or pick another"
+                        + " destination.";
+            }
+            return TaskResult.fail(String.format("found no route from %s toward %s (about %.0f blocks away)%s",
                     feet.toShortString(), center.toShortString(), Math.sqrt(feet.distSqr(center)), hint))
                     .toJson();
         }
