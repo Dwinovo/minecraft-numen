@@ -29,6 +29,14 @@ import net.minecraft.server.MinecraftServer;
  * work stops, never what a search concludes — every search ends on its own work
  * bound.
  *
+ * <h2>Every slice moves</h2>
+ * A slice always gets {@link #MIN_SLICE_NANOS} of its own, even when earlier slices
+ * have spent the whole lid, so every consumer takes at least one step per tick. A
+ * search's work is bounded, so it then comes back within a bounded number of ticks
+ * however slow the machine or busy the other searches — the guarantee callers lean
+ * on when they wait for a search before concluding anything. The cost is one step
+ * per consumer per tick beyond the lid.
+ *
  * <h2>Threading</h2>
  * Server main thread only, like everything in the task layer. The tick stamp
  * uses {@link MinecraftServer#getTickCount()} (monotonic, unaffected by
@@ -66,6 +74,8 @@ public final class SearchBudget {
      * even when every check goes cold to disk. 4ms ≈ 8% of a 50ms tick.
      */
     private static final long MAX_NANOS_PER_TICK = 4_000_000L;
+    /** Time a slice always gets of its own, whatever earlier slices spent: at least one step per tick. */
+    private static final long MIN_SLICE_NANOS = 250_000L;
     /** {@link #sliceStart} when no slice is open. */
     private static final long CLOSED = Long.MIN_VALUE;
 
@@ -120,14 +130,17 @@ public final class SearchBudget {
     }
 
     /**
-     * Search time left in this tick's pool — the lid over work that needs no permit
+     * Search time left for this slice — the lid over work that needs no permit
      * (visiting sections the index or palette already answers); false = resume next tick.
+     * True while the tick's pool has time left, and always within the slice's own
+     * {@link #MIN_SLICE_NANOS}.
      */
     public static boolean withinTime() {
         if (sliceStart == CLOSED) {
             throw new IllegalStateException("search work outside a slice");
         }
-        return spentNanos + (System.nanoTime() - sliceStart) < MAX_NANOS_PER_TICK;
+        long own = System.nanoTime() - sliceStart;
+        return own < MIN_SLICE_NANOS || spentNanos + own < MAX_NANOS_PER_TICK;
     }
 
     /** Take one biome-sample permit; false = pool drained, resume next tick. */

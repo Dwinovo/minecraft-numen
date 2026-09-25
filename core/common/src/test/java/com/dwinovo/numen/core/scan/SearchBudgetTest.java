@@ -37,6 +37,20 @@ class SearchBudgetTest {
         }
     }
 
+    /** 前面的切片把整刻的上限花光了,后到的切片照样有自己的一小段:每个搜索每刻至少走一步。 */
+    @Test
+    void aSliceAfterTheLidIsSpentStillGetsItsOwnStep() {
+        try (SearchBudget.Slice hog = SearchBudget.slice(4)) {
+            spin(4_500_000L);
+            assertFalse(SearchBudget.withinTime());
+        }
+        try (SearchBudget.Slice late = SearchBudget.slice(4)) {
+            assertTrue(SearchBudget.withinTime());
+            spin(1_000_000L);
+            assertFalse(SearchBudget.withinTime());
+        }
+    }
+
     @Test
     void searchWorkOutsideASliceIsABug() {
         assertThrows(IllegalStateException.class, SearchBudget::withinTime);
