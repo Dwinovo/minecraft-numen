@@ -144,12 +144,20 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                     actionCost *= favoring.calculate(hashCode);
                 }
                 if (hasPositional) {
-                    // 踩叠在落点(脚下那格);穿叠在身体占的两格——脚与头。与 CellClass 里
-                    // 硬禁的口径一致:那边对每个身体格都查 pass,软代价不能只算脚不算头,
-                    // 否则一格头高的工地格拦不住她从下面钻过去。
+                    // 踩叠在落点(脚下那格);穿叠在身体经过的每一格——落点的脚与头,斜走时再加两个切角柱的
+                    // 脚与头。与 CellClass 里硬禁的口径一致:那边对每个身体格都查 pass(斜走的切角也查),
+                    // 软代价只算落点就拦不住身体擦过去——一格头高的工地格拦不住她从下面钻,斜走绕墙角时
+                    // 她的中心正好擦过角上那格,走得稍偏一点就站进了图纸格。
                     long feet = BlockPos.asLong(res.x, res.y, res.z);
                     long head = BlockPos.asLong(res.x, res.y + 1, res.z);
                     actionCost += positions.stand(feet) + positions.pass(feet) + positions.pass(head);
+                    if (moves.xOffset != 0 && moves.zOffset != 0 && !moves.dynamicXZ) {
+                        int y = currentNode.y;
+                        actionCost += positions.pass(BlockPos.asLong(currentNode.x, y, res.z))
+                                + positions.pass(BlockPos.asLong(currentNode.x, y + 1, res.z))
+                                + positions.pass(BlockPos.asLong(res.x, y, currentNode.z))
+                                + positions.pass(BlockPos.asLong(res.x, y + 1, currentNode.z));
+                    }
                 }
                 PathNode neighbor = getNodeAtPosition(res.x, res.y, res.z, hashCode);
                 double tentativeCost = currentNode.cost + actionCost;
