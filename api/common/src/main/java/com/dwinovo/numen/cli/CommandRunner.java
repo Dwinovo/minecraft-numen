@@ -82,7 +82,8 @@ public final class CommandRunner {
     /**
      * 这一行她此刻写不写得通;写得通返回 null。{@code numen} 开头的是 Numen 的命令:报错是 Brigadier 的原话加上出错
      * 那一层的帮助,和主人客户端那一侧同一种说法。别的指令:和服务器执行前做的是同一道检查,写不通时说为什么——根不存在、
-     * 服务器不让她用这条、还是参数写错(附上这条的用法)。
+     * 服务器不让她用这条、还是参数写错(附上这条的用法)。写错了的,两种都在最后接上"你是不是要写"
+     * ({@link Completions#didYouMean}:出错位置上她能写的候选里最接近的几个,同一个函数)。
      */
     static String problem(CommandDispatcher<CommandSourceStack> dispatcher, String line, CommandSourceStack her) {
         ParseResults<CommandSourceStack> parse = dispatcher.parse(line, her);
@@ -100,12 +101,13 @@ public final class CommandRunner {
             String root = line.split(" ", 2)[0];
             CommandNode<CommandSourceStack> node = dispatcher.getRoot().getChild(root);
             if (node == null) {
-                return "there is no /" + root + " command on this server. " + HELP_HINT;
+                return "there is no /" + root + " command on this server. " + HELP_HINT + Completions.didYouMean(parse);
             }
             if (!node.canUse(her)) {
                 return "the server does not let you use /" + root + ". " + HELP_HINT;
             }
-            return e.getMessage() + "\nUsage: /" + dispatcher.getSmartUsage(dispatcher.getRoot(), her).get(node);
+            return e.getMessage() + "\nUsage: /" + dispatcher.getSmartUsage(dispatcher.getRoot(), her).get(node)
+                    + Completions.didYouMean(parse);
         }
     }
 

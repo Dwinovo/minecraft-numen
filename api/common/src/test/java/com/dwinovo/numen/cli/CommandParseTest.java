@@ -95,7 +95,7 @@ class CommandParseTest {
     void anUnknownActionOrAnUnfinishedLineShowsTheGroupsListing() {
         String typo = failed("numen gt_parse tke 3 apple");
         assertTrue(typo.startsWith("Unknown command at position 15: "), typo);
-        assertTrue(typo.endsWith("\n" + GROUP_HELP), typo);
+        assertTrue(typo.endsWith("\n" + GROUP_HELP + "\nDid you mean: take?"), "那一层的用法之后接上最接近的动作: " + typo);
 
         String bare = failed("numen gt_parse");
         assertTrue(bare.startsWith("Unknown command"), bare);

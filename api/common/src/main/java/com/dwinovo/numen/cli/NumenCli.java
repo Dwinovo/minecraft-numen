@@ -286,15 +286,16 @@ public final class NumenCli {
     }
 
     /**
-     * 一行 Numen 命令写不写得通:写不通是 Brigadier 的报错加上出错那一层的帮助,写得通是 null。两侧同一种说法——
-     * 主人客户端的小表与 MC 指令树都从同一份声明长出来,同一行在两边的报错一字不差。
+     * 一行 Numen 命令写不写得通:写不通是 Brigadier 的报错(原话与出错位置)、出错那一层的帮助,再接上"你是不是要写"
+     * ({@link Completions#didYouMean},和原版与模组的指令同一个函数);写得通是 null。两侧同一种说法——主人客户端的
+     * 小表与 MC 指令树都从同一份声明长出来,同一行在两边的报错一字不差。
      */
-    static String problem(ParseResults<?> parse, String line) {
+    static <S> String problem(ParseResults<S> parse, String line) {
         try {
             validate(parse, line);
             return null;
         } catch (CommandSyntaxException e) {
-            return e.getMessage() + "\n" + helpAt(parse);
+            return e.getMessage() + "\n" + helpAt(parse) + Completions.didYouMean(parse);
         }
     }
 
