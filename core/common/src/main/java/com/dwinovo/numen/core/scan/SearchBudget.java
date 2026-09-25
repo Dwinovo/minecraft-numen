@@ -19,6 +19,16 @@ import net.minecraft.server.MinecraftServer;
  * and the implementation stays trivial. Revisit with round-robin only if
  * dozens of simultaneous searches ever become real.
  *
+ * <h2>The wall-clock lid counts search time only</h2>
+ * Every consumer does its work inside a {@link #slice}; the 4ms lid is the sum of
+ * this tick's slices, not the time since the first search of the tick. The world
+ * ticks between the searches (locators run in the entity tick, block searches at
+ * the end of it); counting that time too would hand whichever search runs later a
+ * lid the world already spent, and a slow world tick would stall it for as long as
+ * an earlier search kept running. The lid only paces: it decides where this tick's
+ * work stops, never what a search concludes — every search ends on its own work
+ * bound.
+ *
  * <h2>Threading</h2>
  * Server main thread only, like everything in the task layer. The tick stamp
  * uses {@link MinecraftServer#getTickCount()} (monotonic, unaffected by
@@ -44,71 +54,105 @@ public final class SearchBudget {
      * Block-search section reads (one permit = one 16³ chunk section actually read:
      * building its index entry — a count pass plus a collect pass — or walking a
      * section where a target is too abundant to index). Sections the palette rules
-     * out and sections with a fresh index entry cost no permit, only wall clock.
+     * out and sections with a fresh index entry cost no permit, only search time.
      *
      * <p>实测一次构建约 50µs:单刻 64 次时峰值 ~3.1ms,48 次压进 ~2.5ms——取 48,冷区域在几刻内
-     * 渐进变热,读地形本身不把一刻吃到 4ms 的墙钟上限。
+     * 渐进变热,读地形本身不把一刻吃到 4ms 的上限。
      */
     private static final int MAX_SECTION_READS_PER_TICK = 48;
     /**
-     * Wall-clock hard stop. The count caps bound the common case; this makes
-     * the "never stalls the server" promise unconditional even when every
-     * check goes cold to disk. 4ms ≈ 8% of a 50ms tick.
+     * Wall-clock lid on the search slices of one tick. The count caps bound the
+     * common case; this makes the "never stalls the server" promise unconditional
+     * even when every check goes cold to disk. 4ms ≈ 8% of a 50ms tick.
      */
     private static final long MAX_NANOS_PER_TICK = 4_000_000L;
+    /** {@link #sliceStart} when no slice is open. */
+    private static final long CLOSED = Long.MIN_VALUE;
 
     private static int stampTick = Integer.MIN_VALUE;
     private static int checksLeft;
     private static int biomeSamplesLeft;
     private static int sectionReadsLeft;
-    private static long deadlineNanos;
+    /** Nanos the closed slices of this tick have spent. */
+    private static long spentNanos;
+    /** When the open slice began; {@link #CLOSED} when none is open. */
+    private static long sliceStart = CLOSED;
+
+    private static final Slice SLICE = new Slice();
 
     private SearchBudget() {}
 
-    /** Reset the pool when the server tick has advanced. Call before consuming. */
-    public static void refresh(MinecraftServer server) {
-        int now = server.getTickCount();
+    /**
+     * Open this consumer's slice of the tick's pool (resetting the pool when the
+     * server tick has advanced); close it when the consumer stops searching this
+     * tick. Every permit and {@link #withinTime} check happens inside one.
+     */
+    public static Slice slice(MinecraftServer server) {
+        return slice(server.getTickCount());
+    }
+
+    /** {@link #slice(MinecraftServer)} by tick number; also the test seam. */
+    static Slice slice(int now) {
         if (now != stampTick) {
             resetForTick(now);
         }
+        if (sliceStart != CLOSED) {
+            throw new IllegalStateException("a search slice is already open");
+        }
+        sliceStart = System.nanoTime();
+        return SLICE;
     }
 
-    /** The actual pool reset; also the test seam (no MinecraftServer needed). */
-    public static void resetForTick(int tick) {
+    /** The actual pool reset. */
+    private static void resetForTick(int tick) {
         stampTick = tick;
         checksLeft = MAX_CHECKS_PER_TICK;
         biomeSamplesLeft = MAX_BIOME_SAMPLES_PER_TICK;
         sectionReadsLeft = MAX_SECTION_READS_PER_TICK;
-        deadlineNanos = System.nanoTime() + MAX_NANOS_PER_TICK;
+        spentNanos = 0;
     }
 
     /** Take one section-read permit (one 16³ section read); false = resume next tick. */
     public static boolean trySectionRead() {
-        if (sectionReadsLeft <= 0 || System.nanoTime() >= deadlineNanos) return false;
+        if (sectionReadsLeft <= 0 || !withinTime()) return false;
         sectionReadsLeft--;
         return true;
     }
 
     /**
-     * Wall clock left in this tick's pool — the lid over work that needs no permit
+     * Search time left in this tick's pool — the lid over work that needs no permit
      * (visiting sections the index or palette already answers); false = resume next tick.
      */
     public static boolean withinTime() {
-        return System.nanoTime() < deadlineNanos;
+        if (sliceStart == CLOSED) {
+            throw new IllegalStateException("search work outside a slice");
+        }
+        return spentNanos + (System.nanoTime() - sliceStart) < MAX_NANOS_PER_TICK;
     }
 
     /** Take one biome-sample permit; false = pool drained, resume next tick. */
     public static boolean tryBiomeSample() {
-        if (biomeSamplesLeft <= 0 || System.nanoTime() >= deadlineNanos) return false;
+        if (biomeSamplesLeft <= 0 || !withinTime()) return false;
         biomeSamplesLeft--;
         return true;
     }
 
     /** Take one candidate-check permit; false = pool drained, resume next tick. */
     public static boolean tryCheck() {
-        if (checksLeft <= 0 || System.nanoTime() >= deadlineNanos) return false;
+        if (checksLeft <= 0 || !withinTime()) return false;
         checksLeft--;
         return true;
     }
 
+    /** One consumer's share of a tick, charged to the pool when closed. */
+    public static final class Slice implements AutoCloseable {
+
+        private Slice() {}
+
+        @Override
+        public void close() {
+            spentNanos += System.nanoTime() - sliceStart;
+            sliceStart = CLOSED;
+        }
+    }
 }

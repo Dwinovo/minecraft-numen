@@ -156,18 +156,19 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
             fail("not on a server level", FailureType.UNKNOWN);
             return TaskState.FAILED;
         }
-        SearchBudget.refresh(sl.getServer());
-        while (true) {
-            if (exhausted) {
-                return TaskState.SUCCESS;   // best == null → "not found"
-            }
-            if (!SearchBudget.tryBiomeSample()) {
-                return TaskState.RUNNING;    // pool drained — resume next tick
-            }
-            BlockPos hit = sampleNext();
-            if (hit != null) {
-                best = hit;                  // ring order ⇒ first hit ≈ nearest
-                return TaskState.SUCCESS;
+        try (SearchBudget.Slice slice = SearchBudget.slice(sl.getServer())) {
+            while (true) {
+                if (exhausted) {
+                    return TaskState.SUCCESS;   // best == null → "not found"
+                }
+                if (!SearchBudget.tryBiomeSample()) {
+                    return TaskState.RUNNING;    // pool drained — resume next tick
+                }
+                BlockPos hit = sampleNext();
+                if (hit != null) {
+                    best = hit;                  // ring order ⇒ first hit ≈ nearest
+                    return TaskState.SUCCESS;
+                }
             }
         }
     }

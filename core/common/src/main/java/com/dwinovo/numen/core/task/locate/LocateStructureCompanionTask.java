@@ -233,25 +233,26 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
         }
         // GLOBAL budget: shared by every searching companion on the server, so
         // total per-tick search cost is a constant regardless of pet count.
-        SearchBudget.refresh(sl.getServer());
-        while (true) {
-            if (jobIndex >= jobs.size()) {
-                return TaskState.SUCCESS;
-            }
-            Job job = jobs.get(jobIndex);
-            ChunkPos candidate = pendingCandidate != null ? pendingCandidate : job.next();
-            pendingCandidate = null;
-            if (candidate == null) {
-                jobIndex++;
-                continue;
-            }
-            if (!SearchBudget.tryCheck()) {
-                pendingCandidate = candidate;   // pool drained — resume next tick
-                return TaskState.RUNNING;
-            }
-            if (checkCandidate(sl, job, candidate)) {
-                consider(job.placement.getLocatePos(candidate));
-                jobIndex++;   // ring order ⇒ first hit is this job's nearest
+        try (SearchBudget.Slice slice = SearchBudget.slice(sl.getServer())) {
+            while (true) {
+                if (jobIndex >= jobs.size()) {
+                    return TaskState.SUCCESS;
+                }
+                Job job = jobs.get(jobIndex);
+                ChunkPos candidate = pendingCandidate != null ? pendingCandidate : job.next();
+                pendingCandidate = null;
+                if (candidate == null) {
+                    jobIndex++;
+                    continue;
+                }
+                if (!SearchBudget.tryCheck()) {
+                    pendingCandidate = candidate;   // pool drained — resume next tick
+                    return TaskState.RUNNING;
+                }
+                if (checkCandidate(sl, job, candidate)) {
+                    consider(job.placement.getLocatePos(candidate));
+                    jobIndex++;   // ring order ⇒ first hit is this job's nearest
+                }
             }
         }
     }

@@ -243,14 +243,20 @@ public final class BlockSearch {
             TargetIndex.sweep(server);
         }
         if (JOBS.isEmpty()) return;
-        SearchBudget.refresh(server);
-        // A callback may start the next search; it joins the list for the next tick.
-        for (BlockSearch job : List.copyOf(JOBS)) {
-            if (JOBS.contains(job) && job.tickOne(server)) {
-                JOBS.remove(job);
-                job.onDone.accept(job.result);
-                TargetIndex.unregister(job.dimension, job.targets);
+        List<BlockSearch> done = new ArrayList<>();
+        try (SearchBudget.Slice slice = SearchBudget.slice(server)) {
+            for (BlockSearch job : JOBS) {
+                if (job.tickOne(server)) {
+                    done.add(job);
+                }
             }
+        }
+        // 回调在切片外跑:分团、并进名单、回执是调用方的活,不记在搜索的账上。回调里起的下一次搜索
+        // 排进名单,下一刻开始走。
+        for (BlockSearch job : done) {
+            JOBS.remove(job);
+            job.onDone.accept(job.result);
+            TargetIndex.unregister(job.dimension, job.targets);
         }
     }
 
