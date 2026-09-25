@@ -97,6 +97,11 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     /** 主人点头的那几次,回执末尾交代。 */
     private final List<String> allowances = new ArrayList<>();
 
+    /** 身体真在干活的刻数,见 {@link #workTicks()}。 */
+    private long workTicks;
+    /** 这一刻任务说它在等一次后台搜索({@link #awaitSearch});每刻开头清掉。 */
+    private boolean awaitingSearch;
+
     // ---- sub-task composition state (see runChild) ----
     /** The child sub-goal currently being delegated to, or {@code null}. */
     private Task child;
@@ -143,22 +148,45 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     @Override
     public final TaskState tick(NumenPlayer companion) {
         if (pendingTerminal != null) return pendingTerminal;
-        // 规划器在飞、身体没有路段可走的等待刻,不烧任务预算:deadline 度量
-        // 的是身体干活的刻,异步搜索的墙钟延迟不是任务的错(与调度层被生存
-        // 链抢占时的 freezeTick 同一原则)。正常 tick 速率下一次搜索只有几刻,
-        // 这里几乎不动;tick 远快于真实时间时(如不限速的测试服),没有这道
-        // 冻结,任务会在第一次搜索返回前就被判 TIMEOUT。
-        // 等主人点头的刻同理:期限度量身体干活,主人想多久不是任务的错。
-        if ((nav != null && nav.planningInFlight()) || consent != null) {
-            r.extendDeadlineTo(r.getDeadlineGameTime() + 1);
-        }
+        awaitingSearch = false;
+        TaskState state;
         try {
             TaskState routeConsent = awaitRouteConsent();
-            return routeConsent != null ? routeConsent : onTick();
+            state = routeConsent != null ? routeConsent : onTick();
         } catch (RuntimeException e) {
             crashed("tick", e);
             return TaskState.FAILED;
         }
+        // 这一刻身体在等就不算干活:期限往后推一刻(与调度层被生存链抢占时的 freeze 同一原则),
+        // 干活的刻数不走。
+        if (waiting()) {
+            r.extendDeadlineTo(r.getDeadlineGameTime() + 1);
+        } else {
+            workTicks++;
+        }
+        return state;
+    }
+
+    /**
+     * 身体真在干活的刻数——任务里一切"干了多久"的量尺:超时、卡死判定、重算间隔都拿它量,不自己数刻。
+     *
+     * <p>等的刻不算:导航在等规划、在等主人答复、任务说它在等一次后台搜索。这些刻有多少取决于机器快慢
+     * (搜索在后台线程上、按每刻的时间上限分摊,花的是真实时间)和主人,而刻数跑得比真实时间快多少并不
+     * 固定——tick 远快于真实时间时(/tick rate、不限速的测试服),拿游戏刻去量等待,预算会在第一次搜索
+     * 返回前就烧光。拿这把尺子量,结论只看身体干了多少活。任务期限也是这样冻结的。
+     */
+    protected final long workTicks() {
+        return workTicks;
+    }
+
+    /** 这一刻身体站着等一次后台搜索(找方块、定位)出结论:不算干活,期限不走。每刻要等就每刻调。 */
+    protected final void awaitSearch() {
+        awaitingSearch = true;
+    }
+
+    /** 身体这一刻在等,不在干活。见 {@link #workTicks()}。 */
+    private boolean waiting() {
+        return (nav != null && nav.planningInFlight()) || consent != null || awaitingSearch;
     }
 
     /**
