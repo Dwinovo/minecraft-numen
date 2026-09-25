@@ -1,6 +1,10 @@
 package com.dwinovo.numen.core.gametest;
 
+import com.dwinovo.numen.api.NumenPlugins;
+import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.NumenCli;
+import com.dwinovo.numen.cli.Param;
+import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -13,11 +17,18 @@ import com.dwinovo.numen.permission.ConsentRequest;
 import com.dwinovo.numen.permission.PermissionStore;
 import com.dwinovo.numen.permission.Rule;
 import com.dwinovo.numen.permission.Verdict;
+import com.dwinovo.numen.task.Task;
+import com.dwinovo.numen.task.TaskDispatch;
+import com.dwinovo.numen.task.TaskFactory;
+import com.dwinovo.numen.task.TaskRecord;
+import com.dwinovo.numen.task.TaskResult;
+import com.dwinovo.numen.task.TaskState;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.brigadier.tree.ArgumentCommandNode;
 import com.mojang.brigadier.tree.CommandNode;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -53,12 +64,67 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
  *   <li>{@code /numen} 下两种观众:她的命令组只给她,管理同伴的指令只给玩家;两边互相看不见。她的指令树造得出包
  *       (Numen 自己的参数类型登记过了)。</li>
  *   <li>长活从 {@code command} 派出,受理与收尾都对着这次调用的 id 与"组 动作"这个名字。</li>
- *   <li>{@code /numen drive} 与 {@code command} 是同一个入口,结果一样。</li>
+ *   <li>{@code /numen drive} 与 {@code command} 是同一个入口,结果一样;同步短活的最终回执也回到 drive 的发令人
+ *       (夹具组 {@code gt_sync} 的 {@code hold} 是一件 runSync 的短活)。</li>
+ *   <li>{@code help <指令>} 在原版用法之后接上从 Brigadier 挖出的参数类型、例子与候选;写错了接上最接近的候选。</li>
  * </ul>
  */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
 public class CommandGameTests {
+
+    private static final Param<Integer> TICKS = Param.required("ticks", ArgType.integer(1, 100),
+            "How long to hold still, in ticks.");
+
+    static {
+        NumenPlugins.register(numen -> numen.registerCommands("gt_sync",
+                "Test fixture: a short action the caller waits on.", g ->
+                        g.server("hold", "Hold still for a few ticks while the caller waits.",
+                                (src, args) -> TaskDispatch.runSync(src.companion(),
+                                        new HoldRecord(src, args.get(TICKS)), src::reply),
+                                TICKS)
+                                .example("numen gt_sync hold 5")));
+        TaskFactory.register(HoldRecord.class, (body, record) -> new Hold(record));
+    }
+
+    /** 夹具的同步短活:站着数够刻数就干完。名字与调用 id 取自派它的那次调用。 */
+    private static final class HoldRecord extends TaskRecord {
+        final int ticks;
+
+        HoldRecord(ServerSource source, int ticks) {
+            super(source, source.companion().level().getGameTime() + ticks + 100);
+            this.ticks = ticks;
+        }
+    }
+
+    private static final class Hold implements Task {
+        private final HoldRecord record;
+        private int held;
+
+        Hold(HoldRecord record) {
+            this.record = record;
+        }
+
+        @Override
+        public TaskState tick(NumenPlayer companion) {
+            return ++held >= record.ticks ? TaskState.SUCCESS : TaskState.RUNNING;
+        }
+
+        @Override
+        public void stop(NumenPlayer companion, StopReason why) {
+        }
+
+        @Override
+        public TaskResult result(TaskState terminal) {
+            return terminal == TaskState.SUCCESS ? TaskResult.ok("held for " + held + " ticks")
+                    : TaskResult.fail("stopped after " + held + " ticks");
+        }
+
+        @Override
+        public String name() {
+            return "hold";
+        }
+    }
 
     /** 指令批次前置:和平难度 + 正午。 */
     @BeforeBatch(batch = "numen_command")
@@ -351,7 +417,24 @@ public class CommandGameTests {
         ToolRun status = command(companion, "numen task status");
         ToolRun typo = command(companion, "numen task stauts");
         List<String> heard = new ArrayList<>();
-        CommandSourceStack console = server.createCommandSourceStack().withSource(new CommandSource() {
+        CommandSourceStack console = console(server, heard);
+        server.getCommands().performPrefixedCommand(console, "numen drive gametest_mc_driven numen task status");
+        server.getCommands().performPrefixedCommand(console, "/numen drive gametest_mc_driven /numen task stauts");
+
+        helper.succeedWhen(() -> {
+            String name = companion.getName().getString();
+            helper.assertTrue(heard.size() == 2, "drive did not answer both lines: " + heard);
+            helper.assertTrue(heard.get(0).equals(name + ": " + message(status.reply())),
+                    "drive and command differ: " + heard.get(0) + " / " + status.reply());
+            helper.assertTrue(heard.get(1).equals(name + ": " + message(typo.reply())),
+                    "a mistake reads differently through drive: " + heard.get(1) + " / " + typo.reply());
+            CompanionFactory.despawn(server, companion);
+        });
+    }
+
+    /** 控制台那样的发令人:她那一行的回执说给它听,一句一条记进 {@code heard}。 */
+    private static CommandSourceStack console(net.minecraft.server.MinecraftServer server, List<String> heard) {
+        return server.createCommandSourceStack().withSource(new CommandSource() {
             @Override
             public void sendSystemMessage(Component message) {
                 heard.add(message.getString());
@@ -372,17 +455,98 @@ public class CommandGameTests {
                 return false;
             }
         });
-        server.getCommands().performPrefixedCommand(console, "numen drive gametest_mc_driven numen task status");
-        server.getCommands().performPrefixedCommand(console, "/numen drive gametest_mc_driven /numen task stauts");
+    }
+
+    /**
+     * 经 drive 放行、又要主人点头的同步短活:主人允许后活才开始,结算后的最终回执回到 drive 的发令人那里,恰好一条,
+     * 末尾交代主人允许了什么——结果只有派它的那次调用这一个去处。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_command")
+    public static void command_drive_hears_the_final_result_of_a_sync_action_the_owner_allowed(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_mc_held", new BlockPos(4, 2, 4), false);
+        NumenPlayer owner = presentOwner(helper, companion, "gametest_mc_holder");
+        storeOf(owner).add(Verdict.Kind.ASK, Rule.parse("command(numen)"));
+        var server = helper.getLevel().getServer();
+        List<String> heard = new ArrayList<>();
+        server.getCommands().performPrefixedCommand(console(server, heard),
+                "numen drive gametest_mc_held numen gt_sync hold 5");
+        boolean[] allowed = new boolean[1];
 
         helper.succeedWhen(() -> {
+            if (!allowed[0]) {
+                ConsentRequest pending = ConsentDesk.of(companion).pending();
+                helper.assertTrue(pending != null, "the driven line did not ask the owner: " + heard);
+                helper.assertTrue(heard.isEmpty(), "drive heard something before the owner answered: " + heard);
+                ConsentDesk.of(companion).answer(pending.id(), ConsentAnswer.Decision.ALLOW_ONCE, "");
+                allowed[0] = true;
+                helper.fail("allowed; waiting for the action to finish");
+            }
             String name = companion.getName().getString();
-            helper.assertTrue(heard.size() == 2, "drive did not answer both lines: " + heard);
-            helper.assertTrue(heard.get(0).equals(name + ": " + message(status.reply())),
-                    "drive and command differ: " + heard.get(0) + " / " + status.reply());
-            helper.assertTrue(heard.get(1).equals(name + ": " + message(typo.reply())),
-                    "a mistake reads differently through drive: " + heard.get(1) + " / " + typo.reply());
-            CompanionFactory.despawn(server, companion);
+            helper.assertTrue(heard.size() == 1, "drive did not hear exactly one final result: " + heard);
+            helper.assertTrue(heard.get(0).startsWith(name + ": held for 5 ticks")
+                            && heard.get(0).contains("the owner allowed"),
+                    "drive heard another result, or it lacks the owner's allowance: " + heard.get(0));
+            cleanUp(helper, companion, owner);
         });
+    }
+
+    /**
+     * {@code help give}:原版那一行用法之后,是从 Brigadier 挖出的参数类型与类型自带的例子,再是此刻接下来能写的
+     * (她自己、选择器);写了半截的物品 id 只列以它开头的。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
+    public static void command_help_give_mines_types_examples_and_candidates(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_mc_learner", new BlockPos(4, 2, 4), false);
+        grantOp(companion);
+        ToolRun give = command(companion, "help give");
+        ToolRun item = command(companion, "help give @s minecraft:diamond_");
+        String said = message(give.reply());
+        String items = message(item.reply());
+        Constants.LOG.info("[numen-cli] help give -> {}", said);
+        Constants.LOG.info("[numen-cli] help give @s minecraft:diamond_ -> {}", items);
+
+        helper.assertTrue(give.succeeded() && said.startsWith("ran /help give: /give <targets> <item> [<count>]\n"),
+                "the vanilla usage does not come first: " + said);
+        helper.assertTrue(said.contains("\n  <targets> minecraft:entity (amount multiple, type players) — e.g. Player, ")
+                        && said.contains("\n  <item> minecraft:item_stack — e.g. stick, minecraft:stick")
+                        && said.contains("\n  <count> brigadier:integer (min 1"),
+                "the argument types or their examples are missing: " + said);
+        helper.assertTrue(said.contains("\nCan go next") && said.contains("@s"),
+                "the candidates for <targets> are missing: " + said);
+        String next = items.substring(items.indexOf("\nCan go next") + 1);
+        helper.assertTrue(item.succeeded() && next.contains("minecraft:diamond_axe")
+                        && Arrays.stream(next.substring(next.indexOf(": ") + 2).split(", "))
+                                .allMatch(id -> id.startsWith("minecraft:diamond_")),
+                "a half-written item id does not narrow the candidates: " + items);
+        cleanUp(helper, companion, null);
+        helper.succeed();
+    }
+
+    /**
+     * 写错了:报错仍是 Brigadier 的原话、位置与那一层的用法,最后接上最接近的候选——原版指令的物品 id 与 Numen 命令的
+     * 动作名是同一个函数。写不通的当场失败,不进任务槽。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
+    public static void command_a_typo_ends_with_the_nearest_candidate(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_mc_typist", new BlockPos(4, 2, 4), false);
+        grantOp(companion);
+        ToolRun item = command(companion, "give @s minecraft:dimond");
+        ToolRun action = command(companion, "numen gt_long lingre 40");
+        String itemSaid = message(item.reply());
+        String actionSaid = message(action.reply());
+        Constants.LOG.info("[numen-cli] give @s minecraft:dimond -> {}", itemSaid);
+        Constants.LOG.info("[numen-cli] numen gt_long lingre 40 -> {}", actionSaid);
+
+        helper.assertTrue(!item.succeeded() && item.task() == null
+                        && itemSaid.contains("minecraft:dimond") && itemSaid.contains("<--[HERE]")
+                        && itemSaid.contains("\nUsage: /give <targets> <item> [<count>]")
+                        && itemSaid.endsWith("\nDid you mean: minecraft:diamond?"),
+                "the item typo does not end with the nearest item: " + itemSaid);
+        helper.assertTrue(!action.succeeded() && action.task() == null
+                        && actionSaid.contains("<--[HERE]") && actionSaid.contains("numen gt_long linger <ticks>")
+                        && actionSaid.endsWith("\nDid you mean: linger?"),
+                "the action typo does not end with the nearest action: " + actionSaid);
+        cleanUp(helper, companion, null);
+        helper.succeed();
     }
 }
