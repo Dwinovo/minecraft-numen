@@ -1,8 +1,10 @@
 package com.dwinovo.numen.core.gametest;
 
+import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.entity.EventOutbox;
 import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.permission.ConsentAnswer;
 import com.dwinovo.numen.permission.ConsentDesk;
@@ -11,14 +13,29 @@ import com.dwinovo.numen.permission.ConsentRequest;
 import com.dwinovo.numen.permission.PermissionStore;
 import com.dwinovo.numen.permission.Rule;
 import com.dwinovo.numen.permission.Verdict;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.mojang.brigadier.tree.ArgumentCommandNode;
+import com.mojang.brigadier.tree.CommandNode;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import net.minecraft.commands.CommandSource;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.synchronization.ArgumentTypeInfos;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.players.ServerOpListEntry;
 import net.minecraft.world.Difficulty;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -33,6 +50,10 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
  * <ul>
  *   <li>能用哪些是服务器按她的权限等级定的(测试里直接把她记进 OP 表,等级 2);主人的允许与拒绝规则直接生效,没有规则
  *       说到的问主人;出厂规则放行只读与只说话的指令。</li>
+ *   <li>{@code /numen} 下两种观众:她的命令组只给她,管理同伴的指令只给玩家;两边互相看不见。她的指令树造得出包
+ *       (Numen 自己的参数类型登记过了)。</li>
+ *   <li>长活从 {@code command} 派出,受理与收尾都对着这次调用的 id 与"组 动作"这个名字。</li>
+ *   <li>{@code /numen drive} 与 {@code command} 是同一个入口,结果一样。</li>
  * </ul>
  */
 @GameTestHolder(Constants.MOD_ID)
@@ -228,5 +249,140 @@ public class CommandGameTests {
         helper.assertTrue(op.contains("/give <targets> <item> [<count>]"), "the op help never lists /give: " + op);
         cleanUp(helper, companion, null);
         helper.succeed();
+    }
+
+    /**
+     * 可见性:{@code /numen} 下她看得见的只有她的命令组与帮助,玩家看得见的只有管理同伴的指令,两边不相交;玩家那一侧
+     * 连一种 Numen 自己的参数类型都碰不到,装不装 Numen 客户端都不受影响。服务器给她造的指令树包造得出来——她的
+     * 参数类型都登记过了。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_command")
+    public static void command_numen_nodes_are_hers_and_the_verbs_are_the_players(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_mc_viewer", new BlockPos(4, 2, 4), false);
+        Commands commands = helper.getLevel().getServer().getCommands();
+        CommandNode<CommandSourceStack> numen = commands.getDispatcher().getRoot().getChild(NumenCli.ROOT);
+        CommandSourceStack player = helper.getLevel().getServer().createCommandSourceStack()
+                .withEntity(helper.makeMockPlayer(GameType.SURVIVAL)).withPermission(0);
+
+        Set<String> hers = usable(numen, companion.createCommandSourceStack());
+        Set<String> players = usable(numen, player);
+        helper.assertTrue(hers.containsAll(List.of("help", "--help", "task", "gt_long")),
+                "her /numen lacks her groups: " + hers);
+        helper.assertTrue(players.containsAll(List.of("player", "settings", "reset", "permission", "consent")),
+                "a player's /numen lacks the verbs: " + players);
+        Set<String> both = new HashSet<>(hers);
+        both.retainAll(players);
+        helper.assertTrue(both.isEmpty(), "seen by both her and a player: " + both);
+        helper.assertTrue(!usable(numen, player.withPermission(2)).contains("task"),
+                "an op player sees her groups");
+
+        Set<String> playerTypes = new HashSet<>();
+        argumentTypes(numen, player.withPermission(4), playerTypes);
+        helper.assertTrue(playerTypes.stream().allMatch(CommandGameTests::vanillaArgumentType),
+                "a player's tree carries a Numen argument type: " + playerTypes);
+        Set<String> herTypes = new HashSet<>();
+        argumentTypes(numen, companion.createCommandSourceStack(), herTypes);
+        helper.assertTrue(herTypes.stream().anyMatch(t -> !vanillaArgumentType(t)),
+                "her tree carries none of Numen's argument types: " + herTypes);
+
+        commands.sendCommands(companion);
+        CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        helper.succeed();
+    }
+
+    /** {@code /numen} 下这个来源用得了的那些格。 */
+    private static Set<String> usable(CommandNode<CommandSourceStack> numen, CommandSourceStack source) {
+        return numen.getChildren().stream().filter(c -> c.canUse(source)).map(CommandNode::getName)
+                .collect(Collectors.toSet());
+    }
+
+    /** 这个来源用得了的节点上,每种参数类型在注册表里的名字(发指令树包时写进包里的就是它)。 */
+    private static void argumentTypes(CommandNode<CommandSourceStack> node, CommandSourceStack source,
+                                      Set<String> found) {
+        for (CommandNode<CommandSourceStack> child : node.getChildren()) {
+            if (!child.canUse(source)) {
+                continue;
+            }
+            if (child instanceof ArgumentCommandNode<CommandSourceStack, ?> argument) {
+                found.add(String.valueOf(BuiltInRegistries.COMMAND_ARGUMENT_TYPE.getKey(
+                        ArgumentTypeInfos.byClass(argument.getType()))));
+            }
+            argumentTypes(child, source, found);
+        }
+    }
+
+    private static boolean vanillaArgumentType(String id) {
+        return id.startsWith("minecraft:") || id.startsWith("brigadier:");
+    }
+
+    /**
+     * 长活从 {@code command} 派出:受理回执对着这次调用(调度器按调用 id 认得出它派下的活),任务叫"组 动作",
+     * 收尾的 task_finished 用的是受理时那个任务号与名字。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
+    public static void command_long_work_is_accepted_and_finished_under_one_id(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_mc_worker", new BlockPos(4, 2, 4), false);
+        ToolRun run = command(companion, "numen gt_long linger 10");
+        EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(run.task() != null, "the long work was not found under the call's id: " + run.reply());
+            JsonObject data = JsonParser.parseString(run.reply()).getAsJsonObject().getAsJsonObject("data");
+            String id = data.get("task_id").getAsString();
+            helper.assertTrue(id.equals(run.task().publicId()) && data.get("task").getAsString().equals("gt_long linger"),
+                    "the receipt names another task: " + run.reply());
+            helper.assertTrue(outbox.peek(companion.getUUID()).entries().stream()
+                            .anyMatch(e -> e.type().equals("task_finished") && e.text().contains(id)
+                                    && e.text().contains("task=\"gt_long linger\"")),
+                    "task_finished does not answer the receipt: " + outbox.peek(companion.getUUID()).entries());
+            outbox.forget(companion.getUUID());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /**
+     * {@code /numen drive <同伴> <一行指令>} 与 {@code command} 是同一个入口:同一行,回执一样;写不通的说法也一样。
+     * 回执说给发 drive 的人听(这里是控制台)。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
+    public static void command_drive_runs_a_line_through_her_entry(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_mc_driven", new BlockPos(4, 2, 4), false);
+        var server = helper.getLevel().getServer();
+        ToolRun status = command(companion, "numen task status");
+        ToolRun typo = command(companion, "numen task stauts");
+        List<String> heard = new ArrayList<>();
+        CommandSourceStack console = server.createCommandSourceStack().withSource(new CommandSource() {
+            @Override
+            public void sendSystemMessage(Component message) {
+                heard.add(message.getString());
+            }
+
+            @Override
+            public boolean acceptsSuccess() {
+                return true;
+            }
+
+            @Override
+            public boolean acceptsFailure() {
+                return true;
+            }
+
+            @Override
+            public boolean shouldInformAdmins() {
+                return false;
+            }
+        });
+        server.getCommands().performPrefixedCommand(console, "numen drive gametest_mc_driven numen task status");
+        server.getCommands().performPrefixedCommand(console, "/numen drive gametest_mc_driven /numen task stauts");
+
+        helper.succeedWhen(() -> {
+            String name = companion.getName().getString();
+            helper.assertTrue(heard.size() == 2, "drive did not answer both lines: " + heard);
+            helper.assertTrue(heard.get(0).equals(name + ": " + message(status.reply())),
+                    "drive and command differ: " + heard.get(0) + " / " + status.reply());
+            helper.assertTrue(heard.get(1).equals(name + ": " + message(typo.reply())),
+                    "a mistake reads differently through drive: " + heard.get(1) + " / " + typo.reply());
+            CompanionFactory.despawn(server, companion);
+        });
     }
 }
