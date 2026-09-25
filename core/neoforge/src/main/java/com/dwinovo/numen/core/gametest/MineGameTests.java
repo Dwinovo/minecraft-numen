@@ -122,18 +122,21 @@ public class MineGameTests {
     }
 
     /**
-     * 够不着就如实收工:一根原木悬在她脚上八格,站在底下眼睛离它 5.38 格,出了交互距离;她没有垫脚的方块,
+     * 够不着就如实收工:一根去皮白桦原木悬在她脚上八格,站在底下眼睛离它 5.38 格,出了交互距离;她没有垫脚的方块,
      * 爬不上去。任务不该站着一遍遍重搜同一条走不通的路,而是按 NO_PATH 收场、说清楚够不着。
+     *
+     * <p>用去皮白桦原木而不是和同批树冠用例一样的金合欢原木:mine 扫 32 个 chunk,同批别的场地里的同种方块
+     * 它看得见(见 {@link GameTestKit} 的场地隔离),"够不着"就成了"去隔壁挖"。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mine")
     public static void mine_out_of_reach_ends_instead_of_hanging(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos logRel = new BlockPos(8, 10, 8);
-        level.setBlockAndUpdate(helper.absolutePos(logRel), Blocks.ACACIA_LOG.defaultBlockState());
+        level.setBlockAndUpdate(helper.absolutePos(logRel), Blocks.STRIPPED_BIRCH_LOG.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_skyward", new BlockPos(7, 2, 8), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         TaskRecord record = call(companion, "mine", args(
-                "block_ids", List.of("minecraft:acacia_log"),
+                "block_ids", List.of("minecraft:stripped_birch_log"),
                 "count", 1)).task();
 
         helper.succeedWhen(() -> {
@@ -141,7 +144,7 @@ public class MineGameTests {
             helper.assertTrue(reply != null, "mine has not finished");
             helper.assertTrue(!record.getResult().success() && reply.contains("could not reach"),
                     "an out-of-reach log did not end as unreachable: " + reply);
-            helper.assertTrue(level.getBlockState(helper.absolutePos(logRel)).is(Blocks.ACACIA_LOG),
+            helper.assertTrue(level.getBlockState(helper.absolutePos(logRel)).is(Blocks.STRIPPED_BIRCH_LOG),
                     "the out-of-reach log is gone");
             // 悬在模板外的原木不收走,后面批次的大半径找方块会把它当目标
             level.removeBlock(helper.absolutePos(logRel), false);
