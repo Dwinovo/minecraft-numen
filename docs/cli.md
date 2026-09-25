@@ -1,8 +1,8 @@
 # Numen CLI:她只有一个能力——执行一行游戏指令
 
 状态:
-- **已落地**:第 1–3、5 步。第 1、2、5 步的细节见附录 A、B、C。
-- **下一步**:第 6 步,把 Numen 的命令并进 Minecraft 指令树,去掉 `numen mc`。本稿正文描述的就是这一步之后的样子。
+- **已落地**:第 1–3、5 步,以及第 6 步的执行管线(`command` 工具、`/numen` 注册进 MC 指令树、唯一的执行入口、`/numen drive`)。第 1、2、5、6 步的细节见附录 A、B、C、D。
+- **进行中**:第 6 步的帮助与报错(第九节)。
 - **之后**:第 4 步,核心工具迁移,直接按第 6 步的形态做。
 
 ## 一、为什么
@@ -221,15 +221,16 @@ numen ftbquests submit <quest>
 | 1 | 底座:命令组声明、帮助、快捷工具同源、两侧分发 | 已落地(附录 A) |
 | 2 | 三个联动插件的 8 个工具改成命令 | 已落地(附录 B) |
 | 3 | FTB Quests 命令组、Curios 走装备位扩展点 | 已落地 |
-| 5 | `numen mc` 原版指令入口 + 权限层 COMMAND | 已落地(附录 C),第 6 步把它并掉 |
-| **6** | **并进 MC 指令树**:`command` 工具取代 `numen` 工具;Numen 服务端组真实注册到 `/numen`,只给她看见;客户端组留在客户端小表;`numen mc` 组与帮助目录删掉(原版 `help` 已按她的来源过滤);出厂规则;`/numen drive` 取代 DebugCommands 的重复实现;自定义参数类型在 MC 注册表登记;帮助与报错按第九节补齐(例子必填、注意、相关命令;别的指令从 Brigadier 挖类型、例子、候选;报错带"你是不是要写") | 下一步 |
+| 5 | `numen mc` 原版指令入口 + 权限层 COMMAND | 已落地(附录 C),第 6 步已把它并掉 |
+| **6** | **并进 MC 指令树**:`command` 工具取代 `numen` 工具;Numen 服务端组真实注册到 `/numen`,只给她看见;客户端组留在客户端小表;`numen mc` 组与帮助目录删掉(原版 `help` 已按她的来源过滤);出厂规则;`/numen drive` 取代 DebugCommands 的重复实现;自定义参数类型在 MC 注册表登记;帮助与报错按第九节补齐(例子必填、注意、相关命令;别的指令从 Brigadier 挖类型、例子、候选;报错带"你是不是要写") | 执行管线已落地(附录 D);帮助与报错进行中 |
 | 4 | 核心工具按领域分批迁移,直接注册到 `/numen`,高频的提升为快捷工具 | 第 6 步之后 |
 
 ## 十六、待核实
 
-- **调用上下文怎么取**:`CommandSourceStack` 里输出收集器那个字段的访问方式(公开字段还是访问器),决定处理函数怎么拿到调用上下文。
-- **参数类型的两侧登记**:NeoForge 与 Fabric 各自的登记方式,以及同伴的指令树在服务端构造时不再报错。
-- **客户端动作的根**:客户端小表与服务端树共用 `/numen` 这个根,专用服务器上客户端动作不进 MC 树。确认帮助的覆盖面完整。
+三条都已核实,结论见附录 D:
+- **调用上下文怎么取**:那个字段是私有的,原版只给换不给读,用一个只读的访问器 mixin 读回。
+- **参数类型的两侧登记**:经平台服务,NeoForge 用 `DeferredRegister`,Fabric 用 `ArgumentTypeRegistry`;她的指令树在服务端造得出包。
+- **客户端动作的根**:两棵树共用 `numen` 这个根、同一个形状;客户端动作的参数与执行不进 MC 树,帮助两侧都有。
 
 ## 十七、不做的
 
@@ -241,7 +242,12 @@ numen ftbquests submit <quest>
 
 ## 附录 A:第 1 步落地时定下的细节
 
-第 6 步之后,文中的 `numen` 工具改名为 `command`,整行不再以工具名打头,而是一行真实的指令;其余约定照旧。
+第 6 步之后,文中的 `numen` 工具改名为 `command`,整行不再以工具名打头,而是一行真实的指令;其余约定照旧,
+以下几条已被附录 D 取代:
+- `CommandGroup.serverDirect` 与帮助目录 `Action.catalog` 删掉(它们只为 `numen mc` 而开)。
+- "客户端先解析、服务端动作送去服务端再解析同一棵树"改为两棵树、一条路由规则;服务端不再有 Numen 自己的调度器,
+  服务端动作在 MC 指令树上。
+- `numen` 工具由引擎登记,现在是 `command` 工具。
 
 代码在 `api` 的 `com.dwinovo.numen.cli` 包。
 
@@ -307,9 +313,14 @@ numen ftbquests submit <quest>
 
 ## 附录 C:第 5 步(`numen mc`)落地时定下的细节
 
-代码:命令组在 core 的 `McCommands`,执行是任务 `McCommandTaskRecord` / `McCommandCompanionTask`;权限层的动作是 `Action.command`,规则写法见 `docs/permission-layer.md` 的"指令"。**第 6 步里这一组要并掉**:它的执行入口(先解析、写不通当场失败、过权限层、`performPrefixedCommand`、收集回显)就是第三节图里服务端那一段,所有指令都走它;`serverDirect` 组形态与帮助目录(`Action.catalog`)随之删掉,因为原版 `help` 已按她的来源过滤。
+**第 6 步已把这一组并掉**(附录 D):它的执行入口(先解析、写不通当场失败、过权限层、`performPrefixedCommand`、收集回显)
+泛化成服务端唯一的执行入口 `CommandRunner`,所有指令都走它;`McCommands`、`McCommandTaskRecord`、`McCommandCompanionTask`、
+`serverDirect` 组形态与帮助目录(`Action.catalog`)都已删掉,原版 `help` 已按她的来源过滤。下面标"已取代"的几条以附录 D 为准,
+其余(来源与回显的收法、回执的写法、征询卡)照旧。
 
-- **执行**:任务槽里的一次同步短任务(`runSync`,期限 5 秒,等主人答复的刻不计)。动手前先把 `command(整行)` 交给权限层,要问就走现有的征询流程。
+代码:权限层的动作是 `Action.command`,规则写法见 `docs/permission-layer.md` 的"指令"。
+
+- **执行**(已取代):~~任务槽里的一次同步短任务(`runSync`,期限 5 秒,等主人答复的刻不计)~~。现在不进任务槽,放行就当场执行;要问主人时这次调用悬着(附录 D)。动手前先把 `command(整行)` 交给权限层,要问就走现有的征询流程。
 - **来源与回显**:
   - 来源是她的 `CommandSourceStack`,权限等级、位置、`@s` 都是她自己的,只是把回话的去处换成一个收集器。
   - 成功和失败的回话都收下。成败以执行完的结果回调为准:分叉的指令有一支成功就算成功;没有回调就是没跑成。
@@ -317,3 +328,41 @@ numen ftbquests submit <quest>
   - 成功时是 `ran /<整行>: <回显>`,失败时是 `/<整行> failed: <回显>`。
   - `data` 里带 `command`、`output`、`result`。
 - **征询卡**:动词写"执行 / run",名字是 `/整行`。"以后都允许"记下的是 `allow command(根名)`。
+
+## 附录 D:第 6 步(执行管线)落地时定下的细节
+
+代码在 `api` 的 `com.dwinovo.numen.cli`;`/numen` 下玩家那一半在 `entity.NumenCommands`,core 的调试开关在 `DebugCommands`。
+
+- **一份声明,两棵树**(`CommandTree`)。主人客户端的小表(`NumenCli` 自己的调度器)与 MC 指令树 `/numen` 下她的节点,由同一个生成器从命令组声明长出来,形状相同:根下 `help`、`--help`;组下 `--help` 与每个动作;动作下 `--help`。动作的参数、标志尾巴、可执行的那一格只长在执行它的那一侧。登记时把例子按这一组的树解析一遍(第九节)用的也是这个生成器,只是那棵树上每个动作都长着参数。
+- **路由**(`NumenCli.run`)。一行先在客户端小表上解析,看解析走到的最后一个字面节点:是帮助,或是一个客户端动作,就在客户端答,这个动作写错了也当场报;停在根上、组上、服务端动作上,或者不以 `numen` 开头,原样经 `ServerToolTransport` 送服务端。服务端动作写错由服务端报,两侧报错是同一个函数(`NumenCli.problem`),一字不差。
+- **注册与可见性**(`NumenCommands`)。两个加载器的入口本来就在指令注册事件里调 `NumenCommands.register`,她的节点(`NumenCli.herNodes()`)在这里挂到 `/numen` 下,不另开平台服务。
+  - 她的节点 `requires(FOR_HER)`:来源实体是 `NumenPlayer`。玩家的管理节点(`player`、`settings`、`reset`、`permission`、`consent`、`drive`,core 的 `debug`、`profile`、`pad`)`requires(FOR_PLAYERS)`。
+  - 挂到 `/numen` 下的每一格都经 `NumenCommands.graft`:同名的一格已经在了就抛出。Brigadier 会把同名两格悄悄并成一格,留下先来那一格的观众。
+  - 服务器建指令树的这一刻各模组的组都已登记完,相关命令(`seeAlso`)在这里一次查全,断掉的引用开服就报错;连着别人服务器的客户端不建指令树,仍在小表第一次被读时查。
+  - 实测(GameTest):她在 `/numen` 下用得了的格与玩家用得了的格不相交;玩家的树里没有 Numen 自己的参数类型;她的 `help` 列出 `/numen`、不列召唤与权限。
+- **执行入口**(`CommandRunner`)。
+  - 一行:以她的来源在服务器指令树上解析。`numen` 开头的用 Numen 的报错(Brigadier 原话加那一层的帮助);别的指令用和服务器执行前同一道检查,写不通时说没有这条、服务器不让她用、还是参数写错(附 `getSmartUsage`)。写不通当场失败,不打扰主人。然后权限层 `command(根名)`,放行就 `Commands.performPrefixedCommand`,来源的回话去处换成 `Echo`。
+  - 快捷工具:JSON 按同一张参数表读成值;权限层裁决它作为 alias 的那一行(`numen 组 动作 值… --标志 值`,值写成它在命令行上的样子);放行后交同一个处理函数,不拼行再解析。
+  - 执行一行指令不是身体上的活,不进任务槽:原版与模组的指令当场执行、当场回执;`/numen` 的处理函数照旧当场回执或把长活交任务槽。附录 C 的同步短任务删掉,原因之一是它在任务槽里执行 `/numen` 的处理函数时,处理函数自己的 `runSync` 会把它顶掉。
+- **要问主人时**(`PendingCommands`)。这次调用挂在身体上(和征询登记处一样),征询的作用域就是这一次挂着的调用;`ConsentDesk` 的作用域因此从任务记录放宽为任意对象,授权照旧按身份记、随发起的一方收场而清。每刻读一次结论:
+  - 允许就接着执行,回执末尾交代主人允许了什么(`ServerSource.allowed`,和任务回执交代允许是同一种写法);
+  - 拒绝、超时、被新的请求顶替,如实回执;
+  - 主人按停止、身体离开世界:撤掉征询,回执说被谁叫停、没有执行;她死了:撤掉征询、不回执(那条调用已由死因结算);
+  - 等主人的时候身体照常做手上的事。
+- **调用上下文**(`Echo`)。`Echo` 既是她来源的回话去处(`CommandSource` 与 `CommandResultCallback`),也带着这次调用(`ServerSource`:调用 id、工具名、参数、回信口)。
+  - `CommandSourceStack` 的回话去处是私有字段,原版只给 `withSource` 换、不给读;用一个只读的访问器 mixin(`CommandSourceStackAccessor`)读回,放在 api 的公共 mixin 配置里,两个加载器共用。
+  - `execute` 这类改写来源的指令只换位置、朝向、实体,回话去处原样传下去,所以指令树上任何一格都取得到它。
+  - `/numen` 的节点取出这次调用、绑上动作交给处理函数;处理函数正常返回,就记下"这次调用由 Numen 答了",入口不再拿回显作回执。取不到就抛出:有人绕开了执行入口。没有线程变量。
+  - 长活:处理函数交 `TaskDispatch.setTask(source, record)`,记录的调用 id 与名字都取自这次调用,受理回执与 `task_finished` 对得上号(GameTest 实测)。
+- **参数类型登记**。`FlagsArgument` 与 `ArgType` 的 `id()`、`string()`(从方法引用改成具名类 `IdArgument`、`ValueArgument`)经平台服务 `IPlatformHelper.registerArgumentType` 登记进 `COMMAND_ARGUMENT_TYPE`,注册名 `numen_api:flags|id|string`:NeoForge 用 `DeferredRegister` 加 `ArgumentTypeInfos.registerByClass`,Fabric 用 `ArgumentTypeRegistry`。
+  - 它们的 `ArgumentTypeInfo`(`HerArgumentInfo`)什么都不写,读回就抛:这些类型只在她的节点上,从不发到客户端。
+  - NeoForge 服务器本来就要求装 Numen 客户端(Numen 的网络载荷不是可选的),装了的客户端两侧都登记过;玩家收到的树里没有这些类型。
+- **`/numen drive <同伴> <一行指令>`**(OP 2 级,只给玩家)。同伴用原版的玩家参数(名字或选择器);这一行交 `CommandRunner.run`,与 `command` 工具同一个入口,回执说给发指令的人听。
+  - drive 自己正在执行,原版把执行当中调起的指令排到它之后,入口返回时她那一行还没跑。所以交给服务器的任务队列(`TickTask`),等 drive 执行完再以她的身份执行。
+  - `DebugCommands` 的 `goto`、`mine`、`cancel` 删掉,只剩 `debug`、`profile`、`pad`。
+- **重放**。长活记下的是 `command` 与 `{"command": 那一行}`,重启后走同一个入口再来一遍。改名前落盘的 `numen` 调用按"这个工具已经不在了"告诉她,不做转接。
+- **名字与提示**。工具叫 `command`,参数 `command` 是一整行,前导 `/` 可有可无;描述写明 Numen 的用 `numen --help`、其它的用 `help`。`<commands>` 索引开头是"Numen's command groups, run with the command tool"。外脑(MCP)读的是同一张工具表。
+- **与正文的出入**。
+  - 客户端动作不进 MC 树,指的是参数与执行;它的名字与 `--help` 两侧都有,`/numen drive` 问得到帮助,写到它那儿报这个动作的帮助。
+  - 客户端动作写错参数在客户端当场答:这一行解析到的就是客户端动作。
+  - 帮助只经 `/numen drive` 才会在服务端答;在那里翻页越界,回执是指令失败的回显,不附那一层的帮助。
