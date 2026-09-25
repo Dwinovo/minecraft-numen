@@ -86,6 +86,11 @@ public final class PathExecutor {
     /** 剩余路径将要挤身而过的全部格。 */
     private HashSet<BlockPos> toWalkInto = new HashSet<>();
     private boolean failed;
+    /**
+     * 最近一次为等在飞搜索的新路而站住(回头暂停)的游戏刻。{@link #waiting} 只认当刻的——执行器这一刻没被
+     * 推进,就谈不上在等。
+     */
+    private long waitedAt = -1;
     /** 取消原因(失败验尸与放弃判定的素材);未失败时为 null。 */
     private String failureCause;
     private boolean sprintNextTick;
@@ -279,6 +284,8 @@ public final class PathExecutor {
         if (pathPosition < path.movements().size() - 1) {
             Movement next = path.movements().get(pathPosition + 1);
             if (!loadedTest.isLoaded(next.getDest().getX(), next.getDest().getZ())) {
+                // 这种站住不算在等(不记 waitedAt):区块什么时候来没有保证——她站着不走,那边可能一直
+                // 不加载。算成等,期限与各种时限就会一直冻着,永远等下去。
                 Constants.LOG.debug("下一移动的终点在已加载区块边缘,暂停");
                 harness.clearAllKeys();
                 return true;
@@ -319,6 +326,7 @@ public final class PathExecutor {
         if (shouldPause()) {
             Constants.LOG.debug("在飞搜索的最优路径会回头经过脚下,暂停");
             harness.clearAllKeys();
+            waitedAt = player.level().getGameTime();
             return true;
         }
         MovementStatus movementStatus = movement.update();
@@ -527,6 +535,14 @@ public final class PathExecutor {
         double dx = pos.getX() + 0.5 - px;
         double dz = pos.getZ() + 0.5 - pz;
         return Math.sqrt(dx * dx + dz * dz);
+    }
+
+    /**
+     * 这一刻身体站着等在飞搜索的新路,而不是在走:新路会回头经过脚下(回头暂停)。等的是后台搜索的真实时间,
+     * 不是走路;搜索的工作量有界,这种等总会结束。
+     */
+    public boolean waiting() {
+        return waitedAt == player.level().getGameTime();
     }
 
     // ==================== 回头暂停 / 提前接段 ====================

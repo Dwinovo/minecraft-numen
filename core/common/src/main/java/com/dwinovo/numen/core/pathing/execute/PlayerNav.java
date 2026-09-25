@@ -759,14 +759,15 @@ public final class PlayerNav {
     }
 
     /**
-     * 本导航派出的搜索有结论还没取走,且当前无路段在执行——身体站着等异步搜索返回。任务层用它
-     * 冻结任务 deadline:deadline 度量的是身体干活的刻,搜索的墙钟延迟不该
-     * 折算成任务超时(tick 越快于真实时间,这笔折算越离谱,无上限 tick 的
-     * 测试服上足以在首次搜索返回前烧光整个预算)。段搜索、候选路线查询、整路规划都经
-     * {@link NavSearches} 派出,这里只读它一处。
+     * 身体这一刻站着等规划,不在走:没有路段可走而本导航派出的搜索还没出结论(段搜索、候选路线查询、整路规划
+     * 都经 {@link NavSearches} 派出,只读它一处),或手上的路段为等在飞搜索的新路而站住
+     * ({@link PathExecutor#waiting})。等的是搜索的真实时间,不是走路;任务层据此不把这些刻算成干活
+     * (AbstractCompanionTask 的干活刻数与期限冻结)——tick 越快于真实时间,这笔折算越离谱,无上限 tick
+     * 的测试服上足以在首次搜索返回前烧光整个预算。只算有界的等:搜索的工作量有界,总会出结论。
      */
-    public boolean planningInFlight() {
-        return searches.waiting() && core.getCurrent() == null;
+    public boolean waiting() {
+        PathExecutor current = core.getCurrent();
+        return current == null ? searches.waiting() : current.waiting();
     }
 
     /** 停止导航:取消在飞搜索、丢段、清键停挖,并把身体停稳、松潜行。 */

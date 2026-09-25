@@ -186,7 +186,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
 
     /** 身体这一刻在等,不在干活。见 {@link #workTicks()}。 */
     private boolean waiting() {
-        return (nav != null && nav.planningInFlight()) || consent != null || awaitingSearch;
+        return (nav != null && nav.waiting()) || consent != null || awaitingSearch;
     }
 
     /**
