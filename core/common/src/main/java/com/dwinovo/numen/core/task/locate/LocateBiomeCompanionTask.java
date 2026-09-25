@@ -49,7 +49,10 @@ import java.util.function.Predicate;
  * Coverage: {@value #SEARCH_RADIUS_RINGS} rings × {@value #SAMPLE_STEP_BLOCKS}
  * blocks = 6400 blocks, exactly vanilla /locate biome's radius; NC's default
  * reach is 10k with the same 64-block grid. Worst-case full miss ≈ 40k samples
- * ≈ 160 budgeted ticks ≈ 8s, far under the task deadline.
+ * ≈ 160 budgeted ticks ≈ 8s.
+ *
+ * <p>收工看环数,不看时间:身体从头到尾站着等这次搜索({@link #awaitSearch}),任务期限不走,
+ * 机器慢只是答案晚几刻,不会变成"搜到一半超时"。
  */
 public final class LocateBiomeCompanionTask extends AbstractCompanionTask<LocateBiomeTaskRecord> {
 
@@ -162,6 +165,7 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
                     return TaskState.SUCCESS;   // best == null → "not found"
                 }
                 if (!SearchBudget.tryBiomeSample()) {
+                    awaitSearch();
                     return TaskState.RUNNING;    // pool drained — resume next tick
                 }
                 BlockPos hit = sampleNext();
@@ -243,14 +247,6 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
                 + " blocks IN THIS DIMENSION (" + dim + ") — check the biome's "
                 + "home dimension (warped_forest/soul_sand_valley: nether; most "
                 + "others: overworld) or travel a few thousand blocks and retry";
-    }
-
-    @Override
-    protected String timeoutMessage() {
-        int searched = Math.min(ring, SEARCH_RADIUS_RINGS) * SAMPLE_STEP_BLOCKS;
-        return "biome search deadline hit after ~"
-                + searched + " blocks with no " + r.biome
-                + " — retrying immediately is fine, or travel first";
     }
 
     @Override

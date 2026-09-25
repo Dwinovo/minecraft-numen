@@ -474,6 +474,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                     FailureType.NO_PATH);
             return TaskState.FAILED;
         }
+        awaitSearch();   // 候选还没回来:站着等搜索,不算走路的刻
         return TaskState.RUNNING;
     }
 

@@ -13,6 +13,10 @@ import com.dwinovo.numen.core.task.locate.LocateStructureTaskRecord;
  */
 public final class LocateOps {
 
+    /**
+     * 期限量的是身体干活的刻;定位从头到尾站着等搜索,一刻活都不干,期限不走——收工靠搜索自己的环数。
+     * 这个数只是记录要带的那一格。
+     */
     private static final long TIMEOUT_TICKS = 30 * 20;
     private static final int MAX_ARG_LENGTH = 128;
 

@@ -58,6 +58,11 @@ import java.util.Optional;
  * </ul>
  * 于是这个搜索对服务端的全部成本就是 {@link SearchBudget} 框住的那点 CPU:
  * 最坏情况是答案晚几 tick,而不是主线程卡在世界生成上等到看门狗把服务器杀掉。
+ *
+ * <h2>收工看环数,不看时间</h2>
+ * 搜多远由 {@link #SEARCH_RADIUS_RINGS} 定,每刻搜多少由 {@link SearchBudget} 定(机器慢、存档读得慢就少搜几个)。
+ * 身体从头到尾站着等这次搜索({@link #awaitSearch}),任务期限不走——所以结论只取决于世界和问法:
+ * 找到的就是环内最近的,找不到就是环内没有,不会因为机器慢而变成"搜到一半超时"。
  */
 public final class LocateStructureCompanionTask extends AbstractCompanionTask<LocateStructureTaskRecord> {
 
@@ -65,8 +70,7 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
      * Search radius in placement-region RINGS, exactly vanilla /locate's
      * radius unit (one ring = one region = {@code spacing} chunks, so the
      * covered distance scales with the structure's rarity: fortress ≈ 43k
-     * blocks, village ≈ 54k). The global budget + the task deadline bound the
-     * actual work; a search that exhausts its deadline reports how far it got.
+     * blocks, village ≈ 54k). This bounds the work; the global budget only paces it.
      */
     private static final int SEARCH_RADIUS_RINGS = 100;
 
@@ -247,6 +251,7 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
                 }
                 if (!SearchBudget.tryCheck()) {
                     pendingCandidate = candidate;   // pool drained — resume next tick
+                    awaitSearch();
                     return TaskState.RUNNING;
                 }
                 if (checkCandidate(sl, job, candidate)) {
@@ -346,15 +351,6 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
                 : "no " + r.structure + " within ~" + searched
                         + " blocks of here (" + dim + ") — extremely unlucky seed; "
                         + "travel a few thousand blocks and retry";
-    }
-
-    @Override
-    protected String timeoutMessage() {
-        return "search deadline hit after covering ~"
-                + searchedRadiusBlocks() + " blocks outward with no " + r.structure
-                + " — it is at least that far. Retrying immediately is fine (results "
-                + "are cached, the search resumes fast), or travel toward unexplored "
-                + "land first";
     }
 
     @Override
