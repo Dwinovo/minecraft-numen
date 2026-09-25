@@ -1,8 +1,7 @@
 # Numen CLI:她只有一个能力——执行一行游戏指令
 
 状态:
-- **已落地**:第 1–3、5 步,以及第 6 步的执行管线(`command` 工具、`/numen` 注册进 MC 指令树、唯一的执行入口、`/numen drive`)。第 1、2、5、6 步的细节见附录 A、B、C、D。
-- **进行中**:第 6 步的帮助与报错(第九节)。
+- **已落地**:第 1–3、5、6 步。第 6 步分两块:执行管线(`command` 工具、`/numen` 注册进 MC 指令树、唯一的执行入口、`/numen drive`)与帮助、报错(第九节)。第 1、2、5 步的细节见附录 A、B、C,第 6 步见附录 D、E。
 - **之后**:第 4 步,核心工具迁移,直接按第 6 步的形态做。
 
 ## 一、为什么
@@ -166,8 +165,8 @@ numen ftbquests submit <quest>
 
 帮助每次都进上下文,所以:
 - 组的帮助只给一行一个动作;
-- 候选值有上限;
-- 长清单一律分页(`Listing`,附录 A);
+- 候选值有上限,并给总数;`help <指令>` 的候选靠多写一截缩小,不翻页(附录 E);
+- 其余长清单一律分页(`Listing`,附录 A);
 - 例子和注意只写在动作的帮助里。
 
 ## 十、提示词与技能
@@ -222,7 +221,7 @@ numen ftbquests submit <quest>
 | 2 | 三个联动插件的 8 个工具改成命令 | 已落地(附录 B) |
 | 3 | FTB Quests 命令组、Curios 走装备位扩展点 | 已落地 |
 | 5 | `numen mc` 原版指令入口 + 权限层 COMMAND | 已落地(附录 C),第 6 步已把它并掉 |
-| **6** | **并进 MC 指令树**:`command` 工具取代 `numen` 工具;Numen 服务端组真实注册到 `/numen`,只给她看见;客户端组留在客户端小表;`numen mc` 组与帮助目录删掉(原版 `help` 已按她的来源过滤);出厂规则;`/numen drive` 取代 DebugCommands 的重复实现;自定义参数类型在 MC 注册表登记;帮助与报错按第九节补齐(例子必填、注意、相关命令;别的指令从 Brigadier 挖类型、例子、候选;报错带"你是不是要写") | 执行管线已落地(附录 D);帮助与报错进行中 |
+| **6** | **并进 MC 指令树**:`command` 工具取代 `numen` 工具;Numen 服务端组真实注册到 `/numen`,只给她看见;客户端组留在客户端小表;`numen mc` 组与帮助目录删掉(原版 `help` 已按她的来源过滤);出厂规则;`/numen drive` 取代 DebugCommands 的重复实现;自定义参数类型在 MC 注册表登记;帮助与报错按第九节补齐(例子必填、注意、相关命令;别的指令从 Brigadier 挖类型、例子、候选;报错带"你是不是要写") | 已落地(执行管线附录 D,帮助与报错附录 E) |
 | 4 | 核心工具按领域分批迁移,直接注册到 `/numen`,高频的提升为快捷工具 | 第 6 步之后 |
 
 ## 十六、待核实
@@ -366,3 +365,57 @@ numen ftbquests submit <quest>
   - 客户端动作不进 MC 树,指的是参数与执行;它的名字与 `--help` 两侧都有,`/numen drive` 问得到帮助,写到它那儿报这个动作的帮助。
   - 客户端动作写错参数在客户端当场答:这一行解析到的就是客户端动作。
   - 帮助只经 `/numen drive` 才会在服务端答;在那里翻页越界,回执是指令失败的回显,不附那一层的帮助。
+
+## 附录 E:第 6 步(帮助与报错)落地时定下的细节
+
+代码在 `api` 的 `com.dwinovo.numen.cli`:`BrigadierHelp` 挖别的指令的帮助,`Completions` 是补全引擎的候选与"你是不是要写"。Numen 自己命令的帮助(第九节第一小节)在第 1、6 步已经落地(附录 A,例子必填见 `Action`)。
+
+- **`help <指令>` 接在哪**(`CommandRunner.perform`)。`help <指令>` 照常交给原版执行,原版说的用法由 `Echo` 收下;跑成了,回执在原版原话之后接上 `BrigadierHelp.mine` 挖出的几项。用法只有原版 `help` 这一个来源,这里不再写一遍。
+  - 不在执行前截下来自己答:那样就要把原版 help 的那几步(解析、取最后一格、`getSmartUsage`)再写一遍,成了两份;也绕开了 `performPrefixedCommand`(别的模组在指令事件里拦或记指令)。
+  - 不在 core 另注册一个只给她的节点:`help` 是原版的根,往它下面挂节点就是嫁接;另起一个名字,又多一个入口、和 `numen help` 撞义。
+  - 认的是根名 `help` 且带了参数的一行;`help` 不带参数照旧是原版的清单。原版 help 自己失败了(没有这条指令),回执照旧是失败的回显,不接。
+- **挖什么**(`BrigadierHelp`)。
+  - 参数:从解析到的最后一格往下,和 `getSmartUsage` 走同一条路(一个子节点就接着往下,几个就各列一格不深入,可执行的一格之后只列下一格,redirect 不跟),所以列的正是原版那一行用法里出现的参数;她用不了的格不列。想看更深,就像原版那样多写一截(`help give @s`)。
+  - 类型的称呼:`ArgumentType` 在 `COMMAND_ARGUMENT_TYPE` 注册表里的名字,括号里接这一格的设定——设定由类型自己的 `ArgumentTypeInfo.serializeToJson` 写出,和原版导出指令树(`ArgumentUtils`)是同一份。
+  - 例子:`ArgumentType#getExamples`,没有就不写。
+  - 接下来能写什么:整行读通了,是下一格的候选(补一个空格再补全);最后一截读不通(物品 id 的开头这类),是以它开头的候选,和按 Tab 一样。最多列 10 个,超出时写"10 of N"。那一截对不上任何候选时接上"你是不是要写"。
+  - 长清单不翻页,靠多写一截缩小:`help` 这一行归原版解析,加不进 `--page`。只有读不通的那一截会缩小——`word`、玩家名这类怎么写都读得通的参数,写半截会被当成写完,候选跳到下一格。
+- **补全引擎按她的来源**(`Completions.at`)。Brigadier 的 `getCompletionSuggestions` 不看 `requires`:原版客户端手里的树是服务器按它的来源滤过的,用不着看;服务端手里是整棵树,原样调会列出她用不了的(没有 OP 时的 `give`、`/numen` 下玩家的管理指令)。所以照引擎的同几步走(找光标所在那一层 → 每个子节点按同一个上下文给候选 → 合并),只多一条 `canUse`。一个节点给候选时抛 `CommandSyntaxException` 的,照引擎的口径算它没有候选。服务端的候选提供者当场算完,这里 `join`。
+- **你是不是要写**(`Completions.didYouMean`,Numen 命令与别的指令同一个函数)。
+  - 位置:解析停下的地方(`ParseResults` 的读头),她写的那个词到下一个空格为止;候选是那个位置上的全部(不按她写的前缀滤)。
+  - 远近:编辑距离,相邻两个对调算一步。五个字符以内一步、更长的两步;只列最近的那一档,至多 3 个;和她写的一字不差的不算。依据:绝大多数错字只差一步,长词偶尔两处;短词放到两步就会指向不相干的词。
+  - 资源 id 照原版补全的规矩(`SharedSuggestionProvider#filterResources`):不带命名空间的,按 `minecraft:` 下的路径比。
+  - 一行读完才发现缺东西(`numen gt_parse`、`give @s`)不给——那不是写错。服务器不让她用的根不指给她(不在候选里)。
+  - 接在哪:Numen 命令在那一层的帮助之后(`NumenCli.problem`);别的指令在 `Usage:` 之后,或"没有这条指令"那一句之后(`CommandRunner.problem`)。
+- **实测**(GameTest,她有 OP 2 级;真服务器上 Brigadier 的内置报错是 MC 的说法):
+
+```
+help give
+→ ran /help give: /give <targets> <item> [<count>]
+  Arguments:
+    <targets> minecraft:entity (amount multiple, type players) — e.g. Player, 0123, @e, @e[type=foo], dd12be42-52a9-4a91-a8a1-11c01849e498
+    <item> minecraft:item_stack — e.g. stick, minecraft:stick, stick{foo=bar}
+    <count> brigadier:integer (min 1) — e.g. 0, 123, -123
+  Can go next (10 of 11): @a, @e, @n, @p, @r, @s, gametest_mc_builder, gametest_mc_held, gametest_mc_holder, gametest_mc_landlord
+
+help give @s minecraft:diamond_
+→ …Can go next (10 of 12): minecraft:diamond_axe, minecraft:diamond_block, minecraft:diamond_boots, …
+
+give @s minecraft:dimond
+→ Unknown item 'minecraft:dimond' at position 8: give @s <--[HERE]
+  Usage: /give <targets> <item> [<count>]
+  Did you mean: minecraft:diamond?
+
+numen gt_long lingre 40
+→ Unknown or incomplete command, see below for error at position 14: ...n gt_long <--[HERE]
+  numen gt_long: Test fixture: long work dispatched by a command. Actions:
+    numen gt_long linger <ticks> — Stand still for a while, as background work.
+  numen gt_long <action> --help explains one action.
+  Did you mean: linger?
+```
+
+- **执行管线留下的两处**。
+  - 同步短活的结果只有一个去处:派它的那次调用的回信口。原先 `TaskDispatch.runSync` 收下回信口却不用,结算后 `CompanionBrain` 另按调用 id 给主人发 `TaskResultPayload`——drive 的发令人收不到,`ServerSource.allowed` 包上的"主人允许了什么"也丢了。现在回信口绑在记录上(`TaskRecord.replyTo`),结算后只从那里回:网络入口来的调用照旧回给发来它的主人客户端,drive 回给发令人,主人点过头的带上交代(GameTest 实测:drive 发令人恰好收到一条最终回执,末尾是"the owner allowed")。没有第二条回执通道。
+  - 征询撤回的原因由收尾的一方给真实的那一个(`ConsentDesk.Withdrawal`):任务收场、主人按了停止、她离开了世界、她死了,以及原有的主人不在、被新的顶替、不用再问。`TaskRecord.StopCause` 带着它对应的那一个,叫停一件活和叫停一条等着的指令说同一句。载荷只带是哪一种,主人的客户端按语言文件显示(中英文案都在 `ModLanguageData`)。模型读的拒绝理由(`ConsentDesk.OWNER_ABSENT` 等)不变;撤回的请求没有发起者再读它的结论,理由留空。
+- **与正文的出入**。
+  - 第九节说长清单一律分页;`help <指令>` 的候选不分页,靠多写一截缩小(见上)。
