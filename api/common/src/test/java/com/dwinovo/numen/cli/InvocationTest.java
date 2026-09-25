@@ -39,12 +39,12 @@ class InvocationTest {
         echo.onResult(true, 1);
         echo.onResult(false, 0);
         echo.onResult(true, 1);
-        echo.settle("give @s minecraft:diamond 2");
+        echo.settle("give @s minecraft:diamond 2", () -> "\nmore");
 
         JsonObject receipt = only(replies);
         assertTrue(receipt.get("success").getAsBoolean(), "分叉的指令有一支成功就算成功");
-        assertEquals("ran /give @s minecraft:diamond 2: Gave 1 [Diamond] to Aria\nGave 1 [Diamond] to Aria",
-                receipt.get("message").getAsString());
+        assertEquals("ran /give @s minecraft:diamond 2: Gave 1 [Diamond] to Aria\nGave 1 [Diamond] to Aria\nmore",
+                receipt.get("message").getAsString(), "跑成了,接的那一截在原话之后");
         assertEquals(2, receipt.getAsJsonObject("data").get("result").getAsInt(), "各支返回的数相加");
         assertEquals("/give @s minecraft:diamond 2", receipt.getAsJsonObject("data").get("command").getAsString());
     }
@@ -53,7 +53,9 @@ class InvocationTest {
     void aCommandThatNeverRanFailsWithWhatItSaid() {
         List<String> replies = new ArrayList<>();
         Echo echo = new Echo(call(replies));
-        echo.settle("give @s minecraft:diamond 2");
+        echo.settle("give @s minecraft:diamond 2", () -> {
+            throw new AssertionError("没跑成的不去取接在后面的那一截");
+        });
         JsonObject receipt = only(replies);
         assertFalse(receipt.get("success").getAsBoolean(), "没有结果回调就是没跑成");
         assertEquals("/give @s minecraft:diamond 2 failed: (no output)", receipt.get("message").getAsString());
@@ -66,7 +68,7 @@ class InvocationTest {
         echo.call().reply(TaskResult.ok("done by the handler").toJson());
         echo.answered();
         echo.sendSystemMessage(Component.literal("ignored"));
-        echo.settle("numen task status");
+        echo.settle("numen task status", () -> "");
         assertEquals("done by the handler", only(replies).get("message").getAsString(),
                 "处理函数答了,回显不再作回执");
     }

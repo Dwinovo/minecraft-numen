@@ -29,7 +29,8 @@ import java.util.function.Consumer;
  *   <li><b>执行</b>:{@link Commands#performPrefixedCommand},和玩家在聊天栏里敲的是同一条路,加载器的指令事件
  *       (别的模组在那里拦或记指令)照常。来源是她自己的,只把回话去处换成 {@link Echo}——它同时带着这次调用。</li>
  *   <li><b>回执</b>:{@code /numen} 的处理函数从来源里取出这次调用,自己回执或把长活交给任务槽;原版与模组的指令说的话
- *       由 {@link Echo} 收成回执。</li>
+ *       由 {@link Echo} 收成回执;{@code help <指令>} 在原版那一行用法之后接上从 Brigadier 挖出的参数类型、例子与此刻的
+ *       候选({@link BrigadierHelp})。</li>
  * </ol>
  *
  * <h2>快捷工具</h2>
@@ -40,8 +41,10 @@ import java.util.function.Consumer;
  */
 public final class CommandRunner {
 
+    /** 原版的 {@code help}:不带参数列她此刻能执行的指令,带一条指令给出它的用法。 */
+    private static final String HELP = "help";
     /** 写不通时附的那一句:原版的 {@code help} 按她的来源过滤,列的就是她此刻能执行的。 */
-    private static final String HELP_HINT = "help lists the commands you can run.";
+    private static final String HELP_HINT = HELP + " lists the commands you can run.";
 
     private CommandRunner() {}
 
@@ -134,12 +137,20 @@ public final class CommandRunner {
         return TaskResult.fail("did not run /" + line + ": " + why, Map.of("command", "/" + line)).toJson();
     }
 
-    /** 以她的身份执行,回话去处换成带着这次调用的 {@link Echo};跑完了没人答的,回显就是回执。 */
+    /**
+     * 以她的身份执行,回话去处换成带着这次调用的 {@link Echo};跑完了没人答的,回显就是回执。{@code help <指令>} 跑成了,
+     * 原版那一行用法之后接上从 Brigadier 挖出的几项({@link BrigadierHelp})——用法仍是原版 {@code help} 自己说的那一句,
+     * 这里只接它没说的。
+     */
     private static void perform(ServerSource call, String line) {
         NumenPlayer her = call.companion();
         Echo echo = new Echo(call);
+        CommandDispatcher<CommandSourceStack> dispatcher = her.getServer().getCommands().getDispatcher();
         her.getServer().getCommands().performPrefixedCommand(
                 her.createCommandSourceStack().withSource(echo).withCallback(echo), line);
-        echo.settle(line);
+        String[] words = line.split(" ", 2);
+        echo.settle(line, () -> words[0].equals(HELP) && words.length == 2
+                ? BrigadierHelp.mine(dispatcher, words[1], her.createCommandSourceStack())
+                : "");
     }
 }

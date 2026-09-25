@@ -10,6 +10,7 @@ import net.minecraft.network.chat.Component;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * 她执行一行指令时 {@code CommandSourceStack} 的回话去处,同时带着这次调用({@link ServerSource}:调用 id、任务名、
@@ -61,14 +62,18 @@ final class Echo implements CommandSource, CommandResultCallback {
         answered = true;
     }
 
-    /** 指令跑完了:没有 {@code /numen} 的处理函数答这次调用,就把指令说的话与结果收成回执送回。 */
-    void settle(String line) {
+    /**
+     * 指令跑完了:没有 {@code /numen} 的处理函数答这次调用,就把指令说的话与结果收成回执送回。
+     *
+     * @param more 跑成了时接在指令原话后面的那一截(只在跑成时才去取);没有就是空串
+     */
+    void settle(String line, Supplier<String> more) {
         if (answered) {
             return;
         }
         Map<String, Object> data = Map.of("command", "/" + line, "output", List.copyOf(lines), "result", result);
         call.reply((ran && anySuccess
-                ? TaskResult.ok("ran /" + line + ": " + said(), data)
+                ? TaskResult.ok("ran /" + line + ": " + said() + more.get(), data)
                 : TaskResult.fail("/" + line + " failed: " + said(), data)).toJson());
     }
 
