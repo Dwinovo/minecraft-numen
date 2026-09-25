@@ -11,8 +11,7 @@ import com.dwinovo.numen.permission.ConsentRequest;
 import com.dwinovo.numen.permission.PermissionStore;
 import com.dwinovo.numen.permission.Rule;
 import com.dwinovo.numen.permission.Verdict;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import com.google.gson.JsonParser;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
@@ -28,17 +27,21 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
 /**
- * {@code numen mc}:以她的身份执行游戏指令。能用哪些是服务器按她的权限等级定的(测试里直接把她记进 OP 表,
- * 等级 2);执行前过权限层,没有规则就问主人,主人的允许与拒绝规则直接生效;指令的回显原样回到回执;
- * {@code --help} 只列服务器让她用的指令,分页。
+ * {@code command} 工具:她执行一行游戏指令,Numen 自己的、原版的、模组的都从服务端同一个执行入口过——先按她的来源
+ * 解析(写不通当场失败、附用法),再过权限层({@code command(根名)}),再以她的身份执行,回显就是回执。
+ *
+ * <ul>
+ *   <li>能用哪些是服务器按她的权限等级定的(测试里直接把她记进 OP 表,等级 2);主人的允许与拒绝规则直接生效,没有规则
+ *       说到的问主人;出厂规则放行只读与只说话的指令。</li>
+ * </ul>
  */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
-public class McCommandGameTests {
+public class CommandGameTests {
 
     /** 指令批次前置:和平难度 + 正午。 */
-    @BeforeBatch(batch = "numen_mc")
-    public static void prepareMcBatch(ServerLevel level) {
+    @BeforeBatch(batch = "numen_command")
+    public static void prepareCommandBatch(ServerLevel level) {
         settleWorld(level, Difficulty.PEACEFUL, NOON);
     }
 
@@ -64,13 +67,8 @@ public class McCommandGameTests {
         return PermissionStore.of(owner.getServer(), owner.getUUID());
     }
 
-    /** 帮助当场回执里给模型读的那段话。 */
-    private static String help(NumenPlayer companion, String line) {
-        ToolRun run = command(companion, line);
-        if (!run.succeeded()) {
-            throw new net.minecraft.gametest.framework.GameTestAssertException(line + " failed: " + run.reply());
-        }
-        return com.google.gson.JsonParser.parseString(run.reply()).getAsJsonObject().get("message").getAsString();
+    private static String message(String reply) {
+        return JsonParser.parseString(reply).getAsJsonObject().get("message").getAsString();
     }
 
     private static String setblock(GameTestHelper helper, BlockPos rel) {
@@ -79,11 +77,11 @@ public class McCommandGameTests {
     }
 
     /** 服务器不让她用:没有 OP 时 give 当场如实失败,说清是服务器不让;不问主人,背包不变。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_mc")
-    public static void mc_without_op_is_refused_by_the_server(GameTestHelper helper) {
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
+    public static void command_without_op_is_refused_by_the_server(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_guest", new BlockPos(4, 2, 4), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_mc_host");
-        ToolRun give = command(companion, "numen mc /give @s minecraft:diamond");
+        ToolRun give = command(companion, "/give @s minecraft:diamond");
 
         helper.succeedWhen(() -> {
             helper.assertTrue(give.task() == null, "a command the server refuses must not reach the task slot");
@@ -97,24 +95,24 @@ public class McCommandGameTests {
     }
 
     /**
-     * 有 OP、主人允许 give:不问、直接执行,背包里多了钻石,回执里是服务器的原话。参数写错的当场失败,附上这条的用法。
+     * 有 OP、主人允许 give:不问、当场执行,背包里多了钻石,回执里是服务器的原话;执行一行指令不是身体上的活,不进任务槽。
+     * 参数写错的当场失败,附上这条的用法。
      */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_mc")
-    public static void mc_give_with_op_and_an_allow_rule_runs_and_echoes(GameTestHelper helper) {
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
+    public static void command_give_with_op_and_an_allow_rule_runs_and_echoes(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_op", new BlockPos(4, 2, 4), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_mc_admin");
         grantOp(companion);
         storeOf(owner).add(Verdict.Kind.ALLOW, Rule.parse("command(give)"));
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= ConsentDesk.of(companion).pending() != null);
-        ToolRun give = command(companion, "numen mc give @s minecraft:diamond 2");
-        ToolRun typo = command(companion, "numen mc give @s minecraft:not_an_item");
+        ToolRun give = command(companion, "give @s minecraft:diamond 2");
+        ToolRun typo = command(companion, "give @s minecraft:not_an_item");
 
         helper.succeedWhen(() -> {
             helper.assertTrue(give.done(), "give has not finished");
             helper.assertTrue(give.succeeded(), "give failed: " + give.outcome());
-            helper.assertTrue(give.task().getToolName().equals("mc"),
-                    "the task is not named after the command group: " + give.task().getToolName());
+            helper.assertTrue(give.task() == null, "a game command occupied the task slot: " + give.task());
             helper.assertTrue(give.outcome().contains("Gave 2 [Diamond] to gametest_mc_op"),
                     "the reply does not carry the server's echo: " + give.outcome());
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 2, "no diamonds in the inventory");
@@ -130,15 +128,15 @@ public class McCommandGameTests {
      * 没有任何一行规则说到 setblock:动手前问主人,卡上是整行指令;挂着的这些刻世界不变;主人允许后才放下石头,
      * 回执带着服务器的回显与"主人允许了"。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_mc")
-    public static void mc_setblock_without_a_rule_asks_the_owner_first(GameTestHelper helper) {
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_command")
+    public static void command_setblock_without_a_rule_asks_the_owner_first(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos target = new BlockPos(8, 3, 8);
         NumenPlayer companion = spawnAt(helper, "gametest_mc_builder", new BlockPos(4, 2, 4), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_mc_landlord");
         grantOp(companion);
         String line = setblock(helper, target);
-        ToolRun run = command(companion, "numen mc " + line);
+        ToolRun run = command(companion, line);
         int[] waited = new int[1];
 
         helper.succeedWhen(() -> {
@@ -170,33 +168,28 @@ public class McCommandGameTests {
 
     /**
      * 主人一行规则都没写:出厂层放行只读与只说话的指令,{@code help} 与私信的别名 {@code tell} 不弹卡、直接执行;
-     * 没有规则说到的 setblock 照旧问,见 {@link #mc_setblock_without_a_rule_asks_the_owner_first}。
+     * 没有规则说到的 setblock 照旧问,见 {@link #command_setblock_without_a_rule_asks_the_owner_first}。
      */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_mc")
-    public static void mc_factory_rules_let_help_and_tell_run_without_asking(GameTestHelper helper) {
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
+    public static void command_factory_rules_let_help_and_tell_run_without_asking(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_chatty", new BlockPos(4, 2, 4), false);
         NumenPlayer owner = presentOwner(helper, companion, "gt_mc_listener");
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= ConsentDesk.of(companion).pending() != null);
-        ToolRun help = command(companion, "numen mc help");
-        ToolRun[] tell = new ToolRun[1];
+        ToolRun help = command(companion, "help");
+        ToolRun tell = command(companion, "tell gt_mc_listener on my way");
 
         helper.succeedWhen(() -> {
             helper.assertTrue(help.done() && help.succeeded(), "help did not run: " + help.outcome());
-            if (tell[0] == null) {
-                // 一次一条:任务槽里只放一件活,help 收了尾再发下一条
-                tell[0] = command(companion, "numen mc tell gt_mc_listener on my way");
-                helper.fail("help done, tell sent");
-            }
-            helper.assertTrue(tell[0].done() && tell[0].succeeded(), "tell did not run: " + tell[0].outcome());
+            helper.assertTrue(tell.done() && tell.succeeded(), "tell did not run: " + tell.outcome());
             helper.assertTrue(!asked[0], "a factory-allowed command asked the owner");
             cleanUp(helper, companion, owner);
         });
     }
 
     /** 主人写了拒绝 setblock 的规则:当场如实失败、理由是那一行,不弹卡,世界不变。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_mc")
-    public static void mc_setblock_denied_by_a_rule_fails_with_the_rule(GameTestHelper helper) {
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
+    public static void command_setblock_denied_by_a_rule_fails_with_the_rule(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos target = new BlockPos(8, 3, 8);
         NumenPlayer companion = spawnAt(helper, "gametest_mc_forbidden", new BlockPos(4, 2, 4), false);
@@ -205,7 +198,7 @@ public class McCommandGameTests {
         storeOf(owner).add(Verdict.Kind.DENY, Rule.parse("command(setblock)"));
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= ConsentDesk.of(companion).pending() != null);
-        ToolRun run = command(companion, "numen mc " + setblock(helper, target));
+        ToolRun run = command(companion, setblock(helper, target));
 
         helper.succeedWhen(() -> {
             helper.assertTrue(run.done(), "setblock has not settled");
@@ -218,28 +211,21 @@ public class McCommandGameTests {
     }
 
     /**
-     * {@code numen mc --help} 只列服务器让她用的:没有 OP 时有 msg、没有 give;有 OP 后列表长到要翻页,give 在其中一页,
-     * 每页都说还剩几条、怎么翻。
+     * 原版 {@code help} 按她的来源过滤,列的就是她此刻能执行的:没有 OP 时有 msg、没有 give,有她自己的
+     * {@code /numen} 命令组、没有玩家的管理指令;有 OP 后 give 也在。
      */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_mc")
-    public static void mc_help_lists_only_what_the_server_lets_her_run(GameTestHelper helper) {
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
+    public static void command_help_lists_only_what_the_server_lets_her_run(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_reader", new BlockPos(4, 2, 4), false);
-        String guest = help(companion, "numen mc --help");
-        helper.assertTrue(guest != null && guest.contains("Commands the server lets you run now:")
-                        && guest.contains("/msg <targets> <message>") && !guest.contains("/give "),
+        String guest = message(command(companion, "help").reply());
+        helper.assertTrue(guest.contains("/msg <targets> <message>") && !guest.contains("/give "),
                 "the no-op help lists the wrong commands: " + guest);
+        helper.assertTrue(guest.contains("/numen ") && !guest.contains("permission") && !guest.contains("summon"),
+                "her help does not show her own /numen, or shows a player's verbs: " + guest);
 
         grantOp(companion);
-        String first = help(companion, "numen mc --help");
-        Matcher pages = Pattern.compile("\\(page 1 of (\\d+), \\d+ more: numen mc --help --page 2\\)").matcher(first);
-        helper.assertTrue(pages.find(), "the op help is not paged: " + first);
-        boolean listsGive = first.contains("/give <targets> <item> [<count>]");
-        for (int page = 2; page <= Integer.parseInt(pages.group(1)); page++) {
-            String next = help(companion, "numen mc --help --page " + page);
-            helper.assertTrue(next.startsWith("numen mc <command...>\n"), "page " + page + " lost its head: " + next);
-            listsGive |= next.contains("/give <targets> <item> [<count>]");
-        }
-        helper.assertTrue(listsGive, "the op help never lists /give");
+        String op = message(command(companion, "help").reply());
+        helper.assertTrue(op.contains("/give <targets> <item> [<count>]"), "the op help never lists /give: " + op);
         cleanUp(helper, companion, null);
         helper.succeed();
     }

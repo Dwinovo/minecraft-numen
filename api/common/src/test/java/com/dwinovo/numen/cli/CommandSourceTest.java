@@ -25,7 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 执行侧与同源:客户端动作当场跑,服务端动作送去服务端;快捷工具的 schema 由参数表生成,调它就是用同一份读好的
- * 参数调同一个处理函数,回执与从命令调一字不差。
+ * 参数调同一个处理函数。回执与从 {@code command} 调一字不差、派下的活叫什么,在 GameTest 里对着真服务器验
+ * ({@code TaskControlGameTests}、{@code CommandGameTests})。
  */
 class CommandSourceTest {
 
@@ -68,11 +69,14 @@ class CommandSourceTest {
         assertEquals(before, SERVER_CALLS.size(), "客户端不跑服务端的处理函数");
     }
 
+    /** 服务端的树上客户端动作只有名字与帮助,没有参数、执行不了:写到它那儿是一行没写完的命令,附上它的帮助。 */
     @Test
-    void theServerRefusesAClientActionOutright() {
-        CliFixture.Outcome jot = onServer("numen gt_side jot");
+    void theServerTreeOnlyNamesAClientAction() {
+        CliFixture.Outcome jot = onServer("numen gt_side jot --id a1");
         assertFalse(jot.success());
-        assertEquals("numen gt_side jot runs on the owner's client, not on the server.", jot.message());
+        assertTrue(jot.message().startsWith("Unknown command"), jot.message());
+        assertTrue(jot.message().contains("\nnumen gt_side jot [--id <word>] [--tries <integer>]\n"), jot.message());
+        assertTrue(onServer("numen gt_side jot --help").success(), "帮助两侧都答得出");
     }
 
     @Test
@@ -89,31 +93,30 @@ class CommandSourceTest {
                 .optionalInteger("tries", "How often.", 1, 5)
                 .build(), ToolRegistry.get("gt_side_jot").parameterSchema());
         assertEquals(Schema.object()
-                .string("command", "The whole command line, starting with numen, e.g. \"numen help\".")
-                .build(), new CommandLineTool().parameterSchema());
+                .string("command", "One command line, as a player would type it in chat; the leading / is "
+                        + "optional. E.g. \"numen --help\", \"help give\".")
+                .build(), new CommandTool().parameterSchema());
     }
 
+    /**
+     * 同一件事从两个入口进来,处理函数拿到的参数相等:快捷工具在服务端按同一张参数表把 JSON 读成值
+     * ({@link CommandArgs#fromJson}),命令从服务端那棵树上读。从 {@code command} 进来,源对象带着 {@code command}
+     * 这个工具名,派下的活叫"组 动作"。
+     */
     @Test
-    void theShortcutAndTheCommandCallTheSameHandlerWithTheSameArguments() {
+    void theShortcutAndTheCommandHandTheSameArgumentsToTheSameHandler() {
         SERVER_CALLS.clear();
         JsonObject json = new JsonObject();
         json.addProperty("after_s", 60);
         json.addProperty("reason", "check the furnace");
-        String viaTool = serve(ToolRegistry.get("gt_side_remind"), json);
+        CliFixture.Outcome viaCommand = onServer("numen gt_side remind 60 check the furnace");
 
-        JsonObject line = new JsonObject();
-        line.addProperty("command", "numen gt_side remind 60 check the furnace");
-        String viaCommand = serve(new CommandLineTool(), line);
-
-        assertEquals(2, SERVER_CALLS.size());
-        assertEquals(SERVER_CALLS.get(0), SERVER_CALLS.get(1), "两个入口读出的参数相等");
-        assertEquals(message(viaTool), message(viaCommand), "回执同一句话");
-        assertEquals("gt_side_remind", data(viaTool).get("tool").getAsString(), "源对象带着进来时的工具名");
-        assertEquals("numen", data(viaCommand).get("tool").getAsString());
-        assertEquals("gt_side_remind", data(viaTool).get("task").getAsString(),
-                "从快捷工具派下的活叫快捷工具名");
-        assertEquals("gt_side remind", data(viaCommand).get("task").getAsString(),
-                "从 numen 派下的活叫\"组 动作\",不叫 numen");
+        assertEquals(1, SERVER_CALLS.size());
+        assertEquals(CommandArgs.fromJson(List.of(AFTER, REASON), json), SERVER_CALLS.get(0), "两个入口读出的参数相等");
+        assertEquals("reminder in 60s: check the furnace", viaCommand.message());
+        assertEquals("command", viaCommand.json().getAsJsonObject("data").get("tool").getAsString());
+        assertEquals("gt_side remind", viaCommand.json().getAsJsonObject("data").get("task").getAsString(),
+                "从 command 派下的活叫\"组 动作\",不叫 command");
     }
 
     @Test
@@ -154,7 +157,4 @@ class CommandSourceTest {
         return JsonParser.parseString(json).getAsJsonObject().get("message").getAsString();
     }
 
-    private static JsonObject data(String json) {
-        return JsonParser.parseString(json).getAsJsonObject().getAsJsonObject("data");
-    }
 }

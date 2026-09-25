@@ -74,7 +74,7 @@ public final class TaskDispatch {
     /**
      * 命令派活的写法,规矩同上。记录的名字是给模型看的"组 动作"({@link ServerSource#taskName()}),不是能重放的
      * 工具名,所以重放记的是这次调用本身({@link ServerSource#toolName()} 与 {@link ServerSource#args()}):
-     * 从 {@code numen} 进来就重放那一行命令,从快捷工具进来就重放那次工具调用。
+     * 从 {@code command} 进来就重放那一行指令,从快捷工具进来就重放那次工具调用。
      */
     public static void setTask(ServerSource source, TaskRecord record) {
         accept(source.companion(), record, source.toolName(), source.args(), source::reply);

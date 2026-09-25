@@ -1,5 +1,7 @@
 package com.dwinovo.numen.entity;
 
+import com.dwinovo.numen.cli.CommandRunner;
+import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.network.payload.ClientUiActionPayload;
 import com.dwinovo.numen.permission.ConsentAnswer;
 import com.dwinovo.numen.permission.ConsentDesk;
@@ -10,6 +12,8 @@ import com.dwinovo.numen.permission.Rule;
 import com.dwinovo.numen.permission.RuleSet;
 import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.platform.Services;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.LongArgumentType;
@@ -17,20 +21,25 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.tree.CommandNode;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.TickTask;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
- * The unified server-side {@code /numen} command tree — one root with
- * per-companion verbs. Lives entirely on the server so it never collides with
- * the client command dispatcher; the two inherently client-local verbs
- * ({@code settings}, {@code reset}) act on the caller's own client by firing a
+ * The unified server-side {@code /numen} command tree — one root, two audiences. The players' verbs manage
+ * companions; her nodes are Numen's command groups ({@link NumenCli#herNodes}). The two inherently
+ * client-local player verbs ({@code settings}, {@code reset}) act on the caller's own client by firing a
  * {@link ClientUiActionPayload} back at them.
  *
  * <pre>
@@ -38,6 +47,8 @@ import java.util.Locale;
  *   /numen player despawn &lt;name&gt;   permanently dismiss the named companion (gone for good)
  *   /numen settings                  open the settings GUI on the caller's client
  *   /numen reset                     clear the caller's conversation loops
+ *   /numen drive &lt;companion&gt; &lt;line&gt;   (op) run one line through her command entry, as her command tool does;
+ *                                    a name with spaces or non-ASCII letters goes in quotes
  *
  *   /numen permission mode &lt;name&gt; [ask|bypass|observe]     show or set a companion's permission mode
  *   /numen permission rules list                          the caller's rows, then the factory rows
@@ -47,6 +58,13 @@ import java.util.Locale;
  *   /numen consent &lt;allow|remember&gt; &lt;id&gt; | deny &lt;id&gt; [note]   answer a pending consent request
  * </pre>
  *
+ * <h2>谁看得见哪一半</h2>
+ * 挂在 {@code /numen} 下的每一格都经 {@link #graft} 挂上,并带着它的观众:她的命令组只给她({@link #FOR_HER}),
+ * 管理同伴的指令只给不是她的来源({@link #FOR_PLAYERS})。原版给每个玩家发指令树、补全、{@code help} 都按
+ * {@code requires} 过滤,玩家收不到她的节点,硬敲是"未知或不完整的指令";她也看不见、用不了召唤、设置、权限、征询
+ * 这些——"她能不能经指令召唤同伴"从结构上就不存在。{@code /execute as 她 run numen …} 也进不来:Brigadier 解析时
+ * 按发指令的人查 {@code requires}。
+ *
  * <h2>权限命令是底层接口</h2>
  * 卡片、面板与以后聊天里的可点击按钮都落到同一组公开接口:模式经 {@link Permission},规则经
  * {@link PermissionStore},答复只经 {@link ConsentDesk#reply}(与卡片的网络载荷同一个入口)。这里只解析参数、
@@ -55,33 +73,107 @@ import java.util.Locale;
 @com.dwinovo.numen.api.Internal
 public final class NumenCommands {
 
+    /** 来源是她:她的命令组只给她。 */
+    public static final Predicate<CommandSourceStack> FOR_HER = source -> source.getEntity() instanceof NumenPlayer;
+    /** 来源不是她(玩家、控制台、命令方块):管理同伴的指令只给他们。 */
+    public static final Predicate<CommandSourceStack> FOR_PLAYERS = FOR_HER.negate();
+
     private NumenCommands() {}
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        dispatcher.register(Commands.literal("numen")
-                .then(Commands.literal("player")
-                        .then(Commands.literal("summon")
-                                .then(Commands.argument("name", StringArgumentType.word())
-                                        .executes(ctx -> summon(ctx, StringArgumentType.getString(ctx, "name")))))
-                        .then(Commands.literal("despawn")
-                                .then(Commands.argument("name", StringArgumentType.word())
-                                        .executes(ctx -> despawn(ctx, StringArgumentType.getString(ctx, "name"))))))
-                .then(Commands.literal("settings")
-                        .executes(ctx -> clientAction(ctx, ClientUiActionPayload.Action.OPEN_SETTINGS)))
-                .then(Commands.literal("reset")
-                        .executes(ctx -> clientAction(ctx, ClientUiActionPayload.Action.RESET_LOOPS)))
-                .then(Commands.literal("permission")
-                        .then(modeCommand())
-                        .then(Commands.literal("rules")
-                                .then(Commands.literal("list").executes(NumenCommands::listRules))
-                                .then(tableCommand("add", (literal, table) -> literal.then(
-                                        Commands.argument("rule", StringArgumentType.greedyString())
-                                                .executes(ctx -> addRule(ctx, table)))))
-                                .then(tableCommand("remove", (literal, table) -> literal.then(
-                                        Commands.argument("row", IntegerArgumentType.integer(1))
-                                                .executes(ctx -> removeRule(ctx, table)))))
-                                .then(Commands.literal("reset").executes(NumenCommands::resetRules))))
-                .then(consentCommand()));
+        graft(dispatcher, FOR_PLAYERS, Commands.literal("player")
+                .then(Commands.literal("summon")
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .executes(ctx -> summon(ctx, StringArgumentType.getString(ctx, "name")))))
+                .then(Commands.literal("despawn")
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .executes(ctx -> despawn(ctx, StringArgumentType.getString(ctx, "name"))))));
+        graft(dispatcher, FOR_PLAYERS, Commands.literal("settings")
+                .executes(ctx -> clientAction(ctx, ClientUiActionPayload.Action.OPEN_SETTINGS)));
+        graft(dispatcher, FOR_PLAYERS, Commands.literal("reset")
+                .executes(ctx -> clientAction(ctx, ClientUiActionPayload.Action.RESET_LOOPS)));
+        graft(dispatcher, FOR_PLAYERS, Commands.literal("permission")
+                .then(modeCommand())
+                .then(Commands.literal("rules")
+                        .then(Commands.literal("list").executes(NumenCommands::listRules))
+                        .then(tableCommand("add", (literal, table) -> literal.then(
+                                Commands.argument("rule", StringArgumentType.greedyString())
+                                        .executes(ctx -> addRule(ctx, table)))))
+                        .then(tableCommand("remove", (literal, table) -> literal.then(
+                                Commands.argument("row", IntegerArgumentType.integer(1))
+                                        .executes(ctx -> removeRule(ctx, table)))))
+                        .then(Commands.literal("reset").executes(NumenCommands::resetRules))));
+        graft(dispatcher, FOR_PLAYERS, consentCommand());
+        graft(dispatcher, FOR_PLAYERS, Commands.literal("drive").requires(source -> source.hasPermission(2))
+                .then(Commands.argument("companion", StringArgumentType.string())
+                        .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(companionsHere(ctx.getSource())
+                                .map(body -> StringArgumentType.escapeIfRequired(body.getName().getString())), builder))
+                        .then(Commands.argument("line", StringArgumentType.greedyString())
+                                .executes(NumenCommands::drive))));
+        for (LiteralArgumentBuilder<CommandSourceStack> node : NumenCli.herNodes()) {
+            graft(dispatcher, FOR_HER, node);
+        }
+    }
+
+    /**
+     * 往 {@code /numen} 下挂一格,只给 {@code audience} 看见(和这一格自己的 {@code requires} 一起算)。同名的一格已经在了
+     * 就抛出:Brigadier 会把同名的两格悄悄并成一格,留下先来那一格的观众——她的一个命令组就可能并进玩家的节点里,
+     * 或者反过来。哪个组与谁撞了,在服务器建指令树时就说清。
+     */
+    public static void graft(CommandDispatcher<CommandSourceStack> dispatcher, Predicate<CommandSourceStack> audience,
+                             LiteralArgumentBuilder<CommandSourceStack> node) {
+        CommandNode<CommandSourceStack> root = dispatcher.getRoot().getChild(NumenCli.ROOT);
+        if (root != null && root.getChild(node.getLiteral()) != null) {
+            throw new IllegalStateException("/" + NumenCli.ROOT + " " + node.getLiteral()
+                    + " is registered twice: a companion command group and a player command share the name");
+        }
+        dispatcher.register(Commands.literal(NumenCli.ROOT).then(node.requires(audience.and(node.getRequirement()))));
+    }
+
+    /**
+     * {@code /numen drive <同伴> <一行指令>}:把这一行交给她的执行入口,和 {@code command} 工具是同一个入口——解析、
+     * 权限层、执行、回执都一样,回执说给发指令的人听。
+     *
+     * <p>这条 drive 自己正在执行:原版把一条指令执行当中调起的另一条排到它之后,她的那一行要是在这里执行,入口返回时它
+     * 还没跑,回显无从收起。所以交给服务器的任务队列,等这条 drive 执行完再以她的身份执行。
+     */
+    private static int drive(CommandContext<CommandSourceStack> ctx) {
+        CommandSourceStack caller = ctx.getSource();
+        String name = StringArgumentType.getString(ctx, "companion");
+        List<NumenPlayer> named = companionsHere(caller).filter(body -> body.getName().getString().equals(name)).toList();
+        if (named.size() != 1) {
+            caller.sendFailure(Component.literal(named.isEmpty() ? "No companion named '" + name + "' is here"
+                    : named.size() + " companions here are named '" + name + "'"));
+            return 0;
+        }
+        NumenPlayer her = named.get(0);
+        String line = StringArgumentType.getString(ctx, "line");
+        MinecraftServer server = caller.getServer();
+        String callId = "drive-" + UUID.randomUUID();
+        server.tell(new TickTask(server.getTickCount(),
+                () -> CommandRunner.run(her, callId, line, result -> report(caller, her, result))));
+        return 1;
+    }
+
+    /**
+     * 此刻在场的同伴,不论主人是谁:drive 是服主的调试入口。名字用字符串参数(中文名加引号),不用原版的玩家参数——
+     * 那一个只认 16 个字符以内的英文名。
+     */
+    private static java.util.stream.Stream<NumenPlayer> companionsHere(CommandSourceStack source) {
+        return source.getServer().getPlayerList().getPlayers().stream()
+                .filter(player -> player instanceof NumenPlayer)
+                .map(player -> (NumenPlayer) player);
+    }
+
+    /** 她那一行的回执,说给发 drive 的人听。 */
+    private static void report(CommandSourceStack caller, NumenPlayer her, String resultJson) {
+        JsonObject result = JsonParser.parseString(resultJson).getAsJsonObject();
+        Component said = Component.literal(her.getName().getString() + ": " + result.get("message").getAsString());
+        if (result.get("success").getAsBoolean()) {
+            caller.sendSuccess(() -> said, false);
+        } else {
+            caller.sendFailure(said);
+        }
     }
 
     private static int summon(CommandContext<CommandSourceStack> ctx, String name)

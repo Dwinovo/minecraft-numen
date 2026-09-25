@@ -4,7 +4,6 @@ import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.platform.Services;
-import com.dwinovo.numen.task.TaskRecord;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -31,9 +30,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * 附言只随拒绝:主人要她换个做法才会说,那句话就是拒绝的理由,随发起的任务收场送达。允许不带附言。
  *
  * <h2>任务期授权</h2>
- * 主人允许的清单记在发起它的任务记录名下,{@link #granted} 是全部在册授权的快照,作为
- * {@link Gate} 的输入:被覆盖的 ask 放行。任务收尾(槽放开这条记录)时 {@link #release} 清掉它名下的
- * 授权与没答复的请求——各任务不各存一份。
+ * 主人允许的清单记在发起它的那一方名下(作用域:任务记录,或一次等着执行的指令),{@link #granted} 是全部在册授权的
+ * 快照,作为 {@link Gate} 的输入:被覆盖的 ask 放行。发起的那一方收尾(槽放开任务记录、指令收场)时 {@link #release}
+ * 清掉它名下的授权与没答复的请求——各任务不各存一份。
  *
  * <h2>记住</h2>
  * 主人选"允许并记住"时,除了记成本任务的授权,清单每一条的 {@link ConsentItem#remember} 写进主人的
@@ -84,8 +83,8 @@ public final class ConsentDesk {
     private final UUID companion;
     private final Line line;
     private Ticket pending;
-    /** 任务记录 → 主人为它答应下来的清单。按记录身份索引:记录没有值语义。 */
-    private final Map<TaskRecord, List<ConsentItem>> grants = new IdentityHashMap<>();
+    /** 作用域 → 主人为它答应下来的清单。按身份索引:任务记录与挂着的指令都没有值语义。 */
+    private final Map<Object, List<ConsentItem>> grants = new IdentityHashMap<>();
     /** {@link #grants} 的扁平快照,变了才重建;交给裁决快照,任何线程只读。 */
     private List<ConsentItem> granted = List.of();
 
@@ -102,10 +101,10 @@ public final class ConsentDesk {
     /**
      * 发起一次征询。挂着的那条被顶替;主人此刻不在线则当场按拒绝收尾,不推给主人。
      *
-     * @param scope 发起它的任务记录——授权记在它名下,它收尾时一并清掉
+     * @param scope 发起它的那一方(任务记录,或一次等着执行的指令)——授权记在它名下,它收尾时一并清掉
      * @param items 清单,不能为空
      */
-    public Ticket ask(TaskRecord scope, List<ConsentItem> items) {
+    public Ticket ask(Object scope, List<ConsentItem> items) {
         if (items.isEmpty()) {
             throw new IllegalArgumentException("a consent request needs at least one item");
         }
@@ -208,8 +207,8 @@ public final class ConsentDesk {
         }
     }
 
-    /** 任务收尾:清掉它名下的授权,撤回它没等到答复的请求。 */
-    public void release(TaskRecord scope) {
+    /** 发起的那一方收尾:清掉它名下的授权,撤回它没等到答复的请求。 */
+    public void release(Object scope) {
         if (grants.remove(scope) != null) {
             rebuildGranted();
         }
@@ -244,11 +243,11 @@ public final class ConsentDesk {
 
     /** 发起者手里的一张号:每刻 {@link #poll},有结论之前是 null。 */
     public static final class Ticket {
-        private final TaskRecord scope;
+        private final Object scope;
         private final ConsentRequest request;
         private ConsentAnswer answer;
 
-        private Ticket(TaskRecord scope, ConsentRequest request) {
+        private Ticket(Object scope, ConsentRequest request) {
             this.scope = scope;
             this.request = request;
         }

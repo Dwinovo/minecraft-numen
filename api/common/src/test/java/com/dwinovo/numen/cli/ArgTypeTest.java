@@ -35,6 +35,8 @@ class ArgTypeTest {
     static final Param<Boolean> HAVE_ONLY = Param.optional("have_only", ArgType.bool(), "Only what you can make.");
     static final Param<String> SEARCH = Param.optional("search", ArgType.string(), "Narrow the list.");
     static final Param<Integer> DEPTH = Param.optional("depth", ArgType.integer(), "How far down.");
+    /** 这个动作的参数表:快捷工具在服务端就是按它把 JSON 读成值,再交给处理函数。 */
+    static final List<Param<?>> PARAMS = List.of(X, RECIPE, MODEL, HAVE_ONLY, SEARCH, DEPTH);
 
     static final AtomicReference<CommandArgs> LAST = new AtomicReference<>();
 
@@ -93,6 +95,10 @@ class ArgTypeTest {
         assertTrue(failed("numen gt_types make 1.5 stone m").startsWith("Invalid integer '1.5'"));
     }
 
+    /**
+     * 快捷工具在服务端把 JSON 按同一个参数表读成值({@link CommandArgs#fromJson}),交给处理函数——读出来的和命令行上
+     * 读出来的是同一份。从工具一路走到处理函数、回执一字不差,在 GameTest 里对着真服务器验。
+     */
     @Test
     void theShortcutReadsTheSameValuesFromJson() {
         CommandArgs viaLine = ran("numen gt_types make -12 kaleidoscope_cookery:flex_pot/braised_beef "
@@ -100,8 +106,8 @@ class ArgTypeTest {
         JsonObject json = JsonParser.parseString("""
                 {"x": -12, "recipe": "kaleidoscope_cookery:flex_pot/braised_beef", "model": "抽象鸣潮 菲比.ysm",
                  "have_only": false, "search": "misc/1_Alex"}""").getAsJsonObject();
-        assertEquals("made", message(serve(json)));
-        assertEquals(viaLine, LAST.get(), "带空格的名字 JSON 里不用加引号,读出来和命令行上加了引号的是同一个值");
+        assertEquals(viaLine, CommandArgs.fromJson(PARAMS, json),
+                "带空格的名字 JSON 里不用加引号,读出来和命令行上加了引号的是同一个值");
 
         assertEquals("say \"hi\" \\ bye", read("{\"x\":1,\"recipe\":\"stone\",\"model\":\"say \\\"hi\\\" \\\\ bye\"}")
                 .get(MODEL), "JSON 里的引号与反斜杠原样读回");
@@ -138,9 +144,7 @@ class ArgTypeTest {
     }
 
     private static CommandArgs read(String json) {
-        LAST.set(null);
-        assertEquals("made", message(serve(JsonParser.parseString(json).getAsJsonObject())));
-        return LAST.get();
+        return CommandArgs.fromJson(PARAMS, JsonParser.parseString(json).getAsJsonObject());
     }
 
     private static String serve(JsonObject args) {

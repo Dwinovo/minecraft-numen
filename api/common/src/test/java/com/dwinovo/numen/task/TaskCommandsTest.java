@@ -6,7 +6,7 @@ import com.dwinovo.numen.agent.tool.ToolCall;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.api.NumenPlugins;
-import com.dwinovo.numen.cli.CommandLineTool;
+import com.dwinovo.numen.cli.CommandTool;
 import com.google.gson.Gson;
 import com.google.gson.JsonParser;
 import org.junit.jupiter.api.BeforeAll;
@@ -119,11 +119,11 @@ class TaskCommandsTest {
         assertEquals(GSON.toJson(schema), GSON.toJson(tool.parameterSchema()), name + " 的 schema 变了");
     }
 
-    /** 从 numen 工具在主人客户端这一侧问帮助:当场回,不跑服务端。 */
+    /** 从 command 工具在主人客户端这一侧问帮助:当场回,不跑服务端。 */
     private static String help(String line) {
         List<String> replies = new ArrayList<>();
         UUID companion = UUID.randomUUID();
-        new CommandLineTool().invoke(new ToolCall("test-call", "numen",
+        new CommandTool().invoke(new ToolCall("test-call", CommandTool.NAME,
                 GSON.toJson(Map.of("command", line)), () -> companion, replies::add));
         assertEquals(1, replies.size());
         return JsonParser.parseString(replies.get(0)).getAsJsonObject().get("message").getAsString();

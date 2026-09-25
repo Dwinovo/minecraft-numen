@@ -24,17 +24,12 @@ import java.util.Set;
  * <p>它不给任何通向别的组或根的把手,所以插件<b>够不着别人的节点</b>——"不能往别人的节点下嫁接"由形状保证,
  * 不靠约定。组名撞了、动作名撞了、快捷工具名撞了、动作没写例子或例子写不通,都在登记的那一刻抛出。
  * 登记块返回后这一组就封口,之后再往里加、再提升、再补帮助都会抛。
- *
- * <p>一组也可以直接就是一个动作({@link #serverDirect}):参数紧跟在组名后面,没有动作名,这一组也就不再有
- * 别的动作——具名动作会和它的参数抢同一个位置。
  */
 public final class CommandGroup {
 
     private final String name;
     private final String summary;
     private final List<Action> actions = new ArrayList<>();
-    /** 这一组直接就是的那个动作;有具名动作时为 null。 */
-    private Action direct;
     private boolean open = true;
 
     CommandGroup(String name, String summary) {
@@ -58,32 +53,14 @@ public final class CommandGroup {
         return add(name, summary, List.of(params), null, requireHandler(handler, name));
     }
 
-    /**
-     * 这一组直接就是一个在服务端执行的动作:{@code numen <组> <参数…>},没有动作名(原版指令入口
-     * {@code numen mc <command...>})。这一组从此不能再有别的动作,反过来已经有具名动作的组也不能再这样登记。
-     *
-     * @param summary 一句话说明,这个动作的帮助里用;组的那一句仍是登记组时写的
-     */
-    public Action serverDirect(String summary, Action.OnServer handler, Param<?>... params) {
-        requireOpen();
-        if (!actions.isEmpty()) {
-            throw new IllegalArgumentException("numen " + name + " 已经有动作了,不能再直接就是一个动作");
-        }
-        direct = add(null, summary, List.of(params), requireHandler(handler, name), null);
-        return direct;
-    }
-
     private Action add(String action, String actionSummary, List<Param<?>> params,
                        Action.OnServer onServer, Action.OnClient onClient) {
         requireOpen();
-        String path = "numen " + name + (action == null ? "" : " " + action);
-        if (direct != null) {
-            throw new IllegalArgumentException("numen " + name + " 直接就是一个动作,不能再加 " + path);
-        }
-        if (action != null && !Action.NAME.matcher(action).matches()) {
+        String path = NumenCli.ROOT + " " + name + " " + action;
+        if (action == null || !Action.NAME.matcher(action).matches()) {
             throw new IllegalArgumentException("动作名不合规(小写字母开头,只含 [a-z0-9_]): '" + action + "'");
         }
-        if (action != null && actions.stream().anyMatch(a -> action.equals(a.name()))) {
+        if (actions.stream().anyMatch(a -> action.equals(a.name()))) {
             throw new IllegalArgumentException(path + " 登记了两次");
         }
         if (actionSummary == null || actionSummary.isBlank()) {
@@ -131,31 +108,16 @@ public final class CommandGroup {
 
     /**
      * 登记块跑完:封口,再查每个动作的例子。例子在一棵只有这一组的树上解析——组这时还没挂上共享的树,
-     * 而例子只该用到这一组自己的语法。
+     * 而例子只该用到这一组自己的语法。这棵树由两侧的树同一个生成器长出来,只是每个动作都长着参数
+     * ({@link CommandTree#EXAMPLES}):服务端动作与客户端动作的例子按同一种形状解析。
      */
     void close() {
         open = false;
-        CommandDispatcher<CommandSource> tree = new CommandDispatcher<>();
-        tree.register(LiteralArgumentBuilder.<CommandSource>literal(NumenCli.ROOT).then(node()));
+        CommandDispatcher<Object> tree = new CommandDispatcher<>();
+        tree.register(LiteralArgumentBuilder.literal(NumenCli.ROOT).then(CommandTree.EXAMPLES.group(this)));
         for (Action a : actions) {
             a.checkExamples(tree);
         }
-    }
-
-    /**
-     * 这一组在 Brigadier 树上的样子:{@code --help}(可翻页)与各个动作,组本身不可执行;组直接就是一个动作时,
-     * 那个动作的帮助与参数直接挂在组这一格下。
-     */
-    LiteralArgumentBuilder<CommandSource> node() {
-        LiteralArgumentBuilder<CommandSource> node = LiteralArgumentBuilder.literal(name);
-        if (direct != null) {
-            return direct.fill(node);
-        }
-        node.then(NumenCli.helpNode(NumenCli.HELP_FLAG, () -> CommandHelp.group(this)));
-        for (Action a : actions) {
-            node.then(a.node());
-        }
-        return node;
     }
 
     String name() {
@@ -175,10 +137,5 @@ public final class CommandGroup {
             if (actionName.equals(a.name())) return a;
         }
         return null;
-    }
-
-    /** 这一组直接就是的那个动作;有具名动作的组是 null。 */
-    Action direct() {
-        return direct;
     }
 }

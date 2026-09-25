@@ -12,6 +12,7 @@ import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
@@ -812,8 +813,8 @@ public class PermissionGameTests {
         });
     }
 
-    /** 以 {@code who} 的身份跑一条命令,和在聊天栏里敲的一样;回话(成功与失败的)收进返回的列表。 */
-    private static List<String> runAs(NumenPlayer who, String command) {
+    /** 以玩家 {@code who} 的身份跑一条命令,和在聊天栏里敲的一样;回话(成功与失败的)收进返回的列表。 */
+    private static List<String> runAs(ServerPlayer who, String command) {
         List<String> said = new ArrayList<>();
         net.minecraft.commands.CommandSource capture = new net.minecraft.commands.CommandSource() {
             @Override
@@ -841,7 +842,7 @@ public class PermissionGameTests {
         return said;
     }
 
-    private static com.dwinovo.numen.permission.PermissionStore storeOf(NumenPlayer owner) {
+    private static com.dwinovo.numen.permission.PermissionStore storeOf(ServerPlayer owner) {
         return com.dwinovo.numen.permission.PermissionStore.of(owner.getServer(), owner.getUUID());
     }
 
@@ -933,7 +934,7 @@ public class PermissionGameTests {
         BlockPos stoneRel = new BlockPos(6, 2, 5);
         level.setBlockAndUpdate(helper.absolutePos(stoneRel), Blocks.STONE.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_sculptor", new BlockPos(4, 2, 5), true);
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_geologist");
+        ServerPlayer owner = presentPlayer(helper, companion, "gametest_geologist");
 
         List<String> mistake = runAs(owner, "numen permission rules add ask brek(placed)");
         helper.assertTrue(mistake.stream().anyMatch(m -> m.contains("unknown verb 'brek'") && m.contains("break")),
@@ -968,7 +969,7 @@ public class PermissionGameTests {
             helper.assertTrue(removed.stream().anyMatch(m -> m.contains("Removed from ask"))
                     && storeOf(owner).rules().ask().isEmpty(), "remove did not take the row out: " + removed);
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 
@@ -982,8 +983,8 @@ public class PermissionGameTests {
     public static void consent_command_answers_like_the_card(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_almoner", new BlockPos(4, 2, 4), false);
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_beggar");
-        NumenPlayer stranger = spawnAt(helper, "gametest_passerby", new BlockPos(12, 2, 12), false);
+        ServerPlayer owner = presentPlayer(helper, companion, "gametest_beggar");
+        ServerPlayer stranger = presentPlayer(helper, null, "gametest_passerby");
         companion.getInventory().add(new ItemStack(Items.DIAMOND, 2));
         companion.getInventory().add(new ItemStack(Items.EMERALD, 4));
         TaskRecord[] calls = new TaskRecord[3];
@@ -1060,8 +1061,8 @@ public class PermissionGameTests {
             helper.assertTrue(stale.stream().anyMatch(m -> m.contains("No pending consent request")),
                     "answering a missing request did not say so: " + stale);
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
-            CompanionFactory.despawn(level.getServer(), stranger);
+            leave(owner);
+            leave(stranger);
         });
     }
 
@@ -1159,7 +1160,7 @@ public class PermissionGameTests {
         BlockPos chestRel = new BlockPos(6, 2, 5);
         BlockPos chest = chestWithDiamonds(helper, chestRel, 5);
         NumenPlayer companion = spawnAt(helper, "gametest_peeker", new BlockPos(4, 2, 5), false);
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_curator");
+        ServerPlayer owner = presentPlayer(helper, companion, "gametest_curator");
         TaskRecord[] calls = new TaskRecord[3];
         int[] step = {0};
         boolean[] asked = new boolean[1];
@@ -1213,7 +1214,7 @@ public class PermissionGameTests {
                     "the chest lost its diamonds");
             helper.assertTrue(!asked[0], "observe mode asked the owner");
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 
@@ -1227,7 +1228,7 @@ public class PermissionGameTests {
         BlockPos chestRel = new BlockPos(6, 2, 5);
         BlockPos chest = chestWithDiamonds(helper, chestRel, 3);
         NumenPlayer companion = spawnAt(helper, "gametest_borrower", new BlockPos(4, 2, 5), false);
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_lender");
+        ServerPlayer owner = presentPlayer(helper, companion, "gametest_lender");
         runAs(owner, "numen permission rules add ask take(*)");
         TaskRecord[] calls = new TaskRecord[2];
         int[] step = {0};
@@ -1273,7 +1274,7 @@ public class PermissionGameTests {
             var box = (net.minecraft.world.level.block.entity.ChestBlockEntity) level.getBlockEntity(chest);
             helper.assertTrue(box.getItem(0).isEmpty(), "the chest still holds the diamonds");
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 

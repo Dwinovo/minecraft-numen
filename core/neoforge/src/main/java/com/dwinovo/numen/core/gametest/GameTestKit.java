@@ -241,6 +241,31 @@ public final class GameTestKit {
         return owner;
     }
     /**
+     * 一个真玩家,不是同伴:主人要在聊天栏里敲 {@code /numen} 的管理指令(权限、征询)时用它——那些指令只给不是同伴的
+     * 来源,{@link #presentOwner} 那具替身敲不了。没有客户端,连接照同伴的假连接丢掉一切下行包。{@code companion}
+     * 非空时认他作主人。用完经 {@link #leave} 离开。
+     */
+    static net.minecraft.server.level.ServerPlayer presentPlayer(GameTestHelper helper, NumenPlayer companion,
+                                                                 String name) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        com.mojang.authlib.GameProfile profile = new com.mojang.authlib.GameProfile(UUID.randomUUID(), name);
+        var player = new net.minecraft.server.level.ServerPlayer(server, level, profile,
+                net.minecraft.server.level.ClientInformation.createDefault());
+        server.getPlayerList().placeNewPlayer(new com.dwinovo.numen.entity.FakeConnection(), player,
+                net.minecraft.server.network.CommonListenerCookie.createInitial(profile, false));
+        if (companion != null) {
+            companion.setOwnerUuid(player.getUUID());
+        }
+        return player;
+    }
+
+    /** {@link #presentPlayer} 请来的玩家离开服务器。 */
+    static void leave(net.minecraft.server.level.ServerPlayer player) {
+        player.getServer().getPlayerList().remove(player);
+    }
+
+    /**
      * 按模型的样子调一次工具:按名字从工具表里取(和网络入口是同一张表),交同一份 JSON 参数,走同一个
      * {@link NumenTool#serve}。查询当场回执;身体动作派下去的那件活按调用 id 从调度器里取出来,
      * 收尾后读它交给模型的那句话。测的是工具本身,不经过模型。
@@ -256,9 +281,9 @@ public final class GameTestKit {
         return new ToolRun(toolName, replied, CompanionTickDispatcher.taskOf(body.getUUID(), id));
     }
 
-    /** 按模型的样子写一行命令:就是调一次 {@code numen} 工具,和 {@link #call} 同一个入口。 */
+    /** 按模型的样子执行一行指令:就是调一次 {@code command} 工具,和 {@link #call} 同一个入口。 */
     static ToolRun command(NumenPlayer body, String line) {
-        return call(body, "numen", args("command", line));
+        return call(body, com.dwinovo.numen.cli.CommandTool.NAME, args("command", line));
     }
 
     /** 拼工具参数:键、值交替;值是字符串、数字、布尔、列表(成 JSON 数组)或现成的 JSON。 */

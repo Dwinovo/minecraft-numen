@@ -122,6 +122,8 @@ public final class CompanionTickDispatcher {
                 }
                 // 等主人点头的那条征询:主人下线或到点就按拒绝收尾,发起的任务下一刻读到结论。
                 com.dwinovo.numen.permission.ConsentDesk.of(ap).tick();
+                // 等主人点头的指令这一刻就读结论:允许的接着执行,拒绝的回执。
+                com.dwinovo.numen.cli.PendingCommands.tick(ap);
                 CompanionBrain brain = brainFor(ap.getUUID());
                 if (!brain.boundTo(ap) && !brain.boundBodyGone()) {
                     // 同一个 UUID 同时有两具身体:上一具还在世界里,来的这具是重影。
@@ -160,6 +162,7 @@ public final class CompanionTickDispatcher {
     public static void clearActiveTask(NumenPlayer player) {
         CompanionBrain brain = BRAINS.get(player.getUUID());   // never create: a late death
         if (brain != null) brain.dropActiveNoResult(player);   // event must not leak a brain
+        com.dwinovo.numen.cli.PendingCommands.drop(player);
     }
 
     /** 她现在在做的那件事,null = 槽空(她站着)。task_status 用。 */
@@ -209,6 +212,8 @@ public final class CompanionTickDispatcher {
      *  The 取消边沿 also releases the task-scoped MAINHAND intent pin immediately —
      *  the explicit-hold session dies with the task it served (constitution §5). */
     public static void cancelFor(NumenPlayer player) {
+        // 等主人点头的指令不在槽里,同一下叫停(撤掉征询,回执说被主人叫停)。
+        com.dwinovo.numen.cli.PendingCommands.stop(player, TaskRecord.StopCause.OWNER);
         CompanionBrain brain = BRAINS.get(player.getUUID());   // never create: a late cancel
         if (brain == null) return;                             // packet must not leak a brain
         brain.sync.cancel(TaskRecord.StopCause.OWNER);
@@ -229,6 +234,7 @@ public final class CompanionTickDispatcher {
         if (brain != null) {
             brain.finalizeActive(player);
         }
+        com.dwinovo.numen.cli.PendingCommands.stop(player, TaskRecord.StopCause.BODY_LEFT);
         BRAINS.remove(id);   // the body is gone; don't leak its brain
     }
 }

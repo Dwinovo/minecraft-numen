@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static com.dwinovo.numen.cli.CliFixture.door;
 import static com.dwinovo.numen.cli.CliFixture.onClient;
+import static com.dwinovo.numen.cli.CliFixture.onServer;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -35,7 +36,7 @@ class CommandRegistrationTest {
         String listing = onClient("numen gt_owned --help").message();
         assertTrue(listing.contains("numen gt_owned mine"), listing);
         assertFalse(listing.contains("graft"), "被拒的那次一个动作都没挂上: " + listing);
-        assertFalse(onClient("numen gt_owned graft").success());
+        assertFalse(onServer("numen gt_owned graft").success());
 
         assertThrows(IllegalArgumentException.class, () -> numen.registerCommands("help", "Shadow the help.",
                 g -> g.server("x", "x.", OK)), "help 是根上的保留名");
@@ -104,19 +105,16 @@ class CommandRegistrationTest {
     void onceTheTreeIsInUseAGroupsReferencesAreCheckedAsItRegisters() {
         NumenApi numen = door();
         NumenCli.index();
-        Param<String> line = Param.required("line", ArgType.text(), "The rest.");
         numen.registerCommands("gt_see_target", "Pointed at from another group.",
                 g -> g.server("go", "Go.", OK).example("numen gt_see_target go"));
-        numen.registerCommands("gt_see_direct", "A group that is one action.",
-                g -> g.serverDirect("Echo.", OK, line).example("numen gt_see_direct hello"));
 
         assertDoesNotThrow(() -> numen.registerCommands("gt_see_ok", "Points at real actions.", g -> {
             g.server("first", "First.", OK).example("numen gt_see_ok first")
-                    .seeAlso("numen gt_see_ok second", "numen gt_see_target go", "numen gt_see_direct");
+                    .seeAlso("numen gt_see_ok second", "numen gt_see_target go");
             g.server("second", "Second.", OK).example("numen gt_see_ok second");
-        }), "同组(哪怕写在后面)、别组、直接就是动作的组都认");
+        }), "同组(哪怕写在后面)、别组都认");
         assertTrue(onClient("numen gt_see_ok first --help").message()
-                .endsWith("\n  See also: numen gt_see_ok second, numen gt_see_target go, numen gt_see_direct"));
+                .endsWith("\n  See also: numen gt_see_ok second, numen gt_see_target go"));
 
         IllegalStateException broken = assertThrows(IllegalStateException.class, () -> numen.registerCommands(
                 "gt_see_broken", "Points at nothing.", g -> g.server("go", "Go.", OK).example("numen gt_see_broken go")
@@ -124,7 +122,7 @@ class CommandRegistrationTest {
         assertEquals("相关命令指向不存在的动作: numen gt_see_broken go -> numen gt_see_target come; "
                 + "numen gt_see_broken go -> numen gt_nowhere go; numen gt_see_broken go -> gt_see_target go",
                 broken.getMessage(), "写不存在的动作、不存在的组、漏了 numen,一次列全");
-        assertFalse(onClient("numen gt_see_broken --help").success(), "查不过的组没有挂上树");
+        assertFalse(onServer("numen gt_see_broken --help").success(), "查不过的组没有挂上树");
     }
 
     @Test
@@ -135,7 +133,7 @@ class CommandRegistrationTest {
         IllegalArgumentException none = assertThrows(IllegalArgumentException.class, () -> numen.registerCommands(
                 "gt_no_example", "x.", g -> g.server("go", "Go.", OK)));
         assertEquals("numen gt_no_example go 没写例子——模型照着例子写,每个动作至少一个", none.getMessage());
-        assertFalse(onClient("numen gt_no_example --help").success(), "被拒的组没有挂上树");
+        assertFalse(onServer("numen gt_no_example --help").success(), "被拒的组没有挂上树");
 
         for (String bad : new String[]{
                 "numen gt_bad_example take",              // 缺了必填参数

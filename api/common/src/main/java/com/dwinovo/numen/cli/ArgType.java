@@ -113,7 +113,7 @@ public final class ArgType<T> {
      * 自己的规则({@code a-z0-9_.-} 加路径里的 {@code /}),不另写一份;不写命名空间就是 {@code minecraft:},和原版指令一样。
      */
     public static ArgType<ResourceLocation> id() {
-        return new ArgType<>(ArgType::readId, "id", "id, e.g. minecraft:oak_log", false, ArgType::stringField);
+        return new ArgType<>(new IdArgument(), "id", "id, e.g. minecraft:oak_log", false, ArgType::stringField);
     }
 
     /**
@@ -122,7 +122,7 @@ public final class ArgType<T> {
      * 角色名)用它——这些名字的字符集不归我们定。
      */
     public static ArgType<String> string() {
-        return new ArgType<>(ArgType::readString, "string", "string, quote it if it has spaces", false,
+        return new ArgType<>(new ValueArgument(), "string", "string, quote it if it has spaces", false,
                 ArgType::stringField, ArgType::quoted);
     }
 
@@ -131,35 +131,46 @@ public final class ArgType<T> {
         return '"' + text.replace("\\", "\\\\").replace("\"", "\\\"") + '"';
     }
 
-    private static ResourceLocation readId(StringReader reader) throws CommandSyntaxException {
-        int start = reader.getCursor();
-        while (reader.canRead() && ResourceLocation.isAllowedInResourceLocation(reader.peek())) {
-            reader.skip();
+    /**
+     * {@link #id()} 的读法。它和 {@link ValueArgument} 是具名的类而不是方法引用:服务端的动作真实注册进 MC 的指令树,
+     * 树上每种参数类型都要按类在 MC 的指令参数类型注册表里登记(见 {@link NumenCli#registerArgumentTypes})。
+     */
+    static final class IdArgument implements ArgumentType<ResourceLocation> {
+        @Override
+        public ResourceLocation parse(StringReader reader) throws CommandSyntaxException {
+            int start = reader.getCursor();
+            while (reader.canRead() && ResourceLocation.isAllowedInResourceLocation(reader.peek())) {
+                reader.skip();
+            }
+            String raw = reader.getString().substring(start, reader.getCursor());
+            if (raw.isEmpty()) {
+                throw NO_ID.createWithContext(reader);
+            }
+            ResourceLocation id = ResourceLocation.tryParse(raw);
+            if (id == null) {
+                reader.setCursor(start);
+                throw BAD_ID.createWithContext(reader, raw);
+            }
+            return id;
         }
-        String raw = reader.getString().substring(start, reader.getCursor());
-        if (raw.isEmpty()) {
-            throw NO_ID.createWithContext(reader);
-        }
-        ResourceLocation id = ResourceLocation.tryParse(raw);
-        if (id == null) {
-            reader.setCursor(start);
-            throw BAD_ID.createWithContext(reader, raw);
-        }
-        return id;
     }
 
-    private static String readString(StringReader reader) throws CommandSyntaxException {
-        if (reader.canRead() && StringReader.isQuotedStringStart(reader.peek())) {
-            return reader.readQuotedString();
+    /** {@link #string()} 的读法:带引号就读到配对的引号,不带就读到下一个空格。 */
+    static final class ValueArgument implements ArgumentType<String> {
+        @Override
+        public String parse(StringReader reader) throws CommandSyntaxException {
+            if (reader.canRead() && StringReader.isQuotedStringStart(reader.peek())) {
+                return reader.readQuotedString();
+            }
+            int start = reader.getCursor();
+            while (reader.canRead() && reader.peek() != ' ') {
+                reader.skip();
+            }
+            if (reader.getCursor() == start) {
+                throw NO_STRING.createWithContext(reader);
+            }
+            return reader.getString().substring(start, reader.getCursor());
         }
-        int start = reader.getCursor();
-        while (reader.canRead() && reader.peek() != ' ') {
-            reader.skip();
-        }
-        if (reader.getCursor() == start) {
-            throw NO_STRING.createWithContext(reader);
-        }
-        return reader.getString().substring(start, reader.getCursor());
     }
 
     /**
@@ -191,12 +202,17 @@ public final class ArgType<T> {
         if (value == null || !value.isJsonPrimitive()) {
             throw NOT_A_VALUE.create(hint);
         }
-        StringReader reader = new StringReader(written.apply(value.getAsString()));
+        StringReader reader = new StringReader(written(value.getAsString()));
         T parsed = read(reader);
         if (reader.canRead()) {
             throw TRAILING.createWithContext(reader, hint);
         }
         return parsed;
+    }
+
+    /** 一个 JSON 值的文字在命令行上写成什么样:快捷工具读参数、写出它作为 alias 的那一行,都经这里。 */
+    String written(String text) {
+        return written.apply(text);
     }
 
     /** 类型的名字,比如 {@code integer};标志的用法里写它。 */

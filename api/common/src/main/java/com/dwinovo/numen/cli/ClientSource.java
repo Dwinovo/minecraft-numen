@@ -7,8 +7,8 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
- * 主人客户端的命令源:她的 UUID、回信口。客户端动作当场执行;解析到的是服务端动作时,调用照身体工具的
- * 路子整个送去服务端({@code ServerToolTransport}),在那边再解析、执行,结果走原来的回执。
+ * 主人客户端的命令源:她的 UUID、回信口。客户端动作与帮助当场执行;别的一行(服务端动作、原版与模组的指令),
+ * 调用照身体工具的路子整个送去服务端({@code ServerToolTransport}),由那边的执行入口解析、执行,结果走原来的回执。
  *
  * <p>要她的循环、界面这类只活在客户端的东西,拿 UUID 去客户端那一侧的登记处取——公共代码摸不到客户端类。
  */
@@ -42,7 +42,7 @@ public final class ClientSource implements CommandSource {
         reply.accept(resultJson);
     }
 
-    /** 服务端动作:这一侧只负责把调用送过去。 */
+    /** 不归这一侧答的一行:这一侧只负责把调用送过去。 */
     void forwardToServer() {
         toServer.run();
     }

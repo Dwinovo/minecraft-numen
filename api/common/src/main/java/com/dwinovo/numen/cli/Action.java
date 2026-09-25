@@ -1,17 +1,10 @@
 package com.dwinovo.numen.cli;
 
-import com.dwinovo.numen.task.TaskResult;
-import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.ParseResults;
-import com.mojang.brigadier.builder.ArgumentBuilder;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import com.mojang.brigadier.builder.RequiredArgumentBuilder;
-import com.mojang.brigadier.context.CommandContext;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -19,13 +12,10 @@ import java.util.regex.Pattern;
  * 命令行、帮助、快捷工具都从这里取。
  *
  * <p>执行侧由登记时给的处理函数决定:{@link CommandGroup#server} 给的是服务端函数,{@link CommandGroup#client}
- * 给的是客户端函数,二者只有一个。两侧都注册这同一格(公共代码在每个进程里各跑一遍),所以客户端能当场给帮助、
- * 当场报解析错误;真正执行时,源对象在哪一侧、函数属于哪一侧,{@link #execute} 一处决定——客户端遇到服务端动作
- * 就把调用送过去,服务端遇到客户端动作如实拒绝。专用服务器上客户端动作的函数照样登记着(帮助要用它的说明),
- * 只是永远不会在那里被调用。
- *
- * <p>一组也可以直接就是一个动作({@link CommandGroup#serverDirect}):它没有动作名,参数紧跟在组名后面
- * ({@code numen mc <command...>})。
+ * 给的是客户端函数,二者只有一个。声明在两侧都登记(公共代码在每个进程里各跑一遍),每一侧的树由
+ * {@link CommandTree} 长出来:两侧都有这个动作的名字与帮助,参数与可执行的那一格只在执行它的那一侧——
+ * 服务端动作在 MC 的指令树上,客户端动作在主人客户端的小表里。专用服务器上客户端动作照样登记(帮助要它的说明),
+ * 它的处理函数永远不会在那里被调用。
  *
  * <h2>帮助正文也登记在这里</h2>
  * 动作的帮助除了用法、说明、参数,还有三块,都接在登记处返回的这个动作上写:
@@ -40,11 +30,11 @@ import java.util.regex.Pattern;
  *       和名字不合规同一种把关;每个例子也在那一刻按这一组的树解析一遍,必须整行写得通、落在这个动作上,
  *       例子与语法不会走样。</li>
  *   <li>{@link #note}:可选,多条。写会不会问主人、是不是长活、会动她的什么、不会做什么。</li>
- *   <li>{@link #seeAlso}:可选。做完这件事下一步通常用的动作,同组别组都行,写整条路径。引用在命令树第一次被读时
- *       查(那时各模组的组都已登记完),理由见 {@link NumenCli}。</li>
+ *   <li>{@link #seeAlso}:可选。做完这件事下一步通常用的动作,同组别组都行,写整条路径。引用在全部组到齐之后
+ *       一次查全(服务器建指令树、或命令树第一次被读时),理由见 {@link NumenCli}。</li>
  * </ul>
  */
-public final class Action implements Command<CommandSource> {
+public final class Action {
 
     /** 动作名与组名同形:小写字母开头,小写字母、数字、下划线。 */
     static final Pattern NAME = Pattern.compile("[a-z][a-z0-9_]{0,31}");
@@ -61,17 +51,7 @@ public final class Action implements Command<CommandSource> {
         void run(ClientSource source, CommandArgs args);
     }
 
-    /**
-     * 帮助里一张只有服务端答得出的目录:按这一刻、这具身体算出来的条目,一行一条(比如服务器按她的权限等级
-     * 让她用的原版指令)。
-     */
-    @FunctionalInterface
-    public interface Catalog {
-        List<String> lines(ServerSource source);
-    }
-
     private final CommandGroup group;
-    /** 动作名;组直接就是这个动作时为 null。 */
     private final String name;
     private final String summary;
     private final List<Param<?>> params;
@@ -82,8 +62,6 @@ public final class Action implements Command<CommandSource> {
     private final List<String> seeAlso = new ArrayList<>();
     private String toolName;
     private String toolDescription;
-    private String catalogTitle;
-    private Catalog catalog;
 
     Action(CommandGroup group, String name, String summary, List<Param<?>> params,
            OnServer onServer, OnClient onClient) {
@@ -141,107 +119,34 @@ public final class Action implements Command<CommandSource> {
     }
 
     /**
-     * 例子的把关,登记块跑完时由组调用:至少一个;每个都在 {@code tree}(只有这一组的树)上整行解析通过,
-     * 落在这个动作上。这棵树的节点不设 {@code requires},解析用不到来源,源给 null。
+     * 例子的把关,登记块跑完时由组调用:至少一个;每个都在 {@code tree}(只有这一组、每个动作都长着参数的树,见
+     * {@link CommandGroup#close})上整行解析通过,走到可执行的一格,而且那一格属于这个动作。这棵树的节点不设
+     * {@code requires},解析用不到来源,源给 null。
      */
-    void checkExamples(CommandDispatcher<CommandSource> tree) {
+    void checkExamples(CommandDispatcher<Object> tree) {
         if (examples.isEmpty()) {
             throw new IllegalArgumentException(path() + " 没写例子——模型照着例子写,每个动作至少一个");
         }
+        List<String> here = List.of(NumenCli.ROOT, group.name(), name);
         for (String example : examples) {
-            ParseResults<CommandSource> parse = tree.parse(example, null);
+            ParseResults<Object> parse = tree.parse(example, null);
             if (parse.getReader().canRead() || !parse.getExceptions().isEmpty()
-                    || parse.getContext().getCommand() != this) {
+                    || parse.getContext().getCommand() == null || !NumenCli.literalPath(parse).equals(here)) {
                 throw new IllegalArgumentException(path() + " 的例子写不通,或者落在别的动作上: " + example);
             }
         }
     }
 
     /**
-     * 帮助末尾再列一张目录,标题是 {@code title}。目录只有服务端答得出,所以这个动作的 {@code --help} 在客户端
-     * 解析到时把调用送去服务端,在那边算出来,和组的列表一样分页、认 {@code --page}。
+     * 读好的参数交给处理函数。树只把动作的可执行格长在执行它的那一侧,快捷工具也按 {@link #runsOnServer} 分路,
+     * 所以到这里的源对象总是这个动作那一侧的。服务端的源先绑上这个动作,派下的活才叫得出名字
+     * ({@link ServerSource#taskName})。
      */
-    public Action catalog(String title, Catalog lines) {
-        group.requireOpen();
-        if (this.catalog != null) {
-            throw new IllegalStateException(path() + " 已经有一张目录了");
-        }
-        if (title == null || title.isBlank() || lines == null) {
-            throw new IllegalArgumentException(path() + " 的目录要有标题和条目");
-        }
-        this.catalogTitle = title;
-        this.catalog = lines;
-        return this;
-    }
-
-    /** 命令行这一入口:Brigadier 解析通过后调到这里。 */
-    @Override
-    public int run(CommandContext<CommandSource> ctx) {
-        execute(ctx.getSource(), CommandArgs.fromCommand(positionals(), ctx, FlagsArgument.valuesIn(ctx)));
-        return Command.SINGLE_SUCCESS;
-    }
-
-    /** 两个入口的汇合处:读好的参数交给这一侧的处理函数,或送去该执行的那一侧。 */
     void execute(CommandSource source, CommandArgs args) {
         switch (source) {
-            case ServerSource server -> {
-                if (onServer != null) {
-                    onServer.run(server.running(this), args);
-                } else {
-                    server.reply(TaskResult.fail(path() + " runs on the owner's client, not on the server.").toJson());
-                }
-            }
-            case ClientSource client -> {
-                if (onClient != null) {
-                    onClient.run(client, args);
-                } else {
-                    client.forwardToServer();
-                }
-            }
+            case ServerSource server -> onServer.run(server.running(this), args);
+            case ClientSource client -> onClient.run(client, args);
         }
-    }
-
-    /** 具名动作在 Brigadier 树上的那一格:动作名,下面是 {@link #fill} 挂的东西。 */
-    LiteralArgumentBuilder<CommandSource> node() {
-        return fill(LiteralArgumentBuilder.<CommandSource>literal(name));
-    }
-
-    /**
-     * 往 {@code node} 下面挂这个动作:{@code --help};必填参数依次一格一格往下接,最后一格可执行;有可选参数的话,
-     * 可执行的那一格下面再挂一格标志尾巴,同样可执行。具名动作挂在自己那一格下,组直接就是它时挂在组那一格下。
-     */
-    <B extends ArgumentBuilder<CommandSource, B>> B fill(B node) {
-        node.then(catalog == null
-                ? LiteralArgumentBuilder.<CommandSource>literal(NumenCli.HELP_FLAG).executes(ctx -> {
-                    ctx.getSource().reply(TaskResult.ok(CommandHelp.action(this)).toJson());
-                    return Command.SINGLE_SUCCESS;
-                })
-                : NumenCli.serverHelpNode(NumenCli.HELP_FLAG, source -> CommandHelp.catalog(this, source)));
-        List<Param<?>> required = positionals();
-        if (required.isEmpty()) {
-            executable(node);
-            return node;
-        }
-        ArgumentBuilder<CommandSource, ?> tip = executable(argument(required.get(required.size() - 1)));
-        for (int i = required.size() - 2; i >= 0; i--) {
-            tip = argument(required.get(i)).then(tip);
-        }
-        node.then(tip);
-        return node;
-    }
-
-    private <B extends ArgumentBuilder<CommandSource, B>> B executable(B builder) {
-        builder.executes(this);
-        List<Param<?>> optional = params.stream().filter(p -> !p.required()).toList();
-        if (!optional.isEmpty()) {
-            builder.then(RequiredArgumentBuilder.<CommandSource, Map<String, Object>>argument(
-                    FlagsArgument.NODE, new FlagsArgument(optional)).executes(this));
-        }
-        return builder;
-    }
-
-    private static <T> RequiredArgumentBuilder<CommandSource, T> argument(Param<T> param) {
-        return RequiredArgumentBuilder.argument(param.name(), param.type().brigadier());
     }
 
     List<Param<?>> positionals() {
@@ -273,14 +178,14 @@ public final class Action implements Command<CommandSource> {
         return seeAlso;
     }
 
-    /** {@code numen <组> <动作>};组直接就是这个动作时是 {@code numen <组>}。 */
+    /** {@code numen <组> <动作>}。 */
     String path() {
         return NumenCli.ROOT + " " + label();
     }
 
-    /** {@code <组> <动作>},组直接就是这个动作时只是 {@code <组>}:从命令派下的活就叫这个名字。 */
+    /** {@code <组> <动作>}:从命令派下的活就叫这个名字。 */
     String label() {
-        return group.name() + (name == null ? "" : " " + name);
+        return group.name() + " " + name;
     }
 
     /** 整行用法:路径 + 必填参数 + 标志。 */
@@ -307,15 +212,5 @@ public final class Action implements Command<CommandSource> {
 
     String toolDescription() {
         return toolDescription;
-    }
-
-    /** 目录的标题;没有目录是 {@code null}。 */
-    String catalogTitle() {
-        return catalogTitle;
-    }
-
-    /** 这具身体此刻的目录条目。只在服务端调。 */
-    List<String> catalogLines(ServerSource source) {
-        return catalog.lines(source);
     }
 }

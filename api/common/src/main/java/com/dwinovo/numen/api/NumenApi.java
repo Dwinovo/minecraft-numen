@@ -50,8 +50,9 @@ public interface NumenApi {
     void registerTool(NumenTool tool);
 
     /**
-     * 登记一组命令:{@code numen <namespace> <action> …}。模型经 {@code numen} 工具调用它们,不必为每个动作
-     * 多花一个工具定义;常用的动作可以 {@link com.dwinovo.numen.cli.Action#promote 提升}成快捷工具。
+     * 登记一组命令:{@code numen <namespace> <action> …}。模型经 {@code command} 工具写这一行调用它们,不必为每个动作
+     * 多花一个工具定义;常用的动作可以 {@link com.dwinovo.numen.cli.Action#promote 提升}成快捷工具。服务端的动作
+     * 真实注册在 MC 指令树的 {@code /numen} 下,只给她看见;客户端的动作留在主人客户端。
      *
      * <pre>{@code
      * numen.registerCommands("mymod", "What your mod lets her do, in one sentence.", cmds -> {

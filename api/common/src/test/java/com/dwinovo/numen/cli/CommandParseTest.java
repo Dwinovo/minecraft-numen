@@ -125,11 +125,38 @@ class CommandParseTest {
                 "标志的值用那个参数自己的类型读");
     }
 
+    /**
+     * 路由只有一条规则:解析到客户端动作才在客户端答。服务端动作写错了也原样送服务端,由那边的执行入口报——
+     * 报的是上面那一句,附着这个动作的帮助。
+     */
     @Test
-    void theClientReportsTheSameMistakeWithoutGoingToTheServer() {
+    void aServerActionsMistakeIsReportedByTheServer() {
         CliFixture.Outcome client = onClient("numen gt_parse take many apple");
+        assertTrue(client.forwarded, "服务端动作的一行整条送去服务端");
+        assertTrue(client.replies.isEmpty(), "客户端不替服务端答");
+        String server = failed("numen gt_parse take many apple");
+        assertTrue(server.startsWith("Expected integer at position 20: "), server);
+        assertTrue(server.endsWith("\n" + TAKE_HELP), server);
+    }
+
+    /** 客户端动作写错了在客户端当场回,说法和服务端动作写错时同一种:Brigadier 的原话加上这个动作的帮助。 */
+    @Test
+    void aClientActionsMistakeIsAnsweredRightThere() {
+        Param<Integer> pages = Param.required("pages", ArgType.integer(1, 9), "How many pages.");
+        door().registerCommands("gt_parse_local", "A group with an action on the owner's client.", g ->
+                g.client("read", "Read some pages.", (src, args) -> src.reply(TaskResult.ok("read").toJson()), pages)
+                        .example("numen gt_parse_local read 2"));
+        CliFixture.Outcome client = onClient("numen gt_parse_local read many");
+        assertFalse(client.forwarded, "客户端动作的解析错误当场回");
         assertFalse(client.success());
-        assertFalse(client.forwarded, "解析错误当场回");
-        assertEquals(failed("numen gt_parse take many apple"), client.message());
+        assertTrue(client.message().startsWith("Expected integer at position 26: "), client.message());
+        assertTrue(client.message().endsWith("""
+
+                numen gt_parse_local read <pages>
+                  Read some pages.
+                  <pages> (integer 1-9) — How many pages.
+                  Examples:
+                    numen gt_parse_local read 2"""), client.message());
+        assertEquals("read", onClient("numen gt_parse_local read 2").message());
     }
 }

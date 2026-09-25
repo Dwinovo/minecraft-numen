@@ -85,10 +85,10 @@ final class FlagsArgument implements ArgumentType<Map<String, Object>> {
         return out;
     }
 
-    /** 这一行写了的标志:写了,最后一个解析到的节点就是标志那一格;没写是空表。 */
+    /** 这一行写了的标志:写了,最后一个解析到的节点就是标志那一格;没写是空表。两侧的树都这样取。 */
     @SuppressWarnings("unchecked")
-    static Map<String, Object> valuesIn(CommandContext<CommandSource> ctx) {
-        List<ParsedCommandNode<CommandSource>> nodes = ctx.getNodes();
+    static Map<String, Object> valuesIn(CommandContext<?> ctx) {
+        List<? extends ParsedCommandNode<?>> nodes = ctx.getNodes();
         boolean written = !nodes.isEmpty() && nodes.get(nodes.size() - 1).getNode().getName().equals(NODE);
         return written ? ctx.getArgument(NODE, Map.class) : Map.of();
     }

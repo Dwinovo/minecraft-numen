@@ -80,7 +80,7 @@ public record Param<T>(String name, ArgType<T> type, String description, boolean
         return new Param<>(name, type, description, required, values, whenOmitted);
     }
 
-    /** 一组参数的 JSON schema,字段按声明顺序。快捷工具与 numen 工具的 schema 都经这里生成。 */
+    /** 一组参数的 JSON schema,字段按声明顺序。快捷工具与 command 工具的 schema 都经这里生成。 */
     static Map<String, Object> schemaOf(List<Param<?>> params) {
         Schema.Builder builder = Schema.object();
         for (Param<?> p : params) {

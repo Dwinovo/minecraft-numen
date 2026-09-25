@@ -265,7 +265,7 @@ public class TaskControlGameTests {
 
     /**
      * 命令派下的长活叫"组 动作",快捷工具派下的叫快捷工具名:受理回执、任务记录、task_finished 三处都是这个名字,
-     * 而重启要重放的仍是那次调用本身(numen 与那一行命令)。
+     * 而重启要重放的仍是那次调用本身(command 与那一行指令)。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
     public static void a_long_command_is_named_after_its_group_and_action(GameTestHelper helper) {
@@ -287,7 +287,7 @@ public class TaskControlGameTests {
             helper.assertTrue(taskIn(viaTool.reply()).equals("gt_linger")
                             && viaTool.task().getToolName().equals("gt_linger"),
                     "the shortcut's task is not named after the shortcut: " + viaTool.reply());
-            helper.assertTrue(recorded.taskTool().equals("numen")
+            helper.assertTrue(recorded.taskTool().equals(com.dwinovo.numen.cli.CommandTool.NAME)
                             && recorded.taskArgs().contains("numen gt_long linger 20"),
                     "the replay recipe is not the call itself: " + recorded.taskTool() + " " + recorded.taskArgs());
             helper.assertTrue(recorded.taskName().equals("gt_long linger"),
@@ -349,7 +349,7 @@ public class TaskControlGameTests {
 
     /**
      * 重启后接不回来的命令长活:重放那一行被拒(这里把落盘的那一行改成写不通的),她收到的 task_finished 仍以受理时的
-     * 名字"组 动作"说这件活没接回来,不是重放用的工具名 numen。
+     * 名字"组 动作"说这件活没接回来,不是重放用的工具名 command。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
     public static void an_abandoned_long_command_is_reported_under_its_name(GameTestHelper helper) {

@@ -10,8 +10,7 @@ import java.util.List;
  *
  * <p>三层:根(列出各组,一组一句)、组(列出动作,一行用法一句说明)、动作(用法、说明、逐个参数、例子、注意、
  * 相关命令)。帮助每次都进上下文,所以只有最后一层是全量:例子与注意只写在动作的帮助里,组的帮助仍一行一个动作。
- * 前两层是可翻页的 {@link Listing}。带目录的动作({@link Action#catalog})的帮助后面接着那张目录,同样分页。
- * 解析出错时附上的就是出错那一层的第一页或动作帮助。
+ * 前两层是可翻页的 {@link Listing}。解析出错时附上的就是出错那一层的第一页或动作帮助。
  */
 final class CommandHelp {
 
@@ -75,12 +74,6 @@ final class CommandHelp {
         for (String line : lines) {
             sb.append("\n    ").append(line);
         }
-    }
-
-    /** 带目录的动作:动作的帮助,接着目录的标题与这具身体此刻的条目。 */
-    static Listing catalog(Action action, ServerSource source) {
-        return new Listing(action(action) + "\n" + action.catalogTitle(), action.catalogLines(source), "",
-                action.path() + " " + NumenCli.HELP_FLAG);
     }
 
     /** 一组一句:根帮助与系统提示索引共用。 */

@@ -122,8 +122,6 @@ public final class NumenCore {
         // 引擎的 numen task 命令组,和插件走同一扇门;它提升出的 task_status / task_stop / set_timer 就在这里进表,
         // 工具表的顺序不变。
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.task.TaskCommands::install);
-        // 原版指令入口 numen mc:没有快捷工具,不占工具表的位置
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.command.McCommands::install);
         ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.DropItemsTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.TakeItemsTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.interact.InspectGuiTool());
@@ -169,7 +167,5 @@ public final class NumenCore {
         TaskFactory.register(InteractEntityTaskRecord.class, (p, r) -> new InteractEntityCompanionTask(p, r));
         TaskFactory.register(LocateStructureTaskRecord.class, (p, r) -> new LocateStructureCompanionTask(p, r));
         TaskFactory.register(LocateBiomeTaskRecord.class, (p, r) -> new LocateBiomeCompanionTask(p, r));
-        TaskFactory.register(com.dwinovo.numen.core.task.command.McCommandTaskRecord.class,
-                (p, r) -> new com.dwinovo.numen.core.task.command.McCommandCompanionTask(p, r));
     }
 }

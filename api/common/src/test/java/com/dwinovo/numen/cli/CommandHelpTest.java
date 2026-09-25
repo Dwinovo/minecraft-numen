@@ -120,7 +120,7 @@ class CommandHelpTest {
             assertTrue(root.endsWith("\nnumen <group> --help lists a group's actions."), root);
         }
         String index = NumenCli.index();
-        assertTrue(index.startsWith("<commands>\nCommand groups of the numen tool "
+        assertTrue(index.startsWith("<commands>\nNumen's command groups, run with the command tool "
                 + "(numen <group> --help lists a group's actions):\n"), index);
         assertTrue(index.contains("\ngt_help — A group the tests read.\n"), index);
         assertTrue(index.indexOf("gt_help —") < index.indexOf("gt_many —"), "按名字排序: " + index);
