@@ -9,8 +9,8 @@ import java.util.Comparator;
 
 /**
  * 施工顺序与节奏的<b>唯一定义</b>:先后(比较器与它的两个判据)与快慢
- * (速率公式与时长估计)。全是无状态纯函数——派发方(BuildTool 的时限
- * 公式)、测试与施工任务共用同一份,不许各拍各的。
+ * (速率公式、时长估计与时限)。全是无状态纯函数——派发方({@link #deadlineTicks})、
+ * 测试与施工任务共用同一份,不许各拍各的。
  */
 public final class BuildOrder {
 
@@ -104,5 +104,19 @@ public final class BuildOrder {
      */
     public static long estimatedTicks(int cellCount, boolean consumeMaterials) {
         return (long) Math.ceil(Math.max(1, cellCount) / paceFor(cellCount, consumeMaterials));
+    }
+
+    private static final long MIN_DEADLINE_TICKS = 60 * 20;
+    private static final long TRAVEL_ALLOWANCE_TICKS = 40 * 20;
+    /** 施工预计时长之上再留的余量(挪窝、翻层停顿、零进展重试都吃这笔)。 */
+    private static final double DEADLINE_SLACK = 1.6;
+
+    /**
+     * 施工时限:赴工地的行程 + 施工预计时长再留一截余量。预计时长就是 {@link #estimatedTicks}——时限若另估一套,
+     * 生存最慢档每格十刻的真实开销会被低估,五百格的房子盖到一半就被判超时。
+     */
+    public static long deadlineTicks(int cellCount, boolean consumeMaterials) {
+        return Math.max(MIN_DEADLINE_TICKS,
+                TRAVEL_ALLOWANCE_TICKS + (long) (estimatedTicks(cellCount, consumeMaterials) * DEADLINE_SLACK));
     }
 }

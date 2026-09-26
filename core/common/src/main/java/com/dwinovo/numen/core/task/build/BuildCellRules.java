@@ -64,11 +64,16 @@ final class BuildCellRules {
      * 问权限层——玩家的箱子、玩家放的墙、观察模式,都是它的裁决,这里不另设判据。
      * 要问主人的在开工前整批问过({@link #actionsFor});主人答应的这时已是放行,拒绝的仍不许。
      * 双格方块连另一半一起问:任一半不许清就都不动。
+     *
+     * <p>拆除格({@link BuildTaskRecord.Target#removes})只拆她从前放下的那个方块:这一格现在已经是别的了——别人换过、
+     * 主人后来自己摆了——就不是她的,不碰。
      */
     boolean blockedByMode(BuildTaskRecord.Target target) {
         BlockState current = peek(target.pos());
-        ReplaceMode mode = target.mask() != null ? target.mask() : r.replaceMode;
-        if (!mode.allows(current, target.desiredState())) {
+        if (!target.mode().allows(current, target.desiredState())) {
+            return true;
+        }
+        if (target.removes() != null && !current.isAir() && !current.is(target.removes())) {
             return true;
         }
         if (target.matches(current)) {

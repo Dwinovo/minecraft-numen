@@ -294,6 +294,22 @@ public final class GameTestKit {
         return new ToolRun(toolName, replied, CompanionTickDispatcher.taskOf(body.getUUID(), id));
     }
 
+    /**
+     * 一件直接交执行器的建造活,不经命令:测的是执行器本身(施工顺序、扣料、落定、续建)。按设计或蓝图施工、当场执行原语
+     * 从 {@code build} 命令进来的,见 BuildGameTests 里经 {@link #command} 调的那些。
+     */
+    static com.dwinovo.numen.core.task.build.BuildTaskRecord buildJob(String callId, long deadline,
+            com.dwinovo.numen.core.build.Layout layout, boolean consume, boolean partial) {
+        return new com.dwinovo.numen.core.task.build.BuildTaskRecord("build", callId, deadline, layout, consume,
+                partial, null);
+    }
+
+    /** 只有方块的一件建造活,见 {@link #buildJob(String, long, com.dwinovo.numen.core.build.Layout, boolean, boolean)}。 */
+    static com.dwinovo.numen.core.task.build.BuildTaskRecord buildJob(String callId, long deadline,
+            List<com.dwinovo.numen.core.task.build.BuildTaskRecord.Target> targets, boolean consume, boolean partial) {
+        return buildJob(callId, deadline, com.dwinovo.numen.core.build.Layout.of(targets, 0), consume, partial);
+    }
+
     /** 按模型的样子执行一行指令:就是调一次 {@code command} 工具,和 {@link #call} 同一个入口。 */
     static ToolRun command(NumenPlayer body, String line) {
         return call(body, com.dwinovo.numen.cli.CommandTool.NAME, args("command", line));

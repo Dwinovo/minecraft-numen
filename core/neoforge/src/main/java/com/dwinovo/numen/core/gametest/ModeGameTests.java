@@ -95,8 +95,8 @@ public class ModeGameTests {
                     helper.absolutePos(rel), "cobblestone"));
         }
         var ctx = TaskDispatch.ctx("gametest-cbuild", companion);
-        TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(),
-                ctx.deadline(3600L), targets, com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, false), null, reply -> {});
+        TaskDispatch.setTask(companion, buildJob(ctx.toolCallId(),
+                ctx.deadline(3600L), targets, false, false), null, reply -> {});
         helper.succeedWhen(() -> {
             for (BuildTaskRecord.Target t : targets) {
                 helper.assertTrue(level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),
@@ -120,8 +120,7 @@ public class ModeGameTests {
         }
         var ctx = TaskDispatch.ctx("gametest-sbuild-broke", companion);
         // dispatchAsync 的回调只回"已受理"收条;预检失败落在任务记录的终态上
-        BuildTaskRecord record = new BuildTaskRecord(ctx.toolCallId(),
-                ctx.deadline(3600L), targets, com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true);
+        BuildTaskRecord record = buildJob(ctx.toolCallId(), ctx.deadline(3600L), targets, true, false);
         TaskDispatch.setTask(companion, record, null, reply -> {});
         helper.succeedWhen(() -> {
             var result = record.getResult();
@@ -365,8 +364,8 @@ public class ModeGameTests {
                     helper.absolutePos(rel), "cobblestone"));
         }
         var ctx = TaskDispatch.ctx("gametest-sbuild", companion);
-        TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(),
-                ctx.deadline(3600L), targets, com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true), null, reply -> {});
+        TaskDispatch.setTask(companion, buildJob(ctx.toolCallId(),
+                ctx.deadline(3600L), targets, true, false), null, reply -> {});
         helper.succeedWhen(() -> {
             for (BuildTaskRecord.Target t : targets) {
                 helper.assertTrue(level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),

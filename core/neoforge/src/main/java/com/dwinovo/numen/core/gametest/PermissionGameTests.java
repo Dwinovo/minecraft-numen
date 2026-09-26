@@ -1328,8 +1328,7 @@ public class PermissionGameTests {
         BlockPos spot = helper.absolutePos(new BlockPos(7, 2, 4));
         NumenPlayer companion = spawnAt(helper, "gametest_demolisher", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.TNT));
-        ToolRun build = call(companion, "build", args("ops", List.of(args("op", "set",
-                "block_id", "minecraft:tnt", "x", spot.getX(), "y", spot.getY(), "z", spot.getZ()))));
+        ToolRun build = command(companion, "build place tnt " + xyz(spot));
 
         helper.succeedWhen(() -> {
             helper.assertTrue(build.done(), "build has not finished");
@@ -1349,8 +1348,7 @@ public class PermissionGameTests {
         BlockPos spot = helper.absolutePos(new BlockPos(10, 2, 10));
         NumenPlayer companion = spawnAt(helper, "gametest_quarryman", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.TNT));
-        ToolRun build = call(companion, "build", args("ops", List.of(args("op", "set",
-                "block_id", "minecraft:tnt", "x", spot.getX(), "y", spot.getY(), "z", spot.getZ()))));
+        ToolRun build = command(companion, "build place tnt " + xyz(spot));
 
         helper.succeedWhen(() -> {
             helper.assertTrue(build.done(), "build has not finished");

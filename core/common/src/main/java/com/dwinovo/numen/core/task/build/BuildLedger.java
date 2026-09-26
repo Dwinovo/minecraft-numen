@@ -69,10 +69,10 @@ final class BuildLedger {
      * 组件一致。这张单子整个盖过默认口径。
      */
     List<BuildTaskRecord.CellNeed> needsFor(BuildTaskRecord.Target target) {
-        if (r.cellNeeds().isEmpty()) {
+        if (r.cellNeeds.isEmpty()) {
             return List.of();
         }
-        var found = r.cellNeeds().get(target.pos().asLong());
+        var found = r.cellNeeds.get(target.pos().asLong());
         return found == null ? List.of() : found;
     }
 
@@ -212,7 +212,7 @@ final class BuildLedger {
                 restCount += sorted.get(i).getValue();
             }
             out.append(", and ").append(restKinds).append(" more kinds (")
-                    .append(restCount).append(" items) — `build blueprint_read` lists every one");
+                    .append(restCount).append(" items) — `build show` lists every one");
         }
         int total = 0;
         for (int v : shortfall.values()) {

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.permission;
 
+import com.dwinovo.numen.entity.NumenPlayer;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
@@ -10,6 +11,7 @@ import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.ChunkPos;
@@ -43,6 +45,24 @@ public final class PlacedBlocks extends SavedData {
     public record Placer(UUID id, String name) {
 
         public static final Placer UNKNOWN = new Placer(new UUID(0L, 0L), "");
+
+        /**
+         * 这只同伴的主人作为放的人:名字取在线的主人,不在线取服务器记着的档案;都查不到名字为空串(说成"玩家放的")。
+         * 没有主人是 {@link #UNKNOWN}。
+         */
+        public static Placer ownerOf(NumenPlayer companion) {
+            UUID id = companion.getOwnerUuid();
+            if (id == null) {
+                return UNKNOWN;
+            }
+            ServerPlayer online = companion.resolveOwnerPlayer();
+            String name = online != null ? online.getGameProfile().getName()
+                    : java.util.Optional.ofNullable(companion.getServer().getProfileCache())
+                            .flatMap(cache -> cache.get(id))
+                            .map(com.mojang.authlib.GameProfile::getName)
+                            .orElse("");
+            return new Placer(id, name);
+        }
 
         /** 说得出是谁:有名字。 */
         public boolean known() {

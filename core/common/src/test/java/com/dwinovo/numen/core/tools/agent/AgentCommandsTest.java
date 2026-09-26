@@ -4,8 +4,6 @@ import com.dwinovo.numen.agent.memory.NoteBook;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolCall;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
-import com.dwinovo.numen.api.NumenApi;
-import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.cli.CommandTool;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -18,7 +16,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -38,11 +35,8 @@ class AgentCommandsTest {
     @BeforeAll
     static void register() {
         NoteBook.init(uuid -> homes.resolve(uuid.toString()), () -> 7);
-        // 经插件那扇门登记,和 NumenCore 同一条路;登记时的报错(例子写不通、名字撞了)当场抛出
-        AtomicReference<NumenApi> door = new AtomicReference<>();
-        NumenPlugins.register(door::set);
-        MemoryCommands.install(door.get());
-        SkillCommands.install(door.get());
+        // 照 NumenCore 同一份登记装上 core 的各组;登记时的报错(例子写不通、名字撞了)当场抛出
+        com.dwinovo.numen.core.CoreCommandsFixture.install();
     }
 
     /** 调一次工具,收下它唯一的一条回执。 */

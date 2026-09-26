@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.task.build;
 
 import com.dwinovo.numen.core.FailureType;
+import com.dwinovo.numen.core.build.Built;
 import com.dwinovo.numen.core.act.BlockDigger;
 import com.dwinovo.numen.core.pathing.bridge.ContextFactory;
 import com.dwinovo.numen.core.pathing.cache.LoadedOnlyView;
@@ -221,7 +222,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     @Override
     protected List<Precondition> preconditions() {
-        return List.of(this::checkExistingBlocks, this::checkMaterials);
+        return List.of(this::checkMaterials);
     }
 
     /**
@@ -261,21 +262,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 FailureType.NO_MATERIAL);
     }
 
-    private Precondition.Failure checkExistingBlocks() {
-        if (r.replaceMode != ReplaceMode.DONT_REPLACE) {
-            return null;
-        }
-        for (BuildTaskRecord.Target target : r.targets) {
-            BlockState state = rules.peek(target.pos());
-            if (!target.matches(state)
-                    && (BuildCellRules.isAirTarget(target) || !isReplaceable(target.pos(), state))) {
-                return new Precondition.Failure("target " + target.shortPos()
-                        + " is occupied; enable replacement or clear it first", FailureType.TARGET_LOST);
-            }
-        }
-        return null;
-    }
-
     @Override
     protected void onStart() {
         observedCompleted = new LongOpenHashSet();
@@ -300,7 +286,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         List<com.dwinovo.numen.permission.ConsentItem> items = new ArrayList<>();
         for (BuildTaskRecord.Target target : r.targets) {
             if (target.matches(rules.peek(target.pos()))
-                    || !r.replaceMode.allows(rules.peek(target.pos()), target.desiredState())
+                    || !target.mode().allows(rules.peek(target.pos()), target.desiredState())
                     || rules.hopeless(target)) {
                 continue;
             }
@@ -602,7 +588,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
 
         if (occupied) {
-            if (!clear(pos)) {
+            if (!clear(target)) {
                 return null;   // 没清掉(权限层拒了、或砸不动):这遍放下,不往上放
             }
             if (BuildCellRules.isAirTarget(target)) {
@@ -623,7 +609,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             if (!target.matches(now)) {
                 return null;
             }
-            r.placedOne();
+            r.placedOne(occupied);
+            recordPlaced(pos, now);
             markObserved(target, true);
             return now;
         }
@@ -670,7 +657,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 inv.consumeOne(target.item());
             }
         }
-        r.placedOne();
+        r.placedOne(occupied);
+        recordPlaced(pos, desired);
         markObserved(target, true);
         return desired;
     }
@@ -785,12 +773,28 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      *
      * @return 这一格真的清空了
      */
-    private boolean clear(BlockPos pos) {
-        if (!digger.destroyNow(pos)) {
+    private boolean clear(BuildTaskRecord.Target target) {
+        if (!digger.destroyNow(target.pos())) {
             return false;
         }
-        r.brokeOne();
+        r.brokeOne(target.removes() != null);
+        recordCleared(target.pos());
         return true;
+    }
+
+    /** 放下了一格:这件活盖的是一栋房子的话,记进那一栋——那一栋由哪些格子组成,只有这一处记着。 */
+    private void recordPlaced(BlockPos pos, BlockState state) {
+        if (r.site != null) {
+            Built.of(player.getServer()).placed(r.site, player.getGameProfile().getName(),
+                    player.getServer().overworld().getGameTime(), pos, state.getBlock());
+        }
+    }
+
+    /** 拆掉了一格:这件活盖的是一栋房子的话,从那一栋的记录里划掉。 */
+    private void recordCleared(BlockPos pos) {
+        if (r.site != null) {
+            Built.of(player.getServer()).cleared(r.site, player.getServer().overworld().getGameTime(), pos);
+        }
     }
 
     /**
@@ -1024,8 +1028,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 notes.add(popped + " cell(s) ended up different once the world settled — vanilla would not"
                         + " hold them there, or their shape is decided by their neighbours");
             }
-            if (r.droppedAtLoad() > 0) {
-                notes.add(r.droppedAtLoad() + " cell(s) of the blueprint were dropped on load"
+            if (r.droppedAtLoad > 0) {
+                notes.add(r.droppedAtLoad + " cell(s) of the plan could not be taken along"
                         + " (liquids, or blocks with no item to pay with)");
             }
             if (fixtures.skippedFixtures() > 0) {
@@ -1493,7 +1497,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private CalculationContext buildContext(ServerPlayer player, BlockGetter view, ChunkLoadedTest loaded,
                                             boolean safeForThreadedUse, RouteSpec spec, Gate gate) {
         return new BuildCalculationContext(player, view, loaded, safeForThreadedUse, spec, gate,
-                targetByPos, inv.availableStates(true), r.replaceMode.mayReplace());
+                targetByPos, inv.availableStates(true), r.mayReplace());
     }
 
     @Override
@@ -1525,7 +1529,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             return;
         }
         PlacedBlocks placed = PlacedBlocks.of(level);
-        PlacedBlocks.Placer owner = ownerAsPlacer(level);
+        PlacedBlocks.Placer owner = PlacedBlocks.Placer.ownerOf(player);
         for (BuildTaskRecord.Target target : r.targets) {
             if (BuildCellRules.isAirTarget(target) || !level.isLoaded(target.pos())) {
                 continue;
@@ -1539,21 +1543,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 placed.record(other, owner);
             }
         }
-    }
-
-    /** 主人作为放的人:名字取在线的主人,不在线取服务器记着的档案;都查不到名字为空串(说成"玩家放的")。 */
-    private PlacedBlocks.Placer ownerAsPlacer(net.minecraft.server.level.ServerLevel level) {
-        java.util.UUID id = player.getOwnerUuid();
-        if (id == null) {
-            return PlacedBlocks.Placer.UNKNOWN;
-        }
-        net.minecraft.server.level.ServerPlayer online = player.resolveOwnerPlayer();
-        String name = online != null ? online.getGameProfile().getName()
-                : java.util.Optional.ofNullable(level.getServer().getProfileCache())
-                        .flatMap(cache -> cache.get(id))
-                        .map(com.mojang.authlib.GameProfile::getName)
-                        .orElse("");
-        return new PlacedBlocks.Placer(id, name);
     }
 
     /**
@@ -1570,7 +1559,13 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         data.put("requested", r.targets.size());
         data.put("completed", r.completed());
         data.put("placed", r.placed());
+        data.put("replaced", r.replaced());
         data.put("cleared", r.broken());
+        data.put("removed", r.removed());
+        String building = building();
+        if (building != null) {
+            data.put("building", building);
+        }
         data.put("site_min", siteMin == null ? "-" : siteMin.toShortString());
         data.put("site_max", siteMax == null ? "-" : siteMax.toShortString());
         if (damagedCells > 0) {
@@ -1586,10 +1581,35 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         return data;
     }
 
+    /**
+     * 这件活盖的那一栋叫什么({@code house#1});当场执行的原语不是一栋房子,一格都还没放下的新房子也还没有名字,是 null。
+     */
+    private String building() {
+        if (r.site == null) {
+            return null;
+        }
+        Built.Building b = Built.of(player.getServer()).at(r.site);
+        return b == null ? null : b.name();
+    }
+
+    /** 放了、换了、拆了多少格,这一句收工与收不了工都用。 */
+    private String tally() {
+        StringBuilder sb = new StringBuilder("placed ").append(r.placed());
+        if (r.replaced() > 0) {
+            sb.append(" (").append(r.replaced()).append(" replacing what stood there)");
+        }
+        sb.append(", cleared ").append(r.broken());
+        if (r.removed() > 0) {
+            sb.append(" (").append(r.removed()).append(" of them blocks you had put there before)");
+        }
+        return sb.toString();
+    }
+
     @Override
     protected String successMessage() {
-        return "built " + r.completed() + "/" + r.targets.size()
-                + " block(s); placed " + r.placed() + ", cleared " + r.broken()
+        String building = building();
+        return (building == null ? "" : building + ": ") + "built " + r.completed() + "/" + r.targets.size()
+                + " block(s); " + tally()
                 + (damagedCells > 0
                         ? "; " + damagedCells + " finished cell(s) were destroyed mid-build by "
                                 + "something outside the job and had to be redone"
