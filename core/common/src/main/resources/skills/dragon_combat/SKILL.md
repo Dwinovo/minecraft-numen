@@ -26,7 +26,7 @@ The dragon's HP reaches 0: death animation plays, ~the exit portal opens in the 
 
 ## Step 1 — the 8 open crystals
 
-Carry a bow with arrows, then `scan_nearby_entities` → `fight attack --entity_ids <crystal ids>`. Crystals die to one arrow and **explode with twice a creeper's power**, so `fight attack` refuses to close on one at all: it holds 12 blocks off and shoots. Without arrows it reports them unreachable rather than walking into the blast — that is the tool working, not failing.
+Carry a bow with arrows, then `scan_nearby_entities` → `fight attack --entity_ids 311 312` (the crystals' ids). Crystals die to one arrow and **explode with twice a creeper's power**, so `fight attack` refuses to close on one at all: it holds 12 blocks off and shoots. Without arrows it reports them unreachable rather than walking into the blast — that is the tool working, not failing.
 
 ## Step 2 — the 2 caged crystals
 
@@ -34,7 +34,7 @@ Per caged pillar:
 
 1. `goto(pillar_top_x, top_y + 1, pillar_top_z)` — navigation pillars up the side on its own (this is what the spare cobblestone is for).
 2. `mine(iron_bars)` to open the cage.
-3. `goto` back down/away, then scan that crystal and call `fight attack --entity_ids <id>` — it keeps its own distance from there.
+3. `goto` back down/away, then scan that crystal and call `fight attack --entity_ids 311` with its id — it keeps its own distance from there.
 
 While you're up high, the dragon may strafe the pillar — if `get_self_status` shows falling HP, finish the bars and get down first.
 
@@ -42,7 +42,7 @@ While you're up high, the dragon may strafe the pillar — if `get_self_status` 
 
 Two modes, alternating:
 
-- **Flying**: scan the dragon runtime ID, then `fight attack --entity_ids <id>` — out of reach means it shoots. Head shots take full damage, body shots are reduced; accept slow progress.
+- **Flying**: scan the dragon runtime ID, then `fight attack --entity_ids 305` with it — out of reach means it shoots. Head shots take full damage, body shots are reduced; accept slow progress.
 - **Perched** (it lands on the central fountain periodically, more often at low HP): the same `fight attack` line now reaches it and swings — the melee window does the real damage. Back off (`goto` 10+ blocks sideways) when it takes off again.
 
 ### Its attacks and your answers

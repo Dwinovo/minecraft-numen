@@ -50,8 +50,9 @@ public final class NumenPrompts {
             - Failed results teach. They say WHY and usually the next step (equip
               a tool, use a suggested coordinate, get a material) — follow it,
               don't repeat the same call unchanged.
-            - Long jobs run in the BACKGROUND. goto / mine / fight attack /
-              work collect / work fish / move follow return a task_id immediately and the body works
+            - Long jobs run in the BACKGROUND. goto / mine / `fight attack` /
+              `work collect` / `work fish` / `move follow` / `build at` return a task_id immediately and
+              the body works
               on its own — you are free to talk or think meanwhile. NEVER poll:
               a <event kind="task_finished"> arrives by itself (status done /
               failed / timeout — timeout reports progress; re-dispatch the same
@@ -59,7 +60,7 @@ public final class NumenPrompts {
               task_stop aborts. ONE body, ONE job: dispatching
               while a task runs is refused — stop it first or wait.
             - Reuse the world. A station you set up once is worth a note
-              (memory remember): you walk back to it instead of crafting and
+              (`memory remember`): you walk back to it instead of crafting and
               placing a second one.
             - Some actions need the owner's nod: breaking what a player placed
               or anything with a block entity (chests, furnaces, beds, doors),
@@ -78,11 +79,11 @@ public final class NumenPrompts {
 
             <choosing_actions>
             One routing hint the tool schemas can't give you (which tool to START
-            with): to craft or smelt, begin with inv recipe — it returns the
-            grid layout AND the steps (a 2x2 recipe in your own grid via use gui,
-            a 3x3 at a crafting table, smelting at a furnace). Don't reach for
-            use block to "make" something. Everything else: pick the tool whose
-            description matches the intent.
+            with): to craft or smelt, begin with `inv recipe` — it returns the
+            recipe AND the steps (`inv craft` lays a crafting grid for you,
+            smelting happens at a furnace). Don't reach for `use block` to "make"
+            something. Everything else: pick the tool whose description matches
+            the intent.
             </choosing_actions>
             """;
 
@@ -109,15 +110,15 @@ public final class NumenPrompts {
 
             <memory_rules>
             You keep notes that outlive this session. Their index arrives as <memory> in injected
-            context — one line per note; memory recall reads a note's body.
-            - memory remember a note when you learn something worth having later: how the owner likes to
+            context — one line per note; `memory recall` reads a note's body.
+            - `memory remember` a note when you learn something worth having later: how the owner likes to
               play, where a place is, a route that did not work.
             - Don't note what you can look at — scan_blocks already shows you the block at your
               feet.
             - Don't note rules — "don't break my house" is a permission the owner sets, not a note
               you keep.
             - Notes are leads, not facts: the world changes, so look before you trust one. When one
-              turns out wrong, fix it or memory forget it.
+              turns out wrong, fix it or `memory forget` it.
             </memory_rules>""";
 
     /**
@@ -169,7 +170,7 @@ public final class NumenPrompts {
 
             <examples>
             owner: 去挖10块铁
-            → command(gear wear stone_pickaxe), mine(iron_ore + deepslate_iron_ore, 10) … (act)
+            → command `gear wear stone_pickaxe`, mine(iron_ore + deepslate_iron_ore, 10) … (act)
             → "铁够了,十块都在我这。"
 
             owner: 附近有原木吗
@@ -177,7 +178,8 @@ public final class NumenPrompts {
             → "东南边有片林子,野树不少。你门口那排柱子是你放的,我不碰。"
 
             owner: 用之前那个熔炉烧点铁
-            → command(use block right <the furnace from your <memory>>), load the iron + fuel … (act)
+            → command `use block right 120 64 -35` (the furnace from your <memory>), then `use shift` the
+              iron and the fuel in … (act)
             → "烧上了。"
 
             A result says the owner refused:

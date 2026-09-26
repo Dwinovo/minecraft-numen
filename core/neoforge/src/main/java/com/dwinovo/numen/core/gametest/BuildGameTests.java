@@ -1613,12 +1613,11 @@ public class BuildGameTests {
      */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
     public static void skill_docs_name_real_blocks(GameTestHelper helper) {
-        // 我们自己的词汇:工具、op、参数、状态键、形制名。它们和方块名共用反引号,
-        // 但不该去注册表里找。
+        // 我们自己的词汇:原语的参数名与档位、状态键、技能名、形制名。它们和方块名共用反引号,
+        // 但不该去注册表里找。命令写得对不对归命令树判,这里只管方块名。
         java.util.Set<String> ours = java.util.Set.of(
-                "block_id", "legend", "rows", "mask", "carve", "overwrite", "solid", "keep",
-                "rotation", "mirror", "include_air", "hollow", "load_skill", "task_status",
-                "task_finished", "building_design", "blueprint_read",
+                "legend", "rows", "mask", "carve", "overwrite", "solid", "keep", "up_to",
+                "rotation", "mirror", "hollow", "building_design",
                 "short_grass", "dirt_path", "coarse_dirt", "flower_pot", "decorated_pot",
                 "x1", "y1", "z1", "x2", "y2", "z2");
         java.util.List<String> bad = new java.util.ArrayList<>();

@@ -14,7 +14,7 @@ Phase 5 of the dragon route. With rods and pearls in hand you craft eyes, walk s
 
 ## Step 1 — craft the eyes
 
-Both are 2×2/shapeless recipes — `inv recipe` for the layout, then `transfer` the ingredients into a grid and take the result (see the `containers` skill; no crafting table needed).
+Both are 2×2/shapeless recipes — `inv craft` makes them in your own grid, no crafting table needed (the `containers` skill shows how to lay a grid by hand).
 
 1. `blaze_powder` — each blaze rod grinds into 2 powder.
 2. `ender_eye` (×12) — 1 blaze powder + 1 ender pearl each.
@@ -33,13 +33,13 @@ The room has a lava pool under the frame and a **silverfish spawner** on the sta
 
 1. `mine(spawner)` immediately — unlike the blaze spawner, this one is pure liability.
 2. If silverfish are already out, scan them, then pass their runtime IDs to `fight attack`; don't let them burrow into the brickwork.
-3. `build` cobblestone over the lava pool edges where you'll stand.
+3. Cover the lava pool edges where you'll stand with cobblestone: a `build layer` of it, or `build set` for single cells.
 
 ## Step 4 — fill the frames
 
 1. The 12 `end_portal_frame` blocks ring a 3×3 opening. `scan_blocks(end_portal_frame)` returns them as one group that lists all 12 positions.
 2. `inspect_block` each frame — the `has_eye` property tells you which are pre-filled.
-3. `use block right <x> <y> <z> --item minecraft:ender_eye` on each empty frame. **Eyes cannot be taken back out.**
+3. `use block right 120 64 -35 --item minecraft:ender_eye` on each empty frame, one line per frame. **Eyes cannot be taken back out.**
 4. The 12th eye activates the portal; the opening fills with the starfield surface.
 
 ## Before dropping in
