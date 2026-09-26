@@ -361,7 +361,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         NavProfiler.end("mine.drops", tDrops);
 
         // 1) Mine any target whose stance we already stand in (no pathing).
-        BlockPos reachable = quotaMet ? null : reachableTarget();
+        BlockPos reachable = reachableTarget();
         if (reachable != null) {
             // Mine in place with the nav merely PAUSED (inputs cleared each tick), never torn down:
             // the goal, current path segment, and any in-flight search stay warm, so when this dig
@@ -418,7 +418,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     settledPrice = oreFieldCompiled().goal().arrivalCost(settledAt);
                     // [ANCHOR arrived-dud] 到了,却没有可挖的。站位与原地就挖是同一个判据,所以这
                     // <b>不构成关于任何一颗矿的证据</b>:她到的是复合目标里的<b>掉落物</b>成员(刚捡完
-                    // 东西,附近本来就没矿),或者这一刻人在空中(reachableTarget 第一行就要求 onGround)。
+                    // 东西,附近本来就没矿;够数之后只剩掉落物成员),或者这一刻人在空中(reachableTarget
+                    // 第一行就要求 onGround)。
                     //
                     // 所以这里只重新规划。真卡住了由 STALL_TICKS 那把尺子收工,不记账到某一格。
                     if (reachableTarget() == null && !knownOres.isEmpty()) {
@@ -585,9 +586,13 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      * <p>够得着的也可能不是该挖的:别处有按乐观估价就更便宜的({@link #targetCost}:走过去 + 挖它),
      * 就先让导航按总价去挑。导航挑完仍停在这儿({@link #settledAt}),而且认下的价钱够挖它
      * ({@link #settledPrice}),说明别处的便宜只是估价上的,那就挖手边的。
+     *
+     * <p>够数了({@link #quotaMet})手边也没有该挖的:再挖就多了。这一条必须写在这里,不能由调用方各自
+     * 另加——导航的"到了"问的就是这个函数,门槛若只挡在原地就挖那一侧,导航会拿手边那根当"到了"、
+     * 任务却不挖,两边来回推,她钉在原地不去捡那几件够数所靠的掉落物。
      */
     private BlockPos reachableTarget() {
-        if (!player.onGround()) return null;
+        if (quotaMet || !player.onGround()) return null;
         Level level = player.level();
         BlockPos feet = PathExecutor.playerFeet(player);
         BlockReach reach = BlockReach.of(player);
