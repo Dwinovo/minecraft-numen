@@ -55,7 +55,7 @@ class CommandHelpTest {
         door().registerCommands("gt_many", "A group with a long list.", g -> {
             for (int i = 1; i <= 25; i++) {
                 String name = String.format("act%02d", i);
-                g.server(name, "Action number " + i + ".",
+                g.server(name, "Action number " + i + ". " + "Long words. ".repeat(250),
                         (src, args) -> src.reply(TaskResult.ok("done").toJson()))
                         .example("gt_many " + name);
             }
@@ -170,28 +170,24 @@ class CommandHelpTest {
         assertEquals(index, NumenCli.index(), "字节稳定");
     }
 
+    /** 帮助和动作自己列的清单同一个预算:二十五个动作、每个两三千字节的说明,一页放不下。 */
     @Test
     void aLongListIsPagedAndSaysHowToTurnThePage() {
         String first = onClient("gt_many --help").message();
         assertTrue(first.startsWith("gt_many: A group with a long list. Actions:\n"
-                + "  gt_many act01 — Action number 1.\n"), first);
-        assertTrue(first.contains("  gt_many act20 — Action number 20.\n"
-                + "(page 1 of 2, 5 more: gt_many --help --page 2)\n"
-                + "gt_many <action> --help explains one action."), first);
-        assertFalse(first.contains("act21"), first);
+                + "  gt_many act01 — Action number 1. Long words."), first.substring(0, 80));
+        int shown = ListingTest.shownTo(first, 25, "gt_many --help --page 2");
+        assertTrue(first.endsWith(" to continue.]\ngt_many <action> --help explains one action."),
+                first.substring(first.length() - 120));
+        assertTrue(first.contains(String.format("gt_many act%02d — ", shown)), "显示到的那一条在这一页");
+        assertFalse(first.contains(String.format("gt_many act%02d — ", shown + 1)), "下一条不在");
 
         String second = onClient("gt_many --help --page 2").message();
-        assertEquals("""
-                gt_many: A group with a long list. Actions:
-                  gt_many act21 — Action number 21.
-                  gt_many act22 — Action number 22.
-                  gt_many act23 — Action number 23.
-                  gt_many act24 — Action number 24.
-                  gt_many act25 — Action number 25.
-                gt_many <action> --help explains one action.""", second);
+        assertTrue(second.startsWith("gt_many: A group with a long list. Actions:\n"
+                + String.format("  gt_many act%02d — ", shown + 1)), second.substring(0, 80));
 
-        CliFixture.Outcome beyond = onClient("gt_many --help --page 3");
+        CliFixture.Outcome beyond = onClient("gt_many --help --page 9");
         assertFalse(beyond.success());
-        assertTrue(beyond.message().startsWith("no page 3; gt_many --help has pages 1-2"), beyond.message());
+        assertTrue(beyond.message().startsWith("no page 9; gt_many --help has pages 1-"), beyond.message());
     }
 }

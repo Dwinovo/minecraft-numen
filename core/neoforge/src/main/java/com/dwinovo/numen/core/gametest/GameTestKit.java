@@ -315,6 +315,20 @@ public final class GameTestKit {
         return call(body, com.dwinovo.numen.cli.CommandTool.NAME, args("command", line));
     }
 
+    /**
+     * 一张按输出预算分页的清单,从第一页往后翻,直到哪一页里有 {@code needle}:清单跨次攒下来,要找的那条落在第几页由
+     * 前面有多少条定。翻到最后一页也没有、或者哪一页失败了,返回那一页,由用例的断言说明白。
+     */
+    static ToolRun pageWith(NumenPlayer body, String line, String needle) {
+        for (int page = 1; ; page++) {
+            ToolRun run = command(body, line + " --page " + page);
+            if (!run.succeeded() || run.reply().contains(needle)
+                    || !run.reply().contains(" --page " + (page + 1) + " to continue.]")) {
+                return run;
+            }
+        }
+    }
+
     /** 拼工具参数:键、值交替;值是字符串、数字、布尔、列表(成 JSON 数组)或现成的 JSON。 */
     static JsonObject args(Object... keyValues) {
         JsonObject out = new JsonObject();
