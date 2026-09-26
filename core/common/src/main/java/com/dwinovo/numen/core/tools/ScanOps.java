@@ -25,8 +25,8 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 /**
- * The {@code scan_blocks} implementation — the business half of
- * {@code ScanBlocksTool}. It is an async (budget-sliced) server job: the method
+ * The {@code scan blocks} implementation (declared, and promoted to {@code scan_blocks}, in
+ * {@link com.dwinovo.numen.core.tools.perception.ScanCommands}). It is an async (budget-sliced) server job: the method
  * takes the live entity plus a reply {@link Consumer} and returns void — the
  * result arrives on a later tick through the callback.
  *

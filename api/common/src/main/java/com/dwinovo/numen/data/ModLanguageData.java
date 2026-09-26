@@ -417,7 +417,6 @@ public final class ModLanguageData {
         adder.add("numen.tool.get_self_status", "Self status");
         adder.add("numen.tool.goto", "Go to");
         adder.add("numen.tool.inspect_block", "Inspect block");
-        adder.add("numen.tool.inspect_block_storage", "Inspect container");
         adder.add("numen.tool.inspect_gui", "Inspect GUI");
         adder.add("numen.tool.interact_at", "Interact");
         adder.add("numen.tool.interact_entity", "Interact entity");
@@ -857,7 +856,6 @@ public final class ModLanguageData {
         adder.add("numen.tool.get_self_status", "自身状态");
         adder.add("numen.tool.goto", "前往");
         adder.add("numen.tool.inspect_block", "查看方块");
-        adder.add("numen.tool.inspect_block_storage", "查看容器");
         adder.add("numen.tool.inspect_gui", "查看界面");
         adder.add("numen.tool.interact_at", "交互");
         adder.add("numen.tool.interact_entity", "实体交互");

@@ -36,24 +36,24 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Query tool implementations — the business half of {@code LookupRecipeTool},
- * {@code ScanNearbyEntitiesTool} and {@code InspectBlockStorageTool}.
+ * Query implementations — the business half of {@code LookupRecipeTool}, and of the
+ * {@code scan entities} and {@code scan storage} commands declared in
+ * {@link com.dwinovo.numen.core.tools.perception.ScanCommands}.
  */
 public final class QueryExtraOps {
 
-    // ---- scan_nearby_entities ----
+    // ---- scan entities ----
 
     private static final int MAX_RESULTS = 20;
     private static final double MIN_RADIUS = 1.0;
     private static final double MAX_RADIUS = 64.0;
 
+    /** @param filter hostile、passive、player 或 all,由参数类型把关 */
     public String scanNearbyEntities(
 double radius,
-String type_filter,
+String filter,
             NumenPlayer self) {
         radius = Math.clamp(radius, MIN_RADIUS, MAX_RADIUS);
-        String filter = readEnum("type_filter", type_filter,
-                List.of("hostile", "passive", "player", "all"));
 
         List<Entity> raw = NearbyEntities.within(self, radius, Entity.class, e -> true);
 
@@ -107,18 +107,6 @@ String type_filter,
     }
 
     private record ScoredEntity(Entity entity, String category, double distance) {}
-
-    private static String readEnum(String key, String value, List<String> allowed) {
-        if (value == null) {
-            throw new IllegalArgumentException("missing required argument: " + key);
-        }
-        String v = value;
-        if (!allowed.contains(v)) {
-            throw new IllegalArgumentException(
-                    "argument '" + key + "' must be one of " + allowed + ", got: " + v);
-        }
-        return v;
-    }
 
     // ---- lookup_recipe ----
 
@@ -285,7 +273,7 @@ String item_id,
         return token;
     }
 
-    // ---- inspect_block_storage ----
+    // ---- scan storage ----
 
     public String inspectBlockStorage(int x,
 int y,

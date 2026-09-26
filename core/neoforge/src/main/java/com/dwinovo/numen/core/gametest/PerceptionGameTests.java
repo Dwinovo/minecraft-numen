@@ -23,9 +23,10 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
 /**
- * 感知:{@code inspect_block}、{@code inspect_block_storage}、{@code look_around}、{@code scan_nearby_entities}、
- * {@code get_self_status}、{@code get_world_info}、{@code get_owner_status}、{@code lookup_recipe}、
- * {@code scaffold_materials}。这些工具不动世界,测的是回执说的是不是眼前的真事。
+ * 感知:{@code scan} 组({@code scan block}、{@code scan storage}、{@code scan around}、{@code scan entities}、
+ * {@code scan blocks})、{@code status} 组({@code status self}、{@code status world}、{@code status owner}),以及
+ * {@code lookup_recipe}、{@code scaffold_materials}。这些不动世界,测的是回执说的是不是眼前的真事;提升成快捷工具的
+ * 动作,同一刻从工具与从 {@code command} 读到的一字不差(同源)。
  */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
@@ -47,6 +48,7 @@ public class PerceptionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_inspector", new BlockPos(3, 2, 3), false);
         ToolRun atNear = call(companion, "inspect_block", args("x", near.getX(), "y", near.getY(), "z", near.getZ()));
         ToolRun atFar = call(companion, "inspect_block", args("x", far.getX(), "y", far.getY(), "z", far.getZ()));
+        ToolRun viaCommand = command(companion, "scan block " + near.getX() + " " + near.getY() + " " + near.getZ());
 
         helper.succeedWhen(() -> {
             JsonObject n = json(atNear);
@@ -55,6 +57,8 @@ public class PerceptionGameTests {
                     "the stone beside her is not reported as stone within reach: " + atNear.reply());
             helper.assertTrue(!f.get("in_reach").getAsBoolean(),
                     "the stone across the site is reported within reach: " + atFar.reply());
+            helper.assertTrue(atNear.reply().equals(viaCommand.reply()),
+                    "inspect_block and scan block read differently: " + atNear.reply() + " / " + viaCommand.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -64,8 +68,7 @@ public class PerceptionGameTests {
     public static void inspect_block_storage_reads_a_chest_without_opening_it(GameTestHelper helper) {
         BlockPos chest = chestWithDiamonds(helper, new BlockPos(5, 2, 3), 5);
         NumenPlayer companion = spawnAt(helper, "gametest_auditor", new BlockPos(3, 2, 3), false);
-        ToolRun storage = call(companion, "inspect_block_storage",
-                args("x", chest.getX(), "y", chest.getY(), "z", chest.getZ()));
+        ToolRun storage = command(companion, "scan storage " + chest.getX() + " " + chest.getY() + " " + chest.getZ());
 
         helper.succeedWhen(() -> {
             helper.assertTrue(storage.succeeded() && storage.reply().contains("diamond")
@@ -89,15 +92,21 @@ public class PerceptionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_surveyor", new BlockPos(8, 2, 8), false);
 
         java.util.concurrent.atomic.AtomicReference<ToolRun> map = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<ToolRun> viaCommand = new java.util.concurrent.atomic.AtomicReference<>();
         // 图以她脚下那一格为中心,落地之前那一格还没定
         helper.startSequence()
                 .thenWaitUntil(() -> helper.assertTrue(companion.onGround(), "she has not landed"))
-                .thenExecute(() -> map.set(call(companion, "look_around", args())))
+                .thenExecute(() -> {
+                    map.set(call(companion, "look_around", args()));
+                    viaCommand.set(command(companion, "scan around"));
+                })
                 .thenWaitUntil(() -> {
                     String m = map.get().reply();
                     helper.assertTrue(cell(m, 2, 0) == '#', "the wall two east is not #: \n" + m);
                     helper.assertTrue(cell(m, 0, -2) == '^', "the step two north is not ^: \n" + m);
                     helper.assertTrue(cell(m, -2, 0) == '~', "the water two west is not ~: \n" + m);
+                    helper.assertTrue(m.equals(viaCommand.get().reply()),
+                            "look_around and scan around draw differently: \n" + m + "\n" + viaCommand.get().reply());
                 })
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
                 .thenSucceed();
@@ -114,12 +123,16 @@ public class PerceptionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_watcher", new BlockPos(3, 2, 3), false);
         ToolRun all = call(companion, "scan_nearby_entities", args("radius", 12, "type_filter", "all"));
         ToolRun hostile = call(companion, "scan_nearby_entities", args("radius", 12, "type_filter", "hostile"));
+        ToolRun viaCommand = command(companion, "scan entities 12 all");
 
         helper.succeedWhen(() -> {
             helper.assertTrue(all.reply().contains("\"id\":" + pig.getId()) && all.reply().contains("pig"),
                     "the pig is not listed with its id: " + all.reply());
             helper.assertTrue(!hostile.reply().contains("\"id\":" + pig.getId()),
                     "the pig is listed as hostile: " + hostile.reply());
+            helper.assertTrue(all.reply().equals(viaCommand.reply()),
+                    "scan_nearby_entities and scan entities list differently: " + all.reply() + " / "
+                            + viaCommand.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -228,6 +241,50 @@ public class PerceptionGameTests {
         });
     }
 
+    /**
+     * 同源:找方块从 scan_blocks 与 scan blocks 读到同一份团。标签照原版写法({@code #minecraft:logs})认,一个 id 一个标签
+     * 同一次找;两次各领一批新的团编号,编号之外一字不差。两次先后找,后一次的团簿整本换掉前一次的。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_perception")
+    public static void scan_blocks_reads_the_same_from_the_tool_and_the_command(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos gold = helper.absolutePos(new BlockPos(6, 2, 3));
+        BlockPos log = helper.absolutePos(new BlockPos(3, 2, 7));
+        level.setBlockAndUpdate(gold, Blocks.GOLD_BLOCK.defaultBlockState());
+        level.setBlockAndUpdate(log, Blocks.OAK_LOG.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_twin_eyes", new BlockPos(3, 2, 3), false);
+        java.util.concurrent.atomic.AtomicReference<ToolRun> viaTool = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<ToolRun> viaCommand = new java.util.concurrent.atomic.AtomicReference<>();
+
+        // 团的中心是她脚下那一格,落地之前那一格还没定
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(companion.onGround(), "she has not landed"))
+                .thenExecute(() -> viaTool.set(call(companion, "scan_blocks",
+                        args("radius", 8, "block_ids", List.of("minecraft:gold_block", "#minecraft:logs")))))
+                .thenWaitUntil(() -> helper.assertTrue(viaTool.get().reply() != null, "scan_blocks has not answered"))
+                .thenExecute(() -> viaCommand.set(command(companion, "scan blocks 8 minecraft:gold_block #minecraft:logs")))
+                .thenWaitUntil(() -> {
+                    String tool = viaTool.get().reply();
+                    String line = viaCommand.get().reply();
+                    helper.assertTrue(line != null, "scan blocks has not answered");
+                    helper.assertTrue(groupHolding(groupsIn(tool), gold) != null && groupHolding(groupsIn(tool), log) != null,
+                            "the gold block and the log are not both found: " + tool);
+                    helper.assertTrue(withoutGroupIds(tool).equals(withoutGroupIds(line)),
+                            "scan_blocks and scan blocks find differently: " + tool + " / " + line);
+                })
+                .thenExecute(() -> {
+                    level.removeBlock(gold, false);
+                    level.removeBlock(log, false);
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /** 团编号每找一次领一批新的,比两份回执时抹掉。 */
+    private static String withoutGroupIds(String reply) {
+        return reply.replaceAll("\"id\":\"g\\d+\"", "\"id\":\"g\"");
+    }
+
     private static JsonObject json(ToolRun run) {
         return JsonParser.parseString(run.reply()).getAsJsonObject();
     }
@@ -258,8 +315,8 @@ public class PerceptionGameTests {
         helper.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
         BlockPos air = helper.absolutePos(new BlockPos(5, 3, 3));
         NumenPlayer companion = spawnAt(helper, "gametest_prober", new BlockPos(3, 2, 3), false);
-        ToolRun onStone = call(companion, "inspect_block_storage", args("x", stone.getX(), "y", stone.getY(), "z", stone.getZ()));
-        ToolRun onAir = call(companion, "inspect_block_storage", args("x", air.getX(), "y", air.getY(), "z", air.getZ()));
+        ToolRun onStone = command(companion, "scan storage " + stone.getX() + " " + stone.getY() + " " + stone.getZ());
+        ToolRun onAir = command(companion, "scan storage " + air.getX() + " " + air.getY() + " " + air.getZ());
 
         helper.succeedWhen(() -> {
             helper.assertTrue(onStone.succeeded() && onStone.reply().contains("exposes no item/fluid/energy storage"),

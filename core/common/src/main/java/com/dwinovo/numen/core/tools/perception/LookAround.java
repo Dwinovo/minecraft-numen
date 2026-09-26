@@ -1,22 +1,16 @@
 package com.dwinovo.numen.core.tools.perception;
 
-import com.dwinovo.numen.agent.tool.NumenTool;
-import com.dwinovo.numen.agent.tool.Schema;
 import com.dwinovo.numen.core.pathing.cache.LoadedOnlyView;
 import com.dwinovo.numen.core.pathing.execute.PathExecutor;
 import com.dwinovo.numen.core.pathing.spec.CellClass;
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.google.gson.JsonObject;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
-
-import java.util.Map;
-import java.util.function.Consumer;
 
 /**
  * Egocentric spatial view: renders the blocks around the companion as an
@@ -32,14 +26,15 @@ import java.util.function.Consumer;
  * vertical affordance encoding (collapsing a few height slices into one movement
  * symbol) and the hazard "inflation" buffer follow the occupancy-grid / layered
  * costmap practice in autonomous-driving navigation (e.g. Occ3D; ROS Nav2
- * costmap_2d). Sparse far-field objects are left to {@code scan_blocks} /
- * {@code scan_nearby_entities}; this tool is the dense near-field map half.
+ * costmap_2d). Sparse far-field objects are left to {@code scan blocks} /
+ * {@code scan entities}; this map is the dense near-field half. The command and its
+ * shortcut ({@code scan around} / {@code look_around}) are declared in {@link ScanCommands}.
  */
-public final class LookAroundTool implements NumenTool {
+final class LookAround {
 
-    private static final int DEFAULT_RADIUS = 8;
-    private static final int MIN_RADIUS = 4;
-    private static final int MAX_RADIUS = 16;
+    static final int DEFAULT_RADIUS = 8;
+    static final int MIN_RADIUS = 4;
+    static final int MAX_RADIUS = 16;
     /** How far below foot level a floor may sit before the cell reads as a drop. */
     private static final int DROP_DEPTH = 3;
 
@@ -56,42 +51,11 @@ public final class LookAroundTool implements NumenTool {
     private static final char TREE = 'T';
     private static final char UNLOADED = '?';
 
-    @Override
-    public String name() {
-        return "look_around";
-    }
+    private LookAround() {}
 
-    @Override
-    public String description() {
-        return "Your spatial view: a top-down character map of the blocks around you, centred on "
-                + "yourself. `@` is you at the middle, North is up, East is right, each cell is one block. "
-                + "Each cell encodes how you could move onto it, collapsing height into one symbol: "
-                + "`.` flat walkable, `^` step up 1 (jumpable), `,` step down 1-2, `v` drop of 3+ (pit/cliff), "
-                + "`#` wall/blocked, `~` water, `!` lava/hazard, `x` caution (next to a hazard), `T` tree, "
-                + "`?` not loaded. Call this ONCE to grasp terrain, walls, ledges, water and gaps around you "
-                + "instead of many inspect_block calls; to plan a route, trace it cell by cell across the grid. "
-                + "For far-away or specific blocks/entities use scan_blocks / scan_nearby_entities. "
-                + "Optional `radius` (4-16, default 8).";
-    }
-
-    @Override
-    public Map<String, Object> parameterSchema() {
-        return Schema.object()
-                .optionalInteger("radius", "Half-width of the square view in blocks (4-16, default 8).",
-                        MIN_RADIUS, MAX_RADIUS)
-                .build();
-    }
-
-    @Override
-    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
-        int radius = DEFAULT_RADIUS;
-        if (args != null && args.has("radius") && args.get("radius").isJsonPrimitive()) {
-            radius = Math.clamp(args.get("radius").getAsInt(), MIN_RADIUS, MAX_RADIUS);
-        }
-        reply.accept(render(self, radius));
-    }
-
-    private static String render(NumenPlayer self, int radius) {
+    /** The map of the {@code (2 * radius + 1)}-wide square around her feet; {@code radius} is clamped to 4-16. */
+    static String render(NumenPlayer self, int asked) {
+        int radius = Math.clamp(asked, MIN_RADIUS, MAX_RADIUS);
         BlockGetter view = LoadedOnlyView.of(self.level());
         LoadedOnlyView loaded = view instanceof LoadedOnlyView v ? v : null;
         BlockPos center = PathExecutor.playerFeet(self);
