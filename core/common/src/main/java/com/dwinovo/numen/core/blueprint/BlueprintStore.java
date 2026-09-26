@@ -30,8 +30,7 @@ import java.util.Locale;
  * 蓝图仓库:{@code schematics/} 目录下的结构文件。
  *
  * <p>目录名取社区通用的那个:玩家下载来的图纸本来就躺在那儿,不必再为我们
- * 单独搬一次家。旧的 {@code config/numen/blueprints} 继续兜底读取,已经放
- * 进去的图纸不会失踪。
+ * 单独搬一次家。图纸只从这一个目录读。
  *
  * <p>支持两种载体,同一数据形态(原版结构 NBT:size + palette/palettes + blocks):
  * <ul>
@@ -54,7 +53,7 @@ public final class BlueprintStore {
     /** 支持的图纸扩展名。 */
     private static final List<String> EXTENSIONS = List.of(".nbt", ".snbt", ".litematic", ".schem");
 
-    /** 主目录:社区通用的 {@code schematics/}(不存在则建,新图纸也写这里)。 */
+    /** 图纸目录:社区通用的 {@code schematics/}(不存在则建,新图纸也写这里)。 */
     public static Path dir(MinecraftServer server) {
         Path dir = server.getServerDirectory().resolve("schematics");
         try {
@@ -65,37 +64,23 @@ public final class BlueprintStore {
         return dir;
     }
 
-    /** 查找顺序:主目录优先,旧目录兜底(只读,不自动创建)。 */
-    private static List<Path> searchRoots(MinecraftServer server) {
-        List<Path> roots = new ArrayList<>(2);
-        roots.add(dir(server));
-        // 字面量,不用 Constants.CONFIG_ROOT:这是"蓝图曾经放在哪"的历史事实,
-        // 配置根将来若改名,这条兜底路径不该跟着改——那样就找不到老蓝图了。
-        Path legacy = server.getServerDirectory().resolve("config").resolve("numen").resolve("blueprints");
-        if (Files.isDirectory(legacy)) {
-            roots.add(legacy);
-        }
-        return roots;
-    }
-
-    /** 列出可用蓝图名(不含扩展名,排序稳定;同名以主目录为准)。 */
+    /** 列出可用蓝图名(不含扩展名,排序稳定;同一个名字几种格式都有时只列一次)。 */
     public static List<String> list(MinecraftServer server) {
         java.util.Set<String> names = new java.util.LinkedHashSet<>();
-        for (Path root : searchRoots(server)) {
-            try (var stream = Files.list(root)) {
-                stream.forEach(path -> {
-                    String file = path.getFileName().toString();
-                    String lower = file.toLowerCase(Locale.ROOT);
-                    for (String ext : EXTENSIONS) {
-                        if (lower.endsWith(ext)) {
-                            names.add(file.substring(0, file.lastIndexOf('.')));
-                            return;
-                        }
+        Path root = dir(server);
+        try (var stream = Files.list(root)) {
+            stream.forEach(path -> {
+                String file = path.getFileName().toString();
+                String lower = file.toLowerCase(Locale.ROOT);
+                for (String ext : EXTENSIONS) {
+                    if (lower.endsWith(ext)) {
+                        names.add(file.substring(0, file.lastIndexOf('.')));
+                        return;
                     }
-                });
-            } catch (IOException e) {
-                throw new RuntimeException("cannot list blueprint directory " + root, e);
-            }
+                }
+            });
+        } catch (IOException e) {
+            throw new RuntimeException("cannot list blueprint directory " + root, e);
         }
         List<String> sorted = new ArrayList<>(names);
         sorted.sort(Comparator.naturalOrder());
@@ -244,30 +229,29 @@ public final class BlueprintStore {
     }
 
     private static CompoundTag readTag(MinecraftServer server, String name) {
-        for (Path base : searchRoots(server)) {
-            Path nbt = base.resolve(name + ".nbt");
-            Path snbt = base.resolve(name + ".snbt");
-            Path litematic = base.resolve(name + ".litematic");
-            Path schem = base.resolve(name + ".schem");
-            try {
-                if (Files.exists(nbt)) {
-                    return NbtIo.readCompressed(nbt, NbtAccounter.unlimitedHeap());
-                }
-                if (Files.exists(snbt)) {
-                    return NbtUtils.snbtToStructure(Files.readString(snbt));
-                }
-                // 社区格式:读出 gzip NBT 后转成原版结构形态,下游管线无感
-                if (Files.exists(litematic)) {
-                    return BlueprintFormats.fromLitematic(
-                            NbtIo.readCompressed(litematic, NbtAccounter.unlimitedHeap()));
-                }
-                if (Files.exists(schem)) {
-                    return BlueprintFormats.fromSchem(
-                            NbtIo.readCompressed(schem, NbtAccounter.unlimitedHeap()));
-                }
-            } catch (Exception e) {
-                throw new IllegalArgumentException("blueprint " + name + " cannot be read: " + e.getMessage(), e);
+        Path base = dir(server);
+        Path nbt = base.resolve(name + ".nbt");
+        Path snbt = base.resolve(name + ".snbt");
+        Path litematic = base.resolve(name + ".litematic");
+        Path schem = base.resolve(name + ".schem");
+        try {
+            if (Files.exists(nbt)) {
+                return NbtIo.readCompressed(nbt, NbtAccounter.unlimitedHeap());
             }
+            if (Files.exists(snbt)) {
+                return NbtUtils.snbtToStructure(Files.readString(snbt));
+            }
+            // 社区格式:读出 gzip NBT 后转成原版结构形态,下游管线无感
+            if (Files.exists(litematic)) {
+                return BlueprintFormats.fromLitematic(
+                        NbtIo.readCompressed(litematic, NbtAccounter.unlimitedHeap()));
+            }
+            if (Files.exists(schem)) {
+                return BlueprintFormats.fromSchem(
+                        NbtIo.readCompressed(schem, NbtAccounter.unlimitedHeap()));
+            }
+        } catch (Exception e) {
+            throw new IllegalArgumentException("blueprint " + name + " cannot be read: " + e.getMessage(), e);
         }
         throw new IllegalArgumentException("blueprint " + name + " not found; build designs lists the files there are");
     }
