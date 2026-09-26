@@ -171,6 +171,56 @@ public class ModeGameTests {
     }
 
     /**
+     * 空手创造按她自己的垫路清单变料:清单里只有圆石,困在同一口黑曜石竖井里,照样垫圆石柱爬出来,
+     * 背包里也不多出一块清单外的料。
+     *
+     * <p>钉的是"有料可垫"只有一个判据:规划器认定创造画像有料,执行器取料就得取得出规划器认下的那种。
+     * 两边各算一份时,执行器变出一组清单外的泥土、选不出能放的料,垫柱那一步采纳即夭折,重新规划又是
+     * 同一条路。用名册里登记过的同伴——清单跟着名册落盘。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mode")
+    public static void creative_pillars_with_her_own_scaffold_list(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos floor = helper.absolutePos(new BlockPos(3, 2, 3));
+        NumenPlayer companion = com.dwinovo.numen.entity.Companions.summon(level.getServer(),
+                java.util.UUID.randomUUID(), "gametest_cobbler", level,
+                net.minecraft.world.phys.Vec3.atBottomCenterOf(floor));
+        for (int y = 2; y <= 4; y++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    if (dx == 0 && dz == 0) continue;
+                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(3 + dx, y, 3 + dz)),
+                            Blocks.OBSIDIAN.defaultBlockState());
+                }
+            }
+        }
+        companion.teleportTo(floor.getX() + 0.5, floor.getY(), floor.getZ() + 0.5);
+        companion.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
+        com.dwinovo.numen.core.pathing.settings.ScaffoldMaterials.store(companion, List.of("minecraft:cobblestone"));
+        BlockPos target = helper.absolutePos(new BlockPos(12, 2, 12));
+        TaskRecord record = call(companion, "goto", args(
+                "x", (double) target.getX(),
+                "y", (double) target.getY(),
+                "z", (double) target.getZ(),
+                "spec", naturalSpec())).task();
+        helper.onEachTick(() -> {
+            if (record.getResult() != null && !record.getResult().success()) {
+                helper.fail("she did not pillar out of the well with her own scaffolding: "
+                        + record.getResult().message());
+            }
+        });
+        helper.succeedWhen(() -> {
+            helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
+                    "she has not pillared out of the well yet");
+            helper.assertTrue(level.getBlockState(floor).is(Blocks.COBBLESTONE),
+                    "the pillar is not cobblestone: " + level.getBlockState(floor));
+            helper.assertTrue(companion.getInventory().countItem(Items.DIRT) == 0,
+                    "she conjured dirt, which is not on her list");
+            com.dwinovo.numen.entity.Companions.dismiss(level.getServer(), companion);
+        });
+    }
+
+    /**
      * 社区图纸格式解码:代码现场构造最小 .litematic(跨 long 位流、YZX 序、
      * 稀疏丢空气)与 .schem v2(varint 数据、带属性的调色板键),写进蓝图目录
      * 经 BlueprintStore 统一管线加载,逐格断言。不提交二进制夹具。
