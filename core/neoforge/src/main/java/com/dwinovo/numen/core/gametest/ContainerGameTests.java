@@ -44,7 +44,7 @@ public class ContainerGameTests {
 
         // 动作放 thenExecute、断言放 thenWaitUntil:原版序列里 thenExecute 的断言失败后,后面的步骤照样在同一刻
         // 跑下去,报出来的是最后一个失败;等在 thenWaitUntil 里,哪一步没过就停在哪一步、报哪一步
-        helper.startSequence()
+        steps(helper)
                 .thenExecute(() -> step.set(command(companion, "use block right " + xyz(chest))))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,
@@ -73,7 +73,7 @@ public class ContainerGameTests {
         companion.getInventory().add(new net.minecraft.world.item.ItemStack(Items.DIAMOND, 5));
         ToolRun transfer = command(companion, "use shift 90");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(transfer.done(), "transfer has not finished");
             helper.assertTrue(transfer.outcome().contains("OUT OF RANGE"),
                     "the reply does not say the slot is out of range: " + transfer.outcome());
@@ -88,7 +88,7 @@ public class ContainerGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_tidy", new BlockPos(3, 2, 3), false);
         ToolRun close = command(companion, "use close");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(close.succeeded() && close.reply().contains("no block GUI was open"),
                     "the reply does not say nothing was open: " + close.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -111,7 +111,7 @@ public class ContainerGameTests {
         companion.getInventory().add(new net.minecraft.world.item.ItemStack(Items.DIAMOND, 5));
         AtomicReference<ToolRun> step = new AtomicReference<>();
 
-        helper.startSequence()
+        steps(helper)
                 .thenExecute(() -> step.set(command(companion, "use block right " + xyz(chest))))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,
@@ -137,7 +137,7 @@ public class ContainerGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_counter", new BlockPos(3, 2, 4), false);
         AtomicReference<ToolRun> step = new AtomicReference<>();
 
-        helper.startSequence()
+        steps(helper)
                 .thenExecute(() -> step.set(command(companion, "use block right " + xyz(chest))))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,

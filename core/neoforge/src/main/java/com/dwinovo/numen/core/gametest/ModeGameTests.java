@@ -45,7 +45,7 @@ public class ModeGameTests {
                 "x", target.getX(),
                 "y", target.getY(),
                 "z", target.getZ())).task();
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "creative companion has not reached the goto target");
             CompanionFactory.despawn(level.getServer(), companion);
@@ -72,7 +72,7 @@ public class ModeGameTests {
                 "block_ids", List.of("minecraft:gold_ore"),
                 "count", 4)).task();
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             for (BlockPos ore : ores) {
                 helper.assertTrue(level.getBlockState(ore).isAir(),
                         "gold ore not broken at " + ore.toShortString());
@@ -97,7 +97,7 @@ public class ModeGameTests {
         var ctx = TaskDispatch.ctx("gametest-cbuild", companion);
         TaskDispatch.setTask(companion, buildJob(ctx.toolCallId(),
                 ctx.deadline(3600L), targets, false, false), null, reply -> {});
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             for (BuildTaskRecord.Target t : targets) {
                 helper.assertTrue(level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),
                         "structure incomplete at " + t.pos().toShortString());
@@ -122,7 +122,7 @@ public class ModeGameTests {
         // dispatchAsync 的回调只回"已受理"收条;预检失败落在任务记录的终态上
         BuildTaskRecord record = buildJob(ctx.toolCallId(), ctx.deadline(3600L), targets, true, false);
         TaskDispatch.setTask(companion, record, null, reply -> {});
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             var result = record.getResult();
             helper.assertTrue(result != null && !result.success()
                             && result.message() != null
@@ -162,7 +162,7 @@ public class ModeGameTests {
                 "y", target.getY(),
                 "z", target.getZ(),
                 "alter", "natural")).task();
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "empty-handed creative companion has not pillared out");
             CompanionFactory.despawn(level.getServer(), companion);
@@ -208,7 +208,7 @@ public class ModeGameTests {
                         + record.getResult().message());
             }
         });
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "she has not pillared out of the well yet");
             helper.assertTrue(level.getBlockState(floor).is(Blocks.COBBLESTONE),
@@ -328,7 +328,7 @@ public class ModeGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_conjure", new BlockPos(2, 2, 2), true);
         ToolRun reply = command(companion, "inv take minecraft:diamond 100");
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(reply.reply() != null && reply.reply().contains("\"success\":true"),
                     "inv take should succeed in creative, got: " + reply.reply());
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 100,
@@ -343,7 +343,7 @@ public class ModeGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_honest", new BlockPos(2, 2, 2), false);
         ToolRun reply = command(companion, "inv take minecraft:diamond 10");
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(reply.reply() != null && reply.reply().contains("\"success\":false"),
                     "inv take must refuse in survival, got: " + reply.reply());
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0,
@@ -366,7 +366,7 @@ public class ModeGameTests {
         var ctx = TaskDispatch.ctx("gametest-sbuild", companion);
         TaskDispatch.setTask(companion, buildJob(ctx.toolCallId(),
                 ctx.deadline(3600L), targets, true, false), null, reply -> {});
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             for (BuildTaskRecord.Target t : targets) {
                 helper.assertTrue(level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),
                         "structure incomplete at " + t.pos().toShortString());

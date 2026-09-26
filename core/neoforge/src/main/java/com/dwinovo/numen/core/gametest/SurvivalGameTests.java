@@ -52,7 +52,7 @@ public class SurvivalGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = plainCompanion(helper, new BlockPos(4, 2, 4));
         float full = companion.getMaxHealth();
-        helper.startSequence()
+        steps(helper)
                 .thenExecuteAfter(SPAWN_INVULNERABLE_TICKS,
                         () -> drop(helper, companion, new BlockPos(4, DROP_HEIGHT, 4)))
                 .thenWaitUntil(() -> {
@@ -75,7 +75,7 @@ public class SurvivalGameTests {
         NumenPlayer companion = plainCompanion(helper, new BlockPos(11, 2, 11));
         companion.getInventory().add(new ItemStack(Items.WATER_BUCKET));
         float full = companion.getMaxHealth();
-        helper.startSequence()
+        steps(helper)
                 .thenExecuteAfter(SPAWN_INVULNERABLE_TICKS,
                         () -> drop(helper, companion, new BlockPos(11, DROP_HEIGHT, 11)))
                 .thenWaitUntil(() -> {
@@ -100,7 +100,7 @@ public class SurvivalGameTests {
         NumenPlayer companion = plainCompanion(helper, new BlockPos(11, 2, 11));
         companion.getInventory().add(new ItemStack(Items.WATER_BUCKET));
         var outbox = com.dwinovo.numen.entity.EventOutbox.get(level.getServer());
-        helper.startSequence()
+        steps(helper)
                 .thenExecuteAfter(SPAWN_INVULNERABLE_TICKS,
                         () -> drop(helper, companion, new BlockPos(11, DROP_HEIGHT, 11)))
                 .thenWaitUntil(() -> {
@@ -155,7 +155,7 @@ public class SurvivalGameTests {
         int cooldown = companion.getPortalCooldown();
         helper.assertTrue(cooldown > 0, "portal cooldown did not start");
 
-        helper.startSequence()
+        steps(helper)
                 .thenExecute(() -> companion.changeDimension(
                         new net.minecraft.world.level.portal.DimensionTransition(
                                 nether, new Vec3(0.5, 70.0, 0.5), Vec3.ZERO, 0.0f, 0.0f,

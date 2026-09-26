@@ -46,7 +46,7 @@ public class PluginGameTests {
         ToolRun reply = call(companion, "get_self_status", args());
         var outbox = com.dwinovo.numen.entity.EventOutbox.get(level.getServer());
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(reply.reply() != null, "get_self_status has not replied");
             var status = com.google.gson.JsonParser.parseString(reply.reply()).getAsJsonObject();
             // 身体状态片段以引擎渲染的 <worn> 打头,之后按登记顺序接:core 自己的 <throwaway>,最后登记的这个插件的片段

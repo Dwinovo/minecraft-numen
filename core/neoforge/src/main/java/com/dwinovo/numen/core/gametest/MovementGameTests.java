@@ -63,7 +63,7 @@ public class MovementGameTests {
                 "y", target.getY(),
                 "z", target.getZ())).task();
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "companion has not reached the goto target");
             CompanionFactory.despawn(level.getServer(), companion);
@@ -87,7 +87,7 @@ public class MovementGameTests {
                 "z", target.getZ())).task();
         boolean[] stopped = {false};
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             if (!stopped[0]) {
                 helper.assertTrue(record.getState() == com.dwinovo.numen.task.TaskState.RUNNING,
                         "goto is not running yet");
@@ -138,7 +138,7 @@ public class MovementGameTests {
                 "x", target.getX(),
                 "y", target.getY(),
                 "z", target.getZ())).task();
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "companion has not escaped through the door");
             CompanionFactory.despawn(level.getServer(), companion);
@@ -177,7 +177,7 @@ public class MovementGameTests {
                     "z", target.getZ())).task();
         });
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "companion has not crossed the water to the target");
             helper.assertTrue(!companion.isPassenger(), "companion is still in the boat");
@@ -220,7 +220,7 @@ public class MovementGameTests {
             TaskRecord dig = command(companion, "use block left " + xyz(stone)).task();
         });
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(level.getBlockState(stone).isAir(),
                     "the follow-up dig never ran — the self-click press hung the sync slot");
             CompanionFactory.despawn(level.getServer(), companion);
@@ -251,7 +251,7 @@ public class MovementGameTests {
             TaskRecord hit = command(companion, "use entity left " + stand.getId()).task();
         });
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(!companion.isPassenger(), "companion is still sitting in the minecart");
             helper.assertTrue(stand.isRemoved(),
                     "the armor stand was never reached — walking did not step off the vehicle");
@@ -276,7 +276,7 @@ public class MovementGameTests {
                 "y", target.getY(),
                 "z", target.getZ())).task();
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             String reply = record.getResult() == null ? null : record.getResult().message();
             helper.assertTrue(reply != null, "goto has not finished");
             helper.assertTrue(reply.contains("oak_planks"),
@@ -310,7 +310,7 @@ public class MovementGameTests {
                 "z", target.getZ(),
                 "alter", "natural")).task();
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "companion has not reached the target with consent to dig");
             helper.assertTrue(plankCount(helper, 7, 7) < planksBefore, "no plank was broken");
@@ -339,7 +339,7 @@ public class MovementGameTests {
         TaskRecord[] walk = new TaskRecord[1];
         String[] chosen = new String[1];
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             if (walk[0] == null) {
                 String reply = refused.getResult() == null ? null : refused.getResult().message();
                 helper.assertTrue(reply != null, "the first goto has not finished");
@@ -374,7 +374,7 @@ public class MovementGameTests {
         ToolRun reply = command(companion, "move route --x " + target.getX() + " --y " + target.getY()
                 + " --z " + target.getZ() + " --alter natural --alternatives 2");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(reply.reply() != null, "move route has not replied");
             helper.assertTrue(reply.reply().contains("oak_planks"),
                     "the plan does not name the blocks a route would break: " + reply.reply());
@@ -414,7 +414,7 @@ public class MovementGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_knocker", new BlockPos(3, 2, 3), true);
         TaskRecord hit = command(companion, "use entity left " + stand.getId()).task();
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             String reply = hit.getResult() == null ? null : hit.getResult().message();
             helper.assertTrue(reply != null, "use entity has not finished");
             helper.assertTrue(stand.isAlive(), "the armor stand was hit through/after breaking glass");
@@ -458,7 +458,7 @@ public class MovementGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_tail", new BlockPos(3, 2, 8), true);
         ToolRun follow = command(companion, "move follow --entity_id " + stand.getId() + " --distance 3");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(follow.done() && !follow.succeeded(),
                     "follow should end with a failure, got: " + follow.outcome());
             String said = follow.outcome();
@@ -506,7 +506,7 @@ public class MovementGameTests {
         ToolRun[] secondPlan = new ToolRun[1];
         String[] before = new String[2];   // 休眠前的 g 与 r
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             if (before[0] == null) {
                 helper.assertTrue(firstScan.reply() != null, "the first scan has not replied");
                 var group = groupHolding(groupsIn(firstScan.reply()), helper.absolutePos(markRel));
@@ -563,7 +563,7 @@ public class MovementGameTests {
         NumenPlayer second = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
         helper.assertTrue(second != null, "the body was not rebuilt");
         StringBuilder told = new StringBuilder();
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(registry.find(uuid).taskTool().isBlank(), "the task that cannot be replayed is still on record");
             for (var entry : com.dwinovo.numen.entity.EventOutbox.get(server).peek(uuid)
                     .takeEntries(System.currentTimeMillis())) {
@@ -598,7 +598,7 @@ public class MovementGameTests {
         companion.getInventory().add(new ItemStack(Items.DIRT, 16));
         ToolRun walk = call(companion, "goto", args("x", top.getX(), "y", top.getY(), "z", top.getZ()));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
             helper.assertTrue(!walk.succeeded() && walk.outcome().contains("goto route:"),
                     "the reply does not offer routes to choose from: " + walk.outcome());
@@ -618,7 +618,7 @@ public class MovementGameTests {
         ToolRun walk = call(companion, "goto", args("x", top.getX(), "y", top.getY(), "z", top.getZ(),
                 "alter", "natural"));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
             helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(top) <= 2,
                     "she did not get onto the tower: " + walk.outcome());
@@ -645,7 +645,7 @@ public class MovementGameTests {
         BlockPos[] pillar = new BlockPos[1];
         ToolRun[] clear = new ToolRun[1];
 
-        helper.startSequence()
+        steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(walk.done() && walk.succeeded(),
                         "she did not get onto the tower: " + walk.outcome()))
                 .thenExecute(() -> {
@@ -680,7 +680,7 @@ public class MovementGameTests {
         ToolRun walk = call(companion, "goto", args("x", top.getX(), "y", top.getY(), "z", top.getZ(),
                 "alter", "natural"));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
             helper.assertTrue(!walk.succeeded() && walk.outcome().contains("throwaway"),
                     "the failure does not say she has nothing to pillar with: " + walk.outcome());
@@ -705,7 +705,7 @@ public class MovementGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_swimmer", new BlockPos(3, 4, 7), false);
         ToolRun walk = call(companion, "goto", args("x", target.getX(), "y", target.getY(), "z", target.getZ()));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
             helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(target) <= 2,
                     "she did not get across the channel: " + walk.outcome());
@@ -722,7 +722,7 @@ public class MovementGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_skyward", new BlockPos(3, 2, 7), false);
         ToolRun walk = call(companion, "goto", args("x", target.getX(), "y", target.getY(), "z", target.getZ()));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
             helper.assertTrue(walk.succeeded() && walk.outcome().contains("omit y"),
                     "the mid-air y did not end on the ground with the hint: " + walk.outcome());
@@ -742,7 +742,7 @@ public class MovementGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_grounded_y", new BlockPos(3, 2, 7), false);
         ToolRun walk = call(companion, "goto", args("x", target.getX(), "y", target.getY(), "z", target.getZ()));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
             helper.assertTrue(walk.succeeded() && walk.outcome().contains("omit y"),
                     "the y inside the floor did not end on top of it with the hint: " + walk.outcome());
@@ -773,7 +773,7 @@ public class MovementGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_diver", new BlockPos(3, 5, 7), false);
         ToolRun walk = call(companion, "goto", args("x", target.getX(), "y", target.getY(), "z", target.getZ()));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
             helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(target) <= 1,
                     "she did not reach the bottom of the pool: " + walk.outcome()
@@ -802,7 +802,7 @@ public class MovementGameTests {
         boolean[] burned = new boolean[1];
         helper.onEachTick(() -> burned[0] |= companion.isOnFire() || companion.getHealth() < companion.getMaxHealth());
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
             helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(target) <= 2,
                     "she did not get past the lava: " + walk.outcome());
@@ -822,7 +822,7 @@ public class MovementGameTests {
         ToolRun follow = command(companion, "move follow");
         BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
 
-        helper.startSequence()
+        steps(helper)
                 .thenIdle(20)
                 .thenExecute(() -> owner.moveTo(far.getX() + 0.5, far.getY(), far.getZ() + 0.5))
                 .thenWaitUntil(() -> helper.assertTrue(companion.distanceTo(owner) <= 4.5,
@@ -848,7 +848,7 @@ public class MovementGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_swinefollower", new BlockPos(3, 2, 3), false);
         ToolRun follow = command(companion, "move follow --entity_id " + pig.getId());
 
-        helper.startSequence()
+        steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(companion.distanceTo(pig) <= 4.5,
                         "she did not catch up with the pig: " + companion.distanceTo(pig)))
                 .thenExecute(pig::discard)
@@ -888,7 +888,7 @@ public class MovementGameTests {
         NumenPlayer second = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
         helper.assertTrue(second != null, "the body was not rebuilt");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             TaskRecord now = com.dwinovo.numen.task.CompanionTickDispatcher.currentTaskFor(uuid);
             helper.assertTrue(now instanceof com.dwinovo.numen.core.task.move.FollowTaskRecord f
                             && pig.getUUID().equals(f.target),
@@ -904,7 +904,7 @@ public class MovementGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_lost_tail", new BlockPos(3, 2, 3), false);
         ToolRun follow = command(companion, "move follow --entity_id 999999");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(follow.done(), "follow has not replied");
             helper.assertTrue(!follow.succeeded() && follow.outcome().contains("no entity with id 999999"),
                     "the failure does not name the missing id: " + follow.outcome());
@@ -920,7 +920,7 @@ public class MovementGameTests {
         NumenPlayer owner = presentOwner(helper, companion, "gametest_releaser");
         ToolRun follow = command(companion, "move follow");
 
-        helper.startSequence()
+        steps(helper)
                 .thenIdle(20)
                 .thenExecute(() -> com.dwinovo.numen.task.CompanionTickDispatcher.cancelFor(companion))
                 .thenWaitUntil(() -> helper.assertTrue(follow.done() && follow.outcome().startsWith("the owner pressed Stop"),
@@ -943,7 +943,7 @@ public class MovementGameTests {
         ToolRun plan = command(companion, "move route --x " + top.getX() + " --y " + top.getY() + " --z "
                 + top.getZ());
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(plan.done(), "move route has not replied");
             helper.assertTrue(!plan.succeeded() && plan.reply().contains("--alter natural"),
                     "the reply does not point at the natural spec: " + plan.reply());
@@ -961,7 +961,7 @@ public class MovementGameTests {
         ToolRun plan = command(companion, "move route --x " + top.getX() + " --y " + top.getY() + " --z "
                 + top.getZ() + " --alter natural --alter_budget 1");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(plan.done(), "move route has not replied");
             helper.assertTrue(!plan.succeeded() && plan.reply().contains("alter_budget of 1"),
                     "the reply does not say the budget ruled the routes out: " + plan.reply());
@@ -983,7 +983,7 @@ public class MovementGameTests {
         ToolRun viaTool = call(companion, "goto", args("x", there.getX(), "z", there.getZ()));
         java.util.concurrent.atomic.AtomicReference<ToolRun> viaCommand = new java.util.concurrent.atomic.AtomicReference<>();
 
-        helper.startSequence()
+        steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(viaTool.done(), "goto has not finished"))
                 .thenExecute(() -> viaCommand.set(command(companion,
                         "move goto --x " + back.getX() + " --z " + back.getZ())))

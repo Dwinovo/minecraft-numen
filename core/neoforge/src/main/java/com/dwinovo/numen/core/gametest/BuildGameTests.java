@@ -51,7 +51,7 @@ public class BuildGameTests {
                                      List<BlockPos> relCells, int cobbleStacks) {
         ServerLevel level = helper.getLevel();
         Dispatched build = dispatchBuild(helper, name, new BlockPos(2, 2, 2), relCells, cobbleStacks);
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             for (BlockPos cell : build.cells()) {
                 helper.assertTrue(level.getBlockState(cell).is(Blocks.COBBLESTONE),
                         "structure incomplete at " + cell.toShortString());
@@ -128,7 +128,7 @@ public class BuildGameTests {
                 List.of(new BuildTaskRecord.Target(Blocks.CRAFTING_TABLE, Items.CRAFTING_TABLE,
                         lower, "crafting_table")), true, true),
                 null, reply -> {});
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(level.getBlockState(lower).is(Blocks.CRAFTING_TABLE), "工作台没放上");
             helper.assertTrue(!level.getBlockState(lower.above()).is(Blocks.TALL_GRASS),
                     "孤儿草还悬在工作台头顶: " + level.getBlockState(lower.above()));
@@ -169,7 +169,7 @@ public class BuildGameTests {
         BlockPos mid = helper.absolutePos(new BlockPos(7, 2, 8));
         BlockPos west = helper.absolutePos(new BlockPos(6, 2, 8));
         BlockPos east = helper.absolutePos(new BlockPos(8, 2, 8));
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             BlockState m = level.getBlockState(mid);
             helper.assertTrue(m.is(Blocks.OAK_FENCE), "中间那格不是栅栏");
             for (BlockPos nb : new BlockPos[]{west, east}) {
@@ -197,7 +197,7 @@ public class BuildGameTests {
         var ctx = TaskDispatch.ctx("gametest-fence-edge", companion);
         TaskDispatch.setTask(companion, buildJob(ctx.toolCallId(), ctx.deadline(4000L),
                 targets, true, true), null, reply -> {});
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             BlockState built = level.getBlockState(newPos);
             BlockState old = level.getBlockState(oldPos);
             helper.assertTrue(built.is(Blocks.OAK_FENCE), "新栅栏没立起来");
@@ -234,7 +234,7 @@ public class BuildGameTests {
         helper.assertTrue(record.targets.get(0).itemPlace(), "素面格(工作台)没升格成原生放置");
         helper.assertFalse(record.targets.get(1).itemPlace(), "带属性格(栅栏)不该升格");
         TaskDispatch.setTask(companion, record, null, reply -> {});
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(level.getBlockState(tablePos).is(Blocks.CRAFTING_TABLE),
                     "工作台没放出来");
             helper.assertTrue(companion.getInventory().countItem(Items.CRAFTING_TABLE) == 0,
@@ -267,7 +267,7 @@ public class BuildGameTests {
 
         java.util.concurrent.atomic.AtomicBoolean restocked =
                 new java.util.concurrent.atomic.AtomicBoolean(false);
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             int built = 0;
             for (BuildTaskRecord.Target t : targets) {
                 if (t.matches(level.getBlockState(t.pos()))) built++;
@@ -476,7 +476,7 @@ public class BuildGameTests {
                         java.util.Map.of(at.asLong(), bannerData), List.of(), java.util.Map.of(), 0),
                 false, false), null, reply -> {});
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(level.getBlockState(at).is(Blocks.WHITE_BANNER),
                     "the banner itself is not placed yet");
             var be = level.getBlockEntity(at);
@@ -769,7 +769,7 @@ public class BuildGameTests {
         Vec3 want = new Vec3(anchor.getX() + 1.5, anchor.getY() + 0.5, anchor.getZ() + 2.5);
         net.minecraft.world.phys.AABB near = new net.minecraft.world.phys.AABB(
                 want.x - 2, want.y - 2, want.z - 2, want.x + 2, want.y + 2, want.z + 2);
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             var frames = level.getEntities(
                     net.minecraft.world.entity.EntityType.ITEM_FRAME, near, e -> true);
             helper.assertTrue(!frames.isEmpty(),
@@ -1150,7 +1150,7 @@ public class BuildGameTests {
                 anchor.getX() - 2, anchor.getY() - 2, anchor.getZ() - 2,
                 anchor.getX() + 6, anchor.getY() + 4, anchor.getZ() + 6);
 
-        helper.startSequence()
+        steps(helper)
                 // 第一遍:逐格对上,两只摆设都在
                 .thenWaitUntil(() -> {
                     for (BuildTaskRecord.Target t : loaded.targets()) {
@@ -1263,7 +1263,7 @@ public class BuildGameTests {
                 anchor.getX() - 2, anchor.getY() - 2, anchor.getZ() - 2,
                 anchor.getX() + 6, anchor.getY() + 4, anchor.getZ() + 6);
 
-        helper.startSequence()
+        steps(helper)
                 // 她把手上两块石头砌出去
                 .thenWaitUntil(() -> helper.assertTrue(first.placed() >= 2,
                         "she should lay the two stones she has, placed=" + first.placed()))
@@ -1410,7 +1410,7 @@ public class BuildGameTests {
         TaskDispatch.setTask(companion, rec, null, reply -> {});
 
         long[] startTick = {level.getGameTime()};
-        helper.startSequence()
+        steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(rec.placed() >= 2,
                         "she should lay the two stones she has, placed=" + rec.placed()))
                 .thenExecute(() -> startTick[0] = level.getGameTime())
@@ -1842,7 +1842,7 @@ public class BuildGameTests {
                 "build place torch 5 1 4");
         ToolRun build = command(companion, "build at gt_cottage " + xyz(o));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(build.done(), "build has not finished");
             helper.assertTrue(build.succeeded(), "the cottage was not finished: " + build.outcome());
             helper.assertTrue(level.getBlockState(o).is(Blocks.COBBLESTONE), "no foundation");
@@ -1934,7 +1934,7 @@ public class BuildGameTests {
         TaskDispatch.setTask(companion, buildJob(ctx.toolCallId(), deadline,
                 loaded.targets(), false, false), null, reply -> {});
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             for (BuildTaskRecord.Target target : loaded.targets()) {
                 helper.assertTrue(target.matches(level.getBlockState(target.pos())),
                         "blueprint cell mismatch at " + target.pos().toShortString()
@@ -2008,7 +2008,7 @@ public class BuildGameTests {
                 trespass[0] = feet.above();
             }
         });
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             var result = build.record().getResult();
             helper.assertTrue(result != null, "build has not finished");
             helper.assertTrue(result.success(), "build failed: " + result.message());
@@ -2052,7 +2052,7 @@ public class BuildGameTests {
             build.companion().teleportTo(target.getX() + 0.5, target.getY(), target.getZ() + 0.5);
             shovedInto[0] = target;
         });
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(shovedInto[0] != null, "she was never pushed in - the case did not run");
             var result = build.record().getResult();
             helper.assertTrue(result != null, "build has not finished");
@@ -2091,7 +2091,7 @@ public class BuildGameTests {
         var ctx = TaskDispatch.ctx("gametest-jp-cottage", companion);
         BuildTaskRecord record = buildJob(ctx.toolCallId(), ctx.deadline(95000L), loaded.targets(), false, false);
         TaskDispatch.setTask(companion, record, null, reply -> {});
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             // 先看建造收没收工、成没成:一次真实的建造失败(比如最后两格被她自己站着)
             // 不能被翻译成"格数对不上",那会把真正的原因藏起来,还让这条用例空转到超时。
             var result = record.getResult();
@@ -2124,7 +2124,7 @@ public class BuildGameTests {
         BlockPos at = helper.absolutePos(new BlockPos(6, 2, 6));
         ToolRun place = command(companion, "build place crafting_table " + xyz(at));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(place.task() != null && place.task().getToolName().equals("build place"),
                     "the placement is not named after the command: " + place.reply());
             helper.assertTrue(place.done() && place.succeeded(), "place failed: " + place.outcome());
@@ -2142,7 +2142,7 @@ public class BuildGameTests {
         design(companion, "gt_empty");
         ToolRun build = command(companion, "build at gt_empty " + at(helper, new BlockPos(6, 2, 6)));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(build.done() && build.task() == null, "an empty design was dispatched");
             helper.assertTrue(!build.succeeded() && build.outcome().contains("nothing to build"),
                     "the reply does not say there is nothing to build: " + build.outcome());
@@ -2170,7 +2170,7 @@ public class BuildGameTests {
         ToolRun build = command(companion, "build at gt_walls " + xyz(min));
         AtomicReference<ToolRun> built = new AtomicReference<>();
 
-        helper.startSequence()
+        steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(build.done(), "build has not finished"))
                 .thenExecute(() -> {
                     helper.assertTrue(build.succeeded(), "build failed: " + build.outcome());
@@ -2222,7 +2222,7 @@ public class BuildGameTests {
         design(companion, "gt_floor", "build layer 0 0 0 ### ### ### --block cobblestone");
         ToolRun build = command(companion, "build at gt_floor " + xyz(o));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(build.done() && !build.succeeded(), "a build short of materials went ahead");
             helper.assertTrue(build.outcome().contains("cobblestone") && build.outcome().contains("Nothing was placed"),
                     "the refusal does not say what is missing: " + build.outcome());
@@ -2254,7 +2254,7 @@ public class BuildGameTests {
         AtomicReference<ToolRun> run = new AtomicReference<>(command(companion, "build at gt_shed " + xyz(o)));
         List<ToolRun> edits = new ArrayList<>();
 
-        helper.startSequence()
+        steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(run.get().done() && run.get().succeeded(),
                         "the first build did not finish: " + run.get().outcome()))
                 .thenExecute(() -> {
@@ -2333,7 +2333,7 @@ public class BuildGameTests {
         design(companion, "gt_swap", "build set stone 0 0 0");
         AtomicReference<ToolRun> run = new AtomicReference<>(command(companion, "build at gt_swap " + xyz(o)));
 
-        helper.startSequence()
+        steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(run.get().done() && run.get().succeeded(),
                         "the first build did not finish: " + run.get().outcome()))
                 .thenExecute(() -> {
@@ -2371,7 +2371,7 @@ public class BuildGameTests {
         AtomicReference<ToolRun> run = new AtomicReference<>(command(companion, "build at gt_swap_owner " + xyz(o)));
         boolean[] answered = new boolean[1];
 
-        helper.startSequence()
+        steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(run.get().done() && run.get().succeeded(),
                         "the first build did not finish: " + run.get().outcome()))
                 .thenExecute(() -> {
@@ -2417,7 +2417,7 @@ public class BuildGameTests {
         ToolRun build = command(companion, "build at fixture_tool " + xyz(anchor));
         var targets = com.dwinovo.numen.core.blueprint.BlueprintStore.load(level, "fixture_tool", anchor, 0).targets();
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(list.succeeded() && list.reply().contains("fixture_tool — blueprint file"),
                     "the blueprint is not listed: " + list.reply());
             helper.assertTrue(build.task() != null && build.task().getToolName().equals("build at"),
@@ -2448,7 +2448,7 @@ public class BuildGameTests {
         ToolRun file = command(companion, "build show fixture_read");
         ToolRun plan = command(companion, "build show gt_plan");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             com.google.gson.JsonObject read = com.google.gson.JsonParser.parseString(file.reply()).getAsJsonObject();
             helper.assertTrue(file.succeeded() && read.getAsJsonObject("data").get("cells").getAsInt() == cells
                             && read.getAsJsonObject("data").has("materials")
@@ -2601,7 +2601,7 @@ public class BuildGameTests {
         design(companion, "gt_kept", "build layer 0 0 0 ## ## --block oak_planks", "build place torch 0 1 0");
         ToolRun build = command(companion, "build at gt_kept " + xyz(o));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(build.done() && build.succeeded(), "build failed: " + build.outcome());
             var server = level.getServer();
             var design = com.dwinovo.numen.core.build.Designs.load(server, "gt_kept");
@@ -2638,7 +2638,7 @@ public class BuildGameTests {
                 .filter(p -> level.getBlockState(p).is(Blocks.COBBLESTONE)).count();
         int[] atStop = new int[1];
 
-        helper.startSequence()
+        steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(placed.getAsInt() >= 3, "she has not laid three cells yet"))
                 .thenExecute(() -> com.dwinovo.numen.task.CompanionTickDispatcher.cancelFor(companion))
                 .thenWaitUntil(() -> helper.assertTrue(build.done() && build.outcome().startsWith("the owner pressed Stop"),
@@ -2673,7 +2673,7 @@ public class BuildGameTests {
                         + ">=stone_brick_stairs[facing=north]");
         ToolRun build = command(companion, "build at gt_grid " + xyz(o));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(build.done() && build.succeeded(), "build failed: " + build.outcome());
             for (int y = 0; y <= 2; y++) {
                 helper.assertTrue(level.getBlockState(o.offset(0, y, 0)).is(Blocks.STONE_BRICKS),
@@ -2710,7 +2710,7 @@ public class BuildGameTests {
         ToolRun build = command(companion, "build copy " + xyz(src) + " " + xyz(src.offset(1, 0, 0)) + " "
                 + xyz(dst) + " --mirror front_back");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(build.done() && build.succeeded(), "copy failed: " + build.outcome());
             helper.assertTrue(level.getBlockState(src.offset(1, 0, 0))
                             .is(Blocks.STONE_BRICK_STAIRS), "the source wing was moved instead of copied");
@@ -2742,7 +2742,7 @@ public class BuildGameTests {
                 "build set air 2 0 0 --mask carve");
         ToolRun build = command(companion, "build at gt_mask " + xyz(o));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(build.done() && build.succeeded(), "build failed: " + build.outcome());
             helper.assertTrue(level.getBlockState(o).is(Blocks.GOLD_BLOCK),
                     "mask=keep must not overwrite what already stands");
@@ -2771,7 +2771,7 @@ public class BuildGameTests {
 
         // 只在"她报完工"那一刻判一次。用 succeedWhen 每刻重试的话,量到的是"最终有没有
         // 连上"——收尾补水、摆设生成、旁边的动静都可能事后把线碰连,断言迟早会过。
-        helper.startSequence()
+        steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(build.done(), "build has not finished"))
                 .thenExecute(() -> {
                     helper.assertTrue(build.succeeded(), "build failed: " + build.outcome());

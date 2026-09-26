@@ -50,7 +50,7 @@ public class PerceptionGameTests {
         ToolRun atFar = call(companion, "inspect_block", args("x", far.getX(), "y", far.getY(), "z", far.getZ()));
         ToolRun viaCommand = command(companion, "scan block " + near.getX() + " " + near.getY() + " " + near.getZ());
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             JsonObject n = json(atNear);
             JsonObject f = json(atFar);
             helper.assertTrue(n.get("block").getAsString().equals("minecraft:stone") && n.get("in_reach").getAsBoolean(),
@@ -70,7 +70,7 @@ public class PerceptionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_auditor", new BlockPos(3, 2, 3), false);
         ToolRun storage = command(companion, "scan storage " + chest.getX() + " " + chest.getY() + " " + chest.getZ());
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(storage.succeeded() && storage.reply().contains("diamond")
                             && storage.reply().contains("5"),
                     "the chest's diamonds are not in the reply: " + storage.reply());
@@ -94,7 +94,7 @@ public class PerceptionGameTests {
         java.util.concurrent.atomic.AtomicReference<ToolRun> map = new java.util.concurrent.atomic.AtomicReference<>();
         java.util.concurrent.atomic.AtomicReference<ToolRun> viaCommand = new java.util.concurrent.atomic.AtomicReference<>();
         // 图以她脚下那一格为中心,落地之前那一格还没定
-        helper.startSequence()
+        steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(companion.onGround(), "she has not landed"))
                 .thenExecute(() -> {
                     map.set(call(companion, "look_around", args()));
@@ -125,7 +125,7 @@ public class PerceptionGameTests {
         ToolRun hostile = call(companion, "scan_nearby_entities", args("radius", 12, "type_filter", "hostile"));
         ToolRun viaCommand = command(companion, "scan entities 12 all");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(all.reply().contains("\"id\":" + pig.getId()) && all.reply().contains("pig"),
                     "the pig is not listed with its id: " + all.reply());
             helper.assertTrue(!hostile.reply().contains("\"id\":" + pig.getId()),
@@ -146,7 +146,7 @@ public class PerceptionGameTests {
         ToolRun status = call(companion, "get_self_status", args());
         ToolRun viaCommand = command(companion, "status self");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             JsonObject s = json(status);
             helper.assertTrue(s.get("equipment").toString().contains("minecraft:iron_sword"),
                     "the sword in her hand is not reported: " + status.reply());
@@ -166,7 +166,7 @@ public class PerceptionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_skywatcher", new BlockPos(3, 2, 3), false);
         ToolRun info = command(companion, "status world");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             JsonObject w = json(info);
             helper.assertTrue(w.get("dimension").getAsString().equals("minecraft:overworld")
                             && w.get("is_bright_outside").getAsBoolean()
@@ -186,7 +186,7 @@ public class PerceptionGameTests {
         ToolRun present = call(companion, "get_owner_status", args());
         ToolRun viaCommand = command(companion, "status owner");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(!json(absent).get("online").getAsBoolean(),
                     "an absent owner is reported online: " + absent.reply());
             JsonObject p = json(present);
@@ -208,7 +208,7 @@ public class PerceptionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_scholar", new BlockPos(3, 2, 3), false);
         ToolRun recipe = command(companion, "inv recipe minecraft:iron_ingot");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(recipe.succeeded() && recipe.reply().contains("[smelting")
                             && recipe.reply().contains("[crafting]"),
                     "iron ingot's smelting and crafting recipes are not both listed: " + recipe.reply());
@@ -238,7 +238,7 @@ public class PerceptionGameTests {
         ToolRun deleted = command(companion, "throwaway remove minecraft:andesite");
         ToolRun now = command(companion, "status self");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(added.succeeded() && deleted.succeeded(), "add or remove failed: " + added.reply()
                     + " / " + deleted.reply());
             String was = throwawayIn(before);
@@ -266,7 +266,7 @@ public class PerceptionGameTests {
         ToolRun cleared = command(companion, "throwaway clear");
         ToolRun afterClear = command(companion, "status self");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             JsonObject list = JsonParser.parseString(set.reply()).getAsJsonObject();
             helper.assertTrue(set.succeeded() && list.getAsJsonArray("materials").size() == 2
                             && set.reply().contains("minecraft:netherrack") && set.reply().contains("minecraft:basalt"),
@@ -302,7 +302,7 @@ public class PerceptionGameTests {
         java.util.concurrent.atomic.AtomicReference<ToolRun> viaCommand = new java.util.concurrent.atomic.AtomicReference<>();
 
         // 团的中心是她脚下那一格,落地之前那一格还没定
-        helper.startSequence()
+        steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(companion.onGround(), "she has not landed"))
                 .thenExecute(() -> viaTool.set(call(companion, "scan_blocks",
                         args("radius", 8, "block_ids", List.of("minecraft:gold_block", "#minecraft:logs")))))
@@ -363,7 +363,7 @@ public class PerceptionGameTests {
         ToolRun onStone = command(companion, "scan storage " + stone.getX() + " " + stone.getY() + " " + stone.getZ());
         ToolRun onAir = command(companion, "scan storage " + air.getX() + " " + air.getY() + " " + air.getZ());
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(onStone.succeeded() && onStone.reply().contains("exposes no item/fluid/energy storage"),
                     "stone was not reported as holding nothing: " + onStone.reply());
             helper.assertTrue(!onAir.succeeded() && onAir.reply().contains("is air"),
@@ -378,7 +378,7 @@ public class PerceptionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_curious", new BlockPos(3, 2, 3), false);
         ToolRun recipe = command(companion, "inv recipe minecraft:ender_pearl");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(recipe.succeeded() && recipe.reply().contains("no recipe for ender_pearl"),
                     "the reply does not say ender pearls have no recipe: " + recipe.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -391,7 +391,7 @@ public class PerceptionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_misspeller", new BlockPos(3, 2, 3), false);
         ToolRun recipe = command(companion, "inv recipe minecraft:no_such_item");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(!recipe.succeeded() && recipe.reply().contains("invalid arguments")
                             && recipe.reply().contains("no_such_item"),
                     "the unknown id was not rejected by name: " + recipe.reply());
@@ -429,7 +429,7 @@ public class PerceptionGameTests {
         com.dwinovo.numen.core.scan.BlockSearch.start(companion.getUUID(), level, companion.blockPosition(), 24,
                 com.dwinovo.numen.core.scan.BlockSearch.MAX_COLLECT, java.util.Set.of(Blocks.SPONGE), result::set);
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             var res = result.get();
             helper.assertTrue(res != null, "the search never came back while every tick was already spent");
             helper.assertTrue(res.matches().stream().anyMatch(h -> h.pos().equals(sponge)),

@@ -47,7 +47,7 @@ public class InteractGameTests {
         companion.getInventory().add(new ItemStack(Items.BUCKET));
         ToolRun scoop = command(companion, "use block right " + xyz(water) + " --item minecraft:bucket");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(companion.getInventory().countItem(Items.WATER_BUCKET) == 1,
                     "the bucket did not scoop the aimed water — tool reply: " + scoop.outcome());
             helper.assertTrue(!level.getBlockState(water).getFluidState().isSource(),
@@ -80,7 +80,7 @@ public class InteractGameTests {
         BlockPos aim = helper.absolutePos(new BlockPos(9, 2, 8));
         ToolRun place = command(companion, "use block right " + xyz(aim) + " --item minecraft:oak_boat");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             var boats = level.getEntitiesOfClass(net.minecraft.world.entity.vehicle.Boat.class,
                     new net.minecraft.world.phys.AABB(
                             helper.absolutePos(new BlockPos(6, 1, 6)).getCenter(),
@@ -103,7 +103,7 @@ public class InteractGameTests {
         companion.getInventory().add(new ItemStack(Items.SHEARS));
         ToolRun shear = command(companion, "use entity right " + sheep.getId() + " --item minecraft:shears");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(shear.done(), "use entity has not finished");
             helper.assertTrue(shear.succeeded() && sheep.isSheared(), "the sheep was not sheared: " + shear.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -121,7 +121,7 @@ public class InteractGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_poker_entity", new BlockPos(3, 2, 11), false);
         ToolRun hit = command(companion, "use entity left " + pig.getId());
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(hit.done(), "use entity has not finished");
             helper.assertTrue(hit.succeeded() && pig.getHealth() < pig.getMaxHealth()
                             && pig.getLastHurtByMob() == companion,
@@ -138,7 +138,7 @@ public class InteractGameTests {
         companion.getInventory().add(new ItemStack(Items.SNOWBALL, 4));
         ToolRun toss = command(companion, "use ahead right --item minecraft:snowball");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(toss.done(), "use ahead has not finished");
             helper.assertTrue(toss.succeeded() && companion.getInventory().countItem(Items.SNOWBALL) == 3,
                     "the snowball was not thrown: " + toss.outcome());
@@ -154,7 +154,7 @@ public class InteractGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_shortarmed", new BlockPos(2, 2, 2), false);
         ToolRun click = command(companion, "use block left " + xyz(stone));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(click.done(), "use block has not finished");
             helper.assertTrue(!click.succeeded() && click.outcome().contains("out of working reach")
                             && click.outcome().contains("goto"),
@@ -176,7 +176,7 @@ public class InteractGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_restrained", new BlockPos(3, 2, 8), false);
         ToolRun hit = command(companion, "use entity left " + pig.getId());
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(hit.done(), "use entity has not finished");
             helper.assertTrue(!hit.succeeded() && hit.outcome().contains("owner"),
                     "the refusal does not come from asking the owner: " + hit.outcome());
@@ -199,7 +199,7 @@ public class InteractGameTests {
         companion.getInventory().add(new ItemStack(Items.BUCKET));
         ToolRun milk = command(companion, "use entity right " + cow.getId() + " --item minecraft:bucket");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(milk.done(), "use entity has not finished");
             helper.assertTrue(milk.succeeded() && companion.getInventory().countItem(Items.MILK_BUCKET) == 1
                             && companion.getInventory().countItem(Items.BUCKET) == 0,
@@ -221,7 +221,7 @@ public class InteractGameTests {
         companion.getInventory().add(new ItemStack(Items.WHEAT, 2));
         ToolRun feed = command(companion, "use entity right " + cow.getId() + " --item minecraft:wheat");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(feed.done(), "use entity has not finished");
             helper.assertTrue(feed.succeeded() && cow.isInLove() && companion.getInventory().countItem(Items.WHEAT) == 1,
                     "the cow was not fed: " + feed.outcome());
@@ -245,7 +245,7 @@ public class InteractGameTests {
                 .getValue(net.minecraft.world.level.block.DoorBlock.OPEN);
         java.util.concurrent.atomic.AtomicReference<TaskRecord> click = new java.util.concurrent.atomic.AtomicReference<>();
 
-        helper.startSequence()
+        steps(helper)
                 .thenExecute(() -> click.set(click(helper, companion, "right", new BlockPos(6, 2, 4))))
                 .thenWaitUntil(() -> helper.assertTrue(click.get().getResult() != null && open.getAsBoolean(),
                         "the door did not open: " + click.get().getResult()))
@@ -266,7 +266,7 @@ public class InteractGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_switcher", new BlockPos(4, 2, 8), false);
         TaskRecord flip = click(helper, companion, "right", new BlockPos(6, 2, 8));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(flip.getResult() != null, "use block has not finished");
             helper.assertTrue(flip.getResult().success() && helper.getLevel().getBlockState(lever)
                             .getValue(net.minecraft.world.level.block.LeverBlock.POWERED),
@@ -283,7 +283,7 @@ public class InteractGameTests {
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 4));
         ToolRun place = command(companion, "use block right " + xyz(floor) + " --item minecraft:cobblestone");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(place.done(), "use block has not finished");
             helper.assertTrue(place.succeeded() && helper.getLevel().getBlockState(floor.above()).is(Blocks.COBBLESTONE)
                             && companion.getInventory().countItem(Items.COBBLESTONE) == 3,

@@ -233,7 +233,7 @@ public class CommandGameTests {
         NumenPlayer owner = presentOwner(helper, companion, "gametest_mc_host");
         ToolRun give = command(companion, "/give @s minecraft:diamond");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(give.task() == null, "a command the server refuses must not reach the task slot");
             helper.assertTrue(give.reply() != null && !give.succeeded()
                             && give.reply().contains("the server does not let you use /give"),
@@ -259,7 +259,7 @@ public class CommandGameTests {
         ToolRun give = command(companion, "/give @s minecraft:diamond 2");
         ToolRun typo = command(companion, "/give @s minecraft:not_an_item");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(give.done(), "give has not finished");
             helper.assertTrue(give.succeeded(), "give failed: " + give.outcome());
             helper.assertTrue(give.task() == null, "a game command occupied the task slot: " + give.task());
@@ -289,7 +289,7 @@ public class CommandGameTests {
         ToolRun run = command(companion, "/" + line);
         int[] waited = new int[1];
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             if (waited[0] < 10) {
                 ConsentRequest pending = ConsentDesk.of(companion).pending();
                 helper.assertTrue(pending != null, "setblock did not ask: " + run.outcome());
@@ -329,7 +329,7 @@ public class CommandGameTests {
         ToolRun help = command(companion, "/help");
         ToolRun tell = command(companion, "/tell gt_mc_listener on my way");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(help.done() && help.succeeded(), "help did not run: " + help.outcome());
             helper.assertTrue(tell.done() && tell.succeeded(), "tell did not run: " + tell.outcome());
             helper.assertTrue(!asked[0], "a factory-allowed command asked the owner");
@@ -350,7 +350,7 @@ public class CommandGameTests {
         helper.onEachTick(() -> asked[0] |= ConsentDesk.of(companion).pending() != null);
         ToolRun run = command(companion, "/" + setblock(helper, target));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(run.done(), "setblock has not settled");
             helper.assertTrue(!run.succeeded() && run.outcome().contains("denied by rule command(setblock)"),
                     "the refusal does not quote the rule: " + run.outcome());
@@ -521,7 +521,7 @@ public class CommandGameTests {
         ToolRun run = command(companion, "gt_long linger 10");
         EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(run.task() != null, "the long work was not found under the call's id: " + run.reply());
             JsonObject data = JsonParser.parseString(run.reply()).getAsJsonObject().getAsJsonObject("data");
             String id = data.get("task_id").getAsString();
@@ -552,7 +552,7 @@ public class CommandGameTests {
             server.getCommands().performPrefixedCommand(console, "/numen drive gametest_mc_driven " + line);
         }
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             String name = companion.getName().getString();
             helper.assertTrue(heard.size() == lines.size(), "drive did not answer every line: " + heard);
             for (int i = 0; i < lines.size(); i++) {
@@ -603,7 +603,7 @@ public class CommandGameTests {
         server.getCommands().performPrefixedCommand(console(server, heard),
                 "numen drive gametest_mc_held gt_sync hold 5");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             String name = companion.getName().getString();
             helper.assertTrue(heard.size() == 1, "drive did not hear exactly one final result: " + heard);
             helper.assertTrue(heard.get(0).equals(name + ": held for 5 ticks"),
@@ -629,7 +629,7 @@ public class CommandGameTests {
                 "numen drive gametest_mc_placer /" + setblock(helper, target));
         boolean[] allowed = new boolean[1];
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             if (!allowed[0]) {
                 ConsentRequest pending = ConsentDesk.of(companion).pending();
                 helper.assertTrue(pending != null, "the driven line did not ask the owner: " + heard);

@@ -117,7 +117,7 @@ public class TaskControlGameTests {
         ToolRun timer = command(companion, "task timer 600 check the furnace");
         ToolRun status = command(companion, "task status");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(walk.task() != null && timer.succeeded(), "goto or the timer did not go through: "
                     + walk.reply() + " / " + timer.reply());
             helper.assertTrue(status.succeeded() && status.reply().contains(walk.task().publicId())
@@ -136,7 +136,7 @@ public class TaskControlGameTests {
         AtomicReference<ToolRun> stop = new AtomicReference<>();
         EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
-        helper.startSequence()
+        steps(helper)
                 .thenExecuteAfter(5, () -> stop.set(command(companion, "task stop")))
                 .thenWaitUntil(() -> helper.assertTrue(stop.get().succeeded()
                                 && walk.task().getState() == TaskState.CANCELLED,
@@ -159,7 +159,7 @@ public class TaskControlGameTests {
         ToolRun stop = command(companion, "task stop --task_id t9999");
         ToolRun status = command(companion, "task status");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(timer.succeeded(), "the timer failed: " + timer.reply());
             helper.assertTrue(!stop.succeeded() && stop.reply().contains("feed the pets"),
                     "the refusal does not list what is pending: " + stop.reply());
@@ -175,7 +175,7 @@ public class TaskControlGameTests {
         ToolRun timer = command(companion, "task timer 1 the bread should be baked");
         EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(timer.succeeded(), "the timer failed: " + timer.reply());
             helper.assertTrue(outbox.peek(companion.getUUID()).entries().stream()
                             .anyMatch(e -> e.type().equals("timer") && e.text().contains("the bread should be baked")),
@@ -197,7 +197,7 @@ public class TaskControlGameTests {
         ToolRun timer = command(companion, "task timer 600 turn the compost");
         AtomicReference<ToolRun> status = new AtomicReference<>();
 
-        helper.startSequence()
+        steps(helper)
                 .thenExecuteAfter(3, () -> status.set(command(companion, "task status")))
                 .thenExecute(() -> {
                     helper.assertTrue(ToolRegistry.get("task_status") == null && ToolRegistry.get("set_timer") == null,
@@ -221,7 +221,7 @@ public class TaskControlGameTests {
         ToolRun viaTool = call(companion, "task_stop", args("task_id", "t9999"));
         ToolRun viaCommand = command(companion, "task stop --task_id t9999");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(timer.succeeded(), "the timer failed: " + timer.reply());
             helper.assertTrue(!viaTool.succeeded() && viaTool.reply().contains("air out the cellar"),
                     "the refusal does not list what is pending: " + viaTool.reply());
@@ -244,7 +244,7 @@ public class TaskControlGameTests {
         long setAt = server.overworld().getGameTime();
         ToolRun timer = command(companion, "task timer 5000 water the wheat");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(timer.succeeded(), "the timer failed: " + timer.reply());
             helper.assertTrue(timer.reply().contains("你要 5000s"), "the clamp is not explained: " + timer.reply());
             List<TimerRegistry.Timer> set = TimerRegistry.get(server).list(companion.getUUID());
@@ -275,7 +275,7 @@ public class TaskControlGameTests {
         CompanionRegistry.Entry recorded = CompanionRegistry.get(server).find(viaCommandBody.getUUID());
         EventOutbox outbox = EventOutbox.get(server);
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(taskIn(viaCommand.reply()).equals("gt_long linger")
                             && viaCommand.task().getToolName().equals("gt_long linger"),
                     "the command's task is not named group + action: " + viaCommand.reply());
@@ -320,7 +320,7 @@ public class TaskControlGameTests {
         EventOutbox outbox = EventOutbox.get(server);
         AtomicReference<TaskRecord> restored = new AtomicReference<>();
 
-        helper.startSequence()
+        steps(helper)
                 .thenWaitUntil(() -> {
                     helper.assertTrue(before.task() != null, "the first dispatch failed: " + before.reply());
                     TaskRecord now = CompanionTickDispatcher.currentTaskFor(uuid);
@@ -364,7 +364,7 @@ public class TaskControlGameTests {
         helper.assertTrue(second != null, "the body was not rebuilt");
         EventOutbox outbox = EventOutbox.get(server);
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(before.task() != null, "the first dispatch failed: " + before.reply());
             helper.assertTrue(registry.find(uuid).taskTool().isBlank(),
                     "the task that cannot be replayed is still on record");
@@ -403,7 +403,7 @@ public class TaskControlGameTests {
         helper.assertTrue(second != null, "the body was not rebuilt");
         ToolRun woken = command(second, "gt_long linger 900");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(before.task() != null, "the first dispatch failed: " + before.reply());
             helper.assertTrue(woken.task() != null, "the new dispatch was refused: " + woken.reply());
             helper.assertTrue(CompanionTickDispatcher.currentTaskFor(uuid) == woken.task(),

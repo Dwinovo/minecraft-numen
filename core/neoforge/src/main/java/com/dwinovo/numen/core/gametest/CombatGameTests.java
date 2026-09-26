@@ -52,7 +52,7 @@ public class CombatGameTests {
         float startHealth = zombie.getHealth();
 
         int[] insideBand = {0};
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(companion.isAlive(), "companion died to a single zombie");
             double d = companion.distanceTo(zombie);
             if (d >= inner && d <= outer) {
@@ -87,7 +87,7 @@ public class CombatGameTests {
         level.addFreshEntity(pig);
         TaskRecord record = command(companion, "fight attack --entity_ids " + pig.getId()).task();
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(pig.isDeadOrDying() && pig.getLastHurtByMob() == companion,
                     "the pig is still alive — she never walked over to hit it");
             CompanionFactory.despawn(level.getServer(), companion);
@@ -116,7 +116,7 @@ public class CombatGameTests {
         ToolRun attack = command(companion, "fight attack --entity_ids " + pig.getId() + " 999999");
         String recorded = com.dwinovo.numen.entity.CompanionRegistry.get(server).find(companion.getUUID()).taskArgs();
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(nobody.done() && !nobody.succeeded() && nobody.outcome().contains("999998"),
                     "naming only missing entities did not fail on the spot: " + nobody.reply());
             helper.assertTrue(attack.task() != null, "the attack was not accepted: " + attack.reply());

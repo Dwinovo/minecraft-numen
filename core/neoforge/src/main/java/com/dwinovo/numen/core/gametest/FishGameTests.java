@@ -36,7 +36,7 @@ public class FishGameTests {
         companion.getInventory().add(new ItemStack(Items.FISHING_ROD));
         ToolRun fish = command(companion, "work fish --count 1");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(fish.done(), "work fish has not finished");
             helper.assertTrue(fish.succeeded(), "fishing failed: " + fish.outcome());
             var inv = companion.getInventory();
@@ -54,7 +54,7 @@ public class FishGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_rodless", new BlockPos(4, 3, 7), false);
         ToolRun fish = command(companion, "work fish --count 1");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(fish.done(), "work fish has not finished");
             helper.assertTrue(!fish.succeeded() && fish.outcome().contains("fishing rod"),
                     "the failure does not name the missing rod: " + fish.outcome());
@@ -83,7 +83,7 @@ public class FishGameTests {
         ToolRun fish = command(companion, "work fish --count 5");
         java.util.concurrent.atomic.AtomicReference<ToolRun> stop = new java.util.concurrent.atomic.AtomicReference<>();
 
-        helper.startSequence()
+        steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(companion.fishing != null, "she has not cast yet"))
                 .thenExecute(() -> stop.set(command(companion, "task stop")))
                 .thenWaitUntil(() -> helper.assertTrue(stop.get().succeeded() && fish.done()

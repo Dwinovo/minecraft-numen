@@ -51,7 +51,7 @@ public class SleepGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_sleeper", new BlockPos(4, 2, 5), false);
         ToolRun sleep = command(companion, "use sleep");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(sleep.done(), "use sleep has not replied");
             helper.assertTrue(sleep.succeeded() && companion.isSleeping(),
                     "she is not asleep: " + sleep.outcome());
@@ -67,7 +67,7 @@ public class SleepGameTests {
         companion.getInventory().add(new ItemStack(Items.WHITE_BED));
         ToolRun sleep = command(companion, "use sleep");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(sleep.done(), "use sleep has not replied");
             helper.assertTrue(!sleep.succeeded() && sleep.outcome().contains("You are carrying")
                             && sleep.outcome().contains("place it"),
@@ -84,7 +84,7 @@ public class SleepGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_napper", new BlockPos(4, 2, 5), false);
         ToolRun sleep = command(companion, "use sleep");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(sleep.done(), "use sleep has not replied");
             helper.assertTrue(!sleep.succeeded() && sleep.outcome().contains("(bed at "),
                     "the refusal does not come back with the bed: " + sleep.outcome());
@@ -108,7 +108,7 @@ public class SleepGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_misled", new BlockPos(4, 2, 5), false);
         ToolRun sleep = command(companion, "use sleep --x " + floor.getX() + " --y " + floor.getY() + " --z " + floor.getZ());
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(sleep.done(), "use sleep has not replied");
             helper.assertTrue(!sleep.succeeded() && sleep.outcome().contains("no bed at those coordinates")
                             && sleep.outcome().contains("scan_blocks"),
@@ -125,7 +125,7 @@ public class SleepGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_halfsure", new BlockPos(4, 2, 5), false);
         ToolRun sleep = command(companion, "use sleep --x " + head.getX() + " --z " + head.getZ());
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(sleep.done(), "use sleep has not replied");
             helper.assertTrue(!sleep.succeeded() && sleep.outcome().contains("needs all of --x --y --z"),
                     "the reply does not ask for all three coordinates: " + sleep.outcome());
@@ -146,7 +146,7 @@ public class SleepGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_wary", new BlockPos(4, 2, 5), false);
         ToolRun sleep = command(companion, "use sleep");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(sleep.done(), "use sleep has not replied");
             helper.assertTrue(!sleep.succeeded() && !companion.isSleeping()
                             && sleep.outcome().contains("monsters nearby"),
@@ -165,7 +165,7 @@ public class SleepGameTests {
         BlockPos start = companion.blockPosition();
         ToolRun sleep = command(companion, "use sleep --x " + head.getX() + " --y " + head.getY() + " --z " + head.getZ());
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(sleep.done(), "use sleep has not replied");
             helper.assertTrue(!sleep.succeeded() && !companion.isSleeping()
                             && sleep.outcome().contains("too far away"),

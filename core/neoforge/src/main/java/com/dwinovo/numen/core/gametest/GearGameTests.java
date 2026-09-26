@@ -127,7 +127,7 @@ public class GearGameTests {
         companion.getInventory().add(new ItemStack(Items.AMETHYST_SHARD));
         ToolRun equip = command(companion, "gear wear minecraft:amethyst_shard");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(equip.done(), "gear wear has not finished");
             helper.assertTrue(equip.succeeded() && equip.outcome().contains("gametest:ring"),
                     "the reply does not name the ring slot: " + equip.outcome());
@@ -147,7 +147,7 @@ public class GearGameTests {
         companion.getInventory().selected = 5;   // 主手是空的那格,绿宝石在第 0 格
         ToolRun equip = command(companion, "gear wear minecraft:emerald");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(equip.done(), "gear wear has not finished");
             helper.assertTrue(!equip.succeeded() && equip.outcome().contains("sealed"),
                     "the failure does not carry the slot's reason: " + equip.outcome());
@@ -167,7 +167,7 @@ public class GearGameTests {
         companion.getInventory().selected = 5;
         ToolRun equip = command(companion, "gear wear minecraft:diamond");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(equip.done(), "gear wear has not finished");
             helper.assertTrue(!equip.succeeded() && equip.outcome().contains("gametest:belt"),
                     "the failure does not name the missing kind of slot: " + equip.outcome());
@@ -184,7 +184,7 @@ public class GearGameTests {
         companion.getInventory().add(new ItemStack(Items.AMETHYST_SHARD));
         ToolRun equip = command(companion, "gear wear minecraft:amethyst_shard --slot gametest:crown");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(equip.done(), "gear wear has not finished");
             String said = equip.outcome();
             helper.assertTrue(!equip.succeeded() && said.contains("gametest:crown") && said.contains("mainhand")
@@ -205,7 +205,7 @@ public class GearGameTests {
         gear.ring(1).worn = new ItemStack(Items.IRON_NUGGET);
         ToolRun unequip = command(companion, "gear remove --slot gametest:ring");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(unequip.done(), "gear remove has not finished");
             helper.assertTrue(unequip.succeeded() && unequip.outcome().contains("amethyst_shard (gametest:ring)")
                             && unequip.outcome().contains("iron_nugget (gametest:ring)"),
@@ -226,7 +226,7 @@ public class GearGameTests {
         gear.ring(1).worn = new ItemStack(Items.AMETHYST_SHARD);
         ToolRun unequip = command(companion, "gear remove --item minecraft:amethyst_shard");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(unequip.done(), "gear remove has not finished");
             helper.assertTrue(unequip.succeeded() && unequip.outcome().contains("amethyst_shard (gametest:ring)"),
                     "the reply does not name the shard: " + unequip.outcome());
@@ -248,7 +248,7 @@ public class GearGameTests {
         gear.ring(0).worn = new ItemStack(Items.AMETHYST_SHARD);
         ToolRun unequip = command(companion, "gear remove --slot gametest:ring");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(unequip.done(), "gear remove has not finished");
             helper.assertTrue(!unequip.succeeded() && unequip.outcome().contains("inventory is full"),
                     "the failure does not say the inventory is full: " + unequip.outcome());
@@ -268,7 +268,7 @@ public class GearGameTests {
         gear.ring(0).refuseRemove = "the ring is stuck fast";
         ToolRun unequip = command(companion, "gear remove --slot gametest:ring");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(unequip.done(), "gear remove has not finished");
             helper.assertTrue(!unequip.succeeded() && unequip.outcome().contains("stuck fast"),
                     "the failure does not carry the slot's reason: " + unequip.outcome());
@@ -291,7 +291,7 @@ public class GearGameTests {
         companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
         ToolRun status = call(companion, "get_self_status", args());
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(status.reply() != null, "get_self_status has not replied");
             var s = com.google.gson.JsonParser.parseString(status.reply()).getAsJsonObject();
             String body = s.get("body_state").getAsString();
@@ -337,7 +337,7 @@ public class GearGameTests {
         net.minecraft.world.phys.AABB around = companion.getBoundingBox().inflate(4);
         dismiss.accept(owner, companion);
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             var drops = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, around);
             int shards = drops.stream().filter(e -> e.getItem().is(Items.AMETHYST_SHARD))
                     .mapToInt(e -> e.getItem().getCount()).sum();

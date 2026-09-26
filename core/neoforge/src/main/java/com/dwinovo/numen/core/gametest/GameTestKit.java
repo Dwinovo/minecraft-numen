@@ -52,6 +52,10 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
  * <p>更远的感知(mine 与 goto 找方块扫 32 个 chunk、mine 捡掉落物按视距、逃跑看 32~40 格)隔不开:
  * 这类用例靠场景用别的用例不会留下的东西(独一种方块、物品)来保证只看见自己的。
  *
+ * <h2>步骤一律经 {@link #steps} 与 {@link #succeedWhen}</h2>
+ * 原版的 {@code helper.startSequence()} 与 {@code helper.succeedWhen} 在一步失败之后照样往下跑、也接不住断言以外的异常,
+ * 一条用例的失败会把整台测试服带崩({@link Steps})。用例不直接用它们。
+ *
  * <p>用例按领域分在同包的各个 {@code *GameTests} 类里;两个以上的类都要用的身体生成与场景搭建放在这里。
  * 这个类自己没有用例,仍挂着 {@link GameTestHolder}:NeoForge 登记用例时加载并初始化每个挂着它的类,
  * 静态块因此赶在任何结构模板加载之前把模板目录指到仓库里。
@@ -84,6 +88,16 @@ public final class GameTestKit {
         if (dir != null) {
             StructureUtils.testStructuresDir = dir;
         }
+    }
+
+    /** 这条用例的步骤,代替原版的 {@code helper.startSequence()}:一步失败只让这一条用例失败,见 {@link Steps}。 */
+    static Steps steps(GameTestHelper helper) {
+        return new Steps(helper);
+    }
+
+    /** 等到 {@code check} 成立就算通过,代替原版的 {@code helper.succeedWhen}:它抛出别的异常也只让这一条用例失败。 */
+    static void succeedWhen(GameTestHelper helper, Runnable check) {
+        steps(helper).thenWaitUntil(check).thenSucceed();
     }
 
     /** 把她提到 rel 那一格上空放手。 */

@@ -34,7 +34,7 @@ public class LocateGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_cartographer", new BlockPos(3, 2, 3), false);
         ToolRun locate = command(companion, "locate biome minecraft:plains");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(locate.done(), "locate biome has not finished");
             helper.assertTrue(locate.succeeded() && locate.outcome().startsWith("nearest ")
                             && locate.outcome().contains("plains"),
@@ -51,7 +51,7 @@ public class LocateGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_wanderer", new BlockPos(3, 2, 3), false);
         ToolRun locate = command(companion, "locate biome minecraft:desert");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(locate.done(), "locate biome has not finished");
             helper.assertTrue(locate.outcome().startsWith("no ") && locate.outcome().contains("desert")
                             && locate.outcome().contains("within"),
@@ -66,7 +66,7 @@ public class LocateGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_mixedup", new BlockPos(3, 2, 3), false);
         ToolRun locate = command(companion, "locate biome minecraft:village_plains");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(locate.done(), "locate biome has not finished");
             helper.assertTrue(!locate.succeeded()
                             && locate.outcome().contains("locate structure minecraft:village_plains"),
@@ -81,7 +81,7 @@ public class LocateGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_pilgrim", new BlockPos(3, 2, 3), false);
         ToolRun locate = command(companion, "locate structure minecraft:village");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(locate.done(), "locate structure has not finished");
             helper.assertTrue(!locate.outcome().startsWith("nearest ") && locate.outcome().contains("village"),
                     "the reply claims a village or does not name it: " + locate.outcome());

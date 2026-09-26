@@ -69,7 +69,7 @@ public class MineGameTests {
                 "count", 2)).task();
 
         BlockPos wallProbe = helper.absolutePos(new BlockPos(1, 3, 3));
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(companion.getInventory().countItem(Items.RAW_GOLD) >= 2,
                     "companion has not mined the gold outside the door");
             helper.assertTrue(level.getBlockState(wallProbe).is(Blocks.OBSIDIAN),
@@ -108,7 +108,7 @@ public class MineGameTests {
                 "block_ids", List.of("minecraft:acacia_log"),
                 "count", 2)).task();
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             String reply = record.getResult() == null ? null : record.getResult().message();
             helper.assertTrue(reply != null, "mine has not finished");
             helper.assertTrue(record.getResult().success() && companion.getInventory().countItem(Items.ACACIA_LOG) >= 2,
@@ -139,7 +139,7 @@ public class MineGameTests {
                 "block_ids", List.of("minecraft:stripped_birch_log"),
                 "count", 1)).task();
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             String reply = record.getResult() == null ? null : record.getResult().message();
             helper.assertTrue(reply != null, "mine has not finished");
             helper.assertTrue(!record.getResult().success() && reply.contains("could not reach"),
@@ -183,7 +183,7 @@ public class MineGameTests {
                 "block_ids", List.of("minecraft:spruce_log"),
                 "count", 8)).task();
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(companion.getInventory().countItem(Items.SPRUCE_LOG) >= 8,
                     "companion has not gathered 8 spruce logs");
             CompanionFactory.despawn(level.getServer(), companion);
@@ -228,7 +228,7 @@ public class MineGameTests {
         });
         ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:stripped_oak_log"), "count", 1));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
             helper.assertTrue(mine.succeeded() && companion.getInventory().countItem(Items.STRIPPED_OAK_LOG) == 1,
                     "the counted log was not fetched: " + mine.outcome());
@@ -265,7 +265,7 @@ public class MineGameTests {
                 "block_ids", List.of("minecraft:deepslate_diamond_ore"),
                 "count", 2)).task();
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) >= 2,
                     "companion has not gathered 2 diamonds");
             CompanionFactory.despawn(level.getServer(), companion);
@@ -291,7 +291,7 @@ public class MineGameTests {
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
         ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:iron_ore"), "count", 1));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
             helper.assertTrue(!mine.succeeded() && mine.outcome().contains("none of them can be broken here"),
                     "the reply does not say the ore by the lava cannot be broken: " + mine.outcome());
@@ -340,7 +340,7 @@ public class MineGameTests {
         companion.getInventory().add(new ItemStack(Items.WOODEN_PICKAXE));
         ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:diamond_ore"), "count", 1));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
             helper.assertTrue(!mine.succeeded() && mine.outcome().contains("current tools"),
                     "the failure does not say the tool is short: " + mine.outcome());
@@ -357,7 +357,7 @@ public class MineGameTests {
         BlockPos start = helper.absolutePos(new BlockPos(3, 2, 4));
         ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:emerald_ore"), "count", 1));
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
             helper.assertTrue(!mine.succeeded() && mine.outcome().contains("no reachable"),
                     "the failure does not say nothing was found: " + mine.outcome());
@@ -375,7 +375,7 @@ public class MineGameTests {
         companion.getInventory().add(new ItemStack(Items.DIAMOND_PICKAXE));
         ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:obsidian"), "count", 1));
 
-        helper.startSequence()
+        steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(digging(companion),
                         "she has not started digging the obsidian"))
                 .thenExecute(() -> com.dwinovo.numen.task.CompanionTickDispatcher.cancelFor(companion))
@@ -419,7 +419,7 @@ public class MineGameTests {
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
         ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:gold_block"), "count", 12));
 
-        helper.startSequence()
+        steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(mine.done(), "mine has not finished"))
                 .thenWaitUntil(() -> {
                     helper.assertTrue(mine.succeeded(), "mine failed: " + mine.outcome());
@@ -461,7 +461,7 @@ public class MineGameTests {
         ToolRun viaTool = call(companion, "mine", args("block_ids", List.of("minecraft:dried_kelp_block"), "count", 1));
         java.util.concurrent.atomic.AtomicReference<ToolRun> viaCommand = new java.util.concurrent.atomic.AtomicReference<>();
 
-        helper.startSequence()
+        steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(viaTool.done(), "mine has not finished"))
                 .thenExecute(() -> viaCommand.set(command(companion,
                         "work mine --block_ids minecraft:dried_kelp_block --count 1")))

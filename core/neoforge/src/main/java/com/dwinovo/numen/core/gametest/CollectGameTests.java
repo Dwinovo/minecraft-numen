@@ -41,7 +41,7 @@ public class CollectGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_gleaner", new BlockPos(2, 2, 2), false);
         ToolRun collect = command(companion, "work collect --item_ids minecraft:iron_ingot");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(collect.done(), "work collect has not finished");
             helper.assertTrue(collect.succeeded(), "work collect failed: " + collect.outcome());
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 3,
@@ -61,7 +61,7 @@ public class CollectGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_sweeper", new BlockPos(2, 2, 2), false);
         ToolRun collect = command(companion, "work collect");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(collect.done(), "work collect has not finished");
             helper.assertTrue(collect.succeeded(), "work collect failed: " + collect.outcome());
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 3
@@ -81,7 +81,7 @@ public class CollectGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_tallier", new BlockPos(2, 2, 7), false);
         ToolRun collect = command(companion, "work collect --item_ids minecraft:iron_ingot");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(collect.done(), "work collect has not finished");
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 5,
                     "not all five ingots were picked up");
@@ -102,7 +102,7 @@ public class CollectGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_empty_handed", new BlockPos(2, 2, 7), false);
         ToolRun collect = command(companion, "work collect --radius 3");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(collect.done(), "work collect has not finished");
             helper.assertTrue(collect.outcome().startsWith("collected 0 "),
                     "the reply does not say nothing was picked up: " + collect.outcome());
@@ -131,7 +131,7 @@ public class CollectGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_spelunker", new BlockPos(3, 4, 3), false);
         ToolRun collect = command(companion, "work collect --item_ids minecraft:iron_ingot");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(collect.done(), "work collect has not finished");
             helper.assertTrue(collect.succeeded() && companion.getInventory().countItem(Items.IRON_INGOT) == 3,
                     "the ingots at the bottom of the pit were not picked up: " + collect.outcome());
@@ -169,7 +169,7 @@ public class CollectGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_shortarm", new BlockPos(3, 2, 3), false);
         ToolRun collect = command(companion, "work collect --item_ids minecraft:iron_ingot");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(collect.done(), "work collect has not finished");
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 0
                             && onFloor(helper, Items.IRON_INGOT) == 3,
@@ -196,7 +196,7 @@ public class CollectGameTests {
         helper.getLevel().addFreshEntity(drop);
         ToolRun collect = command(companion, "work collect --item_ids minecraft:iron_ingot");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(collect.done(), "work collect has not finished");
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 3
                             && collect.outcome().startsWith("collected 3 "),

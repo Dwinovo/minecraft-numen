@@ -49,7 +49,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.DIAMOND_HELMET));
         TaskRecord record = command(companion, "gear wear minecraft:diamond_helmet").task();
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
                     .is(Items.DIAMOND_HELMET), "the helmet is not on her head");
             String said = record.getResult() == null ? null : record.getResult().message();
@@ -77,7 +77,7 @@ public class InventoryGameTests {
         com.dwinovo.numen.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
         TaskRecord record = command(companion, "inv drop minecraft:diamond_pickaxe 1").task();
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             var drops = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
                     companion.getBoundingBox().inflate(8));
             helper.assertTrue(!drops.isEmpty(), "nothing was dropped");
@@ -110,7 +110,7 @@ public class InventoryGameTests {
         com.dwinovo.numen.entity.Companions.dormant(server, first);
         com.dwinovo.numen.entity.Companions.respawn(server, uuid);
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             NumenPlayer live = NumenPlayer.findByUuid(server, uuid);
             helper.assertTrue(live != null, "the body did not come back");
             helper.assertTrue(live.getGameProfile().getProperties().containsKey("textures"),
@@ -130,7 +130,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.OAK_LOG, 2));
         ToolRun craft = command(companion, "inv craft minecraft:oak_planks --count 8");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(craft.done(), "inv craft has not replied");
             helper.assertTrue(craft.succeeded() && craft.outcome().contains("crafted 8x oak_planks"),
                     "inv craft did not report 8 planks: " + craft.outcome());
@@ -150,7 +150,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 8));
         ToolRun craft = command(companion, "inv craft minecraft:chest --count 1");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(craft.done(), "inv craft has not replied");
             helper.assertTrue(!craft.succeeded() && craft.outcome().contains(
                             "Nearest one is at " + table.getX() + "," + table.getY() + "," + table.getZ()),
@@ -170,7 +170,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 8));
         ToolRun craft = command(companion, "inv craft minecraft:chest --count 1");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(craft.done(), "inv craft has not replied");
             helper.assertTrue(craft.succeeded(), "craft at the table failed: " + craft.outcome());
             helper.assertTrue(companion.getInventory().countItem(Items.CHEST) == 1
@@ -189,7 +189,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 3));
         ToolRun craft = command(companion, "inv craft minecraft:chest --count 1");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(craft.done(), "inv craft has not replied");
             helper.assertTrue(!craft.succeeded() && craft.outcome().contains("not enough materials")
                             && craft.outcome().contains("missing"),
@@ -210,7 +210,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.BREAD, 2));
         ToolRun eat = command(companion, "inv eat minecraft:bread");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(eat.done(), "inv eat has not finished");
             helper.assertTrue(eat.succeeded() && eat.outcome().startsWith("ate bread"),
                     "inv eat did not report the meal: " + eat.outcome());
@@ -230,7 +230,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.BREAD, 2));
         ToolRun eat = command(companion, "inv eat minecraft:bread");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(eat.done(), "inv eat has not finished");
             helper.assertTrue(!eat.succeeded() && eat.outcome().contains("already full"),
                     "eating on a full stomach was not refused: " + eat.outcome());
@@ -246,7 +246,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 8));
         ToolRun craft = command(companion, "inv craft minecraft:bedrock --count 1");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(craft.done(), "inv craft has not replied");
             helper.assertTrue(!craft.succeeded() && craft.outcome().contains("no crafting recipe makes"),
                     "the reply does not say there is no recipe: " + craft.outcome());
@@ -261,7 +261,7 @@ public class InventoryGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_unarmed", new BlockPos(3, 2, 3), false);
         ToolRun equip = command(companion, "gear wear minecraft:iron_helmet");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(equip.done(), "gear wear has not finished");
             helper.assertTrue(!equip.succeeded() && equip.outcome().contains("in inventory to equip"),
                     "the failure does not say the item is not carried: " + equip.outcome());
@@ -279,7 +279,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.DIAMOND_HELMET));
         ToolRun equip = command(companion, "gear wear minecraft:diamond_helmet");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(equip.done(), "gear wear has not finished");
             helper.assertTrue(equip.succeeded() && equip.outcome().contains("in head"),
                     "the reply does not say the helmet went on her head: " + equip.outcome());
@@ -298,7 +298,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.CARVED_PUMPKIN));
         ToolRun equip = command(companion, "gear wear minecraft:carved_pumpkin");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(equip.done(), "gear wear has not finished");
             helper.assertTrue(equip.succeeded() && equip.outcome().contains("in head"),
                     "the reply does not say the pumpkin went on her head: " + equip.outcome());
@@ -316,7 +316,7 @@ public class InventoryGameTests {
         companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.FEET, new ItemStack(Items.IRON_BOOTS));
         ToolRun unequip = command(companion, "gear remove --slot armor");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(unequip.done(), "gear remove has not finished");
             helper.assertTrue(unequip.succeeded() && unequip.outcome().startsWith("took off")
                             && unequip.outcome().contains("iron_helmet") && unequip.outcome().contains("iron_boots"),
@@ -341,7 +341,7 @@ public class InventoryGameTests {
         companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
         ToolRun unequip = command(companion, "gear remove --slot head");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(unequip.done(), "gear remove has not finished");
             helper.assertTrue(!unequip.succeeded() && unequip.outcome().contains("inventory is full"),
                     "the failure does not say the inventory is full: " + unequip.outcome());
@@ -359,7 +359,7 @@ public class InventoryGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_bareheaded", new BlockPos(4, 2, 4), false);
         ToolRun unequip = command(companion, "gear remove --slot head");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(unequip.done(), "gear remove has not finished");
             helper.assertTrue(unequip.succeeded() && unequip.outcome().startsWith("nothing to take off"),
                     "the reply does not say there was nothing to take off: " + unequip.outcome());
@@ -374,7 +374,7 @@ public class InventoryGameTests {
         companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
         ToolRun unequip = command(companion, "gear remove");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(unequip.done(), "gear remove has not replied");
             helper.assertTrue(!unequip.succeeded() && unequip.outcome().contains("slot is required"),
                     "the rejection does not ask for a slot: " + unequip.outcome());
@@ -391,7 +391,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.IRON_HELMET));
         ToolRun equip = command(companion, "gear wear minecraft:iron_helmet --slot armor");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(equip.done(), "gear wear has not replied");
             helper.assertTrue(!equip.succeeded() && equip.outcome().contains("only for gear remove"),
                     "the armor alias was not rejected for wearing: " + equip.outcome());
@@ -408,7 +408,7 @@ public class InventoryGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_emptyhanded", new BlockPos(4, 2, 4), false);
         ToolRun equip = command(companion, "gear wear");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(equip.done() && equip.task() == null, "gear wear has not replied, or dispatched work");
             helper.assertTrue(!equip.succeeded() && equip.outcome().contains("gear wear <item>"),
                     "the rejection does not show the usage: " + equip.outcome());
@@ -427,7 +427,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.WATER_BUCKET));
         ToolRun equip = command(companion, "gear wear minecraft:water_bucket");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(equip.done(), "gear wear has not finished");
             helper.assertTrue(equip.succeeded() && equip.outcome().contains("main hand"),
                     "the reply does not say the bucket is in her main hand: " + equip.outcome());
@@ -448,7 +448,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.SNOWBALL, 4));
         ToolRun equip = command(companion, "gear wear minecraft:snowball");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(equip.done(), "gear wear has not finished");
             helper.assertTrue(equip.succeeded() && equip.outcome().contains("main hand"),
                     "the reply does not say the snowball is in her main hand: " + equip.outcome());
@@ -473,7 +473,7 @@ public class InventoryGameTests {
         companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, helmet);
         ToolRun unequip = command(companion, "gear remove --slot head");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(unequip.done(), "gear remove has not finished");
             helper.assertTrue(!unequip.succeeded() && unequip.outcome().contains("binding"),
                     "the failure does not name the curse of binding: " + unequip.outcome());
@@ -492,7 +492,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.SHIELD));
         ToolRun equip = command(companion, "gear wear minecraft:shield");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(equip.done(), "gear wear has not finished");
             helper.assertTrue(equip.succeeded() && equip.outcome().contains("offhand"),
                     "the reply does not say the shield is in her off hand: " + equip.outcome());
@@ -511,7 +511,7 @@ public class InventoryGameTests {
         companion.getFoodData().setFoodLevel(10);
         ToolRun eat = command(companion, "inv eat minecraft:bread");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(eat.done(), "inv eat has not finished");
             helper.assertTrue(!eat.succeeded() && eat.outcome().contains("no bread in inventory"),
                     "the failure does not say there is no bread: " + eat.outcome());
@@ -527,7 +527,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 3));
         ToolRun eat = command(companion, "inv eat minecraft:cobblestone");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(eat.done(), "inv eat has not finished");
             helper.assertTrue(!eat.succeeded() && eat.outcome().contains("can't be eaten or drunk"),
                     "the failure does not say cobblestone is not food: " + eat.outcome());
@@ -544,7 +544,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.GOLDEN_APPLE));
         ToolRun eat = command(companion, "inv eat minecraft:golden_apple");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(eat.done(), "inv eat has not finished");
             helper.assertTrue(eat.succeeded() && eat.outcome().startsWith("ate golden_apple"),
                     "the golden apple was not eaten on a full stomach: " + eat.outcome());
@@ -563,7 +563,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.BREAD, 2));
         ToolRun eat = command(companion, "inv eat minecraft:bread");
 
-        helper.startSequence()
+        steps(helper)
                 .thenIdle(10)
                 .thenExecute(() -> com.dwinovo.numen.task.CompanionTickDispatcher.cancelFor(companion))
                 .thenWaitUntil(() -> helper.assertTrue(eat.done() && eat.outcome().startsWith("the owner pressed Stop"),
@@ -584,7 +584,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.BREAD, 2));
         ToolRun eat = command(companion, "inv eat minecraft:bread");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(eat.done(), "inv eat has not finished");
             helper.assertTrue(!eat.succeeded() && eat.outcome().contains("creative mode has no hunger"),
                     "the reply does not say creative has no hunger: " + eat.outcome());
@@ -603,7 +603,7 @@ public class InventoryGameTests {
         companion.getInventory().add(new ItemStack(Items.BIRCH_PLANKS, 4));
         ToolRun craft = command(companion, "inv craft minecraft:chest --count 1");
 
-        helper.succeedWhen(() -> {
+        succeedWhen(helper, () -> {
             helper.assertTrue(craft.done(), "inv craft has not replied");
             helper.assertTrue(craft.succeeded(), "craft from mixed planks failed: " + craft.outcome());
             helper.assertTrue(companion.getInventory().countItem(Items.CHEST) == 1
