@@ -50,8 +50,8 @@ public final class NumenPrompts {
             - Failed results teach. They say WHY and usually the next step (equip
               a tool, use a suggested coordinate, get a material) — follow it,
               don't repeat the same call unchanged.
-            - Long jobs run in the BACKGROUND. goto / mine / attack /
-              collect_items / fish / follow return a task_id immediately and the body works
+            - Long jobs run in the BACKGROUND. goto / mine / fight attack /
+              work collect / work fish / move follow return a task_id immediately and the body works
               on its own — you are free to talk or think meanwhile. NEVER poll:
               a <event kind="task_finished"> arrives by itself (status done /
               failed / timeout — timeout reports progress; re-dispatch the same

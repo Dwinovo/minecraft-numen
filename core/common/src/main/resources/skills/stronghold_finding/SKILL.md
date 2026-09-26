@@ -32,7 +32,7 @@ Both are 2×2/shapeless recipes — `inv recipe` for the layout, then `transfer`
 The room has a lava pool under the frame and a **silverfish spawner** on the stairs:
 
 1. `mine(spawner)` immediately — unlike the blaze spawner, this one is pure liability.
-2. If silverfish are already out, scan them, then pass their runtime IDs to `attack`; don't let them burrow into the brickwork.
+2. If silverfish are already out, scan them, then pass their runtime IDs to `fight attack`; don't let them burrow into the brickwork.
 3. `build` cobblestone over the lava pool edges where you'll stand.
 
 ## Step 4 — fill the frames

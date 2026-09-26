@@ -23,7 +23,7 @@ import java.util.UUID;
  * 派发、重放、被顶替、干完、死亡清空,走的是同一个出口。客户端不再推断,只照抄。
  *
  * @param taskId    公开任务 id;<b>空串 = 她现在闲着</b>
- * @param tool      工具名(collect_items / mine / follow …)
+ * @param tool      任务名:快捷工具名或"组 动作"(goto / work collect / move follow …)
  * @param describe  这件活的人话描述,由任务记录自己给出
  * @param standing  常驻(没有终点,不会发 task_finished)
  * @param elapsedMs 已经干了多久——重放回来的活也有正确的起点,不会从推送那一刻重新计时

@@ -23,13 +23,13 @@ Phase 3 of the dragon route. Eyes of ender need blaze powder; `locate structure`
 
 - 20 HP, fly/hover, volley of 3 fireballs (~5 dmg each + sets you on fire) every ~3s at line of sight, fire-immune.
 - They spawn from **blaze spawners**: small fortress rooms with a caged spawner block, plus naturally on fortress bridges.
-- **Carry a bow and ~6 arrows per blaze.** Blazes hover, so `attack` shoots the ones it cannot reach and closes on the ones it can — you do not pick. A diamond sword alone still works when arrows run out (3 hits kill) as long as you carry plenty of cooked food for the fireball damage; what you control is what is in the inventory, not the range.
+- **Carry a bow and ~6 arrows per blaze.** Blazes hover, so `fight attack` shoots the ones it cannot reach and closes on the ones it can — you do not pick. A diamond sword alone still works when arrows run out (3 hits kill) as long as you carry plenty of cooked food for the fireball damage; what you control is what is in the inventory, not the range.
 
 ## Farming loop
 
 1. Find the spawner room (`scan_blocks(spawner)` inside the fortress helps).
-2. `scan_nearby_entities` → `attack({"entity_ids":[id]})` in small batches.
-3. `collect_items` — rods drop on the floor; grab them before they burn in nearby lava... rods are fire-immune items, but lava destroys them. Don't let drops land in lava.
+2. `scan_nearby_entities` → `fight attack --entity_ids <id>` in small batches.
+3. `work collect` — rods drop on the floor; grab them before they burn in nearby lava... rods are fire-immune items, but lava destroys them. Don't let drops land in lava.
 4. `get_self_status` between batches: HP ≤ 8 → `goto` out of spawner range, eat, return.
 5. Repeat until `get_self_status` shows ≥7 rods. Drop rate is 0–1 per kill (avg 0.5) → expect **~14 kills**, more if unlucky.
 
@@ -37,7 +37,7 @@ Phase 3 of the dragon route. Eyes of ender need blaze powder; `locate structure`
 
 ## Hazards
 
-- **Wither skeletons** roam fortress corridors; their hits apply Wither (damage over time). scan them and pass one runtime ID at a time to `attack`, or stay out of reach.
+- **Wither skeletons** roam fortress corridors; their hits apply Wither (damage over time). scan them and pass one runtime ID at a time to `fight attack`, or stay out of reach.
 - Fortress bridges have no railings; knockback over the edge usually lands in lava. Fight away from edges (`combat_basics` positioning rules).
 
 ## What to load next

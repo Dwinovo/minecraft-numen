@@ -1,6 +1,6 @@
 ---
 name: building_design
-description: Building design doctrine for the build/blueprint tools - planning workflow, size reference, single-floor rule, door alignment, composition order with walls, quality checklist. Load BEFORE designing or building any non-trivial structure.
+description: Building design doctrine for the build tool and build blueprint - planning workflow, size reference, single-floor rule, door alignment, composition order with walls, quality checklist. Load BEFORE designing or building any non-trivial structure.
 ---
 
 # Skill: building_design
@@ -403,8 +403,9 @@ reads it as texture rather than as a pattern.
   cylinder / sphere / copy; block states ride in the block name; `minecraft:air`
   clears; `mask` decides what may be overwritten; later ops overwrite earlier
   cells, so details go last
-- whole structure files: `blueprint` tool (action=list first, then action=build
-  at a flat anchor); liquids are always skipped
+- whole structure files: `build blueprints` lists them, `build blueprint_read`
+  prices one, `build blueprint` builds it at a flat anchor; liquids are always
+  skipped
 
 ## Style references — how to read them
 
