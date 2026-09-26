@@ -131,6 +131,7 @@ public class PerceptionGameTests {
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
         companion.getInventory().add(new ItemStack(Items.DIAMOND, 3));
         ToolRun status = call(companion, "get_self_status", args());
+        ToolRun viaCommand = command(companion, "status self");
 
         helper.succeedWhen(() -> {
             JsonObject s = json(status);
@@ -139,6 +140,9 @@ public class PerceptionGameTests {
             helper.assertTrue(s.getAsJsonObject("backpack_slots").get("used").getAsInt() == 2,
                     "the backpack does not count two used slots: " + status.reply());
             helper.assertTrue(s.get("hp").getAsFloat() == companion.getHealth(), "hp is not her health");
+            helper.assertTrue(status.reply().equals(viaCommand.reply()),
+                    "get_self_status and status self read differently: " + status.reply() + " / "
+                            + viaCommand.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -147,7 +151,7 @@ public class PerceptionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void get_world_info_tells_day_and_clear_weather(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_skywatcher", new BlockPos(3, 2, 3), false);
-        ToolRun info = call(companion, "get_world_info", args());
+        ToolRun info = command(companion, "status world");
 
         helper.succeedWhen(() -> {
             JsonObject w = json(info);
@@ -167,6 +171,7 @@ public class PerceptionGameTests {
         NumenPlayer owner = presentOwner(helper, companion, "gametest_guardian");
         ToolRun absent = call(alone, "get_owner_status", args());
         ToolRun present = call(companion, "get_owner_status", args());
+        ToolRun viaCommand = command(companion, "status owner");
 
         helper.succeedWhen(() -> {
             helper.assertTrue(!json(absent).get("online").getAsBoolean(),
@@ -175,6 +180,9 @@ public class PerceptionGameTests {
             helper.assertTrue(p.get("online").getAsBoolean() && p.get("name").getAsString().equals("gametest_guardian")
                             && p.has("distance_to_me"),
                     "the present owner is not reported with name and distance: " + present.reply());
+            helper.assertTrue(present.reply().equals(viaCommand.reply()),
+                    "get_owner_status and status owner read differently: " + present.reply() + " / "
+                            + viaCommand.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), alone);
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
             CompanionFactory.despawn(helper.getLevel().getServer(), owner);

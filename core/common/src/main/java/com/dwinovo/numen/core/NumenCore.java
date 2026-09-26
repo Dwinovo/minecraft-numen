@@ -127,8 +127,8 @@ public final class NumenCore {
         ToolRegistry.register(new com.dwinovo.numen.core.tools.interact.InspectGuiTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.TransferTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.interact.CloseGuiTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.perception.GetSelfStatusTool());   // SAMPLE: raw NumenTool
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.perception.GetOwnerStatusTool());
+        // status 组提升出的 get_self_status / get_owner_status 在这里进表
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.perception.StatusCommands::install);
         ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.LookupRecipeTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.CraftTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.perception.ScanNearbyEntitiesTool());
@@ -137,7 +137,6 @@ public final class NumenCore {
         ToolRegistry.register(new com.dwinovo.numen.core.tools.perception.LookAroundTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.perception.InspectBlockTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.perception.InspectBlockStorageTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.perception.GetWorldInfoTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.agent.TodoWriteTool());   // raw NumenTool
         ToolRegistry.register(new com.dwinovo.numen.core.tools.agent.LoadSkillTool());   // raw NumenTool
         ToolRegistry.register(new com.dwinovo.numen.core.tools.agent.RememberTool());    // raw NumenTool

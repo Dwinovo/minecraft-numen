@@ -19,11 +19,83 @@ import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Perception tool implementations — the business half of {@code InspectBlockTool},
- * {@code GetOwnerStatusTool} and {@code GetWorldInfoTool}, which own the LLM-facing
- * name / description / schema and delegate here.
+ * 读身体、主人、世界与一格方块:{@code status self|owner|world} 与 {@code scan block} 的处理函数交到这里,
+ * 命令的名字、说明与参数在 {@link com.dwinovo.numen.core.tools.perception.StatusCommands} 与
+ * {@link com.dwinovo.numen.core.tools.perception.ScanCommands}。每个方法回一份 JSON,原样作回执。
  */
 public final class PerceptionOps {
+
+    public String getSelfStatus(NumenPlayer self) {
+        JsonObject root = new JsonObject();
+        root.addProperty("entity_id", self.getId());
+        root.addProperty("name", self.getName().getString());
+        root.addProperty("game_mode", self.gameMode.getGameModeForPlayer().getName());
+        root.addProperty("hp", self.getHealth());
+        root.addProperty("max_hp", self.getMaxHealth());
+        root.addProperty("hunger", self.getFoodData().getFoodLevel());
+        root.addProperty("saturation", self.getFoodData().getSaturationLevel());
+
+        JsonObject pos = new JsonObject();
+        pos.addProperty("x", self.getX());
+        pos.addProperty("y", self.getY());
+        pos.addProperty("z", self.getZ());
+        root.add("position", pos);
+
+        root.addProperty("dimension", self.level().dimension().location().toString());
+        root.addProperty("biome", self.level().getBiome(self.blockPosition())
+                .unwrapKey().map(k -> k.location().toString()).orElse("unknown"));
+
+        JsonArray structures = new JsonArray();
+        if (self.level() instanceof ServerLevel sl) {
+            Registry<Structure> reg = sl.registryAccess().registryOrThrow(Registries.STRUCTURE);
+            for (Structure s : sl.structureManager().getAllStructuresAt(self.blockPosition()).keySet()) {
+                ResourceLocation key = reg.getKey(s);
+                if (key != null) structures.add(key.toString());
+            }
+        }
+        root.add("structures", structures);
+
+        // 只报两只手:身上穿戴的归 body_state 里的 <worn> 一处管,原版的甲和模组的饰品同一份
+        JsonObject equipment = new JsonObject();
+        for (EquipmentSlot slot : new EquipmentSlot[]{EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND}) {
+            ItemStack s = self.getItemBySlot(slot);
+            if (s.isEmpty()) continue;
+            JsonObject o = new JsonObject();
+            o.addProperty("item", BuiltInRegistries.ITEM.getKey(s.getItem()).toString());
+            if (s.getCount() > 1) o.addProperty("count", s.getCount());
+            equipment.add(slot.getName(), o);
+        }
+        root.add("equipment", equipment);
+
+        // 背包不在这里。它是「状态」不是「事件」——工具结果会沉进对话历史,而历史里的
+        // 状态永远不会过期:十轮之后她读到那份快照,上面写的还是十轮前的东西,而且和这一轮
+        // 挂在请求里的实时背包对不上。全量背包只有一个来源(runtime_state 的 <inventory>),
+        // 那一份永远是现在。要精确到槽位就调 inspect_gui。
+        var inv = self.getInventory();
+        JsonObject slots = new JsonObject();
+        int used = 0;
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            if (!inv.getItem(i).isEmpty()) used++;
+        }
+        slots.addProperty("used", used);
+        slots.addProperty("total", inv.getContainerSize());
+        root.add("backpack_slots", slots);
+
+        root.add("target", JsonNull.INSTANCE);
+        root.addProperty("on_ground", self.onGround());
+        root.addProperty("in_water", self.isInWater());
+        // Remaining breath — the one stat whose absence let a body drown while its
+        // mind calmly planned an 870-block trip (frozen-ocean death, 2026-07-15).
+        root.addProperty("air", self.getAirSupply() + "/" + self.getMaxAirSupply() + " ticks");
+        root.addProperty("in_lava", self.isInLava());
+        // 身体状态片段:<worn>(穿戴位置,原版与模组同一份)打头,其后是插件从身体上读的片段。
+        // 与挂进 runtime_state 的是同一个汇总,一段都没有就不出这个字段。
+        String bodyState = com.dwinovo.numen.api.NumenPlugins.bodyStateFragments(self);
+        if (!bodyState.isEmpty()) {
+            root.addProperty("body_state", bodyState);
+        }
+        return root.toString();
+    }
 
     @SuppressWarnings("deprecation")  // BlockBehaviour.isSolid() carries Mojang's
                                      // "deprecated for override" marker, not phased out.

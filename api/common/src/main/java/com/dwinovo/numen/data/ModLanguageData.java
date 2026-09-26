@@ -415,7 +415,6 @@ public final class ModLanguageData {
         adder.add("numen.tool.equip_item", "Equip");
         adder.add("numen.tool.get_owner_status", "Owner status");
         adder.add("numen.tool.get_self_status", "Self status");
-        adder.add("numen.tool.get_world_info", "World info");
         adder.add("numen.tool.goto", "Go to");
         adder.add("numen.tool.inspect_block", "Inspect block");
         adder.add("numen.tool.inspect_block_storage", "Inspect container");
@@ -856,7 +855,6 @@ public final class ModLanguageData {
         adder.add("numen.tool.equip_item", "装备");
         adder.add("numen.tool.get_owner_status", "主人状态");
         adder.add("numen.tool.get_self_status", "自身状态");
-        adder.add("numen.tool.get_world_info", "世界信息");
         adder.add("numen.tool.goto", "前往");
         adder.add("numen.tool.inspect_block", "查看方块");
         adder.add("numen.tool.inspect_block_storage", "查看容器");
