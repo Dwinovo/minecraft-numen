@@ -339,6 +339,36 @@ class AgentLoopTest extends LoopHarness {
         }
     }
 
+    // ---- 推进不递归 ----
+
+    @Nested
+    class PumpDoesNotRecurse {
+
+        /**
+         * 端口当场回话时,一次 run 在开它的那一步里就结束了;接下来的清空、下一句话、再下一次清空……
+         * 都是推进里同步发生的。它们一圈一圈接着走,调用栈不随圈数变深。
+         */
+        @Test
+        void thousandsOfSynchronousRunsAndClearsDoNotGrowTheStack() {
+            int pairs = 20_000;
+            EventQueue big = new EventQueue(EventQueue.Journal.NONE, pairs * 2 + 1);
+            AgentLoop busy = new AgentLoop("busy", model, tools, transcript, big, memory, host);
+            List<EventQueue.Entry> batch = new ArrayList<>();
+            for (int i = 0; i < pairs; i++) {
+                batch.add(new EventQueue.Entry(EventTypes.QUERY, "<query>第" + i + "句</query>", 0, false));
+                batch.add(new EventQueue.Entry(EventTypes.CLEAR, "清空上下文", 0, false));
+            }
+            model.replyAtOnce = "好";
+
+            busy.push(batch);
+
+            assertEquals(pairs, model.calls.size(), "每句话答一次");
+            assertEquals(pairs, memory.clears, "每次清空都执行了,顺序不乱");
+            assertTrue(big.isEmpty());
+            assertNull(busy.status().phase());
+        }
+    }
+
     // ---- 读回来的收件箱 ----
 
     @Nested

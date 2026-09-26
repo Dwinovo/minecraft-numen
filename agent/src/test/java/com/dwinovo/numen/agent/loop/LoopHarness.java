@@ -77,6 +77,8 @@ public abstract class LoopHarness {
     public final class FakeModel implements ModelPort {
         public String unavailable;
         public int turnRequests;
+        /** 非空时每次调用当场就用这句话答完,回调同步回到内核里——模拟回得比调用栈退得还快的端口。 */
+        public String replyAtOnce;
         public final List<Call> calls = new ArrayList<>();
 
         @Override
@@ -93,7 +95,11 @@ public abstract class LoopHarness {
         @Override
         public void call(ModelRequest request, CancelToken cancel, Consumer<Delta> onDelta,
                          Consumer<ModelOutcome> onDone) {
-            calls.add(new Call(request, cancel, onDelta, onDone));
+            Call call = new Call(request, cancel, onDelta, onDone);
+            calls.add(call);
+            if (replyAtOnce != null) {
+                call.say(replyAtOnce);
+            }
         }
 
         public Call last() {

@@ -23,8 +23,9 @@ import java.util.function.Consumer;
  * </ul>
  *
  * <h2>唯一的推进点 {@link #pump}</h2>
- * 入队、run 结束、停牌解开、每个 tick 之后都只调它。它只在真的开 run 或执行控制条目时打日志——
- * 停牌时每 tick 调一次也没有输出。
+ * 入队、run 结束、停牌解开、每个 tick 之后都只调它。它一步一步往下走({@link #step}:开 run / 执行控制条目 /
+ * 什么也不做,只有这一个判断),直到没有能同步做完的事;不递归,调用栈不随步数变深。它只在真的开 run 或
+ * 执行控制条目时打日志——停牌时每 tick 调一次也没有输出。
  *
  * <h2>一次 run 是两层循环</h2>
  * <pre>
@@ -70,6 +71,10 @@ public final class AgentLoop {
     private Hold announced;
     /** 这次整理记忆已经流回来的摘要字数。 */
     private int compactChars;
+    /** 正在 {@link #pump} 的那一圈里。这期间再来的推进请求不重入,只记下"再看一眼"。 */
+    private boolean pumping;
+    /** {@link #pump} 期间有人又要求推进(run 当场结束、订阅者推了新输入):那一圈做完接着再看一眼。 */
+    private boolean pumpAgain;
 
     /**
      * @param name       日志里认这只同伴用的名字
@@ -152,7 +157,30 @@ public final class AgentLoop {
     // ---- 推进 ----
 
     /**
-     * 闲时推进一步。"下一步做什么"只有这一个判断,看的是队列里墙之前那一段——和 run 取件同一段、同一份声明:
+     * 推进:一步一步往下走,直到没有能同步做完的事。入队、run 结束、停牌解开、每个 tick 都只调它。
+     *
+     * <p>它不递归:一步里同步发生的事(端口当场回话让 run 当场结束、清空执行完、订阅者推了新输入)再要求推进时,
+     * 只记下"再看一眼",由这一圈接着走。调用栈不随步数变深——哪天某一步又没推进任何东西,循环停下,不会越陷越深。
+     */
+    public void pump() {
+        if (pumping) {
+            pumpAgain = true;
+            return;
+        }
+        pumping = true;
+        try {
+            boolean again;
+            do {
+                pumpAgain = false;
+                again = step() || pumpAgain;
+            } while (again);
+        } finally {
+            pumping = false;
+        }
+    }
+
+    /**
+     * 闲时的一步。"下一步做什么"只有这一个判断,看的是队列里墙之前那一段——和 run 取件同一段、同一份声明:
      * <ol>
      *   <li>没停牌、那一段熟了({@link EventQueue#ripeness}):开 run。熟了就一定有叫醒她的条目,
      *       开出来的 run 一定取得到它;</li>
@@ -162,14 +190,16 @@ public final class AgentLoop {
      *   <li>否则什么也不做,也不说话。</li>
      * </ol>
      * 死着、外接驾驶时什么都不做:身体不在、驾驶席不在内脑手里。
+     *
+     * @return 这一步动了队列或停牌(开了 run、执行了控制条目),值得再看一眼;什么也没做、或者被端点挡下是 {@code false}
      */
-    public void pump() {
+    private boolean step() {
         if (run != null) {
-            return;   // run 里的边界自己取队列
+            return false;   // run 里的边界自己取队列
         }
         Hold hold = hold();
         if (hold == Hold.DEAD || hold == Hold.EXTERNAL) {
-            return;
+            return false;
         }
         int level = host.initiativeLevel();
         EventQueue.Ripeness ripeness = inbox.ripeness(host.now(), level);
@@ -184,11 +214,9 @@ public final class AgentLoop {
                     ripeness.waiting(), EventQueue.thresholdOf(level),
                     ripeness.oldestAge() / 1000L, EventQueue.maxWaitMsOf(level) / 1000L, level);
             startRun(false, false);
-            return;
+            return true;
         }
-        if (!inbox.nextControls().isEmpty()) {
-            runControl();
-        }
+        return !inbox.nextControls().isEmpty() && runControl();
     }
 
     /**
@@ -343,7 +371,7 @@ public final class AgentLoop {
             afterFailure(finished, failed);
         }
         announceHold(null);
-        pump();
+        pump();   // 端口当场回话、run 在推进那一步里就结束时,这里只记一笔"再看一眼",不重入
     }
 
     /**
@@ -367,7 +395,8 @@ public final class AgentLoop {
 
     // ---- 控制条目与整理记忆 ----
 
-    private void runControl() {
+    /** @return 执行了(清完了、整理发出去了);端点不可用、条目留着是 {@code false} */
+    private boolean runControl() {
         // 连着按的几次算一次;批里混着清空就清空说了算——整理要的是腾地方,清空把地方全腾出来了。
         // 分清是哪一条控制命令只能认 id:类型表只说"它是控制命令"。
         boolean clears = inbox.nextControls().stream().anyMatch(e -> EventTypes.CLEAR.equals(e.type()));
@@ -376,7 +405,7 @@ public final class AgentLoop {
             String problem = model.unavailable();
             if (problem != null) {
                 block(problem);
-                return;
+                return false;
             }
         }
         inbox.takeControls();
@@ -387,8 +416,7 @@ public final class AgentLoop {
             AiLog.LOG.info("[numen-entity#{}] 清空上下文:排到了(之前听见、还没交给她的 {} 条一并清掉)", name, heard);
             memory.clear();
             emit(new LoopEvent.TranscriptBoundary(LoopEvent.Boundary.CLEAR));
-            pump();   // 排在清空后面的话进全新的上下文
-            return;
+            return true;   // 排在清空后面的话,推进的下一步里进全新的上下文
         }
         AiLog.LOG.info("[numen-entity#{}] 整理记忆:排到了,开始", name);
         run = new Run(++lastRunId, true, false, false);
@@ -397,6 +425,7 @@ public final class AgentLoop {
             announceHold(null);
             pump();
         });
+        return true;
     }
 
     /**
