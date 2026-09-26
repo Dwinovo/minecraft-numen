@@ -1,9 +1,8 @@
 # Numen CLI:她只有一个能力——执行一行命令
 
 状态:
-- **已落地**:第 1–3、5、6 步,细节见附录 A–E。
-- **下一步**:第 7 步"分层",本稿正文描述的就是这一步之后的样子。第 6 步里"把她的命令挂进 MC 指令树 `/numen`"的做法随之撤回(见第十五节),其余留用。
-- **之后**:第 4 步,核心工具迁移,直接按分层后的形态做。
+- **已落地**:第 1–3、5–7 步,细节见附录 A–F。本稿正文描述的就是第 7 步"分层"之后的样子;第 6 步里"把她的命令挂进 MC 指令树 `/numen`"的做法已撤回(附录 F)。
+- **下一步**:第 4 步,核心工具迁移,直接按分层后的形态做。
 
 ## 一、为什么
 
@@ -214,10 +213,10 @@ ftbquests submit <quest>
 | 3 | FTB Quests 命令组;Curios 走装备位扩展点 | 已落地 |
 | 5 | 原版指令入口与权限层 COMMAND | 已落地(附录 C),第 6 步并入唯一执行入口 |
 | 6 | `command` 工具、唯一执行入口、出厂规则、帮助与报错、`/numen drive` | 已落地(附录 D、E) |
-| **7** | **分层**:见下 | 下一步 |
-| 4 | 核心工具迁移:直接进第 1 层,高频的提升为快捷工具 | 第 7 步之后 |
+| 7 | 分层:见下 | 已落地(附录 F) |
+| **4** | **核心工具迁移**:直接进第 1 层,高频的提升为快捷工具 | 下一步 |
 
-**第 7 步的内容**:
+**第 7 步的内容**(落地细节见附录 F):
 - **撤回**第 6 步里把她的命令挂进 MC `/numen` 的做法:
   - `NumenCommands` 里给她的节点、按 NumenPlayer 过滤可见性的 `requires`;
   - 自定义参数类型在 MC 注册表的登记(`HerArgumentInfo`、平台服务的 `registerArgumentType`);
@@ -231,7 +230,7 @@ ftbquests submit <quest>
 ## 十六、待核实
 
 - 第 1 层的一级命令名要和核心领域名、将来迁来的动作名统一规划,避免 `goto` 这类动词和组名混用得不一致(第 4 步定)。
-- 权威声明的形状:能表达"她自己 / 服务器权威但只作用于她",不多也不少。
+- ~~权威声明的形状~~:已定,`Authority` 的两种,见附录 F。
 
 ## 十七、不做的
 
@@ -242,6 +241,10 @@ ftbquests submit <quest>
 - 不写死指令白名单:出厂规则是数据,主人能改。
 
 ## 附录 A:第 1 步落地时定下的细节
+
+> 第 7 步之后(附录 F),第 1 层的一行不再以 `numen` 打头,组名直接是一级命令,下文的 `numen …` 写法都去掉这个前缀读;
+> 服务端重新有 Numen 自己的调度器(两棵树由同一个生成器长出,见附录 F),下面第二条的"服务端不再有 Numen 自己的调度器"
+> 随之作废。
 
 第 6 步之后,文中的 `numen` 工具改名为 `command`,整行不再以工具名打头,而是一行真实的指令;其余约定照旧,
 以下几条已被附录 D 取代:
@@ -280,6 +283,9 @@ ftbquests submit <quest>
 - **`numen` 工具由引擎在 `CommonClass` 登记**:插件的命令只依赖引擎,谁登记了命令都指望这个入口在。外脑(`NumenActuator` / MCP)读的就是同一张工具表,自然看到 `numen` 与各快捷工具。
 
 ## 附录 B:第 2 步落地时定下的细节
+
+> 第 7 步去掉了 `numen` 前缀(附录 F):下表的命令读作 `kaleidoscope recipes …`、`ysm switch …` 等;YSM 的三个动作
+> 改为声明借服务器的权威(附录 F)。
 
 三个联动插件的工具全部改成命令,都不提升(插件工具是长尾);旧工具类删掉,描述拆成组说明、动作说明、参数说明写在各插件的 `*Commands` 类里,技能里只留命令的例子。
 
@@ -332,7 +338,9 @@ ftbquests submit <quest>
 
 ## 附录 D:第 6 步(执行管线)落地时定下的细节
 
-> 第 7 步撤回其中"把她的命令挂进 MC 指令树 `/numen`"的部分(可见性过滤、参数类型在 MC 注册表的登记、从 MC 来源取调用上下文的访问器),其余留用;见第十五节。
+> 第 7 步已撤回其中"把她的命令挂进 MC 指令树 `/numen`"的部分(下文"一份声明,两棵树"里的 MC 那一棵、"路由"、"注册与可见性"
+> 里她的节点、"调用上下文"、"参数类型登记",以及快捷工具经权限层裁决 alias 那一行),执行入口、征询挂起、重放、drive 留用;
+> 见附录 F。
 
 代码在 `api` 的 `com.dwinovo.numen.cli`;`/numen` 下玩家那一半在 `entity.NumenCommands`,core 的调试开关在 `DebugCommands`。
 
@@ -371,6 +379,9 @@ ftbquests submit <quest>
   - 帮助只经 `/numen drive` 才会在服务端答;在那里翻页越界,回执是指令失败的回显,不附那一层的帮助。
 
 ## 附录 E:第 6 步(帮助与报错)落地时定下的细节
+
+> 第 7 步之后(附录 F),下文的原版 `help <指令>` 在她的一行里写作 `/help <指令>`(第 0 层),`numen gt_long …` 写作
+> `gt_long …`(第 1 层);挖法与"你是不是要写"不变。
 
 代码在 `api` 的 `com.dwinovo.numen.cli`:`BrigadierHelp` 挖别的指令的帮助,`Completions` 是补全引擎的候选与"你是不是要写"。Numen 自己命令的帮助(第九节第一小节)在第 1、6 步已经落地(附录 A,例子必填见 `Action`)。
 
@@ -423,3 +434,117 @@ numen gt_long lingre 40
   - 征询撤回的原因由收尾的一方给真实的那一个(`ConsentDesk.Withdrawal`):任务收场、主人按了停止、她离开了世界、她死了,以及原有的主人不在、被新的顶替、不用再问。`TaskRecord.StopCause` 带着它对应的那一个,叫停一件活和叫停一条等着的指令说同一句。载荷只带是哪一种,主人的客户端按语言文件显示(中英文案都在 `ModLanguageData`)。模型读的拒绝理由(`ConsentDesk.OWNER_ABSENT` 等)不变;撤回的请求没有发起者再读它的结论,理由留空。
 - **与正文的出入**。
   - 第九节说长清单一律分页;`help <指令>` 的候选不分页,靠多写一截缩小(见上)。
+
+## 附录 F:第 7 步(分层)落地时定下的细节
+
+代码在 `api` 的 `com.dwinovo.numen.cli`;`/numen` 下玩家那一半在 `entity.NumenCommands`,YSM 的包装在 `plugins/ysm`。
+
+- **撤回的**(附录 D 里挂进 MC `/numen` 的那一半)。
+  - 删掉:`HerArgumentInfo`,平台服务的 `registerArgumentType` 与两个加载器的实现(NeoForge 的 `ARGUMENT_TYPES` 延迟注册一并删),
+    `CommandSourceStackAccessor` 与它在 mixin 配置里的一行,`NumenCli.herNodes`,`Echo.of` 与"这次调用由 Numen 答了"。
+  - `ArgType` 的 `id()`、`string()` 从具名类收回成方法引用:具名只为按类登记进注册表。
+  - `Echo` 只剩第 0 层的回显收集(`receipt` 收成回执,`lines` 交回借权的处理函数)。
+  - 快捷工具在服务端把读好的参数直接交处理函数,不再拼出它作为 alias 的那一行去过权限层。
+- **类与职责**(组合关系,自上而下)。
+  - `CommandTool`:她唯一的能力。`invoke`(主人客户端)交 `NumenCli.run`;`onServerCall`(服务端)交 `CommandRunner.line`。
+    `/numen drive` 交 `CommandRunner.run`,同一个入口。
+  - `Line`:一行落在哪一层,路由的唯一规则,两侧都经它分。
+  - `NumenCli`:第 1 层。登记处,持有两棵 `CommandTree`(主人客户端一棵、服务端一棵),两侧共用的报错(`problem`)与出错那一层的
+    帮助(`helpAt`);`run` 是客户端这一侧,`serve` 是服务端这一侧。
+  - `CommandTree<S>`:一侧的第 1 层树,就是一个 Numen 自己的 Brigadier 调度器,由声明长出来;构造时给一条"这个动作在这一侧执行吗",
+    决定哪些动作在这一侧长参数、可执行。源对象就是 Numen 自己的来源(`ClientSource` / `ServerSource`),处理函数直接拿到它。
+    登记时查例子也是现长一棵(每个动作都长参数,只解析)。
+  - `CommandRunner`:服务端唯一的执行入口。`line` 按 `Line` 分:第 1 层交 `NumenCli.serve`;第 0 层走原来的原版分支
+    (解析 → 权限层 `command(根名)` → `performPrefixedCommand` → `Echo` 收回显 → 回执;要问就挂在 `PendingCommands`)。
+  - `Authority` / `Action.authority` / `ServerSource.onHer()` / `OnHer`:以谁的权威执行,与借服务器权威的唯一途径(见下)。
+  - `NumenCommands`:`/numen` 只剩玩家的管理指令。
+- **路由**。行首 `/` 是第 0 层,否则是第 1 层,两侧同一条规则。
+  - 主人客户端:第 0 层的一行原样送服务端;第 1 层在客户端的树上解析,解析到服务端动作(走到了它的名字,不是它的 `--help`)
+    原样送服务端,客户端动作、帮助、写错的当场答。
+  - 服务端:第 0 层走原版分支;第 1 层在服务端的树上解析、执行。
+  - 第 1 层认不出的一行在第 1 层报错,不转第 0 层(`give @s …` 不带 `/` 就是"未知命令"加第 1 层的根帮助)。
+  - 调用记下的是她写的原样(带着 `/`),重放落在同一层。改名前落盘的 `numen …` 调用重放时是第 1 层里一个不存在的组,如实报错,
+    不做转接。
+- **去掉前缀**。
+  - 组名直接是一级命令,根下 `help`、`--help`;组名与 `help` 撞、两组同名在登记时报错(沿用原有检查);例子、相关命令写
+    `<组> <动作>`,多写 `numen` 的例子登记时报错。
+  - `<commands>` 索引开头是 "Numen's command groups, run with the command tool, no leading / (<group> --help lists a group's
+    actions):";根帮助的最后一句提示带 `/` 的是原生指令;第 0 层写不通时附的是 "/help lists the commands you can run."。
+  - `command` 工具的描述分两段写两层(第十节)。
+- **`/numen` 只给玩家**(第六节的判断)。她的命令不在 MC 树上,第 1 层不需要"是不是她"的过滤;但她作为玩家,经第 0 层照样敲得到
+  MC 树上的每一条。召唤、设置、权限、征询、drive 是给人的,她不该用,所以 `/numen` 这个根只给不是她的来源,在
+  `NumenCommands.graft` 建根时一处定下,下面每一格(含 core 的 `debug`、`profile`、`pad`)随之。她敲 `/numen …` 当场失败:
+  "the server does not let you use /numen",不问主人;她的 `/help` 里没有 `/numen`。
+- **权威声明**。
+  - 形状只有两种:`Authority.HERS`(默认)与 `Authority.SERVER_ON_HER`。声明组合在动作上:`.authority(Authority.SERVER_ON_HER)`,
+    只有服务端动作能声明,封口后不能改。帮助里写明 "Runs with the server's authority, and only on you.";她自己的是默认,不写。
+  - 借权的唯一途径是 `OnHer`:只有声明了的动作,处理函数才从 `ServerSource.onHer()` 拿得到,没声明的来拿就抛出。
+    `run(前段, 值…)` 执行 `<前段> <她> <值…>`,她的名字由它写进去(名字与值按 Brigadier 的 `escapeIfRequired` 加引号),
+    调用方够不着别人;来源是服务器自己的(`createCommandSourceStack`,等级 4),回话由 `Echo` 收回。`next(前段, 值…)` 是那一格
+    之后的补全候选(同一个 `Completions.at`),还原成值本身。它不经权限层:权威就在声明里给。
+  - 她自己权威的动作没有调第 0 层的途径:她要执行原生指令就自己写 `/`,走第 0 层的权限层。
+- **YSM**。`ysm options`、`switch`、`emote` 都声明 `SERVER_ON_HER`;模型清单、贴图清单、`ysm model set`、`ysm play` 都经 `OnHer`。
+  `Ysm` 里自拼的 `withPermission(4)` 来源、`Heard` 回显收集、补全去引号删掉(换成 `OnHer`、`Echo`、`Completions`)。
+  授权镜像(`OwnerSync` 的 `ysm auth <她> clear|add`)不是她的动作,是服务器按主人的授权做的对账,以服务器自己的来源执行
+  (`createCommandSourceStack`,不另抬等级),回显照原版进服务器日志。
+- **第 1 层与权限层**。第 1 层的一行不是 `command(…)` 动作,整行不送权限层;出厂 allow 表去掉 `command(numen)`。其中身体对世界的
+  动作照旧逐个裁决。所以"主人点过头的调用,回执末尾交代允许了什么"只出现在第 0 层;GameTest 相应拆成两条:drive 派的同步短活
+  只回一条最终结果,drive 执行、主人点过头的 `/setblock` 回执末尾交代主人允许了什么。
+- **相关命令什么时候查**。任一侧的树第一次被读(执行一行、系统提示要索引)时查全。服务器不再建"她的指令树",所以断掉的引用
+  在第一次被读时报出,不再是开服那一刻。
+- **实测**(`/help give`、写错的两条、`/numen …` 出自 GameTest(`/help give`、`/give …` 两条她有 OP 2 级);`help` 列的是只装了 YSM 时的样子,`ysm --help`、`ysm switch --help` 按 YSM 登记的声明逐字写出,YSM 不在 GameTest 里;"…" 是这里省略的):
+
+```
+help
+→ <group> <action> [arguments]. Command groups:
+    task — Your dispatched work — the background task and your pending timers.
+    ysm — Yes Steve Model looks: what you wear and can switch to, switching, emotes.
+  <group> --help lists a group's actions. A line starting with / is a native command instead (/help lists those).
+
+ysm --help
+→ ysm: Yes Steve Model looks: what you wear and can switch to, switching, emotes. Actions:
+    ysm options — Your model and texture now, the models you can switch to, and this model's textures.
+    ysm switch <model> [--texture <string>] — Switch to another model.
+    ysm emote <animation> — Play one of this model's emotes, or stop the one playing.
+  ysm <action> --help explains one action.
+
+ysm switch --help
+→ ysm switch <model> [--texture <string>]
+    Switch to another model.
+    Runs with the server's authority, and only on you.
+    <model> (string, quote it if it has spaces) — The model to switch to. Values: a model id exactly as ysm options lists it.
+    --texture <string> (string, quote it if it has spaces; optional) — Which of the model's textures to wear. Values: …
+    Examples:
+      ysm switch misc/1_alex
+      ysm switch "抽象鸣潮 菲比.ysm"
+    Notes: …
+    See also: ysm options
+
+/help give
+→ ran /help give: /give <targets> <item> [<count>]
+  Arguments:
+    <targets> minecraft:entity (amount multiple, type players) — e.g. Player, 0123, @e, @e[type=foo], dd12be42-…
+    <item> minecraft:item_stack — e.g. stick, minecraft:stick, stick{foo=bar}
+    <count> brigadier:integer (min 1) — e.g. 0, 123, -123
+  Can go next (10 of 12): @a, @e, @n, @p, @r, @s, gametest_mc_builder, gametest_mc_held, gametest_mc_landlord, …
+
+/give @s minecraft:dimond
+→ Unknown item 'minecraft:dimond' at position 8: give @s <--[HERE]
+  Usage: /give <targets> <item> [<count>]
+  Did you mean: minecraft:diamond?
+
+gt_long lingre 40
+→ Unknown or incomplete command, see below for error at position 8: gt_long <--[HERE]
+  gt_long: Test fixture: long work dispatched by a command. Actions:
+    gt_long linger <ticks> — Stand still for a while, as background work.
+  gt_long <action> --help explains one action.
+  Did you mean: linger?
+
+/numen player summon gametest_mc_twin        (她敲玩家的管理指令)
+→ the server does not let you use /numen. /help lists the commands you can run.
+```
+
+- **与正文的出入**。
+  - 第五节"写错了当场回答":主人客户端的树上服务端动作只有名字与帮助,服务端动作的参数写错由服务端报(同一个
+    `NumenCli.problem`,两侧一字不差);根、组、动作名写错与客户端动作写错在客户端答。
+  - 第六节"不需要按是不是她过滤可见性":对第 1 层成立;`/numen` 根仍排除她,那是第 0 层的可见性(见上)。

@@ -50,9 +50,10 @@ public interface NumenApi {
     void registerTool(NumenTool tool);
 
     /**
-     * 登记一组命令:{@code <namespace> <action> …},组名就是 Numen 命令层(第 1 层)的一级命令。模型经 {@code command} 工具写这一行调用它们,不必为每个动作
-     * 多花一个工具定义;常用的动作可以 {@link com.dwinovo.numen.cli.Action#promote 提升}成快捷工具。服务端的动作
-     * 真实注册在 MC 指令树的 {@code /numen} 下,只给她看见;客户端的动作留在主人客户端。
+     * 登记一组命令:{@code <namespace> <action> …},组名就是 Numen 命令层(第 1 层)的一级命令。模型经 {@code command}
+     * 工具写这一行调用它们,不必为每个动作多花一个工具定义;常用的动作可以
+     * {@link com.dwinovo.numen.cli.Action#promote 提升}成快捷工具。第 1 层是 Numen 自己的调度器,不挂进 MC 的指令树,
+     * 玩家看不到;服务端的动作在服务端执行,客户端的动作留在主人客户端。
      *
      * <pre>{@code
      * numen.registerCommands("mymod", "What your mod lets her do, in one sentence.", cmds -> {
@@ -66,7 +67,8 @@ public interface NumenApi {
      * <p>{@code namespace} 用你的 mod id。一个组名只能登记一次,你只能往自己的组里加动作——引擎自带的组和
      * 别的插件的组都够不着。每个动作选一侧执行:{@code server}(动身体、读世界)或 {@code client}(只有主人
      * 客户端才有的数据)。命令树在两侧都登记,所以<b>在 {@code NumenPlugins.register} 的块里直接调</b>,别放进
-     * {@link #onClient}。
+     * {@link #onClient}。动作默认以她自己的权威执行;包装你的模组管理指令的服务端动作可以声明
+     * {@code .authority(Authority.SERVER_ON_HER)},借服务器的权威、只对她执行(见 {@link com.dwinovo.numen.cli.Authority})。
      *
      * @param namespace 一级命令名,小写英文,用你的 mod id
      * @param summary   一句话说明,进系统提示里的命令索引和 {@code help}
