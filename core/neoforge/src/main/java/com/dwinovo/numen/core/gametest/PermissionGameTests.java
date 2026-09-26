@@ -1131,7 +1131,7 @@ public class PermissionGameTests {
 
     /** 把打开的界面里第 0 格整叠拿进背包。 */
     private static TaskRecord takeFirstSlot(NumenPlayer companion) {
-        return call(companion, "transfer", args("moves", List.of(args("from", 0)))).task();
+        return command(companion, "use shift 0").task();
     }
 
     /**

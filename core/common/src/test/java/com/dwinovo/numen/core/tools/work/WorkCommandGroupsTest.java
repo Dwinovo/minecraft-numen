@@ -63,9 +63,20 @@ class WorkCommandGroupsTest {
         assertEquals(mineFields, fields("mine"));
         assertEquals(List.of(), required("mine"));
         for (String gone : List.of("follow", "plan_route", "collect_items", "fish", "attack", "blueprint",
-                "blueprint_read", "scaffold_materials", "build")) {
+                "blueprint_read", "scaffold_materials", "build", "transfer")) {
             assertNull(ToolRegistry.get(gone), gone + " 已经是命令,不再是工具");
         }
+    }
+
+    @Test
+    void movingItemsInAGuiIsOneStepPerLine() {
+        String use = run("use --help").get("message").getAsString();
+        assertTrue(use.contains("\n  use transfer <from> <to> [--count <integer>] — ")
+                && use.contains("\n  use shift <from> — "), use);
+        JsonObject noGui = run("use transfer 1");
+        assertTrue(!noGui.get("success").getAsBoolean()
+                        && noGui.get("message").getAsString().contains("use transfer <from> <to>"),
+                "少写一格目标就附上这个动作的用法: " + noGui);
     }
 
     @Test

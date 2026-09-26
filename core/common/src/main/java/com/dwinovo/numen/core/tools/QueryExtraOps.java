@@ -182,12 +182,12 @@ String item_id,
                 + "• [crafting]: run inv craft <item> --count N — it lays out the grid and takes the "
                 + "result for you (a 3x3 recipe needs a crafting table within reach; 2x2 works "
                 + "anywhere).\n"
-                + "• [smelting|blasting|smoking]: use block the furnace, then transfer the input and "
-                + "the fuel with NO `to` — the menu routes each to its slot. Wait, then transfer the "
-                + "output back out.\n"
-                + "• [stonecutter]: use block it, transfer the input (no `to` routes it in), take the "
-                + "output. [smithing]: use block it, use gui, then transfer template + base + "
-                + "addition each into its own slot (give `to`).").toJson();
+                + "• [smelting|blasting|smoking]: use block the furnace, then use shift the input and "
+                + "the fuel — the menu routes each to its slot. Wait, then use shift the output back "
+                + "out.\n"
+                + "• [stonecutter]: use block it, use shift the input (the menu routes it in), take the "
+                + "output. [smithing]: use block it, use gui, then use transfer template + base + "
+                + "addition each into its own slot.").toJson();
     }
 
     private static String format(CraftingRecipe recipe, ItemStack result) {

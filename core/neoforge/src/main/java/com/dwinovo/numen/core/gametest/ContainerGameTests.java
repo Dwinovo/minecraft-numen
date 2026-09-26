@@ -3,7 +3,6 @@ package com.dwinovo.numen.core.gametest;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
@@ -19,7 +18,10 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
-/** 容器:{@code use block} 右键打开、{@code use gui} 看格子、{@code transfer} 搬东西、{@code use close} 合上。 */
+/**
+ * 容器:{@code use block} 右键打开、{@code use gui} 看格子、{@code use shift} 整叠挪到另一边或 {@code use transfer} 放进指定的一格、
+ * {@code use close} 合上。
+ */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
 public class ContainerGameTests {
@@ -51,7 +53,7 @@ public class ContainerGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(step.get().succeeded() && step.get().reply().contains("0: ")
                                 && step.get().reply().contains("diamond"),
                         "use gui does not show the diamonds in slot 0: " + step.get().reply()))
-                .thenExecute(() -> step.set(call(companion, "transfer", args("moves", List.of(args("from", 0))))))
+                .thenExecute(() -> step.set(command(companion, "use shift 0")))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.getInventory().countItem(Items.DIAMOND) == 5
                                 && ((ChestBlockEntity) helper.getLevel().getBlockEntity(chest)).isEmpty(),
@@ -69,7 +71,7 @@ public class ContainerGameTests {
     public static void transfer_with_no_container_open_moves_nothing(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_shuffler", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new net.minecraft.world.item.ItemStack(Items.DIAMOND, 5));
-        ToolRun transfer = call(companion, "transfer", args("moves", List.of(args("from", 90))));
+        ToolRun transfer = command(companion, "use shift 90");
 
         helper.succeedWhen(() -> {
             helper.assertTrue(transfer.done(), "transfer has not finished");
@@ -114,8 +116,7 @@ public class ContainerGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,
                         "the chest did not open: " + step.get().outcome()))
-                .thenExecute(() -> step.set(call(companion, "transfer",
-                        args("moves", List.of(args("from", menuSlotOf(companion, Items.DIAMOND)))))))
+                .thenExecute(() -> step.set(command(companion, "use shift " + menuSlotOf(companion, Items.DIAMOND))))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done()
                                 && step.get().outcome().contains("didn't move"),
                         "the reply does not say the diamonds stayed: " + step.get().outcome()))
@@ -141,8 +142,8 @@ public class ContainerGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,
                         "the chest did not open: " + step.get().outcome()))
-                .thenExecute(() -> step.set(call(companion, "transfer", args("moves", List.of(
-                        args("from", 0, "to", menuSlotOf(companion, Items.AIR), "count", 2))))))
+                .thenExecute(() -> step.set(command(companion,
+                        "use transfer 0 " + menuSlotOf(companion, Items.AIR) + " --count 2")))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && step.get().outcome().contains("moved 2 diamond"),
                         "the reply does not say two diamonds moved: " + step.get().outcome()))

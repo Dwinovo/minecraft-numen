@@ -114,8 +114,8 @@ public final class GuiOps {
                 + "your inventory (non-empty):\n" + (mine.length() == 0 ? "  (empty)\n" : mine)
                 + "cursor: " + describe(menu.getCarried()) + "\n"
                 + dataLine
-                + "tip: transfer {from} (no `to`) routes a whole stack to the other section; add `to`"
-                + " + `count` for an exact move into a specific slot.").toJson();
+                + "tip: `use shift <slot>` sends a whole stack to the other section; `use transfer <from> <to>`"
+                + " (with --count N for part of it) puts it into a specific slot.").toJson();
     }
 
     private static String describe(ItemStack stack) {
@@ -128,7 +128,7 @@ public final class GuiOps {
         AbstractContainerMenu menu = self.containerMenu;
         if (menu == null || menu == self.inventoryMenu) {
             // The InventoryMenu (your own 2x2 grid + inventory) is always open — nothing to close.
-            // If you left items in the 2x2 crafting grid, transfer them back out.
+            // If you left items in the 2x2 crafting grid, shift them back out.
             return TaskResult.ok("no block GUI was open (your own inventory menu is always available).").toJson();
         }
         self.closeContainer();

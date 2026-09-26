@@ -160,7 +160,7 @@ public final class CraftOps {
             }
             if (chosen == null) {
                 return TaskResult.fail(name + "'s recipe needs a grid larger than 3x3 (modded station) — "
-                        + "use block that station, then use gui + transfer instead.").toJson();
+                        + "use block that station, then use gui and use transfer instead.").toJson();
             }
             CraftingRecipe recipe = chosen.recipe();
             // 够得着的工作台:原版交互的判据(眼睛到那一格外框在交互距离内),搜索盒以眼睛为中心罩住它

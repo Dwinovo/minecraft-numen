@@ -11,18 +11,12 @@ import com.dwinovo.numen.task.TaskState;
 import net.minecraft.core.registries.BuiltInRegistries;
 
 /**
- * {@code transfer} on the player body: run the moves in order in the open GUI. A move that takes something
- * out of a container ({@link ContainerOps#taking}) is handed to the permission layer right before its clicks:
- * allowed, it runs; waiting for the owner, the call hangs on that move; refused, that move is skipped with the
- * reason and the result is a refusal. Everything else is one tick.
+ * 在她打开的界面里搬一次东西。这一步要是从容器里拿东西({@link ContainerOps#taking}),点下去之前交给权限层:放行就搬,
+ * 要等主人就挂在这一步上,拒绝就不搬并带上理由。其余一刻就完。
  */
 public final class TransferCompanionTask extends AbstractCompanionTask<TransferTaskRecord> {
 
     private final ContainerOps ops = new ContainerOps();
-    private final StringBuilder lines = new StringBuilder();
-    /** 下一步是第几步(从 0 数);等主人答复时停在要问的那一步。 */
-    private int next;
-    private boolean refused;
     private String doneMessage = "done";
 
     public TransferCompanionTask(NumenPlayer player, TransferTaskRecord record) {
@@ -40,35 +34,20 @@ public final class TransferCompanionTask extends AbstractCompanionTask<TransferT
     }
 
     private TaskState run() {
-        while (next < r.moves.size()) {
-            ContainerOps.Move move = r.moves.get(next);
-            Action take = ContainerOps.taking(move, player);
-            String line;
-            if (take == null) {
-                line = ops.step(move, player);
-            } else {
-                Permit permit = permit(take);
-                if (permit.state() == PermitState.WAITING) {
-                    InputDriver.halt(player);
-                    return TaskState.RUNNING;
-                }
-                if (permit.state() == PermitState.REFUSED) {
-                    refused = true;
-                    line = "did not take " + BuiltInRegistries.ITEM.getKey(take.item()).getPath() + ": "
-                            + permit.refusal();
-                } else {
-                    line = ops.step(move, player);
-                }
+        Action take = ContainerOps.taking(r.move, player);
+        if (take != null) {
+            Permit permit = permit(take);
+            if (permit.state() == PermitState.WAITING) {
+                InputDriver.halt(player);
+                return TaskState.RUNNING;
             }
-            lines.append(next + 1).append(". ").append(line).append('\n');
-            next++;
+            if (permit.state() == PermitState.REFUSED) {
+                fail("did not take " + BuiltInRegistries.ITEM.getKey(take.item()).getPath() + ": "
+                        + permit.refusal(), FailureType.REFUSED);
+                return TaskState.FAILED;
+            }
         }
-        String text = lines.toString().stripTrailing();
-        if (refused) {
-            fail(text, FailureType.REFUSED);
-            return TaskState.FAILED;
-        }
-        doneMessage = text;
+        doneMessage = ops.step(r.move, player);
         succeed();
         return TaskState.SUCCESS;
     }
@@ -84,11 +63,11 @@ public final class TransferCompanionTask extends AbstractCompanionTask<TransferT
 
     @Override
     protected String timeoutMessage() {
-        return "transfer timed out" + (lines.isEmpty() ? "" : " after: " + lines.toString().stripTrailing());
+        return "transfer timed out before the items moved";
     }
 
     @Override
     protected String cancelledMessage() {
-        return "transfer interrupted" + (lines.isEmpty() ? "" : " after: " + lines.toString().stripTrailing());
+        return "transfer interrupted before the items moved";
     }
 }

@@ -113,10 +113,8 @@ public final class NumenCore {
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.BuildCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.interact.UseCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.inventory.InvCommands::install);
-        // 引擎的 task 命令组,和插件走同一扇门;它提升出的 task_status / task_stop / set_timer 就在这里进表,
-        // 工具表的顺序不变。
+        // 引擎的 task 命令组,和插件走同一扇门;它提升出的 task_stop 就在这里进表,工具表的顺序不变。
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.task.TaskCommands::install);
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.TransferTool());
         // status 组提升出的 get_self_status / get_owner_status 在这里进表
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.perception.StatusCommands::install);
         // scan 组提升出的 look_around / scan_blocks / scan_nearby_entities / inspect_block 在这里进表

@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.agent.tool.api.ToolContext;
+import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.core.act.MenuOrigin;
 import com.dwinovo.numen.core.task.inventory.TransferTaskRecord;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -15,31 +15,28 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 
-import java.util.List;
 
 /**
- * Container-GUI tool implementation — the business half of {@code TransferTool}:
- * {@code transfer} moves stacks between the open container menu and the backpack,
- * one {@link Move} per slot-to-slot step. The steps run as a short task
- * ({@code TransferCompanionTask}) so that a step taking something out of a container can
- * wait for the owner's consent like any other body action.
+ * 在打开的界面里搬东西的业务半边:{@code use transfer}(一格挪到另一格:挪、并、换)与 {@code use shift}(整叠挪到另一边,
+ * 像按住 Shift 点它)。一次调用一步({@link Move}),作为有界短活跑({@code TransferCompanionTask}):从容器里拿东西的那一步
+ * 和别的身体动作一样,可能要等主人点头。
  */
 public final class ContainerOps {
 
-    /** Generous for a list of clicks that normally lands in one tick. */
+    /** Generous for clicks that normally land in one tick. */
     private static final long TRANSFER_TIMEOUT_TICKS = 10 * 20;
 
-    /** One transfer; its @Arg components become the {@code moves} array item schema. */
-    public record Move(
-int from,
-Integer to,
-Integer count) {}
+    /**
+     * 搬一步。
+     *
+     * @param to    放到哪一格;null 是整叠挪到另一边({@code use shift})
+     * @param count 挪几个;null 是整叠。只和 {@code to} 一起用
+     */
+    public record Move(int from, Integer to, Integer count) {}
 
-    public TaskRecord transfer(List<Move> moves, ToolContext ctx) {
-        if (moves == null || moves.isEmpty()) {
-            throw new IllegalArgumentException("moves must contain at least one transfer");
-        }
-        return new TransferTaskRecord(ctx.toolCallId(), ctx.deadline(TRANSFER_TIMEOUT_TICKS), moves);
+    /** 这一步交任务槽的那件活:点击通常一刻就完,期限只为等主人点头之外的意外留着。 */
+    public static TaskRecord transfer(ServerSource source, Move move) {
+        return new TransferTaskRecord(source, source.companion().level().getGameTime() + TRANSFER_TIMEOUT_TICKS, move);
     }
 
     /**
@@ -95,14 +92,14 @@ Integer count) {}
             return "to slot " + to + " OUT OF RANGE (0.." + max + ") — skipped; use gui for indices.";
         }
         try {
-            return to == null ? route(menu, self, from, count) : place(menu, self, from, to, count);
+            return to == null ? route(menu, self, from) : place(menu, self, from, to, count);
         } catch (RuntimeException ex) {
-            return "slot " + from + " — ERROR: " + ex.getMessage() + " (earlier transfers already applied).";
+            return "slot " + from + " — ERROR: " + ex.getMessage();
         }
     }
 
     /** No destination: shift the whole stack to the other section, menu-routed (deposit/take/feed). */
-    private static String route(AbstractContainerMenu menu, NumenPlayer entity, int from, Integer count) {
+    private static String route(AbstractContainerMenu menu, NumenPlayer entity, int from) {
         ItemStack before = menu.slots.get(from).getItem().copy();
         if (before.isEmpty()) {
             if (menu.slots.get(from) instanceof ResultSlot) {
@@ -118,15 +115,13 @@ Integer count) {}
         menu.clicked(from, 0, ClickType.QUICK_MOVE, entity);
         ItemStack after = menu.slots.get(from).getItem();
         int moved = before.getCount() - (sameItem(before, after) ? after.getCount() : 0);
-        String note = (count != null) ? " (count ignored — routing moves the whole stack; give `to` "
-                + "for an exact amount)" : "";
         if (moved <= 0) {
             return "slot " + from + " (" + name(before) + ") didn't move — the other section is full "
-                    + "or won't accept it." + note;
+                    + "or won't accept it.";
         }
         return "routed " + moved + " " + name(before) + " from slot " + from + " to the other section "
                 + "(deposit/take/feed)." + (after.isEmpty() ? "" : " " + after.getCount() + " left in slot "
-                + from + ".") + note;
+                + from + ".");
     }
 
     /** A destination slot: place exactly there — empty→move, same item→merge, different item→swap. */

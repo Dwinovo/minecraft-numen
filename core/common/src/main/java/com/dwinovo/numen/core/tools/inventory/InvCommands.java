@@ -83,14 +83,15 @@ public final class InvCommands {
                 .note("Missing materials are reported with exact shortfalls: get those first, then run it again. "
                         + "It stops early, and says so, when materials run out or the inventory fills.")
                 .note("Only [crafting] recipes. Smelting, stonecutting and smithing happen at the station: "
-                        + "use block it, use gui, then transfer.")
+                        + "`use block` it, `use gui`, then `use shift` or `use transfer` the items in.")
                 .seeAlso(line(RECIPE));
         inv.server(RECIPE, "How an item is made, like JEI: every recipe that outputs it, at every station.",
                 InvCommands::recipe, RECIPE_ITEM)
                 .example(line(RECIPE) + " minecraft:diamond_pickaxe")
                 .note("Instant and read-only.")
                 .note("Each recipe is tagged [crafting], [smelting], [stonecutter], [smithing] …: [crafting] is "
-                        + line(CRAFT) + "; the others are made at their station (use block it, use gui, transfer).")
+                        + "`" + line(CRAFT) + "`; the others are made at their station (`use block` it, `use gui`, "
+                        + "then `use shift` or `use transfer`).")
                 .note("No recipe found means the item is mined or traded, not made.")
                 .seeAlso(line(CRAFT));
         inv.server(EAT, "Eat or drink something from your inventory.",
@@ -106,8 +107,8 @@ public final class InvCommands {
                 InvCommands::drop, DROP_ITEM, DROP_COUNT)
                 .example(line(DROP) + " minecraft:cobblestone 32")
                 .note("Asks your owner first unless their rules allow it; the call waits for the answer.")
-                .note("Dropped items despawn after 5 minutes. To store things, open a chest with use block and "
-                        + "transfer them into it instead.")
+                .note("Dropped items despawn after 5 minutes. To store things, open a chest with `use block` and "
+                        + "`use shift` them into it instead.")
                 .note("Returns how many were dropped and how many remain.")
                 .seeAlso("use block");
         inv.server(TAKE, "Creative mode only: conjure items into your inventory, like the creative menu.",
