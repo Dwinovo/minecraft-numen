@@ -1,9 +1,9 @@
 package com.dwinovo.numen.permission;
 
-import com.dwinovo.numen.entity.NumenPlayer;
-
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.BlockGetter;
+
+import java.util.UUID;
 
 /**
  * 信号函数读世界的口。
@@ -12,7 +12,7 @@ import net.minecraft.world.level.BlockGetter;
  * @param placed 这一维度的玩家放置记录(任何线程可读)
  * @param live   只在主线程非空——方块实体内容这类活读只从它读;搜索线程拿到 null,
  *               信号按"不知道"的保守值回答(见各信号的说明)
- * @param actor  要动手的同伴;测试可传 null
+ * @param actor  要动手的同伴是谁(放置记号认人只看这个);测试可传 null
  */
-public record Facts(BlockGetter view, PlacedBlocks placed, ServerLevel live, NumenPlayer actor) {
+public record Facts(BlockGetter view, PlacedBlocks placed, ServerLevel live, UUID actor) {
 }

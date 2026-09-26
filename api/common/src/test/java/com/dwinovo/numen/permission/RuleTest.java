@@ -56,6 +56,10 @@ class RuleTest {
         assertEquals("break(placed & !contents)", r.toString());
         assertEquals("placed by a player", r.describe(), "取反的项不进自述");
         assertEquals(null, Rule.parse("*(placed)").kind(), "* 是任何动作");
+        Rule own = Rule.parse("break(self_placed & !contents)");
+        assertEquals("break(self_placed & !contents)", own.toString());
+        assertEquals("placed by herself", own.describe());
+        assertFalse(own.irreversible());
     }
 
     @Test
@@ -96,6 +100,24 @@ class RuleTest {
         assertTrue(rule.matches(dig, facts(world, placed)));
         assertFalse(Rule.parse("break(!placed)").matches(dig, facts(world, placed)), "取反");
         assertTrue(Rule.parse("break(placed & !block_entity)").matches(dig, facts(world, placed)), "与");
+    }
+
+    @Test
+    void selfPlacedIsTheActorsOwnMarkAndPlacedIsEveryoneElses() {
+        FakeWorld world = new FakeWorld();
+        world.set(POS, Blocks.COBBLESTONE.defaultBlockState());
+        PlacedBlocks placed = new PlacedBlocks();
+        Action dig = Action.breakBlock(POS, world.getBlockState(POS));
+        java.util.UUID her = java.util.UUID.fromString("00000000-0000-0000-0000-0000000000bb");
+        Facts asHer = new Facts(world, placed, null, her);
+        Facts asSteve = new Facts(world, placed, null, STEVE.id());
+        assertFalse(Rule.parse("break(self_placed)").matches(dig, asHer), "没有记号:谁都没放过");
+        placed.record(POS, new PlacedBlocks.Placer(her, "Aria"));
+        assertTrue(Rule.parse("break(self_placed)").matches(dig, asHer));
+        assertFalse(Rule.parse("break(placed)").matches(dig, asHer));
+        assertFalse(Rule.parse("break(self_placed)").matches(dig, asSteve), "别人来拆,那就是别人放的");
+        assertTrue(Rule.parse("break(placed)").matches(dig, asSteve));
+        assertFalse(Rule.parse("break(self_placed)").matches(dig, facts(world, placed)), "不知道是谁动手,不算她的");
     }
 
     @Test

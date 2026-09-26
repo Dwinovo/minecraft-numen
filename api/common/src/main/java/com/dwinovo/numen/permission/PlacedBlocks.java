@@ -1,6 +1,5 @@
 package com.dwinovo.numen.permission;
 
-import com.dwinovo.numen.entity.NumenPlayer;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
@@ -29,11 +28,12 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 每维度一份:玩家放过方块的格子,和是谁放的。{@code placed} 信号的来源,也是"这东西是谁的"这个概念在
+ * 每维度一份:玩家放过方块的格子,和是谁放的。{@code placed}、{@code self_placed} 信号的来源,也是"这东西是谁的"这个概念在
  * 全仓唯一的落点。
  *
- * <p>记:{@code BlockItem.place} 返回处的 mixin,谁放的就记谁——真玩家、同伴都一样;建造任务收工把成果格
- * 改记到主人名下。这里只记事实,"算不算别人的东西"由 {@code placed} 信号对着要动手的同伴判。
+ * <p>记:放的人只在 {@link #placedBy} 一处认——谁放的就记谁,真玩家、同伴都一样,双格方块连它带出来的另一半一起记。
+ * 经物品落位的({@code BlockItem.place} 返回处的 mixin)与建造照图直写的都走它。这里只记事实,"算不算别人的东西"
+ * 由信号对着要动手的同伴判。
  * 查:格子已是空气视为无记号并顺手清掉——不另挂方块变化钩子,谁挖的都一样。
  *
  * <p>线程:按区块存"格子 → 放的人",每份发布后不再改,改就整个换一份(写时复制,经
@@ -48,24 +48,6 @@ public final class PlacedBlocks extends SavedData {
     public record Placer(UUID id, String name) {
 
         public static final Placer UNKNOWN = new Placer(new UUID(0L, 0L), "");
-
-        /**
-         * 这只同伴的主人作为放的人:名字取在线的主人,不在线取服务器记着的档案;都查不到名字为空串(说成"玩家放的")。
-         * 没有主人是 {@link #UNKNOWN}。
-         */
-        public static Placer ownerOf(NumenPlayer companion) {
-            UUID id = companion.getOwnerUuid();
-            if (id == null) {
-                return UNKNOWN;
-            }
-            ServerPlayer online = companion.resolveOwnerPlayer();
-            String name = online != null ? online.getGameProfile().getName()
-                    : java.util.Optional.ofNullable(companion.getServer().getProfileCache())
-                            .flatMap(cache -> cache.get(id))
-                            .map(com.mojang.authlib.GameProfile::getName)
-                            .orElse("");
-            return new Placer(id, name);
-        }
 
         /** 说得出是谁:有名字。 */
         public boolean known() {
@@ -127,8 +109,22 @@ public final class PlacedBlocks extends SavedData {
     }
 
     /**
-     * 双格方块的主半(门的下半、床脚)带出来的另一半在哪;不是双格方块的主半为 null。建造判"放一扇门还要清哪一格"与画设计时
-     * "门盖掉哪两格"共用这一处。
+     * {@code by} 在 {@code pos} 放下了方块(主线程):记下这一格和放的人,双格方块连它带出来的另一半(门上半、床头)。
+     * 放的人只在这里认,名字取放的那一刻的。
+     */
+    public static void placedBy(ServerLevel level, BlockPos pos, ServerPlayer by) {
+        PlacedBlocks placed = of(level);
+        Placer placer = new Placer(by.getUUID(), by.getGameProfile().getName());
+        placed.record(pos, placer);
+        BlockPos other = otherHalfOf(pos, level.getBlockState(pos));
+        if (other != null && !level.getBlockState(other).isAir()) {
+            placed.record(other, placer);
+        }
+    }
+
+    /**
+     * 双格方块的主半(门的下半、床脚)带出来的另一半在哪;不是双格方块的主半为 null。放置记录、建造判"放一扇门
+     * 还要清哪一格"与画设计时"门盖掉哪两格"共用这一处。
      */
     public static BlockPos otherHalfOf(BlockPos pos, BlockState state) {
         if (state == null) {

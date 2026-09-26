@@ -107,14 +107,114 @@ class GateTest {
                 "attack(owned)", "attack(named)", "attack(villager)", "drop(*)",
                 "place(hazard_item & near_placed)"), RuleSet.FACTORY_ASK);
         assertEquals(List.of(
-                "break(!placed & !block_entity & !#minecraft:beds & !#minecraft:doors"
+                "break(!placed & !self_placed & !block_entity & !#minecraft:beds & !#minecraft:doors"
                         + " & !#minecraft:trapdoors & !#minecraft:fence_gates)",
+                "break(self_placed & !contents)",
                 "place(!hazard_item)", "place(hazard_item & !near_placed)",
                 "attack(!owned & !named & !villager)", "use_block(*)", "use_entity(!owned)", "take(*)",
                 "command(help)", "command(list)", "command(me)", "command(msg)",
                 "command(teammsg)", "command(seed)", "command(random)"),
                 RuleSet.FACTORY_ALLOW);
         assertTrue(RuleSet.factory().deny().isEmpty(), "出厂不写死任何拒绝");
+    }
+
+    // ==================== 她自己放的 ====================
+
+    private static final java.util.UUID HER = java.util.UUID.fromString("00000000-0000-0000-0000-0000000000bb");
+    private static final PlacedBlocks.Placer HERSELF = new PlacedBlocks.Placer(HER, "Aria");
+    private static final PlacedBlocks.Placer OTHER_COMPANION =
+            new PlacedBlocks.Placer(java.util.UUID.fromString("00000000-0000-0000-0000-0000000000cc"), "Bea");
+
+    /** 要动手的是她:只有出厂层,或者主人层压在上面。 */
+    private static Gate hers(RuleSet owner, PlacedBlocks placed) {
+        return new Gate(HER, Mode.ASK, owner, RuleSet.factory(), placed, List.of());
+    }
+
+    @Test
+    void herOwnBlocksAreAllowedByTheSelfPlacedRow() {
+        FakeWorld world = new FakeWorld();
+        PlacedBlocks placed = new PlacedBlocks();
+        Gate gate = hers(RuleSet.EMPTY, placed);
+        Facts facts = new Facts(world, placed, null, HER);
+
+        // 她垫的圆石、她照设计装的门:拆都不问,命中的是 self_placed 那一行,不是自然方块那一行
+        world.set(POS, Blocks.COBBLESTONE.defaultBlockState());
+        placed.record(POS, HERSELF);
+        Action dig = Action.breakBlock(POS, world.getBlockState(POS));
+        assertTrue(Rule.parse("break(self_placed)").matches(dig, facts));
+        assertFalse(Rule.parse("break(placed)").matches(dig, facts), "她自己放的不是别人放的");
+        assertFalse(RuleSet.factory().allow().get(0).matches(dig, facts), "自然方块那一行不管她放的");
+        assertTrue(gate.judge(dig, world).allowed(), "拆她自己放的圆石不问");
+        BlockPos door = POS.east();
+        world.set(door, Blocks.OAK_DOOR.defaultBlockState());
+        placed.record(door, HERSELF);
+        assertTrue(gate.judge(Action.breakBlock(door, world.getBlockState(door)), world).allowed(),
+                "她自己装的门也是她的");
+        // 换 = 先拆后放:放不危险的方块由 place(!hazard_item) 放行
+        assertTrue(gate.judge(Action.place(POS, world.getBlockState(POS), Items.GLASS), world).allowed());
+
+        // 她自己放的箱子装着东西(搜索线程按有):东西多半是主人的,撤不回,仍问
+        BlockPos chest = POS.west();
+        world.set(chest, Blocks.CHEST.defaultBlockState());
+        placed.record(chest, HERSELF);
+        Verdict chestVerdict = gate.judge(Action.breakBlock(chest, world.getBlockState(chest)), world);
+        assertTrue(chestVerdict.asks());
+        assertEquals("break(block_entity & contents)", chestVerdict.rule().toString());
+    }
+
+    @Test
+    void theOwnersAndOtherCompanionsBlocksStillAsk() {
+        FakeWorld world = new FakeWorld();
+        PlacedBlocks placed = new PlacedBlocks();
+        Gate gate = hers(RuleSet.EMPTY, placed);
+        world.set(POS, Blocks.COBBLESTONE.defaultBlockState());
+        BlockPos other = POS.offset(4, 0, 0);
+        world.set(other, Blocks.COBBLESTONE.defaultBlockState());
+        placed.record(POS, STEVE);
+        placed.record(other, OTHER_COMPANION);
+
+        Verdict owners = gate.judge(Action.breakBlock(POS, world.getBlockState(POS)), world);
+        assertTrue(owners.asks(), "主人放的照旧问");
+        assertEquals("break(placed)", owners.rule().toString());
+        Verdict neighbours = gate.judge(Action.breakBlock(other, world.getBlockState(other)), world);
+        assertTrue(neighbours.asks(), "别人家同伴放的照旧问");
+        assertEquals("break(placed)", neighbours.rule().toString());
+        // 同一格换一个要动手的人:另一只同伴拆她的,是别人放的
+        Gate bea = new Gate(OTHER_COMPANION.id(), Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), placed, List.of());
+        placed.record(POS.north(), HERSELF);
+        world.set(POS.north(), Blocks.COBBLESTONE.defaultBlockState());
+        assertTrue(bea.judge(Action.breakBlock(POS.north(), world.getBlockState(POS.north())), world).asks());
+    }
+
+    @Test
+    void anOwnersAskRowTakesBackTheSelfPlacedAllowance() {
+        FakeWorld world = new FakeWorld();
+        PlacedBlocks placed = new PlacedBlocks();
+        world.set(POS, Blocks.COBBLESTONE.defaultBlockState());
+        placed.record(POS, HERSELF);
+        Gate gate = hers(rules(List.of(), List.of("break(self_placed)"), List.of()), placed);
+        Verdict v = gate.judge(Action.breakBlock(POS, world.getBlockState(POS)), world);
+        assertTrue(v.asks(), "主人层先于出厂层:主人写了要问就问");
+        assertEquals("break(self_placed)", v.rule().toString());
+        assertTrue(v.reason().contains("placed by herself"));
+        // 自然方块不受这一行牵连
+        world.set(POS.north(), Blocks.STONE.defaultBlockState());
+        assertTrue(gate.judge(Action.breakBlock(POS.north(), world.getBlockState(POS.north())), world).allowed());
+    }
+
+    @Test
+    void hazardsNextToHerOwnBlocksDoNotAsk() {
+        FakeWorld world = new FakeWorld();
+        PlacedBlocks placed = new PlacedBlocks();
+        world.set(POS, Blocks.COBBLESTONE.defaultBlockState());
+        placed.record(POS, HERSELF);
+        Gate gate = hers(RuleSet.EMPTY, placed);
+        assertTrue(gate.judge(Action.place(POS.above(), Blocks.AIR.defaultBlockState(), Items.LAVA_BUCKET), world)
+                .allowed(), "near_placed 与 placed 同一个\"别人\":她自己的方块旁边放岩浆不问");
+        placed.record(POS.east(), STEVE);
+        world.set(POS.east(), Blocks.COBBLESTONE.defaultBlockState());
+        assertTrue(gate.judge(Action.place(POS.above(), Blocks.AIR.defaultBlockState(), Items.LAVA_BUCKET), world)
+                .asks(), "旁边有主人放的就问");
     }
 
     // ==================== 顺序 ====================

@@ -55,6 +55,22 @@ class PlacedBlocksTest {
         assertEquals(0, placed.size());
     }
 
+    /** 双格方块的主半带出另一半:门的下半 → 正上方,床脚 → 朝向那一格;上半、床头与单格方块没有。 */
+    @Test
+    void theOtherHalfOfATwoBlockPlacement() {
+        BlockPos a = new BlockPos(5, 64, 5);
+        var door = Blocks.OAK_DOOR.defaultBlockState();
+        assertEquals(a.above(), PlacedBlocks.otherHalfOf(a, door));
+        assertEquals(null, PlacedBlocks.otherHalfOf(a, door.setValue(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.DOUBLE_BLOCK_HALF,
+                net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER)));
+        var bed = Blocks.RED_BED.defaultBlockState().setValue(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.HORIZONTAL_FACING,
+                net.minecraft.core.Direction.EAST);
+        assertEquals(a.east(), PlacedBlocks.otherHalfOf(a, bed));
+        assertEquals(null, PlacedBlocks.otherHalfOf(a, Blocks.STONE.defaultBlockState()));
+    }
+
     @Test
     void chunksAreIndependentAndNeighbourhoodQueryReadsTheView() {
         PlacedBlocks placed = new PlacedBlocks();

@@ -1051,8 +1051,8 @@ public class PermissionGameTests {
     }
 
     /**
-     * 放的人照实记,"玩家放的"是"不是她自己放的":同伴 A 放下一块木板,记在 A 名下;A 自己拆是放行(她垫的、
-     * 搭的是她的),同伴 B 要拆就得问——别人家同伴搭的东西不是自然方块。
+     * 放的人照实记:同伴 A 放下一块木板,记在 A 名下;A 自己拆由出厂的 {@code break(self_placed & !contents)} 放行
+     * (她垫的、搭的是她的),同伴 B 要拆就得问——在 B 看来那是别人放的({@code break(placed)})。
      */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_permission")
     public static void her_own_blocks_are_hers_but_another_companion_asks(GameTestHelper helper) {

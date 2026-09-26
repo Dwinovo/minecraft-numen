@@ -627,6 +627,51 @@ public class MovementGameTests {
         });
     }
 
+    /**
+     * 她垫的柱子是她自己的:垫着爬上高台后,柱子里的泥土记在她名下;主人在场,{@code build set air} 拆掉其中一格,
+     * 由出厂的 {@code break(self_placed & !contents)} 放行,一张卡都不弹。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void the_pillar_she_built_is_hers_to_take_down(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos top = obsidianTower(helper);
+        NumenPlayer companion = spawnAt(helper, "gametest_stacker", new BlockPos(3, 2, 7), false);
+        NumenPlayer owner = presentOwner(helper, companion, "gametest_watcher");
+        companion.getInventory().add(new ItemStack(Items.DIRT, 16));
+        boolean[] asked = new boolean[1];
+        helper.onEachTick(() -> asked[0] |= com.dwinovo.numen.permission.ConsentDesk.of(companion).pending() != null);
+        ToolRun walk = call(companion, "goto", args("x", top.getX(), "y", top.getY(), "z", top.getZ(),
+                "alter", "natural"));
+        BlockPos[] pillar = new BlockPos[1];
+        ToolRun[] clear = new ToolRun[1];
+
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(walk.done() && walk.succeeded(),
+                        "she did not get onto the tower: " + walk.outcome()))
+                .thenExecute(() -> {
+                    var placed = com.dwinovo.numen.permission.PlacedBlocks.of(level);
+                    pillar[0] = BlockPos.betweenClosedStream(helper.absolutePos(new BlockPos(0, 2, 0)),
+                                    helper.absolutePos(new BlockPos(15, 6, 15)))
+                            .filter(p -> level.getBlockState(p).is(Blocks.DIRT))
+                            .map(BlockPos::immutable)
+                            .findFirst().orElse(null);
+                    helper.assertTrue(pillar[0] != null, "no dirt of hers stands anywhere");
+                    var placer = placed.placerAt(pillar[0], level.getBlockState(pillar[0]));
+                    helper.assertTrue(placer != null && placer.id().equals(companion.getUUID()),
+                            "the dirt she pillared with is not recorded as hers: " + placer);
+                    clear[0] = command(companion, "build set air " + xyz(pillar[0]));
+                })
+                .thenWaitUntil(() -> helper.assertTrue(clear[0].done(), "taking the pillar down has not finished"))
+                .thenExecute(() -> {
+                    helper.assertTrue(clear[0].succeeded() && level.getBlockState(pillar[0]).isAir(),
+                            "her pillar block is still there: " + clear[0].outcome());
+                    helper.assertTrue(!asked[0], "she asked the owner about her own pillar");
+                    CompanionFactory.despawn(level.getServer(), companion);
+                    CompanionFactory.despawn(level.getServer(), owner);
+                })
+                .thenSucceed();
+    }
+
     /** 允许改地形,但身上没有能垫的方块:上不去,回执说清楚缺的是垫脚的方块。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
     public static void goto_up_a_tower_without_scaffold_says_so(GameTestHelper helper) {

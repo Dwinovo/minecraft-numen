@@ -1,11 +1,10 @@
 package com.dwinovo.numen.permission;
 
-import com.dwinovo.numen.entity.NumenPlayer;
-
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.BlockGetter;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 一次裁决用的快照:模式、两层规则、这一维度的放置记录、主人答应下来的任务期授权。主线程建
@@ -28,7 +27,7 @@ import java.util.List;
  */
 public final class Gate {
 
-    private final NumenPlayer actor;
+    private final UUID actor;
     private final Mode mode;
     /** 先查的在前:主人层,出厂层。 */
     private final List<RuleSet> layers;
@@ -36,13 +35,13 @@ public final class Gate {
     private final List<ConsentItem> granted;
 
     /**
-     * @param actor   要动手的同伴;测试可传 null
+     * @param actor   要动手的同伴是谁;测试可传 null
      * @param owner   主人自己写的规则层({@link PermissionStore#rules});没有主人是 {@link RuleSet#EMPTY}
      * @param factory 出厂规则层({@link RuleSet#factory})
      * @param placed  这一维度的放置记录
      * @param granted 主人答应下来的任务期授权({@link ConsentDesk#granted})
      */
-    public Gate(NumenPlayer actor, Mode mode, RuleSet owner, RuleSet factory, PlacedBlocks placed,
+    public Gate(UUID actor, Mode mode, RuleSet owner, RuleSet factory, PlacedBlocks placed,
                 List<ConsentItem> granted) {
         this.actor = actor;
         this.mode = mode;

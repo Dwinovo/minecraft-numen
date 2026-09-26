@@ -2238,15 +2238,16 @@ public class BuildGameTests {
 
     /**
      * 改设计、再在同一个落点 {@code build at}:按差异改——缺的补、不一样的换、设计里已经没有的只拆她自己放下且没被动过的。
-     * 旁人在设计外加的金块、把她的一格石头换成的钻石块,一律不碰;再来一次什么都不差,就不派活。
+     * 她砌的格记在她自己名下,出厂的 {@code break(self_placed & !contents)} 放行拆与换,主人在场也一张卡都不弹。
+     * 旁人在设计外放的金块、把她的一格石头换成的钻石块(都记在旁人名下),一律不碰;再来一次什么都不差,就不派活。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_build")
     public static void changing_a_design_and_building_it_again_changes_only_what_differs(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_renovator", new BlockPos(2, 2, 2), true);
-        presentOwner(helper, companion, "gametest_landlady");
-        // 拆掉她自己砌的石头就是拆"玩家放的"方块,出厂规则要问主人;这里只看差异算得对不对,不问
-        com.dwinovo.numen.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
+        NumenPlayer owner = presentOwner(helper, companion, "gametest_landlady");
+        boolean[] asked = new boolean[1];
+        helper.onEachTick(() -> asked[0] |= com.dwinovo.numen.permission.ConsentDesk.of(companion).pending() != null);
         BlockPos o = helper.absolutePos(new BlockPos(6, 2, 6));
         design(companion, "gt_shed",
                 "build layer 0 0 0 ### ### ### --block stone",
@@ -2259,8 +2260,12 @@ public class BuildGameTests {
                         "the first build did not finish: " + run.get().outcome()))
                 .thenExecute(() -> {
                     // 旁人在设计外放了一块金块;又把她砌的一格石头换成了钻石块
+                    var neighbour = new com.dwinovo.numen.permission.PlacedBlocks.Placer(UUID.randomUUID(),
+                            "gametest_passerby");
                     level.setBlockAndUpdate(o.offset(0, 1, 0), Blocks.GOLD_BLOCK.defaultBlockState());
                     level.setBlockAndUpdate(o.offset(2, 0, 2), Blocks.DIAMOND_BLOCK.defaultBlockState());
+                    com.dwinovo.numen.permission.PlacedBlocks.of(level).record(o.offset(0, 1, 0), neighbour);
+                    com.dwinovo.numen.permission.PlacedBlocks.of(level).record(o.offset(2, 0, 2), neighbour);
                     // 地板少掉南边一排,木板换成玻璃,再加一块木板
                     edits.add(command(companion, "build step gt_shed 1 layer 0 0 0 ### ### --block stone"));
                     edits.add(command(companion, "build step gt_shed 2 set glass 1 1 1"));
@@ -2305,7 +2310,95 @@ public class BuildGameTests {
                     helper.assertTrue(run.get().task() == null && run.get().succeeded()
                                     && run.get().reply().contains("already looks like"),
                             "a spot that already matches the design was built again: " + run.get().reply());
+                    helper.assertTrue(!asked[0], "changing her own building asked the owner");
                     CompanionFactory.despawn(level.getServer(), companion);
+                    CompanionFactory.despawn(level.getServer(), owner);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * 改设计把她放的一格 A 换成 B:换 = 先拆她自己的石头({@code break(self_placed & !contents)})再放玻璃
+     * ({@code place(!hazard_item)}),生存模式、主人在场,全程一张卡都不弹。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_build")
+    public static void swapping_a_block_she_placed_asks_nobody(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_swapper", new BlockPos(2, 2, 2), false);
+        NumenPlayer owner = presentOwner(helper, companion, "gametest_patron");
+        companion.getInventory().add(new ItemStack(Items.STONE));
+        companion.getInventory().add(new ItemStack(Items.GLASS));
+        boolean[] asked = new boolean[1];
+        helper.onEachTick(() -> asked[0] |= com.dwinovo.numen.permission.ConsentDesk.of(companion).pending() != null);
+        BlockPos o = helper.absolutePos(new BlockPos(7, 2, 7));
+        design(companion, "gt_swap", "build set stone 0 0 0");
+        AtomicReference<ToolRun> run = new AtomicReference<>(command(companion, "build at gt_swap " + xyz(o)));
+
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(run.get().done() && run.get().succeeded(),
+                        "the first build did not finish: " + run.get().outcome()))
+                .thenExecute(() -> {
+                    var placer = com.dwinovo.numen.permission.PlacedBlocks.of(level).placerAt(o, level.getBlockState(o));
+                    helper.assertTrue(placer != null && placer.id().equals(companion.getUUID()),
+                            "the stone she built is not recorded as hers: " + placer);
+                    requireOk(command(companion, "build step gt_swap 1 set glass 0 0 0"));
+                    run.set(command(companion, "build at gt_swap " + xyz(o)));
+                })
+                .thenWaitUntil(() -> helper.assertTrue(run.get().done(), "the swap has not finished"))
+                .thenExecute(() -> {
+                    helper.assertTrue(run.get().succeeded() && level.getBlockState(o).is(Blocks.GLASS),
+                            "her stone was not swapped for glass: " + run.get().outcome());
+                    helper.assertTrue(!asked[0], "swapping a block she placed asked the owner");
+                    CompanionFactory.despawn(level.getServer(), companion);
+                    CompanionFactory.despawn(level.getServer(), owner);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * 对照:同一处换方块,但那一格的石头是主人后来亲手放的(她砌的被主人拆了重放)——那是 {@code break(placed)},照旧挂一条
+     * 征询;主人拒绝就不换,回执说主人没答应。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_build")
+    public static void swapping_a_block_the_owner_placed_still_asks(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_tactful", new BlockPos(2, 2, 2), false);
+        NumenPlayer owner = presentOwner(helper, companion, "gametest_landowner");
+        companion.getInventory().add(new ItemStack(Items.STONE));
+        companion.getInventory().add(new ItemStack(Items.GLASS));
+        var desk = com.dwinovo.numen.permission.ConsentDesk.of(companion);
+        BlockPos o = helper.absolutePos(new BlockPos(7, 2, 7));
+        design(companion, "gt_swap_owner", "build set stone 0 0 0");
+        AtomicReference<ToolRun> run = new AtomicReference<>(command(companion, "build at gt_swap_owner " + xyz(o)));
+        boolean[] answered = new boolean[1];
+
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(run.get().done() && run.get().succeeded(),
+                        "the first build did not finish: " + run.get().outcome()))
+                .thenExecute(() -> {
+                    // 主人拆了她那块石头,自己放回一块:这一格从此是主人的
+                    level.setBlockAndUpdate(o, Blocks.AIR.defaultBlockState());
+                    level.setBlockAndUpdate(o, Blocks.STONE.defaultBlockState());
+                    com.dwinovo.numen.permission.PlacedBlocks.placedBy(level, o, owner);
+                    requireOk(command(companion, "build step gt_swap_owner 1 set glass 0 0 0"));
+                    run.set(command(companion, "build at gt_swap_owner " + xyz(o)));
+                })
+                .thenWaitUntil(() -> {
+                    var pending = desk.pending();
+                    helper.assertTrue(pending != null, "swapping the owner's stone did not ask");
+                    helper.assertTrue(level.getBlockState(o).is(Blocks.STONE), "the owner's stone went before he answered");
+                    answered[0] = desk.answer(pending.id(),
+                            com.dwinovo.numen.permission.ConsentAnswer.Decision.DENY, "");
+                })
+                .thenWaitUntil(() -> helper.assertTrue(run.get().done(), "the swap has not finished"))
+                .thenExecute(() -> {
+                    helper.assertTrue(answered[0], "the request was not answered");
+                    helper.assertTrue(level.getBlockState(o).is(Blocks.STONE),
+                            "the owner's stone was swapped although he said no");
+                    helper.assertTrue(run.get().outcome().contains("because the owner said no"),
+                            "the receipt does not say the owner refused: " + run.get().outcome());
+                    CompanionFactory.despawn(level.getServer(), companion);
+                    CompanionFactory.despawn(level.getServer(), owner);
                 })
                 .thenSucceed();
     }

@@ -11,16 +11,19 @@ import java.util.List;
  * allow 行({@code allow break(placed & minecraft:cobblestone)} 对着 {@code ask break(placed)}):
  * ask 若先查,记住的规则永远轮不到。
  *
- * <p>于是出厂 allow 行必须写得比 ask 行窄——自然方块那一行把玩家放的、带方块实体的、床门活板门
- * 栅栏门都排除在外,它们才轮得到 ask 表。
+ * <p>于是出厂 allow 行必须写得比 ask 行窄——自然方块那一行把有人放过的、带方块实体的、床门活板门
+ * 栅栏门都排除在外,她自己放的那一行把装着东西的容器排除在外,它们才轮得到 ask 表。
  */
 public final class RuleSet {
 
     /**
      * 出厂 allow 表原文:日常动作一行一行写明,主人看得见、改得了。
      * <ul>
-     *   <li>挖自然方块——不是玩家放的、没有方块实体、不是床门活板门栅栏门;</li>
-     *   <li>放不危险的东西,或者离玩家的东西远的危险物;</li>
+     *   <li>挖自然方块——谁都没放过(不是别人放的,也不是她自己放的)、没有方块实体、不是床门活板门栅栏门;</li>
+     *   <li>拆她自己放的——她垫的柱子、搭的桥、照设计砌的墙与门,里面装着东西的容器除外(东西多半是主人的,
+     *       洒一地撤不回,仍走 ask 表);改自己盖的房子因此一路不问,主人要管就在自己那一层写一行
+     *       {@code ask break(self_placed)};</li>
+     *   <li>放不危险的东西(空处也好、先拆掉再放的格也好),或者附近没有别人放的方块的危险物;</li>
      *   <li>打没主人、没名字、不是村民的(敌对生物与野生动物);</li>
      *   <li>开关门、开容器、按按钮;对没主人的实体右键;从容器拿东西;</li>
      *   <li>执行只读或只说话的指令:帮助、在线名单、动作消息、私信、队伍消息、种子、随机数。别名随根名认
@@ -29,8 +32,9 @@ public final class RuleSet {
      * 其余指令没有一行说到,照旧问。
      */
     public static final List<String> FACTORY_ALLOW = List.of(
-            "break(!placed & !block_entity & !#minecraft:beds & !#minecraft:doors"
+            "break(!placed & !self_placed & !block_entity & !#minecraft:beds & !#minecraft:doors"
                     + " & !#minecraft:trapdoors & !#minecraft:fence_gates)",
+            "break(self_placed & !contents)",
             "place(!hazard_item)",
             "place(hazard_item & !near_placed)",
             "attack(!owned & !named & !villager)",

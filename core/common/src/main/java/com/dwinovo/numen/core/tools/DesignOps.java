@@ -10,7 +10,6 @@ import com.dwinovo.numen.core.build.Layout;
 import com.dwinovo.numen.core.build.Primitive;
 import com.dwinovo.numen.core.task.build.BuildTaskRecord;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.permission.PlacedBlocks;
 import com.dwinovo.numen.task.TaskResult;
 
 import net.minecraft.core.BlockPos;
@@ -47,8 +46,7 @@ public final class DesignOps {
         if (BlueprintStore.list(server).contains(name)) {
             return TaskResult.fail("a blueprint file is already named " + name + "; pick another name").toJson();
         }
-        PlacedBlocks.Placer owner = PlacedBlocks.Placer.ownerOf(her);
-        Design design = Design.fresh(name, her.getOwnerUuid(), owner.name(), her.getGameProfile().getName(),
+        Design design = Design.fresh(name, her.getOwnerUuid(), her.ownerName(), her.getGameProfile().getName(),
                 Instant.now().truncatedTo(ChronoUnit.SECONDS).toString());
         Designs.save(server, design);
         return TaskResult.ok("made an empty design " + name + "; add steps with a primitive and --into " + name

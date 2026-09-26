@@ -249,6 +249,22 @@ public final class NumenPlayer extends ServerPlayer {
         return ownerUuid == null ? null : level().getServer().getPlayerList().getPlayer(ownerUuid);
     }
 
+    /**
+     * The owner's name for people to read: the online owner's, else the server's profile cache; empty when
+     * there is no owner or the name is unknown.
+     */
+    public String ownerName() {
+        if (ownerUuid == null) {
+            return "";
+        }
+        ServerPlayer online = resolveOwnerPlayer();
+        return online != null ? online.getGameProfile().getName()
+                : java.util.Optional.ofNullable(getServer().getProfileCache())
+                        .flatMap(cache -> cache.get(ownerUuid))
+                        .map(com.mojang.authlib.GameProfile::getName)
+                        .orElse("");
+    }
+
 
     /** True if {@code item} sits anywhere in the inventory (hotbar/main/offhand all count). */
     public boolean ensureInInventory(Item item) {

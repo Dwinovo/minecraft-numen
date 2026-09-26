@@ -694,6 +694,7 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_VERB_PREFIX + "drop",       "drop");
         adder.add(Keys.CONSENT_VERB_PREFIX + "command",    "run");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "placed",       "placed by a player");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "self_placed",  "placed by herself");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "block_entity", "functional block");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "contents",     "has things inside");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "owned",        "has an owner");
@@ -1121,6 +1122,7 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_VERB_PREFIX + "drop",       "丢");
         adder.add(Keys.CONSENT_VERB_PREFIX + "command",    "执行");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "placed",       "玩家放的");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "self_placed",  "她自己放的");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "block_entity", "功能方块");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "contents",     "装着东西");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "owned",        "有主人");

@@ -24,7 +24,7 @@ public final class Permission {
      */
     public static Gate gateFor(NumenPlayer companion) {
         ServerLevel level = (ServerLevel) companion.level();
-        return new Gate(companion, modeOf(companion), ownerRules(companion), RuleSet.factory(),
+        return new Gate(companion.getUUID(), modeOf(companion), ownerRules(companion), RuleSet.factory(),
                 PlacedBlocks.of(level), ConsentDesk.of(companion).granted());
     }
 

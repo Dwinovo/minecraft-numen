@@ -28,8 +28,8 @@ import java.util.Set;
 public enum Signals {
 
     /**
-     * 别人放的:这一格有放置记号,而且放的不是要动手的这只同伴自己——她自己垫的路、搭的桥是她的,
-     * 主人、别的玩家、别人家同伴放的都算。
+     * 别人放的:这一格有放置记号,而且放的不是要动手的这只同伴自己——主人、别的玩家、别人家同伴放的都算。
+     * 她自己放的是 {@link #SELF_PLACED},两个信号把"有人放过"分成互不相交的两半,各由规则行说怎么办。
      */
     PLACED("placed", "placed by a player", false) {
         @Override
@@ -44,6 +44,15 @@ public enum Signals {
             return placer != null && placer.known()
                     ? Component.translatable(ModLanguageData.Keys.PERMISSION_PLACED_BY, placer.name())
                     : super.shown(a, f);
+        }
+    },
+
+    /** 她自己放的:这一格的放置记号记的就是要动手的这只同伴——她垫的柱子、搭的桥、照设计砌的墙。 */
+    SELF_PLACED("self_placed", "placed by herself", false) {
+        @Override
+        boolean test(Action a, Facts f) {
+            PlacedBlocks.Placer placer = placerAt(a, f);
+            return placer != null && placer.id().equals(f.actor());
         }
     },
 
@@ -102,11 +111,12 @@ public enum Signals {
         }
     },
 
+    /** 放置点附近有别人放的方块:和 {@link #PLACED} 同一个"别人",她自己放的不算。 */
     NEAR_PLACED("near_placed", "next to player-placed blocks", false) {
         @Override
         boolean test(Action a, Facts f) {
             return a.pos() != null && f.placed() != null
-                    && f.placed().anyPlacedWithin(a.pos(), NEAR_PLACED_RADIUS, f.view(), actorId(f));
+                    && f.placed().anyPlacedWithin(a.pos(), NEAR_PLACED_RADIUS, f.view(), f.actor());
         }
     };
 
@@ -155,17 +165,18 @@ public enum Signals {
 
     abstract boolean test(Action action, Facts facts);
 
-    /** 这一格别人放的那一位;没有记号、或者就是要动手的同伴自己放的,为 null。 */
-    private static PlacedBlocks.Placer placedByOther(Action a, Facts f) {
+    /** 这一格放置记号上记的那一位;没有记号为 null。 */
+    private static PlacedBlocks.Placer placerAt(Action a, Facts f) {
         if (a.pos() == null || f.placed() == null) {
             return null;
         }
-        PlacedBlocks.Placer placer = f.placed().placerAt(a.pos(), f.view().getBlockState(a.pos()));
-        return placer == null || placer.id().equals(actorId(f)) ? null : placer;
+        return f.placed().placerAt(a.pos(), f.view().getBlockState(a.pos()));
     }
 
-    private static java.util.UUID actorId(Facts f) {
-        return f.actor() == null ? null : f.actor().getUUID();
+    /** 这一格别人放的那一位;没有记号、或者就是要动手的同伴自己放的,为 null。 */
+    private static PlacedBlocks.Placer placedByOther(Action a, Facts f) {
+        PlacedBlocks.Placer placer = placerAt(a, f);
+        return placer == null || placer.id().equals(f.actor()) ? null : placer;
     }
 
     /** 按规则文本里的名字取信号;没有这个名字返回 null(规则解析据此报错)。 */
