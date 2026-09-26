@@ -309,20 +309,35 @@ public class GearGameTests {
     }
 
     /**
-     * 遣散像死亡一样全掉在脚下:原版的头盔,和不在原版物品栏里的那处来源上戴着的,都落地各一件,
+     * 遣散像死亡一样全掉在脚下:背包里的、原版的头盔,和不在原版物品栏里的那处来源上戴着的,都落地各一件,
      * 身上不再戴着。只丢原版物品栏的话,模组的饰品会跟着身体一起消失。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_gear")
     public static void dismiss_drops_what_she_wears(GameTestHelper helper) {
+        dismissDropsEverything(helper, "gametest_farewell", "gametest_bereaved",
+                (owner, companion) -> com.dwinovo.numen.network.payload.DismissRequestPayload.handle(
+                        new com.dwinovo.numen.network.payload.DismissRequestPayload(companion.getUUID()), owner));
+    }
+
+    /** 主人敲 {@code /numen player despawn} 和在面板上点 ✕ 是同一次遣散,掉的东西一样。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_gear")
+    public static void despawn_command_drops_what_she_carries_and_wears(GameTestHelper helper) {
+        dismissDropsEverything(helper, "gametest_parting", "gametest_mourner",
+                (owner, companion) -> owner.getServer().getCommands().performPrefixedCommand(
+                        owner.createCommandSourceStack(), "numen player despawn " + companion.getGameProfile().getName()));
+    }
+
+    private static void dismissDropsEverything(GameTestHelper helper, String name, String ownerName,
+            java.util.function.BiConsumer<net.minecraft.server.level.ServerPlayer, NumenPlayer> dismiss) {
         ServerLevel level = helper.getLevel();
-        NumenPlayer companion = spawnAt(helper, "gametest_farewell", new BlockPos(4, 2, 4), false);
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_bereaved");
+        NumenPlayer companion = spawnAt(helper, name, new BlockPos(4, 2, 4), false);
+        var owner = presentPlayer(helper, companion, ownerName);
         FakeGear gear = dress(companion);
         gear.ring(1).worn = new ItemStack(Items.AMETHYST_SHARD);
         companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+        companion.getInventory().add(new ItemStack(Items.DIAMOND));
         net.minecraft.world.phys.AABB around = companion.getBoundingBox().inflate(4);
-        com.dwinovo.numen.network.payload.DismissRequestPayload.handle(
-                new com.dwinovo.numen.network.payload.DismissRequestPayload(companion.getUUID()), owner);
+        dismiss.accept(owner, companion);
 
         helper.succeedWhen(() -> {
             var drops = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class, around);
@@ -330,11 +345,16 @@ public class GearGameTests {
                     .mapToInt(e -> e.getItem().getCount()).sum();
             int helmets = drops.stream().filter(e -> e.getItem().is(Items.IRON_HELMET))
                     .mapToInt(e -> e.getItem().getCount()).sum();
+            int diamonds = drops.stream().filter(e -> e.getItem().is(Items.DIAMOND))
+                    .mapToInt(e -> e.getItem().getCount()).sum();
             helper.assertTrue(shards == 1, "the worn shard did not drop exactly once: " + shards);
             helper.assertTrue(helmets == 1, "the helmet did not drop exactly once: " + helmets);
+            helper.assertTrue(diamonds == 1, "the carried diamond did not drop exactly once: " + diamonds);
             helper.assertTrue(gear.ring(1).worn.isEmpty(), "the shard is still worn by a dismissed body");
+            helper.assertTrue(NumenPlayer.findByUuid(level.getServer(), companion.getUUID()) == null,
+                    "the dismissed body is still in the world");
             drops.forEach(net.minecraft.world.entity.Entity::discard);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 }
