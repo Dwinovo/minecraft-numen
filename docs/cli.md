@@ -1,8 +1,7 @@
 # Numen CLI:她只有一个能力——执行一行命令
 
 状态:
-- **已落地**:第 1–3、5–7 步,细节见附录 A–F。本稿正文描述的就是第 7 步"分层"之后的样子;第 6 步里"把她的命令挂进 MC 指令树 `/numen`"的做法已撤回(附录 F)。
-- **下一步**:第 4 步,核心工具迁移,直接按分层后的形态做。
+- **已落地**:第 1–7 步,细节见附录 A–G。本稿正文描述的就是第 7 步"分层"之后的样子;第 6 步里"把她的命令挂进 MC 指令树 `/numen`"的做法已撤回(附录 F);第 4 步核心工具迁移按分层后的形态做完(附录 G)。
 
 ## 一、为什么
 
@@ -42,7 +41,7 @@
 
 ```
 模型
- ├─ 快捷工具 task_status / goto / …    ← 第 1 层里高频命令的 alias
+ ├─ 快捷工具 goto / mine / …          ← 第 1 层里高频命令的 alias
  └─ command 工具 "<一行>"
           │
           ├─ 行首是 "/" → 第 0 层:服务端以她的 CommandSourceStack 解析(写不通当场失败,附用法)
@@ -105,7 +104,10 @@ task status                           第 1 层,核心动作
 ## 八、快捷工具
 
 - **同源**:把 JSON 参数按同一组参数类型读成值,交给同一个处理函数,回执与从 `command` 调用一字不差(附录 A)。
-- **提升哪些**:按调用频率定。基线建议的 11 个是 get_self_status、scan_blocks、look_around、scan_nearby_entities、get_owner_status、inspect_block、goto、mine、build、load_skill,以及 task_status;task_status 主要被拿来轮询,要不要提升待定。
+- **提升哪些**:按调用频率定。现在提升的是 get_self_status、get_owner_status、look_around、scan_blocks、scan_nearby_entities、inspect_block、goto、mine、load_skill、task_stop 十个(附录 G)。
+  - `task status` 与 `task timer` 只留命令:task_status 主要被拿来轮询,而收尾本来就会以 `task_finished` 送到。
+  - 基线建议里的 build 不再是工具:建造改为 `build` 组的一串命令(原语、设计、`build at`),一次写完整栋房子的那一个调用没有了(附录 G)。
+- **独立工具**:除了快捷工具与 `command`,工具表里只留一个 `todowrite`——输入本身是一份结构化清单的动作留作独立工具,这是这条规则下唯一的例外(附录 G)。
 
 ## 九、帮助与报错:像真正的 CLI 一样把她教会
 
@@ -165,6 +167,7 @@ ftbquests submit <quest>
 - **技能**讲"什么时候、怎么用",附一两个例子,不抄语法。
   - 同一件事第 1 层已经有包装的,技能教她用包装版;
   - 模组原生指令就够用的,技能教她用 `/` 写法,我们不再包一层。
+- **文字里怎么写命令**:技能、系统提示、工具与动作的说明里提到一条命令,一律写进反引号(或 ``` 代码块的一行),写成能照抄的样子——一条完整的命令(`use shift 5`),或只点名一组、一个动作(`inv recipe`)。占位符(`<x>`)与省略号不是命令的写法。这样写的每一行都由防漂移测试按命令树读一遍(附录 G)。
 
 ## 十一、扩展点与模组联动
 
@@ -214,7 +217,7 @@ ftbquests submit <quest>
 | 5 | 原版指令入口与权限层 COMMAND | 已落地(附录 C),第 6 步并入唯一执行入口 |
 | 6 | `command` 工具、唯一执行入口、出厂规则、帮助与报错、`/numen drive` | 已落地(附录 D、E) |
 | 7 | 分层:见下 | 已落地(附录 F) |
-| **4** | **核心工具迁移**:直接进第 1 层,高频的提升为快捷工具 | 下一步 |
+| 4 | 核心工具迁移:直接进第 1 层,高频的提升为快捷工具 | 已落地(附录 G) |
 
 **第 7 步的内容**(落地细节见附录 F):
 - **撤回**第 6 步里把她的命令挂进 MC `/numen` 的做法:
@@ -229,7 +232,7 @@ ftbquests submit <quest>
 
 ## 十六、待核实
 
-- 第 1 层的一级命令名要和核心领域名、将来迁来的动作名统一规划,避免 `goto` 这类动词和组名混用得不一致(第 4 步定)。
+- ~~第 1 层的一级命令名统一规划~~:第 4 步已定,一级命令全是领域名(`move`、`work`、`fight`、`build`、`use`、`inv`、`gear`、`scan`、`status`、`locate`、`memory`、`skill`、`task`),动词只做动作名(`move goto`);`goto`、`mine` 这类动词只作快捷工具名出现,见附录 G。
 - ~~权威声明的形状~~:已定,`Authority` 的两种,见附录 F。
 
 ## 十七、不做的
@@ -548,3 +551,195 @@ gt_long lingre 40
   - 第五节"写错了当场回答":主人客户端的树上服务端动作只有名字与帮助,服务端动作的参数写错由服务端报(同一个
     `NumenCli.problem`,两侧一字不差);根、组、动作名写错与客户端动作写错在客户端答。
   - 第六节"不需要按是不是她过滤可见性":对第 1 层成立;`/numen` 根仍排除她,那是第 0 层的可见性(见上)。
+
+## 附录 G:第 4 步(核心工具迁移)落地时定下的细节
+
+代码在 core 的 `tools/*/*Commands`(各组的登记)与 `core.build`(建造的原语、设计、建成的房子);机制的增补在 api 的
+`com.dwinovo.numen.cli`(标志组、只读不执行的读法、写回命令行、文字里的命令)。
+
+### 分三批迁完
+
+一级命令全是领域名,动词只做动作名;高频的几条提升为快捷工具(第八节)。
+
+| 批 | 原来的工具 | 现在的命令 | 提升成快捷工具 |
+|---|---|---|---|
+| A 感知与定位 | get_self_status、get_owner_status、get_world_info | `status self`、`status owner`、`status world` | get_self_status、get_owner_status |
+| | look_around、scan_blocks、scan_nearby_entities、inspect_block、inspect_block_storage | `scan around`、`scan blocks`、`scan entities`、`scan block`、`scan storage` | look_around、scan_blocks、scan_nearby_entities、inspect_block |
+| | locate_structure、locate_biome | `locate structure`、`locate biome` | |
+| B 背包、交互、札记、技能 | craft、lookup_recipe、eat、drop_items、take_items | `inv craft`、`inv recipe`、`inv eat`、`inv drop`、`inv take` | |
+| | equip_item | `gear wear`、`gear remove` | |
+| | interact_at、interact_entity、inspect_gui、close_gui、sleep | `use block`、`use ahead`、`use entity`、`use gui`、`use close`、`use sleep` | |
+| | transfer | `use transfer`、`use shift`(本批,见下) | |
+| | remember、recall、forget、load_skill | `memory remember`、`memory recall`、`memory forget`、`skill load` | load_skill |
+| | task_status、task_stop、set_timer | `task status`、`task stop`、`task timer` | task_stop |
+| C 长活 | goto、follow、plan_route | `move goto`、`move follow`、`move route` | goto |
+| | mine、collect_items、fish | `work mine`、`work collect`、`work fish` | mine |
+| | attack | `fight attack` | |
+| | blueprint、blueprint_read、scaffold_materials、build | `build` 组(本批,见下) | |
+
+- A 批给参数类型补了小数、几个固定值之一、id 或 `#标签`、一串值(附录 B 的几种之外);C 批让一串值读到下一个标志为止,
+  所以它也能当标志(`--avoid_break a b --count 3`),并补了方块或坐标格类型(路线规格的禁令)。
+- "留空表示另一件事"一律拆成两个动作(附录 B 的规矩):`use block` / `use ahead`、`gear wear` / `gear remove`、
+  `use transfer` / `use shift`。
+- 工具表剩下:十个快捷工具、`command`、`todowrite`。
+
+### 建造:原语命令、设计与建成的房子
+
+设计稿见 `docs/build-designs.md`。`build` 工具与它的 ops JSON 解析删掉,建造全部走命令。
+
+**类与职责**(组合关系,自下而上):
+
+- `Primitive`:七个原语(`set place line layer cylinder sphere copy`)。每个是一张参数表(命令行的写法,最后是 `--mask`)
+  加一步画法:把读好的参数画到一张 `Canvas` 上。当场执行与记进设计读的是同一份参数、画的是同一些格子。
+  - `set` 照写下的方块状态直写,`place` 像玩家右键那样放(朝向随视线):原来 `set` 按"写没写状态"分两种,拆成两个动作。
+- `Canvas`:画到一半的图。后写覆盖先写;每一步画了哪些格另记一份(`build show` 逐步报)。没画过的格读**底子**
+  (`Ground`):当场执行时底子是世界(坐标就是世界坐标,`copy` 抄已经立着的),设计里底子是空的(坐标相对原点,`copy`
+  只抄这份设计前面画的)——设计因此和摆到哪儿无关。
+- `Placement`:原点落在锚点、绕原点顺时针转几个 90°,位置与方块朝向都由原版算。设计与蓝图文件同一条变换。
+- `Layout`:摆到世界里的一份施工图——目标格,外加蓝图文件才带的方块实体数据、摆设、逐格料单与掉格数。原来的
+  `BlueprintStore.Loaded` 就是它。
+- `Design`:一份设计 = 名字、所属主人、作者、创建时间与一串原语命令行。读与写都过 `NumenCli.read`(见下),每一步读成
+  原语与参数、画一遍,读不通或画不出来整份不认,报出第几行(文件)或第几步(改设计时)。步骤按原语的参数表写回规范的
+  一行(`Design.Step.line`)。
+- `Designs`:设计库 `schematics/designs/<名>.numen`,每次从盘上读;存之前把要写的文本照读的规矩读一遍。设计与蓝图文件
+  共用名字空间,`kindOf` 是"这个名字指什么"的唯一判据(两样都没有、两样都叫这个名都如实报)。
+- `Built`:建成的房子(主世界的 SavedData,一份记全部维度)。一栋 = 施工图名 + 维度 + 落点(`Site` 认一栋),记着朝向、
+  谁盖的、何时,以及她**实际放下的每一格**(格 → 方块)。执行器每放下一格、拆掉一格就记一笔,活怎么收场、服务器停在
+  哪一刻都照实。
+- `Changes`:把一处变成施工图的样子要动哪些格——施工图的每一格和世界比(补、换),加上这一栋记录里有、施工图里没有、
+  世界里仍是记录里那个方块的格(拆)。没有要动的就不派活。交给执行器的是施工图的全部格加要拆的格:执行器本来就逐格对着
+  世界跳过已经对的格。
+- 执行器(`BuildCompanionTask`)不变,只多三处:拆除格(`Target.removes`)只在那一格仍是她放的方块时动手;放下与拆掉
+  随手记进 `Built`;回执写明放了、换了、拆了多少格。整单的让路档位撤掉,每格自己的 `--mask`,不写是 `carve`。
+- `BuildOps`(当场执行、`build at`、`build built`)、`DesignOps`(新建、改步、删除、列出、展示)、`BuildCommands`
+  (登记)。
+
+**命令的实际样子**:
+
+```
+build new shed
+build layer 0 0 0 #### #### #### --block cobblestone --into shed
+build layer 0 1 0 #### #..# #### --block oak_planks --up_to 1 --into shed
+build set air 1 1 0 --into shed
+build show shed
+build at shed 120 64 -35 --rotation 90
+build step shed 1 layer 0 0 0 #### #### --block cobblestone
+build at shed 120 64 -35 --rotation 90
+build built
+build place crafting_table 120 64 -30
+```
+
+**设计文件的实际样子**(`schematics/designs/shed.numen`,改了就覆盖):
+
+```
+# Numen design shed
+# author: Aria
+# owner: d3e2c687-5ff0-4a20-9212-10cb825d5412 Dwin
+# created: 2026-09-26T08:18:51Z
+build layer 0 0 0 #### #### #### --block cobblestone
+build layer 0 1 0 #### #..# #### --block oak_planks --up_to 1
+build set air 1 1 0
+```
+
+**`build show` 的实际输出**(GameTest 里跑出来的):
+
+```
+shed: 3 step(s), 4x2x3 at x 0..3, y 0..1, z 0..2, 22 cells — cobblestone x12, oak_planks x9
+1. build layer 0 0 0 #### #### #### --block cobblestone
+   layer at x 0..3, y 0, z 0..2, 12 cells: cobblestone x12
+2. build layer 0 1 0 #### #..# #### --block oak_planks --up_to 1
+   layer at x 0..3, y 1, z 0..2, 10 cells: oak_planks x10
+3. build set air 1 1 0
+   set at x 1, y 1, z 0, 1 cells: no materials
+It is your owner's design; you can change it. Written by Aria.
+She carries enough for all of it.
+```
+
+`data` 里另有整份与每一步的料单(拿去采集的全量清单)与生存画像的 `short_of`。蓝图文件的 `build show` 就是原来
+`build blueprint_read` 不带落点的那一份(尺寸、格数、全量料单、按组件全等收的料、按层分布)。
+
+**`build at` 的回执**:受理即回执;`task_finished` 写成
+
+```
+shed#1: built 22/22 block(s); placed 21, cleared 0 (all requested cells match)
+shed#1: built 18/22 block(s); placed 0, cleared 0 (left 4 cell(s) alone because the owner said no: …)
+```
+
+第二行是改掉地板一排之后再 `build at`、主人不在场:她从前砌的石头记在主人名下(`PlacedBlocks`),拆它是 `break(placed)`,
+出厂规则要问;问不到就不拆,如实交代。数据里有 `placed`、`replaced`、`cleared`、`removed` 与 `building`。
+
+**与设计稿的出入**:
+
+- 蓝图文件也照设计的摆法:图纸自己的原点(最小角)落在锚点、**绕原点**转。原来按"转完再把最小角对齐锚点";改动是为了
+  两样东西一个摆法,也为了同一栋房子改了之后按同一个落点再摆,墙落回原来的格子。不转(0°)时和原来一样。
+- 生存缺料:设计与当场执行的原语整份预检、缺料一格不放;蓝图文件保留原来的"能建多少建多少,同一行再发一次从断点接上"
+  ——整张社区图纸一趟本来运不完。这是施工图来源自带的一条,不是开关。
+- 原来 `build blueprint_read` 带落点报"那里已经立着多少、还差多少"的用法删掉:同一个问题现在由 `build at` 的差异回答,
+  没有差异就当场说"已经是那个样子",有差异就去补;不另开一个只读的"差异预览",那就是被撤掉的 plan。
+- `build step` / `build insert` 的新一步写成"`build` 之后的那一截"(`layer 0 1 0 …`),存进设计时写回完整的一行。这一截
+  是一个吃整行的参数,整行按命令树读得通,但里面那一步要等处理函数读——防漂移测试只看得到外层;设计文件里的每一行
+  照样由同一个读法把关。
+- `copy` 在设计里只抄这份设计前面画的;要抄世界里已有的一片,当场执行 `build copy`。
+- 实例记录里被别人换掉的格照实留着(记的是她当初放的),只是世界里对不上,不会拆;不在读的时候顺手改记录。
+
+**持久化**:设计是文件,跨世界复用,每次从盘上读(GameTest 验:写下的几步读回来一字不差);房子在世界存档里,存下的那份
+读回来还是同一栋、同样的格子。设计删掉,房子照样在 `build built` 里,写明它的设计已删。
+
+### transfer 改成一次一步
+
+`transfer` 工具与它的 `moves` 数组删掉,换成 `use` 组的两个动作,一个动作一个意思:
+
+```
+use transfer 38 1 --count 1      放进指定的一格:空格就放,同样的东西就并,不同的就对调
+use shift 5                      像按住 Shift 点它:整叠挪到另一边,菜单自己定落在哪
+```
+
+要搬好几样就同一轮发好几行(串行的派发器一行一行排开,每行的回执说这一步搬了什么)。放在 `use` 组:在打开的界面里点格子,
+和点方块、点实体是同一种"像玩家那样点"。从容器里拿东西的那一步照旧先过权限层,可能挂着等主人。
+
+### todowrite 是唯一的独立工具
+
+规则:**输入本身是一份结构化清单的动作留作独立工具**,不进命令层——一行命令装不下一张带状态的清单,硬塞进去就是在命令行
+里写 JSON。`todowrite` 是这条规则下唯一的例外(Claude Code 的 TodoWrite 同理),主人面板上的计划清单直接读它的参数。
+它的行为不变。其余动作都是一行命令,或它的快捷工具。
+
+### 帮助缩短:标志组
+
+成批的可选标志(路线规格那十三个)在组帮助与动作的用法行里不再逐个列出。机制是通用的:参数可以声明归入一个标志组
+(`Param.group("route flags")`),用法行里整组写成一格 `[route flags]`,排在组里第一个标志的位置;动作自己的 `--help`
+把组里每个标志列全,列在组名那一小节下。命令行上怎么写、快捷工具的 schema 怎么摊都不变。move 与 work 没有特判,
+它们只是把 `RouteSpecFlags` 的参数都声明进了这一组。
+
+前(`move --help` 里 goto 那一行):
+
+```
+move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--route <word>] [--alter <none|natural|any>] [--avoid <snow_layer|door|ladder|vine|water|flowing_water|lava|hazard...>] [--penalty_place <number>] [--penalty_break <number>] [--penalty_jump <number>] [--penalty_wade <number>] [--avoid_break <block|cell...>] [--avoid_place <block|cell...>] [--avoid_step <block|cell...>] [--parkour <boolean>] [--climb_vines <boolean>] [--max_fall <integer>] [--alter_budget <integer>] — Travel to one destination with full terrain pathfinding.
+```
+
+后:
+
+```
+move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--route <word>] [route flags] — Travel to one destination with full terrain pathfinding.
+```
+
+`move goto --help` 里,不归组的参数之后接一小节 `Route flags:`,十三个标志各一行。
+
+### 防漂移测试
+
+`WrittenCommandsTest`(core 单测)把写着的每一行命令按命令树读一遍,读不通就失败并指出出处、那一行和报错的第一句:
+
+- **读什么**:core 随身带的每一份技能文档(`SKILL.md` 与它们按需读的参考文件)、系统提示(`NumenPrompts` 的几段与本能
+  名册)、每个命令组与动作的说明、参数说明、例子与注意、工具表里每个工具的描述与参数说明(快捷工具、`command`、
+  `todowrite`),以及随模组发的设计文件(`.numen`,按设计的读法读,就是同一棵树)。
+- **怎么认出一行命令**(`WrittenCommands`,约定只写在这一处):反引号里,或 ``` 代码块里的一行;以 `/` 打头,或第一个词是
+  第 1 层的一级命令。别的反引号(方块 id、工具名、参数名、字符网格)不读。
+- **读得通**:第 1 层交 `NumenCli.read`——和执行时同一个解析器,整行是一条能执行的命令,或整行只是一串名字(在文字里
+  点名一组、一个动作);第 0 层按原版的指令树读(OP 4 级,看得见每一条)。判据只有命令树,不另记清单。
+- **`NumenCli.read`** 是为它与设计文件开的:一行读成动作路径与参数、不执行,读不通抛出和执行时写错一样的话。只读的那一棵
+  树和两侧的树同一个生成器、每个动作都长着参数。读好的参数能写回一行(`CommandArgs.write`,每种参数类型知道自己的值在
+  命令行上的样子),再读一遍是同一份——设计文件的每一步就是这么写出来的。
+- **先跑一遍抓到并修掉的**:技能里 `transfer moves=[…]` 的整套写法(containers 重写)、`build`/`build blueprint*` 的
+  旧写法(building_design、nether_entry、stronghold_finding、tier_progression、end_game_overview、blaze_rods)、带
+  占位符写不通的 `fight attack --entity_ids <id>`、`use block right <x> <y> <z> …`、不存在的 `wait`;动作注意与工具描述里
+  没加反引号的命令提及(都补上了,否则读不到);系统提示的例子 `command(use block right <the furnace…>)`。
+- **插件的技能文档不在这里读**:插件的命令组只在它的模组在场时登记,core 的单测里没有它们;插件模块现在没有测试源码集。
