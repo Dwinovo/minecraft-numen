@@ -470,24 +470,17 @@ public final class Companions {
     }
 
     /**
-     * Permanently dismiss EVERY companion of {@code ownerUuid} named {@code name} — gone for good, it
-     * will NOT come back on login. Removes both live bodies and registry entries, so it also cleans up
-     * any same-name duplicates that the old non-idempotent summon left behind. Returns how many it
-     * dismissed. (The {@code .dat} files orphan harmlessly — with no registry entry nothing respawns
-     * them.)
+     * Permanently dismiss every registry entry of {@code ownerUuid} named {@code name} — gone for good, it
+     * will NOT come back on login — through {@link #dismiss(MinecraftServer, UUID, Collection)}, which
+     * also pushes the roster. Returns how many it dismissed. The registry is the whole answer: every body
+     * is spawned from an entry and its entry is removed only after the body leaves ({@link #forget}), so a
+     * live body always has one. (The {@code .dat} files orphan harmlessly — with no registry entry nothing
+     * respawns them.)
      */
     public static int dismissByName(MinecraftServer server, UUID ownerUuid, String name) {
-        CompanionRegistry reg = CompanionRegistry.get(server);
         List<UUID> ids = new ArrayList<>();
-        for (Map.Entry<UUID, CompanionRegistry.Entry> e : reg.ownedBy(ownerUuid)) {
+        for (Map.Entry<UUID, CompanionRegistry.Entry> e : CompanionRegistry.get(server).ownedBy(ownerUuid)) {
             if (e.getValue().name().equals(name)) ids.add(e.getKey());
-        }
-        // Defensive: also catch a live body of that name somehow missing from the registry.
-        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-            if (p instanceof NumenPlayer a && a.isOwnedByPlayer(ownerUuid)
-                    && a.getName().getString().equals(name) && !ids.contains(a.getUUID())) {
-                ids.add(a.getUUID());
-            }
         }
         dismiss(server, ownerUuid, ids);
         return ids.size();

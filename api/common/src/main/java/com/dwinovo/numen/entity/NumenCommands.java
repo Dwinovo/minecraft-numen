@@ -193,14 +193,14 @@ public final class NumenCommands {
         ServerPlayer owner = ctx.getSource().getPlayerOrException();
         var server = owner.level().getServer();
         // Permanent dismissal: removes the live body AND its registry entry (and any same-name
-        // duplicates), so it does NOT come back on the next login. NOT dormancy.
+        // duplicates), so it does NOT come back on the next login. NOT dormancy. The dismissal pushes
+        // the roster itself.
         int dismissed = Companions.dismissByName(server, owner.getUUID(), name);
         if (dismissed == 0) {
             ctx.getSource().sendFailure(
                     Component.literal("No companion of yours named '" + name + "'"));
             return 0;
         }
-        Companions.syncRosterToOwner(server, owner);
         ctx.getSource().sendSuccess(() -> Component.literal(
                 "Dismissed companion '" + name + "' — gone for good"
                         + (dismissed > 1 ? " (cleaned up " + dismissed + " duplicates)" : "")), false);
