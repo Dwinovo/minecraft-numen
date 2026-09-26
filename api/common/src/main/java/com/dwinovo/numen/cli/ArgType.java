@@ -6,6 +6,7 @@ import com.mojang.brigadier.LiteralMessage;
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.arguments.BoolArgumentType;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -13,6 +14,8 @@ import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.UnaryOperator;
 
 /**
@@ -21,12 +24,14 @@ import java.util.function.UnaryOperator;
  * <h2>两个入口,一种读法</h2>
  * 命令行上的值由 Brigadier 的 {@link ArgumentType} 读;快捷工具收到的 JSON 值写成它在命令行上的样子,交给
  * <b>同一个</b> {@link ArgumentType} 读,而且必须整段读完。多数类型的样子就是字面文字;{@link #string()} 在命令行上
- * 靠引号装下空格,JSON 的字符串本身就有边界,所以它的值一律加上引号再读——否则带空格的名字命令行收、JSON 拒。所以同一个值从哪个入口进来,被接受还是被拒、报什么错都一样——
+ * 靠引号装下空格,JSON 的字符串本身就有边界,所以它的值一律加上引号再读——否则带空格的名字命令行收、JSON 拒。一串值
+ * ({@link #list})在 JSON 里是数组,每一项照同样的规矩读。所以同一个值从哪个入口进来,被接受还是被拒、报什么错都一样——
  * 转换只有这一处。这不是把整条命令拼回字符串再解析:每个值各自按自己的类型读,参数名来自 JSON 的键。
  *
  * <h2>现有的几种</h2>
- * 按用到的才开:整数(带给模型看的范围,或不设范围的方块坐标)、布尔、一个词(编号这类)、资源 id(配方、模型)、
- * 一个值(模组给的名字,可能带空格或非英文,带空格时加引号)、余下整行(自由文字)。要新的,就在这里加一种,
+ * 按用到的才开:整数(带给模型看的范围,或不设范围的方块坐标)、小数(带范围)、布尔、一个词(编号这类)、
+ * 几个固定值之一、资源 id(配方、模型)、资源 id 或 {@code #标签}、一个值(模组给的名字,可能带空格或非英文,
+ * 带空格时加引号)、余下整行(自由文字),以及把一种值组合成"余下整行里的一串"的 {@link #list}。要新的,就在这里加一种,
  * schema 与帮助跟着有。
  */
 public final class ArgType<T> {
@@ -41,6 +46,8 @@ public final class ArgType<T> {
             id -> new LiteralMessage("'" + id + "' is not a valid id"));
     private static final SimpleCommandExceptionType NO_STRING = new SimpleCommandExceptionType(
             new LiteralMessage("expected a string"));
+    private static final DynamicCommandExceptionType NOT_A_CHOICE = new DynamicCommandExceptionType(
+            choices -> new LiteralMessage("expected one of " + choices));
 
     /** 往 schema 里写这一个字段:{@link Schema.Builder} 是工具 schema 的唯一写法,这里只挑用哪个方法。 */
     @FunctionalInterface
@@ -48,28 +55,51 @@ public final class ArgType<T> {
         void add(Schema.Builder schema, String name, String description, boolean required);
     }
 
+    /** 快捷工具的一个 JSON 值读成值。 */
+    @FunctionalInterface
+    private interface FromJson<T> {
+        T read(JsonElement value) throws CommandSyntaxException;
+    }
+
     private final ArgumentType<T> brigadier;
     private final String kind;
     private final String hint;
     private final boolean restOfLine;
     private final SchemaField schema;
-    private final UnaryOperator<String> written;
+    private final FromJson<T> json;
 
+    /** JSON 值是一个字面值,文字原样就是它在命令行上的样子。 */
     private ArgType(ArgumentType<T> brigadier, String kind, String hint, boolean restOfLine, SchemaField schema) {
-        this(brigadier, kind, hint, restOfLine, schema, UnaryOperator.identity());
+        this(brigadier, kind, hint, restOfLine, schema, literal(brigadier, hint, UnaryOperator.identity()));
     }
 
-    /**
-     * @param written 一个 JSON 值的文字在命令行上写成什么样
-     */
     private ArgType(ArgumentType<T> brigadier, String kind, String hint, boolean restOfLine, SchemaField schema,
-                    UnaryOperator<String> written) {
+                    FromJson<T> json) {
         this.brigadier = brigadier;
         this.kind = kind;
         this.hint = hint;
         this.restOfLine = restOfLine;
         this.schema = schema;
-        this.written = written;
+        this.json = json;
+    }
+
+    /**
+     * 一个 JSON 值是一个字面值:写成它在命令行上的样子,用同一个读法整段读完。
+     *
+     * @param written 一个 JSON 值的文字在命令行上写成什么样
+     */
+    private static <T> FromJson<T> literal(ArgumentType<T> brigadier, String hint, UnaryOperator<String> written) {
+        return value -> {
+            if (value == null || !value.isJsonPrimitive()) {
+                throw NOT_A_VALUE.create(hint);
+            }
+            StringReader reader = new StringReader(written.apply(value.getAsString()));
+            T parsed = brigadier.parse(reader);
+            if (reader.canRead()) {
+                throw TRAILING.createWithContext(reader, hint);
+            }
+            return parsed;
+        };
     }
 
     /**
@@ -122,8 +152,9 @@ public final class ArgType<T> {
      * 角色名)用它——这些名字的字符集不归我们定。
      */
     public static ArgType<String> string() {
-        return new ArgType<>(ArgType::readString, "string", "string, quote it if it has spaces", false,
-                ArgType::stringField, ArgType::quoted);
+        ArgumentType<String> read = ArgType::readString;
+        String hint = "string, quote it if it has spaces";
+        return new ArgType<>(read, "string", hint, false, ArgType::stringField, literal(read, hint, ArgType::quoted));
     }
 
     /** 加上双引号,里面的反斜杠与双引号转义——{@link StringReader#readQuotedString} 读回来就是原文。 */
@@ -171,6 +202,116 @@ public final class ArgType<T> {
                 ArgType::stringField);
     }
 
+    /**
+     * 小数。和 {@link #integer(int, int)} 一样,{@code min..max} 是告诉模型的约定,读的时候不拦越界的值:夹住还是拒绝
+     * 是动作自己的语义。
+     */
+    public static ArgType<Double> number(double min, double max) {
+        return new ArgType<>(DoubleArgumentType.doubleArg(), "number", "number " + plain(min) + "-" + plain(max), false,
+                (s, name, desc, required) -> {
+                    if (required) s.number(name, desc, min, max);
+                    else s.optionalNumber(name, desc, min, max);
+                });
+    }
+
+    /** 帮助里的数不带多余的 {@code .0}:{@code 1-64} 而不是 {@code 1.0-64.0}。 */
+    private static String plain(double value) {
+        return value == Math.rint(value) ? Long.toString((long) value) : Double.toString(value);
+    }
+
+    /**
+     * 几个固定值之一(小写英文,不带空格),比如实体的种类 {@code hostile}、{@code passive}。写了别的就当场拒,
+     * 报错列出能写的几个;schema 里是一个 {@code enum}。
+     */
+    public static ArgType<String> oneOf(String... choices) {
+        List<String> allowed = List.of(choices);
+        String listed = String.join(", ", allowed);
+        return new ArgType<>(reader -> {
+            int start = reader.getCursor();
+            String value = reader.readUnquotedString();
+            if (!allowed.contains(value)) {
+                reader.setCursor(start);
+                throw NOT_A_CHOICE.createWithContext(reader, listed);
+            }
+            return value;
+        }, String.join("|", allowed), "one of " + listed, false,
+                (s, name, desc, required) -> {
+                    if (required) s.enumStr(name, desc, choices);
+                    else s.optionalEnum(name, desc, choices);
+                });
+    }
+
+    /**
+     * 资源 id,或 {@code #} 开头的标签:"这一种"或"这一类"({@code minecraft:fortress} / {@code #minecraft:village},
+     * {@code iron_ore} / {@code #minecraft:logs})。标签是原版自己的写法(数据包里引用标签就这么写)。id 的字符集与合法性
+     * 同 {@link #id()};读出来的是写下的原文(带不带 {@code #}、写没写命名空间都照原样),在哪个注册表里认、认不出来
+     * 怎么说,是用它的动作的事——同一个 {@code #minecraft:village} 在结构表里是一类、在群系表里查无此类。
+     */
+    public static ArgType<String> idOrTag() {
+        return new ArgType<>(ArgType::readIdOrTag, "id", "id or #tag, e.g. minecraft:oak_log or #minecraft:logs",
+                false, ArgType::stringField);
+    }
+
+    private static String readIdOrTag(StringReader reader) throws CommandSyntaxException {
+        int start = reader.getCursor();
+        if (reader.canRead() && reader.peek() == '#') {
+            reader.skip();
+        }
+        int idStart = reader.getCursor();
+        while (reader.canRead() && ResourceLocation.isAllowedInResourceLocation(reader.peek())) {
+            reader.skip();
+        }
+        String id = reader.getString().substring(idStart, reader.getCursor());
+        if (id.isEmpty()) {
+            reader.setCursor(start);
+            throw NO_ID.createWithContext(reader);
+        }
+        if (ResourceLocation.tryParse(id) == null) {
+            reader.setCursor(start);
+            throw BAD_ID.createWithContext(reader, reader.getString().substring(start, idStart) + id);
+        }
+        return reader.getString().substring(start, reader.getCursor());
+    }
+
+    /**
+     * 一串同一种的值:命令行上是余下整行里一个空格隔开的一个个值({@code iron_ore deepslate_iron_ore}),每个都按
+     * {@code element} 的读法读;快捷工具里是一个 JSON 数组,每一项按 {@code element} 读 JSON 值的规矩读。至少一个。
+     * 它吃掉余下整行,和 {@link #text()} 一样只能是动作的最后一个必填参数。
+     */
+    public static ArgType<List<String>> list(ArgType<String> element) {
+        if (element.restOfLine) {
+            throw new IllegalArgumentException("一串值里的每一个不能自己吃掉余下整行");
+        }
+        String hint = element.hint + "; one or more, separated by spaces";
+        return new ArgType<List<String>>(reader -> {
+            List<String> values = new ArrayList<>();
+            values.add(element.read(reader));
+            while (reader.canRead()) {
+                if (reader.peek() != ' ') {
+                    throw CommandSyntaxException.BUILT_IN_EXCEPTIONS.dispatcherExpectedArgumentSeparator()
+                            .createWithContext(reader);
+                }
+                reader.skip();
+                values.add(element.read(reader));
+            }
+            return List.copyOf(values);
+        }, element.kind + "...", hint, true,
+                (s, name, desc, required) -> {
+                    if (required) s.stringArray(name, desc, 1);
+                    else s.optionalStringArray(name, desc);
+                },
+                value -> {
+                    if (value == null || !value.isJsonArray() || value.getAsJsonArray().isEmpty()) {
+                        throw NOT_A_VALUE.create("a list: " + hint);
+                    }
+                    List<String> values = new ArrayList<>();
+                    for (JsonElement item : value.getAsJsonArray()) {
+                        values.add(element.fromJson(item));
+                    }
+                    return List.copyOf(values);
+                });
+    }
+
     private static void stringField(Schema.Builder s, String name, String desc, boolean required) {
         if (required) s.string(name, desc);
         else s.optionalString(name, desc);
@@ -186,17 +327,9 @@ public final class ArgType<T> {
         return brigadier.parse(reader);
     }
 
-    /** 快捷工具的 JSON 值:写成它在命令行上的样子,用同一个读法整段读完。 */
+    /** 快捷工具的 JSON 值:字面值写成它在命令行上的样子,用同一个读法整段读完;一串值({@link #list})逐个这样读。 */
     T fromJson(JsonElement value) throws CommandSyntaxException {
-        if (value == null || !value.isJsonPrimitive()) {
-            throw NOT_A_VALUE.create(hint);
-        }
-        StringReader reader = new StringReader(written.apply(value.getAsString()));
-        T parsed = read(reader);
-        if (reader.canRead()) {
-            throw TRAILING.createWithContext(reader, hint);
-        }
-        return parsed;
+        return json.read(value);
     }
 
     /** 类型的名字,比如 {@code integer};标志的用法里写它。 */
