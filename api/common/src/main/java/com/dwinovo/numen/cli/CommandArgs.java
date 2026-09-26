@@ -30,6 +30,13 @@ public final class CommandArgs {
         return (T) values.get(param.name());
     }
 
+    /** 同一份参数,{@code param} 换成 {@code value}:受理时把一个值换成它稳定的写法再写回一行(见 {@link #write})。 */
+    public <T> CommandArgs with(Param<T> param, T value) {
+        Map<String, Object> out = new LinkedHashMap<>(values);
+        out.put(param.name(), value);
+        return new CommandArgs(out);
+    }
+
     /**
      * 命令行这一侧:位置参数按名字从 Brigadier 的上下文里取,标志是 {@link FlagsArgument} 已经读好的那张表
      * (这一行没写标志就是空表)。

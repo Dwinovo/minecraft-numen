@@ -94,6 +94,40 @@ public class CombatGameTests {
         });
     }
 
+    /**
+     * 点名攻击落盘重放的那一行写的是目标的 UUID:运行期编号重启后会发给别的东西,照旧号重放可能打到毫不相干的一只。
+     * 受理时找不到的编号不写进去(任务照旧记它丢失);一只都找不到就当场失败,不留一行会变成不点名清场的重放。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void attack_is_replayed_by_uuid_not_by_runtime_id(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        var pig = EntityType.PIG.create(level);
+        helper.assertTrue(pig != null, "pig did not spawn");
+        BlockPos at = helper.absolutePos(new BlockPos(13, 2, 13));
+        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pig.setNoAi(true);
+        level.addFreshEntity(pig);
+        BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 2));
+        NumenPlayer companion = com.dwinovo.numen.entity.Companions.summon(server, java.util.UUID.randomUUID(),
+                "gametest_uuid_hunter", level, new net.minecraft.world.phys.Vec3(spawn.getX() + 0.5, spawn.getY(),
+                        spawn.getZ() + 0.5));
+        ToolRun nobody = command(companion, "fight attack --entity_ids 999998");
+        ToolRun attack = command(companion, "fight attack --entity_ids " + pig.getId() + " 999999");
+        String recorded = com.dwinovo.numen.entity.CompanionRegistry.get(server).find(companion.getUUID()).taskArgs();
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(nobody.done() && !nobody.succeeded() && nobody.outcome().contains("999998"),
+                    "naming only missing entities did not fail on the spot: " + nobody.reply());
+            helper.assertTrue(attack.task() != null, "the attack was not accepted: " + attack.reply());
+            helper.assertTrue(recorded.contains("--entity_ids " + pig.getUUID() + "\"")
+                            && !recorded.contains("999999"),
+                    "the replay recipe does not name exactly the pig by its UUID: " + recorded);
+            com.dwinovo.numen.entity.Companions.dismiss(server, companion);
+            pig.discard();
+        });
+    }
+
     private static Zombie spawnZombie(GameTestHelper helper, BlockPos rel, NumenPlayer target) {
         ServerLevel level = helper.getLevel();
         Zombie zombie = EntityType.ZOMBIE.create(level);

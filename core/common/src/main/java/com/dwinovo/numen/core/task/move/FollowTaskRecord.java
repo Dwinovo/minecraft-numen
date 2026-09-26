@@ -3,9 +3,10 @@ package com.dwinovo.numen.core.task.move;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskRecord;
 
+import java.util.UUID;
+
 /**
- * 「跟着」——她当前在做的事就是跟着某个东西走。默认是主人,给了 {@link #entityId}
- * 就是跟着那一只。
+ * 「跟着」——她当前在做的事就是跟着某个东西走。默认是主人,给了 {@link #target} 就是跟着那一只。
  *
  * <p>没有"干完"这回事,所以 {@link com.dwinovo.numen.task.TaskRecord#NO_DEADLINE}:
  * 期限回答的是"该多久干完",而这件活的终点只有主人换掉它。
@@ -23,38 +24,33 @@ public final class FollowTaskRecord extends TaskRecord {
     public final double keepWithin;
 
     /**
-     * 跟着谁。{@code null} = 主人。
+     * 跟着谁,按 UUID 认。{@code null} = 主人。
+     *
+     * <p>UUID 跨重启不变:常驻任务重启后重放,重放的那一行写的也是它,认到的还是同一只,认不到就是它没了。
      *
      * <p>这两种目标<b>消失的含义不一样</b>,所以任务里分两支:主人下线是暂时的,他会
      * 回来,那时该休眠等着;点名的实体死了或者被卸载就是没了,再等也不会回来,该收尾
      * 报给模型。
      */
-    public final Integer entityId;
+    public final UUID target;
 
-    /**
-     * 那一只的 UUID。<b>身份看这个,{@link #entityId} 只是查找键。</b>
-     *
-     * <p>常驻任务会跨重启重放(存的是当时那次调用的 args),而运行期 id 每次开服重新发,
-     * 只认 id 的话重放之后她可能一声不吭地跟上另一只完全不相干的东西。UUID 是稳的,
-     * 对不上就是目标没了。
-     */
-    public final java.util.UUID targetUuid;
+    /** 点名的那只叫什么,给人看的;跟主人时为 null。 */
+    private final String targetName;
 
-    public FollowTaskRecord(ServerSource source, double keepWithin, Integer entityId,
-                            java.util.UUID targetUuid) {
+    public FollowTaskRecord(ServerSource source, double keepWithin, UUID target, String targetName) {
         super(source, NO_DEADLINE);
         this.keepWithin = keepWithin;
-        this.entityId = entityId;
-        this.targetUuid = targetUuid;
+        this.target = target;
+        this.targetName = targetName;
     }
 
-    @Override
     /**
      * 一行人话 —— 这是<b>给主人看的</b>:头顶气泡、面板、task status 印的都是它。
      * 工具 id 不写进来,需要它的地方(运行时状态的 tool 属性、派发回执)本来就有。
      */
+    @Override
     public String describe() {
-        String who = entityId == null ? "你" : "实体 " + entityId;
+        String who = target == null ? "你" : targetName;
         return "跟着" + who + ",保持 " + (int) keepWithin + " 米";
     }
 }

@@ -74,11 +74,12 @@ public final class TaskDispatch {
 
     /**
      * 命令派活的写法,规矩同上。记录的名字是给模型看的"组 动作"({@link ServerSource#taskName()}),不是能重放的
-     * 工具名,所以重放记的是这次调用本身({@link ServerSource#toolName()} 与 {@link ServerSource#args()}):
-     * 从 {@code command} 进来就重放那一行指令,从快捷工具进来就重放那次工具调用。
+     * 工具名,所以重放记的是源给的那次调用({@link ServerSource#replayTool()} 与 {@link ServerSource#replayArgs()}):
+     * 默认就是这次调用本身——从 {@code command} 进来就重放那一行指令,从快捷工具进来就重放那次工具调用;处理函数把
+     * 只在这一次开服里有效的写法换掉了的,重放换过的那一行({@link ServerSource#replayedWith})。
      */
     public static void setTask(ServerSource source, TaskRecord record) {
-        accept(source.companion(), record, source.toolName(), source.args(), source::reply);
+        accept(source.companion(), record, source.replayTool(), source.replayArgs(), source::reply);
     }
 
     /** @param replayTool 重启后重放用的工具名,与 {@code args} 一起就是那次调用 */

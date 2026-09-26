@@ -37,8 +37,8 @@ import java.util.stream.Collectors;
  *
  * <h2>现有的几种</h2>
  * 按用到的才开:整数(带给模型看的范围,或不设范围的方块坐标)、小数(带范围)、布尔、一个词(编号这类)、
- * 几个固定值之一、资源 id(配方、模型)、资源 id 或 {@code #标签}、方块或坐标格、一个值(模组给的名字,可能带空格或
- * 非英文,带空格时加引号)、余下整行(自由文字),以及把一种值组合成"一串"的 {@link #list}。要新的,就在这里加一种,
+ * 几个固定值之一、资源 id(配方、模型)、资源 id 或 {@code #标签}、方块或坐标格、一只实体、一个值(模组给的名字,可能带
+ * 空格或非英文,带空格时加引号)、余下整行(自由文字),以及把一种值组合成"一串"的 {@link #list}。要新的,就在这里加一种,
  * schema 与帮助跟着有。
  */
 public final class ArgType<T> {
@@ -57,6 +57,11 @@ public final class ArgType<T> {
             choices -> new LiteralMessage("expected one of " + choices));
     private static final SimpleCommandExceptionType NO_CELL = new SimpleCommandExceptionType(
             new LiteralMessage("expected a cell x,y,z or a box x1,y1,z1..x2,y2,z2, in whole numbers"));
+    private static final SimpleCommandExceptionType NO_ENTITY = new SimpleCommandExceptionType(
+            new LiteralMessage("expected an entity id as scan entities lists it, like 184"));
+    /** UUID 的规范写法:8-4-4-4-12 位十六进制。 */
+    private static final java.util.regex.Pattern UUID_TEXT = java.util.regex.Pattern.compile(
+            "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
 
     /** 标签的记号:原版标签文件里引用别的标签就这么写,{@code #minecraft:logs}。 */
     private static final char TAG = '#';
@@ -372,10 +377,37 @@ public final class ArgType<T> {
     }
 
     /**
+     * 一只实体({@link EntityRef}):{@code scan entities} 列出的运行期编号,或它的 UUID。帮助与报错只说编号——那是她的写法;
+     * UUID 是受理之后写进重放那一行的写法,读得回来就行。
+     */
+    public static ArgType<EntityRef> entity() {
+        ArgumentType<EntityRef> read = ArgType::readEntity;
+        String hint = "entity id as scan entities lists it";
+        return new ArgType<>(read, "entity", hint, Span.ONE, Item.STRING, ArgType::stringField,
+                literal(read, hint, UnaryOperator.identity()), EntityRef::written);
+    }
+
+    private static EntityRef readEntity(StringReader reader) throws CommandSyntaxException {
+        int start = reader.getCursor();
+        while (reader.canRead() && reader.peek() != ' ') {
+            reader.skip();
+        }
+        String raw = reader.getString().substring(start, reader.getCursor());
+        if (UUID_TEXT.matcher(raw).matches()) {
+            return new EntityRef(null, java.util.UUID.fromString(raw));
+        }
+        if (!raw.isEmpty() && raw.chars().allMatch(Character::isDigit) && raw.length() <= 9) {
+            return EntityRef.id(Integer.parseInt(raw));
+        }
+        reader.setCursor(start);
+        throw NO_ENTITY.createWithContext(reader);
+    }
+
+    /**
      * 一串同一种的值:命令行上是空格隔开的一个个值({@code iron_ore deepslate_iron_ore}),每个都按 {@code element} 的读法读,
      * 读到行尾或下一个标志({@code --} 打头)为止,所以它既能是动作的最后一个必填参数,也能是一个标志
      * ({@code --block_ids iron_ore deepslate_iron_ore --count 10});快捷工具里是一个 JSON 数组,每一项按 {@code element}
-     * 读 JSON 值的规矩读。至少一个。一项只能是一个值:整数、词、id、id 或标签、方块或坐标格、几个固定值之一、一个值。
+     * 读 JSON 值的规矩读。至少一个。一项只能是一个值:整数、词、id、id 或标签、方块或坐标格、一只实体、几个固定值之一、一个值。
      */
     public static <T> ArgType<List<T>> list(ArgType<T> element) {
         if (element.item == Item.NONE) {

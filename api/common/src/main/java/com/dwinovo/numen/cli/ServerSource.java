@@ -12,8 +12,9 @@ import java.util.function.Consumer;
  *
  * <p>{@link #toolName()} 与 {@link #args()} 是<b>这次调用本身</b>:从快捷工具进来是那个工具名和它的 JSON,
  * 从 {@code command} 工具进来是 {@code command} 和 {@code {"command": "…"}}。长活交给
- * {@code TaskDispatch.setTask(source, record)} 时,重启后的重放记的就是它们,走同一个入口再来一遍——不需要为命令另记
- * 一种配方。
+ * {@code TaskDispatch.setTask(source, record)} 时,重启后的重放记的默认就是它们({@link #replayTool()}、
+ * {@link #replayArgs()}),走同一个入口再来一遍——不需要为命令另记一种配方。参数里有只在这一次开服里有效的写法
+ * (实体的运行期编号)时,处理函数把它换成跨重启不变的写法,重放记的是换过的那一行({@link #replayedWith})。
  *
  * <p>它就是服务端那棵第 1 层树上的来源:解析到动作,处理函数直接拿到它——调用 id、任务名、回信口一路跟着这次调用走。
  *
@@ -31,14 +32,18 @@ public final class ServerSource implements CommandSource {
     private final Action action;
     /** 主人为这次调用点了头时,回执末尾交代的那一句;没问过主人为 null。 */
     private final String allowance;
+    /** 重启后重放的那次调用:工具名与它的 JSON 参数。 */
+    private final String replayTool;
+    private final JsonObject replayArgs;
 
     ServerSource(NumenPlayer companion, String toolName, String toolCallId, JsonObject args,
                  Consumer<String> reply) {
-        this(companion, toolName, toolCallId, args, reply, null, null);
+        this(companion, toolName, toolCallId, args, reply, null, null, toolName, args);
     }
 
     private ServerSource(NumenPlayer companion, String toolName, String toolCallId, JsonObject args,
-                         Consumer<String> reply, Action action, String allowance) {
+                         Consumer<String> reply, Action action, String allowance, String replayTool,
+                         JsonObject replayArgs) {
         this.companion = companion;
         this.toolName = toolName;
         this.toolCallId = toolCallId;
@@ -46,16 +51,40 @@ public final class ServerSource implements CommandSource {
         this.reply = reply;
         this.action = action;
         this.allowance = allowance;
+        this.replayTool = replayTool;
+        this.replayArgs = replayArgs;
     }
 
     /** 同一次调用,绑上解析到的动作。 */
     ServerSource running(Action action) {
-        return new ServerSource(companion, toolName, toolCallId, args, reply, action, allowance);
+        return new ServerSource(companion, toolName, toolCallId, args, reply, action, allowance, replayTool,
+                replayArgs);
     }
 
     /** 同一次调用,主人点了头:回执末尾交代 {@code allowance} 这一句。 */
     ServerSource allowed(String allowance) {
-        return new ServerSource(companion, toolName, toolCallId, args, reply, action, allowance);
+        return new ServerSource(companion, toolName, toolCallId, args, reply, action, allowance, replayTool,
+                replayArgs);
+    }
+
+    /**
+     * 同一次调用,重启后重放的是 {@code stable} 写回的那一行命令(经 {@code command} 工具,{@link CommandArgs#write} 按这个
+     * 动作的参数表写):处理函数把只在这一次开服里有效的值换成跨重启不变的写法(实体的运行期编号换成
+     * {@link EntityRef#of 它的 UUID}),交给 {@code TaskDispatch.setTask}。回执、任务名、调用 id 都还是这次调用的。
+     */
+    public ServerSource replayedWith(CommandArgs stable) {
+        return new ServerSource(companion, toolName, toolCallId, args, reply, action, allowance, CommandTool.NAME,
+                CommandTool.args(stable.write(action.path(), action.params())));
+    }
+
+    /** 重启后重放用的工具名:默认是这次调用进来时的那个。 */
+    public String replayTool() {
+        return replayTool;
+    }
+
+    /** 重启后重放用的 JSON 参数:默认是这次调用原样。 */
+    public JsonObject replayArgs() {
+        return replayArgs;
     }
 
     /** 这具身体。 */

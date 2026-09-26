@@ -3,13 +3,13 @@ package com.dwinovo.numen.core.tools.work;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.stream.Stream;
 
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
+import com.dwinovo.numen.cli.EntityRef;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.core.pathing.astar.PathCalcResult;
@@ -65,7 +65,7 @@ public final class MoveCommands {
     private static final Param<Integer> DISTANCE = Param.optional("distance",
             ArgType.integer(MIN_DISTANCE, MAX_DISTANCE), "How close to stay, in blocks.")
             .whenOmitted("stay within " + DEFAULT_DISTANCE);
-    private static final Param<Integer> ENTITY_ID = Param.optional("entity_id", ArgType.integer(),
+    private static final Param<EntityRef> ENTITY_ID = Param.optional("entity_id", ArgType.entity(),
             "Who to follow.")
             .values("a runtime entity id from scan_nearby_entities")
             .whenOmitted("follow your owner");
@@ -162,24 +162,27 @@ public final class MoveCommands {
      * 跟着,直到主人让她做别的({@code mine}、{@code work fish}……都会顶掉它)。
      *
      * <p>不给 {@code entity_id} 就是跟主人,给了就跟那一只——村民、狼、别的玩家都行。两者目标消失时的含义不同,
-     * 见 {@code FollowTaskRecord#entityId}。
+     * 见 {@code FollowTaskRecord#target}。点名的那只按 UUID 认:记录里存它,重启后重放的那一行也写它
+     * ({@link ServerSource#replayedWith}),运行期编号只在受理这一刻用来找到它。
      */
     private static void follow(ServerSource src, CommandArgs args) {
         NumenPlayer companion = src.companion();
         Integer asked = args.get(DISTANCE);
         int distance = asked == null ? DEFAULT_DISTANCE : Math.clamp(asked, MIN_DISTANCE, MAX_DISTANCE);
-        Integer entityId = args.get(ENTITY_ID);
-        UUID targetUuid = null;
-        if (entityId != null) {
-            Entity target = companion.serverLevel().getEntity(entityId);
-            if (target == null || target.isRemoved() || target == companion) {
-                src.reply(TaskResult.fail("no entity with id " + entityId
-                        + " is here — scan_nearby_entities first, ids do not survive restarts").toJson());
-                return;
-            }
-            targetUuid = target.getUUID();
+        EntityRef named = args.get(ENTITY_ID);
+        if (named == null) {
+            TaskDispatch.setTask(src, new FollowTaskRecord(src, distance, null, null));
+            return;
         }
-        TaskDispatch.setTask(src, new FollowTaskRecord(src, distance, entityId, targetUuid));
+        Entity target = named.in(companion.serverLevel());
+        if (target == null || target == companion) {
+            src.reply(TaskResult.fail("no entity with id " + named
+                    + " is here — scan_nearby_entities first, ids do not survive restarts").toJson());
+            return;
+        }
+        EntityRef stable = EntityRef.of(target);
+        TaskDispatch.setTask(src.replayedWith(args.with(ENTITY_ID, stable)),
+                new FollowTaskRecord(src, distance, target.getUUID(), target.getName().getString()));
     }
 
     /**

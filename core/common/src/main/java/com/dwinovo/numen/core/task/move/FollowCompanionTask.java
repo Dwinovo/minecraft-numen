@@ -63,7 +63,7 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
         if (target == null) {
             // 点名的目标没了:要放它跑一刻才收得了尾(canRun 返 false 的任务不会 tick,
             // 也就永远报不出去)。跟的是主人就单纯睡着等他回来。
-            return r.entityId != null;
+            return r.target != null;
         }
         double gap = companion.position().distanceTo(target.position());
         // 迟滞:走出 keepWithin + margin 才起步,回到 keepWithin 之内才停——
@@ -80,7 +80,7 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
     protected TaskState onTick() {
         Entity target = target(player);
         if (target == null) {
-            if (r.entityId == null) {
+            if (r.target == null) {
                 return TaskState.RUNNING;   // 主人下线:canRun 已经挡住了,这里只是防御
             }
             stopNav();
@@ -119,22 +119,18 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
     }
 
     /**
-     * 跟着谁。没点名就是主人;点名了就按 id 现查——每次都查,因为它随时可能死掉或者
+     * 跟着谁。没点名就是主人;点名了就按 UUID 现查——每次都查,因为它随时可能死掉或者
      * 走出加载范围,而那两件事对我们是同一个答案:不在了。
      *
      * <p>不同维度天然落进 null:{@code ServerLevel.getEntity} 只认自己这一层。
      */
     private Entity target(NumenPlayer companion) {
-        if (r.entityId == null) {
+        if (r.target == null) {
             var owner = companion.resolveOwnerPlayer();
             return owner == null || owner.level() != companion.level() ? null : owner;
         }
-        Entity e = ((ServerLevel) companion.level()).getEntity(r.entityId);
-        if (e == null || e.isRemoved() || e == companion) {
-            return null;
-        }
-        // id 对上还不够:重启之后同一个号可能发给了别的东西。
-        return r.targetUuid != null && !r.targetUuid.equals(e.getUUID()) ? null : e;
+        Entity e = ((ServerLevel) companion.level()).getEntity(r.target);
+        return e == null || e.isRemoved() ? null : e;
     }
 
     private NavGoal goal() {

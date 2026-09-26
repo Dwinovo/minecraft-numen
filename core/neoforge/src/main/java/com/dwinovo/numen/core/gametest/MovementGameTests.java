@@ -859,6 +859,45 @@ public class MovementGameTests {
                 .thenSucceed();
     }
 
+    /**
+     * 跟着一只点名的实体,重启后接回来认的还是那一只:落盘的重放那一行写的是它的 UUID,不是只在这一次开服里有效的
+     * 运行期编号(重启后同一个号会发给别的东西)。重启用"休眠 + 把落盘的那条记录放回去 + 复活"来演。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_terrain")
+    public static void a_restored_follow_finds_the_same_entity_by_uuid(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        var pig = net.minecraft.world.entity.EntityType.PIG.create(level);
+        BlockPos at = helper.absolutePos(new BlockPos(11, 2, 11));
+        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pig.setNoAi(true);
+        level.addFreshEntity(pig);
+        BlockPos spawn = helper.absolutePos(new BlockPos(3, 2, 3));
+        NumenPlayer first = com.dwinovo.numen.entity.Companions.summon(server, UUID.randomUUID(),
+                "gametest_uuid_follower", level, new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
+        UUID uuid = first.getUUID();
+        ToolRun follow = command(first, "move follow --entity_id " + pig.getId() + " --distance 3");
+        var registry = com.dwinovo.numen.entity.CompanionRegistry.get(server);
+        var recorded = registry.find(uuid);
+        helper.assertTrue(follow.task() != null, "follow was not accepted: " + follow.reply());
+        helper.assertTrue(recorded.taskArgs().contains("--entity_id " + pig.getUUID())
+                        && !recorded.taskArgs().contains("--entity_id " + pig.getId() + " "),
+                "the replay recipe names the pig by its runtime id, not its UUID: " + recorded.taskArgs());
+        com.dwinovo.numen.entity.Companions.dormant(server, first);
+        registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskTool(), recorded.taskArgs()));
+        NumenPlayer second = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
+        helper.assertTrue(second != null, "the body was not rebuilt");
+
+        helper.succeedWhen(() -> {
+            TaskRecord now = com.dwinovo.numen.task.CompanionTickDispatcher.currentTaskFor(uuid);
+            helper.assertTrue(now instanceof com.dwinovo.numen.core.task.move.FollowTaskRecord f
+                            && pig.getUUID().equals(f.target),
+                    "the replayed follow is not after the same pig: " + now);
+            com.dwinovo.numen.entity.Companions.dismiss(server, second);
+            pig.discard();
+        });
+    }
+
     /** 给了一个这里没有的实体编号:当场失败,叫她先扫一眼附近的实体。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
     public static void follow_an_unknown_entity_id_says_so(GameTestHelper helper) {
