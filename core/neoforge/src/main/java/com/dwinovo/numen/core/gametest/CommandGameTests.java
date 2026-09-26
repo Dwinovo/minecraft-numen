@@ -2,6 +2,8 @@ package com.dwinovo.numen.core.gametest;
 
 import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.cli.ArgType;
+import com.dwinovo.numen.cli.Authority;
+import com.dwinovo.numen.cli.OnHer;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.core.Constants;
@@ -25,6 +27,7 @@ import com.dwinovo.numen.task.TaskResult;
 import com.dwinovo.numen.task.TaskState;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.tree.ArgumentCommandNode;
 import com.mojang.brigadier.tree.CommandNode;
 import java.util.ArrayList;
@@ -36,6 +39,8 @@ import java.util.stream.Collectors;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.synchronization.ArgumentTypeInfos;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
@@ -87,10 +92,20 @@ public class CommandGameTests {
                                 TICKS)
                                 .example("gt_sync hold 5")));
         NumenPlugins.register(numen -> numen.registerCommands(TWIN,
-                "Test fixture: a group that shares its name with a native command.", g ->
-                        g.server("ping", "Say which layer answered.",
-                                (src, args) -> src.reply(TaskResult.ok("layer one").toJson()))
-                                .example(TWIN + " ping")));
+                "Test fixture: a group that shares its name with a native command.", g -> {
+                    g.server("ping", "Say which layer answered.",
+                                    (src, args) -> src.reply(TaskResult.ok("layer one").toJson()))
+                            .example(TWIN + " ping");
+                    g.server("mark", "Mark yourself through the native admin command.", (src, args) -> {
+                                OnHer her = src.onHer();
+                                List<String> words = her.next(TWIN + " mark");
+                                List<String> said = her.run(TWIN + " mark", words.get(0));
+                                src.reply(TaskResult.ok(String.join(",", words) + " | " + String.join(" ", said))
+                                        .toJson());
+                            })
+                            .authority(Authority.SERVER_ON_HER)
+                            .example(TWIN + " mark");
+                }));
         TaskFactory.register(HoldRecord.class, (body, record) -> new Hold(record));
     }
 
@@ -395,12 +410,7 @@ public class CommandGameTests {
     public static void command_one_name_on_both_layers_does_not_collide(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_twin_caller", new BlockPos(4, 2, 4), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_mc_twin_owner");
-        var server = helper.getLevel().getServer();
-        server.getCommands().getDispatcher().register(Commands.literal(TWIN).then(Commands.literal("ping")
-                .executes(ctx -> {
-                    ctx.getSource().sendSuccess(() -> Component.literal("layer zero"), false);
-                    return 1;
-                })));
+        registerNativeTwin(helper.getLevel().getServer());
         storeOf(owner).add(Verdict.Kind.ALLOW, Rule.parse("command(" + TWIN + ")"));
         ToolRun one = command(companion, TWIN + " ping");
         ToolRun zero = command(companion, "/" + TWIN + " ping");
@@ -409,6 +419,53 @@ public class CommandGameTests {
                 "layer 1 did not answer its own line: " + one.reply());
         helper.assertTrue(zero.succeeded() && message(zero.reply()).equals("ran /" + TWIN + " ping: layer zero"),
                 "layer 0 did not answer the native line: " + zero.reply());
+        cleanUp(helper, companion, owner);
+        helper.succeed();
+    }
+
+    /**
+     * 与夹具组同名的原生指令:{@code ping} 谁都能用;{@code mark <玩家> <词>} 是一条要 OP 2 级的管理指令,能对任何玩家
+     * 用,词的补全是 alpha、beta。
+     */
+    private static void registerNativeTwin(net.minecraft.server.MinecraftServer server) {
+        server.getCommands().getDispatcher().register(Commands.literal(TWIN)
+                .then(Commands.literal("ping").executes(ctx -> {
+                    ctx.getSource().sendSuccess(() -> Component.literal("layer zero"), false);
+                    return 1;
+                }))
+                .then(Commands.literal("mark").requires(source -> source.hasPermission(2))
+                        .then(Commands.argument("target", EntityArgument.player())
+                                .then(Commands.argument("word", StringArgumentType.word())
+                                        .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(
+                                                List.of("alpha", "beta"), builder))
+                                        .executes(ctx -> {
+                                            String target = EntityArgument.getPlayer(ctx, "target").getName()
+                                                    .getString();
+                                            String word = StringArgumentType.getString(ctx, "word");
+                                            ctx.getSource().sendSuccess(
+                                                    () -> Component.literal("marked " + target + " " + word), false);
+                                            return 1;
+                                        })))));
+    }
+
+    /**
+     * 借服务器的权威:夹具组的 {@code mark} 声明了 {@link Authority#SERVER_ON_HER},她没有 OP 也执行得了那条要 OP 的原生
+     * 管理指令,补全也读得到;作用对象是她自己,不问主人。她自己在第 0 层敲同一条,服务器不让。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_command")
+    public static void command_a_wrapper_borrows_the_servers_authority_only_on_her(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gt_mc_marked", new BlockPos(4, 2, 4), false);
+        NumenPlayer owner = presentOwner(helper, companion, "gt_mc_marker");
+        registerNativeTwin(helper.getLevel().getServer());
+        ToolRun wrapped = command(companion, TWIN + " mark");
+        ToolRun herself = command(companion, "/" + TWIN + " mark gt_mc_marked alpha");
+
+        helper.assertTrue(wrapped.succeeded()
+                        && message(wrapped.reply()).equals("alpha,beta | marked gt_mc_marked alpha"),
+                "the wrapper did not run on her with the server's authority: " + wrapped.reply());
+        helper.assertTrue(!herself.succeeded() && herself.task() == null,
+                "she ran the admin command with her own authority: " + herself.reply());
+        helper.assertTrue(ConsentDesk.of(companion).pending() == null, "the wrapper asked the owner");
         cleanUp(helper, companion, owner);
         helper.succeed();
     }
@@ -560,11 +617,17 @@ public class CommandGameTests {
         grantOp(companion);
         ToolRun give = command(companion, "/help give");
         ToolRun item = command(companion, "/help give @s minecraft:diamond_");
+        ToolRun groups = command(companion, "help");
         String said = message(give.reply());
         String items = message(item.reply());
-        Constants.LOG.info("[numen-cli] help give -> {}", said);
-        Constants.LOG.info("[numen-cli] help give @s minecraft:diamond_ -> {}", items);
+        String listed = message(groups.reply());
+        Constants.LOG.info("[numen-cli] /help give -> {}", said);
+        Constants.LOG.info("[numen-cli] /help give @s minecraft:diamond_ -> {}", items);
+        Constants.LOG.info("[numen-cli] help -> {}", listed);
 
+        helper.assertTrue(groups.succeeded() && listed.startsWith("<group> <action> [arguments]. Command groups:\n")
+                        && listed.contains("\n  task — "),
+                "help without the / is not layer 1's own listing: " + listed);
         helper.assertTrue(give.succeeded() && said.startsWith("ran /help give: /give <targets> <item> [<count>]\n"),
                 "the vanilla usage does not come first: " + said);
         helper.assertTrue(said.contains("\n  <targets> minecraft:entity (amount multiple, type players) — e.g. Player, ")
@@ -594,7 +657,7 @@ public class CommandGameTests {
         ToolRun action = command(companion, "gt_long lingre 40");
         String itemSaid = message(item.reply());
         String actionSaid = message(action.reply());
-        Constants.LOG.info("[numen-cli] give @s minecraft:dimond -> {}", itemSaid);
+        Constants.LOG.info("[numen-cli] /give @s minecraft:dimond -> {}", itemSaid);
         Constants.LOG.info("[numen-cli] gt_long lingre 40 -> {}", actionSaid);
 
         helper.assertTrue(!item.succeeded() && item.task() == null
