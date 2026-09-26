@@ -13,7 +13,7 @@ Phase 1 of the dragon route. You need diamond tools before you can mine obsidian
 - **Iron-or-better armor** worn (full iron is fine; diamond chestplate first if diamonds allow)
 - **Bow + 32 arrows** (the dragon's crystals must be shot; blazes are safest shot too)
 - **32+ cooked food** (cooked_beef / cooked_porkchop preferred)
-- **64+ cobblestone** kept in inventory at all times — navigation consumes it as scaffold when bridging/pillaring
+- **64+ cobblestone** kept in inventory at all times — navigation spends it as throwaway blocks when bridging/pillaring (your `throwaway` list)
 
 ## Tool tier chain
 

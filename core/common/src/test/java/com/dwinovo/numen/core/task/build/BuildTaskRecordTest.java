@@ -62,7 +62,7 @@ class BuildTaskRecordTest {
         try {
             net.minecraft.SharedConstants.tryDetectVersion();
             net.minecraft.server.Bootstrap.bootStrap();
-            com.dwinovo.numen.core.ScaffoldTagTestSupport.bind();
+            com.dwinovo.numen.core.ThrowawayTagTestSupport.bind();
             player = allocatePlayer();
             booted = true;
         } catch (Throwable t) {

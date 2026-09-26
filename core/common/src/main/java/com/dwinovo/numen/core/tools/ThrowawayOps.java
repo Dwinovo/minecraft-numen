@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.core.pathing.settings.ScaffoldMaterials;
+import com.dwinovo.numen.core.pathing.settings.ThrowawayBlocks;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -15,29 +15,25 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code build scaffold*} 的业务半边:增删改查那份垫路料清单。
+ * {@code throwaway} 组的业务半边:增、删、整份换、清空她的 throwaway 清单。看清单不在这里——现状挂在她的身体状态里
+ * ({@link ThrowawayBlocks#bodyState})。
  *
- * <p>改动都落到同一个出口——{@link ScaffoldMaterials#store}——然后回读落盘后的实际结果。
+ * <p>改动都落到同一个出口——{@link ThrowawayBlocks#store}——然后回读落盘后的实际结果。
  * 回执报的永远是<b>存进去之后读回来的</b>那份,不是请求的那份:认不出的 id 会被丢掉,
  * 模型得看见这件事,否则它会以为自己加上了。
  */
-public final class ScaffoldOps {
+public final class ThrowawayOps {
 
     /** 回执里最多列几种背包里没在清单上的方块——够模型挑,不至于把回执撑爆。 */
     private static final int MAX_SUGGESTIONS = 12;
 
-    /** 只看:当前清单与背包里还没进清单的方块。 */
-    public String read(NumenPlayer self) {
-        return report(self, ScaffoldMaterials.effectiveIds(self), "read");
-    }
-
     /** 追加这些,已在清单上的不重复。 */
     public String add(NumenPlayer self, List<String> blockIds) {
-        List<String> given = ScaffoldMaterials.normalize(blockIds);
+        List<String> given = ThrowawayBlocks.normalize(blockIds);
         if (given.isEmpty()) {
             return error(self, unknownIds("add"));
         }
-        List<String> merged = new ArrayList<>(ScaffoldMaterials.effectiveIds(self));
+        List<String> merged = new ArrayList<>(ThrowawayBlocks.effectiveIds(self));
         for (String id : given) {
             if (!merged.contains(id)) {
                 merged.add(id);
@@ -48,18 +44,18 @@ public final class ScaffoldOps {
 
     /** 从清单上拿掉这些。 */
     public String remove(NumenPlayer self, List<String> blockIds) {
-        List<String> given = ScaffoldMaterials.normalize(blockIds);
+        List<String> given = ThrowawayBlocks.normalize(blockIds);
         if (given.isEmpty()) {
             return error(self, unknownIds("remove"));
         }
-        List<String> kept = new ArrayList<>(ScaffoldMaterials.effectiveIds(self));
+        List<String> kept = new ArrayList<>(ThrowawayBlocks.effectiveIds(self));
         kept.removeAll(given);
         return changed(self, "remove", kept);
     }
 
     /** 整份换成这些。 */
     public String set(NumenPlayer self, List<String> blockIds) {
-        List<String> given = ScaffoldMaterials.normalize(blockIds);
+        List<String> given = ThrowawayBlocks.normalize(blockIds);
         if (given.isEmpty()) {
             return error(self, unknownIds("set"));
         }
@@ -73,8 +69,8 @@ public final class ScaffoldOps {
 
     /** 存下、报主人一句,回执报回读的那份。 */
     private String changed(NumenPlayer self, String verb, List<String> ids) {
-        ScaffoldMaterials.store(self, ids);
-        List<String> now = ScaffoldMaterials.effectiveIds(self);
+        ThrowawayBlocks.store(self, ids);
+        List<String> now = ThrowawayBlocks.effectiveIds(self);
         announceToOwner(self, verb, now);
         return report(self, now, verb);
     }
@@ -86,7 +82,7 @@ public final class ScaffoldOps {
         JsonArray list = new JsonArray();
         materials.forEach(list::add);
         root.add("materials", list);
-        root.addProperty("customised", !ScaffoldMaterials.storedIds(self).isEmpty());
+        root.addProperty("customised", !ThrowawayBlocks.storedIds(self).isEmpty());
 
         JsonArray carrying = new JsonArray();
         for (Map.Entry<String, Integer> e : notListed(self, materials).entrySet()) {
@@ -98,11 +94,9 @@ public final class ScaffoldOps {
         root.add("carrying_not_listed", carrying);
         // 空清单不是出错,是她选的——但后果得说清,否则下一次 goto 撞墙她不知道是自己关的。
         root.addProperty("message", materials.isEmpty()
-                ? "your scaffolding list is now EMPTY — pathfinding may not place a single block, "
+                ? "your throwaway list is now EMPTY — pathfinding may not place a single block, "
                         + "so any route needing a pillar, bridge or step up will fail until you add some back"
-                : verb.equals("read")
-                        ? "these are the blocks you are willing to spend on scaffolding"
-                        : "list updated — this is what pathfinding will spend from now on");
+                : "throwaway list updated — this is what pathfinding will spend from now on");
         return root.toString();
     }
 
@@ -121,7 +115,7 @@ public final class ScaffoldOps {
             if (stack.isEmpty() || !(stack.getItem() instanceof net.minecraft.world.item.BlockItem)) {
                 continue;
             }
-            String id = ScaffoldMaterials.idOf(stack.getItem());
+            String id = ThrowawayBlocks.idOf(stack.getItem());
             if (materials.contains(id)) {
                 continue;
             }
@@ -143,7 +137,7 @@ public final class ScaffoldOps {
             return;
         }
         owner.sendSystemMessage(Component.literal(
-                "🧱 " + self.getName().getString() + " 的垫路料(" + verb + "):" + shortList(now)));
+                "🧱 " + self.getName().getString() + " 的 throwaway 垫路料(" + verb + "):" + shortList(now)));
     }
 
     private static String shortList(List<String> ids) {
@@ -164,7 +158,7 @@ public final class ScaffoldOps {
         root.addProperty("success", false);
         root.addProperty("error", why);
         JsonArray list = new JsonArray();
-        ScaffoldMaterials.effectiveIds(self).forEach(list::add);
+        ThrowawayBlocks.effectiveIds(self).forEach(list::add);
         root.add("materials", list);
         return root.toString();
     }

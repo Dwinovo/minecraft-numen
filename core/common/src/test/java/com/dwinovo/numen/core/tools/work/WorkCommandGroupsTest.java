@@ -68,6 +68,25 @@ class WorkCommandGroupsTest {
         }
     }
 
+    /**
+     * build 组只剩原语、设计与 at/built 十六个动作,一页放得下;她赶路时愿意消耗的方块是自己的一组 throwaway,四个动作只改
+     * 清单,没有"看清单"的动作(现状在身体状态里)。
+     */
+    @Test
+    void buildFitsOnOnePageAndThrowawayIsItsOwnGroup() {
+        String build = run("build --help").get("message").getAsString();
+        List<String> actions = build.lines().filter(l -> l.startsWith("  build ")).map(l -> l.split(" ")[3]).toList();
+        assertEquals(List.of("set", "place", "line", "layer", "cylinder", "sphere", "copy", "new", "show", "step",
+                "insert", "drop", "designs", "delete", "at", "built"), actions, build);
+        assertTrue(!build.contains("(page 1 of") && !build.contains("scaffold") && !build.contains("throwaway"), build);
+        String throwaway = run("throwaway --help").get("message").getAsString();
+        assertEquals(List.of("add", "remove", "set", "clear"), throwaway.lines()
+                .filter(l -> l.startsWith("  throwaway ")).map(l -> l.split(" ")[3]).toList(), throwaway);
+        assertTrue(throwaway.startsWith("throwaway: Your own setting: "), throwaway);
+        JsonObject gone = run("build scaffold_add minecraft:dirt");
+        assertTrue(!gone.get("success").getAsBoolean(), "build 组里不再有垫路料的动作: " + gone);
+    }
+
     @Test
     void movingItemsInAGuiIsOneStepPerLine() {
         String use = run("use --help").get("message").getAsString();
@@ -81,7 +100,7 @@ class WorkCommandGroupsTest {
 
     @Test
     void eachGroupAnswersItsHelp() {
-        for (String group : List.of("move", "work", "fight", "build")) {
+        for (String group : List.of("move", "work", "fight", "build", "throwaway")) {
             JsonObject help = run(group + " --help");
             assertTrue(help.get("success").getAsBoolean(), help.toString());
             assertTrue(help.get("message").getAsString().startsWith(group + ": "), help.toString());

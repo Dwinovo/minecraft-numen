@@ -1,5 +1,5 @@
 package com.dwinovo.numen.core.pathing.moves.movements;
-import com.dwinovo.numen.core.pathing.settings.ScaffoldMaterials;
+import com.dwinovo.numen.core.pathing.settings.ThrowawayBlocks;
 import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
 import com.dwinovo.numen.core.pathing.moves.Input;
@@ -181,8 +181,8 @@ final class MovementPlacement {
     }
 
     // 选料只有一个出口:先按图纸挑精确材料(施工中的格子值得放对),挑不出就
-    // 退回通用垫路料。两条路最终都落到 selectThrowaway——它取料问的 ScaffoldMaterials.take
-    // 就是规划器"有料可垫"(ScaffoldMaterials.available)的那一处,于是"背包空着也能垫路"
+    // 退回通用垫路料。两条路最终都落到 selectThrowaway——它取料问的 ThrowawayBlocks.take
+    // 就是规划器"有料可垫"(ThrowawayBlocks.available)的那一处,于是"背包空着也能垫路"
     // 对两条路同时成立。
     //
     // 这条汇流是必需的,不是顺手:规划器认定"有料可垫",执行器若在某
@@ -206,11 +206,11 @@ final class MovementPlacement {
         return selectThrowaway(player, select);
     }
     /**
-     * 找垫路料并(可选)切到手上。取料只问 {@link ScaffoldMaterials#take}——规划器的"有没有料可垫"
-     * ({@link ScaffoldMaterials#available})与它读同一份清单、同一个找法,免耗材画像变出来的料也是它认下的那种。
+     * 找垫路料并(可选)切到手上。取料只问 {@link ThrowawayBlocks#take}——规划器的"有没有料可垫"
+     * ({@link ThrowawayBlocks#available})与它读同一份清单、同一个找法,免耗材画像变出来的料也是它认下的那种。
      */
     static boolean selectThrowaway(ServerPlayer player, boolean select) {
-        ScaffoldMaterials.Source source = ScaffoldMaterials.take(player);
+        ThrowawayBlocks.Source source = ThrowawayBlocks.take(player);
         if (source == null) {
             return false;
         }

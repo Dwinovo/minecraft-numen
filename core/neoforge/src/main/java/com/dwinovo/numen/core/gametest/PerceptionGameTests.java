@@ -25,7 +25,7 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 /**
  * 感知:{@code scan} 组({@code scan block}、{@code scan storage}、{@code scan around}、{@code scan entities}、
  * {@code scan blocks})、{@code status} 组({@code status self}、{@code status world}、{@code status owner}),以及
- * {@code inv recipe}、{@code scaffold_materials}。这些不动世界,测的是回执说的是不是眼前的真事;提升成快捷工具的
+ * {@code inv recipe}、{@code throwaway}(清单现状在 {@code status self} 的身体状态里)。这些不动世界,测的是回执说的是不是眼前的真事;提升成快捷工具的
  * 动作,同一刻从工具与从 {@code command} 读到的一字不差(同源)。
  */
 @GameTestHolder(Constants.MOD_ID)
@@ -216,42 +216,55 @@ public class PerceptionGameTests {
         });
     }
 
+    /** {@code status self} 的身体状态里,她的 throwaway 清单那一段(没有就是 null)。 */
+    private static String throwawayIn(ToolRun status) {
+        String body = JsonParser.parseString(status.reply()).getAsJsonObject().get("body_state").getAsString();
+        int from = body.indexOf("<throwaway>");
+        return from < 0 ? null : body.substring(from, body.indexOf("</throwaway>", from) + "</throwaway>".length());
+    }
+
     /**
-     * 垫脚材料是她自己的长期选择,跟着同伴名册落盘:加上木板就列在里面,删掉出厂就有的安山岩就不在了。
-     * 用和召唤同一条路生成的同伴——名册里没有她,清单就无处可存。
+     * throwaway 清单是她自己的长期选择,跟着同伴名册落盘:加上木板就列在里面,删掉出厂就有的安山岩就不在了。清单现状不靠
+     * 一个"看清单"的动作,就在她的身体状态里,{@code status self} 读得到。用和召唤同一条路生成的同伴——名册里没有她,清单就无处可存。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
-    public static void build_scaffold_adds_and_removes(GameTestHelper helper) {
+    public static void throwaway_adds_and_removes_and_shows_in_her_status(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos at = helper.absolutePos(new BlockPos(3, 2, 3));
         NumenPlayer companion = com.dwinovo.numen.entity.Companions.summon(level.getServer(), java.util.UUID.randomUUID(),
                 "gametest_mason", level, new net.minecraft.world.phys.Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
-        ToolRun added = command(companion, "build scaffold_add minecraft:oak_planks");
-        ToolRun deleted = command(companion, "build scaffold_remove minecraft:andesite");
-        ToolRun now = command(companion, "build scaffold");
+        ToolRun before = command(companion, "status self");
+        ToolRun added = command(companion, "throwaway add minecraft:oak_planks");
+        ToolRun deleted = command(companion, "throwaway remove minecraft:andesite");
+        ToolRun now = command(companion, "status self");
 
         helper.succeedWhen(() -> {
             helper.assertTrue(added.succeeded() && deleted.succeeded(), "add or remove failed: " + added.reply()
                     + " / " + deleted.reply());
-            helper.assertTrue(now.reply().contains("minecraft:oak_planks") && !now.reply().contains("minecraft:andesite"),
-                    "the list does not hold planks without andesite: " + now.reply());
+            String was = throwawayIn(before);
+            helper.assertTrue(was != null && was.startsWith("<throwaway>cobblestone, dirt, ") && was.contains("andesite"),
+                    "her status does not show the factory throwaway list: " + before.reply());
+            String list = throwawayIn(now);
+            helper.assertTrue(list != null && list.contains("oak_planks") && !list.contains("andesite"),
+                    "her status does not show planks without andesite: " + now.reply());
             com.dwinovo.numen.entity.Companions.dismiss(level.getServer(), companion);
         });
     }
 
     /**
-     * 整份换掉就只剩给的那几种;清空之后一格都不许垫,回执把后果说清;认不出的 id 一个都没有时如实说,清单不动。
+     * 整份换掉就只剩给的那几种;清空之后一格都不许垫,回执与状态都把后果说清;认不出的 id 一个都没有时如实说,清单不动。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
-    public static void build_scaffold_set_and_clear_replace_the_list(GameTestHelper helper) {
+    public static void throwaway_set_and_clear_replace_the_list(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos at = helper.absolutePos(new BlockPos(3, 2, 3));
         NumenPlayer companion = com.dwinovo.numen.entity.Companions.summon(level.getServer(), java.util.UUID.randomUUID(),
                 "gametest_resetter", level, new net.minecraft.world.phys.Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
-        ToolRun set = command(companion, "build scaffold_set minecraft:netherrack minecraft:basalt");
-        ToolRun unknown = command(companion, "build scaffold_set minecraft:no_such_block");
-        ToolRun afterUnknown = command(companion, "build scaffold");
-        ToolRun cleared = command(companion, "build scaffold_clear");
+        ToolRun set = command(companion, "throwaway set minecraft:netherrack minecraft:basalt");
+        ToolRun unknown = command(companion, "throwaway set minecraft:no_such_block");
+        ToolRun afterUnknown = command(companion, "status self");
+        ToolRun cleared = command(companion, "throwaway clear");
+        ToolRun afterClear = command(companion, "status self");
 
         helper.succeedWhen(() -> {
             JsonObject list = JsonParser.parseString(set.reply()).getAsJsonObject();
@@ -260,12 +273,15 @@ public class PerceptionGameTests {
                     "the list is not exactly what was set: " + set.reply());
             helper.assertTrue(!unknown.succeeded() && unknown.reply().contains("none of them is a block"),
                     "an unknown id is not reported: " + unknown.reply());
-            helper.assertTrue(afterUnknown.reply().contains("minecraft:netherrack"),
+            helper.assertTrue("<throwaway>netherrack, basalt</throwaway>".equals(throwawayIn(afterUnknown)),
                     "a refused set changed the list: " + afterUnknown.reply());
             JsonObject empty = JsonParser.parseString(cleared.reply()).getAsJsonObject();
             helper.assertTrue(cleared.succeeded() && empty.getAsJsonArray("materials").isEmpty()
                             && cleared.reply().contains("EMPTY"),
                     "clearing does not empty the list and say what it means: " + cleared.reply());
+            helper.assertTrue("<throwaway>empty: you place no blocks while moving</throwaway>"
+                            .equals(throwawayIn(afterClear)),
+                    "her status does not say the list is empty: " + afterClear.reply());
             com.dwinovo.numen.entity.Companions.dismiss(level.getServer(), companion);
         });
     }

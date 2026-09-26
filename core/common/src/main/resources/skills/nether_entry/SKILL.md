@@ -48,7 +48,7 @@ Notes:
 | Diamond sword + bow | 1 + 1 | Equip for combat only — hold the pickaxe while travelling (navigation digs with the held tool) |
 | Arrows | 32+ | `fight attack` spends them only on what it cannot reach (~6 per blaze); run low → carry extra food and let it melee |
 | Diamond pickaxe (+ iron backup) | 1 + 1 | Obsidian, digging |
-| Cobblestone | 64+ | Navigation scaffold — bridging lava lakes eats it |
+| Cobblestone | 64+ | Throwaway blocks for navigation — bridging lava lakes eats it; keep it on your `throwaway` list |
 | Gold helmet (worn) | 1 | Piglin truce; 5 gold ingots if you must craft one |
 | Flint & steel | 1 | Re-light the portal if a ghast blows it out |
 

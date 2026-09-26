@@ -1,5 +1,5 @@
 package com.dwinovo.numen.core.task.move;
-import com.dwinovo.numen.core.pathing.settings.ScaffoldMaterials;
+import com.dwinovo.numen.core.pathing.settings.ThrowawayBlocks;
 import com.dwinovo.numen.core.FailureType;
 
 import com.dwinovo.numen.task.TaskState;
@@ -581,7 +581,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         // 其实不是。
         String advice = "";
         if (nav.failType() != FailureType.TERRAIN_BLOCKED) {
-            advice = ScaffoldMaterials.shortageAdvice(player);
+            advice = ThrowawayBlocks.shortageAdvice(player);
             if (advice == null) {
                 advice = " Try a nearer waypoint or scan_blocks for a way through.";
             }

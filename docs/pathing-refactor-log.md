@@ -66,7 +66,7 @@ Args→MovementTools→MoveToTaskRecord(`Arrival` 枚举, 非 BLOCK kind 传参�
 | MovesProtectionTest (2, @Tag("mc")) | **真实 Moves.generate 端到端**：箱子破坏必 INF；同地形 dirt 无保护有限价、标 sacred 后必 INF。MC Bootstrap 在本环境可用（非跳过） |
 | 既有 12 类（引擎矩阵+forceBreak） | 回归护栏，零改动零失败 |
 
-已知测试缺口（诚实记录）：放置侧"盖住保护方块"的端到端（需 SCAFFOLDS tag 绑定，
+已知测试缺口（诚实记录）：放置侧"盖住保护方块"的端到端（需 THROWAWAY tag 绑定，
 无数据包加载的单测做不到）——由 NavContextSacredTest 纯层覆盖规则本身；
 `searchSatisfied` 持续 ARRIVED 依赖 NumenPlayer——游戏内验收覆盖。
 

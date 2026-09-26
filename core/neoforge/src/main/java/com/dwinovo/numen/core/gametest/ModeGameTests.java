@@ -178,7 +178,7 @@ public class ModeGameTests {
      * 同一条路。用名册里登记过的同伴——清单跟着名册落盘。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mode")
-    public static void creative_pillars_with_her_own_scaffold_list(GameTestHelper helper) {
+    public static void creative_pillars_with_her_own_throwaway_list(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos floor = helper.absolutePos(new BlockPos(3, 2, 3));
         NumenPlayer companion = com.dwinovo.numen.entity.Companions.summon(level.getServer(),
@@ -195,7 +195,7 @@ public class ModeGameTests {
         }
         companion.teleportTo(floor.getX() + 0.5, floor.getY(), floor.getZ() + 0.5);
         companion.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
-        com.dwinovo.numen.core.pathing.settings.ScaffoldMaterials.store(companion, List.of("minecraft:cobblestone"));
+        com.dwinovo.numen.core.pathing.settings.ThrowawayBlocks.store(companion, List.of("minecraft:cobblestone"));
         BlockPos target = helper.absolutePos(new BlockPos(12, 2, 12));
         TaskRecord record = call(companion, "goto", args(
                 "x", target.getX(),
@@ -204,7 +204,7 @@ public class ModeGameTests {
                 "alter", "natural")).task();
         helper.onEachTick(() -> {
             if (record.getResult() != null && !record.getResult().success()) {
-                helper.fail("she did not pillar out of the well with her own scaffolding: "
+                helper.fail("she did not pillar out of the well with her own throwaway blocks: "
                         + record.getResult().message());
             }
         });

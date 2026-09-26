@@ -15,20 +15,17 @@ import com.dwinovo.numen.core.build.Placement;
 import com.dwinovo.numen.core.build.Primitive;
 import com.dwinovo.numen.core.tools.BuildOps;
 import com.dwinovo.numen.core.tools.DesignOps;
-import com.dwinovo.numen.core.tools.ScaffoldOps;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
 
 /**
- * {@code build}:原语、设计、建成的房子,以及寻路拿来垫脚的那份方块清单。设计稿见 {@code docs/build-designs.md}。
+ * {@code build}:原语、设计、建成的房子。设计稿见 {@code docs/build-designs.md}。
  *
  * <ul>
  *   <li><b>原语</b>({@code set place line layer cylinder sphere copy}):不带 {@code --into} 当场执行(长活,交任务槽),
  *       带 {@code --into <设计>} 就把这一步记进设计的末尾(当场回)。两条路读的是同一份参数、画的是同一些格子。</li>
  *   <li><b>设计</b>({@code new show step insert drop designs delete}):改的是设计库里的一份文本,不动世界,当场回。</li>
  *   <li><b>{@code at}</b>:把一处变成设计或蓝图文件的样子——第一次是盖,之后是按差异改(长活);{@code built} 列出建成的房子。</li>
- *   <li><b>{@code scaffold*}</b>:只读,或改一份登记(不占身体,改完报主人一句)。</li>
  * </ul>
  */
 public final class BuildCommands {
@@ -56,16 +53,11 @@ public final class BuildCommands {
                     "Turn it clockwise about its origin, in degrees.")
             .values("0, 90, 180 or 270")
             .whenOmitted("keep it as drawn");
-    private static final Param<List<ResourceLocation>> BLOCKS = Param.required("blocks", ArgType.list(ArgType.id()),
-            "Block ids.");
-
-    private static final ScaffoldOps SCAFFOLD = new ScaffoldOps();
-
     private BuildCommands() {}
 
     public static void install(NumenApi numen) {
-        numen.registerCommands(GROUP, "Building: primitives you run now or collect into a design, building a design or "
-                + "blueprint file at a spot, and the blocks you spend as scaffolding.", BuildCommands::actions);
+        numen.registerCommands(GROUP, "Building: primitives you run now or collect into a design, and building a "
+                + "design or blueprint file at a spot.", BuildCommands::actions);
     }
 
     private static void actions(CommandGroup build) {
@@ -92,7 +84,6 @@ public final class BuildCommands {
                 .example("build built")
                 .note("Instant and read-only. A building whose design was deleted is still listed, and says so.")
                 .seeAlso("build at");
-        scaffold(build);
     }
 
     /** 七个原语:同一个处理函数,带 {@code --into} 记进设计,不带当场执行。 */
@@ -205,45 +196,5 @@ public final class BuildCommands {
     private static void at(ServerSource src, CommandArgs args) {
         BuildOps.at(src, args.get(SOURCE), new BlockPos(args.get(AT_X), args.get(AT_Y), args.get(AT_Z)),
                 Placement.quarters(args.get(AT_ROTATION)));
-    }
-
-    private static void scaffold(CommandGroup build) {
-        build.server("scaffold", "Your scaffolding list: the blocks pathfinding may spend to pillar up, bridge a "
-                        + "gap or step over a ledge.", (src, args) -> src.reply(SCAFFOLD.read(src.companion())))
-                .example("build scaffold")
-                .note("Instant and read-only. The reply carries the whole list and what you carry that is not on "
-                        + "it, so one call is enough to decide.")
-                .note("The list persists across sessions and is used by every move you make, reflexes such as "
-                        + "fleeing included.")
-                .seeAlso("build scaffold_add", "build scaffold_remove");
-        build.server("scaffold_add", "Add blocks you are willing to spend as scaffolding.",
-                        (src, args) -> src.reply(SCAFFOLD.add(src.companion(), ids(args))), BLOCKS)
-                .example("build scaffold_add minecraft:cobblestone minecraft:cobbled_deepslate")
-                .note("Anything listed WILL be consumed and never comes back: list what is junk here and now. "
-                        + "Cobblestone is junk in a mineshaft and precious in the End.")
-                .note("Instant; your owner is told what you changed.")
-                .seeAlso("build scaffold", "build scaffold_remove");
-        build.server("scaffold_remove", "Take blocks off your scaffolding list.",
-                        (src, args) -> src.reply(SCAFFOLD.remove(src.companion(), ids(args))), BLOCKS)
-                .example("build scaffold_remove minecraft:dirt")
-                .note("Instant; your owner is told what you changed.")
-                .seeAlso("build scaffold", "build scaffold_add");
-        build.server("scaffold_set", "Replace your whole scaffolding list.",
-                        (src, args) -> src.reply(SCAFFOLD.set(src.companion(), ids(args))), BLOCKS)
-                .example("build scaffold_set minecraft:netherrack")
-                .note("Instant; your owner is told what you changed. To allow nothing at all, use "
-                        + "`build scaffold_clear`.")
-                .seeAlso("build scaffold", "build scaffold_clear");
-        build.server("scaffold_clear", "Empty your scaffolding list, so no block may be spent.",
-                        (src, args) -> src.reply(SCAFFOLD.clear(src.companion())))
-                .example("build scaffold_clear")
-                .note("A real choice for when what you carry is earmarked (the dirt is for a build): she then "
-                        + "cannot pillar or bridge at all, and routes that need it fail until you add some back.")
-                .note("Instant; your owner is told what you changed.")
-                .seeAlso("build scaffold_add");
-    }
-
-    private static List<String> ids(CommandArgs args) {
-        return args.get(BLOCKS).stream().map(ResourceLocation::toString).toList();
     }
 }

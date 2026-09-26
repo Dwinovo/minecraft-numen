@@ -722,7 +722,7 @@ public final class PlayerNav {
             r.append("; ").append(why);
         }
         if (lastSearchContext != null && !lastSearchContext.hasThrowaway) {
-            r.append("; carrying no scaffolding blocks to bridge or pillar with");
+            r.append("; carrying none of your throwaway blocks to bridge or pillar with");
         }
         r.append(')');
         String reason = r.toString();

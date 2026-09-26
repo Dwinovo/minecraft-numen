@@ -17,9 +17,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-/** 垫路料清单的解析与归一。需要 MC 注册表。 */
+/** throwaway 清单的解析与归一。需要 MC 注册表。 */
 @Tag("mc")
-class ScaffoldMaterialsTest {
+class ThrowawayBlocksTest {
 
     private static boolean booted;
 
@@ -39,23 +39,23 @@ class ScaffoldMaterialsTest {
     @Test
     void aBareNameMeansTheVanillaBlock() {
         assumeTrue(booted);
-        assertEquals(Items.COBBLESTONE, ScaffoldMaterials.parse("cobblestone"));
-        assertEquals(Items.COBBLESTONE, ScaffoldMaterials.parse("minecraft:cobblestone"));
+        assertEquals(Items.COBBLESTONE, ThrowawayBlocks.parse("cobblestone"));
+        assertEquals(Items.COBBLESTONE, ThrowawayBlocks.parse("minecraft:cobblestone"));
     }
 
     @Test
     void surroundingSpaceAndCaseAreForgiven() {
         assumeTrue(booted);
-        assertEquals(Items.DEEPSLATE, ScaffoldMaterials.parse("  Minecraft:DeepSlate  "));
+        assertEquals(Items.DEEPSLATE, ThrowawayBlocks.parse("  Minecraft:DeepSlate  "));
     }
 
     @Test
     void somethingThatIsNotABlockIdIsRejectedRatherThanGuessed() {
         assumeTrue(booted);
-        assertNull(ScaffoldMaterials.parse("definitely_not_a_block"));
-        assertNull(ScaffoldMaterials.parse("not a resource location"));
-        assertNull(ScaffoldMaterials.parse(""));
-        assertNull(ScaffoldMaterials.parse(null));
+        assertNull(ThrowawayBlocks.parse("definitely_not_a_block"));
+        assertNull(ThrowawayBlocks.parse("not a resource location"));
+        assertNull(ThrowawayBlocks.parse(""));
+        assertNull(ThrowawayBlocks.parse(null));
     }
 
     // ==================== 归一 ====================
@@ -65,14 +65,14 @@ class ScaffoldMaterialsTest {
     void theGivenOrderIsKeptBecauseItIsThePickingOrder() {
         assumeTrue(booted);
         assertEquals(List.of("minecraft:stone", "minecraft:dirt", "minecraft:cobblestone"),
-                ScaffoldMaterials.normalize(List.of("stone", "dirt", "cobblestone")));
+                ThrowawayBlocks.normalize(List.of("stone", "dirt", "cobblestone")));
     }
 
     @Test
     void aRepeatedBlockIsListedOnceAtItsFirstPosition() {
         assumeTrue(booted);
         assertEquals(List.of("minecraft:dirt", "minecraft:stone"),
-                ScaffoldMaterials.normalize(
+                ThrowawayBlocks.normalize(
                         List.of("dirt", "minecraft:stone", "dirt", "minecraft:dirt")));
     }
 
@@ -81,35 +81,35 @@ class ScaffoldMaterialsTest {
     void unknownIdsAreDroppedAndTheRestSurvive() {
         assumeTrue(booted);
         assertEquals(List.of("minecraft:dirt"),
-                ScaffoldMaterials.normalize(Arrays.asList("nope:whatever", "dirt", null, "")));
+                ThrowawayBlocks.normalize(Arrays.asList("nope:whatever", "dirt", null, "")));
     }
 
     @Test
     void nothingUsableNormalisesToAnEmptyList() {
         assumeTrue(booted);
-        assertTrue(ScaffoldMaterials.normalize(List.of("nope:whatever")).isEmpty());
-        assertTrue(ScaffoldMaterials.normalize(null).isEmpty());
+        assertTrue(ThrowawayBlocks.normalize(List.of("nope:whatever")).isEmpty());
+        assertTrue(ThrowawayBlocks.normalize(null).isEmpty());
     }
 
     // ==================== 出厂默认 ====================
 
     /**
      * 出厂默认是一条<b>标签引用</b>,不是展开后的清单。这样整合包改
-     * {@code numen:scaffolds} 就能改掉所有新同伴的起点,而静态常量读不到数据包——
+     * {@code numen:throwaway} 就能改掉所有新同伴的起点,而静态常量读不到数据包——
      * 存引用、用时再解析,才躲得开那个时序。清单内容本身由 datagen 那份定义,
      * 它的判据(不含重力方块、不含有功能的方块)在 {@code ModItemTagData} 那边钉。
      */
     @Test
     void theFactoryDefaultIsATagReferenceSoPacksCanChangeIt() {
         assumeTrue(booted);
-        assertEquals(List.of("#numen:scaffolds"), ScaffoldMaterials.factoryDefaultIds());
+        assertEquals(List.of("#numen:throwaway"), ThrowawayBlocks.factoryDefaultIds());
     }
 
     /** 标签引用必须真的解析得开——认不出就等于所有新同伴一件垫路料都没有。 */
     @Test
     void thatReferenceResolvesToRealItems() {
         assumeTrue(booted);
-        String ref = ScaffoldMaterials.factoryDefaultIds().get(0);
+        String ref = ThrowawayBlocks.factoryDefaultIds().get(0);
         assertNotNull(InitTag.parseRef(net.minecraft.core.registries.Registries.ITEM, ref), ref);
     }
 }

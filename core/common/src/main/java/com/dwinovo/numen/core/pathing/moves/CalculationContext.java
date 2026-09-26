@@ -3,7 +3,7 @@ package com.dwinovo.numen.core.pathing.moves;
 import java.util.List;
 
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
-import com.dwinovo.numen.core.pathing.settings.ScaffoldMaterials;
+import com.dwinovo.numen.core.pathing.settings.ThrowawayBlocks;
 import com.dwinovo.numen.core.pathing.spec.CellClass;
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.permission.Action;
@@ -56,7 +56,7 @@ public class CalculationContext {
     public final BlockGetter view;
     public final ChunkLoadedTest loadedTest;
     public final ToolSet toolSet;
-    /** 有没有她认可的垫路料可放({@link ScaffoldMaterials#available}),已与规格和总开关折在一起。 */
+    /** 有没有她认可的垫路料可放({@link ThrowawayBlocks#available}),已与规格和总开关折在一起。 */
     public final boolean hasThrowaway;
     /** 快捷栏有水桶且不在下界。 */
     public final boolean hasWaterBucket;
@@ -111,11 +111,11 @@ public class CalculationContext {
         this.spec = spec;
         this.gate = gate;
         this.toolSet = new ToolSet(player);
-        // 有没有料可垫与执行器切料问同一处(ScaffoldMaterials.available / source):免耗材画像(创造)
+        // 有没有料可垫与执行器切料问同一处(ThrowawayBlocks.available / source):免耗材画像(创造)
         // 清单不空就算有,执行时伸手进创造物品栏取清单里的料——不然空手创造同伴会挖坑出不来。
         // 规格与总开关同折:不改地形的路线没有耗材这回事,放置成本处处 INF
         this.hasThrowaway = spec.alter().mayAlter() && settings.allowPlace
-                && ScaffoldMaterials.available(player);
+                && ThrowawayBlocks.available(player);
         this.hasWaterBucket = settings.allowWaterBucketFall
                 && hotbarHasWaterBucket(player)
                 && player.level().dimension() != Level.NETHER;

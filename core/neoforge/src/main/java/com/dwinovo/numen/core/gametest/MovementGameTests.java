@@ -674,7 +674,7 @@ public class MovementGameTests {
 
     /** 允许改地形,但身上没有能垫的方块:上不去,回执说清楚缺的是垫脚的方块。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
-    public static void goto_up_a_tower_without_scaffold_says_so(GameTestHelper helper) {
+    public static void goto_up_a_tower_without_throwaway_says_so(GameTestHelper helper) {
         BlockPos top = obsidianTower(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_grounded", new BlockPos(3, 2, 7), false);
         ToolRun walk = call(companion, "goto", args("x", top.getX(), "y", top.getY(), "z", top.getZ(),
@@ -682,7 +682,7 @@ public class MovementGameTests {
 
         helper.succeedWhen(() -> {
             helper.assertTrue(walk.done(), "goto has not finished");
-            helper.assertTrue(!walk.succeeded() && walk.outcome().contains("scaffolding"),
+            helper.assertTrue(!walk.succeeded() && walk.outcome().contains("throwaway"),
                     "the failure does not say she has nothing to pillar with: " + walk.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });

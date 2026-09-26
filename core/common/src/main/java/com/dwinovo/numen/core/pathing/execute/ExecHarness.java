@@ -1,5 +1,5 @@
 package com.dwinovo.numen.core.pathing.execute;
-import com.dwinovo.numen.core.pathing.settings.ScaffoldMaterials;
+import com.dwinovo.numen.core.pathing.settings.ThrowawayBlocks;
 import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
 import java.util.EnumMap;
@@ -437,7 +437,7 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
      * {@code allowInventory} 开启才换进当前选中格。
      */
     public boolean ensureThrowawayInHotbar() {
-        var acceptable = ScaffoldMaterials.of(player);
+        var acceptable = ThrowawayBlocks.of(player);
         return ensureInHotbar(stack -> !stack.isEmpty() && acceptable.contains(stack.getItem()));
     }
 

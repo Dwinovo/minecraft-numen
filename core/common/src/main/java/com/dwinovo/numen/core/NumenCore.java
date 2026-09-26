@@ -111,6 +111,8 @@ public final class NumenCore {
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.WorkCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.inventory.GearCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.BuildCommands::install);
+        // throwaway 组连同它挂进身体状态的那一段
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.ThrowawayCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.interact.UseCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.inventory.InvCommands::install);
         // 引擎的 task 命令组,和插件走同一扇门;它提升出的 task_stop 就在这里进表,工具表的顺序不变。

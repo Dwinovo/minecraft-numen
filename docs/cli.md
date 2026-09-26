@@ -575,7 +575,8 @@ gt_long lingre 40
 | C 长活 | goto、follow、plan_route | `move goto`、`move follow`、`move route` | goto |
 | | mine、collect_items、fish | `work mine`、`work collect`、`work fish` | mine |
 | | attack | `fight attack` | |
-| | blueprint、blueprint_read、scaffold_materials、build | `build` 组(本批,见下) | |
+| | blueprint、blueprint_read、build | `build` 组(本批,见下) | |
+| | scaffold_materials | `throwaway` 组(见下) | |
 
 - A 批给参数类型补了小数、几个固定值之一、id 或 `#标签`、一串值(附录 B 的几种之外);C 批让一串值读到下一个标志为止,
   所以它也能当标志(`--avoid_break a b --count 3`),并补了方块或坐标格类型(路线规格的禁令)。
@@ -686,6 +687,29 @@ shed#1: built 18/22 block(s); placed 0, cleared 0 (left 4 cell(s) alone because 
 
 **持久化**:设计是文件,跨世界复用,每次从盘上读(GameTest 验:写下的几步读回来一字不差);房子在世界存档里,存下的那份
 读回来还是同一栋、同样的格子。设计删掉,房子照样在 `build built` 里,写明它的设计已删。
+
+### throwaway:她赶路时愿意消耗的方块
+
+寻路往上垫柱、过沟搭桥时愿意消耗掉的那份方块清单,是她自己的一项设置,单独一组 `throwaway`(名字取 Baritone 的
+acceptableThrowawayItems;不叫 scaffold,免得和原版的脚手架方块混在一起)。代码、命令、状态、存档用同一个词:
+`ThrowawayBlocks`(清单与取料)、`ThrowawayOps`(改清单)、`ThrowawayCommands`(登记)、出厂标签 `numen:throwaway`、
+名册存档键 `throwaway`。
+
+```
+throwaway add minecraft:cobblestone minecraft:cobbled_deepslate
+throwaway remove minecraft:dirt
+throwaway set minecraft:netherrack
+throwaway clear
+```
+
+- 四个动作只改清单,当场回,改完报主人一句;回执是存进去之后读回来的那份,外加背包里还没进清单的方块。
+- 没有"看清单"的动作:清单现状是身体状态的一段(`ThrowawayBlocks.bodyState`,和命令组在同一处装上),每轮挂进
+  `<runtime_state>`,`status self` 照抄。样子是 `<throwaway>cobblestone, dirt, cobbled_deepslate, …</throwaway>`(原版 id
+  省掉命名空间,模组的带着),清空了是 `<throwaway>empty: you place no blocks while moving</throwaway>`。
+- 名册里旧存档的清单在 `scaffold` 键下(出厂标签那时叫 `#numen:scaffolds`)。读档时认它一次,存档只写 `throwaway`:
+  不读的话她自己定过的清单(包括清空)会悄悄变回出厂默认。整合包往 `numen:scaffolds` 里加过方块的,要改加到
+  `numen:throwaway`。
+- `build` 组去掉原来的五个 `scaffold*` 动作后是十六个动作,组帮助一页放得下。
 
 ### transfer 改成一次一步
 

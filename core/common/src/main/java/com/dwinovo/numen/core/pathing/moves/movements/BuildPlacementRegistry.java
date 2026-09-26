@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.pathing.moves.movements;
 
-import com.dwinovo.numen.core.pathing.settings.ScaffoldMaterials;
+import com.dwinovo.numen.core.pathing.settings.ThrowawayBlocks;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.build.BuildValidity;
@@ -168,7 +168,7 @@ public final class BuildPlacementRegistry {
     /** 施工现场挑不出精确材料时退回通用垫路料:从哪儿取与规划器同一处,只多筛一道"这一格放得下"。 */
     private static boolean selectGenericThrowaway(ServerPlayer player, BlockHitResult hit,
                                                   float yaw, float pitch, boolean select) {
-        ScaffoldMaterials.Source source = ScaffoldMaterials.source(player,
+        ThrowawayBlocks.Source source = ThrowawayBlocks.source(player,
                 (stack, hand) -> wouldPlaceAny(player, stack, hit, yaw, pitch, hand));
         if (source == null) {
             return false;

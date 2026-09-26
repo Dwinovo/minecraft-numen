@@ -27,33 +27,33 @@ import java.util.Set;
 import java.util.function.BiPredicate;
 
 /**
- * 她愿意拿来垫路的方块——<b>每个同伴一份,落盘</b>。垫柱子、搭桥、铺台阶都从这里取料,
- * 反射(逃跑/脱困/摔落自救)走的也是这一份。
+ * 她的 throwaway 清单:赶路时愿意消耗掉的方块(名字取 Baritone 的 acceptableThrowawayItems)——<b>每个同伴一份,落盘</b>。
+ * 垫柱子、搭桥、铺台阶都从这里取料,反射(逃跑/脱困/摔落自救)走的也是这一份。这是她自己的设置,由
+ * {@code throwaway} 命令组增删;清单现状每轮挂在她的身体状态里({@link #bodyState})。
  *
  * <h2>为什么不是一份硬编码清单</h2>
  * "什么东西是垃圾"没法预先枚举:模组世界里她背包里堆的石头我们一个都不认识,而同一块
  * 圆石在矿洞里是垃圾、背到末地就是唯一的垫路料。所以清单归她自己管——模型看着背包和
- * 当下的处境用 {@code build scaffold_add} 这一系列命令增删,断料时的回执会把候选一并递到它面前。
+ * 当下的处境用 {@code throwaway add} 这一组命令增删,断料时的回执会把候选一并递到它面前。
  *
  * <h2>空表就是空表</h2>
- * 清空之后她一块都不垫——那是模型可以做的决定(背包里那些泥土留着盖房子,别拿去填坑),
- * 后果可见也可撤回。"没设过"由 {@link CompanionRegistry#DEFAULT_SCAFFOLD} 在读取时兜住,
- * 不靠空表兼职表达。
+ * 清空之后她一块都不垫——那是模型可以做的决定(背包里那些泥土留着盖房子),后果可见也可撤回。
+ * "没设过"由 {@link CompanionRegistry#DEFAULT_THROWAWAY} 在读取时兜住,不靠空表兼职表达。
  *
  * <h2>出厂默认的选料判据</h2>
  * 遍地都是、没有功能、<b>放下去不会掉</b>——重力方块(沙/砂砾)一个不要,垫在半空会直接
  * 落下去。清单本身跟着同伴落盘,住在 {@link CompanionRegistry}。
  */
-public final class ScaffoldMaterials {
+public final class ThrowawayBlocks {
 
-    private ScaffoldMaterials() {}
+    private ThrowawayBlocks() {}
 
     /** 出厂默认的 id 形式。 */
     public static List<String> factoryDefaultIds() {
-        return CompanionRegistry.DEFAULT_SCAFFOLD;
+        return CompanionRegistry.DEFAULT_THROWAWAY;
     }
 
-    /** 这个同伴实际认可的垫路料。清空过就是空表——她垫不了任何东西,如她所愿。 */
+    /** 这个同伴实际认可的 throwaway 方块。清空过就是空表——她垫不了任何东西,如她所愿。 */
     public static List<Item> of(ServerPlayer player) {
         Set<Item> out = new LinkedHashSet<>();   // 标签之间会重叠,去重且保序
         for (String entry : storedIds(player)) {
@@ -64,13 +64,13 @@ public final class ScaffoldMaterials {
 
     /** 同上,但给出 id 形式(工具回执用)。 */
     public static List<String> effectiveIds(ServerPlayer player) {
-        return of(player).stream().map(ScaffoldMaterials::idOf).toList();
+        return of(player).stream().map(ThrowawayBlocks::idOf).toList();
     }
 
     /** 存储里那份原样。同伴还没落盘(无头测试的空壳身体)时给出厂默认。 */
     public static List<String> storedIds(ServerPlayer player) {
         CompanionRegistry.Entry entry = entry(player);
-        return entry == null ? CompanionRegistry.DEFAULT_SCAFFOLD : entry.scaffoldMaterials();
+        return entry == null ? CompanionRegistry.DEFAULT_THROWAWAY : entry.throwaway();
     }
 
     /**
@@ -87,7 +87,7 @@ public final class ScaffoldMaterials {
         if (entry == null) {
             return;
         }
-        registry.put(player.getUUID(), entry.withScaffoldMaterials(normalize(ids)));
+        registry.put(player.getUUID(), entry.withThrowaway(normalize(ids)));
     }
 
     /**
@@ -151,7 +151,7 @@ public final class ScaffoldMaterials {
     // ==================== 从哪儿取料 ====================
 
     /**
-     * 垫路料此刻从哪儿取。规划器问"有没有料可垫"({@link #available})、执行器切料去放、施工现场退回通用垫料,
+     * throwaway 方块此刻从哪儿取。规划器问"有没有料可垫"({@link #available})、执行器切料去放、施工现场退回通用垫料,
      * 问的都是 {@link #source} 这一处——各写一份时,规划器会端出一条执行器选不出料的路,重新规划的输入
      * 分毫未变,那条路就一遍遍采纳即夭折。
      *
@@ -257,9 +257,9 @@ public final class ScaffoldMaterials {
     public static String shortageAdvice(ServerPlayer player) {
         List<Item> accepted = of(player);
         if (accepted.isEmpty()) {
-            return " Your scaffolding list is EMPTY, so pathfinding may not place a single block —"
+            return " Your throwaway list is EMPTY, so pathfinding may not place a single block —"
                     + " no pillaring, bridging or stepping up. That was your own call; put blocks"
-                    + " back with build scaffold_add if this route needs them.";
+                    + " back with `throwaway add` if this route needs them.";
         }
         var inv = player.getInventory();
         Map<String, Integer> spare = new LinkedHashMap<>();
@@ -281,15 +281,34 @@ public final class ScaffoldMaterials {
                 .map(e -> e.getKey() + "×" + e.getValue())
                 .reduce((a, b) -> a + ", " + b)
                 .orElse("");
-        StringBuilder out = new StringBuilder(" You are carrying NONE of your scaffolding materials (")
+        StringBuilder out = new StringBuilder(" You are carrying NONE of your throwaway blocks (")
                 .append(String.join(", ", effectiveIds(player)))
                 .append("), so pathfinding could not pillar, bridge or step anywhere.");
         if (carrying.isEmpty()) {
             return out.append(" Mine some of those blocks first.").toString();
         }
         return out.append(" You ARE carrying: ").append(carrying)
-                .append(". Add what you are willing to spend with build scaffold_add, or go mine "
+                .append(". Add what you are willing to spend with `throwaway add`, or go mine "
                         + "something already on the list.").toString();
+    }
+
+    /**
+     * 身体状态里的那一段:{@code <throwaway>cobblestone, dirt, create:limestone</throwaway>}。每轮挂进
+     * {@code <runtime_state>},{@code status self} 也照抄,清单现状只从这里读。原版的 id 省掉命名空间(命令里照样认),
+     * 模组的带着;清空了就说清后果。只随清单(或标签内容)变,不会每刻都推包。
+     */
+    public static String bodyState(ServerPlayer player) {
+        List<Item> items = of(player);
+        if (items.isEmpty()) {
+            return "<throwaway>empty: you place no blocks while moving</throwaway>";
+        }
+        StringBuilder out = new StringBuilder("<throwaway>");
+        for (int i = 0; i < items.size(); i++) {
+            ResourceLocation id = BuiltInRegistries.ITEM.getKey(items.get(i));
+            out.append(i == 0 ? "" : ", ")
+                    .append(id.getNamespace().equals(ResourceLocation.DEFAULT_NAMESPACE) ? id.getPath() : id.toString());
+        }
+        return out.append("</throwaway>").toString();
     }
 
     /** 没有世界的空壳身体(无头测试、构造中途)一律当"没定制过"——回落出厂默认,不炸。 */

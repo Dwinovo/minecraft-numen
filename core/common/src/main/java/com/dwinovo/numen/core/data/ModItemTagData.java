@@ -96,9 +96,9 @@ public final class ModItemTagData {
                 .add(Items.RABBIT_STEW)
                 .add(Items.SWEET_BERRIES);
 
-        // Cheap, common blocks the pathfinder may expend as scaffolding —
+        // The factory throwaway list: cheap, common blocks the pathfinder may spend —
         // never the player's valuables. Packs can extend this tag freely.
-        tags.tag(InitTag.SCAFFOLDS)
+        tags.tag(InitTag.THROWAWAY)
                 .add(Items.COBBLESTONE)
                 .add(Items.DIRT)
                 .add(Items.COBBLED_DEEPSLATE)
@@ -110,8 +110,8 @@ public final class ModItemTagData {
                 .add(Items.TUFF)
                 .add(Items.DEEPSLATE)
                 // Dirt-family variants players actually hand the companion ("here,
-                // 128 dirt") — a stack of coarse dirt must count as scaffolding,
-                // or hasScaffold=false silently disables every pillar/bridge move.
+                // 128 dirt") — a stack of coarse dirt must count as throwaway,
+                // or hasThrowaway=false silently disables every pillar/bridge move.
                 .add(Items.COARSE_DIRT)
                 .add(Items.ROOTED_DIRT)
                 .add(Items.PODZOL)

@@ -70,7 +70,7 @@ class ProtectionPinsTest {
         try {
             net.minecraft.SharedConstants.tryDetectVersion();
             net.minecraft.server.Bootstrap.bootStrap();
-            com.dwinovo.numen.core.ScaffoldTagTestSupport.bind();
+            com.dwinovo.numen.core.ThrowawayTagTestSupport.bind();
             player = allocatePlayer();
             booted = true;
         } catch (Throwable t) {
@@ -298,7 +298,7 @@ class ProtectionPinsTest {
     @Test
     void factoryDoorRuleHoldsInfinite() {
         // 出厂表 break(#minecraft:doors)。标签内容运行时来自数据包,无头引导不加载数据包,
-        // 所以手动把石头绑进门标签——同 ScaffoldTagTestSupport 的路子,钉的是"标签行生效"。
+        // 所以手动把石头绑进门标签——同 ThrowawayTagTestSupport 的路子,钉的是"标签行生效"。
         BlockPos stone = SRC.north();
         FakeView v = floored();
         v.set(stone, Blocks.STONE.defaultBlockState());

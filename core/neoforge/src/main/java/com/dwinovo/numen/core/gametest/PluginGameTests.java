@@ -49,10 +49,10 @@ public class PluginGameTests {
         helper.succeedWhen(() -> {
             helper.assertTrue(reply.reply() != null, "get_self_status has not replied");
             var status = com.google.gson.JsonParser.parseString(reply.reply()).getAsJsonObject();
-            // 身体状态片段以引擎渲染的 <worn> 打头,插件登记的片段接在后面
+            // 身体状态片段以引擎渲染的 <worn> 打头,之后按登记顺序接:core 自己的 <throwaway>,最后登记的这个插件的片段
             helper.assertTrue(status.has("body_state") && status.get("body_state").getAsString().startsWith("<worn>")
                             && status.get("body_state").getAsString()
-                            .endsWith("</worn><gametest_charm>wearing a gametest charm</gametest_charm>"),
+                            .endsWith("</throwaway><gametest_charm>wearing a gametest charm</gametest_charm>"),
                     "get_self_status leaves out what the plugin reads off her body: " + reply.reply());
             var kept = outbox.peek(self).entries().stream()
                     .filter(e -> e.type().equals("gametest_charm_changed")).toList();
