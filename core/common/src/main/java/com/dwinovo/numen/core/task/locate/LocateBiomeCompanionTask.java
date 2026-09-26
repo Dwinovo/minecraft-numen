@@ -28,7 +28,7 @@ import java.util.Map;
 import java.util.function.Predicate;
 
 /**
- * Goal for {@code locate_biome}: find the nearest instance of a biome (by id)
+ * Goal for {@code locate biome}: find the nearest instance of a biome (by id)
  * or biome family (by {@code #tag}) in the entity's CURRENT dimension —
  * vanilla {@code /locate biome} semantics, time-sliced across ticks.
  *
@@ -114,8 +114,8 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
             TagKey<Biome> tag = TagKey.create(Registries.BIOME, tagId);
             if (registry.get(tag).isEmpty()) {
                 failReason = isStructureTag(sl, tagId)
-                        ? arg + " is a STRUCTURE tag, not a biome tag — call "
-                                + "locate_structure(structure=\"" + arg + "\") instead"
+                        ? arg + " is a STRUCTURE tag, not a biome tag — use "
+                                + "locate structure " + arg + " instead"
                         : "unknown biome tag: " + arg + " — try a biome id like "
                                 + "minecraft:warped_forest, or tags like #minecraft:is_forest";
                 return null;
@@ -125,8 +125,8 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
         ResourceLocation id = ResourceLocation.tryParse(arg);
         if (id == null || registry.get(ResourceKey.create(Registries.BIOME, id)).isEmpty()) {
             if (id != null && isStructureId(sl, id)) {
-                failReason = arg + " is a STRUCTURE, not a biome — call "
-                        + "locate_structure(structure=\"" + arg + "\") instead";
+                failReason = arg + " is a STRUCTURE, not a biome — use "
+                        + "locate structure " + arg + " instead";
                 return null;
             }
             String suggestion = IdSuggest.closest(
@@ -251,6 +251,6 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
 
     @Override
     protected String cancelledMessage() {
-        return "locate_biome interrupted";
+        return r.getToolName() + " interrupted";
     }
 }

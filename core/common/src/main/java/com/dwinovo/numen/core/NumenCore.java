@@ -105,8 +105,7 @@ public final class NumenCore {
         // the tool list cache stably across requests).
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.MoveToTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.AttackTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.locate.LocateStructureTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.locate.LocateBiomeTool());
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.locate.LocateCommands::install);
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.CollectItemsTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.FishTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.FollowTool());

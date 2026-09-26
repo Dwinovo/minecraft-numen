@@ -421,8 +421,6 @@ public final class ModLanguageData {
         adder.add("numen.tool.interact_at", "Interact");
         adder.add("numen.tool.interact_entity", "Interact entity");
         adder.add("numen.tool.load_skill", "Load skill");
-        adder.add("numen.tool.locate_biome", "Locate biome");
-        adder.add("numen.tool.locate_structure", "Locate structure");
         adder.add("numen.tool.look_around", "Look around");
         adder.add("numen.tool.lookup_recipe", "Look up recipe");
         adder.add("numen.tool.attack", "Attack");
@@ -860,8 +858,6 @@ public final class ModLanguageData {
         adder.add("numen.tool.interact_at", "交互");
         adder.add("numen.tool.interact_entity", "实体交互");
         adder.add("numen.tool.load_skill", "加载技能");
-        adder.add("numen.tool.locate_biome", "定位群系");
-        adder.add("numen.tool.locate_structure", "定位结构");
         adder.add("numen.tool.look_around", "环顾四周");
         adder.add("numen.tool.lookup_recipe", "查配方");
         adder.add("numen.tool.attack", "攻击");

@@ -16,12 +16,12 @@ Phase 2 of the dragon route. Build a portal, ignite it, walk through. Actual Net
 
 Mine it from a **ruined portal** — a structure that's just standing obsidian, no lava-casting. This is the only route: casting your own (water over lava) leaves every fresh obsidian block touching lava, and I refuse to mine fluid-adjacent blocks (it would flood or burn the dig), so a cast wall is unminable by design.
 
-1. `locate_structure("#minecraft:ruined_portal")` — searches the whole family and returns the nearest. **Skip `ruined_portal_ocean`** (underwater) if the result names it; re-search or pick a land one — I can't dive.
+1. `locate structure #minecraft:ruined_portal` — searches the whole family and returns the nearest. **Skip `ruined_portal_ocean`** (underwater) if the result names it; re-search or pick a land one — I can't dive.
 2. `equip_item(diamond_pickaxe)` (obsidian needs diamond), `goto` the portal coordinates.
 3. `mine(obsidian, 10)` — it digs the frame's obsidian on its own. ~9.4s per block is normal.
 
 Notes:
-- A portal's frame mixes plain **obsidian** with **crying obsidian** (purple particles). Crying obsidian is a *different block and useless for a portal frame* — `mine(obsidian)` already ignores it, so a single portal may yield fewer than 10. If you come up short, `locate_structure("#minecraft:ruined_portal")` again for the next nearest and top up.
+- A portal's frame mixes plain **obsidian** with **crying obsidian** (purple particles). Crying obsidian is a *different block and useless for a portal frame* — `mine(obsidian)` already ignores it, so a single portal may yield fewer than 10. If you come up short, `locate structure #minecraft:ruined_portal` again for the next nearest and top up.
 - If `mine` reports obsidian that "can't be broken here" with fluid beside it, that portal sits in a wet/lava pocket — relocate to a cleaner one rather than fighting the fluid.
 
 ## Portal build

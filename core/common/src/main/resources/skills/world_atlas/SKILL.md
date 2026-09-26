@@ -1,11 +1,11 @@
 ---
 name: world_atlas
-description: Every searchable structure and biome in MC 26.1 — exact registry ids with a one-line picture of each (what's there, dangers, loot), the classic id traps, family tags, and the structure-vs-biome routing rule. Load before locate_structure / locate_biome.
+description: Every searchable structure and biome in MC 26.1 — exact registry ids with a one-line picture of each (what's there, dangers, loot), the classic id traps, family tags, and the structure-vs-biome routing rule. Load before locate structure / locate biome.
 ---
 
 # Skill: world_atlas
 
-`locate_structure` / `locate_biome` take EXACT registry ids (or `#tags`),
+`locate structure` / `locate biome` take EXACT registry ids (or `#tags`),
 current dimension only. A guessed id costs a failed round — this is the
 COMPLETE catalog (all 34 structures + all 65 biomes, extracted from the
 26.1 registry): if an id isn't here, it doesn't exist in vanilla.
@@ -99,7 +99,7 @@ COMPLETE catalog (all 34 structures + all 65 biomes, extracted from the
 
 ## 分流口诀
 
-- **结构**(有箱子/房间的建筑)→ `locate_structure`;**群系**(一片地形气候)→ `locate_biome`;
+- **结构**(有箱子/房间的建筑)→ `locate structure`;**群系**(一片地形气候)→ `locate biome`;
 - 拿错类别没关系,失败消息会给修正调用;拼错 id 会收到 "did you mean…";
 - 只搜**当前维度**:fortress/bastion 在下界,end_city 在末地,其余主世界;
 - 数据包/模组加的注册表 id 同样合法。

@@ -33,7 +33,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Goal for {@code locate_structure}: find the nearest instance of a structure
+ * Goal for {@code locate structure}: find the nearest instance of a structure
  * (by id) or structure family (by {@code #tag}) in the entity's CURRENT
  * dimension — vanilla {@code /locate structure} semantics, but <b>time-sliced
  * across ticks instead of one synchronous call</b>.
@@ -187,8 +187,8 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
             var set = registry.get(TagKey.create(Registries.STRUCTURE, tagId));
             if (set.isEmpty()) {
                 failReason = isBiomeTag(sl, tagId)
-                        ? arg + " is a BIOME tag, not a structure tag — call "
-                                + "locate_biome(biome=\"" + arg + "\") instead"
+                        ? arg + " is a BIOME tag, not a structure tag — use "
+                                + "locate biome " + arg + " instead"
                         : "unknown structure tag: " + arg + " — try #minecraft:village "
                                 + "or an id like minecraft:fortress";
                 return null;
@@ -201,8 +201,8 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
                 : registry.get(ResourceKey.create(Registries.STRUCTURE, id));
         if (holder.isEmpty()) {
             if (id != null && isBiomeId(sl, id)) {
-                failReason = arg + " is a BIOME, not a structure — call "
-                        + "locate_biome(biome=\"" + arg + "\") instead";
+                failReason = arg + " is a BIOME, not a structure — use "
+                        + "locate biome " + arg + " instead";
                 return null;
             }
             String suggestion = IdSuggest.closest(
@@ -355,7 +355,7 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
 
     @Override
     protected String cancelledMessage() {
-        return "locate_structure interrupted";
+        return r.getToolName() + " interrupted";
     }
 
     /** How far outward (blocks) the random-spread spirals have covered so far. */

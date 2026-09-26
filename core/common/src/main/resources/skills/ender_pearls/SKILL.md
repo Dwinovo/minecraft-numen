@@ -27,7 +27,7 @@ Phase 4 of the dragon route. You need **12 pearls** for up to 12 eyes of ender (
 | Overworld at night | Low | Plains/desert, flat sight-lines; `status world` to confirm darkness |
 | Soul sand valley | Medium | Slow walking (soul sand), watch for ghasts |
 
-**Finding the forest: `locate_biome(biome="minecraft:warped_forest")` — never wander-and-scan.** It answers with coordinates and distance up to ~6400 blocks out. The answer is accurate to ~64 blocks: `goto` the x/z, then `scan_nearby_entities` to confirm endermen (or `scan_blocks` for `warped_nylium`). Not found → travel a few thousand blocks and retry, same as `locate_structure`.
+**Finding the forest: `locate biome minecraft:warped_forest` — never wander-and-scan.** It answers with coordinates and distance up to ~6400 blocks out. The answer is accurate to ~64 blocks: `goto` the x/z, then `scan_nearby_entities` to confirm endermen (or `scan_blocks` for `warped_nylium`). Not found → travel a few thousand blocks and retry, same as `locate structure`.
 
 ## Hunting loop
 

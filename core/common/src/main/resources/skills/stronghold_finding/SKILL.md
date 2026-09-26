@@ -1,11 +1,11 @@
 ---
 name: stronghold_finding
-description: Craft eyes of ender, find the stronghold with the locate_structure tool (no eye-throwing needed), reach the portal room, and fill the 12 frames via inspect_block + interact_at.
+description: Craft eyes of ender, find the stronghold with the locate structure command (no eye-throwing needed), reach the portal room, and fill the 12 frames via inspect_block + interact_at.
 ---
 
 # Skill: stronghold_finding
 
-Phase 5 of the dragon route. With rods and pearls in hand you craft eyes, walk straight to the stronghold — **`locate_structure("minecraft:stronghold")` replaces the whole throw-and-triangulate ritual** — and activate the End portal.
+Phase 5 of the dragon route. With rods and pearls in hand you craft eyes, walk straight to the stronghold — **`locate structure minecraft:stronghold` replaces the whole throw-and-triangulate ritual** — and activate the End portal.
 
 ## Done when
 
@@ -19,11 +19,11 @@ Both are 2×2/shapeless recipes — `lookup_recipe` for the layout, then `transf
 1. `blaze_powder` — each blaze rod grinds into 2 powder.
 2. `ender_eye` (×12) — 1 blaze powder + 1 ender pearl each.
 
-12 is the worst case; frames generate pre-filled at 10% each (~1–2 typically), so spares may remain. **Never throw eyes to navigate** — `locate_structure("minecraft:stronghold")` is free and exact; eyes are only for the frames.
+12 is the worst case; frames generate pre-filled at 10% each (~1–2 typically), so spares may remain. **Never throw eyes to navigate** — `locate structure minecraft:stronghold` is free and exact; eyes are only for the frames.
 
 ## Step 2 — go there
 
-1. `locate_structure("minecraft:stronghold")` → coordinates, direction, distance (often 1000–2500 blocks; the journey is the long part).
+1. `locate structure minecraft:stronghold` → coordinates, direction, distance (often 1000–2500 blocks; the journey is the long part).
 2. `goto(x, ~60, z)` to cross the surface, then `goto(x, 30, z)` — navigation digs down on its own. Strongholds sit around Y 6–50.
 3. Hit stone bricks → you're inside. `scan_blocks(end_portal_frame)` to find the portal room; no match → explore corridors with `goto` and rescan. (Stronghold corridors are stone_bricks / mossy_stone_bricks / cracked_stone_bricks.)
 
