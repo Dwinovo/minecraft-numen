@@ -480,7 +480,7 @@ public final class EntityAgentLoop {
     }
 
     /**
-     * 主人要求清空上下文。与 {@link #requestCompact} 同一走法:急件进队列,闲时执行,
+     * 主人要求清空上下文。与 {@link #requestCompact} 同一走法:进队列,闲时执行,
      * 忙的时候也按得下。空闲时当场发生,调用返回时已经清完。
      *
      * @return 拒绝的理由;{@code null} = 已排上(空闲时当场清完)
@@ -491,7 +491,7 @@ public final class EntityAgentLoop {
             Constants.LOG.info("[numen-entity#{}] manual clear refused: {}", entityUuid, problem);
             return problem;
         }
-        // clear 在类型表里恒为急件,发送方不另标。
+        // 清空是控制命令:不叫醒她、不走熟度,循环闲下来自己执行。
         loop.push(List.of(new EventQueue.Entry(EventTypes.CLEAR, "清空上下文", System.currentTimeMillis(), false)));
         return null;
     }
@@ -520,11 +520,10 @@ public final class EntityAgentLoop {
      * @return 取走的事件拼段;这次没取到返回 null(继续等或如实说没有)
      */
     public String takeEventsForExternal(boolean urgentOnly) {
-        java.util.function.Predicate<EventQueue.Entry> text =
-                e -> EventTypes.get(e.type()).delivery() != EventTypes.Delivery.CONTROL;
-        if (urgentOnly && queue.entries().stream().noneMatch(e -> e.urgent() && text.test(e))) return null;
+        // 急件只可能是文本:控制命令在队列的急件规则里就不急
+        if (urgentOnly && !queue.hasUrgent()) return null;
         long now = System.currentTimeMillis();
-        List<EventQueue.Entry> taken = queue.takeIf(text, now);
+        List<EventQueue.Entry> taken = queue.takeText(now);
         if (taken.isEmpty()) return null;
         List<String> parts = EventQueue.render(taken, now);
         return parts.isEmpty() ? null : String.join("\n\n", parts);
@@ -698,7 +697,7 @@ public final class EntityAgentLoop {
             Constants.LOG.info("[numen-entity#{}] manual compact refused: {}", entityUuid, problem);
             return problem;
         }
-        // compact 在类型表里恒为急件,发送方不另标。
+        // 整理是控制命令:不叫醒她、不走熟度,循环闲下来自己执行。
         loop.push(List.of(new EventQueue.Entry(EventTypes.COMPACT, "整理记忆", System.currentTimeMillis(), false)));
         return null;
     }

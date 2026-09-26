@@ -50,7 +50,7 @@ public final class GoalSteward {
 
     /**
      * @param name             日志里认这只同伴用的名字
-     * @param inbox            只读:队里还排着东西就先不判——那些本来就会开起一次 run
+     * @param inbox            只读:队里还排着会叫醒她的条目就先不判——那些本来就会开起一次 run
      * @param runtimeState     这一刻的运行期状态({@code <runtime_state>}),评估器对着它判身体事实
      * @param bodyOnFiniteTask 身体手上有一件会结束的活(常驻的跟随不算)——那时不催
      * @param persist          目标落盘(跨重进游戏活着)
@@ -147,10 +147,11 @@ public final class GoalSteward {
      * <p>判定<b>不由她自己做</b>——另开一次干净的调用(不带对话历史、不带人设、不带工具),
      * 只看条件、身体事实和最近几句。执行的人和判定的人分开,她才骗不了自己。
      *
-     * <p>队列里还有别的排着就先不判——那些本来就会开起一次 run,那次做完时再说。
+     * <p>队列里还排着会叫醒她的条目就先不判——那些本来就会开起一次 run,那次做完时再说。旁听的话不算:
+     * 它们开不起 run,等它们就是等别的事,目标就停在这儿了;控制命令同样不算,它们执行完不会开 run。
      */
     private void steer() {
-        if (goal == null || loop.hold() != null || !inbox.isEmpty() || judging != null) {
+        if (goal == null || loop.hold() != null || inbox.hasWaking() || judging != null) {
             return;
         }
         // 身体还在干活就别催。

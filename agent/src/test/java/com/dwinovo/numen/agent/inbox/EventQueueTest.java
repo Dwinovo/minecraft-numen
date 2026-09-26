@@ -144,17 +144,16 @@ class EventQueueTest {
     // ---- 先到先得 ----
 
     @Test
-    void takeWhileStopsAtTheFirstEntryItCannotHandle() {
+    void aCallTakesNothingPastTheFirstControlEntry() {
         // 有些条目到了安全点要做的不是"往 user 消息里添一段话"——整理记忆就是。
-        // 排空按顺序走到它就停下:前面的先走完,它留在队首等下一次。
+        // 调模型取件走到它就停下:前面的先走完,它和它后面的留着等它执行。
         EventQueue q = fresh();
         q.push(EventTypes.TASK_FINISHED, "<event>她挨打了</event>", T0, false);
         q.push(EventTypes.QUERY, "<query>回来</query>", T0, true);
         q.push(EventTypes.COMPACT, "整理记忆", T0, true);
         q.push(EventTypes.QUERY, "<query>整理完再说这句</query>", T0, true);
 
-        List<EventQueue.Entry> head =
-                q.takeWhile(e -> !EventTypes.COMPACT.equals(e.type()), T0);
+        List<EventQueue.Entry> head = q.takeForCall(false, T0);
 
         assertEquals(2, head.size(), "整理之前排着的两条先走");
         assertEquals(2, q.size(), "整理和它后面那句原样留着");
@@ -162,19 +161,20 @@ class EventQueueTest {
     }
 
     @Test
-    void takeWhileReturnsNothingWhenTheHeadDoesNotMatch() {
+    void aCallTakesNothingWhenTheHeadIsAControlEntry() {
         // 队首就是整理 —— 说明轮到它了,一条文本都不该被顺出去
         EventQueue q = fresh();
         q.push(EventTypes.COMPACT, "整理记忆", T0, true);
         q.push(EventTypes.QUERY, "<query>回来</query>", T0, true);
 
-        assertTrue(q.takeWhile(e -> !EventTypes.COMPACT.equals(e.type()), T0).isEmpty());
-        assertTrue(q.takeWhile(null, T0).isEmpty());
+        assertFalse(q.wantsAnswer(), "墙之前没有要她回应的");
+        assertTrue(q.takeForCall(false, T0).isEmpty());
+        assertTrue(q.takeForCall(true, T0).isEmpty(), "本来就要调模型也不越过墙");
         assertEquals(2, q.size(), "什么都没取走");
     }
 
     @Test
-    void takeIfSkipsWhatItDoesNotWantAndLeavesItQueued() {
+    void takeTextSkipsControlEntriesAndLeavesThemQueued() {
         // 外接模型取件:队首的整理是对内脑说的,留着;排在它后面的话照取,不能被它挡住
         EventQueue q = fresh();
         q.push(EventTypes.COMPACT, "整理记忆", T0, false);
@@ -182,20 +182,19 @@ class EventQueueTest {
         q.push(EventTypes.CLEAR, "清空上下文", T0, false);
         q.push(EventTypes.TASK_FINISHED, "<event>她挨打了</event>", T0, false);
 
-        List<EventQueue.Entry> text = q.takeIf(
-                e -> EventTypes.get(e.type()).delivery() != EventTypes.Delivery.CONTROL, T0);
+        List<EventQueue.Entry> text = q.takeText(T0);
 
         assertEquals(List.of(EventTypes.QUERY, EventTypes.TASK_FINISHED),
                 text.stream().map(EventQueue.Entry::type).toList(), "文本全取走,按入队顺序");
         assertEquals(List.of(EventTypes.COMPACT, EventTypes.CLEAR),
                 q.entries().stream().map(EventQueue.Entry::type).toList(), "控制条目原样留着,先后不变");
-        assertTrue(q.takeIf(e -> EventTypes.TASK_FINISHED.equals(e.type()), T0).isEmpty(), "一条都不要就什么都不动");
+        assertTrue(q.takeText(T0).isEmpty(), "只剩控制条目就什么都不动");
         assertEquals(2, q.size());
     }
 
     @Test
-    void takeAheadTakesOnlyBeforeTheBarrierAndSkipsWhatItDoesNotWant() {
-        // 循环在 run 的边界取插话:接续留着不挡路,控制条目之后的等它执行完
+    void aCallThatHappensAnywayLeavesFollowUpsAndEverythingPastTheWall() {
+        // 工具结果等着回应的边界:插话照取,接续留着不挡路,控制条目之后的等它执行完
         EventQueue q = fresh();
         q.push(EventTypes.TASK_FINISHED, "<event>挖到铁了</event>", T0, false);
         q.push(EventTypes.GOAL, "<goal-progress>还差</goal-progress>", T0, false);
@@ -203,17 +202,15 @@ class EventQueueTest {
         q.push(EventTypes.CLEAR, "清空上下文", T0, false);
         q.push(EventTypes.QUERY, "<query>清完再说这句</query>", T0, false);
 
-        List<EventQueue.Entry> steer = q.takeAhead(
-                e -> EventTypes.get(e.type()).delivery() == EventTypes.Delivery.CONTROL,
-                e -> EventTypes.get(e.type()).delivery() == EventTypes.Delivery.STEER, T0);
+        List<EventQueue.Entry> steer = q.takeForCall(true, T0);
 
         assertEquals(List.of("<event>挖到铁了</event>", "<query>先回来</query>"),
-                steer.stream().map(EventQueue.Entry::text).toList(), "屏障之前的插话按入队顺序取走");
+                steer.stream().map(EventQueue.Entry::text).toList(), "墙之前的插话按入队顺序取走");
         assertEquals(List.of(EventTypes.GOAL, EventTypes.CLEAR, EventTypes.QUERY),
-                q.entries().stream().map(EventQueue.Entry::type).toList(), "接续、屏障和屏障之后的原样留着");
-        assertTrue(q.takeAhead(e -> EventTypes.CLEAR.equals(e.type()),
-                e -> EventTypes.TASK_FINISHED.equals(e.type()), T0).isEmpty(), "一条都没取就什么都不动");
-        assertEquals(3, q.size());
+                q.entries().stream().map(EventQueue.Entry::type).toList(), "接续、墙和墙之后的原样留着");
+        assertEquals(List.of(EventTypes.GOAL), q.takeForCall(false, T0).stream().map(EventQueue.Entry::type).toList(),
+                "本来要停时,只剩接续就是它引起这次调用");
+        assertEquals(2, q.size());
     }
 
     @Test
@@ -223,7 +220,8 @@ class EventQueueTest {
         for (int i = 0; i < 3; i++) q.push(EventTypes.COMPACT, "整理记忆", T0, true);
         q.push(EventTypes.QUERY, "<query>回来</query>", T0, true);
 
-        assertEquals(3, q.takeWhile(e -> EventTypes.COMPACT.equals(e.type()), T0).size());
+        assertEquals(3, q.nextControls().size(), "只看不取");
+        assertEquals(3, q.takeControls().size());
         assertEquals(1, q.size(), "后面那句还排着");
     }
 
@@ -438,8 +436,29 @@ class EventQueueTest {
         q.push(EventTypes.QUERY, "<query>回来吃饭</query>", T0 + 1, false);
         assertTrue(q.shouldDrain(T0 + 1, 1), "主人说话了,这一轮该开");
 
-        List<String> out = EventQueue.render(q.takeEntries(T0 + 1), T0 + 1);
+        List<String> out = EventQueue.render(q.takeForCall(false, T0 + 1), T0 + 1);
         assertTrue(String.join("\n", out).contains("[阿岚] 我去东边"), "旁听到的话要跟着这一轮进去");
+        assertTrue(q.isEmpty(), "循环取件时带走了它,不会躺在队里越攒越多");
+    }
+
+    /** 本来就要调模型的边界(工具结果等着回应)上,旁听同样捎带进去。 */
+    @Test
+    void overheardTalkRidesAlongOnACallThatHappensAnyway() {
+        EventQueue q = fresh();
+        q.push(EventTypes.TALK, "<event kind=\"talk\">[阿岚] 我去东边</event>", T0, false);
+
+        assertEquals(List.of(EventTypes.TALK), q.takeForCall(true, T0).stream().map(EventQueue.Entry::type).toList());
+    }
+
+    /** 本来要停的时候,只剩旁听不是再调一次模型的理由——那就是同伴唤醒了同伴。 */
+    @Test
+    void overheardTalkAloneCausesNoCall() {
+        EventQueue q = fresh();
+        q.push(EventTypes.TALK, "<event kind=\"talk\">[阿岚] 在吗</event>", T0, false);
+
+        assertFalse(q.wantsAnswer());
+        assertTrue(q.takeForCall(false, T0).isEmpty(), "不调模型就一条都不取");
+        assertEquals(1, q.size(), "留着等别的事叫醒她");
     }
 
     /** 队里只剩旁听时不是"空",只是不值得开轮——别让它被当成没有东西可取。 */
@@ -449,5 +468,44 @@ class EventQueueTest {
         q.push(EventTypes.TALK, "<event kind=\"talk\">[阿岚] 在吗</event>", T0, false);
         assertFalse(q.isEmpty());
         assertFalse(q.shouldDrain(T0, 1));
+        assertFalse(q.hasWaking(), "它开不起一次 run");
+    }
+
+    // ---- 控制条目不叫醒她,也就谈不上急 ----
+
+    @Test
+    void controlEntriesAreNeverUrgentNoMatterWhatTheSenderSays() {
+        EventQueue q = fresh();
+        java.util.concurrent.atomic.AtomicInteger woken = new java.util.concurrent.atomic.AtomicInteger();
+        q.addUrgentListener(woken::incrementAndGet);
+
+        assertFalse(q.push(EventTypes.CLEAR, "清空上下文", T0, true));
+        assertFalse(q.push(EventTypes.COMPACT, "整理记忆", T0, true));
+
+        assertFalse(q.hasUrgent());
+        assertFalse(q.shouldDrain(T0, EventQueue.MIN_LEVEL), "控制命令不是开 run 的理由");
+        assertFalse(q.hasWaking());
+        assertEquals(0, woken.get(), "外接大脑的长轮询不为它醒");
+    }
+
+    /** 盘上的急件标记是写下它的那一版定的:读回来同样过入队那一条规则。 */
+    @Test
+    void entriesReadBackPassTheSameUrgencyRuleAsPush() {
+        List<EventQueue.Entry> disk = List.of(
+                new EventQueue.Entry(EventTypes.TALK, "<event kind=\"talk\">[阿岚] 在吗</event>", T0, true),
+                new EventQueue.Entry(EventTypes.CLEAR, "清空上下文", T0 + 1, true),
+                new EventQueue.Entry(EventTypes.TASK_FINISHED, "<event>任务失败了</event>", T0 + 2, true),
+                new EventQueue.Entry(EventTypes.QUERY, "<query>在吗</query>", T0 + 3, false));
+        EventQueue q = new EventQueue(new EventQueue.Journal() {
+            @Override public List<EventQueue.Entry> load() {
+                return disk;
+            }
+
+            @Override public void save(List<EventQueue.Entry> entries) {
+            }
+        });
+
+        assertEquals(List.of(false, false, true, true), q.entries().stream().map(EventQueue.Entry::urgent).toList(),
+                "旁听与控制命令不急;世界的事照发送方;主人的话恒急");
     }
 }

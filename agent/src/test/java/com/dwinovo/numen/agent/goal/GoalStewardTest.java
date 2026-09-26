@@ -106,11 +106,52 @@ class GoalStewardTest extends LoopHarness {
         goals.set(goal);
         loop.push(List.of(new EventQueue.Entry(EventTypes.QUERY, "<query>先过来</query>", 0, false)));
         control(EventTypes.COMPACT);   // run 里主人按了整理:它排在队首,这次 run 说完就走
+        loop.push(List.of(new EventQueue.Entry(EventTypes.QUERY, "<query>整理完再说这句</query>", 0, false)));
         model.last().say("来了");
 
         assertFalse(model.calls.stream().anyMatch(this::isEvaluation),
-                "队里还排着东西,那本来就会接着发生,做完再判");
+                "队里还排着要她回应的话,那本来就会开起下一次 run,做完再判");
         assertEquals(com.dwinovo.numen.agent.loop.Phase.COMPACT, loop.status().phase());
+    }
+
+    @Test
+    void aQueuedControlEntryDoesNotStallTheGoal() {
+        GoalState goal = GoalState.of("挖 64 个铁", T0);
+        goals.set(goal);
+        loop.push(List.of(new EventQueue.Entry(EventTypes.QUERY, "<query>先过来</query>", 0, false)));
+        control(EventTypes.COMPACT);
+        model.last().say("来了");
+
+        Call judging = model.calls.stream().filter(this::isEvaluation).findFirst()
+                .orElseThrow(() -> new AssertionError("整理执行完不会开 run,等它就是让目标停在这儿"));
+        Call compaction = model.last();
+        assertEquals(com.dwinovo.numen.agent.loop.Phase.COMPACT, loop.status().phase());
+
+        judging.onDone().accept(new ModelOutcome.Answered(new AssistantTurn(
+                GoalPrompts.NOT_MET + ": 背包里只有 20 个铁", List.of(), null), new Usage(100, 20, 0, 0)));
+        assertEquals(com.dwinovo.numen.agent.loop.Phase.COMPACT, loop.status().phase(), "续跑排着,等整理落地");
+
+        compaction.say("<summary>之前挖了矿</summary>");
+
+        assertEquals(com.dwinovo.numen.agent.loop.Phase.MODEL, loop.status().phase(), "整理落地后续跑接上");
+        assertTrue(model.last().lastUser().contains("背包里只有 20 个铁"));
+    }
+
+    @Test
+    void overheardTalkQueuedAtTheEndDoesNotStallTheGoal() {
+        GoalState goal = GoalState.of("挖 64 个铁", T0);
+        goals.set(goal);
+        loop.push(List.of(new EventQueue.Entry(EventTypes.QUERY, "<query>/goal 挖 64 个铁</query>", 0, false)));
+        overhears("[阿岚] 我去东边");   // 她最后那次调模型期间,同伴在群里说了一句
+        model.last().say("好,这就去");
+
+        assertTrue(isEvaluation(model.last()), "旁听开不起 run,等它就是让目标停在这儿");
+
+        verdict(GoalPrompts.NOT_MET + ": 背包里只有 20 个铁");
+
+        String injected = model.last().lastUser();
+        assertTrue(injected.contains("背包里只有 20 个铁") && injected.contains("[阿岚] 我去东边"),
+                "续跑那一轮把旁听捎带进去");
     }
 
     @Test

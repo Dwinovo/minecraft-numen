@@ -245,6 +245,11 @@ public abstract class LoopHarness {
         loop.push(List.of(new EventQueue.Entry(EventTypes.TASK_FINISHED, "<event>" + text + "</event>", 0, urgent)));
     }
 
+    /** 群聊里旁听到别人说的一句(捎带投递)。发送方标急也没用——测试照标,钉住这一点。 */
+    protected void overhears(String text) {
+        loop.push(List.of(new EventQueue.Entry(EventTypes.TALK, "<event kind=\"talk\">" + text + "</event>", 0, true)));
+    }
+
     protected void goalContinues(String text) {
         loop.push(List.of(new EventQueue.Entry(EventTypes.GOAL, "<goal-progress>" + text + "</goal-progress>", 0, false)));
     }

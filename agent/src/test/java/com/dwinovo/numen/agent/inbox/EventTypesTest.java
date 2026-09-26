@@ -35,8 +35,12 @@ class EventTypesTest {
     void builtInTypesAreRegisteredAsTheTableSays() {
         assertRow(EventTypes.QUERY, EventTypes.Delivery.STEER, true, true, true, true);
         assertRow(EventTypes.GOAL, EventTypes.Delivery.FOLLOW_UP, true, true, true, false);
-        assertRow(EventTypes.COMPACT, EventTypes.Delivery.CONTROL, true, true, true, true);
-        assertRow(EventTypes.CLEAR, EventTypes.Delivery.CONTROL, true, true, true, true);
+        // 控制命令不叫醒她,也就谈不上急:循环闲下来自己执行,不走熟度
+        assertRow(EventTypes.COMPACT, EventTypes.Delivery.CONTROL, false, true, true, true);
+        assertRow(EventTypes.CLEAR, EventTypes.Delivery.CONTROL, false, true, true, true);
+        // 旁听的话与离场通知:捎带
+        assertRow(EventTypes.TALK, EventTypes.Delivery.AMBIENT, false, false, false, false);
+        assertRow(EventTypes.LEFT, EventTypes.Delivery.AMBIENT, false, false, false, false);
     }
 
     @Test
@@ -146,7 +150,7 @@ class EventTypesTest {
 
     @Test
     void alwaysUrgentTypesAreUrgentWhateverTheSenderSays() {
-        for (String id : new String[] {EventTypes.QUERY, EventTypes.GOAL, EventTypes.COMPACT, EventTypes.CLEAR,
+        for (String id : new String[] {EventTypes.QUERY, EventTypes.GOAL,
                 EventTypes.DEATH, EventTypes.HUNGRY, EventTypes.TIMER, EventTypes.WOKE}) {
             EventQueue q = new EventQueue(EventQueue.Journal.NONE);
             java.util.concurrent.atomic.AtomicInteger woken = new java.util.concurrent.atomic.AtomicInteger();
@@ -169,5 +173,48 @@ class EventTypesTest {
         assertTrue(q.push(EventTypes.TASK_FINISHED, "<event>任务失败了</event>", T0, true));
         assertTrue(q.hasUrgent());
         assertFalse(q.push(EventTypes.QUERY, " ", T0, true), "空白不入队,也就谈不上急");
+    }
+
+    // ---- 投递档的声明 ----
+
+    /** 每一档声明的两件事,逐格钉住:队列与循环的行为只从这里来。 */
+    @Test
+    void everyDeliveryDeclaresWhetherItWakesAndWhichCallItJoins() {
+        assertTrue(EventTypes.Delivery.STEER.wakes());
+        assertEquals(EventTypes.Delivery.Joins.ANY_CALL, EventTypes.Delivery.STEER.joins());
+        assertTrue(EventTypes.Delivery.FOLLOW_UP.wakes());
+        assertEquals(EventTypes.Delivery.Joins.OWN_CALL, EventTypes.Delivery.FOLLOW_UP.joins());
+        assertFalse(EventTypes.Delivery.CONTROL.wakes());
+        assertTrue(EventTypes.Delivery.CONTROL.control());
+        assertFalse(EventTypes.Delivery.AMBIENT.wakes(), "旁听不唤醒");
+        assertEquals(EventTypes.Delivery.Joins.ANY_CALL, EventTypes.Delivery.AMBIENT.joins(), "但随下一次调用捎带");
+        for (EventTypes.Delivery d : EventTypes.Delivery.values()) {
+            assertEquals(d.joins() == EventTypes.Delivery.Joins.NONE, d.control(), d + ":控制命令就是不随任何调用走的那一档");
+            assertFalse(d.wakes() && d.control(), d + ":叫醒她的条目必须交得出去");
+            assertFalse(!d.wakes() && d.joins() == EventTypes.Delivery.Joins.OWN_CALL, d + ":只随自己那次走的条目必须叫得醒她");
+        }
+    }
+
+    /** 急件的意思是立刻叫醒她:不叫醒她的档登记成恒急,当场拒绝,而不是登记进去再悄悄不生效。 */
+    @Test
+    void aTypeThatDoesNotWakeCannotBeAlwaysUrgent() {
+        for (EventTypes.Delivery d : EventTypes.Delivery.values()) {
+            if (d.wakes()) {
+                continue;
+            }
+            assertThrows(IllegalArgumentException.class,
+                    () -> new EventTypes.Type("never_" + d, s -> s, s -> null, false, false, d, true), d.toString());
+        }
+    }
+
+    /** 主人开口只认一处:来自主人、叫醒她、随下一次调用就走的条目。 */
+    @Test
+    void ownerWordsAreReadFromTheDeclarations() {
+        assertTrue(EventTypes.get(EventTypes.QUERY).ownerWords());
+        assertFalse(EventTypes.get(EventTypes.GOAL).ownerWords(), "续跑是她自己接着干");
+        assertFalse(EventTypes.get(EventTypes.CLEAR).ownerWords(), "清空是按钮,不是话");
+        assertFalse(EventTypes.get(EventTypes.COMPACT).ownerWords());
+        assertFalse(EventTypes.get(EventTypes.TALK).ownerWords(), "旁听到的话不是主人对她说的");
+        assertFalse(EventTypes.get(EventTypes.TASK_FINISHED).ownerWords());
     }
 }

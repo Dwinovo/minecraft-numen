@@ -342,6 +342,84 @@ class AgentLoopTest extends LoopHarness {
         }
     }
 
+    // ---- 旁听(捎带投递):听得见,但不为它调模型 ----
+
+    @Nested
+    class Overheard {
+
+        @Test
+        void overheardTalkNeverWakesHerWhileIdle() {
+            host.level = EventQueue.MIN_LEVEL;
+            events.clear();
+            for (int i = 0; i < 50; i++) {
+                overhears("[阿岚] 第" + i + "句");
+            }
+            host.now = T0 + EventQueue.maxWaitMsOf(host.level) * 100;
+            for (int i = 0; i < 100; i++) {
+                loop.tick();
+            }
+
+            assertTrue(model.calls.isEmpty(), "条数再多、躺再久也不开 run");
+            assertTrue(events.isEmpty(), "不开 run 也不说话");
+            assertEquals(50, inbox.size(), "都还躺着,等别的事叫醒她");
+        }
+
+        @Test
+        void overheardTalkRidesAlongWhenTheOwnerWakesHer() {
+            overhears("[阿岚] 我去东边");
+            ownerSays("回来吃饭");
+
+            String injected = model.last().lastUser();
+            assertTrue(injected.contains("[阿岚] 我去东边") && injected.contains("<query>回来吃饭</query>"),
+                    "旁听到的话跟着这一轮进去");
+            assertTrue(inbox.isEmpty(), "带走了,不在队里越攒越多");
+        }
+
+        @Test
+        void overheardTalkJoinsTheNextCallAfterTheToolsSettle() {
+            ownerSays("去挖矿");
+            model.last().callTools(tool("c1"));
+            overhears("[阿岚] 我在西边挖到铁了");
+            assertEquals(1, model.calls.size(), "旁听不打断在跑的工具");
+
+            tools.finish("c1");
+
+            assertEquals(2, model.calls.size());
+            List<ConvoState.Msg> sent = model.last().request().messages();
+            assertInstanceOf(ConvoState.Msg.Tool.class, sent.get(sent.size() - 2));
+            assertTrue(model.last().lastUser().contains("[阿岚] 我在西边挖到铁了"), "本来就要调模型,它捎带进去");
+            assertTrue(inbox.isEmpty());
+        }
+
+        @Test
+        void overheardTalkDoesNotKeepARunGoingWhenSheWouldStop() {
+            ownerSays("你好");
+            overhears("[阿岚] 小柚在跟主人说话");
+
+            model.last().say("你好呀");
+
+            assertEquals(1, model.calls.size(), "本来要停了:旁听不是再调一次的理由,否则同伴就能唤醒同伴");
+            assertEquals(RunEnd.DONE, eventsOf(LoopEvent.RunEnded.class).get(0).end());
+            assertEquals(1, inbox.count(EventTypes.TALK), "留着跟下一次调用走");
+
+            ownerSays("刚才阿岚说什么");
+            assertTrue(model.last().lastUser().contains("[阿岚] 小柚在跟主人说话"), "下一轮带上");
+        }
+
+        @Test
+        void overheardTalkDoesNotReleaseAFailedHold() {
+            ownerSays("挖矿");
+            model.last().fail("网络断了");
+            model.last().fail("网络断了");
+            assertEquals(Hold.FAILED, loop.hold());
+
+            overhears("[阿岚] 在吗");
+
+            assertEquals(Hold.FAILED, loop.hold(), "发送方标了急也不算急件");
+            assertEquals(2, model.calls.size());
+        }
+    }
+
     // ---- 切断 ----
 
     @Nested
