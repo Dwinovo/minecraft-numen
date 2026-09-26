@@ -30,6 +30,13 @@ public final class ChatCommands {
 
     public static final char PREFIX = '/';
 
+    /**
+     * 命令作用于一只同伴的大脑(清她的上下文、给她定目标、用她的技能),前提是这个会话恰好对着
+     * 一只。不是的会话里斜杠输入仍是命令、不当话发出去,补全和回车给的都是这一句——
+     * 群里 {@code /clear} 清谁说不清,想动哪只就去和她的私聊里动。
+     */
+    public static final String SOLO_ONLY = "命令只能在和同伴的私聊里用。";
+
     /** 内置命令表(写死的那几条)。成批的命令走 {@link CommandSource}。 */
     private static final Map<String, ChatCommand> BUILTIN = new LinkedHashMap<>();
 

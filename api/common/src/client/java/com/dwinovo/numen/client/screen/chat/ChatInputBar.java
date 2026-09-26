@@ -65,7 +65,11 @@ public final class ChatInputBar {
         /** 输入框占位文案(随麦克风状态变)。 */
         String hint();
 
-        /** 这条输入行对着的那位的大脑;null = 没有单一的主(斜杠命令不补全、不跑)。 */
+        /**
+         * 这条输入行对着的那位的大脑;null = 会话没有单一的主。斜杠命令能不能在这里用只看它:
+         * null 时补全只给一行灰着的 {@link com.dwinovo.numen.client.command.ChatCommands#SOLO_ONLY},
+         * 回车回的也是这一句,斜杠输入不会当话发出去。
+         */
         com.dwinovo.numen.client.agent.EntityAgentLoop loop();
 
         /** 这条输入行对着的会话;`@` 补的是它里面的人。null = 没选。 */
@@ -492,7 +496,7 @@ public final class ChatInputBar {
         if (text == null) text = "";
         if (commandMode(text)) {
             var loop = host.loop();
-            candidates = loop == null ? List.of()
+            candidates = loop == null ? List.of(soloOnly(text))
                     : com.dwinovo.numen.client.command.ChatCommands.complete(loop, text);
         } else {
             var conv = host.conversation();
@@ -502,6 +506,13 @@ public final class ChatInputBar {
                             com.dwinovo.numen.client.agent.Conversations.instance().named(conv));
         }
         selected = firstEnabled();
+    }
+
+    /** 会话没有单一的主时补全弹层里唯一的一行:打的是哪条命令,灰着,理由和回车时回的是同一句。 */
+    private static Completion soloOnly(String text) {
+        String label = com.dwinovo.numen.client.command.ChatCommands.PREFIX
+                + com.dwinovo.numen.client.command.ChatCommands.parse(text).name();
+        return new Completion(text, label, com.dwinovo.numen.client.command.ChatCommands.SOLO_ONLY, false, false);
     }
 
     /** 这串输入是命令还是话——候选从哪来、框里哪段换色,都由它定。 */
@@ -598,8 +609,13 @@ public final class ChatInputBar {
         }
         // 斜杠命令是主人对客户端说的话:在本地跑完就结束,不往下走。所以它不过宿主的
         // 发言闸门——查技能、看清单这些事没有理由要求先配好 API key。
-        var loop = host.loop();
-        if (loop != null && com.dwinovo.numen.client.command.ChatCommands.isCommand(text)) {
+        if (com.dwinovo.numen.client.command.ChatCommands.isCommand(text)) {
+            var loop = host.loop();
+            if (loop == null) {
+                setText("");
+                host.onCommandReply(com.dwinovo.numen.client.command.ChatCommands.SOLO_ONLY);
+                return;
+            }
             // 面板类命令:多余的参数不理会——它要的不是参数,是一个能上下选的界面。
             var page = com.dwinovo.numen.client.command.ChatCommands.popupFor(loop, text);
             if (page != null) {
