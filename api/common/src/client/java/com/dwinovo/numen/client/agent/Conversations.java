@@ -484,19 +484,34 @@ public final class Conversations extends JsonLibrary<Conversation> {
      * 她被遣散了:告诉每个和她同过会话、还在的成员。她的日志跟着家目录一起没了,别人日志里旁听到的
      * 她的话还在——这条事件给那个缺口一个解释。同一个人和她同在几个会话里也只说一次。
      * 成员表不改:读的时候按名册过滤,见类头。
+     *
+     * <p>她走后只剩一个人(或没人)的群随即解散,和主人点垃圾桶是同一条路({@link #dissolve}),
+     * 见 {@link #dissolvesAfterLeaving}。只在这里判:会话记录是全部世界共用的一份,名册只是当前世界的,
+     * 拿名册去扫全部会话会把别的世界的群当成没人了。
      */
     public void left(UUID gone, String name) {
+        List<Conversation> hers = containing(gone);
         java.util.Set<UUID> tell = new java.util.LinkedHashSet<>();
-        for (Conversation c : containing(gone)) {
+        for (Conversation c : hers) {
             tell.addAll(membersAlive(c));
-        }
-        if (tell.isEmpty()) {
-            return;
         }
         // 只给正文:<event kind="left" day t> 的壳由投递口拼(EntityAgentLoop.submitEvent),这里拼一层就是两层
         for (UUID m : tell) {
             NumenGateway.emit(m, EventTypes.LEFT, name + " was dismissed by the owner and is gone");
         }
+        for (Conversation c : hers) {
+            if (dissolvesAfterLeaving(c, membersAlive(c).size())) {
+                dissolve(c);
+            }
+        }
+    }
+
+    /**
+     * 群只剩一个人就不再是群:成员表和她的私聊是同一张,留着就是左栏两格指向同一个大脑。
+     * 本来就只有一个成员的记录(落过盘的"就他俩")不在此列。
+     */
+    static boolean dissolvesAfterLeaving(Conversation conv, int alive) {
+        return conv.members().size() > 1 && alive <= 1;
     }
 
     // ---- 停 ----
