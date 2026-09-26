@@ -175,8 +175,8 @@ ftbquests submit <quest>
   最后一页不写这一句。抬头与结尾算在预算里,这一句不算(和 pi 一样只算内容)。
 - **一条条目自己就比一页大**(一步极长的设计、一份很长的技能里的一行):单占一页,只放得下的开头(按字节,不切断一个字),
   后面注明 `[This entry is N bytes; only its first M fit in one page.]`。
-- **不随数据变长的输出**(一个对象的回执、一次改动的结果)天然在预算内,不分页。改一份清单的动作,回执报这次改了什么与总数,
-  不把整份再抄一遍。
+- **不随数据变长的输出**(一个对象的回执、一次改动的结果、本身有上限的清单)天然在预算内,不分页。哪些命令属于哪一种,
+  逐条审查的结论在附录 H。
 - **预算之外还有线上的上限**(`Wire`,附录 H):那是网络一个包的硬顶,不是分页。回执万一超过它,网络层换成一条如实说明的
   失败回执,连接不断。
 
@@ -812,3 +812,80 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
   占位符写不通的 `fight attack --entity_ids <id>`、`use block right <x> <y> <z> …`、不存在的 `wait`;动作注意与工具描述里
   没加反引号的命令提及(都补上了,否则读不到);系统提示的例子 `command(use block right <the furnace…>)`。
 - **插件的技能文档不在这里读**:插件的命令组只在它的模组在场时登记,core 的单测里没有它们;插件模块现在没有测试源码集。
+
+## 附录 H:包的上限与输出预算(09-26)
+
+真机事故:主人让她建田园小屋,她写了一份 43 步的设计后执行 `build show tianyuan_cottage`,回执 19899 字符;
+`TaskResultPayload` 用 `stringUtf8(16384)`,netty 编码时抛 `EncoderException: String too big (was 19899 characters, max
+16384)`,连接断开,单人世界的房主掉线,服务器随之停止。两层根因:网络层的上限是随手定的数、发送前没人查、上游也不保证
+不超;`build show` 把每一步完整列出,长度随设计增长,又不分页。
+
+### 线上的上限:`Wire`
+
+- **唯一来源** `network.Wire`,按方向:下行(服务端 → 客户端)1048576 字节,上行 32767 字节。
+- **数从哪来**(对着 1.21.1 的源码核过):这是原版 `ClientboundCustomPayloadPacket` 与 `ServerboundCustomPayloadPacket` 的
+  私有常量 `MAX_PAYLOAD_SIZE`,单测(`WireTest`)反射读它们,改了版本先红。原版只拿它们卡认不出的载荷
+  (`DiscardedPayload`);登记过的载荷,Fabric(networking-api 4.3.0)与 NeoForge(21.1.233)都不另设上限。真正的硬顶是帧:
+  `Varint21FrameDecoder` 的三字节长度前缀,一帧至多 2097151 字节;压缩时解压后至多 8388608 字节(`CompressionDecoder`)。
+  NeoForge 的 `GenericPacketSplitter` 超过帧就拆包,Fabric 不拆、直接断开。字符串字段由 `Utf8String.write` 先按字符数拦,
+  事故就是在这一步。取原版的方向上限,因为它们都在帧以内:哪个加载器、压不压缩、单人还是联机都成立。
+- **送出只有一条路** `NumenNetwork.sendToPlayer` / `sendToServer`:用包自己的编解码器编一遍量字节(下行带着那位玩家的
+  注册表)。装得下照发;内容随数据长的包实现 `Wire.Oversized`,缩成它自己给的、装得下的样子,如实说明原来多大、上限多少;
+  别的包内容本来有界,装不下是填它的代码错了,当场抛 `IllegalStateException`,不交给 netty 去断开连接。登记时每种包的
+  编解码器按方向记下(`toClient` / `toServer`),量的就是真正上线的那些字节。上行的包都不带注册表里的东西,编解码器写在
+  `ByteBuf` 上。
+- **字段**:长度不由包自己定的文字一律用 `Wire.X.text()`——编码不另拦(整包由上面那一步量,字段再拦就是第二个判据),
+  解码以整包上限为防线。保留的语义上限只有两个,都由发送方先守:召唤的名字 16(原版的玩家名规则)、征询的附言 512
+  (答复框截断)。
+- **上行的工具调用**不能换一个包送:`ServerToolTransport.ship` 先量,装不下不送,就地给模型一条失败——服务端根本不知道这次
+  调用,不会有结果回来。
+
+逐个载荷的处理:
+
+| 载荷 | 方向 | 内容 | 装不下时 |
+|---|---|---|---|
+| `TaskResultPayload` | 下行 | 工具回执 | 换成同一次调用的一条失败回执 |
+| `NumenEventPayload` | 下行 | 一批事件(实时一条,离线补发至多 200 条) | 从正文最长的一条起换成一句说明,种类、时刻、急不急都留着 |
+| `NumenStatePayload` | 下行 | 背包、效果、骑乘、身体状态片段(插件给) | 先把身体状态换成说明;还装不下,背包也不带,说明里交代"空格子不是你的背包" |
+| `CurrentTaskPayload` | 下行 | 任务名与描述(插件的任务也在内) | 描述换成一句说明 |
+| `NumenDeathPayload`、`NumenRespawnPayload` | 下行 | 死因(原版死亡消息,名字长短不定) | 死因换成一句说明 |
+| `ConsentRequestPayload` | 下行 | 征询清单(按种类归堆)、记住的规则行、轮廓(至多 256 格、32 只) | 有界(按方块与实体种类) |
+| `CompanionListPayload` | 下行 | 名册(至多 64 只) | 有界 |
+| `NumenLocationsPayload` | 下行 | 定位(至多 16 只) | 有界 |
+| `PathDebugPayload` | 下行 | 调试路径(寻路一段的格数) | 有界 |
+| `ClientUiActionPayload` | 下行 | 一个枚举 | 有界 |
+| `ExecuteToolPayload` | 上行 | 工具名、调用 id、参数 JSON | 不送,客户端就地回失败 |
+| `SummonRequestPayload`、`ChangeSkinPayload` | 上行 | 名字(16)、Mojang 签名的皮肤(约 1KB + 700B) | 有界 |
+| `ConsentReplyPayload` | 上行 | 答复与附言(512) | 有界 |
+| 其余上行(`CancelTasks`、`SpeakingState`、`LocateNumen` 至多 16、`RequestState`、`DismissRequest`、`SetGameMode`) | 上行 | UUID 与几个标量 | 有界 |
+
+模型看到的样子(`N` 是整包编码后的字节数):
+
+```
+{"success":false,"message":"The result of this call came to N bytes, more than the 1048576 bytes one message to your client can carry, so it was not delivered. Ask for less of it at a time: a narrower range, or one page of a list with --page.","data":{"result_bytes":N,"limit_bytes":1048576}}
+
+{"success":false,"message":"This call came to N bytes, more than the 32767 bytes one message to the server can carry, so it was not sent. Split the work into several shorter calls: a long grid or list goes in as several steps.","data":{"call_bytes":N,"limit_bytes":32767}}
+```
+
+### 输出预算的落地
+
+- 规则在第九节,常量在 `Listing`:2000 行或 50KB。`Listing` 从"每页 20 条"改为按预算切页,帮助的根与组列表同一个预算;
+  抬头与结尾可以省。翻页提示照 pi:`[Showing 1-12 of 43. Use build show house --page 2 to continue.]`。
+- **改成分页的**(会随数据变长,原来一次全给):
+  - `build show`:设计按步分页;`--layer` 的切片按行分页;
+  - `skill load`(快捷工具 `load_skill`,多了 `page` 参数):技能正文与附属文件按行分页,和 pi 读文件一样;
+  - `memory recall`:札记正文按行分页;
+  - `use gui`:按槽分页(模组的大容器);
+  - `tlm models`:包级摘要与搜索结果按行分页,原来的"搜索至多 40 条"(悄悄截断,还报成"找到 40 个")删掉;
+  - `ysm options`:能换的模型一行一个分页,`data` 不再带整份模型清单。
+- **原来就分页的**:`build designs`、`build built`、`ftbquests list`,换成按预算切页。
+- **审查过、判为有界的**(不分页,理由):
+  - `scan around` 半径夹在 4–16;`scan blocks` 至多 16 团;`scan entities` 至多 20 只;`inv recipe` 至多 4 条配方;
+    `kaleidoscope recipes` 至多 30 行;`task status` / `task timer` 表至多 8 个;`move route` 至多 3 条路线;
+  - `ftbquests show`:一个任务的正文(截到 600 字)、依赖、任务项与奖励,随这一个任务的定义有界;它的参数吃掉余下整行,
+    也挂不上 `--page`;`ftbquests submit`:每个任务项一行,同样随一个任务有界;
+  - `throwaway` 四个动作:回执读回整份清单,清单只随她一次次写 id 变长(一次调用至多一个上行包),同一份清单每轮就在身体
+    状态里;
+  - `fight attack` 不点名时收尾的名单随十分钟时限有界;`scan storage` 每个物品栏至多 64 行;`use block` 等收尾里新出现
+    实体的行在半径 6 格内;后台任务收尾里"路上动了什么"按方块种类归堆。
+  - 其余动作都是一个对象的回执,字段固定。
