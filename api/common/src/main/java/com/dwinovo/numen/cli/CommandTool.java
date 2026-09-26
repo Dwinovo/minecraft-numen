@@ -24,8 +24,8 @@ public final class CommandTool implements NumenTool {
     public static final String NAME = "command";
 
     private static final Param<String> LINE = Param.required("command", ArgType.text(),
-            "One command line. Without a leading / it is one of Numen's commands, e.g. \"task status\"; "
-                    + "with a leading / it is a native command, e.g. \"/help give\".");
+            "One command line: without a leading / a command from <commands>, e.g. \"task status\"; "
+                    + "with a leading / a Minecraft or mod command, e.g. \"/help give\".");
 
     @Override
     public String name() {
@@ -34,16 +34,16 @@ public final class CommandTool implements NumenTool {
 
     @Override
     public String description() {
-        return "Run one command line. Two kinds of line:\n"
-                + "- Without a leading /: Numen's commands for you, grouped (the installed groups are listed under "
-                + "<commands>). `help` lists the groups, `<group> --help` a group's actions, "
-                + "`<group> <action> --help` explains one; required arguments follow the action in order, optional "
-                + "ones are flags written `--name value`.\n"
-                + "- With a leading /: a native Minecraft or mod command, run as yourself exactly as a player types "
-                + "it in chat, with your own permission level. `/help` lists the ones the server lets you run, "
-                + "`/help <command>` shows one's usage. Each may need your owner's consent first.\n"
-                + "What the command says comes back as the result; a line with a mistake comes back with the "
-                + "usage of the level it failed at.";
+        // 照 Claude Code 的工具描述写:动词起头,只说它做什么、环境是什么样,不说"谁给了你"
+        return "Runs one command line and returns its output.\n"
+                + "- A line without a leading / runs one of the command groups listed in <commands>: "
+                + "`<group> <action> [arguments]`. Required arguments follow the action in order; optional ones "
+                + "are flags written `--name value`. `help` lists the groups, `<group> --help` a group's actions, "
+                + "`<group> <action> --help` explains one.\n"
+                + "- A line with a leading / runs a Minecraft or mod command exactly as a player types it in chat, "
+                + "with your own permission level. `/help` lists the ones you can run, `/help <command>` shows "
+                + "one's usage. A command may need your owner's consent first.\n"
+                + "A line with a mistake returns the usage of the level it failed at.";
     }
 
     @Override

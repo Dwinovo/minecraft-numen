@@ -43,7 +43,7 @@ public final class TaskCommands {
 
     /** 经插件那扇门登记这一组;三个快捷工具按 status、stop、timer 的顺序进工具表。 */
     public static void install(NumenApi numen) {
-        numen.registerCommands("task", "Your dispatched work — the background task and your pending timers.",
+        numen.registerCommands("task", "The background task and your pending timers.",
                 TaskCommands::actions);
     }
 

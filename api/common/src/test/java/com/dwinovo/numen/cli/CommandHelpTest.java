@@ -112,7 +112,7 @@ class CommandHelpTest {
     }
 
     @Test
-    void theRootListsEveryGroupInOneSentenceAndTheIndexCarriesTheSameLines() {
+    void theRootListsEveryGroupInOneSentenceAndTheIndexListsThemLikeTheSkills() {
         for (String line : new String[]{"help", "--help"}) {
             String root = onClient(line).message();
             assertTrue(root.startsWith("<group> <action> [arguments]. Command groups:\n"), root);
@@ -121,10 +121,10 @@ class CommandHelpTest {
                     + "command instead (/help lists those)."), root);
         }
         String index = NumenCli.index();
-        assertTrue(index.startsWith("<commands>\nNumen's command groups, run with the command tool, no leading / "
-                + "(<group> --help lists a group's actions):\n"), index);
-        assertTrue(index.contains("\ngt_help — A group the tests read.\n"), index);
-        assertTrue(index.indexOf("gt_help —") < index.indexOf("gt_many —"), "按名字排序: " + index);
+        assertTrue(index.startsWith("<commands>\nThe following command groups are available for use with the "
+                + "command tool:\n"), index);
+        assertTrue(index.contains("\n- gt_help: A group the tests read.\n"), index);
+        assertTrue(index.indexOf("- gt_help:") < index.indexOf("- gt_many:"), "按名字排序: " + index);
         assertTrue(index.endsWith("\n</commands>"), index);
         assertEquals(index, NumenCli.index(), "字节稳定");
     }

@@ -78,7 +78,7 @@ class TaskCommandsTest {
     @Test
     void theGroupsHelpReadsLikeThis() {
         assertEquals("""
-                task: Your dispatched work — the background task and your pending timers. Actions:
+                task: The background task and your pending timers. Actions:
                   task status — What you have in flight: the background task and your pending timers.
                   task stop [--task_id <word>] — Cancel the background task, or a task or timer by its id.
                   task timer <after_s> <reason...> — Set a one-shot reminder that fires after a delay in world time.

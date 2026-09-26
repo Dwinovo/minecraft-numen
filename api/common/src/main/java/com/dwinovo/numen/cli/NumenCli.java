@@ -104,11 +104,11 @@ public final class NumenCli {
         if (GROUPS.isEmpty()) {
             return "";
         }
-        StringBuilder sb = new StringBuilder("<commands>\nNumen's command groups, run with the ")
-                .append(CommandTool.NAME).append(" tool, no leading ").append(Line.MC).append(" (<group> ")
-                .append(HELP_FLAG).append(" lists a group's actions):");
+        // 和系统提示里的技能清单同一个形状("The following … are available for use with …",一行一个"- 名字: 描述")
+        StringBuilder sb = new StringBuilder("<commands>\nThe following command groups are available for use with the ")
+                .append(CommandTool.NAME).append(" tool:");
         for (CommandGroup g : GROUPS.values()) {
-            sb.append('\n').append(CommandHelp.groupLine(g));
+            sb.append("\n- ").append(g.name()).append(": ").append(g.summary());
         }
         return sb.append("\n</commands>").toString();
     }

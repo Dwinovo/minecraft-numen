@@ -93,8 +93,8 @@ class CommandSourceTest {
                 .optionalInteger("tries", "How often.", 1, 5)
                 .build(), ToolRegistry.get("gt_side_jot").parameterSchema());
         assertEquals(Schema.object()
-                .string("command", "One command line. Without a leading / it is one of Numen's commands, e.g. "
-                        + "\"task status\"; with a leading / it is a native command, e.g. \"/help give\".")
+                .string("command", "One command line: without a leading / a command from <commands>, e.g. "
+                        + "\"task status\"; with a leading / a Minecraft or mod command, e.g. \"/help give\".")
                 .build(), new CommandTool().parameterSchema());
     }
 

@@ -160,7 +160,7 @@ ftbquests submit <quest>
 
 ## 十、提示词与技能
 
-- **`command` 工具的描述**写清两层:不带 `/` 的是 Numen 给你的命令,用 `help` 和 `<组> --help` 查;带 `/` 的是原版和模组的原生指令,用 `/help <指令>` 查,每条都按你自己的权限执行、可能要问主人。
+- **`command` 工具的描述**照 Claude Code 的工具描述写:动词起头("Runs one command line and returns its output"),只说它做什么、环境什么样,不说"谁给了你"。分两段写两层:不带 `/` 的执行 `<commands>` 里列出的命令组,用 `help` 和 `<组> --help` 查;带 `/` 的执行原版和模组指令,用 `/help <指令>` 查,按你自己的权限执行、可能要问主人。
 - **`<commands>` 索引**照旧列出第 1 层已安装的命令组,各一句话。
 - **技能**讲"什么时候、怎么用",附一两个例子,不抄语法。
   - 同一件事第 1 层已经有包装的,技能教她用包装版;
@@ -468,8 +468,8 @@ numen gt_long lingre 40
 - **去掉前缀**。
   - 组名直接是一级命令,根下 `help`、`--help`;组名与 `help` 撞、两组同名在登记时报错(沿用原有检查);例子、相关命令写
     `<组> <动作>`,多写 `numen` 的例子登记时报错。
-  - `<commands>` 索引开头是 "Numen's command groups, run with the command tool, no leading / (<group> --help lists a group's
-    actions):";根帮助的最后一句提示带 `/` 的是原生指令;第 0 层写不通时附的是 "/help lists the commands you can run."。
+  - `<commands>` 索引和系统提示里的技能清单同一个形状:"The following command groups are available for use with the command
+    tool:",每组一行 `- 名字: 描述`;根帮助的最后一句提示带 `/` 的是原生指令;第 0 层写不通时附的是 "/help lists the commands you can run."。
   - `command` 工具的描述分两段写两层(第十节)。
 - **`/numen` 只给玩家**(第六节的判断)。她的命令不在 MC 树上,第 1 层不需要"是不是她"的过滤;但她作为玩家,经第 0 层照样敲得到
   MC 树上的每一条。召唤、设置、权限、征询、drive 是给人的,她不该用,所以 `/numen` 这个根只给不是她的来源,在
@@ -497,7 +497,7 @@ numen gt_long lingre 40
 ```
 help
 → <group> <action> [arguments]. Command groups:
-    task — Your dispatched work — the background task and your pending timers.
+    task — The background task and your pending timers.
     ysm — Yes Steve Model looks: what you wear and can switch to, switching, emotes.
   <group> --help lists a group's actions. A line starting with / is a native command instead (/help lists those).
 
