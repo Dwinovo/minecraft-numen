@@ -4,7 +4,6 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.task.TaskResult;
 import com.dwinovo.numen.task.TaskState;
-import net.minecraft.server.MinecraftServer;
 
 import java.util.List;
 
@@ -13,8 +12,8 @@ import java.util.List;
  *
  * <h2>为什么在任务里做</h2>
  * 成败要以 YSM 真正设上为准,也就是回读之前那条命令必须已经执行完。原版的指令在另一条指令的执行当中被调起时会
- * 排到那条指令之后(见 {@link Ysm#setModel} 背后的 {@code run}),命令处理函数又可能正是从那种地方调进来的;
- * 任务在服务器刻里跑,不在任何一条指令的执行当中,命令当场执行完,紧接着的回读读到的就是结果。
+ * 排到那条指令之后(见 {@code OnHer});任务在服务器刻里跑,不在任何一条指令的执行当中,命令当场执行完,紧接着的
+ * 回读读到的就是结果。
  *
  * <h2>没换成时说什么</h2>
  * YSM 对这条命令说的话原样转给她(要授权、没有这个模型……);它不说话的时候如实说它没说原因,不替它猜。
@@ -33,9 +32,8 @@ final class SwitchTask implements Task {
 
     @Override
     public TaskState tick(NumenPlayer her) {
-        MinecraftServer server = her.level().getServer();
         String model = r.look.model();
-        List<String> said = ysm.setModel(server, her.getName().getString(), r.look);
+        List<String> said = ysm.setModel(r.her, r.look);
         Ysm.Look now = ysm.readLook(her);
         if (now != null && model.equals(now.model())) {
             outcome = "换好了:" + model;

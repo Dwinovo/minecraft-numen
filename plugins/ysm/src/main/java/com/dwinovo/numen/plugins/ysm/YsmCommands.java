@@ -2,8 +2,10 @@ package com.dwinovo.numen.plugins.ysm;
 
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
+import com.dwinovo.numen.cli.Authority;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
+import com.dwinovo.numen.cli.OnHer;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskDispatch;
@@ -17,7 +19,10 @@ import java.util.Map;
  * {@code ysm}:现在穿什么、能换成什么;换一身;做一个动作。三个都在服务端,全走 YSM 自己的
  * 命令、命令补全与同伴的 NBT(见 {@link Ysm})。
  *
- * <p>都不提升成快捷工具:联动的动作是长尾,走 {@code numen} 这一个入口就够了。
+ * <p>三个都借服务器的权威({@link Authority#SERVER_ON_HER}):YSM 的这几条命令要权限等级 2,她自己多半没有;
+ * 作用对象写死为她({@link OnHer}),能换成什么仍由 YSM 按镜像来的主人授权判。
+ *
+ * <p>都不提升成快捷工具:联动的动作是长尾,走 {@code command} 这一个入口就够了。
  */
 final class YsmCommands {
 
@@ -59,11 +64,13 @@ final class YsmCommands {
     private void actions(CommandGroup group) {
         group.server(OPTIONS, "Your model and texture now, the models you can switch to, and this model's "
                 + "textures.", this::options)
+                .authority(Authority.SERVER_ON_HER)
                 .example(line(OPTIONS))
                 .note("Read-only. Emotes are not listed: YSM does not tell the server which ones a model has.")
                 .seeAlso(line(SWITCH), line(EMOTE));
         group.server(SWITCH, "Switch to another model.",
                 this::switchModel, MODEL, TEXTURE)
+                .authority(Authority.SERVER_ON_HER)
                 .example(line(SWITCH) + " misc/1_alex")
                 .example(line(SWITCH) + " \"抽象鸣潮 菲比.ysm\"")
                 .note("You can have exactly the models your owner is authorized for. A refusal comes from YSM, "
@@ -73,6 +80,7 @@ final class YsmCommands {
                 .seeAlso(line(OPTIONS));
         group.server(EMOTE, "Play one of this model's emotes, or stop the one playing.",
                 this::emote, ANIMATION)
+                .authority(Authority.SERVER_ON_HER)
                 .example(line(EMOTE) + " extra1")
                 .example(line(EMOTE) + " " + STOP)
                 .note("It only reports the command as sent: whether this model has that animation cannot be "
@@ -85,15 +93,10 @@ final class YsmCommands {
      * 玩家装的模型变,查询就该是查询。这身模型有哪些动作不在里面:YSM 不告诉服务器(见 {@link Ysm})。
      */
     private void options(ServerSource src, CommandArgs args) {
-        var server = src.companion().level().getServer();
-        if (server == null) {
-            src.reply(TaskResult.fail("身体不在服务端上").toJson());
-            return;
-        }
-        String me = src.companion().getName().getString();
+        OnHer her = src.onHer();
         var look = ysm.readLook(src.companion());
-        var models = ysm.models(server, me);
-        var textures = look == null ? List.<String>of() : ysm.textures(server, me, look.model());
+        var models = ysm.models(her);
+        var textures = look == null ? List.<String>of() : ysm.textures(her, look.model());
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("current_model", look == null ? "(读不到,YSM 可能没装)" : look.model());
@@ -117,21 +120,16 @@ final class YsmCommands {
      */
     private void switchModel(ServerSource src, CommandArgs args) {
         String model = args.get(MODEL);
-        var server = src.companion().level().getServer();
-        if (server == null) {
-            src.reply(TaskResult.fail("身体不在服务端上").toJson());
-            return;
-        }
-        String me = src.companion().getName().getString();
+        OnHer her = src.onHer();
         // 贴图不给就用 YSM 给这个模型列的第一张——问的是它自己的补全,不猜文件格式
         String texture = args.get(TEXTURE);
         if (texture == null) {
-            if (!ysm.models(server, me).contains(model)) {
+            if (!ysm.models(her).contains(model)) {
                 src.reply(TaskResult.fail(
                         "YSM 不认 '" + model + "' 这个模型。用 " + line(OPTIONS) + " 看清单里的 id").toJson());
                 return;
             }
-            var textures = ysm.textures(server, me, model);
+            var textures = ysm.textures(her, model);
             if (textures.isEmpty()) {
                 src.reply(TaskResult.fail(
                         "YSM 没给 '" + model + "' 列出贴图,定不了默认贴图;用 --texture 指定一个").toJson());
@@ -140,7 +138,7 @@ final class YsmCommands {
             texture = textures.get(0);
         }
 
-        TaskDispatch.runSync(src.companion(), new SwitchRecord(src, new Ysm.Look(model, texture)), src::reply);
+        TaskDispatch.runSync(src.companion(), new SwitchRecord(src, her, new Ysm.Look(model, texture)), src::reply);
     }
 
     /**
@@ -155,18 +153,13 @@ final class YsmCommands {
      */
     private void emote(ServerSource src, CommandArgs args) {
         String animation = args.get(ANIMATION);
-        var server = src.companion().level().getServer();
-        if (server == null) {
-            src.reply(TaskResult.fail("身体不在服务端上").toJson());
-            return;
-        }
-        String me = src.companion().getName().getString();
+        OnHer her = src.onHer();
         if (STOP.equalsIgnoreCase(animation)) {
-            ysm.stopAnimation(server, me);
+            ysm.stopAnimation(her);
             src.reply(TaskResult.ok("停下了").toJson());
             return;
         }
-        ysm.playAnimation(server, me, animation);
+        ysm.playAnimation(her, animation);
         src.reply(TaskResult.ok("已发出播放 '" + animation + "' 的指令。YSM 不告诉服务器一个模型有哪些动作,"
                 + "核对不了现在这身模型有没有 '" + animation + "';没有的话身体不会有任何动作。").toJson());
     }

@@ -1,20 +1,14 @@
 package com.dwinovo.numen.plugins.ysm;
 
-import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.ParseResults;
+import com.dwinovo.numen.cli.OnHer;
 import com.mojang.brigadier.arguments.StringArgumentType;
-import com.mojang.brigadier.suggestion.Suggestion;
 import net.minecraft.ChatFormatting;
-import net.minecraft.commands.CommandSource;
-import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -43,6 +37,11 @@ import java.util.Set;
  *   <li><b>NBT 键名</b>——它们是源码里的字符串字面量,混淆器不改字符串。存在哪一层
  *       随加载器而异,见 {@link Storage}。</li>
  * </ul>
+ *
+ * <h2>以谁的权威执行 YSM 的命令</h2>
+ * YSM 的命令要权限等级 2,能作用于任何玩家。她的动作(看清单、换装、做动作)借服务器的权威,只经 {@link OnHer}:
+ * 动作在声明里写明({@code Authority.SERVER_ON_HER}),目标由它写成她,这里只写目标前后的那两截。授权镜像
+ * ({@link OwnerSync})不是她的动作,是服务器自己的对账,以服务器自己的来源执行。
  */
 public final class Ysm {
 
@@ -82,6 +81,10 @@ public final class Ysm {
      */
     private static final String AUTH_MODELS = "own_models";
 
+    private static final String MODEL_SET = "ysm model set";
+    private static final String PLAY = "ysm play";
+    private static final String AUTH = "ysm auth";
+
     private static final String KEY_MODEL = "model_id";
     private static final String KEY_TEXTURE = "select_texture";
 
@@ -118,120 +121,55 @@ public final class Ysm {
 
     // ---- 读:YSM 认哪些 id(命令补全) ----
 
-    /** YSM 认的全部模型 id。 */
-    public List<String> models(MinecraftServer server, String playerName) {
-        return suggestions(server, "ysm model set " + arg(playerName) + " ");
+    /** YSM 认的全部模型 id:{@code ysm model set <她> <Tab>}。 */
+    public List<String> models(OnHer her) {
+        return her.next(MODEL_SET);
     }
 
     /**
-     * 某个模型的贴图 id。补全按字母排,第一张未必是作者在模型里定的默认;
+     * 某个模型的贴图 id:{@code ysm model set <她> <模型> <Tab>}。补全按字母排,第一张未必是作者在模型里定的默认;
      * YSM 认 {@code -}(用默认贴图)的版本会把它也列出来,它排在最前。
      */
-    public List<String> textures(MinecraftServer server, String playerName, String model) {
-        return suggestions(server, "ysm model set " + arg(playerName) + " " + arg(model) + " ");
-    }
-
-    /** 命令行敲到这里、按 Tab 会列出什么。补全提供者是同步的,在服务端线程上直接取。 */
-    private static List<String> suggestions(MinecraftServer server, String input) {
-        CommandDispatcher<CommandSourceStack> dispatcher = server.getCommands().getDispatcher();
-        ParseResults<CommandSourceStack> parse = dispatcher.parse(input, source(server));
-        return dispatcher.getCompletionSuggestions(parse).join().getList().stream()
-                .map(Suggestion::getText).map(Ysm::unquote).toList();
-    }
-
-    /** 补全给的是命令行里的写法,带空格的 id 会带引号;还原成 id 本身。 */
-    private static String unquote(String token) {
-        if (token.length() >= 2 && token.startsWith("\"") && token.endsWith("\"")) {
-            return token.substring(1, token.length() - 1).replace("\\\"", "\"").replace("\\\\", "\\");
-        }
-        return token;
+    public List<String> textures(OnHer her, String model) {
+        return her.next(MODEL_SET, model);
     }
 
     // ---- 写:走命令 ----
 
     /**
-     * 给一个玩家换模型。<b>刻意不传 ignore_auth</b>——省略时 YSM 默认按授权检查,
+     * 给她换模型。<b>刻意不传 ignore_auth</b>——省略时 YSM 默认按授权检查,
      * 同伴要不到主人没有的模型是 YSM 在拦,不是本插件写 if 拦。
      *
      * <p>贴图由调用方从 {@link #textures} 里挑好再传,这里不补占位符:{@code -} 只有 2.6 起
      * 才认,2.4.1 会把它当贴图名原样存下、模型渲染成紫黑格——1.21 只有 2.4.1 可用,真机撞见过。
      *
-     * @return YSM 对这条命令说的话(换好了、要授权、没有这个模型……);它在几种情况下什么都不说
+     * @return YSM 对这条命令说的话(换好了、要授权、没有这个模型……),去掉颜色码;它在几种情况下什么都不说
      */
-    public List<String> setModel(MinecraftServer server, String playerName, Look look) {
-        return run(server, "ysm model set " + arg(playerName) + " " + arg(look.model()) + " " + arg(look.texture()));
+    public List<String> setModel(OnHer her, Look look) {
+        return her.run(MODEL_SET, look.model(), look.texture()).stream()
+                .map(ChatFormatting::stripFormatting).toList();
     }
 
-    public void playAnimation(MinecraftServer server, String playerName, String animation) {
-        run(server, "ysm play " + arg(playerName) + " " + arg(animation));
+    public void playAnimation(OnHer her, String animation) {
+        her.run(PLAY, animation);
     }
 
-    public void stopAnimation(MinecraftServer server, String playerName) {
-        run(server, "ysm play " + arg(playerName) + " stop");
+    public void stopAnimation(OnHer her) {
+        her.run(PLAY, "stop");
     }
 
+    /** 清空一个玩家的授权表。授权镜像的对账用,以服务器自己的来源执行(见类注释)。 */
     public void authClear(MinecraftServer server, String playerName) {
-        run(server, "ysm auth " + arg(playerName) + " clear");
+        asServer(server, AUTH + " " + arg(playerName) + " clear");
     }
 
+    /** 给一个玩家的授权表加一个模型。同上。 */
     public void authAdd(MinecraftServer server, String playerName, String modelId) {
-        run(server, "ysm auth " + arg(playerName) + " add " + arg(modelId));
+        asServer(server, AUTH + " " + arg(playerName) + " add " + arg(modelId));
     }
 
-    /**
-     * 以服务器的身份执行一条 YSM 命令,返回它对执行者说的每一句话(去掉颜色码)。
-     *
-     * <p>命令什么时候真正执行,看调用方在哪:不在任何一条指令的执行当中(服务器刻里跑的任务、网络包送来的调用)
-     * 时,这里返回前它已经执行完;在另一条指令的执行当中(控制台、{@code /numen debug}、{@code /test} 调进来的)时,
-     * 原版的指令队列把它排到那条指令之后,这里返回时它还没跑,也就还什么都没说。要以执行结果为准的事
-     * (换模型要回读身上穿的)因此放在任务里做,见 {@link SwitchTask}。
-     */
-    private static List<String> run(MinecraftServer server, String command) {
-        Heard heard = new Heard(server);
-        server.getCommands().performPrefixedCommand(source(server).withSource(heard), command);
-        return heard.lines;
-    }
-
-    /**
-     * 命令回话的去处:YSM 对执行者说的每一句都收下。要不要知会管理员、记进服务器日志,照服务器自己的来,
-     * 和直接以服务器身份执行时一样。
-     */
-    private static final class Heard implements CommandSource {
-
-        private final MinecraftServer server;
-        private final List<String> lines = new ArrayList<>();
-
-        Heard(MinecraftServer server) {
-            this.server = server;
-        }
-
-        @Override
-        public void sendSystemMessage(Component message) {
-            lines.add(ChatFormatting.stripFormatting(message.getString()));
-        }
-
-        @Override
-        public boolean acceptsSuccess() {
-            return true;
-        }
-
-        @Override
-        public boolean acceptsFailure() {
-            return true;
-        }
-
-        @Override
-        public boolean shouldInformAdmins() {
-            return server.shouldInformAdmins();
-        }
-    }
-
-    /**
-     * YSM 的命令要权限等级 2。这里用等级 4 的服务器源:调用方是插件而不是玩家,
-     * 越权与否已经在上层按"主人的授权集合"判过了。补全也用它,否则权限不够的节点不会被列出。
-     */
-    private static CommandSourceStack source(MinecraftServer server) {
-        return server.createCommandSourceStack().withPermission(4);
+    private static void asServer(MinecraftServer server, String command) {
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command);
     }
 
     /** 模型 id 带斜杠(misc/1_alex),名字可能带空格——交给 Brigadier 自己决定要不要加引号。 */
