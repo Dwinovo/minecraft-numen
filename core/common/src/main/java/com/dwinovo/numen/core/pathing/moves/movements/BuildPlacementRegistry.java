@@ -10,7 +10,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
@@ -166,52 +165,18 @@ public final class BuildPlacementRegistry {
         return state != null && state.getBlock() == desired.getBlock();
     }
 
+    /** 施工现场挑不出精确材料时退回通用垫路料:从哪儿取与规划器同一处,只多筛一道"这一格放得下"。 */
     private static boolean selectGenericThrowaway(ServerPlayer player, BlockHitResult hit,
                                                   float yaw, float pitch, boolean select) {
-        Inventory inventory = player.getInventory();
-        boolean allowInventory = NavSettings.get().allowInventory;
-        for (Item item : ScaffoldMaterials.of(player)) {
-            for (int i = 0; i < 9; i++) {
-                ItemStack stack = inventory.getItem(i);
-                if (!stack.isEmpty() && stack.getItem() == item
-                        && wouldPlaceAny(player, stack, hit, yaw, pitch, InteractionHand.MAIN_HAND)) {
-                    if (select) {
-                        inventory.selected = i;
-                    }
-                    return true;
-                }
-            }
-            ItemStack offhand = player.getOffhandItem();
-            if (!offhand.isEmpty() && offhand.getItem() == item
-                    && wouldPlaceAny(player, offhand, hit, yaw, pitch, InteractionHand.OFF_HAND)) {
-                for (int i = 0; i < 9; i++) {
-                    ItemStack stack = inventory.getItem(i);
-                    if (stack.isEmpty()
-                            || stack.getItem().components().has(net.minecraft.core.component.DataComponents.TOOL)) {
-                        if (select) {
-                            inventory.selected = i;
-                        }
-                        return true;
-                    }
-                }
-            }
-            if (allowInventory) {
-                for (int i = 9; i < 36; i++) {
-                    ItemStack stack = inventory.getItem(i);
-                    if (!stack.isEmpty() && stack.getItem() == item
-                            && wouldPlaceAny(player, stack, hit, yaw, pitch, InteractionHand.MAIN_HAND)) {
-                        if (select) {
-                            ItemStack tmp = inventory.getItem(7);
-                            inventory.setItem(7, stack);
-                            inventory.setItem(i, tmp);
-                            inventory.selected = 7;
-                        }
-                        return true;
-                    }
-                }
-            }
+        ScaffoldMaterials.Source source = ScaffoldMaterials.source(player,
+                (stack, hand) -> wouldPlaceAny(player, stack, hit, yaw, pitch, hand));
+        if (source == null) {
+            return false;
         }
-        return false;
+        if (select) {
+            source.select(player);
+        }
+        return true;
     }
 
     private static boolean wouldPlaceAny(ServerPlayer player, ItemStack stack, BlockHitResult hit,

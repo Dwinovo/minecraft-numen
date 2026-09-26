@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.pathing.settings;
 
+import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.core.init.InitTag;
 import com.dwinovo.numen.entity.CompanionRegistry;
 
@@ -10,6 +11,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
@@ -21,6 +24,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BiPredicate;
 
 /**
  * 她愿意拿来垫路的方块——<b>每个同伴一份,落盘</b>。垫柱子、搭桥、铺台阶都从这里取料,
@@ -142,6 +146,101 @@ public final class ScaffoldMaterials {
         }
         Item item = parse(raw);
         return item == null || item == Items.AIR ? List.of() : List.of(item);
+    }
+
+    // ==================== 从哪儿取料 ====================
+
+    /**
+     * 垫路料此刻从哪儿取。规划器问"有没有料可垫"({@link #available})、执行器切料去放、施工现场退回通用垫料,
+     * 问的都是 {@link #source} 这一处——各写一份时,规划器会端出一条执行器选不出料的路,重新规划的输入
+     * 分毫未变,那条路就一遍遍采纳即夭折。
+     *
+     * @param where 在哪儿:快捷栏;副手(主手换到 {@code slot},一个右键不放方块的格——空格或挖掘工具,
+     *              右键才走副手);背包深处(用时搬进 7 号格)
+     * @param slot  主手要切到的格;背包深处时是料所在的格
+     */
+    public record Source(Where where, int slot) {
+
+        public enum Where { HOTBAR, OFFHAND, INVENTORY }
+
+        /** 把这份料拿到手上:主手切到对应的格,背包深处的先和 7 号格对调。 */
+        public void select(ServerPlayer player) {
+            Inventory inventory = player.getInventory();
+            if (where == Where.INVENTORY) {
+                ItemStack moved = inventory.getItem(slot);
+                inventory.setItem(slot, inventory.getItem(7));
+                inventory.setItem(7, moved);
+                inventory.selected = 7;
+                return;
+            }
+            inventory.selected = slot;
+        }
+    }
+
+    /**
+     * 按清单顺序挑种类,每种先找快捷栏、再看副手、允许动背包({@link NavSettings#allowInventory})时再找
+     * 背包深处;{@code usable} 再按拿哪只手放筛一道(施工现场要看这一格放不放得下)。没有返回 null。
+     */
+    public static Source source(ServerPlayer player, BiPredicate<ItemStack, InteractionHand> usable) {
+        Inventory inventory = player.getInventory();
+        boolean deep = NavSettings.get().allowInventory;
+        for (Item item : of(player)) {
+            for (int i = 0; i < 9; i++) {
+                ItemStack stack = inventory.getItem(i);
+                if (stack.is(item) && usable.test(stack, InteractionHand.MAIN_HAND)) {
+                    return new Source(Source.Where.HOTBAR, i);
+                }
+            }
+            ItemStack offhand = player.getOffhandItem();
+            if (offhand.is(item) && usable.test(offhand, InteractionHand.OFF_HAND)) {
+                for (int i = 0; i < 9; i++) {
+                    ItemStack stack = inventory.getItem(i);
+                    if (stack.isEmpty()
+                            || stack.getItem().components().has(net.minecraft.core.component.DataComponents.TOOL)) {
+                        return new Source(Source.Where.OFFHAND, i);
+                    }
+                }
+            }
+            if (deep) {
+                for (int i = 9; i < 36; i++) {
+                    ItemStack stack = inventory.getItem(i);
+                    if (stack.is(item) && usable.test(stack, InteractionHand.MAIN_HAND)) {
+                        return new Source(Source.Where.INVENTORY, i);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** 不挑放在哪儿的那一问:见 {@link #source(ServerPlayer, BiPredicate)}。 */
+    public static Source source(ServerPlayer player) {
+        return source(player, (stack, hand) -> true);
+    }
+
+    /**
+     * 规划器问的"有没有料可垫":手上找得到;或者是免耗材画像(创造)而清单不空——执行时 {@link #take} 会伸手
+     * 进创造物品栏取清单里的料。清单空着就是她不垫,创造也一样。
+     */
+    public static boolean available(ServerPlayer player) {
+        return source(player) != null || canConjure(player);
+    }
+
+    /**
+     * 执行器要放的那一刻取料:手上有就用手上的;没有而 {@link #available} 认了能变出来,就取一组清单里排
+     * 第一的料放进背包——原版创造玩家放置也得先手持方块,真人从创造栏抓,假玩家没有那个 GUI,这里就是
+     * 那只手。取不到(背包满)返回 null。
+     */
+    public static Source take(ServerPlayer player) {
+        Source source = source(player);
+        if (source != null || !canConjure(player)) {
+            return source;
+        }
+        return player.getInventory().add(new ItemStack(of(player).get(0), 64)) ? source(player) : null;
+    }
+
+    private static boolean canConjure(ServerPlayer player) {
+        return WorkProfile.of(player).freeMaterials() && !of(player).isEmpty();
     }
 
     public static String idOf(Item item) {

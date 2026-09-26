@@ -2,22 +2,16 @@ package com.dwinovo.numen.core.pathing.moves.movements;
 import com.dwinovo.numen.core.pathing.settings.ScaffoldMaterials;
 import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
-import java.util.List;
-
 import com.dwinovo.numen.core.pathing.moves.Input;
 import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
 import com.dwinovo.numen.core.pathing.moves.MovementStatus;
-import com.dwinovo.numen.core.pathing.settings.NavSettings;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
@@ -195,10 +189,11 @@ final class MovementPlacement {
     }
 
     // 选料只有一个出口:先按图纸挑精确材料(施工中的格子值得放对),挑不出就
-    // 退回通用垫路料。两条路最终都落到 selectThrowaway——免耗材画像的自动补料
-    // 那只手就长在那里,于是"背包空着也能垫路"对两条路同时成立。
+    // 退回通用垫路料。两条路最终都落到 selectThrowaway——它取料问的 ScaffoldMaterials.take
+    // 就是规划器"有料可垫"(ScaffoldMaterials.available)的那一处,于是"背包空着也能垫路"
+    // 对两条路同时成立。
     //
-    // 这条汇流是必需的,不是顺手:规划器按画像位认定"有料可垫",执行器若在某
+    // 这条汇流是必需的,不是顺手:规划器认定"有料可垫",执行器若在某
     // 条支路上选不出料就报 UNREACHABLE,两边对同一动作各执一词,而重新规划的
     // 输入分毫未变——必然算出同一条路、再次夭折,规划器与执行器能对着掐到天
     // 荒地老。可行性判据必须只有一处真源。
@@ -218,89 +213,19 @@ final class MovementPlacement {
         }
         return selectThrowaway(player, select);
     }
-    /** 全背包+副手里是否已有任一耗材(自动补货前的查重)。 */
-    private static boolean hasAnyThrowaway(ServerPlayer player, List<Item> acceptable) {
-        Inventory inv = player.getInventory();
-        for (int i = 0; i < inv.getContainerSize(); i++) {
-            ItemStack s = inv.getItem(i);
-            if (!s.isEmpty() && acceptable.contains(s.getItem())) {
-                return true;
-            }
-        }
-        ItemStack off = player.getOffhandItem();
-        return !off.isEmpty() && acceptable.contains(off.getItem());
-    }
-
     /**
-     * 找可垫路耗材并(可选)切到该槽。外层按 NavSettings.acceptableThrowawayItems
-     * 的配置优先级顺序遍历物品种类(默认泥土/圆石/下界岩/石头),内层扫
-     * 快捷栏 0-8 找该种类;快捷栏全无命中时再无条件查副手,命中则选
-     * 一个无害主手槽(空手或非工具类)以便右键走副手。
-     *
-     * <p>{@code select=true} 时把选中的耗材切到主手:快捷栏命中直接切
-     * 该槽;副手命中则把主手换到一个不会右键消费的槽(空手或带 TOOL
-     * 组件的挖掘工具——镐/斧/铲/锄,这些物品右键不放置方块),右键时
-     * 原版走副手放置。
+     * 找垫路料并(可选)切到手上。取料只问 {@link ScaffoldMaterials#take}——规划器的"有没有料可垫"
+     * ({@link ScaffoldMaterials#available})与它读同一份清单、同一个找法,免耗材画像变出来的料也是它认下的那种。
      */
     static boolean selectThrowaway(ServerPlayer player, boolean select) {
-        List<Item> acceptable = ScaffoldMaterials.of(player);
-        Inventory inventory = player.getInventory();
-        boolean allowInventory = NavSettings.get().allowInventory;
-        // 免耗材画像的"伸手进创造物品栏":背包连一块耗材都没有时自动补一组
-        // 泥土——原版创造玩家放置也得先手持方块,真人是从创造栏抓,假玩家
-        // 没有那个 GUI,这里就是那只手。生存画像不进此分支。
-        if (player.hasInfiniteMaterials() && !hasAnyThrowaway(player, acceptable)) {
-            ItemStack restock = new ItemStack(net.minecraft.world.item.Items.DIRT, 64);
-            if (!inventory.add(restock)) {
-                return false;   // 背包满还没耗材:罕见,按无料处理
-            }
-            com.dwinovo.numen.core.Constants.LOG.debug(
-                    "[numen-place] 免耗材画像自动补脚手架泥土 ×64");
+        ScaffoldMaterials.Source source = ScaffoldMaterials.take(player);
+        if (source == null) {
+            return false;
         }
-        for (Item item : acceptable) {
-            for (int i = 0; i < 9; i++) {
-                ItemStack stack = inventory.getItem(i);
-                if (!stack.isEmpty() && stack.getItem() == item) {
-                    if (select) {
-                        inventory.selected = i;
-                    }
-                    return true;
-                }
-            }
-            // 该种类快捷栏无命中:查副手
-            ItemStack offhand = player.getOffhandItem();
-            if (!offhand.isEmpty() && offhand.getItem() == item) {
-                // 主手不能是会右键消费/使用的物品(方块/桶等),否则右键走主手
-                // 而非副手;选一个空手或带 TOOL 组件的挖掘工具槽(镐/斧/铲/锄),
-                // 这些物品右键不会放置方块,右键时原版走副手放置。
-                for (int i = 0; i < 9; i++) {
-                    ItemStack stack = inventory.getItem(i);
-                    if (stack.isEmpty()
-                            || stack.getItem().components().has(net.minecraft.core.component.DataComponents.TOOL)) {
-                        if (select) {
-                            inventory.selected = i;
-                        }
-                        return true;
-                    }
-                }
-            }
-            // 背包深处:仅 allowInventory 开启时动用,搬到 7 号槽再选中
-            if (allowInventory) {
-                for (int i = 9; i < 36; i++) {
-                    ItemStack stack = inventory.getItem(i);
-                    if (!stack.isEmpty() && stack.getItem() == item) {
-                        if (select) {
-                            ItemStack tmp = inventory.getItem(7);
-                            inventory.setItem(7, stack);
-                            inventory.setItem(i, tmp);
-                            inventory.selected = 7;
-                        }
-                        return true;
-                    }
-                }
-            }
+        if (select) {
+            source.select(player);
         }
-        return false;
+        return true;
     }
 
     /** 玩家当前视线是否命中该方块(轮廓射线,不穿流体)。 */

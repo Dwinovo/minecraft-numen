@@ -57,7 +57,7 @@ public class CalculationContext {
     public final BlockGetter view;
     public final ChunkLoadedTest loadedTest;
     public final ToolSet toolSet;
-    /** 背包里是否有可垫路耗材(泥土/圆石/下界岩/石头)。 */
+    /** 有没有她认可的垫路料可放({@link ScaffoldMaterials#available}),已与规格和总开关折在一起。 */
     public final boolean hasThrowaway;
     /** 快捷栏有水桶且不在下界。 */
     public final boolean hasWaterBucket;
@@ -112,13 +112,11 @@ public class CalculationContext {
         this.spec = spec;
         this.gate = gate;
         this.toolSet = new ToolSet(player);
-        // 免耗材画像(创造)恒有耗材:执行层选料时会自动补一组(伸手进创造
-        // 物品栏的代码版),规划器因此敢想所有需要垫方块的路线——不然空手
-        // 创造同伴会挖坑出不来(离目标 2 格报 NO-PATH)。
+        // 有没有料可垫与执行器切料问同一处(ScaffoldMaterials.available / source):免耗材画像(创造)
+        // 清单不空就算有,执行时伸手进创造物品栏取清单里的料——不然空手创造同伴会挖坑出不来。
         // 规格与总开关同折:不改地形的路线没有耗材这回事,放置成本处处 INF
         this.hasThrowaway = spec.alter().mayAlter() && settings.allowPlace
-                && (hasGenericThrowaway(player, settings)
-                        || com.dwinovo.numen.core.WorkProfile.of(player).freeMaterials());
+                && ScaffoldMaterials.available(player);
         this.hasWaterBucket = settings.allowWaterBucketFall
                 && hotbarHasWaterBucket(player)
                 && player.level().dimension() != Level.NETHER;
@@ -154,42 +152,6 @@ public class CalculationContext {
             }
         }
         this.worldBorder = border;
-    }
-
-    /**
-     * 是否持有可垫路耗材。查快捷栏(0-8)与副手;仅当
-     * {@code allowInventory} 开启才查背包深处(9-35)。
-     */
-    private static boolean hasGenericThrowaway(ServerPlayer player, NavSettings settings) {
-        List<net.minecraft.world.item.Item> acceptable = ScaffoldMaterials.of(player);
-        var inv = player.getInventory();
-        for (int i = 0; i < 9; i++) {
-            ItemStack stack = inv.getItem(i);
-            if (!stack.isEmpty() && acceptable.contains(stack.getItem())) {
-                return true;
-            }
-        }
-        ItemStack offhand = player.getItemBySlot(EquipmentSlot.OFFHAND);
-        if (!offhand.isEmpty() && acceptable.contains(offhand.getItem())) {
-            // 副手耗材要真能用出来,主手须能切到"右键无消费"的槽
-            // (空手或带 TOOL 组件的挖掘工具),否则右键走主手放不出副手方块
-            for (int i = 0; i < 9; i++) {
-                ItemStack stack = inv.getItem(i);
-                if (stack.isEmpty() || stack.getItem().components()
-                        .has(net.minecraft.core.component.DataComponents.TOOL)) {
-                    return true;
-                }
-            }
-        }
-        if (settings.allowInventory) {
-            for (int i = 9; i < 36; i++) {
-                ItemStack stack = inv.getItem(i);
-                if (!stack.isEmpty() && acceptable.contains(stack.getItem())) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     /** 快捷栏里是否有(物品与组件都相同的)水桶。 */
