@@ -172,6 +172,5 @@ public interface GearSlot {
 
 ## 十一、顺带发现的无关问题(未改)
 
-- `ReflexRegistry` 的提示词说 `item_id` 传 "auto" 可以解除钉住,但这并没有实现。
 - `NumenPrompts` 说 `get_self_status` 返回完整背包,但实际不列背包。
 - `InventoryGameTests` 的注释还写着"走原版右键换装"。
