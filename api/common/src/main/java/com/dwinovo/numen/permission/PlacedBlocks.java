@@ -16,6 +16,9 @@ import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.saveddata.SavedData;
 
 import java.util.ArrayList;
@@ -121,6 +124,26 @@ public final class PlacedBlocks extends SavedData {
         CODEC.encodeStart(NbtOps.INSTANCE, this).result()
                 .ifPresent(t -> { if (t instanceof CompoundTag c) tag.merge(c); });
         return tag;
+    }
+
+    /**
+     * 双格方块的主半(门的下半、床脚)带出来的另一半在哪;不是双格方块的主半为 null。建造判"放一扇门还要清哪一格"与画设计时
+     * "门盖掉哪两格"共用这一处。
+     */
+    public static BlockPos otherHalfOf(BlockPos pos, BlockState state) {
+        if (state == null) {
+            return null;
+        }
+        if (state.hasProperty(BlockStateProperties.BED_PART)
+                && state.getValue(BlockStateProperties.BED_PART) == BedPart.FOOT
+                && state.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
+            return pos.relative(state.getValue(BlockStateProperties.HORIZONTAL_FACING));
+        }
+        if (state.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
+                && state.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.LOWER) {
+            return pos.above();
+        }
+        return null;
     }
 
     /** 记一格和放它的人(主线程)。 */

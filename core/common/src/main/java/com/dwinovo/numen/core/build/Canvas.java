@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.build;
 
 import com.dwinovo.numen.core.task.build.BuildTaskRecord;
+import com.dwinovo.numen.permission.PlacedBlocks;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.Item;
@@ -79,13 +80,20 @@ public final class Canvas {
         steps.add(new ArrayList<>());
     }
 
-    /** 画一格:这一格原来画过的被盖掉。 */
+    /**
+     * 画一格:这一格原来画过的被盖掉。双格方块(门的下半、床脚)占两格,另一半那格原来画过的也被它盖掉——另一半由放置
+     * 回调自己补出来,不进目标集;留着先前那一笔,施工时就会为了那一笔把刚装好的门拆掉。
+     */
     public void put(BuildTaskRecord.Target target) {
         if (steps.isEmpty()) {
             nextStep();
         }
         steps.get(steps.size() - 1).add(target);
         cells.remove(target.pos().asLong());
+        BlockPos other = PlacedBlocks.otherHalfOf(target.pos(), target.desiredState());
+        if (other != null) {
+            cells.remove(other.asLong());
+        }
         cells.put(target.pos().asLong(), target);
         if (cells.size() > BuildShapes.MAX_TOTAL_CELLS) {
             throw new IllegalArgumentException("this comes to more than " + BuildShapes.MAX_TOTAL_CELLS

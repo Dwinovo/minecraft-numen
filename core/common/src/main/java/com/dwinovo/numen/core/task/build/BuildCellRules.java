@@ -4,11 +4,9 @@ import com.dwinovo.numen.core.pathing.cache.LoadedOnlyView;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.permission.Permission;
+import com.dwinovo.numen.permission.PlacedBlocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BedPart;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -101,7 +99,7 @@ final class BuildCellRules {
         if (!isAirTarget(target)) {
             actions.add(Action.place(pos, current, target.item()));
         }
-        BlockPos other = otherHalfOf(pos, target.desiredState());
+        BlockPos other = PlacedBlocks.otherHalfOf(pos, target.desiredState());
         if (other != null) {
             BlockState otherState = peek(other);
             if (!otherState.isAir()) {
@@ -143,30 +141,8 @@ final class BuildCellRules {
         if (peek(pos).getDestroySpeed(level, pos) == -1) {
             return true;
         }
-        BlockPos other = otherHalfOf(pos, desired);
+        BlockPos other = PlacedBlocks.otherHalfOf(pos, desired);
         return other != null && peek(other).getDestroySpeed(level, other) == -1;
-    }
-
-    /**
-     * 双格方块的另一半在哪:床看朝向那一格,门与高草看正上方。
-     *
-     * <p>只查自己那一格,会出现"下半放下去了、上半卡在基岩里"或者"下半盖住了玩家
-     * 箱子的上半"这类半截货,所以砸不动与箱子保护两处都要连它一起看。
-     */
-    static BlockPos otherHalfOf(BlockPos pos, BlockState desired) {
-        if (desired == null) {
-            return null;
-        }
-        if (desired.hasProperty(BlockStateProperties.BED_PART)
-                && desired.getValue(BlockStateProperties.BED_PART) == BedPart.FOOT
-                && desired.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
-            return pos.relative(desired.getValue(BlockStateProperties.HORIZONTAL_FACING));
-        }
-        if (desired.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
-                && desired.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.LOWER) {
-            return pos.above();
-        }
-        return null;
     }
 
     /**

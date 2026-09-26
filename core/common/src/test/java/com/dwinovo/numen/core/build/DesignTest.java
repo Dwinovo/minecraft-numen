@@ -21,6 +21,7 @@ import java.util.UUID;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -57,7 +58,8 @@ class DesignTest {
         assertEquals("Dwin", design.ownerName());
         assertEquals("Aria", design.author());
         assertEquals(design.steps(), Design.parse("house", design.text()).steps(), "写出去的文本读回来是同样几步");
-        assertEquals(3 * 8, design.drawn().targets().size(), "墙圈三层每层八格;门盖掉南面正中那一格,不多出一格");
+        assertEquals(3 * 8 - 1, design.drawn().targets().size(),
+                "墙圈三层每层八格;门盖掉南面正中那一格和它上半占的那一格,门本身只算一格");
     }
 
     @Test
@@ -108,6 +110,18 @@ class DesignTest {
         assertTrue(cells.get(new BlockPos(0, 0, 0)).is(Blocks.STONE));
         assertEquals(List.of(3, 1), design.drawn().steps().stream().map(List::size).toList(),
                 "每一步各自画了几格,被覆盖的也算在那一步里");
+    }
+
+    /** 门占两格:装在两格高的墙里,上半那格先前画的圆石被门盖掉,不留一笔让施工时为它把门拆了。 */
+    @Test
+    void aDoorOverwritesTheCellItsUpperHalfTakes() {
+        Design design = Design.parse("house", text("build layer 0 0 0 ### --block cobblestone --up_to 1",
+                "build set oak_door[facing=south] 1 0 0"));
+        Map<BlockPos, BlockState> cells = new HashMap<>();
+        design.drawn().targets().forEach(t -> cells.put(t.pos(), t.desiredState()));
+        assertTrue(cells.get(new BlockPos(1, 0, 0)).is(Blocks.OAK_DOOR));
+        assertFalse(cells.containsKey(new BlockPos(1, 1, 0)), "门的上半那格不再是圆石的目标");
+        assertEquals(5, cells.size());
     }
 
     @Test
