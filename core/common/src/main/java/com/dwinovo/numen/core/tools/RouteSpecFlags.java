@@ -48,35 +48,46 @@ public final class RouteSpecFlags {
     private static final double MAX_PENALTY = 1000.0;
     private static final int MAX_FALL = 64;
     private static final int MAX_ALTER_BUDGET = 10_000;
+    /** 这一串标志在用法行里写成的那一格 {@code [route flags]};完整清单在动作自己的帮助里。 */
+    public static final String GROUP = "route flags";
 
     static final Param<String> ALTER = Param.optional("alter", ArgType.oneOf("none", "natural", "any"),
             "Whether the walk may change the world: none never breaks or places a block; natural may dig, bridge "
                     + "and pillar through natural terrain; any also counts blocks that need your owner's consent, "
-                    + "asking before it touches them. Every change is itemised in the result.");
+                    + "asking before it touches them. Every change is itemised in the result.")
+            .group(GROUP);
     static final Param<List<String>> AVOID = Param.optional("avoid", ArgType.list(ArgType.oneOf(cellNames())),
-            "Cell types to keep out of entirely, e.g. water to stay dry, door to never pass doors.");
+            "Cell types to keep out of entirely, e.g. water to stay dry, door to never pass doors.")
+            .group(GROUP);
     static final Param<Double> PENALTY_PLACE = penalty("place", "Extra cost per block placed", 20);
     static final Param<Double> PENALTY_BREAK = penalty("break", "Extra cost per block broken, on top of dig time", 30);
     static final Param<Double> PENALTY_JUMP = penalty("jump", "Extra cost per jump; raise it for a flatter walk", 2);
     static final Param<Double> PENALTY_WADE = penalty("wade", "Extra cost per block of water walked", 3);
     static final Param<List<String>> AVOID_BREAK = Param.optional("avoid_break", ArgType.list(ArgType.blockOrCells()),
-            "Never break these blocks, or anything in these cells.");
+            "Never break these blocks, or anything in these cells.")
+            .group(GROUP);
     static final Param<List<String>> AVOID_PLACE = Param.optional("avoid_place", ArgType.list(ArgType.blockOrCells()),
-            "Never place a block into cells holding these (e.g. minecraft:water), or into these cells.");
+            "Never place a block into cells holding these (e.g. minecraft:water), or into these cells.")
+            .group(GROUP);
     static final Param<List<String>> AVOID_STEP = Param.optional("avoid_step", ArgType.list(ArgType.blockOrCells()),
-            "Never stand on these blocks (e.g. minecraft:farmland, #minecraft:crops), or on these cells.");
+            "Never stand on these blocks (e.g. minecraft:farmland, #minecraft:crops), or on these cells.")
+            .group(GROUP);
     static final Param<Boolean> PARKOUR = Param.optional("parkour", ArgType.bool(),
-            "Allow running jumps over 2-4 block gaps.").whenOmitted("not jump gaps");
+            "Allow running jumps over 2-4 block gaps.").whenOmitted("not jump gaps")
+            .group(GROUP);
     static final Param<Boolean> CLIMB_VINES = Param.optional("climb_vines", ArgType.bool(), "Allow climbing vines.")
-            .whenOmitted("not climb vines");
+            .whenOmitted("not climb vines")
+            .group(GROUP);
     static final Param<Integer> MAX_FALL_FLAG = Param.optional("max_fall", ArgType.integer(0, MAX_FALL),
             "Highest drop she may take without water below, in blocks; she may still fall further when her health "
-                    + "can take it.").whenOmitted("keep 3");
+                    + "can take it.").whenOmitted("keep 3")
+            .group(GROUP);
     static final Param<Integer> ALTER_BUDGET = Param.optional("alter_budget", ArgType.integer(0, MAX_ALTER_BUDGET),
             "How many blocks the whole route may change (broken + placed). Routes over it are dropped; if none fits, "
                     + "the reply says so. Checked when the route is planned; a re-plan after being blocked still "
                     + "itemises every block actually changed.")
-            .whenOmitted("put no limit on it");
+            .whenOmitted("put no limit on it")
+            .group(GROUP);
 
     /** 这一串标志,按帮助里列的顺序。用它的动作把它接在自己的参数之后。 */
     public static final List<Param<?>> PARAMS = List.of(ALTER, AVOID, PENALTY_PLACE, PENALTY_BREAK, PENALTY_JUMP,
@@ -85,7 +96,8 @@ public final class RouteSpecFlags {
     private static Param<Double> penalty(String action, String what, int byDefault) {
         return Param.optional("penalty_" + action, ArgType.number(0, MAX_PENALTY),
                 what + "; higher makes the planner prefer a longer route over doing it.")
-                .whenOmitted("keep " + byDefault);
+                .whenOmitted("keep " + byDefault)
+                .group(GROUP);
     }
 
     /** 这一行写了哪怕一个规格标志。 */

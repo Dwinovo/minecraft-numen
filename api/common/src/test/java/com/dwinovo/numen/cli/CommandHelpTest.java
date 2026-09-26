@@ -26,6 +26,14 @@ class CommandHelpTest {
             .whenOmitted("walk");
     static final Param<String> BODY = Param.required("body", ArgType.text(), "What to write.")
             .values("any text; the owner reads it as written");
+    static final Param<Boolean> FAST = Param.optional("fast", ArgType.bool(), "Run.");
+    static final Param<Boolean> WET = Param.optional("wet", ArgType.bool(), "Wade through water.")
+            .group("path flags");
+    static final Param<Boolean> DRY = Param.optional("dry", ArgType.bool(), "Stay out of water.")
+            .whenOmitted("wade when it is shorter")
+            .group("path flags");
+    static final Param<Integer> LATE = Param.optional("late", ArgType.integer(0, 9), "How late may she be.")
+            .group("time flags");
 
     @BeforeAll
     static void register() {
@@ -40,6 +48,10 @@ class CommandHelpTest {
             g.client("note", "Write a note.", (src, args) -> src.reply(TaskResult.ok("noted").toJson()), BODY)
                     .example("gt_help note buy more torches");
         });
+        door().registerCommands("gt_grouped", "A group whose action takes a batch of flags.", g ->
+                g.server("go", "Go somewhere.", (src, args) -> src.reply(TaskResult.ok("went").toJson()),
+                                X, FAST, WET, DRY, LATE)
+                        .example("gt_grouped go 12 --wet true --late 3"));
         door().registerCommands("gt_many", "A group with a long list.", g -> {
             for (int i = 1; i <= 25; i++) {
                 String name = String.format("act%02d", i);
@@ -86,6 +98,35 @@ class CommandHelpTest {
                   Examples:
                     gt_help note buy more torches""",
                 onClient("gt_help note --help").message(), "没有注意与相关命令时那两块不出现");
+    }
+
+    @Test
+    void aFlagGroupIsOneCellInTheUsageAndListedInFullUnderItsNameInTheActionHelp() {
+        assertEquals("""
+                gt_grouped: A group whose action takes a batch of flags. Actions:
+                  gt_grouped go <x> [--fast <boolean>] [path flags] [time flags] — Go somewhere.
+                gt_grouped <action> --help explains one action.""", onClient("gt_grouped --help").message());
+        assertEquals("""
+                gt_grouped go <x> [--fast <boolean>] [path flags] [time flags]
+                  Go somewhere.
+                  <x> (integer 0-100) — X coordinate.
+                  --fast <boolean> (true or false; optional) — Run.
+                  Path flags:
+                    --wet <boolean> (true or false; optional) — Wade through water.
+                    --dry <boolean> (true or false; optional) — Stay out of water. Omit to wade when it is shorter.
+                  Time flags:
+                    --late <integer> (integer 0-9; optional) — How late may she be.
+                  Examples:
+                    gt_grouped go 12 --wet true --late 3""", onClient("gt_grouped go --help").message());
+        assertTrue(onServer("gt_grouped go 12 --dry true --fast true --late 1").success(),
+                "归组只改帮助的排法,标志照样顺序随意地写");
+    }
+
+    @Test
+    void onlyAnOptionalParameterJoinsAFlagGroupUnderALowercaseName() {
+        assertThrows(IllegalArgumentException.class, () -> Param.required("x", ArgType.word(), "X.").group("path flags"));
+        assertThrows(IllegalArgumentException.class, () -> Param.optional("x", ArgType.word(), "X.").group("Path"));
+        assertThrows(IllegalArgumentException.class, () -> Param.optional("x", ArgType.word(), "X.").group(" "));
     }
 
     @Test

@@ -87,7 +87,14 @@ class WorkCommandGroupsTest {
             assertTrue(help.get("success").getAsBoolean(), help.toString());
             assertTrue(help.get("message").getAsString().startsWith(group + ": "), help.toString());
         }
+        String moveHelp = run("move --help").get("message").getAsString();
+        assertTrue(moveHelp.contains("\n  move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] "
+                + "[--route <word>] [route flags] — "), "组帮助里路线标志整组写成一格: " + moveHelp);
+        assertTrue(!moveHelp.contains("--avoid_break"), moveHelp);
         String gotoHelp = run("move goto --help").get("message").getAsString();
+        assertTrue(gotoHelp.startsWith("move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] "
+                + "[--route <word>] [route flags]\n"), gotoHelp);
+        assertTrue(gotoHelp.contains("\n  Route flags:\n    --alter <none|natural|any> "), gotoHelp);
         assertTrue(gotoHelp.contains("--avoid_break <block|cell...>"), gotoHelp);
         assertTrue(gotoHelp.endsWith("Shortcut tool: goto."), gotoHelp);
         String mineHelp = run("work mine --help").get("message").getAsString();

@@ -206,14 +206,26 @@ public final class Action {
         return group.name() + " " + name;
     }
 
-    /** 整行用法:路径 + 必填参数 + 标志。 */
+    /**
+     * 整行用法:路径 + 必填参数 + 标志。归了组的标志整组写成一格 {@code [组名]},排在组里第一个标志的位置;
+     * 组里有哪些标志由动作自己的帮助列全({@link CommandHelp#action})。
+     */
     String usage() {
         StringBuilder sb = new StringBuilder(path());
         for (Param<?> p : params) {
             if (p.required()) sb.append(' ').append(p.usage());
         }
+        List<String> groups = new ArrayList<>();
         for (Param<?> p : params) {
-            if (!p.required()) sb.append(' ').append(p.usage());
+            if (p.required()) {
+                continue;
+            }
+            if (p.group() == null) {
+                sb.append(' ').append(p.usage());
+            } else if (!groups.contains(p.group())) {
+                groups.add(p.group());
+                sb.append(" [").append(p.group()).append(']');
+            }
         }
         return sb.toString();
     }

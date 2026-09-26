@@ -21,6 +21,11 @@ import java.util.regex.Pattern;
  * </ul>
  * 两条都接在说明后面({@link #explained}),帮助与 schema 读的是同一段文字。
  *
+ * <h2>标志组</h2>
+ * 成批出现、意思相关的可选标志(路线规格的十几个旋钮)可以归进一个组({@link #group}):动作的用法行只写一格
+ * {@code [route flags]},不逐个列;完整清单在动作自己的帮助里,列在组名那一小节下。组只是帮助里怎么排,
+ * 命令行上怎么写、schema 里怎么摊都不变。
+ *
  * <pre>{@code
  * static final Param<String> TEXTURE = Param.optional("texture", ArgType.string(), "Which texture to wear.")
  *         .values("a texture id from the textures ysm options lists")
@@ -31,12 +36,15 @@ import java.util.regex.Pattern;
  *
  * @param values      能写哪些值、去哪查;没写是 null
  * @param whenOmitted 可选参数不写时会怎样("Omit to" 后面那半句);必填参数与没写的都是 null
+ * @param group       归进的标志组,用法行里整组写成一格 {@code [组名]};不归组是 null
  */
 public record Param<T>(String name, ArgType<T> type, String description, boolean required,
-                       String values, String whenOmitted) {
+                       String values, String whenOmitted, String group) {
 
     /** 参数名与 JSON 键同形:小写字母开头,小写字母、数字、下划线。 */
     private static final Pattern NAME = Pattern.compile("[a-z][a-z0-9_]{0,63}");
+    /** 标志组的名字:用法行里写成 {@code [组名]},帮助里是那一小节的标题。 */
+    private static final Pattern GROUP = Pattern.compile("[a-z]+( [a-z]+)*");
 
     public Param {
         if (name == null || !NAME.matcher(name).matches()) {
@@ -60,24 +68,33 @@ public record Param<T>(String name, ArgType<T> type, String description, boolean
         if (whenOmitted != null && whenOmitted.isBlank()) {
             throw new IllegalArgumentException("参数 " + name + " 不写时会怎样是空的");
         }
+        if (group != null && (required || !GROUP.matcher(group).matches())) {
+            throw new IllegalArgumentException("参数 " + name + " 的标志组不合规:只有可选参数能归组,组名是小写英文词"
+                    + "(如 \"route flags\"),得到 '" + group + "'");
+        }
     }
 
     public static <T> Param<T> required(String name, ArgType<T> type, String description) {
-        return new Param<>(name, type, description, true, null, null);
+        return new Param<>(name, type, description, true, null, null, null);
     }
 
     public static <T> Param<T> optional(String name, ArgType<T> type, String description) {
-        return new Param<>(name, type, description, false, null, null);
+        return new Param<>(name, type, description, false, null, null, null);
     }
 
     /** 能写哪些值、去哪查,例如 {@code "pot or stockpot"}、{@code "a model id as ysm options lists it"}。 */
     public Param<T> values(String values) {
-        return new Param<>(name, type, description, required, values, whenOmitted);
+        return new Param<>(name, type, description, required, values, whenOmitted, group);
     }
 
     /** 可选参数不写时会怎样,接在 "Omit to" 后面,例如 {@code "use the model's first texture"}。 */
     public Param<T> whenOmitted(String whenOmitted) {
-        return new Param<>(name, type, description, required, values, whenOmitted);
+        return new Param<>(name, type, description, required, values, whenOmitted, group);
+    }
+
+    /** 归进一个标志组,例如 {@code "route flags"}:用法行里整组只写一格 {@code [route flags]}。只有可选参数能归组。 */
+    public Param<T> group(String group) {
+        return new Param<>(name, type, description, required, values, whenOmitted, group);
     }
 
     /** 一组参数的 JSON schema,字段按声明顺序。快捷工具与 command 工具的 schema 都经这里生成。 */
