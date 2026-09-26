@@ -27,12 +27,12 @@ import java.util.List;
  *
  * <h2>急件叫醒:脉冲可以丢,电平不会骗</h2>
  * 急件落地时同步通知{@link #addUrgentListener 登记过的等待者}——叫的内容只是
- * "来问吧",不递事件。正确性从不依赖叫醒:{@link #hasUrgent}/{@link #shouldDrain}
+ * "来问吧",不递事件。正确性从不依赖叫醒:{@link #hasUrgent}/{@link #ripeness}
  * 是随时可问、答案一致的状态;丢一次叫醒,消费者按自己的节律(内脑的 tick 心跳、
  * 外脑的下一次长轮询)一问就发现。
  *
  * <h2>"排空"是"到点就走",不是"立刻发出"</h2>
- * {@link #shouldDrain} 只读状态,可以反复问、答案一致。上层因为协议原因(不能往
+ * {@link #ripeness} 只读状态,可以反复问、答案一致。上层因为协议原因(不能往
  * assistant 的 tool_calls 中间插 user 消息)排不成,下一 tick 再问就是了——
  * <b>不存在"错过的排空"</b>,也就不需要记住"我刚才想排空"这种会出错的状态。
  *
@@ -144,36 +144,6 @@ public final class EventQueue {
     // ---- 出 ----
 
     /**
-     * 现在该不该排空。
-     *
-     * @param now   真实时间(墙上时钟——游戏刻在单机退出时是冻结的,拿它算"躺了多久"
-     *              会以为什么都没老)
-     * @param level 主动性档位 1~10,见 {@link #thresholdOf} / {@link #maxWaitMsOf}
-     */
-    public boolean shouldDrain(long now, int level) {
-        int waiting = 0;
-        long oldest = Long.MAX_VALUE;
-        for (Entry e : entries) {
-            // 不叫醒她的不算数(捎带的话、控制命令):它们自己不值得开一轮
-            if (!delivery(e).wakes()) {
-                continue;
-            }
-            if (e.urgent()) {
-                return true;
-            }
-            waiting++;
-            if (e.ts() > 0 && e.ts() < oldest) {
-                oldest = e.ts();
-            }
-        }
-        if (waiting == 0) {
-            return false;
-        }
-        long age = oldest == Long.MAX_VALUE ? 0L : Math.max(0L, now - oldest);
-        return waiting >= thresholdOf(level) || age >= maxWaitMsOf(level);
-    }
-
-    /**
      * 取走全部<b>原始条目</b>并清空——转发用(服务端暂存 → 客户端队列)。
      *
      * <p>转发时不能渲染:渲染会把类型和时间戳压成一个字符串,收下的那一端就没法
@@ -252,17 +222,69 @@ public final class EventQueue {
     }
 
     /**
-     * 本来要停的时候(历史里没有待回应的东西),墙之前有没有本身要她回应的条目
-     * ({@link EventTypes.Delivery#wakes})。有,就该再调一次模型,而那一次的 {@link #takeForCall} 一定取得到它。
+     * 墙之前那一段里本身要她回应的条目({@link EventTypes.Delivery#wakes})。闲时熟没熟({@link #ripeness})、
+     * 本来要停时还调不调模型({@link #wantsAnswer})、这次调用带走什么({@link #takeForCall})都从它算——
+     * 三处看的是同一段、同一份声明,所以熟了开出来的 run 一定取得到东西。
      */
-    public boolean wantsAnswer() {
+    private List<Entry> wakers() {
         int wall = wall();
+        List<Entry> out = new ArrayList<>();
         for (int i = 0; i < wall; i++) {
             if (delivery(entries.get(i)).wakes()) {
-                return true;
+                out.add(entries.get(i));
             }
         }
-        return false;
+        return out;
+    }
+
+    /**
+     * 熟度:闲着的时候,墙之前那一段该不该开一次 run。有急件就熟;否则按主动性档位,叫醒她的条目攒够条数、
+     * 或者最老的一条等够时长。不叫醒她的条目(捎带的话)不算数,墙后面的等墙执行完再说。
+     *
+     * @param now   真实时间(墙上时钟——游戏刻在单机退出时是冻结的,拿它算"躺了多久"
+     *              会以为什么都没老)
+     * @param level 主动性档位 1~10,见 {@link #thresholdOf} / {@link #maxWaitMsOf}
+     */
+    public Ripeness ripeness(long now, int level) {
+        List<Entry> wakers = wakers();
+        boolean urgent = false;
+        long oldest = Long.MAX_VALUE;
+        for (Entry e : wakers) {
+            urgent |= e.urgent();
+            if (e.ts() > 0 && e.ts() < oldest) {
+                oldest = e.ts();
+            }
+        }
+        long age = oldest == Long.MAX_VALUE ? 0L : Math.max(0L, now - oldest);
+        Ripeness.Why why = urgent ? Ripeness.Why.URGENT
+                : wakers.isEmpty() ? null
+                : wakers.size() >= thresholdOf(level) ? Ripeness.Why.ENOUGH
+                : age >= maxWaitMsOf(level) ? Ripeness.Why.LONG_ENOUGH
+                : null;
+        return new Ripeness(why, wakers.size(), age);
+    }
+
+    /**
+     * 熟度的答案,连同算它用的数(日志照着说为什么开了这一轮,不另算一遍)。
+     *
+     * @param why       为什么熟了;{@code null} = 没熟
+     * @param waiting   墙之前叫醒她的条目有几条
+     * @param oldestAge 其中最老那条躺了多久;一条都没有是 0
+     */
+    public record Ripeness(Why why, int waiting, long oldestAge) {
+        public enum Why { URGENT, ENOUGH, LONG_ENOUGH }
+
+        public boolean ripe() {
+            return why != null;
+        }
+    }
+
+    /**
+     * 本来要停的时候(没有待回应的东西),墙之前有没有本身要她回应的条目。有,就该再调一次模型,
+     * 而那一次的 {@link #takeForCall} 一定取得到它。
+     */
+    public boolean wantsAnswer() {
+        return !wakers().isEmpty();
     }
 
     /**
@@ -273,21 +295,17 @@ public final class EventQueue {
      * <p>不叫醒她的条目(捎带)只随别人引起的调用走:{@code answerDue} 为假、墙之前又没有要她回应的条目时,
      * 这次根本不调模型,一条都不取。
      *
-     * @param answerDue 历史里已经有待模型回应的东西(工具结果、还没回上的话):这次调用无论如何都会发生
+     * @param answerDue 已经有待模型回应的东西(工具结果、失败重试的那次输入):这次调用无论如何都会发生
      * @return 取走的条目,按入队顺序;{@code answerDue} 为假时非空当且仅当 {@link #wantsAnswer}
      */
     public List<Entry> takeForCall(boolean answerDue, long now) {
-        int wall = wall();
-        boolean wanted = false;
-        boolean othersCall = answerDue;
-        for (int i = 0; i < wall; i++) {
-            EventTypes.Delivery d = delivery(entries.get(i));
-            wanted |= d.wakes();
-            othersCall |= d.wakes() && d.joins() == EventTypes.Delivery.Joins.ANY_CALL;
-        }
-        if (!answerDue && !wanted) {
+        List<Entry> wakers = wakers();
+        if (!answerDue && wakers.isEmpty()) {
             return List.of();
         }
+        boolean othersCall = answerDue
+                || wakers.stream().anyMatch(e -> delivery(e).joins() == EventTypes.Delivery.Joins.ANY_CALL);
+        int wall = wall();
         List<Entry> taken = new ArrayList<>();
         java.util.Iterator<Entry> it = entries.iterator();
         for (int i = 0; i < wall; i++) {
@@ -334,6 +352,28 @@ public final class EventQueue {
             journal.save(entries);
         }
         return taken;
+    }
+
+    /**
+     * 丢掉墙之前那一段里不叫醒她的条目(捎带的旁听)。清空上下文时用:它们是她在清空之前听见的,属于被清掉的
+     * 那段上下文;要她回应的条目留着,清完进新的上下文。
+     *
+     * @return 丢掉几条
+     */
+    public int discardQuietAhead() {
+        int wall = wall();
+        int n = 0;
+        java.util.Iterator<Entry> it = entries.iterator();
+        for (int i = 0; i < wall; i++) {
+            if (!delivery(it.next()).wakes()) {
+                it.remove();
+                n++;
+            }
+        }
+        if (n > 0) {
+            journal.save(entries);
+        }
+        return n;
     }
 
     // ---- 外接大脑 ----
@@ -418,15 +458,6 @@ public final class EventQueue {
             if (delivery(e).wakes()) return true;
         }
         return false;
-    }
-
-    /** 最老那条躺了多久;空队列返回 0。 */
-    public long oldestAgeMs(long now) {
-        long oldest = Long.MAX_VALUE;
-        for (Entry e : entries) {
-            if (e.ts() > 0 && e.ts() < oldest) oldest = e.ts();
-        }
-        return oldest == Long.MAX_VALUE ? 0L : Math.max(0L, now - oldest);
     }
 
     /** 因为满了被丢掉、还没报告过的条数。 */

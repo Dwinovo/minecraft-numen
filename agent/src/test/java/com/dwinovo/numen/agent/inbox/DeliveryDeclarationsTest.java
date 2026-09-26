@@ -47,7 +47,7 @@ class DeliveryDeclarationsTest {
             String id = probe(d);
             boolean anyCall = d.joins() == EventTypes.Delivery.Joins.ANY_CALL;
 
-            assertEquals(d.wakes(), queueOf(id).shouldDrain(T0, EventQueue.MIN_LEVEL), d + ":闲时算不算叫醒她的理由");
+            assertEquals(d.wakes(), queueOf(id).ripeness(T0, EventQueue.MIN_LEVEL).ripe(), d + ":闲时算不算叫醒她的理由");
             assertEquals(d.wakes(), queueOf(id).hasWaking(), d + ":开不开得起一次 run");
             assertEquals(d.wakes(), queueOf(id).wantsAnswer(), d + ":本来要停时让不让 run 接着走");
             assertEquals(d.wakes() ? 1 : 0, queueOf(id).takeForCall(false, T0).size(),

@@ -39,29 +39,29 @@ class EventQueueTest {
     void urgentDrainsAtAnyLevel() {
         EventQueue q = fresh();
         q.push(EventTypes.TASK_FINISHED, "<event>任务失败了</event>", T0, true);
-        assertTrue(q.shouldDrain(T0, EventQueue.MAX_LEVEL), "档位拉到最沉默也拦不住急件");
+        assertTrue(q.ripeness(T0, EventQueue.MAX_LEVEL).ripe(), "档位拉到最沉默也拦不住急件");
     }
 
     @Test
     void enoughPilesUpDrains() {
-        assertFalse(withEvents(2, T0).shouldDrain(T0, 5), "5 档要攒够 5 条");
-        assertTrue(withEvents(5, T0).shouldDrain(T0, 5));
-        assertTrue(withEvents(1, T0).shouldDrain(T0, 1), "1 档一有动静就说");
+        assertFalse(withEvents(2, T0).ripeness(T0, 5).ripe(), "5 档要攒够 5 条");
+        assertTrue(withEvents(5, T0).ripeness(T0, 5).ripe());
+        assertTrue(withEvents(1, T0).ripeness(T0, 1).ripe(), "1 档一有动静就说");
     }
 
     @Test
     void sittingTooLongDrainsBelowTheThreshold() {
         // 少了这条,10 档就退化成永久沉默:攒不够 10 件的话那几条会一直躺着
         EventQueue q = withEvents(3, T0);
-        assertFalse(q.shouldDrain(T0 + 60_000L, 10), "才一分钟,再等等");
-        assertTrue(q.shouldDrain(T0 + EventQueue.maxWaitMsOf(10), 10), "躺够了就得说");
+        assertFalse(q.ripeness(T0 + 60_000L, 10).ripe(), "才一分钟,再等等");
+        assertTrue(q.ripeness(T0 + EventQueue.maxWaitMsOf(10), 10).ripe(), "躺够了就得说");
     }
 
     @Test
     void emptyQueueNeverDrains() {
         EventQueue q = fresh();
         for (int lv = EventQueue.MIN_LEVEL; lv <= EventQueue.MAX_LEVEL; lv++) {
-            assertFalse(q.shouldDrain(T0 + 999_999_999L, lv), "档位 " + lv);
+            assertFalse(q.ripeness(T0 + 999_999_999L, lv).ripe(), "档位 " + lv);
         }
     }
 
@@ -124,7 +124,7 @@ class EventQueueTest {
         q.push(EventTypes.QUERY, "<query>没人听见</query>", T0, true);
 
         assertTrue(q.hasUrgent());
-        assertTrue(q.shouldDrain(T0, EventQueue.MAX_LEVEL), "有急件即熟,无关有没有人被叫醒");
+        assertTrue(q.ripeness(T0, EventQueue.MAX_LEVEL).ripe(), "有急件即熟,无关有没有人被叫醒");
         assertEquals(1, EventQueue.render(q.takeEntries(T0), T0).size());
     }
 
@@ -263,7 +263,7 @@ class EventQueueTest {
         EventQueue q = fresh();
         q.push("raid_alert", "村庄被围了", T0, true);
 
-        assertTrue(q.shouldDrain(T0, EventQueue.MAX_LEVEL), "这类不恒急,发送方标了急就是急件");
+        assertTrue(q.ripeness(T0, EventQueue.MAX_LEVEL).ripe(), "这类不恒急,发送方标了急就是急件");
         assertEquals(List.of("⚔ 村庄被围了"), q.chatPreview());
         assertEquals(List.of("<events>\n[袭击] 村庄被围了\n</events>"), EventQueue.render(q.takeEntries(T0), T0));
     }
@@ -412,7 +412,7 @@ class EventQueueTest {
         EventQueue q = fresh();
         assertFalse(q.push(EventTypes.TALK, "<event kind=\"talk\">[阿岚] 我去东边</event>", T0, true),
                 "捎带的条目不可能是急件");
-        assertFalse(q.shouldDrain(T0, 1), "主动性拉到最高也不该为一句旁听开一轮");
+        assertFalse(q.ripeness(T0, 1).ripe(), "主动性拉到最高也不该为一句旁听开一轮");
     }
 
     /** 攒多少条、躺多久都不算数——熟度只数那些本来就该叫醒她的。 */
@@ -422,8 +422,8 @@ class EventQueueTest {
         for (int i = 0; i < EventQueue.thresholdOf(1) * 3; i++) {
             q.push(EventTypes.TALK, "<event kind=\"talk\">[阿岚] 第" + i + "句</event>", T0, false);
         }
-        assertFalse(q.shouldDrain(T0, 1), "条数再多也不开轮");
-        assertFalse(q.shouldDrain(T0 + EventQueue.maxWaitMsOf(1) * 10, 1), "躺再久也不开轮");
+        assertFalse(q.ripeness(T0, 1).ripe(), "条数再多也不开轮");
+        assertFalse(q.ripeness(T0 + EventQueue.maxWaitMsOf(1) * 10, 1).ripe(), "躺再久也不开轮");
     }
 
     /** 但别的事把她叫醒时,躺着的旁听跟着那一轮一起走——这就是它免费的原因。 */
@@ -431,10 +431,10 @@ class EventQueueTest {
     void overheardTalkRidesAlongOnSomeoneElsesWakeUp() {
         EventQueue q = fresh();
         q.push(EventTypes.TALK, "<event kind=\"talk\">[阿岚] 我去东边</event>", T0, false);
-        assertFalse(q.shouldDrain(T0, 1));
+        assertFalse(q.ripeness(T0, 1).ripe());
 
         q.push(EventTypes.QUERY, "<query>回来吃饭</query>", T0 + 1, false);
-        assertTrue(q.shouldDrain(T0 + 1, 1), "主人说话了,这一轮该开");
+        assertTrue(q.ripeness(T0 + 1, 1).ripe(), "主人说话了,这一轮该开");
 
         List<String> out = EventQueue.render(q.takeForCall(false, T0 + 1), T0 + 1);
         assertTrue(String.join("\n", out).contains("[阿岚] 我去东边"), "旁听到的话要跟着这一轮进去");
@@ -467,7 +467,7 @@ class EventQueueTest {
         EventQueue q = fresh();
         q.push(EventTypes.TALK, "<event kind=\"talk\">[阿岚] 在吗</event>", T0, false);
         assertFalse(q.isEmpty());
-        assertFalse(q.shouldDrain(T0, 1));
+        assertFalse(q.ripeness(T0, 1).ripe());
         assertFalse(q.hasWaking(), "它开不起一次 run");
     }
 
@@ -483,7 +483,7 @@ class EventQueueTest {
         assertFalse(q.push(EventTypes.COMPACT, "整理记忆", T0, true));
 
         assertFalse(q.hasUrgent());
-        assertFalse(q.shouldDrain(T0, EventQueue.MIN_LEVEL), "控制命令不是开 run 的理由");
+        assertFalse(q.ripeness(T0, EventQueue.MIN_LEVEL).ripe(), "控制命令不是开 run 的理由");
         assertFalse(q.hasWaking());
         assertEquals(0, woken.get(), "外接大脑的长轮询不为它醒");
     }

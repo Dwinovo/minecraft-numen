@@ -28,7 +28,7 @@ import java.util.UUID;
  * 同一个 {@link EventQueue} 类、同一张类型表、同一个 {@value EventQueue#DEFAULT_CAP}
  * 上限、同样的"丢最老的并记账"。区别只在两处:落盘走存档而不是 JSONL(所以注入
  * {@link EventQueue.Journal#NONE},整份状态交给 {@link SavedData});以及它不问
- * {@code shouldDrain} —— 它的排空时机只有一个,主人回来了。
+ * {@code ripeness} —— 它的排空时机只有一个,主人回来了。
  *
  * <p>服务端专用。
  */

@@ -151,7 +151,18 @@ public final class AgentLoop {
 
     // ---- 推进 ----
 
-    /** 能开 run 就开,能执行控制条目就执行;否则什么也不做,也不说话。 */
+    /**
+     * 闲时推进一步。"下一步做什么"只有这一个判断,看的是队列里墙之前那一段——和 run 取件同一段、同一份声明:
+     * <ol>
+     *   <li>没停牌、那一段熟了({@link EventQueue#ripeness}):开 run。熟了就一定有叫醒她的条目,
+     *       开出来的 run 一定取得到它;</li>
+     *   <li>开不了 run(没熟、或者停着),而队里有控制条目:执行它。控制条目不叫醒她,它的"急"不是开 run 的
+     *       理由;排在它前面、此刻开不起 run 的条目(旁听、还没攒熟的事、停牌压着的话)不挡它——
+     *       清空/整理是主人对内脑的直接要求,按了停止之后照样立即执行;</li>
+     *   <li>否则什么也不做,也不说话。</li>
+     * </ol>
+     * 死着、外接驾驶时什么都不做:身体不在、驾驶席不在内脑手里。
+     */
     public void pump() {
         if (run != null) {
             return;   // run 里的边界自己取队列
@@ -160,25 +171,24 @@ public final class AgentLoop {
         if (hold == Hold.DEAD || hold == Hold.EXTERNAL) {
             return;
         }
-        if (headIsControl()) {
-            runControl();   // 清空/整理是主人对内脑的直接要求,按了停止之后照样立即执行
-            return;
-        }
-        if (hold != null) {
-            return;
-        }
-        long now = host.now();
         int level = host.initiativeLevel();
-        if (!inbox.shouldDrain(now, level)) {
+        EventQueue.Ripeness ripeness = inbox.ripeness(host.now(), level);
+        if (hold == null && ripeness.ripe()) {
+            AiLog.LOG.info("[numen-queue#{}] 主动开轮:{}(攒了 {} 条/阈值 {},最老 {}s/上限 {}s,档位 {})",
+                    name,
+                    switch (ripeness.why()) {
+                        case URGENT -> "有急件";
+                        case ENOUGH -> "攒够了";
+                        case LONG_ENOUGH -> "攒久了";
+                    },
+                    ripeness.waiting(), EventQueue.thresholdOf(level),
+                    ripeness.oldestAge() / 1000L, EventQueue.maxWaitMsOf(level) / 1000L, level);
+            startRun(false, false);
             return;
         }
-        AiLog.LOG.info("[numen-queue#{}] 主动开轮:{}(攒了 {} 条/阈值 {},最老 {}s/上限 {}s,档位 {})",
-                name,
-                inbox.hasUrgent() ? "有急件"
-                        : (inbox.size() >= EventQueue.thresholdOf(level) ? "攒够了" : "攒久了"),
-                inbox.size(), EventQueue.thresholdOf(level),
-                inbox.oldestAgeMs(now) / 1000L, EventQueue.maxWaitMsOf(level) / 1000L, level);
-        startRun(false, false);
+        if (!inbox.nextControls().isEmpty()) {
+            runControl();
+        }
     }
 
     /**
@@ -362,7 +372,7 @@ public final class AgentLoop {
         // 分清是哪一条控制命令只能认 id:类型表只说"它是控制命令"。
         boolean clears = inbox.nextControls().stream().anyMatch(e -> EventTypes.CLEAR.equals(e.type()));
         if (!clears) {
-            // 整理要发一次请求。端点不可用就进 BLOCKED,条目留在队首——绑定改好了自己接着走,按了就一定会发生。
+            // 整理要发一次请求。端点不可用就进 BLOCKED,条目留在队里——绑定改好了自己接着走,按了就一定会发生。
             String problem = model.unavailable();
             if (problem != null) {
                 block(problem);
@@ -371,7 +381,10 @@ public final class AgentLoop {
         }
         inbox.takeControls();
         if (clears) {
-            AiLog.LOG.info("[numen-entity#{}] 清空上下文:排到了", name);
+            // 排在清空前面、没叫醒她的旁听是她在清空之前听见的,属于被清掉的那段上下文,一并清掉;要她回应的条目
+            // 留着,清完进新的上下文。整理不丢:它只把历史换成摘要,排着的条目还没进历史,照旧跟下一次调用走。
+            int heard = inbox.discardQuietAhead();
+            AiLog.LOG.info("[numen-entity#{}] 清空上下文:排到了(之前听见、还没交给她的 {} 条一并清掉)", name, heard);
             memory.clear();
             emit(new LoopEvent.TranscriptBoundary(LoopEvent.Boundary.CLEAR));
             pump();   // 排在清空后面的话进全新的上下文
@@ -555,11 +568,6 @@ public final class AgentLoop {
         for (Consumer<? super LoopEvent> listener : List.copyOf(listeners)) {
             listener.accept(event);
         }
-    }
-
-    private boolean headIsControl() {
-        List<EventQueue.Entry> entries = inbox.entries();
-        return !entries.isEmpty() && EventTypes.get(entries.get(0).type()).delivery().control();
     }
 
     private static String brief(String s, int max) {

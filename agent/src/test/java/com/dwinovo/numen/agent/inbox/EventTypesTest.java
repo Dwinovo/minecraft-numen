@@ -159,7 +159,7 @@ class EventTypesTest {
             assertTrue(q.push(id, "x", T0, false), id + ":发送方没标急,类型表说它恒急");
 
             assertTrue(q.entries().get(0).urgent(), id + ":条目上记的是生效后的急件");
-            assertTrue(q.shouldDrain(T0, EventQueue.MAX_LEVEL), id + ":急件即熟");
+            assertTrue(q.ripeness(T0, EventQueue.MAX_LEVEL).ripe(), id + ":急件即熟");
             assertEquals(1, woken.get(), id + ":急件落地就叫醒等待者");
         }
     }

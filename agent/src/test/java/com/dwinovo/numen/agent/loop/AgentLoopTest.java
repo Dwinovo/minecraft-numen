@@ -247,6 +247,142 @@ class AgentLoopTest extends LoopHarness {
             assertEquals(1, sent.size(), "排在清空后面的话进全新的上下文");
             assertTrue(model.last().lastUser().contains("清完再说这句"));
         }
+
+        @Test
+        void ownerWordsQueuedAheadOfAClearAreAnsweredFirstInTheOldContext() {
+            transcript.addUser("<query>很久以前的话</query>");
+            transcript.addAssistant(new AssistantTurn("很久以前的回答", List.of(), null));
+            loop.push(List.of(
+                    new EventQueue.Entry(EventTypes.QUERY, "<query>先回答这句</query>", 0, false),
+                    new EventQueue.Entry(EventTypes.CLEAR, "清空上下文", 0, false)));
+
+            assertEquals(1, model.calls.size(), "插话排在清空前面:先开 run");
+            assertEquals(0, memory.clears, "清空等这次 run 答完");
+            assertTrue(model.last().request().messages().size() > 1, "答的时候旧上下文还在");
+
+            model.last().say("好");
+
+            assertEquals(1, memory.clears, "答完再清");
+            assertTrue(transcript.snapshot().isEmpty());
+            assertTrue(inbox.isEmpty());
+        }
+
+        @Test
+        void aClearBehindOverheardTalkRunsWithoutCallingTheModel() {
+            overhears("[阿岚] 我去东边");
+            overhears("[阿岚] 东边有铁");
+            events.clear();
+
+            control(EventTypes.CLEAR);
+
+            assertEquals(1, memory.clears, "旁听挡不住清空");
+            assertTrue(model.calls.isEmpty(), "也不为旁听调模型");
+            assertTrue(eventsOf(LoopEvent.RunStarted.class).isEmpty(), "不开空轮");
+            assertTrue(inbox.isEmpty(), "清空之前听见的属于被清掉的那段上下文");
+        }
+
+        @Test
+        void aCompactionBehindOverheardTalkKeepsTheTalkForTheNextCall() {
+            overhears("[阿岚] 我去东边");
+
+            control(EventTypes.COMPACT);
+
+            assertEquals(Phase.COMPACT, loop.status().phase(), "旁听挡不住整理");
+            model.last().say("<summary>之前挖了矿</summary>");
+            assertEquals(1, model.calls.size(), "整理完不为旁听开 run");
+            assertEquals(1, inbox.count(EventTypes.TALK), "整理只换历史,排着的旁听照旧留着");
+
+            ownerSays("在吗");
+            assertTrue(model.last().lastUser().contains("[阿岚] 我去东边"), "跟下一次调用走");
+        }
+
+        @Test
+        void anUnripeEventAheadDoesNotHoldTheClearBackNorGetsAModelCallForIt() {
+            worldEvent("鸡下蛋了", false);
+
+            control(EventTypes.CLEAR);
+
+            assertEquals(1, memory.clears, "攒不熟的事不挡清空");
+            assertTrue(model.calls.isEmpty(), "清空不是为它开 run 的理由");
+            assertEquals(1, inbox.count(EventTypes.TASK_FINISHED), "要她回应的事留着,清完进新的上下文");
+        }
+
+        @Test
+        void aClearAfterStopIsNotHeldBackByTheStoppedTaskReport() {
+            ownerSays("去挖矿");
+            loop.halt(HaltReason.OWNER_STOP);
+            worldEvent("task stopped", true);   // 叫停身体的回执,停牌压着不开 run
+
+            control(EventTypes.CLEAR);
+
+            assertEquals(1, memory.clears, "停止之后清空立即执行");
+            assertEquals(1, model.calls.size());
+            assertEquals(Hold.OWNER_STOP, loop.hold());
+            assertEquals(1, inbox.count(EventTypes.TASK_FINISHED), "回执留着,主人再开口时跟着走");
+        }
+
+        @Test
+        void tenThousandOverheardLinesAndAClearTakeOneStep() {
+            EventQueue big = new EventQueue(EventQueue.Journal.NONE, 20_000);
+            AgentLoop crowded = new AgentLoop("crowded", model, tools, transcript, big, memory, host);
+            List<EventQueue.Entry> batch = new ArrayList<>();
+            for (int i = 0; i < 10_000; i++) {
+                batch.add(new EventQueue.Entry(EventTypes.TALK, "<event kind=\"talk\">[阿岚] 第" + i + "句</event>", 0, true));
+            }
+            batch.add(new EventQueue.Entry(EventTypes.CLEAR, "清空上下文", 0, true));
+
+            crowded.push(batch);
+
+            assertEquals(1, memory.clears);
+            assertTrue(model.calls.isEmpty());
+            assertTrue(big.isEmpty());
+        }
+    }
+
+    // ---- 读回来的收件箱 ----
+
+    @Nested
+    class RestoredInbox {
+
+        /** 真机上崩掉的那一份:别的同伴在群里说了 23 句,躺了四天多,最后一条是主人按的清空(当时记成了急件)。 */
+        @Test
+        void overheardTalkThenAClearIsClearedOnTheFirstStepWithoutAModelCall() {
+            long fourDays = 4L * 24 * 3600_000L + 12 * 3600_000L;
+            List<EventQueue.Entry> disk = new ArrayList<>();
+            for (int i = 0; i < 23; i++) {
+                disk.add(new EventQueue.Entry(EventTypes.TALK,
+                        "<event kind=\"talk\">[阿岚] 第" + i + "句</event>", T0 - fourDays + i, false));
+            }
+            disk.add(new EventQueue.Entry(EventTypes.CLEAR, "清空上下文", T0, true));
+            EventQueue restored = new EventQueue(new EventQueue.Journal() {
+                @Override
+                public List<EventQueue.Entry> load() {
+                    return List.copyOf(disk);
+                }
+
+                @Override
+                public void save(List<EventQueue.Entry> entries) {
+                    disk.clear();
+                    disk.addAll(entries);
+                }
+            });
+            AgentLoop reopened = new AgentLoop("reopened", model, tools, transcript, restored, memory, host);
+            reopened.subscribe(events::add);
+            transcript.addUser("<query>旧话</query>");
+
+            reopened.tick();
+
+            assertEquals(1, memory.clears, "第一次推进就把清空执行了");
+            assertTrue(model.calls.isEmpty(), "不为旁听调模型");
+            assertTrue(eventsOf(LoopEvent.RunStarted.class).isEmpty(), "不开空轮");
+            assertTrue(disk.isEmpty(), "盘上也清干净了");
+
+            events.clear();
+            for (int i = 0; i < 100; i++) {
+                reopened.tick();
+            }
+            assertTrue(events.isEmpty(), "之后每 tick 什么也不做");
+        }
     }
 
     // ---- run 里的插话与接续 ----
