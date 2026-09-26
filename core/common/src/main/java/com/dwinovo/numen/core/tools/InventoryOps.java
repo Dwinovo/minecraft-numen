@@ -1,7 +1,6 @@
 package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.ToolArgs;
-import com.dwinovo.numen.agent.tool.api.ToolContext;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.core.task.collect.CollectItemsTaskRecord;
@@ -21,9 +20,9 @@ import java.util.Set;
 
 /**
  * Inventory-management implementations — the business half of {@code gear wear} / {@code gear remove} /
- * {@code inv eat} / {@code inv drop} ({@code GearCommands}, {@code InvCommands}) and {@code CollectItemsTool}.
- * Each returns a {@link TaskRecord} the body's task queue runs; a command's records take their name, call id and
- * deadline basis from its {@link ServerSource}, a tool's from its {@link ToolContext}.
+ * {@code inv eat} / {@code inv drop} ({@code GearCommands}, {@code InvCommands}) and {@code work collect}.
+ * Each returns a {@link TaskRecord} the body's task queue runs, which takes its name, call id and deadline basis
+ * from the call's {@link ServerSource}.
  */
 public final class InventoryOps {
 
@@ -31,7 +30,6 @@ public final class InventoryOps {
 
     private static final int COLLECT_DEFAULT_RADIUS = 16;
     private static final int COLLECT_MAX_RADIUS = 48;
-    private static final long COLLECT_TIMEOUT_TICKS = 60 * 20;   // 1 min
 
     /**
      * {@code gear wear}:只做参数翻译。槽名随身体而定(模组会加槽),是不是真有这个槽、穿不穿得上,都由
@@ -75,18 +73,13 @@ public final class InventoryOps {
                 BuiltInRegistries.ITEM.getKey(item).getPath());
     }
 
-    public TaskRecord collectItems(
-List<String> item_ids,
-Integer radius,
-            ToolContext ctx) {
-        // Lenient set from the id list: unparseable / unknown ids are skipped, and
-        // an absent list yields an empty set — the "match everything" filter.
+    public TaskRecord collectItems(ServerSource src, List<ResourceLocation> itemIds, Integer radius) {
+        // Lenient set from the id list: unknown ids are skipped, and an absent list
+        // yields an empty set — the "match everything" filter.
         Set<Item> filter = new LinkedHashSet<>();
-        if (item_ids != null) {
-            for (String el : item_ids) {
-                if (el == null) continue;
-                ResourceLocation id = ResourceLocation.tryParse(el);
-                if (id != null && BuiltInRegistries.ITEM.containsKey(id)) {
+        if (itemIds != null) {
+            for (ResourceLocation id : itemIds) {
+                if (BuiltInRegistries.ITEM.containsKey(id)) {
                     filter.add(BuiltInRegistries.ITEM.get(id));
                 }
             }
@@ -100,8 +93,7 @@ Integer radius,
         }
 
         String label = filter.isEmpty() ? "all items" : labelFor(filter);
-        return new CollectItemsTaskRecord(ctx.toolCallId(), ctx.deadline(COLLECT_TIMEOUT_TICKS),
-                filter, searchRadius, label);
+        return new CollectItemsTaskRecord(src, filter, searchRadius, label);
     }
 
     private static String labelFor(Set<Item> filter) {

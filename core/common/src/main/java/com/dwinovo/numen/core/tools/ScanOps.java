@@ -166,7 +166,7 @@ List<String> block_ids,
         nearest.addProperty("direction", direction(center, group.nearest()));
         nearest.addProperty("distance", Math.round(group.distance() * 10) / 10.0);
         o.add("nearest", nearest);
-        o.addProperty("box", cell(group.min()) + RouteSpecJson.BOX_SEPARATOR + cell(group.max()));
+        o.addProperty("box", cell(group.min()) + RouteSpecFlags.BOX_SEPARATOR + cell(group.max()));
         o.addProperty("permission", group.verdict().kind().name().toLowerCase(Locale.ROOT));
         if (!group.verdict().allowed()) {
             o.addProperty("reason", group.verdict().reason());

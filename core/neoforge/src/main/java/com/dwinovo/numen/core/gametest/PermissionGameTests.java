@@ -460,14 +460,10 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_forager", new BlockPos(7, 2, 5), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         BlockPos kept = helper.absolutePos(keptRel);
-        com.google.gson.JsonObject spec = new com.google.gson.JsonObject();
-        com.google.gson.JsonArray avoid = new com.google.gson.JsonArray();
-        avoid.add(kept.getX() + "," + kept.getY() + "," + kept.getZ());
-        spec.add("avoid_break", avoid);
         TaskRecord record = call(companion, "mine", args(
                 "block_ids", List.of("minecraft:warped_stem"),
                 "count", 2,
-                "spec", spec)).task();
+                "avoid_break", List.of(kept.getX() + "," + kept.getY() + "," + kept.getZ()))).task();
 
         helper.succeedWhen(() -> {
             String reply = record.getResult() == null ? null : record.getResult().message();

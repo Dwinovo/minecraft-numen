@@ -138,7 +138,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
         if (stance == null || target == null) {
             FishingSetup setup = findFishingSetup();
             if (setup == null) {
-                fail("no safe dry fishing stance with reachable water nearby; move close to a shoreline and try fish again",
+                fail("no safe dry fishing stance with reachable water nearby; move close to a shoreline and try work fish again",
                         FailureType.OUT_OF_REACH);
                 return TaskState.FAILED;
             }
@@ -167,7 +167,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
                 stance = null;
                 target = null;
                 if (++positionFailures >= MAX_POSITION_FAILURES) {
-                    fail("nearby dry fishing stances were unreachable; move onto a clear shoreline and try fish again",
+                    fail("nearby dry fishing stances were unreachable; move onto a clear shoreline and try work fish again",
                             FailureType.NO_PATH);
                     yield TaskState.FAILED;
                 }
@@ -439,7 +439,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
         if (rejectTarget && failedTarget != null) rejectedTargets.add(failedTarget);
         if (++failedCasts >= MAX_FAILED_CASTS) {
             fail(reason + " after " + failedCasts
-                    + " attempts; move to a clearer shoreline and try fish again", FailureType.OUT_OF_REACH);
+                    + " attempts; move to a clearer shoreline and try work fish again", FailureType.OUT_OF_REACH);
             return TaskState.FAILED;
         }
         phase = Phase.PREPARE;

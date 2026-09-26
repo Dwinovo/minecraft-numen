@@ -34,10 +34,10 @@ public class FishGameTests {
         pool(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_angler", new BlockPos(4, 3, 7), false);
         companion.getInventory().add(new ItemStack(Items.FISHING_ROD));
-        ToolRun fish = call(companion, "fish", args("count", 1));
+        ToolRun fish = command(companion, "work fish --count 1");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(fish.done(), "fish has not finished");
+            helper.assertTrue(fish.done(), "work fish has not finished");
             helper.assertTrue(fish.succeeded(), "fishing failed: " + fish.outcome());
             var inv = companion.getInventory();
             boolean caught = inv.items.stream().anyMatch(s -> !s.isEmpty() && !s.is(Items.FISHING_ROD));
@@ -52,10 +52,10 @@ public class FishGameTests {
     public static void fish_without_a_rod_says_so(GameTestHelper helper) {
         pool(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_rodless", new BlockPos(4, 3, 7), false);
-        ToolRun fish = call(companion, "fish", args("count", 1));
+        ToolRun fish = command(companion, "work fish --count 1");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(fish.done(), "fish has not finished");
+            helper.assertTrue(fish.done(), "work fish has not finished");
             helper.assertTrue(!fish.succeeded() && fish.outcome().contains("fishing rod"),
                     "the failure does not name the missing rod: " + fish.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -80,7 +80,7 @@ public class FishGameTests {
         pool(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_recalled", new BlockPos(4, 3, 7), false);
         companion.getInventory().add(new ItemStack(Items.FISHING_ROD));
-        ToolRun fish = call(companion, "fish", args("count", 5));
+        ToolRun fish = command(companion, "work fish --count 5");
         java.util.concurrent.atomic.AtomicReference<ToolRun> stop = new java.util.concurrent.atomic.AtomicReference<>();
 
         helper.startSequence()

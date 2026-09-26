@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.task.mine;
 
+import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.core.BlockPos;
@@ -9,7 +10,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Typed task descriptor for the intent-level {@code mine} tool, in one of two forms:
+ * Typed task descriptor for {@code work mine} (shortcut {@code mine}), in one of two forms:
  * <ul>
  *   <li><b>block_ids</b> — "gather {@code count} of these block types, find them yourself": the task
  *       searches the loaded area around the body, walks to the nearest with the terrain-modifying
@@ -23,8 +24,6 @@ import java.util.Set;
  * Drops/tool-tier follow from whatever the entity holds, as in vanilla.
  */
 public final class MineBlockTaskRecord extends TaskRecord {
-
-    public static final String TOOL_NAME = "mine";
 
     /**
      * mine 的默认规格:可以改地形,需要主人同意的格也算进去、按价排在后面(挖不挖由动手前的权限裁决定)。
@@ -56,9 +55,9 @@ public final class MineBlockTaskRecord extends TaskRecord {
      *  overlay text. */
     private int mined = 0;
 
-    public MineBlockTaskRecord(String toolCallId, long deadlineGameTime, Set<Block> targets,
+    public MineBlockTaskRecord(ServerSource source, long deadlineGameTime, Set<Block> targets,
                                Map<BlockPos, Block> named, int count, String label, RouteSpec spec) {
-        super(TOOL_NAME, toolCallId, deadlineGameTime);
+        super(source, deadlineGameTime);
         this.targets = Set.copyOf(targets);
         this.named = Map.copyOf(named);
         this.count = count;

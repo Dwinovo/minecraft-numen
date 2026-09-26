@@ -447,4 +447,44 @@ public class MineGameTests {
                 .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
                 .thenSucceed();
     }
+
+    /**
+     * 同源:快捷工具 mine 与命令 work mine 是同一个处理函数。两块干海带块,先用工具挖一块、再用命令挖一块:两次都挖成、
+     * 各自到手一块,回执除了数字一字不差;派下的活一个叫工具名、一个叫"组 动作"。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mine")
+    public static void mine_from_the_tool_and_the_command_is_the_same_work(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        level.setBlockAndUpdate(helper.absolutePos(new BlockPos(8, 2, 6)), Blocks.DRIED_KELP_BLOCK.defaultBlockState());
+        level.setBlockAndUpdate(helper.absolutePos(new BlockPos(8, 2, 10)), Blocks.DRIED_KELP_BLOCK.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_twin_digger", new BlockPos(3, 2, 8), false);
+        ToolRun viaTool = call(companion, "mine", args("block_ids", List.of("minecraft:dried_kelp_block"), "count", 1));
+        java.util.concurrent.atomic.AtomicReference<ToolRun> viaCommand = new java.util.concurrent.atomic.AtomicReference<>();
+
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(viaTool.done(), "mine has not finished"))
+                .thenExecute(() -> viaCommand.set(command(companion,
+                        "work mine --block_ids minecraft:dried_kelp_block --count 1")))
+                .thenWaitUntil(() -> helper.assertTrue(viaCommand.get().done(), "work mine has not finished"))
+                .thenExecute(() -> {
+                    helper.assertTrue(viaTool.succeeded() && viaCommand.get().succeeded(),
+                            "one of the two failed: " + viaTool.outcome() + " / " + viaCommand.get().outcome());
+                    helper.assertTrue(companion.getInventory().countItem(Items.DRIED_KELP_BLOCK) == 2,
+                            "the two calls did not gather one block each");
+                    helper.assertTrue(viaTool.task().getToolName().equals("mine")
+                                    && viaCommand.get().task().getToolName().equals("work mine"),
+                            "the work is not named after the call: " + viaTool.task().getToolName() + " / "
+                                    + viaCommand.get().task().getToolName());
+                    helper.assertTrue(withoutNumbers(viaTool.outcome()).equals(withoutNumbers(viaCommand.get().outcome())),
+                            "mine and work mine report differently: " + viaTool.outcome() + " / "
+                                    + viaCommand.get().outcome());
+                })
+                .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
+                .thenSucceed();
+    }
+
+    /** 数字(坐标、件数、刻数)抹掉,比两份回执的措辞。 */
+    private static String withoutNumbers(String reply) {
+        return reply.replaceAll("-?\\d+", "#");
+    }
 }

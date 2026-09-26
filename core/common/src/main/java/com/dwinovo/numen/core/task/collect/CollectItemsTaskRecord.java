@@ -1,12 +1,13 @@
 package com.dwinovo.numen.core.task.collect;
 
+import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.world.item.Item;
 
 import java.util.Set;
 
 /**
- * Typed task descriptor for the {@code collect_items} tool: "walk around and
+ * Typed task descriptor for {@code work collect}: "walk around and
  * pick up dropped items nearby". The goal ({@link CollectItemsCompanionTask}) scans
  * for {@code ItemEntity}s within the radius, walks to each with the pathfinder
  * (the entity auto-absorbs items it gets close to), and repeats until none
@@ -15,7 +16,7 @@ import java.util.Set;
  */
 public final class CollectItemsTaskRecord extends TaskRecord {
 
-    public static final String TOOL_NAME = "collect_items";
+    private static final long TIMEOUT_TICKS = 60 * 20;
 
     /** Item types to collect; empty = collect every dropped item. */
     public final Set<Item> filter;
@@ -27,9 +28,8 @@ public final class CollectItemsTaskRecord extends TaskRecord {
     /** 到手的件数:背包里要捡的那几种比开工时多出来的数目,任务每刻更新。 */
     private int collected = 0;
 
-    public CollectItemsTaskRecord(String toolCallId, long deadlineGameTime,
-                                  Set<Item> filter, int radius, String label) {
-        super(TOOL_NAME, toolCallId, deadlineGameTime);
+    public CollectItemsTaskRecord(ServerSource source, Set<Item> filter, int radius, String label) {
+        super(source, source.companion().level().getGameTime() + TIMEOUT_TICKS);
         this.filter = Set.copyOf(filter);
         this.radius = radius;
         this.label = label;

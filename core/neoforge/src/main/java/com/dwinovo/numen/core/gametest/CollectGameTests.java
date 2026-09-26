@@ -22,7 +22,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
-/** 捡东西:{@code collect_items} 走过去把地上的掉落物捡起来,可以只捡点名的那几种。 */
+/** 捡东西:{@code work collect} 走过去把地上的掉落物捡起来,可以只捡点名的那几种。 */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
 public class CollectGameTests {
@@ -35,15 +35,15 @@ public class CollectGameTests {
 
     /** 点名只捡铁锭:三块铁锭捡回来,旁边那堆圆石原样躺在地上。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_collect")
-    public static void collect_items_picks_up_only_the_named_items(GameTestHelper helper) {
+    public static void work_collect_picks_up_only_the_named_items(GameTestHelper helper) {
         dropOnFloor(helper, new BlockPos(10, 2, 4), Items.IRON_INGOT, 3);
         dropOnFloor(helper, new BlockPos(4, 2, 11), Items.COBBLESTONE, 4);
         NumenPlayer companion = spawnAt(helper, "gametest_gleaner", new BlockPos(2, 2, 2), false);
-        ToolRun collect = call(companion, "collect_items", args("item_ids", List.of("minecraft:iron_ingot")));
+        ToolRun collect = command(companion, "work collect --item_ids minecraft:iron_ingot");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(collect.done(), "collect_items has not finished");
-            helper.assertTrue(collect.succeeded(), "collect_items failed: " + collect.outcome());
+            helper.assertTrue(collect.done(), "work collect has not finished");
+            helper.assertTrue(collect.succeeded(), "work collect failed: " + collect.outcome());
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 3,
                     "the iron was not picked up");
             helper.assertTrue(companion.getInventory().countItem(Items.COBBLESTONE) == 0
@@ -55,15 +55,15 @@ public class CollectGameTests {
 
     /** 不点名就全捡:散在两处的铁锭和圆石都到了身上,地上一件不剩。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_collect")
-    public static void collect_items_without_names_picks_up_everything(GameTestHelper helper) {
+    public static void work_collect_without_names_picks_up_everything(GameTestHelper helper) {
         dropOnFloor(helper, new BlockPos(10, 2, 4), Items.IRON_INGOT, 3);
         dropOnFloor(helper, new BlockPos(4, 2, 11), Items.COBBLESTONE, 4);
         NumenPlayer companion = spawnAt(helper, "gametest_sweeper", new BlockPos(2, 2, 2), false);
-        ToolRun collect = call(companion, "collect_items", args());
+        ToolRun collect = command(companion, "work collect");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(collect.done(), "collect_items has not finished");
-            helper.assertTrue(collect.succeeded(), "collect_items failed: " + collect.outcome());
+            helper.assertTrue(collect.done(), "work collect has not finished");
+            helper.assertTrue(collect.succeeded(), "work collect failed: " + collect.outcome());
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 3
                             && companion.getInventory().countItem(Items.COBBLESTONE) == 4,
                     "not everything was picked up");
@@ -75,14 +75,14 @@ public class CollectGameTests {
 
     /** 回执报的是到手的件数,不是捡了几堆:一堆三块、一堆两块铁锭,说的是五块。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_collect")
-    public static void collect_items_reports_items_not_stacks(GameTestHelper helper) {
+    public static void work_collect_reports_items_not_stacks(GameTestHelper helper) {
         dropOnFloor(helper, new BlockPos(9, 2, 4), Items.IRON_INGOT, 3);
         dropOnFloor(helper, new BlockPos(9, 2, 10), Items.IRON_INGOT, 2);
         NumenPlayer companion = spawnAt(helper, "gametest_tallier", new BlockPos(2, 2, 7), false);
-        ToolRun collect = call(companion, "collect_items", args("item_ids", List.of("minecraft:iron_ingot")));
+        ToolRun collect = command(companion, "work collect --item_ids minecraft:iron_ingot");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(collect.done(), "collect_items has not finished");
+            helper.assertTrue(collect.done(), "work collect has not finished");
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 5,
                     "not all five ingots were picked up");
             helper.assertTrue(collect.succeeded() && collect.outcome().startsWith("collected 5 "),
@@ -98,12 +98,12 @@ public class CollectGameTests {
      * 隔壁撒的铁锭本来也扫不进来。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_collect")
-    public static void collect_items_with_nothing_on_the_ground_says_none(GameTestHelper helper) {
+    public static void work_collect_with_nothing_on_the_ground_says_none(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_empty_handed", new BlockPos(2, 2, 7), false);
-        ToolRun collect = call(companion, "collect_items", args("radius", 3));
+        ToolRun collect = command(companion, "work collect --radius 3");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(collect.done(), "collect_items has not finished");
+            helper.assertTrue(collect.done(), "work collect has not finished");
             helper.assertTrue(collect.outcome().startsWith("collected 0 "),
                     "the reply does not say nothing was picked up: " + collect.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -115,7 +115,7 @@ public class CollectGameTests {
      * 不因为站在坑沿够不着就放弃。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_collect")
-    public static void collect_items_goes_down_into_a_pit(GameTestHelper helper) {
+    public static void work_collect_goes_down_into_a_pit(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
@@ -129,10 +129,10 @@ public class CollectGameTests {
         }
         dropOnFloor(helper, new BlockPos(8, 2, 8), Items.IRON_INGOT, 3);
         NumenPlayer companion = spawnAt(helper, "gametest_spelunker", new BlockPos(3, 4, 3), false);
-        ToolRun collect = call(companion, "collect_items", args("item_ids", List.of("minecraft:iron_ingot")));
+        ToolRun collect = command(companion, "work collect --item_ids minecraft:iron_ingot");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(collect.done(), "collect_items has not finished");
+            helper.assertTrue(collect.done(), "work collect has not finished");
             helper.assertTrue(collect.succeeded() && companion.getInventory().countItem(Items.IRON_INGOT) == 3,
                     "the ingots at the bottom of the pit were not picked up: " + collect.outcome());
             CompanionFactory.despawn(level.getServer(), companion);
@@ -160,17 +160,17 @@ public class CollectGameTests {
      * 在哪——不能只说"捡了 0 块",让模型以为这一片已经干净了。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_collect")
-    public static void collect_items_says_what_it_could_not_reach(GameTestHelper helper) {
+    public static void work_collect_says_what_it_could_not_reach(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int y = 2; y <= 4; y++) {
             level.setBlockAndUpdate(helper.absolutePos(new BlockPos(10, y, 10)), Blocks.STONE.defaultBlockState());
         }
         dropOnFloor(helper, new BlockPos(10, 5, 10), Items.IRON_INGOT, 3);
         NumenPlayer companion = spawnAt(helper, "gametest_shortarm", new BlockPos(3, 2, 3), false);
-        ToolRun collect = call(companion, "collect_items", args("item_ids", List.of("minecraft:iron_ingot")));
+        ToolRun collect = command(companion, "work collect --item_ids minecraft:iron_ingot");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(collect.done(), "collect_items has not finished");
+            helper.assertTrue(collect.done(), "work collect has not finished");
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 0
                             && onFloor(helper, Items.IRON_INGOT) == 3,
                     "the ingots on the pillar were somehow taken");
@@ -187,17 +187,17 @@ public class CollectGameTests {
      * 捡起来,不能因为"走到了却没进背包"就当它捡不了。
      */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_collect")
-    public static void collect_items_waits_out_a_fresh_drops_pickup_delay(GameTestHelper helper) {
+    public static void work_collect_waits_out_a_fresh_drops_pickup_delay(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_patient", new BlockPos(5, 2, 5), false);
         Vec3 at = Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(6, 2, 5)));
         ItemEntity drop = new ItemEntity(helper.getLevel(), at.x, at.y, at.z, new ItemStack(Items.IRON_INGOT, 3));
         drop.setDeltaMovement(Vec3.ZERO);
         drop.setDefaultPickUpDelay();
         helper.getLevel().addFreshEntity(drop);
-        ToolRun collect = call(companion, "collect_items", args("item_ids", List.of("minecraft:iron_ingot")));
+        ToolRun collect = command(companion, "work collect --item_ids minecraft:iron_ingot");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(collect.done(), "collect_items has not finished");
+            helper.assertTrue(collect.done(), "work collect has not finished");
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 3
                             && collect.outcome().startsWith("collected 3 "),
                     "the fresh drop at her feet was not picked up: " + collect.outcome());

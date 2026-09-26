@@ -107,9 +107,8 @@ public final class NumenCore {
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.MoveCommands::install);
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.AttackTool());
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.locate.LocateCommands::install);
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.work.CollectItemsTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.work.FishTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.work.AutoMineTool());
+        // work 组提升出的 mine 在这里进表
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.WorkCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.inventory.GearCommands::install);
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.BuildTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.BlueprintTool());

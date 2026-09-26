@@ -407,7 +407,6 @@ public final class ModLanguageData {
         adder.add("numen.chat.plan", "Plan %s/%s");
         // Tool-chip labels (convention: numen.tool.<tool name>; unknown/MCP tools fall back to the raw name).
         adder.add("numen.tool.build", "Build");
-        adder.add("numen.tool.collect_items", "Collect items");
         adder.add("numen.tool.get_owner_status", "Owner status");
         adder.add("numen.tool.get_self_status", "Self status");
         adder.add("numen.tool.goto", "Go to");
@@ -835,7 +834,6 @@ public final class ModLanguageData {
         adder.add("numen.chat.plan", "计划 %s/%s");
         // 工具 chip 标签(约定键 numen.tool.<工具名>;未知/MCP 工具回落原名)。
         adder.add("numen.tool.build", "建造");
-        adder.add("numen.tool.collect_items", "拾取掉落物");
         adder.add("numen.tool.get_owner_status", "主人状态");
         adder.add("numen.tool.get_self_status", "自身状态");
         adder.add("numen.tool.goto", "前往");
