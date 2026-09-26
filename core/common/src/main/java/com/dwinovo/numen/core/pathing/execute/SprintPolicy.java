@@ -1,7 +1,6 @@
 package com.dwinovo.numen.core.pathing.execute;
 
 import com.dwinovo.numen.core.Constants;
-import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.core.pathing.astar.NavPath;
 import com.dwinovo.numen.core.pathing.cache.LoadedOnlyView;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
@@ -19,8 +18,6 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.world.phys.Vec3;
-
-import java.util.function.Supplier;
 
 /**
  * 疾跑整体决策:按当前移动类型与前后文判定这一 tick 该不该疾跑,以及
@@ -53,25 +50,21 @@ final class SprintPolicy {
 
     private final NavPath path;
     private final NumenPlayer player;
-    /** 执行期重算成本用的上下文(霜行者判定要它)。 */
-    private final Supplier<CalculationContext> contextSupplier;
 
-    SprintPolicy(NavPath path, NumenPlayer player, Supplier<CalculationContext> contextSupplier) {
+    SprintPolicy(NavPath path, NumenPlayer player) {
         this.path = path;
         this.player = player;
-        this.contextSupplier = contextSupplier;
     }
 
     /**
      * 裁决这一 tick 的疾跑。{@code requested} 是移动原语被没收前请求的
-     * SPRINT 键(没收动作在执行器,这里只收结论)。
+     * SPRINT 键(没收动作在执行器,这里只收结论);{@code context} 是执行器这一 tick 复核成本用的那一份。
      */
-    Decision decide(int pathPosition, boolean requested) {
+    Decision decide(int pathPosition, boolean requested, CalculationContext context) {
         Movement current = path.movements().get(pathPosition);
-        // 与成本模型同判据:规格允许疾跑、总开关允许、饥饿值足够
-        if (!(current.spec().sprint() && NavSettings.get().allowSprint
-                && (!WorkProfile.of(player).hasHunger()
-                        || player.getFoodData().getFoodLevel() > 6))) {
+        // 能不能疾跑只认成本模型的 canSprint:四格跑酷、跑酷上台是按它定价进的路,这里另写一份判据,
+        // 改了一处漏了另一处,路里就会留着一跳执行器不肯疾跑去跳的
+        if (!context.canSprint) {
             return Decision.NO;
         }
 
@@ -94,7 +87,6 @@ final class SprintPolicy {
         if (current instanceof MovementDescend descend) {
             if (pathPosition < path.length() - 2) {
                 Movement next = path.movements().get(pathPosition + 1);
-                CalculationContext context = contextSupplier.get();
                 if (MovementHelper.canUseFrostWalker(context, context.get(next.getDest().below()))) {
                     // 霜行者只在贴地跨过方块边缘时结冰,可能冲过头;下一步
                     // 同向平走/跑酷时强制慢速直进(跑酷且有耗材可放置替代除外)

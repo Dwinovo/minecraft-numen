@@ -107,7 +107,7 @@ public final class PathExecutor {
         this.contextSupplier = contextSupplier;
         this.inProgressBestPath = inProgressBestPath;
         this.loadedTest = loadedTest;
-        this.sprint = new SprintPolicy(path, player, contextSupplier);
+        this.sprint = new SprintPolicy(path, player);
         this.pathPosition = 0;
     }
 
@@ -346,7 +346,7 @@ public final class PathExecutor {
             // 不靠按键),把请求作为事实交给策略;裁决的全部副作用在此统一施加。
             boolean sprintRequested = harness.isKeyRequested(Input.SPRINT);
             harness.forceKey(Input.SPRINT, false);
-            SprintPolicy.Decision d = sprint.decide(pathPosition, sprintRequested);
+            SprintPolicy.Decision d = sprint.decide(pathPosition, sprintRequested, context);
             if (d.skipTo() >= 0) {
                 pathPosition = d.skipTo();
                 onChangeInPathPosition();
