@@ -29,8 +29,17 @@ import java.util.regex.Pattern;
  *       例子与语法不会走样。</li>
  *   <li>{@link #note}:可选,多条。写会不会问主人、是不是长活、会动她的什么、不会做什么。</li>
  *   <li>{@link #seeAlso}:可选。做完这件事下一步通常用的动作,同组别组都行,写整条路径。引用在全部组到齐之后
- *       一次查全(服务器建指令树、或命令树第一次被读时),理由见 {@link NumenCli}。</li>
+ *       一次查全(任一侧的树第一次被读时),理由见 {@link NumenCli}。</li>
  * </ul>
+ *
+ * <h2>以谁的权威执行</h2>
+ * 默认是她自己的({@link Authority#HERS})。包装模组管理指令的服务端动作可以声明借服务器的权威,作用对象写死为她
+ * ({@link #authority},见 {@link Authority}):
+ * <pre>{@code
+ * group.server("switch", "Switch to another model.", this::switchModel, MODEL)
+ *      .authority(Authority.SERVER_ON_HER)
+ *      .example("ysm switch misc/1_alex");
+ * }</pre>
  */
 public final class Action {
 
@@ -60,6 +69,7 @@ public final class Action {
     private final List<String> seeAlso = new ArrayList<>();
     private String toolName;
     private String toolDescription;
+    private Authority authority = Authority.HERS;
 
     Action(CommandGroup group, String name, String summary, List<Param<?>> params,
            OnServer onServer, OnClient onClient) {
@@ -85,6 +95,21 @@ public final class Action {
         }
         this.toolName = toolName;
         this.toolDescription = description;
+        return this;
+    }
+
+    /**
+     * 以谁的权威执行,不调就是她自己的。只有服务端动作能借服务器的权威:客户端动作不在服务端执行。
+     */
+    public Action authority(Authority authority) {
+        group.requireOpen();
+        if (authority == null) {
+            throw new IllegalArgumentException(path() + " 的权威没给");
+        }
+        if (authority == Authority.SERVER_ON_HER && !runsOnServer()) {
+            throw new IllegalArgumentException(path() + " 在主人客户端执行,借不了服务器的权威");
+        }
+        this.authority = authority;
         return this;
     }
 
@@ -191,6 +216,10 @@ public final class Action {
             if (!p.required()) sb.append(' ').append(p.usage());
         }
         return sb.toString();
+    }
+
+    Authority authority() {
+        return authority;
     }
 
     /** 服务端执行?(否则在主人客户端执行。) */

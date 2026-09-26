@@ -14,6 +14,9 @@ import java.util.List;
  */
 final class CommandHelp {
 
+    /** 借了服务器权威的动作,帮助里写明的那一句。 */
+    static final String SERVER_ON_HER = "Runs with the server's authority, and only on you.";
+
     private CommandHelp() {}
 
     /** 根:各组一句。组按名字排序,与系统提示里的索引同一份条目。 */
@@ -41,11 +44,14 @@ final class CommandHelp {
     }
 
     /**
-     * 动作,给全:用法;缩进一格依次是一句说明、逐个参数(类型的完整称呼,说明接取值提示)、例子、注意、相关命令;
-     * 提升过的最后注明快捷工具名。没有注意、没有相关命令时那一块不出现。
+     * 动作,给全:用法;缩进一格依次是一句说明、借了服务器的权威时写明这一句、逐个参数(类型的完整称呼,说明接取值提示)、
+     * 例子、注意、相关命令;提升过的最后注明快捷工具名。没有注意、没有相关命令时那一块不出现;她自己的权威是默认,不写。
      */
     static String action(Action action) {
         StringBuilder sb = new StringBuilder(action.usage()).append("\n  ").append(action.summary());
+        if (action.authority() == Authority.SERVER_ON_HER) {
+            sb.append("\n  ").append(SERVER_ON_HER);
+        }
         for (Param<?> p : action.params()) {
             sb.append("\n  ");
             if (p.required()) {

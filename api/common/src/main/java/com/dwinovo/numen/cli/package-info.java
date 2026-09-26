@@ -7,7 +7,9 @@
  * <p>插件经 {@code NumenApi.registerCommands} 拿到自己的 {@link com.dwinovo.numen.cli.CommandGroup},往里加
  * {@link com.dwinovo.numen.cli.Action}:参数用 {@link com.dwinovo.numen.cli.Param} 与
  * {@link com.dwinovo.numen.cli.ArgType} 声明,处理函数拿到 {@link com.dwinovo.numen.cli.ServerSource} 或
- * {@link com.dwinovo.numen.cli.ClientSource} 与读好的 {@link com.dwinovo.numen.cli.CommandArgs}。
+ * {@link com.dwinovo.numen.cli.ClientSource} 与读好的 {@link com.dwinovo.numen.cli.CommandArgs}。动作以她自己的权威执行;
+ * 包装模组管理指令的动作可以声明 {@link com.dwinovo.numen.cli.Authority#SERVER_ON_HER},经
+ * {@link com.dwinovo.numen.cli.ServerSource#onHer()} 拿到只对她执行的 {@link com.dwinovo.numen.cli.OnHer}。
  * {@link com.dwinovo.numen.cli.NumenCli}、{@link com.dwinovo.numen.cli.CommandRunner} 与 {@code command} 工具是
  * 引擎内部的机器。
  */

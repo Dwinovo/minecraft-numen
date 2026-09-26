@@ -63,6 +63,18 @@ public final class ServerSource implements CommandSource {
         return companion;
     }
 
+    /**
+     * 以服务器的权威、只对她执行第 0 层指令的那条路。只有声明了 {@link Authority#SERVER_ON_HER} 的动作拿得到;
+     * 没声明的动作来拿就抛出——权威只在动作的声明里给,处理函数不另开后门。
+     */
+    public OnHer onHer() {
+        if (action.authority() != Authority.SERVER_ON_HER) {
+            throw new IllegalStateException(action.path() + " runs with her own authority; declare "
+                    + "authority(Authority.SERVER_ON_HER) to borrow the server's");
+        }
+        return new OnHer(companion);
+    }
+
     /** 调用进来时用的工具名:快捷工具名,或 {@code command}。 */
     public String toolName() {
         return toolName;
