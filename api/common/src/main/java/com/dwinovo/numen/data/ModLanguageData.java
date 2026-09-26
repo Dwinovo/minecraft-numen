@@ -452,7 +452,7 @@ public final class ModLanguageData {
         adder.add("numen.summon.name_hint", "New companion name…");
         adder.add("numen.dismiss.delete", "Delete");
         adder.add("numen.dismiss.title", "Delete companion \"%s\"?");
-        adder.add("numen.dismiss.warning", "Permanent · backpack drops in place · cannot be undone");
+        adder.add("numen.dismiss.warning", "Permanent · backpack, armor and accessories drop in place · cannot be undone");
         adder.add("numen.empty.no_companions", "No companions yet");
         adder.add("numen.respawn", "· reviving %ss");
         adder.add("numen.status.loading", "loading…");
@@ -889,7 +889,7 @@ public final class ModLanguageData {
         adder.add("numen.summon.name_hint", "新同伴名字…");
         adder.add("numen.dismiss.delete", "删除");
         adder.add("numen.dismiss.title", "删除同伴 \"%s\"？");
-        adder.add("numen.dismiss.warning", "永久删除 · 背包会掉落在原地 · 无法撤销");
+        adder.add("numen.dismiss.warning", "永久删除 · 背包与身上的装备、饰品会掉落在原地 · 无法撤销");
         adder.add("numen.empty.no_companions", "还没有同伴");
         adder.add("numen.respawn", "· 复活中 %ss");
         adder.add("numen.status.loading", "加载中…");

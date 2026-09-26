@@ -135,7 +135,7 @@ public final class NumenNetwork {
                 com.dwinovo.numen.network.payload.SummonRequestPayload.STREAM_CODEC,
                 com.dwinovo.numen.network.payload.SummonRequestPayload::handle);
 
-        // C→S: the edit card's dismiss → confirm asks to permanently delete a companion (drops its inventory first).
+        // C→S: the edit card's dismiss → confirm asks to permanently delete a companion (drops its inventory, armor and accessories first).
         Services.NETWORK.registerClientToServer(
                 com.dwinovo.numen.network.payload.DismissRequestPayload.TYPE,
                 com.dwinovo.numen.network.payload.DismissRequestPayload.STREAM_CODEC,

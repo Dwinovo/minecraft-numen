@@ -117,8 +117,8 @@ public final class NumenActuator {
     }
 
     /**
-     * Permanently dismiss a companion — its body drops its whole inventory (like
-     * death), then it's gone for good — exactly the panel's ✕. The roster updates
+     * Permanently dismiss a companion — its body drops its whole inventory, armor and
+     * accessories (like death), then it's gone for good — exactly the panel's ✕. The roster updates
      * asynchronously; confirm via {@link #companions()}.
      *
      * @return true once the request was sent; false if not currently in a world

@@ -258,7 +258,8 @@ public final class McpServer {
                 requiredStringSchema("name",
                         "The new companion's name (3–16 letters, digits, or underscore).")));
         tools.add(toolDef("delete_companion",
-                "Permanently dismiss a companion — it drops its inventory and is gone for good. Takes its name or id.",
+                "Permanently dismiss a companion — it drops its inventory, armor and accessories and is gone for good. "
+                        + "Takes its name or id.",
                 requiredStringSchema("companion",
                         "Which companion to dismiss — its name or id (see list_companions).")));
         tools.add(toolDef("get_events",
@@ -483,7 +484,7 @@ public final class McpServer {
             return content("no such companion — call list_companions to see valid names/ids", true);
         }
         boolean ok = NumenActuator.delete(target).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        return content(ok ? "dismissed " + target + " — it dropped its inventory and is gone for good"
+        return content(ok ? "dismissed " + target + " — it drops its inventory, armor and accessories and is gone for good"
                 : "could not dismiss " + target, !ok);
     }
 
