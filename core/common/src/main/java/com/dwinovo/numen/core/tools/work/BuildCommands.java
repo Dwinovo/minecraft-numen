@@ -44,6 +44,11 @@ public final class BuildCommands {
     private static final Param<String> PRIMITIVE = Param.required("primitive", ArgType.text(),
                     "The step: one primitive written as it follows build, without --into.")
             .values("e.g. layer 0 1 0 ##### #...# ##### --block oak_planks");
+    private static final Param<Integer> LAYER = Param.optional("layer", ArgType.integer(),
+                    "Draw one level of it as a map seen from above instead: the block that ends up in every cell, later "
+                            + "steps over earlier ones.")
+            .values("a y in the design's own coordinates, as the steps write it; a blueprint file's lowest level is 0")
+            .whenOmitted("list the steps, or price the blueprint file");
     private static final Param<Integer> AT_X = Param.required("x", ArgType.integer(),
             "Where the origin (0,0,0) of the design or blueprint file goes: X.");
     private static final Param<Integer> AT_Y = Param.required("y", ArgType.integer(),
@@ -155,15 +160,20 @@ public final class BuildCommands {
                 .note("Instant. Add steps with any primitive and --into house; coordinates in a design are relative "
                         + "to its origin (0,0,0), which `build at` puts on a spot.")
                 .seeAlso("build layer", "build show", "build at");
-        build.server("show", "Show a design step by step with what each costs, or price a blueprint file.",
-                        (src, args) -> src.reply(DesignOps.show(src.companion(), args.get(SOURCE), args,
-                                args.write(GROUP + " show", List.of(SOURCE)))), SOURCE, Listing.PAGE)
+        build.server("show", "Show a design step by step with what each costs, or price a blueprint file; or draw "
+                        + "one level of either as a map.", (src, args) -> src.reply(DesignOps.show(src.companion(),
+                        args.get(SOURCE), args.get(LAYER), args, args.write(GROUP + " show", List.of(SOURCE, LAYER)))),
+                        SOURCE, LAYER, Listing.PAGE)
                 .example("build show house")
-                .example("build show \"my cottage\"")
+                .example("build show house --layer 1")
+                .example("build show \"my cottage\" --layer 0")
                 .note("Instant and read-only: every step numbered with its line, the cells it covers and the blocks "
                         + "it takes; for a blueprint file its size, cells, every material and how its cells spread "
                         + "over height. In survival it also says what you are still short of for all of it. A long "
                         + "design comes a page at a time: --page 2 shows the next.")
+                .note("With --layer y it draws that level as it will stand when built, one character per cell in the "
+                        + "same grid as build layer: the first row is the north edge, each row runs east, '.' is "
+                        + "nothing, and the legend names every character. Rows and columns are labelled with z and x.")
                 .seeAlso("build step", "build at");
         build.server("step", "Replace one step of a design.", (src, args) -> src.reply(DesignOps.replace(
                         src.companion(), args.get(DESIGN), args.get(STEP), args.get(PRIMITIVE))), DESIGN, STEP, PRIMITIVE)

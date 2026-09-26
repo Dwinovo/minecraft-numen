@@ -8,6 +8,7 @@ import com.dwinovo.numen.core.build.Design;
 import com.dwinovo.numen.core.build.Designs;
 import com.dwinovo.numen.core.build.Layout;
 import com.dwinovo.numen.core.build.Primitive;
+import com.dwinovo.numen.core.build.Slice;
 import com.dwinovo.numen.core.task.build.BuildTaskRecord;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskResult;
@@ -150,15 +151,24 @@ public final class DesignOps {
     }
 
     /**
-     * 展示一份:设计按步分页,列出每一步;蓝图文件报尺寸、格数、用料与按层分布。
+     * 展示一份:设计按步分页,列出每一步;蓝图文件报尺寸、格数、用料与按层分布。给了 {@code layer},改为把那一层的最终样子
+     * 俯视画成字符图({@link Slice}),设计与蓝图文件都行。
      *
+     * @param layer 画哪一层;没给是 null,列步骤或报价
      * @param again 这一行本身(不带 {@code --page}):翻页时写它
      */
-    public static String show(NumenPlayer her, String name, CommandArgs args, String again) {
+    public static String show(NumenPlayer her, String name, Integer layer, CommandArgs args, String again) {
         MinecraftServer server = her.getServer();
-        return Designs.kindOf(server, name) == Designs.Kind.DESIGN
-                ? showDesign(her, Designs.load(server, name), args, again)
-                : showFile(her, name, args, again);
+        boolean design = Designs.kindOf(server, name) == Designs.Kind.DESIGN;
+        if (layer != null) {
+            return design
+                    ? Slice.of("design " + name, Designs.load(server, name).drawn().targets(), layer, again)
+                            .result(args).toJson()
+                    : Slice.of("blueprint file " + name + " (0 0 0 is its lowest north-west corner)",
+                            BlueprintStore.load(her.serverLevel(), name, BlockPos.ZERO, 0).targets(), layer, again)
+                            .result(args).toJson();
+        }
+        return design ? showDesign(her, Designs.load(server, name), args, again) : showFile(her, name, args, again);
     }
 
     /**

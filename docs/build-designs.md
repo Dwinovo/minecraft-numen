@@ -27,7 +27,8 @@ build layer … / line … / sphere … 同理           不带 --into 就当场
 
 build new house                                 新建一份空设计
 build layer … --into house                      往设计末尾加一步(相对坐标)
-build show house                                列出设计:每步编号、类型、范围、方块数、所需材料
+build show house                                列出设计:每步编号、类型、范围、方块数、所需材料(按输出预算分页)
+build show house --layer 1                      把第 1 层建成后的样子俯视画成字符图(蓝图文件同样)
 build step house 2 <原语…>                       把第 2 步换成新原语
 build insert house 3 <原语…>                     在第 3 步前插入
 build drop house 4                              删掉第 4 步

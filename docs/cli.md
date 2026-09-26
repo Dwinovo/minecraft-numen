@@ -681,6 +681,27 @@ She carries enough for all of it.
 `build show` 就是原来 `build blueprint_read` 不带落点的那一份(尺寸、格数、全量料单、按组件全等收的料、按层分布),
 它不随图纸变长,只有一页。
 
+**`build show <名> --layer <y>`:一层的俯视图。** 她写一层、看一层、改一层,不必动笔前把整栋在脑子里算完(真机里为此在
+三轮思考里烧了约 8 万 token)。画的是那一层建成之后的最终样子(`Slice`):设计按步骤画完的那张图(后写覆盖先写),蓝图文件
+读出来的格;门的上半、床头不在施工图里、建成后在,照建成的样子画上,那一格后来被别的一步画过的留后画的。格子和
+`build layer` 的字符网格同一个约定(一行一个 z,北在上,每行从西往东,`.` 是什么都没画),图例写成 `--legend` 的样子、方块
+状态照 `/setblock` 写全,抄回 `build layer` 画出来是同一层(单测验);行首标 z、头上一行标 x 的末位数;所有层用整份的 x、z
+范围做框,上下两层叠得上。行多了按输出预算分页。字从方块名的字母里挑(格数多的先挑),挑不到按数字、符号、希腊字母的顺序,
+不用 `.`、空格、`-`(抄进 `build layer` 时以它开头的一行会被当成标志)、引号、反斜杠与 `=`。
+
+```
+build show cottage --layer 1
+→ design cottage at y=1 (it spans y 0..4), seen from above: x -1..7 left to right (east), z -1..4 top to bottom (south); the x row gives each column's last digit; . = nothing here.
+  x     901234567
+  z -1  .........
+  z  0  .ooooooo.
+  z  1  .oc....o.
+  z  2  .o.....o.
+  z  3  .o.....o.
+  z  4  .oooOooo.
+  legend: o=oak_planks c=chest[facing=south,type=single,waterlogged=false] O=oak_door[facing=north,half=lower,hinge=left,open=false,powered=false]
+```
+
 **`build at` 的回执**:受理即回执;`task_finished` 写成
 
 ```
