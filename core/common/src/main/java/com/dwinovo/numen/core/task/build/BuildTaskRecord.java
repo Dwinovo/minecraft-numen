@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.task.build;
 import com.dwinovo.numen.core.build.BuildValidity;
 
+import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskRecord;
 
 import net.minecraft.core.BlockPos;
@@ -17,6 +18,7 @@ import java.util.Objects;
 /** Typed descriptor for a bounded multi-block construction job. */
 public final class BuildTaskRecord extends TaskRecord {
 
+    /** {@code build} 工具派的活叫这个名字;命令派的活(按图施工)名字取自那次调用。 */
     public static final String TOOL_NAME = "build";
 
     public final List<Target> targets;
@@ -98,7 +100,22 @@ public final class BuildTaskRecord extends TaskRecord {
     public BuildTaskRecord(String toolCallId, long deadlineGameTime, List<Target> targets,
                            ReplaceMode replaceMode, boolean consumeMaterials, boolean allowPartial,
                            Map<Long, CompoundTag> blockEntityData, List<EntitySpawn> entities) {
-        super(TOOL_NAME, toolCallId, deadlineGameTime);
+        this(TOOL_NAME, toolCallId, deadlineGameTime, targets, replaceMode, consumeMaterials, allowPartial,
+                blockEntityData, entities);
+    }
+
+    /** 命令派的活:名字与调用 id 取自那次调用({@code build blueprint})。 */
+    public BuildTaskRecord(ServerSource source, long deadlineGameTime, List<Target> targets,
+                           ReplaceMode replaceMode, boolean consumeMaterials, boolean allowPartial,
+                           Map<Long, CompoundTag> blockEntityData, List<EntitySpawn> entities) {
+        this(source.taskName(), source.toolCallId(), deadlineGameTime, targets, replaceMode, consumeMaterials,
+                allowPartial, blockEntityData, entities);
+    }
+
+    private BuildTaskRecord(String name, String toolCallId, long deadlineGameTime, List<Target> targets,
+                            ReplaceMode replaceMode, boolean consumeMaterials, boolean allowPartial,
+                            Map<Long, CompoundTag> blockEntityData, List<EntitySpawn> entities) {
+        super(name, toolCallId, deadlineGameTime);
         this.entities = List.copyOf(entities);
         this.targets = promotePlainCells(targets, blockEntityData);
         this.replaceMode = replaceMode;

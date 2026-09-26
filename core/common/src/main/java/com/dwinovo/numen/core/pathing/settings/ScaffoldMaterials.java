@@ -33,7 +33,7 @@ import java.util.function.BiPredicate;
  * <h2>为什么不是一份硬编码清单</h2>
  * "什么东西是垃圾"没法预先枚举:模组世界里她背包里堆的石头我们一个都不认识,而同一块
  * 圆石在矿洞里是垃圾、背到末地就是唯一的垫路料。所以清单归她自己管——模型看着背包和
- * 当下的处境用 {@code scaffold_materials} 增删,断料时的回执会把候选一并递到它面前。
+ * 当下的处境用 {@code build scaffold_add} 这一系列命令增删,断料时的回执会把候选一并递到它面前。
  *
  * <h2>空表就是空表</h2>
  * 清空之后她一块都不垫——那是模型可以做的决定(背包里那些泥土留着盖房子,别拿去填坑),
@@ -259,7 +259,7 @@ public final class ScaffoldMaterials {
         if (accepted.isEmpty()) {
             return " Your scaffolding list is EMPTY, so pathfinding may not place a single block —"
                     + " no pillaring, bridging or stepping up. That was your own call; put blocks"
-                    + " back with scaffold_materials if this route needs them.";
+                    + " back with build scaffold_add if this route needs them.";
         }
         var inv = player.getInventory();
         Map<String, Integer> spare = new LinkedHashMap<>();
@@ -288,7 +288,7 @@ public final class ScaffoldMaterials {
             return out.append(" Mine some of those blocks first.").toString();
         }
         return out.append(" You ARE carrying: ").append(carrying)
-                .append(". Add what you are willing to spend with scaffold_materials, or go mine "
+                .append(". Add what you are willing to spend with build scaffold_add, or go mine "
                         + "something already on the list.").toString();
     }
 

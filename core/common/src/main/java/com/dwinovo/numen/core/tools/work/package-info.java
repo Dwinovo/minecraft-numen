@@ -1,10 +1,8 @@
 /**
- * 派长活:goto/挖矿/建造/蓝图/钓鱼/双战斗/捡拾——时长无界(取决于世界)的
- * 任务全员在此,统一走 dispatchAsync:受理即回执 task_id,收尾经 task_finished
- * 事件唤醒大脑;占用闸门一次一件。
- *
- * <p>审查红灯:本包之外不得出现 dispatchAsync,本包之内不得出现 enqueue。
- * 每个工具在镜像的 task/&lt;领域&gt; 包里配一对 TaskRecord + CompanionTask。
- * 四连问见 {@link com.dwinovo.numen.core.tools} 包说明。
+ * 派长活:命令组 {@code move}(goto、follow、route)、{@code work}(mine、collect、fish)、{@code fight}(attack)、
+ * {@code build}(按图施工、读图纸、垫路料清单),以及一串建造原语的 {@code build} 工具。占身体、时长取决于世界的活
+ * 都经 {@code TaskDispatch.setTask} 交任务槽:受理即回执 task_id,收尾经 task_finished 事件唤醒大脑;一次一件。
+ * 只读的 route、blueprints、blueprint_read 与改登记的 scaffold 系列当场回。每件活在镜像的 task/&lt;领域&gt; 包里配一对
+ * TaskRecord + CompanionTask。四连问见 {@link com.dwinovo.numen.core.tools} 包说明。
  */
 package com.dwinovo.numen.core.tools.work;

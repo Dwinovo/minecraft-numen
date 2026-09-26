@@ -2207,27 +2207,66 @@ public class BuildGameTests {
         });
     }
 
-    /** 蓝图:list 里看得到放进 schematics/ 的那份文件,build 照文件把它建出来,每一格都对上。 */
+    /**
+     * 蓝图:build blueprints 里看得到放进 schematics/ 的那份文件,build blueprint 照文件把它建出来,每一格都对上;
+     * 派下的活叫"组 动作"。
+     */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_build")
-    public static void blueprint_tool_lists_and_builds_a_file(GameTestHelper helper) throws Exception {
+    public static void build_blueprints_lists_and_build_blueprint_builds_a_file(GameTestHelper helper) throws Exception {
         ServerLevel level = helper.getLevel();
         writeSmallHouse(level, "fixture_tool");
         NumenPlayer companion = spawnAt(helper, "gametest_architect", new BlockPos(2, 2, 2), true);
         BlockPos anchor = helper.absolutePos(new BlockPos(6, 2, 6));
-        ToolRun list = call(companion, "blueprint", args("action", "list"));
-        ToolRun build = call(companion, "blueprint", args("action", "build", "file", "fixture_tool",
-                "x", anchor.getX(), "y", anchor.getY(), "z", anchor.getZ()));
+        ToolRun list = command(companion, "build blueprints");
+        ToolRun build = command(companion, "build blueprint fixture_tool " + anchor.getX() + " " + anchor.getY()
+                + " " + anchor.getZ());
         var targets = com.dwinovo.numen.core.blueprint.BlueprintStore.load(level, "fixture_tool", anchor, 0).targets();
 
         helper.succeedWhen(() -> {
             helper.assertTrue(list.succeeded() && list.reply().contains("fixture_tool"),
                     "the blueprint is not listed: " + list.reply());
+            helper.assertTrue(build.task() != null && build.task().getToolName().equals("build blueprint"),
+                    "the build is not named after the command: " + build.reply());
             helper.assertTrue(build.done(), "blueprint build has not finished");
             helper.assertTrue(build.succeeded(), "blueprint build failed: " + build.outcome());
             for (BuildTaskRecord.Target t : targets) {
                 helper.assertTrue(t.matches(level.getBlockState(t.pos())),
                         "the cell at " + t.pos().toShortString() + " does not match the blueprint");
             }
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 读图纸不动世界:build blueprint_read 报尺寸、格数与用料;带上锚点再报那里已经立着多少、还差多少;锚点只给了一截
+     * 当场说清要三个都给。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
+    public static void build_blueprint_read_prices_a_file_and_a_site(GameTestHelper helper) throws Exception {
+        ServerLevel level = helper.getLevel();
+        writeSmallHouse(level, "fixture_read");
+        NumenPlayer companion = spawnAt(helper, "gametest_estimator", new BlockPos(2, 2, 2), false);
+        BlockPos anchor = helper.absolutePos(new BlockPos(6, 2, 6));
+        int cells = com.dwinovo.numen.core.blueprint.BlueprintStore.load(level, "fixture_read", anchor, 0)
+                .targets().size();
+        ToolRun alone = command(companion, "build blueprint_read fixture_read");
+        ToolRun site = command(companion, "build blueprint_read fixture_read --x " + anchor.getX() + " --y "
+                + anchor.getY() + " --z " + anchor.getZ());
+        ToolRun half = command(companion, "build blueprint_read fixture_read --x " + anchor.getX());
+
+        helper.succeedWhen(() -> {
+            com.google.gson.JsonObject read = com.google.gson.JsonParser.parseString(alone.reply()).getAsJsonObject();
+            helper.assertTrue(alone.succeeded() && read.getAsJsonObject("data").get("cells").getAsInt() == cells
+                            && read.getAsJsonObject("data").has("materials")
+                            && !read.getAsJsonObject("data").has("already_standing"),
+                    "reading the blueprint alone does not price it: " + alone.reply());
+            com.google.gson.JsonObject there = com.google.gson.JsonParser.parseString(site.reply()).getAsJsonObject()
+                    .getAsJsonObject("data");
+            helper.assertTrue(site.succeeded() && there.has("already_standing")
+                            && there.get("still_to_place").getAsInt() > 0,
+                    "reading at a site does not say what stands there and what is missing: " + site.reply());
+            helper.assertTrue(!half.succeeded() && half.reply().contains("a site needs all of --x, --y and --z"),
+                    "half an anchor is not refused: " + half.reply());
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }

@@ -221,22 +221,51 @@ public class PerceptionGameTests {
      * 用和召唤同一条路生成的同伴——名册里没有她,清单就无处可存。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
-    public static void scaffold_materials_adds_and_deletes(GameTestHelper helper) {
+    public static void build_scaffold_adds_and_removes(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos at = helper.absolutePos(new BlockPos(3, 2, 3));
         NumenPlayer companion = com.dwinovo.numen.entity.Companions.summon(level.getServer(), java.util.UUID.randomUUID(),
                 "gametest_mason", level, new net.minecraft.world.phys.Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
-        ToolRun added = call(companion, "scaffold_materials",
-                args("action", "add", "block_ids", List.of("minecraft:oak_planks")));
-        ToolRun deleted = call(companion, "scaffold_materials",
-                args("action", "delete", "block_ids", List.of("minecraft:andesite")));
-        ToolRun now = call(companion, "scaffold_materials", args());
+        ToolRun added = command(companion, "build scaffold_add minecraft:oak_planks");
+        ToolRun deleted = command(companion, "build scaffold_remove minecraft:andesite");
+        ToolRun now = command(companion, "build scaffold");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(added.succeeded() && deleted.succeeded(), "add or delete failed: " + added.reply()
+            helper.assertTrue(added.succeeded() && deleted.succeeded(), "add or remove failed: " + added.reply()
                     + " / " + deleted.reply());
             helper.assertTrue(now.reply().contains("minecraft:oak_planks") && !now.reply().contains("minecraft:andesite"),
                     "the list does not hold planks without andesite: " + now.reply());
+            com.dwinovo.numen.entity.Companions.dismiss(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 整份换掉就只剩给的那几种;清空之后一格都不许垫,回执把后果说清;认不出的 id 一个都没有时如实说,清单不动。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
+    public static void build_scaffold_set_and_clear_replace_the_list(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos at = helper.absolutePos(new BlockPos(3, 2, 3));
+        NumenPlayer companion = com.dwinovo.numen.entity.Companions.summon(level.getServer(), java.util.UUID.randomUUID(),
+                "gametest_resetter", level, new net.minecraft.world.phys.Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
+        ToolRun set = command(companion, "build scaffold_set minecraft:netherrack minecraft:basalt");
+        ToolRun unknown = command(companion, "build scaffold_set minecraft:no_such_block");
+        ToolRun afterUnknown = command(companion, "build scaffold");
+        ToolRun cleared = command(companion, "build scaffold_clear");
+
+        helper.succeedWhen(() -> {
+            JsonObject list = JsonParser.parseString(set.reply()).getAsJsonObject();
+            helper.assertTrue(set.succeeded() && list.getAsJsonArray("materials").size() == 2
+                            && set.reply().contains("minecraft:netherrack") && set.reply().contains("minecraft:basalt"),
+                    "the list is not exactly what was set: " + set.reply());
+            helper.assertTrue(!unknown.succeeded() && unknown.reply().contains("none of them is a block"),
+                    "an unknown id is not reported: " + unknown.reply());
+            helper.assertTrue(afterUnknown.reply().contains("minecraft:netherrack"),
+                    "a refused set changed the list: " + afterUnknown.reply());
+            JsonObject empty = JsonParser.parseString(cleared.reply()).getAsJsonObject();
+            helper.assertTrue(cleared.succeeded() && empty.getAsJsonArray("materials").isEmpty()
+                            && cleared.reply().contains("EMPTY"),
+                    "clearing does not empty the list and say what it means: " + cleared.reply());
             com.dwinovo.numen.entity.Companions.dismiss(level.getServer(), companion);
         });
     }

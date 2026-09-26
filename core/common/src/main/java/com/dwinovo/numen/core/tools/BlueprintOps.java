@@ -1,17 +1,19 @@
-package com.dwinovo.numen.core.tools.perception;
+package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.agent.tool.NumenTool;
-import com.dwinovo.numen.core.blueprint.BlueprintStore;
-import com.dwinovo.numen.core.task.build.BuildTaskRecord;
+import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.core.PlayerInv;
 import com.dwinovo.numen.core.WorkProfile;
+import com.dwinovo.numen.core.blueprint.BlueprintStore;
+import com.dwinovo.numen.core.task.build.BuildTaskRecord;
+import com.dwinovo.numen.core.task.build.ReplaceMode;
+import com.dwinovo.numen.core.tools.work.BuildTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskResult;
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Vec3i;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.Item;
 
@@ -20,78 +22,77 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.function.Consumer;
 
 /**
- * 读一张图纸:尺寸、用料、按层分布——不动世界一格。
+ * 图纸三件事的业务半边:列出蓝图目录里的文件({@code build blueprints})、读一张图纸的尺寸与用料
+ * ({@code build blueprint_read})、按图整幢施工({@code build blueprint})。
  *
- * <p>此前这些只能作为<b>失败的副产品</b>出现:得先选好位置、发起施工、被拒绝,
- * 才知道要多少料。实测就是这个样子——盖屋顶、缺四十一块楼梯、跑去找工作台、
- * 找不到、再试、再缺,全程没有任何一步能提前回答"这栋房子要多少料"。
- *
- * <p>而生存模式的价值恰恰在那条链上:她设计 → 报料 → 一起去采 → 施工。报料是
- * 第二环,不该靠撞墙触发。
+ * <p>读图纸不动世界一格。这件事此前只能作为<b>失败的副产品</b>出现:得先选好位置、发起施工、被拒绝,
+ * 才知道要多少料。实测就是这个样子——盖屋顶、缺四十一块楼梯、跑去找工作台、找不到、再试、再缺,
+ * 全程没有任何一步能提前回答"这栋房子要多少料"。而生存模式的价值恰恰在那条链上:她设计 → 报料 →
+ * 一起去采 → 施工。报料是第二环,不该靠撞墙触发。
  */
-public final class BlueprintReadTool implements NumenTool {
+public final class BlueprintOps {
 
-    private static final Gson GSON = new Gson();
+    private static final long MIN_TIMEOUT_TICKS = 2 * 60 * 20;
     /** 一句话概览里点名几种,其余只报个数——完整清单在 data 里,那才是拿去采集的。 */
     private static final int NAMED_IN_HEADLINE = 5;
     /** 按层分布最多报几层,再多就分桶。 */
     private static final int MAX_LAYERS = 24;
 
-    private record Args(String file, Integer x, Integer y, Integer z, Integer rotation) {}
+    private BlueprintOps() {}
 
-    @Override
-    public String name() {
-        return "blueprint_read";
-    }
-
-    @Override
-    public String description() {
-        return "Read a blueprint without touching the world: overall size, cell count, the materials it "
-                + "costs (biggest items first), and how its cells are spread across height — the layer "
-                + "profile is what lets you reason about storeys, e.g. where a second floor or a roof "
-                + "starts. Call this BEFORE proposing a build so you can tell the player what it will "
-                + "take; in survival that shopping list is the whole point, since a large structure needs "
-                + "several gathering trips. Pass the optional anchor x,y,z (and rotation) as well and you "
-                + "also get what is ALREADY standing there, what is still missing, and what she is short "
-                + "of right now — use that to resume a part-built structure or to check a site before "
-                + "committing to it. Instant, read-only; use the blueprint tool to actually build.";
-    }
-
-    @Override
-    public Map<String, Object> parameterSchema() {
-        Map<String, Object> props = new LinkedHashMap<>();
-        props.put("file", Map.of("type", "string",
-                "description", "Blueprint name from `blueprint action=list`, without extension."));
-        props.put("x", Map.of("type", "integer",
-                "description", "Optional anchor minimum X — give all three to also get site progress."));
-        props.put("y", Map.of("type", "integer", "description", "Optional anchor bottom Y."));
-        props.put("z", Map.of("type", "integer", "description", "Optional anchor minimum Z."));
-        // 值域写描述不写 enum:代码对任意整数取模,enum 在这儿不添约束,
-        // 而整数 enum 会被一部分只认字符串 enum 的上游拒收。
-        props.put("rotation", Map.of("type", "integer",
-                "description", "Optional clockwise rotation (0/90/180/270), matching the build you plan."));
-        Map<String, Object> root = new LinkedHashMap<>();
-        root.put("type", "object");
-        root.put("properties", props);
-        root.put("required", List.of("file"));
-        root.put("additionalProperties", false);
-        return root;
-    }
-
-    @Override
-    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
-        Args a = GSON.fromJson(args, Args.class);
-        if (a.file() == null || a.file().isBlank()) {
-            throw new IllegalArgumentException("file is required; use `blueprint action=list` first");
+    /** 蓝图目录里有哪些,各多大。 */
+    public static String list(MinecraftServer server) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (String name : BlueprintStore.list(server)) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", name);
+            try {
+                Vec3i size = BlueprintStore.peekSize(server, name);
+                entry.put("size", size.getX() + "x" + size.getY() + "x" + size.getZ());
+            } catch (Exception e) {
+                entry.put("size", "unreadable: " + e.getMessage());
+            }
+            out.add(entry);
         }
-        boolean anchored = a.x() != null && a.y() != null && a.z() != null;
-        BlockPos anchor = anchored ? new BlockPos(a.x(), a.y(), a.z()) : BlockPos.ZERO;
-        int quarters = a.rotation() == null ? 0 : Math.floorMod(a.rotation(), 360) / 90;
-        ServerLevel level = (ServerLevel) companion.level();
-        BlueprintStore.Loaded loaded = BlueprintStore.load(level, a.file(), anchor, quarters);
+        String message = out.isEmpty()
+                ? "no blueprints yet; drop .litematic / .schem / .nbt files into the schematics folder"
+                : out.size() + " blueprint(s) available";
+        return TaskResult.ok(message, Map.of("blueprints", out)).toJson();
+    }
+
+    /**
+     * 按图整幢施工的那件活。{@code quarters} 是顺时针转几个 90°。料不齐时能建多少建多少(整幢图纸一趟运不完是常态),
+     * 同一个调用再发一次就从断点接上。
+     */
+    public static BuildTaskRecord build(ServerSource src, String file, BlockPos anchor, int quarters) {
+        NumenPlayer companion = src.companion();
+        BlueprintStore.Loaded loaded = BlueprintStore.load(companion.serverLevel(), file, anchor, quarters);
+        if (loaded.targets().isEmpty()) {
+            throw new IllegalArgumentException("blueprint " + file + " contains no buildable cells");
+        }
+        // 材料记账随能力画像(同 build 工具):免耗材想建就建,否则消耗并预检报缺。
+        boolean consume = !WorkProfile.of(companion).freeMaterials();
+        long timeout = Math.max(MIN_TIMEOUT_TICKS, BuildTool.timeoutTicksFor(loaded.targets().size(), consume));
+        // allowPartial:整幢图纸一趟运不完是常态,分段施工 + 精确续建
+        BuildTaskRecord record = new BuildTaskRecord(src,
+                companion.level().getGameTime() + timeout, loaded.targets(),
+                ReplaceMode.REPLACE_EMPTY, consume, true, loaded.blockEntityData(), loaded.entities());
+        // 加载时掉的格随任务一起交代:掉格必须有账,否则回执会拿剩下的格数当全部
+        record.droppedAtLoad(loaded.dropped());
+        // 逐格料单:带花的花盆收盆加花两件,带花纹的旗帜收一叠但要组件一致
+        record.cellNeeds(loaded.cellNeeds());
+        return record;
+    }
+
+    /**
+     * 读一张图纸:尺寸、用料、按层分布。给了锚点({@code anchor} 非 null)再报那里已经立着多少、还差多少、她手上缺多少。
+     */
+    public static String read(NumenPlayer companion, String file, BlockPos anchor, int quarters) {
+        boolean anchored = anchor != null;
+        ServerLevel level = companion.serverLevel();
+        BlueprintStore.Loaded loaded = BlueprintStore.load(level, file, anchored ? anchor : BlockPos.ZERO, quarters);
 
         Map<Item, Integer> cost = new LinkedHashMap<>();
         Map<Integer, Integer> byLayer = new TreeMap<>();
@@ -170,7 +171,7 @@ public final class BlueprintReadTool implements NumenTool {
         data.put("layer_profile", layerProfile(byLayer));
 
         StringBuilder msg = new StringBuilder();
-        msg.append(a.file()).append(": ").append(size.getX()).append('x').append(size.getY())
+        msg.append(file).append(": ").append(size.getX()).append('x').append(size.getY())
                 .append('x').append(size.getZ()).append(", ").append(loaded.targets().size())
                 .append(" cells, needs ").append(sum(cost)).append(" items across ")
                 .append(cost.size()).append(" kinds — ").append(topLine(cost));
@@ -198,7 +199,7 @@ public final class BlueprintReadTool implements NumenTool {
                         : "; still short " + topLine(shortOf));
             }
         }
-        reply.accept(TaskResult.ok(msg.toString(), data).toJson());
+        return TaskResult.ok(msg.toString(), data).toJson();
     }
 
     private static int sum(Map<Item, Integer> m) {

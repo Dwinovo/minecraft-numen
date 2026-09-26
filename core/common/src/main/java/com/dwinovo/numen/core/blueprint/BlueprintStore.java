@@ -305,6 +305,6 @@ public final class BlueprintStore {
                 throw new IllegalArgumentException("blueprint " + name + " cannot be read: " + e.getMessage(), e);
             }
         }
-        throw new IllegalArgumentException("blueprint " + name + " not found; use blueprint_list first");
+        throw new IllegalArgumentException("blueprint " + name + " not found; build blueprints lists the files there are");
     }
 }

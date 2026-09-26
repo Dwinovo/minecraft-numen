@@ -104,7 +104,7 @@ public final class BuildTool implements NumenTool {
                 + "so put the ENTIRE building in ONE call; split it and the walls go up before anyone "
                 + "discovers the roof material is missing. Treat a shortfall as an invitation to gather "
                 + "together, never promise a survival build costs nothing. For prebuilt structure files "
-                + "use the blueprint tool. BACKGROUND: after acceptance wait for task_finished; never "
+                + "use the command build blueprint. BACKGROUND: after acceptance wait for task_finished; never "
                 + "resend while running or after status=done.";
     }
 

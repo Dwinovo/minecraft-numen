@@ -15,9 +15,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code scaffold_materials} 的业务半边:增删改查那份垫路料清单。
+ * {@code build scaffold*} 的业务半边:增删改查那份垫路料清单。
  *
- * <p>四个动作都落到同一个出口——{@link ScaffoldMaterials#store}——然后回读落盘后的实际结果。
+ * <p>改动都落到同一个出口——{@link ScaffoldMaterials#store}——然后回读落盘后的实际结果。
  * 回执报的永远是<b>存进去之后读回来的</b>那份,不是请求的那份:认不出的 id 会被丢掉,
  * 模型得看见这件事,否则它会以为自己加上了。
  */
@@ -26,53 +26,56 @@ public final class ScaffoldOps {
     /** 回执里最多列几种背包里没在清单上的方块——够模型挑,不至于把回执撑爆。 */
     private static final int MAX_SUGGESTIONS = 12;
 
-    public String apply(String action, List<String> blockIds, NumenPlayer self) {
-        String verb = action == null || action.isBlank() ? "read" : action.trim().toLowerCase(java.util.Locale.ROOT);
+    /** 只看:当前清单与背包里还没进清单的方块。 */
+    public String read(NumenPlayer self) {
+        return report(self, ScaffoldMaterials.effectiveIds(self), "read");
+    }
+
+    /** 追加这些,已在清单上的不重复。 */
+    public String add(NumenPlayer self, List<String> blockIds) {
         List<String> given = ScaffoldMaterials.normalize(blockIds);
-
-        boolean gaveNothing = blockIds == null || blockIds.isEmpty();
-
-        switch (verb) {
-            case "read" -> { }
-            case "clear" -> ScaffoldMaterials.store(self, List.of());
-            case "add" -> {
-                if (given.isEmpty()) {
-                    return error(self, refusal("add", gaveNothing));
-                }
-                List<String> merged = new ArrayList<>(ScaffoldMaterials.effectiveIds(self));
-                for (String id : given) {
-                    if (!merged.contains(id)) {
-                        merged.add(id);
-                    }
-                }
-                ScaffoldMaterials.store(self, merged);
-            }
-            case "delete" -> {
-                if (given.isEmpty()) {
-                    return error(self, refusal("delete", gaveNothing));
-                }
-                List<String> kept = new ArrayList<>(ScaffoldMaterials.effectiveIds(self));
-                kept.removeAll(given);
-                ScaffoldMaterials.store(self, kept);
-            }
-            case "set" -> {
-                if (given.isEmpty()) {
-                    return error(self, gaveNothing
-                            ? "set needs block_ids — use action=clear if you really mean an empty list"
-                            : refusal("set", false));
-                }
-                ScaffoldMaterials.store(self, given);
-            }
-            default -> {
-                return error(self, "unknown action '" + action + "' — use add / delete / set / clear, "
-                        + "or omit it to just read");
+        if (given.isEmpty()) {
+            return error(self, unknownIds("add"));
+        }
+        List<String> merged = new ArrayList<>(ScaffoldMaterials.effectiveIds(self));
+        for (String id : given) {
+            if (!merged.contains(id)) {
+                merged.add(id);
             }
         }
+        return changed(self, "add", merged);
+    }
 
+    /** 从清单上拿掉这些。 */
+    public String remove(NumenPlayer self, List<String> blockIds) {
+        List<String> given = ScaffoldMaterials.normalize(blockIds);
+        if (given.isEmpty()) {
+            return error(self, unknownIds("remove"));
+        }
+        List<String> kept = new ArrayList<>(ScaffoldMaterials.effectiveIds(self));
+        kept.removeAll(given);
+        return changed(self, "remove", kept);
+    }
+
+    /** 整份换成这些。 */
+    public String set(NumenPlayer self, List<String> blockIds) {
+        List<String> given = ScaffoldMaterials.normalize(blockIds);
+        if (given.isEmpty()) {
+            return error(self, unknownIds("set"));
+        }
+        return changed(self, "set", given);
+    }
+
+    /** 清空:什么都不许垫。 */
+    public String clear(NumenPlayer self) {
+        return changed(self, "clear", List.of());
+    }
+
+    /** 存下、报主人一句,回执报回读的那份。 */
+    private String changed(NumenPlayer self, String verb, List<String> ids) {
+        ScaffoldMaterials.store(self, ids);
         List<String> now = ScaffoldMaterials.effectiveIds(self);
-        if (!verb.equals("read")) {
-            announceToOwner(self, verb, now);
-        }
+        announceToOwner(self, verb, now);
         return report(self, now, verb);
     }
 
@@ -103,12 +106,10 @@ public final class ScaffoldOps {
         return root.toString();
     }
 
-    /** 参数为什么不合格:一个字都没给,还是给的全认不出。对模型是两个不同的下一步。 */
-    private static String refusal(String verb, boolean gaveNothing) {
-        return gaveNothing
-                ? verb + " needs block_ids and you gave none"
-                : verb + " got block_ids but none of them is a block that exists here — "
-                        + "check the spelling, and include the namespace (minecraft:cobblestone)";
+    /** 给的 id 一个都认不出:下一步是查拼写,不是换动作。 */
+    private static String unknownIds(String verb) {
+        return verb + " got block ids but none of them is a block that exists here — "
+                + "check the spelling, and include the namespace (minecraft:cobblestone)";
     }
 
     /** 背包里能当方块放下、却不在清单上的东西,按数量从多到少。 */
