@@ -103,7 +103,7 @@ public final class TaskDispatch {
         // 记下"她现在在做什么",服务器重启后照着重放一遍(见 TaskPersistence)。
         TaskPersistence.remember(companion, record.getToolName(), replayTool, args);
         // 内置大脑靠 task_finished 事件收尾(别轮询);外部(MCP)夺舍收不到事件
-        // (那条投给内置大脑,不是它),得自己轮询 task_status 到身体空闲,再感知确认。
+        // (那条投给内置大脑,不是它),得自己用 task status 轮询到身体空闲,再感知确认。
         // 常驻的活没有终点,也就永远不会发 task_finished —— 回执必须说清楚,
         // 否则她会照着"等事件"的指引干等下去。
         boolean standing = record.getDeadlineGameTime() >= TaskRecord.NO_DEADLINE;
@@ -112,9 +112,9 @@ public final class TaskDispatch {
             note = "已受理,持续进行中。这件活没有终点,不会发 task_finished 事件;"
                     + "派别的身体动作就会顶替它,那是让它停下的正常方式。";
         } else if (record.isExternalCall()) {
-            note = "已受理,后台执行中。用 task_status 轮询,身体转空闲即为完成,再用感知工具确认结果;task_stop 叫停。";
+            note = "已受理,后台执行中。用命令 task status 轮询,身体转空闲即为完成,再用感知工具确认结果;task_stop 叫停。";
         } else {
-            note = "已受理,后台执行中。完成会自动收到 task_finished 事件,不要轮询;task_status 查进度,task_stop 叫停。";
+            note = "已受理,后台执行中。完成会自动收到 task_finished 事件,不要轮询;task_stop 叫停。";
         }
         reply.accept(TaskResult.ok(
                 note,

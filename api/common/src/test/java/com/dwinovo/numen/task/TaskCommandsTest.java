@@ -19,10 +19,12 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * {@code task} 的三个动作提升回原来的工具名:模型看到的名字、描述、参数 schema 与改成命令之前逐字相同,
- * 顺序也挨在一起。期望值是改之前那三个手写工具的原样(描述照抄,schema 用它们当时的 {@link Schema} 写法)。
+ * {@code task} 的三个动作只有 {@code stop} 提升成快捷工具 {@code task_stop}:名字与参数 schema 与改成命令之前的手写工具
+ * 逐字相同(schema 用它当时的 {@link Schema} 写法),描述里不再指向已经不是工具的 task_status。{@code status} 与
+ * {@code timer} 只作命令,工具表里没有 {@code task_status}、{@code set_timer}。
  */
 class TaskCommandsTest {
 
@@ -36,43 +38,20 @@ class TaskCommandsTest {
     }
 
     @Test
-    void theShortcutsKeepTheirOldListingWordForWord() {
-        assertListing("task_status",
-                "Read what you have in flight: the background task (id, what it is, running/queued, elapsed time "
-                        + "and remaining budget) and your pending timers (id, seconds left, reason). Instant. "
-                        + "Normally you don't need it — a task announces its own end as a task_finished event and "
-                        + "a timer fires on its own; use it when the owner asks how things are going, or before "
-                        + "deciding what to task_stop.",
-                Schema.object().build());
+    void onlyStopIsAShortcut() {
         assertListing("task_stop",
                 "Cancel something you dispatched. With no id: aborts the background task (the one "
-                        + "<current_task> / task_status shows) so the body frees up; its wind-down arrives as a "
+                        + "<current_task> shows) so the body frees up; its wind-down arrives as a "
                         + "task_finished event with status=stopped. With an id: cancels that task or that timer "
                         + "(tm...). Fails, listing what is actually pending, when nothing matches.",
                 Schema.object()
                         .optionalString("task_id", "What to cancel: a task id (e.g. t42) or a timer id (e.g. tm3). "
                                 + "Omit to stop the background task, whatever it is.")
                         .build());
-        assertListing("set_timer",
-                "Set a one-shot reminder that fires after a delay in world time. Returns immediately and never "
-                        + "occupies the body — she keeps doing whatever she is doing. Use it for things the world "
-                        + "will not announce on its own: a furnace finishing, crops growing, waiting for daybreak. "
-                        + "Do NOT use it to watch work you dispatched yourself — a background task sends its own "
-                        + "task_finished event when it ends. The timer only reminds you; it is not proof that the "
-                        + "thing you waited for happened, so inspect the world when it fires. Max 1200s, at most 8 "
-                        + "pending. World time stops while a single-player world is paused. task_status lists your "
-                        + "timers; task_stop cancels one.",
-                Schema.object()
-                        .integer("after_s", "Delay in world-time seconds (1-1200; out-of-range values are clamped).",
-                                1, 1200)
-                        .string("reason", "What to look at or decide when it fires. The owner sees this too, so "
-                                + "name the thing: \"collect the iron from the furnace\" beats \"check back\".")
-                        .build());
 
         List<String> names = ToolRegistry.all().stream().map(NumenTool::name).toList();
-        int at = names.indexOf("task_status");
-        assertEquals(List.of("task_status", "task_stop", "set_timer"), names.subList(at, at + 3),
-                "三个快捷工具挨着、按原来的顺序进表");
+        assertFalse(names.contains("task_status"), "task status 只作命令,不进工具表:" + names);
+        assertFalse(names.contains("set_timer"), "task timer 只作命令,不进工具表:" + names);
     }
 
     @Test
@@ -93,10 +72,11 @@ class TaskCommandsTest {
                     task timer 300 collect the iron from the furnace
                   Notes:
                     Returns at once and never occupies your body; your owner is told when and why.
+                    For what the world will not announce on its own: a furnace finishing, crops growing, daybreak. \
+                When it fires, look: the reminder is not proof the thing happened.
                     It only reminds you. Work you dispatched sends its own task_finished; don't set a timer to watch it.
                     At most 8 pending. World time stops while a single-player world is paused.
-                  See also: task status, task stop
-                  Shortcut tool: set_timer.""", help("task timer --help"));
+                  See also: task status, task stop""", help("task timer --help"));
         assertEquals("""
                 task stop [--task_id <word>]
                   Cancel the background task, or a task or timer by its id.

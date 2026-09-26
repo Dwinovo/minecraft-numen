@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.gametest;
 
+import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.Param;
@@ -18,7 +19,6 @@ import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.task.TaskResult;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.task.TimerRegistry;
-import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.util.List;
 import java.util.UUID;
@@ -39,8 +39,8 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
  * 她手上在办的事:{@code task status} 查进度、{@code task stop} 叫停、{@code task timer} 定表。
  * 主人不在线,收尾与到点的事件进出箱,测试从那里读模型会收到的原话。
  *
- * <p>三个动作各自提升成了快捷工具({@code task_status} / {@code task_stop} / {@code set_timer}):同一件事从工具和
- * 从命令各调一次,回执与世界上的结果一样。
+ * <p>只有 {@code task stop} 提升成了快捷工具 {@code task_stop}:同一件事从工具和从命令各调一次,回执与世界上的结果
+ * 一样。{@code task status}、{@code task timer} 只作命令,工具表里没有它们。
  *
  * <p>命令派下的长活叫什么、重启后怎么接回来,用夹具组 {@code gt_long} 验:它唯一的动作 {@code linger} 派一件站着
  * 数刻的后台活,并提升成快捷工具 {@code gt_linger}。
@@ -185,30 +185,29 @@ public class TaskControlGameTests {
         });
     }
 
-    /** 同源:走在路上时,task_status 与 task status 在同一刻读到的是一字不差的同一份回执。 */
+    /**
+     * 查与定表只作命令:工具表里没有 task_status、set_timer(task_status 多被拿来轮询,而活干完会以事件叫醒她;
+     * 定表很少用),叫停的 task_stop 还在。走在路上时 task status 照样报出这件活与挂着的表。
+     */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
-    public static void task_status_reads_the_same_from_the_tool_and_the_command(GameTestHelper helper) {
+    public static void task_status_and_set_timer_are_commands_only(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_twice_asked", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(14, 2, 14));
         ToolRun walk = call(companion, "goto", args("x", far.getX(), "y", far.getY(), "z", far.getZ()));
-        ToolRun timer = call(companion, "set_timer", args("after_s", 600, "reason", "turn the compost"));
-        AtomicReference<ToolRun> viaTool = new AtomicReference<>();
-        AtomicReference<ToolRun> viaCommand = new AtomicReference<>();
+        ToolRun timer = command(companion, "task timer 600 turn the compost");
+        AtomicReference<ToolRun> status = new AtomicReference<>();
 
         helper.startSequence()
-                .thenExecuteAfter(3, () -> {
-                    viaTool.set(call(companion, "task_status", args()));
-                    viaCommand.set(command(companion, "task status"));
-                })
+                .thenExecuteAfter(3, () -> status.set(command(companion, "task status")))
                 .thenExecute(() -> {
+                    helper.assertTrue(ToolRegistry.get("task_status") == null && ToolRegistry.get("set_timer") == null,
+                            "task_status or set_timer is still a tool");
+                    helper.assertTrue(ToolRegistry.get("task_stop") != null, "task_stop is no longer a tool");
                     helper.assertTrue(walk.task() != null && timer.succeeded(), "setup failed: " + timer.reply());
-                    helper.assertTrue(viaTool.get().succeeded()
-                                    && viaTool.get().reply().contains(walk.task().publicId())
-                                    && viaTool.get().reply().contains("turn the compost"),
-                            "task_status does not name the walk and the timer: " + viaTool.get().reply());
-                    helper.assertTrue(viaTool.get().reply().equals(viaCommand.get().reply()),
-                            "the tool and the command read differently: " + viaTool.get().reply()
-                                    + " / " + viaCommand.get().reply());
+                    helper.assertTrue(status.get().succeeded()
+                                    && status.get().reply().contains(walk.task().publicId())
+                                    && status.get().reply().contains("turn the compost"),
+                            "task status does not name the walk and the timer: " + status.get().reply());
                     CompanionFactory.despawn(helper.getLevel().getServer(), companion);
                 })
                 .thenSucceed();
@@ -235,31 +234,27 @@ public class TaskControlGameTests {
     }
 
     /**
-     * 同源:一个经 set_timer、一个经 task timer,在同一刻定同样的表——回执除了各自的表编号一字不差,
-     * 世界上各多一个到期时刻与理由都相同的表。越界的秒数两边都夹住并说明。
+     * 越界的秒数夹住并说明:task timer 5000 回执说你要的和实际定的,世界上多一个按上限到期、理由不变的表,
+     * 回执里的表编号就是它。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
-    public static void set_timer_from_the_tool_and_the_command_sets_the_same_timer(GameTestHelper helper) {
-        NumenPlayer viaToolBody = spawnAt(helper, "gametest_tool_timer", new BlockPos(2, 2, 2), false);
-        NumenPlayer viaCommandBody = spawnAt(helper, "gametest_cmd_timer", new BlockPos(6, 2, 2), false);
-        ToolRun viaTool = call(viaToolBody, "set_timer", args("after_s", 5000, "reason", "water the wheat"));
-        ToolRun viaCommand = command(viaCommandBody, "task timer 5000 water the wheat");
+    public static void task_timer_clamps_and_explains(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_cmd_timer", new BlockPos(6, 2, 2), false);
+        var server = helper.getLevel().getServer();
+        long setAt = server.overworld().getGameTime();
+        ToolRun timer = command(companion, "task timer 5000 water the wheat");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(viaTool.succeeded() && viaCommand.succeeded(),
-                    "a timer failed: " + viaTool.reply() + " / " + viaCommand.reply());
-            helper.assertTrue(viaTool.reply().contains("你要 5000s"), "the clamp is not explained: " + viaTool.reply());
-            helper.assertTrue(withoutTimerId(viaTool.reply()).equals(withoutTimerId(viaCommand.reply())),
-                    "the tool and the command answer differently: " + viaTool.reply() + " / " + viaCommand.reply());
-            TimerRegistry timers = TimerRegistry.get(helper.getLevel().getServer());
-            List<TimerRegistry.Timer> a = timers.list(viaToolBody.getUUID());
-            List<TimerRegistry.Timer> b = timers.list(viaCommandBody.getUUID());
-            helper.assertTrue(a.size() == 1 && b.size() == 1
-                            && a.get(0).dueGameTime() == b.get(0).dueGameTime()
-                            && a.get(0).reason().equals(b.get(0).reason()),
-                    "the two timers differ: " + a + " / " + b);
-            CompanionFactory.despawn(helper.getLevel().getServer(), viaToolBody);
-            CompanionFactory.despawn(helper.getLevel().getServer(), viaCommandBody);
+            helper.assertTrue(timer.succeeded(), "the timer failed: " + timer.reply());
+            helper.assertTrue(timer.reply().contains("你要 5000s"), "the clamp is not explained: " + timer.reply());
+            List<TimerRegistry.Timer> set = TimerRegistry.get(server).list(companion.getUUID());
+            String id = JsonParser.parseString(timer.reply()).getAsJsonObject()
+                    .getAsJsonObject("data").get("timer_id").getAsString();
+            helper.assertTrue(set.size() == 1 && set.get(0).id().equals(id)
+                            && set.get(0).dueGameTime() == setAt + TimerRegistry.MAX_SECONDS * 20L
+                            && set.get(0).reason().equals("water the wheat"),
+                    "the timer is not the clamped one: " + set + " / " + timer.reply());
+            CompanionFactory.despawn(server, companion);
         });
     }
 
@@ -435,12 +430,5 @@ public class TaskControlGameTests {
     private static boolean finishedAs(EventOutbox outbox, NumenPlayer body, String task) {
         return outbox.peek(body.getUUID()).entries().stream().anyMatch(e -> e.type().equals("task_finished")
                 && e.text().contains("task=\"" + task + "\"") && e.text().contains("status=\"done\""));
-    }
-
-    /** 回执里只有表编号因人而异(全服一个计数器),把它抹成同一个记号再比。 */
-    private static String withoutTimerId(String reply) {
-        JsonObject json = JsonParser.parseString(reply).getAsJsonObject();
-        String id = json.getAsJsonObject("data").get("timer_id").getAsString();
-        return reply.replace(id, "tm?");
     }
 }

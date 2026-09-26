@@ -20,8 +20,9 @@ import java.util.Map;
  * {@code task}:她派出去的东西——身体上那件活({@link TaskDispatch#setTask})和挂着的表({@link TimerRegistry})。
  *
  * <p>三个动作都当场返回、不占身体:{@code status} 查、{@code stop} 撤、{@code timer} 定。两条道共用这一组:
- * "我有什么在跑""停掉它"各只有一个问法,模型不必记哪一种去哪问。三个都常用,各自提升回原来的工具名
- * ({@code task_status} / {@code task_stop} / {@code set_timer}),模型看到的工具表一字不变。
+ * "我有什么在跑""停掉它"各只有一个问法,模型不必记哪一种去哪问。只有 {@code stop} 提升成快捷工具
+ * {@code task_stop}:叫停常用。{@code status} 多被拿来轮询,而活干完会以 task_finished 事件叫醒她,不该轮询;
+ * {@code timer} 很少用。这两个只作命令。
  */
 public final class TaskCommands {
 
@@ -41,7 +42,7 @@ public final class TaskCommands {
 
     private TaskCommands() {}
 
-    /** 经插件那扇门登记这一组;三个快捷工具按 status、stop、timer 的顺序进工具表。 */
+    /** 经插件那扇门登记这一组;快捷工具 task_stop 随之进工具表。 */
     public static void install(NumenApi numen) {
         numen.registerCommands("task", "The background task and your pending timers.",
                 TaskCommands::actions);
@@ -53,12 +54,7 @@ public final class TaskCommands {
                 .example("task status")
                 .note("Instant and read-only; it does not touch your body.")
                 .note("Usually not needed: a task ends with its own task_finished event and a timer fires on its own.")
-                .seeAlso("task stop")
-                .promote("task_status", "Read what you have in flight: the background task (id, what it is, "
-                        + "running/queued, elapsed time and remaining budget) and your pending timers (id, "
-                        + "seconds left, reason). Instant. Normally you don't need it — a task announces its "
-                        + "own end as a task_finished event and a timer fires on its own; use it when the owner "
-                        + "asks how things are going, or before deciding what to task_stop.");
+                .seeAlso("task stop");
         task.server("stop", "Cancel the background task, or a task or timer by its id.",
                 TaskCommands::stop, TASK_ID)
                 .example("task stop")
@@ -68,7 +64,7 @@ public final class TaskCommands {
                 .note("When nothing matches it fails and lists what is pending.")
                 .seeAlso("task status")
                 .promote("task_stop", "Cancel something you dispatched. With no id: aborts the background "
-                        + "task (the one <current_task> / task_status shows) so the body frees up; its "
+                        + "task (the one <current_task> shows) so the body frees up; its "
                         + "wind-down arrives as a task_finished event with status=stopped. With an id: cancels "
                         + "that task or that timer (tm...). Fails, listing what is actually pending, when "
                         + "nothing matches.");
@@ -76,21 +72,13 @@ public final class TaskCommands {
                 TaskCommands::timer, AFTER_S, REASON)
                 .example("task timer 300 collect the iron from the furnace")
                 .note("Returns at once and never occupies your body; your owner is told when and why.")
+                .note("For what the world will not announce on its own: a furnace finishing, crops growing, "
+                        + "daybreak. When it fires, look: the reminder is not proof the thing happened.")
                 .note("It only reminds you. Work you dispatched sends its own task_finished; don't set a timer "
                         + "to watch it.")
                 .note("At most " + TimerRegistry.MAX_PER_COMPANION + " pending. World time stops while a "
                         + "single-player world is paused.")
-                .seeAlso("task status", "task stop")
-                .promote("set_timer", "Set a one-shot reminder that fires after a delay in world time. "
-                        + "Returns immediately and never occupies the body — she keeps doing whatever she is "
-                        + "doing. Use it for things the world will not announce on its own: a furnace "
-                        + "finishing, crops growing, waiting for daybreak. Do NOT use it to watch work you "
-                        + "dispatched yourself — a background task sends its own task_finished event when it "
-                        + "ends. The timer only reminds you; it is not proof that the thing you waited for "
-                        + "happened, so inspect the world when it fires. Max " + TimerRegistry.MAX_SECONDS
-                        + "s, at most " + TimerRegistry.MAX_PER_COMPANION + " pending. World time stops while "
-                        + "a single-player world is paused. task_status lists your timers; task_stop cancels "
-                        + "one.");
+                .seeAlso("task status", "task stop");
     }
 
     /** 查:身体在做的那件活与挂着的表,各报一段。 */

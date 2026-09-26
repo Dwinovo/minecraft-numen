@@ -38,7 +38,7 @@ import net.minecraft.world.level.Level;
  * 一步。一套逻辑通吃的话,要么她对着一只死羊站到天荒地老,要么主人一下线任务就没了。
  *
  * <p><b>{@code nav.tick()} 的返回值一个都不能丢</b>:{@link PlayerNav} 的 FAILED 是
- * <b>终局闩</b>(一经裁定即稳定持续),不接住就是她永久定在原地而 {@code task_status}
+ * <b>终局闩</b>(一经裁定即稳定持续),不接住就是她永久定在原地而 {@code task status}
  * 照说"执行中"——主人完全看不出她卡住了。这里接住的方式就是把它变成任务的结果。
  */
 public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskRecord> {

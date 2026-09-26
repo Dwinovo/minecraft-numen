@@ -114,8 +114,7 @@ final class RuntimeState {
         String tail = task.standing()
                 ? "This is a STANDING job — it has no finish line and will NEVER send a "
                   + "task_finished event. It keeps running until something replaces it."
-                : "This background call is ACTIVE and will send a task_finished event when it ends; "
-                  + "use task_status only when the owner asks for progress.";
+                : "This background call is ACTIVE and will send a task_finished event when it ends.";
         // 身体只有一个槽，派新活自然顶掉旧活，所以这里必须说「直接派」而不是
         // 「别再派」——后者会让模型先 task_stop 再派，白跑一轮。
         // 只有「停下来什么也不干」才需要 task_stop。

@@ -182,7 +182,7 @@ public final class CompanionTickDispatcher {
         com.dwinovo.numen.cli.PendingCommands.drop(player);
     }
 
-    /** 她现在在做的那件事,null = 槽空(她站着)。task_status 用。 */
+    /** 她现在在做的那件事,null = 槽空(她站着)。task status 用。 */
     public static TaskRecord currentTaskFor(UUID companionUuid) {
         CompanionBrain brain = BRAINS.get(companionUuid);
         return brain == null ? null : brain.current.record();

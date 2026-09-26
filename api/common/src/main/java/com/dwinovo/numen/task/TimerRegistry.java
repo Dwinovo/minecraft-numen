@@ -40,7 +40,7 @@ import java.util.UUID;
  * ({@link SavedData}),跟 {@code EventOutbox} / {@link CompanionRegistry} 同一制式。
  *
  * <p>也<b>不能</b>走 {@link TaskPersistence}——它靠重放那次工具调用来恢复,
- * 而重放 {@code set_timer(after_s=60)} 等于把表按回 60 秒重新计时。
+ * 而重放 {@code task timer 60 …} 等于把表按回 60 秒重新计时。
  *
  * <h2>到点之后</h2>
  * 一句 {@link NumenEvents#emit} 就够:主人在线立刻送达并开一轮,主人离线进出箱等他回来,

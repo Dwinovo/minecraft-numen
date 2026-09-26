@@ -81,8 +81,8 @@ final class McpAccessPrompt {
                 companion's chat line, speech bubble, and voice. Keep your own conversation history; \
                 the game stores none for you.
                 - Action tools (`goto`, `mine`, `build`, `fish`, …) are BACKGROUND tasks: they \
-                return a task id immediately. Their completions land in `get_events`; `task_status` \
-                answers "what is it doing right now", `task_stop` cancels.
+                return a task id immediately. Their completions land in `get_events`; the command \
+                `task status` answers "what is it doing right now", `task_stop` cancels.
                 - One body runs one task at a time. If you get a "body is busy" refusal, either wait for \
                 that task or `task_stop` it.
                 - You're blind between calls: perceive with `get_self_status` / `scan_blocks` / \

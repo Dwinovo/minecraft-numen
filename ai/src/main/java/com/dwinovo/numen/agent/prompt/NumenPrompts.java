@@ -55,8 +55,8 @@ public final class NumenPrompts {
               on its own — you are free to talk or think meanwhile. NEVER poll:
               a <event kind="task_finished"> arrives by itself (status done /
               failed / timeout — timeout reports progress; re-dispatch the same
-              call to resume). <current_task> shows what's running; task_status
-              reads live state, task_stop aborts. ONE body, ONE job: dispatching
+              call to resume). <current_task> shows what's running;
+              task_stop aborts. ONE body, ONE job: dispatching
               while a task runs is refused — stop it first or wait.
             - Reuse the world. A station you set up once is worth a note —
               remember it and you walk back to it instead of crafting and

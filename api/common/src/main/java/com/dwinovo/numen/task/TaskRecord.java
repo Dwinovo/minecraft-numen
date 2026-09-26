@@ -72,7 +72,7 @@ public abstract class TaskRecord {
     private StopCause stopCause;
     /** 异步派发的记录:受理时已经回执过 tool_call,收尾改走 task_finished 事件。 */
     private boolean async;
-    /** 首次进入 RUNNING 的游戏刻;task_status 用它报已耗时。-1 = 还没开跑。 */
+    /** 首次进入 RUNNING 的游戏刻;task status 用它报已耗时。-1 = 还没开跑。 */
     private long startedGameTime = -1;
     /**
      * 同步动作的回信口:派它的那次调用给的({@link TaskDispatch#runSync} 绑上),结算后的结果只从这里回——模型的调用、
@@ -118,7 +118,7 @@ public abstract class TaskRecord {
      * Prefix of the synthetic tool-call ids NumenActuator mints for external (MCP)
      * invocations — disjoint from the LLM's ids. The async wind-down keys off this
      * to route completion: internal tasks fire a task_finished event to the built-in
-     * brain; external ones don't (their driver polls task_status instead).
+     * brain; external ones don't (their driver polls task status instead).
      */
     public static final String EXTERNAL_CALL_PREFIX = "mcp-";
 

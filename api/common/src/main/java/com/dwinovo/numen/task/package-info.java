@@ -14,8 +14,8 @@
  *   <li>{@link com.dwinovo.numen.task.reflex reflex} — the instinct switch
  *       roster;</li>
  *   <li>{@link TaskCommands} — the engine-owned {@code task} command group
- *       (status / stop / timer, promoted to {@code task_status} / {@code task_stop} /
- *       {@code set_timer}) a pack installs alongside its own tools.</li>
+ *       (status / stop / timer; stop is also the shortcut tool {@code task_stop})
+ *       a pack installs alongside its own tools.</li>
  * </ul>
  *
  * <p>Everything else in this package — the scheduler's own machinery
