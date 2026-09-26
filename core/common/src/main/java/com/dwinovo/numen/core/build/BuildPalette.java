@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.build;
 
+import com.dwinovo.numen.cli.ArgType;
+
 import net.minecraft.commands.arguments.blocks.BlockStateParser;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.BlockItem;
@@ -30,8 +32,18 @@ import java.util.List;
  * <p>取样按<b>位置哈希</b>,不用随机数发生器:同一格永远取到同一个方块。于是
  * 预览与施工一致、重跑一致、断点续建也一致——这三件事任缺其一,玩家看到的房子
  * 就会和确认过的那张不是同一栋。
+ *
+ * <p>命令里的方块参数就是它({@link #ARG}):读命令行时当场解析,方块名、状态写错了是那一行写错了,和别的参数写错一样
+ * 附着用法报回去——不等到画的时候才发现。设计里的每一步、技能与提示里写着的命令,读的也是这同一个解析。
  */
 public final class BuildPalette {
+
+    /**
+     * 方块参数的类型:和原版 {@code /setblock} 一样写(带空格的混合加引号),读的时候就解析成调色板;写回是原来那段文字。
+     */
+    public static final ArgType<BuildPalette> ARG = ArgType.string().as("block",
+            "block as /setblock takes it, or a weighted mix; quote it if it has spaces",
+            BuildPalette::parse, BuildPalette::spec);
 
     /** 单项:方块状态 + 记账用的物品 + 权重。 */
     public record Entry(BlockState state, Item item, String label, int weight) {
@@ -41,10 +53,13 @@ public final class BuildPalette {
         }
     }
 
+    /** 写下的那段文字:写回命令行就是它,两份调色板相等就是这段文字相等。 */
+    private final String spec;
     private final List<Entry> entries;
     private final int totalWeight;
 
-    private BuildPalette(List<Entry> entries) {
+    private BuildPalette(String spec, List<Entry> entries) {
+        this.spec = spec;
         this.entries = List.copyOf(entries);
         int sum = 0;
         for (Entry e : entries) {
@@ -84,7 +99,27 @@ public final class BuildPalette {
         if (entries.isEmpty()) {
             throw new IllegalArgumentException("block_id must name at least one block");
         }
-        return new BuildPalette(entries);
+        return new BuildPalette(spec, entries);
+    }
+
+    /** 写下的那段文字,原样。 */
+    public String spec() {
+        return spec;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        return o instanceof BuildPalette other && spec.equals(other.spec);
+    }
+
+    @Override
+    public int hashCode() {
+        return spec.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return spec;
     }
 
     private static Entry toEntry(String id, int weight) {

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.build;
 
+import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.core.CoreCommandsFixture;
 import com.dwinovo.numen.core.task.build.BuildTaskRecord;
 import com.dwinovo.numen.core.task.build.ReplaceMode;
@@ -86,6 +87,35 @@ class DesignTest {
         IllegalArgumentException other = assertThrows(IllegalArgumentException.class, () -> Design.parse("house",
                 text("build new shed")));
         assertTrue(other.getMessage().contains("one build primitive"), other.getMessage());
+    }
+
+    /**
+     * 方块名与状态在命令树读的时候就认:当场执行的一行、{@code build step} 写进设计的那一步,写错了都是那一行读不通,
+     * 报的是原版解析器的原话,不等到画或施工。{@code build step} 的那一步由读外面那一行的同一棵树读,读出来就是一步。
+     */
+    @Test
+    void blocksAndStepsAreReadByTheCommandTree() {
+        IllegalArgumentException state = assertThrows(IllegalArgumentException.class,
+                () -> NumenCli.read("build set oak_stairs[facing=nrth] 1 1 1"));
+        assertTrue(state.getMessage().startsWith("oak_stairs[facing=nrth] — "), state.getMessage());
+        IllegalArgumentException legend = assertThrows(IllegalArgumentException.class,
+                () -> NumenCli.read("build layer 0 0 0 #X# --legend X=notablock --block stone"));
+        assertTrue(legend.getMessage().startsWith("notablock — "), legend.getMessage());
+
+        NumenCli.Reading step = NumenCli.read("build step house 2 layer 0 1 0 ### --block \"stone*3, andesite\"");
+        assertEquals("build step", step.path());
+        assertEquals(Design.step("build layer 0 1 0 ### --block \"stone*3, andesite\""),
+                step.args().get(com.dwinovo.numen.cli.Param.required("primitive", Design.STEP, "The step.")),
+                "build step 写来的那一步和设计文件里同样一行读成同一步");
+        IllegalArgumentException inner = assertThrows(IllegalArgumentException.class,
+                () -> NumenCli.read("build step house 2 set oak_door[half=middle] 1 0 0"));
+        assertTrue(inner.getMessage().startsWith("oak_door[half=middle] — "), inner.getMessage());
+        IllegalArgumentException typo = assertThrows(IllegalArgumentException.class,
+                () -> NumenCli.read("build insert house 1 layr 0 0 0 ###"));
+        assertTrue(typo.getMessage().contains("Did you mean: layer?"), typo.getMessage());
+        IllegalArgumentException notAStep = assertThrows(IllegalArgumentException.class,
+                () -> NumenCli.read("build step house 2 designs"));
+        assertTrue(notAStep.getMessage().startsWith("a design step is one build primitive"), notAStep.getMessage());
     }
 
     @Test

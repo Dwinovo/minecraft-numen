@@ -11,6 +11,7 @@ import com.dwinovo.numen.cli.CommandGroup;
 import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.core.build.Design;
 import com.dwinovo.numen.core.build.Placement;
 import com.dwinovo.numen.core.build.Primitive;
 import com.dwinovo.numen.core.tools.BuildOps;
@@ -41,7 +42,7 @@ public final class BuildCommands {
             .values("a name as `build designs` lists it");
     private static final Param<Integer> STEP = Param.required("step", ArgType.integer(1, 999),
             "The step number, as `build show` numbers the steps.");
-    private static final Param<String> PRIMITIVE = Param.required("primitive", ArgType.text(),
+    private static final Param<Design.Step> PRIMITIVE = Param.required("primitive", Design.STEP,
                     "The step: one primitive written as it follows build, without --into.")
             .values("e.g. layer 0 1 0 ##### #...# ##### --block oak_planks");
     private static final Param<Integer> LAYER = Param.optional("layer", ArgType.integer(),

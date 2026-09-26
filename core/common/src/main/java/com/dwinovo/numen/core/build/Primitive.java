@@ -31,7 +31,7 @@ public enum Primitive {
         @Override
         void paint(CommandArgs args, Canvas canvas) {
             BlockPos pos = new BlockPos(args.get(Params.X), args.get(Params.Y), args.get(Params.Z));
-            canvas.put(masked(args, cell(BuildPalette.parse(args.get(Params.BLOCK)), pos)));
+            canvas.put(masked(args, cell(args.get(Params.BLOCK), pos)));
         }
     },
 
@@ -40,7 +40,7 @@ public enum Primitive {
         @Override
         void paint(CommandArgs args, Canvas canvas) {
             BlockPos pos = new BlockPos(args.get(Params.X), args.get(Params.Y), args.get(Params.Z));
-            canvas.put(masked(args, cell(BuildPalette.parse(args.get(Params.BLOCK)), pos).asItemPlace()));
+            canvas.put(masked(args, cell(args.get(Params.BLOCK), pos).asItemPlace()));
         }
     },
 
@@ -59,16 +59,11 @@ public enum Primitive {
         @Override
         void paint(CommandArgs args, Canvas canvas) {
             Map<Character, BuildPalette> legend = new HashMap<>();
-            List<String> entries = args.get(Params.LEGEND);
-            for (String entry : entries == null ? List.<String>of() : entries) {
-                if (entry.length() < 3 || entry.charAt(1) != '=') {
-                    throw new IllegalArgumentException("a legend entry is one character, =, and a block, like "
-                            + "#=stone_bricks; got \"" + entry + "\"");
-                }
-                legend.put(entry.charAt(0), BuildPalette.parse(entry.substring(2)));
+            List<Legend> entries = args.get(Params.LEGEND);
+            for (Legend entry : entries == null ? List.<Legend>of() : entries) {
+                legend.put(entry.key(), entry.block());
             }
-            String fill = args.get(Params.FILL);
-            BuildPalette fallback = fill == null ? null : BuildPalette.parse(fill);
+            BuildPalette fallback = args.get(Params.FILL);
             int y = args.get(Params.Y);
             Integer upTo = args.get(Params.UP_TO);
             for (BuildShapes.CharCell c : BuildShapes.layerCells(args.get(Params.X), y, upTo == null ? y : upTo,
@@ -162,7 +157,7 @@ public enum Primitive {
     }
 
     private static void shape(CommandArgs args, Canvas canvas, List<BlockPos> cells) {
-        BuildPalette palette = BuildPalette.parse(args.get(Params.BLOCK));
+        BuildPalette palette = args.get(Params.BLOCK);
         for (BlockPos pos : cells) {
             canvas.put(masked(args, cell(palette, pos)));
         }
@@ -192,12 +187,35 @@ public enum Primitive {
         };
     }
 
+    /**
+     * {@code layer} 图例里的一项:一个字符、{@code =}、一种方块(写法同 {@link BuildPalette}),如 {@code <=oak_stairs[facing=south]}。
+     * 读命令行时就认好,写回是原来那段文字。
+     */
+    public record Legend(char key, BuildPalette block) {
+
+        static final ArgType<Legend> ARG = ArgType.string().as("legend entry",
+                "one character, =, and a block, like #=stone_bricks; quote it if the block is a mix with spaces",
+                Legend::parse, Legend::written);
+
+        static Legend parse(String entry) {
+            if (entry.length() < 3 || entry.charAt(1) != '=') {
+                throw new IllegalArgumentException("a legend entry is one character, =, and a block, like "
+                        + "#=stone_bricks; got \"" + entry + "\"");
+            }
+            return new Legend(entry.charAt(0), BuildPalette.parse(entry.substring(2)));
+        }
+
+        String written() {
+            return key + "=" + block.spec();
+        }
+    }
+
     /** 原语的参数:每一个都是命令行上的写法、帮助里的一行、设计文件里一步的那一截。 */
     public static final class Params {
 
         private Params() {}
 
-        public static final Param<String> BLOCK = Param.required("block", ArgType.string(),
+        public static final Param<BuildPalette> BLOCK = Param.required("block", BuildPalette.ARG,
                         "The block, written exactly as /setblock takes it, block state included.")
                 .values("an id such as stone_bricks or oak_stairs[facing=north,half=top], or a weighted mix such as "
                         + "\"stone_bricks*8, mossy_stone_bricks\" (quoted, it has spaces); air clears the cell");
@@ -221,12 +239,12 @@ public enum Primitive {
                         "The grid, one row per value: the first row sits at z and each row runs +x from x, so it "
                                 + "reads like a map with north at the top. ' ' and '.' leave a cell alone.")
                 .values("rows like ##### or #...#; quote a row that has spaces in it");
-        public static final Param<List<String>> LEGEND = Param.optional("legend", ArgType.list(ArgType.string()),
+        public static final Param<List<Legend>> LEGEND = Param.optional("legend", ArgType.list(Legend.ARG),
                         "Which block each character of the grid is.")
                 .values("entries like #=stone_bricks or <=oak_stairs[facing=south]; quote an entry whose block is "
                         + "a mix with spaces")
                 .whenOmitted("use --block for every character");
-        public static final Param<String> FILL = Param.optional("block", ArgType.string(),
+        public static final Param<BuildPalette> FILL = Param.optional("block", BuildPalette.ARG,
                         "The block for every grid character the legend does not name, written as /setblock takes it.")
                 .whenOmitted("require every character to be in the legend");
         public static final Param<Integer> UP_TO = Param.optional("up_to", ArgType.integer(),

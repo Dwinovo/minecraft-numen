@@ -2,12 +2,14 @@ package com.dwinovo.numen.cli;
 
 import com.dwinovo.numen.task.TaskResult;
 import com.mojang.brigadier.Command;
+import com.mojang.brigadier.LiteralMessage;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.ParseResults;
 import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
 
 import java.util.List;
 import java.util.Map;
@@ -28,9 +30,15 @@ import java.util.function.Supplier;
  *
  * <p>树上的源对象就是 Numen 自己的来源({@link ClientSource} 或 {@link ServerSource}),处理函数直接拿到它。
  *
+ * <p>一个参数的值可以是本组的另一行命令({@link ArgType#command}):它由这棵树自己读({@link #lines}),和外面那一行同一个
+ * 解析器。
+ *
  * @param <S> 这一侧的来源
  */
 final class CommandTree<S extends CommandSource> {
+
+    private static final DynamicCommandExceptionType WRONG_LINE = new DynamicCommandExceptionType(
+            problem -> new LiteralMessage(String.valueOf(problem)));
 
     private final CommandDispatcher<S> dispatcher = new CommandDispatcher<>();
     private final Predicate<Action> runs;
@@ -88,9 +96,10 @@ final class CommandTree<S extends CommandSource> {
             executable(node, action);
             return node;
         }
-        ArgumentBuilder<S, ?> tip = executable(argument(required.get(required.size() - 1)), action);
+        GroupLines lines = lines(action.group());
+        ArgumentBuilder<S, ?> tip = executable(argument(required.get(required.size() - 1), lines), action);
         for (int i = required.size() - 2; i >= 0; i--) {
-            tip = argument(required.get(i)).then(tip);
+            tip = argument(required.get(i), lines).then(tip);
         }
         node.then(tip);
         return node;
@@ -111,8 +120,24 @@ final class CommandTree<S extends CommandSource> {
         return builder;
     }
 
-    private <T> RequiredArgumentBuilder<S, T> argument(Param<T> param) {
-        return RequiredArgumentBuilder.argument(param.name(), param.type().brigadier());
+    private <T> RequiredArgumentBuilder<S, T> argument(Param<T> param, GroupLines lines) {
+        return RequiredArgumentBuilder.argument(param.name(), param.type().brigadierIn(lines));
+    }
+
+    /**
+     * 在这棵树上读 {@code group} 的一行命令(不带组名):整行要走到可执行的一格,写不通的说法和单独执行这一行时一样
+     * ({@link NumenCli#problem})。解析不用来源:树上的节点不设 {@code requires}。
+     */
+    private GroupLines lines(CommandGroup group) {
+        return afterGroup -> {
+            String line = group.name() + " " + afterGroup;
+            ParseResults<S> parse = dispatcher.parse(line, null);
+            String problem = NumenCli.problem(parse, line);
+            if (problem != null) {
+                throw WRONG_LINE.create(problem);
+            }
+            return NumenCli.reading(parse, line, name -> name.equals(group.name()) ? group : null);
+        };
     }
 
     /** 一个显示列表的帮助节点:不带标志是第一页,{@code --page N} 翻页;页码不存在时抛出,附着用法回去。 */

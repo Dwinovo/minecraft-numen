@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * 第 1 层:Numen 给她的命令层。登记处、两侧各一棵 Numen 自己的调度器,以及两侧共用的帮助与报错。设计稿见
@@ -174,13 +175,30 @@ public final class NumenCli {
         if (problem != null) {
             throw new IllegalArgumentException(problem);
         }
-        Action action = path.size() == 2 ? GROUPS.get(path.get(0)).action(path.get(1)) : null;
+        return reading(parse, line, GROUPS::get);
+    }
+
+    /**
+     * 读通了、走到可执行一格的一行读成什么:动作路径,走到动作时还有读好的参数(帮助没有参数)。
+     *
+     * @param groups 按组名找组:读 {@link #read} 的是登记了的各组,树上读本组一行的({@link ArgType#command})是那一组
+     */
+    static Reading reading(ParseResults<?> parse, String line, Function<String, CommandGroup> groups) {
+        List<String> path = literalPath(parse);
+        Action action = path.size() == 2 ? groups.apply(path.get(0)).action(path.get(1)) : null;
         CommandArgs args = null;
         if (action != null) {
-            CommandContext<CommandSource> ctx = parse.getContext().build(line);
+            CommandContext<?> ctx = parse.getContext().build(line);
             args = CommandArgs.fromCommand(action.positionals(), ctx, FlagsArgument.valuesIn(ctx));
         }
         return new Reading(String.join(" ", path), true, args);
+    }
+
+    /** 读好的一条命令写回组名之后的那一截({@link ArgType#command} 的值的写法):按那个动作的参数表写。 */
+    static String afterGroup(Reading reading) {
+        String[] path = reading.path().split(" ");
+        Action action = GROUPS.get(path[0]).action(path[1]);
+        return reading.args().write(reading.path(), action.params()).substring(path[0].length() + 1);
     }
 
     /** 登记了的各组,按名字排序。 */

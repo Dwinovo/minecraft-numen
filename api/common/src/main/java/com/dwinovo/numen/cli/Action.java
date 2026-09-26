@@ -93,6 +93,9 @@ public final class Action {
         if (description == null || description.isBlank()) {
             throw new IllegalArgumentException(path() + " 提升为 " + toolName + " 却没写工具描述");
         }
+        if (params.stream().anyMatch(p -> p.type().readsInTree())) {
+            throw new IllegalArgumentException(path() + " 有一个参数是本组的另一行命令,只在命令行上读得了,不能提升为快捷工具");
+        }
         this.toolName = toolName;
         this.toolDescription = description;
         return this;
@@ -178,6 +181,10 @@ public final class Action {
 
     List<Param<?>> params() {
         return params;
+    }
+
+    CommandGroup group() {
+        return group;
     }
 
     String name() {

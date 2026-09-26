@@ -67,8 +67,8 @@ public final class DesignOps {
         return saved(her, design.withSteps(steps), "added step " + steps.size());
     }
 
-    /** 把第 {@code n} 步换成 {@code primitive}(写法同 {@code build} 之后的那一截,如 {@code layer 0 0 0 ###})。 */
-    public static String replace(NumenPlayer her, String name, int n, String primitive) {
+    /** 把第 {@code n} 步换成读好的这一步(命令行上写的是 {@code build} 之后的那一截,如 {@code layer 0 0 0 ###})。 */
+    public static String replace(NumenPlayer her, String name, int n, Design.Step step) {
         Design design = Designs.load(her.getServer(), name);
         String refused = refusal(her, design);
         if (refused != null) {
@@ -76,12 +76,12 @@ public final class DesignOps {
         }
         checkStep(design, n, design.steps().size());
         List<String> steps = new ArrayList<>(design.steps());
-        steps.set(n - 1, stepLine(primitive));
+        steps.set(n - 1, step.line());
         return saved(her, design.withSteps(steps), "replaced step " + n);
     }
 
     /** 在第 {@code n} 步前插一步;{@code n} 比步数多一就是接在末尾。 */
-    public static String insert(NumenPlayer her, String name, int n, String primitive) {
+    public static String insert(NumenPlayer her, String name, int n, Design.Step step) {
         Design design = Designs.load(her.getServer(), name);
         String refused = refusal(her, design);
         if (refused != null) {
@@ -89,7 +89,7 @@ public final class DesignOps {
         }
         checkStep(design, n, design.steps().size() + 1);
         List<String> steps = new ArrayList<>(design.steps());
-        steps.add(n - 1, stepLine(primitive));
+        steps.add(n - 1, step.line());
         return saved(her, design.withSteps(steps), "inserted step " + n);
     }
 
@@ -284,11 +284,6 @@ public final class DesignOps {
 
     private static String range(int lo, int hi) {
         return lo == hi ? Integer.toString(lo) : lo + ".." + hi;
-    }
-
-    /** 写来的一步({@code build} 之后的那一截)读成原语,写回规范的一行;读不通就说清。 */
-    private static String stepLine(String primitive) {
-        return Design.step(Design.GROUP + " " + primitive).line();
     }
 
     private static void checkStep(Design design, int n, int max) {

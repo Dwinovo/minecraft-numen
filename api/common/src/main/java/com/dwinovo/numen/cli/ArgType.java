@@ -35,6 +35,10 @@ import java.util.stream.Collectors;
  * ({@link Span#SEVERAL});余下整行({@link #text})吃掉后面的一切({@link Span#REST})。宽度决定它能放在参数表的哪儿,
  * 这条规矩在 {@link Param} 与 {@link CommandGroup} 登记时查。
  *
+ * <h2>读出来的是什么</h2>
+ * 一个值的写法读通了,内容还可以交给用它的一方去认:{@link #as} 在一种写法上接一个解读(方块状态、图例的一项),认不了就是
+ * 这个值写错了,报错指在它的开头。解读只在这里挂一次,命令行、快捷工具、只读不执行的那一棵树读到的都是认过的值。
+ *
  * <h2>现有的几种</h2>
  * 按用到的才开:整数(带给模型看的范围,或不设范围的方块坐标)、小数(带范围)、布尔、一个词(编号这类)、
  * 几个固定值之一、资源 id(配方、模型)、资源 id 或 {@code #标签}、方块或坐标格、一只实体、一个值(模组给的名字,可能带
@@ -57,6 +61,9 @@ public final class ArgType<T> {
             choices -> new LiteralMessage("expected one of " + choices));
     private static final SimpleCommandExceptionType NO_CELL = new SimpleCommandExceptionType(
             new LiteralMessage("expected a cell x,y,z or a box x1,y1,z1..x2,y2,z2, in whole numbers"));
+    /** 读成了写法,内容却不成立(方块名认不出、不是本组的命令……):说法由认它的那一方给。 */
+    private static final DynamicCommandExceptionType REJECTED = new DynamicCommandExceptionType(
+            why -> new LiteralMessage(String.valueOf(why)));
     private static final SimpleCommandExceptionType NO_ENTITY = new SimpleCommandExceptionType(
             new LiteralMessage("expected an entity id as scan entities lists it, like 184"));
     /** UUID 的规范写法:8-4-4-4-12 位十六进制。 */
@@ -88,7 +95,10 @@ public final class ArgType<T> {
         T read(JsonElement value) throws CommandSyntaxException;
     }
 
+    /** 命令行上的读法;要在某一棵树上才读得了的({@link #command})是 null,由 {@link #inTree} 给。 */
     private final ArgumentType<T> brigadier;
+    /** 在一棵树上的读法:只有 {@link #command} 这种要读本组的另一行命令的类型才有。 */
+    private final Function<GroupLines, ArgumentType<T>> inTree;
     private final String kind;
     private final String hint;
     private final Span span;
@@ -109,7 +119,13 @@ public final class ArgType<T> {
     /** @param written 读好的值写回命令行上是什么样子,再读一遍得到的是同一个值 */
     private ArgType(ArgumentType<T> brigadier, String kind, String hint, Span span, Item item, SchemaField schema,
                     FromJson<T> json, Function<T, String> written) {
+        this(brigadier, null, kind, hint, span, item, schema, json, written);
+    }
+
+    private ArgType(ArgumentType<T> brigadier, Function<GroupLines, ArgumentType<T>> inTree, String kind, String hint,
+                    Span span, Item item, SchemaField schema, FromJson<T> json, Function<T, String> written) {
         this.brigadier = brigadier;
+        this.inTree = inTree;
         this.kind = kind;
         this.hint = hint;
         this.span = span;
@@ -377,6 +393,64 @@ public final class ArgType<T> {
     }
 
     /**
+     * 余下的整行是本组的另一条命令,不带组名:{@code build step house 2 layer 0 1 0 ###} 里 {@code layer 0 1 0 ###} 这一截。
+     * 它由正在读外面这一行的那棵树读(同一个生成器长出的同一个形状,见 {@code CommandTree}),所以里面那一条和单独执行时
+     * 读得一样完整——每个参数按它自己的类型认,写错了报它自己的错。读出来的是那一条的动作路径与参数
+     * ({@link NumenCli.Reading});只能是必填的位置参数,也不能进快捷工具——JSON 里没有"本组"。
+     */
+    public static ArgType<NumenCli.Reading> command() {
+        String hint = "the rest of the line: one more command of this group, without the group name";
+        return new ArgType<>(null, lines -> reader -> {
+            int start = reader.getCursor();
+            String text = reader.getRemaining();
+            reader.setCursor(reader.getTotalLength());
+            try {
+                return lines.read(text);
+            } catch (CommandSyntaxException wrong) {
+                reader.setCursor(start);
+                throw REJECTED.createWithContext(reader, wrong.getMessage());
+            }
+        }, "command", hint, Span.REST, Item.NONE, ArgType::stringField,
+                value -> {
+                    throw new IllegalStateException("a command inside a command is read on the command line only");
+                },
+                NumenCli::afterGroup);
+    }
+
+    /**
+     * 同一种写法,读通之后交给 {@code parse} 认:认不了抛出的 {@link IllegalArgumentException} 的话就是这个值的报错,
+     * 位置指在它的开头。命令行、快捷工具与在树上读的都经这一处,读出来的都是认过的值。
+     *
+     * @param kind    帮助与标志用法里的称呼
+     * @param hint    帮助里的完整称呼
+     * @param parse   把这种写法读出的值认成要的东西
+     * @param unparse 认好的东西写回这种写法的值:{@code parse} 读回来是同一个
+     */
+    public <R> ArgType<R> as(String kind, String hint, Function<T, R> parse, Function<R, T> unparse) {
+        Function<ArgumentType<T>, ArgumentType<R>> judged = base -> reader -> {
+            int start = reader.getCursor();
+            T raw = base.parse(reader);
+            try {
+                return parse.apply(raw);
+            } catch (IllegalArgumentException wrong) {
+                reader.setCursor(start);
+                throw REJECTED.createWithContext(reader, wrong.getMessage());
+            }
+        };
+        FromJson<R> fromJson = value -> {
+            T raw = json.read(value);
+            try {
+                return parse.apply(raw);
+            } catch (IllegalArgumentException wrong) {
+                throw REJECTED.create(wrong.getMessage());
+            }
+        };
+        return new ArgType<>(brigadier == null ? null : judged.apply(brigadier),
+                inTree == null ? null : lines -> judged.apply(inTree.apply(lines)),
+                kind, hint, span, item, schema, fromJson, value -> written.apply(unparse.apply(value)));
+    }
+
+    /**
      * 一只实体({@link EntityRef}):{@code scan entities} 列出的运行期编号,或它的 UUID。帮助与报错只说编号——那是她的写法;
      * UUID 是受理之后写进重放那一行的写法,读得回来就行。
      */
@@ -455,13 +529,21 @@ public final class ArgType<T> {
         else s.optionalString(name, desc);
     }
 
-    /** 命令行上的读法。 */
-    ArgumentType<T> brigadier() {
-        return brigadier;
+    /** 在这棵树上的读法:{@code lines} 读本组的另一行命令,只有 {@link #command} 这种类型用得上它。 */
+    ArgumentType<T> brigadierIn(GroupLines lines) {
+        return inTree == null ? brigadier : inTree.apply(lines);
     }
 
-    /** 从命令行当前位置读一个值(标志的值也经这里)。 */
+    /** 这种值要不要在一棵树上才读得了({@link #command}):只能做位置参数,不进快捷工具。 */
+    boolean readsInTree() {
+        return inTree != null;
+    }
+
+    /** 从命令行当前位置读一个值(标志的值经这里)。要在树上读的类型只能做位置参数,不会走到这里。 */
     T read(StringReader reader) throws CommandSyntaxException {
+        if (brigadier == null) {
+            throw new IllegalStateException(kind + " is read in a command tree, as a positional argument");
+        }
         return brigadier.parse(reader);
     }
 
