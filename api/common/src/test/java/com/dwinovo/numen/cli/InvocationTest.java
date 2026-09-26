@@ -14,14 +14,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 一次调用在服务端怎么跟着指令走:执行入口放进她来源的回话去处({@link Echo})带着这次调用,{@code /numen} 的节点
- * 取出来交给处理函数、由处理函数回执;别的指令说的话由它收成回执。主人点过头的调用,回执末尾交代那一句。
- * 从来源里把它取回来(要 mixin)、长活的受理与收尾对得上号,在 GameTest 里对着真服务器验。
+ * 第 0 层的一行指令说的话由她来源的回话去处({@link Echo})收成回执;主人点过头的调用,回执末尾交代那一句。
+ * 真服务器上的回显、长活的受理与收尾对得上号,在 GameTest 里验。
  */
 class InvocationTest {
 
     private static ServerSource call(List<String> replies) {
-        return new ServerSource(null, CommandTool.NAME, "call-1", CommandTool.args("give @s minecraft:diamond 2"),
+        return new ServerSource(null, CommandTool.NAME, "call-1", CommandTool.args("/give @s minecraft:diamond 2"),
                 replies::add);
     }
 
@@ -33,13 +32,13 @@ class InvocationTest {
     @Test
     void whatACommandSaysBecomesTheReceipt() {
         List<String> replies = new ArrayList<>();
-        Echo echo = new Echo(call(replies));
+        Echo echo = new Echo(false);
         echo.sendSystemMessage(Component.literal("Gave 1 [Diamond] to Aria"));
         echo.sendSystemMessage(Component.literal("Gave 1 [Diamond] to Aria"));
         echo.onResult(true, 1);
         echo.onResult(false, 0);
         echo.onResult(true, 1);
-        echo.settle("give @s minecraft:diamond 2", () -> "\nmore");
+        call(replies).reply(echo.receipt("give @s minecraft:diamond 2", () -> "\nmore"));
 
         JsonObject receipt = only(replies);
         assertTrue(receipt.get("success").getAsBoolean(), "分叉的指令有一支成功就算成功");
@@ -52,25 +51,13 @@ class InvocationTest {
     @Test
     void aCommandThatNeverRanFailsWithWhatItSaid() {
         List<String> replies = new ArrayList<>();
-        Echo echo = new Echo(call(replies));
-        echo.settle("give @s minecraft:diamond 2", () -> {
+        Echo echo = new Echo(false);
+        call(replies).reply(echo.receipt("give @s minecraft:diamond 2", () -> {
             throw new AssertionError("没跑成的不去取接在后面的那一截");
-        });
+        }));
         JsonObject receipt = only(replies);
         assertFalse(receipt.get("success").getAsBoolean(), "没有结果回调就是没跑成");
         assertEquals("/give @s minecraft:diamond 2 failed: (no output)", receipt.get("message").getAsString());
-    }
-
-    @Test
-    void aNumenNodeAnswersTheCallItself() {
-        List<String> replies = new ArrayList<>();
-        Echo echo = new Echo(call(replies));
-        echo.call().reply(TaskResult.ok("done by the handler").toJson());
-        echo.answered();
-        echo.sendSystemMessage(Component.literal("ignored"));
-        echo.settle("numen task status", () -> "");
-        assertEquals("done by the handler", only(replies).get("message").getAsString(),
-                "处理函数答了,回显不再作回执");
     }
 
     @Test

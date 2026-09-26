@@ -20,7 +20,6 @@ public class CommonClass {
         com.dwinovo.numen.config.ConfigMigrations.run(numenDir);
 
         registerTools();
-        com.dwinovo.numen.cli.NumenCli.registerArgumentTypes();
         wireTaskMachine();
     }
 

@@ -15,8 +15,7 @@ import java.util.function.Consumer;
  * {@code TaskDispatch.setTask(source, record)} 时,重启后的重放记的就是它们,走同一个入口再来一遍——不需要为命令另记
  * 一种配方。
  *
- * <p>一行指令走 MC 的指令树时,它由执行入口放在她的 {@code CommandSourceStack} 的回话去处里({@link Echo}),
- * {@code /numen} 的节点从那里取出来交给处理函数——调用 id、任务名、回信口一路跟着这次调用走。
+ * <p>它就是服务端那棵第 1 层树上的来源:解析到动作,处理函数直接拿到它——调用 id、任务名、回信口一路跟着这次调用走。
  *
  * <p>给模型看的任务名是另一回事,见 {@link #taskName()}:它要说出是哪个动作,而 {@code command} 这个工具名说不出。
  * 所以解析到动作、交给处理函数之前,源对象先绑上那个动作({@link #running})。

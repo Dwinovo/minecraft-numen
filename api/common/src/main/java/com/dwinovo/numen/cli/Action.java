@@ -1,6 +1,5 @@
 package com.dwinovo.numen.cli;
 
-import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.ParseResults;
 
 import java.util.ArrayList;
@@ -13,9 +12,8 @@ import java.util.regex.Pattern;
  *
  * <p>执行侧由登记时给的处理函数决定:{@link CommandGroup#server} 给的是服务端函数,{@link CommandGroup#client}
  * 给的是客户端函数,二者只有一个。声明在两侧都登记(公共代码在每个进程里各跑一遍),每一侧的树由
- * {@link CommandTree} 长出来:两侧都有这个动作的名字与帮助,参数与可执行的那一格只在执行它的那一侧——
- * 服务端动作在 MC 的指令树上,客户端动作在主人客户端的小表里。专用服务器上客户端动作照样登记(帮助要它的说明),
- * 它的处理函数永远不会在那里被调用。
+ * {@link CommandTree} 长出来:两侧都有这个动作的名字与帮助,参数与可执行的那一格只在执行它的那一侧。专用服务器上
+ * 客户端动作照样登记(帮助要它的说明),它的处理函数永远不会在那里被调用。
  *
  * <h2>帮助正文也登记在这里</h2>
  * 动作的帮助除了用法、说明、参数,还有三块,都接在登记处返回的这个动作上写:
@@ -123,13 +121,13 @@ public final class Action {
      * {@link CommandGroup#close})上整行解析通过,走到可执行的一格,而且那一格属于这个动作。这棵树的节点不设
      * {@code requires},解析用不到来源,源给 null。
      */
-    void checkExamples(CommandDispatcher<Object> tree) {
+    void checkExamples(CommandTree<CommandSource> tree) {
         if (examples.isEmpty()) {
             throw new IllegalArgumentException(path() + " 没写例子——模型照着例子写,每个动作至少一个");
         }
         List<String> here = List.of(NumenCli.ROOT, group.name(), name);
         for (String example : examples) {
-            ParseResults<Object> parse = tree.parse(example, null);
+            ParseResults<CommandSource> parse = tree.parse(example, null);
             if (parse.getReader().canRead() || !parse.getExceptions().isEmpty()
                     || parse.getContext().getCommand() == null || !NumenCli.literalPath(parse).equals(here)) {
                 throw new IllegalArgumentException(path() + " 的例子写不通,或者落在别的动作上: " + example);

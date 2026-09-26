@@ -93,8 +93,8 @@ class CommandSourceTest {
                 .optionalInteger("tries", "How often.", 1, 5)
                 .build(), ToolRegistry.get("gt_side_jot").parameterSchema());
         assertEquals(Schema.object()
-                .string("command", "One command line, as a player would type it in chat; the leading / is "
-                        + "optional. E.g. \"numen --help\", \"help give\".")
+                .string("command", "One command line. Without a leading / it is one of Numen's commands, e.g. "
+                        + "\"numen --help\"; with a leading / it is a native command, e.g. \"/help give\".")
                 .build(), new CommandTool().parameterSchema());
     }
 

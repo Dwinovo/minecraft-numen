@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * {@code /numen} 这棵树的形状与观众:玩家的管理指令(权限、征询、drive……)每条都解析到有执行体的节点、参数取得到,
- * 写错的解析不通;她的命令组由声明长进同一个根下,只有她解析得通,玩家的管理指令她解析不通。执行与鉴权(只认主人)、
+ * 写错的解析不通;整个根只给不是她的来源,她一条都解析不通。她的命令组不在 MC 的指令树上。执行与鉴权(只认主人)、
  * 真服务器发给玩家的指令树,在 GameTest 里钉。
  */
 @Tag("mc")
@@ -57,7 +57,7 @@ class NumenCommandsTest {
             booted = false;
         }
         if (booted) {
-            NumenPlugins.register(numen -> numen.registerCommands("gt_tree", "A group grown into /numen.", g -> {
+            NumenPlugins.register(numen -> numen.registerCommands("gt_tree", "A group that stays off the MC tree.", g -> {
                 g.server("take", "Take some.", (src, args) -> src.reply(TaskResult.ok("took").toJson()), COUNT, FROM)
                         .example("numen gt_tree take 3 --from chest");
                 g.client("jot", "Jot on the owner's client.", (src, args) -> src.reply(TaskResult.ok("jot").toJson()),
@@ -159,17 +159,17 @@ class NumenCommandsTest {
         assertTrue(fails("numen drive Aria numen task status", source(null).withPermission(0)), "drive is for ops");
     }
 
-    /** 她的命令组长在同一个根下,只有她解析得通:玩家收到的树、补全、help 都按这个过滤。 */
+    /** 她的命令组不在 MC 的指令树上:谁都解析不到,谁的用法里都没有。 */
     @Test
-    void herGroupsAreHersAlone() {
-        assertEquals(3, runs("numen gt_tree take 3 --from chest", her).get("count").getResult());
-        runs("numen help", her);
-        runs("numen --help", her);
-        runs("numen gt_tree --help", her);
-        assertTrue(fails("numen gt_tree take 3"), "a player cannot reach her group");
-        assertTrue(fails("numen help"), "nor her help");
-        assertTrue(dispatcher.getSmartUsage(dispatcher.getRoot(), console).values().stream()
-                .noneMatch(usage -> usage.contains("gt_tree")), "a player's usage lists none of her nodes");
+    void herGroupsAreNotOnTheMcTree() {
+        for (CommandSourceStack source : new CommandSourceStack[]{console, her}) {
+            assertTrue(fails("numen gt_tree take 3 --from chest", source));
+            assertTrue(fails("numen help", source));
+            assertTrue(fails("gt_tree take 3", source));
+            assertTrue(dispatcher.getSmartUsage(dispatcher.getRoot(), source).values().stream()
+                    .noneMatch(usage -> usage.contains("gt_tree")), "a usage lists her group");
+        }
+        assertTrue(dispatcher.getRoot().getChild("gt_tree") == null, "her group is a root of the MC tree");
     }
 
     /** 管理同伴的指令只给玩家:她召唤不了同伴、改不了权限、答不了征询、drive 不了别人。 */
@@ -180,22 +180,15 @@ class NumenCommandsTest {
             runs(line, console);
             assertTrue(fails(line, her), "she can reach " + line);
         }
-        assertTrue(dispatcher.getSmartUsage(dispatcher.getRoot(), her).values().stream()
-                .noneMatch(usage -> usage.contains("permission") || usage.contains("summon")),
-                "her usage lists a player's verb");
-    }
-
-    /** 客户端动作在 MC 的树上只有名字与帮助:执行它的那一侧是主人客户端。 */
-    @Test
-    void aClientActionHasOnlyItsHelpOnTheServer() {
-        runs("numen gt_tree jot --help", her);
-        assertTrue(fails("numen gt_tree jot 2", her));
+        assertTrue(!dispatcher.getRoot().getChild(NumenCommands.ROOT).canUse(her), "she can use the /numen root");
+        assertTrue(!dispatcher.getSmartUsage(dispatcher.getRoot(), her).containsKey(
+                dispatcher.getRoot().getChild(NumenCommands.ROOT)), "her usage lists /numen");
     }
 
     /** 同名的一格挂两次:Brigadier 会悄悄并成一格,留下先来那一格的观众,所以当场抛出。 */
     @Test
     void aNameUnderNumenIsGraftedOnce() {
-        assertThrows(IllegalStateException.class, () -> NumenCommands.graft(dispatcher, NumenCommands.FOR_HER,
+        assertThrows(IllegalStateException.class, () -> NumenCommands.graft(dispatcher,
                 net.minecraft.commands.Commands.literal("permission")));
     }
 }

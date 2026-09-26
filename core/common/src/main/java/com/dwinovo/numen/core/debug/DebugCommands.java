@@ -26,12 +26,9 @@ public final class DebugCommands {
     private DebugCommands() {}
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        NumenCommands.graft(dispatcher, NumenCommands.FOR_PLAYERS,
-                Commands.literal("debug").executes(DebugCommands::toggleDebug));
-        NumenCommands.graft(dispatcher, NumenCommands.FOR_PLAYERS,
-                Commands.literal("profile").executes(DebugCommands::toggleProfile));
-        NumenCommands.graft(dispatcher, NumenCommands.FOR_PLAYERS,
-                Commands.literal("pad").executes(DebugCommands::togglePad));
+        NumenCommands.graft(dispatcher, Commands.literal("debug").executes(DebugCommands::toggleDebug));
+        NumenCommands.graft(dispatcher, Commands.literal("profile").executes(DebugCommands::toggleProfile));
+        NumenCommands.graft(dispatcher, Commands.literal("pad").executes(DebugCommands::togglePad));
     }
 
     private static int toggleDebug(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {

@@ -19,8 +19,6 @@ public class NumenMod {
 
     public NumenMod(IEventBus eventBus, ModContainer container) {
         eventBus.addListener(NumenMod::registerPayloads);
-        // 指令参数类型:公共初始化经平台服务登记进来,注册事件到来时写进注册表。
-        com.dwinovo.numen.platform.NeoForgePlatformHelper.ARGUMENT_TYPES.register(eventBus);
 
         // Register the TOML config spec — NeoForge handles file creation +
         // hot-reload from this point on. SPEC is built lazily in the

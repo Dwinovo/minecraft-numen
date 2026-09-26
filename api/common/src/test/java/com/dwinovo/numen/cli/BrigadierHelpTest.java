@@ -164,9 +164,9 @@ class BrigadierHelpTest {
                 Usage: /give <targets> <item>
                 Did you mean: minecraft:diamond?""", item);
 
-        assertEquals("there is no /gvie command on this server. help lists the commands you can run.\n"
+        assertEquals("there is no /gvie command on this server. /help lists the commands you can run.\n"
                 + "Did you mean: give?", CommandRunner.problem(dispatcher, "gvie her minecraft:diamond", her(2)));
-        assertEquals("there is no /gvie command on this server. help lists the commands you can run.",
+        assertEquals("there is no /gvie command on this server. /help lists the commands you can run.",
                 CommandRunner.problem(dispatcher, "gvie her minecraft:diamond", her(0)),
                 "没有 OP 时她用不了 give,就不指给她");
     }

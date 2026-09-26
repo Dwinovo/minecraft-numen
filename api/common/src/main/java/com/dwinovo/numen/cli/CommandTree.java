@@ -2,67 +2,68 @@ package com.dwinovo.numen.cli;
 
 import com.dwinovo.numen.task.TaskResult;
 import com.mojang.brigadier.Command;
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.ParseResults;
 import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.tree.LiteralCommandNode;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
- * 命令组的声明长成一侧的 Brigadier 树。两侧是同一份声明、同一个形状,只有一处不同:
+ * 第 1 层的一棵树:一个 Numen 自己的 Brigadier 调度器,由命令组的声明长出来。主人客户端与服务端各有一棵
+ * ({@link NumenCli}),登记例子时再现长一棵只有那一组的({@link CommandGroup#close});三棵是同一个生成器、同一个形状,
+ * 只有一处不同:
  *
  * <ul>
  *   <li>根下是 {@code help} 与 {@code --help};组下是 {@code --help} 与每一个动作;每个动作下是 {@code --help}。
- *       帮助只读声明,所以两侧都答得出,每一层在两侧都有。</li>
- *   <li>动作的参数与标志尾巴、可执行的那一格,只长在<b>执行它的那一侧</b>({@link #runs})。另一侧的树上这个动作
- *       只有名字和帮助——主人客户端的小表里没有服务端动作的参数,MC 指令树里没有客户端动作的参数。</li>
+ *       帮助只读声明,所以哪一侧都答得出。</li>
+ *   <li>动作的参数与标志尾巴、可执行的那一格,只长在<b>执行它的那一侧</b>({@code runs}):主人客户端的树里没有服务端动作的
+ *       参数,服务端的树里没有客户端动作的参数。</li>
  * </ul>
  *
- * <p>两侧的差别还在"源对象怎么变成 Numen 的源"({@link #handle}):主人客户端的树,源对象就是 {@link ClientSource};
- * MC 的树,源对象是她的 {@code CommandSourceStack},这次调用由执行入口放在它的回话去处里({@link Echo})。
+ * <p>树上的源对象就是 Numen 自己的来源({@link ClientSource} 或 {@link ServerSource}),处理函数直接拿到它。
  *
- * @param <S> 这一侧 Brigadier 的源对象
+ * @param <S> 这一侧的来源
  */
-abstract class CommandTree<S> {
+final class CommandTree<S extends CommandSource> {
 
-    /**
-     * 查例子用的形状:每个动作都长着参数,不分哪一侧——登记时把一组的例子在上面整行解析一遍({@link CommandGroup#close})。
-     * 只解析、不执行。
-     */
-    static final CommandTree<Object> EXAMPLES = new CommandTree<>() {
-        @Override
-        void handle(Object source, Body body) {
-            throw new IllegalStateException("the example tree only parses");
-        }
+    private final CommandDispatcher<S> dispatcher = new CommandDispatcher<>();
+    private final LiteralCommandNode<S> root = dispatcher.register(LiteralArgumentBuilder.literal(NumenCli.ROOT));
+    private final Predicate<Action> runs;
 
-        @Override
-        boolean runs(Action action) {
-            return true;
-        }
-    };
-
-    /** 一格交给 Numen 之后做的事;帮助翻页越界时抛出,和别的解析错误一样附着用法回去。 */
-    @FunctionalInterface
-    interface Body {
-        void run(CommandSource source) throws CommandSyntaxException;
+    /** @param runs 这个动作在这一侧执行吗 */
+    CommandTree(Predicate<Action> runs) {
+        this.runs = runs;
     }
 
-    /** 从源对象取出这次调用的 Numen 源,交给 {@code body}。 */
-    abstract void handle(S source, Body body) throws CommandSyntaxException;
+    /** 根上挂 {@code help} 与 {@code --help},列出各组。查例子的那棵树不挂:例子只该落在动作上。 */
+    CommandTree<S> withRootHelp(Supplier<Listing> listing) {
+        root.addChild(help(NumenCli.HELP, listing).build());
+        root.addChild(help(NumenCli.HELP_FLAG, listing).build());
+        return this;
+    }
 
-    /** 这个动作在这一侧执行吗。 */
-    abstract boolean runs(Action action);
+    /** 挂上一组。 */
+    void add(CommandGroup group) {
+        root.addChild(group(group).build());
+    }
 
-    /** 根上的帮助节点:{@code help} 与 {@code --help} 各一格,列出各组。 */
-    List<LiteralArgumentBuilder<S>> rootHelp(Supplier<Listing> listing) {
-        return List.of(help(NumenCli.HELP, listing), help(NumenCli.HELP_FLAG, listing));
+    ParseResults<S> parse(String line, S source) {
+        return dispatcher.parse(line, source);
+    }
+
+    void execute(ParseResults<S> parse) throws CommandSyntaxException {
+        dispatcher.execute(parse);
     }
 
     /** 一组:{@code --help}(可翻页)与各个动作,组本身不可执行。 */
-    LiteralArgumentBuilder<S> group(CommandGroup group) {
+    private LiteralArgumentBuilder<S> group(CommandGroup group) {
         LiteralArgumentBuilder<S> node = LiteralArgumentBuilder.literal(group.name());
         node.then(help(NumenCli.HELP_FLAG, () -> CommandHelp.group(group)));
         for (Action a : group.actions()) {
@@ -78,10 +79,10 @@ abstract class CommandTree<S> {
     private LiteralArgumentBuilder<S> action(Action action) {
         LiteralArgumentBuilder<S> node = LiteralArgumentBuilder.literal(action.name());
         node.then(LiteralArgumentBuilder.<S>literal(NumenCli.HELP_FLAG).executes(ctx -> {
-            handle(ctx.getSource(), source -> source.reply(TaskResult.ok(CommandHelp.action(action)).toJson()));
+            ctx.getSource().reply(TaskResult.ok(CommandHelp.action(action)).toJson());
             return Command.SINGLE_SUCCESS;
         }));
-        if (!runs(action)) {
+        if (!runs.test(action)) {
             return node;
         }
         List<Param<?>> required = action.positionals();
@@ -99,8 +100,8 @@ abstract class CommandTree<S> {
 
     private <B extends ArgumentBuilder<S, B>> B executable(B builder, Action action) {
         Command<S> run = ctx -> {
-            CommandArgs args = CommandArgs.fromCommand(action.positionals(), ctx, FlagsArgument.valuesIn(ctx));
-            handle(ctx.getSource(), source -> action.execute(source, args));
+            action.execute(ctx.getSource(),
+                    CommandArgs.fromCommand(action.positionals(), ctx, FlagsArgument.valuesIn(ctx)));
             return Command.SINGLE_SUCCESS;
         };
         builder.executes(run);
@@ -120,7 +121,7 @@ abstract class CommandTree<S> {
     private LiteralArgumentBuilder<S> help(String literal, Supplier<Listing> listing) {
         Command<S> show = ctx -> {
             CommandArgs args = CommandArgs.fromCommand(List.of(), ctx, FlagsArgument.valuesIn(ctx));
-            handle(ctx.getSource(), source -> source.reply(TaskResult.ok(listing.get().page(args)).toJson()));
+            ctx.getSource().reply(TaskResult.ok(listing.get().page(args)).toJson());
             return Command.SINGLE_SUCCESS;
         };
         return LiteralArgumentBuilder.<S>literal(literal)

@@ -1,8 +1,5 @@
 package com.dwinovo.numen.cli;
 
-import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -108,13 +105,13 @@ public final class CommandGroup {
 
     /**
      * 登记块跑完:封口,再查每个动作的例子。例子在一棵只有这一组的树上解析——组这时还没挂上共享的树,
-     * 而例子只该用到这一组自己的语法。这棵树由两侧的树同一个生成器长出来,只是每个动作都长着参数
-     * ({@link CommandTree#EXAMPLES}):服务端动作与客户端动作的例子按同一种形状解析。
+     * 而例子只该用到这一组自己的语法。这棵树由两侧的树同一个生成器长出来,只是每个动作都长着参数:
+     * 服务端动作与客户端动作的例子按同一种形状解析。
      */
     void close() {
         open = false;
-        CommandDispatcher<Object> tree = new CommandDispatcher<>();
-        tree.register(LiteralArgumentBuilder.literal(NumenCli.ROOT).then(CommandTree.EXAMPLES.group(this)));
+        CommandTree<CommandSource> tree = new CommandTree<>(action -> true);
+        tree.add(this);
         for (Action a : actions) {
             a.checkExamples(tree);
         }

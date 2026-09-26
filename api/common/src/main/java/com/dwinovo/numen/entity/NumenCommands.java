@@ -1,7 +1,6 @@
 package com.dwinovo.numen.entity;
 
 import com.dwinovo.numen.cli.CommandRunner;
-import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.network.payload.ClientUiActionPayload;
 import com.dwinovo.numen.permission.ConsentAnswer;
 import com.dwinovo.numen.permission.ConsentDesk;
@@ -37,10 +36,10 @@ import java.util.UUID;
 import java.util.function.Predicate;
 
 /**
- * The unified server-side {@code /numen} command tree — one root, two audiences. The players' verbs manage
- * companions; her nodes are Numen's command groups ({@link NumenCli#herNodes}). The two inherently
- * client-local player verbs ({@code settings}, {@code reset}) act on the caller's own client by firing a
- * {@link ClientUiActionPayload} back at them.
+ * The server-side {@code /numen} command tree: the players' verbs that manage companions. Her own commands are
+ * not here — they live in Numen's own command layer ({@code cli.NumenCli}), off the MC command tree. The two
+ * inherently client-local player verbs ({@code settings}, {@code reset}) act on the caller's own client by firing
+ * a {@link ClientUiActionPayload} back at them.
  *
  * <pre>
  *   /numen player summon &lt;name&gt;    summon the named companion (idempotent — reuses an existing one)
@@ -58,12 +57,12 @@ import java.util.function.Predicate;
  *   /numen consent &lt;allow|remember&gt; &lt;id&gt; | deny &lt;id&gt; [note]   answer a pending consent request
  * </pre>
  *
- * <h2>谁看得见哪一半</h2>
- * 挂在 {@code /numen} 下的每一格都经 {@link #graft} 挂上,并带着它的观众:她的命令组只给她({@link #FOR_HER}),
- * 管理同伴的指令只给不是她的来源({@link #FOR_PLAYERS})。原版给每个玩家发指令树、补全、{@code help} 都按
- * {@code requires} 过滤,玩家收不到她的节点,硬敲是"未知或不完整的指令";她也看不见、用不了召唤、设置、权限、征询
- * 这些——"她能不能经指令召唤同伴"从结构上就不存在。{@code /execute as 她 run numen …} 也进不来:Brigadier 解析时
- * 按发指令的人查 {@code requires}。
+ * <h2>只给玩家</h2>
+ * 她作为一个玩家也在 MC 的指令树上,行首带 {@code /} 的一行就是以她的身份在这棵树上执行。{@code /numen} 这个根只给
+ * 不是她的来源({@link #FOR_PLAYERS}),一处定下,挂在它下面的每一格都随之(见 {@link #graft}):原版的补全、
+ * {@code help}、解析都按 {@code requires} 过滤,她看不见、用不了召唤、设置、权限、征询、drive 这些——"她能不能经指令
+ * 召唤同伴"从结构上就不存在,{@code /numen …} 对她就是"服务器不让你用"。{@code /execute as 她 run numen …} 也进不来:
+ * Brigadier 解析时按发指令的人查 {@code requires}。
  *
  * <h2>权限命令是底层接口</h2>
  * 卡片、面板与以后聊天里的可点击按钮都落到同一组公开接口:模式经 {@link Permission},规则经
@@ -73,26 +72,27 @@ import java.util.function.Predicate;
 @com.dwinovo.numen.api.Internal
 public final class NumenCommands {
 
-    /** 来源是她:她的命令组只给她。 */
-    public static final Predicate<CommandSourceStack> FOR_HER = source -> source.getEntity() instanceof NumenPlayer;
+    /** {@code /numen} 这个根。 */
+    public static final String ROOT = "numen";
     /** 来源不是她(玩家、控制台、命令方块):管理同伴的指令只给他们。 */
-    public static final Predicate<CommandSourceStack> FOR_PLAYERS = FOR_HER.negate();
+    private static final Predicate<CommandSourceStack> FOR_PLAYERS =
+            source -> !(source.getEntity() instanceof NumenPlayer);
 
     private NumenCommands() {}
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        graft(dispatcher, FOR_PLAYERS, Commands.literal("player")
+        graft(dispatcher, Commands.literal("player")
                 .then(Commands.literal("summon")
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .executes(ctx -> summon(ctx, StringArgumentType.getString(ctx, "name")))))
                 .then(Commands.literal("despawn")
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .executes(ctx -> despawn(ctx, StringArgumentType.getString(ctx, "name"))))));
-        graft(dispatcher, FOR_PLAYERS, Commands.literal("settings")
+        graft(dispatcher, Commands.literal("settings")
                 .executes(ctx -> clientAction(ctx, ClientUiActionPayload.Action.OPEN_SETTINGS)));
-        graft(dispatcher, FOR_PLAYERS, Commands.literal("reset")
+        graft(dispatcher, Commands.literal("reset")
                 .executes(ctx -> clientAction(ctx, ClientUiActionPayload.Action.RESET_LOOPS)));
-        graft(dispatcher, FOR_PLAYERS, Commands.literal("permission")
+        graft(dispatcher, Commands.literal("permission")
                 .then(modeCommand())
                 .then(Commands.literal("rules")
                         .then(Commands.literal("list").executes(NumenCommands::listRules))
@@ -103,31 +103,30 @@ public final class NumenCommands {
                                 Commands.argument("row", IntegerArgumentType.integer(1))
                                         .executes(ctx -> removeRule(ctx, table)))))
                         .then(Commands.literal("reset").executes(NumenCommands::resetRules))));
-        graft(dispatcher, FOR_PLAYERS, consentCommand());
-        graft(dispatcher, FOR_PLAYERS, Commands.literal("drive").requires(source -> source.hasPermission(2))
+        graft(dispatcher, consentCommand());
+        graft(dispatcher, Commands.literal("drive").requires(source -> source.hasPermission(2))
                 .then(Commands.argument("companion", StringArgumentType.string())
                         .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(companionsHere(ctx.getSource())
                                 .map(body -> StringArgumentType.escapeIfRequired(body.getName().getString())), builder))
                         .then(Commands.argument("line", StringArgumentType.greedyString())
                                 .executes(NumenCommands::drive))));
-        for (LiteralArgumentBuilder<CommandSourceStack> node : NumenCli.herNodes()) {
-            graft(dispatcher, FOR_HER, node);
-        }
     }
 
     /**
-     * 往 {@code /numen} 下挂一格,只给 {@code audience} 看见(和这一格自己的 {@code requires} 一起算)。同名的一格已经在了
-     * 就抛出:Brigadier 会把同名的两格悄悄并成一格,留下先来那一格的观众——她的一个命令组就可能并进玩家的节点里,
-     * 或者反过来。哪个组与谁撞了,在服务器建指令树时就说清。
+     * 往 {@code /numen} 下挂一格。根由第一次挂的这一刻建出来,带着它的观众({@link #FOR_PLAYERS}):Brigadier 合并同名节点
+     * 时留下先来的那一个的 {@code requires},所以根只在这里建。同名的一格已经在了就抛出:Brigadier 会把同名的两格悄悄
+     * 并成一格,哪条管理指令与谁撞了,在服务器建指令树时就说清。
      */
-    public static void graft(CommandDispatcher<CommandSourceStack> dispatcher, Predicate<CommandSourceStack> audience,
+    public static void graft(CommandDispatcher<CommandSourceStack> dispatcher,
                              LiteralArgumentBuilder<CommandSourceStack> node) {
-        CommandNode<CommandSourceStack> root = dispatcher.getRoot().getChild(NumenCli.ROOT);
-        if (root != null && root.getChild(node.getLiteral()) != null) {
-            throw new IllegalStateException("/" + NumenCli.ROOT + " " + node.getLiteral()
-                    + " is registered twice: a companion command group and a player command share the name");
+        CommandNode<CommandSourceStack> root = dispatcher.getRoot().getChild(ROOT);
+        if (root == null) {
+            root = dispatcher.register(Commands.literal(ROOT).requires(FOR_PLAYERS));
         }
-        dispatcher.register(Commands.literal(NumenCli.ROOT).then(node.requires(audience.and(node.getRequirement()))));
+        if (root.getChild(node.getLiteral()) != null) {
+            throw new IllegalStateException("/" + ROOT + " " + node.getLiteral() + " is registered twice");
+        }
+        root.addChild(node.build());
     }
 
     /**
