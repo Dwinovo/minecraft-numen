@@ -5,8 +5,11 @@ import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.ClientSource;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
+import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.core.tools.AgentOps;
+
+import java.util.List;
 
 /**
  * {@code memory}:她自己的札记——记一条、读一条的正文、忘掉一条。
@@ -62,11 +65,12 @@ public final class MemoryCommands {
                 .note("Use --content only when there is more worth reading later.")
                 .seeAlso(line(RECALL), line(FORGET));
         memory.client(RECALL, "Read the body of one of your notes.",
-                MemoryCommands::recall, NAME)
+                MemoryCommands::recall, NAME, Listing.PAGE)
                 .example(line(RECALL) + " main-base")
                 .note("<memory> already carries each note's line; recall only when that line points at more you "
                         + "need.")
                 .note("A note says what was true when you wrote it; the world may have moved on.")
+                .note("A long body comes a page at a time; its last line says how to get the next.")
                 .seeAlso(line(REMEMBER));
         memory.client(FORGET, "Drop one of your notes for good.",
                 MemoryCommands::forget, NAME)
@@ -82,7 +86,7 @@ public final class MemoryCommands {
     }
 
     private static void recall(ClientSource src, CommandArgs args) {
-        src.reply(NOTES.recall(src.companion(), args.get(NAME)));
+        src.reply(NOTES.recall(src.companion(), args.get(NAME), args, args.write(line(RECALL), List.of(NAME))));
     }
 
     private static void forget(ClientSource src, CommandArgs args) {

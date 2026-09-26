@@ -5,6 +5,7 @@ import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.ClientSource;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
+import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.task.TaskResult;
 import net.minecraft.resources.ResourceLocation;
@@ -53,10 +54,11 @@ final class TlmCommands {
 
     private static void actions(CommandGroup tlm) {
         tlm.client(MODELS, "Which maid model you wear now, and which are installed.",
-                TlmCommands::models, SEARCH)
+                TlmCommands::models, SEARCH, Listing.PAGE)
                 .example(line(MODELS))
                 .example(line(MODELS) + " --search 灵梦")
                 .note("Read-only. Runs on your owner's client, where the model packs are.")
+                .note("One line per pack, or per model found; a long list comes a page at a time.")
                 .seeAlso(line(WEAR));
         tlm.client(WEAR, "Put on a maid model.",
                 TlmCommands::wear, MODEL)
@@ -72,7 +74,7 @@ final class TlmCommands {
 
     /**
      * 不带关键词只给包级摘要,带关键词才展开具体条目——这台机器上有两百多个模型,全量倒出去一次吃掉两万多 token,
-     * 而且给的是一堆哈希 id,模型拿到了也讲不清哪个是哪个。理由与封顶细节见 {@link MaidCatalog}。
+     * 而且给的是一堆哈希 id,模型拿到了也讲不清哪个是哪个(理由见 {@link MaidCatalog})。两样都一行一条,按输出预算分页。
      */
     private static void models(ClientSource src, CommandArgs args) {
         if (!Tlm.present()) {
@@ -88,27 +90,28 @@ final class TlmCommands {
 
         String worn = wornId == null ? "现在是本来的样子" : "现在穿 " + MaidCatalog.nameOf(wornId);
 
+        String again = args.write(line(MODELS), List.of(SEARCH));
         if (q.isEmpty()) {
             Map<String, Object> packs = MaidCatalog.summary();
             int total = packs.values().stream()
                     .mapToInt(v -> (int) ((Map<?, ?>) v).get("count")).sum();
-            data.put("packs", packs);
+            List<String> rows = new ArrayList<>();
+            packs.forEach((pack, v) -> rows.add("  " + pack + " — " + ((Map<?, ?>) v).get("count") + " 个,比如 "
+                    + String.join("、", ((List<?>) ((Map<?, ?>) v).get("examples")).stream()
+                            .map(String::valueOf).toList())));
             data.put("total", total);
-            src.reply(TaskResult.ok(worn + ";一共 " + total + " 个模型,分在 " + packs.size()
-                    + " 个包里。想找具体哪个,用 --search 搜角色名或包名", data).toJson());
+            src.reply(new Listing(worn + ";一共 " + total + " 个模型,分在 " + packs.size()
+                    + " 个包里。想找具体哪个,用 --search 搜角色名或包名:", rows, "", again).result(args, data)
+                    .toJson());
             return;
         }
 
-        List<Map<String, String>> rows = new ArrayList<>();
+        List<String> rows = new ArrayList<>();
         for (MaidCatalog.Entry e : MaidCatalog.search(q)) {
-            Map<String, String> r = new LinkedHashMap<>();
-            r.put("id", e.id());
-            r.put("name", e.name());
-            r.put("pack", e.pack());
-            rows.add(r);
+            rows.add("  " + e.id() + " — " + e.name() + "(" + e.pack() + ")");
         }
-        data.put("matches", rows);
-        src.reply(TaskResult.ok(worn + ";搜「" + q + "」找到 " + rows.size() + " 个", data).toJson());
+        src.reply(new Listing(worn + ";搜「" + q + "」找到 " + rows.size() + " 个:", rows, "", again)
+                .result(args, data).toJson());
     }
 
     /**

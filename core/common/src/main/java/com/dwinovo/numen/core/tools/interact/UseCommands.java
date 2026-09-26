@@ -4,6 +4,7 @@ import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
+import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.core.tools.BlockActionOps;
@@ -120,13 +121,15 @@ public final class UseCommands {
                 .note("Hitting pets, named mobs or villagers asks your owner first; the call waits for the answer.")
                 .seeAlso(line(BLOCK));
         use.server(GUI, "Look at the GUI you have open, or at your own inventory menu when none is.",
-                UseCommands::gui)
+                UseCommands::gui, Listing.PAGE)
                 .example(line(GUI))
                 .note("Instant and read-only. Lists every slot (index, side, item and count, [output] mark), "
                         + "the cursor and any machine progress; a crafting grid is drawn as a 2D map of slot "
                         + "numbers.")
                 .note("With nothing open it shows YOUR inventory menu, whose 2x2 grid crafts small recipes "
                         + "without a table.")
+                .note("A modded GUI with very many slots comes a page at a time; the last line says how to get the "
+                        + "next.")
                 .note("Read slot indices here before `use transfer` or `use shift`, and to check one. Before laying "
                         + "a recipe out by hand, `inv recipe` gives the exact layout: match it onto the map cell for "
                         + "cell (a smaller recipe sits top-left); 2x2 slot indices are easy to guess wrong.")
@@ -189,7 +192,7 @@ public final class UseCommands {
     }
 
     private static void gui(ServerSource src, CommandArgs args) {
-        src.reply(GUIS.inspectGui(src.companion()));
+        src.reply(GUIS.inspectGui(src.companion(), args, line(GUI)));
     }
 
     /** 有界短活:点击一刻就完,从容器里拿东西的那一步可能挂着等主人。 */

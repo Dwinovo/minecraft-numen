@@ -20,7 +20,8 @@ import java.util.Map;
  * 它没法跟主人讲"哪个是哪个",只能泛泛复述工具本身。
  *
  * <p>所以:不带关键词就只给<b>包级摘要</b>(每个包几个模型、举几个名字),
- * 带关键词才展开具体条目并封顶:目录是索引,不是文档。
+ * 带关键词才展开具体条目:目录是索引,不是文档。两样都是一行一条,多了按输出预算分页
+ * ({@code Listing}),说一共几条、怎么翻。
  *
  * <h2>名字从哪来</h2>
  * 每个模型都有正经名字,只是以 {@code {model.<命名空间>.<路径>.name}} 的形式存着
@@ -29,9 +30,6 @@ import java.util.Map;
  * 直接查得到。不用自己维护映射表。
  */
 public final class MaidCatalog {
-
-    /** 带关键词时最多展开多少条——再多模型也读不完,只会把上下文撑爆。 */
-    private static final int MAX_HITS = 40;
 
     /** 包级摘要里每个包举几个例子。 */
     private static final int SAMPLES = 3;
@@ -111,12 +109,11 @@ public final class MaidCatalog {
         return out;
     }
 
-    /** 按关键词找,名字和 id 都匹配。返回值封顶 {@link #MAX_HITS}。 */
+    /** 按关键词找,名字、id 与包名都匹配。 */
     public static List<Entry> search(String query) {
         String q = query.toLowerCase(Locale.ROOT);
         List<Entry> hits = new ArrayList<>();
         for (Entry e : all()) {
-            if (hits.size() >= MAX_HITS) break;
             boolean m = e.id().toLowerCase(Locale.ROOT).contains(q)
                     || (e.name() != null && e.name().toLowerCase(Locale.ROOT).contains(q))
                     || (e.pack() != null && e.pack().toLowerCase(Locale.ROOT).contains(q));

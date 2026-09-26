@@ -5,6 +5,7 @@ import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.Authority;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
+import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.OnHer;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
@@ -63,10 +64,11 @@ final class YsmCommands {
 
     private void actions(CommandGroup group) {
         group.server(OPTIONS, "Your model and texture now, the models you can switch to, and this model's "
-                + "textures.", this::options)
+                + "textures.", this::options, Listing.PAGE)
                 .authority(Authority.SERVER_ON_HER)
                 .example(line(OPTIONS))
                 .note("Read-only. Emotes are not listed: YSM does not tell the server which ones a model has.")
+                .note("One model per line; with many models installed it comes a page at a time.")
                 .seeAlso(line(SWITCH), line(EMOTE));
         group.server(SWITCH, "Switch to another model.",
                 this::switchModel, MODEL, TEXTURE)
@@ -90,7 +92,8 @@ final class YsmCommands {
 
     /**
      * 现在穿什么、能换成什么、这身有哪几张贴图——一次问清:本来就是同一个问题的几面。清单不写进帮助里:帮助跟着
-     * 玩家装的模型变,查询就该是查询。这身模型有哪些动作不在里面:YSM 不告诉服务器(见 {@link Ysm})。
+     * 玩家装的模型变,查询就该是查询。这身模型有哪些动作不在里面:YSM 不告诉服务器(见 {@link Ysm})。能换的模型随装了
+     * 多少包变长,一行一个,按输出预算分页;穿着的和这身的贴图写在抬头里。
      */
     private void options(ServerSource src, CommandArgs args) {
         OnHer her = src.onHer();
@@ -101,13 +104,15 @@ final class YsmCommands {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("current_model", look == null ? "(读不到,YSM 可能没装)" : look.model());
         data.put("current_texture", look == null ? "" : look.texture());
-        data.put("available_models", models);
         data.put("textures", textures);   // 当前模型的贴图 id,switch 的 --texture 从这里挑
 
-        String summary = look == null
+        String head = look == null
                 ? "读不到当前模型,YSM 可能没装"
-                : "现在穿 " + look.model() + ",可换 " + models.size() + " 个模型";
-        src.reply(TaskResult.ok(summary, data).toJson());
+                : "现在穿 " + look.model() + "(贴图 " + look.texture() + "),这身的贴图:"
+                        + (textures.isEmpty() ? "没列出" : String.join(", ", textures)) + ";可换 " + models.size()
+                        + " 个模型:";
+        List<String> rows = models.stream().map(m -> "  " + m).toList();
+        src.reply(new Listing(head, rows, "", line(OPTIONS)).result(args, data).toJson());
     }
 
     /**

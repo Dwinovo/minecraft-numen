@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 一张可翻页的列表:抬头、条目、结尾一句(可以没有),以及翻页时要写的那条命令。命令里所有会随数据变长的输出都是它:
+ * 一张可翻页的列表:抬头、条目、结尾一句(抬头与结尾都可以没有),以及翻页时要写的那条命令。命令里所有会随数据变长的输出都是它:
  * 根与组的帮助,以及动作自己列的清单、设计的步骤、切片的行。
  *
  * <h2>输出预算</h2>
@@ -89,8 +89,8 @@ public record Listing(String head, List<String> entries, String foot, String aga
      * 一页一条都放不下时那一条单占一页。每一项是 {@code [from, to)}。
      */
     private List<int[]> pages() {
-        int baseBytes = bytes(head) + (foot.isEmpty() ? 0 : 1 + bytes(foot));
-        int baseLines = lines(head) + (foot.isEmpty() ? 0 : lines(foot));
+        int baseBytes = (head.isEmpty() ? 0 : bytes(head)) + (foot.isEmpty() ? 0 : 1 + bytes(foot));
+        int baseLines = (head.isEmpty() ? 0 : lines(head)) + (foot.isEmpty() ? 0 : lines(foot));
         List<int[]> pages = new ArrayList<>();
         int from = 0;
         do {
@@ -124,16 +124,21 @@ public record Listing(String head, List<String> entries, String foot, String aga
 
     private String render(List<int[]> pages, int page) {
         int[] range = pages.get(page - 1);
-        StringBuilder sb = new StringBuilder(head);
+        List<String> parts = new ArrayList<>();
+        if (!head.isEmpty()) {
+            parts.add(head);
+        }
         for (String entry : entries.subList(range[0], range[1])) {
-            sb.append('\n').append(within(entry, range[1] - range[0]));
+            parts.add(within(entry, range[1] - range[0]));
         }
         if (range[1] < entries.size()) {
-            sb.append("\n[Showing ").append(range[0] + 1).append('-').append(range[1]).append(" of ")
-                    .append(entries.size()).append(". Use ").append(again).append(" --page ").append(page + 1)
-                    .append(" to continue.]");
+            parts.add("[Showing " + (range[0] + 1) + "-" + range[1] + " of " + entries.size() + ". Use " + again
+                    + " --page " + (page + 1) + " to continue.]");
         }
-        return foot.isEmpty() ? sb.toString() : sb.append('\n').append(foot).toString();
+        if (!foot.isEmpty()) {
+            parts.add(foot);
+        }
+        return String.join("\n", parts);
     }
 
     /**

@@ -4,6 +4,9 @@ import com.dwinovo.numen.agent.memory.NoteBook;
 import com.dwinovo.numen.agent.skill.SkillInfo;
 import com.dwinovo.numen.agent.skill.SkillInjection;
 import com.dwinovo.numen.agent.skill.SkillRegistry;
+import com.dwinovo.numen.cli.CommandArgs;
+import com.dwinovo.numen.cli.Listing;
+import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
@@ -19,13 +22,19 @@ import java.util.stream.Collectors;
  */
 public final class AgentOps {
 
-    public String loadSkill(String name, String file) {
+    /**
+     * 技能正文或它的附属文件,按输出预算一页一页给(一行一条,{@link Listing});正文成型交给 {@link SkillInjection},和主人
+     * 打斜杠命令同一个样子。
+     *
+     * @param again 这一行本身(不带 {@code --page}):翻页时写它
+     */
+    public String loadSkill(String name, String file, CommandArgs args, String again) {
         SkillRegistry registry = SkillRegistry.instance();
         if (file != null && !file.isBlank()) {
             // 三级披露:正文引用的附属文件按需拉取
             try {
                 String text = registry.readSupportFile(name, file);
-                return SkillInjection.supportFile(name, file, text);
+                return page(SkillInjection.supportFile(name, file, text), args, again);
             } catch (IllegalArgumentException ex) {
                 return "{\"success\":false,\"error\":\"" + escapeJson(ex.getMessage()) + "\"}";
             }
@@ -41,7 +50,13 @@ public final class AgentOps {
         }
 
         // 成型交给 SkillInjection:主人打斜杠命令走的是另一条路,进上下文的东西必须一样。
-        return SkillInjection.body(maybe.get(), null);
+        return page(SkillInjection.body(maybe.get(), null), args, again);
+    }
+
+    /** 一段文字按输出预算取这一页,一行一条;要的那一页不存在是一条失败。 */
+    private static String page(String text, CommandArgs args, String again) {
+        TaskResult page = new Listing("", List.of(text.split("\n", -1)), "", again).result(args);
+        return page.success() ? page.message() : page.toJson();
     }
 
     private static String quote(String s) {
@@ -122,8 +137,12 @@ List<Todo> todos) {
         return o.toString();
     }
 
-    /** 读一条的正文。没有这条就把有的名字列出来——她记的名字自己最清楚,别让她瞎猜。 */
-    public String recall(UUID companion, String name) {
+    /**
+     * 读一条的正文,正文按输出预算一页一页给。没有这条就把有的名字列出来——她记的名字自己最清楚,别让她瞎猜。
+     *
+     * @param again 这一行本身(不带 {@code --page}):翻页时写它
+     */
+    public String recall(UUID companion, String name, CommandArgs args, String again) {
         NoteBook book = NoteBook.of(companion);
         NoteBook.Note note = book.read(name);
         if (note == null) {
@@ -134,11 +153,15 @@ List<Todo> todos) {
             return "{\"success\":false,\"error\":\"no note named " + escapeJson(name)
                     + "\",\"notes\":[" + known + "]}";
         }
+        TaskResult content = new Listing("", List.of(note.content().split("\n", -1)), "", again).result(args);
+        if (!content.success()) {
+            return content.toJson();
+        }
         JsonObject o = new JsonObject();
         o.addProperty("success", true);
         o.addProperty("name", note.name());
         o.addProperty("day", note.day());
-        o.addProperty("content", note.content());
+        o.addProperty("content", content.message());
         return o.toString();
     }
 
