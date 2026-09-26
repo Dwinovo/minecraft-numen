@@ -98,9 +98,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
 
     public MoveToCompanionTask(NumenPlayer player, MoveToTaskRecord record) {
         super(player, record);
-        this.bx = record.x != null ? (int) Math.floor(record.x) : 0;
-        this.by = record.y != null ? (int) Math.floor(record.y) : 0;
-        this.bz = record.z != null ? (int) Math.floor(record.z) : 0;
+        this.bx = record.x != null ? record.x : 0;
+        this.by = record.y != null ? record.y : 0;
+        this.bz = record.z != null ? record.z : 0;
         this.blockTarget = new BlockPos(bx, by, bz);
         this.spec = record.spec;
     }
@@ -111,9 +111,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             // 路线簿里的一条:取走即划掉(走过一次的路径不能再走);目标与规格都是它的
             route = RouteBook.of(player).take(r.route);
             if (route == null) {
-                fail("unknown route id '" + r.route + "' — ids come from a goto refusal or a plan_route"
+                fail("unknown route id '" + r.route + "' — ids come from a goto refusal or a move route"
                         + " reply, and a route is dropped once walked or when newer plans push it out."
-                        + " plan_route again, or goto the destination coordinates.",
+                        + " Run move route again, or goto the destination coordinates.",
                         FailureType.NO_PATH);
                 return;
             }

@@ -103,12 +103,12 @@ public final class NumenCore {
 
         // Registration ORDER is preserved (backends with prompt-caching keyed off
         // the tool list cache stably across requests).
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.work.MoveToTool());
+        // move 组提升出的 goto 在这里进表
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.MoveCommands::install);
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.AttackTool());
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.locate.LocateCommands::install);
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.CollectItemsTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.FishTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.work.FollowTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.AutoMineTool());
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.inventory.GearCommands::install);
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.BuildTool());
@@ -129,7 +129,6 @@ public final class NumenCore {
         // skill 组提升出的 load_skill 就在这里进表,工具表里的位置不变
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.agent.SkillCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.agent.MemoryCommands::install);
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.work.PlanRouteTool());
     }
 
 

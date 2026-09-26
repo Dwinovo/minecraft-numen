@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.task.move;
 
+import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskRecord;
 
 /**
@@ -17,8 +18,6 @@ import com.dwinovo.numen.task.TaskRecord;
  * 候选路线,模型先 goto 一条开路再接着跟。
  */
 public final class FollowTaskRecord extends TaskRecord {
-
-    public static final String TOOL_NAME = "follow";
 
     /** 跟到这么近就算到位(米)。 */
     public final double keepWithin;
@@ -41,9 +40,9 @@ public final class FollowTaskRecord extends TaskRecord {
      */
     public final java.util.UUID targetUuid;
 
-    public FollowTaskRecord(String toolCallId, double keepWithin, Integer entityId,
+    public FollowTaskRecord(ServerSource source, double keepWithin, Integer entityId,
                             java.util.UUID targetUuid) {
-        super(TOOL_NAME, toolCallId, NO_DEADLINE);
+        super(source, NO_DEADLINE);
         this.keepWithin = keepWithin;
         this.entityId = entityId;
         this.targetUuid = targetUuid;

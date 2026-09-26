@@ -2,6 +2,7 @@ package com.dwinovo.numen.core.task.move;
 
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
+import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.task.TaskRecord;
 
@@ -9,7 +10,7 @@ import it.unimi.dsi.fastutil.longs.LongSets;
 import net.minecraft.core.BlockPos;
 
 /**
- * Typed task descriptor for the {@code goto} tool. The goal type is chosen
+ * Typed task descriptor for {@code move goto} (shortcut {@code goto}). The goal type is chosen
  * by WHICH inputs are supplied: the LLM picks its intent by filling only the
  * fields it means.
  * <ul>
@@ -24,7 +25,7 @@ import net.minecraft.core.BlockPos;
  *       scan for the nearest block of that kind and walk up beside it,
  *       never touching it.</li>
  *   <li>{@code route} only → {@link Kind#ROUTE}: walk a route the planner
- *       already priced (a {@code goto} refusal or a {@code plan_route} reply
+ *       already priced (a {@code goto} refusal or a {@code move route} reply
  *       listed it by id); destination and spec are the route's own.</li>
  * </ul>
  * Coordinates are nullable ({@code null} = "not supplied"); the deadline-based
@@ -36,14 +37,15 @@ import net.minecraft.core.BlockPos;
  */
 public final class MoveToTaskRecord extends TaskRecord {
 
-    public static final String TOOL_NAME = "goto";
-
     public enum Kind { BLOCK, COLUMN, YLEVEL, FIND, ROUTE }
 
+    /** 基础期限:30 秒,出发后按路程再往后推(见 {@code MoveToCompanionTask})。 */
+    private static final long BUDGET_TICKS = 30 * 20;
+
     /** Nullable: {@code null} means the LLM did not supply this axis. */
-    public final Double x;
-    public final Double y;
-    public final Double z;
+    public final Integer x;
+    public final Integer y;
+    public final Integer z;
     /** Namespaced block id to walk to the nearest of; null when coordinates drive. */
     public final String block;
     /** Route-book id to walk; null unless this is the ROUTE form. */
@@ -52,9 +54,9 @@ public final class MoveToTaskRecord extends TaskRecord {
     /** The parsed route spec for a coordinate/FIND walk; null for the ROUTE form. */
     public final RouteSpec spec;
 
-    public MoveToTaskRecord(String toolCallId, long deadlineGameTime,
-                            Double x, Double y, Double z, String block, RouteSpec spec, String route) {
-        super(TOOL_NAME, toolCallId, deadlineGameTime);
+    public MoveToTaskRecord(ServerSource source, Integer x, Integer y, Integer z, String block, RouteSpec spec,
+                            String route) {
+        super(source, source.companion().level().getGameTime() + BUDGET_TICKS);
         this.x = x;
         this.y = y;
         this.z = z;
@@ -69,13 +71,13 @@ public final class MoveToTaskRecord extends TaskRecord {
      * named nullable fields). Throws a teaching error for ambiguous
      * combos so the LLM learns the valid shapes.
      */
-    public static Kind resolveKind(Double x, Double y, Double z, String block, String route) {
+    public static Kind resolveKind(Integer x, Integer y, Integer z, String block, String route) {
         boolean hasX = x != null, hasY = y != null, hasZ = z != null;
         if (route != null) {
             if (hasX || hasY || hasZ || block != null) {
                 throw new IllegalArgumentException(
                         "route means 'walk the planned route " + route + "' — its destination and"
-                        + " spec are already fixed, so give it ALONE (no coordinates, block or spec).");
+                        + " spec are already fixed, so give it ALONE (no coordinates, block or route-spec flags).");
             }
             return Kind.ROUTE;
         }
@@ -124,9 +126,9 @@ public final class MoveToTaskRecord extends TaskRecord {
      */
     public String describe() {
         String where = switch (kind) {
-            case BLOCK -> "走向 " + (int) (double) x + "," + (int) (double) y + "," + (int) (double) z;
-            case COLUMN -> "走向 x=" + (int) (double) x + " z=" + (int) (double) z;
-            case YLEVEL -> "下到 y=" + (int) (double) y;
+            case BLOCK -> "走向 " + x + "," + y + "," + z;
+            case COLUMN -> "走向 x=" + x + " z=" + z;
+            case YLEVEL -> "下到 y=" + y;
             case FIND -> "去找 " + block;
             case ROUTE -> "走路线 " + route;
         };

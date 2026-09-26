@@ -183,13 +183,6 @@ public final class GameTestKit {
         return n;
     }
 
-    /** goto/plan_route 的 spec:可自然改动。 */
-    static com.google.gson.JsonObject naturalSpec() {
-        com.google.gson.JsonObject spec = new com.google.gson.JsonObject();
-        spec.addProperty("alter", "natural");
-        return spec;
-    }
-
     /** 回执里点名的第一个路线 id(r1、r2……)。 */
     static String firstRouteId(String reply) {
         java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\br\\d+\\b").matcher(reply);

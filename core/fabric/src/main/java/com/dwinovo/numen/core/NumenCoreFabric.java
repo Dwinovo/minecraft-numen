@@ -27,7 +27,7 @@ public class NumenCoreFabric implements ModInitializer {
         // 排程机器的心跳随机器归了 numen-api;core 只 tick 自己的工具配套。
         // Advance budget-sliced block searches each tick (and sweep their shared index).
         ServerTickEvents.END_SERVER_TICK.register(BlockSearch::tick);
-        // Read-only route queries (plan_route): poll finished searches and reply.
+        // Read-only route queries (move route): poll finished searches and reply.
         ServerTickEvents.END_SERVER_TICK.register(
                 com.dwinovo.numen.core.pathing.plan.RoutePlanner::serverTick);
         // Snapshot loaded chunks near companions for the off-thread planner to read live.

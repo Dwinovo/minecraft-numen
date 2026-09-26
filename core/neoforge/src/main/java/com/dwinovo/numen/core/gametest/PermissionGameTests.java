@@ -84,12 +84,6 @@ public class PermissionGameTests {
     }
 
     /** goto 的 spec:连需要主人同意的格也算进路线。 */
-    private static com.google.gson.JsonObject anySpec() {
-        com.google.gson.JsonObject spec = new com.google.gson.JsonObject();
-        spec.addProperty("alter", "any");
-        return spec;
-    }
-
     /**
      * 规格没说能动主人的东西就不动,也不问:主人的屋子,goto alter=natural。自然改动没有路,
      * 探针连要同意的格也算进去再查一次,回执是候选清单、标着 needing consent;墙一块不少,她还在屋里,
@@ -104,10 +98,10 @@ public class PermissionGameTests {
         NumenPlayer owner = presentOwner(helper, companion, "gametest_landlord");
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
         TaskRecord record = call(companion, "goto", args(
-                "x", (double) target.getX(),
-                "y", (double) target.getY(),
-                "z", (double) target.getZ(),
-                "spec", naturalSpec())).task();
+                "x", target.getX(),
+                "y", target.getY(),
+                "z", target.getZ(),
+                "alter", "natural")).task();
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 
@@ -140,10 +134,10 @@ public class PermissionGameTests {
         BlockPos start = companion.blockPosition();
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
         TaskRecord record = call(companion, "goto", args(
-                "x", (double) target.getX(),
-                "y", (double) target.getY(),
-                "z", (double) target.getZ(),
-                "spec", anySpec())).task();
+                "x", target.getX(),
+                "y", target.getY(),
+                "z", target.getZ(),
+                "alter", "any")).task();
         boolean[] answered = new boolean[1];
 
         helper.succeedWhen(() -> {
@@ -178,10 +172,10 @@ public class PermissionGameTests {
         NumenPlayer owner = presentOwner(helper, companion, "gametest_strict");
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
         TaskRecord record = call(companion, "goto", args(
-                "x", (double) target.getX(),
-                "y", (double) target.getY(),
-                "z", (double) target.getZ(),
-                "spec", anySpec())).task();
+                "x", target.getX(),
+                "y", target.getY(),
+                "z", target.getZ(),
+                "alter", "any")).task();
         boolean[] answered = new boolean[1];
 
         helper.succeedWhen(() -> {

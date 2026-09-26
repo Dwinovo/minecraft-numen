@@ -42,9 +42,9 @@ public class ModeGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_cghost", new BlockPos(2, 2, 2), true);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
         TaskRecord record = call(companion, "goto", args(
-                "x", (double) target.getX(),
-                "y", (double) target.getY(),
-                "z", (double) target.getZ())).task();
+                "x", target.getX(),
+                "y", target.getY(),
+                "z", target.getZ())).task();
         helper.succeedWhen(() -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "creative companion has not reached the goto target");
@@ -159,10 +159,10 @@ public class ModeGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_climber", new BlockPos(3, 2, 3), true);
         BlockPos target = helper.absolutePos(new BlockPos(12, 2, 12));
         TaskRecord record = call(companion, "goto", args(
-                "x", (double) target.getX(),
-                "y", (double) target.getY(),
-                "z", (double) target.getZ(),
-                "spec", naturalSpec())).task();
+                "x", target.getX(),
+                "y", target.getY(),
+                "z", target.getZ(),
+                "alter", "natural")).task();
         helper.succeedWhen(() -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "empty-handed creative companion has not pillared out");
@@ -199,10 +199,10 @@ public class ModeGameTests {
         com.dwinovo.numen.core.pathing.settings.ScaffoldMaterials.store(companion, List.of("minecraft:cobblestone"));
         BlockPos target = helper.absolutePos(new BlockPos(12, 2, 12));
         TaskRecord record = call(companion, "goto", args(
-                "x", (double) target.getX(),
-                "y", (double) target.getY(),
-                "z", (double) target.getZ(),
-                "spec", naturalSpec())).task();
+                "x", target.getX(),
+                "y", target.getY(),
+                "z", target.getZ(),
+                "alter", "natural")).task();
         helper.onEachTick(() -> {
             if (record.getResult() != null && !record.getResult().success()) {
                 helper.fail("she did not pillar out of the well with her own scaffolding: "
