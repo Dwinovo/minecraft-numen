@@ -97,6 +97,14 @@ class ListingTest {
         assertTrue(bytes(kept) <= Listing.MAX_BYTES && bytes(kept) > Listing.MAX_BYTES - 3);
     }
 
+    /** 没有抬头与结尾的一张(技能正文、札记正文按行分页):就是那些条目,不多出空行。 */
+    @Test
+    void aListingWithNoHeadOrFootIsJustItsEntries() {
+        CommandArgs noPage = CommandArgs.fromJson(List.of(Listing.PAGE), new com.google.gson.JsonObject());
+        assertEquals("a\nb", new Listing("", List.of("a", "b"), "", "gt_listing rows").result(noPage).message());
+        assertEquals("", new Listing("", List.of(), "", "gt_listing rows").result(noPage).message());
+    }
+
     @Test
     void thePageFlagReadsTheSameAsInHelp() {
         assertEquals("""
