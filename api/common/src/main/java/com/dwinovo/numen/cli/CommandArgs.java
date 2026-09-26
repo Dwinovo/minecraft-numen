@@ -74,6 +74,36 @@ public final class CommandArgs {
         return new CommandArgs(out);
     }
 
+    /**
+     * 这些参数写回一行命令:{@code path} 之后是写了值的位置参数,再是写了值的标志 {@code --name value},都按
+     * {@code params} 的顺序,值写成它在命令行上的样子({@link ArgType} 的写法)。这一行交给同一棵树读回来,得到的是相等的
+     * 一份参数——读与写是同一张参数表的两个方向。{@code params} 里没列的参数(比如只管这次调用落到哪儿的标志)不写。
+     *
+     * @param path 这一行的动作路径,如 {@code build layer}
+     */
+    public String write(String path, List<Param<?>> params) {
+        StringBuilder line = new StringBuilder(path);
+        for (Param<?> p : params) {
+            if (p.required()) {
+                line.append(' ').append(written(p));
+            }
+        }
+        for (Param<?> p : params) {
+            if (!p.required() && values.containsKey(p.name())) {
+                line.append(' ').append(FlagsArgument.PREFIX).append(p.name()).append(' ').append(written(p));
+            }
+        }
+        return line.toString();
+    }
+
+    private <T> String written(Param<T> param) {
+        T value = get(param);
+        if (value == null) {
+            throw new IllegalArgumentException("参数 " + param.name() + " 没有值,写不回命令行");
+        }
+        return param.type().write(value);
+    }
+
     @Override
     public boolean equals(Object o) {
         return o instanceof CommandArgs other && values.equals(other.values);

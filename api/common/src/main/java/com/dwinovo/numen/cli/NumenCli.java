@@ -5,6 +5,7 @@ import com.dwinovo.numen.api.Internal;
 import com.dwinovo.numen.task.TaskResult;
 import com.mojang.brigadier.ParseResults;
 import com.mojang.brigadier.ImmutableStringReader;
+import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.context.ContextChain;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.tree.CommandNode;
@@ -49,6 +50,12 @@ public final class NumenCli {
     /** 服务端的那一棵:执行服务端动作。 */
     private static final CommandTree<ServerSource> SERVER =
             new CommandTree<ServerSource>(Action::runsOnServer).withRootHelp(NumenCli::rootListing);
+    /**
+     * 只读不执行的那一棵:两侧的动作都长着参数,{@link #read} 用它把一行读成动作与参数。和两侧的树同一个生成器,
+     * 所以一行在这里读得通,在执行它的那一侧也读得通。
+     */
+    private static final CommandTree<CommandSource> READ =
+            new CommandTree<CommandSource>(action -> true).withRootHelp(NumenCli::rootListing);
     /** 各组到齐、相关命令查过了没有;查过之后登记的组在登记那一刻就查(见 {@link #inUse()})。 */
     private static boolean inUse;
 
@@ -88,6 +95,7 @@ public final class NumenCli {
         GROUPS.put(name, group);
         CLIENT.add(group);
         SERVER.add(group);
+        READ.add(group);
         for (Action a : group.actions()) {
             if (a.toolName() != null) {
                 ToolRegistry.register(new PromotedTool(a));
@@ -131,6 +139,59 @@ public final class NumenCli {
             return;
         }
         answer(CLIENT, parse, line.text(), source);
+    }
+
+    /**
+     * 一行第 1 层命令读成什么,不执行。
+     *
+     * @param path     走过的字面节点,空格隔开:{@code build layer}、{@code build --help}、{@code help}、{@code build}
+     * @param runnable 走到了可执行的一格(一个动作或一个帮助);否则这一行只点到一组或一个动作的名字,是提到它
+     * @param args     走到一个动作时读好的参数,和执行时处理函数拿到的是同一份;帮助与只提到名字的是 null
+     */
+    public record Reading(String path, boolean runnable, CommandArgs args) {}
+
+    /**
+     * 把一行第 1 层命令按命令树读一遍,不执行:写成它的样子的文字(设计文件里的一步、技能与提示里写的命令)和执行时
+     * 同一个解析器、同一个判据。读得通有两种:整行是一条能执行的命令,或整行只是一串名字({@code use gui}、{@code build},
+     * 在文字里提到一个动作或一组)。停在参数中间、多写了东西、写错了都读不通。
+     *
+     * @throws IllegalArgumentException 读不通;消息和执行时写错一样(Brigadier 的原话、出错那一层的帮助、你是不是要写)
+     */
+    public static Reading read(String line) {
+        inUse();
+        ParseResults<CommandSource> parse = READ.parse(line, null);
+        List<String> path = literalPath(parse);
+        if (parse.getContext().getCommand() == null) {
+            boolean named = !parse.getReader().canRead() && parse.getExceptions().isEmpty() && !path.isEmpty()
+                    && parse.getContext().getNodes().size() == path.size();
+            if (!named) {
+                // 没走到可执行的一格,Brigadier 执行前那道检查必然不过,problem 说的就是它
+                throw new IllegalArgumentException(problem(parse, line));
+            }
+            return new Reading(String.join(" ", path), false, null);
+        }
+        String problem = problem(parse, line);
+        if (problem != null) {
+            throw new IllegalArgumentException(problem);
+        }
+        Action action = path.size() == 2 ? GROUPS.get(path.get(0)).action(path.get(1)) : null;
+        CommandArgs args = null;
+        if (action != null) {
+            CommandContext<CommandSource> ctx = parse.getContext().build(line);
+            args = CommandArgs.fromCommand(action.positionals(), ctx, FlagsArgument.valuesIn(ctx));
+        }
+        return new Reading(String.join(" ", path), true, args);
+    }
+
+    /** 登记了的各组,按名字排序。 */
+    static Collection<CommandGroup> groups() {
+        inUse();
+        return GROUPS.values();
+    }
+
+    /** 这个词是不是第 1 层的一级命令:一个命令组的名字,或根下的 {@code help}、{@code --help}。 */
+    public static boolean isTopLevel(String word) {
+        return HELP.equals(word) || HELP_FLAG.equals(word) || GROUPS.containsKey(word);
     }
 
     /** 服务端这一侧跑一行第 1 层命令:在服务端的树上解析、执行;写错了附用法。结果经 {@code call} 恰好回一次。 */

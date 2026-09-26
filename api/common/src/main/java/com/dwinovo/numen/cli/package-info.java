@@ -12,5 +12,9 @@
  * {@link com.dwinovo.numen.cli.ServerSource#onHer()} 拿到只对她执行的 {@link com.dwinovo.numen.cli.OnHer}。
  * {@link com.dwinovo.numen.cli.NumenCli}、{@link com.dwinovo.numen.cli.CommandRunner} 与 {@code command} 工具是
  * 引擎内部的机器。
+ *
+ * <p>一行命令也能只读不执行({@link com.dwinovo.numen.cli.NumenCli#read}):读成动作与参数,读好的参数再写回一行
+ * ({@link com.dwinovo.numen.cli.CommandArgs#write})。存成命令文本的东西(建造的设计)与文字里写着的命令
+ * ({@link com.dwinovo.numen.cli.WrittenCommands})都经它,和执行时是同一个解析器。
  */
 package com.dwinovo.numen.cli;

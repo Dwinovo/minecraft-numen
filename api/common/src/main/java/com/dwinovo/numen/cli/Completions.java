@@ -61,6 +61,9 @@ final class Completions {
         return Suggestions.merge(line, found);
     }
 
+    /** "你是不是要写"那一句的开头。 */
+    static final String DID_YOU_MEAN = "Did you mean: ";
+
     /** 候选的文字,按引擎排好的顺序。 */
     static List<String> texts(Suggestions suggestions) {
         return suggestions.getList().stream().map(Suggestion::getText).toList();
@@ -80,7 +83,7 @@ final class Completions {
         int end = line.indexOf(' ', at);
         String written = line.substring(at, end < 0 ? line.length() : end);
         List<String> near = nearest(written, texts(at(parse, at)));
-        return near.isEmpty() ? "" : "\nDid you mean: " + String.join(", ", near) + "?";
+        return near.isEmpty() ? "" : "\n" + DID_YOU_MEAN + String.join(", ", near) + "?";
     }
 
     /**

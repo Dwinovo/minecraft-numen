@@ -16,7 +16,9 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
+import java.util.stream.Collectors;
 
 /**
  * 一种命令参数的类型:命令行上怎么读、快捷工具的 JSON 怎么读、schema 里写成什么、帮助里怎么称呼。
@@ -88,14 +90,20 @@ public final class ArgType<T> {
     private final Item item;
     private final SchemaField schema;
     private final FromJson<T> json;
+    private final Function<T, String> written;
 
-    /** 一个值;JSON 值是一个字面值,文字原样就是它在命令行上的样子。 */
+    /**
+     * 一个值;JSON 值是一个字面值,文字原样就是它在命令行上的样子,读好的值写回去也就是它的文字
+     * ({@link String#valueOf}:整数、布尔、小数、词、id、固定值之一都是这样)。
+     */
     private ArgType(ArgumentType<T> brigadier, String kind, String hint, Item item, SchemaField schema) {
-        this(brigadier, kind, hint, Span.ONE, item, schema, literal(brigadier, hint, UnaryOperator.identity()));
+        this(brigadier, kind, hint, Span.ONE, item, schema, literal(brigadier, hint, UnaryOperator.identity()),
+                String::valueOf);
     }
 
+    /** @param written 读好的值写回命令行上是什么样子,再读一遍得到的是同一个值 */
     private ArgType(ArgumentType<T> brigadier, String kind, String hint, Span span, Item item, SchemaField schema,
-                    FromJson<T> json) {
+                    FromJson<T> json, Function<T, String> written) {
         this.brigadier = brigadier;
         this.kind = kind;
         this.hint = hint;
@@ -103,6 +111,7 @@ public final class ArgType<T> {
         this.item = item;
         this.schema = schema;
         this.json = json;
+        this.written = written;
     }
 
     /**
@@ -178,7 +187,17 @@ public final class ArgType<T> {
         ArgumentType<String> read = ArgType::readString;
         String hint = "string, quote it if it has spaces";
         return new ArgType<>(read, "string", hint, Span.ONE, Item.STRING, ArgType::stringField,
-                literal(read, hint, ArgType::quoted));
+                literal(read, hint, ArgType::quoted), ArgType::quotedIfNeeded);
+    }
+
+    /**
+     * 写回命令行:不加引号读得回原样的就不加——没有空格、不以引号打头(否则读成带引号的串)、不以 {@code --} 打头
+     * (否则一串值读到它就当成下一个标志);否则加上引号。
+     */
+    private static String quotedIfNeeded(String text) {
+        boolean bare = !text.isEmpty() && text.indexOf(' ') < 0 && !StringReader.isQuotedStringStart(text.charAt(0))
+                && !text.startsWith(FlagsArgument.PREFIX);
+        return bare ? text : quoted(text);
     }
 
     /** 加上双引号,里面的反斜杠与双引号转义——{@link StringReader#readQuotedString} 读回来就是原文。 */
@@ -225,7 +244,7 @@ public final class ArgType<T> {
         StringArgumentType read = StringArgumentType.greedyString();
         String hint = "text, the rest of the line";
         return new ArgType<>(read, "text", hint, Span.REST, Item.NONE, ArgType::stringField,
-                literal(read, hint, UnaryOperator.identity()));
+                literal(read, hint, UnaryOperator.identity()), UnaryOperator.identity());
     }
 
     /**
@@ -395,7 +414,8 @@ public final class ArgType<T> {
                         values.add(element.fromJson(item));
                     }
                     return List.copyOf(values);
-                });
+                },
+                values -> values.stream().map(element::write).collect(Collectors.joining(" ")));
     }
 
     private static void stringField(Schema.Builder s, String name, String desc, boolean required) {
@@ -411,6 +431,11 @@ public final class ArgType<T> {
     /** 从命令行当前位置读一个值(标志的值也经这里)。 */
     T read(StringReader reader) throws CommandSyntaxException {
         return brigadier.parse(reader);
+    }
+
+    /** 读好的值写回命令行上的样子:同一个类型再读一遍,得到的是同一个值。 */
+    String write(T value) {
+        return written.apply(value);
     }
 
     /** 快捷工具的 JSON 值:字面值写成它在命令行上的样子,用同一个读法整段读完;一串值({@link #list})逐个这样读。 */
