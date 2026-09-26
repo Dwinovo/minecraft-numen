@@ -11,14 +11,16 @@ furniture stands against a wall, and every level gets furnished.
 
 Trapdoors are the most useful detail block in the game — measured at 397 of 941
 furnishing cells on a hand-built compound, in seven different woods. They are the
-only thin block you can put in every orientation, so learn all four states:
+only thin block you can put in every orientation, so learn all three shapes:
 
 | state | reads as |
 | --- | --- |
-| `half=bottom, open=true` | a vertical panel: screen, shutter, cupboard front, railing infill |
+| `open=true` | a full-height vertical panel against the cell edge opposite `facing`: screen, shutter, cupboard front, railing infill |
 | `half=top, open=false` | a shelf hanging under a beam; a ceiling panel |
 | `half=bottom, open=false` | a low ledge: a step, a hearth lip, a platform edge |
-| `half=top, open=true` | a panel hanging down from above; a valance under an eave |
+
+An open trapdoor is the same panel whatever its `half`; `half` only decides
+whether it shuts to a shelf at the top or a ledge at the bottom.
 
 Mix wood types across one room — spruce, oak, dark_oak, jungle, bamboo — and the
 fittings read as separate pieces of furniture instead of one repeated part.

@@ -20,11 +20,20 @@ finished build looks wrong.
    wall material repeated from the lowest ground up to your chosen floor level
    (costs materials in survival like any build). Stilt houses are a valid choice
    too — just make it a choice, not an accident.
-3. Write the building as a DESIGN, big to small: `build new` it, then add the
-   steps one line at a time with `--into` — `layer` grids first, single `set`
-   details last; later steps overwrite earlier cells. Coordinates in a design are
-   relative to its origin (0,0,0), so you can think in the building's own terms.
-   `build show` lists the steps with what each costs.
+3. Write the building as a DESIGN, one level at a time from the ground up:
+   `build new` it, add the foundation and the first storey as steps with
+   `--into`, then LOOK at what you wrote with `build show` and `--layer`
+   (`build show cottage --layer 1`) — a map of that level seen from above as it
+   will stand when built, in the same character grid `layer` takes, with z and
+   x labelled. Fix what is off
+   (`build step`, `build insert`, `build drop`), look again, and only then write
+   the next level on top of the one you saw. Do NOT work the whole building out
+   in your head before the first step: a design is cheap to change, and the
+   slice shows what you actually wrote, not what you meant. Within a level go big
+   to small — `layer` grids first, single `set` details last; later steps
+   overwrite earlier cells. Coordinates in a design are relative to its origin
+   (0,0,0), so you can think in the building's own terms. `build show` lists
+   the steps with what each costs.
 4. `build at` the design on the site: it prices the whole design first and builds
    it as one background job.
 5. After task_finished, LOOK at the result and run the checklist below. To fix
@@ -93,16 +102,45 @@ A small house, written as a design:
 build new cottage
 build layer 0 0 0 ####### ####### ####### ####### ####### --block cobblestone --into cottage
 build layer 0 1 0 ####### #.....# #.....# #.....# ####### --block "oak_planks*8, spruce_planks*2" --up_to 3 --into cottage
-build layer 3 1 0 # --block air --up_to 2 --into cottage
-build set oak_door[facing=south] 3 1 4 --into cottage
+build show cottage --layer 1
+build layer 3 1 4 # --block air --up_to 2 --into cottage
+build set oak_door[facing=north] 3 1 4 --into cottage
+build show cottage --layer 1
 build show cottage
 build at cottage 120 64 -35
 ```
 
+The doorway and the door are in the same cell of the south wall (z=4), and the
+slice after the walls is where you would have caught a doorway cut into the
+wrong wall.
+
 Block states ride along with the block name, exactly as in `/setblock`:
 `oak_stairs[facing=north,half=top]`, `oak_slab[type=double]`, `oak_log[axis=x]`,
-`trapdoor[open=true,facing=north]`. A door, bed or tall flower is placed from its
-LOWER half alone — the other half appears with it.
+`oak_trapdoor[open=true,facing=north]`. A door or tall flower is written as its
+lower half alone and a bed as its foot — the other half appears with it.
+
+Which way a block faces (these are the game's own rules; `--layer` shows the
+full state of every cell, so check a slice instead of reasoning it out):
+
+- **stairs** — `facing` is the side the tall back is on, the way you walk UP
+  them. A roof slope rises toward the ridge, so its stairs face the ridge: on a
+  south slope (the side that drops away to the south) they face north, on a
+  north slope south. `half=top` turns them upside down.
+- **door** — the closed panel lies against the edge of its cell opposite
+  `facing`: in a south wall, `facing=north` sets it flush with the outside,
+  `facing=south` with the inside.
+- **trapdoor** — open, it stands as a full-height panel against the edge of its
+  cell opposite `facing` (`facing=south` stands on the north edge, against a
+  north wall); shut, `half=top` is a slab at the top of the cell and
+  `half=bottom` one at the bottom.
+- **ladder** — hangs on the block on the side opposite `facing`:
+  `ladder[facing=north]` needs a solid block just south of it.
+- **bed** — `facing` points from the foot to the head; the head goes one cell
+  that way.
+- **lantern** — `hanging=true` hangs from the block above it and needs one
+  there; `hanging=false` stands on the block below.
+- **log / pillar** — `axis` is the way it runs: `y` upright, `x` east–west,
+  `z` north–south.
 
 `mask` decides what happens where something already stands, per step: `carve` (default)
 builds through anything and an `air` cell digs that cell out; `overwrite` leaves
@@ -160,9 +198,9 @@ ways to climb that always meet:
   slab as you go up. This is what a tiled roof is actually made of, it is the
   shallowest pitch, and it is what East Asian roofs need.
 - **Stairs, one block per cell**: one course of stairs per level, `facing` the
-  way the roof RISES (a south slope's stairs face south). Steeper, western, and
-  the cheapest roof to write. Under a deep overhang put the lowest course as
-  `[half=top]` stairs so the eave reads thin.
+  way the roof RISES, toward the ridge (a south slope's stairs face north).
+  Steeper, western, and the cheapest roof to write. Under a deep overhang put
+  the lowest course as `[half=top]` stairs so the eave reads thin.
 
 Never mix the two on one plane — the join is exactly where the gap appears.
 
@@ -308,10 +346,10 @@ their shape. Measured frequencies from the same building, in order:
 
 - **Trapdoors — 397 of 941 furnishing cells, across seven different woods.** By a
   wide margin the most useful detail block in the game, because it is the only
-  thin one you can put in any orientation. All four states earn their keep:
-  - `open=true` → a **thin vertical panel** filling part of a cell: a screen, a
-    shutter, a cupboard front, railing infill, a partition that does not eat the
-    room.
+  thin one you can put in any orientation. All three shapes earn their keep:
+  - `open=true` → a **thin vertical panel** against one edge of the cell (the
+    edge opposite `facing`; `half` does not change it): a screen, a shutter, a
+    cupboard front, railing infill, a partition that does not eat the room.
   - `open=false, half=top` → a **shelf hanging under a beam**, or a ceiling panel.
   - `open=false, half=bottom` → a **low ledge at floor level**: a step, a hearth
     lip, the edge of a platform.
@@ -387,7 +425,8 @@ Interior detail is the **last** pass — later steps overwrite earlier cells, so
 shell goes first and the fittings go on top. Almost all of it is one cell with a
 state, because the state is the whole point:
 
-- vertical panel: `oak_trapdoor[half=bottom,open=true,facing=north]`
+- vertical panel: `oak_trapdoor[half=bottom,open=true,facing=north]` (stands on
+  the cell's south edge)
 - hanging shelf: `oak_trapdoor[half=top,open=false]`
 - lit hearth: `campfire[signal_fire=false,lit=true]`
 - hanging lantern: `lantern[hanging=true]` under a beam
@@ -424,7 +463,8 @@ reads it as texture rather than as a pattern.
 
 - a design is a named list of primitive steps: `build new` starts one, a
   primitive with `--into` appends a step, `build show` lists the steps and what
-  they cost, `build step` / `build insert` / `build drop` change them, `build at`
+  they cost, `build show` with `--layer` draws one level as a map,
+  `build step` / `build insert` / `build drop` change them, `build at`
   builds it on a spot and — run again on the same spot — changes the building to
   match; block states ride in the block name; `air` clears; `mask` decides what
   may be overwritten; later steps overwrite earlier cells, so details go last

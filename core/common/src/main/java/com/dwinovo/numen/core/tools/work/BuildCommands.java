@@ -50,12 +50,17 @@ public final class BuildCommands {
             .values("a y in the design's own coordinates, as the steps write it; a blueprint file's lowest level is 0")
             .whenOmitted("list the steps, or price the blueprint file");
     private static final Param<Integer> AT_X = Param.required("x", ArgType.integer(),
-            "Where the origin (0,0,0) of the design or blueprint file goes: X.");
+            "X of the world cell the design's 0 0 0 goes to (a blueprint file's lowest north-west corner): what "
+                    + "the design draws at x=0 is built at this x.");
     private static final Param<Integer> AT_Y = Param.required("y", ArgType.integer(),
-            "Y of that spot; the origin's floor level.");
-    private static final Param<Integer> AT_Z = Param.required("z", ArgType.integer(), "Z of that spot.");
+            "Y of that cell: what the design draws at y=0 is built at this y, y=1 one higher. A floor drawn at y=0 "
+                    + "given the ground's own y replaces the top ground block, flush with the ground outside; given "
+                    + "one more it sits on top of the ground.");
+    private static final Param<Integer> AT_Z = Param.required("z", ArgType.integer(),
+            "Z of that cell: what the design draws at z=0 is built at this z.");
     private static final Param<Integer> AT_ROTATION = Param.optional("rotation", ArgType.integer(),
-                    "Turn it clockwise about its origin, in degrees.")
+                    "Turn it clockwise seen from above, about its 0 0 0, which stays on x y z: at 90 the design's +x "
+                            + "runs south and what faced north faces east.")
             .values("0, 90, 180 or 270")
             .whenOmitted("keep it as drawn");
     private BuildCommands() {}

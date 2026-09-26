@@ -2463,6 +2463,52 @@ public class BuildGameTests {
     }
 
     /**
+     * 技能里"方块朝哪"的说法在真世界里核一遍(形状在单测 {@code BlockFacingTest} 里核):楼梯高背在 {@code facing} 那一侧,
+     * 南坡朝北才从南边踩得上去;梯子挂在与 {@code facing} 相反那一侧的方块上;挂着的灯笼要上面有东西;床头落在
+     * {@code facing} 那一格。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_build")
+    public static void block_facing_in_the_skill_holds_in_the_world(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockState stone = Blocks.STONE.defaultBlockState();
+
+        BlockPos stair = helper.absolutePos(new BlockPos(2, 2, 2));
+        level.setBlockAndUpdate(stair, Blocks.OAK_STAIRS.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.StairBlock.FACING, net.minecraft.core.Direction.NORTH));
+        var shape = level.getBlockState(stair).getCollisionShape(level, stair).toAabbs();
+        helper.assertTrue(shape.stream().anyMatch(b -> b.contains(0.5, 0.75, 0.25))
+                        && shape.stream().noneMatch(b -> b.contains(0.5, 0.75, 0.75)),
+                "a north-facing stair does not have its tall back to the north: " + shape);
+
+        BlockPos ladder = helper.absolutePos(new BlockPos(6, 2, 6));
+        BlockState northLadder = Blocks.LADDER.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.LadderBlock.FACING, net.minecraft.core.Direction.NORTH);
+        level.setBlockAndUpdate(ladder.south(), stone);
+        helper.assertTrue(northLadder.canSurvive(level, ladder), "ladder[facing=north] does not hang on the block south");
+        level.setBlockAndUpdate(ladder.south(), Blocks.AIR.defaultBlockState());
+        level.setBlockAndUpdate(ladder.north(), stone);
+        helper.assertFalse(northLadder.canSurvive(level, ladder), "ladder[facing=north] hangs on the block north");
+
+        BlockPos lantern = helper.absolutePos(new BlockPos(10, 2, 10));
+        BlockState hanging = Blocks.LANTERN.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.LanternBlock.HANGING, true);
+        helper.assertFalse(hanging.canSurvive(level, lantern), "a hanging lantern holds with nothing above");
+        level.setBlockAndUpdate(lantern.above(), stone);
+        helper.assertTrue(hanging.canSurvive(level, lantern), "a hanging lantern does not hang from the block above");
+
+        BlockPos foot = helper.absolutePos(new BlockPos(2, 2, 10));
+        BlockState bed = Blocks.RED_BED.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.BedBlock.FACING, net.minecraft.core.Direction.EAST);
+        level.setBlockAndUpdate(foot, bed);
+        bed.getBlock().setPlacedBy(level, foot, bed, null, new ItemStack(Items.RED_BED));
+        helper.assertTrue(level.getBlockState(foot.east()).is(Blocks.RED_BED) && level.getBlockState(foot.east())
+                        .getValue(net.minecraft.world.level.block.BedBlock.PART)
+                        == net.minecraft.world.level.block.state.properties.BedPart.HEAD,
+                "the head of red_bed[facing=east] is not one cell east of its foot");
+        helper.succeed();
+    }
+
+    /**
      * 服务器重启之后设计与建成的房子都还在:设计是蓝图库里的文件,从盘上重读还是那几步;房子记在世界存档里,存下的那份
      * 读回来还是同一栋、同样的格子。
      */
