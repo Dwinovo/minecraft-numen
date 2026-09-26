@@ -18,9 +18,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * (队伍、领地)决定她做的算不算,所以在这里答"不是"。
  *
  * <p>注入公共类 {@code PlayerHooks}:两个加载器、各个版本都是这个名字,平台实现类
- * ({@code …forge.PlayerHooksImpl})的包名是历史遗留,不作依据。Architectury 不在场时 {@link Pseudo}
- * 让这条 mixin 整个跳过,编译期也不依赖它;在场而 {@code isFake} 没了或签名变了,
- * {@code defaultRequire: 1} 与处理器签名校验让启动当场报错,不会悄悄失效。
+ * ({@code …forge.PlayerHooksImpl})的包名是历史遗留,不作依据。它单独一份 mixin 配置,只在 Architectury 在场时挂上
+ * (NeoForge 是 {@code neoforge.mods.toml} 里的 {@code requiredMods},Fabric 是那份配置的插件
+ * {@code ArchitecturyMixins}),不在场就不去找它的类;{@link Pseudo} 让编译期不依赖 Architectury。在场而
+ * {@code isFake} 没了或签名变了,{@code defaultRequire: 1} 与处理器签名校验让启动当场报错,不会悄悄失效。
  *
  * <p>只按方法名定位、不写描述符:Fabric 成品里 {@code Player} 是中间名,而本条 {@code remap = false}
  * 不经映射表;参数类型由处理器的签名把关。

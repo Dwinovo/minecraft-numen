@@ -56,9 +56,9 @@ abstract class ArchitecturyPlayerHooksMixin {
 ```
 
 - **注入点选公共类 `PlayerHooks`**：类名跨加载器、跨版本不变。`…forge.PlayerHooksImpl` 这个包名是历史遗留，将来可能改。
-- **Architectury 不在场**：`@Pseudo` 让 mixin 直接跳过。编译时不依赖 Architectury。
+- **Architectury 不在场**：这条 mixin 单独一份配置，只在 Architectury 在场时挂上，不在场就不去找它的类，也就没有"找不到类"的警告。NeoForge 写在 `neoforge.mods.toml` 的 `[[mixins]]` 里（`numen_api.architectury.mixins.json`，`requiredMods = ["architectury"]`）；Fabric 的 `fabric.mod.json` 没有这种写法，由配置 `numen_api.fabric.architectury.mixins.json` 的插件 `ArchitecturyMixins` 按模组清单交出这条 mixin。`@Pseudo` 只为编译时不依赖 Architectury。
 - **目标在但签名变了**：保留 `defaultRequire: 1`，直接报错，不静默失效。
-- **放在哪**：`api/common` 的 `numen_api.mixins.json`。"她是真玩家"是身体的身份，属于引擎机制，影响所有基于 Architectury 的模组。`plugins/` 没有 mixin 入口。
+- **放在哪**：类在 `api/common`，两份配置在各自加载器的 api 模块里。"她是真玩家"是身体的身份，属于引擎机制，影响所有基于 Architectury 的模组，所以跟着 Architectury 走，不跟着 FTB 联动走。`plugins/` 没有 mixin 入口。
 - **上游**：可以给 Architectury 提 PR，让 NeoForge 端也走 `FakePlayers` 事件，和 Fabric 对齐。合并以后就能删掉这条 mixin。
 - **其它版本分支**：
   - 26.1 起，FTB 改用 FTB Library 自己的 `Platform.get().misc().isFakePlayer`（`NeoMiscImpl.java:42`），注入点要换。
