@@ -149,58 +149,56 @@ public final class DesignOps {
         return new Listing(head, rows, "", "build designs").result(args).toJson();
     }
 
-    /** 展示一份:设计列出每一步;蓝图文件报尺寸、格数、用料与按层分布。 */
-    public static String show(NumenPlayer her, String name) {
+    /**
+     * 展示一份:设计按步分页,列出每一步;蓝图文件报尺寸、格数、用料与按层分布。
+     *
+     * @param again 这一行本身(不带 {@code --page}):翻页时写它
+     */
+    public static String show(NumenPlayer her, String name, CommandArgs args, String again) {
         MinecraftServer server = her.getServer();
         return Designs.kindOf(server, name) == Designs.Kind.DESIGN
-                ? showDesign(her, Designs.load(server, name))
-                : showFile(her, name);
+                ? showDesign(her, Designs.load(server, name), args, again)
+                : showFile(her, name, args, again);
     }
 
-    private static String showDesign(NumenPlayer her, Design design) {
+    /**
+     * 一份设计:抬头是整份的尺寸、范围、格数与料;每一步一条(那一行命令,加它占的范围、格数与料),按输出预算分页;结尾说
+     * 这份设计是谁的、她缺不缺料。{@code data} 是整份的小结(尺寸、格数、全量料单、还缺多少),不随页变。
+     */
+    private static String showDesign(NumenPlayer her, Design design, CommandArgs args, String again) {
         List<BuildTaskRecord.Target> all = design.drawn().targets();
         Map<Item, Integer> cost = BuildBill.cost(all, Set.of());
-        StringBuilder msg = new StringBuilder(design.name()).append(": ");
         Map<String, Object> data = new LinkedHashMap<>();
+        String head;
         if (design.steps().isEmpty()) {
-            msg.append("no steps yet; add one with a primitive and --into ").append(design.name());
+            head = design.name() + ": no steps yet; add one with a primitive and --into " + design.name();
         } else {
             Vec3i size = Layout.of(all, 0).size();
-            msg.append(design.steps().size()).append(" step(s), ").append(size.getX()).append('x').append(size.getY())
-                    .append('x').append(size.getZ()).append(' ').append(span(all)).append(", ").append(all.size())
-                    .append(" cells — ").append(BuildBill.topLine(cost));
+            head = design.name() + ": " + design.steps().size() + " step(s), " + size.getX() + "x" + size.getY() + "x"
+                    + size.getZ() + " " + span(all) + ", " + all.size() + " cells — " + BuildBill.topLine(cost);
             data.put("size", size.getX() + "x" + size.getY() + "x" + size.getZ());
         }
-        List<Map<String, Object>> steps = new ArrayList<>();
+        List<String> steps = new ArrayList<>();
         List<List<BuildTaskRecord.Target>> drawn = design.drawn().steps();
         for (int i = 0; i < design.steps().size(); i++) {
             List<BuildTaskRecord.Target> cells = drawn.get(i);
-            Map<Item, Integer> stepCost = BuildBill.cost(cells, Set.of());
             String kind = Design.step(design.steps().get(i)).primitive().action;
-            msg.append('\n').append(i + 1).append(". ").append(design.steps().get(i)).append("\n   ")
-                    .append(kind).append(' ').append(span(cells)).append(", ").append(cells.size()).append(" cells: ")
-                    .append(BuildBill.topLine(stepCost));
-            Map<String, Object> step = new LinkedHashMap<>();
-            step.put("step", i + 1);
-            step.put("line", design.steps().get(i));
-            step.put("cells", cells.size());
-            step.put("materials", BuildBill.summarize(stepCost));
-            steps.add(step);
+            steps.add((i + 1) + ". " + design.steps().get(i) + "\n   " + kind + " " + span(cells) + ", "
+                    + cells.size() + " cells: " + BuildBill.topLine(BuildBill.cost(cells, Set.of())));
         }
-        msg.append('\n').append(ownership(her, design))
-                .append(design.author().isEmpty() ? "" : " Written by " + design.author() + ".");
         data.put("cells", all.size());
         data.put("materials", BuildBill.summarize(cost));
-        shortOf(her, cost, data, msg);
-        data.put("steps", steps);
-        return TaskResult.ok(msg.toString(), data).toJson();
+        String foot = ownership(her, design) + (design.author().isEmpty() ? "" : " Written by " + design.author() + ".")
+                + "\n" + shortOf(her, cost, data);
+        return new Listing(head, steps, foot, again).result(args, data).toJson();
     }
 
     /**
      * 读一张图纸:尺寸、用料、按层分布。按组件全等收料的那些格(旗帜的花纹)与摆设身上带的东西要单独点名:报价说一句
      * "white_banner x3" 而实际要的是三面绣好花纹的旗,玩家按报价备齐了照样一格都放不下去。判据严到哪里,报价就得说到哪里。
+     * 它不随图纸变长(料按种类、分布按层),只有一页。
      */
-    private static String showFile(NumenPlayer her, String file) {
+    private static String showFile(NumenPlayer her, String file, CommandArgs args, String again) {
         Layout loaded = BlueprintStore.load(her.serverLevel(), file, BlockPos.ZERO, 0);
         Map<String, Integer> extra = new LinkedHashMap<>();
         Map<String, Integer> exact = new LinkedHashMap<>();
@@ -240,24 +238,21 @@ public final class DesignOps {
             data.put("exact_match_means", "same patterns / enchantments / contents, not just the same kind of item");
         }
         data.put("layer_profile", BuildBill.layerProfile(loaded.targets()));
-        StringBuilder msg = new StringBuilder(file).append(": blueprint file, ").append(size.getX()).append('x')
-                .append(size.getY()).append('x').append(size.getZ()).append(", ").append(loaded.targets().size())
-                .append(" cells, needs ").append(BuildBill.sum(cost)).append(" items across ").append(cost.size())
-                .append(" kinds — ").append(BuildBill.topLine(cost));
-        shortOf(her, cost, data, msg);
-        return TaskResult.ok(msg.toString(), data).toJson();
+        String head = file + ": blueprint file, " + size.getX() + "x" + size.getY() + "x" + size.getZ() + ", "
+                + loaded.targets().size() + " cells, needs " + BuildBill.sum(cost) + " items across " + cost.size()
+                + " kinds — " + BuildBill.topLine(cost);
+        return new Listing(head, List.of(), shortOf(her, cost, data), again).result(args, data).toJson();
     }
 
-    /** 免耗材的画像说一句不花料;生存画像报她手上还缺多少(整份都盖要的,不减已经立着的)。 */
-    private static void shortOf(NumenPlayer her, Map<Item, Integer> cost, Map<String, Object> data, StringBuilder msg) {
+    /** 免耗材的画像说一句不花料;生存画像报她手上还缺多少(整份都盖要的,不减已经立着的),也记进 {@code data}。 */
+    private static String shortOf(NumenPlayer her, Map<Item, Integer> cost, Map<String, Object> data) {
         if (WorkProfile.of(her).freeMaterials()) {
-            msg.append("\nShe builds free of charge in this mode.");
-            return;
+            return "She builds free of charge in this mode.";
         }
         Map<Item, Integer> shortOf = BuildBill.shortOf(her, cost);
         data.put("short_of", BuildBill.summarize(shortOf));
-        msg.append(shortOf.isEmpty() ? "\nShe carries enough for all of it."
-                : "\nFor all of it she is still short " + BuildBill.topLine(shortOf) + ".");
+        return shortOf.isEmpty() ? "She carries enough for all of it."
+                : "For all of it she is still short " + BuildBill.topLine(shortOf) + ".";
     }
 
     /** 这些格占的范围:{@code x 0..8, y 0..4, z 0..6}。 */

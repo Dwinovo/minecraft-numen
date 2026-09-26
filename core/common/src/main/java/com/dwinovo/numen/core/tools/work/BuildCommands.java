@@ -156,12 +156,14 @@ public final class BuildCommands {
                         + "to its origin (0,0,0), which `build at` puts on a spot.")
                 .seeAlso("build layer", "build show", "build at");
         build.server("show", "Show a design step by step with what each costs, or price a blueprint file.",
-                        (src, args) -> src.reply(DesignOps.show(src.companion(), args.get(SOURCE))), SOURCE)
+                        (src, args) -> src.reply(DesignOps.show(src.companion(), args.get(SOURCE), args,
+                                args.write(GROUP + " show", List.of(SOURCE)))), SOURCE, Listing.PAGE)
                 .example("build show house")
                 .example("build show \"my cottage\"")
                 .note("Instant and read-only: every step numbered with its line, the cells it covers and the blocks "
                         + "it takes; for a blueprint file its size, cells, every material and how its cells spread "
-                        + "over height. In survival it also says what you are still short of for all of it.")
+                        + "over height. In survival it also says what you are still short of for all of it. A long "
+                        + "design comes a page at a time: --page 2 shows the next.")
                 .seeAlso("build step", "build at");
         build.server("step", "Replace one step of a design.", (src, args) -> src.reply(DesignOps.replace(
                         src.companion(), args.get(DESIGN), args.get(STEP), args.get(PRIMITIVE))), DESIGN, STEP, PRIMITIVE)

@@ -676,8 +676,10 @@ It is your owner's design; you can change it. Written by Aria.
 She carries enough for all of it.
 ```
 
-`data` 里另有整份与每一步的料单(拿去采集的全量清单)与生存画像的 `short_of`。蓝图文件的 `build show` 就是原来
-`build blueprint_read` 不带落点的那一份(尺寸、格数、全量料单、按组件全等收的料、按层分布)。
+`data` 里另有整份的料单(拿去采集的全量清单)与生存画像的 `short_of`,不随页变。步骤是一条条的条目,按输出预算
+(第九节)分页:一份设计写得长,第一页末尾说一共几步、这页是哪几步、`build show shed --page 2` 取下一页。蓝图文件的
+`build show` 就是原来 `build blueprint_read` 不带落点的那一份(尺寸、格数、全量料单、按组件全等收的料、按层分布),
+它不随图纸变长,只有一页。
 
 **`build at` 的回执**:受理即回执;`task_finished` 写成
 
