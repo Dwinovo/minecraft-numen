@@ -106,6 +106,13 @@ public class CommandGameTests {
                             .authority(Authority.SERVER_ON_HER)
                             .example(TWIN + " mark");
                 }));
+        // 一个不守输出预算的动作:回执比一个下行包还大,测网络层接得住
+        NumenPlugins.register(numen -> numen.registerCommands("gt_wire",
+                "Test fixture: an action whose reply is bigger than one payload to the client.", g ->
+                        g.server("flood", "Reply with more text than one payload carries.",
+                                (src, args) -> src.reply(TaskResult.ok(
+                                        "x".repeat(com.dwinovo.numen.network.Wire.TO_CLIENT.bytes() + 1)).toJson()))
+                                .example("gt_wire flood")));
         TaskFactory.register(HoldRecord.class, (body, record) -> new Hold(record));
     }
 
@@ -186,6 +193,40 @@ public class CommandGameTests {
     }
 
     /** 服务器不让她用:没有 OP 时 give 当场如实失败,说清是服务器不让;不问主人,背包不变。 */
+    /**
+     * 真机事故那一类:回执比一个下行包大。从网络入口进来({@code ExecuteToolPayload.handle},和主人的客户端发来的一样),
+     * 回执经 {@code NumenNetwork} 送主人:整条路不抛异常、不断开;送出去的是同一次调用的一条失败回执,说清多大、上限多少、
+     * 怎么要少一点,而且编得进一个包。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
+    public static void an_oversized_result_reaches_the_owner_as_a_failure_not_a_disconnect(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_flooder", new BlockPos(2, 2, 2), false);
+        NumenPlayer owner = presentOwner(helper, companion, "gametest_flood_owner");
+        ServerLevel level = helper.getLevel();
+
+        com.dwinovo.numen.network.payload.ExecuteToolPayload.handle(
+                new com.dwinovo.numen.network.payload.ExecuteToolPayload(companion.getUUID(), "gt-flood",
+                        com.dwinovo.numen.cli.CommandTool.NAME, "{\"command\":\"gt_wire flood\"}"), owner);
+
+        ToolRun run = command(companion, "gt_wire flood");
+        var sent = com.dwinovo.numen.network.Wire.TO_CLIENT.fit(
+                com.dwinovo.numen.network.payload.TaskResultPayload.STREAM_CODEC,
+                new com.dwinovo.numen.network.payload.TaskResultPayload(companion.getUUID(), "gt-flood", run.reply()),
+                () -> new net.minecraft.network.RegistryFriendlyByteBuf(io.netty.buffer.Unpooled.buffer(),
+                        level.registryAccess()));
+        JsonObject result = JsonParser.parseString(sent.resultJson()).getAsJsonObject();
+        helper.assertTrue("gt-flood".equals(sent.toolCallId()) && !result.get("success").getAsBoolean()
+                        && result.get("message").getAsString().startsWith("The result of this call came to ")
+                        && result.get("message").getAsString().contains("--page"),
+                "the oversized result is not replaced by a failure that says so: " + sent.resultJson());
+        helper.assertTrue(result.getAsJsonObject("data").get("limit_bytes").getAsInt()
+                        == com.dwinovo.numen.network.Wire.TO_CLIENT.bytes(),
+                "the failure does not name the limit: " + sent.resultJson());
+        CompanionFactory.despawn(level.getServer(), companion);
+        CompanionFactory.despawn(level.getServer(), owner);
+        helper.succeed();
+    }
+
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
     public static void command_without_op_is_refused_by_the_server(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_guest", new BlockPos(4, 2, 4), false);

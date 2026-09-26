@@ -2463,6 +2463,87 @@ public class BuildGameTests {
     }
 
     /**
+     * 一份很长的设计:{@code build show} 按输出预算分页,第一页说一共几步、这是哪几步、下一页怎么取;每一页都编得进一个下行包。
+     * 从网络入口进来({@code ExecuteToolPayload.handle})整条路不抛异常——真机事故里这一步把房主踢下线、服务器停下。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    public static void build_show_pages_a_long_design_and_every_page_fits_one_payload(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        NumenPlayer companion = spawnAt(helper, "gametest_long_reader", new BlockPos(2, 2, 2), true);
+        List<String> steps = new ArrayList<>();
+        for (int i = 0; i < 250; i++) {
+            steps.add("build layer 0 " + i + " 0 #" + ".".repeat(198) + "# --block stone_bricks");
+        }
+        if (com.dwinovo.numen.core.build.Designs.exists(server, "gt_long")) {
+            com.dwinovo.numen.core.build.Designs.delete(server, "gt_long");
+        }
+        com.dwinovo.numen.core.build.Designs.save(server, com.dwinovo.numen.core.build.Design.fresh("gt_long",
+                companion.getOwnerUuid(), "", "gametest_long_reader", "2026-09-26T00:00:00Z").withSteps(steps));
+        NumenPlayer owner = presentOwner(helper, companion, "gametest_long_owner");
+        com.dwinovo.numen.network.payload.ExecuteToolPayload.handle(
+                new com.dwinovo.numen.network.payload.ExecuteToolPayload(companion.getUUID(), "gt-show",
+                        com.dwinovo.numen.cli.CommandTool.NAME, "{\"command\":\"build show gt_long\"}"), owner);
+
+        ToolRun first = command(companion, "build show gt_long");
+        java.util.regex.Matcher shown = java.util.regex.Pattern.compile("\\[Showing 1-(\\d+) of 250\\. Use build "
+                + "show gt_long --page 2 to continue\\.]").matcher(first.reply());
+        helper.assertTrue(first.succeeded() && first.reply().contains("1. build layer 0 0 0 #") && shown.find(),
+                "the first page does not say how many steps and how to turn the page: "
+                        + first.reply().substring(Math.max(0, first.reply().length() - 400)));
+        int onFirst = Integer.parseInt(shown.group(1));
+        ToolRun second = command(companion, "build show gt_long --page 2");
+        helper.assertTrue(second.succeeded() && second.reply().contains("\\n" + (onFirst + 1) + ". build layer 0 "
+                        + onFirst + " 0 #"), "the second page does not go on from the first: "
+                        + second.reply().substring(0, Math.min(400, second.reply().length())));
+        for (ToolRun page : List.of(first, second)) {
+            var payload = new com.dwinovo.numen.network.payload.TaskResultPayload(companion.getUUID(), "gt-show",
+                    page.reply());
+            helper.assertTrue(com.dwinovo.numen.network.Wire.TO_CLIENT.fit(
+                            com.dwinovo.numen.network.payload.TaskResultPayload.STREAM_CODEC, payload,
+                            () -> new net.minecraft.network.RegistryFriendlyByteBuf(io.netty.buffer.Unpooled.buffer(),
+                                    level.registryAccess())) == payload,
+                    "a page does not fit one payload to the client");
+        }
+        com.dwinovo.numen.core.build.Designs.delete(server, "gt_long");
+        CompanionFactory.despawn(server, companion);
+        CompanionFactory.despawn(server, owner);
+        helper.succeed();
+    }
+
+    /**
+     * {@code build show --layer}:设计画的是后写覆盖先写之后的那一层,蓝图文件画的是读出来的格(床头照建成的样子补上);
+     * 字符网格与图例是 {@code build layer} 的写法。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
+    public static void build_show_layer_draws_a_level_of_a_design_and_of_a_blueprint_file(GameTestHelper helper)
+            throws Exception {
+        ServerLevel level = helper.getLevel();
+        writeSmallHouse(level, "fixture_slice");
+        NumenPlayer companion = spawnAt(helper, "gametest_slicer", new BlockPos(2, 2, 2), false);
+        design(companion, "gt_slice", "build layer 0 0 0 ### ### ### --block stone", "build set oak_planks 1 0 1");
+        ToolRun plan = command(companion, "build show gt_slice --layer 0");
+        ToolRun file = command(companion, "build show fixture_slice --layer 0");
+        ToolRun above = command(companion, "build show gt_slice --layer 3");
+
+        String map = com.google.gson.JsonParser.parseString(plan.reply()).getAsJsonObject().get("message").getAsString();
+        helper.assertTrue(plan.succeeded() && map.endsWith(String.join("\n", "x    012", "z 0  sss", "z 1  sos",
+                        "z 2  sss", "legend: s=stone o=oak_planks")),
+                "the design's level is not drawn with the later step on top: " + map);
+        String read = com.google.gson.JsonParser.parseString(file.reply()).getAsJsonObject().get("message")
+                .getAsString();
+        helper.assertTrue(file.succeeded() && read.startsWith("blueprint file fixture_slice (0 0 0 is its lowest "
+                        + "north-west corner) at y=0") && read.contains("\nz 0  s.r\nz 1  s.R\nz 2  s..\n")
+                        && read.contains("r=red_bed[facing=north,occupied=false,part=head]")
+                        && read.contains("R=red_bed[facing=north,occupied=false,part=foot]"),
+                "the blueprint file's level is not drawn with the bed as built: " + read);
+        helper.assertTrue(above.succeeded() && above.reply().contains("has nothing at y=3; it spans y 0."),
+                "a level outside the design does not say where it spans: " + above.reply());
+        CompanionFactory.despawn(level.getServer(), companion);
+        helper.succeed();
+    }
+
+    /**
      * 技能里"方块朝哪"的说法在真世界里核一遍(形状在单测 {@code BlockFacingTest} 里核):楼梯高背在 {@code facing} 那一侧,
      * 南坡朝北才从南边踩得上去;梯子挂在与 {@code facing} 相反那一侧的方块上;挂着的灯笼要上面有东西;床头落在
      * {@code facing} 那一格。
