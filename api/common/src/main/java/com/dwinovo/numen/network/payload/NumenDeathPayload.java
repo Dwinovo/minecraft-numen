@@ -1,14 +1,15 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.network.Wire;
+import io.netty.buffer.ByteBuf;
 import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
  * Server → Client: an Numen body died for good. The owner's client-side
@@ -29,16 +30,22 @@ import java.util.UUID;
  * idle. {@code cause} is the vanilla death message ("X was slain by a zombie") for that Halt.
  */
 public record NumenDeathPayload(UUID entityUuid, String cause)
-        implements CustomPacketPayload {
+        implements CustomPacketPayload, Wire.Oversized<NumenDeathPayload> {
 
     public static final Type<NumenDeathPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_death"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, NumenDeathPayload> STREAM_CODEC =
+    public static final StreamCodec<ByteBuf, NumenDeathPayload> STREAM_CODEC =
             StreamCodec.composite(
                     UUIDUtil.STREAM_CODEC, NumenDeathPayload::entityUuid,
-                    ByteBufCodecs.STRING_UTF8, NumenDeathPayload::cause,
+                    Wire.TO_CLIENT.text(), NumenDeathPayload::cause,
                     NumenDeathPayload::new);
+
+    /** 死因是原版的死亡消息,里面的名字长短不归这个包定;长到整包装不下时换成一句说明,死没死、是谁照旧。 */
+    @Override
+    public NumenDeathPayload shrunk(Predicate<NumenDeathPayload> fits, int bytes, int budget) {
+        return new NumenDeathPayload(entityUuid, Wire.TO_CLIENT.tooBig("The cause of death", bytes) + ", so it is not shown.");
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

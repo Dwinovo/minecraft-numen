@@ -2,9 +2,9 @@ package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.platform.Services;
+import com.dwinovo.numen.network.NumenNetwork;
+import io.netty.buffer.ByteBuf;
 import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -32,7 +32,7 @@ public record RequestStatePayload(UUID uuid) implements CustomPacketPayload {
     public static final Type<RequestStatePayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "request_state"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, RequestStatePayload> STREAM_CODEC =
+    public static final StreamCodec<ByteBuf, RequestStatePayload> STREAM_CODEC =
             StreamCodec.composite(UUIDUtil.STREAM_CODEC, RequestStatePayload::uuid,
                     RequestStatePayload::new);
 
@@ -45,10 +45,10 @@ public record RequestStatePayload(UUID uuid) implements CustomPacketPayload {
     public static void handle(RequestStatePayload p, ServerPlayer player) {
         NumenPlayer numen = NumenPlayer.findByUuid(player.level().getServer(), p.uuid());
         if (numen == null || !numen.isOwnedByPlayer(player.getUUID())) {
-            Services.NETWORK.sendToPlayer(player, absent(p.uuid()));
+            NumenNetwork.sendToPlayer(player, absent(p.uuid()));
             return;
         }
-        Services.NETWORK.sendToPlayer(player, snapshot(numen));
+        NumenNetwork.sendToPlayer(player, snapshot(numen));
     }
 
     /** 身体不在(睡在未加载区块 / 不是你的):没有内容可给。 */

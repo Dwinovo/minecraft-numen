@@ -3,12 +3,13 @@ package com.dwinovo.numen.network.payload;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
+import com.dwinovo.numen.network.NumenNetwork;
+import com.dwinovo.numen.network.Wire;
 import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import io.netty.buffer.ByteBuf;
 import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -49,30 +50,37 @@ import java.util.UUID;
  * running {@code move_to} would turn "what's my HP" into a minute-long wait.
  *
  * <h2>Wire format</h2>
- * Fixed-shape strings (ResourceLocation for compactness on the tool name even
- * though tools live under a single namespace; this is forward-compatible for
- * multi-namespace tool registries). The arguments arrive as the raw JSON
- * string the LLM emitted; server parses with Gson and re-validates.
+ * The arguments arrive as the raw JSON string the LLM emitted; server parses
+ * with Gson and re-validates. Every string is {@link Wire#text()}: none of them
+ * is ours to bound (the call id comes from the model provider, the arguments from
+ * the model), so the whole payload is measured against {@link Wire#TO_SERVER}
+ * before it leaves the client, and a call that does not fit is answered there
+ * ({@link #tooBig}) instead of being sent.
  */
 public record ExecuteToolPayload(UUID entityUuid,
                                   String toolCallId,
                                   String toolName,
                                   String argumentsJson) implements CustomPacketPayload {
 
-    public static final int MAX_TOOL_CALL_ID_LENGTH = 128;
-    public static final int MAX_TOOL_NAME_LENGTH = 128;
-    public static final int MAX_ARGUMENTS_JSON_LENGTH = 16 * 1024;
-
     public static final Type<ExecuteToolPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "execute_tool"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, ExecuteToolPayload> STREAM_CODEC =
+    public static final StreamCodec<ByteBuf, ExecuteToolPayload> STREAM_CODEC =
             StreamCodec.composite(
                     UUIDUtil.STREAM_CODEC, ExecuteToolPayload::entityUuid,
-                    ByteBufCodecs.stringUtf8(MAX_TOOL_CALL_ID_LENGTH), ExecuteToolPayload::toolCallId,
-                    ByteBufCodecs.stringUtf8(MAX_TOOL_NAME_LENGTH), ExecuteToolPayload::toolName,
-                    ByteBufCodecs.stringUtf8(MAX_ARGUMENTS_JSON_LENGTH), ExecuteToolPayload::argumentsJson,
+                    Wire.TO_SERVER.text(), ExecuteToolPayload::toolCallId,
+                    Wire.TO_SERVER.text(), ExecuteToolPayload::toolName,
+                    Wire.TO_SERVER.text(), ExecuteToolPayload::argumentsJson,
                     ExecuteToolPayload::new);
+
+    /**
+     * 这次调用编码后是 {@code bytes} 字节,一个上行的包装不下:不送,就地回给模型的那条失败。说清多大、上限多少、怎么办。
+     */
+    public static String tooBig(int bytes) {
+        return TaskResult.fail(Wire.TO_SERVER.tooBig("This call", bytes) + ", so it was not sent. Split the work "
+                        + "into several shorter calls: a long grid or list goes in as several steps.",
+                java.util.Map.of("call_bytes", bytes, "limit_bytes", Wire.TO_SERVER.bytes())).toJson();
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {
@@ -139,8 +147,7 @@ public record ExecuteToolPayload(UUID entityUuid,
         // onServerCall 是 NumenTool 的接口默认方法——非身体工具的默认实现
         // 兜底出一条清晰失败,这里无需再分岔。
         java.util.function.Consumer<String> reply = json ->
-                com.dwinovo.numen.platform.Services.NETWORK.sendToPlayer(player,
-                        new TaskResultPayload(p.entityUuid(), p.toolCallId(), json));
+                NumenNetwork.sendToPlayer(player, new TaskResultPayload(p.entityUuid(), p.toolCallId(), json));
         tool.serve(p.toolCallId(), args, companion, reply);
     }
 
@@ -157,7 +164,6 @@ public record ExecuteToolPayload(UUID entityUuid,
                 player.getName().getString(), p.toolName(), p.toolCallId(), message,
                 p.argumentsJson());
         String json = TaskResult.fail(message).toJson();
-        com.dwinovo.numen.platform.Services.NETWORK.sendToPlayer(player,
-                new TaskResultPayload(p.entityUuid(), p.toolCallId(), json));
+        NumenNetwork.sendToPlayer(player, new TaskResultPayload(p.entityUuid(), p.toolCallId(), json));
     }
 }

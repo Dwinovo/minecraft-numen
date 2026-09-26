@@ -3,7 +3,7 @@ package com.dwinovo.numen.permission;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.network.payload.ConsentRequestPayload;
-import com.dwinovo.numen.platform.Services;
+import com.dwinovo.numen.network.NumenNetwork;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -312,7 +312,7 @@ public final class ConsentDesk {
         public void show(ConsentRequest request) {
             ServerPlayer owner = body.resolveOwnerPlayer();
             if (owner != null) {
-                Services.NETWORK.sendToPlayer(owner, ConsentRequestPayload.of(request));
+                NumenNetwork.sendToPlayer(owner, ConsentRequestPayload.of(request));
             }
         }
 
@@ -320,7 +320,7 @@ public final class ConsentDesk {
         public void clear(Withdrawal why) {
             ServerPlayer owner = body.resolveOwnerPlayer();
             if (owner != null) {
-                Services.NETWORK.sendToPlayer(owner, ConsentRequestPayload.none(body.getUUID(), why));
+                NumenNetwork.sendToPlayer(owner, ConsentRequestPayload.none(body.getUUID(), why));
             }
         }
 

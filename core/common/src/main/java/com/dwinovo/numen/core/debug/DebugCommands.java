@@ -2,10 +2,10 @@ package com.dwinovo.numen.core.debug;
 
 import com.dwinovo.numen.entity.NumenCommands;
 import com.dwinovo.numen.network.payload.ClientUiActionPayload;
-import com.dwinovo.numen.platform.Services;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.dwinovo.numen.network.NumenNetwork;
 
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -34,7 +34,7 @@ public final class DebugCommands {
     private static int toggleDebug(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer caller = ctx.getSource().getPlayerOrException();
         boolean on = PathDebug.toggle(caller.getUUID());
-        Services.NETWORK.sendToPlayer(caller, new ClientUiActionPayload(on
+        NumenNetwork.sendToPlayer(caller, new ClientUiActionPayload(on
                 ? ClientUiActionPayload.Action.DEBUG_TEXT_ON
                 : ClientUiActionPayload.Action.DEBUG_TEXT_OFF));
         ctx.getSource().sendSuccess(() -> Component.literal(

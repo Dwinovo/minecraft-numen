@@ -2,8 +2,8 @@ package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.NumenPlayer;
+import io.netty.buffer.ByteBuf;
 import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -32,7 +32,7 @@ public record CancelTasksPayload(UUID entityUuid) implements CustomPacketPayload
     public static final Type<CancelTasksPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "cancel_tasks"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, CancelTasksPayload> STREAM_CODEC =
+    public static final StreamCodec<ByteBuf, CancelTasksPayload> STREAM_CODEC =
             StreamCodec.composite(
                     UUIDUtil.STREAM_CODEC, CancelTasksPayload::entityUuid,
                     CancelTasksPayload::new);

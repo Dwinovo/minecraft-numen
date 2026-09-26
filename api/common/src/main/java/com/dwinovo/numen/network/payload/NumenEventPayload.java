@@ -2,15 +2,20 @@ package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.inbox.EventQueue;
+import com.dwinovo.numen.network.Wire;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufUtil;
 import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
  * Server → Client: 一只同伴的一批输入条目,进她的输入队列。
@@ -31,26 +36,53 @@ import java.util.UUID;
  *
  * <p>消费时机<b>不由发送方决定</b>:队列按自己的规则(急件 / 攒够条数 / 攒够时长)
  * 说了算。
+ *
+ * <p>条目的种类名与正文都不归这个包定长短(插件登记的种类、任务收尾时说的话),用 {@link Wire#text()};整批装不下一个
+ * 下行包时({@link #shrunk}),从最长的那条起换成一句说明,直到装得下——种类、时刻、急不急都留着,她知道漏了哪件事。
  */
 public record NumenEventPayload(UUID entityUuid, List<EventQueue.Entry> entries)
-        implements CustomPacketPayload {
+        implements CustomPacketPayload, Wire.Oversized<NumenEventPayload> {
 
     public static final Type<NumenEventPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_event"));
 
-    private static final StreamCodec<RegistryFriendlyByteBuf, EventQueue.Entry> ENTRY_CODEC =
+    private static final StreamCodec<ByteBuf, EventQueue.Entry> ENTRY_CODEC =
             StreamCodec.composite(
-                    ByteBufCodecs.stringUtf8(64), EventQueue.Entry::type,
-                    ByteBufCodecs.STRING_UTF8, EventQueue.Entry::text,
+                    Wire.TO_CLIENT.text(), EventQueue.Entry::type,
+                    Wire.TO_CLIENT.text(), EventQueue.Entry::text,
                     ByteBufCodecs.VAR_LONG, EventQueue.Entry::ts,
                     ByteBufCodecs.BOOL, EventQueue.Entry::urgent,
                     EventQueue.Entry::new);
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, NumenEventPayload> STREAM_CODEC =
+    public static final StreamCodec<ByteBuf, NumenEventPayload> STREAM_CODEC =
             StreamCodec.composite(
                     UUIDUtil.STREAM_CODEC, NumenEventPayload::entityUuid,
                     ENTRY_CODEC.apply(ByteBufCodecs.list()), NumenEventPayload::entries,
                     NumenEventPayload::new);
+
+    /** 从正文最长的那条起,一条条换成说明,直到整批装得下。 */
+    @Override
+    public NumenEventPayload shrunk(Predicate<NumenEventPayload> fits, int bytes, int budget) {
+        List<Integer> longestFirst = new ArrayList<>();
+        for (int i = 0; i < entries.size(); i++) {
+            longestFirst.add(i);
+        }
+        longestFirst.sort(Comparator.comparingInt((Integer i) -> ByteBufUtil.utf8Bytes(entries.get(i).text()))
+                .reversed());
+        List<EventQueue.Entry> out = new ArrayList<>(entries);
+        NumenEventPayload candidate = this;
+        for (int i : longestFirst) {
+            EventQueue.Entry e = entries.get(i);
+            out.set(i, new EventQueue.Entry(e.type(), Wire.TO_CLIENT.tooBig("A " + e.type() + " event",
+                    ByteBufUtil.utf8Bytes(e.text())) + " together with the rest, so its text was not delivered.",
+                    e.ts(), e.urgent()));
+            candidate = new NumenEventPayload(entityUuid, List.copyOf(out));
+            if (fits.test(candidate)) {
+                return candidate;
+            }
+        }
+        return candidate;
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

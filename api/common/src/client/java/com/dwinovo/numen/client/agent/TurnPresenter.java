@@ -15,7 +15,7 @@ import com.dwinovo.numen.client.ui.NumenToasts;
 import com.dwinovo.numen.client.voice.VoiceLibrary;
 import com.dwinovo.numen.client.voice.VoicePipeline;
 import com.dwinovo.numen.mcp.server.McpTranscript;
-import com.dwinovo.numen.platform.Services;
+import com.dwinovo.numen.network.NumenNetwork;
 import net.minecraft.client.Minecraft;
 
 import java.util.UUID;
@@ -271,7 +271,7 @@ final class TurnPresenter {
         boolean speaking = phase == Phase.MODEL || phase == Phase.TOOLS || (voice != null && voice.isSpeaking());
         if (speaking != lastSpeakingSent) {
             lastSpeakingSent = speaking;
-            Services.NETWORK.sendToServer(new com.dwinovo.numen.network.payload.SpeakingStatePayload(
+            NumenNetwork.sendToServer(new com.dwinovo.numen.network.payload.SpeakingStatePayload(
                     entityUuid, speaking));
         }
     }

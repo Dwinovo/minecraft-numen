@@ -9,9 +9,9 @@ import com.dwinovo.numen.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.network.payload.DismissRequestPayload;
 import com.dwinovo.numen.network.payload.SummonRequestPayload;
-import com.dwinovo.numen.platform.Services;
 import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.task.TaskResult;
+import com.dwinovo.numen.network.NumenNetwork;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
 
@@ -110,7 +110,7 @@ public final class NumenActuator {
                 return;
             }
             String n = name == null ? "" : name.trim();
-            Services.NETWORK.sendToServer(new SummonRequestPayload(n, "", "", false));
+            NumenNetwork.sendToServer(new SummonRequestPayload(n, "", "", false));
             f.complete(true);
         });
         return f;
@@ -134,7 +134,7 @@ public final class NumenActuator {
                 f.complete(false);
                 return;
             }
-            Services.NETWORK.sendToServer(new DismissRequestPayload(companion));
+            NumenNetwork.sendToServer(new DismissRequestPayload(companion));
             f.complete(true);
         });
         return f;

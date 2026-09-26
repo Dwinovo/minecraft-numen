@@ -10,7 +10,6 @@ import com.dwinovo.numen.permission.PermissionStore;
 import com.dwinovo.numen.permission.Rule;
 import com.dwinovo.numen.permission.RuleSet;
 import com.dwinovo.numen.permission.Verdict;
-import com.dwinovo.numen.platform.Services;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.brigadier.CommandDispatcher;
@@ -21,6 +20,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.tree.CommandNode;
+import com.dwinovo.numen.network.NumenNetwork;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
@@ -211,7 +211,7 @@ public final class NumenCommands {
                                     ClientUiActionPayload.Action action)
             throws CommandSyntaxException {
         ServerPlayer caller = ctx.getSource().getPlayerOrException();
-        Services.NETWORK.sendToPlayer(caller, new ClientUiActionPayload(action));
+        NumenNetwork.sendToPlayer(caller, new ClientUiActionPayload(action));
         return 1;
     }
 

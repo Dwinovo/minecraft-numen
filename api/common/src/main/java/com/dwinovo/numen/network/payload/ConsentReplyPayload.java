@@ -5,8 +5,8 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.permission.ConsentAnswer;
 import com.dwinovo.numen.permission.ConsentDesk;
 
+import io.netty.buffer.ByteBuf;
 import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -35,7 +35,7 @@ public record ConsentReplyPayload(UUID companion, long id, ConsentAnswer.Decisio
     public static final Type<ConsentReplyPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "consent_reply"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, ConsentReplyPayload> STREAM_CODEC =
+    public static final StreamCodec<ByteBuf, ConsentReplyPayload> STREAM_CODEC =
             StreamCodec.composite(
                     UUIDUtil.STREAM_CODEC, ConsentReplyPayload::companion,
                     ByteBufCodecs.VAR_LONG, ConsentReplyPayload::id,

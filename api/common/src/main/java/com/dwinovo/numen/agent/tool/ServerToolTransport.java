@@ -3,7 +3,9 @@ package com.dwinovo.numen.agent.tool;
 import com.dwinovo.numen.agent.tool.ToolCall;
 import com.dwinovo.numen.network.payload.CancelTasksPayload;
 import com.dwinovo.numen.network.payload.ExecuteToolPayload;
-import com.dwinovo.numen.platform.Services;
+import com.dwinovo.numen.network.NumenNetwork;
+import com.dwinovo.numen.network.Wire;
+import io.netty.buffer.Unpooled;
 
 import java.util.Collection;
 import java.util.Map;
@@ -25,12 +27,21 @@ public final class ServerToolTransport {
 
     private ServerToolTransport() {}
 
-    /** Ship a body-bound tool to the server and park its call until the result returns. */
+    /**
+     * Ship a body-bound tool to the server and park its call until the result returns. A call too big for one
+     * payload to the server ({@link Wire#TO_SERVER}) is not sent: it completes here with a failure that says so,
+     * because the server never hears of it and no result would come back.
+     */
     public static void ship(ToolCall call) {
-        UUID entity = call.ctx().entityUuid();
+        ExecuteToolPayload payload = new ExecuteToolPayload(call.ctx().entityUuid(), call.id(), call.toolName(),
+                call.rawArgs());
+        int size = Wire.size(ExecuteToolPayload.STREAM_CODEC, payload, Unpooled::buffer);
+        if (!Wire.TO_SERVER.holds(size)) {
+            call.complete(ExecuteToolPayload.tooBig(size));
+            return;
+        }
         IN_FLIGHT.put(call.id(), call);
-        Services.NETWORK.sendToServer(
-                new ExecuteToolPayload(entity, call.id(), call.toolName(), call.rawArgs()));
+        NumenNetwork.sendToServer(payload);
     }
 
     /** A server result came back (core's TaskResultPayload) — complete the parked call. */
@@ -45,7 +56,7 @@ public final class ServerToolTransport {
      * {@link #forget} 掉。
      */
     public static void abort(UUID companionUuid) {
-        Services.NETWORK.sendToServer(new CancelTasksPayload(companionUuid));
+        NumenNetwork.sendToServer(new CancelTasksPayload(companionUuid));
     }
 
     /**

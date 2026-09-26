@@ -6,8 +6,8 @@ import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.network.payload.NumenEventPayload;
-import com.dwinovo.numen.platform.Services;
 import com.dwinovo.numen.task.reflex.Reflex;
+import com.dwinovo.numen.network.NumenNetwork;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -121,7 +121,7 @@ public final class NumenEvents {
         ServerPlayer owner = companion.resolveOwnerPlayer();
         route(uuid, entry,
                 owner == null ? null : payload -> {
-                    Services.NETWORK.sendToPlayer(owner, payload);
+                    NumenNetwork.sendToPlayer(owner, payload);
                     Constants.LOG.info("[numen-event] {} kind={}{} → 客户端", uuid, type,
                             urgent ? " URGENT" : "");
                 },

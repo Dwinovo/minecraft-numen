@@ -6,7 +6,7 @@ import com.dwinovo.numen.api.gear.GearSlot;
 import com.dwinovo.numen.network.payload.NumenDeathPayload;
 import com.dwinovo.numen.network.payload.NumenRespawnPayload;
 import com.dwinovo.numen.network.payload.CompanionListPayload;
-import com.dwinovo.numen.platform.Services;
+import com.dwinovo.numen.network.NumenNetwork;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -207,7 +207,7 @@ public final class Companions {
         }
         for (com.dwinovo.numen.network.payload.NumenEventPayload p
                 : outboxPayloads(EventOutbox.get(server), companions, System.currentTimeMillis())) {
-            Services.NETWORK.sendToPlayer(owner, p);
+            NumenNetwork.sendToPlayer(owner, p);
             com.dwinovo.numen.Constants.LOG.info("[numen-outbox] {} 补发 {} 条离线输入",
                     p.entityUuid(), p.entries().size());
         }
@@ -260,7 +260,7 @@ public final class Companions {
         // 死亡消息又把那一轮整个作废——白烧一次请求,还多一条没人看的对话。
         ServerPlayer owner = body.resolveOwnerPlayer();
         if (owner != null) {   // immediate, same-session
-            Services.NETWORK.sendToPlayer(owner, new NumenDeathPayload(uuid, cause));
+            NumenNetwork.sendToPlayer(owner, new NumenDeathPayload(uuid, cause));
         }
         CompanionEvents.fire(CompanionEvent.DEATH, body);   // 不发工具结果:那条 tool_call 已由死因结算
         // Persist the death (cause + game-time) in the world-saved registry so it survives a logout during
@@ -313,7 +313,7 @@ public final class Companions {
         body.clearFire();
         CompanionRegistry.get(server).markAlive(uuid);
         syncRosterToOwner(server, owner);
-        Services.NETWORK.sendToPlayer(owner, new NumenRespawnPayload(uuid, entry.deathCause()));
+        NumenNetwork.sendToPlayer(owner, new NumenRespawnPayload(uuid, entry.deathCause()));
         return true;
     }
 
@@ -337,7 +337,7 @@ public final class Companions {
             list.add(new CompanionListPayload.Entry(l.uuid(), l.name(), l.respawnInMs(),
                     body != null && body.isCreative()));
         }
-        Services.NETWORK.sendToPlayer(owner, new CompanionListPayload(reg.worldId(), list));
+        NumenNetwork.sendToPlayer(owner, new CompanionListPayload(reg.worldId(), list));
     }
 
     /**

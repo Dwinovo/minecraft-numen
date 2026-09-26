@@ -13,7 +13,7 @@ import com.dwinovo.numen.core.pathing.goals.GoalGetToBlock;
 import com.dwinovo.numen.core.pathing.goals.GoalInverted;
 import com.dwinovo.numen.core.pathing.goals.GoalXZ;
 import com.dwinovo.numen.network.payload.PathDebugPayload;
-import com.dwinovo.numen.platform.Services;
+import com.dwinovo.numen.network.NumenNetwork;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
@@ -54,7 +54,7 @@ public final class PathDebugRenderer {
             }
             PathDebugPayload payload = snapshot(core);
             for (ServerPlayer viewer : viewers) {
-                Services.NETWORK.sendToPlayer(viewer, payload);
+                NumenNetwork.sendToPlayer(viewer, payload);
             }
         }
     }

@@ -2,7 +2,8 @@ package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.Companions;
-import net.minecraft.network.RegistryFriendlyByteBuf;
+import com.dwinovo.numen.network.Wire;
+import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -24,19 +25,17 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
         implements CustomPacketPayload {
 
     public static final int MAX_NAME = 16;
-    /** Mojang 签名 textures 的尺寸上限:value 是带皮肤/披风 URL 的 base64 JSON,
-     *  实测 1KB 上下,8KB 已是十倍余量;signature 固定 ~700B。 */
-    public static final int MAX_SKIN_VALUE = 8192;
-    public static final int MAX_SKIN_SIG = 2048;
 
     public static final Type<SummonRequestPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "summon_request"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, SummonRequestPayload> STREAM_CODEC =
+    public static final StreamCodec<ByteBuf, SummonRequestPayload> STREAM_CODEC =
             StreamCodec.composite(
                     ByteBufCodecs.stringUtf8(MAX_NAME), SummonRequestPayload::name,
-                    ByteBufCodecs.stringUtf8(MAX_SKIN_VALUE), SummonRequestPayload::skinValue,
-                    ByteBufCodecs.stringUtf8(MAX_SKIN_SIG), SummonRequestPayload::skinSig,
+                    // Mojang 签名的 textures(带皮肤/披风 URL 的 base64 JSON,实测 1KB 上下;签名约 700B):长度是 Mojang 的,
+                    // 不是这个包的,整包的大小由 Wire 量
+                    Wire.TO_SERVER.text(), SummonRequestPayload::skinValue,
+                    Wire.TO_SERVER.text(), SummonRequestPayload::skinSig,
                     ByteBufCodecs.BOOL, SummonRequestPayload::creative,
                     SummonRequestPayload::new);
 

@@ -1,14 +1,15 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.network.Wire;
+import io.netty.buffer.ByteBuf;
 import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
  * Server → Client: a companion has respawned at the owner's side after dying — both the same-session
@@ -17,16 +18,23 @@ import java.util.UUID;
  * in-memory death state. The owner's {@link com.dwinovo.numen.client.agent.EntityAgentLoop} is created
  * if needed and reawakened with a death {@code <event>}.
  */
-public record NumenRespawnPayload(UUID entityUuid, String cause) implements CustomPacketPayload {
+public record NumenRespawnPayload(UUID entityUuid, String cause)
+        implements CustomPacketPayload, Wire.Oversized<NumenRespawnPayload> {
 
     public static final Type<NumenRespawnPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_respawn"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, NumenRespawnPayload> STREAM_CODEC =
+    public static final StreamCodec<ByteBuf, NumenRespawnPayload> STREAM_CODEC =
             StreamCodec.composite(
                     UUIDUtil.STREAM_CODEC, NumenRespawnPayload::entityUuid,
-                    ByteBufCodecs.STRING_UTF8, NumenRespawnPayload::cause,
+                    Wire.TO_CLIENT.text(), NumenRespawnPayload::cause,
                     NumenRespawnPayload::new);
+
+    /** 死因是原版的死亡消息,里面的名字长短不归这个包定;长到整包装不下时换成一句说明,死没死、是谁照旧。 */
+    @Override
+    public NumenRespawnPayload shrunk(Predicate<NumenRespawnPayload> fits, int bytes, int budget) {
+        return new NumenRespawnPayload(entityUuid, Wire.TO_CLIENT.tooBig("The cause of death", bytes) + ", so it is not shown.");
+    }
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

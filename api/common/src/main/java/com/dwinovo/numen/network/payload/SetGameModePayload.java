@@ -4,8 +4,8 @@ import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.Companions;
 import com.dwinovo.numen.entity.NumenPlayer;
 
+import io.netty.buffer.ByteBuf;
 import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -26,7 +26,7 @@ public record SetGameModePayload(UUID uuid, boolean creative) implements CustomP
     public static final Type<SetGameModePayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "set_game_mode"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, SetGameModePayload> STREAM_CODEC =
+    public static final StreamCodec<ByteBuf, SetGameModePayload> STREAM_CODEC =
             StreamCodec.composite(
                     UUIDUtil.STREAM_CODEC, SetGameModePayload::uuid,
                     ByteBufCodecs.BOOL, SetGameModePayload::creative,

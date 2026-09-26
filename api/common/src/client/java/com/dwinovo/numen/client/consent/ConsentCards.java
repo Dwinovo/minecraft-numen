@@ -9,7 +9,7 @@ import com.dwinovo.numen.network.payload.ConsentReplyPayload;
 import com.dwinovo.numen.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.permission.ConsentAnswer;
 import com.dwinovo.numen.permission.ConsentDesk;
-import com.dwinovo.numen.platform.Services;
+import com.dwinovo.numen.network.NumenNetwork;
 
 import net.minecraft.client.resources.language.I18n;
 
@@ -218,7 +218,7 @@ public final class ConsentCards {
             said = said.substring(0, ConsentReplyPayload.MAX_NOTE_LENGTH);
         }
         ConsentAnswer.Decision decision = key == NOTE ? ConsentAnswer.Decision.DENY : DECISIONS[key];
-        Services.NETWORK.sendToServer(new ConsentReplyPayload(card.companion(), card.request.id(), decision, said));
+        NumenNetwork.sendToServer(new ConsentReplyPayload(card.companion(), card.request.id(), decision, said));
         card.chosen = key;
         card.note = said;
         card.settle();

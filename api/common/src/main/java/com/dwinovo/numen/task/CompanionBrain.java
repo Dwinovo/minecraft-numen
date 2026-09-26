@@ -222,7 +222,7 @@ final class CompanionBrain {
                     companion.getUUID(), id, rec.getToolName(), desc,
                     rec.getDeadlineGameTime() >= TaskRecord.NO_DEADLINE, elapsedMs);
         }
-        com.dwinovo.numen.platform.Services.NETWORK.sendToPlayer(owner, msg);
+        com.dwinovo.numen.network.NumenNetwork.sendToPlayer(owner, msg);
     }
 
     /** 上一刻当前任务槽是不是空的——用来只在"刚变空"那一刻清记录,不必每刻写盘。 */

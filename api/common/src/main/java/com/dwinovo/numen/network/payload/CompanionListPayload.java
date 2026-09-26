@@ -1,6 +1,7 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.network.Wire;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -36,7 +37,7 @@ public record CompanionListPayload(String worldId, List<Entry> companions) imple
         static final StreamCodec<RegistryFriendlyByteBuf, Entry> CODEC =
                 StreamCodec.composite(
                         UUIDUtil.STREAM_CODEC, Entry::uuid,
-                        ByteBufCodecs.stringUtf8(256), Entry::name,
+                        Wire.TO_CLIENT.text(), Entry::name,
                         ByteBufCodecs.VAR_LONG, Entry::respawnInMs,
                         ByteBufCodecs.BOOL, Entry::creative,
                         Entry::new);
@@ -47,7 +48,7 @@ public record CompanionListPayload(String worldId, List<Entry> companions) imple
 
     public static final StreamCodec<RegistryFriendlyByteBuf, CompanionListPayload> STREAM_CODEC =
             StreamCodec.composite(
-                    ByteBufCodecs.stringUtf8(64), CompanionListPayload::worldId,
+                    Wire.TO_CLIENT.text(), CompanionListPayload::worldId,
                     Entry.CODEC.apply(ByteBufCodecs.list(MAX)), CompanionListPayload::companions,
                     CompanionListPayload::new);
 

@@ -2,7 +2,7 @@ package com.dwinovo.numen.entity;
 
 import com.dwinovo.numen.network.payload.NumenStatePayload;
 import com.dwinovo.numen.network.payload.RequestStatePayload;
-import com.dwinovo.numen.platform.Services;
+import com.dwinovo.numen.network.NumenNetwork;
 
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
@@ -118,7 +118,7 @@ public final class CompanionStateWatch {
         boolean first = !everSent;
         everSent = true;
         NumenStatePayload payload = RequestStatePayload.snapshot(companion);
-        Services.NETWORK.sendToPlayer(owner, payload);
+        NumenNetwork.sendToPlayer(owner, payload);
         // 一次推送一行。链路是"服务端推 → 客户端缓存 → 渲染进请求",出问题时得能一眼看出
         // 断在哪一节;只记开始不记结果的日志已经害过我们一次。
         com.dwinovo.numen.Constants.LOG.info(

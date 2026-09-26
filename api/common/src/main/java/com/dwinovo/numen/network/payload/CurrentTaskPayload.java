@@ -1,14 +1,16 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.network.Wire;
+import io.netty.buffer.ByteBuf;
 import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
  * Server → Client:她此刻在做什么。<b>这是「她在做什么」的唯一真源</b>。
@@ -27,20 +29,23 @@ import java.util.UUID;
  * @param describe  这件活的人话描述,由任务记录自己给出
  * @param standing  常驻(没有终点,不会发 task_finished)
  * @param elapsedMs 已经干了多久——重放回来的活也有正确的起点,不会从推送那一刻重新计时
+ *
+ * <p>任务名与描述由任务记录给(插件的任务也在内),长短不归这个包定,用 {@link Wire#text()};描述长到整包装不下时
+ * 换成一句说明({@link #shrunk}),是哪件活、干了多久照旧。
  */
 public record CurrentTaskPayload(UUID entityUuid, String taskId, String tool,
                                  String describe, boolean standing, long elapsedMs)
-        implements CustomPacketPayload {
+        implements CustomPacketPayload, Wire.Oversized<CurrentTaskPayload> {
 
     public static final Type<CurrentTaskPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "current_task"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, CurrentTaskPayload> STREAM_CODEC =
+    public static final StreamCodec<ByteBuf, CurrentTaskPayload> STREAM_CODEC =
             StreamCodec.composite(
                     UUIDUtil.STREAM_CODEC, CurrentTaskPayload::entityUuid,
-                    ByteBufCodecs.STRING_UTF8, CurrentTaskPayload::taskId,
-                    ByteBufCodecs.STRING_UTF8, CurrentTaskPayload::tool,
-                    ByteBufCodecs.STRING_UTF8, CurrentTaskPayload::describe,
+                    Wire.TO_CLIENT.text(), CurrentTaskPayload::taskId,
+                    Wire.TO_CLIENT.text(), CurrentTaskPayload::tool,
+                    Wire.TO_CLIENT.text(), CurrentTaskPayload::describe,
                     ByteBufCodecs.BOOL, CurrentTaskPayload::standing,
                     ByteBufCodecs.VAR_LONG, CurrentTaskPayload::elapsedMs,
                     CurrentTaskPayload::new);
@@ -52,6 +57,12 @@ public record CurrentTaskPayload(UUID entityUuid, String taskId, String tool,
 
     public boolean idle() {
         return taskId.isEmpty();
+    }
+
+    @Override
+    public CurrentTaskPayload shrunk(Predicate<CurrentTaskPayload> fits, int bytes, int budget) {
+        return new CurrentTaskPayload(entityUuid, taskId, tool,
+                Wire.TO_CLIENT.tooBig("Its description", bytes) + ", so it is not shown.", standing, elapsedMs);
     }
 
     @Override
