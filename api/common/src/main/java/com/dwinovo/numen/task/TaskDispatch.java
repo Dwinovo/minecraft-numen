@@ -99,7 +99,7 @@ public final class TaskDispatch {
             return;
         }
         record.markAsync();
-        CompanionTickDispatcher.currentSlotFor(id).put(companion, record);
+        CompanionTickDispatcher.assign(companion, record);
         // 记下"她现在在做什么",服务器重启后照着重放一遍(见 TaskPersistence)。
         TaskPersistence.remember(companion, record.getToolName(), replayTool, args);
         // 内置大脑靠 task_finished 事件收尾(别轮询);外部(MCP)夺舍收不到事件

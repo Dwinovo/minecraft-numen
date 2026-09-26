@@ -35,6 +35,9 @@ public class CommonClass {
                 com.dwinovo.numen.api.CompanionEvent.DEATH,
                 com.dwinovo.numen.task.CompanionTickDispatcher::clearActiveTask);
         com.dwinovo.numen.entity.CompanionEvents.subscribe(
+                com.dwinovo.numen.api.CompanionEvent.SPAWN,
+                com.dwinovo.numen.task.CompanionTickDispatcher::onCompanionSpawned);
+        com.dwinovo.numen.entity.CompanionEvents.subscribe(
                 com.dwinovo.numen.api.CompanionEvent.REMOVE,
                 com.dwinovo.numen.task.CompanionTickDispatcher::onCompanionRemoved);
         com.dwinovo.numen.entity.CompanionEvents.subscribe(

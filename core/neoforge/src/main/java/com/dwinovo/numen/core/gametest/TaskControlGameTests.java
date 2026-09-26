@@ -384,6 +384,50 @@ public class TaskControlGameTests {
         });
     }
 
+    /**
+     * 身体刚进世界、调度器还没 tick 过的那一刻派下的长活(调用唤醒休眠的她就是这样)不是重启前留下的:它照常跑、
+     * 照常落盘,不被当成旧活重放后拒掉,也没有一条假的"没能接回来"。重启前留下的那件被它顶替,她收到一条
+     * task_finished 说明。重启用"休眠 + 把重启前落盘的那条记录放回去 + 复活"来演。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
+    public static void a_task_dispatched_before_the_first_tick_is_not_taken_for_a_left_over(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        BlockPos at = helper.absolutePos(new BlockPos(2, 2, 2));
+        NumenPlayer first = Companions.summon(server, UUID.randomUUID(), "gametest_woken", level,
+                new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
+        UUID uuid = first.getUUID();
+        ToolRun before = command(first, "gt_long linger 1000");
+        CompanionRegistry registry = CompanionRegistry.get(server);
+        CompanionRegistry.Entry recorded = registry.find(uuid);
+        Companions.dormant(server, first);
+        registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskTool(), recorded.taskArgs()));
+        EventOutbox outbox = EventOutbox.get(server);
+        outbox.forget(uuid);
+        NumenPlayer second = Companions.respawn(server, uuid);
+        helper.assertTrue(second != null, "the body was not rebuilt");
+        ToolRun woken = command(second, "gt_long linger 900");
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(before.task() != null, "the first dispatch failed: " + before.reply());
+            helper.assertTrue(woken.task() != null, "the new dispatch was refused: " + woken.reply());
+            helper.assertTrue(CompanionTickDispatcher.currentTaskFor(uuid) == woken.task(),
+                    "the new task is not the one running: " + CompanionTickDispatcher.currentTaskFor(uuid));
+            helper.assertTrue(registry.find(uuid).taskArgs().contains("gt_long linger 900"),
+                    "the new task is not on record: " + registry.find(uuid).taskArgs());
+            var entries = outbox.peek(uuid).entries();
+            helper.assertTrue(entries.stream().noneMatch(e -> e.text().contains("没能接回来")),
+                    "a task was reported as not taken back: " + entries);
+            helper.assertTrue(entries.stream().anyMatch(e -> e.type().equals("task_finished")
+                            && e.text().contains("task=\"gt_long linger\"")
+                            && e.text().contains("status=\"stopped\"")
+                            && e.text().contains("新派的活顶替了它")),
+                    "she was not told the left-over task was superseded: " + entries);
+            outbox.forget(uuid);
+            Companions.dismiss(server, second);
+        });
+    }
+
     private static String taskIn(String reply) {
         return JsonParser.parseString(reply).getAsJsonObject().getAsJsonObject("data").get("task").getAsString();
     }

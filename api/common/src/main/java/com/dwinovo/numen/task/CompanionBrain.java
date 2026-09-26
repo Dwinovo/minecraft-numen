@@ -50,8 +50,11 @@ final class CompanionBrain {
     /** 空闲姿态:没别的事做时才轮到,连身体都不算真正占用。 */
     private final List<Task> idlePoses;
 
-    /** 重启后的活接回来没有(每具身体只接一次)。 */
-    boolean restored;
+    /**
+     * 重启前留下、还没接回来的那件活:身体进世界那一刻从落盘记录接手,第一次 tick 时取走重放;那之前派下新活
+     * 就被新活顶替。null = 没有,或者已经取走。见 {@link TaskPersistence}。
+     */
+    private TaskPersistence.LeftOver leftOver;
 
     /** 这个大脑伺候的那具身体。首次 tick 时认下，以后不换。 */
     private NumenPlayer body;
@@ -98,6 +101,30 @@ final class CompanionBrain {
     /** 绑着的那具身体已经离开世界了 —— 这才是"该换大脑"。 */
     boolean boundBodyGone() {
         return body == null || body.isRemoved();
+    }
+
+    /** 身体进世界那一刻:接手重启前留下的那件活。 */
+    void inherit(TaskPersistence.LeftOver left) {
+        leftOver = left;
+    }
+
+    /** 取走重启前留下的那件活(只有一次);没有就是 null。 */
+    TaskPersistence.LeftOver takeLeftOver() {
+        TaskPersistence.LeftOver left = leftOver;
+        leftOver = null;
+        return left;
+    }
+
+    /**
+     * 往当前任务槽派一件新活——派活只有这一个入口。重启前留下、还没接回来的那件由它顶替,
+     * 和槽里原有的活被换掉一样告诉她。
+     */
+    void assign(NumenPlayer companion, TaskRecord record) {
+        TaskPersistence.LeftOver superseded = takeLeftOver();
+        if (superseded != null) {
+            TaskPersistence.superseded(companion, superseded);
+        }
+        current.put(companion, record);
     }
 
     void tick(NumenPlayer companion) {

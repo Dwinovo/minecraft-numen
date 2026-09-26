@@ -68,6 +68,23 @@ public final class CompanionTickDispatcher {
         return brainFor(companionUuid).current;
     }
 
+    /** 换掉她现在在做的事(首次使用时建脑),见 {@link CompanionBrain#assign}。 */
+    static void assign(NumenPlayer companion, TaskRecord record) {
+        brainFor(companion.getUUID()).assign(companion, record);
+    }
+
+    /**
+     * 身体进了世界:这一刻落盘记录里的那件活是重启前留下的,交给它的大脑,第一次 tick 时重放。此刻之后派下的活
+     * 会改写记录,所以只能在这一刻读(见 {@link TaskPersistence})。同一 UUID 还有另一具身体在世界里时这具是重影,
+     * 不接手,tick 时照旧跳过它。
+     */
+    public static void onCompanionSpawned(NumenPlayer body) {
+        CompanionBrain brain = brainFor(body.getUUID());
+        if (brain.boundTo(body)) {
+            brain.inherit(TaskPersistence.leftOver(body));
+        }
+    }
+
     /** 一次性心跳日志:证明排程机器的 tick 钩子真的接上了(排查"闲时链不触发"时先看它)。 */
     private static boolean heartbeatLogged;
 
@@ -144,10 +161,10 @@ public final class CompanionTickDispatcher {
                     BRAINS.remove(ap.getUUID());
                     brain = brainFor(ap.getUUID());
                 }
-                if (!brain.restored) {
-                    // 首次见到这具身体:把重启前她手上的活接回来(见 TaskPersistence)。
-                    brain.restored = true;
-                    TaskPersistence.restore(ap);
+                // 首次见到这具身体:把重启前她手上、进世界时接手的那件活接回来(见 TaskPersistence)。
+                TaskPersistence.LeftOver left = brain.takeLeftOver();
+                if (left != null) {
+                    TaskPersistence.replay(ap, left);
                 }
                 brain.tick(ap);
             }
