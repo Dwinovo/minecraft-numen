@@ -158,16 +158,27 @@ record LoopStatus(Phase phase /* null = 闲 */, Hold hold, boolean bodyTaskRunni
 任何可能改变"能不能开 run"的事发生后都只调它:入队、run 结束、停牌解开、每个客户端 tick。
 
 ```java
-void pump() {
-    if (run != null) return;                       // run 里的边界自己取队列
-    if (hold() == DEAD || hold() == EXTERNAL) return;
-    if (inbox.headIsControl()) { runControl(); return; }   // 清空/压缩:闲时执行,见 §七
-    if (hold() != null) return;                    // OWNER_STOP / BLOCKED / FAILED
-    if (!inbox.ripe(now, initiativeLevel)) return; // 急件 / 攒够条数 / 攒够时长
-    startRun();
+void pump() {                          // 一步一步走,直到没有能同步做完的事;不递归
+    if (pumping) { pumpAgain = true; return; }   // 推进那一圈里又有人要求推进:只记一笔
+    pumping = true;
+    do { pumpAgain = false; } while (step() || pumpAgain);
+    pumping = false;
+}
+
+boolean step() {                       // "下一步做什么"只有这一个判断
+    if (run != null) return false;                          // run 里的边界自己取队列
+    if (hold() == DEAD || hold() == EXTERNAL) return false;
+    if (hold() == null && inbox.ripeness(now, level).ripe()) { startRun(); return true; }
+    if (inbox.hasControl()) return runControl();            // 开不了 run 时控制条目自己执行,见 §七
+    return false;
 }
 ```
 
+- **熟度与取件看同一段队列**:`ripeness` 只数第一条控制条目("墙")之前、声明会叫醒她的条目;run 取件
+  (`takeForCall`)看的也是墙之前这一段、同一份声明。熟了就一定有叫醒她的条目,开出来的 run 一定取得到它,
+  空轮在结构上不存在。
+- **不递归**:run 在开它的那一步里就结束(端口当场回话)、清空执行完、订阅者推了新输入,再要求推进时只记
+  "再看一眼",由同一圈接着走。调用栈不随步数变深;哪天某一步又没推进任何东西,循环停下,不会越陷越深。
 - **只在真的开 run 或执行控制条目时打日志**;每 tick 调一次也不会有输出,结构上不可能刷屏。
 - `tick` 调 pump 只是为了"攒够时长"这一条;其余情况都由事件当场触发。
 - 端点检查在 `startRun` 里:不可用就进 `BLOCKED` 并通过事件提示主人,不开 run。
@@ -269,32 +280,64 @@ record Type(String id,
             Function<String,String> chatPreview,
             boolean clearedByInterrupt,
             boolean fromOwner,
-            Delivery delivery,                    // STEER | FOLLOW_UP | CONTROL
-            boolean alwaysUrgent)                 // true = 这类恒为急件;false = 发送方定
+            Delivery delivery,                    // STEER | FOLLOW_UP | CONTROL | AMBIENT
+            boolean alwaysUrgent)                 // true = 这类恒为急件;false = 发送方定。只有叫醒她的档能恒急
 ```
 
 | 类型 | delivery | alwaysUrgent | clearedByInterrupt | fromOwner |
 |---|---|---|---|---|
 | `query` 主人的话 | STEER | true | true | true |
-| `event` 世界的事 | STEER | false | false | false |
+| 世界的事(`task_finished` 等) | STEER | 各行自定 | false | false |
 | `goal` 目标续跑 | FOLLOW_UP | true | true | true |
-| `compact` 压缩 | CONTROL | true | true | true |
-| `clear` 清空 | CONTROL | true | true | true |
+| `compact` 压缩 | CONTROL | false | true | true |
+| `clear` 清空 | CONTROL | false | true | true |
+| `talk`/`left` 旁听、离场 | AMBIENT | false | false | false |
 
-- **STEER**:run 中,在下一个边界(这批工具结算后、下次调模型前)注入;闲时参与熟度判断开 run。
-- **FOLLOW_UP**:run 中只在要结束时接上;闲时同样参与熟度判断。
-- **CONTROL**:只在闲时执行(`pump` 第三行),**不受 `OWNER_STOP`/`BLOCKED`/`FAILED` 影响**
-  (按了停止再清空,立即清)。`DEAD`、`EXTERNAL` 时不执行;这两种状态下 `/compact`、`/clear`
-  直接拒绝并说明原因(`compactProblem`/`clearProblem` 读 `hold()`)。
-- **一次取光**:注入时把所有 STEER 条目合成一条 user 消息(保持现状,不照搬 pi 的一次一条)。
+### 每一档自己声明怎么投递
+
+投递档不是一个让各处去 `switch` 的名字。每一档声明两件事,队列与循环只读这两件:
+
+| 档 | `wakes` 本身是不是叫醒她的理由 | `joins` 随哪一次调模型交出去 |
+|---|---|---|
+| STEER | 是 | `ANY_CALL`:下一次调模型就带上,不管这次是谁引起的 |
+| FOLLOW_UP | 是 | `OWN_CALL`:只随自己引起的那次——别的已经要调模型时它等着,等本来要停的时候 |
+| CONTROL | 否 | `NONE`:不是给模型的文本,循环闲时自己执行;它是队列里的墙 |
+| AMBIENT | 否 | `ANY_CALL`:随下一次调模型捎带,自己不引起调用 |
+
+由这两件推出全部行为,没有第二处写:
+
+- **急件**:急件的意思是"立刻叫醒她",只有 `wakes` 的档可能急;入队与读盘都过 `EventQueue` 里同一条规则,
+  发送方怎么标都一样。不叫醒她的档登记成恒急,登记时就拒绝。
+- **闲时熟度**:只数墙之前 `wakes` 的条目——有急件即熟,否则按档位攒够条数或等够时长。
+- **回合里的边界**:工具结果等着回应时(这次调用无论如何都会发生),带上墙之前所有 `ANY_CALL` 的条目;
+  模型本来要停时,墙之前有 `wakes` 的条目才再调一次,带上 `ANY_CALL` 的,若这次只是 `OWN_CALL` 引起的就连它们一起。
+  run 开头同"本来要停":闲时开的 run 是队里的条目引起的;失败重试同"等着回应":它接着答失败那次的输入。
+- **主人开口**(解开停止/配置停牌、语音硬停):来自主人、`wakes`、`ANY_CALL` 的条目,`Type.ownerWords()` 一处。
+- **控制条目**:见下。
+- **外接模型取件**:`takeText` 取走一切不是控制条目的文本,不管排在哪;控制条目留着等内脑。
+
+加一档新投递只改 `Delivery` 一处;`DeliveryDeclarationsTest` 逐档验证队列的行为都能从声明推出来,并钉住
+实现代码里没有一处按档名判断。
+
+### 控制条目:开不了 run 的时候就执行
+
+- **墙**:第一条控制条目之前那一段是模型调用能取的全部,它和它后面的等它执行完。排在它前面、此刻能开 run
+  的话先走(主人先说一句再按 `/clear`:先答,再清);排在它后面的话进下一次 run。
+- **它的"急"不是开 run 的理由**:控制条目不叫醒她。闲时 `step` 先问墙之前能不能开 run,开不了(没熟、停着)
+  才轮到它——排在它前面、此刻开不起 run 的条目(旁听、还没攒熟的事、停牌压着的回执)不挡它,也不为它们调模型。
+  于是 `OWNER_STOP`/`BLOCKED`/`FAILED` 都挡不住它(按了停止再清空,立即清;停止后叫停身体的回执排在前面也一样)。
+  `DEAD`、`EXTERNAL` 时不执行;这两种状态下 `/compact`、`/clear` 直接拒绝并说明原因(`compactProblem`/`clearProblem` 读 `hold()`)。
+- **墙前面的条目怎么处置,由控制自己的语义定**(见 §十九)。
+- 连着按的几次算一次;批里混着清空就清空说了算。
+
+其余照旧:
+
+- **一次取光**:注入时把该带的条目合成一条 user 消息(保持现状,不照搬 pi 的一次一条)。
   顺序保持现状:世界的事按时间排进 `<events>`,主人的话垫底。
-- **不插队**:队首是 CONTROL 时,排在它前面的文本先走,它在闲时执行,排在它后面的文本进下一次 run。
-- **外接模型取件**:`takeEventsForExternal` 跳过 CONTROL 条目取文本,不再停在队首
-  (现在队首一个 `/compact` 会让外接模型永远取不到后面的话)。
 - **离线补发一次送达**:服务端 `Companions.replayOutbox` 把攒的条目**打成一个包**发给客户端,
   客户端一次 push 完再 pump。现在逐条发包,第一条急件就开 run,只带走了已到的几条。
 
-`EventQueue` 本身不变:仍然只是台账,只答熟度,不认识 run 和停牌。
+`EventQueue` 仍然只是台账:不认识 run 和停牌,只答熟度、按声明取件。
 
 ### 事件的种类就是类型表里的一行
 
@@ -437,7 +480,7 @@ void afterRun(Run r, RunEnd end) {
 - 连续失败的熔断保留(自动路径三次失败后不再自动压缩,手动不受限)。
 
 ### 长期目标
-- `GoalSteward` 订阅 `RunEnded(DONE)`:有目标、队列里没有插话、身体没有进行中的非常驻任务时,
+- `GoalSteward` 订阅 `RunEnded(DONE)`:有目标、队列里没有会叫醒她的条目、身体没有进行中的非常驻任务时,
   发起一次评估(`ModelPort`,不是 run,不带历史与工具)。
 - 评估回来:达成/打转/额度用尽 → 收工;否则推一条 `goal` 条目(FOLLOW_UP)→ pump。
 - 评估在飞期间开了新 run、或目标被换掉,结果作废。
@@ -608,7 +651,7 @@ sealed interface LoopEvent {
 
 第 4 步之后,Curios 联动插件(另有设计稿)直接用第 4 步的事件门与身体状态片段落地,不开旁路。
 
-第 0–7 步都已落地;落地时与本稿的出入记在 §十八。
+第 0–7 步都已落地;落地时与本稿的出入记在 §十八,之后一次事故带来的收件箱推进改动记在 §十九。
 
 ---
 
@@ -633,6 +676,44 @@ sealed interface LoopEvent {
   `RuntimeState`(含当前任务的镜像)在 api 客户端。工作站坐标与任务镜像也各自订阅内核,门面自己不订阅任何事件。
 - **模型端口的失败只有一个出口**:请求还没组装出来就出的错(服务商配置对不上、历史转不成线格式)同样作为
   失败交回,不会同步抛出去让内核永远等在 `MODEL`。
+
+---
+
+## 十九、收件箱推进:一次栈溢出之后(09-26)
+
+**现场。** 主人按 `/clear` 后客户端 `StackOverflowError`:`pump → startRun → turn → end → pump → …` 同步递归,
+"主动开轮:有急件(攒了 24 条…)"一毫秒一条刷了两千多遍。她的 `inbox.jsonl`:23 条 `talk`(别的同伴在群里说的话,
+最老躺了约 4.5 天)+ 末尾 1 条 `clear`。`pump` 只看队首是不是控制条目,队首是 `talk`,不执行清空;熟度见到急件
+(`clear` 当时恒为急件)要开 run;run 取件只取 STEER、run 开头再加 FOLLOW_UP,碰到控制条目就停,一条没取到;
+没有待答就 `end(DONE)`,而 `end` 同步调 `pump`——同样的判断再来一遍。
+
+**三处根因,各自的结构:**
+
+| 为什么会发生 | 同类问题怎么不再出现 |
+|---|---|
+| 捎带档加进类型表时,文档写着"回合进行中与 STEER 一样在边界注入",循环里取件的手写谓词却没跟着改——捎带条目只进不出。群聊里同伴从那天起一直听不见彼此,没有任何报错。队列测试验"捎带跟着走"用的是转发用的 `takeEntries`,没走循环真正的取件口 | 投递档自己声明 `wakes`/`joins`(§七),队列与循环只读声明,加一档只改 `Delivery` 一处。`DeliveryDeclarationsTest` 逐档验证队列行为可从声明推出,并钉住实现代码里不出现档名;循环层测试直接走 `AgentLoop` |
+| "要不要开一轮"(熟度,数全队列的急件)与"这一轮能取到什么"(取件,碰控制就停)是两个各自为政的判断,不一致时开出空轮 | 闲时只有 `step` 一个判断(§四);熟度与取件看同一段(墙之前)、同一份声明,熟了就一定取得到。控制条目不叫醒她,它的"急"不再是开 run 的理由:开不了 run 时它自己执行 |
+| `end → pump` 同步递归,一次空转就是无限递归 | `pump` 一圈一圈往下走,嵌套的推进请求只记"再看一眼";即使将来又出现别的不一致,也只会停下 |
+
+**墙前面的旁听:清空时一并清掉,整理时留着。** 斜杠命令只在私聊里用,但她只有一条上下文(`group-chat.md` §七):
+私聊里的、群里的、旁听到的都在同一条流上。躺在队里的旁听,是她已经听见、还没交给模型的那部分上下文——
+
+- `/clear` 的意思是"之前的都忘掉"。主人在私聊里按下清空,她之前在群里听见的那些话属于被清掉的那段;清完再交给她,
+  新上下文一开头就是主人刚让她忘掉的旧闲聊。所以一并清掉。
+- 要她回应的条目(还没攒熟的世界的事、停牌压着的回执或主人的话)不丢:它们要一个回应,也是她该知道的事实,清完进新的上下文。
+- `/compact` 只把历史换成摘要;排着的条目还没进历史,不属于被整理的那段,照旧留着,跟下一次调模型走。
+
+**读回那份现场。** 读盘与入队过同一条急件规则,`clear` 读回来就不急。第一次推进:墙之前只有旁听,开不了 run;
+执行清空,连带清掉 23 条旁听;不调模型,不开空轮,之后每 tick 什么也不做。
+
+**顺带收口的同类判断:**
+
+- 目标评估"队里还排着东西就先不判"改为"还排着会叫醒她的条目才不判":旁听开不起 run,控制条目执行完也不开 run,
+  等它们就是让目标停在那儿。
+- 外接取件跳过控制条目、主人开口、急件规则,都改读声明。
+- 一次 run 调不调模型由边界自己知道的原因定(工具结果等着回应、失败重试接着答、否则看队里有没有要她回应的),
+  不再从历史末尾去猜——整理留下的摘要、被切断的那句话停在末尾,看上去"待回应",却不是这次调用的原因。
+- 开 run 的日志用熟度本身算出的条数与理由,不再另拿全队列去数。
 
 ---
 
