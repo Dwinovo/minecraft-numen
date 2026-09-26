@@ -28,10 +28,15 @@ import java.util.function.UnaryOperator;
  * ({@link #list})在 JSON 里是数组,每一项照同样的规矩读。所以同一个值从哪个入口进来,被接受还是被拒、报什么错都一样——
  * 转换只有这一处。这不是把整条命令拼回字符串再解析:每个值各自按自己的类型读,参数名来自 JSON 的键。
  *
+ * <h2>一个值占多宽</h2>
+ * 多数类型是一个值({@link Span#ONE});一串值({@link #list})是空格隔开的几个,读到行尾或下一个标志为止
+ * ({@link Span#SEVERAL});余下整行({@link #text})吃掉后面的一切({@link Span#REST})。宽度决定它能放在参数表的哪儿,
+ * 这条规矩在 {@link Param} 与 {@link CommandGroup} 登记时查。
+ *
  * <h2>现有的几种</h2>
  * 按用到的才开:整数(带给模型看的范围,或不设范围的方块坐标)、小数(带范围)、布尔、一个词(编号这类)、
- * 几个固定值之一、资源 id(配方、模型)、资源 id 或 {@code #标签}、一个值(模组给的名字,可能带空格或非英文,
- * 带空格时加引号)、余下整行(自由文字),以及把一种值组合成"余下整行里的一串"的 {@link #list}。要新的,就在这里加一种,
+ * 几个固定值之一、资源 id(配方、模型)、资源 id 或 {@code #标签}、方块或坐标格、一个值(模组给的名字,可能带空格或
+ * 非英文,带空格时加引号)、余下整行(自由文字),以及把一种值组合成"一串"的 {@link #list}。要新的,就在这里加一种,
  * schema 与帮助跟着有。
  */
 public final class ArgType<T> {
@@ -48,6 +53,21 @@ public final class ArgType<T> {
             new LiteralMessage("expected a string"));
     private static final DynamicCommandExceptionType NOT_A_CHOICE = new DynamicCommandExceptionType(
             choices -> new LiteralMessage("expected one of " + choices));
+    private static final SimpleCommandExceptionType NO_CELL = new SimpleCommandExceptionType(
+            new LiteralMessage("expected a cell x,y,z or a box x1,y1,z1..x2,y2,z2, in whole numbers"));
+
+    /** 标签的记号:原版标签文件里引用别的标签就这么写,{@code #minecraft:logs}。 */
+    private static final char TAG = '#';
+    /** 坐标格三个数之间的分隔。 */
+    private static final char CELL_SEPARATOR = ',';
+    /** 坐标盒两角之间的分隔。 */
+    private static final String BOX_SEPARATOR = "..";
+
+    /** 一个值在命令行上占多宽:一个值、空格隔开的几个(到行尾或下一个标志为止)、余下整行。 */
+    enum Span { ONE, SEVERAL, REST }
+
+    /** 一串值({@link #list})的一项在 JSON 数组里是什么;不能做一串值里一项的类型是 NONE。 */
+    private enum Item { STRING, INTEGER, NONE }
 
     /** 往 schema 里写这一个字段:{@link Schema.Builder} 是工具 schema 的唯一写法,这里只挑用哪个方法。 */
     @FunctionalInterface
@@ -64,21 +84,23 @@ public final class ArgType<T> {
     private final ArgumentType<T> brigadier;
     private final String kind;
     private final String hint;
-    private final boolean restOfLine;
+    private final Span span;
+    private final Item item;
     private final SchemaField schema;
     private final FromJson<T> json;
 
-    /** JSON 值是一个字面值,文字原样就是它在命令行上的样子。 */
-    private ArgType(ArgumentType<T> brigadier, String kind, String hint, boolean restOfLine, SchemaField schema) {
-        this(brigadier, kind, hint, restOfLine, schema, literal(brigadier, hint, UnaryOperator.identity()));
+    /** 一个值;JSON 值是一个字面值,文字原样就是它在命令行上的样子。 */
+    private ArgType(ArgumentType<T> brigadier, String kind, String hint, Item item, SchemaField schema) {
+        this(brigadier, kind, hint, Span.ONE, item, schema, literal(brigadier, hint, UnaryOperator.identity()));
     }
 
-    private ArgType(ArgumentType<T> brigadier, String kind, String hint, boolean restOfLine, SchemaField schema,
+    private ArgType(ArgumentType<T> brigadier, String kind, String hint, Span span, Item item, SchemaField schema,
                     FromJson<T> json) {
         this.brigadier = brigadier;
         this.kind = kind;
         this.hint = hint;
-        this.restOfLine = restOfLine;
+        this.span = span;
+        this.item = item;
         this.schema = schema;
         this.json = json;
     }
@@ -108,7 +130,7 @@ public final class ArgType<T> {
      * 和实际定的)——若在这里按 Brigadier 的范围拒掉,处理函数就没机会把话说清楚。
      */
     public static ArgType<Integer> integer(int min, int max) {
-        return new ArgType<>(IntegerArgumentType.integer(), "integer", "integer " + min + "-" + max, false,
+        return new ArgType<>(IntegerArgumentType.integer(), "integer", "integer " + min + "-" + max, Item.INTEGER,
                 (s, name, desc, required) -> {
                     if (required) s.integer(name, desc, min, max);
                     else s.optionalInteger(name, desc, min, max);
@@ -117,7 +139,7 @@ public final class ArgType<T> {
 
     /** 不设范围的整数:方块坐标这类,哪个值都合法,范围没什么可告诉模型的。 */
     public static ArgType<Integer> integer() {
-        return new ArgType<>(IntegerArgumentType.integer(), "integer", "integer", false,
+        return new ArgType<>(IntegerArgumentType.integer(), "integer", "integer", Item.INTEGER,
                 (s, name, desc, required) -> {
                     if (required) s.integer(name, desc);
                     else s.optionalInteger(name, desc);
@@ -126,7 +148,7 @@ public final class ArgType<T> {
 
     /** 布尔:{@code true} 或 {@code false}。当标志时也要写值({@code --have_only true})。 */
     public static ArgType<Boolean> bool() {
-        return new ArgType<>(BoolArgumentType.bool(), "boolean", "true or false", false,
+        return new ArgType<>(BoolArgumentType.bool(), "boolean", "true or false", Item.NONE,
                 (s, name, desc, required) -> {
                     if (required) s.bool(name, desc);
                     else s.optionalBool(name, desc);
@@ -135,7 +157,7 @@ public final class ArgType<T> {
 
     /** 一个词:字母、数字与 {@code _-.+},不带空格。编号(t42、tm3)这类。 */
     public static ArgType<String> word() {
-        return new ArgType<>(StringArgumentType.word(), "word", "word", false, ArgType::stringField);
+        return new ArgType<>(StringArgumentType.word(), "word", "word", Item.STRING, ArgType::stringField);
     }
 
     /**
@@ -143,7 +165,8 @@ public final class ArgType<T> {
      * 自己的规则({@code a-z0-9_.-} 加路径里的 {@code /}),不另写一份;不写命名空间就是 {@code minecraft:},和原版指令一样。
      */
     public static ArgType<ResourceLocation> id() {
-        return new ArgType<>(ArgType::readId, "id", "id, e.g. minecraft:oak_log", false, ArgType::stringField);
+        return new ArgType<>(ArgType::readId, "id", "id, e.g. minecraft:oak_log", Item.STRING,
+                ArgType::stringField);
     }
 
     /**
@@ -154,7 +177,8 @@ public final class ArgType<T> {
     public static ArgType<String> string() {
         ArgumentType<String> read = ArgType::readString;
         String hint = "string, quote it if it has spaces";
-        return new ArgType<>(read, "string", hint, false, ArgType::stringField, literal(read, hint, ArgType::quoted));
+        return new ArgType<>(read, "string", hint, Span.ONE, Item.STRING, ArgType::stringField,
+                literal(read, hint, ArgType::quoted));
     }
 
     /** 加上双引号,里面的反斜杠与双引号转义——{@link StringReader#readQuotedString} 读回来就是原文。 */
@@ -198,8 +222,10 @@ public final class ArgType<T> {
      * 也不能当可选标志——这两条在 {@link Param} 与 {@link CommandGroup} 里登记时就查。
      */
     public static ArgType<String> text() {
-        return new ArgType<>(StringArgumentType.greedyString(), "text", "text, the rest of the line", true,
-                ArgType::stringField);
+        StringArgumentType read = StringArgumentType.greedyString();
+        String hint = "text, the rest of the line";
+        return new ArgType<>(read, "text", hint, Span.REST, Item.NONE, ArgType::stringField,
+                literal(read, hint, UnaryOperator.identity()));
     }
 
     /**
@@ -207,7 +233,7 @@ public final class ArgType<T> {
      * 是动作自己的语义。
      */
     public static ArgType<Double> number(double min, double max) {
-        return new ArgType<>(DoubleArgumentType.doubleArg(), "number", "number " + plain(min) + "-" + plain(max), false,
+        return new ArgType<>(DoubleArgumentType.doubleArg(), "number", "number " + plain(min) + "-" + plain(max), Item.NONE,
                 (s, name, desc, required) -> {
                     if (required) s.number(name, desc, min, max);
                     else s.optionalNumber(name, desc, min, max);
@@ -234,7 +260,7 @@ public final class ArgType<T> {
                 throw NOT_A_CHOICE.createWithContext(reader, listed);
             }
             return value;
-        }, String.join("|", allowed), "one of " + listed, false,
+        }, String.join("|", allowed), "one of " + listed, Item.STRING,
                 (s, name, desc, required) -> {
                     if (required) s.enumStr(name, desc, choices);
                     else s.optionalEnum(name, desc, choices);
@@ -249,12 +275,12 @@ public final class ArgType<T> {
      */
     public static ArgType<String> idOrTag() {
         return new ArgType<>(ArgType::readIdOrTag, "id", "id or #tag, e.g. minecraft:oak_log or #minecraft:logs",
-                false, ArgType::stringField);
+                Item.STRING, ArgType::stringField);
     }
 
     private static String readIdOrTag(StringReader reader) throws CommandSyntaxException {
         int start = reader.getCursor();
-        if (reader.canRead() && reader.peek() == '#') {
+        if (reader.canRead() && reader.peek() == TAG) {
             reader.skip();
         }
         int idStart = reader.getCursor();
@@ -274,37 +300,97 @@ public final class ArgType<T> {
     }
 
     /**
-     * 一串同一种的值:命令行上是余下整行里一个空格隔开的一个个值({@code iron_ore deepslate_iron_ore}),每个都按
-     * {@code element} 的读法读;快捷工具里是一个 JSON 数组,每一项按 {@code element} 读 JSON 值的规矩读。至少一个。
-     * 它吃掉余下整行,和 {@link #text()} 一样只能是动作的最后一个必填参数。
+     * 一种方块({@link #idOrTag} 的写法),或一片坐标:一格 {@code x,y,z},或一个盒子 {@code x1,y1,z1..x2,y2,z2}
+     * (两角任意顺序)。数字或负号打头的是坐标。读出来是写下的原文,是方块还是坐标由用它的动作去认。
      */
-    public static ArgType<List<String>> list(ArgType<String> element) {
-        if (element.restOfLine) {
-            throw new IllegalArgumentException("一串值里的每一个不能自己吃掉余下整行");
+    public static ArgType<String> blockOrCells() {
+        return new ArgType<>(ArgType::readBlockOrCells, "block|cell",
+                "block id, #tag, cell x,y,z or box x1,y1,z1..x2,y2,z2", Item.STRING, ArgType::stringField);
+    }
+
+    private static String readBlockOrCells(StringReader reader) throws CommandSyntaxException {
+        if (!reader.canRead() || !(Character.isDigit(reader.peek()) || reader.peek() == '-')) {
+            return readIdOrTag(reader);
+        }
+        int start = reader.getCursor();
+        readCell(reader);
+        if (reader.getString().startsWith(BOX_SEPARATOR, reader.getCursor())) {
+            reader.setCursor(reader.getCursor() + BOX_SEPARATOR.length());
+            readCell(reader);
+        }
+        return reader.getString().substring(start, reader.getCursor());
+    }
+
+    /** {@code x,y,z}:三个整数,逗号隔开。 */
+    private static void readCell(StringReader reader) throws CommandSyntaxException {
+        readCoordinate(reader);
+        for (int i = 0; i < 2; i++) {
+            if (!reader.canRead() || reader.peek() != CELL_SEPARATOR) {
+                throw NO_CELL.createWithContext(reader);
+            }
+            reader.skip();
+            readCoordinate(reader);
+        }
+    }
+
+    /**
+     * 一个坐标:可带负号的一串数字。不用 Brigadier 的 {@code readInt}——它把 {@code .} 也当数字的一部分,
+     * 会把盒子两角之间的 {@code ..} 吞进前一个数。
+     */
+    private static void readCoordinate(StringReader reader) throws CommandSyntaxException {
+        int start = reader.getCursor();
+        if (reader.canRead() && reader.peek() == '-') {
+            reader.skip();
+        }
+        int firstDigit = reader.getCursor();
+        while (reader.canRead() && Character.isDigit(reader.peek())) {
+            reader.skip();
+        }
+        if (reader.getCursor() == firstDigit) {
+            reader.setCursor(start);
+            throw NO_CELL.createWithContext(reader);
+        }
+    }
+
+    /**
+     * 一串同一种的值:命令行上是空格隔开的一个个值({@code iron_ore deepslate_iron_ore}),每个都按 {@code element} 的读法读,
+     * 读到行尾或下一个标志({@code --} 打头)为止,所以它既能是动作的最后一个必填参数,也能是一个标志
+     * ({@code --block_ids iron_ore deepslate_iron_ore --count 10});快捷工具里是一个 JSON 数组,每一项按 {@code element}
+     * 读 JSON 值的规矩读。至少一个。一项只能是一个值:整数、词、id、id 或标签、方块或坐标格、几个固定值之一、一个值。
+     */
+    public static <T> ArgType<List<T>> list(ArgType<T> element) {
+        if (element.item == Item.NONE) {
+            throw new IllegalArgumentException(element.kind + " 不能做一串值里的一项:它不止一个值,或 JSON 数组里没有对应的项");
         }
         String hint = element.hint + "; one or more, separated by spaces";
-        return new ArgType<List<String>>(reader -> {
-            List<String> values = new ArrayList<>();
+        return new ArgType<List<T>>(reader -> {
+            List<T> values = new ArrayList<>();
             values.add(element.read(reader));
             while (reader.canRead()) {
                 if (reader.peek() != ' ') {
                     throw CommandSyntaxException.BUILT_IN_EXCEPTIONS.dispatcherExpectedArgumentSeparator()
                             .createWithContext(reader);
                 }
+                if (reader.getString().startsWith(FlagsArgument.PREFIX, reader.getCursor() + 1)) {
+                    break;
+                }
                 reader.skip();
                 values.add(element.read(reader));
             }
             return List.copyOf(values);
-        }, element.kind + "...", hint, true,
+        }, element.kind + "...", hint, Span.SEVERAL, Item.NONE,
                 (s, name, desc, required) -> {
-                    if (required) s.stringArray(name, desc, 1);
+                    boolean integers = element.item == Item.INTEGER;
+                    if (required && integers) s.intArray(name, desc, 1, 0);
+                    else if (required) s.stringArray(name, desc, 1);
+                    else if (integers) s.optionalIntArray(name, desc, 0, 0);
                     else s.optionalStringArray(name, desc);
                 },
                 value -> {
                     if (value == null || !value.isJsonArray() || value.getAsJsonArray().isEmpty()) {
                         throw NOT_A_VALUE.create("a list: " + hint);
                     }
-                    List<String> values = new ArrayList<>();
+                    List<T> values = new ArrayList<>();
                     for (JsonElement item : value.getAsJsonArray()) {
                         values.add(element.fromJson(item));
                     }
@@ -342,9 +428,9 @@ public final class ArgType<T> {
         return hint;
     }
 
-    /** 是否吃掉余下整行。 */
-    boolean restOfLine() {
-        return restOfLine;
+    /** 一个值在命令行上占多宽。 */
+    Span span() {
+        return span;
     }
 
     void addTo(Schema.Builder builder, String name, String description, boolean required) {

@@ -48,7 +48,7 @@ public record Param<T>(String name, ArgType<T> type, String description, boolean
         if (description == null || description.isBlank()) {
             throw new IllegalArgumentException("参数 " + name + " 没写说明——帮助和 schema 都从它来");
         }
-        if (!required && type.restOfLine()) {
+        if (!required && type.span() == ArgType.Span.REST) {
             throw new IllegalArgumentException("参数 " + name + " 吃掉余下整行,不能当可选标志");
         }
         if (values != null && values.isBlank()) {
@@ -101,11 +101,11 @@ public record Param<T>(String name, ArgType<T> type, String description, boolean
         return sb.toString();
     }
 
-    /** 命令行上的样子:位置参数 {@code <name>},吃整行的 {@code <name...>},标志 {@code [--name <类型>]}。 */
+    /** 命令行上的样子:位置参数 {@code <name>},一串值或吃整行的 {@code <name...>},标志 {@code [--name <类型>]}。 */
     String usage() {
         if (!required) {
             return "[--" + name + " <" + type.kind() + ">]";
         }
-        return type.restOfLine() ? "<" + name + "...>" : "<" + name + ">";
+        return type.span() == ArgType.Span.ONE ? "<" + name + ">" : "<" + name + "...>";
     }
 }

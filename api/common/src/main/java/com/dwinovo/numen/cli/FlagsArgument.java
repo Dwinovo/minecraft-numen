@@ -30,6 +30,8 @@ final class FlagsArgument implements ArgumentType<Map<String, Object>> {
 
     /** 标志尾巴那一格在树上的名字。参数名只能是小写字母开头(见 {@link Param}),撞不上它。 */
     static final String NODE = "--flags";
+    /** 一个标志的打头:{@code --name}。一串值({@link ArgType#list})读到它就停。 */
+    static final String PREFIX = "--";
 
     private static final DynamicCommandExceptionType EXPECTED_FLAG = new DynamicCommandExceptionType(
             usage -> new LiteralMessage("expected a flag (" + usage + ")"));
@@ -55,11 +57,10 @@ final class FlagsArgument implements ArgumentType<Map<String, Object>> {
         Map<String, Object> out = new LinkedHashMap<>();
         while (reader.canRead()) {
             int start = reader.getCursor();
-            if (!reader.canRead(2) || reader.peek() != '-' || reader.peek(1) != '-') {
+            if (!reader.getString().startsWith(PREFIX, reader.getCursor())) {
                 throw EXPECTED_FLAG.createWithContext(reader, usage());
             }
-            reader.skip();
-            reader.skip();
+            reader.setCursor(reader.getCursor() + PREFIX.length());
             String name = reader.readUnquotedString();
             Param<?> param = flags.get(name);
             if (param == null) {

@@ -70,8 +70,8 @@ public final class CommandGroup {
     }
 
     /**
-     * 参数表的两条硬规矩:名字不重复;吃整行的参数只能是最后一个必填参数,而且这个动作不能再有标志——
-     * 它会把后面的一切都当成自己的值。
+     * 参数表的硬规矩:名字不重复;吃整行的参数只能是最后一个必填参数,而且这个动作不能再有标志——它会把后面的一切都当成
+     * 自己的值;一串值当位置参数时只能是最后一个必填参数——它读到行尾或下一个标志,后面的位置参数会被它吞掉。
      */
     private static void checkParams(String path, List<Param<?>> params) {
         Set<String> seen = new HashSet<>();
@@ -80,12 +80,14 @@ public final class CommandGroup {
             if (!seen.add(p.name())) {
                 throw new IllegalArgumentException(path + " 的参数 " + p.name() + " 写了两次");
             }
-            if (p.type().restOfLine()) {
-                boolean last = required.get(required.size() - 1) == p;
-                if (!last || required.size() != params.size()) {
-                    throw new IllegalArgumentException(path + " 的参数 " + p.name()
-                            + " 吃掉余下整行,只能是最后一个参数,且这个动作不能再有标志");
-                }
+            boolean last = !required.isEmpty() && required.get(required.size() - 1) == p;
+            if (p.type().span() == ArgType.Span.REST && (!last || required.size() != params.size())) {
+                throw new IllegalArgumentException(path + " 的参数 " + p.name()
+                        + " 吃掉余下整行,只能是最后一个参数,且这个动作不能再有标志");
+            }
+            if (p.type().span() == ArgType.Span.SEVERAL && p.required() && !last) {
+                throw new IllegalArgumentException(path + " 的参数 " + p.name()
+                        + " 是一串值,当位置参数只能是最后一个必填参数");
             }
         }
     }
