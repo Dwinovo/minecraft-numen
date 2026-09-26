@@ -23,7 +23,6 @@ public final class RuleSet {
      *   <li>放不危险的东西,或者离玩家的东西远的危险物;</li>
      *   <li>打没主人、没名字、不是村民的(敌对生物与野生动物);</li>
      *   <li>开关门、开容器、按按钮;对没主人的实体右键;从容器拿东西;</li>
-     *   <li>执行 Numen 自己的指令——它们里面的挖、放、打各自按动作裁决,外层不再问一遍;</li>
      *   <li>执行只读或只说话的指令:帮助、在线名单、动作消息、私信、队伍消息、种子、随机数。别名随根名认
      *       ({@code tell}、{@code w} 归 {@code msg},{@code tm} 归 {@code teammsg}),见 {@link Action#command}。</li>
      * </ul>
@@ -38,7 +37,6 @@ public final class RuleSet {
             "use_block(*)",
             "use_entity(!owned)",
             "take(*)",
-            "command(numen)",
             "command(help)",
             "command(list)",
             "command(me)",

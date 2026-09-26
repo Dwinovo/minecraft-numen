@@ -114,10 +114,11 @@ command(msg)           指令按根名写
 - 根名在服务器的指令树上认:与她打的那个根同指一个节点的根都算它的别名(`tp` 与 `teleport`,`msg` 与
   `tell`、`w`),写哪一个都盖得住其余的——`deny command(tp)` 不会被 `teleport` 绕过去。
 - 只认根:`execute … run setblock …` 的根是 `execute`,由 `command(execute)` 那几行裁决。
-- 出厂 allow 表写了几行指令,和别的出厂行一样是数据:`command(numen)` 放行 Numen 自己的命令,它们里面的挖、放、
-  打各自按动作裁决,外层不再问一遍;`command(help)`、`command(list)`、`command(me)`、`command(msg)`、
+- 出厂 allow 表写了几行指令,和别的出厂行一样是数据:`command(help)`、`command(list)`、`command(me)`、`command(msg)`、
   `command(teammsg)`、`command(seed)`、`command(random)` 放行只读或只说话的指令,别名随根名认(`tell`、`w` 归
   `msg`,`tm` 归 `teammsg`)。代码里没有另一份"安全指令"名单;没有一行规则说到的指令一律问。
+- `command` 只说第 0 层(行首 `/` 的一行,MC 的指令树)。Numen 给她的第 1 层命令(`docs/cli.md`)不在 MC 的指令树上,
+  整行不送权限层;它们里面身体对世界的挖、放、打各自按动作裁决。
 - 主人层照旧先于出厂层:`deny command(msg)` 让她连 `tell`、`w` 也发不出去,`ask command(help)` 让查帮助也要问;
   "以后都允许"写进的是主人层,出厂层不变。
 - 能不能执行是服务器的事(她的权限等级,她不是 OP 就没有 `/give`);权限层只在服务器让她执行的指令上再问
@@ -128,11 +129,11 @@ command(msg)           指令按根名写
 | 表 | 规则 |
 |---|---|
 | deny | 空 |
-| allow | `break(!placed & !block_entity & !#minecraft:beds & !#minecraft:doors & !#minecraft:trapdoors & !#minecraft:fence_gates)`、`place(!hazard_item)`、`place(hazard_item & !near_placed)`、`attack(!owned & !named & !villager)`、`use_block(*)`、`use_entity(!owned)`、`take(*)`、`command(numen)`、`command(help)`、`command(list)`、`command(me)`、`command(msg)`、`command(teammsg)`、`command(seed)`、`command(random)` |
+| allow | `break(!placed & !block_entity & !#minecraft:beds & !#minecraft:doors & !#minecraft:trapdoors & !#minecraft:fence_gates)`、`place(!hazard_item)`、`place(hazard_item & !near_placed)`、`attack(!owned & !named & !villager)`、`use_block(*)`、`use_entity(!owned)`、`take(*)`、`command(help)`、`command(list)`、`command(me)`、`command(msg)`、`command(teammsg)`、`command(seed)`、`command(random)` |
 | ask | `break(block_entity & contents)`、`break(placed)`、`break(block_entity)`、`break(#minecraft:beds)`、`break(#minecraft:doors)`、`break(#minecraft:trapdoors)`、`break(#minecraft:fence_gates)`、`attack(owned)`、`attack(named)`、`attack(villager)`、`drop(*)`、`place(hazard_item & near_placed)` |
 
 allow 行把日常动作一行一行写明:自然方块、不危险的放置、敌对生物与野生动物、开关门开容器、
-对没主人的实体右键、从容器拿东西、执行 Numen 自己的与只读只说话的指令。ask 表里同一个动作命中几行时第一行作数,所以更具体的在前
+对没主人的实体右键、从容器拿东西、执行只读只说话的指令。ask 表里同一个动作命中几行时第一行作数,所以更具体的在前
 (装着东西的容器先于玩家放的)。从主人的容器拿东西默认放行:她的设计就是用主人的工作台熔炉
 箱子,相当于 Claude Code 读项目文件;主人想管就把 `take(*)` 改窄、加一条 `take(placed)` 的 ask。
 
@@ -154,7 +155,7 @@ allow 行把日常动作一行一行写明:自然方块、不危险的放置、�
 | 档 | 动作 | 对应 Claude Code |
 |---|---|---|
 | 从不问 | scan、look_around、inspect、status、lookup_recipe、plan_route | Read、Grep、Glob |
-| 出厂 allow 行 | 挖自然方块、砍野树、用自己的方块搭路盖房、打敌对生物、宰野生动物、开关门与栅栏门、开容器、拿东西、执行 Numen 自己的与只读只说话的指令 | 工作目录内的编辑 |
+| 出厂 allow 行 | 挖自然方块、砍野树、用自己的方块搭路盖房、打敌对生物、宰野生动物、开关门与栅栏门、开容器、拿东西、执行只读只说话的指令 | 工作目录内的编辑 |
 | 问 | 挖玩家放的、挖带方块实体的、打有主人或有名字的、打村民、丢物品、在别人的东西旁放危险物,以及没有任何一行规则说到的动作 | `rm -rf`、`git push`、网络 |
 | 拒 | 主人写的 deny 行、observe 模式 | deny 规则 |
 
@@ -186,7 +187,7 @@ allow 行把日常动作一行一行写明:自然方块、不危险的放置、�
 | interact_at、interact_entity | 按下去之前送准星落到的动作:左键是挖、打,右键是 `use_block`、`use_entity` |
 | transfer | 逐步执行,把东西从容器里拿进背包的那一步动手前送 `take`(容器是右键打开界面的那一格);她自己背包的合成格与没有方块实体的工作台类界面不算 |
 | drop_items | 每次送 `drop`,出厂是问 |
-| `command` 工具、快捷工具、`/numen drive` | 服务端唯一的执行入口(`CommandRunner`)执行前送 `command(整行)`,快捷工具送它作为 alias 的那一行;出厂 allow 行放行的(`numen`、`help`、`msg` 等)不问,没有规则说到的每条都问,等答复时这次调用悬着、不占任务槽。服务器不让她用、写错了的不送,当场失败 |
+| `command` 工具、`/numen drive` | 行首 `/` 的一行(第 0 层):服务端唯一的执行入口(`CommandRunner`)执行前送 `command(整行)`;出厂 allow 行放行的(`help`、`msg` 等)不问,没有规则说到的每条都问,等答复时这次调用悬着、不占任务槽。服务器不让她用、写错了的不送,当场失败。第 1 层的命令与它提升成的快捷工具不送整行,里面的身体动作各按动作裁决 |
 
 **允许的作用范围。** 对所有工具通用:本任务内,同一行规则问出来的同一种方块(或同一只实体)
 都算已授权,不再重复问——挖一堆主人放的原木只弹一次卡;换一种方块、另一只实体另问。授权只把

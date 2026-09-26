@@ -111,7 +111,7 @@ class GateTest {
                         + " & !#minecraft:trapdoors & !#minecraft:fence_gates)",
                 "place(!hazard_item)", "place(hazard_item & !near_placed)",
                 "attack(!owned & !named & !villager)", "use_block(*)", "use_entity(!owned)", "take(*)",
-                "command(numen)", "command(help)", "command(list)", "command(me)", "command(msg)",
+                "command(help)", "command(list)", "command(me)", "command(msg)",
                 "command(teammsg)", "command(seed)", "command(random)"),
                 RuleSet.FACTORY_ALLOW);
         assertTrue(RuleSet.factory().deny().isEmpty(), "出厂不写死任何拒绝");
