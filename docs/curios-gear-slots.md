@@ -4,7 +4,7 @@
 
 ## 一、要解决的问题
 
-1. **核心 `equip_item` 假成功**。`EquipCompanionTask.onStart` 的流程是:
+1. **核心 `gear wear` 假成功**。`EquipCompanionTask.onStart` 的流程是:
    - 先 `player.gameMode.useItem(...)`(右键)。Curios 饰品默认不响应右键;只挂了 `curios:*` 标签、没有 `ICurio` 能力的饰品,右键永远戴不上。
    - 右键没穿上,就退回 `resolveSlot`,等于 `getEquipmentSlotForItem`。非盔甲一律得到 `MAINHAND`。
    - 最后回报 "holding … in main hand",算成功。
@@ -29,7 +29,7 @@
 
 ```java
 /** 一处能把东西穿戴在身上的来源:原版四件甲是一处,Curios 饰品栏是一处。
- *  equip_item 的穿、脱、自动选位,<worn> 状态,都只经这里。
+ *  gear wear / gear remove 的穿、脱、自动选位,<worn> 状态,都只经这里。
  *  来源只陈述游戏规则,不做许可裁决(穿戴不改世界、不伤实体)。只在服务端主线程调用。 */
 public interface GearSource {
     /** 这具身体此刻有的位置,顺序固定(自动选位按它)。句柄只在本次调用内有效。 */
@@ -52,7 +52,7 @@ public interface GearSlot {
 - `NumenApi.registerGear(GearSource)` 由 `NumenPlugins` 实现,内部用 `CopyOnWriteArrayList`。登记顺序就是自动选位的优先级。
 - 引擎内部入口是 `gearSlots(body)` 和 `gearKinds(body, stack)`。
 - 服务端要用,所以插件要在 `register` 块里直接调,不能放进 `onClient`。
-- `kindsOf` 是必需的:没有它,自动模式只能二选一——要么"没位置就拿手上"(就是现在的 bug),要么"没位置就失败"(`equip_item(stone_pickaxe)` 就不能用了)。
+- `kindsOf` 是必需的:没有它,自动模式只能二选一——要么"没位置就拿手上"(就是现在的 bug),要么"没位置就失败"(`gear wear stone_pickaxe` 就不能用了)。
 
 ## 四、原版提供者(core)
 

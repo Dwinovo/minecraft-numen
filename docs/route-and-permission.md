@@ -88,7 +88,7 @@ build 天然 `natural`,mine 默认 `any`(模型给 mine 的 `spec` 与 goto 同�
 
 ## 五、两个工具
 
-**只读的规划查询(`plan_route`)。** 收 goto 的坐标目标和规格,只搜不走,回执列候选
+**只读的规划查询(`move route`)。** 收 goto 的坐标目标和规格,只搜不走,回执列候选
 路线,每条带 id(r1、r2……)、长度、预算账;id 记进这个同伴的路线簿(`RouteBook`,挂在
 身体上,身体没了簿子跟着没,上限是引擎参数)。id 的数字取自同伴存在自己 `.dat` 里的编号
 (`NumenPlayer.nextIdNumber`,`scan_blocks` 的团编号共用),休眠、复活、重启之后接着往上数——模型的
@@ -113,7 +113,7 @@ build 天然 `natural`,mine 默认 `any`(模型给 mine 的 `spec` 与 goto 同�
 `alter_budget`;JSON 到规格的翻译只在 `RouteSpecJson` 一处。按方块种类的禁令
 (`RouteSpec.BlockBans`)与按位置的表互补:位置表回答"这一格",种类表回答"这一种"。
 
-`follow` 没有 `may_alter_terrain`,跟随不改地形;跟不上时回执同样列候选,模型先 goto 一条
+`move follow` 没有 `may_alter_terrain`,跟随不改地形;跟不上时回执同样列候选,模型先 goto 一条
 开路再接着跟。
 
 ## 六、与权限层的接口
@@ -144,7 +144,7 @@ build 天然 `natural`,mine 默认 `any`(模型给 mine 的 `spec` 与 goto 同�
 
 1. 路线规格与账单:规格对象替换 `TerrainPermit` 穿过 `ContextFactory` 进成本模型;
    `TerrainBill` 扩成预算账。删 `may_alter_terrain`。此步之后行为与今天等价。(已落地)
-2. 规划查询工具:探针一般化成 `RoutePlanner`,备选用惩罚法;`plan_route` 工具;goto 接收
+2. 规划查询工具:探针一般化成 `RoutePlanner`,备选用惩罚法;`move route` 命令;goto 接收
    `spec` 与路线 id,路线簿挂在身体上;`alter_budget` 真判。(已落地,09-14 真机验过)
 3. 权限层接入:见 `permission-layer.md` §十。
 

@@ -32,7 +32,7 @@ It can also get better at things. Write a Markdown file to teach it a new way to
 ```
 You:    Go get me a stack of iron
 Numen:  On it. Heading underground.
-        ▸ 4 steps · locate_biome · move_to · auto_mine · collect_items   ✔
+        ▸ 4 steps · locate biome · goto · mine · work collect   ✔
 Numen:  Got 64 raw iron — want me to smelt it?
 ```
 
@@ -69,7 +69,7 @@ Numen:  Got 64 raw iron — want me to smelt it?
 Close to thirty tools make up its hands and eyes right now:
 
 - ⛏️ **Work** — mining, logging, gathering, building, precise placement and breaking, crafting from recipes, smelting in furnaces, and sorting loot into chests.
-- 🧭 **Movement** — a server-side pathfinding engine that jumps, swims, climbs, opens doors, parkours and pilots boats, and can bridge gaps, pillar up, tunnel through and staircase down. Walking never alters the world by default — walls, floors, other people's builds and the landscape stay as they were; when there is no clean route it lists priced candidate routes (what each would break or place) and only proceeds once the model picks one (`goto route:<id>`) or another destination; `plan_route` prices routes without walking them. Every result reports what was actually broken or placed en route.
+- 🧭 **Movement** — a server-side pathfinding engine that jumps, swims, climbs, opens doors, parkours and pilots boats, and can bridge gaps, pillar up, tunnel through and staircase down. Walking never alters the world by default — walls, floors, other people's builds and the landscape stay as they were; when there is no clean route it lists priced candidate routes (what each would break or place) and only proceeds once the model picks one (`move goto --route r1`) or another destination; `move route` prices routes without walking them. Every result reports what was actually broken or placed en route.
 - ⚔️ **Combat** — vanilla player melee and archery, with real cooldowns and real crits; it eats when hurt and swims up when it's about to drown.
 - 🔭 **Perception** — scan blocks, scan entities, query state, look up recipes, locate structures and biomes, and read what's inside a machine without opening its GUI.
 - 🗣️ **Voice** — speech in, speech out, plus a persona, a skin, and a voice you pick yourself.
@@ -141,7 +141,7 @@ Building it yourself: clone the repo and run `./gradlew :core:fabric:build` (or 
 
 ## Roadmap
 
-- **Adapting the big mods.** Create, AE2, Mekanism and other tech mods that are universes unto themselves have to be adapted one at a time — [a plugin plus skills](#extending-it), one workflow per mod. `inspect_block_storage` is the first brick.
+- **Adapting the big mods.** Create, AE2, Mekanism and other tech mods that are universes unto themselves have to be adapted one at a time — [a plugin plus skills](#extending-it), one workflow per mod. `scan storage` is the first brick.
 - **Growing a skill library.** Make "teach the AI a new mod" as simple as writing one Markdown file, built and shared by the community.
 - **Playing more like a veteran.** Deeper world memory and longer-horizon planning.
 

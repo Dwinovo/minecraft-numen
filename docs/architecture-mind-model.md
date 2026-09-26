@@ -128,7 +128,7 @@ interface Reflex {
 
 ## 六、异步任务与事件登记处
 
-长跑任务(move_to / auto_mine / attack / collect_items / wait)受理即回执:
+长跑任务(goto、mine、fight attack、work collect、build at 这类)受理即回执:
 工具结果只承载 `{task_id, async:true}`,身体在后台跑,大脑当场自由——
 干活期间照常聊天、感知、规划。
 
@@ -236,7 +236,7 @@ deny 空;allow 为 `break(!placed & !block_entity & !#minecraft:beds & !#minecra
 **各内容的接入点。** 内容只提出动作(`AbstractCompanionTask.permit`),判与问归权限层。mine 选目标
 不看权限,规格 `alter=any`,按"走过去 + 挖它"的同一套定价挑,动手前把挖掘交给权限层;goto、follow
 的导航采纳每段路之前,`alter=any` 的路把要问的格打包送一次;build 施工前整批裁决,要问的一张卡,
-拒绝的格跳过并交代;attack 开打前送目标,自卫换目标时再送;interact_at 左键动手前送;drop_items
+拒绝的格跳过并交代;fight attack 开打前送目标,自卫换目标时再送;use block、use entity 左键动手前送;inv drop
 每次送。允许的作用范围:本任务内,同一行规则问出来的同一种方块(或同一只实体)。
 
 **征询**是一个请求响应子协议:登记处 `ConsentDesk` 挂在身体上,同一同伴同时一条、新的顶掉旧的;
