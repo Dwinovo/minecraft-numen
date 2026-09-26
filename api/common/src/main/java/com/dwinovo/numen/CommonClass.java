@@ -24,10 +24,10 @@ public class CommonClass {
     }
 
     /**
-     * 排程机器的引擎侧接线:本能开关的持久化、生命周期与任务调度的对接。
+     * 排程机器的引擎侧接线:生命周期与任务调度的对接,以及引擎自带的姿态链进本能名册。
      * 链/任务执行器/工具是内容,由 numen-core 或第三方在各自 init 注册
      * ({@link com.dwinovo.numen.task.BrainChains} /
-     * {@link com.dwinovo.numen.task.CompanionTaskFactory})。
+     * {@link com.dwinovo.numen.task.TaskFactory})。
      */
     private static void wireTaskMachine() {
         // 引擎自己也走同一条总线,和插件用的是同一套事件——没有"内部另有一条捷径"。
@@ -43,7 +43,7 @@ public class CommonClass {
         com.dwinovo.numen.entity.CompanionEvents.subscribe(
                 com.dwinovo.numen.api.CompanionEvent.ABORT,
                 com.dwinovo.numen.agent.tool.ServerToolTransport::abort);
-        // 引擎自带姿态链的名册文书(主人开关 + 提示词总览一行)。
+        // 引擎自带姿态链的名册文书:提示词总览里的一行。
         com.dwinovo.numen.task.reflex.ReflexRegistry.register(
                 new com.dwinovo.numen.task.chain.SpeakingLookChain());
     }

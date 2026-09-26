@@ -36,15 +36,19 @@ import com.dwinovo.numen.core.task.move.MoveToTaskRecord;
  * task bodies), then registers its own server-tick hooks for the tools that need
  * per-tick server work (scans, the pathfinder caches).
  *
- * <p>Two things plug into the engine here:
+ * <p>Things plug into the engine here:
  * <ul>
- *   <li>tools — each a {@link com.dwinovo.numen.agent.tool.NumenTool} (raw) and
- *       added to the global {@link ToolRegistry} (order preserved for prompt
- *       caching), or a command group registered through the plugin door, whose
- *       promoted actions enter the registry at that same point;</li>
- *   <li>task runners — each {@code TaskRecord} type a world-action tool emits is
- *       paired with the {@code CompanionTask} that runs it, via
- *       {@link CompanionTaskFactory#register}.</li>
+ *   <li>command groups — registered through the plugin door, the same one third-party
+ *       packs use; an action a group promotes to a quick tool enters the global
+ *       {@link ToolRegistry} the moment its group registers, so the tool table's order
+ *       is the order of the calls in {@link #registerTools()} (backends that cache the
+ *       prompt key off it). {@code todowrite} is the one raw
+ *       {@link com.dwinovo.numen.agent.tool.NumenTool};</li>
+ *   <li>task runners — each {@code TaskRecord} type an action emits is paired with the
+ *       {@code CompanionTask} that runs it, via {@link TaskFactory#register};</li>
+ *   <li>the survival chains ({@link com.dwinovo.numen.task.BrainChains}) and their
+ *       entries in the reflex roster;</li>
+ *   <li>vanilla armour as the first gear source.</li>
  * </ul>
  */
 public final class NumenCore {
@@ -67,18 +71,13 @@ public final class NumenCore {
                 ToolRegistry.size(), TaskFactory.size());
     }
 
-    /**
-     * 把 core 的五条生存本能链插进引擎的竞价调度(链登记口)。运输包与
-     * 生命周期对接已随排程机器归引擎,不再是 core 的事。
-     */
+    /** 把 core 的四条生存本能链插进引擎的竞价调度(链登记口)。 */
     private static void registerReflexes() {
-        // 注册号小的先问 —— 与原版 addGoal(int priority, goal) 同一惯例。
-        // 顺序<b>照搬旧的浮点优先级</b>(MLG 10 > 换气 6 > 自卫 5 > 进食 4/3 > 脱困 2),
-        // 那些数值本身已经退役:反射之间的先后是固定的,不随世界状态变,用连续量
-        // 表达一个固定序,数值就成了必须维护却没人看得懂的魔法数。
+        // 注册号小的先问 —— 与原版 addGoal(int priority, goal) 同一惯例:摔落缓冲 > 换气 > 自卫 > 脱困。
+        // 本能之间的先后是固定的,不随世界状态变,所以是一个序号,不是一个要现算的出价。
         //
         // 正在坠落是最迫近的死法,所以摔落缓冲压过一切;卡住只是烦人,绝不该压过
-        // 打架或吃饭 —— 这条排序是有单测守着的(ReflexOrderTest)。
+        // 打架 —— 这条排序是有单测守着的(ReflexOrderTest)。
         com.dwinovo.numen.task.BrainChains.register(10,
                 com.dwinovo.numen.core.task.chain.MLGChain::new);
         com.dwinovo.numen.task.BrainChains.register(20,
@@ -90,24 +89,21 @@ public final class NumenCore {
     }
 
     /**
-     * The reflex roster (constitution §6): enlist core's instincts — the five
-     * survival chains and the pure policies. The switch persistence is bound by
-     * the engine ({@code CommonClass.wireTaskMachine}). Runs on BOTH sides like
-     * the rest of init.
+     * The reflex roster (constitution §6): enlist core's instincts — the four survival
+     * chains — so their one-line self-descriptions reach the prompt. Runs on BOTH sides
+     * like the rest of init.
      */
     private static void enlistReflexRoster() {
         com.dwinovo.numen.core.task.reflex.CoreReflexes.registerAll();
     }
 
     private static void registerTools() {
-
-        // Registration ORDER is preserved (backends with prompt-caching keyed off
-        // the tool list cache stably across requests).
-        // move 组提升出的 goto 在这里进表
+        // 登记的先后就是工具表的顺序(按工具表做提示词缓存的后端要它逐次一致)。每组提升出的快捷工具在它登记这一刻进表。
+        // move 组提升出 goto
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.MoveCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.FightCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.locate.LocateCommands::install);
-        // work 组提升出的 mine 在这里进表
+        // work 组提升出 mine
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.WorkCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.inventory.GearCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.BuildCommands::install);
@@ -115,14 +111,14 @@ public final class NumenCore {
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.ThrowawayCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.interact.UseCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.inventory.InvCommands::install);
-        // 引擎的 task 命令组,和插件走同一扇门;它提升出的 task_stop 就在这里进表,工具表的顺序不变。
+        // 引擎的 task 命令组,和插件走同一扇门;它提升出 task_stop
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.task.TaskCommands::install);
-        // status 组提升出的 get_self_status / get_owner_status 在这里进表
+        // status 组提升出 get_self_status、get_owner_status
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.perception.StatusCommands::install);
-        // scan 组提升出的 look_around / scan_blocks / scan_nearby_entities / inspect_block 在这里进表
+        // scan 组提升出 look_around、scan_blocks、scan_nearby_entities、inspect_block
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.perception.ScanCommands::install);
         ToolRegistry.register(new com.dwinovo.numen.core.tools.agent.TodoWriteTool());   // raw NumenTool
-        // skill 组提升出的 load_skill 就在这里进表,工具表里的位置不变
+        // skill 组提升出 load_skill
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.agent.SkillCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.agent.MemoryCommands::install);
     }
