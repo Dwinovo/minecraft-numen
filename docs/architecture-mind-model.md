@@ -188,7 +188,8 @@ interface Reflex {
 
 | 信号 | 问题 | 来源 |
 |---|---|---|
-| placed | 这格是不是玩家放的 | `BlockItem.place` 返回处的 mixin,放的人不是同伴就按区块记进每维度一份 SavedData;查询时格子已是空气视为无记号;同伴自己垫路的不记,build 完工把成果格登记 |
+| placed | 这格是不是别人放的 | 放置记录(每维度一份 SavedData):放的人只在 `PlacedBlocks.placedBy` 一处认,谁放的记谁(物品落位的 mixin 与建造照图直写都调它);查询时格子已是空气视为无记号;放的人不是要动手的这只同伴 |
+| self_placed | 这格是不是她自己放的 | 同一份放置记录,放的人就是要动手的这只同伴 |
 | block_entity | 这格有没有方块实体 | 方块状态 |
 | contents | 容器里有没有东西 | 世界(只在主线程读;搜索线程按"有") |
 | owned | 这只实体有没有主人 | `OwnableEntity` |
@@ -196,7 +197,7 @@ interface Reflex {
 | villager | 是不是村民 | 实体类型 |
 | hostile | 是不是敌对 | 实体分类 |
 | hazard_item | 放的是不是岩浆、火、TNT、水 | 物品 |
-| near_placed | 放置点附近有没有玩家放的方块 | placed 的邻域查询 |
+| near_placed | 放置点附近有没有别人放的方块 | placed 的邻域查询 |
 权限层只做原版,领地模组之后以联动插件做。原生通道里服务器退回的挖掘,由挖掘落点如实报成被拒,
 那是身体汇报,不是权限裁决。
 
@@ -207,8 +208,8 @@ deny 行与主人选的 observe;其余一律问。身体的物理与安全判断
 **规则(Rule)。** deny、allow、ask 三张表。一条规则一行字符串 `动作(信号 & 信号 & !信号)`,
 项也可以是方块或实体种类 id、`#标签`、`entity:<uuid>`;`command` 的项是指令根名(`command(msg)`),别名同认。查的顺序 deny → allow → ask → 都不中
 也问(allow 在 ask 之前,因为"允许并记住"存的是从 ask 行里抠出来的更细的 allow 行)。出厂:
-deny 空;allow 为 `break(!placed & !block_entity & !#minecraft:beds & !#minecraft:doors &
-!#minecraft:trapdoors & !#minecraft:fence_gates)`、`place(!hazard_item)`、
+deny 空;allow 为 `break(!placed & !self_placed & !block_entity & !#minecraft:beds & !#minecraft:doors &
+!#minecraft:trapdoors & !#minecraft:fence_gates)`、`break(self_placed & !contents)`、`place(!hazard_item)`、
 `place(hazard_item & !near_placed)`、`attack(!owned & !named & !villager)`、`use_block(*)`、
 `use_entity(!owned)`、`take(*)`;ask 为 `break(block_entity & contents)`、`break(placed)`、
 `break(block_entity)`、`break(#minecraft:beds)`、`break(#minecraft:doors)`、

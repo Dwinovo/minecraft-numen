@@ -665,8 +665,10 @@ shed#1: built 22/22 block(s); placed 21, cleared 0 (all requested cells match)
 shed#1: built 18/22 block(s); placed 0, cleared 0 (left 4 cell(s) alone because the owner said no: …)
 ```
 
-第二行是改掉地板一排之后再 `build at`、主人不在场:她从前砌的石头记在主人名下(`PlacedBlocks`),拆它是 `break(placed)`,
-出厂规则要问;问不到就不拆,如实交代。数据里有 `placed`、`replaced`、`cleared`、`removed` 与 `building`。
+她放下的每一格记在她自己名下(`PlacedBlocks.placedBy`:物品车道由 `BlockItem.place` 的 mixin 调,照图直写由执行器调),
+改设计后再 `build at` 拆、换她自己的格由出厂的 `break(self_placed & !contents)` 与 `place(!hazard_item)` 放行,不问。
+第二行是那一格的方块是主人后来亲手放的:拆它是 `break(placed)`,主人不在场问不到就不拆,如实交代。数据里有 `placed`、
+`replaced`、`cleared`、`removed` 与 `building`。
 
 **与设计稿的出入**:
 
