@@ -191,6 +191,52 @@ public class MineGameTests {
     }
 
     /**
+     * 够数靠的那一件躺在远处:砍下的第一根原木已经算进数里,掉落物却落在二十来格外(云杉林里是弹到了隔壁
+     * 的树叶上、她走开去捡另一件),而她站的地方手边还够得着下一根。该做的是走过去捡,不是再砍一根,
+     * 也不是站着不动。
+     *
+     * <p>钉的是"到了没有"只有一个判据:导航问的"站在这儿有没有可挖的"和任务真去挖的必须是同一个——
+     * 够数之后手边那根不是该挖的,导航就不能拿它当"到了"。两边各说各的时,导航报到了、任务不挖,
+     * 她钉在原地直到卡死判定把那件掉落物当成走不到的出账,再多砍一根。用场地里独一种的去皮橡木,
+     * 免得看见别的用例的原木。
+     */
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_mine")
+    public static void mine_fetches_the_counted_drop_instead_of_freezing(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos first = helper.absolutePos(new BlockPos(2, 2, 4));
+        BlockPos second = helper.absolutePos(new BlockPos(2, 2, 6));
+        level.setBlockAndUpdate(first, Blocks.STRIPPED_OAK_LOG.defaultBlockState());
+        level.setBlockAndUpdate(second, Blocks.STRIPPED_OAK_LOG.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_fetcher", new BlockPos(2, 2, 2), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
+        // 第一根的掉落物一露面就挪到远处:她站着的地方离它远到"走过去"比"再砍一根"估价还高
+        Vec3 far = Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(16, 2, 16)));
+        boolean[] thrown = {false};
+        helper.onEachTick(() -> {
+            if (!thrown[0] && level.getBlockState(first).isAir()) {
+                for (net.minecraft.world.entity.item.ItemEntity drop : level.getEntitiesOfClass(
+                        net.minecraft.world.entity.item.ItemEntity.class, new net.minecraft.world.phys.AABB(first).inflate(2),
+                        ie -> ie.getItem().is(Items.STRIPPED_OAK_LOG))) {
+                    drop.teleportTo(far.x, far.y, far.z);
+                    drop.setDeltaMovement(Vec3.ZERO);
+                    thrown[0] = true;
+                }
+            }
+            if (level.getBlockState(second).isAir()) {
+                helper.fail("she cut a second log instead of fetching the one she had already cut");
+            }
+        });
+        ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:stripped_oak_log"), "count", 1));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(mine.done(), "mine has not finished");
+            helper.assertTrue(mine.succeeded() && companion.getInventory().countItem(Items.STRIPPED_OAK_LOG) == 1,
+                    "the counted log was not fetched: " + mine.outcome());
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
      * 埋在石头里的钻石:一块九乘九、六层高的深板岩,中间埋着四颗深板岩钻石矿;她站在顶上,手持铁镐
      * 往下挖进去,采得 2 颗钻石。盯的是埋矿的站位:脚不能高于矿,得一路挖着往下走,再就地挖矿。
      */
