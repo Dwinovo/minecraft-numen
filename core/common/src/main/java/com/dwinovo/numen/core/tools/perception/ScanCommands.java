@@ -99,7 +99,7 @@ public final class ScanCommands {
                         + "type_filter to narrow: 'hostile' for monsters, 'passive' for animals/items, 'player' for "
                         + "players, 'all' for everything. Returns at most 20 entities; truncated:true means more "
                         + "exist. Each entry has id, type, position, distance, hp, and category. Pass the returned "
-                        + "runtime ids to attack; it cannot attack anything outside that set.");
+                        + "runtime ids to fight attack; it cannot attack anything outside that set.");
         scan.server("block", "One block: its id and state, hardness, whether your held tool is right, dig time, "
                         + "whether it is in reach.",
                         ScanCommands::block, X, Y, Z)

@@ -85,7 +85,7 @@ public class CombatGameTests {
         pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);   // 站着别跑,这条测的是她走不走过去,不是追逐
         level.addFreshEntity(pig);
-        TaskRecord record = call(companion, "attack", args("entity_ids", List.of(pig.getId()))).task();
+        TaskRecord record = command(companion, "fight attack --entity_ids " + pig.getId()).task();
 
         helper.succeedWhen(() -> {
             helper.assertTrue(pig.isDeadOrDying() && pig.getLastHurtByMob() == companion,

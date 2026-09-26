@@ -9,14 +9,12 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * {@code attack} 的进度账本:请求的实体 id、每个 id 的终态(打倒/丢失/够不着)与出手次数。
+ * {@code fight attack} 的进度账本:请求的实体 id、每个 id 的终态(打倒/丢失/够不着)与出手次数。
  *
  * <p>近战与远程曾是两个工具、两份账本,差别只在措辞("defeated/hits" 对 "destroyed/shots"),
  * 为此有三个抽象的词汇钩子。现在只有一个工具,措辞也就只有一套,钩子跟着消失。
  */
 public final class AttackTaskRecord extends TaskRecord {
-
-    public static final String TOOL_NAME = "attack";
 
     public final List<Integer> entityIds;
 
@@ -36,9 +34,13 @@ public final class AttackTaskRecord extends TaskRecord {
     private final Map<Integer, Integer> strikesByEntity = new LinkedHashMap<>();
     private int strikes;
 
-    public AttackTaskRecord(String toolCallId, long deadlineGameTime,
+    /**
+     * @param name       这件活叫什么:命令派的是那次调用的任务名,本能开的仗是本能的 id
+     * @param toolCallId 派它的那次调用;本能开的仗是本能自己起的号
+     */
+    public AttackTaskRecord(String name, String toolCallId, long deadlineGameTime,
                             List<Integer> entityIds, boolean indiscriminate) {
-        super(TOOL_NAME, toolCallId, deadlineGameTime);
+        super(name, toolCallId, deadlineGameTime);
         this.entityIds = List.copyOf(entityIds);
         this.indiscriminate = indiscriminate;
     }

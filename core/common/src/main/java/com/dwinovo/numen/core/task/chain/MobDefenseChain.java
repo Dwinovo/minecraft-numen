@@ -126,7 +126,7 @@ public final class MobDefenseChain implements Task, Reflex {
     private void begin(NumenPlayer companion) {
         long now = companion.level().getGameTime();
         AttackTaskRecord record = new AttackTaskRecord(
-                "reflex-" + now, now + NO_DEADLINE, List.of(), true);
+                ID, "reflex-" + now, now + NO_DEADLINE, List.of(), true);
         fight = new AttackCompanionTask(companion, record);
         fight.start(companion);
         com.dwinovo.numen.Constants.LOG.info("[numen-defense] 自动接管 —— 身边 {} 个危险",
@@ -173,7 +173,7 @@ public final class MobDefenseChain implements Task, Reflex {
 
     @Override
     public String describe() {
-        return "身边有危险就自动开打,打法与她自己派的 attack 完全一致";
+        return "身边有危险就自动开打,打法与她自己派的 fight attack 完全一致";
     }
 
     // ---- 什么算危险 ----

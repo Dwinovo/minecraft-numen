@@ -413,7 +413,6 @@ public final class ModLanguageData {
         adder.add("numen.tool.inspect_block", "Inspect block");
         adder.add("numen.tool.load_skill", "Load skill");
         adder.add("numen.tool.look_around", "Look around");
-        adder.add("numen.tool.attack", "Attack");
         adder.add("numen.tool.mine", "Mine");
         adder.add("numen.tool.scan_blocks", "Scan blocks");
         adder.add("numen.tool.scan_nearby_entities", "Scan entities");
@@ -840,7 +839,6 @@ public final class ModLanguageData {
         adder.add("numen.tool.inspect_block", "查看方块");
         adder.add("numen.tool.load_skill", "加载技能");
         adder.add("numen.tool.look_around", "环顾四周");
-        adder.add("numen.tool.attack", "攻击");
         adder.add("numen.tool.mine", "挖掘");
         adder.add("numen.tool.scan_blocks", "扫描方块");
         adder.add("numen.tool.scan_nearby_entities", "扫描实体");

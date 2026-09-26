@@ -105,7 +105,7 @@ public final class NumenCore {
         // the tool list cache stably across requests).
         // move 组提升出的 goto 在这里进表
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.MoveCommands::install);
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.work.AttackTool());
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.FightCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.locate.LocateCommands::install);
         // work 组提升出的 mine 在这里进表
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.WorkCommands::install);

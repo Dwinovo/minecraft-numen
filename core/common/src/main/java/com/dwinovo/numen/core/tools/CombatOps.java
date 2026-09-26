@@ -1,12 +1,12 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.agent.tool.api.ToolContext;
+import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.core.task.combat.AttackTaskRecord;
 import com.dwinovo.numen.task.TaskRecord;
 
 import java.util.List;
 
-/** 造 {@code attack} 的任务账本。 */
+/** 造 {@code fight attack} 的任务账本。 */
 public final class CombatOps {
 
     /** 每个目标给多久;总时长封顶十分钟。 */
@@ -18,12 +18,13 @@ public final class CombatOps {
      * 不给 id 就是<b>无差别</b>:打退附近所有敌对生物。会分裂的怪(史莱姆、岩浆怪)只能这么打
      * ——它一裂开,点名的那份 id 清单就作废了。
      */
-    public TaskRecord attack(List<Integer> entityIds, ToolContext ctx) {
+    public TaskRecord attack(ServerSource src, List<Integer> entityIds) {
         boolean indiscriminate = entityIds == null || entityIds.isEmpty();
         List<Integer> ids = indiscriminate ? List.of() : normalizeEntityIds(entityIds);
         long count = indiscriminate ? 4 : ids.size();
         long timeout = Math.min(MAX_TICKS, Math.max(MIN_TICKS, count * PER_TARGET_TICKS));
-        return new AttackTaskRecord(ctx.toolCallId(), ctx.deadline(timeout), ids, indiscriminate);
+        return new AttackTaskRecord(src.taskName(), src.toolCallId(),
+                src.companion().level().getGameTime() + timeout, ids, indiscriminate);
     }
 
     static List<Integer> normalizeEntityIds(List<Integer> entityIds) {

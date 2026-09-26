@@ -618,7 +618,7 @@ public class PermissionGameTests {
         pig.setNoAi(true);
         pig.setCustomName(net.minecraft.network.chat.Component.literal("Wilbur"));
         level.addFreshEntity(pig);
-        TaskRecord record = call(companion, "attack", args("entity_ids", List.of(pig.getId()))).task();
+        TaskRecord record = command(companion, "fight attack --entity_ids " + pig.getId()).task();
         long[] asked = {0L};
         int[] waited = {0};
         boolean[] denied = {false};
@@ -1374,7 +1374,7 @@ public class PermissionGameTests {
         level.addFreshEntity(villager);
         NumenPlayer companion = spawnAt(helper, "gametest_peacekeeper", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
-        ToolRun attack = call(companion, "attack", args("entity_ids", List.of(villager.getId())));
+        ToolRun attack = command(companion, "fight attack --entity_ids " + villager.getId());
 
         helper.succeedWhen(() -> {
             helper.assertTrue(attack.done(), "attack has not finished");
@@ -1398,7 +1398,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_enforcer", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
         NumenPlayer owner = presentOwner(helper, companion, "gametest_magistrate");
-        ToolRun attack = call(companion, "attack", args("entity_ids", List.of(villager.getId())));
+        ToolRun attack = command(companion, "fight attack --entity_ids " + villager.getId());
         java.util.Set<Long> requests = new java.util.HashSet<>();
         boolean[] hitBeforeYes = new boolean[1];
         helper.onEachTick(() -> {
@@ -1435,7 +1435,7 @@ public class PermissionGameTests {
         level.addFreshEntity(wolf);
         NumenPlayer companion = spawnAt(helper, "gametest_dogcatcher", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
-        ToolRun attack = call(companion, "attack", args("entity_ids", List.of(wolf.getId())));
+        ToolRun attack = command(companion, "fight attack --entity_ids " + wolf.getId());
 
         helper.succeedWhen(() -> {
             helper.assertTrue(attack.done(), "attack has not finished");
