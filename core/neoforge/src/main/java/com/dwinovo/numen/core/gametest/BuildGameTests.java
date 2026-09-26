@@ -2195,7 +2195,13 @@ public class BuildGameTests {
                     helper.assertTrue(companion.getInventory().countItem(Items.COBBLESTONE) == 32 - 14
                                     && companion.getInventory().countItem(Items.OAK_DOOR) == 0,
                             "the materials spent do not match the cells built");
-                    built.set(command(companion, "build built"));
+                    // 测试世界跨次复用,建成的房子一次次攒下来:翻到这一栋所在的那一页
+                    var all = com.dwinovo.numen.core.build.Built.of(level.getServer()).all();
+                    var site = new com.dwinovo.numen.core.build.Built.Site("gt_walls", level.dimension().location(),
+                            min, 0);
+                    int at = all.indexOf(com.dwinovo.numen.core.build.Built.of(level.getServer()).at(site));
+                    helper.assertTrue(at >= 0, "the new building is not on record");
+                    built.set(command(companion, "build built --page " + (at / 20 + 1)));
                 })
                 .thenWaitUntil(() -> helper.assertTrue(built.get().succeeded()
                                 && built.get().reply().contains("gt_walls#")
@@ -2314,7 +2320,11 @@ public class BuildGameTests {
         writeSmallHouse(level, "fixture_tool");
         NumenPlayer companion = spawnAt(helper, "gametest_architect", new BlockPos(2, 2, 2), true);
         BlockPos anchor = helper.absolutePos(new BlockPos(6, 2, 6));
-        ToolRun list = command(companion, "build designs");
+        // 库里先列设计、再列蓝图文件,各按名字排;测试服的蓝图库跨次复用,翻到这个文件所在的那一页
+        var server = level.getServer();
+        int row = com.dwinovo.numen.core.build.Designs.names(server).size()
+                + com.dwinovo.numen.core.blueprint.BlueprintStore.list(server).indexOf("fixture_tool");
+        ToolRun list = command(companion, "build designs --page " + (row / 20 + 1));
         ToolRun build = command(companion, "build at fixture_tool " + xyz(anchor));
         var targets = com.dwinovo.numen.core.blueprint.BlueprintStore.load(level, "fixture_tool", anchor, 0).targets();
 
