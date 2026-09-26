@@ -578,7 +578,7 @@ public class PermissionGameTests {
     }
 
     /**
-     * interact_at 左键打主人的箱子:动手之前挂一条征询,这次调用悬着;主人允许后箱子没了。
+     * use block 左键打主人的箱子:动手之前挂一条征询,这次调用悬着;主人允许后箱子没了。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void interact_left_click_on_owners_chest_asks(GameTestHelper helper) {
@@ -591,15 +591,11 @@ public class PermissionGameTests {
         TaskRecord[] dig = new TaskRecord[1];
         boolean[] answered = new boolean[1];
         helper.runAfterDelay(5, () -> {
-            dig[0] = call(companion, "interact_at", args(
-                    "button", "left",
-                    "x", chest.getX(),
-                    "y", chest.getY(),
-                    "z", chest.getZ())).task();
+            dig[0] = command(companion, "use block left " + xyz(chest)).task();
         });
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(dig[0] != null, "interact_at not dispatched yet");
+            helper.assertTrue(dig[0] != null, "use block not dispatched yet");
             if (!answered[0]) {
                 var pending = desk(companion).pending();
                 helper.assertTrue(pending != null, "no consent request before hitting the owner's chest");
@@ -608,7 +604,7 @@ public class PermissionGameTests {
                 answered[0] = desk(companion).answer(pending.id(),
                         com.dwinovo.numen.permission.ConsentAnswer.Decision.ALLOW_ONCE, "");
             }
-            helper.assertTrue(dig[0].getResult() != null, "interact_at has not finished");
+            helper.assertTrue(dig[0].getResult() != null, "use block has not finished");
             helper.assertTrue(level.getBlockState(chest).isAir(),
                     "the chest is still there after the owner allowed: " + dig[0].getResult().message());
             CompanionFactory.despawn(level.getServer(), companion);
@@ -667,27 +663,27 @@ public class PermissionGameTests {
         });
     }
 
-    /** drop_items 每次问:调用悬着等主人;允许后东西丢出来。 */
+    /** inv drop 每次问:调用悬着等主人;允许后东西丢出来。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void drop_items_waits_for_the_owner(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_giver", new BlockPos(4, 2, 4), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_receiver");
         companion.getInventory().add(new ItemStack(Items.DIAMOND, 3));
-        TaskRecord record = call(companion, "drop_items", args("item_id", "minecraft:diamond", "count", 3)).task();
+        TaskRecord record = command(companion, "inv drop minecraft:diamond 3").task();
         boolean[] answered = new boolean[1];
 
         helper.succeedWhen(() -> {
             if (!answered[0]) {
                 var pending = desk(companion).pending();
-                helper.assertTrue(pending != null, "drop_items did not ask");
-                helper.assertTrue(record.getResult() == null, "drop_items finished without an answer");
+                helper.assertTrue(pending != null, "inv drop did not ask");
+                helper.assertTrue(record.getResult() == null, "inv drop finished without an answer");
                 helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 3, "dropped before the answer");
                 answered[0] = desk(companion).answer(pending.id(),
                         com.dwinovo.numen.permission.ConsentAnswer.Decision.ALLOW_ONCE, "");
             }
             String reply = record.getResult() == null ? null : record.getResult().message();
-            helper.assertTrue(reply != null && record.getResult().success(), "drop_items did not finish: " + reply);
+            helper.assertTrue(reply != null && record.getResult().success(), "inv drop did not finish: " + reply);
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0, "nothing was dropped");
             helper.assertTrue(reply.contains("the owner allowed"), "the reply does not say the owner allowed: " + reply);
             CompanionFactory.despawn(level.getServer(), companion);
@@ -696,7 +692,7 @@ public class PermissionGameTests {
     }
 
     /**
-     * 卡片挂着时主人按停止:drop_items 悬着等答复,主人没点卡片而是按了停止(与 CancelTasksPayload 同一个入口)。
+     * 卡片挂着时主人按停止:inv drop 悬着等答复,主人没点卡片而是按了停止(与 CancelTasksPayload 同一个入口)。
      * 这件活按主人停止收场、消息写明是主人停的,挂着的征询随之撤掉,东西一件没丢。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
@@ -705,14 +701,12 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_hesitant", new BlockPos(4, 2, 4), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_changed_mind");
         companion.getInventory().add(new ItemStack(Items.GOLD_INGOT, 4));
-        TaskRecord record = call(companion, "drop_items", args(
-                "item_id", "minecraft:gold_ingot",
-                "count", 4)).task();
+        TaskRecord record = command(companion, "inv drop minecraft:gold_ingot 4").task();
         boolean[] stopped = new boolean[1];
 
         helper.succeedWhen(() -> {
             if (!stopped[0]) {
-                helper.assertTrue(desk(companion).pending() != null, "drop_items did not ask");
+                helper.assertTrue(desk(companion).pending() != null, "inv drop did not ask");
                 com.dwinovo.numen.task.CompanionTickDispatcher.cancelFor(companion);
                 stopped[0] = true;
             }
@@ -734,7 +728,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_waiter", new BlockPos(4, 2, 4), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_absent");
         companion.getInventory().add(new ItemStack(Items.EMERALD, 2));
-        TaskRecord record = call(companion, "drop_items", args("item_id", "minecraft:emerald", "count", 2)).task();
+        TaskRecord record = command(companion, "inv drop minecraft:emerald 2").task();
 
         helper.succeedWhen(() -> {
             String reply = record.getResult() == null ? null : record.getResult().message();
@@ -960,7 +954,7 @@ public class PermissionGameTests {
         });
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(call[0] != null && call[0].getResult() != null, "interact_at has not finished");
+            helper.assertTrue(call[0] != null && call[0].getResult() != null, "use block has not finished");
             helper.assertTrue(answered[0], "the owner's ask row did not raise a card");
             helper.assertTrue(!call[0].getResult().success() && call[0].getResult().message().contains("石头别动"),
                     "the refusal does not quote the owner: " + call[0].getResult().message());
@@ -989,7 +983,7 @@ public class PermissionGameTests {
         companion.getInventory().add(new ItemStack(Items.EMERALD, 4));
         TaskRecord[] calls = new TaskRecord[3];
         int[] step = {0};
-        calls[0] = call(companion, "drop_items", args("item_id", "minecraft:diamond", "count", 1)).task();
+        calls[0] = command(companion, "inv drop minecraft:diamond 1").task();
         helper.onEachTick(() -> {
             var pending = desk(companion).pending();
             switch (step[0]) {
@@ -1017,7 +1011,7 @@ public class PermissionGameTests {
                         helper.assertTrue(calls[0].getResult().success()
                                         && calls[0].getResult().message().contains("the owner allowed"),
                                 "the card answer did not go through: " + calls[0].getResult().message());
-                        calls[1] = call(companion, "drop_items", args("item_id", "minecraft:emerald", "count", 2))
+                        calls[1] = command(companion, "inv drop minecraft:emerald 2")
                                 .task();
                         step[0] = 2;
                     }
@@ -1035,7 +1029,7 @@ public class PermissionGameTests {
                         helper.assertTrue(calls[1].getResult().success()
                                         && calls[1].getResult().message().contains("remembered it"),
                                 "the command answer did not go through: " + calls[1].getResult().message());
-                        calls[2] = call(companion, "drop_items", args("item_id", "minecraft:emerald", "count", 2))
+                        calls[2] = command(companion, "inv drop minecraft:emerald 2")
                                 .task();
                         step[0] = 4;
                     }
@@ -1297,7 +1291,7 @@ public class PermissionGameTests {
 
     /**
      * 别的模组在原生通道里取消了破坏事件:权限层放行了(自然泥土),挖掘落点照真客户端挖下去,服务端退回来——
-     * interact_at 以 refused 收场,理由写明服务器没让挖掉,泥土一块不少。生存(STOP 那一下被退)与创造
+     * use block 以 refused 收场,理由写明服务器没让挖掉,泥土一块不少。生存(STOP 那一下被退)与创造
      * (START 那一下被退)各一具身体。
      */
     @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_permission")
@@ -1505,7 +1499,7 @@ public class PermissionGameTests {
 
     /**
      * 拿水桶对着主人木板旁边的地面右键:倒水是危险品挨着玩家的东西,要问;主人不在,问不到就不倒——
-     * 走的是 interact_at 的放置路径,和 build 一样由权限层裁决。水没倒出来,桶还是满的。
+     * 走的是 use block 的放置路径,和 build 一样由权限层裁决。水没倒出来,桶还是满的。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void interact_at_water_next_to_the_owners_planks_needs_the_owner(GameTestHelper helper) {
@@ -1514,11 +1508,10 @@ public class PermissionGameTests {
         BlockPos floor = helper.absolutePos(new BlockPos(6, 1, 5));
         NumenPlayer companion = spawnAt(helper, "gametest_waterer", new BlockPos(4, 2, 5), false);
         companion.getInventory().add(new ItemStack(Items.WATER_BUCKET));
-        ToolRun pour = call(companion, "interact_at", args("button", "right",
-                "x", floor.getX(), "y", floor.getY(), "z", floor.getZ(), "item_id", "minecraft:water_bucket"));
+        ToolRun pour = command(companion, "use block right " + xyz(floor) + " --item minecraft:water_bucket");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(pour.done(), "interact_at has not finished");
+            helper.assertTrue(pour.done(), "use block has not finished");
             helper.assertTrue(!pour.succeeded() && pour.outcome().contains("refused by the owner"),
                     "the refusal does not come from asking the owner: " + pour.outcome());
             helper.assertTrue(!level.getBlockState(floor.above()).is(Blocks.WATER)

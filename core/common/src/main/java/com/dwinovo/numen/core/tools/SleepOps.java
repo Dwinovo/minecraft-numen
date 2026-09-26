@@ -20,7 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * {@code sleep} 的业务半边:<b>上床,然后确认她真的睡着了</b>。
+ * {@code use sleep} 的业务半边:<b>上床,然后确认她真的睡着了</b>。
  *
  * <h2>为什么它这么薄</h2>
  * 找床归 {@code scan_blocks}(现在能写 {@code #minecraft:beds},一句话覆盖全部颜色),
@@ -41,12 +41,16 @@ public final class SleepOps {
     private static final int REACH_H = 3;
     private static final int REACH_V = 2;
 
+    /** @param x,y,z 指定哪张床:三个都给,或都不给(用手边够得着的那张) */
     public String sleep(Integer x, Integer y, Integer z, NumenPlayer self) {
-        BlockPos bedHead = x != null && y != null && z != null
-                ? headOf(self.level(), new BlockPos(x, y, z))
-                : nearestBedHeadInReach(self);
+        boolean given = x != null && y != null && z != null;
+        if (!given && (x != null || y != null || z != null)) {
+            return TaskResult.fail("a bed position needs all of --x --y --z; leave them all out to use the bed "
+                    + "within reach").toJson();
+        }
+        BlockPos bedHead = given ? headOf(self.level(), new BlockPos(x, y, z)) : nearestBedHeadInReach(self);
         if (bedHead == null) {
-            return noBed(self, x != null && y != null && z != null);
+            return noBed(self, given);
         }
 
         Either<Player.BedSleepingProblem, Unit> result = self.startSleepInBed(bedHead);
@@ -133,7 +137,7 @@ public final class SleepOps {
                 : "there is no bed within reach (you must be standing next to one)";
         String next = carried != null
                 ? " You are carrying " + carried + " — place it on flat ground and try again."
-                : " Use scan_blocks with #minecraft:beds to find one, goto it, then call sleep again.";
+                : " Use scan_blocks with #minecraft:beds to find one, goto it, then run use sleep again.";
         return TaskResult.fail(base + "." + next).toJson();
     }
 

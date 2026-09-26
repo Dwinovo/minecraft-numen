@@ -73,7 +73,7 @@ public final class McpServer {
 
             Loop: (1) list_companions to see who is live — create_companion by name to summon a new one, \
             delete_companion to dismiss one for good; (2) perceive with get_self_status / scan_blocks / \
-            scan_nearby_entities; (3) act with goto / mine / build / craft / equip_item / \
+            scan_nearby_entities; (3) act with goto / mine / build / command (inv craft, gear wear, …) / \
             attack / etc. Action tools return a task_id at once — poll the command 'task status' until the body is idle, \
             then perceive to confirm. Every action tool takes a 'companion' argument (name or id), so each \
             call targets one companion; just drive it, there is no take-control step.

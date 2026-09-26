@@ -10,7 +10,7 @@ import java.util.Set;
  * 一处能把东西穿戴在身上的来源:原版四件甲是一处,饰品栏(Curios)是一处。经
  * {@link com.dwinovo.numen.api.NumenApi#registerGear} 登记。
  *
- * <p>{@code equip_item} 的穿、脱、自动选位,以及每轮挂给模型的 {@code <worn>},都只经这里——原版和模组
+ * <p>{@code gear wear} / {@code gear remove} 的穿、脱、自动选位,以及每轮挂给模型的 {@code <worn>},都只经这里——原版和模组
  * 走同一扇门,没有"原版先定、模组兜底"。
  *
  * <p>来源只陈述游戏规则(这件能不能放进这格、这格里的能不能摘),不做许可裁决:穿戴不改世界、不伤实体。

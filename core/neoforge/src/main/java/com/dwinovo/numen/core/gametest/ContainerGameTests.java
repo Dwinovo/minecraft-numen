@@ -19,7 +19,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
-/** 容器:{@code interact_at} 右键打开、{@code inspect_gui} 看格子、{@code transfer} 搬东西、{@code close_gui} 合上。 */
+/** 容器:{@code use block} 右键打开、{@code use gui} 看格子、{@code transfer} 搬东西、{@code use close} 合上。 */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
 public class ContainerGameTests {
@@ -43,24 +43,23 @@ public class ContainerGameTests {
         // 动作放 thenExecute、断言放 thenWaitUntil:原版序列里 thenExecute 的断言失败后,后面的步骤照样在同一刻
         // 跑下去,报出来的是最后一个失败;等在 thenWaitUntil 里,哪一步没过就停在哪一步、报哪一步
         helper.startSequence()
-                .thenExecute(() -> step.set(call(companion, "interact_at",
-                        args("button", "right", "x", chest.getX(), "y", chest.getY(), "z", chest.getZ()))))
+                .thenExecute(() -> step.set(command(companion, "use block right " + xyz(chest))))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,
                         "the chest did not open: " + step.get().outcome()))
-                .thenExecute(() -> step.set(call(companion, "inspect_gui", args())))
+                .thenExecute(() -> step.set(command(companion, "use gui")))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().succeeded() && step.get().reply().contains("0: ")
                                 && step.get().reply().contains("diamond"),
-                        "inspect_gui does not show the diamonds in slot 0: " + step.get().reply()))
+                        "use gui does not show the diamonds in slot 0: " + step.get().reply()))
                 .thenExecute(() -> step.set(call(companion, "transfer", args("moves", List.of(args("from", 0))))))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.getInventory().countItem(Items.DIAMOND) == 5
                                 && ((ChestBlockEntity) helper.getLevel().getBlockEntity(chest)).isEmpty(),
                         "the diamonds did not move from the chest into her inventory: " + step.get().outcome()))
-                .thenExecute(() -> step.set(call(companion, "close_gui", args())))
+                .thenExecute(() -> step.set(command(companion, "use close")))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().succeeded()
                                 && companion.containerMenu == companion.inventoryMenu,
-                        "close_gui did not close the chest: " + step.get().reply()))
+                        "use close did not close the chest: " + step.get().reply()))
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
                 .thenSucceed();
     }
@@ -85,7 +84,7 @@ public class ContainerGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_container")
     public static void close_gui_with_nothing_open_says_so(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_tidy", new BlockPos(3, 2, 3), false);
-        ToolRun close = call(companion, "close_gui", args());
+        ToolRun close = command(companion, "use close");
 
         helper.succeedWhen(() -> {
             helper.assertTrue(close.succeeded() && close.reply().contains("no block GUI was open"),
@@ -111,8 +110,7 @@ public class ContainerGameTests {
         AtomicReference<ToolRun> step = new AtomicReference<>();
 
         helper.startSequence()
-                .thenExecute(() -> step.set(call(companion, "interact_at",
-                        args("button", "right", "x", chest.getX(), "y", chest.getY(), "z", chest.getZ()))))
+                .thenExecute(() -> step.set(command(companion, "use block right " + xyz(chest))))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,
                         "the chest did not open: " + step.get().outcome()))
@@ -125,7 +123,7 @@ public class ContainerGameTests {
                                 && box.countItem(Items.COBBLESTONE) == box.getContainerSize() * 64
                                 && box.countItem(Items.DIAMOND) == 0,
                         "something moved between her and the full chest"))
-                .thenExecute(() -> step.set(call(companion, "close_gui", args())))
+                .thenExecute(() -> step.set(command(companion, "use close")))
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
                 .thenSucceed();
     }
@@ -139,8 +137,7 @@ public class ContainerGameTests {
         AtomicReference<ToolRun> step = new AtomicReference<>();
 
         helper.startSequence()
-                .thenExecute(() -> step.set(call(companion, "interact_at",
-                        args("button", "right", "x", chest.getX(), "y", chest.getY(), "z", chest.getZ()))))
+                .thenExecute(() -> step.set(command(companion, "use block right " + xyz(chest))))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,
                         "the chest did not open: " + step.get().outcome()))
@@ -153,12 +150,12 @@ public class ContainerGameTests {
                                 && box.countItem(Items.DIAMOND) == 3,
                         "she has " + companion.getInventory().countItem(Items.DIAMOND) + " and the chest "
                                 + box.countItem(Items.DIAMOND)))
-                .thenExecute(() -> step.set(call(companion, "close_gui", args())))
+                .thenExecute(() -> step.set(command(companion, "use close")))
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
                 .thenSucceed();
     }
 
-    /** 她打开的界面里,她自己背包那一段第一个装着 {@code item} 的格子号(AIR = 第一个空格)——模型从 inspect_gui 读到的就是它。 */
+    /** 她打开的界面里,她自己背包那一段第一个装着 {@code item} 的格子号(AIR = 第一个空格)——模型从 use gui 读到的就是它。 */
     private static int menuSlotOf(NumenPlayer companion, net.minecraft.world.item.Item item) {
         var slots = companion.containerMenu.slots;
         for (int i = 0; i < slots.size(); i++) {

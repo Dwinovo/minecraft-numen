@@ -25,7 +25,7 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 /**
  * 感知:{@code scan} 组({@code scan block}、{@code scan storage}、{@code scan around}、{@code scan entities}、
  * {@code scan blocks})、{@code status} 组({@code status self}、{@code status world}、{@code status owner}),以及
- * {@code lookup_recipe}、{@code scaffold_materials}。这些不动世界,测的是回执说的是不是眼前的真事;提升成快捷工具的
+ * {@code inv recipe}、{@code scaffold_materials}。这些不动世界,测的是回执说的是不是眼前的真事;提升成快捷工具的
  * 动作,同一刻从工具与从 {@code command} 读到的一字不差(同源)。
  */
 @GameTestHolder(Constants.MOD_ID)
@@ -206,7 +206,7 @@ public class PerceptionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void lookup_recipe_lists_every_station(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_scholar", new BlockPos(3, 2, 3), false);
-        ToolRun recipe = call(companion, "lookup_recipe", args("item_id", "minecraft:iron_ingot"));
+        ToolRun recipe = command(companion, "inv recipe minecraft:iron_ingot");
 
         helper.succeedWhen(() -> {
             helper.assertTrue(recipe.succeeded() && recipe.reply().contains("[smelting")
@@ -331,7 +331,7 @@ public class PerceptionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void lookup_recipe_for_something_not_made_says_so(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_curious", new BlockPos(3, 2, 3), false);
-        ToolRun recipe = call(companion, "lookup_recipe", args("item_id", "minecraft:ender_pearl"));
+        ToolRun recipe = command(companion, "inv recipe minecraft:ender_pearl");
 
         helper.succeedWhen(() -> {
             helper.assertTrue(recipe.succeeded() && recipe.reply().contains("no recipe for ender_pearl"),
@@ -344,7 +344,7 @@ public class PerceptionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void lookup_recipe_for_an_unknown_item_is_rejected(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_misspeller", new BlockPos(3, 2, 3), false);
-        ToolRun recipe = call(companion, "lookup_recipe", args("item_id", "minecraft:no_such_item"));
+        ToolRun recipe = command(companion, "inv recipe minecraft:no_such_item");
 
         helper.succeedWhen(() -> {
             helper.assertTrue(!recipe.succeeded() && recipe.reply().contains("invalid arguments")

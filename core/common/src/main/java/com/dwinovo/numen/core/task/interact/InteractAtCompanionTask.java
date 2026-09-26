@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code interact_at} on the player body — the point-aimed native interaction (BLOCK + AIR).
+ * {@code use block} / {@code use ahead} on the player body — the point-aimed native interaction (BLOCK + AIR).
  * Walk within reach of the aim (if one is given), look at it, fire ONE native crosshair
  * raytrace ({@link Interaction#nativeRaytrace}) and press the requested mouse button on
  * whatever it resolves to ({@link Interaction#forHit}): break / activate the block hit, or —
@@ -289,6 +289,6 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
 
     @Override
     protected String cancelledMessage() {
-        return "interact_at interrupted";
+        return r.getToolName() + " interrupted";
     }
 }

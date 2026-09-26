@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code drop_items} on the player body — toss items forward, natively. One tick when the permission
+ * {@code inv drop} on the player body — toss items forward, natively. One tick when the permission
  * layer allows it; otherwise the call waits for the owner's answer.
  */
 public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTaskRecord> {
@@ -62,7 +62,7 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
 
         // 丢的是背包里<b>真实的那几叠</b>:从格子里拆出来的栈带着自己的全部组件
         // (附魔/耐久/改名/容器内容物)。曾经按数量销毁再 new ItemStack 重造,附魔镐
-        // 丢出来变白板——凭空重造只属于创造模式的 take_items,不属于这里。
+        // 丢出来变白板——凭空重造只属于创造模式的 inv take,不属于这里。
         // Toss like a real player: native Player.drop(stack, false) throws each stack in the facing
         // direction with vanilla motion + pickup delay and fires the drop event (mods watching item
         // tosses see it) — instead of hand-building an ItemEntity with a made-up velocity.

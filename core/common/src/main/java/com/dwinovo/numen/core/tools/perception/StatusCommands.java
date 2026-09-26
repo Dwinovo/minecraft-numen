@@ -37,7 +37,7 @@ public final class StatusCommands {
                         + "about your body, and movement "
                         + "state. ALWAYS call this before "
                         + "combat or planning decisions. It does NOT list your backpack — what you carry "
-                        + "is already in front of you every turn; use inspect_gui when exact slots matter. "
+                        + "is already in front of you every turn; run use gui when exact slots matter. "
                         + "No arguments.");
         status.server("owner", "Your owner: online or not, health, hunger, position, distance from you, held items.",
                         StatusCommands::owner)

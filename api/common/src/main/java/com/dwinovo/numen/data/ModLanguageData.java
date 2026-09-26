@@ -407,22 +407,13 @@ public final class ModLanguageData {
         adder.add("numen.chat.plan", "Plan %s/%s");
         // Tool-chip labels (convention: numen.tool.<tool name>; unknown/MCP tools fall back to the raw name).
         adder.add("numen.tool.build", "Build");
-        adder.add("numen.tool.close_gui", "Close GUI");
         adder.add("numen.tool.collect_items", "Collect items");
-        adder.add("numen.tool.craft", "Craft");
-        adder.add("numen.tool.drop_items", "Drop items");
-        adder.add("numen.tool.eat", "Eat");
-        adder.add("numen.tool.equip_item", "Equip");
         adder.add("numen.tool.get_owner_status", "Owner status");
         adder.add("numen.tool.get_self_status", "Self status");
         adder.add("numen.tool.goto", "Go to");
         adder.add("numen.tool.inspect_block", "Inspect block");
-        adder.add("numen.tool.inspect_gui", "Inspect GUI");
-        adder.add("numen.tool.interact_at", "Interact");
-        adder.add("numen.tool.interact_entity", "Interact entity");
         adder.add("numen.tool.load_skill", "Load skill");
         adder.add("numen.tool.look_around", "Look around");
-        adder.add("numen.tool.lookup_recipe", "Look up recipe");
         adder.add("numen.tool.attack", "Attack");
         adder.add("numen.tool.mine", "Mine");
         adder.add("numen.tool.scan_blocks", "Scan blocks");
@@ -844,22 +835,13 @@ public final class ModLanguageData {
         adder.add("numen.chat.plan", "计划 %s/%s");
         // 工具 chip 标签(约定键 numen.tool.<工具名>;未知/MCP 工具回落原名)。
         adder.add("numen.tool.build", "建造");
-        adder.add("numen.tool.close_gui", "关闭界面");
         adder.add("numen.tool.collect_items", "拾取掉落物");
-        adder.add("numen.tool.craft", "合成");
-        adder.add("numen.tool.drop_items", "丢出物品");
-        adder.add("numen.tool.eat", "进食");
-        adder.add("numen.tool.equip_item", "装备");
         adder.add("numen.tool.get_owner_status", "主人状态");
         adder.add("numen.tool.get_self_status", "自身状态");
         adder.add("numen.tool.goto", "前往");
         adder.add("numen.tool.inspect_block", "查看方块");
-        adder.add("numen.tool.inspect_gui", "查看界面");
-        adder.add("numen.tool.interact_at", "交互");
-        adder.add("numen.tool.interact_entity", "实体交互");
         adder.add("numen.tool.load_skill", "加载技能");
         adder.add("numen.tool.look_around", "环顾四周");
-        adder.add("numen.tool.lookup_recipe", "查配方");
         adder.add("numen.tool.attack", "攻击");
         adder.add("numen.tool.mine", "挖掘");
         adder.add("numen.tool.scan_blocks", "扫描方块");

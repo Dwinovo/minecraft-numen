@@ -33,7 +33,7 @@ It also picks the strongest weapon you own **against that specific target**: a S
 
 1. Use `get_self_status` to check HP, equipment, food, and dimension.
 2. Carry a melee weapon, and carry a bow with arrows if the phase involves anything airborne. Without arrows, an unreachable target is simply reported as unreachable.
-3. Keep dense food available and heal with `eat_item` before critical HP. Combat does not interrupt an active eating, potion, bow, or other use action.
+3. Keep dense food available and heal with `inv eat` before critical HP. Combat does not interrupt an active eating, potion, bow, or other use action.
 
 ## During and after the fight
 

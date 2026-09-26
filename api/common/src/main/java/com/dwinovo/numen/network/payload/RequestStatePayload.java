@@ -78,7 +78,7 @@ public record RequestStatePayload(UUID uuid) implements CustomPacketPayload {
         for (var live : numen.getActiveEffects()) {
             effects.add(new net.minecraft.world.effect.MobEffectInstance(live));
         }
-        // 骑乘随身照:类型按注册路径报,id 给 interact_entity 直接可用的实体号
+        // 骑乘随身照:类型按注册路径报,id 给 use entity 直接可用的实体号
         net.minecraft.world.entity.Entity vehicle = numen.getVehicle();
         String vehicleType = vehicle == null ? ""
                 : net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE

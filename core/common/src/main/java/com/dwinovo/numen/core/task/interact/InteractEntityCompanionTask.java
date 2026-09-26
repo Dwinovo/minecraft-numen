@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code interact_entity} on the player body: the entity-aimed native interaction.
+ * {@code use entity} on the player body: the entity-aimed native interaction.
  * It auto-paths and follows the live entity, then aims at it and presses the
  * requested mouse button only when the native raytrace reaches that entity.
  * A wall in between blocks it, and the task repositions instead of acting on
@@ -159,7 +159,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
             if (r.item != null) {
                 player.holdInHand(PlayerInv.findSlot(player.getInventory(), r.item));
             }
-            // 兜底开关与 interact_at 同一条身体约束(政策的唯一出处在那份记录上):
+            // 兜底开关与 use block 同一条身体约束(政策的唯一出处在那份记录上):
             // 实体没吃掉点击才轮到物品自用,手里是食物/珍珠时宁可不兜。
             boolean fallthroughOk =
                     InteractAtTaskRecord.bodyBoundReason(player.getMainHandItem().getItem()) == null
@@ -253,7 +253,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
         return verb + " " + targetName();
     }
 
-    /** 收尾对账,与 interact_at 同款:只报事实,判断留给读回执的人。 */
+    /** 收尾对账,与 use block 同款:只报事实,判断留给读回执的人。 */
     private String settle() {
         changes = receipt == null ? List.of() : receipt.diff(player);
         if (changes.isEmpty()) {
@@ -292,6 +292,6 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
 
     @Override
     protected String cancelledMessage() {
-        return "interact_entity interrupted";
+        return r.getToolName() + " interrupted";
     }
 }

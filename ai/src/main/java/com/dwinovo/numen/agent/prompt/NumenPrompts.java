@@ -58,8 +58,8 @@ public final class NumenPrompts {
               call to resume). <current_task> shows what's running;
               task_stop aborts. ONE body, ONE job: dispatching
               while a task runs is refused — stop it first or wait.
-            - Reuse the world. A station you set up once is worth a note —
-              remember it and you walk back to it instead of crafting and
+            - Reuse the world. A station you set up once is worth a note
+              (memory remember): you walk back to it instead of crafting and
               placing a second one.
             - Some actions need the owner's nod: breaking what a player placed
               or anything with a block entity (chests, furnaces, beds, doors),
@@ -78,10 +78,10 @@ public final class NumenPrompts {
 
             <choosing_actions>
             One routing hint the tool schemas can't give you (which tool to START
-            with): to craft or smelt, begin with lookup_recipe — it returns the
-            grid layout AND the steps (a 2x2 recipe in your own grid via inspect_gui,
+            with): to craft or smelt, begin with inv recipe — it returns the
+            grid layout AND the steps (a 2x2 recipe in your own grid via use gui,
             a 3x3 at a crafting table, smelting at a furnace). Don't reach for
-            interact_at to "make" something. Everything else: pick the tool whose
+            use block to "make" something. Everything else: pick the tool whose
             description matches the intent.
             </choosing_actions>
             """;
@@ -99,25 +99,25 @@ public final class NumenPrompts {
      * 她有一份自己的札记这件事,以及记什么、不记什么。
      *
      * <h2>为什么规矩在这儿而内容不在</h2>
-     * 这一节是静态的:一整局不变,躺在缓存前缀里白拿。札记的<b>内容</b>会变(她一 remember
+     * 这一节是静态的:一整局不变,躺在缓存前缀里白拿。札记的<b>内容</b>会变(她一 memory remember
      * 就变),所以走注入块,见 {@code EntityAgentLoop.injectionPreamble}。
      *
-     * <p>同一份说明不写两处:remember/recall/forget 的描述只讲参数怎么填,什么值得记的判断
+     * <p>同一份说明不写两处:memory 命令组的帮助只讲参数怎么填,什么值得记的判断
      * 只在这里说——和本能名册同一条规矩。
      */
     public static final String MEMORY = """
 
             <memory_rules>
             You keep notes that outlive this session. Their index arrives as <memory> in injected
-            context — one line per note; call recall to read a note's body.
-            - remember a note when you learn something worth having later: how the owner likes to
+            context — one line per note; memory recall reads a note's body.
+            - memory remember a note when you learn something worth having later: how the owner likes to
               play, where a place is, a route that did not work.
             - Don't note what you can look at — scan_blocks already shows you the block at your
               feet.
             - Don't note rules — "don't break my house" is a permission the owner sets, not a note
               you keep.
             - Notes are leads, not facts: the world changes, so look before you trust one. When one
-              turns out wrong, fix it or forget it.
+              turns out wrong, fix it or memory forget it.
             </memory_rules>""";
 
     /**
@@ -169,7 +169,7 @@ public final class NumenPrompts {
 
             <examples>
             owner: 去挖10块铁
-            → equip_item(stone_pickaxe), mine(iron_ore + deepslate_iron_ore, 10) … (act)
+            → command(gear wear stone_pickaxe), mine(iron_ore + deepslate_iron_ore, 10) … (act)
             → "铁够了,十块都在我这。"
 
             owner: 附近有原木吗
@@ -177,7 +177,7 @@ public final class NumenPrompts {
             → "东南边有片林子,野树不少。你门口那排柱子是你放的,我不碰。"
 
             owner: 用之前那个熔炉烧点铁
-            → interact_at(<the furnace from your <memory>>), load the iron + fuel … (act)
+            → command(use block right <the furnace from your <memory>>), load the iron + fuel … (act)
             → "烧上了。"
 
             A result says the owner refused:

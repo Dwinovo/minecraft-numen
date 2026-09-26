@@ -40,7 +40,7 @@ import net.minecraft.world.phys.Vec3;
  * </ul>
  * Shared by path-obstruction clearing ({@code ExecHarness}), auto-mine
  * ({@code MineCompanionTask}), construction clearing ({@code BuildCompanionTask}) and
- * {@link Interaction} (the {@code interact_at} left click). It is the only place a block is broken, so it is
+ * {@link Interaction} (the {@code use block} left click). It is the only place a block is broken, so it is
  * where the permission layer is enforced: every new target is judged before the first swing
  * ({@link #permit}); a refused block is reported as {@link DigResult#REFUSED} and never touched.
  *
@@ -111,7 +111,7 @@ public final class BlockDigger {
 
     /**
      * 问权限层这一格能不能挖。每次换新目标问一次,在第一次挥手之前;被拒的格连 START 都不发。
-     * 唯一挖掘落点上的唯一门,所有调用方(寻路、挖矿、施工、interact_at 左键)都过它。
+     * 唯一挖掘落点上的唯一门,所有调用方(寻路、挖矿、施工、use block 左键)都过它。
      */
     private Verdict permit(BlockPos target) {
         Verdict verdict = Permission.judge(player, Action.breakBlock(target, player.level().getBlockState(target)));

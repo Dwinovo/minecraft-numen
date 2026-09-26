@@ -8,7 +8,7 @@ import com.dwinovo.numen.task.TaskState;
 import java.util.Map;
 
 /**
- * {@code equip_item action=unequip} on the player body:在身体的任务槽里跑 {@link Wardrobe#remove}。
+ * {@code gear remove} on the player body:在身体的任务槽里跑 {@link Wardrobe#remove}。
  * 摘不摘得下、背包放不放得下、腾主手怎么腾都在那里;这里只把结论交进回执。
  * One-tick (all work in {@link #onStart()}).
  */

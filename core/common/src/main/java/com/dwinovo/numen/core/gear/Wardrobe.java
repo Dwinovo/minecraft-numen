@@ -21,7 +21,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 穿、脱、自动选位——身体上"把这件穿上 / 摘下来"的唯一实现。它不认识任何入口:{@code equip_item} 工具只把
+ * 穿、脱、自动选位——身体上"把这件穿上 / 摘下来"的唯一实现。它不认识任何入口:{@code gear wear} / {@code gear remove} 只把
  * 参数翻译过来交给这里,别的入口也直接调这里。
  *
  * <p>穿戴位置只经 {@link NumenPlugins#gearSlots} 与 {@link NumenPlugins#gearKinds} 来:原版四件甲和模组的

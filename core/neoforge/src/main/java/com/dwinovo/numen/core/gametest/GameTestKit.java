@@ -222,11 +222,19 @@ public final class GameTestKit {
         return null;
     }
 
-    /** interact_at 对着 {@code rel} 那一格按一下,同步调用。 */
+    /** {@code use block} 对着 {@code rel} 那一格按一下,同步调用。 */
     static TaskRecord click(GameTestHelper helper, NumenPlayer companion, String button, BlockPos rel) {
-        BlockPos at = helper.absolutePos(rel);
-        return call(companion, "interact_at", args("button", button, "x", at.getX(), "y", at.getY(), "z", at.getZ()))
-                .task();
+        return command(companion, "use block " + button + " " + at(helper, rel)).task();
+    }
+
+    /** {@code rel} 那一格的绝对坐标,写成命令行上的 {@code x y z}。 */
+    static String at(GameTestHelper helper, BlockPos rel) {
+        return xyz(helper.absolutePos(rel));
+    }
+
+    /** 一格的坐标写成命令行上的 {@code x y z}。 */
+    static String xyz(BlockPos pos) {
+        return pos.getX() + " " + pos.getY() + " " + pos.getZ();
     }
 
 

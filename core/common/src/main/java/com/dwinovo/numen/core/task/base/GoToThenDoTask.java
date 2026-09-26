@@ -8,8 +8,8 @@ import com.dwinovo.numen.entity.NumenPlayer;
 
 /**
  * The "walk within reach, then act" shape shared by every task that navigates to a
- * target and then does one bounded thing there ({@code interact_at},
- * {@code interact_entity}). It collapses
+ * target and then does one bounded thing there ({@code use block},
+ * {@code use entity}). It collapses
  * the identical nav-drive-then-act loop those tasks each hand-wrote onto three small
  * abstract hooks, leaving each concrete task to describe only its target, its
  * arrival test, and its action.

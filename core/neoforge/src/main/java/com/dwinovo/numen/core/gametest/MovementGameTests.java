@@ -214,16 +214,10 @@ public class MovementGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_seated", new BlockPos(7, 2, 4), true);
         helper.runAfterDelay(2, () -> {
             companion.startRiding(boat, true);
-            TaskRecord press = call(companion, "interact_entity", args(
-                    "button", "right",
-                    "entity_id", boat.getId())).task();
+            TaskRecord press = command(companion, "use entity right " + boat.getId()).task();
         });
         helper.runAfterDelay(30, () -> {
-            TaskRecord dig = call(companion, "interact_at", args(
-                    "button", "left",
-                    "x", stone.getX(),
-                    "y", stone.getY(),
-                    "z", stone.getZ())).task();
+            TaskRecord dig = command(companion, "use block left " + xyz(stone)).task();
         });
 
         helper.succeedWhen(() -> {
@@ -235,7 +229,7 @@ public class MovementGameTests {
 
     /**
      * 步行即下座驾,且只有一处说了算(PlayerNav):坐在矿车里对远处的盔甲架发
-     * interact_entity,这不是 goto,任务层没有任何载具处置——她必须自己下车、走过去
+     * use entity,这不是 goto,任务层没有任何载具处置——她必须自己下车、走过去
      * 把它打掉(创造模式一下即碎)。乘客的行走输入对载具无效,没有这条规则她会坐着
      * "走"到失速。
      */
@@ -254,9 +248,7 @@ public class MovementGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_rider", new BlockPos(3, 2, 6), true);
         helper.runAfterDelay(2, () -> {
             companion.startRiding(cart, true);
-            TaskRecord hit = call(companion, "interact_entity", args(
-                    "button", "left",
-                    "entity_id", stand.getId())).task();
+            TaskRecord hit = command(companion, "use entity left " + stand.getId()).task();
         });
 
         helper.succeedWhen(() -> {
@@ -398,7 +390,7 @@ public class MovementGameTests {
     }
 
     /**
-     * 接近类动作从不动世界:盔甲架关在玻璃罩里,interact_entity 左键它。她到不了触及
+     * 接近类动作从不动世界:盔甲架关在玻璃罩里,use entity 左键它。她到不了触及
      * 距离内的视线位,任务失败并把挡路的玻璃点名(goto 开路是模型的决定),玻璃一块不碎。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
@@ -420,13 +412,11 @@ public class MovementGameTests {
             }
         }
         NumenPlayer companion = spawnAt(helper, "gametest_knocker", new BlockPos(3, 2, 3), true);
-        TaskRecord hit = call(companion, "interact_entity", args(
-                "button", "left",
-                "entity_id", stand.getId())).task();
+        TaskRecord hit = command(companion, "use entity left " + stand.getId()).task();
 
         helper.succeedWhen(() -> {
             String reply = hit.getResult() == null ? null : hit.getResult().message();
-            helper.assertTrue(reply != null, "interact_entity has not finished");
+            helper.assertTrue(reply != null, "use entity has not finished");
             helper.assertTrue(stand.isAlive(), "the armor stand was hit through/after breaking glass");
             helper.assertTrue(reply.contains("glass"),
                     "the failure does not name the glass in the way: " + reply);

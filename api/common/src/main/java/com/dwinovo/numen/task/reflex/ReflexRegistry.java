@@ -49,8 +49,8 @@ public final class ReflexRegistry {
         if (lines.isEmpty()) return "";
         return "你的身体有这些本能,会自动发生,不需要用工具去做:"
                 + String.join(";", lines)
-                + "。你的显式动作永远优先——用 equip_item 显式穿戴会钉住那个槽位,本能不再更换它;"
-                + "equip_item 的 item_id 传 \"auto\" 可解除钉,交还本能管理。";
+                + "。你的显式动作永远优先——用 gear wear 显式穿戴会钉住那个槽位,本能不再更换它;"
+                + "gear wear 的 item 传 \"auto\" 可解除钉,交还本能管理。";
     }
 
     /** Test hook: wipe the roster. */

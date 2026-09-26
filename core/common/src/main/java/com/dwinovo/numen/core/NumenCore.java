@@ -110,34 +110,25 @@ public final class NumenCore {
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.FishTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.FollowTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.AutoMineTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.EquipItemTool());
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.inventory.GearCommands::install);
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.BuildTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.BlueprintTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.perception.BlueprintReadTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.interact.InteractAtTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.interact.SleepTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.interact.InteractEntityTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.EatItemTool());
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.interact.UseCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.inventory.InvCommands::install);
         // 引擎的 task 命令组,和插件走同一扇门;它提升出的 task_status / task_stop / set_timer 就在这里进表,
         // 工具表的顺序不变。
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.task.TaskCommands::install);
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.DropItemsTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.TakeItemsTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.interact.InspectGuiTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.TransferTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.interact.CloseGuiTool());
         // status 组提升出的 get_self_status / get_owner_status 在这里进表
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.perception.StatusCommands::install);
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.LookupRecipeTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.CraftTool());
         // scan 组提升出的 look_around / scan_blocks / scan_nearby_entities / inspect_block 在这里进表
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.perception.ScanCommands::install);
         ToolRegistry.register(new com.dwinovo.numen.core.tools.perception.ScaffoldMaterialsTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.agent.TodoWriteTool());   // raw NumenTool
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.agent.LoadSkillTool());   // raw NumenTool
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.agent.RememberTool());    // raw NumenTool
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.agent.RecallTool());      // raw NumenTool
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.agent.ForgetTool());      // raw NumenTool
+        // skill 组提升出的 load_skill 就在这里进表,工具表里的位置不变
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.agent.SkillCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.agent.MemoryCommands::install);
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.PlanRouteTool());
     }
 

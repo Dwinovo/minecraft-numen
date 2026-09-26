@@ -1,11 +1,12 @@
 package com.dwinovo.numen.core.task.inventory;
 
+import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.world.item.Item;
 
 /**
- * Typed task descriptor for the {@code equip} tool: "take this item out of my
- * inventory and wear/wield it." Completes in a single tick — no pathing.
+ * Typed task descriptor for {@code gear wear}: "take this item out of my inventory and wear/wield it."
+ * Completes in a single tick — no pathing.
  *
  * <p>{@link #slot} is {@code null} for auto-choosing, or a slot name the LLM forces:
  * {@code mainhand}, {@code offhand} or a name from {@code <worn>}. Slot names depend on the
@@ -13,7 +14,8 @@ import net.minecraft.world.item.Item;
  */
 public final class EquipTaskRecord extends TaskRecord {
 
-    public static final String TOOL_NAME = "equip_item";
+    /** 穿脱都是当场的事,期限只防卡死,给得宽一点。{@link UnequipTaskRecord} 用同一个。 */
+    static final long TIMEOUT_TICKS = 5 * 20;
 
     /** The item to equip (must be in the 36 backpack slots). */
     public final Item item;
@@ -22,9 +24,8 @@ public final class EquipTaskRecord extends TaskRecord {
     /** Human-readable label for messages / debug overlay (e.g. "wooden_pickaxe"). */
     public final String label;
 
-    public EquipTaskRecord(String toolCallId, long deadlineGameTime,
-                           Item item, String slot, String label) {
-        super(TOOL_NAME, toolCallId, deadlineGameTime);
+    public EquipTaskRecord(ServerSource source, Item item, String slot, String label) {
+        super(source, source.companion().level().getGameTime() + TIMEOUT_TICKS);
         this.item = item;
         this.slot = slot;
         this.label = label;
@@ -32,6 +33,6 @@ public final class EquipTaskRecord extends TaskRecord {
 
     @Override
     public String describe() {
-        return TOOL_NAME + " " + label;
+        return getToolName() + " " + label;
     }
 }

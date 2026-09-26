@@ -171,7 +171,7 @@ public final class Interaction {
     /**
      * 右键落在 {@code hit} 这一面、手里是 {@code stack} 时,会不会往世界里放东西、放在哪:方块物品贴着
      * 命中面放进可替换的格,桶倒出或舀起液体,打火石与火焰弹点起火——都是一次放置,交权限层裁决。
-     * 不往世界里放东西时为 null。按下右键的各处(导航执行、interact_at)都按这一份判。
+     * 不往世界里放东西时为 null。按下右键的各处(导航执行、use block)都按这一份判。
      */
     public static Action placementOf(Level level, BlockHitResult hit, ItemStack stack) {
         BlockPos placeAt = hit.getBlockPos().relative(hit.getDirection());

@@ -8,7 +8,7 @@ import com.dwinovo.numen.task.TaskState;
 import java.util.Map;
 
 /**
- * {@code equip_item} on the player body: runs {@link Wardrobe#wear} in the body's task slot. The
+ * {@code gear wear} on the player body: runs {@link Wardrobe#wear} in the body's task slot. The
  * wearing, the auto-choosing of a slot and the refusals all live there; this task only carries the
  * outcome into the result envelope. One-tick (all work in {@link #onStart()}).
  *

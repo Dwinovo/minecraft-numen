@@ -36,7 +36,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Query implementations — the business half of {@code LookupRecipeTool}, and of the
+ * Query implementations — the business half of the {@code inv recipe} command declared in
+ * {@link com.dwinovo.numen.core.tools.inventory.InvCommands}, and of the
  * {@code scan entities} and {@code scan storage} commands declared in
  * {@link com.dwinovo.numen.core.tools.perception.ScanCommands}.
  */
@@ -108,7 +109,7 @@ String filter,
 
     private record ScoredEntity(Entity entity, String category, double distance) {}
 
-    // ---- lookup_recipe ----
+    // ---- inv recipe ----
 
     /** Cap recipes per lookup — enough variants to choose from without a token bomb. */
     private static final int MAX_RECIPES = 4;
@@ -178,14 +179,14 @@ String item_id,
         }
         return TaskResult.ok("recipe(s) for " + name + ":\n\n" + String.join("\n\n", recipes) + "\n\n"
                 + "To make it —\n"
-                + "• [crafting]: call craft {item_id, count} — it lays out the grid and takes the "
+                + "• [crafting]: run inv craft <item> --count N — it lays out the grid and takes the "
                 + "result for you (a 3x3 recipe needs a crafting table within reach; 2x2 works "
                 + "anywhere).\n"
-                + "• [smelting|blasting|smoking]: interact_at the furnace, then transfer the input and "
+                + "• [smelting|blasting|smoking]: use block the furnace, then transfer the input and "
                 + "the fuel with NO `to` — the menu routes each to its slot. Wait, then transfer the "
                 + "output back out.\n"
-                + "• [stonecutter]: interact_at it, transfer the input (no `to` routes it in), take the "
-                + "output. [smithing]: interact_at it, inspect_gui, then transfer template + base + "
+                + "• [stonecutter]: use block it, transfer the input (no `to` routes it in), take the "
+                + "output. [smithing]: use block it, use gui, then transfer template + base + "
                 + "addition each into its own slot (give `to`).").toJson();
     }
 
@@ -290,7 +291,7 @@ int z,
         if (caps == null || caps.isBlank()) {
             return TaskResult.ok(id + " at " + coord + " exposes no item/fluid/energy storage "
                     + "(not a machine/tank/battery, or it keeps its state elsewhere). "
-                    + "If it has a GUI, right-click it then use inspect_gui.").toJson();
+                    + "If it has a GUI, right-click it (use block) then use gui.").toJson();
         }
         return TaskResult.ok(id + " at " + coord + ":\n" + caps).toJson();
     }

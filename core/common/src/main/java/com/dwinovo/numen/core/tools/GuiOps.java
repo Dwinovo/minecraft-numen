@@ -13,8 +13,8 @@ import net.minecraft.world.item.ItemStack;
 import java.util.List;
 
 /**
- * GUI tool implementations — the business half of {@code InspectGuiTool} and
- * {@code CloseGuiTool}: read the open container menu and close it.
+ * GUI tool implementations — the business half of {@code use gui} and
+ * {@code use close} ({@code UseCommands}): read the open container menu and close it.
  */
 public final class GuiOps {
 
@@ -82,7 +82,7 @@ public final class GuiOps {
         }
 
         // Render the crafting grid as a 2D map of click-able slot numbers, so the recipe ascii from
-        // lookup_recipe overlays cell-for-cell (a smaller recipe goes in the TOP-LEFT — same as here).
+        // inv recipe overlays cell-for-cell (a smaller recipe goes in the TOP-LEFT — same as here).
         String gridSection = "";
         if (gridCells != null) {
             StringBuilder g = new StringBuilder("crafting grid " + gridW + "x" + gridH

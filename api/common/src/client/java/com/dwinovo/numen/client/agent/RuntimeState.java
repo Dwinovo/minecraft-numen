@@ -140,7 +140,7 @@ final class RuntimeState {
      * 这里只负责渲染——所以"换没换"只有一个信号:快照的时间戳。
      *
      * <p>放进请求而不是让她调 {@code get_self_status},省的是<b>一整轮</b>(请求 + 工具结果 +
-     * 再请求)。合并同类计数,不报耐久附魔:要精确到槽位时她该调 {@code inspect_gui}。
+     * 再请求)。合并同类计数,不报耐久附魔:要精确到槽位时她该用 {@code use gui}。
      */
     private String inventoryXml() {
         var snapshot = ClientNumenState.get(entityUuid).orElse(null);
@@ -183,7 +183,7 @@ final class RuntimeState {
     /**
      * 她这一刻骑没骑着东西。与效果同一纪律:<b>只能现挂,不能进历史</b>——上下船是
      * 随时翻转的身体事实,沉进历史就成了理直气壮的错。没骑就一个字都不发。
-     * 有这一行,模型不会再对自己坐着的船发第二次 interact_entity,也知道 goto
+     * 有这一行,模型不会再对自己坐着的船发第二次 use entity,也知道 goto
      * 会驾着它走、任何要走路的动作都会自己下来。
      */
     private String ridingXml() {
@@ -245,7 +245,7 @@ final class RuntimeState {
         // 向它,结构上就没什么可重复计的。
         return "<inventory>Everything your body carries right now, totalled across all 36 backpack "
                 + "slots — trust it and do not spend a call on get_self_status to rediscover it. "
-                + "Call inspect_gui only when exact slots matter. A newer tool result wins over this."
+                + "Run use gui only when exact slots matter. A newer tool result wins over this."
                 + "\ncarrying=" + (items.length() == 0 ? "nothing" : items)
                 + "\nholding (already counted above)=main " + describe(snapshot.mainHand())
                 + ", off " + describe(snapshot.offhand())

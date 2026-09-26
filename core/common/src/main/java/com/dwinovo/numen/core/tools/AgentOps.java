@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 
 /**
  * Agent-side (client-local) tool implementations — the business half of
- * {@code LoadSkillTool}, {@code TodoWriteTool} and the memory tools. These run on
+ * {@code skill load} ({@code SkillCommands}), {@code TodoWriteTool} and {@code memory} ({@code MemoryCommands}). These run on
  * the agent thread with no server body and return their result directly.
  */
 public final class AgentOps {

@@ -1,6 +1,6 @@
 ---
 name: stronghold_finding
-description: Craft eyes of ender, find the stronghold with the locate structure command (no eye-throwing needed), reach the portal room, and fill the 12 frames via inspect_block + interact_at.
+description: Craft eyes of ender, find the stronghold with the locate structure command (no eye-throwing needed), reach the portal room, and fill the 12 frames via inspect_block + use block.
 ---
 
 # Skill: stronghold_finding
@@ -14,7 +14,7 @@ Phase 5 of the dragon route. With rods and pearls in hand you craft eyes, walk s
 
 ## Step 1 — craft the eyes
 
-Both are 2×2/shapeless recipes — `lookup_recipe` for the layout, then `transfer` the ingredients into a grid and take the result (see the `containers` skill; no crafting table needed).
+Both are 2×2/shapeless recipes — `inv recipe` for the layout, then `transfer` the ingredients into a grid and take the result (see the `containers` skill; no crafting table needed).
 
 1. `blaze_powder` — each blaze rod grinds into 2 powder.
 2. `ender_eye` (×12) — 1 blaze powder + 1 ender pearl each.
@@ -39,7 +39,7 @@ The room has a lava pool under the frame and a **silverfish spawner** on the sta
 
 1. The 12 `end_portal_frame` blocks ring a 3×3 opening. `scan_blocks(end_portal_frame)` returns them as one group that lists all 12 positions.
 2. `inspect_block` each frame — the `has_eye` property tells you which are pre-filled.
-3. `interact_at(button=right, x, y, z, item_id=minecraft:ender_eye)` on each empty frame. **Eyes cannot be taken back out.**
+3. `use block right <x> <y> <z> --item minecraft:ender_eye` on each empty frame. **Eyes cannot be taken back out.**
 4. The 12th eye activates the portal; the opening fills with the starfield surface.
 
 ## Before dropping in

@@ -2,6 +2,7 @@ package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.ToolArgs;
 import com.dwinovo.numen.agent.tool.api.ToolContext;
+import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.core.task.interact.InteractAtTaskRecord;
 import com.dwinovo.numen.core.task.interact.InteractEntityTaskRecord;
@@ -21,20 +22,15 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Block-action tool implementations — the business half of {@code AutoMineTool},
- * {@code InteractAtTool} and {@code InteractEntityTool}. Each method validates its
- * args and builds a {@link TaskRecord}; the {@link ToolContext} carries the call
- * id and deadline basis.
+ * Block-action implementations — the business half of {@code AutoMineTool} and of
+ * {@code use block} / {@code use ahead} / {@code use entity} ({@code UseCommands}). Each method validates its
+ * args and builds a {@link TaskRecord}; a command's records take their name, call id and deadline basis from its
+ * {@link ServerSource}, a tool's from its {@link ToolContext}.
  */
 public final class BlockActionOps {
 
     // mine bounds.
     private static final int MAX_COUNT = 256;
-
-    // interact_at: covers walking to the aim.
-    private static final long INTERACT_AT_TIMEOUT_TICKS = 30 * 20;
-    // interact_entity: covers chasing a moving target.
-    private static final long INTERACT_ENTITY_TIMEOUT_TICKS = 60 * 20;
 
     /**
      * {@code mine} 的两种用法二选一:{@code block_ids}(她自己挑最近的,{@code count} 必给)或 {@code groups}
@@ -89,42 +85,26 @@ public final class BlockActionOps {
         return targets.size() == 1 ? path : path + "+" + (targets.size() - 1);
     }
 
-    public TaskRecord interactAt(
-String button,
-Integer x,
-Integer y,
-Integer z,
-Integer hold_ticks,
-String item_id,
-            ToolContext ctx) {
+    /**
+     * {@code use block}({@code aim} 是那一格)与 {@code use ahead}({@code aim} 为 null,朝她此刻面对的方向)。
+     */
+    public TaskRecord interactAt(ServerSource source, String button, BlockPos aim, Integer hold_ticks,
+                                 String item_id) {
         MouseButton buttonVal = ToolParse.parseButton(button);
         int holdTicks = hold_ticks == null ? 0 : hold_ticks;
-
-        BlockPos aim = null;
-        if (x != null || y != null || z != null) {
-            if (x == null || y == null || z == null) {
-                throw new IllegalArgumentException(
-                        "an aim point needs all of x, y, z (or leave all null to use the held item straight ahead).");
-            }
-            aim = new BlockPos(x, y, z);
-        }
         Item item = item_id == null ? null : ToolArgs.parseItem(item_id);
         String bodyBound = InteractAtTaskRecord.bodyBoundReason(item);
         if (bodyBound != null) {
             throw new IllegalArgumentException(bodyBound);
         }
-        return new InteractAtTaskRecord(ctx.toolCallId(), ctx.deadline(INTERACT_AT_TIMEOUT_TICKS), buttonVal, aim, holdTicks, item);
+        return new InteractAtTaskRecord(source, buttonVal, aim, holdTicks, item);
     }
 
-    public TaskRecord interactEntity(
-String button,
-int entity_id,
-Integer hold_ticks,
-String item_id,
-            ToolContext ctx) {
+    public TaskRecord interactEntity(ServerSource source, String button, int entity_id, Integer hold_ticks,
+                                     String item_id) {
         MouseButton buttonVal = ToolParse.parseButton(button);
         int holdTicks = hold_ticks == null ? 0 : hold_ticks;
-        return new InteractEntityTaskRecord(ctx.toolCallId(), ctx.deadline(INTERACT_ENTITY_TIMEOUT_TICKS), buttonVal, entity_id, holdTicks,
+        return new InteractEntityTaskRecord(source, buttonVal, entity_id, holdTicks,
                 item_id == null ? null : ToolArgs.parseItem(item_id));
     }
 }

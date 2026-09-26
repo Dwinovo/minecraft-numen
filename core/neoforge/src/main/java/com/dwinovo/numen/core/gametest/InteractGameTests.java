@@ -18,7 +18,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
-/** 交互:{@code interact_at} 对着水面舀水、放船;{@code interact_entity} 走到活物跟前右键、左键。 */
+/** 交互:{@code use block} 对着水面舀水、放船;{@code use entity} 走到活物跟前右键、左键。 */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
 public class InteractGameTests {
@@ -45,8 +45,7 @@ public class InteractGameTests {
 
         NumenPlayer companion = spawnAt(helper, "gametest_scooper", new BlockPos(3, 2, 5), false);
         companion.getInventory().add(new ItemStack(Items.BUCKET));
-        ToolRun scoop = call(companion, "interact_at", args("button", "right",
-                "x", water.getX(), "y", water.getY(), "z", water.getZ(), "item_id", "minecraft:bucket"));
+        ToolRun scoop = command(companion, "use block right " + xyz(water) + " --item minecraft:bucket");
 
         helper.succeedWhen(() -> {
             helper.assertTrue(companion.getInventory().countItem(Items.WATER_BUCKET) == 1,
@@ -79,8 +78,7 @@ public class InteractGameTests {
         // 瞄池心时船的碰撞箱(宽 1.375)会搭在石堤上被 noCollision 拒绝——
         // 真玩家放船也是往远处的水面看,不盯着脚边的岸沿。
         BlockPos aim = helper.absolutePos(new BlockPos(9, 2, 8));
-        ToolRun place = call(companion, "interact_at", args("button", "right",
-                "x", aim.getX(), "y", aim.getY(), "z", aim.getZ(), "item_id", "minecraft:oak_boat"));
+        ToolRun place = command(companion, "use block right " + xyz(aim) + " --item minecraft:oak_boat");
 
         helper.succeedWhen(() -> {
             var boats = level.getEntitiesOfClass(net.minecraft.world.entity.vehicle.Boat.class,
@@ -103,11 +101,10 @@ public class InteractGameTests {
         helper.getLevel().addFreshEntity(sheep);
         NumenPlayer companion = spawnAt(helper, "gametest_shearer", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.SHEARS));
-        ToolRun shear = call(companion, "interact_entity",
-                args("button", "right", "entity_id", sheep.getId(), "item_id", "minecraft:shears"));
+        ToolRun shear = command(companion, "use entity right " + sheep.getId() + " --item minecraft:shears");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(shear.done(), "interact_entity has not finished");
+            helper.assertTrue(shear.done(), "use entity has not finished");
             helper.assertTrue(shear.succeeded() && sheep.isSheared(), "the sheep was not sheared: " + shear.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -122,10 +119,10 @@ public class InteractGameTests {
         pig.setNoAi(true);
         helper.getLevel().addFreshEntity(pig);
         NumenPlayer companion = spawnAt(helper, "gametest_poker_entity", new BlockPos(3, 2, 11), false);
-        ToolRun hit = call(companion, "interact_entity", args("button", "left", "entity_id", pig.getId()));
+        ToolRun hit = command(companion, "use entity left " + pig.getId());
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(hit.done(), "interact_entity has not finished");
+            helper.assertTrue(hit.done(), "use entity has not finished");
             helper.assertTrue(hit.succeeded() && pig.getHealth() < pig.getMaxHealth()
                             && pig.getLastHurtByMob() == companion,
                     "the pig was not hit by her: " + hit.outcome());
@@ -133,17 +130,32 @@ public class InteractGameTests {
         });
     }
 
-    /** 目标在工作距离外:interact_at 不自己走过去,当场失败并叫她先 goto,那一格原样。 */
+    /** 不对准任何一格:朝她面对的方向用手里的东西——雪球扔了出去,手里少一个。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
+    public static void use_ahead_throws_the_held_item(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_pitcher", new BlockPos(4, 2, 8), false);
+        companion.setXRot(-30f);
+        companion.getInventory().add(new ItemStack(Items.SNOWBALL, 4));
+        ToolRun toss = command(companion, "use ahead right --item minecraft:snowball");
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(toss.done(), "use ahead has not finished");
+            helper.assertTrue(toss.succeeded() && companion.getInventory().countItem(Items.SNOWBALL) == 3,
+                    "the snowball was not thrown: " + toss.outcome());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 目标在工作距离外:use block 不自己走过去,当场失败并叫她先 goto,那一格原样。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_at_out_of_reach_says_goto_first(GameTestHelper helper) {
         BlockPos stone = helper.absolutePos(new BlockPos(13, 2, 13));
         helper.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_shortarmed", new BlockPos(2, 2, 2), false);
-        ToolRun click = call(companion, "interact_at",
-                args("button", "left", "x", stone.getX(), "y", stone.getY(), "z", stone.getZ()));
+        ToolRun click = command(companion, "use block left " + xyz(stone));
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(click.done(), "interact_at has not finished");
+            helper.assertTrue(click.done(), "use block has not finished");
             helper.assertTrue(!click.succeeded() && click.outcome().contains("out of working reach")
                             && click.outcome().contains("goto"),
                     "the failure does not send her to goto first: " + click.outcome());
@@ -162,10 +174,10 @@ public class InteractGameTests {
         pig.setCustomName(net.minecraft.network.chat.Component.literal("Wilbur"));
         helper.getLevel().addFreshEntity(pig);
         NumenPlayer companion = spawnAt(helper, "gametest_restrained", new BlockPos(3, 2, 8), false);
-        ToolRun hit = call(companion, "interact_entity", args("button", "left", "entity_id", pig.getId()));
+        ToolRun hit = command(companion, "use entity left " + pig.getId());
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(hit.done(), "interact_entity has not finished");
+            helper.assertTrue(hit.done(), "use entity has not finished");
             helper.assertTrue(!hit.succeeded() && hit.outcome().contains("owner"),
                     "the refusal does not come from asking the owner: " + hit.outcome());
             helper.assertTrue(pig.getHealth() == pig.getMaxHealth(), "the named pig was hit");
@@ -173,7 +185,7 @@ public class InteractGameTests {
         });
     }
 
-    // ---- interact_entity:挤奶、喂食;interact_at:门、拉杆、放方块 ----
+    // ---- use entity:挤奶、喂食;use block:门、拉杆、放方块 ----
 
     /** 拿空桶右键一头牛:她走过去挤了奶,空桶换成了一桶牛奶。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_interact")
@@ -185,11 +197,10 @@ public class InteractGameTests {
         helper.getLevel().addFreshEntity(cow);
         NumenPlayer companion = spawnAt(helper, "gametest_milkmaid", new BlockPos(3, 2, 7), false);
         companion.getInventory().add(new ItemStack(Items.BUCKET));
-        ToolRun milk = call(companion, "interact_entity",
-                args("button", "right", "entity_id", cow.getId(), "item_id", "minecraft:bucket"));
+        ToolRun milk = command(companion, "use entity right " + cow.getId() + " --item minecraft:bucket");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(milk.done(), "interact_entity has not finished");
+            helper.assertTrue(milk.done(), "use entity has not finished");
             helper.assertTrue(milk.succeeded() && companion.getInventory().countItem(Items.MILK_BUCKET) == 1
                             && companion.getInventory().countItem(Items.BUCKET) == 0,
                     "the bucket was not filled with milk: " + milk.outcome());
@@ -208,11 +219,10 @@ public class InteractGameTests {
         helper.getLevel().addFreshEntity(cow);
         NumenPlayer companion = spawnAt(helper, "gametest_cowherd", new BlockPos(3, 2, 11), false);
         companion.getInventory().add(new ItemStack(Items.WHEAT, 2));
-        ToolRun feed = call(companion, "interact_entity",
-                args("button", "right", "entity_id", cow.getId(), "item_id", "minecraft:wheat"));
+        ToolRun feed = command(companion, "use entity right " + cow.getId() + " --item minecraft:wheat");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(feed.done(), "interact_entity has not finished");
+            helper.assertTrue(feed.done(), "use entity has not finished");
             helper.assertTrue(feed.succeeded() && cow.isInLove() && companion.getInventory().countItem(Items.WHEAT) == 1,
                     "the cow was not fed: " + feed.outcome());
             cow.discard();
@@ -257,7 +267,7 @@ public class InteractGameTests {
         TaskRecord flip = click(helper, companion, "right", new BlockPos(6, 2, 8));
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(flip.getResult() != null, "interact_at has not finished");
+            helper.assertTrue(flip.getResult() != null, "use block has not finished");
             helper.assertTrue(flip.getResult().success() && helper.getLevel().getBlockState(lever)
                             .getValue(net.minecraft.world.level.block.LeverBlock.POWERED),
                     "the lever was not flipped: " + flip.getResult().message());
@@ -271,11 +281,10 @@ public class InteractGameTests {
         BlockPos floor = helper.absolutePos(new BlockPos(6, 1, 12));
         NumenPlayer companion = spawnAt(helper, "gametest_paver", new BlockPos(4, 2, 12), false);
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 4));
-        ToolRun place = call(companion, "interact_at", args("button", "right",
-                "x", floor.getX(), "y", floor.getY(), "z", floor.getZ(), "item_id", "minecraft:cobblestone"));
+        ToolRun place = command(companion, "use block right " + xyz(floor) + " --item minecraft:cobblestone");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(place.done(), "interact_at has not finished");
+            helper.assertTrue(place.done(), "use block has not finished");
             helper.assertTrue(place.succeeded() && helper.getLevel().getBlockState(floor.above()).is(Blocks.COBBLESTONE)
                             && companion.getInventory().countItem(Items.COBBLESTONE) == 3,
                     "the cobblestone was not placed on the floor: " + place.outcome());

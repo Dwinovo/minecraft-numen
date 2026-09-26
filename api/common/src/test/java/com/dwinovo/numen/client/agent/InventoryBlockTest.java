@@ -223,7 +223,7 @@ class InventoryBlockTest {
         assumeTrue(booted);
         String block = RuntimeState.renderInventory(snapshot(0, ItemStack.EMPTY));
         assertTrue(block.contains("get_self_status"), block);
-        assertTrue(block.contains("inspect_gui"), block);
+        assertTrue(block.contains("use gui"), block);
     }
 
     // ==================== mainHand 本身 ====================

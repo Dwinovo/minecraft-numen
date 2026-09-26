@@ -70,7 +70,7 @@ public final class PerceptionOps {
         // 背包不在这里。它是「状态」不是「事件」——工具结果会沉进对话历史,而历史里的
         // 状态永远不会过期:十轮之后她读到那份快照,上面写的还是十轮前的东西,而且和这一轮
         // 挂在请求里的实时背包对不上。全量背包只有一个来源(runtime_state 的 <inventory>),
-        // 那一份永远是现在。要精确到槽位就调 inspect_gui。
+        // 那一份永远是现在。要精确到槽位就用 use gui。
         var inv = self.getInventory();
         JsonObject slots = new JsonObject();
         int used = 0;

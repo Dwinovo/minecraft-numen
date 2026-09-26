@@ -1,12 +1,11 @@
 package com.dwinovo.numen.core.task.inventory;
 
+import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.world.item.Item;
 
 /**
- * {@code equip_item action=unequip} 的任务描述:把身上的东西收回背包。
- * 与 {@link EquipTaskRecord} 是同一个工具的两个形态——对象都是自己身上,
- * 动词进参数,不另开工具。单 tick 完成,无寻路。
+ * {@code gear remove} 的任务描述:把身上的东西收回背包。单 tick 完成,无寻路。
  *
  * <p>按 {@link #slot}(一个槽名,或 {@code armor} 指四件甲)摘,或按 {@link #item} 从戴着它的格子摘;
  * 两个都给就只摘这些槽里戴着这件的。槽名随身体而定,执行时才解析。
@@ -20,8 +19,8 @@ public final class UnequipTaskRecord extends TaskRecord {
     /** Human-readable label for messages / debug overlay:槽名或物品名。 */
     public final String label;
 
-    public UnequipTaskRecord(String toolCallId, long deadlineGameTime, String slot, Item item, String label) {
-        super(EquipTaskRecord.TOOL_NAME, toolCallId, deadlineGameTime);
+    public UnequipTaskRecord(ServerSource source, String slot, Item item, String label) {
+        super(source, source.companion().level().getGameTime() + EquipTaskRecord.TIMEOUT_TICKS);
         this.slot = slot;
         this.item = item;
         this.label = label;
@@ -29,6 +28,6 @@ public final class UnequipTaskRecord extends TaskRecord {
 
     @Override
     public String describe() {
-        return EquipTaskRecord.TOOL_NAME + " unequip " + label;
+        return getToolName() + " " + label;
     }
 }

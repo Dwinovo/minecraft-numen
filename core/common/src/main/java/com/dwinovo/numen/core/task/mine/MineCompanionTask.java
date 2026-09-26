@@ -264,8 +264,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 return new Precondition.Failure(
                         "can't harvest " + r.label + " with the current tools — mining it would"
                         + " destroy it without any drop. Equip a suitable tool (e.g. a pickaxe)"
-                        + " first; to just destroy a block regardless of drops, goto beside it and use interact_at"
-                        + " with button left.",
+                        + " first; to just destroy a block regardless of drops, goto beside it and run use block left"
+                        + " on it.",
                         FailureType.WRONG_TOOL);
             }
             return null;
@@ -1126,8 +1126,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             // problem is the tool, not the deposit. Names the escape hatches explicitly.
             fail("found " + unharvestable.size() + " " + noun() + " but none can be harvested with"
                     + " the current tools (mining would destroy them without any drop); gathered "
-                    + r.getMined() + ". Equip a better tool (equip_item) and retry; to just destroy"
-                    + " blocks regardless of drops, goto beside them and use interact_at with button left."
+                    + r.getMined() + ". Equip a better tool (gear wear) and retry; to just destroy"
+                    + " blocks regardless of drops, goto beside them and run use block left on each."
                     + leftovers(unharvestable), FailureType.WRONG_TOOL);
         } else if (!unworkable.isEmpty()) {
             fail("found " + unworkable.size() + " " + noun() + " nearby but no clear shot at any"

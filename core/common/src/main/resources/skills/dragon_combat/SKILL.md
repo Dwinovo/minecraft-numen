@@ -55,7 +55,7 @@ Two modes, alternating:
 
 ### HP discipline
 
-This is a long fight. Between every tool call: `get_self_status`; **HP ≤ 10 → disengage to centre, `eat_item`, only then re-engage.** The dragon doesn't rush you — patience is free, death isn't.
+This is a long fight. Between every tool call: `get_self_status`; **HP ≤ 10 → disengage to centre, `inv eat`, only then re-engage.** The dragon doesn't rush you — patience is free, death isn't.
 
 ## After the kill
 

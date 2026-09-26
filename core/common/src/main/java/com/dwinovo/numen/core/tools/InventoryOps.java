@@ -2,6 +2,7 @@ package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.ToolArgs;
 import com.dwinovo.numen.agent.tool.api.ToolContext;
+import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.core.task.collect.CollectItemsTaskRecord;
 import com.dwinovo.numen.core.task.inventory.DropItemsTaskRecord;
@@ -15,78 +16,63 @@ import net.minecraft.world.item.Item;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /**
- * Inventory-management tool implementations — the business half of
- * {@code EquipItemTool} / {@code EatItemTool} / {@code DropItemsTool} /
- * {@code CollectItemsTool}. Each returns a {@link TaskRecord} the body's task
- * queue runs; the {@link ToolContext} carries the call id and deadline basis.
+ * Inventory-management implementations — the business half of {@code gear wear} / {@code gear remove} /
+ * {@code inv eat} / {@code inv drop} ({@code GearCommands}, {@code InvCommands}) and {@code CollectItemsTool}.
+ * Each returns a {@link TaskRecord} the body's task queue runs; a command's records take their name, call id and
+ * deadline basis from its {@link ServerSource}, a tool's from its {@link ToolContext}.
  */
 public final class InventoryOps {
 
-    private static final long EQUIP_TIMEOUT_TICKS = 5 * 20;   // instant; generous floor
-
-    /** Generous — covers any food's eat duration (most ~1.6s) plus buffer. */
-    private static final long EAT_TIMEOUT_TICKS = 15 * 20;
-
     private static final int DROP_MAX_COUNT = 999;
-    private static final long DROP_TIMEOUT_TICKS = 10 * 20;
 
     private static final int COLLECT_DEFAULT_RADIUS = 16;
     private static final int COLLECT_MAX_RADIUS = 48;
     private static final long COLLECT_TIMEOUT_TICKS = 60 * 20;   // 1 min
 
-    public TaskRecord equipItem(
-String action,
-String item_id,
-String slot,
-            ToolContext ctx) {
-        // 只做参数翻译:槽名随身体而定(模组会加槽),是不是真有这个槽、穿不穿得上,都由 Wardrobe 在身上答
-        String slotName = slot == null || slot.isBlank() ? null : slot.toLowerCase();
-        boolean hasItem = item_id != null && !item_id.isBlank();
-        if ("unequip".equalsIgnoreCase(action)) {
-            if (slotName == null && !hasItem) {
-                throw new IllegalArgumentException("slot is required for unequip — a slot name from "
-                        + "<worn>, mainhand, offhand or 'armor' (all four armor pieces) — unless you name "
-                        + "the worn item with item_id");
-            }
-            Item item = hasItem ? ToolArgs.parseItem(item_id) : null;
-            String label = slotName != null ? slotName : BuiltInRegistries.ITEM.getKey(item).getPath();
-            return new UnequipTaskRecord(ctx.toolCallId(), ctx.deadline(EQUIP_TIMEOUT_TICKS),
-                    slotName, item, label);
-        }
-        if (!hasItem) {
-            throw new IllegalArgumentException(
-                    "item_id is required to equip (to take gear off, use action=unequip with a slot)");
-        }
+    /**
+     * {@code gear wear}:只做参数翻译。槽名随身体而定(模组会加槽),是不是真有这个槽、穿不穿得上,都由
+     * {@link Wardrobe} 在身上答;{@code armor} 是卸下专用的别名,穿戴没有这个目标——四件甲各回各槽。
+     */
+    public TaskRecord wear(ServerSource source, String item_id, String slot) {
+        String slotName = slotName(slot);
         if (Wardrobe.ARMOR.equals(slotName)) {
             throw new IllegalArgumentException(
-                    "slot=armor is only for action=unequip (it means all four armor pieces)");
+                    "--slot armor is only for gear remove (it means all four armor pieces)");
         }
-
         Item item = ToolArgs.parseItem(item_id);
-        String label = BuiltInRegistries.ITEM.getKey(item).getPath();
-        return new EquipTaskRecord(ctx.toolCallId(), ctx.deadline(EQUIP_TIMEOUT_TICKS), item, slotName, label);
+        return new EquipTaskRecord(source, item, slotName, BuiltInRegistries.ITEM.getKey(item).getPath());
     }
 
-    public TaskRecord eatItem(
-String item_id,
-            ToolContext ctx) {
-        Item item = ToolArgs.parseItem(item_id);
-        String label = BuiltInRegistries.ITEM.getKey(item).getPath();
-        return new EatItemTaskRecord(ctx.toolCallId(), ctx.deadline(EAT_TIMEOUT_TICKS), item, label);
+    /** {@code gear remove}:按槽名摘,或按物品从戴着它的格子摘;两个都没给就不知道摘什么。 */
+    public TaskRecord remove(ServerSource source, String slot, String item_id) {
+        String slotName = slotName(slot);
+        if (slotName == null && item_id == null) {
+            throw new IllegalArgumentException("slot is required for gear remove — --slot with a slot name from "
+                    + "<worn>, mainhand, offhand or armor (all four armor pieces) — unless you name "
+                    + "the worn item with --item");
+        }
+        Item item = item_id == null ? null : ToolArgs.parseItem(item_id);
+        String label = slotName != null ? slotName : BuiltInRegistries.ITEM.getKey(item).getPath();
+        return new UnequipTaskRecord(source, slotName, item, label);
     }
 
-    public TaskRecord dropItems(
-String item_id,
-int count,
-            ToolContext ctx) {
+    private static String slotName(String slot) {
+        return slot == null || slot.isBlank() ? null : slot.toLowerCase(Locale.ROOT);
+    }
+
+    public TaskRecord eatItem(ServerSource source, String item_id) {
         Item item = ToolArgs.parseItem(item_id);
-        count = Math.clamp(count, 1, DROP_MAX_COUNT);
-        String label = BuiltInRegistries.ITEM.getKey(item).getPath();
-        return new DropItemsTaskRecord(ctx.toolCallId(), ctx.deadline(DROP_TIMEOUT_TICKS),
-                item, count, label);
+        return new EatItemTaskRecord(source, item, BuiltInRegistries.ITEM.getKey(item).getPath());
+    }
+
+    public TaskRecord dropItems(ServerSource source, String item_id, int count) {
+        Item item = ToolArgs.parseItem(item_id);
+        return new DropItemsTaskRecord(source, item, Math.clamp(count, 1, DROP_MAX_COUNT),
+                BuiltInRegistries.ITEM.getKey(item).getPath());
     }
 
     public TaskRecord collectItems(

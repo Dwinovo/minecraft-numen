@@ -33,14 +33,14 @@ public final class TransferTool implements NumenTool {
     public String description() {
         return "Transfer items between slots in the GUI you have open — reorganize, load a machine, "
                 + "deposit or take. Pass `moves` as a LIST; they run in order, so do the whole job in one "
-                + "call. inspect_gui first for slot indices.";
+                + "call. Run use gui first for slot indices.";
     }
 
     @Override
     public Map<String, Object> parameterSchema() {
         return Schema.object()
                 .objectArray("moves", "Transfers to run in order (one whole job per call).", item -> item
-                        .integer("from", "Source slot index (from inspect_gui).")
+                        .integer("from", "Source slot index (from use gui).")
                         .nullableInteger("to", "Destination slot. OMIT to route the stack to the other section "
                                 + "(deposit/take/feed). Give a slot to place exactly there (empty=move, same "
                                 + "item=merge, different item=swap).")

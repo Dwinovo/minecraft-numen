@@ -273,30 +273,30 @@ public class ModeGameTests {
         helper.succeed();
     }
 
-    /** 创造取物:take_items 凭空取 100 钻石入背包(创造物品栏 GUI 的假体)。 */
+    /** 创造取物:inv take 凭空取 100 钻石入背包(创造物品栏 GUI 的假体)。 */
     @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
     public static void creative_take_items(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_conjure", new BlockPos(2, 2, 2), true);
-        ToolRun reply = call(companion, "take_items", args("item_id", "minecraft:diamond", "count", 100));
+        ToolRun reply = command(companion, "inv take minecraft:diamond 100");
         helper.succeedWhen(() -> {
             helper.assertTrue(reply.reply() != null && reply.reply().contains("\"success\":true"),
-                    "take_items should succeed in creative, got: " + reply.reply());
+                    "inv take should succeed in creative, got: " + reply.reply());
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 100,
                     "expected 100 diamonds in inventory");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
 
-    /** 生存取物拒绝:take_items 在生存画像下吃诚实拒绝,背包不动。 */
+    /** 生存取物拒绝:inv take 在生存画像下吃诚实拒绝,背包不动。 */
     @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
     public static void survival_take_items_refused(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_honest", new BlockPos(2, 2, 2), false);
-        ToolRun reply = call(companion, "take_items", args("item_id", "minecraft:diamond", "count", 10));
+        ToolRun reply = command(companion, "inv take minecraft:diamond 10");
         helper.succeedWhen(() -> {
             helper.assertTrue(reply.reply() != null && reply.reply().contains("\"success\":false"),
-                    "take_items must refuse in survival, got: " + reply.reply());
+                    "inv take must refuse in survival, got: " + reply.reply());
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0,
                     "survival refusal must not add items");
             CompanionFactory.despawn(level.getServer(), companion);

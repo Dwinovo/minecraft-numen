@@ -16,7 +16,7 @@ import java.util.Set;
 
 /**
  * 工具入口共享的参数解析件——此前 scan_blocks 与 mine 各抄一份方块 id
- * 解析、interact_at 与 interact_entity 各抄一份按键解析,在这里合一。
+ * 解析、use block 与 use entity 各抄一份按键解析,在这里合一。
  * 物品 id 解析用引擎的 {@code ToolArgs.parseItem},不在此重复。
  */
 public final class ToolParse {

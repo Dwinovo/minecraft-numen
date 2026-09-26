@@ -42,7 +42,7 @@ import java.util.Map;
 import java.util.TreeSet;
 
 /**
- * The {@code craft} tool: the whole craft flow in one call — pick a recipe whose
+ * The {@code inv craft} command: the whole craft flow in one call — pick a recipe whose
  * materials the inventory can feed, lay the ingredients into a REAL crafting grid
  * via menu clicks, and shift-take the result. Everything runs through the vanilla
  * container path ({@code menu.clicked} on a live {@code CraftingMenu} /
@@ -82,7 +82,7 @@ public final class CraftOps {
 
         List<Cand> candidates = candidatesFor(level, target);
         if (candidates.isEmpty()) {
-            return TaskResult.fail("no crafting recipe makes " + name + " — check lookup_recipe: it may "
+            return TaskResult.fail("no crafting recipe makes " + name + " — check inv recipe: it may "
                     + "be smelted, stonecut, smithed, mined or traded instead.").toJson();
         }
 
@@ -111,7 +111,7 @@ public final class CraftOps {
         if (satisfiable.isEmpty()) {
             return TaskResult.fail("not enough materials for " + name + " — missing: "
                     + String.join(", ", bestMissing)
-                    + ". Collect or craft those first, then craft again.").toJson();
+                    + ". Collect or craft those first, then run inv craft again.").toJson();
         }
 
         // Pick the crafting surface: the open grid if a satisfiable recipe fits it, else the
@@ -160,7 +160,7 @@ public final class CraftOps {
             }
             if (chosen == null) {
                 return TaskResult.fail(name + "'s recipe needs a grid larger than 3x3 (modded station) — "
-                        + "interact_at that station and use inspect_gui + transfer instead.").toJson();
+                        + "use block that station, then use gui + transfer instead.").toJson();
             }
             CraftingRecipe recipe = chosen.recipe();
             // 够得着的工作台:原版交互的判据(眼睛到那一格外框在交互距离内),搜索盒以眼睛为中心罩住它
@@ -223,7 +223,7 @@ public final class CraftOps {
                                   int want, String name, String station, NumenPlayer self) {
         if (!settleCarried(menu, self)) {
             return TaskResult.fail("the cursor is holding items and no inventory slot is free to put "
-                    + "them down — free a slot first (drop_items).").toJson();
+                    + "them down — free a slot first (inv drop).").toJson();
         }
         Map<Item, Integer> before = poolOf(menu, self);
         List<Ingredient> ings = ingredientsOf(chosen.recipe());

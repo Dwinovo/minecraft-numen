@@ -27,7 +27,7 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
 /**
  * 穿戴扩展点:测试经 {@code NumenApi.registerGear} 那扇门登记一处假的穿戴来源(两格 {@code gametest:ring}、
- * 一格封死的 {@code gametest:charm}),只对本测试的同伴生效。{@code equip_item} 的自动选位、被拒、缺槽、
+ * 一格封死的 {@code gametest:charm}),只对本测试的同伴生效。{@code gear wear} / {@code gear remove} 的自动选位、被拒、缺槽、
  * 槽名写错、卸下、满包、摘不下,以及 {@code <worn>},都经这一处来源走和原版同一条路。
  */
 @GameTestHolder(Constants.MOD_ID)
@@ -119,16 +119,16 @@ public class GearGameTests {
         return gear;
     }
 
-    /** 不给 slot:紫水晶碎片归 gametest:ring,进第一格空的,回执写出槽名,背包里少了它。 */
+    /** 不给 --slot:紫水晶碎片归 gametest:ring,进第一格空的,回执写出槽名,背包里少了它。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_gear")
     public static void gear_auto_choice_names_the_slot(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_ringbearer", new BlockPos(4, 2, 4), false);
         FakeGear gear = dress(companion);
         companion.getInventory().add(new ItemStack(Items.AMETHYST_SHARD));
-        ToolRun equip = call(companion, "equip_item", args("item_id", "minecraft:amethyst_shard"));
+        ToolRun equip = command(companion, "gear wear minecraft:amethyst_shard");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(equip.done(), "equip_item has not finished");
+            helper.assertTrue(equip.done(), "gear wear has not finished");
             helper.assertTrue(equip.succeeded() && equip.outcome().contains("gametest:ring"),
                     "the reply does not name the ring slot: " + equip.outcome());
             helper.assertTrue(gear.ring(0).worn.is(Items.AMETHYST_SHARD), "the shard is not in the first ring slot");
@@ -145,10 +145,10 @@ public class GearGameTests {
         FakeGear gear = dress(companion);
         companion.getInventory().add(new ItemStack(Items.EMERALD));
         companion.getInventory().selected = 5;   // 主手是空的那格,绿宝石在第 0 格
-        ToolRun equip = call(companion, "equip_item", args("item_id", "minecraft:emerald"));
+        ToolRun equip = command(companion, "gear wear minecraft:emerald");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(equip.done(), "equip_item has not finished");
+            helper.assertTrue(equip.done(), "gear wear has not finished");
             helper.assertTrue(!equip.succeeded() && equip.outcome().contains("sealed"),
                     "the failure does not carry the slot's reason: " + equip.outcome());
             helper.assertTrue(companion.getMainHandItem().isEmpty(), "her main hand changed");
@@ -165,10 +165,10 @@ public class GearGameTests {
         dress(companion);
         companion.getInventory().add(new ItemStack(Items.DIAMOND));
         companion.getInventory().selected = 5;
-        ToolRun equip = call(companion, "equip_item", args("item_id", "minecraft:diamond"));
+        ToolRun equip = command(companion, "gear wear minecraft:diamond");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(equip.done(), "equip_item has not finished");
+            helper.assertTrue(equip.done(), "gear wear has not finished");
             helper.assertTrue(!equip.succeeded() && equip.outcome().contains("gametest:belt"),
                     "the failure does not name the missing kind of slot: " + equip.outcome());
             helper.assertTrue(companion.getMainHandItem().isEmpty(), "the diamond went into her hand instead");
@@ -182,11 +182,10 @@ public class GearGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_crownless", new BlockPos(4, 2, 4), false);
         dress(companion);
         companion.getInventory().add(new ItemStack(Items.AMETHYST_SHARD));
-        ToolRun equip = call(companion, "equip_item",
-                args("item_id", "minecraft:amethyst_shard", "slot", "gametest:crown"));
+        ToolRun equip = command(companion, "gear wear minecraft:amethyst_shard --slot gametest:crown");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(equip.done(), "equip_item has not finished");
+            helper.assertTrue(equip.done(), "gear wear has not finished");
             String said = equip.outcome();
             helper.assertTrue(!equip.succeeded() && said.contains("gametest:crown") && said.contains("mainhand")
                             && said.contains("head") && said.contains("gametest:ring")
@@ -197,17 +196,17 @@ public class GearGameTests {
         });
     }
 
-    /** 按槽名卸下:两格 ring 都戴着,unequip slot=gametest:ring 两件都回背包。 */
+    /** 按槽名卸下:两格 ring 都戴着,gear remove --slot gametest:ring 两件都回背包。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_gear")
     public static void gear_unequip_by_slot_name(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_unringed", new BlockPos(4, 2, 4), false);
         FakeGear gear = dress(companion);
         gear.ring(0).worn = new ItemStack(Items.AMETHYST_SHARD);
         gear.ring(1).worn = new ItemStack(Items.IRON_NUGGET);
-        ToolRun unequip = call(companion, "equip_item", args("action", "unequip", "slot", "gametest:ring"));
+        ToolRun unequip = command(companion, "gear remove --slot gametest:ring");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(unequip.done(), "unequip has not finished");
+            helper.assertTrue(unequip.done(), "gear remove has not finished");
             helper.assertTrue(unequip.succeeded() && unequip.outcome().contains("amethyst_shard (gametest:ring)")
                             && unequip.outcome().contains("iron_nugget (gametest:ring)"),
                     "the reply does not name both pieces: " + unequip.outcome());
@@ -218,18 +217,17 @@ public class GearGameTests {
         });
     }
 
-    /** 按物品卸下:不给 slot,unequip item_id=紫水晶碎片,只从戴着它的那格摘,另一格不动。 */
+    /** 按物品卸下:不给 --slot,gear remove --item 紫水晶碎片,只从戴着它的那格摘,另一格不动。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_gear")
     public static void gear_unequip_by_item(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_pickyring", new BlockPos(4, 2, 4), false);
         FakeGear gear = dress(companion);
         gear.ring(0).worn = new ItemStack(Items.IRON_NUGGET);
         gear.ring(1).worn = new ItemStack(Items.AMETHYST_SHARD);
-        ToolRun unequip = call(companion, "equip_item",
-                args("action", "unequip", "item_id", "minecraft:amethyst_shard"));
+        ToolRun unequip = command(companion, "gear remove --item minecraft:amethyst_shard");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(unequip.done(), "unequip has not finished");
+            helper.assertTrue(unequip.done(), "gear remove has not finished");
             helper.assertTrue(unequip.succeeded() && unequip.outcome().contains("amethyst_shard (gametest:ring)"),
                     "the reply does not name the shard: " + unequip.outcome());
             helper.assertTrue(gear.ring(1).worn.isEmpty(), "the amethyst shard is still worn");
@@ -248,10 +246,10 @@ public class GearGameTests {
             companion.getInventory().setItem(i, new ItemStack(Items.COBBLESTONE, 64));
         }
         gear.ring(0).worn = new ItemStack(Items.AMETHYST_SHARD);
-        ToolRun unequip = call(companion, "equip_item", args("action", "unequip", "slot", "gametest:ring"));
+        ToolRun unequip = command(companion, "gear remove --slot gametest:ring");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(unequip.done(), "unequip has not finished");
+            helper.assertTrue(unequip.done(), "gear remove has not finished");
             helper.assertTrue(!unequip.succeeded() && unequip.outcome().contains("inventory is full"),
                     "the failure does not say the inventory is full: " + unequip.outcome());
             helper.assertTrue(gear.ring(0).worn.is(Items.AMETHYST_SHARD), "the ring came off with nowhere to go");
@@ -268,10 +266,10 @@ public class GearGameTests {
         FakeGear gear = dress(companion);
         gear.ring(0).worn = new ItemStack(Items.AMETHYST_SHARD);
         gear.ring(0).refuseRemove = "the ring is stuck fast";
-        ToolRun unequip = call(companion, "equip_item", args("action", "unequip", "slot", "gametest:ring"));
+        ToolRun unequip = command(companion, "gear remove --slot gametest:ring");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(unequip.done(), "unequip has not finished");
+            helper.assertTrue(unequip.done(), "gear remove has not finished");
             helper.assertTrue(!unequip.succeeded() && unequip.outcome().contains("stuck fast"),
                     "the failure does not carry the slot's reason: " + unequip.outcome());
             helper.assertTrue(gear.ring(0).worn.is(Items.AMETHYST_SHARD), "the stuck ring came off");
