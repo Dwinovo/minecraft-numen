@@ -9,17 +9,9 @@ import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.item.enchantment.Enchantment;
-import net.minecraft.world.item.enchantment.Enchantments;
-import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.LiquidBlock;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
@@ -254,27 +246,6 @@ final class MovementPlacement {
             wrapped -= 360.0f;
         }
         return wrapped;
-    }
-
-    /** 执行期霜行者判定:装备有霜行者且目标格是静水源。 */
-    static boolean canUseFrostWalker(ServerPlayer player, BlockState state) {
-        return frostWalkerLevel(player) != 0
-                && state.getBlock() == Blocks.WATER
-                && state.getValue(LiquidBlock.LEVEL) == 0;
-    }
-
-    /** 全身装备的霜行者附魔最高等级。 */
-    static int frostWalkerLevel(ServerPlayer player) {
-        int level = 0;
-        for (EquipmentSlot slot : EquipmentSlot.values()) {
-            ItemEnchantments itemEnchantments = player.getItemBySlot(slot).getEnchantments();
-            for (Holder<Enchantment> enchant : itemEnchantments.keySet()) {
-                if (enchant.is(Enchantments.FROST_WALKER)) {
-                    level = Math.max(level, itemEnchantments.getLevel(enchant));
-                }
-            }
-        }
-        return level;
     }
 
     /** 沿指定转角从 eye 出发的轮廓射线(不含流体)。 */

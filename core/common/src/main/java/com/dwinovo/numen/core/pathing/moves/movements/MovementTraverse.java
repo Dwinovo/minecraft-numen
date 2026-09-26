@@ -250,7 +250,7 @@ public class MovementTraverse extends Movement {
 
         boolean isTheBridgeBlockThere = CellClass.canWalkOn(level, positionToPlace, spec)
                 || ladder
-                || MovementPlacement.canUseFrostWalker(player, level.getBlockState(positionToPlace));
+                || MovementHelper.canUseFrostWalker(player, level.getBlockState(positionToPlace));
         BlockPos feet = feet(player);
         if (feet.getY() != dest.getY() && !ladder) {
             // 高度不对:低了跳一下,高了等下落

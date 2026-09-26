@@ -19,7 +19,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
-import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.item.enchantment.effects.EnchantmentAttributeEffect;
 import net.minecraft.world.level.BlockGetter;
@@ -127,7 +126,7 @@ public class CalculationContext {
         this.allowBreak = spec.alter().mayAlter() && settings.allowBreak;
         this.allowBreakAnyway = List.copyOf(settings.allowBreakAnyway());
         this.allowJumpAtBuildLimit = settings.allowJumpAtBuildLimit;
-        this.frostWalker = equipmentEnchantLevel(player);
+        this.frostWalker = MovementHelper.frostWalkerLevel(player);
         this.minFallHeight = 3;
         // 落差上限不写死:摔不死的高度都可以是路,只是疼。原版摔伤 = 高度-3(半心/格),
         // 按当前血量留 3 颗心(6 点)保命余量反推可承受高度;规格值为下限。
@@ -158,20 +157,6 @@ public class CalculationContext {
     private static boolean hotbarHasWaterBucket(ServerPlayer player) {
         return net.minecraft.world.entity.player.Inventory.isHotbarSlot(
                 player.getInventory().findSlotMatchingItem(STACK_BUCKET_WATER));
-    }
-
-    /** 装备槽遍历顺序中最后一件带霜行者附魔的等级。 */
-    private static int equipmentEnchantLevel(ServerPlayer player) {
-        int level = 0;
-        for (EquipmentSlot slot : EquipmentSlot.values()) {
-            ItemEnchantments itemEnchantments = player.getItemBySlot(slot).getEnchantments();
-            for (Holder<Enchantment> enchant : itemEnchantments.keySet()) {
-                if (enchant.is(Enchantments.FROST_WALKER)) {
-                    level = itemEnchantments.getLevel(enchant);
-                }
-            }
-        }
-        return level;
     }
 
     /** 按装备的水下移动效率附魔,把水中步速在水速与平走速之间插值。 */

@@ -3,6 +3,12 @@ package com.dwinovo.numen.core.pathing.moves;
 import com.dwinovo.numen.core.pathing.spec.CellClass;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.AirBlock;
 import net.minecraft.world.level.block.Block;
@@ -33,11 +39,36 @@ public final class MovementHelper {
 
     // ==================== 霜行者 ====================
 
+    /**
+     * 身上装备的霜行者附魔最高等级,0 为没有。规划({@link CalculationContext#frostWalker})与执行
+     * (平移时把冻得住的水面当桥)问的都是它——各数一遍时,一边认冰面、一边不认,路就接不上。
+     */
+    public static int frostWalkerLevel(ServerPlayer player) {
+        int level = 0;
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            ItemEnchantments itemEnchantments = player.getItemBySlot(slot).getEnchantments();
+            for (Holder<Enchantment> enchant : itemEnchantments.keySet()) {
+                if (enchant.is(Enchantments.FROST_WALKER)) {
+                    level = Math.max(level, itemEnchantments.getLevel(enchant));
+                }
+            }
+        }
+        return level;
+    }
+
     /** 霜行者能否把该格冻成冰面(静水源且有附魔)。 */
     public static boolean canUseFrostWalker(CalculationContext context, BlockState state) {
-        return context.frostWalker != 0
-                && state.getBlock() == Blocks.WATER
-                && state.getValue(LiquidBlock.LEVEL) == 0;
+        return context.frostWalker != 0 && freezable(state);
+    }
+
+    /** 执行期同一判据:{@link #canUseFrostWalker(CalculationContext, BlockState)} 读的等级就是这具身体此刻的。 */
+    public static boolean canUseFrostWalker(ServerPlayer player, BlockState state) {
+        return frostWalkerLevel(player) != 0 && freezable(state);
+    }
+
+    /** 霜行者冻得住的格:静水源。 */
+    private static boolean freezable(BlockState state) {
+        return state.getBlock() == Blocks.WATER && state.getValue(LiquidBlock.LEVEL) == 0;
     }
 
     /**
