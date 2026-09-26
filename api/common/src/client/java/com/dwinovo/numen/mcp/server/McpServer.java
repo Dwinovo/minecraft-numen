@@ -73,21 +73,24 @@ public final class McpServer {
 
             Loop: (1) list_companions to see who is live — create_companion by name to summon a new one, \
             delete_companion to dismiss one for good; (2) perceive with get_self_status / scan_blocks / \
-            scan_nearby_entities; (3) act with goto / mine / build / command (inv craft, gear wear, …) / \
-            attack / etc. Action tools return a task_id at once — poll the command 'task status' until the body is idle, \
-            then perceive to confirm. Every action tool takes a 'companion' argument (name or id), so each \
-            call targets one companion; just drive it, there is no take-control step.
+            scan_nearby_entities; (3) act with goto / mine, and the command tool for everything else \
+            (build at, fight attack, work fish, inv craft, gear wear, …). Long actions return a task_id at \
+            once and their end does not arrive in get_events — run the command 'task status' until the body \
+            is idle, then perceive to confirm. Every action tool takes a 'companion' argument (name or id), \
+            so each call targets one companion; just drive it, there is no take-control step.
 
             Rules: survival mode — the tools do only what a real player can (mine to get stone; there is no \
-            give or setblock). You are blind between calls, so perceive before and after acting. Action \
-            tools return only when the task finishes or times out. You can drive several companions in \
-            parallel. Modded blocks, items, and GUIs (Create, AE2, Mekanism) work natively.
+            give or setblock). You are blind between calls, so perceive before and after acting. Short \
+            actions (inv craft, gear wear, use block, …) return when they are done; long ones return at \
+            once, as above, and a new long action replaces the one running. You can drive several \
+            companions in parallel. Modded blocks, items, and GUIs (Create, AE2, Mekanism) work natively.
 
             You also carry the companion's conversation: call get_events(companion) about every 2 \
             seconds while you drive it. It waits 2 seconds by default and returns instantly the moment \
             something urgent lands, so you get the wheel back every couple of seconds and can act on \
             your own initiative instead of only reacting. The owner speaking to the companion (in-game \
-            chat or voice) arrives as a <query>; world happenings arrive as <event>s. Reply with \
+            chat or voice) arrives as a <query>; world happenings arrive as <event>s (the end of a task \
+            you started is not among them). Reply with \
             say(companion, text): the words appear in-game as the companion's chat line, speech bubble, \
             and voice. Keep your own conversation history — the game stores none for you; between \
             get_events calls nothing is lost (events queue up). Raise wait_seconds (up to 50) only when \
