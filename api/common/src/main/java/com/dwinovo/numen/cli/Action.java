@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * 一个动作:{@code numen <组> <动作> …} 的那一格。它持有这件事<b>唯一的处理函数</b>、参数表与说明,
+ * 一个动作:{@code <组> <动作> …} 的那一格。它持有这件事<b>唯一的处理函数</b>、参数表与说明,
  * 命令行、帮助、快捷工具都从这里取。
  *
  * <p>执行侧由登记时给的处理函数决定:{@link CommandGroup#server} 给的是服务端函数,{@link CommandGroup#client}
@@ -19,9 +19,9 @@ import java.util.regex.Pattern;
  * 动作的帮助除了用法、说明、参数,还有三块,都接在登记处返回的这个动作上写:
  * <pre>{@code
  * quests.server("submit", "Hand in a quest's items from your own inventory.", QuestSubmit::submit, QUEST_ID)
- *       .example("numen ftbquests submit 15CDF6A098B95FDA")
+ *       .example("ftbquests submit 15CDF6A098B95FDA")
  *       .note("Takes the items from YOUR inventory; FTB decides what counts.")
- *       .seeAlso("numen ftbquests list", "numen ftbquests show");
+ *       .seeAlso("ftbquests list", "ftbquests show");
  * }</pre>
  * <ul>
  *   <li>{@link #example}:至少一个,可以多个。模型照着例子写,比读语法可靠,所以缺了在登记那一刻抛出,
@@ -100,7 +100,7 @@ public final class Action {
         return this;
     }
 
-    /** 相关命令:下一步通常用的动作,写整条路径,如 {@code numen ftbquests list}。可以调多次。 */
+    /** 相关命令:下一步通常用的动作,写整条路径,如 {@code ftbquests list}。可以调多次。 */
     public Action seeAlso(String... paths) {
         for (String path : paths) {
             seeAlso.add(requireText(path, "相关命令"));
@@ -125,7 +125,7 @@ public final class Action {
         if (examples.isEmpty()) {
             throw new IllegalArgumentException(path() + " 没写例子——模型照着例子写,每个动作至少一个");
         }
-        List<String> here = List.of(NumenCli.ROOT, group.name(), name);
+        List<String> here = List.of(group.name(), name);
         for (String example : examples) {
             ParseResults<CommandSource> parse = tree.parse(example, null);
             if (parse.getReader().canRead() || !parse.getExceptions().isEmpty()
@@ -176,13 +176,8 @@ public final class Action {
         return seeAlso;
     }
 
-    /** {@code numen <组> <动作>}。 */
+    /** {@code <组> <动作>}:整条路径,帮助与报错里这样写它;从命令派下的活也叫这个名字。 */
     String path() {
-        return NumenCli.ROOT + " " + label();
-    }
-
-    /** {@code <组> <动作>}:从命令派下的活就叫这个名字。 */
-    String label() {
         return group.name() + " " + name;
     }
 

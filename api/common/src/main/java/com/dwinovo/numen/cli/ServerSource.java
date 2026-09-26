@@ -73,7 +73,7 @@ public final class ServerSource implements CommandSource {
      * 快捷工具名,从 {@code command} 进来是"组 动作"(如 {@code kaleidoscope cook})。模型看到的就是它刚才调的那个东西。
      */
     public String taskName() {
-        return toolName.equals(action.toolName()) ? toolName : action.label();
+        return toolName.equals(action.toolName()) ? toolName : action.path();
     }
 
     /** 模型那次 {@code tool_call} 的 id,要跟着结果回去。 */

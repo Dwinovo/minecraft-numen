@@ -24,7 +24,7 @@ public final class CommandTool implements NumenTool {
     public static final String NAME = "command";
 
     private static final Param<String> LINE = Param.required("command", ArgType.text(),
-            "One command line. Without a leading / it is one of Numen's commands, e.g. \"numen --help\"; "
+            "One command line. Without a leading / it is one of Numen's commands, e.g. \"task status\"; "
                     + "with a leading / it is a native command, e.g. \"/help give\".");
 
     @Override
@@ -36,10 +36,9 @@ public final class CommandTool implements NumenTool {
     public String description() {
         return "Run one command line. Two kinds of line:\n"
                 + "- Without a leading /: Numen's commands for you, grouped (the installed groups are listed under "
-                + "<commands>). `" + NumenCli.ROOT + " --help` lists the groups, `" + NumenCli.ROOT
-                + " <group> --help` a group's actions, `" + NumenCli.ROOT + " <group> <action> --help` explains "
-                + "one; required arguments follow the action in order, optional ones are flags written "
-                + "`--name value`.\n"
+                + "<commands>). `help` lists the groups, `<group> --help` a group's actions, "
+                + "`<group> <action> --help` explains one; required arguments follow the action in order, optional "
+                + "ones are flags written `--name value`.\n"
                 + "- With a leading /: a native Minecraft or mod command, run as yourself exactly as a player types "
                 + "it in chat, with your own permission level. `/help` lists the ones the server lets you run, "
                 + "`/help <command>` shows one's usage. Each may need your owner's consent first.\n"

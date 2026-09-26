@@ -23,7 +23,7 @@ import java.util.regex.Pattern;
  *
  * <pre>{@code
  * static final Param<String> TEXTURE = Param.optional("texture", ArgType.string(), "Which texture to wear.")
- *         .values("a texture id from the textures numen ysm options lists")
+ *         .values("a texture id from the textures ysm options lists")
  *         .whenOmitted("use the model's first texture");
  * ...
  * String texture = args.get(TEXTURE);   // 没给是 null
@@ -70,7 +70,7 @@ public record Param<T>(String name, ArgType<T> type, String description, boolean
         return new Param<>(name, type, description, false, null, null);
     }
 
-    /** 能写哪些值、去哪查,例如 {@code "pot or stockpot"}、{@code "a model id as numen ysm options lists it"}。 */
+    /** 能写哪些值、去哪查,例如 {@code "pot or stockpot"}、{@code "a model id as ysm options lists it"}。 */
     public Param<T> values(String values) {
         return new Param<>(name, type, description, required, values, whenOmitted);
     }

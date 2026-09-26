@@ -4,7 +4,6 @@ import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
-import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskDispatch;
@@ -22,7 +21,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * {@code numen kaleidoscope}:查一口锅能做什么、看一格锅现在怎样、在一格锅上做一道菜。
+ * {@code kaleidoscope}:查一口锅能做什么、看一格锅现在怎样、在一格锅上做一道菜。
  *
  * <p>三个动作都在服务端:锅的状态机、配方表、品质评估都住在那边。都不提升成快捷工具——联动的动作是长尾,
  * 走 {@code numen} 这一个入口就够了。
@@ -55,7 +54,7 @@ final class KaleidoscopeCommands {
 
     /** 回执与事件里提到别的动作时写的那一行命令。 */
     static String line(String action) {
-        return NumenCli.ROOT + " " + GROUP + " " + action;
+        return GROUP + " " + action;
     }
 
     static void install(NumenApi numen) {
@@ -86,7 +85,7 @@ final class KaleidoscopeCommands {
                 .note("It does not walk: stand within reach of the cookware first.")
                 .note("Uses the ingredients, oil and container from YOUR inventory. Asks your owner first when "
                         + "their rules say so, for using the cookware and for taking the dish.")
-                .seeAlso(line(RECIPES), line(INSPECT), "numen task stop");
+                .seeAlso(line(RECIPES), line(INSPECT), "task stop");
     }
 
     private static void recipes(ServerSource src, CommandArgs args) {

@@ -119,7 +119,7 @@ public final class NumenCore {
         ToolRegistry.register(new com.dwinovo.numen.core.tools.interact.SleepTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.interact.InteractEntityTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.EatItemTool());
-        // 引擎的 numen task 命令组,和插件走同一扇门;它提升出的 task_status / task_stop / set_timer 就在这里进表,
+        // 引擎的 task 命令组,和插件走同一扇门;它提升出的 task_status / task_stop / set_timer 就在这里进表,
         // 工具表的顺序不变。
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.task.TaskCommands::install);
         ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.DropItemsTool());

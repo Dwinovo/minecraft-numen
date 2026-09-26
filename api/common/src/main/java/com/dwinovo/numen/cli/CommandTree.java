@@ -8,7 +8,6 @@ import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import com.mojang.brigadier.tree.LiteralCommandNode;
 
 import java.util.List;
 import java.util.Map;
@@ -34,7 +33,6 @@ import java.util.function.Supplier;
 final class CommandTree<S extends CommandSource> {
 
     private final CommandDispatcher<S> dispatcher = new CommandDispatcher<>();
-    private final LiteralCommandNode<S> root = dispatcher.register(LiteralArgumentBuilder.literal(NumenCli.ROOT));
     private final Predicate<Action> runs;
 
     /** @param runs 这个动作在这一侧执行吗 */
@@ -44,14 +42,14 @@ final class CommandTree<S extends CommandSource> {
 
     /** 根上挂 {@code help} 与 {@code --help},列出各组。查例子的那棵树不挂:例子只该落在动作上。 */
     CommandTree<S> withRootHelp(Supplier<Listing> listing) {
-        root.addChild(help(NumenCli.HELP, listing).build());
-        root.addChild(help(NumenCli.HELP_FLAG, listing).build());
+        dispatcher.register(help(NumenCli.HELP, listing));
+        dispatcher.register(help(NumenCli.HELP_FLAG, listing));
         return this;
     }
 
-    /** 挂上一组。 */
+    /** 挂上一组:组名就是一级命令。 */
     void add(CommandGroup group) {
-        root.addChild(group(group).build());
+        dispatcher.register(group(group));
     }
 
     ParseResults<S> parse(String line, S source) {

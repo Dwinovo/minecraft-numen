@@ -27,9 +27,9 @@ class RoutingTest {
         Param<Integer> count = Param.required("count", ArgType.integer(1, 9), "How many.");
         door().registerCommands("gt_route", "One action on each side.", g -> {
             g.server("take", "Take some.", (src, args) -> src.reply(TaskResult.ok("took").toJson()), count)
-                    .example("numen gt_route take 2");
+                    .example("gt_route take 2");
             g.client("jot", "Jot it down.", (src, args) -> src.reply(TaskResult.ok("jotted").toJson()), count)
-                    .example("numen gt_route jot 2");
+                    .example("gt_route jot 2");
         });
     }
 
@@ -50,25 +50,25 @@ class RoutingTest {
     void theLayerIsTheLeadingSlashAndNothingElse() {
         assertEquals(new Line(true, "give @s minecraft:diamond 2"), Line.of("  /give @s minecraft:diamond 2 "));
         assertEquals(new Line(true, "help give"), Line.of("/ help give"));
-        assertEquals(new Line(false, "numen gt_route take 2"), Line.of(" numen gt_route take 2"));
+        assertEquals(new Line(false, "gt_route take 2"), Line.of(" gt_route take 2"));
         assertEquals(new Line(false, "give @s minecraft:diamond 2"), Line.of("give @s minecraft:diamond 2"),
                 "不带 / 的就是第 1 层,哪怕它像一条原版指令");
     }
 
     @Test
     void helpClientActionsAndMistakesAreAnsweredOnTheClient() {
-        answeredOnClient("numen help");
-        answeredOnClient("numen --help");
-        answeredOnClient("numen gt_route --help");
-        answeredOnClient("numen gt_route take --help");
-        answeredOnClient("numen gt_route jot --help");
-        answeredOnClient("numen gt_route jot 2");
-        answeredOnClient("numen gt_route jot many");
-        answeredOnClient("numen --help --page 9");
-        answeredOnClient("numen gt_route");
-        answeredOnClient("numen gt_route tkae 2");
-        answeredOnClient("numen gt_nowhere go");
-        answeredOnClient("numen");
+        answeredOnClient("help");
+        answeredOnClient("--help");
+        answeredOnClient("gt_route --help");
+        answeredOnClient("gt_route take --help");
+        answeredOnClient("gt_route jot --help");
+        answeredOnClient("gt_route jot 2");
+        answeredOnClient("gt_route jot many");
+        answeredOnClient("--help --page 9");
+        answeredOnClient("gt_route");
+        answeredOnClient("gt_route tkae 2");
+        answeredOnClient("gt_nowhere go");
+        answeredOnClient("numen gt_route take 2");
     }
 
     /** 第 1 层认不出的一行在第 1 层报错,不转给第 0 层:像原版指令也一样。 */
@@ -81,19 +81,19 @@ class RoutingTest {
 
     @Test
     void serverActionsAndEveryNativeLineGoToTheServerAsWritten() {
-        forwarded("numen gt_route take 2");
-        forwarded("numen gt_route take many");
+        forwarded("gt_route take 2");
+        forwarded("gt_route take many");
         forwarded("/give @s minecraft:diamond 2");
         forwarded("/help give");
-        forwarded("/numen gt_route jot 2");
+        forwarded("/gt_route jot 2");
         forwarded("/ftbteams party join Dwin_Party#1a2b");
     }
 
     /** 服务端那一侧同一条规则:第 1 层的一行在 Numen 服务端的树上执行。 */
     @Test
     void onTheServerALayerOneLineRunsOnNumensOwnTree() {
-        assertEquals("took", onServer("numen gt_route take 2").message());
-        CliFixture.Outcome jot = onServer("numen gt_route jot 2");
+        assertEquals("took", onServer("gt_route take 2").message());
+        CliFixture.Outcome jot = onServer("gt_route jot 2");
         assertFalse(jot.success(), "服务端的树上客户端动作只有名字与帮助");
     }
 
@@ -103,7 +103,7 @@ class RoutingTest {
         List<String> replies = new ArrayList<>();
         UUID her = UUID.randomUUID();
         new CommandTool().invoke(new ToolCall("call-1", CommandTool.NAME,
-                "{\"command\":\"  numen gt_route jot 2 \"}", () -> her, replies::add));
+                "{\"command\":\"  gt_route jot 2 \"}", () -> her, replies::add));
         assertEquals(1, replies.size());
         assertTrue(replies.get(0).contains("jotted"), replies.get(0));
 

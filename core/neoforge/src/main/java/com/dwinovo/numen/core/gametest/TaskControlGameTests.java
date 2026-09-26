@@ -36,7 +36,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
 /**
- * 她手上在办的事:{@code numen task status} 查进度、{@code numen task stop} 叫停、{@code numen task timer} 定表。
+ * 她手上在办的事:{@code task status} 查进度、{@code task stop} 叫停、{@code task timer} 定表。
  * 主人不在线,收尾与到点的事件进出箱,测试从那里读模型会收到的原话。
  *
  * <p>三个动作各自提升成了快捷工具({@code task_status} / {@code task_stop} / {@code set_timer}):同一件事从工具和
@@ -58,7 +58,7 @@ public class TaskControlGameTests {
                         g.server("linger", "Stand still for a while, as background work.",
                                 (src, args) -> TaskDispatch.setTask(src, new LingerRecord(src, args.get(TICKS))),
                                 TICKS)
-                                .example("numen gt_long linger 40")
+                                .example("gt_long linger 40")
                                 .promote("gt_linger", "Stand still for a while, as background work.")));
         TaskFactory.register(LingerRecord.class, (body, record) -> new Linger(record));
     }
@@ -114,8 +114,8 @@ public class TaskControlGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_busy", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(14, 2, 14));
         ToolRun walk = call(companion, "goto", args("x", far.getX(), "y", far.getY(), "z", far.getZ()));
-        ToolRun timer = command(companion, "numen task timer 600 check the furnace");
-        ToolRun status = command(companion, "numen task status");
+        ToolRun timer = command(companion, "task timer 600 check the furnace");
+        ToolRun status = command(companion, "task status");
 
         helper.succeedWhen(() -> {
             helper.assertTrue(walk.task() != null && timer.succeeded(), "goto or the timer did not go through: "
@@ -137,7 +137,7 @@ public class TaskControlGameTests {
         EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
         helper.startSequence()
-                .thenExecuteAfter(5, () -> stop.set(command(companion, "numen task stop")))
+                .thenExecuteAfter(5, () -> stop.set(command(companion, "task stop")))
                 .thenWaitUntil(() -> helper.assertTrue(stop.get().succeeded()
                                 && walk.task().getState() == TaskState.CANCELLED,
                         "the walk was not stopped: " + stop.get().reply()))
@@ -155,9 +155,9 @@ public class TaskControlGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
     public static void task_stop_with_an_unknown_id_changes_nothing(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_confused", new BlockPos(2, 2, 2), false);
-        ToolRun timer = command(companion, "numen task timer 600 feed the pets");
-        ToolRun stop = command(companion, "numen task stop --task_id t9999");
-        ToolRun status = command(companion, "numen task status");
+        ToolRun timer = command(companion, "task timer 600 feed the pets");
+        ToolRun stop = command(companion, "task stop --task_id t9999");
+        ToolRun status = command(companion, "task status");
 
         helper.succeedWhen(() -> {
             helper.assertTrue(timer.succeeded(), "the timer failed: " + timer.reply());
@@ -172,7 +172,7 @@ public class TaskControlGameTests {
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_tasks")
     public static void set_timer_fires_its_reason_back(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_alarmed", new BlockPos(2, 2, 2), false);
-        ToolRun timer = command(companion, "numen task timer 1 the bread should be baked");
+        ToolRun timer = command(companion, "task timer 1 the bread should be baked");
         EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
         helper.succeedWhen(() -> {
@@ -185,7 +185,7 @@ public class TaskControlGameTests {
         });
     }
 
-    /** 同源:走在路上时,task_status 与 numen task status 在同一刻读到的是一字不差的同一份回执。 */
+    /** 同源:走在路上时,task_status 与 task status 在同一刻读到的是一字不差的同一份回执。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
     public static void task_status_reads_the_same_from_the_tool_and_the_command(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_twice_asked", new BlockPos(2, 2, 2), false);
@@ -198,7 +198,7 @@ public class TaskControlGameTests {
         helper.startSequence()
                 .thenExecuteAfter(3, () -> {
                     viaTool.set(call(companion, "task_status", args()));
-                    viaCommand.set(command(companion, "numen task status"));
+                    viaCommand.set(command(companion, "task status"));
                 })
                 .thenExecute(() -> {
                     helper.assertTrue(walk.task() != null && timer.succeeded(), "setup failed: " + timer.reply());
@@ -218,9 +218,9 @@ public class TaskControlGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
     public static void task_stop_refuses_the_same_from_the_tool_and_the_command(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_twice_refused", new BlockPos(2, 2, 2), false);
-        ToolRun timer = command(companion, "numen task timer 600 air out the cellar");
+        ToolRun timer = command(companion, "task timer 600 air out the cellar");
         ToolRun viaTool = call(companion, "task_stop", args("task_id", "t9999"));
-        ToolRun viaCommand = command(companion, "numen task stop --task_id t9999");
+        ToolRun viaCommand = command(companion, "task stop --task_id t9999");
 
         helper.succeedWhen(() -> {
             helper.assertTrue(timer.succeeded(), "the timer failed: " + timer.reply());
@@ -235,7 +235,7 @@ public class TaskControlGameTests {
     }
 
     /**
-     * 同源:一个经 set_timer、一个经 numen task timer,在同一刻定同样的表——回执除了各自的表编号一字不差,
+     * 同源:一个经 set_timer、一个经 task timer,在同一刻定同样的表——回执除了各自的表编号一字不差,
      * 世界上各多一个到期时刻与理由都相同的表。越界的秒数两边都夹住并说明。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
@@ -243,7 +243,7 @@ public class TaskControlGameTests {
         NumenPlayer viaToolBody = spawnAt(helper, "gametest_tool_timer", new BlockPos(2, 2, 2), false);
         NumenPlayer viaCommandBody = spawnAt(helper, "gametest_cmd_timer", new BlockPos(6, 2, 2), false);
         ToolRun viaTool = call(viaToolBody, "set_timer", args("after_s", 5000, "reason", "water the wheat"));
-        ToolRun viaCommand = command(viaCommandBody, "numen task timer 5000 water the wheat");
+        ToolRun viaCommand = command(viaCommandBody, "task timer 5000 water the wheat");
 
         helper.succeedWhen(() -> {
             helper.assertTrue(viaTool.succeeded() && viaCommand.succeeded(),
@@ -275,7 +275,7 @@ public class TaskControlGameTests {
         NumenPlayer viaCommandBody = Companions.summon(server, UUID.randomUUID(), "gametest_lingerer", level,
                 new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
         NumenPlayer viaToolBody = spawnAt(helper, "gametest_tool_lingerer", new BlockPos(6, 2, 2), false);
-        ToolRun viaCommand = command(viaCommandBody, "numen gt_long linger 20");
+        ToolRun viaCommand = command(viaCommandBody, "gt_long linger 20");
         ToolRun viaTool = call(viaToolBody, "gt_linger", args("ticks", 20));
         CompanionRegistry.Entry recorded = CompanionRegistry.get(server).find(viaCommandBody.getUUID());
         EventOutbox outbox = EventOutbox.get(server);
@@ -288,7 +288,7 @@ public class TaskControlGameTests {
                             && viaTool.task().getToolName().equals("gt_linger"),
                     "the shortcut's task is not named after the shortcut: " + viaTool.reply());
             helper.assertTrue(recorded.taskTool().equals(com.dwinovo.numen.cli.CommandTool.NAME)
-                            && recorded.taskArgs().contains("numen gt_long linger 20"),
+                            && recorded.taskArgs().contains("gt_long linger 20"),
                     "the replay recipe is not the call itself: " + recorded.taskTool() + " " + recorded.taskArgs());
             helper.assertTrue(recorded.taskName().equals("gt_long linger"),
                     "the task is recorded under another name: " + recorded.taskName());
@@ -315,7 +315,7 @@ public class TaskControlGameTests {
         NumenPlayer first = Companions.summon(server, UUID.randomUUID(), "gametest_relingerer", level,
                 new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
         UUID uuid = first.getUUID();
-        ToolRun before = command(first, "numen gt_long linger 1000");
+        ToolRun before = command(first, "gt_long linger 1000");
         CompanionRegistry registry = CompanionRegistry.get(server);
         CompanionRegistry.Entry recorded = registry.find(uuid);
         Companions.dormant(server, first);
@@ -359,12 +359,12 @@ public class TaskControlGameTests {
         NumenPlayer first = Companions.summon(server, UUID.randomUUID(), "gametest_unlingerer", level,
                 new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
         UUID uuid = first.getUUID();
-        ToolRun before = command(first, "numen gt_long linger 1000");
+        ToolRun before = command(first, "gt_long linger 1000");
         CompanionRegistry registry = CompanionRegistry.get(server);
         CompanionRegistry.Entry recorded = registry.find(uuid);
         Companions.dormant(server, first);
         registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskTool(),
-                "{\"command\":\"numen gt_long linger soon\"}"));
+                "{\"command\":\"gt_long linger soon\"}"));
         NumenPlayer second = Companions.respawn(server, uuid);
         helper.assertTrue(second != null, "the body was not rebuilt");
         EventOutbox outbox = EventOutbox.get(server);

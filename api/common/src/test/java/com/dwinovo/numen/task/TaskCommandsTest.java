@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * {@code numen task} 的三个动作提升回原来的工具名:模型看到的名字、描述、参数 schema 与改成命令之前逐字相同,
+ * {@code task} 的三个动作提升回原来的工具名:模型看到的名字、描述、参数 schema 与改成命令之前逐字相同,
  * 顺序也挨在一起。期望值是改之前那三个手写工具的原样(描述照抄,schema 用它们当时的 {@link Schema} 写法)。
  */
 class TaskCommandsTest {
@@ -78,39 +78,39 @@ class TaskCommandsTest {
     @Test
     void theGroupsHelpReadsLikeThis() {
         assertEquals("""
-                numen task: Your dispatched work — the background task and your pending timers. Actions:
-                  numen task status — What you have in flight: the background task and your pending timers.
-                  numen task stop [--task_id <word>] — Cancel the background task, or a task or timer by its id.
-                  numen task timer <after_s> <reason...> — Set a one-shot reminder that fires after a delay in world time.
-                numen task <action> --help explains one action.""", help("numen task --help"));
+                task: Your dispatched work — the background task and your pending timers. Actions:
+                  task status — What you have in flight: the background task and your pending timers.
+                  task stop [--task_id <word>] — Cancel the background task, or a task or timer by its id.
+                  task timer <after_s> <reason...> — Set a one-shot reminder that fires after a delay in world time.
+                task <action> --help explains one action.""", help("task --help"));
         assertEquals("""
-                numen task timer <after_s> <reason...>
+                task timer <after_s> <reason...>
                   Set a one-shot reminder that fires after a delay in world time.
                   <after_s> (integer 1-1200) — Delay in world-time seconds (1-1200; out-of-range values are clamped).
                   <reason...> (text, the rest of the line) — What to look at or decide when it fires. The owner \
                 sees this too, so name the thing: "collect the iron from the furnace" beats "check back".
                   Examples:
-                    numen task timer 300 collect the iron from the furnace
+                    task timer 300 collect the iron from the furnace
                   Notes:
                     Returns at once and never occupies your body; your owner is told when and why.
                     It only reminds you. Work you dispatched sends its own task_finished; don't set a timer to watch it.
                     At most 8 pending. World time stops while a single-player world is paused.
-                  See also: numen task status, numen task stop
-                  Shortcut tool: set_timer.""", help("numen task timer --help"));
+                  See also: task status, task stop
+                  Shortcut tool: set_timer.""", help("task timer --help"));
         assertEquals("""
-                numen task stop [--task_id <word>]
+                task stop [--task_id <word>]
                   Cancel the background task, or a task or timer by its id.
                   --task_id <word> (word; optional) — What to cancel: a task id (e.g. t42) or a timer id (e.g. tm3). \
                 Omit to stop the background task, whatever it is.
                   Examples:
-                    numen task stop
-                    numen task stop --task_id tm3
+                    task stop
+                    task stop --task_id tm3
                   Notes:
                     Instant; does not ask your owner. A stopped task winds down and reports as a task_finished event \
                 with status=stopped.
                     When nothing matches it fails and lists what is pending.
-                  See also: numen task status
-                  Shortcut tool: task_stop.""", help("numen task stop --help"));
+                  See also: task status
+                  Shortcut tool: task_stop.""", help("task stop --help"));
     }
 
     private static void assertListing(String name, String description, Map<String, Object> schema) {

@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * {@code numen ftbquests submit <quest>}:替她按下任务书上的提交按钮。
+ * {@code ftbquests submit <quest>}:替她按下任务书上的提交按钮。
  *
  * <p>按钮背后是 FTB 的一条服务端处理({@code SubmitTaskMessage.handle}):取提交者所在队伍的进度、确认没被锁定、
  * 确认这个任务能开始,然后以提交者为上下文调 {@link Task#submitTask}。这里走的就是这一条,判定和扣背包都由

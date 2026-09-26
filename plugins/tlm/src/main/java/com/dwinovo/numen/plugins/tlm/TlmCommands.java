@@ -5,7 +5,6 @@ import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.ClientSource;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
-import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.task.TaskResult;
 import net.minecraft.resources.ResourceLocation;
@@ -16,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code numen tlm}:现在穿哪套女仆模型、这里装了哪些、换上一套、脱下来。
+ * {@code tlm}:现在穿哪套女仆模型、这里装了哪些、换上一套、脱下来。
  *
  * <h2>为什么都在主人客户端</h2>
  * 模型包只有客户端知道({@code CustomPackLoader} 是客户端类),穿什么也记在主人这边({@link Wardrobe}),
@@ -44,7 +43,7 @@ final class TlmCommands {
 
     /** 回执与状态片段里提到别的动作时写的那一行命令。 */
     static String line(String action) {
-        return NumenCli.ROOT + " " + GROUP + " " + action;
+        return GROUP + " " + action;
     }
 
     static void install(NumenApi numen) {

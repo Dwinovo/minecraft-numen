@@ -75,13 +75,13 @@ class CompanionRegistryTest {
         // 命令派的活名字是"组 动作",重放用的工具是 numen:两样都得活过读档,接不回来时才说得出她受理的是什么
         CompanionRegistry reg = new CompanionRegistry();
         reg.put(A, entry("小焰", OWNER).doing("kaleidoscope cook", "numen",
-                "{\"command\":\"numen kaleidoscope cook 1 2 3 x\"}"));
+                "{\"command\":\"kaleidoscope cook 1 2 3 x\"}"));
 
         CompanionRegistry.Entry back = roundTrip(reg).find(A);
 
         assertEquals("kaleidoscope cook", back.taskName());
         assertEquals("numen", back.taskTool());
-        assertEquals("{\"command\":\"numen kaleidoscope cook 1 2 3 x\"}", back.taskArgs());
+        assertEquals("{\"command\":\"kaleidoscope cook 1 2 3 x\"}", back.taskArgs());
     }
 
     @Test

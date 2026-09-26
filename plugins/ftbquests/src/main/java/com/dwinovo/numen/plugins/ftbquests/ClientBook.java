@@ -12,7 +12,7 @@ import net.minecraft.world.entity.player.Player;
 import java.util.function.Function;
 
 /**
- * {@code numen ftbquests list|show} 的执行处,在主人的客户端上。整个联动里只有这个类碰 FTB 的客户端一侧:
+ * {@code ftbquests list|show} 的执行处,在主人的客户端上。整个联动里只有这个类碰 FTB 的客户端一侧:
  * 客户端任务书 {@link ClientQuestFile}、客户端队伍表、客户端玩家。
  *
  * <p>为什么在客户端读:任务的标题与描述经 FTB 按<b>主人的语言</b>解析({@code {翻译键}}、各语言的任务书译文),

@@ -11,7 +11,7 @@ import dev.ftb.mods.ftbteams.data.PartyTeam;
 import java.util.List;
 
 /**
- * {@code numen ftbquests join}:替她点邀请消息里的"接受"。
+ * {@code ftbquests join}:替她点邀请消息里的"接受"。
  *
  * <p>接受哪一个只看 {@link InviteWatch#pending}——告诉她"有人邀请你"的也是那一处。只挂着一个邀请时不必点名;
  * 挂着几个时用 {@code --team} 点名那个队伍的短名(FTB 自己的写法,{@code team_invite} 事件的 {@code party}

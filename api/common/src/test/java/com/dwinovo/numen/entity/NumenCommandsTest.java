@@ -59,9 +59,9 @@ class NumenCommandsTest {
         if (booted) {
             NumenPlugins.register(numen -> numen.registerCommands("gt_tree", "A group that stays off the MC tree.", g -> {
                 g.server("take", "Take some.", (src, args) -> src.reply(TaskResult.ok("took").toJson()), COUNT, FROM)
-                        .example("numen gt_tree take 3 --from chest");
+                        .example("gt_tree take 3 --from chest");
                 g.client("jot", "Jot on the owner's client.", (src, args) -> src.reply(TaskResult.ok("jot").toJson()),
-                        COUNT).example("numen gt_tree jot 2");
+                        COUNT).example("gt_tree jot 2");
             }));
         }
     }
@@ -156,7 +156,7 @@ class NumenCommandsTest {
         assertEquals("give @s minecraft:diamond 2",
                 runs("numen drive Aria give @s minecraft:diamond 2").get("line").getResult());
         assertTrue(fails("numen drive Aria"), "a line is required");
-        assertTrue(fails("numen drive Aria numen task status", source(null).withPermission(0)), "drive is for ops");
+        assertTrue(fails("numen drive Aria task status", source(null).withPermission(0)), "drive is for ops");
     }
 
     /** 她的命令组不在 MC 的指令树上:谁都解析不到,谁的用法里都没有。 */

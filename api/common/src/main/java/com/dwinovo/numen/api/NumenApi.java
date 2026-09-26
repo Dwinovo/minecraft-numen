@@ -50,7 +50,7 @@ public interface NumenApi {
     void registerTool(NumenTool tool);
 
     /**
-     * 登记一组命令:{@code numen <namespace> <action> …}。模型经 {@code command} 工具写这一行调用它们,不必为每个动作
+     * 登记一组命令:{@code <namespace> <action> …},组名就是 Numen 命令层(第 1 层)的一级命令。模型经 {@code command} 工具写这一行调用它们,不必为每个动作
      * 多花一个工具定义;常用的动作可以 {@link com.dwinovo.numen.cli.Action#promote 提升}成快捷工具。服务端的动作
      * 真实注册在 MC 指令树的 {@code /numen} 下,只给她看见;客户端的动作留在主人客户端。
      *
@@ -69,7 +69,7 @@ public interface NumenApi {
      * {@link #onClient}。
      *
      * @param namespace 一级命令名,小写英文,用你的 mod id
-     * @param summary   一句话说明,进系统提示里的命令索引和 {@code numen help}
+     * @param summary   一句话说明,进系统提示里的命令索引和 {@code help}
      * @param actions   往这一组里加动作;它返回后这一组就封口
      * @throws IllegalArgumentException 组名已被占、名字不合规、动作或参数写错
      * @throws IllegalStateException    提升成的工具名已被占

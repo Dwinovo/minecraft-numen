@@ -37,8 +37,6 @@ import java.util.function.Consumer;
  */
 public final class NumenCli {
 
-    /** 根命令:第 1 层的一行以它开头。 */
-    public static final String ROOT = "numen";
     static final String HELP_FLAG = "--help";
     static final String HELP = "help";
 
@@ -70,7 +68,7 @@ public final class NumenCli {
             throw new IllegalArgumentException("命令组名不合规(小写字母开头,只含 [a-z0-9_]): '" + name + "'");
         }
         if (HELP.equals(name) || GROUPS.containsKey(name)) {
-            throw new IllegalArgumentException("命令组 " + ROOT + " " + name
+            throw new IllegalArgumentException("命令组 " + name
                     + " 已经有主了——每个插件只在自己的组里加动作,不往别人的组下挂");
         }
         if (summary == null || summary.isBlank()) {
@@ -107,8 +105,8 @@ public final class NumenCli {
             return "";
         }
         StringBuilder sb = new StringBuilder("<commands>\nNumen's command groups, run with the ")
-                .append(CommandTool.NAME).append(" tool (").append(ROOT).append(" <group> ").append(HELP_FLAG)
-                .append(" lists a group's actions):");
+                .append(CommandTool.NAME).append(" tool, no leading ").append(Line.MC).append(" (<group> ")
+                .append(HELP_FLAG).append(" lists a group's actions):");
         for (CommandGroup g : GROUPS.values()) {
             sb.append('\n').append(CommandHelp.groupLine(g));
         }
@@ -187,14 +185,14 @@ public final class NumenCli {
         }
     }
 
-    /** 一条整路径指的动作:{@code numen <组> <动作>};没有是 null。 */
+    /** 一条整路径指的动作:{@code <组> <动作>};没有是 null。 */
     private static Action resolve(String path, Map<String, CommandGroup> groups) {
         String[] words = path.split(" ");
-        if (words.length != 3 || !ROOT.equals(words[0])) {
+        if (words.length != 2) {
             return null;
         }
-        CommandGroup group = groups.get(words[1]);
-        return group == null ? null : group.action(words[2]);
+        CommandGroup group = groups.get(words[0]);
+        return group == null ? null : group.action(words[1]);
     }
 
     /**
@@ -203,10 +201,10 @@ public final class NumenCli {
      */
     private static boolean reachesServerAction(ParseResults<ClientSource> parse) {
         List<String> path = literalPath(parse);
-        if (path.size() < 3 || path.get(path.size() - 1).equals(HELP_FLAG)) {
+        if (path.size() < 2 || path.get(path.size() - 1).equals(HELP_FLAG)) {
             return false;
         }
-        Action action = GROUPS.get(path.get(1)).action(path.get(2));
+        Action action = GROUPS.get(path.get(0)).action(path.get(1));
         return action != null && action.runsOnServer();
     }
 
@@ -251,15 +249,15 @@ public final class NumenCli {
      */
     private static String helpAt(ParseResults<?> parse) {
         List<String> path = literalPath(parse);
-        CommandGroup group = path.size() > 1 ? GROUPS.get(path.get(1)) : null;
+        CommandGroup group = path.isEmpty() ? null : GROUPS.get(path.get(0));
         if (group == null) {
             return rootListing().first();
         }
-        Action action = path.size() > 2 ? group.action(path.get(2)) : null;
+        Action action = path.size() > 1 ? group.action(path.get(1)) : null;
         return action == null ? CommandHelp.group(group).first() : CommandHelp.action(action);
     }
 
-    /** 解析走过的字面节点的名字,从根往下。 */
+    /** 解析走过的字面节点的名字,从一级命令往下。 */
     static List<String> literalPath(ParseResults<?> parse) {
         return parse.getContext().getNodes().stream()
                 .map(n -> (CommandNode<?>) n.getNode())

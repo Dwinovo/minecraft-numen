@@ -36,7 +36,7 @@ final class SystemPromptComposer {
         if (!skillsXml.isEmpty()) {
             sb.append("\n\n").append(skillsXml);
         }
-        // 命令索引:装了哪些命令组,一组一句,她不必先 numen help 就知道去哪找。只随组的增减变、按名字排好,
+        // 命令索引:装了哪些命令组,一组一句,她不必先 help 就知道去哪找。只随组的增减变、按名字排好,
         // 和技能表一样是稳定前缀的一部分;各组的动作与语法只在帮助里。
         String commands = com.dwinovo.numen.cli.NumenCli.index();
         if (!commands.isEmpty()) {

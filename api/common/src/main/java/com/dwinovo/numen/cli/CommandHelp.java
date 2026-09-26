@@ -22,9 +22,10 @@ final class CommandHelp {
         for (CommandGroup g : groups) {
             lines.add("  " + groupLine(g));
         }
-        return new Listing(NumenCli.ROOT + " <group> <action> [arguments]. Command groups:", lines,
-                NumenCli.ROOT + " <group> --help lists a group's actions.",
-                NumenCli.ROOT + " help");
+        return new Listing("<group> <action> [arguments]. Command groups:", lines,
+                "<group> --help lists a group's actions. A line starting with / is a native command instead ("
+                        + "/help lists those).",
+                NumenCli.HELP);
     }
 
     /** 组:每个动作一行用法加一句说明,按登记顺序。 */
@@ -33,7 +34,7 @@ final class CommandHelp {
         for (Action a : group.actions()) {
             lines.add("  " + a.usage() + " — " + a.summary());
         }
-        String path = NumenCli.ROOT + " " + group.name();
+        String path = group.name();
         return new Listing(path + ": " + group.summary() + " Actions:", lines,
                 path + " <action> --help explains one action.",
                 path + " " + NumenCli.HELP_FLAG);

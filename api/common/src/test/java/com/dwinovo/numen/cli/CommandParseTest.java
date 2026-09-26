@@ -33,23 +33,23 @@ class CommandParseTest {
                 g.server("take", "Take some items.", (src, args) -> {
                     LAST.set(args);
                     src.reply(TaskResult.ok("took").toJson());
-                }, COUNT, ITEM, FROM, LIMIT).example("numen gt_parse take 3 apple --from chest"));
+                }, COUNT, ITEM, FROM, LIMIT).example("gt_parse take 3 apple --from chest"));
     }
 
     private static final String TAKE_HELP = """
-            numen gt_parse take <count> <item> [--from <word>] [--limit <integer>]
+            gt_parse take <count> <item> [--from <word>] [--limit <integer>]
               Take some items.
               <count> (integer 1-64) — How many.
               <item> (word) — Which item.
               --from <word> (word; optional) — Where to take them from.
               --limit <integer> (integer 1-10; optional) — At most this many trips.
               Examples:
-                numen gt_parse take 3 apple --from chest""";
+                gt_parse take 3 apple --from chest""";
 
     private static final String GROUP_HELP = """
-            numen gt_parse: A group the parser tests poke at. Actions:
-              numen gt_parse take <count> <item> [--from <word>] [--limit <integer>] — Take some items.
-            numen gt_parse <action> --help explains one action.""";
+            gt_parse: A group the parser tests poke at. Actions:
+              gt_parse take <count> <item> [--from <word>] [--limit <integer>] — Take some items.
+            gt_parse <action> --help explains one action.""";
 
     private static CommandArgs ran(String line) {
         LAST.set(null);
@@ -68,60 +68,61 @@ class CommandParseTest {
 
     @Test
     void flagsComeInAnyOrderAndMissingOnesAreNull() {
-        CommandArgs plain = ran("numen gt_parse take 3 apple");
+        CommandArgs plain = ran("gt_parse take 3 apple");
         assertEquals(3, plain.get(COUNT));
         assertEquals("apple", plain.get(ITEM));
         assertNull(plain.get(FROM));
         assertNull(plain.get(LIMIT));
 
-        CommandArgs flagged = ran("numen gt_parse take 3 apple --limit 2 --from chest");
+        CommandArgs flagged = ran("gt_parse take 3 apple --limit 2 --from chest");
         assertEquals("chest", flagged.get(FROM));
         assertEquals(2, flagged.get(LIMIT));
-        assertEquals(flagged, ran("numen gt_parse take 3 apple --from chest --limit 2"), "标志顺序不影响读到的值");
+        assertEquals(flagged, ran("gt_parse take 3 apple --from chest --limit 2"), "标志顺序不影响读到的值");
     }
 
     @Test
     void aBadArgumentSaysWhatAndShowsTheActionsUsage() {
-        String msg = failed("numen gt_parse take many apple");
-        assertTrue(msg.startsWith("Expected integer at position 20: "), msg);
+        String msg = failed("gt_parse take many apple");
+        assertTrue(msg.startsWith("Expected integer at position 14: "), msg);
         assertTrue(msg.endsWith("\n" + TAKE_HELP), msg);
 
-        String incomplete = failed("numen gt_parse take 3");
+        String incomplete = failed("gt_parse take 3");
         assertTrue(incomplete.startsWith("Unknown command"), incomplete);
         assertTrue(incomplete.endsWith("\n" + TAKE_HELP), incomplete);
     }
 
     @Test
     void anUnknownActionOrAnUnfinishedLineShowsTheGroupsListing() {
-        String typo = failed("numen gt_parse tke 3 apple");
-        assertTrue(typo.startsWith("Unknown command at position 15: "), typo);
+        String typo = failed("gt_parse tke 3 apple");
+        assertTrue(typo.startsWith("Unknown command at position 9: "), typo);
         assertTrue(typo.endsWith("\n" + GROUP_HELP + "\nDid you mean: take?"), "那一层的用法之后接上最接近的动作: " + typo);
 
-        String bare = failed("numen gt_parse");
+        String bare = failed("gt_parse");
         assertTrue(bare.startsWith("Unknown command"), bare);
         assertTrue(bare.endsWith("\n" + GROUP_HELP), bare);
     }
 
     @Test
-    void aLineThatIsNotANumenCommandShowsTheRootListing() {
-        String msg = failed("gt_parse take 3 apple");
-        assertTrue(msg.contains("\nnumen <group> <action> [arguments]. Command groups:\n"), msg);
-        String unknownGroup = failed("numen nosuchgroup take");
-        assertTrue(unknownGroup.contains("\nnumen <group> <action> [arguments]. Command groups:\n"), unknownGroup);
+    void aLineOutsideEveryGroupShowsTheRootListing() {
+        String prefixed = failed("numen gt_parse take 3 apple");
+        assertTrue(prefixed.startsWith("Unknown command at position 0: "), prefixed);
+        assertTrue(prefixed.contains("\n<group> <action> [arguments]. Command groups:\n"), prefixed);
+        String unknownGroup = failed("nosuchgroup take");
+        assertTrue(unknownGroup.contains("\n<group> <action> [arguments]. Command groups:\n"), unknownGroup);
     }
 
     @Test
     void flagMistakesEachSayWhatIsWrong() {
-        String unknown = failed("numen gt_parse take 3 apple --form chest");
+        String unknown = failed("gt_parse take 3 apple --form chest");
         assertTrue(unknown.startsWith("unknown flag --form; flags here: [--from <word>] [--limit <integer>]"),
                 unknown);
         assertTrue(unknown.endsWith("\n" + TAKE_HELP), unknown);
 
-        assertTrue(failed("numen gt_parse take 3 apple --from a --from b").startsWith("--from is given twice"));
-        assertTrue(failed("numen gt_parse take 3 apple --from").startsWith("--from needs a value"));
-        assertTrue(failed("numen gt_parse take 3 apple chest")
+        assertTrue(failed("gt_parse take 3 apple --from a --from b").startsWith("--from is given twice"));
+        assertTrue(failed("gt_parse take 3 apple --from").startsWith("--from needs a value"));
+        assertTrue(failed("gt_parse take 3 apple chest")
                 .startsWith("expected a flag ([--from <word>] [--limit <integer>])"));
-        assertTrue(failed("numen gt_parse take 3 apple --limit two").startsWith("Expected integer"),
+        assertTrue(failed("gt_parse take 3 apple --limit two").startsWith("Expected integer"),
                 "标志的值用那个参数自己的类型读");
     }
 
@@ -131,11 +132,11 @@ class CommandParseTest {
      */
     @Test
     void aServerActionsMistakeIsReportedByTheServer() {
-        CliFixture.Outcome client = onClient("numen gt_parse take many apple");
+        CliFixture.Outcome client = onClient("gt_parse take many apple");
         assertTrue(client.forwarded, "服务端动作的一行整条送去服务端");
         assertTrue(client.replies.isEmpty(), "客户端不替服务端答");
-        String server = failed("numen gt_parse take many apple");
-        assertTrue(server.startsWith("Expected integer at position 20: "), server);
+        String server = failed("gt_parse take many apple");
+        assertTrue(server.startsWith("Expected integer at position 14: "), server);
         assertTrue(server.endsWith("\n" + TAKE_HELP), server);
     }
 
@@ -145,18 +146,18 @@ class CommandParseTest {
         Param<Integer> pages = Param.required("pages", ArgType.integer(1, 9), "How many pages.");
         door().registerCommands("gt_parse_local", "A group with an action on the owner's client.", g ->
                 g.client("read", "Read some pages.", (src, args) -> src.reply(TaskResult.ok("read").toJson()), pages)
-                        .example("numen gt_parse_local read 2"));
-        CliFixture.Outcome client = onClient("numen gt_parse_local read many");
+                        .example("gt_parse_local read 2"));
+        CliFixture.Outcome client = onClient("gt_parse_local read many");
         assertFalse(client.forwarded, "客户端动作的解析错误当场回");
         assertFalse(client.success());
-        assertTrue(client.message().startsWith("Expected integer at position 26: "), client.message());
+        assertTrue(client.message().startsWith("Expected integer at position 20: "), client.message());
         assertTrue(client.message().endsWith("""
 
-                numen gt_parse_local read <pages>
+                gt_parse_local read <pages>
                   Read some pages.
                   <pages> (integer 1-9) — How many pages.
                   Examples:
-                    numen gt_parse_local read 2"""), client.message());
-        assertEquals("read", onClient("numen gt_parse_local read 2").message());
+                    gt_parse_local read 2"""), client.message());
+        assertEquals("read", onClient("gt_parse_local read 2").message());
     }
 }

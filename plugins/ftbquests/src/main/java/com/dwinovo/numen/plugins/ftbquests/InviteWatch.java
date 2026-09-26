@@ -58,7 +58,7 @@ final class InviteWatch {
 
     /**
      * 她此刻挂着的邀请:成员表里把她记成 {@link TeamRank#INVITED} 的队伍。"有人邀请了她"只从这里读——
-     * 刻末告诉她、{@code numen ftbquests join} 接受哪一个,都问这一处。
+     * 刻末告诉她、{@code ftbquests join} 接受哪一个,都问这一处。
      */
     static List<Team> pending(UUID companion) {
         if (!FTBTeamsAPI.api().isManagerLoaded()) {

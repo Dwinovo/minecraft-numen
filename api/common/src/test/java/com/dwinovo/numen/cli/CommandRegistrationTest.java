@@ -29,14 +29,14 @@ class CommandRegistrationTest {
     void aGroupNameHasOneOwnerAndOthersCannotGraftOntoIt() {
         NumenApi numen = door();
         numen.registerCommands("gt_owned", "Owned by the first plugin.",
-                g -> g.server("mine", "The owner's.", OK).example("numen gt_owned mine"));
+                g -> g.server("mine", "The owner's.", OK).example("gt_owned mine"));
 
         assertThrows(IllegalArgumentException.class, () -> door().registerCommands("gt_owned", "Someone else's.",
                 g -> g.server("graft", "Grafted on.", OK)), "第二个插件拿同一个组名");
-        String listing = onClient("numen gt_owned --help").message();
-        assertTrue(listing.contains("numen gt_owned mine"), listing);
+        String listing = onClient("gt_owned --help").message();
+        assertTrue(listing.contains("gt_owned mine"), listing);
         assertFalse(listing.contains("graft"), "被拒的那次一个动作都没挂上: " + listing);
-        assertFalse(onServer("numen gt_owned graft").success());
+        assertFalse(onServer("gt_owned graft").success());
 
         assertThrows(IllegalArgumentException.class, () -> numen.registerCommands("help", "Shadow the help.",
                 g -> g.server("x", "x.", OK)), "help 是根上的保留名");
@@ -48,7 +48,7 @@ class CommandRegistrationTest {
         AtomicReference<Action> action = new AtomicReference<>();
         door().registerCommands("gt_closed", "Closed after its block.", g -> {
             leaked.set(g);
-            action.set(g.server("only", "The only action.", OK).example("numen gt_closed only"));
+            action.set(g.server("only", "The only action.", OK).example("gt_closed only"));
         });
         assertThrows(IllegalStateException.class, () -> leaked.get().server("late", "Too late.", OK));
         assertThrows(IllegalStateException.class, () -> action.get().promote("gt_closed_late", "Too late."));
@@ -88,15 +88,15 @@ class CommandRegistrationTest {
     @Test
     void atFirstReadEveryReferenceIsResolvedAgainstAllGroupsWhateverTheirOrder() {
         CommandGroup early = new CommandGroup("gt_early", "Registered first.");
-        early.server("go", "Go.", OK).example("numen gt_early go").seeAlso("numen gt_late come");
+        early.server("go", "Go.", OK).example("gt_early go").seeAlso("gt_late come");
         early.close();
         CommandGroup late = new CommandGroup("gt_late", "Registered after the group that points at it.");
-        late.server("come", "Come.", OK).example("numen gt_late come");
+        late.server("come", "Come.", OK).example("gt_late come");
         late.close();
 
         IllegalStateException missing = assertThrows(IllegalStateException.class,
                 () -> NumenCli.checkSeeAlso(List.of(early), Map.of("gt_early", early)));
-        assertTrue(missing.getMessage().contains("numen gt_early go -> numen gt_late come"), missing.getMessage());
+        assertTrue(missing.getMessage().contains("gt_early go -> gt_late come"), missing.getMessage());
         assertDoesNotThrow(() -> NumenCli.checkSeeAlso(List.of(early, late), Map.of("gt_early", early, "gt_late", late)),
                 "指向后登记的组:到齐之后一起查就认");
     }
@@ -106,23 +106,23 @@ class CommandRegistrationTest {
         NumenApi numen = door();
         NumenCli.index();
         numen.registerCommands("gt_see_target", "Pointed at from another group.",
-                g -> g.server("go", "Go.", OK).example("numen gt_see_target go"));
+                g -> g.server("go", "Go.", OK).example("gt_see_target go"));
 
         assertDoesNotThrow(() -> numen.registerCommands("gt_see_ok", "Points at real actions.", g -> {
-            g.server("first", "First.", OK).example("numen gt_see_ok first")
-                    .seeAlso("numen gt_see_ok second", "numen gt_see_target go");
-            g.server("second", "Second.", OK).example("numen gt_see_ok second");
+            g.server("first", "First.", OK).example("gt_see_ok first")
+                    .seeAlso("gt_see_ok second", "gt_see_target go");
+            g.server("second", "Second.", OK).example("gt_see_ok second");
         }), "同组(哪怕写在后面)、别组都认");
-        assertTrue(onClient("numen gt_see_ok first --help").message()
-                .endsWith("\n  See also: numen gt_see_ok second, numen gt_see_target go"));
+        assertTrue(onClient("gt_see_ok first --help").message()
+                .endsWith("\n  See also: gt_see_ok second, gt_see_target go"));
 
         IllegalStateException broken = assertThrows(IllegalStateException.class, () -> numen.registerCommands(
-                "gt_see_broken", "Points at nothing.", g -> g.server("go", "Go.", OK).example("numen gt_see_broken go")
-                        .seeAlso("numen gt_see_target come", "numen gt_nowhere go", "gt_see_target go")));
-        assertEquals("相关命令指向不存在的动作: numen gt_see_broken go -> numen gt_see_target come; "
-                + "numen gt_see_broken go -> numen gt_nowhere go; numen gt_see_broken go -> gt_see_target go",
-                broken.getMessage(), "写不存在的动作、不存在的组、漏了 numen,一次列全");
-        assertFalse(onServer("numen gt_see_broken --help").success(), "查不过的组没有挂上树");
+                "gt_see_broken", "Points at nothing.", g -> g.server("go", "Go.", OK).example("gt_see_broken go")
+                        .seeAlso("gt_see_target come", "gt_nowhere go", "numen gt_see_target go")));
+        assertEquals("相关命令指向不存在的动作: gt_see_broken go -> gt_see_target come; "
+                + "gt_see_broken go -> gt_nowhere go; gt_see_broken go -> numen gt_see_target go",
+                broken.getMessage(), "写不存在的动作、不存在的组、多写了 numen 前缀,一次列全");
+        assertFalse(onServer("gt_see_broken --help").success(), "查不过的组没有挂上树");
     }
 
     @Test
@@ -132,29 +132,29 @@ class CommandRegistrationTest {
         Param<String> from = Param.optional("from", ArgType.word(), "Where from.");
         IllegalArgumentException none = assertThrows(IllegalArgumentException.class, () -> numen.registerCommands(
                 "gt_no_example", "x.", g -> g.server("go", "Go.", OK)));
-        assertEquals("numen gt_no_example go 没写例子——模型照着例子写,每个动作至少一个", none.getMessage());
-        assertFalse(onServer("numen gt_no_example --help").success(), "被拒的组没有挂上树");
+        assertEquals("gt_no_example go 没写例子——模型照着例子写,每个动作至少一个", none.getMessage());
+        assertFalse(onServer("gt_no_example --help").success(), "被拒的组没有挂上树");
 
         for (String bad : new String[]{
-                "numen gt_bad_example take",              // 缺了必填参数
-                "numen gt_bad_example take many",         // 值读不通
-                "numen gt_bad_example take 3 --form x",   // 没有这个标志
-                "numen gt_bad_example take 3 extra",      // 多写了东西
-                "numen gt_bad_example give 3",            // 落在别的动作上
-                "numen gt_bad_example take --help",       // 落在帮助上
-                "numen gt_other take 3",                  // 别的组
-                "gt_bad_example take 3"}) {               // 漏了 numen
+                "gt_bad_example take",              // 缺了必填参数
+                "gt_bad_example take many",         // 值读不通
+                "gt_bad_example take 3 --form x",   // 没有这个标志
+                "gt_bad_example take 3 extra",      // 多写了东西
+                "gt_bad_example give 3",            // 落在别的动作上
+                "gt_bad_example take --help",       // 落在帮助上
+                "gt_other take 3",                  // 别的组
+                "numen gt_bad_example take 3"}) {   // 多写了 numen 前缀
             IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> numen.registerCommands(
                     "gt_bad_example", "x.", g -> {
-                        g.server("take", "Take.", OK, count, from).example("numen gt_bad_example take 3").example(bad);
-                        g.server("give", "Give.", OK, count).example("numen gt_bad_example give 3");
+                        g.server("take", "Take.", OK, count, from).example("gt_bad_example take 3").example(bad);
+                        g.server("give", "Give.", OK, count).example("gt_bad_example give 3");
                     }), bad);
-            assertEquals("numen gt_bad_example take 的例子写不通,或者落在别的动作上: " + bad, e.getMessage());
+            assertEquals("gt_bad_example take 的例子写不通,或者落在别的动作上: " + bad, e.getMessage());
         }
         assertDoesNotThrow(() -> numen.registerCommands("gt_bad_example", "x.", g -> {
-            g.server("take", "Take.", OK, count, from).example("numen gt_bad_example take 3")
-                    .example("numen gt_bad_example take 3 --from chest");
-            g.server("give", "Give.", OK, count).example("numen gt_bad_example give 3");
+            g.server("take", "Take.", OK, count, from).example("gt_bad_example take 3")
+                    .example("gt_bad_example take 3 --from chest");
+            g.server("give", "Give.", OK, count).example("gt_bad_example give 3");
         }), "写对了就能登记——前面几次被拒没有占住这个组名");
     }
 
@@ -163,10 +163,10 @@ class CommandRegistrationTest {
         assertThrows(IllegalArgumentException.class, () -> door().registerCommands("gt_blank_help", "x.",
                 g -> g.server("x", "x.", OK).example(" ")));
         assertThrows(IllegalArgumentException.class, () -> door().registerCommands("gt_blank_note", "x.",
-                g -> g.server("x", "x.", OK).example("numen gt_blank_note x").note("")));
+                g -> g.server("x", "x.", OK).example("gt_blank_note x").note("")));
         AtomicReference<Action> leaked = new AtomicReference<>();
         door().registerCommands("gt_help_closed", "Closed after its block.",
-                g -> leaked.set(g.server("x", "x.", OK).example("numen gt_help_closed x")));
+                g -> leaked.set(g.server("x", "x.", OK).example("gt_help_closed x")));
         assertThrows(IllegalStateException.class, () -> leaked.get().note("Too late."), "封口之后不能再补帮助");
     }
 
@@ -174,9 +174,9 @@ class CommandRegistrationTest {
     void aShortcutNameThatIsTakenBlowsUpAtRegistration() {
         NumenApi numen = door();
         numen.registerCommands("gt_tool_a", "First.",
-                g -> g.server("go", "Go.", OK).example("numen gt_tool_a go").promote("gt_shared_tool", "Go."));
+                g -> g.server("go", "Go.", OK).example("gt_tool_a go").promote("gt_shared_tool", "Go."));
         assertThrows(IllegalStateException.class, () -> numen.registerCommands("gt_tool_b", "Second.",
-                g -> g.server("go", "Go.", OK).example("numen gt_tool_b go").promote("gt_shared_tool", "Go too.")));
+                g -> g.server("go", "Go.", OK).example("gt_tool_b go").promote("gt_shared_tool", "Go too.")));
         assertThrows(IllegalStateException.class, () -> numen.registerCommands("gt_tool_c", "Third.", g -> {
             Action a = g.server("go", "Go.", OK).promote("gt_tool_c_go", "Go.");
             a.promote("gt_tool_c_again", "Again.");

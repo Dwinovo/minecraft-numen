@@ -5,7 +5,7 @@ import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 
-/** {@code numen kaleidoscope cook} 派下来的一件活:在哪一格、做哪道菜。 */
+/** {@code kaleidoscope cook} 派下来的一件活:在哪一格、做哪道菜。 */
 public final class CookRecord extends TaskRecord {
 
     /**

@@ -25,16 +25,16 @@ class ListingTest {
                     for (int i = 1; i <= 23; i++) {
                         rows.add("  row " + i);
                     }
-                    src.reply(new Listing("Rows (23):", rows, "That is all.", "numen gt_listing rows")
+                    src.reply(new Listing("Rows (23):", rows, "That is all.", "gt_listing rows")
                             .result(args).toJson());
-                }, Listing.PAGE).example("numen gt_listing rows --page 2"));
+                }, Listing.PAGE).example("gt_listing rows --page 2"));
     }
 
     @Test
     void anActionsListIsPagedLikeHelp() {
-        String first = onClient("numen gt_listing rows").message();
+        String first = onClient("gt_listing rows").message();
         assertTrue(first.startsWith("Rows (23):\n  row 1\n"), first);
-        assertTrue(first.endsWith("  row 20\n(page 1 of 2, 3 more: numen gt_listing rows --page 2)\nThat is all."),
+        assertTrue(first.endsWith("  row 20\n(page 1 of 2, 3 more: gt_listing rows --page 2)\nThat is all."),
                 first);
 
         assertEquals("""
@@ -42,21 +42,21 @@ class ListingTest {
                   row 21
                   row 22
                   row 23
-                That is all.""", onClient("numen gt_listing rows --page 2").message());
+                That is all.""", onClient("gt_listing rows --page 2").message());
 
-        CliFixture.Outcome beyond = onClient("numen gt_listing rows --page 3");
+        CliFixture.Outcome beyond = onClient("gt_listing rows --page 3");
         assertFalse(beyond.success());
-        assertEquals("no page 3; numen gt_listing rows has pages 1-2", beyond.message());
+        assertEquals("no page 3; gt_listing rows has pages 1-2", beyond.message());
     }
 
     @Test
     void thePageFlagReadsTheSameAsInHelp() {
         assertEquals("""
-                numen gt_listing rows [--page <integer>]
+                gt_listing rows [--page <integer>]
                   List the rows.
                   --page <integer> (integer 1-99; optional) — Which page of the list.
                   Examples:
-                    numen gt_listing rows --page 2""",
-                onClient("numen gt_listing rows --help").message());
+                    gt_listing rows --page 2""",
+                onClient("gt_listing rows --help").message());
     }
 }

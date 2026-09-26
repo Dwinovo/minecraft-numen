@@ -6,14 +6,14 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 一个命令组({@code numen <组> …}):插件经 {@code NumenApi.registerCommands} 拿到的就是它,只能往这一组里加动作。
+ * 一个命令组({@code <组> …},组名就是一级命令):插件经 {@code NumenApi.registerCommands} 拿到的就是它,只能往这一组里加动作。
  *
  * <pre>{@code
  * numen.registerCommands("ftbquests", "Your quest book: chapters, quests, submitting.", quests -> {
  *     quests.server("submit", "Hand in the items a quest asks for.", Quests::submit, QUEST)
- *           .example("numen ftbquests submit 15CDF6A098B95FDA");
+ *           .example("ftbquests submit 15CDF6A098B95FDA");
  *     quests.client("list", "List the quests you can work on now.", Quests::list)
- *           .example("numen ftbquests list")
+ *           .example("ftbquests list")
  *           .promote("list_quests", "…");
  * });
  * }</pre>
@@ -53,7 +53,7 @@ public final class CommandGroup {
     private Action add(String action, String actionSummary, List<Param<?>> params,
                        Action.OnServer onServer, Action.OnClient onClient) {
         requireOpen();
-        String path = NumenCli.ROOT + " " + name + " " + action;
+        String path = name + " " + action;
         if (action == null || !Action.NAME.matcher(action).matches()) {
             throw new IllegalArgumentException("动作名不合规(小写字母开头,只含 [a-z0-9_]): '" + action + "'");
         }
@@ -99,7 +99,7 @@ public final class CommandGroup {
 
     void requireOpen() {
         if (!open) {
-            throw new IllegalStateException("numen " + name + " 已经登记完了,不能再往里加");
+            throw new IllegalStateException("命令组 " + name + " 已经登记完了,不能再往里加");
         }
     }
 

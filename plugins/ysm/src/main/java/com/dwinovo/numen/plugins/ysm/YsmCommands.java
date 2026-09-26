@@ -4,7 +4,6 @@ import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
-import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskDispatch;
@@ -15,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code numen ysm}:现在穿什么、能换成什么;换一身;做一个动作。三个都在服务端,全走 YSM 自己的
+ * {@code ysm}:现在穿什么、能换成什么;换一身;做一个动作。三个都在服务端,全走 YSM 自己的
  * 命令、命令补全与同伴的 NBT(见 {@link Ysm})。
  *
  * <p>都不提升成快捷工具:联动的动作是长尾,走 {@code numen} 这一个入口就够了。
@@ -49,7 +48,7 @@ final class YsmCommands {
 
     /** 回执里提到别的动作时写的那一行命令。 */
     static String line(String action) {
-        return NumenCli.ROOT + " " + GROUP + " " + action;
+        return GROUP + " " + action;
     }
 
     static void install(NumenApi numen, Ysm ysm) {

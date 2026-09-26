@@ -32,7 +32,7 @@ import java.util.Map;
  * ({@code flex_*},同一组料按投料比例判品质)。两张表的记录是四个互不相干的 record,
  * 这里是唯一一处把它们摊平的地方。
  *
- * @param id          配方 id,{@code numen kaleidoscope cook} 点菜用的就是它
+ * @param id          配方 id,{@code kaleidoscope cook} 点菜用的就是它
  * @param cookware    哪口锅做
  * @param result      出锅的东西
  * @param ingredients 要的料(已剔掉配方表里的空位)
@@ -210,7 +210,7 @@ public record Dish(ResourceLocation id, Cookware cookware, ItemStack result, Lis
         return base == null ? soupBase.toString() : idOf(base.getDisplayStack().getItem());
     }
 
-    /** {@code numen kaleidoscope recipes} 的一行。 */
+    /** {@code kaleidoscope recipes} 的一行。 */
     public Map<String, Object> row(ServerLevel level) {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("recipe", id.toString());

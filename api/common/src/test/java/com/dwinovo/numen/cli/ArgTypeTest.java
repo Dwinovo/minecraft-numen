@@ -47,7 +47,7 @@ class ArgTypeTest {
                     LAST.set(args);
                     src.reply(TaskResult.ok("made").toJson());
                 }, X, RECIPE, MODEL, HAVE_ONLY, SEARCH, DEPTH)
-                        .example("numen gt_types make -12 stone \"抽象鸣潮 菲比.ysm\" --have_only true")
+                        .example("gt_types make -12 stone \"抽象鸣潮 菲比.ysm\" --have_only true")
                         .promote("gt_types_make", "Make something, as a tool."));
     }
 
@@ -68,14 +68,14 @@ class ArgTypeTest {
 
     @Test
     void eachTypeReadsItsValueOffTheLine() {
-        CommandArgs plain = ran("numen gt_types make -12 kaleidoscope_cookery:flex_pot/braised_beef misc/1_Alex");
+        CommandArgs plain = ran("gt_types make -12 kaleidoscope_cookery:flex_pot/braised_beef misc/1_Alex");
         assertEquals(-12, plain.get(X));
         assertEquals(ResourceLocation.fromNamespaceAndPath("kaleidoscope_cookery", "flex_pot/braised_beef"),
                 plain.get(RECIPE));
         assertEquals("misc/1_Alex", plain.get(MODEL), "不加引号时一个值读到空格为止,斜杠与大写照收");
         assertNull(plain.get(HAVE_ONLY));
 
-        CommandArgs flagged = ran("numen gt_types make 30000000 stone \"抽象鸣潮 菲比.ysm\" --have_only true "
+        CommandArgs flagged = ran("gt_types make 30000000 stone \"抽象鸣潮 菲比.ysm\" --have_only true "
                 + "--search 灵梦 --depth -64");
         assertEquals(30000000, flagged.get(X));
         assertEquals(ResourceLocation.withDefaultNamespace("stone"), flagged.get(RECIPE), "不写命名空间就是 minecraft:");
@@ -83,16 +83,16 @@ class ArgTypeTest {
         assertEquals(true, flagged.get(HAVE_ONLY));
         assertEquals("灵梦", flagged.get(SEARCH));
         assertEquals(-64, flagged.get(DEPTH));
-        assertEquals("say \"hi\"", ran("numen gt_types make 1 stone \"say \\\"hi\\\"\"").get(MODEL), "引号里反斜杠转义");
+        assertEquals("say \"hi\"", ran("gt_types make 1 stone \"say \\\"hi\\\"\"").get(MODEL), "引号里反斜杠转义");
     }
 
     @Test
     void aBadValueSaysWhatWasExpected() {
-        assertTrue(failed("numen gt_types make 1 Stone m").startsWith("expected an id like minecraft:oak_log at position 22: "));
-        assertTrue(failed("numen gt_types make 1 a:b:c m").startsWith("'a:b:c' is not a valid id at position 22: "));
-        assertTrue(failed("numen gt_types make 1 stone \"half open").startsWith("Unclosed quoted string"));
-        assertTrue(failed("numen gt_types make 1 stone m --have_only yes").startsWith("Invalid bool, expected true or false"));
-        assertTrue(failed("numen gt_types make 1.5 stone m").startsWith("Invalid integer '1.5'"));
+        assertTrue(failed("gt_types make 1 Stone m").startsWith("expected an id like minecraft:oak_log at position 16: "));
+        assertTrue(failed("gt_types make 1 a:b:c m").startsWith("'a:b:c' is not a valid id at position 16: "));
+        assertTrue(failed("gt_types make 1 stone \"half open").startsWith("Unclosed quoted string"));
+        assertTrue(failed("gt_types make 1 stone m --have_only yes").startsWith("Invalid bool, expected true or false"));
+        assertTrue(failed("gt_types make 1.5 stone m").startsWith("Invalid integer '1.5'"));
     }
 
     /**
@@ -101,7 +101,7 @@ class ArgTypeTest {
      */
     @Test
     void theShortcutReadsTheSameValuesFromJson() {
-        CommandArgs viaLine = ran("numen gt_types make -12 kaleidoscope_cookery:flex_pot/braised_beef "
+        CommandArgs viaLine = ran("gt_types make -12 kaleidoscope_cookery:flex_pot/braised_beef "
                 + "\"抽象鸣潮 菲比.ysm\" --have_only false --search misc/1_Alex");
         JsonObject json = JsonParser.parseString("""
                 {"x": -12, "recipe": "kaleidoscope_cookery:flex_pot/braised_beef", "model": "抽象鸣潮 菲比.ysm",
@@ -130,7 +130,7 @@ class ArgTypeTest {
                 .optionalInteger("depth", "How far down.")
                 .build()), new Gson().toJson(tool.parameterSchema()));
         assertEquals("""
-                numen gt_types make <x> <recipe> <model> [--have_only <boolean>] [--search <string>] [--depth <integer>]
+                gt_types make <x> <recipe> <model> [--have_only <boolean>] [--search <string>] [--depth <integer>]
                   Make something.
                   <x> (integer) — Block X.
                   <recipe> (id, e.g. minecraft:oak_log) — Which recipe.
@@ -139,8 +139,8 @@ class ArgTypeTest {
                   --search <string> (string, quote it if it has spaces; optional) — Narrow the list.
                   --depth <integer> (integer; optional) — How far down.
                   Examples:
-                    numen gt_types make -12 stone "抽象鸣潮 菲比.ysm" --have_only true
-                  Shortcut tool: gt_types_make.""", onClient("numen gt_types make --help").message());
+                    gt_types make -12 stone "抽象鸣潮 菲比.ysm" --have_only true
+                  Shortcut tool: gt_types_make.""", onClient("gt_types make --help").message());
     }
 
     private static CommandArgs read(String json) {

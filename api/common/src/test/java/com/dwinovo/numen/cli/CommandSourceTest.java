@@ -46,24 +46,24 @@ class CommandSourceTest {
                 SERVER_CALLS.add(args);
                 src.reply(TaskResult.ok("reminder in " + args.get(AFTER) + "s: " + args.get(REASON),
                         Map.of("tool", src.toolName(), "task", src.taskName())).toJson());
-            }, AFTER, REASON).example("numen gt_side remind 60 check the furnace")
+            }, AFTER, REASON).example("gt_side remind 60 check the furnace")
                     .promote("gt_side_remind", "Set a reminder, as a tool.");
             g.client("jot", "Jot something down on the owner's client.", (src, args) -> {
                 CLIENT_CALLS.add(args);
                 src.reply(TaskResult.ok("jotted " + args.get(ID) + " x" + args.get(TRIES)).toJson());
-            }, ID, TRIES).example("numen gt_side jot --id a1")
+            }, ID, TRIES).example("gt_side jot --id a1")
                     .promote("gt_side_jot", "Jot something down, as a tool.");
         });
     }
 
     @Test
     void aClientActionRunsRightThereAndAServerActionIsShippedWhole() {
-        CliFixture.Outcome jot = onClient("numen gt_side jot --id a1");
+        CliFixture.Outcome jot = onClient("gt_side jot --id a1");
         assertFalse(jot.forwarded);
         assertEquals("jotted a1 xnull", jot.message());
 
         int before = SERVER_CALLS.size();
-        CliFixture.Outcome remind = onClient("numen gt_side remind 60 check the furnace");
+        CliFixture.Outcome remind = onClient("gt_side remind 60 check the furnace");
         assertTrue(remind.forwarded, "服务端动作整条送去服务端");
         assertTrue(remind.replies.isEmpty(), "结果等服务端回来");
         assertEquals(before, SERVER_CALLS.size(), "客户端不跑服务端的处理函数");
@@ -72,11 +72,11 @@ class CommandSourceTest {
     /** 服务端的树上客户端动作只有名字与帮助,没有参数、执行不了:写到它那儿是一行没写完的命令,附上它的帮助。 */
     @Test
     void theServerTreeOnlyNamesAClientAction() {
-        CliFixture.Outcome jot = onServer("numen gt_side jot --id a1");
+        CliFixture.Outcome jot = onServer("gt_side jot --id a1");
         assertFalse(jot.success());
         assertTrue(jot.message().startsWith("Unknown command"), jot.message());
-        assertTrue(jot.message().contains("\nnumen gt_side jot [--id <word>] [--tries <integer>]\n"), jot.message());
-        assertTrue(onServer("numen gt_side jot --help").success(), "帮助两侧都答得出");
+        assertTrue(jot.message().contains("\ngt_side jot [--id <word>] [--tries <integer>]\n"), jot.message());
+        assertTrue(onServer("gt_side jot --help").success(), "帮助两侧都答得出");
     }
 
     @Test
@@ -94,7 +94,7 @@ class CommandSourceTest {
                 .build(), ToolRegistry.get("gt_side_jot").parameterSchema());
         assertEquals(Schema.object()
                 .string("command", "One command line. Without a leading / it is one of Numen's commands, e.g. "
-                        + "\"numen --help\"; with a leading / it is a native command, e.g. \"/help give\".")
+                        + "\"task status\"; with a leading / it is a native command, e.g. \"/help give\".")
                 .build(), new CommandTool().parameterSchema());
     }
 
@@ -109,7 +109,7 @@ class CommandSourceTest {
         JsonObject json = new JsonObject();
         json.addProperty("after_s", 60);
         json.addProperty("reason", "check the furnace");
-        CliFixture.Outcome viaCommand = onServer("numen gt_side remind 60 check the furnace");
+        CliFixture.Outcome viaCommand = onServer("gt_side remind 60 check the furnace");
 
         assertEquals(1, SERVER_CALLS.size());
         assertEquals(CommandArgs.fromJson(List.of(AFTER, REASON), json), SERVER_CALLS.get(0), "两个入口读出的参数相等");
@@ -134,7 +134,7 @@ class CommandSourceTest {
     @Test
     void aShortcutForAClientActionRunsOnTheClientWithTheJsonReadTheSameWay() {
         CLIENT_CALLS.clear();
-        String viaCommand = onClient("numen gt_side jot --tries 3 --id a1").replies.get(0);
+        String viaCommand = onClient("gt_side jot --tries 3 --id a1").replies.get(0);
 
         List<String> replies = new ArrayList<>();
         UUID companion = UUID.randomUUID();

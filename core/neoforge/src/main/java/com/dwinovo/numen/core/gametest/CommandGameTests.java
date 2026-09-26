@@ -85,12 +85,12 @@ public class CommandGameTests {
                                 (src, args) -> TaskDispatch.runSync(src.companion(),
                                         new HoldRecord(src, args.get(TICKS)), src::reply),
                                 TICKS)
-                                .example("numen gt_sync hold 5")));
+                                .example("gt_sync hold 5")));
         NumenPlugins.register(numen -> numen.registerCommands(TWIN,
                 "Test fixture: a group that shares its name with a native command.", g ->
                         g.server("ping", "Say which layer answered.",
                                 (src, args) -> src.reply(TaskResult.ok("layer one").toJson()))
-                                .example("numen " + TWIN + " ping")));
+                                .example(TWIN + " ping")));
         TaskFactory.register(HoldRecord.class, (body, record) -> new Hold(record));
     }
 
@@ -402,7 +402,7 @@ public class CommandGameTests {
                     return 1;
                 })));
         storeOf(owner).add(Verdict.Kind.ALLOW, Rule.parse("command(" + TWIN + ")"));
-        ToolRun one = command(companion, "numen " + TWIN + " ping");
+        ToolRun one = command(companion, TWIN + " ping");
         ToolRun zero = command(companion, "/" + TWIN + " ping");
 
         helper.assertTrue(one.succeeded() && message(one.reply()).equals("layer one"),
@@ -420,7 +420,7 @@ public class CommandGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
     public static void command_long_work_is_accepted_and_finished_under_one_id(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_worker", new BlockPos(4, 2, 4), false);
-        ToolRun run = command(companion, "numen gt_long linger 10");
+        ToolRun run = command(companion, "gt_long linger 10");
         EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
         helper.succeedWhen(() -> {
@@ -446,7 +446,7 @@ public class CommandGameTests {
     public static void command_drive_runs_a_line_through_her_entry(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_driven", new BlockPos(4, 2, 4), false);
         var server = helper.getLevel().getServer();
-        List<String> lines = List.of("numen task status", "numen task stauts", "/help help", "/gvie @s stone");
+        List<String> lines = List.of("task status", "task stauts", "/help help", "/gvie @s stone");
         List<ToolRun> viaCommand = lines.stream().map(line -> command(companion, line)).toList();
         List<String> heard = new ArrayList<>();
         CommandSourceStack console = console(server, heard);
@@ -503,7 +503,7 @@ public class CommandGameTests {
         var server = helper.getLevel().getServer();
         List<String> heard = new ArrayList<>();
         server.getCommands().performPrefixedCommand(console(server, heard),
-                "numen drive gametest_mc_held numen gt_sync hold 5");
+                "numen drive gametest_mc_held gt_sync hold 5");
 
         helper.succeedWhen(() -> {
             String name = companion.getName().getString();
@@ -591,11 +591,11 @@ public class CommandGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_typist", new BlockPos(4, 2, 4), false);
         grantOp(companion);
         ToolRun item = command(companion, "/give @s minecraft:dimond");
-        ToolRun action = command(companion, "numen gt_long lingre 40");
+        ToolRun action = command(companion, "gt_long lingre 40");
         String itemSaid = message(item.reply());
         String actionSaid = message(action.reply());
         Constants.LOG.info("[numen-cli] give @s minecraft:dimond -> {}", itemSaid);
-        Constants.LOG.info("[numen-cli] numen gt_long lingre 40 -> {}", actionSaid);
+        Constants.LOG.info("[numen-cli] gt_long lingre 40 -> {}", actionSaid);
 
         helper.assertTrue(!item.succeeded() && item.task() == null
                         && itemSaid.contains("minecraft:dimond") && itemSaid.contains("<--[HERE]")
@@ -603,7 +603,7 @@ public class CommandGameTests {
                         && itemSaid.endsWith("\nDid you mean: minecraft:diamond?"),
                 "the item typo does not end with the nearest item: " + itemSaid);
         helper.assertTrue(!action.succeeded() && action.task() == null
-                        && actionSaid.contains("<--[HERE]") && actionSaid.contains("numen gt_long linger <ticks>")
+                        && actionSaid.contains("<--[HERE]") && actionSaid.contains("gt_long linger <ticks>")
                         && actionSaid.endsWith("\nDid you mean: linger?"),
                 "the action typo does not end with the nearest action: " + actionSaid);
         cleanUp(helper, companion, null);

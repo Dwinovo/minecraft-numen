@@ -26,7 +26,7 @@ public final class NumenKaleidoscope {
         NumenPlugins.register(numen -> {
             KaleidoscopeCommands.install(numen);
 
-            // numen kaleidoscope cook 派下来的记录由谁来跑
+            // kaleidoscope cook 派下来的记录由谁来跑
             TaskFactory.register(CookRecord.class, (player, record) -> new CookTask(record));
 
             // 事件两侧都要登记(服务端的发出口靠它挡,主人客户端的队列靠它投递),

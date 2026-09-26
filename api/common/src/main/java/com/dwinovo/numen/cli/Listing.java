@@ -16,7 +16,7 @@ import java.util.List;
  *
  * <pre>{@code
  * quests.client("list", "The quests you can work on now.",
- *         (src, args) -> src.reply(new Listing(head, rows, foot, "numen ftbquests list").result(args).toJson()),
+ *         (src, args) -> src.reply(new Listing(head, rows, foot, "ftbquests list").result(args).toJson()),
  *         Listing.PAGE);
  * }</pre>
  *

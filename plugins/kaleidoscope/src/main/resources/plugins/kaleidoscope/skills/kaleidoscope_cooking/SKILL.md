@@ -5,8 +5,8 @@ description: 主人提到做饭、想吃点什么、或者你看见炒锅汤锅�
 
 # 用森罗的厨房做饭
 
-这个世界装了森罗物语:厨房。做饭的动作都在 `numen kaleidoscope` 命令组里:`recipes` 查菜单、`inspect` 看锅、
-`cook` 做菜。每个动作怎么写,用 `numen kaleidoscope <动作> --help` 查;这里只讲什么时候用、怎么安排。
+这个世界装了森罗物语:厨房。做饭的动作都在 `kaleidoscope` 命令组里:`recipes` 查菜单、`inspect` 看锅、
+`cook` 做菜。每个动作怎么写,用 `kaleidoscope <动作> --help` 查;这里只讲什么时候用、怎么安排。
 
 **配方永远现查,不要凭记忆报菜名。** 整合包能加菜也能删菜,而弹性配方的配比每个存档都不一样。
 
@@ -26,7 +26,7 @@ description: 主人提到做饭、想吃点什么、或者你看见炒锅汤锅�
 ## 给主人安排一顿饭
 
 1. 先问清楚或者自己判断:他是饿了要垫一口,还是要正经吃一顿。
-2. 只看**现在就做得出来的**(比如 `numen kaleidoscope recipes pot --have_only true`),比翻整份菜单快得多。
+2. 只看**现在就做得出来的**(比如 `kaleidoscope recipes pot --have_only true`),比翻整份菜单快得多。
 3. 做得出来的里面挑:主食(饭)+ 一个菜就够一顿;人多就用汤锅出一锅。
 4. `inspect` 确认那口锅是空的,`goto` 过去,再 `cook`。
 5. 做完跟主人说一句做了什么、什么成色,别默默把菜塞给他。

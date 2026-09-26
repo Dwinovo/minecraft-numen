@@ -30,7 +30,7 @@ public final class NumenYsm {
 
         NumenPlugins.register(numen -> {
             YsmCommands.install(numen, ysm);
-            // numen ysm switch 派下来的换装由谁来跑
+            // ysm switch 派下来的换装由谁来跑
             TaskFactory.register(SwitchRecord.class, (player, record) -> new SwitchTask(ysm, record));
 
             if (skillsRoot != null) numen.bundleSkills(skillsRoot);
