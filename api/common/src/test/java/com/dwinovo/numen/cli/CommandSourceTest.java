@@ -94,7 +94,7 @@ class CommandSourceTest {
                 .build(), ToolRegistry.get("gt_side_jot").parameterSchema());
         assertEquals(Schema.object()
                 .string("command", "One command line: without a leading / a command from <commands>, e.g. "
-                        + "\"task status\"; with a leading / a Minecraft or mod command, e.g. \"/help give\".")
+                        + "`task status`; with a leading / a Minecraft or mod command, e.g. `/help give`.")
                 .build(), new CommandTool().parameterSchema());
     }
 

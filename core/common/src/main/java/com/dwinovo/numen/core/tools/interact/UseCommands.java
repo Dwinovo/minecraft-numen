@@ -106,8 +106,8 @@ public final class UseCommands {
                         + "where you face.",
                 UseCommands::ahead, BUTTON, HOLD_TICKS, ITEM)
                 .example(line(AHEAD) + " right --item minecraft:snowball")
-                .note("To aim somewhere, " + line(BLOCK) + " at that cell instead; air cells work too.")
-                .note("Food and drink go through inv eat, not here.")
+                .note("To aim somewhere, `" + line(BLOCK) + "` at that cell instead; air cells work too.")
+                .note("Food and drink go through `inv eat`, not here.")
                 .seeAlso(line(BLOCK));
         use.server(ENTITY, "Press a mouse button on an entity: walk up to it, follow it, and act once your "
                         + "crosshair reaches it.",
@@ -162,7 +162,7 @@ public final class UseCommands {
                 .note("It does NOT travel: find a bed with scan_blocks using #minecraft:beds (that one tag covers "
                         + "every colour), goto it, then run this.")
                 .note("Succeeds only when the server confirms you are sleeping; otherwise it hands back "
-                        + "Minecraft's own reason. \"Only at night\" means wait (task timer), not retry; \"too far "
+                        + "Minecraft's own reason. \"Only at night\" means wait (`task timer`), not retry; \"too far "
                         + "away\" means goto.")
                 .note("Returns the moment you lie down; night passes on its own.")
                 .seeAlso("task timer");

@@ -54,7 +54,7 @@ public final class ScanCommands {
                 .example("scan around")
                 .example("scan around --radius 12")
                 .note("Instant and read-only. @ is you, North is up, one cell is one block; the legend comes with it.")
-                .note("One map instead of many single-block looks; for things further out use scan blocks or "
+                .note("One map instead of many single-block looks; for things further out use `scan blocks` or "
                         + "scan entities.")
                 .seeAlso("scan blocks", "scan entities", "scan block")
                 .promote("look_around", "Your spatial view: a top-down character map of the blocks around you, "
@@ -71,7 +71,7 @@ public final class ScanCommands {
                 .example("scan blocks 32 iron_ore deepslate_iron_ore")
                 .example("scan blocks 16 #minecraft:beds")
                 .note("Read-only; the reply comes when the search is done. Name every variant you want.")
-                .note("Group ids (g1, g2, ...) stay good only until your next scan blocks.")
+                .note("Group ids (g1, g2, ...) stay good only until your next `scan blocks`.")
                 .note("Only loaded terrain is read: anything further out is UNKNOWN, not empty.")
                 .seeAlso("scan block", "scan around")
                 .promote("scan_blocks", "Find blocks of given type(s) near you, reported as GROUPS: matching cells "
@@ -99,7 +99,7 @@ public final class ScanCommands {
                         + "type_filter to narrow: 'hostile' for monsters, 'passive' for animals/items, 'player' for "
                         + "players, 'all' for everything. Returns at most 20 entities; truncated:true means more "
                         + "exist. Each entry has id, type, position, distance, hp, and category. Pass the returned "
-                        + "runtime ids to fight attack; it cannot attack anything outside that set.");
+                        + "runtime ids to `fight attack`; it cannot attack anything outside that set.");
         scan.server("block", "One block: its id and state, hardness, whether your held tool is right, dig time, "
                         + "whether it is in reach.",
                         ScanCommands::block, X, Y, Z)

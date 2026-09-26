@@ -91,7 +91,7 @@ public final class WorkCommands {
                         + "she asks; if the owner or a rule refuses, the task stops with the reason — decide what "
                         + "to do next, do not route around it. Only mines what its tools actually harvest, and "
                         + "stops naming the needed tier if nothing qualifies (to destroy a block regardless of "
-                        + "drops, goto beside it and run use block left on it). The route fields are "
+                        + "drops, goto beside it and run `use block` with the left button on it). The route fields are "
                         + "goto's, laid over mine's own default, which may dig anything (cells needing consent "
                         + "included) — pass them only to restrict her, e.g. avoid_break for blocks or cells she "
                         + "must leave standing. BACKGROUND: a successful call is already running; do not call "
@@ -105,7 +105,7 @@ public final class WorkCommands {
                 .note("Walks to each drop until none she can reach remain; she picks up what she gets close to. "
                         + "It never breaks or places a block: drops in a pit or across a gap it cannot walk to "
                         + "are left there and named in the result.")
-                .note("For drops left by your own interactions; fight attack and mine already walk over the "
+                .note("For drops left by your own interactions; `fight attack` and mine already walk over the "
                         + "drops they make.")
                 .seeAlso("work mine", "task stop");
         work.server("fish", "Fish from nearby water with a fishing rod.", WorkCommands::fish, CATCHES)

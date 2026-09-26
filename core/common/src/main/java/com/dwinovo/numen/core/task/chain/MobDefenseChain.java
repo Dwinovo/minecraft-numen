@@ -173,7 +173,7 @@ public final class MobDefenseChain implements Task, Reflex {
 
     @Override
     public String describe() {
-        return "身边有危险就自动开打,打法与她自己派的 fight attack 完全一致";
+        return "身边有危险就自动开打,打法与她自己派的 `fight attack` 完全一致";
     }
 
     // ---- 什么算危险 ----

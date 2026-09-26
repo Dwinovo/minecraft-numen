@@ -33,7 +33,7 @@ public final class MemoryCommands {
     private static final Param<String> DESCRIPTION = Param.required("description", ArgType.string(),
             "The one line you will see in your index: the fact itself, not a label.");
     private static final Param<String> CONTENT = Param.optional("content", ArgType.string(),
-            "A longer body, read back with memory recall.")
+            "A longer body, read back with `memory recall`.")
             .whenOmitted("keep just the line, when it already says everything");
     private static final Param<String> NAME = Param.required("name", ArgType.word(),
             "The note's name, exactly as <memory> lists it.");

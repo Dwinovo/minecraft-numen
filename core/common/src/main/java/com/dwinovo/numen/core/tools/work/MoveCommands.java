@@ -61,7 +61,7 @@ public final class MoveCommands {
                     + "no coordinates.");
     private static final Param<String> ROUTE = Param.optional("route", ArgType.word(),
             "A planned route to walk. Give it alone: its destination and route flags are already fixed.")
-            .values("a route id (r1, r2, ...) from a goto refusal or a move route reply");
+            .values("a route id (r1, r2, ...) from a goto refusal or a `move route` reply");
     private static final Param<Integer> DISTANCE = Param.optional("distance",
             ArgType.integer(MIN_DISTANCE, MAX_DISTANCE), "How close to stay, in blocks.")
             .whenOmitted("stay within " + DEFAULT_DISTANCE);
@@ -107,7 +107,7 @@ public final class MoveCommands {
                         • route — walk a route by id (r1, r2, ...) from an earlier refusal or a `move route` reply. Give it ALONE: its destination and route fields are already fixed. A route is spent once walked, and only valid while you still stand where it was planned.
                         TERRAIN: the walk never changes the world unless you say so — walls, floors, other people's builds and the landscape stay exactly as they were. When there is no clean route, the call FAILS and lists candidate routes, each with an id, its length and exactly which blocks it would break or place — blocks that are someone's are marked as needing consent, and walking such a route asks the owner first; then either goto route:<id> or pick another destination. Underground travel and climbing out of pits usually need alter:'natural'. Every call reports what it actually broke or placed.
                         ROUTE FIELDS (all optional): alter 'none'|'natural'|'any' — may the walk dig, bridge, pillar ('any' also through blocks that need the owner's consent, asking first); avoid — cell types to keep out of (water, flowing_water, lava, hazard, door, ladder, vine, snow_layer); penalty_place / penalty_break / penalty_jump / penalty_wade — make an action pricier so she detours instead; avoid_break / avoid_place / avoid_step — blocks (ids or #tags) or cells/boxes ('x,y,z', 'x1,y1,z1..x2,y2,z2') she must not break, place into, or stand on; parkour — running jumps over gaps; climb_vines; max_fall — highest drop without water; alter_budget — how many blocks the whole route may change; routes over budget are dropped.
-                        VEHICLES: start a goto while sitting in a boat (see <riding>) and she pilots it over the water toward the target — a destination on the water keeps her aboard, a destination ashore has her step off at the shore and finish on foot. Any other vehicle is stepped off the moment walking begins. Boarding is use entity right on the boat.
+                        VEHICLES: start a goto while sitting in a boat (see <riding>) and she pilots it over the water toward the target — a destination on the water keeps her aboard, a destination ashore has her step off at the shore and finish on foot. Any other vehicle is stepped off the moment walking begins. Boarding is `use entity` right on the boat.
                         BACKGROUND: a successful call means movement is already running. Do not call goto again or launch another body action while <current_task> exists; wait for matching task_finished. status=done means that destination is complete, so advance the plan and never resend identical coordinates. Only status=timeout permits the same call to resume.""");
         move.server("follow", "Tag along with your owner, or with an entity you name, until given something else "
                         + "to do.", MoveCommands::follow, DISTANCE, ENTITY_ID)
@@ -128,10 +128,10 @@ public final class MoveCommands {
                 .example("move route --x 120 --y 12 --z -35")
                 .note("Instant and read-only: nothing moves, nothing changes, the body stays free.")
                 .note("Destination is x and z (a place), x, y and z (a cell), or y alone (a height). For the "
-                        + "nearest block of a kind use move goto --block, which has to scan first.")
+                        + "nearest block of a kind use `move goto` with --block, which has to scan first.")
                 .note("Without route flags it prices the default walk that never changes a block; add "
                         + "--alter natural to see what digging or bridging would cost.")
-                .note("Each route gets an id (r1, r2, ...); walk one with move goto --route <id> while you still "
+                .note("Each route gets an id (r1, r2, ...); walk one with `move goto --route r1` while you still "
                         + "stand where you planned it.")
                 .seeAlso("move goto");
     }
@@ -148,7 +148,7 @@ public final class MoveCommands {
         if (route != null && RouteSpecFlags.given(args)) {
             throw new IllegalArgumentException(
                     "a route already carries the route flags it was planned under — give route alone. To walk"
-                    + " under different flags, goto the destination coordinates with them, or run move route again.");
+                    + " under different flags, goto the destination coordinates with them, or run `move route` again.");
         }
         ResourceLocation block = args.get(BLOCK);
         // 坐标、方块、路线几样怎么搭配由记录判(说不通的组合当场报错,教她合法的几种写法)

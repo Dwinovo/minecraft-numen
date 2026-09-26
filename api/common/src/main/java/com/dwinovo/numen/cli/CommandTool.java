@@ -24,8 +24,8 @@ public final class CommandTool implements NumenTool {
     public static final String NAME = "command";
 
     private static final Param<String> LINE = Param.required("command", ArgType.text(),
-            "One command line: without a leading / a command from <commands>, e.g. \"task status\"; "
-                    + "with a leading / a Minecraft or mod command, e.g. \"/help give\".");
+            "One command line: without a leading / a command from <commands>, e.g. `task status`; "
+                    + "with a leading / a Minecraft or mod command, e.g. `/help give`.");
 
     @Override
     public String name() {
