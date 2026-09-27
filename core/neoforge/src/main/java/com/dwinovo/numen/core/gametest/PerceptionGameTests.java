@@ -335,9 +335,9 @@ public class PerceptionGameTests {
                 .thenSucceed();
     }
 
-    /** 团编号每找一次领一批新的,比两份回执时抹掉。 */
+    /** 团编号每找一次领一批新的,比两份回执时抹掉(团一行一个 JSON 对象,在消息里引号带着转义)。 */
     private static String withoutGroupIds(String reply) {
-        return reply.replaceAll("\"id\":\"g\\d+\"", "\"id\":\"g\"");
+        return reply.replaceAll("(\\\\?\"id\\\\?\":\\\\?\")g\\d+", "$1g");
     }
 
     private static JsonObject json(ToolRun run) {
