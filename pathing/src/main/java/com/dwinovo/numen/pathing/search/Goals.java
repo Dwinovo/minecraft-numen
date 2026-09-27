@@ -13,6 +13,7 @@ import com.dwinovo.numen.pathing.world.Reach;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Pose;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.phys.AABB;
 
 /**
@@ -30,6 +31,24 @@ public final class Goals {
     /** 脚正好在这个节点。给了 y 就是那一格。 */
     public static Goal at(BlockPos feet) {
         return new At(feet.immutable());
+    }
+
+    /**
+     * 站到那一格,给的高度不作数时落到那一列能站的地方:那一格在半空(放得下身体却没东西托着)就往下找,埋在方块里(放不下
+     * 身体)就往上找,取第一个待得住的节点;那一列都待不住,就还是那一格。在世界所在的线程上按此刻的世界定下,之后不再变。
+     */
+    public static Goal ground(BlockGetter level, BodyStats body, BlockPos pos) {
+        if (Stance.at(level, body, pos) != null) {
+            return at(pos);
+        }
+        int step = Clearance.fits(level, body, Pose.STANDING, pos.getX(), pos.getY(), pos.getZ()) ? -1 : 1;
+        for (int y = pos.getY() + step; y >= level.getMinBuildHeight() && y < level.getMaxBuildHeight(); y += step) {
+            BlockPos node = new BlockPos(pos.getX(), y, pos.getZ());
+            if (Stance.at(level, body, node) != null) {
+                return at(node);
+            }
+        }
+        return at(pos);
     }
 
     /** 那一列,任何高度:只给了 x、z 的去处。 */
