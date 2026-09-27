@@ -78,16 +78,14 @@ final class Contact {
 
     /** 这一格碰了伤身:岩浆、危险方块;托得住身体的细雪不算。 */
     private boolean harmful(Draft draft, BlockPos pos) {
-        Set<Kind> kinds = Semantics.kinds(draft, pos);
-        if (body.walksOnPowderSnow() && draft.getBlockState(pos).is(Blocks.POWDER_SNOW)) {
-            return false;
-        }
-        for (Kind kind : HARMFUL) {
-            if (kinds.contains(kind)) {
-                return true;
-            }
-        }
-        return false;
+        return Semantics.isAny(draft, pos, HARMFUL)
+                && !(body.walksOnPowderSnow() && draft.getBlockState(pos).is(Blocks.POWDER_SNOW));
+    }
+
+    private static LongOpenHashSet add(LongOpenHashSet near, long cell) {
+        LongOpenHashSet out = near == null ? new LongOpenHashSet(4) : near;
+        out.add(cell);
+        return out;
     }
 
     /**
@@ -98,11 +96,12 @@ final class Contact {
      */
     boolean admit(Draft draft, CostModel model, BlockPos support, boolean fromHeight) {
         RouteSpec spec = model.spec();
-        LongOpenHashSet near = new LongOpenHashSet();
+        // 挨着的伤身格多半一个都没有:碰上了才建表
+        LongOpenHashSet near = null;
         for (int i = 0; i < cells.size(); i++) {
             long cell = cells.getLong(i);
             BlockPos pos = BlockPos.of(cell);
-            if (spec.excludesAny(Semantics.kinds(draft, pos))) {
+            if (Semantics.isAny(draft, pos, spec.excluded())) {
                 return draft.fail(pos, Reason.EXCLUDED);
             }
             if (model.forbids(Use.PASS, cell)) {
@@ -111,7 +110,7 @@ final class Contact {
             for (Direction side : Direction.Plane.HORIZONTAL) {
                 BlockPos beside = pos.relative(side);
                 if (!seen.contains(beside.asLong()) && harmful(draft, beside)) {
-                    near.add(beside.asLong());
+                    near = add(near, beside.asLong());
                 }
             }
         }
@@ -120,17 +119,16 @@ final class Contact {
             for (Direction side : Direction.Plane.HORIZONTAL) {
                 BlockPos beside = support.relative(side);
                 if (harmful(draft, beside)) {
-                    near.add(beside.asLong());
+                    near = add(near, beside.asLong());
                 }
             }
         }
-        exposure = near.size();
+        exposure = near == null ? 0 : near.size();
         if (support == null) {
             return true;
         }
         BlockState state = draft.getBlockState(support);
-        EnumSet<Kind> kinds = EnumSet.noneOf(Kind.class);
-        kinds.addAll(Semantics.kinds(draft, support));
+        Set<Kind> kinds = Semantics.kinds(draft, support);
         if (body.walksOnPowderSnow() && state.is(Blocks.POWDER_SNOW)) {
             kinds.remove(Kind.HAZARD);
         }

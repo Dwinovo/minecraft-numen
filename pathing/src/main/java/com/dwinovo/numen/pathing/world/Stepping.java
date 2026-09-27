@@ -182,32 +182,40 @@ public final class Stepping {
      * 碰撞箱不变,每段取中点;终点单独取。
      */
     private static double[] samplePoints(List<AABB> boxes, double half, double sx, double sz, int dx, int dz) {
-        List<Double> cuts = new ArrayList<>();
-        cuts.add(0.0);
-        cuts.add(1.0);
+        double[] cuts = new double[2 + 4 * boxes.size()];
+        int n = 0;
+        cuts[n++] = 0.0;
+        cuts[n++] = 1.0;
         for (AABB box : boxes) {
             if (dx != 0) {
-                addCut(cuts, (box.maxX + half - sx) / dx);
-                addCut(cuts, (box.minX - half - sx) / dx);
+                n = addCut(cuts, n, (box.maxX + half - sx) / dx);
+                n = addCut(cuts, n, (box.minX - half - sx) / dx);
             }
             if (dz != 0) {
-                addCut(cuts, (box.maxZ + half - sz) / dz);
-                addCut(cuts, (box.minZ - half - sz) / dz);
+                n = addCut(cuts, n, (box.maxZ + half - sz) / dz);
+                n = addCut(cuts, n, (box.minZ - half - sz) / dz);
             }
         }
-        double[] sorted = cuts.stream().mapToDouble(Double::doubleValue).distinct().sorted().toArray();
-        double[] points = new double[sorted.length];
-        for (int i = 0; i + 1 < sorted.length; i++) {
-            points[i] = (sorted[i] + sorted[i + 1]) / 2;
+        java.util.Arrays.sort(cuts, 0, n);
+        int distinct = 0;
+        for (int i = 0; i < n; i++) {
+            if (distinct == 0 || cuts[i] != cuts[distinct - 1]) {
+                cuts[distinct++] = cuts[i];
+            }
         }
-        points[sorted.length - 1] = 1.0;
+        double[] points = new double[distinct];
+        for (int i = 0; i + 1 < distinct; i++) {
+            points[i] = (cuts[i] + cuts[i + 1]) / 2;
+        }
+        points[distinct - 1] = 1.0;
         return points;
     }
 
-    private static void addCut(List<Double> cuts, double t) {
+    private static int addCut(double[] cuts, int n, double t) {
         if (t > 0 && t < 1) {
-            cuts.add(t);
+            cuts[n++] = t;
         }
+        return n;
     }
 
     /** 脚底中心在 {@code (cx, cz)}、脚在 {@code feet} 时身体撞上的碰撞箱里最高的顶面;没撞上是 NaN。 */

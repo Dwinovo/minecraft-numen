@@ -55,9 +55,20 @@ final class Drop implements Move {
         int tx = from.getX() + heading.dx();
         int tz = from.getZ() + heading.dz();
         double f0 = stance.feetY();
+        // 落点是往下第一个待得住的节点;下一级只收低一个节点处,那里待不住,落点就更深或没有,不必再往下找
+        int lowest = kind == MoveKind.DESCEND ? from.getY() - 1 : draft.getMinBuildHeight();
         BlockPos to = null;
         Stance landing = null;
-        for (int y = from.getY() - 1; y >= draft.getMinBuildHeight(); y--) {
+        BlockPos.MutableBlockPos cell = new BlockPos.MutableBlockPos(tx, from.getY() - 1, tz);
+        boolean airHere = draft.getBlockState(cell).isAir();
+        for (int y = from.getY() - 1; y >= lowest; y--) {
+            boolean airBelow = draft.getBlockState(cell.setY(y - 1)).isAir();
+            if (airHere && airBelow) {
+                // 这一格与下面一格都是空气:托不住脚、也挂不住身体,落点只能更深
+                airHere = true;
+                continue;
+            }
+            airHere = airBelow;
             landing = Stance.at(draft, body, tx, y, tz);
             if (landing != null) {
                 to = new BlockPos(tx, y, tz);
@@ -68,10 +79,11 @@ final class Drop implements Move {
             }
         }
         if (to == null) {
-            return Premise.fail(new BlockPos(tx, from.getY() - 1, tz), Reason.NO_FOOTING);
+            return Premise.fail(new BlockPos(tx, from.getY() - 1, tz),
+                    kind == MoveKind.DESCEND ? Reason.WRONG_DROP : Reason.NO_FOOTING);
         }
         int depth = from.getY() - to.getY();
-        if (kind == MoveKind.DESCEND ? depth != 1 : depth < 2) {
+        if (kind == MoveKind.FALL && depth < 2) {
             return Premise.fail(to, Reason.WRONG_DROP);
         }
         if (!walksOff(draft, body, from, f0, heading, landing)) {

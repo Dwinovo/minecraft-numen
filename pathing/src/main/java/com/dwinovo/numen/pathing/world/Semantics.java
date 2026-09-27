@@ -70,7 +70,21 @@ public final class Semantics {
         return (bits(level, pos) & bit(kind)) != 0;
     }
 
-    /** 这一格的全部种类。 */
+    /** 这一格是 {@code kinds} 里的任何一种。 */
+    public static boolean isAny(BlockGetter level, BlockPos pos, Set<Kind> kinds) {
+        int bits = bits(level, pos);
+        if (bits == 0) {
+            return false;
+        }
+        for (Kind kind : KINDS) {
+            if ((bits & bit(kind)) != 0 && kinds.contains(kind)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 这一格的全部种类;交出的是一份新的集合。 */
     public static Set<Kind> kinds(BlockGetter level, BlockPos pos) {
         int bits = bits(level, pos);
         EnumSet<Kind> out = EnumSet.noneOf(Kind.class);

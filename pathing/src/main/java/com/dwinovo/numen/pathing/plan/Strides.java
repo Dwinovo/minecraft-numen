@@ -48,10 +48,12 @@ final class Strides {
         return !level.getFluidState(feet).isEmpty();
     }
 
+    /** 水:静的与流动的。 */
+    private static final java.util.EnumSet<Kind> WATERS = java.util.EnumSet.of(Kind.WATER, Kind.FLOWING_WATER);
+
     /** 脚所在的这一格泡在水里。 */
     static boolean inWater(BlockGetter level, BlockPos feet) {
-        var kinds = Semantics.kinds(level, feet);
-        return kinds.contains(Kind.WATER) || kinds.contains(Kind.FLOWING_WATER);
+        return Semantics.isAny(level, feet, WATERS);
     }
 
     /** 起步与落点两处脚下步速系数的平均:各管半程。 */

@@ -20,15 +20,24 @@ import net.minecraft.world.level.material.FluidState;
  * 只剩它原来含着的液体,放下的格是那种方块的默认状态,开关过的门连同另一半一起翻转。
  *
  * <p>规划一步时,草稿在它上面叠这一步设想的改动;搜索展开一个节点时,在快照上叠"走到这个节点的那一步"做过的改动,
- * 下一步的前提看到的就是身体此刻真正面对的世界。
+ * 下一步的前提看到的就是身体此刻真正面对的世界。叠在另一份改动之上时,把那份的改动抄过来、直接读它底下的视图:
+ * 前提函数每一步要读几百格,读一格只经一层。
  */
-public final class EditedView implements WorldView {
+public class EditedView implements WorldView {
 
     private final WorldView base;
-    private final Long2ObjectOpenHashMap<BlockState> changed = new Long2ObjectOpenHashMap<>(4);
+    /** 改过的格;一件改动都没有时不建表(规划一步时大多数草稿一件也不改)。 */
+    private Long2ObjectOpenHashMap<BlockState> changed;
 
     EditedView(WorldView base) {
-        this.base = base;
+        if (base instanceof EditedView under) {
+            this.base = under.base;
+            if (under.changed != null) {
+                this.changed = new Long2ObjectOpenHashMap<>(under.changed);
+            }
+        } else {
+            this.base = base;
+        }
     }
 
     /** {@code base} 做完 {@code edits} 之后的样子;没有改动就是 {@code base} 本身。 */
@@ -54,41 +63,51 @@ public final class EditedView implements WorldView {
 
     /** 挖掉:只剩这一格原来含着的液体。 */
     void dig(BlockPos pos) {
-        changed.put(pos.asLong(), getBlockState(pos).getFluidState().createLegacyBlock());
+        set(pos, getBlockState(pos).getFluidState().createLegacyBlock());
     }
 
     /** 放下一块 {@code block}。 */
     void place(BlockPos pos, Block block) {
-        changed.put(pos.asLong(), block.defaultBlockState());
+        set(pos, block.defaultBlockState());
     }
 
     /** 倒一桶水:这一格成了水源。 */
     void pour(BlockPos pos) {
-        changed.put(pos.asLong(), Blocks.WATER.defaultBlockState());
+        set(pos, Blocks.WATER.defaultBlockState());
     }
 
     /** 开关一扇门;门的另一半照原版一起翻转。 */
     void toggle(BlockPos pos) {
         BlockState state = getBlockState(pos);
-        changed.put(pos.asLong(), Semantics.toggled(state));
+        set(pos, Semantics.toggled(state));
         if (state.getBlock() instanceof DoorBlock) {
             BlockPos other = state.getValue(DoorBlock.HALF) == DoubleBlockHalf.LOWER ? pos.above() : pos.below();
             BlockState half = getBlockState(other);
             if (half.is(state.getBlock())) {
-                changed.put(other.asLong(), Semantics.toggled(half));
+                set(other, Semantics.toggled(half));
             }
         }
     }
 
+    private void set(BlockPos pos, BlockState state) {
+        if (changed == null) {
+            changed = new Long2ObjectOpenHashMap<>(4);
+        }
+        changed.put(pos.asLong(), state);
+    }
+
     /** 这一格改过。 */
     boolean changed(BlockPos pos) {
-        return changed.containsKey(pos.asLong());
+        return changed != null && changed.containsKey(pos.asLong());
     }
 
     // ==================== 视图 ====================
 
     @Override
     public BlockState getBlockState(BlockPos pos) {
+        if (changed == null) {
+            return base.getBlockState(pos);
+        }
         BlockState state = changed.get(pos.asLong());
         return state != null ? state : base.getBlockState(pos);
     }
@@ -100,7 +119,7 @@ public final class EditedView implements WorldView {
 
     @Override
     public BlockEntity getBlockEntity(BlockPos pos) {
-        return changed.containsKey(pos.asLong()) ? null : base.getBlockEntity(pos);
+        return changed(pos) ? null : base.getBlockEntity(pos);
     }
 
     @Override

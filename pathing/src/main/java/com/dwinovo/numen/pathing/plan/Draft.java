@@ -11,10 +11,7 @@ import com.dwinovo.numen.pathing.world.Semantics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.border.WorldBorder;
-import net.minecraft.world.level.material.FluidState;
 
 /**
  * 一步的草稿:把这一步设想中的改动(挖掉、放下、开关门)叠在只读视图上({@link EditedView}),自己也是一个视图——几何
@@ -23,55 +20,17 @@ import net.minecraft.world.level.material.FluidState;
  *
  * <p>一次前提判断一份,用完即弃,不跨线程。
  */
-final class Draft implements WorldView {
+final class Draft extends EditedView {
 
     private final CostModel model;
     private final BodyStats body;
-    private final EditedView view;
     private final List<Edit> edits = new ArrayList<>(2);
     private Premise.Fails failure;
 
     Draft(CostModel model, WorldView base) {
+        super(base);
         this.model = model;
         this.body = model.body().stats();
-        this.view = new EditedView(base);
-    }
-
-    // ==================== 视图 ====================
-
-    @Override
-    public BlockState getBlockState(BlockPos pos) {
-        return view.getBlockState(pos);
-    }
-
-    @Override
-    public FluidState getFluidState(BlockPos pos) {
-        return view.getFluidState(pos);
-    }
-
-    @Override
-    public BlockEntity getBlockEntity(BlockPos pos) {
-        return view.getBlockEntity(pos);
-    }
-
-    @Override
-    public int getHeight() {
-        return view.getHeight();
-    }
-
-    @Override
-    public int getMinBuildHeight() {
-        return view.getMinBuildHeight();
-    }
-
-    @Override
-    public WorldBorder border() {
-        return view.border();
-    }
-
-    @Override
-    public boolean ultraWarm() {
-        return view.ultraWarm();
     }
 
     // ==================== 结果 ====================
@@ -115,7 +74,7 @@ final class Draft implements WorldView {
         }
         boolean eyeInWater = Semantics.eyeInWater(this, bx + 0.5, feetY + body.eyeHeight(Pose.STANDING), bz + 0.5);
         edits.add(new Edit.Dig(pos.immutable(), state, admission.permit(), eyeInWater, grounded));
-        view.dig(pos);
+        dig(pos);
         return true;
     }
 
@@ -136,7 +95,7 @@ final class Draft implements WorldView {
         }
         Block block = model.placing().orElseThrow();
         edits.add(new Edit.Place(pos.immutable(), current, block, admission.permit()));
-        view.place(pos, block);
+        place(pos, block);
         return true;
     }
 
@@ -150,7 +109,7 @@ final class Draft implements WorldView {
             return fail(pos, admission.refused(), admission.detail());
         }
         edits.add(new Edit.Catch(pos.immutable(), current, admission.permit()));
-        view.pour(pos);
+        pour(pos);
         return true;
     }
 
@@ -165,13 +124,13 @@ final class Draft implements WorldView {
     boolean clear(List<BlockPos> blockers, boolean mayDig, int bx, double feetY, int bz, boolean grounded) {
         for (int i = blockers.size() - 1; i >= 0; i--) {
             BlockPos cell = blockers.get(i);
-            if (view.changed(cell)) {
+            if (changed(cell)) {
                 continue;
             }
             BlockState state = getBlockState(cell);
             if (Semantics.openableByHand(state)) {
                 edits.add(new Edit.Door(cell.immutable(), state));
-                view.toggle(cell);
+                toggle(cell);
             } else if (!mayDig) {
                 return fail(cell, Reason.NO_CLEARANCE);
             } else if (!dig(cell, bx, feetY, bz, grounded)) {
