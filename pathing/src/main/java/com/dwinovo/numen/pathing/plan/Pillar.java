@@ -27,10 +27,6 @@ final class Pillar implements Move {
         return List.of(Heading.UP);
     }
 
-    @Override
-    public int reach() {
-        return 0;
-    }
 
     @Override
     public Premise premise(CostModel model, WorldView view, BlockPos from, Stance stance, Heading heading) {

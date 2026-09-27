@@ -35,11 +35,6 @@ final class Parkour implements Move {
         return Heading.CARDINAL;
     }
 
-    @Override
-    public int reach() {
-        // 最远落到第 4 列,再往前一列看冲过头
-        return 5;
-    }
 
     @Override
     public Premise premise(CostModel model, WorldView view, BlockPos from, Stance stance, Heading heading) {

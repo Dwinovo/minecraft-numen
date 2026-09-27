@@ -95,7 +95,24 @@ class SearchTest {
         SearchResult result = search(world, defaults(), new BlockPos(1, Y, 1), Goals.at(new BlockPos(40, Y, 1)));
         assertEquals(SearchResult.Stop.UNLOADED, result.stop());
         assertNotNull(result.route(), "朝目标推进到边上的半程路线照样交出");
-        assertEquals(15, result.route().end().getX(), "停在加载区块的边上");
+        // 区块最东一列是 x = 15;走进它要看边外 x = 16 那一格伤不伤身(挨着走要加价),那一格不知道,这一步就不走
+        assertEquals(14, result.route().end().getX(), "停在加载区块的边上");
+    }
+
+    /**
+     * 一间封死的小屋贴着加载区块的边(原点所在区块 x 到 15 为止,屋子的东墙在 x = 13):屋里走遍了也没有路。跑酷那一步
+     * 伸得到边外的列,可它没开、或者紧挨着的那一列是墙根本不是空隙——这一步与边外是什么无关,结论是搜完无路,不是"未加载"。
+     */
+    @Test
+    void aStepThatDoesNotHoldRegardlessOfTheUnloadedColumnsDoesNotMakeItUnloaded() {
+        TestWorld room = new TestWorld().floor(0, 0, 15, 12, Y - 1)
+                .fill(9, Y, 4, 13, Y + 2, 8, STONE).fill(10, Y, 5, 12, Y + 1, 7, Blocks.AIR.defaultBlockState())
+                .loadedWithin(0);
+        BlockPos start = new BlockPos(11, Y, 6);
+        Goal away = Goals.at(new BlockPos(1, Y, 6));
+        assertEquals(SearchResult.Stop.EXHAUSTED, search(room, defaults(), start, away).stop(), "跑酷没开");
+        CostModel parkour = Fixtures.model(RouteSpec.defaults().edit().parkour(true).build());
+        assertEquals(SearchResult.Stop.EXHAUSTED, search(room, parkour, start, away).stop(), "紧挨着的一列是墙,不是空隙");
     }
 
     @Test

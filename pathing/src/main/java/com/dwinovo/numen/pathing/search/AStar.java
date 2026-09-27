@@ -21,6 +21,10 @@ import com.dwinovo.numen.pathing.world.BodyStats;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.border.WorldBorder;
+import net.minecraft.world.level.material.FluidState;
 
 /**
  * A*:从起点节点逐个展开 {@link Moves#ALL} 的每种走法、每个方向,前提成立的步子按它的代价(乘上旧路折扣)松弛。
@@ -29,7 +33,9 @@ import net.minecraft.core.BlockPos;
  *   <li><b>身体面对的世界</b>:展开一个节点时,前提读的是快照加上"走到这个节点的那一步"做过的改动——刚挖开的格是空的,
  *       刚垫下的块托着脚。更早的步子做过的改动不叠:身体已经离开了那里;</li>
  *   <li><b>预算</b>按展开的节点数计,结论不随机器快慢漂移;</li>
- *   <li><b>停下的原因</b>随结论交出({@link SearchResult.Stop}):到了、搜完无路、预算用完、有路伸进快照外没加载的区块;</li>
+ *   <li><b>停下的原因</b>随结论交出({@link SearchResult.Stop}):到了、搜完无路、预算用完、有路伸进快照外没加载的区块。
+ *       一步的前提读到了没加载的列,它成不成立就不知道,这一步不走、结论记成"未加载";前提没读到那些列就定了的(规格没开这种
+ *       走法、紧挨着的一列就挡住了),与那边是什么无关,不算;</li>
  *   <li><b>半程路线</b>:没到目标时,按几档"估价加已走代价的折算"各取最好的节点,取第一个离起点超过 {@value #MIN_PARTIAL}
  *       格的交出;都不够远就不交——原地打转的半截路不是路。最后一档只看估价(离目标多近):估价按疾跑算,挖隧道、搭桥时
  *       每一步的真实代价比它贵几十倍,前几档的折算都压不住已走的代价,最好的节点总在起点跟前;</li>
@@ -92,6 +98,7 @@ public final class AStar {
 
         int expanded = 0;
         boolean skippedUnloaded = false;
+        Probe probe = new Probe(view);
         while (!open.isEmpty()) {
             if (cancelled.getAsBoolean()) {
                 return new SearchResult(SearchResult.Stop.CANCELLED, null);
@@ -113,14 +120,16 @@ public final class AStar {
             expanded++;
             BlockPos from = new BlockPos(current.x, current.y, current.z);
             // 身体此刻面对的世界:快照,加上走到这个节点的那一步做过的改动
-            WorldView here = current.via == null ? view : EditedView.after(view, current.via.edits());
+            WorldView here = current.via == null ? probe : EditedView.after(probe, current.via.edits());
             for (Move move : Moves.ALL) {
                 for (Heading heading : move.headings()) {
-                    if (!loaded(view, current, heading, move.reach())) {
+                    probe.unknown = false;
+                    Premise premise = move.premise(model, here, from, current.stance, heading);
+                    if (probe.unknown) {
                         skippedUnloaded = true;
                         continue;
                     }
-                    if (!(move.premise(model, here, from, current.stance, heading) instanceof Premise.Holds holds)) {
+                    if (!(premise instanceof Premise.Holds holds)) {
                         continue;
                     }
                     Maneuver m = holds.maneuver();
@@ -162,17 +171,57 @@ public final class AStar {
         return new SearchResult(stop, partial(start, best));
     }
 
-    /** 这一步最远会读到的列都在快照里。 */
-    private static boolean loaded(SearchView view, Node from, Heading heading, int reach) {
-        for (int i = 1; i <= reach; i++) {
-            if (!view.isLoaded(from.x + heading.dx() * i, from.z + heading.dz() * i)) {
-                return false;
+    /**
+     * 前提读世界经过的这一层:照读快照,读到没加载的列就记一笔。快照之外读出来的是空气,那不是测量——一步的前提读到了它,
+     * 结论就不作数。
+     */
+    private static final class Probe implements WorldView {
+
+        private final SearchView view;
+        /** 这一步的前提读到了没加载的列。 */
+        boolean unknown;
+
+        Probe(SearchView view) {
+            this.view = view;
+        }
+
+        @Override
+        public BlockState getBlockState(BlockPos pos) {
+            if (!view.isLoaded(pos.getX(), pos.getZ())) {
+                unknown = true;
             }
+            return view.getBlockState(pos);
         }
-        if (heading.dx() != 0 && heading.dz() != 0) {
-            return view.isLoaded(from.x + heading.dx(), from.z) && view.isLoaded(from.x, from.z + heading.dz());
+
+        @Override
+        public FluidState getFluidState(BlockPos pos) {
+            return getBlockState(pos).getFluidState();
         }
-        return true;
+
+        @Override
+        public BlockEntity getBlockEntity(BlockPos pos) {
+            return view.getBlockEntity(pos);
+        }
+
+        @Override
+        public int getHeight() {
+            return view.getHeight();
+        }
+
+        @Override
+        public int getMinBuildHeight() {
+            return view.getMinBuildHeight();
+        }
+
+        @Override
+        public WorldBorder border() {
+            return view.border();
+        }
+
+        @Override
+        public boolean ultraWarm() {
+            return view.ultraWarm();
+        }
     }
 
     private Node node(int x, int y, int z, int used) {

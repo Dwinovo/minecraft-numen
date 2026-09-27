@@ -44,10 +44,6 @@ final class Drop implements Move {
         return Heading.CARDINAL;
     }
 
-    @Override
-    public int reach() {
-        return 1;
-    }
 
     @Override
     public Premise premise(CostModel model, WorldView view, BlockPos from, Stance stance, Heading heading) {

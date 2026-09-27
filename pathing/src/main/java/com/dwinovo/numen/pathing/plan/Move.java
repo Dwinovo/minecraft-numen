@@ -15,9 +15,6 @@ public interface Move {
     /** 这种走法从一个节点出发可以朝哪些方向。 */
     List<Heading> headings();
 
-    /** 一步最远会读到离起点几列:搜索据此判断会不会读进没加载的区块。 */
-    int reach();
-
     /**
      * 身体此刻以 {@code stance} 待在节点 {@code from},朝 {@code heading} 走这一步,前提成不成立;成立时交出这一步的全部事实,
      * 包括执行时要挖、要放、要开关的格。

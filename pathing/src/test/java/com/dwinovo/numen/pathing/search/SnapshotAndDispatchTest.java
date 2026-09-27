@@ -77,7 +77,8 @@ class SnapshotAndDispatchTest {
                 Goals.at(new BlockPos(40, Y + 1, 3)), Fixtures.BUDGET, Favoring.NONE);
         SearchResult result = Searches.submit(search).join();
         assertEquals(SearchResult.Stop.UNLOADED, result.stop());
-        assertEquals(15, result.route().end().getX());
+        // 走进区块最东一列 x = 15 要看边外那一格伤不伤身,不知道就不走,停在它前面一列
+        assertEquals(14, result.route().end().getX());
     }
 
     @Test
