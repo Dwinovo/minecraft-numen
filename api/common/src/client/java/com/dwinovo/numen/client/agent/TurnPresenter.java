@@ -1,5 +1,7 @@
 package com.dwinovo.numen.client.agent;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.loop.Hold;
 import com.dwinovo.numen.agent.loop.LoopEvent;
@@ -216,7 +218,7 @@ final class TurnPresenter {
     /** 调用失败而且不再重试:必须让主人看见——沉进日志就是"已读不回"。 */
     private void showFailure(String words) {
         SpeechBubbles.clear(entityUuid);
-        ChatLines.notice(speakerName(), "这次没连上(" + truncate(words, 90) + ")——稍后再试一句,详情见日志");
+        ChatLines.notice(speakerName(), I18n.get(Keys.TURN_FAILED, truncate(words, 90)));
         // HUD toast:玩家多半没开面板(Y/V 快捷对话),这是唯一接得住他的通道。
         NumenHudToasts.push(NumenToasts.Severity.ERROR, speakerName() + ": " + truncate(words, 90));
     }

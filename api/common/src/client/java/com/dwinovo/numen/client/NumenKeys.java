@@ -1,5 +1,7 @@
 package com.dwinovo.numen.client;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.agent.conversation.Conversation;
 import com.dwinovo.numen.client.agent.Conversations;
 import com.dwinovo.numen.client.agent.NumenRoster;
@@ -68,7 +70,7 @@ public final class NumenKeys {
                 continue;
             }
             if (NumenRoster.instance().entries().isEmpty()) {
-                com.dwinovo.numen.client.hud.TalkHint.flash("还没有同伴——先在 G 面板召唤一位", 3000);
+                com.dwinovo.numen.client.hud.TalkHint.flash(I18n.get(Keys.KEYS_NO_COMPANION), 3000);
                 continue;
             }
             mc.setScreen(new CompanionWheelScreen());
@@ -85,9 +87,8 @@ public final class NumenKeys {
             }
             Conversation target = SelectedCompanion.resolveTarget();
             if (target == null) {
-                com.dwinovo.numen.client.hud.TalkHint.flash(
-                        "先按 [" + COMPANION_WHEEL.getTranslatedKeyMessage().getString()
-                                + "] 选一位同伴,或把准星对准它", 3000);
+                com.dwinovo.numen.client.hud.TalkHint.flash(I18n.get(Keys.KEYS_PICK_FIRST,
+                        COMPANION_WHEEL.getTranslatedKeyMessage().getString()), 3000);
                 continue;
             }
             mc.setScreen(new CompanionChatScreen(target));

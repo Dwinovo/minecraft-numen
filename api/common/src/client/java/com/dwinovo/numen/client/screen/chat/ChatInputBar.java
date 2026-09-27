@@ -67,7 +67,7 @@ public final class ChatInputBar {
 
         /**
          * 这条输入行对着的那位的大脑;null = 会话没有单一的主。斜杠命令能不能在这里用只看它:
-         * null 时补全只给一行灰着的 {@link com.dwinovo.numen.client.command.ChatCommands#SOLO_ONLY},
+         * null 时补全只给一行灰着的 {@link com.dwinovo.numen.client.command.ChatCommands#soloOnly()},
          * 回车回的也是这一句,斜杠输入不会当话发出去。
          */
         com.dwinovo.numen.client.agent.EntityAgentLoop loop();
@@ -512,7 +512,7 @@ public final class ChatInputBar {
     private static Completion soloOnly(String text) {
         String label = com.dwinovo.numen.client.command.ChatCommands.PREFIX
                 + com.dwinovo.numen.client.command.ChatCommands.parse(text).name();
-        return new Completion(text, label, com.dwinovo.numen.client.command.ChatCommands.SOLO_ONLY, false, false);
+        return new Completion(text, label, com.dwinovo.numen.client.command.ChatCommands.soloOnly(), false, false);
     }
 
     /** 这串输入是命令还是话——候选从哪来、框里哪段换色,都由它定。 */
@@ -613,7 +613,7 @@ public final class ChatInputBar {
             var loop = host.loop();
             if (loop == null) {
                 setText("");
-                host.onCommandReply(com.dwinovo.numen.client.command.ChatCommands.SOLO_ONLY);
+                host.onCommandReply(com.dwinovo.numen.client.command.ChatCommands.soloOnly());
                 return;
             }
             // 面板类命令:多余的参数不理会——它要的不是参数,是一个能上下选的界面。

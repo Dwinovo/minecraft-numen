@@ -1,5 +1,6 @@
 package com.dwinovo.numen.client.screen.settings;
 
+import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
@@ -76,7 +77,6 @@ public final class VoiceFormPanel {
             VoiceLibrary.BACKEND_MINIMAX, VoiceLibrary.BACKEND_FISH,
             VoiceLibrary.BACKEND_DASHSCOPE, VoiceLibrary.BACKEND_MIMO,
             VoiceLibrary.BACKEND_DOUBAO);
-    private static final String TEST_SENTENCE = "你好,我是你的同伴,这是我的声音。";
 
     /** 滚动根:表单行(进裁剪区,可上下滚);固定根:结果胶囊/按钮行(不动)。 */
     private final UiRoot ui = new UiRoot();
@@ -176,7 +176,8 @@ public final class VoiceFormPanel {
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_KEY_FISH,
                         "sk-…", true, draft.apiKey, v -> draft.apiKey = v);
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_REFERENCE,
-                        "fish.audio/m/… 或纯 ID", false, draft.voice, v -> draft.voice = v);
+                        I18n.get(ModLanguageData.Keys.VOICE_FISH_REF_PLACEHOLDER), false, draft.voice,
+                        v -> draft.voice = v);
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_FISH_MODEL,
                         "s1 / s2.1-pro-free", false, draft.model, v -> draft.model = v);
             }
@@ -340,7 +341,7 @@ public final class VoiceFormPanel {
         final com.dwinovo.numen.client.voice.TtsBackend backend;
         try {
             backend = probe.createBackend();
-            synth = backend.synthesize(TEST_SENTENCE);
+            synth = backend.synthesize(I18n.get(ModLanguageData.Keys.VOICE_TEST_SENTENCE));
         } catch (Exception ex) {
             String why = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
             com.dwinovo.numen.Constants.LOG.warn("[numen-voice] 试音失败(同步): {}", why);

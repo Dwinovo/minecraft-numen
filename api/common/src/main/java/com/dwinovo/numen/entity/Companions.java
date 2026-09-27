@@ -348,8 +348,8 @@ public final class Companions {
     public static void applyGameMode(ServerPlayer owner, NumenPlayer body, boolean creative) {
         if (body == null) return;
         if (creative && !owner.hasPermissions(2) && !owner.isCreative()) {
-            owner.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-                    "[Numen] 创造档需要作弊/OP 权限,已按生存"));
+            owner.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
+                    com.dwinovo.numen.data.ModLanguageData.Keys.NOTICE_CREATIVE_NEEDS_OP));
             creative = false;
         }
         body.setGameMode(creative ? net.minecraft.world.level.GameType.CREATIVE

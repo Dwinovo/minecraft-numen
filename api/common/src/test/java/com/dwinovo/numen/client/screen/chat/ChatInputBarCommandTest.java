@@ -6,7 +6,9 @@ import com.dwinovo.numen.client.agent.CompanionHome;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.command.ChatCommands;
 import com.dwinovo.numen.client.ui.KeyCodes;
+import net.minecraft.client.resources.language.NumenTestLanguage;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -24,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 输入行上斜杠命令能不能用,只看会话有没有单一的主(宿主的 {@code loop()})。
- * 没有时(群会话)斜杠输入不当话发给全体,回一句 {@link ChatCommands#SOLO_ONLY};
+ * 没有时(群会话)斜杠输入不当话发给全体,回一句 {@link ChatCommands#soloOnly()};
  * 有时(私聊)照旧交给命令层。
  */
 class ChatInputBarCommandTest {
@@ -33,6 +35,12 @@ class ChatInputBarCommandTest {
 
     @TempDir
     Path home;
+
+    /** 回主人的话按语言键写,单测里装上英文才读得到它说了什么。 */
+    @BeforeAll
+    static void english() {
+        NumenTestLanguage.install();
+    }
 
     @BeforeEach
     void useTempHome() {
@@ -80,7 +88,7 @@ class ChatInputBarCommandTest {
         ChatInputBar bar = bar(host);
         type(bar, "/clear");
         assertTrue(host.sent.isEmpty(), "群里的 /clear 不该当成一句话发给全体:" + host.sent);
-        assertEquals(List.of(ChatCommands.SOLO_ONLY), host.replies);
+        assertEquals(List.of(ChatCommands.soloOnly()), host.replies);
         assertEquals("", bar.text(), "和别的命令回话一样,用过的那串清掉");
     }
 
@@ -89,7 +97,7 @@ class ChatInputBarCommandTest {
         Host host = new Host(null);
         type(bar(host), "/");
         assertTrue(host.sent.isEmpty(), host.sent.toString());
-        assertEquals(List.of(ChatCommands.SOLO_ONLY), host.replies);
+        assertEquals(List.of(ChatCommands.soloOnly()), host.replies);
     }
 
     @Test
@@ -108,7 +116,7 @@ class ChatInputBarCommandTest {
         assertEquals(1, host.replies.size());
         String reply = host.replies.get(0);
         assertNotNull(reply);
-        assertNotEquals(ChatCommands.SOLO_ONLY, reply, "私聊里命令照旧交给命令层");
+        assertNotEquals(ChatCommands.soloOnly(), reply, "私聊里命令照旧交给命令层");
         assertTrue(reply.contains("/nosuchthing"), reply);
     }
 }

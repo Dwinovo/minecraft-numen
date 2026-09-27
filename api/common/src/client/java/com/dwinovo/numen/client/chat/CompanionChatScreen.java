@@ -1,5 +1,7 @@
 package com.dwinovo.numen.client.chat;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.agent.conversation.Conversation;
 import com.dwinovo.numen.api.Delivery;
 import com.dwinovo.numen.api.NumenGateway;
@@ -65,7 +67,7 @@ public class CompanionChatScreen extends Screen {
     private int keysX, keysY, keysW;
 
     public CompanionChatScreen(Conversation conv) {
-        super(Component.literal("Numen face-to-face chat"));
+        super(Component.translatable(Keys.CHAT_SCREEN_TITLE));
         this.conv = conv;
         this.companionName = conv.displayName(NumenRoster.instance()::name);
     }
@@ -118,7 +120,7 @@ public class CompanionChatScreen extends Screen {
             if (Conversations.instance().say(conv, text).reached()) {
                 ChatLines.owner(companionName, text, false);
             } else {
-                com.dwinovo.numen.client.hud.TalkHint.flash(companionName + " 没能收到——它可能不在线", 3000);
+                com.dwinovo.numen.client.hud.TalkHint.flash(I18n.get(Keys.CHAT_NOT_RECEIVED, companionName), 3000);
             }
             onClose();
         }
@@ -128,7 +130,7 @@ public class CompanionChatScreen extends Screen {
         @Override public boolean canAbort() { return Conversations.instance().canAbort(conv); }
 
         @Override public String hint() {
-            return "想说什么…(回车说出去,Esc 算了)";
+            return I18n.get(Keys.CHAT_INPUT_HINT);
         }
 
         @Override public EntityAgentLoop loop() { return CompanionChatScreen.this.loop(); }

@@ -1,5 +1,7 @@
 package com.dwinovo.numen.client.chat;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.agent.conversation.Conversation;
 import com.dwinovo.numen.client.NumenKeys;
 import com.dwinovo.numen.client.agent.Conversations;
@@ -72,7 +74,7 @@ public class CompanionWheelScreen extends Screen {
     private float rotVel;
 
     public CompanionWheelScreen() {
-        super(Component.literal("Numen companion wheel"));
+        super(Component.translatable(Keys.WHEEL_TITLE));
         this.entries = Conversations.instance().all();
         this.index = 0;
         Conversation current = SelectedCompanion.get();
@@ -268,7 +270,7 @@ public class CompanionWheelScreen extends Screen {
             g.disableScissor();
 
             // 直接压在游戏画面上的操作提示:白字半透明,和原版 HUD 字一样对比世界背景,不跟主题
-            String hint = "滚轮转盘 · 点击送到顶槽 · 点顶槽或松开确认 · Esc 取消";
+            String hint = I18n.get(Keys.WHEEL_HINT);
             Nb.text(g, this.font, hint, cx - this.font.width(hint) / 2, cy + r + 30, 0xB0FFFFFF);
         }
 
@@ -342,10 +344,9 @@ public class CompanionWheelScreen extends Screen {
     private void confirm() {
         SelectedCompanion.set(entries.get(index));
         // 关盘教学:下一步怎么跟它说话
-        TalkHint.flash("已选中 " + name(index)
-                + " · 按 [" + NumenKeys.TALK_COMPANION.getTranslatedKeyMessage().getString()
-                + "] 对话 · 按住 [" + NumenKeys.QUICK_VOICE.getTranslatedKeyMessage().getString()
-                + "] 说话", FLASH_MS);
+        TalkHint.flash(I18n.get(Keys.WHEEL_SELECTED, name(index),
+                NumenKeys.TALK_COMPANION.getTranslatedKeyMessage().getString(),
+                NumenKeys.QUICK_VOICE.getTranslatedKeyMessage().getString()), FLASH_MS);
         onClose();
     }
 

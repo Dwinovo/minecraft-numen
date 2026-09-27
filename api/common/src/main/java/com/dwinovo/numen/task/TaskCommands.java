@@ -7,6 +7,7 @@ import com.dwinovo.numen.cli.CommandGroup;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.data.ModLanguageData;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -219,14 +220,14 @@ public final class TaskCommands {
                         "reason", reason)).toJson());
     }
 
-    /** 她的日程也是主人的信息:表定在什么时候、为什么定,当场说一句。 */
+    /** 她的日程也是主人的信息:表定在什么时候、为什么定,当场说一句;发的是语言键,主人按他自己的语言看。 */
     private static void announceToOwner(NumenPlayer companion, int seconds, String reason) {
         ServerPlayer owner = companion.resolveOwnerPlayer();
         if (owner == null) {
             return;
         }
-        owner.sendSystemMessage(Component.literal(
-                "⏱ " + companion.getName().getString() + ":" + seconds + " 秒后 —— " + reason));
+        owner.sendSystemMessage(Component.translatable(ModLanguageData.Keys.NOTICE_TIMER,
+                companion.getName(), seconds, reason));
     }
 
     /** 给模型看的一行摘要。 */

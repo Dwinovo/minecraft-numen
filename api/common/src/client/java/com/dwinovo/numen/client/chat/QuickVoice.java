@@ -1,5 +1,7 @@
 package com.dwinovo.numen.client.chat;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.agent.conversation.Conversation;
 import com.dwinovo.numen.api.Delivery;
 import com.dwinovo.numen.api.NumenGateway;
@@ -36,7 +38,7 @@ public final class QuickVoice {
         Minecraft mc = Minecraft.getInstance();
         Conversation t = SelectedCompanion.resolveTarget();
         if (t == null) {
-            flash("先按轮盘键选一位同伴,或把准星对准它");
+            flash(I18n.get(Keys.QUICKVOICE_PICK_FIRST));
             return;
         }
         target = t;
@@ -68,13 +70,13 @@ public final class QuickVoice {
         transcribing = false;
         String said = text == null ? "" : text.trim();
         if (t == null || said.isEmpty()) {
-            if (said.isEmpty()) flash("没听清,再试一次");
+            if (said.isEmpty()) flash(I18n.get(Keys.QUICKVOICE_UNHEARD));
             return;
         }
         if (Conversations.instance().say(t, said).reached()) {
             ChatLines.owner(name(t), said, true);
         } else {
-            flash(name(t) + " 没能收到——它可能不在线");
+            flash(I18n.get(Keys.CHAT_NOT_RECEIVED, name(t)));
         }
     }
 
@@ -89,10 +91,10 @@ public final class QuickVoice {
             // 脉冲圆点:让"正在听"看起来活着
             String dot = System.currentTimeMillis() / 500 % 2 == 0 ? "●" : "○";
             String live = livePartial.isBlank() ? "" : ":" + livePartial;
-            return dot + " 正在听" + live + "  (松开发给 " + name(target) + ")";
+            return I18n.get(Keys.QUICKVOICE_LISTENING, dot, live, name(target));
         }
         if (transcribing && target != null) {
-            return "◌ 转写中…  (马上发给 " + name(target) + ")";
+            return I18n.get(Keys.QUICKVOICE_TRANSCRIBING, name(target));
         }
         if (notice != null && System.currentTimeMillis() < noticeUntilMs) {
             return notice;

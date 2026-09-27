@@ -5,7 +5,10 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
+import com.dwinovo.numen.data.ModLanguageData;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentUtils;
+import net.minecraft.world.item.Item;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 
@@ -23,6 +26,9 @@ import java.util.Map;
  * 模型得看见这件事,否则它会以为自己加上了。
  */
 public final class ThrowawayOps {
+
+    /** 报主人的那句话里至多点名几种:一行聊天读得完,其余说一共几种。 */
+    private static final int NAMED_TO_OWNER = 6;
 
     /** 追加这些,已在清单上的不重复。 */
     public String add(NumenPlayer self, List<String> blockIds) {
@@ -68,7 +74,7 @@ public final class ThrowawayOps {
     private String changed(NumenPlayer self, String verb, List<String> ids) {
         ThrowawayBlocks.store(self, ids);
         List<String> now = ThrowawayBlocks.effectiveIds(self);
-        announceToOwner(self, verb, now);
+        announceToOwner(self, verb);
         return report(self, now, verb);
     }
 
@@ -125,27 +131,27 @@ public final class ThrowawayOps {
 
     /**
      * 她改了什么当场报主人一句。这是一张长期空白支票——设一次之后寻路可能烧掉几百块,
-     * 中间没有任何确认——所以主人有权知道她授权了消耗什么。
+     * 中间没有任何确认——所以主人有权知道她授权了消耗什么。发的是语言键,方块写成它们的名字,主人按他自己的语言看。
      */
-    private static void announceToOwner(NumenPlayer self, String verb, List<String> now) {
+    private static void announceToOwner(NumenPlayer self, String verb) {
         ServerPlayer owner = self.resolveOwnerPlayer();
         if (owner == null) {
             return;
         }
-        owner.sendSystemMessage(Component.literal(
-                "🧱 " + self.getName().getString() + " 的 throwaway 垫路料(" + verb + "):" + shortList(now)));
+        owner.sendSystemMessage(Component.translatable(ModLanguageData.Keys.NOTICE_THROWAWAY,
+                self.getName(), verb, shortList(ThrowawayBlocks.of(self))));
     }
 
-    private static String shortList(List<String> ids) {
-        if (ids.isEmpty()) {
-            return "空";
+    /** 给主人看的清单:至多点名 {@link #NAMED_TO_OWNER} 种,其余说一共几种。 */
+    private static Component shortList(List<Item> blocks) {
+        if (blocks.isEmpty()) {
+            return Component.translatable(ModLanguageData.Keys.NOTICE_THROWAWAY_EMPTY);
         }
-        List<String> paths = ids.stream()
-                .map(id -> id.contains(":") ? id.substring(id.indexOf(':') + 1) : id)
-                .toList();
-        return paths.size() <= 6
-                ? String.join("、", paths)
-                : String.join("、", paths.subList(0, 6)) + " 等 " + paths.size() + " 种";
+        List<Component> names = blocks.stream().limit(NAMED_TO_OWNER).map(Item::getDescription).toList();
+        Component named = ComponentUtils.formatList(names, ComponentUtils.DEFAULT_SEPARATOR);
+        return blocks.size() <= NAMED_TO_OWNER ? named
+                : Component.translatable(ModLanguageData.Keys.NOTICE_THROWAWAY_MORE, named,
+                        blocks.size() - NAMED_TO_OWNER);
     }
 
     /** 失败也把当前清单带上——参数写错了不该连"现在是什么"都看不到。 */

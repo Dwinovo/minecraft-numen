@@ -1,5 +1,6 @@
 package com.dwinovo.numen.client.screen.settings;
 
+import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.client.stt.MicrophoneManager;
 import com.dwinovo.numen.client.stt.SttProviders;
 import com.dwinovo.numen.client.ui.IDrawSurface;
@@ -102,7 +103,7 @@ public final class SttPanel {
         label(x, ry, cx, ModLanguageData.Keys.GUI_SETTINGS_API_KEY);
         keyField = ui.add(new TextField(key, v -> key = v).masked(true).underlined(true)
                 .placeholder(SttProviders.BACKEND_DOUBAO.equals(opt.backend())
-                        ? "API Key(旧版控制台填 appid:access_token)" : ""));
+                        ? I18n.get(ModLanguageData.Keys.STT_DOUBAO_KEY_PLACEHOLDER) : ""));
         keyField.setBounds(cx, SettingsRows.controlY(ry, NumenStyle.CONTROL_H), cw, NumenStyle.CONTROL_H);
         ry += SettingsRows.ROW_H;
 

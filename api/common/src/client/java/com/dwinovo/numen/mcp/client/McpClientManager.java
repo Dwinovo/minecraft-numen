@@ -1,5 +1,7 @@
 package com.dwinovo.numen.mcp.client;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.mcp.client.McpClientConfig.ServerSpec;
@@ -212,7 +214,7 @@ public final class McpClientManager {
                 authTried = true;
                 if (handle != null) {
                     handle.status = Status.CONNECTING;
-                    handle.error = "等待浏览器授权…";
+                    handle.error = I18n.get(ModLanguageData.Keys.MCP_WAITING_BROWSER);
                 }
                 Constants.LOG.info("[numen-mcp-client] '{}' requires OAuth — launching browser flow", spec.name());
                 try {

@@ -59,8 +59,8 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
         boolean ownSameName = online instanceof com.dwinovo.numen.entity.NumenPlayer np
                 && np.isOwnedByPlayer(owner.getUUID());
         if (online != null && !ownSameName) {
-            owner.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-                    "[Numen] 名字「" + name + "」已被在线玩家占用,换一个吧"));
+            owner.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
+                    com.dwinovo.numen.data.ModLanguageData.Keys.NOTICE_NAME_TAKEN, name));
             return;
         }
         // 登录中闸:异步皮肤查询窗口内(几秒)重复点击不许再召。

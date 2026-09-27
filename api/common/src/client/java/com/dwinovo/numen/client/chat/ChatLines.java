@@ -1,5 +1,6 @@
 package com.dwinovo.numen.client.chat;
 
+import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.mixin.ChatComponentAccessor;
 
@@ -50,8 +51,7 @@ public final class ChatLines {
      * 干什么,面板把还没被消费的那条画成 ⌛ 泡。
      */
     public static void owner(String companionName, String text, boolean voice) {
-        add(Component.literal(
-                "你 → " + companionName + ":" + (voice ? "(语音) " : "") + text)
+        add(Component.translatable(voice ? Keys.CHAT_OWNER_VOICE : Keys.CHAT_OWNER, companionName, text)
                 .withColor(OWN));
     }
 

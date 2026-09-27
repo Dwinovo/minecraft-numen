@@ -9,6 +9,7 @@ import com.dwinovo.numen.network.NumenNetwork;
 
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -37,9 +38,7 @@ public final class DebugCommands {
         NumenNetwork.sendToPlayer(caller, new ClientUiActionPayload(on
                 ? ClientUiActionPayload.Action.DEBUG_TEXT_ON
                 : ClientUiActionPayload.Action.DEBUG_TEXT_OFF));
-        ctx.getSource().sendSuccess(() -> Component.literal(
-                on ? "调试模式已开:路径粒子渲染 + UI 文本不过滤直出"
-                   : "调试模式已关"), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable(on ? Keys.DEBUG_ON : Keys.DEBUG_OFF), false);
         return 1;
     }
 
@@ -50,9 +49,8 @@ public final class DebugCommands {
         boolean on = settings.profile;
         // Start each profiling session from a clean window/baseline (no skewed first line across toggles).
         com.dwinovo.numen.core.pathing.util.NavProfiler.reset();
-        ctx.getSource().sendSuccess(() -> Component.literal(on
-                ? "寻路性能探针已开:日志看 [nav-profile](主线程 tick 耗时按窗口汇总)"
-                : "寻路性能探针已关"), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable(on ? Keys.DEBUG_PROFILE_ON : Keys.DEBUG_PROFILE_OFF),
+                false);
         return 1;
     }
 
@@ -61,9 +59,7 @@ public final class DebugCommands {
     private static int togglePad(CommandContext<CommandSourceStack> ctx) {
         boolean on = !com.dwinovo.numen.entity.CompanionChunkLoader.enabled;
         com.dwinovo.numen.entity.CompanionChunkLoader.enabled = on;
-        ctx.getSource().sendSuccess(() -> Component.literal(on
-                ? "同伴加载 pad 已开(默认状态)"
-                : "同伴加载 pad 已关:同伴仅在玩家加载的区块内活动(诊断用)"), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable(on ? Keys.DEBUG_PAD_ON : Keys.DEBUG_PAD_OFF), false);
         return 1;
     }
 }

@@ -1983,7 +1983,7 @@ public final class NumenScreen extends Screen {
         // 崩溃护栏:面板渲染的任何异常都不许带走游戏——降级成一行红字
         if (!com.dwinovo.numen.client.ui.SafeUi.run("panel-render",
                 () -> renderInner(g, mouseX, mouseY, partial))) {
-            g.drawString(font, "Numen 面板渲染出错,已兜底——详情见 latest.log",
+            g.drawString(font, I18n.get(ModLanguageData.Keys.SCREEN_RENDER_FAILED),
                     left + 10, top + 10, 0xFFFF6B6B, true);
         }
     }
@@ -2868,7 +2868,7 @@ public final class NumenScreen extends Screen {
             double p = lp.status().compactProgress();
             int bw = panelW - PAD * 2;
             int by = top + panelH - inputH() - PAD - 8;
-            txt(g, Component.literal("整理记忆… " + Math.round(p * 100) + "%"),
+            txt(g, Component.literal(I18n.get(ModLanguageData.Keys.LOOP_COMPACT_PROGRESS, Math.round(p * 100))),
                     left + PAD, by - 11, TXT_MUTED);
             g.fill(left + PAD, by, left + PAD + bw, by + 3, FIELD);
             g.fill(left + PAD, by, left + PAD + (int) Math.round(bw * p), by + 3, ACCENT);

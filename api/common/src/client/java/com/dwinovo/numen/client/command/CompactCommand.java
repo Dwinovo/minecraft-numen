@@ -1,5 +1,7 @@
 package com.dwinovo.numen.client.command;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 
 /**
@@ -17,7 +19,7 @@ final class CompactCommand implements ChatCommand {
 
     @Override
     public String description() {
-        return "整理记忆";
+        return I18n.get(Keys.LOOP_COMPACT);
     }
 
     @Override
@@ -38,6 +40,6 @@ final class CompactCommand implements ChatCommand {
         }
         // 空闲时进队列就当场走掉了,忙的时候才真排着——照实说哪一种。
         return loop.status().phase() == com.dwinovo.numen.agent.loop.Phase.COMPACT
-                ? "开始整理记忆…" : "整理记忆已排上,她手上这轮完就走";
+                ? I18n.get(Keys.CMD_COMPACT_STARTED) : I18n.get(Keys.CMD_COMPACT_QUEUED);
     }
 }

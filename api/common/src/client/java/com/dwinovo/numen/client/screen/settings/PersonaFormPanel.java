@@ -1,5 +1,6 @@
 package com.dwinovo.numen.client.screen.settings;
 
+import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
@@ -60,7 +61,7 @@ public final class PersonaFormPanel {
         nameLabel.setBounds(x, ry, 200, 9);
         ry += NumenStyle.LABEL_PITCH;
         nameField = ui.add(new TextField(draft.name, v -> draft.name = v)
-                .placeholder("名称(即文件名),如 小焰")
+                .placeholder(I18n.get(ModLanguageData.Keys.PERSONA_NAME_PLACEHOLDER))
                 .underlined(true)
                 .withLabel(nameLabel));
         nameField.setBounds(x, ry, w, NumenStyle.CONTROL_H);

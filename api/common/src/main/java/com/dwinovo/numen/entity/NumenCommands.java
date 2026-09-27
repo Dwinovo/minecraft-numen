@@ -1,6 +1,7 @@
 package com.dwinovo.numen.entity;
 
 import com.dwinovo.numen.cli.CommandRunner;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.network.payload.ClientUiActionPayload;
 import com.dwinovo.numen.permission.ConsentAnswer;
 import com.dwinovo.numen.permission.ConsentDesk;
@@ -25,6 +26,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.TickTask;
 import net.minecraft.server.level.ServerLevel;
@@ -141,8 +143,8 @@ public final class NumenCommands {
         String name = StringArgumentType.getString(ctx, "companion");
         List<NumenPlayer> named = companionsHere(caller).filter(body -> body.getName().getString().equals(name)).toList();
         if (named.size() != 1) {
-            caller.sendFailure(Component.literal(named.isEmpty() ? "No companion named '" + name + "' is here"
-                    : named.size() + " companions here are named '" + name + "'"));
+            caller.sendFailure(named.isEmpty() ? Component.translatable(Keys.COMMAND_NO_COMPANION_HERE, name)
+                    : Component.translatable(Keys.COMMAND_SEVERAL_NAMED, named.size(), name));
             return 0;
         }
         NumenPlayer her = named.get(0);
@@ -184,7 +186,7 @@ public final class NumenCommands {
         // Push the updated roster so the owner's G panel can reach the new companion.
         Companions.syncRosterToOwner(level.getServer(), owner);
         ctx.getSource().sendSuccess(() ->
-                Component.literal("Summoned companion '" + name + "' (" + body.getUUID() + ")"), false);
+                Component.translatable(Keys.COMMAND_SUMMONED, name, body.getUUID().toString()), false);
         return 1;
     }
 
@@ -197,13 +199,12 @@ public final class NumenCommands {
         // the roster itself.
         int dismissed = Companions.dismissByName(server, owner.getUUID(), name);
         if (dismissed == 0) {
-            ctx.getSource().sendFailure(
-                    Component.literal("No companion of yours named '" + name + "'"));
+            ctx.getSource().sendFailure(Component.translatable(Keys.COMMAND_NO_SUCH_COMPANION, name));
             return 0;
         }
-        ctx.getSource().sendSuccess(() -> Component.literal(
-                "Dismissed companion '" + name + "' — gone for good"
-                        + (dismissed > 1 ? " (cleaned up " + dismissed + " duplicates)" : "")), false);
+        ctx.getSource().sendSuccess(() -> dismissed > 1
+                ? Component.translatable(Keys.COMMAND_DISMISSED_DUPLICATES, name, dismissed)
+                : Component.translatable(Keys.COMMAND_DISMISSED, name), false);
         return dismissed;
     }
 
@@ -241,15 +242,15 @@ public final class NumenCommands {
             }
         }
         if (companion == null) {
-            ctx.getSource().sendFailure(Component.literal("No companion of yours named '" + name + "' is here"));
+            ctx.getSource().sendFailure(Component.translatable(Keys.COMMAND_YOURS_NOT_HERE, name));
             return 0;
         }
         if (mode != null) {
             Permission.setMode(companion, mode);
         }
         String now = Permission.modeOf(companion).name().toLowerCase(Locale.ROOT);
-        ctx.getSource().sendSuccess(() -> Component.literal(
-                name + (mode == null ? ": permission mode " : ": permission mode set to ") + now), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable(mode == null ? Keys.COMMAND_MODE : Keys.COMMAND_MODE_SET,
+                name, now), false);
         return 1;
     }
 
@@ -273,25 +274,25 @@ public final class NumenCommands {
     private static int listRules(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer owner = ctx.getSource().getPlayerOrException();
         RuleSet mine = PermissionStore.of(owner.getServer(), owner.getUUID()).rules();
-        StringBuilder sb = new StringBuilder("Your rules (checked first, deny → allow → ask):");
-        appendLayer(sb, mine, true);
-        sb.append("\nFactory rules (checked after yours, allow → ask; not editable):");
-        appendLayer(sb, RuleSet.factory(), false);
-        sb.append("\nNothing matched → ask.");
-        String text = sb.toString();
-        ctx.getSource().sendSuccess(() -> Component.literal(text), false);
+        MutableComponent text = Component.translatable(Keys.COMMAND_RULES_YOURS);
+        appendLayer(text, mine, true);
+        text.append("\n").append(Component.translatable(Keys.COMMAND_RULES_FACTORY));
+        appendLayer(text, RuleSet.factory(), false);
+        text.append("\n").append(Component.translatable(Keys.COMMAND_RULES_UNMATCHED));
+        ctx.getSource().sendSuccess(() -> text, false);
         return 1;
     }
 
-    private static void appendLayer(StringBuilder sb, RuleSet layer, boolean numbered) {
+    /** 一层规则的三张表:表名与规则行照命令里的写法,只有"没有"一词随主人的语言。 */
+    private static void appendLayer(MutableComponent text, RuleSet layer, boolean numbered) {
         for (Verdict.Kind table : List.of(Verdict.Kind.DENY, Verdict.Kind.ALLOW, Verdict.Kind.ASK)) {
             List<Rule> rows = layer.table(table);
-            sb.append("\n  ").append(tableName(table)).append(':');
+            text.append("\n  " + tableName(table) + ":");
             if (rows.isEmpty()) {
-                sb.append(" (none)");
+                text.append(" ").append(Component.translatable(Keys.COMMAND_RULES_NONE));
             }
             for (int i = 0; i < rows.size(); i++) {
-                sb.append("\n    ").append(numbered ? (i + 1) + ". " : "- ").append(rows.get(i));
+                text.append("\n    " + (numbered ? (i + 1) + ". " : "- ") + rows.get(i));
             }
         }
     }
@@ -307,9 +308,9 @@ public final class NumenCommands {
             return 0;
         }
         boolean added = PermissionStore.of(owner.getServer(), owner.getUUID()).add(table, rule);
-        String text = added ? "Added to " + tableName(table) + ": " + rule
-                : tableName(table) + " already has: " + rule;
-        ctx.getSource().sendSuccess(() -> Component.literal(text), false);
+        Component text = Component.translatable(added ? Keys.COMMAND_RULE_ADDED : Keys.COMMAND_RULE_EXISTS,
+                tableName(table), rule.toString());
+        ctx.getSource().sendSuccess(() -> text, false);
         return added ? 1 : 0;
     }
 
@@ -320,21 +321,19 @@ public final class NumenCommands {
         int row = IntegerArgumentType.getInteger(ctx, "row");
         int size = store.rules().table(table).size();
         if (row > size) {
-            ctx.getSource().sendFailure(Component.literal(tableName(table) + " has no row " + row + " (it has "
-                    + size + "); /numen permission rules list shows the numbers"));
+            ctx.getSource().sendFailure(Component.translatable(Keys.COMMAND_RULE_NO_ROW, tableName(table), row, size));
             return 0;
         }
         Rule removed = store.remove(table, row - 1);
-        ctx.getSource().sendSuccess(() -> Component.literal(
-                "Removed from " + tableName(table) + ": " + removed), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable(Keys.COMMAND_RULE_REMOVED, tableName(table),
+                removed.toString()), false);
         return 1;
     }
 
     private static int resetRules(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer owner = ctx.getSource().getPlayerOrException();
         PermissionStore.of(owner.getServer(), owner.getUUID()).reset();
-        ctx.getSource().sendSuccess(() -> Component.literal(
-                "Cleared your deny, ask and allow tables; the factory rules still apply"), false);
+        ctx.getSource().sendSuccess(() -> Component.translatable(Keys.COMMAND_RULES_RESET), false);
         return 1;
     }
 
@@ -368,13 +367,10 @@ public final class NumenCommands {
         ConsentDesk.Reply reply = companion == null ? ConsentDesk.Reply.NOT_PENDING
                 : ConsentDesk.reply(owner, companion, id, decision, note);
         switch (reply) {
-            case ANSWERED -> ctx.getSource().sendSuccess(() -> Component.literal("Answered consent request #" + id
-                    + " for " + companion.getName().getString() + ": " + decision.name().toLowerCase(Locale.ROOT)),
-                    false);
-            case NOT_OWNER -> ctx.getSource().sendFailure(Component.literal(
-                    "Consent request #" + id + " belongs to a companion that is not yours"));
-            case NOT_PENDING -> ctx.getSource().sendFailure(Component.literal(
-                    "No pending consent request #" + id + " (already answered, expired or replaced)"));
+            case ANSWERED -> ctx.getSource().sendSuccess(() -> Component.translatable(Keys.COMMAND_CONSENT_ANSWERED,
+                    id, companion.getName(), decision.name().toLowerCase(Locale.ROOT)), false);
+            case NOT_OWNER -> ctx.getSource().sendFailure(Component.translatable(Keys.COMMAND_CONSENT_NOT_OWNER, id));
+            case NOT_PENDING -> ctx.getSource().sendFailure(Component.translatable(Keys.COMMAND_CONSENT_NOT_PENDING, id));
         }
         return reply == ConsentDesk.Reply.ANSWERED ? 1 : 0;
     }
