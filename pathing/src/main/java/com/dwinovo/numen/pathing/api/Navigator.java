@@ -1,0 +1,66 @@
+package com.dwinovo.numen.pathing.api;
+
+import java.util.List;
+import java.util.Optional;
+
+import com.dwinovo.numen.pathing.body.Body;
+import com.dwinovo.numen.pathing.drive.Driver;
+import com.dwinovo.numen.pathing.drive.LiveWorld;
+import com.dwinovo.numen.pathing.plan.BodySnapshot;
+import com.dwinovo.numen.pathing.plan.CostModel;
+import com.dwinovo.numen.pathing.search.Favoring;
+import com.dwinovo.numen.pathing.search.Origin;
+import com.dwinovo.numen.pathing.search.RoutePlanner;
+import com.dwinovo.numen.pathing.search.Search;
+import com.dwinovo.numen.pathing.search.Searches;
+import com.dwinovo.numen.pathing.search.WorldSnapshot;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerPlayer;
+
+/**
+ * 寻路的门面:一具身体加宿主的端口。规划是查询——{@link #plan} 只搜不走,不占身体、不碰世界,交出候选路线与预算账;
+ * 执行是任务——{@link #drive} 交出一次在走的导航。请求、结局、账单都是数据,模块里没有给模型或玩家看的话。
+ *
+ * <p>只在世界所在的线程上调用;搜索在工作线程上跑,读的是派发那一刻在世界线程上拷下的快照。
+ */
+public final class Navigator {
+
+    private final Body body;
+    private final Ports ports;
+
+    private Navigator(Body body, Ports ports) {
+        this.body = body;
+        this.ports = ports;
+    }
+
+    public static Navigator of(Body body, Ports ports) {
+        return new Navigator(body, ports);
+    }
+
+    /** 只搜不走:从身体脚下出候选路线。 */
+    public Planning plan(PlanQuery query) {
+        ServerPlayer entity = body.entity();
+        BodySnapshot snapshot = body.snapshot();
+        Optional<BlockPos> start = Origin.of(new LiveWorld(entity.serverLevel()), snapshot.stats(),
+                entity.getX(), entity.getY(), entity.getZ());
+        if (start.isEmpty()) {
+            BlockPos at = entity.blockPosition();
+            return new Planning(new PlanResult(List.of(),
+                    new Outcome.Stranded(at, entity.level().getBlockState(at))));
+        }
+        BlockPos from = start.get();
+        WorldSnapshot view = WorldSnapshot.around(entity.serverLevel(), from);
+        CostModel model = CostModel.of(query.spec(), snapshot, ports.terrain(), ports.materials(), ports.threats());
+        RoutePlanner.Query planned = new RoutePlanner.Query(view, model, from, query.goal(), query.budget(),
+                query.candidates());
+        Search probe = new Search(view, model, from, query.goal(), query.budget(), Favoring.NONE);
+        return new Planning(Searches.submit(planned), probe);
+    }
+
+    /** 去:交出一次在走的导航,宿主每刻 {@link Navigation#tick} 一次。 */
+    public Navigation drive(NavRequest request) {
+        return new Navigation(new Driver(body, ports.effector(), ports.terrain(), ports.materials(), ports.threats(),
+                request.goal(), request.spec(), request.budget(), request.route()));
+    }
+}

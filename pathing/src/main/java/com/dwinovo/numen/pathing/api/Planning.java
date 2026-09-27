@@ -1,0 +1,74 @@
+package com.dwinovo.numen.pathing.api;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import com.dwinovo.numen.pathing.search.Pending;
+import com.dwinovo.numen.pathing.search.Route;
+import com.dwinovo.numen.pathing.search.RoutePlanner;
+import com.dwinovo.numen.pathing.search.Search;
+import com.dwinovo.numen.pathing.search.Searches;
+
+/**
+ * 一次在工作线程上跑的规划。不占身体、不碰世界;发起方每刻 {@link #poll} 一次,拿到结论为止。候选一条都没有时,
+ * 接着在同一份快照上诊断为什么没路。
+ */
+public final class Planning {
+
+    private Pending<RoutePlanner.Plan> planning;
+    private final Search probe;
+    private Pending<Outcome> diagnosis;
+    private PlanResult result;
+
+    /** 起点上身体待不住,当场就有结论。 */
+    Planning(PlanResult result) {
+        this.probe = null;
+        this.result = result;
+    }
+
+    /**
+     * @param probe 与这次规划同一份快照、成本模型、起点、目标、预算的一次搜索:没有候选时拿它诊断
+     */
+    Planning(Pending<RoutePlanner.Plan> planning, Search probe) {
+        this.planning = planning;
+        this.probe = probe;
+    }
+
+    /** 有结论了就交出,没有为 null。 */
+    public PlanResult poll() {
+        if (result != null) {
+            return result;
+        }
+        if (diagnosis != null) {
+            Outcome outcome = diagnosis.poll();
+            if (outcome != null) {
+                result = new PlanResult(List.of(), outcome);
+            }
+            return result;
+        }
+        RoutePlanner.Plan plan = planning.poll();
+        if (plan == null) {
+            return null;
+        }
+        if (!plan.candidates().isEmpty()) {
+            List<PlanResult.Candidate> candidates = new ArrayList<>();
+            for (Route route : plan.candidates()) {
+                candidates.add(new PlanResult.Candidate(route, Bill.of(route)));
+            }
+            result = new PlanResult(candidates, null);
+            return result;
+        }
+        diagnosis = Searches.submit(cancelled -> Diagnosis.of(plan.unreached(), probe, cancelled));
+        return null;
+    }
+
+    /** 不要了。 */
+    public void cancel() {
+        if (planning != null) {
+            planning.cancel();
+        }
+        if (diagnosis != null) {
+            diagnosis.cancel();
+        }
+    }
+}
