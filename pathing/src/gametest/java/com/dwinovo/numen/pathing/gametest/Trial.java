@@ -14,6 +14,7 @@ import com.dwinovo.numen.pathing.api.Navigator;
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.api.Ports;
 import com.dwinovo.numen.pathing.api.Report;
+import com.dwinovo.numen.pathing.api.Teardown;
 import com.dwinovo.numen.pathing.body.Body;
 import com.dwinovo.numen.pathing.body.Effector;
 import com.dwinovo.numen.pathing.body.PlayerHands;
@@ -164,11 +165,15 @@ final class Trial {
     }
 
     Run go(TestBody body, NavRequest request) {
-        Navigator navigator = Navigator.of(Body.of(body),
-                new Ports(hands.apply(new PlayerHands(body)), terrain, materials, threats));
+        Navigator navigator = navigator(body);
         Run run = new Run(this, body, navigator, navigator.drive(request), request.spec());
         runs.add(run);
         return run;
+    }
+
+    /** 这具身体加这条用例的端口组成的门面。 */
+    Navigator navigator(TestBody body) {
+        return Navigator.of(Body.of(body), new Ports(hands.apply(new PlayerHands(body)), terrain, materials, threats));
     }
 
     /** 一次导航通过了;全部都通过,这条用例才通过。 */
@@ -192,10 +197,10 @@ final class Trial {
      * 实际账与世界的变化一致;规格不许改地形时账里没有挖、没有放。不一致就抛断言异常。{@code passive} 认得出的变化不是
      * 导航动的手,而是原版在身体经过时自己做的(冰霜行者冻住的水面),不算进来。
      */
-    void audit(Report report, RouteSpec spec, java.util.function.BiPredicate<BlockState, BlockState> passive) {
-        EditLedger ledger = report.ledger();
+    void audit(List<EditLedger.Entry> entries, RouteSpec spec,
+               java.util.function.BiPredicate<BlockState, BlockState> passive) {
         Map<BlockPos, BlockState> last = new HashMap<>();
-        for (EditLedger.Entry e : ledger.entries()) {
+        for (EditLedger.Entry e : entries) {
             if (!spec.alter().mayAlter() && !(e instanceof EditLedger.Toggled)) {
                 throw new GameTestAssertException("alter=none,却在 " + rel(e.pos()) + " 改了地形:" + e);
             }
@@ -247,6 +252,11 @@ final class Trial {
         private java.util.function.BiPredicate<BlockState, BlockState> passive = (before, now) -> false;
         private boolean finished;
         private boolean passed;
+        /** 到了之后撤回路上垫块用的规格;不撤为 null。 */
+        private RouteSpec takeBackSpec;
+        private final List<Consumer<Run>> afterTakeBack = new ArrayList<>();
+        /** 到了之后的撤回;还没开始为 null。 */
+        Teardown teardown;
         /** 这么多刻内要收场(从开走算起);用例的 GameTest 时限要比它加上 {@link #delay} 长。 */
         private int limit = 400;
         /**
@@ -319,6 +329,13 @@ final class Trial {
             return this;
         }
 
+        /** 到了之后按 {@code spec} 撤回这次导航路上垫下的块,撤完再断言 {@code check};实际账连撤回的一起对。 */
+        Run takesBack(RouteSpec spec, Consumer<Run> check) {
+            takeBackSpec = spec;
+            afterTakeBack.add(check);
+            return this;
+        }
+
         /** 每刻在推导航之前做(用例中途改世界、推身体)。 */
         Run during(Consumer<Run> action) {
             everyTick.add(action);
@@ -335,6 +352,10 @@ final class Trial {
             }
             try {
                 ticks++;
+                if (teardown != null) {
+                    tearDown();
+                    return;
+                }
                 lowestHealth = Math.min(lowestHealth, body.getHealth());
                 for (Consumer<Run> action : everyTick) {
                     action.accept(this);
@@ -344,14 +365,9 @@ final class Trial {
                 highestRise = Math.max(highestRise, body.getDeltaMovement().y);
                 highestFeet = Math.max(highestFeet, body.getY() - trial.origin.getY());
                 if (status.running()) {
-                    if (ticks >= limit) {
-                        throw new GameTestAssertException("时限内没收场:身体在 " + trial.rel(body.blockPosition())
-                                + " (" + fmt(body.getX()) + "," + fmt(body.getY()) + "," + fmt(body.getZ()) + ") "
-                                + navigation);
-                    }
+                    overdue();
                     return;
                 }
-                finished = true;
                 report = navigation.report();
                 if (status.state() != expected) {
                     throw new GameTestAssertException("应当 " + expected + ",却是 " + status.state() + " " + status.outcome()
@@ -360,20 +376,54 @@ final class Trial {
                 if (expected == NavStatus.State.FAILED) {
                     outcomeCheck.accept(status.outcome());
                 }
-                trial.audit(report, spec, passive);
+                trial.audit(report.ledger().entries(), spec, passive);
                 for (Consumer<Run> check : finals) {
                     check.accept(this);
                 }
-                body.leave();
-                passed = true;
-                trial.passed();
+                if (takeBackSpec != null) {
+                    teardown = navigator.takeBack(report.ledger().placedBlocks(), takeBackSpec);
+                    return;
+                }
+                pass();
             } catch (RuntimeException e) {
                 finished = true;
                 navigation.stop();
+                if (teardown != null) {
+                    teardown.stop();
+                }
                 body.leave();
                 throw e instanceof GameTestAssertException assertion ? assertion
                         : new GameTestAssertException("用例抛出了 " + e);
             }
+        }
+
+        private void tearDown() {
+            if (teardown.tick()) {
+                overdue();
+                return;
+            }
+            List<EditLedger.Entry> all = new ArrayList<>(report.ledger().entries());
+            all.addAll(teardown.report().ledger().entries());
+            trial.audit(all, spec, passive);
+            for (Consumer<Run> check : afterTakeBack) {
+                check.accept(this);
+            }
+            pass();
+        }
+
+        private void overdue() {
+            if (ticks >= limit) {
+                throw new GameTestAssertException("时限内没收场:身体在 " + trial.rel(body.blockPosition())
+                        + " (" + fmt(body.getX()) + "," + fmt(body.getY()) + "," + fmt(body.getZ()) + ") "
+                        + (teardown != null ? teardown : navigation));
+            }
+        }
+
+        private void pass() {
+            finished = true;
+            body.leave();
+            passed = true;
+            trial.passed();
         }
 
         private static String fmt(double v) {
