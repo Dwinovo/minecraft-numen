@@ -27,6 +27,12 @@ tasks.named('compileJava', JavaCompile) {
     source(configurations.commonJava)
 }
 
+// 寻路模块的类平铺进发行 jar,和 core 的类一起发。它对着原版的 Mojang 名编译,与本模块同一套命名:
+// Fabric 上随后由 remapJar 连同本模块的类一起换成 intermediary 名,NeoForge 上原样发出。
+tasks.named('jar', Jar) {
+    from({ project(':pathing').sourceSets.main.output })
+}
+
 processResources {
     dependsOn(configurations.commonResources)
     from(configurations.commonResources)

@@ -1,0 +1,31 @@
+// numen-pathing:寻路模块,设计稿见 docs/pathing.md。
+//
+// 和 api/common 一样对着原版编译(NeoForm),不含加载器代码;classpath 上只有 Minecraft 与它自带的库
+// (fastutil、slf4j),没有 ai / agent / api / core——往 Numen 伸手的 import 在编译期就过不去,边界由编译器守。
+// Numen 经端口接入;成品随 core 的两个加载器 jar 平铺发出,见 multiloader-loader.gradle。
+plugins {
+    id 'multiloader-common'
+    id 'net.neoforged.moddev'
+}
+
+neoForge {
+    neoFormVersion = neo_form_version
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// 单测跑在原版环境里:引导注册表、用真实的 BlockState,所以测试的类路径就是主源码集的那一份原版。
+sourceSets {
+    test {
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+    }
+}
+
+test {
+    useJUnitPlatform()
+}

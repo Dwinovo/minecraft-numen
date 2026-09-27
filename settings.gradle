@@ -35,6 +35,8 @@ include('ai')
 // numen-agent:大脑本身(队列、目标),纯 JVM,依赖 ai、被 api 依赖(详见 agent/build.gradle 头注)。
 include('agent')
 include('ui')
+// numen-pathing:寻路,只依赖原版 Minecraft,Numen 经端口接入(详见 pathing/build.gradle 头注)。
+include('pathing')
 
 // 联动模块:一个联动一个,各自独立,内嵌发布不单独发坐标。见 buildSrc 的 numen-plugin.gradle
 include('plugins:ysm')
