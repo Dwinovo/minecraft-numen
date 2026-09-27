@@ -16,7 +16,8 @@ import net.minecraft.world.entity.Pose;
  * <p>前提:规格开着跑酷;起步时站在地上、脚下不泡在液体里;紧挨着的那一列是空隙(托不住脚——托得住就直接走过去);
  * 起跳能升的高度按脚下方块的起跳系数算({@link BodyStats#jumpHeight}),起步那一列头顶与空中经过的每一列在起跳的脚高与
  * 最高点都放得下身体;落点是第一列托得住脚、放得下身体的节点。跳多远看助跑:脚下步速慢(灵魂沙、蜂蜜块)最远落到第 2 列,
- * 不疾跑最远第 3 列,疾跑第 4 列;落到第 4 列与跳上高一级都要疾跑。落点再往前一列不能是这条路线排除的格——
+ * 不疾跑最远第 3 列,疾跑第 4 列;落到第 4 列、落点比起跳的脚高(跳上高一级,或落在比起跳处高半格的半砖上)都要疾跑——
+ * 落点越高,身体越早落回那个高度,留给水平飞的刻数越少。落点再往前一列不能是这条路线排除的格——
  * 落地时的冲劲会把身体带过去。跑酷不改地形。
  */
 final class Parkour implements Move {
@@ -103,7 +104,7 @@ final class Parkour implements Move {
         if (to == null) {
             return Premise.fail(from.offset(dx * longest, 0, dz * longest), Reason.NO_FOOTING);
         }
-        boolean ascend = to.getY() > y;
+        boolean ascend = landing.feetY() > f0 + Footing.EPSILON;
         if ((span == 4 || ascend) && !sprintable) {
             return Premise.fail(to, Reason.NO_SPRINT);
         }
