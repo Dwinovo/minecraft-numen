@@ -1,5 +1,8 @@
 package com.dwinovo.numen.pathing.world;
 
+import java.util.LinkedHashSet;
+import java.util.Set;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.BlockGetter;
@@ -68,6 +71,29 @@ public final class Footing {
         }
         // 两格的顶面一样高时,踩的是这一格本身:身体压在它上面,原版的"脚下方块"也先看脚所在的格
         return here >= below ? y : y - 1;
+    }
+
+    /** 身体脚底往下这么厚的一层里碰得到碰撞形状的方块,就是正托着它的。 */
+    private static final double SOLE = 0.1;
+
+    /**
+     * 碰撞盒是 {@code box} 的身体此刻压在哪几格上:脚底往下一薄层里碰得到碰撞箱的那几格。撤掉其中一块之前要先挪开——
+     * 挪不开就是她正站在它上面。
+     */
+    public static Set<BlockPos> supports(BlockGetter level, BodyStats body, AABB box) {
+        AABB sole = new AABB(box.minX, box.minY - SOLE, box.minZ, box.maxX, box.minY, box.maxZ);
+        Set<BlockPos> out = new LinkedHashSet<>();
+        for (BlockPos pos : BlockPos.betweenClosed(Mth.floor(sole.minX), Mth.floor(sole.minY), Mth.floor(sole.minZ),
+                Mth.floor(sole.maxX), Mth.floor(sole.maxY), Mth.floor(sole.maxZ))) {
+            for (AABB piece : Boxes.at(level, body, pos.getX(), pos.getY(), pos.getZ(), level.getBlockState(pos),
+                    box.minY)) {
+                if (piece.move(pos).intersects(sole)) {
+                    out.add(pos.immutable());
+                    break;
+                }
+            }
+        }
+        return out;
     }
 
     /**

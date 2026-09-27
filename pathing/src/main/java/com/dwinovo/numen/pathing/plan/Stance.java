@@ -52,6 +52,24 @@ public record Stance(Kind kind, double feetY, int supportY) {
         return at(level, body, node.getX(), node.getY(), node.getZ());
     }
 
+    /**
+     * {@code pos} 所在那一列里身体待得住的节点:这一格待得住就是它;在半空(放得下身体却没东西托着)就往下找,埋在方块里
+     * (放不下身体)就往上找,取第一个待得住的;那一列都待不住,就还是 {@code pos}。
+     */
+    public static BlockPos settle(BlockGetter level, BodyStats body, BlockPos pos) {
+        if (at(level, body, pos) != null) {
+            return pos;
+        }
+        int step = Clearance.fits(level, body, Pose.STANDING, pos.getX(), pos.getY(), pos.getZ()) ? -1 : 1;
+        for (int y = pos.getY() + step; y >= level.getMinBuildHeight() && y < level.getMaxBuildHeight(); y += step) {
+            BlockPos node = new BlockPos(pos.getX(), y, pos.getZ());
+            if (at(level, body, node) != null) {
+                return node;
+            }
+        }
+        return pos;
+    }
+
     public boolean grounded() {
         return kind == Kind.GROUND;
     }

@@ -38,17 +38,7 @@ public final class Goals {
      * 身体)就往上找,取第一个待得住的节点;那一列都待不住,就还是那一格。在世界所在的线程上按此刻的世界定下,之后不再变。
      */
     public static Goal ground(BlockGetter level, BodyStats body, BlockPos pos) {
-        if (Stance.at(level, body, pos) != null) {
-            return at(pos);
-        }
-        int step = Clearance.fits(level, body, Pose.STANDING, pos.getX(), pos.getY(), pos.getZ()) ? -1 : 1;
-        for (int y = pos.getY() + step; y >= level.getMinBuildHeight() && y < level.getMaxBuildHeight(); y += step) {
-            BlockPos node = new BlockPos(pos.getX(), y, pos.getZ());
-            if (Stance.at(level, body, node) != null) {
-                return at(node);
-            }
-        }
-        return at(pos);
+        return at(Stance.settle(level, body, pos));
     }
 
     /** 那一列,任何高度:只给了 x、z 的去处。 */
@@ -104,6 +94,11 @@ public final class Goals {
             throw new IllegalArgumentException("几个目标同时成立,至少要有一个");
         }
         return new AllOf(List.copyOf(goals));
+    }
+
+    /** 站在地上,托着脚的那一块不是 {@code blocks} 里的:从这几块上下来。 */
+    public static Goal offBlocks(java.util.Set<BlockPos> blocks) {
+        return new OffBlocks(java.util.Set.copyOf(blocks));
     }
 
     /** 多个目标取其一:到了任何一个就算到;按"走过去加到了再付"挑最便宜的那个。 */
@@ -353,6 +348,18 @@ public final class Goals {
                 all = all.plus(g.protection());
             }
             return all;
+        }
+    }
+
+    private record OffBlocks(java.util.Set<BlockPos> blocks) implements Goal {
+        @Override
+        public boolean contains(int x, int y, int z, Stance stance) {
+            return stance.grounded() && !blocks.contains(new BlockPos(x, stance.supportY(), z));
+        }
+
+        @Override
+        public double estimate(int x, int y, int z) {
+            return 0;
         }
     }
 

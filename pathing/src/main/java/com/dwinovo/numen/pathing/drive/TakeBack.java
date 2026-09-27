@@ -3,7 +3,6 @@ package com.dwinovo.numen.pathing.drive;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -14,18 +13,16 @@ import com.dwinovo.numen.pathing.body.Effector;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.plan.Permit;
-import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.plan.TerrainPolicy;
 import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.pathing.world.Footing;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
 
 /**
  * 事后撤掉路上垫下的方块。什么时候算"事后"由宿主定(一次导航到了,或一整件活干完),撤哪几块由它交进来——都是导航实际账里
@@ -57,8 +54,6 @@ public final class TakeBack {
 
     private static final Why UNDERFOOT = new Why.Underfoot();
     private static final Why UNREACHABLE = new Why.Unreachable();
-    /** 身体脚底往下这么厚的一层里碰得到碰撞形状的方块,就是正托着它的。 */
-    private static final double SOLE = 0.1;
 
     /** 撤回的状态。 */
     public enum State {
@@ -167,13 +162,13 @@ public final class TakeBack {
         }
         Set<BlockPos> supports = supports();
         if (!supports.isEmpty() && pending.keySet().containsAll(supports)) {
-            send(Errand.STEP_OFF, new OffBlocks(pending.keySet()));
+            send(Errand.STEP_OFF, Goals.offBlocks(pending.keySet()));
             return state;
         }
         BlockPos next = next(supports);
         if (next == null) {
             // 剩下的都托着她,而她脚下还有别的方块托着:挖哪一块都得先挪开
-            send(Errand.STEP_OFF, new OffBlocks(pending.keySet()));
+            send(Errand.STEP_OFF, Goals.offBlocks(pending.keySet()));
             return state;
         }
         if (Aim.point(body, next) != null) {
@@ -308,40 +303,8 @@ public final class TakeBack {
         state = State.DONE;
     }
 
-    /** 此刻托着身体的方块:脚底往下一薄层里碰得到碰撞形状的那几格。 */
+    /** 此刻托着身体的方块。 */
     private Set<BlockPos> supports() {
-        ServerPlayer body = rig.entity;
-        AABB box = body.getBoundingBox();
-        AABB sole = new AABB(box.minX, box.minY - SOLE, box.minZ, box.maxX, box.minY, box.maxZ);
-        Set<BlockPos> out = new LinkedHashSet<>();
-        for (BlockPos pos : BlockPos.betweenClosed(Mth.floor(sole.minX), Mth.floor(sole.minY), Mth.floor(sole.minZ),
-                Mth.floor(sole.maxX), Mth.floor(sole.maxY), Mth.floor(sole.maxZ))) {
-            BlockState state = rig.world().getBlockState(pos);
-            for (AABB piece : state.getCollisionShape(body.level(), pos).toAabbs()) {
-                if (piece.move(pos).intersects(sole)) {
-                    out.add(pos.immutable());
-                    break;
-                }
-            }
-        }
-        return out;
-    }
-
-    /** 站在地上,托着脚的那一块不是要撤的块。 */
-    private record OffBlocks(Set<BlockPos> blocks) implements Goal {
-
-        OffBlocks {
-            blocks = Set.copyOf(blocks);
-        }
-
-        @Override
-        public boolean contains(int x, int y, int z, Stance stance) {
-            return stance.kind() == Stance.Kind.GROUND && !blocks.contains(new BlockPos(x, stance.supportY(), z));
-        }
-
-        @Override
-        public double estimate(int x, int y, int z) {
-            return 0;
-        }
+        return Footing.supports(rig.world(), rig.snapshot().stats(), rig.entity.getBoundingBox());
     }
 }
