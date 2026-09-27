@@ -224,6 +224,18 @@ public final class NumenEvents {
         return sb.append('>').append(escape(text)).append("</event>").toString();
     }
 
+    /**
+     * 同一条事件换一段正文:开头的 {@code <event …>} 连同种类、时刻与编号原样留着,只把正文换成 {@code body}。
+     * 包装不下时缩短正文用它({@code NumenEventPayload#shrunk}),{@link #finishedTaskOf} 照样读得出是哪件活。
+     * 不是 {@code <event>} 的条目没有开头可留,整段换成 {@code body}。
+     */
+    public static String withBody(String text, String body) {
+        if (!text.startsWith("<event ")) {
+            return body;
+        }
+        return text.substring(0, text.indexOf('>') + 1) + escape(body) + "</event>";
+    }
+
     /** 游戏内时刻 HH:mm。原版 0 刻 = 早上 6 点。 */
     static String clockOf(long dayTime) {
         long inDay = Math.floorMod(dayTime, 24000L);

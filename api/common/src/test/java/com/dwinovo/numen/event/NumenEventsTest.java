@@ -60,6 +60,23 @@ class NumenEventsTest {
                 "<query>t3 做完了吗</query>", 1L, false)));
     }
 
+    /** 一批事件装不下一个包时正文被换成说明;开头留着,等 t3 的派发器照样认得出它做完了。 */
+    @Test
+    void aTaskFinishedEventCutForSizeStillSaysWhichTaskEnded() {
+        Map<String, String> attrs = new LinkedHashMap<>();
+        attrs.put("id", "t3");
+        attrs.put("task", "build show");
+        attrs.put("status", "done");
+        EventQueue.Entry finished = NumenEvents.entry(0L, EventTypes.TASK_FINISHED, attrs, "x".repeat(4000), 1L, true);
+
+        NumenEventPayload cut = new NumenEventPayload(A, List.of(finished))
+                .shrunk(p -> p.entries().get(0).text().length() < 1000, 4000, 1000);
+
+        EventQueue.Entry shrunk = cut.entries().get(0);
+        assertTrue(shrunk.text().endsWith("so its text was not delivered.</event>"), shrunk.text());
+        assertEquals("t3", NumenEvents.finishedTaskOf(shrunk));
+    }
+
     @Test
     void aPluginKindGoesOutThroughTheSameConstructor() {
         EventTypes.register(EventTypes.event("accessory_changed", false));
