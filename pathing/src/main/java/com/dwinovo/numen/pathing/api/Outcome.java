@@ -1,6 +1,7 @@
 package com.dwinovo.numen.pathing.api;
 
 import com.dwinovo.numen.pathing.drive.Blockage;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
@@ -25,8 +26,11 @@ public sealed interface Outcome {
     /** 身体待不住:卡在 {@code cell}(此刻是 {@code block})里,或悬在半空,无从出发。 */
     record Stranded(BlockPos cell, BlockState block) implements Outcome {}
 
-    /** 规格不许改地形({@code alter=none}),而要改 {@code alterations} 格才有路。 */
-    record NeedsAlter(int alterations) implements Outcome {}
+    /**
+     * 规格许改的不够:放宽到 {@code level} 才有路,那条路要改 {@code alterations} 格。不许改地形时是 {@code NATURAL}
+     * (许改自然地形就够)或 {@code ANY}(还要动主人得同意的格);只许改自然地形时是 {@code ANY}。
+     */
+    record NeedsAlter(RouteSpec.Alter level, int alterations) implements Outcome {}
 
     /** 要垫方块才有路,身上没有能垫的料。 */
     record NoMaterials() implements Outcome {}

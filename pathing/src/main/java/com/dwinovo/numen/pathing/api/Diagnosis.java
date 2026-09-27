@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.api;
 
+import java.util.List;
 import java.util.function.BooleanSupplier;
 
 import com.dwinovo.numen.pathing.plan.CostModel;
@@ -16,16 +17,18 @@ import com.dwinovo.numen.pathing.spec.RouteSpec;
 import net.minecraft.world.level.block.Blocks;
 
 /**
- * 一次搜索没交出路时,结局是什么:搜索只知道自己为什么停,"没路是因为不许改地形、没有料、改动预算不够、许可拒绝"
+ * 一次搜索没交出路时,结局是什么:搜索只知道自己为什么停,"没路是因为许改的不够、没有料、改动预算不够、许可拒绝"
  * 要在同一份快照、同一个起点与目标上换一样条件再搜才看得出来。依次问,第一个问出路的就是结局:
  * <ol>
- *   <li>规格不许改地形:许改(自然地形)就有路 → {@link Outcome.NeedsAlter},连同那条路要改几格;</li>
+ *   <li>规格不许改地形:许改自然地形就有路 → {@link Outcome.NeedsAlter}({@code NATURAL});连要主人同意的格也许改才有路
+ *       → {@link Outcome.NeedsAlter}({@code ANY});都连同那条路要改几格;</li>
  *   <li>身上没料:有料就有路 → {@link Outcome.NoMaterials};</li>
  *   <li>设了改动预算:不限预算就有路 → {@link Outcome.OverAlterBudget},连同最便宜那条要改几格;</li>
+ *   <li>只许改自然地形:连要主人同意的格也许改就有路 → {@link Outcome.NeedsAlter}({@code ANY});</li>
  *   <li>许可拒绝的格放行就有路 → {@link Outcome.Denied},连同路上第一格被拒的格与许可给的理由;</li>
  *   <li>都没有 → {@link Outcome.NoRoute}。</li>
  * </ol>
- * 前一条换过的条件后面接着用(不许改地形又没料时,问的是"许改又有料"),所以"不许改地形"总是先报,身上有没有料不提。
+ * 前一条换过的条件后面接着用(不许改地形又没料时,问的是"许改又有料"),所以"许改的不够"总是先报,身上有没有料不提。
  * 换条件的搜索与原来的同一个预算;它也搜不完,那一条就不算数。在工作线程上跑,只读快照。
  */
 final class Diagnosis {
@@ -49,9 +52,13 @@ final class Diagnosis {
         RouteSpec spec = model.spec();
         boolean hadMaterials = model.placing().isPresent();
         if (!spec.alter().mayAlter()) {
-            CostModel altering = withMaterials(model).withSpec(spec.edit().alter(RouteSpec.Alter.NATURAL).build());
-            Route route = find(failed, altering, cancelled);
-            return route != null ? new Outcome.NeedsAlter(route.alterations()) : new Outcome.NoRoute();
+            for (RouteSpec.Alter level : List.of(RouteSpec.Alter.NATURAL, RouteSpec.Alter.ANY)) {
+                Route route = find(failed, withMaterials(model).withSpec(spec.edit().alter(level).build()), cancelled);
+                if (route != null) {
+                    return new Outcome.NeedsAlter(level, route.alterations());
+                }
+            }
+            return new Outcome.NoRoute();
         }
         if (!hadMaterials && find(failed, withMaterials(model), cancelled) != null) {
             return new Outcome.NoMaterials();
@@ -60,6 +67,12 @@ final class Diagnosis {
             Route route = find(failed, model.withSpec(spec.edit().alterBudget(RouteSpec.UNLIMITED).build()), cancelled);
             if (route != null) {
                 return new Outcome.OverAlterBudget(route.alterations());
+            }
+        }
+        if (spec.alter() == RouteSpec.Alter.NATURAL) {
+            Route route = find(failed, model.withSpec(spec.edit().alter(RouteSpec.Alter.ANY).build()), cancelled);
+            if (route != null) {
+                return new Outcome.NeedsAlter(RouteSpec.Alter.ANY, route.alterations());
             }
         }
         TerrainPolicy original = model.terrain();
