@@ -2065,6 +2065,328 @@ public class BuildGameTests {
         });
     }
 
+    // ---- 施工时的走位:走出工地、绕外圈、小活不演、收场撤垫块、缺格清单 ----
+
+    /** 图纸以外、这片地板上方几层的每一格此刻是什么:查她有没有动过图纸以外的世界。 */
+    private static java.util.Map<BlockPos, BlockState> outsideDesign(GameTestHelper helper,
+                                                                    java.util.Set<BlockPos> design) {
+        java.util.Map<BlockPos, BlockState> out = new java.util.HashMap<>();
+        for (int x = 0; x < 20; x++) {
+            for (int y = 1; y < 8; y++) {
+                for (int z = 0; z < 20; z++) {
+                    BlockPos p = helper.absolutePos(new BlockPos(x, y, z));
+                    if (!design.contains(p)) {
+                        out.put(p, helper.getLevel().getBlockState(p));
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /** {@link #outsideDesign} 记下之后变过的格。 */
+    private static List<BlockPos> changedSince(GameTestHelper helper, java.util.Map<BlockPos, BlockState> before) {
+        List<BlockPos> changed = new ArrayList<>();
+        before.forEach((p, state) -> {
+            if (helper.getLevel().getBlockState(p) != state) {
+                changed.add(p);
+            }
+        });
+        return changed;
+    }
+
+    /** 这些 rel 格在世界里的位置。 */
+    private static java.util.Set<BlockPos> absolute(GameTestHelper helper, List<BlockPos> rel) {
+        java.util.Set<BlockPos> out = new java.util.HashSet<>();
+        for (BlockPos p : rel) {
+            out.add(helper.absolutePos(p));
+        }
+        return out;
+    }
+
+    /**
+     * 开工时她站在工地正中:先走出去再动手。站在图纸里会压住自己要放的格,墙砌起来还会把她关在里面——所以她的身体还碰着
+     * 工地的时候,一格都不放;走到外圈后照常盖完。
+     */
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
+    public static void build_walks_out_of_the_site_before_laying_anything(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        Dispatched build = dispatchBuild(helper, "gametest_walkout", new BlockPos(9, 2, 9),
+                boxCells(new BlockPos(6, 2, 6), 7, 1, 7, false), 1);
+        net.minecraft.world.phys.AABB site = new net.minecraft.world.phys.AABB(
+                Vec3.atLowerCornerOf(helper.absolutePos(new BlockPos(6, 2, 6))),
+                Vec3.atLowerCornerOf(helper.absolutePos(new BlockPos(13, 3, 13))));
+        boolean[] laidWhileInside = {false};
+        helper.onEachTick(() -> {
+            if (build.record().placed() > 0 && build.companion().getBoundingBox().intersects(site)) {
+                laidWhileInside[0] = true;
+            }
+        });
+        succeedWhen(helper, () -> {
+            var result = build.record().getResult();
+            helper.assertTrue(result != null, "build has not finished");
+            helper.assertTrue(result.success(), "build failed: " + result.message());
+            for (BlockPos cell : build.cells()) {
+                helper.assertTrue(level.getBlockState(cell).is(Blocks.COBBLESTONE),
+                        "structure incomplete at " + cell.toShortString());
+            }
+            helper.assertTrue(!laidWhileInside[0], "she laid cells while she was still standing in the site");
+            helper.assertTrue(!build.companion().getBoundingBox().intersects(site),
+                    "she finished the build still standing in the site");
+            CompanionFactory.despawn(level.getServer(), build.companion());
+        });
+    }
+
+    /**
+     * 平地上一床花草(花与矮草贴着地面、在她脚的高度):她绕着工地外圈走到对面去,一路不踩进图纸格,也不垫块、不挖;
+     * 建成之后,图纸以外的世界和开工前一格不差,回执里没有路上动过地形的交代。
+     */
+    @GameTest(template = "floor20", timeoutTicks = 6000, batch = "numen_build")
+    public static void build_orbits_the_site_without_entering_it_or_touching_the_ground(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 0; x < 20; x++) {
+            for (int z = 0; z < 20; z++) {
+                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, 1, z)), Blocks.GRASS_BLOCK.defaultBlockState());
+            }
+        }
+        List<BuildTaskRecord.Target> targets = new ArrayList<>();
+        java.util.Set<BlockPos> design = new java.util.HashSet<>();
+        for (int x = 6; x <= 12; x++) {
+            for (int z = 6; z <= 12; z++) {
+                BlockPos p = helper.absolutePos(new BlockPos(x, 2, z));
+                boolean flower = (x + z) % 2 == 0;
+                targets.add(flower
+                        ? new BuildTaskRecord.Target(Blocks.POPPY, Items.POPPY, p, "poppy")
+                        : new BuildTaskRecord.Target(Blocks.SHORT_GRASS, Items.SHORT_GRASS, p, "short_grass"));
+                design.add(p);
+            }
+        }
+        java.util.Map<BlockPos, BlockState> before = outsideDesign(helper, design);
+        NumenPlayer companion = spawnAt(helper, "gametest_orbiter", new BlockPos(2, 2, 9), true);
+        var ctx = TaskDispatch.ctx("gametest-orbit", companion);
+        BuildTaskRecord record = buildJob(ctx.toolCallId(), ctx.deadline(5000L), targets, false, false);
+        TaskDispatch.setTask(companion, record, null, reply -> {});
+        BlockPos[] trespass = {null};
+        double[] farthestEast = {Double.NEGATIVE_INFINITY};
+        helper.onEachTick(() -> {
+            BlockPos feet = companion.blockPosition();
+            if (trespass[0] == null && (design.contains(feet) || design.contains(feet.above()))) {
+                trespass[0] = feet;
+            }
+            farthestEast[0] = Math.max(farthestEast[0], companion.getX());
+        });
+        double eastSide = helper.absolutePos(new BlockPos(14, 2, 9)).getX();
+        succeedWhen(helper, () -> {
+            var result = record.getResult();
+            helper.assertTrue(result != null, "build has not finished");
+            helper.assertTrue(result.success(), "build failed: " + result.message());
+            for (BuildTaskRecord.Target t : targets) {
+                helper.assertTrue(t.matches(level.getBlockState(t.pos())), "bed incomplete at " + t.pos().toShortString());
+            }
+            helper.assertTrue(trespass[0] == null, "she stepped into a design cell at "
+                    + (trespass[0] == null ? "-" : trespass[0].toShortString()));
+            helper.assertTrue(farthestEast[0] >= eastSide,
+                    "she never walked round to the far side of the site (got to x=" + farthestEast[0] + ")");
+            List<BlockPos> changed = changedSince(helper, before);
+            helper.assertTrue(changed.isEmpty(), "she changed the world outside the design at " + changed);
+            helper.assertTrue(!result.message().contains("En route"),
+                    "the receipt says she altered terrain on the way: " + result.message());
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 工地东边一堵三格高的石墙从工地边一直砌到场地边,把外圈截断:她绕到墙跟前走不过去就掉头往回绕,从另一头又走到墙跟前
+     * ——墙两边她都到过,没垫块翻过去,也没挖开它;图纸以外的世界一格没变。寻路会把这堵墙挖穿或垫块翻过去,绕圈不会。
+     */
+    @GameTest(template = "floor20", timeoutTicks = 6000, batch = "numen_build")
+    public static void build_orbit_turns_back_where_the_ring_is_blocked(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 14; x < 20; x++) {
+            for (int y = 2; y <= 4; y++) {
+                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, 9)), Blocks.STONE.defaultBlockState());
+            }
+        }
+        List<BlockPos> rel = boxCells(new BlockPos(5, 2, 5), 9, 1, 9, false);
+        java.util.Map<BlockPos, BlockState> before = outsideDesign(helper, absolute(helper, rel));
+        Dispatched build = dispatchBuild(helper, "gametest_turnback", new BlockPos(1, 2, 9), rel, 2);
+        BlockPos northOfWall = helper.absolutePos(new BlockPos(15, 2, 8));
+        BlockPos southOfWall = helper.absolutePos(new BlockPos(15, 2, 10));
+        boolean[] seen = {false, false};
+        helper.onEachTick(() -> {
+            BlockPos feet = build.companion().blockPosition();
+            if (feet.getX() == northOfWall.getX() && feet.getZ() == northOfWall.getZ()) {
+                seen[0] = true;
+            }
+            if (feet.getX() == southOfWall.getX() && feet.getZ() == southOfWall.getZ()) {
+                seen[1] = true;
+            }
+        });
+        succeedWhen(helper, () -> {
+            var result = build.record().getResult();
+            helper.assertTrue(result != null, "build has not finished");
+            helper.assertTrue(result.success(), "build failed: " + result.message());
+            helper.assertTrue(seen[0] && seen[1], "she did not reach the wall from both sides (north "
+                    + seen[0] + ", south " + seen[1] + ") — she did not turn back where the ring is blocked");
+            List<BlockPos> changed = changedSince(helper, before);
+            helper.assertTrue(changed.isEmpty(), "she changed the world outside the design at " + changed);
+            helper.assertTrue(!result.message().contains("En route"),
+                    "the receipt says she altered terrain on the way: " + result.message());
+            CompanionFactory.despawn(level.getServer(), build.companion());
+        });
+    }
+
+    /** 单格的 {@code build set} 是一个动作:几刻之内放完收工,她站在原地不绕圈,没有二十五秒的演出。 */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    public static void build_set_of_one_cell_is_done_at_once_without_walking(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_one_cell", new BlockPos(2, 2, 2), true);
+        BlockPos at = helper.absolutePos(new BlockPos(8, 2, 8));
+        long[] sentAt = {0};
+        Vec3[] from = {null};
+        ToolRun[] set = {null};
+        steps(helper)
+                .thenExecute(() -> {
+                    sentAt[0] = helper.getTick();
+                    from[0] = companion.position();
+                    set[0] = command(companion, "build set stone " + xyz(at));
+                })
+                .thenWaitUntil(() -> helper.assertTrue(set[0].done(), "the build set has not finished"))
+                .thenExecute(() -> {
+                    long took = helper.getTick() - sentAt[0];
+                    helper.assertTrue(set[0].succeeded(), "build set failed: " + set[0].outcome());
+                    helper.assertTrue(level.getBlockState(at).is(Blocks.STONE), "no stone at the cell");
+                    helper.assertTrue(took <= 20, "a one-cell build set took " + took + " ticks");
+                    double moved = Math.hypot(companion.getX() - from[0].x, companion.getZ() - from[0].z);
+                    helper.assertTrue(moved < 0.5, "she walked " + moved + " blocks for a one-cell build set");
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /** 关在基岩牢里的一件建造活:她、她在牢里站的那一格、派下去的活。 */
+    private record PennedBuild(NumenPlayer companion, BlockPos pen, BuildTaskRecord record) {}
+
+    /**
+     * 她被关在一圈两格高的基岩里,只能垫块翻出去。派一件生存的活:边长 {@code planks} 的木板平台,{@code unheldFlower}
+     * 时外加一朵放在石头上的虞美人(原版不让它立在那儿)。
+     */
+    private static PennedBuild pennedBuild(GameTestHelper helper, String name, int planks, boolean unheldFlower) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 1; x <= 3; x++) {
+            for (int z = 1; z <= 3; z++) {
+                if (x == 2 && z == 2) {
+                    continue;
+                }
+                for (int y = 2; y <= 3; y++) {
+                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)), Blocks.BEDROCK.defaultBlockState());
+                }
+            }
+        }
+        NumenPlayer companion = spawnAt(helper, name, new BlockPos(2, 2, 2), false);
+        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
+        companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 64));
+        List<BuildTaskRecord.Target> targets = new ArrayList<>();
+        for (BlockPos rel : boxCells(new BlockPos(9, 2, 9), planks, 1, planks, false)) {
+            targets.add(new BuildTaskRecord.Target(Blocks.OAK_PLANKS, Items.OAK_PLANKS, helper.absolutePos(rel),
+                    "oak_planks"));
+        }
+        if (unheldFlower) {
+            companion.getInventory().add(new ItemStack(Items.POPPY));
+            targets.add(new BuildTaskRecord.Target(Blocks.POPPY, Items.POPPY,
+                    helper.absolutePos(new BlockPos(9 + planks + 1, 2, 9)), "poppy"));
+        }
+        var ctx = TaskDispatch.ctx("gametest-" + name, companion);
+        BuildTaskRecord record = buildJob(ctx.toolCallId(), ctx.deadline(6000L), targets, true, false);
+        TaskDispatch.setTask(companion, record, null, reply -> {});
+        return new PennedBuild(companion, helper.absolutePos(new BlockPos(2, 2, 2)), record);
+    }
+
+    /** 她翻墙时在牢里垫下的块还在不在(脚下那格与再上一格)。 */
+    private static boolean penStillHoldsWhatSheLaid(GameTestHelper helper, BlockPos pen) {
+        return helper.getLevel().getBlockState(pen).is(Blocks.COBBLESTONE)
+                || helper.getLevel().getBlockState(pen.above()).is(Blocks.COBBLESTONE);
+    }
+
+    /**
+     * 活干不下去(那朵虞美人立不住)时,翻墙垫下的圆石也撤掉,回执里说撤了哪几块;缺的那一格照样逐格点名。
+     */
+    @GameTest(template = "floor20", timeoutTicks = 6000, batch = "numen_build")
+    public static void blocks_put_down_on_the_way_are_taken_down_when_the_build_fails(GameTestHelper helper) {
+        PennedBuild build = pennedBuild(helper, "gametest_failed_climber", 3, true);
+        boolean[] laid = {false};
+        helper.onEachTick(() -> laid[0] |= penStillHoldsWhatSheLaid(helper, build.pen()));
+        succeedWhen(helper, () -> {
+            var result = build.record().getResult();
+            helper.assertTrue(result != null, "build has not finished");
+            helper.assertTrue(laid[0], "she never put a block down to climb out - the case did not run");
+            helper.assertTrue(!result.success(), "the build should have failed on the flower: " + result.message());
+            helper.assertTrue(!penStillHoldsWhatSheLaid(helper, build.pen()),
+                    "the cobblestone she climbed out on is still there");
+            helper.assertTrue(result.message().contains("Took down the") && result.message().contains("cobblestone"),
+                    "the receipt does not say what she took down: " + result.message());
+            helper.assertTrue(result.message().contains("poppy"), "the receipt does not name the unbuilt cell: "
+                    + result.message());
+            CompanionFactory.despawn(helper.getLevel().getServer(), build.companion());
+        });
+    }
+
+    /** 主人半路按停止:翻墙垫下的圆石当场撤掉,回执里说撤了哪几块。 */
+    @GameTest(template = "floor20", timeoutTicks = 6000, batch = "numen_build")
+    public static void blocks_put_down_on_the_way_are_taken_down_when_the_owner_stops(GameTestHelper helper) {
+        PennedBuild build = pennedBuild(helper, "gametest_stopped_climber", 5, false);
+        boolean[] laid = {false};
+        helper.onEachTick(() -> laid[0] |= penStillHoldsWhatSheLaid(helper, build.pen()));
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(build.record().completed() >= 3, "she has not laid three cells yet"))
+                .thenExecute(() -> com.dwinovo.numen.task.CompanionTickDispatcher.cancelFor(build.companion()))
+                .thenWaitUntil(() -> helper.assertTrue(build.record().getResult() != null, "the stop has not settled"))
+                .thenExecute(() -> {
+                    String message = build.record().getResult().message();
+                    helper.assertTrue(laid[0], "she never put a block down to climb out - the case did not run");
+                    helper.assertTrue(message.startsWith("the owner pressed Stop"),
+                            "the build did not end as stopped by the owner: " + message);
+                    helper.assertTrue(!penStillHoldsWhatSheLaid(helper, build.pen()),
+                            "the cobblestone she climbed out on is still there");
+                    helper.assertTrue(message.contains("Took down the") && message.contains("cobblestone"),
+                            "the receipt does not say what she took down: " + message);
+                    CompanionFactory.despawn(helper.getLevel().getServer(), build.companion());
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * 设计里两朵虞美人落在石头上:原版不让它们立在那儿。活以"立不住"收场,不是"没有路";回执按病因归堆,点名虞美人和
+     * 它们的每一格——世界坐标后面跟着它在设计里的坐标。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_build")
+    public static void cells_vanilla_will_not_hold_are_reported_one_by_one(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_unheld", new BlockPos(2, 2, 2), true);
+        BlockPos o = helper.absolutePos(new BlockPos(8, 2, 8));
+        design(companion, "gt_unheld", "build layer 0 0 0 ### --block stone", "build set poppy 0 1 0",
+                "build set poppy 2 1 0");
+        ToolRun build = command(companion, "build at gt_unheld " + xyz(o));
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(build.done(), "the build has not finished");
+            String outcome = build.outcome();
+            helper.assertTrue(!build.succeeded(), "two flowers on stone cannot be built: " + outcome);
+            helper.assertTrue(outcome.contains("vanilla physics will not hold"),
+                    "the failure is not put down to the flowers not holding: " + outcome);
+            helper.assertTrue(!outcome.contains("no route") && !outcome.contains("could not reach"),
+                    "the failure is reported as a path problem: " + outcome);
+            BlockPos first = o.offset(0, 1, 0);
+            BlockPos second = o.offset(2, 1, 0);
+            helper.assertTrue(outcome.contains("2 poppy (" + first.getX() + "," + first.getY() + "," + first.getZ()
+                            + " = design 0,1,0; " + second.getX() + "," + second.getY() + "," + second.getZ()
+                            + " = design 2,1,0)"),
+                    "the receipt does not list both flowers with their world and design coordinates: " + outcome);
+            helper.assertTrue(level.getBlockState(o).is(Blocks.STONE), "the stone under them was not built");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     /** 建造批次(重):创造同伴照真实社区图纸把整栋日式小屋盖出来。 */
     @BeforeBatch(batch = "numen_cottage_jp")
     public static void prepareJpCottageBatch(ServerLevel level) {
