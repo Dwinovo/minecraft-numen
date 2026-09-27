@@ -74,7 +74,7 @@ neoForge {
     mods {
         "${mod_id}" {
             sourceSet sourceSets.main
-            sourceSet project(':pathing').sourceSets.main
+            // 寻路模块本身随 numen-api 来(api 依赖它);这里只挂它自己的 GameTest 用例
             sourceSet project(':pathing').sourceSets.gametest
         }
     }

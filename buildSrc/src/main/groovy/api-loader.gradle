@@ -24,6 +24,8 @@ dependencies {
     // UI 组件库(纯 JVM)同理:屏幕组装层引用 widget/令牌类型,编译期要看得见;
     // 发行 jar 里的类由下方 jar 块平铺进来。
     api project(':ui')
+    // 寻路同理:同伴的身体机制在它里面,core 的适配层经它接入;发行 jar 里的类由下方 jar 块平铺进来。
+    api project(':pathing')
     compileOnly(project(':api:common')) {
         def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
         attributes {
@@ -67,13 +69,17 @@ tasks.named('sourcesJar', Jar) {
     from({ project(':ai').sourceSets.main.allSource })
     from({ project(':agent').sourceSets.main.allSource })
     from({ project(':ui').sourceSets.main.allSource })
+    from({ project(':pathing').sourceSets.main.allSource })
 }
 
 // numen-ai 的类平铺进加载器发行 jar——http/prompt 从 common 源码集迁去 ai
 // 模块后,加载器不再从源码把它们编进来,这里补回,发行 jar 内容与拆分前一致。
 // numen-agent 同理:队列与目标从 common 迁去 agent 模块,类在这里平铺回来。
+// 寻路模块对着原版的 Mojang 名编译,与本模块同一套命名:Fabric 上随后由 remapJar 连同本模块的类一起换成
+// intermediary 名,NeoForge 上原样发出。
 tasks.named('jar', Jar) {
     from({ project(':ai').sourceSets.main.output })
     from({ project(':agent').sourceSets.main.output })
     from({ project(':ui').sourceSets.main.output })
+    from({ project(':pathing').sourceSets.main.output })
 }

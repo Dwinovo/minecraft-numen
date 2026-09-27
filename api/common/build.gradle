@@ -32,6 +32,9 @@ dependencies {
     // UI 组件库(纯 JVM,零 MC 依赖):client 源码集的屏幕组装层消费它;
     // api 配置让下游 loader 也透视得到 widget/令牌类型。
     api project(':ui')
+    // 寻路(只依赖原版):假玩家的身体机制(按键、物理步进、两只手、快捷栏)只此一份,同伴的身体
+    // NumenPlayer 用它;core 的适配层经它接入寻路。api 配置让 core 与下游 loader 透视得到。
+    api project(':pathing')
 
     compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
     // fabric and neoforge both bundle mixinextras, so it is safe to use it in common
