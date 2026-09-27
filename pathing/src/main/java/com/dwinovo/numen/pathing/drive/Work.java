@@ -10,6 +10,8 @@ import com.dwinovo.numen.pathing.plan.ToolChoice;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
@@ -31,20 +33,29 @@ final class Work {
     /** 正在做的那一件;换了一件就重新拿工具、重新计看不见的刻数。 */
     private Edit current;
     private int blind;
+    /** 接坠落的那桶水已经倒下、已经收回。 */
+    private boolean poured;
+    private boolean scooped;
 
     Work(Rig rig, MoveKind move) {
         this.rig = rig;
         this.move = move;
     }
 
-    /** 这件改动做完了:挖的那一格原来的方块没了,放的那一格已经是那种方块,门已经翻过来。 */
+    /** 这件改动做完了:挖的那一格原来的方块没了,放的那一格已经是那种方块,门已经翻过来,接坠落的水倒了又收回了。 */
     boolean done(Edit edit) {
         BlockState now = rig.world().getBlockState(edit.pos());
         return switch (edit) {
             case Edit.Dig dig -> now.getBlock() != dig.state().getBlock();
             case Edit.Place place -> now.is(place.block());
             case Edit.Door door -> DoorOpener.opened(door, now);
+            case Edit.Catch caught -> scooped;
         };
+    }
+
+    /** 接坠落的水已经倒下了。 */
+    boolean poured() {
+        return poured;
     }
 
     /** 做这一件改动的这一刻。 */
@@ -62,6 +73,7 @@ final class Work {
             case Edit.Dig dig -> dig(dig);
             case Edit.Place place -> place(place);
             case Edit.Door door -> DoorOpener.tick(rig, door, hitch -> blind(door.pos(), hitch));
+            case Edit.Catch caught -> poured ? scoop(caught) : pour(caught);
         };
     }
 
@@ -123,6 +135,70 @@ final class Work {
                 yield Beat.WORKED;
             }
             case Effector.Use.Refused refused -> new Beat.Denied(refused.pos(), refused.reason());
+        };
+    }
+
+    // ==================== 接坠落的水 ====================
+
+    /**
+     * 下落途中往落点倒一桶水:水桶拿在手上,低头点落点脚下那块的顶面,右键——原版水桶顺着视线把水倒在点中的那一面前面,
+     * 就是落点那一格。
+     */
+    private Beat pour(Edit.Catch caught) {
+        ServerPlayer body = rig.entity;
+        Hotbar.Grip grip = Hotbar.grip(body, Items.WATER_BUCKET);
+        rig.act(grip.action());
+        if (!grip.ready()) {
+            return new Beat.Blocked(new Blockage(caught.pos(), rig.world().getBlockState(caught.pos()), move, null,
+                    Hitch.NO_MATERIALS));
+        }
+        Aim.Face face = Aim.face(body, caught.pos(), Blocks.WATER);
+        if (face == null) {
+            return Beat.IDLE;
+        }
+        Aim.look(body, face.point());
+        if (!(Crosshair.pick(body) instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK
+                || !hit.getBlockPos().equals(face.clicked())) {
+            return Beat.IDLE;
+        }
+        return switch (rig.hands.use(hit)) {
+            case Effector.Use.Changed changed -> {
+                rig.ledger.used(changed.changes(), caught.pos(), caught.permit());
+                poured = rig.world().getBlockState(caught.pos()).is(Blocks.WATER);
+                yield Beat.WORKED;
+            }
+            case Effector.Use.Refused refused -> new Beat.Denied(refused.pos(), refused.reason());
+            default -> Beat.IDLE;
+        };
+    }
+
+    /**
+     * 落进水里之后把水收回桶里:空桶拿在手上,低头看着脚下这一格的水,右键——原版空桶顺着视线舀起碰到的第一格水源。
+     */
+    private Beat scoop(Edit.Catch caught) {
+        ServerPlayer body = rig.entity;
+        BlockPos pos = caught.pos();
+        if (!rig.world().getBlockState(pos).is(Blocks.WATER)) {
+            scooped = true;
+            return Beat.WORKED;
+        }
+        Hotbar.Grip grip = Hotbar.grip(body, Items.BUCKET);
+        rig.act(grip.action());
+        if (!grip.ready()) {
+            return new Beat.Blocked(new Blockage(pos, rig.world().getBlockState(pos), move, null, Hitch.NO_MATERIALS));
+        }
+        Aim.look(body, new Vec3(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5));
+        if (!(Crosshair.pick(body) instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) {
+            return Beat.IDLE;
+        }
+        return switch (rig.hands.use(hit)) {
+            case Effector.Use.Changed changed -> {
+                rig.ledger.used(changed.changes(), pos, caught.permit());
+                scooped = !rig.world().getBlockState(pos).is(Blocks.WATER);
+                yield Beat.WORKED;
+            }
+            case Effector.Use.Refused refused -> new Beat.Denied(refused.pos(), refused.reason());
+            default -> Beat.IDLE;
         };
     }
 

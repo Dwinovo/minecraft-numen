@@ -69,6 +69,11 @@ final class Draft implements WorldView {
         return view.border();
     }
 
+    @Override
+    public boolean ultraWarm() {
+        return view.ultraWarm();
+    }
+
     // ==================== 结果 ====================
 
     List<Edit> edits() {
@@ -132,6 +137,20 @@ final class Draft implements WorldView {
         Block block = model.placing().orElseThrow();
         edits.add(new Edit.Place(pos.immutable(), current, block, admission.permit()));
         view.place(pos, block);
+        return true;
+    }
+
+    /**
+     * 下落摔不起时在落点 {@code pos} 倒一桶水接住(准入见 {@link CostModel#admitCatch}):草稿上这一格成了水,落点就是落进水里。
+     */
+    boolean catchFall(BlockPos pos) {
+        BlockState current = getBlockState(pos);
+        CostModel.Admission admission = model.admitCatch(this, pos, current);
+        if (!admission.ok()) {
+            return fail(pos, admission.refused(), admission.detail());
+        }
+        edits.add(new Edit.Catch(pos.immutable(), current, admission.permit()));
+        view.pour(pos);
         return true;
     }
 

@@ -18,7 +18,8 @@ import net.minecraft.core.BlockPos;
  *       就落不下去;</li>
  *   <li>迈出去不用起跳,走完落到的脚高与落点一致(第 0 层 {@link Stepping#walkOff});身体在起步的脚高上走进那一列
  *       途中挡着的格,门开关、其余挖开;</li>
- *   <li>落在硬地上时落差不超过摔落上限({@link CostModel#fallLimit});落进水里、抓住梯子不摔伤,不受这个上限。</li>
+ *   <li>落在硬地上时落差不超过摔落上限({@link CostModel#fallLimit});落进水里、抓住梯子不摔伤,不受这个上限;摔不起而身上
+ *       有水桶时,在落点倒一桶水接住(落定后收回,{@link Edit.Catch})。</li>
  * </ul>
  */
 final class Drop implements Move {
@@ -89,7 +90,11 @@ final class Drop implements Move {
         boolean wading = Strides.inWater(draft, to);
         double drop = f0 - landing.feetY();
         if (landing.grounded() && !wading && drop > model.fallLimit() + Footing.EPSILON) {
-            return Premise.fail(to, Reason.TOO_FAR_TO_FALL);
+            // 摔不起:身上有水桶就在落点倒一桶水接住,落进水里
+            if (!draft.catchFall(to)) {
+                return draft.failure();
+            }
+            wading = true;
         }
         Contact contact = new Contact(body, from, f0).column(tx, tz, landing.feetY(), f0);
         BlockPos support = landing.support(tx, tz);

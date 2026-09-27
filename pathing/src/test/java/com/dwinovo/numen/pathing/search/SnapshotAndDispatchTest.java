@@ -51,7 +51,7 @@ class SnapshotAndDispatchTest {
         LevelChunkSection[] live = chunk(heights);
         WorldBorder border = new WorldBorder();
         border.setSize(1000);
-        WorldSnapshot snapshot = WorldSnapshot.capture(heights, border, (cx, cz) -> cx == 0 && cz == 0 ? live : null, 0, 0, 1);
+        WorldSnapshot snapshot = WorldSnapshot.capture(heights, border, false, (cx, cz) -> cx == 0 && cz == 0 ? live : null, 0, 0, 1);
 
         BlockPos marked = new BlockPos(1, Y + 1, 1);
         assertEquals(Blocks.STONE, snapshot.getBlockState(marked).getBlock());
@@ -71,7 +71,7 @@ class SnapshotAndDispatchTest {
     void aSearchOnTheSnapshotStopsAtItsEdge() {
         TestWorld heights = new TestWorld();
         LevelChunkSection[] live = chunk(heights);
-        WorldSnapshot snapshot = WorldSnapshot.capture(heights, new WorldBorder(),
+        WorldSnapshot snapshot = WorldSnapshot.capture(heights, new WorldBorder(), false,
                 (cx, cz) -> cx == 0 && cz == 0 ? live : null, 0, 0, 2);
         Search search = new Search(snapshot, Fixtures.model(RouteSpec.defaults()), new BlockPos(3, Y + 1, 3),
                 Goals.at(new BlockPos(40, Y + 1, 3)), Fixtures.BUDGET, Favoring.NONE);

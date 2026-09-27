@@ -7,6 +7,7 @@ import com.dwinovo.numen.pathing.world.BodyStats;
 
 import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 
 /**
@@ -58,6 +59,16 @@ public record BodySnapshot(BodyStats stats, GameType gameMode, float health, dou
 
     public boolean creative() {
         return gameMode.isCreative();
+    }
+
+    /** 背包里有一桶水:摔不起的坠落可以倒水接住。 */
+    public boolean carriesWaterBucket() {
+        for (ItemStack stack : inventory) {
+            if (stack.is(Items.WATER_BUCKET)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 能不能挖、能不能放:冒险与旁观模式不能(原版 {@code GameType.isBlockPlacingRestricted})。 */

@@ -46,6 +46,11 @@ final class Step {
         return control != null && control.falls();
     }
 
+    /** 这一步还有收尾的事没做完,身体落在落点上也先不算走完。 */
+    boolean holds() {
+        return control != null && control.holds();
+    }
+
     Beat tick() {
         if (control == null) {
             CostModel model = Goal.guarded(goal,

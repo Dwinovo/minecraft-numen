@@ -72,4 +72,9 @@ public final class LiveWorld implements WorldView {
     public WorldBorder border() {
         return level.getWorldBorder();
     }
+
+    @Override
+    public boolean ultraWarm() {
+        return level.dimensionType().ultraWarm();
+    }
 }

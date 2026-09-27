@@ -27,6 +27,8 @@ public final class ActionCosts {
     public static final double CLIMB_DOWN_ONE = 20 / 3.0;
     /** 走到边沿并迈出去开始下落:半格走到边,再 0.3 格让身体离开边沿。 */
     public static final double WALK_OFF_EDGE = WALK_ONE_BLOCK * 0.8;
+    /** 落进倒下的水里之后,低头把水收回桶里:转头与原版两次右键之间的间隔。 */
+    public static final double SCOOP_WATER = 10;
     /** 落地后走回落点那一列的中心。 */
     public static final double CENTER_AFTER_FALL = WALK_ONE_BLOCK - WALK_OFF_EDGE;
 

@@ -14,6 +14,7 @@ import com.dwinovo.numen.pathing.world.Replaceable;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
@@ -192,6 +193,36 @@ public final class CostModel {
         return judge(TerrainPolicy.Change.PLACE, pos, current);
     }
 
+    /**
+     * 下落摔不起时在落点 {@code pos}(此刻是 {@code current})倒一桶水接住能不能进路线,依次问:身上有没有一桶水、这个维度倒不
+     * 倒得出水(没有就还是摔不起)、规格许不许改地形、按位置与按种类禁不禁、游戏模式与世界边界、这一格倒不倒得进水、
+     * 有没有能点的面(落点脚下那块的顶面)、许可怎么答(按往这一格放东西问)。
+     */
+    public Admission admitCatch(WorldView view, BlockPos pos, BlockState current) {
+        if (!body.carriesWaterBucket() || view.ultraWarm()) {
+            return Admission.refuse(Reason.TOO_FAR_TO_FALL);
+        }
+        if (!spec.alter().mayAlter()) {
+            return Admission.refuse(Reason.NEEDS_ALTER);
+        }
+        if (forbids(Use.PLACE, pos.asLong()) || spec.bans().placingInto().contains(current.getBlock())) {
+            return Admission.refuse(Reason.FORBIDDEN);
+        }
+        if (!body.mayEdit()) {
+            return Admission.refuse(Reason.EDIT_RESTRICTED);
+        }
+        if (!Bounds.allowsEdit(view.border(), view, pos)) {
+            return Admission.refuse(Reason.OUT_OF_BOUNDS);
+        }
+        if (!Replaceable.replaceableBy(current, Blocks.WATER)) {
+            return Admission.refuse(Reason.NOT_REPLACEABLE);
+        }
+        if (Faces.against(view, pos, Blocks.WATER).isEmpty()) {
+            return Admission.refuse(Reason.NO_FACE);
+        }
+        return judge(TerrainPolicy.Change.PLACE, pos, current);
+    }
+
     private Admission judge(TerrainPolicy.Change change, BlockPos pos, BlockState state) {
         Permit permit = terrain.judge(change, pos.immutable(), state);
         return switch (permit) {
@@ -228,6 +259,18 @@ public final class CostModel {
     }
 
     /**
+     * 倒一桶水接住坠落:与放一块同样的罚分与按位置加价(许可要问的乘 {@link ActionCosts#CONSENT_MULTIPLIER}),再加上落定之后
+     * 把水收回桶里的那一下。
+     */
+    public double catchCost(Edit.Catch caught) {
+        double cost = spec.placeCost() + extra(Use.PLACE, caught.pos().asLong());
+        if (caught.permit() instanceof Permit.Ask) {
+            cost *= ActionCosts.CONSENT_MULTIPLIER;
+        }
+        return cost + ActionCosts.SCOOP_WATER;
+    }
+
+    /**
      * 一步里除了身体移动本身以外的价钱,每种走法都一样加:要做的改动、身体新进入的格与落脚那一格的按位置加价、
      * 紧挨着伤身的格走过的加价、落到水里的涉水罚分。
      */
@@ -238,6 +281,7 @@ public final class CostModel {
                 case Edit.Dig dig -> digCost(dig);
                 case Edit.Place place -> placeCost(place);
                 case Edit.Door door -> 0;
+                case Edit.Catch caught -> catchCost(caught);
             };
         }
         for (long cell : m.cells()) {

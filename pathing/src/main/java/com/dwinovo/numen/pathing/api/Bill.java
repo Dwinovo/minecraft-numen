@@ -36,14 +36,22 @@ public record Bill(int steps, List<BlockPos> digs, List<BlockPos> places, List<C
         List<BlockPos> places = new ArrayList<>();
         List<Consent> consents = new ArrayList<>();
         for (Edit edit : route.edits()) {
-            switch (edit) {
-                case Edit.Dig dig -> digs.add(dig.pos());
-                case Edit.Place place -> places.add(place.pos());
-                case Edit.Door door -> {
-                    continue;
+            Permit permit = switch (edit) {
+                case Edit.Dig dig -> {
+                    digs.add(dig.pos());
+                    yield dig.permit();
                 }
-            }
-            Permit permit = edit instanceof Edit.Dig d ? d.permit() : ((Edit.Place) edit).permit();
+                case Edit.Place place -> {
+                    places.add(place.pos());
+                    yield place.permit();
+                }
+                // 接住坠落的那桶水也是往那一格放了东西,落定后收回
+                case Edit.Catch caught -> {
+                    places.add(caught.pos());
+                    yield caught.permit();
+                }
+                case Edit.Door door -> null;
+            };
             if (permit instanceof Permit.Ask ask) {
                 consents.add(new Consent(edit.pos(), ask.credential()));
             }

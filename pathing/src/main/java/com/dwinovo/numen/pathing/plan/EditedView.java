@@ -7,6 +7,7 @@ import com.dwinovo.numen.pathing.world.Semantics;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -41,6 +42,9 @@ public final class EditedView implements WorldView {
                 case Edit.Dig dig -> view.dig(dig.pos());
                 case Edit.Place place -> view.place(place.pos(), place.block());
                 case Edit.Door door -> view.toggle(door.pos());
+                // 倒下的水在这一步里就收回了
+                case Edit.Catch caught -> {
+                }
             }
         }
         return view;
@@ -56,6 +60,11 @@ public final class EditedView implements WorldView {
     /** 放下一块 {@code block}。 */
     void place(BlockPos pos, Block block) {
         changed.put(pos.asLong(), block.defaultBlockState());
+    }
+
+    /** 倒一桶水:这一格成了水源。 */
+    void pour(BlockPos pos) {
+        changed.put(pos.asLong(), Blocks.WATER.defaultBlockState());
     }
 
     /** 开关一扇门;门的另一半照原版一起翻转。 */
@@ -107,5 +116,10 @@ public final class EditedView implements WorldView {
     @Override
     public WorldBorder border() {
         return base.border();
+    }
+
+    @Override
+    public boolean ultraWarm() {
+        return base.ultraWarm();
     }
 }

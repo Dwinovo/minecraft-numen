@@ -328,7 +328,7 @@ public final class Driver {
 
     /** 按身体落在了哪个节点认步:往后认、往回退,或者认出落在了路线之外。 */
     private void track(BlockPos node) {
-        if (node == null) {
+        if (node == null || step != null && step.holds()) {
             return;
         }
         int last = Math.min(cur + WINDOW, legs.size());

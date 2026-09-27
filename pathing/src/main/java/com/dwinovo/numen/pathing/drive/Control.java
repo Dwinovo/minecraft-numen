@@ -62,6 +62,11 @@ abstract class Control {
         return false;
     }
 
+    /** 身体已经落在这一步的落点上,这一步却还有收尾的事没做完(比如把接坠落的水收回):段状态机先不往后认步。 */
+    boolean holds() {
+        return false;
+    }
+
     // ==================== 改动 ====================
 
     /** 下一件还没做完的改动;前 {@code until} 件都做完了为 null。 */

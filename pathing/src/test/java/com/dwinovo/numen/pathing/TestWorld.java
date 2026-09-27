@@ -68,6 +68,11 @@ public final class TestWorld implements SearchView {
     }
 
     @Override
+    public boolean ultraWarm() {
+        return false;
+    }
+
+    @Override
     public BlockEntity getBlockEntity(BlockPos pos) {
         return null;
     }

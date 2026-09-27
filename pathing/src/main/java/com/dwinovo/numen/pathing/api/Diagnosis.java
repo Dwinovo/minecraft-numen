@@ -69,13 +69,13 @@ final class Diagnosis {
         }), cancelled);
         if (route != null) {
             for (Edit edit : route.edits()) {
-                if (!edit.alters()) {
-                    continue;
-                }
-                TerrainPolicy.Change change = edit instanceof Edit.Dig ? TerrainPolicy.Change.DIG
-                        : TerrainPolicy.Change.PLACE;
-                var state = edit instanceof Edit.Dig dig ? dig.state() : ((Edit.Place) edit).replaced();
-                if (original.judge(change, edit.pos(), state) instanceof Permit.Deny deny) {
+                Permit permit = switch (edit) {
+                    case Edit.Dig dig -> original.judge(TerrainPolicy.Change.DIG, dig.pos(), dig.state());
+                    case Edit.Place place -> original.judge(TerrainPolicy.Change.PLACE, place.pos(), place.replaced());
+                    case Edit.Catch caught -> original.judge(TerrainPolicy.Change.PLACE, caught.pos(), caught.replaced());
+                    case Edit.Door door -> Permit.ALLOW;
+                };
+                if (permit instanceof Permit.Deny deny) {
                     return new Outcome.Denied(edit.pos(), deny.reason());
                 }
             }

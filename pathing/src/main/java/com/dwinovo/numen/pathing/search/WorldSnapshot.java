@@ -40,10 +40,11 @@ public final class WorldSnapshot implements SearchView {
     private final int height;
     private final int minSection;
     private final WorldBorder border;
+    private final boolean ultraWarm;
 
     @SuppressWarnings("unchecked")
-    private WorldSnapshot(LevelHeightAccessor heights, WorldBorder border, Sections source, int centerX, int centerZ,
-                          int radius) {
+    private WorldSnapshot(LevelHeightAccessor heights, WorldBorder border, boolean ultraWarm, Sections source,
+                          int centerX, int centerZ, int radius) {
         this.minChunkX = centerX - radius;
         this.minChunkZ = centerZ - radius;
         this.side = 2 * radius + 1;
@@ -52,6 +53,7 @@ public final class WorldSnapshot implements SearchView {
         this.height = heights.getHeight();
         this.minSection = heights.getMinSection();
         this.border = copy(border);
+        this.ultraWarm = ultraWarm;
         for (int i = 0; i < side; i++) {
             for (int j = 0; j < side; j++) {
                 LevelChunkSection[] sections = source.of(minChunkX + i, minChunkZ + j);
@@ -83,19 +85,19 @@ public final class WorldSnapshot implements SearchView {
      * {@code level} 所在的线程上调用;不加载任何区块。
      */
     public static WorldSnapshot capture(Level level, int centerX, int centerZ, int radius) {
-        return capture(level, level.getWorldBorder(), (cx, cz) -> {
+        return capture(level, level.getWorldBorder(), level.dimensionType().ultraWarm(), (cx, cz) -> {
             LevelChunk chunk = level.getChunkSource().getChunkNow(cx, cz);
             return chunk == null ? null : chunk.getSections();
         }, centerX, centerZ, radius);
     }
 
-    /** 同上,方块段、建筑高度与世界边界由调用方给出。 */
-    public static WorldSnapshot capture(LevelHeightAccessor heights, WorldBorder border, Sections source,
-                                        int centerX, int centerZ, int radius) {
+    /** 同上,方块段、建筑高度、世界边界与维度倒不倒得出水由调用方给出。 */
+    public static WorldSnapshot capture(LevelHeightAccessor heights, WorldBorder border, boolean ultraWarm,
+                                        Sections source, int centerX, int centerZ, int radius) {
         if (radius < 0) {
             throw new IllegalArgumentException("半径不能为负:" + radius);
         }
-        return new WorldSnapshot(heights, border, source, centerX, centerZ, radius);
+        return new WorldSnapshot(heights, border, ultraWarm, source, centerX, centerZ, radius);
     }
 
     /** 世界边界抄一份静止的:正在缩放的边界按此刻的大小。 */
@@ -156,5 +158,10 @@ public final class WorldSnapshot implements SearchView {
     @Override
     public WorldBorder border() {
         return border;
+    }
+
+    @Override
+    public boolean ultraWarm() {
+        return ultraWarm;
     }
 }

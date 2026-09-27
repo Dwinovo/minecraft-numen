@@ -238,6 +238,22 @@ class MovesTest {
     }
 
     @Test
+    void aFallTooDeepIsCaughtWithWaterOnlyWhenABucketIsCarriedAndTheSpecMayAlter() {
+        TestWorld cliff = ledge(12);
+        BodySnapshot bucket = Fixtures.carrying(0, new ItemStack(net.minecraft.world.item.Items.WATER_BUCKET));
+        CostModel natural = CostModel.of(natural(), bucket, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+        Maneuver m = holds(MoveKind.FALL, natural, cliff, AT, EAST);
+        assertTrue(m.wading(), "落进自己倒下的水里");
+        Edit.Catch caught = assertInstanceOf(Edit.Catch.class, m.edits().get(m.edits().size() - 1));
+        assertEquals(m.to(), caught.pos(), "水倒在落点那一格");
+        // 没带水桶,还是摔不起
+        assertEquals(Reason.TOO_FAR_TO_FALL, fails(MoveKind.FALL, Fixtures.model(natural()), cliff, AT, EAST).reason());
+        // 带着水桶,但规格不许改地形
+        CostModel none = CostModel.of(RouteSpec.defaults(), bucket, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+        assertEquals(Reason.NEEDS_ALTER, fails(MoveKind.FALL, none, cliff, AT, EAST).reason());
+    }
+
+    @Test
     void theFallLimitTightensWithHealthAndTheSpecCanOnlyTightenIt() {
         RouteSpec loose = RouteSpec.defaults().edit().maxFallHeightNoWater(10).build();
         CostModel healthy = CostModel.of(loose, Fixtures.body(20), TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
@@ -429,6 +445,21 @@ class MovesTest {
         Maneuver m = holds(MoveKind.WALK, defaults(), world, AT, EAST);
         assertTrue(m.wading());
         assertFalse(m.sprint(), "水里不疾跑");
+    }
+
+    @Test
+    void aFrostWalkerWalksOverStillWaterThatHasAirAbove() {
+        // 一池两格深的静水,水面与岸齐平:穿冰霜行者的身体踩着水面走过去,脚在水面那一层之上
+        TestWorld world = pool(2);
+        BodySnapshot frost = new BodySnapshot(Vanilla.FROST_WALKER, GameType.SURVIVAL, 20, 3, 1, 20, 0, List.of(),
+                BodySnapshot.Mining.VANILLA);
+        CostModel model = CostModel.of(RouteSpec.defaults(), frost, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+        BlockPos shore = new BlockPos(-5, Y, 0);
+        Maneuver m = holds(MoveKind.WALK, model, world, shore, EAST);
+        assertTrue(m.landing().grounded(), "站在冻住的水面上");
+        assertEquals(Y, m.landing().feetY(), 1e-9);
+        // 不穿的身体在同一处平走过去就得在水面上搭桥
+        assertEquals(Reason.NEEDS_ALTER, fails(MoveKind.WALK, defaults(), world, shore, EAST).reason());
     }
 
     // ==================== 细雪 ====================
