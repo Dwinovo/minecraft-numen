@@ -4,6 +4,7 @@ import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
+import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.core.tools.PerceptionOps;
@@ -20,6 +21,8 @@ import java.util.List;
  * {@code scan_nearby_entities}、{@code inspect_block});{@code storage} 用得少,只留命令。
  */
 public final class ScanCommands {
+
+    private static final String GROUP = "scan";
 
     private static final PerceptionOps PERCEPTION = new PerceptionOps();
     private static final ScanOps SCAN = new ScanOps();
@@ -44,7 +47,7 @@ public final class ScanCommands {
     private ScanCommands() {}
 
     public static void install(NumenApi numen) {
-        numen.registerCommands("scan", "Look around you: the ground map, where blocks are, who is near, one block "
+        numen.registerCommands(GROUP, "Look around you: the ground map, where blocks are, who is near, one block "
                 + "and what it holds.", ScanCommands::actions);
     }
 
@@ -67,38 +70,44 @@ public final class ScanCommands {
                         + "by cell across the grid. For far-away or specific blocks/entities use scan_blocks / "
                         + "scan_nearby_entities. Optional `radius` (4-16, default 8).");
         scan.server("blocks", "Find blocks of the given types near you, reported as groups of touching blocks.",
-                        ScanCommands::blocks, SEARCH_RADIUS, BLOCK_IDS)
+                        ScanCommands::blocks, SEARCH_RADIUS, BLOCK_IDS, Listing.PAGE)
                 .example("scan blocks 32 iron_ore deepslate_iron_ore")
                 .example("scan blocks 16 #minecraft:beds")
+                .example("scan blocks 32 iron_ore deepslate_iron_ore --page 2")
                 .note("Read-only; the reply comes when the search is done. Name every variant you want.")
-                .note("Group ids (g1, g2, ...) stay good only until your next `scan blocks`.")
+                .note("One group per line, nearest first; a long list comes in pages. --page turns the pages of "
+                        + "your latest scan without scanning again, so its group ids stay the same.")
+                .note("Group ids (g1, g2, ...) stay good only until your next `scan blocks` without --page.")
                 .note("Only loaded terrain is read: anything further out is UNKNOWN, not empty.")
                 .seeAlso("scan block", "scan around")
                 .promote("scan_blocks", "Find blocks of given type(s) near you, reported as GROUPS: matching cells "
                         + "that touch (diagonals count) and get the same permission answer for breaking them — so a "
-                        + "player's log pillar standing against a wild tree comes back as two groups. Nearest groups "
-                        + "first, up to 16; groups_total counts them all when the whole radius was read. Each group "
-                        + "gives: id, cells and a count per block type, the nearest cell with direction and "
+                        + "player's log pillar standing against a wild tree comes back as two groups. One group per "
+                        + "line (a JSON object), nearest first; groups_total counts them all when the whole radius was "
+                        + "read. A long list comes in pages: pass page to read the next one — it turns the pages of "
+                        + "your latest scan without scanning again, so the ids stay the same. Each group gives: id, cells and a count per block type, the nearest cell with direction and "
                         + "distance, a box (x1,y1,z1..x2,y2,z2 — the form avoid_break takes), permission for "
                         + "breaking its cells (allow; ask = mine asks the owner first; deny = mine stops) with the "
                         + "reason, sources = source cells for water or lava (a source behaves very differently from "
                         + "flowing), and for groups of up to 16 cells every position. A very large group comes back "
                         + "cut along 16-block section lines, one group per piece. Group ids (g1, g2, ...) are valid "
-                        + "only until your next scan_blocks; to dig exactly those cells, pass them to mine as "
+                        + "only until your next scan_blocks without page; to dig exactly those cells, pass them to mine as "
                         + "groups. Sees terrain that is loaded right now; anything further out is UNKNOWN, not "
                         + "empty, and note says when that happened — walk that way and scan again. Give every "
                         + "variant of what you want, e.g. both iron_ore and deepslate_iron_ore.");
         scan.server("entities", "List the entities near you, nearest first, with the ids other actions take.",
-                        ScanCommands::entities, ENTITY_RADIUS, TYPE_FILTER)
+                        ScanCommands::entities, ENTITY_RADIUS, TYPE_FILTER, Listing.PAGE)
                 .example("scan entities 24 hostile")
                 .example("scan entities 12 all")
-                .note("Instant and read-only. At most 20; truncated:true means more exist.")
+                .example("scan entities 64 all --page 2")
+                .note("Instant and read-only. One entity per line, nearest first; a long list comes in pages, and "
+                        + "each page is read fresh, so things that moved may shift between pages.")
                 .note("The ids are runtime ids: they do not survive a restart.")
                 .seeAlso("scan around")
                 .promote("scan_nearby_entities", "List entities within a radius around you, sorted by distance. Use "
                         + "type_filter to narrow: 'hostile' for monsters, 'passive' for animals/items, 'player' for "
-                        + "players, 'all' for everything. Returns at most 20 entities; truncated:true means more "
-                        + "exist. Each entry has id, type, position, distance, hp, and category. Pass the returned "
+                        + "players, 'all' for everything. One entity per line (a JSON object); a long list comes in "
+                        + "pages — pass page to read the next one. Each entry has id, type, position, distance, hp, and category. Pass the returned "
                         + "runtime ids to `fight attack`; it cannot attack anything outside that set.");
         scan.server("block", "One block: its id and state, hardness, whether your held tool is right, dig time, "
                         + "whether it is in reach.",
@@ -113,7 +122,7 @@ public final class ScanCommands {
                         + "to confirm the operation will succeed, or to check which end_portal_frame cells "
                         + "still need an ender_eye.");
         scan.server("storage", "What a block holds — items, fluid, energy — read without opening it.",
-                        ScanCommands::storage, X, Y, Z)
+                        ScanCommands::storage, X, Y, Z, Listing.PAGE)
                 .example("scan storage 120 64 -35")
                 .note("Instant and read-only, from any distance; nothing is opened or moved.")
                 .note("Works on chests, furnaces and most modded machines, tanks and batteries. Storage-network "
@@ -129,11 +138,13 @@ public final class ScanCommands {
 
     /** 搜索按刻分片,回执在搜完的那一刻经回信口送出。 */
     private static void blocks(ServerSource src, CommandArgs args) {
-        SCAN.scanBlocks(args.get(SEARCH_RADIUS), args.get(BLOCK_IDS), src.companion(), src::reply);
+        SCAN.scanBlocks(args.get(SEARCH_RADIUS), args.get(BLOCK_IDS), src.companion(),
+                args.write(GROUP + " blocks", List.of(SEARCH_RADIUS, BLOCK_IDS)), args, src::reply);
     }
 
     private static void entities(ServerSource src, CommandArgs args) {
-        src.reply(QUERY.scanNearbyEntities(args.get(ENTITY_RADIUS), args.get(TYPE_FILTER), src.companion()));
+        src.reply(QUERY.scanNearbyEntities(args.get(ENTITY_RADIUS), args.get(TYPE_FILTER), src.companion(), args,
+                args.write(GROUP + " entities", List.of(ENTITY_RADIUS, TYPE_FILTER))));
     }
 
     private static void block(ServerSource src, CommandArgs args) {
@@ -141,6 +152,7 @@ public final class ScanCommands {
     }
 
     private static void storage(ServerSource src, CommandArgs args) {
-        src.reply(QUERY.inspectBlockStorage(args.get(X), args.get(Y), args.get(Z), src.companion()));
+        src.reply(QUERY.inspectBlockStorage(args.get(X), args.get(Y), args.get(Z), src.companion(), args,
+                args.write(GROUP + " storage", List.of(X, Y, Z))));
     }
 }

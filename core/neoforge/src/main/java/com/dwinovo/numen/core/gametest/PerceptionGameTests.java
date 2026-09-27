@@ -126,15 +126,25 @@ public class PerceptionGameTests {
         ToolRun viaCommand = command(companion, "scan entities 12 all");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(all.reply().contains("\"id\":" + pig.getId()) && all.reply().contains("pig"),
+            helper.assertTrue(listsEntity(all, pig) && all.reply().contains("pig"),
                     "the pig is not listed with its id: " + all.reply());
-            helper.assertTrue(!hostile.reply().contains("\"id\":" + pig.getId()),
+            helper.assertTrue(!listsEntity(hostile, pig),
                     "the pig is listed as hostile: " + hostile.reply());
             helper.assertTrue(all.reply().equals(viaCommand.reply()),
                     "scan_nearby_entities and scan entities list differently: " + all.reply() + " / "
                             + viaCommand.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
+    }
+
+    /** {@code scan entities} 的这一页有没有列出这只实体(按它的运行期编号)。 */
+    private static boolean listsEntity(ToolRun scan, net.minecraft.world.entity.Entity entity) {
+        for (var row : rowsIn(scan.reply())) {
+            if (row.getAsJsonObject().get("id").getAsInt() == entity.getId()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 她自己的状态:手里的剑、背包用了几格、血与饥饿都照实报。 */

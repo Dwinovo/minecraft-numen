@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
+import com.dwinovo.numen.cli.CommandArgs;
+import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.scan.BlockGroups;
 import com.dwinovo.numen.core.scan.BlockScanner;
@@ -18,6 +20,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -31,27 +34,33 @@ import java.util.function.Consumer;
  * result arrives on a later tick through the callback.
  *
  * <p>结果按团给出({@link BlockGroups}):每一格先拿挖掘落点会提交的同一个动作问权限层,相连且说法相同的格子
- * 成一团;最近的那些团记进身体上的团编号簿({@link GroupBook}),供 {@code mine groups} 取用。
+ * 成一团,由近及远;每一团都记进身体上的团编号簿({@link GroupBook}),供 {@code mine groups} 取用。
+ *
+ * <p>团一条一行(一个 JSON 对象),按输出预算分页({@link Listing})。翻页不重新扫:团的编号只在一次扫描里有效,重扫一遍
+ * 就是另一批编号,前一页上的编号跟着作废。所以 {@code --page} 翻的是簿子里存着的那一次扫描({@link GroupBook#page}),
+ * 不带 {@code --page} 才扫。
  */
 public final class ScanOps {
 
     private static final int MIN_RADIUS = 1;
     private static final int MAX_RADIUS = 192;
     /**
-     * 回执最多给出多少团(离她最近的那些),其余只计数。团比格子粗:从前按格给 32 个,常常只是三四棵树的
-     * 原木;16 团覆盖的地面更大,字数却相当。
-     */
-    static final int MAX_GROUPS = 16;
-    /**
      * 不超过这么多格的团逐格列出坐标,更大的只给摘要(格数、最近一格、包围盒)。要够一圈末地传送门框架的
      * 12 格(stronghold_finding 靠它找门),够一棵普通树或一小撮矿;再多就是清单不是事实了。
      */
     static final int LIST_CELLS_UP_TO = 16;
 
-    public void scanBlocks(
-int radius,
-List<String> block_ids,
-            NumenPlayer self, Consumer<String> reply) {
+    /**
+     * 扫一次,回执是结果的第一页;带了 {@code --page} 就翻簿子里存着的那一次,不重新扫。
+     *
+     * @param again 这一次扫描本身的那一行(不带 {@code --page}):翻页提示写它,簿子也按它认"是不是这一次"
+     */
+    public void scanBlocks(int radius, List<String> block_ids, NumenPlayer self, String again, CommandArgs args,
+                           Consumer<String> reply) {
+        if (args.get(Listing.PAGE) != null) {
+            reply.accept(GroupBook.of(self).page(again, args));
+            return;
+        }
         int r = Math.clamp(radius, MIN_RADIUS, MAX_RADIUS);
         Set<Block> targets = ToolParse.parseBlocks(block_ids);
         if (targets.isEmpty()) {
@@ -64,7 +73,7 @@ List<String> block_ids,
         Judged judged = new Judged(self, sl, targets);
         // want 取收集上限:团要整团给,不能在"最近的几格已经证明"时就停,走满半径,内存由上限兜住
         BlockSearch.start(self.getUUID(), sl, center, r, BlockSearch.MAX_COLLECT, targets, judged,
-                result -> reply.accept(buildResult(result, judged.groups, r, center, GroupBook.of(self))));
+                result -> reply.accept(buildResult(result, judged.groups, r, center, GroupBook.of(self), again, args)));
     }
 
     /**
@@ -122,31 +131,39 @@ List<String> block_ids,
         return notes.isEmpty() ? null : String.join("; ", notes);
     }
 
+    /**
+     * 整理这一次扫描:每一团编号、一团一行,存进簿子,回执是要的那一页。抬头说在哪、多远、找到几团;没扫全时抬头只说
+     * "读到的那部分里"有几团,结尾说清哪里没读到。{@code data} 是整次的小结,不随页变。
+     */
     private static String buildResult(BlockSearch.ScanResult res, BlockGroups groups, int radius, BlockPos center,
-                                      GroupBook book) {
-        BlockGroups.Grouped grouped = groups.grouped(center, MAX_GROUPS);
-        List<BlockGroups.Group> nearest = grouped.nearest();
-        List<String> ids = book.replace(nearest.stream().map(BlockGroups.Group::cells).toList());
-        JsonArray out = new JsonArray();
-        for (int i = 0; i < nearest.size(); i++) {
-            out.add(groupJson(ids.get(i), nearest.get(i), center));
+                                      GroupBook book, String again, CommandArgs args) {
+        List<BlockGroups.Group> all = groups.grouped(center);
+        List<String> ids = book.replace(all.stream().map(BlockGroups.Group::cells).toList());
+        List<String> rows = new ArrayList<>(all.size());
+        for (int i = 0; i < all.size(); i++) {
+            rows.add(groupJson(ids.get(i), all.get(i), center).toString());
         }
-        JsonObject root = new JsonObject();
-        root.add("groups", out);
+        Map<String, Object> data = new LinkedHashMap<>();
         // A total only when the walk actually covered the sphere. Cut short — hit the section cap or
         // the collect cap, skipped unloaded ground — whatever it saw is an artifact of stopping,
-        // and a number in this slot gets read as "that is how much is there".
-        if (res.coveredEverything()) {
-            root.addProperty("groups_total", grouped.total());
-        }
-        root.addProperty("truncated", grouped.total() > nearest.size() || !res.coveredEverything());
-        root.addProperty("radius_searched", radius);
+        // and a number in this slot gets read as "that is how much is there". The head says the
+        // same thing in words.
+        boolean whole = res.coveredEverything();
         String note = coverageNote(res);
-        if (note != null) {
-            root.addProperty("note", note);
+        String where = whole
+                ? " within " + radius + " blocks of " + cell(center)
+                : " in the part of the " + radius + "-block radius around " + cell(center) + " that was read"
+                        + (note == null ? "" : " (the note at the end says what was not)");
+        if (whole) {
+            data.put("groups_total", all.size());
         }
-        root.add("center", xyz(center));
-        return root.toString();
+        data.put("radius_searched", radius);
+        String head = all.isEmpty()
+                ? "No groups" + where + "."
+                : all.size() + " group(s)" + where + ", nearest first, one per line:";
+        Listing listing = new Listing(head, rows, note == null ? "" : "Note: " + note, again);
+        book.listed(listing, data);
+        return listing.result(args, data).toJson();
     }
 
     /**

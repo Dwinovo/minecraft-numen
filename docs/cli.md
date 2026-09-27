@@ -880,15 +880,25 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
   - `memory recall`:札记正文按行分页;
   - `use gui`:按槽分页(模组的大容器);
   - `tlm models`:包级摘要与搜索结果按行分页,原来的"搜索至多 40 条"(悄悄截断,还报成"找到 40 个")删掉;
-  - `ysm options`:能换的模型一行一个分页,`data` 不再带整份模型清单。
+  - `ysm options`:能换的模型一行一个分页,`data` 不再带整份模型清单;
+  - `scan blocks`(快捷工具 `scan_blocks` 多了 `page`):原来"至多 16 团、其余只计数"删掉,一团一行(一个 JSON 对象)由近及远
+    分页。翻页不重扫:团的编号只在一次扫描里有效,重扫就是另一批编号,所以 `--page` 翻的是团簿里存着的那一次
+    (`GroupBook.page`),要翻的不是最新那一次就如实说、叫她先不带 `--page` 扫。没扫全时抬头只说"读到的那部分里"有几团,
+    `groups_total` 照旧只在扫全时给;
+  - `scan entities`(`scan_nearby_entities` 多了 `page`):原来"至多 20 只、truncated"删掉,一只一行由近及远分页;翻页现读,
+    实体会走动,编号在它还在世界里时不变;
+  - `inv recipe`:原来"至多 4 条配方"(悄悄截断,不说一共几条)删掉,一条配方一个条目分页,各工位的做法在结尾;配料是标签
+    又没有共同后缀时原来只列 3 个成员接省略号,现在全列;
+  - `kaleidoscope recipes`:原来"至多 30 行"删掉,一道菜一行分页,`data` 只留不随页变的品质说明;
+  - `scan storage`:原来"每个物品栏至多 64 行,其余只计数"删掉。加载器的读法(`IBlockCapabilityReader.describe`)交回一行
+    一条,命令按预算分页。
 - **原来就分页的**:`build designs`、`build built`、`ftbquests list`,换成按预算切页。
 - **审查过、判为有界的**(不分页,理由):
-  - `scan around` 半径夹在 4–16;`scan blocks` 至多 16 团;`scan entities` 至多 20 只;`inv recipe` 至多 4 条配方;
-    `kaleidoscope recipes` 至多 30 行;`task status` / `task timer` 表至多 8 个;`move route` 至多 3 条路线;
-  - `ftbquests show`:一个任务的正文(截到 600 字)、依赖、任务项与奖励,随这一个任务的定义有界;它的参数吃掉余下整行,
-    也挂不上 `--page`;`ftbquests submit`:每个任务项一行,同样随一个任务有界;
+  - `scan around` 半径夹在 4–16;`task status` / `task timer` 表至多 8 个;`move route` 至多 3 条路线;
+  - `ftbquests show`:一个任务的正文(整段给出;原来截到 600 字,截掉的她无处可看,删掉)、依赖、任务项与奖励,随这一个
+    任务的定义有界;它的参数吃掉余下整行,也挂不上 `--page`;`ftbquests submit`:每个任务项一行,同样随一个任务有界;
   - `throwaway` 四个动作:回执读回整份清单,清单只随她一次次写 id 变长(一次调用至多一个上行包),同一份清单每轮就在身体
-    状态里;
-  - `fight attack` 不点名时收尾的名单随十分钟时限有界;`scan storage` 每个物品栏至多 64 行;`use block` 等收尾里新出现
+    状态里。回执与寻路没料时的那句话里"背包里还没进清单的方块"原来各截到 12 种、6 种,现在全列:种数不会多过背包的格数;
+  - `fight attack` 不点名时收尾的名单随十分钟时限有界;`use block` 等收尾里新出现
     实体的行在半径 6 格内;后台任务收尾里"路上动了什么"按方块种类归堆。
   - 其余动作都是一个对象的回执,字段固定。

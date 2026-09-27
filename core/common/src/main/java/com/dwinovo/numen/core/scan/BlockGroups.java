@@ -55,9 +55,6 @@ public final class BlockGroups {
     public record Group(Map<BlockPos, Block> cells, Verdict verdict, BlockPos nearest, double distance,
                        BlockPos min, BlockPos max, Map<Block, Integer> counts, int fluidCells, int sources) {}
 
-    /** 离中心最近的若干团,和一共分出了多少团。 */
-    public record Grouped(List<Group> nearest, int total) {}
-
     private final Long2IntOpenHashMap indexOf = new Long2IntOpenHashMap();
     private final LongArrayList cells = new LongArrayList();
     private final List<BlockState> states = new ArrayList<>();
@@ -97,11 +94,8 @@ public final class BlockGroups {
         return cells.size();
     }
 
-    /**
-     * 分团:连通块,超过 {@link #SPLIT_ABOVE} 的按 section 切块;按离 {@code center} 最近的那一格排,
-     * 只为最近的 {@code limit} 团整理出格子清单,其余只计数。
-     */
-    public Grouped grouped(BlockPos center, int limit) {
+    /** 分团:连通块,超过 {@link #SPLIT_ABOVE} 的按 section 切块;按离 {@code center} 最近的那一格由近及远排。 */
+    public List<Group> grouped(BlockPos center) {
         Int2ObjectLinkedOpenHashMap<IntArrayList> components = new Int2ObjectLinkedOpenHashMap<>();
         for (int i = 0; i < cells.size(); i++) {
             components.computeIfAbsent(find(i), k -> new IntArrayList()).add(i);
@@ -131,11 +125,11 @@ public final class BlockGroups {
             nearestSq[p] = best;
         }
         IntArrays.quickSort(order, (a, b) -> Long.compare(nearestSq[a], nearestSq[b]));
-        List<Group> nearest = new ArrayList<>(Math.min(limit, order.length));
-        for (int k = 0; k < Math.min(limit, order.length); k++) {
-            nearest.add(build(pieces.get(order[k]), center));
+        List<Group> groups = new ArrayList<>(order.length);
+        for (int k : order) {
+            groups.add(build(pieces.get(k), center));
         }
-        return new Grouped(nearest, pieces.size());
+        return groups;
     }
 
     private Group build(IntArrayList piece, BlockPos center) {

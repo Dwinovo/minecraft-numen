@@ -252,7 +252,7 @@ public final class ThrowawayBlocks {
      * 原因,别把模型往岔路上引)。
      *
      * <p>光说"没料"没用:清单是她自己定的,背包里那 184 块模组花岗岩她也看不见。所以两样都端
-     * 出来,让"清单漏了"从死路变成一个能自己走出去的岔路口。
+     * 出来,让"清单漏了"从死路变成一个能自己走出去的岔路口。背包里的方块一样不落地列:种数不会多过背包的格数。
      */
     public static String shortageAdvice(ServerPlayer player) {
         List<Item> accepted = of(player);
@@ -277,7 +277,6 @@ public final class ThrowawayBlocks {
         }
         String carrying = spare.entrySet().stream()
                 .sorted((a, b) -> Integer.compare(b.getValue(), a.getValue()))
-                .limit(6)
                 .map(e -> e.getKey() + "×" + e.getValue())
                 .reduce((a, b) -> a + ", " + b)
                 .orElse("");

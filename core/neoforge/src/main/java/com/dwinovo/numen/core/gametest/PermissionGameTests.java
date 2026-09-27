@@ -333,9 +333,9 @@ public class PermissionGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(reply.reply() != null, "scan_blocks has not replied");
-            var root = com.google.gson.JsonParser.parseString(reply.reply()).getAsJsonObject();
-            var groups = root.getAsJsonArray("groups");
-            helper.assertTrue(groups.size() == 2 && root.has("groups_total") && root.get("groups_total").getAsInt() == 2,
+            var data = com.google.gson.JsonParser.parseString(reply.reply()).getAsJsonObject().getAsJsonObject("data");
+            var groups = groupsIn(reply.reply());
+            helper.assertTrue(groups.size() == 2 && data.has("groups_total") && data.get("groups_total").getAsInt() == 2,
                     "expected exactly two groups: " + reply.reply());
             var owners = groupHolding(groups, helper.absolutePos(pillar.get(0)));
             var wild = groupHolding(groups, helper.absolutePos(tree.get(0)));

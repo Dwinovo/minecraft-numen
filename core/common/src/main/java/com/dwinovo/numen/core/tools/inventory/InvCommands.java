@@ -5,6 +5,7 @@ import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
+import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.core.WorkProfile;
@@ -17,6 +18,8 @@ import com.dwinovo.numen.task.TaskResult;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+
+import java.util.List;
 
 /**
  * {@code inv}:背包里的东西——合成、查配方、吃、丢,以及创造模式里凭空取。
@@ -86,9 +89,9 @@ public final class InvCommands {
                         + "`use block` it, `use gui`, then `use shift` or `use transfer` the items in.")
                 .seeAlso(line(RECIPE));
         inv.server(RECIPE, "How an item is made, like JEI: every recipe that outputs it, at every station.",
-                InvCommands::recipe, RECIPE_ITEM)
+                InvCommands::recipe, RECIPE_ITEM, Listing.PAGE)
                 .example(line(RECIPE) + " minecraft:diamond_pickaxe")
-                .note("Instant and read-only.")
+                .note("Instant and read-only. Every recipe is listed; a long list comes in pages.")
                 .note("Each recipe is tagged [crafting], [smelting], [stonecutter], [smithing] …: [crafting] is "
                         + "`" + line(CRAFT) + "`; the others are made at their station (`use block` it, `use gui`, "
                         + "then `use shift` or `use transfer`).")
@@ -123,7 +126,8 @@ public final class InvCommands {
     }
 
     private static void recipe(ServerSource src, CommandArgs args) {
-        src.reply(RECIPES.lookupRecipe(args.get(RECIPE_ITEM).toString(), src.companion()));
+        src.reply(RECIPES.lookupRecipe(args.get(RECIPE_ITEM).toString(), src.companion(), args,
+                args.write(line(RECIPE), List.of(RECIPE_ITEM))));
     }
 
     /** 长活:咀嚼要时间,一口一口吃到饱可能更久,占着一轮对话不合理;受理即回执,吃完发 task_finished。 */

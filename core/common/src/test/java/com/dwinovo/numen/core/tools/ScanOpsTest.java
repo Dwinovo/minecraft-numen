@@ -109,10 +109,10 @@ class ScanOpsTest {
         for (int i = 0; i < ScanOps.LIST_CELLS_UP_TO + 1; i++) {
             groups.add(new BlockPos(-40 - i, 70, 0), Blocks.OAK_LOG.defaultBlockState(), Verdict.allow());
         }
-        BlockGroups.Grouped grouped = groups.grouped(center, 16);
-        assertEquals(2, grouped.total());
+        List<BlockGroups.Group> grouped = groups.grouped(center);
+        assertEquals(2, grouped.size());
 
-        JsonObject small = ScanOps.groupJson("g7", grouped.nearest().get(0), center);
+        JsonObject small = ScanOps.groupJson("g7", grouped.get(0), center);
         assertEquals("g7", small.get("id").getAsString());
         assertEquals(12, small.get("cells").getAsInt());
         assertEquals(12, small.getAsJsonArray("positions").size());
@@ -123,7 +123,7 @@ class ScanOpsTest {
         assertFalse(small.has("sources"));
         assertEquals("south-east", small.getAsJsonObject("nearest").get("direction").getAsString());
 
-        JsonObject big = ScanOps.groupJson("g8", grouped.nearest().get(1), center);
+        JsonObject big = ScanOps.groupJson("g8", grouped.get(1), center);
         assertEquals(ScanOps.LIST_CELLS_UP_TO + 1, big.get("cells").getAsInt());
         assertFalse(big.has("positions"));
         assertEquals("-56,70,0..-40,70,0", big.get("box").getAsString());
@@ -137,7 +137,7 @@ class ScanOpsTest {
         BlockPos center = new BlockPos(0, 64, 0);
         BlockGroups groups = new BlockGroups();
         groups.add(new BlockPos(1, 64, 0), Blocks.OAK_LOG.defaultBlockState(), Verdict.ask(Rule.parse("break(placed)")));
-        JsonObject json = ScanOps.groupJson("g1", groups.grouped(center, 16).nearest().get(0), center);
+        JsonObject json = ScanOps.groupJson("g1", groups.grouped(center).get(0), center);
         assertEquals("ask", json.get("permission").getAsString());
         assertTrue(json.get("reason").getAsString().contains("placed by a player"), json.toString());
     }

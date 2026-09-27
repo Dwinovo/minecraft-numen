@@ -1,5 +1,11 @@
 package com.dwinovo.numen.core.scan;
 
+import com.dwinovo.numen.cli.CommandArgs;
+import com.dwinovo.numen.cli.Listing;
+import com.dwinovo.numen.cli.NumenCli;
+import com.dwinovo.numen.core.CoreCommandsFixture;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -15,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -119,5 +126,47 @@ class GroupBookTest {
         assertNull(taken.get(new BlockPos(5, 64, 0)));
         // 取用不划掉:同一次扫描的编号可以再取
         assertNull(book.staleMessage(List.of("g1")));
+    }
+
+    /** 按 core 的命令树读一行(翻页的参数从这里来,和她写的那一行同一个读法)。 */
+    private static CommandArgs read(String line) {
+        CoreCommandsFixture.install();
+        return NumenCli.read(line).args();
+    }
+
+    /**
+     * 翻页翻的是存着的那一次扫描,不重扫:第二页上的编号还是那一次编出来的,簿子里的团也没换。编号跟着一次扫描走,
+     * 翻页若重扫,前一页上的编号就悄悄作废了。
+     */
+    @Test
+    void pagingTurnsTheStoredScanWithoutScanningAgain() {
+        GroupBook book = new GroupBook(numbers());
+        List<String> ids = book.replace(List.of(cells(0), cells(5)));
+        String again = "scan blocks 32 minecraft:oak_log";
+        List<String> rows = List.of("{\"id\":\"" + ids.get(0) + "\"}", "{\"id\":\"" + ids.get(1) + "\"}");
+        book.listed(new Listing("2 group(s):", rows, "", again), Map.of("radius_searched", 32));
+
+        JsonObject page = JsonParser.parseString(book.page(again, read(again + " --page 1"))).getAsJsonObject();
+        assertTrue(page.get("success").getAsBoolean(), page.toString());
+        assertTrue(page.get("message").getAsString().contains("\"id\":\"g2\""), page.toString());
+        assertEquals(32, page.getAsJsonObject("data").get("radius_searched").getAsInt());
+        assertNull(book.staleMessage(ids), "paging replaced the groups");
+    }
+
+    /** 要翻的不是最新那一次(或还没扫过)时如实说,叫她先不带 --page 扫;不拿别的扫描的页冒充。 */
+    @Test
+    void pagingAnotherScanSaysToScanFirst() {
+        GroupBook book = new GroupBook(numbers());
+        String iron = "scan blocks 32 minecraft:iron_ore";
+        JsonObject none = JsonParser.parseString(book.page(iron, read(iron + " --page 2"))).getAsJsonObject();
+        assertFalse(none.get("success").getAsBoolean());
+        assertTrue(none.get("message").getAsString().contains("without --page first"), none.toString());
+
+        String logs = "scan blocks 32 minecraft:oak_log";
+        book.replace(List.of(cells(0)));
+        book.listed(new Listing("1 group(s):", List.of("{\"id\":\"g1\"}"), "", logs), Map.of());
+        JsonObject other = JsonParser.parseString(book.page(iron, read(iron + " --page 2"))).getAsJsonObject();
+        assertFalse(other.get("success").getAsBoolean());
+        assertTrue(other.get("message").getAsString().contains("which was " + logs), other.toString());
     }
 }

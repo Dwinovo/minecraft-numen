@@ -208,8 +208,21 @@ public final class GameTestKit {
         return call(companion, "scan_blocks", args("radius", radius, "block_ids", List.of(blockId)));
     }
 
+    /** 回执这一页列出的团:消息里一团一行,每行一个 JSON 对象(抬头、翻页提示与结尾不是)。 */
     static com.google.gson.JsonArray groupsIn(String reply) {
-        return com.google.gson.JsonParser.parseString(reply).getAsJsonObject().getAsJsonArray("groups");
+        return rowsIn(reply);
+    }
+
+    /** 回执消息里一条一行的 JSON 对象({@code scan blocks}、{@code scan entities} 的清单)。 */
+    static com.google.gson.JsonArray rowsIn(String reply) {
+        String message = com.google.gson.JsonParser.parseString(reply).getAsJsonObject().get("message").getAsString();
+        com.google.gson.JsonArray rows = new com.google.gson.JsonArray();
+        for (String line : message.split("\n")) {
+            if (line.startsWith("{")) {
+                rows.add(com.google.gson.JsonParser.parseString(line));
+            }
+        }
+        return rows;
     }
 
     /** 列出了 {@code cell} 这一格的那一团;没有为 null。 */

@@ -4,10 +4,12 @@ import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
+import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskDispatch;
 import com.dwinovo.numen.task.TaskResult;
+import com.google.gson.Gson;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -33,8 +35,7 @@ final class KaleidoscopeCommands {
     static final String INSPECT = "inspect";
     static final String COOK = "cook";
 
-    /** 一口锅两百多条配方,一次全发出去就是把这一轮的上下文塞满。 */
-    private static final int MAX_ROWS = 30;
+    private static final Gson GSON = new Gson();
 
     private static final Param<String> COOKWARE = Param.required("cookware", ArgType.word(), "Which cookware.")
             .values(Arrays.stream(Cookware.values()).map(Cookware::id).collect(Collectors.joining(" or ")));
@@ -65,10 +66,11 @@ final class KaleidoscopeCommands {
     private static void actions(CommandGroup kc) {
         kc.server(RECIPES, "What the cookware can cook: recipe id, ingredients with portions, carrier, kitchenware, "
                         + "time.",
-                KaleidoscopeCommands::recipes, COOKWARE, HAVE_ONLY, NAME)
+                KaleidoscopeCommands::recipes, COOKWARE, HAVE_ONLY, NAME, Listing.PAGE)
                 .example(line(RECIPES) + " pot --have_only true")
                 .example(line(RECIPES) + " stockpot --name rice")
-                .note("Read-only. Shows at most " + MAX_ROWS + "; narrow it with --name or --have_only.")
+                .note("Read-only. One recipe per line; a pot knows a few hundred, so the list comes in pages — "
+                        + "narrow it with --name or --have_only instead of paging through all of them.")
                 .note("Flex recipes list THIS world's golden ratio; every save has its own.")
                 .seeAlso(line(INSPECT), line(COOK));
         kc.server(INSPECT, "Read one pot or stockpot from any distance: stage, contents, heat, ticks left, what it "
@@ -99,8 +101,7 @@ final class KaleidoscopeCommands {
         String needle = args.get(NAME) == null ? null : args.get(NAME).toLowerCase(Locale.ROOT);
         boolean haveOnly = Boolean.TRUE.equals(args.get(HAVE_ONLY));
 
-        List<Map<String, Object>> rows = new ArrayList<>();
-        int matched = 0;
+        List<String> rows = new ArrayList<>();
         for (Dish dish : Dish.menu(level, cookware)) {
             if (needle != null
                     && !dish.id().toString().toLowerCase(Locale.ROOT).contains(needle)
@@ -110,26 +111,21 @@ final class KaleidoscopeCommands {
             if (haveOnly && dish.missingFor(src.companion(), level) != null) {
                 continue;
             }
-            matched++;
-            if (rows.size() < MAX_ROWS) {
-                rows.add(dish.row(level));
-            }
+            rows.add(GSON.toJson(dish.row(level)));
         }
 
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("cookware", cookware.id());
-        data.put("matched", matched);
-        data.put("shown", rows.size());
-        data.put("recipes", rows);
         data.put("quality_notes", List.of(
                 "Quality grading only exists for flex recipes, and it compares the RATIO of the portions,"
                         + " not the total: the pot always hands the evaluator a 9-slot list, so the quantity"
                         + " factor is always 1 and 2:1 grades exactly the same as 4:2.",
                 "A flex recipe with a SINGLE ingredient is always graded SUPERB whatever the amount, because"
                         + " the same 9-slot list makes its count check pass every time — one portion is enough."));
-        src.reply(TaskResult.ok(matched > rows.size()
-                ? "showing " + rows.size() + " of " + matched + " — narrow it with --name or --have_only"
-                : matched + " recipe(s)", data).toJson());
+        String head = rows.isEmpty()
+                ? "No " + cookware.id() + " recipe matches."
+                : rows.size() + " " + cookware.id() + " recipe(s), one per line:";
+        String again = args.write(line(RECIPES), List.of(COOKWARE, HAVE_ONLY, NAME));
+        src.reply(new Listing(head, rows, "", again).result(args, data).toJson());
     }
 
     private static void inspect(ServerSource src, CommandArgs args) {

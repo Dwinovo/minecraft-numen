@@ -24,9 +24,6 @@ import java.util.Map;
  */
 public final class ThrowawayOps {
 
-    /** 回执里最多列几种背包里没在清单上的方块——够模型挑,不至于把回执撑爆。 */
-    private static final int MAX_SUGGESTIONS = 12;
-
     /** 追加这些,已在清单上的不重复。 */
     public String add(NumenPlayer self, List<String> blockIds) {
         List<String> given = ThrowawayBlocks.normalize(blockIds);
@@ -106,7 +103,7 @@ public final class ThrowawayOps {
                 + "check the spelling, and include the namespace (minecraft:cobblestone)";
     }
 
-    /** 背包里能当方块放下、却不在清单上的东西,按数量从多到少。 */
+    /** 背包里能当方块放下、却不在清单上的东西,按数量从多到少,一样不落:种数不会多过背包的格数。 */
     private static Map<String, Integer> notListed(NumenPlayer self, List<String> materials) {
         Map<String, Integer> counts = new LinkedHashMap<>();
         var inv = self.getInventory();
@@ -123,7 +120,6 @@ public final class ThrowawayOps {
         }
         return counts.entrySet().stream()
                 .sorted((a, b) -> Integer.compare(b.getValue(), a.getValue()))
-                .limit(MAX_SUGGESTIONS)
                 .collect(LinkedHashMap::new, (m, e) -> m.put(e.getKey(), e.getValue()), Map::putAll);
     }
 

@@ -1,11 +1,12 @@
 package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.ToolArgs;
+import com.dwinovo.numen.cli.CommandArgs;
+import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.core.scan.NearbyEntities;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.platform.Services;
 import com.dwinovo.numen.task.TaskResult;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -45,15 +46,18 @@ public final class QueryExtraOps {
 
     // ---- scan entities ----
 
-    private static final int MAX_RESULTS = 20;
     private static final double MIN_RADIUS = 1.0;
     private static final double MAX_RADIUS = 64.0;
 
-    /** @param filter hostile、passive、player 或 all,由参数类型把关 */
-    public String scanNearbyEntities(
-double radius,
-String filter,
-            NumenPlayer self) {
+    /**
+     * 半径内的实体由近及远,一只一行(一个 JSON 对象),按输出预算分页({@link Listing})。翻页现读:实体会走动,
+     * 编号是运行期编号,它还在世界里时不变。
+     *
+     * @param filter hostile、passive、player 或 all,由参数类型把关
+     * @param again  这一行本身(不带 {@code --page}):翻页时写它
+     */
+    public String scanNearbyEntities(double radius, String filter, NumenPlayer self, CommandArgs args,
+                                     String again) {
         radius = Math.clamp(radius, MIN_RADIUS, MAX_RADIUS);
 
         List<Entity> raw = NearbyEntities.within(self, radius, Entity.class, e -> true);
@@ -66,10 +70,8 @@ String filter,
         }
         matched.sort(Comparator.comparingDouble(s -> s.distance));
 
-        JsonArray entities = new JsonArray();
-        int limit = Math.min(matched.size(), MAX_RESULTS);
-        for (int i = 0; i < limit; i++) {
-            ScoredEntity s = matched.get(i);
+        List<String> rows = new ArrayList<>(matched.size());
+        for (ScoredEntity s : matched) {
             JsonObject o = new JsonObject();
             o.addProperty("id", s.entity.getId());
             o.addProperty("type", s.entity.getType().getDescriptionId());
@@ -84,16 +86,13 @@ String filter,
                 o.addProperty("hp", le.getHealth());
                 o.addProperty("max_hp", le.getMaxHealth());
             }
-            entities.add(o);
+            rows.add(o.toString());
         }
-
-        JsonObject root = new JsonObject();
-        root.add("entities", entities);
-        root.addProperty("total_found", matched.size());
-        root.addProperty("truncated", matched.size() > MAX_RESULTS);
-        root.addProperty("radius_searched", radius);
-        root.addProperty("filter", filter);
-        return root.toString();
+        String where = " within " + radius + " blocks (" + filter + ")";
+        String head = rows.isEmpty()
+                ? "No entities" + where + "."
+                : rows.size() + " entit" + (rows.size() == 1 ? "y" : "ies") + where + ", nearest first, one per line:";
+        return new Listing(head, rows, "", again).result(args).toJson();
     }
 
     private static String categorise(Entity e) {
@@ -111,12 +110,12 @@ String filter,
 
     // ---- inv recipe ----
 
-    /** Cap recipes per lookup — enough variants to choose from without a token bomb. */
-    private static final int MAX_RECIPES = 4;
-
-    public String lookupRecipe(
-String item_id,
-            NumenPlayer self) {
+    /**
+     * 做这样东西的每一条配方,一条一个条目,按输出预算分页({@link Listing});结尾是各种工位怎么做。
+     *
+     * @param again 这一行本身(不带 {@code --page}):翻页时写它
+     */
+    public String lookupRecipe(String item_id, NumenPlayer self, CommandArgs args, String again) {
         Item target = ToolArgs.parseItem(item_id);
         if (!(self.level() instanceof ServerLevel level)) {
             return TaskResult.fail("recipe lookup needs a server level.").toJson();
@@ -125,9 +124,6 @@ String item_id,
 
         List<String> recipes = new ArrayList<>();
         for (RecipeHolder<?> holder : level.getRecipeManager().getRecipes()) {
-            if (recipes.size() >= MAX_RECIPES) {
-                break;
-            }
             // 每条配方自成一格:整合包里一条坏配方(产出为 null、输入表为 null)
             // 只丢它自己,绝不让它杀掉整个查询。见 RecipeProbe。
             try {
@@ -177,8 +173,7 @@ String item_id,
             return TaskResult.ok("no recipe for " + name + " — it's obtained another way (mine it, or "
                     + "trade), not crafted or smelted.").toJson();
         }
-        return TaskResult.ok("recipe(s) for " + name + ":\n\n" + String.join("\n\n", recipes) + "\n\n"
-                + "To make it —\n"
+        return new Listing(recipes.size() + " recipe(s) for " + name + ":", recipes, "To make it —\n"
                 + "• [crafting]: run inv craft <item> --count N — it lays out the grid and takes the "
                 + "result for you (a 3x3 recipe needs a crafting table within reach; 2x2 works "
                 + "anywhere).\n"
@@ -187,7 +182,7 @@ String item_id,
                 + "out.\n"
                 + "• [stonecutter]: use block it, use shift the input (the menu routes it in), take the "
                 + "output. [smithing]: use block it, use gui, then use transfer template + base + "
-                + "addition each into its own slot.").toJson();
+                + "addition each into its own slot.", again).result(args).toJson();
     }
 
     private static String format(CraftingRecipe recipe, ItemStack result) {
@@ -238,8 +233,8 @@ String item_id,
         return "[smithing] (smithing table: template + base + addition) -> makes " + result.getCount();
     }
 
-    /** Name an ingredient: a single item directly, a shared-suffix tag as "planks (any)", else a few
-     *  members — so a category ingredient doesn't mislead the model into one specific item.
+    /** Name an ingredient: a single item directly, a shared-suffix tag as "planks (any)", else every
+     *  member — so a category ingredient doesn't mislead the model into one specific item.
      *  Package-visible: the craft tool names its material shortfalls with the same vocabulary. */
     static String describeIngredient(Ingredient ing) {
         List<String> paths = java.util.Arrays.stream(ing.getItems())   // 1.21.1: getItems() -> ItemStack[]
@@ -256,8 +251,7 @@ String item_id,
         if (suffix != null) {
             return suffix + "(any)";
         }
-        return "any[" + paths.stream().limit(3).collect(Collectors.joining("/"))
-                + (paths.size() > 3 ? "/…" : "") + "]";
+        return "any[" + String.join("/", paths) + "]";
     }
 
     private static String commonSuffixToken(List<String> paths) {
@@ -276,10 +270,12 @@ String item_id,
 
     // ---- scan storage ----
 
-    public String inspectBlockStorage(int x,
-int y,
-int z,
-                                      NumenPlayer self) {
+    /**
+     * 一格方块里装着什么,一行一个条目,按输出预算分页({@link Listing})。
+     *
+     * @param again 这一行本身(不带 {@code --page}):翻页时写它
+     */
+    public String inspectBlockStorage(int x, int y, int z, NumenPlayer self, CommandArgs args, String again) {
         BlockPos pos = new BlockPos(x, y, z);
         BlockState state = self.level().getBlockState(pos);
         String coord = x + "," + y + "," + z;
@@ -287,12 +283,12 @@ int z,
             return TaskResult.fail("block at " + coord + " is air — nothing to read.").toJson();
         }
         String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
-        String caps = Services.CAPS.describe(self.level(), pos);
-        if (caps == null || caps.isBlank()) {
+        List<String> caps = Services.CAPS.describe(self.level(), pos);
+        if (caps.isEmpty()) {
             return TaskResult.ok(id + " at " + coord + " exposes no item/fluid/energy storage "
                     + "(not a machine/tank/battery, or it keeps its state elsewhere). "
                     + "If it has a GUI, right-click it (use block) then use gui.").toJson();
         }
-        return TaskResult.ok(id + " at " + coord + ":\n" + caps).toJson();
+        return new Listing(id + " at " + coord + ":", caps, "", again).result(args).toJson();
     }
 }

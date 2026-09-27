@@ -1,6 +1,9 @@
 package com.dwinovo.numen.core.scan;
 
+import com.dwinovo.numen.cli.CommandArgs;
+import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.task.TaskResult;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
@@ -14,7 +17,8 @@ import java.util.function.LongSupplier;
 
 /**
  * 一个同伴的团编号簿:最近一次 {@code scan_blocks} 列出的团,每团一个短编号(g1、g2……),供
- * {@code mine groups} 取用。只存数据——格子还在不在、许不许挖,由取用它的任务判。
+ * {@code mine groups} 取用;连同那一次的回执清单,{@code --page} 翻的就是它。只存数据——格子还在不在、许不许挖,
+ * 由取用它的任务判。
  *
  * <p>挂在身体上({@link NumenPlayer#state}):身体没了簿子跟着没,休眠回来是空簿子。每次扫描整本换成新结果;
  * 编号的数字取自身体上落盘的编号({@link NumenPlayer#nextIdNumber}),休眠、重启之后也接着往上数、不回到
@@ -37,6 +41,9 @@ public final class GroupBook {
     private final LongSupplier numbers;
     /** 这本簿子记过扫描结果没有。 */
     private boolean scanned;
+    /** 最新一次扫描的回执清单(它的 {@link Listing#again} 就是那一次扫描的那一行)与不随页变的小结;翻页只翻这一次。 */
+    private Listing listing;
+    private Map<String, Object> summary;
 
     public GroupBook(LongSupplier numbers) {
         this.numbers = numbers;
@@ -53,6 +60,29 @@ public final class GroupBook {
             ids.add(id);
         }
         return ids;
+    }
+
+    /** 记下这一次扫描的回执清单,与不随页变的小结。 */
+    public void listed(Listing listing, Map<String, Object> summary) {
+        this.listing = listing;
+        this.summary = Map.copyOf(summary);
+    }
+
+    /**
+     * 最新一次扫描的某一页,不重新扫:重扫就是另一批编号。{@code query} 不是最新那一次(或还没扫过)时如实说,叫她先扫。
+     *
+     * @param query 要翻页的那一行(不带 {@code --page})
+     */
+    public String page(String query, CommandArgs args) {
+        if (listing == null) {
+            return TaskResult.fail("there is no scan_blocks result on me to page through (results are dropped when"
+                    + " I go dormant or the server restarts) — run " + query + " without --page first").toJson();
+        }
+        if (!listing.again().equals(query)) {
+            return TaskResult.fail("--page turns the pages of your latest scan, which was " + listing.again()
+                    + "; run " + query + " without --page to scan that").toJson();
+        }
+        return listing.result(args, summary).toJson();
     }
 
     /** 这些编号里有不在最新一次扫描里的:给模型的说明;都在返回 null。 */

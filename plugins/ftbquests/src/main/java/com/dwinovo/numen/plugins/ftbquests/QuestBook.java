@@ -33,9 +33,6 @@ import java.util.UUID;
  */
 final class QuestBook {
 
-    /** 描述超过这么多字就截断:整段剧情塞进上下文不值,要细看的是条件和奖励。 */
-    private static final int DESCRIPTION_LIMIT = 600;
-
     private final BaseQuestFile file;
     private final TeamData team;
     private final UUID owner;
@@ -202,7 +199,10 @@ final class QuestBook {
                 + (team.isCompleted(dep) ? "completed" : "not completed") + ")";
     }
 
-    /** 正文:跳过分页记号与空行,连成一段;太长截断并说明。设了"完成前隐藏正文"的照做。 */
+    /**
+     * 正文:跳过分页记号与空行,连成一段,整段给出——她点名要看的就是这一个任务,正文里常有怎么做的说明;长度随这一个
+     * 任务的定义有界。设了"完成前隐藏正文"的照做。
+     */
     private String description(Quest quest) {
         boolean hidden = quest.getHideTextUntilComplete().get(quest.getChapter().isHideTextUntilComplete())
                 && !team.isCompleted(quest);
@@ -219,10 +219,7 @@ final class QuestBook {
         if (kept.isEmpty()) {
             return "Description: none.";
         }
-        String all = String.join(" ", kept);
-        return all.length() <= DESCRIPTION_LIMIT
-                ? "Description: " + all
-                : "Description: " + all.substring(0, DESCRIPTION_LIMIT) + "… (cut, " + all.length() + " characters in all)";
+        return "Description: " + String.join(" ", kept);
     }
 
     /** 一个奖励:个人还是队伍的、自动领还是要在书里点、领了没有。 */

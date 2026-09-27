@@ -61,10 +61,10 @@ class BlockGroupsTest {
         groups.add(new BlockPos(3, 66, 2), log(), Verdict.allow());
         groups.add(new BlockPos(8, 64, 1), log(), Verdict.allow());   // 隔开了
 
-        BlockGroups.Grouped grouped = groups.grouped(CENTER, 16);
-        assertEquals(2, grouped.total());
-        assertEquals(3, grouped.nearest().get(0).cells().size());
-        assertEquals(1, grouped.nearest().get(1).cells().size());
+        List<BlockGroups.Group> grouped = groups.grouped(CENTER);
+        assertEquals(2, grouped.size());
+        assertEquals(3, grouped.get(0).cells().size());
+        assertEquals(1, grouped.get(1).cells().size());
     }
 
     @Test
@@ -77,10 +77,10 @@ class BlockGroupsTest {
         }
         groups.add(new BlockPos(3, 67, 0), log(), Verdict.allow());
 
-        BlockGroups.Grouped grouped = groups.grouped(CENTER, 16);
-        assertEquals(2, grouped.total());
-        BlockGroups.Group pillar = grouped.nearest().get(0);
-        BlockGroups.Group tree = grouped.nearest().get(1);
+        List<BlockGroups.Group> grouped = groups.grouped(CENTER);
+        assertEquals(2, grouped.size());
+        BlockGroups.Group pillar = grouped.get(0);
+        BlockGroups.Group tree = grouped.get(1);
         assertEquals(placed, pillar.verdict());
         assertEquals(3, pillar.cells().size());
         assertTrue(pillar.cells().keySet().stream().allMatch(p -> p.getX() == 2));
@@ -94,7 +94,7 @@ class BlockGroupsTest {
         groups.add(new BlockPos(1, 64, 0), log(), Verdict.ask(Rule.parse("break(placed)")));
         groups.add(new BlockPos(2, 64, 0), log(), Verdict.ask(Rule.parse("break(block_entity)")));
         groups.add(new BlockPos(3, 64, 0), log(), Verdict.deny("observe mode: break would change the world"));
-        assertEquals(3, groups.grouped(CENTER, 16).total());
+        assertEquals(3, groups.grouped(CENTER).size());
     }
 
     @Test
@@ -104,9 +104,9 @@ class BlockGroupsTest {
             groups.add(new BlockPos(x, 64, 15), log(), Verdict.allow());
             groups.add(new BlockPos(x, 64, 16), log(), Verdict.allow());
         }
-        BlockGroups.Grouped grouped = groups.grouped(CENTER, 16);
-        assertEquals(1, grouped.total());
-        assertEquals(12, grouped.nearest().get(0).cells().size());
+        List<BlockGroups.Group> grouped = groups.grouped(CENTER);
+        assertEquals(1, grouped.size());
+        assertEquals(12, grouped.get(0).cells().size());
     }
 
     @Test
@@ -119,11 +119,11 @@ class BlockGroupsTest {
             }
         }
         assertTrue(groups.size() > BlockGroups.SPLIT_ABOVE);
-        BlockGroups.Grouped grouped = groups.grouped(CENTER, 16);
-        assertEquals(4, grouped.total());
+        List<BlockGroups.Group> grouped = groups.grouped(CENTER);
+        assertEquals(4, grouped.size());
         int cells = 0;
         Set<Long> sections = new HashSet<>();
-        for (BlockGroups.Group piece : grouped.nearest()) {
+        for (BlockGroups.Group piece : grouped) {
             cells += piece.cells().size();
             Set<Long> own = new HashSet<>();
             for (BlockPos p : piece.cells().keySet()) {
@@ -136,17 +136,17 @@ class BlockGroupsTest {
     }
 
     @Test
-    void groupsComeNearestFirstAndOnlyTheNearestAreListed() {
+    void groupsComeNearestFirst() {
         BlockGroups groups = new BlockGroups();
         for (int i = 0; i < 5; i++) {
             groups.add(new BlockPos(40 - 8 * i, 64, 0), log(), Verdict.allow());
         }
-        BlockGroups.Grouped grouped = groups.grouped(CENTER, 2);
-        assertEquals(5, grouped.total());
-        assertEquals(2, grouped.nearest().size());
-        assertEquals(new BlockPos(8, 64, 0), grouped.nearest().get(0).nearest());
-        assertEquals(8.0, grouped.nearest().get(0).distance());
-        assertEquals(new BlockPos(16, 64, 0), grouped.nearest().get(1).nearest());
+        List<BlockGroups.Group> grouped = groups.grouped(CENTER);
+        assertEquals(5, grouped.size());
+        for (int i = 0; i < 5; i++) {
+            assertEquals(new BlockPos(8 + 8 * i, 64, 0), grouped.get(i).nearest(), "由近及远排");
+            assertEquals(8.0 + 8 * i, grouped.get(i).distance());
+        }
     }
 
     @Test
@@ -158,7 +158,7 @@ class BlockGroupsTest {
         groups.add(new BlockPos(6, 60, 5), source, Verdict.allow());
         groups.add(new BlockPos(7, 61, 6), flowing, Verdict.allow());
 
-        BlockGroups.Group water = groups.grouped(CENTER, 16).nearest().get(0);
+        BlockGroups.Group water = groups.grouped(CENTER).get(0);
         assertEquals(List.of(new BlockPos(5, 60, 5), new BlockPos(6, 60, 5), new BlockPos(7, 61, 6)),
                 List.copyOf(water.cells().keySet()));
         assertEquals(3, water.counts().get(Blocks.WATER));
