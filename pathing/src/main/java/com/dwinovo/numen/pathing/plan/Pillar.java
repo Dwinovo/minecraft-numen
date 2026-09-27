@@ -66,7 +66,7 @@ final class Pillar implements Move {
         if (!contact.admit(draft, model, support, false)) {
             return draft.failure();
         }
-        return new Premise.Holds(new Maneuver(MoveKind.PILLAR, from, stance, to, landing, true, false, false, false,
+        return new Premise.Holds(new Maneuver(MoveKind.PILLAR, heading, from, stance, to, landing, true, false, false, false,
                 1, 0, 0, draft.edits(), contact.cells(), support));
     }
 

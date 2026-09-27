@@ -90,7 +90,7 @@ final class Diagonal implements Move {
         }
         boolean wading = Strides.inWater(draft, to);
         boolean sprint = model.maySprint() && !wading && !jump && draft.edits().isEmpty();
-        return new Premise.Holds(new Maneuver(MoveKind.DIAGONAL, from, stance, to, landing, jump, sprint, false, wading,
+        return new Premise.Holds(new Maneuver(MoveKind.DIAGONAL, heading, from, stance, to, landing, jump, sprint, false, wading,
                 Strides.speedFactor(draft, from, f0, to, f1), Math.max(0, f0 - f1), 1, draft.edits(),
                 contact.cells(), support));
     }

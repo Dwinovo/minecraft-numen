@@ -9,6 +9,7 @@ import net.minecraft.core.BlockPos;
  * 也照这些事实去做。
  *
  * @param kind        走法
+ * @param heading     前提按哪个方向判的:执行复核在活世界上按同一个方向再判一次
  * @param from        起步节点
  * @param start       身体起步时在 {@code from} 上怎么待着
  * @param to          落到的节点
@@ -24,7 +25,7 @@ import net.minecraft.core.BlockPos;
  * @param cells       身体这一步新进入的格(不含起步时已经占着的),{@link BlockPos#asLong} 编码
  * @param support     落到之后脚踩的那一格;不是站着为 null
  */
-public record Maneuver(MoveKind kind, BlockPos from, Stance start, BlockPos to, Stance landing, boolean jump, boolean sprint,
+public record Maneuver(MoveKind kind, Heading heading, BlockPos from, Stance start, BlockPos to, Stance landing, boolean jump, boolean sprint,
                        boolean sneak, boolean wading, double speedFactor, double drop, int span, List<Edit> edits,
                        long[] cells, BlockPos support) {
 

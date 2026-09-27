@@ -82,7 +82,7 @@ final class Ascend implements Move {
         }
         // 攀着、浮着时身体是攀上去、游上去的,只有站着时要跨过高坎才起跳
         boolean jump = rises && grounded;
-        return new Premise.Holds(new Maneuver(MoveKind.ASCEND, from, stance, to, landing, jump, false, false,
+        return new Premise.Holds(new Maneuver(MoveKind.ASCEND, heading, from, stance, to, landing, jump, false, false,
                 Strides.inWater(draft, to), Strides.speedFactor(draft, from, f0, to, f1), 0, 1, draft.edits(),
                 contact.cells(), support));
     }

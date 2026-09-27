@@ -1,7 +1,9 @@
 package com.dwinovo.numen.pathing.search;
 
+import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.spec.PositionCosts;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
 
@@ -28,6 +30,27 @@ public interface Goal {
      */
     default PositionCosts protection() {
         return PositionCosts.EMPTY;
+    }
+
+    /**
+     * 停在这个已到达的节点上,还要看得见哪一格才算数(贴脸要够得着的那一格);不要求视线为 null。目标只判几何上够不够得着,
+     * 视线由执行层到了之后在活世界上复核。
+     */
+    default BlockPos sight(int x, int y, int z, Stance stance) {
+        return null;
+    }
+
+    /**
+     * 为这个目标搜索与执行复核用的成本模型:把目标格保护({@link #protection()})并进路线规格的按位置禁令。搜索展开与
+     * 执行时在活世界上复核前提,读的都是它,只此一处。
+     */
+    static CostModel guarded(Goal goal, CostModel model) {
+        PositionCosts protection = goal.protection();
+        if (protection.isEmpty()) {
+            return model;
+        }
+        RouteSpec spec = model.spec();
+        return model.withSpec(spec.edit().positions(spec.positions().plus(protection)).build());
     }
 
     /**

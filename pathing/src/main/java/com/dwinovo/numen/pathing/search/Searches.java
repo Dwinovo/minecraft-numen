@@ -46,6 +46,17 @@ public final class Searches {
         return dispatch(cancelled -> RoutePlanner.run(query, cancelled));
     }
 
+    /** 一件由搜索组成的活:在工作线程上跑,{@code cancelled} 答是就尽快收手。 */
+    @FunctionalInterface
+    public interface Job<T> {
+        T run(BooleanSupplier cancelled);
+    }
+
+    /** 派发一件由搜索组成的活(门面诊断"为什么没路"时在同一份快照上换几份规格再搜)。 */
+    public static <T> Pending<T> submit(Job<T> job) {
+        return dispatch(job::run);
+    }
+
     private static <T> Pending<T> dispatch(Function<BooleanSupplier, T> job) {
         AtomicBoolean cancelled = new AtomicBoolean();
         CompletableFuture<T> future = CompletableFuture.supplyAsync(() -> job.apply(cancelled::get), POOL);

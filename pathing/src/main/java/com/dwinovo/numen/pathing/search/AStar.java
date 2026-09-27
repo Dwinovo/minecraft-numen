@@ -15,7 +15,6 @@ import com.dwinovo.numen.pathing.plan.Moves;
 import com.dwinovo.numen.pathing.plan.Premise;
 import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.plan.WorldView;
-import com.dwinovo.numen.pathing.spec.PositionCosts;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.Bounds;
 import com.dwinovo.numen.pathing.world.BodyStats;
@@ -60,10 +59,8 @@ public final class AStar {
 
     private AStar(Search search) {
         this.search = search;
-        PositionCosts protection = search.goal().protection();
         RouteSpec spec = search.model().spec();
-        this.model = protection.isEmpty() ? search.model()
-                : search.model().withSpec(spec.edit().positions(spec.positions().plus(protection)).build());
+        this.model = Goal.guarded(search.goal(), search.model());
         this.body = model.body().stats();
         this.budgeted = spec.budgeted();
         this.alterBudget = spec.alterBudget();

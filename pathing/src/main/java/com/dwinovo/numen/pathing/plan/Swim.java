@@ -73,7 +73,7 @@ final class Swim implements Move {
         if (!contact.admit(draft, model, support, false)) {
             return draft.failure();
         }
-        return new Premise.Holds(new Maneuver(MoveKind.SWIM, from, stance, to, landing, false, false, false, true,
+        return new Premise.Holds(new Maneuver(MoveKind.SWIM, heading, from, stance, to, landing, false, false, false, true,
                 1, Math.max(0, f0 - landing.feetY()), heading.horizontal() ? 1 : 0, draft.edits(), contact.cells(),
                 support));
     }

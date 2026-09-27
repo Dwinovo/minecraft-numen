@@ -62,7 +62,7 @@ final class Climb implements Move {
         if (!contact.admit(draft, model, support, false)) {
             return draft.failure();
         }
-        return new Premise.Holds(new Maneuver(MoveKind.CLIMB, from, stance, to, landing, false, false, false,
+        return new Premise.Holds(new Maneuver(MoveKind.CLIMB, heading, from, stance, to, landing, false, false, false,
                 Strides.inWater(draft, to), 1, Math.max(0, f0 - landing.feetY()), 0, draft.edits(), contact.cells(),
                 support));
     }

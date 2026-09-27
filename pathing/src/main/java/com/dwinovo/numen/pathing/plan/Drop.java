@@ -96,7 +96,7 @@ final class Drop implements Move {
         if (!contact.admit(draft, model, support, drop > 0.5)) {
             return draft.failure();
         }
-        return new Premise.Holds(new Maneuver(kind, from, stance, to, landing, false, false, false, wading,
+        return new Premise.Holds(new Maneuver(kind, heading, from, stance, to, landing, false, false, false, wading,
                 Semantics.speedFactor(draft, from.getX(), f0, from.getZ()), drop, 1, draft.edits(), contact.cells(),
                 support));
     }

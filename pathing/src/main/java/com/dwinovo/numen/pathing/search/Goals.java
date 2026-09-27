@@ -226,6 +226,11 @@ public final class Goals {
         public PositionCosts protection() {
             return PositionCosts.builder().forbid(Use.DIG, target.asLong()).forbid(Use.PLACE, target.asLong()).build();
         }
+
+        @Override
+        public BlockPos sight(int x, int y, int z, Stance stance) {
+            return target;
+        }
     }
 
     private record AwayFrom(List<Threat> threats) implements Goal {
@@ -280,6 +285,25 @@ public final class Goals {
             return min;
         }
 
+        /** 停在这里满足的成员里有一个不要求视线,就不要求;否则要看第一个成员要看的那一格。 */
+        @Override
+        public BlockPos sight(int x, int y, int z, Stance stance) {
+            BlockPos needed = null;
+            for (Goal g : members) {
+                if (!g.contains(x, y, z, stance)) {
+                    continue;
+                }
+                BlockPos own = g.sight(x, y, z, stance);
+                if (own == null) {
+                    return null;
+                }
+                if (needed == null) {
+                    needed = own;
+                }
+            }
+            return needed;
+        }
+
         /** 停在这里满足的那些成员里最便宜的到达价。 */
         @Override
         public double arrival(int x, int y, int z, Stance stance) {
@@ -316,6 +340,11 @@ public final class Goals {
         @Override
         public double arrival(int x, int y, int z, Stance stance) {
             return cost;
+        }
+
+        @Override
+        public BlockPos sight(int x, int y, int z, Stance stance) {
+            return inner.sight(x, y, z, stance);
         }
 
         @Override

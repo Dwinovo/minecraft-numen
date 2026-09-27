@@ -69,6 +69,15 @@ public final class WorldSnapshot implements SearchView {
         }
     }
 
+    /** 派发一次搜索时拷贝的半径(区块数):以起点所在区块为中心,边长 13 个区块,约两百格见方。 */
+    public static final int SEARCH_RADIUS = 6;
+
+    /** 为从 {@code start} 出发的一次搜索拷贝快照:以它所在的区块为中心、{@link #SEARCH_RADIUS} 为半径。必须在世界所在的线程上调用。 */
+    public static WorldSnapshot around(Level level, BlockPos start) {
+        return capture(level, SectionPos.blockToSectionCoord(start.getX()), SectionPos.blockToSectionCoord(start.getZ()),
+                SEARCH_RADIUS);
+    }
+
     /**
      * 拷贝 {@code level} 里以区块 {@code (centerX, centerZ)} 为中心、半径 {@code radius} 个区块的已加载区块。必须在
      * {@code level} 所在的线程上调用;不加载任何区块。

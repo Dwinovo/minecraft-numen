@@ -63,6 +63,20 @@ public final class CostModel {
         return new CostModel(spec, body, terrain, placing, danger, tools);
     }
 
+    /** 同一份模型,换一个许可(诊断"换一种答复有没有路"用)。 */
+    public CostModel withTerrain(TerrainPolicy terrain) {
+        return new CostModel(spec, body, terrain, placing, danger, tools);
+    }
+
+    /** 同一份模型,下一块垫路料换成 {@code placing}(诊断"有料的话有没有路"用)。 */
+    public CostModel withPlacing(Block placing) {
+        return new CostModel(spec, body, terrain, placing, danger, tools);
+    }
+
+    public TerrainPolicy terrain() {
+        return terrain;
+    }
+
     public RouteSpec spec() {
         return spec;
     }
