@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.combat;
 
 import com.dwinovo.numen.core.pathing.goals.GoalAvoidEntities;
+import com.dwinovo.numen.pathing.plan.Threat;
 import com.dwinovo.numen.core.scan.NearbyEntities;
 
 import net.minecraft.core.Holder;
@@ -234,6 +235,18 @@ public final class Menace {
             }
         }
         return threats;
+    }
+
+    /**
+     * 寻路要避开的生物:{@code radius} 内每一只敌对生物此刻的位置与它的危险半径({@link #dangerRadius},含格量化补偿,
+     * 寻路拿格心比)。开一趟路、每次派发搜索时问一次,规划把它们折成按位置的代价——走进谁的危险半径,那一格就贵。
+     */
+    public static List<Threat> dangers(LivingEntity self, double radius) {
+        List<Threat> out = new ArrayList<>();
+        for (Mob mob : hostilesAround(self, radius)) {
+            out.add(new Threat(mob.getX(), mob.getY(), mob.getZ(), dangerRadius(mob, self)));
+        }
+        return out;
     }
 
     /** 这一只此刻是不是已经进了它的危险半径。判据与寻路同一把尺子、同一套坐标。 */
