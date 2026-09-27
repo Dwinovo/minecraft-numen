@@ -191,6 +191,18 @@ public final class MovementHelper {
         return miningDuration(context, x, y, z, state, includeFalling, false);
     }
 
+    /**
+     * 挖掉一块 {@code state} 本身的价钱(tick):快捷栏最优工具的耗时加每次挖掘的附加罚金;挖不动为 INF。
+     * 不看位置、不问规格与权限——那些由调用方乘上去。路上现挖一格与事后拆掉自己垫下的块都按它算。
+     */
+    public static double breakTicks(CalculationContext context, BlockState state) {
+        double strVsBlock = context.toolSet.getStrVsBlock(state);
+        if (strVsBlock <= 0) {
+            return COST_INF;
+        }
+        return 1 / strVsBlock + context.spec.breakPenalty();
+    }
+
     private static double miningDuration(CalculationContext context, int x, int y, int z,
                                          BlockState state, boolean includeFalling, boolean priced) {
         if (!context.canWalkThrough(x, y, z, state)) {
@@ -206,12 +218,10 @@ public final class MovementHelper {
             if (avoidBreaking(context, x, y, z, state)) {
                 return COST_INF;
             }
-            double strVsBlock = context.toolSet.getStrVsBlock(state);
-            if (strVsBlock <= 0) {
+            double result = breakTicks(context, state);
+            if (result >= COST_INF) {
                 return COST_INF;
             }
-            double result = 1 / strVsBlock;
-            result += context.spec.breakPenalty();
             result *= mult;
             if (includeFalling) {
                 BlockState above = context.get(x, y + 1, z);

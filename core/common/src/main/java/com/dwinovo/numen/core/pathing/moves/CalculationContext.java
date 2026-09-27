@@ -58,6 +58,11 @@ public class CalculationContext {
     public final ToolSet toolSet;
     /** 有没有她认可的垫路料可放({@link ThrowawayBlocks#available}),已与规格和总开关折在一起。 */
     public final boolean hasThrowaway;
+    /**
+     * 规格要她事后拆掉路上放下的块({@link RouteSpec#takeBack})时,拆一块的价钱:拆的就是下一次垫路会放下的那种料
+     * ({@link ThrowawayBlocks#next}),按 {@link MovementHelper#breakTicks} 算;规格不拆或无料可垫时为 0。
+     */
+    public final double takeBackTicks;
     /** 快捷栏有水桶且不在下界。 */
     public final boolean hasWaterBucket;
     public final boolean canSprint;
@@ -151,6 +156,16 @@ public class CalculationContext {
             }
         }
         this.worldBorder = border;
+        this.takeBackTicks = spec.takeBack() && hasThrowaway ? takeBackTicks(player) : 0;
+    }
+
+    /** 拆掉一块她会垫下的料要多久;料是什么由 {@link ThrowawayBlocks#next} 说,挖不动为 INF。 */
+    private double takeBackTicks(ServerPlayer player) {
+        net.minecraft.world.item.Item item = ThrowawayBlocks.next(player);
+        if (!(item instanceof net.minecraft.world.item.BlockItem block)) {
+            return COST_INF;
+        }
+        return MovementHelper.breakTicks(this, block.getBlock().defaultBlockState());
     }
 
     /** 快捷栏里是否有(物品与组件都相同的)水桶。 */
@@ -224,7 +239,8 @@ public class CalculationContext {
     /**
      * 在 (x,y,z) 放一个方块的成本。无耗材、规格按位置或按种类禁放、权限层不许、贴着世界边界
      * (边界格无法右键贴放)、流体规则不许 → INF;否则放置罚金加该格的位置代价,需要主人同意
-     * 的格(只有 {@link RouteSpec.Alter#ANY} 走得到)再乘 {@link #CONSENT_COST_MULTIPLIER}。
+     * 的格(只有 {@link RouteSpec.Alter#ANY} 走得到)再乘 {@link #CONSENT_COST_MULTIPLIER}。规格要她事后拆掉
+     * 路上放下的块时,拆的那一下({@link #takeBackTicks})也算在这一块的价钱里——放下去的块并不白留在那儿。
      */
     public double costOfPlacingAt(int x, int y, int z, BlockState current) {
         if (!hasThrowaway) { // 构造时已含规格与 allowPlace 判定
@@ -251,7 +267,10 @@ public class CalculationContext {
                 && !current.getFluidState().isSource()) {
             return COST_INF;
         }
-        return spec.placeCost() * permitted + positional;
+        if (takeBackTicks >= COST_INF) {
+            return COST_INF;
+        }
+        return spec.placeCost() * permitted + takeBackTicks + positional;
     }
 
     /**

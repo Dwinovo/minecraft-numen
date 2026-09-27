@@ -163,6 +163,11 @@ public final class ThrowawayBlocks {
 
         public enum Where { HOTBAR, OFFHAND, INVENTORY }
 
+        /** 这份料本身(副手那一叠,或者快捷栏、背包里那一格)。 */
+        public ItemStack stack(ServerPlayer player) {
+            return where == Where.OFFHAND ? player.getOffhandItem() : player.getInventory().getItem(slot);
+        }
+
         /** 把这份料拿到手上:主手切到对应的格,背包深处的先和 7 号格对调。 */
         public void select(ServerPlayer player) {
             Inventory inventory = player.getInventory();
@@ -216,6 +221,18 @@ public final class ThrowawayBlocks {
     /** 不挑放在哪儿的那一问:见 {@link #source(ServerPlayer, BiPredicate)}。 */
     public static Source source(ServerPlayer player) {
         return source(player, (stack, hand) -> true);
+    }
+
+    /**
+     * 下一次垫路会放下哪种料:{@link #take} 取的就是它——手上找得到的那一份,找不到而能变出来时是清单排第一的料。
+     * 只看不拿,背包分毫不动;没有料可垫是 null。规划器给"放下去之后还要拆掉"定价时问它拆的是什么。
+     */
+    public static Item next(ServerPlayer player) {
+        Source source = source(player);
+        if (source != null) {
+            return source.stack(player).getItem();
+        }
+        return canConjure(player) ? of(player).get(0) : null;
     }
 
     /**

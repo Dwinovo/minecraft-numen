@@ -70,6 +70,8 @@ class RouteSpecTest {
         // 没动的旋钮原样带过去
         assertEquals(d.placeCost(), altered.placeCost());
         assertTrue(altered.parkourAscend());
+        assertFalse(d.takeBack(), "出厂规格路上放下的块留在原处");
+        assertTrue(d.withTakeBack(true).withSprint(false).takeBack(), "要拆回的规格派生之后还是要拆回");
         assertSame(RouteSpec.defaults(), d);
         assertNotSame(d, altered);
     }
