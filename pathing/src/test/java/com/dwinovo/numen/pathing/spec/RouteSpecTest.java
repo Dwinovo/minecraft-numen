@@ -56,6 +56,16 @@ class RouteSpecTest {
     }
 
     @Test
+    void byDefaultTheRouteKeepsOutOfWaterThatPushesTheBody() {
+        BlockState lower = Blocks.WATER.defaultBlockState().setValue(net.minecraft.world.level.block.LiquidBlock.LEVEL, 3);
+        TestWorld stream = new TestWorld().set(AT, Blocks.WATER.defaultBlockState()).set(AT.east(), lower)
+                .set(AT.below(), Blocks.STONE.defaultBlockState()).set(AT.east().below(), Blocks.STONE.defaultBlockState());
+        assertTrue(RouteSpec.defaults().excludesAny(Semantics.kinds(stream, AT.east())), "流水把身体推离路线");
+        assertTrue(RouteSpec.defaults().excludes(Kind.FLOWING_WATER));
+        assertFalse(RouteSpec.defaults().edit().allow(Kind.FLOWING_WATER).build().excludes(Kind.FLOWING_WATER));
+    }
+
+    @Test
     void theDefaultsOnlyWalk() {
         RouteSpec d = RouteSpec.defaults();
         assertEquals(RouteSpec.Alter.NONE, d.alter());

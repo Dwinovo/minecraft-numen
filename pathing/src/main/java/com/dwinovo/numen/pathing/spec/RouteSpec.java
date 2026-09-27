@@ -10,7 +10,7 @@ import com.dwinovo.numen.pathing.world.Semantics.Kind;
 /**
  * 一次导航的路线规格:每次搜索和每次执行各带一份,成本模型只认它。按次传值、不可变,搜索线程只读。四组旋钮,每组一个出处:
  * <ol>
- *   <li><b>能力开关与上限</b>——能不能改地形({@link Alter})、疾跑、跑酷、斜向上下、原地向下挖、攀藤;无水时的最大落差、
+ *   <li><b>能力开关与上限</b>——能不能改地形({@link Alter})、疾跑、跑酷、斜向上下、原地向下挖;无水时的最大落差、
  *       一条路最多改几格;</li>
  *   <li><b>排除的格子种类</b>——{@link #excluded()}:这条路线不站上、不穿过这些语义种类的格子。每类格子只有"排除"这一种
  *       处置,不按种类另外计价;</li>
@@ -24,16 +24,14 @@ import com.dwinovo.numen.pathing.world.Semantics.Kind;
  *
  * @param alter                走路能不能改世界
  * @param sprint               可以疾跑
- * @param parkour              可以跑酷平跳(2–4 格的空隙)
- * @param parkourPlace         跑酷跳到半空时在落点下方放方块
+ * @param parkour              可以跑酷:越过一到三格的空隙
  * @param parkourAscend        跑酷跳上高一格的落点
  * @param diagonalAscend       可以斜着上一级
  * @param diagonalDescend      可以斜着下一级
  * @param downward             可以原地向下挖
- * @param climbVines           藤蔓算可攀爬的面
  * @param strictLiquidCheck    挖掘时邻格有任何液体都不挖(否则只忌源头与横流)
- * @param maxFallHeightNoWater 下面没有水时愿意跳下的最大落差
- * @param alterBudget          整条路挖加放最多几格,{@link #UNLIMITED} 即不限;只在规划时核
+ * @param maxFallHeightNoWater 下面没有水时愿意跳下的最大落差;身体快照按血量给出摔得起的上限,这里只能比它更紧
+ * @param alterBudget          整条路挖加放最多几格,{@link #UNLIMITED} 即不限;搜索展开每一步时就按它剪枝
  * @param excluded             排除的格子种类
  * @param positions            按坐标的代价与禁令
  * @param bans                 按方块种类的禁令
@@ -43,9 +41,8 @@ import com.dwinovo.numen.pathing.world.Semantics.Kind;
  * @param wadePenalty          水里走一格的罚分
  * @param takeBack             路上放下的方块事后都要拆掉
  */
-public record RouteSpec(Alter alter, boolean sprint, boolean parkour, boolean parkourPlace, boolean parkourAscend,
-                        boolean diagonalAscend, boolean diagonalDescend, boolean downward, boolean climbVines,
-                        boolean strictLiquidCheck, int maxFallHeightNoWater, int alterBudget, Set<Kind> excluded,
+public record RouteSpec(Alter alter, boolean sprint, boolean parkour, boolean parkourAscend,
+                        boolean diagonalAscend, boolean diagonalDescend, boolean downward, boolean strictLiquidCheck, int maxFallHeightNoWater, int alterBudget, Set<Kind> excluded,
                         PositionCosts positions, BlockBans bans, double placeCost, double breakPenalty,
                         double jumpPenalty, double wadePenalty, boolean takeBack) {
 
@@ -65,13 +62,13 @@ public record RouteSpec(Alter alter, boolean sprint, boolean parkour, boolean pa
     }
 
     /**
-     * 出厂规格:只走不改,可疾跑、可跑酷跳上高一格、可原地向下挖;不跑酷平跳、不斜向上下、不攀藤;无水落差上限 3;
-     * 排除岩浆、危险、机关(压力板、绊线)、易碎(耕地、海龟蛋)——后两类会被踩坏或会触发,默认不踩,规格可以放开;
-     * 放置 20、挖掘另加 30(约等于多走 6.5 格:破坏是绕不开时的下策)、起跳 2、涉水 3。
+     * 出厂规格:只走不改,可疾跑、可跑酷跳上高一格、可原地向下挖;不跑酷平跳、不斜向上下;无水落差上限 3(原版摔不疼的
+     * 高度);排除岩浆、危险、流水、机关(压力板、绊线)、易碎(耕地、海龟蛋)——流水会把身体推离路线,后两类会被踩坏或
+     * 会触发,都默认不进,规格可以放开;放置 20、挖掘另加 30(约等于多走 6.5 格:破坏是绕不开时的下策)、起跳 2、涉水 3。
      */
     private static final RouteSpec DEFAULTS = new RouteSpec(
-            Alter.NONE, true, false, false, true, false, false, true, false, false,
-            3, UNLIMITED, EnumSet.of(Kind.LAVA, Kind.HAZARD, Kind.TRIGGER, Kind.FRAGILE),
+            Alter.NONE, true, false, true, false, false, true, false,
+            3, UNLIMITED, EnumSet.of(Kind.LAVA, Kind.HAZARD, Kind.FLOWING_WATER, Kind.TRIGGER, Kind.FRAGILE),
             PositionCosts.EMPTY, BlockBans.EMPTY, 20.0, 30.0, 2.0, 3.0, false);
 
     public RouteSpec {
@@ -126,12 +123,10 @@ public record RouteSpec(Alter alter, boolean sprint, boolean parkour, boolean pa
         private Alter alter;
         private boolean sprint;
         private boolean parkour;
-        private boolean parkourPlace;
         private boolean parkourAscend;
         private boolean diagonalAscend;
         private boolean diagonalDescend;
         private boolean downward;
-        private boolean climbVines;
         private boolean strictLiquidCheck;
         private int maxFallHeightNoWater;
         private int alterBudget;
@@ -148,12 +143,10 @@ public record RouteSpec(Alter alter, boolean sprint, boolean parkour, boolean pa
             alter = from.alter;
             sprint = from.sprint;
             parkour = from.parkour;
-            parkourPlace = from.parkourPlace;
             parkourAscend = from.parkourAscend;
             diagonalAscend = from.diagonalAscend;
             diagonalDescend = from.diagonalDescend;
             downward = from.downward;
-            climbVines = from.climbVines;
             strictLiquidCheck = from.strictLiquidCheck;
             maxFallHeightNoWater = from.maxFallHeightNoWater;
             alterBudget = from.alterBudget;
@@ -182,11 +175,6 @@ public record RouteSpec(Alter alter, boolean sprint, boolean parkour, boolean pa
             return this;
         }
 
-        public Builder parkourPlace(boolean parkourPlace) {
-            this.parkourPlace = parkourPlace;
-            return this;
-        }
-
         public Builder parkourAscend(boolean parkourAscend) {
             this.parkourAscend = parkourAscend;
             return this;
@@ -204,11 +192,6 @@ public record RouteSpec(Alter alter, boolean sprint, boolean parkour, boolean pa
 
         public Builder downward(boolean downward) {
             this.downward = downward;
-            return this;
-        }
-
-        public Builder climbVines(boolean climbVines) {
-            this.climbVines = climbVines;
             return this;
         }
 
@@ -275,8 +258,8 @@ public record RouteSpec(Alter alter, boolean sprint, boolean parkour, boolean pa
         }
 
         public RouteSpec build() {
-            return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
-                    diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater, alterBudget,
+            return new RouteSpec(alter, sprint, parkour, parkourAscend, diagonalAscend,
+                    diagonalDescend, downward, strictLiquidCheck, maxFallHeightNoWater, alterBudget,
                     excluded, positions, bans, placeCost, breakPenalty, jumpPenalty, wadePenalty, takeBack);
         }
     }
