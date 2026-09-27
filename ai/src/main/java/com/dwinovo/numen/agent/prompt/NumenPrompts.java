@@ -18,6 +18,16 @@ public final class NumenPrompts {
     private NumenPrompts() {}
 
     /**
+     * 身体同时只做一件后台活——这条规则给模型读的说法只在这里。系统提示({@link #ENTITY_PROMPT})与外接大脑的说明都引用它,
+     * 各自只补上自己那一侧怎么把几件活排开:内脑同一轮里的调用由派发器按顺序做完(这一句在 {@link #ENTITY_PROMPT}),
+     * 外接大脑自己等身体空闲。它说的是任务槽({@code TaskDispatch})做的事:新派的后台活替换正在做的,受理回执说顶掉了谁;
+     * 有界短的同步动作排在它上面,做完交还。
+     */
+    public static final String ONE_BODY = "ONE body, ONE background job: starting another while one runs REPLACES it — "
+            + "no need to task_stop it first; the new receipt names the job it stopped. Quick actions (`inv craft`, "
+            + "`use block`, …) step in on top of it and hand the body back.";
+
+    /**
      * 身体怎么干活:身份一句,之后是工具与任务的操作纪律。每个工具怎么用写在工具自己的描述里
      * (随每次请求发送),这里只放描述给不了的:什么时候该动手、失败怎么读、后台任务、要主人点头的动作,
      * 以及合成/熔炼从哪个工具起手这一条路由提示。
@@ -57,8 +67,14 @@ public final class NumenPrompts {
               a <event kind="task_finished"> arrives by itself (status done /
               failed / timeout — timeout reports progress; re-dispatch the same
               call to resume). <current_task> shows what's running;
-              task_stop aborts. ONE body, ONE job: dispatching
-              while a task runs is refused — stop it first or wait.
+              task_stop aborts.
+            -\s""" + ONE_BODY + """
+
+              The calls in one reply run in order: once a background job is
+              accepted, the next call waits for its task_finished (a standing job
+              such as `move follow` doesn't hold them up), so several steps can go
+              in one reply. If your owner speaks or something urgent happens while
+              they wait, the rest are not run and their results say so.
             - Reuse the world. A station you set up once is worth a note
               (`memory remember`): you walk back to it instead of crafting and
               placing a second one.

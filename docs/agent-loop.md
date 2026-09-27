@@ -236,11 +236,14 @@ void end(RunEnd reason) {
 }
 ```
 
-- **工具串行**(不照搬 pi 的并行):身体只有一个动作槽。`ToolDispatcher` 保持串行、兜底超时、
-  展开闸;结果逐条经 `Transcript` 写入,一批全部结算后回调 `onToolsSettled`。
+- **工具按顺序**(不照搬 pi 的并行):身体只有一个动作槽。顺序在 `SerialCalls`(agent 模块),
+  `ToolDispatcher` 只管怎么执行一个调用与兜底超时;结果逐条经 `Transcript` 写入,一批全部结算后回调
+  `onToolsSettled`。
 - **异步身体任务**:世界动作工具的"结果"是立刻回来的受理回执,真正完成是之后的 `task_finished`
-  事件。所以 run 往往在身体还在干活时就结束了;`task_finished` 作为插话进队,下次 pump 开新 run。
-  这正是 pi 的"闲时来消息就开 run"。
+  事件。同一批后面还有调用时,派发器等这件活的 `task_finished` 进了队列才派下一个;这批还没结算时,
+  内核把入了队的条目连同急不急转给工具口(`ToolPort.arrived`),等的时候来了急件就不再等,余下的调用
+  逐条回"没执行"(规则见宪法 §六)。最后一件受理了这批就结算,所以 run 往往在身体还在干活时就结束了;
+  `task_finished` 作为插话进队,下次 pump 开新 run。这正是 pi 的"闲时来消息就开 run"。
 - **没有轮数上限、没有循环检测**:保持现状(模型合理地连着派很多任务;失控由主人停止)。
 
 ---
@@ -256,6 +259,8 @@ sealed interface ModelOutcome { record Answered(AssistantTurn turn, Usage usage)
 
 interface ToolPort {
     void run(List<ToolInvocation> calls, long runId, LongConsumer settled);
+    /** 这批还没结算时入队的一条输入与它急不急:等身体收尾的这批据此接着派或不再等。 */
+    void arrived(Entry entry, boolean urgent);
     /** 放弃这批里还没结果的调用;返回它们的 id。stopBody 决定是否叫停身体。 */
     List<String> cancel(boolean stopBody);
 }

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.gametest;
 
+import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.cli.ArgType;
@@ -29,6 +30,7 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
+import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -44,6 +46,9 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
  *
  * <p>命令派下的长活叫什么、重启后怎么接回来,用夹具组 {@code gt_long} 验:它唯一的动作 {@code linger} 派一件站着
  * 数刻的后台活,并提升成快捷工具 {@code gt_long_linger}。
+ *
+ * <p>身体同时只做一件后台活:模型一次回复里的几条调用经 {@link GameTestKit#round} 按内脑派发的同一个顺序执行(一件做完
+ * 才派下一件,等的时候主人开口余下的不再执行);下一轮派的替换正在做的,受理回执说顶掉了谁。
  */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
@@ -421,6 +426,146 @@ public class TaskControlGameTests {
             outbox.forget(uuid);
             Companions.dismiss(server, second);
         });
+    }
+
+    // ---- 一轮里的几条调用:一件做完才派下一件;下一轮派的替换正在做的 ----
+
+    /** 一轮里写了两条 {@code build set air}:第一件做完才派第二件,两格都拆掉,第二件没有顶掉第一件。 */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_tasks")
+    public static void two_build_sets_in_one_round_both_get_done(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_two_sets", new BlockPos(2, 2, 2), true);
+        BlockPos first = helper.absolutePos(new BlockPos(4, 2, 2));
+        BlockPos second = helper.absolutePos(new BlockPos(2, 2, 4));
+        level.setBlockAndUpdate(first, Blocks.STONE.defaultBlockState());
+        level.setBlockAndUpdate(second, Blocks.STONE.defaultBlockState());
+        LlmToolCall clearFirst = commandCall("build set air " + xyz(first));
+        LlmToolCall clearSecond = commandCall("build set air " + xyz(second));
+        Round round = round(helper, companion, clearFirst, clearSecond);
+        EventOutbox outbox = EventOutbox.get(level.getServer());
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(round.hasSettled(), "the round has not settled: " + round.result(clearFirst) + " / "
+                    + round.result(clearSecond));
+            helper.assertTrue(level.getBlockState(first).isAir() && level.getBlockState(second).isAir(),
+                    "not both cells were cleared");
+            helper.assertTrue(!round.result(clearSecond).contains("It replaced"),
+                    "the second set replaced the first: " + round.result(clearSecond));
+            helper.assertTrue(outbox.peek(companion.getUUID()).entries().stream()
+                            .noneMatch(e -> e.text().contains("status=\"stopped\"")),
+                    "a set was stopped: " + outbox.peek(companion.getUUID()).entries());
+            outbox.forget(companion.getUUID());
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 一轮里 goto 之后接一个只读的 status self:它等她走到了才执行,读到的是到达之后的她。 */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_tasks")
+    public static void a_query_after_a_goto_in_one_round_runs_on_arrival(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_arriver", new BlockPos(2, 2, 2), false);
+        BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
+        LlmToolCall walk = toolCall("move_goto", args("x", far.getX(), "z", far.getZ()));
+        LlmToolCall look = toolCall("status_self", args());
+        Round round = round(helper, companion, walk, look);
+        EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(round.hasSettled(), "the round has not settled");
+            Vec3 at = round.startedAt(look);
+            double off = Math.hypot(at.x - (far.getX() + 0.5), at.z - (far.getZ() + 0.5));
+            helper.assertTrue(off < 1.5, "status self ran " + off + " blocks from where the walk ends");
+            helper.assertTrue(round.result(look).contains("\"position\""), "status self did not answer: "
+                    + round.result(look));
+            outbox.forget(companion.getUUID());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 跟随没有收尾,不挡同一轮后面的调用:它们当场执行,跟随照常是她手上的活。 */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_tasks")
+    public static void a_follow_does_not_hold_up_the_rest_of_the_round(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_tagalong", new BlockPos(2, 2, 2), false);
+        LlmToolCall follow = commandCall("move follow");
+        LlmToolCall look = toolCall("status_self", args());
+        Round round = round(helper, companion, follow, look);
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(round.hasSettled() && round.result(look) != null,
+                    "the call after the follow is still waiting: " + round.result(follow));
+            TaskRecord now = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
+            helper.assertTrue(now != null && now.getToolName().equals("move follow"),
+                    "following is not what she is doing: " + now);
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /**
+     * 等她走到的时候主人开口:同一轮里还没派的两条不再执行,各回一条"没执行"并写明原因,这一轮结算;在走的那段路照常走。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
+    public static void the_owner_speaking_while_she_walks_leaves_the_rest_unrun(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_interrupted", new BlockPos(2, 2, 2), false);
+        BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
+        LlmToolCall walk = toolCall("move_goto", args("x", far.getX(), "z", far.getZ()));
+        LlmToolCall look = toolCall("status_self", args());
+        LlmToolCall around = toolCall("scan_around", args());
+        Round round = round(helper, companion, walk, look, around);
+        EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
+
+        steps(helper)
+                .thenExecuteAfter(5, () -> {
+                    helper.assertTrue(!round.hasSettled() && round.result(look) == null,
+                            "the query did not wait for the walk: " + round.result(look));
+                    round.ownerSays("wait, come back");
+                })
+                .thenExecute(() -> {
+                    helper.assertTrue(round.hasSettled(), "the round did not settle when the owner spoke");
+                    for (LlmToolCall skipped : List.of(look, around)) {
+                        String result = round.result(skipped);
+                        helper.assertTrue(result != null && result.contains("Not run")
+                                        && result.contains("your owner spoke") && result.contains("keeps running"),
+                                "a call left unrun does not say why: " + result);
+                    }
+                    TaskRecord now = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
+                    helper.assertTrue(now != null && now.getToolName().equals("move_goto"),
+                            "the walk is no longer running: " + now);
+                    outbox.forget(companion.getUUID());
+                    CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /** 下一轮派新的身体动作:它替换正在走的那段路,受理回执当场说顶掉了哪件;被顶掉的照常以 stopped 收尾。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
+    public static void a_body_action_in_a_later_round_says_which_job_it_replaced(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_changed_mind", new BlockPos(2, 2, 2), false);
+        BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
+        BlockPos near = helper.absolutePos(new BlockPos(2, 2, 8));
+        ToolRun walk = call(companion, "move_goto", args("x", far.getX(), "z", far.getZ()));
+        AtomicReference<ToolRun> instead = new AtomicReference<>();
+        EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
+
+        steps(helper)
+                .thenExecuteAfter(3, () -> instead.set(command(companion,
+                        "move goto --x " + near.getX() + " --z " + near.getZ())))
+                .thenWaitUntil(() -> {
+                    String reply = instead.get().reply();
+                    helper.assertTrue(reply.contains("It replaced " + walk.task().publicId() + " (")
+                                    && reply.contains("which is now stopped"),
+                            "the receipt does not say which job it replaced: " + reply);
+                    helper.assertTrue(walk.task().getState() == TaskState.CANCELLED,
+                            "the first walk was not stopped: " + walk.task().getState());
+                })
+                .thenWaitUntil(() -> helper.assertTrue(outbox.peek(companion.getUUID()).entries().stream()
+                                .anyMatch(e -> e.type().equals("task_finished")
+                                        && e.text().contains("id=\"" + walk.task().publicId() + "\"")
+                                        && e.text().contains("status=\"stopped\"")),
+                        "the replaced walk did not wind down as stopped: " + outbox.peek(companion.getUUID()).entries()))
+                .thenExecute(() -> {
+                    outbox.forget(companion.getUUID());
+                    CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+                })
+                .thenSucceed();
     }
 
     private static String taskIn(String reply) {

@@ -110,22 +110,16 @@ final class RuntimeState {
         // 有没有"干完"这回事,决定她该等还是该换:有终点的活等它的 task_finished;
         // 常驻的活(跟随 / 一直钓鱼)永远不会有那条事件,只能被换掉。分不清这一点,
         // 她要么干等一个永不到来的事件,要么把还没干完的活当成已经结束。
-        // 两支只差在「会不会有 task_finished」。怎么换是一样的 —— 直接派新的。
+        // 怎么换是系统提示里那条身体规则(NumenPrompts.ONE_BODY),这里只说这一件活的事实。
         String tail = task.standing()
                 ? "This is a STANDING job — it has no finish line and will NEVER send a "
                   + "task_finished event. It keeps running until something replaces it."
                 : "This background call is ACTIVE and will send a task_finished event when it ends.";
-        // 身体只有一个槽，派新活自然顶掉旧活，所以这里必须说「直接派」而不是
-        // 「别再派」——后者会让模型先 task_stop 再派，白跑一轮。
-        // 只有「停下来什么也不干」才需要 task_stop。
-        String swap = " There is only ONE body: dispatching another body action REPLACES this one "
-                + "outright — you do NOT need to stop it first. Use task_stop only when the owner "
-                + "wants her to stop and do nothing.";
         return "<current_task id=\"" + xml(task.id()) + "\" tool=\""
                 + xml(task.tool()) + "\" state=\"running\" standing=\"" + task.standing()
                 + "\" elapsed_s=\"" + elapsed
                 + "\">" + xml(truncate(task.describe(), 600)) + ". "
-                + tail + swap + "</current_task>";
+                + tail + "</current_task>";
     }
 
     /** 上一次渲染背包块用的那份快照本身。收到新包时缓存会换一个新对象,比身份就够,

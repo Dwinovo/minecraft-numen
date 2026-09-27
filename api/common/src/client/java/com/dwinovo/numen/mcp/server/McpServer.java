@@ -1,6 +1,7 @@
 package com.dwinovo.numen.mcp.server;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.agent.prompt.NumenPrompts;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.NumenActuator;
@@ -60,6 +61,14 @@ public final class McpServer {
     private static final int SUMMARY_LIMIT = 90;
 
     /**
+     * 外接大脑读的那条身体规则:内脑读的同一句({@link NumenPrompts#ONE_BODY}),接上这一侧怎么把几件活排开——外接大脑的
+     * 调用没有"同一轮",每一条当场执行,要一件做完再派下一件就自己等身体空闲。说明与接入提示词({@link McpAccessPrompt})
+     * 都用这一句。
+     */
+    static final String ONE_BODY = NumenPrompts.ONE_BODY + " To do jobs one after another, wait until the command "
+            + "`task status` shows the body idle before starting the next.";
+
+    /**
      * Sent to the connecting agent in the {@code initialize} handshake (MCP's
      * {@code instructions} field) — what Numen is and how to drive it, so any
      * client gets the essentials without a separately-installed skill.
@@ -82,7 +91,7 @@ public final class McpServer {
             Rules: survival mode — the tools do only what a real player can (mine to get stone; there is no \
             give or setblock). You are blind between calls, so perceive before and after acting. Short \
             actions (inv craft, gear wear, use block, …) return when they are done; long ones return at \
-            once, as above, and a new long action replaces the one running. You can drive several \
+            once, as above. %s You can drive several \
             companions in parallel. Modded blocks, items, and GUIs (Create, AE2, Mekanism) work natively.
 
             You also carry the companion's conversation: call get_events(companion) about every 2 \
@@ -94,7 +103,7 @@ public final class McpServer {
             say(companion, text): the words appear in-game as the companion's chat line, speech bubble, \
             and voice. Keep your own conversation history — the game stores none for you; between \
             get_events calls nothing is lost (events queue up). Raise wait_seconds (up to 50) only when \
-            you deliberately want to park and wait for the owner to speak.""";
+            you deliberately want to park and wait for the owner to speak.""".formatted(ONE_BODY);
 
     private final McpConfig config;
     private final Gson gson = new Gson();

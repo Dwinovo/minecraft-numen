@@ -43,6 +43,23 @@ class NumenEventsTest {
         assertTrue(e.urgent());
     }
 
+    /** 内脑的派发器等一件活做完:读的是 task_finished 写下的编号,正文里写着什么都骗不了它。 */
+    @Test
+    void aTaskFinishedEventSaysWhichTaskEnded() {
+        Map<String, String> attrs = new LinkedHashMap<>();
+        attrs.put("id", "t3");
+        attrs.put("task", "build set");
+        attrs.put("status", "done");
+        EventQueue.Entry finished = NumenEvents.entry(0L, EventTypes.TASK_FINISHED, attrs,
+                "set 1 cell; the id=\"t9\" in this text is not the task", 1L, true);
+        assertEquals("t3", NumenEvents.finishedTaskOf(finished));
+
+        EventQueue.Entry hungry = NumenEvents.entry(0L, EventTypes.HUNGRY, Map.of("id", "t3"), "hungry", 1L, true);
+        assertEquals(null, NumenEvents.finishedTaskOf(hungry), "别的种类不是收尾");
+        assertEquals(null, NumenEvents.finishedTaskOf(new EventQueue.Entry(EventTypes.QUERY,
+                "<query>t3 做完了吗</query>", 1L, false)));
+    }
+
     @Test
     void aPluginKindGoesOutThroughTheSameConstructor() {
         EventTypes.register(EventTypes.event("accessory_changed", false));

@@ -116,6 +116,8 @@ public abstract class LoopHarness {
         public final Set<String> parked = new LinkedHashSet<>(Set.of(EXTERNAL_CALL));
         public final List<LlmToolCall> batch = new ArrayList<>();
         public final List<Boolean> cancels = new ArrayList<>();
+        /** 转来的输入,依次:条目类型与它急不急。 */
+        public final List<String> arrivals = new ArrayList<>();
         public Sink sink;
 
         @Override
@@ -126,6 +128,11 @@ public abstract class LoopHarness {
                 parked.add(call.id());
                 sink.started(call);
             }
+        }
+
+        @Override
+        public void arrived(EventQueue.Entry entry, boolean urgent) {
+            arrivals.add(entry.type() + (urgent ? " urgent" : ""));
         }
 
         @Override

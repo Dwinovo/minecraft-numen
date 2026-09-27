@@ -94,8 +94,8 @@ public final class WorkCommands {
                         + "drops, move_goto beside it and run `use block` with the left button on it). The route fields are "
                         + "move_goto's, laid over work_mine's own default, which may dig anything (cells needing consent "
                         + "included) — pass them only to restrict her, e.g. avoid_break for blocks or cells she "
-                        + "must leave standing. BACKGROUND: a successful call is already running; do not call "
-                        + "work_mine/move_goto again while <current_task> exists and do not poll. task_finished status=done "
+                        + "must leave standing. BACKGROUND: a successful call is already running; do not poll. "
+                        + "task_finished status=done "
                         + "means the job is complete; only timeout permits resending the same arguments.");
         work.server("collect", "Pick up dropped items lying on the ground nearby.", WorkCommands::collect,
                         ITEM_IDS, RADIUS)
@@ -112,7 +112,7 @@ public final class WorkCommands {
                 .example("work fish --count 5")
                 .example("work fish")
                 .note("Background work: returns at once; the end arrives as a task_finished event. Without "
-                        + "--count it is a standing job that runs until another body action replaces it.")
+                        + "--count it is a standing job: it never ends on its own and never sends task_finished.")
                 .note("Needs a vanilla fishing rod in her inventory. In water she first moves up to 12 blocks "
                         + "onto a dry stance; it does not search far for a biome or a lake.")
                 .note("A catch is one bite reeled in: fish, junk or treasure, with vanilla loot, rod wear and "

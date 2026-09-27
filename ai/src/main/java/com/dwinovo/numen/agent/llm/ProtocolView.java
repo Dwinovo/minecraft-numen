@@ -1,7 +1,6 @@
 package com.dwinovo.numen.agent.llm;
 
 import com.dwinovo.numen.agent.provider.LlmToolCall;
-import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -80,10 +79,7 @@ public final class ProtocolView {
     /** 给还没结果的调用各补一条失败结果,补完清空。 */
     private static void answer(List<ConvoState.Msg> out, List<LlmToolCall> open, String reason) {
         for (LlmToolCall call : open) {
-            JsonObject result = new JsonObject();
-            result.addProperty("success", false);
-            result.addProperty("message", reason);
-            out.add(new ConvoState.Msg.Tool(call.id(), result.toString()));
+            out.add(new ConvoState.Msg.Tool(call.id(), ToolOutcome.failure(reason)));
         }
         open.clear();
     }

@@ -22,8 +22,6 @@ final class TaskSlot {
 
     private Task task;
     private TaskRecord record;
-    /** 它真正被 tick 过几刻——0 表示"刚受理还没动手"。 */
-    private int ticksRun;
 
     TaskSlot(Consumer<TaskRecord> outbox) {
         this.outbox = outbox;
@@ -31,25 +29,6 @@ final class TaskSlot {
 
     boolean isEmpty() {
         return record == null;
-    }
-
-    /**
-     * 刚受理,受理的那一刻还没过去。
-     *
-     * <p>用来分开两种"再派一个活":同一批工具调用里的第二个(模型在做计划,
-     * 该拒绝——让它拿到第一个的结果再决定),和新回合里的(主人/模型改主意了,
-     * 该替换)。判据本地可判,不用把回合 id 穿到服务端。
-     *
-     * <p><b>量的是槽里躺了多久,不是任务跑了多久。</b>任务会休眠:{@code follow}
-     * 在主人身边时 {@code canRun} 返 false,槽轮不到 tick,{@code ticksRun} 就一直是 0
-     * ——拿它当判据的话,一个跟了你十分钟的跟随任务会始终自称"刚受理",你让她去捡个
-     * 掉落物都会被拒,而拒绝话术还会让模型去等一个常驻任务永远不会发的
-     * {@code task_finished}。
-     *
-     * <p>记录自己知道是哪一刻受理的,判据也住在那儿({@link TaskRecord#acceptedThisTick})。
-     */
-    boolean freshlyAccepted(NumenPlayer companion) {
-        return record != null && record.acceptedThisTick(companion.level().getGameTime());
     }
 
     TaskRecord record() {
@@ -75,7 +54,6 @@ final class TaskSlot {
         rec.markStarted(companion.level().getGameTime());
         task = TaskFactory.create(companion, rec);
         record = rec;
-        ticksRun = 0;
         task.start(companion);
         // start() 里就走到终态的(一次性动作把活全干完了 / 前置条件不通过)当刻结算,
         // 免得它空占一刻 RUNNING —— 那一刻里的一次"停止"会给已经干完的事发中断。
@@ -87,7 +65,6 @@ final class TaskSlot {
         if (record == null) {
             return;
         }
-        ticksRun++;
         if (record.getState() == TaskState.RUNNING) {
             if (companion.level().getGameTime() >= record.getDeadlineGameTime()) {
                 record.setState(TaskState.TIMEOUT);
@@ -155,7 +132,6 @@ final class TaskSlot {
         }
         task = null;
         record = null;
-        ticksRun = 0;
     }
 
     /**
@@ -172,6 +148,5 @@ final class TaskSlot {
         outbox.accept(record);
         task = null;
         record = null;
-        ticksRun = 0;
     }
 }

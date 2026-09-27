@@ -444,6 +444,26 @@ class AgentLoopTest extends LoopHarness {
             assertTrue(eventsOf(LoopEvent.TurnStarted.class).get(1).ownerSpoke());
         }
 
+        /** 工具口在等身体收尾时要看见进了队列的每一条:收尾让它接着派,急件让它不再等。急不急是队列算的。 */
+        @Test
+        void inputWhileToolsRunReachesTheToolPortWithItsUrgency() {
+            worldEvent("闲着时到的", false);
+            ownerSays("去挖矿");
+            assertTrue(tools.arrivals.isEmpty(), "没有一批在跑,不转");
+
+            model.last().callTools(tool("c1"), tool("c2"));
+            worldEvent("t3 挖完了", false);
+            ownerSays("停一下");
+            overhears("旁边有人说话");
+            assertEquals(List.of(EventTypes.TASK_FINISHED, EventTypes.QUERY + " urgent", EventTypes.TALK),
+                    tools.arrivals, "发送方标急也没用的旁听不急,主人的话恒急");
+
+            tools.finish("c1");
+            tools.finish("c2");
+            ownerSays("好了");
+            assertEquals(3, tools.arrivals.size(), "这批结算之后不再转");
+        }
+
         @Test
         void aContinuationTurnDoesNotCountAsTheOwnerSpeaking() {
             ownerSays("去挖矿");

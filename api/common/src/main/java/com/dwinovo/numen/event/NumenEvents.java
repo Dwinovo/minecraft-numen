@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * <b>世界事件的唯一发出口。</b>常驻任务链、任务收尾、维度穿越、以及第三方内容包,
@@ -98,10 +100,27 @@ public final class NumenEvents {
     public static void taskFinished(NumenPlayer companion, String taskId, String tool,
                                     String status, String message) {
         Map<String, String> attrs = new LinkedHashMap<>();
-        attrs.put("id", taskId);
+        attrs.put(TASK_ID, taskId);
         attrs.put("task", tool);
         attrs.put("status", status);
         emit(companion, EventTypes.TASK_FINISHED, attrs, message, !"stopped".equals(status));
+    }
+
+    /** task_finished 里写着是哪件活的那个属性:{@link #taskFinished} 按它写,{@link #finishedTaskOf} 按它读。 */
+    private static final String TASK_ID = "id";
+    /** 事件开头那一截里的这个属性;属性值经 {@link #escape} 转义过,里面不会有引号和尖括号。 */
+    private static final Pattern FINISHED_ID = Pattern.compile("^<event [^>]* " + TASK_ID + "=\"([^\"]*)\"");
+
+    /**
+     * 这条输入是哪件后台活的收尾:一条 task_finished 事件就是它的编号,别的输入是 null。事件的样子只在这里拼
+     * ({@link #compose}),也在这里读回;内脑的派发器据此知道它在等的那件活做完了。
+     */
+    public static String finishedTaskOf(EventQueue.Entry entry) {
+        if (!EventTypes.TASK_FINISHED.equals(entry.type())) {
+            return null;
+        }
+        Matcher m = FINISHED_ID.matcher(entry.text());
+        return m.find() ? m.group(1) : null;
     }
 
     /**

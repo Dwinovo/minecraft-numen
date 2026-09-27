@@ -199,18 +199,6 @@ public final class CompanionTickDispatcher {
     }
 
     /**
-     * 槽里那个刚受理、一刻都还没跑过。
-     *
-     * <p>用来分开两种"再派一个活":同一批工具调用里的第二个(模型在做计划,该拒绝
-     * ——让它拿到第一个的结果再决定下一步),和新回合里派的(主人/模型改主意了,
-     * 该直接替换)。判据本地可判,不用把回合 id 穿到服务端。
-     */
-    public static boolean currentFreshlyAccepted(NumenPlayer companion) {
-        CompanionBrain brain = BRAINS.get(companion.getUUID());
-        return brain != null && brain.current.freshlyAccepted(companion);
-    }
-
-    /**
      * task_stop:LLM 主动叫停当前异步任务——与主人 Stop 同一条取消路(含 MAINHAND
      * 意图钉释放),原因词不同。返回被叫停的记录,null = 本来就没有异步任务在跑。
      * 收尾结果由 drainResults 以 task_finished(status=stopped) 事件送达。

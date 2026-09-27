@@ -119,9 +119,9 @@ public final class EntityAgentLoop {
     private String providerEntryId;
 
     /**
-     * Runs a model reply's tool calls one at a time and reports each result back to the kernel — the
-     * kernel's {@link com.dwinovo.numen.agent.loop.ToolPort}. All the tool-execution plumbing (serial
-     * queue, ship-to-server, completion, timeout) lives in there, not here.
+     * Runs a model reply's tool calls in order and reports each result back to the kernel — the
+     * kernel's {@link com.dwinovo.numen.agent.loop.ToolPort}. All the tool-execution plumbing (the order and
+     * waiting for a body job, ship-to-server, completion, timeout) lives in there, not here.
      */
 
     private final ToolDispatcher dispatcher;

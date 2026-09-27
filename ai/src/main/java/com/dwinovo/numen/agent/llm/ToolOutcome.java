@@ -25,6 +25,14 @@ public final class ToolOutcome {
 
     private ToolOutcome() {}
 
+    /** 一条失败结果 {@code {"success":false,"message":…}}:不是工具自己回的、由循环替它写下的结果都是这个形状。 */
+    public static String failure(String message) {
+        JsonObject result = new JsonObject();
+        result.addProperty("success", false);
+        result.addProperty("message", message);
+        return result.toString();
+    }
+
     /** 这条工具结果是否宣告了失败。 */
     public static boolean failed(String content) {
         if (content == null || content.isBlank()) {

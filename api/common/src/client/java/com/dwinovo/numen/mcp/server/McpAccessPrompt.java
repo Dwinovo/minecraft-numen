@@ -86,9 +86,7 @@ final class McpAccessPrompt {
                 `get_events`: run the command `task status` until the body is idle, then perceive to \
                 confirm what happened. `task_stop` cancels. Short actions (`inv craft`, `gear wear`, \
                 `use block`, …) return when they are done.
-                - One body runs one task at a time: a new long action replaces the one running. Two \
-                long actions sent at the same moment are refused — send the second after the first \
-                is accepted.
+                - %s
                 - You're blind between calls: perceive with `status_self` / `scan_blocks` / \
                 `scan_entities` before and after acting.
                 - `scan_blocks` answers in groups of touching blocks, each with an id (g1, g2, …) and \
@@ -107,6 +105,7 @@ final class McpAccessPrompt {
                         auth.isBlank()
                                 ? "\"-y\", \"mcp-remote\", \"" + endpoint + "\""
                                 : "\"-y\", \"mcp-remote\", \"" + endpoint + "\", \"--header\", "
-                                        + "\"Authorization: Bearer " + auth + "\"");
+                                        + "\"Authorization: Bearer " + auth + "\"",
+                        McpServer.ONE_BODY);
     }
 }
