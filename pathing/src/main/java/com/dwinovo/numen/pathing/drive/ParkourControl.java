@@ -20,13 +20,13 @@ final class ParkourControl extends Control {
         keys().release(Key.SNEAK);
         Vec3 target = center(m.to());
         keys().set(Key.SPRINT, SprintPolicy.sprint(m, next, flows()));
-        if (rig.entity.onGround() && ahead() < 0.5 + rig.entity.getBbWidth() / 2) {
+        double edge = 0.5 + rig.entity.getBbWidth() / 2;
+        if (rig.entity.onGround() && ahead() < edge) {
             Aim.faceToward(rig.entity, target.x, target.z);
             keys().press(Key.FORWARD);
             keys().release(Key.BACK);
-            // 下一刻身子就离开边沿了:这一刻起跳
-            double leave = 0.5 + rig.entity.getBbWidth() / 2 - horizontalSpeed();
-            keys().set(Key.JUMP, ahead() >= leave);
+            // 下一刻身子就离开边沿了:这一刻按下跳,原版在下一刻移动之前起跳
+            keys().set(Key.JUMP, ahead() + Steering.nextStride(rig.entity) >= edge);
             return Beat.IDLE;
         }
         keys().release(Key.JUMP);

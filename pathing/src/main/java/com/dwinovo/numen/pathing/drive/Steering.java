@@ -53,6 +53,14 @@ final class Steering {
         keys.set(Key.FORWARD, along < speed);
     }
 
+    /** 按住前进的下一刻,身体沿它此刻朝着的方向会挪多远:原版先把这一刻的输入加速度加进速度,再移动。 */
+    static double nextStride(ServerPlayer body) {
+        double yaw = Math.toRadians(body.getYRot());
+        Vec3 motion = body.getDeltaMovement();
+        double along = motion.x * -Math.sin(yaw) + motion.z * Math.cos(yaw);
+        return along + (body.onGround() ? groundAccel(body) : (body.isSprinting() ? 0.026 : 0.02) * 0.98);
+    }
+
     /**
      * 停在 {@code (x, z)};身体在空中时落在脚高 {@code landingY}。
      *
