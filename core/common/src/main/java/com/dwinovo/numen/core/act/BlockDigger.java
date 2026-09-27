@@ -122,10 +122,10 @@ public final class BlockDigger {
     }
 
     /**
-     * 施工清障:一次到位的原生破坏({@code ServerPlayerGameMode.destroyBlock}——掉落按手持结算、
+     * 施工清障与收工撤垫块:一次到位的原生破坏({@code ServerPlayerGameMode.destroyBlock}——掉落按手持结算、
      * 创造不掉、别的模组的破坏事件照常触发),不走逐刻进度,也不要求视线。同样先过权限层。
      *
-     * @return 方块真的没了
+     * @return 方块真的没了;没碎而那一格不是空气时,{@link #refusal()} 说为什么
      */
     public boolean destroyNow(BlockPos target) {
         BlockState state = player.level().getBlockState(target);
@@ -135,7 +135,12 @@ public final class BlockDigger {
         if (!permit(target).allowed()) {
             return false;
         }
-        return player.gameMode.destroyBlock(target);
+        if (!player.gameMode.destroyBlock(target)) {
+            // 权限层放行了,原生通道却没让它碎(别的模组取消了破坏事件、出生点保护):和逐刻挖掘被退回同一个说法
+            refusal = Verdict.deny(SERVER_REFUSED);
+            return false;
+        }
+        return true;
     }
 
     /** Outcome of one {@link #digStep} tick — lets callers distinguish "still working"
