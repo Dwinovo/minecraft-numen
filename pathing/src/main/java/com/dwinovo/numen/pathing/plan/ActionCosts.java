@@ -73,6 +73,11 @@ public final class ActionCosts {
      * 长度相当的自然路线都胜出。
      */
     public static final double CONSENT_MULTIPLIER = 10.0;
+    /**
+     * 身体走进的格紧挨着一格伤身的方块(岩浆、火、仙人掌),加这么多刻:没碰上,可身子歪一点、被推一下就碰上了。
+     * 有稍远一点的路时走远一点,没有也照样走。
+     */
+    public static final double EXPOSED_SIDE = 2 * WALK_ONE_BLOCK;
     /** 身体进入一只生物危险半径里的一格,加这么多刻:穿过去约等于多绕十来格,够让路线绕开,又不至于宁可挖穿一座山。 */
     public static final double DANGER_PER_CELL = 3 * WALK_ONE_BLOCK;
 }

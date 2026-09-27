@@ -389,6 +389,17 @@ class MovesTest {
     }
 
     @Test
+    void aStepBesideLavaCostsMoreThanTheSameStepAwayFromIt() {
+        TestWorld safe = ground();
+        TestWorld beside = ground().set(1, Y, 1, Blocks.LAVA.defaultBlockState());
+        Maneuver away = holds(MoveKind.WALK, defaults(), safe, AT, EAST);
+        Maneuver near = holds(MoveKind.WALK, defaults(), beside, AT, EAST);
+        assertEquals(0, away.exposure());
+        assertEquals(1, near.exposure(), "落点那一列南边紧挨着一格岩浆");
+        assertTrue(Steps.cost(defaults(), near) > Steps.cost(defaults(), away));
+    }
+
+    @Test
     void aSwimmerClimbsOutOntoTheShoreWithoutJumping() {
         // 两格深的池子,水面那一层的格与岸边地板齐平:浮在水面上,朝岸边上一级
         TestWorld world = pool(2);

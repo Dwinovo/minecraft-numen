@@ -56,7 +56,7 @@ final class Downward implements Move {
             return draft.failure();
         }
         return new Premise.Holds(new Maneuver(MoveKind.DOWNWARD, heading, from, stance, below, landing, false, false, false,
-                Strides.inWater(draft, below), 1, drop, 0, draft.edits(), contact.cells(), support));
+                Strides.inWater(draft, below), 1, drop, 0, draft.edits(), contact.cells(), contact.exposure(), support));
     }
 
     @Override

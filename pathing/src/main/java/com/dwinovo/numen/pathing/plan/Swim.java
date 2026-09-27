@@ -74,7 +74,7 @@ final class Swim implements Move {
             return draft.failure();
         }
         return new Premise.Holds(new Maneuver(MoveKind.SWIM, heading, from, stance, to, landing, false, false, false, true,
-                1, Math.max(0, f0 - landing.feetY()), heading.horizontal() ? 1 : 0, draft.edits(), contact.cells(),
+                1, Math.max(0, f0 - landing.feetY()), heading.horizontal() ? 1 : 0, draft.edits(), contact.cells(), contact.exposure(),
                 support));
     }
 

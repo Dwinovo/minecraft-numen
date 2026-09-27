@@ -1,6 +1,7 @@
 package com.dwinovo.numen.pathing.plan;
 
 import java.util.EnumSet;
+import java.util.Set;
 
 import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
@@ -13,6 +14,7 @@ import com.dwinovo.numen.pathing.world.Semantics.Kind;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -23,7 +25,8 @@ import net.minecraft.world.level.block.state.BlockState;
  * 踩坏的格。走法各自只管几何,碰到什么一律在这里判,只此一处。
  *
  * <p>身体碰到的是它的碰撞盒占到的格,外加脚踩的那一格(岩浆块踩上去就烫)。细雪托得住的身体站在细雪上不会陷进去,
- * 细雪对它不算危险。
+ * 细雪对它不算危险。进入的格与脚下那一格水平方向上紧挨着的伤身的格(岩浆、火、仙人掌……)也在这里数出来,挨着它们走要加价
+ * ({@link CostModel#overhead}),路线因此离它们远一点。
  */
 final class Contact {
 
@@ -34,6 +37,10 @@ final class Contact {
     private final int fromHigh;
     private final LongArrayList cells = new LongArrayList();
     private final LongOpenHashSet seen = new LongOpenHashSet();
+    private int exposure;
+
+    /** 碰了伤身的种类:挨着它走,身子歪一点就碰上。 */
+    private static final EnumSet<Kind> HARMFUL = EnumSet.of(Kind.LAVA, Kind.HAZARD);
 
     /** 身体起步时脚在 {@code (from 那一列, fromFeet)}:它那时占着的格不算新进入的。 */
     Contact(BodyStats body, BlockPos from, double fromFeet) {
@@ -64,6 +71,25 @@ final class Contact {
         return cells.toLongArray();
     }
 
+    /** 这一步新进入的格与脚下那一格水平方向上紧挨着几格伤身的({@link #admit} 时数出来)。 */
+    int exposure() {
+        return exposure;
+    }
+
+    /** 这一格碰了伤身:岩浆、危险方块;托得住身体的细雪不算。 */
+    private boolean harmful(Draft draft, BlockPos pos) {
+        Set<Kind> kinds = Semantics.kinds(draft, pos);
+        if (body.walksOnPowderSnow() && draft.getBlockState(pos).is(Blocks.POWDER_SNOW)) {
+            return false;
+        }
+        for (Kind kind : HARMFUL) {
+            if (kinds.contains(kind)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * 这些格与脚踩的 {@code support} 这条路线碰不碰得:不行就在草稿上记下哪一格、为什么。
      *
@@ -72,6 +98,7 @@ final class Contact {
      */
     boolean admit(Draft draft, CostModel model, BlockPos support, boolean fromHeight) {
         RouteSpec spec = model.spec();
+        LongOpenHashSet near = new LongOpenHashSet();
         for (int i = 0; i < cells.size(); i++) {
             long cell = cells.getLong(i);
             BlockPos pos = BlockPos.of(cell);
@@ -81,7 +108,23 @@ final class Contact {
             if (model.forbids(Use.PASS, cell)) {
                 return draft.fail(pos, Reason.FORBIDDEN);
             }
+            for (Direction side : Direction.Plane.HORIZONTAL) {
+                BlockPos beside = pos.relative(side);
+                if (!seen.contains(beside.asLong()) && harmful(draft, beside)) {
+                    near.add(beside.asLong());
+                }
+            }
         }
+        if (support != null) {
+            // 脚下那一格旁边的也算:站在岩浆坑边上,脚底一滑就下去了
+            for (Direction side : Direction.Plane.HORIZONTAL) {
+                BlockPos beside = support.relative(side);
+                if (harmful(draft, beside)) {
+                    near.add(beside.asLong());
+                }
+            }
+        }
+        exposure = near.size();
         if (support == null) {
             return true;
         }

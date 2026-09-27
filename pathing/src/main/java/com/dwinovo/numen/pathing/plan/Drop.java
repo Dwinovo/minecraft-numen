@@ -97,7 +97,7 @@ final class Drop implements Move {
             return draft.failure();
         }
         return new Premise.Holds(new Maneuver(kind, heading, from, stance, to, landing, false, false, false, wading,
-                Semantics.speedFactor(draft, from.getX(), f0, from.getZ()), drop, 1, draft.edits(), contact.cells(),
+                Semantics.speedFactor(draft, from.getX(), f0, from.getZ()), drop, 1, draft.edits(), contact.cells(), contact.exposure(),
                 support));
     }
 

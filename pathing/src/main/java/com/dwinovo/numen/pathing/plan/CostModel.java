@@ -229,7 +229,7 @@ public final class CostModel {
 
     /**
      * 一步里除了身体移动本身以外的价钱,每种走法都一样加:要做的改动、身体新进入的格与落脚那一格的按位置加价、
-     * 落到水里的涉水罚分。
+     * 紧挨着伤身的格走过的加价、落到水里的涉水罚分。
      */
     public double overhead(Maneuver m) {
         double cost = 0;
@@ -243,6 +243,7 @@ public final class CostModel {
         for (long cell : m.cells()) {
             cost += extra(Use.PASS, cell);
         }
+        cost += m.exposure() * ActionCosts.EXPOSED_SIDE;
         if (m.support() != null) {
             cost += extra(Use.STAND, m.support().asLong());
         }

@@ -23,11 +23,13 @@ import net.minecraft.core.BlockPos;
  * @param span        水平走了几列(跑酷是落点离起点的列数,其余是 1)
  * @param edits       要做的改动,按执行的先后
  * @param cells       身体这一步新进入的格(不含起步时已经占着的),{@link BlockPos#asLong} 编码
+ * @param exposure    这些格与脚下那一格水平方向上紧挨着几格碰了会伤身的(岩浆、火、仙人掌……):挨着走没碰上,歪一点、
+ *                    滑一下就碰上了
  * @param support     落到之后脚踩的那一格;不是站着为 null
  */
 public record Maneuver(MoveKind kind, Heading heading, BlockPos from, Stance start, BlockPos to, Stance landing, boolean jump, boolean sprint,
                        boolean sneak, boolean wading, double speedFactor, double drop, int span, List<Edit> edits,
-                       long[] cells, BlockPos support) {
+                       long[] cells, int exposure, BlockPos support) {
 
     public Maneuver {
         edits = List.copyOf(edits);
