@@ -1,0 +1,45 @@
+package com.dwinovo.numen.pathing.plan;
+
+import java.util.List;
+
+import net.minecraft.core.BlockPos;
+
+/**
+ * 前提成立的一步:从哪个节点到哪个节点、身体怎么过去、路上要改哪几格。代价只从这些事实与成本模型算出,执行的控制器
+ * 也照这些事实去做。
+ *
+ * @param kind        走法
+ * @param from        起步节点
+ * @param start       身体起步时在 {@code from} 上怎么待着
+ * @param to          落到的节点
+ * @param landing     身体在 {@code to} 上怎么待着
+ * @param jump        要起跳
+ * @param sprint      可以疾跑过去
+ * @param sneak       要潜行(贴着脚下那块的侧面搭桥时,身子探出边沿)
+ * @param wading      落到的节点泡在水里
+ * @param speedFactor 脚下方块的步速系数(起步与落点两处的平均,灵魂沙、蜂蜜块慢)
+ * @param drop        脚往下落了多高
+ * @param span        水平走了几列(跑酷是落点离起点的列数,其余是 1)
+ * @param edits       要做的改动,按执行的先后
+ * @param cells       身体这一步新进入的格(不含起步时已经占着的),{@link BlockPos#asLong} 编码
+ * @param support     落到之后脚踩的那一格;不是站着为 null
+ */
+public record Maneuver(MoveKind kind, BlockPos from, Stance start, BlockPos to, Stance landing, boolean jump, boolean sprint,
+                       boolean sneak, boolean wading, double speedFactor, double drop, int span, List<Edit> edits,
+                       long[] cells, BlockPos support) {
+
+    public Maneuver {
+        edits = List.copyOf(edits);
+    }
+
+    /** 这一步改地形的格数(挖加放,开关门不算)。 */
+    public int alterations() {
+        int n = 0;
+        for (Edit edit : edits) {
+            if (edit.alters()) {
+                n++;
+            }
+        }
+        return n;
+    }
+}

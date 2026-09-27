@@ -1,0 +1,121 @@
+package com.dwinovo.numen.pathing.plan;
+
+import java.util.List;
+import java.util.Set;
+
+import com.dwinovo.numen.pathing.Fixtures;
+import com.dwinovo.numen.pathing.TestWorld;
+import com.dwinovo.numen.pathing.Vanilla;
+import com.dwinovo.numen.pathing.spec.BlockBans;
+import com.dwinovo.numen.pathing.spec.PositionCosts;
+import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.pathing.spec.RouteSpec.Alter;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/** 成本模型:挖与放的准入按规格与许可分开,价钱只在一处算。 */
+class CostModelTest {
+
+    private static final BlockPos FREE = new BlockPos(0, 64, 0);
+    private static final BlockPos ASK = new BlockPos(1, 64, 0);
+    private static final BlockPos DENY = new BlockPos(2, 64, 0);
+    private static BlockState STONE;
+
+    @BeforeAll
+    static void boot() {
+        Vanilla.boot();
+        STONE = Blocks.STONE.defaultBlockState();
+    }
+
+    private static final TerrainPolicy POLICY = (change, pos, state) -> pos.equals(ASK) ? Permit.ask("主人的箱子")
+            : pos.equals(DENY) ? Permit.deny("玩家放的") : Permit.ALLOW;
+
+    private static CostModel model(Alter alter) {
+        return CostModel.of(RouteSpec.defaults().edit().alter(alter).build(), Fixtures.body(), POLICY, Fixtures.COBBLE,
+                Threats.NONE);
+    }
+
+    private static TestWorld stones() {
+        return new TestWorld().set(FREE, STONE).set(ASK, STONE).set(DENY, STONE);
+    }
+
+    @Test
+    void noneRefusesEverythingNaturalTakesWhatIsAllowedAndAnyAlsoWhatNeedsConsent() {
+        TestWorld world = stones();
+        assertEquals(Reason.NEEDS_ALTER, model(Alter.NONE).admitDig(world, FREE, STONE).refused());
+
+        CostModel natural = model(Alter.NATURAL);
+        assertInstanceOf(Permit.Allow.class, natural.admitDig(world, FREE, STONE).permit());
+        assertEquals(Reason.NEEDS_CONSENT, natural.admitDig(world, ASK, STONE).refused());
+        CostModel.Admission denied = natural.admitDig(world, DENY, STONE);
+        assertEquals(Reason.DENIED, denied.refused());
+        assertEquals("玩家放的", denied.detail(), "许可给的理由原样交还");
+
+        CostModel any = model(Alter.ANY);
+        assertEquals("主人的箱子", assertInstanceOf(Permit.Ask.class, any.admitDig(world, ASK, STONE).permit()).credential());
+        assertEquals(Reason.DENIED, any.admitDig(world, DENY, STONE).refused(), "拒绝的格在 any 下也不进");
+    }
+
+    @Test
+    void aCellThatNeedsConsentCostsMuchMore() {
+        CostModel any = model(Alter.ANY);
+        double free = any.digCost(new Edit.Dig(FREE, STONE, Permit.ALLOW, false, true));
+        double asked = any.digCost(new Edit.Dig(ASK, STONE, Permit.ask("x"), false, true));
+        assertEquals(free * ActionCosts.CONSENT_MULTIPLIER, asked, 1e-9);
+    }
+
+    @Test
+    void placingPricesTakingTheBlockBackWhenTheSpecAsksForIt() {
+        RouteSpec keep = RouteSpec.defaults().edit().alter(Alter.NATURAL).build();
+        CostModel left = CostModel.of(keep, Fixtures.body(), TerrainPolicy.ALLOW_ALL, Fixtures.COBBLE, Threats.NONE);
+        CostModel taken = left.withSpec(keep.edit().takeBack(true).build());
+        Edit.Place place = new Edit.Place(FREE, Blocks.AIR.defaultBlockState(), Blocks.COBBLESTONE, Permit.ALLOW);
+        double pickUp = left.tools().ticks(Blocks.COBBLESTONE.defaultBlockState(), false, true);
+        assertEquals(left.placeCost(place) + pickUp, taken.placeCost(place), 1e-9);
+    }
+
+    @Test
+    void positionsAndBansForbidDiggingAndPlacing() {
+        TestWorld world = stones();
+        RouteSpec spec = RouteSpec.defaults().edit().alter(Alter.NATURAL)
+                .positions(PositionCosts.builder().forbid(Use.DIG, FREE.asLong()).build())
+                .bans(new BlockBans(Set.of(), Set.of(Blocks.WATER), Set.of())).build();
+        CostModel model = CostModel.of(spec, Fixtures.body(), TerrainPolicy.ALLOW_ALL, Fixtures.COBBLE, Threats.NONE);
+        assertEquals(Reason.FORBIDDEN, model.admitDig(world, FREE, STONE).refused());
+        BlockPos pond = new BlockPos(0, 60, 0);
+        world.set(pond, Blocks.WATER.defaultBlockState()).set(pond.below(), STONE);
+        assertEquals(Reason.FORBIDDEN, model.admitPlace(world, pond, Blocks.WATER.defaultBlockState()).refused());
+    }
+
+    @Test
+    void creaturesMakeTheCellsAroundThemDearer() {
+        List<Threat> zombie = List.of(new Threat(10.5, 64, 10.5, 2));
+        CostModel model = CostModel.of(RouteSpec.defaults(), Fixtures.body(), TerrainPolicy.ALLOW_ALL, Materials.NONE,
+                () -> zombie);
+        assertEquals(ActionCosts.DANGER_PER_CELL, model.extra(Use.PASS, new BlockPos(11, 64, 10).asLong()), 1e-9);
+        assertEquals(0, model.extra(Use.PASS, new BlockPos(20, 64, 10).asLong()));
+    }
+
+    @Test
+    void theFallLimitIsTheBodysAndTheSpecOnlyTightensIt() {
+        RouteSpec loose = RouteSpec.defaults().edit().maxFallHeightNoWater(100).build();
+        CostModel healthy = CostModel.of(loose, Fixtures.body(20), TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+        CostModel hurt = healthy.withSpec(loose);
+        assertEquals(17, healthy.fallLimit(), "20 点血摔完留 6 点:能摔 17 格");
+        CostModel weak = CostModel.of(loose, Fixtures.body(6), TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+        assertEquals(3, weak.fallLimit(), "只剩 6 点血时只落摔不疼的高度");
+        assertEquals(3, CostModel.of(RouteSpec.defaults(), Fixtures.body(20), TerrainPolicy.ALLOW_ALL, Materials.NONE,
+                Threats.NONE).fallLimit(), "出厂规格收紧到 3");
+        assertTrue(hurt.fallLimit() <= loose.maxFallHeightNoWater());
+    }
+}
