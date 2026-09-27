@@ -7,8 +7,8 @@ description: 主人提到女仆模型、想换个样子、或问你现在长什�
 
 这台机器上装了车万女仆,你可以穿它的模型。
 
-这些动作在 `tlm` 命令组里:`models` 查、`wear` 换、`remove` 脱。每个动作怎么写,用
-`tlm <动作> --help` 查。比如主人想看灵梦:先 `tlm models --search 灵梦`,再照查到的 id 换上。
+这些动作在 `tlm` 命令组里:`models` 查、`wear` 换、`remove` 脱。每个动作怎么写,在它后面加
+--help 查(如 `tlm wear --help`)。比如主人想看灵梦:先 `tlm models --search 灵梦`,再照查到的 id 换上。
 
 模型 id 一定要先查再用,别猜。查到的清单里没有的,就是没装。
 
