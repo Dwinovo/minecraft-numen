@@ -26,21 +26,15 @@ public final class Hotbar {
     private Hotbar() {}
 
     /**
-     * 把主背包第 {@code slot} 格的东西拿到主手;{@code slot} 为负是空手——快捷栏有空格就切过去,没有就拿着手上的东西。
-     * 已经在主手上就什么也不做。
+     * 把主背包第 {@code slot} 格的东西拿到主手;{@code slot} 为负是空手——切到快捷栏里一个空格({@link #emptyHand}),
+     * 没有空格就拿着手上的东西。已经在主手上就什么也不做。
      */
     public static Optional<BodyAction> hold(ServerPlayer body, int slot) {
         Inventory inventory = body.getInventory();
         if (slot < 0) {
-            if (inventory.getSelected().isEmpty()) {
-                return Optional.empty();
-            }
-            for (int i = 0; i < Inventory.getSelectionSize(); i++) {
-                if (inventory.getItem(i).isEmpty()) {
-                    return Optional.of(select(body, i, Items.AIR));
-                }
-            }
-            return Optional.empty();
+            int empty = emptyHand(inventory);
+            return empty < 0 || empty == inventory.selected ? Optional.empty()
+                    : Optional.of(select(body, empty, Items.AIR));
         }
         if (slot == inventory.selected) {
             return Optional.empty();
@@ -83,6 +77,23 @@ public final class Hotbar {
 
     /** {@link #grip} 的结果。 */
     public record Grip(boolean ready, BodyAction action) {}
+
+    /**
+     * 空手用快捷栏的哪一格。捡起的东西先进背包的第一个空格;空手挖着的时候那一格被塞进东西,手上就换了一样东西,原版会从头挖。
+     * 所以挑一个不是第一个空格的空格:手上正空着的那一格是就不动,不是就从后往前找;只有第一个空格可用时用它。没有空格为 -1。
+     */
+    private static int emptyHand(Inventory inventory) {
+        int first = inventory.getFreeSlot();
+        if (inventory.getSelected().isEmpty() && inventory.selected != first) {
+            return inventory.selected;
+        }
+        for (int i = Inventory.getSelectionSize() - 1; i >= 0; i--) {
+            if (inventory.getItem(i).isEmpty() && i != first) {
+                return i;
+            }
+        }
+        return first >= 0 && Inventory.isHotbarSlot(first) ? first : -1;
+    }
 
     /** 主背包里第一格装着 {@code item} 的,快捷栏在前;没有为 -1。 */
     private static int slotOf(Inventory inventory, Item item) {
