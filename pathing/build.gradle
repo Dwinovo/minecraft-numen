@@ -12,18 +12,26 @@ neoForge {
     neoFormVersion = neo_form_version
 }
 
-dependencies {
-    testImplementation platform('org.junit:junit-bom:5.11.4')
-    testImplementation 'org.junit.jupiter:junit-jupiter'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-}
-
-// 单测跑在原版环境里:引导注册表、用真实的 BlockState,所以测试的类路径就是主源码集的那一份原版。
 sourceSets {
+    // 单测跑在原版环境里:引导注册表、用真实的 BlockState,所以测试的类路径就是主源码集的那一份原版。
     test {
         compileClasspath += sourceSets.main.compileClasspath
         runtimeClasspath += sourceSets.main.runtimeClasspath
     }
+    // 模块自己的 GameTest:用一个不是同伴的普通假玩家真走,只看模块与原版。由 core:neoforge 的 GameTest 服务器
+    // 一起跑(见 core/neoforge/build.gradle),所以不进发行 jar;模板在 src/gametest/structures。
+    gametest {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    // GameTest 服务器只登记挂着 NeoForge 的 @GameTestHolder 的类:用例要看见这一个注解,别的 NeoForge 类一个不用
+    gametestCompileOnly "net.neoforged:neoforge:${neoforge_version}:universal"
 }
 
 test {
