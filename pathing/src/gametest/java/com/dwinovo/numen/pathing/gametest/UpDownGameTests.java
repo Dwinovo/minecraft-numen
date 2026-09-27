@@ -10,7 +10,6 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
@@ -195,19 +194,8 @@ public class UpDownGameTests {
         Trial t = new Trial(helper).floor();
         t.fill(2, 1, 5, 6, 3, 5, Blocks.STONE);
         TestBody body = t.body(4, 4, 5);
-        float[] takeoff = {Float.NaN};
         t.go(body, Goals.at(t.at(7, 1, 1)), RouteSpec.defaults())
-                .during(r -> {
-                    if (r.body.onGround()) {
-                        takeoff[0] = Float.NaN;
-                        return;
-                    }
-                    if (Float.isNaN(takeoff[0])) {
-                        takeoff[0] = r.body.getYRot();
-                    } else if (Math.abs(Mth.wrapDegrees(r.body.getYRot() - takeoff[0])) > 90) {
-                        throw new GameTestAssertException("空中回了身:离地时 yaw " + takeoff[0] + ",此刻 " + r.body.getYRot());
-                    }
-                })
+                .during(Scenes.noTurnInMidAir())
                 .arrives().then(UpDownGameTests::unhurt);
     }
 

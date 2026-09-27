@@ -4,7 +4,10 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.GameRules;
 
-/** 寻路用例的批次开场:和平、正午、晴天、不自然刷怪——每一批都自己定,不继承上一批。 */
+/**
+ * 寻路用例的批次开场:和平、正午、晴天、不自然刷怪、没有随机刻(耕地不会自己干成泥土,场地只因导航与用例自己改变)——
+ * 每一批都自己定,不继承上一批。
+ */
 final class Worlds {
 
     private Worlds() {}
@@ -13,6 +16,7 @@ final class Worlds {
         level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
         level.setDayTime(6000);
         level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false, level.getServer());
+        level.getGameRules().getRule(GameRules.RULE_RANDOMTICKING).set(0, level.getServer());
         level.setWeatherParameters(24000, 0, false, false);
     }
 }

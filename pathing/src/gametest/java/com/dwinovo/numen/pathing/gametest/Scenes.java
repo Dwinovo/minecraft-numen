@@ -50,6 +50,22 @@ final class Scenes {
         }
     }
 
+    /** 每刻看一眼:腾空那几刻身体一直朝着离地那一刻的方向(差不过 90 度),空中没回身。 */
+    static java.util.function.Consumer<Trial.Run> noTurnInMidAir() {
+        float[] takeoff = {Float.NaN};
+        return r -> {
+            if (r.body.onGround() || r.body.onClimbable() || r.body.isInWater()) {
+                takeoff[0] = Float.NaN;
+                return;
+            }
+            if (Float.isNaN(takeoff[0])) {
+                takeoff[0] = r.body.getYRot();
+            } else if (Math.abs(net.minecraft.util.Mth.wrapDegrees(r.body.getYRot() - takeoff[0])) > 90) {
+                throw new GameTestAssertException("空中回了身:离地时 yaw " + takeoff[0] + ",此刻 " + r.body.getYRot());
+            }
+        };
+    }
+
     /** 实际账里没有挖、没有放(开关门不算)。 */
     static void unaltered(Trial.Run r) {
         if (r.report.ledger().alterations() != 0) {
