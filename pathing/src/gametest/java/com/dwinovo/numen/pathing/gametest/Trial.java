@@ -257,6 +257,10 @@ final class Trial {
         int ticks;
         /** 这次导航途中身体最少时剩几点血(原版会回血,只看收场时的血量看不出摔没摔)。 */
         float lowestHealth = Float.MAX_VALUE;
+        /** 途中身体往上的速度最大到过多少:起跳一下是 0.33 以上,迈步上坎是瞬间抬上去的,不留速度。 */
+        double highestRise;
+        /** 途中身体的脚最高到过哪一格(相对场地)。 */
+        double highestFeet = Double.NEGATIVE_INFINITY;
 
         Run(Trial trial, TestBody body, Navigator navigator, Navigation navigation, RouteSpec spec) {
             this.trial = trial;
@@ -325,6 +329,8 @@ final class Trial {
                 }
                 status = navigation.tick();
                 lowestHealth = Math.min(lowestHealth, body.getHealth());
+                highestRise = Math.max(highestRise, body.getDeltaMovement().y);
+                highestFeet = Math.max(highestFeet, body.getY() - trial.origin.getY());
                 if (status.running()) {
                     if (ticks >= limit) {
                         throw new GameTestAssertException("时限内没收场:身体在 " + trial.rel(body.blockPosition())
