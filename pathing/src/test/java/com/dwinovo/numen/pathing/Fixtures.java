@@ -9,16 +9,24 @@ import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.plan.TerrainPolicy;
 import com.dwinovo.numen.pathing.plan.Threats;
+import com.dwinovo.numen.pathing.search.AStar;
+import com.dwinovo.numen.pathing.search.Favoring;
+import com.dwinovo.numen.pathing.search.Goal;
+import com.dwinovo.numen.pathing.search.Search;
+import com.dwinovo.numen.pathing.search.SearchResult;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.BodyStats;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 
-/** 规划单测的常用摆设:一具原版身体、一份成本模型。 */
+/** 规划与搜索单测的常用摆设:一具原版身体、一份成本模型、跑一次搜索。 */
 public final class Fixtures {
 
+    /** 单测默认的展开预算。 */
+    public static final int BUDGET = 20_000;
     /** 身上带着圆石当垫路料。 */
     public static final Materials COBBLE = () -> Optional.of(Blocks.COBBLESTONE);
 
@@ -60,5 +68,14 @@ public final class Fixtures {
     /** 能改自然地形({@code alter=natural})的规格。 */
     public static RouteSpec natural() {
         return RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build();
+    }
+
+    /** 在这个世界里按这份成本模型从 {@code start} 搜到 {@code goal}。 */
+    public static SearchResult search(TestWorld world, CostModel model, BlockPos start, Goal goal) {
+        return search(world, model, start, goal, BUDGET);
+    }
+
+    public static SearchResult search(TestWorld world, CostModel model, BlockPos start, Goal goal, int budget) {
+        return AStar.run(new Search(world, model, start, goal, budget, Favoring.NONE), () -> false);
     }
 }

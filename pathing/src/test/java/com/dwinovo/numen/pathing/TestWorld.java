@@ -3,20 +3,25 @@ package com.dwinovo.numen.pathing;
 import java.util.HashMap;
 import java.util.Map;
 
-import com.dwinovo.numen.pathing.plan.WorldView;
+import com.dwinovo.numen.pathing.search.SearchView;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.material.FluidState;
 
-/** 单测摆场景用的世界:一张坐标到方块状态的表,没摆的格是空气;世界边界是原版的默认值。 */
-public final class TestWorld implements WorldView {
+/**
+ * 单测摆场景用的世界:一张坐标到方块状态的表,没摆的格是空气。默认所有区块都算加载了;{@link #loadedWithin} 把加载的区块
+ * 限在以原点所在区块为中心的一块正方形里。
+ */
+public final class TestWorld implements SearchView {
 
     private final Map<BlockPos, BlockState> blocks = new HashMap<>();
     private final WorldBorder border = new WorldBorder();
+    private int loadedRadius = Integer.MAX_VALUE;
 
     public TestWorld set(int x, int y, int z, BlockState state) {
         blocks.put(new BlockPos(x, y, z), state);
@@ -43,6 +48,18 @@ public final class TestWorld implements WorldView {
             }
         }
         return this;
+    }
+
+    /** 只有离原点所在区块不超过 {@code chunks} 个区块的区块算加载了。 */
+    public TestWorld loadedWithin(int chunks) {
+        this.loadedRadius = chunks;
+        return this;
+    }
+
+    @Override
+    public boolean isLoaded(int x, int z) {
+        return Math.abs(SectionPos.blockToSectionCoord(x)) <= loadedRadius
+                && Math.abs(SectionPos.blockToSectionCoord(z)) <= loadedRadius;
     }
 
     @Override

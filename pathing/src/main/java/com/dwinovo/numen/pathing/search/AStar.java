@@ -1,0 +1,318 @@
+package com.dwinovo.numen.pathing.search;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.function.BooleanSupplier;
+
+import com.dwinovo.numen.pathing.plan.CostModel;
+import com.dwinovo.numen.pathing.plan.EditedView;
+import com.dwinovo.numen.pathing.plan.Heading;
+import com.dwinovo.numen.pathing.plan.Maneuver;
+import com.dwinovo.numen.pathing.plan.Move;
+import com.dwinovo.numen.pathing.plan.Moves;
+import com.dwinovo.numen.pathing.plan.Premise;
+import com.dwinovo.numen.pathing.plan.Stance;
+import com.dwinovo.numen.pathing.plan.WorldView;
+import com.dwinovo.numen.pathing.spec.PositionCosts;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.pathing.world.Bounds;
+import com.dwinovo.numen.pathing.world.BodyStats;
+
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import net.minecraft.core.BlockPos;
+
+/**
+ * A*:从起点节点逐个展开 {@link Moves#ALL} 的每种走法、每个方向,前提成立的步子按它的代价(乘上旧路折扣)松弛。
+ *
+ * <ul>
+ *   <li><b>身体面对的世界</b>:展开一个节点时,前提读的是快照加上"走到这个节点的那一步"做过的改动——刚挖开的格是空的,
+ *       刚垫下的块托着脚。更早的步子做过的改动不叠:身体已经离开了那里;</li>
+ *   <li><b>预算</b>按展开的节点数计,结论不随机器快慢漂移;</li>
+ *   <li><b>停下的原因</b>随结论交出({@link SearchResult.Stop}):到了、搜完无路、预算用完、有路伸进快照外没加载的区块;</li>
+ *   <li><b>半程路线</b>:没到目标时,按几档"估价加已走代价的折算"各取最好的节点,取第一个离起点超过 {@value #MIN_PARTIAL}
+ *       格的交出;都不够远就不交——原地打转的半截路不是路;</li>
+ *   <li><b>目标格保护</b>:目标的 {@link Goal#protection()} 并进路线规格的按位置禁令,规划不挖自己要站、要够的格;</li>
+ *   <li><b>改动预算</b>(规格的 {@code alterBudget})在展开时就生效:设了预算时节点按"位置加已改几格"区分,超出预算的步子
+ *       不展开,所以搜出来的路一定在预算内,而且是预算内最便宜的;</li>
+ *   <li><b>到达价</b>:进了目标的节点出堆时补上它的到达价放回堆里,按总价再次出堆才收,同时照常往外展开。</li>
+ * </ul>
+ *
+ * <p>只读 {@link Search#view()} 这份快照,单线程跑完;结论可复现,不引入随机。
+ */
+public final class AStar {
+
+    /** 半程路线的几档折算系数:越小越接近真正的最优,越大越激进地朝目标扑。 */
+    private static final double[] COEFFICIENTS = {1.5, 2, 2.5, 3, 4, 5, 10};
+    /** 半程路线的终点至少要离起点这么多格才交出。 */
+    static final int MIN_PARTIAL = 5;
+    /** 小于这个改进不松弛:平地上斜走与直走组合出的浮点差不值得重排堆。 */
+    private static final double MIN_IMPROVEMENT = 0.01;
+
+    private final Search search;
+    private final CostModel model;
+    private final BodyStats body;
+    private final boolean budgeted;
+    private final int alterBudget;
+    private final Long2ObjectOpenHashMap<Node> nodes = new Long2ObjectOpenHashMap<>();
+    private final Heap open = new Heap();
+
+    private AStar(Search search) {
+        this.search = search;
+        PositionCosts protection = search.goal().protection();
+        RouteSpec spec = search.model().spec();
+        this.model = protection.isEmpty() ? search.model()
+                : search.model().withSpec(spec.edit().positions(spec.positions().plus(protection)).build());
+        this.body = model.body().stats();
+        this.budgeted = spec.budgeted();
+        this.alterBudget = spec.alterBudget();
+    }
+
+    /** 在当前线程上跑完一次搜索;{@code cancelled} 在每展开一个节点前问一次。 */
+    public static SearchResult run(Search search, BooleanSupplier cancelled) {
+        return new AStar(search).run(cancelled);
+    }
+
+    private SearchResult run(BooleanSupplier cancelled) {
+        SearchView view = search.view();
+        Goal goal = search.goal();
+        BlockPos startPos = search.start();
+        Stance startStance = Stance.at(view, body, startPos);
+        if (startStance == null) {
+            return new SearchResult(SearchResult.Stop.STRANDED, null);
+        }
+        Node start = node(startPos.getX(), startPos.getY(), startPos.getZ(), 0);
+        start.g = 0;
+        start.stance = startStance;
+        start.f = start.h;
+        open.push(start);
+        Node[] best = new Node[COEFFICIENTS.length];
+        double[] bestScore = new double[COEFFICIENTS.length];
+        Arrays.fill(best, start);
+        Arrays.fill(bestScore, start.h);
+
+        int expanded = 0;
+        boolean skippedUnloaded = false;
+        while (!open.isEmpty()) {
+            if (cancelled.getAsBoolean()) {
+                return new SearchResult(SearchResult.Stop.CANCELLED, null);
+            }
+            Node current = open.pop();
+            if (goal.contains(current.x, current.y, current.z, current.stance)) {
+                double total = current.g + goal.arrival(current.x, current.y, current.z, current.stance);
+                if (total > current.f + MIN_IMPROVEMENT) {
+                    // 到达价还没付:按总价放回堆里,同时照常往外展开——起点在贵的成员里时要走得出去
+                    current.f = total;
+                    open.push(current);
+                } else {
+                    return new SearchResult(SearchResult.Stop.ARRIVED, route(start, current));
+                }
+            }
+            if (expanded >= search.budget()) {
+                return new SearchResult(SearchResult.Stop.BUDGET, partial(start, best));
+            }
+            expanded++;
+            BlockPos from = new BlockPos(current.x, current.y, current.z);
+            // 身体此刻面对的世界:快照,加上走到这个节点的那一步做过的改动
+            WorldView here = current.via == null ? view : EditedView.after(view, current.via.edits());
+            for (Move move : Moves.ALL) {
+                for (Heading heading : move.headings()) {
+                    if (!loaded(view, current, heading, move.reach())) {
+                        skippedUnloaded = true;
+                        continue;
+                    }
+                    if (!(move.premise(model, here, from, current.stance, heading) instanceof Premise.Holds holds)) {
+                        continue;
+                    }
+                    Maneuver m = holds.maneuver();
+                    BlockPos to = m.to();
+                    if (!Bounds.holdsBody(view.border(), body, to.getX(), to.getZ())) {
+                        continue;
+                    }
+                    int used = current.used + m.alterations();
+                    if (budgeted && used > alterBudget) {
+                        continue;
+                    }
+                    double cost = move.cost(model, m);
+                    if (!(cost > 0) || Double.isInfinite(cost)) {
+                        throw new IllegalStateException(move.kind() + " 从 " + from + " 算出了非法的代价 " + cost);
+                    }
+                    Node next = node(to.getX(), to.getY(), to.getZ(), budgeted ? used : 0);
+                    double g = current.g + cost * search.favoring().factor(to);
+                    if (next.g - g <= MIN_IMPROVEMENT) {
+                        continue;
+                    }
+                    next.g = g;
+                    next.f = g + next.h;
+                    next.parent = current;
+                    next.via = m;
+                    next.viaCost = cost;
+                    next.stance = m.landing();
+                    open.pushOrUpdate(next);
+                    for (int i = 0; i < COEFFICIENTS.length; i++) {
+                        double score = next.h + next.g / COEFFICIENTS[i];
+                        if (bestScore[i] - score > MIN_IMPROVEMENT) {
+                            bestScore[i] = score;
+                            best[i] = next;
+                        }
+                    }
+                }
+            }
+        }
+        SearchResult.Stop stop = skippedUnloaded ? SearchResult.Stop.UNLOADED : SearchResult.Stop.EXHAUSTED;
+        return new SearchResult(stop, partial(start, best));
+    }
+
+    /** 这一步最远会读到的列都在快照里。 */
+    private static boolean loaded(SearchView view, Node from, Heading heading, int reach) {
+        for (int i = 1; i <= reach; i++) {
+            if (!view.isLoaded(from.x + heading.dx() * i, from.z + heading.dz() * i)) {
+                return false;
+            }
+        }
+        if (heading.dx() != 0 && heading.dz() != 0) {
+            return view.isLoaded(from.x + heading.dx(), from.z) && view.isLoaded(from.x, from.z + heading.dz());
+        }
+        return true;
+    }
+
+    private Node node(int x, int y, int z, int used) {
+        long key = BlockPos.asLong(x, y, z);
+        Node head = nodes.get(key);
+        for (Node n = head; n != null; n = n.sibling) {
+            if (n.used == used) {
+                return n;
+            }
+        }
+        Node n = new Node(x, y, z, used, search.goal().estimate(x, y, z));
+        n.sibling = head;
+        nodes.put(key, n);
+        return n;
+    }
+
+    /** 按系数从紧到松,取第一个离起点足够远的最好节点;都不够远就没有半程路线。 */
+    private Route partial(Node start, Node[] best) {
+        for (Node n : best) {
+            double dx = n.x - start.x;
+            double dy = n.y - start.y;
+            double dz = n.z - start.z;
+            if (dx * dx + dy * dy + dz * dz > MIN_PARTIAL * MIN_PARTIAL) {
+                return route(start, n);
+            }
+        }
+        return null;
+    }
+
+    private static Route route(Node start, Node end) {
+        List<Route.Leg> legs = new ArrayList<>();
+        for (Node n = end; n.parent != null; n = n.parent) {
+            legs.add(new Route.Leg(n.via, n.viaCost));
+        }
+        Collections.reverse(legs);
+        return new Route(new BlockPos(start.x, start.y, start.z), start.stance, legs);
+    }
+
+    /** 一个搜索节点:位置,加上设了改动预算时到这儿已经改了几格。 */
+    private static final class Node {
+        final int x;
+        final int y;
+        final int z;
+        final int used;
+        final double h;
+        double g = Double.POSITIVE_INFINITY;
+        double f;
+        Stance stance;
+        Node parent;
+        Maneuver via;
+        double viaCost;
+        /** 同一位置、已改格数不同的另一个节点。 */
+        Node sibling;
+        int heapIndex = -1;
+
+        Node(int x, int y, int z, int used, double h) {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.used = used;
+            this.h = h;
+        }
+    }
+
+    /** 按 f 排的二叉堆,支持原地降键。 */
+    private static final class Heap {
+        private Node[] items = new Node[1024];
+        private int size;
+
+        boolean isEmpty() {
+            return size == 0;
+        }
+
+        void push(Node n) {
+            if (size == items.length) {
+                items = Arrays.copyOf(items, size * 2);
+            }
+            items[size] = n;
+            n.heapIndex = size;
+            size++;
+            up(n.heapIndex);
+        }
+
+        void pushOrUpdate(Node n) {
+            if (n.heapIndex >= 0) {
+                up(n.heapIndex);
+            } else {
+                push(n);
+            }
+        }
+
+        Node pop() {
+            Node top = items[0];
+            size--;
+            items[0] = items[size];
+            items[0].heapIndex = 0;
+            items[size] = null;
+            if (size > 0) {
+                down(0);
+            }
+            top.heapIndex = -1;
+            return top;
+        }
+
+        private void up(int i) {
+            Node n = items[i];
+            while (i > 0) {
+                int parent = (i - 1) >>> 1;
+                if (items[parent].f <= n.f) {
+                    break;
+                }
+                items[i] = items[parent];
+                items[i].heapIndex = i;
+                i = parent;
+            }
+            items[i] = n;
+            n.heapIndex = i;
+        }
+
+        private void down(int i) {
+            Node n = items[i];
+            while (true) {
+                int child = 2 * i + 1;
+                if (child >= size) {
+                    break;
+                }
+                if (child + 1 < size && items[child + 1].f < items[child].f) {
+                    child++;
+                }
+                if (items[child].f >= n.f) {
+                    break;
+                }
+                items[i] = items[child];
+                items[i].heapIndex = i;
+                i = child;
+            }
+            items[i] = n;
+            n.heapIndex = i;
+        }
+    }
+}
