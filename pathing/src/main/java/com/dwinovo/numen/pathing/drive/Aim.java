@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.dwinovo.numen.pathing.world.Faces;
+import com.dwinovo.numen.pathing.world.Reach;
 import com.dwinovo.numen.pathing.world.Replaceable;
 
 import net.minecraft.core.BlockPos;
@@ -32,6 +33,8 @@ public final class Aim {
     static final double PIXEL = Math.pow(0.5 * 0.6 + 0.2, 3) * 8 * 0.15;
     /** 瞄面上的点时往面里收一点,射线不贴着棱。 */
     private static final double INSET = 0.02;
+    /** 瞄面上离眼睛最近的一点时离棱留的边:准星不落在两格共用的棱上。 */
+    private static final double EDGE = 0.05;
 
     private Aim() {}
 
@@ -73,8 +76,9 @@ public final class Aim {
     // ==================== 挖:看这一格身上的哪一点 ====================
 
     /**
-     * 挖 {@code pos} 这一格时看它身上的哪一点:它的轮廓中心,不行就是轮廓各个朝着眼睛的面的中心,取第一个看得见、够得着的;
-     * 都看不见为 null。
+     * 挖 {@code pos} 这一格时看它身上的哪一点:它的轮廓中心,不行就是轮廓各个朝着眼睛的面的中心,再不行是这些面上离眼睛最近的
+     * 一点(离棱留一点边),取第一个看得见、够得着的;都看不见为 null。最后那一档与第 0 层 {@link Reach} 量的是同一个距离
+     * ——眼睛到方块最近的一点——所以 {@code Reach} 说够得着、那一点又没被挡着,这里就交得出瞄点。
      */
     public static Vec3 point(ServerPlayer body, BlockPos pos) {
         Level level = body.level();
@@ -84,15 +88,19 @@ public final class Aim {
         List<Vec3> candidates = new ArrayList<>();
         AABB bounds = shape.isEmpty() ? boxes.get(0) : shape.bounds();
         candidates.add(bounds.getCenter().add(pos.getX(), pos.getY(), pos.getZ()));
+        List<Vec3> nearest = new ArrayList<>();
         for (AABB local : boxes) {
             AABB box = local.move(pos);
             for (Direction side : Direction.values()) {
                 Vec3 center = faceCenter(box, side);
                 if (facing(eye, center, side)) {
-                    candidates.add(center.subtract(Vec3.atLowerCornerOf(side.getNormal()).scale(INSET)));
+                    Vec3 inward = Vec3.atLowerCornerOf(side.getNormal()).scale(INSET);
+                    candidates.add(center.subtract(inward));
+                    nearest.add(nearestOnFace(box, side, eye).subtract(inward));
                 }
             }
         }
+        candidates.addAll(nearest);
         double range = body.blockInteractionRange();
         for (Vec3 candidate : candidates) {
             if (candidate.distanceTo(eye) < range && hits(body, eye, candidate, pos, null)) {
@@ -152,6 +160,26 @@ public final class Aim {
     private static boolean facing(Vec3 eye, Vec3 onFace, Direction side) {
         Vec3 normal = Vec3.atLowerCornerOf(side.getNormal());
         return eye.subtract(onFace).dot(normal) > 1.0E-4;
+    }
+
+    /** {@code box} 的 {@code side} 面上离 {@code eye} 最近的一点,离面的四条棱各留 {@link #EDGE}。 */
+    private static Vec3 nearestOnFace(AABB box, Direction side, Vec3 eye) {
+        double x = clampInside(eye.x, box.minX, box.maxX);
+        double y = clampInside(eye.y, box.minY, box.maxY);
+        double z = clampInside(eye.z, box.minZ, box.maxZ);
+        return switch (side) {
+            case DOWN -> new Vec3(x, box.minY, z);
+            case UP -> new Vec3(x, box.maxY, z);
+            case NORTH -> new Vec3(x, y, box.minZ);
+            case SOUTH -> new Vec3(x, y, box.maxZ);
+            case WEST -> new Vec3(box.minX, y, z);
+            case EAST -> new Vec3(box.maxX, y, z);
+        };
+    }
+
+    private static double clampInside(double v, double min, double max) {
+        double margin = Math.min(EDGE, (max - min) / 2);
+        return Mth.clamp(v, min + margin, max - margin);
     }
 
     private static Vec3 faceCenter(AABB box, Direction side) {
