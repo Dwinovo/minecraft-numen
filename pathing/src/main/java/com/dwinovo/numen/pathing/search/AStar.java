@@ -31,7 +31,8 @@ import net.minecraft.core.BlockPos;
  *   <li><b>预算</b>按展开的节点数计,结论不随机器快慢漂移;</li>
  *   <li><b>停下的原因</b>随结论交出({@link SearchResult.Stop}):到了、搜完无路、预算用完、有路伸进快照外没加载的区块;</li>
  *   <li><b>半程路线</b>:没到目标时,按几档"估价加已走代价的折算"各取最好的节点,取第一个离起点超过 {@value #MIN_PARTIAL}
- *       格的交出;都不够远就不交——原地打转的半截路不是路;</li>
+ *       格的交出;都不够远就不交——原地打转的半截路不是路。最后一档只看估价(离目标多近):估价按疾跑算,挖隧道、搭桥时
+ *       每一步的真实代价比它贵几十倍,前几档的折算都压不住已走的代价,最好的节点总在起点跟前;</li>
  *   <li><b>目标格保护</b>:目标的 {@link Goal#protection()} 并进路线规格的按位置禁令,规划不挖自己要站、要够的格;</li>
  *   <li><b>改动预算</b>(规格的 {@code alterBudget})在展开时就生效:设了预算时节点按"位置加已改几格"区分,超出预算的步子
  *       不展开,所以搜出来的路一定在预算内,而且是预算内最便宜的;</li>
@@ -42,8 +43,8 @@ import net.minecraft.core.BlockPos;
  */
 public final class AStar {
 
-    /** 半程路线的几档折算系数:越小越接近真正的最优,越大越激进地朝目标扑。 */
-    private static final double[] COEFFICIENTS = {1.5, 2, 2.5, 3, 4, 5, 10};
+    /** 半程路线的几档折算系数:越小越接近真正的最优,越大越激进地朝目标扑;最后一档不计已走的代价。 */
+    private static final double[] COEFFICIENTS = {1.5, 2, 2.5, 3, 4, 5, 10, Double.POSITIVE_INFINITY};
     /** 半程路线的终点至少要离起点这么多格才交出。 */
     static final int MIN_PARTIAL = 5;
     /** 小于这个改进不松弛:平地上斜走与直走组合出的浮点差不值得重排堆。 */

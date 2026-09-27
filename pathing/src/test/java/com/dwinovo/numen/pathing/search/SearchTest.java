@@ -99,6 +99,17 @@ class SearchTest {
     }
 
     @Test
+    void aLongTunnelThatRunsOutOfBudgetStillHandsOverAPartialRouteTowardTheGoal() {
+        // 整片石头里只空着身体站的那两格,空手挖:每挖一格的价钱比估价里走一格贵几十倍
+        TestWorld rock = new TestWorld().fill(-4, Y - 6, -8, 40, Y + 8, 8, STONE)
+                .fill(0, Y, 0, 0, Y + 1, 0, Blocks.AIR.defaultBlockState());
+        SearchResult result = search(rock, Fixtures.model(natural()), START, Goals.at(new BlockPos(30, Y, 0)), 2000);
+        assertEquals(SearchResult.Stop.BUDGET, result.stop());
+        assertNotNull(result.route(), "挖隧道的长路搜不到头,也要交出朝目标挖过去的半程路线");
+        assertTrue(result.route().end().getX() > AStar.MIN_PARTIAL, "半程路线朝目标推进:" + result.route().end());
+    }
+
+    @Test
     void aBodyThatCannotStandAtTheStartIsStranded() {
         SearchResult result = search(new TestWorld(), defaults(), START, Goals.at(new BlockPos(5, Y, 0)));
         assertEquals(SearchResult.Stop.STRANDED, result.stop());
