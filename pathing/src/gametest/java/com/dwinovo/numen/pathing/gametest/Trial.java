@@ -12,6 +12,9 @@ import com.dwinovo.numen.pathing.api.NavStatus;
 import com.dwinovo.numen.pathing.api.Navigation;
 import com.dwinovo.numen.pathing.api.Navigator;
 import com.dwinovo.numen.pathing.api.Outcome;
+import com.dwinovo.numen.pathing.api.PlanQuery;
+import com.dwinovo.numen.pathing.api.PlanResult;
+import com.dwinovo.numen.pathing.api.Planning;
 import com.dwinovo.numen.pathing.api.Ports;
 import com.dwinovo.numen.pathing.api.Report;
 import com.dwinovo.numen.pathing.api.Teardown;
@@ -63,6 +66,8 @@ final class Trial {
     private final BlockPos extent;
     private final Map<BlockPos, BlockState> baseline = new HashMap<>();
     private final List<Run> runs = new ArrayList<>();
+    /** 每刻要做的事(推导航、等规划);在刻里新加的从下一刻起做。 */
+    private final List<Runnable> tickers = new ArrayList<>();
     private boolean recorded;
 
     Materials materials = Materials.NONE;
@@ -77,6 +82,8 @@ final class Trial {
         this.origin = helper.absolutePos(BlockPos.ZERO).above();
         var bounds = helper.getBounds();
         this.extent = new BlockPos((int) bounds.getXsize(), (int) bounds.getYsize(), (int) bounds.getZsize());
+        // 只在这里向 GameTest 登记一次:原版在刻里遍历它的登记表,刻里再登记会撞上那次遍历
+        helper.onEachTick(() -> List.copyOf(tickers).forEach(Runnable::run));
     }
 
     // ==================== 场地 ====================
@@ -169,6 +176,35 @@ final class Trial {
         Run run = new Run(this, body, navigator, navigator.drive(request), request.spec());
         runs.add(run);
         return run;
+    }
+
+    /**
+     * 只搜不走:从这具身体脚下规划,有了结论交给 {@code then}(在世界线程上,那一刻)。规划期间身体原地不动,{@code then}
+     * 可以接着 {@link #go} 开走,或自己断言后 {@code helper.succeed()}。
+     */
+    void plan(TestBody body, PlanQuery query, Consumer<PlanResult> then) {
+        Planning planning = navigator(body).plan(query);
+        boolean[] done = {false};
+        tickers.add(() -> {
+            if (done[0]) {
+                return;
+            }
+            PlanResult result = planning.poll();
+            if (result != null) {
+                done[0] = true;
+                then.accept(result);
+            }
+        });
+    }
+
+    /** {@code ticks} 刻之后做 {@code action}(可以在里面开走)。 */
+    void later(int ticks, Runnable action) {
+        int[] left = {ticks};
+        tickers.add(() -> {
+            if (left[0]-- == 0) {
+                action.run();
+            }
+        });
     }
 
     /** 这具身体加这条用例的端口组成的门面。 */
@@ -280,7 +316,7 @@ final class Trial {
             this.navigator = navigator;
             this.navigation = navigation;
             this.spec = spec;
-            trial.helper.onEachTick(this::tick);
+            trial.tickers.add(this::tick);
         }
 
         /** 拉起身体之后等 {@code ticks} 刻才开走。 */
@@ -336,7 +372,7 @@ final class Trial {
             return this;
         }
 
-        /** 每刻在推导航之前做(用例中途改世界、推身体)。 */
+        /** 每刻在推导航(或撤回)之前做(用例中途改世界、推身体)。 */
         Run during(Consumer<Run> action) {
             everyTick.add(action);
             return this;
@@ -352,14 +388,14 @@ final class Trial {
             }
             try {
                 ticks++;
+                for (Consumer<Run> action : everyTick) {
+                    action.accept(this);
+                }
                 if (teardown != null) {
                     tearDown();
                     return;
                 }
                 lowestHealth = Math.min(lowestHealth, body.getHealth());
-                for (Consumer<Run> action : everyTick) {
-                    action.accept(this);
-                }
                 status = navigation.tick();
                 lowestHealth = Math.min(lowestHealth, body.getHealth());
                 highestRise = Math.max(highestRise, body.getDeltaMovement().y);

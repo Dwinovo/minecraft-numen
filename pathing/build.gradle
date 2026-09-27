@@ -30,8 +30,10 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-    // GameTest 服务器只登记挂着 NeoForge 的 @GameTestHolder 的类:用例要看见这一个注解,别的 NeoForge 类一个不用
+    // GameTest 服务器只登记挂着 NeoForge 的 @GameTestHolder 的类:用例要看见这一个注解;另外只借它的事件总线,在用例里
+    // 扮演"别的模组取消了破坏事件"。模块自己的代码一个 NeoForge 类不用
     gametestCompileOnly "net.neoforged:neoforge:${neoforge_version}:universal"
+    gametestCompileOnly 'net.neoforged:bus:8.0.5'
 }
 
 test {

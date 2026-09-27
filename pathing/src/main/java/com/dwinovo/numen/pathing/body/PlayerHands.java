@@ -73,7 +73,12 @@ public final class PlayerHands implements Effector {
 
     /** 左键正按在某一格上(包括送了 STOP 在等服务端落地)。 */
     public boolean digging() {
-        return destroying != null || stopped != null;
+        return pressing() != null;
+    }
+
+    /** 左键正按在哪一格上(包括送了 STOP 在等服务端落地的那一格);没按为 null。 */
+    public BlockPos pressing() {
+        return stopped != null ? stopped : destroying;
     }
 
     private long now() {
