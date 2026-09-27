@@ -59,6 +59,8 @@ final class Trial {
     static final String ARENA = "pathing_arena";
     /** 长条空场地模板(长途)。 */
     static final String LONG = "pathing_long";
+    /** 高场地模板(按高度爬高)。 */
+    static final String TALL = "pathing_tall";
 
     final GameTestHelper helper;
     final ServerLevel level;
@@ -369,6 +371,22 @@ final class Trial {
         Run takesBack(RouteSpec spec, Consumer<Run> check) {
             takeBackSpec = spec;
             afterTakeBack.add(check);
+            return this;
+        }
+
+        /**
+         * 每刻至少占 {@code millis} 毫秒墙钟。测试服务器的刻不等墙钟(一刻做完就接着下一刻),而搜索在工作线程上按墙钟跑:
+         * 一次要几百毫秒的搜索在这里会占去上千刻,期限与"提前搜下一段来得及"就都失去了意义。搜索吃重的用例按它定个节奏,
+         * 让刻与搜索的快慢比接近真实服务器(真实服务器一刻五十毫秒)。
+         */
+        Run paced(long millis) {
+            everyTick.add(r -> {
+                try {
+                    Thread.sleep(millis);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
             return this;
         }
 
