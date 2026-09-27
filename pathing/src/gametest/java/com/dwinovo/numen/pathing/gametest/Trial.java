@@ -185,6 +185,10 @@ final class Trial {
      * 可以接着 {@link #go} 开走,或自己断言后 {@code helper.succeed()}。
      */
     void plan(TestBody body, PlanQuery query, Consumer<PlanResult> then) {
+        if (!recorded) {
+            recorded = true;
+            record();
+        }
         Planning planning = navigator(body).plan(query);
         boolean[] done = {false};
         tickers.add(() -> {
@@ -224,11 +228,16 @@ final class Trial {
         helper.succeed();
     }
 
-    /** 记下场地此刻的样子,收场时与实际账对照:在第一次导航开走的那一刻记,搭好的场景(水流开、脚手架定下稳定度)已经自己停当。 */
+    /** 记下场地此刻的样子,收场时与实际账对照:在第一次规划或导航开走的那一刻记,搭好的场景(水流开、脚手架定下稳定度)已经自己停当。 */
     private void record() {
         baseline.clear();
         BlockPos.betweenClosed(origin, origin.offset(extent.getX() - 1, extent.getY() - 1, extent.getZ() - 1))
                 .forEach(pos -> baseline.put(pos.immutable(), level.getBlockState(pos)));
+    }
+
+    /** 场地与第一次规划或开走那一刻一样,一格没变。 */
+    void untouched() {
+        audit(List.of(), RouteSpec.defaults(), (before, now) -> false);
     }
 
     /**
@@ -330,6 +339,12 @@ final class Trial {
         /** 要在 {@code ticks} 刻内收场。 */
         Run within(int ticks) {
             limit = ticks;
+            return this;
+        }
+
+        /** 预期被叫停。 */
+        Run stops() {
+            expected = NavStatus.State.STOPPED;
             return this;
         }
 
