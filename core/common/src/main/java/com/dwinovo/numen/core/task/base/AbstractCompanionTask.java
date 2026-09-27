@@ -348,8 +348,10 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     @Override
     public final TaskResult result(TaskState finalState) {
         cleanup();
-        // 路上真动过的地形跟着每一种收场走:成功也好失败也罢,拆了什么就说什么;主人点过头的也说
+        // 路上真动过的地形跟着每一种收场走:成功也好失败也罢,拆了什么就说什么;收场时又动了什么接着说;主人点过头的也说
+        String closing = closingNote();
         String enRoute = (journey.isEmpty() ? "" : " En route I had to " + journey.describe() + ".")
+                + (closing.isEmpty() ? "" : " " + closing)
                 + (allowances.isEmpty() ? "" : " " + String.join("; ", allowances) + ".");
         return switch (finalState) {
             case SUCCESS   -> TaskResult.ok(successMessage() + enRoute, resultData());
@@ -377,6 +379,14 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     /** Release physical resources on termination. Default: stop nav + clear the path overlay. */
     protected void cleanup() {
         stopNav();
+    }
+
+    /**
+     * 收场时身体又对世界做了什么(在 {@link #cleanup()} 之后读,紧跟在路上那段账后面):每一种收场都带上,不论成败、
+     * 叫停还是超时。默认什么都没做,空串。
+     */
+    protected String closingNote() {
+        return "";
     }
 
     /** Structured payload for the result envelope. Default: a fresh empty (mutable) map. */
@@ -452,6 +462,18 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
      */
     protected final boolean brokeOnTheWay(BlockPos pos) {
         return journey.broke(pos) || (nav != null && nav.ledger().broke(pos));
+    }
+
+    /**
+     * 这件活一路上真放下的方块:历次导航的实际放置账,加上还在跑的这条导航的账。和 {@link #brokeOnTheWay} 同一本账,
+     * 只读;放下之后世界里又怎样了,由问的一方自己看。
+     */
+    protected final List<com.dwinovo.numen.core.pathing.execute.TerrainBill.Place> placedOnTheWay() {
+        List<com.dwinovo.numen.core.pathing.execute.TerrainBill.Place> placed = new ArrayList<>(journey.places());
+        if (nav != null) {
+            placed.addAll(nav.ledger().places());
+        }
+        return placed;
     }
 
     /** Stop and forget the active nav (idempotent); its terrain ledger joins the task's journey. */
