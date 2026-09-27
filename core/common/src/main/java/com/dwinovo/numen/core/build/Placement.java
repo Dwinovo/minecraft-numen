@@ -64,6 +64,11 @@ public record Placement(BlockPos anchor, int quarters) {
         return StructureTemplate.transform(relative, Mirror.NONE, rotation(), BlockPos.ZERO).offset(anchor);
     }
 
+    /** 世界里的一格是施工图里的哪一格:{@link #cell} 倒过来——先挪回原点,再往回转同样多的 90°。 */
+    public BlockPos relative(BlockPos world) {
+        return new Placement(BlockPos.ZERO, 4 - quarters).cell(world.subtract(anchor));
+    }
+
     /** 一个点(摆设实体的位置)落在世界哪儿;方块的格子占 {@code [x, x+1)},转法与 {@link #cell} 一致。 */
     public Vec3 point(Vec3 relative) {
         return StructureTemplate.transform(relative, Mirror.NONE, rotation(), BlockPos.ZERO)

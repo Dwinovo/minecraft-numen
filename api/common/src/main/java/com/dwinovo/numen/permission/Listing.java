@@ -3,10 +3,11 @@ package com.dwinovo.numen.permission;
 import net.minecraft.core.BlockPos;
 
 import java.util.List;
+import java.util.function.Function;
 
 /**
- * 点名一堆格子的说法:{@code 2 oak_planks (120,64,-33; 120,65,-33)}。路线账单与征询清单
- * 共用这一份——模型在回执里、主人在答复框上看到的同一种东西长一个样。
+ * 点名一堆格子的说法:{@code 2 oak_planks (120,64,-33; 120,65,-33)}。路线账单、征询清单、建造收不了尾的缺格与收工撤掉的
+ * 垫块共用这一份——模型在回执里、主人在答复框上看到的同一种东西长一个样。
  */
 public final class Listing {
 
@@ -20,6 +21,14 @@ public final class Listing {
      * 没有坐标的(丢弃)只报数量与名字。
      */
     public static String part(String name, int count, List<BlockPos> cells) {
+        return part(name, count, cells, Listing::coords);
+    }
+
+    /**
+     * 同 {@link #part(String, int, List)},每一格怎么写由 {@code naming} 定——比如世界坐标后面再跟它在施工图里的坐标。
+     * 点名多少个、其余怎么计数不变。
+     */
+    public static String part(String name, int count, List<BlockPos> cells, Function<BlockPos, String> naming) {
         StringBuilder sb = new StringBuilder().append(count).append(' ').append(name);
         if (cells.isEmpty()) {
             return sb.toString();
@@ -29,12 +38,16 @@ public final class Listing {
             if (i > 0) {
                 sb.append("; ");
             }
-            BlockPos p = cells.get(i);
-            sb.append(p.getX()).append(',').append(p.getY()).append(',').append(p.getZ());
+            sb.append(naming.apply(cells.get(i)));
         }
         if (cells.size() > COORDS_NAMED) {
             sb.append("; +").append(cells.size() - COORDS_NAMED).append(" more");
         }
         return sb.append(')').toString();
+    }
+
+    /** 一格的世界坐标:{@code 120,64,-33}。 */
+    public static String coords(BlockPos p) {
+        return p.getX() + "," + p.getY() + "," + p.getZ();
     }
 }
