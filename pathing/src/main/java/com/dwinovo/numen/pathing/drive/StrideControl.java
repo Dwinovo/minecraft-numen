@@ -56,7 +56,9 @@ final class StrideControl extends Control {
         keys().release(Key.SNEAK);
         Vec3 target = center(m.to());
         boolean climbOut = m.kind() == MoveKind.ASCEND && !m.start().grounded();
-        boolean jump = climbOut || m.jump() && rig.entity.onGround()
+        // 站在水里起跳:原版在水里按跳是往上浮,浮到身子够高、再顶着岸边,才被水托上去——所以在水里一直按着
+        boolean wadingJump = m.jump() && rig.entity.isInWater();
+        boolean jump = climbOut || floatUp() || wadingJump || m.jump() && rig.entity.onGround()
                 && (rig.entity.horizontalCollision || ahead() >= jumpPoint());
         keys().set(Key.JUMP, jump);
         boolean flows = flows();

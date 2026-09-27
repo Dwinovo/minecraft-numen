@@ -88,6 +88,8 @@ public final class Driver {
     private int cur;
     /** 路线的终点在目标里。 */
     private boolean complete;
+    /** 从这条路线的终点接着搜过,没搜出能接上的一段:走到终点再从脚下搜,不再提前搜。 */
+    private boolean nextFailed;
     private BlockPos start;
     private Stance startStance;
     private Step step;
@@ -107,6 +109,8 @@ public final class Driver {
 
     private State state = State.RUNNING;
     private Halt halt;
+    /** 最近几件事(派搜索、换路线、走不下去、离开路线),排障时看。 */
+    private final java.util.ArrayDeque<String> trace = new java.util.ArrayDeque<>();
 
     /**
      * @param budget 每次搜索最多展开几个节点
@@ -231,8 +235,11 @@ public final class Driver {
             hold();
             if (pending == null) {
                 if (node == null) {
+                    // 脚下待不住:朝旁边待得住的节点挪,挪了一阵还不行就收场
                     if (++stranded > STRANDED_TICKS) {
                         halt(new Halt.Stranded(body.blockPosition(), rig.world().getBlockState(body.blockPosition())));
+                    } else {
+                        stepOut();
                     }
                     return;
                 }
@@ -274,6 +281,39 @@ public final class Driver {
         ServerPlayer body = rig.entity;
         BodyStats stats = rig.snapshot().stats();
         return Origin.of(rig.world(), stats, body.getX(), body.getY(), body.getZ()).orElse(null);
+    }
+
+    /**
+     * 身体脚下不是一个待得住的节点(头顶压着方块、原版让它趴着;卡在方块里),却踩在地上:朝旁边最近的一个待得住的节点
+     * 挪过去,挪到了就能从那里搜。悬在半空、旁边都待不住时什么也不做。
+     */
+    private void stepOut() {
+        ServerPlayer body = rig.entity;
+        if (!body.onGround()) {
+            return;
+        }
+        BodyStats stats = rig.snapshot().stats();
+        BlockPos here = BlockPos.containing(body.getX(), com.dwinovo.numen.pathing.world.Footing.cellOf(body.getY()),
+                body.getZ());
+        Vec3 best = null;
+        double bestDistance = Double.POSITIVE_INFINITY;
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                BlockPos next = here.offset(dx, 0, dz);
+                if ((dx == 0 && dz == 0) || Stance.at(rig.world(), stats, next) == null) {
+                    continue;
+                }
+                Vec3 c = Control.center(next);
+                double d = distanceSqr(c);
+                if (d < bestDistance) {
+                    best = c;
+                    bestDistance = d;
+                }
+            }
+        }
+        if (best != null) {
+            Steering.stop(body, rig.keys, best.x, best.z, body.getY());
+        }
     }
 
     /** 身体此刻稳稳地以 {@code kind} 的方式待着。 */
@@ -324,6 +364,7 @@ public final class Driver {
             if (++offRoute > OFF_ROUTE_TICKS) {
                 // 落在路线之外:从这里重新搜,不算这一步走不下去
                 offRoute = 0;
+                note("off route at " + node.toShortString());
                 replan();
             }
         }
@@ -391,7 +432,25 @@ public final class Driver {
     }
 
     /** 从 {@code from} 派一次搜索:在世界所在的线程上拷下以它为中心的快照,成本模型按此刻的身体与端口现组。 */
+    private void note(String event) {
+        if (trace.size() >= 16) {
+            trace.removeFirst();
+        }
+        trace.addLast(rig.entity.level().getGameTime() + " " + event);
+    }
+
+    /** 排障用:此刻在哪一步,以及最近几件事。 */
+    @Override
+    public String toString() {
+        String at = cur < legs.size() ? cur + "/" + legs.size() + " " + legs.get(cur).maneuver().kind() + " "
+                + legs.get(cur).maneuver().from().toShortString() + "->" + legs.get(cur).maneuver().to().toShortString()
+                : cur + "/" + legs.size();
+        return "Driver[" + state + " step " + at + " complete=" + complete + " pending=" + (pending == null ? "-" : purpose)
+                + " trace=" + trace + "]";
+    }
+
     private void dispatch(Purpose why, BlockPos from) {
+        note("dispatch " + why + " from " + from.toShortString());
         WorldSnapshot view = WorldSnapshot.around(rig.entity.serverLevel(), from);
         Search search = new Search(view, model(), from, goal, budget, favoring);
         pendingSearch = search;
@@ -412,11 +471,14 @@ public final class Driver {
         if (purpose == Purpose.NEXT) {
             BlockPos end = legs.get(legs.size() - 1).maneuver().to();
             if (result.route() != null && result.route().start().equals(end)) {
+                note("append " + result.route().legs().size() + " legs" + (result.arrived() ? " (goal)" : " (partial)"));
                 legs.addAll(result.route().legs());
                 complete = result.arrived();
                 partial(result);
+            } else {
+                // 接续段没搜出来:走到终点后从脚下再搜
+                nextFailed = true;
             }
-            // 接续段没搜出来:走到终点后从脚下再搜
             return;
         }
         if (result.route() == null) {
@@ -456,19 +518,26 @@ public final class Driver {
     }
 
     private void install(Route route, boolean arrived) {
+        StringBuilder kinds = new StringBuilder();
+        for (Route.Leg leg : route.legs()) {
+            kinds.append(leg.maneuver().kind().name().charAt(0));
+        }
+        note("install " + kinds + " from " + route.start().toShortString() + " to "
+                + route.end().toShortString() + (arrived ? " (goal)" : " (partial)"));
         legs.clear();
         legs.addAll(route.legs());
         cur = 0;
         start = route.start();
         startStance = route.startStance();
         complete = arrived;
+        nextFailed = false;
         step = null;
         offRoute = 0;
     }
 
     /** 路线快走完、又没到目标:从终点提前搜下一段。 */
     private void lookahead() {
-        if (complete || pending != null || legs.isEmpty()) {
+        if (complete || nextFailed || pending != null || legs.isEmpty()) {
             return;
         }
         double left = 0;
@@ -482,6 +551,7 @@ public final class Driver {
 
     /** 扔掉当前路线,从身体脚下重新搜,旧路打折。 */
     private void replan() {
+        note("replan");
         if (!legs.isEmpty()) {
             favoring = Favoring.along(new Route(start, startStance, legs));
         }
@@ -493,11 +563,14 @@ public final class Driver {
         legs.clear();
         cur = 0;
         complete = false;
+        nextFailed = false;
         step = null;
     }
 
     /** 一步走不下去:记一次;同一步第三次,就以它收场,否则重新搜。 */
     private void fail(Blockage blockage) {
+        note("blocked " + blockage.move() + " at " + blockage.cell().toShortString() + " "
+                + (blockage.reason() != null ? blockage.reason() : blockage.hitch()));
         lastBlockage = blockage;
         Maneuver m = step.planned();
         List<Object> key = List.of(m.kind(), m.from(), m.to());

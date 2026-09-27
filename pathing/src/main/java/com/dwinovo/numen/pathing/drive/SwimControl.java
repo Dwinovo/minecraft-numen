@@ -11,9 +11,6 @@ import net.minecraft.world.phys.Vec3;
  */
 final class SwimControl extends Control {
 
-    /** 平挪时脚低于这一格底上这么多就按跳。 */
-    private static final double FLOAT = 0.3;
-
     SwimControl(Rig rig, Maneuver m, Maneuver next) {
         super(rig, m, next);
     }

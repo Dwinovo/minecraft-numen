@@ -113,6 +113,18 @@ abstract class Control {
         return false;
     }
 
+    /**
+     * 落点是浮在水里的:身体落进水里会沉下去,脚沉到落点那一格的下半截就按住跳浮上来(原版在水里按住跳就往上浮)。
+     * 返回这一刻要不要按跳。
+     */
+    final boolean floatUp() {
+        return m.landing().kind() == Stance.Kind.SWIMMING && rig.entity.isInWater()
+                && rig.entity.getY() < m.to().getY() + FLOAT;
+    }
+
+    /** 浮在水里时脚低于那一格底上这么多就按跳。 */
+    static final double FLOAT = 0.3;
+
     final com.dwinovo.numen.pathing.body.Controls keys() {
         return rig.keys;
     }
@@ -145,11 +157,13 @@ abstract class Control {
     }
 
     /**
-     * 走完这一步不用停下,可以接着走下一步:下一步不先在原地做改动,是平地上的走法,两步都落在地上;下落与跑酷落地时
-     * 还带着冲劲,只有下一步朝同一个方向才不停。
+     * 走完这一步不用停下,可以接着走下一步:下一步不先在原地做改动,是平地上的走法,两步都落在地上、落点不泡在水里。
+     * 带着冲劲落地的(下一级、跑酷)只有下一步朝同一个方向才不停——冲过了头也还在路上;下落(两格以上)从不带着冲劲落,
+     * 飘得太远,落点(一池水、一块窄台)就接不住了。
      */
     final boolean flows() {
-        if (next == null || !next.edits().isEmpty() || !m.landing().grounded() || !next.start().grounded()) {
+        if (next == null || !next.edits().isEmpty() || !m.landing().grounded() || m.wading()
+                || !next.start().grounded() || m.kind() == MoveKind.FALL) {
             return false;
         }
         boolean flat = switch (next.kind()) {
@@ -159,7 +173,7 @@ abstract class Control {
         if (!flat) {
             return false;
         }
-        boolean momentum = m.kind() == MoveKind.DESCEND || m.kind() == MoveKind.FALL || m.kind() == MoveKind.PARKOUR;
+        boolean momentum = m.kind() == MoveKind.DESCEND || m.kind() == MoveKind.PARKOUR;
         return !momentum || next.heading().dx() == m.heading().dx() && next.heading().dz() == m.heading().dz();
     }
 }

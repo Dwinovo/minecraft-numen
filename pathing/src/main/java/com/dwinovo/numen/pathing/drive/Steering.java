@@ -8,12 +8,14 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 朝一个水平的点走,停在那儿或不减速地穿过去。身体朝着那一点,每刻在"按前进、松开、按后退"三者里挑一个:照原版的
- * 移动与摩擦往后推算这一刻按下它、之后一直松着,身体最后停在哪,挑停得离那一点最近的。
+ * 朝一个水平的点走:停在那儿、不减速地穿过去,或压着速度走过去。停下时身体朝着那一点,每刻在"按前进、松开、按后退"
+ * 三者里挑一个:照原版的移动与摩擦往后推算这一刻按下它、之后一直松着,身体最后停在哪,挑停得离那一点最近的;身体在空中
+ * 时连同落地前的那几刻一起推算。
  *
  * <p>推算用原版的量:地上每刻的加速度是移动速度属性乘 {@code 0.216 / 方块摩擦³},速度每刻乘方块摩擦乘 0.91;空中加速度
- * 0.02(疾跑 0.026),速度每刻乘 0.91。走出边沿的那一段在空中待几刻由调用方按落差给出,所以下台阶、下落也能停在落点上,
- * 不被冲劲带过头。
+ * 0.02(疾跑 0.026),速度每刻乘 0.91。
+ *
+ * <p>只在脚踏实地时转身;腾空时不回身,按身体此刻朝着的方向前进或后退来修正——空中转过身去,落地就是背对着路。
  */
 final class Steering {
 
@@ -31,23 +33,32 @@ final class Steering {
 
     /** 不减速地朝 {@code (x, z)} 走。 */
     static void pass(ServerPlayer body, Controls keys, double x, double z) {
-        Aim.faceToward(body, x, z);
+        if (body.onGround()) {
+            Aim.faceToward(body, x, z);
+        }
         keys.press(Key.FORWARD);
         keys.release(Key.BACK);
     }
 
-    /** 停在 {@code (x, z)},身体一直在地上(或已在空中、落在 {@code landingY})。 */
-    static boolean stop(ServerPlayer body, Controls keys, double x, double z, double landingY) {
-        return toward(body, keys, x, z, Double.POSITIVE_INFINITY, 0, landingY);
+    /**
+     * 朝 {@code (x, z)} 走,沿那个方向的速度不超过 {@code speed}(格每刻):低于它就按前进,否则松开。走出边沿时用它压住
+     * 冲出去的速度,离地之后再由 {@link #stop} 在空中修正落点。
+     */
+    static void approach(ServerPlayer body, Controls keys, double x, double z, double speed) {
+        Aim.faceToward(body, x, z);
+        double yaw = Math.toRadians(body.getYRot());
+        Vec3 motion = body.getDeltaMovement();
+        double along = motion.x * -Math.sin(yaw) + motion.z * Math.cos(yaw);
+        keys.release(Key.BACK);
+        keys.set(Key.FORWARD, along < speed);
     }
 
     /**
-     * 停在 {@code (x, z)}:朝它走 {@code edge} 格之后脚下就空了,在空中待 {@code airtime} 刻落在脚高 {@code landingY}。
+     * 停在 {@code (x, z)};身体在空中时落在脚高 {@code landingY}。
      *
      * @return 已经停在那一点上
      */
-    static boolean toward(ServerPlayer body, Controls keys, double x, double z, double edge, int airtime,
-                          double landingY) {
+    static boolean stop(ServerPlayer body, Controls keys, double x, double z, double landingY) {
         double dx = x - body.getX();
         double dz = z - body.getZ();
         double distance = Math.sqrt(dx * dx + dz * dz);
@@ -58,12 +69,15 @@ final class Steering {
         if (distance < AT && speed < REST * 10) {
             return true;
         }
-        if (distance >= AT) {
+        // 只在地上转身;腾空时不回身,沿身体此刻朝着的方向按前进后退修正
+        if (distance >= AT && body.onGround()) {
             Aim.faceToward(body, x, z);
         }
-        double ux = distance < 1.0E-6 ? 0 : dx / distance;
-        double uz = distance < 1.0E-6 ? 0 : dz / distance;
-        double along = motion.x * ux + motion.z * uz;
+        double yaw = Math.toRadians(body.getYRot());
+        double fx = -Math.sin(yaw);
+        double fz = Math.cos(yaw);
+        double ahead = dx * fx + dz * fz;
+        double along = motion.x * fx + motion.z * fz;
         int airLeft = body.onGround() ? 0 : ticksToLand(body.getY(), motion.y, landingY, body.getGravity());
         double groundAccel = groundAccel(body);
         double groundFriction = friction(body) * 0.91;
@@ -71,9 +85,8 @@ final class Steering {
         double best = Double.POSITIVE_INFINITY;
         int choice = 0;
         for (int action : new int[] {1, 0, -1}) {
-            double rest = simulate(along, !body.onGround(), airLeft, action, edge, airtime,
-                    groundAccel, groundFriction, airAccel);
-            double miss = Math.abs(rest - distance);
+            double rest = simulate(along, airLeft, action, groundAccel, groundFriction, airAccel);
+            double miss = Math.abs(rest - ahead);
             if (miss < best - 1.0E-4) {
                 best = miss;
                 choice = action;
@@ -88,29 +101,19 @@ final class Steering {
     }
 
     /**
-     * 这一刻按 {@code action}(1 前进、0 松开、-1 后退)、之后一直松着,身体沿直线还会走多远才停住。
+     * 这一刻按 {@code action}(1 前进、0 松开、-1 后退)、之后一直松着,身体沿直线还会走多远才停住:先在空中飞完
+     * {@code airLeft} 刻(在地上为 0),再在地上滑到停。
      */
-    private static double simulate(double along, boolean inAir, int airLeft, int action, double edge, int airtime,
+    private static double simulate(double along, int airLeft, int action,
                                    double groundAccel, double groundFriction, double airAccel) {
         double pos = 0;
         double m = along;
-        boolean air = inAir;
-        int left = airLeft;
-        double support = edge;
         for (int t = 0; t < HORIZON; t++) {
             int input = t == 0 ? action : 0;
-            if (!air && pos >= support) {
-                air = true;
-                left = airtime;
-                support = Double.POSITIVE_INFINITY;
-            }
-            if (air) {
+            if (t < airLeft) {
                 m += airAccel * input;
                 pos += m;
                 m *= AIR_FRICTION;
-                if (--left <= 0) {
-                    air = false;
-                }
             } else {
                 m += groundAccel * input;
                 pos += m;
@@ -124,7 +127,7 @@ final class Steering {
     }
 
     /** 从脚高 {@code y}、竖直速度 {@code vy} 落到 {@code landingY} 要几刻(原版先移动,再减重力乘 0.98)。 */
-    static int ticksToLand(double y, double vy, double landingY, double gravity) {
+    private static int ticksToLand(double y, double vy, double landingY, double gravity) {
         int ticks = 0;
         while (y > landingY && ticks < HORIZON) {
             y += vy;
@@ -132,11 +135,6 @@ final class Steering {
             ticks++;
         }
         return Math.max(ticks, 1);
-    }
-
-    /** 从静止走出边沿、落下 {@code drop} 格要几刻。 */
-    static int fallTicks(double drop, double gravity) {
-        return ticksToLand(drop, 0, 0, gravity);
     }
 
     /** 地上按前进一刻加的速度:原版 {@code getFrictionInfluencedSpeed} 乘输入的 0.98。 */

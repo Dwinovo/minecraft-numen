@@ -87,6 +87,12 @@ public final class Navigation {
         return driver.plannedFall();
     }
 
+    /** 排障用:段状态机此刻的样子与最近几件事。 */
+    @Override
+    public String toString() {
+        return "Navigation[" + status + " " + driver + "]";
+    }
+
     /** 暂停:松开所有键,路线留着。 */
     public void pause() {
         driver.pause();
