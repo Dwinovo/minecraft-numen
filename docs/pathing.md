@@ -1,6 +1,6 @@
 # 寻路模块
 
-状态:设计稿(2026-09-27),按重写来做;设计选择已定，第三步未动工。取代已删除的 `pathing-refactor-log.md` 与 `route-and-permission.md`;
+状态:设计稿(2026-09-27),按重写来做;设计选择已定，第三步进行中(第一、二批已完成，见第十三节)。取代已删除的 `pathing-refactor-log.md` 与 `route-and-permission.md`;
 权限层另见 `permission-layer.md`。
 
 ## 一、为什么重做
@@ -94,7 +94,8 @@
 - 每种动作(平走、斜走、上一级、下一级、下落、跑酷、垫柱、向下挖……)只有**前提与代价**两个纯函数，读的是只读世界
   视图、第 0 层和成本模型，不接触 `ServerPlayer`。
 - **成本模型由几部分组合而成**:物理代价(`ActionCosts`)、路线规格、改地形许可(端口 `TerrainPolicy`)、
-  垫路料(端口 `Materials`)、身体快照(迈步高度、游戏模式、背包里的工具、附魔、够得着的距离)。
+  垫路料(端口 `Materials`)、身体快照(迈步、起跳、交互距离、游戏模式、血量推出的摔落上限、装备推出的能力、
+  背包里的工具与挖掘属性)、生物危险(端口 `Threats`,折成按位置的代价)。
   任务要改价，只能通过路线规格或按位置的代价表，不能继承成本上下文。
 - 放一块的价钱在规格要求"事后拆回"时连拆的那一下一起算，只在放置定价这一处算。
 - "许不许改地形"和"有没有料"是两个独立事实，分别来自规格与 `Materials`,不折成一个布尔。
@@ -133,11 +134,14 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 |---|---|---|
 | `Body` | 身体实体(服务端玩家)、按键与视角输入、迈步高度、游戏模式 | `NumenPlayer` + `InputDriver` |
 | `TerrainPolicy` | 这一格能不能挖或放:放行 / 要问(带一个模块不解读的凭据)/ 拒绝 | 权限层 `Gate`;凭据就是 `ConsentItem` |
-| `Materials` | 有没有可垫的料、下一块用哪个、拿到手 | `ThrowawayBlocks` |
+| `Materials` | 下一块垫路料用哪个(没有就是没料;规划建成本模型时问一次)、拿到手(执行) | `ThrowawayBlocks` |
+| `Threats` | 此刻要避开的生物与各自的危险半径(规划建成本模型时问一次) | `Menace` |
 | `Effector` | 真的挖掉或放下一格，并如实返回成没成、为什么没成 | `BlockDigger` 与放置通道 |
 | `PlacementAdvice` | 这一格放下去应该是什么状态(给建造) | 建造任务 |
 | `Limits` | 服主总开关与上限(能不能挖、能不能放、超时) | Numen 配置 |
 | `NavLog` | 日志出口 | Numen 的日志 |
+
+身体快照 `BodySnapshot` 不是端口，是宿主派发时从真实身体上抄下来交进来的值;规划与执行复核读同一个形状。
 
 ### Numen 适配层(`core/.../nav/`)
 
@@ -173,7 +177,7 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 | 8 | 这一格能不能放进去、真实落点 | `isReplaceable`、`Interaction.placementOf`、`ExecHarness`、建造各一份;瞄准高草、单层雪时按"命中面前一格"算，权限问错格、实际账漏记(推断) | 第 0 层 `Replaceable`;落点以 `Effector` 返回为准 |
 | 9 | 物理上能不能挖 | `MovementHelper.avoidBreaking`;挖矿任务重复调一遍并自带基岩规则;建造自判 `destroySpeed==-1`;`canHarvest` 注释说成本模型会否决，实际不查 | 第 1 层 `DigRules` |
 | 10 | 挖多久 | `ToolSet` 自己重写原版公式(只看快捷栏，没有水下、离地减速);执行用原版 `getDestroyProgress`;感知另算一份 | 第 1 层 `DigTime`,读身体快照 |
-| 11 | 用哪把工具 | 定价 `ToolSet`(快捷栏)、执行 `ToolSelect`(全背包)、挖矿 `bestToolFor`;规划不计价的镐子执行照拿 | 身体快照里的 `ToolChoice`,规划执行共用 |
+| 11 | 用哪把工具 | 定价 `ToolSet`(快捷栏)、执行 `ToolSelect`(全背包)、挖矿 `bestToolFor`;规划不计价的镐子执行照拿 | `ToolChoice`(由身体快照建，看全背包),规划执行共用 |
 | 12 | 有没有料 ★ | `ThrowawayBlocks.available`、`CalculationContext.hasThrowaway`(和"许不许改地形"折成一个布尔)、`shortageAdvice`(自己扫背包);取料又有两套 | `Materials` 端口 |
 | 13 | 下一块用什么料 | 拆回定价按垫路料算，执行先问建造登记 | `Materials.next` 与 `PlacementAdvice` 端口 |
 | 14 | 许不许动 | 规划 `permissionMultiplier`、账单再问一遍、`PlayerNav.admits`;执行放置直接调 `Permission.judge`;`BuildCalculationContext` 对图纸格不问权限、漏了按种类禁挖 | `TerrainPolicy`(规划)与 `Effector`(执行)端口 |
@@ -184,15 +188,15 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 | 19 | 进度量尺 | 导航用估价，goto 用欧氏距离，挖矿用挪没挪 2 格 | 第 3 层 `Watchdog` |
 | 20 | 搜索预算 | 改动预算只在规划时核，A* 不知道，重算不再核 | 第 2 层 |
 | 21 | 实际改了什么 | 执行器的账;任务旅程账;挖矿自己一份;`PlacedBlocks` 另记真实落点;坠落放水桶不记账(推断) | 第 3 层 `EditLedger`,只收 `Effector` 结果 |
-| 22 | 液体与危险 | `CellClass` 名单;各动作自查岩浆;生物危险两套(固定半径的 `Avoidance` 与 `Menace.dangerRadius`);压力板默认会踩、绊线当墙 | 第 0 层 `Semantics`,代价归第 1 层;生物危险半径经端口 |
+| 22 | 液体与危险 | `CellClass` 名单;各动作自查岩浆;生物危险两套(固定半径的 `Avoidance` 与 `Menace.dangerRadius`);压力板默认会踩、绊线当墙 | 第 0 层 `Semantics`,代价归第 1 层;生物危险半径经 `Threats` 端口 |
 | 23 | 落沙与漏液 | 每个动作各开一个窗口判"头顶会不会塌",范围不同 | 第 1 层 `DigRules` |
 | 24 | 门能不能开 | 规划里门格对所有动作可穿，只有平移会开门;门板朝向不看;有红石的铁门当墙 | 第 0 层语义 + 第 1 层前提 + 第 3 层开门控制器 |
 | 25 | 疾跑与跳 | 水里定价不给疾跑折扣，执行照样疾跑;脱困反射、建造表演各自按跳 | 第 3 层 `SprintPolicy`,读第 1 层 |
 | 26 | 视角瞄点 | 执行器和放置各有一个步进器实例、各有一份"是否对准";一个管实体遮挡一个不管 | 第 3 层 `Aim` |
-| 27 | 摔落上限与水桶 | 规划按血量、备货按规格原值、`willPlaceBucket` 当刻重算、`MLGChain` 按下落速度;"有没有水桶"四份 | `Body`/`Limits` 端口一处 |
+| 27 | 摔落上限与水桶 | 规划按血量、备货按规格原值、`willPlaceBucket` 当刻重算、`MLGChain` 按下落速度;"有没有水桶"四份 | 摔落上限 `BodySnapshot.maxFall`(按血量),规格只能收紧(`CostModel.fallLimit`);水桶留给第三批 |
 | 28 | 世界边界 | A* 整格在内，挖放内缩一格 | 第 0 层 |
 | 29 | 区块加载与搜索视图 | `CachedNavView` 在工作线程读活的区块调色板，不是注释说的冻结快照 | 第 2 层 `WorldSnapshot` |
-| 30 | 目标格保护(sacred)、目标移动与重根 | 分散在 `GoalCompiler`、`PlayerNav`、`Goal.keepsStop` | 第 2 层 |
+| 30 | 目标格保护(sacred)、目标移动与重根 | 分散在 `GoalCompiler`、`PlayerNav`、`Goal.keepsStop` | 第 2 层:`Goal.protection`、`Goal.keepsStop`、`Favoring` |
 | 31 | 载具 | 起步时静默下载具，没报给模型 | `Body` 端口，记进结局 |
 
 另外，普查发现几处文档或注释与代码不符:`spatial-perception.md` 说 `look_around` 与寻路同口径(实际不是)、
@@ -259,7 +263,7 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 | 挡路的方块 | 栅栏、墙挡住不跨;栅栏门开了能过、关着绕;玻璃板、铁栏杆当墙 |
 | 净空 | 两格高通道正常走;一格半高的缝不钻;头顶是楼梯、活板门、半砖时按真实形状判断;起跳时头顶有方块不撞头 |
 | 门 | 木门关着自己开;铁门没有红石当墙;双开门;地面上开着的活板门 |
-| 攀爬 | 梯子上、下;藤蔓按规格开关;爬梯子进头顶压着屋顶楼梯的阁楼;梯子顶端出口;脚手架 |
+| 攀爬 | 梯子上、下;藤蔓与梯子同一种攀爬;爬梯子进头顶压着屋顶楼梯的阁楼;梯子顶端出口;脚手架 |
 | 流体 | 浅水涉水;游过一片水;流水不走;岩浆拒绝;岩浆旁边加价绕行;细雪、蜘蛛网避开 |
 | 危险 | 仙人掌、火、甜浆果、岩浆块旁边绕开;压力板、绊线按规格避开 |
 | 不许改地形 | `alter=none` 遇墙绕行;绕不过去报"需要改地形",世界不变 |
@@ -387,7 +391,7 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 - **物理事实**:炼药锅内膛比身体宽，身体能站进去，脚在 0.25;关着的上半活板门从 13/16 起，站立时头顶碰不到;关着的门只占格边
   3/16,身体站得进门格，走过门板时才被挡。
 
-### 留给第二批定的
+### 留给第二批定的(第二批已定，见下)
 
 - 藤蔓：保留了能力开关 `climbVines`,可攀爬按原版 `#climbable` 标签算一类;两者怎么分工要定。
 - 流水按原版水流判：悬空、四周无依托的下落水柱水流为零，算静水;要确认这对水里的动作合不合适。
@@ -395,6 +399,64 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 - 起跳是保守近似(先竖直升到最高点再平移);碰撞箱随身体变化的方块按起点脚高取形状。
 - `RouteSpec.maxFallHeightNoWater` 原样保留，要和第十二节第 8 条"摔落上限只在一处"对齐。
 - 点中会被使用的方块(箱子、门等)要潜行才能贴着放，归执行层。
+
+### 第二批(09-27,`pathing-rewrite` 上 61784a26..ee6b86ee)
+
+- **走法**:每种走法一个实现(`Walk`、`Diagonal`、`Ascend`、`Drop` 管下一级与下落、`Parkour`、`Pillar`、`Downward`、
+  `Climb`、`Swim`),只有 `premise` 与 `cost` 两个函数。前提交出 `Maneuver`(连同要做的 `Edit`:挖、放、开关门),
+  或 `Fails(哪一格, Reason)`,执行复核报的就是它。
+- **前提怎么判**:在草稿 `Draft` 上判——设想的改动叠在视图上(`EditedView`,"一件改动让世界变成什么样"只写在它里面)。
+  先照原样问第 0 层的几何;过不去,才把身体途中与落定后挡着的格(第 0 层 `Clearance.blockers`,含走过格边时的扫掠)
+  腾出来——能用手开的门就开关、其余挖开——再问一次。走楼梯不会把楼梯挖掉，门板贴在格边也找得到。
+- **碰到什么只在一处判**:`Contact` 数身体新进入的格与脚踩的那一格，统一查规格排除的语义种类、按位置与按种类的禁令，
+  以及从高处落上去会踩坏的格(耕地、海龟蛋,落差超过半格)。走法各自只管几何。
+- **成本模型**:`CostModel` 组合 `ActionCosts`、`RouteSpec`、`TerrainPolicy`、`Materials`(建模型时问一次 `next()`)、
+  `BodySnapshot`(连同由它建的 `ToolChoice`)、`Threats`(建模型时折成按位置的代价),不许继承;换规格用 `withSpec`。
+  挖与放的准入(`admitDig`/`admitPlace`)与定价(`digCost`/`placeCost`/`overhead`)只在这里。准入依次问：规格许不许改地形
+  → 按位置与按种类 →(放)有没有料 → 物理(`DigRules`、`Replaceable`、`Faces`、边界)→ 许可。"不许改地形"是 `NEEDS_ALTER`,
+  "没有料"是 `NO_MATERIALS`;许可要问的格只在 `alter=any` 下准入，价钱乘 `CONSENT_MULTIPLIER`,凭据随 `Edit` 交出。
+- **挖掘**:`DigRules` 物理上能不能挖(漏液、塌方、冰、虫蚀、基岩、冒险模式、边界);`DigTime` 照原版 `getDestroyProgress`
+  与 `Player.getDestroySpeed`(效率附魔按原版属性算法叠加，急迫、疲劳、破坏速度、水下、离地),所需状态来自身体快照;
+  `ToolChoice` 看全背包，一样快时空手优先、其次不耗耐久的。
+- **门**:开关门是 `Edit.Door`,不算改地形、不问许可,`alter=none` 也开;任何一种走法被门挡着都一样处理。
+- **摔落**:上限只在 `BodySnapshot.maxFall`——摔不疼的高度都行，要掉血的只到摔完还剩 6 点血;
+  `RouteSpec.maxFallHeightNoWater` 只能收紧它(`CostModel.fallLimit`)。落进水里、抓住梯子不受上限;摔疼的按掉的血折价。
+- **搜索**:`AStar` 展开一个节点时，前提读"快照加上走到这个节点那一步的改动"(`EditedView.after`),刚挖开的格是空的、
+  刚垫的块托着脚。设了改动预算时节点按"位置 + 已改格数"区分，搜出来的路一定在预算内。停下的原因:`ARRIVED`、`EXHAUSTED`、
+  `BUDGET`、`UNLOADED`、`STRANDED`(起点待不住)、`CANCELLED`;半程路线离起点超过 5 格才交出。目标格保护是
+  `Goal.protection()`,并进规格的按位置禁令;换目标后在走的路还算不算数只问 `Goal.keepsStop`;旧路打折是 `Favoring`;
+  假起点是 `Origin`。
+- **快照与派发**:`WorldSnapshot.capture` 在世界所在线程拷贝以一个区块为中心的正方形里已加载区块的非空区段
+  (`PalettedContainer.copy`)与世界边界;`Searches` 是唯一派发口，固定大小的守护线程池;`Pending` 逐刻轮询、可叫停。
+- **候选路线**:`RoutePlanner` 惩罚法：已有候选经过的节点每格加两倍平走一格的价重搜，重叠超过 0.7 的丢弃;候选按调用方的
+  成本模型重新定价。
+- **第 0 层补了几处**(规划第一次要用，仍只在第 0 层):`Clearance.blockers`(站着与走过去时挡着哪些格)、`topCell`/`occupies`
+  (身体占哪几格)、`Stepping.walkOff`(不指定终点地走出边沿会落到多高)、`Semantics.speedFactor`/`eyeInWater`;
+  `Footing.EPSILON` 公开为全模块的高度容差。
+- **规格**:删去 `climbVines` 与 `parkourPlace`(没有调用方打开过，跑酷半空放块也没做);流水 `FLOWING_WATER` 进了出厂排除。
+
+第一批留下的几件：
+
+- 藤蔓：删去 `climbVines`。原版身体在可攀爬的格里按住跳就往上爬(`LivingEntity.handleRelativeFrictionAndCalculateMovement`
+  里是 `horizontalCollision || jumping`),藤蔓不必贴墙，与梯子物理上是同一种攀爬;也没有"许爬梯子、不许爬藤"的真实用例。
+- 流水：规划照第 0 层按原版水流判。流水默认被规格排除(身体会被推离路线),放开时照常能游;悬空无依托的下落水柱水流为零，
+  当静水游上去——原版按住跳本来就游得上去;贴墙的瀑布水流带向下的分量，算流水、默认不进，是偏保守的。
+- 细雪:`BodyStats.walksOnPowderSnow`(宿主按脚上是不是皮靴给);第 0 层 `Boxes` 照原版规则让细雪托住它;
+  `Contact` 里托得住它的细雪不算危险。
+- 摔落上限：见上。
+- 起跳近似与碰撞箱随身体变化的方块：没动，交给第三批的 GameTest。
+- 点中会被使用的方块要潜行才能贴着放：仍归执行层。规划里"只剩起步那块的侧面可贴、要潜行探出去搭桥"是 `Maneuver.sneak`。
+
+### 留给第三批的
+
+- 控制器照 `Maneuver` 做;复核用同一个 `Moves.of(kind).premise` 在活世界上判，不成立就交出 `Fails`。
+- 从真实身体上抄 `BodySnapshot`(`Mining.efficiency` 要扣掉手上那件自己的修饰符)、端口在假玩家夹具与 Numen 适配层的实现。
+- 结局里的 `NEEDS_ALTER`、`NO_MATERIALS`、"改动预算不够、最便宜那条要改几格"要从搜索与前提的结论汇总出来，归门面。
+- 没做的：带水桶的高落差(MLG)、霜行者、跑酷半空放块;按"有真实用例"再加。
+- 已知近似：展开节点只叠"走到这里那一步"的改动，更早的步子的改动不叠(身体已离开那里，只有路线折回来时才看不到);
+  斜走找挡路的门时按两端身体盒的包络找。
+- 性能：单测的哈希表世界里,`alter=natural` 在实心地形中展开 10 万个节点约 3.5 秒;先在真实快照上量，再看第 0 层
+  `Stepping` 的取样与每一步草稿的分配。
 
 ## 参考
 
