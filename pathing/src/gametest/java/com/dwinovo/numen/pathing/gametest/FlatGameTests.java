@@ -36,7 +36,7 @@ public class FlatGameTests {
     }
 
     /** 直走十格到那一格。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
     public static void walks_straight(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(3, 1, 3);
@@ -44,7 +44,7 @@ public class FlatGameTests {
     }
 
     /** 斜着走过去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
     public static void walks_diagonally(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(3, 1, 3);
@@ -52,7 +52,7 @@ public class FlatGameTests {
     }
 
     /** 中间一堵墙,绕过去;不许改地形,世界不变。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
     public static void walks_around_an_obstacle(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(8, 1, 2, 8, 2, 10, Blocks.STONE);
@@ -61,7 +61,7 @@ public class FlatGameTests {
     }
 
     /** 一格宽、两格高的窄道走到头。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
     public static void walks_a_one_wide_corridor(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(2, 1, 4, 16, 2, 4, Blocks.STONE);
@@ -71,7 +71,7 @@ public class FlatGameTests {
     }
 
     /** 两块斜对着的石头之间的缝不许斜穿:绕过去,身体从不挤进那道缝。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
     public static void does_not_cut_a_corner_between_two_blocks(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(6, 1, 7, 6, 2, 7, Blocks.STONE);
@@ -91,7 +91,7 @@ public class FlatGameTests {
     }
 
     /** 目标就在脚下:当场到达,一步不走。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 200)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 300)
     public static void arrives_at_once_when_standing_in_the_goal(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(5, 1, 5);
@@ -105,7 +105,7 @@ public class FlatGameTests {
     }
 
     /** 两百格跨十几个区块。 */
-    @GameTest(template = LONG, batch = BATCH, timeoutTicks = 1600)
+    @GameTest(template = LONG, batch = BATCH, timeoutTicks = 1700)
     public static void walks_across_many_chunks(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(2, 1, 12);
@@ -113,7 +113,7 @@ public class FlatGameTests {
     }
 
     /** 四面与头顶都是基岩:搜完没有路。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 300)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
     public static void a_sealed_box_has_no_route(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(4, 0, 4, 8, 4, 8, Blocks.BEDROCK);
@@ -125,7 +125,7 @@ public class FlatGameTests {
     // ==================== 普查补充 ====================
 
     /** 站在一根柱子顶上的边沿起步(身体中心已经悬空),不误判离开了路线,照样下去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
     public static void starts_from_the_edge_of_a_pillar_top(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(5, 1, 5, 5, 2, 5, Blocks.STONE);
@@ -135,7 +135,7 @@ public class FlatGameTests {
     }
 
     /** 路上有下半砖、楼梯把身体抬起来:照走不停,十几格不到一百刻。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
     public static void keeps_walking_when_slabs_and_stairs_lift_the_body(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.set(6, 1, 5, Blocks.STONE_SLAB.defaultBlockState().setValue(SlabBlock.TYPE, SlabType.BOTTOM));
@@ -147,7 +147,7 @@ public class FlatGameTests {
     }
 
     /** 开走没几刻就被传送到别处:从新的地方重新搜,照样到。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
     public static void replans_right_after_a_teleport(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(3, 1, 3);
@@ -162,7 +162,7 @@ public class FlatGameTests {
     }
 
     /** 三具身体同时各走各的,交叉而过,都到。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
     public static void several_bodies_walk_at_once(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.go(t.body(2, 1, 2), Goals.at(t.at(14, 1, 14)), RouteSpec.defaults()).arrives();
@@ -170,17 +170,18 @@ public class FlatGameTests {
         t.go(t.body(8, 1, 2), Goals.at(t.at(8, 1, 15)), RouteSpec.defaults()).arrives();
     }
 
-    /** 起步时头卡在方块里:照原版客户端被推到旁边的空处,再走。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    /** 起步时头顶压着方块(原版让身体趴着):先挪到旁边站得起来的地方,再走。 */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
     public static void starts_with_the_head_inside_a_block(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.set(5, 2, 5, Blocks.STONE);
         TestBody body = t.body(5, 1, 5);
-        t.go(body, Goals.at(t.at(11, 1, 5)), RouteSpec.defaults()).arrives();
+        t.go(body, Goals.at(t.at(11, 1, 5)), RouteSpec.defaults())
+                .arrives();
     }
 
     /** 起步坐在船上:按潜行下船,记进身体动作,再走。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
     public static void steps_off_a_vehicle_first(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(5, 1, 5);

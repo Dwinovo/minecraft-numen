@@ -48,6 +48,9 @@ import net.minecraft.world.level.block.state.BlockState;
  */
 final class Trial {
 
+    /** 原版玩家进世界之后的出生无敌刻数({@code ServerPlayer.spawnInvulnerableTime})。 */
+    static final int SPAWN_INVULNERABILITY = 60;
+
     /** 空场地模板。 */
     static final String ARENA = "pathing_arena";
     /** 长条空场地模板(长途)。 */
@@ -242,11 +245,18 @@ final class Trial {
         private final List<Consumer<Run>> everyTick = new ArrayList<>();
         private boolean finished;
         private boolean passed;
-        /** 这么多刻内要收场;用例的 GameTest 时限要比它长。 */
+        /** 这么多刻内要收场(从开走算起);用例的 GameTest 时限要比它加上 {@link #delay} 长。 */
         private int limit = 400;
+        /**
+         * 拉起身体之后等这么多刻才开走:原版玩家进世界后有 60 刻的出生无敌,这期间摔落不掉血,掉没掉血就看不出来。
+         */
+        private int delay = SPAWN_INVULNERABILITY;
+        private int age;
         NavStatus status;
         Report report;
         int ticks;
+        /** 这次导航途中身体最少时剩几点血(原版会回血,只看收场时的血量看不出摔没摔)。 */
+        float lowestHealth = Float.MAX_VALUE;
 
         Run(Trial trial, TestBody body, Navigator navigator, Navigation navigation, RouteSpec spec) {
             this.trial = trial;
@@ -255,6 +265,12 @@ final class Trial {
             this.navigation = navigation;
             this.spec = spec;
             trial.helper.onEachTick(this::tick);
+        }
+
+        /** 拉起身体之后等 {@code ticks} 刻才开走。 */
+        Run after(int ticks) {
+            delay = ticks;
+            return this;
         }
 
         /** 要在 {@code ticks} 刻内收场。 */
@@ -298,19 +314,22 @@ final class Trial {
         }
 
         private void tick() {
-            if (finished) {
+            if (finished || ++age <= delay) {
                 return;
             }
             try {
                 ticks++;
+                lowestHealth = Math.min(lowestHealth, body.getHealth());
                 for (Consumer<Run> action : everyTick) {
                     action.accept(this);
                 }
                 status = navigation.tick();
+                lowestHealth = Math.min(lowestHealth, body.getHealth());
                 if (status.running()) {
                     if (ticks >= limit) {
                         throw new GameTestAssertException("时限内没收场:身体在 " + trial.rel(body.blockPosition())
-                                + " (" + fmt(body.getX()) + "," + fmt(body.getY()) + "," + fmt(body.getZ()) + ")");
+                                + " (" + fmt(body.getX()) + "," + fmt(body.getY()) + "," + fmt(body.getZ()) + ") "
+                                + navigation);
                     }
                     return;
                 }
@@ -318,7 +337,7 @@ final class Trial {
                 report = navigation.report();
                 if (status.state() != expected) {
                     throw new GameTestAssertException("应当 " + expected + ",却是 " + status.state() + " " + status.outcome()
-                            + ",身体在 " + trial.rel(body.blockPosition()));
+                            + ",身体在 " + trial.rel(body.blockPosition()) + " " + navigation);
                 }
                 if (expected == NavStatus.State.FAILED) {
                     outcomeCheck.accept(status.outcome());
