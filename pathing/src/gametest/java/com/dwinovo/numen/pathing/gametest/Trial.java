@@ -62,6 +62,7 @@ final class Trial {
     private final BlockPos extent;
     private final Map<BlockPos, BlockState> baseline = new HashMap<>();
     private final List<Run> runs = new ArrayList<>();
+    private boolean recorded;
 
     Materials materials = Materials.NONE;
     TerrainPolicy terrain = TerrainPolicy.ALLOW_ALL;
@@ -163,9 +164,6 @@ final class Trial {
     }
 
     Run go(TestBody body, NavRequest request) {
-        if (runs.isEmpty()) {
-            record();
-        }
         Navigator navigator = Navigator.of(Body.of(body),
                 new Ports(hands.apply(new PlayerHands(body)), terrain, materials, threats));
         Run run = new Run(this, body, navigator, navigator.drive(request), request.spec());
@@ -183,8 +181,8 @@ final class Trial {
         helper.succeed();
     }
 
-    /** 记下场地此刻的样子,收场时与实际账对照。 */
-    void record() {
+    /** 记下场地此刻的样子,收场时与实际账对照:在第一次导航开走的那一刻记,搭好的场景(水流开、脚手架定下稳定度)已经自己停当。 */
+    private void record() {
         baseline.clear();
         BlockPos.betweenClosed(origin, origin.offset(extent.getX() - 1, extent.getY() - 1, extent.getZ() - 1))
                 .forEach(pos -> baseline.put(pos.immutable(), level.getBlockState(pos)));
@@ -320,6 +318,10 @@ final class Trial {
         private void tick() {
             if (finished || ++age <= delay) {
                 return;
+            }
+            if (ticks == 0 && !trial.recorded) {
+                trial.recorded = true;
+                trial.record();
             }
             try {
                 ticks++;
