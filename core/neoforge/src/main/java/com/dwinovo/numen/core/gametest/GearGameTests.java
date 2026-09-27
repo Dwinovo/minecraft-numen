@@ -328,8 +328,11 @@ public class GearGameTests {
     private static void dismissDropsEverything(GameTestHelper helper, String name, String ownerName,
             java.util.function.BiConsumer<net.minecraft.server.level.ServerPlayer, NumenPlayer> dismiss) {
         ServerLevel level = helper.getLevel();
-        NumenPlayer companion = spawnAt(helper, name, new BlockPos(4, 2, 4), false);
-        var owner = presentPlayer(helper, companion, ownerName);
+        // 照正式召唤入册:遣散认的是注册表(按名遣散只查它),没入册的身体在正式游戏里不存在
+        var owner = presentPlayer(helper, null, ownerName);
+        BlockPos at = helper.absolutePos(new BlockPos(4, 2, 4));
+        NumenPlayer companion = com.dwinovo.numen.entity.Companions.summon(level.getServer(), owner.getUUID(), name,
+                level, new net.minecraft.world.phys.Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
         FakeGear gear = dress(companion);
         gear.ring(1).worn = new ItemStack(Items.AMETHYST_SHARD);
         companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
