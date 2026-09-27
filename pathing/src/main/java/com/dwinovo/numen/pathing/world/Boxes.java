@@ -27,6 +27,9 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  * ({@link BodyStats#walksOnPowderSnow}),这里照原版 {@code PowderSnowBlock.getCollisionShape} 的同一条规则回答:
  * 脚在它顶面之上就是一整块,否则是空的。原版另有"下落超过 2.5 格时被细雪接住"一条,看的是实体的下落距离,
  * 身体不在这里,不算。
+ *
+ * <p>穿冰霜行者的身体({@link BodyStats#frostWalker})走到静水边,原版把它脚下那一层一圈上面是空气的静水源冻成霜冰;
+ * 这里对它把这样的水面答成一整块。
  */
 final class Boxes {
 
@@ -46,11 +49,23 @@ final class Boxes {
             // 原版 isAbove:脚底高过顶面减去同一个容差
             return feetY > y + 1 - Footing.EPSILON ? FULL : NONE;
         }
+        if (body.frostWalker() && freezes(level, x, y, z, state)) {
+            return FULL;
+        }
         if (Semantics.dynamicCollision(state)) {
             return split(state.getCollisionShape(level, new BlockPos(x, y, z), bodyAt(feetY)));
         }
         // 与原版给这类状态缓存碰撞箱的是同一次调用:不看世界、不看身体
         return CACHE.computeIfAbsent(state, s -> split(s.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO)));
+    }
+
+    /**
+     * 冰霜行者冻得住这一格:原版的冰霜行者只把上面是空气的静水源冻成霜冰(走在它旁边的地上时,脚下那一层一圈都冻上),
+     * 所以对穿着它的身体,这样的水面就是一块能站的冰。
+     */
+    private static boolean freezes(BlockGetter level, int x, int y, int z, BlockState state) {
+        return state.is(Blocks.WATER) && state.getFluidState().isSource()
+                && level.getBlockState(new BlockPos(x, y + 1, z)).isAir();
     }
 
     private static AABB[] split(VoxelShape shape) {

@@ -37,6 +37,8 @@ public final class Vanilla {
     public static final BodyStats CREATIVE;
     /** 同一具生存模式的身体穿上皮靴:细雪托得住它。 */
     public static final BodyStats LEATHER_BOOTS;
+    /** 同一具生存模式的身体穿上带冰霜行者的靴子:静水面冻得住。 */
+    public static final BodyStats FROST_WALKER;
 
     static {
         SharedConstants.tryDetectVersion();
@@ -48,9 +50,10 @@ public final class Vanilla {
         }
         EntityDimensions standing = EntityDimensions.scalable(0.6F, 1.8F).withEyeHeight(1.62F);
         EntityDimensions crouching = EntityDimensions.scalable(0.6F, 1.5F).withEyeHeight(1.27F);
-        SURVIVAL = new BodyStats(standing, crouching, 0.6, 0.42F, 0.08, 4.5, false);
-        CREATIVE = new BodyStats(standing, crouching, 0.6, 0.42F, 0.08, 5.0, false);
-        LEATHER_BOOTS = new BodyStats(standing, crouching, 0.6, 0.42F, 0.08, 4.5, true);
+        SURVIVAL = new BodyStats(standing, crouching, 0.6, 0.42F, 0.08, 4.5, false, false);
+        CREATIVE = new BodyStats(standing, crouching, 0.6, 0.42F, 0.08, 5.0, false, false);
+        LEATHER_BOOTS = new BodyStats(standing, crouching, 0.6, 0.42F, 0.08, 4.5, true, false);
+        FROST_WALKER = new BodyStats(standing, crouching, 0.6, 0.42F, 0.08, 4.5, false, true);
     }
 
     private Vanilla() {}

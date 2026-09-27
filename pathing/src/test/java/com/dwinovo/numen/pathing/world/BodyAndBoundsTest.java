@@ -33,7 +33,7 @@ class BodyAndBoundsTest {
     @Test
     void standingAndCrouchingMustShareOneWidth() {
         assertThrows(IllegalArgumentException.class, () -> new BodyStats(EntityDimensions.scalable(0.6F, 1.8F),
-                EntityDimensions.scalable(0.5F, 1.5F), 0.6, 0.42, 0.08, 4.5, false));
+                EntityDimensions.scalable(0.5F, 1.5F), 0.6, 0.42, 0.08, 4.5, false, false));
     }
 
     @Test
