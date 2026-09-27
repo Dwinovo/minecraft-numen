@@ -9,6 +9,7 @@ import com.dwinovo.numen.pathing.plan.MoveKind;
 import com.dwinovo.numen.pathing.plan.Stance;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -131,6 +132,45 @@ abstract class Control {
 
     static Vec3 center(BlockPos node) {
         return new Vec3(node.getX() + 0.5, node.getY(), node.getZ() + 0.5);
+    }
+
+    /** 让开梯子碰撞箱时多留的一点。 */
+    private static final double CLEAR = 0.05;
+
+    /**
+     * 这一步落下去时身体中心该落在的那一点。平常是落点那一列的中心;落点是攀着的(梯子)时,要让开那一格的碰撞箱——
+     * 梯子只贴着墙占一薄片,顶面与旁边的地面齐平,脚底压着它就站在了梯子顶上,抓不住梯子。挪开的方向取挪得最少的那一边。
+     */
+    final Vec3 landingSpot() {
+        BlockPos to = m.to();
+        if (m.landing().kind() != Stance.Kind.CLIMBING) {
+            return center(to);
+        }
+        double half = rig.entity.getBbWidth() / 2;
+        double x = 0.5;
+        double z = 0.5;
+        var level = rig.world();
+        for (AABB solid : level.getBlockState(to).getCollisionShape(level, to).toAabbs()) {
+            AABB box = solid.inflate(CLEAR, 0, CLEAR);
+            if (box.minX >= x + half || box.maxX <= x - half || box.minZ >= z + half || box.maxZ <= z - half) {
+                continue;
+            }
+            double west = x + half - box.minX;
+            double east = box.maxX - (x - half);
+            double north = z + half - box.minZ;
+            double south = box.maxZ - (z - half);
+            double least = Math.min(Math.min(west, east), Math.min(north, south));
+            if (least == west) {
+                x -= west;
+            } else if (least == east) {
+                x += east;
+            } else if (least == north) {
+                z -= north;
+            } else {
+                z += south;
+            }
+        }
+        return new Vec3(to.getX() + x, to.getY(), to.getZ() + z);
     }
 
     final double horizontalDistance(Vec3 point) {

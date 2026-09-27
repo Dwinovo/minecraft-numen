@@ -14,6 +14,8 @@ final class DropControl extends Control {
 
     /** 走出边沿时的速度(格每刻):慢到落下去不冲过落点那一列,又快到走得出去。 */
     private static final double EDGE_SPEED = 0.1;
+    /** 脚比落点高出这么多,就还没落下去。 */
+    private static final double DROPPED = 0.3;
 
     DropControl(Rig rig, Maneuver m, Maneuver next) {
         super(rig, m, next);
@@ -28,17 +30,18 @@ final class DropControl extends Control {
         keys().release(Key.SNEAK);
         keys().set(Key.JUMP, floatUp());
         keys().release(Key.SPRINT);
-        Vec3 target = center(m.to());
+        Vec3 target = landingSpot();
         if (flows()) {
             Steering.pass(rig.entity, keys(), target.x, target.z);
             return Beat.IDLE;
         }
-        if (rig.entity.onGround() && ahead() < 0.5 + rig.entity.getBbWidth() / 2) {
-            // 还在起步那一块上:压着速度走出边沿,冲出去太快就落过了头
+        if (rig.entity.onGround() && rig.entity.getY() > m.landing().feetY() + DROPPED) {
+            // 脚还在上面:压着速度往前走,直到脚下空了——冲出去太快就落过了头。托着脚的不一定只有起步那一块,
+            // 梯子顶也托得住,所以看的是离没离地,不是走没走过格边
             Steering.approach(rig.entity, keys(), target.x, target.z, EDGE_SPEED);
             return Beat.IDLE;
         }
-        // 离地了(或已经过了边沿):照原版空中那一点加速度修正,停在落点上
+        // 离地了(或已经落下去了):照原版空中那一点加速度修正,停在落点上
         Steering.stop(rig.entity, keys(), target.x, target.z, m.landing().feetY());
         return Beat.IDLE;
     }
