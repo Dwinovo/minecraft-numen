@@ -23,9 +23,9 @@ public final class Footing {
 
     /**
      * 脚的高度离上面一格的底不到这么多,就算进上面一格。吸收碰撞结算留下的浮点误差;原版判"身体在不在一个形状上面"
-     * ({@code EntityCollisionContext.isAbove})用的是同一个容差。
+     * ({@code EntityCollisionContext.isAbove})用的是同一个容差。比较两个脚高是否相同、是否超过某个高度,全模块都用它。
      */
-    static final double EPSILON = 1.0E-5;
+    public static final double EPSILON = 1.0E-5;
     private static final int NO_SUPPORT = Integer.MIN_VALUE;
 
     private Footing() {}
@@ -75,7 +75,7 @@ public final class Footing {
      * 碰撞箱随身体变化的方块按"脚正好在节点底面"回答——脚手架此时托得住,细雪托不住。
      */
     private static double highestTop(BlockGetter level, BodyStats body, int x, int cy, int z, int node) {
-        AABB[] boxes = Boxes.at(level, x, cy, z, level.getBlockState(new BlockPos(x, cy, z)), node);
+        AABB[] boxes = Boxes.at(level, body, x, cy, z, level.getBlockState(new BlockPos(x, cy, z)), node);
         double half = body.width() / 2 - Clearance.DEFLATE;
         double best = Double.NaN;
         for (AABB box : boxes) {

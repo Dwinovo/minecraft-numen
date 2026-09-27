@@ -186,4 +186,15 @@ class SteppingTest {
         assertEquals(Step.WALK, step(world, AT.east(), Y, Direction.WEST, Y));
         assertEquals(Step.WALK, step(world, AT, Y, Direction.WEST, Y));
     }
+
+    @Test
+    void walkingOffAnEdgeTellsWhereTheFeetLand() {
+        TestWorld world = ground().set(AT.east().below(), Blocks.AIR.defaultBlockState())
+                .set(AT.east().below(3), Blocks.STONE.defaultBlockState());
+        assertEquals(Y - 2, Stepping.walkOff(world, SURVIVAL, 0, Y, 0, 1, 0, Y - 4), 1e-9, "落到两格下的石头上");
+        assertEquals(Double.NEGATIVE_INFINITY, Stepping.walkOff(world, SURVIVAL, 0, Y, 0, 1, 0, Y - 1),
+                "看的范围里脚下没有东西");
+        TestWorld wall = ground().set(AT.east(), Blocks.STONE.defaultBlockState());
+        assertTrue(Double.isNaN(Stepping.walkOff(wall, SURVIVAL, 0, Y, 0, 1, 0, Y - 4)), "要跳才过得去");
+    }
 }

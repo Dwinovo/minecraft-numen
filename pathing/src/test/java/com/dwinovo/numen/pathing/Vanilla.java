@@ -35,6 +35,8 @@ public final class Vanilla {
     public static final BodyStats SURVIVAL;
     /** 同一具身体在创造模式下:交互距离 5。 */
     public static final BodyStats CREATIVE;
+    /** 同一具生存模式的身体穿上皮靴:细雪托得住它。 */
+    public static final BodyStats LEATHER_BOOTS;
 
     static {
         SharedConstants.tryDetectVersion();
@@ -46,8 +48,9 @@ public final class Vanilla {
         }
         EntityDimensions standing = EntityDimensions.scalable(0.6F, 1.8F).withEyeHeight(1.62F);
         EntityDimensions crouching = EntityDimensions.scalable(0.6F, 1.5F).withEyeHeight(1.27F);
-        SURVIVAL = new BodyStats(standing, crouching, 0.6, 0.42F, 0.08, 4.5);
-        CREATIVE = new BodyStats(standing, crouching, 0.6, 0.42F, 0.08, 5.0);
+        SURVIVAL = new BodyStats(standing, crouching, 0.6, 0.42F, 0.08, 4.5, false);
+        CREATIVE = new BodyStats(standing, crouching, 0.6, 0.42F, 0.08, 5.0, false);
+        LEATHER_BOOTS = new BodyStats(standing, crouching, 0.6, 0.42F, 0.08, 4.5, true);
     }
 
     private Vanilla() {}

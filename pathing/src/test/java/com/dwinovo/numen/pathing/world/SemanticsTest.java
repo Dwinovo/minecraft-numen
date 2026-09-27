@@ -148,4 +148,15 @@ class SemanticsTest {
         TestWorld stone = new TestWorld().set(AT, Blocks.STONE.defaultBlockState());
         assertEquals(1.0, Semantics.jumpFactor(stone, 0, 65, 0), 1e-6);
     }
+
+    @Test
+    void soulSandSlowsTheFeetAndWaterOverTheEyesIsNoticed() {
+        TestWorld sand = new TestWorld().set(AT.below(), Blocks.SOUL_SAND.defaultBlockState());
+        assertEquals(0.4, Semantics.speedFactor(sand, 0, AT.getY() - 0.125, 0), 1e-6);
+        assertEquals(1.0, Semantics.speedFactor(new TestWorld().set(AT.below(), Blocks.STONE.defaultBlockState()), 0, AT.getY(), 0));
+        TestWorld pool = new TestWorld().set(AT, Blocks.WATER.defaultBlockState()).set(AT.above(), Blocks.WATER.defaultBlockState());
+        assertTrue(Semantics.eyeInWater(pool, 0.5, AT.getY() + 1.62, 0.5));
+        TestWorld shallow = new TestWorld().set(AT, Blocks.WATER.defaultBlockState());
+        assertFalse(Semantics.eyeInWater(shallow, 0.5, AT.getY() + 1.62, 0.5), "浅水只没过脚");
+    }
 }

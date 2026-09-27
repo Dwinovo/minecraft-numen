@@ -1,5 +1,9 @@
 package com.dwinovo.numen.pathing.world;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Predicate;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Pose;
@@ -22,7 +26,46 @@ public final class Clearance {
 
     /** 身体以 {@code pose} 站在 {@code (x, z)} 这一列、脚在 {@code feetY} 时放不放得下。 */
     public static boolean fits(BlockGetter level, BodyStats body, Pose pose, int x, double feetY, int z) {
-        return free(level, box(body, pose, x + 0.5, feetY, z + 0.5), feetY);
+        return free(level, body, box(body, pose, x + 0.5, feetY, z + 0.5), feetY);
+    }
+
+    /**
+     * 身体以 {@code pose} 站在 {@code (x, z)} 这一列、脚在 {@code feetY} 时,碰撞箱与它交叠的那些格,自下而上;放得下时为空。
+     * 规划要挖开或打开哪几格才站得进去,问的就是这里。
+     */
+    public static List<BlockPos> blockers(BlockGetter level, BodyStats body, Pose pose, int x, double feetY, int z) {
+        return blockers(level, body, pose, x, feetY, z, 0, 0);
+    }
+
+    /**
+     * 身体以 {@code pose}、脚一直在 {@code feetY},从 {@code (x, z)} 这一列的中心直走到 {@code (x + dx, z + dz)} 那一列的中心,
+     * 途中碰撞箱与它交叠的那些格,自下而上。关着的门只占格边,身体站在门格中心碰不到它,走过格边时才撞上——找挡路的门、
+     * 要挖开的格问的是这里。走的是斜线时取两端身体盒的包络,比身体真实扫过的范围略大。
+     */
+    public static List<BlockPos> blockers(BlockGetter level, BodyStats body, Pose pose, int x, double feetY, int z,
+                                          int dx, int dz) {
+        AABB swept = box(body, pose, x + 0.5, feetY, z + 0.5).minmax(box(body, pose, x + dx + 0.5, feetY, z + dz + 0.5));
+        List<BlockPos> out = new ArrayList<>();
+        visit(level, body, swept, feetY, pos -> {
+            out.add(pos.immutable());
+            return true;
+        });
+        out.sort((a, b) -> Integer.compare(a.getY(), b.getY()));
+        return out;
+    }
+
+    /**
+     * 身体以 {@code pose}、脚在 {@code feetY} 时占到的最高一格(碰撞盒的顶在这一格里)。最低一格就是脚所在的格
+     * {@link Footing#cellOf}。身体经过哪几格、碰到哪几格,都按这两头数。
+     */
+    public static int topCell(BodyStats body, Pose pose, double feetY) {
+        return Mth.floor(feetY + body.height(pose) - DEFLATE);
+    }
+
+    /** 身体以 {@code pose} 站在 {@code (x, z)} 这一列、脚在 {@code feetY} 时占着 {@code cell} 这一格。 */
+    public static boolean occupies(BodyStats body, Pose pose, int x, double feetY, int z, BlockPos cell) {
+        return cell.getX() == x && cell.getZ() == z && cell.getY() >= Footing.cellOf(feetY)
+                && cell.getY() <= topCell(body, pose, feetY);
     }
 
     /** 身体以 {@code pose}、脚底中心在 {@code (cx, feetY, cz)} 时的碰撞盒。 */
@@ -34,7 +77,12 @@ public final class Clearance {
     /**
      * 这个盒子与方块碰撞箱有没有交叠。{@code feetY} 是这具身体的脚高,碰撞箱随身体变化的方块按它回答。
      */
-    static boolean free(BlockGetter level, AABB body, double feetY) {
+    static boolean free(BlockGetter level, BodyStats stats, AABB body, double feetY) {
+        return !visit(level, stats, body, feetY, pos -> false);
+    }
+
+    /** 与盒子交叠的格逐个交给 {@code hit};它答 false 就停下。有交叠返回 true。 */
+    private static boolean visit(BlockGetter level, BodyStats stats, AABB body, double feetY, Predicate<BlockPos> hit) {
         AABB inner = body.deflate(DEFLATE);
         int x0 = Mth.floor(inner.minX);
         int x1 = Mth.floor(inner.maxX);
@@ -44,18 +92,23 @@ public final class Clearance {
         int y0 = Mth.floor(inner.minY) - 1;
         int y1 = Mth.floor(inner.maxY);
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        boolean any = false;
         for (int x = x0; x <= x1; x++) {
             for (int z = z0; z <= z1; z++) {
                 for (int y = y0; y <= y1; y++) {
-                    for (AABB box : Boxes.at(level, x, y, z, level.getBlockState(pos.set(x, y, z)), feetY)) {
+                    for (AABB box : Boxes.at(level, stats, x, y, z, level.getBlockState(pos.set(x, y, z)), feetY)) {
                         if (inner.intersects(box.minX + x, box.minY + y, box.minZ + z,
                                 box.maxX + x, box.maxY + y, box.maxZ + z)) {
-                            return false;
+                            any = true;
+                            if (!hit.test(pos)) {
+                                return true;
+                            }
+                            break;
                         }
                     }
                 }
             }
         }
-        return true;
+        return any;
     }
 }

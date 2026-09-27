@@ -67,11 +67,23 @@ public final class Semantics {
 
     /** 这一格是不是某一种。 */
     public static boolean is(BlockGetter level, BlockPos pos, Kind kind) {
-        return kinds(level, pos).contains(kind);
+        return (bits(level, pos) & bit(kind)) != 0;
     }
 
     /** 这一格的全部种类。 */
     public static Set<Kind> kinds(BlockGetter level, BlockPos pos) {
+        int bits = bits(level, pos);
+        EnumSet<Kind> out = EnumSet.noneOf(Kind.class);
+        for (Kind kind : KINDS) {
+            if ((bits & bit(kind)) != 0) {
+                out.add(kind);
+            }
+        }
+        return out;
+    }
+
+    /** 这一格的全部种类,一种一位。 */
+    private static int bits(BlockGetter level, BlockPos pos) {
         BlockState state = level.getBlockState(pos);
         int bits = STATE_KINDS.computeIfAbsent(state, Semantics::stateKinds);
         FluidState fluid = state.getFluidState();
@@ -83,13 +95,7 @@ public final class Semantics {
         if (state.getBlock() instanceof TrapDoorBlock && ladderTrapdoor(level, pos, state)) {
             bits |= bit(Kind.CLIMBABLE);
         }
-        EnumSet<Kind> out = EnumSet.noneOf(Kind.class);
-        for (Kind kind : KINDS) {
-            if ((bits & bit(kind)) != 0) {
-                out.add(kind);
-            }
-        }
-        return out;
+        return bits;
     }
 
     private static int stateKinds(BlockState state) {
@@ -181,7 +187,7 @@ public final class Semantics {
         return state.getBlock().hasDynamicShape();
     }
 
-    // ==================== 起跳 ====================
+    // ==================== 起跳与步速 ====================
 
     /**
      * 脚在 {@code feetY} 时脚下方块的起跳系数,照原版 {@code Entity.getBlockJumpFactor}:先看脚所在那一格的方块,
@@ -193,5 +199,30 @@ public final class Semantics {
             return here;
         }
         return level.getBlockState(new BlockPos(x, Mth.floor(feetY - 0.500001), z)).getBlock().getJumpFactor();
+    }
+
+    /**
+     * 脚在 {@code feetY} 时脚下方块的步速系数,照原版 {@code Entity.getBlockSpeedFactor}:脚所在那一格是水或气泡柱时就用它,
+     * 否则它不改步速才看脚下半格处的方块。灵魂沙、蜂蜜块是 0.4,其余原版方块是 1。
+     */
+    public static double speedFactor(BlockGetter level, int x, double feetY, int z) {
+        BlockState here = level.getBlockState(new BlockPos(x, Mth.floor(feetY), z));
+        float factor = here.getBlock().getSpeedFactor();
+        if (here.is(Blocks.WATER) || here.is(Blocks.BUBBLE_COLUMN) || factor != 1.0F) {
+            return factor;
+        }
+        return level.getBlockState(new BlockPos(x, Mth.floor(feetY - 0.500001), z)).getBlock().getSpeedFactor();
+    }
+
+    // ==================== 眼睛 ====================
+
+    /**
+     * 眼睛在 {@code (x, eyeY, z)} 时是不是泡在水里,照原版 {@code Entity.updateFluidOnEyes}:眼睛所在那一格的水面高过眼睛。
+     * 水下挖掘变慢看的就是它。
+     */
+    public static boolean eyeInWater(BlockGetter level, double x, double eyeY, double z) {
+        BlockPos pos = BlockPos.containing(x, eyeY, z);
+        FluidState fluid = level.getFluidState(pos);
+        return fluid.is(FluidTags.WATER) && pos.getY() + fluid.getHeight(level, pos) > eyeY;
     }
 }

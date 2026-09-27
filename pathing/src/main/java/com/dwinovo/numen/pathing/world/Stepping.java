@@ -47,13 +47,67 @@ public final class Stepping {
      */
     public static Step between(BlockGetter level, BodyStats body, int x, double fromFeetY, int z,
                                int dx, int dz, double toFeetY) {
+        Walk walk = walk(level, body, x, fromFeetY, z, dx, dz, Math.min(fromFeetY, toFeetY), toFeetY);
+        if (walk == null || Math.abs(walk.feet - toFeetY) > Footing.EPSILON) {
+            return Step.BLOCKED;
+        }
+        if (walk.biggestStep <= body.stepHeight() + Footing.EPSILON) {
+            return Step.WALK;
+        }
+        double height = body.height(Pose.STANDING);
+        double half = body.width() / 2 - Clearance.DEFLATE;
+        double sx = x + 0.5;
+        double sz = z + 0.5;
+        // 起跳:从起点竖直升到最高的脚高,再平移到最高处,这一段头顶都不能撞
+        if (!Double.isNaN(highestHit(walk.boxes, sx, sz, half, walk.peak, height))) {
+            return Step.BLOCKED;
+        }
+        for (int i = 0; i <= walk.peakAt; i++) {
+            double cx = sx + walk.points[i] * dx;
+            double cz = sz + walk.points[i] * dz;
+            if (!Double.isNaN(highestHit(walk.boxes, cx, cz, half, walk.peak, height))) {
+                return Step.BLOCKED;
+            }
+        }
+        return Step.JUMP;
+    }
+
+    /**
+     * 站立的身体脚在 {@code (x, fromFeetY, z)},不起跳,朝 {@code (dx, dz)} 走进相邻一列,脚最后落在多高:与
+     * {@link #between} 同一套推导,只是不指定终点。途中有坎高过迈步高度、要跳才过得去,答 {@link Double#NaN};脚下直到
+     * {@code lowestFeetY} 都没有东西托住,答 {@link Double#NEGATIVE_INFINITY}(身体落出了看的范围)。落进水里、抓住梯子
+     * 这类碰撞箱表达不了的接住,由调用方按语义判断。
+     */
+    public static double walkOff(BlockGetter level, BodyStats body, int x, double fromFeetY, int z,
+                                 int dx, int dz, double lowestFeetY) {
+        Walk walk = walk(level, body, x, fromFeetY, z, dx, dz, Math.min(fromFeetY, lowestFeetY), fromFeetY);
+        if (walk == null || walk.biggestStep > body.stepHeight() + Footing.EPSILON) {
+            return Double.NaN;
+        }
+        return walk.feet;
+    }
+
+    /**
+     * 沿直线走一遍的结果:最后的脚高、途中最大的坎、最高的脚高与它出现在第几个取样点,以及用到的碰撞箱与取样点
+     * (起跳时复核头顶)。
+     */
+    private record Walk(List<AABB> boxes, double[] points, double feet, double biggestStep, double peak, int peakAt) {}
+
+    /**
+     * 按类注释里的推导走一遍;途中要抬到起跳也够不着的高度时返回 null。
+     *
+     * @param low     要看的最低脚高
+     * @param highest 要看的最高脚高(再加起跳与身高)
+     */
+    private static Walk walk(BlockGetter level, BodyStats body, int x, double fromFeetY, int z,
+                             int dx, int dz, double low, double highest) {
         if (dx < -1 || dx > 1 || dz < -1 || dz > 1 || (dx == 0 && dz == 0)) {
             throw new IllegalArgumentException("相邻一列的方向只能是正方向或斜向:" + dx + "," + dz);
         }
         double height = body.height(Pose.STANDING);
         double jump = body.jumpHeight(Semantics.jumpFactor(level, x, fromFeetY, z));
-        List<AABB> boxes = boxesAround(level, x, z, dx, dz,
-                Math.min(fromFeetY, toFeetY), Math.max(fromFeetY, toFeetY) + jump + height, fromFeetY);
+        List<AABB> boxes = boxesAround(level, body, x, z, dx, dz,
+                low, Math.max(fromFeetY, highest) + jump + height, fromFeetY);
         double half = body.width() / 2 - Clearance.DEFLATE;
         double sx = x + 0.5;
         double sz = z + 0.5;
@@ -71,7 +125,7 @@ public final class Stepping {
             while (!Double.isNaN(top = highestHit(boxes, cx, cz, half, feet, height))) {
                 feet = top;
                 if (feet - fromFeetY > jump + Footing.EPSILON) {
-                    return Step.BLOCKED;
+                    return null;
                 }
             }
             if (feet > before) {
@@ -84,26 +138,11 @@ public final class Stepping {
                 feet = support(boxes, cx, cz, half, feet);
             }
         }
-        if (Math.abs(feet - toFeetY) > Footing.EPSILON) {
-            return Step.BLOCKED;
-        }
-        if (biggestStep <= body.stepHeight() + Footing.EPSILON) {
-            return Step.WALK;
-        }
-        // 起跳:从起点竖直升到最高的脚高,再平移到最高处,这一段头顶都不能撞
-        if (!Double.isNaN(highestHit(boxes, sx, sz, half, peak, height))) {
-            return Step.BLOCKED;
-        }
-        for (int i = 0; i <= peakAt; i++) {
-            if (!Double.isNaN(highestHit(boxes, sx + points[i] * dx, sz + points[i] * dz, half, peak, height))) {
-                return Step.BLOCKED;
-            }
-        }
-        return Step.JUMP;
+        return new Walk(boxes, points, feet, biggestStep, peak, peakAt);
     }
 
     /** 起点列与终点列(斜走时连同两侧的两列)里,脚高范围 {@code [low, high]} 附近所有碰撞箱,换成绝对坐标。 */
-    private static List<AABB> boxesAround(BlockGetter level, int x, int z, int dx, int dz,
+    private static List<AABB> boxesAround(BlockGetter level, BodyStats body, int x, int z, int dx, int dz,
                                           double low, double high, double feetY) {
         List<AABB> out = new ArrayList<>();
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
@@ -113,7 +152,7 @@ public final class Stepping {
         for (int cx = Math.min(x, x + dx); cx <= Math.max(x, x + dx); cx++) {
             for (int cz = Math.min(z, z + dz); cz <= Math.max(z, z + dz); cz++) {
                 for (int cy = y0; cy <= y1; cy++) {
-                    for (AABB box : Boxes.at(level, cx, cy, cz, level.getBlockState(pos.set(cx, cy, cz)), feetY)) {
+                    for (AABB box : Boxes.at(level, body, cx, cy, cz, level.getBlockState(pos.set(cx, cy, cz)), feetY)) {
                         out.add(box.move(cx, cy, cz));
                     }
                 }

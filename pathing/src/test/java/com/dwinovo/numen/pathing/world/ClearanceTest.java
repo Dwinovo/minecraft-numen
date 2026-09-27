@@ -1,16 +1,21 @@
 package com.dwinovo.numen.pathing.world;
 
+import java.util.List;
+
 import com.dwinovo.numen.pathing.TestWorld;
 import com.dwinovo.numen.pathing.Vanilla;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.block.state.properties.SlabType;
 
@@ -18,6 +23,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static com.dwinovo.numen.pathing.Vanilla.SURVIVAL;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -118,5 +124,31 @@ class ClearanceTest {
                 .set(0, Y, 0, Blocks.WHITE_CARPET.defaultBlockState());
         assertTrue(Clearance.fits(carpet, SURVIVAL, Pose.STANDING, 0, Y + 1 / 16.0, 0));
         assertFalse(Clearance.fits(carpet, SURVIVAL, Pose.STANDING, 0, Y, 0), "脚不能陷进地毯里");
+    }
+
+    @Test
+    void aClosedDoorOnTheCellEdgeBlocksOnlyTheBodyWalkingAcrossIt() {
+        // 朝东关着的门,门板贴在门格西边:站在门格中心碰不到它,从西边那一列走过来才撞上
+        BlockState door = Blocks.OAK_DOOR.defaultBlockState().setValue(DoorBlock.FACING, Direction.EAST);
+        TestWorld world = new TestWorld().set(0, Y - 1, 0, Blocks.STONE.defaultBlockState())
+                .set(-1, Y - 1, 0, Blocks.STONE.defaultBlockState())
+                .set(0, Y, 0, door).set(0, Y + 1, 0, door.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER));
+        assertTrue(Clearance.blockers(world, SURVIVAL, Pose.STANDING, 0, Y, 0).isEmpty());
+        assertEquals(List.of(new BlockPos(0, Y, 0), new BlockPos(0, Y + 1, 0)),
+                Clearance.blockers(world, SURVIVAL, Pose.STANDING, -1, Y, 0, 1, 0));
+    }
+
+    @Test
+    void theBodyOccupiesFromItsFeetCellUpToItsHeadCell() {
+        assertTrue(Clearance.occupies(SURVIVAL, Pose.STANDING, 0, Y + 0.5, 0, new BlockPos(0, Y + 2, 0)), "脚在半格高,头伸进第三格");
+        assertFalse(Clearance.occupies(SURVIVAL, Pose.STANDING, 0, Y, 0, new BlockPos(0, Y + 2, 0)));
+        assertFalse(Clearance.occupies(SURVIVAL, Pose.STANDING, 0, Y, 0, new BlockPos(1, Y, 0)));
+    }
+
+    @Test
+    void powderSnowHoldsUpOnlyABodyInLeatherBoots() {
+        TestWorld world = new TestWorld().set(0, Y - 1, 0, Blocks.POWDER_SNOW.defaultBlockState());
+        assertTrue(Double.isNaN(Footing.height(world, SURVIVAL, 0, Y, 0)), "陷进细雪");
+        assertEquals(Y, Footing.height(world, Vanilla.LEATHER_BOOTS, 0, Y, 0), 1e-9, "穿皮靴站在上面");
     }
 }

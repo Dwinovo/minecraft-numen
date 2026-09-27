@@ -4,9 +4,9 @@ import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.Pose;
 
 /**
- * 身体的几项物理量:站立与潜行时的碰撞盒和眼高、迈步高度、起跳力度、重力、方块交互距离。第 0 层只从这里读身体,
- * 不接触实体——宿主从真实的身体上取值交进来(尺寸取 {@code getDimensions(pose)},其余取同名属性),规划与执行
- * 拿到的是同一份。
+ * 身体的几项物理量:站立与潜行时的碰撞盒和眼高、迈步高度、起跳力度、重力、方块交互距离,以及脚上的装备让它能不能
+ * 站在细雪上。第 0 层只从这里读身体,不接触实体——宿主从真实的身体上取值交进来(尺寸取 {@code getDimensions(pose)},
+ * 其余取同名属性),规划与执行拿到的是同一份。
  *
  * <p>交互距离由调用方给:原版生存模式 4.5、创造模式 5,各随属性与修饰符变。
  *
@@ -16,9 +16,10 @@ import net.minecraft.world.entity.Pose;
  * @param jumpStrength 起跳的初速度(属性 {@code jump_strength},原版 0.42)
  * @param gravity      每刻的重力加速度(属性 {@code gravity},原版 0.08)
  * @param blockReach   方块交互距离(属性 {@code block_interaction_range})
+ * @param walksOnPowderSnow 细雪托得住它:原版 {@code PowderSnowBlock.canEntityWalkOnPowderSnow},玩家看脚上是不是皮靴
  */
 public record BodyStats(EntityDimensions standing, EntityDimensions crouching, double stepHeight,
-                        double jumpStrength, double gravity, double blockReach) {
+                        double jumpStrength, double gravity, double blockReach, boolean walksOnPowderSnow) {
 
     /** 原版每刻对竖直速度乘的空气阻力({@code LivingEntity.travel} 里的 {@code 0.98F})。 */
     private static final double AIR_DRAG = 0.98F;
