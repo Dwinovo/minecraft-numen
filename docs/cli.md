@@ -814,7 +814,17 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
   旧写法(building_design、nether_entry、stronghold_finding、tier_progression、end_game_overview、blaze_rods)、带
   占位符写不通的 `fight attack --entity_ids <id>`、`use block right <x> <y> <z> …`、不存在的 `wait`;动作注意与工具描述里
   没加反引号的命令提及(都补上了,否则读不到);系统提示的例子 `command(use block right <the furnace…>)`。
-- **插件的技能文档不在这里读**:插件的命令组只在它的模组在场时登记,core 的单测里没有它们;插件模块现在没有测试源码集。
+- **插件在自己的模块里读**:每个带命令组的联动有一个同样的测试(`plugins/*/src/test`,读法共用 core 测试里的
+  `WrittenCommandsLint`),读它随身带的技能文档与它那一组的说明。
+  - 跑在 core 单测的原版环境里:NeoForge 打过补丁的 MC 离了 FML 引导不起来,而读命令只要原版的指令树、core 的命令组与
+    联动自己的登记代码。环境由 `numen-plugin` 约定接好,插件只写一个测试类。
+  - 目标模组不需要在场:测试不经 `Builtin` 的闸门、不假装模组已装,只执行联动登记命令组的那一段(同一个 `install`,经同一扇
+    `NumenPlugins` 的门),产品里"模组在场才登记"这条不动。登记时动作的处理函数要连上目标模组的类的(ftbquests 读任务书
+    要 FTB 的类),那个联动把模组的 jar 加进测试运行时的类路径:只加载、不运行,不进任何产物。
+  - 联动的组只进它自己那个测试进程,不混进 core 的单测(命令树是进程级的静态表,帮助的快照不受影响)。
+  - 随发行 jar 的构建一起跑:`core:neoforge` 与 `core:fabric` 的 `check` 依赖它们带上的那几个联动的测试。
+  - 先跑一遍抓到并修掉的:四份插件技能都写着 `<组> <动作> --help` 这种带占位符的写法,改成"在动作后面加 --help"并举一个
+    能照抄的例子。
 
 ## 附录 H:包的上限与输出预算(09-26)
 

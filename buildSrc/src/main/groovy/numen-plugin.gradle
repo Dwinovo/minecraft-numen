@@ -40,3 +40,27 @@ dependencies {
     compileOnly project(':agent')
     compileOnly project(':ui')
 }
+
+/*
+ * 防漂移测试:联动的技能与命令说明里写着的每一行命令,按命令树读一遍(core 的 WrittenCommandsLint)。
+ *
+ * 测试跑在 core 单测的原版环境里,不跑在本模块的加载器环境里:NeoForge 打过补丁的 MC 离了 FML 引导不起来
+ * (Bootstrap 要 LoadingModList),而读命令只要原版的指令树、core 的命令组与联动自己的登记代码。目标模组不在场,
+ * 也不需要在场——测试不经 Builtin 的闸门、不假装模组已装,只执行联动登记命令组的那一段(同一个 install,经同一扇
+ * NumenPlugins 的门),那一段只碰 numen api。联动的组只进它自己这个测试进程,不混进 core 的单测。
+ */
+def coreTests = { project(':core:common').sourceSets.test }
+sourceSets.test {
+    compileClasspath += files({ coreTests().output }) + files({ coreTests().compileClasspath })
+    runtimeClasspath += files({ coreTests().output }) + files({ coreTests().runtimeClasspath })
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
