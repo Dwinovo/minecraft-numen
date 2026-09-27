@@ -165,6 +165,24 @@ public final class Driver {
         return legs.isEmpty() ? List.of() : List.copyOf(legs.subList(cur, legs.size()));
     }
 
+    /**
+     * 换目标(跟着的东西挪了):在走的这条路原本到得了目标,而它的终点在新目标里还算数、停在那儿没变贵
+     * ({@link Goal#keepsStop}),就照走;否则扔掉它,从身体脚下按新目标重搜,旧路打折。在飞的搜索是按旧目标派的,作废。
+     */
+    public void retarget(Goal next) {
+        Goal before = goal;
+        goal = next;
+        bestEstimate = Double.POSITIVE_INFINITY;
+        stalePartials = 0;
+        BlockPos end = legs.isEmpty() ? start : legs.get(legs.size() - 1).maneuver().to();
+        Stance endStance = legs.isEmpty() ? startStance : legs.get(legs.size() - 1).maneuver().landing();
+        if (complete && end != null && endStance != null && Goal.keepsStop(before, next, end, endStance)) {
+            return;
+        }
+        note("retarget");
+        replan();
+    }
+
     /** 暂停:松开所有键,路线留着。 */
     public void pause() {
         paused = true;
@@ -431,7 +449,7 @@ public final class Driver {
         return CostModel.of(spec, rig.snapshot(), rig.terrain, rig.materials, rig.threats);
     }
 
-    /** 从 {@code from} 派一次搜索:在世界所在的线程上拷下以它为中心的快照,成本模型按此刻的身体与端口现组。 */
+    /** 记一件事。 */
     private void note(String event) {
         if (trace.size() >= 16) {
             trace.removeFirst();
@@ -449,6 +467,7 @@ public final class Driver {
                 + " trace=" + trace + "]";
     }
 
+    /** 从 {@code from} 派一次搜索:在世界所在的线程上拷下以它为中心的快照,成本模型按此刻的身体与端口现组。 */
     private void dispatch(Purpose why, BlockPos from) {
         note("dispatch " + why + " from " + from.toShortString());
         WorldSnapshot view = WorldSnapshot.around(rig.entity.serverLevel(), from);

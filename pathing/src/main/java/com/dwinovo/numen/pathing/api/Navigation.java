@@ -2,6 +2,7 @@ package com.dwinovo.numen.pathing.api;
 
 import com.dwinovo.numen.pathing.drive.Driver;
 import com.dwinovo.numen.pathing.drive.Halt;
+import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Pending;
 import com.dwinovo.numen.pathing.search.Searches;
 
@@ -91,6 +92,16 @@ public final class Navigation {
     @Override
     public String toString() {
         return "Navigation[" + status + " " + driver + "]";
+    }
+
+    /**
+     * 换目标:跟着的东西挪了,宿主把新目标交进来。在走的路终点在新目标里还算数就照走,否则从身体脚下按新目标重搜。
+     * 挪多远才值得换由宿主定(跟随的迟滞在宿主那边)。只对还在走的导航起作用;到了或收场之后要去新的地方,另开一次导航。
+     */
+    public void retarget(Goal goal) {
+        if (status.running() && diagnosis == null) {
+            driver.retarget(goal);
+        }
     }
 
     /** 暂停:松开所有键,路线留着。 */
