@@ -54,7 +54,7 @@ final class Ascend implements Move {
                 return Premise.fail(to, Reason.NO_FOOTING);
             }
         }
-        Stepping.Step step = Stepping.between(draft, body, from.getX(), f0, from.getZ(), heading.dx(), heading.dz(), f1);
+        Stepping.Step step = geometry(draft, body, from, f0, grounded, heading, f1);
         if (step == Stepping.Step.BLOCKED) {
             // 身体在落点的脚高上从起步那一列挪到落点:途中与落定后挡着的格,连同起跳时头顶那一格
             List<BlockPos> blockers = Strides.union(Strides.at(draft, body, to, f1),
@@ -62,7 +62,7 @@ final class Ascend implements Move {
             if (!draft.clear(blockers, true, from.getX(), f0, from.getZ(), grounded)) {
                 return draft.failure();
             }
-            step = Stepping.between(draft, body, from.getX(), f0, from.getZ(), heading.dx(), heading.dz(), f1);
+            step = geometry(draft, body, from, f0, grounded, heading, f1);
             if (step == Stepping.Step.BLOCKED) {
                 return Premise.fail(to, Reason.TOO_HIGH);
             }
@@ -85,6 +85,14 @@ final class Ascend implements Move {
         return new Premise.Holds(new Maneuver(MoveKind.ASCEND, heading, from, stance, to, landing, jump, false, false,
                 Strides.inWater(draft, to), Strides.speedFactor(draft, from, f0, to, f1), 0, 1, draft.edits(),
                 contact.cells(), support));
+    }
+
+    /** 站着是从脚下的方块迈上去或跳上去({@link Stepping#between});攀着、浮着是在梯子、水里升上去再挪过去({@link Stepping#fromHold})。 */
+    private static Stepping.Step geometry(Draft draft, BodyStats body, BlockPos from, double f0, boolean grounded,
+                                          Heading heading, double f1) {
+        return grounded
+                ? Stepping.between(draft, body, from.getX(), f0, from.getZ(), heading.dx(), heading.dz(), f1)
+                : Stepping.fromHold(draft, body, from.getX(), f0, from.getZ(), heading.dx(), heading.dz(), f1);
     }
 
     @Override

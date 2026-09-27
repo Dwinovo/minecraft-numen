@@ -389,6 +389,30 @@ class MovesTest {
     }
 
     @Test
+    void aSwimmerClimbsOutOntoTheShoreWithoutJumping() {
+        // 两格深的池子,水面那一层的格与岸边地板齐平:浮在水面上,朝岸边上一级
+        TestWorld world = pool(2);
+        BlockPos surface = new BlockPos(4, Y - 1, 0);
+        Maneuver m = holds(MoveKind.ASCEND, defaults(), world, surface, EAST);
+        assertEquals(new BlockPos(5, Y, 0), m.to());
+        assertFalse(m.jump(), "是游上岸的,不起跳");
+    }
+
+    @Test
+    void aClimberStepsSidewaysOffTheLadderOntoABlock() {
+        // 梯子贴在西墙上,东边一列是一格高的平台:攀在第二格梯子上,平着挪上平台
+        TestWorld world = ground().fill(-1, Y, -1, -1, Y + 4, 1, Blocks.STONE.defaultBlockState())
+                .set(1, Y, 0, Blocks.STONE.defaultBlockState());
+        for (int y = Y; y < Y + 3; y++) {
+            world.set(0, y, 0, Blocks.LADDER.defaultBlockState().setValue(LadderBlock.FACING, Direction.EAST));
+        }
+        BlockPos rung = AT.above();
+        Maneuver m = holds(MoveKind.WALK, defaults(), world, rung, EAST);
+        assertEquals(rung.east(), m.to());
+        assertTrue(m.landing().grounded());
+    }
+
+    @Test
     void aBodyThatCannotJumpInWaterStillWadesOutOnTheBottom() {
         TestWorld world = ground().set(AT, Blocks.WATER.defaultBlockState()).set(AT.east(), Blocks.WATER.defaultBlockState());
         Maneuver m = holds(MoveKind.WALK, defaults(), world, AT, EAST);

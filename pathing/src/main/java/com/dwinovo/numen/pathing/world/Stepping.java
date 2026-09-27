@@ -73,6 +73,22 @@ public final class Stepping {
     }
 
     /**
+     * 身体不是站在方块上,而是被水或梯子托在脚高 {@code fromFeetY}(浮着、攀着),朝 {@code (dx, dz)} 挪进相邻一列、落在脚高
+     * {@code toFeetY}:先在起步那一列里升到两个脚高中较高的那个(游上去、爬上去),再在那个高度上平着挪过去,最后落到
+     * {@code toFeetY}。不起跳——托着它的是水和梯子,不是脚下的方块,{@link #between} 那套"从脚下的碰撞箱起步"的推导不适用。
+     * 升到的高度上身体在起步那一列放得下、平挪途中处处放得下,就是走得过去;否则过不去。落到的那一格托不托得住由调用方看。
+     */
+    public static Step fromHold(BlockGetter level, BodyStats body, int x, double fromFeetY, int z,
+                                int dx, int dz, double toFeetY) {
+        double top = Math.max(fromFeetY, toFeetY);
+        if (!Clearance.fits(level, body, Pose.STANDING, x, top, z)
+                || !Clearance.blockers(level, body, Pose.STANDING, x, top, z, dx, dz).isEmpty()) {
+            return Step.BLOCKED;
+        }
+        return Step.WALK;
+    }
+
+    /**
      * 站立的身体脚在 {@code (x, fromFeetY, z)},不起跳,朝 {@code (dx, dz)} 走进相邻一列,脚最后落在多高:与
      * {@link #between} 同一套推导,只是不指定终点。途中有坎高过迈步高度、要跳才过得去,答 {@link Double#NaN};脚下直到
      * {@code lowestFeetY} 都没有东西托住,答 {@link Double#NEGATIVE_INFINITY}(身体落出了看的范围)。落进水里、抓住梯子

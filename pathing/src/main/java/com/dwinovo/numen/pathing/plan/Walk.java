@@ -70,14 +70,14 @@ final class Walk implements Move {
                 sneak = onlyBackFace(draft, model, bridge, from);
             }
         }
-        Stepping.Step step = geometry(draft, body, from, f0, heading, f1, hanging);
+        Stepping.Step step = geometry(draft, body, from, f0, grounded, heading, f1, hanging);
         if (step == Stepping.Step.BLOCKED) {
             List<BlockPos> blockers = Strides.union(Strides.at(draft, body, to, f1),
                     Strides.across(draft, body, from, heading, Math.max(f0, f1)));
             if (!draft.clear(blockers, true, from.getX(), f0, from.getZ(), grounded)) {
                 return draft.failure();
             }
-            step = geometry(draft, body, from, f0, heading, f1, hanging);
+            step = geometry(draft, body, from, f0, grounded, heading, f1, hanging);
             if (step == Stepping.Step.BLOCKED) {
                 return Premise.fail(to, f1 - f0 > body.stepHeight() ? Reason.TOO_HIGH : Reason.NO_CLEARANCE);
             }
@@ -103,11 +103,15 @@ final class Walk implements Move {
     }
 
     /**
-     * 走过去的几何:落点托得住脚时照 {@link Stepping#between};走进水里、梯子上时,迈得过去且脚下没有东西把身体托在这个
-     * 节点之上就行(水与梯子接住身体是语义,碰撞箱表达不了)。
+     * 走过去的几何:攀在梯子上起步时,在梯子那一列里挪过去({@link Stepping#fromHold});站着起步、落点托得住脚时照
+     * {@link Stepping#between};走进水里、梯子上时,迈得过去且脚下没有东西把身体托在这个节点之上就行(水与梯子接住身体是
+     * 语义,碰撞箱表达不了)。
      */
-    private static Stepping.Step geometry(Draft draft, BodyStats body, BlockPos from, double f0, Heading heading,
-                                          double f1, boolean hanging) {
+    private static Stepping.Step geometry(Draft draft, BodyStats body, BlockPos from, double f0, boolean grounded,
+                                          Heading heading, double f1, boolean hanging) {
+        if (!grounded) {
+            return Stepping.fromHold(draft, body, from.getX(), f0, from.getZ(), heading.dx(), heading.dz(), f1);
+        }
         if (!hanging) {
             return Stepping.between(draft, body, from.getX(), f0, from.getZ(), heading.dx(), heading.dz(), f1);
         }
