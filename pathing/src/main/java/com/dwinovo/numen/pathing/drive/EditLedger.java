@@ -65,6 +65,25 @@ public final class EditLedger {
         return Collections.unmodifiableList(entries);
     }
 
+    /**
+     * 这本账放下、之后没再挖掉的方块,按放下的先后:每一格看最后一笔,是放下了一种方块(倒下又收回的水、放下的流体不算)。
+     * 事后撤回垫块就撤这些。
+     */
+    public List<Placed> placedBlocks() {
+        java.util.Map<BlockPos, Entry> last = new java.util.LinkedHashMap<>();
+        for (Entry e : entries) {
+            last.remove(e.pos());
+            last.put(e.pos(), e);
+        }
+        List<Placed> out = new ArrayList<>();
+        for (Entry e : last.values()) {
+            if (e instanceof Placed p && !p.after().isAir() && p.after().getFluidState().isEmpty()) {
+                out.add(p);
+            }
+        }
+        return out;
+    }
+
     /** 走完的步数。 */
     public int steps() {
         return steps;
