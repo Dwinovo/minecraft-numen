@@ -37,7 +37,7 @@ class CostModelTest {
         STONE = Blocks.STONE.defaultBlockState();
     }
 
-    private static final TerrainPolicy POLICY = (change, pos, state) -> pos.equals(ASK) ? Permit.ask("主人的箱子")
+    private static final TerrainPolicy POLICY = (change, pos, state, view) -> pos.equals(ASK) ? Permit.ask("主人的箱子")
             : pos.equals(DENY) ? Permit.deny("玩家放的") : Permit.ALLOW;
 
     private static CostModel model(Alter alter) {

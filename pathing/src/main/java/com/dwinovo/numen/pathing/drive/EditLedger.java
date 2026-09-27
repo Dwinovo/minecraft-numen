@@ -70,6 +70,11 @@ public final class EditLedger {
      * 事后撤回垫块就撤这些。
      */
     public List<Placed> placedBlocks() {
+        return placedBlocks(entries);
+    }
+
+    /** 同 {@link #placedBlocks()},对几本账接起来的笔(按先后)。 */
+    public static List<Placed> placedBlocks(List<? extends Entry> entries) {
         java.util.Map<BlockPos, Entry> last = new java.util.LinkedHashMap<>();
         for (Entry e : entries) {
             last.remove(e.pos());

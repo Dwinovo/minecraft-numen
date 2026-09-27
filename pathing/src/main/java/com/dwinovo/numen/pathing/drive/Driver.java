@@ -160,7 +160,12 @@ public final class Driver {
         return step != null && step.falls() && !rig.entity.onGround();
     }
 
-    /** 此刻在走的路线(不含已经走过的步);没有为 null。 */
+    /** 身体此刻站着等一次搜索的结论:没有路可走(或路走完了还没到),派出去的搜索还没回来。 */
+    public boolean waiting() {
+        return state == State.RUNNING && pending != null && cur >= legs.size();
+    }
+
+    /** 此刻在走的路线(不含已经走过的步);没有为空。 */
     public List<Route.Leg> remaining() {
         return legs.isEmpty() ? List.of() : List.copyOf(legs.subList(cur, legs.size()));
     }
@@ -183,9 +188,10 @@ public final class Driver {
         replan();
     }
 
-    /** 暂停:松开所有键,路线留着。 */
+    /** 暂停:松开所有键,手上正在挖的放下,路线留着。 */
     public void pause() {
         paused = true;
+        rig.hands.release();
     }
 
     /** 接着走:照留着的路线走下去,不重新搜。 */

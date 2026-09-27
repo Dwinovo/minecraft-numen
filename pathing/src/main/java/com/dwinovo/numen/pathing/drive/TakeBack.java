@@ -234,7 +234,7 @@ public final class TakeBack {
 
     private void begin(BlockPos pos) {
         BlockState state = rig.world().getBlockState(pos);
-        Permit permit = rig.terrain.judge(TerrainPolicy.Change.DIG, pos, state);
+        Permit permit = rig.terrain.judge(TerrainPolicy.Change.DIG, pos, state, rig.world());
         if (permit instanceof Permit.Deny deny) {
             leave(pos, new Why.Refused(deny.reason()));
             return;

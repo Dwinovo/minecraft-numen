@@ -83,6 +83,19 @@ public final class Navigation {
         return driver.progressing();
     }
 
+    /**
+     * 身体此刻站着等搜索的结论(没有路可走而搜索还没回来,或在诊断为什么没路),不在走。等的是搜索线程的真实时间,
+     * 宿主据此不把这几刻算成干活。
+     */
+    public boolean waiting() {
+        return status.running() && (diagnosis != null || driver.waiting());
+    }
+
+    /** 还没走完的那几步,按先后;排障画路线用。 */
+    public java.util.List<com.dwinovo.numen.pathing.search.Route.Leg> remaining() {
+        return driver.remaining();
+    }
+
     /** 身体此刻是计划内的坠落:宿主的摔落反射只接管计划外的。 */
     public boolean plannedFall() {
         return driver.plannedFall();
@@ -104,7 +117,7 @@ public final class Navigation {
         }
     }
 
-    /** 暂停:松开所有键,路线留着。 */
+    /** 暂停:松开所有键,手上正在挖的放下,路线留着。 */
     public void pause() {
         driver.pause();
     }

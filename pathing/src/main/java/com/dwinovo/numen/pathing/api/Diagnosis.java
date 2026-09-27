@@ -76,16 +76,18 @@ final class Diagnosis {
             }
         }
         TerrainPolicy original = model.terrain();
-        Route route = find(failed, model.withTerrain((change, pos, state) -> {
-            Permit permit = original.judge(change, pos, state);
+        Route route = find(failed, model.withTerrain((change, pos, state, view) -> {
+            Permit permit = original.judge(change, pos, state, view);
             return permit instanceof Permit.Deny ? Permit.ALLOW : permit;
         }), cancelled);
         if (route != null) {
             for (Edit edit : route.edits()) {
                 Permit permit = switch (edit) {
-                    case Edit.Dig dig -> original.judge(TerrainPolicy.Change.DIG, dig.pos(), dig.state());
-                    case Edit.Place place -> original.judge(TerrainPolicy.Change.PLACE, place.pos(), place.replaced());
-                    case Edit.Catch caught -> original.judge(TerrainPolicy.Change.PLACE, caught.pos(), caught.replaced());
+                    case Edit.Dig dig -> original.judge(TerrainPolicy.Change.DIG, dig.pos(), dig.state(), failed.view());
+                    case Edit.Place place -> original.judge(new TerrainPolicy.Change.Place(place.block()), place.pos(),
+                            place.replaced(), failed.view());
+                    case Edit.Catch caught -> original.judge(new TerrainPolicy.Change.Place(Blocks.WATER), caught.pos(),
+                            caught.replaced(), failed.view());
                     case Edit.Door door -> Permit.ALLOW;
                 };
                 if (permit instanceof Permit.Deny deny) {

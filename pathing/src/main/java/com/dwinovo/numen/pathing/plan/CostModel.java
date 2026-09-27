@@ -160,7 +160,7 @@ public final class CostModel {
         if (physical != null) {
             return Admission.refuse(physical);
         }
-        return judge(TerrainPolicy.Change.DIG, pos, state);
+        return judge(TerrainPolicy.Change.DIG, pos, state, view);
     }
 
     /**
@@ -190,7 +190,7 @@ public final class CostModel {
         if (Faces.against(view, pos, placing).isEmpty()) {
             return Admission.refuse(Reason.NO_FACE);
         }
-        return judge(TerrainPolicy.Change.PLACE, pos, current);
+        return judge(new TerrainPolicy.Change.Place(placing), pos, current, view);
     }
 
     /**
@@ -220,11 +220,11 @@ public final class CostModel {
         if (Faces.against(view, pos, Blocks.WATER).isEmpty()) {
             return Admission.refuse(Reason.NO_FACE);
         }
-        return judge(TerrainPolicy.Change.PLACE, pos, current);
+        return judge(new TerrainPolicy.Change.Place(Blocks.WATER), pos, current, view);
     }
 
-    private Admission judge(TerrainPolicy.Change change, BlockPos pos, BlockState state) {
-        Permit permit = terrain.judge(change, pos.immutable(), state);
+    private Admission judge(TerrainPolicy.Change change, BlockPos pos, BlockState state, WorldView view) {
+        Permit permit = terrain.judge(change, pos.immutable(), state, view);
         return switch (permit) {
             case Permit.Allow allow -> new Admission(permit, null, null);
             case Permit.Ask ask -> spec.alter() == RouteSpec.Alter.ANY

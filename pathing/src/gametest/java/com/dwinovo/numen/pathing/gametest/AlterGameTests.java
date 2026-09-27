@@ -191,7 +191,7 @@ public class AlterGameTests {
         wall(t, 8, 3, Blocks.DIRT, -1);
         t.set(8, 1, 5, Blocks.CHEST);
         BlockPos wallStart = t.at(8, 1, 0);
-        t.terrain = (change, pos, state) -> state.is(Blocks.CHEST) ? Permit.deny("chest")
+        t.terrain = (change, pos, state, view) -> state.is(Blocks.CHEST) ? Permit.deny("chest")
                 : pos.getX() == wallStart.getX() && pos.getZ() - wallStart.getZ() <= 12 ? Permit.deny("player placed")
                 : Permit.ALLOW;
         TestBody body = t.body(4, 1, 5);
@@ -209,7 +209,7 @@ public class AlterGameTests {
     public static void reports_the_denied_cell(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         hut(t);
-        t.terrain = (change, pos, state) -> state.is(Blocks.DIRT) ? Permit.deny("owner's hut") : Permit.ALLOW;
+        t.terrain = (change, pos, state, view) -> state.is(Blocks.DIRT) ? Permit.deny("owner's hut") : Permit.ALLOW;
         TestBody body = t.body(5, 1, 5);
         t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(300).fails(Outcome.Denied.class, o -> {
             if (!"owner's hut".equals(o.reason()) || !t.state(o.cell().getX() - t.origin.getX(),
@@ -227,7 +227,7 @@ public class AlterGameTests {
     public static void lists_cells_that_need_consent(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         hut(t);
-        t.terrain = (change, pos, state) -> state.is(Blocks.DIRT) ? Permit.ask("hut:" + t.rel(pos)) : Permit.ALLOW;
+        t.terrain = (change, pos, state, view) -> state.is(Blocks.DIRT) ? Permit.ask("hut:" + t.rel(pos)) : Permit.ALLOW;
         TestBody body = t.body(5, 1, 5);
         t.go(body, Goals.at(t.at(12, 1, 5)), ANY).within(400).arrives().then(r -> {
             Bill bill = r.report.bill();
@@ -274,11 +274,11 @@ public class AlterGameTests {
         }
         BlockPos snowRow = t.at(8, 0, 0);
         List<BlockPos> asked = new ArrayList<>();
-        t.terrain = (change, pos, state) -> {
-            if (change == TerrainPolicy.Change.PLACE && pos.getX() == snowRow.getX() && pos.getY() == snowRow.getY()) {
+        t.terrain = (change, pos, state, view) -> {
+            if (change instanceof TerrainPolicy.Change.Place && pos.getX() == snowRow.getX() && pos.getY() == snowRow.getY()) {
                 return Permit.ask("snow");
             }
-            return pos.getX() == snowRow.getX() && change == TerrainPolicy.Change.PLACE
+            return pos.getX() == snowRow.getX() && change instanceof TerrainPolicy.Change.Place
                     ? Permit.deny("not the snow cell") : Permit.ALLOW;
         };
         TestBody body = t.body(4, 1, 5);

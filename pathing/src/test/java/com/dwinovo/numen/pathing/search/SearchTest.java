@@ -161,7 +161,7 @@ class SearchTest {
         world.fill(5, Y, 0, 5, Y + 1, 0, Blocks.DIRT.defaultBlockState()).fill(5, Y, 4, 5, Y + 1, 4, Blocks.DIRT.defaultBlockState());
         world.fill(-1, Y + 2, -1, 11, Y + 2, 5, STONE);
         BlockPos denied = new BlockPos(5, Y, 0);
-        TerrainPolicy policy = (change, pos, state) -> pos.getX() == 5 && pos.getZ() == 0 ? Permit.deny("玩家放的") : Permit.ALLOW;
+        TerrainPolicy policy = (change, pos, state, view) -> pos.getX() == 5 && pos.getZ() == 0 ? Permit.deny("玩家放的") : Permit.ALLOW;
         CostModel model = CostModel.of(natural(), Fixtures.body(), policy, Materials.NONE, Threats.NONE);
         SearchResult result = search(world, model, START, Goals.at(new BlockPos(10, Y, 0)));
         assertTrue(result.arrived());
@@ -172,7 +172,7 @@ class SearchTest {
     @Test
     void cellsThatNeedConsentEnterTheRouteOnlyUnderAny() {
         TestWorld world = corridor().fill(5, Y, 0, 5, Y + 1, 0, Blocks.DIRT.defaultBlockState());
-        TerrainPolicy policy = (change, pos, state) -> pos.getX() == 5 ? Permit.ask("要主人点头") : Permit.ALLOW;
+        TerrainPolicy policy = (change, pos, state, view) -> pos.getX() == 5 ? Permit.ask("要主人点头") : Permit.ALLOW;
         Goal goal = Goals.at(new BlockPos(10, Y, 0));
         CostModel naturalModel = CostModel.of(natural(), Fixtures.body(), policy, Materials.NONE, Threats.NONE);
         assertEquals(SearchResult.Stop.EXHAUSTED, search(world, naturalModel, START, goal).stop());
@@ -270,6 +270,22 @@ class SearchTest {
             double dz = end.getZ() + 0.5 - t.z();
             assertTrue(dx * dx + dz * dz >= t.radius() * t.radius());
         }
+    }
+
+    /** 站在离目标三到四格的环带上,同时离环带东边一只怪五格开外:停的地方两条都成立,环带靠怪那一侧不算。 */
+    @Test
+    void severalGoalsAtOnceEndWhereEveryOneHolds() {
+        BlockPos center = new BlockPos(12, Y, 0);
+        Threat creature = new Threat(16.5, Y, 0.5, 5);
+        SearchResult result = search(field(), defaults(), START,
+                Goals.allOf(List.of(Goals.ring(center, 3, 4), Goals.awayFrom(List.of(creature)))));
+        assertTrue(result.arrived());
+        BlockPos end = result.route().end();
+        double ring = Math.sqrt(Math.pow(end.getX() - center.getX(), 2) + Math.pow(end.getZ() - center.getZ(), 2));
+        assertTrue(ring >= 3 && ring <= 4, "停在环带上:" + ring);
+        double dx = end.getX() + 0.5 - creature.x();
+        double dz = end.getZ() + 0.5 - creature.z();
+        assertTrue(dx * dx + dz * dz >= 25, "离那只怪五格开外:" + end);
     }
 
     @Test

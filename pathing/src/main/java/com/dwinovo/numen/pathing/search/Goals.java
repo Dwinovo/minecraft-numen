@@ -95,6 +95,17 @@ public final class Goals {
         return new AwayFrom(List.copyOf(threats));
     }
 
+    /**
+     * 几个目标同时成立:每一个都到了才算到。估价取各自估价里最大的那个;要看的格取第一个要求视线的;为了到得了都别动的格
+     * 合在一起。
+     */
+    public static Goal allOf(List<Goal> goals) {
+        if (goals.isEmpty()) {
+            throw new IllegalArgumentException("几个目标同时成立,至少要有一个");
+        }
+        return new AllOf(List.copyOf(goals));
+    }
+
     /** 多个目标取其一:到了任何一个就算到;按"走过去加到了再付"挑最便宜的那个。 */
     public static Goal anyOf(List<Goal> goals) {
         if (goals.isEmpty()) {
@@ -333,6 +344,57 @@ public final class Goals {
                 }
             }
             return min == Double.POSITIVE_INFINITY ? 0 : min;
+        }
+
+        @Override
+        public PositionCosts protection() {
+            PositionCosts all = PositionCosts.EMPTY;
+            for (Goal g : members) {
+                all = all.plus(g.protection());
+            }
+            return all;
+        }
+    }
+
+    private record AllOf(List<Goal> members) implements Goal {
+        @Override
+        public boolean contains(int x, int y, int z, Stance stance) {
+            for (Goal g : members) {
+                if (!g.contains(x, y, z, stance)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        @Override
+        public double estimate(int x, int y, int z) {
+            double max = 0;
+            for (Goal g : members) {
+                max = Math.max(max, g.estimate(x, y, z));
+            }
+            return max;
+        }
+
+        /** 停在这里要付的到达价:各成员的相加。 */
+        @Override
+        public double arrival(int x, int y, int z, Stance stance) {
+            double sum = 0;
+            for (Goal g : members) {
+                sum += g.arrival(x, y, z, stance);
+            }
+            return sum;
+        }
+
+        @Override
+        public BlockPos sight(int x, int y, int z, Stance stance) {
+            for (Goal g : members) {
+                BlockPos own = g.sight(x, y, z, stance);
+                if (own != null) {
+                    return own;
+                }
+            }
+            return null;
         }
 
         @Override
