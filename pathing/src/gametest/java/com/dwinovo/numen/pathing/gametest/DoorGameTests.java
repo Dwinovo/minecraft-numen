@@ -22,7 +22,7 @@ import net.minecraft.world.level.block.state.properties.Half;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
-/** 门:木门自己开、铁门当墙、双开门、地上开着与关着的活板门、上一级与下一级途中的门、门板在侧面、通了红石的铁门。 */
+/** 门:木门自己开、铁门当墙、双开门、地上开着与关着的活板门、上一级与下一级与斜走途中的门、门板在侧面、通了红石的铁门。 */
 @GameTestHolder("numen")
 @PrefixGameTestTemplate(false)
 public class DoorGameTests {
@@ -162,5 +162,18 @@ public class DoorGameTests {
         t.set(8, 1, 4, Blocks.REDSTONE_BLOCK);
         TestBody body = t.body(4, 1, 5);
         t.go(body, Goals.at(t.at(12, 1, 5)), RouteSpec.defaults()).arrives().then(DoorGameTests::untouched);
+    }
+
+    /**
+     * 斜着走的路上横着一整排关着的木门(一格一扇,门板贴在各格的南沿,再没有别的口):斜着走过来,开一扇门穿过去,斜着走到。
+     */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    public static void opens_a_door_across_a_diagonal_way(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        for (int x = 0; x < 40; x++) {
+            door(t, x, 1, 8, Blocks.OAK_DOOR, Direction.NORTH, false);
+        }
+        TestBody body = t.body(4, 1, 4);
+        t.go(body, Goals.at(t.at(12, 1, 12)), RouteSpec.defaults()).arrives().then(DoorGameTests::toggled);
     }
 }
