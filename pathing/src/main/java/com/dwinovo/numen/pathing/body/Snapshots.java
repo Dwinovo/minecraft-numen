@@ -39,9 +39,7 @@ public final class Snapshots {
     private Snapshots() {}
 
     public static BodySnapshot of(ServerPlayer body) {
-        BodyStats stats = new BodyStats(body.getDimensions(Pose.STANDING), body.getDimensions(Pose.CROUCHING),
-                body.maxUpStep(), body.getAttributeValue(Attributes.JUMP_STRENGTH), body.getGravity(),
-                body.blockInteractionRange(), PowderSnowBlock.canEntityWalkOnPowderSnow(body), frostWalker(body));
+        BodyStats stats = stats(body);
         BodySnapshot.Mining mining = new BodySnapshot.Mining(efficiencyBesidesHand(body),
                 body.getAttributeValue(Attributes.BLOCK_BREAK_SPEED),
                 body.getAttributeValue(Attributes.SUBMERGED_MINING_SPEED),
@@ -52,6 +50,13 @@ public final class Snapshots {
                 body.getAttributeValue(Attributes.SAFE_FALL_DISTANCE),
                 body.getAttributeValue(Attributes.FALL_DAMAGE_MULTIPLIER), body.getFoodData().getFoodLevel(),
                 body.getAttributeValue(Attributes.WATER_MOVEMENT_EFFICIENCY), inventory, mining);
+    }
+
+    /** 第 0 层要的那几项物理量:尺寸、迈步、起跳、重力、交互距离、细雪与冰霜行者。 */
+    public static BodyStats stats(ServerPlayer body) {
+        return new BodyStats(body.getDimensions(Pose.STANDING), body.getDimensions(Pose.CROUCHING),
+                body.maxUpStep(), body.getAttributeValue(Attributes.JUMP_STRENGTH), body.getGravity(),
+                body.blockInteractionRange(), PowderSnowBlock.canEntityWalkOnPowderSnow(body), frostWalker(body));
     }
 
     /** 脚上的靴子带冰霜行者。 */
