@@ -15,6 +15,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.FarmBlock;
 import net.minecraft.world.level.block.SnowLayerBlock;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.Half;
@@ -190,7 +191,7 @@ public class StairGameTests {
     public static void walks_and_jumps_on_soul_sand_farmland_and_paths(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(5, 0, 4, 7, 0, 6, Blocks.SOUL_SAND);
-        t.fill(8, 0, 4, 10, 0, 6, Blocks.FARMLAND);
+        t.fill(8, 0, 4, 10, 0, 6, Blocks.FARMLAND.defaultBlockState().setValue(FarmBlock.MOISTURE, FarmBlock.MAX_MOISTURE));
         t.fill(11, 0, 4, 13, 0, 6, Blocks.DIRT_PATH);
         t.fill(14, 1, 4, 16, 1, 6, Blocks.STONE);
         TestBody body = t.body(2, 1, 5);

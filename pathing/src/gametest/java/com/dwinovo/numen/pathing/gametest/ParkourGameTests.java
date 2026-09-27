@@ -15,6 +15,7 @@ import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.FarmBlock;
 import net.minecraft.world.level.block.state.properties.SlabType;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -135,7 +136,8 @@ public class ParkourGameTests {
     public static void does_not_jump_onto_farmland(GameTestHelper helper) {
         Trial t = gap(helper, 10, 11);
         t.fill(9, 4, 0, 9, 4, 39, Blocks.DIRT_PATH);
-        t.fill(12, 4, 0, 12, 4, 39, Blocks.FARMLAND);
+        // 湿透的耕地:随机刻里要干上七回才变回泥土,用例这点工夫干不透
+        t.fill(12, 4, 0, 12, 4, 39, Blocks.FARMLAND.defaultBlockState().setValue(FarmBlock.MOISTURE, FarmBlock.MAX_MOISTURE));
         bridge(t, 10, 11);
         TestBody body = t.body(6, 5, 5);
         t.go(body, Goals.at(t.at(14, 5, 5)), PARKOUR.edit().allow(Kind.FRAGILE).build()).within(600)
