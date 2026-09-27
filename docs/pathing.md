@@ -1,6 +1,6 @@
 # 寻路模块
 
-状态:设计稿(2026-09-27),按重写来做;设计选择已定，第三步进行中(第一、二批已完成，见第十三节)。取代已删除的 `pathing-refactor-log.md` 与 `route-and-permission.md`;
+状态:设计稿(2026-09-27),按重写来做;设计选择已定，第三步的三批都已完成(见第十三节),下一步是切换。取代已删除的 `pathing-refactor-log.md` 与 `route-and-permission.md`;
 权限层另见 `permission-layer.md`。
 
 ## 一、为什么重做
@@ -457,6 +457,67 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
   斜走找挡路的门时按两端身体盒的包络找。
 - 性能：单测的哈希表世界里,`alter=natural` 在实心地形中展开 10 万个节点约 3.5 秒;先在真实快照上量，再看第 0 层
   `Stepping` 的取样与每一步草稿的分配。
+
+### 第三批(09-27,`pathing-rewrite` 之上 caccab38..e4a9e8c2)
+
+- **身体机制**(`body/`,原版口径只此一份,执行层与宿主共用):`Controls` 把按键照原版客户端变成身体输入(前后左右是
+  数字键、跳按住由原版 `aiStep` 分地面/水里/攀爬、潜行、疾跑照原版的开跑停跑条件、卡在方块里往外推);`Physics.step`
+  补上网络层替真玩家做的那一趟(`doTick`、摔伤、移动统计、区块跟随),宿主的假玩家每刻在自己的实体刻里调;`PlayerHands`
+  是端口 `Effector` 的原版实现(左键照 `MultiPlayerGameMode` 的挖掘循环经 `handlePlayerAction`,右键先主手后副手);
+  `Hotbar` 把工具或料拿到手上(数字键、中键、F 键、创造模式取料),每次都交回 `BodyAction`;`Crosshair` 准星拾取;
+  `Snapshots` 从身体上抄 `BodySnapshot`(挖掘效率扣掉手上那件自己的修饰符)。
+- **第 3 层**(`drive/`):`Driver` 段状态机(首段、提前 100 刻搜下一段接上、按身体落在哪个节点认步、离开路线重搜、
+  同一步三次走不下去收场、半程路线连续三段不更近收场、换目标只问 `Goal.keepsStop`、暂停与接着走不重搜、下载具记进动作);
+  `Step` 一步开始前在活世界(`LiveWorld`)上用同一个 `Moves.of(kind).premise`、同一个方向复核,不成立交出 `Fails`;
+  每种走法一个 `Control`(`StrideControl` 管平走斜走上一级与背贴搭桥、`DropControl`、`ParkourControl`、`PillarControl`、
+  `DownwardControl`、`ClimbControl`、`SwimControl`),改动由 `Work` 做(挖、放、倒水接坠落再收回),开关门是可复用的
+  `DoorOpener`;`Steering` 照原版移动与摩擦推算怎么停在一点、空中不回身;`SprintPolicy`、`Aim`(瞄点与按鼠标像素转头,
+  与准星同一套射线)、`Watchdog`(按估价给一步期限、对外的"在推进"信号)各只一处;`EditLedger` 只收 `Effector` 真实
+  交回的结果;`TakeBack` 撤回路上垫的块。
+- **第 4 层**(`api/`):`Navigator.of(body, ports)`;`plan(PlanQuery)` 交出 `Planning`(轮询出 `PlanResult`:候选路线各带
+  预算账,没有候选时带结局),`drive(NavRequest)` 交出 `Navigation`(`tick`/`stop`/`report`/`progressing`/`plannedFall`/
+  `retarget`/`pause`/`resume`),`takeBack` 交出 `Teardown`;请求可带先照走的候选路线与展开预算。结局 `Outcome` 是数据:
+  `Arrived`、`NoRoute`、`OutOfBudget`、`Unloaded`、`Stranded`、`NeedsAlter(级别, 要改几格)`、`NoMaterials`、
+  `OverAlterBudget(要改几格)`、`Denied(格, 理由)`、`Blocked(格, 方块, 走法, 前提或执行里出的事)`、`NoLineOfSight`。
+  搜索没交出路时,为什么没路由 `Diagnosis` 在同一份快照上换条件再搜得出(先问许改的够不够,再问料、改动预算、许可)。
+- **端口的最终形状**:身体 `Body`(`entity()` 加 `snapshot()`)另给;`Ports` 四个——`Effector`(`dig`/`release`/`use`,
+  如实交回碎了哪格、变了哪几格、被拒及理由)、`TerrainPolicy.judge(改动, 格, 方块) → Permit`(放行/要问带凭据/拒绝带理由)、
+  `Materials.next()`、`Threats.current()`。第四节表里的 `PlacementAdvice`、`Limits`、`NavLog` 没有用到的地方,没做。
+- **对照第六节落定的**:#18、#19 卡没卡住与进度量尺只在 `Watchdog`;#21 实际改动只在 `EditLedger`,坠落倒的水也记账;
+  #24 门只经 `DoorOpener`,任何走法穿门都用它;#25 疾跑只在 `SprintPolicy`;#26 瞄点只在 `Aim`;#27 水桶只给要接的
+  坠落备(`Edit.Catch`),执行中的计划坠落经 `plannedFall` 对外声明;#31 下载具记进 `BodyAction`;#16 到达只看目标的
+  `contains`,视线由执行层到了之后复核(`NoLineOfSight`);#11 挖的时候照 `ToolChoice` 同一个选择拿工具;
+  执行复核与规划用同一个前提函数。
+- **GameTest**:夹具 `Trial`(每刻推导航、收场断言结局、`alter=none` 不改地形、实际账与世界逐格对照)、`TestBody`
+  (普通假玩家,不是 `NumenPlayer`)、`Scenes`、`Worlds`;第八节两张表的场景按类别分进 16 个用例类,共 18 批 170 条,全部通过。
+  补上的类别:目标(`GoalGameTests`)、预算与长途(`BudgetGameTests`)、执行复核(`RecheckGameTests`)、tick 速率
+  (`TickRateGameTests`)、门面(`FacadeGameTests`),以及门里"斜走途中的门"。
+- **与原版对不上而按原版写的场景**:落进一格深的水照样不摔(原版落水就清掉下落距离);一格高的玻璃板站得上去,当墙的
+  场景用两格高的;身体会跟着加载区块(`Physics` 照原版做区块跟随),导航中碰不到"前面一直没加载",所以"未加载"用只搜
+  不走来测;测试服务器一刻做完就接下一刻、不等墙钟,"段与段之间不停顿"与挖隧道这类搜索吃重的用例按墙钟给每刻定节奏
+  (`Trial.Run.paced`),tick 速率一类让搜索线程池排着睡觉活,使结论晚到很多刻。
+- **这一批修的**:半程路线最后一档只看离目标多近——估价按疾跑算,挖隧道时每步真实代价贵几十倍,原来的几档折算下最好的
+  节点总在起点跟前,长隧道搜不到头时交不出半程路线。
+- **性能**(测试服务器里的真实快照,十三个区块见方;每项三次取中):不改地形平地 100 格 2–3 毫秒到;208 格(伸出快照)
+  展开完快照内 60–80 毫秒;起伏地形 100 格不改地形约 60 毫秒、许改自然地形约 0.6 秒;许改自然地形在整片石头里展开
+  4 万节点 1.7–2.0 秒、10 万节点约 4.5 秒(每节点约 45 微秒,约 900 次读方块);快照拷贝 0.1–1 毫秒。JFR 采样:
+  读方块(调色板解码加草稿叠层)约三成、`Stepping` 走一遍约三成(其中取样点的流与排序约一成)、语义种类(`EnumSet`
+  与缓存查找)约一成半、`Contact` 约一成半。把缓存改成先无锁读、取样点改成数组试过,在噪声里看不出差别,没有提交。
+  许改地形的一次搜索要一两秒,门面诊断"不许改地形时许改有没有路"最多再搜两次;真实服务器上这几秒身体站着等。
+
+### 留给切换那批的
+
+- 适配层实现四个端口与 `Body`:`Effector` 包在 `PlayerHands` 外面问权限层、被拒交回 `Verdict`;`TerrainPolicy` 用 `Gate`;
+  `Materials` 用 `ThrowawayBlocks`;`Threats` 用 `Menace`;结局与 `BodyAction` 渲染成给模型的话、映射 `FailureType`。
+- 身体机制进模块之后:`NumenPlayer.tick` 里的物理那段换成 `Physics.step`(模块每刻跟随区块并结算移动统计,旧的每十刻
+  一次;旧的每十刻 `connection.resetPosition` 要核对还要不要),`holdInHand` 由 `Hotbar` 替代;身份、主人、事件上报、
+  本能开关、上船对齐都留下。`InputDriver` 的走、跳、潜行、停由 `Controls` 替代(每具身体一个实例、每刻 `apply`),
+  朝向与看向(模块里在 `Aim`)、船的驾驶留在 Numen。`BlockDigger` 的逐刻挖掘循环由 `PlayerHands` 替代,权限判断、
+  `destroyNow`、挡路方块回退与 `DigResult` 留在 Numen。`ToolSelect` 整个由 `ToolChoice` 加 `Hotbar` 替代。
+  调用方以 core 的任务、反射与 `ExecHarness` 为主,切换时逐个改。
+- 现有寻路单测与 `MovementGameTests` 迁到新接口,逐条列去向(第八节"现有测试")。
+- 性能:许改地形时每个节点读九百次方块;若要快,先从同一次展开里各走法重复算的落脚与迈步下手,再看快照按区段解码。
+- 已知近似照旧:展开节点只叠"走到这里那一步"的改动;斜走找挡路的门按两端身体盒的包络找。
 
 ## 参考
 
