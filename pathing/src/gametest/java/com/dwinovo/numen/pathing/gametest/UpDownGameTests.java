@@ -211,6 +211,44 @@ public class UpDownGameTests {
                 .arrives().then(UpDownGameTests::unhurt);
     }
 
+    /**
+     * 十六格高的柱顶,四周都是硬地,背包里有一桶水,许改自然地形:走出边沿之前才把水桶拿到手上,落到够得着地面时倒水,
+     * 落进水里一点血不掉,再把水收回桶里;账上先有倒下的水、后有收回。另一具身体从三格高处走下来,背包里也有水桶——
+     * 这一跳摔不疼,不备水桶。
+     */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    public static void catches_a_high_fall_with_a_water_bucket(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(4, 1, 4, 4, 15, 4, Blocks.STONE);
+        TestBody body = t.body(4, 16, 4);
+        body.getInventory().setItem(5, new ItemStack(Items.WATER_BUCKET));
+        RouteSpec natural = RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build();
+        t.go(body, Goals.at(t.at(12, 1, 4)), natural).within(500).arrives().then(r -> {
+            unhurt(r);
+            var entries = r.report.ledger().entries();
+            boolean poured = entries.stream().anyMatch(e -> e instanceof com.dwinovo.numen.pathing.drive.EditLedger.Placed p
+                    && p.after().is(Blocks.WATER));
+            boolean scooped = entries.stream().anyMatch(e -> e instanceof com.dwinovo.numen.pathing.drive.EditLedger.Placed p
+                    && p.before().is(Blocks.WATER) && p.after().isAir());
+            if (!poured || !scooped) {
+                throw new GameTestAssertException("水没倒下或没收回:" + entries);
+            }
+            if (!r.body.getInventory().contains(new ItemStack(Items.WATER_BUCKET))) {
+                throw new GameTestAssertException("水没收回桶里");
+            }
+        });
+        t.fill(20, 1, 4, 22, 3, 6, Blocks.STONE);
+        TestBody low = t.body(21, 4, 5);
+        low.getInventory().setItem(5, new ItemStack(Items.WATER_BUCKET));
+        t.go(low, Goals.at(t.at(27, 1, 5)), natural).arrives().then(r -> {
+            boolean held = r.report.actions().stream().anyMatch(a -> a instanceof com.dwinovo.numen.pathing.body.BodyAction.Held h
+                    && h.item() == Items.WATER_BUCKET);
+            if (held) {
+                throw new GameTestAssertException("摔不疼的一跳也备了水桶");
+            }
+        });
+    }
+
     static void unhurt(Trial.Run r) {
         if (r.lowestHealth < r.body.getMaxHealth()) {
             throw new GameTestAssertException("掉了血:最低 " + r.lowestHealth);

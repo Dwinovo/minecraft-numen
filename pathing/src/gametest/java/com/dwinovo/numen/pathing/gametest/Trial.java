@@ -188,8 +188,11 @@ final class Trial {
                 .forEach(pos -> baseline.put(pos.immutable(), level.getBlockState(pos)));
     }
 
-    /** 实际账与世界的变化一致;规格不许改地形时账里没有挖、没有放。不一致就抛断言异常。 */
-    void audit(Report report, RouteSpec spec) {
+    /**
+     * 实际账与世界的变化一致;规格不许改地形时账里没有挖、没有放。不一致就抛断言异常。{@code passive} 认得出的变化不是
+     * 导航动的手,而是原版在身体经过时自己做的(冰霜行者冻住的水面),不算进来。
+     */
+    void audit(Report report, RouteSpec spec, java.util.function.BiPredicate<BlockState, BlockState> passive) {
         EditLedger ledger = report.ledger();
         Map<BlockPos, BlockState> last = new HashMap<>();
         for (EditLedger.Entry e : ledger.entries()) {
@@ -206,7 +209,7 @@ final class Trial {
         baseline.forEach((pos, before) -> {
             BlockState now = level.getBlockState(pos);
             boolean onLedger = last.containsKey(pos);
-            if (now != before && !onLedger) {
+            if (now != before && !onLedger && !passive.test(before, now)) {
                 problems.add(rel(pos) + " 从 " + before + " 变成 " + now + ",账上没有");
             }
             if (onLedger) {
@@ -241,6 +244,7 @@ final class Trial {
         private Consumer<Outcome> outcomeCheck = o -> {};
         private final List<Consumer<Run>> finals = new ArrayList<>();
         private final List<Consumer<Run>> everyTick = new ArrayList<>();
+        private java.util.function.BiPredicate<BlockState, BlockState> passive = (before, now) -> false;
         private boolean finished;
         private boolean passed;
         /** 这么多刻内要收场(从开走算起);用例的 GameTest 时限要比它加上 {@link #delay} 长。 */
@@ -303,6 +307,12 @@ final class Trial {
             return fails(kind, o -> {});
         }
 
+        /** 世界里这样的变化是原版在身体经过时自己做的,不是导航动的手:对账时不算。 */
+        Run passive(java.util.function.BiPredicate<BlockState, BlockState> change) {
+            passive = change;
+            return this;
+        }
+
         /** 收场之后再断言。 */
         Run then(Consumer<Run> check) {
             finals.add(check);
@@ -350,7 +360,7 @@ final class Trial {
                 if (expected == NavStatus.State.FAILED) {
                     outcomeCheck.accept(status.outcome());
                 }
-                trial.audit(report, spec);
+                trial.audit(report, spec, passive);
                 for (Consumer<Run> check : finals) {
                     check.accept(this);
                 }

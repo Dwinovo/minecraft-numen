@@ -17,6 +17,8 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.PressurePlateBlock;
 import net.minecraft.world.level.block.SweetBerryBushBlock;
@@ -128,6 +130,109 @@ public class FluidGameTests {
         bad.addAll(box(t, 10, 1, 3, 11, 2, 7));
         t.go(body, Goals.at(t.at(14, 1, 5)), RouteSpec.defaults())
                 .during(r -> avoid(r, t, bad))
+                .arrives();
+    }
+
+    // ==================== 流体(普查补充) ====================
+
+    /** 一口四格深、一格宽的水井,身体在井底:游上来,上岸。 */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    public static void swims_up_from_the_bottom_of_a_deep_well(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(5, -4, 4, 7, -1, 6, Blocks.STONE);
+        t.fill(6, -3, 5, 6, 0, 5, Blocks.WATER);
+        TestBody body = t.body(6, -3, 5);
+        t.go(body, Goals.at(t.at(10, 1, 5)), RouteSpec.defaults()).arrives();
+    }
+
+    /** 泡在三格深的池子里,身上有圆石、许改地形,去处在岸上:游上岸再说,不在水里垫柱。 */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    public static void does_not_pillar_while_in_water(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        pool(t, 4, 3, 9, 8, 3);
+        t.fill(11, 1, 3, 13, 2, 8, Blocks.STONE);
+        TestBody body = t.body(6, -2, 5);
+        Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
+        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
+        List<BlockPos> water = box(t, 4, -2, 3, 9, 0, 8);
+        t.go(body, Goals.at(t.at(12, 3, 5)), RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build())
+                .within(600).arrives().then(r -> {
+                    for (var e : r.report.ledger().entries()) {
+                        if (e instanceof com.dwinovo.numen.pathing.drive.EditLedger.Placed && water.contains(e.pos())) {
+                            throw new GameTestAssertException("在水里放了方块 " + t.rel(e.pos()));
+                        }
+                    }
+                });
+    }
+
+    /** 路上一个一格的水坑,走过去短暂落进水里又出来:照常走过去,不在水坑边反复停下重搜,一路在推进。 */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    public static void a_brief_dip_in_water_does_not_stall(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        pool(t, 8, 5, 8, 5, 1);
+        TestBody body = t.body(3, 1, 5);
+        t.go(body, Goals.at(t.at(14, 1, 5)), RouteSpec.defaults()).within(120)
+                .during(r -> {
+                    if (r.ticks > 5 && !r.navigation.progressing()) {
+                        throw new GameTestAssertException("在水坑边停住了(第 " + r.ticks + " 刻)");
+                    }
+                })
+                .arrives();
+    }
+
+    /**
+     * 一道横贯场地的水渠,规格不许下水、也不许往水里放方块,许改地形、身上有圆石:先垫高一格,在水面上方那一层搭桥过去,
+     * 水渠里的水一格没动。
+     */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 900)
+    public static void bridges_over_water_without_placing_into_it(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        pool(t, 7, 0, 9, 39, 1);
+        TestBody body = t.body(4, 1, 5);
+        Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
+        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
+        RouteSpec spec = RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL)
+                .exclude(Semantics.Kind.WATER)
+                .bans(new com.dwinovo.numen.pathing.spec.BlockBans(java.util.Set.of(), java.util.Set.of(Blocks.WATER),
+                        java.util.Set.of()))
+                .build();
+        List<BlockPos> water = box(t, 7, 0, 0, 9, 0, 39);
+        t.go(body, Goals.at(t.at(12, 1, 5)), spec).within(800).arrives().then(r -> {
+            for (var e : r.report.ledger().entries()) {
+                if (water.contains(e.pos())) {
+                    throw new GameTestAssertException("动了水渠里的水 " + t.rel(e.pos()));
+                }
+            }
+        });
+    }
+
+    /** 潜到三格深的池底某一格站着。 */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    public static void dives_to_a_cell_on_the_bottom(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        pool(t, 5, 3, 10, 8, 3);
+        TestBody body = t.body(3, 1, 5);
+        t.go(body, Goals.at(t.at(8, -2, 6)), RouteSpec.defaults()).arrives();
+    }
+
+    /** 穿着冰霜行者的靴子:三格深的一片静水挡在路上,踩着冻住的水面走过去,一次也没下水。 */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    public static void walks_over_water_in_frost_walker_boots(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        pool(t, 6, 0, 11, 39, 3);
+        TestBody body = t.body(3, 1, 5);
+        ItemStack boots = new ItemStack(Items.LEATHER_BOOTS);
+        boots.enchant(t.level.registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT)
+                .getHolderOrThrow(net.minecraft.world.item.enchantment.Enchantments.FROST_WALKER), 2);
+        body.setItemSlot(net.minecraft.world.entity.EquipmentSlot.FEET, boots);
+        t.go(body, Goals.at(t.at(14, 1, 5)), RouteSpec.defaults())
+                // 冰霜行者冻住的水面是原版在身体经过时自己冻的,过一阵又化回水,不是导航动的手
+                .passive((before, now) -> before.is(Blocks.WATER) && now.is(Blocks.FROSTED_ICE))
+                .during(r -> {
+                    if (r.body.isInWater()) {
+                        throw new GameTestAssertException("下了水");
+                    }
+                })
                 .arrives();
     }
 
