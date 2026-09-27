@@ -50,18 +50,18 @@ class WorkCommandGroupsTest {
     }
 
     @Test
-    void gotoAndMineKeepTheirNamesWithTheRouteFieldsLaidFlat() {
+    void moveGotoAndWorkMineLayTheRouteFieldsFlat() {
         List<String> route = List.of("alter", "avoid", "penalty_place", "penalty_break", "penalty_jump",
                 "penalty_wade", "avoid_break", "avoid_place", "avoid_step", "parkour", "climb_vines", "max_fall",
                 "alter_budget");
         List<String> gotoFields = new ArrayList<>(List.of("x", "y", "z", "block", "route"));
         gotoFields.addAll(route);
-        assertEquals(gotoFields, fields("goto"));
-        assertEquals(List.of(), required("goto"));
+        assertEquals(gotoFields, fields("move_goto"));
+        assertEquals(List.of(), required("move_goto"));
         List<String> mineFields = new ArrayList<>(List.of("block_ids", "groups", "count"));
         mineFields.addAll(route);
-        assertEquals(mineFields, fields("mine"));
-        assertEquals(List.of(), required("mine"));
+        assertEquals(mineFields, fields("work_mine"));
+        assertEquals(List.of(), required("work_mine"));
         for (String gone : List.of("follow", "plan_route", "collect_items", "fish", "attack", "blueprint",
                 "blueprint_read", "scaffold_materials", "build", "transfer")) {
             assertNull(ToolRegistry.get(gone), gone + " 已经是命令,不再是工具");
@@ -114,10 +114,10 @@ class WorkCommandGroupsTest {
                 + "[--route <word>] [route flags]\n"), gotoHelp);
         assertTrue(gotoHelp.contains("\n  Route flags:\n    --alter <none|natural|any> "), gotoHelp);
         assertTrue(gotoHelp.contains("--avoid_break <block|cell...>"), gotoHelp);
-        assertTrue(gotoHelp.endsWith("Shortcut tool: goto."), gotoHelp);
+        assertTrue(gotoHelp.endsWith("Shortcut tool: move_goto."), gotoHelp);
         String mineHelp = run("work mine --help").get("message").getAsString();
         assertTrue(mineHelp.startsWith("work mine [--block_ids <id...>] [--groups <word...>] [--count <integer>]"),
                 mineHelp);
-        assertTrue(mineHelp.endsWith("Shortcut tool: mine."), mineHelp);
+        assertTrue(mineHelp.endsWith("Shortcut tool: work_mine."), mineHelp);
     }
 }

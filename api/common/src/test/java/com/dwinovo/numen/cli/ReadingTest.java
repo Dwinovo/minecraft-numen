@@ -105,7 +105,7 @@ class ReadingTest {
     void commandsInProseAreTheBackquotedAndFencedOnesThatStartWithAGroupOrASlash() {
         String text = """
                 Open it with `gt_read put`, then `gt_read say hi`. Blocks like `oak_log` and tools like
-                `load_skill` are not commands; neither is `gt_reader`.
+                `skill_load` are not commands; neither is `gt_reader`.
                 ```
                 gt_read put 3 x y
                 floor ### (a drawing, not a command)

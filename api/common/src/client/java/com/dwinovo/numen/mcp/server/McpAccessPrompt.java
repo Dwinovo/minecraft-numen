@@ -80,19 +80,17 @@ final class McpAccessPrompt {
                 - Reply and narrate with `say(companion, text)` — the words appear in-game as the \
                 companion's chat line, speech bubble, and voice. Keep your own conversation history; \
                 the game stores none for you.
-                - Long actions — the tools `goto` and `mine`, and commands such as `build at`, \
+                - Long actions — the tools `move_goto` and `work_mine`, and commands such as `build at`, \
                 `work fish` or `fight attack` run through the `command` tool — are BACKGROUND tasks: \
                 they return a task id at once. The end of a task you started does NOT show up in \
                 `get_events`: run the command `task status` until the body is idle, then perceive to \
                 confirm what happened. `task_stop` cancels. Short actions (`inv craft`, `gear wear`, \
                 `use block`, …) return when they are done.
-                - One body runs one task at a time: a new long action replaces the one running. Two \
-                long actions sent at the same moment are refused — send the second after the first \
-                is accepted.
-                - You're blind between calls: perceive with `get_self_status` / `scan_blocks` / \
-                `scan_nearby_entities` before and after acting.
+                - %s
+                - You're blind between calls: perceive with `status_self` / `scan_blocks` / \
+                `scan_entities` before and after acting.
                 - `scan_blocks` answers in groups of touching blocks, each with an id (g1, g2, …) and \
-                whether breaking it is allowed, needs the owner's consent, or is refused. `mine` with \
+                whether breaking it is allowed, needs the owner's consent, or is refused. `work_mine` with \
                 `groups` digs exactly those cells; an id is only good until the next `scan_blocks`.
                 - It's survival mode — the tools do only what a real player can. No give, no setblock.
 
@@ -107,6 +105,7 @@ final class McpAccessPrompt {
                         auth.isBlank()
                                 ? "\"-y\", \"mcp-remote\", \"" + endpoint + "\""
                                 : "\"-y\", \"mcp-remote\", \"" + endpoint + "\", \"--header\", "
-                                        + "\"Authorization: Bearer " + auth + "\"");
+                                        + "\"Authorization: Bearer " + auth + "\"",
+                        McpServer.ONE_BODY);
     }
 }

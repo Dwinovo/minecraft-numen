@@ -107,6 +107,9 @@ public final class AgentLoop {
      * 收一批输入。整批先入队、再推进一次:离线补发的条目一次到达,逐条推进的话第一条急件就开了 run,
      * 只带走已经到的那几条。
      *
+     * <p>一批工具调用还没结算时,入了队的每一条都转给工具口({@link ToolPort#arrived}),带着队列的急件规则算出的急不急:
+     * 它在等身体收尾时,收尾让它接着派下一个,急件让它不再等。
+     *
      * <p>来自主人的插话解开 {@link Hold.Release#OWNER_SPOKE} 那几种停牌,急件解开 FAILED。死着、外接驾驶时也照收:
      * 条目盖着真实时间戳,之后模型看得出哪些是那期间发生的。
      */
@@ -114,6 +117,7 @@ public final class AgentLoop {
         long now = host.now();
         boolean ownerSpoke = false;
         boolean urgent = false;
+        List<Queued> queued = new ArrayList<>();
         for (EventQueue.Entry e : entries) {
             if (e.text() == null || e.text().isBlank()) {
                 continue;
@@ -121,8 +125,13 @@ public final class AgentLoop {
             boolean asUrgent = inbox.push(e.type(), e.text(), e.ts() > 0 ? e.ts() : now, e.urgent());
             AiLog.LOG.info("[numen-entity#{}] queued {}{}: {}", name, e.type(), asUrgent ? " URGENT" : "",
                     brief(e.text(), 120));
+            queued.add(new Queued(e, asUrgent));
             urgent |= asUrgent;
             ownerSpoke |= EventTypes.get(e.type()).ownerWords();
+        }
+        // 转给工具口可能让这一批当场结算、调下一次模型,那之后就不是它的事了
+        for (int i = 0; i < queued.size() && run != null && run.phase == Phase.TOOLS; i++) {
+            tools.arrived(queued.get(i).entry(), queued.get(i).urgent());
         }
         if (ownerSpoke) {
             release(Hold.Release.OWNER_SPOKE);
@@ -598,6 +607,9 @@ public final class AgentLoop {
             listener.accept(event);
         }
     }
+
+    /** 入了队的一条,和队列的急件规则给它算出的急不急。 */
+    private record Queued(EventQueue.Entry entry, boolean urgent) {}
 
     private static String brief(String s, int max) {
         return s.length() <= max ? s : s.substring(0, max) + "...";

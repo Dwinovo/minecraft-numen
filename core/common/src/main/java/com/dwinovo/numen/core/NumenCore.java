@@ -99,11 +99,11 @@ public final class NumenCore {
 
     private static void registerTools() {
         // 登记的先后就是工具表的顺序(按工具表做提示词缓存的后端要它逐次一致)。每组提升出的快捷工具在它登记这一刻进表。
-        // move 组提升出 goto
+        // move 组提升出 move_goto
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.MoveCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.FightCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.locate.LocateCommands::install);
-        // work 组提升出 mine
+        // work 组提升出 work_mine
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.WorkCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.inventory.GearCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.BuildCommands::install);
@@ -113,12 +113,12 @@ public final class NumenCore {
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.inventory.InvCommands::install);
         // 引擎的 task 命令组,和插件走同一扇门;它提升出 task_stop
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.task.TaskCommands::install);
-        // status 组提升出 get_self_status、get_owner_status
+        // status 组提升出 status_self、status_owner
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.perception.StatusCommands::install);
-        // scan 组提升出 look_around、scan_blocks、scan_nearby_entities、inspect_block
+        // scan 组提升出 scan_around、scan_blocks、scan_entities、scan_block
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.perception.ScanCommands::install);
         ToolRegistry.register(new com.dwinovo.numen.core.tools.agent.TodoWriteTool());   // raw NumenTool
-        // skill 组提升出 load_skill
+        // skill 组提升出 skill_load
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.agent.SkillCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.agent.MemoryCommands::install);
     }

@@ -19,7 +19,7 @@ import java.util.function.Predicate;
  * Server → Client: a companion's 36 main backpack slots. Sent both as the answer to
  * {@link RequestStatePayload} (the Items tab asking) and unprompted whenever her
  * inventory actually changes, so the agent loop can state what she carries without
- * spending a turn on {@code get_self_status}. {@code loaded=false} means the body is
+ * spending a turn on {@code status_self}. {@code loaded=false} means the body is
  * asleep in unloaded chunks (or not the requester's) — no contents.
  *
  * <p>{@code selectedSlot} and {@code offhand} ride along rather than being read off the
@@ -31,7 +31,7 @@ import java.util.function.Predicate;
  * 饱食度、选中槽、副手早就在里面了 —— 它一直是<b>这具身体此刻的样子</b>,只是原来叫背包。
  * 身上的效果同理:模型每一轮都要读它才知道自己中没中毒、有没有抗性,而这类东西<b>一进对话
  * 历史就永远不会过期</b>,只能每次现挂。同一条通道、同一份快照,不必为每样状态另开一路。
- * 骑乘同理:她坐没坐在船上决定了"再点一次船"是不是废话、goto 会驾船还是走路,
+ * 骑乘同理:她坐没坐在船上决定了"再点一次船"是不是废话、move goto 会驾船还是走路,
  * 模型必须实时看见。{@code vehicleType} 空串 = 没骑任何东西,{@code vehicleId} 相应为 -1。
  * 身体状态片段({@code bodyState}:打头的 {@code <worn>} 与插件经 {@code NumenApi.contributeBodyState} 读的)同理:
  * 身体上的事实,同一份快照带过去;空串 = 没有插件要说什么。

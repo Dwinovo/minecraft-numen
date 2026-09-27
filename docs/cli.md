@@ -23,13 +23,13 @@
    - **第 0 层**:MC 指令树,原版和各模组的指令,是给玩家的。我们不往里挂任何东西。
 3. **一个标记**:行首带 `/` 的,原样交给第 0 层,以她自己的权限执行,和在聊天栏敲的一样;不带 `/` 的,交给第 1 层。
 4. **命名空间**:
-   - 第 1 层的一级命令,是核心领域名(`task`、第 4 步迁来的 `goto`……),或者模组 id(`ysm`、`ftbquests`……)。
+   - 第 1 层的一级命令,是核心领域名(`task`、第 4 步迁来的 `move`……),或者模组 id(`ysm`、`ftbquests`……)。
    - 和第 0 层同名也不冲突:`ysm switch` 是第 1 层的,`/ysm model set` 是第 0 层的。
 5. **第 1 层命令的三种来源**:
    - 包装第 0 层的指令,比如 `ysm switch`:限定只作用于她、按主人的授权、执行后回读确认;
    - 用模组的 API 直接补上模组没给的功能,比如 `ftbquests submit`;
-   - 核心动作,比如 `task status`,以及第 4 步迁来的 goto、mine 等。
-6. **快捷工具是 alias**:第 1 层里高频的几条提升为独立工具,用同一个处理函数,回执也一样。
+   - 核心动作,比如 `task status`,以及第 4 步迁来的 `move goto`、`work mine` 等。
+6. **快捷工具是 alias**:第 1 层里高频的几条提升为独立工具,名字就是 `组_动作`,用同一个处理函数,回执也一样。
 7. **权限**:
    - 第 1 层每条命令自己声明以谁的权威执行,默认是她自己。包装类命令可以借服务器的权威,但作用范围写死在代码里。
    - 身体对世界的每个动作,仍然由权限层按动作裁决。
@@ -41,7 +41,7 @@
 
 ```
 模型
- ├─ 快捷工具 goto / mine / …          ← 第 1 层里高频命令的 alias
+ ├─ 快捷工具 move_goto / work_mine / … ← 第 1 层里高频命令的 alias
  └─ command 工具 "<一行>"
           │
           ├─ 行首是 "/" → 第 0 层:服务端以她的 CommandSourceStack 解析(写不通当场失败,附用法)
@@ -104,7 +104,8 @@ task status                           第 1 层,核心动作
 ## 八、快捷工具
 
 - **同源**:把 JSON 参数按同一组参数类型读成值,交给同一个处理函数,回执与从 `command` 调用一字不差(附录 A)。
-- **提升哪些**:按调用频率定。现在提升的是 get_self_status、get_owner_status、look_around、scan_blocks、scan_nearby_entities、inspect_block、goto、mine、load_skill、task_stop 十个(附录 G)。
+- **叫什么**:工具名由命令路径生成,`组_动作`(`move goto` 提升成 `move_goto`),登记时不另起名字(附录 G)。
+- **提升哪些**:按调用频率定。现在提升的是 status_self、status_owner、scan_around、scan_blocks、scan_entities、scan_block、move_goto、work_mine、skill_load、task_stop 十个(附录 G)。
   - `task status` 与 `task timer` 只留命令:task_status 主要被拿来轮询,而收尾本来就会以 `task_finished` 送到。
   - 基线建议里的 build 不再是工具:建造改为 `build` 组的一串命令(原语、设计、`build at`),一次写完整栋房子的那一个调用没有了(附录 G)。
 - **独立工具**:除了快捷工具与 `command`,工具表里只留一个 `todowrite`——输入本身是一份结构化清单的动作留作独立工具,这是这条规则下唯一的例外(附录 G)。
@@ -252,7 +253,7 @@ ftbquests submit <quest>
 
 ## 十六、待核实
 
-- ~~第 1 层的一级命令名统一规划~~:第 4 步已定,一级命令全是领域名(`move`、`work`、`fight`、`build`、`use`、`inv`、`gear`、`scan`、`status`、`locate`、`memory`、`skill`、`task`),动词只做动作名(`move goto`);`goto`、`mine` 这类动词只作快捷工具名出现,见附录 G。
+- ~~第 1 层的一级命令名统一规划~~:第 4 步已定,一级命令全是领域名(`move`、`work`、`fight`、`build`、`use`、`inv`、`gear`、`scan`、`status`、`locate`、`memory`、`skill`、`task`),动词只做动作名(`move goto`);快捷工具名由路径生成(`move_goto`),见附录 G。
 - ~~权威声明的形状~~:已定,`Authority` 的两种,见附录 F。
 
 ## 十七、不做的
@@ -583,17 +584,17 @@ gt_long lingre 40
 
 | 批 | 原来的工具 | 现在的命令 | 提升成快捷工具 |
 |---|---|---|---|
-| A 感知与定位 | get_self_status、get_owner_status、get_world_info | `status self`、`status owner`、`status world` | get_self_status、get_owner_status |
-| | look_around、scan_blocks、scan_nearby_entities、inspect_block、inspect_block_storage | `scan around`、`scan blocks`、`scan entities`、`scan block`、`scan storage` | look_around、scan_blocks、scan_nearby_entities、inspect_block |
+| A 感知与定位 | get_self_status、get_owner_status、get_world_info | `status self`、`status owner`、`status world` | status_self、status_owner |
+| | look_around、scan_blocks、scan_nearby_entities、inspect_block、inspect_block_storage | `scan around`、`scan blocks`、`scan entities`、`scan block`、`scan storage` | scan_around、scan_blocks、scan_entities、scan_block |
 | | locate_structure、locate_biome | `locate structure`、`locate biome` | |
 | B 背包、交互、札记、技能 | craft、lookup_recipe、eat、drop_items、take_items | `inv craft`、`inv recipe`、`inv eat`、`inv drop`、`inv take` | |
 | | equip_item | `gear wear`、`gear remove` | |
 | | interact_at、interact_entity、inspect_gui、close_gui、sleep | `use block`、`use ahead`、`use entity`、`use gui`、`use close`、`use sleep` | |
 | | transfer | `use transfer`、`use shift`(本批,见下) | |
-| | remember、recall、forget、load_skill | `memory remember`、`memory recall`、`memory forget`、`skill load` | load_skill |
+| | remember、recall、forget、load_skill | `memory remember`、`memory recall`、`memory forget`、`skill load` | skill_load |
 | | task_status、task_stop、set_timer | `task status`、`task stop`、`task timer` | task_stop |
-| C 长活 | goto、follow、plan_route | `move goto`、`move follow`、`move route` | goto |
-| | mine、collect_items、fish | `work mine`、`work collect`、`work fish` | mine |
+| C 长活 | goto、follow、plan_route | `move goto`、`move follow`、`move route` | move_goto |
+| | mine、collect_items、fish | `work mine`、`work collect`、`work fish` | work_mine |
 | | attack | `fight attack` | |
 | | blueprint、blueprint_read、build | `build` 组(本批,见下) | |
 | | scaffold_materials | `throwaway` 组(见下) | |
@@ -603,6 +604,19 @@ gt_long lingre 40
 - "留空表示另一件事"一律拆成两个动作(附录 B 的规矩):`use block` / `use ahead`、`gear wear` / `gear remove`、
   `use transfer` / `use shift`。
 - 工具表剩下:十个快捷工具、`command`、`todowrite`。
+
+### 快捷工具名:`组_动作`
+
+快捷工具名由命令路径机械生成:组名、下划线、动作名(`Action.toolNameOf`),`promote` 只收工具描述,不收名字。
+
+- **一个能力一个名字**:`move goto` 与 `move_goto` 是同一个动作的两种写法,可以机械地互推,不需要记一张对照表。
+  手起的名字(`look_around` 对 `scan around`、`get_self_status` 对 `status self`)让她分不清哪个是命令、哪个是工具,
+  真机里她把 `look_around` 写进了 `command`,只得到"未知命令"加整份组列表。
+- **写反了直接指路**:`command` 的一行解析失败、第一个词又按同一个写法反推得到一个提升过的动作(`Action.promotedAs`,
+  和生成写在同一处)时,报错只说这是工具名:直接调工具,或者写 `组 动作`;不倾倒整份组列表。
+- **旧名不留兼容**:会话记录里的旧工具调用照原样回放(服务商不要求历史里的工具名还在工具表上);重启前落盘的活按旧
+  工具名接不回来时,`TaskPersistence` 照既有的规矩发一条 task_finished 说清楚;外接大脑配置 `mcp_server.json` 的
+  `hidden_tools` 出厂写着 `load_skill`,读档时认它一次、存档只写 `skill_load`(不认的话升级后它会对外接大脑露出来)。
 
 ### 建造:原语命令、设计与建成的房子
 
@@ -886,7 +900,7 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
   抬头与结尾可以省。翻页提示照 pi:`[Showing 1-12 of 43. Use build show house --page 2 to continue.]`。
 - **改成分页的**(会随数据变长,原来一次全给):
   - `build show`:设计按步分页;`--layer` 的切片按行分页;
-  - `skill load`(快捷工具 `load_skill`,多了 `page` 参数):技能正文与附属文件按行分页,和 pi 读文件一样;
+  - `skill load`(快捷工具 `skill_load`,多了 `page` 参数):技能正文与附属文件按行分页,和 pi 读文件一样;
   - `memory recall`:札记正文按行分页;
   - `use gui`:按槽分页(模组的大容器);
   - `tlm models`:包级摘要与搜索结果按行分页,原来的"搜索至多 40 条"(悄悄截断,还报成"找到 40 个")删掉;
@@ -895,7 +909,7 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
     分页。翻页不重扫:团的编号只在一次扫描里有效,重扫就是另一批编号,所以 `--page` 翻的是团簿里存着的那一次
     (`GroupBook.page`),要翻的不是最新那一次就如实说、叫她先不带 `--page` 扫。没扫全时抬头只说"读到的那部分里"有几团,
     `groups_total` 照旧只在扫全时给;
-  - `scan entities`(`scan_nearby_entities` 多了 `page`):原来"至多 20 只、truncated"删掉,一只一行由近及远分页;翻页现读,
+  - `scan entities`(`scan_entities` 多了 `page`):原来"至多 20 只、truncated"删掉,一只一行由近及远分页;翻页现读,
     实体会走动,编号在它还在世界里时不变;
   - `inv recipe`:原来"至多 4 条配方"(悄悄截断,不说一共几条)删掉,一条配方一个条目分页,各工位的做法在结尾;配料是标签
     又没有共同后缀时原来只列 3 个成员接省略号,现在全列;

@@ -15,7 +15,7 @@ import java.util.List;
  * {@code skill}:把一份技能的说明装进对话。
  *
  * <p>技能表在主人客户端({@code SkillRegistry}),所以在客户端执行;命令树两侧都登记(帮助要它)。{@code load} 调得勤,
- * 提升为快捷工具 {@code load_skill}:参数是 {@code name}、{@code file} 与翻页的 {@code page};快捷工具与 {@code skill load}
+ * 提升为快捷工具 {@code skill_load}:参数是 {@code name}、{@code file} 与翻页的 {@code page};快捷工具与 {@code skill load}
  * 是同一个处理函数、同一份回执。技能与附属文件是文件,按输出预算一页一页读,和 pi、Claude Code 读文件一样。
  */
 public final class SkillCommands {
@@ -47,7 +47,7 @@ public final class SkillCommands {
                 .note("A skill body may reference supporting files by relative path; load one with --file only "
                         + "when the body points you there.")
                 .note("A long skill or file comes a page at a time; the last line says how to get the next.")
-                .promote("load_skill", """
+                .promote("""
                         Load a specialized skill when the task at hand matches one of the skills listed in the system prompt.
 
                         Use this tool to inject the skill's instructions and resources into the current conversation. The output contains detailed workflow guidance for the task.

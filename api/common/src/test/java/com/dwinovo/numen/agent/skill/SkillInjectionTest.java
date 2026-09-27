@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 技能正文的成型口。钉住它是因为有<b>两个</b>扳机会走这儿——模型自己 {@code load_skill},
+ * 技能正文的成型口。钉住它是因为有<b>两个</b>扳机会走这儿——模型自己 {@code skill_load},
  * 主人打斜杠命令——两边进上下文的东西必须一模一样。差异只在其中一条路上出问题,极难查。
  */
 class SkillInjectionTest {

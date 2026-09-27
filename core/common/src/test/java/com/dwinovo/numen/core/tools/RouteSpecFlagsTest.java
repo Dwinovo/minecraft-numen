@@ -60,7 +60,7 @@ class RouteSpecFlagsTest {
                     src.reply(TaskResult.ok("read").toJson());
                 }, RouteSpecFlags.PARAMS.toArray(Param<?>[]::new))
                         .example("gt_route plan --alter natural --avoid water")
-                        .promote("gt_route_plan", "Read the route flags, as a tool."));
+                        .promote("Read the route flags, as a tool."));
     }
 
     /** 一整行交 {@code command} 工具,和她写的一样;回执失败时返回 null。 */

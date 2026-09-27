@@ -7,7 +7,7 @@ description: Progress from nothing → wood → stone → iron → diamond tier 
 
 Phase 1 of the dragon route. You need diamond tools before you can mine obsidian and survive the Nether. Skip nothing here — under-geared Nether trips end in a lost inventory.
 
-## Done when (verify with `get_self_status`)
+## Done when (verify with `status_self`)
 
 - **Diamond pickaxe** (required for obsidian) and **diamond sword**, equipped as appropriate
 - **Iron-or-better armor** worn (full iron is fine; diamond chestplate first if diamonds allow)
@@ -17,9 +17,9 @@ Phase 1 of the dragon route. You need diamond tools before you can mine obsidian
 
 ## Tool tier chain
 
-`mine` checks your held tool: a too-low tier breaks the block with **no drop**. `gear wear` the right pickaxe before mining, and `inspect_block` when unsure.
+`work_mine` checks your held tool: a too-low tier breaks the block with **no drop**. `gear wear` the right pickaxe before mining, and `scan_block` when unsure.
 
-The same rule gates navigation: **`goto` only digs through blocks your held tool can harvest.** Descending into stone with a sword in hand fails with "no path" — travel with the pickaxe in your main hand; switch to a weapon only for the fight, then switch back.
+The same rule gates navigation: **`move_goto` only digs through blocks your held tool can harvest.** Descending into stone with a sword in hand fails with "no path" — travel with the pickaxe in your main hand; switch to a weapon only for the fight, then switch back.
 
 | Tier | Unlocks mining | Recipe |
 |---|---|---|
@@ -31,7 +31,7 @@ The same rule gates navigation: **`goto` only digs through blocks your held tool
 
 ## Where ores live (1.21+ worldgen)
 
-Below Y 0 every ore is its **deepslate variant** — always pass both ids to `mine` / `scan_blocks` (e.g. `diamond_ore` *and* `deepslate_diamond_ore`).
+Below Y 0 every ore is its **deepslate variant** — always pass both ids to `work_mine` / `scan_blocks` (e.g. `diamond_ore` *and* `deepslate_diamond_ore`).
 
 | Resource | Target Y | Notes |
 |---|---|---|
@@ -41,14 +41,14 @@ Below Y 0 every ore is its **deepslate variant** — always pass both ids to `mi
 
 ## Recommended order
 
-1. **Wood**: `mine` 8+ logs (any `*_log`; hand works) → craft planks → sticks → a `wooden_pickaxe`. Crafting = `inv craft` (it finds the recipe and lays the grid for you). 2×2 recipes (planks, sticks) use your own grid; a 3×3 (the pickaxe) needs a crafting table within reach — once you have planks, craft one and put it down with `build place crafting_table 120 64 -35` (next to you). Remember the table's coordinates and reuse it.
-2. **Stone**: `gear wear wooden_pickaxe` → `mine(stone, 20)` (drops cobblestone) → craft a `stone_pickaxe`, `stone_sword`, and a `furnace`.
+1. **Wood**: `work_mine` 8+ logs (any `*_log`; hand works) → craft planks → sticks → a `wooden_pickaxe`. Crafting = `inv craft` (it finds the recipe and lays the grid for you). 2×2 recipes (planks, sticks) use your own grid; a 3×3 (the pickaxe) needs a crafting table within reach — once you have planks, craft one and put it down with `build place crafting_table 120 64 -35` (next to you). Remember the table's coordinates and reuse it.
+2. **Stone**: `gear wear wooden_pickaxe` → `work_mine(stone, 20)` (drops cobblestone) → craft a `stone_pickaxe`, `stone_sword`, and a `furnace`.
 3. **Food**: scan cows/pigs/chickens and pass their runtime IDs to `fight attack` (6+ total) → cook the raw meat: `use block` a furnace, `use shift` the raw food (it goes to the top slot) and the fuel (coal or planks, it goes below), set a `task timer`, then `use shift` the cooked food out (see the `containers` skill). Always cook; raw meat barely heals.
-4. **Iron**: descend (`goto(x, 16, z)` — navigation digs its own way down) → `gear wear stone_pickaxe` → `mine(iron_ore, deepslate_iron_ore, 10+)` → smelt `raw_iron` (same furnace flow) → craft an `iron_pickaxe`, `iron_sword`, then armor as ingots allow (helmet 5, chestplate 8, leggings 7, boots 4).
-5. **Diamonds**: `goto(x, -58, z)` → `gear wear iron_pickaxe` → `mine(deepslate_diamond_ore, diamond_ore, 5+)`. Minimum 5 (pickaxe 3 + sword 2); 8+ if you also want a chestplate later. Watch HP near lava.
+4. **Iron**: descend (`move_goto(x, 16, z)` — navigation digs its own way down) → `gear wear stone_pickaxe` → `work_mine(iron_ore, deepslate_iron_ore, 10+)` → smelt `raw_iron` (same furnace flow) → craft an `iron_pickaxe`, `iron_sword`, then armor as ingots allow (helmet 5, chestplate 8, leggings 7, boots 4).
+5. **Diamonds**: `move_goto(x, -58, z)` → `gear wear iron_pickaxe` → `work_mine(deepslate_diamond_ore, diamond_ore, 5+)`. Minimum 5 (pickaxe 3 + sword 2); 8+ if you also want a chestplate later. Watch HP near lava.
 6. **Diamond gear**: craft a `diamond_pickaxe` + `diamond_sword` on the crafting table. Keep the pickaxe in hand for travel and mining; equip the sword only when a fight starts.
-7. **Bow + arrows**: bow = 3 sticks + 3 string (scan spiders at night and pass their runtime IDs to `fight attack` for string); arrows = 1 flint + 1 stick + 1 feather → 4 (flint drops from `mine(gravel)` at ~10%, feathers from chickens). Target 32 arrows — more is comfort, not requirement; melee + food covers what arrows don't.
-8. **Top up**: 32+ cooked food, 64+ cobblestone. Re-run `get_self_status` against the "done when" list.
+7. **Bow + arrows**: bow = 3 sticks + 3 string (scan spiders at night and pass their runtime IDs to `fight attack` for string); arrows = 1 flint + 1 stick + 1 feather → 4 (flint drops from `work_mine(gravel)` at ~10%, feathers from chickens). Target 32 arrows — more is comfort, not requirement; melee + food covers what arrows don't.
+8. **Top up**: 32+ cooked food, 64+ cobblestone. Re-run `status_self` against the "done when" list.
 
 ## Enchanting
 
@@ -56,4 +56,4 @@ You cannot operate an enchanting table (GUI block). If your owner offers to ench
 
 ## What to load next
 
-Checklist verified → mark phase 1 `completed` in `todowrite`, then `load_skill(name="nether_entry")`.
+Checklist verified → mark phase 1 `completed` in `todowrite`, then `skill_load(name="nether_entry")`.

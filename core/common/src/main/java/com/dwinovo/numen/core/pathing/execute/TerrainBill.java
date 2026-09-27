@@ -229,7 +229,7 @@ public final class TerrainBill {
                                       PathCalcResult.Stop cleanStop, Map<String, TerrainBill> byId) {
         return String.format(
                 "found no route without %s (from %s toward %s, about %.0f blocks away; %s). candidates:\n%s\n"
-                        + "choose one with goto route:<id>, or pick another destination. A route with cells"
+                        + "choose one with move_goto route:<id>, or pick another destination. A route with cells"
                         + " needing consent asks the owner before I set off.",
                 alteringAllowed ? "touching what needs the owner's consent" : "altering terrain",
                 from.toShortString(), toward.toShortString(), Math.sqrt(from.distSqr(toward)),
@@ -268,7 +268,7 @@ public final class TerrainBill {
     public static String planned(BlockPos from, BlockPos toward, Map<String, TerrainBill> byId) {
         return String.format(
                 "%d route%s from %s toward %s (about %.0f blocks away):\n%s\n"
-                        + "walk one with goto route:<id>; ids stay valid while I stay near here.",
+                        + "walk one with move_goto route:<id>; ids stay valid while I stay near here.",
                 byId.size(), byId.size() == 1 ? "" : "s",
                 from.toShortString(), toward.toShortString(), Math.sqrt(from.distSqr(toward)),
                 listing(byId));

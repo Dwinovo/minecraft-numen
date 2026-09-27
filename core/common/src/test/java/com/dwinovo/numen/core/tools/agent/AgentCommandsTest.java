@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 主人客户端的两组命令,从模型的入口调:{@code command} 工具的一行,或快捷工具 {@code load_skill}。札记落在临时目录里,
+ * 主人客户端的两组命令,从模型的入口调:{@code command} 工具的一行,或快捷工具 {@code skill_load}。札记落在临时目录里,
  * 技能表是空的(没装任何技能),所以装技能走的是"没有这份技能"那一支——同一个处理函数、同一份回执才是这里要钉的。
  */
 class AgentCommandsTest {
@@ -89,12 +89,12 @@ class AgentCommandsTest {
     }
 
     /**
-     * 快捷工具 {@code load_skill} 就是 {@code skill load}:名字、参数、描述照旧(file 是可选的),同一次调用两个入口的
+     * 快捷工具 {@code skill_load} 就是 {@code skill load}:参数与描述出自同一个动作(file 是可选的),同一次调用两个入口的
      * 回执一字不差。
      */
     @Test
     void loadSkillIsTheSameActionAsSkillLoad() {
-        NumenTool tool = ToolRegistry.get("load_skill");
+        NumenTool tool = ToolRegistry.get("skill_load");
         assertTrue(tool.description().startsWith("Load a specialized skill when the task at hand matches"),
                 tool.description());
         Map<String, Object> schema = tool.parameterSchema();

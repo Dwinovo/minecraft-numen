@@ -52,14 +52,14 @@ public interface NumenApi {
     /**
      * 登记一组命令:{@code <namespace> <action> …},组名就是 Numen 命令层(第 1 层)的一级命令。模型经 {@code command}
      * 工具写这一行调用它们,不必为每个动作多花一个工具定义;常用的动作可以
-     * {@link com.dwinovo.numen.cli.Action#promote 提升}成快捷工具。第 1 层是 Numen 自己的调度器,不挂进 MC 的指令树,
+     * {@link com.dwinovo.numen.cli.Action#promote 提升}成快捷工具,工具名就是 {@code <namespace>_<action>}。第 1 层是 Numen 自己的调度器,不挂进 MC 的指令树,
      * 玩家看不到;服务端的动作在服务端执行,客户端的动作留在主人客户端。
      *
      * <pre>{@code
      * numen.registerCommands("mymod", "What your mod lets her do, in one sentence.", cmds -> {
      *     cmds.server("status", "Read the machine she is looking at.", MyCommands::status);
      *     cmds.server("start", "Start a machine by its id.", MyCommands::start, MACHINE_ID)
-     *         .promote("start_machine", "Start one of your mod's machines …");
+     *         .promote("Start one of your mod's machines …");   // 工具名 mymod_start
      *     cmds.client("recipes", "List recipes in the owner's language.", MyCommands::recipes);
      * });
      * }</pre>
@@ -136,7 +136,7 @@ public interface NumenApi {
     void contributeState(Function<UUID, String> fragment);
 
     /**
-     * 服务端:从身体上读一段她此刻的状态,挂进 {@code <runtime_state>},也写进 {@code get_self_status}。
+     * 服务端:从身体上读一段她此刻的状态,挂进 {@code <runtime_state>},也写进 {@code status self}。
      *
      * <p>给身体上的事实用——模组给她身上加的、背包和穿戴之外的东西。穿戴位置上戴着什么不走这里,
      * 用 {@link #registerGear}:引擎把它渲染成 {@code <worn>},排在所有片段的最前面。它和背包、状态效果同一条路:

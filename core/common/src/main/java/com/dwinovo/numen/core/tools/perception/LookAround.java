@@ -28,7 +28,7 @@ import net.minecraft.world.level.block.state.BlockState;
  * costmap practice in autonomous-driving navigation (e.g. Occ3D; ROS Nav2
  * costmap_2d). Sparse far-field objects are left to {@code scan blocks} /
  * {@code scan entities}; this map is the dense near-field half. The command and its
- * shortcut ({@code scan around} / {@code look_around}) are declared in {@link ScanCommands}.
+ * shortcut ({@code scan around} / {@code scan_around}) are declared in {@link ScanCommands}.
  */
 final class LookAround {
 
@@ -77,7 +77,7 @@ final class LookAround {
         inflateHazards(grid, size);
 
         StringBuilder sb = new StringBuilder();
-        sb.append("look_around center=(").append(cx).append(',').append(cy).append(',').append(cz)
+        sb.append("scan_around center=(").append(cx).append(',').append(cy).append(',').append(cz)
                 .append(") facing=").append(self.getDirection().getName())
                 .append(" | 1 cell = 1 block, @ = you, North = up (-Z), East = right (+X)\n\n");
         for (int r = 0; r < size; r++) {

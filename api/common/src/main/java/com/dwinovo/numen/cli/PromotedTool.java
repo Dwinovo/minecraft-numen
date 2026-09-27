@@ -10,9 +10,9 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * 一个动作提升成的快捷工具,是那条第 1 层命令的 alias。名字与描述是登记时 {@link Action#promote} 写的,
- * schema 由动作的参数表生成;调用它就是执行那个动作:JSON 参数按同一组参数类型读成值,交给同一个处理函数,回执也就是
- * 同一份。不拼命令字符串再解析一遍。
+ * 一个动作提升成的快捷工具,是那条第 1 层命令的 alias。名字由路径生成({@link Action#toolNameOf}),描述是
+ * {@link Action#promote} 写的,schema 由动作的参数表生成;调用它就是执行那个动作:JSON 参数按同一组参数类型读成值,
+ * 交给同一个处理函数,回执也就是同一份。不拼命令字符串再解析一遍。
  */
 final class PromotedTool implements NumenTool {
 

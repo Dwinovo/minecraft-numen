@@ -46,7 +46,7 @@ class ArgTypeChoiceAndListTest {
         door().registerCommands("gt_more", "A group whose actions take the choice, tag and list types.", g -> {
             g.server("find", "Find things.", ArgTypeChoiceAndListTest::remember, RADIUS, KIND, IDS)
                     .example("gt_more find 12.5 hostile #minecraft:logs iron_ore")
-                    .promote("gt_more_find", "Find things, as a tool.");
+                    .promote("Find things, as a tool.");
             g.server("pick", "Pick one.", ArgTypeChoiceAndListTest::remember, WHAT, MODE, REACH)
                     .example("gt_more pick #minecraft:village --mode far --reach 2");
         });

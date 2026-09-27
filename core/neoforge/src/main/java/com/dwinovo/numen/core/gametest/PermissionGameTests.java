@@ -97,7 +97,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_lodger", new BlockPos(7, 2, 7), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_landlord");
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        TaskRecord record = call(companion, "goto", args(
+        TaskRecord record = call(companion, "move_goto", args(
                 "x", target.getX(),
                 "y", target.getY(),
                 "z", target.getZ(),
@@ -133,7 +133,7 @@ public class PermissionGameTests {
         NumenPlayer owner = presentOwner(helper, companion, "gametest_host");
         BlockPos start = companion.blockPosition();
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        TaskRecord record = call(companion, "goto", args(
+        TaskRecord record = call(companion, "move_goto", args(
                 "x", target.getX(),
                 "y", target.getY(),
                 "z", target.getZ(),
@@ -171,7 +171,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_squatter", new BlockPos(7, 2, 7), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_strict");
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        TaskRecord record = call(companion, "goto", args(
+        TaskRecord record = call(companion, "move_goto", args(
                 "x", target.getX(),
                 "y", target.getY(),
                 "z", target.getZ(),
@@ -210,7 +210,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_lumberjack", new BlockPos(2, 2, 5), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_forester");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        TaskRecord record = call(companion, "mine", args(
+        TaskRecord record = call(companion, "work_mine", args(
                 "block_ids", List.of("minecraft:oak_log"),
                 "count", 2)).task();
         java.util.Set<Long> requests = new java.util.HashSet<>();
@@ -244,7 +244,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_hewer", new BlockPos(2, 2, 5), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_keeper");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        TaskRecord record = call(companion, "mine", args(
+        TaskRecord record = call(companion, "work_mine", args(
                 "block_ids", List.of("minecraft:jungle_log"),
                 "count", 2)).task();
         helper.onEachTick(() -> {
@@ -286,7 +286,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_ranger", new BlockPos(2, 2, 5), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_warden");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        TaskRecord record = call(companion, "mine", args(
+        TaskRecord record = call(companion, "work_mine", args(
                 "block_ids", List.of("minecraft:acacia_log"),
                 "count", 2)).task();
         boolean[] asked = new boolean[1];
@@ -309,7 +309,7 @@ public class PermissionGameTests {
 
     /** mine 点名这些团(不给 count,挖完为止),后台派出。 */
     private static TaskRecord mineGroups(NumenPlayer companion, List<String> groups) {
-        return call(companion, "mine", args("groups", groups)).task();
+        return call(companion, "work_mine", args("groups", groups)).task();
     }
 
     /**
@@ -434,7 +434,7 @@ public class PermissionGameTests {
                     helper.assertTrue(Integer.parseInt(ids[1].substring(1)) > Integer.parseInt(ids[0].substring(1)),
                             "a new scan reused an old id: " + ids[0] + " then " + ids[1]);
                     // 派发当场拒收:不派活,拒收的话就是这次调用的回执
-                    ToolRun stale = call(companion, "mine", args("groups", List.of(ids[0])));
+                    ToolRun stale = call(companion, "work_mine", args("groups", List.of(ids[0])));
                     refusal[0] = stale.task() == null ? stale.reply() : "(accepted)";
                 }
             }
@@ -460,7 +460,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_forager", new BlockPos(7, 2, 5), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         BlockPos kept = helper.absolutePos(keptRel);
-        TaskRecord record = call(companion, "mine", args(
+        TaskRecord record = call(companion, "work_mine", args(
                 "block_ids", List.of("minecraft:warped_stem"),
                 "count", 2,
                 "avoid_break", List.of(kept.getX() + "," + kept.getY() + "," + kept.getZ()))).task();
@@ -745,7 +745,7 @@ public class PermissionGameTests {
         NumenPlayer owner = presentOwner(helper, companion, "gametest_viewer");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         com.dwinovo.numen.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.OBSERVE);
-        TaskRecord record = call(companion, "mine", args(
+        TaskRecord record = call(companion, "work_mine", args(
                 "block_ids", List.of("minecraft:birch_log"),
                 "count", 2)).task();
         boolean[] asked = new boolean[1];
@@ -778,7 +778,7 @@ public class PermissionGameTests {
         NumenPlayer owner = presentOwner(helper, companion, "gametest_trusting");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         com.dwinovo.numen.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
-        TaskRecord record = call(companion, "mine", args(
+        TaskRecord record = call(companion, "work_mine", args(
                 "block_ids", List.of("minecraft:spruce_log"),
                 "count", 2)).task();
         boolean[] asked = new boolean[1];
@@ -1452,7 +1452,7 @@ public class PermissionGameTests {
         BlockPos chest = chestWithDiamonds(helper, new BlockPos(6, 2, 4), 5);
         NumenPlayer companion = spawnAt(helper, "gametest_looter", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:chest"), "count", 1));
+        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:chest"), "count", 1));
 
         succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
@@ -1474,7 +1474,7 @@ public class PermissionGameTests {
         level.setBlockAndUpdate(trapdoor, Blocks.OAK_TRAPDOOR.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_doorman", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:oak_trapdoor"), "count", 1));
+        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:oak_trapdoor"), "count", 1));
 
         succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");

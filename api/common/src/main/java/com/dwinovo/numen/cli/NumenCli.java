@@ -290,15 +290,33 @@ public final class NumenCli {
     /**
      * 一行 Numen 命令写不写得通:写不通是 Brigadier 的报错(原话与出错位置)、出错那一层的帮助,再接上"你是不是要写"
      * ({@link Completions#didYouMean},和原版与模组的指令同一个函数);写得通是 null。两侧同一种说法——两侧的树从同一份
-     * 声明长出来,同一行在两边的报错一字不差。
+     * 声明长出来,同一行在两边的报错一字不差。第一个词是快捷工具名的,说法见 {@link #toolNameInstead}。
      */
     static <S> String problem(ParseResults<S> parse, String line) {
         try {
             validate(parse, line);
             return null;
         } catch (CommandSyntaxException e) {
-            return e.getMessage() + "\n" + helpAt(parse) + Completions.didYouMean(parse);
+            String toolName = toolNameInstead(parse, line);
+            return toolName != null ? toolName : e.getMessage() + "\n" + helpAt(parse) + Completions.didYouMean(parse);
         }
+    }
+
+    /**
+     * 第一个词不是任何一组,却按快捷工具名的写法反推得到一个提升过的动作({@link Action#promotedAs}):她把工具名写进了
+     * 命令行。直接告诉她这是工具名、两种写法各是什么;整份组列表帮不上这个忙。不是这种情况是 null。
+     */
+    private static String toolNameInstead(ParseResults<?> parse, String line) {
+        if (!literalPath(parse).isEmpty()) {
+            return null;
+        }
+        String word = line.strip().split(" ", 2)[0];
+        Action action = Action.promotedAs(word, GROUPS.values());
+        if (action == null) {
+            return null;
+        }
+        return word + " is a tool name, not a command: call the tool " + word + " directly, or write the command `"
+                + action.path() + "` (`" + action.path() + " " + HELP_FLAG + "` shows its arguments).";
     }
 
     /**

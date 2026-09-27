@@ -54,7 +54,7 @@ public enum FailureType {
      *  or place (they sit in the body's route book). Approach tasks treat it in-ladder like
      *  NO_PATH (a looser stance may still avoid it); goto does not loosen its goal on it — the
      *  candidates are the answer. The final verdict hands the list to the LLM, which picks one
-     *  ({@code goto route:<id>}) or another destination. */
+     *  ({@code move_goto route:<id>}) or another destination. */
     TERRAIN_BLOCKED,
     /** Never got within interaction reach of the target. In-ladder: reposition. */
     OUT_OF_REACH,

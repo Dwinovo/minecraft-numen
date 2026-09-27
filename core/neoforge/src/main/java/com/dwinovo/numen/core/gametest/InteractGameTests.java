@@ -157,7 +157,7 @@ public class InteractGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(click.done(), "use block has not finished");
             helper.assertTrue(!click.succeeded() && click.outcome().contains("out of working reach")
-                            && click.outcome().contains("goto"),
+                            && click.outcome().contains("move_goto"),
                     "the failure does not send her to goto first: " + click.outcome());
             helper.assertTrue(helper.getLevel().getBlockState(stone).is(Blocks.STONE), "the stone was touched");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);

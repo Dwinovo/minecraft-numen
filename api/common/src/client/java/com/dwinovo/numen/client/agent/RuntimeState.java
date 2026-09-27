@@ -110,22 +110,16 @@ final class RuntimeState {
         // 有没有"干完"这回事,决定她该等还是该换:有终点的活等它的 task_finished;
         // 常驻的活(跟随 / 一直钓鱼)永远不会有那条事件,只能被换掉。分不清这一点,
         // 她要么干等一个永不到来的事件,要么把还没干完的活当成已经结束。
-        // 两支只差在「会不会有 task_finished」。怎么换是一样的 —— 直接派新的。
+        // 怎么换是系统提示里那条身体规则(NumenPrompts.ONE_BODY),这里只说这一件活的事实。
         String tail = task.standing()
                 ? "This is a STANDING job — it has no finish line and will NEVER send a "
                   + "task_finished event. It keeps running until something replaces it."
                 : "This background call is ACTIVE and will send a task_finished event when it ends.";
-        // 身体只有一个槽，派新活自然顶掉旧活，所以这里必须说「直接派」而不是
-        // 「别再派」——后者会让模型先 task_stop 再派，白跑一轮。
-        // 只有「停下来什么也不干」才需要 task_stop。
-        String swap = " There is only ONE body: dispatching another body action REPLACES this one "
-                + "outright — you do NOT need to stop it first. Use task_stop only when the owner "
-                + "wants her to stop and do nothing.";
         return "<current_task id=\"" + xml(task.id()) + "\" tool=\""
                 + xml(task.tool()) + "\" state=\"running\" standing=\"" + task.standing()
                 + "\" elapsed_s=\"" + elapsed
                 + "\">" + xml(truncate(task.describe(), 600)) + ". "
-                + tail + swap + "</current_task>";
+                + tail + "</current_task>";
     }
 
     /** 上一次渲染背包块用的那份快照本身。收到新包时缓存会换一个新对象,比身份就够,
@@ -139,7 +133,7 @@ final class RuntimeState {
      * 她此刻带着什么。服务端在背包真变化时推一份过来({@code CompanionStateWatch}),
      * 这里只负责渲染——所以"换没换"只有一个信号:快照的时间戳。
      *
-     * <p>放进请求而不是让她调 {@code get_self_status},省的是<b>一整轮</b>(请求 + 工具结果 +
+     * <p>放进请求而不是让她调 {@code status_self},省的是<b>一整轮</b>(请求 + 工具结果 +
      * 再请求)。合并同类计数,不报耐久附魔:要精确到槽位时她该用 {@code use gui}。
      */
     private String inventoryXml() {
@@ -183,7 +177,7 @@ final class RuntimeState {
     /**
      * 她这一刻骑没骑着东西。与效果同一纪律:<b>只能现挂,不能进历史</b>——上下船是
      * 随时翻转的身体事实,沉进历史就成了理直气壮的错。没骑就一个字都不发。
-     * 有这一行,模型不会再对自己坐着的船发第二次 use entity,也知道 goto
+     * 有这一行,模型不会再对自己坐着的船发第二次 use entity,也知道 move_goto
      * 会驾着它走、任何要走路的动作都会自己下来。
      */
     private String ridingXml() {
@@ -192,7 +186,7 @@ final class RuntimeState {
             return "";
         }
         return "<riding>" + xml(snapshot.vehicleType()) + " (entity id " + snapshot.vehicleId()
-                + "). goto pilots a boat over water toward the target; any action that needs "
+                + "). move_goto pilots a boat over water toward the target; any action that needs "
                 + "walking steps off by itself — no need to click the vehicle again.</riding>";
     }
 
@@ -244,7 +238,7 @@ final class RuntimeState {
         // 加起来(实测她把主手 64 个熔炉和清单里同一批数成了 128)。总数只有一处,手只指
         // 向它,结构上就没什么可重复计的。
         return "<inventory>Everything your body carries right now, totalled across all 36 backpack "
-                + "slots — trust it and do not spend a call on get_self_status to rediscover it. "
+                + "slots — trust it and do not spend a call on status_self to rediscover it. "
                 + "Run use gui only when exact slots matter. A newer tool result wins over this."
                 + "\ncarrying=" + (items.length() == 0 ? "nothing" : items)
                 + "\nholding (already counted above)=main " + describe(snapshot.mainHand())

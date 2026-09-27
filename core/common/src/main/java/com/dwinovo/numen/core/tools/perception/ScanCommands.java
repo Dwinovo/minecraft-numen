@@ -17,8 +17,8 @@ import java.util.List;
  * {@code scan}:看她周围——脚下一圈的地形图、某几种方块在哪、附近有谁、一格方块是什么、一格方块里装着什么。
  * 五个动作都在服务端读世界,只读不动,不占身体;回执照原样是那份结果(JSON,地形图是一张字符图)。
  *
- * <p>前四个是做事之前最常用的眼睛,提升回原来的工具名({@code look_around}、{@code scan_blocks}、
- * {@code scan_nearby_entities}、{@code inspect_block});{@code storage} 用得少,只留命令。
+ * <p>前四个是做事之前最常用的眼睛,提升为快捷工具({@code scan_around}、{@code scan_blocks}、
+ * {@code scan_entities}、{@code scan_block});{@code storage} 用得少,只留命令。
  */
 public final class ScanCommands {
 
@@ -60,15 +60,15 @@ public final class ScanCommands {
                 .note("One map instead of many single-block looks; for things further out use `scan blocks` or "
                         + "scan entities.")
                 .seeAlso("scan blocks", "scan entities", "scan block")
-                .promote("look_around", "Your spatial view: a top-down character map of the blocks around you, "
+                .promote("Your spatial view: a top-down character map of the blocks around you, "
                         + "centred on yourself. `@` is you at the middle, North is up, East is right, each cell is "
                         + "one block. Each cell encodes how you could move onto it, collapsing height into one "
                         + "symbol: `.` flat walkable, `^` step up 1 (jumpable), `,` step down 1-2, `v` drop of 3+ "
                         + "(pit/cliff), `#` wall/blocked, `~` water, `!` lava/hazard, `x` caution (next to a "
                         + "hazard), `T` tree, `?` not loaded. Call this ONCE to grasp terrain, walls, ledges, water "
-                        + "and gaps around you instead of many inspect_block calls; to plan a route, trace it cell "
+                        + "and gaps around you instead of many scan_block calls; to plan a route, trace it cell "
                         + "by cell across the grid. For far-away or specific blocks/entities use scan_blocks / "
-                        + "scan_nearby_entities. Optional `radius` (4-16, default 8).");
+                        + "scan_entities. Optional `radius` (4-16, default 8).");
         scan.server("blocks", "Find blocks of the given types near you, reported as groups of touching blocks.",
                         ScanCommands::blocks, SEARCH_RADIUS, BLOCK_IDS, Listing.PAGE)
                 .example("scan blocks 32 iron_ore deepslate_iron_ore")
@@ -80,18 +80,18 @@ public final class ScanCommands {
                 .note("Group ids (g1, g2, ...) stay good only until your next `scan blocks` without --page.")
                 .note("Only loaded terrain is read: anything further out is UNKNOWN, not empty.")
                 .seeAlso("scan block", "scan around")
-                .promote("scan_blocks", "Find blocks of given type(s) near you, reported as GROUPS: matching cells "
+                .promote("Find blocks of given type(s) near you, reported as GROUPS: matching cells "
                         + "that touch (diagonals count) and get the same permission answer for breaking them — so a "
                         + "player's log pillar standing against a wild tree comes back as two groups. One group per "
                         + "line (a JSON object), nearest first; groups_total counts them all when the whole radius was "
                         + "read. A long list comes in pages: pass page to read the next one — it turns the pages of "
                         + "your latest scan without scanning again, so the ids stay the same. Each group gives: id, cells and a count per block type, the nearest cell with direction and "
                         + "distance, a box (x1,y1,z1..x2,y2,z2 — the form avoid_break takes), permission for "
-                        + "breaking its cells (allow; ask = mine asks the owner first; deny = mine stops) with the "
+                        + "breaking its cells (allow; ask = work_mine asks the owner first; deny = work_mine stops) with the "
                         + "reason, sources = source cells for water or lava (a source behaves very differently from "
                         + "flowing), and for groups of up to 16 cells every position. A very large group comes back "
                         + "cut along 16-block section lines, one group per piece. Group ids (g1, g2, ...) are valid "
-                        + "only until your next scan_blocks without page; to dig exactly those cells, pass them to mine as "
+                        + "only until your next scan_blocks without page; to dig exactly those cells, pass them to work_mine as "
                         + "groups. Sees terrain that is loaded right now; anything further out is UNKNOWN, not "
                         + "empty, and note says when that happened — walk that way and scan again. Give every "
                         + "variant of what you want, e.g. both iron_ore and deepslate_iron_ore.");
@@ -104,7 +104,7 @@ public final class ScanCommands {
                         + "each page is read fresh, so things that moved may shift between pages.")
                 .note("The ids are runtime ids: they do not survive a restart.")
                 .seeAlso("scan around")
-                .promote("scan_nearby_entities", "List entities within a radius around you, sorted by distance. Use "
+                .promote("List entities within a radius around you, sorted by distance. Use "
                         + "type_filter to narrow: 'hostile' for monsters, 'passive' for animals/items, 'player' for "
                         + "players, 'all' for everything. One entity per line (a JSON object); a long list comes in "
                         + "pages — pass page to read the next one. Each entry has id, type, position, distance, hp, and category. Pass the returned "
@@ -115,10 +115,10 @@ public final class ScanCommands {
                 .example("scan block 120 64 -35")
                 .note("Instant and read-only, from any distance.")
                 .seeAlso("scan storage", "scan blocks")
-                .promote("inspect_block", "Inspect a single block at the given integer coordinates. Returns block "
+                .promote("Inspect a single block at the given integer coordinates. Returns block "
                         + "id, its block-state properties when any (e.g. an end_portal_frame's has_eye/facing), "
                         + "hardness, whether you have the correct tool in hand, an estimated dig-tick count, "
-                        + "and whether the block is in your 4.5-block mining reach. Call this before mine "
+                        + "and whether the block is in your 4.5-block mining reach. Call this before work_mine "
                         + "to confirm the operation will succeed, or to check which end_portal_frame cells "
                         + "still need an ender_eye.");
         scan.server("storage", "What a block holds — items, fluid, energy — read without opening it.",

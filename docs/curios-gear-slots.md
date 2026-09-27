@@ -95,7 +95,7 @@ public interface GearSlot {
 - 由 api 渲染,作为 `BODY_STATE` 的第一个片段,复用 `joinFragments` 的出错隔离。插件不需要各自再调 `contributeBodyState`。
 - **空位也列出**(用户已定):这是模型认识自己有哪些槽名的唯一来源,每轮大约多 20–60 token。
 - 只写物品 id,不写耐久和组件。`CompanionStateWatch` 按整段字符串做差分,所以耐久变化不会推包。
-- `get_self_status` 的 `equipment` 只保留两只手。
+- `status_self` 的 `equipment` 只保留两只手。
 
 **第一版不加饰品变化事件。** "戴着什么"是状态;自己穿脱有回执;外部变化下一轮 `<worn>` 会如实反映。以后真要加事件:
 - 在 api 层对"槽名 → 物品 id"的快照做差分,不监听 `CurioChangeEvent`;
@@ -172,5 +172,5 @@ public interface GearSlot {
 
 ## 十一、顺带发现的无关问题(未改)
 
-- `NumenPrompts` 说 `get_self_status` 返回完整背包,但实际不列背包。
+- `NumenPrompts` 说 `status_self` 返回完整背包,但实际不列背包。
 - `InventoryGameTests` 的注释还写着"走原版右键换装"。

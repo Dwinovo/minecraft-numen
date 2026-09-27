@@ -236,11 +236,14 @@ void end(RunEnd reason) {
 }
 ```
 
-- **工具串行**(不照搬 pi 的并行):身体只有一个动作槽。`ToolDispatcher` 保持串行、兜底超时、
-  展开闸;结果逐条经 `Transcript` 写入,一批全部结算后回调 `onToolsSettled`。
+- **工具按顺序**(不照搬 pi 的并行):身体只有一个动作槽。顺序在 `SerialCalls`(agent 模块),
+  `ToolDispatcher` 只管怎么执行一个调用与兜底超时;结果逐条经 `Transcript` 写入,一批全部结算后回调
+  `onToolsSettled`。
 - **异步身体任务**:世界动作工具的"结果"是立刻回来的受理回执,真正完成是之后的 `task_finished`
-  事件。所以 run 往往在身体还在干活时就结束了;`task_finished` 作为插话进队,下次 pump 开新 run。
-  这正是 pi 的"闲时来消息就开 run"。
+  事件。同一批后面还有调用时,派发器等这件活的 `task_finished` 进了队列才派下一个;这批还没结算时,
+  内核把入了队的条目连同急不急转给工具口(`ToolPort.arrived`),等的时候来了急件就不再等,余下的调用
+  逐条回"没执行"(规则见宪法 §六)。最后一件受理了这批就结算,所以 run 往往在身体还在干活时就结束了;
+  `task_finished` 作为插话进队,下次 pump 开新 run。这正是 pi 的"闲时来消息就开 run"。
 - **没有轮数上限、没有循环检测**:保持现状(模型合理地连着派很多任务;失控由主人停止)。
 
 ---
@@ -256,6 +259,8 @@ sealed interface ModelOutcome { record Answered(AssistantTurn turn, Usage usage)
 
 interface ToolPort {
     void run(List<ToolInvocation> calls, long runId, LongConsumer settled);
+    /** 这批还没结算时入队的一条输入与它急不急:等身体收尾的这批据此接着派或不再等。 */
+    void arrived(Entry entry, boolean urgent);
     /** 放弃这批里还没结果的调用;返回它们的 id。stopBody 决定是否叫停身体。 */
     List<String> cancel(boolean stopBody);
 }
@@ -368,7 +373,7 @@ record Type(String id,
 
 - **新增服务端身体状态片段**:插件在服务端给一个"身体 → 一段描述"的函数;引擎在 `CompanionStateWatch`
   检测变化时一并算、有变化随状态包推给主人的客户端;这段描述出现在运行期状态里,也出现在
-  `get_self_status` 里("你的全部"不再漏掉插件管的部位)。
+  `status_self` 里("你的全部"不再漏掉插件管的部位)。
 - **两个来源按事实住在哪里分工**:身体上的事实(饰品栏、模组给的装备位)用服务端片段;只有主人客户端知道
   的事(东方小女仆的外观是客户端渲染的)仍用 `contributeState`。一个事实只有一个来源。
 
@@ -581,7 +586,7 @@ sealed interface LoopEvent {
 | 事件种类两套:队列 `EventTypes` 与服务端 `NumenEvents.Kind` | 种类就是类型表的一行(§七) |
 | `body_log` 兜底桶收本能叙事 | `reflex` 类型带本能名(§七) |
 | 插件报身体上的事没有正门,只有冒充主人的 `enqueue` | 插件登记类型、发出事件,与内置同一条路(§七) |
-| 插件状态只能在客户端现算,远处/跨维度的同伴读不到 | 服务端身体状态片段随状态包推送,也进 `get_self_status`(§七) |
+| 插件状态只能在客户端现算,远处/跨维度的同伴读不到 | 服务端身体状态片段随状态包推送,也进 `status_self`(§七) |
 
 ---
 
@@ -643,7 +648,7 @@ sealed interface LoopEvent {
    `handleResponse`/`abort`/`onEntityDied` 中的旧逻辑。内核单元测试在这一步落地。
 4. **事件种类统一与插件的门**(§七):种类登记进类型表,删 `NumenEvents.Kind`,`body_log` 退役为 `reflex`;
    服务端一个发出口;`NumenApi` 加登记类型、发出事件,`enqueue` 收进去;服务端身体状态片段(随状态包推送、
-   进运行期状态与 `get_self_status`)。
+   进运行期状态与 `status_self`)。
 5. **事件与 LoopStatus**:表现层、记账、显示记录、MCP 记录改为订阅;UI 的"忙不忙"改读 `LoopStatus`;
    主人的话统一走 `NumenGateway`;端点口径统一。
 6. **拆组件**:`SystemPromptComposer`、`RuntimeState`、`Compactor`、`GoalSteward`;收窄 public、删死代码。

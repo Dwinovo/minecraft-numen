@@ -2,6 +2,7 @@ package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.inbox.EventQueue;
+import com.dwinovo.numen.event.NumenEvents;
 import com.dwinovo.numen.network.Wire;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
@@ -38,7 +39,7 @@ import java.util.function.Predicate;
  * 说了算。
  *
  * <p>条目的种类名与正文都不归这个包定长短(插件登记的种类、任务收尾时说的话),用 {@link Wire#text()};整批装不下一个
- * 下行包时({@link #shrunk}),从最长的那条起换成一句说明,直到装得下——种类、时刻、急不急都留着,她知道漏了哪件事。
+ * 下行包时({@link #shrunk}),从最长的那条起把正文换成一句说明,直到装得下——开头的种类、时刻、编号与急不急都留着,她知道漏了哪件事,等这件活的派发器也认得出它。
  */
 public record NumenEventPayload(UUID entityUuid, List<EventQueue.Entry> entries)
         implements CustomPacketPayload, Wire.Oversized<NumenEventPayload> {
@@ -73,8 +74,9 @@ public record NumenEventPayload(UUID entityUuid, List<EventQueue.Entry> entries)
         NumenEventPayload candidate = this;
         for (int i : longestFirst) {
             EventQueue.Entry e = entries.get(i);
-            out.set(i, new EventQueue.Entry(e.type(), Wire.TO_CLIENT.tooBig("A " + e.type() + " event",
-                    ByteBufUtil.utf8Bytes(e.text())) + " together with the rest, so its text was not delivered.",
+            out.set(i, new EventQueue.Entry(e.type(), NumenEvents.withBody(e.text(),
+                    Wire.TO_CLIENT.tooBig("A " + e.type() + " event", ByteBufUtil.utf8Bytes(e.text()))
+                            + " together with the rest, so its text was not delivered."),
                     e.ts(), e.urgent()));
             candidate = new NumenEventPayload(entityUuid, List.copyOf(out));
             if (fits.test(candidate)) {

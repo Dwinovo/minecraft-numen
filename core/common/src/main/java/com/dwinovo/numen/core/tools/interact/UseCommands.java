@@ -23,7 +23,7 @@ import net.minecraft.resources.ResourceLocation;
  * 搬东西一次一步:{@code transfer} 放到指定的一格,{@code shift} 像按住 Shift 点它、整叠挪到另一边——"不给目标格就是另一件事"
  * 拆成两个动作,一个动作一个意思;要搬好几样就同一轮发好几行。
  * 对准一格和不对准任何东西是两件事,拆成 {@code block} 与 {@code ahead} 两个动作,一个动作一个意思。
- * 上床放在这一组:原版里睡觉就是用一张床,和别的"用"是同一种动作,找床与走过去仍归扫描和 goto。都不提升成快捷工具。
+ * 上床放在这一组:原版里睡觉就是用一张床,和别的"用"是同一种动作,找床与走过去仍归扫描和 {@code move goto}。都不提升成快捷工具。
  */
 public final class UseCommands {
 
@@ -44,7 +44,7 @@ public final class UseCommands {
     private static final Param<Integer> Z = Param.required("z", ArgType.integer(), "Block Z of the aim point.");
     private static final Param<Integer> ENTITY_ID = Param.required("entity", ArgType.integer(),
             "The entity to act on.")
-            .values("an entity id from scan_nearby_entities");
+            .values("an entity id from scan_entities");
     private static final Param<Integer> HOLD_TICKS = Param.optional("hold_ticks", ArgType.integer(),
             "How long to hold the button, in ticks; -1 holds until the action completes or times out.")
             .whenOmitted("press once");
@@ -96,9 +96,9 @@ public final class UseCommands {
                 .note("If the aimed block doesn't take a right click, the held item acts on its own, exactly like "
                         + "a real right-click: aiming at water with a bucket scoops it, with a boat places it.")
                 .note("It does NOT travel: you must already be within working reach (~4.5 blocks) of the aim "
-                        + "point; goto stops you right beside a block, which is in reach. Farther away it fails "
-                        + "and tells you to goto first.")
-                .note("Prefer mine for digging. Breaking or placing near your owner's things may ask your owner "
+                        + "point; move_goto stops you right beside a block, which is in reach. Farther away it fails "
+                        + "and tells you to move_goto first.")
+                .note("Prefer work_mine for digging. Breaking or placing near your owner's things may ask your owner "
                         + "first; the call waits for the answer.")
                 .note("The result reports what actually changed (hands, the aimed block, new entities); no "
                         + "change listed means the click did nothing.")
@@ -116,7 +116,7 @@ public final class UseCommands {
                 .example(line(ENTITY) + " right 812 --item minecraft:shears")
                 .example(line(ENTITY) + " left 812")
                 .note("A wall in the way makes you re-position, not hit through it.")
-                .note("Right on a boat or rideable boards it: runtime_state then shows <riding>; goto pilots or "
+                .note("Right on a boat or rideable boards it: runtime_state then shows <riding>; move_goto pilots or "
                         + "steps off. Never click your own vehicle again.")
                 .note("Hitting pets, named mobs or villagers asks your owner first; the call waits for the answer.")
                 .seeAlso(line(BLOCK));
@@ -163,10 +163,10 @@ public final class UseCommands {
                 .example(line(SLEEP))
                 .example(line(SLEEP) + " --x 120 --y 64 --z -35")
                 .note("It does NOT travel: find a bed with scan_blocks using #minecraft:beds (that one tag covers "
-                        + "every colour), goto it, then run this.")
+                        + "every colour), move_goto it, then run this.")
                 .note("Succeeds only when the server confirms you are sleeping; otherwise it hands back "
                         + "Minecraft's own reason. \"Only at night\" means wait (`task timer`), not retry; \"too far "
-                        + "away\" means goto.")
+                        + "away\" means move_goto.")
                 .note("Returns the moment you lie down; night passes on its own.")
                 .seeAlso("task timer");
     }

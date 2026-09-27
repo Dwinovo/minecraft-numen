@@ -1,5 +1,9 @@
 package com.dwinovo.numen.core.gametest;
 
+import com.dwinovo.numen.agent.inbox.EventQueue;
+import com.dwinovo.numen.agent.loop.SerialCalls;
+import com.dwinovo.numen.agent.loop.ToolPort;
+import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.core.Constants;
@@ -335,6 +339,99 @@ public final class GameTestKit {
     static com.dwinovo.numen.core.task.build.BuildTaskRecord buildJob(String callId, long deadline,
             List<com.dwinovo.numen.core.task.build.BuildTaskRecord.Target> targets, boolean consume, boolean partial) {
         return buildJob(callId, deadline, com.dwinovo.numen.core.build.Layout.of(targets, 0), consume, partial);
+    }
+
+    /**
+     * 按模型的样子派一轮调用:模型一次回复里写了这几条,交给内脑派发的同一个顺序({@link SerialCalls})——一条做完才派
+     * 下一条,后台活等它的 task_finished 进了队列才往下走。每条照 {@link #call} 从工具表取、走 {@link NumenTool#serve};
+     * 主人不在线,收尾的事件进出箱,每刻把新到的条目按收件箱的急件规则交给这一轮一次,和内核转给派发器的一样。
+     */
+    static Round round(GameTestHelper helper, NumenPlayer body, LlmToolCall... calls) {
+        Round round = new Round(body);
+        helper.onEachTick(round::feed);
+        round.calls.run(List.of(calls), round);
+        return round;
+    }
+
+    /** 一轮里的一条工具调用。 */
+    static LlmToolCall toolCall(String toolName, JsonObject args) {
+        return new LlmToolCall("gametest-" + toolName + "-" + UUID.randomUUID(), toolName, args.toString());
+    }
+
+    /** 一轮里的一行指令:一条 {@code command} 工具调用。 */
+    static LlmToolCall commandCall(String line) {
+        return toolCall(com.dwinovo.numen.cli.CommandTool.NAME, args("command", line));
+    }
+
+    /** 一轮调用的现场:每条的结果、派出那一刻她站在哪、这一轮结算没有。 */
+    static final class Round implements ToolPort.Sink {
+
+        private final NumenPlayer body;
+        /** 她的收件箱:进来的条目急不急由它的规则算,和主人客户端上同一条。 */
+        private final EventQueue inbox = new EventQueue(EventQueue.Journal.NONE);
+        private final SerialCalls calls;
+        private final java.util.Map<String, String> results = new java.util.HashMap<>();
+        private final java.util.Map<String, Vec3> startedAt = new java.util.HashMap<>();
+        /** 出箱里已经交给这一轮的条目数。 */
+        private int fed;
+        private boolean settled;
+
+        private Round(NumenPlayer body) {
+            this.body = body;
+            this.calls = new SerialCalls((call, done) -> ToolRegistry.get(call.name()).serve(call.id(),
+                    JsonParser.parseString(call.arguments()).getAsJsonObject(), body, done),
+                    com.dwinovo.numen.task.TaskDispatch::runningTaskOf,
+                    com.dwinovo.numen.event.NumenEvents::finishedTaskOf);
+        }
+
+        /** 出箱里新到的事件交给这一轮。 */
+        private void feed() {
+            List<EventQueue.Entry> out = com.dwinovo.numen.entity.EventOutbox.get(body.getServer())
+                    .peek(body.getUUID()).entries();
+            for (; fed < out.size(); fed++) {
+                arrive(out.get(fed));
+            }
+        }
+
+        /** 主人开口说一句,和他在聊天框里说的一样进她的收件箱。 */
+        void ownerSays(String words) {
+            arrive(new EventQueue.Entry(com.dwinovo.numen.agent.inbox.EventTypes.QUERY,
+                    "<query>" + words + "</query>", System.currentTimeMillis(), false));
+        }
+
+        private void arrive(EventQueue.Entry entry) {
+            calls.arrived(entry, inbox.push(entry.type(), entry.text(), entry.ts(), entry.urgent()));
+        }
+
+        @Override
+        public void started(LlmToolCall call) {
+            startedAt.put(call.id(), body.position());
+        }
+
+        @Override
+        public void finished(LlmToolCall call, String resultJson) {
+            results.put(call.id(), resultJson);
+        }
+
+        @Override
+        public void settled() {
+            settled = true;
+        }
+
+        /** 这条调用的结果;还没有是 null。 */
+        String result(LlmToolCall call) {
+            return results.get(call.id());
+        }
+
+        /** 这条调用派出那一刻她站在哪;还没派出是 null。 */
+        Vec3 startedAt(LlmToolCall call) {
+            return startedAt.get(call.id());
+        }
+
+        /** 这一轮结算了:每条调用都有了结果。 */
+        boolean hasSettled() {
+            return settled;
+        }
     }
 
     /** 按模型的样子执行一行指令:就是调一次 {@code command} 工具,和 {@link #call} 同一个入口。 */

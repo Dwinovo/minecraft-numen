@@ -64,7 +64,7 @@ public class MineGameTests {
 
         NumenPlayer companion = spawnAt(helper, "gametest_tunneler", new BlockPos(3, 2, 3), false);
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
-        TaskRecord record = call(companion, "mine", args(
+        TaskRecord record = call(companion, "work_mine", args(
                 "block_ids", List.of("minecraft:gold_ore"),
                 "count", 2)).task();
 
@@ -104,7 +104,7 @@ public class MineGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_canopy", new BlockPos(4, 2, 8), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        TaskRecord record = call(companion, "mine", args(
+        TaskRecord record = call(companion, "work_mine", args(
                 "block_ids", List.of("minecraft:acacia_log"),
                 "count", 2)).task();
 
@@ -135,7 +135,7 @@ public class MineGameTests {
         level.setBlockAndUpdate(helper.absolutePos(logRel), Blocks.STRIPPED_BIRCH_LOG.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_skyward", new BlockPos(7, 2, 8), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        TaskRecord record = call(companion, "mine", args(
+        TaskRecord record = call(companion, "work_mine", args(
                 "block_ids", List.of("minecraft:stripped_birch_log"),
                 "count", 1)).task();
 
@@ -179,7 +179,7 @@ public class MineGameTests {
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
 
-        TaskRecord record = call(companion, "mine", args(
+        TaskRecord record = call(companion, "work_mine", args(
                 "block_ids", List.of("minecraft:spruce_log"),
                 "count", 8)).task();
 
@@ -226,7 +226,7 @@ public class MineGameTests {
                 helper.fail("she cut a second log instead of fetching the one she had already cut");
             }
         });
-        ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:stripped_oak_log"), "count", 1));
+        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:stripped_oak_log"), "count", 1));
 
         succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
@@ -261,7 +261,7 @@ public class MineGameTests {
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
 
-        TaskRecord record = call(companion, "mine", args(
+        TaskRecord record = call(companion, "work_mine", args(
                 "block_ids", List.of("minecraft:deepslate_diamond_ore"),
                 "count", 2)).task();
 
@@ -289,7 +289,7 @@ public class MineGameTests {
         level.setBlockAndUpdate(lava, Blocks.LAVA.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_careful", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
-        ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:iron_ore"), "count", 1));
+        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:iron_ore"), "count", 1));
 
         succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
@@ -338,7 +338,7 @@ public class MineGameTests {
         helper.getLevel().setBlockAndUpdate(ore, Blocks.DIAMOND_ORE.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_underequipped", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.WOODEN_PICKAXE));
-        ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:diamond_ore"), "count", 1));
+        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:diamond_ore"), "count", 1));
 
         succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
@@ -355,7 +355,7 @@ public class MineGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_prospector", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
         BlockPos start = helper.absolutePos(new BlockPos(3, 2, 4));
-        ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:emerald_ore"), "count", 1));
+        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:emerald_ore"), "count", 1));
 
         succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
@@ -373,7 +373,7 @@ public class MineGameTests {
         helper.getLevel().setBlockAndUpdate(block, Blocks.OBSIDIAN.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_interrupted", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.DIAMOND_PICKAXE));
-        ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:obsidian"), "count", 1));
+        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:obsidian"), "count", 1));
 
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(digging(companion),
@@ -417,7 +417,7 @@ public class MineGameTests {
         final int stones = field;
         NumenPlayer companion = spawnAt(helper, "gametest_counter", new BlockPos(2, 2, 8), false);
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
-        ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:gold_block"), "count", 12));
+        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:gold_block"), "count", 12));
 
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(mine.done(), "mine has not finished"))
@@ -458,7 +458,7 @@ public class MineGameTests {
         level.setBlockAndUpdate(helper.absolutePos(new BlockPos(8, 2, 6)), Blocks.DRIED_KELP_BLOCK.defaultBlockState());
         level.setBlockAndUpdate(helper.absolutePos(new BlockPos(8, 2, 10)), Blocks.DRIED_KELP_BLOCK.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_twin_digger", new BlockPos(3, 2, 8), false);
-        ToolRun viaTool = call(companion, "mine", args("block_ids", List.of("minecraft:dried_kelp_block"), "count", 1));
+        ToolRun viaTool = call(companion, "work_mine", args("block_ids", List.of("minecraft:dried_kelp_block"), "count", 1));
         java.util.concurrent.atomic.AtomicReference<ToolRun> viaCommand = new java.util.concurrent.atomic.AtomicReference<>();
 
         steps(helper)
@@ -471,7 +471,7 @@ public class MineGameTests {
                             "one of the two failed: " + viaTool.outcome() + " / " + viaCommand.get().outcome());
                     helper.assertTrue(companion.getInventory().countItem(Items.DRIED_KELP_BLOCK) == 2,
                             "the two calls did not gather one block each");
-                    helper.assertTrue(viaTool.task().getToolName().equals("mine")
+                    helper.assertTrue(viaTool.task().getToolName().equals("work_mine")
                                     && viaCommand.get().task().getToolName().equals("work mine"),
                             "the work is not named after the call: " + viaTool.task().getToolName() + " / "
                                     + viaCommand.get().task().getToolName());

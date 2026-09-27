@@ -24,7 +24,7 @@ import java.util.Map;
  *
  * <h2>为什么它这么薄</h2>
  * 找床归 {@code scan_blocks}(现在能写 {@code #minecraft:beds},一句话覆盖全部颜色),
- * 走过去归 {@code goto}——那两件事今天已经各有一个统一的实现,再包一份进来就是第三个入口。
+ * 走过去归 {@code move goto}——那两件事今天已经各有一个统一的实现,再包一份进来就是第三个入口。
  * 这里只做别处做不了的那一件:<b>把原版的睡眠判定翻译成模型能接住的回执</b>。
  *
  * <h2>三态,不是两态</h2>
@@ -137,7 +137,7 @@ public final class SleepOps {
                 : "there is no bed within reach (you must be standing next to one)";
         String next = carried != null
                 ? " You are carrying " + carried + " — place it on flat ground and try again."
-                : " Use scan_blocks with #minecraft:beds to find one, goto it, then run use sleep again.";
+                : " Use scan_blocks with #minecraft:beds to find one, move_goto it, then run use sleep again.";
         return TaskResult.fail(base + "." + next).toJson();
     }
 

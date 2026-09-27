@@ -22,7 +22,7 @@ import net.minecraft.resources.ResourceLocation;
 /**
  * {@code work}:采集类的活——挖方块、捡掉落物、钓鱼。
  *
- * <p>三个动作都占身体,交任务槽:受理即回执,收尾走 task_finished。{@code mine} 提升成同名快捷工具;挖矿的路线规格
+ * <p>三个动作都占身体,交任务槽:受理即回执,收尾走 task_finished。{@code mine} 提升成快捷工具 {@code work_mine};挖矿的路线规格
  * 标志与 goto 共用({@link RouteSpecFlags}),叠在 mine 自己的默认规格上(可以改地形,要主人同意的格也算进去)。
  */
 public final class WorkCommands {
@@ -72,30 +72,30 @@ public final class WorkCommands {
                 .example("work mine --block_ids #minecraft:logs --count 16 --avoid_break 10,64,-3..14,70,1")
                 .note("Background work: returns at once; the end arrives as a task_finished event.")
                 .note("Travels on its own with full terrain navigation: digs to buried ores, pillars up cliffs, "
-                        + "bridges gaps — no goto needed. The route flags are laid over mine's own default, which "
+                        + "bridges gaps — no move_goto needed. The route flags are laid over work_mine's own default, which "
                         + "may dig anything (blocks needing consent included); pass them only to restrict her.")
                 .note("Asks your owner before breaking a block their rules want asked about; a refusal stops the "
                         + "task with the reason.")
                 .note("Only mines what her tools actually harvest, and stops naming the tier she needs when "
                         + "nothing qualifies.")
                 .seeAlso("scan blocks", "work collect", "task stop")
-                .promote("mine", "Gather blocks, in one of two ways. block_ids + count: she finds the nearest "
+                .promote("Gather blocks, in one of two ways. block_ids + count: she finds the nearest "
                         + "blocks of those types herself and mines until `count` NEW items are gained or none "
                         + "remain nearby; include all variants (iron_ore AND deepslate_iron_ore). groups: ids from "
                         + "your latest scan_blocks (g1, g2, ...) — she digs exactly the cells of those groups that "
                         + "still hold the block the scan saw, nothing beyond them; count is optional there and "
                         + "without it she digs the groups out. An id not from the latest scan fails — scan again. "
                         + "Either way she travels with full terrain-traversing navigation (digs to buried ores, "
-                        + "pillars up cliffs, bridges gaps); no coordinates or goto needed. count is items, not "
+                        + "pillars up cliffs, bridges gaps); no coordinates or move_goto needed. count is items, not "
                         + "blocks (redstone_ore drops ~4). Before breaking a block that needs the owner's consent "
                         + "she asks; if the owner or a rule refuses, the task stops with the reason — decide what "
                         + "to do next, do not route around it. Only mines what its tools actually harvest, and "
                         + "stops naming the needed tier if nothing qualifies (to destroy a block regardless of "
-                        + "drops, goto beside it and run `use block` with the left button on it). The route fields are "
-                        + "goto's, laid over mine's own default, which may dig anything (cells needing consent "
+                        + "drops, move_goto beside it and run `use block` with the left button on it). The route fields are "
+                        + "move_goto's, laid over work_mine's own default, which may dig anything (cells needing consent "
                         + "included) — pass them only to restrict her, e.g. avoid_break for blocks or cells she "
-                        + "must leave standing. BACKGROUND: a successful call is already running; do not call "
-                        + "mine/goto again while <current_task> exists and do not poll. task_finished status=done "
+                        + "must leave standing. BACKGROUND: a successful call is already running; do not poll. "
+                        + "task_finished status=done "
                         + "means the job is complete; only timeout permits resending the same arguments.");
         work.server("collect", "Pick up dropped items lying on the ground nearby.", WorkCommands::collect,
                         ITEM_IDS, RADIUS)
@@ -105,14 +105,14 @@ public final class WorkCommands {
                 .note("Walks to each drop until none she can reach remain; she picks up what she gets close to. "
                         + "It never breaks or places a block: drops in a pit or across a gap it cannot walk to "
                         + "are left there and named in the result.")
-                .note("For drops left by your own interactions; `fight attack` and mine already walk over the "
+                .note("For drops left by your own interactions; `fight attack` and work_mine already walk over the "
                         + "drops they make.")
                 .seeAlso("work mine", "task stop");
         work.server("fish", "Fish from nearby water with a fishing rod.", WorkCommands::fish, CATCHES)
                 .example("work fish --count 5")
                 .example("work fish")
                 .note("Background work: returns at once; the end arrives as a task_finished event. Without "
-                        + "--count it is a standing job that runs until another body action replaces it.")
+                        + "--count it is a standing job: it never ends on its own and never sends task_finished.")
                 .note("Needs a vanilla fishing rod in her inventory. In water she first moves up to 12 blocks "
                         + "onto a dry stance; it does not search far for a biome or a lake.")
                 .note("A catch is one bite reeled in: fish, junk or treasure, with vanilla loot, rod wear and "
