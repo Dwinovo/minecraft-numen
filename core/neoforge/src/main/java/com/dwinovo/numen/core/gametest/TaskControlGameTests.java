@@ -43,7 +43,7 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
  * 一样。{@code task status}、{@code task timer} 只作命令,工具表里没有它们。
  *
  * <p>命令派下的长活叫什么、重启后怎么接回来,用夹具组 {@code gt_long} 验:它唯一的动作 {@code linger} 派一件站着
- * 数刻的后台活,并提升成快捷工具 {@code gt_linger}。
+ * 数刻的后台活,并提升成快捷工具 {@code gt_long_linger}。
  */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
@@ -59,7 +59,7 @@ public class TaskControlGameTests {
                                 (src, args) -> TaskDispatch.setTask(src, new LingerRecord(src, args.get(TICKS))),
                                 TICKS)
                                 .example("gt_long linger 40")
-                                .promote("gt_linger", "Stand still for a while, as background work.")));
+                                .promote("Stand still for a while, as background work.")));
         TaskFactory.register(LingerRecord.class, (body, record) -> new Linger(record));
     }
 
@@ -113,7 +113,7 @@ public class TaskControlGameTests {
     public static void task_status_names_the_running_task_and_the_timers(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_busy", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(14, 2, 14));
-        ToolRun walk = call(companion, "goto", args("x", far.getX(), "y", far.getY(), "z", far.getZ()));
+        ToolRun walk = call(companion, "move_goto", args("x", far.getX(), "y", far.getY(), "z", far.getZ()));
         ToolRun timer = command(companion, "task timer 600 check the furnace");
         ToolRun status = command(companion, "task status");
 
@@ -121,7 +121,7 @@ public class TaskControlGameTests {
             helper.assertTrue(walk.task() != null && timer.succeeded(), "goto or the timer did not go through: "
                     + walk.reply() + " / " + timer.reply());
             helper.assertTrue(status.succeeded() && status.reply().contains(walk.task().publicId())
-                            && status.reply().contains("goto") && status.reply().contains("check the furnace"),
+                            && status.reply().contains("move_goto") && status.reply().contains("check the furnace"),
                     "task status does not name the walk and the timer: " + status.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -132,7 +132,7 @@ public class TaskControlGameTests {
     public static void task_stop_without_an_id_stops_the_background_task(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_halted", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(14, 2, 14));
-        ToolRun walk = call(companion, "goto", args("x", far.getX(), "y", far.getY(), "z", far.getZ()));
+        ToolRun walk = call(companion, "move_goto", args("x", far.getX(), "y", far.getY(), "z", far.getZ()));
         AtomicReference<ToolRun> stop = new AtomicReference<>();
         EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
@@ -193,7 +193,7 @@ public class TaskControlGameTests {
     public static void task_status_and_set_timer_are_commands_only(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_twice_asked", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(14, 2, 14));
-        ToolRun walk = call(companion, "goto", args("x", far.getX(), "y", far.getY(), "z", far.getZ()));
+        ToolRun walk = call(companion, "move_goto", args("x", far.getX(), "y", far.getY(), "z", far.getZ()));
         ToolRun timer = command(companion, "task timer 600 turn the compost");
         AtomicReference<ToolRun> status = new AtomicReference<>();
 
@@ -271,7 +271,7 @@ public class TaskControlGameTests {
                 new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
         NumenPlayer viaToolBody = spawnAt(helper, "gametest_tool_lingerer", new BlockPos(6, 2, 2), false);
         ToolRun viaCommand = command(viaCommandBody, "gt_long linger 20");
-        ToolRun viaTool = call(viaToolBody, "gt_linger", args("ticks", 20));
+        ToolRun viaTool = call(viaToolBody, "gt_long_linger", args("ticks", 20));
         CompanionRegistry.Entry recorded = CompanionRegistry.get(server).find(viaCommandBody.getUUID());
         EventOutbox outbox = EventOutbox.get(server);
 
@@ -279,8 +279,8 @@ public class TaskControlGameTests {
             helper.assertTrue(taskIn(viaCommand.reply()).equals("gt_long linger")
                             && viaCommand.task().getToolName().equals("gt_long linger"),
                     "the command's task is not named group + action: " + viaCommand.reply());
-            helper.assertTrue(taskIn(viaTool.reply()).equals("gt_linger")
-                            && viaTool.task().getToolName().equals("gt_linger"),
+            helper.assertTrue(taskIn(viaTool.reply()).equals("gt_long_linger")
+                            && viaTool.task().getToolName().equals("gt_long_linger"),
                     "the shortcut's task is not named after the shortcut: " + viaTool.reply());
             helper.assertTrue(recorded.taskTool().equals(com.dwinovo.numen.cli.CommandTool.NAME)
                             && recorded.taskArgs().contains("gt_long linger 20"),
@@ -288,7 +288,7 @@ public class TaskControlGameTests {
             helper.assertTrue(recorded.taskName().equals("gt_long linger"),
                     "the task is recorded under another name: " + recorded.taskName());
             helper.assertTrue(finishedAs(outbox, viaCommandBody, "gt_long linger")
-                            && finishedAs(outbox, viaToolBody, "gt_linger"),
+                            && finishedAs(outbox, viaToolBody, "gt_long_linger"),
                     "task_finished does not name the task: " + outbox.peek(viaCommandBody.getUUID()).entries()
                             + " / " + outbox.peek(viaToolBody.getUUID()).entries());
             outbox.forget(viaCommandBody.getUUID());

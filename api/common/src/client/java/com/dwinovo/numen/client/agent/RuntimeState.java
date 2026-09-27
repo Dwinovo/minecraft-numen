@@ -139,7 +139,7 @@ final class RuntimeState {
      * 她此刻带着什么。服务端在背包真变化时推一份过来({@code CompanionStateWatch}),
      * 这里只负责渲染——所以"换没换"只有一个信号:快照的时间戳。
      *
-     * <p>放进请求而不是让她调 {@code get_self_status},省的是<b>一整轮</b>(请求 + 工具结果 +
+     * <p>放进请求而不是让她调 {@code status_self},省的是<b>一整轮</b>(请求 + 工具结果 +
      * 再请求)。合并同类计数,不报耐久附魔:要精确到槽位时她该用 {@code use gui}。
      */
     private String inventoryXml() {
@@ -183,7 +183,7 @@ final class RuntimeState {
     /**
      * 她这一刻骑没骑着东西。与效果同一纪律:<b>只能现挂,不能进历史</b>——上下船是
      * 随时翻转的身体事实,沉进历史就成了理直气壮的错。没骑就一个字都不发。
-     * 有这一行,模型不会再对自己坐着的船发第二次 use entity,也知道 goto
+     * 有这一行,模型不会再对自己坐着的船发第二次 use entity,也知道 move_goto
      * 会驾着它走、任何要走路的动作都会自己下来。
      */
     private String ridingXml() {
@@ -192,7 +192,7 @@ final class RuntimeState {
             return "";
         }
         return "<riding>" + xml(snapshot.vehicleType()) + " (entity id " + snapshot.vehicleId()
-                + "). goto pilots a boat over water toward the target; any action that needs "
+                + "). move_goto pilots a boat over water toward the target; any action that needs "
                 + "walking steps off by itself — no need to click the vehicle again.</riding>";
     }
 
@@ -244,7 +244,7 @@ final class RuntimeState {
         // 加起来(实测她把主手 64 个熔炉和清单里同一批数成了 128)。总数只有一处,手只指
         // 向它,结构上就没什么可重复计的。
         return "<inventory>Everything your body carries right now, totalled across all 36 backpack "
-                + "slots — trust it and do not spend a call on get_self_status to rediscover it. "
+                + "slots — trust it and do not spend a call on status_self to rediscover it. "
                 + "Run use gui only when exact slots matter. A newer tool result wins over this."
                 + "\ncarrying=" + (items.length() == 0 ? "nothing" : items)
                 + "\nholding (already counted above)=main " + describe(snapshot.mainHand())

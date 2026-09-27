@@ -41,7 +41,7 @@ public class ModeGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_cghost", new BlockPos(2, 2, 2), true);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
-        TaskRecord record = call(companion, "goto", args(
+        TaskRecord record = call(companion, "move_goto", args(
                 "x", target.getX(),
                 "y", target.getY(),
                 "z", target.getZ())).task();
@@ -68,7 +68,7 @@ public class ModeGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_cminer", new BlockPos(2, 2, 2), true);
 
-        TaskRecord record = call(companion, "mine", args(
+        TaskRecord record = call(companion, "work_mine", args(
                 "block_ids", List.of("minecraft:gold_ore"),
                 "count", 4)).task();
 
@@ -157,7 +157,7 @@ public class ModeGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_climber", new BlockPos(3, 2, 3), true);
         BlockPos target = helper.absolutePos(new BlockPos(12, 2, 12));
-        TaskRecord record = call(companion, "goto", args(
+        TaskRecord record = call(companion, "move_goto", args(
                 "x", target.getX(),
                 "y", target.getY(),
                 "z", target.getZ(),
@@ -197,7 +197,7 @@ public class ModeGameTests {
         companion.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
         com.dwinovo.numen.core.pathing.settings.ThrowawayBlocks.store(companion, List.of("minecraft:cobblestone"));
         BlockPos target = helper.absolutePos(new BlockPos(12, 2, 12));
-        TaskRecord record = call(companion, "goto", args(
+        TaskRecord record = call(companion, "move_goto", args(
                 "x", target.getX(),
                 "y", target.getY(),
                 "z", target.getZ(),

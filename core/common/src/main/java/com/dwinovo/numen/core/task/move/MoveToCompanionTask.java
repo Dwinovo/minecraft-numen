@@ -111,9 +111,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             // 路线簿里的一条:取走即划掉(走过一次的路径不能再走);目标与规格都是它的
             route = RouteBook.of(player).take(r.route);
             if (route == null) {
-                fail("unknown route id '" + r.route + "' — ids come from a goto refusal or a move route"
+                fail("unknown route id '" + r.route + "' — ids come from a move_goto refusal or a move route"
                         + " reply, and a route is dropped once walked or when newer plans push it out."
-                        + " Run move route again, or goto the destination coordinates.",
+                        + " Run move route again, or move_goto the destination coordinates.",
                         FailureType.NO_PATH);
                 return;
             }
@@ -532,12 +532,12 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         return "timed out " + String.format("%.1f", remaining) + " blocks from target (now at "
                 + bx(gy) + "); "
                 + (stalled
-                        ? "progress had stopped — likely blocked; call goto again to retry, or"
+                        ? "progress had stopped — likely blocked; call move_goto again to retry, or"
                                 + " try a nearer waypoint / scan_blocks for a way through."
                         : "the journey was still progressing and simply exceeded its check-in budget;"
                                 + (r.kind == MoveToTaskRecord.Kind.ROUTE
-                                        ? " goto the destination coordinates to resume (a route id is spent once walked)."
-                                        : " call goto again with the same target to resume."));
+                                        ? " move_goto the destination coordinates to resume (a route id is spent once walked)."
+                                        : " call move_goto again with the same target to resume."));
     }
 
     @Override

@@ -46,8 +46,8 @@ public class PerceptionGameTests {
         helper.getLevel().setBlockAndUpdate(near, Blocks.STONE.defaultBlockState());
         helper.getLevel().setBlockAndUpdate(far, Blocks.STONE.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_inspector", new BlockPos(3, 2, 3), false);
-        ToolRun atNear = call(companion, "inspect_block", args("x", near.getX(), "y", near.getY(), "z", near.getZ()));
-        ToolRun atFar = call(companion, "inspect_block", args("x", far.getX(), "y", far.getY(), "z", far.getZ()));
+        ToolRun atNear = call(companion, "scan_block", args("x", near.getX(), "y", near.getY(), "z", near.getZ()));
+        ToolRun atFar = call(companion, "scan_block", args("x", far.getX(), "y", far.getY(), "z", far.getZ()));
         ToolRun viaCommand = command(companion, "scan block " + near.getX() + " " + near.getY() + " " + near.getZ());
 
         succeedWhen(helper, () -> {
@@ -58,7 +58,7 @@ public class PerceptionGameTests {
             helper.assertTrue(!f.get("in_reach").getAsBoolean(),
                     "the stone across the site is reported within reach: " + atFar.reply());
             helper.assertTrue(atNear.reply().equals(viaCommand.reply()),
-                    "inspect_block and scan block read differently: " + atNear.reply() + " / " + viaCommand.reply());
+                    "scan_block and scan block read differently: " + atNear.reply() + " / " + viaCommand.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -97,7 +97,7 @@ public class PerceptionGameTests {
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(companion.onGround(), "she has not landed"))
                 .thenExecute(() -> {
-                    map.set(call(companion, "look_around", args()));
+                    map.set(call(companion, "scan_around", args()));
                     viaCommand.set(command(companion, "scan around"));
                 })
                 .thenWaitUntil(() -> {
@@ -106,7 +106,7 @@ public class PerceptionGameTests {
                     helper.assertTrue(cell(m, 0, -2) == '^', "the step two north is not ^: \n" + m);
                     helper.assertTrue(cell(m, -2, 0) == '~', "the water two west is not ~: \n" + m);
                     helper.assertTrue(m.equals(viaCommand.get().reply()),
-                            "look_around and scan around draw differently: \n" + m + "\n" + viaCommand.get().reply());
+                            "scan_around and scan around draw differently: \n" + m + "\n" + viaCommand.get().reply());
                 })
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
                 .thenSucceed();
@@ -121,8 +121,8 @@ public class PerceptionGameTests {
         pig.setNoAi(true);
         helper.getLevel().addFreshEntity(pig);
         NumenPlayer companion = spawnAt(helper, "gametest_watcher", new BlockPos(3, 2, 3), false);
-        ToolRun all = call(companion, "scan_nearby_entities", args("radius", 12, "type_filter", "all"));
-        ToolRun hostile = call(companion, "scan_nearby_entities", args("radius", 12, "type_filter", "hostile"));
+        ToolRun all = call(companion, "scan_entities", args("radius", 12, "type_filter", "all"));
+        ToolRun hostile = call(companion, "scan_entities", args("radius", 12, "type_filter", "hostile"));
         ToolRun viaCommand = command(companion, "scan entities 12 all");
 
         succeedWhen(helper, () -> {
@@ -131,7 +131,7 @@ public class PerceptionGameTests {
             helper.assertTrue(!listsEntity(hostile, pig),
                     "the pig is listed as hostile: " + hostile.reply());
             helper.assertTrue(all.reply().equals(viaCommand.reply()),
-                    "scan_nearby_entities and scan entities list differently: " + all.reply() + " / "
+                    "scan_entities and scan entities list differently: " + all.reply() + " / "
                             + viaCommand.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -153,7 +153,7 @@ public class PerceptionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_selfie", new BlockPos(3, 2, 3), false);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
         companion.getInventory().add(new ItemStack(Items.DIAMOND, 3));
-        ToolRun status = call(companion, "get_self_status", args());
+        ToolRun status = call(companion, "status_self", args());
         ToolRun viaCommand = command(companion, "status self");
 
         succeedWhen(helper, () -> {
@@ -164,7 +164,7 @@ public class PerceptionGameTests {
                     "the backpack does not count two used slots: " + status.reply());
             helper.assertTrue(s.get("hp").getAsFloat() == companion.getHealth(), "hp is not her health");
             helper.assertTrue(status.reply().equals(viaCommand.reply()),
-                    "get_self_status and status self read differently: " + status.reply() + " / "
+                    "status_self and status self read differently: " + status.reply() + " / "
                             + viaCommand.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -192,8 +192,8 @@ public class PerceptionGameTests {
         NumenPlayer alone = spawnAt(helper, "gametest_orphan", new BlockPos(3, 2, 3), false);
         NumenPlayer companion = spawnAt(helper, "gametest_ward", new BlockPos(3, 2, 8), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_guardian");
-        ToolRun absent = call(alone, "get_owner_status", args());
-        ToolRun present = call(companion, "get_owner_status", args());
+        ToolRun absent = call(alone, "status_owner", args());
+        ToolRun present = call(companion, "status_owner", args());
         ToolRun viaCommand = command(companion, "status owner");
 
         succeedWhen(helper, () -> {
@@ -204,7 +204,7 @@ public class PerceptionGameTests {
                             && p.has("distance_to_me"),
                     "the present owner is not reported with name and distance: " + present.reply());
             helper.assertTrue(present.reply().equals(viaCommand.reply()),
-                    "get_owner_status and status owner read differently: " + present.reply() + " / "
+                    "status_owner and status owner read differently: " + present.reply() + " / "
                             + viaCommand.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), alone);
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -350,7 +350,7 @@ public class PerceptionGameTests {
      */
     private static char cell(String map, int dx, int dz) {
         List<String> rows = map.lines().filter(l -> !l.isEmpty() && l.charAt(1) == ' '
-                && !l.startsWith("look_around") && !l.startsWith("legend")).toList();
+                && !l.startsWith("scan_around") && !l.startsWith("legend")).toList();
         int row = -1;
         int col = -1;
         for (int r = 0; r < rows.size(); r++) {

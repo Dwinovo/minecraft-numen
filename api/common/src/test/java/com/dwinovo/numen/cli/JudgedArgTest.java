@@ -84,6 +84,6 @@ class JudgedArgTest {
                 "A group that tries to promote a line-typed action.", g -> g.server("later", "Later.",
                         (src, args) -> src.reply(TaskResult.ok("later").toJson()), THEN)
                         .example("gt_judge_tool later later later")
-                        .promote("gt_judge_later", "Runs a line later.")));
+                        .promote("Runs a line later.")));
     }
 }

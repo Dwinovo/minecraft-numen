@@ -368,7 +368,7 @@ record Type(String id,
 
 - **新增服务端身体状态片段**:插件在服务端给一个"身体 → 一段描述"的函数;引擎在 `CompanionStateWatch`
   检测变化时一并算、有变化随状态包推给主人的客户端;这段描述出现在运行期状态里,也出现在
-  `get_self_status` 里("你的全部"不再漏掉插件管的部位)。
+  `status_self` 里("你的全部"不再漏掉插件管的部位)。
 - **两个来源按事实住在哪里分工**:身体上的事实(饰品栏、模组给的装备位)用服务端片段;只有主人客户端知道
   的事(东方小女仆的外观是客户端渲染的)仍用 `contributeState`。一个事实只有一个来源。
 
@@ -581,7 +581,7 @@ sealed interface LoopEvent {
 | 事件种类两套:队列 `EventTypes` 与服务端 `NumenEvents.Kind` | 种类就是类型表的一行(§七) |
 | `body_log` 兜底桶收本能叙事 | `reflex` 类型带本能名(§七) |
 | 插件报身体上的事没有正门,只有冒充主人的 `enqueue` | 插件登记类型、发出事件,与内置同一条路(§七) |
-| 插件状态只能在客户端现算,远处/跨维度的同伴读不到 | 服务端身体状态片段随状态包推送,也进 `get_self_status`(§七) |
+| 插件状态只能在客户端现算,远处/跨维度的同伴读不到 | 服务端身体状态片段随状态包推送,也进 `status_self`(§七) |
 
 ---
 
@@ -643,7 +643,7 @@ sealed interface LoopEvent {
    `handleResponse`/`abort`/`onEntityDied` 中的旧逻辑。内核单元测试在这一步落地。
 4. **事件种类统一与插件的门**(§七):种类登记进类型表,删 `NumenEvents.Kind`,`body_log` 退役为 `reflex`;
    服务端一个发出口;`NumenApi` 加登记类型、发出事件,`enqueue` 收进去;服务端身体状态片段(随状态包推送、
-   进运行期状态与 `get_self_status`)。
+   进运行期状态与 `status_self`)。
 5. **事件与 LoopStatus**:表现层、记账、显示记录、MCP 记录改为订阅;UI 的"忙不忙"改读 `LoopStatus`;
    主人的话统一走 `NumenGateway`;端点口径统一。
 6. **拆组件**:`SystemPromptComposer`、`RuntimeState`、`Compactor`、`GoalSteward`;收窄 public、删死代码。

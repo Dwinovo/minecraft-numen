@@ -64,7 +64,7 @@ public final class TaskCommands {
                         + "event with status=stopped.")
                 .note("When nothing matches it fails and lists what is pending.")
                 .seeAlso("task status")
-                .promote("task_stop", "Cancel something you dispatched. With no id: aborts the background "
+                .promote("Cancel something you dispatched. With no id: aborts the background "
                         + "task (the one <current_task> shows) so the body frees up; its "
                         + "wind-down arrives as a task_finished event with status=stopped. With an id: cancels "
                         + "that task or that timer (tm...). Fails, listing what is actually pending, when "

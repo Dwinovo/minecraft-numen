@@ -11,7 +11,7 @@ finished build looks wrong.
 ## Workflow
 
 1. PLAN first: purpose, footprint, height, one main material + one accent material.
-2. Inspect the site (goto / look around): flat enough? big enough? Note the GROUND
+2. Inspect the site (move_goto / scan_around): flat enough? big enough? Note the GROUND
    level — every vertical decision below is anchored to it.
    **Uneven ground is YOUR problem to solve, not the builder's**: the builder puts
    blocks exactly where told, so on a slope one side of the footprint will hang in

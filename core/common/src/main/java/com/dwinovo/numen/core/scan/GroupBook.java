@@ -100,16 +100,16 @@ public final class GroupBook {
         if (!scanned) {
             return "there is no scan_blocks result on me to take group " + named + " from (scan results are"
                     + " dropped when I go dormant or the server restarts; ids are never reused) — scan_blocks"
-                    + " first and mine the groups it lists.";
+                    + " first and work_mine the groups it lists.";
         }
         if (latest.isEmpty()) {
             return "group " + named + " is not from your latest scan_blocks, which found no groups — ids only"
-                    + " stay good until the next scan; scan_blocks again and mine the groups it lists.";
+                    + " stay good until the next scan; scan_blocks again and work_mine the groups it lists.";
         }
         List<String> listed = new ArrayList<>(latest.keySet());
         String range = listed.size() == 1 ? listed.get(0) : listed.get(0) + " to " + listed.get(listed.size() - 1);
         return "group " + named + " is not from your latest scan_blocks, which listed " + range + " — ids only"
-                + " stay good until the next scan; scan_blocks again and mine the groups it lists.";
+                + " stay good until the next scan; scan_blocks again and work_mine the groups it lists.";
     }
 
     /** 这些团的格子与扫描时记下的方块,按编号顺序合并。先用 {@link #staleMessage} 查过。 */

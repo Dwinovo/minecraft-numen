@@ -10,7 +10,7 @@ import it.unimi.dsi.fastutil.longs.LongSets;
 import net.minecraft.core.BlockPos;
 
 /**
- * Typed task descriptor for {@code move goto} (shortcut {@code goto}). The goal type is chosen
+ * Typed task descriptor for {@code move goto} (shortcut {@code move_goto}). The goal type is chosen
  * by WHICH inputs are supplied: the LLM picks its intent by filling only the
  * fields it means.
  * <ul>
@@ -25,7 +25,7 @@ import net.minecraft.core.BlockPos;
  *       scan for the nearest block of that kind and walk up beside it,
  *       never touching it.</li>
  *   <li>{@code route} only → {@link Kind#ROUTE}: walk a route the planner
- *       already priced (a {@code goto} refusal or a {@code move route} reply
+ *       already priced (a {@code move goto} refusal or a {@code move route} reply
  *       listed it by id); destination and spec are the route's own.</li>
  * </ul>
  * Coordinates are nullable ({@code null} = "not supplied"); the deadline-based
@@ -85,7 +85,7 @@ public final class MoveToTaskRecord extends TaskRecord {
             if (hasX || hasY || hasZ) {
                 throw new IllegalArgumentException(
                         "block means 'walk to the nearest one of these' — no coordinates with"
-                        + " it. To reach one specific block you know the position of, goto its"
+                        + " it. To reach one specific block you know the position of, move_goto its"
                         + " location (x+z) and interact there.");
             }
             return Kind.FIND;
@@ -97,7 +97,7 @@ public final class MoveToTaskRecord extends TaskRecord {
             return Kind.YLEVEL;
         }
         throw new IllegalArgumentException(
-                "goto needs either x+z (a location; omit y to auto-resolve the "
+                "move_goto needs either x+z (a location; omit y to auto-resolve the "
                 + "surface), x+y+z (one exact cell), y alone (a target height), "
                 + "block alone (walk to the nearest block of that kind), or route alone "
                 + "(walk a planned route by id). "

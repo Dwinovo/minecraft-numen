@@ -32,7 +32,7 @@ It can also get better at things. Write a Markdown file to teach it a new way to
 ```
 You:    Go get me a stack of iron
 Numen:  On it. Heading underground.
-        ▸ 4 steps · locate biome · goto · mine · work collect   ✔
+        ▸ 4 steps · locate biome · move_goto · work_mine · work collect   ✔
 Numen:  Got 64 raw iron — want me to smelt it?
 ```
 

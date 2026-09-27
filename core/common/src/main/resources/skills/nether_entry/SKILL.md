@@ -17,12 +17,12 @@ Phase 2 of the dragon route. Build a portal, ignite it, walk through. Actual Net
 Mine it from a **ruined portal** — a structure that's just standing obsidian, no lava-casting. This is the only route: casting your own (water over lava) leaves every fresh obsidian block touching lava, and I refuse to mine fluid-adjacent blocks (it would flood or burn the dig), so a cast wall is unminable by design.
 
 1. `locate structure #minecraft:ruined_portal` — searches the whole family and returns the nearest. **Skip `ruined_portal_ocean`** (underwater) if the result names it; re-search or pick a land one — I can't dive.
-2. `gear wear diamond_pickaxe` (obsidian needs diamond), `goto` the portal coordinates.
-3. `mine(obsidian, 10)` — it digs the frame's obsidian on its own. ~9.4s per block is normal.
+2. `gear wear diamond_pickaxe` (obsidian needs diamond), `move_goto` the portal coordinates.
+3. `work_mine(obsidian, 10)` — it digs the frame's obsidian on its own. ~9.4s per block is normal.
 
 Notes:
-- A portal's frame mixes plain **obsidian** with **crying obsidian** (purple particles). Crying obsidian is a *different block and useless for a portal frame* — `mine(obsidian)` already ignores it, so a single portal may yield fewer than 10. If you come up short, `locate structure #minecraft:ruined_portal` again for the next nearest and top up.
-- If `mine` reports obsidian that "can't be broken here" with fluid beside it, that portal sits in a wet/lava pocket — relocate to a cleaner one rather than fighting the fluid.
+- A portal's frame mixes plain **obsidian** with **crying obsidian** (purple particles). Crying obsidian is a *different block and useless for a portal frame* — `work_mine(obsidian)` already ignores it, so a single portal may yield fewer than 10. If you come up short, `locate structure #minecraft:ruined_portal` again for the next nearest and top up.
+- If `work_mine` reports obsidian that "can't be broken here" with fluid beside it, that portal sits in a wet/lava pocket — relocate to a cleaner one rather than fighting the fluid.
 
 ## Portal build
 
@@ -36,11 +36,11 @@ Notes:
   build line obsidian 1 4 0 2 4 0 --into portal
   build at portal 120 64 -35
   ```
-- **Flint & steel**: craft `flint_and_steel` = 1 iron ingot + 1 flint, a 2×2 recipe (`inv craft` it; see the `containers` skill to lay a grid by hand). Flint drops from `mine(gravel)`, ~10%/block.
+- **Flint & steel**: craft `flint_and_steel` = 1 iron ingot + 1 flint, a 2×2 recipe (`inv craft` it; see the `containers` skill to lay a grid by hand). Flint drops from `work_mine(gravel)`, ~10%/block.
 - **Ignite**: `use block right 121 65 -35 --item minecraft:flint_and_steel` aimed at an **empty air cell INSIDE the frame** (a bottom one), not at the obsidian. The fire lands in that cell and the portal forms.
-- Enter: `goto` the portal cell and stand in it until the dimension changes (`get_self_status` confirms).
+- Enter: `move_goto` the portal cell and stand in it until the dimension changes (`status_self` confirms).
 
-## Packlist (verify with `get_self_status` before igniting)
+## Packlist (verify with `status_self` before igniting)
 
 | Item | Qty | Why |
 |---|---|---|
@@ -59,9 +59,9 @@ Notes:
 - **Don't dig straight down**; lava oceans sit under most terrain. Navigation bridges lava when it must — keep cobblestone stocked.
 - **Water doesn't exist here**: buckets won't place.
 - **Zombified piglins are pacifists until hit — and then they ALL swarm.** Never `fight attack` them.
-- **Ghasts** snipe from far; their fireballs can break the portal. On arrival, note the Nether-side portal coordinates (`get_self_status`) and report them to your owner. Overworld↔Nether coordinates map 8:1 horizontally.
+- **Ghasts** snipe from far; their fireballs can break the portal. On arrival, note the Nether-side portal coordinates (`status_self`) and report them to your owner. Overworld↔Nether coordinates map 8:1 horizontally.
 
 ## What to load next
 
-Standing in the Nether, packlist intact → mark phase 2 `completed`, `load_skill(name="blaze_rods")`. Load `combat_basics` too if you haven't — blazes are the first real combat test.
+Standing in the Nether, packlist intact → mark phase 2 `completed`, `skill_load(name="blaze_rods")`. Load `combat_basics` too if you haven't — blazes are the first real combat test.
 

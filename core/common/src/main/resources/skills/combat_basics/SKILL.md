@@ -9,7 +9,7 @@ Load this support skill before a combat-heavy phase.
 
 ## Choose and authorize targets
 
-Combat does not scan by mob type. First call `scan_nearby_entities`, select the exact entities you intend to attack, then pass 1-20 returned runtime integer IDs:
+Combat does not scan by mob type. First call `scan_entities`, select the exact entities you intend to attack, then pass 1-20 returned runtime integer IDs:
 
 ```
 fight attack --entity_ids 184 207 215
@@ -31,7 +31,7 @@ It also picks the strongest weapon you own **against that specific target**: a S
 
 ## Before the fight
 
-1. Use `get_self_status` to check HP, equipment, food, and dimension.
+1. Use `status_self` to check HP, equipment, food, and dimension.
 2. Carry a melee weapon, and carry a bow with arrows if the phase involves anything airborne. Without arrows, an unreachable target is simply reported as unreachable.
 3. Keep dense food available and heal with `inv eat` before critical HP. Combat does not interrupt an active eating, potion, bow, or other use action.
 
@@ -43,11 +43,11 @@ After every kill, target selection pauses while the body walks over newly spawne
 
 ## Retreat rules
 
-Combat runs in the background. Check `task_finished` and `get_self_status` between engagements.
+Combat runs in the background. Check `task_finished` and `status_self` between engagements.
 
 - HP <= 8: stop the task, move 20+ blocks away, heal, then scan again because runtime IDs may have changed.
 - Weapon about to break or no arrows: disengage and restock.
-- Before a long `goto`, clear or outrun active pursuers.
+- Before a long `move_goto`, clear or outrun active pursuers.
 - Avoid cliff edges, lava corridors, deep water, and cramped ledges where knockback or drops become unsafe.
 
 ## Aggro pitfalls

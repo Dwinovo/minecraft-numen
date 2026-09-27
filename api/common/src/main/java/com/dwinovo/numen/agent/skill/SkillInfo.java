@@ -8,7 +8,7 @@ import java.nio.file.Path;
  *
  * @param name        slug from the {@code name:} frontmatter key. Used both
  *                    as the lookup key in the registry and as the argument
- *                    the LLM passes to the {@code load_skill} tool.
+ *                    the LLM passes to the {@code skill_load} tool.
  * @param description short blurb from the {@code description:} frontmatter
  *                    key, surfaced in the {@code <available_skills>} XML
  *                    list. May be {@code null} — descriptionless skills are

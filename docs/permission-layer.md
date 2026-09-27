@@ -162,7 +162,7 @@ allow 行把日常动作一行一行写明:自然方块(谁都没放过)、她�
 
 | 档 | 动作 | 对应 Claude Code |
 |---|---|---|
-| 从不问 | scan、look_around、inspect_block、status、inv recipe、move route | Read、Grep、Glob |
+| 从不问 | scan、scan_around、scan_block、status、inv recipe、move route | Read、Grep、Glob |
 | 出厂 allow 行 | 挖自然方块、砍野树、用自己的方块搭路盖房、拆她自己放的、打敌对生物、宰野生动物、开关门与栅栏门、开容器、拿东西、执行只读只说话的指令 | 工作目录内的编辑 |
 | 问 | 挖玩家放的、挖带方块实体的、打有主人或有名字的、打村民、丢物品、在别人的东西旁放危险物,以及没有任何一行规则说到的动作 | `rm -rf`、`git push`、网络 |
 | 拒 | 主人写的 deny 行、observe 模式 | deny 规则 |
@@ -282,7 +282,7 @@ allow 行把日常动作一行一行写明:自然方块(谁都没放过)、她�
 路由这边只有两个预留位,现在都是空的:
 
 - `TerrainBill.Break.consent`:每条挖掘条目为什么需要同意,由权限层填,规划器自己不判。
-- `RouteSpec.Alter.ANY`:把需要同意的格子也算进路线,账单里单列;`goto route:rN` 选了这种
+- `RouteSpec.Alter.ANY`:把需要同意的格子也算进路线,账单里单列;`move_goto route:rN` 选了这种
   路线,执行开始前发起征询。
 
 `sacred` 不是权限,它是"别挖自己要站的那格",留在规划器。

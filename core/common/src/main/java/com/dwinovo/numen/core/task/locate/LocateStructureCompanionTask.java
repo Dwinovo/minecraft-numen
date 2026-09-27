@@ -212,7 +212,7 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
                             ? " — did you mean " + suggestion + "?"
                             : " — use a structure id like minecraft:fortress / "
                                     + "minecraft:stronghold, or a tag like #minecraft:village; "
-                                    + "load_skill(world_atlas) lists every id");
+                                    + "skill_load(world_atlas) lists every id");
             return null;
         }
         out.add(holder.get());
@@ -339,7 +339,7 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
             String dir = CompassUtil.compass(dx, dz);
             return "nearest " + r.structure + " at " + best.getX() + ","
                     + best.getY() + "," + best.getZ() + " (" + dir + ", ~" + dist
-                    + " blocks). goto the x/z (pick a sensible y for the terrain), "
+                    + " blocks). move_goto the x/z (pick a sensible y for the terrain), "
                     + "then scan_blocks to find its actual blocks.";
         }
         String dim = player.level().dimension().location().getPath();

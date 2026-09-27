@@ -51,7 +51,7 @@ class CommandRegistrationTest {
             action.set(g.server("only", "The only action.", OK).example("gt_closed only"));
         });
         assertThrows(IllegalStateException.class, () -> leaked.get().server("late", "Too late.", OK));
-        assertThrows(IllegalStateException.class, () -> action.get().promote("gt_closed_late", "Too late."));
+        assertThrows(IllegalStateException.class, () -> action.get().promote("Too late."));
     }
 
     @Test
@@ -174,12 +174,13 @@ class CommandRegistrationTest {
     void aShortcutNameThatIsTakenBlowsUpAtRegistration() {
         NumenApi numen = door();
         numen.registerCommands("gt_tool_a", "First.",
-                g -> g.server("go", "Go.", OK).example("gt_tool_a go").promote("gt_shared_tool", "Go."));
-        assertThrows(IllegalStateException.class, () -> numen.registerCommands("gt_tool_b", "Second.",
-                g -> g.server("go", "Go.", OK).example("gt_tool_b go").promote("gt_shared_tool", "Go too.")));
+                g -> g.server("go", "Go.", OK).example("gt_tool_a go").promote("Go."));
+        assertThrows(IllegalStateException.class, () -> numen.registerCommands("gt_tool", "Second.",
+                g -> g.server("a_go", "Go.", OK).example("gt_tool a_go").promote("Go too.")),
+                "gt_tool a_go 生成的工具名也是 gt_tool_a_go");
         assertThrows(IllegalStateException.class, () -> numen.registerCommands("gt_tool_c", "Third.", g -> {
-            Action a = g.server("go", "Go.", OK).promote("gt_tool_c_go", "Go.");
-            a.promote("gt_tool_c_again", "Again.");
+            Action a = g.server("go", "Go.", OK).promote("Go.");
+            a.promote("Again.");
         }), "一个动作只提升一次");
     }
 }

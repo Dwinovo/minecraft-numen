@@ -3,6 +3,7 @@ package com.dwinovo.numen.cli;
 import com.mojang.brigadier.ParseResults;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -67,7 +68,7 @@ public final class Action {
     private final List<String> examples = new ArrayList<>();
     private final List<String> notes = new ArrayList<>();
     private final List<String> seeAlso = new ArrayList<>();
-    private String toolName;
+    /** 提升时写的工具描述;没提升是 null。 */
     private String toolDescription;
     private Authority authority = Authority.HERS;
 
@@ -82,23 +83,45 @@ public final class Action {
     }
 
     /**
-     * 提升为快捷工具:模型的工具表里多一个 {@code toolName},描述是 {@code description},参数 schema 由这个
-     * 动作的参数表生成。调用它就是执行这个动作——同一个处理函数,同一份回执。
+     * 提升为快捷工具:模型的工具表里多一个工具,名字由路径生成({@link #toolNameOf}),描述是 {@code description},
+     * 参数 schema 由这个动作的参数表生成。调用它就是执行这个动作——同一个处理函数,同一份回执。
      */
-    public Action promote(String toolName, String description) {
+    public Action promote(String description) {
         group.requireOpen();
-        if (this.toolName != null) {
-            throw new IllegalStateException(path() + " 已经提升为 " + this.toolName + ",一个动作只提升一次");
+        if (toolDescription != null) {
+            throw new IllegalStateException(path() + " 已经提升为 " + toolName() + ",一个动作只提升一次");
         }
         if (description == null || description.isBlank()) {
-            throw new IllegalArgumentException(path() + " 提升为 " + toolName + " 却没写工具描述");
+            throw new IllegalArgumentException(path() + " 提升为快捷工具却没写工具描述");
         }
         if (params.stream().anyMatch(p -> p.type().readsInTree())) {
             throw new IllegalArgumentException(path() + " 有一个参数是本组的另一行命令,只在命令行上读得了,不能提升为快捷工具");
         }
-        this.toolName = toolName;
         this.toolDescription = description;
         return this;
+    }
+
+    /**
+     * 快捷工具名的唯一写法:{@code 组_动作}({@code move goto} 是 {@code move_goto})。一个能力只有一个名字,工具名与命令
+     * 两种写法可以机械地互推——反推是 {@link #promotedAs},和这里写在一起。
+     */
+    static String toolNameOf(String group, String action) {
+        return group + "_" + action;
+    }
+
+    /**
+     * 按 {@link #toolNameOf} 反推:{@code word} 是 {@code groups} 里哪个提升过的动作的工具名;不是任何一个的是 null。
+     * 模型把工具名写进 {@code command} 时,报错据此直接指给她两种写法。
+     */
+    static Action promotedAs(String word, Collection<CommandGroup> groups) {
+        for (CommandGroup group : groups) {
+            for (Action action : group.actions()) {
+                if (word.equals(action.toolName())) {
+                    return action;
+                }
+            }
+        }
+        return null;
     }
 
     /**
@@ -248,7 +271,7 @@ public final class Action {
 
     /** 提升成的工具名;没提升是 {@code null}。 */
     String toolName() {
-        return toolName;
+        return toolDescription == null ? null : toolNameOf(group.name(), name);
     }
 
     String toolDescription() {

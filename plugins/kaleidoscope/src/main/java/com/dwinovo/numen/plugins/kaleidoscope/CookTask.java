@@ -26,7 +26,7 @@ import java.util.Map;
  * 在一格锅上把一道菜从头做到尾。
  *
  * <h2>它不走路</h2>
- * 身体必须<b>已经</b>在够得着的距离内,否则当场教学失败让她先 {@code goto}——和 {@code use block}
+ * 身体必须<b>已经</b>在够得着的距离内,否则当场教学失败让她先 {@code move goto}——和 {@code use block}
  * 同一条规矩。寻路住在核心里,联动够不着,自己再发明一套到场方式就是第二个判据。
  *
  * <h2>能不能动这口锅,权限层说</h2>
@@ -83,7 +83,7 @@ final class CookTask implements Task {
             double away = Math.sqrt(cook.distanceToSqr(r.pos.getX() + 0.5, r.pos.getY() + 0.5, r.pos.getZ() + 0.5));
             return failed("the " + cooker.kind().id() + " at " + Cooker.where(r.pos) + " is "
                     + String.format("%.1f", away) + " blocks away — out of working reach."
-                    + " goto it first (goto stops right beside a solid block), then run "
+                    + " move_goto it first (move_goto stops right beside a solid block), then run "
                     + KaleidoscopeCommands.line(KaleidoscopeCommands.COOK) + " again.");
         }
         if (!permitted) {

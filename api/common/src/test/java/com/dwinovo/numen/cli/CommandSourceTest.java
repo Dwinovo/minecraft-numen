@@ -47,12 +47,12 @@ class CommandSourceTest {
                 src.reply(TaskResult.ok("reminder in " + args.get(AFTER) + "s: " + args.get(REASON),
                         Map.of("tool", src.toolName(), "task", src.taskName())).toJson());
             }, AFTER, REASON).example("gt_side remind 60 check the furnace")
-                    .promote("gt_side_remind", "Set a reminder, as a tool.");
+                    .promote("Set a reminder, as a tool.");
             g.client("jot", "Jot something down on the owner's client.", (src, args) -> {
                 CLIENT_CALLS.add(args);
                 src.reply(TaskResult.ok("jotted " + args.get(ID) + " x" + args.get(TRIES)).toJson());
             }, ID, TRIES).example("gt_side jot --id a1")
-                    .promote("gt_side_jot", "Jot something down, as a tool.");
+                    .promote("Jot something down, as a tool.");
         });
     }
 

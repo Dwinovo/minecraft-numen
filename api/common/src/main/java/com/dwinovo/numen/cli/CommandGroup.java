@@ -14,7 +14,7 @@ import java.util.Set;
  *           .example("ftbquests submit 15CDF6A098B95FDA");
  *     quests.client("list", "List the quests you can work on now.", Quests::list)
  *           .example("ftbquests list")
- *           .promote("list_quests", "…");
+ *           .promote("…");   // 快捷工具 ftbquests_list
  * });
  * }</pre>
  *

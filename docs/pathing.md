@@ -29,7 +29,7 @@
 
 ## 二、目标
 
-1. 地形几何只有一个来源：从方块碰撞箱推导。规划、执行、感知(`look_around`)读同一份。
+1. 地形几何只有一个来源：从方块碰撞箱推导。规划、执行、感知(`scan_around`)读同一份。
 2. 寻路成为独立的 Gradle 模块，只依赖原版 Minecraft;Numen 经端口接入，边界由编译器保证。
 3. 规划与执行分开;执行用同一份几何校验，失败交出结构化的结局，模块里不写给模型看的话。
 4. 能单独测：几何与规划跑单测，执行跑 GameTest,用一个普通假玩家，不用 `NumenPlayer`。
@@ -142,7 +142,7 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 ### Numen 适配层(`core/.../nav/`)
 
 端口的实现、路线簿 `RouteBook`(挂在同伴身上、编号跨重启)、账单与结局渲染成给模型看的英文、
-结局到 `FailureType` 的映射、建造工地的位置代价、`look_around` 读第 0 层。任务、命令、感知只经门面使用寻路。
+结局到 `FailureType` 的映射、建造工地的位置代价、`scan_around` 读第 0 层。任务、命令、感知只经门面使用寻路。
 
 ## 五、模块与构建
 
@@ -163,7 +163,7 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 
 | # | 事实 | 现在几处、矛盾在哪 | 归属 |
 |---|---|---|---|
-| 1 | 身体能不能占一格、头顶净空 ★ | `CellClass.canWalkThrough`(楼梯、门、梯子、藤蔓算可穿)与 `fullyPassable`(只收空格和地毯)两个谓词;上一格定价和 `headBonkClear` 用前者，疾跑、跑酷、`look_around` 用后者;建造表演、目标格判断、呼吸反射、船各自按碰撞箱另判 | 第 0 层 `Clearance` |
+| 1 | 身体能不能占一格、头顶净空 ★ | `CellClass.canWalkThrough`(楼梯、门、梯子、藤蔓算可穿)与 `fullyPassable`(只收空格和地毯)两个谓词;上一格定价和 `headBonkClear` 用前者，疾跑、跑酷、`scan_around` 用后者;建造表演、目标格判断、呼吸反射、船各自按碰撞箱另判 | 第 0 层 `Clearance` |
 | 2 | 迈步(走上还是跳上)★ | 楼梯格可穿又可站，同一级两条边两种价，执行靠跳;实体迈步高度全仓没读 | 第 0 层 `Stepping`,读身体的迈步属性 |
 | 3 | 能不能站 | `CellClass.canWalkOn` 的白名单;床、附魔台、炼药锅、灯笼、雪层 4–7 站不上，活板门恒为障碍;霜行者另有 `mustBeSolidToWalkOn`;跑酷单独排除耕地;寻路外还有 6 处 | 第 0 层 `Footing`;"不踩耕地"这类意愿归规格 |
 | 4 | 脚在哪一格(节点归格) | `Movement.feet`(+0.1251,半砖楼梯上抬)、`BlockHelper.playerFeet`(只认半砖)、挖矿直接用 `blockPosition()`;`MoveToCompanionTask.reached` 同时用两把尺 | 第 0 层 `Footing.cellOf`;假起点归第 2 层 |
@@ -195,7 +195,7 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 | 30 | 目标格保护(sacred)、目标移动与重根 | 分散在 `GoalCompiler`、`PlayerNav`、`Goal.keepsStop` | 第 2 层 |
 | 31 | 载具 | 起步时静默下载具，没报给模型 | `Body` 端口，记进结局 |
 
-另外，普查发现几处文档或注释与代码不符:`spatial-perception.md` 说 `look_around` 与寻路同口径(实际不是)、
+另外，普查发现几处文档或注释与代码不符:`spatial-perception.md` 说 `scan_around` 与寻路同口径(实际不是)、
 `BlockHelper.canHarvest` 的注释、`ContextFactory` 关于冻结快照的注释。重写后这些随旧代码一起删除。
 
 ## 七、现有代码里的经验

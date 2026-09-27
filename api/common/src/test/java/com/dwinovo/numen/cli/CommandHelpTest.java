@@ -44,7 +44,7 @@ class CommandHelpTest {
                     .note("Background work: the result arrives as a task_finished event.")
                     .note("Does not ask your owner.")
                     .seeAlso("gt_help note")
-                    .promote("gt_help_walk", "Walk somewhere, as a tool.");
+                    .promote("Walk somewhere, as a tool.");
             g.client("note", "Write a note.", (src, args) -> src.reply(TaskResult.ok("noted").toJson()), BODY)
                     .example("gt_help note buy more torches");
         });
@@ -135,6 +135,25 @@ class CommandHelpTest {
                 .integer("x", "X coordinate.", 0, 100)
                 .optionalString("mode", "How to walk. Values: walk or sprint. Omit to walk.")
                 .build(), ToolRegistry.get("gt_help_walk").parameterSchema());
+    }
+
+    @Test
+    void theShortcutIsNamedAfterItsPath() {
+        assertEquals("gt_help_walk", ToolRegistry.get("gt_help_walk").name(), "组_动作");
+    }
+
+    /** 工具名写进了命令行:报错直接指给她两种写法,不倾倒整份组列表。 */
+    @Test
+    void aToolNameWrittenAsACommandPointsToBothSpellings() {
+        String expected = "gt_help_walk is a tool name, not a command: call the tool gt_help_walk directly, or write "
+                + "the command `gt_help walk` (`gt_help walk --help` shows its arguments).";
+        for (CliFixture.Outcome typed : new CliFixture.Outcome[]{onClient("gt_help_walk"),
+                onClient("gt_help_walk 12 --mode sprint"), onServer("gt_help_walk 12")}) {
+            assertFalse(typed.success());
+            assertEquals(expected, typed.message());
+        }
+        String unknown = onClient("gt_help_run").message();
+        assertTrue(unknown.contains("Command groups:"), "对不上任何快捷工具的照旧是没有这个命令: " + unknown);
     }
 
     @Test

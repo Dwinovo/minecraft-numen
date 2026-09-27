@@ -217,12 +217,12 @@ class InventoryBlockTest {
         assertTrue(block.endsWith("</inventory>"), block);
     }
 
-    /** 这一句是它存在的理由:省掉一整轮 get_self_status。 */
+    /** 这一句是它存在的理由:省掉一整轮 status_self。 */
     @Test
     void itTellsHerNotToRediscoverThisWithATool() {
         assumeTrue(booted);
         String block = RuntimeState.renderInventory(snapshot(0, ItemStack.EMPTY));
-        assertTrue(block.contains("get_self_status"), block);
+        assertTrue(block.contains("status_self"), block);
         assertTrue(block.contains("use gui"), block);
     }
 

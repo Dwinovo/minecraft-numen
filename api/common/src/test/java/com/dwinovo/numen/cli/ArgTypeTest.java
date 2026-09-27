@@ -48,7 +48,7 @@ class ArgTypeTest {
                     src.reply(TaskResult.ok("made").toJson());
                 }, X, RECIPE, MODEL, HAVE_ONLY, SEARCH, DEPTH)
                         .example("gt_types make -12 stone \"抽象鸣潮 菲比.ysm\" --have_only true")
-                        .promote("gt_types_make", "Make something, as a tool."));
+                        .promote("Make something, as a tool."));
     }
 
     private static CommandArgs ran(String line) {

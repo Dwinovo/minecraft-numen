@@ -90,10 +90,10 @@ public abstract class GoToThenDoTask<R extends TaskRecord> extends AbstractCompa
                         t.getX() + 0.5, t.getY() + 0.5, t.getZ() + 0.5));
                 fail("target " + t.getX() + "," + t.getY() + "," + t.getZ() + " is "
                         + String.format("%.1f", dist) + " blocks away — out of working reach."
-                        + " goto it first (goto stops right beside a solid block), then call"
+                        + " move_goto it first (move_goto stops right beside a solid block), then call"
                         + " this again.", FailureType.OUT_OF_REACH);
             } else {
-                fail("out of working reach and this action does not travel — goto the spot"
+                fail("out of working reach and this action does not travel — move_goto the spot"
                         + " first, then call this again.", FailureType.OUT_OF_REACH);
             }
             return TaskState.FAILED;

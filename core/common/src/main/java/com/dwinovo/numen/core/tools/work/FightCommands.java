@@ -29,7 +29,7 @@ public final class FightCommands {
 
     private static final Param<List<EntityRef>> ENTITY_IDS = Param.optional("entity_ids",
             ArgType.list(ArgType.entity()), "The entities to fight, up to 20 distinct ones.")
-            .values("runtime entity ids from scan_nearby_entities")
+            .values("runtime entity ids from scan_entities")
             .whenOmitted("fight off every hostile near you");
 
     private FightCommands() {}
@@ -80,7 +80,7 @@ public final class FightCommands {
             ids.add(e.getId());
         }
         if (found.isEmpty()) {
-            src.reply(TaskResult.fail("none of " + named + " is here — scan_nearby_entities first, ids do not "
+            src.reply(TaskResult.fail("none of " + named + " is here — scan_entities first, ids do not "
                     + "survive restarts").toJson());
             return;
         }

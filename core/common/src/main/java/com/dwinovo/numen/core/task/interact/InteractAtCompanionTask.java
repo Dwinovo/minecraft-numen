@@ -109,7 +109,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
                 };
                 fail("aim " + aimLabel() + " is blocked from here — the crosshair lands on "
                         + blockerId + " at " + blocker.getX() + "," + blocker.getY() + ","
-                        + blocker.getZ() + " instead. " + blockerNote + " goto the target's"
+                        + blocker.getZ() + " instead. " + blockerNote + " move_goto the target's"
                         + " open side, then retry.", FailureType.OCCLUDED);
                 return TaskState.FAILED;
             }

@@ -281,7 +281,7 @@ public class GearGameTests {
 
     /**
      * {@code <worn>} 排在身体状态最前面:原版四件甲与假来源的格子都列出,空位写 empty,同名多格逗号并列;
-     * {@code get_self_status} 的 equipment 只剩两只手。
+     * {@code status_self} 的 equipment 只剩两只手。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_gear")
     public static void body_state_lists_every_worn_slot(GameTestHelper helper) {
@@ -289,10 +289,10 @@ public class GearGameTests {
         FakeGear gear = dress(companion);
         gear.ring(0).worn = new ItemStack(Items.AMETHYST_SHARD);
         companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
-        ToolRun status = call(companion, "get_self_status", args());
+        ToolRun status = call(companion, "status_self", args());
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(status.reply() != null, "get_self_status has not replied");
+            helper.assertTrue(status.reply() != null, "status_self has not replied");
             var s = com.google.gson.JsonParser.parseString(status.reply()).getAsJsonObject();
             String body = s.get("body_state").getAsString();
             // 原版最先登记,排在最前;别的来源(装了的饰品模组)可能夹在中间,所以假来源那段只看在不在 <worn> 里

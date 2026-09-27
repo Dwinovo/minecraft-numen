@@ -48,7 +48,7 @@ class ListFlagArgTypeTest {
                     src.reply(TaskResult.ok("picked").toJson());
                 }, BLOCKS, IDS, KEEP, ITEMS, COUNT)
                         .example("gt_flags pick iron_ore #minecraft:logs --ids 3 -4 --keep 1,2,3..4,5,6 chest --count 2")
-                        .promote("gt_flags_pick", "Pick some things, as a tool."));
+                        .promote("Pick some things, as a tool."));
     }
 
     private static CommandArgs ran(String line) {
