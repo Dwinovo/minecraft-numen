@@ -363,6 +363,33 @@ class BuildTaskRecordTest {
     }
 
 
+    /**
+     * 施工路上放下的非图纸块收场时都要拆掉,所以这条路放一块的价钱连拆它的那一下一起算:定价只在
+     * {@code CalculationContext.costOfPlacingAt} 一处,施工的路线规格只说"要拆回",不自己加价。
+     */
+    @Test
+    void buildRoutePricesAStrayBlockWithTakingItDownAgain() {
+        assumeTrue(booted, "Minecraft 引导不可用,跳过建造成本钉桩");
+        player.getInventory().items.set(1, new net.minecraft.world.item.ItemStack(Items.DIRT));
+        assertTrue(BuildCompanionTask.SPEC.takeBack(), "施工的路线规格要说明路上放下的块事后要拆");
+        BlockPos stray = new BlockPos(3, 65, 7);
+        FakeView view = new FakeView();
+        BuildCalculationContext keeps = new BuildCalculationContext(player, view, ChunkLoadedTest.ALWAYS,
+                true, NATURAL, com.dwinovo.numen.core.GateTestSupport.open(), Map.of(), Set.of(), true);
+        BuildCalculationContext takesBack = new BuildCalculationContext(player, view, ChunkLoadedTest.ALWAYS,
+                true, NATURAL.withTakeBack(true), com.dwinovo.numen.core.GateTestSupport.open(), Map.of(), Set.of(),
+                true);
+
+        var laid = com.dwinovo.numen.core.pathing.settings.ThrowawayBlocks.next(player);
+        double takeDown = com.dwinovo.numen.core.pathing.moves.MovementHelper.breakTicks(takesBack,
+                ((net.minecraft.world.item.BlockItem) laid).getBlock().defaultBlockState());
+        assertTrue(takeDown > NATURAL.breakPenalty(), "拆一块要花挖它的工夫,不只是罚金");
+        assertEquals(keeps.costOfPlacingAt(stray.getX(), stray.getY(), stray.getZ(), Blocks.AIR.defaultBlockState())
+                        + takeDown,
+                takesBack.costOfPlacingAt(stray.getX(), stray.getY(), stray.getZ(), Blocks.AIR.defaultBlockState()),
+                1e-9);
+    }
+
     @Test
     void buildContextRespectsBreakSettingForWrongTargetCells() {
         assumeTrue(booted, "Minecraft 引导不可用,跳过建造成本钉桩");

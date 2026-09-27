@@ -2,6 +2,7 @@ package com.dwinovo.numen.core.task.build;
 
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.build.Built;
+import com.dwinovo.numen.core.build.Placement;
 import com.dwinovo.numen.core.act.BlockDigger;
 import com.dwinovo.numen.core.pathing.bridge.ContextFactory;
 import com.dwinovo.numen.core.pathing.cache.LoadedOnlyView;
@@ -32,19 +33,19 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
 /**
- * 多格建造任务:赴工地、在工地里施工、逐批落位。
+ * 多格建造任务:走到工地外圈、一边绕圈一边逐批落位、收工撤掉路上垫下的块。
  *
- * <p><b>施工模型</b>——同伴走到工地,然后在工地范围内一批一批地把方块落进世界,
+ * <p><b>施工模型</b>——同伴走到工地外圈(开工时站在工地里就先走出去),然后按稳定的速率一批一批地把方块落进世界,
  * 伴随朝向、挥手、粒子与音效。她不逐格走到每个方块旁边,也不需要"够得着"。
  *
  * <p>这是刻意的产品选择,不是偷懒。逐格走位是<b>客户端自动化模组</b>的生存约束
@@ -55,38 +56,37 @@ import java.util.Map;
  * <p>保留下来的是真正属于我们的东西:生存模式逐格扣料、清障掉落、期望状态精确
  * 落位、以及"支撑还没长出来就先放着,下一遍再来"的分遍推进。
  *
+ * <p><b>施工与表演分开</b>——施工只管下一格放哪、放没放成、差什么;走动和放块的动画归演出组件
+ * {@link BuildShowmanship},挂在这件活上:施工每刻落完位后叫它走一步,从不问它走得怎样。它手里没有挖掘器、导航与放置
+ * 入口,绕圈改不了世界。真要挪身体的两处——开工时走出工地、收工时从自己垫的块上下来——是施工的事,在这里用正式寻路。
+ *
  * <p><b>分工</b>——本类只持有施工的调度状态机(相位、遍、层窗口、落位循环)与
  * 轮扫对账;单格判据在 {@link BuildCellRules},背包口径在 {@link BuildInventory},
  * 材料账本在 {@link BuildLedger},摆设与善后在 {@link BuildFixtures},演出在
- * {@link BuildShowmanship},顺序与节奏的纯函数在 {@link BuildOrder}。
+ * {@link BuildShowmanship},外圈的几何在 {@link SiteRing},顺序与节奏的纯函数在 {@link BuildOrder},
+ * 收不了尾时的缺格清单在 {@link BuildOutstanding},路上垫下的块在 {@link EnRouteBlocks}。
  */
 public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRecord>
         implements BuildPlacementRegistry.Provider, PlayerNav.ContextProvider {
 
     private static final double WALK_SPEED = 1.0;
 
-    /** 赴工地的时限:走不到就地开工,绝不因为路不通而不干活。 */
+    /** 走到外圈的时限:走不到就地开工,绝不因为路不通而不干活。 */
     private static final int TRAVEL_BUDGET_TICKS = 30 * 20;
-    /** 单刻落位硬上限:再快也不能一刻塞几百格,那是卡顿不是建造。 */
-    private static final int MAX_CELLS_PER_TICK = 8;
-    /** 一层砌完后停下端详的刻数——匀速是机器,有起伏才是人。 */
-    private static final int LAYER_PAUSE_TICKS = 18;
-    /** 巡视路线离工地包围盒的外扩格数。 */
-    private static final int SITE_MARGIN = 2;
     /**
-     * 踩进或穿过工地格的代价:一步抵一百格路。任何绕行都比穿过去便宜,所以赴工地、
-     * 巡场永远绕着图纸走;但它不是 FORBID——被外力挪进图纸里(挤、推、掉落)时,
-     * 她还得能走出来,走出来那几步就是她付的这份价。
+     * 踩进或穿过工地格的代价:一步抵一百格路。任何绕行都比穿过去便宜,所以走向外圈永远绕着图纸走;但它不是
+     * FORBID——开工时站在工地里、被外力挪进图纸里(挤、推、掉落)时,她还得能走出来,走出来那几步就是她付的这份价。
      */
     private static final double SITE_BODY_COST = ActionCosts.WALK_ONE_BLOCK_COST * 100;
-    /** 挑落脚点时往前看多少格,决定她该站到哪一侧去。 */
-    private static final int WANDER_LOOKAHEAD_CELLS = 120;
-    /** 换个地方站:让她绕着工地动起来,而不是钉在原地。 */
-    private static final int WANDER_INTERVAL_TICKS = 4 * 20;
-    /** 单次挪窝的步行时限。 */
-    private static final int WANDER_WALK_TICKS = 40;
     /** 连续几遍零进展才升级处置。 */
     private static final int MAX_BARREN_PASSES = 3;
+    /**
+     * 一遍零进展(又不是断料)之后,等多少刻再来下一遍。她自己在圈上,压不住格子;剩下的多半被人或活物站着,
+     * 裁决要等他们有机会走开——一遍全是"放不下去"会在同一刻跑完,不等的话三遍连着翻完只要三刻。
+     */
+    private static final int RETRY_WAIT_TICKS = 60;
+    /** 收工时从自己垫的块上下来,最远走开几格。 */
+    private static final int STEP_OFF_REACH = 4;
 
     /**
      * 写入标志:{@code UPDATE_CLIENTS}(同步给客户端)+ {@code UPDATE_KNOWN_SHAPE}
@@ -109,39 +109,50 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             net.minecraft.world.level.block.Block.UPDATE_CLIENTS
                     | net.minecraft.world.level.block.Block.UPDATE_KNOWN_SHAPE;
 
-    /** CONSENT:开工前整批问主人;TRAVEL:赴工地;WORK:施工。 */
-    private enum Phase { CONSENT, TRAVEL, WORK }
+    /**
+     * CONSENT:开工前整批问主人;TRAVEL:走到外圈(开工时在工地里就是走出去);WORK:施工;END:活到头了,撤掉路上
+     * 垫下的块再按结论收场。
+     */
+    private enum Phase { CONSENT, TRAVEL, WORK, END }
+
+    /** 干不下去时的结论:失败的理由与类型。撤完垫块才交出去。 */
+    private record Ending(String why, FailureType type) {}
 
     private final BuildCellRules rules;
     private final BuildInventory inv;
     private final BuildFixtures fixtures;
     private final BuildLedger ledger;
     private final BuildShowmanship show;
-    /** 清障与撤脚手架的唯一落点:方块只在 {@link BlockDigger} 里被破坏,权限层在那儿把门。 */
+    /** 清障与撤垫块的唯一落点:方块只在 {@link BlockDigger} 里被破坏,权限层在那儿把门。 */
     private final BlockDigger digger;
+    /** 路上垫下、收场时要撤的块。 */
+    private final EnRouteBlocks enRoute;
 
     private final Map<Long, BuildTaskRecord.Target> targetByPos = new LinkedHashMap<>();
-    /** 施工期寻路垫出来的非目标方块,收工时一并撤掉。 */
-    private final LinkedHashSet<BlockPos> scaffold = new LinkedHashSet<>();
     /** 本遍缺料统计(遍末报告用)。 */
     private final Map<Item, Integer> passMissing = new LinkedHashMap<>();
 
     private LongOpenHashSet observedCompleted;
     private boolean providerRegistered;
     private Phase phase = Phase.TRAVEL;
-    /** 动身赴工地时的 {@link #workTicks()}。 */
+    /** 动身走向外圈时的 {@link #workTicks()}。 */
     private long travelSince;
 
     /** 工地包围盒(全体目标格的最小/最大角)。 */
-    private BlockPos siteMin;
-    private BlockPos siteMax;
+    private final BlockPos siteMin;
+    private final BlockPos siteMax;
+    /** 包围盒外的那一圈:走出工地走到它上面,演出绕着它走。 */
+    private final SiteRing ring;
+    /** 走到外圈的目标(编译一次,每次走出去都用它)。 */
+    private GoalCompiler.Compiled toRing;
+    /** 走出工地没走成:她还在工地里时不再反复起寻路,就在原地接着盖;等她出了工地这一笔才清掉。 */
+    private boolean stuckInSite;
 
     /** 本遍施工顺序:低层先、层内清障→骨架→贴附、蛇形走位。 */
     private List<BuildTaskRecord.Target> order = List.of();
     /** 当前层在 order 里的区间,以及本层已经轮到过的格。 */
     private int layerStart;
     private int layerEnd;
-    private int layerCursor;
     private final LongOpenHashSet placedThisLayer = new LongOpenHashSet();
     /** 每刻该落几格(可以是小数),以及攒下来的落位信用。 */
     private double cellsPerTick;
@@ -168,34 +179,18 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     /**
      * 本遍已经证明<b>付不起剩下任何一格</b>——缺料这件事在这一刻就成立了,不必走完这遍。
      *
-     * <p>此前判"干不下去了"用的是"一遍走完没有进展",那是个<b>过程量</b>,时间分辨率
-     * 就是一遍;而"她付不起剩下任何一格"是个<b>状态量</b>,在她第一次付不起的那一刻
-     * 就已经成立。用过程量推断状态量必然慢一拍,而那一拍里所有的演出停顿(每层 18 刻、
-     * 收遍 60 刻)都在为一个早就成立的结论排队——玩家看到的是她溜达一分钟才说没料。
+     * <p>"一遍走完没有进展"是个<b>过程量</b>,时间分辨率就是一遍;"她付不起剩下任何一格"
+     * 是个<b>状态量</b>,在她第一次付不起的那一刻就已经成立。用过程量推断状态量必然慢一拍,
+     * 那一拍里的每一刻都在为一个早就成立的结论排队——玩家看到的是她绕着工地转一圈才说没料。
      */
     private boolean passStarved;
-    /** 本层开始时已落位的格数——演出停顿要"这一层真砌了东西"才付。 */
-    private int layerStartPlaced;
-    /**
-     * 暂停落位的刻数,两处用它:
-     *
-     * <p>其一是零进展遍后的冷却。一遍全是"放不下去"时会在同一 tick 内跑完(每格
-     * 都不耗预算),三遍连着翻完只要三刻——她根本来不及从压着的格子上挪开,就被
-     * 判成推不动了。裁决必须等身体真的动过。
-     *
-     * <p>其二是砌完一层后的停顿。恒定输出像打印机;停一拍、把刚砌好的那层扫一眼
-     * 再继续,才有人在干活的样子。
-     */
-    private int workPause;
+    /** 零进展遍之后还要等的刻数,见 {@link #RETRY_WAIT_TICKS}。 */
+    private int retryWait;
 
-    /** 挪窝状态。 */
-    private List<Vec3> wanderPoints = List.of();
-    private int wanderIndex;
-    /** 两次挪窝之间干了几刻活。 */
-    private int wanderTicks;
-    private Vec3 wanderTarget;
-    /** 动身去这次挪窝落点时的 {@link #workTicks()}。 */
-    private long wanderSince;
+    /** 干不下去时的结论,进了 END 才有;建完了是 null。 */
+    private Ending ending;
+    /** 收工时已经从垫块上下来过一次(走到了或走不通):不再起第二次,还托着她的那几格留在原处,照实交代。 */
+    private boolean steppedOff;
 
     private String note = "done";
 
@@ -213,11 +208,17 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         this.inv = new BuildInventory(player);
         this.fixtures = new BuildFixtures(player, record, inv);
         this.ledger = new BuildLedger(player, record, rules, inv, fixtures);
-        this.show = new BuildShowmanship(player, inv);
         this.digger = new BlockDigger(player);
         for (BuildTaskRecord.Target target : record.targets) {
             targetByPos.put(target.pos().asLong(), target);
         }
+        BlockPos[] box = siteBox(player, record.targets);
+        this.siteMin = box[0];
+        this.siteMax = box[1];
+        this.ring = SiteRing.around(siteMin, siteMax);
+        // 小活是一个动作,不演:不给演出那一圈,它就只转头挥手
+        this.show = new BuildShowmanship(player, inv, BuildOrder.instant(record.targets.size()) ? null : ring);
+        this.enRoute = new EnRouteBlocks(player, digger, pos -> targetByPos.containsKey(pos.asLong()));
     }
 
     @Override
@@ -266,8 +267,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     protected void onStart() {
         observedCompleted = new LongOpenHashSet();
         skippedPos = new LongOpenHashSet();
-        computeSite();
-        computeWanderPoints();
         registerProvider();
         rescanAll();
         rebuildOrder();
@@ -327,61 +326,69 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (phase == Phase.CONSENT) {
             return tickConsent();
         }
-        // 蹲姿由施工分支决定并保持:落位只在批次刻发生,若每 tick 复位成站立,
-        // 中间那些刻就会把她弹起来,看起来是在抖而不是在蹲着贴边放。
-        player.setShiftKeyDown(phase == Phase.WORK && show.crouching());
+        if (phase == Phase.END) {
+            return tickEnd();
+        }
         registerProvider();
         updateCompleted();
-        drainScaffold();
 
         // 每刻只轮扫一片,所以这个判定可能用着一轮之前的旧数据。收工是不可回头的
-        // 一步(撤脚手架、生成摆设、报成功),所以真要收工之前必须再精确核一次:
+        // 一步(撤垫块、生成摆设、报成功),所以真要收工之前必须再精确核一次:
         // 否则一格刚被玩家拆掉、轮扫还没转到它,她就会带着一个缺口报"全部达标"。
         if (r.completed() + skippedCells >= r.targets.size()) {
             rescanAll();
             if (r.completed() + skippedCells >= r.targets.size()) {
-                return finish();
+                return conclude(null);
             }
         }
-        return switch (phase) {
-            case CONSENT -> tickConsent();
-            case TRAVEL -> tickTravel();
-            case WORK -> tickWork();
-        };
+        return phase == Phase.TRAVEL ? tickTravel() : tickWork();
     }
 
     // ------------------------------------------------------------------
-    // 一、赴工地
+    // 一、走到外圈
     // ------------------------------------------------------------------
 
     /**
-     * 走到工地跟前。整个任务里唯一一次寻路——之后落位不再依赖走位,所以这一段
-     * 走成什么样都不影响能不能盖完:到了就开工,没到、走不通、超时,一样开工。
+     * 先挪身体再干活吗:她在工地里就得先走出去——站在图纸里会压住自己要放的格,墙砌起来还会把她关在里面;要绕圈的活
+     * 她还没站到外圈上,就走过去。
+     */
+    private boolean mustMove() {
+        return inSite() || (!BuildOrder.instant(r.targets.size()) && !show.onRing());
+    }
+
+    /** 她的身体碰着工地包围盒吗。 */
+    private boolean inSite() {
+        return new AABB(siteMin.getX(), siteMin.getY(), siteMin.getZ(),
+                siteMax.getX() + 1, siteMax.getY() + 1, siteMax.getZ() + 1).intersects(player.getBoundingBox());
+    }
+
+    /**
+     * 走到外圈,开工时站在工地里就是走出去。这是施工真要的一步,所以用正式寻路、可以改地形:路上垫下的块收场时撤掉
+     * ({@link EnRouteBlocks}),放一块的价钱连撤的那一下一起算({@link #SPEC})。走到了、走不通、超时,都开工——落位不
+     * 靠走位,绝不因为路不通而不干活。
      */
     private TaskState tickTravel() {
         if (nav == null) {
-            NavGoal goal = siteApproachGoal();
-            travelSince = workTicks();
-            nav = PlayerNav.to(player,
-                    () -> new GoalCompiler.Compiled(goal, protectedCells()),
-                    WALK_SPEED, () -> false, this);
-        }
-        return switch (nav.tick()) {
-            case ARRIVED, FAILED -> {
+            if (!mustMove()) {
                 beginWork();
-                yield TaskState.RUNNING;
+                return TaskState.RUNNING;
             }
-            case RUNNING -> {
-                // 预算只计"正在往那儿走"的刻(workTicks):等规划的刻长短看机器快慢,不计入。
-                if (workTicks() - travelSince > TRAVEL_BUDGET_TICKS) {
-                    com.dwinovo.numen.core.Constants.LOG.debug(
-                            "[numen-build] 赴工地超时,就地开工 feet={} 工地={}",
-                            player.blockPosition().toShortString(), siteMin.toShortString());
-                    beginWork();
-                }
-                yield TaskState.RUNNING;
+            travelSince = workTicks();
+            if (toRing == null) {
+                toRing = new GoalCompiler.Compiled(ring.goal(), protectedCells());
             }
+            GoalCompiler.Compiled goal = toRing;
+            nav = PlayerNav.to(player, () -> goal, WALK_SPEED, () -> false, this);
+        }
+        boolean done = switch (nav.tick()) {
+            case ARRIVED, FAILED -> true;
+            // 预算只计"正在往那儿走"的刻(workTicks):等规划的刻长短看机器快慢,不计入。
+            case RUNNING -> workTicks() - travelSince > TRAVEL_BUDGET_TICKS;
         };
+        if (done) {
+            beginWork();
+        }
+        return TaskState.RUNNING;
     }
 
     private void beginWork() {
@@ -389,43 +396,53 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         InputDriver.halt(player);
         phase = Phase.WORK;
         placeCredit = 0;
-        wanderTicks = 0;
-        wanderTarget = null;
-    }
-
-    /**
-     * 赴工地 = 走到巡视路线的<b>起点</b>,而不是"离工地中心多远以内"。后者的
-     * 半径圈把工地内部整个包含在内,她很可能在场内就算到位,一开工就压住格子。
-     */
-    private NavGoal siteApproachGoal() {
-        Vec3 first = wanderPoints.isEmpty()
-                ? Vec3.atBottomCenterOf(siteMin.offset(-SITE_MARGIN, 0, -SITE_MARGIN))
-                : wanderPoints.get(0);
-        return NavGoal.nearGround(BlockPos.containing(first), 2.0);
+        // 没走出去:就在原地接着盖,不反复起寻路去撞同一堵墙;压着的那几格收尾时如实交代
+        stuckInSite = inSite();
+        if (stuckInSite) {
+            com.dwinovo.numen.core.Constants.LOG.debug(
+                    "[numen-build] 没走出工地,就地开工 feet={} 工地={}..{}",
+                    player.blockPosition().toShortString(), siteMin.toShortString(), siteMax.toShortString());
+        }
     }
 
     // ------------------------------------------------------------------
     // 二、施工
     // ------------------------------------------------------------------
 
+    /**
+     * 施工的一刻:按稳定的速率落位,落完叫演出走一步。速率只由信用定——层与层之间不停顿,她走到哪一面、那一面就长。
+     */
     private TaskState tickWork() {
-        tickWander();
-        if (workPause > 0) {
-            workPause--;
+        if (!inSite()) {
+            stuckInSite = false;
+        } else if (!stuckInSite) {
+            // 被挤、被推、掉进了工地:先走出去,站在里面会压住要放的格
+            phase = Phase.TRAVEL;
+            InputDriver.halt(player);
+            player.setShiftKeyDown(false);
             return TaskState.RUNNING;
         }
-        // 速率可以小于每刻一格,所以用信用累积而不是"每 N 刻放一批":
-        // 生存慢到每十刻一格时,每一格都自成一批,节奏自然就散开了。
-        placeCredit += cellsPerTick;
-        int budget = (int) Math.min(placeCredit, MAX_CELLS_PER_TICK);
-        if (budget <= 0) {
-            return TaskState.RUNNING;
+        TaskState state = TaskState.RUNNING;
+        if (retryWait > 0) {
+            retryWait--;
+        } else {
+            // 速率可以小于每刻一格,所以用信用累积而不是"每 N 刻放一批":
+            // 生存慢到每十刻一格时,每一格都自成一批,节奏自然就散开了。
+            placeCredit += cellsPerTick;
+            int budget = (int) Math.min(placeCredit, BuildOrder.MAX_CELLS_PER_TICK);
+            if (budget > 0) {
+                state = runBatch(budget);
+            }
         }
-        return runBatch(budget);
+        if (phase == Phase.WORK) {
+            // 落完位再迈步:脸朝哪儿这一刻已经定了,腿按它换算
+            show.walk();
+        }
+        return state;
     }
 
     /**
-     * 落一批:在<b>当前最低的未完成层</b>里,挑离她最近的几格。
+     * 落一批:在<b>当前最低的未完成层</b>里,挑离她最近的几格;这一层轮完了接着翻下一层,预算用完或者这一遍到头为止。
      *
      * <p>顺序低层优先(上面的东西得有底下的东西撑着),层内则<b>跟着她的位置走</b>,
      * 不走固定蛇形。落位顺序跟她在哪无关的话,观感是"她在那边溜达,方块在这边冒出来"
@@ -435,41 +452,38 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private TaskState runBatch(int budget) {
         List<BlockPos> touched = new ArrayList<>();
         BlockState sample = null;
-        while (budget > 0) {
+        boolean passOver = false;
+        while (budget > 0 && !passStarved) {
             BuildTaskRecord.Target target = nearestPendingInLayer();
             if (target == null) {
-                break;
+                if (!advanceLayer()) {
+                    passOver = true;
+                    break;
+                }
+                continue;
             }
             BlockState placed = processCell(target);
-            layerCursor++;   // 无论成败都推进,免得同一格被反复挑中空转
             if (placed != null) {
                 budget--;
                 placeCredit -= 1.0;
                 touched.add(target.pos());
                 sample = placed;
             }
-            if (passStarved) {
-                break;   // 剩下一格都付不起,别再往下翻了
-            }
         }
         if (!touched.isEmpty()) {
             show.performWork(touched, sample);
         }
-        // 付不起剩下任何一格:当场收遍。走完剩下的层不会改变结论,只会让玩家多等
-        // (每层还有 18 刻的演出停顿),而结论在第一次付不起的那一刻就已经成立了。
-        if (passStarved) {
+        // 付不起剩下任何一格:当场收遍。结论在第一次付不起的那一刻就已经成立,走完剩下的层不会改变它。
+        if (passStarved || passOver) {
             return endPass();
-        }
-        if (layerCursor >= layerEnd) {
-            return advanceLayer();
         }
         return TaskState.RUNNING;
     }
 
     /**
-     * 当前层里离她最近的一格待建。
+     * 当前层里离她最近、这一层还没轮到过的一格待建;这一层都轮到过了是 null。
      *
-     * <p>{@code layerCursor} 只用来保证"这一层每格都轮到过一次",不决定顺序;
+     * <p>{@code placedThisLayer} 只保证"这一层每格都轮到过一次",不决定顺序;
      * 真正的顺序由距离决定,所以她走到哪里哪里就长。
      */
     private BuildTaskRecord.Target nearestPendingInLayer() {
@@ -503,22 +517,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         return best;
     }
 
-    /** 这一层扫完了:翻到下一层,或者本遍到顶收遍。 */
-    private TaskState advanceLayer() {
-        // 翻层停一拍,把刚砌好的这层扫一眼。恒定输出是打印机,有起伏才像人在干活。
-        //
-        // 但这一拍要<b>这一层真砌了东西</b>才付:一格没砌的层没什么可扫的,那个停顿就
-        // 只是在没干活的时候继续计费。缺料时她会把剩下的层一层层空翻过去,每层白停
-        // 18 刻——玩家看到的是她慢悠悠溜达,而她其实早就干不下去了。
-        if (r.placed() > layerStartPlaced) {
-            workPause = LAYER_PAUSE_TICKS;
-        }
-        layerStartPlaced = r.placed();
+    /** 这一层轮完了,翻到下一层;本遍的层都翻完了返回 false。 */
+    private boolean advanceLayer() {
         placedThisLayer.clear();
         layerStart = layerEnd;
-        layerCursor = layerStart;
         if (layerStart >= order.size()) {
-            return endPass();
+            return false;
         }
         int y = order.get(layerStart).pos().getY();
         int end = layerStart;
@@ -526,7 +530,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             end++;
         }
         layerEnd = end;
-        return TaskState.RUNNING;
+        return true;
     }
 
     /**
@@ -674,7 +678,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      *
      * <p>判据是<b>状态量</b>:剩下的待建格里,还有没有哪怕一格是她此刻付得起的。有——
      * 这一遍还能推进,照常走;一格都没有——这一遍已经证明是死的,不必再把剩下的层空翻
-     * 一遍(每层还要停 18 刻),更不必等三个零进展遍。
+     * 一遍,更不必等三个零进展遍。
      */
     private void noteShortage(Item item, int count) {
         boolean firstShortageThisPass = passMissing.isEmpty();
@@ -800,31 +804,29 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 一遍扫完的裁决。有进展就开下一遍(补漏);零进展先挪窝重试(剩下的多半
-     * 正压在她自己脚下),连着几遍颗粒无收才认账——缺料是邀请,不是错误。
+     * 一遍扫完的裁决。有进展就开下一遍(补漏);零进展先等一等再来(剩下的多半被人或活物站着),连着几遍颗粒无收
+     * 才认账——缺料是邀请,不是错误。
      */
     private TaskState endPass() {
         // 收遍要判完工,这一次必须精确——每刻那次只轮扫一片
         rescanAll();
         if (r.completed() + skippedCells >= r.targets.size()) {
-            return finish();
+            return conclude(null);
         }
         boolean progressed = r.completed() > passStartCompleted;
         com.dwinovo.numen.core.Constants.LOG.debug(
                 "[numen-build] 收遍 {}/{} 本遍+{} 缺料{} 零进展遍{} 断料{}",
                 r.completed(), r.targets.size(), r.completed() - passStartCompleted,
                 passMissing.size(), barrenPasses, passStarved);
-        // 断料:不重试、不挪窝。判据的分野是"这个恢复动作能不能改变卡住的原因"——
-        // 挪窝能把她的身体从格子里挪开,却改变不了背包里的任何东西。为一个改不了的
-        // 原因重试三遍,每遍还带 60 刻的挪窝和每层 18 刻的停顿,就是纯粹在耗玩家的
-        // 时间;而回执本来就写着"补料后重发同一调用",重发很便宜。
+        // 断料:不重试、不等。判据的分野是"这个恢复动作能不能改变卡住的原因"——等一等能让站着的人走开,
+        // 却改变不了背包里的任何东西。为一个改不了的原因重试三遍就是纯粹在耗玩家的时间;
+        // 而回执本来就写着"补料后重发同一调用",重发很便宜。
         //
         // 注意这里不看 progressed:本遍砌了二十格然后断料,和一格没砌就断料,对玩家
         // 是同一件事——她现在动不了了,而且再等下去也不会变。
         if (passStarved) {
-            fail("built " + r.completed() + "/" + r.targets.size()
-                    + " and ran out — " + ledger.missingReason(passMissing), FailureType.NO_MATERIAL);
-            return TaskState.FAILED;
+            return conclude(new Ending("built " + r.completed() + "/" + r.targets.size()
+                    + " and ran out — " + ledger.missingReason(passMissing), FailureType.NO_MATERIAL));
         }
         if (progressed) {
             barrenPasses = 0;
@@ -833,22 +835,18 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 // 有格子缺料、但不是断料(别的格还付得起,只是这一遍恰好没推进)。
                 // 先报干了多少,再报还差什么——玩家要的是"还要凑多少才能收工",
                 // 不是一句材料不足。已经砌好的部分留在世界里,不回滚。
-                fail("built " + r.completed() + "/" + r.targets.size()
-                        + " and ran out — " + ledger.missingReason(passMissing), FailureType.NO_MATERIAL);
-                return TaskState.FAILED;
+                return conclude(new Ending("built " + r.completed() + "/" + r.targets.size()
+                        + " and ran out — " + ledger.missingReason(passMissing), FailureType.NO_MATERIAL));
             }
-            // 挪了窝也补不上:留案再交代。盖不完就是盖不完,不粉饰成成功。
-            dumpOutstanding();
-            fail(diagnoseOutstanding() + "; built " + r.completed() + "/" + r.targets.size(),
-                    FailureType.NO_PATH);
-            return TaskState.FAILED;
+            // 等过了也补不上:走一遍缺格,留案再交代,失败的类型跟主导病因走。盖不完就是盖不完,不粉饰成成功。
+            BuildOutstanding outstanding = BuildOutstanding.survey(r.targets, rules, skippedPos, player.level(),
+                    damagedCells);
+            outstanding.log(r.completed(), r.targets.size(), player.blockPosition(), designFrame());
+            return conclude(new Ending(outstanding.describe(designFrame()) + "; built " + r.completed() + "/"
+                    + r.targets.size(), outstanding.failure()));
         }
-        // 零进展而且不是断料:那多半是她自己站在剩下的格子里。这时候挪窝是对症的
-        // ——身体挪开,格子就能放——所以给它三遍和走完一程的时间。
         if (!progressed) {
-            wanderTarget = null;
-            wanderTicks = WANDER_INTERVAL_TICKS;
-            workPause = WANDER_WALK_TICKS + 20;
+            retryWait = RETRY_WAIT_TICKS;
         }
         rebuildOrder();
         passStartCompleted = r.completed();
@@ -857,92 +855,76 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         return TaskState.RUNNING;
     }
 
+    /** 这件活照的施工图摆在哪儿、朝哪儿;当场执行的原语没有施工图,是 null。 */
+    private Placement designFrame() {
+        return r.site == null ? null : new Placement(r.site.anchor(), r.site.quarters());
+    }
+
+    // ------------------------------------------------------------------
+    // 三、收场
+    // ------------------------------------------------------------------
+
     /**
-     * 收不了尾时的留案:缺格按层分布 + 逐条实例(期望/实际/立得住吗/被谁占着)。
-     * 盖不完的病因只有两类——世界拒收,或者她自己压着——两者的修法完全不同,
-     * 不该靠单个失败样本去猜。
+     * 活到头了:建完({@code why} 为 null)或干不下去了。结论先记下,身体站住,进 END——撤完路上垫下的块再交出去,
+     * 撤了什么也跟着结论一起说。
      */
-    private void dumpOutstanding() {
-        Map<Integer, Integer> byLayer = new java.util.TreeMap<>();
-        List<BuildTaskRecord.Target> examples = new ArrayList<>();
-        for (BuildTaskRecord.Target target : r.targets) {
-            if (target.matches(rules.peek(target.pos()))) continue;
-            // 主动不去动的格不算"缺格":它们不在分母里,更不该在留案里冒充病灶
-            if (skippedPos.contains(target.pos().asLong())) continue;
-            byLayer.merge(target.pos().getY(), 1, Integer::sum);
-            if (examples.size() < 12) {
-                examples.add(target);
-            }
-        }
-        com.dwinovo.numen.core.Constants.LOG.info(
-                "[numen-build] 收不了尾 {}/{} feet={} 缺格分层={}",
-                r.completed(), r.targets.size(), player.blockPosition().toShortString(), byLayer);
-        for (BuildTaskRecord.Target target : examples) {
-            BlockPos pos = target.pos();
-            BlockState desired = target.desiredState();
-            com.dwinovo.numen.core.Constants.LOG.info(
-                    "[numen-build] 缺 {} 期望={} 实际={} 立得住={} 占身={} 有料={}",
-                    pos.toShortString(), desired, rules.peek(pos),
-                    desired.canSurvive(player.level(), pos), rules.blockedByEntity(pos, desired),
-                    !r.consumeMaterials || inv.hasItem(target.item(), true));
-        }
+    private TaskState conclude(Ending why) {
+        ending = why;
+        phase = Phase.END;
+        stopNav();
+        InputDriver.halt(player);
+        player.setShiftKeyDown(false);
+        return TaskState.RUNNING;
     }
 
     /**
-     * 收不了尾时的病因分类。
-     *
-     * <p>剩下的格子放不下去只有四种可能,而玩家的应对完全不同:让占着的人挪开、
-     * 让拆的人住手、去补材料、或者认下图纸里原版不允许的那几格。所以必须分开报,
-     * 不能笼统一句 "could not be placed" —— 判据本来就算出来了,裁决做了却不交代
-     * 理由,和没裁决一样难用。
+     * 撤掉路上垫下的块再收场。正站在垫块上时先下来——拆掉托着她的那块她会掉下去,而拆掉别的垫块可能正拆掉她下来
+     * 要走的路,所以下来之前一块都不拆。下不来就把托着她的那几格留在原处,照实交代。
      */
-    private String diagnoseOutstanding() {
-        int occupied = 0;
-        int unsupported = 0;
-        int broke = 0;
-        BlockPos sample = null;
-        for (BuildTaskRecord.Target target : r.targets) {
-            BlockPos pos = target.pos();
-            if (target.matches(rules.peek(pos))) {
-                continue;
-            }
-            // 主动不去动的格不参与病因分类。不排掉的话,玩家箱子压着的那七格
-            // blockedByEntity 为假、canSurvive 为真,会一路落进"她站不住"那一档——
-            // 而它们从头到尾没被建过。这正是上一轮要修掉的那个误归因换了张报文。
-            if (skippedPos.contains(pos.asLong())) {
-                continue;
-            }
-            if (sample == null) {
-                sample = pos;
-            }
-            BlockState desired = target.desiredState();
-            if (rules.blockedByEntity(pos, desired)) {
-                occupied++;
-            } else if (!desired.canSurvive(player.level(), pos)) {
-                unsupported++;
-            } else {
-                broke++;
-            }
+    private TaskState tickEnd() {
+        List<com.dwinovo.numen.core.pathing.execute.TerrainBill.Place> placed = placedOnTheWay();
+        if (!steppedOff && !enRoute.holdingHer(placed).isEmpty()) {
+            return stepOff(enRoute.standing(placed));
         }
-        // 分母里已经不含跳过的格,这里也不能含——否则数值虚高,玩家去找一批不存在的坑
-        int missing = r.targets.size() - r.completed() - skippedCells;
-        List<String> parts = new ArrayList<>();
-        if (occupied > 0) {
-            parts.add(occupied + " blocked by someone standing there — ask them to step aside");
+        stopNav();
+        enRoute.takeDown(placedOnTheWay());
+        InputDriver.halt(player);
+        if (ending != null) {
+            fail(ending.why(), ending.type());
+            return TaskState.FAILED;
         }
-        if (unsupported > 0) {
-            parts.add(unsupported + " that vanilla physics will not hold at that spot"
-                    + " (the blueprint asks for something impossible there)");
-        }
-        if (broke > 0) {
-            parts.add(broke + " that would not stay put"
-                    + (damagedCells > 0 ? " — something kept breaking the finished work" : ""));
-        }
-        return missing + " cell(s) unbuilt at " + (sample == null ? "?" : sample.toShortString())
-                + (parts.isEmpty() ? "" : ": " + String.join("; ", parts));
+        return finish();
     }
 
-    /** 收工:撤掉自己垫的脚手架、生成摆设、外围补水,放一把庆祝的粒子。 */
+    /**
+     * 从垫块上下来:只走不改的寻路,走到几格外一处脚下不是垫块的地方。这是收场真要的一步,但不再为它垫新的块。
+     */
+    private TaskState stepOff(java.util.Set<BlockPos> blocks) {
+        if (nav == null) {
+            NavGoal band = NavGoal.ring(com.dwinovo.numen.core.pathing.execute.PathExecutor.playerFeet(player),
+                    1.0, STEP_OFF_REACH);
+            NavGoal offBlocks = new NavGoal() {
+                @Override public boolean isAt(BlockPos feet) {
+                    return band.isAt(feet) && !blocks.contains(feet.below());
+                }
+
+                @Override public double heuristic(BlockPos from) {
+                    return band.heuristic(from);
+                }
+
+                @Override public BlockPos center() {
+                    return band.center();
+                }
+            };
+            nav = PlayerNav.toGoal(player, () -> offBlocks, WALK_SPEED, () -> false,
+                    PlayerNav.ContextProvider.DEFAULT);
+        }
+        if (nav.tick() != PlayerNav.Status.RUNNING) {
+            stopNav();
+            steppedOff = true;   // 下一刻重看她站在什么上面,还托着她的就留下
+        }
+        return TaskState.RUNNING;
+    }
 
     /**
      * 建完之后让世界落定一次:逐格告诉六邻"我在这儿",再通知一圈邻居。
@@ -994,15 +976,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         return settled;
     }
 
+    /** 建成收工:让世界落定一次、生成摆设、外围补水,放一把庆祝的粒子;路上垫下的块在这之前已经撤了。 */
     private TaskState finish() {
-        for (BlockPos pos : scaffold) {
-            if (targetByPos.containsKey(pos.asLong())) continue;
-            BlockState state = player.level().getBlockState(pos);
-            if (!state.isAir() && !(state.getBlock() instanceof LiquidBlock)) {
-                digger.destroyNow(pos);
-            }
-        }
-        scaffold.clear();
         int popped = settleWithWorld();
         fixtures.spawnAll();
         fixtures.nudgeSurroundingWater(siteMin, siteMax);
@@ -1049,133 +1024,22 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     // ------------------------------------------------------------------
-    // 三、在工地里动起来
-    // ------------------------------------------------------------------
-
-    /**
-     * 挪窝。走位交给寻路——巡视点之间只有几格,起一次 A* 的代价很低,而避障是
-     * 它天生就会的事;直线步进遇到墙、树、坎就一路顶着走满时限。
-     */
-    private void tickWander() {
-        if (wanderPoints.isEmpty()) {
-            return;
-        }
-        if (wanderTarget == null) {
-            if (++wanderTicks < WANDER_INTERVAL_TICKS) {
-                return;
-            }
-            wanderTicks = 0;
-            wanderTarget = nextWanderPoint();
-            return;
-        }
-        if (nav == null) {
-            Vec3 dest = wanderTarget;
-            wanderSince = workTicks();
-            nav = PlayerNav.to(player,
-                    () -> new GoalCompiler.Compiled(
-                            NavGoal.nearGround(BlockPos.containing(dest), 1.5),
-                            protectedCells()),
-                    WALK_SPEED, () -> false, this);
-        }
-        boolean done = switch (nav.tick()) {
-            case ARRIVED, FAILED -> true;
-            case RUNNING -> workTicks() - wanderSince > WANDER_WALK_TICKS;
-        };
-        if (done) {
-            stopNav();
-            InputDriver.halt(player);
-            wanderTarget = null;
-            wanderTicks = 0;
-            // 到一个点就停一拍看一眼,再去下一个——不是站四秒走两秒
-            workPause = Math.max(workPause, LAYER_PAUSE_TICKS);
-        }
-    }
-
-    /**
-     * 下一个落脚点:选离<b>接下来要盖的那一片</b>最近的外沿点。
-     *
-     * <p>这是"看起来在干活"与"看起来在遛弯"的分界。施工顺序是低层优先、层内蛇形,
-     * 接下来几十格在空间上本就连成一片;把落脚点绑到那一片,她就会自然地沿着正在
-     * 砌的那面墙挪——同样是绕外圈,但因果对上了。
-     */
-    private Vec3 nextWanderPoint() {
-        if (wanderPoints.isEmpty()) {
-            return null;
-        }
-        Vec3 focus = upcomingFocus();
-        if (focus == null) {
-            return wanderPoints.get(wanderIndex++ % wanderPoints.size());
-        }
-        Vec3 best = wanderPoints.get(0);
-        double bestDist = Double.MAX_VALUE;
-        for (Vec3 point : wanderPoints) {
-            double dx = point.x - focus.x;
-            double dz = point.z - focus.z;
-            double d = dx * dx + dz * dz;
-            if (d < bestDist) {
-                bestDist = d;
-                best = point;
-            }
-        }
-        return best;
-    }
-
-    /** 当前这一层还没建的部分的水平重心;没有待建格则 null。 */
-    private Vec3 upcomingFocus() {
-        double x = 0;
-        double z = 0;
-        int n = 0;
-        for (int i = layerStart; i < layerEnd && n < WANDER_LOOKAHEAD_CELLS; i++) {
-            BuildTaskRecord.Target t = order.get(i);
-            if (placedThisLayer.contains(t.pos().asLong())) {
-                continue;
-            }
-            x += t.pos().getX();
-            z += t.pos().getZ();
-            n++;
-        }
-        return n == 0 ? null : new Vec3(x / n + 0.5, siteMin.getY(), z / n + 0.5);
-    }
-
-    /**
-     * 巡视路线:绕工地包围盒<b>外沿</b>一圈,按顺时针顺序排点。
-     *
-     * <p>她隔空落位,本来就没有理由进场。站进去唯一的后果是把自己压着的那一格
-     * 锁死——身体占格是放置的硬前置(不能把方块塞进活物身体里),而她自己又不
-     * 知道该往哪让。实测就栽在这里:1275/1276,差的正是她脚上那一格。
-     *
-     * <p>让她始终在场外,这一整类失败就不存在了,不需要任何"挪窝解锁"的补救。
-     * 观感上也更像那么回事——绕着工地巡场,而不是站在半成品里面。
-     */
-    private void computeWanderPoints() {
-        int x0 = siteMin.getX() - SITE_MARGIN;
-        int x1 = siteMax.getX() + SITE_MARGIN;
-        int z0 = siteMin.getZ() - SITE_MARGIN;
-        int z1 = siteMax.getZ() + SITE_MARGIN;
-        // 步长随工地大小走:小屋子也要绕出几个点,大宅不至于绕出上百个
-        int span = Math.max(x1 - x0, z1 - z0);
-        int stride = Math.max(3, span / 8);
-        double y = siteMin.getY();
-        List<Vec3> points = new ArrayList<>();
-        for (int x = x0; x <= x1; x += stride) points.add(new Vec3(x + 0.5, y, z0 + 0.5));
-        for (int z = z0; z <= z1; z += stride) points.add(new Vec3(x1 + 0.5, y, z + 0.5));
-        for (int x = x1; x >= x0; x -= stride) points.add(new Vec3(x + 0.5, y, z1 + 0.5));
-        for (int z = z1; z >= z0; z -= stride) points.add(new Vec3(x0 + 0.5, y, z + 0.5));
-        wanderPoints = List.copyOf(points);
-    }
-
-    // ------------------------------------------------------------------
     // 施工顺序与工地
     // ------------------------------------------------------------------
 
-    private void computeSite() {
+    /** 工地包围盒:全体目标格的最小角与最大角;一格都没有时就是她脚下那一格。 */
+    private static BlockPos[] siteBox(NumenPlayer player, List<BuildTaskRecord.Target> targets) {
+        if (targets.isEmpty()) {
+            BlockPos feet = com.dwinovo.numen.core.pathing.execute.PathExecutor.playerFeet(player);
+            return new BlockPos[]{feet, feet};
+        }
         int minX = Integer.MAX_VALUE;
         int minY = Integer.MAX_VALUE;
         int minZ = Integer.MAX_VALUE;
         int maxX = Integer.MIN_VALUE;
         int maxY = Integer.MIN_VALUE;
         int maxZ = Integer.MIN_VALUE;
-        for (BuildTaskRecord.Target target : r.targets) {
+        for (BuildTaskRecord.Target target : targets) {
             BlockPos pos = target.pos();
             minX = Math.min(minX, pos.getX());
             minY = Math.min(minY, pos.getY());
@@ -1184,14 +1048,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             maxY = Math.max(maxY, pos.getY());
             maxZ = Math.max(maxZ, pos.getZ());
         }
-        if (minX > maxX) {
-            BlockPos feet = com.dwinovo.numen.core.pathing.execute.PathExecutor.playerFeet(player);
-            siteMin = feet;
-            siteMax = feet;
-            return;
-        }
-        siteMin = new BlockPos(minX, minY, minZ);
-        siteMax = new BlockPos(maxX, maxY, maxZ);
+        return new BlockPos[]{new BlockPos(minX, minY, minZ), new BlockPos(maxX, maxY, maxZ)};
     }
 
     /**
@@ -1220,7 +1077,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * <p>不许拆——否则她会为了抄近路把自己刚砌好的墙打个洞穿过去,一边建一边拆。
      * 不许埋——否则寻路会拿垫柱材料把某个目标格填上,那格从此和图纸对不上,还得
      * 先拆再放。
-     * 不许站进去——否则赴工地、巡场都会从还是空气的图纸格里抄近路,一条腿走到一半
+     * 不许站进去——否则走向外圈时会从还是空气的图纸格里抄近路,一条腿走到一半
      * 被截断,她就站在了自己要放的那格里:身体占着的格放不下,收工时报"有人站着"。
      * 日式小屋那次差的两格门口台阶,病根就是这个。前两条是硬禁,第三条是重价
      * ({@link #SITE_BODY_COST}):被外力挪进去时她还得走得出来。
@@ -1234,7 +1091,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     private LongOpenHashSet siteCells;
 
-    /** 把工地格的三条禁令并进这次寻路的规格——对本任务起的每一次寻路都生效。 */
+    /** 把工地格的三条禁令并进走向外圈那条寻路的规格(本任务作为成本上下文提供方,只供那一条)。 */
     private RouteSpec withSite(RouteSpec spec) {
         if (sitePins == null) {
             PositionCosts.Builder body = PositionCosts.builder();
@@ -1249,9 +1106,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     /** 把层窗口对准 order 里最低的那一层。 */
     private void resetLayerWindow() {
         placedThisLayer.clear();
-        layerStartPlaced = r.placed();   // 新一层的起点,演出停顿按它判"这层干活了没"
         layerStart = 0;
-        layerCursor = 0;
         layerEnd = 0;
         if (order.isEmpty()) {
             return;
@@ -1270,14 +1125,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 "[numen-build] 节奏 {} 格,{} 格/秒,预计 {} 秒",
                 cells, String.format("%.1f", cellsPerTick * 20),
                 (int) (cells / cellsPerTick / 20));
-    }
-
-    private void drainScaffold() {
-        for (BlockPos placed : BuildPlacementRegistry.drainScaffold(player)) {
-            if (!targetByPos.containsKey(placed.asLong())) {
-                scaffold.add(placed);
-            }
-        }
     }
 
     // ------------------------------------------------------------------
@@ -1303,7 +1150,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     /**
      * 每刻重扫多少格。全量重扫一张满额图纸(32768 格)每刻要三五万次方块查询、
      * 十万次属性查找,峰值吃掉整刻预算的一半,而它盯的那个量每刻最多变
-     * {@code MAX_CELLS_PER_TICK} 格——为看清 8 格的变化去重算三万格,这笔账不划算。
+     * {@link BuildOrder#MAX_CELLS_PER_TICK} 格——为看清 8 格的变化去重算三万格,这笔账不划算。
      *
      * <p>所以每刻只轮扫一片:自己动过的格由 {@link #markObserved} 即时更新,轮扫
      * 只负责发现<b>外力</b>改动(玩家拆墙、苦力怕炸)。满额图纸一轮 64 刻扫完,
@@ -1474,12 +1321,14 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 施工就是改地形:挖错块、搭脚手架、被自己封顶时拆一块出去,都是这个任务的本分。
+     * 走出工地、走到外圈这一段可以改地形:挖掉挡路的、垫块过坎,都是为了到场干活。路上垫下的块收场时都要撤掉
+     * ({@link EnRouteBlocks}),所以放一块的价钱连撤的那一下一起算({@link RouteSpec#takeBack})——定价只在那一处。
      * 起跳比平时贵得多:工地上下层之间蹦跶容易把刚砌的东西踩坏,能绕楼梯就绕。
      */
-    private static final RouteSpec SPEC = RouteSpec.defaults()
+    static final RouteSpec SPEC = RouteSpec.defaults()
             .withAlter(RouteSpec.Alter.NATURAL)
-            .withJumpPenalty(RouteSpec.defaults().jumpPenalty() + 10.0);
+            .withJumpPenalty(RouteSpec.defaults().jumpPenalty() + 10.0)
+            .withTakeBack(true);
 
     @Override
     public RouteSpec spec() {
@@ -1511,12 +1360,23 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         InputDriver.halt(player);
     }
 
+    /**
+     * 任何收场都撤路上垫下的块:自己走到头的在 END 里已经撤过(也先下来过),这里撤的是被叫停、超时时还立着的——
+     * 那时身体已不归这件活,没有机会先下来,托着她的那几格留在原处并说明。
+     */
     @Override
     protected void cleanup() {
         super.cleanup();
+        enRoute.takeDown(placedOnTheWay());
         unregisterProvider();
         InputDriver.halt(player);
         player.setShiftKeyDown(false);
+    }
+
+    /** 撤了哪些垫块、哪些留在原处以及为什么:每一种收场都说。 */
+    @Override
+    protected String closingNote() {
+        return enRoute.describe();
     }
 
     /**

@@ -89,7 +89,6 @@ final class MovementPlacement {
             state.setStatus(MovementStatus.UNREACHABLE);
             return PlaceResult.NO_OPTION;
         }
-        BuildPlacementRegistry.recordScaffold(player, placeAt);
         double reach = player.blockInteractionRange();
         Vec3 eye = eyePosition(player, wouldSneak);
         boolean found = false;
