@@ -9,6 +9,12 @@
 内容,经四个登记口插入(BrainChains 链、CompanionTaskFactory 任务执行器、
 ToolRegistry 工具、ReflexRegistry 本能名册)。第三方内容包与 core 地位平等。
 
+**寻路是独立模块,Numen 经端口接入;规划与执行共用一份地形几何。** `pathing` 只依赖原版,
+设计稿见 `docs/pathing.md`。同伴的身体就是它的身体端口(`NumenPlayer implements Body`:一副键盘、
+每刻一次物理步进);手、许可、垫路料、要避开的生物四个端口由 core 的适配层 `core/nav` 实现。
+core 的任务、命令、感知、反射只经门面、规格、目标与身体机制用寻路,地形几何、挖掘定价这类机器
+只在适配层里接;结局与实际账说给模型听只在 `NavText` 一处。
+
 ## 一、身体层:每 tick 一次竞价
 
 所有想控制身体的机制都是 `TaskChain`,每 tick 向 `CompanionBrain` 出价
@@ -236,9 +242,9 @@ deny 空;allow 为 `break(!placed & !self_placed & !block_entity & !#minecraft:b
 
 | 时机 | 做什么 |
 |---|---|
-| 规划 | 成本模型只读裁决:拒绝无穷大;要问的格在 `alter=any` 下按有限代价算进路线、其余规格下无穷大;`TerrainBill.Break.consent` 带着那一条征询 |
+| 规划 | 成本模型只读裁决:拒绝无穷大;要问的格在 `alter=any` 下按有限代价算进路线、其余规格下无穷大;路线上那一格的改动(`Edit.Dig`)带着许可给的凭据,就是那一条征询(`ConsentItem`) |
 | 执行开始 | 整条路线或整个动作过一次裁决,需要同意就发起一次征询;不是走到墙边才问 |
-| 每次动作 | `BlockDigger`(唯一挖掘落点)、攻击落点、放置落点强制,不发起征询;到这里还没授权就当动作失败,任务按既有机制重算或收尾 |
+| 每次动作 | 她的两只手(`CompanionHands`,导航、挖矿、`use block` 共用的唯一挖掘与放置落点)、攻击落点强制,不发起征询;到这里还没授权就当动作失败,任务按既有机制重算或收尾 |
 
 **各内容的接入点。** 内容只提出动作(`AbstractCompanionTask.permit`),判与问归权限层。mine 选目标
 不看权限,规格 `alter=any`,按"走过去 + 挖它"的同一套定价挑,动手前把挖掘交给权限层;goto、follow

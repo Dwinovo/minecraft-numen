@@ -805,7 +805,7 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
 后:
 
 ```
-move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--route <word>] [route flags] — Travel to one destination with full terrain pathfinding.
+move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--route <word>] [--near <integer>] [route flags] — Travel to one destination with full terrain pathfinding.
 ```
 
 `move goto --help` 里,不归组的参数之后接一小节 `Route flags:`,十三个标志各一行。

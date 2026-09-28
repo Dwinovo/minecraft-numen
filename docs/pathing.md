@@ -1,6 +1,7 @@
 # 寻路模块
 
-状态:设计稿(2026-09-27),按重写来做;设计选择已定，第三步的三批都已完成(见第十三节),下一步是切换。取代已删除的 `pathing-refactor-log.md` 与 `route-and-permission.md`;
+状态:已切换(2026-09-28)。设计选择已定,第三步的三批与第四步切换都已完成(见第十三节),Numen 只经本模块寻路,旧的
+`core/pathing` 已删除;下一步是合回 1.21.1、真机验。取代已删除的 `pathing-refactor-log.md` 与 `route-and-permission.md`;
 权限层另见 `permission-layer.md`。
 
 ## 一、为什么重做
@@ -132,21 +133,31 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 
 | 端口 | 模块向宿主要什么 | Numen 的实现 |
 |---|---|---|
-| `Body` | 身体实体(服务端玩家)、按键与视角输入、迈步高度、游戏模式 | `NumenPlayer` + `InputDriver` |
-| `TerrainPolicy` | 这一格能不能挖或放:放行 / 要问(带一个模块不解读的凭据)/ 拒绝 | 权限层 `Gate`;凭据就是 `ConsentItem` |
-| `Materials` | 下一块垫路料用哪个(没有就是没料;规划建成本模型时问一次)、拿到手(执行) | `ThrowawayBlocks` |
-| `Threats` | 此刻要避开的生物与各自的危险半径(规划建成本模型时问一次) | `Menace` |
-| `Effector` | 真的挖掉或放下一格，并如实返回成没成、为什么没成 | `BlockDigger` 与放置通道 |
-| `PlacementAdvice` | 这一格放下去应该是什么状态(给建造) | 建造任务 |
-| `Limits` | 服主总开关与上限(能不能挖、能不能放、超时) | Numen 配置 |
-| `NavLog` | 日志出口 | Numen 的日志 |
+| `Body` | 身体实体(服务端玩家)、它的那一副键盘(`Controls`)、此刻的身体快照 | `NumenPlayer implements Body`:键盘每刻在它自己的实体刻里经 `Physics.step` 落一次 |
+| `TerrainPolicy` | 这一格能不能挖或放:放行 / 要问(带一个模块不解读的凭据)/ 拒绝 | `GateTerrain`:权限层 `Gate` 快照;凭据就是 `ConsentItem` |
+| `Materials` | 下一块垫路料用哪个(没有就是没料;规划建成本模型时问一次) | `ThrowawayBlocks.next` |
+| `Threats` | 此刻要避开的生物与各自的危险半径(规划建成本模型时问一次) | `Menace.dangers` |
+| `Effector` | 真的挖掉或放下一格,并如实返回成没成、为什么没成 | `CompanionHands`:模块的 `PlayerHands` 外面每一下先问权限层 |
+
+设计时列过的 `PlacementAdvice`(这一格放下去应该是什么状态,给建造)、`Limits`(服主总开关与上限)、`NavLog`(日志出口)
+没有做,见第十三节切换记录。
 
 身体快照 `BodySnapshot` 不是端口，是宿主派发时从真实身体上抄下来交进来的值;规划与执行复核读同一个形状。
 
 ### Numen 适配层(`core/.../nav/`)
 
-端口的实现、路线簿 `RouteBook`(挂在同伴身上、编号跨重启)、账单与结局渲染成给模型看的英文、
-结局到 `FailureType` 的映射、建造工地的位置代价、`scan_around` 读第 0 层。任务、命令、感知只经门面使用寻路。
+- 端口的实现:`CompanionPorts`(组端口、组成本模型)、`CompanionHands`(`Effector`,连同挑工具拿到手上)、`GateTerrain`
+  (`TerrainPolicy`)、`ThrowawayBlocks`(`Materials`);`Threats` 由 `Menace.dangers` 答。
+- 一趟路 `Trip`:门面外面补上开走前问主人、没路时按放宽一档列候选、实际账并进旅程账、反射看得见在走的那一趟。
+- 说给模型:结局、实际账、身体动作、候选清单渲染成英文、结局到 `FailureType` 的映射,只在 `NavText`;旅程账 `Journey`。
+- 路线簿 `RouteBook`(挂在同伴身上、编号跨重启)、只搜不走的结论交付 `RouteQueries`。
+- 第 0 层按她的身体在活世界上答:她在哪个节点 `Feet`、她身边的地形 `Terrain`(待不待得住、能不能站、身体放不放得下、
+  种类、托着她的格、迈不迈得进下一列;`scan_around`、钓鱼站位、建造表演、跟随落脚都问它)。
+- 挖一格的定价 `DigQuote`(挖矿挑目标),建造工地的位置代价 `BuildSite`,船 `BoatNav`(读 `Terrain`)。
+
+core 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标(`search`)与身体机制(`body`:键盘、快捷栏、瞄准、准星);
+门面交出的数据里带的下层值类型(改动 `Edit`、实际账 `EditLedger`、生物 `Threat`、格子种类 `Semantics.Kind`)照读,
+地形几何、成本模型、执行层的机器只在适配层里接。
 
 ## 五、模块与构建
 
@@ -154,8 +165,9 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
   的方式打进两个加载器的发行包。包名 `com.dwinovo.numen.pathing`。
 - 依赖只有 Minecraft、fastutil、slf4j;不依赖 `ai`、`agent`、`api`、`core`。模块的 classpath 上没有 Numen,
   往外的依赖在编译期就过不去。
-- `core` 依赖 `pathing`;`api` 不需要它。
-- `core` 只经门面、规格、目标三个包使用寻路。
+- `api` 依赖 `pathing`(同伴的身体实现了身体端口),`core` 经它的依赖用上;类随 numen-api 的发行包平铺发出。
+  联动插件的编译类路径上另挂一份(`numen-plugin.gradle`)。模块本身还没有单独的 maven 坐标。
+- `core` 在适配层之外只经门面、规格、目标与身体机制使用寻路(见第四节 Numen 适配层)。
 - 以后单独发布时，门面与端口就是对外接口。
 
 ## 六、事实归属
@@ -192,7 +204,7 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 | 23 | 落沙与漏液 | 每个动作各开一个窗口判"头顶会不会塌",范围不同 | 第 1 层 `DigRules` |
 | 24 | 门能不能开 | 规划里门格对所有动作可穿，只有平移会开门;门板朝向不看;有红石的铁门当墙 | 第 0 层语义 + 第 1 层前提 + 第 3 层开门控制器 |
 | 25 | 疾跑与跳 | 水里定价不给疾跑折扣，执行照样疾跑;脱困反射、建造表演各自按跳 | 第 3 层 `SprintPolicy`,读第 1 层 |
-| 26 | 视角瞄点 | 执行器和放置各有一个步进器实例、各有一份"是否对准";一个管实体遮挡一个不管 | 第 3 层 `Aim` |
+| 26 | 视角瞄点 | 执行器和放置各有一个步进器实例、各有一份"是否对准";一个管实体遮挡一个不管 | 身体机制 `Aim`(执行层与宿主共用) |
 | 27 | 摔落上限与水桶 | 规划按血量、备货按规格原值、`willPlaceBucket` 当刻重算、`MLGChain` 按下落速度;"有没有水桶"四份 | 摔落上限 `BodySnapshot.maxFall`(按血量),规格只能收紧(`CostModel.fallLimit`);水桶留给第三批 |
 | 28 | 世界边界 | A* 整格在内，挖放内缩一格 | 第 0 层 |
 | 29 | 区块加载与搜索视图 | `CachedNavView` 在工作线程读活的区块调色板，不是注释说的冻结快照 | 第 2 层 `WorldSnapshot` |
@@ -330,7 +342,7 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
    - **第三批 执行与门面**:第 3、4 层(控制器、开门子控制器、段状态机、`Watchdog`、疾跑、视角、实际账、结局)、
      用普通假玩家跑的 GameTest 夹具，以及第八节模块 GameTest 场景清单全部通过。
 4. **切换**,一批:Numen 适配层实现各端口;任务、命令、感知、反射改用门面;现有测试迁完;删除旧的 `core/pathing`、
-   `BuildPlacementRegistry`、`BuildCalculationContext`;Numen 侧 GameTest 全部通过。
+   `BuildPlacementRegistry`、`BuildCalculationContext`;Numen 侧 GameTest 全部通过。(09-28 已完成,见第十三节)
 5. **合回 1.21.1,部署，真机验。**
 
 ## 十、写完的标准
@@ -343,9 +355,9 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 
 ## 十一、要同步修改的文档
 
-- `architecture-mind-model.md`:加一条"寻路是独立模块，Numen 经端口接入;规划与执行共用一份地形几何"。
-- `spatial-perception.md`:切换时把 `MovementHelper.canWalkOn` 等引用改成第 0 层。
-- `permission-layer.md`:开头对旧稿的引用已改指本文。
+- `architecture-mind-model.md`:加了一条"寻路是独立模块,Numen 经端口接入;规划与执行共用一份地形几何"(切换时已改)。
+- `spatial-perception.md`:`scan_around` 读她身边的地形 `Terrain`(第 0 层),旧类的引用已换掉(切换时已改)。
+- `permission-layer.md`:开头对旧稿的引用已改指本文;规划与每次动作两个时机改成端口 `TerrainPolicy`、`Effector` 的说法(切换时已改)。
 
 ## 十二、已定的设计选择
 
@@ -518,6 +530,48 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 - 现有寻路单测与 `MovementGameTests` 迁到新接口,逐条列去向(第八节"现有测试")。
 - 性能:许改地形时每个节点读九百次方块;若要快,先从同一次展开里各走法重复算的落脚与迈步下手,再看快照按区段解码。
 - 已知近似照旧:展开节点只叠"走到这里那一步"的改动;斜走找挡路的门按两端身体盒的包络找。
+
+### 切换(09-28,`pathing-rewrite` 之上 11bccd3a..)
+
+- **适配层**:见第四节。任务、命令、感知、反射只经门面、规格、目标与身体机制用寻路;挖一格的定价(`DigQuote`)、
+  她身边的地形(`Terrain`)、工地的位置代价(`BuildSite`)、挑工具拿到手上(`CompanionHands.takeToolFor`)都在适配层,
+  结局、实际账、身体动作说给模型听只在 `NavText`。
+- **身体**:`NumenPlayer implements Body`,一副键盘(`Controls`),每刻在自己的实体刻里经 `Physics.step` 落一次(`apply`
+  只给它调);导航、本能、各件活按的都是这一副。走、跳、潜行、停都改按键盘,`InputDriver` 只剩她自己的朝向、看向与驾船;
+  `holdInHand` 删去,拿东西到手统一走 `Hotbar`(`hold` 认副手、`grip` 交回拿在哪只手);`Aim` 移进 `body` 包,执行层与
+  宿主共用。每十刻一次的 `connection.resetPosition` 删去:它记下的位置只给移动包校验与连接自己的 tick 用,假玩家两样都
+  没有;区块跟随改由 `Physics.step` 每刻做。`BlockDigger` 的逐刻挖掘循环换成她的手(`CompanionHands`:`PlayerHands` 外面
+  套权限),`destroyNow`、`DigResult`、挡路回退留下;看不见目标时朝它身上够得着的那一点看(`Aim.reachable`),准星指出挡着的
+  那一格。`ToolSelect` 删去。
+- **第十二节在 Numen 侧**:`closeEnoughToSucceed`、近距重试、`STANCE_DUD` 与 10 刻宽限都删了;goto 给了 y 就是那一格,半空或
+  地里的 y 以失败收场,回执教她省掉 y 或给 `near`;下载具、拿工具或料、凭空取料经旅程账(`Journey`)写进回执。
+- **这一批修的**:
+  - 只许改自然地形而没有路时,`Diagnosis` 先问"连要主人同意的格也许改有没有路",再问料——"许改的不够"先报,设想出来的料
+    不让一条只缺料的路冒充成要同意的路。
+  - 换目标时交进来的还是同一个目标(目标是值),导航什么都不变。战斗走位每刻重编一次目标,原来每刻都把在飞的搜索作废、
+    她站着不动。
+  - 手上本来空着、只是换到另一个空格,不算身体动作。
+  - 挖矿只在站定之后原地挖:半路一脚踩进"够得着"的节点就停下挖,身体离节点中心可能差半格,而节点够不够得着按格心算;
+    走完那一趟,导航会在终点上把她停稳。为此暂停导航的 `Trip.pause` 没有用处了,删去。
+  - 战斗走位的躲避场不再收要打的那一只(它离多远由环的内沿管),环的内沿够不上外沿时归零:够得比她远的怪也走得进去打。
+  - 气泡柱算推人的水,末地传送门与折跃门算危险,出厂都绕开。
+  - 测试场景:塔改用基岩(原版空手也挖得动黑曜石,只是慢);竖井一例里原版 GameTest 给结构封的屏障顶正好压在她头顶,
+    明确清空。
+- **没做的**:第四节原表的 `PlacementAdvice` 没有做。旧代码里建造的这条路(`BuildPlacementRegistry` 选图纸方块、
+  `BuildCalculationContext` 给图纸格单独定价)实际不生效:走向外圈那条路按位置禁挖禁放全部图纸格,规划器先查这条禁令,
+  图纸格上既不会规划放块,也不会走到单独定价那一步;切换后 `BuildSite` 照旧禁,端口没有调用方,不加。
+  `Limits`、`NavLog` 同样没有用到的地方。模块还没有单独的 maven 坐标:类随 numen-api 的发行包平铺发出,
+  仓外插件拿不到它的依赖声明。
+- **性能**(测试服务器里同一场景、同一展开预算 10 万,旧实现在 dad87b84 上量,新实现的搜索此后没有改动;五次):
+  起伏地形 100 格不许改,旧 12–25 毫秒(2523 节点)、新 76–96 毫秒(2517 节点);许改自然地形,旧 16–29 毫秒(2771 节点)、
+  新 123–168 毫秒(4081 节点);实心石头挖 30 格隧道,旧 142–236 毫秒(10114 节点、40 步)、新 1.42–1.93 秒(33575 节点、
+  57 步)。每节点新的约慢四到五倍,隧道里还多展开三倍多的节点;快照拷贝 0.4–1.1 毫秒。优化先从第三批记下的两处下手
+  (同一次展开里各走法重复算的落脚与迈步、快照按区段解码),再看挖掘节点的估价为什么让隧道多展开这么多。
+- **测试迁移**:旧寻路单测 24 类与 `UnstuckDetectorTest` 共 217 条逐条对照,测的功能都在模块的单测、GameTest 或适配层单测里
+  有对应;缺的补在 `GoalsTest`、`SearchTest`、`CostModelTest`、`MovesTest`、`SteppingTest`、`DiggingTest`、`AimTest`、
+  `MaterialGameTests`、`AlterGameTests`、`DigGameTests`、`BuildSiteTest` 与 Numen 侧 GameTest。只钉内部常数的(`ActionCostsTest`、
+  像素角、半程路线的 5 格门槛)与按设计删掉的功能(固定半径躲避、两族目标的映射、静态截断、贴地带、`climbVines`、
+  服主总开关)不迁。`MovementGameTests` 31 条照旧从工具入口测,两条按第十二节第 3 条改成"给了 y 就是那一格"。
 
 ## 参考
 
