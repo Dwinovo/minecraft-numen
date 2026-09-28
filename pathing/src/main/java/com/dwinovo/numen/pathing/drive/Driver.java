@@ -173,8 +173,12 @@ public final class Driver {
     /**
      * 换目标(跟着的东西挪了):在走的这条路原本到得了目标,而它的终点在新目标里还算数、停在那儿没变贵
      * ({@link Goal#keepsStop}),就照走;否则扔掉它,从身体脚下按新目标重搜,旧路打折。在飞的搜索是按旧目标派的,作废。
+     * 交进来的还是同一个目标(目标是值,每刻重编一次也相等),什么都不变:在走的路与在飞的搜索照旧。
      */
     public void retarget(Goal next) {
+        if (next.equals(goal)) {
+            return;
+        }
         Goal before = goal;
         goal = next;
         bestEstimate = Double.POSITIVE_INFINITY;
