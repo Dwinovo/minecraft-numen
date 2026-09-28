@@ -3,12 +3,15 @@ package com.dwinovo.numen.pathing.gametest;
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.plan.Threat;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
+import com.dwinovo.numen.pathing.search.Searches;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
@@ -35,8 +38,16 @@ public class GoalGameTests {
     private static final String BATCH = "pathing_goals";
     private static final RouteSpec NATURAL = RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build();
 
+    /** 要拦住搜索线程池的用例单独一批,不挡着别的用例的搜索。 */
+    private static final String HELD_BATCH = "pathing_goals_held";
+
     @BeforeBatch(batch = BATCH)
     public static void settle(ServerLevel level) {
+        Worlds.settle(level);
+    }
+
+    @BeforeBatch(batch = HELD_BATCH)
+    public static void settleHeld(ServerLevel level) {
         Worlds.settle(level);
     }
 
@@ -160,14 +171,28 @@ public class GoalGameTests {
     }
 
     /**
-     * 去处是一片压力板(出厂规格排除机关格,搜索永远走不进去),身体被一下推着滑进了那一片;推的那一刻派出的搜索要搜很久才说
+     * 去处是一片压力板(出厂规格排除机关格,搜索永远走不进去),身体被一下推着滑进了那一片;推的那一刻派出的搜索要很久才说
      * 没路:它说没路的那一刻她已经停在去处里了,报到达。压力板被她踩下去是原版自己的事,不算进账。
+     *
+     * <p>"很久"不靠搜索慢:派搜索之前先让搜索的线程池每个线程都等着放行,推的那一刻派出的搜索排在它们后面;她停住了才放行。
+     * 放行最多等十秒,用例失败也不会一直占着线程池。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    @GameTest(template = ARENA, batch = HELD_BATCH, timeoutTicks = 600)
     public static void arrives_when_a_failing_search_returns_after_it_slid_in(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.fill(10, 1, 3, 14, 1, 7, Blocks.STONE_PRESSURE_PLATE);
         TestBody body = t.body(8, 1, 5);
+        CountDownLatch release = new CountDownLatch(1);
+        for (int i = 0; i < Runtime.getRuntime().availableProcessors(); i++) {
+            Searches.submit(cancelled -> {
+                try {
+                    release.await(10, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return null;
+            });
+        }
         boolean[] pushed = {false};
         t.go(body, Goals.near(t.at(12, 1, 5), 2), RouteSpec.defaults()).within(500)
                 .passive((before, now) -> before.is(Blocks.STONE_PRESSURE_PLATE) && now.is(Blocks.STONE_PRESSURE_PLATE))
@@ -176,6 +201,8 @@ public class GoalGameTests {
                         pushed[0] = true;
                         r.body.setDeltaMovement(0.9, 0, 0);
                         r.body.hurtMarked = true;
+                    } else if (r.body.onGround() && r.body.getDeltaMovement().horizontalDistanceSqr() < 1.0E-6) {
+                        release.countDown();
                     }
                 })
                 .arrives();
