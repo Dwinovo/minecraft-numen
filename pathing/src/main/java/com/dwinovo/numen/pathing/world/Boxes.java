@@ -30,12 +30,32 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  *
  * <p>穿冰霜行者的身体({@link BodyStats#frostWalker})走到静水边,原版把它脚下那一层一圈上面是空气的静水源冻成霜冰;
  * 这里对它把这样的水面答成一整块。
+ *
+ * <h2>全空与整块</h2>
+ * 绝大多数格的碰撞箱要么什么也没有,要么正好是这一格整块。算碰撞箱的同时就从同一份结果推出它是哪一类({@link Fill}):
+ * 迈步要看的格全是这两类时按整数格子推导({@link Stepping}),其余照旧逐个碰撞箱比;两条路算出的结果完全相同,由单测对
+ * 全部方块状态与全部方向逐一核对。落脚与净空一次只看一两格,按格分两条路实测没有更快,只走碰撞箱。
  */
 final class Boxes {
 
+    /** 一格的碰撞箱是哪一类。 */
+    enum Fill {
+        /** 没有碰撞箱。 */
+        EMPTY,
+        /** 正好一个碰撞箱,就是这一格整块。 */
+        WHOLE,
+        /** 别的形状。 */
+        PARTIAL
+    }
+
+    /** 一格的碰撞箱,连同它是哪一类。 */
+    record Shape(AABB[] boxes, Fill fill) {}
+
     private static final AABB[] NONE = new AABB[0];
     private static final AABB[] FULL = {new AABB(0, 0, 0, 1, 1, 1)};
-    private static final ConcurrentHashMap<BlockState, AABB[]> CACHE = new ConcurrentHashMap<>();
+    private static final Shape EMPTY = new Shape(NONE, Fill.EMPTY);
+    private static final Shape WHOLE = new Shape(FULL, Fill.WHOLE);
+    private static final ConcurrentHashMap<BlockState, Shape> CACHE = new ConcurrentHashMap<>();
 
     private Boxes() {}
 
@@ -45,18 +65,35 @@ final class Boxes {
      * @param feetY 身体的脚此刻(或设想中)的绝对高度:碰撞箱随身体变化的方块按它回答"身体在不在它上面"
      */
     static AABB[] at(BlockGetter level, BodyStats body, int x, int y, int z, BlockState state, double feetY) {
+        return shape(level, body, x, y, z, state, feetY).boxes();
+    }
+
+    /** 同 {@link #at},连同它是全空、整块还是别的形状。 */
+    static Shape shape(BlockGetter level, BodyStats body, int x, int y, int z, BlockState state, double feetY) {
         if (body.walksOnPowderSnow() && state.is(Blocks.POWDER_SNOW)) {
             // 原版 isAbove:脚底高过顶面减去同一个容差
-            return feetY > y + 1 - Footing.EPSILON ? FULL : NONE;
+            return feetY > y + 1 - Footing.EPSILON ? WHOLE : EMPTY;
         }
         if (body.frostWalker() && freezes(level, x, y, z, state)) {
-            return FULL;
+            return WHOLE;
         }
         if (Semantics.dynamicCollision(state)) {
-            return split(state.getCollisionShape(level, new BlockPos(x, y, z), bodyAt(feetY)));
+            return classify(split(state.getCollisionShape(level, new BlockPos(x, y, z), bodyAt(feetY))));
         }
         // 与原版给这类状态缓存碰撞箱的是同一次调用:不看世界、不看身体
-        return CACHE.computeIfAbsent(state, s -> split(s.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO)));
+        return CACHE.computeIfAbsent(state,
+                s -> classify(split(s.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO))));
+    }
+
+    /** 从碰撞箱推出它是哪一类:只有一个且正好是整格的算整块。 */
+    private static Shape classify(AABB[] boxes) {
+        if (boxes.length == 0) {
+            return EMPTY;
+        }
+        if (boxes.length == 1 && boxes[0].equals(FULL[0])) {
+            return WHOLE;
+        }
+        return new Shape(boxes, Fill.PARTIAL);
     }
 
     /**

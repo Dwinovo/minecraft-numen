@@ -1,5 +1,10 @@
 package com.dwinovo.numen.pathing.world;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.LongStream;
+
 import com.dwinovo.numen.pathing.TestWorld;
 import com.dwinovo.numen.pathing.Vanilla;
 import com.dwinovo.numen.pathing.world.Stepping.Step;
@@ -14,11 +19,13 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.block.state.properties.SlabType;
+import net.minecraft.world.phys.AABB;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static com.dwinovo.numen.pathing.Vanilla.SURVIVAL;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -212,5 +219,136 @@ class SteppingTest {
                 "看的范围里脚下没有东西");
         TestWorld wall = ground().set(AT.east(), Blocks.STONE.defaultBlockState());
         assertTrue(Double.isNaN(Stepping.walkOff(wall, SURVIVAL, 0, Y, 0, 1, 0, Y - 4)), "要跳才过得去");
+    }
+
+    // ==================== 整块位图与逐个碰撞箱答得一模一样 ====================
+
+    /** 八个方向:四个正方向、四个斜方向。 */
+    private static final int[][] DIRECTIONS = {{0, -1}, {0, 1}, {1, 0}, {-1, 0}, {1, -1}, {-1, -1}, {1, 1}, {-1, 1}};
+    private static final AABB UNIT = new AABB(0, 0, 0, 1, 1, 1);
+
+    /**
+     * 迈步要看的格全是全空或整块时,推导按每列一个整块位图走({@link Stepping.Columns});否则把碰撞箱逐个比
+     * ({@link Stepping.Pieces})。同一份几何交给两种记法,推导的每一步(取样点、最后的脚高、最大的坎、最高点与它在哪)与结论
+     * (走、跳、过不去,走出边沿落到多高)必须完全相同。起点脚在 Y;八个方向;落到低一格、同一格、高一格的节点,以及不指定终点
+     * 地走出边沿。
+     *
+     * <p>正方向把收进来的两列每一格的全空、整块都穷举。斜方向收四列,全部穷举有两亿多种,改为穷举身体碰得到的格:起点脚在
+     * 整数高度、整块的顶也都是整数,途中的脚高只会是整数(起跳最多升 1.25 格,也就最多到 Y + 1),头顶最多到 Y + 2.8,
+     * 脚下看到的最低是收进来的最低一格——窗口从那一格到 Y + 2;窗口外的格只影响取样点,各按全空、全整块两种摆。
+     */
+    @Test
+    void wholeBlockColumnsAnswerExactlyLikeTheirBoxes() {
+        BodyStats body = SURVIVAL;
+        double jump = body.jumpHeight(1.0);
+        double height = body.height(net.minecraft.world.entity.Pose.STANDING);
+        for (int[] d : DIRECTIONS) {
+            int dx = d[0];
+            int dz = d[1];
+            boolean diagonal = dx != 0 && dz != 0;
+            for (int to = Y - 1; to <= Y + 1; to++) {
+                int y0 = Footing.cellOf(Math.min(Y, to)) - 1;
+                int y1 = net.minecraft.util.Mth.floor(Math.max(Y, to) + jump + height) + 1;
+                double toFeet = to;
+                exhaust(dx, dz, y0, y1, diagonal ? Y + 2 : y1, (columns, pieces) -> {
+                    sameWalk(Stepping.walk(pieces, body, jump, 0, Y, 0, dx, dz), Stepping.walk(columns, body, jump, 0, Y, 0, dx, dz));
+                    assertEquals(Stepping.between(pieces, body, jump, 0, Y, 0, dx, dz, toFeet),
+                            Stepping.between(columns, body, jump, 0, Y, 0, dx, dz, toFeet));
+                });
+            }
+            for (int lowest : diagonal ? new int[] {Y - 1} : new int[] {Y - 1, Y - 3}) {
+                int y0 = Footing.cellOf(Math.min(Y, lowest)) - 1;
+                int y1 = net.minecraft.util.Mth.floor(Y + jump + height) + 1;
+                exhaust(dx, dz, y0, y1, diagonal ? Y + 2 : y1, (columns, pieces) -> {
+                    sameWalk(Stepping.walk(pieces, body, jump, 0, Y, 0, dx, dz), Stepping.walk(columns, body, jump, 0, Y, 0, dx, dz));
+                    assertEquals(0, Double.compare(Stepping.walkOff(pieces, body, jump, 0, Y, 0, dx, dz),
+                            Stepping.walkOff(columns, body, jump, 0, Y, 0, dx, dz)));
+                });
+            }
+        }
+    }
+
+    /**
+     * 同上,起点脚在格子中间的高度(0.25、0.5):推导照样一模一样。实际走到整块位图时起点总在整数高度——托着脚的那一块也在
+     * 收进来的格里,它是整块,脚就在整数高度;这里把推导本身在任意脚高上核一遍。正方向,收进来的格全部穷举。
+     */
+    @Test
+    void wholeBlockColumnsAnswerExactlyLikeTheirBoxesFromAnyFeetHeight() {
+        BodyStats body = SURVIVAL;
+        double jump = body.jumpHeight(1.0);
+        double height = body.height(net.minecraft.world.entity.Pose.STANDING);
+        for (int[] d : Arrays.copyOf(DIRECTIONS, 4)) {
+            int dx = d[0];
+            int dz = d[1];
+            for (double from : new double[] {Y + 0.25, Y + 0.5}) {
+                for (double to : new double[] {from - 1, from, from + 1, Y, Y + 1}) {
+                    int y0 = Footing.cellOf(Math.min(from, to)) - 1;
+                    int y1 = net.minecraft.util.Mth.floor(Math.max(from, to) + jump + height) + 1;
+                    exhaust(dx, dz, y0, y1, y1, (columns, pieces) -> {
+                        sameWalk(Stepping.walk(pieces, body, jump, 0, from, 0, dx, dz),
+                                Stepping.walk(columns, body, jump, 0, from, 0, dx, dz));
+                        assertEquals(Stepping.between(pieces, body, jump, 0, from, 0, dx, dz, to),
+                                Stepping.between(columns, body, jump, 0, from, 0, dx, dz, to));
+                        assertEquals(0, Double.compare(Stepping.walkOff(pieces, body, jump, 0, from, 0, dx, dz),
+                                Stepping.walkOff(columns, body, jump, 0, from, 0, dx, dz)));
+                    });
+                }
+            }
+        }
+    }
+
+    private interface Check {
+        void run(Stepping.Obstacles columns, Stepping.Obstacles pieces);
+    }
+
+    /**
+     * 朝 {@code (dx, dz)} 走一步要收的那几列、{@code y0} 到 {@code y1} 的格:{@code y0} 到 {@code top} 这个窗口里每格的全空、
+     * 整块逐一穷举,窗口外的格全空、全整块各摆一遍;每种摆法交给 {@code check},两种记法各一份。
+     */
+    private static void exhaust(int dx, int dz, int y0, int y1, int top, Check check) {
+        int x0 = Math.min(0, dx);
+        int z0 = Math.min(0, dz);
+        int nx = Math.abs(dx) + 1;
+        int nz = Math.abs(dz) + 1;
+        int width = top - y0 + 1;
+        int bits = width * nx * nz;
+        boolean[] backgrounds = top < y1 ? new boolean[] {false, true} : new boolean[] {false};
+        for (boolean background : backgrounds) {
+            LongStream.range(0, 1L << bits).parallel().forEach(layout -> {
+                Stepping.Columns columns = new Stepping.Columns(x0, z0, nx, nz, y0);
+                List<AABB> boxes = new ArrayList<>();
+                int column = 0;
+                for (int cx = x0; cx < x0 + nx; cx++) {
+                    for (int cz = z0; cz < z0 + nz; cz++) {
+                        for (int cy = y0; cy <= y1; cy++) {
+                            boolean whole = cy <= top ? (layout >> (column * width + cy - y0) & 1) != 0 : background;
+                            if (whole) {
+                                columns.set(cx, cy, cz);
+                                boxes.add(UNIT.move(cx, cy, cz));
+                            }
+                        }
+                        column++;
+                    }
+                }
+                try {
+                    check.run(columns, new Stepping.Pieces(boxes));
+                } catch (AssertionError e) {
+                    throw new AssertionError("方向 " + dx + "," + dz + " 摆法 " + Long.toBinaryString(layout)
+                            + " 窗口外" + (background ? "整块" : "全空") + ":" + e.getMessage(), e);
+                }
+            });
+        }
+    }
+
+    private static void sameWalk(Stepping.Walk expected, Stepping.Walk actual) {
+        if (expected == null || actual == null) {
+            assertEquals(expected, actual, "一边半路就够不着了,另一边没有");
+            return;
+        }
+        assertArrayEquals(expected.points(), actual.points(), "取样点");
+        assertEquals(0, Double.compare(expected.feet(), actual.feet()), "最后的脚高");
+        assertEquals(0, Double.compare(expected.biggestStep(), actual.biggestStep()), "最大的坎");
+        assertEquals(0, Double.compare(expected.peak(), actual.peak()), "最高的脚高");
+        assertEquals(expected.peakAt(), actual.peakAt(), "最高点在第几个取样点");
     }
 }
