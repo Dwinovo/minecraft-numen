@@ -18,6 +18,7 @@ import com.dwinovo.numen.pathing.plan.WorldView;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.Bounds;
 import com.dwinovo.numen.pathing.world.BodyStats;
+import com.dwinovo.numen.pathing.world.Recall;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
@@ -98,7 +99,7 @@ public final class AStar {
 
         int expanded = 0;
         boolean skippedUnloaded = false;
-        Probe probe = new Probe(view);
+        Probe probe = new Probe(view, new Recall(body));
         while (!open.isEmpty()) {
             if (cancelled.getAsBoolean()) {
                 return new SearchResult(SearchResult.Stop.CANCELLED, null);
@@ -123,9 +124,9 @@ public final class AStar {
             WorldView here = current.via == null ? probe : EditedView.after(probe, current.via.edits());
             for (Move move : Moves.ALL) {
                 for (Heading heading : move.headings()) {
-                    probe.unknown = false;
+                    probe.recall.clearUnloaded();
                     Premise premise = move.premise(model, here, from, current.stance, heading);
-                    if (probe.unknown) {
+                    if (probe.recall.unloaded()) {
                         skippedUnloaded = true;
                         continue;
                     }
@@ -172,23 +173,28 @@ public final class AStar {
     }
 
     /**
-     * 前提读世界经过的这一层:照读快照,读到没加载的列就记一笔。快照之外读出来的是空气,那不是测量——一步的前提读到了它,
-     * 结论就不作数。
+     * 前提读世界经过的这一层:照读快照,读到没加载的列就在记事本上记一笔。快照之外读出来的是空气,那不是测量——一步的前提
+     * 读到了它,结论就不作数。这次搜索的记事本({@link Recall})也挂在这里:快照不变,按格的结论算一次就记下。
      */
-    private static final class Probe implements WorldView {
+    private static final class Probe implements WorldView, Recall.Source {
 
         private final SearchView view;
-        /** 这一步的前提读到了没加载的列。 */
-        boolean unknown;
+        final Recall recall;
 
-        Probe(SearchView view) {
+        Probe(SearchView view, Recall recall) {
             this.view = view;
+            this.recall = recall;
+        }
+
+        @Override
+        public Recall recall() {
+            return recall;
         }
 
         @Override
         public BlockState getBlockState(BlockPos pos) {
             if (!view.isLoaded(pos.getX(), pos.getZ())) {
-                unknown = true;
+                recall.touchUnloaded();
             }
             return view.getBlockState(pos);
         }
@@ -196,7 +202,7 @@ public final class AStar {
         @Override
         public boolean airSection(int x, int y, int z) {
             if (!view.isLoaded(x, z)) {
-                unknown = true;
+                recall.touchUnloaded();
             }
             return view.airSection(x, y, z);
         }

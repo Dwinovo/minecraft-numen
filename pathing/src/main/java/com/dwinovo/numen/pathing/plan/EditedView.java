@@ -2,6 +2,7 @@ package com.dwinovo.numen.pathing.plan;
 
 import java.util.List;
 
+import com.dwinovo.numen.pathing.world.Recall;
 import com.dwinovo.numen.pathing.world.Semantics;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
@@ -24,7 +25,7 @@ import net.minecraft.world.level.material.FluidState;
  * 下一步的前提看到的就是身体此刻真正面对的世界。叠在另一份改动之上时,把那份的改动抄过来、直接读它底下的视图:
  * 前提函数每一步要读几百格,读一格只经一层。
  */
-public class EditedView implements WorldView {
+public class EditedView implements WorldView, Recall.Source {
 
     private final WorldView base;
     /** 改过的格;一件改动都没有时不建表(规划一步时大多数草稿一件也不改)。 */
@@ -95,6 +96,12 @@ public class EditedView implements WorldView {
             changed = new Long2ObjectOpenHashMap<>(4);
         }
         changed.put(pos.asLong(), state);
+    }
+
+    /** 一件改动都没叠时,就是底下那份视图:照它交出记事本;叠了改动的世界不记。 */
+    @Override
+    public Recall recall() {
+        return changed == null && base instanceof Recall.Source source ? source.recall() : null;
     }
 
     /** 这一格改过。 */

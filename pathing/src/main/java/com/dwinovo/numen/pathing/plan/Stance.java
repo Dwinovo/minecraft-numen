@@ -3,6 +3,7 @@ package com.dwinovo.numen.pathing.plan;
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Clearance;
 import com.dwinovo.numen.pathing.world.Footing;
+import com.dwinovo.numen.pathing.world.Recall;
 import com.dwinovo.numen.pathing.world.Semantics;
 
 import net.minecraft.core.BlockPos;
@@ -29,8 +30,15 @@ public record Stance(Kind kind, double feetY, int supportY) {
         GROUND, CLIMBING, SWIMMING
     }
 
+    /** 站姿,一次搜索里按格记住({@link Recall})。 */
+    private static final Recall.Fact<Stance> STANCE = new Recall.Fact<>(Stance::measure);
+
     /** 身体在 {@code (x, y, z)} 这个节点上怎么待着;待不住为 null。 */
     public static Stance at(BlockGetter level, BodyStats body, int x, int y, int z) {
+        return STANCE.at(level, body, x, y, z);
+    }
+
+    private static Stance measure(BlockGetter level, BodyStats body, int x, int y, int z) {
         double feet = Footing.height(level, body, x, y, z);
         if (!Double.isNaN(feet) && Clearance.fits(level, body, Pose.STANDING, x, feet, z)) {
             return new Stance(Kind.GROUND, feet, Footing.supportY(level, body, x, y, z));

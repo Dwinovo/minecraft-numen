@@ -30,6 +30,8 @@ public final class Footing {
      */
     public static final double EPSILON = 1.0E-5;
     private static final int NO_SUPPORT = Integer.MIN_VALUE;
+    /** 落脚高度,一次搜索里按格记住({@link Recall})。 */
+    private static final Recall.HeightFact HEIGHT = new Recall.HeightFact(Footing::measureHeight);
 
     private Footing() {}
 
@@ -43,6 +45,10 @@ public final class Footing {
      * 那是下面某个节点的事)。
      */
     public static double height(BlockGetter level, BodyStats body, int x, int y, int z) {
+        return HEIGHT.at(level, body, x, y, z);
+    }
+
+    private static double measureHeight(BlockGetter level, BodyStats body, int x, int y, int z) {
         double best = Double.NaN;
         for (int cy = y - 1; cy <= y; cy++) {
             double top = highestTop(level, body, x, cy, z, y);
