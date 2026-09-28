@@ -15,13 +15,11 @@ import net.minecraft.world.item.FireChargeItem;
 import net.minecraft.world.item.FlintAndSteelItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.phys.Vec3;
 
 /**
  * The most-native interaction primitive for a fake-player body:
@@ -39,9 +37,10 @@ import net.minecraft.world.phys.Vec3;
  *   <li>USE + air       → {@code gameMode.useItem} (+ a hold for food / bow)</li>
  * </ul>
  *
- * <p>准星语义的 USE({@link #forHit} 建的)另有一步收尾:方块/实体没吃掉点击时落到
- * 物品自用——真客户端的完整右键顺序,见 {@link #fallthroughUse}。指定命中面的外科
- * 原语({@link #useBlock(NumenPlayer, BlockHitResult, InteractionHand)})没有这一步。
+ * <p>右键方块总是按一个已经解析好的命中按:准星落点({@link #forHit},准星由寻路模块的
+ * {@code Crosshair} 拾取),或调用方指定的那一面({@link #useBlock}),这里不另打射线。
+ * 准星语义的 USE 另有一步收尾:方块/实体没吃掉点击时落到物品自用——真客户端的完整右键
+ * 顺序,见 {@link #fallthroughUse}。指定命中面的外科原语没有这一步。
  *
  * <h2>Timing</h2>
  * {@link Timing#once()} taps once; {@link Timing#repeat} taps N times spaced by an
@@ -110,7 +109,7 @@ public final class Interaction {
     private final BlockDigger digger; // only for ATTACK + block
     /** 左键挖方块时身体为这一下做的动作(把工具拿到手上)交给它,由任务记进回执;别的按法不动手上的东西,为 null。 */
     private final java.util.function.Consumer<com.dwinovo.numen.pathing.body.BodyAction> told;
-    private BlockHitResult presetHit; // USE+block: an exact hit the caller already resolved (placement)
+    private BlockHitResult presetHit; // USE+block: the hit already resolved (crosshair, or the face the caller chose)
     /**
      * 准星语义的 USE 才有的兜底:方块/实体没吃掉点击时,同一次按键落到物品自用
      * ({@code gameMode.useItem})——真客户端就是这个顺序(useItemOn 不消费就发
@@ -166,13 +165,8 @@ public final class Interaction {
         return new Interaction(p, Button.ATTACK, null, target, InteractionHand.MAIN_HAND, timing);
     }
 
-    /** Right-click a block: place / activate with the held item (raycasts to {@code pos}). */
-    public static Interaction useBlock(NumenPlayer p, BlockPos pos, InteractionHand hand) {
-        return new Interaction(p, Button.USE, pos, null, hand, Timing.once());
-    }
-
     /** Right-click a pre-resolved block hit — placement / precise activation supplies
-     *  the exact support face, so this skips the raycast and presses against {@code hit}. */
+     *  the exact support face, and this presses against {@code hit}. */
     public static Interaction useBlock(NumenPlayer p, BlockHitResult hit, InteractionHand hand) {
         Interaction i = new Interaction(p, Button.USE, hit.getBlockPos(), null, hand, Timing.once());
         i.presetHit = hit;
@@ -360,20 +354,8 @@ public final class Interaction {
     private boolean fireUseBlock() {
         player.controls().stop();
         net.minecraft.world.inventory.AbstractContainerMenu menuBefore = player.containerMenu;
-        BlockHitResult hit;
-        if (presetHit != null) {
-            hit = presetHit;                                  // caller already resolved the support face
-            InputDriver.lookAt(player, hit.getLocation());
-        } else {
-            InputDriver.lookAt(player, Vec3.atCenterOf(block));
-            hit = raycastBlock();
-            if (hit == null) {
-                failReason = "can't see the block to use (out of reach or line of sight blocked)";
-                failType = FailureType.OCCLUDED;
-                hardFail = true;
-                return false;
-            }
-        }
+        BlockHitResult hit = presetHit;
+        InputDriver.lookAt(player, hit.getLocation());
         StringBuilder outcome = new StringBuilder();
         for (InteractionHand h : HANDS) {
             InteractionResult res = player.gameMode.useItemOn(
@@ -453,19 +435,6 @@ public final class Interaction {
         }
         fallthroughUse();          // 实体没吃掉点击:真客户端同样落到物品自用
         return true;               // a press with no effect is still a press
-    }
-
-    /** Raycast from the eyes along the current look; the hit must be the target block. */
-    private BlockHitResult raycastBlock() {
-        Level level = player.level();
-        Vec3 eye = player.getEyePosition();
-        Vec3 end = eye.add(player.getViewVector(1.0f).scale(player.blockInteractionRange()));
-        BlockHitResult hit = level.clip(new ClipContext(
-                eye, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player));
-        if (hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(block)) {
-            return hit;
-        }
-        return null;
     }
 
     /** Abandon any in-progress interaction (clears a dig overlay / releases a held use). */
