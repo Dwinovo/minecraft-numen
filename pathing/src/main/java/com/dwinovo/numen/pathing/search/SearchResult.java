@@ -14,7 +14,7 @@ public record SearchResult(Stop stop, Route route) {
         ARRIVED,
         /** 按这次的规格走得到的节点全搜过了:真的到不了。 */
         EXHAUSTED,
-        /** 展开节点的预算用完了,还没搜完。 */
+        /** 展开节点的预算用完了,还没搜完;或展开到了先交半程的节点数({@link Search#handOver}),先交出了一段。 */
         BUDGET,
         /** 走得到的都搜过了,但有路伸进了快照之外没加载的区块,那边是什么不知道。 */
         UNLOADED,

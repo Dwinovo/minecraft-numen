@@ -103,10 +103,10 @@ final class Diagnosis {
         return model.placing().isPresent() ? model : model.withPlacing(ANY_BLOCK);
     }
 
-    /** 同一份快照、同一个起点、目标与预算,按这份成本模型搜;到了就交出路。 */
+    /** 同一份快照、同一个起点(连同接在哪一步后面)、目标与预算,按这份成本模型搜到底;到了就交出路。 */
     private static Route find(Search failed, CostModel model, BooleanSupplier cancelled) {
         SearchResult result = AStar.run(new Search(failed.view(), model, failed.start(), failed.goal(),
-                failed.budget(), Favoring.NONE), cancelled);
+                failed.budget(), Favoring.NONE, failed.budget(), failed.arrival()), cancelled);
         return result.arrived() ? result.route() : null;
     }
 }

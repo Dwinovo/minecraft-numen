@@ -23,8 +23,8 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
- * 预算与长途:预算用完不说成无路;长途分段接上、段与段之间不停;挖隧道的长路一段一段挖过去;按高度的目标垫五十格不被当成
- * 停滞;暂停之后照留着的路接着走;路伸进没加载的区块时说"未加载"。
+ * 预算与长途:预算用完不说成无路;长途分段接上、段与段之间不停;挖隧道的长路一段一段挖过去;要一路搭桥时先走交出的一段、
+ * 边走边搜;按高度的目标垫五十格不被当成停滞;暂停之后照留着的路接着走;路伸进没加载的区块时说"未加载"。
  */
 @GameTestHolder("numen")
 @PrefixGameTestTemplate(false)
@@ -107,6 +107,42 @@ public class BudgetGameTests {
                 }
             });
         });
+    }
+
+    /**
+     * 两块基岩台子之间一百五十格宽的空隙(跳下去摔不起,底下的地也挖不出路),身上有三叠圆石,许改自然地形:过去只能一路搭桥,
+     * 对岸远在一次搜索的快照之外。许放块时搜索在空中四面铺开;每段搜索展开到先交半程的节点数就交出朝对岸的一段,她先走这一段,
+     * 快走完时从桥头(快照里还没有那块桥)接着搜下一段。起步那段每刻按真实服务器的五十毫秒走,四十刻(两秒)以内就动起来;
+     * 一段段搭过去,到对岸。
+     */
+    @GameTest(template = LONG, batch = BATCH, timeoutTicks = 7000)
+    public static void starts_bridging_a_wide_chasm_before_the_whole_route_is_found(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(0, 1, 0, 9, 4, 23, Blocks.BEDROCK);
+        t.fill(160, 1, 0, 180, 4, 23, Blocks.BEDROCK);
+        TestBody body = t.body(6, 5, 12);
+        for (int i = 0; i < 3; i++) {
+            Trial.give(body, new ItemStack(Items.COBBLESTONE, 64));
+        }
+        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
+        var start = body.position();
+        boolean[] moving = {false};
+        t.go(body, Goals.at(t.at(164, 5, 12)), NATURAL).within(6800)
+                .during(r -> {
+                    try {
+                        Thread.sleep(moving[0] ? 5 : 50);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    if (moving[0]) {
+                        return;
+                    }
+                    moving[0] = r.body.position().distanceToSqr(start) > 0.25;
+                    if (!moving[0] && r.ticks > 40) {
+                        throw new GameTestAssertException("两秒了还站着等搜索:" + r.navigation);
+                    }
+                })
+                .arrives();
     }
 
     /** 按高度的目标:在平地上垫五十格高的柱子上去;一路对外都是"在推进",不被当成停滞。 */

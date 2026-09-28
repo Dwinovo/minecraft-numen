@@ -40,6 +40,11 @@ import net.minecraft.world.level.material.FluidState;
  *   <li><b>半程路线</b>:没到目标时,按几档"估价加已走代价的折算"各取最好的节点,取第一个离起点超过 {@value #MIN_PARTIAL}
  *       格的交出;都不够远就不交——原地打转的半截路不是路。最后一档只看估价(离目标多近):估价按疾跑算,挖隧道、搭桥时
  *       每一步的真实代价比它贵几十倍,前几档的折算都压不住已走的代价,最好的节点总在起点跟前;</li>
+ *   <li><b>先交半程</b>:展开到 {@link Search#handOver} 个节点还没到目标,只要已经有够远的半程路线就先交出它(停因同预算用完),
+ *       执行层先走这一段、同时从它的终点接着搜——许放块时搜索在空中四面铺开,一次搜到底要几秒,身体一直站着等。
+ *       在封顶之前到了目标的,路线与搜到底一样;封顶时还没有够远的半程,就接着搜,直到有了或预算用完;</li>
+ *   <li><b>接着一条路线往下搜</b>:起点是那条路线的终点({@link Search#arrival}),身体到那里时怎么待着按那一步的落点算,
+ *       展开起点时叠上那一步的改动——快照里还没有它垫下的块;</li>
  *   <li><b>目标格保护</b>:目标的 {@link Goal#protection()} 并进路线规格的按位置禁令,规划不挖自己要站、要够的格;</li>
  *   <li><b>改动预算</b>(规格的 {@code alterBudget})在展开时就生效:设了预算时节点按"位置加已改几格"区分,超出预算的步子
  *       不展开,所以搜出来的路一定在预算内,而且是预算内最便宜的;</li>
@@ -83,13 +88,15 @@ public final class AStar {
         SearchView view = search.view();
         Goal goal = search.goal();
         BlockPos startPos = search.start();
-        Stance startStance = Stance.at(view, body, startPos);
+        Maneuver arrival = search.arrival();
+        Stance startStance = arrival != null ? arrival.landing() : Stance.at(view, body, startPos);
         if (startStance == null) {
             return new SearchResult(SearchResult.Stop.STRANDED, null);
         }
         Node start = node(startPos.getX(), startPos.getY(), startPos.getZ(), 0);
         start.g = 0;
         start.stance = startStance;
+        start.via = arrival;
         start.f = start.h;
         open.push(start);
         Node[] best = new Node[COEFFICIENTS.length];
@@ -113,6 +120,12 @@ public final class AStar {
                     open.push(current);
                 } else {
                     return new SearchResult(SearchResult.Stop.ARRIVED, route(start, current));
+                }
+            }
+            if (expanded >= search.handOver()) {
+                Route early = partial(start, best);
+                if (early != null) {
+                    return new SearchResult(SearchResult.Stop.BUDGET, early);
                 }
             }
             if (expanded >= search.budget()) {

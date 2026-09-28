@@ -133,6 +133,81 @@ class SearchTest {
         assertTrue(result.route().end().getX() > AStar.MIN_PARTIAL, "半程路线朝目标推进:" + result.route().end());
     }
 
+    /** 两块台子之间隔着三十格、下面空着的空隙,身上有圆石:过去只能一路搭桥,搜索在空中四面铺开。 */
+    private static TestWorld chasm() {
+        return new TestWorld().floor(-4, -4, 2, 4, Y - 1).floor(33, -4, 40, 4, Y - 1);
+    }
+
+    private static final BlockPos ACROSS = new BlockPos(36, Y, 0);
+
+    /** 跑一次搜索,顺便数它展开了几个节点(每展开一个问一次叫没叫停)。 */
+    private static SearchResult counted(Search search, int[] expanded) {
+        return AStar.run(search, () -> {
+            expanded[0]++;
+            return false;
+        });
+    }
+
+    /**
+     * 许放块时要搭一长段桥:展开到先交半程的节点数时,只要有了离起点够远的一段就交出它,不等搜到底——交出的这一段朝目标推进,
+     * 停因是"没搜完"。
+     */
+    @Test
+    void aSearchHandsOverAPartialRouteOnceItReachesTheHandOverCount() {
+        CostModel model = Fixtures.withCobble(natural());
+        Search search = new Search(chasm(), model, START, Goals.at(ACROSS), 50_000, Favoring.NONE).handingOverAt(2000);
+        int[] expanded = {0};
+        SearchResult result = counted(search, expanded);
+        assertEquals(SearchResult.Stop.BUDGET, result.stop(), "先交出的半程是没搜完,不是到了");
+        assertNotNull(result.route());
+        assertTrue(expanded[0] <= 2001, "展开到先交半程的节点数就交:展开了 " + expanded[0]);
+        BlockPos end = result.route().end();
+        assertTrue(end.distSqr(START) > AStar.MIN_PARTIAL * AStar.MIN_PARTIAL, "交出的一段离起点够远:" + end);
+        assertTrue(end.distSqr(ACROSS) < START.distSqr(ACROSS), "交出的一段朝目标推进:" + end);
+    }
+
+    /** 在先交半程的节点数之内就到了的,路线与搜到底一模一样。 */
+    @Test
+    void aSearchThatArrivesBeforeTheHandOverCountKeepsItsRoute() {
+        TestWorld world = field().fill(6, Y, -6, 6, Y + 1, 6, STONE);
+        Goal goal = Goals.at(new BlockPos(15, Y, 3));
+        Search full = new Search(world, Fixtures.withCobble(natural()), START, goal, Fixtures.BUDGET, Favoring.NONE);
+        int[] expanded = {0};
+        SearchResult whole = counted(full, expanded);
+        assertTrue(whole.arrived());
+        SearchResult early = AStar.run(full.handingOverAt(expanded[0]), () -> false);
+        assertTrue(early.arrived());
+        assertEquals(legs(whole.route()), legs(early.route()));
+    }
+
+    private static List<String> legs(Route route) {
+        return route.legs().stream().map(leg -> leg.maneuver().kind() + " " + leg.maneuver().from() + "->"
+                + leg.maneuver().to() + " " + leg.cost() + " " + leg.maneuver().edits()).toList();
+    }
+
+    /**
+     * 接着一段搭到半空的路线往下搜:起点是那段路线的终点,脚下那块桥还没放、快照里是空的。只给起点,身体在那里待不住;
+     * 给出走到那里的那一步,就照它的落点与它垫下的块接着搜下去。
+     */
+    @Test
+    void aSearchContinuingARouteStartsFromTheLastStepsLandingAndEdits() {
+        TestWorld world = chasm();
+        CostModel model = Fixtures.withCobble(natural());
+        Goal goal = Goals.at(ACROSS);
+        SearchResult first = AStar.run(new Search(world, model, START, goal, 50_000, Favoring.NONE).handingOverAt(2000),
+                () -> false);
+        Route route = first.route();
+        assertNotNull(route);
+        BlockPos end = route.end();
+        assertTrue(end.getX() > 2, "第一段搭到了空隙上方:" + end);
+        Search fromEnd = new Search(world, model, end, goal, 50_000, Favoring.NONE).handingOverAt(2000);
+        assertEquals(SearchResult.Stop.STRANDED, AStar.run(fromEnd, () -> false).stop(), "快照里桥还没搭,起点待不住");
+        SearchResult next = AStar.run(fromEnd.after(route.legs().get(route.legs().size() - 1).maneuver()), () -> false);
+        assertNotNull(next.route(), "照最后一步的落点与它垫的块接着搜:" + next.stop());
+        assertEquals(end, next.route().start());
+        assertTrue(next.route().end().distSqr(ACROSS) < end.distSqr(ACROSS), "接着朝目标推进");
+    }
+
     @Test
     void aBodyThatCannotStandAtTheStartIsStranded() {
         SearchResult result = search(new TestWorld(), defaults(), START, Goals.at(new BlockPos(5, Y, 0)));
