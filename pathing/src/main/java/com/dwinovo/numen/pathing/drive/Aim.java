@@ -81,6 +81,33 @@ public final class Aim {
      * ——眼睛到方块最近的一点——所以 {@code Reach} 说够得着、那一点又没被挡着,这里就交得出瞄点。
      */
     public static Vec3 point(ServerPlayer body, BlockPos pos) {
+        Vec3 eye = body.getEyePosition();
+        double range = body.blockInteractionRange();
+        for (Vec3 candidate : candidates(body, pos)) {
+            if (candidate.distanceTo(eye) < range && hits(body, eye, candidate, pos, null)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 挖 {@code pos} 时够得着的第一个瞄点,不管中间有没有东西挡着(候选与 {@link #point} 同一串);一个都够不着为 null。
+     * 看不见目标时朝这一点看过去,准星落着的就是挡在前面的那一格。
+     */
+    public static Vec3 reachable(ServerPlayer body, BlockPos pos) {
+        Vec3 eye = body.getEyePosition();
+        double range = body.blockInteractionRange();
+        for (Vec3 candidate : candidates(body, pos)) {
+            if (candidate.distanceTo(eye) < range) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    /** 挖 {@code pos} 时的候选瞄点,先后照 {@link #point} 说的那三档。 */
+    private static List<Vec3> candidates(ServerPlayer body, BlockPos pos) {
         Level level = body.level();
         VoxelShape shape = level.getBlockState(pos).getShape(level, pos);
         List<AABB> boxes = shape.isEmpty() ? List.of(new AABB(0, 0, 0, 1, 1, 1)) : shape.toAabbs();
@@ -101,13 +128,7 @@ public final class Aim {
             }
         }
         candidates.addAll(nearest);
-        double range = body.blockInteractionRange();
-        for (Vec3 candidate : candidates) {
-            if (candidate.distanceTo(eye) < range && hits(body, eye, candidate, pos, null)) {
-                return candidate;
-            }
-        }
-        return null;
+        return candidates;
     }
 
     // ==================== 放:点哪个面的哪一点 ====================
