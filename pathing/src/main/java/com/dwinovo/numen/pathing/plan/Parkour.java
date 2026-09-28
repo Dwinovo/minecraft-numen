@@ -111,7 +111,7 @@ final class Parkour implements Move {
         // 落地的冲劲会把身体带进前面那一列:那里的脚、头与脚下都不能是这条路线排除的格
         BlockPos beyond = to.offset(dx, 0, dz);
         for (BlockPos cell : new BlockPos[] {beyond, beyond.above(), beyond.below()}) {
-            if (Semantics.isAny(view, cell, model.spec().excluded())) {
+            if (model.excludes(Semantics.mask(view, cell))) {
                 return Premise.fail(cell, Reason.EXCLUDED);
             }
         }

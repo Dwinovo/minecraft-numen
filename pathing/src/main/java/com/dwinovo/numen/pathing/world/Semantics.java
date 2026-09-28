@@ -69,26 +69,17 @@ public final class Semantics {
 
     /** 这一格是不是某一种。 */
     public static boolean is(BlockGetter level, BlockPos pos, Kind kind) {
-        return (bits(level, pos) & bit(kind)) != 0;
+        return (mask(level, pos) & bit(kind)) != 0;
     }
 
     /** 这一格是 {@code kinds} 里的任何一种。 */
     public static boolean isAny(BlockGetter level, BlockPos pos, Set<Kind> kinds) {
-        int bits = bits(level, pos);
-        if (bits == 0) {
-            return false;
-        }
-        for (Kind kind : KINDS) {
-            if ((bits & bit(kind)) != 0 && kinds.contains(kind)) {
-                return true;
-            }
-        }
-        return false;
+        return (mask(level, pos) & mask(kinds)) != 0;
     }
 
     /** 这一格的全部种类;交出的是一份新的集合。 */
     public static Set<Kind> kinds(BlockGetter level, BlockPos pos) {
-        int bits = bits(level, pos);
+        int bits = mask(level, pos);
         EnumSet<Kind> out = EnumSet.noneOf(Kind.class);
         for (Kind kind : KINDS) {
             if ((bits & bit(kind)) != 0) {
@@ -98,8 +89,11 @@ public final class Semantics {
         return out;
     }
 
-    /** 这一格的全部种类,一种一位。 */
-    private static int bits(BlockGetter level, BlockPos pos) {
+    /**
+     * 这一格的全部种类,一种一位(第 {@code kind.ordinal()} 位)。规划里一步要问几十格,按位与一个种类掩码({@link #mask(Set)})
+     * 就答完,不建集合。
+     */
+    public static int mask(BlockGetter level, BlockPos pos) {
         BlockState state = level.getBlockState(pos);
         int bits = STATE_KINDS.computeIfAbsent(state, Semantics::stateKinds);
         FluidState fluid = state.getFluidState();
@@ -144,8 +138,18 @@ public final class Semantics {
         return bits;
     }
 
-    private static int bit(Kind kind) {
+    /** 一种一位的掩码,与 {@link #mask(BlockGetter, BlockPos)} 同一种编法。 */
+    public static int bit(Kind kind) {
         return 1 << kind.ordinal();
+    }
+
+    /** 这些种类合成的掩码。 */
+    public static int mask(Set<Kind> kinds) {
+        int mask = 0;
+        for (Kind kind : kinds) {
+            mask |= bit(kind);
+        }
+        return mask;
     }
 
     /** 原版 {@code LivingEntity.trapdoorUsableAsLadder}:开着的活板门,正下方是朝向相同的梯子。 */

@@ -1,7 +1,6 @@
 package com.dwinovo.numen.pathing.plan;
 
-import java.util.EnumSet;
-import java.util.Set;
+import java.util.Arrays;
 
 import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
@@ -11,10 +10,7 @@ import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Semantics;
 import com.dwinovo.numen.pathing.world.Semantics.Kind;
 
-import it.unimi.dsi.fastutil.longs.LongArrayList;
-import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -27,20 +23,25 @@ import net.minecraft.world.level.block.state.BlockState;
  * <p>身体碰到的是它的碰撞盒占到的格,外加脚踩的那一格(岩浆块踩上去就烫)。细雪托得住的身体站在细雪上不会陷进去,
  * 细雪对它不算危险。进入的格与脚下那一格水平方向上紧挨着的伤身的格(岩浆、火、仙人掌……)也在这里数出来,挨着它们走要加价
  * ({@link CostModel#overhead}),路线因此离它们远一点。
+ *
+ * <p>一步碰到的格只有十来个,记在一个按需加长的数组里、逐个比对去重;种类一律按位掩码判({@link Semantics#mask}),
+ * 前提函数每一步都要问它,不建集合。
  */
 final class Contact {
+
+    /** 碰了伤身的种类:挨着它走,身子歪一点就碰上。 */
+    private static final int HARMFUL = Semantics.bit(Kind.LAVA) | Semantics.bit(Kind.HAZARD);
+    /** 水平方向紧挨着的四格(北东南西),{x, z} 偏移。 */
+    private static final int[][] SIDES = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
 
     private final BodyStats body;
     private final int fromX;
     private final int fromZ;
     private final int fromLow;
     private final int fromHigh;
-    private final LongArrayList cells = new LongArrayList();
-    private final LongOpenHashSet seen = new LongOpenHashSet();
+    /** 新进入的格,按进入的先后。 */
+    private final Cells cells = new Cells();
     private int exposure;
-
-    /** 碰了伤身的种类:挨着它走,身子歪一点就碰上。 */
-    private static final EnumSet<Kind> HARMFUL = EnumSet.of(Kind.LAVA, Kind.HAZARD);
 
     /** 身体起步时脚在 {@code (from 那一列, fromFeet)}:它那时占着的格不算新进入的。 */
     Contact(BodyStats body, BlockPos from, double fromFeet) {
@@ -59,16 +60,13 @@ final class Contact {
             if (x == fromX && z == fromZ && y >= fromLow && y <= fromHigh) {
                 continue;
             }
-            long cell = BlockPos.asLong(x, y, z);
-            if (seen.add(cell)) {
-                cells.add(cell);
-            }
+            cells.add(BlockPos.asLong(x, y, z));
         }
         return this;
     }
 
     long[] cells() {
-        return cells.toLongArray();
+        return Arrays.copyOf(cells.items, cells.size);
     }
 
     /** 这一步新进入的格与脚下那一格水平方向上紧挨着几格伤身的({@link #admit} 时数出来)。 */
@@ -78,14 +76,8 @@ final class Contact {
 
     /** 这一格碰了伤身:岩浆、危险方块;托得住身体的细雪不算。 */
     private boolean harmful(Draft draft, BlockPos pos) {
-        return Semantics.isAny(draft, pos, HARMFUL)
+        return (Semantics.mask(draft, pos) & HARMFUL) != 0
                 && !(body.walksOnPowderSnow() && draft.getBlockState(pos).is(Blocks.POWDER_SNOW));
-    }
-
-    private static LongOpenHashSet add(LongOpenHashSet near, long cell) {
-        LongOpenHashSet out = near == null ? new LongOpenHashSet(4) : near;
-        out.add(cell);
-        return out;
     }
 
     /**
@@ -96,51 +88,85 @@ final class Contact {
      */
     boolean admit(Draft draft, CostModel model, BlockPos support, boolean fromHeight) {
         RouteSpec spec = model.spec();
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         // 挨着的伤身格多半一个都没有:碰上了才建表
-        LongOpenHashSet near = null;
-        for (int i = 0; i < cells.size(); i++) {
-            long cell = cells.getLong(i);
-            BlockPos pos = BlockPos.of(cell);
-            if (Semantics.isAny(draft, pos, spec.excluded())) {
+        Cells near = null;
+        for (int i = 0; i < cells.size; i++) {
+            long cell = cells.items[i];
+            pos.set(cell);
+            if (model.excludes(Semantics.mask(draft, pos))) {
                 return draft.fail(pos, Reason.EXCLUDED);
             }
             if (model.forbids(Use.PASS, cell)) {
                 return draft.fail(pos, Reason.FORBIDDEN);
             }
-            for (Direction side : Direction.Plane.HORIZONTAL) {
-                BlockPos beside = pos.relative(side);
-                if (!seen.contains(beside.asLong()) && harmful(draft, beside)) {
-                    near = add(near, beside.asLong());
+            for (int[] side : SIDES) {
+                long beside = BlockPos.offset(cell, side[0], 0, side[1]);
+                if (!cells.contains(beside) && harmful(draft, pos.set(beside))) {
+                    near = Cells.add(near, beside);
                 }
             }
         }
         if (support != null) {
             // 脚下那一格旁边的也算:站在岩浆坑边上,脚底一滑就下去了
-            for (Direction side : Direction.Plane.HORIZONTAL) {
-                BlockPos beside = support.relative(side);
-                if (harmful(draft, beside)) {
-                    near = add(near, beside.asLong());
+            long under = support.asLong();
+            for (int[] side : SIDES) {
+                long beside = BlockPos.offset(under, side[0], 0, side[1]);
+                if (harmful(draft, pos.set(beside))) {
+                    near = Cells.add(near, beside);
                 }
             }
         }
-        exposure = near == null ? 0 : near.size();
+        exposure = near == null ? 0 : near.size;
         if (support == null) {
             return true;
         }
         BlockState state = draft.getBlockState(support);
-        Set<Kind> kinds = Semantics.kinds(draft, support);
+        int kinds = Semantics.mask(draft, support);
         if (body.walksOnPowderSnow() && state.is(Blocks.POWDER_SNOW)) {
-            kinds.remove(Kind.HAZARD);
+            kinds &= ~Semantics.bit(Kind.HAZARD);
         }
-        if (spec.excludesAny(kinds)) {
+        if (model.excludes(kinds)) {
             return draft.fail(support, Reason.EXCLUDED);
         }
-        if (fromHeight && kinds.contains(Kind.FRAGILE)) {
+        if (fromHeight && (kinds & Semantics.bit(Kind.FRAGILE)) != 0) {
             return draft.fail(support, Reason.TRAMPLES);
         }
         if (model.forbids(Use.STAND, support.asLong()) || spec.bans().standingOn().contains(state.getBlock())) {
             return draft.fail(support, Reason.FORBIDDEN);
         }
         return true;
+    }
+
+    /** 一步里数出来的格,{@link BlockPos#asLong} 编码,不重复:只有十来个,逐个比对比建哈希表快。 */
+    private static final class Cells {
+        private long[] items = new long[8];
+        private int size;
+
+        boolean contains(long cell) {
+            for (int i = 0; i < size; i++) {
+                if (items[i] == cell) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        void add(long cell) {
+            if (contains(cell)) {
+                return;
+            }
+            if (size == items.length) {
+                items = Arrays.copyOf(items, size * 2);
+            }
+            items[size++] = cell;
+        }
+
+        /** 加进 {@code into};它还没建就先建一个。 */
+        static Cells add(Cells into, long cell) {
+            Cells out = into == null ? new Cells() : into;
+            out.add(cell);
+            return out;
+        }
     }
 }

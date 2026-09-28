@@ -10,6 +10,7 @@ import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.Bounds;
 import com.dwinovo.numen.pathing.world.Faces;
 import com.dwinovo.numen.pathing.world.Replaceable;
+import com.dwinovo.numen.pathing.world.Semantics;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
@@ -41,6 +42,8 @@ public final class CostModel {
     private final Block placing;
     private final PositionCosts danger;
     private final ToolChoice tools;
+    /** 规格排除的格子种类,按 {@link Semantics#mask(java.util.Set)} 编成掩码。 */
+    private final int excluded;
 
     private CostModel(RouteSpec spec, BodySnapshot body, TerrainPolicy terrain, Block placing, PositionCosts danger,
                       ToolChoice tools) {
@@ -50,6 +53,7 @@ public final class CostModel {
         this.placing = placing;
         this.danger = danger;
         this.tools = tools;
+        this.excluded = Semantics.mask(spec.excluded());
     }
 
     /** 在派发那一刻组一份:问一次垫路料、问一次生物危险。 */
@@ -113,7 +117,12 @@ public final class CostModel {
         return ActionCosts.WALK_ONE_IN_WATER * (1 - efficiency) + ActionCosts.WALK_ONE_BLOCK * efficiency;
     }
 
-    // ==================== 按位置 ====================
+    // ==================== 按种类与按位置 ====================
+
+    /** 种类掩码是 {@code kinds} 的格,这条路线排除它吗:任何一种被排除,整格就排除。 */
+    public boolean excludes(int kinds) {
+        return (kinds & excluded) != 0;
+    }
 
     /** 这一格禁不禁止这样用:只有路线规格能禁。 */
     public boolean forbids(Use use, long cell) {
