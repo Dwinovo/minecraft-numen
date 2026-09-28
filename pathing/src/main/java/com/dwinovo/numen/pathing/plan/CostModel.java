@@ -204,8 +204,11 @@ public final class CostModel {
 
     /**
      * 下落摔不起时在落点 {@code pos}(此刻是 {@code current})倒一桶水接住能不能进路线,依次问:身上有没有一桶水、这个维度倒不
-     * 倒得出水(没有就还是摔不起)、规格许不许改地形、按位置与按种类禁不禁、游戏模式与世界边界、这一格倒不倒得进水、
-     * 有没有能点的面(落点脚下那块的顶面)、许可怎么答(按往这一格放东西问)。
+     * 倒得出水(没有就还是摔不起)、规格许不许改地形、按种类禁不禁(水冲掉的那一格原来的方块)、游戏模式与世界边界、这一格
+     * 倒不倒得进水、有没有能点的面(落点脚下那块的顶面)、许可怎么答(按往这一格放东西问)。
+     *
+     * <p>按位置的"放"({@link Use#PLACE})管的是放下之后留在世界上的方块;倒下的水在同一步里就收回,不问它——目标格保护
+     * 不许往要站的格里放方块,却不拦倒水接住落进那一格的自己。
      */
     public Admission admitCatch(WorldView view, BlockPos pos, BlockState current) {
         if (!body.carriesWaterBucket() || view.ultraWarm()) {
@@ -214,7 +217,7 @@ public final class CostModel {
         if (!spec.alter().mayAlter()) {
             return Admission.refuse(Reason.NEEDS_ALTER);
         }
-        if (forbids(Use.PLACE, pos.asLong()) || spec.bans().placingInto().contains(current.getBlock())) {
+        if (spec.bans().placingInto().contains(current.getBlock())) {
             return Admission.refuse(Reason.FORBIDDEN);
         }
         if (!body.mayEdit()) {
@@ -268,11 +271,11 @@ public final class CostModel {
     }
 
     /**
-     * 倒一桶水接住坠落:与放一块同样的罚分与按位置加价(许可要问的乘 {@link ActionCosts#CONSENT_MULTIPLIER}),再加上落定之后
-     * 把水收回桶里的那一下。
+     * 倒一桶水接住坠落:与放一块同样的罚分(许可要问的乘 {@link ActionCosts#CONSENT_MULTIPLIER}),再加上落定之后把水收回桶里的
+     * 那一下。按位置的"放"加价管的是留在世界上的方块,水当场收回,不加。
      */
     public double catchCost(Edit.Catch caught) {
-        double cost = spec.placeCost() + extra(Use.PLACE, caught.pos().asLong());
+        double cost = spec.placeCost();
         if (caught.permit() instanceof Permit.Ask) {
             cost *= ActionCosts.CONSENT_MULTIPLIER;
         }

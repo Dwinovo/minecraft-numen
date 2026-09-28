@@ -28,7 +28,7 @@ public final class PositionCosts {
         PASS,
         /** 挖掉这一格。 */
         DIG,
-        /** 往这一格里放方块。 */
+        /** 往这一格里放下一块留在世界上的方块。倒水接坠落不算:水在同一步里就收回。 */
         PLACE
     }
 

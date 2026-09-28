@@ -237,6 +237,31 @@ public class UpDownGameTests {
         });
     }
 
+    /**
+     * 十六格高的柱顶,去处就是柱脚紧挨着的那一格(高落差的落点),背包里有一桶水,许改自然地形:走出边沿、把水倒在去处那一格里
+     * 接住自己,一点血不掉,收回水,到达。目标格保护不许往要站的格里放方块,倒下又当场收回的水不在其列。
+     */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    public static void catches_a_high_fall_right_in_the_goal_cell(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(4, 1, 4, 4, 15, 4, Blocks.STONE);
+        TestBody body = t.body(4, 16, 4);
+        body.getInventory().setItem(5, new ItemStack(Items.WATER_BUCKET));
+        RouteSpec natural = RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build();
+        var goal = t.at(5, 1, 4);
+        t.go(body, Goals.at(goal), natural).within(500).arrives().then(r -> {
+            unhurt(r);
+            var entries = r.report.ledger().entries();
+            boolean poured = entries.stream().anyMatch(e -> e instanceof com.dwinovo.numen.pathing.drive.EditLedger.Placed p
+                    && p.pos().equals(goal) && p.after().is(Blocks.WATER));
+            boolean scooped = entries.stream().anyMatch(e -> e instanceof com.dwinovo.numen.pathing.drive.EditLedger.Placed p
+                    && p.pos().equals(goal) && p.before().is(Blocks.WATER) && p.after().isAir());
+            if (!poured || !scooped) {
+                throw new GameTestAssertException("水应当倒在去处那一格、再收回:" + entries);
+            }
+        });
+    }
+
     static void unhurt(Trial.Run r) {
         if (r.lowestHealth < r.body.getMaxHealth()) {
             throw new GameTestAssertException("掉了血:最低 " + r.lowestHealth);

@@ -457,21 +457,31 @@ class SearchTest {
     }
 
     /**
-     * 身体站在十二格高的崖边,带着一桶水,去处是崖脚紧挨着的那一格:不保护时最便宜的是直接落进去、把水倒在那一格里接住自己;
-     * 站到某一格的目标不往自己要站的两格里放东西,改落进旁边一列接住、再走过去。
+     * 身体站在十二格高的崖边,带着一桶水和一叠圆石,去处是崖脚紧挨着的那一格:最便宜的是直接落进去、把水倒在那一格里接住自己。
+     * 站到某一格的目标不许往自己要站的两格里放方块(放下就留在那儿,把要站的格埋了);倒下的水在同一步里就收回,不受这条保护——
+     * 保护与不保护一样,都倒水接在去处那一格里,路上都不拿方块垫那两格。
      */
     @Test
     void standingOnACellNeverFillsItsOwnTwoCellsOnTheWay() {
         TestWorld cliff = new TestWorld().floor(-4, -4, 0, 4, Y - 1).floor(1, -4, 6, 4, Y - 13);
         BlockPos foot = new BlockPos(1, Y - 12, 0);
         BodySnapshot bucket = Fixtures.carrying(0, new ItemStack(Items.WATER_BUCKET));
-        CostModel model = CostModel.of(natural(), bucket, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+        CostModel model = CostModel.of(natural(), bucket, TerrainPolicy.ALLOW_ALL, Fixtures.COBBLE, Threats.NONE);
         SearchResult loose = search(cliff, model, START, unguarded(Goals.at(foot)));
-        assertTrue(loose.arrived() && fills(loose.route(), foot), "不保护时最便宜的是把水倒在要站的那一格里");
+        assertTrue(loose.arrived() && catches(loose.route(), foot), "最便宜的是把水倒在要站的那一格里");
         SearchResult guarded = search(cliff, model, START, Goals.at(foot));
         assertTrue(guarded.arrived());
         assertEquals(foot, guarded.route().end());
-        assertFalse(fills(guarded.route(), foot) || fills(guarded.route(), foot.above()), "要站的两格不放东西");
+        assertTrue(catches(guarded.route(), foot), "倒下的水当场收回,不受目标格保护:照样接在要站的那一格里");
+        assertFalse(places(guarded.route(), foot) || places(guarded.route(), foot.above()), "要站的两格不放方块");
+    }
+
+    private static boolean catches(Route route, BlockPos cell) {
+        return route.edits().stream().anyMatch(e -> e instanceof Edit.Catch && e.pos().equals(cell));
+    }
+
+    private static boolean places(Route route, BlockPos cell) {
+        return route.edits().stream().anyMatch(e -> e instanceof Edit.Place && e.pos().equals(cell));
     }
 
     @Test
