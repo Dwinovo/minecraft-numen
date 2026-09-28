@@ -236,15 +236,34 @@ final class Trial {
 
     /** 场地与第一次规划或开走那一刻一样,一格没变。 */
     void untouched() {
-        audit(List.of(), RouteSpec.defaults(), (before, now) -> false);
+        audit(List.of(), RouteSpec.defaults(), (before, now) -> false, java.util.Set.of());
+    }
+
+    /**
+     * 同一个场地里别的身体的实际账上有的格。一个用例里几具身体同时走时,一具收场对账的那一刻,另一具可能正好放下或挖掉了一格:
+     * 那一格记在它自己的账上,由它收场时对。
+     */
+    private java.util.Set<BlockPos> othersCells(Run self) {
+        java.util.Set<BlockPos> out = new java.util.HashSet<>();
+        for (Run run : runs) {
+            if (run == self) {
+                continue;
+            }
+            run.navigation.report().ledger().entries().forEach(e -> out.add(e.pos()));
+            if (run.teardown != null) {
+                run.teardown.report().ledger().entries().forEach(e -> out.add(e.pos()));
+            }
+        }
+        return out;
     }
 
     /**
      * 实际账与世界的变化一致;规格不许改地形时账里没有挖、没有放。不一致就抛断言异常。{@code passive} 认得出的变化不是
-     * 导航动的手,而是原版在身体经过时自己做的(冰霜行者冻住的水面),不算进来。
+     * 导航动的手,而是原版在身体经过时自己做的(冰霜行者冻住的水面),不算进来;{@code others} 是同一场地里别的身体账上的格,
+     * 由它们各自对。
      */
     void audit(List<EditLedger.Entry> entries, RouteSpec spec,
-               java.util.function.BiPredicate<BlockState, BlockState> passive) {
+               java.util.function.BiPredicate<BlockState, BlockState> passive, java.util.Set<BlockPos> others) {
         Map<BlockPos, BlockState> last = new HashMap<>();
         for (EditLedger.Entry e : entries) {
             if (!spec.alter().mayAlter() && !(e instanceof EditLedger.Toggled)) {
@@ -260,7 +279,7 @@ final class Trial {
         baseline.forEach((pos, before) -> {
             BlockState now = level.getBlockState(pos);
             boolean onLedger = last.containsKey(pos);
-            if (now != before && !onLedger && !passive.test(before, now)) {
+            if (now != before && !onLedger && !others.contains(pos) && !passive.test(before, now)) {
                 problems.add(rel(pos) + " 从 " + before + " 变成 " + now + ",账上没有");
             }
             if (onLedger) {
@@ -444,7 +463,7 @@ final class Trial {
                 if (expected == NavStatus.State.FAILED) {
                     outcomeCheck.accept(status.outcome());
                 }
-                trial.audit(report.ledger().entries(), spec, passive);
+                trial.audit(report.ledger().entries(), spec, passive, trial.othersCells(this));
                 for (Consumer<Run> check : finals) {
                     check.accept(this);
                 }
@@ -472,7 +491,7 @@ final class Trial {
             }
             List<EditLedger.Entry> all = new ArrayList<>(report.ledger().entries());
             all.addAll(teardown.report().ledger().entries());
-            trial.audit(all, spec, passive);
+            trial.audit(all, spec, passive, trial.othersCells(this));
             for (Consumer<Run> check : afterTakeBack) {
                 check.accept(this);
             }
