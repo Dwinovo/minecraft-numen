@@ -30,13 +30,16 @@ public class EditedView implements WorldView, Recall.Source {
     private final WorldView base;
     /** 改过的格;一件改动都没有时不建表(规划一步时大多数草稿一件也不改)。 */
     private Long2ObjectOpenHashMap<BlockState> changed;
+    /**
+     * {@link #changed} 是自己建的。叠在另一份改动之上时先借用那份的表(它此后不再改),自己第一次改动时才抄一份:
+     * 展开一个叠了改动的节点要判几十次前提,多数一件也不改,不必每次都抄。
+     */
+    private boolean owned;
 
     EditedView(WorldView base) {
         if (base instanceof EditedView under) {
             this.base = under.base;
-            if (under.changed != null) {
-                this.changed = new Long2ObjectOpenHashMap<>(under.changed);
-            }
+            this.changed = under.changed;
         } else {
             this.base = base;
         }
@@ -92,8 +95,9 @@ public class EditedView implements WorldView, Recall.Source {
     }
 
     private void set(BlockPos pos, BlockState state) {
-        if (changed == null) {
-            changed = new Long2ObjectOpenHashMap<>(4);
+        if (!owned) {
+            changed = changed == null ? new Long2ObjectOpenHashMap<>(4) : new Long2ObjectOpenHashMap<>(changed);
+            owned = true;
         }
         changed.put(pos.asLong(), state);
     }

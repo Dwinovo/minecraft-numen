@@ -19,6 +19,8 @@ import net.minecraft.core.BlockPos;
  */
 final class Climb implements Move {
 
+    private static final List<Heading> HEADINGS = List.of(Heading.UP, Heading.DOWN);
+
     @Override
     public MoveKind kind() {
         return MoveKind.CLIMB;
@@ -26,7 +28,7 @@ final class Climb implements Move {
 
     @Override
     public List<Heading> headings() {
-        return List.of(Heading.UP, Heading.DOWN);
+        return HEADINGS;
     }
 
 

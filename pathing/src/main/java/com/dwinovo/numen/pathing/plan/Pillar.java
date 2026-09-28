@@ -17,6 +17,8 @@ import net.minecraft.core.BlockPos;
  */
 final class Pillar implements Move {
 
+    private static final List<Heading> HEADINGS = List.of(Heading.UP);
+
     @Override
     public MoveKind kind() {
         return MoveKind.PILLAR;
@@ -24,7 +26,7 @@ final class Pillar implements Move {
 
     @Override
     public List<Heading> headings() {
-        return List.of(Heading.UP);
+        return HEADINGS;
     }
 
 
