@@ -120,7 +120,7 @@ final class Parkour implements Move {
             return draft.failure();
         }
         return new Premise.Holds(new Maneuver(MoveKind.PARKOUR, heading, from, stance, to, landing, true, span == 4 || ascend,
-                false, Strides.inWater(view, to), Semantics.speedFactor(view, x, f0, z), Math.max(0, f0 - landing.feetY()),
+                false, Strides.inWater(view, to), Semantics.speedFactor(view, x, f0, z), Math.max(0, f0 - landing.feetY()), 0,
                 span, draft.edits(), contact.cells(), contact.exposure(), support));
     }
 

@@ -20,6 +20,8 @@ import net.minecraft.core.BlockPos;
  * @param wading      落到的节点泡在水里
  * @param speedFactor 脚下方块的步速系数(起步与落点两处的平均,灵魂沙、蜂蜜块慢)
  * @param drop        脚往下落了多高
+ * @param fallDamage  落定时摔掉几点血({@link BodySnapshot#fallDamage}:按落差与脚踩的那一格);落进水里、不是站着落地为 0。
+ *                    下一级、下落、斜走、向下挖才算;其余走法落差不到一格,原版落在哪种方块上都不疼,恒为 0
  * @param span        水平走了几列(跑酷是落点离起点的列数,其余是 1)
  * @param edits       要做的改动,按执行的先后
  * @param cells       身体这一步新进入的格(不含起步时已经占着的),{@link BlockPos#asLong} 编码
@@ -28,7 +30,7 @@ import net.minecraft.core.BlockPos;
  * @param support     落到之后脚踩的那一格;不是站着为 null
  */
 public record Maneuver(MoveKind kind, Heading heading, BlockPos from, Stance start, BlockPos to, Stance landing, boolean jump, boolean sprint,
-                       boolean sneak, boolean wading, double speedFactor, double drop, int span, List<Edit> edits,
+                       boolean sneak, boolean wading, double speedFactor, double drop, int fallDamage, int span, List<Edit> edits,
                        long[] cells, int exposure, BlockPos support) {
 
     public Maneuver {

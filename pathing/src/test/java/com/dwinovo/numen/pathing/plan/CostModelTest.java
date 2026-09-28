@@ -22,6 +22,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -157,12 +158,19 @@ class CostModelTest {
     void theFallLimitIsTheBodysAndTheSpecOnlyTightensIt() {
         RouteSpec loose = RouteSpec.defaults().edit().maxFallHeightNoWater(100).build();
         CostModel healthy = CostModel.of(loose, Fixtures.body(20), TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
-        CostModel hurt = healthy.withSpec(loose);
-        assertEquals(17, healthy.fallLimit(), "20 点血摔完留 6 点:能摔 17 格");
+        assertTrue(bears(healthy, 17), "20 点血摔完留 6 点:能摔 17 格");
+        assertFalse(bears(healthy, 18));
         CostModel weak = CostModel.of(loose, Fixtures.body(6), TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
-        assertEquals(3, weak.fallLimit(), "只剩 6 点血时只落摔不疼的高度");
-        assertEquals(3, CostModel.of(RouteSpec.defaults(), Fixtures.body(20), TerrainPolicy.ALLOW_ALL, Materials.NONE,
-                Threats.NONE).fallLimit(), "出厂规格收紧到 3");
-        assertTrue(hurt.fallLimit() <= loose.maxFallHeightNoWater());
+        assertTrue(bears(weak, 3), "只剩 6 点血时只落摔不疼的高度");
+        assertFalse(bears(weak, 4));
+        CostModel factory = CostModel.of(RouteSpec.defaults(), Fixtures.body(20), TerrainPolicy.ALLOW_ALL, Materials.NONE,
+                Threats.NONE);
+        assertTrue(bears(factory, 3), "出厂规格收紧到 3");
+        assertFalse(bears(factory, 4));
+    }
+
+    /** 从 {@code height} 格高处落到石头上摔不摔得起。 */
+    private static boolean bears(CostModel model, int height) {
+        return model.bearsFall(height, model.body().fallDamage(height, Blocks.STONE.defaultBlockState()));
     }
 }

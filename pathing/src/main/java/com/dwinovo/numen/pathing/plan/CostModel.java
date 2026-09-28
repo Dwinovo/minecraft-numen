@@ -9,6 +9,7 @@ import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.Bounds;
 import com.dwinovo.numen.pathing.world.Faces;
+import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Replaceable;
 import com.dwinovo.numen.pathing.world.Semantics;
 
@@ -25,7 +26,7 @@ import net.minecraft.world.level.block.state.BlockState;
  *   <li>路线规格——{@link RouteSpec}:能力开关、排除的格子种类、按位置与按种类、四项动作罚分;</li>
  *   <li>许可——端口 {@link TerrainPolicy}:一格能不能挖或放;</li>
  *   <li>垫路料——端口 {@link Materials}:建模型时问一次下一块用什么,没有就是没料;</li>
- *   <li>身体——{@link BodySnapshot}:迈步、起跳、交互距离、游戏模式、摔落上限、背包里的工具({@link ToolChoice});</li>
+ *   <li>身体——{@link BodySnapshot}:迈步、起跳、交互距离、游戏模式、摔伤与摔落上限、背包里的工具({@link ToolChoice});</li>
  *   <li>生物危险——端口 {@link Threats}:建模型时问一次,变成按位置的代价。</li>
  * </ul>
  * 不许继承;任务要改价,只能换一份路线规格({@link #withSpec}),或在规格的按位置代价表里加减。
@@ -101,9 +102,12 @@ public final class CostModel {
 
     // ==================== 身体与规格合起来的上限 ====================
 
-    /** 落到硬地上最多落几格:身体按血量给出的上限,规格只能收紧。 */
-    public int fallLimit() {
-        return Math.min(spec.maxFallHeightNoWater(), body.maxFall());
+    /**
+     * 从 {@code drop} 高处站着落地、摔掉 {@code damage} 点血({@link BodySnapshot#fallDamage}),这一下摔不摔得起:
+     * 身体受得起({@link BodySnapshot#bears}),落差也在规格的无水落差以内——规格只能收紧身体的上限。
+     */
+    public boolean bearsFall(double drop, int damage) {
+        return body.bears(damage) && drop <= spec.maxFallHeightNoWater() + Footing.EPSILON;
     }
 
     /** 这次能不能疾跑:规格开着,身体也跑得动。 */

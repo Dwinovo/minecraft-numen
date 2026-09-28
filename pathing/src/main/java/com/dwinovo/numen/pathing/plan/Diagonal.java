@@ -81,13 +81,18 @@ final class Diagonal implements Move {
                 .column(x + heading.dx(), z, low, high)
                 .column(x, z + heading.dz(), low, high);
         BlockPos support = landing.support(to.getX(), to.getZ());
+        boolean wading = Strides.inWater(draft, to);
+        double drop = Math.max(0, f0 - f1);
+        int damage = Strides.fallDamage(model, draft, landing, support, drop, wading);
+        if (!model.body().bears(damage)) {
+            return Premise.fail(support, Reason.TOO_FAR_TO_FALL);
+        }
         if (!contact.admit(draft, model, support, f0 - f1 > 0.5)) {
             return draft.failure();
         }
-        boolean wading = Strides.inWater(draft, to);
         boolean sprint = model.maySprint() && !wading && !jump && draft.edits().isEmpty();
         return new Premise.Holds(new Maneuver(MoveKind.DIAGONAL, heading, from, stance, to, landing, jump, sprint, false, wading,
-                Strides.speedFactor(draft, from, f0, to, f1), Math.max(0, f0 - f1), 1, draft.edits(),
+                Strides.speedFactor(draft, from, f0, to, f1), drop, damage, 1, draft.edits(),
                 contact.cells(), contact.exposure(), support));
     }
 
@@ -98,7 +103,7 @@ final class Diagonal implements Move {
             move = Math.max(move, ActionCosts.JUMP_ONE_BLOCK) + model.spec().jumpPenalty();
         }
         if (m.drop() > 0.5) {
-            move += Math.max(ActionCosts.fall(m.drop()), ActionCosts.CENTER_AFTER_FALL);
+            move += Strides.landing(model, m);
         }
         return move + model.overhead(m);
     }

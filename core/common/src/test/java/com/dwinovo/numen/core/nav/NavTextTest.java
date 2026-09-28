@@ -87,7 +87,7 @@ class NavTextTest {
                 new Edit.Dig(B, planks(), Permit.ask(asks), false, true),
                 new Edit.Place(C, Blocks.AIR.defaultBlockState(), Blocks.COBBLESTONE, Permit.ALLOW));
         Maneuver step = new Maneuver(MoveKind.WALK, Heading.CARDINAL.get(2), A.west(), ground, A, ground, false, false,
-                false, false, 1, 0, 1, edits, new long[0], 0, A.below());
+                false, false, 1, 0, 0, 1, edits, new long[0], 0, A.below());
         Route route = new Route(A.west(), ground, List.of(new Route.Leg(step, 50)));
         assertEquals("  r3  1 step  break 2 oak_planks (120,64,-33; 120,65,-33) needing consent (placed by a player)"
                 + "  place 1 cobblestone (121,64,-33)", NavText.line("r3", route));

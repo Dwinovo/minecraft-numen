@@ -5,15 +5,24 @@ import java.util.Objects;
 
 import com.dwinovo.numen.pathing.world.BodyStats;
 
+import net.minecraft.core.Direction;
 import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.HayBlock;
+import net.minecraft.world.level.block.HoneyBlock;
+import net.minecraft.world.level.block.PointedDripstoneBlock;
+import net.minecraft.world.level.block.PowderSnowBlock;
+import net.minecraft.world.level.block.SlimeBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.DripstoneThickness;
 
 /**
  * 身体快照:规划要知道的身体的一切,由宿主在派发那一刻从真实的身体上抄下来。规划与执行复核读同一份形状,搜索线程只读。
  *
- * <p>摔落上限、能不能疾跑、能不能动方块这几条规则只写在这里,规格只能在其上收紧。
+ * <p>摔掉几点血、摔落上限、能不能疾跑、能不能动方块这几条规则只写在这里,规格只能在其上收紧。
  *
  * @param stats                   第 0 层用的物理量(尺寸、迈步、起跳、交互距离、细雪托不托得住)
  * @param gameMode                游戏模式:创造模式瞬间挖掉、不摔伤;冒险与旁观模式动不了方块
@@ -31,8 +40,6 @@ public record BodySnapshot(BodyStats stats, GameType gameMode, float health, dou
 
     /** 摔完至少要留下的血量(三颗心):按血量推摔落上限时不把她摔到只剩一口气。 */
     static final float HEALTH_RESERVE = 6.0F;
-    /** 摔落上限的搜索范围;创造模式不摔伤,上限就是它。 */
-    private static final int NO_LIMIT = 4096;
 
     /**
      * 挖掘速度用到的身体属性与效果,照原版 {@code Player.getDestroySpeed} 取值。
@@ -82,29 +89,50 @@ public record BodySnapshot(BodyStats stats, GameType gameMode, float health, dou
     }
 
     /**
-     * 从 {@code height} 格高处落到硬地上掉几点血,照原版 {@code LivingEntity.calculateFallDamage}:超出安全高度的部分乘以倍率
-     * 后向上取整。落点方块自己的减伤(干草块、床)不算。创造模式不摔伤。
+     * 从 {@code height} 格高处落到 {@code onto} 上掉几点血。全模块只在这里回答:坠落的定价与摔不摔得起都读它。
+     *
+     * <p>照原版:落地时原版对脚下那块调 {@code Block.fallOn},默认把落差原样交给 {@code causeFallDamage}(倍率 1);
+     * 下面几种方块覆写了它,改的是交过去的落差或倍率——
+     * <ul>
+     *   <li>朝上的滴水石锥尖({@code PointedDripstoneBlock}:{@code tip_direction=up} 且 {@code thickness=tip}):落差加 2、
+     *       倍率 2,落差过 1 格就疼;锥身、朝下的锥与别的粗细按默认;</li>
+     *   <li>干草块({@code HayBlock})、蜂蜜块({@code HoneyBlock}):倍率 0.2;</li>
+     *   <li>床({@code BedBlock}):落差减半;</li>
+     *   <li>黏液块({@code SlimeBlock}):不按潜行时倍率 0——寻路计划的落地都不按潜行;</li>
+     *   <li>细雪({@code PowderSnowBlock}):不调 {@code causeFallDamage},不疼。只有细雪托得住的身体才落得到它上面。</li>
+     * </ul>
+     * 之后照原版 {@code LivingEntity.calculateFallDamage}:落差减去安全高度、乘以方块给的倍率(这两步按原版的 float 算)、
+     * 再乘属性 {@code fall_damage_multiplier},向上取整;不到 1 点不掉血。创造模式不摔伤({@code Player.causeFallDamage}
+     * 在能飞时直接返回)。护甲附魔与抗性效果的减伤不算。
      */
-    public int fallDamage(double height) {
-        if (creative()) {
+    public int fallDamage(double height, BlockState onto) {
+        if (creative() || onto.getBlock() instanceof PowderSnowBlock) {
             return 0;
         }
-        return Math.max(0, Mth.ceil((height - safeFallDistance) * fallDamageMultiplier));
+        float distance = (float) height;
+        float multiplier = 1.0F;
+        switch (onto.getBlock()) {
+            case PointedDripstoneBlock dripstone when onto.getValue(PointedDripstoneBlock.TIP_DIRECTION) == Direction.UP
+                    && onto.getValue(PointedDripstoneBlock.THICKNESS) == DripstoneThickness.TIP -> {
+                distance += 2.0F;
+                multiplier = 2.0F;
+            }
+            case HayBlock hay -> multiplier = 0.2F;
+            case HoneyBlock honey -> multiplier = 0.2F;
+            case SlimeBlock slime -> multiplier = 0.0F;
+            case BedBlock bed -> distance *= 0.5F;
+            default -> {
+            }
+        }
+        float over = distance - (float) safeFallDistance;
+        return Math.max(0, Mth.ceil((double) (over * multiplier) * fallDamageMultiplier));
     }
 
     /**
-     * 摔落上限:落到硬地上最多能落几格——摔不疼的高度都行,要掉血的只到摔完还留 {@link #HEALTH_RESERVE} 点血为止。
-     * 这是全模块唯一的摔落上限;路线规格的无水落差只能比它更紧。
+     * 摔掉 {@code damage} 点血受不受得起:不疼的都行,疼的只到摔完还留 {@link #HEALTH_RESERVE} 点血为止。
+     * 这是全模块唯一的摔落上限;路线规格的无水落差只能比它更紧({@link CostModel#bearsFall})。
      */
-    public int maxFall() {
-        int height = 0;
-        while (height < NO_LIMIT) {
-            int damage = fallDamage(height + 1);
-            if (damage > 0 && health - damage < HEALTH_RESERVE) {
-                return height;
-            }
-            height++;
-        }
-        return NO_LIMIT;
+    public boolean bears(int damage) {
+        return damage <= 0 || health - damage >= HEALTH_RESERVE;
     }
 }

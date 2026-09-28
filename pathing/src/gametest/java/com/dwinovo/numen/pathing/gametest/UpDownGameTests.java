@@ -5,6 +5,7 @@ import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
+import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestAssertException;
@@ -12,6 +13,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -26,6 +28,24 @@ public class UpDownGameTests {
     @BeforeBatch(batch = BATCH)
     public static void settle(ServerLevel level) {
         Worlds.settle(level);
+    }
+
+    /** 落在什么上:和平难度每秒回一点血,看摔掉几点血的用例在这一批里关掉自然回血,批后照原样还回去。 */
+    private static final String LANDING = "pathing_landing";
+
+    private static boolean regeneration;
+
+    @BeforeBatch(batch = LANDING)
+    public static void settleLanding(ServerLevel level) {
+        Worlds.settle(level);
+        GameRules.BooleanValue rule = level.getGameRules().getRule(GameRules.RULE_NATURAL_REGENERATION);
+        regeneration = rule.get();
+        rule.set(false, level.getServer());
+    }
+
+    @AfterBatch(batch = LANDING)
+    public static void restoreLanding(ServerLevel level) {
+        level.getGameRules().getRule(GameRules.RULE_NATURAL_REGENERATION).set(regeneration, level.getServer());
     }
 
     /** 跳上一整块。 */
@@ -184,6 +204,58 @@ public class UpDownGameTests {
         t.go(weak, Goals.at(t.at(30, 1, 4)), spec).within(800).arrives().then(r -> {
             if (r.lowestHealth < 7) {
                 throw new GameTestAssertException("只剩 7 点血却摔了下去:最低 " + r.lowestHealth);
+            }
+        });
+    }
+
+    /**
+     * 规格许落二十格,满血的身体站在九格高的石柱顶上。一边柱脚四周是石头地:落九格掉 6 点血,跳下去;另一边柱脚四周一圈
+     * 朝上的滴水石锥尖:落上去按原版掉 15 点,摔完不到 6 点血,不跳,不许改地形就没有路,一点血不掉。
+     */
+    @GameTest(template = ARENA, batch = LANDING, timeoutTicks = 800)
+    public static void will_not_fall_onto_an_upward_stalagmite(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        RouteSpec spec = RouteSpec.defaults().edit().maxFallHeightNoWater(20).build();
+        t.fill(22, 1, 2, 26, 1, 6, Blocks.POINTED_DRIPSTONE);
+        for (int side : new int[] {0, 19}) {
+            t.fill(side + 4, 1, 3, side + 6, 9, 5, Blocks.STONE);
+        }
+        TestBody stone = t.body(5, 10, 4);
+        TestBody spikes = t.body(24, 10, 4);
+        t.go(stone, Goals.at(t.at(10, 1, 4)), spec).within(600).arrives().then(r -> {
+            if (r.lowestHealth >= 20) {
+                throw new GameTestAssertException("落在石头上摔得起,却没有跳下去 " + r.navigation);
+            }
+        });
+        t.go(spikes, Goals.at(t.at(29, 1, 4)), spec).within(600)
+                .fails(com.dwinovo.numen.pathing.api.Outcome.NeedsAlter.class).then(UpDownGameTests::unhurt);
+    }
+
+    /**
+     * 只剩 8 点血的身体站在八格高的石柱顶上,规格许落二十格。落在石头上掉 5 点,摔完不到 6 点血,不跳;落在干草块上按原版
+     * 只掉 1 点,跳下去。
+     */
+    @GameTest(template = ARENA, batch = LANDING, timeoutTicks = 800)
+    public static void hay_takes_a_higher_fall_than_stone(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        RouteSpec spec = RouteSpec.defaults().edit().maxFallHeightNoWater(20).build();
+        t.fill(22, 0, 1, 28, 0, 7, Blocks.HAY_BLOCK);
+        for (int side : new int[] {0, 19}) {
+            t.fill(side + 4, 1, 3, side + 6, 8, 5, Blocks.STONE);
+        }
+        TestBody stone = t.body(5, 9, 4);
+        TestBody hay = t.body(24, 9, 4);
+        stone.setHealth(8);
+        hay.setHealth(8);
+        t.go(stone, Goals.at(t.at(8, 1, 4)), spec).within(600)
+                .fails(com.dwinovo.numen.pathing.api.Outcome.NeedsAlter.class).then(r -> {
+                    if (r.lowestHealth < 8) {
+                        throw new GameTestAssertException("落在石头上摔不起,却摔了下去:最低 " + r.lowestHealth);
+                    }
+                });
+        t.go(hay, Goals.at(t.at(27, 1, 4)), spec).within(600).arrives().then(r -> {
+            if (r.lowestHealth != 7) {
+                throw new GameTestAssertException("落在干草块上应当只掉 1 点血:最低 " + r.lowestHealth);
             }
         });
     }

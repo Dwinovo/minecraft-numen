@@ -310,6 +310,20 @@ class MovesTest {
     }
 
     @Test
+    void whatTheFallLandsOnDecidesWhetherItIsBearable() {
+        CostModel loose = Fixtures.model(RouteSpec.defaults().edit().maxFallHeightNoWater(30).build());
+        // 同一道十格的崖:落在石头上掉 7 点;落在朝上的滴水石锥尖上(顶面 11/16)按原版掉 17 点,满血也摔不起
+        assertEquals(7, holds(MoveKind.FALL, loose, ledge(10), AT, EAST).fallDamage());
+        TestWorld spike = ledge(10).set(1, Y - 10, 0, net.minecraft.world.level.block.Blocks.POINTED_DRIPSTONE.defaultBlockState());
+        assertEquals(Reason.TOO_FAR_TO_FALL, fails(MoveKind.FALL, loose, spike, AT, EAST).reason());
+        // 十八格落在石头上摔不起,落在干草块上只掉 3 点
+        assertEquals(Reason.TOO_FAR_TO_FALL, fails(MoveKind.FALL, loose, ledge(18), AT, EAST).reason());
+        TestWorld hay = ledge(18).set(1, Y - 19, 0, net.minecraft.world.level.block.Blocks.HAY_BLOCK.defaultBlockState());
+        Maneuver soft = holds(MoveKind.FALL, loose, hay, AT, EAST);
+        assertEquals(3, soft.fallDamage());
+    }
+
+    @Test
     void landingOnFarmlandFromAHeightTramplesItEvenWhenTheRouteMayStepOnIt() {
         RouteSpec farm = RouteSpec.defaults().edit().allow(com.dwinovo.numen.pathing.world.Semantics.Kind.FRAGILE).build();
         TestWorld world = ledge(2);

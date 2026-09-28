@@ -142,7 +142,7 @@ public final class NavText {
             case NO_FOOTING -> "nothing to stand on where the step lands";
             case NO_CLEARANCE -> "no room for my body there";
             case TOO_HIGH -> "too high to step or jump up";
-            case TOO_FAR_TO_FALL -> "the drop is too far to take";
+            case TOO_FAR_TO_FALL -> "the drop is too far, or the landing would hurt too much";
             case WRONG_DROP -> "the ground is not where the step expected it";
             case NO_GAP -> "there is no gap to jump";
             case NO_SPRINT -> "the jump needs a sprint and I can't sprint";

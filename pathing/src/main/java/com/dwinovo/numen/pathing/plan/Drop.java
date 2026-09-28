@@ -19,8 +19,9 @@ import net.minecraft.core.SectionPos;
  *       就落不下去;</li>
  *   <li>迈出去不用起跳,走完落到的脚高与落点一致(第 0 层 {@link Stepping#walkOff});身体在起步的脚高上走进那一列
  *       途中挡着的格,门开关、其余挖开;</li>
- *   <li>落在硬地上时落差不超过摔落上限({@link CostModel#fallLimit});落进水里、抓住梯子不摔伤,不受这个上限;摔不起而身上
- *       有水桶时,在落点倒一桶水接住(落定后收回,{@link Edit.Catch})。</li>
+ *   <li>站着落地时摔得起({@link CostModel#bearsFall}:摔掉几点血按落差与落点脚下那一格算,朝上的滴水石锥尖加重,干草块、
+ *       床这些减轻);落进水里、抓住梯子不摔伤,不受这个上限;摔不起而身上有水桶时,在落点倒一桶水接住(落定后收回,
+ *       {@link Edit.Catch})。</li>
  * </ul>
  */
 final class Drop implements Move {
@@ -107,20 +108,22 @@ final class Drop implements Move {
         }
         boolean wading = Strides.inWater(draft, to);
         double drop = f0 - landing.feetY();
-        if (landing.grounded() && !wading && drop > model.fallLimit() + Footing.EPSILON) {
+        BlockPos support = landing.support(tx, tz);
+        int damage = Strides.fallDamage(model, draft, landing, support, drop, wading);
+        if (landing.grounded() && !wading && !model.bearsFall(drop, damage)) {
             // 摔不起:身上有水桶就在落点倒一桶水接住,落进水里
             if (!draft.catchFall(to)) {
                 return draft.failure();
             }
             wading = true;
+            damage = 0;
         }
         Contact contact = new Contact(body, from, f0).column(tx, tz, landing.feetY(), f0);
-        BlockPos support = landing.support(tx, tz);
         if (!contact.admit(draft, model, support, drop > 0.5)) {
             return draft.failure();
         }
         return new Premise.Holds(new Maneuver(kind, heading, from, stance, to, landing, false, false, false, wading,
-                Semantics.speedFactor(draft, from.getX(), f0, from.getZ()), drop, 1, draft.edits(), contact.cells(), contact.exposure(),
+                Semantics.speedFactor(draft, from.getX(), f0, from.getZ()), drop, damage, 1, draft.edits(), contact.cells(), contact.exposure(),
                 support));
     }
 
