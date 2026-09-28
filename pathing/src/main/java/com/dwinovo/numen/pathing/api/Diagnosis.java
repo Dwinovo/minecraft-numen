@@ -22,14 +22,15 @@ import net.minecraft.world.level.block.Blocks;
  * <ol>
  *   <li>规格不许改地形:许改自然地形就有路 → {@link Outcome.NeedsAlter}({@code NATURAL});连要主人同意的格也许改才有路
  *       → {@link Outcome.NeedsAlter}({@code ANY});都连同那条路要改几格;</li>
+ *   <li>只许改自然地形:连要主人同意的格也许改就有路 → {@link Outcome.NeedsAlter}({@code ANY});</li>
  *   <li>身上没料:有料就有路 → {@link Outcome.NoMaterials};</li>
  *   <li>设了改动预算:不限预算就有路 → {@link Outcome.OverAlterBudget},连同最便宜那条要改几格;</li>
- *   <li>只许改自然地形:连要主人同意的格也许改就有路 → {@link Outcome.NeedsAlter}({@code ANY});</li>
  *   <li>许可拒绝的格放行就有路 → {@link Outcome.Denied},连同路上第一格被拒的格与许可给的理由;</li>
  *   <li>都没有 → {@link Outcome.NoRoute}。</li>
  * </ol>
- * 前一条换过的条件后面接着用(不许改地形又没料时,问的是"许改又有料"),所以"许改的不够"总是先报,身上有没有料不提。
- * 换条件的搜索与原来的同一个预算;它也搜不完,那一条就不算数。在工作线程上跑,只读快照。
+ * "许改的不够"总是先报,身上有没有料不提:不许改地形时问的是"许改又有料";只许改自然地形时问的是"连要同意的格也许改,
+ * 料照身上的"——设想出来的料会让一条只缺料的路冒充成要主人同意的路。换条件的搜索与原来的同一个预算;它也搜不完,
+ * 那一条就不算数。在工作线程上跑,只读快照。
  */
 final class Diagnosis {
 
@@ -60,6 +61,12 @@ final class Diagnosis {
             }
             return new Outcome.NoRoute();
         }
+        if (spec.alter() == RouteSpec.Alter.NATURAL) {
+            Route route = find(failed, model.withSpec(spec.edit().alter(RouteSpec.Alter.ANY).build()), cancelled);
+            if (route != null) {
+                return new Outcome.NeedsAlter(RouteSpec.Alter.ANY, route.alterations());
+            }
+        }
         if (!hadMaterials && find(failed, withMaterials(model), cancelled) != null) {
             return new Outcome.NoMaterials();
         }
@@ -67,12 +74,6 @@ final class Diagnosis {
             Route route = find(failed, model.withSpec(spec.edit().alterBudget(RouteSpec.UNLIMITED).build()), cancelled);
             if (route != null) {
                 return new Outcome.OverAlterBudget(route.alterations());
-            }
-        }
-        if (spec.alter() == RouteSpec.Alter.NATURAL) {
-            Route route = find(failed, model.withSpec(spec.edit().alter(RouteSpec.Alter.ANY).build()), cancelled);
-            if (route != null) {
-                return new Outcome.NeedsAlter(RouteSpec.Alter.ANY, route.alterations());
             }
         }
         TerrainPolicy original = model.terrain();
