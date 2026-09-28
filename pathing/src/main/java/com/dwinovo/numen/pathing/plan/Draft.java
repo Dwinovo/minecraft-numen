@@ -24,8 +24,7 @@ final class Draft extends EditedView {
 
     private final CostModel model;
     private final BodyStats body;
-    /** 要做的改动;多数草稿一件也不改,第一件改动时才建表。 */
-    private List<Edit> edits;
+    private final List<Edit> edits = new ArrayList<>(2);
     private Premise.Fails failure;
 
     Draft(CostModel model, WorldView base) {
@@ -36,16 +35,8 @@ final class Draft extends EditedView {
 
     // ==================== 结果 ====================
 
-    /** 要做的改动,按执行的先后;交出的是一份不可变的。 */
     List<Edit> edits() {
-        return edits == null ? List.of() : List.copyOf(edits);
-    }
-
-    private void record(Edit edit) {
-        if (edits == null) {
-            edits = new ArrayList<>(2);
-        }
-        edits.add(edit);
+        return edits;
     }
 
     /** 这一步的失败;还没失败为 null。 */
@@ -82,7 +73,7 @@ final class Draft extends EditedView {
             return fail(pos, Reason.OUT_OF_REACH);
         }
         boolean eyeInWater = Semantics.eyeInWater(this, bx + 0.5, feetY + body.eyeHeight(Pose.STANDING), bz + 0.5);
-        record(new Edit.Dig(pos.immutable(), state, admission.permit(), eyeInWater, grounded));
+        edits.add(new Edit.Dig(pos.immutable(), state, admission.permit(), eyeInWater, grounded));
         dig(pos);
         return true;
     }
@@ -103,7 +94,7 @@ final class Draft extends EditedView {
             return fail(pos, Reason.OUT_OF_REACH);
         }
         Block block = model.placing().orElseThrow();
-        record(new Edit.Place(pos.immutable(), current, block, admission.permit()));
+        edits.add(new Edit.Place(pos.immutable(), current, block, admission.permit()));
         place(pos, block);
         return true;
     }
@@ -117,7 +108,7 @@ final class Draft extends EditedView {
         if (!admission.ok()) {
             return fail(pos, admission.refused(), admission.detail());
         }
-        record(new Edit.Catch(pos.immutable(), current, admission.permit()));
+        edits.add(new Edit.Catch(pos.immutable(), current, admission.permit()));
         pour(pos);
         return true;
     }
@@ -138,7 +129,7 @@ final class Draft extends EditedView {
             }
             BlockState state = getBlockState(cell);
             if (Semantics.openableByHand(state)) {
-                record(new Edit.Door(cell.immutable(), state));
+                edits.add(new Edit.Door(cell.immutable(), state));
                 toggle(cell);
             } else if (!mayDig) {
                 return fail(cell, Reason.NO_CLEARANCE);

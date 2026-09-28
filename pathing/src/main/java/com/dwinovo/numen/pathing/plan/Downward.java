@@ -15,8 +15,6 @@ import net.minecraft.core.BlockPos;
  */
 final class Downward implements Move {
 
-    private static final List<Heading> HEADINGS = List.of(Heading.DOWN);
-
     @Override
     public MoveKind kind() {
         return MoveKind.DOWNWARD;
@@ -24,7 +22,7 @@ final class Downward implements Move {
 
     @Override
     public List<Heading> headings() {
-        return HEADINGS;
+        return List.of(Heading.DOWN);
     }
 
 
