@@ -27,14 +27,19 @@ public final class Hotbar {
 
     /**
      * 把主背包第 {@code slot} 格的东西拿到主手;{@code slot} 为负是空手——切到快捷栏里一个空格({@link #emptyHand}),
-     * 没有空格就拿着手上的东西。已经在主手上就什么也不做。
+     * 没有空格就拿着手上的东西。已经在主手上就什么也不做。手上本来就空着、只是换到另一个空格时,手上拿的没变,
+     * 不算一个身体动作。
      */
     public static Optional<BodyAction> hold(ServerPlayer body, int slot) {
         Inventory inventory = body.getInventory();
         if (slot < 0) {
             int empty = emptyHand(inventory);
-            return empty < 0 || empty == inventory.selected ? Optional.empty()
-                    : Optional.of(select(body, empty, Items.AIR));
+            if (empty < 0 || empty == inventory.selected) {
+                return Optional.empty();
+            }
+            boolean wasEmpty = inventory.getSelected().isEmpty();
+            BodyAction action = select(body, empty, Items.AIR);
+            return wasEmpty ? Optional.empty() : Optional.of(action);
         }
         if (slot == inventory.selected) {
             return Optional.empty();
