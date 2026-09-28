@@ -13,6 +13,8 @@ import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.spec.RouteSpec.Alter;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -21,6 +23,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** 成本模型:挖与放的准入按规格与许可分开,价钱只在一处算。 */
@@ -95,6 +98,50 @@ class CostModelTest {
         BlockPos pond = new BlockPos(0, 60, 0);
         world.set(pond, Blocks.WATER.defaultBlockState()).set(pond.below(), STONE);
         assertEquals(Reason.FORBIDDEN, model.admitPlace(world, pond, Blocks.WATER.defaultBlockState()).refused());
+    }
+
+    /** 规格按位置禁放的一格,往里放垫路料不准入,原因是"规格禁止";同一格不禁时放得进去。 */
+    @Test
+    void placingIntoACellThePositionsForbidIsRefused() {
+        TestWorld world = new TestWorld().set(FREE.below(), STONE);
+        RouteSpec natural = RouteSpec.defaults().edit().alter(Alter.NATURAL).build();
+        CostModel open = CostModel.of(natural, Fixtures.body(), TerrainPolicy.ALLOW_ALL, Fixtures.COBBLE, Threats.NONE);
+        assertNull(open.admitPlace(world, FREE, Blocks.AIR.defaultBlockState()).refused());
+        CostModel forbidden = open.withSpec(natural.edit()
+                .positions(PositionCosts.builder().forbid(Use.PLACE, FREE.asLong()).build()).build());
+        assertEquals(Reason.FORBIDDEN, forbidden.admitPlace(world, FREE, Blocks.AIR.defaultBlockState()).refused());
+    }
+
+    /**
+     * 挖一格的价钱由两份合成:这具身体用挑中的工具挖掉它的刻数(与 {@link DigTime} 按同一份身体快照算的一致,眼睛泡没泡在
+     * 水里、脚着没着地照样算进去),加上规格的挖掘罚分。
+     */
+    @Test
+    void diggingCostsTheDigTimeWithTheChosenToolPlusTheBreakPenalty() {
+        RouteSpec spec = RouteSpec.defaults().edit().alter(Alter.NATURAL).breakPenalty(7.5).build();
+        BodySnapshot body = Fixtures.carrying(3, new ItemStack(Items.WOODEN_PICKAXE));
+        CostModel model = CostModel.of(spec, body, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+        for (boolean eyeInWater : new boolean[] {false, true}) {
+            for (boolean grounded : new boolean[] {true, false}) {
+                double ticks = DigTime.ticks(body, new ItemStack(Items.WOODEN_PICKAXE), STONE, eyeInWater, grounded);
+                assertEquals(ticks + 7.5, model.digCost(new Edit.Dig(FREE, STONE, Permit.ALLOW, eyeInWater, grounded)), 1e-9,
+                        "水里 " + eyeInWater + ",着地 " + grounded);
+            }
+        }
+    }
+
+    /** 危险半径不同的两只生物,各自只在自己的半径里加价:离小的那只四格没事,离大的那只四格要加价。 */
+    @Test
+    void eachCreatureRaisesThePriceOnlyWithinItsOwnRadius() {
+        Threat small = new Threat(0.5, 64, 0.5, 2);
+        Threat wide = new Threat(20.5, 64, 0.5, 5);
+        CostModel model = CostModel.of(RouteSpec.defaults(), Fixtures.body(), TerrainPolicy.ALLOW_ALL, Materials.NONE,
+                () -> List.of(small, wide));
+        double inside = model.extra(Use.PASS, new BlockPos(1, 64, 0).asLong());
+        assertTrue(inside > 0, "小的那只半径里");
+        assertEquals(0, model.extra(Use.PASS, new BlockPos(4, 64, 0).asLong()), "离小的那只四格,出了它的半径");
+        assertEquals(inside, model.extra(Use.PASS, new BlockPos(24, 64, 0).asLong()), 1e-9, "离大的那只四格,还在它的半径里");
+        assertEquals(0, model.extra(Use.PASS, new BlockPos(26, 64, 0).asLong()), "离大的那只五格半,出了它的半径");
     }
 
     @Test

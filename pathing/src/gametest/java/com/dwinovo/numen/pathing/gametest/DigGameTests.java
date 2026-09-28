@@ -269,6 +269,26 @@ public class DigGameTests {
         });
     }
 
+    /**
+     * 选中的快捷栏格空着,背包里有一把铁镐:泥土墙空手挖不比镐子慢,就空手挖,手里一直空着——从一个空格换到另一个空格
+     * 手上拿的没变,不是身体动作,结局里一个身体动作也没有。
+     */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    public static void digging_bare_handed_from_an_empty_slot_is_no_body_action(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        wall(t, 8, 3, Blocks.DIRT);
+        TestBody body = t.body(4, 1, 5);
+        body.getInventory().setItem(3, new ItemStack(Items.IRON_PICKAXE));
+        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(400).arrives().then(r -> {
+            if (dug(r).isEmpty()) {
+                throw new GameTestAssertException("一格也没挖");
+            }
+            if (!r.report.actions().isEmpty()) {
+                throw new GameTestAssertException("空手挖不该有身体动作:" + r.report.actions());
+            }
+        });
+    }
+
     /** 红石矿墙,手上铁镐:红石矿被敲一下会亮起来(方块状态变了),挖掘照样一次挖完,不重开。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
     public static void does_not_restart_on_redstone_ore(GameTestHelper helper) {

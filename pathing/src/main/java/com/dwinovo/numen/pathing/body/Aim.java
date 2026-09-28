@@ -53,14 +53,25 @@ public final class Aim {
 
     /** 转到朝 {@code yaw}、俯仰 {@code pitch}(按鼠标像素取整)。 */
     public static void turn(ServerPlayer body, float yaw, float pitch) {
-        float fromYaw = body.getYRot();
+        Rotation to = turned(body.getYRot(), body.getXRot(), yaw, pitch);
+        body.setYRot(to.yaw());
+        body.setYHeadRot(to.yaw());
+        body.setYBodyRot(to.yaw());
+        body.setXRot(to.pitch());
+    }
+
+    /** 一个朝向:水平朝向 {@code yaw} 与俯仰 {@code pitch},度。 */
+    record Rotation(float yaw, float pitch) {}
+
+    /**
+     * 从 {@code (fromYaw, fromPitch)} 照鼠标转向 {@code (yaw, pitch)} 之后落在哪:两个方向各转整数个像素({@link #PIXEL}),
+     * 取离要的角度最近的那一格,所以差不到半个像素;水平朝向走近的那一边(不超过半圈,转到的值不回绕到 ±180 之内,与原版
+     * 鼠标一样累加);俯仰照原版夹在 ±90 之间。
+     */
+    static Rotation turned(float fromYaw, float fromPitch, float yaw, float pitch) {
         float newYaw = fromYaw + quantize(Mth.wrapDegrees(yaw - fromYaw));
-        float fromPitch = body.getXRot();
         float newPitch = Mth.clamp(fromPitch + quantize(pitch - fromPitch), -90.0F, 90.0F);
-        body.setYRot(newYaw);
-        body.setYHeadRot(newYaw);
-        body.setYBodyRot(newYaw);
-        body.setXRot(newPitch);
+        return new Rotation(newYaw, newPitch);
     }
 
     /** 走路时朝 {@code (x, z)} 看去,俯仰留在平视。 */

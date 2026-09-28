@@ -1,10 +1,14 @@
 package com.dwinovo.numen.pathing.plan;
 
 import java.util.List;
+import java.util.Set;
 
 import com.dwinovo.numen.pathing.Fixtures;
 import com.dwinovo.numen.pathing.TestWorld;
 import com.dwinovo.numen.pathing.Vanilla;
+import com.dwinovo.numen.pathing.spec.BlockBans;
+import com.dwinovo.numen.pathing.spec.PositionCosts;
+import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
@@ -77,6 +81,45 @@ class MovesTest {
         assertTrue(m.edits().isEmpty());
         assertTrue(m.sprint());
         assertFalse(m.jump());
+    }
+
+    /** 规格不许疾跑时,平地上走一格不疾跑,比许疾跑时贵。 */
+    @Test
+    void aSpecThatForbidsSprintingWalksAndPaysForIt() {
+        CostModel walking = Fixtures.model(RouteSpec.defaults().edit().sprint(false).build());
+        Maneuver walked = holds(MoveKind.WALK, walking, ground(), AT, EAST);
+        assertFalse(walked.sprint());
+        assertTrue(Steps.cost(walking, walked) > Steps.cost(defaults(), holds(MoveKind.WALK, defaults(), ground(), AT, EAST)));
+    }
+
+    /**
+     * 规格按位置禁站、禁穿过的格与按种类禁站的方块,平走一步踩上、穿过它们都不成,原因是"规格禁止",点出的是那一格;
+     * 同一步没有这些禁令时照常成立。
+     */
+    @Test
+    void cellsAndBlocksTheSpecForbidsAreNeitherStoodOnNorPassedThrough() {
+        BlockPos support = AT.east().below();
+        BlockPos head = AT.east().above();
+        TestWorld planks = ground().set(support, Blocks.OAK_PLANKS.defaultBlockState());
+        holds(MoveKind.WALK, defaults(), planks, AT, EAST);
+
+        RouteSpec noStand = RouteSpec.defaults().edit()
+                .positions(PositionCosts.builder().forbid(Use.STAND, support.asLong()).build()).build();
+        Premise.Fails stand = fails(MoveKind.WALK, Fixtures.model(noStand), planks, AT, EAST);
+        assertEquals(Reason.FORBIDDEN, stand.reason());
+        assertEquals(support, stand.cell());
+
+        RouteSpec noPass = RouteSpec.defaults().edit()
+                .positions(PositionCosts.builder().forbid(Use.PASS, head.asLong()).build()).build();
+        Premise.Fails pass = fails(MoveKind.WALK, Fixtures.model(noPass), planks, AT, EAST);
+        assertEquals(Reason.FORBIDDEN, pass.reason());
+        assertEquals(head, pass.cell(), "头顶经过的那一格");
+
+        RouteSpec noPlanks = RouteSpec.defaults().edit()
+                .bans(new BlockBans(Set.of(), Set.of(), Set.of(Blocks.OAK_PLANKS))).build();
+        Premise.Fails banned = fails(MoveKind.WALK, Fixtures.model(noPlanks), planks, AT, EAST);
+        assertEquals(Reason.FORBIDDEN, banned.reason());
+        assertEquals(support, banned.cell());
     }
 
     @Test
@@ -312,6 +355,28 @@ class MovesTest {
         TestWorld wet = ground().set(AT, Blocks.WATER.defaultBlockState());
         assertEquals(Reason.WRONG_STANCE, fails(MoveKind.PILLAR, withCobble(natural()), wet, AT, Heading.UP).reason(),
                 "泡在水里不垫柱");
+    }
+
+    /** 头顶一格压着石头时垫柱:先挖开头顶那一格,再往脚下垫块;不许改地形时这一步不成。 */
+    @Test
+    void pillaringUnderABlockDigsItFirst() {
+        BlockPos overhead = new BlockPos(0, Y + 2, 0);
+        TestWorld world = ground().set(overhead, Blocks.STONE.defaultBlockState());
+        Maneuver m = holds(MoveKind.PILLAR, withCobble(natural()), world, AT, Heading.UP);
+        List<Edit> edits = m.edits();
+        int dig = -1;
+        int place = -1;
+        for (int i = 0; i < edits.size(); i++) {
+            if (edits.get(i) instanceof Edit.Dig d && d.pos().equals(overhead)) {
+                dig = i;
+            }
+            if (edits.get(i) instanceof Edit.Place p && p.pos().equals(AT)) {
+                place = i;
+            }
+        }
+        assertTrue(dig >= 0, "挖开头顶那一格:" + edits);
+        assertTrue(place > dig, "挖开之后才垫块:" + edits);
+        assertEquals(Reason.NEEDS_ALTER, fails(MoveKind.PILLAR, withCobble(RouteSpec.defaults()), world, AT, Heading.UP).reason());
     }
 
     @Test

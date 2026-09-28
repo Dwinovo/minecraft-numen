@@ -250,6 +250,35 @@ public class AlterGameTests {
         });
     }
 
+    /**
+     * 关在没有顶的泥土围栏里(墙三格高,跳不出去),泥土许可答"要问",身上没有料:出去要么挖墙(要主人同意),要么垫柱翻过墙
+     * (要料)。只许改自然地形时,结局是"放宽到 any 才有路"——许改的不够先报,不说成没料。旁边一模一样的围栏里,带着圆石的
+     * 身体垫柱翻出去,墙一格不挖:这个场景里料确实是另一条出路。
+     */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
+    public static void asks_for_consent_before_materials(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(2, 1, 2, 8, 3, 8, Blocks.DIRT);
+        t.fill(3, 1, 3, 7, 3, 7, Blocks.AIR);
+        t.fill(2, 1, 17, 8, 3, 23, Blocks.DIRT);
+        t.fill(3, 1, 18, 7, 3, 22, Blocks.AIR);
+        t.terrain = (change, pos, state, view) -> state.is(Blocks.DIRT) ? Permit.ask("pen") : Permit.ALLOW;
+        TestBody empty = t.body(5, 1, 5);
+        t.go(empty, Goals.at(t.at(12, 1, 5)), NATURAL).within(300).fails(Outcome.NeedsAlter.class, o -> {
+            if (o.level() != RouteSpec.Alter.ANY) {
+                throw new GameTestAssertException("应当是放宽到 any 才有路:" + o);
+            }
+        }).then(Scenes::unaltered);
+        TestBody carrying = t.body(5, 1, 20);
+        Trial.give(carrying, new ItemStack(Items.COBBLESTONE, 16));
+        t.materials = Trial.carried(carrying, Blocks.COBBLESTONE);
+        t.go(carrying, Goals.at(t.at(12, 1, 20)), NATURAL).within(600).arrives().then(r -> {
+            if (!dug(r).isEmpty() || placed(r).isEmpty()) {
+                throw new GameTestAssertException("应当垫柱翻出去、不挖墙:" + r.report.ledger().entries());
+            }
+        });
+    }
+
     // ==================== 改地形补充 ====================
 
     /** 两格高的泥土墙,口在六格多的绕路之外:许改地形也不挖,绕过去。 */

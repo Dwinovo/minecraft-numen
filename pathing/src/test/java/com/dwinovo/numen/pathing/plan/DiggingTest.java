@@ -86,6 +86,27 @@ class DiggingTest {
                 "挖泥土镐子不比空手快,不为它磨损镐子");
     }
 
+    /**
+     * 身体快照抄下的是背包那一刻的样子:之后宿主改了原来那份清单(把镐子拿走、别的槽位塞进更好的),或者原来那件东西本身
+     * 被用掉,挑工具看的还是快照里那份。
+     */
+    @Test
+    void theSnapshotKeepsTheInventoryAsItWasWhenTaken() {
+        List<ItemStack> inventory = new ArrayList<>();
+        for (int i = 0; i < 36; i++) {
+            inventory.add(ItemStack.EMPTY);
+        }
+        ItemStack pickaxe = new ItemStack(Items.DIAMOND_PICKAXE);
+        inventory.set(5, pickaxe);
+        BodySnapshot body = Fixtures.body(Vanilla.SURVIVAL, GameType.SURVIVAL, 20, inventory);
+        inventory.set(5, ItemStack.EMPTY);
+        inventory.set(2, new ItemStack(Items.NETHERITE_PICKAXE));
+        pickaxe.shrink(1);
+        ToolChoice.Pick pick = new ToolChoice(body).best(Blocks.STONE.defaultBlockState());
+        assertEquals(5, pick.slot());
+        assertEquals(Items.DIAMOND_PICKAXE, pick.tool().getItem());
+    }
+
     // ==================== 能不能挖 ====================
 
     private static Reason check(TestWorld world, BlockPos pos) {

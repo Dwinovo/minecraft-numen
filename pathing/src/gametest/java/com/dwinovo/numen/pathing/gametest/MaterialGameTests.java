@@ -133,6 +133,35 @@ public class MaterialGameTests {
         });
     }
 
+    /** 主手拿着一叠木板(不在料清单上),圆石只在副手:主副手一换,桥全用圆石搭,一块木板也不放。 */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    public static void bridges_with_the_listed_material_not_what_is_in_hand(GameTestHelper helper) {
+        Trial t = ditch(helper);
+        TestBody body = t.body(6, 5, 5);
+        body.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.OAK_PLANKS, 16));
+        body.setItemInHand(InteractionHand.OFF_HAND, new ItemStack(Items.COBBLESTONE, 16));
+        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
+        t.go(body, Goals.at(t.at(17, 5, 5)), NATURAL).within(700).arrives().then(r -> placedAre(r, Blocks.COBBLESTONE));
+    }
+
+    /** 快捷栏第 1 格与第 4 格都是圆石:用的是靠前的第 1 格,第 4 格一块没少。 */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
+    public static void takes_the_material_from_the_earlier_slot(GameTestHelper helper) {
+        Trial t = ditch(helper);
+        TestBody body = t.body(6, 5, 5);
+        body.getInventory().setItem(1, new ItemStack(Items.COBBLESTONE, 16));
+        body.getInventory().setItem(4, new ItemStack(Items.COBBLESTONE, 16));
+        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
+        t.go(body, Goals.at(t.at(17, 5, 5)), NATURAL).within(700).arrives().then(r -> {
+            placedAre(r, Blocks.COBBLESTONE);
+            int earlier = body.getInventory().getItem(1).getCount();
+            int later = body.getInventory().getItem(4).getCount();
+            if (earlier >= 16 || later != 16) {
+                throw new GameTestAssertException("应当从第 1 格取料:第 1 格剩 " + earlier + ",第 4 格剩 " + later);
+            }
+        });
+    }
+
     /** 手上拿着剑,圆石在背包深处:中键把圆石换进快捷栏搭桥,剑换回背包,一直在身上。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
     public static void keeps_the_weapon_after_bridging(GameTestHelper helper) {

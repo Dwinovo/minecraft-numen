@@ -6,6 +6,8 @@ import java.util.Optional;
 import com.dwinovo.numen.pathing.Fixtures;
 import com.dwinovo.numen.pathing.TestWorld;
 import com.dwinovo.numen.pathing.Vanilla;
+import com.dwinovo.numen.pathing.api.PlanQuery;
+import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.Materials;
@@ -14,12 +16,16 @@ import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.plan.TerrainPolicy;
 import com.dwinovo.numen.pathing.plan.Threat;
 import com.dwinovo.numen.pathing.plan.Threats;
+import com.dwinovo.numen.pathing.spec.PositionCosts;
+import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.spec.RouteSpec.Alter;
 import com.dwinovo.numen.pathing.world.Reach;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Pose;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -35,6 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** 搜索:到达判定、停下的原因、改地形与许可、候选路线、改动预算、生物危险、目标格保护。地板在 {@code Y - 1}。 */
@@ -130,6 +137,30 @@ class SearchTest {
     void aBodyThatCannotStandAtTheStartIsStranded() {
         SearchResult result = search(new TestWorld(), defaults(), START, Goals.at(new BlockPos(5, Y, 0)));
         assertEquals(SearchResult.Stop.STRANDED, result.stop());
+    }
+
+    /**
+     * 两条走廊 z=0 与 z=4 两头连通,z=0 那条短,可规格给它中段每一格加了价:搜出来的是绕远的 z=4,价钱与只许走 z=4 时
+     * 搜出的一样(最便宜),比只许走 z=0 时便宜——按价钱挑路,不按远近。
+     */
+    @Test
+    void theCheapestOfTwoWaysIsTakenEvenWhenItIsTheLongerOne() {
+        PositionCosts.Builder dear = PositionCosts.builder();
+        for (int x = 3; x <= 7; x++) {
+            dear.add(Use.PASS, new BlockPos(x, Y, 0).asLong(), 20);
+        }
+        RouteSpec spec = RouteSpec.defaults().edit().positions(dear.build()).build();
+        Goal goal = Goals.at(new BlockPos(10, Y, 0));
+        Route best = search(twoCorridors(), Fixtures.model(spec), START, goal).route();
+        Route onlyLong = search(twoCorridors(), Fixtures.model(spec.edit().positions(spec.positions()
+                .plus(PositionCosts.builder().forbid(Use.PASS, new BlockPos(5, Y, 0).asLong()).build())).build()),
+                START, goal).route();
+        Route onlyShort = search(twoCorridors(), Fixtures.model(spec.edit().positions(spec.positions()
+                .plus(PositionCosts.builder().forbid(Use.PASS, new BlockPos(5, Y, 4).asLong()).build())).build()),
+                START, goal).route();
+        assertTrue(best.nodes().contains(new BlockPos(5, Y, 4)), "走绕远的那条");
+        assertEquals(onlyLong.cost(), best.cost(), 0.1);
+        assertTrue(best.cost() < onlyShort.cost(), "比加了价的近路便宜");
     }
 
     // ==================== 改地形与许可 ====================
@@ -315,6 +346,59 @@ class SearchTest {
         assertFalse(digs(guarded.route(), goal.below()), "目标脚下那块不挖");
     }
 
+    /** 同一个目标去掉目标格保护:到达与估价照旧,不护着任何格。用来看不保护时最便宜的路会不会动那几格。 */
+    private static Goal unguarded(Goal goal) {
+        return new Goal() {
+            @Override
+            public boolean contains(int x, int y, int z, Stance stance) {
+                return goal.contains(x, y, z, stance);
+            }
+
+            @Override
+            public double estimate(int x, int y, int z) {
+                return goal.estimate(x, y, z);
+            }
+        };
+    }
+
+    private static boolean fills(Route route, BlockPos cell) {
+        return route.edits().stream().anyMatch(e -> (e instanceof Edit.Place || e instanceof Edit.Catch) && e.pos().equals(cell));
+    }
+
+    /**
+     * 身体站在一口一格宽、两格深的石坑底,要够的正是脚下这一格:不保护时最便宜的是原地垫一块——把那一格填上、站到它上面去
+     * 够它;贴脸的目标不往要够的那一格里放东西,改从坑壁出去。
+     */
+    @Test
+    void reachingABlockNeverFillsItOnTheWay() {
+        TestWorld pit = field().fill(-1, Y, -1, 1, Y + 1, 1, STONE).fill(0, Y, 0, 0, Y + 1, 0, Blocks.AIR.defaultBlockState());
+        Goal reach = Goals.reach(START, SURVIVAL);
+        CostModel model = Fixtures.withCobble(natural());
+        SearchResult loose = search(pit, model, START, unguarded(reach));
+        assertTrue(loose.arrived() && fills(loose.route(), START), "不保护时最便宜的是把要够的那一格垫上");
+        SearchResult guarded = search(pit, model, START, reach);
+        assertTrue(guarded.arrived(), "从坑壁出去");
+        assertFalse(fills(guarded.route(), START), "要够的那一格不放东西");
+    }
+
+    /**
+     * 身体站在十二格高的崖边,带着一桶水,去处是崖脚紧挨着的那一格:不保护时最便宜的是直接落进去、把水倒在那一格里接住自己;
+     * 站到某一格的目标不往自己要站的两格里放东西,改落进旁边一列接住、再走过去。
+     */
+    @Test
+    void standingOnACellNeverFillsItsOwnTwoCellsOnTheWay() {
+        TestWorld cliff = new TestWorld().floor(-4, -4, 0, 4, Y - 1).floor(1, -4, 6, 4, Y - 13);
+        BlockPos foot = new BlockPos(1, Y - 12, 0);
+        BodySnapshot bucket = Fixtures.carrying(0, new ItemStack(Items.WATER_BUCKET));
+        CostModel model = CostModel.of(natural(), bucket, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+        SearchResult loose = search(cliff, model, START, unguarded(Goals.at(foot)));
+        assertTrue(loose.arrived() && fills(loose.route(), foot), "不保护时最便宜的是把水倒在要站的那一格里");
+        SearchResult guarded = search(cliff, model, START, Goals.at(foot));
+        assertTrue(guarded.arrived());
+        assertEquals(foot, guarded.route().end());
+        assertFalse(fills(guarded.route(), foot) || fills(guarded.route(), foot.above()), "要站的两格不放东西");
+    }
+
     @Test
     void aStopStillCountsAfterTheGoalChangesOnlyIfItIsStillInsideAndNotDearer() {
         BlockPos stop = new BlockPos(5, Y, 0);
@@ -345,6 +429,40 @@ class SearchTest {
         assertTrue(first.nodes().stream().anyMatch(n -> n.getZ() == 0 && n.getX() == 5));
         assertTrue(second.nodes().stream().anyMatch(n -> n.getZ() == 4 && n.getX() == 5));
         assertTrue(first.cost() < second.cost(), "候选按原价计,不带逼出备选的加价");
+    }
+
+    /**
+     * 要三条候选,预算只够搜出最便宜的那一条:第二次搜索(已有候选经过的格加了价,要绕开它得多展开)预算用完,规划收工——
+     * 先找到的那一条照样交出,并说出收工的那次搜索为什么停。
+     */
+    @Test
+    void aCandidateSearchThatStopsShortKeepsTheCandidatesFoundAndSaysWhy() {
+        TestWorld world = field();
+        CostModel model = defaults();
+        Goal goal = Goals.at(new BlockPos(12, Y, 0));
+        int enough = 1;
+        while (!search(world, model, START, goal, enough).arrived()) {
+            enough++;
+        }
+        Route cheapest = search(world, model, START, goal, enough).route();
+        RoutePlanner.Plan plan = RoutePlanner.run(new RoutePlanner.Query(world, model, START, goal, enough, 3), () -> false);
+        assertEquals(SearchResult.Stop.BUDGET, plan.unreached(), "第二次搜索预算用完");
+        assertEquals(1, plan.candidates().size(), "先找到的那一条留着");
+        assertEquals(cheapest.nodes(), plan.candidates().get(0).nodes());
+    }
+
+    /** 候选条数只能是 1 到上限:要 0 条或超过上限,查询本身就不成立——搜索这一层的查询与门面的查询都一样。 */
+    @Test
+    void askingForNoCandidatesOrMoreThanTheLimitIsRefused() {
+        Goal goal = Goals.at(new BlockPos(5, Y, 0));
+        for (int wanted : new int[] {0, RoutePlanner.MAX_CANDIDATES + 1}) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> new RoutePlanner.Query(field(), defaults(), START, goal, Fixtures.BUDGET, wanted), "要 " + wanted + " 条");
+            assertThrows(IllegalArgumentException.class, () -> PlanQuery.of(goal, RouteSpec.defaults(), wanted),
+                    "要 " + wanted + " 条");
+        }
+        new RoutePlanner.Query(field(), defaults(), START, goal, Fixtures.BUDGET, RoutePlanner.MAX_CANDIDATES);
+        PlanQuery.of(goal, RouteSpec.defaults(), PlanQuery.MAX_CANDIDATES);
     }
 
     @Test

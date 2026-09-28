@@ -187,6 +187,22 @@ class SteppingTest {
         assertEquals(Step.WALK, step(world, AT, Y, Direction.WEST, Y));
     }
 
+    /**
+     * 开着的门:朝北的门(铰链默认在左)开了之后门板转到格子的西边、沿南北方向立着。顺着门板南北穿过门格不碰它;从东往西
+     * 横穿过去、从西边走进门格,都要穿过门板,过不去。
+     */
+    @Test
+    void anOpenDoorBlocksWalkingAcrossItsPanelButNotAlongIt() {
+        BlockState open = Blocks.OAK_DOOR.defaultBlockState().setValue(DoorBlock.FACING, Direction.NORTH)
+                .setValue(DoorBlock.OPEN, true);
+        TestWorld world = ground().set(AT, open).set(AT.above(), open.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER));
+        assertEquals(Step.WALK, step(world, AT.south(), Y, Direction.NORTH, Y), "从南边顺着门板走进门格");
+        assertEquals(Step.WALK, step(world, AT, Y, Direction.NORTH, Y), "顺着门板从北边出去");
+        assertEquals(Step.WALK, step(world, AT.east(), Y, Direction.WEST, Y), "从东边进门格,还没碰到西边的门板");
+        assertEquals(Step.BLOCKED, step(world, AT, Y, Direction.WEST, Y), "往西出去要穿过门板");
+        assertEquals(Step.BLOCKED, step(world, AT.west(), Y, Direction.EAST, Y), "从西边进门格要穿过门板");
+    }
+
     @Test
     void walkingOffAnEdgeTellsWhereTheFeetLand() {
         TestWorld world = ground().set(AT.east().below(), Blocks.AIR.defaultBlockState())
