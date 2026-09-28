@@ -72,6 +72,38 @@ public class CombatGameTests {
     }
 
     /**
+     * 够得比她还远的怪(原版里是十四号往上的史莱姆:它的击打范围随身宽按对角放大,她的够到距离只加半个身宽):打得着
+     * 又挨不着的那条带不存在,走位环的内沿归零,她照样走进够得着的地方砍它,而不是在编走位目标时出错收场。史莱姆不动
+     * 不还手,测的只是她走不走过去打。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_combat")
+    public static void attack_walks_in_on_a_creature_that_outreaches_her(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = armedCompanion(helper, new BlockPos(2, 2, 2));
+        var slime = EntityType.SLIME.create(level);
+        helper.assertTrue(slime != null, "slime did not spawn");
+        slime.setSize(14, true);
+        BlockPos at = helper.absolutePos(new BlockPos(11, 2, 11));
+        slime.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        slime.setNoAi(true);
+        level.addFreshEntity(slime);
+        helper.assertTrue(Menace.rawDangerRadius(slime, companion) >= Swing.reachTo(
+                        companion.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE), slime.getBbWidth()),
+                "this slime does not outreach her, the scene tests nothing");
+        float startHealth = slime.getHealth();
+        TaskRecord record = command(companion, "fight attack --entity_ids " + slime.getId()).task();
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(record.getResult() == null || !record.getResult().message().contains("internal error"),
+                    "the attack broke down: " + record.getResult());
+            helper.assertTrue(slime.getHealth() < startHealth && slime.getLastHurtByMob() == companion,
+                    "she never walked in to hit the slime");
+            slime.discard();
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
      * 点名打不敌对的东西:一头猪,附近一只怪都没有。她必须走过去把它打掉——走位目标由
      * "有没有目标"决定,不由"附近有没有怪"决定;后者只是躲避场。
      */

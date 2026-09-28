@@ -696,10 +696,10 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * <p>光靠这一条还不够:目标是开路那一刻的<b>快照</b>。真正每刻重问的是判据那一侧
      * 这里管的是"落脚点别选在人家嘴边"。
      *
-     * <h2>目标自己也在势场里</h2>
-     * 它当然也会打她,所以不需要另画一条内沿:吸引项把她拉进够到距离,它自己的危险半径把她
-     * 顶在够不着的地方,中间那条缝就是拉扯的位置。缝宽是原版碰撞箱给的 —— 僵尸 3.30 对 2.73,
-     * 半格出头。
+     * <h2>目标自己由环管</h2>
+     * 它当然也会打她:环的外沿把她拉进够到距离,内沿就是它自己的危险半径,把她顶在够不着的地方,
+     * 中间那条缝就是拉扯的位置。缝宽是原版碰撞箱给的 —— 僵尸 3.30 对 2.73,半格出头。躲避场只收
+     * 别的怪;它够得比她还远时内沿归零,她只能走进它的范围去打。
      *
      * <h2>被围住的时候</h2>
      * 没有合格的格子时,搜索交出离目标最近的那一段先走着,走完再搜。
@@ -723,7 +723,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             // 而不是跑三十二格。
             return Goals.awayFrom(threats);
         }
-        // 走位是<b>一个环</b>:外沿别跟丢,内沿是每一只都够不着她。太近自然往外走,太远
+        // 走位是<b>一个环</b>:外沿别跟丢,内沿是它够不着她(别的怪由躲避场管)。太近自然往外走,太远
         // 自然往回走 —— "拉开"不是另一个动作。
         //
         // 外沿<b>就是她的够到距离</b>。寻路不负责"打",但必须把她送进打得到的范围,否则
@@ -733,15 +733,18 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         // 内沿用<b>裸</b>攻击距离(2.02),不加格量化补偿。带宽因此是 1.28 格,比格量化误差
         // 0.71 宽出一截 —— 当初算出"带只有 0.57 格、做不出来",是因为把补偿也叠进了内沿。
         Goal ring = Goals.ring(target.blockPosition(), skirmishInner(), skirmishOuter());
-        if (threats.isEmpty()) {
+        // 要打的这一只离多远由环管(内沿就是它够不着她的距离),躲避场只收别的怪:再把它放进去,它够得比她还远时
+        // "够得着它"与"出了它的危险半径"两头都要,就没有一格站得下
+        List<Threat> others = Menace.field(player, field.stream().filter(mob -> mob != target).toList());
+        if (others.isEmpty()) {
             return ring;
         }
         // 弓那一套的内沿对<b>每一只</b>都成立:她要跟所有怪保持五格,不只是当前目标。
         List<Threat> keepOff = bowFighting
-                ? threats.stream()
+                ? others.stream()
                         .map(t -> new Threat(t.x(), t.y(), t.z(), Math.max(t.radius(), BOW_MIN_DISTANCE)))
                         .toList()
-                : threats;
+                : others;
         return Goals.allOf(List.of(ring, Goals.awayFrom(keepOff)));
     }
 
