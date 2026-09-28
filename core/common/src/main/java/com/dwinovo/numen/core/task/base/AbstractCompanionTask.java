@@ -2,7 +2,10 @@ package com.dwinovo.numen.core.task.base;
 
 import com.dwinovo.numen.entity.InputDriver;
 
-import com.dwinovo.numen.core.pathing.execute.PlayerNav;
+import com.dwinovo.numen.core.nav.Journey;
+import com.dwinovo.numen.core.nav.Trip;
+import com.dwinovo.numen.pathing.api.Report;
+import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.task.TaskRecord;
@@ -72,14 +75,13 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     protected final NumenPlayer player;
     /** The typed input record for this task. */
     protected final R r;
-    /** The active navigation, if any — owned here so {@link #stopNav()} / {@link #cleanup()} can release it. */
-    protected PlayerNav nav;
+    /** 正在走的那一趟路;没有为 null。挂在这里,{@link #stopNav()} / {@link #cleanup()} 才收得了它。 */
+    protected Trip nav;
     /**
-     * 本任务历次导航累计真动过的地形(每条导航停下时并入)。回执末尾如实相告——
-     * 不论成败、不论任务,"路上挖了什么放了什么"只在这一处说一次。
+     * 本任务历次导航的实际账与身体动作(每一趟停下时并入)。回执末尾如实相告——不论成败、不论任务,"路上挖了什么、放了什么、
+     * 身体做了什么"只在这一处说一次。
      */
-    private final com.dwinovo.numen.core.pathing.execute.TerrainBill journey =
-            new com.dwinovo.numen.core.pathing.execute.TerrainBill();
+    private final Journey journey = new Journey();
 
     /** Model-facing reason for a terminal FAILED; also the fallback result message. */
     private String doneReason = "done";
@@ -350,7 +352,8 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
         cleanup();
         // 路上真动过的地形跟着每一种收场走:成功也好失败也罢,拆了什么就说什么;收场时又动了什么接着说;主人点过头的也说
         String closing = closingNote();
-        String enRoute = (journey.isEmpty() ? "" : " En route I had to " + journey.describe() + ".")
+        String travelled = journey.describe();
+        String enRoute = (travelled.isEmpty() ? "" : " " + travelled)
                 + (closing.isEmpty() ? "" : " " + closing)
                 + (allowances.isEmpty() ? "" : " " + String.join("; ", allowances) + ".");
         return switch (finalState) {
@@ -452,8 +455,12 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
      * 这件活替目标之外挖掉的一格记进旅程账(比如为了拉出射线挖掉的遮挡物)。回执末尾和导航挖的一起交代,
      * {@link #brokeOnTheWay} 也认它。
      */
+    protected final void recordAction(com.dwinovo.numen.pathing.body.BodyAction action) {
+        journey.did(action);
+    }
+
     protected final void recordBreak(com.dwinovo.numen.core.act.BlockDigger.Broken broken) {
-        journey.addBreak(broken.pos(), broken.was());
+        journey.dug(broken.pos(), broken.was());
     }
 
     /**
@@ -461,26 +468,28 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
      * 账本是"她挖了什么"的唯一出处,任务要分清"她挖的"和"别人动的"时问这里。
      */
     protected final boolean brokeOnTheWay(BlockPos pos) {
-        return journey.broke(pos) || (nav != null && nav.ledger().broke(pos));
+        return soFar().broke(pos);
     }
 
     /**
-     * 这件活一路上真放下的方块:历次导航的实际放置账,加上还在跑的这条导航的账。和 {@link #brokeOnTheWay} 同一本账,
-     * 只读;放下之后世界里又怎样了,由问的一方自己看。
+     * 这件活一路上放下、之后没再挖掉的方块:历次导航的实际账,加上还在走的这一趟的账,按放下的先后。和
+     * {@link #brokeOnTheWay} 同一本账,只读;放下之后世界里又怎样了,由问的一方自己看。
      */
-    protected final List<com.dwinovo.numen.core.pathing.execute.TerrainBill.Place> placedOnTheWay() {
-        List<com.dwinovo.numen.core.pathing.execute.TerrainBill.Place> placed = new ArrayList<>(journey.places());
-        if (nav != null) {
-            placed.addAll(nav.ledger().places());
-        }
-        return placed;
+    protected final List<EditLedger.Placed> placedOnTheWay() {
+        return soFar().placedBlocks();
     }
 
-    /** Stop and forget the active nav (idempotent); its terrain ledger joins the task's journey. */
+    /** 旅程账加上还在走的这一趟。 */
+    private Journey soFar() {
+        return nav == null ? journey : journey.plus(nav.reports());
+    }
+
+    /** 叫停并放下在走的这一趟(可重复调);它的实际账并进旅程账。 */
     protected void stopNav() {
         if (nav != null) {
-            journey.addAll(nav.ledger());
-            nav.stop();
+            for (Report report : nav.stop()) {
+                journey.add(report);
+            }
             nav = null;
         }
     }

@@ -542,6 +542,10 @@ public class PermissionGameTests {
         for (BlockPos rel : column) {
             level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
         }
+        // 原版 GameTest 给测试结构封了一层屏障顶,正好压在竖井里她头顶那一格:竖井上半截明确清空,她才站得直
+        for (int y = 6; y <= 9; y++) {
+            level.setBlockAndUpdate(helper.absolutePos(new BlockPos(7, y, 7)), Blocks.AIR.defaultBlockState());
+        }
         NumenPlayer companion = spawnAt(helper, "gametest_sinker", new BlockPos(7, 6, 7), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         ToolRun reply = scan(companion, 6, "minecraft:stripped_spruce_log");

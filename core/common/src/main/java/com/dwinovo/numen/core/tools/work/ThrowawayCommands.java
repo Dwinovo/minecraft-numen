@@ -7,7 +7,7 @@ import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
 import com.dwinovo.numen.cli.Param;
-import com.dwinovo.numen.core.pathing.settings.ThrowawayBlocks;
+import com.dwinovo.numen.core.nav.ThrowawayBlocks;
 import com.dwinovo.numen.core.tools.ThrowawayOps;
 
 import net.minecraft.resources.ResourceLocation;

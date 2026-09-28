@@ -1,12 +1,11 @@
 package com.dwinovo.numen.core.task.move;
 
-import com.dwinovo.numen.core.pathing.calc.NavGoal;
-import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
 import com.dwinovo.numen.cli.ServerSource;
-import com.dwinovo.numen.core.pathing.spec.RouteSpec;
+import com.dwinovo.numen.pathing.search.Goal;
+import com.dwinovo.numen.pathing.search.Goals;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.task.TaskRecord;
 
-import it.unimi.dsi.fastutil.longs.LongSets;
 import net.minecraft.core.BlockPos;
 
 /**
@@ -15,10 +14,10 @@ import net.minecraft.core.BlockPos;
  * fields it means.
  * <ul>
  *   <li>{@code x} + {@code z} (no {@code y}) → {@link Kind#COLUMN}:
- *       walk to that location, Y auto-resolved to the surface.
+ *       walk to that location at whatever height stands there.
  *       The default "go there" — a guessed Y can never make it unreachable.</li>
  *   <li>{@code x} + {@code y} + {@code z} → {@link Kind#BLOCK}:
- *       one exact cell (a verified-reachable spot).</li>
+ *       stand in exactly that cell; a y in mid-air or inside a block is no place to stand, and the walk says so.</li>
  *   <li>{@code y} only → {@link Kind#YLEVEL}:
  *       change elevation to that height.</li>
  *   <li>{@code block} only (no coordinates) → {@link Kind#FIND}:
@@ -29,7 +28,9 @@ import net.minecraft.core.BlockPos;
  *       listed it by id); destination and spec are the route's own.</li>
  * </ul>
  * Coordinates are nullable ({@code null} = "not supplied"); the deadline-based
- * timeout is handled by the base class.
+ * timeout is handled by the base class. {@link #near} widens a coordinate form to "anywhere within that many blocks":
+ * around the cell with y, around the column without it — the only way to ask for "close enough", since arrival is
+ * otherwise exact.
  *
  * <p>{@link #spec} is the parsed route spec the walk searches and executes under
  * ({@link RouteSpec#defaults()} = never changes a block). It is {@code null} only for
@@ -53,9 +54,11 @@ public final class MoveToTaskRecord extends TaskRecord {
     public final Kind kind;
     /** The parsed route spec for a coordinate/FIND walk; null for the ROUTE form. */
     public final RouteSpec spec;
+    /** Accept anywhere within this many blocks of the coordinates; null = exactly there. */
+    public final Integer near;
 
     public MoveToTaskRecord(ServerSource source, Integer x, Integer y, Integer z, String block, RouteSpec spec,
-                            String route) {
+                            String route, Integer near) {
         super(source, source.companion().level().getGameTime() + BUDGET_TICKS);
         this.x = x;
         this.y = y;
@@ -63,7 +66,13 @@ public final class MoveToTaskRecord extends TaskRecord {
         this.block = block == null || block.isBlank() ? null : block.trim();
         this.route = route == null || route.isBlank() ? null : route.trim();
         this.kind = resolveKind(x, y, z, this.block, this.route);
+        if (near != null && kind != Kind.BLOCK && kind != Kind.COLUMN) {
+            throw new IllegalArgumentException("near widens a location (x and z, with or without y) to anywhere within"
+                    + " that many blocks; it does not go with " + (kind == Kind.YLEVEL ? "y alone" : kind == Kind.FIND
+                            ? "block" : "route") + ".");
+        }
         this.spec = spec;
+        this.near = near;
     }
 
     /**
@@ -105,17 +114,29 @@ public final class MoveToTaskRecord extends TaskRecord {
     }
 
     /**
-     * The navigation contract of a coordinate kind — the ONE place a goto target becomes a
-     * goal, shared by the walk and by the read-only planner:
-     * BLOCK = occupy exactly that cell (digging out whatever is there is the route's business,
-     * so the cell is not sacred), COLUMN = that (x,z) at any height, YLEVEL = that height.
+     * The goal of a coordinate kind — the ONE place a goto target becomes a goal, shared by the walk and by the
+     * read-only planner: BLOCK = stand in exactly that cell, COLUMN = that (x,z) at any height, YLEVEL = that height;
+     * with {@code near}, anywhere within that many blocks of the cell (BLOCK) or of the column (COLUMN).
      */
-    public static GoalCompiler.Compiled compile(Kind kind, int bx, int by, int bz) {
+    public static Goal goal(Kind kind, int bx, int by, int bz, Integer near) {
         return switch (kind) {
-            case BLOCK -> GoalCompiler.standOn(new BlockPos(bx, by, bz));
-            case COLUMN -> new GoalCompiler.Compiled(NavGoal.column(bx, bz), LongSets.emptySet());
-            case YLEVEL -> new GoalCompiler.Compiled(NavGoal.yLevel(by), LongSets.emptySet());
+            case BLOCK -> near == null ? Goals.at(new BlockPos(bx, by, bz)) : Goals.near(new BlockPos(bx, by, bz), near);
+            case COLUMN -> near == null ? Goals.column(bx, bz) : Goals.ring(new BlockPos(bx, 0, bz), 0, near);
+            case YLEVEL -> Goals.level(by);
             case FIND, ROUTE -> throw new IllegalArgumentException(kind + " has no coordinate goal");
+        };
+    }
+
+    /**
+     * 给人说"朝哪儿"的那一格(回执里的方向与距离):BLOCK 是那一格,COLUMN 是那一列上与 {@code from} 同高的一格,YLEVEL 是
+     * {@code from} 那一列上的那个高度。
+     */
+    public static BlockPos toward(Kind kind, int bx, int by, int bz, BlockPos from) {
+        return switch (kind) {
+            case BLOCK -> new BlockPos(bx, by, bz);
+            case COLUMN -> new BlockPos(bx, from.getY(), bz);
+            case YLEVEL -> new BlockPos(from.getX(), by, from.getZ());
+            case FIND, ROUTE -> throw new IllegalArgumentException(kind + " has no coordinate target");
         };
     }
 
@@ -132,6 +153,7 @@ public final class MoveToTaskRecord extends TaskRecord {
             case FIND -> "去找 " + block;
             case ROUTE -> "走路线 " + route;
         };
-        return spec != null && spec.alter().mayAlter() ? where + "(可开路)" : where;
+        String within = near == null ? "" : "(" + near + " 格内)";
+        return spec != null && spec.alter().mayAlter() ? where + within + "(可开路)" : where + within;
     }
 }

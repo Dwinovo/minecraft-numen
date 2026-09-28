@@ -4,23 +4,20 @@ import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.build.Built;
 import com.dwinovo.numen.core.build.Placement;
 import com.dwinovo.numen.core.act.BlockDigger;
-import com.dwinovo.numen.core.pathing.bridge.ContextFactory;
-import com.dwinovo.numen.core.pathing.cache.LoadedOnlyView;
-import com.dwinovo.numen.core.pathing.calc.NavGoal;
-import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
-import com.dwinovo.numen.core.pathing.moves.ActionCosts;
-import com.dwinovo.numen.core.pathing.moves.CalculationContext;
-import com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest;
-import com.dwinovo.numen.core.pathing.moves.MovementHelper;
-import com.dwinovo.numen.core.pathing.moves.movements.BuildPlacementRegistry;
-import com.dwinovo.numen.core.pathing.execute.PlayerNav;
-import com.dwinovo.numen.core.pathing.spec.PositionCosts;
-import com.dwinovo.numen.core.pathing.spec.RouteSpec;
+import com.dwinovo.numen.core.nav.Feet;
+import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.entity.InputDriver;
-import com.dwinovo.numen.permission.Gate;
+import com.dwinovo.numen.pathing.drive.EditLedger;
+import com.dwinovo.numen.pathing.drive.LiveWorld;
+import com.dwinovo.numen.pathing.plan.ActionCosts;
+import com.dwinovo.numen.pathing.search.Goal;
+import com.dwinovo.numen.pathing.search.Goals;
+import com.dwinovo.numen.pathing.spec.PositionCosts;
+import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.permission.PlacedBlocks;
 import com.dwinovo.numen.task.TaskState;
 
@@ -29,8 +26,6 @@ import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -66,10 +61,7 @@ import java.util.Map;
  * {@link BuildShowmanship},外圈的几何在 {@link SiteRing},顺序与节奏的纯函数在 {@link BuildOrder},
  * 收不了尾时的缺格清单在 {@link BuildOutstanding},路上垫下的块在 {@link EnRouteBlocks}。
  */
-public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRecord>
-        implements BuildPlacementRegistry.Provider, PlayerNav.ContextProvider {
-
-    private static final double WALK_SPEED = 1.0;
+public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRecord> {
 
     /** 走到外圈的时限:走不到就地开工,绝不因为路不通而不干活。 */
     private static final int TRAVEL_BUDGET_TICKS = 30 * 20;
@@ -77,7 +69,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * 踩进或穿过工地格的代价:一步抵一百格路。任何绕行都比穿过去便宜,所以走向外圈永远绕着图纸走;但它不是
      * FORBID——开工时站在工地里、被外力挪进图纸里(挤、推、掉落)时,她还得能走出来,走出来那几步就是她付的这份价。
      */
-    private static final double SITE_BODY_COST = ActionCosts.WALK_ONE_BLOCK_COST * 100;
+    private static final double SITE_BODY_COST = ActionCosts.WALK_ONE_BLOCK * 100;
     /** 连续几遍零进展才升级处置。 */
     private static final int MAX_BARREN_PASSES = 3;
     /**
@@ -133,7 +125,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private final Map<Item, Integer> passMissing = new LinkedHashMap<>();
 
     private LongOpenHashSet observedCompleted;
-    private boolean providerRegistered;
     private Phase phase = Phase.TRAVEL;
     /** 动身走向外圈时的 {@link #workTicks()}。 */
     private long travelSince;
@@ -143,8 +134,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private final BlockPos siteMax;
     /** 包围盒外的那一圈:走出工地走到它上面,演出绕着它走。 */
     private final SiteRing ring;
-    /** 走到外圈的目标(编译一次,每次走出去都用它)。 */
-    private GoalCompiler.Compiled toRing;
+    /** 走到外圈的路线规格:{@link #SPEC} 并上工地格的三条禁令(编一次,每次走出去都用它)。 */
+    private RouteSpec toRing;
     /** 走出工地没走成:她还在工地里时不再反复起寻路,就在原地接着盖;等她出了工地这一笔才清掉。 */
     private boolean stuckInSite;
 
@@ -267,7 +258,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     protected void onStart() {
         observedCompleted = new LongOpenHashSet();
         skippedPos = new LongOpenHashSet();
-        registerProvider();
         rescanAll();
         rebuildOrder();
         computePace();
@@ -329,7 +319,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (phase == Phase.END) {
             return tickEnd();
         }
-        registerProvider();
         updateCompleted();
 
         // 每刻只轮扫一片,所以这个判定可能用着一轮之前的旧数据。收工是不可回头的
@@ -375,10 +364,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             }
             travelSince = workTicks();
             if (toRing == null) {
-                toRing = new GoalCompiler.Compiled(ring.goal(), protectedCells());
+                toRing = siteSpec();
             }
-            GoalCompiler.Compiled goal = toRing;
-            nav = PlayerNav.to(player, () -> goal, WALK_SPEED, () -> false, this);
+            nav = Trip.to(player, ring.goal(), toRing, siteCenter());
         }
         boolean done = switch (nav.tick()) {
             case ARRIVED, FAILED -> true;
@@ -882,7 +870,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * 要走的路,所以下来之前一块都不拆。下不来就把托着她的那几格留在原处,照实交代。
      */
     private TaskState tickEnd() {
-        List<com.dwinovo.numen.core.pathing.execute.TerrainBill.Place> placed = placedOnTheWay();
+        List<EditLedger.Placed> placed = placedOnTheWay();
         if (!steppedOff && !enRoute.holdingHer(placed).isEmpty()) {
             return stepOff(enRoute.standing(placed));
         }
@@ -901,25 +889,11 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      */
     private TaskState stepOff(java.util.Set<BlockPos> blocks) {
         if (nav == null) {
-            NavGoal band = NavGoal.ring(com.dwinovo.numen.core.pathing.execute.PathExecutor.playerFeet(player),
-                    1.0, STEP_OFF_REACH);
-            NavGoal offBlocks = new NavGoal() {
-                @Override public boolean isAt(BlockPos feet) {
-                    return band.isAt(feet) && !blocks.contains(feet.below());
-                }
-
-                @Override public double heuristic(BlockPos from) {
-                    return band.heuristic(from);
-                }
-
-                @Override public BlockPos center() {
-                    return band.center();
-                }
-            };
-            nav = PlayerNav.toGoal(player, () -> offBlocks, WALK_SPEED, () -> false,
-                    PlayerNav.ContextProvider.DEFAULT);
+            BlockPos feet = Feet.cell(player);
+            Goal off = Goals.allOf(List.of(Goals.ring(feet, 1.0, STEP_OFF_REACH), Goals.offBlocks(blocks)));
+            nav = Trip.to(player, off, RouteSpec.defaults(), feet);
         }
-        if (nav.tick() != PlayerNav.Status.RUNNING) {
+        if (nav.tick() != Trip.Status.RUNNING) {
             stopNav();
             steppedOff = true;   // 下一刻重看她站在什么上面,还托着她的就留下
         }
@@ -1030,7 +1004,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     /** 工地包围盒:全体目标格的最小角与最大角;一格都没有时就是她脚下那一格。 */
     private static BlockPos[] siteBox(NumenPlayer player, List<BuildTaskRecord.Target> targets) {
         if (targets.isEmpty()) {
-            BlockPos feet = com.dwinovo.numen.core.pathing.execute.PathExecutor.playerFeet(player);
+            BlockPos feet = Feet.cell(player);
             return new BlockPos[]{feet, feet};
         }
         int minX = Integer.MAX_VALUE;
@@ -1080,7 +1054,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * 不许站进去——否则走向外圈时会从还是空气的图纸格里抄近路,一条腿走到一半
      * 被截断,她就站在了自己要放的那格里:身体占着的格放不下,收工时报"有人站着"。
      * 日式小屋那次差的两格门口台阶,病根就是这个。前两条是硬禁,第三条是重价
-     * ({@link #SITE_BODY_COST}):被外力挪进去时她还得走得出来。
+     * ({@link #SITE_BODY_COST}):被外力挪进去时她还得走得出来。三条都按位置写进走向外圈那条路的规格({@link #siteSpec})。
      */
     private LongSet protectedCells() {
         if (siteCells == null) {
@@ -1091,17 +1065,19 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     private LongOpenHashSet siteCells;
 
-    /** 把工地格的三条禁令并进走向外圈那条寻路的规格(本任务作为成本上下文提供方,只供那一条)。 */
-    private RouteSpec withSite(RouteSpec spec) {
-        if (sitePins == null) {
-            PositionCosts.Builder body = PositionCosts.builder();
-            protectedCells().forEach((long cell) -> body.stand(cell, SITE_BODY_COST).pass(cell, SITE_BODY_COST));
-            sitePins = PositionCosts.protect(protectedCells()).plus(body.build());
-        }
-        return spec.withPositions(spec.positions().plus(sitePins));
+    /** 走向外圈那条路的规格:{@link #SPEC} 并上工地格的三条禁令。 */
+    private RouteSpec siteSpec() {
+        PositionCosts.Builder body = PositionCosts.builder();
+        protectedCells().forEach((long cell) -> body.add(Use.STAND, cell, SITE_BODY_COST).add(Use.PASS, cell, SITE_BODY_COST));
+        PositionCosts pins = PositionCosts.protect(protectedCells()).plus(body.build());
+        return SPEC.edit().positions(SPEC.positions().plus(pins)).build();
     }
 
-    private PositionCosts sitePins;
+    /** 工地包围盒的中心那一格:走向外圈没走成时,回执里说"朝哪儿"用。 */
+    private BlockPos siteCenter() {
+        return new BlockPos((siteMin.getX() + siteMax.getX()) / 2, (siteMin.getY() + siteMax.getY()) / 2,
+                (siteMin.getZ() + siteMax.getZ()) / 2);
+    }
 
     /** 把层窗口对准 order 里最低的那一层。 */
     private void resetLayerWindow() {
@@ -1187,8 +1163,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         int total = r.targets.size();
         int n = Math.min(budget, total);
-        BlockGetter view = LoadedOnlyView.of(player.level());
-        LoadedOnlyView loadedView = view instanceof LoadedOnlyView v ? v : null;
+        LiveWorld view = new LiveWorld(player.serverLevel());
         for (int k = 0; k < n; k++) {
             if (rescanCursor >= total) {
                 rescanCursor = 0;
@@ -1197,7 +1172,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             BlockPos pos = target.pos();
             long key = pos.asLong();
             // 未加载的格保持原判:完成集与跳过集都有记忆,不能因为看不见就翻案
-            if (loadedView != null && !loadedView.isLoaded(pos.getX(), pos.getZ())) {
+            if (!view.isLoaded(pos.getX(), pos.getZ())) {
                 continue;
             }
             BlockState observed = view.getBlockState(pos);
@@ -1237,11 +1212,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         skippedCells = skippedPos.size();
         r.completed(observedCompleted.size());
-    }
-
-    private boolean isReplaceable(BlockPos pos, BlockState state) {
-        return MovementHelper.isReplaceable(pos.getX(), pos.getY(), pos.getZ(), state,
-                ChunkLoadedTest.ALWAYS);
     }
 
     /**
@@ -1284,79 +1254,20 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
     }
 
-    // ------------------------------------------------------------------
-    // 寻路桥接
-    // ------------------------------------------------------------------
-
-    private void registerProvider() {
-        if (!providerRegistered) {
-            BuildPlacementRegistry.register(player, this);
-            providerRegistered = true;
-        }
-    }
-
-    private void unregisterProvider() {
-        if (providerRegistered) {
-            BuildPlacementRegistry.unregister(player, this);
-            providerRegistered = false;
-        }
-    }
-
-    @Override
-    public BlockState desiredState(BlockPos placeAt) {
-        BuildTaskRecord.Target target = targetByPos.get(placeAt.asLong());
-        if (target == null || BuildCellRules.isAirTarget(target)) {
-            return null;
-        }
-        if (target.matches(player.level().getBlockState(target.pos()))) {
-            return null;
-        }
-        return target.desiredState();
-    }
-
-    @Override
-    public boolean acceptsPlacement(BlockPos placeAt, BlockState state) {
-        BuildTaskRecord.Target target = targetByPos.get(placeAt.asLong());
-        return target != null && target.acceptsPlacedState(state);
-    }
-
     /**
      * 走出工地、走到外圈这一段可以改地形:挖掉挡路的、垫块过坎,都是为了到场干活。路上垫下的块收场时都要撤掉
      * ({@link EnRouteBlocks}),所以放一块的价钱连撤的那一下一起算({@link RouteSpec#takeBack})——定价只在那一处。
      * 起跳比平时贵得多:工地上下层之间蹦跶容易把刚砌的东西踩坏,能绕楼梯就绕。
      */
-    static final RouteSpec SPEC = RouteSpec.defaults()
-            .withAlter(RouteSpec.Alter.NATURAL)
-            .withJumpPenalty(RouteSpec.defaults().jumpPenalty() + 10.0)
-            .withTakeBack(true);
-
-    @Override
-    public RouteSpec spec() {
-        return SPEC;
-    }
-
-    @Override
-    public CalculationContext forSearch(NumenPlayer player, RouteSpec spec) {
-        return ContextFactory.forSearch(player, withSite(spec), this::buildContext);
-    }
-
-    @Override
-    public CalculationContext forExecution(NumenPlayer player, RouteSpec spec) {
-        return ContextFactory.forExecution(player, withSite(spec), this::buildContext);
-    }
-
-    private CalculationContext buildContext(ServerPlayer player, BlockGetter view, ChunkLoadedTest loaded,
-                                            boolean safeForThreadedUse, RouteSpec spec, Gate gate) {
-        return new BuildCalculationContext(player, view, loaded, safeForThreadedUse, spec, gate,
-                targetByPos, inv.availableStates(true), r.mayReplace());
-    }
+    static final RouteSpec SPEC = RouteSpec.defaults().edit()
+            .alter(RouteSpec.Alter.NATURAL)
+            .jumpPenalty(RouteSpec.defaults().jumpPenalty() + 10.0)
+            .takeBack(true)
+            .build();
 
     @Override
     public void stop(NumenPlayer companion, StopReason why) {
         super.stop(companion, why);
-        // 让位时摘掉放置提供者;下一次 onTick 每刻都会重新登记(registerProvider 幂等),
-        // 所以不需要一个"恢复"钩子——原来那个 resume() 全代码库零调用者,是死代码。
-        unregisterProvider();
         InputDriver.halt(player);
     }
 
@@ -1368,7 +1279,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     protected void cleanup() {
         super.cleanup();
         enRoute.takeDown(placedOnTheWay());
-        unregisterProvider();
         InputDriver.halt(player);
         player.setShiftKeyDown(false);
     }

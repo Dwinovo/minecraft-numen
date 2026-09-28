@@ -9,9 +9,10 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.core.act.PressReceipt;
-import com.dwinovo.numen.core.pathing.execute.PlayerNav;
-import com.dwinovo.numen.core.pathing.moves.AimGeometry;
+import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.task.base.GoToThenDoTask;
+import com.dwinovo.numen.pathing.body.Crosshair;
+import com.dwinovo.numen.pathing.drive.Aim;
 import com.dwinovo.numen.core.task.base.Precondition;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.phys.HitResult;
@@ -23,8 +24,8 @@ import java.util.Map;
 
 /**
  * {@code use block} / {@code use ahead} on the player body — the point-aimed native interaction (BLOCK + AIR).
- * Walk within reach of the aim (if one is given), look at it, fire ONE native crosshair
- * raytrace ({@link Interaction#nativeRaytrace}) and press the requested mouse button on
+ * Walk within reach of the aim (if one is given), look at it, pick what the crosshair lands on
+ * ({@link Crosshair#pick}) and press the requested mouse button on
  * whatever it resolves to ({@link Interaction#forHit}): break / activate the block hit, or —
  * on a clear-air aim — use the held item in that direction (throw / eat / draw). The mouse
  * model is the two record fields {@code button} (left/right) × {@code holdTicks} (tap/hold).
@@ -56,7 +57,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     }
 
     @Override
-    protected PlayerNav buildNav() {
+    protected Trip buildNav() {
         // 本任务不自带到场导航:身体须已在触及距离内(基座在 reached()==false
         // 且无导航时直接教学失败,旅行归 goto)。
         return null;
@@ -82,10 +83,10 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
             // 看向目标上真能射到的那一点(拉杆、开着的门只占格子的一角,格心可能是空的);一点都看不见
             // 时看格心,下面的准星就点名挡着的那一块。空气与流体本来就没有可射中的轮廓,也看格心
             if (r.aim != null) {
-                var visible = AimGeometry.visibleHit(player, r.aim, player.blockInteractionRange());
-                InputDriver.lookAt(player, visible != null ? visible.getLocation() : Vec3.atCenterOf(r.aim));
+                Vec3 visible = Aim.point(player, r.aim);
+                InputDriver.lookAt(player, visible != null ? visible : Vec3.atCenterOf(r.aim));
             }
-            HitResult hit = Interaction.nativeRaytrace(player, player.blockInteractionRange());
+            HitResult hit = Crosshair.pick(player);
             // 目标格本身是实心方块、而准星实际落在别的方块上 = 被遮挡:
             // 拒绝并点名遮挡物(点下去只会交互到错误对象还谎报成功)。
             // 目标格是空气或流体的瞄点保持准星穿透语义——流体本来就不该被准星
@@ -153,7 +154,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
                     InteractAtTaskRecord.bodyBoundReason(player.getMainHandItem().getItem()) == null
                     && InteractAtTaskRecord.bodyBoundReason(player.getOffhandItem().getItem()) == null;
             receipt = PressReceipt.before(player, r.aim);
-            interaction = Interaction.forHit(player, hit, button(), r.holdTicks, fallthroughOk);
+            interaction = Interaction.forHit(player, hit, button(), r.holdTicks, fallthroughOk, this::recordAction);
             if (interaction == null) {       // left-click on air — a swing, nothing to do
                 successMsg = "nothing under the aim (left-click in the air)";
                 return TaskState.SUCCESS;

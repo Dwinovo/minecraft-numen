@@ -1,24 +1,26 @@
 package com.dwinovo.numen.core.task.build;
-import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
-import com.dwinovo.numen.core.pathing.cache.LoadedOnlyView;
-import com.dwinovo.numen.core.pathing.execute.AimProcessor;
-import com.dwinovo.numen.core.pathing.spec.CellClass;
-import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.body.Snapshots;
+import com.dwinovo.numen.pathing.drive.Aim;
+import com.dwinovo.numen.pathing.drive.LiveWorld;
+import com.dwinovo.numen.pathing.plan.Stance;
+import com.dwinovo.numen.pathing.world.BodyStats;
+import com.dwinovo.numen.pathing.world.Footing;
+import com.dwinovo.numen.pathing.world.Semantics;
+import com.dwinovo.numen.pathing.world.Stepping;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.block.BasePressurePlateBlock;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 
@@ -52,17 +54,12 @@ final class BuildShowmanship {
     private static final int LOOK_HOLD_TICKS = 20;
 
     /**
-     * 绕圈踩的地面:只走不改的出厂规格,再把水、梯子这类要游要爬的排除掉;耕地踩下去会被踩坏,也不站。
-     * 身体经过的格另由 {@link #clear} 判。
+     * 绕圈不碰的格子种类:要游要爬的(水、流水、攀爬)、伤身的(岩浆、危险方块)、踩坏的(耕地、海龟蛋)、一碰就触发的
+     * (压力板、绊线),还有门——表演不开门。落脚那一格、托着脚的那一格、身体经过的格都不能是。
      */
-    private static final RouteSpec GROUND = RouteSpec.defaults()
-            .withCellCost(CellClass.WATER, RouteSpec.FORBID)
-            .withCellCost(CellClass.FLOWING_WATER, RouteSpec.FORBID)
-            .withCellCost(CellClass.LADDER, RouteSpec.FORBID)
-            .withCellCost(CellClass.VINE, RouteSpec.FORBID)
-            .withBans(new RouteSpec.BlockBans(Set.of(), Set.of(), Set.of(Blocks.FARMLAND)));
-
-    private static final AimProcessor AIM = new AimProcessor();
+    private static final Set<Semantics.Kind> KEEP_OFF = EnumSet.of(Semantics.Kind.WATER,
+            Semantics.Kind.FLOWING_WATER, Semantics.Kind.CLIMBABLE, Semantics.Kind.LAVA, Semantics.Kind.HAZARD,
+            Semantics.Kind.FRAGILE, Semantics.Kind.TRIGGER, Semantics.Kind.DOOR);
 
     private final NumenPlayer player;
     private final BuildInventory inv;
@@ -79,6 +76,8 @@ final class BuildShowmanship {
     private int heading = -1;
     /** 那一列站脚的高度。 */
     private int headingY;
+    /** 走进那一列要起跳。 */
+    private boolean headingJump;
     /** 刚离开的那一列站脚的高度:这一段走不过去掉头时,回去就踩在那儿。 */
     private int leftY;
     /** 顺着圈往哪边走:+1 顺时针,-1 逆时针。 */
@@ -137,6 +136,7 @@ final class BuildShowmanship {
             heading = Math.floorMod(heading - dir, ring.size());
             dir = -dir;
             headingY = leftY;
+            headingJump = leftY > player.blockPosition().getY();
             resetProgress();
         }
         stride();
@@ -156,51 +156,60 @@ final class BuildShowmanship {
      */
     private boolean pickNext() {
         int feetY = player.blockPosition().getY();
-        int ahead = stepTo(heading + dir, heading, feetY);
-        if (ahead == Integer.MIN_VALUE) {
+        Ahead ahead = stepTo(heading + dir, heading, feetY);
+        if (ahead == null) {
             dir = -dir;
             ahead = stepTo(heading + dir, heading, feetY);
-            if (ahead == Integer.MIN_VALUE) {
+            if (ahead == null) {
                 return false;
             }
         }
         heading = Math.floorMod(heading + dir, ring.size());
         leftY = feetY;
-        headingY = ahead;
+        headingY = ahead.y();
+        headingJump = ahead.jump();
         resetProgress();
         return true;
     }
 
+    /** 相邻那一列落脚在哪一层,走进去要不要起跳。 */
+    private record Ahead(int y, boolean jump) {}
+
     /**
-     * 从第 {@code from} 列(脚在 {@code feetY})贴地走到相邻的第 {@code to} 列,落脚在哪一层:平走、上一级台阶、下一级
-     * 台阶三选一,按这个先后。走不过去是 {@link Integer#MIN_VALUE}——落脚处下面站不住、身体要经过的格不空(门也算不空:
-     * 表演不开门)、起跳时头顶不空,都算。再高再深的都不走,那样上得去回不来。
+     * 从第 {@code from} 列(脚在 {@code feetY})贴地走到相邻的第 {@code to} 列,落脚在哪一层:平走、上一级、下一级三选一,按这个
+     * 先后。站不站得住、迈不迈得过去都问第 0 层——落脚处身体待得住而且是站着({@link Stance}),从这一列迈进那一列是走过去
+     * 或跳上去({@link Stepping}),与寻路判一步同一套几何;落脚、托脚、身体经过的格都不是 {@link #KEEP_OFF} 里的。走不过去为
+     * null。再高再深的都不走,那样上得去回不来。
      */
-    private int stepTo(int to, int from, int feetY) {
-        BlockGetter view = LoadedOnlyView.of(player.level());
+    private Ahead stepTo(int to, int from, int feetY) {
+        LiveWorld view = new LiveWorld(player.serverLevel());
+        BodyStats stats = Snapshots.stats(player);
+        int fx = ring.x(from);
+        int fz = ring.z(from);
         int x = ring.x(to);
         int z = ring.z(to);
+        double fromFeet = Footing.height(view, stats, fx, feetY, fz);
+        if (Double.isNaN(fromFeet)) {
+            fromFeet = player.getY();
+        }
         for (int dy : new int[]{0, 1, -1}) {
             int y = feetY + dy;
-            if (!CellClass.canWalkOn(view, new BlockPos(x, y - 1, z), GROUND)
-                    || !clear(view, x, y, z) || !clear(view, x, y + 1, z)) {
+            Stance stance = Stance.at(view, stats, x, y, z);
+            if (stance == null || !stance.grounded() || keptOff(view, stance.support(x, z))
+                    || keptOff(view, new BlockPos(x, y, z)) || keptOff(view, new BlockPos(x, y + 1, z))) {
                 continue;
             }
-            if (dy == 1 && !clear(view, ring.x(from), feetY + 2, ring.z(from))) {
-                continue;   // 起跳要头顶有空
+            Stepping.Step step = Stepping.between(view, stats, fx, fromFeet, fz, Integer.signum(x - fx),
+                    Integer.signum(z - fz), stance.feetY());
+            if (step != Stepping.Step.BLOCKED) {
+                return new Ahead(y, step == Stepping.Step.JUMP);
             }
-            if (dy == -1 && !clear(view, x, y + 2, z)) {
-                continue;   // 走下去的那一步,身体先经过台阶沿上方那一格
-            }
-            return y;
         }
-        return Integer.MIN_VALUE;
+        return null;
     }
 
-    /** 身体经过这一格不会动到世界:完全没有阻碍(空气、花草、地毯),而且不是一踩就按下去的压力板。 */
-    private static boolean clear(BlockGetter view, int x, int y, int z) {
-        BlockState state = view.getBlockState(new BlockPos(x, y, z));
-        return CellClass.fullyPassable(state) && !(state.getBlock() instanceof BasePressurePlateBlock);
+    private static boolean keptOff(LiveWorld view, BlockPos pos) {
+        return Semantics.isAny(view, pos, KEEP_OFF);
     }
 
     /**
@@ -209,21 +218,20 @@ final class BuildShowmanship {
      */
     private void stride() {
         Vec3 dest = new Vec3(ring.x(heading) + 0.5, headingY, ring.z(heading) + 0.5);
-        float pathYaw = AimGeometry.yawTo(player.position(), dest);
+        float pathYaw = (float) (Math.toDegrees(Math.atan2(dest.z - player.getZ(), dest.x - player.getX())) - 90.0);
         if (sinceAim > LOOK_HOLD_TICKS) {
-            player.setYRot(pathYaw);
-            player.setYHeadRot(pathYaw);
-            player.setXRot(12.0f);
+            Aim.turn(player, pathYaw, 12.0f);
         }
-        float[] impulse = AimProcessor.remapInput(0.0f, 1.0f, pathYaw, player.getYRot());
-        player.xxa = impulse[0];
-        player.zza = impulse[1];
+        // 去向相对脸的朝向:往前走 cos、往左走 -sin
+        double off = Math.toRadians(Mth.wrapDegrees(pathYaw - player.getYRot()));
+        player.xxa = (float) -Math.sin(off);
+        player.zza = (float) Math.cos(off);
         player.setSprinting(false);
         // 走着不蹲:潜行不肯走下台阶,还把步子砍到三成
         player.setShiftKeyDown(false);
         double dx = dest.x - player.getX();
         double dz = dest.z - player.getZ();
-        if (headingY > player.blockPosition().getY() && player.onGround() && dx * dx + dz * dz < 1.3 * 1.3) {
+        if (headingJump && player.onGround() && dx * dx + dz * dz < 1.3 * 1.3) {
             InputDriver.jump(player);
         }
     }
@@ -307,14 +315,8 @@ final class BuildShowmanship {
         }
     }
 
-    /** 视角按 AimProcessor 的像素量化步进转向目标点(和寻路同一套转头手感)。 */
+    /** 视角按鼠标像素取整转向目标点(和寻路同一套转头,{@link Aim#look})。 */
     private void applySteppedAim(Vec3 point) {
-        Vec3 eye = player.getEyePosition();
-        float yaw = AimGeometry.yawTo(eye, point);
-        float pitch = AimGeometry.pitchTo(eye, point);
-        AimProcessor.Rotation next = AIM.step(player.getYRot(), player.getXRot(), yaw, pitch);
-        player.setYRot(next.yaw());
-        player.setYHeadRot(next.yaw());
-        player.setXRot(next.pitch());
+        Aim.look(player, point);
     }
 }

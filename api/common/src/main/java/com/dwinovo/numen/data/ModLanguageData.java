@@ -316,8 +316,6 @@ public final class ModLanguageData {
         public static final String COMMAND_CONSENT_NOT_PENDING = "numen.command.consent_not_pending";
         public static final String DEBUG_ON          = "numen.debug.on";
         public static final String DEBUG_OFF         = "numen.debug.off";
-        public static final String DEBUG_PROFILE_ON  = "numen.debug.profile_on";
-        public static final String DEBUG_PROFILE_OFF = "numen.debug.profile_off";
         public static final String DEBUG_PAD_ON      = "numen.debug.pad_on";
         public static final String DEBUG_PAD_OFF     = "numen.debug.pad_off";
 
@@ -864,8 +862,6 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_CONSENT_NOT_PENDING, "No pending consent request #%s (already answered, expired or replaced)");
         adder.add(Keys.DEBUG_ON,          "Debug mode on: path particles, and UI text shown unfiltered");
         adder.add(Keys.DEBUG_OFF,         "Debug mode off");
-        adder.add(Keys.DEBUG_PROFILE_ON,  "Pathfinding profiler on: see [nav-profile] in the log (main-thread tick time per window)");
-        adder.add(Keys.DEBUG_PROFILE_OFF, "Pathfinding profiler off");
         adder.add(Keys.DEBUG_PAD_ON,      "Companion loading pad on (the default)");
         adder.add(Keys.DEBUG_PAD_OFF,     "Companion loading pad off: companions only act in chunks that players keep loaded (for diagnosis)");
         adder.add(Keys.LOOP_GONE, "She is gone");
@@ -1399,8 +1395,6 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_CONSENT_NOT_PENDING, "没有待答复的征询 #%s(已答复、过期或被顶掉)");
         adder.add(Keys.DEBUG_ON,          "调试模式已开:路径粒子渲染 + UI 文本不过滤直出");
         adder.add(Keys.DEBUG_OFF,         "调试模式已关");
-        adder.add(Keys.DEBUG_PROFILE_ON,  "寻路性能探针已开:日志看 [nav-profile](主线程 tick 耗时按窗口汇总)");
-        adder.add(Keys.DEBUG_PROFILE_OFF, "寻路性能探针已关");
         adder.add(Keys.DEBUG_PAD_ON,      "同伴加载 pad 已开(默认状态)");
         adder.add(Keys.DEBUG_PAD_OFF,     "同伴加载 pad 已关:同伴仅在玩家加载的区块内活动(诊断用)");
         adder.add(Keys.LOOP_GONE, "她已经不在了");

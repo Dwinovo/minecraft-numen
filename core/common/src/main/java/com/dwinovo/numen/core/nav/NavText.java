@@ -26,6 +26,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -85,7 +86,7 @@ public final class NavText {
                             + " that changes " + needs.alterations() + " block(s), some of them someone's: walk with"
                             + " alter:'any' to ask the owner first)";
             case Outcome.NoMaterials none -> "found no path to target (" + where + "; every way needs blocks to"
-                    + " pillar or bridge with)." + com.dwinovo.numen.core.pathing.settings.ThrowawayBlocks.shortageAdvice(player);
+                    + " pillar or bridge with)." + ThrowawayBlocks.shortageAdvice(player);
             case Outcome.Denied denied -> "had to stop: changing " + Listing.coords(denied.cell()) + " is refused ("
                     + reason(denied.reason()) + ")";
             case Outcome.Stranded stranded -> "can't set off: I can't stand where I am (" + name(stranded.block())
@@ -246,6 +247,7 @@ public final class NavText {
     private static String action(BodyAction action) {
         return switch (action) {
             case BodyAction.Dismounted d -> "stepped off the " + EntityType.getKey(d.vehicle()).getPath();
+            case BodyAction.Held h when h.item() == Items.AIR -> "put away what was in my hand";
             case BodyAction.Held h when h.from() == Hotbar.OFFHAND -> "swapped " + item(h.item())
                     + " from my offhand into my hand";
             case BodyAction.Held h when h.from() == h.to() -> "switched to " + item(h.item()) + " in my hotbar";
@@ -324,6 +326,21 @@ public final class NavText {
                 : "altering terrain") + " (" + where(from, toward) + "; every reachable cell was searched). candidates:\n"
                 + listing(routes) + "\nchoose one with move_goto route:<id>, or pick another destination. A route with"
                 + " cells needing consent asks the owner before I set off.";
+    }
+
+    /**
+     * 只搜不走却一条候选都没有的回执({@code move route} 是命令,教的是命令的写法):按这次的规格要改地形才有路,就说放宽到
+     * 哪一档再规划一次能看到那几条;其余与走路没走到同一句话。
+     */
+    public static String unplanned(Outcome outcome, NumenPlayer player, BlockPos from, BlockPos toward, RouteSpec spec) {
+        if (outcome instanceof Outcome.NeedsAlter needs) {
+            String level = needs.level() == RouteSpec.Alter.NATURAL ? "natural" : "any";
+            return "found no route " + (needs.level() == RouteSpec.Alter.NATURAL ? "without altering terrain"
+                    : "without touching what needs the owner's consent") + " (" + where(from, toward) + "; one exists"
+                    + " that changes " + needs.alterations() + " block(s)): plan again with --alter " + level
+                    + " to see what it would take, or pick another destination";
+        }
+        return failure(outcome, player, from, toward, spec);
     }
 
     /** 只搜不走的回执:找到几条、从哪儿到哪儿,接着是候选清单,末尾告诉模型怎么用。 */

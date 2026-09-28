@@ -9,13 +9,15 @@ import com.dwinovo.numen.core.combat.Loadout;
 import com.dwinovo.numen.core.combat.Haven;
 import com.dwinovo.numen.core.combat.Menace;
 import com.dwinovo.numen.core.combat.Swing;
-import com.dwinovo.numen.core.pathing.calc.NavGoal;
-import com.dwinovo.numen.core.pathing.goals.GoalAvoidEntities;
-import com.dwinovo.numen.core.pathing.execute.PlayerNav;
+import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.chain.MobDefenseChain;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.plan.Threat;
+import com.dwinovo.numen.pathing.search.Goal;
+import com.dwinovo.numen.pathing.search.Goals;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.task.TaskState;
 
@@ -27,6 +29,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -62,7 +65,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
 
     private enum Phase { COMBAT, LOOT }
 
-    private static final double CHASE_SPEED = 1.2;
     /** 退避的寻路连续失败几次算"退不掉"。 */
     private static final int MAX_RETREAT_FAILURES = 3;
 
@@ -607,24 +609,32 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * <p>{@code MELEE} 与 {@code CLOSE_IN} 共用这一段 —— 它们只差"要不要挥",站位是一样的。
      * 分开写的时候,姿态一变就会拆掉刚算好的路径,而击退每砍一刀就让姿态变一次。
      */
-    private PlayerNav.Status driveApproach() {
-        if (nav == null) {
-            // <b>没有目标也要走。</b>判据的 SKIRMISH 可以是"对全场的"(挑不出能打的,但还有
-            // 东西追她),那时该退开等机会 —— 这里曾经第一行就 {@code target == null} 早退,
-            // 于是判据每刻正确地喊"走位"、执行层每刻安静地什么都不做,日志看着一切正常,
-            // 直到她被苦力怕炸死。什么时候不用走由 standoffGoal 说(既无目标也无怪才返回 null)。
-            //
-            // 目标会动:要 trackGoal 而不是 toGoal —— 后者一旦到达就永久 ARRIVED,
-            // 她会站在原地不再跟位,别的怪就能从容贴上来。
-            nav = PlayerNav.trackGoal(player, this::standoffGoal, CHASE_SPEED, () -> false);
+    private void driveApproach() {
+        // <b>没有目标也要走。</b>判据的 SKIRMISH 可以是"对全场的"(挑不出能打的,但还有
+        // 东西追她),那时该退开等机会。什么时候不用走由 standoffGoal 说(既无目标也无怪才返回 null)。
+        Goal goal = standoffGoal();
+        if (goal == null) {
+            stopNav();
+            return;
         }
-        PlayerNav.Status status = nav.tick();
+        BlockPos toward = target != null && !target.isRemoved() ? target.blockPosition() : player.blockPosition();
+        if (nav == null) {
+            nav = Trip.to(player, goal, RouteSpec.defaults(), toward);
+        } else {
+            // 目标与怪每刻都在挪:每刻把这一刻的站位交给在走的这一趟,停点还算数就照走
+            nav.retarget(goal, toward);
+        }
+        Trip.Status status = nav.tick();
+        if (status == Trip.Status.ARRIVED) {
+            // 站到位了。这一趟走完就收,下一刻按那时的站位再开一趟——一直站着不跟位,别的怪就能从容贴上来
+            stopNav();
+        }
         // <b>只有真 NO-PATH 才算够不着</b>:搜索烧完整个预算也没找出路线。目标丢了、被围死、
         // 重规划抖动都是另外的事,拿它们当够不着会把两格外的普通僵尸也判死。
-        boolean noRoute = status == PlayerNav.Status.FAILED
+        boolean noRoute = status == Trip.Status.FAILED
                 && (nav.failType() == FailureType.NO_PATH
                         || nav.failType() == FailureType.TERRAIN_BLOCKED);
-        if (status == PlayerNav.Status.FAILED) {
+        if (status == Trip.Status.FAILED) {
             // 别的失败也要留声:走位导航当刻就失败、下一刻重建,在日志里是一片安静的
             // SKIRMISH——站着不动却什么都没说,排查时只能靠猜。
             if (!noRoute) {
@@ -641,7 +651,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 noPath.remove(target.getId());
             }
         }
-        return status;
     }
 
     /**
@@ -658,10 +667,14 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         return bowFighting ? BOW_MAX_DISTANCE : reachToTarget();
     }
 
-    /** 走位环的内沿:剑是"它够得着我",弓是"拉得开弓的距离"。 */
+    /**
+     * 走位环的内沿:剑是"它够得着我",弓是"拉得开弓的距离"。它够得比她的外沿还远(大史莱姆、点着的苦力怕)时,
+     * 打得着又挨不着的那条带本来就不存在,内沿归零:环退成"走进够得着的地方"。
+     */
     private double skirmishInner() {
-        return bowFighting ? BOW_MIN_DISTANCE
+        double inner = bowFighting ? BOW_MIN_DISTANCE
                 : target == null ? 0.0 : Menace.rawDangerRadius(target, player);
+        return inner < skirmishOuter() ? inner : 0.0;
     }
 
     private double reachToTarget() {
@@ -688,16 +701,18 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * 半格出头。
      *
      * <h2>被围住的时候</h2>
-     * 没有合格的格子也不会失败:引擎的七档 {@code bestSoFar} 会交出这次搜索里最好的一段。
+     * 没有合格的格子时,搜索交出离目标最近的那一段先走着,走完再搜。
      */
-    private NavGoal standoffGoal() {
+    private Goal standoffGoal() {
         // 躲避场只收敌对生物:它们才有危险半径。目标本身归下面的环管——点名的猪牛鸡不是
         // 敌对生物,不在这份名单里,但照样是要走过去打的目标。"有没有目标"与"附近有没有怪"
         // 是两个问题,这里早退只看前者是否也为空:既无目标也无怪,才真的没处可站。
         // 两份材料都引用本刻的判断:目标是判据选的那一只,怪是 surveyField 扫的那一份。
         var field = hostiles;
+        // 威胁场只收此刻还活着的:"场上有没有怪"与"远离谁"问的是同一份名单,不然扫到的那只这一刻刚死,名单就空了
+        List<Threat> threats = Menace.field(player, field);
         boolean haveTarget = target != null && !target.isRemoved();
-        if (!haveTarget && field.isEmpty()) {
+        if (!haveTarget && threats.isEmpty()) {
             return null;
         }
         logStandoff(field);
@@ -705,7 +720,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             // <b>没有目标也照样走位</b>:环退化成"离每一只都出了它的危险半径"。
             // 场上只剩一只点着的爬行者(她没弓打不了)时走的就是这一支 —— 退开等引信熄,
             // 而不是跑三十二格。
-            return NavGoal.avoid(Menace.AVOID_PENALTY, Menace.field(player, field));
+            return Goals.awayFrom(threats);
         }
         // 走位是<b>一个环</b>:外沿别跟丢,内沿是每一只都够不着她。太近自然往外走,太远
         // 自然往回走 —— "拉开"不是另一个动作。
@@ -716,16 +731,17 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         //
         // 内沿用<b>裸</b>攻击距离(2.02),不加格量化补偿。带宽因此是 1.28 格,比格量化误差
         // 0.71 宽出一截 —— 当初算出"带只有 0.57 格、做不出来",是因为把补偿也叠进了内沿。
-        return NavGoal.approachAvoiding(
-                NavGoal.ring(target.blockPosition(), skirmishInner(), skirmishOuter()),
-                Menace.AVOID_PENALTY,
-                bowFighting
-                        ? Menace.field(player, field).stream()
-                                .map(x -> x.withClearance(
-                                        Math.max(x.clearance(), BOW_MIN_DISTANCE)))
-                                .toList()
-                        : Menace.field(player, field));
+        Goal ring = Goals.ring(target.blockPosition(), skirmishInner(), skirmishOuter());
+        if (threats.isEmpty()) {
+            return ring;
+        }
         // 弓那一套的内沿对<b>每一只</b>都成立:她要跟所有怪保持五格,不只是当前目标。
+        List<Threat> keepOff = bowFighting
+                ? threats.stream()
+                        .map(t -> new Threat(t.x(), t.y(), t.z(), Math.max(t.radius(), BOW_MIN_DISTANCE)))
+                        .toList()
+                : threats;
+        return Goals.allOf(List.of(ring, Goals.awayFrom(keepOff)));
     }
 
     /** 站位日志只在数字真的变了时打一行——每 tick 一行会把别的全冲掉。 */
@@ -860,20 +876,19 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             stopNav();   // 到点重算:落点不变,只让这一刻的怪进边成本
         }
         if (nav == null) {
-            BlockPos landing = haven;
             havenPlannedAt = workTicks();
-            nav = PlayerNav.toGoal(player, () -> NavGoal.approachAvoiding(
-                            NavGoal.nearGround(landing, HAVEN_ARRIVED),
-                            Menace.AVOID_PENALTY, roadHazards()),
-                    CHASE_SPEED, () -> false);
+            // 路上要绕开谁:四十格内每一只,经过它们身边的格变贵;落点旁边站着一只怪也算到了,不然她永远到不了、
+            // 也就永远不换落点
+            nav = Trip.to(player, Goals.near(haven, HAVEN_ARRIVED), RouteSpec.defaults(), haven)
+                    .avoiding(() -> Menace.dangers(player, FLEE_SCAN_RADIUS));
         }
-        PlayerNav.Status status = nav.tick();
-        if (status == PlayerNav.Status.FAILED) {
+        Trip.Status status = nav.tick();
+        if (status == Trip.Status.FAILED) {
             stopNav();
             haven = null;   // 这个方向走不通,下一刻换一个
             retreatFailures++;
         } else {
-            if (status == PlayerNav.Status.ARRIVED) {
+            if (status == Trip.Status.ARRIVED) {
                 stopNav();
                 haven = null;
             }
@@ -886,17 +901,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private void clearHaven() {
         haven = null;
         stopNav();
-    }
-
-    /**
-     * 路上要绕开谁。<b>间距给零</b>:它们只让经过的格子变贵(边成本 ×4)与影响估价,
-     * 不参与"到没到"——落点旁边站着一只怪也算到了,不然她永远到不了、也就永远不换落点。
-     */
-    private java.util.List<com.dwinovo.numen.core.pathing.goals.GoalAvoidEntities.Threat>
-            roadHazards() {
-        return Menace.field(player, Menace.hostilesAround(player, FLEE_SCAN_RADIUS)).stream()
-                .map(t -> t.withClearance(0.0))
-                .toList();
     }
 
     /**
@@ -935,7 +939,10 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             return TaskState.RUNNING;
         }
         if (nav == null) {
-            nav = PlayerNav.toGoal(player, loot::goal, 1.0, () -> loot.live().isEmpty());
+            BlockPos nearest = loot.live().stream().map(ItemEntity::blockPosition)
+                    .min(java.util.Comparator.comparingDouble(p -> p.distSqr(player.blockPosition())))
+                    .orElse(player.blockPosition());
+            nav = Trip.to(player, loot.goal(), RouteSpec.defaults(), nearest);
         }
         switch (nav.tick()) {
             case RUNNING -> { }

@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.core.pathing.settings.ThrowawayBlocks;
+import com.dwinovo.numen.core.nav.ThrowawayBlocks;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;

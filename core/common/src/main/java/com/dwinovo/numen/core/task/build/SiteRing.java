@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.task.build;
 
-import com.dwinovo.numen.core.pathing.calc.NavGoal;
+import com.dwinovo.numen.pathing.search.Goal;
+import com.dwinovo.numen.pathing.search.Goals;
 
 import net.minecraft.core.BlockPos;
 
@@ -79,11 +80,11 @@ final class SiteRing {
     }
 
     /** 站到圈上任何一列:搜索自己挑最近的那一段走过去。 */
-    NavGoal goal() {
-        List<NavGoal> columns = new ArrayList<>(xs.length);
+    Goal goal() {
+        List<Goal> columns = new ArrayList<>(xs.length);
         for (int i = 0; i < xs.length; i++) {
-            columns.add(NavGoal.column(xs[i], zs[i]));
+            columns.add(Goals.column(xs[i], zs[i]));
         }
-        return NavGoal.composite(columns);
+        return Goals.anyOf(columns);
     }
 }

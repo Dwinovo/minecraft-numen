@@ -2,6 +2,7 @@ package com.dwinovo.numen.core.task.chain;
 
 import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.core.WorkProfile;
+import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
@@ -72,8 +73,15 @@ public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Refle
         return falling(companion) || reclaiming(companion);
     }
 
-    /** 正在快速下落,而且身上有能救自己的东西。 */
+    /**
+     * 正在快速下落,而且身上有能救自己的东西。在走的路线里计划好的坠落不算:落差与接住的办法寻路规划时已经算过、
+     * 执行时自己接,这条链只接计划外的。
+     */
     private static boolean falling(NumenPlayer companion) {
+        Trip trip = Trip.current(companion);
+        if (trip != null && trip.plannedFall()) {
+            return false;
+        }
         boolean grounded = companion.onGround() || companion.isInWater()
                 || companion.isSwimming() || companion.onClimbable();
         boolean canSave = waterBucketSlot(companion) >= 0 || softBlockSlot(companion) >= 0;

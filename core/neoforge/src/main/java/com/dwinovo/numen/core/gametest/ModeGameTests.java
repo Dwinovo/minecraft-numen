@@ -195,7 +195,7 @@ public class ModeGameTests {
         }
         companion.teleportTo(floor.getX() + 0.5, floor.getY(), floor.getZ() + 0.5);
         companion.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
-        com.dwinovo.numen.core.pathing.settings.ThrowawayBlocks.store(companion, List.of("minecraft:cobblestone"));
+        com.dwinovo.numen.core.nav.ThrowawayBlocks.store(companion, List.of("minecraft:cobblestone"));
         BlockPos target = helper.absolutePos(new BlockPos(12, 2, 12));
         TaskRecord record = call(companion, "move_goto", args(
                 "x", target.getX(),

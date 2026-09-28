@@ -13,6 +13,9 @@ import com.dwinovo.numen.pathing.spec.RouteSpec;
  */
 public record PlanQuery(Goal goal, RouteSpec spec, int candidates, int budget) {
 
+    /** 一次最多要几条候选。 */
+    public static final int MAX_CANDIDATES = RoutePlanner.MAX_CANDIDATES;
+
     public PlanQuery {
         Objects.requireNonNull(goal, "goal");
         Objects.requireNonNull(spec, "spec");

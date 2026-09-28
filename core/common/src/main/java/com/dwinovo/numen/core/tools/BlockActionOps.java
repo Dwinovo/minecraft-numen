@@ -7,7 +7,7 @@ import com.dwinovo.numen.core.task.interact.InteractAtTaskRecord;
 import com.dwinovo.numen.core.task.interact.InteractEntityTaskRecord;
 import com.dwinovo.numen.core.task.mine.MineBlockTaskRecord;
 import com.dwinovo.numen.core.task.MouseButton;
-import com.dwinovo.numen.core.pathing.spec.RouteSpec;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.core.scan.GroupBook;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;

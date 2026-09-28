@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task.base;
 
-import com.dwinovo.numen.core.pathing.execute.PlayerNav;
+import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.task.TaskState;
@@ -18,7 +18,8 @@ import com.dwinovo.numen.entity.NumenPlayer;
  * <ul>
  *   <li>{@link #onStart()} builds the nav from {@link #buildNav()}.</li>
  *   <li>each tick: if {@link #reached()} → {@link #act()}; otherwise drive the nav —
- *       {@code RUNNING}/{@code ARRIVED} keep going, {@code FAILED} routes through
+ *       {@code RUNNING} keeps going; {@code ARRIVED} while {@link #reached()} still says no means the route's goal
+ *       holds but the work can't start from there, and like {@code FAILED} it routes through
  *       {@link #handleNavFailure(FailureType, String)}.</li>
  * </ul>
  *
@@ -39,7 +40,7 @@ public abstract class GoToThenDoTask<R extends TaskRecord> extends AbstractCompa
     /** Build the navigation toward this task's target. Assigned to {@link #nav} on start.
      *  方块目标的动作任务返回 null——它们不再自带任何到场导航,身体必须已在
      *  工作距离内({@link #reached()}),否则直接教学失败让调用方先 goto。 */
-    protected abstract PlayerNav buildNav();
+    protected abstract Trip buildNav();
 
     /**
      * 教学失败要点名的目标格(算距离、给 goto 坐标用)。返回 null = 无固定
@@ -69,12 +70,6 @@ public abstract class GoToThenDoTask<R extends TaskRecord> extends AbstractCompa
         nav = buildNav();
     }
 
-    /** Consecutive nav-ARRIVED ticks with {@link #reached()} still false. */
-    private int dudTicks = 0;
-    /** Grace before arrived-but-not-reached is declared a stance dud — landing,
-     *  settling and onGround can lag goal membership by a few ticks. */
-    private static final int DUD_GRACE_TICKS = 10;
-
     @Override
     protected final TaskState onTick() {
         if (reached()) return act();
@@ -98,35 +93,24 @@ public abstract class GoToThenDoTask<R extends TaskRecord> extends AbstractCompa
             }
             return TaskState.FAILED;
         }
+        track();
         return switch (nav.tick()) {
-            case RUNNING -> {
-                dudTicks = 0;
-                yield TaskState.RUNNING;
-            }
+            case RUNNING -> TaskState.RUNNING;
             case ARRIVED -> {
-                // reached() said no above, so the nav's arrival is a stance-dud
-                // candidate: the search's membership is satisfied but the work
-                // still can't start from here (out of reach, no sight line).
-                // Route it through the SAME recovery ladder a failed path uses —
-                // it is just one more way this bounded goal failed to yield a
-                // working stance. The grace window absorbs settle transients.
-                if (++dudTicks < DUD_GRACE_TICKS) {
-                    yield TaskState.RUNNING;
-                }
-                dudTicks = 0;
+                // 到了:导航只在身体停稳在目标里时才这么说,reached() 上面却说够不着——目标本身成立,
+                // 这件活却从这里开不了工(够不着、没有视线)。和走不到是同一类:这一次没站到能干活的地方
                 stopNav();
-                com.dwinovo.numen.core.Constants.LOG.info(
-                        "[numen-task] STANCE_DUD {} feet={} — nav arrived, reached() still"
-                                + " false after {} ticks; routing the recovery ladder",
-                        getClass().getSimpleName(), player.blockPosition().toShortString(),
-                        DUD_GRACE_TICKS);
-                yield handleNavFailure(FailureType.STANCE_DUD,
-                        "arrived where the route ends, but the target is still out of"
-                                + " reach from there");
+                yield handleNavFailure(FailureType.OUT_OF_REACH,
+                        "arrived where the route ends, but the target is still out of reach from there");
             }
             case FAILED -> handleNavFailure(nav.failType(), nav.failReason());
         };
     }
+
+    /**
+     * 目标会挪的活(跟着一只生物走过去)每刻在走之前把新目标交给在走的这一趟({@code nav.retarget});默认什么都不做。
+     */
+    protected void track() {}
 
     /**
      * React to the nav giving up. Default: {@code fail(reason, type)} and

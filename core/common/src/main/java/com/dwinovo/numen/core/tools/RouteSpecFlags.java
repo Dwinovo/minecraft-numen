@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.tools;
 
+import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -9,9 +10,11 @@ import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.core.init.InitTag;
-import com.dwinovo.numen.core.pathing.spec.CellClass;
-import com.dwinovo.numen.core.pathing.spec.PositionCosts;
-import com.dwinovo.numen.core.pathing.spec.RouteSpec;
+import com.dwinovo.numen.pathing.spec.BlockBans;
+import com.dwinovo.numen.pathing.spec.PositionCosts;
+import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.pathing.world.Semantics;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
@@ -28,9 +31,9 @@ import net.minecraft.world.level.block.Block;
  * 长什么样,读好的值怎么变成 {@link RouteSpec}({@link #parse})——标志到规格的翻译全仓只此一处。旋钮名用模型看得懂的
  * 普通词,按规格的四组组织:
  * <ul>
- *   <li>能力:{@code --alter}(none/natural)、{@code --parkour}、{@code --climb_vines}、{@code --max_fall}、
- *       {@code --alter_budget};</li>
- *   <li>每类代价:{@code --avoid}——要排除的格子类型({@link CellClass} 名);</li>
+ *   <li>能力:{@code --alter}(none/natural/any)、{@code --parkour}、{@code --max_fall}、{@code --alter_budget};</li>
+ *   <li>格子种类:{@code --avoid}——还要排除的语义种类({@link Semantics.Kind} 名),{@code --allow}——放开出厂排除的
+ *       那几种里可以放开的;</li>
  *   <li>按位置 / 按种类:{@code --avoid_break}、{@code --avoid_place}、{@code --avoid_step}——方块 id、{@code #标签},
  *       或坐标 {@code x,y,z} / 坐标盒 {@code x1,y1,z1..x2,y2,z2};</li>
  *   <li>动作代价:{@code --penalty_place}、{@code --penalty_break}、{@code --penalty_jump}、{@code --penalty_wade}。</li>
@@ -51,13 +54,28 @@ public final class RouteSpecFlags {
     /** 这一串标志在用法行里写成的那一格 {@code [route flags]};完整清单在动作自己的帮助里。 */
     public static final String GROUP = "route flags";
 
+    /** 能排除的种类:门、攀爬、水……每一种都可以。 */
+    private static final Set<Semantics.Kind> AVOIDABLE = EnumSet.allOf(Semantics.Kind.class);
+
+    /**
+     * 能放开的:出厂规格排除、而放开只是这一趟愿不愿意的那几种——流水(会把她推离路线)、机关(压力板、绊线)、易碎(耕地、
+     * 海龟蛋)。岩浆与危险方块碰了就伤身,不在其中。
+     */
+    private static final Set<Semantics.Kind> ALLOWABLE = EnumSet.of(Semantics.Kind.FLOWING_WATER,
+            Semantics.Kind.TRIGGER, Semantics.Kind.FRAGILE);
+
     static final Param<String> ALTER = Param.optional("alter", ArgType.oneOf("none", "natural", "any"),
             "Whether the walk may change the world: none never breaks or places a block; natural may dig, bridge "
                     + "and pillar through natural terrain; any also counts blocks that need your owner's consent, "
                     + "asking before it touches them. Every change is itemised in the result.")
             .group(GROUP);
-    static final Param<List<String>> AVOID = Param.optional("avoid", ArgType.list(ArgType.oneOf(cellNames())),
+    static final Param<List<String>> AVOID = Param.optional("avoid", ArgType.list(ArgType.oneOf(kindNames(AVOIDABLE))),
             "Cell types to keep out of entirely, e.g. water to stay dry, door to never pass doors.")
+            .group(GROUP);
+    static final Param<List<String>> ALLOW = Param.optional("allow", ArgType.list(ArgType.oneOf(kindNames(ALLOWABLE))),
+            "Cell types kept out by default that this walk may use: flowing_water (currents push her off the route),"
+                    + " trigger (pressure plates and tripwires), fragile (farmland and turtle eggs).")
+            .whenOmitted("keep out of them")
             .group(GROUP);
     static final Param<Double> PENALTY_PLACE = penalty("place", "Extra cost per block placed", 20);
     static final Param<Double> PENALTY_BREAK = penalty("break", "Extra cost per block broken, on top of dig time", 30);
@@ -75,9 +93,6 @@ public final class RouteSpecFlags {
     static final Param<Boolean> PARKOUR = Param.optional("parkour", ArgType.bool(),
             "Allow running jumps over 2-4 block gaps.").whenOmitted("not jump gaps")
             .group(GROUP);
-    static final Param<Boolean> CLIMB_VINES = Param.optional("climb_vines", ArgType.bool(), "Allow climbing vines.")
-            .whenOmitted("not climb vines")
-            .group(GROUP);
     static final Param<Integer> MAX_FALL_FLAG = Param.optional("max_fall", ArgType.integer(0, MAX_FALL),
             "Highest drop she may take without water below, in blocks; she may still fall further when her health "
                     + "can take it.").whenOmitted("keep 3")
@@ -90,8 +105,8 @@ public final class RouteSpecFlags {
             .group(GROUP);
 
     /** 这一串标志,按帮助里列的顺序。用它的动作把它接在自己的参数之后。 */
-    public static final List<Param<?>> PARAMS = List.of(ALTER, AVOID, PENALTY_PLACE, PENALTY_BREAK, PENALTY_JUMP,
-            PENALTY_WADE, AVOID_BREAK, AVOID_PLACE, AVOID_STEP, PARKOUR, CLIMB_VINES, MAX_FALL_FLAG, ALTER_BUDGET);
+    public static final List<Param<?>> PARAMS = List.of(ALTER, AVOID, ALLOW, PENALTY_PLACE, PENALTY_BREAK, PENALTY_JUMP,
+            PENALTY_WADE, AVOID_BREAK, AVOID_PLACE, AVOID_STEP, PARKOUR, MAX_FALL_FLAG, ALTER_BUDGET);
 
     private static Param<Double> penalty(String action, String what, int byDefault) {
         return Param.optional("penalty_" + action, ArgType.number(0, MAX_PENALTY),
@@ -115,61 +130,57 @@ public final class RouteSpecFlags {
         if (!given(args)) {
             return base;
         }
-        RouteSpec spec = base;
+        RouteSpec.Builder spec = base.edit();
         if (args.get(ALTER) != null) {
-            spec = spec.withAlter(RouteSpec.Alter.valueOf(args.get(ALTER).toUpperCase(Locale.ROOT)));
+            spec.alter(RouteSpec.Alter.valueOf(args.get(ALTER).toUpperCase(Locale.ROOT)));
         }
         if (args.get(AVOID) != null) {
             for (String name : args.get(AVOID)) {
-                spec = spec.withCellCost(CellClass.valueOf(name.toUpperCase(Locale.ROOT)), RouteSpec.FORBID);
+                spec.exclude(Semantics.Kind.valueOf(name.toUpperCase(Locale.ROOT)));
+            }
+        }
+        if (args.get(ALLOW) != null) {
+            for (String name : args.get(ALLOW)) {
+                spec.allow(Semantics.Kind.valueOf(name.toUpperCase(Locale.ROOT)));
             }
         }
         if (args.get(PENALTY_PLACE) != null) {
-            spec = spec.withPlaceCost(penalty(PENALTY_PLACE, args));
+            spec.placeCost(penalty(PENALTY_PLACE, args));
         }
         if (args.get(PENALTY_BREAK) != null) {
-            spec = spec.withBreakPenalty(penalty(PENALTY_BREAK, args));
+            spec.breakPenalty(penalty(PENALTY_BREAK, args));
         }
         if (args.get(PENALTY_JUMP) != null) {
-            spec = spec.withJumpPenalty(penalty(PENALTY_JUMP, args));
+            spec.jumpPenalty(penalty(PENALTY_JUMP, args));
         }
         if (args.get(PENALTY_WADE) != null) {
-            spec = spec.withWadePenalty(penalty(PENALTY_WADE, args));
+            spec.wadePenalty(penalty(PENALTY_WADE, args));
         }
         Bans breaking = bans(AVOID_BREAK, args);
         Bans placing = bans(AVOID_PLACE, args);
         Bans standing = bans(AVOID_STEP, args);
         PositionCosts.Builder cells = PositionCosts.builder();
-        breaking.cells.forEach((long c) -> cells.dig(c, RouteSpec.FORBID));
-        placing.cells.forEach((long c) -> cells.place(c, RouteSpec.FORBID));
-        standing.cells.forEach((long c) -> cells.stand(c, RouteSpec.FORBID));
-        RouteSpec.BlockBans held = spec.bans();
-        spec = spec.withPositions(spec.positions().plus(cells.build()))
-                .withBans(new RouteSpec.BlockBans(union(held.breaking(), breaking.blocks),
-                        union(held.placingInto(), placing.blocks), union(held.standingOn(), standing.blocks)));
+        breaking.cells.forEach((long c) -> cells.forbid(Use.DIG, c));
+        placing.cells.forEach((long c) -> cells.forbid(Use.PLACE, c));
+        standing.cells.forEach((long c) -> cells.forbid(Use.STAND, c));
+        spec.positions(base.positions().plus(cells.build()))
+                .bans(base.bans().plus(new BlockBans(breaking.blocks, placing.blocks, standing.blocks)));
         if (args.get(PARKOUR) != null) {
-            spec = spec.withParkour(args.get(PARKOUR));
-        }
-        if (args.get(CLIMB_VINES) != null) {
-            spec = spec.withClimbVines(args.get(CLIMB_VINES));
+            spec.parkour(args.get(PARKOUR));
         }
         if (args.get(MAX_FALL_FLAG) != null) {
-            spec = spec.withMaxFallHeightNoWater(nonNegative(MAX_FALL_FLAG, args));
+            spec.maxFallHeightNoWater(nonNegative(MAX_FALL_FLAG, args));
         }
         if (args.get(ALTER_BUDGET) != null) {
-            spec = spec.withAlterBudget(nonNegative(ALTER_BUDGET, args));
+            spec.alterBudget(nonNegative(ALTER_BUDGET, args));
         }
-        return spec;
+        return spec.build();
     }
 
     // ==================== 单项翻译 ====================
 
-    /** 可排除的类型名,由 {@link CellClass#avoidable()} 定,不另抄一份。 */
-    private static String[] cellNames() {
-        return java.util.Arrays.stream(CellClass.values())
-                .filter(CellClass::avoidable)
-                .map(c -> c.name().toLowerCase(Locale.ROOT))
-                .toArray(String[]::new);
+    private static String[] kindNames(Set<Semantics.Kind> kinds) {
+        return kinds.stream().map(k -> k.name().toLowerCase(Locale.ROOT)).toArray(String[]::new);
     }
 
     private static double penalty(Param<Double> flag, CommandArgs args) {
@@ -187,12 +198,6 @@ public final class RouteSpecFlags {
             throw new IllegalArgumentException("--" + flag.name() + " must be 0 or more, got " + v);
         }
         return v;
-    }
-
-    private static Set<Block> union(Set<Block> held, Set<Block> added) {
-        Set<Block> out = new LinkedHashSet<>(held);
-        out.addAll(added);
-        return out;
     }
 
     /** 一栏禁令:按种类的方块集合 + 按位置的格子集合。 */

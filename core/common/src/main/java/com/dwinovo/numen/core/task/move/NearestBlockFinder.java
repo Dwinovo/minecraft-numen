@@ -1,13 +1,15 @@
 package com.dwinovo.numen.core.task.move;
-import com.dwinovo.numen.core.task.mine.MineCompanionTask;
-
-import com.dwinovo.numen.core.pathing.bridge.ContextFactory;
-import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
-import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.Constants;
+import com.dwinovo.numen.core.nav.Feet;
 import com.dwinovo.numen.core.scan.BlockScanner;
 import com.dwinovo.numen.core.scan.BlockSearch;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.body.Snapshots;
+import com.dwinovo.numen.pathing.drive.LiveWorld;
+import com.dwinovo.numen.pathing.plan.BodySnapshot;
+import com.dwinovo.numen.pathing.plan.DigRules;
+import com.dwinovo.numen.pathing.search.Goal;
+import com.dwinovo.numen.pathing.search.Goals;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
@@ -19,9 +21,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * goto 的 FIND(就近方块)子系统:起一次 {@link BlockSearch} 找出候选、按 mine 同一道
- * 剪枝入册、编译 anyOf 导航契约、打不通时逐个除名轮换。它与 goto 的坐标三态
- * (BLOCK/COLUMN/YLEVEL)不共享任何逻辑,任务只管驱动。
+ * goto 的 FIND(就近方块)子系统:起一次 {@link BlockSearch} 找出候选、剔掉物理上处置不了的、编出"够得着其中任何一个"
+ * 的目标、打不通时逐个除名轮换。它与 goto 的坐标三态(BLOCK/COLUMN/YLEVEL)不共享任何逻辑,任务只管驱动。
  *
  * <p>搜索和 {@code scan_blocks}、{@code mine} 走同一个出口({@link BlockSearch}),只是 {@code want}
  * 不同——所以"最近的铁矿在哪"几个工具给的是同一个答案。
@@ -50,8 +51,8 @@ final class NearestBlockFinder {
     /** 搜索被节数上限截断时的那句话({@link BlockSearch.ScanResult#sectionCapNote});没截断为 null。 */
     private String capNote;
     private boolean scanDrained;
-    /** 候选集编译出的导航契约(候选变动时重建)。 */
-    private GoalCompiler.Compiled contract;
+    /** 候选集编出的目标(候选变动时重建)。 */
+    private Goal goal;
 
     NearestBlockFinder(NumenPlayer player, Block target) {
         this.player = player;
@@ -64,8 +65,8 @@ final class NearestBlockFinder {
             scanDrained = true;
             return;
         }
-        // 圆心用寻路口径的脚位格(0.1251 上抬 + 台阶取上格)——section 遍历序从它导出。
-        BlockPos feet = BlockHelper.playerFeet(level, player.getX(), player.getY(), player.getZ());
+        // 圆心是脚所在的那一格(与寻路归格同一条规则)——section 遍历序从它导出。
+        BlockPos feet = Feet.cell(player);
         scanId = BlockSearch.start(player.getUUID(), level, feet, MAX_CHUNK_RADIUS * 16,
                 NEAREST_WANTED, Set.of(target), res -> {
                     scanId = 0;
@@ -91,16 +92,14 @@ final class NearestBlockFinder {
         List<BlockScanner.Hit> found = hits;
         hits = null;
         scanDrained = true;
-        // 入册前过与 mine 同一道目标剪枝:挖不动/禁挖(贴液体等)/基岩上下
-        // 夹死的格不作候选——省得选中一个走近了也没法处置的目标。问的是这块
-        // "能不能被处置",与她怎么走过去无关,按可改地形算。
-        var ctx = ContextFactory.forExecution(player,
-                com.dwinovo.numen.core.pathing.execute.PlayerNav.ContextProvider.NATURAL.spec());
+        // 入册前剔掉物理上处置不了的格(挖不动、贴着流体、顶着落沙、世界边界外):省得选中一个走近了也没法处置的目标。
+        // 问的是这块"能不能被处置",与她怎么走过去无关;判据是寻路模块的挖掘规则,只此一处
+        LiveWorld world = new LiveWorld(player.serverLevel());
+        BodySnapshot body = Snapshots.of(player);
         found.stream()
                 .sorted(Comparator.comparingDouble(BlockScanner.Hit::distance))
                 .map(h -> h.pos().immutable())
-                .filter(p -> MineCompanionTask.plausibleToBreak(
-                        ctx, p, ctx.get(p.getX(), p.getY(), p.getZ())))
+                .filter(p -> DigRules.check(world, body, p, world.getBlockState(p), false) == null)
                 .limit(MAX_CANDIDATES)
                 .forEach(candidates::add);
         // "她为什么去了那一块而不是最近的" 要靠这一行答:有几个被剪掉了,直线最近的是哪个。
@@ -109,7 +108,7 @@ final class NearestBlockFinder {
                         + " straight-line nearest {}",
                 BuiltInRegistries.BLOCK.getKey(target).getPath(), found.size(), candidates.size(),
                 candidates.isEmpty() ? "none" : candidates.get(0).toShortString());
-        rebuildContract();
+        rebuildGoal();
     }
 
     boolean hasCandidates() {
@@ -126,13 +125,22 @@ final class NearestBlockFinder {
         return scanId == 0 && scanDrained;
     }
 
-    /** 当前候选集的导航契约;无候选为 null。 */
-    GoalCompiler.Compiled contract() {
-        return contract;
+    /** 当前候选集的目标:站在够得着其中任何一个的地方(不占着它,路上也不挖它、不埋它);无候选为 null。 */
+    Goal goal() {
+        return goal;
     }
 
-    private void rebuildContract() {
-        contract = candidates.isEmpty() ? null : GoalCompiler.anyOf(candidates);
+    private void rebuildGoal() {
+        if (candidates.isEmpty()) {
+            goal = null;
+            return;
+        }
+        var stats = Snapshots.stats(player);
+        List<Goal> members = new ArrayList<>(candidates.size());
+        for (BlockPos c : candidates) {
+            members.add(Goals.reach(c, stats));
+        }
+        goal = Goals.anyOf(members);
     }
 
     /** 打不通时的轮换:还有得换就把最近候选除名并重建契约,只剩一个则不动。 */
@@ -144,7 +152,7 @@ final class NearestBlockFinder {
         if (nearest >= 0) {
             candidates.remove(nearest);
         }
-        rebuildContract();
+        rebuildGoal();
         return true;
     }
 

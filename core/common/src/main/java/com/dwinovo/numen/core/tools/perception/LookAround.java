@@ -1,14 +1,17 @@
 package com.dwinovo.numen.core.tools.perception;
 
-import com.dwinovo.numen.core.pathing.cache.LoadedOnlyView;
-import com.dwinovo.numen.core.pathing.execute.PathExecutor;
-import com.dwinovo.numen.core.pathing.spec.CellClass;
-import com.dwinovo.numen.core.pathing.spec.RouteSpec;
+import com.dwinovo.numen.core.nav.Feet;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.body.Snapshots;
+import com.dwinovo.numen.pathing.drive.LiveWorld;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.pathing.world.BodyStats;
+import com.dwinovo.numen.pathing.world.Clearance;
+import com.dwinovo.numen.pathing.world.Semantics;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.BlockTags;
-import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -29,6 +32,9 @@ import net.minecraft.world.level.block.state.BlockState;
  * costmap_2d). Sparse far-field objects are left to {@code scan blocks} /
  * {@code scan entities}; this map is the dense near-field half. The command and its
  * shortcut ({@code scan around} / {@code scan_around}) are declared in {@link ScanCommands}.
+ *
+ * <p>Where she can stand and where her body fits are read off the pathing module's terrain geometry (layer 0), the
+ * very rules the route planner walks by, so the map and the walk never disagree.
  */
 final class LookAround {
 
@@ -56,9 +62,9 @@ final class LookAround {
     /** The map of the {@code (2 * radius + 1)}-wide square around her feet; {@code radius} is clamped to 4-16. */
     static String render(NumenPlayer self, int asked) {
         int radius = Math.clamp(asked, MIN_RADIUS, MAX_RADIUS);
-        BlockGetter view = LoadedOnlyView.of(self.level());
-        LoadedOnlyView loaded = view instanceof LoadedOnlyView v ? v : null;
-        BlockPos center = PathExecutor.playerFeet(self);
+        LiveWorld view = new LiveWorld(self.serverLevel());
+        BodyStats body = Snapshots.stats(self);
+        BlockPos center = Feet.cell(self);
         int cx = center.getX();
         int cy = center.getY();
         int cz = center.getZ();
@@ -71,7 +77,7 @@ final class LookAround {
                 int dx = c - radius;             // c=0 is west (-X), left
                 grid[r][c] = (dx == 0 && dz == 0)
                         ? YOU
-                        : classify(view, loaded, cx + dx, cy, cz + dz);
+                        : classify(view, body, cx + dx, cy, cz + dz);
             }
         }
         inflateHazards(grid, size);
@@ -96,14 +102,14 @@ final class LookAround {
     }
 
     /** Semantic-pool the column at (x,z) to one movement-affordance glyph at the companion's Y band. */
-    private static char classify(BlockGetter view, LoadedOnlyView loaded, int x, int feetY, int z) {
-        if (loaded != null && !loaded.isLoaded(x, z)) {
+    private static char classify(LiveWorld view, BodyStats body, int x, int feetY, int z) {
+        if (!view.isLoaded(x, z)) {
             return UNLOADED;
         }
         BlockState feetState = view.getBlockState(new BlockPos(x, feetY, z));
         BlockState headState = view.getBlockState(new BlockPos(x, feetY + 1, z));
 
-        if (CellClass.isLava(feetState) || CellClass.isLava(headState)) {
+        if (lava(view, x, feetY, z) || lava(view, x, feetY + 1, z)) {
             return HAZARD;
         }
         if (feetState.getBlock() instanceof LiquidBlock || headState.getBlock() instanceof LiquidBlock) {
@@ -114,12 +120,12 @@ final class LookAround {
         // first liquid you would step onto is the surface: a lake level with the shore is water, not a pit.
         Integer standY = null;
         for (int y = feetY + 1; y >= feetY - DROP_DEPTH; y--) {
-            if (canStandAt(view, x, y, z)) {
+            if (Feet.standingSpot(view, body, new BlockPos(x, y, z), RouteSpec.defaults())) {
                 standY = y;
                 break;
             }
             BlockState floor = view.getBlockState(new BlockPos(x, y - 1, z));
-            if (y <= feetY && CellClass.isLava(floor)) {
+            if (y <= feetY && lava(view, x, y - 1, z)) {
                 return HAZARD;
             }
             if (y <= feetY && floor.getBlock() instanceof LiquidBlock) {
@@ -127,8 +133,7 @@ final class LookAround {
             }
         }
         if (standY == null) {
-            boolean bodyClear = CellClass.fullyPassable(view, new BlockPos(x, feetY, z))
-                    && CellClass.fullyPassable(view, new BlockPos(x, feetY + 1, z));
+            boolean bodyClear = Clearance.fits(view, body, Pose.STANDING, x, feetY, z);
             if (!bodyClear) {
                 return (isTree(feetState) || isTree(headState)) ? TREE : WALL;
             }
@@ -150,10 +155,8 @@ final class LookAround {
         return DROP;
     }
 
-    private static boolean canStandAt(BlockGetter view, int x, int y, int z) {
-        return CellClass.canWalkOn(view, new BlockPos(x, y - 1, z), RouteSpec.defaults())
-                && CellClass.fullyPassable(view, new BlockPos(x, y, z))
-                && CellClass.fullyPassable(view, new BlockPos(x, y + 1, z));
+    private static boolean lava(LiveWorld view, int x, int y, int z) {
+        return Semantics.is(view, new BlockPos(x, y, z), Semantics.Kind.LAVA);
     }
 
     /** Layered-costmap style: ring a caution buffer around lava/fire so the model keeps clear of edges. */

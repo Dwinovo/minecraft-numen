@@ -1,17 +1,19 @@
 package com.dwinovo.numen.core.task.move;
 
-import com.dwinovo.numen.core.pathing.calc.NavGoal;
-import com.dwinovo.numen.core.pathing.execute.PlayerNav;
-import com.dwinovo.numen.core.pathing.spec.CellClass;
-import com.dwinovo.numen.core.pathing.spec.RouteSpec;
+import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
+import com.dwinovo.numen.pathing.body.Snapshots;
+import com.dwinovo.numen.pathing.drive.LiveWorld;
+import com.dwinovo.numen.pathing.plan.Stance;
+import com.dwinovo.numen.pathing.search.Goal;
+import com.dwinovo.numen.pathing.search.Goals;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.core.FailureType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.Level;
 
 /**
  * 跟着走——第一个<b>常驻</b>任务。默认跟主人,点名了就跟那一只。
@@ -29,7 +31,7 @@ import net.minecraft.world.level.Level;
  * 跟着走从不动世界(路线规格 alter=NONE,没有开关),于是"没有路"多半不是暂时的:隔着断崖、
  * 在屋里、差几格高——退避多少次都一样。那就以失败收场,把原因连同候选路线清单交给
  * 模型,它决定先 goto 一条开路、换个办法、或者告诉主人。一个明确的失败原因不能攥在手里
- * 站着空算。主人飞在半空时跟的是他脚下的地面({@link #anchor}),一般够得着;真够不着
+ * 站着空算。主人飞在半空时跟的是他脚下能站的地方({@link #anchor}),一般够得着;真够不着
  * 也照样报。
  *
  * <h2>目标没了,主人和别人不一样</h2>
@@ -37,21 +39,25 @@ import net.minecraft.world.level.Level;
  * 那只羊死了、或者走出加载范围被卸载了,再等也不会回来:那时收尾报给模型,让它决定下
  * 一步。一套逻辑通吃的话,要么她对着一只死羊站到天荒地老,要么主人一下线任务就没了。
  *
- * <p><b>{@code nav.tick()} 的返回值一个都不能丢</b>:{@link PlayerNav} 的 FAILED 是
- * <b>终局闩</b>(一经裁定即稳定持续),不接住就是她永久定在原地而 {@code task status}
- * 照说"执行中"——主人完全看不出她卡住了。这里接住的方式就是把它变成任务的结果。
+ * <p><b>{@code nav.tick()} 的返回值一个都不能丢</b>:{@link Trip} 收场之后就稳定地是那个结局,
+ * 不接住就是她永久定在原地而 {@code task status} 照说"执行中"——主人完全看不出她卡住了。
+ * 这里接住的方式就是把它变成任务的结果。
+ *
+ * <p><b>目标跟着挪</b>:他走出上次定下的落脚点两格外,就把新目标交给在走的这一趟({@link Trip#retarget}),
+ * 在走的路还算数就照走,不算数才重搜——挪多远才值得换在这里定。
  */
 public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskRecord> {
 
-    private static final double WALK_SPEED = 1.0;
     /** 比 {@code keepWithin} 多出这么远才重新起步,免得在临界距离上抖着走走停停。 */
     private static final double RESUME_MARGIN = 2.0;
 
-    /** 主人悬空时,往下找地面最多找几格。 */
-    private static final int GROUND_SCAN = 64;
-
     /** 上一刻是不是在走——用来只在真正起步/到位时重建导航。 */
     private boolean moving;
+    /** 在走的这一趟朝着的落脚点;他挪出它 {@link #RETARGET_DISTANCE} 格外才换目标。 */
+    private BlockPos heading;
+
+    /** 他挪出上次的落脚点这么远(格)才把新目标交给在走的这一趟。 */
+    private static final double RETARGET_DISTANCE = 2.0;
 
     public FollowCompanionTask(NumenPlayer player, FollowTaskRecord record) {
         super(player, record);
@@ -88,11 +94,14 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
                     FailureType.TARGET_LOST);
             return TaskState.FAILED;
         }
+        BlockPos anchor = anchor(target);
         if (nav == null) {
-            // 目标每次重规划时现取,所以主人边走她也跟得上。只走不改;探针开着——跟不上的
-            // 时候回执里要有候选路线的清单
-            nav = PlayerNav.toGoal(player, this::goal, WALK_SPEED, this::closeEnough, TERRAIN)
-                    .withTerrainProbe();
+            // 只走不改;跟不上的时候回执里要有候选路线的清单
+            heading = anchor;
+            nav = Trip.to(player, goal(anchor), TERRAIN, anchor).probing();
+        } else if (anchor.distSqr(heading) > RETARGET_DISTANCE * RETARGET_DISTANCE) {
+            heading = anchor;
+            nav.retarget(goal(anchor), anchor);
         }
         moving = true;
         switch (nav.tick()) {
@@ -133,43 +142,20 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
         return e == null || e.isRemoved() ? null : e;
     }
 
-    private NavGoal goal() {
-        Entity target = target(player);
-        BlockPos at = target == null ? player.blockPosition() : anchor(target);
-        return NavGoal.nearGround(at, r.keepWithin);
+    /** 跟到落脚点 {@code anchor} 附近 {@code keepWithin} 格内。 */
+    private Goal goal(BlockPos anchor) {
+        return Goals.near(anchor, r.keepWithin);
     }
 
     /** 跟随的路线规格:只走不改,没有开关。 */
-    private static final PlayerNav.ContextProvider TERRAIN = PlayerNav.ContextProvider.DEFAULT;
+    private static final RouteSpec TERRAIN = RouteSpec.defaults();
 
     /**
-     * 目标悬空(飞行/跳跃/坐船/本来就会飞)时跟到它<b>脚下的地面</b>。
-     *
-     * <p>{@link NavGoal#nearGround} 只认 ±1 格高差,直接追主人所在的那一格,人在半空就
-     * 永远够不着——这正是「飞起来她就不跟了」的来源。往下找到第一块能站的地面,
-     * 「就近跟随」在他头顶下方成立。
-     *
-     * <p>找不到(悬在虚空/海面上)就返回扫到的最低点:那一格同样够不着,于是照实报,
-     * 而不是假装找到了。
+     * 跟到哪一格:他所在那一列里身体待得住的地方({@link Stance#settle})——他站着就是他脚下,悬空(飞行、跳跃、本来就会飞)
+     * 时是他下方的地面。那一列都待不住(悬在虚空上)就还是他那一格:那里够不着,于是照实报,而不是假装找到了。
      */
     private BlockPos anchor(Entity target) {
-        BlockPos at = target.blockPosition();
-        if (target.onGround()) {
-            return at;
-        }
-        Level level = player.level();
-        RouteSpec spec = TERRAIN.spec();
-        BlockPos p = at;
-        for (int i = 0; i < GROUND_SCAN; i++) {
-            if (CellClass.canWalkOn(level, p.below(), spec)) {
-                return p;                        // 站得住,就是这儿
-            }
-            if (!CellClass.canWalkThrough(level, p.below(), spec)) {
-                return p;                        // 下面是穿不过又站不住的东西,不再往下
-            }
-            p = p.below();
-        }
-        return p;
+        return Stance.settle(new LiveWorld(player.serverLevel()), Snapshots.stats(player), target.blockPosition());
     }
 
     private boolean closeEnough() {

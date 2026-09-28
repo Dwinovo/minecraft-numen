@@ -112,6 +112,31 @@ class NavTextTest {
     }
 
     @Test
+    void puttingAwayWhatWasInHandIsToldAsSuch() {
+        assertEquals("En route I put away what was in my hand.",
+                NavText.journey(List.of(), List.of(new BodyAction.Held(Items.AIR, 8, 8))));
+    }
+
+    @Test
+    void onlyASearchedOutWalkSaysEveryCellWasSearchedAndARunOutBudgetIsNoProof() {
+        String none = NavText.failure(new Outcome.NoRoute(), null, A, C, RouteSpec.defaults());
+        assertTrue(none.contains("every reachable cell was searched"), none);
+        String budget = NavText.failure(new Outcome.OutOfBudget(), null, A, C, RouteSpec.defaults());
+        assertTrue(budget.contains("not proof there is none") && !budget.contains("every reachable cell"), budget);
+    }
+
+    @Test
+    void aPlanWithNoRouteUnderItsSpecTeachesTheFlagThatWouldShowOne() {
+        String natural = NavText.unplanned(new Outcome.NeedsAlter(RouteSpec.Alter.NATURAL, 2), null, A, C,
+                RouteSpec.defaults());
+        assertTrue(natural.contains("without altering terrain") && natural.contains("changes 2 block(s)")
+                && natural.contains("plan again with --alter natural"), natural);
+        String consent = NavText.unplanned(new Outcome.NeedsAlter(RouteSpec.Alter.ANY, 3), null, A, C,
+                RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build());
+        assertTrue(consent.contains("owner's consent") && consent.contains("plan again with --alter any"), consent);
+    }
+
+    @Test
     void anOverBudgetWalkSaysWhatTheCheapestRouteWouldChange() {
         assertEquals("no route within an alter_budget of 1 (the cheapest found would change 3 blocks)",
                 NavText.overBudget(1, 3));

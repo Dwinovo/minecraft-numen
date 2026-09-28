@@ -283,7 +283,7 @@ public class MovementGameTests {
                     "the refusal does not name the blocks in the way: " + reply);
             helper.assertTrue(reply.contains("goto route:") && firstRouteId(reply) != null,
                     "the refusal does not list candidate routes by id: " + reply);
-            helper.assertTrue(com.dwinovo.numen.core.pathing.plan.RouteBook.of(companion)
+            helper.assertTrue(com.dwinovo.numen.core.nav.RouteBook.of(companion)
                     .get(firstRouteId(reply)) != null, "the listed route is not in the route book");
             helper.assertTrue(plankCount(helper, 7, 7) == planksBefore,
                     "the wall was damaged without consent");
@@ -353,7 +353,7 @@ public class MovementGameTests {
             String reply = walk[0].getResult() == null ? null : walk[0].getResult().message();
             helper.assertTrue(reply != null && reply.contains("En route") && reply.contains("oak_planks"),
                     "the reply does not report what was broken en route: " + reply);
-            helper.assertTrue(com.dwinovo.numen.core.pathing.plan.RouteBook.of(companion).get(chosen[0]) == null,
+            helper.assertTrue(com.dwinovo.numen.core.nav.RouteBook.of(companion).get(chosen[0]) == null,
                     "a walked route is still in the route book");
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -381,7 +381,7 @@ public class MovementGameTests {
             String id = firstRouteId(reply.reply());
             helper.assertTrue(id != null && reply.reply().contains("goto route:"),
                     "the plan lists no route id: " + reply.reply());
-            helper.assertTrue(com.dwinovo.numen.core.pathing.plan.RouteBook.of(companion).get(id) != null,
+            helper.assertTrue(com.dwinovo.numen.core.nav.RouteBook.of(companion).get(id) != null,
                     "the planned route is not in the route book");
             helper.assertTrue(plankCount(helper, 7, 7) == planksBefore, "planning altered the wall");
             helper.assertTrue(companion.blockPosition().equals(spawnPos), "planning moved the body");
@@ -577,13 +577,16 @@ public class MovementGameTests {
 
     // ---- 地形边界:高台、水沟 ----
 
-    /** 一座三格高、3×3 的黑曜石台,台顶是 (11,5,7)。空手挖不动它,想上去只能垫方块。 */
-    private static BlockPos obsidianTower(GameTestHelper helper) {
+    /**
+     * 一座三格高、3×3 的基岩台,台顶是 (11,5,7)。基岩挖不动,想上去只能垫方块(黑曜石原版空手也挖得动,只是慢,
+     * 寻路照样会挖出台阶上去)。
+     */
+    private static BlockPos bedrockTower(GameTestHelper helper) {
         for (int x = 10; x <= 12; x++) {
             for (int z = 6; z <= 8; z++) {
                 for (int y = 2; y <= 4; y++) {
                     helper.getLevel().setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)),
-                            Blocks.OBSIDIAN.defaultBlockState());
+                            Blocks.BEDROCK.defaultBlockState());
                 }
             }
         }
@@ -593,7 +596,7 @@ public class MovementGameTests {
     /** 默认不改地形:上高台要垫方块,她只列出候选路线让模型选,不动手,泥土一块没用。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
     public static void goto_up_a_tower_by_default_only_lists_routes(GameTestHelper helper) {
-        BlockPos top = obsidianTower(helper);
+        BlockPos top = bedrockTower(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_asker", new BlockPos(3, 2, 7), false);
         companion.getInventory().add(new ItemStack(Items.DIRT, 16));
         ToolRun walk = call(companion, "move_goto", args("x", top.getX(), "y", top.getY(), "z", top.getZ()));
@@ -612,7 +615,7 @@ public class MovementGameTests {
     /** 规格允许改地形、身上带着泥土:垫着爬上高台,泥土用掉了几块。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
     public static void goto_up_a_tower_with_natural_spec_pillars_up(GameTestHelper helper) {
-        BlockPos top = obsidianTower(helper);
+        BlockPos top = bedrockTower(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_climber", new BlockPos(3, 2, 7), false);
         companion.getInventory().add(new ItemStack(Items.DIRT, 16));
         ToolRun walk = call(companion, "move_goto", args("x", top.getX(), "y", top.getY(), "z", top.getZ(),
@@ -634,7 +637,7 @@ public class MovementGameTests {
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
     public static void the_pillar_she_built_is_hers_to_take_down(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        BlockPos top = obsidianTower(helper);
+        BlockPos top = bedrockTower(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_stacker", new BlockPos(3, 2, 7), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_watcher");
         companion.getInventory().add(new ItemStack(Items.DIRT, 16));
@@ -675,7 +678,7 @@ public class MovementGameTests {
     /** 允许改地形,但身上没有能垫的方块:上不去,回执说清楚缺的是垫脚的方块。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
     public static void goto_up_a_tower_without_throwaway_says_so(GameTestHelper helper) {
-        BlockPos top = obsidianTower(helper);
+        BlockPos top = bedrockTower(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_grounded", new BlockPos(3, 2, 7), false);
         ToolRun walk = call(companion, "move_goto", args("x", top.getX(), "y", top.getY(), "z", top.getZ(),
                 "alter", "natural"));
@@ -715,42 +718,42 @@ public class MovementGameTests {
 
     // ---- y 给得不对:半空、地里;水底、岩浆 ----
 
-    /** y 猜到了半空(离地三格):那一格没法站,她走到那一列的地面上,算到达,回执教她下次省掉 y。 */
+    /**
+     * y 猜到了半空(离地三格):给了 y 就是那一格,那一格没法站,不许改地形也就到不了。她不改地形、不去"差不多"的地方,
+     * 以失败收场,回执教她要去那个地方就省掉 y,要停在附近就给 near。
+     */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
-    public static void goto_with_y_in_the_air_lands_on_the_ground_below(GameTestHelper helper) {
+    public static void goto_with_y_in_the_air_says_to_omit_y(GameTestHelper helper) {
         BlockPos target = helper.absolutePos(new BlockPos(11, 5, 7));
         NumenPlayer companion = spawnAt(helper, "gametest_skyward", new BlockPos(3, 2, 7), false);
         ToolRun walk = call(companion, "move_goto", args("x", target.getX(), "y", target.getY(), "z", target.getZ()));
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
-            helper.assertTrue(walk.succeeded() && walk.outcome().contains("omit y"),
-                    "the mid-air y did not end on the ground with the hint: " + walk.outcome());
-            BlockPos at = companion.blockPosition();
-            int dx = at.getX() - target.getX();
-            int dz = at.getZ() - target.getZ();
-            helper.assertTrue(at.getY() == target.getY() - 3 && dx * dx + dz * dz <= 9,
-                    "she is not on the ground beneath the target: " + at.toShortString());
+            helper.assertTrue(!walk.succeeded() && walk.outcome().contains("omit y")
+                            && walk.outcome().contains("near"),
+                    "the mid-air y did not fail with the hint: " + walk.outcome());
+            helper.assertTrue(companion.blockPosition().getY() == target.getY() - 3,
+                    "she left the ground: " + companion.blockPosition().toShortString());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
 
-    /** y 给成了地面那一块本身:那一格是实心的,她站到它上面,算到达,回执同样教她省掉 y。 */
+    /**
+     * y 给成了地面那一块本身:那一格是实心的,要站进去就得挖掉它,默认规格不许改地形。她不挖、不去"差不多"的地方,
+     * 以失败收场,回执同样教她省掉 y 或给 near;地面那一块还在。
+     */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
-    public static void goto_with_y_inside_the_floor_lands_on_top_of_it(GameTestHelper helper) {
+    public static void goto_with_y_inside_the_floor_says_to_omit_y(GameTestHelper helper) {
         BlockPos target = helper.absolutePos(new BlockPos(11, 1, 7));
         NumenPlayer companion = spawnAt(helper, "gametest_grounded_y", new BlockPos(3, 2, 7), false);
         ToolRun walk = call(companion, "move_goto", args("x", target.getX(), "y", target.getY(), "z", target.getZ()));
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
-            helper.assertTrue(walk.succeeded() && walk.outcome().contains("omit y"),
-                    "the y inside the floor did not end on top of it with the hint: " + walk.outcome());
-            BlockPos at = companion.blockPosition();
-            int dx = at.getX() - target.getX();
-            int dz = at.getZ() - target.getZ();
-            helper.assertTrue(at.getY() == target.getY() + 1 && dx * dx + dz * dz <= 9,
-                    "she is not standing on the floor by the target: " + at.toShortString());
+            helper.assertTrue(!walk.succeeded() && walk.outcome().contains("omit y")
+                            && walk.outcome().contains("near"),
+                    "the y inside the floor did not fail with the hint: " + walk.outcome());
             helper.assertTrue(helper.getLevel().getBlockState(target).isSolid(), "the floor block was dug out");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -937,7 +940,7 @@ public class MovementGameTests {
     /** 默认规格(不改地形)规划上高台:没有路,回执失败,并提示加 --alter natural 再规划看看;身体不动。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
     public static void move_route_with_no_clean_way_says_what_to_try(GameTestHelper helper) {
-        BlockPos top = obsidianTower(helper);
+        BlockPos top = bedrockTower(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_surveyor", new BlockPos(3, 2, 7), false);
         BlockPos start = companion.blockPosition();
         ToolRun plan = command(companion, "move route --x " + top.getX() + " --y " + top.getY() + " --z "
@@ -955,7 +958,7 @@ public class MovementGameTests {
     /** 允许改地形但改动预算只有 1 格,上高台至少要垫 3 格:没有预算内的路,回执说出最便宜的那条要改几格。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
     public static void move_route_over_the_alter_budget_names_the_cheapest(GameTestHelper helper) {
-        BlockPos top = obsidianTower(helper);
+        BlockPos top = bedrockTower(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_frugal", new BlockPos(3, 2, 7), false);
         companion.getInventory().add(new ItemStack(Items.DIRT, 16));
         ToolRun plan = command(companion, "move route --x " + top.getX() + " --y " + top.getY() + " --z "

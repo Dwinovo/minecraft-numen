@@ -3,7 +3,6 @@ package com.dwinovo.numen.core;
 import com.dwinovo.numen.agent.skill.SkillRegistry;
 import com.dwinovo.numen.core.debug.DebugCommands;
 import com.dwinovo.numen.core.debug.PathDebugRenderer;
-import com.dwinovo.numen.core.pathing.cache.PathCaches;
 import com.dwinovo.numen.task.CompanionTickDispatcher;
 import com.dwinovo.numen.core.scan.BlockSearch;
 import net.neoforged.api.distmarker.Dist;
@@ -60,8 +59,7 @@ public class NumenCoreNeoForge {
         // 排程机器的心跳随机器归了 numen-api;core 只 tick 自己的工具配套。
         BlockSearch.tick(event.getServer());
         // Read-only route queries (move route): poll finished searches and reply.
-        com.dwinovo.numen.core.pathing.plan.RoutePlanner.serverTick(event.getServer());
-        PathCaches.serverTick(event.getServer());
+        com.dwinovo.numen.core.nav.RouteQueries.serverTick(event.getServer());
         // Debug particles for pathing state, sent only to players with debug on.
         PathDebugRenderer.serverTick(event.getServer());
     }

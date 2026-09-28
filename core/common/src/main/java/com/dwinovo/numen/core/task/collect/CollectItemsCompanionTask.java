@@ -4,10 +4,13 @@ import com.dwinovo.numen.task.TaskState;
 
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.mixin.ItemEntityAccessor;
-import com.dwinovo.numen.core.pathing.execute.PlayerNav;
+import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.scan.NearbyEntities;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.TargetSet;
+import com.dwinovo.numen.pathing.search.Goal;
+import com.dwinovo.numen.pathing.search.Goals;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.item.ItemEntity;
 
@@ -26,7 +29,7 @@ import java.util.Map;
  * <h2>State machine (per tick)</h2>
  * <pre>
  *   SCAN     → nearest matching ItemEntity within the radius; none → DONE.
- *   APPROACH → Navigator toward it until it's absorbed or we
+ *   APPROACH → walk to within a block of it (following it if it slides) until it's absorbed or we
  *              reach the spot without picking it up, then re-SCAN. At the spot a
  *              fresh drop still counting down its pickup delay is waited out;
  *              anything else that stays on the ground is skipped.
@@ -42,12 +45,15 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
 
     private enum Phase { SCAN, APPROACH }
 
-    private static final double WALK_SPEED = 1.0;
     /** Close enough that vanilla auto-pickup should have absorbed the item (≈1.2 blocks). */
     private static final double PICKUP_REACH_SQR = 1.5;
+    /** 走到离它这么近(格):原版拾取框横向外扩一格,站进这一圈就捡得到。 */
+    private static final double PICKUP_RADIUS = 1.0;
 
     private Phase phase = Phase.SCAN;
     private ItemEntity target;
+    /** 在走的这一趟朝着的那一格;掉落物滑走了就换目标。 */
+    private BlockPos heading;
 
     /** Item-entity ids we reached but couldn't absorb, so SCAN won't loop on them. */
     private final TargetSet<ItemEntity> skipped = new TargetSet<>(ItemEntity::getId);
@@ -84,7 +90,8 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
             return TaskState.SUCCESS;
         }
         target = best;
-        nav = new PlayerNav(player, this::targetCell, WALK_SPEED, this::picked);
+        heading = best.blockPosition();
+        nav = Trip.to(player, goal(heading), RouteSpec.defaults(), heading);
         phase = Phase.APPROACH;
         return TaskState.RUNNING;
     }
@@ -96,7 +103,15 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
             phase = Phase.SCAN;
             return TaskState.RUNNING;
         }
-        switch (nav.tick()) {
+        BlockPos at = target.blockPosition();
+        if (!at.equals(heading)) {
+            // 掉落物滑走了、被推开了:目标跟着它挪
+            heading = at;
+            nav.retarget(goal(at), at);
+        }
+        // 已经挨着它了:原版拾取不等走到那一格,挨着还没进包的就是还在拾取冷却里,或者捡不起来
+        Trip.Status status = player.distanceToSqr(target) <= PICKUP_REACH_SQR ? Trip.Status.ARRIVED : nav.tick();
+        switch (status) {
             case RUNNING -> { /* walking to it */ }
             case ARRIVED -> {
                 // Reached the spot. If it's now absorbed, the removed-branch above
@@ -120,8 +135,9 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
         return TaskState.RUNNING;
     }
 
-    private BlockPos targetCell() {
-        return (target != null && !target.isRemoved()) ? target.blockPosition() : null;
+    /** 走到离掉落物所在那一格 {@link #PICKUP_RADIUS} 格以内。 */
+    private static Goal goal(BlockPos item) {
+        return Goals.near(item, PICKUP_RADIUS);
     }
 
     /** Still counting down its pickup delay (vanilla gives fresh drops a few ticks) — not
@@ -129,12 +145,6 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
     private static boolean pickupPending(ItemEntity item) {
         int delay = ((ItemEntityAccessor) item).numen$getPickupDelay();
         return delay > 0 && delay != ItemEntityAccessor.numen$infinitePickupDelay();
-    }
-
-    /** Reached = absorbed, or close enough that auto-pickup should have fired. */
-    private boolean picked() {
-        return target == null || target.isRemoved()
-                || player.distanceToSqr(target) <= PICKUP_REACH_SQR;
     }
 
     /** 背着的、要捡的那几种一共多少个(没点名就是全部)。 */

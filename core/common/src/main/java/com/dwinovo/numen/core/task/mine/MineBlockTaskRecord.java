@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.task.mine;
 
 import com.dwinovo.numen.cli.ServerSource;
-import com.dwinovo.numen.core.pathing.spec.RouteSpec;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
@@ -29,7 +29,7 @@ public final class MineBlockTaskRecord extends TaskRecord {
      * mine 的默认规格:可以改地形,需要主人同意的格也算进去、按价排在后面(挖不挖由动手前的权限裁决定)。
      * 模型给的 {@code spec} 叠在它上面,没给的字段保持这里的值。
      */
-    public static final RouteSpec DEFAULT_SPEC = RouteSpec.defaults().withAlter(RouteSpec.Alter.ANY);
+    public static final RouteSpec DEFAULT_SPEC = RouteSpec.defaults().edit().alter(RouteSpec.Alter.ANY).build();
 
     /** {@link #count} 取这个值:groups 用法没给 count,挖完这些团为止。 */
     public static final int UNTIL_GONE = 0;

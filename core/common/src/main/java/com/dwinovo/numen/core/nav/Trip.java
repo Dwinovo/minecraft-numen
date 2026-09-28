@@ -2,10 +2,8 @@ package com.dwinovo.numen.core.nav;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 import com.dwinovo.numen.core.FailureType;
-import com.dwinovo.numen.core.combat.Menace;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.api.Bill;
 import com.dwinovo.numen.pathing.api.NavRequest;
@@ -16,28 +14,20 @@ import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.api.PlanQuery;
 import com.dwinovo.numen.pathing.api.PlanResult;
 import com.dwinovo.numen.pathing.api.Planning;
-import com.dwinovo.numen.pathing.api.Ports;
 import com.dwinovo.numen.pathing.api.Report;
-import com.dwinovo.numen.pathing.body.Body;
-import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Route;
-import com.dwinovo.numen.pathing.search.RoutePlanner;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.permission.ConsentItem;
-import com.dwinovo.numen.permission.Permission;
 import com.dwinovo.numen.permission.Verdict;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.level.block.Block;
 
 /**
  * 同伴的一趟路:一件活从这里走到一个目标,经寻路的门面({@link Navigator})完成。门面外面补上同伴这一侧的几件事:
  * <ul>
- *   <li><b>端口</b>:她的身体,她的手({@link CompanionHands},动手前问权限层),这一趟开始时取的权限快照
- *       ({@link GateTerrain}),她自己的垫路料清单({@link ThrowawayBlocks}),附近的敌对生物({@link Menace#dangers});</li>
+ *   <li><b>端口</b>:每开一次导航按此刻组一份({@link CompanionPorts}),权限快照里有主人刚答应的;</li>
  *   <li><b>开走之前问主人</b>:规格许动要主人同意的格({@code alter=any})时,先只搜不走出一条路,账上有要问的格就扣住,
  *       由任务发起征询({@link #consentNeeded});主人答应之后照这条路走。走到半路动手时又撞上要问的格(路重搜过),同样停下,
  *       从那里再出一条、再问;</li>
@@ -73,9 +63,6 @@ public final class Trip {
         Trip trip;
     }
 
-    /** 她附近多远的敌对生物算进这一趟要避开的。 */
-    private static final double DANGER_SCAN = 16.0;
-
     private final NumenPlayer player;
     private final RouteSpec spec;
     private Goal goal;
@@ -92,6 +79,8 @@ public final class Trip {
     private Route held;
     private List<ConsentItem> consent = List.of();
     private Navigation navigation;
+    /** 这一趟没走到时的结局;还在走或到了为 null。 */
+    private Outcome outcome;
     /** 这一趟里已经停下的几次导航交出的实际账。 */
     private final List<Report> done = new ArrayList<>();
 
@@ -104,7 +93,7 @@ public final class Trip {
         this.goal = goal;
         this.spec = spec;
         this.toward = toward.immutable();
-        this.threats = () -> Menace.dangers(player, DANGER_SCAN);
+        this.threats = CompanionPorts.dangers(player);
     }
 
     /**
@@ -231,6 +220,7 @@ public final class Trip {
     /** 一次导航或规划没走到:要问主人的格就停下再问;不许改地形就去规划候选;其余照实收场。 */
     private void conclude(Outcome outcome) {
         retire();
+        this.outcome = outcome;
         if (outcome instanceof Outcome.Denied denied && denied.reason() instanceof Verdict verdict && verdict.asks()
                 && spec.alter() == RouteSpec.Alter.ANY) {
             planning = navigator().plan(PlanQuery.of(goal, spec, 1));
@@ -239,7 +229,7 @@ public final class Trip {
         }
         if (outcome instanceof Outcome.NeedsAlter needs && probe) {
             relaxed = spec.edit().alter(needs.level()).build();
-            planning = navigator().plan(PlanQuery.of(goal, relaxed, RoutePlanner.MAX_CANDIDATES));
+            planning = navigator().plan(PlanQuery.of(goal, relaxed, PlanQuery.MAX_CANDIDATES));
             phase = Phase.PROBING;
             return;
         }
@@ -254,8 +244,8 @@ public final class Trip {
         }
         planning = null;
         if (result.candidates().isEmpty()) {
-            fail(NavText.failure(result.outcome(), player, Feet.cell(player), toward, spec),
-                    NavText.type(result.outcome()));
+            outcome = result.outcome();
+            fail(NavText.failure(outcome, player, Feet.cell(player), toward, spec), NavText.type(outcome));
             return;
         }
         RouteBook book = RouteBook.of(player);
@@ -289,28 +279,22 @@ public final class Trip {
         }
     }
 
-    // ==================== 端口 ====================
-
     private Navigator navigator() {
-        Materials materials = () -> Optional.ofNullable(throwaway());
-        return Navigator.of(Body.of(player), new Ports(CompanionHands.of(player),
-                new GateTerrain(Permission.gateFor(player)), materials, threats));
-    }
-
-    /** 下一块垫路料:她的清单里身上有的那一种;免耗材时是清单第一种。 */
-    private Block throwaway() {
-        var item = com.dwinovo.numen.core.pathing.settings.ThrowawayBlocks.next(player);
-        return item instanceof BlockItem block ? block.getBlock() : null;
+        return CompanionPorts.navigator(player, threats);
     }
 
     // ==================== 对外 ====================
 
     /**
-     * 换目标(跟着的东西挪了):在走的这一次导航照走或按新目标重搜,由门面判;还在出路线时按新目标重新出。
+     * 换目标(跟着的东西挪了):在走的这一次导航照走或按新目标重搜,由门面判;还在出路线时按新目标重新出。还是同一个目标就什么都不变。
      *
      * @param toward 给人说"朝哪儿"的那一格
      */
     public void retarget(Goal next, BlockPos toward) {
+        if (next.equals(goal)) {
+            this.toward = toward.immutable();
+            return;
+        }
         this.goal = next;
         this.toward = toward.immutable();
         switch (phase) {
@@ -321,20 +305,6 @@ public final class Trip {
             }
             default -> {
             }
-        }
-    }
-
-    /** 这一刻站住:松开所有键、放下手,路线与在飞的搜索都留着,下一刻接着走。身体被别处要去干活时调。 */
-    public void pause() {
-        if (navigation != null) {
-            navigation.pause();
-        }
-    }
-
-    /** 从暂停处接着走,不重新搜。 */
-    public void resume() {
-        if (navigation != null) {
-            navigation.resume();
         }
     }
 
@@ -410,6 +380,11 @@ public final class Trip {
 
     public FailureType failType() {
         return failType;
+    }
+
+    /** 没走到时寻路给的结局(连同为了列候选而规划的那一次);还在走、到了、或被叫停为 null。 */
+    public Outcome outcome() {
+        return outcome;
     }
 
     /** 给人说"朝哪儿"的那一格。 */

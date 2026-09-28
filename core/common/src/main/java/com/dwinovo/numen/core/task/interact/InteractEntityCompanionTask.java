@@ -6,12 +6,15 @@ import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.act.Interaction;
-import com.dwinovo.numen.core.pathing.execute.PlayerNav;
+import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.task.base.GoToThenDoTask;
 import com.dwinovo.numen.core.task.base.Precondition;
+import com.dwinovo.numen.pathing.body.Crosshair;
+import com.dwinovo.numen.pathing.search.Goals;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -32,7 +35,8 @@ import java.util.Map;
  */
 public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEntityTaskRecord> {
 
-    private static final double WALK_SPEED = 1.0;
+    /** 第一次走过去:走到离它所在那一格这么近(格)。 */
+    private static final double APPROACH_RADIUS = 1.0;
     /** Reposition-rung stance radius: any feet cell this close to the entity's cell (inside the vanilla
      *  entity interaction range, 3 by default, so an accepted stance is still within interact reach). */
     private static final double REPOSITION_RADIUS = 2.5;
@@ -40,6 +44,9 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
     private static final int MAX_REPOSITIONS = 1;
 
     private Entity entity;
+    /** 在走的这一趟朝着它的哪一格、走到离那一格多近;它挪了就换目标。 */
+    private BlockPos heading;
+    private double radius = APPROACH_RADIUS;
     // ---- bounded recovery state (fields, so a Suspendable mid-rung suspend/resume
     //      picks straight back up: the counter and the rebuilt nav both survive) ----
     /** Executions of the reposition rung so far (capped at {@link #MAX_REPOSITIONS}). */
@@ -77,12 +84,29 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
     }
 
     @Override
-    protected PlayerNav buildNav() {
-        // Arrival = within reach AND a clear line of sight: nav keeps walking (toward the entity)
-        // until BOTH hold, so a wall between us and the target is cleared by re-positioning rather
-        // than stood in front of forever.
-        return new PlayerNav(player, () -> entity.blockPosition(), WALK_SPEED, this::inReachAndLos)
-                .withTerrainProbe();
+    protected Trip buildNav() {
+        // 走到它旁边;够得着又看得见({@link #reached})就动手,不等这一趟走完——隔着一堵墙时接着走,
+        // 换个位置,而不是站在墙前面一直等
+        return approach();
+    }
+
+    /** 朝它此刻所在的那一格走,走到 {@link #radius} 格以内。 */
+    private Trip approach() {
+        heading = entity.blockPosition();
+        return Trip.to(player, Goals.near(heading, radius), RouteSpec.defaults(), heading).probing();
+    }
+
+    /** 它挪了就把新目标交给在走的这一趟。 */
+    @Override
+    protected void track() {
+        if (entity == null || !entity.isAlive()) {
+            return;
+        }
+        BlockPos at = entity.blockPosition();
+        if (!at.equals(heading)) {
+            heading = at;
+            nav.retarget(Goals.near(at, radius), at);
+        }
     }
 
     /** Act this tick when the target is gone (report the outcome), a fixed hold has elapsed, or we're
@@ -132,7 +156,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
         // In reach + LOS: aim at the entity and confirm the crosshair actually resolves to IT
         // (e.g. not another entity wandered into the exact line) before pressing.
         InputDriver.lookAt(player, entity.getEyePosition());
-        HitResult hit = Interaction.nativeRaytrace(player, player.entityInteractionRange());
+        HitResult hit = Crosshair.pick(player);
         boolean onTarget = hit.getType() == HitResult.Type.ENTITY
                 && ((EntityHitResult) hit).getEntity() == entity;
         if (!onTarget) {
@@ -165,7 +189,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
                     InteractAtTaskRecord.bodyBoundReason(player.getMainHandItem().getItem()) == null
                     && InteractAtTaskRecord.bodyBoundReason(player.getOffhandItem().getItem()) == null;
             receipt = com.dwinovo.numen.core.act.PressReceipt.before(player, null);
-            interaction = Interaction.forHit(player, hit, button(), r.holdTicks, fallthroughOk);
+            interaction = Interaction.forHit(player, hit, button(), r.holdTicks, fallthroughOk, this::recordAction);
             if (r.holdTicks > 0) {
                 holdUntil = player.level().getGameTime() + r.holdTicks;
             }
@@ -189,10 +213,10 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
      * Bounded recovery — ONE reposition rung, as an inline attempt counter (a single
      * rung doesn't warrant {@code RecoveryLadder}'s child-task plumbing). On an
      * in-ladder nav cause ({@code NO_PATH} / {@code BOXED_IN} / {@code OUT_OF_REACH})
-     * retry the SAME bounded goal once with a looser stance goal — {@link NavGoal#near}
+     * retry the SAME bounded goal once with a looser stance goal — {@link Goals#near}
      * within {@link #REPOSITION_RADIUS} (inside the entity interaction range) of the entity's LIVE cell,
      * so "can't stand exactly next to it" becomes "stand anywhere within interact reach".
-     * The goal supplier re-reads the entity each tick, so a target that merely MOVED
+     * {@link #track} re-reads the entity each tick, so a target that merely MOVED
      * while we repositioned is tracked (the nav replans), not failed; a genuinely gone
      * entity never reaches this seam — {@link #reached()} routes it to {@link #act()},
      * which reports {@code TARGET_LOST} immediately (no ladder). Never widens the
@@ -206,10 +230,8 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
             repositionAttempts++;
             firstNavFailReason = reason;
             stopNav();
-            nav = PlayerNav.toGoal(player,
-                    () -> (entity == null || !entity.isAlive()) ? null
-                            : NavGoal.near(entity.blockPosition(), REPOSITION_RADIUS),
-                    WALK_SPEED, this::inReachAndLos).withTerrainProbe();
+            radius = REPOSITION_RADIUS;
+            nav = approach();
             return TaskState.RUNNING;
         }
         String original = firstNavFailReason != null ? firstNavFailReason : reason;
@@ -225,7 +247,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
     private static boolean repositionable(FailureType type) {
         return type == FailureType.NO_PATH || type == FailureType.TERRAIN_BLOCKED
                 || type == FailureType.BOXED_IN
-                || type == FailureType.OUT_OF_REACH || type == FailureType.STANCE_DUD;
+                || type == FailureType.OUT_OF_REACH;
     }
 
     private Interaction.Button button() {

@@ -26,6 +26,11 @@ public final class Journey {
         actions.addAll(report.actions());
     }
 
+    /** 活自己为了干活让身体做了 {@code action}(比如把挖它最快的那件工具拿到手上)。 */
+    public void did(BodyAction action) {
+        actions.add(action);
+    }
+
     /** 活自己挖掉了 {@code pos}(原来是 {@code before}),比如为了拉出射线挖掉的遮挡物。 */
     public void dug(BlockPos pos, BlockState before) {
         entries.add(new EditLedger.Dug(pos.immutable(), before, null));

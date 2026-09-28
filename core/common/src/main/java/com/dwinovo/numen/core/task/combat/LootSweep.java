@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.task.combat;
 
-import com.dwinovo.numen.core.pathing.calc.NavGoal;
+import com.dwinovo.numen.pathing.search.Goal;
+import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.core.task.base.DropTracker;
 import com.dwinovo.numen.entity.NumenPlayer;
 
@@ -83,12 +84,12 @@ final class LootSweep {
         drops.prune((ServerLevel) player.level());
     }
 
-    /** 走向所有还剩的掉落物(哪个先到算哪个)。 */
-    NavGoal goal() {
-        List<NavGoal> goals = live().stream()
-                .map(item -> NavGoal.near(item.blockPosition(), 1.0))
+    /** 走向所有还剩的掉落物(哪个先到算哪个);还有剩的时候才问。 */
+    Goal goal() {
+        List<Goal> goals = live().stream()
+                .map(item -> Goals.near(item.blockPosition(), 1.0))
                 .toList();
-        return goals.isEmpty() ? NavGoal.exact(player.blockPosition()) : NavGoal.composite(goals);
+        return Goals.anyOf(goals);
     }
 
     /** 又一次没走到。连续够了次数就把最近那件拉黑,否则下一轮再试。 */

@@ -5,26 +5,31 @@ import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.task.TaskState;
 
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.pathing.calc.NavGoal;
-import com.dwinovo.numen.core.pathing.bridge.ContextFactory;
-import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
-import com.dwinovo.numen.core.pathing.moves.ActionCosts;
-import com.dwinovo.numen.core.pathing.moves.BlockReach;
-import com.dwinovo.numen.core.pathing.moves.CalculationContext;
-import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.act.BlockDigger;
-import com.dwinovo.numen.core.pathing.execute.PathExecutor;
-import com.dwinovo.numen.core.pathing.execute.PlayerNav;
-import com.dwinovo.numen.core.pathing.util.BlockHelper;
-import com.dwinovo.numen.core.pathing.util.NavProfiler;
+import com.dwinovo.numen.core.nav.CompanionPorts;
+import com.dwinovo.numen.core.nav.Feet;
+import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.scan.BlockScanner;
 import com.dwinovo.numen.core.scan.BlockSearch;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
-import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.entity.InputDriver;
+import com.dwinovo.numen.pathing.api.Outcome;
+import com.dwinovo.numen.pathing.api.Report;
+import com.dwinovo.numen.pathing.body.Snapshots;
+import com.dwinovo.numen.pathing.drive.EditLedger;
+import com.dwinovo.numen.pathing.drive.LiveWorld;
+import com.dwinovo.numen.pathing.plan.CostModel;
+import com.dwinovo.numen.pathing.plan.Edit;
+import com.dwinovo.numen.pathing.plan.Reason;
+import com.dwinovo.numen.pathing.search.Goal;
+import com.dwinovo.numen.pathing.search.Goals;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.permission.Action;
+import com.dwinovo.numen.permission.Verdict;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.Container;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -40,6 +45,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -62,15 +68,15 @@ import java.util.Set;
  *       through the block-change hook and repeated searches read a warm cache), and
  *       {@link #prune} every tick (drop ones mined / no longer matching / unworkable /
  *       hazardous), sorted by distance, capped at {@link #MAX_ORES}.</li>
- *   <li><b>in place</b> — a target whose {@link NavGoal#mineStance} the body is standing in
- *       (within block reach, feet not above it) is broken on the spot, cheapest first,
- *       auto-switching to the best tool — no pathing. The digger clears what stands in the
- *       line of sight first, if it is safe to break ({@link #plausibleToBreak}).</li>
- *   <li><b>composite goal</b> — otherwise head for the whole ore field at once:
- *       one A* search over {@link NavGoal#composite} of the same stances, so it walks to
+ *   <li><b>in place</b> — a target the body can reach from where it stands ({@link Goals#reach}: within
+ *       block reach, not occupying it) is broken on the spot, cheapest first, auto-switching to the best
+ *       tool — no pathing. The digger clears what stands in the line of sight first, if it can be broken
+ *       at all ({@link #breakable}).</li>
+ *   <li><b>one goal over the field</b> — otherwise head for the whole ore field at once:
+ *       one search over {@link Goals#anyOf} of the same reach goals ({@link #oreField}), so it walks to
  *       the CLOSEST reachable ore (not greedy-nearest, which is often the walled-in one).
  *       Arrival and the in-place pick are one criterion, so wherever the search ends, the
- *       dig side agrees.</li>
+ *       dig side agrees; ending out of sight of the ore still counts, the digger clears the way.</li>
  *   <li><b>够不着是一批的属性,不是某一格的罪</b> — 复合目标在完整的图上搜不出路,意思是
  *       <b>这一刻这一批都到不了</b>,不是"最近那颗有问题"。所以不记账到任何一格,也不原样
  *       再搜:同一个局面(起点、目标、掉落物)第二次撞上无路,如实收工、报告剩下的走不到
@@ -79,9 +85,9 @@ import java.util.Set;
  *
  * <h2>主人的东西</h2>
  * 选目标不看权限:主人放的原木和野树一样是候选。路线规格默认是 {@link RouteSpec.Alter#ANY}(模型给的
- * {@code spec} 叠在上面,{@code avoid_break} 这类限制经 {@link #plausibleToBreak} 直接作用到候选上),
- * 需要主人同意的格在成本模型里乘 {@code CONSENT_COST_MULTIPLIER}——挑目标按"走过去 + 挖它"的
- * 同一套定价({@link #targetCost}),附近有野树时自然先挖野树。轮到一格,动手之前把这次挖掘交给
+ * {@code spec} 叠在上面,{@code avoid_break} 这类限制经 {@link #breakable} 直接作用到候选上),
+ * 需要主人同意的格在成本模型里乘同意倍率——挑目标按"走过去 + 挖它"的同一套定价({@link #targetCost}),
+ * 附近有野树时自然先挖野树。轮到一格,动手之前把这次挖掘交给
  * 权限层({@link #permit}):要问就等主人点头,同一行规则问出来的同一种方块从此本任务内不再问;
  * 不许(主人拒绝、观察模式、服务器退回)就按 {@link FailureType#REFUSED} 带着理由收场。路上要穿过需要
  * 同意的格,由导航在开走前问。mine 自己不判、不跳、不问,只提出动作。
@@ -102,7 +108,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private static final int QUERY_MIN_GAP_TICKS = 20;
     /** 无条件刷新的慢心跳(tick):兜底外部世界变化(别人放/挖了方块)。 */
     private static final int QUERY_HEARTBEAT_TICKS = 100;
-    private static final double MINE_SPEED = 1.0;
     /** 同一格连续这么多刻拉不出射线,就记进 {@link #unworkable} —— 站位说够得着,
      *  可射线始终成不了(挡在中间的挖不得、瞄准量化)。没有这条,挖掘会永远等一个
      *  不会来的射线。 */
@@ -134,10 +139,12 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      *  terminal failure can name the tool problem instead of reporting an empty field. */
     private final Set<BlockPos> unharvestable = new HashSet<>();
     /**
-     * 每个候选"到了之后挖它"的价钱(刻),{@link #prune} 每刻按成本模型现算:挖掘耗时乘权限层的
-     * 定价(需要同意的乘 {@code CONSENT_COST_MULTIPLIER},不许的是 {@code COST_INF})。
+     * 每个候选"到了之后挖它"的价钱(刻),{@link #prune} 每刻按成本模型现算:与寻路给路上一格定价同一份(挖掘耗时加挖掘
+     * 罚分,需要主人同意的乘同意倍率);许可不许的是无穷,不进目标。
      */
     private final Map<BlockPos, Double> digCosts = new HashMap<>();
+    /** 许可不许挖的候选说的理由(最近一格的);没有为 null。一格都挖不得时拿它收场。 */
+    private String deniedWhy;
     /**
      * 按总价挑目标的导航在这一格落定了(搜索挑中的就是脚下):手边够得着、价钱不超过 {@link #settledPrice}
      * 的就是该挖的,不再因为别处估价更低而让路。挖掉一格或挪了窝就作废。
@@ -196,10 +203,23 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private final Set<BlockPos> remaining = new HashSet<>();
     /** groups 用法里轮到时已经不是扫描时那种方块、而旅程账上也没有她挖过的格(别人挖掉、换掉的)。 */
     private final Set<BlockPos> gone = new HashSet<>();
-    /** 挖不成的候选:挖不动的方块、规格禁挖的、贴着流体或悬空落沙的——{@link #plausibleToBreak} 说不的。 */
+    /** 挖不成的候选:挖不动的方块、规格禁挖的、贴着流体或悬空落沙的——{@link #breakable} 说不的。 */
     private final Set<BlockPos> ruledOut = new HashSet<>();
-    /** 这件活的路线规格:mine 的默认叠上模型给的。 */
-    private final PlayerNav.ContextProvider terrain;
+    /** 这件活的路线规格:mine 的默认叠上模型给的。只管走过去的那条路。 */
+    private final RouteSpec spec;
+    /**
+     * 给目标本身定价的规格:同一份规格,改地形一档放到 {@link RouteSpec.Alter#ANY}。目标是这件活自己要挖的,许不许改地形只管
+     * 走过去的路;要问主人的照价乘倍,不许的无穷。
+     */
+    private final RouteSpec targetSpec;
+    /** 给目标定价、判挖不挖得成的成本模型,每刻按此刻的身体与权限重组。 */
+    private CostModel pricing;
+    /** 在走的那一趟朝着的目标,以及它是按哪一份名单与价钱编的——名单或价钱变了才把新目标交给那一趟。 */
+    private Goal field;
+    private FieldKey fieldKey;
+
+    /** 编目标用的名单:每个有价的候选与它的价钱、地上要捡的掉落物。 */
+    private record FieldKey(Map<BlockPos, Double> ores, List<BlockPos> drops) {}
 
     /** 距下一次允许查询的冷却(tick)。 */
     private int queryCooldown;
@@ -245,21 +265,22 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     public MineCompanionTask(NumenPlayer player, MineBlockTaskRecord record) {
         super(player, record);
         this.digger = new BlockDigger(player);
-        this.terrain = PlayerNav.ContextProvider.of(record.spec);
+        this.spec = record.spec;
+        this.targetSpec = record.spec.edit().alter(RouteSpec.Alter.ANY).build();
     }
 
     @Override
     protected List<Precondition> preconditions() {
         // Fail fast if NO requested target is harvestable with the current inventory — mining it
-        // would destroy the block for no drop. Same gate as the cost model
-        // (BlockHelper.canHarvest, whole-inventory). prune() then drops any individual unharvestable
+        // would destroy the block for no drop ({@link #canHarvest}, whole-inventory). prune() then drops any
+        // individual unharvestable
         // cell, so a mixed request (e.g. coal we can mine + diamond we can't) still works.
         return List.of(() -> {
             if (WorkProfile.of(player).instaBreak()) {
                 return null;   // 瞬破画像无视工具等级,工具门不适用
             }
             boolean anyHarvestable = r.targets.stream().anyMatch(
-                    b -> BlockHelper.canHarvest(player.getInventory(), b.defaultBlockState()));
+                    b -> canHarvest(player.getInventory(), b.defaultBlockState()));
             if (!anyHarvestable) {
                 return new Precondition.Failure(
                         "can't harvest " + r.label + " with the current tools — mining it would"
@@ -332,11 +353,10 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // a search is started on demand (list low / new chunk / slow heartbeat) instead of
         // on a fixed rescan cadence — the block-change hook keeps the shared index current
         // in between.
-        long tUpkeep = NavProfiler.begin();
+        pricing = CompanionPorts.model(player, targetSpec);
         absorbSearch();
         prune();
         maybeQuery();
-        NavProfiler.end("mine.upkeep", tUpkeep);
 
         // 0) Continue an in-progress dig, locked onto its target (no re-selection)
         //    until it breaks or the body no longer stands where it can work it.
@@ -349,28 +369,18 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 digger.cancel();
                 digTarget = null;
             } else {
-                if (nav != null) {
-                    nav.pause();   // stand still for the dig; goal/path/in-flight search stay warm
-                }
                 return mineProgress(digTarget);
             }
         }
 
-        long tDrops = NavProfiler.begin();
         drops = droppedItems();
-        NavProfiler.end("mine.drops", tDrops);
 
-        // 1) Mine any target whose stance we already stand in (no pathing).
-        BlockPos reachable = reachableTarget();
+        // 1) Mine any target whose stance we already stand in (no pathing) — but only standing still. While a walk is
+        //    under way it runs to its end: the route ends at the stance the search picked, and arriving there is where
+        //    the walk stops the body on the node's centre. Stopping it mid-stride the moment the feet cross into a
+        //    stance leaves the eyes off that centre, where the block the stance reaches can lie beyond the arm.
+        BlockPos reachable = nav == null ? reachableTarget() : null;
         if (reachable != null) {
-            // Mine in place with the nav merely PAUSED (inputs cleared each tick), never torn down:
-            // the goal, current path segment, and any in-flight search stay warm, so when this dig
-            // ends navigation resumes where it left off instead of cold-starting a fresh A* — that
-            // cold start used to surface as a visible stall after every in-place dig. The goal-box
-            // overlay also survives for free (nothing clears it anymore).
-            if (nav != null) {
-                nav.pause();
-            }
             // 动手之前:这一格交给权限层。要问就站着等主人,不许就带着理由收场
             Permit permit = permit(Action.breakBlock(reachable, level.getBlockState(reachable)));
             if (permit.state() == PermitState.WAITING) {
@@ -391,33 +401,38 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             if (stalled != null) {
                 return stalled;
             }
-            if (nav == null) {
-                stopNav();
-                // Compiled front door: one composite over every known ore's stance plus nearby
-                // drops. The route MAY chop a target on the way past — an en-route break is
-                // progress (prune drops the cell, the drop members collect the item, and the
-                // tally counts inventory); see GoalCompiler.mineField.
-                // Revalidating: the ore field changes every few ticks (mined cells pruned,
-                // rescans merging, unworkable cells trimming), so hand the freshly compiled goal to
-                // the engine EVERY tick — the current segment is kept unless its destination
-                // is no longer accepted by the new goal (then it soft-cancels and re-plans),
-                // and standing in a stance whose ore just got mined out resumes navigation
-                // instead of reporting a stale arrival.
-                nav = PlayerNav.toRevalidating(player, this::oreFieldCompiled, MINE_SPEED,
-                        () -> reachableTarget() != null, terrain);
+            boolean moved = refreshField();
+            if (field == null) {
+                // 名单上的每一格许可都不许挖,地上也没有要捡的:权限层的拒绝就是这件活的结果
+                fail("could not mine " + r.label + ": " + deniedWhy + "; " + soFar(), FailureType.REFUSED);
+                return TaskState.FAILED;
             }
-            switch (nav.tick()) {
+            if (nav == null) {
+                // 一个目标撒在整片矿上(加上地上的掉落物):路上可以顺手挖掉目标——顺路挖开的也是进展,
+                // prune 把那一格划掉,掉落物成员去捡,够没够数看背包
+                nav = Trip.to(player, field, spec, towardField());
+            } else if (moved) {
+                // 名单每几刻就变(挖掉的划掉、新查到的并进来、挖不成的剔掉):新目标交给在走的这一趟,
+                // 停点还算数就照走,不算数才重搜
+                nav.retarget(field, towardField());
+            }
+            Trip.Status status = nav.tick();
+            if (status == Trip.Status.FAILED && nav.outcome() instanceof Outcome.NoLineOfSight) {
+                // 到了够得着的地方,只是眼前有东西挡着:挖掘器会先清掉挡着的,当到了算
+                status = Trip.Status.ARRIVED;
+            }
+            switch (status) {
                 case RUNNING -> { return TaskState.RUNNING; }
                 case ARRIVED -> {
-                    // Arrival normally means an in-place target just became reachable — next tick step 1
-                    // pauses the nav and digs. Only clear inputs here (pause), never tear the nav down:
-                    // teardown would throw away the goal + any in-flight search and force a cold restart.
-                    nav.pause();
                     // 搜索按总价挑中的就是这儿:手边够得着的就挖,别再为别处的估价让路
-                    settledAt = PathExecutor.playerFeet(player);
-                    settledPrice = oreFieldCompiled().goal().arrivalCost(settledAt);
+                    Feet here = Feet.of(player);
+                    settledAt = here == null ? null : here.node();
+                    settledPrice = here == null ? 0 : field.arrival(settledAt.getX(), settledAt.getY(),
+                            settledAt.getZ(), here.stance());
+                    // 这一趟走完了;下一趟从这儿起,要走时再开
+                    stopNav();
                     // [ANCHOR arrived-dud] 到了,却没有可挖的。站位与原地就挖是同一个判据,所以这
-                    // <b>不构成关于任何一颗矿的证据</b>:她到的是复合目标里的<b>掉落物</b>成员(刚捡完
+                    // <b>不构成关于任何一颗矿的证据</b>:她到的是目标里的<b>掉落物</b>成员(刚捡完
                     // 东西,附近本来就没矿;够数之后只剩掉落物成员),或者这一刻人在空中(reachableTarget
                     // 第一行就要求 onGround)。
                     //
@@ -426,7 +441,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                         com.dwinovo.numen.core.Constants.LOG.debug(
                                 "[numen-task] mine ARRIVED 但够不到 feet={} nearestOre={} —— 重规划",
                                 player.blockPosition().toShortString(), nearestOreInfo());
-                        stopNav();
                     }
                     return TaskState.RUNNING;   // a reachable shaft is handled next tick
                 }
@@ -448,23 +462,23 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     }
                     // [ANCHOR nav-failed] 完整图上真的没路。
                     //
-                    // <b>这句话的主语是"这一批",不是"最近那颗"。</b>复合目标撒在全部目标上,
+                    // <b>这句话的主语是"这一批",不是"最近那颗"。</b>目标撒在全部候选上,
                     // 搜不出路的意思是一个都到不了 —— 拿"离脚最近的"顶罪只是猜,所以什么都不记。
                     // 也不原样再搜:同一个局面(同一个起点、同一批目标、同一批掉落物)再搜一遍还是这个
                     // 结论,她只会站着不动、每次烧满搜索预算、永远不收工。所以同一个局面第二次撞上无路
                     // 就如实收工,剩下的交给模型;局面变了(掉落物落了地、刚挖掉的格不再当掉落物等着、
                     // 名单变了)才值得再搜。
+                    String why = nav.failReason();
                     com.dwinovo.numen.core.Constants.LOG.info(
-                            "[numen-task] mine nav failed ({}): {} | 复合目标 {} 个,nearestOre={}",
-                            nav.failType(), nav.failReason(), knownOres.size(), nearestOreInfo());
-                    NoPathScene scene = new NoPathScene(PathExecutor.playerFeet(player), Set.copyOf(knownOres),
+                            "[numen-task] mine nav failed ({}): {} | 目标 {} 个,nearestOre={}",
+                            nav.failType(), why, knownOres.size(), nearestOreInfo());
+                    NoPathScene scene = new NoPathScene(Feet.cell(player), Set.copyOf(knownOres),
                             Set.copyOf(drops));
+                    stopNav();
                     if (scene.equals(lastNoPath)) {
-                        return unreachable(nav.failReason()
-                                + (knownOres.isEmpty() ? "" : "; the nearest is " + nearestOreInfo()));
+                        return unreachable(why + (knownOres.isEmpty() ? "" : "; the nearest is " + nearestOreInfo()));
                     }
                     lastNoPath = scene;
-                    stopNav();
                     return TaskState.RUNNING;
                 }
             }
@@ -490,54 +504,92 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     // ---- goals ----
 
-    /** The whole mining objective, compiled: a stance per ore + a walk-over member
-     *  per nearby drop — one A* search heads for the closest of either. The route
-     *  may chop targets en route; see {@link GoalCompiler#mineField}. */
-    private GoalCompiler.Compiled oreFieldCompiled() {
-        if ((quotaMet || knownOres.isEmpty()) && drops.isEmpty()) {
-            // Degenerate frame (targets vanished between ticks): stand where we are.
-            return GoalCompiler.standOn(player.blockPosition());
+    /**
+     * 把此刻的名单编成目标({@link #field}):每个有价的候选"站到够得着它的地方、再付挖它的价钱",加上地上每件掉落物"站到它
+     * 那一格"——一次搜索奔向其中最便宜的那个。名单与价钱没变就不重编。
+     *
+     * @return 目标换了
+     */
+    private boolean refreshField() {
+        Map<BlockPos, Double> ores = new LinkedHashMap<>();
+        if (!quotaMet) {
+            for (BlockPos ore : knownOres) {
+                double cost = digCost(ore);
+                if (Double.isFinite(cost)) {
+                    ores.put(ore, cost);
+                }
+            }
         }
-        return GoalCompiler.mineField(
-                quotaMet ? List.of() : new ArrayList<>(knownOres),
-                this::digCost, new ArrayList<>(drops), BlockReach.of(player));
+        FieldKey key = new FieldKey(ores, List.copyOf(drops));
+        if (key.equals(fieldKey)) {
+            return false;
+        }
+        fieldKey = key;
+        field = oreField(key);
+        return true;
+    }
+
+    /** 名单编成的目标;一个成员都没有为 null。 */
+    private Goal oreField(FieldKey key) {
+        BodyStats stats = Snapshots.stats(player);
+        List<Goal> members = new ArrayList<>(key.ores().size() + key.drops().size());
+        key.ores().forEach((ore, cost) -> members.add(Goals.priced(Goals.reach(ore, stats), cost)));
+        for (BlockPos drop : key.drops()) {
+            members.add(Goals.at(drop));     // items, not blocks
+        }
+        return members.isEmpty() ? null : Goals.anyOf(members);
+    }
+
+    /** 给人说"朝哪儿"的那一格:最近的候选,没有就是最近的掉落物。 */
+    private BlockPos towardField() {
+        BlockPos ore = nearestOre();
+        if (ore != null) {
+            return ore;
+        }
+        BlockPos feet = player.blockPosition();
+        return drops.stream().min(Comparator.comparingDouble(feet::distSqr)).orElse(feet);
     }
 
     /** 到了之后挖它的价钱;这一刻没算过的按不许挖的价。 */
     private double digCost(BlockPos ore) {
-        return digCosts.getOrDefault(ore, ActionCosts.COST_INF);
+        return digCosts.getOrDefault(ore, Double.POSITIVE_INFINITY);
     }
 
     /**
-     * 挑目标用的总价:走到它的站位(站位的估价,与复合目标给 A* 的同一把尺;已经站在站位里是 0)
-     * 加上挖它的价钱。
+     * 挑目标用的总价:走到够得着它的地方(目标的估价,与交给搜索的同一把尺)加上挖它的价钱。
      */
-    private double targetCost(BlockPos ore, BlockPos feet, BlockReach reach) {
-        return NavGoal.mineStance(ore, reach).heuristic(feet) + digCost(ore);
+    private double targetCost(BlockPos ore, BlockPos feet, BodyStats stats) {
+        return Goals.reach(ore, stats).estimate(feet.getX(), feet.getY(), feet.getZ()) + digCost(ore);
     }
 
-    /** 身体此刻站着的这一格是不是 {@code ore} 的站位——原地就挖与导航到位是这同一个判据。 */
+    /** 身体此刻站着的地方够不够得着 {@code ore}——原地就挖与导航到位是这同一个判据。 */
     private boolean canWork(BlockPos ore) {
-        return NavGoal.mineStance(ore, BlockReach.of(player)).isAt(PathExecutor.playerFeet(player));
+        Feet here = Feet.of(player);
+        return here != null && here.in(Goals.reach(ore, Snapshots.stats(player)));
     }
 
+    /**
+     * 这一格挖不挖得成:按给目标定价的成本模型问——规格的按位置与按种类禁令、物理上挖不挖得了(挖不动、贴着流体、顶着
+     * 落沙、世界边界外)。许可不许的也算挖得成:那是动手时权限层的事,价钱是无穷。挡着视线的遮挡物过同一道。
+     */
+    private boolean breakable(BlockPos pos, BlockState state) {
+        CostModel.Admission admission = pricing.admitDig(new LiveWorld(player.serverLevel()), pos, state);
+        return admission.ok() || admission.refused() == Reason.DENIED;
+    }
 
-    /** 该目标格是否真挖得成:挖穿成本无穷(挖不动/规格禁挖)、禁挖判定命中
-     *  (冰/虫蚀/贴液体/悬空落沙邻格/世界边界)、或上下都被基岩封死的都不算。
-     *  问的是挖不挖得动,不问许不许挖——那是执行开始时权限层的事。
-     *  包内共享:goto 的 FIND 候选入册走同一道剪枝。 */
-    public static boolean plausibleToBreak(CalculationContext ctx, BlockPos pos, BlockState state) {
-        if (MovementHelper.getUnpricedMiningDurationTicks(ctx, pos.getX(), pos.getY(), pos.getZ(),
-                state, true) >= ActionCosts.COST_INF) {
-            return false;
+    /**
+     * 身上有没有能让它掉东西的工具(整个背包,不只快捷栏:她能从包里拿工具挖)。不要求工具的方块总是有。
+     */
+    private static boolean canHarvest(Container inv, BlockState state) {
+        if (!state.requiresCorrectToolForDrops()) {
+            return true;
         }
-        if (MovementHelper.avoidBreaking(ctx, pos.getX(), pos.getY(), pos.getZ(), state)) {
-            return false;
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            if (inv.getItem(i).isCorrectToolForDrops(state)) {
+                return true;
+            }
         }
-        return !(ctx.get(pos.getX(), pos.getY() + 1, pos.getZ()).getBlock()
-                        == net.minecraft.world.level.block.Blocks.BEDROCK
-                && ctx.get(pos.getX(), pos.getY() - 1, pos.getZ()).getBlock()
-                        == net.minecraft.world.level.block.Blocks.BEDROCK);
+        return false;
     }
 
     /** Dropped items worth collecting, walked over for native pickup: only items the
@@ -577,8 +629,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     }
 
     /**
-     * The in-place mining pick: the cheapest known target whose {@link NavGoal#mineStance} the body is
-     * standing in right now — mined on the spot, no pathing; equal prices go to the nearest. It is the
+     * The in-place mining pick: the cheapest known target the body can reach from where it stands right
+     * now ({@link #canWork}) — mined on the spot, no pathing; equal prices go to the nearest. It is the
      * very criterion the navigator arrives by, so an arrival always has something to dig here, and
      * whatever blocks the line of sight is the digger's to clear. Anything not workable from here is
      * left to the navigator.
@@ -593,14 +645,16 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      */
     private BlockPos reachableTarget() {
         if (quotaMet || !player.onGround()) return null;
+        Feet here = Feet.of(player);
+        if (here == null) return null;
         Level level = player.level();
-        BlockPos feet = PathExecutor.playerFeet(player);
-        BlockReach reach = BlockReach.of(player);
+        BlockPos feet = here.node();
+        BodyStats stats = Snapshots.stats(player);
         BlockPos best = null;
         double bestCost = Double.MAX_VALUE;
         double bestD = Double.MAX_VALUE;
         for (BlockPos ore : knownOres) {
-            if (level.getBlockState(ore).isAir() || !NavGoal.mineStance(ore, reach).isAt(feet)) {
+            if (level.getBlockState(ore).isAir() || !here.in(Goals.reach(ore, stats))) {
                 continue;
             }
             double cost = digCost(ore);
@@ -616,13 +670,13 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             return best;
         }
         for (BlockPos ore : knownOres) {
-            if (!ore.equals(best) && targetCost(ore, feet, reach) < bestCost) {
+            if (!ore.equals(best) && targetCost(ore, feet, stats) < bestCost) {
                 return null;
             }
         }
         // 地上等着捡的也按同一把尺:捡起来只花走过去的路程
         for (BlockPos drop : drops) {
-            if (NavGoal.pointBound(drop, feet) < bestCost) {
+            if (Goals.at(drop).estimate(feet.getX(), feet.getY(), feet.getZ()) < bestCost) {
                 return null;
             }
         }
@@ -634,7 +688,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     /** Advance the shared dig one tick (it switches to the best tool itself); on the tick the TARGET
      *  breaks, drop it from the ore list. A {@link BlockDigger.DigResult#BROKE_OCCLUDER} (a leaf cleared
      *  to open the line of sight) is NOT the target, so the ore stays. The digger clears only occluders
-     *  that pass the same cut as the targets themselves ({@link #plausibleToBreak}). The progress count
+     *  that pass the same cut as the targets themselves ({@link #breakable}). The progress count
      *  is read from the inventory each tick, not here — one block can yield several items, and the drops
      *  take a moment to be picked up.
      *
@@ -644,9 +698,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      *  按格记账的地方,因为它是唯一一件关于那一格的可复现事实。 */
     private TaskState mineProgress(BlockPos pos) {
         digTarget = pos.immutable();
-        switch (digger.digStep(pos, occluder -> plausibleToBreak(
-                ContextFactory.forExecution(player, terrain.spec()), occluder,
-                player.level().getBlockState(occluder)))) {
+        switch (digger.digStep(pos, occluder -> breakable(occluder, player.level().getBlockState(occluder)),
+                this::recordAction)) {
             case BROKE_TARGET -> {
                 digTarget = null;
                 knownOres.remove(pos);
@@ -728,16 +781,20 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     /**
      * 把导航这条路上挖开的格也入账。
      *
-     * <p>为了走过去而挖开的格和她照着目标敲掉的格一样,掉的东西都会进她的包。旅程账
-     * ({@code nav.ledger()} / {@link #brokeOnTheWay})是"她挖了什么"的唯一出处,所以这里问它,
-     * 而不是另设一套记录。导航拆掉时账会并进旅程账,所以 {@link #stopNav()} 之前再扫一次。
+     * <p>为了走过去而挖开的格和她照着目标敲掉的格一样,掉的东西都会进她的包。实际账
+     * ({@link Trip#reports} / {@link #brokeOnTheWay})是"她挖了什么"的唯一出处,所以这里问它,
+     * 而不是另设一套记录。停下时账会并进旅程账,所以 {@link #stopNav()} 之前再扫一次。
      */
     private void sweepNavBreaks() {
         if (nav == null) {
             return;
         }
-        for (var broken : nav.ledger().breaks()) {
-            claimDrops(broken.pos());
+        for (Report report : nav.reports()) {
+            for (EditLedger.Entry entry : report.ledger().entries()) {
+                if (entry instanceof EditLedger.Dug dug) {
+                    claimDrops(dug.pos());
+                }
+            }
         }
     }
 
@@ -887,13 +944,12 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // linear contains is O(N^2) on the server thread.
         Set<BlockPos> seen = new HashSet<>(knownOres);
         Level level = player.level();
-        CalculationContext ctx = ContextFactory.forExecution(player, terrain.spec());
         for (BlockScanner.Hit hit : hits) {
             if (knownOres.size() >= MAX_ORES) {
                 break;
             }
             BlockPos p = hit.pos().immutable();
-            if (!seen.add(p) || !stillCandidate(level, ctx, p)) {
+            if (!seen.add(p) || !stillCandidate(level, p)) {
                 continue;
             }
             knownOres.add(p);
@@ -913,7 +969,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         List<BlockPos> nearestFirst = new ArrayList<>(remaining);
         nearestFirst.sort(Comparator.comparingDouble(feet::distSqr));
         Level level = player.level();
-        CalculationContext ctx = ContextFactory.forExecution(player, terrain.spec());
         for (BlockPos p : nearestFirst) {
             if (knownOres.size() >= MAX_ORES) {
                 break;
@@ -922,7 +977,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 continue;
             }
             remaining.remove(p);
-            if (stillCandidate(level, ctx, p)) {
+            if (stillCandidate(level, p)) {
                 knownOres.add(p);
             }
         }
@@ -933,7 +988,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      * 这一格还算不算候选:还是要的方块(groups 用法:还是扫描时记下的那种)、没被记成挖不动、挖得成、手里的
      * 工具收得到掉落。问的是"挖不挖得成",按这件活自己的规格算;许不许挖不在这里剪。收不进的记账,回执交代。
      */
-    private boolean stillCandidate(Level level, CalculationContext ctx, BlockPos p) {
+    private boolean stillCandidate(Level level, BlockPos p) {
         var state = level.getBlockState(p);
         boolean wanted = byGroups() ? r.named.get(p) == state.getBlock() : r.targets.contains(state.getBlock());
         if (state.isAir() || !wanted) {
@@ -951,7 +1006,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         if (unworkable.contains(p)) {
             return false;
         }
-        if (!plausibleToBreak(ctx, p, state)) {
+        if (!breakable(p, state)) {
             ruledOut.add(p.immutable());
             return false;
         }
@@ -960,7 +1015,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // tool situation can also CHANGE mid-task: the only good pick breaking makes this
         // fire on re-prune).
         if (!WorkProfile.of(player).instaBreak()
-                && !BlockHelper.canHarvest(player.getInventory(), state)) {
+                && !canHarvest(player.getInventory(), state)) {
             unharvestable.add(p.immutable());
             return false;
         }
@@ -970,8 +1025,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private void prune() {
         Level level = player.level();
         BlockPos feet = player.blockPosition();
-        CalculationContext ctx = ContextFactory.forExecution(player, terrain.spec());
-        knownOres.removeIf(p -> !stillCandidate(level, ctx, p));
+        knownOres.removeIf(p -> !stillCandidate(level, p));
         knownOres.sort(Comparator.comparingDouble(feet::distSqr));
         if (knownOres.size() > MAX_ORES) {
             List<BlockPos> farther = knownOres.subList(MAX_ORES, knownOres.size());
@@ -980,11 +1034,20 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             }
             farther.clear();
         }
-        // 挖每一块的价钱:同一个成本模型,需要主人同意的乘倍率,不许的是 INF——挑目标按价,不按剪
+        // 挖每一块的价钱:与寻路给路上一格定价同一个成本模型,需要主人同意的乘倍率,不许的是无穷——挑目标按价,不按剪。
+        // 挖的时候站着、眼睛不在水里
         digCosts.clear();
+        LiveWorld world = new LiveWorld(player.serverLevel());
         for (BlockPos p : knownOres) {
-            digCosts.put(p, MovementHelper.getMiningDurationTicks(ctx, p.getX(), p.getY(), p.getZ(),
-                    level.getBlockState(p), true));
+            BlockState state = level.getBlockState(p);
+            CostModel.Admission admission = pricing.admitDig(world, p, state);
+            if (admission.ok()) {
+                digCosts.put(p, pricing.digCost(new Edit.Dig(p, state, admission.permit(), false, true)));
+            } else {
+                digCosts.put(p, Double.POSITIVE_INFINITY);
+                deniedWhy = admission.detail() instanceof Verdict verdict ? verdict.reason()
+                        : "the permission layer does not allow it";
+            }
         }
     }
 

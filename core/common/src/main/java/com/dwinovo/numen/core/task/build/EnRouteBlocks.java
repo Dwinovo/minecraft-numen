@@ -1,20 +1,18 @@
 package com.dwinovo.numen.core.task.build;
 
 import com.dwinovo.numen.core.act.BlockDigger;
-import com.dwinovo.numen.core.pathing.execute.TerrainBill;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.body.Snapshots;
+import com.dwinovo.numen.pathing.drive.EditLedger;
+import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.permission.Listing;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -23,7 +21,7 @@ import java.util.function.Predicate;
 /**
  * 施工路上放下、又不是图纸格的方块:活怎么收场都撤掉,撤了哪些、哪些留在原处以及为什么,记下来交代出去。
  *
- * <p>路上放了什么只认一本账——执行器的实际放置账(任务的旅程账,{@code AbstractCompanionTask.placedOnTheWay}),
+ * <p>路上放了什么只认一本账——寻路交出的实际账(任务的旅程账,{@code AbstractCompanionTask.placedOnTheWay}),
  * 这里不另记。账上的格此刻还是她放下的那种方块才撤:之后被别人换过、挖过的,已经不是她留下的东西。
  *
  * <p>撤走正常的破坏路径({@link BlockDigger#destroyNow}),权限层在那儿把门;她自己放的方块按出厂规则 {@code self_placed}
@@ -53,7 +51,7 @@ final class EnRouteBlocks {
     }
 
     /** 账上还立着的垫块:放下的、不是图纸格、此刻还是那种方块、还没处理过。 */
-    Set<BlockPos> standing(List<TerrainBill.Place> placed) {
+    Set<BlockPos> standing(List<EditLedger.Placed> placed) {
         return Set.copyOf(standingBlocks(placed).keySet());
     }
 
@@ -61,7 +59,7 @@ final class EnRouteBlocks {
      * 还立着的垫块里正托着她的那几格:拆掉就会让她掉下去。托着她的方块有一块不是垫块(站在自然地面与垫块的交界上)时,
      * 拆哪一块她都还站得住,一格也不算。
      */
-    Set<BlockPos> holdingHer(List<TerrainBill.Place> placed) {
+    Set<BlockPos> holdingHer(List<EditLedger.Placed> placed) {
         Set<BlockPos> cells = standingBlocks(placed).keySet();
         Set<BlockPos> supports = supports();
         if (supports.isEmpty() || !cells.containsAll(supports)) {
@@ -73,7 +71,7 @@ final class EnRouteBlocks {
     /**
      * 撤:账上还立着的垫块都走挖掘器拆掉;正托着她的那几格不拆,记成留在原处——调用方有机会让她先挪开的,在调这里之前挪。
      */
-    void takeDown(List<TerrainBill.Place> placed) {
+    void takeDown(List<EditLedger.Placed> placed) {
         Set<BlockPos> holding = holdingHer(placed);
         for (Map.Entry<BlockPos, Block> e : standingBlocks(placed).entrySet()) {
             BlockPos pos = e.getKey();
@@ -108,37 +106,24 @@ final class EnRouteBlocks {
     }
 
     /** 账上放下、不是图纸格、此刻还是那种方块、还没处理过的格,按放下的先后。 */
-    private Map<BlockPos, Block> standingBlocks(List<TerrainBill.Place> placed) {
+    private Map<BlockPos, Block> standingBlocks(List<EditLedger.Placed> placed) {
         Map<BlockPos, Block> out = new LinkedHashMap<>();
-        for (TerrainBill.Place place : placed) {
+        for (EditLedger.Placed place : placed) {
             BlockPos pos = place.pos();
             if (designCell.test(pos) || taken.containsKey(pos) || left.containsKey(pos)) {
                 continue;
             }
-            if (player.level().getBlockState(pos).is(place.block())) {
-                out.put(pos, place.block());
+            Block block = place.after().getBlock();
+            if (player.level().getBlockState(pos).is(block)) {
+                out.put(pos, block);
             }
         }
         return out;
     }
 
-    /** 此刻托着她的方块:脚底往下一薄层里碰得到碰撞形状的那几格。 */
+    /** 此刻托着她的方块(与寻路判"托着身体的是哪几格"同一处)。 */
     private Set<BlockPos> supports() {
-        AABB body = player.getBoundingBox();
-        AABB sole = new AABB(body.minX, body.minY - 0.1, body.minZ, body.maxX, body.minY, body.maxZ);
-        Set<BlockPos> out = new LinkedHashSet<>();
-        for (BlockPos pos : BlockPos.betweenClosed(
-                Mth.floor(sole.minX), Mth.floor(sole.minY), Mth.floor(sole.minZ),
-                Mth.floor(sole.maxX), Mth.floor(sole.maxY), Mth.floor(sole.maxZ))) {
-            BlockState state = player.level().getBlockState(pos);
-            for (AABB piece : state.getCollisionShape(player.level(), pos).toAabbs()) {
-                if (piece.move(pos).intersects(sole)) {
-                    out.add(pos.immutable());
-                    break;
-                }
-            }
-        }
-        return out;
+        return Footing.supports(player.level(), Snapshots.stats(player), player.getBoundingBox());
     }
 
     /** 按方块归堆,每堆一段:{@code 2 cobblestone (1,64,2; 1,65,2)}。 */
