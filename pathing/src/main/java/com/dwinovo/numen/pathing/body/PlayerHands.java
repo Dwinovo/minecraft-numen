@@ -5,6 +5,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.dwinovo.numen.pathing.plan.DigTime;
+
 import net.minecraft.advancements.CriteriaTriggers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -27,7 +29,8 @@ import net.minecraft.world.phys.Vec3;
  *
  * <h2>挖</h2>
  * 第一下送 START:秒破的方块与创造模式当场碎;其余每刻累加原版的 {@code getDestroyProgress},到 1 送 STOP,服务端按它
- * 自己的钟确认后挖掉。碎掉之后手要缓 5 刻才挖下一格(秒破的不缓),创造模式同样每格隔 5 刻。手上的东西换了就从头挖;
+ * 自己的钟确认后挖掉。碎掉之后手要缓几刻才挖下一格,照原版客户端的 {@code destroyDelay}({@link DigTime#cooldown}:
+ * 累着进度挖碎的与创造模式缓 5 刻,秒破的不缓),规划给挖一格定价按的是同一个。手上的东西换了就从头挖;
  * 原地变了的(修补附魔吸经验改了耐久)还是同一件,不重开——原版客户端记的是手上那一叠本身。
  *
  * <p>服务端没挖掉就是没让挖:送 STOP 之后方块没变,再等服务端自己的钟走一阵(它记的进度偶尔比客户端慢,会挂成延迟
@@ -47,8 +50,7 @@ public final class PlayerHands implements Effector {
         SERVER
     }
 
-    /** 原版客户端挖碎一格之后缓手的刻数(第 6 刻才挖下一格),两次右键之间的刻数。 */
-    private static final int DESTROY_DELAY = 6;
+    /** 原版客户端两次右键之间的刻数。 */
     private static final int RIGHT_CLICK_DELAY = 4;
     /** 送了 STOP 之后,最多等服务端这么多刻把延迟破坏落地。 */
     private static final int STOP_GRACE = 20;
@@ -100,7 +102,7 @@ public final class PlayerHands implements Effector {
         Direction face = hit.getDirection();
         BlockState state = level.getBlockState(pos);
         if (body.gameMode.isCreative()) {
-            destroyReadyAt = now() + DESTROY_DELAY;
+            cooldown(true, true);
             body.swing(InteractionHand.MAIN_HAND);
             send(ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, pos, face);
             return landed(level, pos, state);
@@ -120,7 +122,7 @@ public final class PlayerHands implements Effector {
         }
         destroying = null;
         progress = 0;
-        destroyReadyAt = now() + DESTROY_DELAY;
+        cooldown(false, false);
         send(ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, pos, face);
         if (level.getBlockState(pos) != state) {
             return new Strike.Broke(pos, state);
@@ -129,6 +131,11 @@ public final class PlayerHands implements Effector {
         stoppedState = state;
         stopDeadline = now() + STOP_GRACE;
         return Strike.SWINGING;
+    }
+
+    /** 碎掉一格之后缓手:缓的那几刻里不挖,下一刻才挖下一格。 */
+    private void cooldown(boolean creative, boolean instant) {
+        destroyReadyAt = now() + DigTime.cooldown(creative, instant) + 1;
     }
 
     /** 第一下:原版客户端换了目标就先放下旧的,再送 START;秒破的当场碎,否则开始累加进度。 */

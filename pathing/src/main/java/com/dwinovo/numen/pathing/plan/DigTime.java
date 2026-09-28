@@ -14,11 +14,26 @@ import net.minecraft.world.level.block.state.BlockState;
  * 从手上那件的挖掘速度起算,速度大于 1 时加上挖掘效率属性,再乘急迫、挖掘疲劳、方块破坏速度属性,眼睛泡在水里乘水下挖掘
  * 速度,脚不着地除以 5。
  *
- * <p>规划定价与执行等多久用的都是这一个函数;所需的身体状态全部来自 {@link BodySnapshot},用哪件工具由 {@link ToolChoice} 定。
+ * <p>挖碎之后,原版客户端的手要缓几刻才挖下一格({@link #cooldown})。
+ *
+ * <p>规划定价与执行等多久用的都是这里;所需的身体状态全部来自 {@link BodySnapshot},用哪件工具由 {@link ToolChoice} 定。
  */
 public final class DigTime {
 
+    /** 原版客户端挖碎一格之后缓手的刻数({@code MultiPlayerGameMode.destroyDelay})。 */
+    private static final int DESTROY_DELAY = 5;
+
     private DigTime() {}
+
+    /**
+     * 挖碎一格之后要缓几刻才能挖下一格,照原版客户端:累着进度挖碎的、创造模式挖掉的都缓 5 刻,生存模式一下就碎的不缓。
+     * 规划给挖一格定价({@link ToolChoice#handTicks})与身体的手({@code PlayerHands})按的都是它。
+     *
+     * @param instant 生存模式里第一下就碎(每刻的进度不小于 1)
+     */
+    public static int cooldown(boolean creative, boolean instant) {
+        return creative || !instant ? DESTROY_DELAY : 0;
+    }
 
     /**
      * 拿 {@code tool} 挖 {@code state} 要几刻。创造模式一下就碎;挖不动的方块(硬度为负)由 {@link DigRules} 先挡下,这里

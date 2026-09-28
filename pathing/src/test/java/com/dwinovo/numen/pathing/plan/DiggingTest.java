@@ -68,6 +68,24 @@ class DiggingTest {
         assertEquals(1, DigTime.ticks(creative, ItemStack.EMPTY, Blocks.OBSIDIAN.defaultBlockState(), false, true));
     }
 
+    /**
+     * 挖碎一格之后缓手(原版客户端的 {@code destroyDelay}):累着进度挖碎的、创造模式挖掉的缓 5 刻,生存模式一下就碎的不缓。
+     * 挖一格手上一共要花的刻数是挖到碎的刻数加上它。
+     */
+    @Test
+    void theHandRestsFiveTicksAfterABlockThatTookProgressToBreak() {
+        BodySnapshot body = Fixtures.body();
+        ToolChoice tools = new ToolChoice(body);
+        BlockState stone = Blocks.STONE.defaultBlockState();
+        assertEquals(5, DigTime.cooldown(false, false));
+        assertEquals(5, DigTime.cooldown(true, true), "创造模式照样缓");
+        assertEquals(0, DigTime.cooldown(false, true), "一下就碎的不缓");
+        assertEquals(150 + 5, tools.handTicks(stone, false, true), 1e-9, "空手挖石头 150 刻,再缓 5 刻");
+        assertEquals(1, tools.handTicks(Blocks.SHORT_GRASS.defaultBlockState(), false, true), 1e-9, "草一下就碎,不缓");
+        ToolChoice creative = new ToolChoice(Fixtures.body(Vanilla.CREATIVE, GameType.CREATIVE, 20, List.of()));
+        assertEquals(1 + 5, creative.handTicks(Blocks.OBSIDIAN.defaultBlockState(), false, true), 1e-9);
+    }
+
     @Test
     void theBestToolDeepInTheInventoryIsPickedAndPriced() {
         List<ItemStack> inventory = new ArrayList<>();

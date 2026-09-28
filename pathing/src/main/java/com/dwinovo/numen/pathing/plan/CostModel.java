@@ -248,16 +248,19 @@ public final class CostModel {
 
     // ==================== 价钱 ====================
 
-    /** 挖一格:用挑中的工具挖掉它的刻数,加规格的挖掘罚分与这一格的按位置加价;许可要问的乘 {@link ActionCosts#CONSENT_MULTIPLIER}。 */
+    /**
+     * 挖一格:用挑中的工具挖掉它手上要花的刻数(挖到碎,加碎了之后缓手的那几刻,{@link ToolChoice#handTicks}),加规格的挖掘罚分
+     * 与这一格的按位置加价;许可要问的乘 {@link ActionCosts#CONSENT_MULTIPLIER}。
+     */
     public double digCost(Edit.Dig dig) {
-        double cost = tools.ticks(dig.state(), dig.eyeInWater(), dig.grounded()) + spec.breakPenalty()
+        double cost = tools.handTicks(dig.state(), dig.eyeInWater(), dig.grounded()) + spec.breakPenalty()
                 + extra(Use.DIG, dig.pos().asLong());
         return dig.permit() instanceof Permit.Ask ? cost * ActionCosts.CONSENT_MULTIPLIER : cost;
     }
 
     /**
      * 放一块:规格的放置罚分加这一格的按位置加价,许可要问的乘 {@link ActionCosts#CONSENT_MULTIPLIER};规格要求事后拆回时,
-     * 再加上挖掉这块料的刻数(站在地上、眼睛不在水里挖)。
+     * 再加上挖掉这块料手上要花的刻数(站在地上、眼睛不在水里挖,{@link ToolChoice#handTicks})。
      */
     public double placeCost(Edit.Place place) {
         double cost = spec.placeCost() + extra(Use.PLACE, place.pos().asLong());
@@ -265,7 +268,7 @@ public final class CostModel {
             cost *= ActionCosts.CONSENT_MULTIPLIER;
         }
         if (spec.takeBack()) {
-            cost += tools.ticks(place.block().defaultBlockState(), false, true);
+            cost += tools.handTicks(place.block().defaultBlockState(), false, true);
         }
         return cost;
     }

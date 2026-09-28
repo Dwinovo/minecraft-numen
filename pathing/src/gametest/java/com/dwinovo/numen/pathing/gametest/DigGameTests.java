@@ -104,6 +104,35 @@ public class DigGameTests {
         }
     }
 
+    /**
+     * 三格高的泥土墙横贯场地,手上木锹,许改自然地形:挖开身体高的两格穿过去。上一格碎了之后手要缓几刻(原版客户端的
+     * {@code destroyDelay})才开挖下一格,缓的正是规划给挖一格定价时加上的那几刻({@link DigTime#cooldown})。
+     */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    public static void waits_out_the_vanilla_cooldown_between_two_digs(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        wall(t, 8, 3, Blocks.DIRT);
+        TestBody body = t.body(4, 1, 5);
+        body.getInventory().setItem(0, new ItemStack(Items.WOODEN_SHOVEL));
+        DigWatch watch = new DigWatch(body);
+        t.hands = watch::wrap;
+        t.go(body, Goals.at(t.at(12, 1, 5)), NATURAL).within(400).arrives().then(r -> {
+            List<DigWatch.Dig> broken = new ArrayList<>(watch.broken());
+            broken.sort(java.util.Comparator.comparingLong(d -> d.startedAt));
+            if (broken.size() < 2) {
+                throw new GameTestAssertException("应当连着挖两格:" + broken);
+            }
+            int cooldown = DigTime.cooldown(false, false);
+            for (int i = 1; i < broken.size(); i++) {
+                long idle = broken.get(i).startedAt - broken.get(i - 1).brokeAt;
+                if (idle <= cooldown) {
+                    throw new GameTestAssertException("上一格碎了 " + idle + " 刻就开挖下一格,没缓够 " + cooldown + " 刻:" + broken);
+                }
+            }
+            vanillaTimed(watch, body);
+        });
+    }
+
     // ==================== 挖掘的物理约束 ====================
 
     /**
