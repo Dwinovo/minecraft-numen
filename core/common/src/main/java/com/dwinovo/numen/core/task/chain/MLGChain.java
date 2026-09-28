@@ -8,6 +8,7 @@ import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.body.Crosshair;
 import com.dwinovo.numen.pathing.body.Hotbar;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
@@ -35,9 +36,10 @@ import net.minecraft.world.phys.Vec3;
  * 所以窗口卡死在 {@link #RECLAIM_TICKS} ——装桶、看向、点右键统共三五刻,到点无条件放手。
  *
  * <h2>够不够得着由桶自己说</h2>
- * 放水和收水都先按<b>原版 {@code BucketItem} 那条射线</b>问一次:从眼睛沿视线打
- * {@code blockInteractionRange}。够得着才点,而且必须真的瞄在那一格上 —— 判据与真正
- * 执行的是同一条射线,不会出现"以为够得着、点下去什么也没发生"。
+ * 放水和收水都先按<b>原版 {@code BucketItem} 那条射线</b>问一次(寻路模块身体机制的
+ * {@link Crosshair#itemRay}):从眼睛沿视线打 {@code blockInteractionRange}。够得着才点,
+ * 而且必须真的瞄在那一格上 —— 判据与真正执行的是同一条射线,不会出现"以为够得着、
+ * 点下去什么也没发生"。
  *
  * <h2>探落点用五条射线</h2>
  * 她的碰撞箱宽 0.6,单一条竖直射线会从格缝里漏下去。中心加四角各打一条、取最近的那个落点,
@@ -127,7 +129,7 @@ public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Refle
         }
         InputDriver.lookAt(companion, Vec3.atCenterOf(ground));
 
-        BlockHitResult aim = bucketRay(companion, ClipContext.Fluid.NONE);
+        BlockHitResult aim = Crosshair.itemRay(companion, ClipContext.Fluid.NONE);
         if (aim.getType() != HitResult.Type.BLOCK || !aim.getBlockPos().equals(ground)) {
             return TaskState.RUNNING;   // 还够不着,或者这一刻没瞄准 —— 下一刻更近
         }
@@ -156,7 +158,7 @@ public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Refle
         }
         InputDriver.lookAt(companion, Vec3.atCenterOf(placed));
         // 空桶那条射线是认水源的(SOURCE_ONLY),和满桶那条不是同一种。
-        BlockHitResult aim = bucketRay(companion, ClipContext.Fluid.SOURCE_ONLY);
+        BlockHitResult aim = Crosshair.itemRay(companion, ClipContext.Fluid.SOURCE_ONLY);
         if (aim.getType() != HitResult.Type.BLOCK || !aim.getBlockPos().equals(placed)) {
             return TaskState.RUNNING;
         }
@@ -200,18 +202,6 @@ public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Refle
     @Override
     public String describe() {
         return "高处坠落时会用水桶或软方块自救,落地后把水收回来";
-    }
-
-    /**
-     * 原版 {@code BucketItem} 自己那条射线:从眼睛沿视线打 {@code blockInteractionRange}。
-     * 判"够不够得着"和真正执行用的是同一条,所以不会有点了没反应的情况。
-     */
-    private static BlockHitResult bucketRay(NumenPlayer companion, ClipContext.Fluid fluids) {
-        Vec3 eye = companion.getEyePosition();
-        Vec3 end = eye.add(companion.calculateViewVector(companion.getXRot(), companion.getYRot())
-                .scale(companion.blockInteractionRange()));
-        return companion.level().clip(new ClipContext(
-                eye, end, ClipContext.Block.OUTLINE, fluids, companion));
     }
 
     /** 水会落在哪一格 —— 与 {@code BucketItem.use} 同一个算法(可含水的方块就地灌,否则贴面)。 */

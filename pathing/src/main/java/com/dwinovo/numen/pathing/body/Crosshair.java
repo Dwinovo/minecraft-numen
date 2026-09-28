@@ -5,6 +5,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
+import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
@@ -47,6 +48,16 @@ public final class Crosshair {
     public static BlockHitResult on(ServerPlayer body, BlockPos pos) {
         return pick(body) instanceof BlockHitResult hit && hit.getType() == HitResult.Type.BLOCK
                 && hit.getBlockPos().equals(pos) ? hit : null;
+    }
+
+    /**
+     * 手里的东西在空中右键时自己沿视线打的那一条,照原版 {@code Item.getPlayerPOVHitResult}(桶倒水、舀水就用它):从眼睛沿视线
+     * 打方块交互距离,按方块轮廓,液体按 {@code fluid} 的规矩算不算;不看实体。和准星那一次拾取不是同一条:桶瞄的是它自己这条。
+     */
+    public static BlockHitResult itemRay(ServerPlayer body, ClipContext.Fluid fluid) {
+        Vec3 eye = body.getEyePosition();
+        Vec3 end = eye.add(body.calculateViewVector(body.getXRot(), body.getYRot()).scale(body.blockInteractionRange()));
+        return body.level().clip(new ClipContext(eye, end, ClipContext.Block.OUTLINE, fluid, body));
     }
 
     private static HitResult within(HitResult hit, Vec3 eye, double range) {
