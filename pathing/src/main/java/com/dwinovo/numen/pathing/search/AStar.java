@@ -91,7 +91,7 @@ public final class AStar {
         Maneuver arrival = search.arrival();
         Stance startStance = arrival != null ? arrival.landing() : Stance.at(view, body, startPos);
         if (startStance == null) {
-            return new SearchResult(SearchResult.Stop.STRANDED, null);
+            return new SearchResult(SearchResult.Stop.STRANDED, null, 0);
         }
         Node start = node(startPos.getX(), startPos.getY(), startPos.getZ(), 0);
         start.g = 0;
@@ -109,7 +109,7 @@ public final class AStar {
         Probe probe = new Probe(view, new Recall(body));
         while (!open.isEmpty()) {
             if (cancelled.getAsBoolean()) {
-                return new SearchResult(SearchResult.Stop.CANCELLED, null);
+                return new SearchResult(SearchResult.Stop.CANCELLED, null, expanded);
             }
             Node current = open.pop();
             if (goal.contains(current.x, current.y, current.z, current.stance)) {
@@ -119,17 +119,17 @@ public final class AStar {
                     current.f = total;
                     open.push(current);
                 } else {
-                    return new SearchResult(SearchResult.Stop.ARRIVED, route(start, current));
+                    return new SearchResult(SearchResult.Stop.ARRIVED, route(start, current), expanded);
                 }
             }
             if (expanded >= search.handOver()) {
                 Route early = partial(start, best);
                 if (early != null) {
-                    return new SearchResult(SearchResult.Stop.BUDGET, early);
+                    return new SearchResult(SearchResult.Stop.BUDGET, early, expanded);
                 }
             }
             if (expanded >= search.budget()) {
-                return new SearchResult(SearchResult.Stop.BUDGET, partial(start, best));
+                return new SearchResult(SearchResult.Stop.BUDGET, partial(start, best), expanded);
             }
             expanded++;
             BlockPos from = new BlockPos(current.x, current.y, current.z);
@@ -182,7 +182,7 @@ public final class AStar {
             }
         }
         SearchResult.Stop stop = skippedUnloaded ? SearchResult.Stop.UNLOADED : SearchResult.Stop.EXHAUSTED;
-        return new SearchResult(stop, partial(start, best));
+        return new SearchResult(stop, partial(start, best), expanded);
     }
 
     /**

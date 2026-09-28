@@ -7,6 +7,7 @@ import com.dwinovo.numen.pathing.body.Body;
 import com.dwinovo.numen.pathing.drive.Driver;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.drive.LiveWorld;
+import com.dwinovo.numen.pathing.drive.PathLog;
 import com.dwinovo.numen.pathing.drive.TakeBack;
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.CostModel;
@@ -48,18 +49,22 @@ public final class Navigator {
         BodySnapshot snapshot = body.snapshot();
         Optional<BlockPos> start = Origin.of(new LiveWorld(entity.serverLevel()), snapshot.stats(),
                 entity.getX(), entity.getY(), entity.getZ());
+        String who = PathLog.who(entity);
         if (start.isEmpty()) {
             BlockPos at = entity.blockPosition();
+            PathLog.info("{} 规划 去 {}:起点待不住 {}", who, query.goal(), PathLog.body(entity));
             return new Planning(new PlanResult(List.of(),
                     new Outcome.Stranded(at, entity.level().getBlockState(at))));
         }
         BlockPos from = start.get();
+        long t0 = System.nanoTime();
         WorldSnapshot view = WorldSnapshot.around(entity.serverLevel(), from);
         CostModel model = CostModel.of(query.spec(), snapshot, ports.terrain(), ports.materials(), ports.threats());
+        PathLog.mainThread(who, "规划时拷快照与组成本模型", System.nanoTime() - t0);
         RoutePlanner.Query planned = new RoutePlanner.Query(view, model, from, query.goal(), query.budget(),
                 query.candidates());
         Search probe = new Search(view, model, from, query.goal(), query.budget(), Favoring.NONE);
-        return new Planning(Searches.submit(planned), probe);
+        return new Planning(Searches.submit(planned), probe, who);
     }
 
     /**
@@ -73,7 +78,12 @@ public final class Navigator {
 
     /** 去:交出一次在走的导航,宿主每刻 {@link Navigation#tick} 一次。 */
     public Navigation drive(NavRequest request) {
+        ServerPlayer entity = body.entity();
+        PathLog.debug("{} 出发 去 {} {} 预算 {}{} 刻速 {} {}", PathLog.who(entity), request.goal(),
+                PathLog.spec(request.spec()), request.budget(),
+                request.route() != null ? " 先照候选 " + PathLog.route(request.route()) : "",
+                PathLog.num(entity.level().tickRateManager().tickrate()), PathLog.body(entity));
         return new Navigation(new Driver(body, ports.effector(), ports.terrain(), ports.materials(), ports.threats(),
-                request.goal(), request.spec(), request.budget(), request.route()));
+                request.goal(), request.spec(), request.budget(), request.route()), entity);
     }
 }

@@ -132,6 +132,26 @@ public final class Goals {
         return rise > 0 ? rise * ActionCosts.ESTIMATE_UP : -rise * ActionCosts.ESTIMATE_DOWN;
     }
 
+    // ==================== 排障 ====================
+
+    /** 日志里的一格:{@code x,y,z}。 */
+    private static String xyz(BlockPos pos) {
+        return pos.getX() + "," + pos.getY() + "," + pos.getZ();
+    }
+
+    /** 日志里的一组目标:成员多时只列前三个,再注明一共几个。 */
+    private static String listed(List<Goal> members) {
+        int shown = Math.min(3, members.size());
+        StringBuilder out = new StringBuilder("(");
+        for (int i = 0; i < shown; i++) {
+            out.append(i > 0 ? " " : "").append(members.get(i));
+        }
+        if (members.size() > shown) {
+            out.append(" …共 ").append(members.size()).append(" 个");
+        }
+        return out.append(")").toString();
+    }
+
     // ==================== 各个目标 ====================
 
     private record At(BlockPos feet) implements Goal {
@@ -151,6 +171,11 @@ public final class Goals {
             return PositionCosts.builder().forbid(Use.PLACE, feet.asLong()).forbid(Use.PLACE, feet.above().asLong())
                     .forbid(Use.DIG, feet.below().asLong()).build();
         }
+
+        @Override
+        public String toString() {
+            return "at(" + xyz(feet) + ")";
+        }
     }
 
     private record Column(int cx, int cz) implements Goal {
@@ -162,6 +187,11 @@ public final class Goals {
         @Override
         public double estimate(int x, int y, int z) {
             return horizontal(Math.abs(cx - x), Math.abs(cz - z));
+        }
+
+        @Override
+        public String toString() {
+            return "column(" + cx + "," + cz + ")";
         }
     }
 
@@ -175,6 +205,11 @@ public final class Goals {
         public double estimate(int x, int y, int z) {
             return vertical(level - y);
         }
+
+        @Override
+        public String toString() {
+            return "level(" + level + ")";
+        }
     }
 
     private record Near(BlockPos center, double radius) implements Goal {
@@ -187,6 +222,11 @@ public final class Goals {
         @Override
         public double estimate(int x, int y, int z) {
             return point(x, y, z, center.getX(), center.getY(), center.getZ());
+        }
+
+        @Override
+        public String toString() {
+            return "near(" + xyz(center) + " r=" + radius + ")";
         }
     }
 
@@ -210,6 +250,11 @@ public final class Goals {
             double gap = d < inner ? inner - d : d > outer ? d - outer : 0;
             return gap * ActionCosts.ESTIMATE_PER_BLOCK;
         }
+
+        @Override
+        public String toString() {
+            return "ring(" + xyz(center) + " " + inner + ".." + outer + ")";
+        }
     }
 
     private record StandOn(BlockPos block) implements Goal {
@@ -228,6 +273,11 @@ public final class Goals {
         public PositionCosts protection() {
             return PositionCosts.builder().forbid(Use.DIG, block.asLong()).forbid(Use.PLACE, block.above().asLong())
                     .forbid(Use.PLACE, block.above(2).asLong()).build();
+        }
+
+        @Override
+        public String toString() {
+            return "standOn(" + xyz(block) + ")";
         }
     }
 
@@ -255,6 +305,11 @@ public final class Goals {
         @Override
         public BlockPos sight(int x, int y, int z, Stance stance) {
             return target;
+        }
+
+        @Override
+        public String toString() {
+            return "reach(" + xyz(target) + ")";
         }
     }
 
@@ -287,6 +342,11 @@ public final class Goals {
                 sum += 1 / Math.max(ratio, 1.0E-3);
             }
             return sum * ActionCosts.DANGER_PER_CELL;
+        }
+
+        @Override
+        public String toString() {
+            return "awayFrom(" + threats.size() + ")";
         }
     }
 
@@ -349,6 +409,11 @@ public final class Goals {
             }
             return all;
         }
+
+        @Override
+        public String toString() {
+            return "anyOf" + listed(members);
+        }
     }
 
     private record OffBlocks(java.util.Set<BlockPos> blocks) implements Goal {
@@ -360,6 +425,11 @@ public final class Goals {
         @Override
         public double estimate(int x, int y, int z) {
             return 0;
+        }
+
+        @Override
+        public String toString() {
+            return "offBlocks(" + blocks.size() + ")";
         }
     }
 
@@ -412,6 +482,11 @@ public final class Goals {
             }
             return all;
         }
+
+        @Override
+        public String toString() {
+            return "allOf" + listed(members);
+        }
     }
 
     private record Priced(Goal inner, double cost) implements Goal {
@@ -438,6 +513,11 @@ public final class Goals {
         @Override
         public PositionCosts protection() {
             return inner.protection();
+        }
+
+        @Override
+        public String toString() {
+            return inner + "+" + cost;
         }
     }
 }

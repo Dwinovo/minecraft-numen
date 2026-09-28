@@ -2,6 +2,7 @@ package com.dwinovo.numen.pathing.drive;
 
 import com.dwinovo.numen.pathing.drive.Blockage.Hitch;
 import com.dwinovo.numen.pathing.plan.CostModel;
+import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.Maneuver;
 import com.dwinovo.numen.pathing.plan.Moves;
 import com.dwinovo.numen.pathing.plan.Premise;
@@ -27,6 +28,10 @@ final class Step {
     private final RouteSpec spec;
     private final Watchdog watchdog;
     private Control control;
+    /** 计划内的坠落开始时身体的血量;不是这样的一步为 NaN。落地时拿它对账。 */
+    private float healthBefore = Float.NaN;
+    /** 计划内的坠落预计掉几点血。 */
+    private int expectedDamage;
 
     Step(Rig rig, Maneuver planned, Maneuver next, Goal goal, RouteSpec spec, Watchdog watchdog) {
         this.rig = rig;
@@ -53,9 +58,11 @@ final class Step {
 
     Beat tick() {
         if (control == null) {
+            long t0 = System.nanoTime();
             CostModel model = Goal.guarded(goal,
                     CostModel.of(spec, rig.snapshot(), rig.terrain, rig.materials, Threats.NONE));
             Premise premise = recheck(model);
+            rig.tally.rechecked(System.nanoTime() - t0);
             if (premise instanceof Premise.Fails fails) {
                 return new Beat.Blocked(new Blockage(fails.cell(), rig.world().getBlockState(fails.cell()),
                         planned.kind(), fails.reason(), null));
@@ -65,14 +72,48 @@ final class Step {
                 return new Beat.Blocked(blocked(planned.to(), Hitch.DIVERTED));
             }
             control = Control.of(rig, fresh, next);
-            watchdog.begin(Moves.of(fresh.kind()).cost(model, fresh), rig.entity.position());
+            double expected = Moves.of(fresh.kind()).cost(model, fresh);
+            watchdog.begin(expected, rig.entity.position());
+            begun(fresh, expected);
         }
         Beat beat = control.tick();
         watchdog.observe(rig.entity.position(), beat instanceof Beat.Going going && going.worked());
         if (beat instanceof Beat.Going && watchdog.overran()) {
+            PathLog.info("{} 卡住 {} 做了 {} 刻,超过期限 {} 刻;落点 {} 是 {} {}", rig.who, PathLog.step(planned),
+                    watchdog.stepTicks(), PathLog.num(watchdog.allowance()), PathLog.pos(planned.to()),
+                    PathLog.block(rig.world().getBlockState(planned.to())), PathLog.body(rig.entity));
             return new Beat.Blocked(blocked(planned.to(), Hitch.STUCK));
         }
         return beat;
+    }
+
+    /**
+     * 一步开始:DEBUG 记走法、估价与期限;落差过一格、会掉血或要倒水接住的坠落是计划内的坠落,记 INFO——落差、落在什么上、
+     * 预计掉几点血、接不接水,落地时({@link #finish})再对一次账。
+     */
+    private void begun(Maneuver m, double expected) {
+        if (PathLog.debugging()) {
+            PathLog.debug("{} 步 {} 估 {} 刻 期限 {} 刻 改动 {}", rig.who, PathLog.step(m), PathLog.num(expected),
+                    PathLog.num(watchdog.allowance()), m.edits().size());
+        }
+        boolean catches = !m.edits().isEmpty() && m.edits().get(m.edits().size() - 1) instanceof Edit.Catch;
+        if (!control.falls() || !(m.drop() > 1 || m.fallDamage() > 0 || catches)) {
+            return;
+        }
+        healthBefore = rig.entity.getHealth();
+        expectedDamage = m.fallDamage();
+        PathLog.info("{} 计划坠落 {} 落差 {} 落在 {}{} 预计掉 {} 点血 血 {}", rig.who, PathLog.step(m), PathLog.num(m.drop()),
+                m.support() != null ? PathLog.block(rig.world().getBlockState(m.support())) : m.landing().kind(),
+                catches ? " 上倒的水里" : "", m.fallDamage(), PathLog.num(healthBefore));
+    }
+
+    /** 这一步走完,身体落在 {@code node}:计划内的坠落记一行落地——实际掉了几点血。 */
+    void finish(BlockPos node) {
+        if (Float.isNaN(healthBefore)) {
+            return;
+        }
+        PathLog.info("{} 落地 {} 掉了 {} 点血(预计 {}) {}", rig.who, PathLog.pos(node),
+                PathLog.num(healthBefore - rig.entity.getHealth()), expectedDamage, PathLog.body(rig.entity));
     }
 
     /** 同一个前提函数在活世界上再判一次。 */

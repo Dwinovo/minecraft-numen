@@ -14,6 +14,7 @@ import com.dwinovo.numen.pathing.plan.TerrainPolicy;
 import com.dwinovo.numen.pathing.plan.Threats;
 
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.phys.BlockHitResult;
 
 /**
  * 执行的一套家伙:身体与它的键盘、动手的端口、活世界、宿主的另外几个端口,以及这次导航的实际账与身体动作。一次导航
@@ -30,6 +31,10 @@ final class Rig {
     final TerrainPolicy terrain;
     final Threats threats;
     final EditLedger ledger = new EditLedger();
+    /** 日志里的"谁"({@link PathLog#who})。 */
+    final String who;
+    /** 这一刻主线程上寻路用了多久。 */
+    final TickTally tally = new TickTally();
     private final List<BodyAction> actions = new ArrayList<>();
     private LiveWorld world;
 
@@ -41,6 +46,27 @@ final class Rig {
         this.terrain = terrain;
         this.materials = materials;
         this.threats = threats;
+        this.who = PathLog.who(entity);
+    }
+
+    /** 经宿主的手左键这一下;用了多久(宿主问许可、原版挖掘与它引起的方块更新)记进这一刻的账。 */
+    Effector.Strike dig(BlockHitResult hit) {
+        long t0 = System.nanoTime();
+        try {
+            return hands.dig(hit);
+        } finally {
+            tally.acted(System.nanoTime() - t0);
+        }
+    }
+
+    /** 经宿主的手右键这一下;用了多久记进这一刻的账。 */
+    Effector.Use use(BlockHitResult hit) {
+        long t0 = System.nanoTime();
+        try {
+            return hands.use(hit);
+        } finally {
+            tally.acted(System.nanoTime() - t0);
+        }
     }
 
     /** 身体此刻所在的活世界(换了维度就换一份)。 */
@@ -57,8 +83,14 @@ final class Rig {
 
     /** 记下身体做的一个动作;null 是什么也没做。 */
     void act(BodyAction action) {
-        if (action != null) {
-            actions.add(action);
+        if (action == null) {
+            return;
+        }
+        actions.add(action);
+        if (action instanceof BodyAction.Dismounted) {
+            PathLog.info("{} 下载具 {} {}", who, action, PathLog.body(entity));
+        } else {
+            PathLog.debug("{} 身体动作 {}", who, action);
         }
     }
 

@@ -42,16 +42,19 @@ final class DoorOpener {
         }
         boolean sneaking = rig.entity.isShiftKeyDown();
         rig.entity.setShiftKeyDown(false);
-        Effector.Use use = rig.hands.use(hit);
+        Effector.Use use = rig.use(hit);
         rig.entity.setShiftKeyDown(sneaking);
         return switch (use) {
             case Effector.Use.Waiting w -> Beat.IDLE;
             case Effector.Use.Nothing n -> Beat.IDLE;
             case Effector.Use.Changed changed -> {
                 rig.ledger.used(changed.changes(), pos, null);
+                if (PathLog.debugging()) {
+                    PathLog.debug("{} 开关门 {}", rig.who, Work.changes(changed));
+                }
                 yield Beat.WORKED;
             }
-            case Effector.Use.Refused refused -> new Beat.Denied(refused.pos(), refused.reason());
+            case Effector.Use.Refused refused -> Work.refused(rig, "开关门", refused.pos(), refused.reason());
         };
     }
 }

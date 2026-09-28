@@ -94,13 +94,17 @@ final class Work {
             rig.hands.release();
             return blind(pos, Hitch.OCCLUDED);
         }
-        return switch (rig.hands.dig(hit)) {
+        return switch (rig.dig(hit)) {
             case Effector.Strike.Swinging s -> Beat.WORKED;
             case Effector.Strike.Broke broke -> {
                 rig.ledger.dug(broke.pos(), broke.before(), broke.pos().equals(pos) ? edit.permit() : null);
+                if (PathLog.debugging()) {
+                    PathLog.debug("{} 挖掉 {} {}{}", rig.who, PathLog.pos(broke.pos()), PathLog.block(broke.before()),
+                            broke.pos().equals(pos) ? "" : "(要挖的是 " + PathLog.pos(pos) + ")");
+                }
                 yield Beat.WORKED;
             }
-            case Effector.Strike.Refused refused -> new Beat.Denied(refused.pos(), refused.reason());
+            case Effector.Strike.Refused refused -> refused(rig, "挖", refused.pos(), refused.reason());
         };
     }
 
@@ -126,16 +130,19 @@ final class Work {
         // 点中的方块若自己会响应右键(箱子、门),按着潜行才是往上贴方块:按下的那一刻按着潜行,与搭桥的玩家一样
         boolean sneaking = body.isShiftKeyDown();
         body.setShiftKeyDown(true);
-        Effector.Use use = rig.hands.use(hit);
+        Effector.Use use = rig.use(hit);
         body.setShiftKeyDown(sneaking);
         return switch (use) {
             case Effector.Use.Waiting w -> Beat.IDLE;
             case Effector.Use.Nothing n -> Beat.IDLE;
             case Effector.Use.Changed changed -> {
                 rig.ledger.used(changed.changes(), pos, edit.permit());
+                if (PathLog.debugging()) {
+                    PathLog.debug("{} 放下 {} {}", rig.who, PathLog.pos(pos), changes(changed));
+                }
                 yield Beat.WORKED;
             }
-            case Effector.Use.Refused refused -> new Beat.Denied(refused.pos(), refused.reason());
+            case Effector.Use.Refused refused -> refused(rig, "放", refused.pos(), refused.reason());
         };
     }
 
@@ -162,13 +169,15 @@ final class Work {
                 || !hit.getBlockPos().equals(face.clicked())) {
             return Beat.IDLE;
         }
-        return switch (rig.hands.use(hit)) {
+        return switch (rig.use(hit)) {
             case Effector.Use.Changed changed -> {
                 rig.ledger.used(changed.changes(), caught.pos(), caught.permit());
                 poured = rig.world().getBlockState(caught.pos()).is(Blocks.WATER);
+                PathLog.info("{} 倒水接坠落 {} 脚离落点还有 {} 格{}", rig.who, changes(changed),
+                        PathLog.num(body.getY() - caught.pos().getY()), poured ? "" : ",水没落在落点 " + PathLog.pos(caught.pos()));
                 yield Beat.WORKED;
             }
-            case Effector.Use.Refused refused -> new Beat.Denied(refused.pos(), refused.reason());
+            case Effector.Use.Refused refused -> refused(rig, "倒水", refused.pos(), refused.reason());
             default -> Beat.IDLE;
         };
     }
@@ -192,15 +201,33 @@ final class Work {
         if (!(Crosshair.pick(body) instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) {
             return Beat.IDLE;
         }
-        return switch (rig.hands.use(hit)) {
+        return switch (rig.use(hit)) {
             case Effector.Use.Changed changed -> {
                 rig.ledger.used(changed.changes(), pos, caught.permit());
                 scooped = !rig.world().getBlockState(pos).is(Blocks.WATER);
+                PathLog.info("{} 收回水 {}{}", rig.who, changes(changed), scooped ? "" : "," + PathLog.pos(pos) + " 还是水");
                 yield Beat.WORKED;
             }
-            case Effector.Use.Refused refused -> new Beat.Denied(refused.pos(), refused.reason());
+            case Effector.Use.Refused refused -> refused(rig, "收水", refused.pos(), refused.reason());
             default -> Beat.IDLE;
         };
+    }
+
+    /** 动手被拒:记一行,交出拒绝方自己的理由。 */
+    static Beat refused(Rig rig, String what, BlockPos pos, Object reason) {
+        PathLog.info("{} 动手被拒 {} {} {}:{}", rig.who, what, PathLog.pos(pos), PathLog.block(rig.world().getBlockState(pos)),
+                reason);
+        return new Beat.Denied(pos, reason);
+    }
+
+    /** 右键之后变了的几格:{@code 格 原来 -> 现在}。 */
+    static String changes(Effector.Use.Changed changed) {
+        StringBuilder out = new StringBuilder();
+        for (Effector.Change c : changed.changes()) {
+            out.append(out.isEmpty() ? "" : "; ").append(PathLog.pos(c.pos())).append(' ').append(PathLog.block(c.before()))
+                    .append(" -> ").append(PathLog.block(c.after()));
+        }
+        return out.toString();
     }
 
     /** 看不见、点不中:等一阵(身体还在挪、转头还没到),这一件改动累计如此太久就交出原因。 */

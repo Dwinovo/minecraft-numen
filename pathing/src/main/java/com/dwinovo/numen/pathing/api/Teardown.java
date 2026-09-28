@@ -39,7 +39,7 @@ public final class Teardown {
         return report();
     }
 
-    /** 排障用:还剩哪几块、最近几件事。 */
+    /** 排障用:还剩哪几块;经过见日志。 */
     @Override
     public String toString() {
         return "Teardown[" + takeBack + "]";

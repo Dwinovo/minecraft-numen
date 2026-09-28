@@ -59,7 +59,8 @@ public final class Searches {
 
     private static <T> Pending<T> dispatch(Function<BooleanSupplier, T> job) {
         AtomicBoolean cancelled = new AtomicBoolean();
-        CompletableFuture<T> future = CompletableFuture.supplyAsync(() -> job.apply(cancelled::get), POOL);
-        return new Pending<>(future, cancelled);
+        Pending.Clock clock = new Pending.Clock();
+        CompletableFuture<T> future = CompletableFuture.supplyAsync(() -> clock.time(() -> job.apply(cancelled::get)), POOL);
+        return new Pending<>(future, cancelled, clock);
     }
 }

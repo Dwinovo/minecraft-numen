@@ -1,10 +1,14 @@
 package com.dwinovo.numen.pathing.api;
 
 import com.dwinovo.numen.pathing.drive.Driver;
+import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.drive.Halt;
+import com.dwinovo.numen.pathing.drive.PathLog;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Pending;
 import com.dwinovo.numen.pathing.search.Searches;
+
+import net.minecraft.server.level.ServerPlayer;
 
 /**
  * 一次在走的导航。宿主每个服务端刻调一次 {@link #tick}(在世界所在的线程上),直到它不再是 {@code RUNNING};
@@ -16,11 +20,20 @@ import com.dwinovo.numen.pathing.search.Searches;
 public final class Navigation {
 
     private final Driver driver;
+    private final ServerPlayer entity;
+    private final String who;
+    /** 出发时的游戏刻与墙钟:结局里对比用了几刻、几秒,看得出刻速。 */
+    private final long startTick;
+    private final long startNanos;
     private Pending<Outcome> diagnosis;
     private NavStatus status = NavStatus.RUNNING;
 
-    Navigation(Driver driver) {
+    Navigation(Driver driver, ServerPlayer entity) {
         this.driver = driver;
+        this.entity = entity;
+        this.who = PathLog.who(entity);
+        this.startTick = entity.level().getGameTime();
+        this.startNanos = System.nanoTime();
     }
 
     public NavStatus tick() {
@@ -30,15 +43,20 @@ public final class Navigation {
         if (diagnosis != null) {
             Outcome outcome = diagnosis.poll();
             if (outcome != null) {
+                long spent = diagnosis.ranNanos();
                 diagnosis = null;
                 status = NavStatus.failed(outcome);
+                log("结局", " 诊断 " + PathLog.ms(spent));
             }
             return status;
         }
         switch (driver.tick()) {
             case RUNNING -> {
             }
-            case ARRIVED -> status = NavStatus.ARRIVED;
+            case ARRIVED -> {
+                status = NavStatus.ARRIVED;
+                log("结局", "");
+            }
             case HALTED -> conclude(driver.halt());
         }
         return status;
@@ -46,14 +64,52 @@ public final class Navigation {
 
     private void conclude(Halt halt) {
         switch (halt) {
-            case Halt.Searched searched -> diagnosis = Searches.submit(
-                    cancelled -> Diagnosis.of(searched.stop(), searched.search(), cancelled));
+            case Halt.Searched searched -> {
+                PathLog.info("{} 搜索没交出能走的路(停因 {}),在同一份快照上诊断为什么", who, searched.stop());
+                diagnosis = Searches.submit(cancelled -> Diagnosis.of(searched.stop(), searched.search(), cancelled));
+                return;
+            }
             case Halt.Blocked blocked -> status = NavStatus.failed(new Outcome.Blocked(blocked.blockage()));
             case Halt.Denied denied -> status = NavStatus.failed(new Outcome.Denied(denied.cell(), denied.reason()));
             case Halt.NoSight sight -> status = NavStatus.failed(new Outcome.NoLineOfSight(sight.target()));
             case Halt.Stranded stranded -> status = NavStatus.failed(
                     new Outcome.Stranded(stranded.cell(), stranded.block()));
         }
+        log("结局", "");
+    }
+
+    /**
+     * 记一行收场:结局、走了几步、实际改了几格、身体动作几个、用了几刻与几秒墙钟、此刻的刻速、身体在哪。刻数与墙钟对不上
+     * (刻速调高了、服务器跟不上)一眼看得出。
+     */
+    private void log(String event, String extra) {
+        EditLedger ledger = driver.ledger();
+        int dug = 0;
+        int placed = 0;
+        int toggled = 0;
+        for (EditLedger.Entry e : ledger.entries()) {
+            switch (e) {
+                case EditLedger.Dug d -> dug++;
+                case EditLedger.Placed p -> placed++;
+                case EditLedger.Toggled t -> toggled++;
+            }
+        }
+        PathLog.info("{} {} {} 走了 {} 步 挖 {} 放 {} 开关门 {} 身体动作 {} 用了 {} 刻 墙钟 {} 刻速 {}{} {}", who, event,
+                status.running() ? driver : describe(status.outcome()), ledger.steps(), dug, placed, toggled,
+                driver.actions().size(), entity.level().getGameTime() - startTick,
+                PathLog.seconds(System.nanoTime() - startNanos), PathLog.num(entity.level().tickRateManager().tickrate()),
+                extra, PathLog.body(entity));
+    }
+
+    /** 日志里的结局:几种带格子与方块的写齐坐标与方块 id,其余照它自己的样子。 */
+    static String describe(Outcome outcome) {
+        return switch (outcome) {
+            case Outcome.Blocked b -> "Blocked " + PathLog.blockage(b.blockage());
+            case Outcome.Denied d -> "Denied " + PathLog.pos(d.cell()) + " " + d.reason();
+            case Outcome.Stranded s -> "Stranded " + PathLog.pos(s.cell()) + " " + PathLog.block(s.block());
+            case Outcome.NoLineOfSight n -> "NoLineOfSight " + PathLog.pos(n.target());
+            default -> outcome.toString();
+        };
     }
 
     public NavStatus status() {
@@ -66,10 +122,11 @@ public final class Navigation {
             diagnosis.cancel();
             diagnosis = null;
         }
-        driver.stop();
         if (status.running()) {
+            log("被叫停", "");
             status = NavStatus.STOPPED;
         }
+        driver.stop();
         return report();
     }
 
@@ -101,7 +158,7 @@ public final class Navigation {
         return driver.plannedFall();
     }
 
-    /** 排障用:段状态机此刻的样子与最近几件事。 */
+    /** 排障用:段状态机此刻的样子;走过的经过见日志。 */
     @Override
     public String toString() {
         return "Navigation[" + status + " " + driver + "]";

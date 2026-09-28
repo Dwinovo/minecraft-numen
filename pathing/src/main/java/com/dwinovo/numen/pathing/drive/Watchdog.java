@@ -55,6 +55,16 @@ public final class Watchdog {
         return stepTicks > allowance;
     }
 
+    /** 这一步做了几刻。 */
+    int stepTicks() {
+        return stepTicks;
+    }
+
+    /** 这一步的期限(刻)。 */
+    double allowance() {
+        return allowance;
+    }
+
     /** 在推进。 */
     public boolean progressing() {
         return idle < STALL;

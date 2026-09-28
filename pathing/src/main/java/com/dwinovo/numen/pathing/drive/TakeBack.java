@@ -84,8 +84,6 @@ public final class TakeBack {
     private BlockPos approached;
     private Edit.Dig digging;
     private State state = State.RUNNING;
-    /** 最近几件事(挖哪一块、走一趟、留下哪一块),排障时看。 */
-    private final java.util.ArrayDeque<String> trace = new java.util.ArrayDeque<>();
 
     /**
      * @param placed 要撤的块,按放下的先后
@@ -104,6 +102,8 @@ public final class TakeBack {
         for (EditLedger.Placed p : placed) {
             pending.put(p.pos(), p.after());
         }
+        PathLog.info("{} 撤垫块 {} 块 {} 走过去按 {}", rig.who, pending.size(), pending.keySet().stream().map(PathLog::pos)
+                .toList(), PathLog.spec(spec));
     }
 
     public State state() {
@@ -141,6 +141,17 @@ public final class TakeBack {
         if (state != State.RUNNING) {
             return state;
         }
+        rig.tally.begin();
+        try {
+            advance();
+        } finally {
+            rig.tally.end(rig.who);
+        }
+        return state;
+    }
+
+    /** 推一刻。 */
+    private State advance() {
         if (errand != null) {
             runErrand();
             return state;
@@ -186,7 +197,7 @@ public final class TakeBack {
     // ==================== 走一趟 ====================
 
     private void send(Errand kind, Goal goal) {
-        note(kind + " from " + rig.entity.blockPosition().toShortString());
+        PathLog.debug("{} 撤垫块 走一趟 {} 去 {} {}", rig.who, kind, goal, PathLog.at(rig.entity.position()));
         why = kind;
         errand = new Driver(rig, goal, spec, budget, null);
         runErrand();
@@ -199,7 +210,7 @@ public final class TakeBack {
             return;
         }
         Halt halt = errand.halt();
-        note(why + " " + s + (halt != null ? " " + halt : ""));
+        PathLog.debug("{} 撤垫块 走一趟 {} {}{}", rig.who, why, s, halt != null ? " " + halt : "");
         errand = null;
         if (why == Errand.STEP_OFF) {
             // 下来了还踩着的(站定在它与别的方块的交界上)或下不来,托着她的那几块都留下,别的照撤
@@ -232,7 +243,7 @@ public final class TakeBack {
             leave(pos, new Why.Refused(deny.reason()));
             return;
         }
-        note("dig " + pos.toShortString() + " from " + rig.entity.position());
+        PathLog.debug("{} 撤 {} {} 站在 {}", rig.who, PathLog.pos(pos), PathLog.block(state), PathLog.at(rig.entity.position()));
         digging = new Edit.Dig(pos, state, permit, rig.entity.isEyeInFluid(net.minecraft.tags.FluidTags.WATER),
                 rig.entity.onGround());
     }
@@ -275,28 +286,25 @@ public final class TakeBack {
     private void leave(BlockPos pos, Why reason) {
         BlockState placed = pending.remove(pos);
         if (placed != null) {
-            note("leave " + pos.toShortString() + " " + reason);
+            PathLog.info("{} 留下垫块 {} {}:{}", rig.who, PathLog.pos(pos), PathLog.block(placed), reason);
             left.add(new Left(pos, placed, reason));
         }
     }
 
-    private void note(String event) {
-        if (trace.size() >= 16) {
-            trace.removeFirst();
-        }
-        trace.addLast(rig.entity.level().getGameTime() + " " + event);
-    }
-
-    /** 排障用:还剩哪几块、在不在走一趟,以及最近几件事。 */
+    /** 排障用:还剩哪几块、在不在走一趟。经过见日志({@link PathLog})。 */
     @Override
     public String toString() {
         return "TakeBack[" + state + " pending=" + pending.keySet() + (errand != null ? " " + why + " " + errand : "")
-                + " trace=" + trace + "]";
+                + "]";
     }
 
     private void finish() {
         rig.keys.releaseAll();
         rig.hands.release();
+        if (state == State.RUNNING) {
+            PathLog.info("{} 撤垫块完 撤掉 {} 块 留下 {} 块{}", rig.who, taken.size(), left.size(),
+                    pending.isEmpty() ? "" : ",叫停时还有 " + pending.size() + " 块没撤");
+        }
         state = State.DONE;
     }
 
