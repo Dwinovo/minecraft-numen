@@ -60,6 +60,14 @@ class SemanticsTest {
     }
 
     @Test
+    void aBubbleColumnPushesTheBodySoItIsFlowingWater() {
+        TestWorld column = new TestWorld().set(AT, Blocks.BUBBLE_COLUMN.defaultBlockState())
+                .set(AT.below(), Blocks.MAGMA_BLOCK.defaultBlockState());
+        assertTrue(Semantics.is(column, AT, Kind.FLOWING_WATER));
+        assertFalse(Semantics.is(column, AT, Kind.WATER));
+    }
+
+    @Test
     void lavaIsLavaAndAHazard() {
         assertEquals(Set.of(Kind.LAVA, Kind.HAZARD), kinds(Blocks.LAVA.defaultBlockState()));
     }
@@ -111,7 +119,8 @@ class SemanticsTest {
                 Blocks.CACTUS.defaultBlockState(), Blocks.SWEET_BERRY_BUSH.defaultBlockState(),
                 Blocks.MAGMA_BLOCK.defaultBlockState(), Blocks.POWDER_SNOW.defaultBlockState(),
                 Blocks.COBWEB.defaultBlockState(), Blocks.WITHER_ROSE.defaultBlockState(),
-                Blocks.CAMPFIRE.defaultBlockState().setValue(CampfireBlock.LIT, true)}) {
+                Blocks.CAMPFIRE.defaultBlockState().setValue(CampfireBlock.LIT, true), Blocks.END_PORTAL.defaultBlockState(),
+                Blocks.END_GATEWAY.defaultBlockState()}) {
             assertTrue(kinds(state).contains(Kind.HAZARD), state + " 危险");
         }
         assertFalse(kinds(Blocks.CAMPFIRE.defaultBlockState().setValue(CampfireBlock.LIT, false)).contains(Kind.HAZARD),

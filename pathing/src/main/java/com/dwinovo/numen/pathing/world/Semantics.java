@@ -41,7 +41,9 @@ public final class Semantics {
     public enum Kind {
         /** 不流动的水:源头与静止的水体,身体泡在里面不被推走。 */
         WATER,
-        /** 流动的水:原版算出的水流不为零,身体会被推着走——包括流淌的水,也包括池边那一圈源头。 */
+        /**
+         * 流动的水:身体会被推着走——原版算出的水流不为零的(流淌的水,也包括池边那一圈源头),以及把身体往上托、往下拽的气泡柱。
+         */
         FLOWING_WATER,
         /** 岩浆,流不流都是。 */
         LAVA,
@@ -49,7 +51,7 @@ public final class Semantics {
         CLIMBABLE,
         /** 身体能用手打开或关上的门、栅栏门、活板门。铁门、铁活板门不在其列,它们开没开只看真实状态。 */
         DOOR,
-        /** 碰了掉血或被困住:火、营火、岩浆、岩浆块、仙人掌、甜浆果丛、凋灵玫瑰、细雪、蜘蛛网。 */
+        /** 碰了掉血、被困住或被传走:火、营火、岩浆、岩浆块、仙人掌、甜浆果丛、凋灵玫瑰、细雪、蜘蛛网、末地传送门与折跃门。 */
         HAZARD,
         /** 下面空了会掉下来的方块:沙子、沙砾、混凝土粉末、铁砧等。 */
         FALLING,
@@ -102,8 +104,8 @@ public final class Semantics {
         int bits = STATE_KINDS.computeIfAbsent(state, Semantics::stateKinds);
         FluidState fluid = state.getFluidState();
         if (fluid.is(FluidTags.WATER)) {
-            // 身体被不被推走,以原版对这一格算出的水流为准:池边的源头也在流
-            boolean flowing = fluid.getFlow(level, pos).lengthSqr() > 0;
+            // 身体被不被推走,以原版对这一格算出的水流为准:池边的源头也在流;气泡柱的水是源头,却竖着推人
+            boolean flowing = state.is(Blocks.BUBBLE_COLUMN) || fluid.getFlow(level, pos).lengthSqr() > 0;
             bits |= bit(flowing ? Kind.FLOWING_WATER : Kind.WATER);
         }
         if (state.getBlock() instanceof TrapDoorBlock && ladderTrapdoor(level, pos, state)) {
@@ -126,7 +128,8 @@ public final class Semantics {
         }
         // 着火的方块沿用原版寻路的同一个判据(火、营火、岩浆、岩浆块、岩浆炼药锅)
         if (NodeEvaluator.isBurningBlock(state) || block == Blocks.CACTUS || block == Blocks.SWEET_BERRY_BUSH
-                || block == Blocks.WITHER_ROSE || block == Blocks.POWDER_SNOW || block == Blocks.COBWEB) {
+                || block == Blocks.WITHER_ROSE || block == Blocks.POWDER_SNOW || block == Blocks.COBWEB
+                || block == Blocks.END_PORTAL || block == Blocks.END_GATEWAY) {
             bits |= bit(Kind.HAZARD);
         }
         if (block instanceof FallingBlock) {
