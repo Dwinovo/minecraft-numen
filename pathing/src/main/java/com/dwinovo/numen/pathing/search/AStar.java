@@ -194,6 +194,14 @@ public final class AStar {
         }
 
         @Override
+        public boolean airSection(int x, int y, int z) {
+            if (!view.isLoaded(x, z)) {
+                unknown = true;
+            }
+            return view.airSection(x, y, z);
+        }
+
+        @Override
         public FluidState getFluidState(BlockPos pos) {
             return getBlockState(pos).getFluidState();
         }

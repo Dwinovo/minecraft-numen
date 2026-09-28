@@ -8,6 +8,7 @@ import com.dwinovo.numen.pathing.world.Semantics;
 import com.dwinovo.numen.pathing.world.Stepping;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.SectionPos;
 
 /**
  * 走出边沿往下落,{@link MoveKind#DESCEND 下一级}与{@link MoveKind#FALL 下落}是同一个动作,只是落点深浅不同,这里是它们
@@ -62,6 +63,15 @@ final class Drop implements Move {
         BlockPos.MutableBlockPos cell = new BlockPos.MutableBlockPos(tx, from.getY() - 1, tz);
         boolean airHere = draft.getBlockState(cell).isAir();
         for (int y = from.getY() - 1; y >= lowest; y--) {
+            if (airHere && draft.airSection(tx, y - 1, tz)) {
+                // 下面一格所在的区段整段是空气:一直到区段底,每一格与它下面一格都是空气,整段落过去
+                int bottom = SectionPos.sectionToBlockCoord(SectionPos.blockToSectionCoord(y - 1));
+                if (bottom < lowest) {
+                    break;
+                }
+                y = bottom + 1;
+                continue;
+            }
             boolean airBelow = draft.getBlockState(cell.setY(y - 1)).isAir();
             if (airHere && airBelow) {
                 // 这一格与下面一格都是空气:托不住脚、也挂不住身体,落点只能更深

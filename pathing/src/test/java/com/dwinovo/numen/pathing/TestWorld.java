@@ -1,7 +1,9 @@
 package com.dwinovo.numen.pathing;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import com.dwinovo.numen.pathing.search.SearchView;
 
@@ -20,16 +22,20 @@ import net.minecraft.world.level.material.FluidState;
 public final class TestWorld implements SearchView {
 
     private final Map<BlockPos, BlockState> blocks = new HashMap<>();
+    /** 摆过非空气方块的区段;摆回空气也不划掉,只会让 {@link #airSection} 少答一次是。 */
+    private final Set<Long> occupied = new HashSet<>();
     private final WorldBorder border = new WorldBorder();
     private int loadedRadius = Integer.MAX_VALUE;
 
     public TestWorld set(int x, int y, int z, BlockState state) {
-        blocks.put(new BlockPos(x, y, z), state);
-        return this;
+        return set(new BlockPos(x, y, z), state);
     }
 
     public TestWorld set(BlockPos pos, BlockState state) {
         blocks.put(pos.immutable(), state);
+        if (!state.isAir()) {
+            occupied.add(SectionPos.blockToSection(pos.asLong()));
+        }
         return this;
     }
 
@@ -80,6 +86,12 @@ public final class TestWorld implements SearchView {
     @Override
     public BlockState getBlockState(BlockPos pos) {
         return blocks.getOrDefault(pos, Blocks.AIR.defaultBlockState());
+    }
+
+    @Override
+    public boolean airSection(int x, int y, int z) {
+        return !occupied.contains(SectionPos.asLong(SectionPos.blockToSectionCoord(x), SectionPos.blockToSectionCoord(y),
+                SectionPos.blockToSectionCoord(z)));
     }
 
     @Override

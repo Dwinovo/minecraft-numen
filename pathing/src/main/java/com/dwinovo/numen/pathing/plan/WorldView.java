@@ -13,4 +13,10 @@ public interface WorldView extends BlockGetter {
 
     /** 这个维度倒出的水当场蒸发(原版 {@code dimensionType().ultraWarm()},下界):用水桶接不住坠落。 */
     boolean ultraWarm();
+
+    /**
+     * {@code (x, y, z)} 所在的区段(区块里 16 格高的那一段)整段都是空气。只在确知时答是,答否不说明什么:往下找落点时
+     * 整段跳过,结论与逐格读一样。
+     */
+    boolean airSection(int x, int y, int z);
 }

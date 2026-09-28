@@ -6,6 +6,7 @@ import com.dwinovo.numen.pathing.world.Semantics;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
@@ -110,6 +111,21 @@ public class EditedView implements WorldView {
         }
         BlockState state = changed.get(pos.asLong());
         return state != null ? state : base.getBlockState(pos);
+    }
+
+    /** 这一段里改过哪一格,就不敢说整段是空气;没改过的照底下的视图答。 */
+    @Override
+    public boolean airSection(int x, int y, int z) {
+        if (changed != null) {
+            long section = SectionPos.asLong(SectionPos.blockToSectionCoord(x), SectionPos.blockToSectionCoord(y),
+                    SectionPos.blockToSectionCoord(z));
+            for (long cell : changed.keySet()) {
+                if (SectionPos.blockToSection(cell) == section) {
+                    return false;
+                }
+            }
+        }
+        return base.airSection(x, y, z);
     }
 
     @Override

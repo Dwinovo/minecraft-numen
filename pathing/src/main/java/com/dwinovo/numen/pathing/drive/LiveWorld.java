@@ -47,6 +47,17 @@ public final class LiveWorld implements WorldView {
         return chunk == null ? VOID : chunk.getBlockState(pos);
     }
 
+    /** 没加载的区块读出来是虚空空气,建筑高度之外是空气;其余看区段自己数的非空气方块数。 */
+    @Override
+    public boolean airSection(int x, int y, int z) {
+        LevelChunk chunk = chunk(x, z);
+        if (chunk == null) {
+            return true;
+        }
+        int index = chunk.getSectionIndex(y);
+        return index < 0 || index >= chunk.getSectionsCount() || chunk.getSection(index).hasOnlyAir();
+    }
+
     @Override
     public FluidState getFluidState(BlockPos pos) {
         return getBlockState(pos).getFluidState();

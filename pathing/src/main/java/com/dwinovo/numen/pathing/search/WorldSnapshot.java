@@ -135,6 +135,17 @@ public final class WorldSnapshot implements SearchView {
         return states[index].get(pos.getX() & 15, pos.getY() & 15, pos.getZ() & 15);
     }
 
+    /** 没加载的区块、全空的区段(拷贝时记为空)、建筑高度之外,读出来都是空气。 */
+    @Override
+    public boolean airSection(int x, int y, int z) {
+        PalettedContainer<BlockState>[] states = chunk(x, z);
+        if (states == null) {
+            return true;
+        }
+        int index = SectionPos.blockToSectionCoord(y) - minSection;
+        return index < 0 || index >= states.length || states[index] == null;
+    }
+
     @Override
     public FluidState getFluidState(BlockPos pos) {
         return getBlockState(pos).getFluidState();
