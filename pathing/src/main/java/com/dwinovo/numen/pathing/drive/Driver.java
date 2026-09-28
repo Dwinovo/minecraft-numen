@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.pathing.body.Body;
 import com.dwinovo.numen.pathing.body.BodyAction;
 import com.dwinovo.numen.pathing.body.Controls.Key;
@@ -195,6 +196,7 @@ public final class Driver {
     /** 暂停:松开所有键,手上正在挖的放下,路线留着。 */
     public void pause() {
         paused = true;
+        rig.keys.releaseAll();
         rig.hands.release();
     }
 
@@ -211,7 +213,6 @@ public final class Driver {
             pending = null;
         }
         rig.keys.releaseAll();
-        rig.keys.apply(rig.entity);
         rig.hands.release();
         if (state == State.RUNNING) {
             state = State.HALTED;
@@ -225,8 +226,6 @@ public final class Driver {
             return state;
         }
         if (paused) {
-            rig.keys.releaseAll();
-            rig.keys.apply(rig.entity);
             watchdog.waiting(rig.entity.position());
             return state;
         }
@@ -235,7 +234,6 @@ public final class Driver {
             rig.keys.releaseAll();
             rig.keys.press(Key.SNEAK);
             BodyAction.Dismounted dismount = new BodyAction.Dismounted(rig.entity.getVehicle().getType());
-            rig.keys.apply(rig.entity);
             pendingDismount = dismount;
             return state;
         }
@@ -248,7 +246,6 @@ public final class Driver {
             return state;
         }
         drive();
-        rig.keys.apply(rig.entity);
         return state;
     }
 
@@ -629,7 +626,6 @@ public final class Driver {
             pending = null;
         }
         rig.keys.releaseAll();
-        rig.keys.apply(rig.entity);
     }
 
     private double horizontalSpeedSqr() {

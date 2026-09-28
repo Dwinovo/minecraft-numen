@@ -1,9 +1,10 @@
 package com.dwinovo.numen.core.task.build;
 
-import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.body.Controls;
+import com.dwinovo.numen.pathing.body.Hotbar;
 import com.dwinovo.numen.pathing.body.Snapshots;
-import com.dwinovo.numen.pathing.drive.Aim;
+import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.pathing.drive.LiveWorld;
 import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.world.BodyStats;
@@ -147,8 +148,8 @@ final class BuildShowmanship {
      * 她会一蹲一起地抖。
      */
     void stand() {
-        InputDriver.halt(player);
-        player.setShiftKeyDown(crouching);
+        player.controls().stop();
+        player.controls().set(Controls.Key.SNEAK, crouching);
     }
 
     /**
@@ -213,8 +214,8 @@ final class BuildShowmanship {
     }
 
     /**
-     * 朝要去的那一列迈步。脸朝哪儿由落位定(看着正在长的那一面),腿按去的方向走:移动输入按"脸的朝向与去向的差"换算,
-     * 和寻路执行器同一套换算。一阵子没放东西,脸转回走的方向。
+     * 朝要去的那一列迈步。脸朝哪儿由落位定(看着正在长的那一面),腿按去的方向走:去向相对脸的朝向落在八个方向里的哪一个,
+     * 就按哪几个方向键(和真玩家看着一边、按着 WASD 往另一边走一样)。一阵子没放东西,脸转回走的方向。
      */
     private void stride() {
         Vec3 dest = new Vec3(ring.x(heading) + 0.5, headingY, ring.z(heading) + 0.5);
@@ -222,19 +223,25 @@ final class BuildShowmanship {
         if (sinceAim > LOOK_HOLD_TICKS) {
             Aim.turn(player, pathYaw, 12.0f);
         }
-        // 去向相对脸的朝向:往前走 cos、往左走 -sin
+        // 去向相对脸的朝向:往前是 cos、往左是 -sin;偏出 22.5° 以外才按侧向的键
         double off = Math.toRadians(Mth.wrapDegrees(pathYaw - player.getYRot()));
-        player.xxa = (float) -Math.sin(off);
-        player.zza = (float) Math.cos(off);
-        player.setSprinting(false);
+        double forward = Math.cos(off);
+        double left = -Math.sin(off);
+        Controls keys = player.controls();
+        keys.set(Controls.Key.FORWARD, forward > DIAGONAL);
+        keys.set(Controls.Key.BACK, forward < -DIAGONAL);
+        keys.set(Controls.Key.LEFT, left > DIAGONAL);
+        keys.set(Controls.Key.RIGHT, left < -DIAGONAL);
+        keys.release(Controls.Key.SPRINT);
         // 走着不蹲:潜行不肯走下台阶,还把步子砍到三成
-        player.setShiftKeyDown(false);
+        keys.release(Controls.Key.SNEAK);
         double dx = dest.x - player.getX();
         double dz = dest.z - player.getZ();
-        if (headingJump && player.onGround() && dx * dx + dz * dz < 1.3 * 1.3) {
-            InputDriver.jump(player);
-        }
+        keys.set(Controls.Key.JUMP, headingJump && player.onGround() && dx * dx + dz * dz < 1.3 * 1.3);
     }
+
+    /** 八个方向的分界:去向与一个轴的夹角小于 67.5° 就按那个轴的键。 */
+    private static final double DIAGONAL = Math.sin(Math.toRadians(22.5));
 
     private void resetProgress() {
         closest = Double.MAX_VALUE;
@@ -265,7 +272,7 @@ final class BuildShowmanship {
         if (sample != null) {
             int slot = inv.findSlot(sample.getBlock().asItem(), true);
             if (slot >= 0) {
-                player.holdInHand(slot);
+                Hotbar.hold(player, slot);
             }
         }
         if (!(player.level() instanceof ServerLevel level) || sample == null) {

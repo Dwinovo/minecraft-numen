@@ -23,7 +23,8 @@ final class Rig {
 
     final Body body;
     final ServerPlayer entity;
-    final Controls keys = new Controls();
+    /** 身体的键盘(一具身体一副,宿主每刻在身体的物理步进里落一次)。 */
+    final Controls keys;
     final Effector hands;
     final Materials materials;
     final TerrainPolicy terrain;
@@ -35,6 +36,7 @@ final class Rig {
     Rig(Body body, Effector hands, TerrainPolicy terrain, Materials materials, Threats threats) {
         this.body = body;
         this.entity = body.entity();
+        this.keys = body.controls();
         this.hands = hands;
         this.terrain = terrain;
         this.materials = materials;

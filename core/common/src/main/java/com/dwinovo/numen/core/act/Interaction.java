@@ -299,7 +299,7 @@ public final class Interaction {
     // ---- USE + air: tap or hold (food / bow) ----
 
     private Status useAir() {
-        InputDriver.halt(player);
+        player.controls().stop();
         if (!started) {
             started = true;
             player.gameMode.useItem(player, player.level(), player.getItemInHand(hand), hand);
@@ -342,7 +342,7 @@ public final class Interaction {
             hardFail = true;
             return false;
         }
-        InputDriver.halt(player);
+        player.controls().stop();
         InputDriver.lookAt(player, entity.getEyePosition());
         boolean recovering = entity instanceof net.minecraft.world.entity.LivingEntity living
                 && living.hurtTime > 0;
@@ -358,7 +358,7 @@ public final class Interaction {
     }
 
     private boolean fireUseBlock() {
-        InputDriver.halt(player);
+        player.controls().stop();
         net.minecraft.world.inventory.AbstractContainerMenu menuBefore = player.containerMenu;
         BlockHitResult hit;
         if (presetHit != null) {
@@ -438,7 +438,7 @@ public final class Interaction {
             hardFail = true;
             return false;
         }
-        InputDriver.halt(player);
+        player.controls().stop();
         InputDriver.lookAt(player, entity.getEyePosition());
         net.minecraft.world.inventory.AbstractContainerMenu menuBefore = player.containerMenu;
         for (InteractionHand h : HANDS) {
@@ -472,6 +472,6 @@ public final class Interaction {
     public void stop() {
         if (digger != null) digger.cancel();
         if (player.isUsingItem()) player.releaseUsingItem();
-        InputDriver.halt(player);
+        player.controls().stop();
     }
 }

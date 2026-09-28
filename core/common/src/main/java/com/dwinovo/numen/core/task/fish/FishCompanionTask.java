@@ -9,6 +9,7 @@ import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.body.Hotbar;
 import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.drive.LiveWorld;
 import com.dwinovo.numen.pathing.search.Goal;
@@ -113,7 +114,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
     protected TaskState onTick() {
         if (player.isDeadOrDying()) return TaskState.CANCELLED;
 
-        InputDriver.halt(player);
+        player.controls().stop();
         if (phase == Phase.POSITION) return positionForFishing();
         if (phase == Phase.COLLECT) return collectCaughtLoot();
         // requested == 0 = 主人没说钓几条 —— 这一行永远不成立,任务就是常驻的:
@@ -126,7 +127,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
             fail("fishing stopped because there is no fishing rod left", FailureType.WRONG_TOOL);
             return TaskState.FAILED;
         }
-        player.holdInHand(rodSlot);
+        Hotbar.hold(player, rodSlot);
         if (!player.getMainHandItem().is(Items.FISHING_ROD)) return TaskState.RUNNING;
 
         return switch (phase) {
@@ -696,7 +697,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
 
     @Override
     protected void cleanup() {
-        InputDriver.halt(player);
+        player.controls().stop();
         discardHook();
         clearLootTracking();
         super.cleanup();

@@ -8,6 +8,7 @@ import com.dwinovo.numen.pathing.api.NavRequest;
 import com.dwinovo.numen.pathing.api.PlanQuery;
 import com.dwinovo.numen.pathing.api.PlanResult;
 import com.dwinovo.numen.pathing.api.Report;
+import com.dwinovo.numen.pathing.body.Controls;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
@@ -41,8 +42,8 @@ public class FacadeGameTests {
     }
 
     /**
-     * 两块基岩台子之间一道四格宽的沟,身上有圆石:探出台边潜行着搭桥,桥搭到第二块时叫停——潜行当场松开,叫停交出的实际账里
-     * 正是已经放下的那几块,与世界一致。
+     * 两块基岩台子之间一道四格宽的沟,身上有圆石:探出台边潜行着搭桥,桥搭到第二块时叫停——潜行键当场松开(身体下一刻的物理
+     * 步进里站起来),叫停交出的实际账里正是已经放下的那几块,与世界一致。
      */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
     public static void stopping_releases_sneak_and_hands_over_the_ledger(GameTestHelper helper) {
@@ -61,7 +62,7 @@ public class FacadeGameTests {
                     }
                 })
                 .stops().then(r -> {
-                    if (r.body.isShiftKeyDown()) {
+                    if (r.body.controls().held(Controls.Key.SNEAK)) {
                         throw new GameTestAssertException("叫停之后还按着潜行");
                     }
                     List<BlockPos> placed = handed[0].bill().places();

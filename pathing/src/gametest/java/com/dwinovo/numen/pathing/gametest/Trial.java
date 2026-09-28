@@ -18,7 +18,6 @@ import com.dwinovo.numen.pathing.api.Planning;
 import com.dwinovo.numen.pathing.api.Ports;
 import com.dwinovo.numen.pathing.api.Report;
 import com.dwinovo.numen.pathing.api.Teardown;
-import com.dwinovo.numen.pathing.body.Body;
 import com.dwinovo.numen.pathing.body.Effector;
 import com.dwinovo.numen.pathing.body.PlayerHands;
 import com.dwinovo.numen.pathing.drive.EditLedger;
@@ -215,7 +214,7 @@ final class Trial {
 
     /** 这具身体加这条用例的端口组成的门面。 */
     Navigator navigator(TestBody body) {
-        return Navigator.of(Body.of(body), new Ports(hands.apply(new PlayerHands(body)), terrain, materials, threats));
+        return Navigator.of(body, new Ports(hands.apply(new PlayerHands(body)), terrain, materials, threats));
     }
 
     /** 一次导航通过了;全部都通过,这条用例才通过。 */

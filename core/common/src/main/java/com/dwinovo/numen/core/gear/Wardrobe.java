@@ -4,6 +4,7 @@ import com.dwinovo.numen.api.NumenPlugins;
 import com.dwinovo.numen.api.gear.GearSlot;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.body.Hotbar;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -101,7 +102,7 @@ public final class Wardrobe {
             }
         }
         if (MAINHAND.equals(where)) {
-            body.holdInHand(src);
+            Hotbar.hold(body, src);
             data.put("slot", MAINHAND);
             return Outcome.done("holding " + label + " in main hand", data);
         }

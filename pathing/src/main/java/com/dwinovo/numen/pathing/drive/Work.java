@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.drive;
 
+import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.pathing.body.Crosshair;
 import com.dwinovo.numen.pathing.body.Effector;
 import com.dwinovo.numen.pathing.body.Hotbar;

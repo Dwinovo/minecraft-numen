@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.pathing.body.Body;
 import com.dwinovo.numen.pathing.body.BodyAction;
 import com.dwinovo.numen.pathing.body.Effector;
@@ -147,7 +148,6 @@ public final class TakeBack {
         forgetChanged();
         if (digging != null) {
             dig();
-            rig.keys.apply(rig.entity);
             return state;
         }
         if (pending.isEmpty()) {
@@ -157,7 +157,6 @@ public final class TakeBack {
         ServerPlayer body = rig.entity;
         rig.keys.releaseAll();
         if (!body.onGround()) {
-            rig.keys.apply(body);
             return state;
         }
         Set<BlockPos> supports = supports();
@@ -181,7 +180,6 @@ public final class TakeBack {
             approached = next;
             send(Errand.APPROACH, Goals.reach(next, rig.snapshot().stats()));
         }
-        rig.keys.apply(body);
         return state;
     }
 
@@ -298,7 +296,6 @@ public final class TakeBack {
 
     private void finish() {
         rig.keys.releaseAll();
-        rig.keys.apply(rig.entity);
         rig.hands.release();
         state = State.DONE;
     }

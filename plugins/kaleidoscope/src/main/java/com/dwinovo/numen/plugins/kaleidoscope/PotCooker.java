@@ -1,7 +1,7 @@
 package com.dwinovo.numen.plugins.kaleidoscope;
 
-import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.body.Controls;
 import com.github.ysbbbbbb.kaleidoscopecookery.api.blockentity.IPot;
 import com.github.ysbbbbbb.kaleidoscopecookery.block.kitchen.PotBlock;
 import com.github.ysbbbbbb.kaleidoscopecookery.blockentity.kitchen.PotBlockEntity;
@@ -234,9 +234,9 @@ final class PotCooker implements Cooker {
                 return Step.blocked("this dish needs no carrier, but taking it out needs a kitchen shovel in hand");
             }
             // 不用容器的菜森罗要求蹲着铲,真玩家也是这么做的
-            InputDriver.sneak(cook, true);
+            cook.controls().set(Controls.Key.SNEAK, true);
             boolean took = pot.takeOutProduct(level, cook, shovel);
-            InputDriver.sneak(cook, false);
+            cook.controls().set(Controls.Key.SNEAK, false);
             return took ? settle(cook, plated, burnt, ordered)
                     : Step.blocked("the pot would not hand the dish over to the kitchen shovel");
         }

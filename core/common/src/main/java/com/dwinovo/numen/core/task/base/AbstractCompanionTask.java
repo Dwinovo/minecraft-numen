@@ -1,6 +1,5 @@
 package com.dwinovo.numen.core.task.base;
 
-import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.core.nav.Journey;
 import com.dwinovo.numen.core.nav.Trip;
@@ -206,7 +205,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
         if (needed.isEmpty()) {
             return null;
         }
-        InputDriver.halt(player);
+        player.controls().stop();
         ConsentAnswer answer = consult(needed);
         if (answer == null) {
             return TaskState.RUNNING;
@@ -550,8 +549,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
         // 被抢占:只松开身体(归零移动输入、放开潜行),<b>逻辑字段一个不动</b>——
         // 尤其是寻路计划,它正是下次拿回身体时能接着走的原因。不调 nav.stop()。
         // 被换掉/身体没了不需要额外收尾:buildResult 里的 cleanup() 会跑。
-        InputDriver.halt(player);
-        player.setShiftKeyDown(false);
+        player.controls().releaseAll();
     }
 
     @Override

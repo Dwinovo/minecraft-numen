@@ -39,6 +39,8 @@ dependencies {
     compileOnly project(':ai')
     compileOnly project(':agent')
     compileOnly project(':ui')
+    // 寻路模块同理:同伴的身体实现了它的身体端口,api 依赖它
+    compileOnly project(':pathing')
 }
 
 /*

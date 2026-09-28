@@ -10,6 +10,7 @@ import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.entity.InputDriver;
+import com.dwinovo.numen.pathing.body.Hotbar;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.drive.LiveWorld;
 import com.dwinovo.numen.pathing.plan.ActionCosts;
@@ -295,7 +296,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * 施工照常跳过,收工时按"主人不让动"连同他的原话交代。
      */
     private TaskState tickConsent() {
-        InputDriver.halt(player);
+        player.controls().stop();
         var answer = consult(consentItems);
         if (answer == null) {
             return TaskState.RUNNING;
@@ -381,7 +382,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     private void beginWork() {
         stopNav();
-        InputDriver.halt(player);
+        player.controls().stop();
         phase = Phase.WORK;
         placeCredit = 0;
         // 没走出去:就在原地接着盖,不反复起寻路去撞同一堵墙;压着的那几格收尾时如实交代
@@ -406,8 +407,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         } else if (!stuckInSite) {
             // 被挤、被推、掉进了工地:先走出去,站在里面会压住要放的格
             phase = Phase.TRAVEL;
-            InputDriver.halt(player);
-            player.setShiftKeyDown(false);
+            player.controls().releaseAll();
             return TaskState.RUNNING;
         }
         TaskState state = TaskState.RUNNING;
@@ -734,7 +734,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             if (slot < 0) {
                 return;   // 付得起的闸门刚过,到这儿没了只可能是同刻竞态:这遍放下
             }
-            player.holdInHand(slot);
+            Hotbar.hold(player, slot);
         } else {
             // 免耗材:凭空一叠拿在手里,放完把原来的东西还回去,不动她的真背包
             restore = player.getMainHandItem();
@@ -860,8 +860,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         ending = why;
         phase = Phase.END;
         stopNav();
-        InputDriver.halt(player);
-        player.setShiftKeyDown(false);
+        player.controls().releaseAll();
         return TaskState.RUNNING;
     }
 
@@ -876,7 +875,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         stopNav();
         enRoute.takeDown(placedOnTheWay());
-        InputDriver.halt(player);
+        player.controls().stop();
         if (ending != null) {
             fail(ending.why(), ending.type());
             return TaskState.FAILED;
@@ -956,7 +955,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         fixtures.spawnAll();
         fixtures.nudgeSurroundingWater(siteMin, siteMax);
         show.celebrate(siteMin, siteMax);
-        InputDriver.halt(player);
+        player.controls().stop();
         if (r.completed() + skippedCells >= r.targets.size()) {
             // 三种交代要并列,不能互相吃掉:此前 skippedFixtures 一非零就只报摆设,
             // 那句"有几格没动"被整段吞掉——两件事同时发生时回执只说一半。
@@ -1268,7 +1267,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     @Override
     public void stop(NumenPlayer companion, StopReason why) {
         super.stop(companion, why);
-        InputDriver.halt(player);
+        player.controls().stop();
     }
 
     /**
@@ -1279,8 +1278,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     protected void cleanup() {
         super.cleanup();
         enRoute.takeDown(placedOnTheWay());
-        InputDriver.halt(player);
-        player.setShiftKeyDown(false);
+        player.controls().releaseAll();
     }
 
     /** 撤了哪些垫块、哪些留在原处以及为什么:每一种收场都说。 */

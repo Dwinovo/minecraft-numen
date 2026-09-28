@@ -1,4 +1,4 @@
-package com.dwinovo.numen.pathing.drive;
+package com.dwinovo.numen.pathing.body;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,7 +25,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  * 像素转一个固定角度,所以转到的角度落在这个格子上,离算出来的点差不到半个像素。
  *
  * <p>看得见是指从眼睛到那一点的方块射线(轮廓,不看流体)第一下就碰上那一格,而且在交互距离之内——与准星拾取
- * ({@link com.dwinovo.numen.pathing.body.Crosshair})是同一套射线,所以转过去之后准星就落在那一格上。
+ * ({@link Crosshair})是同一套射线,所以转过去之后准星就落在那一格上。
  */
 public final class Aim {
 

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.task.chain;
 
+import com.dwinovo.numen.pathing.body.Controls;
 import com.dwinovo.numen.task.reflex.Reflex;
 import com.dwinovo.numen.entity.InputDriver;
 
@@ -92,8 +93,7 @@ public final class BreathChain implements Task, com.dwinovo.numen.task.reflex.Re
     public TaskState tick(NumenPlayer companion) {
         episodeActive = true;
         worstAir = Math.min(worstAir, companion.getAirSupply());
-        InputDriver.halt(companion);
-        companion.setShiftKeyDown(false);
+        companion.controls().releaseAll();
         // Straight up is the cheap common rescue (open water). Only a sealed column
         // engages the lateral hunt: swim through connected water toward the nearest
         // opening with air above it (an ice hole, the cave mouth), still stroking up.
@@ -109,10 +109,11 @@ public final class BreathChain implements Task, com.dwinovo.numen.task.reflex.Re
                 }
             }
             if (airColumn != null) {
-                InputDriver.stepToward(companion, Vec3.atCenterOf(airColumn), false);
+                InputDriver.face(companion, Vec3.atCenterOf(airColumn));
+                companion.controls().press(Controls.Key.FORWARD);
             }
         }
-        InputDriver.jump(companion);   // in water this is the per-tick swim-up stroke
+        companion.controls().press(Controls.Key.JUMP);   // 在水里按住跳就是往上游
         return TaskState.RUNNING;
     }
 

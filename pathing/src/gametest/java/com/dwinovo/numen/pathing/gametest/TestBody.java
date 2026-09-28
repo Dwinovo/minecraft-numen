@@ -2,6 +2,8 @@ package com.dwinovo.numen.pathing.gametest;
 
 import java.util.UUID;
 
+import com.dwinovo.numen.pathing.body.Body;
+import com.dwinovo.numen.pathing.body.Controls;
 import com.dwinovo.numen.pathing.body.Physics;
 
 import com.mojang.authlib.GameProfile;
@@ -21,13 +23,15 @@ import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.level.GameType;
 
 /**
- * 夹具自己的假玩家,不是同伴:一具普通的服务端玩家,每刻在自己的实体刻里跑模块的物理步进({@link Physics#step}),
- * 别的什么也不做。它能走通就说明寻路模块不依赖宿主。
+ * 夹具自己的假玩家,不是同伴:一具普通的服务端玩家,带一副键盘({@link Controls}),每刻在自己的实体刻里跑模块的物理步进
+ * ({@link Physics#step}),别的什么也不做。它能走通就说明寻路模块不依赖宿主。
  *
  * <p>它只进世界、不进玩家列表(不"登录"):没有客户端,也就没有与服务器协商过任何模组的网络通道,登录时别的模组发来的
  * 自定义包会被网络层当场拒掉。进了世界就有区块跟着它加载、实体刻照常跑;连接丢掉一切下行包。
  */
-final class TestBody extends ServerPlayer {
+final class TestBody extends ServerPlayer implements Body {
+
+    private final Controls controls = new Controls();
 
     private TestBody(MinecraftServer server, ServerLevel level, GameProfile profile) {
         super(server, level, profile, ClientInformation.createDefault());
@@ -49,6 +53,16 @@ final class TestBody extends ServerPlayer {
     /** 离开世界。 */
     void leave() {
         serverLevel().removePlayerImmediately(this, RemovalReason.DISCARDED);
+    }
+
+    @Override
+    public ServerPlayer entity() {
+        return this;
+    }
+
+    @Override
+    public Controls controls() {
+        return controls;
     }
 
     @Override

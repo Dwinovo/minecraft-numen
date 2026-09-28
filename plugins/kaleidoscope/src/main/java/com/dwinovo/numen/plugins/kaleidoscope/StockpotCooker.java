@@ -1,6 +1,7 @@
 package com.dwinovo.numen.plugins.kaleidoscope;
 
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.body.Hotbar;
 import com.github.ysbbbbbb.kaleidoscopecookery.api.blockentity.IStockpot;
 import com.github.ysbbbbbb.kaleidoscopecookery.api.recipe.soupbase.ISoupBase;
 import com.github.ysbbbbbb.kaleidoscopecookery.blockentity.kitchen.StockpotBlockEntity;
@@ -253,17 +254,10 @@ final class StockpotCooker implements Cooker {
     private Step takeLidOff(NumenPlayer cook, String what) {
         Inventory inv = cook.getInventory();
         if (!inv.getItem(inv.selected).isEmpty()) {
-            int free = -1;
-            for (int i = 0; i < Inventory.getSelectionSize(); i++) {
-                if (inv.getItem(i).isEmpty()) {
-                    free = i;
-                    break;
-                }
-            }
-            if (free < 0) {
+            Hotbar.hold(cook, -1);
+            if (!inv.getItem(inv.selected).isEmpty()) {
                 return Step.blocked("the hotbar is full, so there is no free hand to take the lid off " + what);
             }
-            cook.holdInHand(free);
         }
         if (!stockpot.onLitClick(level, cook, ItemStack.EMPTY)) {
             return Step.blocked("the lid would not come off");

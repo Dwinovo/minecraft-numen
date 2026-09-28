@@ -176,7 +176,7 @@ final class CookTask implements Task {
         }
         ConsentAnswer answer = consent.poll();
         if (answer == null) {
-            InputDriver.halt(cook);
+            cook.controls().stop();
             return TaskState.RUNNING;
         }
         consent = null;
@@ -195,7 +195,7 @@ final class CookTask implements Task {
 
     @Override
     public void stop(NumenPlayer cook, StopReason why) {
-        InputDriver.halt(cook);
+        cook.controls().stop();
     }
 
     @Override

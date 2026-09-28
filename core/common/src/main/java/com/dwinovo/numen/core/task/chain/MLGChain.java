@@ -8,6 +8,7 @@ import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.body.Hotbar;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Inventory;
@@ -84,7 +85,7 @@ public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Refle
         }
         boolean grounded = companion.onGround() || companion.isInWater()
                 || companion.isSwimming() || companion.onClimbable();
-        boolean canSave = waterBucketSlot(companion) >= 0 || softBlockSlot(companion) >= 0;
+        boolean canSave = carries(companion, Items.WATER_BUCKET) || softBlock(companion) != null;
         return SurvivalDecisions.mlgTriggered(grounded,
                 companion.getDeltaMovement().y, canSave);
     }
@@ -94,7 +95,7 @@ public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Refle
         if (placed == null || reclaimTicks <= 0) {
             return false;
         }
-        if (slotWith(companion, Items.BUCKET) < 0 || waterBucketSlot(companion) >= 0) {
+        if (!carries(companion, Items.BUCKET) || carries(companion, Items.WATER_BUCKET)) {
             return false;   // 没空桶可装,或者已经收到手了
         }
         BlockState state = companion.level().getBlockState(placed);
@@ -132,21 +133,17 @@ public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Refle
         }
 
         // 下界的水一倒就蒸发,倒下去只是白扔一个桶。
-        int bucket = companion.level().dimensionType().ultraWarm()
-                ? -1 : waterBucketSlot(companion);
-        if (bucket >= 0) {
-            companion.holdInHand(bucket);
+        if (!companion.level().dimensionType().ultraWarm() && carries(companion, Items.WATER_BUCKET)) {
+            InteractionHand hand = Hotbar.grip(companion, Items.WATER_BUCKET).hand();
             placed = waterLandsAt(companion, aim);
             reclaimTicks = RECLAIM_TICKS;
-            Interaction.useInAir(companion, InteractionHand.MAIN_HAND,
-                    Interaction.Timing.once()).tick();
+            Interaction.useInAir(companion, hand, Interaction.Timing.once()).tick();
             noteSave(companion, "a water bucket");
             return TaskState.RUNNING;
         }
-        int block = softBlockSlot(companion);
-        if (block >= 0) {
-            companion.holdInHand(block);
-            Interaction.useBlock(companion, aim, InteractionHand.MAIN_HAND).tick();
+        net.minecraft.world.item.Item block = softBlock(companion);
+        if (block != null) {
+            Interaction.useBlock(companion, aim, Hotbar.grip(companion, block).hand()).tick();
             noteSave(companion, "a soft block");
         }
         return TaskState.RUNNING;
@@ -163,10 +160,8 @@ public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Refle
         if (aim.getType() != HitResult.Type.BLOCK || !aim.getBlockPos().equals(placed)) {
             return TaskState.RUNNING;
         }
-        int empty = slotWith(companion, Items.BUCKET);
-        if (empty >= 0) {
-            companion.holdInHand(empty);
-            Interaction.useInAir(companion, InteractionHand.MAIN_HAND,
+        if (carries(companion, Items.BUCKET)) {
+            Interaction.useInAir(companion, Hotbar.grip(companion, Items.BUCKET).hand(),
                     Interaction.Timing.once()).tick();
         }
         return TaskState.RUNNING;
@@ -256,25 +251,22 @@ public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Refle
         return best;
     }
 
-    private static int waterBucketSlot(NumenPlayer companion) {
-        return slotWith(companion, Items.WATER_BUCKET);
-    }
-
-    private static int slotWith(NumenPlayer companion, net.minecraft.world.item.Item item) {
+    /** 身上(主背包或副手)带着 {@code item}。 */
+    private static boolean carries(NumenPlayer companion, net.minecraft.world.item.Item item) {
         Inventory inv = companion.getInventory();
         for (int i = 0; i < inv.getContainerSize(); i++) {
-            if (inv.getItem(i).is(item)) return i;
+            if (inv.getItem(i).is(item)) return true;
         }
-        return -1;
+        return false;
     }
 
-    /** Slot of a placeable fall-dampening block (hay / slime), or -1. */
-    private static int softBlockSlot(NumenPlayer companion) {
+    /** A placeable fall-dampening block (hay / slime) she carries, or null. */
+    private static net.minecraft.world.item.Item softBlock(NumenPlayer companion) {
         Inventory inv = companion.getInventory();
         for (int i = 0; i < inv.getContainerSize(); i++) {
             ItemStack s = inv.getItem(i);
-            if (s.is(Items.HAY_BLOCK) || s.is(Items.SLIME_BLOCK)) return i;
+            if (s.is(Items.HAY_BLOCK) || s.is(Items.SLIME_BLOCK)) return s.getItem();
         }
-        return -1;
+        return null;
     }
 }

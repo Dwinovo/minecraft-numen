@@ -1,8 +1,8 @@
 package com.dwinovo.numen.core.task.chain;
 
-import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.core.nav.Trip;
+import com.dwinovo.numen.pathing.body.Controls;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -15,8 +15,8 @@ import com.dwinovo.numen.entity.NumenPlayer;
  * back. An idle body is never on a walk, so it will not wake during legitimate idle; whether she is stuck is judged
  * in the pathing module alone, this chain only reacts.
  *
- * <p>The break-out is a bounded, best-effort wander driven straight through
- * {@link InputDriver} (no nav, no dig plan) — rough but safe: it is capped at
+ * <p>The break-out is a bounded, best-effort wander driven straight through her keys
+ * ({@link NumenPlayer#controls}; no nav, no dig plan) — rough but safe: it is capped at
  * {@link #WANDER_TICKS} and never travels far. After a burst it stays quiet for {@link #REARM_TICKS} so the walk
  * gets to try again from where she ended up before it is judged once more.
  */
@@ -52,7 +52,7 @@ public final class UnstuckChain implements Task, com.dwinovo.numen.task.reflex.R
         }
         driveWander(companion);
         if (--wanderTicksLeft <= 0) {
-            InputDriver.halt(companion);
+            companion.controls().stop();
             rearm = REARM_TICKS;
         }
         return TaskState.RUNNING;
@@ -60,8 +60,7 @@ public final class UnstuckChain implements Task, com.dwinovo.numen.task.reflex.R
 
     @Override
     public void stop(NumenPlayer companion, StopReason why) {
-        InputDriver.halt(companion);
-        companion.setShiftKeyDown(false);
+        companion.controls().releaseAll();
         wanderTicksLeft = 0;
     }
 
@@ -82,15 +81,13 @@ public final class UnstuckChain implements Task, com.dwinovo.numen.task.reflex.R
         return "被地形卡住时会自己挣脱出来";
     }
 
-    /** Face the chosen heading, push forward, and hop periodically to clear a lip/step. */
+    /** Face the chosen heading, hold forward, and hop every fifth tick to clear a lip/step. */
     private void driveWander(NumenPlayer companion) {
         companion.setYRot(wanderYaw);
         companion.setYHeadRot(wanderYaw);
-        companion.zza = 1.0f;
-        companion.xxa = 0.0f;
-        companion.setSprinting(false);
-        if (wanderTicksLeft % 5 == 0) {
-            InputDriver.jump(companion);
-        }
+        Controls keys = companion.controls();
+        keys.press(Controls.Key.FORWARD);
+        keys.release(Controls.Key.SPRINT);
+        keys.set(Controls.Key.JUMP, wanderTicksLeft % 5 == 0);
     }
 }

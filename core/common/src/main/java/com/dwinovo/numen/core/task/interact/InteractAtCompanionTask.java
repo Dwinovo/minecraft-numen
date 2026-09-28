@@ -2,6 +2,7 @@ package com.dwinovo.numen.core.task.interact;
 import com.dwinovo.numen.core.task.MouseButton;
 import com.dwinovo.numen.core.PlayerInv;
 
+import com.dwinovo.numen.pathing.body.Hotbar;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.entity.InputDriver;
 
@@ -12,7 +13,7 @@ import com.dwinovo.numen.core.act.PressReceipt;
 import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.task.base.GoToThenDoTask;
 import com.dwinovo.numen.pathing.body.Crosshair;
-import com.dwinovo.numen.pathing.drive.Aim;
+import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.core.task.base.Precondition;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.phys.HitResult;
@@ -78,7 +79,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
         // Resolve the crosshair once we're in position, then drive the action.
         if (interaction == null) {
             if (r.item != null) {
-                player.holdInHand(PlayerInv.findSlot(player.getInventory(), r.item));
+                Hotbar.grip(player, r.item);
             }
             // 看向目标上真能射到的那一点(拉杆、开着的门只占格子的一角,格心可能是空的);一点都看不见
             // 时看格心,下面的准星就点名挡着的那一块。空气与流体本来就没有可射中的轮廓,也看格心
@@ -136,7 +137,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
                     }
                 }
                 if (permits.stream().anyMatch(p -> p.state() == PermitState.WAITING)) {
-                    InputDriver.halt(player);
+                    player.controls().stop();
                     return TaskState.RUNNING;
                 }
             }

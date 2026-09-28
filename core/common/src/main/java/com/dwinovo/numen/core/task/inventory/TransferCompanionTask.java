@@ -3,7 +3,6 @@ package com.dwinovo.numen.core.task.inventory;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.tools.ContainerOps;
-import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.task.TaskState;
@@ -38,7 +37,7 @@ public final class TransferCompanionTask extends AbstractCompanionTask<TransferT
         if (take != null) {
             Permit permit = permit(take);
             if (permit.state() == PermitState.WAITING) {
-                InputDriver.halt(player);
+                player.controls().stop();
                 return TaskState.RUNNING;
             }
             if (permit.state() == PermitState.REFUSED) {

@@ -4,7 +4,6 @@ import com.dwinovo.numen.core.combat.Menace;
 import com.dwinovo.numen.core.task.combat.AttackCompanionTask;
 import com.dwinovo.numen.core.task.combat.AttackTaskRecord;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
-import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.task.TaskState;
@@ -140,8 +139,7 @@ public final class MobDefenseChain implements Task, Reflex {
         String line = fight.result(state).message();
         fight = null;
         dangerLastSeenTick = NEVER;
-        InputDriver.halt(companion);
-        companion.setShiftKeyDown(false);
+        companion.controls().releaseAll();
         com.dwinovo.numen.Constants.LOG.info("[numen-defense] 收场 {} —— {}", state, line);
         // <b>不急</b>:她的后台任务照跑,黄了自有 task_finished 报。这条只是让主人翻聊天流时
         // 看得懂她刚才为什么打了一架、或者挪了二十格。攒着搭下一轮的车就够。
@@ -155,8 +153,7 @@ public final class MobDefenseChain implements Task, Reflex {
             // 被更急的链抢走(摔落、换气):只松开身体,这场仗的状态一个不动,回来接着打。
             fight.stop(companion, why);
         }
-        InputDriver.halt(companion);
-        companion.setShiftKeyDown(false);
+        companion.controls().releaseAll();
     }
 
     @Override

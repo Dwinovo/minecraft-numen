@@ -4,7 +4,6 @@ import com.dwinovo.numen.core.combat.Menace;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.api.Navigator;
 import com.dwinovo.numen.pathing.api.Ports;
-import com.dwinovo.numen.pathing.body.Body;
 import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Materials;
@@ -32,7 +31,7 @@ public final class CompanionPorts {
 
     /** 她的寻路门面,避开 {@code threats}。 */
     public static Navigator navigator(NumenPlayer player, Threats threats) {
-        return Navigator.of(Body.of(player), new Ports(CompanionHands.of(player), terrain(player), materials(player),
+        return Navigator.of(player, new Ports(CompanionHands.of(player), terrain(player), materials(player),
                 threats));
     }
 

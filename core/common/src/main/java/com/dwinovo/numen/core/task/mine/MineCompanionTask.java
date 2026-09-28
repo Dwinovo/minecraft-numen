@@ -13,7 +13,6 @@ import com.dwinovo.numen.core.scan.BlockScanner;
 import com.dwinovo.numen.core.scan.BlockSearch;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
-import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.api.Report;
 import com.dwinovo.numen.pathing.body.Snapshots;
@@ -384,7 +383,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             // 动手之前:这一格交给权限层。要问就站着等主人,不许就带着理由收场
             Permit permit = permit(Action.breakBlock(reachable, level.getBlockState(reachable)));
             if (permit.state() == PermitState.WAITING) {
-                InputDriver.halt(player);
+                player.controls().stop();
                 return TaskState.RUNNING;
             }
             if (permit.state() == PermitState.REFUSED) {

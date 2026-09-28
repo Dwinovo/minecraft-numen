@@ -11,9 +11,9 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 一具服务端假玩家的键盘。键按下就一直按着,直到松开;每刻 {@link #apply} 一次,在身体的物理步进之前,照原版客户端把
- * 按键变成身体输入的那一套({@code KeyboardInput.tick} 与 {@code LocalPlayer.aiStep})落到身体上——假玩家没有客户端,
- * 服务端缺的就是这一段:
+ * 一具服务端假玩家的键盘,一具身体一副({@link Body#controls})。键按下就一直按着,直到松开;每刻由 {@link Physics#step}
+ * 在身体的物理步进之前落一次,照原版客户端把按键变成身体输入的那一套({@code KeyboardInput.tick} 与
+ * {@code LocalPlayer.aiStep})落到身体上——假玩家没有客户端,服务端缺的就是这一段:
  * <ul>
  *   <li>前后左右是数字键:{@code zza}、{@code xxa} 只取 -1、0、1,相对身体此刻的朝向;蹲着或爬着乘潜行速度属性,
  *       用着物品乘 0.2;</li>
@@ -68,8 +68,16 @@ public final class Controls {
         held.clear();
     }
 
-    /** 把按着的键落到身体上。 */
-    public void apply(ServerPlayer body) {
+    /** 停下脚步:松开前后左右、跳与疾跑,潜行照旧按着(蹲在边沿上干活时停下不站起来)。 */
+    public void stop() {
+        held.removeAll(MOVING);
+    }
+
+    private static final EnumSet<Key> MOVING = EnumSet.of(Key.FORWARD, Key.BACK, Key.LEFT, Key.RIGHT, Key.JUMP,
+            Key.SPRINT);
+
+    /** 把按着的键落到身体上。只由 {@link Physics#step} 调,每刻一次。 */
+    void apply(ServerPlayer body) {
         pushOutOfBlocks(body);
         float forward = impulse(Key.FORWARD, Key.BACK);
         float left = impulse(Key.LEFT, Key.RIGHT);

@@ -4,14 +4,13 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 import com.dwinovo.numen.core.nav.CompanionHands;
-import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.body.BodyAction;
 import com.dwinovo.numen.pathing.body.Crosshair;
 import com.dwinovo.numen.pathing.body.Effector.Strike;
 import com.dwinovo.numen.pathing.body.Hotbar;
 import com.dwinovo.numen.pathing.body.Snapshots;
-import com.dwinovo.numen.pathing.drive.Aim;
+import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.pathing.plan.ToolChoice;
 import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.permission.Permission;
@@ -129,7 +128,7 @@ public final class BlockDigger {
      * @param told 身体为这一下做的动作(把工具拿到手上)交给它,由任务记进回执
      */
     public DigResult digStep(BlockPos target, Predicate<BlockPos> mayClear, Consumer<BodyAction> told) {
-        InputDriver.halt(player);
+        player.controls().stop();
         BlockPos effective = target;
         Vec3 point = Aim.point(player, target);
         if (point != null) {

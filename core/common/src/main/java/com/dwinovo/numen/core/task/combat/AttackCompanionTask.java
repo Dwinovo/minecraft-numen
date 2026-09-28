@@ -14,6 +14,7 @@ import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.chain.MobDefenseChain;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.body.Hotbar;
 import com.dwinovo.numen.pathing.plan.Threat;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
@@ -200,7 +201,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         lastMove = move;
         logMove(move, field);
         if (move.action() == AttackPlan.Action.DONE && awaitingOwner) {
-            InputDriver.halt(player);   // 没别的可打,等主人点头
+            player.controls().stop();   // 没别的可打,等主人点头
             return TaskState.RUNNING;
         }
 
@@ -406,7 +407,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
 
     /** 打完了 —— 名单清空(点名),或没人再追她(无差别)。 */
     private TaskState finish() {
-        InputDriver.halt(player);
+        player.controls().stop();
         stopNav();
         if (r.indiscriminate || !r.defeated().isEmpty()) {
             succeed();
@@ -565,7 +566,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         }
         ItemStack before = player.getMainHandItem();
         if (loadout.hasMelee()) {
-            player.holdInHand(loadout.melee().slot());
+            Hotbar.hold(player, loadout.melee().slot());
         }
         boolean weaponChanged = player.getMainHandItem() != before;
         if (!Swing.mayStrike(weaponChanged, victim instanceof LivingEntity hurt && hurt.hurtTime > 0,
@@ -799,7 +800,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         }
 
         ItemStack before = player.getMainHandItem();
-        player.holdInHand(weapon.slot());
+        Hotbar.hold(player, weapon.slot());
         if (player.getMainHandItem() != before && shot == null) {
             return TaskState.RUNNING;   // 这一刻只换手,下一刻才起手
         }
@@ -852,7 +853,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         var around = Menace.hostilesAround(player, Menace.FLEE_DISTANCE);
         if (around.isEmpty()) {
             clearHaven();
-            InputDriver.halt(player);
+            player.controls().stop();
             Constants.LOG.info("[numen-attack] 脱离成功 —— {} 格内没有敌对生物",
                     (int) Menace.FLEE_DISTANCE);
             fail(Menace.outmatched(player)
@@ -918,7 +919,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private void beginLoot(Vec3 where) {
         stopNav();
         abortShot();
-        InputDriver.halt(player);
+        player.controls().stop();
         loot.begin(BlockPos.containing(where != null ? where : player.position()));
         target = null;
         lastMove = null;   // 目标没了,承诺一并作废
@@ -928,7 +929,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private TaskState tickLoot() {
         loot.discover();
         if (loot.settling()) {
-            InputDriver.halt(player);
+            player.controls().stop();
             return TaskState.RUNNING;
         }
         loot.prune();
@@ -985,8 +986,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     @Override
     protected void cleanup() {
         abortShot();
-        InputDriver.halt(player);
-        player.setShiftKeyDown(false);
+        player.controls().releaseAll();
         super.cleanup();
     }
 
