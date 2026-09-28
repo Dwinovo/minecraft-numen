@@ -21,9 +21,10 @@ import net.minecraft.world.entity.Entity;
  * 「挖 64 块」干完腾位,而它一直占着,直到主人给她别的事做。
  *
  * <h2>跟到了就休眠,不是结束</h2>
- * 主人就在旁边时 {@link #canRun} 返 false:身体让给别人(她可以站着看你、可以被
- * 反射拿去吃东西),主人一走远它自己就醒过来。这跟原版 {@code Goal.canUse()} 是
- * 同一个道理——<b>休眠不是失败</b>,不发结果、不腾槽、不惊动模型。
+ * 跟到了(这一趟的目标自己说到了,{@link Goals#near} 落脚点附近 {@code keepWithin} 格)之后
+ * {@link #canRun} 返 false:身体让给别人(她可以站着看你、可以被反射拿去吃东西),主人一走远
+ * 它自己就醒过来。这跟原版 {@code Goal.canUse()} 是同一个道理——<b>休眠不是失败</b>,不发结果、
+ * 不腾槽、不惊动模型。到没到只看目标,这里不另拿距离判"差不多到了";离主人多远只决定要不要起步。
  *
  * <h2>够不着就报出去</h2>
  * 跟着走从不动世界(路线规格 alter=NONE,没有开关),于是"没有路"多半不是暂时的:隔着断崖、
@@ -46,7 +47,7 @@ import net.minecraft.world.entity.Entity;
  */
 public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskRecord> {
 
-    /** 比 {@code keepWithin} 多出这么远才重新起步,免得在临界距离上抖着走走停停。 */
+    /** 跟到之后,他比 {@code keepWithin} 多走出这么远才重新起步,免得在临界距离上抖着走走停停。 */
     private static final double RESUME_MARGIN = 2.0;
 
     /** 上一刻是不是在走——用来只在真正起步/到位时重建导航。 */
@@ -69,10 +70,12 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
             // 也就永远报不出去)。跟的是主人就单纯睡着等他回来。
             return r.target != null;
         }
-        double gap = companion.position().distanceTo(target.position());
-        // 迟滞:走出 keepWithin + margin 才起步,回到 keepWithin 之内才停——
-        // 单阈值会让她在临界距离上一步一停地抖。
-        return moving ? gap > r.keepWithin : gap > r.keepWithin + RESUME_MARGIN;
+        if (moving) {
+            // 在走的这一趟到没到,只看它的目标
+            return true;
+        }
+        // 迟滞:走出 keepWithin + margin 才起步——一跟到就起步会让她在临界距离上一步一停地抖
+        return companion.position().distanceTo(target.position()) > r.keepWithin + RESUME_MARGIN;
     }
 
     @Override
@@ -117,10 +120,6 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
                 return TaskState.FAILED;
             }
         }
-        if (closeEnough()) {
-            stopNav();
-            moving = false;
-        }
         // 不返终态就是"常驻"的全部含义;只有够不着和目标没了才收场。
         return TaskState.RUNNING;
     }
@@ -154,11 +153,6 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
      */
     private BlockPos anchor(Entity target) {
         return Terrain.of(player).settle(target.blockPosition());
-    }
-
-    private boolean closeEnough() {
-        Entity target = target(player);
-        return target != null && player.position().distanceTo(target.position()) <= r.keepWithin;
     }
 
     @Override
