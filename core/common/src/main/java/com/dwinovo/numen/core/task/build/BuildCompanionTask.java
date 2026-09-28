@@ -4,7 +4,9 @@ import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.build.Built;
 import com.dwinovo.numen.core.build.Placement;
 import com.dwinovo.numen.core.act.BlockDigger;
+import com.dwinovo.numen.core.nav.BuildSite;
 import com.dwinovo.numen.core.nav.Feet;
+import com.dwinovo.numen.core.nav.Terrain;
 import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
@@ -12,12 +14,8 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.pathing.body.Hotbar;
 import com.dwinovo.numen.pathing.drive.EditLedger;
-import com.dwinovo.numen.pathing.drive.LiveWorld;
-import com.dwinovo.numen.pathing.plan.ActionCosts;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
-import com.dwinovo.numen.pathing.spec.PositionCosts;
-import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.permission.PlacedBlocks;
 import com.dwinovo.numen.task.TaskState;
@@ -66,11 +64,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     /** 走到外圈的时限:走不到就地开工,绝不因为路不通而不干活。 */
     private static final int TRAVEL_BUDGET_TICKS = 30 * 20;
-    /**
-     * 踩进或穿过工地格的代价:一步抵一百格路。任何绕行都比穿过去便宜,所以走向外圈永远绕着图纸走;但它不是
-     * FORBID——开工时站在工地里、被外力挪进图纸里(挤、推、掉落)时,她还得能走出来,走出来那几步就是她付的这份价。
-     */
-    private static final double SITE_BODY_COST = ActionCosts.WALK_ONE_BLOCK * 100;
     /** 连续几遍零进展才升级处置。 */
     private static final int MAX_BARREN_PASSES = 3;
     /**
@@ -1052,8 +1045,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * 先拆再放。
      * 不许站进去——否则走向外圈时会从还是空气的图纸格里抄近路,一条腿走到一半
      * 被截断,她就站在了自己要放的那格里:身体占着的格放不下,收工时报"有人站着"。
-     * 日式小屋那次差的两格门口台阶,病根就是这个。前两条是硬禁,第三条是重价
-     * ({@link #SITE_BODY_COST}):被外力挪进去时她还得走得出来。三条都按位置写进走向外圈那条路的规格({@link #siteSpec})。
+     * 日式小屋那次差的两格门口台阶,病根就是这个。前两条是硬禁,第三条是重价:被外力挪进去时她还得走得出来。
+     * 三条怎么写进走向外圈那条路的规格,在工地的位置代价那一处({@link BuildSite})。
      */
     private LongSet protectedCells() {
         if (siteCells == null) {
@@ -1066,10 +1059,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     /** 走向外圈那条路的规格:{@link #SPEC} 并上工地格的三条禁令。 */
     private RouteSpec siteSpec() {
-        PositionCosts.Builder body = PositionCosts.builder();
-        protectedCells().forEach((long cell) -> body.add(Use.STAND, cell, SITE_BODY_COST).add(Use.PASS, cell, SITE_BODY_COST));
-        PositionCosts pins = PositionCosts.protect(protectedCells()).plus(body.build());
-        return SPEC.edit().positions(SPEC.positions().plus(pins)).build();
+        return BuildSite.around(SPEC, protectedCells());
     }
 
     /** 工地包围盒的中心那一格:走向外圈没走成时,回执里说"朝哪儿"用。 */
@@ -1162,7 +1152,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         int total = r.targets.size();
         int n = Math.min(budget, total);
-        LiveWorld view = new LiveWorld(player.serverLevel());
+        Terrain view = Terrain.of(player);
         for (int k = 0; k < n; k++) {
             if (rescanCursor >= total) {
                 rescanCursor = 0;
@@ -1171,10 +1161,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             BlockPos pos = target.pos();
             long key = pos.asLong();
             // 未加载的格保持原判:完成集与跳过集都有记忆,不能因为看不见就翻案
-            if (!view.isLoaded(pos.getX(), pos.getZ())) {
+            if (!view.loaded(pos.getX(), pos.getZ())) {
                 continue;
             }
-            BlockState observed = view.getBlockState(pos);
+            BlockState observed = view.state(pos);
             if (target.matches(observed)
                     || target.desiredState().getBlock() instanceof LiquidBlock
                     || (BuildCellRules.isAirTarget(target) && observed.getBlock() instanceof LiquidBlock)) {

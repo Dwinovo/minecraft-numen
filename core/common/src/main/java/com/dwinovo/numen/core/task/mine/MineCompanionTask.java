@@ -2,11 +2,11 @@ package com.dwinovo.numen.core.task.mine;
 import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.core.FailureType;
 
+import com.dwinovo.numen.core.nav.DigQuote;
 import com.dwinovo.numen.task.TaskState;
 
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.act.BlockDigger;
-import com.dwinovo.numen.core.nav.CompanionPorts;
 import com.dwinovo.numen.core.nav.Feet;
 import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.scan.BlockScanner;
@@ -17,14 +17,9 @@ import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.api.Report;
 import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.drive.EditLedger;
-import com.dwinovo.numen.pathing.drive.LiveWorld;
-import com.dwinovo.numen.pathing.plan.CostModel;
-import com.dwinovo.numen.pathing.plan.Edit;
-import com.dwinovo.numen.pathing.plan.Reason;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
-import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.permission.Verdict;
 import net.minecraft.core.BlockPos;
@@ -212,7 +207,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      */
     private final RouteSpec targetSpec;
     /** 给目标定价、判挖不挖得成的成本模型,每刻按此刻的身体与权限重组。 */
-    private CostModel pricing;
+    private DigQuote pricing;
     /** 在走的那一趟朝着的目标,以及它是按哪一份名单与价钱编的——名单或价钱变了才把新目标交给那一趟。 */
     private Goal field;
     private FieldKey fieldKey;
@@ -352,7 +347,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // a search is started on demand (list low / new chunk / slow heartbeat) instead of
         // on a fixed rescan cadence — the block-change hook keeps the shared index current
         // in between.
-        pricing = CompanionPorts.model(player, targetSpec);
+        pricing = DigQuote.of(player, targetSpec);
         absorbSearch();
         prune();
         maybeQuery();
@@ -530,7 +525,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     /** 名单编成的目标;一个成员都没有为 null。 */
     private Goal oreField(FieldKey key) {
-        BodyStats stats = Snapshots.stats(player);
+        var stats = Snapshots.stats(player);
         List<Goal> members = new ArrayList<>(key.ores().size() + key.drops().size());
         key.ores().forEach((ore, cost) -> members.add(Goals.priced(Goals.reach(ore, stats), cost)));
         for (BlockPos drop : key.drops()) {
@@ -557,8 +552,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     /**
      * 挑目标用的总价:走到够得着它的地方(目标的估价,与交给搜索的同一把尺)加上挖它的价钱。
      */
-    private double targetCost(BlockPos ore, BlockPos feet, BodyStats stats) {
-        return Goals.reach(ore, stats).estimate(feet.getX(), feet.getY(), feet.getZ()) + digCost(ore);
+    private double targetCost(BlockPos ore, BlockPos feet) {
+        return Goals.reach(ore, Snapshots.stats(player)).estimate(feet.getX(), feet.getY(), feet.getZ()) + digCost(ore);
     }
 
     /** 身体此刻站着的地方够不够得着 {@code ore}——原地就挖与导航到位是这同一个判据。 */
@@ -572,8 +567,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      * 落沙、世界边界外)。许可不许的也算挖得成:那是动手时权限层的事,价钱是无穷。挡着视线的遮挡物过同一道。
      */
     private boolean breakable(BlockPos pos, BlockState state) {
-        CostModel.Admission admission = pricing.admitDig(new LiveWorld(player.serverLevel()), pos, state);
-        return admission.ok() || admission.refused() == Reason.DENIED;
+        return pricing.breakable(pos, state);
     }
 
     /**
@@ -648,7 +642,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         if (here == null) return null;
         Level level = player.level();
         BlockPos feet = here.node();
-        BodyStats stats = Snapshots.stats(player);
+        var stats = Snapshots.stats(player);
         BlockPos best = null;
         double bestCost = Double.MAX_VALUE;
         double bestD = Double.MAX_VALUE;
@@ -669,7 +663,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             return best;
         }
         for (BlockPos ore : knownOres) {
-            if (!ore.equals(best) && targetCost(ore, feet, stats) < bestCost) {
+            if (!ore.equals(best) && targetCost(ore, feet) < bestCost) {
                 return null;
             }
         }
@@ -1036,15 +1030,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // 挖每一块的价钱:与寻路给路上一格定价同一个成本模型,需要主人同意的乘倍率,不许的是无穷——挑目标按价,不按剪。
         // 挖的时候站着、眼睛不在水里
         digCosts.clear();
-        LiveWorld world = new LiveWorld(player.serverLevel());
         for (BlockPos p : knownOres) {
-            BlockState state = level.getBlockState(p);
-            CostModel.Admission admission = pricing.admitDig(world, p, state);
-            if (admission.ok()) {
-                digCosts.put(p, pricing.digCost(new Edit.Dig(p, state, admission.permit(), false, true)));
-            } else {
-                digCosts.put(p, Double.POSITIVE_INFINITY);
-                deniedWhy = admission.detail() instanceof Verdict verdict ? verdict.reason()
+            DigQuote.Price price = pricing.price(p, level.getBlockState(p));
+            digCosts.put(p, price.cost());
+            if (!Double.isFinite(price.cost())) {
+                deniedWhy = price.refusal() instanceof Verdict verdict ? verdict.reason()
                         : "the permission layer does not allow it";
             }
         }

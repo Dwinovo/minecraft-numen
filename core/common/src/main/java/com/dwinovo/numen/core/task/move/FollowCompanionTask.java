@@ -1,10 +1,8 @@
 package com.dwinovo.numen.core.task.move;
 
+import com.dwinovo.numen.core.nav.Terrain;
 import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
-import com.dwinovo.numen.pathing.body.Snapshots;
-import com.dwinovo.numen.pathing.drive.LiveWorld;
-import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
@@ -151,11 +149,11 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
     private static final RouteSpec TERRAIN = RouteSpec.defaults();
 
     /**
-     * 跟到哪一格:他所在那一列里身体待得住的地方({@link Stance#settle})——他站着就是他脚下,悬空(飞行、跳跃、本来就会飞)
+     * 跟到哪一格:他所在那一列里身体待得住的地方({@link Terrain#settle})——他站着就是他脚下,悬空(飞行、跳跃、本来就会飞)
      * 时是他下方的地面。那一列都待不住(悬在虚空上)就还是他那一格:那里够不着,于是照实报,而不是假装找到了。
      */
     private BlockPos anchor(Entity target) {
-        return Stance.settle(new LiveWorld(player.serverLevel()), Snapshots.stats(player), target.blockPosition());
+        return Terrain.of(player).settle(target.blockPosition());
     }
 
     private boolean closeEnough() {

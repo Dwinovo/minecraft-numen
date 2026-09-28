@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.task.build;
 
+import com.dwinovo.numen.core.nav.Terrain;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.pathing.drive.LiveWorld;
 import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.permission.Permission;
 import com.dwinovo.numen.permission.PlacedBlocks;
@@ -39,7 +39,7 @@ final class BuildCellRules {
      * 否则六个读点里只挡住了一个。
      */
     BlockState peek(BlockPos pos) {
-        return new LiveWorld(player.serverLevel()).getBlockState(pos);
+        return Terrain.of(player).state(pos);
     }
 
     static boolean isAirTarget(BuildTaskRecord.Target target) {

@@ -8,10 +8,7 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.body.BodyAction;
 import com.dwinovo.numen.pathing.body.Crosshair;
 import com.dwinovo.numen.pathing.body.Effector.Strike;
-import com.dwinovo.numen.pathing.body.Hotbar;
-import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.body.Aim;
-import com.dwinovo.numen.pathing.plan.ToolChoice;
 import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.permission.Permission;
 import com.dwinovo.numen.permission.Verdict;
@@ -155,8 +152,7 @@ public final class BlockDigger {
         CompanionHands hands = CompanionHands.of(player);
         if (!effective.equals(hands.pressing())) {
             // 换了一格挖:先把挖它最快的那件拿到手上(与寻路给挖掘定价用的是同一份挑法)
-            BlockState state = player.level().getBlockState(effective);
-            Hotbar.hold(player, new ToolChoice(Snapshots.of(player)).best(state).slot()).ifPresent(told);
+            hands.takeToolFor(player.level().getBlockState(effective)).ifPresent(told);
         }
         Strike strike = hands.dig(hit);
         return switch (strike) {

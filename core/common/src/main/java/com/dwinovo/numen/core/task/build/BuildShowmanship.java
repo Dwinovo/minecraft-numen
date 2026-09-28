@@ -1,16 +1,11 @@
 package com.dwinovo.numen.core.task.build;
 
+import com.dwinovo.numen.core.nav.Terrain;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.body.Controls;
 import com.dwinovo.numen.pathing.body.Hotbar;
-import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.body.Aim;
-import com.dwinovo.numen.pathing.drive.LiveWorld;
-import com.dwinovo.numen.pathing.plan.Stance;
-import com.dwinovo.numen.pathing.world.BodyStats;
-import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Semantics;
-import com.dwinovo.numen.pathing.world.Stepping;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
@@ -157,7 +152,7 @@ final class BuildShowmanship {
      */
     private boolean pickNext() {
         int feetY = player.blockPosition().getY();
-        Ahead ahead = stepTo(heading + dir, heading, feetY);
+        Terrain.Step ahead = stepTo(heading + dir, heading, feetY);
         if (ahead == null) {
             dir = -dir;
             ahead = stepTo(heading + dir, heading, feetY);
@@ -173,44 +168,14 @@ final class BuildShowmanship {
         return true;
     }
 
-    /** 相邻那一列落脚在哪一层,走进去要不要起跳。 */
-    private record Ahead(int y, boolean jump) {}
-
     /**
-     * 从第 {@code from} 列(脚在 {@code feetY})贴地走到相邻的第 {@code to} 列,落脚在哪一层:平走、上一级、下一级三选一,按这个
-     * 先后。站不站得住、迈不迈得过去都问第 0 层——落脚处身体待得住而且是站着({@link Stance}),从这一列迈进那一列是走过去
-     * 或跳上去({@link Stepping}),与寻路判一步同一套几何;落脚、托脚、身体经过的格都不是 {@link #KEEP_OFF} 里的。走不过去为
-     * null。再高再深的都不走,那样上得去回不来。
+     * 从第 {@code from} 列(脚在 {@code feetY})贴地走到相邻的第 {@code to} 列,落脚在哪一层、要不要起跳:站不站得住、迈不迈得
+     * 过去都问她身边的地形({@link Terrain#step}),与寻路判一步同一套几何;落脚、托脚、身体经过的格都不是 {@link #KEEP_OFF}
+     * 里的。走不过去为 null。再高再深的都不走,那样上得去回不来。
      */
-    private Ahead stepTo(int to, int from, int feetY) {
-        LiveWorld view = new LiveWorld(player.serverLevel());
-        BodyStats stats = Snapshots.stats(player);
-        int fx = ring.x(from);
-        int fz = ring.z(from);
-        int x = ring.x(to);
-        int z = ring.z(to);
-        double fromFeet = Footing.height(view, stats, fx, feetY, fz);
-        if (Double.isNaN(fromFeet)) {
-            fromFeet = player.getY();
-        }
-        for (int dy : new int[]{0, 1, -1}) {
-            int y = feetY + dy;
-            Stance stance = Stance.at(view, stats, x, y, z);
-            if (stance == null || !stance.grounded() || keptOff(view, stance.support(x, z))
-                    || keptOff(view, new BlockPos(x, y, z)) || keptOff(view, new BlockPos(x, y + 1, z))) {
-                continue;
-            }
-            Stepping.Step step = Stepping.between(view, stats, fx, fromFeet, fz, Integer.signum(x - fx),
-                    Integer.signum(z - fz), stance.feetY());
-            if (step != Stepping.Step.BLOCKED) {
-                return new Ahead(y, step == Stepping.Step.JUMP);
-            }
-        }
-        return null;
-    }
-
-    private static boolean keptOff(LiveWorld view, BlockPos pos) {
-        return Semantics.isAny(view, pos, KEEP_OFF);
+    private Terrain.Step stepTo(int to, int from, int feetY) {
+        return Terrain.of(player).step(ring.x(from), ring.z(from), feetY, player.getY(), ring.x(to), ring.z(to),
+                KEEP_OFF);
     }
 
     /**

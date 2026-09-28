@@ -2,14 +2,10 @@ package com.dwinovo.numen.core.nav;
 
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.pathing.body.Snapshots;
-import com.dwinovo.numen.pathing.drive.LiveWorld;
-import com.dwinovo.numen.pathing.world.Clearance;
 import com.dwinovo.numen.pathing.world.Semantics;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.phys.Vec3;
 
@@ -39,8 +35,8 @@ import java.util.Set;
  * <p>驾驶输入走 {@link InputDriver#steerVehicle}(原版桨物理);服务端能动船的
  * 前提是载具权威开关(numen-api 的 MixinEntityVehicleControl)。
  *
- * <p>哪一格是水、船过不过得去,读寻路模块的第 0 层:水是语义种类里的静水与流水,过得去是水面上方放得下她的身体
- * ({@link Clearance}),与步行寻路是同一份几何。
+ * <p>哪一格是水、船过不过得去,问她身边的地形({@link Terrain},寻路模块的第 0 层):水是语义种类里的静水与流水,过得去
+ * 是水面上方放得下她的身体,与步行寻路是同一份几何。
  */
 public final class BoatNav {
 
@@ -233,18 +229,16 @@ public final class BoatNav {
 
     /** 这一格水面能过船吗:这一格是水,水面上方放得下她坐着的身体(船身连同她的头)。 */
     private boolean cruisable(int x, int z) {
-        LiveWorld world = new LiveWorld(player.serverLevel());
-        BlockPos at = new BlockPos(x, surfaceY, z);
-        return Semantics.isAny(world, at, WATER)
-                && Clearance.fits(world, Snapshots.stats(player), Pose.STANDING, x, surfaceY + 1, z);
+        Terrain terrain = Terrain.of(player);
+        return terrain.isAny(new BlockPos(x, surfaceY, z), WATER) && terrain.fits(x, surfaceY + 1, z);
     }
 
     /** 船脚下的水面 y。往下扫三格:被浮力弹起、载人下压的瞬间,船位会短暂离面。 */
     private Integer waterSurfaceAt(BlockPos feet) {
-        LiveWorld world = new LiveWorld(player.serverLevel());
+        Terrain terrain = Terrain.of(player);
         for (int dy = 0; dy <= 3; dy++) {
             BlockPos at = feet.below(dy);
-            if (Semantics.isAny(world, at, WATER)) {
+            if (terrain.isAny(at, WATER)) {
                 return at.getY();
             }
         }

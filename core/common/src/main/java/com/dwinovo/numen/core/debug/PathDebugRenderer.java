@@ -10,7 +10,6 @@ import com.dwinovo.numen.network.NumenNetwork;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.search.Route;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;

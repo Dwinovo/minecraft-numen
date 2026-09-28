@@ -36,7 +36,7 @@ public final class CompanionPorts {
     }
 
     /** 按 {@code spec} 与她此刻的身体、端口组一份成本模型:估一格挖多久、许不许挖,与寻路用的是同一份定价。 */
-    public static CostModel model(NumenPlayer player, RouteSpec spec) {
+    static CostModel model(NumenPlayer player, RouteSpec spec) {
         return CostModel.of(spec, Snapshots.of(player), terrain(player), materials(player), dangers(player));
     }
 

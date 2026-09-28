@@ -4,14 +4,13 @@ import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.mixin.FishingHookAccessor;
 import com.dwinovo.numen.core.nav.Feet;
+import com.dwinovo.numen.core.nav.Terrain;
 import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.body.Hotbar;
-import com.dwinovo.numen.pathing.body.Snapshots;
-import com.dwinovo.numen.pathing.drive.LiveWorld;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
@@ -547,12 +546,12 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
     }
 
     /**
-     * 能站着钓鱼的干地方:出厂规格的路线会让她在这儿站着({@link Feet#standingSpot}),脚与头所在的两格没有液体。
+     * 能站着钓鱼的干地方:出厂规格的路线会让她在这儿站着({@link Terrain#standingSpot}),脚与头所在的两格没有液体。
      */
     private boolean isDryStance(BlockPos pos) {
-        LiveWorld world = new LiveWorld(player.serverLevel());
-        return world.getFluidState(pos).isEmpty() && world.getFluidState(pos.above()).isEmpty()
-                && Feet.standingSpot(world, Snapshots.stats(player), pos, RouteSpec.defaults());
+        Terrain terrain = Terrain.of(player);
+        return terrain.state(pos).getFluidState().isEmpty() && terrain.state(pos.above()).getFluidState().isEmpty()
+                && terrain.standingSpot(pos, RouteSpec.defaults());
     }
 
     private boolean atStance() {

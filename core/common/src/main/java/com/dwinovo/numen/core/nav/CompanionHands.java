@@ -2,14 +2,21 @@ package com.dwinovo.numen.core.nav;
 
 import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.body.BodyAction;
 import com.dwinovo.numen.pathing.body.Effector;
+import com.dwinovo.numen.pathing.body.Hotbar;
 import com.dwinovo.numen.pathing.body.PlayerHands;
+import com.dwinovo.numen.pathing.body.Snapshots;
+import com.dwinovo.numen.pathing.plan.ToolChoice;
 import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.permission.Permission;
 import com.dwinovo.numen.permission.Verdict;
 
+import java.util.Optional;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 
 /**
@@ -36,6 +43,14 @@ public final class CompanionHands implements Effector {
     /** 这具身体的手(首次取时建)。 */
     public static CompanionHands of(NumenPlayer player) {
         return player.state(CompanionHands.class, () -> new CompanionHands(player));
+    }
+
+    /**
+     * 把挖 {@code state} 最快的那件拿到手上——与寻路给挖掘定价、执行路上挖时拿工具是同一份挑法({@link ToolChoice},看全背包,
+     * 一样快时空手优先、其次不耗耐久的)。换了就交回做了什么。
+     */
+    public Optional<BodyAction> takeToolFor(BlockState state) {
+        return Hotbar.hold(player, new ToolChoice(Snapshots.of(player)).best(state).slot());
     }
 
     /** 左键正按在哪一格上;没按为 null。 */

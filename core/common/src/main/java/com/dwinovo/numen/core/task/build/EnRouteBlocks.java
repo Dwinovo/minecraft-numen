@@ -1,10 +1,9 @@
 package com.dwinovo.numen.core.task.build;
 
 import com.dwinovo.numen.core.act.BlockDigger;
+import com.dwinovo.numen.core.nav.Terrain;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.drive.EditLedger;
-import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.permission.Listing;
 
 import net.minecraft.core.BlockPos;
@@ -123,7 +122,7 @@ final class EnRouteBlocks {
 
     /** 此刻托着她的方块(与寻路判"托着身体的是哪几格"同一处)。 */
     private Set<BlockPos> supports() {
-        return Footing.supports(player.level(), Snapshots.stats(player), player.getBoundingBox());
+        return Terrain.of(player).supports(player.getBoundingBox());
     }
 
     /** 按方块归堆,每堆一段:{@code 2 cobblestone (1,64,2; 1,65,2)}。 */

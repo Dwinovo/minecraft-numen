@@ -4,12 +4,10 @@ import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.nav.BoatNav;
 import com.dwinovo.numen.core.nav.Feet;
 import com.dwinovo.numen.core.nav.RouteBook;
+import com.dwinovo.numen.core.nav.Terrain;
 import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.pathing.body.Snapshots;
-import com.dwinovo.numen.pathing.drive.LiveWorld;
-import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.task.TaskState;
@@ -390,6 +388,6 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
 
     /** 这一格身体待得住(站着、攀着或浮着)。 */
     private boolean standable(BlockPos cell) {
-        return Stance.at(new LiveWorld(player.serverLevel()), Snapshots.stats(player), cell) != null;
+        return Terrain.of(player).standable(cell);
     }
 }

@@ -1,13 +1,11 @@
 package com.dwinovo.numen.core.task.move;
 import com.dwinovo.numen.core.Constants;
+import com.dwinovo.numen.core.nav.DigQuote;
 import com.dwinovo.numen.core.nav.Feet;
 import com.dwinovo.numen.core.scan.BlockScanner;
 import com.dwinovo.numen.core.scan.BlockSearch;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.body.Snapshots;
-import com.dwinovo.numen.pathing.drive.LiveWorld;
-import com.dwinovo.numen.pathing.plan.BodySnapshot;
-import com.dwinovo.numen.pathing.plan.DigRules;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
 import net.minecraft.core.BlockPos;
@@ -94,12 +92,10 @@ final class NearestBlockFinder {
         scanDrained = true;
         // 入册前剔掉物理上处置不了的格(挖不动、贴着流体、顶着落沙、世界边界外):省得选中一个走近了也没法处置的目标。
         // 问的是这块"能不能被处置",与她怎么走过去无关;判据是寻路模块的挖掘规则,只此一处
-        LiveWorld world = new LiveWorld(player.serverLevel());
-        BodySnapshot body = Snapshots.of(player);
         found.stream()
                 .sorted(Comparator.comparingDouble(BlockScanner.Hit::distance))
                 .map(h -> h.pos().immutable())
-                .filter(p -> DigRules.check(world, body, p, world.getBlockState(p), false) == null)
+                .filter(p -> DigQuote.physicallyDiggable(player, p))
                 .limit(MAX_CANDIDATES)
                 .forEach(candidates::add);
         // "她为什么去了那一块而不是最近的" 要靠这一行答:有几个被剪掉了,直线最近的是哪个。
