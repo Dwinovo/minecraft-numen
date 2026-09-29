@@ -8,6 +8,7 @@ import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.tree.LiteralCommandNode;
 import com.mojang.brigadier.tree.RootCommandNode;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.Level;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -62,7 +63,7 @@ class CommandRuleTest {
         assumeTrue(booted, "Minecraft 引导不可用,跳过指令规则钉桩");
     }
 
-    private static final Facts NO_WORLD = new Facts(null, null, null, null);
+    private static final Facts NO_WORLD = new Facts(null, null, null, null, Level.OVERWORLD, Map.of());
 
     private static Action run(String line) {
         return Action.command(line, tree);
@@ -71,7 +72,7 @@ class CommandRuleTest {
     private static Gate gate(Mode mode, List<String> deny, List<String> ask, List<String> allow) {
         RuleSet owner = new RuleSet(deny.stream().map(Rule::parse).toList(), ask.stream().map(Rule::parse).toList(),
                 allow.stream().map(Rule::parse).toList());
-        return new Gate(null, mode, owner, RuleSet.factory(), new PlacedBlocks(), List.of());
+        return new Gate(null, mode, owner, RuleSet.factory(), Level.OVERWORLD, new PlacedBlocks(), Map.of(), List.of());
     }
 
     // ==================== 动作 ====================
@@ -196,7 +197,8 @@ class CommandRuleTest {
         assertEquals(List.of(Rule.parse("command(setblock)")), store.rules().allow(), "以后都允许写进主人层");
         assertEquals(RuleSet.FACTORY_ALLOW, RuleSet.factory().allow().stream().map(Rule::toString).toList(),
                 "出厂层不跟着变");
-        Gate after = new Gate(null, Mode.ASK, store.rules(), RuleSet.factory(), new PlacedBlocks(), List.of());
+        Gate after = new Gate(null, Mode.ASK, store.rules(), RuleSet.factory(),
+                Level.OVERWORLD, new PlacedBlocks(), Map.of(), List.of());
         assertTrue(after.judge(run("setblock 1 64 1 dirt"), null).allowed(), "记住以后 setblock 不再问");
         assertTrue(after.judge(run("help"), null).allowed(), "出厂行照旧放行");
         assertTrue(after.judge(run("give @s diamond"), null).asks(), "别的照旧问");
@@ -233,7 +235,8 @@ class CommandRuleTest {
         Gate ungranted = gate(Mode.ASK, List.of(), List.of(), List.of());
         Action first = run("setblock 0 64 0 stone");
         ConsentItem grant = ungranted.consentItem(first, ungranted.judge(first, null), null);
-        Gate granted = new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), new PlacedBlocks(),
+        Gate granted = new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(),
+                Level.OVERWORLD, new PlacedBlocks(), Map.of(),
                 List.of(grant));
         assertTrue(granted.judge(first, null).allowed());
         assertTrue(granted.judge(run("setblock 0 65 0 stone"), null).asks(), "答应的是这一整行,换一行另问");

@@ -25,17 +25,24 @@ public record Action(Kind kind, BlockPos pos, BlockState state, Entity entity, I
 
     /** 动词。{@link #verb} 是规则文本里写的那个词。 */
     public enum Kind {
-        BREAK("break"), PLACE("place"), ATTACK("attack"), USE_BLOCK("use_block"),
-        USE_ENTITY("use_entity"), TAKE("take"), DROP("drop"), COMMAND("command");
+        BREAK("break", true), PLACE("place", true), ATTACK("attack", false), USE_BLOCK("use_block", true),
+        USE_ENTITY("use_entity", false), TAKE("take", true), DROP("drop", false), COMMAND("command", false);
 
         private final String verb;
+        private final boolean atBlock;
 
-        Kind(String verb) {
+        Kind(String verb, boolean atBlock) {
             this.verb = verb;
+            this.atBlock = atBlock;
         }
 
         public String verb() {
             return verb;
+        }
+
+        /** 这种动作落在一格上({@link Action#pos} 非空):挖、放、右键方块、从容器拿。 */
+        public boolean atBlock() {
+            return atBlock;
         }
 
         /** 规则文本里的动词 → 动词;认不出返回 null。 */

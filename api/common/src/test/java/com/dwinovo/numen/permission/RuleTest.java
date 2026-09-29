@@ -5,6 +5,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.Level;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,7 +45,7 @@ class RuleTest {
     }
 
     private static Facts facts(FakeWorld world, PlacedBlocks placed) {
-        return new Facts(world, placed, null, null);
+        return new Facts(world, placed, null, null, Level.OVERWORLD, Map.of());
     }
 
     // ==================== 解析 ====================
@@ -109,8 +110,8 @@ class RuleTest {
         PlacedBlocks placed = new PlacedBlocks();
         Action dig = Action.breakBlock(POS, world.getBlockState(POS));
         java.util.UUID her = java.util.UUID.fromString("00000000-0000-0000-0000-0000000000bb");
-        Facts asHer = new Facts(world, placed, null, her);
-        Facts asSteve = new Facts(world, placed, null, STEVE.id());
+        Facts asHer = new Facts(world, placed, null, her, Level.OVERWORLD, Map.of());
+        Facts asSteve = new Facts(world, placed, null, STEVE.id(), Level.OVERWORLD, Map.of());
         assertFalse(Rule.parse("break(self_placed)").matches(dig, asHer), "没有记号:谁都没放过");
         placed.record(POS, new PlacedBlocks.Placer(her, "Aria"));
         assertTrue(Rule.parse("break(self_placed)").matches(dig, asHer));

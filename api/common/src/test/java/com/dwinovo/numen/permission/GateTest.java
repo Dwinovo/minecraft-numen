@@ -3,6 +3,7 @@ package com.dwinovo.numen.permission;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.Level;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -47,7 +49,7 @@ class GateTest {
     }
 
     private static Gate layered(Mode mode, RuleSet owner, RuleSet factory, PlacedBlocks placed) {
-        return new Gate(null, mode, owner, factory, placed, List.of());
+        return new Gate(null, mode, owner, factory, Level.OVERWORLD, placed, Map.of(), List.of());
     }
 
     private static RuleSet rules(List<String> deny, List<String> ask, List<String> allow) {
@@ -127,7 +129,7 @@ class GateTest {
 
     /** 要动手的是她:只有出厂层,或者主人层压在上面。 */
     private static Gate hers(RuleSet owner, PlacedBlocks placed) {
-        return new Gate(HER, Mode.ASK, owner, RuleSet.factory(), placed, List.of());
+        return new Gate(HER, Mode.ASK, owner, RuleSet.factory(), Level.OVERWORLD, placed, Map.of(), List.of());
     }
 
     @Test
@@ -135,7 +137,7 @@ class GateTest {
         FakeWorld world = new FakeWorld();
         PlacedBlocks placed = new PlacedBlocks();
         Gate gate = hers(RuleSet.EMPTY, placed);
-        Facts facts = new Facts(world, placed, null, HER);
+        Facts facts = new Facts(world, placed, null, HER, Level.OVERWORLD, Map.of());
 
         // 她垫的圆石、她照设计装的门:拆都不问,命中的是 self_placed 那一行,不是自然方块那一行
         world.set(POS, Blocks.COBBLESTONE.defaultBlockState());
@@ -180,7 +182,8 @@ class GateTest {
         assertTrue(neighbours.asks(), "别人家同伴放的照旧问");
         assertEquals("break(placed)", neighbours.rule().toString());
         // 同一格换一个要动手的人:另一只同伴拆她的,是别人放的
-        Gate bea = new Gate(OTHER_COMPANION.id(), Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), placed, List.of());
+        Gate bea = new Gate(OTHER_COMPANION.id(), Mode.ASK, RuleSet.EMPTY, RuleSet.factory(),
+                Level.OVERWORLD, placed, Map.of(), List.of());
         placed.record(POS.north(), HERSELF);
         world.set(POS.north(), Blocks.COBBLESTONE.defaultBlockState());
         assertTrue(bea.judge(Action.breakBlock(POS.north(), world.getBlockState(POS.north())), world).asks());
@@ -327,7 +330,7 @@ class GateTest {
         Action dig = Action.breakBlock(POS, world.getBlockState(POS));
         ConsentItem item = gate.consentItem(dig, gate.judge(dig, world), world);
         assertEquals("break(placed & minecraft:cobblestone)", item.remember().toString());
-        assertTrue(item.remember().matches(dig, new Facts(world, placed, null, null)),
+        assertTrue(item.remember().matches(dig, new Facts(world, placed, null, null, Level.OVERWORLD, Map.of())),
                 "记下的规则盖得住这次问的动作");
 
         // 主人自己写的 ask 行带取反项:原样留着
@@ -413,13 +416,14 @@ class GateTest {
         Action digFirst = Action.breakBlock(first, world.getBlockState(first));
         ConsentItem grant = ungranted.consentItem(digFirst, ungranted.judge(digFirst, world), world);
 
-        Gate granted = new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), placed,
+        Gate granted = new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), Level.OVERWORLD, placed, Map.of(),
                 List.of(grant));
         assertTrue(granted.judge(digFirst, world).allowed());
         assertTrue(granted.judge(Action.breakBlock(second, world.getBlockState(second)), world).allowed(),
                 "同一行规则问出来的同一种方块:挖一堆只问一次");
         assertTrue(granted.judge(Action.breakBlock(stone, world.getBlockState(stone)), world).asks(),
                 "换一种方块另问");
-        assertEquals(Verdict.Kind.DENY, new Gate(null, Mode.OBSERVE, RuleSet.EMPTY, RuleSet.factory(), placed, List.of(grant)).judge(digFirst, world).kind(), "授权只把问变成放行,解不开拒绝");
+        assertEquals(Verdict.Kind.DENY, new Gate(null, Mode.OBSERVE, RuleSet.EMPTY, RuleSet.factory(),
+                Level.OVERWORLD, placed, Map.of(), List.of(grant)).judge(digFirst, world).kind(), "授权只把问变成放行,解不开拒绝");
     }
 }

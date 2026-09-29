@@ -1,5 +1,7 @@
 package com.dwinovo.numen.permission;
 
+import com.dwinovo.numen.area.Area;
+import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.data.ModLanguageData;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
@@ -17,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -24,8 +27,15 @@ import java.util.stream.Collectors;
 /**
  * 一条规则:一行字符串 {@code 动作(项 & 项 & !项)},与 Claude Code 的 {@code Tool(specifier)}
  * 同形。动词是 {@link Action.Kind#verb} 或 {@code *};项是信号名、方块/实体种类 id
- * ({@code minecraft:chest})、标签({@code #minecraft:beds})、某一只实体({@code entity:<uuid>})
+ * ({@code minecraft:chest})、标签({@code #minecraft:beds})、某一只实体({@code entity:<uuid>})、
+ * 主人名下的一块区域或其中一部分({@code area:house}、{@code area:house/b2},写法见 {@link AreaRef})
  * 或 {@code *};{@code !} 取反。全仓只在这一个类里解析。
+ *
+ * <p>{@code area:} 项按名字活引用区域:区域改了,这一行跟着管新的格子。动作落在一格上({@link Action.Kind#atBlock})、
+ * 与区域同一维度、那一格在区域里就命中;所以它只写在挖、放、右键方块、拿这几个动词(或 {@code *})上,写在打、
+ * 右键实体、丢上解析时就拒。一行规则点名的区域(或部分)不存在时,这一行整行不作数、什么也不命中——
+ * 取反的 {@code !area:house} 也不例外:说不清管哪儿的规则不放行、不拒绝、也不问。加规则时点名不存在的区域由命令当场
+ * 拒收,区域后来被删的由 {@code rules list} 标出来({@link #missingAreas})。
  *
  * <p>{@code command} 的项不一样:除了 {@code *},每一项都是指令的根名({@code command(msg)}、
  * {@code command(!tp)}),认的是 {@link Action.CommandLine#names}。信号说的是方块与实体,一条指令没有它们,
@@ -87,10 +97,15 @@ public final class Rule {
         return kind;
     }
 
-    /** 这条规则对这个动作成立吗。 */
+    /** 这条规则对这个动作成立吗;点名的区域不在了就整行不成立(见类说明)。 */
     public boolean matches(Action action, Facts facts) {
         if (kind != null && kind != action.kind()) {
             return false;
+        }
+        for (Term t : terms) {
+            if (t.type == Term.Type.AREA && t.area.resolve(facts.areas()) == null) {
+                return false;
+            }
         }
         for (Term t : terms) {
             if (!t.matches(action, facts)) {
@@ -98,6 +113,20 @@ public final class Rule {
             }
         }
         return true;
+    }
+
+    /**
+     * 这一行点名、却在 {@code areas} 里找不到的区域或部分,按原文({@code house}、{@code ores/g3});都在是空表。
+     * 这样的一行什么也不命中:命令加规则时据此拒收,列规则时据此标出。
+     */
+    public List<String> missingAreas(Map<String, Area> areas) {
+        List<String> out = new ArrayList<>();
+        for (Term t : terms) {
+            if (t.type == Term.Type.AREA && t.area.resolve(areas) == null) {
+                out.add(t.area.toString());
+            }
+        }
+        return out;
     }
 
     /** 命中这条规则的动作撤不回:它的正项里有撤不回的信号({@link Signals#irreversible})。 */
@@ -176,7 +205,7 @@ public final class Rule {
         if (subject != null && !terms.contains(subject)) {
             terms.add(subject);
         }
-        Facts blind = new Facts(facts.view(), facts.placed(), null, facts.actor());
+        Facts blind = new Facts(facts.view(), facts.placed(), null, facts.actor(), facts.dimension(), facts.areas());
         for (Signals s : Signals.values()) {
             if (s.irreversible() && !mentioned.contains(s) && !s.test(action, facts) && s.test(action, blind)) {
                 terms.add("!" + s.ruleName());
@@ -203,24 +232,29 @@ public final class Rule {
     // ==================== 项 ====================
 
     private static final class Term {
-        private enum Type { ANY, SIGNAL, TAG, ID, ENTITY, COMMAND }
+        private enum Type { ANY, SIGNAL, TAG, ID, ENTITY, COMMAND, AREA }
+
+        private static final String AREA = "area:";
 
         final Type type;
         final boolean negated;
         final Signals signal;
         final ResourceLocation id;
         final UUID uuid;
+        final AreaRef area;
         /** 这一项的原文({@code !placed}、{@code minecraft:chest});指令项的原文就是根名。 */
         final String text;
         /** 不带 {@code !} 的那一截。 */
         final String body;
 
-        private Term(Type type, boolean negated, Signals signal, ResourceLocation id, UUID uuid, String body) {
+        private Term(Type type, boolean negated, Signals signal, ResourceLocation id, UUID uuid, AreaRef area,
+                     String body) {
             this.type = type;
             this.negated = negated;
             this.signal = signal;
             this.id = id;
             this.uuid = uuid;
+            this.area = area;
             this.body = body;
             this.text = (negated ? "!" : "") + body;
         }
@@ -233,25 +267,38 @@ public final class Rule {
                 throw new IllegalArgumentException("empty term in rule '" + rule + "'");
             }
             if (body.equals("*")) {
-                return new Term(Type.ANY, negated, null, null, null, body);
+                return new Term(Type.ANY, negated, null, null, null, null, body);
             }
             if (kind == Action.Kind.COMMAND) {
                 if (body.startsWith("/") || body.chars().anyMatch(Character::isWhitespace)) {
                     throw new IllegalArgumentException("bad command name '" + body + "' in rule '" + rule
                             + "'; write the command's root name without the slash, e.g. command(setblock)");
                 }
-                return new Term(Type.COMMAND, negated, null, null, null, body);
+                return new Term(Type.COMMAND, negated, null, null, null, null, body);
+            }
+            if (body.startsWith(AREA)) {
+                if (kind != null && !kind.atBlock()) {
+                    throw new IllegalArgumentException("area terms match actions at a block (break, place, use_block, "
+                            + "take or *), not " + kind.verb() + ", in rule '" + rule + "'");
+                }
+                try {
+                    return new Term(Type.AREA, negated, null, null, null, AreaRef.parse(body.substring(AREA.length())),
+                            body);
+                } catch (IllegalArgumentException e) {
+                    throw new IllegalArgumentException("bad area '" + body + "' in rule '" + rule + "': "
+                            + e.getMessage());
+                }
             }
             if (body.startsWith("#")) {
                 ResourceLocation id = ResourceLocation.tryParse(body.substring(1));
                 if (id == null) {
                     throw new IllegalArgumentException("bad tag '" + body + "' in rule '" + rule + "'");
                 }
-                return new Term(Type.TAG, negated, null, id, null, body);
+                return new Term(Type.TAG, negated, null, id, null, null, body);
             }
             if (body.startsWith("entity:")) {
                 try {
-                    return new Term(Type.ENTITY, negated, null, null, UUID.fromString(body.substring(7)), body);
+                    return new Term(Type.ENTITY, negated, null, null, UUID.fromString(body.substring(7)), null, body);
                 } catch (IllegalArgumentException e) {
                     throw new IllegalArgumentException("bad entity uuid '" + body + "' in rule '" + rule + "'");
                 }
@@ -261,15 +308,16 @@ public final class Rule {
                 if (id == null) {
                     throw new IllegalArgumentException("bad id '" + body + "' in rule '" + rule + "'");
                 }
-                return new Term(Type.ID, negated, null, id, null, body);
+                return new Term(Type.ID, negated, null, id, null, null, body);
             }
             Signals signal = Signals.byName(body);
             if (signal == null) {
                 throw new IllegalArgumentException("unknown signal '" + body + "' in rule '" + rule + "'; signals are "
                         + Arrays.stream(Signals.values()).map(Signals::ruleName).collect(Collectors.joining(", "))
-                        + ", or write a namespaced id (minecraft:chest), a tag (#minecraft:beds), entity:<uuid> or *");
+                        + ", or write a namespaced id (minecraft:chest), a tag (#minecraft:beds), entity:<uuid>, "
+                        + "area:<name> or *");
             }
-            return new Term(Type.SIGNAL, negated, signal, null, null, body);
+            return new Term(Type.SIGNAL, negated, signal, null, null, null, body);
         }
 
         boolean matches(Action action, Facts facts) {
@@ -280,6 +328,7 @@ public final class Rule {
                 case ID -> idHit(action);
                 case ENTITY -> action.entity() != null && uuid.equals(action.entity().getUUID());
                 case COMMAND -> action.command() != null && action.command().names().contains(body);
+                case AREA -> inArea(action, facts);
             };
             return negated != hit;
         }
@@ -292,7 +341,14 @@ public final class Rule {
                 case ID -> "is " + id;
                 case ENTITY -> "is entity " + uuid;
                 case COMMAND -> "runs /" + body;
+                case AREA -> "is in area " + area;
             };
+        }
+
+        /** 动作落在一格上,那一格在点名的区域里(同一维度)。区域不在由 {@link Rule#matches} 先挡掉。 */
+        private boolean inArea(Action action, Facts facts) {
+            Area a = area.resolve(facts.areas());
+            return a != null && action.pos() != null && a.contains(facts.dimension(), action.pos());
         }
 
         /** 给主人看的这一项;只对正项、非 {@code *} 调。 */
