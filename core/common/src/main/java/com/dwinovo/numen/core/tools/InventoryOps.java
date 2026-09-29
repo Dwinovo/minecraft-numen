@@ -2,6 +2,7 @@ package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.ToolArgs;
 import com.dwinovo.numen.area.Area;
+import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.core.nav.WorkArea;
@@ -83,7 +84,7 @@ public final class InventoryOps {
      * 半径),点名了区域({@code areas})就再和它求交:区域说在哪儿,球说一趟走多远。
      */
     public TaskRecord collectItems(ServerSource src, List<ResourceLocation> itemIds, Integer radius,
-                                   List<String> areas) {
+                                   List<AreaRef> areas) {
         // Lenient set from the id list: unknown ids are skipped, and an absent list
         // yields an empty set — the "match everything" filter.
         Set<Item> filter = new LinkedHashSet<>();
@@ -102,10 +103,8 @@ public final class InventoryOps {
         Area area = around.area();
         String where = around.describe();
         if (named) {
-            String name = String.join(" ", areas);
-            Area chosen = AreaOps.resolveAll(src.companion(), areas);
-            AreaOps.requireHere(src.companion(), name, chosen);
-            area = area.intersect(chosen);
+            String name = String.join(" ", areas.stream().map(AreaRef::toString).toList());
+            area = area.intersect(AreaOps.resolveAll(src.companion(), areas));
             where = "in " + name + ", " + where;
         }
         String label = filter.isEmpty() ? "all items" : labelFor(filter);

@@ -11,6 +11,7 @@ import com.dwinovo.numen.core.task.mine.MineBlockTaskRecord;
 import com.dwinovo.numen.core.task.MouseButton;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.area.Area;
+import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.area.Cells;
 import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
@@ -42,7 +43,7 @@ public final class BlockActionOps {
      * <p>工作区在受理这一刻定下:以她此刻脚下那一格为中心({@link WorkArea#around})。区域有几格在区里的照常受理,区外那几格
      * 留着不挖,受理回执与结局都交代。
      */
-    public TaskRecord autoMine(ServerSource src, List<String> block_ids, List<String> areas, Integer count,
+    public TaskRecord autoMine(ServerSource src, List<String> block_ids, List<AreaRef> areas, Integer count,
                                RouteSpec spec) {
         NumenPlayer her = src.companion();
         long now = her.level().getGameTime();
@@ -57,9 +58,8 @@ public final class BlockActionOps {
                             + " scan blocks --into keeps them)");
         }
         if (byArea) {
-            String name = String.join(" ", areas);
+            String name = String.join(" ", areas.stream().map(AreaRef::toString).toList());
             Area area = AreaOps.resolveAll(her, areas);
-            AreaOps.requireHere(her, name, area);
             Cells scanned = MineBlockTaskRecord.scanned(area);
             if (scanned.isEmpty()) {
                 throw new IllegalArgumentException(name + " has no scanned cells: work_mine digs cells a scan added,"

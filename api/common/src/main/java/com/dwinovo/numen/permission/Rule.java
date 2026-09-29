@@ -247,8 +247,6 @@ public final class Rule {
     private static final class Term {
         private enum Type { ANY, SIGNAL, TAG, ID, ENTITY, COMMAND, AREA }
 
-        private static final String AREA = "area:";
-
         final Type type;
         final boolean negated;
         final Signals signal;
@@ -289,14 +287,14 @@ public final class Rule {
                 }
                 return new Term(Type.COMMAND, negated, null, null, null, null, body);
             }
-            if (body.startsWith(AREA)) {
+            if (body.startsWith(AreaRef.MARK)) {
                 if (kind != null && !kind.atBlock() && kind != Action.Kind.EDIT_AREA) {
                     throw new IllegalArgumentException("area terms match actions at a block (break, place, use_block, "
                             + "take), edit_area or *, not " + kind.verb() + ", in rule '" + rule + "'");
                 }
                 AreaRef ref;
                 try {
-                    ref = AreaRef.parse(body.substring(AREA.length()));
+                    ref = AreaRef.marked(body);
                 } catch (IllegalArgumentException e) {
                     throw new IllegalArgumentException("bad area '" + body + "' in rule '" + rule + "': "
                             + e.getMessage());
@@ -409,7 +407,7 @@ public final class Rule {
                 return a.command().root();
             }
             if (a.area() != null) {
-                return AREA + a.area();
+                return AreaRef.parse(a.area()).marked();
             }
             ResourceLocation id = subjectId(a);
             return id == null ? null : id.toString();

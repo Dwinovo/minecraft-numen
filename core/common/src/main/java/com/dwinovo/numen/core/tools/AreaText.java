@@ -39,7 +39,7 @@ public final class AreaText {
      * (方向与距离),小的逐格列坐标(由近及远)。许不许挖由调用方接上:扫描时的说法,或此刻问的。
      *
      * @param id   这一部分怎么点名({@code ores/g3});没有编号(只是看、没存)为 null
-     * @param from 她此刻脚下那一格:方向与距离从这里量;区域在别的维度时为 null,不说最近一格
+     * @param from 她此刻脚下那一格:方向与距离从这里量
      */
     public static JsonObject part(String id, Cells cells, BlockPos from) {
         JsonObject o = new JsonObject();
@@ -78,7 +78,7 @@ public final class AreaText {
         if (fluids[0] > 0) {
             o.addProperty("sources", fluids[1]);
         }
-        BlockPos nearest = from == null ? null : cells.nearest(from);
+        BlockPos nearest = cells.nearest(from);
         if (nearest != null) {
             JsonObject at = xyz(nearest);
             at.addProperty("direction", direction(from, nearest));
@@ -86,9 +86,7 @@ public final class AreaText {
             o.add("nearest", at);
         }
         if (list) {
-            if (from != null) {
-                positions.sort(Comparator.comparingDouble(from::distSqr));
-            }
+            positions.sort(Comparator.comparingDouble(from::distSqr));
             JsonArray cellsOut = new JsonArray();
             positions.forEach(p -> cellsOut.add(cell(p)));
             o.add("positions", cellsOut);

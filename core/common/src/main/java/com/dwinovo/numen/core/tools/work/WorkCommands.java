@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import com.dwinovo.numen.api.NumenApi;
+import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
@@ -43,7 +44,7 @@ public final class WorkCommands {
     private static final Param<List<String>> BLOCK_IDS = Param.optional("block_ids",
             ArgType.list(ArgType.idOrTag()), "Block types to gather; she scans for them around her herself. "
                     + "Include every variant (iron_ore AND deepslate_iron_ore). Give this OR area.");
-    private static final Param<List<String>> MINE_AREA = Param.optional("area", ArgType.list(ArgType.string()),
+    private static final Param<List<AreaRef>> MINE_AREA = Param.optional("area", ArgType.list(ArgType.area()),
             "Dig exactly the scanned cells of this area, or of these parts of it, that still hold the block the "
                     + "scan saw, nothing beyond them. Give this OR block_ids.")
             .values("an area or its parts, as a scan with --into kept them and `area show` lists them (ores, "
@@ -59,7 +60,7 @@ public final class WorkCommands {
             "How far around where she stands when you call it to pick up, in blocks.")
             .whenOmitted("pick up within " + InventoryOps.COLLECT_DEFAULT_RADIUS + ", or within her work area's "
                     + WorkArea.RADIUS + " with --area");
-    private static final Param<List<String>> COLLECT_AREA = Param.optional("area", ArgType.list(ArgType.string()),
+    private static final Param<List<AreaRef>> COLLECT_AREA = Param.optional("area", ArgType.list(ArgType.area()),
             "Only pick up drops lying in this area, or these parts of it.")
             .values("an area or its parts as `area list` and `area show` list them")
             .whenOmitted("pick up anywhere within the radius");

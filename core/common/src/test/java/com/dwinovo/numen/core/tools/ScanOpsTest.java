@@ -162,8 +162,9 @@ class ScanOpsTest {
         assertEquals(3, part.getAsJsonObject("blocks").get("minecraft:water").getAsInt());
         assertEquals(2, part.get("sources").getAsInt());
         assertEquals("5,60,5..7,61,6", AreaText.box(water.bounds()));
-        JsonObject framed = AreaText.part("pond/b1", Cells.box(new BlockPos(0, 60, 0), new BlockPos(1, 60, 0)), null);
+        JsonObject framed = AreaText.part("pond/b1", Cells.box(new BlockPos(0, 60, 0), new BlockPos(1, 60, 0)),
+                new BlockPos(3, 60, 0));
         assertFalse(framed.has("blocks"), "框出来的格不附带方块");
-        assertFalse(framed.has("nearest"), "在别的维度就不说最近一格");
+        assertEquals("1,60,0", framed.getAsJsonArray("positions").get(0).getAsString(), "逐格由近及远列");
     }
 }

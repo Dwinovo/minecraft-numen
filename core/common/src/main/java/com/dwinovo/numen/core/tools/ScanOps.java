@@ -45,7 +45,7 @@ public final class ScanOps {
      * @param into  把每一团加进这块区域;只是看为 null
      * @param again 这一次看本身的那一行(不带 {@code --page}):翻页提示写它,改区域的征询也点名它
      */
-    public static void scanBlocks(ServerSource src, int radius, List<String> blockIds, String in, String into,
+    public static void scanBlocks(ServerSource src, int radius, List<String> blockIds, AreaRef in, AreaRef into,
                                   CommandArgs args, String again) {
         NumenPlayer self = src.companion();
         int r = Math.clamp(radius, MIN_RADIUS, BlockScan.MAX_RADIUS);
@@ -53,12 +53,7 @@ public final class ScanOps {
         if (targets.isEmpty()) {
             throw new IllegalArgumentException("no valid block_ids provided");
         }
-        Area within = null;
-        if (in != null) {
-            within = AreaOps.resolve(self, in);
-            AreaOps.requireHere(self, AreaRef.parse(in).name(), within);
-        }
-        Area only = within;
+        Area only = in == null ? null : AreaOps.resolve(self, in);
         if (into == null) {
             BlockScan.start(self, r, targets, only, found -> src.reply(listed(found, r, in, null, null, args, again)));
             return;
@@ -68,19 +63,18 @@ public final class ScanOps {
                     + "added to " + into + " are its parts, and area show " + into + " --page " + args.get(Listing.PAGE)
                     + " lists them");
         }
-        AreaRef target = AreaRef.parse(into);
-        String name = target.name();
-        if (target.part() != null) {
+        String name = into.name();
+        if (into.part() != null) {
             throw new IllegalArgumentException("--into takes a whole area (" + name + "): each group becomes a new part "
                     + "of it");
         }
-        AreaOps.requireHere(self, name, AreaOps.existing(self, name));
+        AreaOps.existing(self, name);
         src.authorize(Action.editArea(name), again, allowed -> BlockScan.start(self, r, targets, only,
                 found -> allowed.reply(added(self, found, r, in, name, args))));
     }
 
     /** 看完,写进区域:那一刻的区域加上每一团。看的时候区域被删了就不写,照实说。 */
-    private static String added(NumenPlayer self, BlockScan.Found found, int radius, String in, String into,
+    private static String added(NumenPlayer self, BlockScan.Found found, int radius, AreaRef in, String into,
                                 CommandArgs args) {
         Area now = AreaOps.store(self).get(into);
         if (now == null) {
@@ -123,7 +117,7 @@ public final class ScanOps {
      * @param ids   写进区域后各团的编号;只是看为 null
      * @param again 翻页提示写的那一行
      */
-    private static String listed(BlockScan.Found found, int radius, String in, String into, List<String> ids,
+    private static String listed(BlockScan.Found found, int radius, AreaRef in, String into, List<String> ids,
                                  CommandArgs args, String again) {
         List<BlockGroups.Group> all = found.groups();
         List<String> rows = new ArrayList<>(all.size());

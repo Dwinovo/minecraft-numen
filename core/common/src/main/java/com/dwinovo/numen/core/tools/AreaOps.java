@@ -17,6 +17,7 @@ import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.Names;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.core.build.Built;
+import com.dwinovo.numen.core.nav.NamedAreas;
 import com.dwinovo.numen.core.route.Itinerary;
 import com.dwinovo.numen.core.route.Routes;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -72,29 +73,25 @@ public final class AreaOps {
     }
 
     /**
-     * {@code 名字} 或 {@code 名字/部分} 指的那一块或那一部分({@link AreaRef}):整块,或只剩那一部分的区域。
+     * {@code ref} 指的那一块或那一部分(整块,或只剩那一部分的区域),在她此刻所在的维度里:按名字找主人的区域只经
+     * {@link NamedAreas},路线与别的命令点名区域也是它。
      *
-     * @throws IllegalArgumentException 写法不对,没有这块区域,或区域里没有这一部分;说清有哪些
+     * @throws IllegalArgumentException 没有这块区域、区域里没有这一部分、区域在别的维度;说清有哪些
      */
-    public static Area resolve(NumenPlayer her, String written) {
-        AreaRef ref = AreaRef.parse(written);
-        Area area = existing(her, ref.name());
-        if (ref.part() != null && area.part(ref.part()) == null) {
-            throw new IllegalArgumentException("area " + ref.name() + " has no part " + ref.part() + "; its parts are "
-                    + partIds(area) + " (area show " + ref.name() + " lists them)");
-        }
-        return ref.resolve(Map.of(ref.name(), area));
+    public static Area resolve(NumenPlayer her, AreaRef ref) {
+        return NamedAreas.of(her).resolve(ref);
     }
 
     /**
-     * 几处点名的并({@code ores/g1 ores/g3}):一处就是它自己。都要在同一个维度。
+     * 几处点名的并({@code ores/g1 ores/g3}):一处就是它自己。
      *
-     * @throws IllegalArgumentException 哪一处点不到,或不在同一个维度
+     * @throws IllegalArgumentException 哪一处点不到
      */
-    public static Area resolveAll(NumenPlayer her, List<String> written) {
+    public static Area resolveAll(NumenPlayer her, List<AreaRef> refs) {
+        NamedAreas areas = NamedAreas.of(her);
         Area out = null;
-        for (String one : written) {
-            Area area = resolve(her, one);
+        for (AreaRef ref : refs) {
+            Area area = areas.resolve(ref);
             out = out == null ? area : out.union(area);
         }
         if (out == null) {
@@ -103,34 +100,9 @@ public final class AreaOps {
         return out;
     }
 
-    /** 叫这个名字的那一块;没有就说有哪些、怎么建。 */
+    /** 叫这个名字的那一整块,在她此刻所在的维度里;没有就说有哪些、怎么建。 */
     static Area existing(NumenPlayer her, String name) {
-        AreaStore store = store(her);
-        Area area = store.get(Names.checked("area", name));
-        if (area == null) {
-            throw new IllegalArgumentException("there is no area named " + name + "; "
-                    + (store.all().isEmpty() ? "your owner has none yet" : "the areas are "
-                            + String.join(", ", store.all().keySet()))
-                    + "; area new " + name + " makes one");
-        }
-        return area;
-    }
-
-    /**
-     * 区域和她此刻在同一个维度;不在就说清。
-     *
-     * @throws IllegalArgumentException 不在同一个维度
-     */
-    public static void requireHere(NumenPlayer her, String name, Area area) {
-        ResourceKey<Level> here = her.level().dimension();
-        if (!area.dimension().equals(here)) {
-            throw new IllegalArgumentException("area " + name + " is in " + area.dimension().location() + " and you are in "
-                    + here.location() + "; an area belongs to one dimension");
-        }
-    }
-
-    private static String partIds(Area area) {
-        return area.parts().isEmpty() ? "none" : String.join(", ", area.parts().stream().map(Area.Part::id).toList());
+        return resolve(her, AreaRef.parse(name));
     }
 
     // ==================== 改区域 ====================
@@ -276,11 +248,7 @@ public final class AreaOps {
     /** 删掉一部分;别的部分编号不变。 */
     public static void drop(ServerSource src, String name, String part, String what) {
         NumenPlayer her = src.companion();
-        Area area = existing(her, name);
-        if (area.part(part) == null) {
-            throw new IllegalArgumentException("area " + name + " has no part " + part + "; its parts are "
-                    + partIds(area));
-        }
+        resolve(her, AreaRef.parse(name + "/" + part));
         src.authorize(Action.editArea(name), what, allowed -> {
             Area next = existing(her, name).without(part);
             store(her).replace(name, next);
@@ -307,7 +275,6 @@ public final class AreaOps {
     public static void refresh(ServerSource src, String name, String what) {
         NumenPlayer her = src.companion();
         Area area = existing(her, name);
-        requireHere(her, name, area);
         Recheck first = recheck(area, her.serverLevel());
         if (first.stale().isEmpty()) {
             src.reply(TaskResult.ok("all " + first.checked() + " scanned cells of " + name + " still hold what was "
@@ -384,30 +351,25 @@ public final class AreaOps {
 
     /**
      * 一块区域(或其中一部分):抬头是整块的小结,之后每部分一行——格数、附带的方块、最近一格、包围盒、挖它此刻许不许
-     * (逐格用挖掘落点会提交的同一个动作问,在她此刻的世界里;区域在别的维度就不问)。按输出预算分页。
+     * (逐格用挖掘落点会提交的同一个动作问,在她此刻的世界里)。按输出预算分页。
      */
-    public static String show(NumenPlayer her, String written, CommandArgs args, String again) {
-        AreaRef ref = AreaRef.parse(written);
+    public static String show(NumenPlayer her, AreaRef ref, CommandArgs args, String again) {
         Area whole = existing(her, ref.name());
-        Area shown = resolve(her, written);
-        boolean here = whole.dimension().equals(her.level().dimension());
+        Area shown = resolve(her, ref);
         ServerLevel level = her.serverLevel();
-        Gate gate = here ? Permission.gateFor(her) : null;
+        Gate gate = Permission.gateFor(her);
         BlockPos feet = her.blockPosition();
         List<String> rows = new ArrayList<>(shown.parts().size());
         for (Area.Part part : shown.parts()) {
-            JsonObject row = AreaText.part(ref.name() + "/" + part.id(), part.cells(), here ? feet : null);
+            JsonObject row = AreaText.part(ref.name() + "/" + part.id(), part.cells(), feet);
             row.addProperty("box", AreaText.box(part.cells().bounds()));
-            if (here) {
-                judgeNow(row, part.cells(), gate, level);
-            }
+            judgeNow(row, part.cells(), gate, level);
             rows.add(row.toString());
         }
         String head = "area " + AreaText.summary(ref.name(), whole)
                 + (shown.parts().isEmpty() ? "." : (ref.part() == null ? "" : "; showing " + ref.part()) + ". One part "
                         + "per line: blocks are as they were seen when added (framed parts carry none), permission is "
-                        + "asked now for breaking what stands in each cell"
-                        + (here ? "" : " (not asked: you are in " + her.level().dimension().location() + ")") + ":");
+                        + "asked now for breaking what stands in each cell:");
         return new Listing(head, rows, "", again).result(args).toJson();
     }
 

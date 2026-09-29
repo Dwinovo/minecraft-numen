@@ -115,7 +115,7 @@ class WorkCommandGroupsTest {
         assertTrue(gotoHelp.contains("--avoid_break <block|cell|area...>"), gotoHelp);
         assertTrue(gotoHelp.endsWith("Shortcut tool: move_goto."), gotoHelp);
         String mineHelp = run("work mine --help").get("message").getAsString();
-        assertTrue(mineHelp.startsWith("work mine [--block_ids <id...>] [--area <string...>] [--count <integer>]"),
+        assertTrue(mineHelp.startsWith("work mine [--block_ids <id...>] [--area <area...>] [--count <integer>]"),
                 mineHelp);
         assertTrue(mineHelp.endsWith("Shortcut tool: work_mine."), mineHelp);
     }

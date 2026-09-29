@@ -5,6 +5,7 @@ import java.util.function.UnaryOperator;
 
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.area.Area;
+import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
@@ -30,7 +31,7 @@ public final class AreaCommands {
             .values("an area name, as `area list` lists it");
     private static final Param<String> NEW_NAME = Param.required("name", ArgType.word(),
             "Name of the new area: lowercase letters, digits, _ and -.");
-    private static final Param<String> SHOWN = Param.required("area", ArgType.string(),
+    private static final Param<AreaRef> SHOWN = Param.required("area", ArgType.area(),
             "The area, or one part of it written area/part (ores/g3).");
     private static final Param<String> PART = Param.required("part", ArgType.word(),
             "The part: a letter and a number, as `area show` lists them (g3, b1, p2, c1).");
@@ -44,9 +45,9 @@ public final class AreaCommands {
             "A route: the cells its latest plan breaks or places, as `route show` lists it.");
     private static final Param<String> RESULT = Param.required("name", ArgType.word(),
             "Name of the new area the result is kept as: lowercase letters, digits, _ and -.");
-    private static final Param<String> FROM = Param.required("area", ArgType.string(),
+    private static final Param<AreaRef> FROM = Param.required("area", ArgType.area(),
             "The area to start from, or one part of it (ores/g3).");
-    private static final Param<List<String>> AREAS = Param.required("areas", ArgType.list(ArgType.string()),
+    private static final Param<List<AreaRef>> AREAS = Param.required("areas", ArgType.list(ArgType.area()),
             "The areas, or parts of them (ores/g3), one or more.");
     private static final Param<List<String>> BLOCKS = Param.optional("blocks", ArgType.list(ArgType.idOrTag()),
             "Block types or #tags to keep.");
@@ -184,20 +185,20 @@ public final class AreaCommands {
 
     /** 运算:点名的第一块起算,结果存成新的一块。 */
     private static void derive(ServerSource src, CommandArgs args, String action, List<Param<?>> params,
-                               String first, UnaryOperator<Area> operation) {
+                               AreaRef first, UnaryOperator<Area> operation) {
         AreaOps.derive(src, args.get(RESULT), line(args, action, params), operation,
                 AreaOps.resolve(src.companion(), first));
     }
 
     /** 并:第一块之后的几块依次接上。 */
-    private static Area unionRest(NumenPlayer her, Area first, List<String> all) {
+    private static Area unionRest(NumenPlayer her, Area first, List<AreaRef> all) {
         return fold(her, first, all.subList(1, all.size()), Area::union);
     }
 
-    private static Area fold(NumenPlayer her, Area start, List<String> others,
+    private static Area fold(NumenPlayer her, Area start, List<AreaRef> others,
                              java.util.function.BinaryOperator<Area> op) {
         Area out = start;
-        for (String other : others) {
+        for (AreaRef other : others) {
             out = op.apply(out, AreaOps.resolve(her, other));
         }
         return out;

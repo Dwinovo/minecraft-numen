@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.tools.perception;
 
 import com.dwinovo.numen.api.NumenApi;
+import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
@@ -37,11 +38,11 @@ public final class ScanCommands {
                     + ").");
     private static final Param<List<String>> BLOCK_IDS = Param.required("block_ids", ArgType.list(ArgType.idOrTag()),
             "List of namespaced block ids to search for.");
-    private static final Param<String> IN = Param.optional("in", ArgType.string(),
+    private static final Param<AreaRef> IN = Param.optional("in", ArgType.area(),
             "Only look inside this area, or one part of it (base, ores/g3).")
             .values("an area as `area list` lists it")
             .whenOmitted("look everywhere within the radius");
-    private static final Param<String> INTO = Param.optional("into", ArgType.word(),
+    private static final Param<AreaRef> INTO = Param.optional("into", ArgType.area(),
             "Add each group found to this area as a new part (g1, g2, ... counted within the area).")
             .values("an area made with `area new`")
             .whenOmitted("only look: the groups get no ids and nothing is kept");
