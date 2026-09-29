@@ -2,12 +2,12 @@ package com.dwinovo.numen.core.build;
 
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
+import com.dwinovo.numen.cli.Names;
 import com.dwinovo.numen.cli.NumenCli;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 /**
  * 一份设计:有名字、存盘的一串原语,坐标相对原点 {@code (0,0,0)}。它像一个函数,可以在任何地方、盖任意多次
@@ -33,8 +33,6 @@ import java.util.regex.Pattern;
 public record Design(String name, UUID owner, String ownerName, String author, String created,
                      List<String> steps, Canvas drawn) {
 
-    /** 设计名:小写字母、数字、下划线、连字符,用作文件名,也是建成的房子的名字的前半({@code house#1})。 */
-    private static final Pattern NAME = Pattern.compile("[a-z0-9][a-z0-9_-]{0,47}");
     private static final String HEAD = "# ";
     private static final String OWNER = "owner: ";
     private static final String AUTHOR = "author: ";
@@ -50,18 +48,12 @@ public record Design(String name, UUID owner, String ownerName, String author, S
             "the rest of the line: one build primitive without build and without --into",
             Design::step, Step::reading);
 
-    /** 合不合设计名的规矩。 */
-    public static boolean isName(String name) {
-        return name != null && NAME.matcher(name).matches();
-    }
-
-    /** 设计名合规就原样返回,否则说清能用什么字。 */
+    /**
+     * 设计名合规就原样返回,否则说清能用什么字。规矩见 {@link Names}:用作文件名,也是建成的房子的名字的前半
+     * ({@code house#1})。
+     */
     public static String checkedName(String name) {
-        if (!isName(name)) {
-            throw new IllegalArgumentException("a design name is lowercase letters, digits, _ and -, starting with a "
-                    + "letter or digit, at most 48 long; got \"" + name + "\"");
-        }
-        return name;
+        return Names.checked("design", name);
     }
 
     /** 一份还没有步骤的新设计。 */
