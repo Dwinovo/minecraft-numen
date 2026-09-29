@@ -128,6 +128,27 @@ class RouteSpecTest {
         assertSame(a, a.plus(PositionCosts.EMPTY));
     }
 
+    /** "只许这几格":这一栏别的格一律禁止,别的栏不受影响;两份"只许"叠在一起取交集,空集就是一格都不许。 */
+    @Test
+    void aConfinedUseForbidsEveryOtherCellAndTwoConfinementsIntersect() {
+        long a = AT.asLong();
+        long b = AT.above().asLong();
+        long c = AT.east().asLong();
+        PositionCosts only = PositionCosts.builder().confine(Use.DIG, LongSet.of(a, b)).build();
+        assertFalse(only.forbids(Use.DIG, a));
+        assertFalse(only.forbids(Use.DIG, b));
+        assertTrue(only.forbids(Use.DIG, c));
+        assertFalse(only.forbids(Use.PLACE, c), "只管挖这一栏");
+        assertFalse(only.isEmpty());
+        PositionCosts both = only.plus(PositionCosts.builder().confine(Use.DIG, LongSet.of(b, c)).build());
+        assertTrue(both.forbids(Use.DIG, a));
+        assertFalse(both.forbids(Use.DIG, b));
+        assertTrue(both.forbids(Use.DIG, c));
+        PositionCosts none = PositionCosts.builder().confine(Use.PLACE, LongSet.of()).build();
+        assertTrue(none.forbids(Use.PLACE, a));
+        assertTrue(only.plus(PositionCosts.protect(LongSet.of(a))).forbids(Use.DIG, a), "禁令照旧取并集");
+    }
+
     @Test
     void aForbiddenCellIsNotAnInfinitePrice() {
         assertThrows(IllegalArgumentException.class,

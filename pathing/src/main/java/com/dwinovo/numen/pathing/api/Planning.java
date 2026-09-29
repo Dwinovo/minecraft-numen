@@ -21,6 +21,8 @@ public final class Planning {
     /** 日志里的"谁"。 */
     private final String who;
     private Pending<Outcome> diagnosis;
+    /** 没有候选时朝目标推进的那一截,等诊断回来一并交出;没有为 null。 */
+    private PlanResult.Candidate partial;
     private PlanResult result;
 
     /** 起点上身体待不住,当场就有结论。 */
@@ -49,7 +51,7 @@ public final class Planning {
             if (outcome != null) {
                 PathLog.info("{} 规划 {} 去 {} {} 没有候选 -> {} 诊断 {}", who, PathLog.pos(probe.start()), probe.goal(),
                         PathLog.spec(probe.model().spec()), Navigation.describe(outcome), PathLog.ms(diagnosis.ranNanos()));
-                result = new PlanResult(List.of(), outcome);
+                result = new PlanResult(List.of(), outcome, partial);
             }
             return result;
         }
@@ -61,15 +63,16 @@ public final class Planning {
             List<PlanResult.Candidate> candidates = new ArrayList<>();
             StringBuilder listed = new StringBuilder();
             for (Route route : plan.candidates()) {
-                candidates.add(new PlanResult.Candidate(route, Bill.of(route)));
+                candidates.add(PlanResult.Candidate.of(route));
                 listed.append(" [").append(candidates.size()).append("] ").append(PathLog.route(route));
             }
             PathLog.info("{} 规划 {} 去 {} {} 候选 {} 条 用时 {} 排队 {}:{}", who, PathLog.pos(probe.start()), probe.goal(),
                     PathLog.spec(probe.model().spec()), candidates.size(), PathLog.ms(planning.ranNanos()),
                     PathLog.ms(planning.queuedNanos()), listed);
-            result = new PlanResult(candidates, null);
+            result = new PlanResult(candidates, null, null);
             return result;
         }
+        partial = plan.partial() == null ? null : PlanResult.Candidate.of(plan.partial());
         diagnosis = Searches.submit(cancelled -> Diagnosis.of(plan.unreached(), probe, cancelled));
         return null;
     }

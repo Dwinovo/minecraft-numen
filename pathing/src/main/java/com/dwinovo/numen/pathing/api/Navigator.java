@@ -9,8 +9,10 @@ import com.dwinovo.numen.pathing.drive.LiveWorld;
 import com.dwinovo.numen.pathing.drive.PathLog;
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.CostModel;
+import com.dwinovo.numen.pathing.plan.Maneuver;
 import com.dwinovo.numen.pathing.search.Favoring;
 import com.dwinovo.numen.pathing.search.Origin;
+import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.search.RoutePlanner;
 import com.dwinovo.numen.pathing.search.Search;
 import com.dwinovo.numen.pathing.search.Searches;
@@ -40,28 +42,36 @@ public final class Navigator {
         return new Navigator(body, ports);
     }
 
-    /** 只搜不走:从身体脚下出候选路线。 */
+    /** 只搜不走:从身体脚下(或接在 {@link PlanQuery#after} 那条路线后面)出候选路线。 */
     public Planning plan(PlanQuery query) {
         ServerPlayer entity = body.entity();
         BodySnapshot snapshot = body.snapshot();
-        Optional<BlockPos> start = Origin.of(new LiveWorld(entity.serverLevel()), snapshot.stats(),
-                entity.getX(), entity.getY(), entity.getZ());
         String who = PathLog.who(entity);
-        if (start.isEmpty()) {
-            BlockPos at = entity.blockPosition();
-            PathLog.info("{} 规划 去 {}:起点待不住 {}", who, query.goal(), PathLog.body(entity));
-            return new Planning(new PlanResult(List.of(),
-                    new Outcome.Stranded(at, entity.level().getBlockState(at))));
+        BlockPos from;
+        Maneuver arrival = null;
+        if (query.after() != null) {
+            Route previous = query.after();
+            from = previous.end();
+            arrival = previous.legs().isEmpty() ? null : previous.legs().get(previous.legs().size() - 1).maneuver();
+        } else {
+            Optional<BlockPos> start = Origin.of(new LiveWorld(entity.serverLevel()), snapshot.stats(),
+                    entity.getX(), entity.getY(), entity.getZ());
+            if (start.isEmpty()) {
+                BlockPos at = entity.blockPosition();
+                PathLog.info("{} 规划 去 {}:起点待不住 {}", who, query.goal(), PathLog.body(entity));
+                return new Planning(new PlanResult(List.of(),
+                        new Outcome.Stranded(at, entity.level().getBlockState(at)), null));
+            }
+            from = start.get();
         }
-        BlockPos from = start.get();
         long t0 = System.nanoTime();
         WorldSnapshot view = WorldSnapshot.around(entity.serverLevel(), from);
         CostModel model = CostModel.of(query.spec(), snapshot, ports.terrain(), ports.materials(), ports.threats());
         PathLog.mainThread(who, "规划时拷快照与组成本模型", System.nanoTime() - t0);
         RoutePlanner.Query planned = new RoutePlanner.Query(view, model, from, query.goal(), query.budget(),
-                query.candidates());
+                query.candidates(), arrival);
         Search probe = new Search(view, model, from, query.goal(), query.budget(), Favoring.NONE);
-        return new Planning(Searches.submit(planned), probe, who);
+        return new Planning(Searches.submit(planned), arrival == null ? probe : probe.after(arrival), who);
     }
 
     /** 去:交出一次在走的导航,宿主每刻 {@link Navigation#tick} 一次。 */

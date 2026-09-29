@@ -11,6 +11,7 @@ import com.dwinovo.numen.pathing.plan.ActionCosts;
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Edit;
+import com.dwinovo.numen.pathing.plan.Maneuver;
 import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.pathing.plan.Stance;
@@ -23,6 +24,8 @@ import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.spec.RouteSpec.Alter;
 import com.dwinovo.numen.pathing.world.Reach;
 
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.item.ItemStack;
@@ -258,6 +261,34 @@ class SearchTest {
         SearchResult dug = search(world, Fixtures.model(natural()), START, goal);
         assertTrue(dug.arrived());
         assertEquals(2, dug.route().alterations());
+    }
+
+    /**
+     * 承诺:规格"只许挖"计划里挖的那两格,搜出来的还是挖那两格的路;只许其中一格就过不去(两格高的土墙只挖一格钻不过)——
+     * 搜索只在承诺里找,不另有检查。
+     */
+    @Test
+    void aSpecConfinedToThePlannedDigsDigsOnlyThose() {
+        TestWorld world = corridor().fill(5, Y, 0, 5, Y + 1, 0, Blocks.DIRT.defaultBlockState());
+        Goal goal = Goals.at(new BlockPos(10, Y, 0));
+        Route planned = search(world, Fixtures.model(natural()), START, goal).route();
+        LongOpenHashSet digs = new LongOpenHashSet();
+        planned.edits().stream().filter(e -> e instanceof Edit.Dig).forEach(e -> digs.add(e.pos().asLong()));
+        assertEquals(2, digs.size());
+        SearchResult kept = search(world, Fixtures.model(confined(digs)), START, goal);
+        assertTrue(kept.arrived(), "承诺里的两格照样挖:" + kept.stop());
+        LongOpenHashSet keptDigs = new LongOpenHashSet();
+        kept.route().edits().stream().filter(e -> e instanceof Edit.Dig).forEach(e -> keptDigs.add(e.pos().asLong()));
+        assertEquals(digs, keptDigs);
+        SearchResult narrower = search(world, Fixtures.model(confined(LongSet.of(new BlockPos(5, Y, 0).asLong()))), START,
+                goal);
+        assertEquals(SearchResult.Stop.EXHAUSTED, narrower.stop(), "承诺外的那一格不挖,就过不去");
+    }
+
+    /** 许改自然地形,但只许挖 {@code digs}、一格都不许放。 */
+    private static RouteSpec confined(LongSet digs) {
+        return natural().edit().positions(PositionCosts.builder().confine(Use.DIG, digs)
+                .confine(Use.PLACE, LongSet.of()).build()).build();
     }
 
     @Test
@@ -580,6 +611,45 @@ class SearchTest {
         assertEquals(SearchResult.Stop.BUDGET, plan.unreached(), "第二次搜索预算用完");
         assertEquals(1, plan.candidates().size(), "先找到的那一条留着");
         assertEquals(cheapest.nodes(), plan.candidates().get(0).nodes());
+    }
+
+    /** 规划没搜到头(预算用完):一条候选都没有,交出朝目标推进的那一截——那一截看清了,之后是什么这次没看到。 */
+    @Test
+    void aPlanThatRunsOutOfBudgetHandsOverThePartOfTheWayItSaw() {
+        TestWorld rock = new TestWorld().fill(-4, Y - 6, -8, 40, Y + 8, 8, STONE)
+                .fill(0, Y, 0, 0, Y + 1, 0, Blocks.AIR.defaultBlockState());
+        RoutePlanner.Plan plan = RoutePlanner.run(new RoutePlanner.Query(rock, Fixtures.model(natural()), START,
+                Goals.at(new BlockPos(30, Y, 0)), 2000, 1), () -> false);
+        assertTrue(plan.candidates().isEmpty());
+        assertEquals(SearchResult.Stop.BUDGET, plan.unreached());
+        assertNotNull(plan.partial(), "朝目标挖过去的那一截要交出来");
+        assertEquals(START, plan.partial().start());
+        assertTrue(plan.partial().end().getX() > AStar.MIN_PARTIAL, "那一截朝目标推进:" + plan.partial().end());
+    }
+
+    /**
+     * 一串途经点逐段规划:下一段接在上一段后面。上一段搭桥搭到半空,快照里还没有那块桥——只给终点当起点,身体在那里待不住;
+     * 连同最后一步交进去,就从它的落点、照它垫下的块接着规划,出来的路从那里起。
+     */
+    @Test
+    void aPlanContinuingARouteStartsWhereItEndsAndCarriesItsLastStep() {
+        TestWorld world = chasm();
+        CostModel model = Fixtures.withCobble(natural());
+        Goal goal = Goals.at(ACROSS);
+        Route first = AStar.run(new Search(world, model, START, goal, 50_000, Favoring.NONE).handingOverAt(2000),
+                () -> false).route();
+        assertNotNull(first);
+        BlockPos end = first.end();
+        Maneuver last = first.legs().get(first.legs().size() - 1).maneuver();
+        RoutePlanner.Plan bare = RoutePlanner.run(new RoutePlanner.Query(world, model, end, goal, 50_000, 1),
+                () -> false);
+        assertEquals(SearchResult.Stop.STRANDED, bare.unreached(), "快照里桥还没搭,起点待不住");
+        RoutePlanner.Plan next = RoutePlanner.run(new RoutePlanner.Query(world, model, end, goal, 50_000, 1, last),
+                () -> false);
+        Route continued = next.candidates().isEmpty() ? next.partial() : next.candidates().get(0);
+        assertNotNull(continued, "接着规划出了路:" + next.unreached());
+        assertEquals(end, continued.start());
+        assertTrue(continued.end().distSqr(ACROSS) < end.distSqr(ACROSS), "接着朝目标推进");
     }
 
     /** 候选条数只能是 1 到上限:要 0 条或超过上限,查询本身就不成立——搜索这一层的查询与门面的查询都一样。 */
