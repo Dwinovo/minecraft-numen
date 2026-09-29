@@ -495,7 +495,7 @@ core 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(在
   `DownwardControl`、`ClimbControl`、`SwimControl`),改动由 `Work` 做(挖、放、倒水接坠落再收回),开关门是可复用的
   `DoorOpener`;`Steering` 照原版移动与摩擦推算怎么停在一点、空中不回身;`SprintPolicy`、`Aim`(瞄点与按鼠标像素转头,
   与准星同一套射线)、`Watchdog`(按估价给一步期限、对外的"在推进"信号)各只一处;`EditLedger` 只收 `Effector` 真实
-  交回的结果;`TakeBack` 撤回路上垫的块。
+  交回的结果。
 - **第 4 层**(`api/`):`Navigator.of(body, ports)`;`plan(PlanQuery)` 交出 `Planning`(轮询出 `PlanResult`:候选路线各带
   预算账,没有候选时带结局),`drive(NavRequest)` 交出 `Navigation`(`tick`/`stop`/`report`/`progressing`/`plannedFall`/
   `retarget`/`pause`/`resume`),`takeBack` 交出 `Teardown`;请求可带先照走的候选路线与展开预算。结局 `Outcome` 是数据:
@@ -743,7 +743,7 @@ goto 超时、跟随报没路,还有 17 次 "Can't keep up"。新模块一行日
   掉落物按服务器视距找(改成工作区里的,加上她自己敲出来弹出区外的)。
 - **失败按类型说**:挖矿收工时接上 `NavText.failure` 的原话,不另写话术;`NavText` 给没带下一步的几种结局补上下一步(真无路、
   被拒、起点待不住、执行受阻、看不见)。挖矿开导航时打开 `probing`:模型收紧成不许改地形而没有干净的路时,和 `move_goto` 一样
-  列出候选路线。
+  列出候选路线(09-30 探路删掉,结局改为点名要改的格,见 `look-plan-act.md` §十)。
 - **没动的,记着**:`build at` 去远处工地时按 `alter=natural` 走向外圈(不先整条规划,段与段接着搜),走不通或走满 30 秒就在原地
   开工,落位不靠走位、已加载的格隔多远都照放;走不通的原因没有进回执。
 

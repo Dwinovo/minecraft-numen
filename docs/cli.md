@@ -593,7 +593,7 @@ gt_long lingre 40
 | | transfer | `use transfer`、`use shift`(本批,见下) | |
 | | remember、recall、forget、load_skill | `memory remember`、`memory recall`、`memory forget`、`skill load` | skill_load |
 | | task_status、task_stop、set_timer | `task status`、`task stop`、`task timer` | task_stop |
-| C 长活 | goto、follow、plan_route | `move goto`、`move follow`、`move route` | move_goto |
+| C 长活 | goto、follow、plan_route | `move goto`、`move follow`、`route plan`(09-30 起;原 `move route`) | move_goto |
 | | mine、collect_items、fish | `work mine`、`work collect`、`work fish` | work_mine |
 | | attack | `fight attack` | |
 | | blueprint、blueprint_read、build | `build` 组(本批,见下) | |
