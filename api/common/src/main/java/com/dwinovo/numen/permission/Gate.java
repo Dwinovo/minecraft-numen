@@ -7,12 +7,15 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
- * 一次裁决用的快照:模式、两层规则、所在维度与这一维度的放置记录、主人名下的区域、主人答应下来的任务期授权。
+ * 一次裁决用的快照:模式、两层规则(连同主人层点名了哪些区域)、所在维度与这一维度的放置记录、主人名下的区域、
+ * 主人答应下来的任务期授权。
  * 主线程建({@link Permission#gateFor}),之后任何线程只读——寻路工作线程拿着它给每条边定价。区域是取快照时
  * 一并取好的不可变值,{@code area:} 项在哪个线程上判都不回头读存档。
  *
@@ -40,6 +43,8 @@ public final class Gate {
     private final ResourceKey<Level> dimension;
     private final PlacedBlocks placed;
     private final Map<String, Area> areas;
+    /** 主人层规则点名的区域名:这些区域改了,主人的规矩管到的格子跟着变({@link Signals#RULED})。 */
+    private final Set<String> ruled;
     private final List<ConsentItem> granted;
 
     /**
@@ -59,6 +64,11 @@ public final class Gate {
         this.dimension = dimension;
         this.placed = placed;
         this.areas = Map.copyOf(areas);
+        Set<String> named = new HashSet<>();
+        for (Verdict.Kind table : Verdict.Kind.values()) {
+            owner.table(table).forEach(rule -> named.addAll(rule.areaNames()));
+        }
+        this.ruled = Set.copyOf(named);
         this.granted = List.copyOf(granted);
     }
 
@@ -87,7 +97,7 @@ public final class Gate {
     }
 
     private Facts facts(BlockGetter view, ServerLevel live) {
-        return new Facts(view, placed, live, actor, dimension, areas);
+        return new Facts(view, placed, live, actor, dimension, areas, ruled);
     }
 
     private Verdict decide(Action action, Facts facts) {

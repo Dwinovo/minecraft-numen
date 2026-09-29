@@ -14,10 +14,11 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * 等主人点头的指令:执行入口裁决出"要问"时,这次调用挂在这里,征询交给 {@link ConsentDesk},每刻读一次结论
- * ({@link #tick});允许就接着执行,拒绝、超时、被新的请求顶替都如实回执。
+ * 等主人点头的调用:一次调用要做的事({@link ServerSource#authorize}:一行第 0 层指令、改一块区域)裁决出"要问"时,
+ * 这次调用挂在这里,征询交给 {@link ConsentDesk},每刻读一次结论({@link #tick});允许就接着执行,拒绝、超时、被新的请求
+ * 顶替都如实回执。
  *
- * <p>一行指令不是身体上的活:它不占任务槽,身体照常做手上的事,等的只是这一次调用。所以它不进任务槽,而是和征询一起
+ * <p>这样的一次调用不是身体上的活:它不占任务槽,身体照常做手上的事,等的只是这一次调用。所以它不进任务槽,而是和征询一起
  * 挂在身体上;身体那一头的几件事照任务槽的口径收尾——主人按停止({@link #stop})撤掉征询、回执说被叫停;身体离开世界
  * 同样;她死了({@link #drop})撤掉征询、不回执(那条调用已由死因结算)。
  */
@@ -27,14 +28,15 @@ public final class PendingCommands {
     /** 一次挂着的调用。它自己就是征询的作用域:主人允许的授权记在它名下,收场时一并清掉。 */
     private static final class Waiting {
         final ServerSource call;
-        final String line;
+        /** 这次调用要做的事,回执里点名它:{@code /setblock …}、{@code area delete house}。 */
+        final String what;
         final List<ConsentItem> items;
         final Consumer<ServerSource> go;
         ConsentDesk.Ticket ticket;
 
-        Waiting(ServerSource call, String line, List<ConsentItem> items, Consumer<ServerSource> go) {
+        Waiting(ServerSource call, String what, List<ConsentItem> items, Consumer<ServerSource> go) {
             this.call = call;
-            this.line = line;
+            this.what = what;
             this.items = items;
             this.go = go;
         }
@@ -49,8 +51,8 @@ public final class PendingCommands {
     }
 
     /** 问主人这一批事,答复到了再决定这次调用怎么走。 */
-    void await(ServerSource call, String line, List<ConsentItem> items, Consumer<ServerSource> go) {
-        Waiting w = new Waiting(call, line, items, go);
+    void await(ServerSource call, String what, List<ConsentItem> items, Consumer<ServerSource> go) {
+        Waiting w = new Waiting(call, what, items, go);
         w.ticket = ConsentDesk.of(call.companion()).ask(w, items);
         waiting.add(w);
     }
@@ -72,7 +74,7 @@ public final class PendingCommands {
             if (answer.allowed()) {
                 proceed(w, answer);
             } else {
-                w.call.reply(CommandRunner.refused(w.line, answer.refusal(w.items)));
+                w.call.reply(CommandRunner.refused(w.what, answer.refusal(w.items)));
             }
         }
     }
@@ -85,15 +87,15 @@ public final class PendingCommands {
         try {
             w.go.accept(w.call.allowed(answer.allowance(w.items)));
         } catch (RuntimeException e) {
-            Constants.LOG.warn("[numen-cli] /{} failed after the owner allowed it", w.line, e);
-            w.call.reply(TaskResult.fail("/" + w.line + " failed: " + e.getMessage()).toJson());
+            Constants.LOG.warn("[numen-cli] {} failed after the owner allowed it", w.what, e);
+            w.call.reply(TaskResult.fail(w.what + " failed: " + e.getMessage()).toJson());
         }
     }
 
     /** 主人按了停止,或身体要离开世界:撤掉征询(主人看到是谁叫停的),这些调用回执说被谁叫停、没有执行。 */
     public static void stop(NumenPlayer her, TaskRecord.StopCause cause) {
         for (Waiting w : of(her).drain(cause.withdrawal())) {
-            w.call.reply(TaskResult.cancelled(cause.words() + " — /" + w.line + " did not run").toJson());
+            w.call.reply(TaskResult.cancelled(cause.words() + " — " + w.what + " did not run").toJson());
         }
     }
 

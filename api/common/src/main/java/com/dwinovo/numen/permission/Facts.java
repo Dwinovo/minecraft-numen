@@ -8,6 +8,7 @@ import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -20,7 +21,8 @@ import java.util.UUID;
  * @param actor     要动手的同伴是谁(放置记号认人只看这个);测试可传 null
  * @param dimension 动作发生在哪个维度:{@code area:} 项只认同一维度的区域
  * @param areas     主人名下的区域({@code area:} 项按名字在这里找),取快照时一并取好的不可变值
+ * @param ruled     主人自己写的规则里 {@code area:} 项点名的区域名,不论那块区域此刻在不在({@link Signals#RULED} 读它)
  */
 public record Facts(BlockGetter view, PlacedBlocks placed, ServerLevel live, UUID actor,
-                    ResourceKey<Level> dimension, Map<String, Area> areas) {
+                    ResourceKey<Level> dimension, Map<String, Area> areas, Set<String> ruled) {
 }

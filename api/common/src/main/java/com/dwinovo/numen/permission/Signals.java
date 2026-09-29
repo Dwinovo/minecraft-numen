@@ -111,6 +111,17 @@ public enum Signals {
         }
     },
 
+    /**
+     * 要改的这块区域被主人自己写的规则点名着({@code area:} 项,deny、ask、allow 哪张表都算;区域此刻在不在都算):
+     * 改它就是改那几行规则管到的格子——新建一块同名的、给它加格、删掉它,主人的规矩跟着管到别处。只对 {@code edit_area} 成立。
+     */
+    RULED("ruled", "is an area your owner's rules name", false) {
+        @Override
+        boolean test(Action a, Facts f) {
+            return a.area() != null && f.ruled() != null && f.ruled().contains(a.area());
+        }
+    },
+
     /** 放置点附近有别人放的方块:和 {@link #PLACED} 同一个"别人",她自己放的不算。 */
     NEAR_PLACED("near_placed", "next to player-placed blocks", false) {
         @Override

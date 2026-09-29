@@ -45,7 +45,9 @@ public final class Area {
         /** 一个点。 */
         POINT('p'),
         /** 一个球(以一格为中心、给定半径)。 */
-        SPHERE('s');
+        SPHERE('s'),
+        /** 别处记着的一组格:一栋建成的房子放下的格、一条路线的计划要改的格。 */
+        CELLS('c');
 
         private final char letter;
 
@@ -71,7 +73,7 @@ public final class Area {
     public record Part(String id, Cells cells) {
     }
 
-    private static final Pattern PART_ID = Pattern.compile("([gbps])([1-9][0-9]{0,8})");
+    private static final Pattern PART_ID = Pattern.compile("([gbpsc])([1-9][0-9]{0,8})");
 
     private final ResourceKey<Level> dimension;
     private final List<Part> parts;

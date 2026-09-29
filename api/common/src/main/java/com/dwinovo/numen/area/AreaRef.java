@@ -27,7 +27,7 @@ public record AreaRef(String name, String part) {
         }
         String part = raw.substring(slash + 1);
         if (!Area.isPartId(part)) {
-            throw new IllegalArgumentException("a part of an area is a letter and a number (g3, b1, p2, s1), got \""
+            throw new IllegalArgumentException("a part of an area is a letter and a number (g3, b1, p2, s1, c1), got \""
                     + part + "\" in \"" + raw + "\"");
         }
         return new AreaRef(name, part);

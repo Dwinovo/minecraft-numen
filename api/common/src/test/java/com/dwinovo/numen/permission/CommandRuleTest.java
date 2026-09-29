@@ -63,7 +63,8 @@ class CommandRuleTest {
         assumeTrue(booted, "Minecraft 引导不可用,跳过指令规则钉桩");
     }
 
-    private static final Facts NO_WORLD = new Facts(null, null, null, null, Level.OVERWORLD, Map.of());
+    private static final Facts NO_WORLD = new Facts(null, null, null, null, Level.OVERWORLD, Map.of(),
+            java.util.Set.of());
 
     private static Action run(String line) {
         return Action.command(line, tree);

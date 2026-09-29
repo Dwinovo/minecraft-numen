@@ -1,9 +1,13 @@
 package com.dwinovo.numen.cli;
 
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.permission.Gate;
+import com.dwinovo.numen.permission.Permission;
+import com.dwinovo.numen.permission.Verdict;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -125,6 +129,26 @@ public final class ServerSource implements CommandSource {
     /** 调用进来时的 JSON 参数,原样。 */
     public JsonObject args() {
         return args;
+    }
+
+    /**
+     * 这次调用要做的一件事先过权限层,在主线程对活世界裁决:放行就接着走({@code go});不许就带着理由回执、不走;要问就挂起
+     * 这次调用({@link PendingCommands}),主人答复后再走或如实回执。等的只是这一次调用,不占任务槽。第 0 层的一行指令与
+     * 改一块区域都经这里,是同一个口子。
+     *
+     * @param action 要做的事,如 {@code command(setblock)}、{@code edit_area(house)}
+     * @param what   回执里点名这件事:{@code /setblock 0 64 0 stone}、{@code area delete house}
+     * @param go     放行之后接着做的;主人为它点过头时拿到的是交代了这一句的同一次调用
+     */
+    public void authorize(com.dwinovo.numen.permission.Action action, String what, Consumer<ServerSource> go) {
+        Gate gate = Permission.gateFor(companion);
+        Verdict verdict = gate.judgeLive(action, companion.serverLevel());
+        switch (verdict.kind()) {
+            case ALLOW -> go.accept(this);
+            case DENY -> reply(CommandRunner.refused(what, verdict.reason()));
+            case ASK -> PendingCommands.of(companion).await(this, what,
+                    List.of(gate.consentItemLive(action, verdict, companion.serverLevel())), go);
+        }
     }
 
     /** 送回这次调用的结果;主人为它点过头的,消息末尾交代那一句(和任务回执交代主人允许的是同一种写法)。 */

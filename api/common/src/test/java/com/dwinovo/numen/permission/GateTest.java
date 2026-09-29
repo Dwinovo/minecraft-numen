@@ -107,7 +107,7 @@ class GateTest {
                 "break(block_entity & contents)", "break(placed)", "break(block_entity)", "break(#minecraft:beds)",
                 "break(#minecraft:doors)", "break(#minecraft:trapdoors)", "break(#minecraft:fence_gates)",
                 "attack(owned)", "attack(named)", "attack(villager)", "drop(*)",
-                "place(hazard_item & near_placed)"), RuleSet.FACTORY_ASK);
+                "place(hazard_item & near_placed)", "edit_area(ruled)"), RuleSet.FACTORY_ASK);
         assertEquals(List.of(
                 "break(!placed & !self_placed & !block_entity & !#minecraft:beds & !#minecraft:doors"
                         + " & !#minecraft:trapdoors & !#minecraft:fence_gates)",
@@ -115,7 +115,7 @@ class GateTest {
                 "place(!hazard_item)", "place(hazard_item & !near_placed)",
                 "attack(!owned & !named & !villager)", "use_block(*)", "use_entity(!owned)", "take(*)",
                 "command(help)", "command(list)", "command(me)", "command(msg)",
-                "command(teammsg)", "command(seed)", "command(random)"),
+                "command(teammsg)", "command(seed)", "command(random)", "edit_area(!ruled)"),
                 RuleSet.FACTORY_ALLOW);
         assertTrue(RuleSet.factory().deny().isEmpty(), "出厂不写死任何拒绝");
     }
@@ -137,7 +137,7 @@ class GateTest {
         FakeWorld world = new FakeWorld();
         PlacedBlocks placed = new PlacedBlocks();
         Gate gate = hers(RuleSet.EMPTY, placed);
-        Facts facts = new Facts(world, placed, null, HER, Level.OVERWORLD, Map.of());
+        Facts facts = new Facts(world, placed, null, HER, Level.OVERWORLD, Map.of(), java.util.Set.of());
 
         // 她垫的圆石、她照设计装的门:拆都不问,命中的是 self_placed 那一行,不是自然方块那一行
         world.set(POS, Blocks.COBBLESTONE.defaultBlockState());
@@ -330,7 +330,8 @@ class GateTest {
         Action dig = Action.breakBlock(POS, world.getBlockState(POS));
         ConsentItem item = gate.consentItem(dig, gate.judge(dig, world), world);
         assertEquals("break(placed & minecraft:cobblestone)", item.remember().toString());
-        assertTrue(item.remember().matches(dig, new Facts(world, placed, null, null, Level.OVERWORLD, Map.of())),
+        assertTrue(item.remember().matches(dig, new Facts(world, placed, null, null, Level.OVERWORLD, Map.of(),
+                        java.util.Set.of())),
                 "记下的规则盖得住这次问的动作");
 
         // 主人自己写的 ask 行带取反项:原样留着

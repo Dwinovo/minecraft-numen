@@ -1,9 +1,6 @@
 package com.dwinovo.numen.cli;
 
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.permission.Gate;
-import com.dwinovo.numen.permission.Permission;
-import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.task.TaskResult;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.ParseResults;
@@ -13,7 +10,6 @@ import com.mojang.brigadier.tree.CommandNode;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 
-import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -78,7 +74,9 @@ public final class CommandRunner {
             call.reply(TaskResult.fail(problem).toJson());
             return;
         }
-        authorize(call, line, allowed -> perform(allowed, line));
+        com.dwinovo.numen.permission.Action command = com.dwinovo.numen.permission.Action.command(line,
+                her.getServer().getCommands().getDispatcher().getRoot());
+        call.authorize(command, Line.MC + line, allowed -> perform(allowed, line));
     }
 
     /**
@@ -109,27 +107,9 @@ public final class CommandRunner {
         }
     }
 
-    /**
-     * 执行这一行就是动作 {@code command(根名)}:根名在服务器此刻的指令树上认,别名同认。放行就接着走;不许就带着理由
-     * 收场;要问就挂起这次调用,主人答复后再走。
-     */
-    private static void authorize(ServerSource call, String line, Consumer<ServerSource> go) {
-        NumenPlayer her = call.companion();
-        com.dwinovo.numen.permission.Action command = com.dwinovo.numen.permission.Action.command(
-                line, her.getServer().getCommands().getDispatcher().getRoot());
-        Gate gate = Permission.gateFor(her);
-        Verdict verdict = gate.judgeLive(command, her.serverLevel());
-        switch (verdict.kind()) {
-            case ALLOW -> go.accept(call);
-            case DENY -> call.reply(refused(line, verdict.reason()));
-            case ASK -> PendingCommands.of(her).await(call, line,
-                    List.of(gate.consentItemLive(command, verdict, her.serverLevel())), go);
-        }
-    }
-
-    /** 没执行这一行的回执:理由是规则、模式或主人的原话。 */
-    static String refused(String line, String why) {
-        return TaskResult.fail("did not run /" + line + ": " + why, Map.of("command", "/" + line)).toJson();
+    /** 没做这件事的回执:{@code what} 是这次调用要做的事(一行指令、一行命令),理由是规则、模式或主人的原话。 */
+    static String refused(String what, String why) {
+        return TaskResult.fail("did not run " + what + ": " + why, Map.of("command", what)).toJson();
     }
 
     /**

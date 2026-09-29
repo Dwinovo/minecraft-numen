@@ -53,7 +53,7 @@ class AreaRuleTest {
 
     private static Facts facts(FakeWorld world, net.minecraft.resources.ResourceKey<Level> dim,
                                Map<String, Area> areas) {
-        return new Facts(world, new PlacedBlocks(), null, null, dim, areas);
+        return new Facts(world, new PlacedBlocks(), null, null, dim, areas, java.util.Set.of());
     }
 
     private static Action dig(FakeWorld world, BlockPos pos) {
@@ -146,5 +146,68 @@ class AreaRuleTest {
         ConsentItem item = gate.consentItem(stone, asked, world);
         assertEquals("break(area:house & minecraft:stone)", item.remember().toString(),
                 "记下的是房子里的石头,不是哪儿的石头都行");
+    }
+
+    // ==================== 改区域 ====================
+
+    @Test
+    void editAreaTakesWholeAreaTermsAndTheRuledSignal() {
+        assertEquals("edit_area(ruled)", Rule.parse("edit_area(ruled)").toString());
+        Rule.parse("edit_area(area:ores & !ruled)");
+        assertTrue(assertThrows(IllegalArgumentException.class, () -> Rule.parse("edit_area(area:house/b2)"))
+                .getMessage().contains("edit_area changes a whole area"));
+        assertEquals(List.of("house", "barn"),
+                Rule.parse("*(area:house/b2 & !area:barn)").areaNames(), "点名的区域名不带部分,取反的也算");
+    }
+
+    /**
+     * 主人的规则点名的区域(deny、ask、allow 哪张表都算,区域此刻在不在都算)改之前要问;没点名的照出厂 allow 行放行。
+     * 新建一块和规则点名的区域同名的,也是改它。
+     */
+    @Test
+    void editingAnAreaTheOwnersRulesNameAsksAndOthersPass() {
+        RuleSet owner = new RuleSet(List.of(Rule.parse("break(area:house)")), List.of(),
+                List.of(Rule.parse("break(area:free)")));
+        Gate gate = new Gate(null, Mode.ASK, owner, RuleSet.factory(), Level.OVERWORLD, new PlacedBlocks(), areas(),
+                List.of());
+        Verdict house = gate.judge(Action.editArea("house"), null);
+        assertEquals(Verdict.Kind.ASK, house.kind());
+        assertEquals("edit_area(ruled)", house.rule().toString());
+        assertTrue(house.reason().contains("is an area your owner's rules name"), house.reason());
+        assertEquals(Verdict.Kind.ASK, gate.judge(Action.editArea("free"), null).kind(),
+                "allow 行点名、此刻还不存在的区域:建它就是替主人放宽");
+        assertTrue(gate.judge(Action.editArea("ores"), null).allowed(), "没被点名的区域照常改");
+    }
+
+    @Test
+    void theOwnerCanLoosenOrTightenEditingAreas() {
+        RuleSet loose = new RuleSet(List.of(Rule.parse("break(area:house)")), List.of(),
+                List.of(Rule.parse("edit_area(area:house)")));
+        Gate gate = new Gate(null, Mode.ASK, loose, RuleSet.factory(), Level.OVERWORLD, new PlacedBlocks(), areas(),
+                List.of());
+        assertTrue(gate.judge(Action.editArea("house"), null).allowed(), "主人放开了这一块");
+
+        RuleSet tight = new RuleSet(List.of(Rule.parse("edit_area(*)")), List.of(), List.of());
+        Gate strict = new Gate(null, Mode.ASK, tight, RuleSet.factory(), Level.OVERWORLD, new PlacedBlocks(), areas(),
+                List.of());
+        assertEquals(Verdict.Kind.DENY, strict.judge(Action.editArea("ores"), null).kind());
+    }
+
+    @Test
+    void rememberingAnAreaEditKeepsThatArea() {
+        RuleSet owner = new RuleSet(List.of(Rule.parse("break(area:house)")), List.of(), List.of());
+        Gate gate = new Gate(null, Mode.ASK, owner, RuleSet.factory(), Level.OVERWORLD, new PlacedBlocks(), areas(),
+                List.of());
+        Action edit = Action.editArea("house");
+        ConsentItem item = gate.consentItem(edit, gate.judge(edit, null), null);
+        assertEquals("edit_area(ruled & area:house)", item.remember().toString(), "记下的只是这一块");
+        assertEquals("house", item.subject());
+        Gate granted = new Gate(null, Mode.ASK, owner, RuleSet.factory(), Level.OVERWORLD, new PlacedBlocks(),
+                areas(), List.of(item));
+        assertTrue(granted.judge(edit, null).allowed(), "答应过的这一块不再问");
+        RuleSet remembered = new RuleSet(owner.deny(), List.of(), List.of(item.remember()));
+        Gate later = new Gate(null, Mode.ASK, remembered, RuleSet.factory(), Level.OVERWORLD, new PlacedBlocks(),
+                areas(), List.of());
+        assertTrue(later.judge(edit, null).allowed());
     }
 }

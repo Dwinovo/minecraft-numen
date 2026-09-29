@@ -32,8 +32,9 @@ import java.util.stream.Collectors;
  * 或 {@code *};{@code !} 取反。全仓只在这一个类里解析。
  *
  * <p>{@code area:} 项按名字活引用区域:区域改了,这一行跟着管新的格子。动作落在一格上({@link Action.Kind#atBlock})、
- * 与区域同一维度、那一格在区域里就命中;所以它只写在挖、放、右键方块、拿这几个动词(或 {@code *})上,写在打、
- * 右键实体、丢上解析时就拒。一行规则点名的区域(或部分)不存在时,这一行整行不作数、什么也不命中——
+ * 与区域同一维度、那一格在区域里就命中;{@code edit_area} 改的正是点名的那一整块时也命中({@code allow edit_area(area:ores)})。
+ * 所以它只写在挖、放、右键方块、拿、改区域这几个动词(或 {@code *})上,写在打、右键实体、丢上解析时就拒;写在
+ * {@code edit_area} 上只点整块,不点一部分。一行规则点名的区域(或部分)不存在时,这一行整行不作数、什么也不命中——
  * 取反的 {@code !area:house} 也不例外:说不清管哪儿的规则不放行、不拒绝、也不问。加规则时点名不存在的区域由命令当场
  * 拒收,区域后来被删的由 {@code rules list} 标出来({@link #missingAreas})。
  *
@@ -129,6 +130,17 @@ public final class Rule {
         return out;
     }
 
+    /** 这一行 {@code area:} 项点名的区域名(不带部分),不论它们在不在;给权限层认"主人的规矩点名着哪几块"。 */
+    public List<String> areaNames() {
+        List<String> out = new ArrayList<>();
+        for (Term t : terms) {
+            if (t.type == Term.Type.AREA) {
+                out.add(t.area.name());
+            }
+        }
+        return out;
+    }
+
     /** 命中这条规则的动作撤不回:它的正项里有撤不回的信号({@link Signals#irreversible})。 */
     public boolean irreversible() {
         for (Term t : terms) {
@@ -205,7 +217,8 @@ public final class Rule {
         if (subject != null && !terms.contains(subject)) {
             terms.add(subject);
         }
-        Facts blind = new Facts(facts.view(), facts.placed(), null, facts.actor(), facts.dimension(), facts.areas());
+        Facts blind = new Facts(facts.view(), facts.placed(), null, facts.actor(), facts.dimension(), facts.areas(),
+                facts.ruled());
         for (Signals s : Signals.values()) {
             if (s.irreversible() && !mentioned.contains(s) && !s.test(action, facts) && s.test(action, blind)) {
                 terms.add("!" + s.ruleName());
@@ -277,17 +290,22 @@ public final class Rule {
                 return new Term(Type.COMMAND, negated, null, null, null, null, body);
             }
             if (body.startsWith(AREA)) {
-                if (kind != null && !kind.atBlock()) {
+                if (kind != null && !kind.atBlock() && kind != Action.Kind.EDIT_AREA) {
                     throw new IllegalArgumentException("area terms match actions at a block (break, place, use_block, "
-                            + "take or *), not " + kind.verb() + ", in rule '" + rule + "'");
+                            + "take), edit_area or *, not " + kind.verb() + ", in rule '" + rule + "'");
                 }
+                AreaRef ref;
                 try {
-                    return new Term(Type.AREA, negated, null, null, null, AreaRef.parse(body.substring(AREA.length())),
-                            body);
+                    ref = AreaRef.parse(body.substring(AREA.length()));
                 } catch (IllegalArgumentException e) {
                     throw new IllegalArgumentException("bad area '" + body + "' in rule '" + rule + "': "
                             + e.getMessage());
                 }
+                if (kind == Action.Kind.EDIT_AREA && ref.part() != null) {
+                    throw new IllegalArgumentException("edit_area changes a whole area; name it without a part (area:"
+                            + ref.name() + "), in rule '" + rule + "'");
+                }
+                return new Term(Type.AREA, negated, null, null, null, ref, body);
             }
             if (body.startsWith("#")) {
                 ResourceLocation id = ResourceLocation.tryParse(body.substring(1));
@@ -345,8 +363,14 @@ public final class Rule {
             };
         }
 
-        /** 动作落在一格上,那一格在点名的区域里(同一维度)。区域不在由 {@link Rule#matches} 先挡掉。 */
+        /**
+         * 动作落在一格上,那一格在点名的区域里(同一维度);改区域的动作改的就是点名的那一整块。区域不在由
+         * {@link Rule#matches} 先挡掉。
+         */
         private boolean inArea(Action action, Facts facts) {
+            if (action.area() != null) {
+                return area.part() == null && area.name().equals(action.area());
+            }
             Area a = area.resolve(facts.areas());
             return a != null && action.pos() != null && a.contains(facts.dimension(), action.pos());
         }
@@ -376,10 +400,16 @@ public final class Rule {
             return id.equals(subjectId(a));
         }
 
-        /** "允许并记住"钉上的对象:指令是她打的那个根名,其余是 {@link #subjectId}。没有对象为 null。 */
+        /**
+         * "允许并记住"钉上的对象:指令是她打的那个根名,改区域是那一块({@code area:house}),其余是 {@link #subjectId}。
+         * 没有对象为 null。
+         */
         static String subject(Action a) {
             if (a.command() != null) {
                 return a.command().root();
+            }
+            if (a.area() != null) {
+                return AREA + a.area();
             }
             ResourceLocation id = subjectId(a);
             return id == null ? null : id.toString();
