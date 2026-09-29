@@ -211,6 +211,21 @@ class CellsTest {
                 Cells.box(new BlockPos(3, 4, 5), new BlockPos(7, 8, 9)).center(), "盒子的中心是正中那一格");
     }
 
+    /** 最近的几格:由近到远,和逐格排出来的一样;不超过要的格数;格子不够就全给。 */
+    @Test
+    void theNearestFewCellsComeNearestFirstAndNoMore() {
+        Cells box = Cells.box(new BlockPos(-20, 60, -20), new BlockPos(20, 70, 20));
+        BlockPos from = new BlockPos(45, 65, 3);
+        List<BlockPos> near = box.nearest(from, 30);
+        assertEquals(30, near.size());
+        List<Double> byCell = listed(box).stream().map(p -> p.distSqr(from)).sorted().limit(30).toList();
+        assertEquals(byCell, near.stream().map(p -> p.distSqr(from)).toList(), "与逐格排出来的最近 30 格一样远");
+        assertTrue(near.stream().allMatch(box::contains));
+        assertEquals(box.nearest(from), near.get(0));
+        assertEquals(1, Cells.point(from).nearest(new BlockPos(0, 0, 0), 64).size(), "格子不够就全给");
+        assertTrue(Cells.EMPTY.nearest(from, 5).isEmpty());
+    }
+
     // ==================== 大区域 ====================
 
     @Test
@@ -226,6 +241,9 @@ class CellsTest {
         assertEquals(new BoundingBox(-82, -42, -82, 81, 121, 81), buffer.bounds());
         assertEquals(shell, shell.union(shell.intersect(base)));
         assertEquals(base, Cells.load(base.save(), BuiltInRegistries.BLOCK.asLookup()));
+        List<BlockPos> corner = base.nearest(new BlockPos(500, 200, 500), 64);
+        assertEquals(64, corner.size());
+        assertEquals(new BlockPos(79, 119, 79), corner.get(0), "四百万格里最近的几格只翻离那一点近的几节");
     }
 
     // ==================== 存盘 ====================

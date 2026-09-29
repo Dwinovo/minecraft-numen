@@ -266,6 +266,56 @@ public final class Cells {
         return new BlockPos(found[0], found[1], found[2]);
     }
 
+    /**
+     * 离 {@code from} 最近的至多 {@code limit} 格(直线距离),由近到远;一样近的先后每次一样。和 {@link #nearest(BlockPos)} 同一个
+     * 走法:按节到这一点的最近可能距离由近到远看,攒够了 {@code limit} 格、下一节的下界又比攒到的最远一格还远就停——四百万格的
+     * 区域也只翻离这一点近的那几节,交出的格数不超过 {@code limit}。
+     */
+    public List<BlockPos> nearest(BlockPos from, int limit) {
+        if (limit < 1) {
+            throw new IllegalArgumentException("ask for 1 or more cells, got " + limit);
+        }
+        if (isEmpty()) {
+            return List.of();
+        }
+        double px = from.getX();
+        double py = from.getY();
+        double pz = from.getZ();
+        double[] bound = new double[keys.length];
+        Integer[] order = new Integer[keys.length];
+        for (int k = 0; k < keys.length; k++) {
+            order[k] = k;
+            bound[k] = boxDistSqr(keys[k], px, py, pz);
+        }
+        Arrays.sort(order, (a, b) -> Double.compare(bound[a], bound[b]));
+        // 攒到的格:最远的在堆顶,满了就拿更近的换掉它;先后号让一样近的按遍历顺序排
+        java.util.PriorityQueue<long[]> kept = new java.util.PriorityQueue<>(limit, (a, b) -> a[0] != b[0]
+                ? Long.compare(b[0], a[0]) : Long.compare(b[2], a[2]));
+        long[] seq = {0};
+        for (int k : order) {
+            if (kept.size() == limit && bound[k] > kept.peek()[0]) {
+                break;
+            }
+            visitSection(keys[k], sections.get(keys[k]), (x, y, z, seen) -> {
+                long dx = x - from.getX(), dy = y - from.getY(), dz = z - from.getZ();
+                long d = dx * dx + dy * dy + dz * dz;
+                if (kept.size() < limit) {
+                    kept.add(new long[]{d, BlockPos.asLong(x, y, z), seq[0]++});
+                } else if (d < kept.peek()[0]) {
+                    kept.poll();
+                    kept.add(new long[]{d, BlockPos.asLong(x, y, z), seq[0]++});
+                }
+            });
+        }
+        List<long[]> sorted = new ArrayList<>(kept);
+        sorted.sort((a, b) -> a[0] != b[0] ? Long.compare(a[0], b[0]) : Long.compare(a[2], b[2]));
+        List<BlockPos> out = new ArrayList<>(sorted.size());
+        for (long[] e : sorted) {
+            out.add(BlockPos.of(e[1]));
+        }
+        return out;
+    }
+
     /** 离所有格子的平均位置最近的那一格:落在这堆格子里,环形、L 形的也一样。空的是 null。 */
     public BlockPos center() {
         if (isEmpty()) {

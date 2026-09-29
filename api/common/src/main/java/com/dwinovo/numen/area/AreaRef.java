@@ -14,6 +14,26 @@ import java.util.Map;
 public record AreaRef(String name, String part) {
 
     /**
+     * 和方块、格子种类并列写在一串里时的记号:{@code area:house}、{@code area:ores/g3}(路线标志 {@code --avoid_break area:house}、
+     * {@code --avoid area:farm})。
+     */
+    public static final String MARK = "area:";
+
+    /**
+     * 以 {@link #MARK} 打头的就读出它点名的区域,否则是 null(那是方块、种类之类别的东西)。
+     *
+     * @throws IllegalArgumentException 打头是 {@code area:},后面的名字或编号不合规矩
+     */
+    public static AreaRef marked(String text) {
+        return text != null && text.startsWith(MARK) ? parse(text.substring(MARK.length())) : null;
+    }
+
+    /** 带记号写回去:{@code area:ores/g3}。 */
+    public String marked() {
+        return MARK + this;
+    }
+
+    /**
      * 读 {@code 名字} 或 {@code 名字/部分}。
      *
      * @throws IllegalArgumentException 名字或编号不合规矩,说清该怎么写
