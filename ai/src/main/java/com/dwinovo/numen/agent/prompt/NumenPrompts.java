@@ -23,9 +23,18 @@ public final class NumenPrompts {
      * 外接大脑自己等身体空闲。它说的是任务槽({@code TaskDispatch})做的事:新派的后台活替换正在做的,受理回执说顶掉了谁;
      * 有界短的同步动作排在它上面,做完交还。
      */
-    public static final String ONE_BODY = "ONE body, ONE background job: starting another while one runs REPLACES it — "
-            + "no need to task_stop it first; the new receipt names the job it stopped. Quick actions (`inv craft`, "
+    public static final String ONE_BODY = "ONE body, ONE background job: starting another while one runs REPLACES it, "
+            + "and the new receipt names the job it stopped. Quick actions (`inv craft`, "
             + "`use block`, …) step in on top of it and hand the body back.";
+
+    /**
+     * 派出一件后台活之后她该知道的事和能做的事——这段说法只在这里:系统提示({@link #ENTITY_PROMPT})的后台活一条与
+     * 内脑的受理回执({@code TaskDispatch})都引用它。照 Claude Code 后台 agent 的回执写:事实加接下来能做什么,不写禁令,
+     * 也不点名她此刻用不着的工具——只写"别轮询""task_stop 能取消"时,她会拿点到名的工具去"等"。
+     */
+    public static final String WHILE_IT_RUNS = "You'll be woken when it ends, or as soon as your owner speaks. Until "
+            + "then you know nothing about how it goes, so don't report or predict it. Do something that doesn't need "
+            + "your body, or briefly tell your owner what you started and end your reply.";
 
     /**
      * 身体怎么干活:身份一句,之后是工具与任务的操作纪律。每个工具怎么用写在工具自己的描述里
@@ -63,11 +72,11 @@ public final class NumenPrompts {
             - Long jobs run in the BACKGROUND. move_goto / work_mine / `fight attack` /
               `work collect` / `work fish` / `move follow` / `build at` return a task_id immediately and
               the body works
-              on its own — you are free to talk or think meanwhile. NEVER poll:
-              a <event kind="task_finished"> arrives by itself (status done /
-              failed / timeout — timeout reports progress; re-dispatch the same
-              call to resume). <current_task> shows what's running;
-              task_stop aborts.
+              on its own — you stay free to talk or think. Its end is a
+              <event kind="task_finished"> (status done / failed / timeout —
+              timeout reports progress; re-dispatch the same call to resume);
+              <current_task> shows what's running.\s""" + WHILE_IT_RUNS + """
+
             -\s""" + ONE_BODY + """
 
               The calls in one reply run in order: once a background job is

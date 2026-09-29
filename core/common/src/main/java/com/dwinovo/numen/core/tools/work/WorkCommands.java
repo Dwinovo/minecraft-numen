@@ -94,8 +94,7 @@ public final class WorkCommands {
                         + "drops, move_goto beside it and run `use block` with the left button on it). The route fields are "
                         + "move_goto's, laid over work_mine's own default, which may dig anything (cells needing consent "
                         + "included) — pass them only to restrict her, e.g. avoid_break for blocks or cells she "
-                        + "must leave standing. BACKGROUND: a successful call is already running; do not poll. "
-                        + "task_finished status=done "
+                        + "must leave standing. task_finished status=done "
                         + "means the job is complete; only timeout permits resending the same arguments.");
         work.server("collect", "Pick up dropped items lying on the ground nearby.", WorkCommands::collect,
                         ITEM_IDS, RADIUS)

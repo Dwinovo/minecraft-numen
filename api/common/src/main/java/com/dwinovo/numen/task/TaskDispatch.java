@@ -1,5 +1,6 @@
 package com.dwinovo.numen.task;
 
+import com.dwinovo.numen.agent.prompt.NumenPrompts;
 import com.dwinovo.numen.agent.tool.api.ToolContext;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -97,8 +98,9 @@ public final class TaskDispatch {
         CompanionTickDispatcher.assign(companion, record);
         // 记下"她现在在做什么",服务器重启后照着重放一遍(见 TaskPersistence)。
         TaskPersistence.remember(companion, record.getToolName(), replayTool, args);
-        // 内置大脑靠 task_finished 事件收尾(别轮询);外部(MCP)夺舍收不到事件
+        // 内置大脑靠 task_finished 事件收尾;外部(MCP)夺舍收不到事件
         // (那条投给内置大脑,不是它),得自己用 task status 轮询到身体空闲,再感知确认。
+        // 内置大脑这份回执写事实和接下来能做的事,说法与理由见 NumenPrompts.WHILE_IT_RUNS。
         // 常驻的活没有终点,也就永远不会发 task_finished —— 回执必须说清楚,
         // 否则她会照着"等事件"的指引干等下去。
         boolean standing = record.getDeadlineGameTime() >= TaskRecord.NO_DEADLINE;
@@ -109,8 +111,8 @@ public final class TaskDispatch {
             note.append("Accepted; running in the background. Run the command task status until the body is idle, "
                     + "then perceive to confirm the result; task_stop cancels it.");
         } else {
-            note.append("Accepted; running in the background. Its end arrives as a task_finished event, so don't "
-                    + "poll; task_stop cancels it.");
+            note.append("Accepted as ").append(record.publicId()).append("; your body is working on it in the "
+                    + "background. ").append(NumenPrompts.WHILE_IT_RUNS);
         }
         Map<String, Object> data = new LinkedHashMap<>();
         data.put(TASK_ID, record.publicId());
