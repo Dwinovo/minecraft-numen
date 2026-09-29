@@ -1132,7 +1132,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     + beyondClause(), FailureType.MINED_OUT);
         } else {
             fail("found no " + r.label + " in my work area (" + work.describe() + ") or anywhere else in the loaded"
-                    + " terrain within " + MineBlockTaskRecord.SCAN_RADIUS + " blocks of me"
+                    + " terrain around me (within " + MineBlockTaskRecord.SCAN_RADIUS + " blocks)"
                     + (capNote == null ? "" : " (" + capNote + ")"), FailureType.MINED_OUT);
         }
         return TaskState.FAILED;

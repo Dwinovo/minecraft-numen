@@ -202,6 +202,7 @@ public final class AreaOps {
 
     /** 一条路线最近一次计划要改的格:要挖的与要放的。 */
     public static Source route(NumenPlayer her, String name) {
+        store(her);
         Itinerary route = Routes.of(her.getServer(), her.getOwnerUuid()).get(name);
         if (route == null) {
             throw new IllegalArgumentException("there is no route named " + name + "; route list shows the routes");
