@@ -3,6 +3,7 @@ package com.dwinovo.numen.core.tools;
 import com.dwinovo.numen.agent.tool.ToolArgs;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskRecord;
+import com.dwinovo.numen.core.nav.WorkArea;
 import com.dwinovo.numen.core.task.collect.CollectItemsTaskRecord;
 import com.dwinovo.numen.core.task.inventory.DropItemsTaskRecord;
 import com.dwinovo.numen.core.task.inventory.EatItemTaskRecord;
@@ -28,8 +29,11 @@ public final class InventoryOps {
 
     private static final int DROP_MAX_COUNT = 999;
 
-    private static final int COLLECT_DEFAULT_RADIUS = 16;
-    private static final int COLLECT_MAX_RADIUS = 48;
+    /**
+     * {@code collect} 不给半径时捡多远:身边一圈,自己刚打下、挖下的东西都在这里面;要更远由模型给,上限是工作区的半径
+     * ({@link WorkArea#RADIUS})。
+     */
+    public static final int COLLECT_DEFAULT_RADIUS = 16;
 
     /**
      * {@code gear wear}:只做参数翻译。槽名随身体而定(模组会加槽),是不是真有这个槽、穿不穿得上,都由
@@ -85,15 +89,10 @@ public final class InventoryOps {
             }
         }
 
-        int searchRadius = COLLECT_DEFAULT_RADIUS;
-        if (radius != null) {
-            searchRadius = radius;
-            if (searchRadius < 1) searchRadius = 1;
-            if (searchRadius > COLLECT_MAX_RADIUS) searchRadius = COLLECT_MAX_RADIUS;
-        }
+        int searchRadius = radius == null ? COLLECT_DEFAULT_RADIUS : Math.clamp(radius, 1, WorkArea.RADIUS);
 
         String label = filter.isEmpty() ? "all items" : labelFor(filter);
-        return new CollectItemsTaskRecord(src, filter, searchRadius, label);
+        return new CollectItemsTaskRecord(src, filter, WorkArea.around(src.companion(), searchRadius), label);
     }
 
     private static String labelFor(Set<Item> filter) {

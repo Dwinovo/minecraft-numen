@@ -28,7 +28,7 @@ import java.util.Map;
  *
  * <h2>State machine (per tick)</h2>
  * <pre>
- *   SCAN     → nearest matching ItemEntity within the radius; none → DONE.
+ *   SCAN     → nearest matching ItemEntity in the work area; none → DONE.
  *   APPROACH → walk to within a block of it (following it if it slides) until it's absorbed or we
  *              reach the spot without picking it up, then re-SCAN. At the spot a
  *              fresh drop still counting down its pickup delay is waited out;
@@ -37,6 +37,9 @@ import java.util.Map;
  *
  * <p>SCAN ends only once every matching drop in range has been tried, so whatever
  * still lies there at the end is what she couldn't pick up — the reply names it.
+ *
+ * <p>范围是工作区({@link CollectItemsTaskRecord#area}),以受理时她脚下那一格为中心,不跟着她走:捡完一件、站到那边,
+ * 下一件仍只在这块地方里找,她不会一件接一件越捡越远;每一趟都在一次规划看得清的范围里。
  *
  * <p>回执里捡了多少,数的是到手的件数:背包里要捡的那几种比开工时多出来的,不是消失了几堆掉落物
  * ——一堆可能是好几个,消失的也可能是被别人捡走、到时候没了。
@@ -157,9 +160,9 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
         return skipped.pick(matchingItems(), Comparator.comparingDouble(player::distanceToSqr)).orElse(null);
     }
 
-    /** Every drop within the radius (a distance from her) that this sweep is after, tried or not. */
+    /** Every drop in the work area that this sweep is after, tried or not. */
     private List<ItemEntity> matchingItems() {
-        return NearbyEntities.within(player, r.radius, ItemEntity.class,
+        return NearbyEntities.in(player.level(), r.area, ItemEntity.class,
                 ie -> !ie.isRemoved() && (r.filter.isEmpty() || r.filter.contains(ie.getItem().getItem())));
     }
 
@@ -168,7 +171,7 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
         Map<String, Object> data = new HashMap<>();
         data.put("label", r.label);
         data.put("collected", r.getCollected());
-        data.put("radius", r.radius);
+        data.put("radius", r.area.radius());
         return data;
     }
 

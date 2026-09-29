@@ -26,7 +26,8 @@ import net.minecraft.resources.ResourceLocation;
  * <p>三个动作都占身体,交任务槽:受理即回执,收尾走 task_finished。{@code mine} 提升成快捷工具 {@code work_mine};挖矿的路线规格
  * 标志与 goto 共用({@link RouteSpecFlags}),叠在 mine 自己的默认规格上(可以改地形,要主人同意的格也算进去)。
  *
- * <p>{@code mine} 只在工作区里干({@link WorkArea}):受理时她脚下那一格为中心,区外的目标只报告。
+ * <p>{@code mine} 与 {@code collect} 都只在工作区里干({@link WorkArea}):受理时她脚下那一格为中心。mine 用满半径,区外的目标只
+ * 报告;collect 的半径由模型给,上限就是工作区的半径。
  */
 public final class WorkCommands {
 
@@ -34,7 +35,6 @@ public final class WorkCommands {
 
     private static final int MAX_MINE_COUNT = 256;
     private static final int MAX_CATCHES = 64;
-    private static final int MAX_COLLECT_RADIUS = 48;
     private static final long TICKS_PER_CATCH = 90L * 20L;
     private static final long MIN_FISH_TICKS = 120L * 20L;
 
@@ -52,9 +52,9 @@ public final class WorkCommands {
     private static final Param<List<ResourceLocation>> ITEM_IDS = Param.optional("item_ids",
             ArgType.list(ArgType.id()), "Item types to pick up.")
             .whenOmitted("pick up everything");
-    private static final Param<Integer> RADIUS = Param.optional("radius", ArgType.integer(1, MAX_COLLECT_RADIUS),
-            "How far around her to look, in blocks.")
-            .whenOmitted("look within 16");
+    private static final Param<Integer> RADIUS = Param.optional("radius", ArgType.integer(1, WorkArea.RADIUS),
+            "How far around where she stands when you call it to pick up, in blocks.")
+            .whenOmitted("pick up within " + InventoryOps.COLLECT_DEFAULT_RADIUS);
     private static final Param<Integer> CATCHES = Param.optional("count", ArgType.integer(1, MAX_CATCHES),
             "How many catches to reel in.")
             .whenOmitted("keep fishing until given something else to do");
@@ -116,6 +116,9 @@ public final class WorkCommands {
                 .note("Walks to each drop until none she can reach remain; she picks up what she gets close to. "
                         + "It never breaks or places a block: drops in a pit or across a gap it cannot walk to "
                         + "are left there and named in the result.")
+                .note("Only drops within the radius of where she stood when you called it count, so she never "
+                        + "wanders off chasing drops; the radius goes up to her work area's " + WorkArea.RADIUS
+                        + " blocks.")
                 .note("For drops left by your own interactions; `fight attack` and work_mine already walk over the "
                         + "drops they make.")
                 .seeAlso("work mine", "task stop");
