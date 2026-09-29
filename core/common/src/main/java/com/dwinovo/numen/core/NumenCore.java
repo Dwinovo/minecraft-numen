@@ -118,6 +118,7 @@ public final class NumenCore {
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.perception.StatusCommands::install);
         // scan 组提升出 scan_around、scan_blocks、scan_entities、scan_block
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.perception.ScanCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.area.AreaCommands::install);
         ToolRegistry.register(new com.dwinovo.numen.core.tools.agent.TodoWriteTool());   // raw NumenTool
         // skill 组提升出 skill_load
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.agent.SkillCommands::install);

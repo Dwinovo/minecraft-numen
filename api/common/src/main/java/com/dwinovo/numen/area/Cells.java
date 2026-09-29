@@ -39,6 +39,14 @@ public final class Cells {
 
     /** 扫描时这一格是什么、在哪一刻看到的。 */
     public record Seen(BlockState state, long tick) {
+
+        /**
+         * 这一格现在还是当时看到的那种方块:比方块种类,不比朝向、含水这类状态——原木换了朝向还是那根原木。消费方动手前
+         * (挖之前)与复核({@code area refresh})都按这一条认,不各写一份。
+         */
+        public boolean holds(BlockState now) {
+            return now.getBlock() == state.getBlock();
+        }
     }
 
     /** 逐格遍历的回调;没附带方块的格 {@code seen} 为 null。 */
