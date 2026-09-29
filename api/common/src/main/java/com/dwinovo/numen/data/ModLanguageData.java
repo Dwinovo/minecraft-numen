@@ -310,6 +310,8 @@ public final class ModLanguageData {
         public static final String COMMAND_RULE_EXISTS       = "numen.command.rule_exists";
         public static final String COMMAND_RULE_NO_ROW       = "numen.command.rule_no_row";
         public static final String COMMAND_RULE_REMOVED      = "numen.command.rule_removed";
+        public static final String COMMAND_RULE_NO_AREA      = "numen.command.rule_no_area";
+        public static final String COMMAND_RULE_AREA_GONE    = "numen.command.rule_area_gone";
         public static final String COMMAND_RULES_RESET       = "numen.command.rules_reset";
         public static final String COMMAND_CONSENT_ANSWERED  = "numen.command.consent_answered";
         public static final String COMMAND_CONSENT_NOT_OWNER = "numen.command.consent_not_owner";
@@ -856,6 +858,8 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_RULE_EXISTS,       "%s already has: %s");
         adder.add(Keys.COMMAND_RULE_NO_ROW,       "%s has no row %s (it has %s); /numen permission rules list shows the numbers");
         adder.add(Keys.COMMAND_RULE_REMOVED,      "Removed from %s: %s");
+        adder.add(Keys.COMMAND_RULE_NO_AREA,      "Not added: there is no area %s, so the row would match nothing. Your areas: %s");
+        adder.add(Keys.COMMAND_RULE_AREA_GONE,    "(area %s is gone; this row matches nothing)");
         adder.add(Keys.COMMAND_RULES_RESET,       "Cleared your deny, ask and allow tables; the factory rules still apply");
         adder.add(Keys.COMMAND_CONSENT_ANSWERED,  "Answered consent request #%s for %s: %s");
         adder.add(Keys.COMMAND_CONSENT_NOT_OWNER, "Consent request #%s belongs to a companion that is not yours");
@@ -1389,6 +1393,8 @@ public final class ModLanguageData {
         adder.add(Keys.COMMAND_RULE_EXISTS,       "%s 里已经有:%s");
         adder.add(Keys.COMMAND_RULE_NO_ROW,       "%s 没有第 %s 行(一共 %s 行);行号用 /numen permission rules list 看");
         adder.add(Keys.COMMAND_RULE_REMOVED,      "已从 %s 删掉:%s");
+        adder.add(Keys.COMMAND_RULE_NO_AREA,      "没加:没有区域 %s,这一行什么也管不到。你的区域:%s");
+        adder.add(Keys.COMMAND_RULE_AREA_GONE,    "(区域 %s 已经没了,这一行什么也管不到)");
         adder.add(Keys.COMMAND_RULES_RESET,       "清空了你的 deny、ask、allow 三张表;出厂规则照旧生效");
         adder.add(Keys.COMMAND_CONSENT_ANSWERED,  "已答复征询 #%s(%s):%s");
         adder.add(Keys.COMMAND_CONSENT_NOT_OWNER, "征询 #%s 属于别人的同伴");

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.build;
 
+import com.dwinovo.numen.cli.Names;
 import com.dwinovo.numen.core.blueprint.BlueprintStore;
 
 import net.minecraft.server.MinecraftServer;
@@ -76,7 +77,7 @@ public final class Designs {
 
     /** 库里有没有叫这个名字的设计;不合设计名规矩的名字(带空格的蓝图文件名这类)一定没有。 */
     public static boolean exists(MinecraftServer server, String name) {
-        return Design.isName(name) && Files.exists(file(server, name));
+        return Names.valid(name) && Files.exists(file(server, name));
     }
 
     /**

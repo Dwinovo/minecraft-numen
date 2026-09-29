@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core;
 
+import net.minecraft.world.level.Level;
 import com.dwinovo.numen.permission.Gate;
 import com.dwinovo.numen.permission.Mode;
 import com.dwinovo.numen.permission.PlacedBlocks;
@@ -14,6 +15,7 @@ public final class GateTestSupport {
     private GateTestSupport() {}
 
     public static Gate open() {
-        return new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), new PlacedBlocks(), java.util.List.of());
+        return new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(),
+                Level.OVERWORLD, new PlacedBlocks(), java.util.Map.of(), java.util.List.of());
     }
 }

@@ -97,8 +97,8 @@
   放的橡木仍问。于是出厂 allow 行也必须写得比出厂 ask 行窄。
 - 任务期授权(§六)只覆盖问出来的动作,解不开拒绝。
 
-裁决快照(`Gate`)由 `Permission.gateFor` 在主线程取:模式、主人层与出厂层、放置记录、任务期
-授权,不可变,任何线程可读。一条规则一行字符串 `动作(信号 & 信号 & !信号)`,与 Claude Code 的
+裁决快照(`Gate`)由 `Permission.gateFor` 在主线程取:模式、主人层与出厂层、所在维度与它的放置记录、
+主人名下的区域、任务期授权,不可变,任何线程可读。一条规则一行字符串 `动作(信号 & 信号 & !信号)`,与 Claude Code 的
 `Tool(specifier)` 同形,全仓只在 `Rule.parse` 解析,写错了回教学式的错误(列出认得的动词与信号):
 
 ```
@@ -106,8 +106,23 @@ break(placed)          攻击/挖掘/放置四个动词 × 信号
 attack(owned)
 place(hazard_item & near_placed)
 break(#minecraft:beds) 也接受方块标签与 id,给主人写细规则用
+break(area:house)      主人名下的一块区域,或其中一部分 area:house/b2
 command(msg)           指令按根名写
 ```
+
+**区域。** `area:<名字>` 与 `area:<名字>/<部分>` 点名主人名下的一块区域(`look-plan-act.md` §三;存在 `AreaStore`,
+同一主人的同伴共用),写法只在 `AreaRef.parse` 读。动作落在一格上、与区域同一维度、那一格在区域里就命中,所以它只写在
+`break`、`place`、`use_block`、`take`(或 `*`)上,写在 `attack`、`use_entity`、`drop` 上解析时就拒;实体不进区域,
+护住圈里的动物另写实体的规则。
+
+- 按名字活引用:区域加了、删了部分,这一行跟着管新的格子。裁决快照(`Gate`)在主线程把主人的区域连同规则一并取走,
+  区域是不可变值,搜索线程判 `area:` 不回头读存档。
+- 点名的区域(或部分)不存在,这一行整行不作数、什么也不命中,取反的 `!area:house` 也一样:说不清管哪儿的规则
+  不放行、不拒绝、也不问,剩下的交给别的行与"都不中也问"。
+- `/numen permission rules add` 点名不存在的区域不收,说没有哪块、主人名下有哪些;区域后来被删的行照列,
+  `rules list` 在后面标"区域已经没了,这一行什么也管不到",删不删由主人定。
+- "允许并记住"照常把问出它的那一行的条件留着:`ask break(area:house)` 问出来的石头记成
+  `allow break(area:house & minecraft:stone)`,房子外的石头不沾光。
 
 **指令。** `command` 的项除了 `*` 都是指令的根名,不写斜杠:`allow command(msg)`、`allow command(trigger)`、
 `ask command(setblock)`、`deny command(tp)`、`ask command(!msg & !trigger)`。信号说的是方块与实体,一条指令没有
@@ -268,7 +283,7 @@ allow 行把日常动作一行一行写明:自然方块(谁都没放过)、她�
 ```
 /numen permission mode <同伴名> [ask|bypass|observe]    不带模式参数时显示当前模式
 /numen permission rules list                          主人层(带序号)与出厂层
-/numen permission rules add <deny|ask|allow> <规则>    例: add ask take(*)
+/numen permission rules add <deny|ask|allow> <规则>    例: add ask take(*)、add deny break(area:house)
 /numen permission rules remove <deny|ask|allow> <序号>
 /numen permission rules reset                         清空主人层
 /numen consent <allow|remember> <请求 id>

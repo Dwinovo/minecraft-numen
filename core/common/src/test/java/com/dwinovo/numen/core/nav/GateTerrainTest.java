@@ -25,6 +25,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
+import net.minecraft.world.level.Level;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -50,7 +51,8 @@ class GateTerrainTest {
     }
 
     private static Gate gate(PlacedBlocks placed) {
-        return new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), placed, List.of());
+        return new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(),
+                Level.OVERWORLD, placed, java.util.Map.of(), List.of());
     }
 
     private static Permit dig(Gate gate, BlockState state) {

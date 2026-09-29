@@ -1551,4 +1551,123 @@ public class PermissionGameTests {
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
+
+    /** 主人名下的一块区域:两个对角(相对坐标)框出的盒子,那一部分是 {@code b1}。 */
+    private static com.dwinovo.numen.area.Area boxArea(GameTestHelper helper, BlockPos from, BlockPos to) {
+        return com.dwinovo.numen.area.Area.of(helper.getLevel().dimension(), com.dwinovo.numen.area.Area.Kind.BOX,
+                com.dwinovo.numen.area.Cells.box(helper.absolutePos(from), helper.absolutePos(to)));
+    }
+
+    private static com.dwinovo.numen.area.AreaStore areasOf(ServerPlayer owner) {
+        return com.dwinovo.numen.area.AreaStore.of(owner.getServer(), owner.getUUID());
+    }
+
+    /**
+     * 主人用命令写 {@code deny break(area:house)}:区域还没建时这一行不收,说清没有这块区域;建好后收下。她 use block 左键打
+     * 房子里的石头被拒、理由是那一行规则,石头还在;房子外的石头照常挖掉。区域删掉以后 {@code rules list} 把这一行标成
+     * 什么也管不到,房子原来那块地上的石头照出厂 allow 行挖掉。从头到尾不弹卡。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void an_area_deny_row_guards_the_area_until_the_area_is_gone(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos insideRel = new BlockPos(6, 2, 5);
+        BlockPos outsideRel = new BlockPos(6, 2, 3);
+        BlockPos laterRel = new BlockPos(6, 2, 6);
+        for (BlockPos rel : List.of(insideRel, outsideRel, laterRel)) {
+            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.STONE.defaultBlockState());
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_house_sitter", new BlockPos(4, 2, 5), true);
+        ServerPlayer owner = presentPlayer(helper, companion, "gametest_house_owner");
+
+        List<String> early = runAs(owner, "numen permission rules add deny break(area:house)");
+        helper.assertTrue(early.stream().anyMatch(m -> m.contains("there is no area house"))
+                        && storeOf(owner).rules().deny().isEmpty(),
+                "a row naming an area that does not exist was not turned away: " + early);
+        areasOf(owner).create("house", boxArea(helper, new BlockPos(6, 2, 5), new BlockPos(7, 3, 6)));
+        List<String> added = runAs(owner, "numen permission rules add deny break(area:house)");
+        helper.assertTrue(added.stream().anyMatch(m -> m.contains("Added to deny")), "the row was not added: " + added);
+
+        TaskRecord[] calls = new TaskRecord[3];
+        List<String> listed = new ArrayList<>();
+        int[] step = {0};
+        boolean[] asked = new boolean[1];
+        helper.runAfterDelay(5, () -> {
+            calls[0] = click(helper, companion, "left", insideRel);
+            step[0] = 1;
+        });
+        helper.onEachTick(() -> {
+            asked[0] |= desk(companion).pending() != null;
+            if (step[0] == 1 && calls[0].getResult() != null) {
+                calls[1] = click(helper, companion, "left", outsideRel);
+                step[0] = 2;
+            } else if (step[0] == 2 && calls[1].getResult() != null) {
+                areasOf(owner).delete("house");
+                listed.addAll(runAs(owner, "numen permission rules list"));
+                calls[2] = click(helper, companion, "left", laterRel);
+                step[0] = 3;
+            }
+        });
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(step[0] == 3 && calls[2].getResult() != null, "the three clicks have not finished");
+            String refused = calls[0].getResult().message();
+            helper.assertTrue(!calls[0].getResult().success() && refused.contains("denied by rule break(area:house)"),
+                    "the dig inside the area was not refused by the row: " + refused);
+            helper.assertTrue(level.getBlockState(helper.absolutePos(insideRel)).is(Blocks.STONE),
+                    "the stone inside the area was dug");
+            helper.assertTrue(calls[1].getResult().success()
+                            && level.getBlockState(helper.absolutePos(outsideRel)).isAir(),
+                    "the stone outside the area was not dug: " + calls[1].getResult().message());
+            helper.assertTrue(listed.stream().anyMatch(m -> m.contains("1. break(area:house) (area house is gone")),
+                    "the list does not mark the row whose area is gone: " + listed);
+            helper.assertTrue(calls[2].getResult().success()
+                            && level.getBlockState(helper.absolutePos(laterRel)).isAir(),
+                    "a row whose area is gone still guarded the stone: " + calls[2].getResult().message());
+            helper.assertTrue(!asked[0], "an area deny row raised a consent card");
+            CompanionFactory.despawn(level.getServer(), companion);
+            leave(owner);
+        });
+    }
+
+    /**
+     * 主人不许挖谷仓那块区域:谷仓里的南瓜离她近,谷仓外的远。work mine 要一个南瓜,她去挖外面那个,谷仓里的一动不动;
+     * 再要一个,只剩谷仓里的,任务按拒绝收场、理由是那一行规则。不弹卡。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void work_mine_leaves_the_denied_area_standing(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos insideRel = new BlockPos(5, 2, 5);
+        BlockPos outsideRel = new BlockPos(11, 2, 5);
+        level.setBlockAndUpdate(helper.absolutePos(insideRel), Blocks.PUMPKIN.defaultBlockState());
+        level.setBlockAndUpdate(helper.absolutePos(outsideRel), Blocks.PUMPKIN.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_harvester", new BlockPos(2, 2, 5), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
+        ServerPlayer owner = presentPlayer(helper, companion, "gametest_farmer");
+        areasOf(owner).create("barn", boxArea(helper, new BlockPos(4, 2, 4), new BlockPos(6, 3, 6)));
+        storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
+                com.dwinovo.numen.permission.Rule.parse("break(area:barn)"));
+        ToolRun first = call(companion, "work_mine", args("block_ids", List.of("minecraft:pumpkin"), "count", 1));
+        ToolRun[] second = new ToolRun[1];
+        boolean[] asked = new boolean[1];
+        helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(first.done(), "the first mine has not finished");
+            helper.assertTrue(first.succeeded() && level.getBlockState(helper.absolutePos(outsideRel)).isAir(),
+                    "the pumpkin outside the barn was not mined: " + first.outcome());
+            helper.assertTrue(level.getBlockState(helper.absolutePos(insideRel)).is(Blocks.PUMPKIN),
+                    "the pumpkin in the barn was mined");
+            if (second[0] == null) {
+                second[0] = call(companion, "work_mine", args("block_ids", List.of("minecraft:pumpkin"), "count", 1));
+            }
+            helper.assertTrue(second[0].done(), "the second mine has not finished");
+            helper.assertTrue(!second[0].succeeded() && second[0].outcome().contains("break(area:barn)"),
+                    "the second mine does not stop on the barn's row: " + second[0].outcome());
+            helper.assertTrue(level.getBlockState(helper.absolutePos(insideRel)).is(Blocks.PUMPKIN),
+                    "the pumpkin in the barn was mined");
+            helper.assertTrue(!asked[0], "an area deny row raised a consent card");
+            CompanionFactory.despawn(level.getServer(), companion);
+            leave(owner);
+        });
+    }
 }
