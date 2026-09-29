@@ -98,7 +98,7 @@ Numen 只经本模块寻路,旧的 `core/pathing` 已删除;下一步是合回 1
   垫路料(端口 `Materials`)、身体快照(迈步、起跳、交互距离、游戏模式、按落差与落点方块算的摔伤与按血量推出的摔落上限、装备推出的能力、
   背包里的工具与挖掘属性)、生物危险(端口 `Threats`,折成按位置的代价)。
   任务要改价，只能通过路线规格或按位置的代价表，不能继承成本上下文。
-- 放一块的价钱只在放置定价这一处算。路上垫下的块留在原处,宿主照实报给模型(见第十三节"删掉撤垫块")。
+- 放一块的价钱只在放置定价这一处算。路上垫下的块留在原处,记在实际账里,宿主照账报给模型(见第十三节"删掉撤垫块")。
 - "许不许改地形"和"有没有料"是两个独立事实，分别来自规格与 `Materials`,不折成一个布尔。
 
 ### 第 2 层　搜索(`search/`)
@@ -797,18 +797,17 @@ goto 超时、跟随报没路,还有 17 次 "Can't keep up"。新模块一行日
 撤回路上垫下的块(`drive/TakeBack`、门面的 `Navigator.takeBack` 与 `Teardown`、规格的 `takeBack` 与它给放置的加价,建造的
 `EnRouteBlocks` 与收场前"先从垫块上下来")整套删掉,不修补。路上垫下的块留在原处,照实报给模型:
 
-- **账只有一本**:寻路交出的实际账。`EditLedger.placedBlocks` 是账上放下、之后没再挖掉的方块;Numen 的旅程账(`Journey`)把历次
-  导航的账接起来,任务经 `AbstractCompanionTask.placedOnTheWay` 读。
-- **说法只在一处**:`NavText.stillStanding`——账上放下的里面,此刻那一格还是她放下的那种方块的(被人挖走、换掉的不算),按方块
-  归堆、点名坐标(每堆最多 `Listing.COORDS_NAMED` 个,其余计数),接一句能照抄的挖法。建造的每一种收场(建完、干不下去、被叫停、
-  超时)都把它接在回执末尾,例如 `Still standing from what I put down on the way: 2 cobblestone (1,64,2; 1,65,2) — they stay
-  unless you break them, e.g. use block left 1 64 2.`;留不留由模型定,要清就用 `use block` 左键去挖。
+- **只由实际账说一次**:寻路交出的实际账(`EditLedger`),Numen 的旅程账(`Journey`)把一件活开过的每一趟接起来,回执末尾的那段
+  (`NavText.journey`)说路上挖了什么、放了什么、各在哪——例如 `En route I had to place 1 cobblestone (1,64,2).`。赶路、挖矿、
+  建造的每一种收场(建完、干不下去、被叫停、超时)都走 `AbstractCompanionTask.result` 这同一处,不另写第二种说法;留不留由模型定,
+  要清就用 `use block` 左键去挖。
 - **一并删掉的**:执行层里只为撤回存在的套娃——`Driver` 共用 `Rig` 的那个构造器、`TickTally` 的嵌套计数;日志里撤垫块的那几行;
-  `PositionCosts.forbidding`。
+  `PositionCosts.forbidding`;只给撤回列清单的 `EditLedger.placedBlocks`、`Journey.placedBlocks`、
+  `AbstractCompanionTask.placedOnTheWay`,以及任务收场时另接一句的钩子 `closingNote`。
 - **测试**:删掉只测撤回本身的 `MaterialGameTests.takes_back_the_bridge`、`steps_off_its_own_blocks_before_taking_them_back`,
   单测 `CostModelTest.placingPricesTakingTheBlockBackWhenTheSpecAsksForIt`;`DigGameTests.pauses_while_a_mob_blocks_the_crosshair`
-  原来搭在撤回时的挖掘上,改成挖穿一堵石墙时猪挡住准星;建造两条"撤掉了"的 GameTest 改成断言回执照实点名还立着的圆石,新加一条
-  建完收工的。
+  原来搭在撤回时的挖掘上,改成挖穿一堵石墙时一只鸡挡住准星;建造两条"撤掉了"的 GameTest 改成断言圆石还立着、回执路上那段账
+  点到了每一块的坐标,新加一条建完收工的。
 
 ## 参考
 

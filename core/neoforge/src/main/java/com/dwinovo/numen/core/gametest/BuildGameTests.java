@@ -2313,20 +2313,26 @@ public class BuildGameTests {
         return out;
     }
 
-    /** 回执照实点名了牢里还立着的每一块圆石:方块名与坐标,接着能照抄的挖法。 */
+    /**
+     * 牢里垫下的圆石还立着,回执里路上那段账("En route … place …")点到了每一块的坐标:放了什么、在哪,只由实际账说一次。
+     */
     private static void reportsWhatIsLeftInPen(GameTestHelper helper, BlockPos pen, String message) {
         List<BlockPos> left = laidInPen(helper, pen);
         helper.assertTrue(!left.isEmpty(), "the cobblestone she climbed out on is gone - the case did not run");
-        helper.assertTrue(message.contains("Still standing from what I put down on the way: ")
-                        && message.contains("cobblestone") && message.contains("use block left"),
-                "the receipt does not say what she left standing: " + message);
+        int enRoute = message.indexOf("En route I had to ");
+        helper.assertTrue(enRoute >= 0, "the receipt has no en-route line: " + message);
+        String line = message.substring(enRoute);
+        int end = line.indexOf('.', line.indexOf(")"));
+        line = end < 0 ? line : line.substring(0, end + 1);
+        helper.assertTrue(line.contains("place") && line.contains("cobblestone"),
+                "the en-route line does not say she placed cobblestone: " + message);
         for (BlockPos at : left) {
-            helper.assertTrue(message.contains(at.getX() + "," + at.getY() + "," + at.getZ()),
-                    "the receipt does not name " + at.toShortString() + ": " + message);
+            helper.assertTrue(line.contains(at.getX() + "," + at.getY() + "," + at.getZ()),
+                    "the en-route line does not name " + at.toShortString() + ": " + message);
         }
     }
 
-    /** 建完收工:翻墙垫下的圆石留在原处,回执照实点名它们。 */
+    /** 建完收工:翻墙垫下的圆石留在原处,回执路上那段账点名它们。 */
     @GameTest(template = "floor20", timeoutTicks = 6000, batch = "numen_build")
     public static void blocks_put_down_on_the_way_are_reported_when_the_build_is_done(GameTestHelper helper) {
         PennedBuild build = pennedBuild(helper, "gametest_done_climber", 3, false);
@@ -2340,7 +2346,7 @@ public class BuildGameTests {
     }
 
     /**
-     * 活干不下去(那朵虞美人立不住)时,翻墙垫下的圆石留在原处,回执照实点名;缺的那一格照样逐格点名。
+     * 活干不下去(那朵虞美人立不住)时,翻墙垫下的圆石留在原处,回执路上那段账点名它们;缺的那一格照样逐格点名。
      */
     @GameTest(template = "floor20", timeoutTicks = 6000, batch = "numen_build")
     public static void blocks_put_down_on_the_way_are_reported_when_the_build_fails(GameTestHelper helper) {
@@ -2356,7 +2362,7 @@ public class BuildGameTests {
         });
     }
 
-    /** 主人半路按停止:翻墙垫下的圆石留在原处,回执照实点名。 */
+    /** 主人半路按停止:翻墙垫下的圆石留在原处,回执路上那段账点名它们。 */
     @GameTest(template = "floor20", timeoutTicks = 6000, batch = "numen_build")
     public static void blocks_put_down_on_the_way_are_reported_when_the_owner_stops(GameTestHelper helper) {
         PennedBuild build = pennedBuild(helper, "gametest_stopped_climber", 5, false);

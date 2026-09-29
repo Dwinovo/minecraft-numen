@@ -4,7 +4,6 @@ package com.dwinovo.numen.core.task.base;
 import com.dwinovo.numen.core.nav.Journey;
 import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.pathing.api.Report;
-import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.task.TaskRecord;
@@ -349,11 +348,9 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     @Override
     public final TaskResult result(TaskState finalState) {
         cleanup();
-        // 路上真动过的地形跟着每一种收场走:成功也好失败也罢,拆了什么就说什么;收场时又动了什么接着说;主人点过头的也说
-        String closing = closingNote();
+        // 路上真动过的地形跟着每一种收场走:成功也好失败也罢,挖了什么、放了什么就说什么;主人点过头的也说
         String travelled = journey.describe();
         String enRoute = (travelled.isEmpty() ? "" : " " + travelled)
-                + (closing.isEmpty() ? "" : " " + closing)
                 + (allowances.isEmpty() ? "" : " " + String.join("; ", allowances) + ".");
         return switch (finalState) {
             case SUCCESS   -> TaskResult.ok(successMessage() + enRoute, resultData());
@@ -381,14 +378,6 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     /** Release physical resources on termination. Default: stop nav + clear the path overlay. */
     protected void cleanup() {
         stopNav();
-    }
-
-    /**
-     * 收场时身体又对世界做了什么(在 {@link #cleanup()} 之后读,紧跟在路上那段账后面):每一种收场都带上,不论成败、
-     * 叫停还是超时。默认什么都没做,空串。
-     */
-    protected String closingNote() {
-        return "";
     }
 
     /** Structured payload for the result envelope. Default: a fresh empty (mutable) map. */
@@ -468,14 +457,6 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
      */
     protected final boolean brokeOnTheWay(BlockPos pos) {
         return soFar().broke(pos);
-    }
-
-    /**
-     * 这件活一路上放下、之后没再挖掉的方块:历次导航的实际账,加上还在走的这一趟的账,按放下的先后。和
-     * {@link #brokeOnTheWay} 同一本账,只读;放下之后世界里又怎样了,由问的一方自己看。
-     */
-    protected final List<EditLedger.Placed> placedOnTheWay() {
-        return soFar().placedBlocks();
     }
 
     /** 旅程账加上还在走的这一趟。 */

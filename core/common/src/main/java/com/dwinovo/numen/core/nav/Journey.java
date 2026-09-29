@@ -57,11 +57,6 @@ public final class Journey {
         return false;
     }
 
-    /** 放下、之后没再挖掉的方块,按放下的先后。 */
-    public List<EditLedger.Placed> placedBlocks() {
-        return EditLedger.placedBlocks(entries);
-    }
-
     public List<EditLedger.Entry> entries() {
         return Collections.unmodifiableList(entries);
     }

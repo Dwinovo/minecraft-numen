@@ -34,7 +34,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 多格建造任务:走到工地外圈、一边绕圈一边逐批落位;路上垫下、收场时还立着的块照实交代。
+ * 多格建造任务:走到工地外圈、一边绕圈一边逐批落位。
  *
  * <p><b>施工模型</b>——同伴走到工地外圈(开工时站在工地里就先走出去),然后按稳定的速率一批一批地把方块落进世界,
  * 伴随朝向、挥手、粒子与音效。她不逐格走到每个方块旁边,也不需要"够得着"。
@@ -327,8 +327,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 走到外圈,开工时站在工地里就是走出去。这是施工真要的一步,所以用正式寻路、可以改地形({@link #SPEC}):路上垫下的块
-     * 留在原处,收场时照实交代({@link #closingNote})。走到了、走不通、超时,都开工——落位不靠走位,绝不因为路不通而不干活。
+     * 走到外圈,开工时站在工地里就是走出去。这是施工真要的一步,所以用正式寻路、可以改地形({@link #SPEC}):路上挖的、垫的
+     * 记在实际账里,每一种收场的回执末尾照账说。走到了、走不通、超时,都开工——落位不靠走位,绝不因为路不通而不干活。
      */
     private TaskState tickTravel() {
         if (nav == null) {
@@ -1206,15 +1206,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     protected void cleanup() {
         super.cleanup();
         player.controls().releaseAll();
-    }
-
-    /**
-     * 路上垫下、此刻还立着的块:每一种收场(建完、干不下去、被叫停、超时)都照实说,留不留由模型定。账只认寻路交出的实际账
-     * ({@link #placedOnTheWay}),说法在 {@link com.dwinovo.numen.core.nav.NavText#stillStanding}。
-     */
-    @Override
-    protected String closingNote() {
-        return com.dwinovo.numen.core.nav.NavText.stillStanding(player.level(), placedOnTheWay());
     }
 
     /**
