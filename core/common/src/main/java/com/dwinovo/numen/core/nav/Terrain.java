@@ -5,11 +5,13 @@ import java.util.Set;
 import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.drive.LiveWorld;
 import com.dwinovo.numen.pathing.plan.Stance;
+import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Clearance;
 import com.dwinovo.numen.pathing.world.Footing;
 import com.dwinovo.numen.pathing.world.Semantics;
+import com.dwinovo.numen.pathing.world.Sight;
 import com.dwinovo.numen.pathing.world.Stepping;
 
 import net.minecraft.core.BlockPos;
@@ -63,6 +65,28 @@ public final class Terrain {
     /** 她的身体在节点 {@code cell} 上待得住(站着、攀着或浮着)。 */
     public boolean standable(BlockPos cell) {
         return Stance.at(world, body, cell) != null;
+    }
+
+    /** 这一格有碰撞箱:有东西能托住脚。 */
+    public boolean solid(BlockPos pos) {
+        return !world.getBlockState(pos).getCollisionShape(world, pos).isEmpty();
+    }
+
+    /** 这一格有没有可点的轮廓(第 0 层 {@link Sight#clickable}):空气、流体没有。 */
+    public boolean clickable(BlockPos pos) {
+        return Sight.clickable(world, pos);
+    }
+
+    /** 此刻她站在 {@code block} 上时脚所在的节点({@link Goals#standingOn});站不上去为 null。 */
+    public BlockPos standingOn(BlockPos block) {
+        return Goals.standingOn(world, body, block);
+    }
+
+    /**
+     * 用 {@code target} 这一格:按此刻的世界列出她的候选站位({@link Goals#use})。要先确认它可点({@link #clickable})。
+     */
+    public Goals.Use use(BlockPos target) {
+        return Goals.use(world, body, target);
     }
 
     /** 落到 {@code cell} 那一列里她待得住的节点({@link Stance#settle});那一列都待不住就是它自己。 */

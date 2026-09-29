@@ -1,0 +1,77 @@
+package com.dwinovo.numen.core.task.move;
+
+import java.util.List;
+
+import org.junit.jupiter.api.Test;
+
+import net.minecraft.core.BlockPos;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * move_goto 写错时的提醒怎么组成:说事实,再给能照抄的写法;每一句里的 move_goto 都是完整的一行坐标加字段。
+ */
+class GotoRemindersTest {
+
+    private static final BlockPos FURNACE = new BlockPos(120, 64, -35);
+
+    @Test
+    void aCopyableCallSpellsEveryCoordinateAndTheFields() {
+        assertEquals("move_goto x:120 y:64 z:-35 arrive:use", GotoReminders.call(FURNACE, "arrive:use"));
+        assertEquals("move_goto x:120 y:64 z:-35", GotoReminders.call(FURNACE, ""));
+    }
+
+    /** at 指向一格方块:说它是什么、站不进去,给用它、站上去、停在附近、挖进去四种写法。 */
+    @Test
+    void anOccupiedCellNamesTheBlockAndEveryWayToWriteIt() {
+        String said = GotoReminders.occupied(FURNACE, "furnace");
+        assertTrue(said.startsWith("120,64,-35 is furnace — no room to stand in it"), said);
+        assertTrue(said.contains("To use it: move_goto x:120 y:64 z:-35 arrive:use"), said);
+        assertTrue(said.contains("to stand on top of it: move_goto x:120 y:64 z:-35 arrive:on"), said);
+        assertTrue(said.contains("to stop close by: move_goto x:120 y:64 z:-35 arrive:near near:<blocks>"), said);
+        assertTrue(said.contains("add alter:natural"), said);
+    }
+
+    /** at 指向半空:说那一列的地面在哪一层,写成能照抄的一行;找不到地面就不提。 */
+    @Test
+    void midAirNamesTheGroundOfThatColumnWhenThereIsOne() {
+        String withGround = GotoReminders.midAir(new BlockPos(120, 70, -35), new BlockPos(120, 64, -35));
+        assertTrue(withGround.startsWith("120,70,-35 is in mid-air"), withGround);
+        assertTrue(withGround.contains("the ground in that column is at y=64: move_goto x:120 y:64 z:-35"), withGround);
+        assertTrue(withGround.contains("Omit y"), withGround);
+        String without = GotoReminders.midAir(new BlockPos(120, 70, -35), null);
+        assertTrue(!without.contains("ground in that column"), without);
+    }
+
+    /** 四面封死:每一面前面是什么都列出来,离她最近的那一面给出挖开它的一行,再照抄 arrive:use。 */
+    @Test
+    void aSealedBlockListsEveryCoverAndTheNearestToDig() {
+        List<GotoReminders.Cover> covers = List.of(
+                new GotoReminders.Cover("west", "stone", FURNACE.west()),
+                new GotoReminders.Cover("up", "dirt", FURNACE.above()));
+        String said = GotoReminders.sealed(FURNACE, "furnace", covers);
+        assertTrue(said.startsWith("120,64,-35 (furnace) is walled in on every side"), said);
+        assertTrue(said.contains("west stone at 119,64,-35, up dirt at 120,65,-35."), said);
+        assertTrue(said.contains("the west one is nearest me: `use block left 119 64 -35`"), said);
+        assertTrue(said.endsWith("move_goto x:120 y:64 z:-35 arrive:use again."), said);
+    }
+
+    @Test
+    void theShapeMistakesSayWhatGoesWithWhat() {
+        assertTrue(GotoReminders.nearWithoutArriveNear(3).contains("write arrive:near near:3"));
+        assertTrue(GotoReminders.arriveNearWithoutNear().contains("near:<blocks>"));
+        assertTrue(GotoReminders.blockNeedsY("use").startsWith("arrive:use names one block — give its y too"));
+        assertTrue(GotoReminders.heightTakesNoArrive("on").contains("arrive:on needs a place"));
+    }
+
+    /** use 指向空气或水:没有可点的,给停在附近的写法;有敞开的面却无处可站:说哪几面敞开。 */
+    @Test
+    void nothingToClickAndNowhereToStandSayWhy() {
+        String air = GotoReminders.nothingToUse(FURNACE, "air");
+        assertTrue(air.startsWith("120,64,-35 is air — nothing there to click"), air);
+        assertTrue(air.contains("move_goto x:120 y:64 z:-35 arrive:near near:<blocks>"), air);
+        String nowhere = GotoReminders.nowhereToStand(FURNACE, "chest", List.of("up", "north"));
+        assertTrue(nowhere.contains("is open on up, north, but there is nowhere within reach"), nowhere);
+    }
+}

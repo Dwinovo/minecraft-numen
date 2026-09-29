@@ -18,6 +18,7 @@ import com.dwinovo.numen.core.nav.NavText;
 import com.dwinovo.numen.core.nav.RouteBook;
 import com.dwinovo.numen.core.nav.RouteQueries;
 import com.dwinovo.numen.core.task.move.FollowTaskRecord;
+import com.dwinovo.numen.core.task.move.Destination;
 import com.dwinovo.numen.core.task.move.MoveToTaskRecord;
 import com.dwinovo.numen.core.tools.RouteSpecFlags;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -29,15 +30,15 @@ import com.dwinovo.numen.task.TaskDispatch;
 import com.dwinovo.numen.task.TaskResult;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 
 /**
- * {@code move}:走到一处或一种方块旁边、跟着谁走、走之前先给路线报价。
+ * {@code move}:走到一处(站进去、站上去、去用那一格方块、停在附近)、跟着谁走、走之前先给路线报价。
  *
  * <p>三个动作都在服务端。{@code goto} 与 {@code follow} 占身体,交任务槽(受理即回执,收尾走 task_finished);
  * {@code route} 只搜不走,不占身体,搜索出结论那一刻回复。{@code goto} 提升成快捷工具 {@code move_goto}——最常用的身体动作。
- * 路线规格的标志三处共用({@link RouteSpecFlags}),goto 与 route 在出厂规格(只走不改)上叠。
+ * 路线规格的标志三处共用({@link RouteSpecFlags}),goto 与 route 在出厂规格(只走不改)上叠。坐标与到达方式怎么对应到寻路的
+ * 目标、写错了怎么提醒,goto 与 route 共用 {@link Destination}。
  */
 public final class MoveCommands {
 
@@ -51,21 +52,21 @@ public final class MoveCommands {
     private static final int MAX_NEAR = 16;
 
     private static final Param<Integer> X = Param.optional("x", ArgType.integer(),
-            "Target X. With z alone: go to that place, at whatever height stands there. With y and z: stand in that "
-                    + "exact cell.");
+            "Target X. With z alone: that place, at whatever height stands there. With y and z: that one cell.");
     private static final Param<Integer> Y = Param.optional("y", ArgType.integer(),
             "Target height. Leave it out to go to a place (x and z, at whatever height stands there). With x and z: "
-                    + "that exact cell, which must be somewhere to stand. Alone: climb or descend to that height.");
+                    + "that one cell. Alone: climb or descend to that height.");
     private static final Param<Integer> Z = Param.optional("z", ArgType.integer(), "Target Z; see x.");
-    private static final Param<ResourceLocation> BLOCK = Param.optional("block", ArgType.id(),
-            "Walk up BESIDE the block of this kind she can reach most easily, never touching it. Give it alone, "
-                    + "no coordinates.");
+    private static final Param<String> ARRIVE = Param.optional("arrive", ArgType.oneOf(Destination.ARRIVE_WORDS),
+            "What counts as there. at: stand in that cell (or column, or height). on: stand on top of that block. "
+                    + "use: stand where that block is in sight and in reach, to use it. near: stop within --near "
+                    + "blocks of the cell or place.")
+            .whenOmitted("arrive at");
     private static final Param<String> ROUTE = Param.optional("route", ArgType.word(),
             "A planned route to walk. Give it alone: its destination and route flags are already fixed.")
             .values("a route id (r1, r2, ...) from a move_goto refusal or a `move route` reply");
     private static final Param<Integer> NEAR = Param.optional("near", ArgType.integer(1, MAX_NEAR),
-            "Anywhere within this many blocks of the place or cell counts as there.")
-            .whenOmitted("exactly there");
+            "With --arrive near only: anywhere within this many blocks counts as there.");
     private static final Param<Integer> DISTANCE = Param.optional("distance",
             ArgType.integer(MIN_DISTANCE, MAX_DISTANCE), "How close to stay, in blocks.")
             .whenOmitted("stay within " + DEFAULT_DISTANCE);
@@ -81,38 +82,48 @@ public final class MoveCommands {
     private MoveCommands() {}
 
     public static void install(NumenApi numen) {
-        numen.registerCommands(GROUP, "Getting around: go to a place or beside a block, follow someone, price a "
-                + "route before walking it.", MoveCommands::actions);
+        numen.registerCommands(GROUP, "Getting around: go to a place, stand on a block or where you can use it, "
+                + "follow someone, price a route before walking it.", MoveCommands::actions);
     }
 
     private static void actions(CommandGroup move) {
         move.server("goto", "Travel to one destination with full terrain pathfinding.", MoveCommands::goTo,
-                        with(List.of(X, Y, Z, BLOCK, ROUTE, NEAR), RouteSpecFlags.PARAMS))
+                        with(List.of(X, Y, Z, ARRIVE, ROUTE, NEAR), RouteSpecFlags.PARAMS))
                 .example("move goto --x 120 --z -35")
-                .example("move goto --x 120 --y 64 --z -35 --near 2")
-                .example("move goto --block minecraft:crafting_table")
+                .example("move goto --x 120 --y 64 --z -35 --arrive use")
+                .example("move goto --x 120 --y 63 --z -35 --arrive on")
+                .example("move goto --x 120 --y 64 --z -35 --arrive near --near 2")
+                .example("move goto --y 16 --alter natural")
                 .example("move goto --x 120 --y 12 --z -35 --alter natural --avoid_break minecraft:chest")
                 .example("move goto --route r2")
-                .note("Fill exactly one pattern: x and z (a place), block (beside the easiest one to reach), "
-                        + "x, y and z (that exact cell; never aim it at a chest or anything you want to keep), "
-                        + "y alone (a height), or route alone.")
-                .note("Arrival is exact: x, y and z means standing in that cell, x and z means standing in that "
-                        + "column. Add --near to accept anywhere within that many blocks.")
+                .note("Coordinates: x and z (a place), x, y and z (one cell), y alone (a height), or route alone. "
+                        + "To find a block, scan for it first (`scan blocks`), then give its coordinates.")
+                .note("--arrive says what counts as there: at (default) stands in the cell or column exactly; on "
+                        + "stands on top of the block; use stands where the block is in sight and in reach, never "
+                        + "touching it; near stops within --near blocks.")
+                .note("A call that cannot mean anything here fails at once with the reason and the ways to write it: "
+                        + "arrive at into a solid block or mid-air on a walk that changes nothing, arrive on or use "
+                        + "without y, arrive use on air or on a block walled in on every side.")
                 .note("Background work: returns at once; the end arrives as a task_finished event.")
                 .note("Changes nothing in the world unless --alter natural or any. With no clean route it fails and "
                         + "lists candidate routes with the blocks each would break or place; a route with blocks "
                         + "that are someone's asks your owner before setting off.")
                 .note("Started while sitting in a boat, she pilots it toward the target; any other vehicle is "
                         + "stepped off.")
-                .seeAlso("move route", "task stop")
+                .seeAlso("scan blocks", "move route", "task stop")
                 .promote("""
-                        Travel to ONE new destination with full terrain pathfinding: walks, jumps, swims, climbs, opens doors and gates, parkours, and auto-equips tools. Which fields you fill IS your intent — fill exactly one pattern:
-                        • x+z — go to a place, at whatever height stands there. This is the DEFAULT for exploration or "go there"; omit y.
-                        • block — e.g. block:'minecraft:crafting_table'. Walks up BESIDE the one she can reach most easily and never damages it. Easiest to reach is not always closest in a straight line, so it may not be the first block scan_blocks listed — give coordinates when it has to be a specific one.
-                        • x+y+z — stand EXACTLY in that cell. A y in mid-air or one too high is no place to stand and fails saying so — omit y when unsure. A block occupying it would have to be dug out (only alter:'natural' allows that), so never aim this at a chest, furnace or anything you want to keep — use block or x+z for those.
-                        • y — climb/descend to that elevation.
+                        Travel to ONE destination with full terrain pathfinding: walks, jumps, swims, climbs, opens doors and gates, parkours, and auto-equips tools. It only takes coordinates — to find a block, scan_blocks first and give its coordinates.
+                        WHERE (fill exactly one pattern):
+                        • x+z — a place, at whatever height stands there. The DEFAULT for exploration or "go there"; omit y.
+                        • x+y+z — one cell.
+                        • y — climb/descend to that height where you are (with alter:'natural' to dig down).
                         • route — walk a route by id (r1, r2, ...) from an earlier refusal or a `move route` reply. Give it ALONE: its destination and route fields are already fixed. A route is spent once walked, and only valid while you still stand where it was planned.
-                        NEAR (with x+z or x+y+z): arrival is exact unless you add near:<n> — then anywhere within n blocks counts as there.
+                        ARRIVE — what counts as there (default 'at'):
+                        • at — stand IN that cell (or column, or height), however the body is held there: standing, on a ladder, in water.
+                        • use — x+y+z of a block you want to use (furnace, chest, crafting table, bed…): stands where one of its open faces is in sight and in reach, never touching it. Then call use block on it.
+                        • on — x+y+z of a block to stand on top of.
+                        • near — with near:<n>, anywhere within n blocks of the cell or place.
+                        A call that cannot mean anything here fails at once, saying why and how to write it (e.g. arrive 'at' into a furnace on a walk that changes nothing, or 'use' on a block walled in on every side). It never guesses what you meant.
                         TERRAIN: the walk never changes the world unless you say so — walls, floors, other people's builds and the landscape stay exactly as they were. When there is no clean route, the call FAILS and lists candidate routes, each with an id, its length and exactly which blocks it would break or place — blocks that are someone's are marked as needing consent, and walking such a route asks the owner first; then either move_goto route:<id> or pick another destination. Underground travel and climbing out of pits usually need alter:'natural'. Every call reports what it actually broke or placed.
                         ROUTE FIELDS (all optional): alter 'none'|'natural'|'any' — may the walk dig, bridge, pillar ('any' also through blocks that need the owner's consent, asking first); avoid — cell types to keep out of (water, flowing_water, lava, climbable, door, hazard, falling, trigger, fragile); allow — cell types kept out by default that this walk may use (flowing_water, trigger, fragile); penalty_place / penalty_break / penalty_jump / penalty_wade — make an action pricier so she detours instead; avoid_break / avoid_place / avoid_step — blocks (ids or #tags) or cells/boxes ('x,y,z', 'x1,y1,z1..x2,y2,z2') she must not break, place into, or stand on; parkour — running jumps over gaps; max_fall — highest drop without water; alter_budget — how many blocks the whole route may change; routes over budget are dropped.
                         VEHICLES: start a move_goto while sitting in a boat (see <riding>) and she pilots it over the water toward the target — a destination on the water keeps her aboard, a destination ashore has her step off at the shore and finish on foot. Any other vehicle is stepped off the moment walking begins. Boarding is `use entity` right on the boat.
@@ -131,12 +142,12 @@ public final class MoveCommands {
                 .seeAlso("scan entities", "move goto", "task stop");
         move.server("route", "Price a walk without taking it: up to three routes to a destination, each with the "
                         + "blocks it would break or place.", MoveCommands::route,
-                        with(List.of(X, Y, Z, NEAR), RouteSpecFlags.PARAMS, List.of(ALTERNATIVES)))
+                        with(List.of(X, Y, Z, ARRIVE, NEAR), RouteSpecFlags.PARAMS, List.of(ALTERNATIVES)))
                 .example("move route --x 120 --z -35 --alter natural --alternatives 3")
-                .example("move route --x 120 --y 12 --z -35 --near 2")
+                .example("move route --x 120 --y 12 --z -35 --arrive near --near 2")
                 .note("Instant and read-only: nothing moves, nothing changes, the body stays free.")
-                .note("Destination is x and z (a place), x, y and z (a cell), or y alone (a height). For the "
-                        + "nearest block of a kind use `move goto` with --block, which has to scan first.")
+                .note("Destination and --arrive are written as for `move goto`, and a call that cannot mean anything "
+                        + "here fails at once the same way.")
                 .note("Without route flags it prices the default walk that never changes a block; add "
                         + "--alter natural to see what digging or bridging would cost.")
                 .note("Each route gets an id (r1, r2, ...); walk one with `move goto --route r1` while you still "
@@ -150,19 +161,26 @@ public final class MoveCommands {
         return Stream.of(parts).flatMap(List::stream).toArray(Param<?>[]::new);
     }
 
-    /** 给了 route 就走那条路:它自带规格,所以不能再给规格标志。 */
+    /**
+     * 给了 route 就走那条路:它自带规格,所以不能再给规格标志,也不能再给坐标与到达方式。否则按坐标编出去处
+     * ({@link Destination#of}:写错了当场提醒,不派活)。
+     */
     private static void goTo(ServerSource src, CommandArgs args) {
         String route = args.get(ROUTE);
-        if (route != null && RouteSpecFlags.given(args)) {
-            throw new IllegalArgumentException(
-                    "a route already carries the route flags it was planned under — give route alone. To walk"
-                    + " under different flags, move_goto the destination coordinates with them, or run `move route` again.");
+        if (route != null) {
+            if (RouteSpecFlags.given(args) || args.get(X) != null || args.get(Y) != null || args.get(Z) != null
+                    || args.get(ARRIVE) != null || args.get(NEAR) != null) {
+                throw new IllegalArgumentException("route means 'walk the planned route " + route + "' — its"
+                        + " destination and route flags are already fixed, so give it ALONE. To walk under different"
+                        + " flags, move_goto the destination coordinates with them, or run `move route` again.");
+            }
+            TaskDispatch.setTask(src, new MoveToTaskRecord(src, null, null, route));
+            return;
         }
-        ResourceLocation block = args.get(BLOCK);
-        // 坐标、方块、路线几样怎么搭配由记录判(说不通的组合当场报错,教她合法的几种写法)
-        RouteSpec spec = route == null ? RouteSpecFlags.parse(args, RouteSpec.defaults()) : null;
-        TaskDispatch.setTask(src, new MoveToTaskRecord(src, args.get(X), args.get(Y), args.get(Z),
-                block == null ? null : block.toString(), spec, route, args.get(NEAR)));
+        RouteSpec spec = RouteSpecFlags.parse(args, RouteSpec.defaults());
+        Destination destination = Destination.of(src.companion(), args.get(X), args.get(Y), args.get(Z),
+                args.get(ARRIVE), args.get(NEAR), spec);
+        TaskDispatch.setTask(src, new MoveToTaskRecord(src, destination, spec, null));
     }
 
     /**
@@ -199,24 +217,14 @@ public final class MoveCommands {
      */
     private static void route(ServerSource src, CommandArgs args) {
         NumenPlayer companion = src.companion();
-        Integer x = args.get(X);
-        Integer y = args.get(Y);
-        Integer z = args.get(Z);
-        Integer near = args.get(NEAR);
-        MoveToTaskRecord.Kind kind = MoveToTaskRecord.resolveKind(x, y, z, null, null);
-        if (near != null && kind == MoveToTaskRecord.Kind.YLEVEL) {
-            throw new IllegalArgumentException("near widens a location (x and z, with or without y); it does not go"
-                    + " with y alone.");
-        }
-        int bx = x == null ? 0 : x;
-        int by = y == null ? 0 : y;
-        int bz = z == null ? 0 : z;
-        Goal goal = MoveToTaskRecord.goal(kind, bx, by, bz, near);
         RouteSpec spec = RouteSpecFlags.parse(args, RouteSpec.defaults());
+        Destination destination = Destination.of(companion, args.get(X), args.get(Y), args.get(Z), args.get(ARRIVE),
+                args.get(NEAR), spec);
+        Goal goal = destination.goal();
         int alternatives = args.get(ALTERNATIVES) == null ? 1 : args.get(ALTERNATIVES);
 
         BlockPos from = Feet.cell(companion);
-        BlockPos toward = MoveToTaskRecord.toward(kind, bx, by, bz, from);
+        BlockPos toward = destination.toward(from);
         RouteQueries.deliver(CompanionPorts.navigator(companion, CompanionPorts.dangers(companion))
                         .plan(PlanQuery.of(goal, spec, alternatives)),
                 result -> src.reply(planned(companion, goal, toward, spec, from, result)));

@@ -546,7 +546,7 @@ public class MineGameTests {
                             && said.contains("2 more lie beyond it")
                             && said.contains("the nearest at " + coords(nearer))
                             && said.contains("move_goto there first (x:" + nearer.getX() + " y:" + nearer.getY() + " z:"
-                                    + nearer.getZ() + " near:8), then work_mine again"),
+                                    + nearer.getZ() + " arrive:near near:8), then work_mine again"),
                     "the reply does not say what lies beyond the work area and what to do: " + said);
             helper.assertTrue(companion.blockPosition().distSqr(start) <= 4, "she set off for ore beyond her work area");
             helper.assertTrue(level.getBlockState(nearer).is(Blocks.OCHRE_FROGLIGHT)
@@ -589,7 +589,7 @@ public class MineGameTests {
             BlockPos nearest = helper.absolutePos(far.get(0));
             helper.assertTrue(refusal[0] != null && refusal[0].contains("wholly beyond my work area")
                             && refusal[0].contains("move_goto there first (x:" + nearest.getX() + " y:" + nearest.getY()
-                                    + " z:" + nearest.getZ() + " near:8)"),
+                                    + " z:" + nearest.getZ() + " arrive:near near:8)"),
                     "the refusal does not say where the group is and how to get there: " + refusal[0]);
             for (BlockPos rel : far) {
                 helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).is(Blocks.VERDANT_FROGLIGHT),

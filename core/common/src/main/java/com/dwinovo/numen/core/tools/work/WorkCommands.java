@@ -80,7 +80,7 @@ public final class WorkCommands {
                         + "included); pass them only to restrict her.")
                 .note("What lies beyond the work area is reported, not visited: the end says how many, where the "
                         + "nearest is and how far. `scan blocks` marks which groups lie in it; for the others move_goto "
-                        + "near them first, then mine again. Groups lying wholly beyond it are refused at once.")
+                        + "near them first (arrive near), then mine again. Groups lying wholly beyond it are refused at once.")
                 .note("Asks your owner before breaking a block their rules want asked about; a refusal stops the "
                         + "task with the reason.")
                 .note("Only mines what her tools actually harvest, and stops naming the tier she needs when "
@@ -95,15 +95,15 @@ public final class WorkCommands {
                         + "WORK AREA: either way she works only within " + WorkArea.RADIUS + " blocks of where she "
                         + "stands when you call it; there she walks, digs to buried ores, pillars up and bridges gaps "
                         + "on her own. What lies beyond it she reports (how many, the nearest, how far) and does not go "
-                        + "to: scan_blocks marks each group's in_work_area; for the rest move_goto near them first, then "
-                        + "work_mine again. A group lying wholly beyond it is refused at once. When she cannot reach "
+                        + "to: scan_blocks marks each group's in_work_area; for the rest move_goto near them first (arrive:'near'), "
+                        + "then work_mine again. A group lying wholly beyond it is refused at once. When she cannot reach "
                         + "what is in the area, the end says why (no path, search budget used up, needs digging, a "
                         + "refused block, not loaded, ...) and what to try next. count is items, not "
                         + "blocks (redstone_ore drops ~4). Before breaking a block that needs the owner's consent "
                         + "she asks; if the owner or a rule refuses, the task stops with the reason — decide what "
                         + "to do next, do not route around it. Only mines what its tools actually harvest, and "
                         + "stops naming the needed tier if nothing qualifies (to destroy a block regardless of "
-                        + "drops, move_goto beside it and run `use block` with the left button on it). The route fields are "
+                        + "drops, move_goto its coordinates with arrive:'use' and run `use block` with the left button on it). The route fields are "
                         + "move_goto's, laid over work_mine's own default, which may dig anything (cells needing consent "
                         + "included) — pass them only to restrict her, e.g. avoid_break for blocks or cells she "
                         + "must leave standing. task_finished status=done "

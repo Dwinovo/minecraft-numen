@@ -99,7 +99,8 @@ public final class NavText {
             case Outcome.Blocked blocked -> "gave up: " + blockage(blocked.blockage())
                     + "; try again, and pick another destination if it keeps failing";
             case Outcome.NoLineOfSight sight -> "arrived, but " + Listing.coords(sight.target())
-                    + " is not in sight from there; clear what is in between, or come at it from another side";
+                    + " went out of sight after the walk was planned (something now stands in between); "
+                    + gotoCall(sight.target(), "arrive:use") + " again picks a spot that sees it";
         };
     }
 
@@ -374,7 +375,12 @@ public final class NavText {
         return String.join(", ", parts.subList(0, parts.size() - 1)) + " and " + parts.get(parts.size() - 1);
     }
 
-    static String name(BlockState state) {
+    /** 一句能照抄的 move_goto:{@code move_goto x:1 y:2 z:3 arrive:use};{@code rest} 是跟在坐标后面的字段,可以为空。 */
+    public static String gotoCall(BlockPos pos, String rest) {
+        return "move_goto x:" + pos.getX() + " y:" + pos.getY() + " z:" + pos.getZ() + (rest.isEmpty() ? "" : " " + rest);
+    }
+
+    public static String name(BlockState state) {
         return name(state.getBlock());
     }
 

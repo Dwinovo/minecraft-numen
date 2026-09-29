@@ -719,41 +719,41 @@ public class MovementGameTests {
     // ---- y 给得不对:半空、地里;水底、岩浆 ----
 
     /**
-     * y 猜到了半空(离地三格):给了 y 就是那一格,那一格没法站,不许改地形也就到不了。她不改地形、不去"差不多"的地方,
-     * 以失败收场,回执教她要去那个地方就省掉 y,要停在附近就给 near。
+     * y 猜到了半空(离地三格):给了 y 就是那一格,那一格没东西托,这一趟又不改地形。受理当场提醒——说那一格在半空、那一列的地面
+     * 在哪一层,教她省掉 y 或许改地形垫上去——不派活,她不动。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
-    public static void goto_with_y_in_the_air_says_to_omit_y(GameTestHelper helper) {
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
+    public static void goto_with_y_in_the_air_is_refused_at_once(GameTestHelper helper) {
         BlockPos target = helper.absolutePos(new BlockPos(11, 5, 7));
         NumenPlayer companion = spawnAt(helper, "gametest_skyward", new BlockPos(3, 2, 7), false);
+        BlockPos before = companion.blockPosition();
         ToolRun walk = call(companion, "move_goto", args("x", target.getX(), "y", target.getY(), "z", target.getZ()));
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "goto has not finished");
-            helper.assertTrue(!walk.succeeded() && walk.outcome().contains("omit y")
-                            && walk.outcome().contains("near"),
-                    "the mid-air y did not fail with the hint: " + walk.outcome());
-            helper.assertTrue(companion.blockPosition().getY() == target.getY() - 3,
-                    "she left the ground: " + companion.blockPosition().toShortString());
+            helper.assertTrue(walk.task() == null && walk.done() && !walk.succeeded(), "it was not refused at once");
+            helper.assertTrue(walk.outcome().contains("in mid-air") && walk.outcome().contains("Omit y")
+                            && walk.outcome().contains("y=" + (target.getY() - 3)),
+                    "the mid-air y was not refused with the reminder: " + walk.outcome());
+            helper.assertTrue(companion.blockPosition().equals(before), "she moved");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
 
     /**
-     * y 给成了地面那一块本身:那一格是实心的,要站进去就得挖掉它,默认规格不许改地形。她不挖、不去"差不多"的地方,
-     * 以失败收场,回执同样教她省掉 y 或给 near;地面那一块还在。
+     * y 给成了地面那一块本身:那一格是实心的,站不进去,这一趟又不改地形。受理当场提醒——说那一格是什么,要用它写
+     * arrive:use、站上去写 arrive:on、停在附近写 arrive:near——不派活,地面那一块还在。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
-    public static void goto_with_y_inside_the_floor_says_to_omit_y(GameTestHelper helper) {
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
+    public static void goto_with_y_inside_the_floor_is_refused_at_once(GameTestHelper helper) {
         BlockPos target = helper.absolutePos(new BlockPos(11, 1, 7));
         NumenPlayer companion = spawnAt(helper, "gametest_grounded_y", new BlockPos(3, 2, 7), false);
         ToolRun walk = call(companion, "move_goto", args("x", target.getX(), "y", target.getY(), "z", target.getZ()));
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "goto has not finished");
-            helper.assertTrue(!walk.succeeded() && walk.outcome().contains("omit y")
-                            && walk.outcome().contains("near"),
-                    "the y inside the floor did not fail with the hint: " + walk.outcome());
+            helper.assertTrue(walk.task() == null && walk.done() && !walk.succeeded(), "it was not refused at once");
+            helper.assertTrue(walk.outcome().contains("no room to stand in it") && walk.outcome().contains("arrive:use")
+                            && walk.outcome().contains("arrive:on") && walk.outcome().contains("arrive:near"),
+                    "the y inside the floor was not refused with the reminder: " + walk.outcome());
             helper.assertTrue(helper.getLevel().getBlockState(target).isSolid(), "the floor block was dug out");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });

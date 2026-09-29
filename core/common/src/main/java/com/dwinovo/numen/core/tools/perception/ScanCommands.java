@@ -92,7 +92,7 @@ public final class ScanCommands {
                         + "distance, a box (x1,y1,z1..x2,y2,z2 — the form avoid_break takes), in_work_area — how much "
                         + "of it lies within " + WorkArea.RADIUS + " blocks of where you stand, the only place "
                         + "work_mine digs from here (all, none, or a count of its cells; none means move_goto near it "
-                        + "first), permission for "
+                        + "first, with arrive near), permission for "
                         + "breaking its cells (allow; ask = work_mine asks the owner first; deny = work_mine stops) with the "
                         + "reason, sources = source cells for water or lava (a source behaves very differently from "
                         + "flowing), and for groups of up to 16 cells every position. A very large group comes back "

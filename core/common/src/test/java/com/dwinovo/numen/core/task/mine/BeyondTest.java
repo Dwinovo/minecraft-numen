@@ -22,7 +22,7 @@ class BeyondTest {
     void whatLiesBeyondSaysHowManyTheNearestAndWhatToDo() {
         Beyond seen = new Beyond(List.of(FAR, NEAR), false);
         assertEquals("2 more lie beyond it, the nearest at 60,64,0, about 60 blocks from me: move_goto there first"
-                + " (x:60 y:64 z:0 near:" + Beyond.NEAR + "), then work_mine again", seen.more(FROM));
+                + " (x:60 y:64 z:0 arrive:near near:" + Beyond.NEAR + "), then work_mine again", seen.more(FROM));
         assertTrue(new Beyond(List.of(FAR, NEAR), true).more(FROM).startsWith("at least 2 more lie beyond it"),
                 "查询凑够就停时个数只是下限");
         assertTrue(seen.named(FROM).startsWith("2 of the named cells lie beyond it and were left, the nearest at"
@@ -49,7 +49,7 @@ class BeyondTest {
         String one = Beyond.groupsOutside(List.of("g3"), false, area, NEAR);
         assertEquals("group g3 lies wholly beyond my work area (within " + WorkArea.RADIUS + " blocks of 0,64,0), so I"
                 + " did not start; the nearest of its cells is at 60,64,0, about 60 blocks away. move_goto there first"
-                + " (x:60 y:64 z:0 near:" + Beyond.NEAR + "), then work_mine again (group ids stay good until your next"
+                + " (x:60 y:64 z:0 arrive:near near:" + Beyond.NEAR + "), then work_mine again (group ids stay good until your next"
                 + " scan_blocks).", one);
         String two = Beyond.groupsOutside(List.of("g3", "g5"), true, area, NEAR);
         assertTrue(two.startsWith("groups g3, g5 lie wholly beyond") && two.contains("the nearest of their cells")

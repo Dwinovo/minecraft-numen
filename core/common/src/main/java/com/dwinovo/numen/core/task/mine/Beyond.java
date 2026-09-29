@@ -21,7 +21,7 @@ public record Beyond(List<BlockPos> cells, boolean atLeast) {
     public static final Beyond NONE = new Beyond(List.of(), false);
 
     /**
-     * 下一步里 {@code move_goto} 的 {@code near}:走到离那一格这么近就算到了。落脚宽松(挖进石头里的矿不必站到跟前),
+     * 下一步里 {@code move_goto} 的 {@code arrive:near} 用的 {@code near}:走到离那一格这么近就算到了。落脚宽松(挖进石头里的矿不必站到跟前),
      * 到了之后以脚下为中心的工作区照样盖得住它和它身边的一片。
      */
     static final int NEAR = 8;
@@ -41,7 +41,7 @@ public record Beyond(List<BlockPos> cells, boolean atLeast) {
 
     /**
      * 找方块的用法:{@code 7 more lie beyond it, the nearest at 80,40,-10, about 69 blocks from me: move_goto there first
-     * (x:80 y:40 z:-10 near:8), then work_mine again}。查询提前停了时说"至少"。
+     * (x:80 y:40 z:-10 arrive:near near:8), then work_mine again}。查询提前停了时说"至少"。
      *
      * @param from 她此刻脚下那一格
      */
@@ -79,8 +79,8 @@ public record Beyond(List<BlockPos> cells, boolean atLeast) {
 
     /** 照着就能做的下一步:先走过去,再挖一次。 */
     static String goThere(BlockPos cell) {
-        return "move_goto there first (x:" + cell.getX() + " y:" + cell.getY() + " z:" + cell.getZ() + " near:" + NEAR
-                + "), then work_mine again";
+        return "move_goto there first (x:" + cell.getX() + " y:" + cell.getY() + " z:" + cell.getZ() + " arrive:near near:"
+                + NEAR + "), then work_mine again";
     }
 
     private static String coords(BlockPos p) {
