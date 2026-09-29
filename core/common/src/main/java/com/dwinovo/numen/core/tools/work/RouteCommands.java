@@ -104,7 +104,7 @@ public final class RouteCommands {
                 .note("Read-only and does not take the body: it replies when the plan is ready. The plan stays on "
                         + "the route and is what move go keeps to: it changes only the cells listed here.")
                 .note("Each leg is planned as far as one look reaches; a leg that goes past it says where the known "
-                        + "part ends, and move go stops there.")
+                        + "part ends. move go walks on past it, but changes no cell the plan did not list.")
                 .seeAlso("move go", "route show");
         route.server("show", "Show a route: its stops and flags, its latest plan and who walked it.",
                         (src, args) -> src.reply(RouteOps.show(src.companion(), args.get(NAME))), NAME)

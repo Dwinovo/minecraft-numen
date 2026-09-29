@@ -56,10 +56,6 @@ public enum FailureType {
      *  treat it in-ladder like NO_PATH (a looser stance may still avoid it); a route walk does not
      *  loosen anything on it — whether to allow more is the LLM's call. */
     TERRAIN_BLOCKED,
-    /** Walked to where the plan's knowledge ends (the search budget or the loaded chunks ran out
-     *  there); the rest of the way is unknown until planned again from here. Kick to LLM: walking
-     *  the same route again plans on from where she stands. */
-    UNCHARTED,
     /** Never got within interaction reach of the target. In-ladder: reposition. */
     OUT_OF_REACH,
     /** Can't harvest/attack effectively with the current inventory. Prerequisite — kick to LLM. */

@@ -18,7 +18,6 @@ import com.dwinovo.numen.core.route.Routes;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.api.Outcome;
-import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.permission.ConsentAnswer;
 import com.dwinovo.numen.permission.ConsentItem;
@@ -39,7 +38,9 @@ import net.minecraft.core.BlockPos;
  *   <li><b>walk leg by leg</b> — each leg is driven under its spec bound to the promise ({@link Plan#bind}): when the
  *       world changes on the way and the engine re-searches, it only finds ways inside the promise; finding none it
  *       stops, and a fresh plan from where she stands says which cells lie outside it. A leg only partly seen when
- *       planning is walked to the end of the seen part and the walk stops there, saying the rest is still unknown.</li>
+ *       planning (or not planned because the one before it was only partly seen) is driven toward its own goal all the
+ *       same, the seen part first: the engine works out the rest on the way, and the promise keeps it from changing
+ *       any cell the plan did not list — a walk that changes nothing goes as far as it likes.</li>
  * </ol>
  * Arrival is the goal's own membership, decided by the pathing module. Results always echo the ACTUAL position reached
  * (and the real ground height) so the model learns the terrain. Every walk is written onto the route.
@@ -83,8 +84,6 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     private List<ConsentItem> asks = List.of();
     /** 在走第几段(从 0 数)。 */
     private int leg;
-    /** 在走的这一段只走到计划看清的那一截的尽头。 */
-    private boolean edge;
     /** 半路停下的那一段与结局,等从这里规划的结论回来再说。 */
     private int stoppedLeg;
     private Outcome stopped;
@@ -219,27 +218,23 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         return startLeg();
     }
 
-    /** 开走第 {@link #leg} 段:照规划出的路走,规格绑上承诺;只看清一截的走到那一截的尽头。 */
+    /**
+     * 开走第 {@link #leg} 段:照这一段自己的目标走,规格绑上承诺。整段看清了就照规划出的路走;只看清一截就拿那一截当开头,
+     * 后面由执行层边走边算;没规划(前一段没看清)就从脚下算起。未知的部分要改承诺外的格时,重搜找不到路,停下再说是哪几格。
+     */
     private TaskState startLeg() {
         if (leg >= route.legs().size()) {
             return arrived();
         }
         RoutePlanning.Leg target = planned.legs().get(leg);
         Survey.Found found = leg < planned.found().size() ? planned.found().get(leg) : null;
-        RouteSpec spec = promise.bind(target.spec());
-        if (found != null && found.reached()) {
-            nav = Trip.following(player, target.goal(), spec, found.route(), target.toward());
-            edge = false;
-        } else if (found != null && found.partial() != null) {
-            BlockPos end = found.partial().end();
-            nav = Trip.following(player, Goals.at(end), spec, found.partial(), end);
-            edge = true;
-        } else {
-            return uncharted();
-        }
+        RouteSpec spec = promise.bind(target.way().spec());
+        var seed = found == null ? null : found.reached() ? found.route() : found.partial();
+        nav = seed == null ? Trip.to(player, target.way().goal(), spec, target.toward())
+                : Trip.following(player, target.way().goal(), spec, seed, target.toward());
         phase = Phase.DRIVING;
         com.dwinovo.numen.core.Constants.LOG.info("[numen-task] go {} 第 {} 段{} alter={}", route.name(), leg + 1,
-                edge ? "(走到看清的尽头)" : "", spec.alter());
+                found != null && found.reached() ? "" : "(计划只看清一截或没规划,边走边算)", spec.alter());
         return TaskState.RUNNING;
     }
 
@@ -254,9 +249,6 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             case RUNNING -> TaskState.RUNNING;
             case ARRIVED -> {
                 stopNav();
-                if (edge) {
-                    yield uncharted();
-                }
                 leg++;
                 yield startLeg();
             }
@@ -282,19 +274,11 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                     + "then move go " + route.name() + " keeps to that plan.", FailureType.TERRAIN_BLOCKED);
         }
         RoutePlanning.Leg target = planned.legs().get(stoppedLeg);
-        String why = NavText.failure(stopped, player, Feet.cell(player), target.toward(), target.spec(),
+        String why = NavText.failure(stopped, player, Feet.cell(player), target.toward(), target.way().spec(),
                 new NavText.OnRoute(route.name(), stoppedLeg + 1, route.legs().size()));
         return end("blocked on " + legName(stoppedLeg) + ": got within " + String.format("%.1f", repDistance())
                 + " blocks of " + route.destination().words() + " (now on the ground at y="
                 + player.blockPosition().getY() + "). " + why + ".", NavText.type(stopped));
-    }
-
-    /** 走到了计划看清的尽头:后面是什么还不知道,停下。 */
-    private TaskState uncharted() {
-        Plan.Leg seen = planned.plan().legs().get(leg);
-        return end("stopped at " + here(player.blockPosition().getY()) + ", where the plan of " + legName(leg)
-                + " ends: past it the way is still unknown (" + seen.why() + "). move go " + route.name()
-                + " again plans on from here.", FailureType.UNCHARTED);
     }
 
     /** 最后一段到了。 */

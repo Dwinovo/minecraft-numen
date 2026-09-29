@@ -10,7 +10,6 @@ import com.dwinovo.numen.core.task.move.Destination;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.api.Bill;
 import com.dwinovo.numen.pathing.api.Outcome;
-import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.permission.ConsentItem;
@@ -25,17 +24,16 @@ import net.minecraft.core.BlockPos;
 public final class RoutePlanning {
 
     /**
-     * 一段编好的样子。
-     *
-     * @param toward 给人说"朝哪儿"的那一格(回执里的方向与距离)
+     * 一段编好的样子:交给规划的那一段(目标与规格),加上给人说"朝哪儿"的那一格(回执里的方向与距离)。
      */
-    public record Leg(Goal goal, RouteSpec spec, BlockPos toward) {}
+    public record Leg(Survey.Leg way, BlockPos toward) {}
 
     /**
      * 规划的结论。
      *
      * @param plan  写成的计划
-     * @param legs  编好的每一段(从规划的第一段起;途经点编不成目标的那一段与之后的没有)
+     * @param legs  编好的每一段(从规划的第一段起;途经点编不成目标的那一段与之后的没有)。没走到、没规划的段也在,
+     *              执行时照它的目标开走
      * @param found 每一段规划出来的样子,与 {@code legs} 同序;没走到的那一段是最后一个
      */
     public record Result(Plan plan, List<Leg> legs, List<Survey.Found> found) {
@@ -78,13 +76,13 @@ public final class RoutePlanning {
             RouteSpec spec = RouteFlags.spec(route, i);
             Destination.Stop stop = route.legs().get(i).to();
             try {
-                legs.add(new Leg(Destination.of(her, stop, spec).goal(), spec, stop.toward(from)));
+                legs.add(new Leg(new Survey.Leg(Destination.of(her, stop, spec).goal(), spec), stop.toward(from)));
             } catch (IllegalArgumentException e) {
                 refusal = e.getMessage();
                 break;
             }
         }
-        List<Survey.Leg> asked = legs.stream().map(l -> new Survey.Leg(l.goal(), l.spec())).toList();
+        List<Survey.Leg> asked = legs.stream().map(Leg::way).toList();
         this.survey = asked.isEmpty() ? null : Survey.of(her, asked);
     }
 
@@ -126,11 +124,13 @@ public final class RoutePlanning {
         boolean seen = true;
         for (int i = first; i < route.legs().size(); i++) {
             int k = i - first;
-            if (!seen) {
+            if (k == legs.size() && refusal != null) {
+                // 途经点此刻就编不成目标:与从哪儿走来无关,确定走不通
+                planned.add(Plan.Leg.unreachable(refusal));
+                seen = false;
+            } else if (!seen) {
                 planned.add(Plan.Leg.unplanned());
-                continue;
-            }
-            if (k < found.size()) {
+            } else if (k < found.size()) {
                 Survey.Found f = found.get(k);
                 Leg leg = legs.get(k);
                 if (f.reached()) {
@@ -138,13 +138,10 @@ public final class RoutePlanning {
                     start = f.route().end();
                     continue;
                 }
-                String why = NavText.failure(f.outcome(), her, start, leg.toward(), leg.spec(),
+                String why = NavText.failure(f.outcome(), her, start, leg.toward(), leg.way().spec(),
                         new NavText.OnRoute(route.name(), i + 1, route.legs().size()));
                 planned.add(unknown(f.outcome())
                         ? leg(Plan.Reach.PARTIAL, f.partial(), why) : Plan.Leg.unreachable(why));
-                seen = false;
-            } else if (k == legs.size() && refusal != null) {
-                planned.add(Plan.Leg.unreachable(refusal));
                 seen = false;
             } else {
                 planned.add(Plan.Leg.unplanned());

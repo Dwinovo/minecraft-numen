@@ -27,8 +27,9 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
  * 路线:{@code route new} + {@code route plan} 只规划不动身体;{@code move go} 照计划走,只改计划里的格;路上世界变了、要承诺外的格时
- * 停下并说是哪几格;从别处出发、新计划超出承诺时不走并说出差别;途经点照顺序走;{@code move goto} 简写与分开三步结局相同;
- * 重启后 {@code move go} 照常重放。都从工具入口进。
+ * 停下并说是哪几格;远途一格不改的 goto 一路走到;走进计划看不清的部分后要改承诺外的格时停下;从别处出发、新计划超出
+ * 承诺时不走并说出差别;途经点照顺序走;{@code move goto} 简写与分开三步结局相同;重启后 {@code move go} 照常重放。
+ * 都从工具入口进。
  */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
@@ -298,6 +299,98 @@ public class RouteGameTests {
                     String b = walk[0].outcome().replace("trip", "R").replaceAll("-?\\d+", "#");
                     helper.assertTrue(a.equals(b), "the shorthand reports differently: " + shorthand.outcome()
                             + " / " + walk[0].outcome());
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /** 寻路模块的长场地:224 × 24,两百格跨十几个区块,远过一次规划看得清的范围(快照从起点往外 96 格)。 */
+    private static final String LONG = "pathing_long";
+
+    /** 长场地铺一层石头地面(y=0),她站在 y=1。 */
+    private static void longFloor(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 0; x < 224; x++) {
+            for (int z = 0; z < 24; z++) {
+                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, 0, z)), Blocks.STONE.defaultBlockState());
+            }
+        }
+    }
+
+    /** 长场地横着砌一整面墙(x 这一列,地面以上到顶、两边到头):要过去只能挖穿它。 */
+    private static void wallAcross(GameTestHelper helper, int x, net.minecraft.world.level.block.Block block) {
+        for (int y = 1; y < 16; y++) {
+            for (int z = 0; z < 24; z++) {
+                helper.getLevel().setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)), block.defaultBlockState());
+            }
+        }
+    }
+
+    /**
+     * 远途、一格不改:两百格外的一处,一次规划只看清开头那一截。{@code move_goto} 照样一路走到——一格不改的承诺怎么走都不越界,
+     * 看不清的部分由执行层边走边算。
+     */
+    @GameTest(template = LONG, timeoutTicks = 100000, batch = BATCH)
+    public static void a_far_goto_that_changes_nothing_walks_all_the_way(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        longFloor(helper);
+        NumenPlayer companion = spawnAt(helper, "gametest_wanderer2", new BlockPos(2, 1, 12), false);
+        BlockPos far = helper.absolutePos(new BlockPos(210, 1, 12));
+        ToolRun walk = call(companion, "move_goto", args("x", far.getX(), "z", far.getZ()));
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(walk.done(), "move_goto has not finished");
+            helper.assertTrue(walk.succeeded(), "the far walk did not arrive: " + walk.outcome());
+            helper.assertTrue(companion.getBlockX() == far.getX() && companion.getBlockZ() == far.getZ(),
+                    "she stopped short at " + companion.blockPosition().toShortString());
+            Plan plan = routes(companion).get(Itinerary.gotoOf("gametest_wanderer2")).plan();
+            helper.assertTrue(plan != null && plan.legs().get(0).reach() == Plan.Reach.PARTIAL,
+                    "the plan should have seen only the first stretch of a walk this long: " + plan);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 远途、要改地形:长场地上两面横墙,近的是泥土(计划看得见,要挖),远的是石头(在计划看不清的那一截之后)。规划只看清开头,
+     * {@code move go} 照走:挖穿泥土、走进未知部分,到石墙前要挖承诺外的格——停下,说出是哪几格;石墙一块不少。
+     */
+    @GameTest(template = LONG, timeoutTicks = 100000, batch = BATCH)
+    public static void a_walk_into_the_unknown_stops_where_it_needs_cells_outside_the_plan(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        longFloor(helper);
+        wallAcross(helper, 30, Blocks.DIRT);
+        wallAcross(helper, 150, Blocks.STONE);
+        NumenPlayer companion = spawnAt(helper, "gametest_pioneer", new BlockPos(2, 1, 12), false);
+        BlockPos start = companion.blockPosition();
+        command(companion, "route new far --to " + at(helper, new BlockPos(210, 1, 12)) + " --alter natural");
+        ToolRun plan = command(companion, "route plan far");
+        ToolRun[] walk = new ToolRun[1];
+
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(plan.done(), "route plan has not replied"))
+                .thenExecute(() -> {
+                    helper.assertTrue(plan.succeeded() && plan.reply().contains("dirt")
+                                    && plan.reply().contains("unknown") && !plan.reply().contains("stone"),
+                            "the plan should dig the dirt wall and see nothing of the stone one: " + plan.reply());
+                    walk[0] = command(companion, "move go far");
+                })
+                .thenWaitUntil(() -> helper.assertTrue(walk[0].done(), "move go has not finished"))
+                .thenExecute(() -> {
+                    String said = walk[0].outcome();
+                    helper.assertTrue(!walk[0].succeeded() && said.contains("outside the plan") && said.contains("stone"),
+                            "the stop does not say which cells lie outside the plan: " + said);
+                    helper.assertTrue(Math.sqrt(companion.blockPosition().distSqr(start)) > 100,
+                            "she did not walk on into the part the plan could not see: "
+                                    + companion.blockPosition().toShortString());
+                    int stone = 0;
+                    for (int y = 1; y < 16; y++) {
+                        for (int z = 0; z < 24; z++) {
+                            if (level.getBlockState(helper.absolutePos(new BlockPos(150, y, z))).is(Blocks.STONE)) {
+                                stone++;
+                            }
+                        }
+                    }
+                    helper.assertTrue(stone == 15 * 24, "she dug the stone wall the plan never listed: " + stone);
                     CompanionFactory.despawn(level.getServer(), companion);
                 })
                 .thenSucceed();

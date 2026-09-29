@@ -79,7 +79,7 @@ public final class RouteText {
                             + leg.ticks() + " ticks; " + changes(leg) + "), unknown past that")
                     + ": " + leg.why();
             case UNREACHABLE -> "can't be walked: " + leg.why();
-            case UNPLANNED -> "not planned, the leg before it is not walkable yet";
+            case UNPLANNED -> "not planned yet, the leg before it is only partly known; it is worked out on the way";
         };
     }
 
@@ -98,9 +98,8 @@ public final class RouteText {
         String asking = asks == 0 ? "" : ", asking your owner about " + asks + " cell(s) before setting off";
         for (Plan.Leg leg : plan.legs()) {
             if (leg.reach() == Plan.Reach.PARTIAL) {
-                return "move go " + route.name() + " walks the part that is known" + asking + " and stops "
-                        + (leg.end() == null ? "where the unknown starts" : "at " + Listing.coords(leg.end()))
-                        + "; move go " + route.name() + " again goes on from there.";
+                return "move go " + route.name() + " walks it" + asking + ", working out the unknown part on the "
+                        + "way; it changes only the cells listed here, and stops to say so if the unknown part needs more.";
             }
         }
         return "move go " + route.name() + " walks it" + asking + "; it changes only the cells listed here.";

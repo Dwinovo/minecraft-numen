@@ -823,7 +823,7 @@ goto 超时、跟随报没路,还有 17 次 "Can't keep up"。新模块一行日
 - **接着规划**:`PlanQuery.after(route)`:起点是那条路线的终点,身体到那里时怎么待着、最后一步的改动照它算(与执行分段接续的
   `Search.after` 同一个)。快照按新起点拷;更早几步的改动不叠,与已知近似"展开节点只叠走到这里那一步的改动"同一回事。
 - **看清的那一截**:一条候选都没有时,`PlanResult.partial` 交出第一次搜索朝目标推进的半程路线(连同预算账),诊断照旧给结局。
-  宿主拿它说"这一段看清到哪儿、之后未知",执行时只走到那一截的尽头。
+  宿主拿它说"这一段看清到哪儿、之后未知",执行时拿它当这一段的开头,后面照这一段的目标边走边算(承诺照样绑着)。
 - 单测:`RouteSpecTest.aConfinedUseForbidsEveryOtherCellAndTwoConfinementsIntersect`、`SearchTest.aSpecConfinedToThePlannedDigsDigsOnlyThose`、
   `aPlanThatRunsOutOfBudgetHandsOverThePartOfTheWayItSaw`、`aPlanContinuingARouteStartsWhereItEndsAndCarriesItsLastStep`。
 - **要改地形才有路的那条路**:结局 `Outcome.NeedsAlter` 带上诊断搜出的那条路要做的改动(`changes`,挖哪几格、放哪几格连同许可的
