@@ -53,6 +53,33 @@ public class CollectGameTests {
         });
     }
 
+    /**
+     * 只捡区域里的:框一块盒子罩住一堆铁锭,{@code work collect --area pen} 只把那一堆捡回来;盒子外的另一堆铁锭原样躺着。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_collect")
+    public static void work_collect_area_picks_up_only_what_lies_in_the_area(GameTestHelper helper) {
+        dropOnFloor(helper, new BlockPos(10, 2, 4), Items.IRON_INGOT, 3);
+        dropOnFloor(helper, new BlockPos(4, 2, 11), Items.IRON_INGOT, 2);
+        NumenPlayer companion = spawnAt(helper, "gametest_penkeeper", new BlockPos(2, 2, 2), false);
+        BlockPos a = helper.absolutePos(new BlockPos(8, 1, 2));
+        BlockPos b = helper.absolutePos(new BlockPos(12, 4, 6));
+        ToolRun made = command(companion, "area new pen");
+        ToolRun framed = command(companion, "area add pen --box " + a.getX() + "," + a.getY() + "," + a.getZ() + ".."
+                + b.getX() + "," + b.getY() + "," + b.getZ());
+        ToolRun collect = command(companion, "work collect --item_ids minecraft:iron_ingot --area pen");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(made.succeeded() && framed.succeeded(), "the pen was not framed: " + framed.reply());
+            helper.assertTrue(collect.done(), "work collect has not finished");
+            helper.assertTrue(collect.succeeded() && collect.outcome().startsWith("collected 3 "),
+                    "work collect did not pick up the three ingots in the pen: " + collect.outcome());
+            helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 3
+                            && onFloor(helper, Items.IRON_INGOT) == 2,
+                    "the ingots outside the pen were not left where they lay");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
     /** 不点名就全捡:散在两处的铁锭和圆石都到了身上,地上一件不剩。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_collect")
     public static void work_collect_without_names_picks_up_everything(GameTestHelper helper) {
