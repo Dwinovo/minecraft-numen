@@ -830,6 +830,18 @@ goto 超时、跟随报没路,还有 17 次 "Can't keep up"。新模块一行日
   答复;`alterations()` 是它的格数),宿主点名那几格,代替原来失败后另起一次规划列候选。诊断设想身上有料,点名的放块可能是身上没有的料。
 - 候选路线的惩罚法(`RoutePlanner` 多条候选)模块里留着(门面 GameTest 在测),Numen 侧只要一条。
 
+### 整片禁止(09-30,`look-plan-act` 第 3 步)
+
+宿主的"一块地方"是区域(Numen api 的 `Area`,按 16³ 小节存位图,一块基地可以有几百万格)。路线标志 `--avoid area:farm`、
+`--avoid_break area:house` 要把整块区域写进按位置的禁令,逐格展开进 `LongSet` 既慢又占地方,所以模块只加了一样数据:
+
+- **`PositionCosts.Region`**:一个函数式接口 `boolean contains(long cell)`(键是 `BlockPos.asLong`),只回答一格在不在里面。
+  `Builder.forbid(Use, Region)` 把整片交进某一栏;`forbids` 先查逐格的禁令,再逐片问,再看"只许";合并时整片的禁令接在一起
+  (与逐格的一样取并集)。模块不认识区域怎么存,也不引用 Numen 的类型:宿主(`core/nav/NamedAreas.region`)拿区域的小节位图实现它,
+  一次查表加一次取位;区域是不可变值,搜索线程逐格问。实现要不可变或线程安全、问一格要快——这是接口的约定。
+- 去一块区域不加到达:Numen 侧用 `Goals.anyOf` 组合现成的 `at`/`use`/`within`(成员有界,见 `cli.md` 附录 G)。
+- 单测 `RouteSpecTest.aForbiddenRegionIsAskedCellByCellWithoutBeingSpelledOut`。
+
 ## 参考
 
 - Baritone:对外接口单独一个源码集 `api`,实现依赖它而不是反过来;`Settings` 无随机性(本机 `D:\01_Projects\baritone`)。

@@ -3,6 +3,7 @@ package com.dwinovo.numen.core.route;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.cli.Param;
+import com.dwinovo.numen.core.nav.NamedAreas;
 import com.dwinovo.numen.core.tools.RouteSpecFlags;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
@@ -11,6 +12,9 @@ import com.dwinovo.numen.pathing.spec.RouteSpec;
  * 用时读回来经 {@link RouteSpecFlags} 翻成规格——标志到规格的翻译只有那一处。读与写都过 {@code route spec} 这一行命令:
  * 写是那一行的参数写回命令行的样子({@link CommandArgs#write}),读是同一棵树把它读回来({@link NumenCli#read}),文字的语法就是
  * 命令的语法,没有第二份。
+ *
+ * <p>标志里点名的区域存的是名字,翻成规格时按那一刻的区域解析({@link NamedAreas}):改规格时点名不在的区域当场拒收,
+ * 规划时区域已经删了,那一段如实说是哪块区域不在了。
  */
 public final class RouteFlags {
 
@@ -27,22 +31,28 @@ public final class RouteFlags {
     /**
      * 在存下的 {@code flags} 上改:{@code given} 里写了的每个标志换掉原来的值(一串值的标志整串换),没写的照旧。
      *
-     * @param name 路线名(读回存下的标志借 {@code route spec <name>} 那一行)
-     * @throws IllegalArgumentException 改完的规格意思不成立(方块不存在、标签是空的……),说法同 {@link RouteSpecFlags#parse}
+     * @param name  路线名(读回存下的标志借 {@code route spec <name>} 那一行)
+     * @param areas 点名的区域在这里找
+     * @throws IllegalArgumentException 改完的规格意思不成立(方块不存在、标签是空的、区域不在……),说法同
+     *                                  {@link RouteSpecFlags#parse}
      */
-    public static String merged(String name, String flags, CommandArgs given) {
+    public static String merged(String name, String flags, CommandArgs given, NamedAreas areas) {
         CommandArgs now = read(name, flags);
         for (Param<?> p : RouteSpecFlags.PARAMS) {
             now = copied(p, given, now);
         }
-        RouteSpecFlags.parse(now, RouteSpec.defaults());
+        RouteSpecFlags.parse(now, RouteSpec.defaults(), areas);
         return written(now);
     }
 
-    /** 一段走的规格:出厂值上叠整条的标志,再叠这一段另加的。 */
-    public static RouteSpec spec(Itinerary route, int leg) {
-        RouteSpec whole = RouteSpecFlags.parse(read(route.name(), route.flags()), RouteSpec.defaults());
-        return RouteSpecFlags.parse(read(route.name(), route.legs().get(leg).flags()), whole);
+    /**
+     * 一段走的规格:出厂值上叠整条的标志,再叠这一段另加的。
+     *
+     * @throws IllegalArgumentException 标志里点名的区域此刻不在了,说法同 {@link NamedAreas#resolve}
+     */
+    public static RouteSpec spec(Itinerary route, int leg, NamedAreas areas) {
+        RouteSpec whole = RouteSpecFlags.parse(read(route.name(), route.flags()), RouteSpec.defaults(), areas);
+        return RouteSpecFlags.parse(read(route.name(), route.legs().get(leg).flags()), whole, areas);
     }
 
     private static CommandArgs read(String name, String flags) {

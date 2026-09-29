@@ -2,6 +2,7 @@ package com.dwinovo.numen.core.route;
 
 import java.util.List;
 
+import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.core.task.move.Destination;
 import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
@@ -27,6 +28,8 @@ class RouteDataTest {
     private static final Destination.Stop HOME = new Destination.Stop(120, 64, -35, Destination.Arrive.AT, null);
     private static final Destination.Stop BRIDGE = new Destination.Stop(100, 70, -20, Destination.Arrive.NEAR, 3);
     private static final Destination.Stop HILL = new Destination.Stop(90, null, -10, Destination.Arrive.AT, null);
+    private static final Destination.Stop ORES = new Destination.Stop(null, null, null, AreaRef.parse("ores/g3"),
+            Destination.Arrive.NEAR, 3);
 
     @BeforeAll
     static void boot() {
@@ -42,7 +45,7 @@ class RouteDataTest {
         return new Plan.Cell(new BlockPos(x, 64, 0), Blocks.DIRT);
     }
 
-    /** 存下去再读回来是同一条:途经点(连同空着的坐标与到达方式)、每段的标志、计划的每一段、走过的记录。 */
+    /** 存下去再读回来是同一条:途经点(连同空着的坐标、区域的名字与到达方式)、每段的标志、计划的每一段、走过的记录。 */
     @Test
     void aRouteReadsBackAsItWasSaved() {
         Plan plan = new Plan(new BlockPos(0, 64, 0), 1200, List.of(
@@ -51,8 +54,8 @@ class RouteDataTest {
                 new Plan.Leg(Plan.Reach.PARTIAL, 40, 200, new BlockPos(50, 64, 0), List.of(), List.of(), List.of(),
                         "the search reached chunks that are not loaded"),
                 Plan.Leg.unplanned()));
-        Itinerary route = Itinerary.of("home", OVERWORLD, HOME, "--alter natural")
-                .via(BRIDGE, 1).via(HILL, 2).withLegFlags(2, "--avoid water").planned(plan)
+        Itinerary route = Itinerary.of("home", OVERWORLD, HOME, "--alter natural --avoid_break area:house")
+                .via(BRIDGE, 1).via(ORES, 2).withLegFlags(2, "--avoid water area:farm").planned(plan)
                 .walked(new Itinerary.Walk("Aria", 1300, 412, true, "arrived"));
         Routes routes = new Routes();
         routes.put(route);
@@ -98,6 +101,33 @@ class RouteDataTest {
         assertEquals("--alter natural", back.flags());
         assertNull(back.plan());
         assertTrue(back.walks().isEmpty());
+    }
+
+    /**
+     * 一处的写法({@code route new --to}、{@code route via}):数是坐标——三个一格、两个一处、一个一个高度;一个名字是一块区域,
+     * 与坐标不能同时给;别的写法当场说能写什么。
+     */
+    @Test
+    void aPlaceIsCoordinatesOrAnArea() {
+        assertEquals(HOME, Destination.Stop.of(List.of("120", "64", "-35"), null, null));
+        assertEquals(HILL, Destination.Stop.of(List.of("90", "-10"), "at", null));
+        assertEquals(new Destination.Stop(null, 12, null, Destination.Arrive.AT, null),
+                Destination.Stop.of(List.of("12"), null, null));
+        assertEquals(ORES, Destination.Stop.of(List.of("ores/g3"), "near", 3));
+        Destination.Stop chests = Destination.Stop.of(List.of("chests"), "use", null);
+        assertEquals("area chests (to use one of its blocks)", chests.words(), "区域的 use 不要 y");
+        assertEquals("area ores/g3 (within 3)", ORES.words());
+        IllegalArgumentException mixed = assertThrows(IllegalArgumentException.class,
+                () -> Destination.Stop.of(List.of("farm", "64"), null, null));
+        assertTrue(mixed.getMessage().startsWith("a place is x y z (one cell)"), mixed.getMessage());
+        assertThrows(IllegalArgumentException.class, () -> Destination.Stop.of(List.of("1", "2", "3", "4"), null, null));
+        IllegalArgumentException badName = assertThrows(IllegalArgumentException.class,
+                () -> Destination.Stop.of(List.of("Farm"), null, null));
+        assertTrue(badName.getMessage().startsWith("area names are lowercase"), badName.getMessage());
+        assertThrows(IllegalArgumentException.class, () -> new Destination.Stop(1, 2, 3, AreaRef.parse("farm"),
+                Destination.Arrive.AT, null), "坐标与区域不能同时给");
+        assertThrows(IllegalArgumentException.class, () -> Destination.Stop.of(List.of("farm"), "near", null),
+                "near 照样要给距离");
     }
 
     /** 走过的记录只留最近几条。 */

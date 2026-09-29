@@ -4,7 +4,7 @@
  * <ul>
  *   <li>{@link com.dwinovo.numen.pathing.spec.RouteSpec} —— 四组旋钮:能力开关与上限、排除的格子种类、按位置与按种类、
  *       动作代价。不可变,搜索线程只读。</li>
- *   <li>{@link com.dwinovo.numen.pathing.spec.PositionCosts} —— 坐标上的禁令与加价,踩、穿、挖、放四栏。</li>
+ *   <li>{@link com.dwinovo.numen.pathing.spec.PositionCosts} —— 坐标上的禁令与加价,踩、穿、挖、放四栏;禁令可以逐格给,也可以整片给(只问一格在不在)。</li>
  *   <li>{@link com.dwinovo.numen.pathing.spec.BlockBans} —— 按方块种类的禁令,挖、放、踩三栏。</li>
  * </ul>
  *

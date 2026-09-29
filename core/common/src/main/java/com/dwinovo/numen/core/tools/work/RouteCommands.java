@@ -26,11 +26,13 @@ public final class RouteCommands {
             .values("a route name, as `route list` lists it");
     private static final Param<String> NEW_NAME = Param.required("name", ArgType.word(),
             "Name of the new route: lowercase letters, digits, _ and -.");
-    private static final Param<List<Integer>> TO = Param.optional("to", ArgType.list(ArgType.integer()),
-            "The destination: x y z (one cell), x z (a place, at whatever height stands there) or y (a height).");
-    private static final Param<Integer> X = Param.required("x", ArgType.integer(), "X of the waypoint.");
-    private static final Param<Integer> Y = Param.required("y", ArgType.integer(), "Y of the waypoint: that one cell.");
-    private static final Param<Integer> Z = Param.required("z", ArgType.integer(), "Z of the waypoint.");
+    /** 一处的写法:数是坐标,一个名字是区域;怎么读成去处只在 {@link Destination.Stop#of(List, String, Integer)}。 */
+    private static final ArgType<List<String>> PLACE = ArgType.list(ArgType.string()
+            .as("place", Destination.PLACE_HINT, text -> text, text -> text));
+    private static final Param<List<String>> TO = Param.optional("to", PLACE,
+            "The destination: coordinates, or an area of your owner's to go into (see --arrive).");
+    private static final Param<List<String>> WAYPOINT = Param.required("place", PLACE,
+            "The waypoint: coordinates, or an area of your owner's.");
     private static final Param<Integer> AT = Param.optional("at", ArgType.integer(1, 99),
             "Which stop it becomes, counting from 1; one past the last makes it the new destination.")
             .whenOmitted("just before the destination");
@@ -60,26 +62,28 @@ public final class RouteCommands {
         route.server("new", "Make a route: from wherever you stand to a destination, with the route flags it walks "
                         + "under.", (src, args) -> {
                     if (args.get(TO) == null) {
-                        throw new IllegalArgumentException("route new needs --to: x y z (one cell), x z (a place) or y "
-                                + "(a height)");
+                        throw new IllegalArgumentException("route new needs --to: " + Destination.PLACE_HINT);
                     }
-                    src.reply(RouteOps.create(src.companion(), args.get(NEW_NAME), RouteOps.stop(args.get(TO),
+                    src.reply(RouteOps.create(src.companion(), args.get(NEW_NAME), Destination.Stop.of(args.get(TO),
                             args.get(MoveCommands.ARRIVE), args.get(MoveCommands.NEAR)), args));
                 }, with(List.of(NEW_NAME, TO, MoveCommands.ARRIVE, MoveCommands.NEAR), RouteSpecFlags.PARAMS))
                 .example("route new home --to 120 64 -35")
                 .example("route new mine --to 80 12 -40 --arrive near --near 3 --alter natural")
+                .example("route new ore --to ores/g3 --arrive near --near 3 --avoid_break area:house")
                 .note("Instant; it only writes the route down, nothing moves. --to, --arrive and --near mean what the "
-                        + "same fields of move goto mean, and a destination that cannot mean anything here is refused "
-                        + "at once the same way.")
+                        + "same fields of move goto mean (numbers are coordinates, a name is an area), and a destination "
+                        + "that cannot mean anything here is refused at once the same way.")
+                .note("An area is kept by name: each plan uses the area as it is then, and says so if it is gone.")
                 .note("Without route flags the route changes no block. Routes belong to your owner: every companion "
                         + "of theirs sees and walks the same ones, and they survive restarts.")
                 .seeAlso("route via", "route plan", "move go");
         route.server("via", "Add a waypoint to a route.", (src, args) -> src.reply(RouteOps.via(src.companion(),
-                        args.get(NAME), Destination.Stop.of(args.get(X), args.get(Y), args.get(Z),
-                                args.get(MoveCommands.ARRIVE), args.get(MoveCommands.NEAR)), args.get(AT))),
-                        NAME, X, Y, Z, MoveCommands.ARRIVE, MoveCommands.NEAR, AT)
+                        args.get(NAME), Destination.Stop.of(args.get(WAYPOINT), args.get(MoveCommands.ARRIVE),
+                                args.get(MoveCommands.NEAR)), args.get(AT))),
+                        NAME, WAYPOINT, MoveCommands.ARRIVE, MoveCommands.NEAR, AT)
                 .example("route via home 100 70 -20")
                 .example("route via home 100 70 -20 --at 1")
+                .example("route via home farm --arrive near --near 2")
                 .note("Instant. The route walks through its stops in order; the leg to each stop keeps its own flags. "
                         + "The old plan is dropped.")
                 .seeAlso("route drop", "route show");
@@ -93,9 +97,11 @@ public final class RouteCommands {
                         RouteOps.spec(src.companion(), args.get(NAME), args.get(LEG), args)),
                         with(List.of(NAME, LEG), RouteSpecFlags.PARAMS))
                 .example("route spec home --alter natural")
-                .example("route spec home --leg 2 --avoid water")
+                .example("route spec home --leg 2 --avoid water area:farm")
                 .note("Instant. Each flag you write replaces its earlier value, the rest stay; a leg's flags add to "
                         + "the whole route's. The old plan is dropped.")
+                .note("Areas in the flags (area:<name>) are kept by name: one that does not exist is refused now, one "
+                        + "deleted later is named when the route is planned.")
                 .seeAlso("route show", "route plan");
         route.server("plan", "Plan a route from where you stand, without moving: each leg's length, the blocks it "
                         + "would break or place, and the ones needing your owner's consent.",

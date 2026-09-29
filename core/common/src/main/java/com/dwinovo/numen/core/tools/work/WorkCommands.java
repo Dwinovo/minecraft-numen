@@ -9,6 +9,7 @@ import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.core.nav.NamedAreas;
 import com.dwinovo.numen.core.nav.WorkArea;
 import com.dwinovo.numen.core.task.fish.FishTaskRecord;
 import com.dwinovo.numen.core.task.mine.MineBlockTaskRecord;
@@ -80,6 +81,7 @@ public final class WorkCommands {
                 .example("work mine --area ores/g3")
                 .example("work mine --area ores --count 10")
                 .example("work mine --block_ids iron_ore deepslate_iron_ore --count 10")
+                .example("work mine --block_ids #minecraft:logs --count 16 --avoid_break area:house")
                 .note("Background work: returns at once; the end arrives as a task_finished event.")
                 .note("It digs the cells of an area that a scan added (`scan blocks 32 iron_ore --into ores`), each "
                         + "only while it still holds the block the scan saw; framed cells carry no block and are not "
@@ -148,7 +150,8 @@ public final class WorkCommands {
 
     private static void mine(ServerSource src, CommandArgs args) {
         TaskDispatch.setTask(src, new BlockActionOps().autoMine(src, args.get(BLOCK_IDS), args.get(MINE_AREA),
-                args.get(MINE_COUNT), RouteSpecFlags.parse(args, MineBlockTaskRecord.DEFAULT_SPEC)));
+                args.get(MINE_COUNT), RouteSpecFlags.parse(args, MineBlockTaskRecord.DEFAULT_SPEC,
+                        NamedAreas.of(src.companion()))));
     }
 
     private static void collect(ServerSource src, CommandArgs args) {

@@ -149,6 +149,28 @@ class RouteSpecTest {
         assertTrue(only.plus(PositionCosts.protect(LongSet.of(a))).forbids(Use.DIG, a), "禁令照旧取并集");
     }
 
+    /** 整片禁止:只问"在不在",几百万格也不逐格展开;只管给了的那一栏,合并时与逐格的禁令一样取并集。 */
+    @Test
+    void aForbiddenRegionIsAskedCellByCellWithoutBeingSpelledOut() {
+        int[] asked = {0};
+        // 一片 x ≥ 0 的半个世界:逐格展开根本装不下,判定只是比一个数
+        PositionCosts.Region east = cell -> {
+            asked[0]++;
+            return BlockPos.getX(cell) >= 0;
+        };
+        PositionCosts half = PositionCosts.builder().forbid(Use.PASS, east).forbid(Use.STAND, east).build();
+        assertFalse(half.isEmpty());
+        assertTrue(half.forbids(Use.PASS, new BlockPos(3_000_000, 64, -7).asLong()));
+        assertTrue(half.forbids(Use.STAND, AT.asLong()));
+        assertFalse(half.forbids(Use.PASS, new BlockPos(-1, 64, 0).asLong()));
+        assertFalse(half.forbids(Use.DIG, AT.asLong()), "只管给了的那几栏");
+        assertTrue(asked[0] > 0);
+        PositionCosts both = half.plus(PositionCosts.builder().forbid(Use.PASS, AT.west().asLong()).build());
+        assertTrue(both.forbids(Use.PASS, AT.west().asLong()), "逐格的禁令照旧");
+        assertTrue(both.forbids(Use.PASS, AT.asLong()), "整片的禁令合并后还在");
+        assertFalse(both.forbids(Use.PASS, AT.west(2).asLong()));
+    }
+
     @Test
     void aForbiddenCellIsNotAnInfinitePrice() {
         assertThrows(IllegalArgumentException.class,
