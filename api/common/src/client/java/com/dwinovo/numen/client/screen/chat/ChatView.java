@@ -1316,12 +1316,13 @@ public final class ChatView {
             foldKey = "proc#" + f.processWho + "#" + f.processEntry;
             boolean open = expandedGroups.contains(foldKey);
             boolean running = liveThought || runningCall != null;
-            boolean anyFail = calls.stream().anyMatch(tc -> failed.contains(tc.id()));
+            // 收起时的颜色跟这段过程最后一步走:中途失败、后来改对了的一段不算失败;哪一步失败了,展开逐行各有 ✗ / ✔
+            boolean lastFail = !calls.isEmpty() && failed.contains(calls.get(calls.size() - 1).id());
             String head = running
                     ? (liveThought ? I18n.get("numen.chat.reasoning_now") : toolLine(runningCall))
                     : processSummary(thought, calls);
             rows.add(new ChipRow(running ? SPIN[(int) ((t / 120) % 4)] : (open ? "▾" : "▸"), running ? RUN : MUTED,
-                    Nb.colored(Nb.clip(font, head, textW), anyFail && !running ? FAIL : TOOL).getVisualOrderText()));
+                    Nb.colored(Nb.clip(font, head, textW), lastFail && !running ? FAIL : TOOL).getVisualOrderText()));
             if (open) {
                 for (Piece pc : ps) {
                     if (pc.call() != null) {
