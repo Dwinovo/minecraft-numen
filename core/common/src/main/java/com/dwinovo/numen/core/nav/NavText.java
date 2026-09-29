@@ -60,7 +60,8 @@ public final class NavText {
     }
 
     /**
-     * 没走到时的那句话:从哪儿、朝哪儿、多远,为什么,下一步能试什么。
+     * 没走到时的那句话:从哪儿、朝哪儿、多远,为什么,下一步能试什么。每一种结局各说各的原因与下一步,走路与各件活
+     * (挖矿、建造……)没走到时都原样说这一句,不另写、不并成一句"到不了"。
      *
      * @param from   她此刻脚下那一格
      * @param toward 要去的那一格(给人看的方向)
@@ -69,8 +70,10 @@ public final class NavText {
         String where = where(from, toward);
         return switch (outcome) {
             case Outcome.Arrived arrived -> "arrived";
+            // 诊断在许改一切、设想有料时也没搜出路才给这个结局:这条规格下从这里就是过不去
             case Outcome.NoRoute noRoute -> "found no path to target (" + where + "; every reachable cell was searched"
-                    + (spec.alter().mayAlter() ? ", digging, bridging and pillaring included" : "") + ")";
+                    + (spec.alter().mayAlter() ? ", digging, bridging and pillaring included" : "")
+                    + "): there is no way there from here, pick another destination";
             case Outcome.OutOfBudget budget -> "found no path to target (" + where + "; the search used up its budget"
                     + " before finding one, so this is not proof there is none; a nearer waypoint in that direction"
                     + " gets further)";
@@ -88,12 +91,15 @@ public final class NavText {
             case Outcome.NoMaterials none -> "found no path to target (" + where + "; every way needs blocks to"
                     + " pillar or bridge with)." + ThrowawayBlocks.shortageAdvice(player);
             case Outcome.Denied denied -> "had to stop: changing " + Listing.coords(denied.cell()) + " is refused ("
-                    + reason(denied.reason()) + ")";
+                    + reason(denied.reason()) + "); that is not mine to get around, so pick another destination or ask"
+                    + " your owner";
             case Outcome.Stranded stranded -> "can't set off: I can't stand where I am (" + name(stranded.block())
-                    + " at " + Listing.coords(stranded.cell()) + ")";
-            case Outcome.Blocked blocked -> "gave up: " + blockage(blocked.blockage());
+                    + " at " + Listing.coords(stranded.cell()) + "); free me first (break that block with use block"
+                    + " left) or wait until I land";
+            case Outcome.Blocked blocked -> "gave up: " + blockage(blocked.blockage())
+                    + "; try again, and pick another destination if it keeps failing";
             case Outcome.NoLineOfSight sight -> "arrived, but " + Listing.coords(sight.target())
-                    + " is not in sight from there";
+                    + " is not in sight from there; clear what is in between, or come at it from another side";
         };
     }
 

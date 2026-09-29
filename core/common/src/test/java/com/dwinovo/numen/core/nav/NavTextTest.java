@@ -125,6 +125,30 @@ class NavTextTest {
         assertTrue(budget.contains("not proof there is none") && !budget.contains("every reachable cell"), budget);
     }
 
+    /** 每一种没走到各说各的原因与下一步,不并成同一句"到不了"。 */
+    @Test
+    void everyWayOfNotGettingThereSaysItsOwnReasonAndWhatToTryNext() {
+        RouteSpec spec = RouteSpec.defaults();
+        String none = NavText.failure(new Outcome.NoRoute(), null, A, C, spec);
+        String budget = NavText.failure(new Outcome.OutOfBudget(), null, A, C, spec);
+        String unloaded = NavText.failure(new Outcome.Unloaded(), null, A, C, spec);
+        String alter = NavText.failure(new Outcome.NeedsAlter(RouteSpec.Alter.NATURAL, 2), null, A, C, spec);
+        String denied = NavText.failure(new Outcome.Denied(B, "no"), null, A, C, spec);
+        String stranded = NavText.failure(new Outcome.Stranded(A, planks()), null, A, C, spec);
+        String blocked = NavText.failure(new Outcome.Blocked(new Blockage(B, planks(), MoveKind.WALK, Reason.NO_CLEARANCE,
+                null)), null, A, C, spec);
+        String sight = NavText.failure(new Outcome.NoLineOfSight(B), null, A, C, spec);
+        assertTrue(none.contains("pick another destination"), none);
+        assertTrue(budget.contains("not proof there is none") && budget.contains("a nearer waypoint"), budget);
+        assertTrue(unloaded.contains("not loaded") && unloaded.contains("walk toward it and try again"), unloaded);
+        assertTrue(alter.contains("walk with alter:'natural'"), alter);
+        assertTrue(denied.contains("120,65,-33 is refused") && denied.contains("ask your owner"), denied);
+        assertTrue(stranded.contains("can't stand where I am") && stranded.contains("free me first"), stranded);
+        assertTrue(blocked.contains("no room for my body there") && blocked.contains("try again"), blocked);
+        assertTrue(sight.contains("not in sight") && sight.contains("from another side"), sight);
+        assertEquals(8, java.util.Set.of(none, budget, unloaded, alter, denied, stranded, blocked, sight).size());
+    }
+
     @Test
     void aPlanWithNoRouteUnderItsSpecTeachesTheFlagThatWouldShowOne() {
         String natural = NavText.unplanned(new Outcome.NeedsAlter(RouteSpec.Alter.NATURAL, 2), null, A, C,
