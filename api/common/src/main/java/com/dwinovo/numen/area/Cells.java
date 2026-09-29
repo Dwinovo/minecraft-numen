@@ -475,6 +475,9 @@ public final class Cells {
             if (!Arrays.equals(a.bits, b.bits)) {
                 return false;
             }
+            if (a.seen == null && b.seen == null) {
+                continue;
+            }
             for (int i = 0; i < CELLS; i++) {
                 if (a.has(i) && !java.util.Objects.equals(a.seenAt(i), b.seenAt(i))) {
                     return false;
