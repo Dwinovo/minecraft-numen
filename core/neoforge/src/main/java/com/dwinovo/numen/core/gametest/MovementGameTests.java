@@ -21,7 +21,10 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
-/** 移动:{@code goto}、开门、地形许可(不改世界、按路线编号走)、{@code move route}、{@code move follow}、载具,以及任务与编号跨重建的延续。 */
+/**
+ * 移动:{@code goto}、开门、地形许可(不改世界、失败时给出能照抄的下一步)、{@code route plan} 没路与超预算、{@code move follow}、
+ * 载具,以及任务与编号跨重建的延续。路线本身(规划、照承诺走、超出承诺)见 {@link RouteGameTests}。
+ */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
 public class MovementGameTests {
@@ -260,9 +263,9 @@ public class MovementGameTests {
     }
 
     /**
-     * 默认不开路:被木板屋关住,目标在屋外,goto 不带规格。她不能拆墙;回执必须是 TERRAIN_BLOCKED
-     * 的候选清单——点名 oak_planks、给出路线 id 与取用方式——而且墙一块不少。
-     * 这就是"挖穿主人的房子"那类投诉的根治点:路上动地形从引擎顺手干,变成模型选了才干。
+     * 默认不开路:被木板屋关住,目标在屋外,goto 不带规格。她不能拆墙;回执是 TERRAIN_BLOCKED,说出要改几格,并给出能照抄的
+     * 下一步——改她那条匿名路线的规格、再规划看是哪几格。照抄那两行:计划点名 oak_planks,她一步没动,墙一块不少。
+     * 这就是"挖穿主人的房子"那类投诉的根治点:路上动地形从引擎顺手干,变成模型看过计划、选了才干。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
     public static void goto_refuses_to_tunnel_by_default(GameTestHelper helper) {
@@ -270,27 +273,40 @@ public class MovementGameTests {
         plankRoomAround(helper, 7, 7);
         int planksBefore = plankCount(helper, 7, 7);
         NumenPlayer companion = spawnAt(helper, "gametest_guest", new BlockPos(7, 2, 7), false);
+        BlockPos start = companion.blockPosition();
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
         TaskRecord record = call(companion, "move_goto", args(
                 "x", target.getX(),
                 "y", target.getY(),
                 "z", target.getZ())).task();
+        String route = "goto-gametest_guest";
+        ToolRun[] spec = new ToolRun[1];
+        ToolRun[] plan = new ToolRun[1];
 
-        succeedWhen(helper, () -> {
-            String reply = record.getResult() == null ? null : record.getResult().message();
-            helper.assertTrue(reply != null, "goto has not finished");
-            helper.assertTrue(reply.contains("oak_planks"),
-                    "the refusal does not name the blocks in the way: " + reply);
-            helper.assertTrue(reply.contains("goto route:") && firstRouteId(reply) != null,
-                    "the refusal does not list candidate routes by id: " + reply);
-            helper.assertTrue(com.dwinovo.numen.core.nav.RouteBook.of(companion)
-                    .get(firstRouteId(reply)) != null, "the listed route is not in the route book");
-            helper.assertTrue(plankCount(helper, 7, 7) == planksBefore,
-                    "the wall was damaged without consent");
-            helper.assertTrue(companion.blockPosition().distSqr(target) > 3 * 3,
-                    "companion got out without altering terrain?!");
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(record.getResult() != null, "goto has not finished"))
+                .thenExecute(() -> {
+                    String reply = record.getResult().message();
+                    helper.assertTrue(!record.getResult().success() && reply.contains("without altering terrain"),
+                            "the refusal does not say it needs altering terrain: " + reply);
+                    helper.assertTrue(reply.contains("`route spec " + route + " --alter natural`")
+                                    && reply.contains("`route plan " + route + "`"),
+                            "the refusal does not give the lines that change and plan her route: " + reply);
+                    spec[0] = command(companion, "route spec " + route + " --alter natural");
+                    plan[0] = command(companion, "route plan " + route);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(plan[0].done(), "route plan has not replied"))
+                .thenExecute(() -> {
+                    helper.assertTrue(spec[0].succeeded(), "route spec failed: " + spec[0].outcome());
+                    helper.assertTrue(plan[0].succeeded() && plan[0].reply().contains("break")
+                                    && plan[0].reply().contains("oak_planks"),
+                            "the plan does not name the planks it would break: " + plan[0].reply());
+                    helper.assertTrue(plankCount(helper, 7, 7) == planksBefore,
+                            "the wall was damaged without consent");
+                    helper.assertTrue(companion.blockPosition().equals(start), "she moved while refusing or planning");
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
     }
 
     /**
@@ -321,73 +337,6 @@ public class MovementGameTests {
         });
     }
 
-    /**
-     * 选一条候选就开路:同一间屋,第一次 goto 被拒并列出候选,第二次 goto 带那条路的 id。
-     * 她沿那条路拆墙出去到达目标,回执如实记账,路线簿里那条已划掉。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
-    public static void goto_by_route_id(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        plankRoomAround(helper, 7, 7);
-        int planksBefore = plankCount(helper, 7, 7);
-        NumenPlayer companion = spawnAt(helper, "gametest_chooser", new BlockPos(7, 2, 7), false);
-        BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        TaskRecord refused = call(companion, "move_goto", args(
-                "x", target.getX(),
-                "y", target.getY(),
-                "z", target.getZ())).task();
-        TaskRecord[] walk = new TaskRecord[1];
-        String[] chosen = new String[1];
-
-        succeedWhen(helper, () -> {
-            if (walk[0] == null) {
-                String reply = refused.getResult() == null ? null : refused.getResult().message();
-                helper.assertTrue(reply != null, "the first goto has not finished");
-                chosen[0] = firstRouteId(reply);
-                helper.assertTrue(chosen[0] != null, "the refusal lists no route id: " + reply);
-                walk[0] = command(companion, "move goto --route " + chosen[0]).task();
-            }
-            helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
-                    "companion has not reached the target along route " + chosen[0]);
-            helper.assertTrue(plankCount(helper, 7, 7) < planksBefore, "no plank was broken");
-            String reply = walk[0].getResult() == null ? null : walk[0].getResult().message();
-            helper.assertTrue(reply != null && reply.contains("En route") && reply.contains("oak_planks"),
-                    "the reply does not report what was broken en route: " + reply);
-            helper.assertTrue(com.dwinovo.numen.core.nav.RouteBook.of(companion).get(chosen[0]) == null,
-                    "a walked route is still in the route book");
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
-
-    /**
-     * 只算不走:同一间屋,move route 带 --alter natural 要两条候选。回执列出候选(点名 oak_planks、
-     * 带 id),id 进了路线簿;她一步没动,墙一块不少。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
-    public static void move_route_lists_candidates(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        plankRoomAround(helper, 7, 7);
-        int planksBefore = plankCount(helper, 7, 7);
-        NumenPlayer companion = spawnAt(helper, "gametest_planner", new BlockPos(7, 2, 7), false);
-        BlockPos spawnPos = companion.blockPosition();
-        BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        ToolRun reply = command(companion, "move route --x " + target.getX() + " --y " + target.getY()
-                + " --z " + target.getZ() + " --alter natural --alternatives 2");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(reply.reply() != null, "move route has not replied");
-            helper.assertTrue(reply.reply().contains("oak_planks"),
-                    "the plan does not name the blocks a route would break: " + reply.reply());
-            String id = firstRouteId(reply.reply());
-            helper.assertTrue(id != null && reply.reply().contains("goto route:"),
-                    "the plan lists no route id: " + reply.reply());
-            helper.assertTrue(com.dwinovo.numen.core.nav.RouteBook.of(companion).get(id) != null,
-                    "the planned route is not in the route book");
-            helper.assertTrue(plankCount(helper, 7, 7) == planksBefore, "planning altered the wall");
-            helper.assertTrue(companion.blockPosition().equals(spawnPos), "planning moved the body");
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
 
     /**
      * 接近类动作从不动世界:盔甲架关在玻璃罩里,use entity 左键它。她到不了触及
@@ -449,7 +398,7 @@ public class MovementGameTests {
 
     /**
      * 跟不上就以结果收场:目标在够不着的柱顶,follow 从不改地形。任务必须 FAILED,
-     * 回执列出候选路线(id 与要动的方块)——不是退避着站在原地空算,主人和模型都蒙在鼓里。
+     * 回执说出不改地形没有路、要改几格——不是退避着站在原地空算,主人和模型都蒙在鼓里。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
     public static void follow_reports_when_terrain_blocks(GameTestHelper helper) {
@@ -462,31 +411,22 @@ public class MovementGameTests {
             helper.assertTrue(follow.done() && !follow.succeeded(),
                     "follow should end with a failure, got: " + follow.outcome());
             String said = follow.outcome();
-            helper.assertTrue(said.contains("altering terrain") && said.contains("goto route:")
-                            && firstRouteId(said) != null,
-                    "the reason must name the terrain and list candidate routes, got: " + said);
+            helper.assertTrue(said.contains("without altering terrain") && said.contains("block(s)"),
+                    "the reason must say it needs altering terrain and how many blocks, got: " + said);
             helper.assertTrue(level.getBlockState(helper.absolutePos(new BlockPos(10, 5, 8))).is(Blocks.STONE),
                     "the pillar was touched without consent");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
 
-    /** move route 到 {@code rel} 那一格(回执稍后才到)。 */
-    private static ToolRun planTo(GameTestHelper helper, NumenPlayer companion, BlockPos rel) {
-        BlockPos target = helper.absolutePos(rel);
-        return command(companion, "move route --x " + target.getX() + " --y " + target.getY() + " --z "
-                + target.getZ());
-    }
-
-    /** {@code r12}、{@code g7} 里的数字。 */
+    /** {@code g7} 里的数字。 */
     private static long idNumber(String id) {
         return Long.parseLong(id.substring(1));
     }
 
     /**
-     * 编号跨身体重建接着往上数:扫一次、规划一次,拿到 g 与 r 两个编号;她休眠(身体落盘离场)再回来,是一具新身体、
-     * 簿子是空的——旧的团编号说清楚没有扫描结果;再扫一次、再规划一次,新编号的数字都比休眠前的大,旧编号不会
-     * 指到新团、新路上。
+     * 编号跨身体重建接着往上数:扫一次,拿到一个团编号;她休眠(身体落盘离场)再回来,是一具新身体、簿子是空的——旧的团编号
+     * 说清楚没有扫描结果;再扫一次,新编号的数字比休眠前的大,旧编号不会指到新团上。
      */
     @GameTest(template = "floor16", timeoutTicks = 4000, batch = "numen_terrain")
     public static void ids_keep_counting_after_the_body_is_rebuilt(GameTestHelper helper) {
@@ -500,11 +440,9 @@ public class MovementGameTests {
         UUID uuid = first.getUUID();
         // 召唤会替她挑一个站得住的落点,不一定正好在 spawn 那格:半径给宽一点
         ToolRun firstScan = scan(first, 10, "minecraft:honeycomb_block");
-        ToolRun[] firstPlan = new ToolRun[1];
         NumenPlayer[] second = new NumenPlayer[1];
         ToolRun[] secondScan = new ToolRun[1];
-        ToolRun[] secondPlan = new ToolRun[1];
-        String[] before = new String[2];   // 休眠前的 g 与 r
+        String[] before = new String[1];   // 休眠前的 g
 
         succeedWhen(helper, () -> {
             if (before[0] == null) {
@@ -512,12 +450,6 @@ public class MovementGameTests {
                 var group = groupHolding(groupsIn(firstScan.reply()), helper.absolutePos(markRel));
                 helper.assertTrue(group != null, "the first scan did not list the block: " + firstScan.reply());
                 before[0] = group.get("id").getAsString();
-                firstPlan[0] = planTo(helper, first, new BlockPos(3, 2, 11));
-            }
-            if (before[1] == null) {
-                helper.assertTrue(firstPlan[0].reply() != null, "the first move route has not replied");
-                before[1] = firstRouteId(firstPlan[0].reply());
-                helper.assertTrue(before[1] != null, "the first plan lists no route id: " + firstPlan[0].reply());
                 com.dwinovo.numen.entity.Companions.dormant(server, first);
                 second[0] = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
                 helper.assertTrue(second[0] != null && second[0] != first, "the body was not rebuilt");
@@ -527,19 +459,12 @@ public class MovementGameTests {
                         "the rebuilt body still claims the old scan: " + stale);
                 secondScan[0] = scan(second[0], 10, "minecraft:honeycomb_block");
             }
-            if (secondPlan[0] == null) {
-                helper.assertTrue(secondScan[0].reply() != null, "the second scan has not replied");
-                secondPlan[0] = planTo(helper, second[0], new BlockPos(3, 2, 11));
-            }
-            helper.assertTrue(secondPlan[0].reply() != null, "the second move route has not replied");
+            helper.assertTrue(secondScan[0].reply() != null, "the second scan has not replied");
             var group = groupHolding(groupsIn(secondScan[0].reply()), helper.absolutePos(markRel));
             helper.assertTrue(group != null, "the second scan did not list the block: " + secondScan[0].reply());
             String g = group.get("id").getAsString();
-            String r = firstRouteId(secondPlan[0].reply());
-            long highest = Math.max(idNumber(before[0]), idNumber(before[1]));
-            helper.assertTrue(r != null && idNumber(g) > highest && idNumber(r) > idNumber(g),
-                    "ids started over after the rebuild: before " + before[0] + "/" + before[1]
-                            + ", after " + g + "/" + r);
+            helper.assertTrue(idNumber(g) > idNumber(before[0]),
+                    "ids started over after the rebuild: before " + before[0] + ", after " + g);
             com.dwinovo.numen.entity.Companions.dismiss(server, second[0]);
         });
     }
@@ -593,9 +518,9 @@ public class MovementGameTests {
         return helper.absolutePos(new BlockPos(11, 5, 7));
     }
 
-    /** 默认不改地形:上高台要垫方块,她只列出候选路线让模型选,不动手,泥土一块没用。 */
+    /** 默认不改地形:上高台要垫方块,她只说要改几格、照抄哪一行能放开,不动手,泥土一块没用。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
-    public static void goto_up_a_tower_by_default_only_lists_routes(GameTestHelper helper) {
+    public static void goto_up_a_tower_by_default_says_what_it_would_take(GameTestHelper helper) {
         BlockPos top = bedrockTower(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_asker", new BlockPos(3, 2, 7), false);
         companion.getInventory().add(new ItemStack(Items.DIRT, 16));
@@ -603,8 +528,9 @@ public class MovementGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
-            helper.assertTrue(!walk.succeeded() && walk.outcome().contains("goto route:"),
-                    "the reply does not offer routes to choose from: " + walk.outcome());
+            helper.assertTrue(!walk.succeeded()
+                            && walk.outcome().contains("`route spec goto-gametest_asker --alter natural`"),
+                    "the reply does not give the line that lets her build up: " + walk.outcome());
             helper.assertTrue(companion.getInventory().countItem(Items.DIRT) == 16
                             && companion.blockPosition().getY() < top.getY(),
                     "she built her way up without being allowed to");
@@ -937,20 +863,21 @@ public class MovementGameTests {
                 .thenSucceed();
     }
 
-    // ---- move route:默认规格没路、超预算 ----
+    // ---- route plan:默认规格没路、超预算 ----
 
-    /** 默认规格(不改地形)规划上高台:没有路,回执失败,并提示加 --alter natural 再规划看看;身体不动。 */
+    /** 默认规格(不改地形)规划上高台:没有路,回执失败,并给出放开自然地形的那一行;身体不动。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
-    public static void move_route_with_no_clean_way_says_what_to_try(GameTestHelper helper) {
+    public static void route_plan_with_no_clean_way_says_what_to_try(GameTestHelper helper) {
         BlockPos top = bedrockTower(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_surveyor", new BlockPos(3, 2, 7), false);
         BlockPos start = companion.blockPosition();
-        ToolRun plan = command(companion, "move route --x " + top.getX() + " --y " + top.getY() + " --z "
-                + top.getZ());
+        ToolRun made = command(companion, "route new tower --to " + xyz(top));
+        ToolRun plan = command(companion, "route plan tower");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(plan.done(), "move route has not replied");
-            helper.assertTrue(!plan.succeeded() && plan.reply().contains("--alter natural"),
+            helper.assertTrue(made.succeeded(), "route new failed: " + made.outcome());
+            helper.assertTrue(plan.done(), "route plan has not replied");
+            helper.assertTrue(!plan.succeeded() && plan.reply().contains("route spec tower --alter natural"),
                     "the reply does not point at the natural spec: " + plan.reply());
             helper.assertTrue(companion.blockPosition().equals(start), "planning moved the body");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -959,16 +886,18 @@ public class MovementGameTests {
 
     /** 允许改地形但改动预算只有 1 格,上高台至少要垫 3 格:没有预算内的路,回执说出最便宜的那条要改几格。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
-    public static void move_route_over_the_alter_budget_names_the_cheapest(GameTestHelper helper) {
+    public static void route_plan_over_the_alter_budget_names_the_cheapest(GameTestHelper helper) {
         BlockPos top = bedrockTower(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_frugal", new BlockPos(3, 2, 7), false);
         companion.getInventory().add(new ItemStack(Items.DIRT, 16));
-        ToolRun plan = command(companion, "move route --x " + top.getX() + " --y " + top.getY() + " --z "
-                + top.getZ() + " --alter natural --alter_budget 1");
+        ToolRun made = command(companion, "route new tower --to " + xyz(top) + " --alter natural --alter_budget 1");
+        ToolRun plan = command(companion, "route plan tower");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(plan.done(), "move route has not replied");
-            helper.assertTrue(!plan.succeeded() && plan.reply().contains("alter_budget of 1"),
+            helper.assertTrue(made.succeeded(), "route new failed: " + made.outcome());
+            helper.assertTrue(plan.done(), "route plan has not replied");
+            helper.assertTrue(!plan.succeeded() && plan.reply().contains("alter_budget of 1")
+                            && plan.reply().contains("route spec tower --alter_budget "),
                     "the reply does not say the budget ruled the routes out: " + plan.reply());
             helper.assertTrue(companion.getInventory().countItem(Items.DIRT) == 16, "planning spent dirt");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);

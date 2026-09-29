@@ -640,11 +640,11 @@ public class MineGameTests {
     }
 
     /**
-     * 模型不许她改地形(alter none),路又非挖不可:她关在一间泥土小屋里,菌光体在屋外。回执说"不改地形没有路",列出
-     * 挖出去的候选路线,教她 move_goto route:<id>——不是笼统的"到不了"。屋子与菌光体原样。
+     * 模型不许她改地形(alter none),路又非挖不可:她关在一间泥土小屋里,菌光体在屋外。回执说"不改地形没有路"、要改几格、
+     * 放开哪一档——不是笼统的"到不了"。屋子与菌光体原样。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mine")
-    public static void mine_without_leave_to_dig_lists_the_routes_that_would(GameTestHelper helper) {
+    public static void mine_without_leave_to_dig_says_what_digging_would_take(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> hut = boxCells(new BlockPos(3, 1, 3), 3, 4, 3, true);
         for (BlockPos rel : hut) {
@@ -660,9 +660,9 @@ public class MineGameTests {
             helper.assertTrue(mine.done(), "mine has not finished");
             String said = mine.outcome();
             helper.assertTrue(!mine.succeeded() && said.contains("could not reach any of the 1 shroomlight")
-                            && said.contains("found no route without altering terrain")
-                            && said.contains("move_goto route:"),
-                    "the reply does not say it needs digging and list the routes: " + said);
+                            && said.contains("found no path to target without altering terrain")
+                            && said.contains("block(s)") && said.contains("alter:'natural'"),
+                    "the reply does not say it needs digging and what would allow it: " + said);
             helper.assertTrue(level.getBlockState(light).is(Blocks.SHROOMLIGHT), "the shroomlight was mined");
             for (BlockPos rel : hut) {
                 helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).is(Blocks.DIRT),

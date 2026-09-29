@@ -201,12 +201,6 @@ public final class GameTestKit {
         return n;
     }
 
-    /** 回执里点名的第一个路线 id(r1、r2……)。 */
-    static String firstRouteId(String reply) {
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\br\\d+\\b").matcher(reply);
-        return m.find() ? m.group() : null;
-    }
-
     /** scan_blocks 在半径 {@code radius} 内找 {@code blockId}(回执稍后才到)。 */
     static ToolRun scan(NumenPlayer companion, int radius, String blockId) {
         return call(companion, "scan_blocks", args("radius", radius, "block_ids", List.of(blockId)));

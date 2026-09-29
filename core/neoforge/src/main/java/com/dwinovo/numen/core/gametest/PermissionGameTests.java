@@ -83,14 +83,13 @@ public class PermissionGameTests {
         }
     }
 
-    /** goto 的 spec:连需要主人同意的格也算进路线。 */
     /**
-     * 规格没说能动主人的东西就不动,也不问:主人的屋子,goto alter=natural。自然改动没有路,
-     * 探针连要同意的格也算进去再查一次,回执是候选清单、标着 needing consent;墙一块不少,她还在屋里,
-     * 没有弹过一张卡——征询只在选了这种路线、开走之前发生。
+     * 规格没说能动主人的东西就不动,也不问:主人的屋子,goto alter=natural。自然改动没有路;回执说连要主人同意的格也算进去
+     * 才有路、要改几格,给出放开那一档的一行。照抄它再规划:计划列出那几格、标着 needing consent。墙一块不少,她还在屋里,
+     * 没有弹过一张卡——征询只在走这种路线、开走之前发生。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
-    public static void goto_natural_lists_consent_routes_without_asking(GameTestHelper helper) {
+    public static void goto_natural_names_consent_cells_without_asking(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         ownersRoom(helper, 7, 7);
         int planksBefore = plankCount(helper, 7, 7);
@@ -104,20 +103,32 @@ public class PermissionGameTests {
                 "alter", "natural")).task();
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
+        ToolRun[] plan = new ToolRun[1];
 
-        succeedWhen(helper, () -> {
-            String reply = record.getResult() == null ? null : record.getResult().message();
-            helper.assertTrue(reply != null, "goto has not finished");
-            helper.assertTrue(!record.getResult().success(), "goto through the owner's wall must not succeed");
-            helper.assertTrue(reply.contains("needing consent") && firstRouteId(reply) != null,
-                    "the refusal does not list consent routes: " + reply);
-            helper.assertTrue(!asked[0], "a natural goto must not ask the owner");
-            helper.assertTrue(plankCount(helper, 7, 7) == planksBefore, "the owner's wall was damaged");
-            helper.assertTrue(companion.blockPosition().distSqr(target) > 3 * 3,
-                    "companion got out through the owner's wall?!");
-            CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
-        });
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(record.getResult() != null, "goto has not finished"))
+                .thenExecute(() -> {
+                    String reply = record.getResult().message();
+                    helper.assertTrue(!record.getResult().success(), "goto through the owner's wall must not succeed");
+                    helper.assertTrue(reply.contains("owner's consent")
+                                    && reply.contains("`route spec goto-gametest_lodger --alter any`"),
+                            "the refusal does not say it needs the owner's consent and how to allow it: " + reply);
+                    command(companion, "route spec goto-gametest_lodger --alter any");
+                    plan[0] = command(companion, "route plan goto-gametest_lodger");
+                })
+                .thenWaitUntil(() -> helper.assertTrue(plan[0].done(), "route plan has not replied"))
+                .thenExecute(() -> {
+                    helper.assertTrue(plan[0].reply().contains("needing consent")
+                                    && plan[0].reply().contains("oak_planks"),
+                            "the plan does not list the cells needing consent: " + plan[0].reply());
+                    helper.assertTrue(!asked[0], "a natural goto or a plan must not ask the owner");
+                    helper.assertTrue(plankCount(helper, 7, 7) == planksBefore, "the owner's wall was damaged");
+                    helper.assertTrue(companion.blockPosition().distSqr(target) > 3 * 3,
+                            "companion got out through the owner's wall?!");
+                    CompanionFactory.despawn(level.getServer(), companion);
+                    CompanionFactory.despawn(level.getServer(), owner);
+                })
+                .thenSucceed();
     }
 
     /**
