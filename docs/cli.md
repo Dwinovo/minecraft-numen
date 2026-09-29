@@ -771,6 +771,38 @@ throwaway clear
   `numen:throwaway`。
 - `build` 组去掉原来的五个 `scaffold*` 动作后是十六个动作,组帮助一页放得下。
 
+### work:挖矿与捡东西只在工作区里干(09-29)
+
+`work mine`(`work_mine`)原来找矿扫 32 个区块、许改地形时先整条规划再出发,而一次规划只看身边一份快照(以起点所在区块为中心、
+边长 13 个区块)与四万个节点;远处的矿于是被报成 "found N … could not reach any … Move me somewhere else",寻路给的准确原因
+(预算用完不能证明无路、区块未加载……)被压成一句。现在改成工作区:
+
+- **工作区**(`core/nav/WorkArea`,只写在这一处):受理那一刻她脚下那一格为中心的球,距离按两格整数坐标算,与找方块的查询同一把尺。
+  半径上限 `WorkArea.RADIUS` 由寻路一次看得清的范围推出——快照从任何起点保证看得见水平 `SEARCH_RADIUS × 16` = 96 格,
+  工作区的直径取这么大,区里任意两点在同一份快照里;竖直方向用同一个半径。今天是 48 格。
+- **区里**:照旧——按"走过去加挖掉"一起定价挑最便宜的、就地挖通、垫高、捡掉落物,挪动用 `Trip`。首次找矿查询回来之前不出发。
+  捡的掉落物是区里的,加上她自己敲出来、弹出区外一两格的。
+- **区外**:不去,只报告。找矿查询以工作区中心为球心、半径 32 个区块(服务器视距的上限,查询只读已加载的区块,即"她身边加载着的
+  全部地形"),区里的命中进名单,区外的记下来;回执说区外还有几个(查询凑够个数就停时说"至少")、最近一个在哪、离她多远,下一步照抄:
+
+  ```
+  found no ochre_froglight in my work area (within 48 blocks of -12553958,-58,11491503), so I stayed put; 2 more lie beyond it, the nearest at -12553911,-58,11491550, about 66 blocks from me: move_goto there first (x:-12553911 y:-58 z:11491550 near:8), then work_mine again
+  gathered 6/64 pearlescent_froglight (no more pearlescent_froglight in my work area, within 48 blocks of …; 7 more lie beyond it, the nearest at …, about … blocks from me: move_goto there first (…), then work_mine again)
+  ```
+- **受理回执**当场交代工作区(`TaskRecord.acceptNote`,由 `TaskDispatch` 接在受理那句话后面):
+  `My work area is within 48 blocks of -12553812,-58,11491503, where I stand now: I mine only there, and the end reports what lies beyond it.`;
+  groups 用法说点名的格有几格在区里、几格在区外留着不挖。
+- **`--groups` 点名的团一格都不在区里**:和编号过期同一条规矩,派发当场拒收,不派活:
+  `group g4 lies wholly beyond my work area (within 48 blocks of …), so I did not start; the nearest of its cells is at …, about 66 blocks away. move_goto there first (…), then work_mine again (group ids stay good until your next scan_blocks).`
+- **到不了按类型说**:区里的一批搜不出路就收工,回执接上寻路结局的原话与下一步(`NavText.failure`,只此一处):真无路、预算用完、
+  未加载、要改地形(开了 `probing`,和 `move_goto` 一样列候选路线)、没有垫路料、被拒、起点待不住、执行受阻、看不见。例:
+  `could not reach any of the 1 pumpkin in my work area (within 48 blocks of -12553556,-58,11490388); gathered 0: had to stop: changing -12553556,-57,11490389 is refused (denied by rule break(minecraft:white_wool) (is minecraft:white_wool)); that is not mine to get around, so pick another destination or ask your owner`;
+  同样关在小屋里、模型给了 `--alter none` 时是另一句:`… gathered 0: found no route without altering terrain (from …, about 11 blocks away; every reachable cell was searched). candidates: … choose one with move_goto route:<id>, or pick another destination.`
+- **`scan blocks`**:每一团标 `in_work_area`(`all` / `none` / `8 of 17 cells`),小结里有 `work_area`;扫描的中心就是她此刻
+  脚下,和她从这里派 `work mine` 时的工作区是同一块。
+- **`work collect`**:半径参数就是工作区的半径(默认 16,上限 `WorkArea.RADIUS`),以受理时她脚下为中心、不跟着她走——
+  原来每捡一件都以她新的位置重算半径,一件接一件能越捡越远;两处各写一份的上限 48 合成这一处。
+
 ### transfer 改成一次一步
 
 `transfer` 工具与它的 `moves` 数组删掉,换成 `use` 组的两个动作,一个动作一个意思:
