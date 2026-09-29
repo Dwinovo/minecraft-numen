@@ -112,8 +112,10 @@ public final class AStar {
                 return new SearchResult(SearchResult.Stop.CANCELLED, null, expanded);
             }
             Node current = open.pop();
+            // 身体此刻面对的世界:快照,加上走到这个节点的那一步做过的改动
+            WorldView here = current.via == null ? probe : EditedView.after(probe, current.via.edits());
             if (goal.contains(current.x, current.y, current.z, current.stance)) {
-                double total = current.g + goal.arrival(current.x, current.y, current.z, current.stance);
+                double total = current.g + goal.arrival(here, current.x, current.y, current.z, current.stance);
                 if (total > current.f + MIN_IMPROVEMENT) {
                     // 到达价还没付:按总价放回堆里,同时照常往外展开——起点在贵的成员里时要走得出去
                     current.f = total;
@@ -133,8 +135,6 @@ public final class AStar {
             }
             expanded++;
             BlockPos from = new BlockPos(current.x, current.y, current.z);
-            // 身体此刻面对的世界:快照,加上走到这个节点的那一步做过的改动
-            WorldView here = current.via == null ? probe : EditedView.after(probe, current.via.edits());
             for (Move move : Moves.ALL) {
                 for (Heading heading : move.headings()) {
                     probe.recall.clearUnloaded();

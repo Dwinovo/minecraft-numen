@@ -47,12 +47,20 @@ public final class Faces {
      * @throws IllegalArgumentException 那个邻格没有轮廓,点不中
      */
     public static Vec3 hitPoint(BlockGetter level, BlockPos target, Direction dir) {
-        BlockPos neighbor = target.relative(dir);
-        VoxelShape shape = level.getBlockState(neighbor).getShape(level, neighbor);
+        return point(level, target.relative(dir), dir.getOpposite());
+    }
+
+    /**
+     * 点 {@code block} 这一格的 {@code face} 面时准星该落的点(绝对坐标):轮廓在这个方向上的最外一层里面积最大的那块面的中心。
+     * 放方块时点邻格的那一面、用一格方块时点它自己的一面,都从这里取。
+     *
+     * @throws IllegalArgumentException 那一格没有轮廓,点不中
+     */
+    public static Vec3 point(BlockGetter level, BlockPos block, Direction face) {
+        VoxelShape shape = level.getBlockState(block).getShape(level, block);
         if (shape.isEmpty()) {
-            throw new IllegalArgumentException(neighbor + " 没有轮廓,点不中");
+            throw new IllegalArgumentException(block + " 没有轮廓,点不中");
         }
-        Direction face = dir.getOpposite();
         Direction.Axis axis = face.getAxis();
         boolean positive = face.getAxisDirection() == Direction.AxisDirection.POSITIVE;
         double plane = positive ? shape.max(axis) : shape.min(axis);
@@ -75,7 +83,7 @@ public final class Faces {
             case Y -> new Vec3(center.x, plane, center.z);
             case Z -> new Vec3(center.x, center.y, plane);
         };
-        return onFace.add(neighbor.getX(), neighbor.getY(), neighbor.getZ());
+        return onFace.add(block.getX(), block.getY(), block.getZ());
     }
 
     private static double faceArea(AABB box, Direction.Axis axis) {

@@ -6,17 +6,15 @@ import java.util.List;
 import com.dwinovo.numen.pathing.world.Faces;
 import com.dwinovo.numen.pathing.world.Reach;
 import com.dwinovo.numen.pathing.world.Replaceable;
+import com.dwinovo.numen.pathing.world.Sight;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
-import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
@@ -24,15 +22,13 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  * 视角:往哪儿看、怎么转过去。瞄点只在这里定——挖一格看它身上哪一点、放一块点哪个面的哪一点;转头照原版鼠标,每移一个
  * 像素转一个固定角度,所以转到的角度落在这个格子上,离算出来的点差不到半个像素。
  *
- * <p>看得见是指从眼睛到那一点的方块射线(轮廓,不看流体)第一下就碰上那一格,而且在交互距离之内——与准星拾取
- * ({@link Crosshair})是同一套射线,所以转过去之后准星就落在那一格上。
+ * <p>看得见是指从眼睛到那一点的视线(第 0 层 {@link Sight},按轮廓、不看流体)第一下就碰上那一格,而且在交互距离之内——
+ * 与准星拾取({@link Crosshair})是同一种射线,所以转过去之后准星就落在那一格上。
  */
 public final class Aim {
 
     /** 鼠标灵敏度 0.5 时移一个像素视角转的角度(原版 {@code (s·0.6+0.2)³·8·0.15})。 */
     static final double PIXEL = Math.pow(0.5 * 0.6 + 0.2, 3) * 8 * 0.15;
-    /** 瞄面上的点时往面里收一点,射线不贴着棱。 */
-    private static final double INSET = 0.02;
     /** 瞄面上离眼睛最近的一点时离棱留的边:准星不落在两格共用的棱上。 */
     private static final double EDGE = 0.05;
 
@@ -131,8 +127,8 @@ public final class Aim {
             AABB box = local.move(pos);
             for (Direction side : Direction.values()) {
                 Vec3 center = faceCenter(box, side);
-                if (facing(eye, center, side)) {
-                    Vec3 inward = Vec3.atLowerCornerOf(side.getNormal()).scale(INSET);
+                if (Sight.facing(eye, center, side)) {
+                    Vec3 inward = Vec3.atLowerCornerOf(side.getNormal()).scale(Sight.INSET);
                     candidates.add(center.subtract(inward));
                     nearest.add(nearestOnFace(box, side, eye).subtract(inward));
                 }
@@ -140,6 +136,32 @@ public final class Aim {
         }
         candidates.addAll(nearest);
         return candidates;
+    }
+
+    // ==================== 用:点它哪一面 ====================
+
+    /**
+     * 从眼睛此刻的位置用 {@code pos} 这一格:它哪一面用得上(第 0 层 {@link Sight#use}——面朝着眼睛、在交互距离内、视线上没有
+     * 硬遮挡),交出那一次视线;没隔着软遮挡的面优先。一面都用不上为 null。与导航"用一格方块"的到达是同一个视线函数。
+     */
+    public static Sight.Trace use(ServerPlayer body, BlockPos pos) {
+        Level level = body.level();
+        Vec3 eye = body.getEyePosition();
+        double range = body.blockInteractionRange();
+        Sight.Trace behindSoft = null;
+        for (Direction side : Direction.values()) {
+            Sight.Trace trace = Sight.use(level, eye, range, pos, side);
+            if (trace == null) {
+                continue;
+            }
+            if (trace.soft().isEmpty()) {
+                return trace;
+            }
+            if (behindSoft == null) {
+                behindSoft = trace;
+            }
+        }
+        return behindSoft;
     }
 
     // ==================== 放:点哪个面的哪一点 ====================
@@ -162,9 +184,8 @@ public final class Aim {
             BlockPos clicked = target.relative(dir);
             Direction side = dir.getOpposite();
             Vec3 onFace = Faces.hitPoint(level, target, dir);
-            // 点在面上往面里收一点,从面朝外那一侧射过来才碰得上这一面
-            Vec3 point = onFace.subtract(Vec3.atLowerCornerOf(side.getNormal()).scale(INSET));
-            if (!facing(eye, onFace, side) || onFace.distanceTo(eye) >= range) {
+            Vec3 point = Sight.inset(onFace, side);
+            if (!Sight.facing(eye, onFace, side) || onFace.distanceTo(eye) >= range) {
                 continue;
             }
             if (!target.equals(Replaceable.landing(level, clicked, side, placing))) {
@@ -179,19 +200,9 @@ public final class Aim {
 
     // ==================== 射线 ====================
 
-    /** 从眼睛朝 {@code point} 的方块射线第一下碰上的是 {@code pos}(给了 {@code side} 时还得是那一面)。 */
+    /** 从眼睛朝 {@code point} 的视线第一下碰上的是 {@code pos}(给了 {@code side} 时还得是那一面):第 0 层 {@link Sight}。 */
     private static boolean hits(ServerPlayer body, Vec3 eye, Vec3 point, BlockPos pos, Direction side) {
-        Vec3 through = point.add(point.subtract(eye).normalize().scale(0.1));
-        BlockHitResult hit = body.level().clip(new ClipContext(eye, through, ClipContext.Block.OUTLINE,
-                ClipContext.Fluid.NONE, body));
-        return hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(pos)
-                && (side == null || hit.getDirection() == side);
-    }
-
-    /** 眼睛在这个面朝外的一侧。 */
-    private static boolean facing(Vec3 eye, Vec3 onFace, Direction side) {
-        Vec3 normal = Vec3.atLowerCornerOf(side.getNormal());
-        return eye.subtract(onFace).dot(normal) > 1.0E-4;
+        return Sight.trace(body.level(), eye, point, pos).clear(side);
     }
 
     /** {@code box} 的 {@code side} 面上离 {@code eye} 最近的一点,离面的四条棱各留 {@link #EDGE}。 */

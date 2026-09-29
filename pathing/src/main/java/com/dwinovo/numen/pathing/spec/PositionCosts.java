@@ -1,5 +1,6 @@
 package com.dwinovo.numen.pathing.spec;
 
+import java.util.Collection;
 import java.util.EnumMap;
 import java.util.Map;
 
@@ -9,6 +10,7 @@ import it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import it.unimi.dsi.fastutil.longs.LongSets;
+import net.minecraft.core.BlockPos;
 
 /**
  * 按坐标的代价与禁令:不看方块看位置。四种用法({@link Use})各自一栏,每栏两样——禁止的格,与额外加价的格;
@@ -46,6 +48,13 @@ public final class PositionCosts {
     public static PositionCosts protect(LongSet cells) {
         Builder b = builder();
         cells.forEach((long cell) -> b.forbid(Use.DIG, cell).forbid(Use.PLACE, cell));
+        return b.build();
+    }
+
+    /** 这些格都禁止这样用:例如从一片要撤掉的垫块上下来时,一格也不再站上去。 */
+    public static PositionCosts forbidding(Use use, Collection<BlockPos> cells) {
+        Builder b = builder();
+        cells.forEach(cell -> b.forbid(use, cell.asLong()));
         return b.build();
     }
 

@@ -87,7 +87,7 @@ final class LootSweep {
     /** 走向所有还剩的掉落物(哪个先到算哪个);还有剩的时候才问。 */
     Goal goal() {
         List<Goal> goals = live().stream()
-                .map(item -> Goals.near(item.blockPosition(), 1.0))
+                .map(item -> Goals.within(Goals.at(item.blockPosition()), 0, 1.0))
                 .toList();
         return Goals.anyOf(goals);
     }

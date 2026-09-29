@@ -134,7 +134,7 @@ final class NearestBlockFinder {
         var stats = Snapshots.stats(player);
         List<Goal> members = new ArrayList<>(candidates.size());
         for (BlockPos c : candidates) {
-            members.add(Goals.reach(c, stats));
+            members.add(Goals.dig(c, stats));
         }
         goal = Goals.anyOf(members);
     }

@@ -120,8 +120,9 @@ public final class MoveToTaskRecord extends TaskRecord {
      */
     public static Goal goal(Kind kind, int bx, int by, int bz, Integer near) {
         return switch (kind) {
-            case BLOCK -> near == null ? Goals.at(new BlockPos(bx, by, bz)) : Goals.near(new BlockPos(bx, by, bz), near);
-            case COLUMN -> near == null ? Goals.column(bx, bz) : Goals.ring(new BlockPos(bx, 0, bz), 0, near);
+            case BLOCK -> near == null ? Goals.at(new BlockPos(bx, by, bz))
+                    : Goals.within(Goals.at(new BlockPos(bx, by, bz)), 0, near);
+            case COLUMN -> near == null ? Goals.column(bx, bz) : Goals.within(Goals.column(bx, bz), 0, near);
             case YLEVEL -> Goals.level(by);
             case FIND, ROUTE -> throw new IllegalArgumentException(kind + " has no coordinate goal");
         };

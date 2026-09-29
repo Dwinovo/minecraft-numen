@@ -9,6 +9,7 @@ import java.util.function.Consumer;
 import com.dwinovo.numen.pathing.api.NavRequest;
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.api.PlanQuery;
+import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.pathing.body.BodyAction;
 import com.dwinovo.numen.pathing.body.PlayerHands;
 import com.dwinovo.numen.pathing.body.Snapshots;
@@ -47,7 +48,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 /**
  * 挖掘:头顶是沙子沙砾、挖了会漏水漏岩浆、冰,都不挖;挑对工具;空手挖原木、水下挖掘的耗时与原版、与定价一致;背包深处的好工具
  * 被计价也被用上;红石矿、修补附魔都不让挖掘重开;隧道里每一格只开挖一次;实体挡住准星时停手不打它;破坏事件被取消时以
- * 拒绝收场;慢挖硬方块不被当成卡住;创造模式五格交互距离。
+ * 拒绝收场;慢挖硬方块不被当成卡住;创造模式五格交互距离;要挖的那一格同样够得着的几个站位里,停在挡得少的那一处。
  */
 @GameTestHolder("numen")
 @PrefixGameTestTemplate(false)
@@ -470,12 +471,31 @@ public class DigGameTests {
         TestBody body = t.body(2, 1, 5);
         body.setGameMode(GameType.CREATIVE);
         BlockPos target = t.at(10, 1, 5);
-        t.later(2, () -> t.go(body, Goals.reach(target, Snapshots.of(body).stats()), RouteSpec.defaults())
+        t.later(2, () -> t.go(body, Goals.dig(target, Snapshots.of(body).stats()), RouteSpec.defaults())
                 .within(300).arrives().then(r -> {
                     double distance = Math.sqrt(new AABB(target).distanceToSqr(r.body.getEyePosition()));
                     if (distance <= 4.5 || distance >= 5) {
                         throw new GameTestAssertException("应当停在四格半到五格之间:" + distance);
                     }
                 }));
+    }
+    /**
+     * 要挖的铁矿嵌在三格厚的石墙里、离墙面一格,墙上从南边凿了一道缝通到它的南面。正对着它的墙前最近,可隔着一格石头;
+     * 往南挪一格就能从缝里看见它:同样够得着,停在不挡的那一处。
+     */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    public static void stands_where_fewer_blocks_hide_the_target(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(8, 1, 0, 10, 3, 12, Blocks.STONE);
+        t.set(9, 2, 6, Blocks.IRON_ORE);
+        t.set(8, 2, 7, Blocks.AIR).set(9, 2, 7, Blocks.AIR);
+        BlockPos ore = t.at(9, 2, 6);
+        TestBody body = t.body(3, 1, 6);
+        t.go(body, Goals.dig(ore, Snapshots.of(body).stats()), RouteSpec.defaults()).within(300).arrives()
+                .then(r -> {
+                    if (Aim.point(r.body, ore) == null) {
+                        throw new GameTestAssertException("停下的地方看不见它:" + t.rel(r.body.blockPosition()));
+                    }
+                });
     }
 }

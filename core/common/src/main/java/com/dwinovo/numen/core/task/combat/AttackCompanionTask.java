@@ -732,7 +732,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         //
         // 内沿用<b>裸</b>攻击距离(2.02),不加格量化补偿。带宽因此是 1.28 格,比格量化误差
         // 0.71 宽出一截 —— 当初算出"带只有 0.57 格、做不出来",是因为把补偿也叠进了内沿。
-        Goal ring = Goals.ring(target.blockPosition(), skirmishInner(), skirmishOuter());
+        Goal ring = Goals.within(Goals.column(target.getBlockX(), target.getBlockZ()), skirmishInner(), skirmishOuter());
         // 要打的这一只离多远由环管(内沿就是它够不着她的距离),躲避场只收别的怪:再把它放进去,它够得比她还远时
         // "够得着它"与"出了它的危险半径"两头都要,就没有一格站得下
         List<Threat> others = Menace.field(player, field.stream().filter(mob -> mob != target).toList());
@@ -883,7 +883,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             havenPlannedAt = workTicks();
             // 路上要绕开谁:四十格内每一只,经过它们身边的格变贵;落点旁边站着一只怪也算到了,不然她永远到不了、
             // 也就永远不换落点
-            nav = Trip.to(player, Goals.near(haven, HAVEN_ARRIVED), RouteSpec.defaults(), haven)
+            nav = Trip.to(player, Goals.within(Goals.at(haven), 0, HAVEN_ARRIVED), RouteSpec.defaults(), haven)
                     .avoiding(() -> Menace.dangers(player, FLEE_SCAN_RADIUS));
         }
         Trip.Status status = nav.tick();

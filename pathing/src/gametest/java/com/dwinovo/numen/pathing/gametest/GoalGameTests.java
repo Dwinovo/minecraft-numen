@@ -7,29 +7,42 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import com.dwinovo.numen.pathing.api.Outcome;
+import com.dwinovo.numen.pathing.body.Aim;
+import com.dwinovo.numen.pathing.body.Crosshair;
 import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.plan.Threat;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.search.Searches;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.pathing.world.Reach;
+import com.dwinovo.numen.pathing.world.Sight;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.inventory.FurnaceMenu;
+import net.minecraft.world.level.block.DoublePlantBlock;
+import net.minecraft.world.level.block.LadderBlock;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
- * 目标:贴脸、站上、靠近、环形站位、到某一高度、远离一组生物、多个目标取其一;起点在贵成员里;最后一步进目标的同一刻搜索失败;
- * 垫柱或搭桥到目标格站稳才报到;够得着没视线;不垫柱站到目标旁上方;可站却到不了;给的高度在半空或方块里时落到那一列的地面。
+ * 目标:用一格方块(狭窄矿道里的熔炉、只有一面敞开的箱子、悬崖上的工作台、隔着高草)、站上、靠近、环形站位、到某一高度、
+ * 梯子上与水里的一格、远离一组生物、多个目标取其一;起点在贵成员里;最后一步进目标的同一刻搜索失败;垫柱或搭桥到目标格站稳
+ * 才报到;规划之后视线被挡住;不垫柱站到目标旁上方;可站却到不了。
  */
 @GameTestHolder("numen")
 @PrefixGameTestTemplate(false)
@@ -62,20 +75,125 @@ public class GoalGameTests {
         }
     }
 
-    /** 贴脸:走到手够得着那一块、看得见它的地方。 */
+    /** 用:走到看得见它某一面、点得到它的地方。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
-    public static void reaches_a_block(GameTestHelper helper) {
+    public static void uses_a_block(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.set(14, 1, 5, Blocks.CRAFTING_TABLE);
         TestBody body = t.body(4, 1, 5);
         BlockPos table = t.at(14, 1, 5);
-        t.go(body, Goals.reach(table, Snapshots.of(body).stats()), RouteSpec.defaults()).within(300).arrives()
+        t.go(body, Goals.use(t.level, Snapshots.of(body).stats(), table), RouteSpec.defaults()).within(300).arrives()
+                .then(r -> sees(r, table));
+    }
+
+    /** 此刻从身体的眼睛用得上 {@code target} 的某一面(第 0 层 {@link Sight#use}),视线上什么也不隔着;交出那一次视线。 */
+    private static Sight.Trace sees(Trial.Run r, BlockPos target) {
+        for (Direction face : Direction.values()) {
+            Sight.Trace seen = Sight.use(r.body.level(), r.body.getEyePosition(), r.body.blockInteractionRange(), target,
+                    face);
+            if (seen != null && seen.clear(face)) {
+                return seen;
+            }
+        }
+        throw new GameTestAssertException("从停下的地方看不清它:" + r.body.position());
+    }
+
+    /**
+     * 狭窄矿道(一格宽两格高)里,熔炉嵌在南边那条矿道的北壁上,只有朝矿道的南面敞开;身体在北边那条平行矿道里,隔着一层石头,
+     * 几何上够得着它却看不见。用它:绕到南边矿道、站到正对开口的一侧,看得见,打得开。
+     */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    public static void uses_a_furnace_in_a_narrow_tunnel_from_its_open_side(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(2, 1, 0, 18, 3, 7, Blocks.STONE);
+        t.fill(4, 1, 2, 16, 2, 2, Blocks.AIR);
+        t.fill(4, 1, 5, 16, 2, 5, Blocks.AIR);
+        t.fill(4, 1, 2, 4, 2, 5, Blocks.AIR);
+        t.set(10, 1, 4, Blocks.FURNACE);
+        BlockPos furnace = t.at(10, 1, 4);
+        TestBody body = t.body(10, 1, 2);
+        Goals.Use use = Goals.use(t.level, Snapshots.of(body).stats(), furnace);
+        if (!use.open().equals(List.of(Direction.SOUTH))) {
+            throw new GameTestAssertException("只该有南面敞开:" + use.open());
+        }
+        t.go(body, use, RouteSpec.defaults()).within(500).arrives().then(r -> {
+            if (feet(t, r).getZ() != 5) {
+                throw new GameTestAssertException("应当站在南边那条矿道里:" + t.rel(r.body.blockPosition()));
+            }
+            Sight.Trace seen = sees(r, furnace);
+            Aim.look(r.body, seen.point());
+            BlockHitResult hit = Crosshair.on(r.body, furnace);
+            if (hit == null || !r.body.gameMode.useItemOn(r.body, t.level, ItemStack.EMPTY, InteractionHand.MAIN_HAND,
+                    hit).consumesAction() || !(r.body.containerMenu instanceof FurnaceMenu)) {
+                throw new GameTestAssertException("打不开熔炉:" + hit + " " + r.body.containerMenu);
+            }
+            r.body.closeContainer();
+        });
+    }
+
+    /** 箱子三面与顶上罩着(顶上是玻璃),只有西面敞开;身体在东面:绕到西面去。 */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    public static void uses_a_chest_from_its_only_open_side(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.set(12, 1, 5, Blocks.CHEST);
+        t.set(12, 1, 4, Blocks.STONE).set(12, 1, 6, Blocks.STONE).set(13, 1, 5, Blocks.STONE);
+        t.set(12, 2, 5, Blocks.GLASS);
+        BlockPos chest = t.at(12, 1, 5);
+        TestBody body = t.body(17, 1, 5);
+        t.go(body, Goals.use(t.level, Snapshots.of(body).stats(), chest), RouteSpec.defaults()).within(400).arrives()
                 .then(r -> {
-                    double distance = Math.sqrt(new AABB(table).distanceToSqr(r.body.getEyePosition()));
-                    if (distance >= r.body.blockInteractionRange()) {
-                        throw new GameTestAssertException("够不着:" + distance);
+                    if (feet(t, r).getX() >= 12 || sees(r, chest).face() != Direction.WEST) {
+                        throw new GameTestAssertException("应当在西面用它:" + t.rel(r.body.blockPosition()));
                     }
                 });
+    }
+
+    /**
+     * 工作台在三格高的悬崖上、离崖边三格;身体在崖脚,几何上够得着它,中间却隔着崖壁的石头。旁边有一道台阶能上去:不停在崖底,
+     * 上到崖顶看得见它的地方。
+     */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 600)
+    public static void uses_a_table_on_a_cliff_from_the_top(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(10, 1, 0, 20, 3, 10, Blocks.STONE);
+        t.set(7, 1, 8, Blocks.STONE);
+        t.fill(8, 1, 8, 8, 2, 8, Blocks.STONE);
+        t.fill(9, 1, 8, 9, 3, 8, Blocks.STONE);
+        t.set(13, 4, 5, Blocks.CRAFTING_TABLE);
+        BlockPos table = t.at(13, 4, 5);
+        TestBody body = t.body(9, 1, 5);
+        t.go(body, Goals.use(t.level, Snapshots.of(body).stats(), table), RouteSpec.defaults()).within(500).arrives()
+                .then(r -> {
+                    if (feet(t, r).getY() != 4) {
+                        throw new GameTestAssertException("应当上到崖顶:" + t.rel(r.body.blockPosition()));
+                    }
+                    sees(r, table);
+                });
+    }
+
+    /** 箱子只有西面敞开,面前立着一株高草:高草是软遮挡,照样走到西面;视线上隔着它,用之前清掉就行。 */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    public static void uses_a_chest_behind_tall_grass(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.set(12, 1, 5, Blocks.CHEST);
+        t.set(12, 1, 4, Blocks.STONE).set(12, 1, 6, Blocks.STONE).set(13, 1, 5, Blocks.STONE);
+        t.set(12, 2, 5, Blocks.GLASS);
+        // 高草要长在泥土上,不然一次方块更新就掉了
+        t.set(11, 0, 5, Blocks.GRASS_BLOCK);
+        t.set(11, 1, 5, Blocks.TALL_GRASS.defaultBlockState().setValue(DoublePlantBlock.HALF, DoubleBlockHalf.LOWER));
+        t.set(11, 2, 5, Blocks.TALL_GRASS.defaultBlockState().setValue(DoublePlantBlock.HALF, DoubleBlockHalf.UPPER));
+        BlockPos chest = t.at(12, 1, 5);
+        TestBody body = t.body(4, 1, 5);
+        var stats = Snapshots.of(body).stats();
+        t.go(body, Goals.use(t.level, stats, chest), RouteSpec.defaults()).within(400).arrives().then(r -> {
+            // 搜索按节点中心的眼睛挑站位:从停下的那个节点看过去,中间隔着的是高草;高草还在(只走不改)
+            BlockPos node = r.body.blockPosition();
+            Vec3 eye = Reach.eye(stats, Pose.STANDING, node.getX(), r.body.getY(), node.getZ());
+            Sight.Trace seen = Sight.use(t.level, eye, stats.blockReach(), chest, Direction.WEST);
+            if (seen == null || seen.soft().isEmpty() || !t.state(11, 2, 5).is(Blocks.TALL_GRASS)) {
+                throw new GameTestAssertException("应当停在隔着高草看得见它的地方:" + t.rel(node) + " " + seen);
+            }
+        });
     }
 
     /** 站上:站到那一块上面,托着脚的就是它。 */
@@ -84,7 +202,7 @@ public class GoalGameTests {
         Trial t = new Trial(helper).floor();
         t.set(12, 1, 5, Blocks.OAK_PLANKS);
         TestBody body = t.body(4, 1, 5);
-        t.go(body, Goals.standOn(t.at(12, 1, 5)), RouteSpec.defaults()).within(300).arrives()
+        t.go(body, Goals.on(t.at(12, 1, 5)), RouteSpec.defaults()).within(300).arrives()
                 .then(r -> at(t, r, 12, 2, 5));
     }
 
@@ -94,7 +212,7 @@ public class GoalGameTests {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(4, 1, 5);
         BlockPos point = t.at(20, 1, 5);
-        t.go(body, Goals.near(point, 3), RouteSpec.defaults()).within(300).arrives().then(r -> {
+        t.go(body, Goals.within(Goals.at(point), 0, 3), RouteSpec.defaults()).within(300).arrives().then(r -> {
             double d = Math.sqrt(r.body.blockPosition().distSqr(point));
             if (d > 3 || d < 2) {
                 throw new GameTestAssertException("应当刚好停进三格以内:" + d);
@@ -108,7 +226,7 @@ public class GoalGameTests {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(20, 1, 20);
         BlockPos center = t.at(21, 1, 21);
-        t.go(body, Goals.ring(center, 3, 5), RouteSpec.defaults()).within(300).arrives().then(r -> {
+        t.go(body, Goals.within(Goals.column(center.getX(), center.getZ()), 3, 5), RouteSpec.defaults()).within(300).arrives().then(r -> {
             double dx = r.body.getBlockX() - center.getX();
             double dz = r.body.getBlockZ() - center.getZ();
             double d = Math.sqrt(dx * dx + dz * dz);
@@ -165,7 +283,7 @@ public class GoalGameTests {
     public static void leaves_an_expensive_member_for_a_cheap_one(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         TestBody body = t.body(10, 1, 10);
-        Goal goal = Goals.anyOf(List.of(Goals.priced(Goals.near(t.at(10, 1, 10), 2), 500),
+        Goal goal = Goals.anyOf(List.of(Goals.priced(Goals.within(Goals.at(t.at(10, 1, 10)), 0, 2), 500),
                 Goals.at(t.at(20, 1, 10))));
         t.go(body, goal, RouteSpec.defaults()).within(300).arrives().then(r -> at(t, r, 20, 1, 10));
     }
@@ -194,7 +312,7 @@ public class GoalGameTests {
             });
         }
         boolean[] pushed = {false};
-        t.go(body, Goals.near(t.at(12, 1, 5), 2), RouteSpec.defaults()).within(500)
+        t.go(body, Goals.within(Goals.at(t.at(12, 1, 5)), 0, 2), RouteSpec.defaults()).within(500)
                 .passive((before, now) -> before.is(Blocks.STONE_PRESSURE_PLATE) && now.is(Blocks.STONE_PRESSURE_PLATE))
                 .during(r -> {
                     if (!pushed[0]) {
@@ -240,15 +358,21 @@ public class GoalGameTests {
         }
     }
 
-    /** 要够的那一块四面与顶上罩着玻璃:走到够得着的地方,但看不见它,不报到达,结局是"看不见"。 */
+    /**
+     * 工作台摆在一块石头上,只有西面敞开;列好站位之后、开走之前,正对西面的那一格(半空,不是站位)被放上一块玻璃:
+     * 走到了搜索挑的站位,在活世界上复核时看不见它,不报到达,结局是"看不见"。
+     */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
-    public static void reach_without_sight_is_not_arrival(GameTestHelper helper) {
+    public static void sight_blocked_after_planning_is_not_arrival(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
-        t.fill(9, 1, 4, 11, 2, 6, Blocks.GLASS);
-        t.set(10, 1, 5, Blocks.CRAFTING_TABLE);
-        BlockPos table = t.at(10, 1, 5);
+        t.set(10, 1, 5, Blocks.STONE);
+        t.set(10, 2, 5, Blocks.CRAFTING_TABLE);
+        t.set(10, 2, 4, Blocks.GLASS).set(10, 2, 6, Blocks.GLASS).set(11, 2, 5, Blocks.GLASS).set(10, 3, 5, Blocks.GLASS);
+        BlockPos table = t.at(10, 2, 5);
         TestBody body = t.body(4, 1, 5);
-        t.go(body, Goals.reach(table, Snapshots.of(body).stats()), RouteSpec.defaults()).within(300)
+        Goals.Use use = Goals.use(t.level, Snapshots.of(body).stats(), table);
+        t.change(9, 2, 5, Blocks.GLASS.defaultBlockState());
+        t.go(body, use, RouteSpec.defaults()).within(300)
                 .fails(Outcome.NoLineOfSight.class, o -> {
                     if (!o.target().equals(table)) {
                         throw new GameTestAssertException("看不见的应当是那张工作台:" + o);
@@ -256,7 +380,7 @@ public class GoalGameTests {
                 });
     }
 
-    /** 要够的那一块摆在三格高的石柱顶上,身上有圆石、许改地形:站在地上就够得着,不在旁边垫柱爬上去。 */
+    /** 要用的那一块摆在三格高的石柱顶上,身上有圆石、许改地形:站在地上就看得见、点得到,不在旁边垫柱爬上去。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
     public static void does_not_pillar_up_beside_the_target(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
@@ -266,7 +390,7 @@ public class GoalGameTests {
         TestBody body = t.body(4, 1, 5);
         Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
-        t.go(body, Goals.reach(table, Snapshots.of(body).stats()), NATURAL).within(300).arrives()
+        t.go(body, Goals.use(t.level, Snapshots.of(body).stats(), table), NATURAL).within(300).arrives()
                 .then(Scenes::unaltered);
     }
 
@@ -285,16 +409,33 @@ public class GoalGameTests {
                 .then(Scenes::unaltered);
     }
 
-    /** 给的高度一个在半空、一个埋在地板里:都落到那一列的地面上去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
-    public static void a_goal_in_the_air_or_in_the_ground_lands_on_the_ground(GameTestHelper helper) {
+    /** 某一格可以是梯子上的一格:爬到半截停住,脚就在那一格,挂在梯子上。 */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    public static void arrives_at_a_cell_on_a_ladder(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
-        TestBody high = t.body(4, 1, 5);
-        TestBody low = t.body(4, 1, 15);
-        var stats = Snapshots.of(high).stats();
-        t.go(high, Goals.ground(t.level, stats, t.at(12, 8, 5)), RouteSpec.defaults()).within(300).arrives()
-                .then(r -> at(t, r, 12, 1, 5));
-        t.go(low, Goals.ground(t.level, stats, t.at(12, 0, 15)), RouteSpec.defaults()).within(300).arrives()
-                .then(r -> at(t, r, 12, 1, 15));
+        t.fill(9, 1, 3, 12, 6, 7, Blocks.STONE);
+        for (int y = 1; y <= 6; y++) {
+            t.set(8, y, 5, Blocks.LADDER.defaultBlockState().setValue(LadderBlock.FACING, Direction.WEST));
+        }
+        TestBody body = t.body(4, 1, 5);
+        t.go(body, Goals.at(t.at(8, 4, 5)), RouteSpec.defaults()).within(400).arrives().then(r -> {
+            at(t, r, 8, 4, 5);
+            if (!r.body.onClimbable()) {
+                throw new GameTestAssertException("应当挂在梯子上");
+            }
+        });
+    }
+
+    /** 某一格可以是水里的一格:池子三格深,去处是水面那一层,浮在那儿。 */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
+    public static void arrives_at_a_cell_in_water(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        UpDownGameTests.pool(t, 8, 3, 13, 8, 3);
+        TestBody body = t.body(4, 1, 5);
+        t.go(body, Goals.at(t.at(10, 0, 5)), RouteSpec.defaults()).within(400).arrives().then(r -> {
+            if (!r.body.isInWater()) {
+                throw new GameTestAssertException("应当在水里:" + t.rel(r.body.blockPosition()));
+            }
+        });
     }
 }

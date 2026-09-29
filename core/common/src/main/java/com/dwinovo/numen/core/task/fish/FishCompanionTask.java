@@ -564,7 +564,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
 
     /** 走到离战果所在那一格 {@link #PICKUP_RADIUS} 格以内。 */
     private static Goal lootGoal(BlockPos item) {
-        return Goals.near(item, PICKUP_RADIUS);
+        return Goals.within(Goals.at(item), 0, PICKUP_RADIUS);
     }
 
     private void aimAtTarget() {

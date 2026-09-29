@@ -21,7 +21,7 @@ import net.minecraft.world.entity.Entity;
  * 「挖 64 块」干完腾位,而它一直占着,直到主人给她别的事做。
  *
  * <h2>跟到了就休眠,不是结束</h2>
- * 跟到了(这一趟的目标自己说到了,{@link Goals#near} 落脚点附近 {@code keepWithin} 格)之后
+ * 跟到了(这一趟的目标自己说到了,{@link Goals#within} 落脚点附近 {@code keepWithin} 格)之后
  * {@link #canRun} 返 false:身体让给别人(她可以站着看你、可以被反射拿去吃东西),主人一走远
  * 它自己就醒过来。这跟原版 {@code Goal.canUse()} 是同一个道理——<b>休眠不是失败</b>,不发结果、
  * 不腾槽、不惊动模型。到没到只看目标,这里不另拿距离判"差不多到了";离主人多远只决定要不要起步。
@@ -141,7 +141,7 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
 
     /** 跟到落脚点 {@code anchor} 附近 {@code keepWithin} 格内。 */
     private Goal goal(BlockPos anchor) {
-        return Goals.near(anchor, r.keepWithin);
+        return Goals.within(Goals.at(anchor), 0, r.keepWithin);
     }
 
     /** 跟随的路线规格:只走不改,没有开关。 */

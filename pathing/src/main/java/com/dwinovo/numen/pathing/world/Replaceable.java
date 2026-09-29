@@ -28,10 +28,15 @@ public final class Replaceable {
 
     /** 拿着 {@code placing} 这种方块往 {@code state} 所在的格里放,原来的方块能不能被直接顶替。 */
     public static boolean replaceableBy(BlockState state, Block placing) {
+        return state.getBlock() != placing && displaced(state);
+    }
+
+    /**
+     * 往这一格里放一块与它不同种的方块时,它会被直接顶掉:草、高草、蕨、枯灌木、只有一层的雪、没长满的藤蔓、发光地衣……
+     * 花不在里面——原版的花不可替换,放方块时顶不掉它。
+     */
+    public static boolean displaced(BlockState state) {
         Block block = state.getBlock();
-        if (block == placing) {
-            return false;
-        }
         if (block instanceof SnowLayerBlock) {
             return state.getValue(SnowLayerBlock.LAYERS) == 1;
         }

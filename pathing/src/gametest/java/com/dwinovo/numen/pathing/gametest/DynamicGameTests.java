@@ -151,7 +151,7 @@ public class DynamicGameTests {
         TestBody body = t.body(4, 1, 5);
         BlockPos[] aim = {from};
         int[] retargets = {0};
-        t.go(body, Goals.near(from, 2.5), RouteSpec.defaults()).within(600)
+        t.go(body, Goals.within(Goals.at(from), 0, 2.5), RouteSpec.defaults()).within(600)
                 .during(r -> {
                     if (r.ticks % 5 == 0 && pig.getX() - t.origin.getX() < 34) {
                         pig.moveTo(pig.getX() + 1, pig.getY(), pig.getZ(), 0, 0);
@@ -160,7 +160,7 @@ public class DynamicGameTests {
                     if (now.distSqr(aim[0]) >= 4) {
                         aim[0] = now;
                         retargets[0]++;
-                        r.navigation.retarget(Goals.near(now, 2.5));
+                        r.navigation.retarget(Goals.within(Goals.at(now), 0, 2.5));
                     }
                 })
                 .arrives().then(r -> {

@@ -1,15 +1,21 @@
 package com.dwinovo.numen.pathing.search;
 
+import java.util.Set;
+
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.spec.PositionCosts;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.pathing.world.Sight;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.phys.Vec3;
 
 /**
- * 搜索要去哪:哪些节点算到了、从一个节点估计还要多少刻、停在那儿还要付多少、为了到得了别动哪几格。模块里只有这一族目标
- * (由 {@link Goals} 编出),到没到只看 {@link #contains},没有"差不多到了"。
+ * 搜索要去哪:哪些节点算到了、从一个节点估计还要多少刻、停在那儿还要付多少、为了到得了别动哪几格、到了还要看得见什么。
+ * 模块里只有这一族目标(由 {@link Goals} 编出),到没到只看 {@link #contains},没有"差不多到了"。
  */
 public interface Goal {
 
@@ -19,8 +25,11 @@ public interface Goal {
     /** 从节点 {@code (x, y, z)} 到目标的估价(刻)。 */
     double estimate(int x, int y, int z);
 
-    /** 停在这个已到达的节点之后还要付的价钱(刻),默认 0。多个成员各带各的价时,搜索按"走过去加到了再付"挑终点。 */
-    default double arrival(int x, int y, int z, Stance stance) {
+    /**
+     * 停在这个已到达的节点之后还要付的价钱(刻),默认 0。多个成员各带各的价时,搜索按"走过去加到了再付"挑终点。
+     * {@code level} 是身体停在那儿时面对的世界:搜索时是快照(叠着走到那儿那一步的改动),换目标时是活世界。
+     */
+    default double arrival(BlockGetter level, int x, int y, int z, Stance stance) {
         return 0;
     }
 
@@ -33,11 +42,36 @@ public interface Goal {
     }
 
     /**
-     * 停在这个已到达的节点上,还要看得见哪一格才算数(贴脸要够得着的那一格);不要求视线为 null。目标只判几何上够不够得着,
-     * 视线由执行层到了之后在活世界上复核。
+     * 停在这个已到达的节点上,还要看得见什么才算数(用一格方块:它的哪几面);不要求视线为 null。搜索按快照挑出看得见的站位,
+     * 执行层到了之后在活世界上用同一个视线函数复核。
      */
-    default BlockPos sight(int x, int y, int z, Stance stance) {
+    default Sighting sight(int x, int y, int z, Stance stance) {
         return null;
+    }
+
+    /**
+     * 到了还要看得见的:{@code target} 的 {@code faces} 里任何一面。
+     */
+    record Sighting(BlockPos target, Set<Direction> faces) {
+
+        public Sighting {
+            faces = Set.copyOf(faces);
+        }
+
+        /**
+         * 从 {@code eye} 用得上它的哪一面(第 0 层 {@link Sight#use}):交出第一面的视线,可能还隔着软遮挡;一面都用不上为 null。
+         */
+        public Sight.Trace seen(BlockGetter level, Vec3 eye, double reach) {
+            for (Direction face : Direction.values()) {
+                if (faces.contains(face)) {
+                    Sight.Trace trace = Sight.use(level, eye, reach, target, face);
+                    if (trace != null) {
+                        return trace;
+                    }
+                }
+            }
+            return null;
+        }
     }
 
     /**
@@ -55,12 +89,13 @@ public interface Goal {
 
     /**
      * 按 {@code before} 定下的"停在 {@code stop}",换成 {@code after} 之后还算不算数:还在新目标里,而且停在那儿没有变贵。
-     * 目标换了(或跟着的东西挪了)之后,在走的路要不要重新搜,只问这一条。
+     * 目标换了(或跟着的东西挪了)之后,在走的路要不要重新搜,只问这一条。{@code level} 是此刻的世界。
      */
-    static boolean keepsStop(Goal before, Goal after, BlockPos stop, Stance stance) {
+    static boolean keepsStop(BlockGetter level, Goal before, Goal after, BlockPos stop, Stance stance) {
         int x = stop.getX();
         int y = stop.getY();
         int z = stop.getZ();
-        return after.contains(x, y, z, stance) && after.arrival(x, y, z, stance) <= before.arrival(x, y, z, stance);
+        return after.contains(x, y, z, stance)
+                && after.arrival(level, x, y, z, stance) <= before.arrival(level, x, y, z, stance);
     }
 }

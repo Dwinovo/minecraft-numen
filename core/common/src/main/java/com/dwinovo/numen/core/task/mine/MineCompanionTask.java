@@ -15,7 +15,6 @@ import com.dwinovo.numen.core.scan.BlockSearch;
 import com.dwinovo.numen.core.scan.NearbyEntities;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
-import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.api.Report;
 import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.drive.EditLedger;
@@ -70,12 +69,12 @@ import java.util.Set;
  *       inside the work area, and {@link #prune} every tick (drop ones mined / no longer matching /
  *       unworkable / hazardous), sorted by distance, capped at {@link #MAX_ORES}. Nothing moves
  *       before the first search is back: until then she does not know what is there.</li>
- *   <li><b>in place</b> — a target the body can reach from where it stands ({@link Goals#reach}: within
+ *   <li><b>in place</b> — a target the body can reach from where it stands ({@link Goals#dig}: within
  *       block reach, not occupying it) is broken on the spot, cheapest first, auto-switching to the best
  *       tool — no pathing. The digger clears what stands in the line of sight first, if it can be broken
  *       at all ({@link #breakable}).</li>
  *   <li><b>one goal over the field</b> — otherwise head for the whole ore field at once:
- *       one search over {@link Goals#anyOf} of the same reach goals ({@link #oreField}), so it walks to
+ *       one search over {@link Goals#anyOf} of the same dig goals ({@link #oreField}), so it walks to
  *       the CLOSEST reachable ore (not greedy-nearest, which is often the walled-in one).
  *       Arrival and the in-place pick are one criterion, so wherever the search ends, the
  *       dig side agrees; ending out of sight of the ore still counts, the digger clears the way.</li>
@@ -441,17 +440,13 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 nav.retarget(field, towardField());
             }
             Trip.Status status = nav.tick();
-            if (status == Trip.Status.FAILED && nav.outcome() instanceof Outcome.NoLineOfSight) {
-                // 到了够得着的地方,只是眼前有东西挡着:挖掘器会先清掉挡着的,当到了算
-                status = Trip.Status.ARRIVED;
-            }
             switch (status) {
                 case RUNNING -> { return TaskState.RUNNING; }
                 case ARRIVED -> {
                     // 搜索按总价挑中的就是这儿:手边够得着的就挖,别再为别处的估价让路
                     Feet here = Feet.of(player);
                     settledAt = here == null ? null : here.node();
-                    settledPrice = here == null ? 0 : field.arrival(settledAt.getX(), settledAt.getY(),
+                    settledPrice = here == null ? 0 : field.arrival(player.level(), settledAt.getX(), settledAt.getY(),
                             settledAt.getZ(), here.stance());
                     // 这一趟走完了;下一趟从这儿起,要走时再开
                     stopNav();
@@ -532,7 +527,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private Goal oreField(FieldKey key) {
         var stats = Snapshots.stats(player);
         List<Goal> members = new ArrayList<>(key.ores().size() + key.drops().size());
-        key.ores().forEach((ore, cost) -> members.add(Goals.priced(Goals.reach(ore, stats), cost)));
+        key.ores().forEach((ore, cost) -> members.add(Goals.priced(Goals.dig(ore, stats), cost)));
         for (BlockPos drop : key.drops()) {
             members.add(Goals.at(drop));     // items, not blocks
         }
@@ -558,13 +553,13 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      * 挑目标用的总价:走到够得着它的地方(目标的估价,与交给搜索的同一把尺)加上挖它的价钱。
      */
     private double targetCost(BlockPos ore, BlockPos feet) {
-        return Goals.reach(ore, Snapshots.stats(player)).estimate(feet.getX(), feet.getY(), feet.getZ()) + digCost(ore);
+        return Goals.dig(ore, Snapshots.stats(player)).estimate(feet.getX(), feet.getY(), feet.getZ()) + digCost(ore);
     }
 
     /** 身体此刻站着的地方够不够得着 {@code ore}——原地就挖与导航到位是这同一个判据。 */
     private boolean canWork(BlockPos ore) {
         Feet here = Feet.of(player);
-        return here != null && here.in(Goals.reach(ore, Snapshots.stats(player)));
+        return here != null && here.in(Goals.dig(ore, Snapshots.stats(player)));
     }
 
     /**
@@ -661,7 +656,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         double bestCost = Double.MAX_VALUE;
         double bestD = Double.MAX_VALUE;
         for (BlockPos ore : knownOres) {
-            if (level.getBlockState(ore).isAir() || !here.in(Goals.reach(ore, stats))) {
+            if (level.getBlockState(ore).isAir() || !here.in(Goals.dig(ore, stats))) {
                 continue;
             }
             double cost = digCost(ore);

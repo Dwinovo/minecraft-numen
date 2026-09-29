@@ -16,6 +16,7 @@ import com.dwinovo.numen.pathing.body.Hotbar;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
+import com.dwinovo.numen.pathing.spec.PositionCosts;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.permission.PlacedBlocks;
 import com.dwinovo.numen.task.TaskState;
@@ -877,13 +878,17 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 从垫块上下来:只走不改的寻路,走到几格外一处脚下不是垫块的地方。这是收场真要的一步,但不再为它垫新的块。
+     * 从垫块上下来:只走不改的寻路,离开脚下这一列、走到几格以内,一路不站上托着她的那几块(按位置禁站,并进规格)。
+     * 这是收场真要的一步,但不再为它垫新的块。
      */
     private TaskState stepOff(java.util.Set<BlockPos> blocks) {
         if (nav == null) {
             BlockPos feet = Feet.cell(player);
-            Goal off = Goals.allOf(List.of(Goals.ring(feet, 1.0, STEP_OFF_REACH), Goals.offBlocks(blocks)));
-            nav = Trip.to(player, off, RouteSpec.defaults(), feet);
+            Goal off = Goals.within(Goals.column(feet.getX(), feet.getZ()), 1.0, STEP_OFF_REACH);
+            RouteSpec walk = RouteSpec.defaults();
+            walk = walk.edit().positions(walk.positions().plus(
+                    PositionCosts.forbidding(PositionCosts.Use.STAND, blocks))).build();
+            nav = Trip.to(player, off, walk, feet);
         }
         if (nav.tick() != Trip.Status.RUNNING) {
             stopNav();

@@ -94,7 +94,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
     /** 朝它此刻所在的那一格走,走到 {@link #radius} 格以内。 */
     private Trip approach() {
         heading = entity.blockPosition();
-        return Trip.to(player, Goals.near(heading, radius), RouteSpec.defaults(), heading).probing();
+        return Trip.to(player, Goals.within(Goals.at(heading), 0, radius), RouteSpec.defaults(), heading).probing();
     }
 
     /** 它挪了就把新目标交给在走的这一趟。 */
@@ -106,7 +106,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
         BlockPos at = entity.blockPosition();
         if (!at.equals(heading)) {
             heading = at;
-            nav.retarget(Goals.near(at, radius), at);
+            nav.retarget(Goals.within(Goals.at(at), 0, radius), at);
         }
     }
 
@@ -214,7 +214,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
      * Bounded recovery — ONE reposition rung, as an inline attempt counter (a single
      * rung doesn't warrant {@code RecoveryLadder}'s child-task plumbing). On an
      * in-ladder nav cause ({@code NO_PATH} / {@code BOXED_IN} / {@code OUT_OF_REACH})
-     * retry the SAME bounded goal once with a looser stance goal — {@link Goals#near}
+     * retry the SAME bounded goal once with a looser stance goal — {@link Goals#within}
      * within {@link #REPOSITION_RADIUS} (inside the entity interaction range) of the entity's LIVE cell,
      * so "can't stand exactly next to it" becomes "stand anywhere within interact reach".
      * {@link #track} re-reads the entity each tick, so a target that merely MOVED

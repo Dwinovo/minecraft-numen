@@ -405,7 +405,7 @@ public class AlterGameTests {
         wall(t, 8, 3, Blocks.STONE, -1);
         t.set(8, 1, 5, Blocks.CRAFTING_TABLE);
         TestBody body = t.body(2, 1, 5);
-        t.go(body, Goals.reach(t.at(8, 1, 5), com.dwinovo.numen.pathing.body.Snapshots.of(body).stats()), NATURAL)
+        t.go(body, Goals.use(t.level, com.dwinovo.numen.pathing.body.Snapshots.of(body).stats(), t.at(8, 1, 5)), NATURAL)
                 .within(400).arrives().then(r -> {
                     if (!t.state(8, 1, 5).is(Blocks.CRAFTING_TABLE) || !dug(r).isEmpty()) {
                         throw new GameTestAssertException("动了要去用的工作台:" + r.report.ledger().entries());

@@ -2,6 +2,7 @@ package com.dwinovo.numen.pathing.drive;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +19,7 @@ import com.dwinovo.numen.pathing.plan.TerrainPolicy;
 import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
+import com.dwinovo.numen.pathing.spec.PositionCosts;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.Footing;
 
@@ -30,8 +32,10 @@ import net.minecraft.world.level.block.state.BlockState;
  * 放下、之后没再挖掉的({@link EditLedger#placedBlocks()})。
  *
  * <p>后放的先撤,每一块都照原版挖:够得着、看得见就站着挖;不然走过去(子导航,只走不改——撤回是为了还原,不为它再改别处),
- * 走到够得着、看得见它的地方再挖,走不到就照实留下。正托着身体的那几块不挖——挖了她会掉下去;托着她的全是要撤的块时,
- * 先走到脚下不是它们的地方,走不开的照实留下。一块此刻已经不是她放下的那种方块了(被人换过、挖过),就不是她留下的东西,不撤也不算留下。
+ * 走到看得见它某一面、点得到它的地方({@link Goals#use})再挖,走不到就照实留下。正托着身体的那几块不挖——挖了她会掉下去;
+ * 托着她的全是要撤的块时先下来:离开脚下这一列,一路不再站上已经托过她的那几块(按位置禁站,并进走过去的规格);下来了若还
+ * 站在别的要撤的块上(桥的半中间),就把它也记进禁站的,再下一次——每次至少多禁一块,走到岸上为止;走不开的照实留下。
+ * 一块此刻已经不是她放下的那种方块了(被人换过、挖过),就不是她留下的东西,不撤也不算留下。
  *
  * <p>挖之前问许可这一格能不能挖,与规划问的是同一个端口;拒绝的、动手时被 {@link Effector} 拒的,照实留下并带着理由。
  * 挖掉的记进实际账,账与子导航共用一本。
@@ -77,6 +81,8 @@ public final class TakeBack {
     private final Map<BlockPos, BlockState> pending = new LinkedHashMap<>();
     private final List<BlockPos> taken = new ArrayList<>();
     private final List<Left> left = new ArrayList<>();
+    /** 托过她、下来时不许再站上去的块。 */
+    private final Set<BlockPos> steppedOff = new HashSet<>();
 
     private Driver errand;
     private Errand why;
@@ -172,13 +178,13 @@ public final class TakeBack {
         }
         Set<BlockPos> supports = supports();
         if (!supports.isEmpty() && pending.keySet().containsAll(supports)) {
-            send(Errand.STEP_OFF, Goals.offBlocks(pending.keySet()));
+            stepOff(supports);
             return state;
         }
         BlockPos next = next(supports);
         if (next == null) {
             // 剩下的都托着她,而她脚下还有别的方块托着:挖哪一块都得先挪开
-            send(Errand.STEP_OFF, Goals.offBlocks(pending.keySet()));
+            stepOff(supports);
             return state;
         }
         if (Aim.point(body, next) != null) {
@@ -188,18 +194,46 @@ public final class TakeBack {
         } else if (next.equals(approached)) {
             leave(next, UNREACHABLE);
         } else {
+            Goals.Use site = Goals.use(rig.world(), rig.snapshot().stats(), next);
+            if (site.stands().isEmpty()) {
+                leave(next, UNREACHABLE);
+                return state;
+            }
             approached = next;
-            send(Errand.APPROACH, Goals.reach(next, rig.snapshot().stats()));
+            send(Errand.APPROACH, site, spec);
         }
         return state;
     }
 
     // ==================== 走一趟 ====================
 
-    private void send(Errand kind, Goal goal) {
+    /**
+     * 从托着她的要撤的块上下来:把它们记进禁站的,离开脚下这一列,一路不站上禁站的任何一块。没有新的可记(托着她的早就禁过,
+     * 却还是下不来),托着她的照实留下。
+     */
+    private void stepOff(Set<BlockPos> supports) {
+        boolean more = false;
+        for (BlockPos pos : supports) {
+            if (pending.containsKey(pos)) {
+                more |= steppedOff.add(pos);
+            }
+        }
+        if (!more) {
+            supports.forEach(pos -> leave(pos, UNDERFOOT));
+            return;
+        }
+        RouteSpec off = spec.edit()
+                .positions(spec.positions().plus(PositionCosts.forbidding(PositionCosts.Use.STAND, steppedOff)))
+                .build();
+        Goal away = Goals.within(Goals.column(rig.entity.getBlockX(), rig.entity.getBlockZ()), 1,
+                Double.POSITIVE_INFINITY);
+        send(Errand.STEP_OFF, away, off);
+    }
+
+    private void send(Errand kind, Goal goal, RouteSpec walk) {
         PathLog.debug("{} 撤垫块 走一趟 {} 去 {} {}", rig.who, kind, goal, PathLog.at(rig.entity.position()));
         why = kind;
-        errand = new Driver(rig, goal, spec, budget, null);
+        errand = new Driver(rig, goal, walk, budget, null);
         runErrand();
     }
 
@@ -213,9 +247,11 @@ public final class TakeBack {
         PathLog.debug("{} 撤垫块 走一趟 {} {}{}", rig.who, why, s, halt != null ? " " + halt : "");
         errand = null;
         if (why == Errand.STEP_OFF) {
-            // 下来了还踩着的(站定在它与别的方块的交界上)或下不来,托着她的那几块都留下,别的照撤
-            for (BlockPos pos : supports()) {
-                leave(pos, UNDERFOOT);
+            // 下不来:托着她的那几块都留下,别的照撤。下来了就回去接着挑——还站在要撤的块上,下一刻再下一次
+            if (s != Driver.State.ARRIVED) {
+                for (BlockPos pos : supports()) {
+                    leave(pos, UNDERFOOT);
+                }
             }
         } else if (s != Driver.State.ARRIVED) {
             leave(approached, UNREACHABLE);

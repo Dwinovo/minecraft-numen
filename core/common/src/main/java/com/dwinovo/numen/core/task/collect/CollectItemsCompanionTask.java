@@ -140,7 +140,7 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
 
     /** 走到离掉落物所在那一格 {@link #PICKUP_RADIUS} 格以内。 */
     private static Goal goal(BlockPos item) {
-        return Goals.near(item, PICKUP_RADIUS);
+        return Goals.within(Goals.at(item), 0, PICKUP_RADIUS);
     }
 
     /** Still counting down its pickup delay (vanilla gives fresh drops a few ticks) — not

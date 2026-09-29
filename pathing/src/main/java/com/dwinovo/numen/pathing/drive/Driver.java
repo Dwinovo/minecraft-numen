@@ -9,7 +9,6 @@ import com.dwinovo.numen.pathing.body.Aim;
 import com.dwinovo.numen.pathing.body.Body;
 import com.dwinovo.numen.pathing.body.BodyAction;
 import com.dwinovo.numen.pathing.body.Controls.Key;
-import com.dwinovo.numen.pathing.body.Crosshair;
 import com.dwinovo.numen.pathing.body.Effector;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Maneuver;
@@ -28,11 +27,10 @@ import com.dwinovo.numen.pathing.search.Searches;
 import com.dwinovo.numen.pathing.search.WorldSnapshot;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.BodyStats;
+import com.dwinovo.numen.pathing.world.Sight;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -202,7 +200,7 @@ public final class Driver {
         stalePartials = 0;
         BlockPos end = legs.isEmpty() ? start : legs.get(legs.size() - 1).maneuver().to();
         Stance endStance = legs.isEmpty() ? startStance : legs.get(legs.size() - 1).maneuver().landing();
-        if (complete && end != null && endStance != null && Goal.keepsStop(before, next, end, endStance)) {
+        if (complete && end != null && endStance != null && Goal.keepsStop(rig.world(), before, next, end, endStance)) {
             PathLog.debug("{} 换目标 {} -> {},在走的路终点还算数,照走", rig.who, before, next);
             return;
         }
@@ -475,24 +473,17 @@ public final class Driver {
             return;
         }
         rig.keys.releaseAll();
-        BlockPos sight = goal.sight(node.getX(), node.getY(), node.getZ(), here);
-        if (sight != null && !sees(sight)) {
-            halt(new Halt.NoSight(sight));
-            return;
+        Goal.Sighting sighting = goal.sight(node.getX(), node.getY(), node.getZ(), here);
+        if (sighting != null) {
+            // 在活世界上、从眼睛此刻的位置,用搜索挑站位时同一个视线函数复核;看得见就转过去看着那一面
+            Sight.Trace seen = sighting.seen(rig.world(), body.getEyePosition(), body.blockInteractionRange());
+            if (seen == null) {
+                halt(new Halt.NoSight(sighting.target()));
+                return;
+            }
+            Aim.look(body, seen.point());
         }
         state = State.ARRIVED;
-    }
-
-    /** 眼睛看得见 {@code target} 这一格:转过去看它身上的瞄点,准星落在它上面。 */
-    private boolean sees(BlockPos target) {
-        Vec3 point = Aim.point(rig.entity, target);
-        if (point == null) {
-            return false;
-        }
-        Aim.look(rig.entity, point);
-        HitResult hit = Crosshair.pick(rig.entity);
-        return hit instanceof BlockHitResult block && hit.getType() == HitResult.Type.BLOCK
-                && block.getBlockPos().equals(target);
     }
 
     private boolean goalHas(BlockPos node, Stance stance) {
