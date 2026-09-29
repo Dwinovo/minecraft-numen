@@ -25,13 +25,13 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 目标族:把"怎样算到了"的六种说法编成 {@link Goal}。每一种的定义与判定都写在这里,别处不另判;模块里没有别的宽限。
+ * 目标族:把"怎样算到了"的五种说法编成 {@link Goal}。每一种的定义与判定都写在这里,别处不另判;模块里没有别的宽限。
  *
  * <ol>
  *   <li><b>位置</b>({@link #at}、{@link #column}、{@link #level},同一种目标 {@link Position}):某一格、某一列、某一高度,
- *       坐标给几个算几个。"某一格"是脚所在的那一格,身体怎么待着都算:站着、挂在梯子或藤上、浮在水里;</li>
+ *       坐标给几个算几个。"某一格"是脚所在的那一格,身体怎么待着都算:站着、挂在梯子或藤上、浮在水里。站到一块方块上面就是
+ *       到它上面脚所在的那一格,那一格由 {@link #standingOn} 算;</li>
  *   <li><b>距离范围</b>({@link #within}):离一个位置的距离在 [最小, 最大] 之间,距离只按 {@link Position#distanceSqr} 量;</li>
- *   <li><b>站上去</b>({@link #on}):站在某一格方块的上面,托着脚的就是它;</li>
  *   <li><b>用</b>({@link #use}):站在那一格方块某个敞开的面前,眼睛直线看得到那一面、点得到它;</li>
  *   <li><b>挖</b>({@link #dig}):手够得着那一格;挡着的可以挖开,同样够得着时挑挡得少的站位;</li>
  *   <li><b>远离</b>({@link #awayFrom}):离一组生物都在各自的危险半径之外。</li>
@@ -62,6 +62,20 @@ public final class Goals {
         return new Position(null, y, null);
     }
 
+    /**
+     * 此刻站在 {@code block} 上时脚所在的节点:脚在它自己那一格(下半砖、灵魂沙、耕地)或上面一格(整块、栅栏),身体站得住、
+     * 托着脚的就是它;站不上去为 null。
+     */
+    public static BlockPos standingOn(BlockGetter level, BodyStats body, BlockPos block) {
+        for (BlockPos node : List.of(block, block.above())) {
+            Stance stance = Stance.at(level, body, node);
+            if (stance != null && stance.grounded() && stance.supportY() == block.getY()) {
+                return node.immutable();
+            }
+        }
+        return null;
+    }
+
     // ==================== 距离范围 ====================
 
     /**
@@ -73,27 +87,6 @@ public final class Goals {
             throw new IllegalArgumentException("距离范围要 0 ≤ 最小 ≤ 最大:" + min + ".." + max);
         }
         return new Within(center, min, max);
-    }
-
-    // ==================== 站上去 ====================
-
-    /** 站在 {@code block} 上,托着脚的就是它。 */
-    public static Goal on(BlockPos block) {
-        return new On(block.immutable());
-    }
-
-    /**
-     * 此刻站在 {@code block} 上时脚所在的节点:脚在它自己那一格(下半砖、灵魂沙、耕地)或上面一格(整块、栅栏),身体站得住、
-     * 托着脚的就是它;站不上去为 null。与 {@link #on} 的到达同一个判据。
-     */
-    public static BlockPos standingOn(BlockGetter level, BodyStats body, BlockPos block) {
-        for (BlockPos node : List.of(block, block.above())) {
-            Stance stance = Stance.at(level, body, node);
-            if (stance != null && stance.grounded() && stance.supportY() == block.getY()) {
-                return node.immutable();
-            }
-        }
-        return null;
     }
 
     // ==================== 用 ====================
@@ -344,31 +337,6 @@ public final class Goals {
         @Override
         public String toString() {
             return "within(" + center + " " + min + ".." + max + ")";
-        }
-    }
-
-    private record On(BlockPos block) implements Goal {
-        @Override
-        public boolean contains(int x, int y, int z, Stance stance) {
-            return x == block.getX() && z == block.getZ() && stance.grounded() && stance.supportY() == block.getY();
-        }
-
-        @Override
-        public double estimate(int x, int y, int z) {
-            return point(x, y, z, block.getX(), block.getY() + 1, block.getZ());
-        }
-
-        /** 别挖要站上去的那一块,也别往它上面身体要站的两格里放方块。 */
-        @Override
-        public PositionCosts protection() {
-            return PositionCosts.builder().forbid(PositionCosts.Use.DIG, block.asLong())
-                    .forbid(PositionCosts.Use.PLACE, block.above().asLong())
-                    .forbid(PositionCosts.Use.PLACE, block.above(2).asLong()).build();
-        }
-
-        @Override
-        public String toString() {
-            return "on(" + xyz(block) + ")";
         }
     }
 

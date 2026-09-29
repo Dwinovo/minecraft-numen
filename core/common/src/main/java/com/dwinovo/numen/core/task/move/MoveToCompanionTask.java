@@ -220,7 +220,6 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                     : d.x() != null ? "arrived at location x=" + d.x() + " z=" + d.z() + ", standing on the ground at y="
                             + gy + "."
                     : "reached elevation y=" + gy + ".";
-            case ON -> "standing on the " + block(cell) + " at " + coords(cell) + ".";
             case USE -> "standing at " + here(gy) + ", with the " + block(cell) + " at " + coords(cell)
                     + " in sight and in reach — use it from here.";
             case NEAR -> "arrived within " + d.near() + " blocks of " + (cell != null ? coords(cell)

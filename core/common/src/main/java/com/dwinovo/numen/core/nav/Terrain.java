@@ -67,11 +67,6 @@ public final class Terrain {
         return Stance.at(world, body, cell) != null;
     }
 
-    /** 这一格有碰撞箱:有东西能托住脚。 */
-    public boolean solid(BlockPos pos) {
-        return !world.getBlockState(pos).getCollisionShape(world, pos).isEmpty();
-    }
-
     /** 这一格有没有可点的轮廓(第 0 层 {@link Sight#clickable}):空气、流体没有。 */
     public boolean clickable(BlockPos pos) {
         return Sight.clickable(world, pos);

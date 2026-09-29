@@ -22,15 +22,20 @@ class GotoRemindersTest {
         assertEquals("move_goto x:120 y:64 z:-35", GotoReminders.call(FURNACE, ""));
     }
 
-    /** at 指向一格方块:说它是什么、站不进去,给用它、站上去、停在附近、挖进去四种写法。 */
+    /**
+     * at 指向一格方块:说它是什么、站不进去,给用它、站上去、停在附近、挖进去四种写法;站上去照抄的是它上面脚所在的那一格,
+     * 站不上去就不给这一种。
+     */
     @Test
     void anOccupiedCellNamesTheBlockAndEveryWayToWriteIt() {
-        String said = GotoReminders.occupied(FURNACE, "furnace");
+        String said = GotoReminders.occupied(FURNACE, "furnace", FURNACE.above());
         assertTrue(said.startsWith("120,64,-35 is furnace — no room to stand in it"), said);
         assertTrue(said.contains("To use it: move_goto x:120 y:64 z:-35 arrive:use"), said);
-        assertTrue(said.contains("to stand on top of it: move_goto x:120 y:64 z:-35 arrive:on"), said);
+        assertTrue(said.contains("to stand on top of it: move_goto x:120 y:65 z:-35;"), said);
         assertTrue(said.contains("to stop close by: move_goto x:120 y:64 z:-35 arrive:near near:<blocks>"), said);
         assertTrue(said.contains("add alter:natural"), said);
+        String covered = GotoReminders.occupied(FURNACE, "furnace", null);
+        assertTrue(!covered.contains("on top"), covered);
     }
 
     /** at 指向半空:说那一列的地面在哪一层,写成能照抄的一行;找不到地面就不提。 */
@@ -62,7 +67,7 @@ class GotoRemindersTest {
         assertTrue(GotoReminders.nearWithoutArriveNear(3).contains("write arrive:near near:3"));
         assertTrue(GotoReminders.arriveNearWithoutNear().contains("near:<blocks>"));
         assertTrue(GotoReminders.blockNeedsY("use").startsWith("arrive:use names one block — give its y too"));
-        assertTrue(GotoReminders.heightTakesNoArrive("on").contains("arrive:on needs a place"));
+        assertTrue(GotoReminders.heightTakesNoArrive("use").contains("arrive:use needs a place"));
     }
 
     /** use 指向空气或水:没有可点的,给停在附近的写法;有敞开的面却无处可站:说哪几面敞开。 */

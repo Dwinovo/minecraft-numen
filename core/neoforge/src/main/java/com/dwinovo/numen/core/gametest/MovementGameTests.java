@@ -741,7 +741,7 @@ public class MovementGameTests {
 
     /**
      * y 给成了地面那一块本身:那一格是实心的,站不进去,这一趟又不改地形。受理当场提醒——说那一格是什么,要用它写
-     * arrive:use、站上去写 arrive:on、停在附近写 arrive:near——不派活,地面那一块还在。
+     * arrive:use、站上去照抄它上面那一格、停在附近写 arrive:near——不派活,地面那一块还在。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
     public static void goto_with_y_inside_the_floor_is_refused_at_once(GameTestHelper helper) {
@@ -752,7 +752,9 @@ public class MovementGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.task() == null && walk.done() && !walk.succeeded(), "it was not refused at once");
             helper.assertTrue(walk.outcome().contains("no room to stand in it") && walk.outcome().contains("arrive:use")
-                            && walk.outcome().contains("arrive:on") && walk.outcome().contains("arrive:near"),
+                            && walk.outcome().contains("to stand on top of it: move_goto x:" + target.getX() + " y:"
+                                    + (target.getY() + 1) + " z:" + target.getZ() + ";")
+                            && walk.outcome().contains("arrive:near"),
                     "the y inside the floor was not refused with the reminder: " + walk.outcome());
             helper.assertTrue(helper.getLevel().getBlockState(target).isSolid(), "the floor block was dug out");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);

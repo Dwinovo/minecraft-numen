@@ -386,7 +386,7 @@ class SearchTest {
     void standingOnABlockEndsOnTopOfIt() {
         BlockPos block = new BlockPos(6, Y, 0);
         TestWorld world = field().set(block, STONE);
-        SearchResult result = search(world, defaults(), START, Goals.on(block));
+        SearchResult result = search(world, defaults(), START, Goals.at(block.above()));
         assertTrue(result.arrived());
         assertEquals(block.above(), result.route().end());
         assertEquals(block.getY(), result.route().endStance().supportY());

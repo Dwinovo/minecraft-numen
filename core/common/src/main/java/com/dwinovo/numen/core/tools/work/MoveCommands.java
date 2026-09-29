@@ -58,8 +58,7 @@ public final class MoveCommands {
                     + "that one cell. Alone: climb or descend to that height.");
     private static final Param<Integer> Z = Param.optional("z", ArgType.integer(), "Target Z; see x.");
     private static final Param<String> ARRIVE = Param.optional("arrive", ArgType.oneOf(Destination.ARRIVE_WORDS),
-            "What counts as there. at: stand in that cell (or column, or height). on: stand on top of that block. "
-                    + "use: stand where that block is in sight and in reach, to use it. near: stop within --near "
+            "What counts as there. at: stand in that cell (or column, or height). use: stand where that block is in sight and in reach, to use it. near: stop within --near "
                     + "blocks of the cell or place.")
             .whenOmitted("arrive at");
     private static final Param<String> ROUTE = Param.optional("route", ArgType.word(),
@@ -82,7 +81,7 @@ public final class MoveCommands {
     private MoveCommands() {}
 
     public static void install(NumenApi numen) {
-        numen.registerCommands(GROUP, "Getting around: go to a place, stand on a block or where you can use it, "
+        numen.registerCommands(GROUP, "Getting around: go to a place or to where you can use a block, "
                 + "follow someone, price a route before walking it.", MoveCommands::actions);
     }
 
@@ -91,18 +90,17 @@ public final class MoveCommands {
                         with(List.of(X, Y, Z, ARRIVE, ROUTE, NEAR), RouteSpecFlags.PARAMS))
                 .example("move goto --x 120 --z -35")
                 .example("move goto --x 120 --y 64 --z -35 --arrive use")
-                .example("move goto --x 120 --y 63 --z -35 --arrive on")
                 .example("move goto --x 120 --y 64 --z -35 --arrive near --near 2")
                 .example("move goto --y 16 --alter natural")
                 .example("move goto --x 120 --y 12 --z -35 --alter natural --avoid_break minecraft:chest")
                 .example("move goto --route r2")
                 .note("Coordinates: x and z (a place), x, y and z (one cell), y alone (a height), or route alone. "
                         + "To find a block, scan for it first (`scan blocks`), then give its coordinates.")
-                .note("--arrive says what counts as there: at (default) stands in the cell or column exactly; on "
-                        + "stands on top of the block; use stands where the block is in sight and in reach, never "
-                        + "touching it; near stops within --near blocks.")
+                .note("--arrive says what counts as there: at (default) stands in the cell or column exactly — to "
+                        + "stand on top of a block, give the cell above it; use stands where the block is in sight and "
+                        + "in reach, never touching it; near stops within --near blocks.")
                 .note("A call that cannot mean anything here fails at once with the reason and the ways to write it: "
-                        + "arrive at into a solid block or mid-air on a walk that changes nothing, arrive on or use "
+                        + "arrive at into a solid block or mid-air on a walk that changes nothing, arrive use "
                         + "without y, arrive use on air or on a block walled in on every side.")
                 .note("Background work: returns at once; the end arrives as a task_finished event.")
                 .note("Changes nothing in the world unless --alter natural or any. With no clean route it fails and "
@@ -119,9 +117,8 @@ public final class MoveCommands {
                         • y — climb/descend to that height where you are (with alter:'natural' to dig down).
                         • route — walk a route by id (r1, r2, ...) from an earlier refusal or a `move route` reply. Give it ALONE: its destination and route fields are already fixed. A route is spent once walked, and only valid while you still stand where it was planned.
                         ARRIVE — what counts as there (default 'at'):
-                        • at — stand IN that cell (or column, or height), however the body is held there: standing, on a ladder, in water.
+                        • at — stand IN that cell (or column, or height), however the body is held there: standing, on a ladder, in water. To stand on top of a block, give the cell above it.
                         • use — x+y+z of a block you want to use (furnace, chest, crafting table, bed…): stands where one of its open faces is in sight and in reach, never touching it. Then call use block on it.
-                        • on — x+y+z of a block to stand on top of.
                         • near — with near:<n>, anywhere within n blocks of the cell or place.
                         A call that cannot mean anything here fails at once, saying why and how to write it (e.g. arrive 'at' into a furnace on a walk that changes nothing, or 'use' on a block walled in on every side). It never guesses what you meant.
                         TERRAIN: the walk never changes the world unless you say so — walls, floors, other people's builds and the landscape stay exactly as they were. When there is no clean route, the call FAILS and lists candidate routes, each with an id, its length and exactly which blocks it would break or place — blocks that are someone's are marked as needing consent, and walking such a route asks the owner first; then either move_goto route:<id> or pick another destination. Underground travel and climbing out of pits usually need alter:'natural'. Every call reports what it actually broke or placed.

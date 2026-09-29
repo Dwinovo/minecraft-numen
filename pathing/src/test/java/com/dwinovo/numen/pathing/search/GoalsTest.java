@@ -256,17 +256,7 @@ class GoalsTest {
         }
         assertTrue(ringLeads && awayLeads, "两个成员各有说了算的地方");
     }
-    // ==================== 站上去 ====================
-
-    /** 站上去只认托着脚的那一块:站在它上面、站在别的上面、挂在梯子上。 */
-    @Test
-    void standingOnMeansThatBlockHoldsTheFeet() {
-        BlockPos block = new BlockPos(3, 64, 0);
-        Goal on = Goals.on(block);
-        assertTrue(on.contains(3, 65, 0, new Stance(Stance.Kind.GROUND, 65, 64)));
-        assertFalse(on.contains(3, 66, 0, new Stance(Stance.Kind.GROUND, 66, 65)), "托着脚的是上面那一块");
-        assertFalse(on.contains(3, 65, 0, new Stance(Stance.Kind.CLIMBING, 65, Integer.MIN_VALUE)), "挂着不算站上");
-    }
+    // ==================== 站上一块时脚在哪一格 ====================
 
     /** 此刻站不站得上一块:整块站在上面一格,下半砖站在它自己那一格;空气、头顶压着东西的站不上。 */
     @Test

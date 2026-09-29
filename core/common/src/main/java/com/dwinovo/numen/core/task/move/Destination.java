@@ -16,12 +16,11 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
- * {@code move goto} 与 {@code move route} 的去处:坐标(给几个算几个)加怎样算到了({@code --arrive at|on|use|near},
+ * {@code move goto} 与 {@code move route} 的去处:坐标(给几个算几个)加怎样算到了({@code --arrive at|use|near},
  * {@code near} 只配 {@code near})。参数名一一对应到寻路模块的目标,只在这里对应:
  * <ul>
  *   <li>{@code at}:位置——{@code x y z} 是那一格,{@code x z} 是那一列,只给 {@code y} 是那个高度({@link Goals#at}、
- *       {@link Goals#column}、{@link Goals#level});</li>
- *   <li>{@code on}:站上那一格方块({@link Goals#on});</li>
+ *       {@link Goals#column}、{@link Goals#level})。站到一块方块上面也是 {@code at}:坐标是它上面脚所在的那一格;</li>
  *   <li>{@code use}:用那一格方块——站在它敞开的面前、看得见、点得到({@link Goals#use});</li>
  *   <li>{@code near}:离那一格(或那一列)不超过 {@code near} 格({@link Goals#within})。</li>
  * </ul>
@@ -38,7 +37,7 @@ public record Destination(Integer x, Integer y, Integer z, Arrive arrive, Intege
 
     /** 怎样算到了。 */
     public enum Arrive {
-        AT, ON, USE, NEAR;
+        AT, USE, NEAR;
 
         /** 命令行上的写法。 */
         public String word() {
@@ -51,7 +50,7 @@ public record Destination(Integer x, Integer y, Integer z, Arrive arrive, Intege
     }
 
     /** 命令行上 {@code --arrive} 能写的几个。 */
-    public static final String[] ARRIVE_WORDS = {"at", "on", "use", "near"};
+    public static final String[] ARRIVE_WORDS = {"at", "use", "near"};
 
     /**
      * 按受理那一刻的世界把参数编成去处;写错了抛出带提醒的 {@link IllegalArgumentException}(受理回执就是这句话)。
@@ -76,7 +75,7 @@ public record Destination(Integer x, Integer y, Integer z, Arrive arrive, Intege
         if (!hasXz && arrive != Arrive.AT) {
             throw new IllegalArgumentException(GotoReminders.heightTakesNoArrive(arrive.word()));
         }
-        if (y == null && (arrive == Arrive.ON || arrive == Arrive.USE)) {
+        if (y == null && arrive == Arrive.USE) {
             throw new IllegalArgumentException(GotoReminders.blockNeedsY(arrive.word()));
         }
         Goals.Position position = new Goals.Position(x, y, z);
@@ -88,21 +87,10 @@ public record Destination(Integer x, Integer y, Integer z, Arrive arrive, Intege
                 if (cell != null && !alters && !terrain.standable(cell)) {
                     throw new IllegalArgumentException(terrain.fits(x, y, z)
                             ? GotoReminders.midAir(cell, ground(terrain, cell))
-                            : GotoReminders.occupied(cell, NavText.name(terrain.state(cell))));
+                            : GotoReminders.occupied(cell, NavText.name(terrain.state(cell)),
+                                    terrain.standingOn(cell)));
                 }
                 yield position;
-            }
-            case ON -> {
-                if (terrain.standingOn(cell) == null) {
-                    String block = NavText.name(terrain.state(cell));
-                    if (!terrain.solid(cell)) {
-                        throw new IllegalArgumentException(GotoReminders.nothingToStandOn(cell, block));
-                    }
-                    if (!alters) {
-                        throw new IllegalArgumentException(GotoReminders.noRoomOnTop(cell, block));
-                    }
-                }
-                yield Goals.on(cell);
             }
             case USE -> use(her, terrain, cell);
             case NEAR -> Goals.within(position, 0, near);
@@ -160,7 +148,6 @@ public record Destination(Integer x, Integer y, Integer z, Arrive arrive, Intege
         String where = x == null ? "y=" + y : y == null ? "x=" + x + " z=" + z : x + "," + y + "," + z;
         return switch (arrive) {
             case AT -> x == null ? "到 " + where : "走向 " + where;
-            case ON -> "站上 " + where;
             case USE -> "去用 " + where;
             case NEAR -> "走到 " + where + " " + near + " 格内";
         };

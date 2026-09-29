@@ -26,8 +26,8 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
 /**
  * 到达方式,从 {@code move_goto} 的工具入口:{@code arrive:use} 走到看得见、点得到的地方(狭窄矿道里的熔炉、只有一面敞开的箱子、
- * 悬崖上的工作台),隔着高草时 {@code use block} 先清掉再用;四面封死受理即提醒、不出发;{@code arrive:on} 站上柱子;
- * {@code arrive:at} 到梯子上、水里的一格;{@code arrive:near} 停在范围里。
+ * 悬崖上的工作台),隔着高草时 {@code use block} 先清掉再用;四面封死受理即提醒、不出发;{@code arrive:at} 到柱顶上面那一格、
+ * 梯子上、水里的一格;{@code arrive:near} 停在范围里。
  */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
@@ -199,15 +199,14 @@ public class ArriveGameTests {
         });
     }
 
-    /** 两格高的石柱,旁边一级台阶:arrive:on 站上柱顶。 */
+    /** 两格高的石柱,旁边一级台阶:arrive:at 给柱顶上面那一格,站上柱顶。 */
     @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
-    public static void on_stands_on_top_of_a_pillar(GameTestHelper helper) {
+    public static void at_the_cell_above_a_pillar_stands_on_top_of_it(GameTestHelper helper) {
         fill(helper, 8, 2, 8, 8, 3, 8, Blocks.STONE.defaultBlockState());
         set(helper, 7, 2, 8, Blocks.STONE);
         BlockPos top = helper.absolutePos(new BlockPos(8, 3, 8));
         NumenPlayer companion = spawnAt(helper, "gametest_pillar_sitter", new BlockPos(2, 2, 8), false);
-        ToolRun walk = call(companion, "move_goto", args("x", top.getX(), "y", top.getY(), "z", top.getZ(),
-                "arrive", "on"));
+        ToolRun walk = call(companion, "move_goto", args("x", top.getX(), "y", top.getY() + 1, "z", top.getZ()));
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");

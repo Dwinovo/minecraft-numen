@@ -31,7 +31,7 @@ public final class GotoReminders {
         return "arrive:near needs near:<blocks> — how close counts as there (1-16).";
     }
 
-    /** arrive:on、arrive:use 只给了 x、z。 */
+    /** arrive:use 只给了 x、z。 */
     public static String blockNeedsY(String arrive) {
         return "arrive:" + arrive + " names one block — give its y too (x, y and z).";
     }
@@ -43,11 +43,13 @@ public final class GotoReminders {
     }
 
     /**
-     * arrive:at 指向一格占着的方块:站不进去。给出用它、站上去、停在附近、挖进去四种写法。
+     * arrive:at 指向一格占着的方块:站不进去。给出用它、站上去、停在附近、挖进去四种写法;{@code top} 是站在它上面时脚所在的那一格
+     * (模型拿方块的坐标想站上去,照抄这一格就行),站不上去为 null,那就不给这一种。
      */
-    public static String occupied(BlockPos pos, String block) {
+    public static String occupied(BlockPos pos, String block, BlockPos top) {
         return Listing.coords(pos) + " is " + block + " — no room to stand in it, and this walk changes nothing."
-                + " To use it: " + call(pos, "arrive:use") + "; to stand on top of it: " + call(pos, "arrive:on")
+                + " To use it: " + call(pos, "arrive:use")
+                + (top == null ? "" : "; to stand on top of it: " + call(top, ""))
                 + "; to stop close by: " + call(pos, "arrive:near near:<blocks>")
                 + "; to dig into it instead, add alter:natural.";
     }
@@ -60,19 +62,6 @@ public final class GotoReminders {
                 + call(ground, "") + ")";
         return Listing.coords(pos) + " is in mid-air — nothing to stand on there" + there
                 + ". Omit y to go to that column; to pillar up to it, add alter:natural.";
-    }
-
-    /** arrive:on 指向没有碰撞箱的格:空气、草、水。 */
-    public static String nothingToStandOn(BlockPos pos, String block) {
-        return Listing.coords(pos) + " is " + block + " — nothing to stand on. To go to that cell: " + call(pos, "")
-                + ".";
-    }
-
-    /** arrive:on 指向的方块站不上去:上面压着东西。 */
-    public static String noRoomOnTop(BlockPos pos, String block) {
-        return "there is no room to stand on the " + block + " at " + Listing.coords(pos)
-                + " (something above it is in the way) and this walk changes nothing. To clear it, add alter:natural;"
-                + " to stop close by: " + call(pos, "arrive:near near:<blocks>") + ".";
     }
 
     /** arrive:use 指向没有可点的轮廓的格:空气、流体。 */

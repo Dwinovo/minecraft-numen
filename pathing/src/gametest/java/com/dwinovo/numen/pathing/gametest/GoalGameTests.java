@@ -196,13 +196,13 @@ public class GoalGameTests {
         });
     }
 
-    /** 站上:站到那一块上面,托着脚的就是它。 */
+    /** 站上:给那一块上面脚所在的那一格,站到它上面,托着脚的就是它。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
     public static void stands_on_a_block(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         t.set(12, 1, 5, Blocks.OAK_PLANKS);
         TestBody body = t.body(4, 1, 5);
-        t.go(body, Goals.on(t.at(12, 1, 5)), RouteSpec.defaults()).within(300).arrives()
+        t.go(body, Goals.at(t.at(12, 2, 5)), RouteSpec.defaults()).within(300).arrives()
                 .then(r -> at(t, r, 12, 2, 5));
     }
 
