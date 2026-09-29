@@ -1,12 +1,16 @@
 package com.dwinovo.numen.core.scan;
 
+import com.dwinovo.numen.core.nav.WorkArea;
+
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
 
 import java.util.List;
 import java.util.function.Predicate;
 
 /**
- * "她身边半径 r 内的实体",全仓按半径找实体都从这里问。
+ * "她身边半径 r 内的实体"与"工作区里的实体",全仓按范围找实体都从这里问。
  *
  * <p>半径就是离她的距离:先拿外接的方盒向世界要候选(实体分区只认盒子),再按距离滤掉盒角——
  * 方盒的角离她有 r·√3 远,只拿盒子当半径,说好的 16 格实际够到 27 格外。工具对模型说的是半径,
@@ -22,5 +26,14 @@ public final class NearbyEntities {
         double radiusSqr = radius * radius;
         return self.level().getEntitiesOfClass(type, self.getBoundingBox().inflate(radius),
                 e -> e != self && self.distanceToSqr(e) <= radiusSqr && filter.test(e));
+    }
+
+    /**
+     * 工作区 {@code area} 里、类型为 {@code type} 且满足 {@code filter} 的实体。在不在区里按实体所在的那一格判
+     * ({@link WorkArea#contains}),与工作区量方块是同一把尺。
+     */
+    public static <T extends Entity> List<T> in(Level level, WorkArea area, Class<T> type, Predicate<? super T> filter) {
+        return level.getEntitiesOfClass(type, new AABB(area.center()).inflate(area.radius()),
+                e -> area.contains(e.blockPosition()) && filter.test(e));
     }
 }

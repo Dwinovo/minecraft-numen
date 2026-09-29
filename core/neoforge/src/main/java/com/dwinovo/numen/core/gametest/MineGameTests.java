@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.gametest;
 
 import com.dwinovo.numen.core.Constants;
+import com.dwinovo.numen.core.nav.WorkArea;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskRecord;
@@ -22,7 +23,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
-/** 挖掘:{@code mine} 的站位、够得着、开门出屋、树林与埋矿、够不着时如实收工。 */
+/** 挖掘:{@code mine} 的站位、够得着、开门出屋、树林与埋矿、够不着时如实收工、只在工作区里干。 */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
 public class MineGameTests {
@@ -123,10 +124,10 @@ public class MineGameTests {
 
     /**
      * 够不着就如实收工:一根去皮白桦原木悬在她脚上八格,站在底下眼睛离它 5.38 格,出了交互距离;她没有垫脚的方块,
-     * 爬不上去。任务不该站着一遍遍重搜同一条走不通的路,而是按 NO_PATH 收场、说清楚够不着。
+     * 爬不上去。任务不该站着一遍遍重搜同一条走不通的路,而是收场、说清楚够不着,原因是寻路给的那一条(要垫方块而身上没有)。
      *
-     * <p>用去皮白桦原木而不是和同批树冠用例一样的金合欢原木:mine 扫 32 个 chunk,同批别的场地里的同种方块
-     * 它看得见(见 {@link GameTestKit} 的场地隔离),"够不着"就成了"去隔壁挖"。
+     * <p>用去皮白桦原木而不是和同批树冠用例一样的金合欢原木:mine 的工作区(半径 {@link WorkArea#RADIUS})盖得住隔壁场地,
+     * 同批别的场地里的同种方块在它的工作区里(见 {@link GameTestKit} 的场地隔离),"够不着"就成了"去隔壁挖"。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mine")
     public static void mine_out_of_reach_ends_instead_of_hanging(GameTestHelper helper) {
@@ -142,8 +143,9 @@ public class MineGameTests {
         succeedWhen(helper, () -> {
             String reply = record.getResult() == null ? null : record.getResult().message();
             helper.assertTrue(reply != null, "mine has not finished");
-            helper.assertTrue(!record.getResult().success() && reply.contains("could not reach"),
-                    "an out-of-reach log did not end as unreachable: " + reply);
+            helper.assertTrue(!record.getResult().success() && reply.contains("could not reach")
+                            && reply.contains("blocks to pillar or bridge with"),
+                    "an out-of-reach log did not end as unreachable for want of blocks to pillar with: " + reply);
             helper.assertTrue(level.getBlockState(helper.absolutePos(logRel)).is(Blocks.STRIPPED_BIRCH_LOG),
                     "the out-of-reach log is gone");
             // 悬在模板外的原木不收走,后面批次的大半径找方块会把它当目标
@@ -349,7 +351,7 @@ public class MineGameTests {
         });
     }
 
-    /** 附近根本没有要挖的东西:不满世界乱走,如实说找不到。 */
+    /** 工作区里、身边加载着的地形里都没有要挖的东西:不满世界乱走,如实说找不到。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mine")
     public static void mine_with_nothing_in_range_says_none_found(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_prospector", new BlockPos(3, 2, 4), false);
@@ -359,7 +361,8 @@ public class MineGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
-            helper.assertTrue(!mine.succeeded() && mine.outcome().contains("no reachable"),
+            helper.assertTrue(!mine.succeeded() && mine.outcome().contains("found no emerald_ore in my work area")
+                            && mine.outcome().contains("or anywhere else in the loaded terrain around me"),
                     "the failure does not say nothing was found: " + mine.outcome());
             helper.assertTrue(companion.blockPosition().distSqr(start) <= 4, "she wandered off looking for it");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -481,6 +484,192 @@ public class MineGameTests {
                 })
                 .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
                 .thenSucceed();
+    }
+
+    // ==================== 工作区:区里的去挖,区外的只报告 ====================
+
+    /** 工作区的几条用例用 52 格见方的场地:她站在一角,另一角离她六十多格,出了工作区。和平难度、正午。 */
+    @BeforeBatch(batch = "numen_mine_area")
+    public static void prepareMineAreaBatch(ServerLevel level) {
+        settleWorld(level, Difficulty.PEACEFUL, NOON);
+    }
+
+    /** "x,y,z" 的写法,和回执里点坐标的一样。 */
+    private static String coords(BlockPos p) {
+        return p.getX() + "," + p.getY() + "," + p.getZ();
+    }
+
+    /**
+     * 区里的直接挖到:一块标靶在四十五格外、工作区里,她自己走过去挖到手;受理回执当场说工作区在哪。
+     */
+    @GameTest(template = "floor52", timeoutTicks = 100000, batch = "numen_mine_area")
+    public static void mine_walks_to_what_lies_in_its_work_area(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos target = helper.absolutePos(new BlockPos(35, 2, 35));
+        level.setBlockAndUpdate(target, Blocks.TARGET.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_walker_miner", new BlockPos(3, 2, 3), false);
+        BlockPos stand = companion.blockPosition();
+        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:target"), "count", 1));
+        String accepted = mine.reply();
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(accepted != null && accepted.contains("My work area is within " + WorkArea.RADIUS
+                            + " blocks of " + coords(stand)),
+                    "the acceptance does not say where the work area is: " + accepted);
+            helper.assertTrue(mine.done(), "mine has not finished");
+            helper.assertTrue(mine.succeeded() && companion.getInventory().countItem(Items.TARGET) == 1,
+                    "the target inside the work area was not mined: " + mine.outcome());
+            helper.assertTrue(level.getBlockState(target).isAir(), "the target is still there");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 区外的不去:两块赭黄蛙明灯在场地另一角、六十多格外,工作区里一块都没有。她不出发,回执说区里没有、区外有两块、
+     * 最近那块在哪、多远,下一步照抄就能做。
+     */
+    @GameTest(template = "floor52", timeoutTicks = 100000, batch = "numen_mine_area")
+    public static void mine_stays_put_when_the_ore_lies_beyond_its_work_area(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos nearer = helper.absolutePos(new BlockPos(50, 2, 50));
+        BlockPos farther = helper.absolutePos(new BlockPos(51, 2, 50));
+        level.setBlockAndUpdate(nearer, Blocks.OCHRE_FROGLIGHT.defaultBlockState());
+        level.setBlockAndUpdate(farther, Blocks.OCHRE_FROGLIGHT.defaultBlockState());
+        BlockPos start = helper.absolutePos(new BlockPos(3, 2, 3));
+        NumenPlayer companion = spawnAt(helper, "gametest_stay_put", new BlockPos(3, 2, 3), false);
+        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:ochre_froglight"), "count", 1));
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(mine.done(), "mine has not finished");
+            String said = mine.outcome();
+            helper.assertTrue(!mine.succeeded() && said.contains("found no ochre_froglight in my work area")
+                            && said.contains("2 more lie beyond it")
+                            && said.contains("the nearest at " + coords(nearer))
+                            && said.contains("move_goto there first (x:" + nearer.getX() + " y:" + nearer.getY() + " z:"
+                                    + nearer.getZ() + " near:8), then work_mine again"),
+                    "the reply does not say what lies beyond the work area and what to do: " + said);
+            helper.assertTrue(companion.blockPosition().distSqr(start) <= 4, "she set off for ore beyond her work area");
+            helper.assertTrue(level.getBlockState(nearer).is(Blocks.OCHRE_FROGLIGHT)
+                    && level.getBlockState(farther).is(Blocks.OCHRE_FROGLIGHT), "a froglight beyond the area was mined");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 点名的团整个在区外:scan_blocks 把远处那一团标成 in_work_area none、近处那一团标成 all;点名远处那一团,派发当场
+     * 拒收,说它在哪、先 move_goto 过去,不派活,蛙明灯一块不少。
+     */
+    @GameTest(template = "floor52", timeoutTicks = 4000, batch = "numen_mine_area")
+    public static void mine_groups_beyond_the_work_area_is_refused_at_once(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        List<BlockPos> far = List.of(new BlockPos(48, 2, 50), new BlockPos(49, 2, 50), new BlockPos(50, 2, 50));
+        for (BlockPos rel : far) {
+            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.VERDANT_FROGLIGHT.defaultBlockState());
+        }
+        BlockPos nearRel = new BlockPos(8, 2, 8);
+        level.setBlockAndUpdate(helper.absolutePos(nearRel), Blocks.VERDANT_FROGLIGHT.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_far_group", new BlockPos(3, 2, 3), false);
+        ToolRun scanned = scan(companion, 80, "minecraft:verdant_froglight");
+        String[] refusal = new String[1];
+
+        succeedWhen(helper, () -> {
+            if (refusal[0] == null) {
+                helper.assertTrue(scanned.reply() != null, "scan_blocks has not replied");
+                var groups = groupsIn(scanned.reply());
+                var farGroup = groupHolding(groups, helper.absolutePos(far.get(0)));
+                var nearGroup = groupHolding(groups, helper.absolutePos(nearRel));
+                helper.assertTrue(farGroup != null && nearGroup != null
+                                && "none".equals(farGroup.get("in_work_area").getAsString())
+                                && "all".equals(nearGroup.get("in_work_area").getAsString()),
+                        "the scan does not mark which group lies in the work area: " + scanned.reply());
+                ToolRun mine = call(companion, "work_mine", args("groups", List.of(farGroup.get("id").getAsString())));
+                helper.assertTrue(mine.task() == null, "a group wholly beyond the work area was accepted");
+                refusal[0] = mine.reply();
+            }
+            BlockPos nearest = helper.absolutePos(far.get(0));
+            helper.assertTrue(refusal[0] != null && refusal[0].contains("wholly beyond my work area")
+                            && refusal[0].contains("move_goto there first (x:" + nearest.getX() + " y:" + nearest.getY()
+                                    + " z:" + nearest.getZ() + " near:8)"),
+                    "the refusal does not say where the group is and how to get there: " + refusal[0]);
+            for (BlockPos rel : far) {
+                helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).is(Blocks.VERDANT_FROGLIGHT),
+                        "a froglight of the refused group is gone at " + rel.toShortString());
+            }
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 矿脉跨过工作区的边:一排珠光蛙明灯从区里伸到区外(离她 48 格以内的 6 块在区里,再往外 7 块在区外)。要 64 个:她把
+     * 区里那 6 块挖完就收场,算成功,回执说区里没有了、区外还有 7 块、最近那块在哪;区外那 7 块一块不少。
+     */
+    @GameTest(template = "floor52", timeoutTicks = 100000, batch = "numen_mine_area")
+    public static void mine_digs_the_part_of_a_vein_inside_its_work_area_and_reports_the_rest(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_vein_edge", new BlockPos(3, 2, 3), false);
+        WorkArea area = WorkArea.around(companion);
+        List<BlockPos> inside = new java.util.ArrayList<>();
+        List<BlockPos> outside = new java.util.ArrayList<>();
+        for (int x = 28; x <= 40; x++) {
+            BlockPos cell = helper.absolutePos(new BlockPos(x, 2, 40));
+            level.setBlockAndUpdate(cell, Blocks.PEARLESCENT_FROGLIGHT.defaultBlockState());
+            (area.contains(cell) ? inside : outside).add(cell);
+        }
+        helper.assertTrue(inside.size() == 6 && outside.size() == 7, "the vein does not straddle the edge as laid out");
+        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:pearlescent_froglight"),
+                "count", 64));
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(mine.done(), "mine has not finished");
+            String said = mine.outcome();
+            helper.assertTrue(mine.succeeded() && said.contains("gathered 6/64")
+                            && said.contains("no more pearlescent_froglight in my work area")
+                            && said.contains("7 more lie beyond it")
+                            && said.contains("the nearest at " + coords(outside.get(0))),
+                    "the reply does not account for the part of the vein beyond the work area: " + said);
+            for (BlockPos cell : inside) {
+                helper.assertTrue(level.getBlockState(cell).isAir(), "a froglight inside the area is still there at "
+                        + cell.toShortString());
+            }
+            for (BlockPos cell : outside) {
+                helper.assertTrue(level.getBlockState(cell).is(Blocks.PEARLESCENT_FROGLIGHT),
+                        "a froglight beyond the area was mined at " + cell.toShortString());
+            }
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 模型不许她改地形(alter none),路又非挖不可:她关在一间泥土小屋里,菌光体在屋外。回执说"不改地形没有路",列出
+     * 挖出去的候选路线,教她 move_goto route:<id>——不是笼统的"到不了"。屋子与菌光体原样。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mine")
+    public static void mine_without_leave_to_dig_lists_the_routes_that_would(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        List<BlockPos> hut = boxCells(new BlockPos(3, 1, 3), 3, 4, 3, true);
+        for (BlockPos rel : hut) {
+            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.DIRT.defaultBlockState());
+        }
+        BlockPos light = helper.absolutePos(new BlockPos(12, 2, 12));
+        level.setBlockAndUpdate(light, Blocks.SHROOMLIGHT.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_hut_bound", new BlockPos(4, 2, 4), false);
+        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:shroomlight"), "count", 1,
+                "alter", "none"));
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(mine.done(), "mine has not finished");
+            String said = mine.outcome();
+            helper.assertTrue(!mine.succeeded() && said.contains("could not reach any of the 1 shroomlight")
+                            && said.contains("found no route without altering terrain")
+                            && said.contains("move_goto route:"),
+                    "the reply does not say it needs digging and list the routes: " + said);
+            helper.assertTrue(level.getBlockState(light).is(Blocks.SHROOMLIGHT), "the shroomlight was mined");
+            for (BlockPos rel : hut) {
+                helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).is(Blocks.DIRT),
+                        "the hut was dug at " + rel.toShortString());
+            }
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
     }
 
     /** 数字(坐标、件数、刻数)抹掉,比两份回执的措辞。 */

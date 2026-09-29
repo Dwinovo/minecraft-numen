@@ -307,6 +307,45 @@ public class PermissionGameTests {
         });
     }
 
+    /**
+     * 出路全被主人的规则拦着:她关在一间白羊毛小屋里,主人写了 deny 行不许挖白羊毛,南瓜在屋外。回执说哪一格不许动、
+     * 是哪一行规则,下一步是换个去处或问主人——和"要改地形"不是同一句。屋子与南瓜原样,也不弹卡。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void mine_with_every_way_out_refused_says_which_cell_and_why(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        List<BlockPos> hut = boxCells(new BlockPos(3, 1, 3), 3, 4, 3, true);
+        for (BlockPos rel : hut) {
+            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.WHITE_WOOL.defaultBlockState());
+        }
+        BlockPos pumpkin = helper.absolutePos(new BlockPos(12, 2, 12));
+        level.setBlockAndUpdate(pumpkin, Blocks.PUMPKIN.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_walled_in", new BlockPos(4, 2, 4), false);
+        NumenPlayer owner = presentOwner(helper, companion, "gametest_shepherd");
+        storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
+                com.dwinovo.numen.permission.Rule.parse("break(minecraft:white_wool)"));
+        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:pumpkin"), "count", 1));
+        boolean[] asked = new boolean[1];
+        helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(mine.done(), "mine has not finished");
+            String said = mine.outcome();
+            helper.assertTrue(!mine.succeeded() && said.contains("could not reach any of the 1 pumpkin")
+                            && said.contains("is refused") && said.contains("denied by rule")
+                            && said.contains("ask your owner") && !said.contains("without altering terrain"),
+                    "the reply does not say which cell is refused, by what, and what to do: " + said);
+            helper.assertTrue(level.getBlockState(pumpkin).is(Blocks.PUMPKIN), "the pumpkin was mined");
+            for (BlockPos rel : hut) {
+                helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).is(Blocks.WHITE_WOOL),
+                        "the refused wool was broken at " + rel.toShortString());
+            }
+            helper.assertTrue(!asked[0], "a denied way out raised a consent card");
+            CompanionFactory.despawn(level.getServer(), companion);
+            CompanionFactory.despawn(level.getServer(), owner);
+        });
+    }
+
     /** mine 点名这些团(不给 count,挖完为止),后台派出。 */
     private static TaskRecord mineGroups(NumenPlayer companion, List<String> groups) {
         return call(companion, "work_mine", args("groups", groups)).task();

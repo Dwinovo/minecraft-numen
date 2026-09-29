@@ -9,6 +9,7 @@ import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.core.nav.WorkArea;
 import com.dwinovo.numen.core.task.fish.FishTaskRecord;
 import com.dwinovo.numen.core.task.mine.MineBlockTaskRecord;
 import com.dwinovo.numen.core.tools.BlockActionOps;
@@ -24,6 +25,8 @@ import net.minecraft.resources.ResourceLocation;
  *
  * <p>三个动作都占身体,交任务槽:受理即回执,收尾走 task_finished。{@code mine} 提升成快捷工具 {@code work_mine};挖矿的路线规格
  * 标志与 goto 共用({@link RouteSpecFlags}),叠在 mine 自己的默认规格上(可以改地形,要主人同意的格也算进去)。
+ *
+ * <p>{@code mine} 只在工作区里干({@link WorkArea}):受理时她脚下那一格为中心,区外的目标只报告。
  */
 public final class WorkCommands {
 
@@ -36,8 +39,8 @@ public final class WorkCommands {
     private static final long MIN_FISH_TICKS = 120L * 20L;
 
     private static final Param<List<String>> BLOCK_IDS = Param.optional("block_ids",
-            ArgType.list(ArgType.idOrTag()), "Block types to gather; she finds the nearest herself. Include every "
-                    + "variant (iron_ore AND deepslate_iron_ore). Give this OR groups.");
+            ArgType.list(ArgType.idOrTag()), "Block types to gather; she finds them in her work area herself. "
+                    + "Include every variant (iron_ore AND deepslate_iron_ore). Give this OR groups.");
     private static final Param<List<String>> GROUPS = Param.optional("groups", ArgType.list(ArgType.word()),
             "Dig exactly the cells of these groups that still hold the block the scan saw, nothing beyond them. "
                     + "Give this OR block_ids.")
@@ -71,22 +74,31 @@ public final class WorkCommands {
                 .example("work mine --groups g3 g4")
                 .example("work mine --block_ids #minecraft:logs --count 16 --avoid_break 10,64,-3..14,70,1")
                 .note("Background work: returns at once; the end arrives as a task_finished event.")
-                .note("Travels on its own with full terrain navigation: digs to buried ores, pillars up cliffs, "
-                        + "bridges gaps — no move_goto needed. The route flags are laid over work_mine's own default, which "
-                        + "may dig anything (blocks needing consent included); pass them only to restrict her.")
+                .note("Works in her work area: within " + WorkArea.RADIUS + " blocks of where she stands when you "
+                        + "call it. There she walks, digs to buried ores, pillars up and bridges gaps on her own. The route "
+                        + "flags are laid over work_mine's own default, which may dig anything (blocks needing consent "
+                        + "included); pass them only to restrict her.")
+                .note("What lies beyond the work area is reported, not visited: the end says how many, where the "
+                        + "nearest is and how far. `scan blocks` marks which groups lie in it; for the others move_goto "
+                        + "near them first, then mine again. Groups lying wholly beyond it are refused at once.")
                 .note("Asks your owner before breaking a block their rules want asked about; a refusal stops the "
                         + "task with the reason.")
                 .note("Only mines what her tools actually harvest, and stops naming the tier she needs when "
                         + "nothing qualifies.")
                 .seeAlso("scan blocks", "work collect", "task stop")
-                .promote("Gather blocks, in one of two ways. block_ids + count: she finds the nearest "
-                        + "blocks of those types herself and mines until `count` NEW items are gained or none "
-                        + "remain nearby; include all variants (iron_ore AND deepslate_iron_ore). groups: ids from "
+                .promote("Gather blocks, in one of two ways. block_ids + count: she finds the blocks of "
+                        + "those types in her work area herself and mines until `count` NEW items are gained or none "
+                        + "remain there; include all variants (iron_ore AND deepslate_iron_ore). groups: ids from "
                         + "your latest scan_blocks (g1, g2, ...) — she digs exactly the cells of those groups that "
                         + "still hold the block the scan saw, nothing beyond them; count is optional there and "
                         + "without it she digs the groups out. An id not from the latest scan fails — scan again. "
-                        + "Either way she travels with full terrain-traversing navigation (digs to buried ores, "
-                        + "pillars up cliffs, bridges gaps); no coordinates or move_goto needed. count is items, not "
+                        + "WORK AREA: either way she works only within " + WorkArea.RADIUS + " blocks of where she "
+                        + "stands when you call it; there she walks, digs to buried ores, pillars up and bridges gaps "
+                        + "on her own. What lies beyond it she reports (how many, the nearest, how far) and does not go "
+                        + "to: scan_blocks marks each group's in_work_area; for the rest move_goto near them first, then "
+                        + "work_mine again. A group lying wholly beyond it is refused at once. When she cannot reach "
+                        + "what is in the area, the end says why (no path, search budget used up, needs digging, a "
+                        + "refused block, not loaded, ...) and what to try next. count is items, not "
                         + "blocks (redstone_ore drops ~4). Before breaking a block that needs the owner's consent "
                         + "she asks; if the owner or a rule refuses, the task stops with the reason — decide what "
                         + "to do next, do not route around it. Only mines what its tools actually harvest, and "

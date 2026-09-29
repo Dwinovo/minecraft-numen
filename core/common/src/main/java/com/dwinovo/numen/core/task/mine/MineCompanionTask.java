@@ -9,8 +9,10 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.act.BlockDigger;
 import com.dwinovo.numen.core.nav.Feet;
 import com.dwinovo.numen.core.nav.Trip;
+import com.dwinovo.numen.core.nav.WorkArea;
 import com.dwinovo.numen.core.scan.BlockScanner;
 import com.dwinovo.numen.core.scan.BlockSearch;
+import com.dwinovo.numen.core.scan.NearbyEntities;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import com.dwinovo.numen.pathing.api.Outcome;
@@ -24,7 +26,6 @@ import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.permission.Verdict;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.Container;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
@@ -55,13 +56,20 @@ import java.util.Set;
  * 捡、问权限、收场都是同一条路。点名的格子途中被别人挖掉或变了,照常挖剩下的,回执如实交代;全都没了就
  * 如实收场。
  *
+ * <h2>只在工作区里干</h2>
+ * 候选只取工作区({@link MineBlockTaskRecord#area})里的:受理时她脚下那一格为中心,半径由寻路一次看得清的范围推出
+ * ({@link WorkArea})。区里每一步都在一次规划的视野里,走过去加挖掉一起定价、就地挖通、垫高、捡掉落物都照旧;区外的
+ * 只报告——还有几个、最近一个在哪、多远、先 move_goto 过去再挖({@link Beyond})——不去。要不要离开这块地方是有后果的
+ * 决定,归模型。
+ *
  * <h2>The loop</h2>
  * <ol>
  *   <li><b>knownOreLocations</b> — fed on demand by {@link BlockSearch} (the one way to
  *       find blocks; the task holds its targets there, so the shared index stays fresh
- *       through the block-change hook and repeated searches read a warm cache), and
- *       {@link #prune} every tick (drop ones mined / no longer matching / unworkable /
- *       hazardous), sorted by distance, capped at {@link #MAX_ORES}.</li>
+ *       through the block-change hook and repeated searches read a warm cache) with the hits
+ *       inside the work area, and {@link #prune} every tick (drop ones mined / no longer matching /
+ *       unworkable / hazardous), sorted by distance, capped at {@link #MAX_ORES}. Nothing moves
+ *       before the first search is back: until then she does not know what is there.</li>
  *   <li><b>in place</b> — a target the body can reach from where it stands ({@link Goals#reach}: within
  *       block reach, not occupying it) is broken on the spot, cheapest first, auto-switching to the best
  *       tool — no pathing. The digger clears what stands in the line of sight first, if it can be broken
@@ -71,10 +79,11 @@ import java.util.Set;
  *       the CLOSEST reachable ore (not greedy-nearest, which is often the walled-in one).
  *       Arrival and the in-place pick are one criterion, so wherever the search ends, the
  *       dig side agrees; ending out of sight of the ore still counts, the digger clears the way.</li>
- *   <li><b>够不着是一批的属性,不是某一格的罪</b> — 复合目标在完整的图上搜不出路,意思是
- *       <b>这一刻这一批都到不了</b>,不是"最近那颗有问题"。所以不记账到任何一格,也不原样
- *       再搜:同一个局面(起点、目标、掉落物)第二次撞上无路,如实收工、报告剩下的走不到
- *       ({@link #unreachable})。站着既没挖掉一格、也没挪窝超过 {@link #STALL_TICKS} 刻,同样收工。</li>
+ *   <li><b>够不着是一批的属性,不是某一格的罪</b> — 复合目标搜不出路,意思是<b>这一刻这一批都到不了</b>,
+ *       不是"最近那颗有问题",所以不记账到任何一格。目标全在工作区里、工作区在一次规划的视野里,搜索的结论
+ *       就是对这一批的完整回答:一次没走到就收工,寻路给的失败类型与原因、各自的下一步原样带上
+ *       ({@link #unreachable},话由 {@link com.dwinovo.numen.core.nav.NavText} 说)。站着既没挖掉一格、也没挪窝
+ *       超过 {@link #STALL_TICKS} 刻,同样收工。</li>
  * </ol>
  *
  * <h2>主人的东西</h2>
@@ -93,14 +102,19 @@ import java.util.Set;
 public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTaskRecord> {
 
     private static final int MAX_ORES = 64;            // cap on tracked target locations
-    /** 目标查询的最大 chebyshev 区块环半径。 */
+    /**
+     * 目标查询的半径(区块),以工作区中心为球心。区里的命中是候选,区外的只拿来报告最近一个在哪、还有几个
+     * ({@link Beyond})。取服务器视距的上限 32:查询只读已加载的区块,她身边加载着的地形不会比这更远,所以这个半径
+     * 就是"她身边加载着的全部地形",报告说的"区外还有"不漏加载着的任何一片。要几个({@link #MAX_ORES})按离中心由近
+     * 及远,区里的都排在区外的前面;凑够就停的那一次,区外的个数只是下限,回执说"至少"。
+     */
     private static final int QUERY_MAX_CHUNK_RADIUS = 32;
     /** 名单低于此数触发补货查询——索引由方块变更钩子实时维护,自己挖掉的目标即时出账,
      *  所以只在名单快吃完时才需要真正去查。 */
     private static final int QUERY_LOW_WATER = 16;
     /** 两次查询的最小间隔(tick)。 */
     private static final int QUERY_MIN_GAP_TICKS = 20;
-    /** 无条件刷新的慢心跳(tick):兜底外部世界变化(别人放/挖了方块)。 */
+    /** 无条件刷新的慢心跳(tick):外部世界的变化(别人放、挖了方块)由它带进名单与区外的报告。 */
     private static final int QUERY_HEARTBEAT_TICKS = 100;
     /** 同一格连续这么多刻拉不出射线,就记进 {@link #unworkable} —— 站位说够得着,
      *  可射线始终成不了(挡在中间的挖不得、瞄准量化)。没有这条,挖掘会永远等一个
@@ -109,8 +123,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     /**
      * 既没挖掉一格、也没挪窝多远,持续这么多刻就算真卡住了(二十秒)。
      *
-     * <p><b>两个条件同时成立才算</b>:她走三十秒的路去远处挖矿,一刻都不算卡 —— 她在动。
-     * 只有"站着不动又什么都没挖出来"才是卡住,而那种状态没有出口,只能收工报给主人。
+     * <p><b>两个条件同时成立才算</b>:走过去的每一刻都不算卡 —— 她在动。只有"站着不动又什么都没挖出来"才是卡住:
+     * 导航报到了、手边却没有该挖的(见 ARRIVED 那一支),一遍遍重新规划却回到原地,这种循环寻路自己看不见,只有
+     * 这把尺子量得出来;那种状态没有出口,只能收工报给主人。
      */
     private static final int STALL_TICKS = 400;
 
@@ -219,8 +234,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private int queryCooldown;
     /** 距慢心跳强制刷新的剩余 tick。 */
     private int heartbeatTimer;
-    /** 上一次查询时同伴所在 chunk(打包 long)——跨 chunk 视为看到新地形,触发补查。 */
-    private long lastQueryChunk = Long.MIN_VALUE;
     private String progressNote = "done";
     /** The ore currently returning {@code NO_SHOT}, and for how many consecutive ticks. */
     private BlockPos noShotPos;
@@ -229,18 +242,18 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private long lastProgressWork;
     private BlockPos lastProgressPos;
 
-    /** 目标图还没回来时连续无路的次数(见 {@link NoPathVerdict}),只用来让日志只打第一次。 */
-    private int coldMapFails;
-    /** 完整的图上搜不出路时的局面:从哪儿搜、要挖的格、地上的掉落物。同一个局面再撞上一次就收工。 */
-    private record NoPathScene(BlockPos feet, Set<BlockPos> ores, Set<BlockPos> drops) {}
-    /** 上一次搜不出路时的局面;还没有为 null。 */
-    private NoPathScene lastNoPath;
     /**
      * 目标图有了:至少一次查询已经回来(或点名用法不用查)。搜索按工作量收工,回来的就是这个问法在这个世界上
-     * 的完整答案——被节数上限截断也是确定的截断,重查不会更全。还没回来时,终局判定("附近没有目标"、
-     * "都够不着")得等它。
+     * 的完整答案——被节数上限截断也是确定的截断,重查不会更全。还没回来时她不知道区里有什么:不出发(只认得
+     * 地上掉落物时的一次无路说明不了区里将会有的目标),终局判定("区里没有目标"、"都够不着")也等它。
      */
     private boolean mapped;
+    /** 这件活的工作区:候选只取区里的。 */
+    private final WorkArea area;
+    /** 最近一次回来的查询在工作区外看见的目标;只报告,不去。 */
+    private Beyond beyond = Beyond.NONE;
+    /** groups 用法里落在工作区外的点名格:受理时就分出来,留着不挖,收场时交代。 */
+    private Beyond outsideNamed = Beyond.NONE;
     /** 最近一次回来的查询被节数上限截断时的那句话({@link BlockSearch.ScanResult#sectionCapNote});没截断为 null。 */
     private String capNote;
     /** 在飞的搜索句柄;0 表示没有。 */
@@ -261,6 +274,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         this.digger = new BlockDigger(player);
         this.spec = record.spec;
         this.targetSpec = record.spec.edit().alter(RouteSpec.Alter.ANY).build();
+        this.area = record.area;
     }
 
     @Override
@@ -299,8 +313,16 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         dropItems = computeDropItems();
         baseline = inventoryMatch();
         if (byGroups()) {
-            // 候选就是点名的格子,不用搜
-            remaining.addAll(r.named.keySet());
+            // 候选就是点名的格子,不用搜;区外那几格留着不挖,收场时交代
+            List<BlockPos> outside = new ArrayList<>();
+            for (BlockPos p : r.named.keySet()) {
+                if (area.contains(p)) {
+                    remaining.add(p);
+                } else {
+                    outside.add(p);
+                }
+            }
+            outsideNamed = new Beyond(outside, false);
             mapped = true;
         } else {
             // 持有目标的登记,让共享索引在任务期间保持新鲜,并立即起首次搜索;冷区域的读地形由
@@ -315,8 +337,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         lastProgressPos = player.blockPosition();
         // 与 goto 的 start 日志对称:一任务一条,让日志里能看到任务确实启动了
         com.dwinovo.numen.core.Constants.LOG.info(
-                "[numen-task] mine start targets={} count={} cells={} feet={}",
-                r.label, r.count, byGroups() ? r.named.size() : "-", player.blockPosition().toShortString());
+                "[numen-task] mine start targets={} count={} cells={} feet={} area={}",
+                r.label, r.count, byGroups() ? r.named.size() : "-", player.blockPosition().toShortString(),
+                area.describe());
     }
 
     @Override
@@ -344,7 +367,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
         // Maintain the ore list every tick — INCLUDING while a dig below is latched:
         // prune (cheap — knownOres is capped at 64) revalidates against the live world;
-        // a search is started on demand (list low / new chunk / slow heartbeat) instead of
+        // a search is started on demand (list low / slow heartbeat) instead of
         // on a fixed rescan cadence — the block-change hook keeps the shared index current
         // in between.
         pricing = DigQuote.of(player, targetSpec);
@@ -388,6 +411,12 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             return mineProgress(reachable);
         }
 
+        // 首次查询回来之前不出发:她还不知道区里有什么
+        if (!mapped) {
+            awaitSearch();
+            return TaskState.RUNNING;
+        }
+
         // 2) Head for the ore field + nearby drops (GoalComposite), arriving when a
         //    shaft opens up; drops are collected by walking over them (native pickup).
         if ((!quotaMet && !knownOres.isEmpty()) || !drops.isEmpty()) {
@@ -403,8 +432,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             }
             if (nav == null) {
                 // 一个目标撒在整片矿上(加上地上的掉落物):路上可以顺手挖掉目标——顺路挖开的也是进展,
-                // prune 把那一格划掉,掉落物成员去捡,够没够数看背包
-                nav = Trip.to(player, field, spec, towardField());
+                // prune 把那一格划掉,掉落物成员去捡,够没够数看背包。模型收紧了规格(不许改地形)而没有干净的路时,
+                // 按放宽的那一档列出候选路线,和 move_goto 同一种回执
+                nav = Trip.to(player, field, spec, towardField()).probing();
             } else if (moved) {
                 // 名单每几刻就变(挖掉的划掉、新查到的并进来、挖不成的剔掉):新目标交给在走的这一趟,
                 // 停点还算数就照走,不算数才重搜
@@ -439,58 +469,33 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     return TaskState.RUNNING;   // a reachable shaft is handled next tick
                 }
                 case FAILED -> {
-                    // [ANCHOR nav-cold-map] 目标图还没回来，这个“没路”不算证据。
+                    // [ANCHOR nav-failed] 这一批都到不了。
                     //
-                    // 首次查询回来之前,她只认得地上的掉落物;朝它们搜不出路,说明不了名单里将会有的
-                    // 那些目标。拿这种无路去收工，是把“我还不知道”当成了“不可能”。
-                    //
-                    // 跟上面 ARRIVED-dud 是同一条纪律：收工只该给真正失败的路。
-                    if (NoPathVerdict.of(mapped) == NoPathVerdict.Verdict.REQUERY) {
-                        if (++coldMapFails == 1) {
-                            com.dwinovo.numen.core.Constants.LOG.info(
-                                    "[numen-task] mine nav failed ({}) 但目标图还没回来 —— 不收工,等它 | nearestOre={}",
-                                    nav.failType(), nearestOreInfo());
-                        }
-                        stopNav();
-                        return TaskState.RUNNING;
-                    }
-                    // [ANCHOR nav-failed] 完整图上真的没路。
-                    //
-                    // <b>这句话的主语是"这一批",不是"最近那颗"。</b>目标撒在全部候选上,
+                    // <b>这句话的主语是"这一批",不是"最近那颗"。</b>目标撒在工作区里的全部候选上,
                     // 搜不出路的意思是一个都到不了 —— 拿"离脚最近的"顶罪只是猜,所以什么都不记。
-                    // 也不原样再搜:同一个局面(同一个起点、同一批目标、同一批掉落物)再搜一遍还是这个
-                    // 结论,她只会站着不动、每次烧满搜索预算、永远不收工。所以同一个局面第二次撞上无路
-                    // 就如实收工,剩下的交给模型;局面变了(掉落物落了地、刚挖掉的格不再当掉落物等着、
-                    // 名单变了)才值得再搜。
-                    String why = nav.failReason();
+                    // 工作区在一次规划的视野里,名单一变目标就交给在走的这一趟(retarget),所以这个结局
+                    // 回答的就是此刻这一批:收工,寻路说的原因与下一步原样交给模型。
                     com.dwinovo.numen.core.Constants.LOG.info(
                             "[numen-task] mine nav failed ({}): {} | 目标 {} 个,nearestOre={}",
-                            nav.failType(), why, knownOres.size(), nearestOreInfo());
-                    NoPathScene scene = new NoPathScene(Feet.cell(player), Set.copyOf(knownOres),
-                            Set.copyOf(drops));
-                    stopNav();
-                    if (scene.equals(lastNoPath)) {
-                        return unreachable(why + (knownOres.isEmpty() ? "" : "; the nearest is " + nearestOreInfo()));
-                    }
-                    lastNoPath = scene;
-                    return TaskState.RUNNING;
+                            nav.failType(), nav.failReason(), knownOres.size(), nearestOreInfo());
+                    return unreachable(nav.failReason(), nav.failType());
                 }
             }
         }
 
-        // 3) No ore known and nothing dropped nearby. A search still in flight, or none back
-        //    yet, means "don't know yet", not "nothing there" — wait for it before any verdict.
-        //    这样等着的刻是在等搜索,不算干活(awaitSearch)。
-        if (!mapped || searchId != 0) {
+        // 3) No ore known and nothing dropped nearby. A search still in flight means "don't know
+        //    yet", not "nothing there" — wait for it before any verdict. 这样等着的刻是在等搜索,
+        //    不算干活(awaitSearch)。
+        if (searchId != 0) {
             awaitSearch();
             return TaskState.RUNNING;
         }
         //    Finish with whatever we gathered (the tool's contract: "fewer than count in
-        //    range still succeeds") — the body does not wander off across the world looking
-        //    for more; widening the search is the model's call.
+        //    range still succeeds") — the body does not leave its work area looking for more;
+        //    what lies beyond it is reported, and going there is the model's call.
         if (r.getMined() > 0) {
-            progressNote = (byGroups() ? "nothing left to dig in " + r.label : "no more " + r.label + " in range")
-                    + leftovers(null);
+            progressNote = (byGroups() ? "nothing left to dig" : "no more " + r.label) + " in my work area, "
+                    + area.describe() + leftovers(null) + beyondClause();
             return TaskState.SUCCESS;
         }
         return noOreFailure();
@@ -587,7 +592,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     /** Dropped items worth collecting, walked over for native pickup: only items the
      *  targets actually drop (a stray rotten flesh isn't this task's business), within
-     *  the task's own working radius. A drop sitting next to a known ore is skipped —
+     *  its work area ({@link #nearbyDrops}). A drop sitting next to a known ore is skipped —
      *  mining that ore walks us there anyway. Just-broken cells linger as members for
      *  {@link #DROP_LOITER_TICKS} so the spawning drop isn't left behind. */
     private List<BlockPos> droppedItems() {
@@ -602,18 +607,27 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         return out;
     }
 
-    /** 附近这件活要的掉落物:目标会掉的物品,不在 {@link #unreachableDrops} 里。 */
+    /**
+     * 这件活要捡的掉落物:目标会掉的物品,不在 {@link #unreachableDrops} 里;躺在工作区里的,加上她自己敲出来的
+     * ({@link #ourDrops})——挖区边上那一格时掉落物可能弹出区外一两格,那也是这一单的收获,够没够数算着它。
+     */
     private List<ItemEntity> nearbyDrops() {
         Level level = player.level();
-        // 搜集范围 = 服务端视距(身体周围的加载邻域),与目标扫描的事实边界同源。
-        // 视距下限取原版 server.properties 的 3:PlayerList 的视距是发给客户端的同步值,
-        // 只有专用/集成服启动时会配置——GameTestServer 这类开发服上它是 0,不设下限的话
-        // 收集箱塌成脚下一格,挖出的矿就躺在两格外"看不见"。
-        int reach = level instanceof ServerLevel sl
-                ? Math.max(3, sl.getServer().getPlayerList().getViewDistance()) * 16 : 128;
-        AABB box = new AABB(player.blockPosition()).inflate(reach);
-        return level.getEntitiesOfClass(ItemEntity.class, box,
-                ie -> dropItems.contains(ie.getItem().getItem()) && !unreachableDrops.contains(ie.getId()));
+        List<ItemEntity> out = new ArrayList<>(NearbyEntities.in(level, area, ItemEntity.class, this::wanted));
+        if (level instanceof ServerLevel sl) {
+            for (int id : ourDrops) {
+                if (sl.getEntity(id) instanceof ItemEntity ie && !ie.isRemoved() && wanted(ie)
+                        && !area.contains(ie.blockPosition())) {
+                    out.add(ie);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** 这件掉落物是这件活要的:目标会掉的物品,而且没被记成走不到。 */
+    private boolean wanted(ItemEntity ie) {
+        return dropItems.contains(ie.getItem().getItem()) && !unreachableDrops.contains(ie.getId());
     }
 
     /** 距任一已知矿位 3 格内(distSqr ≤ 9)——挖那颗矿自然会带身体过去。 */
@@ -868,7 +882,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     // ---- ore list maintenance ----
 
     /**
-     * 按需补货。block_ids 用法:名单快吃完 / 进入新 chunk / 慢心跳到点 / 上次没走完,才起一次搜索。
+     * 按需补货。block_ids 用法:名单快吃完或慢心跳到点,才起一次搜索(以工作区中心为球心,她在区里走到哪儿问的都是
+     * 同一片)。
      * groups 用法:名单空了,或快吃完且过了间隔,就从点名格里收。
      */
     private void maybeQuery() {
@@ -884,22 +899,19 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         if (queryCooldown > 0 || searchId != 0) {
             return;
         }
-        if (knownOres.size() < QUERY_LOW_WATER
-                || ChunkPos.asLong(player.blockPosition()) != lastQueryChunk
-                || heartbeatTimer <= 0) {
+        if (knownOres.size() < QUERY_LOW_WATER || heartbeatTimer <= 0) {
             runQuery();
         }
     }
 
-    /** 起一次搜索,结果回来后由 {@link #absorbSearch} 并进名单。 */
+    /** 起一次搜索(以工作区中心为球心),结果回来后由 {@link #absorbSearch} 并进名单。 */
     private void runQuery() {
         if (!(player.level() instanceof ServerLevel sl)) {
             return;
         }
-        lastQueryChunk = ChunkPos.asLong(player.blockPosition());
         heartbeatTimer = QUERY_HEARTBEAT_TICKS;
         queryCooldown = QUERY_MIN_GAP_TICKS;
-        searchId = BlockSearch.start(player.getUUID(), sl, player.blockPosition(), QUERY_MAX_CHUNK_RADIUS * 16,
+        searchId = BlockSearch.start(player.getUUID(), sl, area.center(), QUERY_MAX_CHUNK_RADIUS * 16,
                 MAX_ORES, r.targets, res -> {
                     searchId = 0;
                     arrived = res;
@@ -918,35 +930,35 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         queryCooldown = QUERY_MIN_GAP_TICKS;
         heartbeatTimer = QUERY_HEARTBEAT_TICKS;
         mapped = true;
-        coldMapFails = 0;
         capNote = res.sectionCapNote();
         com.dwinovo.numen.core.Constants.LOG.debug(
                 "[numen-task] mine query feet={} raw={} capped={} known(before merge)={}",
                 player.blockPosition().toShortString(), res.matches().size(), capNote != null,
                 knownOres.size());
-        mergeHits(res.matches());
+        mergeHits(res);
     }
 
     /**
-     * 按由近及远把还做得成的命中收进名单,收满 {@link #MAX_ORES} 个就停:铺天盖地的目标(石头)一次能回来
-     * 上千格,逐格验完再截断是白花主线程——远处的下次查询还在。
+     * 工作区里的命中由近及远收进名单,收满 {@link #MAX_ORES} 个就不再逐格验:铺天盖地的目标(石头)一次能回来上千格,
+     * 逐格验完再截断是白花主线程——远处的下次查询还在。区外的命中不进名单,记成这一次看见的区外({@link #beyond})。
      */
-    private void mergeHits(List<BlockScanner.Hit> hits) {
+    private void mergeHits(BlockSearch.ScanResult res) {
         // One-off Set view for dedup: knownOres stays a distance-ordered list (prune sorts it),
         // but membership checks against it must not be linear scans — a big batch times a
         // linear contains is O(N^2) on the server thread.
         Set<BlockPos> seen = new HashSet<>(knownOres);
         Level level = player.level();
-        for (BlockScanner.Hit hit : hits) {
-            if (knownOres.size() >= MAX_ORES) {
-                break;
-            }
+        List<BlockPos> outside = new ArrayList<>();
+        for (BlockScanner.Hit hit : res.matches()) {
             BlockPos p = hit.pos().immutable();
-            if (!seen.add(p) || !stillCandidate(level, p)) {
-                continue;
+            if (!area.contains(p)) {
+                outside.add(p);
+            } else if (knownOres.size() < MAX_ORES && seen.add(p) && stillCandidate(level, p)) {
+                knownOres.add(p);
             }
-            knownOres.add(p);
         }
+        // 凑够要的个数就停(或被节数、收集上限截断)时,更远处还可能有:区外的个数只是下限
+        beyond = new Beyond(outside, res.stoppedEarly() || res.sectionCapHit() || res.collectCapHit());
         prune();
     }
 
@@ -1090,31 +1102,33 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         com.dwinovo.numen.core.Constants.LOG.info(
                 "[numen-task] mine 卡住 {} 刻:没挖掉任何一格、也没挪窝 | feet={} 名单 {} 个",
                 idle, player.blockPosition().toShortString(), knownOres.size());
-        return unreachable("stuck there with nothing minable in place for " + STALL_TICKS / 20 + " seconds");
+        return unreachable("stuck at " + player.blockPosition().toShortString() + " with nothing minable in place for "
+                + STALL_TICKS / 20 + " seconds", FailureType.NO_PATH);
     }
 
     /**
-     * 剩下的一个都到不了,收工:挖到过就算成功,如实交代剩下多少没够着;一个没挖到就按 {@code NO_PATH} 失败。
+     * 剩下的一个都到不了,收工:挖到过就算成功,如实交代剩下多少没够着;一个没挖到就按 {@code type} 失败。
      *
      * <p>够数之后导航的目标只有地上的掉落物,这时到不了的是那批掉落物,不是还没挖的目标:把它们记进
      * {@link #unreachableDrops},接着挖别的补上,不收工。
      *
-     * @param why 为什么到不了,原话进回执
+     * @param why  为什么到不了,原话进回执(寻路的结局由 NavText 说,连同它的下一步)
+     * @param type 归到哪一种失败(寻路的结局由 NavText 归)
      */
-    private TaskState unreachable(String why) {
+    private TaskState unreachable(String why, FailureType type) {
         if (quotaMet && !knownOres.isEmpty()) {
             return writeOffDrops(why);
         }
-        String where = player.blockPosition().toShortString();
-        String what = knownOres.isEmpty() ? "the drops left on the ground"
-                : "the remaining " + knownOres.size() + " " + noun();
+        stopNav();
+        String what = knownOres.isEmpty() ? "the drops lying on the ground"
+                : (r.getMined() > 0 ? "the remaining " : "any of the ") + knownOres.size() + " " + noun();
         if (r.getMined() > 0) {
-            progressNote = "then could not reach " + what + " from " + where + " (" + why + ")" + leftovers(null);
+            progressNote = "then could not reach " + what + " in my work area: " + why + leftovers(null)
+                    + beyondClause();
             return TaskState.SUCCESS;
         }
-        fail("found " + knownOres.size() + " " + noun() + " but could not reach any of them from " + where
-                + " (" + why + "); gathered 0. Move me somewhere else, or clear a way first."
-                + leftovers(null), FailureType.NO_PATH);
+        fail("could not reach " + what + " in my work area (" + area.describe() + "); gathered 0: " + why
+                + leftovers(null) + beyondClause(), type);
         return TaskState.FAILED;
     }
 
@@ -1128,7 +1142,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         com.dwinovo.numen.core.Constants.LOG.info(
                 "[numen-task] mine 够数靠的 {} 件掉落物走不到({}),出账接着挖 | feet={} 名单 {} 个",
                 lost.size(), why, player.blockPosition().toShortString(), knownOres.size());
-        lastNoPath = null;
         stopNav();
         noteProgress();
         return TaskState.RUNNING;
@@ -1185,23 +1198,46 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     + " the current tools (mining would destroy them without any drop); gathered "
                     + r.getMined() + ". Equip a better tool (gear wear) and retry; to just destroy"
                     + " blocks regardless of drops, move_goto beside them and run use block left on each."
-                    + leftovers(unharvestable), FailureType.WRONG_TOOL);
+                    + leftovers(unharvestable) + beyondClause(), FailureType.WRONG_TOOL);
         } else if (!unworkable.isEmpty()) {
             fail("found " + unworkable.size() + " " + noun() + " nearby but no clear shot at any"
-                    + " of them from any stance I could take; gathered 0" + leftovers(unworkable),
+                    + " of them from any stance I could take; gathered 0" + leftovers(unworkable) + beyondClause(),
                     FailureType.NO_PATH);
         } else if (!ruledOut.isEmpty()) {
             fail("found " + ruledOut.size() + " " + noun() + " but none of them can be broken here ("
                     + RULED_OUT_WHY + "); gathered 0"
-                    + leftovers(ruledOut), FailureType.MINED_OUT);
+                    + leftovers(ruledOut) + beyondClause(), FailureType.MINED_OUT);
         } else if (byGroups()) {
-            fail("all " + r.named.size() + " cells of " + r.label + " were gone or had changed since the scan;"
-                    + " gathered 0. scan_blocks again to see what is there now.", FailureType.TARGET_LOST);
+            fail("all " + (r.named.size() - outsideNamed.cells().size()) + " named cells of " + r.label
+                    + " in my work area were gone or had changed since the scan; gathered 0. scan_blocks again to see"
+                    + " what is there now" + beyondClause(), FailureType.TARGET_LOST);
+        } else if (!currentBeyond().isEmpty()) {
+            // 区里没有,区外有:不出发,说清区外在哪、怎么过去——离开这块地方是模型的决定
+            fail("found no " + r.label + " in my work area (" + area.describe() + "), so I stayed put"
+                    + beyondClause(), FailureType.MINED_OUT);
         } else {
-            fail("no reachable " + r.label + " found in the loaded area around me"
-                    + (capNote == null ? "" : " (" + capNote + ")"), FailureType.MINED_OUT);
+            fail("found no " + r.label + " in my work area (" + area.describe() + ") or anywhere else in the loaded"
+                    + " terrain around me" + (capNote == null ? "" : " (" + capNote + ")"), FailureType.MINED_OUT);
         }
         return TaskState.FAILED;
+    }
+
+    /** 此刻还在那儿的区外目标:查询看见的区外命中,或点名的团里落在区外的格,只留还是那种方块的。 */
+    private Beyond currentBeyond() {
+        Level level = player.level();
+        return byGroups()
+                ? outsideNamed.keep(p -> r.named.get(p) == level.getBlockState(p).getBlock())
+                : beyond.keep(p -> r.targets.contains(level.getBlockState(p).getBlock()));
+    }
+
+    /** 回执里说区外的那一截(以 {@code "; "} 起头);区外什么都没有是空串。 */
+    private String beyondClause() {
+        Beyond left = currentBeyond();
+        if (left.isEmpty()) {
+            return "";
+        }
+        BlockPos from = player.blockPosition();
+        return "; " + (byGroups() ? left.named(from) : left.more(from));
     }
 
     @Override

@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.task.mine;
 
 import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.core.nav.WorkArea;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.core.BlockPos;
@@ -13,13 +14,14 @@ import java.util.Set;
  * Typed task descriptor for {@code work mine} (shortcut {@code mine}), in one of two forms:
  * <ul>
  *   <li><b>block_ids</b> — "gather {@code count} of these block types, find them yourself": the task
- *       searches the loaded area around the body, walks to the nearest with the terrain-modifying
+ *       searches its work area ({@link #area}), walks to the cheapest with the terrain-modifying
  *       pathfinder, mines into the inventory, repeats until the count is met or nothing reachable
- *       remains;</li>
+ *       remains there; what lies beyond the area is reported, not visited;</li>
  *   <li><b>groups</b> — "dig exactly these groups from the latest {@code scan_blocks}": the targets are
  *       only those cells, each still holding the block the scan recorded; nothing beyond them. The ids
- *       are resolved against the body's group book when the call is dispatched, so a stale id is refused
- *       in the tool result itself and the record carries the cells.</li>
+ *       are resolved against the body's group book when the call is dispatched, so a stale id, or a group
+ *       lying wholly beyond the work area, is refused in the tool result itself and the record carries the
+ *       cells.</li>
  * </ul>
  * Drops/tool-tier follow from whatever the entity holds, as in vanilla.
  */
@@ -48,6 +50,8 @@ public final class MineBlockTaskRecord extends TaskRecord {
     public final String label;
     /** How the body may move and dig: {@link #DEFAULT_SPEC} with the model's fields laid over it. */
     public final RouteSpec spec;
+    /** 工作区:受理时她脚下那一格为中心。目标只取区里的,区外的只报告。 */
+    public final WorkArea area;
 
     /** Live progress = matching ITEMS gathered since the task started (counted in the inventory,
      *  not blocks broken — multi-drop ores like redstone yield several items per block), or cells
@@ -56,13 +60,15 @@ public final class MineBlockTaskRecord extends TaskRecord {
     private int mined = 0;
 
     public MineBlockTaskRecord(ServerSource source, long deadlineGameTime, Set<Block> targets,
-                               Map<BlockPos, Block> named, int count, String label, RouteSpec spec) {
+                               Map<BlockPos, Block> named, int count, String label, RouteSpec spec,
+                               WorkArea area) {
         super(source, deadlineGameTime);
         this.targets = Set.copyOf(targets);
         this.named = Map.copyOf(named);
         this.count = count;
         this.label = label;
         this.spec = spec;
+        this.area = area;
     }
 
     /** 挖 {@code blocks} 格(或收 {@code blocks} 个物品)的期限预算。 */
@@ -82,6 +88,20 @@ public final class MineBlockTaskRecord extends TaskRecord {
     /** groups 用法点名的格数。 */
     public int cells() {
         return named.size();
+    }
+
+    /** 受理时交代工作区在哪;点名的格有落在区外的,说有几格、它们留着不挖。 */
+    @Override
+    public String acceptNote() {
+        String where = "My work area is " + area.describe() + ", where I stand now";
+        if (named.isEmpty()) {
+            return where + ": I mine only there, and the end reports what lies beyond it.";
+        }
+        long outside = named.keySet().stream().filter(p -> !area.contains(p)).count();
+        return outside == 0
+                ? where + "; all " + named.size() + " named cells lie in it."
+                : where + ": " + (named.size() - outside) + " of the " + named.size() + " named cells lie in it; the"
+                        + " other " + outside + " lie beyond it and will be left.";
     }
 
     @Override

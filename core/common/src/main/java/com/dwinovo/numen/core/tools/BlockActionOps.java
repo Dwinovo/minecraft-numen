@@ -5,6 +5,8 @@ import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.core.task.interact.InteractAtTaskRecord;
 import com.dwinovo.numen.core.task.interact.InteractEntityTaskRecord;
+import com.dwinovo.numen.core.nav.WorkArea;
+import com.dwinovo.numen.core.task.mine.Beyond;
 import com.dwinovo.numen.core.task.mine.MineBlockTaskRecord;
 import com.dwinovo.numen.core.task.MouseButton;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
@@ -14,6 +16,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -34,17 +37,21 @@ public final class BlockActionOps {
      * (最新一次 scan_blocks 的团编号,{@code count} 可选、不给就挖完)。团编号在派发这一刻对着身体上的团簿取:
      * 不在最新一次扫描里就当场拒收,工具结果直接说明——不先回"已受理"再在后台失败,模型也就不会拿着受理回执
      * 告诉主人"去了"。{@code spec} 是已经叠在 mine 自己默认规格上的那份。
+     *
+     * <p>工作区在受理这一刻定下:以她此刻脚下那一格为中心({@link WorkArea#around})。点名的团一格都不在区里,和编号过期
+     * 一样当场拒收,说清它在哪、先走过去;有几格在区里的照常受理,区外那几格留着不挖,受理回执与结局都交代。
      */
     public TaskRecord autoMine(ServerSource src, List<String> block_ids, List<String> groups, Integer count,
                                RouteSpec spec) {
         long now = src.companion().level().getGameTime();
+        WorkArea area = WorkArea.around(src.companion());
         boolean byIds = block_ids != null && !block_ids.isEmpty();
         boolean byGroups = groups != null && !groups.isEmpty();
         if (byIds == byGroups) {
             throw new IllegalArgumentException(byIds
-                    ? "give block_ids or groups, not both — block_ids lets her pick the nearest blocks of those"
-                            + " types, groups digs exactly the groups a scan_blocks listed"
-                    : "give block_ids (block types; she finds the nearest herself) or groups (ids from your"
+                    ? "give block_ids or groups, not both — block_ids lets her pick blocks of those types in"
+                            + " her work area, groups digs exactly the groups a scan_blocks listed"
+                    : "give block_ids (block types; she finds them in her work area herself) or groups (ids from your"
                             + " latest scan_blocks)");
         }
         if (byGroups) {
@@ -54,12 +61,13 @@ public final class BlockActionOps {
             if (stale != null) {
                 throw new IllegalArgumentException(stale);
             }
+            refuseGroupsOutside(book, ids, area);
             Map<BlockPos, Block> cells = book.cells(ids);
             Set<Block> kinds = Set.copyOf(cells.values());
             int until = count == null ? MineBlockTaskRecord.UNTIL_GONE : Math.clamp(count, 1, MAX_COUNT);
             long timeout = MineBlockTaskRecord.timeoutTicks(until == MineBlockTaskRecord.UNTIL_GONE
                     ? cells.size() : until);
-            return new MineBlockTaskRecord(src, now + timeout, kinds, cells, until, labelFor(kinds), spec);
+            return new MineBlockTaskRecord(src, now + timeout, kinds, cells, until, labelFor(kinds), spec, area);
         }
         Set<Block> targets = ToolParse.parseBlocks(block_ids);
         if (targets.isEmpty()) {
@@ -70,7 +78,29 @@ public final class BlockActionOps {
         }
         int clampedCount = Math.clamp(count, 1, MAX_COUNT);
         long deadline = now + MineBlockTaskRecord.timeoutTicks(clampedCount);
-        return new MineBlockTaskRecord(src, deadline, targets, Map.of(), clampedCount, labelFor(targets), spec);
+        return new MineBlockTaskRecord(src, deadline, targets, Map.of(), clampedCount, labelFor(targets), spec, area);
+    }
+
+    /** 点名的团有一格都不在工作区里的:当场拒收,说它们在哪、怎么过去。 */
+    private static void refuseGroupsOutside(GroupBook book, List<String> ids, WorkArea area) {
+        List<String> outside = new ArrayList<>();
+        BlockPos nearest = null;
+        for (String id : ids) {
+            Set<BlockPos> cells = book.cells(List.of(id)).keySet();
+            if (cells.stream().anyMatch(area::contains)) {
+                continue;
+            }
+            outside.add(id);
+            for (BlockPos p : cells) {
+                if (nearest == null || area.center().distSqr(p) < area.center().distSqr(nearest)) {
+                    nearest = p;
+                }
+            }
+        }
+        if (!outside.isEmpty()) {
+            throw new IllegalArgumentException(Beyond.groupsOutside(outside, outside.size() < ids.size(), area,
+                    nearest));
+        }
     }
 
     /** Short label for messages: the first target's path (e.g. "iron_ore"), "+N" if more. */
