@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.dwinovo.numen.core.nav.Feet;
+import com.dwinovo.numen.core.nav.NamedAreas;
 import com.dwinovo.numen.core.nav.NavText;
 import com.dwinovo.numen.core.nav.Survey;
 import com.dwinovo.numen.core.task.move.Destination;
@@ -20,13 +21,22 @@ import net.minecraft.core.BlockPos;
  * 规划一条路线:按此刻的世界把每一段的途经点编成目标({@link Destination#of})、按每一段的规格({@link RouteFlags#spec}),
  * 交给 {@link Survey} 从她脚下起逐段只搜不走;出结论时写成计划({@link Plan})——每段多长、多少刻、要挖要放要问的格,走不通或
  * 没看清的为什么。{@code route plan} 与 {@code move go} 共用这一处;{@code move go} 还要拿规划出的路开走。
+ *
+ * <p>路线里点名的区域(途经点与标志里的)按此刻主人名下的区域解析,一次取好({@link NamedAreas}),各段共用:区域删了、部分删了,
+ * 引用它的那一段编不成,计划里那一段写的就是哪块区域不在了。
  */
 public final class RoutePlanning {
 
     /**
-     * 一段编好的样子:交给规划的那一段(目标与规格),加上给人说"朝哪儿"的那一格(回执里的方向与距离)。
+     * 一段编好的样子:交给规划的那一段(目标与规格),加上编好的去处(给人说"朝哪儿"的那一格在它上面)。
      */
-    public record Leg(Survey.Leg way, BlockPos toward) {}
+    public record Leg(Survey.Leg way, Destination to) {
+
+        /** 给人说"朝哪儿"的那一格(回执里的方向与距离)。 */
+        public BlockPos toward() {
+            return to.toward();
+        }
+    }
 
     /**
      * 规划的结论。
@@ -60,7 +70,7 @@ public final class RoutePlanning {
     private final Itinerary route;
     private final int first;
     private final List<Leg> legs = new ArrayList<>();
-    /** 编不成目标的那一段的提醒({@link Destination#of} 的原话);都编成了为 null。 */
+    /** 编不成目标的那一段的提醒({@link Destination#of}、{@link RouteFlags#spec} 的原话);都编成了为 null。 */
     private String refusal;
     private final Survey survey;
     private final BlockPos from;
@@ -72,11 +82,16 @@ public final class RoutePlanning {
         this.first = first;
         this.from = Feet.cell(her);
         this.at = her.server.overworld().getGameTime();
+        NamedAreas areas = NamedAreas.of(her);
+        // 每一段从上一段去的那一格算起:区域按离它的远近挑成员,坐标缺的那一截照它补
+        BlockPos start = from;
         for (int i = first; i < route.legs().size(); i++) {
-            RouteSpec spec = RouteFlags.spec(route, i);
             Destination.Stop stop = route.legs().get(i).to();
             try {
-                legs.add(new Leg(new Survey.Leg(Destination.of(her, stop, spec).goal(), spec), stop.toward(from)));
+                RouteSpec spec = RouteFlags.spec(route, i, areas);
+                Destination to = Destination.of(her, stop, spec, areas, start);
+                legs.add(new Leg(new Survey.Leg(to.goal(), spec), to));
+                start = to.toward();
             } catch (IllegalArgumentException e) {
                 refusal = e.getMessage();
                 break;

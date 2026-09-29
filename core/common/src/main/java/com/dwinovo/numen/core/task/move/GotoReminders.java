@@ -2,13 +2,14 @@ package com.dwinovo.numen.core.task.move;
 
 import java.util.List;
 
+import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.core.nav.NavText;
 import com.dwinovo.numen.permission.Listing;
 
 import net.minecraft.core.BlockPos;
 
 /**
- * {@code move_goto} 写错时受理当场给的提醒,只有这里写字。每一句说事实,再给能照抄的写法;不替她改成别的意思,也不去搜索。
+ * {@code move_goto} 与路线的去处写错时受理当场给的提醒,只有这里写字。每一句说事实,再给能照抄的写法;不替她改成别的意思,也不去搜索。
  * 判断是不是写错由 {@link Destination} 问寻路模块,这里只把结论写成话。
  */
 public final class GotoReminders {
@@ -96,5 +97,49 @@ public final class GotoReminders {
         return Listing.coords(pos) + " (" + block + ") is open on " + String.join(", ", openFaces)
                 + ", but there is nowhere within reach to stand and see one of those faces. To get as close as I can: "
                 + call(pos, "arrive:near near:<blocks>") + ".";
+    }
+
+    // ==================== 去一块区域 ====================
+
+    /** 去一块区域的那一句 move_goto({@link NavText#gotoCall})。 */
+    public static String call(AreaRef area, String rest) {
+        return NavText.gotoCall(area, rest);
+    }
+
+    /** 区域里还没有一格。 */
+    public static String emptyArea(AreaRef area) {
+        return "area " + area + " has no cells yet, so there is nowhere in it to go; `area add " + area.name()
+                + " --box <x1,y1,z1..x2,y2,z2>` or `scan blocks <radius> <block ids> --into " + area.name()
+                + "` fills it.";
+    }
+
+    /** "它离我最近的那几格":看了整块就说整块。 */
+    private static String nearest(AreaRef area, int looked, long cells) {
+        return looked == cells ? "the " + cells + " cell(s) of area " + area
+                : "the " + looked + " cells of area " + area + " nearest me (of " + cells + ")";
+    }
+
+    /** arrive:at 一块区域,离她最近的那一部分里一格也站不了人,而这一趟不改地形。 */
+    public static String areaNowhereToStand(AreaRef area, int looked, long cells) {
+        return "none of " + nearest(area, looked, cells) + " is somewhere to stand, and this walk changes nothing. "
+                + "To stop close by: " + call(area, "arrive:near near:<blocks>")
+                + "; to dig or pillar into it, add alter:natural.";
+    }
+
+    /** arrive:use 一块区域,离她最近的那一部分里没有一格有可点的轮廓。 */
+    public static String areaNothingToUse(AreaRef area, int looked, long cells) {
+        return "none of " + nearest(area, looked, cells) + " holds a block to click — they are air or fluid. "
+                + "To get close: " + call(area, "arrive:near near:<blocks>") + ".";
+    }
+
+    /**
+     * arrive:use 一块区域,离她最近的那几个能点的方块一个也用不上:四面封死,或够得着的地方一处也站不了。{@code first} 是其中
+     * 离她最近的那一个,单独去用它的那一句会说清是什么挡着。
+     */
+    public static String areaNoneUsable(AreaRef area, int tried, BlockPos first) {
+        return "none of the " + tried + " block(s) of area " + area + " nearest me can be used: each is walled in on "
+                + "every side or has nowhere within reach to stand and see it. " + call(first, "arrive:use")
+                + " says what is in the way of the nearest one; to get as close as I can: "
+                + call(area, "arrive:near near:<blocks>") + ".";
     }
 }

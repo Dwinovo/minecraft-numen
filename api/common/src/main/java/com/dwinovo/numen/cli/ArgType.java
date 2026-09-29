@@ -1,6 +1,7 @@
 package com.dwinovo.numen.cli;
 
 import com.dwinovo.numen.agent.tool.Schema;
+import com.dwinovo.numen.area.AreaRef;
 import com.google.gson.JsonElement;
 import com.mojang.brigadier.LiteralMessage;
 import com.mojang.brigadier.StringReader;
@@ -41,7 +42,7 @@ import java.util.stream.Collectors;
  *
  * <h2>现有的几种</h2>
  * 按用到的才开:整数(带给模型看的范围,或不设范围的方块坐标)、小数(带范围)、布尔、一个词(编号这类)、
- * 几个固定值之一、资源 id(配方、模型)、资源 id 或 {@code #标签}、方块或坐标格、一只实体、一个值(模组给的名字,可能带
+ * 几个固定值之一(或区域)、资源 id(配方、模型)、资源 id 或 {@code #标签}、方块或坐标格或区域、区域、一只实体、一个值(模组给的名字,可能带
  * 空格或非英文,带空格时加引号)、余下整行(自由文字),以及把一种值组合成"一串"的 {@link #list}。要新的,就在这里加一种,
  * schema 与帮助跟着有。
  */
@@ -60,7 +61,11 @@ public final class ArgType<T> {
     private static final DynamicCommandExceptionType NOT_A_CHOICE = new DynamicCommandExceptionType(
             choices -> new LiteralMessage("expected one of " + choices));
     private static final SimpleCommandExceptionType NO_CELL = new SimpleCommandExceptionType(
-            new LiteralMessage("expected a cell x,y,z or a box x1,y1,z1..x2,y2,z2, in whole numbers"));
+            new LiteralMessage("expected a cell x,y,z in whole numbers"));
+    /** 一格后面还接着东西(多半是想写一个盒子):一片格子只有区域一种写法。 */
+    private static final SimpleCommandExceptionType NOT_ONE_CELL = new SimpleCommandExceptionType(
+            new LiteralMessage("a cell is one x,y,z; a box or any other stretch of cells is an area — frame it as one "
+                    + "and write area:<name>"));
     /** 读成了写法,内容却不成立(方块名认不出、不是本组的命令……):说法由认它的那一方给。 */
     private static final DynamicCommandExceptionType REJECTED = new DynamicCommandExceptionType(
             why -> new LiteralMessage(String.valueOf(why)));
@@ -74,8 +79,6 @@ public final class ArgType<T> {
     private static final char TAG = '#';
     /** 坐标格三个数之间的分隔。 */
     private static final char CELL_SEPARATOR = ',';
-    /** 坐标盒两角之间的分隔。 */
-    private static final String BOX_SEPARATOR = "..";
 
     /** 一个值在命令行上占多宽:一个值、空格隔开的几个(到行尾或下一个标志为止)、余下整行。 */
     enum Span { ONE, SEVERAL, REST }
@@ -340,25 +343,83 @@ public final class ArgType<T> {
     }
 
     /**
-     * 一种方块({@link #idOrTag} 的写法),或一片坐标:一格 {@code x,y,z},或一个盒子 {@code x1,y1,z1..x2,y2,z2}
-     * (两角任意顺序)。数字或负号打头的是坐标。读出来是写下的原文,是方块还是坐标由用它的动作去认。
+     * 一种方块({@link #idOrTag} 的写法)、一格坐标 {@code x,y,z},或主人名下的一块区域 {@code area:名字}、{@code area:名字/部分}
+     * ({@link AreaRef#MARK} 打头,名字与编号的规矩在 {@link AreaRef#parse} 当场认)。数字或负号打头的是坐标。读出来是写下的原文,
+     * 是方块、坐标还是区域由用它的动作去认。一片地方只有区域一种写法:要一个盒子,先把它框成区域。
      */
-    public static ArgType<String> blockOrCells() {
-        return new ArgType<>(ArgType::readBlockOrCells, "block|cell",
-                "block id, #tag, cell x,y,z or box x1,y1,z1..x2,y2,z2", Item.STRING, ArgType::stringField);
+    public static ArgType<String> blockCellOrArea() {
+        return new ArgType<>(ArgType::readBlockCellOrArea, "block|cell|area",
+                "block id, #tag, cell x,y,z or area:<name>", Item.STRING, ArgType::stringField);
     }
 
-    private static String readBlockOrCells(StringReader reader) throws CommandSyntaxException {
+    private static String readBlockCellOrArea(StringReader reader) throws CommandSyntaxException {
+        if (reader.getString().startsWith(AreaRef.MARK, reader.getCursor())) {
+            return readMarkedArea(reader);
+        }
         if (!reader.canRead() || !(Character.isDigit(reader.peek()) || reader.peek() == '-')) {
             return readIdOrTag(reader);
         }
         int start = reader.getCursor();
         readCell(reader);
-        if (reader.getString().startsWith(BOX_SEPARATOR, reader.getCursor())) {
-            reader.setCursor(reader.getCursor() + BOX_SEPARATOR.length());
-            readCell(reader);
+        if (reader.canRead() && reader.peek() != ' ') {
+            throw NOT_ONE_CELL.createWithContext(reader);
         }
         return reader.getString().substring(start, reader.getCursor());
+    }
+
+    /**
+     * 几个固定值之一({@link #oneOf} 的写法),或主人名下的一块区域 {@code area:名字}、{@code area:名字/部分}:比如路线要避开的
+     * 格子种类与区域写在同一串里({@code --avoid water area:farm})。读出来是写下的原文。
+     */
+    public static ArgType<String> oneOfOrArea(String... choices) {
+        List<String> allowed = List.of(choices);
+        String listed = String.join(", ", allowed) + " or " + AreaRef.MARK + "<name>";
+        return new ArgType<>(reader -> {
+            if (reader.getString().startsWith(AreaRef.MARK, reader.getCursor())) {
+                return readMarkedArea(reader);
+            }
+            int start = reader.getCursor();
+            String value = reader.readUnquotedString();
+            if (!allowed.contains(value)) {
+                reader.setCursor(start);
+                throw NOT_A_CHOICE.createWithContext(reader, listed);
+            }
+            return value;
+        }, String.join("|", allowed) + "|" + AreaRef.MARK + "<name>", "one of " + listed, Item.STRING,
+                ArgType::stringField);
+    }
+
+    /**
+     * 主人名下的一块区域({@link AreaRef}):{@code 名字} 指整块,{@code 名字/部分} 指其中一部分。写法在 {@link AreaRef#parse} 认,
+     * 名字不合规矩、编号不像编号当场报;有没有这块区域是用它的动作按主人的存档去认。
+     */
+    public static ArgType<AreaRef> area() {
+        ArgumentType<AreaRef> read = reader -> readAreaRef(reader, reader.getCursor());
+        String hint = "area name, or name/part like ores/g3";
+        return new ArgType<>(read, "area", hint, Span.ONE, Item.STRING, ArgType::stringField,
+                literal(read, hint, UnaryOperator.identity()), AreaRef::toString);
+    }
+
+    /** {@code area:} 打头的一截读到空格为止,名字与编号当场认;读出来是原文。 */
+    private static String readMarkedArea(StringReader reader) throws CommandSyntaxException {
+        int start = reader.getCursor();
+        reader.setCursor(start + AreaRef.MARK.length());
+        readAreaRef(reader, start);
+        return reader.getString().substring(start, reader.getCursor());
+    }
+
+    /** 从当前位置读一个区域名(带不带部分),读到空格为止;认不了的报错指在 {@code start}。 */
+    private static AreaRef readAreaRef(StringReader reader, int start) throws CommandSyntaxException {
+        int from = reader.getCursor();
+        while (reader.canRead() && reader.peek() != ' ') {
+            reader.skip();
+        }
+        try {
+            return AreaRef.parse(reader.getString().substring(from, reader.getCursor()));
+        } catch (IllegalArgumentException wrong) {
+            reader.setCursor(start);
+            throw REJECTED.createWithContext(reader, wrong.getMessage());
+        }
     }
 
     /** {@code x,y,z}:三个整数,逗号隔开。 */
@@ -374,8 +435,8 @@ public final class ArgType<T> {
     }
 
     /**
-     * 一个坐标:可带负号的一串数字。不用 Brigadier 的 {@code readInt}——它把 {@code .} 也当数字的一部分,
-     * 会把盒子两角之间的 {@code ..} 吞进前一个数。
+     * 一个坐标:可带负号的一串数字。只收数字,写成小数或别的字就报"要整数的一格"——不借 Brigadier 的 {@code readInt},
+     * 它把 {@code .} 也读进来,报的是另一句。
      */
     private static void readCoordinate(StringReader reader) throws CommandSyntaxException {
         int start = reader.getCursor();
@@ -481,7 +542,7 @@ public final class ArgType<T> {
      * 一串同一种的值:命令行上是空格隔开的一个个值({@code iron_ore deepslate_iron_ore}),每个都按 {@code element} 的读法读,
      * 读到行尾或下一个标志({@code --} 打头)为止,所以它既能是动作的最后一个必填参数,也能是一个标志
      * ({@code --block_ids iron_ore deepslate_iron_ore --count 10});快捷工具里是一个 JSON 数组,每一项按 {@code element}
-     * 读 JSON 值的规矩读。至少一个。一项只能是一个值:整数、词、id、id 或标签、方块或坐标格、一只实体、几个固定值之一、一个值。
+     * 读 JSON 值的规矩读。至少一个。一项只能是一个值:整数、词、id、id 或标签、方块或坐标格或区域、区域、一只实体、几个固定值之一(或区域)、一个值。
      */
     public static <T> ArgType<List<T>> list(ArgType<T> element) {
         if (element.item == Item.NONE) {

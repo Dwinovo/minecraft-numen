@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.api.Outcome;
@@ -396,6 +397,11 @@ public final class NavText {
     /** 一句能照抄的 move_goto:{@code move_goto x:1 y:2 z:3 arrive:use};{@code rest} 是跟在坐标后面的字段,可以为空。 */
     public static String gotoCall(BlockPos pos, String rest) {
         return "move_goto x:" + pos.getX() + " y:" + pos.getY() + " z:" + pos.getZ() + (rest.isEmpty() ? "" : " " + rest);
+    }
+
+    /** 去一块区域的那一句:{@code move_goto area:ores/g3 arrive:near near:<blocks>}。 */
+    public static String gotoCall(AreaRef area, String rest) {
+        return "move_goto area:" + area + (rest.isEmpty() ? "" : " " + rest);
     }
 
     public static String name(BlockState state) {

@@ -7,6 +7,8 @@ import java.util.Map;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.core.nav.Feet;
+import com.dwinovo.numen.core.nav.NamedAreas;
 import com.dwinovo.numen.core.nav.RouteQueries;
 import com.dwinovo.numen.core.route.Itinerary;
 import com.dwinovo.numen.core.route.Plan;
@@ -48,21 +50,9 @@ public final class RouteOps {
     }
 
     /**
-     * {@code --to} 的几个数写成去处:三个是一格,两个是一处(x z),一个是一个高度。
-     *
-     * @throws IllegalArgumentException 个数不对,或到达方式与坐标对不上
+     * 新建一条:从她站的地方到 {@code to},带着这一行写的路线标志。去处写错、标志点名的区域不在,当场提醒,和 {@code move goto}
+     * 一样。
      */
-    public static Destination.Stop stop(List<Integer> to, String arrive, Integer near) {
-        return switch (to.size()) {
-            case 3 -> Destination.Stop.of(to.get(0), to.get(1), to.get(2), arrive, near);
-            case 2 -> Destination.Stop.of(to.get(0), null, to.get(1), arrive, near);
-            case 1 -> Destination.Stop.of(null, to.get(0), null, arrive, near);
-            default -> throw new IllegalArgumentException("--to takes x y z (one cell), x z (a place) or y (a height); "
-                    + "got " + to.size() + " numbers");
-        };
-    }
-
-    /** 新建一条:从她站的地方到 {@code to},带着这一行写的路线标志。去处写错当场提醒,和 {@code move goto} 一样。 */
     public static String create(NumenPlayer her, String name, Destination.Stop to, CommandArgs args) {
         if (routes(her).get(name) != null) {
             return TaskResult.fail("there is already a route named " + name + "; route show " + name + " shows it, "
@@ -70,7 +60,8 @@ public final class RouteOps {
         }
         String flags = RouteFlags.written(args);
         Itinerary route = Itinerary.of(name, her.level().dimension().location(), to, flags);
-        Destination.of(her, to, RouteFlags.spec(route, 0));
+        NamedAreas areas = NamedAreas.of(her);
+        Destination.of(her, to, RouteFlags.spec(route, 0, areas), areas, Feet.cell(her));
         routes(her).put(route);
         return TaskResult.ok("made route " + name + ": from wherever I stand to " + to.words()
                 + (flags.isEmpty() ? ", changing no block" : ", with " + flags)
@@ -83,7 +74,8 @@ public final class RouteOps {
         Itinerary route = named(her, name);
         int place = at == null ? route.legs().size() : at;
         Itinerary next = route.via(stop, place);
-        Destination.of(her, stop, RouteFlags.spec(next, place - 1));
+        NamedAreas areas = NamedAreas.of(her);
+        Destination.of(her, stop, RouteFlags.spec(next, place - 1, areas), areas, Feet.cell(her));
         return saved(her, next, "added stop " + place + " (" + stop.words() + ")");
     }
 
@@ -101,13 +93,14 @@ public final class RouteOps {
         }
         Itinerary next;
         if (leg == null) {
-            next = route.withFlags(RouteFlags.merged(name, route.flags(), args));
+            next = route.withFlags(RouteFlags.merged(name, route.flags(), args, NamedAreas.of(her)));
         } else {
             if (leg < 1 || leg > route.legs().size()) {
                 throw new IllegalArgumentException("route " + name + " has " + route.legs().size() + " leg(s); leg "
                         + leg + " is not one of them");
             }
-            next = route.withLegFlags(leg, RouteFlags.merged(name, route.legs().get(leg - 1).flags(), args));
+            next = route.withLegFlags(leg, RouteFlags.merged(name, route.legs().get(leg - 1).flags(), args,
+                    NamedAreas.of(her)));
         }
         return saved(her, next, "changed the flags" + (leg == null ? "" : " of leg " + leg));
     }

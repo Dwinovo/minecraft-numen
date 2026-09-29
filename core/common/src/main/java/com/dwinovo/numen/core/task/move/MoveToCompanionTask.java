@@ -18,6 +18,7 @@ import com.dwinovo.numen.core.route.Routes;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.api.Outcome;
+import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.permission.ConsentAnswer;
 import com.dwinovo.numen.permission.ConsentItem;
@@ -25,6 +26,7 @@ import com.dwinovo.numen.permission.Listing;
 import com.dwinovo.numen.task.TaskState;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * {@code move go <route>} (and its shorthand {@code move goto}) on the companion body: walk a route from wherever she
@@ -93,6 +95,11 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     private long startedAt;
     /** 这一趟已经记进路线了。 */
     private boolean recorded;
+    /**
+     * 终点是一块区域时,量"离终点多远"的那一格:出发时离她最近的一格,这一趟里不变。区域那时就不在,规划当场拒绝、不出发,
+     * 用不上它,为 null。
+     */
+    private BlockPos areaCell;
 
     public MoveToCompanionTask(NumenPlayer player, MoveToTaskRecord record) {
         super(player, record);
@@ -123,13 +130,18 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                     FailureType.TARGET_LOST);
             return;
         }
+        if (route.destination().area() != null) {
+            areaCell = Destination.toward(player, route.destination(), Feet.cell(player));
+        }
         extendDeadline();
-        // 载具处置:坐在船上而第一个途经点有 x、z,先驾船——船腿走到离它最近的水格,靠岸后接规划与步行(见 tickBoatLeg)。
-        // 其余情况(矿车没有舵、马的寻路仍按步行物理算)直接规划;下座驾是步行导航自己的事,记进身体动作。
+        // 载具处置:坐在船上而第一个途经点有 x、z(或是一块此刻在的区域),先驾船——船腿走到离它最近的水格,靠岸后接规划与步行
+        // (见 tickBoatLeg)。其余情况(矿车没有舵、马的寻路仍按步行物理算)直接规划;下座驾是步行导航自己的事,记进身体动作。
         Destination.Stop first = route.legs().get(0).to();
+        BlockPos boatTo = first.x() == null && first.area() == null ? null
+                : Destination.toward(player, first, player.blockPosition());
         if (player.isPassenger() && player.getVehicle() instanceof net.minecraft.world.entity.vehicle.Boat
-                && first.x() != null) {
-            boatLeg = new BoatNav(player, first.toward(player.blockPosition()));
+                && boatTo != null) {
+            boatLeg = new BoatNav(player, boatTo);
             phase = Phase.BOAT;
             com.dwinovo.numen.core.Constants.LOG.info("[numen-task] go {} 驾船先行", route.name());
             return;
@@ -191,6 +203,11 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             routes().plan(route, fresh);
         }
         int bad = fresh.unreachable();
+        if (bad >= 0 && bad >= result.legs().size()) {
+            // 那一段此刻就编不成目标(去处写不通、点名的区域不在了):没有搜过,照编不成的原话说
+            return end("can't walk " + legName(bad) + " as it stands: " + fresh.legs().get(bad).why(),
+                    FailureType.NO_PATH);
+        }
         if (bad >= 0) {
             FailureType type = bad < result.found().size() && !result.found().get(bad).reached()
                     ? NavText.type(result.found().get(bad).outcome()) : FailureType.NO_PATH;
@@ -347,6 +364,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     /** Representative remaining distance (blocks) to the destination, for the deadline estimate and the replies. */
     private double repDistance() {
         Destination.Stop d = route.destination();
+        if (d.area() != null) {
+            return areaCell == null ? 0 : Math.sqrt(player.distanceToSqr(Vec3.atBottomCenterOf(areaCell)));
+        }
         if (d.x() == null) {
             return Math.abs(player.getY() - d.y());
         }
@@ -375,6 +395,15 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     protected String successMessage() {
         int gy = player.blockPosition().getY();
         Destination.Stop d = route.destination();
+        if (d.area() != null) {
+            String inArea = switch (d.arrive()) {
+                case AT -> "reached area " + d.area() + ", standing at " + here(gy);
+                case USE -> "standing at " + here(gy) + ", with " + usedBlock() + " of area " + d.area()
+                        + " in sight and in reach — use it from here";
+                case NEAR -> "arrived within " + d.near() + " blocks of area " + d.area() + ", standing at " + here(gy);
+            };
+            return inArea + ", via route " + route.name() + ".";
+        }
         BlockPos cell = d.cell();
         String reached = switch (d.arrive()) {
             case AT -> cell != null ? "reached the exact cell " + coords(cell)
@@ -391,6 +420,18 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
 
     private static String coords(BlockPos pos) {
         return pos.getX() + "," + pos.getY() + "," + pos.getZ();
+    }
+
+    /**
+     * 到了一块区域的 {@code use}:她在看的是哪一个方块——终点那一段的目标说停在这里要看得见的是谁({@link Goal#sight},
+     * 多个取其一时是站在这里满足的那个成员的)。
+     */
+    private String usedBlock() {
+        Goal goal = planned.legs().get(planned.legs().size() - 1).way().goal();
+        Feet feet = Feet.of(player);
+        Goal.Sighting sight = feet == null ? null : goal.sight(feet.node().getX(), feet.node().getY(),
+                feet.node().getZ(), feet.stance());
+        return sight == null ? "one of its blocks" : "the " + block(sight.target()) + " at " + coords(sight.target());
     }
 
     private String block(BlockPos pos) {
