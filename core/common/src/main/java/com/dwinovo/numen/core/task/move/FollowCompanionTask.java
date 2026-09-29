@@ -97,9 +97,9 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
         }
         BlockPos anchor = anchor(target);
         if (nav == null) {
-            // 只走不改;跟不上的时候回执里要有候选路线的清单
+            // 只走不改;跟不上的时候回执照实说要改几格才过得去
             heading = anchor;
-            nav = Trip.to(player, goal(anchor), TERRAIN, anchor).probing();
+            nav = Trip.to(player, goal(anchor), TERRAIN, anchor);
         } else if (anchor.distSqr(heading) > RETARGET_DISTANCE * RETARGET_DISTANCE) {
             heading = anchor;
             nav.retarget(goal(anchor), anchor);

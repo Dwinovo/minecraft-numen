@@ -53,7 +53,7 @@ class WorkCommandGroupsTest {
     void moveGotoAndWorkMineLayTheRouteFieldsFlat() {
         List<String> route = List.of("alter", "avoid", "allow", "penalty_place", "penalty_break", "penalty_jump",
                 "penalty_wade", "avoid_break", "avoid_place", "avoid_step", "parkour", "max_fall", "alter_budget");
-        List<String> gotoFields = new ArrayList<>(List.of("x", "y", "z", "arrive", "route", "near"));
+        List<String> gotoFields = new ArrayList<>(List.of("x", "y", "z", "arrive", "near"));
         gotoFields.addAll(route);
         assertEquals(gotoFields, fields("move_goto"));
         assertEquals(List.of(), required("move_goto"));
@@ -99,18 +99,18 @@ class WorkCommandGroupsTest {
 
     @Test
     void eachGroupAnswersItsHelp() {
-        for (String group : List.of("move", "work", "fight", "build", "throwaway")) {
+        for (String group : List.of("move", "route", "work", "fight", "build", "throwaway")) {
             JsonObject help = run(group + " --help");
             assertTrue(help.get("success").getAsBoolean(), help.toString());
             assertTrue(help.get("message").getAsString().startsWith(group + ": "), help.toString());
         }
         String moveHelp = run("move --help").get("message").getAsString();
         assertTrue(moveHelp.contains("\n  move goto [--x <integer>] [--y <integer>] [--z <integer>] [--arrive <at|use|near>] "
-                + "[--route <word>] [--near <integer>] [route flags] — "), "组帮助里路线标志整组写成一格: " + moveHelp);
+                + "[--near <integer>] [route flags] — "), "组帮助里路线标志整组写成一格: " + moveHelp);
         assertTrue(!moveHelp.contains("--avoid_break"), moveHelp);
         String gotoHelp = run("move goto --help").get("message").getAsString();
         assertTrue(gotoHelp.startsWith("move goto [--x <integer>] [--y <integer>] [--z <integer>] [--arrive <at|use|near>] "
-                + "[--route <word>] [--near <integer>] [route flags]\n"), gotoHelp);
+                + "[--near <integer>] [route flags]\n"), gotoHelp);
         assertTrue(gotoHelp.contains("\n  Route flags:\n    --alter <none|natural|any> "), gotoHelp);
         assertTrue(gotoHelp.contains("--avoid_break <block|cell...>"), gotoHelp);
         assertTrue(gotoHelp.endsWith("Shortcut tool: move_goto."), gotoHelp);

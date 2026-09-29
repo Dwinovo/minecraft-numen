@@ -11,9 +11,6 @@ import com.dwinovo.numen.pathing.api.NavStatus;
 import com.dwinovo.numen.pathing.api.Navigation;
 import com.dwinovo.numen.pathing.api.Navigator;
 import com.dwinovo.numen.pathing.api.Outcome;
-import com.dwinovo.numen.pathing.api.PlanQuery;
-import com.dwinovo.numen.pathing.api.PlanResult;
-import com.dwinovo.numen.pathing.api.Planning;
 import com.dwinovo.numen.pathing.api.Report;
 import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.pathing.search.Goal;
@@ -25,19 +22,18 @@ import com.dwinovo.numen.permission.Verdict;
 import net.minecraft.core.BlockPos;
 
 /**
- * 同伴的一趟路:一件活从这里走到一个目标,经寻路的门面({@link Navigator})完成。门面外面补上同伴这一侧的几件事:
+ * 执行:同伴的一趟路,从这里走到一个目标,经寻路的门面({@link Navigator#drive})完成,路上边走边细算。规划是另一件事
+ * ({@link Survey}),这里只在两处用到它:
  * <ul>
- *   <li><b>端口</b>:每开一次导航按此刻组一份({@link CompanionPorts}),权限快照里有主人刚答应的;</li>
- *   <li><b>开走之前问主人</b>:规格许动要主人同意的格({@code alter=any})时,先只搜不走出一条路,账上有要问的格就扣住,
- *       由任务发起征询({@link #consentNeeded});主人答应之后照这条路走。走到半路动手时又撞上要问的格(路重搜过),同样停下,
- *       从那里再出一条、再问;</li>
- *   <li><b>候选路线</b>:{@link #probing} 开着时,不许改地形而没有路(结局 {@link Outcome.NeedsAlter}),按要放宽的那一档规划
- *       几条候选,记进路线簿,连同每条要动的格交给任务;</li>
- *   <li><b>结局</b>:渲染成给模型的英文、归到哪一种失败,只在 {@link NavText};</li>
- *   <li><b>实际账</b>:这一趟开过的每一次导航交出的实际账({@link #reports}),停下时交给任务并进旅程账;</li>
- *   <li><b>反射看得见</b>:她此刻在走的这一趟({@link #current}):脱困反射读"在推进",摔落反射认计划内的坠落。</li>
+ *   <li><b>开走之前问主人</b>:规格许动要主人同意的格({@code alter=any})而没有交进来一条规划好的路时,先规划一条过目,
+ *       账上有要问的格就扣住,由任务发起征询({@link #consentNeeded});主人答应之后照这条路走。走到半路动手时又撞上要问的格
+ *       (路重搜过),同样停下,从那里再规划一条、再问;</li>
+ *   <li>交进来的路({@link #following}):规划它的一方已经把要问的问过了,照它走,走不下去按同样的目标与规格重搜。</li>
  * </ul>
- * 到达只看目标自己的判定,没有"差不多到了";要"靠近就行"由调用方编一个靠近的目标。
+ * 另外几件:端口每开一次导航按此刻组一份({@link CompanionPorts},权限快照里有主人刚答应的);结局渲染成给模型的英文、归到
+ * 哪一种失败,只在 {@link NavText};这一趟开过的每一次导航交出的实际账({@link #reports}),停下时交给任务并进旅程账;
+ * 她此刻在走的这一趟({@link #current})让反射看得见:脱困反射读"在推进",摔落反射认计划内的坠落。
+ * 到达只看目标自己的判定,没有"差不多到了";要"靠近就行"由调用方编一个靠近的目标。没有路就照实收场,放不放宽规格是模型的决定。
  */
 public final class Trip {
 
@@ -52,8 +48,6 @@ public final class Trip {
         CONSENT,
         /** 在走。 */
         DRIVING,
-        /** 没有干净的路,在规划放宽一档的候选。 */
-        PROBING,
         /** 到了、收场或叫停。 */
         DONE
     }
@@ -68,14 +62,11 @@ public final class Trip {
     private Goal goal;
     private BlockPos toward;
     private Threats threats;
-    private boolean probe;
-    /** 先照这条走(路线簿里取的,或开走前过目过的);没有为 null。 */
+    /** 先照这条走(规划好交进来的);没有为 null。 */
     private Route seed;
 
     private Phase phase = Phase.IDLE;
-    private Planning planning;
-    /** 在规划候选时用的那一档规格。 */
-    private RouteSpec relaxed;
+    private Survey survey;
     private Route held;
     private List<ConsentItem> consent = List.of();
     private Navigation navigation;
@@ -105,17 +96,14 @@ public final class Trip {
         return new Trip(player, goal, spec, toward);
     }
 
-    /** 沿路线簿里的一条走:目标与规格是它的,它自己的路线先照着走,走不下去按同样的目标与规格重搜。 */
-    public static Trip along(NumenPlayer player, RouteBook.Entry route) {
-        Trip trip = new Trip(player, route.goal(), route.spec(), route.toward());
-        trip.seed = route.route();
-        return trip.probing();
-    }
-
-    /** 不许改地形而没有路时,规划放宽一档的候选路线、记进路线簿,回执里列出来。开走之前设。 */
-    public Trip probing() {
-        this.probe = true;
-        return this;
+    /**
+     * 照规划好的 {@code route} 走到 {@code goal}:它只是第一段,走不下去按同样的目标与规格重搜。要问主人的格由规划它的一方
+     * 问过了,这里不再扣着。
+     */
+    public static Trip following(NumenPlayer player, Goal goal, RouteSpec spec, Route route, BlockPos toward) {
+        Trip trip = new Trip(player, goal, spec, toward);
+        trip.seed = route;
+        return trip;
     }
 
     /** 这一趟要避开的生物换成 {@code threats}(战斗走位按它自己的那一份)。开走之前设。 */
@@ -138,7 +126,7 @@ public final class Trip {
         player.state(Current.class, Current::new).trip = this;
         switch (phase) {
             case IDLE -> start();
-            case PLANNING -> pollPlanning();
+            case PLANNING -> pollSurvey();
             case CONSENT -> {
             }
             case DRIVING -> {
@@ -150,45 +138,47 @@ public final class Trip {
                     case FAILED -> conclude(s.outcome());
                 }
             }
-            case PROBING -> pollProbe();
             case DONE -> {
             }
         }
         return status;
     }
 
-    /** 开走:许动要主人同意的格的规格,先拿一条路过目(路线簿里取的就是那一条,否则现出一条);别的规格直接走。 */
+    /** 开走:交进来一条路就照它走;许动要主人同意的格的规格,先规划一条过目;别的规格直接走。 */
     private void start() {
         Route route = seed;
         seed = null;
-        if (spec.alter() != RouteSpec.Alter.ANY) {
-            drive(route);
-        } else if (route != null) {
-            hold(route, Bill.of(route));
+        if (route == null && spec.alter() == RouteSpec.Alter.ANY) {
+            plan();
         } else {
-            planning = navigator().plan(PlanQuery.of(goal, spec, 1));
-            phase = Phase.PLANNING;
+            drive(route);
         }
     }
 
-    private void pollPlanning() {
-        PlanResult result = planning.poll();
-        if (result == null) {
+    /** 从她脚下只搜不走地规划一条,出来之后过目。 */
+    private void plan() {
+        survey = Survey.of(navigator(), List.of(new Survey.Leg(goal, spec)));
+        phase = Phase.PLANNING;
+    }
+
+    private void pollSurvey() {
+        List<Survey.Found> found = survey.poll();
+        if (found == null) {
             return;
         }
-        planning = null;
-        if (result.candidates().isEmpty()) {
-            conclude(result.outcome());
-            return;
+        survey = null;
+        Survey.Found leg = found.get(0);
+        if (leg.reached()) {
+            hold(leg.route());
+        } else {
+            conclude(leg.outcome());
         }
-        PlanResult.Candidate first = result.candidates().get(0);
-        hold(first.route(), first.bill());
     }
 
     /** 这条路的账上有要问主人的格就扣住等答复,没有就照它走。 */
-    private void hold(Route route, Bill bill) {
+    private void hold(Route route) {
         List<ConsentItem> asks = new ArrayList<>();
-        for (Bill.Consent c : bill.consents()) {
+        for (Bill.Consent c : Bill.of(route).consents()) {
             if (c.credential() instanceof ConsentItem item) {
                 asks.add(item);
             }
@@ -217,46 +207,16 @@ public final class Trip {
         }
     }
 
-    /** 一次导航或规划没走到:要问主人的格就停下再问;不许改地形就去规划候选;其余照实收场。 */
+    /** 一次导航或规划没走到:动手时撞上要问主人的格就停下,从这里再规划一条再问;其余照实收场。 */
     private void conclude(Outcome outcome) {
         retire();
         this.outcome = outcome;
         if (outcome instanceof Outcome.Denied denied && denied.reason() instanceof Verdict verdict && verdict.asks()
                 && spec.alter() == RouteSpec.Alter.ANY) {
-            planning = navigator().plan(PlanQuery.of(goal, spec, 1));
-            phase = Phase.PLANNING;
-            return;
-        }
-        if (outcome instanceof Outcome.NeedsAlter needs && probe) {
-            relaxed = spec.edit().alter(needs.level()).build();
-            planning = navigator().plan(PlanQuery.of(goal, relaxed, PlanQuery.MAX_CANDIDATES));
-            phase = Phase.PROBING;
+            plan();
             return;
         }
         fail(NavText.failure(outcome, player, Feet.cell(player), toward, spec), NavText.type(outcome));
-    }
-
-    /** 候选出来了:记进路线簿,连同清单收场;一条都没有就照那次规划的结局说。 */
-    private void pollProbe() {
-        PlanResult result = planning.poll();
-        if (result == null) {
-            return;
-        }
-        planning = null;
-        if (result.candidates().isEmpty()) {
-            outcome = result.outcome();
-            fail(NavText.failure(outcome, player, Feet.cell(player), toward, spec), NavText.type(outcome));
-            return;
-        }
-        RouteBook book = RouteBook.of(player);
-        long now = player.level().getGameTime();
-        List<RouteBook.Entry> listed = new ArrayList<>();
-        for (PlanResult.Candidate c : result.candidates()) {
-            // 候选是按放宽一档的规格搜出来的,照它走也用那一档
-            listed.add(book.add(goal, toward, relaxed, c.route(), now));
-        }
-        fail(NavText.noCleanRoute(Feet.cell(player), toward, spec.alter().mayAlter(), listed),
-                FailureType.TERRAIN_BLOCKED);
     }
 
     private void finish(Status end) {
@@ -286,7 +246,7 @@ public final class Trip {
     // ==================== 对外 ====================
 
     /**
-     * 换目标(跟着的东西挪了):在走的这一次导航照走或按新目标重搜,由门面判;还在出路线时按新目标重新出。还是同一个目标就什么都不变。
+     * 换目标(跟着的东西挪了):在走的这一次导航照走或按新目标重搜,由门面判;还在规划时按新目标重新规划。还是同一个目标就什么都不变。
      *
      * @param toward 给人说"朝哪儿"的那一格
      */
@@ -300,8 +260,8 @@ public final class Trip {
         switch (phase) {
             case DRIVING -> navigation.retarget(next);
             case PLANNING -> {
-                planning.cancel();
-                planning = navigator().plan(PlanQuery.of(goal, spec, 1));
+                survey.cancel();
+                plan();
             }
             default -> {
             }
@@ -310,9 +270,9 @@ public final class Trip {
 
     /** 叫停:在飞的搜索作废、松开所有键,交出这一趟的全部实际账。 */
     public List<Report> stop() {
-        if (planning != null) {
-            planning.cancel();
-            planning = null;
+        if (survey != null) {
+            survey.cancel();
+            survey = null;
         }
         retire();
         if (phase != Phase.DONE) {
@@ -345,16 +305,16 @@ public final class Trip {
         }
     }
 
-    /** 身体此刻站着等搜索的结论(出路线、诊断为什么没路、等搜索回来),不在走。 */
+    /** 身体此刻站着等搜索的结论(规划一条过目、诊断为什么没路、等搜索回来),不在走。 */
     public boolean waiting() {
         return switch (phase) {
-            case PLANNING, PROBING -> true;
+            case PLANNING -> true;
             case DRIVING -> navigation.waiting();
             default -> false;
         };
     }
 
-    /** 在推进:在走的这一次导航说的;不在走(出路线、等主人)时不算卡住。 */
+    /** 在推进:在走的这一次导航说的;不在走(规划、等主人)时不算卡住。 */
     public boolean progressing() {
         return phase != Phase.DRIVING || navigation.progressing();
     }
@@ -382,7 +342,7 @@ public final class Trip {
         return failType;
     }
 
-    /** 没走到时寻路给的结局(连同为了列候选而规划的那一次);还在走、到了、或被叫停为 null。 */
+    /** 没走到时寻路给的结局;还在走、到了、或被叫停为 null。 */
     public Outcome outcome() {
         return outcome;
     }

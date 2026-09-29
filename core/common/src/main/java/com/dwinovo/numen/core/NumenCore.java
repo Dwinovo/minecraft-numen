@@ -101,6 +101,7 @@ public final class NumenCore {
         // 登记的先后就是工具表的顺序(按工具表做提示词缓存的后端要它逐次一致)。每组提升出的快捷工具在它登记这一刻进表。
         // move 组提升出 move_goto
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.MoveCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.RouteCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.FightCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.locate.LocateCommands::install);
         // work 组提升出 work_mine

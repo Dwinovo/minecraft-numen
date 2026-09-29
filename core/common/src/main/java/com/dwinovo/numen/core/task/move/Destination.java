@@ -4,36 +4,35 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 import com.dwinovo.numen.core.nav.NavText;
 import com.dwinovo.numen.core.nav.Terrain;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
- * {@code move goto} 与 {@code move route} 的去处:坐标(给几个算几个)加怎样算到了({@code --arrive at|use|near},
- * {@code near} 只配 {@code near})。参数名一一对应到寻路模块的目标,只在这里对应:
+ * 去处:写法({@link Stop}:坐标给几个算几个,加怎样算到了——{@code --arrive at|use|near},{@code near} 只配 {@code near})
+ * 与按那一刻的世界编好的寻路目标。写法到目标的对应只在这里:
  * <ul>
  *   <li>{@code at}:位置——{@code x y z} 是那一格,{@code x z} 是那一列,只给 {@code y} 是那个高度({@link Goals#at}、
  *       {@link Goals#column}、{@link Goals#level})。站到一块方块上面也是 {@code at}:坐标是它上面脚所在的那一格;</li>
  *   <li>{@code use}:用那一格方块——站在它敞开的面前、看得见、点得到({@link Goals#use});</li>
  *   <li>{@code near}:离那一格(或那一列)不超过 {@code near} 格({@link Goals#within})。</li>
  * </ul>
- * 写错了受理当场提醒({@link GotoReminders}),不替她改写、不去搜索;要不要提醒一律问模块({@link Terrain}),这里不另判。
+ * 路线的每个途经点存的是写法,规划时照当时的世界编成目标。写错了当场提醒({@link GotoReminders}),不替她改写、不去搜索;要不要
+ * 提醒一律问模块({@link Terrain}),这里不另判。
  *
- * @param x      没给为 null
- * @param y      没给为 null
- * @param z      没给为 null
- * @param arrive 怎样算到了
- * @param near   {@code arrive=near} 时的距离,否则为 null
- * @param goal   编好的目标;{@code use} 的候选站位按受理那一刻的世界列定
+ * @param goal 编好的目标;{@code use} 的候选站位按编的那一刻的世界列定
  */
-public record Destination(Integer x, Integer y, Integer z, Arrive arrive, Integer near, Goal goal) {
+public record Destination(Stop stop, Goal goal) {
 
     /** 怎样算到了。 */
     public enum Arrive {
@@ -53,36 +52,102 @@ public record Destination(Integer x, Integer y, Integer z, Arrive arrive, Intege
     public static final String[] ARRIVE_WORDS = {"at", "use", "near"};
 
     /**
-     * 按受理那一刻的世界把参数编成去处;写错了抛出带提醒的 {@link IllegalArgumentException}(受理回执就是这句话)。
+     * 一个去处的写法:坐标(给几个算几个)加怎样算到了。形状不成立(坐标缺一截、{@code near} 与到达方式对不上)在建的时候就报,
+     * 报的话就是受理回执;和世界有关的在 {@link Destination#of} 里报。
      *
-     * @param spec 这一趟的路线规格:许改地形时,站不进去、站不上去的格由寻路去挖、去垫,不算写错
+     * @param x    没给为 null
+     * @param y    没给为 null
+     * @param z    没给为 null
+     * @param near {@code arrive=near} 时的距离,否则为 null
      */
-    public static Destination of(ServerPlayer her, Integer x, Integer y, Integer z, String arriveWord, Integer near,
-                                 RouteSpec spec) {
-        Arrive arrive = Arrive.of(arriveWord);
-        boolean hasXz = x != null && z != null;
-        if ((x == null) != (z == null) || (!hasXz && y == null)) {
-            throw new IllegalArgumentException("move_goto needs x and z (a place), x, y and z (one cell), y alone"
-                    + " (a height), or route alone (a planned route); got " + (x != null ? "x" : "")
-                    + (y != null ? "y" : "") + (z != null ? "z" : ""));
+    public record Stop(Integer x, Integer y, Integer z, Arrive arrive, Integer near) {
+
+        public static final Codec<Stop> CODEC = RecordCodecBuilder.create(i -> i.group(
+                Codec.INT.optionalFieldOf("x").forGetter(s -> Optional.ofNullable(s.x())),
+                Codec.INT.optionalFieldOf("y").forGetter(s -> Optional.ofNullable(s.y())),
+                Codec.INT.optionalFieldOf("z").forGetter(s -> Optional.ofNullable(s.z())),
+                Codec.STRING.fieldOf("arrive").forGetter(s -> s.arrive().word()),
+                Codec.INT.optionalFieldOf("near").forGetter(s -> Optional.ofNullable(s.near()))
+        ).apply(i, (x, y, z, arrive, near) -> new Stop(x.orElse(null), y.orElse(null), z.orElse(null),
+                Arrive.of(arrive), near.orElse(null))));
+
+        public Stop {
+            boolean hasXz = x != null && z != null;
+            if ((x == null) != (z == null) || (!hasXz && y == null)) {
+                throw new IllegalArgumentException("a destination is x and z (a place), x, y and z (one cell), or y"
+                        + " alone (a height); got " + (x != null ? "x" : "") + (y != null ? "y" : "")
+                        + (z != null ? "z" : ""));
+            }
+            if (near != null && arrive != Arrive.NEAR) {
+                throw new IllegalArgumentException(GotoReminders.nearWithoutArriveNear(near));
+            }
+            if (arrive == Arrive.NEAR && near == null) {
+                throw new IllegalArgumentException(GotoReminders.arriveNearWithoutNear());
+            }
+            if (!hasXz && arrive != Arrive.AT) {
+                throw new IllegalArgumentException(GotoReminders.heightTakesNoArrive(arrive.word()));
+            }
+            if (y == null && arrive == Arrive.USE) {
+                throw new IllegalArgumentException(GotoReminders.blockNeedsY(arrive.word()));
+            }
         }
-        if (near != null && arrive != Arrive.NEAR) {
-            throw new IllegalArgumentException(GotoReminders.nearWithoutArriveNear(near));
+
+        /** 命令行上读到的几样:{@code arriveWord} 没写是 {@code at}。 */
+        public static Stop of(Integer x, Integer y, Integer z, String arriveWord, Integer near) {
+            return new Stop(x, y, z, Arrive.of(arriveWord), near);
         }
-        if (arrive == Arrive.NEAR && near == null) {
-            throw new IllegalArgumentException(GotoReminders.arriveNearWithoutNear());
+
+        /** 那一格(x、y、z 都给了时);否则为 null。 */
+        public BlockPos cell() {
+            return y != null && x != null ? new BlockPos(x, y, z) : null;
         }
-        if (!hasXz && arrive != Arrive.AT) {
-            throw new IllegalArgumentException(GotoReminders.heightTakesNoArrive(arrive.word()));
+
+        /**
+         * 给人说"朝哪儿"的那一格(回执里的方向与距离):一格就是它,一列是那一列上与 {@code from} 同高的一格,一个高度是
+         * {@code from} 那一列上的那个高度。
+         */
+        public BlockPos toward(BlockPos from) {
+            if (x == null) {
+                return new BlockPos(from.getX(), y, from.getZ());
+            }
+            return new BlockPos(x, y == null ? from.getY() : y, z);
         }
-        if (y == null && arrive == Arrive.USE) {
-            throw new IllegalArgumentException(GotoReminders.blockNeedsY(arrive.word()));
+
+        /** 给模型看的一截:{@code 120,64,-35}、{@code x=120 z=-35} 或 {@code y=64},不是 at 时接上怎样算到了。 */
+        public String words() {
+            String where = x == null ? "y=" + y : y == null ? "x=" + x + " z=" + z : x + "," + y + "," + z;
+            return switch (arrive) {
+                case AT -> where;
+                case USE -> where + " (to use it)";
+                case NEAR -> where + " (within " + near + ")";
+            };
         }
+
+        /** 给主人看的一句(头顶气泡、面板)。 */
+        public String describe() {
+            String where = x == null ? "y=" + y : y == null ? "x=" + x + " z=" + z : x + "," + y + "," + z;
+            return switch (arrive) {
+                case AT -> x == null ? "到 " + where : "走向 " + where;
+                case USE -> "去用 " + where;
+                case NEAR -> "走到 " + where + " " + near + " 格内";
+            };
+        }
+    }
+
+    /**
+     * 按此刻的世界把写法编成去处;写错了抛出带提醒的 {@link IllegalArgumentException}(受理回执就是这句话)。
+     *
+     * @param spec 走到这里的路线规格:许改地形时,站不进去、站不上去的格由寻路去挖、去垫,不算写错
+     */
+    public static Destination of(ServerPlayer her, Stop stop, RouteSpec spec) {
+        Integer x = stop.x();
+        Integer y = stop.y();
+        Integer z = stop.z();
         Goals.Position position = new Goals.Position(x, y, z);
         Terrain terrain = Terrain.of(her);
-        BlockPos cell = position.cell() ? new BlockPos(x, y, z) : null;
+        BlockPos cell = stop.cell();
         boolean alters = spec.alter().mayAlter();
-        Goal goal = switch (arrive) {
+        Goal goal = switch (stop.arrive()) {
             case AT -> {
                 if (cell != null && !alters && !terrain.standable(cell)) {
                     throw new IllegalArgumentException(terrain.fits(x, y, z)
@@ -93,9 +158,9 @@ public record Destination(Integer x, Integer y, Integer z, Arrive arrive, Intege
                 yield position;
             }
             case USE -> use(her, terrain, cell);
-            case NEAR -> Goals.within(position, 0, near);
+            case NEAR -> Goals.within(position, 0, stop.near());
         };
-        return new Destination(x, y, z, arrive, near, goal);
+        return new Destination(stop, goal);
     }
 
     /** 用一格方块的目标;没有可点的轮廓、四面封死、够得着的地方一处也站不了,都当场提醒。 */
@@ -125,31 +190,5 @@ public record Destination(Integer x, Integer y, Integer z, Arrive arrive, Intege
     private static BlockPos ground(Terrain terrain, BlockPos cell) {
         BlockPos settled = terrain.settle(cell);
         return terrain.standable(settled) ? settled : null;
-    }
-
-    /** 那一格(x、y、z 都给了时)。 */
-    public BlockPos cell() {
-        return y != null && x != null ? new BlockPos(x, y, z) : null;
-    }
-
-    /**
-     * 给人说"朝哪儿"的那一格(回执里的方向与距离):一格就是它,一列是那一列上与 {@code from} 同高的一格,一个高度是
-     * {@code from} 那一列上的那个高度。
-     */
-    public BlockPos toward(BlockPos from) {
-        if (x == null) {
-            return new BlockPos(from.getX(), y, from.getZ());
-        }
-        return new BlockPos(x, y == null ? from.getY() : y, z);
-    }
-
-    /** 给主人看的一句(头顶气泡、面板)。 */
-    public String describe() {
-        String where = x == null ? "y=" + y : y == null ? "x=" + x + " z=" + z : x + "," + y + "," + z;
-        return switch (arrive) {
-            case AT -> x == null ? "到 " + where : "走向 " + where;
-            case USE -> "去用 " + where;
-            case NEAR -> "走到 " + where + " " + near + " 格内";
-        };
     }
 }

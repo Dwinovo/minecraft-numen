@@ -7,20 +7,12 @@ import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.body.BodyAction;
 import com.dwinovo.numen.pathing.drive.Blockage;
 import com.dwinovo.numen.pathing.drive.EditLedger;
-import com.dwinovo.numen.pathing.plan.Edit;
-import com.dwinovo.numen.pathing.plan.Heading;
-import com.dwinovo.numen.pathing.plan.Maneuver;
 import com.dwinovo.numen.pathing.plan.MoveKind;
 import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.pathing.plan.Reason;
-import com.dwinovo.numen.pathing.plan.Stance;
-import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
-import com.dwinovo.numen.permission.Action;
-import com.dwinovo.numen.permission.ConsentItem;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
@@ -77,21 +69,36 @@ class NavTextTest {
                 && said.contains("scoop 1 water (121,64,-33) back"), said);
     }
 
+    /** 预算账与实际账同一种写法:要挖的按方块归堆,要问主人的缀上为什么问;要放的归堆;一格不动就说不动。 */
     @Test
-    void aCandidateLineListsItsBreaksWithWhyTheyNeedConsentAndItsPlaces() {
-        ConsentItem asks = new ConsentItem(Action.Kind.BREAK, A, ConsentItem.NO_ENTITY, "oak_planks", Items.OAK_PLANKS,
-                Component.literal("Oak Planks"), "break(placed)", "placed by a player", Component.literal("placed"),
-                false, null);
-        Stance ground = new Stance(Stance.Kind.GROUND, 64, 63);
-        List<Edit> edits = List.of(new Edit.Dig(A, planks(), Permit.ask(asks), false, true),
-                new Edit.Dig(B, planks(), Permit.ask(asks), false, true),
-                new Edit.Place(C, Blocks.AIR.defaultBlockState(), Blocks.COBBLESTONE, Permit.ALLOW));
-        Maneuver step = new Maneuver(MoveKind.WALK, Heading.CARDINAL.get(2), A.west(), ground, A, ground, false, false,
-                false, false, 1, 0, 0, 1, edits, new long[0], 0, A.below());
-        Route route = new Route(A.west(), ground, List.of(new Route.Leg(step, 50)));
-        assertEquals("  r3  1 step  break 2 oak_planks (120,64,-33; 120,65,-33) needing consent (placed by a player)"
-                + "  place 1 cobblestone (121,64,-33)", NavText.line("r3", route));
-        assertEquals("no terrain change", NavText.planned(new Route(A, ground, List.of())));
+    void aPlanListsItsBreaksWithWhyTheyNeedConsentAndItsPlaces() {
+        java.util.Map<BlockPos, net.minecraft.world.level.block.Block> digs = new java.util.LinkedHashMap<>();
+        digs.put(A, Blocks.OAK_PLANKS);
+        digs.put(B, Blocks.OAK_PLANKS);
+        digs.put(B.above(), Blocks.STONE);
+        assertEquals("break 2 oak_planks (120,64,-33; 120,65,-33) needing consent (placed by a player) and 1 stone "
+                        + "(120,66,-33); place 1 cobblestone (121,64,-33)",
+                NavText.planned(digs, java.util.Map.of(C, Blocks.COBBLESTONE),
+                        java.util.Map.of(A, "placed by a player", B, "placed by a player")));
+        assertEquals("no terrain change", NavText.planned(java.util.Map.of(), java.util.Map.of(), java.util.Map.of()));
+    }
+
+    /** 没走到的是路线上的一段时,下一步写成改这条路线的命令:点名路线,多于一段时点名是哪一段。 */
+    @Test
+    void onARouteTheNextStepIsTheLineThatChangesThatRoute() {
+        RouteSpec spec = RouteSpec.defaults();
+        String alone = NavText.failure(new Outcome.NeedsAlter(RouteSpec.Alter.NATURAL, 2), null, A, C, spec,
+                new NavText.OnRoute("goto-aria", 1, 1));
+        assertTrue(alone.contains("`route spec goto-aria --alter natural`") && alone.contains("`route plan goto-aria`")
+                && alone.contains("changing 2 block(s)"), alone);
+        String leg = NavText.failure(new Outcome.NeedsAlter(RouteSpec.Alter.ANY, 3), null, A, C, spec,
+                new NavText.OnRoute("home", 2, 3));
+        assertTrue(leg.contains("`route spec home --leg 2 --alter any`") && leg.contains("asks the owner first"), leg);
+        String budget = NavText.failure(new Outcome.OverAlterBudget(5), null, A, C,
+                spec.edit().alter(RouteSpec.Alter.NATURAL).alterBudget(1).build(), new NavText.OnRoute("home", 1, 1));
+        assertTrue(budget.contains("`route spec home --alter_budget 5`"), budget);
+        String sight = NavText.failure(new Outcome.NoLineOfSight(B), null, A, C, spec, new NavText.OnRoute("home", 1, 1));
+        assertTrue(sight.contains("`move go home` again"), sight);
     }
 
     @Test
@@ -147,17 +154,6 @@ class NavTextTest {
         assertTrue(blocked.contains("no room for my body there") && blocked.contains("try again"), blocked);
         assertTrue(sight.contains("went out of sight") && sight.contains("move_goto x:120 y:65 z:-33 arrive:use"), sight);
         assertEquals(8, java.util.Set.of(none, budget, unloaded, alter, denied, stranded, blocked, sight).size());
-    }
-
-    @Test
-    void aPlanWithNoRouteUnderItsSpecTeachesTheFlagThatWouldShowOne() {
-        String natural = NavText.unplanned(new Outcome.NeedsAlter(RouteSpec.Alter.NATURAL, 2), null, A, C,
-                RouteSpec.defaults());
-        assertTrue(natural.contains("without altering terrain") && natural.contains("changes 2 block(s)")
-                && natural.contains("plan again with --alter natural"), natural);
-        String consent = NavText.unplanned(new Outcome.NeedsAlter(RouteSpec.Alter.ANY, 3), null, A, C,
-                RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build());
-        assertTrue(consent.contains("owner's consent") && consent.contains("plan again with --alter any"), consent);
     }
 
     @Test

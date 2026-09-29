@@ -432,8 +432,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             if (nav == null) {
                 // 一个目标撒在整片矿上(加上地上的掉落物):路上可以顺手挖掉目标——顺路挖开的也是进展,
                 // prune 把那一格划掉,掉落物成员去捡,够没够数看背包。模型收紧了规格(不许改地形)而没有干净的路时,
-                // 按放宽的那一档列出候选路线,和 move_goto 同一种回执
-                nav = Trip.to(player, field, spec, towardField()).probing();
+                // 回执照实说要改几格、放宽到哪一档,放不放宽是她的决定
+                nav = Trip.to(player, field, spec, towardField());
             } else if (moved) {
                 // 名单每几刻就变(挖掉的划掉、新查到的并进来、挖不成的剔掉):新目标交给在走的这一趟,
                 // 停点还算数就照走,不算数才重搜

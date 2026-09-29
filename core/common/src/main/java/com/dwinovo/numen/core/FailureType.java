@@ -49,13 +49,17 @@ public enum FailureType {
     BOXED_IN,
     /** A* returned nothing to the target. In-ladder: try a looser goal (near/adjacent). */
     NO_PATH,
-    /** No route WITHOUT altering terrain, but routes exist if she may dig / bridge / pillar —
-     *  the reason lists candidate routes by id, each with exactly which blocks it would break
-     *  or place (they sit in the body's route book). Approach tasks treat it in-ladder like
-     *  NO_PATH (a looser stance may still avoid it); goto does not loosen its goal on it — the
-     *  candidates are the answer. The final verdict hands the list to the LLM, which picks one
-     *  ({@code move_goto route:<id>}) or another destination. */
+    /** No route within what the walk may change: none without altering terrain while a digging /
+     *  bridging / pillaring one exists, or the way on needs cells beyond the plan she agreed to.
+     *  The reason says how many blocks it would take and the exact line that allows it
+     *  ({@code route spec <route> --alter natural}, then {@code route plan <route>}). Approach tasks
+     *  treat it in-ladder like NO_PATH (a looser stance may still avoid it); a route walk does not
+     *  loosen anything on it — whether to allow more is the LLM's call. */
     TERRAIN_BLOCKED,
+    /** Walked to where the plan's knowledge ends (the search budget or the loaded chunks ran out
+     *  there); the rest of the way is unknown until planned again from here. Kick to LLM: walking
+     *  the same route again plans on from where she stands. */
+    UNCHARTED,
     /** Never got within interaction reach of the target. In-ladder: reposition. */
     OUT_OF_REACH,
     /** Can't harvest/attack effectively with the current inventory. Prerequisite — kick to LLM. */

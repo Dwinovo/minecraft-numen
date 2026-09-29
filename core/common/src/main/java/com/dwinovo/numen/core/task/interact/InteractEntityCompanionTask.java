@@ -94,7 +94,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
     /** 朝它此刻所在的那一格走,走到 {@link #radius} 格以内。 */
     private Trip approach() {
         heading = entity.blockPosition();
-        return Trip.to(player, Goals.within(Goals.at(heading), 0, radius), RouteSpec.defaults(), heading).probing();
+        return Trip.to(player, Goals.within(Goals.at(heading), 0, radius), RouteSpec.defaults(), heading);
     }
 
     /** 它挪了就把新目标交给在走的这一趟。 */

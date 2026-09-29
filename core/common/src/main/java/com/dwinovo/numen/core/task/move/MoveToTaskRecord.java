@@ -1,38 +1,35 @@
 package com.dwinovo.numen.core.task.move;
 
 import com.dwinovo.numen.cli.ServerSource;
-import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.task.TaskRecord;
 
 /**
- * Typed task descriptor for {@code move goto} (shortcut {@code move_goto}): either a {@link Destination} — coordinates
- * plus how arrival counts, its goal already built when the call was accepted — or a {@code route} id, a route the
- * planner already priced (a {@code move goto} refusal or a {@code move route} reply listed it by id), whose destination
- * and spec are the route's own. The deadline is handled by the base class.
- *
- * <p>{@link #spec} is the parsed route spec the walk searches and executes under ({@link RouteSpec#defaults()} = never
- * changes a block). It is {@code null} only for the route form, whose spec travels with the route.
+ * Typed task descriptor for {@code move go <route>} and its shorthand {@code move goto} (tool {@code move_goto}): walk a
+ * route by name. The route itself — waypoints, flags, the plan she saw — lives in the owner's route store, not here; a
+ * {@code move goto} first writes her own anonymous route and then walks it like any other. The deadline is handled by
+ * the base class.
  */
 public final class MoveToTaskRecord extends TaskRecord {
 
     /** 基础期限:30 秒,出发后按路程再往后推(见 {@code MoveToCompanionTask})。 */
     private static final long BUDGET_TICKS = 30 * 20;
 
-    /** 去处;走路线簿里的一条时为 null。 */
-    public final Destination destination;
-    /** 路线簿里的编号;按坐标走时为 null。 */
+    /** 走哪条路线。 */
     public final String route;
-    /** 按坐标走的规格;走路线时为 null。 */
-    public final RouteSpec spec;
+    /** 给主人看的那一句。 */
+    private final String label;
+    /** 受理时交代给模型的那一句;没有为 null。 */
+    private final String note;
 
-    public MoveToTaskRecord(ServerSource source, Destination destination, RouteSpec spec, String route) {
+    /**
+     * @param label 头顶气泡、面板上给主人看的一句
+     * @param note  受理回执里要交代的事实(比如 {@code move goto} 把这一趟记成了哪条路线);没有为 null
+     */
+    public MoveToTaskRecord(ServerSource source, String route, String label, String note) {
         super(source, source.companion().level().getGameTime() + BUDGET_TICKS);
-        if ((destination == null) == (route == null)) {
-            throw new IllegalArgumentException("goto 要么按坐标走,要么走一条路线");
-        }
-        this.destination = destination;
         this.route = route;
-        this.spec = spec;
+        this.label = label;
+        this.note = note;
     }
 
     /**
@@ -41,7 +38,11 @@ public final class MoveToTaskRecord extends TaskRecord {
      */
     @Override
     public String describe() {
-        String where = destination == null ? "走路线 " + route : destination.describe();
-        return spec != null && spec.alter().mayAlter() ? where + "(可开路)" : where;
+        return label;
+    }
+
+    @Override
+    public String acceptNote() {
+        return note;
     }
 }

@@ -27,7 +27,7 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.block.Block;
 
 /**
- * 路线规格的命令面:{@code move goto}、{@code move route} 与 {@code work mine} 共用的那一串标志({@link #PARAMS})
+ * 路线规格的命令面:{@code move goto}、{@code route new}、{@code route spec} 与 {@code work mine} 共用的那一串标志({@link #PARAMS})
  * 长什么样,读好的值怎么变成 {@link RouteSpec}({@link #parse})——标志到规格的翻译全仓只此一处。旋钮名用模型看得懂的
  * 普通词,按规格的四组组织:
  * <ul>
@@ -38,8 +38,8 @@ import net.minecraft.world.level.block.Block;
  *       或坐标 {@code x,y,z} / 坐标盒 {@code x1,y1,z1..x2,y2,z2};</li>
  *   <li>动作代价:{@code --penalty_place}、{@code --penalty_break}、{@code --penalty_jump}、{@code --penalty_wade}。</li>
  * </ul>
- * 全部可选,不给的保持调用方的默认规格:goto 与 route 是出厂值(只走不改),mine 是它自己的默认(可以改地形,要主人同意的
- * 格也算进去)。写法上的错(不是数、坐标缺一截、不在几个固定值里)由参数类型在解析时报;这里报的是写法对了、意思不成立的
+ * 全部可选,不给的保持调用方的默认规格:goto 与路线是出厂值(只走不改),mine 是它自己的默认(可以改地形,要主人同意的
+ * 格也算进去)。路线把写下的标志原样存成文字,用时再经这里翻译({@code core.route.RouteFlags})。写法上的错(不是数、坐标缺一截、不在几个固定值里)由参数类型在解析时报;这里报的是写法对了、意思不成立的
  * ——方块 id 不存在、标签是空的、超出范围——每一条都说清能写什么,模型下一次就写对。
  */
 public final class RouteSpecFlags {

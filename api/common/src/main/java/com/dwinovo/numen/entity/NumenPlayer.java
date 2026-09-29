@@ -226,11 +226,11 @@ public final class NumenPlayer extends ServerPlayer implements Body {
     private long idNumber;
 
     /**
-     * 给模型看的编号取下一个数字(路线 r7、团 g8 里的那个数)。一只同伴一条,单调递增,各种编号共用,
+     * 给模型看的编号取下一个数字(团 g8 里的那个数)。一只同伴一条,单调递增,
      * 存在身体自己的 {@code .dat} 里:休眠、死亡复活、服务器重启之后接着往上数。
      *
      * <p>编号挂在 {@link #state} 那些簿子上的内容会随身体重建清空,数字却不能重来——模型的对话历史跨过
-     * 这些都还在,旧编号要是从 1 重数,就会悄悄指向新的一条路线、新的一团方块。
+     * 这些都还在,旧编号要是从 1 重数,就会悄悄指向新的一团方块。
      */
     public long nextIdNumber() {
         return ++idNumber;
