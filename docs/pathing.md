@@ -153,9 +153,13 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 
 - 端口的实现:`CompanionPorts`(组端口、组成本模型)、`CompanionHands`(`Effector`,连同挑工具拿到手上)、`GateTerrain`
   (`TerrainPolicy`)、`ThrowawayBlocks`(`Materials`);`Threats` 由 `Menace.dangers` 答。
-- 一趟路 `Trip`:门面外面补上开走前问主人、没路时按放宽一档列候选、实际账并进旅程账、反射看得见在走的那一趟。
-- 说给模型:结局、实际账、身体动作、候选清单渲染成英文、结局到 `FailureType` 的映射,只在 `NavText`;旅程账 `Journey`。
-- 路线簿 `RouteBook`(挂在同伴身上、编号跨重启)、只搜不走的结论交付 `RouteQueries`。
+- 规划 `Survey`:只搜不走,一串路段从她脚下逐段规划,下一段接在上一段后面(`PlanQuery.after`),没走到的那一段交出看清的那一截
+  (`PlanResult.partial`)。执行 `Trip`:照一段规划好的路走(`Trip.following`),或反射层直接 `Trip.to`;门面外面补上许动要主人
+  同意的格时开走前先规划一条过目、问主人,实际账并进旅程账,反射看得见在走的那一趟。没路就照实收场,不替她放宽规格。
+- 说给模型:结局(连同路线上的一段没走到时改这条路线的下一步)、实际账、身体动作、计划要改的格渲染成英文、结局到 `FailureType` 的
+  映射,只在 `NavText`;旅程账 `Journey`。
+- 只搜不走的规划(`route plan`)的结论交付 `RouteQueries`。路线这个名词(意图、计划、承诺)在 `core/route`,见 `look-plan-act.md`
+  与 `cli.md` 附录 G"move 与 route"。
 - 第 0 层按她的身体在活世界上答:她在哪个节点 `Feet`、她身边的地形 `Terrain`(待不待得住、能不能站、身体放不放得下、
   种类、托着她的格、迈不迈得进下一列;`scan_around`、钓鱼站位、建造表演、跟随落脚都问它)。
 - 挖一格的定价 `DigQuote`(挖矿挑目标),建造工地的位置代价 `BuildSite`,船 `BoatNav`(读 `Terrain`)。
@@ -323,7 +327,7 @@ core 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(在
 
 ### Numen 侧 GameTest
 
-继续在 core 里从工具入口测:goto、follow、`move route`、建造绕圈、挖矿等，验证适配层和回执措辞。
+继续在 core 里从工具入口测:goto、follow、`route plan` 与 `move go`、建造绕圈、挖矿等，验证适配层和回执措辞。
 
 ### 现有测试
 
@@ -807,6 +811,24 @@ goto 超时、跟随报没路,还有 17 次 "Can't keep up"。新模块一行日
   单测 `CostModelTest.placingPricesTakingTheBlockBackWhenTheSpecAsksForIt`;`DigGameTests.pauses_while_a_mob_blocks_the_crosshair`
   原来搭在撤回时的挖掘上,改成挖穿一堵石墙时一只鸡挡住准星;建造两条"撤掉了"的 GameTest 改成断言圆石还立着、回执路上那段账
   点到了每一块的坐标,新加一条建完收工的。
+
+### 规划与执行分开(09-30,`look-plan-act` 之上)
+
+`look-plan-act.md` 第七节第 2 步:路线成了存盘的名词,Numen 侧 `Trip` 收成规划(`Survey`)与执行两件事,失败后放宽规格探路
+(PROBING)、路线簿、`move route` 删掉。模块为它补了三处,都是门面或规格上的数据,没有新机器:
+
+- **只许**:`PositionCosts` 每一栏除了禁止的格与加价的格,多一样"只许这些格"(`Builder.confine`;`forbids` 对不在其中的格答禁止,
+  合并时同一栏取交集)。宿主把"只许挖、只许放计划里的那几格"写进这一趟的规格,规划、准入(`CostModel.admitDig`/`admitPlace`)、
+  执行时的复核与重搜读的都是同一个 `forbids`,承诺不另写检查。
+- **接着规划**:`PlanQuery.after(route)`:起点是那条路线的终点,身体到那里时怎么待着、最后一步的改动照它算(与执行分段接续的
+  `Search.after` 同一个)。快照按新起点拷;更早几步的改动不叠,与已知近似"展开节点只叠走到这里那一步的改动"同一回事。
+- **看清的那一截**:一条候选都没有时,`PlanResult.partial` 交出第一次搜索朝目标推进的半程路线(连同预算账),诊断照旧给结局。
+  宿主拿它说"这一段看清到哪儿、之后未知",执行时只走到那一截的尽头。
+- 单测:`RouteSpecTest.aConfinedUseForbidsEveryOtherCellAndTwoConfinementsIntersect`、`SearchTest.aSpecConfinedToThePlannedDigsDigsOnlyThose`、
+  `aPlanThatRunsOutOfBudgetHandsOverThePartOfTheWayItSaw`、`aPlanContinuingARouteStartsWhereItEndsAndCarriesItsLastStep`。
+- **要改地形才有路的那条路**:结局 `Outcome.NeedsAlter` 带上诊断搜出的那条路要做的改动(`changes`,挖哪几格、放哪几格连同许可的
+  答复;`alterations()` 是它的格数),宿主点名那几格,代替原来失败后另起一次规划列候选。诊断设想身上有料,点名的放块可能是身上没有的料。
+- 候选路线的惩罚法(`RoutePlanner` 多条候选)模块里留着(门面 GameTest 在测),Numen 侧只要一条。
 
 ## 参考
 

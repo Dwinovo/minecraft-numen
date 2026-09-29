@@ -795,9 +795,9 @@ throwaway clear
 - **`--groups` 点名的团一格都不在区里**:和编号过期同一条规矩,派发当场拒收,不派活:
   `group g4 lies wholly beyond my work area (within 48 blocks of …), so I did not start; the nearest of its cells is at …, about 66 blocks away. move_goto there first (…), then work_mine again (group ids stay good until your next scan_blocks).`
 - **到不了按类型说**:区里的一批搜不出路就收工,回执接上寻路结局的原话与下一步(`NavText.failure`,只此一处):真无路、预算用完、
-  未加载、要改地形(开了 `probing`,和 `move_goto` 一样列候选路线)、没有垫路料、被拒、起点待不住、执行受阻、看不见。例:
+  未加载、要改地形(说出要改几格、放开哪一档;列候选路线的探路 09-30 删掉,见下一节)、没有垫路料、被拒、起点待不住、执行受阻、看不见。例:
   `could not reach any of the 1 pumpkin in my work area (within 48 blocks of -12553556,-58,11490388); gathered 0: had to stop: changing -12553556,-57,11490389 is refused (denied by rule break(minecraft:white_wool) (is minecraft:white_wool)); that is not mine to get around, so pick another destination or ask your owner`;
-  同样关在小屋里、模型给了 `--alter none` 时是另一句:`… gathered 0: found no route without altering terrain (from …, about 11 blocks away; every reachable cell was searched). candidates: … choose one with move_goto route:<id>, or pick another destination.`
+  同样关在小屋里、模型给了 `--alter none` 时是另一句:`… gathered 0: found no path to target without altering terrain (from …, about 11 blocks away; a route that digs, bridges or pillars through natural terrain exists, changing 1 block(s): walk with alter:'natural' to take it)`。
 - **`scan blocks`**:每一团标 `in_work_area`(`all` / `none` / `8 of 17 cells`),小结里有 `work_area`;扫描的中心就是她此刻
   脚下,和她从这里派 `work mine` 时的工作区是同一块。
 - **`work collect`**:半径参数就是工作区的半径(默认 16,上限 `WorkArea.RADIUS`),以受理时她脚下为中心、不跟着她走——
@@ -808,11 +808,11 @@ throwaway clear
 真机上近一半寻路结局是"到了看不见"(`NoLineOfSight`):`move_goto --block X` 与挖矿借的是同一个"够得着"的到达,只按几何距离算,
 不看视线——隔着四格石头、在悬崖底下都算够得着。现在:
 
-- **只收坐标**:`--x --z`(一处)、`--x --y --z`(一格)、`--y`(一个高度),或 `--route` 单独给。`--block`(自动找最近的一种方块)
+- **只收坐标**:`--x --z`(一处)、`--x --y --z`(一格)、`--y`(一个高度)。`--block`(自动找最近的一种方块)
   删去,连同只为它存在的 `NearestBlockFinder`:找东西是 `scan blocks` 的事,它给坐标。
 - **`--arrive at|use|near`**(默认 `at`),`--near N` 只配 `near`。命令行只管参数的写法、帮助与写错时的提醒,参数名一一对应到
   寻路模块的目标只在 `core/task/move/Destination` 一处:`at` 是位置(`Goals.at`/`column`/`level`;站上一块方块
-  就是给它上面那一格,写错时的提醒给出那一格),`use` 是用一格方块(`Goals.use`:站在它敞开的面前、看得见、点得到),`near` 是距离范围(`Goals.within`)。`move route` 读同一份。
+  就是给它上面那一格,写错时的提醒给出那一格),`use` 是用一格方块(`Goals.use`:站在它敞开的面前、看得见、点得到),`near` 是距离范围(`Goals.within`)。路线的终点与途经点(`route new --to`、`route via`)读同一份。
 - **写错当场提醒,不去搜索、不替她改写**(`GotoReminders` 写字,判断一律问寻路模块,经适配层 `Terrain`)。受理回执是
   `invalid arguments: …`,不派活:
   ```
@@ -829,6 +829,68 @@ throwaway clear
   一格左键清掉——每一格过权限层、回执里写 `broke tall_grass at … out of the line of sight, then right-clicked …`。
 - 别处"先走过去"的下一步一并改成能照抄的写法:合成找工作台、睡觉找床、森罗厨房的锅(`arrive:use`),挖矿区外的矿
   (`arrive:near near:8`)。
+
+### move 与 route:先规划、再照承诺走(09-30)
+
+设计稿见 `docs/look-plan-act.md` §四。寻路原来把规划藏在执行里:`move goto` 许改地形时直接开走,`alter any` 时先规划、征询、再走,
+没路时放宽一档探路、把候选路线记进身上的路线簿(`r1`、`r2`,不落盘),`move goto --route r2` 取走即删,`move route` 只列候选。现在
+路线是存盘的名词,规划与执行分成两件事:
+
+- **路线**(`core/route`):`Itinerary` = 名字、维度、一串路段(每段是去一个途经点的那一截;途经点是 `Destination.Stop`,坐标加
+  到达方式,最后一个是终点)、整条与每段的路线标志(她写的那一截原样存成文字,`RouteFlags` 经 `route spec` 那一行命令的同一棵树
+  读回、经 `RouteSpecFlags` 翻成规格)、最近一次计划(`Plan`)、最近 8 次走过的记录。按主人存在主世界的 SavedData(`Routes`,
+  文件名带主人 UUID,与权限层同一个做法),同一个主人的同伴共用,重启不丢。名字规矩是 `Names`,与设计名、区域名同一条。
+- **计划**(`Plan`):从哪一格、何时规划的;每段一份:走得通(几步、估几刻、停在哪)、只看清一截(停在哪、之后为什么未知:预算用完、
+  伸进没加载的区块)、走不通(寻路结局的原话,下一步写成改这条路线的命令)、没规划(前面一段没走通或没看清);每段要挖的格(连同当时
+  的方块)、要放的格(倒水接坠落的那一格记水)、要问主人的格(连同为什么问);与回执里说要改什么读的是同一份(`NavText.Changes`)。
+- **规划**(`core/nav/Survey`):只搜不走,从她脚下逐段一次搜索,下一段接在上一段的终点与最后一步后面(门面 `PlanQuery.after`);
+  没走到的那一段交出看清的那一截(门面 `PlanResult.partial`)。`RoutePlanning` 把途经点按此刻的世界编成目标、交给它、写成计划。
+- **执行**(`core/nav/Trip`):照一段规划好的路走(`Trip.following`),路上边走边细算;反射层(跟随、战斗走位、捡东西、钓鱼、走到
+  实体跟前、建造走外圈、挖矿)照旧 `Trip.to`,许动要主人同意的格时先规划一条过目、问过再走。失败后放宽规格探路(PROBING)删掉:
+  放不放宽是她的决定,回执说要改几格、照抄哪一行。
+- **承诺**:她看过的那份计划就是 `move go` 许改的全部格子。`Plan.bind` 把它写成这一趟规格里按位置的"只许"
+  (`PositionCosts.confine`:只许挖计划里挖的格、只许放计划里放的格),执行层重搜时自然只在承诺里找,不另写检查。
+
+```
+route new home --to 120 64 -35 --alter natural
+route via home 100 70 -20 [--at 1]          插途经点;route drop home via 1 删
+route spec home --leg 2 --avoid water        整条或一段的标志:写了的换掉,没写的照旧;一段的叠在整条的上面
+route plan home                              只搜不走,不占身体,结论出来时回复;计划记在路线上
+route show home / route list / route delete home / route reverse home --as home_back
+move go home                                 占身体,task_finished 收尾
+```
+
+- 改意图(`via`、`drop`、`spec`)的每一步丢掉旧计划。`route reverse` 的终点是这一条上次规划时的起点(没规划过就说要先规划)。
+- **`move go`**:从她此刻的位置重新规划;路线有计划时拿新计划比那一份(`Plan.beyond`:要挖、要放、要问的格各自比,只看多出来的),
+  超出就把多出来的格说出来、不走;没计划就把这一份记成承诺直接走。有走不通的段也不走。开走前要问主人的格一次问完(沿用征询机制),
+  然后一段一段走,每段规格绑上承诺。路上停下时从这里再规划剩下几段:多出承诺外的格就说是哪几格,否则照寻路的结局说。只看清一截的
+  那一段走到那一截的尽头就停(`FailureType.UNCHARTED`),同一条再 `move go` 从那里接着规划。每一趟收场都记进路线走过的记录。
+- **`move goto` 是简写**:参数不变,把这一趟写成她自己的匿名路线 `goto-<她的名字>`(受理回执里写出来)再和 `move go` 一样走。
+  `--route` 删掉。失败回执给出能照抄的下一步,连同寻路诊断出的那条路要改的格(GameTest 里的原话):
+
+  ```
+  blocked on route goto-gametest_lodger: got within 6.0 blocks of -958990,-58,-171598 (now on the ground at y=-58). found no route without touching what needs the owner's consent (from -958996, -58, -171598 toward -958990, -58, -171598, about 6 blocks away; one exists that changes 2 block(s), some of them someone's — break 2 oak_planks (-958994,-57,-171598; -958994,-58,-171598) needing consent (placed by a player):) `route spec goto-gametest_lodger --alter any` lets me take it; then `route plan goto-gametest_lodger` shows the plan, and walking it asks the owner first.
+  ```
+- 从别处出发、新计划超出承诺,不走;路上世界变了、要承诺外的格,停下(GameTest 里的原话):
+
+  ```
+  the way from here goes beyond the plan of route out (made from -959112,-58,-170135), so I did not set off: it would also break 2 oak_planks (-959105,-57,-170130; -959105,-58,-170130). route plan out plans it from here and shows it; then move go out keeps to that plan.
+  stopped on route tunnel at -959070,-58,-170130: the way on from here needs cells outside the plan I keep to — it would break 2 stone (-959070,-57,-170130; -959070,-58,-170130). route plan tunnel plans it from here and shows it; then move go tunnel keeps to that plan.
+  ```
+- `route plan` 的回执是这个样子:抬头(从哪儿、多久以前、几段几步、估几刻),每段一行(要改的格与实际账同一种写法;只看清一截的
+  写"known for N steps up to x,y,z …, unknown past that",走不通的写原因),末尾一句能照抄的下一步:
+
+  ```
+  plan of route out, made from 7,-58,7 just now: 1 leg, 9 steps, about 131 ticks as priced.
+    leg 1 to 13,-58,7: 9 steps, about 131 ticks; break 2 oak_planks (9,-58,7; 9,-57,7)
+  move go out walks it; it changes only the cells listed here.
+  ```
+- 删掉的:`RouteBook`、`r` 编号、`move route` 与它的 `--alternatives`、`move goto --route`、`Trip` 的 PROBING 与 `probing()`、`NavText` 的
+  候选清单(`line`、`listing`、`noCleanRoute`、`unplanned`、`plannedRoutes`)。计划的说法只在 `RouteText`(要改的格与实际账同一种
+  写法,`NavText.planned`)。
+- 寻路结局"要改地形才有路"(`Outcome.NeedsAlter`)带着诊断出的那条路要做的改动,回执点名那几格(反射层的活也一样,例如
+  `use entity` 隔着玻璃罩时说 `break 2 glass (…)`),代替原来的候选清单。诊断问"许改的够不够"时设想身上有料,所以列出的可能是
+  身上没有的垫路料(`place 2 cobblestone`);照这份规格规划(`route plan`)时按身上真有的料算。
 
 ### transfer 改成一次一步
 
@@ -977,7 +1039,7 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
     一条,命令按预算分页。
 - **原来就分页的**:`build designs`、`build built`、`ftbquests list`,换成按预算切页。
 - **审查过、判为有界的**(不分页,理由):
-  - `scan around` 半径夹在 4–16;`task status` / `task timer` 表至多 8 个;`move route` 至多 3 条路线;
+  - `scan around` 半径夹在 4–16;`task status` / `task timer` 表至多 8 个;
   - `ftbquests show`:一个任务的正文(整段给出;原来截到 600 字,截掉的她无处可看,删掉)、依赖、任务项与奖励,随这一个
     任务的定义有界;它的参数吃掉余下整行,也挂不上 `--page`;`ftbquests submit`:每个任务项一行,同样随一个任务有界;
   - `throwaway` 四个动作:回执读回整份清单,清单只随她一次次写 id 变长(一次调用至多一个上行包),同一份清单每轮就在身体
