@@ -6,6 +6,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
@@ -35,13 +36,12 @@ class CellsTest {
 
     @BeforeAll
     static void boot() {
-        try {
-            net.minecraft.SharedConstants.tryDetectVersion();
-            net.minecraft.server.Bootstrap.bootStrap();
-            booted = true;
-        } catch (Throwable t) {
-            booted = false;
-        }
+        booted = MinecraftBoot.boot();
+    }
+
+    @AfterAll
+    static void restore() {
+        MinecraftBoot.restoreBrigadierWords();
     }
 
     @BeforeEach
