@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-import com.dwinovo.numen.core.build.Design;
+import com.dwinovo.numen.cli.Names;
 import com.dwinovo.numen.core.task.move.Destination;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -76,7 +76,7 @@ public record Itinerary(String name, ResourceLocation dimension, List<Leg> legs,
             plan.orElse(null), walks)));
 
     public Itinerary {
-        Design.checkedName(name);
+        Names.checked("route", name);
         if (legs.isEmpty()) {
             throw new IllegalArgumentException("a route goes somewhere: it needs at least its destination");
         }
@@ -86,7 +86,7 @@ public record Itinerary(String name, ResourceLocation dimension, List<Leg> legs,
 
     /**
      * 她自己的那条匿名路线叫什么:{@code move goto} 每次都把这一趟写成它再走,每个同伴一条、名字固定({@code goto-aria}),
-     * 失败回执里改它的下一步照抄这个名字。同伴的名字是玩家名的字符(字母、数字、下划线),小写后合设计名的规矩。
+     * 失败回执里改它的下一步照抄这个名字。同伴的名字是玩家名的字符(字母、数字、下划线),小写后合名字的规矩({@link Names})。
      */
     public static String gotoOf(String companionName) {
         return "goto-" + companionName.toLowerCase(java.util.Locale.ROOT);

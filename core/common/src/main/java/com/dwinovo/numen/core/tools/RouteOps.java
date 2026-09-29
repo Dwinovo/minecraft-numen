@@ -7,7 +7,6 @@ import java.util.Map;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.ServerSource;
-import com.dwinovo.numen.core.build.Design;
 import com.dwinovo.numen.core.nav.RouteQueries;
 import com.dwinovo.numen.core.route.Itinerary;
 import com.dwinovo.numen.core.route.Plan;
@@ -65,7 +64,6 @@ public final class RouteOps {
 
     /** 新建一条:从她站的地方到 {@code to},带着这一行写的路线标志。去处写错当场提醒,和 {@code move goto} 一样。 */
     public static String create(NumenPlayer her, String name, Destination.Stop to, CommandArgs args) {
-        Design.checkedName(name);
         if (routes(her).get(name) != null) {
             return TaskResult.fail("there is already a route named " + name + "; route show " + name + " shows it, "
                     + "route delete " + name + " removes it").toJson();
@@ -185,7 +183,6 @@ public final class RouteOps {
             throw new IllegalArgumentException("route reverse needs --as <name> for the new route, e.g. route reverse "
                     + name + " --as " + name + "_back");
         }
-        Design.checkedName(as);
         if (routes(her).get(as) != null) {
             return TaskResult.fail("there is already a route named " + as + "; pick another name for --as").toJson();
         }
