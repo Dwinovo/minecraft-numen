@@ -122,12 +122,15 @@ class ScanOpsTest {
         assertFalse(small.has("reason"));
         assertFalse(small.has("sources"));
         assertEquals("south-east", small.getAsJsonObject("nearest").get("direction").getAsString());
+        assertEquals("all", small.get("in_work_area").getAsString(), "整团都在她此刻的工作区里");
 
         JsonObject big = ScanOps.groupJson("g8", grouped.get(1), center);
         assertEquals(ScanOps.LIST_CELLS_UP_TO + 1, big.get("cells").getAsInt());
         assertFalse(big.has("positions"));
         assertEquals("-56,70,0..-40,70,0", big.get("box").getAsString());
         assertEquals("west, 6 up", big.getAsJsonObject("nearest").get("direction").getAsString());
+        // 这一排从西 40 格铺到西 56 格、高 6 格:离她不超过工作区半径的是西 40 到西 47 那 8 格
+        assertEquals("8 of " + (ScanOps.LIST_CELLS_UP_TO + 1) + " cells", big.get("in_work_area").getAsString());
     }
 
     /** A group that is not allowed carries the permission layer's own reason. */

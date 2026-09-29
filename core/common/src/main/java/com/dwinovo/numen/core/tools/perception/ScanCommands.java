@@ -7,6 +7,7 @@ import com.dwinovo.numen.cli.CommandGroup;
 import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.core.nav.WorkArea;
 import com.dwinovo.numen.core.tools.PerceptionOps;
 import com.dwinovo.numen.core.tools.QueryExtraOps;
 import com.dwinovo.numen.core.tools.ScanOps;
@@ -78,6 +79,8 @@ public final class ScanCommands {
                 .note("One group per line, nearest first; a long list comes in pages. --page turns the pages of "
                         + "your latest scan without scanning again, so its group ids stay the same.")
                 .note("Group ids (g1, g2, ...) stay good only until your next `scan blocks` without --page.")
+                .note("Each group says how much of it lies in your work area (within " + WorkArea.RADIUS
+                        + " blocks of where you stand), the only place `work mine` digs from here.")
                 .note("Only loaded terrain is read: anything further out is UNKNOWN, not empty.")
                 .seeAlso("scan block", "scan around")
                 .promote("Find blocks of given type(s) near you, reported as GROUPS: matching cells "
@@ -86,7 +89,10 @@ public final class ScanCommands {
                         + "line (a JSON object), nearest first; groups_total counts them all when the whole radius was "
                         + "read. A long list comes in pages: pass page to read the next one — it turns the pages of "
                         + "your latest scan without scanning again, so the ids stay the same. Each group gives: id, cells and a count per block type, the nearest cell with direction and "
-                        + "distance, a box (x1,y1,z1..x2,y2,z2 — the form avoid_break takes), permission for "
+                        + "distance, a box (x1,y1,z1..x2,y2,z2 — the form avoid_break takes), in_work_area — how much "
+                        + "of it lies within " + WorkArea.RADIUS + " blocks of where you stand, the only place "
+                        + "work_mine digs from here (all, none, or a count of its cells; none means move_goto near it "
+                        + "first), permission for "
                         + "breaking its cells (allow; ask = work_mine asks the owner first; deny = work_mine stops) with the "
                         + "reason, sources = source cells for water or lava (a source behaves very differently from "
                         + "flowing), and for groups of up to 16 cells every position. A very large group comes back "

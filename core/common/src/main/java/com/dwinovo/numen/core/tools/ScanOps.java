@@ -7,6 +7,7 @@ import com.dwinovo.numen.core.scan.BlockGroups;
 import com.dwinovo.numen.core.scan.BlockScanner;
 import com.dwinovo.numen.core.scan.BlockSearch;
 import com.dwinovo.numen.core.scan.GroupBook;
+import com.dwinovo.numen.core.nav.WorkArea;
 import com.dwinovo.numen.core.task.CompassUtil;
 import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.permission.Gate;
@@ -35,6 +36,9 @@ import java.util.function.Consumer;
  *
  * <p>结果按团给出({@link BlockGroups}):每一格先拿挖掘落点会提交的同一个动作问权限层,相连且说法相同的格子
  * 成一团,由近及远;每一团都记进身体上的团编号簿({@link GroupBook}),供 {@code mine groups} 取用。
+ *
+ * <p>每一团标出在不在她此刻的工作区里({@link WorkArea},以扫描时她脚下那一格为中心,和她从这里派 {@code work_mine} 时的
+ * 工作区是同一块):区里的能直接挖,区外的要先走过去。
  *
  * <p>团一条一行(一个 JSON 对象),按输出预算分页({@link Listing})。翻页不重新扫:团的编号只在一次扫描里有效,重扫一遍
  * 就是另一批编号,前一页上的编号跟着作废。所以 {@code --page} 翻的是簿子里存着的那一次扫描({@link GroupBook#page}),
@@ -158,6 +162,7 @@ public final class ScanOps {
             data.put("groups_total", all.size());
         }
         data.put("radius_searched", radius);
+        data.put("work_area", new WorkArea(center, WorkArea.RADIUS).describe());
         String head = all.isEmpty()
                 ? "No groups" + where + "."
                 : all.size() + " group(s)" + where + ", nearest first, one per line:";
@@ -167,8 +172,10 @@ public final class ScanOps {
     }
 
     /**
-     * 一团的事实:编号、各种方块的格数、离她最近的一格(方向与距离)、包围盒、挖它权限层怎么说(不是放行时
-     * 附上理由)、流体团的源头格数;小团逐格列坐标。包围盒与坐标写成 {@code avoid_break} 认的格式。
+     * 一团的事实:编号、各种方块的格数、离她最近的一格(方向与距离)、包围盒、在不在她的工作区里、挖它权限层怎么说
+     * (不是放行时附上理由)、流体团的源头格数;小团逐格列坐标。包围盒与坐标写成 {@code avoid_break} 认的格式。
+     *
+     * @param center 扫描的中心,也就是她此刻脚下那一格:方向从这里看,工作区以这里为中心
      */
     static JsonObject groupJson(String id, BlockGroups.Group group, BlockPos center) {
         JsonObject o = new JsonObject();
@@ -184,6 +191,7 @@ public final class ScanOps {
         nearest.addProperty("distance", Math.round(group.distance() * 10) / 10.0);
         o.add("nearest", nearest);
         o.addProperty("box", cell(group.min()) + RouteSpecFlags.BOX_SEPARATOR + cell(group.max()));
+        o.addProperty("in_work_area", inWorkArea(group, new WorkArea(center, WorkArea.RADIUS)));
         o.addProperty("permission", group.verdict().kind().name().toLowerCase(Locale.ROOT));
         if (!group.verdict().allowed()) {
             o.addProperty("reason", group.verdict().reason());
@@ -201,6 +209,12 @@ public final class ScanOps {
             o.add("positions", positions);
         }
         return o;
+    }
+
+    /** 这一团有几格在工作区里:全在是 {@code all},一格都不在是 {@code none},否则 {@code 8 of 17 cells}。 */
+    private static String inWorkArea(BlockGroups.Group group, WorkArea area) {
+        long in = group.cells().keySet().stream().filter(area::contains).count();
+        return in == group.cells().size() ? "all" : in == 0 ? "none" : in + " of " + group.cells().size() + " cells";
     }
 
     /** 从中心看那一格:水平方位({@link CompassUtil})加上下几格;正好在中心是 {@code here}。 */
