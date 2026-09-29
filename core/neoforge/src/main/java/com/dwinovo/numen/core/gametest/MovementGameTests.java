@@ -419,58 +419,52 @@ public class MovementGameTests {
         });
     }
 
-    /** {@code g7} 里的数字。 */
-    private static long idNumber(String id) {
-        return Long.parseLong(id.substring(1));
-    }
-
     /**
-     * 编号跨身体重建接着往上数:扫一次,拿到一个团编号;她休眠(身体落盘离场)再回来,是一具新身体、簿子是空的——旧的团编号
-     * 说清楚没有扫描结果;再扫一次,新编号的数字比休眠前的大,旧编号不会指到新团上。
+     * 扫进区域的东西不随身体走:扫一次进一块区域,拿到 {@code marks/g1};她休眠(身体落盘离场)再回来,是一具新身体——
+     * {@code area show marks} 照样列出那一部分和那一格;再扫一次进同一块,编号接着往上数成 {@code marks/g2},旧编号不会指到新团上。
      */
     @GameTest(template = "floor16", timeoutTicks = 4000, batch = "numen_terrain")
-    public static void ids_keep_counting_after_the_body_is_rebuilt(GameTestHelper helper) {
+    public static void an_area_a_scan_kept_outlives_the_body(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
         BlockPos markRel = new BlockPos(6, 2, 6);
-        level.setBlockAndUpdate(helper.absolutePos(markRel), Blocks.HONEYCOMB_BLOCK.defaultBlockState());
+        BlockPos mark = helper.absolutePos(markRel);
+        level.setBlockAndUpdate(mark, Blocks.HONEYCOMB_BLOCK.defaultBlockState());
         BlockPos spawn = helper.absolutePos(new BlockPos(3, 2, 6));
         NumenPlayer first = com.dwinovo.numen.entity.Companions.summon(server, UUID.randomUUID(),
                 "gametest_numberer", level, new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         UUID uuid = first.getUUID();
         // 召唤会替她挑一个站得住的落点,不一定正好在 spawn 那格:半径给宽一点
-        ToolRun firstScan = scan(first, 10, "minecraft:honeycomb_block");
+        ToolRun firstScan = scanInto(first, 10, "minecraft:honeycomb_block", "marks");
         NumenPlayer[] second = new NumenPlayer[1];
         ToolRun[] secondScan = new ToolRun[1];
-        String[] before = new String[1];   // 休眠前的 g
+        String[] shown = new String[1];
 
         succeedWhen(helper, () -> {
-            if (before[0] == null) {
+            if (shown[0] == null) {
                 helper.assertTrue(firstScan.reply() != null, "the first scan has not replied");
-                var group = groupHolding(groupsIn(firstScan.reply()), helper.absolutePos(markRel));
-                helper.assertTrue(group != null, "the first scan did not list the block: " + firstScan.reply());
-                before[0] = group.get("id").getAsString();
+                var group = groupHolding(groupsIn(firstScan.reply()), mark);
+                helper.assertTrue(group != null && "marks/g1".equals(group.get("id").getAsString()),
+                        "the first scan did not keep the block as marks/g1: " + firstScan.reply());
                 com.dwinovo.numen.entity.Companions.dormant(server, first);
                 second[0] = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
                 helper.assertTrue(second[0] != null && second[0] != first, "the body was not rebuilt");
-                String stale = com.dwinovo.numen.core.scan.GroupBook.of(second[0])
-                        .staleMessage(List.of(before[0]));
-                helper.assertTrue(stale != null && stale.contains("no scan_blocks result"),
-                        "the rebuilt body still claims the old scan: " + stale);
-                secondScan[0] = scan(second[0], 10, "minecraft:honeycomb_block");
+                shown[0] = command(second[0], "area show marks").reply();
+                secondScan[0] = command(second[0], "scan blocks 10 minecraft:honeycomb_block --into marks");
             }
+            var kept = groupHolding(groupsIn(shown[0]), mark);
+            helper.assertTrue(kept != null && "marks/g1".equals(kept.get("id").getAsString()),
+                    "the rebuilt body does not see what the scan kept: " + shown[0]);
             helper.assertTrue(secondScan[0].reply() != null, "the second scan has not replied");
-            var group = groupHolding(groupsIn(secondScan[0].reply()), helper.absolutePos(markRel));
-            helper.assertTrue(group != null, "the second scan did not list the block: " + secondScan[0].reply());
-            String g = group.get("id").getAsString();
-            helper.assertTrue(idNumber(g) > idNumber(before[0]),
-                    "ids started over after the rebuild: before " + before[0] + ", after " + g);
+            var again = groupHolding(groupsIn(secondScan[0].reply()), mark);
+            helper.assertTrue(again != null && "marks/g2".equals(again.get("id").getAsString()),
+                    "the second scan did not number on in the area: " + secondScan[0].reply());
             com.dwinovo.numen.entity.Companions.dismiss(server, second[0]);
         });
     }
 
     /**
-     * 重启后接不回来的活不许让调度 tick 抛出去:存下的参数重放时已经不成立(mine 同时给了 block_ids 与 groups,
+     * 重启后接不回来的活不许让调度 tick 抛出去:存下的参数重放时已经不成立(mine 同时给了 block_ids 与 area,
      * 工具当场拒收),新身体照样起来,她收到一条 task_finished 说清这件活没接回来,记录清掉。
      */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_terrain")
@@ -484,7 +478,7 @@ public class MovementGameTests {
         com.dwinovo.numen.entity.Companions.dormant(server, first);
         var registry = com.dwinovo.numen.entity.CompanionRegistry.get(server);
         registry.put(uuid, registry.find(uuid).doing("work_mine", "work_mine",
-                "{\"block_ids\":[\"minecraft:stone\"],\"groups\":[\"g1\"],\"count\":1}"));
+                "{\"block_ids\":[\"minecraft:stone\"],\"area\":[\"ores/g1\"],\"count\":1}"));
         NumenPlayer second = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
         helper.assertTrue(second != null, "the body was not rebuilt");
         StringBuilder told = new StringBuilder();

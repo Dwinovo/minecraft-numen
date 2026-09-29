@@ -298,7 +298,7 @@ public class PerceptionGameTests {
 
     /**
      * 同源:找方块从 scan_blocks 与 scan blocks 读到同一份团。标签照原版写法({@code #minecraft:logs})认,一个 id 一个标签
-     * 同一次找;两次各领一批新的团编号,编号之外一字不差。两次先后找,后一次的团簿整本换掉前一次的。
+     * 同一次找;只是看,不存、没有编号,两份回执一字不差。
      */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_perception")
     public static void scan_blocks_reads_the_same_from_the_tool_and_the_command(GameTestHelper helper) {
@@ -324,7 +324,7 @@ public class PerceptionGameTests {
                     helper.assertTrue(line != null, "scan blocks has not answered");
                     helper.assertTrue(groupHolding(groupsIn(tool), gold) != null && groupHolding(groupsIn(tool), log) != null,
                             "the gold block and the log are not both found: " + tool);
-                    helper.assertTrue(withoutGroupIds(tool).equals(withoutGroupIds(line)),
+                    helper.assertTrue(tool.equals(line),
                             "scan_blocks and scan blocks find differently: " + tool + " / " + line);
                 })
                 .thenExecute(() -> {
@@ -333,11 +333,6 @@ public class PerceptionGameTests {
                     CompanionFactory.despawn(level.getServer(), companion);
                 })
                 .thenSucceed();
-    }
-
-    /** 团编号每找一次领一批新的,比两份回执时抹掉(团一行一个 JSON 对象,在消息里引号带着转义)。 */
-    private static String withoutGroupIds(String reply) {
-        return reply.replaceAll("(\\\\?\"id\\\\?\":\\\\?\")g\\d+", "$1g");
     }
 
     private static JsonObject json(ToolRun run) {

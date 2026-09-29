@@ -42,7 +42,6 @@ import java.util.UUID;
 public final class NumenPlayer extends ServerPlayer implements Body {
 
     private static final String NBT_KEY_OWNER = "NumenOwner";
-    private static final String NBT_KEY_ID_NUMBER = "NumenIdNumber";
 
     /** Owner's player UUID. Null only transiently before the first assignment. */
     private UUID ownerUuid;
@@ -209,7 +208,7 @@ public final class NumenPlayer extends ServerPlayer implements Body {
     }
 
     /**
-     * 内容包挂在这具身体上的同伴级状态,按类型各一份(路线簿之类)。
+     * 挂在这具身体上的同伴级状态,按类型各一份(征询登记处、等主人答复的调用之类)。
      *
      * <p>与 {@link #pausedReflexes} 同一原则——<b>跟着身体走,不进静态表</b>:身体没了状态
      * 就没了,休眠回来是新身体、新状态,不用给每一种状态各配一套离场清理;引擎不认识
@@ -220,20 +219,6 @@ public final class NumenPlayer extends ServerPlayer implements Body {
     /** 取(首次取时建)这具身体上的一份同伴级状态。 */
     public <T> T state(Class<T> type, java.util.function.Supplier<T> init) {
         return type.cast(bodyState.computeIfAbsent(type, k -> init.get()));
-    }
-
-    /** 这只同伴发给模型的编号已经用到第几号;跟着 {@code .dat} 落盘。 */
-    private long idNumber;
-
-    /**
-     * 给模型看的编号取下一个数字(团 g8 里的那个数)。一只同伴一条,单调递增,
-     * 存在身体自己的 {@code .dat} 里:休眠、死亡复活、服务器重启之后接着往上数。
-     *
-     * <p>编号挂在 {@link #state} 那些簿子上的内容会随身体重建清空,数字却不能重来——模型的对话历史跨过
-     * 这些都还在,旧编号要是从 1 重数,就会悄悄指向新的一团方块。
-     */
-    public long nextIdNumber() {
-        return ++idNumber;
     }
 
     /** The loaded companion body with this UUID, or {@code null} if not spawned. */
@@ -410,13 +395,11 @@ public final class NumenPlayer extends ServerPlayer implements Body {
         if (ownerUuid != null) {
             output.putUUID(NBT_KEY_OWNER, ownerUuid);   // 1.21.4: no CompoundTag.store(Codec)
         }
-        output.putLong(NBT_KEY_ID_NUMBER, idNumber);
     }
 
     @Override
     public void readAdditionalSaveData(CompoundTag input) {
         super.readAdditionalSaveData(input);
         if (input.hasUUID(NBT_KEY_OWNER)) this.ownerUuid = input.getUUID(NBT_KEY_OWNER);
-        this.idNumber = input.getLong(NBT_KEY_ID_NUMBER);
     }
 }

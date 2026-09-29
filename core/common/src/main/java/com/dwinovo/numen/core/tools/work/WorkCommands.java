@@ -26,8 +26,9 @@ import net.minecraft.resources.ResourceLocation;
  * <p>三个动作都占身体,交任务槽:受理即回执,收尾走 task_finished。{@code mine} 提升成快捷工具 {@code work_mine};挖矿的路线规格
  * 标志与 goto 共用({@link RouteSpecFlags}),叠在 mine 自己的默认规格上(可以改地形,要主人同意的格也算进去)。
  *
- * <p>{@code mine} 与 {@code collect} 都只在工作区里干({@link WorkArea}):受理时她脚下那一格为中心。mine 用满半径,区外的目标只
- * 报告;collect 的半径由模型给,上限就是工作区的半径。
+ * <p>{@code mine} 与 {@code collect} 都只在工作区里干({@link WorkArea}):受理时她脚下那一格为中心。mine 挖一块区域里扫描过的格
+ * ({@code --area} 点名,{@code --block_ids} 是先扫进一块匿名区域的简写),用满半径,区外的只报告;collect 的半径由模型给,上限
+ * 就是工作区的半径,{@code --area} 再把它收窄到点名的区域里。
  */
 public final class WorkCommands {
 
@@ -39,22 +40,28 @@ public final class WorkCommands {
     private static final long MIN_FISH_TICKS = 120L * 20L;
 
     private static final Param<List<String>> BLOCK_IDS = Param.optional("block_ids",
-            ArgType.list(ArgType.idOrTag()), "Block types to gather; she finds them in her work area herself. "
-                    + "Include every variant (iron_ore AND deepslate_iron_ore). Give this OR groups.");
-    private static final Param<List<String>> GROUPS = Param.optional("groups", ArgType.list(ArgType.word()),
-            "Dig exactly the cells of these groups that still hold the block the scan saw, nothing beyond them. "
-                    + "Give this OR block_ids.")
-            .values("group ids (g1, g2, ...) from your latest scan_blocks");
+            ArgType.list(ArgType.idOrTag()), "Block types to gather; she scans for them around her herself. "
+                    + "Include every variant (iron_ore AND deepslate_iron_ore). Give this OR area.");
+    private static final Param<List<String>> MINE_AREA = Param.optional("area", ArgType.list(ArgType.string()),
+            "Dig exactly the scanned cells of this area, or of these parts of it, that still hold the block the "
+                    + "scan saw, nothing beyond them. Give this OR block_ids.")
+            .values("an area or its parts, as a scan with --into kept them and `area show` lists them (ores, "
+                    + "ores/g3 ores/g4)");
     private static final Param<Integer> MINE_COUNT = Param.optional("count", ArgType.integer(1, MAX_MINE_COUNT),
             "How many ITEMS to gather (not blocks: a block may drop several), counting only items gained on top "
                     + "of what you already hold. Required with block_ids.")
-            .whenOmitted("dig the groups out (groups only)");
+            .whenOmitted("dig the area out (area only)");
     private static final Param<List<ResourceLocation>> ITEM_IDS = Param.optional("item_ids",
             ArgType.list(ArgType.id()), "Item types to pick up.")
             .whenOmitted("pick up everything");
     private static final Param<Integer> RADIUS = Param.optional("radius", ArgType.integer(1, WorkArea.RADIUS),
             "How far around where she stands when you call it to pick up, in blocks.")
-            .whenOmitted("pick up within " + InventoryOps.COLLECT_DEFAULT_RADIUS);
+            .whenOmitted("pick up within " + InventoryOps.COLLECT_DEFAULT_RADIUS + ", or within her work area's "
+                    + WorkArea.RADIUS + " with --area");
+    private static final Param<List<String>> COLLECT_AREA = Param.optional("area", ArgType.list(ArgType.string()),
+            "Only pick up drops lying in this area, or these parts of it.")
+            .values("an area or its parts as `area list` and `area show` list them")
+            .whenOmitted("pick up anywhere within the radius");
     private static final Param<Integer> CATCHES = Param.optional("count", ArgType.integer(1, MAX_CATCHES),
             "How many catches to reel in.")
             .whenOmitted("keep fishing until given something else to do");
@@ -66,38 +73,42 @@ public final class WorkCommands {
     }
 
     private static void actions(CommandGroup work) {
-        work.server("mine", "Gather blocks by type and quantity, or dig named groups from a scan.",
+        work.server("mine", "Dig the scanned cells of an area, or gather blocks by type and quantity.",
                         WorkCommands::mine,
-                        Stream.concat(Stream.of(BLOCK_IDS, GROUPS, MINE_COUNT), RouteSpecFlags.PARAMS.stream())
+                        Stream.concat(Stream.of(BLOCK_IDS, MINE_AREA, MINE_COUNT), RouteSpecFlags.PARAMS.stream())
                                 .toArray(Param<?>[]::new))
+                .example("work mine --area ores/g3")
+                .example("work mine --area ores --count 10")
                 .example("work mine --block_ids iron_ore deepslate_iron_ore --count 10")
-                .example("work mine --groups g3 g4")
-                .example("work mine --block_ids #minecraft:logs --count 16 --avoid_break 10,64,-3..14,70,1")
                 .note("Background work: returns at once; the end arrives as a task_finished event.")
+                .note("It digs the cells of an area that a scan added (`scan blocks 32 iron_ore --into ores`), each "
+                        + "only while it still holds the block the scan saw; framed cells carry no block and are not "
+                        + "dug. --block_ids with --count is shorthand for scanning those types around her into an "
+                        + "unnamed area and digging that.")
                 .note("Works in her work area: within " + WorkArea.RADIUS + " blocks of where she stands when you "
                         + "call it. There she walks, digs to buried ores, pillars up and bridges gaps on her own. The route "
                         + "flags are laid over work_mine's own default, which may dig anything (blocks needing consent "
                         + "included); pass them only to restrict her.")
                 .note("What lies beyond the work area is reported, not visited: the end says how many, where the "
-                        + "nearest is and how far. `scan blocks` marks which groups lie in it; for the others move_goto "
-                        + "near them first (arrive near), then mine again. Groups lying wholly beyond it are refused at once.")
+                        + "nearest is and how far; move_goto near it first (arrive near), then mine again. An area lying "
+                        + "wholly beyond it is refused at once.")
                 .note("Asks your owner before breaking a block their rules want asked about; a refusal stops the "
                         + "task with the reason.")
                 .note("Only mines what her tools actually harvest, and stops naming the tier she needs when "
                         + "nothing qualifies.")
-                .seeAlso("scan blocks", "work collect", "task stop")
-                .promote("Gather blocks, in one of two ways. block_ids + count: she finds the blocks of "
-                        + "those types in her work area herself and mines until `count` NEW items are gained or none "
-                        + "remain there; include all variants (iron_ore AND deepslate_iron_ore). groups: ids from "
-                        + "your latest scan_blocks (g1, g2, ...) — she digs exactly the cells of those groups that "
-                        + "still hold the block the scan saw, nothing beyond them; count is optional there and "
-                        + "without it she digs the groups out. An id not from the latest scan fails — scan again. "
-                        + "WORK AREA: either way she works only within " + WorkArea.RADIUS + " blocks of where she "
-                        + "stands when you call it; there she walks, digs to buried ores, pillars up and bridges gaps "
-                        + "on her own. What lies beyond it she reports (how many, the nearest, how far) and does not go "
-                        + "to: scan_blocks marks each group's in_work_area; for the rest move_goto near them first (arrive:'near'), "
-                        + "then work_mine again. A group lying wholly beyond it is refused at once. When she cannot reach "
-                        + "what is in the area, the end says why (no path, search budget used up, needs digging, a "
+                .seeAlso("scan blocks", "area show", "work collect", "task stop")
+                .promote("Gather blocks, in one of two ways. area: an area or parts of it that scan_blocks kept with "
+                        + "into (ores, or ores/g3 ores/g4) — she digs exactly the scanned cells there that still hold "
+                        + "the block the scan saw, nothing beyond them; count is optional there and without it she "
+                        + "digs them out. Areas are saved, so the same area works after a restart. block_ids + count: "
+                        + "shorthand — she scans for those types around her into an unnamed area and mines until "
+                        + "`count` NEW items are gained or none remain in her work area; include all variants "
+                        + "(iron_ore AND deepslate_iron_ore). WORK AREA: either way she works only within "
+                        + WorkArea.RADIUS + " blocks of where she stands when you call it; there she walks, digs to "
+                        + "buried ores, pillars up and bridges gaps on her own. What lies beyond it she reports (how "
+                        + "many, the nearest, how far) and does not go to: move_goto near it first (arrive:'near'), then "
+                        + "work_mine again. An area lying wholly beyond it is refused at once. When she cannot reach "
+                        + "what is in the work area, the end says why (no path, search budget used up, needs digging, a "
                         + "refused block, not loaded, ...) and what to try next. count is items, not "
                         + "blocks (redstone_ore drops ~4). Before breaking a block that needs the owner's consent "
                         + "she asks; if the owner or a rule refuses, the task stops with the reason — decide what "
@@ -109,19 +120,20 @@ public final class WorkCommands {
                         + "must leave standing. task_finished status=done "
                         + "means the job is complete; only timeout permits resending the same arguments.");
         work.server("collect", "Pick up dropped items lying on the ground nearby.", WorkCommands::collect,
-                        ITEM_IDS, RADIUS)
+                        ITEM_IDS, RADIUS, COLLECT_AREA)
                 .example("work collect")
                 .example("work collect --item_ids minecraft:iron_ingot minecraft:raw_iron --radius 8")
+                .example("work collect --area farm")
                 .note("Background work: returns at once; the end arrives as a task_finished event.")
                 .note("Walks to each drop until none she can reach remain; she picks up what she gets close to. "
                         + "It never breaks or places a block: drops in a pit or across a gap it cannot walk to "
                         + "are left there and named in the result.")
                 .note("Only drops within the radius of where she stood when you called it count, so she never "
                         + "wanders off chasing drops; the radius goes up to her work area's " + WorkArea.RADIUS
-                        + " blocks.")
+                        + " blocks. --area narrows it to the drops lying in that area.")
                 .note("For drops left by your own interactions; `fight attack` and work_mine already walk over the "
                         + "drops they make.")
-                .seeAlso("work mine", "task stop");
+                .seeAlso("work mine", "area show", "task stop");
         work.server("fish", "Fish from nearby water with a fishing rod.", WorkCommands::fish, CATCHES)
                 .example("work fish --count 5")
                 .example("work fish")
@@ -135,12 +147,13 @@ public final class WorkCommands {
     }
 
     private static void mine(ServerSource src, CommandArgs args) {
-        TaskDispatch.setTask(src, new BlockActionOps().autoMine(src, args.get(BLOCK_IDS), args.get(GROUPS),
+        TaskDispatch.setTask(src, new BlockActionOps().autoMine(src, args.get(BLOCK_IDS), args.get(MINE_AREA),
                 args.get(MINE_COUNT), RouteSpecFlags.parse(args, MineBlockTaskRecord.DEFAULT_SPEC)));
     }
 
     private static void collect(ServerSource src, CommandArgs args) {
-        TaskDispatch.setTask(src, new InventoryOps().collectItems(src, args.get(ITEM_IDS), args.get(RADIUS)));
+        TaskDispatch.setTask(src, new InventoryOps().collectItems(src, args.get(ITEM_IDS), args.get(RADIUS),
+                args.get(COLLECT_AREA)));
     }
 
     /** 没给数量就是常驻:一直钓,不设期限——期限是给"该多久干完"用的,而它没有干完。 */

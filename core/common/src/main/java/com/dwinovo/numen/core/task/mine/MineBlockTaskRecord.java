@@ -1,27 +1,27 @@
 package com.dwinovo.numen.core.task.mine;
 
+import com.dwinovo.numen.area.Area;
+import com.dwinovo.numen.area.Cells;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.core.nav.WorkArea;
+import com.dwinovo.numen.core.scan.BlockScan;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.task.TaskRecord;
-import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
 
-import java.util.Map;
 import java.util.Set;
 
 /**
- * Typed task descriptor for {@code work mine} (shortcut {@code mine}), in one of two forms:
+ * Typed task descriptor for {@code work mine} (shortcut {@code work_mine}). She digs the cells of an area: the
+ * cells a scan added, each still holding the block the scan saw, inside her work area ({@link #work}); what lies
+ * beyond the work area is reported, not visited. The area comes one of two ways:
  * <ul>
- *   <li><b>block_ids</b> — "gather {@code count} of these block types, find them yourself": the task
- *       searches its work area ({@link #area}), walks to the cheapest with the terrain-modifying
- *       pathfinder, mines into the inventory, repeats until the count is met or nothing reachable
- *       remains there; what lies beyond the area is reported, not visited;</li>
- *   <li><b>groups</b> — "dig exactly these groups from the latest {@code scan_blocks}": the targets are
- *       only those cells, each still holding the block the scan recorded; nothing beyond them. The ids
- *       are resolved against the body's group book when the call is dispatched, so a stale id, or a group
- *       lying wholly beyond the work area, is refused in the tool result itself and the record carries the
- *       cells.</li>
+ *   <li><b>--area</b> — an area (or parts of it) the model named, resolved when the call is dispatched, so a
+ *       missing area, one with no scanned cells, or one lying wholly beyond the work area is refused in the
+ *       tool result itself and the record carries the cells;</li>
+ *   <li><b>--block_ids + count</b> — shorthand for "scan these block types into an anonymous area, then mine it":
+ *       the task scans at the start ({@link #SCAN_RADIUS} around where she stands) and digs that area the same way,
+ *       until {@code count} items are gained or none remain in the work area.</li>
  * </ul>
  * Drops/tool-tier follow from whatever the entity holds, as in vanilla.
  */
@@ -33,17 +33,27 @@ public final class MineBlockTaskRecord extends TaskRecord {
      */
     public static final RouteSpec DEFAULT_SPEC = RouteSpec.defaults().edit().alter(RouteSpec.Alter.ANY).build();
 
-    /** {@link #count} 取这个值:groups 用法没给 count,挖完这些团为止。 */
+    /** {@link #count} 取这个值:点名区域的用法没给 count,挖完区域里的格为止。 */
     public static final int UNTIL_GONE = 0;
+
+    /**
+     * 简写先看多远:和 {@code scan blocks} 能看的一样远。区里的进候选,区外的只报告——回执说区外还有几个、最近一个在哪。
+     */
+    public static final int SCAN_RADIUS = BlockScan.MAX_RADIUS;
 
     /** Per-block budget is generous; total scales with the work so big jobs don't time out. */
     private static final long TICKS_PER_BLOCK = 30 * 20;   // 30s each
     private static final long MIN_TIMEOUT_TICKS = 60 * 20; // 1 min floor
 
-    /** Block types to gather: the block_ids given, or the kinds the named cells held when scanned. */
+    /** Block types to gather: the block_ids given, or the kinds the area's scanned cells held. */
     public final Set<Block> targets;
-    /** groups 用法点名的格子和扫描时记下的方块(派发时从团簿取好);block_ids 用法为空。 */
-    public final Map<BlockPos, Block> named;
+    /**
+     * 点名的区域(整块或几部分的并)里扫描时附带了方块的格——能挖的只有它们,框出来的格不知道当时是什么。简写为 null:
+     * 开工时现看一块匿名的。
+     */
+    public final Cells scanned;
+    /** 回执里怎么称呼点名的区域({@code ores/g3});简写为 null。 */
+    public final String areaName;
     /** How many ITEMS to gather before reporting success, or {@link #UNTIL_GONE}. */
     public final int count;
     /** Human-readable target label (block names, e.g. "iron_ore", "oak_log+1") — the owner reads it too. */
@@ -51,7 +61,7 @@ public final class MineBlockTaskRecord extends TaskRecord {
     /** How the body may move and dig: {@link #DEFAULT_SPEC} with the model's fields laid over it. */
     public final RouteSpec spec;
     /** 工作区:受理时她脚下那一格为中心。目标只取区里的,区外的只报告。 */
-    public final WorkArea area;
+    public final WorkArea work;
 
     /** Live progress = matching ITEMS gathered since the task started (counted in the inventory,
      *  not blocks broken — multi-drop ores like redstone yield several items per block), or cells
@@ -59,21 +69,26 @@ public final class MineBlockTaskRecord extends TaskRecord {
      *  overlay text. */
     private int mined = 0;
 
-    public MineBlockTaskRecord(ServerSource source, long deadlineGameTime, Set<Block> targets,
-                               Map<BlockPos, Block> named, int count, String label, RouteSpec spec,
-                               WorkArea area) {
+    public MineBlockTaskRecord(ServerSource source, long deadlineGameTime, Set<Block> targets, Area area,
+                               String areaName, int count, String label, RouteSpec spec, WorkArea work) {
         super(source, deadlineGameTime);
         this.targets = Set.copyOf(targets);
-        this.named = Map.copyOf(named);
+        this.scanned = area == null ? null : scanned(area);
+        this.areaName = areaName;
         this.count = count;
         this.label = label;
         this.spec = spec;
-        this.area = area;
+        this.work = work;
     }
 
     /** 挖 {@code blocks} 格(或收 {@code blocks} 个物品)的期限预算。 */
     public static long timeoutTicks(int blocks) {
         return Math.max(MIN_TIMEOUT_TICKS, (long) blocks * TICKS_PER_BLOCK);
+    }
+
+    /** 区域里扫描时附带了方块的格:能挖的只有它们(框出来的格不知道当时是什么)。 */
+    public static Cells scanned(Area area) {
+        return area.cells().filter(state -> true);
     }
 
     public int getMined() {
@@ -85,23 +100,24 @@ public final class MineBlockTaskRecord extends TaskRecord {
         this.mined = gathered;
     }
 
-    /** groups 用法点名的格数。 */
+    /** 点名的区域里扫描过的格数;简写为 0。 */
     public int cells() {
-        return named.size();
+        return scanned == null ? 0 : (int) scanned.size();
     }
 
-    /** 受理时交代工作区在哪;点名的格有落在区外的,说有几格、它们留着不挖。 */
+    /** 受理时交代工作区在哪;点名的区域有格落在区外的,说有几格、它们留着不挖。 */
     @Override
     public String acceptNote() {
-        String where = "My work area is " + area.describe() + ", where I stand now";
-        if (named.isEmpty()) {
+        String where = "My work area is " + work.describe() + ", where I stand now";
+        if (scanned == null) {
             return where + ": I mine only there, and the end reports what lies beyond it.";
         }
-        long outside = named.keySet().stream().filter(p -> !area.contains(p)).count();
+        long inside = scanned.intersect(work.cells()).size();
+        long outside = scanned.size() - inside;
         return outside == 0
-                ? where + "; all " + named.size() + " named cells lie in it."
-                : where + ": " + (named.size() - outside) + " of the " + named.size() + " named cells lie in it; the"
-                        + " other " + outside + " lie beyond it and will be left.";
+                ? where + "; all " + scanned.size() + " scanned cells of " + areaName + " lie in it."
+                : where + ": " + inside + " of the " + scanned.size() + " scanned cells of " + areaName + " lie in it; "
+                        + "the other " + outside + " lie beyond it and will be left.";
     }
 
     @Override

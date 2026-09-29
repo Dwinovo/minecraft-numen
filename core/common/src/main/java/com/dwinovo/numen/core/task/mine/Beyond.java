@@ -10,10 +10,10 @@ import net.minecraft.core.BlockPos;
 
 /**
  * 工作区外还有的目标:mine 只报告、不去。回执里说它们的那一句——还有几个、最近一个在哪、离她多远,以及照着就能做的
- * 下一步——只在这里写;受理时点名的团整个落在区外、当场拒收的那句话也在这里。
+ * 下一步——只在这里写;受理时点名的区域整个落在区外、当场拒收的那句话也在这里。
  *
- * @param cells   区外的格:找方块的查询带回来的,或点名的团里落在区外的
- * @param atLeast 查询凑够要的个数就停了,区外可能还有更多
+ * @param cells   区外的格:要挖的区域里落在工作区外、扫描过的格
+ * @param atLeast 简写先看的那一次没看全(节数或收集上限截断),区外可能还有更多
  */
 public record Beyond(List<BlockPos> cells, boolean atLeast) {
 
@@ -40,7 +40,7 @@ public record Beyond(List<BlockPos> cells, boolean atLeast) {
     }
 
     /**
-     * 找方块的用法:{@code 7 more lie beyond it, the nearest at 80,40,-10, about 69 blocks from me: move_goto there first
+     * 简写的用法:{@code 7 more lie beyond it, the nearest at 80,40,-10, about 69 blocks from me: move_goto there first
      * (x:80 y:40 z:-10 arrive:near near:8), then work_mine again}。查询提前停了时说"至少"。
      *
      * @param from 她此刻脚下那一格
@@ -49,7 +49,7 @@ public record Beyond(List<BlockPos> cells, boolean atLeast) {
         return (atLeast ? "at least " : "") + cells.size() + " more lie beyond it" + nearest(from);
     }
 
-    /** 点名的用法:{@code 4 of the named cells lie beyond it and were left, the nearest at …: move_goto …}。 */
+    /** 点名区域的用法:{@code 4 of the named cells lie beyond it and were left, the nearest at …: move_goto …}。 */
     public String named(BlockPos from) {
         return cells.size() + " of the named cells lie beyond it and were left" + nearest(from);
     }
@@ -61,20 +61,16 @@ public record Beyond(List<BlockPos> cells, boolean atLeast) {
     }
 
     /**
-     * 点名的团整个落在区外:受理当场拒收的那句话。
+     * 点名的区域整个落在区外:受理当场拒收的那句话。
      *
-     * @param ids    整个落在区外的团
-     * @param others 还点名了别的团(有落在区里的)
-     * @param area   她此刻的工作区
-     * @param near   这些团里离她最近的一格
+     * @param name 点名的区域({@code ores/g3})
+     * @param work 她此刻的工作区
+     * @param near 区域里离工作区中心最近的一格
      */
-    public static String groupsOutside(List<String> ids, boolean others, WorkArea area, BlockPos near) {
-        boolean one = ids.size() == 1;
-        return (one ? "group " + ids.get(0) + " lies" : "groups " + String.join(", ", ids) + " lie")
-                + " wholly beyond my work area (" + area.describe() + "), so I did not start; the nearest of "
-                + (one ? "its" : "their") + " cells is at " + coords(near) + ", about " + blocks(area.center(), near)
-                + " blocks away. " + goThere(near) + " (group ids stay good until your next scan_blocks)"
-                + (others ? "; or leave " + (one ? "it" : "them") + " out to dig the other groups from here." : ".");
+    public static String areaOutside(String name, WorkArea work, BlockPos near) {
+        return name + " lies wholly beyond my work area (" + work.describe() + "), so I did not start; the nearest of "
+                + "its scanned cells is at " + coords(near) + ", about " + blocks(work.center(), near) + " blocks away. "
+                + goThere(near) + ".";
     }
 
     /** 照着就能做的下一步:先走过去,再挖一次。 */

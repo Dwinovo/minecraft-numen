@@ -149,8 +149,9 @@ class BlockGroupsTest {
         }
     }
 
+    /** 一团带着每一格看到的方块状态(连同流体的源头与流动):写进区域时附带的就是它,各种几格、几格源头由区域的格子说。 */
     @Test
-    void aGroupCountsItsBlocksBoxAndFluidSources() {
+    void aGroupKeepsTheStateSeenInEachCell() {
         BlockState source = Blocks.WATER.defaultBlockState();
         BlockState flowing = Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 3);
         BlockGroups groups = new BlockGroups();
@@ -161,10 +162,6 @@ class BlockGroupsTest {
         BlockGroups.Group water = groups.grouped(CENTER).get(0);
         assertEquals(List.of(new BlockPos(5, 60, 5), new BlockPos(6, 60, 5), new BlockPos(7, 61, 6)),
                 List.copyOf(water.cells().keySet()));
-        assertEquals(3, water.counts().get(Blocks.WATER));
-        assertEquals(new BlockPos(5, 60, 5), water.min());
-        assertEquals(new BlockPos(7, 61, 6), water.max());
-        assertEquals(3, water.fluidCells());
-        assertEquals(2, water.sources());
+        assertEquals(List.of(source, source, flowing), List.copyOf(water.cells().values()));
     }
 }

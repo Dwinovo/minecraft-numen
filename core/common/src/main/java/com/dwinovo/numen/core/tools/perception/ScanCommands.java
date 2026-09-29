@@ -7,7 +7,7 @@ import com.dwinovo.numen.cli.CommandGroup;
 import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
-import com.dwinovo.numen.core.nav.WorkArea;
+import com.dwinovo.numen.core.scan.BlockScan;
 import com.dwinovo.numen.core.tools.PerceptionOps;
 import com.dwinovo.numen.core.tools.QueryExtraOps;
 import com.dwinovo.numen.core.tools.ScanOps;
@@ -16,7 +16,8 @@ import java.util.List;
 
 /**
  * {@code scan}:看她周围——脚下一圈的地形图、某几种方块在哪、附近有谁、一格方块是什么、一格方块里装着什么。
- * 五个动作都在服务端读世界,只读不动,不占身体;回执照原样是那份结果(JSON,地形图是一张字符图)。
+ * 五个动作都在服务端读世界,不动世界,不占身体;回执照原样是那份结果(JSON,地形图是一张字符图)。找方块带
+ * {@code --into} 时把看到的记进一块区域({@link ScanOps}),那是改区域,先过权限层。
  *
  * <p>前四个是做事之前最常用的眼睛,提升为快捷工具({@code scan_around}、{@code scan_blocks}、
  * {@code scan_entities}、{@code scan_block});{@code storage} 用得少,只留命令。
@@ -26,16 +27,24 @@ public final class ScanCommands {
     private static final String GROUP = "scan";
 
     private static final PerceptionOps PERCEPTION = new PerceptionOps();
-    private static final ScanOps SCAN = new ScanOps();
     private static final QueryExtraOps QUERY = new QueryExtraOps();
 
     private static final Param<Integer> VIEW_RADIUS = Param.optional("radius",
             ArgType.integer(LookAround.MIN_RADIUS, LookAround.MAX_RADIUS), "Half-width of the square view in blocks.")
             .whenOmitted("use " + LookAround.DEFAULT_RADIUS);
-    private static final Param<Integer> SEARCH_RADIUS = Param.required("radius", ArgType.integer(1, 192),
-            "Spherical search radius in blocks (max 192).");
+    private static final Param<Integer> SEARCH_RADIUS = Param.required("radius",
+            ArgType.integer(1, BlockScan.MAX_RADIUS), "Spherical search radius in blocks (max " + BlockScan.MAX_RADIUS
+                    + ").");
     private static final Param<List<String>> BLOCK_IDS = Param.required("block_ids", ArgType.list(ArgType.idOrTag()),
             "List of namespaced block ids to search for.");
+    private static final Param<String> IN = Param.optional("in", ArgType.string(),
+            "Only look inside this area, or one part of it (base, ores/g3).")
+            .values("an area as `area list` lists it")
+            .whenOmitted("look everywhere within the radius");
+    private static final Param<String> INTO = Param.optional("into", ArgType.word(),
+            "Add each group found to this area as a new part (g1, g2, ... counted within the area).")
+            .values("an area made with `area new`")
+            .whenOmitted("only look: the groups get no ids and nothing is kept");
     private static final Param<Double> ENTITY_RADIUS = Param.required("radius", ArgType.number(1, 64),
             "Search radius in blocks.");
     private static final Param<String> TYPE_FILTER = Param.required("type_filter",
@@ -70,37 +79,39 @@ public final class ScanCommands {
                         + "and gaps around you instead of many scan_block calls; to plan a route, trace it cell "
                         + "by cell across the grid. For far-away or specific blocks/entities use scan_blocks / "
                         + "scan_entities. Optional `radius` (4-16, default 8).");
-        scan.server("blocks", "Find blocks of the given types near you, reported as groups of touching blocks.",
-                        ScanCommands::blocks, SEARCH_RADIUS, BLOCK_IDS, Listing.PAGE)
+        scan.server("blocks", "Find blocks of the given types near you, reported as groups of touching blocks; "
+                        + "--into keeps them in an area.",
+                        ScanCommands::blocks, SEARCH_RADIUS, BLOCK_IDS, IN, INTO, Listing.PAGE)
                 .example("scan blocks 32 iron_ore deepslate_iron_ore")
-                .example("scan blocks 16 #minecraft:beds")
+                .example("scan blocks 32 iron_ore deepslate_iron_ore --into ores")
+                .example("scan blocks 16 #minecraft:beds --in base")
                 .example("scan blocks 32 iron_ore deepslate_iron_ore --page 2")
                 .note("Read-only; the reply comes when the search is done. Name every variant you want.")
-                .note("One group per line, nearest first; a long list comes in pages. --page turns the pages of "
-                        + "your latest scan without scanning again, so its group ids stay the same.")
-                .note("Group ids (g1, g2, ...) stay good only until your next `scan blocks` without --page.")
-                .note("Each group says how much of it lies in your work area (within " + WorkArea.RADIUS
-                        + " blocks of where you stand), the only place `work mine` digs from here.")
+                .note("One group per line, nearest first; a long list comes in pages, and each page looks again.")
+                .note("Without --into it only looks: the groups have no ids. With --into ores each group becomes a "
+                        + "part of the area ores (make it first with `area new ores`), and its id (ores/g5) is what "
+                        + "`work mine` takes as its --area, and `area show` too. Adding to an area your owner's rules name asks "
+                        + "your owner first.")
+                .note("--in base looks only inside the area base, as far as the radius reaches from you.")
                 .note("Only loaded terrain is read: anything further out is UNKNOWN, not empty.")
-                .seeAlso("scan block", "scan around")
+                .seeAlso("area show", "work mine", "scan block")
                 .promote("Find blocks of given type(s) near you, reported as GROUPS: matching cells "
                         + "that touch (diagonals count) and get the same permission answer for breaking them — so a "
                         + "player's log pillar standing against a wild tree comes back as two groups. One group per "
                         + "line (a JSON object), nearest first; groups_total counts them all when the whole radius was "
-                        + "read. A long list comes in pages: pass page to read the next one — it turns the pages of "
-                        + "your latest scan without scanning again, so the ids stay the same. Each group gives: id, cells and a count per block type, the nearest cell with direction and "
-                        + "distance, a box (x1,y1,z1..x2,y2,z2 — the form avoid_break takes), in_work_area — how much "
-                        + "of it lies within " + WorkArea.RADIUS + " blocks of where you stand, the only place "
-                        + "work_mine digs from here (all, none, or a count of its cells; none means move_goto near it "
-                        + "first, with arrive near), permission for "
-                        + "breaking its cells (allow; ask = work_mine asks the owner first; deny = work_mine stops) with the "
-                        + "reason, sources = source cells for water or lava (a source behaves very differently from "
-                        + "flowing), and for groups of up to 16 cells every position. A very large group comes back "
-                        + "cut along 16-block section lines, one group per piece. Group ids (g1, g2, ...) are valid "
-                        + "only until your next scan_blocks without page; to dig exactly those cells, pass them to work_mine as "
-                        + "groups. Sees terrain that is loaded right now; anything further out is UNKNOWN, not "
-                        + "empty, and note says when that happened — walk that way and scan again. Give every "
-                        + "variant of what you want, e.g. both iron_ore and deepslate_iron_ore.");
+                        + "read. A long list comes in pages: pass page to read the next one (each page looks again). "
+                        + "Each group gives: cells and a count per block type, the nearest cell with direction and "
+                        + "distance, permission for breaking its cells (allow; ask = work_mine asks the owner first; "
+                        + "deny = work_mine stops) with the reason, sources = source cells for water or lava (a source "
+                        + "behaves very differently from flowing), and for groups of up to 16 cells every position. A "
+                        + "very large group comes back cut along 16-block section lines, one group per piece. "
+                        + "into: keep what you found — each group becomes a part of that area (make it first with "
+                        + "`area new ores`), its id is area/part (ores/g5), and it stays across restarts: pass it to "
+                        + "work_mine as area to dig exactly those cells, or read it back with `area show ores`. "
+                        + "Without into nothing is kept and the groups have no ids. in: look only inside that area "
+                        + "(or part), as far as radius reaches. Sees terrain that is loaded right now; anything further "
+                        + "out is UNKNOWN, not empty, and note says when that happened — walk that way and scan again. "
+                        + "Give every variant of what you want, e.g. both iron_ore and deepslate_iron_ore.");
         scan.server("entities", "List the entities near you, nearest first, with the ids other actions take.",
                         ScanCommands::entities, ENTITY_RADIUS, TYPE_FILTER, Listing.PAGE)
                 .example("scan entities 24 hostile")
@@ -144,8 +155,8 @@ public final class ScanCommands {
 
     /** 搜索按刻分片,回执在搜完的那一刻经回信口送出。 */
     private static void blocks(ServerSource src, CommandArgs args) {
-        SCAN.scanBlocks(args.get(SEARCH_RADIUS), args.get(BLOCK_IDS), src.companion(),
-                args.write(GROUP + " blocks", List.of(SEARCH_RADIUS, BLOCK_IDS)), args, src::reply);
+        ScanOps.scanBlocks(src, args.get(SEARCH_RADIUS), args.get(BLOCK_IDS), args.get(IN), args.get(INTO), args,
+                args.write(GROUP + " blocks", List.of(SEARCH_RADIUS, BLOCK_IDS, IN, INTO)));
     }
 
     private static void entities(ServerSource src, CommandArgs args) {

@@ -10,15 +10,16 @@ import com.dwinovo.numen.core.task.mine.Beyond;
 import com.dwinovo.numen.core.task.mine.MineBlockTaskRecord;
 import com.dwinovo.numen.core.task.MouseButton;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
-import com.dwinovo.numen.core.scan.GroupBook;
+import com.dwinovo.numen.area.Area;
+import com.dwinovo.numen.area.Cells;
+import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 
-import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -33,41 +34,48 @@ public final class BlockActionOps {
     private static final int MAX_COUNT = 256;
 
     /**
-     * {@code mine} 的两种用法二选一:{@code block_ids}(她自己挑最近的,{@code count} 必给)或 {@code groups}
-     * (最新一次 scan_blocks 的团编号,{@code count} 可选、不给就挖完)。团编号在派发这一刻对着身体上的团簿取:
-     * 不在最新一次扫描里就当场拒收,工具结果直接说明——不先回"已受理"再在后台失败,模型也就不会拿着受理回执
-     * 告诉主人"去了"。{@code spec} 是已经叠在 mine 自己默认规格上的那份。
+     * {@code mine} 的两种写法二选一,挖的都是一块区域里扫描过的格:{@code area}(点名的区域或它的几部分,{@code count} 可选、
+     * 不给就挖完)或 {@code block_ids}(简写:她开工时先把这几种方块扫进一块匿名区域,{@code count} 必给)。点名的区域在派发这一刻
+     * 解析:没有这块、没有扫描过的格、整块都在工作区外,当场拒收,工具结果直接说明——不先回"已受理"再在后台失败。
+     * {@code spec} 是已经叠在 mine 自己默认规格上的那份。
      *
-     * <p>工作区在受理这一刻定下:以她此刻脚下那一格为中心({@link WorkArea#around})。点名的团一格都不在区里,和编号过期
-     * 一样当场拒收,说清它在哪、先走过去;有几格在区里的照常受理,区外那几格留着不挖,受理回执与结局都交代。
+     * <p>工作区在受理这一刻定下:以她此刻脚下那一格为中心({@link WorkArea#around})。区域有几格在区里的照常受理,区外那几格
+     * 留着不挖,受理回执与结局都交代。
      */
-    public TaskRecord autoMine(ServerSource src, List<String> block_ids, List<String> groups, Integer count,
+    public TaskRecord autoMine(ServerSource src, List<String> block_ids, List<String> areas, Integer count,
                                RouteSpec spec) {
-        long now = src.companion().level().getGameTime();
-        WorkArea area = WorkArea.around(src.companion());
+        NumenPlayer her = src.companion();
+        long now = her.level().getGameTime();
+        WorkArea work = WorkArea.around(her);
         boolean byIds = block_ids != null && !block_ids.isEmpty();
-        boolean byGroups = groups != null && !groups.isEmpty();
-        if (byIds == byGroups) {
+        boolean byArea = areas != null && !areas.isEmpty();
+        if (byIds == byArea) {
             throw new IllegalArgumentException(byIds
-                    ? "give block_ids or groups, not both — block_ids lets her pick blocks of those types in"
-                            + " her work area, groups digs exactly the groups a scan_blocks listed"
-                    : "give block_ids (block types; she finds them in her work area herself) or groups (ids from your"
-                            + " latest scan_blocks)");
+                    ? "give block_ids or area, not both — block_ids scans for those types around her and mines them,"
+                            + " area digs the scanned cells of an area you name"
+                    : "give block_ids (block types; she scans for them herself) or area (an area or parts of it, as"
+                            + " scan blocks --into keeps them)");
         }
-        if (byGroups) {
-            List<String> ids = groups.stream().map(String::strip).distinct().toList();
-            GroupBook book = GroupBook.of(src.companion());
-            String stale = book.staleMessage(ids);
-            if (stale != null) {
-                throw new IllegalArgumentException(stale);
+        if (byArea) {
+            String name = String.join(" ", areas);
+            Area area = AreaOps.resolveAll(her, areas);
+            AreaOps.requireHere(her, name, area);
+            Cells scanned = MineBlockTaskRecord.scanned(area);
+            if (scanned.isEmpty()) {
+                throw new IllegalArgumentException(name + " has no scanned cells: work_mine digs cells a scan added,"
+                        + " each still holding the block it saw, and framed cells carry none; scan blocks with into"
+                        + " adds them");
             }
-            refuseGroupsOutside(book, ids, area);
-            Map<BlockPos, Block> cells = book.cells(ids);
-            Set<Block> kinds = Set.copyOf(cells.values());
+            Cells inside = scanned.intersect(work.cells());
+            if (inside.isEmpty()) {
+                throw new IllegalArgumentException(Beyond.areaOutside(name, work, scanned.nearest(work.center())));
+            }
+            Set<Block> kinds = new LinkedHashSet<>();
+            scanned.forEach((x, y, z, seen) -> kinds.add(seen.state().getBlock()));
             int until = count == null ? MineBlockTaskRecord.UNTIL_GONE : Math.clamp(count, 1, MAX_COUNT);
             long timeout = MineBlockTaskRecord.timeoutTicks(until == MineBlockTaskRecord.UNTIL_GONE
-                    ? cells.size() : until);
-            return new MineBlockTaskRecord(src, now + timeout, kinds, cells, until, labelFor(kinds), spec, area);
+                    ? (int) inside.size() : until);
+            return new MineBlockTaskRecord(src, now + timeout, kinds, area, name, until, labelFor(kinds), spec, work);
         }
         Set<Block> targets = ToolParse.parseBlocks(block_ids);
         if (targets.isEmpty()) {
@@ -78,29 +86,7 @@ public final class BlockActionOps {
         }
         int clampedCount = Math.clamp(count, 1, MAX_COUNT);
         long deadline = now + MineBlockTaskRecord.timeoutTicks(clampedCount);
-        return new MineBlockTaskRecord(src, deadline, targets, Map.of(), clampedCount, labelFor(targets), spec, area);
-    }
-
-    /** 点名的团有一格都不在工作区里的:当场拒收,说它们在哪、怎么过去。 */
-    private static void refuseGroupsOutside(GroupBook book, List<String> ids, WorkArea area) {
-        List<String> outside = new ArrayList<>();
-        BlockPos nearest = null;
-        for (String id : ids) {
-            Set<BlockPos> cells = book.cells(List.of(id)).keySet();
-            if (cells.stream().anyMatch(area::contains)) {
-                continue;
-            }
-            outside.add(id);
-            for (BlockPos p : cells) {
-                if (nearest == null || area.center().distSqr(p) < area.center().distSqr(nearest)) {
-                    nearest = p;
-                }
-            }
-        }
-        if (!outside.isEmpty()) {
-            throw new IllegalArgumentException(Beyond.groupsOutside(outside, outside.size() < ids.size(), area,
-                    nearest));
-        }
+        return new MineBlockTaskRecord(src, deadline, targets, null, null, clampedCount, labelFor(targets), spec, work);
     }
 
     /** Short label for messages: the first target's path (e.g. "iron_ore"), "+N" if more. */

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.tools;
 
+import com.dwinovo.numen.area.Cells;
 import com.dwinovo.numen.core.scan.BlockGroups;
 import com.dwinovo.numen.core.scan.BlockSearch;
 import com.dwinovo.numen.permission.Rule;
@@ -7,10 +8,14 @@ import com.dwinovo.numen.permission.Verdict;
 import com.google.gson.JsonObject;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LiquidBlock;
+import net.minecraft.world.level.block.state.BlockState;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -106,31 +111,28 @@ class ScanOpsTest {
                 groups.add(p, Blocks.END_PORTAL_FRAME.defaultBlockState(), Verdict.allow());
             }
         }
-        for (int i = 0; i < ScanOps.LIST_CELLS_UP_TO + 1; i++) {
+        for (int i = 0; i < AreaText.LIST_CELLS_UP_TO + 1; i++) {
             groups.add(new BlockPos(-40 - i, 70, 0), Blocks.OAK_LOG.defaultBlockState(), Verdict.allow());
         }
         List<BlockGroups.Group> grouped = groups.grouped(center);
         assertEquals(2, grouped.size());
 
-        JsonObject small = ScanOps.groupJson("g7", grouped.get(0), center);
-        assertEquals("g7", small.get("id").getAsString());
+        JsonObject small = ScanOps.groupJson("ores/g7", grouped.get(0), center, 100L);
+        assertEquals("ores/g7", small.get("id").getAsString());
         assertEquals(12, small.get("cells").getAsInt());
+        assertEquals(12, small.getAsJsonObject("blocks").get("minecraft:end_portal_frame").getAsInt());
         assertEquals(12, small.getAsJsonArray("positions").size());
         assertEquals("4,64,4", small.getAsJsonArray("positions").get(0).getAsString());
-        assertEquals("3,64,4..7,64,8", small.get("box").getAsString());
         assertEquals("allow", small.get("permission").getAsString());
         assertFalse(small.has("reason"));
         assertFalse(small.has("sources"));
         assertEquals("south-east", small.getAsJsonObject("nearest").get("direction").getAsString());
-        assertEquals("all", small.get("in_work_area").getAsString(), "整团都在她此刻的工作区里");
 
-        JsonObject big = ScanOps.groupJson("g8", grouped.get(1), center);
-        assertEquals(ScanOps.LIST_CELLS_UP_TO + 1, big.get("cells").getAsInt());
+        JsonObject big = ScanOps.groupJson(null, grouped.get(1), center, 100L);
+        assertFalse(big.has("id"), "只是看、没存:团没有编号");
+        assertEquals(AreaText.LIST_CELLS_UP_TO + 1, big.get("cells").getAsInt());
         assertFalse(big.has("positions"));
-        assertEquals("-56,70,0..-40,70,0", big.get("box").getAsString());
         assertEquals("west, 6 up", big.getAsJsonObject("nearest").get("direction").getAsString());
-        // 这一排从西 40 格铺到西 56 格、高 6 格:离她不超过工作区半径的是西 40 到西 47 那 8 格
-        assertEquals("8 of " + (ScanOps.LIST_CELLS_UP_TO + 1) + " cells", big.get("in_work_area").getAsString());
     }
 
     /** A group that is not allowed carries the permission layer's own reason. */
@@ -140,8 +142,28 @@ class ScanOpsTest {
         BlockPos center = new BlockPos(0, 64, 0);
         BlockGroups groups = new BlockGroups();
         groups.add(new BlockPos(1, 64, 0), Blocks.OAK_LOG.defaultBlockState(), Verdict.ask(Rule.parse("break(placed)")));
-        JsonObject json = ScanOps.groupJson("g1", groups.grouped(center).get(0), center);
+        JsonObject json = ScanOps.groupJson(null, groups.grouped(center).get(0), center, 100L);
         assertEquals("ask", json.get("permission").getAsString());
         assertTrue(json.get("reason").getAsString().contains("placed by a player"), json.toString());
+    }
+
+    /** 一部分附带的方块说出各种几格、流体的源头几格;包围盒写成 {@code area add --box} 收的样子。 */
+    @Test
+    void aPartCountsItsBlocksAndFluidSourcesAndWritesItsBox() {
+        assumeTrue(booted, "Minecraft 引导不可用,跳过区域说法钉桩");
+        BlockState source = Blocks.WATER.defaultBlockState();
+        BlockState flowing = Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 3);
+        Map<BlockPos, BlockState> seen = new LinkedHashMap<>();
+        seen.put(new BlockPos(5, 60, 5), source);
+        seen.put(new BlockPos(6, 60, 5), source);
+        seen.put(new BlockPos(7, 61, 6), flowing);
+        Cells water = Cells.seen(seen, 7L);
+        JsonObject part = AreaText.part("pond/g1", water, new BlockPos(0, 60, 0));
+        assertEquals(3, part.getAsJsonObject("blocks").get("minecraft:water").getAsInt());
+        assertEquals(2, part.get("sources").getAsInt());
+        assertEquals("5,60,5..7,61,6", AreaText.box(water.bounds()));
+        JsonObject framed = AreaText.part("pond/b1", Cells.box(new BlockPos(0, 60, 0), new BlockPos(1, 60, 0)), null);
+        assertFalse(framed.has("blocks"), "框出来的格不附带方块");
+        assertFalse(framed.has("nearest"), "在别的维度就不说最近一格");
     }
 }

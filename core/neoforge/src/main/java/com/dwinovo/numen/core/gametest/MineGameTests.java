@@ -556,11 +556,11 @@ public class MineGameTests {
     }
 
     /**
-     * 点名的团整个在区外:scan_blocks 把远处那一团标成 in_work_area none、近处那一团标成 all;点名远处那一团,派发当场
-     * 拒收,说它在哪、先 move_goto 过去,不派活,蛙明灯一块不少。
+     * 点名的区域整个在工作区外:远处一团与近处一团扫进同一块区域;点名远处那一部分,派发当场拒收,说它在哪、先 move_goto
+     * 过去,不派活,蛙明灯一块不少。
      */
     @GameTest(template = "floor52", timeoutTicks = 4000, batch = "numen_mine_area")
-    public static void mine_groups_beyond_the_work_area_is_refused_at_once(GameTestHelper helper) {
+    public static void mine_area_beyond_the_work_area_is_refused_at_once(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> far = List.of(new BlockPos(48, 2, 50), new BlockPos(49, 2, 50), new BlockPos(50, 2, 50));
         for (BlockPos rel : far) {
@@ -569,7 +569,7 @@ public class MineGameTests {
         BlockPos nearRel = new BlockPos(8, 2, 8);
         level.setBlockAndUpdate(helper.absolutePos(nearRel), Blocks.VERDANT_FROGLIGHT.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_far_group", new BlockPos(3, 2, 3), false);
-        ToolRun scanned = scan(companion, 80, "minecraft:verdant_froglight");
+        ToolRun scanned = scanInto(companion, 80, "minecraft:verdant_froglight", "lights");
         String[] refusal = new String[1];
 
         succeedWhen(helper, () -> {
@@ -578,22 +578,20 @@ public class MineGameTests {
                 var groups = groupsIn(scanned.reply());
                 var farGroup = groupHolding(groups, helper.absolutePos(far.get(0)));
                 var nearGroup = groupHolding(groups, helper.absolutePos(nearRel));
-                helper.assertTrue(farGroup != null && nearGroup != null
-                                && "none".equals(farGroup.get("in_work_area").getAsString())
-                                && "all".equals(nearGroup.get("in_work_area").getAsString()),
-                        "the scan does not mark which group lies in the work area: " + scanned.reply());
-                ToolRun mine = call(companion, "work_mine", args("groups", List.of(farGroup.get("id").getAsString())));
-                helper.assertTrue(mine.task() == null, "a group wholly beyond the work area was accepted");
+                helper.assertTrue(farGroup != null && nearGroup != null && farGroup != nearGroup,
+                        "the scan did not keep the far and the near froglights as two parts: " + scanned.reply());
+                ToolRun mine = call(companion, "work_mine", args("area", List.of(farGroup.get("id").getAsString())));
+                helper.assertTrue(mine.task() == null, "a part wholly beyond the work area was accepted");
                 refusal[0] = mine.reply();
             }
             BlockPos nearest = helper.absolutePos(far.get(0));
             helper.assertTrue(refusal[0] != null && refusal[0].contains("wholly beyond my work area")
                             && refusal[0].contains("move_goto there first (x:" + nearest.getX() + " y:" + nearest.getY()
                                     + " z:" + nearest.getZ() + " arrive:near near:8)"),
-                    "the refusal does not say where the group is and how to get there: " + refusal[0]);
+                    "the refusal does not say where the part is and how to get there: " + refusal[0]);
             for (BlockPos rel : far) {
                 helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).is(Blocks.VERDANT_FROGLIGHT),
-                        "a froglight of the refused group is gone at " + rel.toShortString());
+                        "a froglight of the refused part is gone at " + rel.toShortString());
             }
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -613,7 +611,7 @@ public class MineGameTests {
         for (int x = 28; x <= 40; x++) {
             BlockPos cell = helper.absolutePos(new BlockPos(x, 2, 40));
             level.setBlockAndUpdate(cell, Blocks.PEARLESCENT_FROGLIGHT.defaultBlockState());
-            (area.contains(cell) ? inside : outside).add(cell);
+            (area.contains(level.dimension(), cell) ? inside : outside).add(cell);
         }
         helper.assertTrue(inside.size() == 6 && outside.size() == 7, "the vein does not straddle the edge as laid out");
         ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:pearlescent_froglight"),

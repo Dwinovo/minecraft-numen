@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.ToolArgs;
+import com.dwinovo.numen.area.Area;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.core.nav.WorkArea;
@@ -77,7 +78,12 @@ public final class InventoryOps {
                 BuiltInRegistries.ITEM.getKey(item).getPath());
     }
 
-    public TaskRecord collectItems(ServerSource src, List<ResourceLocation> itemIds, Integer radius) {
+    /**
+     * {@code work collect}:只捡一块区域里的——受理时她脚下为中心、半径 {@code radius} 的球(不给取默认,点名了区域时取工作区的
+     * 半径),点名了区域({@code areas})就再和它求交:区域说在哪儿,球说一趟走多远。
+     */
+    public TaskRecord collectItems(ServerSource src, List<ResourceLocation> itemIds, Integer radius,
+                                   List<String> areas) {
         // Lenient set from the id list: unknown ids are skipped, and an absent list
         // yields an empty set — the "match everything" filter.
         Set<Item> filter = new LinkedHashSet<>();
@@ -89,10 +95,21 @@ public final class InventoryOps {
             }
         }
 
-        int searchRadius = radius == null ? COLLECT_DEFAULT_RADIUS : Math.clamp(radius, 1, WorkArea.RADIUS);
-
+        boolean named = areas != null && !areas.isEmpty();
+        int searchRadius = radius != null ? Math.clamp(radius, 1, WorkArea.RADIUS)
+                : named ? WorkArea.RADIUS : COLLECT_DEFAULT_RADIUS;
+        WorkArea around = WorkArea.around(src.companion(), searchRadius);
+        Area area = around.area();
+        String where = around.describe();
+        if (named) {
+            String name = String.join(" ", areas);
+            Area chosen = AreaOps.resolveAll(src.companion(), areas);
+            AreaOps.requireHere(src.companion(), name, chosen);
+            area = area.intersect(chosen);
+            where = "in " + name + ", " + where;
+        }
         String label = filter.isEmpty() ? "all items" : labelFor(filter);
-        return new CollectItemsTaskRecord(src, filter, WorkArea.around(src.companion(), searchRadius), label);
+        return new CollectItemsTaskRecord(src, filter, area, where, label);
     }
 
     private static String labelFor(Set<Item> filter) {

@@ -57,7 +57,7 @@ class WorkCommandGroupsTest {
         gotoFields.addAll(route);
         assertEquals(gotoFields, fields("move_goto"));
         assertEquals(List.of(), required("move_goto"));
-        List<String> mineFields = new ArrayList<>(List.of("block_ids", "groups", "count"));
+        List<String> mineFields = new ArrayList<>(List.of("block_ids", "area", "count"));
         mineFields.addAll(route);
         assertEquals(mineFields, fields("work_mine"));
         assertEquals(List.of(), required("work_mine"));
@@ -115,7 +115,7 @@ class WorkCommandGroupsTest {
         assertTrue(gotoHelp.contains("--avoid_break <block|cell...>"), gotoHelp);
         assertTrue(gotoHelp.endsWith("Shortcut tool: move_goto."), gotoHelp);
         String mineHelp = run("work mine --help").get("message").getAsString();
-        assertTrue(mineHelp.startsWith("work mine [--block_ids <id...>] [--groups <word...>] [--count <integer>]"),
+        assertTrue(mineHelp.startsWith("work mine [--block_ids <id...>] [--area <string...>] [--count <integer>]"),
                 mineHelp);
         assertTrue(mineHelp.endsWith("Shortcut tool: work_mine."), mineHelp);
     }

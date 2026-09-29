@@ -38,7 +38,7 @@ import java.util.Map;
  * <p>SCAN ends only once every matching drop in range has been tried, so whatever
  * still lies there at the end is what she couldn't pick up — the reply names it.
  *
- * <p>范围是工作区({@link CollectItemsTaskRecord#area}),以受理时她脚下那一格为中心,不跟着她走:捡完一件、站到那边,
+ * <p>范围是一块区域({@link CollectItemsTaskRecord#area}),以受理时她脚下那一格为中心,不跟着她走:捡完一件、站到那边,
  * 下一件仍只在这块地方里找,她不会一件接一件越捡越远;每一趟都在一次规划看得清的范围里。
  *
  * <p>回执里捡了多少,数的是到手的件数:背包里要捡的那几种比开工时多出来的,不是消失了几堆掉落物
@@ -171,7 +171,7 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
         Map<String, Object> data = new HashMap<>();
         data.put("label", r.label);
         data.put("collected", r.getCollected());
-        data.put("radius", r.area.radius());
+        data.put("area", r.where);
         return data;
     }
 

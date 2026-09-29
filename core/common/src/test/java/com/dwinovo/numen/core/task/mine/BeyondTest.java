@@ -5,6 +5,7 @@ import java.util.List;
 import com.dwinovo.numen.core.nav.WorkArea;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.Level;
 
 import org.junit.jupiter.api.Test;
 
@@ -44,15 +45,11 @@ class BeyondTest {
     }
 
     @Test
-    void aGroupWhollyBeyondTheAreaIsRefusedWithWhereItIsAndHowToGetThere() {
-        WorkArea area = new WorkArea(FROM, WorkArea.RADIUS);
-        String one = Beyond.groupsOutside(List.of("g3"), false, area, NEAR);
-        assertEquals("group g3 lies wholly beyond my work area (within " + WorkArea.RADIUS + " blocks of 0,64,0), so I"
-                + " did not start; the nearest of its cells is at 60,64,0, about 60 blocks away. move_goto there first"
-                + " (x:60 y:64 z:0 arrive:near near:" + Beyond.NEAR + "), then work_mine again (group ids stay good until your next"
-                + " scan_blocks).", one);
-        String two = Beyond.groupsOutside(List.of("g3", "g5"), true, area, NEAR);
-        assertTrue(two.startsWith("groups g3, g5 lie wholly beyond") && two.contains("the nearest of their cells")
-                && two.endsWith("or leave them out to dig the other groups from here."), two);
+    void anAreaWhollyBeyondTheWorkAreaIsRefusedWithWhereItIsAndHowToGetThere() {
+        WorkArea work = WorkArea.at(Level.OVERWORLD, FROM, WorkArea.RADIUS);
+        assertEquals("ores/g3 lies wholly beyond my work area (within " + WorkArea.RADIUS + " blocks of 0,64,0), so I"
+                + " did not start; the nearest of its scanned cells is at 60,64,0, about 60 blocks away. move_goto there"
+                + " first (x:60 y:64 z:0 arrive:near near:" + Beyond.NEAR + "), then work_mine again.",
+                Beyond.areaOutside("ores/g3", work, NEAR));
     }
 }

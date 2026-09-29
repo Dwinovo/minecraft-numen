@@ -206,6 +206,18 @@ public final class GameTestKit {
         return call(companion, "scan_blocks", args("radius", radius, "block_ids", List.of(blockId)));
     }
 
+    /**
+     * 先建一块区域,再把 {@code blockId} 扫进去({@code scan blocks … --into}):回执里每团的编号就是 {@code 区域/g1} 这种写法。
+     * 建区域当场回;扫的回执稍后才到。
+     */
+    static ToolRun scanInto(NumenPlayer companion, int radius, String blockId, String area) {
+        ToolRun made = command(companion, "area new " + area);
+        if (!made.succeeded()) {
+            throw new IllegalStateException("area new " + area + " failed: " + made.reply());
+        }
+        return command(companion, "scan blocks " + radius + " " + blockId + " --into " + area);
+    }
+
     /** 回执这一页列出的团:消息里一团一行,每行一个 JSON 对象(抬头、翻页提示与结尾不是)。 */
     static com.google.gson.JsonArray groupsIn(String reply) {
         return rowsIn(reply);
