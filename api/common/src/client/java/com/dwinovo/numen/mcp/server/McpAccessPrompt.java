@@ -89,9 +89,10 @@ final class McpAccessPrompt {
                 - %s
                 - You're blind between calls: perceive with `status_self` / `scan_blocks` / \
                 `scan_entities` before and after acting.
-                - `scan_blocks` answers in groups of touching blocks, each with an id (g1, g2, …) and \
-                whether breaking it is allowed, needs the owner's consent, or is refused. `work_mine` with \
-                `groups` digs exactly those cells; an id is only good until the next `scan_blocks`.
+                - `scan_blocks` answers in groups of touching blocks, each saying whether breaking it is \
+                allowed, needs the owner's consent, or is refused. With `into` it keeps them in a saved area \
+                (make it first with the command `area new ores`) and each group gets an id like ores/g3; \
+                `work_mine` with `area` digs exactly those cells, also after a restart.
                 - It's survival mode — the tools do only what a real player can. No give, no setblock.
 
                 One more thing: talk to me in the language I'm writing to you in, even though these \

@@ -19,7 +19,7 @@ Phase 1 of the dragon route. You need diamond tools before you can mine obsidian
 
 `work_mine` checks your held tool: a too-low tier breaks the block with **no drop**. `gear wear` the right pickaxe before mining, and `scan_block` when unsure.
 
-`work_mine` only works its **work area** — the sphere around where you stand when you call it (its description gives the radius). It never walks off to ore further out; it reports how many lie beyond and where the nearest is. So: `scan_blocks` first; a group with `in_work_area` none is out of reach from here — `move_goto` near it (x, y, z with near), then `work_mine`.
+`work_mine` only works its **work area** — the sphere around where you stand when you call it (its description gives the radius). It never walks off to ore further out; it reports how many lie beyond and where the nearest is. So: `scan_blocks` first; a group farther than that radius is out of reach from here — `move_goto` near it (x, y, z with near), then `work_mine`. To dig exactly what a scan found, keep it in an area: `area new ores`, then `scan_blocks` with into ores, then `work_mine` with area ores/g1 (or the whole ores); the area stays across restarts.
 
 The same rule gates navigation: **`move_goto` only digs through blocks your held tool can harvest.** Descending into stone with a sword in hand fails with "no path" — travel with the pickaxe in your main hand; switch to a weapon only for the fight, then switch back.
 

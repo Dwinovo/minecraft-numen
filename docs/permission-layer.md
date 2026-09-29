@@ -62,7 +62,8 @@
 
 **动作(Action)。** 身体要对世界做的一件具体的事及其目标:`break(pos)`、`place(pos, block)`、
 `attack(entity)`、`use_block(pos)`、`use_entity(entity)`、`take(container, item)`、`drop(item)`、
-`command(整行)`(以她的身份执行一条游戏指令,见下文"指令")。不带工具名、不带 JSON。
+`command(整行)`(以她的身份执行一条游戏指令,见下文"指令")、`edit_area(区域名)`(改主人名下的一块区域,见下文"区域")。
+不带工具名、不带 JSON。
 
 **信号(Signal)。** 给动作贴事实的函数,每个只回答一个通用问题:
 
@@ -78,6 +79,7 @@
 | hostile | 是不是敌对 | 实体分类 |
 | hazard_item | 放的是不是岩浆、火、TNT、水 | 物品 |
 | near_placed | 放置点附近有没有别人放的方块 | placed 的邻域查询,"别人"与 placed 同一个,她自己放的不算 |
+| ruled | 要改的这块区域有没有被主人的规则点名 | 主人层三张表里 `area:` 项点名的区域名,不论区域此刻在不在;裁决快照取主人层时一并算好 |
 权限层只做原版:领地模组与服务器保护不接进裁决,领地之后以联动插件做。
 
 原生通道照旧生效:挖掘照真客户端发 START/STOP,原版的出生点保护、冒险模式,以及取消左键或破坏事件的模组
@@ -124,6 +126,19 @@ command(msg)           指令按根名写
 - "允许并记住"照常把问出它的那一行的条件留着:`ask break(area:house)` 问出来的石头记成
   `allow break(area:house & minecraft:stone)`,房子外的石头不沾光。
 
+**改区域。** 区域是 `area:` 项的所指:给 `house` 加一格、删掉它、新建一块和规则里同名的,主人的 `deny break(area:house)`
+就管到了别处;给 `allow break(area:free)` 的 `free` 框进主人的房子,就是她替自己放宽。所以改区域是动作
+`edit_area(区域名)`,和改世界一样只由裁决定:`area` 组的新建、加、删部分、复核后划掉格、删除、运算结果存成它,以及
+`scan blocks --into` 写进它,动手前都送这一个动作(第 1 层命令的一次调用悬着等答复,不占任务槽,与第 0 层指令同一个口子
+`ServerSource.authorize`)。
+
+- 信号 `ruled`:这块区域的名字出现在主人层某一行的 `area:` 项里(deny、ask、allow 都算;区域此刻不在也算——新建同名的
+  就是给那一行补上所指)。出厂 ask 行 `edit_area(ruled)` 让她改这样的区域先问主人,出厂 allow 行 `edit_area(!ruled)` 放行
+  其余的——她扫出来的矿、框的工地是她自己的笔记。
+- `area:` 项也写在 `edit_area` 上,点的是被改的那一整块(不点部分):`allow edit_area(area:ores)` 放开这一块、
+  `deny edit_area(*)` 一块都不许她改。写在 `*` 上的 `area:house` 同样盖住改 `house` 这件事。
+- "允许并记住"钉上的是那一块:`edit_area(ruled)` 问出来的 `house` 记成 `allow edit_area(ruled & area:house)`。
+
 **指令。** `command` 的项除了 `*` 都是指令的根名,不写斜杠:`allow command(msg)`、`allow command(trigger)`、
 `ask command(setblock)`、`deny command(tp)`、`ask command(!msg & !trigger)`。信号说的是方块与实体,一条指令没有
 它们,所以指令规则里不写信号(`*(placed)` 这类通配动词的行也就碰不到指令)。
@@ -146,11 +161,11 @@ command(msg)           指令按根名写
 | 表 | 规则 |
 |---|---|
 | deny | 空 |
-| allow | `break(!placed & !self_placed & !block_entity & !#minecraft:beds & !#minecraft:doors & !#minecraft:trapdoors & !#minecraft:fence_gates)`、`break(self_placed & !contents)`、`place(!hazard_item)`、`place(hazard_item & !near_placed)`、`attack(!owned & !named & !villager)`、`use_block(*)`、`use_entity(!owned)`、`take(*)`、`command(help)`、`command(list)`、`command(me)`、`command(msg)`、`command(teammsg)`、`command(seed)`、`command(random)` |
-| ask | `break(block_entity & contents)`、`break(placed)`、`break(block_entity)`、`break(#minecraft:beds)`、`break(#minecraft:doors)`、`break(#minecraft:trapdoors)`、`break(#minecraft:fence_gates)`、`attack(owned)`、`attack(named)`、`attack(villager)`、`drop(*)`、`place(hazard_item & near_placed)` |
+| allow | `break(!placed & !self_placed & !block_entity & !#minecraft:beds & !#minecraft:doors & !#minecraft:trapdoors & !#minecraft:fence_gates)`、`break(self_placed & !contents)`、`place(!hazard_item)`、`place(hazard_item & !near_placed)`、`attack(!owned & !named & !villager)`、`use_block(*)`、`use_entity(!owned)`、`take(*)`、`command(help)`、`command(list)`、`command(me)`、`command(msg)`、`command(teammsg)`、`command(seed)`、`command(random)`、`edit_area(!ruled)` |
+| ask | `break(block_entity & contents)`、`break(placed)`、`break(block_entity)`、`break(#minecraft:beds)`、`break(#minecraft:doors)`、`break(#minecraft:trapdoors)`、`break(#minecraft:fence_gates)`、`attack(owned)`、`attack(named)`、`attack(villager)`、`drop(*)`、`place(hazard_item & near_placed)`、`edit_area(ruled)` |
 
 allow 行把日常动作一行一行写明:自然方块(谁都没放过)、她自己放的、不危险的放置、敌对生物与野生动物、开关门开容器、
-对没主人的实体右键、从容器拿东西、执行只读只说话的指令。ask 表里同一个动作命中几行时第一行作数,所以更具体的在前
+对没主人的实体右键、从容器拿东西、执行只读只说话的指令、改主人规则没点名的区域。ask 表里同一个动作命中几行时第一行作数,所以更具体的在前
 (装着东西的容器先于玩家放的)。从主人的容器拿东西默认放行:她的设计就是用主人的工作台熔炉
 箱子,相当于 Claude Code 读项目文件;主人想管就把 `take(*)` 改窄、加一条 `take(placed)` 的 ask。
 
@@ -178,9 +193,9 @@ allow 行把日常动作一行一行写明:自然方块(谁都没放过)、她�
 
 | 档 | 动作 | 对应 Claude Code |
 |---|---|---|
-| 从不问 | scan、scan_around、scan_block、status、inv recipe、move route | Read、Grep、Glob |
-| 出厂 allow 行 | 挖自然方块、砍野树、用自己的方块搭路盖房、拆她自己放的、打敌对生物、宰野生动物、开关门与栅栏门、开容器、拿东西、执行只读只说话的指令 | 工作目录内的编辑 |
-| 问 | 挖玩家放的、挖带方块实体的、打有主人或有名字的、打村民、丢物品、在别人的东西旁放危险物,以及没有任何一行规则说到的动作 | `rm -rf`、`git push`、网络 |
+| 从不问 | scan、scan_around、scan_block、status、inv recipe、route plan、area show / list | Read、Grep、Glob |
+| 出厂 allow 行 | 挖自然方块、砍野树、用自己的方块搭路盖房、拆她自己放的、打敌对生物、宰野生动物、开关门与栅栏门、开容器、拿东西、执行只读只说话的指令、改主人规则没点名的区域 | 工作目录内的编辑 |
+| 问 | 挖玩家放的、挖带方块实体的、打有主人或有名字的、打村民、丢物品、在别人的东西旁放危险物、改主人规则点名的区域,以及没有任何一行规则说到的动作 | `rm -rf`、`git push`、网络 |
 | 拒 | 主人写的 deny 行、observe 模式 | deny 规则 |
 
 合成烧炼、吃、装备、换工具不改世界,不是权限层的动作;挖不动(基岩)是物理,不是拒绝。
@@ -203,8 +218,9 @@ allow 行把日常动作一行一行写明:自然方块(谁都没放过)、她�
 
 | 内容 | 什么时候送动作 |
 |---|---|
-| mine | 两种用法:`block_ids` 由 `BlockSearch` 在工作区(受理时她脚下为中心,见 `cli.md` 附录 G)里找候选,区外的只报告;`groups` 只挖最新一次 `scan_blocks` 点名的团里、仍是扫描时那种方块、落在工作区里的格子。选目标不看权限:主人放的方块和野树一样是候选。规格默认 `alter=any`,模型的 `spec` 叠在上面;挑目标按"走过去 + 挖它"的同一套定价(需要同意的格贵十倍,A* 按到达价挑终点),附近有野树时自然先挖野树;轮到需要同意的目标、或为了够到目标要穿过需要同意的格,动手前或开走前征询;允许就挖,拒绝(主人拒绝、主人写的 deny、observe)与服务器退回的挖掘,两种用法都按 REFUSED 附理由收场,不略过继续 |
-| scan_blocks | 不改世界、不征询。命中的每一格用挖掘落点会提交的同一个 `break` 动作在主线程问一次裁决(`Gate.judgeLive`),相连且说法相同的格子成一团,团带着说法与理由报给模型;玩家放的原木柱贴着野树是两团 |
+| mine | 只挖一块区域里的格:`--area` 点名的区域(或其中几部分),`--block_ids` 是简写(先扫进一块匿名区域);只取落在工作区(受理时她脚下为中心的球,见 `cli.md` 附录 G)里、仍是扫描时那种方块的格,区外的只报告。选目标不看权限:主人放的方块和野树一样是候选。规格默认 `alter=any`,模型的 `spec` 叠在上面;挑目标按"走过去 + 挖它"的同一套定价(需要同意的格贵十倍,A* 按到达价挑终点),附近有野树时自然先挖野树;轮到需要同意的目标、或为了够到目标要穿过需要同意的格,动手前或开走前征询;允许就挖,拒绝(主人拒绝、主人写的 deny、observe)与服务器退回的挖掘,都按 REFUSED 附理由收场,不略过继续 |
+| scan_blocks | 看不改世界、不征询。命中的每一格用挖掘落点会提交的同一个 `break` 动作在主线程问一次裁决(`Gate.judgeLive`),相连且说法相同的格子成一团,团带着说法与理由报给模型;玩家放的原木柱贴着野树是两团。带 `--into` 把团写进一块区域,那是 `edit_area`,扫之前裁决 |
+| area | 查询(`show`、`list`)不经权限层;`show` 里每部分"许不许挖"用挖掘落点会提交的同一个 `break` 动作逐格问(`Gate.judgeLive`)。新建、加、删部分、`refresh` 划掉格、删除、运算存成新区域,动手前送 `edit_area(区域名)`:放行照做,拒绝回执理由、区域不变,要问就这次调用悬着等答复 |
 | goto、follow | 规划出路以后、开走以前(导航采纳每一段路之前,含路线簿里的路与预算内整路),`alter=any` 的路把账单里要问的格打包送一次;重规划再查,授权覆盖的不重复问。无路时探针放宽一档(只走不改的先查自然改动,自然改动的查 `any`),候选行标 needing consent |
 | build | 施工前把要清的格与要放的格整批裁决,要问的一张卡;允许就建,拒绝的格按"主人不让动"跳过并写进回执。她放下的每一格(经物品落位或照图直写)记在她自己名下,改设计后再 `build at` 拆、换她自己的格不问 |
 | attack | 开打前送目标,要问的合成一张卡,等答复期间不打它;自卫换目标时新冒出来的再送 |
@@ -333,6 +349,8 @@ allow 行把日常动作一行一行写明:自然方块(谁都没放过)、她�
    改动。已落地:挖掘落点被原生通道退回按 REFUSED"服务器没让挖掉这一格"收场;GameTest 覆盖记住、分层、
    命令答复、observe 拦开箱与拿东西、主人写 `ask take(*)`、破坏事件被取消。领地模组不在本层做,之后以
    联动插件做。
+7. 区域:规则项 `area:`(09-30),改区域的动作 `edit_area` 与信号 `ruled`、出厂两行(09-30)。GameTest 覆盖主人写了
+   `deny break(area:house)` 时她删 `house` 先问、主人拒绝区域不变、没被点名的区域照常改。
 
 ## 十一、宪法修订
 

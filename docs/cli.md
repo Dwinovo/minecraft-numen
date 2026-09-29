@@ -777,13 +777,15 @@ throwaway clear
 边长 13 个区块)与四万个节点;远处的矿于是被报成 "found N … could not reach any … Move me somewhere else",寻路给的准确原因
 (预算用完不能证明无路、区块未加载……)被压成一句。现在改成工作区:
 
-- **工作区**(`core/nav/WorkArea`,只写在这一处):受理那一刻她脚下那一格为中心的球,距离按两格整数坐标算,与找方块的查询同一把尺。
+- **工作区**(`core/nav/WorkArea`,只写在这一处):受理那一刻她脚下那一格为中心的球,距离按两格整数坐标算,与找方块的查询同一把尺
+  (09-30 起它就是一块区域,判定只问区域,见"看与挖收区域"一节)。
   半径上限 `WorkArea.RADIUS` 由寻路一次看得清的范围推出——快照从任何起点保证看得见水平 `SEARCH_RADIUS × 16` = 96 格,
   工作区的直径取这么大,区里任意两点在同一份快照里;竖直方向用同一个半径。今天是 48 格。
 - **区里**:照旧——按"走过去加挖掉"一起定价挑最便宜的、就地挖通、垫高、捡掉落物,挪动用 `Trip`。首次找矿查询回来之前不出发。
   捡的掉落物是区里的,加上她自己敲出来、弹出区外一两格的。
 - **区外**:不去,只报告。找矿查询以工作区中心为球心、半径 32 个区块(服务器视距的上限,查询只读已加载的区块,即"她身边加载着的
-  全部地形"),区里的命中进名单,区外的记下来;回执说区外还有几个(查询凑够个数就停时说"至少")、最近一个在哪、离她多远,下一步照抄:
+  全部地形"),区里的命中进名单,区外的记下来(09-30 起 `--block_ids` 是先扫进一块匿名区域的简写,扫的半径与 `scan blocks` 的上限
+  同为 192 格,区外的就是那块区域落在工作区外的格);回执说区外还有几个(查询凑够个数就停时说"至少")、最近一个在哪、离她多远,下一步照抄:
 
   ```
   found no ochre_froglight in my work area (within 48 blocks of -12553958,-58,11491503), so I stayed put; 2 more lie beyond it, the nearest at -12553911,-58,11491550, about 66 blocks from me: move_goto there first (x:-12553911 y:-58 z:11491550 arrive:near near:8), then work_mine again
@@ -792,16 +794,18 @@ throwaway clear
 - **受理回执**当场交代工作区(`TaskRecord.acceptNote`,由 `TaskDispatch` 接在受理那句话后面):
   `My work area is within 48 blocks of -12553812,-58,11491503, where I stand now: I mine only there, and the end reports what lies beyond it.`;
   groups 用法说点名的格有几格在区里、几格在区外留着不挖。
-- **`--groups` 点名的团一格都不在区里**:和编号过期同一条规矩,派发当场拒收,不派活:
+- **`--groups` 点名的团一格都不在区里**(09-30 起 `--groups` 由 `--area` 取代,同一条规矩,见"看与挖收区域"一节):和编号过期同一条规矩,
+  派发当场拒收,不派活:
   `group g4 lies wholly beyond my work area (within 48 blocks of …), so I did not start; the nearest of its cells is at …, about 66 blocks away. move_goto there first (…), then work_mine again (group ids stay good until your next scan_blocks).`
 - **到不了按类型说**:区里的一批搜不出路就收工,回执接上寻路结局的原话与下一步(`NavText.failure`,只此一处):真无路、预算用完、
   未加载、要改地形(说出要改几格、放开哪一档;列候选路线的探路 09-30 删掉,见下一节)、没有垫路料、被拒、起点待不住、执行受阻、看不见。例:
   `could not reach any of the 1 pumpkin in my work area (within 48 blocks of -12553556,-58,11490388); gathered 0: had to stop: changing -12553556,-57,11490389 is refused (denied by rule break(minecraft:white_wool) (is minecraft:white_wool)); that is not mine to get around, so pick another destination or ask your owner`;
   同样关在小屋里、模型给了 `--alter none` 时是另一句:`… gathered 0: found no path to target without altering terrain (from …, about 11 blocks away; a route that digs, bridges or pillars through natural terrain exists, changing 1 block(s): walk with alter:'natural' to take it)`。
 - **`scan blocks`**:每一团标 `in_work_area`(`all` / `none` / `8 of 17 cells`),小结里有 `work_area`;扫描的中心就是她此刻
-  脚下,和她从这里派 `work mine` 时的工作区是同一块。
+  脚下,和她从这里派 `work mine` 时的工作区是同一块(09-30 删掉:去不去得了归规划,见"看与挖收区域"一节)。
 - **`work collect`**:半径参数就是工作区的半径(默认 16,上限 `WorkArea.RADIUS`),以受理时她脚下为中心、不跟着她走——
-  原来每捡一件都以她新的位置重算半径,一件接一件能越捡越远;两处各写一份的上限 48 合成这一处。
+  原来每捡一件都以她新的位置重算半径,一件接一件能越捡越远;两处各写一份的上限 48 合成这一处(09-30 起这个球是一块区域,
+  `--area` 再把它收窄到点名的区域里)。
 
 ### move goto:只收坐标,`--arrive` 说怎样算到了(09-29)
 
@@ -940,6 +944,88 @@ route spec home --avoid_break area:house                --avoid_break/_place/_st
 - 回执:到了一块区域说 `reached area pen, standing at …`、`standing at …, with the chest at x,y,z of area chests in sight and in
   reach — use it from here`、`arrived within 3 blocks of area pen, standing at …`。
 
+### 看与挖收区域:area 组、scan blocks --into/--in、work --area(09-30)
+
+设计稿 `docs/look-plan-act.md` §七第 3 步的看与挖一半。"一块地方"在看与挖里也只剩区域一种写法:扫描写进区域,挖与捡点名区域,
+工作区本身是一块区域;团编号簿、`g` 编号计数、`--groups`、`in_work_area`、`box` 都删掉。
+
+**`area` 组**(`core/tools/area/AreaCommands`,实现 `AreaOps`,说法 `AreaText`):
+
+```
+area new ores                                    在她此刻的维度建一块空区域
+area add house --box 10,60,5..20,70,15           框一个盒子,一部分 b1、b2……;一框至多 2^24 格
+area add chest --at 12 64 7                      一格,p1……
+area add home --built house#1                    一栋建成的房子放下的格(Built 记的,唯一出处),c1……
+area add tunnel --route mine                     一条路线最近一次计划要挖、要放的格,c……
+area drop ores g2 / area delete ores / area list [--page]
+area show ores [--page] / area show ores/g3      一部分一行
+area refresh ores                                按活世界复核附带方块的格,划掉变了的
+area union all ores gold                         并;右边的部分按左边的计数续号
+area minus safe house house/b2                   差
+area intersect near ores base                    交
+area filter logs house --blocks #minecraft:logs  按附带的方块筛(框出来的格没有方块,不留)
+area grow buffer house 2                         外扩 N 格
+area center mid ores                             中心附近的一格
+```
+
+- 命令层无状态,每行点名区域;名字规矩是 `Names`,点名一块或一部分的写法是 `AreaRef`,参数类型是 `ArgType.area()`,按名字找主人的
+  区域只经 `NamedAreas`(与路线同一处,她此刻所在的维度)。运算的结果存成一块新区域(名字要是新的,已有的不覆盖),不存算式。
+- `Area.Kind` 多一种 `CELLS`(`c`):一栋房子、一条路线计划这类别处记着的一组格。
+- `area show` 的一行与 `scan blocks` 的一团是同一种 JSON(`AreaText.part`:编号、格数、附带的方块各几格、流体源头几格、最近一格的
+  方向与距离、16 格以内逐格列坐标),再接上包围盒(写法就是 `--box` 收的,能原样抄回)与此刻挖它许不许——逐格用挖掘落点会提交的
+  同一个 `break` 动作问 `Gate.judgeLive`,说法只有一种时写成 `permission` + `reason`,几种时是 `{说法: 格数}`;此刻是空气的数进
+  `air_now`,没加载的数进 `not_loaded`。
+- `area refresh` 的"还是当时那种方块"与挖矿动手前的复核同一条(`Cells.Seen.holds`:比方块种类,不比朝向这类状态);没加载的格不看、
+  照实说;一格都没变就不改区域、不经权限层。
+- **改区域过权限层**:新建、加部分、删部分、`refresh` 划掉、删除、运算存成新的一块、`scan blocks --into` 写进去,都是动作
+  `edit_area(区域名)`(`docs/permission-layer.md` "改区域"),经 `ServerSource.authorize` 裁决——与第 0 层指令同一个口子
+  (`PendingCommands` 从只挂指令改为挂任何一次调用的一件事):放行照做;不许回执理由、区域不变;要问就这次调用悬着、不占任务槽,
+  主人答复后按那一刻的存档再算一遍才写。出厂 ask 行 `edit_area(ruled)`:主人层规则的 `area:` 项点名的区域(区域此刻在不在都算),
+  改它先问主人;其余照出厂 allow 行 `edit_area(!ruled)`。命令里不写死哪块能改。
+
+**`scan blocks`**:
+
+```
+scan blocks 32 iron_ore deepslate_iron_ore               只是看:团没有编号,什么也不存
+scan blocks 32 iron_ore deepslate_iron_ore --into ores   每一团加成 ores 的一部分(g 在区域里续),回执里编号是 ores/g5
+scan blocks 16 #minecraft:beds --in base                 只收落在 base 里的格;半径照旧是从她脚下看多远
+```
+
+- 找方块、逐格问权限、分团收成 `core/scan/BlockScan`(`scan blocks` 与 `work mine` 的简写共用);看完的结果经 `Found.into` 写进
+  区域,每格附带看到的方块状态与那一刻(主世界游戏刻)。`BlockGroups.Group` 只留格子与状态、说法、最近一格:各种几格、源头几格
+  由区域的格子说,包围盒由 `area show` 说。
+- `--in`:半径参数不变,范围是"从她脚下的半径"与"点名的区域"两者都要在——区域判定只问 `Area.contains`,搜索的球只是看多远。
+- `--into` 的区域要先 `area new`(与 `build --into` 要先有设计同一个做法),要是整块(不收部分),看之前先过 `edit_area`;看的时候
+  区域被删了就不写、照实说。
+- 回执删掉 `in_work_area`、`box` 与小结里的 `work_area`:去不去得了归规划(`route plan`、`move goto --area`),框一块用 `area add --box`。
+
+**`work mine`**:
+
+```
+work mine --area ores/g3                  挖这一部分里还是当时那种方块的格,挖完为止
+work mine --area ores/g3 ores/g4 --count 10
+work mine --block_ids iron_ore deepslate_iron_ore --count 10   简写:先扫进一块匿名区域再挖
+```
+
+- 候选只有一个来处:区域里附带了方块的格(`MineBlockTaskRecord.scanned`),每格动手前按 `Cells.Seen.holds` 复核,变了的记成"别人动过"
+  (顺路挖掉的记她的),不往外扩。框出来的格不挖。
+- `--area` 在派发时解析:没有这块、没有这一部分、没有扫描过的格、整块落在工作区外,当场拒收不派活。落在工作区外的只报告
+  (`Beyond`),说法同前。
+- `--block_ids` 简写开工时先 `BlockScan`(半径 192,与 `scan blocks` 上限同一个),收成一块不存盘的匿名区域,之后与 `--area` 同一条路;
+  原来任务自己反复找候选(按需补查、慢心跳重查、在 `BlockSearch` 持有登记)的那一套删掉。没存盘的理由:它没有名字,没有人再点它;
+  要留着就先 `scan blocks … --into`。
+- 受理回执:点名区域时说 `all N scanned cells of ores/g3 lie in it`,或 `n of the N … lie in it; the other k lie beyond it and will be left`。
+
+**工作区与捡东西**:`WorkArea` 带着一块球形区域(`Cells.sphere`,`Area.Kind.SPHERE`),`contains` 问区域;挖矿把点名区域与它求交、
+求差。`work collect` 的范围也是一块区域:受理时脚下为中心的球(`--radius`,默认 16;点名区域时默认取工作区的 48),`--area` 再与
+点名的区域求交;找掉落物经 `NearbyEntities.in(level, Area, …)`(区域的包围盒向世界要候选,逐只问区域)。
+
+**没改的**:
+- `BuildSite`(建造走向外圈时的工地禁令)不改成区域:它的格子是这次施工的目标格(`BuildCompanionTask.targetByPos`),只在这一趟里交给
+  寻路的位置代价(`PositionCosts`,寻路模块不依赖 api 的区域);收成区域再展开回去只多一层转换,判定仍是寻路模块那一处。
+- `scan storage --in`:不做。`scan storage` 的必填位置参数是一格 `x y z`,命令行没有可省的位置参数,`--in` 要么让同一个动作有两种
+  写法、要么另起一个动作;"区域里的容器装了什么"眼下没有消费方,等要用时按真实用例开。
+
 ### transfer 改成一次一步
 
 `transfer` 工具与它的 `moves` 数组删掉,换成 `use` 组的两个动作,一个动作一个意思:
@@ -1075,9 +1161,9 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
   - `tlm models`:包级摘要与搜索结果按行分页,原来的"搜索至多 40 条"(悄悄截断,还报成"找到 40 个")删掉;
   - `ysm options`:能换的模型一行一个分页,`data` 不再带整份模型清单;
   - `scan blocks`(快捷工具 `scan_blocks` 多了 `page`):原来"至多 16 团、其余只计数"删掉,一团一行(一个 JSON 对象)由近及远
-    分页。翻页不重扫:团的编号只在一次扫描里有效,重扫就是另一批编号,所以 `--page` 翻的是团簿里存着的那一次
-    (`GroupBook.page`),要翻的不是最新那一次就如实说、叫她先不带 `--page` 扫。没扫全时抬头只说"读到的那部分里"有几团,
-    `groups_total` 照旧只在扫全时给;
+    分页。没扫全时抬头只说"读到的那部分里"有几团,`groups_total` 照旧只在扫全时给。09-30 起不再有团编号簿:只是看的团没有编号,
+    翻页就是再看一次(和 `scan entities` 一样);带 `--into` 的团存进区域,翻页提示指向 `area show <区域>`,`--into` 与 `--page`
+    同写当场拒;
   - `scan entities`(`scan_entities` 多了 `page`):原来"至多 20 只、truncated"删掉,一只一行由近及远分页;翻页现读,
     实体会走动,编号在它还在世界里时不变;
   - `inv recipe`:原来"至多 4 条配方"(悄悄截断,不说一共几条)删掉,一条配方一个条目分页,各工位的做法在结尾;配料是标签
