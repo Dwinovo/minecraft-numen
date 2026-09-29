@@ -1811,7 +1811,7 @@ public class BuildGameTests {
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         // 这条量的是原语能不能盖出一栋屋子,不是生存备料:免耗材档
         companion.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
-        // 发脚手架:垫柱残料由交付前的清扫遍拆除,门洞可通行断言就是它的回归测试
+        // 发脚手架:寻路垫柱上高处要料;门洞是图纸格,寻路不往图纸格里垫块,门洞可通行断言守的是这一条
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
 
@@ -2065,7 +2065,7 @@ public class BuildGameTests {
         });
     }
 
-    // ---- 施工时的走位:走出工地、绕外圈、小活不演、收场撤垫块、缺格清单 ----
+    // ---- 施工时的走位:走出工地、绕外圈、小活不演、收场交代路上的垫块、缺格清单 ----
 
     /** 图纸以外、这片地板上方几层的每一格此刻是什么:查她有没有动过图纸以外的世界。 */
     private static java.util.Map<BlockPos, BlockState> outsideDesign(GameTestHelper helper,
@@ -2302,54 +2302,73 @@ public class BuildGameTests {
         return new PennedBuild(companion, helper.absolutePos(new BlockPos(2, 2, 2)), record);
     }
 
-    /** 她翻墙时在牢里垫下的块还在不在(脚下那格与再上一格)。 */
-    private static boolean penStillHoldsWhatSheLaid(GameTestHelper helper, BlockPos pen) {
-        return helper.getLevel().getBlockState(pen).is(Blocks.COBBLESTONE)
-                || helper.getLevel().getBlockState(pen.above()).is(Blocks.COBBLESTONE);
+    /** 她翻墙时在牢里垫下、此刻还立着的圆石(脚下那格与再上一格)。 */
+    private static List<BlockPos> laidInPen(GameTestHelper helper, BlockPos pen) {
+        List<BlockPos> out = new ArrayList<>();
+        for (BlockPos at : List.of(pen, pen.above())) {
+            if (helper.getLevel().getBlockState(at).is(Blocks.COBBLESTONE)) {
+                out.add(at);
+            }
+        }
+        return out;
     }
 
-    /**
-     * 活干不下去(那朵虞美人立不住)时,翻墙垫下的圆石也撤掉,回执里说撤了哪几块;缺的那一格照样逐格点名。
-     */
+    /** 回执照实点名了牢里还立着的每一块圆石:方块名与坐标,接着能照抄的挖法。 */
+    private static void reportsWhatIsLeftInPen(GameTestHelper helper, BlockPos pen, String message) {
+        List<BlockPos> left = laidInPen(helper, pen);
+        helper.assertTrue(!left.isEmpty(), "the cobblestone she climbed out on is gone - the case did not run");
+        helper.assertTrue(message.contains("Still standing from what I put down on the way: ")
+                        && message.contains("cobblestone") && message.contains("use block left"),
+                "the receipt does not say what she left standing: " + message);
+        for (BlockPos at : left) {
+            helper.assertTrue(message.contains(at.getX() + "," + at.getY() + "," + at.getZ()),
+                    "the receipt does not name " + at.toShortString() + ": " + message);
+        }
+    }
+
+    /** 建完收工:翻墙垫下的圆石留在原处,回执照实点名它们。 */
     @GameTest(template = "floor20", timeoutTicks = 6000, batch = "numen_build")
-    public static void blocks_put_down_on_the_way_are_taken_down_when_the_build_fails(GameTestHelper helper) {
-        PennedBuild build = pennedBuild(helper, "gametest_failed_climber", 3, true);
-        boolean[] laid = {false};
-        helper.onEachTick(() -> laid[0] |= penStillHoldsWhatSheLaid(helper, build.pen()));
+    public static void blocks_put_down_on_the_way_are_reported_when_the_build_is_done(GameTestHelper helper) {
+        PennedBuild build = pennedBuild(helper, "gametest_done_climber", 3, false);
         succeedWhen(helper, () -> {
             var result = build.record().getResult();
             helper.assertTrue(result != null, "build has not finished");
-            helper.assertTrue(laid[0], "she never put a block down to climb out - the case did not run");
+            helper.assertTrue(result.success(), "the build did not finish: " + result.message());
+            reportsWhatIsLeftInPen(helper, build.pen(), result.message());
+            CompanionFactory.despawn(helper.getLevel().getServer(), build.companion());
+        });
+    }
+
+    /**
+     * 活干不下去(那朵虞美人立不住)时,翻墙垫下的圆石留在原处,回执照实点名;缺的那一格照样逐格点名。
+     */
+    @GameTest(template = "floor20", timeoutTicks = 6000, batch = "numen_build")
+    public static void blocks_put_down_on_the_way_are_reported_when_the_build_fails(GameTestHelper helper) {
+        PennedBuild build = pennedBuild(helper, "gametest_failed_climber", 3, true);
+        succeedWhen(helper, () -> {
+            var result = build.record().getResult();
+            helper.assertTrue(result != null, "build has not finished");
             helper.assertTrue(!result.success(), "the build should have failed on the flower: " + result.message());
-            helper.assertTrue(!penStillHoldsWhatSheLaid(helper, build.pen()),
-                    "the cobblestone she climbed out on is still there");
-            helper.assertTrue(result.message().contains("Took down the") && result.message().contains("cobblestone"),
-                    "the receipt does not say what she took down: " + result.message());
+            reportsWhatIsLeftInPen(helper, build.pen(), result.message());
             helper.assertTrue(result.message().contains("poppy"), "the receipt does not name the unbuilt cell: "
                     + result.message());
             CompanionFactory.despawn(helper.getLevel().getServer(), build.companion());
         });
     }
 
-    /** 主人半路按停止:翻墙垫下的圆石当场撤掉,回执里说撤了哪几块。 */
+    /** 主人半路按停止:翻墙垫下的圆石留在原处,回执照实点名。 */
     @GameTest(template = "floor20", timeoutTicks = 6000, batch = "numen_build")
-    public static void blocks_put_down_on_the_way_are_taken_down_when_the_owner_stops(GameTestHelper helper) {
+    public static void blocks_put_down_on_the_way_are_reported_when_the_owner_stops(GameTestHelper helper) {
         PennedBuild build = pennedBuild(helper, "gametest_stopped_climber", 5, false);
-        boolean[] laid = {false};
-        helper.onEachTick(() -> laid[0] |= penStillHoldsWhatSheLaid(helper, build.pen()));
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(build.record().completed() >= 3, "she has not laid three cells yet"))
                 .thenExecute(() -> com.dwinovo.numen.task.CompanionTickDispatcher.cancelFor(build.companion()))
                 .thenWaitUntil(() -> helper.assertTrue(build.record().getResult() != null, "the stop has not settled"))
                 .thenExecute(() -> {
                     String message = build.record().getResult().message();
-                    helper.assertTrue(laid[0], "she never put a block down to climb out - the case did not run");
                     helper.assertTrue(message.startsWith("the owner pressed Stop"),
                             "the build did not end as stopped by the owner: " + message);
-                    helper.assertTrue(!penStillHoldsWhatSheLaid(helper, build.pen()),
-                            "the cobblestone she climbed out on is still there");
-                    helper.assertTrue(message.contains("Took down the") && message.contains("cobblestone"),
-                            "the receipt does not say what she took down: " + message);
+                    reportsWhatIsLeftInPen(helper, build.pen(), message);
                     CompanionFactory.despawn(helper.getLevel().getServer(), build.companion());
                 })
                 .thenSucceed();

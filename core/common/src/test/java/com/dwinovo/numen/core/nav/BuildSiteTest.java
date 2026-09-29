@@ -46,9 +46,9 @@ class BuildSiteTest {
 
     @Test
     void theRestOfTheSpecIsKept() {
-        RouteSpec base = RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).takeBack(true).build();
+        RouteSpec base = RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).jumpPenalty(12.0).build();
         RouteSpec around = BuildSite.around(base, new LongOpenHashSet(new long[] {SITE.asLong()}));
         assertEquals(RouteSpec.Alter.NATURAL, around.alter());
-        assertTrue(around.takeBack());
+        assertEquals(12.0, around.jumpPenalty());
     }
 }

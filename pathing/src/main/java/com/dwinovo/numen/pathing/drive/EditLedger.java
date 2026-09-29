@@ -67,7 +67,7 @@ public final class EditLedger {
 
     /**
      * 这本账放下、之后没再挖掉的方块,按放下的先后:每一格看最后一笔,是放下了一种方块(倒下又收回的水、放下的流体不算)。
-     * 事后撤回垫块就撤这些。
+     * 宿主说给模型"路上垫下的块哪些还立着",读的就是这些。
      */
     public List<Placed> placedBlocks() {
         return placedBlocks(entries);

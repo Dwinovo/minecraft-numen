@@ -31,7 +31,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ExperienceOrb;
-import net.minecraft.world.entity.animal.Pig;
+import net.minecraft.world.entity.animal.Chicken;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantment;
@@ -40,6 +40,7 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -381,45 +382,40 @@ public class DigGameTests {
     }
 
     /**
-     * 撤回桥上的块时,正挖着,一头猪挡到了眼睛与那一块之间:准星落在猪身上,手停下,不打猪;猪走开之后接着挖完,四块都撤掉。
+     * 挖穿一堵石墙时,正挖着,一只鸡挡到了眼睛与正在挖的那一格之间:准星落在鸡身上,手停下,不打它;鸡走开之后接着挖完,
+     * 走到墙那边。她贴着墙挖,眼睛离墙面只有半格,鸡放在视线上离眼睛四分之一格处,身子不碰墙(碰了会闷伤,就分不清是谁伤的)。
      */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 1500)
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 1200)
     public static void pauses_while_a_mob_blocks_the_crosshair(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
-        t.fill(0, 1, 0, 9, 4, 39, Blocks.BEDROCK);
-        t.fill(14, 1, 0, 39, 4, 39, Blocks.BEDROCK);
-        TestBody body = t.body(6, 5, 5);
-        Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
-        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
+        t.fill(10, 1, 0, 10, 6, 39, Blocks.STONE);
+        TestBody body = t.body(4, 1, 5);
+        body.getInventory().setItem(0, new ItemStack(Items.WOODEN_PICKAXE));
         DigWatch watch = new DigWatch(body);
         t.hands = watch::wrap;
-        Pig[] pig = {null};
+        Chicken[] mob = {null};
         int[] shownAt = {-1};
-        t.go(body, Goals.at(t.at(17, 5, 5)), NATURAL.edit().takeBack(true).build()).within(1400).arrives()
+        t.go(body, Goals.at(t.at(14, 1, 5)), NATURAL).within(1000)
                 .during(r -> {
-                    if (r.teardown == null) {
-                        return;
-                    }
-                    if (pig[0] == null && watch.digging()) {
-                        pig[0] = EntityType.PIG.create(t.level);
-                        pig[0].setNoAi(true);
-                        BlockPos at = t.at(15, 5, 5);
-                        pig[0].moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
-                        t.level.addFreshEntity(pig[0]);
+                    if (mob[0] == null && watch.digging()) {
+                        Vec3 eye = r.body.getEyePosition();
+                        Vec3 on = eye.add(Vec3.atCenterOf(watch.current()).subtract(eye).normalize().scale(0.25));
+                        mob[0] = EntityType.CHICKEN.create(t.level);
+                        mob[0].setNoAi(true);
+                        mob[0].setNoGravity(true);
+                        mob[0].moveTo(on.x, on.y - mob[0].getBbHeight() / 2, on.z, 0, 0);
+                        t.level.addFreshEntity(mob[0]);
                         shownAt[0] = r.ticks;
-                    } else if (pig[0] != null && !pig[0].isRemoved() && r.ticks - shownAt[0] >= 30) {
-                        if (pig[0].getHealth() < pig[0].getMaxHealth() || pig[0].getLastHurtByMob() != null) {
-                            throw new GameTestAssertException("打了挡在准星上的猪");
+                    } else if (mob[0] != null && !mob[0].isRemoved() && r.ticks - shownAt[0] >= 30) {
+                        if (mob[0].getHealth() < mob[0].getMaxHealth() || mob[0].getLastHurtByMob() != null) {
+                            throw new GameTestAssertException("挡在准星上的鸡受了伤:" + mob[0].getLastDamageSource());
                         }
-                        pig[0].discard();
+                        mob[0].discard();
                     }
                 })
-                .takesBack(RouteSpec.defaults(), r -> {
-                    if (pig[0] == null || !pig[0].isRemoved()) {
-                        throw new GameTestAssertException("猪没挡上,场景没起作用");
-                    }
-                    if (r.teardown.taken().size() != 4 || !r.teardown.left().isEmpty()) {
-                        throw new GameTestAssertException("应当撤掉桥上四块:" + r.teardown);
+                .arrives().then(r -> {
+                    if (mob[0] == null || !mob[0].isRemoved()) {
+                        throw new GameTestAssertException("鸡没挡上,场景没起作用");
                     }
                 });
     }

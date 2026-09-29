@@ -28,7 +28,7 @@ import net.minecraft.world.phys.Vec3;
  * <p>看不见目标(树叶挡着、头顶太窄)时,朝它身上够得着的那一点看过去({@link Aim#reachable}),准星落在的那一格就是挡着的:
  * 调用方说挖它不会出事、权限层也许,就先挖它把视线打开,而不是站着等一个永远不来的角度。
  *
- * <p>施工清障与收工撤垫块另走一次到位的原生破坏({@link #destroyNow}),同样先过权限层。
+ * <p>施工清障另走一次到位的原生破坏({@link #destroyNow}),同样先过权限层。
  */
 public final class BlockDigger {
 
@@ -67,7 +67,7 @@ public final class BlockDigger {
     }
 
     /**
-     * 施工清障与收工撤垫块:一次到位的原生破坏({@code ServerPlayerGameMode.destroyBlock}——掉落按手持结算、
+     * 施工清障:一次到位的原生破坏({@code ServerPlayerGameMode.destroyBlock}——掉落按手持结算、
      * 创造不掉、别的模组的破坏事件照常触发),不走逐刻进度,也不要求视线。同样先过权限层。
      *
      * @return 方块真的没了;没碎而那一格不是空气时,{@link #refusal()} 说为什么

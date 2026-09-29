@@ -32,7 +32,7 @@ import net.minecraft.world.level.block.state.BlockState;
  * 不许继承;任务要改价,只能换一份路线规格({@link #withSpec}),或在规格的按位置代价表里加减。
  *
  * <p>挖与放能不能进路线、放一块与挖一格多少钱,都只在这里定:{@link #admitDig}、{@link #admitPlace}、{@link #digCost}、
- * {@link #placeCost}。放一块的价钱在规格要求事后拆回时连拆的那一下一起算,也只在 {@link #placeCost} 里。
+ * {@link #placeCost}。
  */
 public final class CostModel {
 
@@ -263,16 +263,12 @@ public final class CostModel {
     }
 
     /**
-     * 放一块:规格的放置罚分加这一格的按位置加价,许可要问的乘 {@link ActionCosts#CONSENT_MULTIPLIER};规格要求事后拆回时,
-     * 再加上挖掉这块料手上要花的刻数(站在地上、眼睛不在水里挖,{@link ToolChoice#handTicks})。
+     * 放一块:规格的放置罚分加这一格的按位置加价,许可要问的乘 {@link ActionCosts#CONSENT_MULTIPLIER}。
      */
     public double placeCost(Edit.Place place) {
         double cost = spec.placeCost() + extra(Use.PLACE, place.pos().asLong());
         if (place.permit() instanceof Permit.Ask) {
             cost *= ActionCosts.CONSENT_MULTIPLIER;
-        }
-        if (spec.takeBack()) {
-            cost += tools.handTicks(place.block().defaultBlockState(), false, true);
         }
         return cost;
     }

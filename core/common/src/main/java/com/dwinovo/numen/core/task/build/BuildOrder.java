@@ -127,7 +127,7 @@ public final class BuildOrder {
 
     private static final long MIN_DEADLINE_TICKS = 60 * 20;
     private static final long TRAVEL_ALLOWANCE_TICKS = 40 * 20;
-    /** 施工预计时长之上再留的余量(零进展重试与收工撤垫块都吃这笔)。 */
+    /** 施工预计时长之上再留的余量(零进展重试吃这笔)。 */
     private static final double DEADLINE_SLACK = 1.6;
 
     /**

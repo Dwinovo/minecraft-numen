@@ -79,16 +79,6 @@ class CostModelTest {
     }
 
     @Test
-    void placingPricesTakingTheBlockBackWhenTheSpecAsksForIt() {
-        RouteSpec keep = RouteSpec.defaults().edit().alter(Alter.NATURAL).build();
-        CostModel left = CostModel.of(keep, Fixtures.body(), TerrainPolicy.ALLOW_ALL, Fixtures.COBBLE, Threats.NONE);
-        CostModel taken = left.withSpec(keep.edit().takeBack(true).build());
-        Edit.Place place = new Edit.Place(FREE, Blocks.AIR.defaultBlockState(), Blocks.COBBLESTONE, Permit.ALLOW);
-        double pickUp = left.tools().handTicks(Blocks.COBBLESTONE.defaultBlockState(), false, true);
-        assertEquals(left.placeCost(place) + pickUp, taken.placeCost(place), 1e-9);
-    }
-
-    @Test
     void positionsAndBansForbidDiggingAndPlacing() {
         TestWorld world = stones();
         RouteSpec spec = RouteSpec.defaults().edit().alter(Alter.NATURAL)

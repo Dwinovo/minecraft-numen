@@ -23,7 +23,7 @@ import net.minecraft.world.phys.Vec3;
  * 数字都写齐。直接写进 slf4j 的 {@code NumenPathing} 这一个记录器,开多少由宿主的日志配置定:
  * <ul>
  *   <li>INFO——结局与被叫停、每一次搜索与规划的结论、重搜、一步走不下去、卡住、计划内的坠落与落地、倒水接坠落与收水、
- *       动手被拒、下载具、不在推进、撤垫块的起止与留下的块;</li>
+ *       动手被拒、下载具、不在推进;</li>
  *   <li>DEBUG——出发、派搜索、路线上的每一步、每一步开始、每一下成功的挖与放与开关门、换目标、暂停、身体换手上的东西;</li>
  *   <li>WARN——主线程上寻路一刻用的时间超过 {@link #MAIN_THREAD_WARN_NANOS}。</li>
  * </ul>
@@ -119,9 +119,6 @@ public final class PathLog {
         }
         if (spec.parkour()) {
             out.append(" parkour");
-        }
-        if (spec.takeBack()) {
-            out.append(" takeBack");
         }
         return out.toString();
     }

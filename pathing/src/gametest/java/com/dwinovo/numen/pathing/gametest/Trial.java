@@ -17,7 +17,6 @@ import com.dwinovo.numen.pathing.api.PlanResult;
 import com.dwinovo.numen.pathing.api.Planning;
 import com.dwinovo.numen.pathing.api.Ports;
 import com.dwinovo.numen.pathing.api.Report;
-import com.dwinovo.numen.pathing.api.Teardown;
 import com.dwinovo.numen.pathing.body.Effector;
 import com.dwinovo.numen.pathing.body.PlayerHands;
 import com.dwinovo.numen.pathing.drive.EditLedger;
@@ -250,9 +249,6 @@ final class Trial {
                 continue;
             }
             run.navigation.report().ledger().entries().forEach(e -> out.add(e.pos()));
-            if (run.teardown != null) {
-                run.teardown.report().ledger().entries().forEach(e -> out.add(e.pos()));
-            }
         }
         return out;
     }
@@ -317,11 +313,6 @@ final class Trial {
         private java.util.function.BiPredicate<BlockState, BlockState> passive = (before, now) -> false;
         private boolean finished;
         private boolean passed;
-        /** 到了之后撤回路上垫块用的规格;不撤为 null。 */
-        private RouteSpec takeBackSpec;
-        private final List<Consumer<Run>> afterTakeBack = new ArrayList<>();
-        /** 到了之后的撤回;还没开始为 null。 */
-        Teardown teardown;
         /** 这么多刻内要收场(从开走算起);用例的 GameTest 时限要比它加上 {@link #delay} 长。 */
         private int limit = 400;
         /**
@@ -400,13 +391,6 @@ final class Trial {
             return this;
         }
 
-        /** 到了之后按 {@code spec} 撤回这次导航路上垫下的块,撤完再断言 {@code check};实际账连撤回的一起对。 */
-        Run takesBack(RouteSpec spec, Consumer<Run> check) {
-            takeBackSpec = spec;
-            afterTakeBack.add(check);
-            return this;
-        }
-
         /**
          * 每刻至少占 {@code millis} 毫秒墙钟。测试服务器的刻不等墙钟(一刻做完就接着下一刻),而搜索在工作线程上按墙钟跑:
          * 一次要几百毫秒的搜索在这里会占去上千刻,期限与"提前搜下一段来得及"就都失去了意义。搜索吃重的用例按它定个节奏,
@@ -423,7 +407,7 @@ final class Trial {
             return this;
         }
 
-        /** 每刻在推导航(或撤回)之前做(用例中途改世界、推身体)。 */
+        /** 每刻在推导航之前做(用例中途改世界、推身体)。 */
         Run during(Consumer<Run> action) {
             everyTick.add(action);
             return this;
@@ -441,10 +425,6 @@ final class Trial {
                 ticks++;
                 for (Consumer<Run> action : everyTick) {
                     action.accept(this);
-                }
-                if (teardown != null) {
-                    tearDown();
-                    return;
                 }
                 lowestHealth = Math.min(lowestHealth, body.getHealth());
                 status = navigation.tick();
@@ -467,42 +447,21 @@ final class Trial {
                 for (Consumer<Run> check : finals) {
                     check.accept(this);
                 }
-                if (takeBackSpec != null) {
-                    teardown = navigator.takeBack(report.ledger().placedBlocks(), takeBackSpec);
-                    return;
-                }
                 pass();
             } catch (RuntimeException e) {
                 finished = true;
                 navigation.stop();
-                if (teardown != null) {
-                    teardown.stop();
-                }
                 body.leave();
                 throw e instanceof GameTestAssertException assertion ? assertion
                         : new GameTestAssertException("用例抛出了 " + e);
             }
         }
 
-        private void tearDown() {
-            if (teardown.tick()) {
-                overdue();
-                return;
-            }
-            List<EditLedger.Entry> all = new ArrayList<>(report.ledger().entries());
-            all.addAll(teardown.report().ledger().entries());
-            trial.audit(all, spec, passive, trial.othersCells(this));
-            for (Consumer<Run> check : afterTakeBack) {
-                check.accept(this);
-            }
-            pass();
-        }
-
         private void overdue() {
             if (ticks >= limit) {
                 throw new GameTestAssertException("时限内没收场:身体在 " + trial.rel(body.blockPosition())
                         + " (" + fmt(body.getX()) + "," + fmt(body.getY()) + "," + fmt(body.getZ()) + ") "
-                        + (teardown != null ? teardown : navigation));
+                        + navigation);
             }
         }
 

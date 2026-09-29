@@ -190,13 +190,9 @@ class BuildTaskRecordTest {
                 .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST)));
     }
 
-    /**
-     * 施工路上放下的非图纸块收场时都要拆掉,所以走向外圈的路线规格要说"要拆回":放一块的价钱连拆它的那一下一起算,
-     * 定价只在寻路的成本模型一处(见模块的 {@code CostModelTest}),施工这边不自己加价。
-     */
+    /** 走向外圈的路可以改自然地形:挖掉挡路的、垫块过坎,都是为了到场干活。 */
     @Test
-    void theBuildRouteTakesBackWhatItLaysDown() {
-        assertTrue(BuildCompanionTask.SPEC.takeBack(), "施工的路线规格要说明路上放下的块事后要拆");
+    void theBuildRouteMayAlterNaturalTerrain() {
         assertEquals(RouteSpec.Alter.NATURAL, BuildCompanionTask.SPEC.alter());
     }
 }

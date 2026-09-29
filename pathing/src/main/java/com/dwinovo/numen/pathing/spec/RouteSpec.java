@@ -15,8 +15,7 @@ import com.dwinovo.numen.pathing.world.Semantics.Kind;
  *   <li><b>排除的格子种类</b>——{@link #excluded()}:这条路线不站上、不穿过这些语义种类的格子。每类格子只有"排除"这一种
  *       处置,不按种类另外计价;</li>
  *   <li><b>按位置与按种类</b>——{@link PositionCosts}(看坐标)与 {@link BlockBans}(看方块种类);</li>
- *   <li><b>动作代价</b>——放置、挖掘、起跳、涉水四项罚分;以及路上放下的块事后要不要拆掉({@link #takeBack()}),
- *       要拆的话放一块的价钱连拆它一起算。</li>
+ *   <li><b>动作代价</b>——放置、挖掘、起跳、涉水四项罚分。</li>
  * </ol>
  *
  * <p>服主总开关是上限,规格只能在其内收紧;规格里的每一项都要能在账单里看出它起了什么作用。{@link #defaults()} 是
@@ -39,12 +38,11 @@ import com.dwinovo.numen.pathing.world.Semantics.Kind;
  * @param breakPenalty         挖一块在挖掘耗时之外另加的罚分
  * @param jumpPenalty          每次起跳的罚分
  * @param wadePenalty          水里走一格的罚分
- * @param takeBack             路上放下的方块事后都要拆掉
  */
 public record RouteSpec(Alter alter, boolean sprint, boolean parkour, boolean parkourAscend,
                         boolean diagonalAscend, boolean diagonalDescend, boolean downward, boolean strictLiquidCheck, int maxFallHeightNoWater, int alterBudget, Set<Kind> excluded,
                         PositionCosts positions, BlockBans bans, double placeCost, double breakPenalty,
-                        double jumpPenalty, double wadePenalty, boolean takeBack) {
+                        double jumpPenalty, double wadePenalty) {
 
     /** 改动预算的"不限"值。 */
     public static final int UNLIMITED = Integer.MAX_VALUE;
@@ -69,7 +67,7 @@ public record RouteSpec(Alter alter, boolean sprint, boolean parkour, boolean pa
     private static final RouteSpec DEFAULTS = new RouteSpec(
             Alter.NONE, true, false, true, false, false, true, false,
             3, UNLIMITED, EnumSet.of(Kind.LAVA, Kind.HAZARD, Kind.FLOWING_WATER, Kind.TRIGGER, Kind.FRAGILE),
-            PositionCosts.EMPTY, BlockBans.EMPTY, 20.0, 30.0, 2.0, 3.0, false);
+            PositionCosts.EMPTY, BlockBans.EMPTY, 20.0, 30.0, 2.0, 3.0);
 
     public RouteSpec {
         Objects.requireNonNull(alter, "alter");
@@ -137,7 +135,6 @@ public record RouteSpec(Alter alter, boolean sprint, boolean parkour, boolean pa
         private double breakPenalty;
         private double jumpPenalty;
         private double wadePenalty;
-        private boolean takeBack;
 
         private Builder(RouteSpec from) {
             alter = from.alter;
@@ -157,7 +154,6 @@ public record RouteSpec(Alter alter, boolean sprint, boolean parkour, boolean pa
             breakPenalty = from.breakPenalty;
             jumpPenalty = from.jumpPenalty;
             wadePenalty = from.wadePenalty;
-            takeBack = from.takeBack;
         }
 
         public Builder alter(Alter alter) {
@@ -252,15 +248,10 @@ public record RouteSpec(Alter alter, boolean sprint, boolean parkour, boolean pa
             return this;
         }
 
-        public Builder takeBack(boolean takeBack) {
-            this.takeBack = takeBack;
-            return this;
-        }
-
         public RouteSpec build() {
             return new RouteSpec(alter, sprint, parkour, parkourAscend, diagonalAscend,
                     diagonalDescend, downward, strictLiquidCheck, maxFallHeightNoWater, alterBudget,
-                    excluded, positions, bans, placeCost, breakPenalty, jumpPenalty, wadePenalty, takeBack);
+                    excluded, positions, bans, placeCost, breakPenalty, jumpPenalty, wadePenalty);
         }
     }
 }

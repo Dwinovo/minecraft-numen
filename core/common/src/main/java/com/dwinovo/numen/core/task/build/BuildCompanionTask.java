@@ -13,10 +13,6 @@ import com.dwinovo.numen.core.task.base.Precondition;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.pathing.body.Hotbar;
-import com.dwinovo.numen.pathing.drive.EditLedger;
-import com.dwinovo.numen.pathing.search.Goal;
-import com.dwinovo.numen.pathing.search.Goals;
-import com.dwinovo.numen.pathing.spec.PositionCosts;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.permission.PlacedBlocks;
 import com.dwinovo.numen.task.TaskState;
@@ -38,7 +34,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 多格建造任务:走到工地外圈、一边绕圈一边逐批落位、收工撤掉路上垫下的块。
+ * 多格建造任务:走到工地外圈、一边绕圈一边逐批落位;路上垫下、收场时还立着的块照实交代。
  *
  * <p><b>施工模型</b>——同伴走到工地外圈(开工时站在工地里就先走出去),然后按稳定的速率一批一批地把方块落进世界,
  * 伴随朝向、挥手、粒子与音效。她不逐格走到每个方块旁边,也不需要"够得着"。
@@ -53,13 +49,13 @@ import java.util.Map;
  *
  * <p><b>施工与表演分开</b>——施工只管下一格放哪、放没放成、差什么;走动和放块的动画归演出组件
  * {@link BuildShowmanship},挂在这件活上:施工每刻落完位后叫它走一步,从不问它走得怎样。它手里没有挖掘器、导航与放置
- * 入口,绕圈改不了世界。真要挪身体的两处——开工时走出工地、收工时从自己垫的块上下来——是施工的事,在这里用正式寻路。
+ * 入口,绕圈改不了世界。真要挪身体的只有开工时走出工地、走到外圈这一处,是施工的事,在这里用正式寻路。
  *
  * <p><b>分工</b>——本类只持有施工的调度状态机(相位、遍、层窗口、落位循环)与
  * 轮扫对账;单格判据在 {@link BuildCellRules},背包口径在 {@link BuildInventory},
  * 材料账本在 {@link BuildLedger},摆设与善后在 {@link BuildFixtures},演出在
  * {@link BuildShowmanship},外圈的几何在 {@link SiteRing},顺序与节奏的纯函数在 {@link BuildOrder},
- * 收不了尾时的缺格清单在 {@link BuildOutstanding},路上垫下的块在 {@link EnRouteBlocks}。
+ * 收不了尾时的缺格清单在 {@link BuildOutstanding}。
  */
 public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRecord> {
 
@@ -72,8 +68,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * 裁决要等他们有机会走开——一遍全是"放不下去"会在同一刻跑完,不等的话三遍连着翻完只要三刻。
      */
     private static final int RETRY_WAIT_TICKS = 60;
-    /** 收工时从自己垫的块上下来,最远走开几格。 */
-    private static final int STEP_OFF_REACH = 4;
 
     /**
      * 写入标志:{@code UPDATE_CLIENTS}(同步给客户端)+ {@code UPDATE_KNOWN_SHAPE}
@@ -96,13 +90,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             net.minecraft.world.level.block.Block.UPDATE_CLIENTS
                     | net.minecraft.world.level.block.Block.UPDATE_KNOWN_SHAPE;
 
-    /**
-     * CONSENT:开工前整批问主人;TRAVEL:走到外圈(开工时在工地里就是走出去);WORK:施工;END:活到头了,撤掉路上
-     * 垫下的块再按结论收场。
-     */
-    private enum Phase { CONSENT, TRAVEL, WORK, END }
+    /** CONSENT:开工前整批问主人;TRAVEL:走到外圈(开工时在工地里就是走出去);WORK:施工。 */
+    private enum Phase { CONSENT, TRAVEL, WORK }
 
-    /** 干不下去时的结论:失败的理由与类型。撤完垫块才交出去。 */
+    /** 干不下去时的结论:失败的理由与类型。 */
     private record Ending(String why, FailureType type) {}
 
     private final BuildCellRules rules;
@@ -110,10 +101,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private final BuildFixtures fixtures;
     private final BuildLedger ledger;
     private final BuildShowmanship show;
-    /** 清障与撤垫块的唯一落点:方块只在 {@link BlockDigger} 里被破坏,权限层在那儿把门。 */
+    /** 清障的唯一落点:方块只在 {@link BlockDigger} 里被破坏,权限层在那儿把门。 */
     private final BlockDigger digger;
-    /** 路上垫下、收场时要撤的块。 */
-    private final EnRouteBlocks enRoute;
 
     private final Map<Long, BuildTaskRecord.Target> targetByPos = new LinkedHashMap<>();
     /** 本遍缺料统计(遍末报告用)。 */
@@ -173,11 +162,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     /** 零进展遍之后还要等的刻数,见 {@link #RETRY_WAIT_TICKS}。 */
     private int retryWait;
 
-    /** 干不下去时的结论,进了 END 才有;建完了是 null。 */
-    private Ending ending;
-    /** 收工时已经从垫块上下来过一次(走到了或走不通):不再起第二次,还托着她的那几格留在原处,照实交代。 */
-    private boolean steppedOff;
-
     private String note = "done";
 
     /** 开工前要问主人的清单(清的格与放的格里裁决为要问的)。 */
@@ -204,7 +188,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         this.ring = SiteRing.around(siteMin, siteMax);
         // 小活是一个动作,不演:不给演出那一圈,它就只转头挥手
         this.show = new BuildShowmanship(player, inv, BuildOrder.instant(record.targets.size()) ? null : ring);
-        this.enRoute = new EnRouteBlocks(player, digger, pos -> targetByPos.containsKey(pos.asLong()));
     }
 
     @Override
@@ -311,13 +294,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (phase == Phase.CONSENT) {
             return tickConsent();
         }
-        if (phase == Phase.END) {
-            return tickEnd();
-        }
         updateCompleted();
 
         // 每刻只轮扫一片,所以这个判定可能用着一轮之前的旧数据。收工是不可回头的
-        // 一步(撤垫块、生成摆设、报成功),所以真要收工之前必须再精确核一次:
+        // 一步(生成摆设、报成功),所以真要收工之前必须再精确核一次:
         // 否则一格刚被玩家拆掉、轮扫还没转到它,她就会带着一个缺口报"全部达标"。
         if (r.completed() + skippedCells >= r.targets.size()) {
             rescanAll();
@@ -347,9 +327,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 走到外圈,开工时站在工地里就是走出去。这是施工真要的一步,所以用正式寻路、可以改地形:路上垫下的块收场时撤掉
-     * ({@link EnRouteBlocks}),放一块的价钱连撤的那一下一起算({@link #SPEC})。走到了、走不通、超时,都开工——落位不
-     * 靠走位,绝不因为路不通而不干活。
+     * 走到外圈,开工时站在工地里就是走出去。这是施工真要的一步,所以用正式寻路、可以改地形({@link #SPEC}):路上垫下的块
+     * 留在原处,收场时照实交代({@link #closingNote})。走到了、走不通、超时,都开工——落位不靠走位,绝不因为路不通而不干活。
      */
     private TaskState tickTravel() {
         if (nav == null) {
@@ -846,55 +825,15 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     // 三、收场
     // ------------------------------------------------------------------
 
-    /**
-     * 活到头了:建完({@code why} 为 null)或干不下去了。结论先记下,身体站住,进 END——撤完路上垫下的块再交出去,
-     * 撤了什么也跟着结论一起说。
-     */
+    /** 活到头了:建完({@code why} 为 null)或干不下去了。身体站住,按结论收场。 */
     private TaskState conclude(Ending why) {
-        ending = why;
-        phase = Phase.END;
         stopNav();
-        player.controls().releaseAll();
-        return TaskState.RUNNING;
-    }
-
-    /**
-     * 撤掉路上垫下的块再收场。正站在垫块上时先下来——拆掉托着她的那块她会掉下去,而拆掉别的垫块可能正拆掉她下来
-     * 要走的路,所以下来之前一块都不拆。下不来就把托着她的那几格留在原处,照实交代。
-     */
-    private TaskState tickEnd() {
-        List<EditLedger.Placed> placed = placedOnTheWay();
-        if (!steppedOff && !enRoute.holdingHer(placed).isEmpty()) {
-            return stepOff(enRoute.standing(placed));
-        }
-        stopNav();
-        enRoute.takeDown(placedOnTheWay());
         player.controls().stop();
-        if (ending != null) {
-            fail(ending.why(), ending.type());
+        if (why != null) {
+            fail(why.why(), why.type());
             return TaskState.FAILED;
         }
         return finish();
-    }
-
-    /**
-     * 从垫块上下来:只走不改的寻路,离开脚下这一列、走到几格以内,一路不站上托着她的那几块(按位置禁站,并进规格)。
-     * 这是收场真要的一步,但不再为它垫新的块。
-     */
-    private TaskState stepOff(java.util.Set<BlockPos> blocks) {
-        if (nav == null) {
-            BlockPos feet = Feet.cell(player);
-            Goal off = Goals.within(Goals.column(feet.getX(), feet.getZ()), 1.0, STEP_OFF_REACH);
-            RouteSpec walk = RouteSpec.defaults();
-            walk = walk.edit().positions(walk.positions().plus(
-                    PositionCosts.forbidding(PositionCosts.Use.STAND, blocks))).build();
-            nav = Trip.to(player, off, walk, feet);
-        }
-        if (nav.tick() != Trip.Status.RUNNING) {
-            stopNav();
-            steppedOff = true;   // 下一刻重看她站在什么上面,还托着她的就留下
-        }
-        return TaskState.RUNNING;
     }
 
     /**
@@ -947,7 +886,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         return settled;
     }
 
-    /** 建成收工:让世界落定一次、生成摆设、外围补水,放一把庆祝的粒子;路上垫下的块在这之前已经撤了。 */
+    /** 建成收工:让世界落定一次、生成摆设、外围补水,放一把庆祝的粒子。 */
     private TaskState finish() {
         int popped = settleWithWorld();
         fixtures.spawnAll();
@@ -1249,14 +1188,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 走出工地、走到外圈这一段可以改地形:挖掉挡路的、垫块过坎,都是为了到场干活。路上垫下的块收场时都要撤掉
-     * ({@link EnRouteBlocks}),所以放一块的价钱连撤的那一下一起算({@link RouteSpec#takeBack})——定价只在那一处。
-     * 起跳比平时贵得多:工地上下层之间蹦跶容易把刚砌的东西踩坏,能绕楼梯就绕。
+     * 走出工地、走到外圈这一段可以改地形:挖掉挡路的、垫块过坎,都是为了到场干活。起跳比平时贵得多:工地上下层之间蹦跶
+     * 容易把刚砌的东西踩坏,能绕楼梯就绕。
      */
     static final RouteSpec SPEC = RouteSpec.defaults().edit()
             .alter(RouteSpec.Alter.NATURAL)
             .jumpPenalty(RouteSpec.defaults().jumpPenalty() + 10.0)
-            .takeBack(true)
             .build();
 
     @Override
@@ -1265,21 +1202,19 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         player.controls().stop();
     }
 
-    /**
-     * 任何收场都撤路上垫下的块:自己走到头的在 END 里已经撤过(也先下来过),这里撤的是被叫停、超时时还立着的——
-     * 那时身体已不归这件活,没有机会先下来,托着她的那几格留在原处并说明。
-     */
     @Override
     protected void cleanup() {
         super.cleanup();
-        enRoute.takeDown(placedOnTheWay());
         player.controls().releaseAll();
     }
 
-    /** 撤了哪些垫块、哪些留在原处以及为什么:每一种收场都说。 */
+    /**
+     * 路上垫下、此刻还立着的块:每一种收场(建完、干不下去、被叫停、超时)都照实说,留不留由模型定。账只认寻路交出的实际账
+     * ({@link #placedOnTheWay}),说法在 {@link com.dwinovo.numen.core.nav.NavText#stillStanding}。
+     */
     @Override
     protected String closingNote() {
-        return enRoute.describe();
+        return com.dwinovo.numen.core.nav.NavText.stillStanding(player.level(), placedOnTheWay());
     }
 
     /**

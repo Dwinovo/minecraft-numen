@@ -82,6 +82,11 @@ final class DigWatch {
         this.body = body;
     }
 
+    /** 手正按着的那一格;没按为 null。 */
+    BlockPos current() {
+        return current;
+    }
+
     /** 手此刻正按在某一格上。 */
     boolean digging() {
         return current != null;

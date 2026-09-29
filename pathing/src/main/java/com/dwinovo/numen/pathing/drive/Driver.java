@@ -133,11 +133,7 @@ public final class Driver {
      */
     public Driver(Body body, Effector hands, TerrainPolicy terrain, Materials materials, Threats threats, Goal goal,
                   RouteSpec spec, int budget, Route seed) {
-        this(new Rig(body, hands, terrain, materials, threats), goal, spec, budget, seed);
-    }
-
-    Driver(Rig rig, Goal goal, RouteSpec spec, int budget, Route seed) {
-        this.rig = rig;
+        this.rig = new Rig(body, hands, terrain, materials, threats);
         this.goal = goal;
         this.spec = spec;
         this.budget = budget;

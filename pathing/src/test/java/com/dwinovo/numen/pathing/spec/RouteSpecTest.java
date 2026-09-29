@@ -71,7 +71,6 @@ class RouteSpecTest {
         assertEquals(RouteSpec.Alter.NONE, d.alter());
         assertFalse(d.alter().mayAlter());
         assertFalse(d.budgeted());
-        assertFalse(d.takeBack());
         assertTrue(d.positions().isEmpty());
         assertTrue(d.bans().isEmpty());
     }

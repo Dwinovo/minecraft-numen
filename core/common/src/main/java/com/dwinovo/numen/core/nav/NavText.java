@@ -23,6 +23,7 @@ import com.dwinovo.numen.permission.Listing;
 import com.dwinovo.numen.permission.Verdict;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.Item;
@@ -373,6 +374,27 @@ public final class NavText {
             return parts.isEmpty() ? "" : parts.get(0);
         }
         return String.join(", ", parts.subList(0, parts.size() - 1)) + " and " + parts.get(parts.size() - 1);
+    }
+
+    /**
+     * 路上垫下、此刻还立着的块:回执里的那一句,例如 {@code Still standing from what I put down on the way: 2 cobblestone
+     * (1,64,2; 1,65,2) — they stay unless you break them, e.g. use block left 1 64 2.}。账是寻路的实际账里放下、之后没再挖掉的
+     * ({@link EditLedger#placedBlocks});此刻那一格已经不是她放下的那种方块(被人换过、挖过)就不算。一块都没有是空串。
+     */
+    public static String stillStanding(BlockGetter level, List<EditLedger.Placed> placed) {
+        Map<Block, List<BlockPos>> standing = new LinkedHashMap<>();
+        for (EditLedger.Placed p : placed) {
+            if (level.getBlockState(p.pos()).is(p.after().getBlock())) {
+                heap(standing, p.after().getBlock(), p.pos());
+            }
+        }
+        if (standing.isEmpty()) {
+            return "";
+        }
+        BlockPos first = standing.values().iterator().next().get(0);
+        return "Still standing from what I put down on the way: " + heaps(standing)
+                + " — they stay unless you break them, e.g. use block left " + first.getX() + " " + first.getY() + " "
+                + first.getZ() + ".";
     }
 
     /** 一句能照抄的 move_goto:{@code move_goto x:1 y:2 z:3 arrive:use};{@code rest} 是跟在坐标后面的字段,可以为空。 */

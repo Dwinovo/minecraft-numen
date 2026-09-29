@@ -49,6 +49,49 @@ class NavTextTest {
         return Blocks.OAK_PLANKS.defaultBlockState();
     }
 
+    /**
+     * 路上垫下、此刻还立着的块:账上放下的里面,那一格此刻还是那种方块的才算(被人挖走、换掉的不算),按方块归堆点名坐标,
+     * 接着一句能照抄的挖法;一块都不剩是空串。
+     */
+    @Test
+    void stillStandingNamesOnlyThePlacedBlocksThatAreStillThere() {
+        BlockState air = Blocks.AIR.defaultBlockState();
+        BlockState cobble = Blocks.COBBLESTONE.defaultBlockState();
+        List<EditLedger.Placed> placed = List.of(new EditLedger.Placed(A, air, cobble, null),
+                new EditLedger.Placed(B, air, cobble, null), new EditLedger.Placed(C, air, cobble, null));
+        java.util.Map<BlockPos, BlockState> world = java.util.Map.of(A, cobble, B, cobble, C, planks());
+        net.minecraft.world.level.BlockGetter level = new net.minecraft.world.level.BlockGetter() {
+            @Override
+            public net.minecraft.world.level.block.entity.BlockEntity getBlockEntity(BlockPos pos) {
+                return null;
+            }
+
+            @Override
+            public BlockState getBlockState(BlockPos pos) {
+                return world.getOrDefault(pos, air);
+            }
+
+            @Override
+            public net.minecraft.world.level.material.FluidState getFluidState(BlockPos pos) {
+                return getBlockState(pos).getFluidState();
+            }
+
+            @Override
+            public int getHeight() {
+                return 384;
+            }
+
+            @Override
+            public int getMinBuildHeight() {
+                return -64;
+            }
+        };
+        assertEquals("Still standing from what I put down on the way: 2 cobblestone (120,64,-33; 120,65,-33) — they"
+                + " stay unless you break them, e.g. use block left 120 64 -33.", NavText.stillStanding(level, placed));
+        assertEquals("", NavText.stillStanding(level, List.of(new EditLedger.Placed(C, air, cobble, null))),
+                "被换成木板的那一格不是她留下的");
+    }
+
     @Test
     void theActualLedgerNamesEveryBlockAndCellAndWhatTheBodyDid() {
         List<EditLedger.Entry> entries = List.of(

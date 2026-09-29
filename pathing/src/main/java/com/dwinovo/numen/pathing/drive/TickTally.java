@@ -1,13 +1,12 @@
 package com.dwinovo.numen.pathing.drive;
 
 /**
- * 一刻里主线程上寻路做的活用了多久:段状态机(连同撤回垫块)每刻开头 {@link #begin}、结尾 {@link #end},中间把拷快照、组成本模型、
+ * 一刻里主线程上寻路做的活用了多久:段状态机每刻开头 {@link #begin}、结尾 {@link #end},中间把拷快照、组成本模型、
  * 复核前提、经宿主的手动手各记一笔。整刻超过 {@link PathLog#MAIN_THREAD_WARN_NANOS} 就记一行 WARN,说清这一刻做了哪几件、
- * 各用了多久;余下的是认步、按键、转头、准星与拿东西到手上。套着跑的(撤回垫块时走一趟)只在最外层开头清零、结尾结算。
+ * 各用了多久;余下的是认步、按键、转头、准星与拿东西到手上。
  */
 final class TickTally {
 
-    private int depth;
     private long start;
     private long snapshot;
     private long model;
@@ -17,15 +16,13 @@ final class TickTally {
     private int rechecks;
 
     void begin() {
-        if (depth++ == 0) {
-            start = System.nanoTime();
-            snapshot = 0;
-            model = 0;
-            recheck = 0;
-            acted = 0;
-            searches = 0;
-            rechecks = 0;
-        }
+        start = System.nanoTime();
+        snapshot = 0;
+        model = 0;
+        recheck = 0;
+        acted = 0;
+        searches = 0;
+        rechecks = 0;
     }
 
     /** 派了一次搜索:拷快照与组成本模型各用了多久。 */
@@ -47,9 +44,6 @@ final class TickTally {
     }
 
     void end(String who) {
-        if (--depth > 0) {
-            return;
-        }
         long total = System.nanoTime() - start;
         if (total > PathLog.MAIN_THREAD_WARN_NANOS) {
             PathLog.warn("{} 主线程这一刻寻路用了 {}(阈值 {}):派搜索 {} 次(拷快照 {} 组成本模型 {}) 复核 {} 次 {} 动手 {} 其余 {}",

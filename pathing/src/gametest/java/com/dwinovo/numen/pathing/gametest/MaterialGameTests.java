@@ -28,7 +28,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
  * 垫路料:没料报"没有料"、不许改地形时不提料;创造模式凭空取料、按清单变料;按清单优先级取料、副手回退、料只在背包深处
- * 而宿主不许动背包;搭桥后手上的武器还在;事后撤回路上垫的块,托着自己的先挪开再撤。
+ * 而宿主不许动背包;搭桥后手上的武器还在。
  *
  * <p>场景都是两块基岩台子中间一道四格宽的沟(沟挖不动、跳下去摔不起),过沟只能搭桥。
  */
@@ -208,38 +208,5 @@ public class MaterialGameTests {
         };
         t.go(body, Goals.at(t.at(17, 5, 5)), NATURAL).within(300).fails(Outcome.NoMaterials.class)
                 .then(Scenes::unaltered);
-    }
-
-    /** 搭桥过沟,到了之后撤回:桥上四块都挖掉,一块不留。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 1500)
-    public static void takes_back_the_bridge(GameTestHelper helper) {
-        Trial t = ditch(helper);
-        TestBody body = t.body(6, 5, 5);
-        Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
-        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
-        t.go(body, Goals.at(t.at(17, 5, 5)), NATURAL.edit().takeBack(true).build()).within(1400).arrives()
-                .takesBack(RouteSpec.defaults(), r -> {
-                    if (r.teardown.taken().size() != 4 || !r.teardown.left().isEmpty()) {
-                        throw new GameTestAssertException("应当撤掉桥上四块:" + r.teardown);
-                    }
-                });
-    }
-
-    /** 去处在桥的半中间:到了时正站在自己垫的块上,撤回时先走回岸上再挖,两块都撤掉,人没掉下去。 */
-    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 1500)
-    public static void steps_off_its_own_blocks_before_taking_them_back(GameTestHelper helper) {
-        Trial t = ditch(helper);
-        TestBody body = t.body(6, 5, 5);
-        Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
-        t.materials = Trial.carried(body, Blocks.COBBLESTONE);
-        t.go(body, Goals.at(t.at(11, 5, 5)), NATURAL.edit().takeBack(true).build()).within(1400).arrives()
-                .takesBack(RouteSpec.defaults(), r -> {
-                    if (r.teardown.taken().size() != 2 || !r.teardown.left().isEmpty()) {
-                        throw new GameTestAssertException("应当撤掉桥上两块:" + r.teardown);
-                    }
-                    if (r.body.getY() - t.origin.getY() < 4.9) {
-                        throw new GameTestAssertException("掉进沟里了:脚在 " + (r.body.getY() - t.origin.getY()));
-                    }
-                });
     }
 }
