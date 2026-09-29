@@ -24,7 +24,7 @@ Both are 2×2/shapeless recipes — `inv craft` makes them in your own grid, no 
 ## Step 2 — go there
 
 1. `locate structure minecraft:stronghold` → coordinates, direction, distance (often 1000–2500 blocks; the journey is the long part).
-2. `move_goto(x, ~60, z)` to cross the surface, then `move_goto(x, 30, z)` — navigation digs down on its own. Strongholds sit around Y 6–50.
+2. `move_goto(x, ~60, z)` to cross the surface, then descend where you stand with `move goto --y 30 --alter natural` — navigation digs down on its own. Strongholds sit around Y 6–50.
 3. Hit stone bricks → you're inside. `scan_blocks(end_portal_frame)` to find the portal room; no match → explore corridors with `move_goto` and rescan. (Stronghold corridors are stone_bricks / mossy_stone_bricks / cracked_stone_bricks.)
 
 ## Step 3 — secure the portal room

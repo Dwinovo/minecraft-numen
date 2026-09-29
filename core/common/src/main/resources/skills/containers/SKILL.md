@@ -9,7 +9,7 @@ You move items through real GUIs, exactly like a player: open the block, look at
 
 ## The loop
 
-1. **Open** — `use block right 120 64 -35` on the container block (move_goto it first: it does not travel). This opens its GUI and leaves it open.
+1. **Open** — `use block right 120 64 -35` on the container block (it does not travel: first `move goto --x 120 --y 64 --z -35 --arrive use`, which stands you where the container is in sight and in reach). This opens its GUI and leaves it open.
 2. **Look** — `use gui`. Lists every slot: `index: item xN`, which side (container vs your inventory), and `[output]` for take-only slots (a furnace result, a machine product).
 3. **Move** — one move per line (see below). To move several stacks, send several lines in the same turn; they run in order.
 4. **Verify** — each result already says what happened; `use gui` again only if you need to re-check.

@@ -786,7 +786,7 @@ throwaway clear
   全部地形"),区里的命中进名单,区外的记下来;回执说区外还有几个(查询凑够个数就停时说"至少")、最近一个在哪、离她多远,下一步照抄:
 
   ```
-  found no ochre_froglight in my work area (within 48 blocks of -12553958,-58,11491503), so I stayed put; 2 more lie beyond it, the nearest at -12553911,-58,11491550, about 66 blocks from me: move_goto there first (x:-12553911 y:-58 z:11491550 near:8), then work_mine again
+  found no ochre_froglight in my work area (within 48 blocks of -12553958,-58,11491503), so I stayed put; 2 more lie beyond it, the nearest at -12553911,-58,11491550, about 66 blocks from me: move_goto there first (x:-12553911 y:-58 z:11491550 arrive:near near:8), then work_mine again
   gathered 6/64 pearlescent_froglight (no more pearlescent_froglight in my work area, within 48 blocks of …; 7 more lie beyond it, the nearest at …, about … blocks from me: move_goto there first (…), then work_mine again)
   ```
 - **受理回执**当场交代工作区(`TaskRecord.acceptNote`,由 `TaskDispatch` 接在受理那句话后面):
@@ -802,6 +802,33 @@ throwaway clear
   脚下,和她从这里派 `work mine` 时的工作区是同一块。
 - **`work collect`**:半径参数就是工作区的半径(默认 16,上限 `WorkArea.RADIUS`),以受理时她脚下为中心、不跟着她走——
   原来每捡一件都以她新的位置重算半径,一件接一件能越捡越远;两处各写一份的上限 48 合成这一处。
+
+### move goto:只收坐标,`--arrive` 说怎样算到了(09-29)
+
+真机上近一半寻路结局是"到了看不见"(`NoLineOfSight`):`move_goto --block X` 与挖矿借的是同一个"够得着"的到达,只按几何距离算,
+不看视线——隔着四格石头、在悬崖底下都算够得着。现在:
+
+- **只收坐标**:`--x --z`(一处)、`--x --y --z`(一格)、`--y`(一个高度),或 `--route` 单独给。`--block`(自动找最近的一种方块)
+  删去,连同只为它存在的 `NearestBlockFinder`:找东西是 `scan blocks` 的事,它给坐标。
+- **`--arrive at|on|use|near`**(默认 `at`),`--near N` 只配 `near`。命令行只管参数的写法、帮助与写错时的提醒,参数名一一对应到
+  寻路模块的目标只在 `core/task/move/Destination` 一处:`at` 是位置(`Goals.at`/`column`/`level`),`on` 是站上去(`Goals.on`),
+  `use` 是用一格方块(`Goals.use`:站在它敞开的面前、看得见、点得到),`near` 是距离范围(`Goals.within`)。`move route` 读同一份。
+- **写错当场提醒,不去搜索、不替她改写**(`GotoReminders` 写字,判断一律问寻路模块,经适配层 `Terrain`)。受理回执是
+  `invalid arguments: …`,不派活:
+  ```
+  120,64,-35 is furnace — no room to stand in it, and this walk changes nothing. To use it: move_goto x:120 y:64 z:-35 arrive:use; to stand on top of it: move_goto x:120 y:64 z:-35 arrive:on; to stop close by: move_goto x:120 y:64 z:-35 arrive:near near:<blocks>; to dig into it instead, add alter:natural.
+  120,70,-35 is in mid-air — nothing to stand on there (the ground in that column is at y=64: move_goto x:120 y:64 z:-35). Omit y to go to that column; to pillar up to it, add alter:natural.
+  arrive:use names one block — give its y too (x, y and z).
+  120,64,-35 is air — nothing there to click. To get close: move_goto x:120 y:64 z:-35 arrive:near near:<blocks>.
+  120,64,-35 (furnace) is walled in on every side — no face is open to see or click: west stone at 119,64,-35, … Dig one of them open — the west one is nearest me: `use block left 119 64 -35` once in reach — then move_goto x:120 y:64 z:-35 arrive:use again.
+  near:3 only goes with arrive:near — write arrive:near near:3 to stop within 3 blocks; without it arrival is exact.
+  ```
+  `at` 指向站不进去、站不住的格,`on` 指向上面压着东西的方块,只在这一趟不改地形(`alter none`)时提醒:许改地形时那是寻路去挖、去垫的事。
+- **`use block` 不自己走路**:够不着、看不见时下一步是能照抄的 `move_goto x:… y:… z:… arrive:use`。它点目标看得见的那一面
+  (`Aim.use`,与 `arrive:use` 同一个视线函数);视线上隔着软遮挡(高草、单层雪,判据是"放一块别种方块时原版会顶掉它")时先一格
+  一格左键清掉——每一格过权限层、回执里写 `broke tall_grass at … out of the line of sight, then right-clicked …`。
+- 别处"先走过去"的下一步一并改成能照抄的写法:合成找工作台、睡觉找床、森罗厨房的锅(`arrive:use`),挖矿区外的矿
+  (`arrive:near near:8`)。
 
 ### transfer 改成一次一步
 
