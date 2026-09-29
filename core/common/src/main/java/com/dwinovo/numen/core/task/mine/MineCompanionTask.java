@@ -292,8 +292,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 return new Precondition.Failure(
                         "can't harvest " + r.label + " with the current tools — mining it would"
                         + " destroy it without any drop. Equip a suitable tool (e.g. a pickaxe)"
-                        + " first; to just destroy a block regardless of drops, move_goto beside it and run use block left"
-                        + " on it.",
+                        + " first; to just destroy a block regardless of drops, move_goto its coordinates with"
+                        + " arrive:use and run use block left on it.",
                         FailureType.WRONG_TOOL);
             }
             return null;
@@ -1192,7 +1192,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             fail("found " + unharvestable.size() + " " + noun() + " but none can be harvested with"
                     + " the current tools (mining would destroy them without any drop); gathered "
                     + r.getMined() + ". Equip a better tool (gear wear) and retry; to just destroy"
-                    + " blocks regardless of drops, move_goto beside them and run use block left on each."
+                    + " blocks regardless of drops, move_goto each one's coordinates with arrive:use and run use block left on it."
                     + leftovers(unharvestable) + beyondClause(), FailureType.WRONG_TOOL);
         } else if (!unworkable.isEmpty()) {
             fail("found " + unworkable.size() + " " + noun() + " nearby but no clear shot at any"

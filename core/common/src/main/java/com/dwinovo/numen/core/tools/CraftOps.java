@@ -183,7 +183,9 @@ public final class CraftOps {
                 return TaskResult.fail(name + " is a 3x3 recipe — it needs a crafting table within reach "
                         + "(~4 blocks). " + (hintPos != null
                                 ? "Nearest one is at " + hintPos.getX() + "," + hintPos.getY() + ","
-                                        + hintPos.getZ() + " — move_goto it, then craft again."
+                                        + hintPos.getZ() + " — "
+                                        + com.dwinovo.numen.core.task.move.GotoReminders.call(hintPos, "arrive:use")
+                                        + ", then craft again."
                                 : "None within " + HINT_H + " blocks — craft a crafting_table (4 planks, "
                                         + "fits your own 2x2), put it down beside you with `build place "
                                         + "crafting_table`, then craft again.")).toJson();

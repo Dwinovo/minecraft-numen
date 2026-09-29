@@ -137,7 +137,8 @@ public final class SleepOps {
                 : "there is no bed within reach (you must be standing next to one)";
         String next = carried != null
                 ? " You are carrying " + carried + " — place it on flat ground and try again."
-                : " Use scan_blocks with #minecraft:beds to find one, move_goto it, then run use sleep again.";
+                : " Use scan_blocks with #minecraft:beds to find one, move_goto its coordinates with arrive:use,"
+                        + " then run use sleep again.";
         return TaskResult.fail(base + "." + next).toJson();
     }
 

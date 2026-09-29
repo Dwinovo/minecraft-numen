@@ -10,7 +10,10 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.core.act.PressReceipt;
+import com.dwinovo.numen.core.nav.NavText;
+import com.dwinovo.numen.core.nav.Terrain;
 import com.dwinovo.numen.core.nav.Trip;
+import com.dwinovo.numen.core.task.move.GotoReminders;
 import com.dwinovo.numen.core.task.base.GoToThenDoTask;
 import com.dwinovo.numen.pathing.body.Crosshair;
 import com.dwinovo.numen.pathing.body.Aim;
@@ -25,11 +28,13 @@ import java.util.Map;
 
 /**
  * {@code use block} / {@code use ahead} on the player body — the point-aimed native interaction (BLOCK + AIR).
- * Walk within reach of the aim (if one is given), look at it, pick what the crosshair lands on
- * ({@link Crosshair#pick}) and press the requested mouse button on
- * whatever it resolves to ({@link Interaction#forHit}): break / activate the block hit, or —
- * on a clear-air aim — use the held item in that direction (throw / eat / draw). The mouse
- * model is the two record fields {@code button} (left/right) × {@code holdTicks} (tap/hold).
+ * It does not travel: the body must already be within reach of the aim (if one is given). An aim with an outline is
+ * clicked on a face in sight ({@link Aim#use}, the same line of sight {@code move_goto arrive:use} stands for); soft
+ * blockers on that line (grass, one snow layer) are broken first, one by one, each through the permission layer and
+ * named in the result. Then it looks there, picks what the crosshair lands on ({@link Crosshair#pick}) and presses the
+ * requested mouse button on whatever it resolves to ({@link Interaction#forHit}): break / activate the block hit, or —
+ * on a clear-air aim — use the held item in that direction (throw / eat / draw). The mouse model is the two record
+ * fields {@code button} (left/right) × {@code holdTicks} (tap/hold).
  */
 public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTaskRecord> {
 
@@ -43,6 +48,12 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     // result names it — whether that station is worth a note is hers to decide.
     private net.minecraft.core.BlockPos activatedBlock;
     private String activatedBlockId;
+    /** 正在清掉的软遮挡(视线上的草、单层雪);没在清为 null。 */
+    private Interaction clearing;
+    private net.minecraft.core.BlockPos clearingAt;
+    private String clearingName;
+    /** 按键之前清掉的软遮挡,回执里说。 */
+    private final List<String> cleared = new java.util.ArrayList<>();
 
     public InteractAtCompanionTask(NumenPlayer player, InteractAtTaskRecord record) {
         super(player, record);
@@ -81,40 +92,28 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
             if (r.item != null) {
                 Hotbar.grip(player, r.item);
             }
-            // 看向目标上真能射到的那一点(拉杆、开着的门只占格子的一角,格心可能是空的);一点都看不见
-            // 时看格心,下面的准星就点名挡着的那一块。空气与流体本来就没有可射中的轮廓,也看格心
-            if (r.aim != null) {
-                Vec3 visible = Aim.point(player, r.aim);
-                InputDriver.lookAt(player, visible != null ? visible : Vec3.atCenterOf(r.aim));
+            // 可点的目标点它看得见的一面(与 move_goto arrive:use 同一个视线函数);视线上隔着软遮挡就先一格一格清掉。
+            // 空气与流体没有可点的轮廓,看格心——对水面右键的原版含义正是"射线穿过去,物品自己找水"(桶、船)
+            if (r.aim != null && Terrain.of(player).clickable(r.aim)) {
+                com.dwinovo.numen.pathing.world.Sight.Trace seen = Aim.use(player, r.aim);
+                if (seen == null) {
+                    return occluded();
+                }
+                if (!seen.soft().isEmpty()) {
+                    return clear(seen.soft().get(0));
+                }
+                InputDriver.lookAt(player, seen.point());
+                // 转头按鼠标像素取整,贴着软遮挡边上过的那条线可能落到它身上:准星落在哪就按哪,落在软遮挡上也先清掉,
+                // 落在别的硬方块上就是看不见
+                if (Crosshair.pick(player) instanceof net.minecraft.world.phys.BlockHitResult landed
+                        && landed.getType() == HitResult.Type.BLOCK && !landed.getBlockPos().equals(r.aim)) {
+                    return com.dwinovo.numen.pathing.world.Sight.soft(player.level().getBlockState(landed.getBlockPos()))
+                            ? clear(landed.getBlockPos()) : occluded();
+                }
+            } else if (r.aim != null) {
+                InputDriver.lookAt(player, Vec3.atCenterOf(r.aim));
             }
             HitResult hit = Crosshair.pick(player);
-            // 目标格本身是实心方块、而准星实际落在别的方块上 = 被遮挡:
-            // 拒绝并点名遮挡物(点下去只会交互到错误对象还谎报成功)。
-            // 目标格是空气或流体的瞄点保持准星穿透语义——流体本来就不该被准星
-            // 点中,对水面右键的原版含义正是"射线穿过去,物品自己找水"(桶、船)。
-            if (r.aim != null
-                    && !player.level().getBlockState(r.aim).isAir()
-                    && !(player.level().getBlockState(r.aim).getBlock()
-                            instanceof net.minecraft.world.level.block.LiquidBlock)
-                    && hit instanceof net.minecraft.world.phys.BlockHitResult blockedHit
-                    && !blockedHit.getBlockPos().equals(r.aim)) {
-                var blocker = blockedHit.getBlockPos();
-                var blockerState = player.level().getBlockState(blocker);
-                String blockerId = BuiltInRegistries.BLOCK.getKey(blockerState.getBlock()).getPath();
-                // 挡着的方块要不要主人同意,权限层说;回执只转述,不出主意去拆
-                var verdict = com.dwinovo.numen.permission.Permission.judge(player,
-                        com.dwinovo.numen.permission.Action.breakBlock(blocker, blockerState));
-                String blockerNote = switch (verdict.kind()) {
-                    case ALLOW -> "Breaking that blocker needs no consent.";
-                    case ASK -> "Breaking that blocker needs the owner's consent (" + verdict.cause() + ").";
-                    case DENY -> "Breaking that blocker is refused (" + verdict.cause() + ").";
-                };
-                fail("aim " + aimLabel() + " is blocked from here — the crosshair lands on "
-                        + blockerId + " at " + blocker.getX() + "," + blocker.getY() + ","
-                        + blocker.getZ() + " instead. " + blockerNote + " move_goto the target's"
-                        + " open side, then retry.", FailureType.OCCLUDED);
-                return TaskState.FAILED;
-            }
             // A consumable / ender pearl used in the AIR is body-bound (would feed or teleport the
             // fake player) — refuse even when it's just whatever happened to be in hand.
             if (button() == Interaction.Button.USE && hit.getType() == HitResult.Type.MISS) {
@@ -185,9 +184,57 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     }
 
     /**
-     * 这一下按在哪儿就是要做什么:左键方块是挖、左键实体是打;右键方块是 {@code use_block}、右键实体是
-     * {@code use_entity}。落在空气里的不对着世界里的谁,不是权限层的动作。
+     * 目标的哪一面都看不见、点不到:转过去看它身上够得着的那一点,准星落着的就是挡着的那一块。点名它,说挖它要不要主人同意
+     * (权限层说,回执只转述),下一步照抄 {@code move_goto … arrive:use}——那会走到看得见它一面的地方。
      */
+    private TaskState occluded() {
+        Vec3 toward = Aim.reachable(player, r.aim);
+        InputDriver.lookAt(player, toward != null ? toward : Vec3.atCenterOf(r.aim));
+        String blockerNote = "";
+        if (Crosshair.pick(player) instanceof net.minecraft.world.phys.BlockHitResult blockedHit
+                && blockedHit.getType() == HitResult.Type.BLOCK && !blockedHit.getBlockPos().equals(r.aim)) {
+            var blocker = blockedHit.getBlockPos();
+            var blockerState = player.level().getBlockState(blocker);
+            var verdict = com.dwinovo.numen.permission.Permission.judge(player,
+                    com.dwinovo.numen.permission.Action.breakBlock(blocker, blockerState));
+            blockerNote = " — the crosshair lands on " + NavText.name(blockerState) + " at "
+                    + blocker.getX() + "," + blocker.getY() + "," + blocker.getZ() + " instead ("
+                    + switch (verdict.kind()) {
+                        case ALLOW -> "breaking it needs no consent";
+                        case ASK -> "breaking it needs the owner's consent: " + verdict.cause();
+                        case DENY -> "breaking it is refused: " + verdict.cause();
+                    } + ")";
+        }
+        fail("no face of " + aimLabel() + " is in sight and in reach from here" + blockerNote + ". "
+                + GotoReminders.call(r.aim, "arrive:use") + " stands where one is, then retry.", FailureType.OCCLUDED);
+        return TaskState.FAILED;
+    }
+
+    /**
+     * 清掉视线上的一格软遮挡:照原版左键挖掉它(挖不挖得由权限层在挖掘落点裁决)。挖掉了记进回执,下一刻重新看目标。
+     */
+    private TaskState clear(net.minecraft.core.BlockPos soft) {
+        if (clearing == null) {
+            clearingAt = soft;
+            clearingName = NavText.name(player.level().getBlockState(soft));
+            clearing = Interaction.attackBlock(player, soft, this::recordAction);
+        }
+        return switch (clearing.tick()) {
+            case RUNNING -> TaskState.RUNNING;
+            case DONE -> {
+                cleared.add(clearingName + " at " + clearingAt.getX() + "," + clearingAt.getY() + ","
+                        + clearingAt.getZ());
+                clearing = null;
+                yield TaskState.RUNNING;
+            }
+            case FAILED -> {
+                fail(clearing.failReason(), clearing.failType());
+                clearing = null;
+                yield TaskState.FAILED;
+            }
+        };
+    }
+
     /**
      * 准星落点上这一下要做的事:左键是挖、打;右键是右键方块、右键实体。右键方块时方块不吃这一下就轮到
      * 手里的东西,两只手里会往世界里放东西的({@link Interaction#placementOf})也一并算上。
@@ -231,8 +278,9 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     }
 
     private String describeDone() {
+        String first = cleared.isEmpty() ? "" : "broke " + String.join(", ", cleared) + " out of the line of sight, then ";
         String verb = r.button == MouseButton.LEFT ? "left-clicked" : "right-clicked";
-        return verb + (r.aim != null ? " " + aimLabel() : " (forward)");
+        return first + verb + (r.aim != null ? " " + aimLabel() : " (forward)");
     }
 
     /**

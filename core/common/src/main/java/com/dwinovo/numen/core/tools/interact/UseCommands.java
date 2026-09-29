@@ -96,8 +96,8 @@ public final class UseCommands {
                 .note("If the aimed block doesn't take a right click, the held item acts on its own, exactly like "
                         + "a real right-click: aiming at water with a bucket scoops it, with a boat places it.")
                 .note("It does NOT travel: you must already be within working reach (~4.5 blocks) of the aim "
-                        + "point; move_goto stops you right beside a block, which is in reach. Farther away it fails "
-                        + "and tells you to move_goto first.")
+                        + "point; move_goto its coordinates with --arrive use stands you where one of its faces is "
+                        + "in sight and in reach. Farther away it fails and names that move_goto.")
                 .note("Prefer work_mine for digging. Breaking or placing near your owner's things may ask your owner "
                         + "first; the call waits for the answer.")
                 .note("The result reports what actually changed (hands, the aimed block, new entities); no "
@@ -163,7 +163,7 @@ public final class UseCommands {
                 .example(line(SLEEP))
                 .example(line(SLEEP) + " --x 120 --y 64 --z -35")
                 .note("It does NOT travel: find a bed with scan_blocks using #minecraft:beds (that one tag covers "
-                        + "every colour), move_goto it, then run this.")
+                        + "every colour), move_goto its coordinates with --arrive use, then run this.")
                 .note("Succeeds only when the server confirms you are sleeping; otherwise it hands back "
                         + "Minecraft's own reason. \"Only at night\" means wait (`task timer`), not retry; \"too far "
                         + "away\" means move_goto.")
