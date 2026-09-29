@@ -23,10 +23,6 @@ import java.util.function.LongSupplier;
  * <p>挂在身体上({@link NumenPlayer#state}):身体没了簿子跟着没,休眠回来是空簿子。每次扫描整本换成新结果;
  * 编号的数字取自身体上落盘的编号({@link NumenPlayer#nextIdNumber}),休眠、重启之后也接着往上数、不回到
  * g1——模型手里的旧编号永远不会悄悄指向新扫描里的另一团;拿旧编号来取,{@link #staleMessage} 明说它过期了。
- *
- * <p>和路线簿({@code RouteBook})共用的是身体上的两样机器:挂簿子的 {@link NumenPlayer#state} 与编号的数字
- * {@link NumenPlayer#nextIdNumber}。两本簿子的存取规则不同——路线簿按容量淘汰、取走即划掉,团簿每次整本
- * 替换、取用不划掉——没有别的可以抽出来共用。
  */
 public final class GroupBook {
 
