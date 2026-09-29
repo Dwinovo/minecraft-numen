@@ -12,9 +12,12 @@ import com.dwinovo.numen.pathing.body.BodyAction;
 import com.dwinovo.numen.pathing.body.Hotbar;
 import com.dwinovo.numen.pathing.drive.Blockage;
 import com.dwinovo.numen.pathing.drive.EditLedger;
+import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.MoveKind;
+import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.pathing.plan.Reason;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.permission.ConsentItem;
 import com.dwinovo.numen.permission.Listing;
 import com.dwinovo.numen.permission.Verdict;
 
@@ -102,16 +105,18 @@ public final class NavText {
                     + (on == null ? "" : ": `" + on.spec("--alter_budget " + over.needed()) + "` allows it");
             case Outcome.NeedsAlter needs -> needs.level() == RouteSpec.Alter.NATURAL
                     ? "found no path to target without altering terrain (" + where + "; a route that digs, bridges or"
-                            + " pillars through natural terrain exists, changing " + needs.alterations() + " block(s):"
+                            + " pillars through natural terrain exists, changing " + needs.alterations() + " block(s) — "
+                            + planned(needs.changes()) + ":"
                             + (on == null ? " walk with alter:'natural' to take it)"
                                     : ") `" + on.spec("--alter natural") + "` lets me take it; then `route plan "
-                                            + on.name() + "` shows which blocks, and `move go " + on.name()
+                                            + on.name() + "` shows the plan, and `move go " + on.name()
                                             + "` walks it")
                     : "found no route without touching what needs the owner's consent (" + where + "; one exists"
-                            + " that changes " + needs.alterations() + " block(s), some of them someone's:"
+                            + " that changes " + needs.alterations() + " block(s), some of them someone's — "
+                            + planned(needs.changes()) + ":"
                             + (on == null ? " walk with alter:'any' to ask the owner first)"
                                     : ") `" + on.spec("--alter any") + "` lets me take it; then `route plan "
-                                            + on.name() + "` shows which blocks, and walking it asks the owner first");
+                                            + on.name() + "` shows the plan, and walking it asks the owner first");
             case Outcome.NoMaterials none -> "found no path to target (" + where + "; every way needs blocks to"
                     + " pillar or bridge with)." + ThrowawayBlocks.shortageAdvice(player);
             case Outcome.Denied denied -> "had to stop: changing " + Listing.coords(denied.cell()) + " is refused ("
@@ -311,6 +316,46 @@ public final class NavText {
             parts.add("place " + consented(places, asks));
         }
         return String.join("; ", parts);
+    }
+
+    /**
+     * 一条路要改的格,读成三张表:要挖的格 → 那里原来的方块,要放的格 → 放的方块(倒水接坠落记水),其中要问主人的格 → 许可给的
+     * 为什么问。规划写计划、回执说要改什么,读的都是这一份。
+     */
+    public record Changes(Map<BlockPos, Block> digs, Map<BlockPos, Block> places, Map<BlockPos, String> asks) {
+
+        public static Changes of(List<Edit> edits) {
+            Map<BlockPos, Block> digs = new LinkedHashMap<>();
+            Map<BlockPos, Block> places = new LinkedHashMap<>();
+            Map<BlockPos, String> asks = new LinkedHashMap<>();
+            for (Edit edit : edits) {
+                Permit permit = switch (edit) {
+                    case Edit.Dig dig -> {
+                        digs.put(dig.pos(), dig.state().getBlock());
+                        yield dig.permit();
+                    }
+                    case Edit.Place place -> {
+                        places.put(place.pos(), place.block());
+                        yield place.permit();
+                    }
+                    case Edit.Catch caught -> {
+                        places.put(caught.pos(), net.minecraft.world.level.block.Blocks.WATER);
+                        yield caught.permit();
+                    }
+                    case Edit.Door door -> null;
+                };
+                if (permit instanceof Permit.Ask ask && ask.credential() instanceof ConsentItem item) {
+                    asks.put(edit.pos(), item.cause());
+                }
+            }
+            return new Changes(digs, places, asks);
+        }
+    }
+
+    /** 一条路要改的格,与 {@link #planned(Map, Map, Map)} 同一种写法。 */
+    static String planned(List<Edit> edits) {
+        Changes changes = Changes.of(edits);
+        return planned(changes.digs(), changes.places(), changes.asks());
     }
 
     /** 按方块归堆,同一种方块里要问主人的按为什么问再分一堆,缀上 {@code needing consent (…)}。 */

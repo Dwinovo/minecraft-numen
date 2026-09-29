@@ -56,7 +56,7 @@ final class Diagnosis {
             for (RouteSpec.Alter level : List.of(RouteSpec.Alter.NATURAL, RouteSpec.Alter.ANY)) {
                 Route route = find(failed, withMaterials(model).withSpec(spec.edit().alter(level).build()), cancelled);
                 if (route != null) {
-                    return new Outcome.NeedsAlter(level, route.alterations());
+                    return new Outcome.NeedsAlter(level, route.edits().stream().filter(Edit::alters).toList());
                 }
             }
             return new Outcome.NoRoute();
@@ -64,7 +64,7 @@ final class Diagnosis {
         if (spec.alter() == RouteSpec.Alter.NATURAL) {
             Route route = find(failed, model.withSpec(spec.edit().alter(RouteSpec.Alter.ANY).build()), cancelled);
             if (route != null) {
-                return new Outcome.NeedsAlter(RouteSpec.Alter.ANY, route.alterations());
+                return new Outcome.NeedsAlter(RouteSpec.Alter.ANY, route.edits().stream().filter(Edit::alters).toList());
             }
         }
         if (!hadMaterials && find(failed, withMaterials(model), cancelled) != null) {

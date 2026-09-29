@@ -1,6 +1,9 @@
 package com.dwinovo.numen.pathing.api;
 
+import java.util.List;
+
 import com.dwinovo.numen.pathing.drive.Blockage;
+import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
@@ -27,10 +30,20 @@ public sealed interface Outcome {
     record Stranded(BlockPos cell, BlockState block) implements Outcome {}
 
     /**
-     * 规格许改的不够:放宽到 {@code level} 才有路,那条路要改 {@code alterations} 格。不许改地形时是 {@code NATURAL}
-     * (许改自然地形就够)或 {@code ANY}(还要动主人得同意的格);只许改自然地形时是 {@code ANY}。
+     * 规格许改的不够:放宽到 {@code level} 才有路,那条路要做 {@code changes} 这几件改地形的事(挖哪几格、放哪几格,连同许可的
+     * 答复)。不许改地形时是 {@code NATURAL}(许改自然地形就够)或 {@code ANY}(还要动主人得同意的格);只许改自然地形时是 {@code ANY}。
      */
-    record NeedsAlter(RouteSpec.Alter level, int alterations) implements Outcome {}
+    record NeedsAlter(RouteSpec.Alter level, List<Edit> changes) implements Outcome {
+
+        public NeedsAlter {
+            changes = List.copyOf(changes);
+        }
+
+        /** 那条路要改几格。 */
+        public int alterations() {
+            return changes.size();
+        }
+    }
 
     /** 要垫方块才有路,身上没有能垫的料。 */
     record NoMaterials() implements Outcome {}

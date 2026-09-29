@@ -7,6 +7,7 @@ import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.body.BodyAction;
 import com.dwinovo.numen.pathing.drive.Blockage;
 import com.dwinovo.numen.pathing.drive.EditLedger;
+import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.MoveKind;
 import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.pathing.plan.Reason;
@@ -39,6 +40,15 @@ class NavTextTest {
 
     private static BlockState planks() {
         return Blocks.OAK_PLANKS.defaultBlockState();
+    }
+
+    /** 挖掉一列 {@code n} 格木板,从 A 往上。 */
+    private static List<Edit> digs(int n) {
+        List<Edit> out = new java.util.ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            out.add(new Edit.Dig(A.above(i), planks(), Permit.ALLOW, false, true));
+        }
+        return out;
     }
 
     @Test
@@ -87,11 +97,11 @@ class NavTextTest {
     @Test
     void onARouteTheNextStepIsTheLineThatChangesThatRoute() {
         RouteSpec spec = RouteSpec.defaults();
-        String alone = NavText.failure(new Outcome.NeedsAlter(RouteSpec.Alter.NATURAL, 2), null, A, C, spec,
+        String alone = NavText.failure(new Outcome.NeedsAlter(RouteSpec.Alter.NATURAL, digs(2)), null, A, C, spec,
                 new NavText.OnRoute("goto-aria", 1, 1));
         assertTrue(alone.contains("`route spec goto-aria --alter natural`") && alone.contains("`route plan goto-aria`")
-                && alone.contains("changing 2 block(s)"), alone);
-        String leg = NavText.failure(new Outcome.NeedsAlter(RouteSpec.Alter.ANY, 3), null, A, C, spec,
+                && alone.contains("changing 2 block(s) — break 2 oak_planks (120,64,-33; 120,65,-33)"), alone);
+        String leg = NavText.failure(new Outcome.NeedsAlter(RouteSpec.Alter.ANY, digs(3)), null, A, C, spec,
                 new NavText.OnRoute("home", 2, 3));
         assertTrue(leg.contains("`route spec home --leg 2 --alter any`") && leg.contains("asks the owner first"), leg);
         String budget = NavText.failure(new Outcome.OverAlterBudget(5), null, A, C,
@@ -107,7 +117,7 @@ class NavTextTest {
         assertEquals(FailureType.NO_PATH, NavText.type(new Outcome.OutOfBudget()));
         assertEquals(FailureType.NO_PATH, NavText.type(new Outcome.Unloaded()));
         assertEquals(FailureType.NO_PATH, NavText.type(new Outcome.OverAlterBudget(4)));
-        assertEquals(FailureType.TERRAIN_BLOCKED, NavText.type(new Outcome.NeedsAlter(RouteSpec.Alter.NATURAL, 2)));
+        assertEquals(FailureType.TERRAIN_BLOCKED, NavText.type(new Outcome.NeedsAlter(RouteSpec.Alter.NATURAL, digs(2))));
         assertEquals(FailureType.NO_MATERIAL, NavText.type(new Outcome.NoMaterials()));
         assertEquals(FailureType.REFUSED, NavText.type(new Outcome.Denied(A, "no")));
         assertEquals(FailureType.BOXED_IN, NavText.type(new Outcome.Stranded(A, planks())));
@@ -139,7 +149,7 @@ class NavTextTest {
         String none = NavText.failure(new Outcome.NoRoute(), null, A, C, spec);
         String budget = NavText.failure(new Outcome.OutOfBudget(), null, A, C, spec);
         String unloaded = NavText.failure(new Outcome.Unloaded(), null, A, C, spec);
-        String alter = NavText.failure(new Outcome.NeedsAlter(RouteSpec.Alter.NATURAL, 2), null, A, C, spec);
+        String alter = NavText.failure(new Outcome.NeedsAlter(RouteSpec.Alter.NATURAL, digs(2)), null, A, C, spec);
         String denied = NavText.failure(new Outcome.Denied(B, "no"), null, A, C, spec);
         String stranded = NavText.failure(new Outcome.Stranded(A, planks()), null, A, C, spec);
         String blocked = NavText.failure(new Outcome.Blocked(new Blockage(B, planks(), MoveKind.WALK, Reason.NO_CLEARANCE,

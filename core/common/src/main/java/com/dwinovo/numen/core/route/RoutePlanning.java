@@ -10,8 +10,6 @@ import com.dwinovo.numen.core.task.move.Destination;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.api.Bill;
 import com.dwinovo.numen.pathing.api.Outcome;
-import com.dwinovo.numen.pathing.plan.Edit;
-import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
@@ -166,27 +164,13 @@ public final class RoutePlanning {
         if (route == null) {
             return new Plan.Leg(reach, 0, 0, null, List.of(), List.of(), List.of(), why);
         }
+        NavText.Changes changes = NavText.Changes.of(route.edits());
         List<Plan.Cell> digs = new ArrayList<>();
         List<Plan.Cell> places = new ArrayList<>();
         List<Plan.Ask> asks = new ArrayList<>();
-        for (Edit edit : route.edits()) {
-            Permit permit = switch (edit) {
-                case Edit.Dig dig -> {
-                    digs.add(new Plan.Cell(dig.pos(), dig.state().getBlock()));
-                    yield dig.permit();
-                }
-                case Edit.Place place -> {
-                    places.add(new Plan.Cell(place.pos(), place.block()));
-                    yield place.permit();
-                }
-                // 倒水接坠落在同一步里就收回,不是留在世界上的改动,也不受按位置的"只许放"管;要问主人的照样问
-                case Edit.Catch caught -> caught.permit();
-                case Edit.Door door -> null;
-            };
-            if (permit instanceof Permit.Ask ask && ask.credential() instanceof ConsentItem item) {
-                asks.add(new Plan.Ask(edit.pos(), item.cause()));
-            }
-        }
+        changes.digs().forEach((pos, block) -> digs.add(new Plan.Cell(pos, block)));
+        changes.places().forEach((pos, block) -> places.add(new Plan.Cell(pos, block)));
+        changes.asks().forEach((pos, cause) -> asks.add(new Plan.Ask(pos, cause)));
         return new Plan.Leg(reach, route.legs().size(), (int) Math.round(route.cost()), route.end(), digs, places,
                 asks, why);
     }

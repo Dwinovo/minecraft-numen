@@ -74,7 +74,7 @@ public record Plan(BlockPos from, long at, List<Leg> legs) {
      * @param ticks  规划器估的刻数(含这一段规格的罚分)
      * @param end    看清的那一截停在哪一格;没有看清任何一截为 null
      * @param digs   要挖的格
-     * @param places 要放方块的格(路上留下的;倒水接坠落当步收回,不算)
+     * @param places 要放方块的格(倒水接坠落的那一格记水,当步收回)
      * @param asks   其中要问主人的格
      * @param why    走不通、或只看清一截时为什么(寻路结局的原话);走得通、没规划为空串
      */
