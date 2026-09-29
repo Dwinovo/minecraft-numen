@@ -241,4 +241,31 @@ route reverse mine --as back                 反着的一条
   假设身上有料,可能报出身上没有的垫料,`route plan` 按真实库存算。`route reverse` 的终点是这条路线上次规划时的起点,没规划过就拒绝。
 - `move goto` = 她自己的匿名路线 `goto-<名字>` → 规划 → 执行;失败回执给出 `route spec … --alter …`、`route plan …` 这样能照抄的下一步。
 
-### 第 3 步:area 接进 core(施工中)
+### 第 3 步:area 接进 core(09-30)
+
+**路线这一半**
+
+- 去处只在 `Destination` 一处编成寻路目标:`move goto --area 名字[/部分]`、`route new --to` 与 `route via` 的位置参数(数是坐标,
+  一个名字是区域)。三种到达对整块区域成立,都用模块现成的 `Goals.anyOf` 拼:`at` = 各格的 `at`,`use` = 各方块的 `use`,
+  `near` = 各格的 `within`;寻路模块没有为区域加新的到达。大区域有界:只在离出发点最近的 4096 格里挑(api `Cells.nearest`,
+  按小节由近到远翻),`at`/`near` 至多 64 个成员,`use` 至多 8 个。
+- 禁区与标志:`--avoid area:名字`(禁入 + 禁站)、`--avoid_break/place/step area:名字`。盒子写法删掉,写了当场说"框成区域再写
+  `area:`"。pathing 只加一样数据 `PositionCosts.Region`(`contains(long cell)`),core 的 `NamedAreas` 用区域的小节位图实现它,
+  不逐格展开(四百万格翻译一次不到一秒)。
+- 区域按名字活引用,规划时按主人当时的区域解析(`NamedAreas`,与权限规则同一口径);被删了如实说是哪一段。
+
+**看与挖这一半**
+
+- `area` 命令组:`new`、`add`(`--box`、`--at`、`--built`、`--route`)、`drop`、`show`、`list`、`delete`、`refresh`,运算
+  `union/minus/intersect/filter/grow/center`(结果用新名字,不覆盖)。一个盒子至多 2^24 格。"还是当时那种方块"只在
+  `Cells.Seen.holds` 一处判,挖矿复核与 `refresh` 共用。
+- **改区域过权限层**:动作 `edit_area(区域名)`、信号 `ruled`(主人层规则的 `area:` 项点名的区域,区域此刻不在也算);出厂
+  `ask edit_area(ruled)`、`allow edit_area(!ruled)`。命令里不写死哪块能改;主人可写 `allow edit_area(area:ores)` 放开、
+  `deny edit_area(*)` 收紧。挂起等答复与第 0 层指令同一个口子(`ServerSource.authorize`),不占任务槽。
+- 扫描:`scan blocks --into` 每一团加成区域的一部分;不带 `--into` 不编号不存。`--in 区域` 与半径球求交。删 `GroupBook`、
+  `staleMessage`、`NumenPlayer.nextIdNumber`、回执的 `in_work_area`/`box`。
+- 挖与捡:`work mine --area` 取代 `--groups`;`--block_ids` 简写开工时用同一处扫描(`BlockScan`,半径 192)收成一块匿名区域再挖,
+  任务里原来的补查、慢心跳重查删掉,候选只有一个来处。`work collect --area` 与半径球求交。`WorkArea` 带着一块球形区域,判定只问区域。
+- **与设计稿的出入**:简写的匿名区域不存盘(没有名字,没人再点它);`BuildSite` 没改成区域(它是交给寻路的位置代价,收成区域
+  再展开回去只多一层转换);`scan storage --in` 没做(`x y z` 是必填位置参数,加 `--in` 就是一个动作两种写法,眼下也没有使用方);
+  `area show` 只看她所在维度的区域;`--built`、`--route` 加进来的格是 `Area.Kind.CELLS`(编号 `c`)。

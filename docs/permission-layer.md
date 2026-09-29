@@ -316,8 +316,8 @@ allow 行把日常动作一行一行写明:自然方块(谁都没放过)、她�
 - `TerrainPolicy`(规划):一格能不能挖或放——放行、要问(带一个模块不解读的凭据,Numen 给的就是那一条
   `ConsentItem`)、拒绝(带理由)。路线上每一格的改动带着这份答复,账单据此列出要问的格。
 - `Effector`(执行):真的动手;Numen 的实现每一下之前问权限层,不许就不动手,交回裁决本身当理由。
-- `RouteSpec.Alter.ANY`:把需要同意的格子也算进路线,账单里单列;`move_goto route:rN` 选了这种
-  路线,执行开始前发起征询。
+- `RouteSpec.Alter.ANY`:把需要同意的格子也算进路线,账单里单列;`route plan` 的计划列出要问的格,`move go`
+  开走前把它们一次问完(`docs/look-plan-act.md` §四)。
 
 `sacred` 不是权限,它是"别挖自己要站的那格",留在规划器。
 
