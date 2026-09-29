@@ -188,4 +188,12 @@ public abstract class TaskRecord {
     public String describe() {
         return toolName;
     }
+
+    /**
+     * 受理时这件活要当场交代给模型的事实(比如它只在哪块地方干、点名的目标里有几个落在那块地方外面),接在受理回执的
+     * 那句话后面;没有要交代的为 null。只写派发那一刻就定下来的事,干的过程与结局走 task_finished。
+     */
+    public String acceptNote() {
+        return null;
+    }
 }

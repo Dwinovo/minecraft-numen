@@ -114,6 +114,10 @@ public final class TaskDispatch {
             note.append("Accepted as ").append(record.publicId()).append("; your body is working on it in the "
                     + "background. ").append(NumenPrompts.WHILE_IT_RUNS);
         }
+        String facts = record.acceptNote();
+        if (facts != null) {
+            note.append(' ').append(facts);
+        }
         Map<String, Object> data = new LinkedHashMap<>();
         data.put(TASK_ID, record.publicId());
         data.put("task", record.getToolName());
