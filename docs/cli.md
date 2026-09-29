@@ -894,6 +894,52 @@ move go home                                 占身体,task_finished 收尾
   `use entity` 隔着玻璃罩时说 `break 2 glass (…)`),代替原来的候选清单。诊断问"许改的够不够"时设想身上有料,所以列出的可能是
   身上没有的垫路料(`place 2 cobblestone`);照这份规格规划(`route plan`)时按身上真有的料算。
 
+### 路线收区域:去处、禁区与路线标志(09-30)
+
+设计稿 `docs/look-plan-act.md` §七第 3 步的路线一半。"一块地方"在路线里只有区域一种写法(api `com.dwinovo.numen.area`),坐标就是
+只有一格的区域:
+
+```
+move goto --area farm                                   走进区域里任意一格(站得住的)
+move goto --area storage --arrive use                   用区域里任意一个能点、用得上的方块
+move goto --area ores/g3 --arrive near --near 3         离区域(这一部分)里任意一格不超过 3 格
+route new ore --to ores/g3 --arrive near --near 3       --to:数是坐标(x y z / x z / y),一个名字是区域
+route via home farm --arrive near --near 2              途经点同一种写法:route via <name> <place...>
+move goto --x 120 --z -35 --avoid water area:farm       --avoid:格子种类之外,area:<名字> 是不进入的一块地
+route spec home --avoid_break area:house                --avoid_break/_place/_step:方块 id、#标签、x,y,z 一格、area:<名字>
+```
+
+- **去处**:`Destination.Stop` 多一样 `area`(`AreaRef`,存名字),与坐标二选一;`move goto` 的 `--area`(快捷工具的 `area` 字段),
+  `route new --to` 与 `route via` 的一处(`Stop.of(List<String>)`:一到三个整数是坐标,一个名字是区域;帮助原文
+  `x y z (one cell), x z (a place, at whatever height stands there), y (a height), or an area of your owner's: its name, or name/part like ores/g3`)。
+  参数到寻路目标仍只在 `Destination`:三种到达对整块区域成立,用模块现成的 `Goals.anyOf` 组合——`at` 是 `anyOf(at(格)…)`、`use`
+  是 `anyOf(use(格)…)`、`near` 是 `anyOf(within(at(格), 0, N)…)`,寻路模块没有为区域加到达。
+- **有界**:成员只在区域里离出发点最近的 4096 格里挑(api `Cells.nearest(from, limit)`,按小节由近到远翻,四百万格的区域也只翻附近
+  几节),`at`/`near` 至多 64 个成员,`use` 至多 8 个(至多给 16 个能点的方块列候选站位)。`at` 在不改地形的一趟只收站得住的格
+  (没加载的列此刻判不了,照收),许改地形时照收(挖进去、垫上去是寻路的事,与单格同一条)。离出发点最近的那一侧就是她走进去的那一侧;
+  要去别处,点名那一部分。路线的第二段起,"出发点"是上一段去的那一格。
+- **写错当场提醒**(`GotoReminders`,能照抄的写法是 `move_goto area:<名字> …`):
+  ```
+  there is no area named pen; your owner's areas are shed (area list shows them)
+  area house has no part b7; its parts are b1, b2 (area show house lists them)
+  area portal lies in minecraft:the_nether, and I am in minecraft:overworld; an area belongs to one dimension
+  area ores has no cells yet, so there is nowhere in it to go; `area add ores --box <x1,y1,z1..x2,y2,z2>` or `scan blocks <radius> <block ids> --into ores` fills it.
+  none of the 4096 cells of area rock nearest me (of 9261) is somewhere to stand, and this walk changes nothing. To stop close by: move_goto area:rock arrive:near near:<blocks>; to dig or pillar into it, add alter:natural.
+  none of the 2 cell(s) of area air holds a block to click — they are air or fluid. To get close: move_goto area:air arrive:near near:<blocks>.
+  none of the 3 block(s) of area vault nearest me can be used: each is walled in on every side or has nowhere within reach to stand and see it. move_goto x:… y:… z:… arrive:use says what is in the way of the nearest one; to get as close as I can: move_goto area:vault arrive:near near:<blocks>.
+  ```
+- **禁区与路线标志**:`--avoid area:<名字>` 落成位置代价的禁入与禁站(`PositionCosts.Use.PASS` 与 `STAND`),`--avoid_break` /
+  `--avoid_place` / `--avoid_step` 的 `area:` 落成挖、放、踩那一栏的禁止。区域整块交给寻路:`NamedAreas.region` 给出"一格在不在"
+  的判定(问区域的小节位图),寻路模块只收这个判定(`PositionCosts.Region`),不逐格展开。**盒子写法 `x1,y1,z1..x2,y2,z2` 删掉**
+  (连同逐格展开的 `cellsOf`):写了会被参数类型当场拒,`a cell is one x,y,z; a box or any other stretch of cells is an area — frame it as one and write area:<name>`。
+  单格坐标、方块 id、标签照旧。
+- **活引用**:路线存区域的名字(去处的 `area` 字段、标志原文里的 `area:…`),每次规划按那一刻主人名下的区域解析(`NamedAreas`,
+  与权限规则 `area:` 同一个口径):写的时候(`move goto`、`route new`、`route via`、`route spec`)点名不在的区域当场拒;之后区域或
+  部分被删,规划如实说哪一段(`route plan` 的 `leg 1 to area pen: can't be walked: there is no area named pen; …`),`move go`
+  不出发(`can't walk route topen as it stands: there is no area named pen; …`、`… --avoid area:farm: there is no area named farm; …`)。
+- 回执:到了一块区域说 `reached area pen, standing at …`、`standing at …, with the chest at x,y,z of area chests in sight and in
+  reach — use it from here`、`arrived within 3 blocks of area pen, standing at …`。
+
 ### transfer 改成一次一步
 
 `transfer` 工具与它的 `moves` 数组删掉,换成 `use` 组的两个动作,一个动作一个意思:
