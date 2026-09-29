@@ -24,7 +24,7 @@ public final class Names {
      */
     public static String checked(String kind, String name) {
         if (!valid(name)) {
-            throw new IllegalArgumentException("a " + kind + " name is lowercase letters, digits, _ and -, starting "
+            throw new IllegalArgumentException(kind + " names are lowercase letters, digits, _ and -, starting "
                     + "with a letter or digit, at most 48 long; got \"" + name + "\"");
         }
         return name;
