@@ -1,6 +1,8 @@
 package com.dwinovo.numen.pathing.spec;
 
+import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 
 import it.unimi.dsi.fastutil.longs.Long2DoubleMap;
@@ -14,6 +16,9 @@ import it.unimi.dsi.fastutil.longs.LongSets;
  * 按坐标的代价与禁令:不看方块看位置。四种用法({@link Use})各自一栏,每栏三样——禁止的格、额外加价的格,以及"只许这些格"
  * (设了就是这一栏别的格一律禁止);查不到的格不禁止、不加价。禁止是一件事实,不是一个很大的数,所以单独成集合,不与加价混在一起。
  * 键是 {@link net.minecraft.core.BlockPos#asLong}。
+ *
+ * <p>禁止的格有两种给法:逐格({@link Builder#forbid(Use, long)},一格一个键)与整片({@link Builder#forbid(Use, Region)}):
+ * 宿主的一片地方可能有几百万格,逐格展开进集合既慢又占地方,所以整片只交一个"这一格在不在"的判定,模块逐格问它,不认识它怎么存。
  *
  * <p>不可变;建表走 {@link #builder()} 或 {@link #protect},合并走 {@link #plus}(禁令取并集,同格加价相加,"只许"取交集)。
  * 导航自己的目标格用 {@link #protect}:别挖自己要站、要够的那格,也别拿方块把它埋了——这是规划的正确性约束,不是权限。
@@ -33,16 +38,29 @@ public final class PositionCosts {
         PLACE
     }
 
+    /**
+     * 一片格子,只回答一格在不在里面(键是 {@link net.minecraft.core.BlockPos#asLong})。宿主用自己的表示实现它——比如按 16³ 小节
+     * 存的位图,一次查表加一次取位——模块只问这一句。搜索线程逐格问,所以实现要不可变(或线程安全),而且问一格要快。
+     */
+    @FunctionalInterface
+    public interface Region {
+        boolean contains(long cell);
+    }
+
     public static final PositionCosts EMPTY = new PositionCosts(new EnumMap<>(Use.class), new EnumMap<>(Use.class),
-            new EnumMap<>(Use.class));
+            new EnumMap<>(Use.class), new EnumMap<>(Use.class));
 
     private final Map<Use, LongSet> forbidden;
+    /** 整片禁止的:这一栏在其中任何一片里的格都禁止。 */
+    private final Map<Use, List<Region>> forbiddenRegions;
     private final Map<Use, Long2DoubleMap> extra;
     /** 设了"只许"的那几栏:这一栏只许这些格。 */
     private final Map<Use, LongSet> confined;
 
-    private PositionCosts(Map<Use, LongSet> forbidden, Map<Use, Long2DoubleMap> extra, Map<Use, LongSet> confined) {
+    private PositionCosts(Map<Use, LongSet> forbidden, Map<Use, List<Region>> forbiddenRegions,
+                          Map<Use, Long2DoubleMap> extra, Map<Use, LongSet> confined) {
         this.forbidden = forbidden;
+        this.forbiddenRegions = forbiddenRegions;
         this.extra = extra;
         this.confined = confined;
     }
@@ -58,11 +76,19 @@ public final class PositionCosts {
         return new Builder();
     }
 
-    /** 这一格禁不禁止这样用:在禁止的格里,或这一栏设了"只许"而它不在其中。 */
+    /** 这一格禁不禁止这样用:在禁止的格里、在禁止的某一片里,或这一栏设了"只许"而它不在其中。 */
     public boolean forbids(Use use, long cell) {
         LongSet cells = forbidden.get(use);
         if (cells != null && cells.contains(cell)) {
             return true;
+        }
+        List<Region> regions = forbiddenRegions.get(use);
+        if (regions != null) {
+            for (Region region : regions) {
+                if (region.contains(cell)) {
+                    return true;
+                }
+            }
         }
         LongSet only = confined.get(use);
         return only != null && !only.contains(cell);
@@ -75,10 +101,10 @@ public final class PositionCosts {
     }
 
     public boolean isEmpty() {
-        return forbidden.isEmpty() && extra.isEmpty() && confined.isEmpty();
+        return forbidden.isEmpty() && forbiddenRegions.isEmpty() && extra.isEmpty() && confined.isEmpty();
     }
 
-    /** 两张表叠加:禁令取并集,同一格同一栏的加价相加,同一栏的"只许"取交集。 */
+    /** 两张表叠加:禁令取并集(整片的接在一起),同一格同一栏的加价相加,同一栏的"只许"取交集。 */
     public PositionCosts plus(PositionCosts other) {
         if (other.isEmpty()) {
             return this;
@@ -94,6 +120,7 @@ public final class PositionCosts {
 
     public static final class Builder {
         private final EnumMap<Use, LongOpenHashSet> forbidden = new EnumMap<>(Use.class);
+        private final EnumMap<Use, List<Region>> forbiddenRegions = new EnumMap<>(Use.class);
         private final EnumMap<Use, Long2DoubleOpenHashMap> extra = new EnumMap<>(Use.class);
         private final EnumMap<Use, LongOpenHashSet> confined = new EnumMap<>(Use.class);
 
@@ -101,6 +128,12 @@ public final class PositionCosts {
 
         public Builder forbid(Use use, long cell) {
             forbidden.computeIfAbsent(use, u -> new LongOpenHashSet()).add(cell);
+            return this;
+        }
+
+        /** 这样用 {@code region} 里的每一格都禁止:整片交进来,不逐格展开。 */
+        public Builder forbid(Use use, Region region) {
+            forbiddenRegions.computeIfAbsent(use, u -> new ArrayList<>()).add(region);
             return this;
         }
 
@@ -132,6 +165,7 @@ public final class PositionCosts {
 
         private void addAll(PositionCosts table) {
             table.forbidden.forEach((use, cells) -> cells.forEach((long cell) -> forbid(use, cell)));
+            table.forbiddenRegions.forEach((use, regions) -> regions.forEach(r -> forbid(use, r)));
             table.extra.forEach((use, costs) -> costs.long2DoubleEntrySet()
                     .forEach(e -> add(use, e.getLongKey(), e.getDoubleValue())));
             table.confined.forEach(this::confine);
@@ -140,11 +174,13 @@ public final class PositionCosts {
         public PositionCosts build() {
             EnumMap<Use, LongSet> f = new EnumMap<>(Use.class);
             forbidden.forEach((use, cells) -> f.put(use, LongSets.unmodifiable(new LongOpenHashSet(cells))));
+            EnumMap<Use, List<Region>> r = new EnumMap<>(Use.class);
+            forbiddenRegions.forEach((use, regions) -> r.put(use, List.copyOf(regions)));
             EnumMap<Use, Long2DoubleMap> e = new EnumMap<>(Use.class);
             extra.forEach((use, costs) -> e.put(use, Long2DoubleMaps.unmodifiable(new Long2DoubleOpenHashMap(costs))));
             EnumMap<Use, LongSet> c = new EnumMap<>(Use.class);
             confined.forEach((use, cells) -> c.put(use, LongSets.unmodifiable(new LongOpenHashSet(cells))));
-            return f.isEmpty() && e.isEmpty() && c.isEmpty() ? EMPTY : new PositionCosts(f, e, c);
+            return f.isEmpty() && r.isEmpty() && e.isEmpty() && c.isEmpty() ? EMPTY : new PositionCosts(f, r, e, c);
         }
     }
 }
