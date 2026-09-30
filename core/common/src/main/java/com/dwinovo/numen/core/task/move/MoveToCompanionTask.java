@@ -401,6 +401,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 case USE -> "standing at " + here(gy) + ", with " + usedBlock() + " of area " + d.area()
                         + " in sight and in reach — use it from here";
                 case NEAR -> "arrived within " + d.near() + " blocks of area " + d.area() + ", standing at " + here(gy);
+                case DIG -> "standing at " + here(gy) + ", within reach of a block of area " + d.area()
+                        + " — `work dig " + d.area() + "` digs it from here";
             };
             return inArea + ", via route " + route.name() + ".";
         }
@@ -414,6 +416,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                     + " in sight and in reach — use it from here";
             case NEAR -> "arrived within " + d.near() + " blocks of " + (cell != null ? coords(cell)
                     : "location x=" + d.x() + " z=" + d.z()) + ", standing at " + here(gy);
+            case DIG -> "standing at " + here(gy) + ", with the " + block(cell) + " at " + coords(cell)
+                    + " within reach — `work dig " + cell.getX() + " " + cell.getY() + " " + cell.getZ()
+                    + "` digs it from here";
         };
         return reached + ", via route " + route.name() + ".";
     }

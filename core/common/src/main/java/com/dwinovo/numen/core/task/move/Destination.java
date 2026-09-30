@@ -12,9 +12,11 @@ import com.dwinovo.numen.core.nav.NamedAreas;
 import com.dwinovo.numen.core.nav.NavText;
 import com.dwinovo.numen.core.nav.Terrain;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.pathing.world.BodyStats;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -23,20 +25,22 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 
 /**
- * 去处:写法({@link Stop}:一处——坐标给几个算几个,或主人名下的一块区域——加怎样算到了,{@code --arrive at|use|near},
+ * 去处:写法({@link Stop}:一处——坐标给几个算几个,或主人名下的一块区域——加怎样算到了,{@code --arrive at|use|near|dig},
  * {@code near} 只配 {@code near})与按那一刻的世界编好的寻路目标。写法到目标的对应只在这里:
  * <ul>
  *   <li>{@code at}:位置——{@code x y z} 是那一格,{@code x z} 是那一列,只给 {@code y} 是那个高度({@link Goals#at}、
  *       {@link Goals#column}、{@link Goals#level})。站到一块方块上面也是 {@code at}:坐标是它上面脚所在的那一格;</li>
  *   <li>{@code use}:用那一格方块——站在它敞开的面前、看得见、点得到({@link Goals#use});</li>
- *   <li>{@code near}:离那一格(或那一列)不超过 {@code near} 格({@link Goals#within})。</li>
+ *   <li>{@code near}:离那一格(或那一列)不超过 {@code near} 格({@link Goals#within});</li>
+ *   <li>{@code dig}:挖那一格方块——站到手够得着它、身体不占着它的地方,挡着的由挖的一方挖开({@link Goals#dig}),
+ *       那一格本身留给 {@code work dig}。</li>
  * </ul>
- * 坐标就是只有一格的区域:去一块区域,三种到达对整块成立,用寻路模块现成的"多个取其一"({@link Goals#anyOf})组合,
+ * 坐标就是只有一格的区域:去一块区域,四种到达对整块成立,用寻路模块现成的"多个取其一"({@link Goals#anyOf})组合,
  * 不另设一种到达——{@code at} 是走进区域里任意一格(站得住的),{@code use} 是用区域里任意一个能点、用得上的方块,
- * {@code near} 是离区域里任意一格不超过 {@code near} 格。
+ * {@code near} 是离区域里任意一格不超过 {@code near} 格,{@code dig} 是够得着区域里任意一个有轮廓的方块。
  *
  * <p><b>区域的目标有界</b>:只在区域里离出发点最近的 {@link #NEAREST} 格里挑成员({@code Cells.nearest} 按小节由近到远翻,
- * 四百万格的区域也只翻出发点附近那几节),{@code at}、{@code near} 至多 {@link #MEMBERS} 个成员,{@code use} 至多
+ * 四百万格的区域也只翻出发点附近那几节),{@code at}、{@code near}、{@code dig} 至多 {@link #MEMBERS} 个成员,{@code use} 至多
  * {@link #USE_MEMBERS} 个(每个要按世界列一遍候选站位,至多试 {@link #USE_TRIES} 个能点的方块)。离出发点最近的那一侧就是她要
  * 走进去的那一侧;那一侧走不通,回执说的也是这一侧——要去区域的别处,点名那一部分({@code ores/g3})或另框一块区域。
  *
@@ -50,7 +54,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
 
     /** 一块区域里,只在离出发点最近的这么多格里挑成员:一个 16³ 小节的格数。 */
     static final int NEAREST = 4096;
-    /** {@code at}、{@code near} 至多几个成员:估价与判到没到逐个问成员,几十个仍是一次比较的量级。 */
+    /** {@code at}、{@code near}、{@code dig} 至多几个成员:估价与判到没到逐个问成员,几十个仍是一次比较的量级。 */
     static final int MEMBERS = 64;
     /** {@code use} 至多几个成员。 */
     static final int USE_MEMBERS = 8;
@@ -59,7 +63,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
 
     /** 怎样算到了。 */
     public enum Arrive {
-        AT, USE, NEAR;
+        AT, USE, NEAR, DIG;
 
         /** 命令行上的写法。 */
         public String word() {
@@ -72,7 +76,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
     }
 
     /** 命令行上 {@code --arrive} 能写的几个。 */
-    public static final String[] ARRIVE_WORDS = {"at", "use", "near"};
+    public static final String[] ARRIVE_WORDS = {"at", "use", "near", "dig"};
 
     /** {@code route new --to}、{@code route via} 那一处在帮助里怎么说。 */
     public static final String PLACE_HINT = "x y z (one cell), x z (a place, at whatever height stands there), y (a "
@@ -131,7 +135,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
             if (area == null && x == null && arrive != Arrive.AT) {
                 throw new IllegalArgumentException(GotoReminders.heightTakesNoArrive(arrive.word()));
             }
-            if (area == null && y == null && arrive == Arrive.USE) {
+            if (area == null && y == null && (arrive == Arrive.USE || arrive == Arrive.DIG)) {
                 throw new IllegalArgumentException(GotoReminders.blockNeedsY(arrive.word()));
             }
         }
@@ -194,6 +198,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
                 case AT -> where;
                 case USE -> where + (area != null ? " (to use one of its blocks)" : " (to use it)");
                 case NEAR -> where + " (within " + near + ")";
+                case DIG -> where + (area != null ? " (to dig one of its blocks)" : " (to dig it)");
             };
         }
 
@@ -204,6 +209,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
                     case AT -> "走进区域 " + area;
                     case USE -> "去用区域 " + area + " 里的方块";
                     case NEAR -> "走到区域 " + area + " " + near + " 格内";
+                    case DIG -> "走到够得着区域 " + area + " 里方块的地方";
                 };
             }
             String where = x == null ? "y=" + y : y == null ? "x=" + x + " z=" + z : x + "," + y + "," + z;
@@ -211,6 +217,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
                 case AT -> x == null ? "到 " + where : "走向 " + where;
                 case USE -> "去用 " + where;
                 case NEAR -> "走到 " + where + " " + near + " 格内";
+                case DIG -> "走到够得着 " + where + " 的地方";
             };
         }
     }
@@ -250,6 +257,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
             }
             case USE -> use(her, terrain, cell);
             case NEAR -> Goals.within(position, 0, stop.near());
+            case DIG -> dig(her, terrain, cell);
         };
         return new Destination(stop, goal, stop.toward(from));
     }
@@ -325,6 +333,22 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
                 }
                 toward = nearest.get(0);
             }
+            case DIG -> {
+                BodyStats body = Snapshots.stats(her);
+                for (BlockPos cell : nearest) {
+                    // 空气与流体没有可挖的;没加载的列此刻判不了,留给走到那儿时的规划
+                    if (!terrain.loaded(cell.getX(), cell.getZ()) || terrain.clickable(cell)) {
+                        members.add(Goals.dig(cell, body));
+                        toward = toward == null ? cell : toward;
+                        if (members.size() == MEMBERS) {
+                            break;
+                        }
+                    }
+                }
+                if (members.isEmpty()) {
+                    throw new IllegalArgumentException(GotoReminders.areaNothingToDig(ref, nearest.size(), cells));
+                }
+            }
         }
         return new Destination(stop, members.size() == 1 ? members.get(0) : Goals.anyOf(members), toward);
     }
@@ -350,6 +374,14 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
                     use.open().stream().map(Direction::getName).toList()));
         }
         return use;
+    }
+
+    /** 挖一格方块的目标;空气、流体没有可挖的,当场提醒。 */
+    private static Goal dig(NumenPlayer her, Terrain terrain, BlockPos cell) {
+        if (!terrain.clickable(cell)) {
+            throw new IllegalArgumentException(GotoReminders.nothingToDig(cell, NavText.name(terrain.state(cell))));
+        }
+        return Goals.dig(cell, Snapshots.stats(her));
     }
 
     /** 那一列里往下第一个站得住的节点;一直到底都没有为 null。 */
