@@ -190,8 +190,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
                     InteractAtTaskRecord.bodyBoundReason(player.getMainHandItem().getItem()) == null
                     && InteractAtTaskRecord.bodyBoundReason(player.getOffhandItem().getItem()) == null;
             receipt = com.dwinovo.numen.core.act.PressReceipt.before(player, null);
-            interaction = Interaction.forHit(player, hit, button(), r.holdTicks, fallthroughOk, r.sneak,
-                    this::recordAction);
+            interaction = Interaction.forHit(player, hit, button(), r.holdTicks, fallthroughOk, r.sneak);
             if (r.holdTicks > 0) {
                 holdUntil = player.level().getGameTime() + r.holdTicks;
             }
