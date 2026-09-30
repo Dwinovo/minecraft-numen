@@ -9,6 +9,7 @@ import com.dwinovo.numen.permission.ConsentItem;
 import com.dwinovo.numen.permission.Gate;
 import com.dwinovo.numen.permission.Permission;
 import com.dwinovo.numen.permission.Verdict;
+import com.dwinovo.numen.task.Preparation;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.task.TaskResult;
 import com.dwinovo.numen.task.TaskState;
@@ -26,8 +27,8 @@ import java.util.Map;
  * 在一格锅上把一道菜从头做到尾。
  *
  * <h2>它不走路</h2>
- * 身体必须<b>已经</b>在够得着的距离内,否则当场教学失败让她先 {@code move goto}——和 {@code use block}
- * 同一条规矩。寻路住在核心里,联动够不着,自己再发明一套到场方式就是第二个判据。
+ * 身体必须<b>已经</b>在够得着的距离内,否则受理之前就当场拒绝、教她先 {@code move goto}——和 {@code use block}
+ * 同一条规矩。这一格不是锅、配方不成、锅被占着,也在受理之前判({@link #prepare})。寻路住在核心里,联动够不着,自己再发明一套到场方式就是第二个判据。
  *
  * <h2>能不能动这口锅,权限层说</h2>
  * 开工前把这件活要做的两件事交上去:<b>动这口锅</b>(倒油、下料、翻炒、盖盖都是右键它)和
@@ -61,32 +62,69 @@ final class CookTask implements Task {
         return KaleidoscopeCommands.GROUP + " " + KaleidoscopeCommands.COOK;
     }
 
+    /**
+     * 受理之前:这一格是不是锅、配方在不在、这个存档有没有投料量、她够不够得着、锅是不是空着——和开工后每刻复核的是同一组判据
+     * ({@link #blocker}),不过就当场回那句话,不受理。半空里判不了够不够得着,等她站稳再判。
+     */
     @Override
-    public TaskState tick(NumenPlayer cook) {
+    public Preparation prepare(NumenPlayer cook) {
+        return () -> {
+            if (!settled(cook)) {
+                return null;
+            }
+            String why = blocker(cook);
+            if (why == null) {
+                why = Cooker.at(cook.serverLevel(), r.pos).cannotStart(dish);
+            }
+            return why == null ? Preparation.Readiness.ready(null) : Preparation.Readiness.refused(why);
+        };
+    }
+
+    /** 站稳了:半空里判不了够不够得着。 */
+    private static boolean settled(NumenPlayer cook) {
+        return cook.onGround() || cook.isInWater() || cook.isPassenger();
+    }
+
+    /**
+     * 此刻开不了工的原因:这一格不是锅、配方不成、她够不着;都没有为 null。认出配方时记下这道菜。锅空不空另判:下了第一手之后
+     * 锅就是我们的了。
+     */
+    private String blocker(NumenPlayer cook) {
         ServerLevel level = cook.serverLevel();
         Cooker cooker = Cooker.at(level, r.pos);
         if (cooker == null) {
-            return failed("nothing at " + Cooker.where(r.pos) + " is a pot or a stockpot"
-                    + " (steamers, chopping boards, millstones and spits are not wired up yet)");
+            return "nothing at " + Cooker.where(r.pos) + " is a pot or a stockpot"
+                    + " (steamers, chopping boards, millstones and spits are not wired up yet)";
         }
         if (dish == null) {
-            TaskState bad = order(level);
+            String bad = order(level);
             if (bad != null) {
                 return bad;
             }
         }
-        // 半空里判不了够不够得着:等她站稳再说
-        if (!(cook.onGround() || cook.isInWater() || cook.isPassenger())) {
-            return TaskState.RUNNING;
-        }
         if (!cook.canInteractWithBlock(r.pos, 0.0)) {
             double away = Math.sqrt(cook.distanceToSqr(r.pos.getX() + 0.5, r.pos.getY() + 0.5, r.pos.getZ() + 0.5));
-            return failed("the " + cooker.kind().id() + " at " + Cooker.where(r.pos) + " is "
+            return "the " + cooker.kind().id() + " at " + Cooker.where(r.pos) + " is "
                     + String.format("%.1f", away) + " blocks away — out of working reach."
                     + " move_goto x:" + r.pos.getX() + " y:" + r.pos.getY() + " z:" + r.pos.getZ()
                     + " arrive:use first (it stands where the pot is in sight and in reach), then run "
-                    + KaleidoscopeCommands.line(KaleidoscopeCommands.COOK) + " again.");
+                    + KaleidoscopeCommands.line(KaleidoscopeCommands.COOK) + " again.";
         }
+        return null;
+    }
+
+    @Override
+    public TaskState tick(NumenPlayer cook) {
+        ServerLevel level = cook.serverLevel();
+        // 半空里判不了够不够得着:等她站稳再说
+        if (!settled(cook)) {
+            return TaskState.RUNNING;
+        }
+        String why = blocker(cook);
+        if (why != null) {
+            return failed(why);
+        }
+        Cooker cooker = Cooker.at(level, r.pos);
         if (!permitted) {
             TaskState pending = permit(cook, level);
             if (pending != null) {
@@ -125,19 +163,21 @@ final class CookTask implements Task {
         };
     }
 
-    /** 认菜:配方在不在、这个存档的投料量是多少。锅空不空由上面每刻复核,不在这里判第二遍。 */
-    private TaskState order(ServerLevel level) {
+    /**
+     * 认菜:配方在不在、这个存档的投料量是多少;认不出是那句话,认出了记下、返回 null。锅空不空由上面每刻复核,不在这里判第二遍。
+     */
+    private String order(ServerLevel level) {
         Dish ordered = Dish.byId(level, r.recipe);
         if (ordered == null) {
-            return failed("no pot or stockpot recipe has id " + r.recipe
+            return "no pot or stockpot recipe has id " + r.recipe
                     + " — take the exact id from " + KaleidoscopeCommands.line(KaleidoscopeCommands.RECIPES)
-                    + ", do not guess it");
+                    + ", do not guess it";
         }
         int[] want = ordered.portions(level);
         if (want == null) {
-            return failed(r.recipe + " is a flex recipe and no mix that fits the pot's 9 slots grades SUPERB"
+            return r.recipe + " is a flex recipe and no mix that fits the pot's 9 slots grades SUPERB"
                     + " on this world, so there is no ratio to cook to — "
-                    + KaleidoscopeCommands.line(KaleidoscopeCommands.RECIPES) + " says the same");
+                    + KaleidoscopeCommands.line(KaleidoscopeCommands.RECIPES) + " says the same";
         }
         dish = ordered;
         portions = want;

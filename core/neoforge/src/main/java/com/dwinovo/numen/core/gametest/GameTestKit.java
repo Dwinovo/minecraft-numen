@@ -389,6 +389,9 @@ public final class GameTestKit {
      * 按模型的样子调一次工具:按名字从工具表里取(和网络入口是同一张表),交同一份 JSON 参数,走同一个
      * {@link NumenTool#serve}。查询当场回执;身体动作派下去的那件活按调用 id 从调度器里取出来,
      * 收尾后读它交给模型的那句话。测的是工具本身,不经过模型。
+     *
+     * <p>派活的调用受理之前先准备,要搜索的准备结论出来那一刻才回执:那件活在回执到的那一刻取(受理时它已经进了槽);准备没过
+     * 的调用没有活,回执就是它的结论。同步动作在回执到之前已经结算离槽,所以派下去当场先取一次。
      */
     static ToolRun call(NumenPlayer body, String toolName, JsonObject args) {
         NumenTool tool = ToolRegistry.get(toolName);
@@ -397,8 +400,13 @@ public final class GameTestKit {
         }
         String id = "gametest-" + toolName + "-" + UUID.randomUUID();
         AtomicReference<String> replied = new AtomicReference<>();
-        tool.serve(id, args, body, replied::set);
-        return new ToolRun(toolName, replied, CompanionTickDispatcher.taskOf(body.getUUID(), id));
+        AtomicReference<TaskRecord> task = new AtomicReference<>();
+        tool.serve(id, args, body, json -> {
+            task.compareAndSet(null, CompanionTickDispatcher.taskOf(body.getUUID(), id));
+            replied.set(json);
+        });
+        task.compareAndSet(null, CompanionTickDispatcher.taskOf(body.getUUID(), id));
+        return new ToolRun(toolName, replied, task);
     }
 
     /**
@@ -557,19 +565,38 @@ public final class GameTestKit {
      * @param replied 当场的回执:查询的结果、后台任务的"已受理"、派发被拒的原因;同步动作不当场回执
      * @param task    派下去的那件活;没派活是 null
      */
-    record ToolRun(String tool, AtomicReference<String> replied, TaskRecord task) {
+    record ToolRun(String tool, AtomicReference<String> replied, AtomicReference<TaskRecord> taken) {
 
         String reply() {
             return replied.get();
         }
 
+        /** 派下去的那件活;还没回执(准备还没结论)、或没派活(查询、准备没过)是 null。 */
+        TaskRecord task() {
+            return taken.get();
+        }
+
+        /** 受理了:回执到了,而且派下了一件活。 */
+        boolean accepted() {
+            return task() != null;
+        }
+
+        /** 当场拒绝:回执到了,是失败,没有派活——没有任务编号,也不会有 task_finished。 */
+        boolean refused() {
+            String r = replied.get();
+            return r != null && task() == null
+                    && !JsonParser.parseString(r).getAsJsonObject().get("success").getAsBoolean();
+        }
+
         /** 有结论了:派了活的看那件活收没收尾,没派活的看回没回执。 */
         boolean done() {
+            TaskRecord task = task();
             return task != null ? task.getResult() != null : replied.get() != null;
         }
 
         /** 结论的原话:派了活的是收尾时交给模型的那句话,没派活的是回执。还没有结论是 null。 */
         String outcome() {
+            TaskRecord task = task();
             if (task != null) {
                 return task.getResult() == null ? null : task.getResult().message();
             }
@@ -578,6 +605,7 @@ public final class GameTestKit {
 
         /** 结论是成功。回执不带 success 的查询(直接回一份数据)回了就算成功。 */
         boolean succeeded() {
+            TaskRecord task = task();
             if (task != null) {
                 return task.getResult() != null && task.getResult().success();
             }

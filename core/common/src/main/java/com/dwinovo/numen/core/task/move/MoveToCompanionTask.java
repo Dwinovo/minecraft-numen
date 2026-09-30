@@ -23,6 +23,7 @@ import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.permission.ConsentAnswer;
 import com.dwinovo.numen.permission.ConsentItem;
 import com.dwinovo.numen.permission.Listing;
+import com.dwinovo.numen.task.Preparation;
 import com.dwinovo.numen.task.TaskState;
 
 import net.minecraft.core.BlockPos;
@@ -32,7 +33,11 @@ import net.minecraft.world.phys.Vec3;
  * {@code move go <route>} (and its shorthand {@code move goto}) on the companion body: walk a route from wherever she
  * stands. Planning and walking are two things ({@link RoutePlanning} → {@link Trip}):
  * <ol>
- *   <li><b>plan from here</b> — every leg once, only searching;</li>
+ *   <li><b>plan from here</b> — every leg once, only searching, before the walk is accepted ({@link #preparation}):
+ *       a route that can't be walked or goes beyond its promise is refused on the spot, with no task id; the receipt of
+ *       an accepted one carries the plan. When the body moved while the plan was being made (it was still busy with
+ *       the work before), it plans again from where it stands and holds that against the plan made then, the way
+ *       {@code move go} does from anywhere else;</li>
  *   <li><b>hold it against the promise</b> — the plan she saw on the route is the promise: when this plan would break,
  *       place or ask about any cell the promise does not, she does not set off and says the difference. A route never
  *       planned takes this plan as its promise and walks straight away;</li>
@@ -113,39 +118,98 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         return player.getServer().overworld().getGameTime();
     }
 
+    /**
+     * 受理之前:路线得在、在她这个维度里;坐在船上先驾船的,规划留到靠岸以后。其余从她此刻脚下规划整条,结论与开走前的判断
+     * 同一处({@link #hold}):走不通、超出承诺就是这次调用的错误结果;走得通就受理,回执带上这份计划(几步、要改的格、要问主人
+     * 的格)。
+     */
     @Override
-    protected void onStart() {
-        startedAt = now();
+    protected Preparation preparation() {
+        String missing = locate();
+        if (missing != null) {
+            return Preparation.refused(missing);
+        }
+        if (boatTo() != null) {
+            return Preparation.READY;
+        }
+        RoutePlanning planning = RoutePlanning.of(player, route);
+        com.dwinovo.numen.core.Constants.LOG.info("[numen-task] go {} 受理前规划 {} 段", route.name(),
+                route.legs().size());
+        return new Preparation() {
+            @Override
+            public Preparation.Readiness poll() {
+                RoutePlanning.Result result = planning.poll();
+                if (result == null) {
+                    return null;
+                }
+                Blocked blocked = hold(result);
+                return blocked != null ? Preparation.Readiness.refused(blocked.why())
+                        : Preparation.Readiness.ready(RouteText.accepted(route, result.plan()));
+            }
+
+            @Override
+            public void cancel() {
+                planning.cancel();
+            }
+        };
+    }
+
+    /** 从存档里取这条路线,认出终点是区域时量距离的那一格;路线不在了、不在她这个维度里,返回那句话,否则 null。 */
+    private String locate() {
         route = routes().get(r.route);
         if (route == null) {
-            recorded = true;
-            fail("there is no route named " + r.route + " any more; route list shows the routes you have",
-                    FailureType.TARGET_LOST);
-            return;
+            return "there is no route named " + r.route + " any more; route list shows the routes you have";
         }
         if (!route.dimension().equals(player.level().dimension().location())) {
-            recorded = true;
-            fail("route " + route.name() + " lies in " + route.dimension() + ", and I am in "
-                    + player.level().dimension().location() + "; its coordinates mean nothing here",
-                    FailureType.TARGET_LOST);
-            return;
+            return "route " + route.name() + " lies in " + route.dimension() + ", and I am in "
+                    + player.level().dimension().location() + "; its coordinates mean nothing here";
         }
         if (route.destination().area() != null) {
             areaCell = Destination.toward(player, route.destination(), Feet.cell(player));
         }
-        extendDeadline();
-        // 载具处置:坐在船上而第一个途经点有 x、z(或是一块此刻在的区域),先驾船——船腿走到离它最近的水格,靠岸后接规划与步行
-        // (见 tickBoatLeg)。其余情况(矿车没有舵、马的寻路仍按步行物理算)直接规划;下座驾是步行导航自己的事,记进身体动作。
+        return null;
+    }
+
+    /**
+     * 载具处置:坐在船上而第一个途经点有 x、z(或是一块此刻在的区域),先驾船——船腿走到离它最近的水格,靠岸后接规划与步行
+     * (见 tickBoatLeg)。其余情况(矿车没有舵、马的寻路仍按步行物理算)直接规划;下座驾是步行导航自己的事,记进身体动作。
+     *
+     * @return 船腿驶向的那一格;不先驾船为 null
+     */
+    private BlockPos boatTo() {
+        if (!(player.isPassenger() && player.getVehicle() instanceof net.minecraft.world.entity.vehicle.Boat)) {
+            return null;
+        }
         Destination.Stop first = route.legs().get(0).to();
-        BlockPos boatTo = first.x() == null && first.area() == null ? null
+        return first.x() == null && first.area() == null ? null
                 : Destination.toward(player, first, player.blockPosition());
-        if (player.isPassenger() && player.getVehicle() instanceof net.minecraft.world.entity.vehicle.Boat
-                && boatTo != null) {
+    }
+
+    @Override
+    protected void onStart() {
+        startedAt = now();
+        if (!prepared()) {
+            String missing = locate();
+            if (missing != null) {
+                recorded = true;
+                fail(missing, FailureType.TARGET_LOST);
+                return;
+            }
+        }
+        extendDeadline();
+        BlockPos boatTo = boatTo();
+        if (boatTo != null) {
             boatLeg = new BoatNav(player, boatTo);
             phase = Phase.BOAT;
             com.dwinovo.numen.core.Constants.LOG.info("[numen-task] go {} 驾船先行", route.name());
             return;
         }
+        if (planned != null && Feet.cell(player).equals(planned.plan().from())) {
+            // 受理前的规划就是从她此刻站的这一格做的:照它开走
+            setOff();
+            return;
+        }
+        // 没准备过,或准备期间身体还在干上一件活、挪了地方:和 move go 从别处出发一样,从这里重新规划,拿准备时的那份当承诺比
         plan();
     }
 
@@ -193,11 +257,24 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         };
     }
 
-    /** 规划回来了:走不通就说;超出承诺就说差别、不走;否则先问主人,再开走。 */
+    /** 规划回来了:走不通、超出承诺就照那句话收场、不走;否则先问主人,再开走。 */
     private TaskState decide(RoutePlanning.Result result) {
         planning = null;
+        Blocked blocked = hold(result);
+        return blocked != null ? end(blocked.why(), blocked.type()) : setOff();
+    }
+
+    /** 不走的那句话,与归到哪一种失败。 */
+    private record Blocked(String why, FailureType type) {}
+
+    /**
+     * 从脚下规划出来的这一份拿来比:有走不通的段,或超出承诺(准备时定下的那份;还没有就是路线上她看过的那份),就是不走的原因;
+     * 否则记下承诺、这一份规划与要问主人的格,返回 null。路线还没规划过时,这一份写上路线,它就是承诺。受理之前的准备与开走前
+     * 的规划都经这里,说法只此一处。
+     */
+    private Blocked hold(RoutePlanning.Result result) {
         Plan fresh = result.plan();
-        Plan saw = route.plan();
+        Plan saw = promise != null ? promise : route.plan();
         if (saw == null) {
             // 还没规划过:这一趟照它走,它就是承诺
             routes().plan(route, fresh);
@@ -205,20 +282,20 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         int bad = fresh.unreachable();
         if (bad >= 0 && bad >= result.legs().size()) {
             // 那一段此刻就编不成目标(去处写不通、点名的区域不在了):没有搜过,照编不成的原话说
-            return end("can't walk " + legName(bad) + " as it stands: " + fresh.legs().get(bad).why(),
+            return new Blocked("can't walk " + legName(bad) + " as it stands: " + fresh.legs().get(bad).why(),
                     FailureType.NO_PATH);
         }
         if (bad >= 0) {
             FailureType type = bad < result.found().size() && !result.found().get(bad).reached()
                     ? NavText.type(result.found().get(bad).outcome()) : FailureType.NO_PATH;
-            return end("blocked on " + legName(bad) + ": got within " + String.format("%.1f", repDistance())
+            return new Blocked("blocked on " + legName(bad) + ": got within " + String.format("%.1f", repDistance())
                     + " blocks of " + route.destination().words() + " (now on the ground at y="
                     + player.blockPosition().getY() + "). " + fresh.legs().get(bad).why() + ".", type);
         }
         if (saw != null) {
             Plan.Difference diff = fresh.beyond(saw);
             if (!diff.isEmpty()) {
-                return end("the way from here goes beyond the plan of route " + route.name() + " (made from "
+                return new Blocked("the way from here goes beyond the plan of route " + route.name() + " (made from "
                         + Listing.coords(saw.from()) + "), so I did not set off: it would also "
                         + RouteText.beyond(diff) + ". route plan " + route.name() + " plans it from here and shows it; "
                         + "then move go " + route.name() + " keeps to that plan.", FailureType.TERRAIN_BLOCKED);
@@ -227,6 +304,11 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         promise = saw == null ? fresh : saw;
         planned = result;
         asks = result.consents();
+        return null;
+    }
+
+    /** 照 {@link #planned} 开走:有要问主人的格先问(运行中等答复),再一段一段走。 */
+    private TaskState setOff() {
         if (!asks.isEmpty()) {
             phase = Phase.CONSENT;
             return TaskState.RUNNING;

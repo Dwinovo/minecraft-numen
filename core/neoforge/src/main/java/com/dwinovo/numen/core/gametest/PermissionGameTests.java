@@ -96,20 +96,20 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_lodger", new BlockPos(7, 2, 7), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_landlord");
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        TaskRecord record = call(companion, "move_goto", args(
+        ToolRun walk = call(companion, "move_goto", args(
                 "x", target.getX(),
                 "y", target.getY(),
                 "z", target.getZ(),
-                "alter", "natural")).task();
+                "alter", "natural"));
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
         ToolRun[] plan = new ToolRun[1];
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(record.getResult() != null, "goto has not finished"))
+                .thenWaitUntil(() -> helper.assertTrue(walk.done(), "goto has not replied"))
                 .thenExecute(() -> {
-                    String reply = record.getResult().message();
-                    helper.assertTrue(!record.getResult().success(), "goto through the owner's wall must not succeed");
+                    String reply = walk.outcome();
+                    helper.assertTrue(walk.refused(), "goto through the owner's wall was accepted: " + walk.reply());
                     helper.assertTrue(reply.contains("owner's consent")
                                     && reply.contains("`route spec goto-gametest_lodger --alter any`"),
                             "the refusal does not say it needs the owner's consent and how to allow it: " + reply);
@@ -144,17 +144,23 @@ public class PermissionGameTests {
         NumenPlayer owner = presentOwner(helper, companion, "gametest_host");
         BlockPos start = companion.blockPosition();
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        TaskRecord record = call(companion, "move_goto", args(
+        ToolRun walk = call(companion, "move_goto", args(
                 "x", target.getX(),
                 "y", target.getY(),
                 "z", target.getZ(),
-                "alter", "any")).task();
+                "alter", "any"));
         boolean[] answered = new boolean[1];
 
         succeedWhen(helper, () -> {
+            TaskRecord record = walk.task();
             if (!answered[0]) {
                 var pending = desk(companion).pending();
                 helper.assertTrue(pending != null, "no consent request before walking through the wall");
+                // 等主人点头不算开始不了:这趟路已经受理,在运行中等答复
+                helper.assertTrue(walk.accepted() && walk.reply().contains("Accepted as " + record.publicId())
+                                && walk.reply().contains("ask your owner about"),
+                        "a walk waiting for the owner was not accepted with the cells it asks about: "
+                                + walk.reply());
                 helper.assertTrue(record.getResult() == null, "goto finished while waiting for the owner");
                 helper.assertTrue(plankCount(helper, 7, 7) == planksBefore, "a plank broke before the owner said yes");
                 helper.assertTrue(companion.blockPosition().distSqr(start) <= 1, "she set off before asking");
@@ -182,14 +188,15 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_squatter", new BlockPos(7, 2, 7), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_strict");
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        TaskRecord record = call(companion, "move_goto", args(
+        ToolRun walk = call(companion, "move_goto", args(
                 "x", target.getX(),
                 "y", target.getY(),
                 "z", target.getZ(),
-                "alter", "any")).task();
+                "alter", "any"));
         boolean[] answered = new boolean[1];
 
         succeedWhen(helper, () -> {
+            TaskRecord record = walk.task();
             if (!answered[0]) {
                 var pending = desk(companion).pending();
                 helper.assertTrue(pending != null, "no consent request before walking through the wall");
@@ -333,6 +340,7 @@ public class PermissionGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
             String said = mine.outcome();
+            helper.assertTrue(mine.task() == null, "a dig with every way out refused was accepted: " + mine.reply());
             helper.assertTrue(!mine.succeeded() && said.contains("could not reach any of the 1 cells of pumpkin")
                             && said.contains("is refused") && said.contains("denied by rule")
                             && said.contains("ask your owner") && !said.contains("without altering terrain"),
@@ -349,8 +357,8 @@ public class PermissionGameTests {
     }
 
     /** work_dig 点名这些区域或部分(不给 count,挖完为止),后台派出。 */
-    private static TaskRecord mineArea(NumenPlayer companion, List<String> parts) {
-        return call(companion, "work_dig", args("place", parts)).task();
+    private static ToolRun mineArea(NumenPlayer companion, List<String> parts) {
+        return call(companion, "work_dig", args("place", parts));
     }
 
     /**
@@ -417,7 +425,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_feller", new BlockPos(7, 2, 7), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         ToolRun reply = scanInto(companion, 6, "minecraft:dark_oak_log", "trees");
-        TaskRecord[] mine = new TaskRecord[1];
+        ToolRun[] mine = new ToolRun[1];
 
         succeedWhen(helper, () -> {
             if (mine[0] == null) {
@@ -429,9 +437,9 @@ public class PermissionGameTests {
                         "the two trees are not two parts: " + reply.reply());
                 mine[0] = mineArea(companion, List.of(target.get("id").getAsString()));
             }
-            String result = mine[0].getResult() == null ? null : mine[0].getResult().message();
+            String result = mine[0].done() ? mine[0].outcome() : null;
             helper.assertTrue(result != null, "mine has not finished");
-            helper.assertTrue(mine[0].getResult().success() && result.contains("dug 3/3 cells"),
+            helper.assertTrue(mine[0].succeeded() && result.contains("dug 3/3 cells"),
                     "mine did not dig the named part out: " + result);
             for (BlockPos rel : named) {
                 helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).isAir(),
@@ -533,7 +541,7 @@ public class PermissionGameTests {
         storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
                 com.dwinovo.numen.permission.Rule.parse("break(minecraft:crimson_stem)"));
         ToolRun reply = scanInto(companion, 5, "minecraft:crimson_stem", "stems");
-        TaskRecord[] mine = new TaskRecord[1];
+        ToolRun[] mine = new ToolRun[1];
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 
@@ -546,9 +554,10 @@ public class PermissionGameTests {
                         "the scan does not mark the denied group: " + reply.reply());
                 mine[0] = mineArea(companion, List.of(group.get("id").getAsString()));
             }
-            String result = mine[0].getResult() == null ? null : mine[0].getResult().message();
+            String result = mine[0].done() ? mine[0].outcome() : null;
             helper.assertTrue(result != null, "mine has not finished");
-            helper.assertTrue(!mine[0].getResult().success() && result.contains("denied by rule"),
+            helper.assertTrue(mine[0].task() == null, "a dig of a denied group was accepted: " + mine[0].reply());
+            helper.assertTrue(!mine[0].succeeded() && result.contains("denied by rule"),
                     "the refusal does not carry the rule: " + result);
             for (BlockPos rel : stems) {
                 helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).is(Blocks.CRIMSON_STEM),
@@ -589,7 +598,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_sinker", new BlockPos(7, 6, 7), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         ToolRun reply = scanInto(companion, 6, "minecraft:stripped_spruce_log", "column");
-        TaskRecord[] mine = new TaskRecord[1];
+        ToolRun[] mine = new ToolRun[1];
 
         succeedWhen(helper, () -> {
             if (mine[0] == null) {
@@ -599,13 +608,13 @@ public class PermissionGameTests {
                         "the column is not one group of four: " + reply.reply());
                 mine[0] = mineArea(companion, List.of(group.get("id").getAsString()));
             }
-            String result = mine[0].getResult() == null ? null : mine[0].getResult().message();
+            String result = mine[0].done() ? mine[0].outcome() : null;
             helper.assertTrue(result != null, "mine has not finished");
             for (BlockPos rel : column) {
                 helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).isAir(),
                         "a log of the column is still standing at " + rel.toShortString());
             }
-            helper.assertTrue(mine[0].getResult().success() && result.contains("dug 4/4 cells")
+            helper.assertTrue(mine[0].succeeded() && result.contains("dug 4/4 cells")
                     && !result.contains("gone"), "the cells she broke on the way were not counted as hers: " + result);
             CompanionFactory.despawn(level.getServer(), companion);
         });

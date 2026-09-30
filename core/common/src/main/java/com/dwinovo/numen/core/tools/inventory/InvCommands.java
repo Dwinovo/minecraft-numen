@@ -100,12 +100,12 @@ public final class InvCommands {
         inv.server(EAT, "Eat or drink something from your inventory.",
                 InvCommands::eat, FOOD)
                 .example(line(EAT) + " minecraft:cooked_beef")
-                .note("Background work: returns at once, and the result arrives as a task_finished event.")
+                .note("Background work: the result arrives as a task_finished event.")
                 .note("A real timed action: only when the chewing finishes do hunger, saturation and the item's "
                         + "effects (a golden apple's absorption) apply. Health then regenerates from saturation, "
                         + "the same as a real player's.")
-                .note("Fails, keeping the food, when you don't carry it, it isn't food or drink, or you are "
-                        + "already full.");
+                .note("Refused at once, keeping the food, when you don't carry it or it isn't food or drink; "
+                        + "fails the same way when you are already full.");
         inv.server(DROP, "Drop items from your inventory on the ground in front of you.",
                 InvCommands::drop, DROP_ITEM, DROP_COUNT)
                 .example(line(DROP) + " minecraft:cobblestone 32")

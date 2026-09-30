@@ -82,9 +82,10 @@ final class KaleidoscopeCommands {
         kc.server(COOK, "Cook one dish start to finish on the cookware at x y z.",
                 KaleidoscopeCommands::cook, X, Y, Z, RECIPE)
                 .example(line(COOK) + " 120 64 -35 kaleidoscope_cookery:flex_pot/braised_beef")
-                .note("Background work: returns at once, and the result arrives as a task_finished event. "
-                        + "One dish at a time.")
-                .note("It does not walk: stand within reach of the cookware first.")
+                .note("Background work: the result arrives as a task_finished event. One dish at a time.")
+                .note("It does not walk: stand within reach of the cookware first. Out of reach, no pot or "
+                        + "stockpot there, an unknown recipe or a cookware already in use is refused at once with the "
+                        + "reason, and nothing starts.")
                 .note("Uses the ingredients, oil and container from YOUR inventory. Asks your owner first when "
                         + "their rules say so, for using the cookware and for taking the dish.")
                 .seeAlso(line(RECIPES), line(INSPECT), "task stop");

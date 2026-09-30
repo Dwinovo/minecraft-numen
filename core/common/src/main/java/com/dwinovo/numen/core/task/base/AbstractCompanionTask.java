@@ -4,6 +4,7 @@ package com.dwinovo.numen.core.task.base;
 import com.dwinovo.numen.core.nav.Journey;
 import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.pathing.api.Report;
+import com.dwinovo.numen.task.Preparation;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.task.TaskRecord;
@@ -44,9 +45,12 @@ import java.util.Map;
  *
  * <h2>Lifecycle (all {@code final}, so subclasses can't break the contract)</h2>
  * <ul>
- *   <li>{@link #start} runs the {@link #preconditions()} in order; the first
- *       that reports a {@link Precondition.Failure} terminates the task
- *       immediately (via {@link #fail}); otherwise {@link #onStart()} runs.</li>
+ *   <li>{@link #prepare} (before the work is accepted, see {@link Preparation}) runs the {@link #preconditions()} in
+ *       order; the first that reports a {@link Precondition.Failure} refuses the call with its message, no task id,
+ *       no task_finished. Then {@link #preparation()} judges the rest (world facts, a plan).</li>
+ *   <li>{@link #start} runs the {@link #preconditions()} itself when nothing prepared the task (a synchronous action,
+ *       a child sub-goal); the first failure terminates the task immediately (via {@link #fail}); otherwise
+ *       {@link #onStart()} runs.</li>
  *   <li>{@link #tick} short-circuits to the terminal state a {@code fail(...)}
  *       (or a start-time precondition) parked in {@code pendingTerminal};
  *       otherwise it delegates to {@link #onTick()}.</li>
@@ -97,6 +101,9 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     /** 主人点头的那几次,回执末尾交代。 */
     private final List<String> allowances = new ArrayList<>();
 
+    /** 受理之前准备过,见 {@link #prepare}。 */
+    private boolean prepared;
+
     /** 身体真在干活的刻数,见 {@link #workTicks()}。 */
     private long workTicks;
     /** 这一刻任务说它在等一次后台搜索({@link #awaitSearch});每刻开头清掉。 */
@@ -121,15 +128,27 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     // Lifecycle (final — the frozen contract)
     // ---------------------------------------------------------------------
 
+    /**
+     * 受理之前的准备:前置条件按顺序判,第一条不过就是这次调用的错误结果;都过了再交给 {@link #preparation()}。准备过的任务
+     * 开工时不再判前置条件。
+     */
+    @Override
+    public final Preparation prepare(NumenPlayer companion) {
+        Precondition.Failure f = firstFailure();
+        if (f != null) {
+            return Preparation.refused(f.message());
+        }
+        prepared = true;
+        return preparation();
+    }
+
     @Override
     public final void start(NumenPlayer companion) {
-        for (Precondition p : preconditions()) {
-            Precondition.Failure f = p.check();
-            if (f != null) {
-                fail(f.message(), f.type());
-                r.setState(TaskState.FAILED);   // same-tick finalization (old dispatcher semantics)
-                return;
-            }
+        Precondition.Failure f = prepared ? null : firstFailure();
+        if (f != null) {
+            fail(f.message(), f.type());
+            r.setState(TaskState.FAILED);   // same-tick finalization (old dispatcher semantics)
+            return;
         }
         try {
             onStart();
@@ -381,9 +400,33 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     // Hooks (override the ones a concrete task needs)
     // ---------------------------------------------------------------------
 
-    /** Ordered start-time gates; the first {@link Precondition.Failure} wins. Default: none. */
+    /** Ordered gates checked before the work begins; the first {@link Precondition.Failure} wins. Default: none. */
     protected List<Precondition> preconditions() {
         return List.of();
+    }
+
+    /** 第一条不过的前置条件;都过了为 null。 */
+    private Precondition.Failure firstFailure() {
+        for (Precondition p : preconditions()) {
+            Precondition.Failure f = p.check();
+            if (f != null) {
+                return f;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 前置条件之后、受理之前还要判的:世界事实、一次只搜不走的规划(见 {@link Preparation})。结论就绪时查到的东西存在
+     * 任务上,开工({@link #onStart()})接着用;准备得出的错误结果与开工后才冒出来时说的是同一句话。默认当场就绪。
+     */
+    protected Preparation preparation() {
+        return Preparation.READY;
+    }
+
+    /** 这件活受理之前准备过({@link #prepare}):开工时准备查到的东西已经在任务上了。 */
+    protected final boolean prepared() {
+        return prepared;
     }
 
     /** First-tick setup (build the nav, snapshot baselines, …). Default: no-op. */

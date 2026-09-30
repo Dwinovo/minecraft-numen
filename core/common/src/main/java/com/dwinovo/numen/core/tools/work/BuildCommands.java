@@ -79,8 +79,10 @@ public final class BuildCommands {
                         AT_ROTATION)
                 .example("build at house 100 64 -20")
                 .example("build at japanese_cottage 100 64 -20 --rotation 90")
-                .note("Background work: returns at once; the end arrives as a task_finished event saying how many "
-                        + "blocks were placed, replaced and removed, and what is missing.")
+                .note("Background work: before it replies she prices the materials and, when she has to walk to "
+                        + "the ring around the site first, plans that walk; the reply says how far it is and what it "
+                        + "changes. The end arrives as a task_finished event saying how many blocks were placed, "
+                        + "replaced and removed, and what is missing.")
                 .note("The same design (or file) at the same dimension and spot is the same building: running it "
                         + "again after changing the design adds what is missing, replaces what differs, and removes "
                         + "only blocks you placed there before that the design no longer has and that nobody has "

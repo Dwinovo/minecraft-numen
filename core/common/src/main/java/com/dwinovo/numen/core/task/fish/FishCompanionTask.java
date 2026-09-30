@@ -14,6 +14,7 @@ import com.dwinovo.numen.pathing.body.Hotbar;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.task.Preparation;
 import com.dwinovo.numen.task.TaskState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -37,7 +38,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** Tick-driven vanilla fishing from a nearby water surface. */
+/**
+ * Tick-driven vanilla fishing from a nearby water surface. Before the work is accepted ({@link #preparation}) it checks
+ * the rod and that there is water to fish from a dry stance nearby; without either the call is refused on the spot.
+ */
 public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecord> {
 
     private enum Phase { POSITION, PREPARE, AIM, WAIT, COLLECT, COOLDOWN }
@@ -139,16 +143,40 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
         };
     }
 
+    /**
+     * 受理之前:身上有鱼竿(前置条件),附近有能钓的水——一处干燥的站位,从那儿抛得进水面。没有就当场回那句话,不受理;有就记下
+     * 站位与落点,开工先走过去。
+     */
+    @Override
+    protected Preparation preparation() {
+        if (!pickSetup()) {
+            return Preparation.refused(NO_WATER);
+        }
+        return Preparation.ready(atStance()
+                ? "I fish from where I stand, casting into the water at " + target.toShortString() + "."
+                : "I fish from the dry stance at " + stance.toShortString() + ", casting into the water at "
+                        + target.toShortString() + ".");
+    }
+
+    /** 附近没有能钓的水时说的那句话。 */
+    private static final String NO_WATER =
+            "no safe dry fishing stance with reachable water nearby; move close to a shoreline and try work fish again";
+
+    /** 挑一处站位与落点({@link #findFishingSetup}),挑到了记下;附近没有能钓的水返回 false。 */
+    private boolean pickSetup() {
+        FishingSetup setup = findFishingSetup();
+        if (setup == null) {
+            return false;
+        }
+        stance = setup.stance();
+        target = setup.water();
+        return true;
+    }
+
     private TaskState positionForFishing() {
-        if (stance == null || target == null) {
-            FishingSetup setup = findFishingSetup();
-            if (setup == null) {
-                fail("no safe dry fishing stance with reachable water nearby; move close to a shoreline and try work fish again",
-                        FailureType.OUT_OF_REACH);
-                return TaskState.FAILED;
-            }
-            stance = setup.stance();
-            target = setup.water();
+        if ((stance == null || target == null) && !pickSetup()) {
+            fail(NO_WATER, FailureType.OUT_OF_REACH);
+            return TaskState.FAILED;
         }
 
         if (atStance()) {

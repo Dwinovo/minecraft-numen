@@ -18,6 +18,7 @@ import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.MoveKind;
 import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.pathing.plan.Reason;
+import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.permission.ConsentItem;
 import com.dwinovo.numen.permission.Listing;
@@ -330,6 +331,14 @@ public final class NavText {
     }
 
     // ==================== 预算账 ====================
+
+    /**
+     * 受理之前规划好的一段路,回执里怎么说:几步,要动的格与计划同一种写法。例如
+     * {@code 12 steps away (break 1 stone (3,64,5))}、{@code 0 steps away (no terrain change)}。
+     */
+    public static String ahead(Route route) {
+        return route.legs().size() + " steps away (" + planned(route.edits()) + ")";
+    }
 
     /**
      * 计划要动什么(预算账),与实际账同一种写法:要挖的格按方块归堆,要问主人的缀上为什么问;要放的格按方块归堆。例如

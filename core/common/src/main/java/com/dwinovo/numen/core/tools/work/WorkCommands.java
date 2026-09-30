@@ -22,7 +22,8 @@ import net.minecraft.resources.ResourceLocation;
 /**
  * {@code work}:采集类的活——挖方块、捡掉落物、钓鱼。
  *
- * <p>三个动作都占身体,交任务槽:受理即回执,收尾走 task_finished。{@code dig} 提升成快捷工具 {@code work_dig}。
+ * <p>三个动作都占身体,交任务槽:受理即回执,收尾走 task_finished;开始不了的(区里没有能挖的、够不着、没有鱼竿……)受理之前就
+ * 当场拒绝,判据在各自的任务里。{@code dig} 提升成快捷工具 {@code work_dig}。
  *
  * <p>{@code dig} 与 {@code collect} 都只在跟前干,工作区是同一个({@link WorkArea}):受理时她脚下那一格为中心、半径
  * {@link WorkArea#RADIUS} 的球,走动关在里面。dig 挖点名的几处(区域、坐标)在区里的格,区外的只报告并给出开路的写法;collect 只捡
@@ -74,7 +75,10 @@ public final class WorkCommands {
                 .example("work dig ores --count 10")
                 .example("work dig 120 12 -35")
                 .example("work dig pit")
-                .note("Background work: returns at once; the end arrives as a task_finished event.")
+                .note("Background work: before it replies she checks there is something in her work area she can "
+                        + "dig, harvest with what she carries and reach. When there isn't, the call is refused with "
+                        + "the reason — no task id, no task_finished, and whatever she was doing goes on. The end of "
+                        + "an accepted job arrives as a task_finished event.")
                 .note("What to dig comes from the area itself: cells a scan added are dug only while they still hold "
                         + "the block the scan saw (mining); framed cells and coordinates are dug whatever they hold "
                         + "(a pit, a tree, clearing), air and fluid skipped. What cannot be broken is reported. Look, "
@@ -104,7 +108,8 @@ public final class WorkCommands {
                         + "she stands when you call it and moves only inside it; cells beyond it are reported with "
                         + "the exact lines that open the way there (route new … --arrive dig --alter natural, route "
                         + "plan, move go — or move_goto … arrive:'dig' alter:'natural'), then call work_dig again. "
-                        + "Something wholly beyond it is refused at once. Keep things standing with area minus or "
+                        + "Something wholly beyond it is refused at once, and so is a job she can't start: nothing "
+                        + "her tools harvest, or no way to any of it in her work area. Keep things standing with area minus or "
                         + "your owner's rules, not with flags. She takes the best tool, breaks what is in her way and "
                         + "picks up the drops. Before breaking a block that needs the owner's consent she asks; a "
                         + "refusal stops the job with the reason — decide what to do next, do not route around it. "
@@ -116,7 +121,9 @@ public final class WorkCommands {
                 .example("work collect")
                 .example("work collect --item_ids minecraft:iron_ingot minecraft:raw_iron")
                 .example("work collect --area farm")
-                .note("Background work: returns at once; the end arrives as a task_finished event.")
+                .note("Background work: refused with the reason when no drop lies in her work area or she can "
+                        + "reach none of them — no task id, no task_finished. The end of an accepted sweep arrives as "
+                        + "a task_finished event.")
                 .note("Walks to each drop until none she can reach remain; she picks up what she gets close to. "
                         + "It never breaks or places a block: drops in a pit or across a gap it cannot walk to "
                         + "are left there and named in the result.")
@@ -129,8 +136,10 @@ public final class WorkCommands {
         work.server("fish", "Fish from nearby water with a fishing rod.", WorkCommands::fish, CATCHES)
                 .example("work fish --count 5")
                 .example("work fish")
-                .note("Background work: returns at once; the end arrives as a task_finished event. Without "
-                        + "--count it is a standing job: it never ends on its own and never sends task_finished.")
+                .note("Background work: refused with the reason when she carries no fishing rod or there is no "
+                        + "water to fish from a dry stance nearby — no task id, no task_finished. Otherwise the end "
+                        + "arrives as a task_finished event. Without --count it is a standing job: it never ends on "
+                        + "its own and never sends task_finished.")
                 .note("Needs a vanilla fishing rod in her inventory. In water she first moves up to 12 blocks "
                         + "onto a dry stance; it does not search far for a biome or a lake.")
                 .note("A catch is one bite reeled in: fish, junk or treasure, with vanilla loot, rod wear and "

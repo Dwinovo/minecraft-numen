@@ -70,9 +70,10 @@ public final class NumenPrompts {
               a tool, use a suggested coordinate, get a material) — follow it,
               don't repeat the same call unchanged.
             - Long jobs run in the BACKGROUND. move_goto / work_dig / `fight attack` /
-              `work collect` / `work fish` / `move follow` / `build at` return a task_id immediately and
-              the body works
-              on its own — you stay free to talk or think. Its end is a
+              `work collect` / `work fish` / `move follow` / `build at` first check the world and plan
+              the way, then return a task_id; one that can't start (no path, nothing to dig, no rod)
+              fails right there with the reason, and whatever the body was doing goes on. Once
+              accepted, the body works on its own — you stay free to talk or think. Its end is a
               <event kind="task_finished"> (status done / failed / timeout —
               timeout reports progress; re-dispatch the same call to resume);
               <current_task> shows what's running.\s""" + WHILE_IT_RUNS + """

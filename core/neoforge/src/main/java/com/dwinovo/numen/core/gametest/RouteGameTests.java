@@ -411,22 +411,31 @@ public class RouteGameTests {
         BlockPos home = helper.absolutePos(new BlockPos(13, 2, 12));
         ToolRun made = command(first, "route new home --to " + xyz(home));
         ToolRun go = command(first, "move go home");
-        helper.assertTrue(made.succeeded() && go.task() != null, "the walk was not accepted: " + made.outcome()
-                + " / " + go.reply());
         var registry = com.dwinovo.numen.entity.CompanionRegistry.get(server);
-        var recorded = registry.find(uuid);
-        com.dwinovo.numen.entity.Companions.dormant(server, first);
-        registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskTool(), recorded.taskArgs()));
-        NumenPlayer second = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
-        helper.assertTrue(second != null, "the body was not rebuilt");
+        NumenPlayer[] second = new NumenPlayer[1];
         boolean[] replayed = new boolean[1];
 
-        succeedWhen(helper, () -> {
-            TaskRecord now = com.dwinovo.numen.task.CompanionTickDispatcher.currentTaskFor(uuid);
-            replayed[0] |= now instanceof MoveToTaskRecord m && m.route.equals("home");
-            helper.assertTrue(replayed[0], "the replayed task is not the walk along home: " + now);
-            helper.assertTrue(second.blockPosition().distSqr(home) <= 1, "she has not reached home after the restart");
-            com.dwinovo.numen.entity.Companions.dismiss(server, second);
-        });
+        // move go 受理之前先规划,规划出来受理了才落盘
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(go.reply() != null, "move go has not replied"))
+                .thenExecute(() -> {
+                    helper.assertTrue(made.succeeded() && go.task() != null, "the walk was not accepted: "
+                            + made.outcome() + " / " + go.reply());
+                    var recorded = registry.find(uuid);
+                    com.dwinovo.numen.entity.Companions.dormant(server, first);
+                    registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskTool(),
+                            recorded.taskArgs()));
+                    second[0] = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
+                    helper.assertTrue(second[0] != null, "the body was not rebuilt");
+                })
+                .thenWaitUntil(() -> {
+                    TaskRecord now = com.dwinovo.numen.task.CompanionTickDispatcher.currentTaskFor(uuid);
+                    replayed[0] |= now instanceof MoveToTaskRecord m && m.route.equals("home");
+                    helper.assertTrue(replayed[0], "the replayed task is not the walk along home: " + now);
+                    helper.assertTrue(second[0].blockPosition().distSqr(home) <= 1,
+                            "she has not reached home after the restart");
+                })
+                .thenExecute(() -> com.dwinovo.numen.entity.Companions.dismiss(server, second[0]))
+                .thenSucceed();
     }
 }

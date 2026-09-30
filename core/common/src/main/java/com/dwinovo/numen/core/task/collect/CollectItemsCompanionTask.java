@@ -1,16 +1,23 @@
 package com.dwinovo.numen.core.task.collect;
 
+import com.dwinovo.numen.task.Preparation;
 import com.dwinovo.numen.task.TaskState;
 
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.mixin.ItemEntityAccessor;
+import com.dwinovo.numen.core.nav.Feet;
+import com.dwinovo.numen.core.nav.NavText;
+import com.dwinovo.numen.core.nav.Survey;
 import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.scan.NearbyEntities;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.DropTracker;
 import com.dwinovo.numen.core.task.base.TargetSet;
 import com.dwinovo.numen.pathing.search.Goal;
+import com.dwinovo.numen.pathing.search.Goals;
+import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.permission.Listing;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.item.ItemEntity;
 
@@ -38,6 +45,8 @@ import java.util.Map;
  * <p>SCAN ends only once every matching drop in range has been tried, so whatever
  * still lies there at the end is what she couldn't pick up — the reply names it.
  *
+ * <p>受理之前({@link #preparation}):区里一件要捡的都没有、或一件都走不到,当场回那句话,不受理。
+ *
  * <p>范围是她的工作区({@link CollectItemsTaskRecord#work}),以受理时她脚下那一格为中心,不跟着她走:捡完一件、站到那边,
  * 下一件仍只在这块地方里找,她不会一件接一件越捡越远;走动也关在区里({@link com.dwinovo.numen.core.nav.WorkArea#confine})。
  *
@@ -60,9 +69,54 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
     private final TargetSet<ItemEntity> skipped = new TargetSet<>(ItemEntity::getId);
     /** 开工时背包里已经有多少要捡的东西;到手的件数从这里往上数。 */
     private int baseline;
+    /** 受理之前的准备规划到的那条路:第一趟照它走;没有、或已经用过为 null。 */
+    private Route seed;
 
     public CollectItemsCompanionTask(NumenPlayer player, CollectItemsTaskRecord record) {
         super(player, record);
+    }
+
+    /**
+     * 受理之前:区里有没有要捡的掉落物,有的话够不够得着——对区里每一件的"站到捡得起它的地方"一次只搜不走的搜索。一件都没有、
+     * 一件都走不到,当场回那句话,没有任务编号;走得到的那条路是第一趟的开头({@link Trip#prepared})。
+     */
+    @Override
+    protected Preparation preparation() {
+        List<ItemEntity> lying = matchingItems();
+        if (lying.isEmpty()) {
+            return Preparation.refused("nothing to pick up: no " + (r.filter.isEmpty() ? "dropped items" : r.label)
+                    + " lie " + r.where + ", so I did not start");
+        }
+        int items = lying.stream().mapToInt(e -> e.getItem().getCount()).sum();
+        BlockPos nearest = lying.stream().min(Comparator.comparingDouble(player::distanceToSqr)).orElseThrow()
+                .blockPosition();
+        String there = lying.size() + " drop(s), " + items + " item(s) in all, lie " + r.where + ", the nearest at "
+                + Listing.coords(nearest);
+        Survey survey = Survey.of(player, List.of(new Survey.Leg(
+                Goals.anyOf(lying.stream().map(e -> goal(e.blockPosition())).toList()), spec())));
+        return new Preparation() {
+            @Override
+            public Preparation.Readiness poll() {
+                List<Survey.Found> found = survey.poll();
+                if (found == null) {
+                    return null;
+                }
+                Survey.Found leg = found.get(0);
+                if (leg.reached()) {
+                    seed = leg.route();
+                    return Preparation.Readiness.ready(there + "; the first I head for is " + NavText.ahead(seed)
+                            + ".");
+                }
+                return Preparation.Readiness.refused(there + "; I can't get to any of them: "
+                        + NavText.failure(leg.outcome(), player, Feet.cell(player), nearest, spec())
+                        + "; so I did not start");
+            }
+
+            @Override
+            public void cancel() {
+                survey.cancel();
+            }
+        };
     }
 
     @Override
@@ -92,7 +146,9 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
         }
         target = best;
         heading = best.blockPosition();
-        nav = Trip.to(player, goal(heading), r.work.confine(RouteSpec.defaults()), heading);
+        // 受理之前规划好的那条只用在第一趟:它通向的也许是别的一件,走到了照样重新挑
+        nav = Trip.prepared(player, goal(heading), spec(), seed, heading);
+        seed = null;
         phase = Phase.APPROACH;
         return TaskState.RUNNING;
     }
@@ -134,6 +190,11 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
             }
         }
         return TaskState.RUNNING;
+    }
+
+    /** 走动的规格:不改地形,关在工作区里。 */
+    private RouteSpec spec() {
+        return r.work.confine(RouteSpec.defaults());
     }
 
     /** 走到捡得起那一格上的掉落物的地方({@link DropTracker#pickUp})。 */

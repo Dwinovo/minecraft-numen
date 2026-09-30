@@ -41,10 +41,10 @@ final class TaskSlot {
     }
 
     /**
-     * 放一个新任务进来。槽里原来那个按<b>被换掉</b>结算并送结果——不能让它悄悄
+     * 放一个新任务进来,{@code runner} 是跑它的那个任务。槽里原来那个按<b>被换掉</b>结算并送结果——不能让它悄悄
      * 消失:模型手上握着它的 tool_call,那条调用要么有结果要么永远悬着。
      */
-    void put(NumenPlayer companion, TaskRecord rec) {
+    void put(NumenPlayer companion, TaskRecord rec, Task runner) {
         if (record != null) {
             task.stop(companion, Task.StopReason.REPLACED);
             record.stop(TaskRecord.StopCause.REPLACED);
@@ -52,7 +52,7 @@ final class TaskSlot {
         }
         rec.setState(TaskState.RUNNING);
         rec.markStarted(companion.level().getGameTime());
-        task = TaskFactory.create(companion, rec);
+        task = runner;
         record = rec;
         task.start(companion);
         // start() 里就走到终态的(一次性动作把活全干完了 / 前置条件不通过)当刻结算,

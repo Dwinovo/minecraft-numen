@@ -106,6 +106,16 @@ public final class Trip {
         return trip;
     }
 
+    /**
+     * 照受理之前准备时规划好的 {@code seed} 走到 {@code goal}:她还站在它的起点上才照它走({@link #following});准备期间身体
+     * 挪了地方(还在干上一件活),那条路从别处起,就从脚下重新搜。没有 {@code seed} 就是从脚下搜。
+     */
+    public static Trip prepared(NumenPlayer player, Goal goal, RouteSpec spec, Route seed, BlockPos toward) {
+        Feet here = Feet.of(player);
+        return seed != null && here != null && here.node().equals(seed.start())
+                ? following(player, goal, spec, seed, toward) : to(player, goal, spec, toward);
+    }
+
     /** 这一趟要避开的生物换成 {@code threats}(战斗走位按它自己的那一份)。开走之前设。 */
     public Trip avoiding(Threats threats) {
         this.threats = threats;

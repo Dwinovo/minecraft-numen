@@ -7,6 +7,8 @@ import com.dwinovo.numen.core.build.Built;
 import com.dwinovo.numen.core.build.Placement;
 import com.dwinovo.numen.core.nav.BuildSite;
 import com.dwinovo.numen.core.nav.Feet;
+import com.dwinovo.numen.core.nav.NavText;
+import com.dwinovo.numen.core.nav.Survey;
 import com.dwinovo.numen.core.nav.Terrain;
 import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.nav.WorkArea;
@@ -17,8 +19,10 @@ import com.dwinovo.numen.core.task.dig.DigTaskRecord;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.pathing.body.Hotbar;
+import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.permission.PlacedBlocks;
+import com.dwinovo.numen.task.Preparation;
 import com.dwinovo.numen.task.TaskResult;
 import com.dwinovo.numen.task.TaskState;
 
@@ -63,6 +67,9 @@ import java.util.Set;
  * <p><b>施工与表演分开</b>——施工只管下一格放哪、放没放成、差什么;走动和放块的动画归演出组件
  * {@link BuildShowmanship},挂在这件活上:施工每刻落完位后叫它走一步,从不问它走得怎样。它手里没有挖掘器、导航与放置
  * 入口,绕圈改不了世界。真要挪身体的只有开工时走出工地、走到外圈这一处,是施工的事,在这里用正式寻路。
+ *
+ * <p><b>受理之前</b>——盘料不齐当场拒绝;要走到外圈的,先只搜不走地规划那条路,几步、要改的格写进受理回执
+ * ({@link #preparation})。
  *
  * <p><b>分工</b>——本类只持有施工的调度状态机(相位、遍、层窗口、落位循环)与
  * 轮扫对账;单格判据在 {@link BuildCellRules},背包口径在 {@link BuildInventory},
@@ -139,6 +146,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private final SiteRing ring;
     /** 走到外圈的路线规格:{@link #SPEC} 并上工地格的三条禁令(编一次,每次走出去都用它)。 */
     private RouteSpec toRing;
+    /** 受理之前的准备规划到的走向外圈的那条路:第一趟照它走;没有、或已经用过为 null。 */
+    private Route ringRoute;
     /** 走出工地没走成:她还在工地里时不再反复起寻路,就在原地接着盖;等她出了工地这一笔才清掉。 */
     private boolean stuckInSite;
 
@@ -248,6 +257,45 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                         + "then send the SAME call again — anything already standing is skipped, so a "
                         + "restocked repeat picks up exactly where this left off.",
                 FailureType.NO_MATERIAL);
+    }
+
+    /**
+     * 受理之前:盘料(前置条件 {@link #checkMaterials},料不齐整批拒绝),再看开工前要不要先走到外圈——要的话一次只搜不走地规划
+     * 走过去的那条路。走不到外圈不是开不了工(落位不靠走位,见 {@link #tickTravel}),所以规划的结论只是回执里的事实:几步、
+     * 要改的格,或者走不过去、就在原地盖;走得到的那条路开工时照它走({@link Trip#prepared})。
+     */
+    @Override
+    protected Preparation preparation() {
+        rescanAll();
+        rebuildOrder();
+        if (!mustMove()) {
+            return Preparation.READY;
+        }
+        RouteSpec spec = siteSpec();
+        Survey survey = Survey.of(player, List.of(new Survey.Leg(ring.goal(), spec)));
+        return new Preparation() {
+            @Override
+            public Preparation.Readiness poll() {
+                List<Survey.Found> found = survey.poll();
+                if (found == null) {
+                    return null;
+                }
+                Survey.Found leg = found.get(0);
+                if (leg.reached()) {
+                    ringRoute = leg.route();
+                    return Preparation.Readiness.ready("I first walk to the ring around the site, "
+                            + NavText.ahead(ringRoute) + ".");
+                }
+                return Preparation.Readiness.ready("I found no way to the ring around the site ("
+                        + NavText.failure(leg.outcome(), player, Feet.cell(player), siteCenter(), spec)
+                        + "), so I build from where I stand.");
+            }
+
+            @Override
+            public void cancel() {
+                survey.cancel();
+            }
+        };
     }
 
     @Override
@@ -442,7 +490,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             if (toRing == null) {
                 toRing = siteSpec();
             }
-            nav = Trip.to(player, ring.goal(), toRing, siteCenter());
+            // 受理之前规划好的那条只用在第一趟
+            nav = Trip.prepared(player, ring.goal(), toRing, ringRoute, siteCenter());
+            ringRoute = null;
         }
         boolean done = switch (nav.tick()) {
             case ARRIVED, FAILED -> true;

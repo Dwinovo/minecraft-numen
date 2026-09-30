@@ -37,8 +37,8 @@ import net.minecraft.server.MinecraftServer;
  * 已经把记录改写成它自己,再读就会把刚派的活当成旧活重放一遍。那段间隙里派下新活,就是新活顶替了
  * 重启前那件({@link #superseded})。
  *
- * <p>重建失败不静默:任务开工后才发现的(鱼塘被填了、目标方块没了)由任务自己走 FAILED;重放本身没接住的
- * (工具没了、参数不成立、调用被拒)由 {@link #replay} 发 task_finished。
+ * <p>重建失败不静默:任务开工后才发现的由任务自己走 FAILED;重放本身没接住的(工具没了、参数不成立、调用被拒、
+ * 受理之前的准备没过——鱼塘被填了、目标方块没了、路不通了)由 {@link #replay} 发 task_finished。
  *
  * <p>服务端专用。
  */
@@ -90,9 +90,9 @@ public final class TaskPersistence {
     }
 
     /**
-     * 重启后把她手上的活接回来:重放那次工具调用。接不回来——工具没了、存下的参数读不了、重放被拒或参数
-     * 已经不成立——都不阻断:身体照样起来,她空着手,并收到一条 task_finished 说清为什么。她的历史里还留着
-     * "已受理,后台执行中"那句回执,不给个了结她会一直干等。
+     * 重启后把她手上的活接回来:重放那次工具调用。接不回来——工具没了、存下的参数读不了、重放被拒、参数
+     * 已经不成立或受理之前的准备没过——都不阻断:身体照样起来,她空着手,并收到一条 task_finished 说清为什么。
+     * 她的历史里还留着"已受理,后台执行中"那句回执,不给个了结她会一直干等。
      */
     static void replay(NumenPlayer companion, LeftOver left) {
         String taskName = left.taskName();
@@ -118,7 +118,7 @@ public final class TaskPersistence {
                 companion.getUUID(), toolName, left.args());
         // 重放,和真实调用走同一个入口(NumenTool#serve)。受理的回执丢掉:它本来是给某一次 tool_call 的,那次
         // 调用早就随上一个会话结束了——真正会送到模型手里的是这件活干完时的 task_finished。被拒的回执(含参数
-        // 已经不成立),就是这件活没接回来。
+        // 已经不成立、准备没过;要搜索的准备结论出来那一刻才回),就是这件活没接回来。
         tool.serve(REPLAY_CALL_ID + "-" + toolName, args, companion, reply -> {
             JsonObject result = JsonParser.parseString(reply).getAsJsonObject();
             if (!result.get("success").getAsBoolean()) {
