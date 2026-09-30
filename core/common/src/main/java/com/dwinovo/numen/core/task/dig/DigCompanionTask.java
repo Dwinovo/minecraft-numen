@@ -409,7 +409,12 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
             }
         }
 
-        // 3) 区里没有要挖的、地上也没有要捡的:挖到过就算成功;区外的只报告,去不去是模型的决定
+        // 3) 区里没有要挖的、地上也没有要捡的——要捡的还在空中就等它落定,真卡住了由 STALL_TICKS 那把尺子收工;
+        //    挖到过就算成功;区外的只报告,去不去是模型的决定
+        if (nearbyDrops().stream().anyMatch(ie -> !settled(ie))) {
+            TaskState stalled = stalledOut();
+            return stalled != null ? stalled : TaskState.RUNNING;
+        }
         if (r.getMined() > 0) {
             progressNote = "nothing left to dig in my work area, " + r.work.describe() + leftovers(null)
                     + beyondClause();
@@ -536,17 +541,25 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
     }
 
     /**
-     * 要去捡的掉落物,走过去原版就捡起来:只捡要挖的方块会掉的东西。贴着某个已知目标的不单独设目标——挖那一格自然会带身体
-     * 过去;够数之后不再挖,那时每一件都得自己走过去捡。
+     * 要去捡的掉落物,走过去原版就捡起来:只捡要挖的方块会掉的东西,而且已经落定的({@link #settled})。贴着某个已知目标的不单独
+     * 设目标——挖那一格自然会带身体过去;够数之后不再挖,那时每一件都得自己走过去捡。
      */
     private List<BlockPos> droppedItems() {
         List<BlockPos> out = new ArrayList<>();
         for (ItemEntity ie : nearbyDrops()) {
             BlockPos p = ie.blockPosition();
-            if (!quotaMet && nearKnownOre(p)) continue;
+            if (!settled(ie) || (!quotaMet && nearKnownOre(p))) continue;
             out.add(p);
         }
         return out;
+    }
+
+    /**
+     * 掉落物落定了:躺在方块上,或漂在水里。刚挖下来的还在往下掉(从树冠上的原木里弹出来、正穿过挖开的洞),此刻所在那一格
+     * 不是它最后躺的地方,拿它去规划只会搜出一条"到不了"。
+     */
+    private static boolean settled(ItemEntity ie) {
+        return ie.onGround() || ie.isInWater();
     }
 
     /**
@@ -1007,9 +1020,9 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
         return nearest == null || r.beyond.openTheWay(nearest).isEmpty() ? "" : " " + r.beyond.openTheWay(nearest);
     }
 
-    /** 够数所靠的那批掉落物走不到:全部出账,下一刻按还拿得到的重新算够没够。 */
+    /** 够数所靠的那批掉落物(导航奔的是落定了的那些)走不到:全部出账,下一刻按还拿得到的重新算够没够。 */
     private TaskState writeOffDrops(String why) {
-        List<ItemEntity> lost = nearbyDrops();
+        List<ItemEntity> lost = nearbyDrops().stream().filter(DigCompanionTask::settled).toList();
         for (ItemEntity ie : lost) {
             unreachableDrops.add(ie.getId());
             ourDrops.remove(ie.getId());
