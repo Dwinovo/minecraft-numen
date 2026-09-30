@@ -4,6 +4,7 @@ import java.util.Set;
 
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Stance;
+import com.dwinovo.numen.pathing.plan.WorldView;
 import com.dwinovo.numen.pathing.spec.PositionCosts;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.Sight;
@@ -28,9 +29,10 @@ public interface Goal {
 
     /**
      * 停在这个已到达的节点之后还要付的价钱(刻),默认 0。多个成员各带各的价时,搜索按"走过去加到了再付"挑终点。
+     * 无穷大是停在这儿也办不成(挖一格时看得见它的每一面都隔着挖的一方清不掉的格):搜索不在这里停,换目标也不认这个停点。
      * {@code level} 是身体停在那儿时面对的世界:搜索时是快照(叠着走到那儿那一步的改动),换目标时是活世界。
      */
-    default double arrival(BlockGetter level, int x, int y, int z, Stance stance) {
+    default double arrival(WorldView level, int x, int y, int z, Stance stance) {
         return 0;
     }
 
@@ -97,14 +99,17 @@ public interface Goal {
     }
 
     /**
-     * 按 {@code before} 定下的"停在 {@code stop}",换成 {@code after} 之后还算不算数:还在新目标里,而且停在那儿没有变贵。
-     * 目标换了(或跟着的东西挪了)之后,在走的路要不要重新搜,只问这一条。{@code level} 是此刻的世界。
+     * 按 {@code before} 定下的"停在 {@code stop}",换成 {@code after} 之后还算不算数:还在新目标里、停在那儿办得成,而且没有
+     * 变贵。目标换了(或跟着的东西挪了)之后,在走的路要不要重新搜,只问这一条。{@code level} 是此刻的世界。
      */
-    static boolean keepsStop(BlockGetter level, Goal before, Goal after, BlockPos stop, Stance stance) {
+    static boolean keepsStop(WorldView level, Goal before, Goal after, BlockPos stop, Stance stance) {
         int x = stop.getX();
         int y = stop.getY();
         int z = stop.getZ();
-        return after.contains(x, y, z, stance)
-                && after.arrival(level, x, y, z, stance) <= before.arrival(level, x, y, z, stance);
+        if (!after.contains(x, y, z, stance)) {
+            return false;
+        }
+        double now = after.arrival(level, x, y, z, stance);
+        return Double.isFinite(now) && now <= before.arrival(level, x, y, z, stance);
     }
 }

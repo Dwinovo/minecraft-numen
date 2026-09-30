@@ -164,6 +164,11 @@ public final class NavText {
         return refusal instanceof Verdict verdict ? verdict.reason() : "the server would not let it happen";
     }
 
+    /** 一格改不得的原因:许可拒绝的({@code detail} 是它的裁决)说权限层自己的话,别的按 {@link Reason} 说。 */
+    public static String refused(Reason reason, Object detail) {
+        return reason == Reason.DENIED ? reason(detail) : reason(reason);
+    }
+
     /** 一步走不下去的那一句:哪一格、什么方块、哪种走法、为什么。 */
     public static String blockage(Blockage b) {
         String why = b.reason() != null ? reason(b.reason()) : hitch(b.hitch());

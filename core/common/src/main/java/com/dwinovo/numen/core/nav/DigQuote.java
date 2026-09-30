@@ -7,6 +7,7 @@ import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.DigRules;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.Reason;
+import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
@@ -53,6 +54,27 @@ public final class DigQuote {
     public boolean breakable(BlockPos pos, BlockState state) {
         CostModel.Admission admission = model.admitDig(world, pos, state);
         return admission.ok() || admission.refused() == Reason.DENIED;
+    }
+
+    /**
+     * 挡着视线的格清不清得掉:按这份规格挖它能不能进路线({@link CostModel#admitDig})——规格的禁令、物理上挖不挖得了、许可
+     * 怎么答(要问主人的只在 {@code alter=any} 下进,不许的永远不进)。交给挖一格的目标给站位定价({@code Goals.dig}),也交给
+     * 挖掘器清遮挡:两处问的是这同一个。只读冻结的成本模型,可以在搜索线程上问。
+     */
+    public Goals.Clearing clearing() {
+        CostModel frozen = model;
+        return (view, pos) -> frozen.admitDig(view, pos, view.getBlockState(pos)).ok();
+    }
+
+    /** 在活世界上问 {@link #clearing}:挡着视线的这一格清得掉。 */
+    public boolean clears(BlockPos pos) {
+        return clearing().clears(world, pos);
+    }
+
+    /** 挡着视线的这一格为什么清不掉(回执里的说法);清得掉为 null。 */
+    public String uncleared(BlockPos pos) {
+        CostModel.Admission admission = model.admitDig(world, pos, world.getBlockState(pos));
+        return admission.ok() ? null : NavText.refused(admission.refused(), admission.detail());
     }
 
     /**

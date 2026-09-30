@@ -55,7 +55,8 @@ import net.minecraft.world.level.material.FluidState;
  *   <li><b>憋气</b>:每个节点带着走到那里时身体憋气的样子,每一步按 {@link Breath#after} 往下推(这一步眼睛换不换得了气、
  *       身体要几刻),走过去憋不住的步子不走({@link Breath#lasts})——判据只在 {@link Breath}。节点再按憋气的档
  *       ({@link Breath#band})区分:同一格,憋着气刚到的与换过气到的是两个节点,贵一点却换过气的那条不会被便宜的挤掉;</li>
- *   <li><b>到达价</b>:进了目标的节点出堆时补上它的到达价放回堆里,按总价再次出堆才收,同时照常往外展开。</li>
+ *   <li><b>到达价</b>:进了目标的节点出堆时补上它的到达价放回堆里,按总价再次出堆才收,同时照常往外展开;到达价无穷的
+ *       节点停下也办不成,不算到。</li>
  * </ul>
  *
  * <p>只读 {@link Search#view()} 这份快照,单线程跑完;结论可复现,不引入随机。
@@ -128,8 +129,11 @@ public final class AStar {
             Node current = open.pop();
             // 身体此刻面对的世界:快照,加上走到这个节点的那一步做过的改动
             WorldView here = current.via == null ? probe : EditedView.after(probe, current.via.edits());
-            if (goal.contains(current.x, current.y, current.z, current.stance)) {
-                double total = current.g + goal.arrival(here, current.x, current.y, current.z, current.stance);
+            // 到达价无穷的节点停下也办不成:不算到,照常往外展开
+            double stopping = goal.contains(current.x, current.y, current.z, current.stance)
+                    ? goal.arrival(here, current.x, current.y, current.z, current.stance) : Double.POSITIVE_INFINITY;
+            if (Double.isFinite(stopping)) {
+                double total = current.g + stopping;
                 if (total > current.f + MIN_IMPROVEMENT) {
                     // 到达价还没付:按总价放回堆里,同时照常往外展开——起点在贵的成员里时要走得出去
                     current.f = total;

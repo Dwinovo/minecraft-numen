@@ -3,6 +3,7 @@ package com.dwinovo.numen.core.gametest;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.permission.Listing;
 import com.dwinovo.numen.task.TaskRecord;
 import java.util.ArrayList;
 import java.util.List;
@@ -1678,6 +1679,93 @@ public class PermissionGameTests {
             helper.assertTrue(level.getBlockState(helper.absolutePos(insideRel)).is(Blocks.PUMPKIN),
                     "the pumpkin in the barn was mined");
             helper.assertTrue(!asked[0], "an area deny row raised a consent card");
+            CompanionFactory.despawn(level.getServer(), companion);
+            leave(owner);
+        });
+    }
+
+    /**
+     * 挡着视线的格不许挖,她就换一面看:南瓜在一堵两格高的木板墙后面,墙划进"篱笆"区域、主人不许挖那块区域,墙向两边伸出
+     * 四格。站在墙前最近,手也够得着,可看得见南瓜的每一面都隔着墙;她绕过墙头,从看得见它的那一面挖到手。墙一块不少,不弹卡。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void work_dig_goes_around_a_denied_wall_to_see_the_block(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos pumpkin = helper.absolutePos(new BlockPos(8, 2, 5));
+        level.setBlockAndUpdate(pumpkin, Blocks.PUMPKIN.defaultBlockState());
+        List<BlockPos> wall = new ArrayList<>();
+        for (int z = 1; z <= 9; z++) {
+            for (int y = 2; y <= 3; y++) {
+                BlockPos cell = helper.absolutePos(new BlockPos(7, y, z));
+                level.setBlockAndUpdate(cell, Blocks.OAK_PLANKS.defaultBlockState());
+                wall.add(cell);
+            }
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_fence_walker", new BlockPos(2, 2, 5), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
+        ServerPlayer owner = presentPlayer(helper, companion, "gametest_fencer");
+        areasOf(owner).create("fence", boxArea(helper, new BlockPos(7, 2, 1), new BlockPos(7, 3, 9)));
+        storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
+                com.dwinovo.numen.permission.Rule.parse("break(area:fence)"));
+        Mining mine = mineScanned(helper, companion, 10, "minecraft:pumpkin", "count", 1);
+        boolean[] asked = new boolean[1];
+        helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(mine.done(), "the dig has not finished");
+            helper.assertTrue(mine.succeeded() && level.getBlockState(pumpkin).isAir()
+                            && companion.getInventory().countItem(Items.PUMPKIN) == 1,
+                    "the pumpkin behind the denied wall was not dug from another side: " + mine.outcome());
+            for (BlockPos cell : wall) {
+                helper.assertTrue(level.getBlockState(cell).is(Blocks.OAK_PLANKS),
+                        "the denied wall was broken at " + cell.toShortString());
+            }
+            helper.assertTrue(!asked[0], "an area deny row raised a consent card");
+            CompanionFactory.despawn(level.getServer(), companion);
+            leave(owner);
+        });
+    }
+
+    /**
+     * 唯一的视线被不许挖的格挡死:南瓜六面都贴着白羊毛,主人写了 deny 行不许挖白羊毛。站位怎么挑都看不见它,当场回:南瓜的
+     * 每一面都贴着不许挖的方块,点名是哪几格、哪一行规则。羊毛与南瓜原样,不弹卡。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void work_dig_names_the_denied_blocks_walling_in_its_target(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos pumpkin = helper.absolutePos(new BlockPos(8, 2, 5));
+        level.setBlockAndUpdate(pumpkin, Blocks.PUMPKIN.defaultBlockState());
+        List<BlockPos> wool = new ArrayList<>();
+        for (net.minecraft.core.Direction side : net.minecraft.core.Direction.values()) {
+            BlockPos cell = pumpkin.relative(side);
+            level.setBlockAndUpdate(cell, Blocks.WHITE_WOOL.defaultBlockState());
+            wool.add(cell);
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_walled_out", new BlockPos(2, 2, 5), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
+        ServerPlayer owner = presentPlayer(helper, companion, "gametest_weaver");
+        storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
+                com.dwinovo.numen.permission.Rule.parse("break(minecraft:white_wool)"));
+        Mining mine = mineScanned(helper, companion, 10, "minecraft:pumpkin", "count", 1);
+        boolean[] asked = new boolean[1];
+        helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(mine.done(), "the dig has not finished");
+            String said = mine.outcome();
+            helper.assertTrue(mine.task() == null && !mine.succeeded(),
+                    "a dig whose only target is walled in was accepted: " + mine.reply());
+            helper.assertTrue(said.contains("every face of pumpkin at " + Listing.coords(pumpkin)
+                                    + " is covered by a block I may not break")
+                            && wool.stream().allMatch(cell -> said.contains("white_wool at " + Listing.coords(cell)))
+                            && said.contains("denied by rule break(minecraft:white_wool)"),
+                    "the reply does not name the denied blocks walling the pumpkin in and the row: " + said);
+            helper.assertTrue(level.getBlockState(pumpkin).is(Blocks.PUMPKIN), "the pumpkin was mined");
+            for (BlockPos cell : wool) {
+                helper.assertTrue(level.getBlockState(cell).is(Blocks.WHITE_WOOL),
+                        "the denied wool was broken at " + cell.toShortString());
+            }
+            helper.assertTrue(!asked[0], "a denied block raised a consent card");
             CompanionFactory.despawn(level.getServer(), companion);
             leave(owner);
         });

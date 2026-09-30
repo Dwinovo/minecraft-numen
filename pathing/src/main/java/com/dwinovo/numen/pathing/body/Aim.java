@@ -89,9 +89,8 @@ public final class Aim {
      */
     public static Vec3 point(ServerPlayer body, BlockPos pos) {
         Vec3 eye = body.getEyePosition();
-        double range = body.blockInteractionRange();
-        for (Vec3 candidate : candidates(body, pos)) {
-            if (candidate.distanceTo(eye) < range && hits(body, eye, candidate, pos, null)) {
+        for (Vec3 candidate : digPoints(body, pos)) {
+            if (hits(body, eye, candidate, pos, null)) {
                 return candidate;
             }
         }
@@ -99,18 +98,19 @@ public final class Aim {
     }
 
     /**
-     * 挖 {@code pos} 时够得着的第一个瞄点,不管中间有没有东西挡着(候选与 {@link #point} 同一串);一个都够不着为 null。
-     * 看不见目标时朝这一点看过去,准星落着的就是挡在前面的那一格。
+     * 挖 {@code pos} 时够得着的瞄点,先后照 {@link #point} 说的那三档,不管中间有没有东西挡着。看不见它时从这几点里挑隔着的格都
+     * 清得掉的那一条视线({@link Sight#dig}),朝那一点看过去,准星落着的就是先要挖开的那一格。
      */
-    public static Vec3 reachable(ServerPlayer body, BlockPos pos) {
+    public static List<Vec3> digPoints(ServerPlayer body, BlockPos pos) {
         Vec3 eye = body.getEyePosition();
         double range = body.blockInteractionRange();
+        List<Vec3> out = new ArrayList<>();
         for (Vec3 candidate : candidates(body, pos)) {
             if (candidate.distanceTo(eye) < range) {
-                return candidate;
+                out.add(candidate);
             }
         }
-        return null;
+        return out;
     }
 
     /** 挖 {@code pos} 时的候选瞄点,先后照 {@link #point} 说的那三档。 */

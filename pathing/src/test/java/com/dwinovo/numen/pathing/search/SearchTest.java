@@ -393,6 +393,30 @@ class SearchTest {
     }
 
     /**
+     * 要挖的矿在一堵三格高的羊毛墙后面,墙向两边各伸出六格。站在墙前最近,手也够得着,但挖的一方清不掉羊毛:那里停下办不成,
+     * 搜索绕过墙头,停在看得见它、不隔着羊毛的地方。谁挖都行的同一个目标,停在墙前(隔一格遮挡比绕路便宜)。
+     */
+    @Test
+    void diggingWalksAroundWhatTheDiggerMayNotClear() {
+        BlockPos ore = new BlockPos(7, Y, 0);
+        TestWorld world = field().fill(4, Y, -6, 4, Y + 2, 6, Blocks.WHITE_WOOL.defaultBlockState())
+                .set(ore, Blocks.IRON_ORE.defaultBlockState());
+        Goals.Clearing sparesWool = (view, pos) -> !view.getBlockState(pos).is(Blocks.WHITE_WOOL);
+        Goal around = Goals.dig(ore, SURVIVAL, sparesWool);
+
+        SearchResult result = search(world, defaults(), START, around);
+        assertTrue(result.arrived(), result.stop().toString());
+        BlockPos end = result.route().end();
+        assertEquals(0, around.arrival(world, end.getX(), end.getY(), end.getZ(), result.route().endStance()), 1e-9,
+                "停在看得见它、不隔着羊毛的地方:" + end);
+
+        Goal anyone = Goals.dig(ore, SURVIVAL);
+        SearchResult near = search(world, defaults(), START, anyone);
+        assertTrue(near.arrived());
+        assertTrue(near.route().end().getX() < 4, "谁挖都行时停在墙前:" + near.route().end());
+    }
+
+    /**
      * 要挖的那一格嵌在三格厚的石墙里,离墙面一格;墙上从南边凿了一道缝通到它的南面。站在墙前正对着它的地方最近,但隔着一格石头;
      * 往南挪一格就能从缝里直接看见它:同样够得着,挑挡得少的那一处——不挡的。
      */

@@ -2,6 +2,7 @@ package com.dwinovo.numen.pathing.world;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -83,6 +84,35 @@ public final class Sight {
         }, view -> null);
         return new Trace(point, hit != null, hit == null ? null : hit.getDirection(), List.copyOf(hard),
                 List.copyOf(soft));
+    }
+
+    /**
+     * 从 {@code eye} 挖 {@code target} 时朝哪一点看:朝 {@code points} 里的每一点各打一条视线,路上挡着的格(硬的、软的)都
+     * {@code clears} 的那些里,取硬遮挡最少的那一条;一条都没有为 null——看得见它的每一处都隔着清不掉的格。挖一格时给站位定价
+     * (瞄点是 {@link #faces})与挖的时候先清哪一格(瞄点是身体够得着的那几点)都按这一条挑。
+     */
+    public static Trace dig(BlockGetter level, Vec3 eye, BlockPos target, List<Vec3> points, Predicate<BlockPos> clears) {
+        Trace best = null;
+        for (Vec3 point : points) {
+            Trace trace = trace(level, eye, point, target);
+            if ((best == null || trace.hard().size() < best.hard().size())
+                    && trace.hard().stream().allMatch(clears) && trace.soft().stream().allMatch(clears)) {
+                best = trace;
+            }
+        }
+        return best;
+    }
+
+    /** {@code target} 朝着 {@code eye} 的各面上的瞄点({@link Faces#point} 往面里收 {@link #INSET})。 */
+    public static List<Vec3> faces(BlockGetter level, Vec3 eye, BlockPos target) {
+        List<Vec3> out = new ArrayList<>(3);
+        for (Direction side : Direction.values()) {
+            Vec3 onFace = Faces.point(level, target, side);
+            if (facing(eye, onFace, side)) {
+                out.add(inset(onFace, side));
+            }
+        }
+        return out;
     }
 
     /** 用一格方块时点它 {@code side} 面的那一点:面上的瞄点({@link Faces#point})往面里收 {@link #INSET}。 */

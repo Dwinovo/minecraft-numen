@@ -122,8 +122,9 @@ public class DigGameTests {
     /**
      * 够不着就如实收工:一根去皮白桦原木悬在她脚上八格,站在底下眼睛离它 5.38 格,出了交互距离;她没有垫脚的方块,
      * 爬不上去。任务不该站着一遍遍重搜同一条走不通的路,而是收场、说清楚够不着,原因是寻路给的那一条(要垫方块而身上没有)。
+     * 场地要够高:原木得在场地的屏障顶棚底下,垫了方块才真够得着。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_dig")
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_dig")
     public static void dig_out_of_reach_ends_instead_of_hanging(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos logRel = new BlockPos(8, 10, 8);
@@ -140,7 +141,7 @@ public class DigGameTests {
                     "an out-of-reach log did not end as unreachable for want of blocks to pillar with: " + reply);
             helper.assertTrue(level.getBlockState(helper.absolutePos(logRel)).is(Blocks.STRIPPED_BIRCH_LOG),
                     "the out-of-reach log is gone");
-            // 悬在模板外的原木不收走,后面批次的扫描会把它当目标
+            // 悬着的原木收走,后面批次的扫描不会把它当目标
             level.removeBlock(helper.absolutePos(logRel), false);
             CompanionFactory.despawn(level.getServer(), companion);
         });

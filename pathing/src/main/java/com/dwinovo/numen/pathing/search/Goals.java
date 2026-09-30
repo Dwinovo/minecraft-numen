@@ -10,10 +10,10 @@ import java.util.Set;
 import com.dwinovo.numen.pathing.plan.ActionCosts;
 import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.plan.Threat;
+import com.dwinovo.numen.pathing.plan.WorldView;
 import com.dwinovo.numen.pathing.spec.PositionCosts;
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Clearance;
-import com.dwinovo.numen.pathing.world.Faces;
 import com.dwinovo.numen.pathing.world.Reach;
 import com.dwinovo.numen.pathing.world.Sight;
 
@@ -152,10 +152,32 @@ public final class Goals {
     /**
      * 挖 {@code target}:站在这里手够得着它(第 0 层 {@link Reach},与挖、放读同一个"够得着"),而且身体不占着它。挡着视线的
      * 由挖的一方挖开,不要求到了就看得见;停在一处要先挖开几格硬遮挡才看得见它,就加几份 {@link ActionCosts#SIGHT_BLOCKER}
-     * ——同样够得着时,搜索挑挡得少的站位。
+     * ——同样够得着时,搜索挑挡得少的站位。谁来挖、清得掉哪些格此刻还不知道:挡着的格一律算清得掉({@link Clearing#ANY})。
      */
     public static Goal dig(BlockPos target, BodyStats body) {
-        return new Dig(target.immutable(), body);
+        return dig(target, body, Clearing.ANY);
+    }
+
+    /**
+     * 挖 {@code target},挡着视线的格由 {@code clearing} 这一方清:看得见它的面只算隔着的格都清得掉的那些({@link Sight#dig}),
+     * 一面都没有的站位停下也办不成,到达价无穷——搜索挑别的站位,挖的时候先清哪一格也按同一个判据。
+     */
+    public static Goal dig(BlockPos target, BodyStats body, Clearing clearing) {
+        return new Dig(target.immutable(), body, clearing);
+    }
+
+    /**
+     * 挖一格的一方清得掉哪些挡着视线的格。给站位定价(搜索时读快照)与挖的时候清遮挡(读活世界)问的是同一个;实现按冻结的
+     * 数据回答,可以从任何线程调用。
+     */
+    @FunctionalInterface
+    public interface Clearing {
+
+        /** 挡着的格一律算清得掉:还不知道谁来挖的时候用。 */
+        Clearing ANY = (view, pos) -> true;
+
+        /** {@code view} 上的 {@code pos} 这一格挡着视线时,挖的一方清不清得掉它。 */
+        boolean clears(WorldView view, BlockPos pos);
     }
 
     // ==================== 远离 ====================
@@ -439,7 +461,7 @@ public final class Goals {
         }
     }
 
-    private record Dig(BlockPos target, BodyStats body) implements Goal {
+    private record Dig(BlockPos target, BodyStats body, Clearing clearing) implements Goal {
         @Override
         public boolean contains(int x, int y, int z, Stance stance) {
             double feet = stance.feetY();
@@ -476,24 +498,18 @@ public final class Goals {
         }
 
         /**
-         * 从这里的眼睛看它朝着眼睛的各面,取硬遮挡最少的那一面({@link Sight#trace}),每一格加一份
-         * {@link ActionCosts#SIGHT_BLOCKER}。它没有轮廓(已经挖掉了)不加。
+         * 从这里的眼睛看它朝着眼睛的各面({@link Sight#faces}),隔着的格都清得掉的那些面里取硬遮挡最少的那一面({@link Sight#dig}),
+         * 每一格加一份 {@link ActionCosts#SIGHT_BLOCKER};一面都没有是无穷。它没有轮廓(已经挖掉了)不加。
          */
         @Override
-        public double arrival(BlockGetter level, int x, int y, int z, Stance stance) {
+        public double arrival(WorldView level, int x, int y, int z, Stance stance) {
             if (!Sight.clickable(level, target)) {
                 return 0;
             }
             Vec3 eye = Reach.eye(body, Pose.STANDING, x, stance.feetY(), z);
-            int fewest = Integer.MAX_VALUE;
-            for (Direction side : Direction.values()) {
-                Vec3 onFace = Faces.point(level, target, side);
-                if (!Sight.facing(eye, onFace, side)) {
-                    continue;
-                }
-                fewest = Math.min(fewest, Sight.trace(level, eye, Sight.inset(onFace, side), target).hard().size());
-            }
-            return fewest == Integer.MAX_VALUE ? 0 : fewest * ActionCosts.SIGHT_BLOCKER;
+            Sight.Trace line = Sight.dig(level, eye, target, Sight.faces(level, eye, target),
+                    pos -> clearing.clears(level, pos));
+            return line == null ? Double.POSITIVE_INFINITY : line.hard().size() * ActionCosts.SIGHT_BLOCKER;
         }
 
         /** 别挖要挖的那一格(那是挖的一方的事),也别往里放方块把它埋了。 */
@@ -585,16 +601,18 @@ public final class Goals {
             return needed;
         }
 
-        /** 停在这里满足的那些成员里最便宜的到达价。 */
+        /** 停在这里满足的那些成员里最便宜的到达价;一个都不满足是 0。 */
         @Override
-        public double arrival(BlockGetter level, int x, int y, int z, Stance stance) {
+        public double arrival(WorldView level, int x, int y, int z, Stance stance) {
             double min = Double.POSITIVE_INFINITY;
+            boolean in = false;
             for (Goal g : members) {
                 if (g.contains(x, y, z, stance)) {
+                    in = true;
                     min = Math.min(min, g.arrival(level, x, y, z, stance));
                 }
             }
-            return min == Double.POSITIVE_INFINITY ? 0 : min;
+            return in ? min : 0;
         }
 
         /** 各成员的合在一起;有一个没有边,合起来也没有。 */
@@ -647,7 +665,7 @@ public final class Goals {
         }
 
         @Override
-        public double arrival(BlockGetter level, int x, int y, int z, Stance stance) {
+        public double arrival(WorldView level, int x, int y, int z, Stance stance) {
             double sum = 0;
             for (Goal g : members) {
                 sum += g.arrival(level, x, y, z, stance);
@@ -706,7 +724,7 @@ public final class Goals {
 
         /** 这一笔,加上里面那个目标自己停在这儿要付的。 */
         @Override
-        public double arrival(BlockGetter level, int x, int y, int z, Stance stance) {
+        public double arrival(WorldView level, int x, int y, int z, Stance stance) {
             return cost + inner.arrival(level, x, y, z, stance);
         }
 

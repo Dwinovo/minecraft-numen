@@ -241,6 +241,26 @@ class GoalsTest {
                 1e-9, "两堵");
     }
 
+    /**
+     * 挖的一方清不掉的格挡在看得见它的每一面前面,停在那儿也办不成:到达价无穷。换成清得掉的格,照旧按硬遮挡定价;
+     * 不说谁来挖的目标,挡着的格一律算清得掉。
+     */
+    @Test
+    void diggingCannotStopWhereEveryFaceIsBehindWhatTheDiggerMayNotClear() {
+        BlockPos target = new BlockPos(4, 64, 0);
+        Goals.Clearing sparesStone = (view, pos) -> !view.getBlockState(pos).is(Blocks.STONE);
+        Goal dig = Goals.dig(target, SURVIVAL, sparesStone);
+        Stance standing = new Stance(Stance.Kind.GROUND, 64, 63);
+        TestWorld world = new TestWorld().floor(-4, -4, 8, 4, 63)
+                .set(target, Blocks.IRON_ORE.defaultBlockState())
+                .fill(3, 63, -4, 3, 70, 4, Blocks.STONE.defaultBlockState());
+        assertTrue(Double.isInfinite(dig.arrival(world, 1, 64, 0, standing)), "看得见的每一面都隔着清不掉的石头");
+        assertEquals(ActionCosts.SIGHT_BLOCKER, Goals.dig(target, SURVIVAL).arrival(world, 1, 64, 0, standing), 1e-9,
+                "没说谁来挖:照旧按一格硬遮挡定价");
+        world.fill(3, 63, -4, 3, 70, 4, Blocks.DIRT.defaultBlockState());
+        assertEquals(ActionCosts.SIGHT_BLOCKER, dig.arrival(world, 1, 64, 0, standing), 1e-9, "隔着清得掉的泥土");
+    }
+
     // ==================== 距离范围的半径 ====================
 
     /**

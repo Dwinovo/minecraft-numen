@@ -17,16 +17,20 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.api.Report;
 import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.drive.EditLedger;
+import com.dwinovo.numen.pathing.drive.LiveWorld;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.pathing.world.Sight;
 import com.dwinovo.numen.permission.Action;
+import com.dwinovo.numen.permission.Listing;
 import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.task.Preparation;
 import com.dwinovo.numen.task.TaskState;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
@@ -70,9 +74,10 @@ import java.util.Set;
  *   <li><b>knownOres</b> — fed on demand from the cells in the work area, nearest first, and {@link #prune}d every
  *       tick (drop ones dug / no longer wanted / unworkable / hazardous), sorted by distance, capped at
  *       {@link #MAX_TARGETS}.</li>
- *   <li><b>in place</b> — a target the body can reach from where it stands ({@link Goals#dig}: within block reach,
- *       not occupying it) is broken on the spot, cheapest first. The digger takes the best tool and clears what
- *       stands in the line of sight first, if it may ({@link #mayClear}).</li>
+ *   <li><b>in place</b> — a target the body can work from where it stands ({@link #workable}: within block reach,
+ *       not occupying it, and some face seen past nothing but what she may clear) is broken on the spot, cheapest
+ *       first. The digger takes the best tool and clears what stands in the line of sight first, by the same
+ *       criterion the goal priced the stance with ({@link #clearing}).</li>
  *   <li><b>one goal over the field</b> — otherwise one search over {@link Goals#anyOf} of the same dig goals
  *       ({@link #field}) inside the work area, so it walks to the closest reachable target. Arrival and the in-place
  *       pick are one criterion.</li>
@@ -166,6 +171,11 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
     private final RouteSpec targetSpec;
     /** 给目标定价、判挖不挖得成的成本模型,每刻按此刻的身体与权限重组。 */
     private DigQuote pricing;
+    /**
+     * 挡着视线的格清不清得掉:按走动的规格({@link #spec})问——关在工作区里、许可要问的与不许的都不碰,与路上挖一格同一道。
+     * 挖一格的目标拿它给站位定价,挖掘器拿它清遮挡,每刻与 {@link #pricing} 一起重组。
+     */
+    private DigQuote clearing;
     /** 受理之前的准备规划到的那条路:第一趟照它走({@link Trip#prepared});没有、或已经用过为 null。 */
     private Route seed;
     /** 在走的那一趟朝着的目标,以及它是按哪一份名单与价钱编的——名单或价钱变了才把新目标交给那一趟。 */
@@ -229,7 +239,7 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
     @Override
     protected Preparation preparation() {
         gather();
-        pricing = DigQuote.of(player, targetSpec);
+        quote();
         admit();
         if (knownOres.isEmpty()) {
             return Preparation.refused(nothingToDig().why());
@@ -319,7 +329,7 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
         quotaMet = !untilGone && gathered + inFlight() >= r.count;
 
         Level level = player.level();
-        pricing = DigQuote.of(player, targetSpec);
+        quote();
         prune();
         maybeQuery();
 
@@ -329,7 +339,7 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
                 // 够数了,手上这块也不敲完:敲完就是多一块
                 digger.cancel();
                 digTarget = null;
-            } else if (!r.wantsAt(digTarget, level.getBlockState(digTarget)) || !canWork(digTarget)) {
+            } else if (!r.wantsAt(digTarget, level.getBlockState(digTarget)) || !workable(Feet.of(player), digTarget)) {
                 digger.cancel();
                 digTarget = null;
             } else {
@@ -382,8 +392,8 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
                     // 搜索按总价挑中的就是这儿:手边够得着的就挖,别再为别处的估价让路
                     Feet here = Feet.of(player);
                     settledAt = here == null ? null : here.node();
-                    settledPrice = here == null ? 0 : field.arrival(player.level(), settledAt.getX(), settledAt.getY(),
-                            settledAt.getZ(), here.stance());
+                    settledPrice = here == null ? 0 : field.arrival(new LiveWorld(player.serverLevel()),
+                            settledAt.getX(), settledAt.getY(), settledAt.getZ(), here.stance());
                     stopNav();
                     // 到了却没有可挖的,不构成关于任何一格的证据(到的是掉落物成员,或这一刻人在空中):只重新规划,
                     // 真卡住了由 STALL_TICKS 那把尺子收工
@@ -437,9 +447,8 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
 
     /** 名单编成的目标;一个成员都没有为 null。 */
     private Goal field(FieldKey key) {
-        var stats = Snapshots.stats(player);
         List<Goal> members = new ArrayList<>(key.ores().size() + key.drops().size());
-        key.ores().forEach((ore, cost) -> members.add(Goals.priced(Goals.dig(ore, stats), cost)));
+        key.ores().forEach((ore, cost) -> members.add(Goals.priced(digGoal(ore), cost)));
         for (BlockPos drop : key.drops()) {
             members.add(dropGoal(drop));     // items, not blocks
         }
@@ -477,29 +486,40 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
 
     /** 挑目标用的总价:走到够得着它的地方(目标的估价,与交给搜索的同一把尺)加上挖它的价钱。 */
     private double targetCost(BlockPos ore, BlockPos feet) {
-        return Goals.dig(ore, Snapshots.stats(player)).estimate(feet.getX(), feet.getY(), feet.getZ()) + digCost(ore);
+        return digGoal(ore).estimate(feet.getX(), feet.getY(), feet.getZ()) + digCost(ore);
     }
 
-    /** 身体此刻站着的地方够不够得着 {@code ore}——原地就挖与导航到位是这同一个判据。 */
-    private boolean canWork(BlockPos ore) {
-        Feet here = Feet.of(player);
-        return here != null && here.in(Goals.dig(ore, Snapshots.stats(player)));
+    /** 挖 {@code ore} 的目标:挡着视线的格按 {@link #clearing} 清——导航挑站位、原地就挖、挖掘器清遮挡都是它。 */
+    private Goal digGoal(BlockPos ore) {
+        return Goals.dig(ore, Snapshots.stats(player), clearing.clearing());
     }
 
     /**
-     * 这一格挖不挖得成:按给目标定价的成本模型问——工作区外的格、物理上挖不了的(挖不动、贴着流体、顶着落沙、世界边界外)。
-     * 许可不许的也算挖得成:那是动手时权限层的事,价钱是无穷。
+     * 站在 {@code here} 挖不挖得了 {@code ore}:在挖它的目标里(够得着、不占着它),而且停在这儿办得成(到达价有限:看得见它的
+     * 面里至少有一面隔着的格都清得掉)——原地就挖与导航判到了、给站位定价是这同一个判据。
+     */
+    private boolean workable(Feet here, BlockPos ore) {
+        if (here == null) {
+            return false;
+        }
+        Goal goal = digGoal(ore);
+        BlockPos node = here.node();
+        return here.in(goal) && Double.isFinite(goal.arrival(new LiveWorld(player.serverLevel()), node.getX(),
+                node.getY(), node.getZ(), here.stance()));
+    }
+
+    /** 按此刻的身体与权限重组给目标定价与判遮挡的两份成本模型。 */
+    private void quote() {
+        pricing = DigQuote.of(player, targetSpec);
+        clearing = DigQuote.of(player, spec);
+    }
+
+    /**
+     * 这一格作为目标挖不挖得成:按给目标定价的成本模型问——工作区外的格、物理上挖不了的(挖不动、贴着流体、顶着落沙、世界边界外)。
+     * 许可不许的也算挖得成:挑目标时价钱是无穷,排不上。挡着视线的格不问这里,问 {@link #clearing}。
      */
     private boolean breakable(BlockPos pos, BlockState state) {
         return pricing.breakable(pos, state);
-    }
-
-    /**
-     * 挡在视线上的那一格可不可以先挖开:和目标过同一道({@link #breakable}),工作区外的不碰——她的手只在区里动。许不许挖由
-     * 挖掘器问权限层。
-     */
-    private boolean mayClear(BlockPos occluder) {
-        return breakable(occluder, player.level().getBlockState(occluder));
     }
 
     /** 身上有没有能让它掉东西的工具(整个背包,不只快捷栏:她能从包里拿工具挖)。不要求工具的方块总是有。 */
@@ -559,7 +579,7 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
     }
 
     /**
-     * 就地挖的挑法:站着就够得着的已知目标里最便宜的那个({@link #canWork}),一样贵挑近的。它与导航判"到了"是同一个判据,
+     * 就地挖的挑法:站着就挖得了的已知目标里最便宜的那个({@link #workable}),一样贵挑近的。它与导航判"到了"是同一个判据,
      * 所以到了总有东西可挖,挡着视线的归挖掘器清。
      *
      * <p>够得着的也可能不是该挖的:别处按乐观估价更便宜({@link #targetCost}:走过去 + 挖它)就先让导航按总价去挑;导航挑完仍停在
@@ -574,12 +594,11 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
         if (here == null) return null;
         Level level = player.level();
         BlockPos feet = here.node();
-        var stats = Snapshots.stats(player);
         BlockPos best = null;
         double bestCost = Double.MAX_VALUE;
         double bestD = Double.MAX_VALUE;
         for (BlockPos ore : knownOres) {
-            if (!r.wantsAt(ore, level.getBlockState(ore)) || !here.in(Goals.dig(ore, stats))) {
+            if (!r.wantsAt(ore, level.getBlockState(ore)) || !workable(here, ore)) {
                 continue;
             }
             double cost = digCost(ore);
@@ -619,7 +638,7 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
      */
     private TaskState digProgress(BlockPos pos) {
         digTarget = pos.immutable();
-        switch (digger.digStep(pos, this::mayClear, this::recordAction)) {
+        switch (digger.digStep(pos, clearing::clears, this::recordAction)) {
             case BROKE_TARGET -> {
                 digTarget = null;
                 knownOres.remove(pos);
@@ -928,7 +947,7 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
         }
         stopNav();
         if (r.getMined() > 0) {
-            progressNote = "then could not reach " + unreached() + " in my work area: " + why + "." + openTheWay()
+            progressNote = "then could not reach " + unreached() + " in my work area: " + reachWhy(why)
                     + leftovers(null) + beyondClause();
             return TaskState.SUCCESS;
         }
@@ -936,10 +955,44 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
         return TaskState.FAILED;
     }
 
-    /** 一格都没挖到就够不着了:说够不着的是哪些、寻路给的原因({@code why})、开路的写法与区里区外剩下的。 */
+    /** 一格都没挖到就够不着了:说够不着的是哪些、为什么与下一步({@link #reachWhy}),以及区里区外剩下的。 */
     private String noneReached(String why) {
-        return "could not reach " + unreached() + " in my work area (" + r.work.describe() + "); gathered 0: " + why
-                + "." + openTheWay() + leftovers(null) + beyondClause();
+        return "could not reach " + unreached() + " in my work area (" + r.work.describe() + "); gathered 0: "
+                + reachWhy(why) + leftovers(null) + beyondClause();
+    }
+
+    /**
+     * 够不着的原因连同下一步,以句号收尾:最近那一格每一面都贴着她清不掉的方块时,说是哪几格、为什么({@link #walledIn})——
+     * 站位怎么挑都看不见它,开路也无济于事;否则是寻路给的原因({@code why})与开路的写法。
+     */
+    private String reachWhy(String why) {
+        BlockPos nearest = nearestOre();
+        String walled = nearest == null ? null : walledIn(nearest);
+        return walled != null ? walled + "." : why + "." + openTheWay();
+    }
+
+    /**
+     * {@code ore} 的每一面都贴着一整块她清不掉的方块(挡着视线的格按 {@link #clearing} 问)时,说它被哪几格、为什么围住;
+     * 有一面露着或贴着清得掉的为 null。这样的一格从哪个站位都看不见。
+     */
+    private String walledIn(BlockPos ore) {
+        Level level = player.level();
+        Map<String, List<String>> cellsByWhy = new LinkedHashMap<>();
+        for (Direction side : Direction.values()) {
+            BlockPos front = ore.relative(side);
+            String why = Sight.open(level, ore, side) ? null : clearing.uncleared(front);
+            if (why == null) {
+                return null;
+            }
+            cellsByWhy.computeIfAbsent(why, k -> new ArrayList<>())
+                    .add(NavText.name(level.getBlockState(front)) + " at " + Listing.coords(front));
+        }
+        List<String> parts = new ArrayList<>(cellsByWhy.size());
+        cellsByWhy.forEach((why, cells) -> parts.add(String.join("; ", cells) + " (" + why + ")"));
+        return "every face of " + NavText.name(level.getBlockState(ore)) + " at " + Listing.coords(ore)
+                + " is covered by a block I may not break: " + String.join(", ", parts)
+                + "; no stance lets me see it, and those blocks are not mine to get around, so dig something else or"
+                + " ask your owner";
     }
 
     /** 够不着的是哪些:名单上的格,名单空了就是地上的掉落物。 */

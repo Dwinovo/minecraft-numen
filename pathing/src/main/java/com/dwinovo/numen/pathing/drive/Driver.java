@@ -492,6 +492,11 @@ public final class Driver {
             replan("停在终点 " + PathLog.pos(node) + " 却不在目标 " + goal + " 里");
             return;
         }
+        if (!Double.isFinite(goal.arrival(rig.world(), node.getX(), node.getY(), node.getZ(), here))) {
+            // 规划之后世界变了,停在这儿办不成了(挖一格时看得见它的面都隔着清不掉的格):按活世界重搜,换一处站位
+            replan("停在终点 " + PathLog.pos(node) + " 却办不成 " + goal);
+            return;
+        }
         rig.keys.releaseAll();
         Goal.Sighting sighting = goal.sight(node.getX(), node.getY(), node.getZ(), here);
         if (sighting != null) {

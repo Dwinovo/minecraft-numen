@@ -9,8 +9,7 @@ import com.dwinovo.numen.pathing.body.BodyAction;
 import com.dwinovo.numen.pathing.body.Crosshair;
 import com.dwinovo.numen.pathing.body.Effector.Strike;
 import com.dwinovo.numen.pathing.body.Aim;
-import com.dwinovo.numen.permission.Action;
-import com.dwinovo.numen.permission.Permission;
+import com.dwinovo.numen.pathing.world.Sight;
 import com.dwinovo.numen.permission.Verdict;
 
 import net.minecraft.core.BlockPos;
@@ -26,8 +25,9 @@ import net.minecraft.world.phys.Vec3;
  * 服务端退回的(别的模组取消了破坏、出生点保护、冒险模式)同样报被拒,理由是 {@link #SERVER_REFUSED}——不空挥到超时,也不把
  * 没挖掉的方块报成挖掉了。创造模式一下就碎、生存模式按工具算时间,是原版的手自己分的。
  *
- * <p>看不见目标(树叶挡着、头顶太窄)时,朝它身上够得着的那一点看过去({@link Aim#reachable}),准星落在的那一格就是挡着的:
- * 调用方说挖它不会出事、权限层也许,就先挖它把视线打开,而不是站着等一个永远不来的角度。
+ * <p>看不见目标(树叶挡着、头顶太窄)时,在够得着的瞄点里朝隔着的格都清得掉、挡得最少的那一点看过去({@link Sight#dig}——
+ * 与导航给挖一格的站位定价是同一个判据),准星落在的那一格就是挡着的:先挖它把视线打开,而不是站着等一个永远不来的角度。清不清得掉由调用方
+ * 给(挖的一方的判据:规格、许可、会不会出事),这里不另判。
  */
 public final class BlockDigger {
 
@@ -73,7 +73,7 @@ public final class BlockDigger {
         BROKE_TARGET,
         /** 挡在前面的那一格这一刻碎了(不是目标)——离目标近了一步。 */
         BROKE_OCCLUDER,
-        /** 目标没有一个面看得见、挡着的也挖不得——卡住了(对应 OCCLUDED)。 */
+        /** 目标没有一个面看得见、隔着的格也清不掉——卡住了(对应 OCCLUDED)。 */
         NO_SHOT,
         /**
          * 权限层在第一下之前没让挖,或服务端把这一下退回来了(别的模组取消了、原版的出生点保护);{@link #refusal()} 说为什么。
@@ -88,9 +88,9 @@ public final class BlockDigger {
     }
 
     /**
-     * 挖 {@code target} 一刻:看着它(看不见就看它的中心,准星落在挡着的那一格上),换了一格挖就先把挖它最快的那件拿到手上,
-     * 按住左键。挡在前面的那一格还要 {@code mayClear} 点头才挖:权限层管许不许,调用方管这一格挖了会不会出事(比如挖矿按
-     * 自己挑目标的那道剪枝,不挖贴着流体、顶着落沙的)。
+     * 挖 {@code target} 一刻:看着它(看不见就朝隔着的格都 {@code mayClear} 的那一点看,准星落在挡着的那一格上),换了一格挖
+     * 就先把挖它最快的那件拿到手上,按住左键。{@code mayClear} 是挖的一方清得掉哪些遮挡的判据,与它交给导航的挖一格目标
+     * ({@code Goals.dig})是同一个。
      *
      * @param told 身体为这一下做的动作(把工具拿到手上)交给它,由任务记进回执
      */
@@ -101,16 +101,15 @@ public final class BlockDigger {
         if (point != null) {
             Aim.look(player, point);
         } else {
-            Vec3 toward = Aim.reachable(player, target);
-            if (toward == null) {
+            Sight.Trace line = Sight.dig(player.level(), player.getEyePosition(), target,
+                    Aim.digPoints(player, target), mayClear);
+            if (line == null) {
                 return DigResult.NO_SHOT;
             }
-            Aim.look(player, toward);
+            Aim.look(player, line.point());
             BlockPos blocker = Crosshair.pick(player) instanceof BlockHitResult hit
                     && hit.getType() == HitResult.Type.BLOCK ? hit.getBlockPos() : null;
-            if (blocker == null || blocker.equals(target) || !mayClear.test(blocker)
-                    || !Permission.judge(player, Action.breakBlock(blocker, player.level().getBlockState(blocker)))
-                            .allowed()) {
+            if (blocker == null || blocker.equals(target) || !mayClear.test(blocker)) {
                 return DigResult.NO_SHOT;
             }
             effective = blocker;
