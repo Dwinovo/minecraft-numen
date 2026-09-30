@@ -73,7 +73,7 @@
 | self_placed | 这格是不是她自己放的 | 同一份放置记录,放的人就是要动手的这只同伴:她垫的柱子、搭的桥、照设计砌的墙。和 placed 互不相交 |
 | block_entity | 这格有没有方块实体 | 世界 |
 | contents | 容器里有没有东西 | 世界 |
-| owned | 这只实体有没有主人 | `OwnableEntity` 记的主人,只在 `Signals.ownerOf` 一处读;主人是谁都算,她自己也算 |
+| owned | 这只实体有没有主人 | `OwnableEntity` 记的主人,只在 `Signals.ownerOf` 一处读(`scan entities` 标"是谁的"也问它);主人是谁都算,她自己也算 |
 | self_owned | 这只实体的主人是不是她自己 | 同一处读法,主人就是要动手的这只同伴:她驯服的狼、猫,和她结契的车万女仆(`EntityMaid` 继承原版 `TamableAnimal`)。是 owned 的一部分,不像 placed 与 self_placed 那样互斥 |
 | named | 有没有自定义名字 | 实体 |
 | villager | 是不是村民 | 实体类型 |

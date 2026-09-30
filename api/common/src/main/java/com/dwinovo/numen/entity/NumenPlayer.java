@@ -245,17 +245,21 @@ public final class NumenPlayer extends ServerPlayer implements Body {
     }
 
     /**
-     * The owner's name for people to read: the online owner's, else the server's profile cache; empty when
-     * there is no owner or the name is unknown.
+     * The owner's name for people to read ({@link #playerName}); empty when there is no owner or the name is unknown.
      */
     public String ownerName() {
-        if (ownerUuid == null) {
-            return "";
-        }
-        ServerPlayer online = resolveOwnerPlayer();
+        return ownerUuid == null ? "" : playerName(getServer(), ownerUuid);
+    }
+
+    /**
+     * A player's name for people to read: the online player's (a companion is one too), else the server's profile
+     * cache; empty when the name is unknown.
+     */
+    public static String playerName(net.minecraft.server.MinecraftServer server, UUID player) {
+        ServerPlayer online = server.getPlayerList().getPlayer(player);
         return online != null ? online.getGameProfile().getName()
-                : java.util.Optional.ofNullable(getServer().getProfileCache())
-                        .flatMap(cache -> cache.get(ownerUuid))
+                : java.util.Optional.ofNullable(server.getProfileCache())
+                        .flatMap(cache -> cache.get(player))
                         .map(com.mojang.authlib.GameProfile::getName)
                         .orElse("");
     }

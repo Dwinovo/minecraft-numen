@@ -139,12 +139,54 @@ public class PerceptionGameTests {
 
     /** {@code scan entities} 的这一页有没有列出这只实体(按它的运行期编号)。 */
     private static boolean listsEntity(ToolRun scan, net.minecraft.world.entity.Entity entity) {
+        return rowOf(scan, entity) != null;
+    }
+
+    /** {@code scan entities} 的这一页里这只实体的那一行;没列出为 null。 */
+    private static com.google.gson.JsonObject rowOf(ToolRun scan, net.minecraft.world.entity.Entity entity) {
         for (var row : rowsIn(scan.reply())) {
             if (row.getAsJsonObject().get("id").getAsInt() == entity.getId()) {
-                return true;
+                return row.getAsJsonObject();
             }
         }
-        return false;
+        return null;
+    }
+
+    /**
+     * 列出的狼标出是谁的:她自己驯服的是 {@code you},她主人的是 {@code your owner},别的玩家的(名字查不到)是 UUID,
+     * 野狼不写。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
+    public static void scan_entities_says_whose_each_wolf_is(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_petcounter", new BlockPos(3, 2, 3), false);
+        var hers = InteractGameTests.wolfAt(helper, new BlockPos(6, 2, 3));
+        hers.tame(companion);
+        var owners = InteractGameTests.wolfAt(helper, new BlockPos(3, 2, 6));
+        owners.setTame(true, true);
+        owners.setOwnerUUID(companion.getOwnerUuid());
+        var strangers = InteractGameTests.wolfAt(helper, new BlockPos(6, 2, 6));
+        java.util.UUID stranger = java.util.UUID.randomUUID();
+        strangers.setTame(true, true);
+        strangers.setOwnerUUID(stranger);
+        var wild = InteractGameTests.wolfAt(helper, new BlockPos(1, 2, 1));
+        ToolRun scan = command(companion, "scan entities 8 passive");
+
+        succeedWhen(helper, () -> {
+            var rows = java.util.stream.Stream.of(hers, owners, strangers, wild).map(w -> rowOf(scan, w)).toList();
+            helper.assertTrue(rows.stream().allMatch(java.util.Objects::nonNull),
+                    "not every wolf is listed: " + scan.reply());
+            helper.assertTrue(rows.get(0).has("owner") && rows.get(0).get("owner").getAsString().equals("you"),
+                    "her own wolf is not marked as hers: " + rows.get(0));
+            helper.assertTrue(rows.get(1).has("owner")
+                            && rows.get(1).get("owner").getAsString().equals("your owner"),
+                    "her owner's wolf is not marked as his: " + rows.get(1));
+            helper.assertTrue(rows.get(2).has("owner")
+                            && rows.get(2).get("owner").getAsString().equals(stranger.toString()),
+                    "a stranger's wolf does not name its owner: " + rows.get(2));
+            helper.assertTrue(!rows.get(3).has("owner"), "a wild wolf is marked as someone's: " + rows.get(3));
+            java.util.stream.Stream.of(hers, owners, strangers, wild).forEach(net.minecraft.world.entity.Entity::discard);
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
     }
 
     /** 她自己的状态:手里的剑、背包用了几格、血与饥饿都照实报。 */

@@ -5,6 +5,7 @@ import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.core.scan.NearbyEntities;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.permission.Signals;
 import com.dwinovo.numen.platform.Services;
 import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonObject;
@@ -34,6 +35,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -86,6 +88,10 @@ public final class QueryExtraOps {
                 o.addProperty("hp", le.getHealth());
                 o.addProperty("max_hp", le.getMaxHealth());
             }
+            String owner = ownerOf(s.entity, self);
+            if (owner != null) {
+                o.addProperty("owner", owner);
+            }
             rows.add(o.toString());
         }
         String where = " within " + radius + " blocks (" + filter + ")";
@@ -93,6 +99,25 @@ public final class QueryExtraOps {
                 ? "No entities" + where + "."
                 : rows.size() + " entit" + (rows.size() == 1 ? "y" : "ies") + where + ", nearest first, one per line:";
         return new Listing(head, rows, "", again).result(args).toJson();
+    }
+
+    /**
+     * 这只是谁的:{@code you}(她自己驯服的)、{@code your owner}(她主人的)、别的玩家的名字,名字查不到就是 UUID;
+     * 没有主人为 null。主人只从权限层的同一处读({@link Signals#ownerOf}),{@code self_owned} 与这里说的是同一回事。
+     */
+    private static String ownerOf(Entity e, NumenPlayer self) {
+        UUID owner = Signals.ownerOf(e);
+        if (owner == null) {
+            return null;
+        }
+        if (owner.equals(self.getUUID())) {
+            return "you";
+        }
+        if (self.isOwnedByPlayer(owner)) {
+            return "your owner";
+        }
+        String name = NumenPlayer.playerName(self.getServer(), owner);
+        return name.isEmpty() ? owner.toString() : name;
     }
 
     private static String categorise(Entity e) {

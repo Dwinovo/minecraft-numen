@@ -121,11 +121,13 @@ public final class ScanCommands {
                 .note("Instant and read-only. One entity per line, nearest first; a long list comes in pages, and "
                         + "each page is read fresh, so things that moved may shift between pages.")
                 .note("The ids are runtime ids: they do not survive a restart.")
+                .note("A tamed entity says whose it is: owner is you, your owner, or the other player's name.")
                 .seeAlso("scan around")
                 .promote("List entities within a radius around you, sorted by distance. Use "
                         + "type_filter to narrow: 'hostile' for monsters, 'passive' for animals/items, 'player' for "
                         + "players, 'all' for everything. One entity per line (a JSON object); a long list comes in "
-                        + "pages — pass page to read the next one. Each entry has id, type, position, distance, hp, and category. Pass the returned "
+                        + "pages — pass page to read the next one. Each entry has id, type, position, distance, hp, and category; a "
+                        + "tamed one also has owner: you, your owner, or the other player's name. Pass the returned "
                         + "runtime ids to `fight attack`; it cannot attack anything outside that set.");
         scan.server("block", "One block: its id and state, hardness, whether your held tool is right, dig time, "
                         + "whether it is in reach.",

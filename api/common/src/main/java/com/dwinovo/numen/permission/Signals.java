@@ -202,7 +202,7 @@ public enum Signals {
 
     /**
      * 实体的主人是谁:原版 {@link OwnableEntity} 记的主人 UUID(狼、猫、鹦鹉,以及继承原版驯服的模组宠物,比如车万女仆);
-     * 没有主人或不是可驯服的实体为 null。"这只是谁的"只在这里读。
+     * 没有主人或不是可驯服的实体为 null。"这只是谁的"只在这里读——信号与扫描实体都问它。
      */
     public static UUID ownerOf(Entity entity) {
         return entity instanceof OwnableEntity o ? o.getOwnerUUID() : null;
