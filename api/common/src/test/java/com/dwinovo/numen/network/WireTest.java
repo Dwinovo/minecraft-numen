@@ -133,7 +133,7 @@ class WireTest {
     @Test
     void aTaskDescriptionOrADeathCauseTooBigIsReplacedBySayingSo() {
         String big = "z".repeat(Wire.TO_CLIENT.bytes() + 1);
-        CurrentTaskPayload task = fit(new CurrentTaskPayload(A, "t1", "work mine", big, false, 1200L));
+        CurrentTaskPayload task = fit(new CurrentTaskPayload(A, "t1", "work dig", big, false, 1200L));
         assertEquals("t1", task.taskId());
         assertEquals(1200L, task.elapsedMs());
         assertTrue(task.describe().startsWith("Its description came to "), task.describe());

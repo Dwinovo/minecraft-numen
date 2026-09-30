@@ -1,6 +1,8 @@
 package com.dwinovo.numen.core.nav;
 
 import com.dwinovo.numen.pathing.search.WorldSnapshot;
+import com.dwinovo.numen.pathing.spec.PositionCosts;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
@@ -9,22 +11,28 @@ import net.minecraft.world.level.LevelHeightAccessor;
 import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** 工作区:哪些格在区里,以及它为什么放得进寻路一次看得清的范围。 */
+/** 工作区:哪些格在区里、走动怎么关在里面,以及它放得进寻路一次看得清的范围。 */
 class WorkAreaTest {
 
     private static final BlockPos CENTER = new BlockPos(0, 64, 0);
     private static final int R = WorkArea.RADIUS;
 
+    @BeforeAll
+    static void boot() {
+        net.minecraft.SharedConstants.tryDetectVersion();
+        net.minecraft.server.Bootstrap.bootStrap();
+    }
+
     @Test
     void theAreaIsABallCountedInWholeCells() {
-        WorkArea area = WorkArea.at(Level.OVERWORLD, CENTER, R);
+        WorkArea area = WorkArea.around(Level.OVERWORLD, CENTER);
         assertTrue(area.contains(Level.OVERWORLD, CENTER));
         assertTrue(area.contains(Level.OVERWORLD, CENTER.east(R)), "半径上的那一格算在区里");
         assertFalse(area.contains(Level.OVERWORLD, CENTER.east(R + 1)));
@@ -39,11 +47,29 @@ class WorkAreaTest {
     }
 
     @Test
-    void aSmallerAreaIsFineButNoneReachesPastWhatOnePlanSees() {
-        assertTrue(WorkArea.at(Level.OVERWORLD, CENTER, 16).contains(Level.OVERWORLD, CENTER.east(16)));
-        assertFalse(WorkArea.at(Level.OVERWORLD, CENTER, 16).contains(Level.OVERWORLD, CENTER.east(17)));
-        assertThrows(IllegalArgumentException.class, () -> WorkArea.at(Level.OVERWORLD, CENTER, R + 1));
-        assertThrows(IllegalArgumentException.class, () -> WorkArea.at(Level.OVERWORLD, CENTER, 0));
+    void aSiteIsItsBoxAndAMarginAroundIt() {
+        WorkArea site = WorkArea.site(Level.OVERWORLD, new BlockPos(0, 64, 0), new BlockPos(4, 66, 2));
+        int m = WorkArea.SITE_MARGIN;
+        assertTrue(site.contains(Level.OVERWORLD, new BlockPos(-m, 64 - m, -m)));
+        assertTrue(site.contains(Level.OVERWORLD, new BlockPos(4 + m, 66 + m, 2 + m)));
+        assertFalse(site.contains(Level.OVERWORLD, new BlockPos(5 + m, 65, 1)));
+        assertEquals(new BlockPos(2, 65, 1), site.center());
+        assertEquals("the site 0,64,0..4,66,2 and " + m + " blocks around it", site.describe());
+    }
+
+    /** 关进区里的规格:站、过、挖、放在区里的格都不禁,区外的一律禁;规格原有的按位置禁令照旧。 */
+    @Test
+    void aConfinedSpecForbidsEveryUseOutsideTheArea() {
+        WorkArea area = WorkArea.around(Level.OVERWORLD, CENTER);
+        BlockPos kept = CENTER.north();
+        RouteSpec spec = area.confine(RouteSpec.defaults().edit().positions(PositionCosts.builder()
+                .forbid(PositionCosts.Use.DIG, kept.asLong()).build()).build());
+        for (PositionCosts.Use use : PositionCosts.Use.values()) {
+            assertFalse(spec.positions().forbids(use, CENTER.east(R).asLong()), use + " 区边上那一格");
+            assertTrue(spec.positions().forbids(use, CENTER.east(R + 1).asLong()), use + " 区外那一格");
+        }
+        assertTrue(spec.positions().forbids(PositionCosts.Use.DIG, kept.asLong()), "原有的禁令还在");
+        assertFalse(spec.positions().forbids(PositionCosts.Use.STAND, kept.asLong()));
     }
 
     /**
@@ -56,11 +82,12 @@ class WorkAreaTest {
         int[][] directions = {{1, 0}, {0, 1}, {1, 1}, {1, -1}};
         for (int offset : new int[]{0, 7, 15}) {
             BlockPos center = new BlockPos(offset, 64, offset);
-            WorkArea area = WorkArea.at(Level.OVERWORLD, center, R);
+            WorkArea area = WorkArea.around(Level.OVERWORLD, center);
             for (int[] d : directions) {
                 double norm = Math.sqrt(d[0] * d[0] + d[1] * d[1]);
-                int dx = (int) Math.floor(R * d[0] / norm);
-                int dz = (int) Math.floor(R * d[1] / norm);
+                // 朝零取整:负方向往下取整会多出一格,落到球外
+                int dx = (int) (R * d[0] / norm);
+                int dz = (int) (R * d[1] / norm);
                 for (int sign : new int[]{1, -1}) {
                     BlockPos start = center.offset(sign * dx, 0, sign * dz);
                     BlockPos target = center.offset(-sign * dx, 0, -sign * dz);

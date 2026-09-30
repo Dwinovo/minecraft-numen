@@ -56,12 +56,13 @@ public final class MoveCommands {
     private static final Param<AreaRef> AREA = Param.optional("area", ArgType.area(),
             "Instead of coordinates: an area of your owner's, the whole of it or one part (ores/g3). --arrive counts "
                     + "for any of its cells: at stands in any of them, use uses any of its blocks, near stops within "
-                    + "--near of any of them.");
+                    + "--near of any of them, dig stands within reach of any of its blocks.");
     /** 怎样算到了:goto 与 route 组写去处的地方共用。 */
     static final Param<String> ARRIVE = Param.optional("arrive", ArgType.oneOf(Destination.ARRIVE_WORDS),
             "What counts as there. at: stand in that cell (or column, or height, or any cell of the area). use: stand "
                     + "where that block (or any block of the area) is in sight and in reach, to use it. near: stop "
-                    + "within --near blocks of the cell, place or area.")
+                    + "within --near blocks of the cell, place or area. dig: stand where your hand reaches that block "
+                    + "(or any block of the area), even if something is in the way, to dig it with work dig.")
             .whenOmitted("arrive at");
     static final Param<Integer> NEAR = Param.optional("near", ArgType.integer(1, MAX_NEAR),
             "With --arrive near only: anywhere within this many blocks counts as there.");
@@ -88,6 +89,7 @@ public final class MoveCommands {
                 .example("move goto --x 120 --z -35")
                 .example("move goto --x 120 --y 64 --z -35 --arrive use")
                 .example("move goto --x 120 --y 64 --z -35 --arrive near --near 2")
+                .example("move goto --x 120 --y 12 --z -35 --arrive dig --alter natural")
                 .example("move goto --y 16 --alter natural")
                 .example("move goto --area farm")
                 .example("move goto --area storage --arrive use")
@@ -97,14 +99,16 @@ public final class MoveCommands {
                         + "(`scan blocks`), then give its coordinates.")
                 .note("With --area she heads for the side of the area nearest her: at walks into any of its cells she "
                         + "can stand in, use goes to any of its blocks she can use, near stops within --near of any of "
-                        + "its cells. To go to another part of it, name that part (ores/g3).")
+                        + "its cells, dig stops within reach of any of its blocks. To go to another part of it, name "
+                        + "that part (ores/g3).")
                 .note("--arrive says what counts as there: at (default) stands in the cell or column exactly — to "
                         + "stand on top of a block, give the cell above it; use stands where the block is in sight and "
-                        + "in reach, never touching it; near stops within --near blocks.")
+                        + "in reach, never touching it; near stops within --near blocks; dig stands where the hand "
+                        + "reaches the block, which may still be buried — it leaves the block itself for work dig.")
                 .note("A call that cannot mean anything here fails at once with the reason and the ways to write it: "
-                        + "arrive at into a solid block or mid-air on a walk that changes nothing, arrive use "
-                        + "without y, arrive use on air or on a block walled in on every side, an area that does not "
-                        + "exist or has nowhere to stand in or nothing to use.")
+                        + "arrive at into a solid block or mid-air on a walk that changes nothing, arrive use or dig "
+                        + "without y, arrive use or dig on air, arrive use on a block walled in on every side, an area "
+                        + "that does not exist or has nowhere to stand in, nothing to use or nothing to dig.")
                 .note("Shorthand for a route: it writes the walk as your own route goto-<your name>, plans it from "
                         + "where you stand and walks it, exactly as move go does. When it fails, the reply gives the "
                         + "line that changes that route, e.g. route spec with --alter natural, then route plan.")
@@ -125,6 +129,7 @@ public final class MoveCommands {
                         • at — stand IN that cell (or column, or height, or any cell of the area), however the body is held there: standing, on a ladder, in water. To stand on top of a block, give the cell above it.
                         • use — x+y+z of a block you want to use (furnace, chest, crafting table, bed…), or an area to use any one of its blocks: stands where one of its open faces is in sight and in reach, never touching it. Then call use block on it.
                         • near — with near:<n>, anywhere within n blocks of the cell, place or area.
+                        • dig — x+y+z of a block to dig (an ore, a buried block), or an area: stands where the hand reaches it, even if it is buried or out of sight; with alter:'natural' she digs and pillars her way there. The block itself is left for work_dig.
                         A call that cannot mean anything here fails at once, saying why and how to write it (e.g. arrive 'at' into a furnace on a walk that changes nothing, or 'use' on a block walled in on every side). It never guesses what you meant.
                         A ROUTE UNDER THE HOOD: every move_goto is written as your own route goto-<your name> (the reply names it), planned from where you stand, then walked — the same as `move go`. The plan is a promise: the walk changes only the blocks it lists, and if the world changes on the way so that more would be needed, it stops and says which. A walk longer than one look is planned as far as it can see and worked out on the way; a walk that changes nothing goes all the way.
                         TERRAIN: the walk never changes the world unless you say so — walls, floors, other people's builds and the landscape stay exactly as they were. When there is no clean route, the call FAILS and says what a route would take (how many blocks) and the exact next line to copy, such as route spec on your route with --alter natural, then route plan to see which blocks before walking. Underground travel and climbing out of pits usually need alter:'natural'. Blocks that are someone's are asked about before setting off. Every call reports what it actually broke or placed.
@@ -197,7 +202,7 @@ public final class MoveCommands {
 
     /**
      * 跟着走——纯<b>常驻</b>的活:它没有"干完"这回事,只有被主人换掉。所以没有 count、没有期限,派下去之后她就一直
-     * 跟着,直到主人让她做别的({@code work mine}、{@code work fish}……都会顶掉它)。
+     * 跟着,直到主人让她做别的({@code work dig}、{@code work fish}……都会顶掉它)。
      *
      * <p>不给 {@code entity_id} 就是跟主人,给了就跟那一只——村民、狼、别的玩家都行。两者目标消失时的含义不同,
      * 见 {@code FollowTaskRecord#target}。点名的那只按 UUID 认:记录里存它,重启后重放的那一行也写它

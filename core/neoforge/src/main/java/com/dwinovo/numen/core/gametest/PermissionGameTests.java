@@ -320,13 +320,13 @@ public class PermissionGameTests {
         for (BlockPos rel : hut) {
             level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.WHITE_WOOL.defaultBlockState());
         }
-        BlockPos pumpkin = helper.absolutePos(new BlockPos(12, 2, 12));
+        BlockPos pumpkin = helper.absolutePos(new BlockPos(10, 2, 10));
         level.setBlockAndUpdate(pumpkin, Blocks.PUMPKIN.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_walled_in", new BlockPos(4, 2, 4), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_shepherd");
         storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
                 com.dwinovo.numen.permission.Rule.parse("break(minecraft:white_wool)"));
-        Mining mine = mineScanned(helper, companion, 16, "minecraft:pumpkin", "count", 1);
+        Mining mine = mineScanned(helper, companion, 9, "minecraft:pumpkin", "count", 1);
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 
@@ -348,9 +348,9 @@ public class PermissionGameTests {
         });
     }
 
-    /** mine 点名这些区域或部分(不给 count,挖完为止),后台派出。 */
+    /** work_dig 点名这些区域或部分(不给 count,挖完为止),后台派出。 */
     private static TaskRecord mineArea(NumenPlayer companion, List<String> parts) {
-        return call(companion, "work_mine", args("area", parts)).task();
+        return call(companion, "work_dig", args("place", parts)).task();
     }
 
     /**
@@ -464,8 +464,8 @@ public class PermissionGameTests {
                 var group = groupHolding(groupsIn(scanned.reply()), helper.absolutePos(logRel));
                 helper.assertTrue(group != null && "logs/g1".equals(group.get("id").getAsString()),
                         "the scan did not keep the log as logs/g1: " + scanned.reply());
-                ToolRun missingPart = call(companion, "work_mine", args("area", List.of("logs/g7")));
-                ToolRun missingArea = call(companion, "work_mine", args("area", List.of("nowhere")));
+                ToolRun missingPart = call(companion, "work_dig", args("place", List.of("logs/g7")));
+                ToolRun missingArea = call(companion, "work_dig", args("place", List.of("nowhere")));
                 refusals[0] = missingPart.task() == null ? missingPart.reply() : "(accepted)";
                 refusals[1] = missingArea.task() == null ? missingArea.reply() : "(accepted)";
             }
@@ -480,11 +480,11 @@ public class PermissionGameTests {
     }
 
     /**
-     * mine 带 spec 的 avoid_break 作用到挑目标上:两根野生诡异菌柄,avoid_break 点名其中一格、要两个。
-     * 她挖了另一根就收场,点名的那格原样立着,回执交代那一格挖不成。
+     * "别碰这一格"由区域运算表达:两根野生诡异菌柄扫进区域,再框出要留的那一格,{@code area minus} 得到只剩另一根的区域,
+     * 挖它、要两个。她挖了另一根就收场(区里没有了),留下的那格原样立着。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
-    public static void mine_spec_avoid_break_leaves_that_cell_standing(GameTestHelper helper) {
+    public static void dig_leaves_standing_what_area_minus_took_out(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos freeRel = new BlockPos(5, 2, 5);
         BlockPos keptRel = new BlockPos(9, 2, 5);
@@ -493,16 +493,25 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_forager", new BlockPos(7, 2, 5), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         BlockPos kept = helper.absolutePos(keptRel);
-        Mining mine = mineScanned(helper, companion, 8, "minecraft:warped_stem", "count", 2,
-                "avoid_break", List.of(kept.getX() + "," + kept.getY() + "," + kept.getZ()));
+        ToolRun scanned = scanInto(companion, 5, "minecraft:warped_stem", "stems");
+        ToolRun[] dig = new ToolRun[1];
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(mine.done(), "mine has not finished");
-            String reply = mine.outcome();
-            helper.assertTrue(level.getBlockState(helper.absolutePos(freeRel)).isAir(), "the free stem was not mined");
-            helper.assertTrue(level.getBlockState(kept).is(Blocks.WARPED_STEM), "the avoid_break cell was mined");
-            helper.assertTrue(mine.succeeded() && reply.contains("can't be broken here"),
-                    "the reply does not account for the cell the spec kept: " + reply);
+            if (dig[0] == null) {
+                helper.assertTrue(scanned.succeeded(), "the scan has not kept the stems: " + scanned.reply());
+                helper.assertTrue(command(companion, "area new keep").succeeded()
+                                && command(companion, "area add keep --at " + xyz(kept)).succeeded()
+                                && command(companion, "area minus rest stems keep").succeeded(),
+                        "the area to dig was not narrowed");
+                dig[0] = call(companion, "work_dig", args("place", List.of("rest"), "count", 2));
+            }
+            helper.assertTrue(dig[0].done(), "dig has not finished");
+            String reply = dig[0].outcome();
+            helper.assertTrue(level.getBlockState(helper.absolutePos(freeRel)).isAir(), "the free stem was not dug");
+            helper.assertTrue(level.getBlockState(kept).is(Blocks.WARPED_STEM), "the cell taken out of the area was dug");
+            helper.assertTrue(dig[0].succeeded() && reply.contains("gathered 1/2")
+                            && reply.contains("nothing left to dig in my work area"),
+                    "the reply does not say the narrowed area was dug out: " + reply);
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
@@ -790,7 +799,7 @@ public class PermissionGameTests {
                 helper.assertTrue(scanned.succeeded(), "the scan has not kept the logs: " + scanned.reply());
                 com.dwinovo.numen.permission.Permission.setMode(companion,
                         com.dwinovo.numen.permission.Mode.OBSERVE);
-                mine[0] = call(companion, "work_mine", args("area", List.of("logs"), "count", 2));
+                mine[0] = call(companion, "work_dig", args("place", List.of("logs"), "count", 2));
             }
             helper.assertTrue(mine[0].done(), "mine has not finished");
             helper.assertTrue(!mine[0].succeeded() && mine[0].outcome().contains("observe mode"),
@@ -1624,11 +1633,11 @@ public class PermissionGameTests {
     }
 
     /**
-     * 主人不许挖谷仓那块区域:谷仓里的南瓜离她近,谷仓外的远,两个都扫进区域。work mine 要一个南瓜,她去挖外面那个,谷仓里的
+     * 主人不许挖谷仓那块区域:谷仓里的南瓜离她近,谷仓外的远,两个都扫进区域。work dig 要一个南瓜,她去挖外面那个,谷仓里的
      * 一动不动;对同一块区域再要一个,只剩谷仓里的,任务按拒绝收场、理由是那一行规则。不弹卡。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
-    public static void work_mine_leaves_the_denied_area_standing(GameTestHelper helper) {
+    public static void work_dig_leaves_the_denied_area_standing(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos insideRel = new BlockPos(5, 2, 5);
         BlockPos outsideRel = new BlockPos(11, 2, 5);
@@ -1640,7 +1649,7 @@ public class PermissionGameTests {
         areasOf(owner).create("barn", boxArea(helper, new BlockPos(4, 2, 4), new BlockPos(6, 3, 6)));
         storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
                 com.dwinovo.numen.permission.Rule.parse("break(area:barn)"));
-        Mining first = mineScanned(helper, companion, 16, "minecraft:pumpkin", "count", 1);
+        Mining first = mineScanned(helper, companion, 10, "minecraft:pumpkin", "count", 1);
         ToolRun[] second = new ToolRun[1];
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
@@ -1652,7 +1661,7 @@ public class PermissionGameTests {
             helper.assertTrue(level.getBlockState(helper.absolutePos(insideRel)).is(Blocks.PUMPKIN),
                     "the pumpkin in the barn was mined");
             if (second[0] == null) {
-                second[0] = call(companion, "work_mine", args("area", List.of(MINED_AREA), "count", 1));
+                second[0] = call(companion, "work_dig", args("place", List.of(MINED_AREA), "count", 1));
             }
             helper.assertTrue(second[0].done(), "the second mine has not finished");
             helper.assertTrue(!second[0].succeeded() && second[0].outcome().contains("break(area:barn)"),

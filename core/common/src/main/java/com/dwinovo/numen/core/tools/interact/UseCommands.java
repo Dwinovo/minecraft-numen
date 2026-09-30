@@ -105,8 +105,13 @@ public final class UseCommands {
                 .note("It does NOT travel: you must already be within working reach (~4.5 blocks) of the aim "
                         + "point; move_goto its coordinates with --arrive use stands you where one of its faces is "
                         + "in sight and in reach. Farther away it fails and names that move_goto.")
-                .note("Prefer work_mine for digging. Breaking or placing near your owner's things may ask your owner "
-                        + "first; the call waits for the answer.")
+                .note("Left is a bare key press: whatever you hold is what hits, and the block the crosshair lands "
+                        + "on is the one clicked — if something else is in the way (tall grass, a leaf), that is what "
+                        + "gets hit, and the result says so. It holds the button until the block breaks or --hold_ticks "
+                        + "run out; it never moves, never swaps tools, never clears the way. To dig something out "
+                        + "properly — best tool, the way cleared, the drops picked up — use work_dig.")
+                .note("Breaking or placing near your owner's things may ask your owner first; the call waits for the "
+                        + "answer.")
                 .note("The result reports what actually changed (hands, the aimed block, new entities); no "
                         + "change listed means the click did nothing.")
                 .seeAlso(line(GUI), line(ENTITY));

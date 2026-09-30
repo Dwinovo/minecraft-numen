@@ -71,6 +71,12 @@ public final class GotoReminders {
                 + call(pos, "arrive:near near:<blocks>") + ".";
     }
 
+    /** arrive:dig 指向没有轮廓的格:空气、流体,没有可挖的。 */
+    public static String nothingToDig(BlockPos pos, String block) {
+        return Listing.coords(pos) + " is " + block + " — nothing there to dig. To get close: "
+                + call(pos, "arrive:near near:<blocks>") + ".";
+    }
+
     /** 封着一面的那一格:哪一面、面前是什么、在哪。 */
     public record Cover(String face, String block, BlockPos at) {}
 
@@ -129,6 +135,12 @@ public final class GotoReminders {
     /** arrive:use 一块区域,离她最近的那一部分里没有一格有可点的轮廓。 */
     public static String areaNothingToUse(AreaRef area, int looked, long cells) {
         return "none of " + nearest(area, looked, cells) + " holds a block to click — they are air or fluid. "
+                + "To get close: " + call(area, "arrive:near near:<blocks>") + ".";
+    }
+
+    /** arrive:dig 一块区域,离她最近的那一部分里没有一格有可挖的方块。 */
+    public static String areaNothingToDig(AreaRef area, int looked, long cells) {
+        return "none of " + nearest(area, looked, cells) + " holds a block to dig — they are air or fluid. "
                 + "To get close: " + call(area, "arrive:near near:<blocks>") + ".";
     }
 

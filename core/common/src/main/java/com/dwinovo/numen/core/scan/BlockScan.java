@@ -20,7 +20,7 @@ import java.util.function.Consumer;
 /**
  * 看某几种方块在哪:从她脚下按半径找({@link BlockSearch}),可以只看一块区域里的,命中的每一格用挖掘落点会提交的同一个动作
  * 问一次权限层,相连且说法相同的成一团({@link BlockGroups})。这是 {@code scan blocks} 的看法——看完的结果能原样写进一块区域
- * ({@link Found#into}),{@code work mine} 挖的就是那块区域里的格,挖矿自己不找候选。
+ * ({@link Found#into}),{@code work dig} 挖的就是那块区域里的格,挖掘自己不找候选。
  */
 public final class BlockScan {
 

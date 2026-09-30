@@ -82,7 +82,7 @@ public final class McpServer {
 
             Loop: (1) list_companions to see who is live — create_companion by name to summon a new one, \
             delete_companion to dismiss one for good; (2) perceive with status_self / scan_blocks / \
-            scan_entities; (3) act with move_goto / work_mine, and the command tool for everything else \
+            scan_entities; (3) act with move_goto / work_dig, and the command tool for everything else \
             (build at, fight attack, work fish, inv craft, gear wear, …). Long actions return a task_id at \
             once and their end does not arrive in get_events — run the command 'task status' until the body \
             is idle, then perceive to confirm. Every action tool takes a 'companion' argument (name or id), \

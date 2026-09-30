@@ -88,6 +88,9 @@ public final class BuildCommands {
                 .note("Survival: a design is priced as a whole before the first block and refused, placing nothing, "
                         + "when anything is short; a blueprint file builds as far as your stock goes, and the same "
                         + "line again carries on where it stopped. Creative builds freely.")
+                .note("Survival: what stands where the design wants air or another block is dug out first, the same "
+                        + "way work dig digs — she walks into the site, takes the right tool, and the drops end up in "
+                        + "her pack; what she cannot dig out is named at the end. Creative replaces it at once.")
                 .note("Asks your owner first when their rules say so, for the cells it would change.")
                 .seeAlso("build show", "build built", "task stop");
         build.server("built", "The buildings made with `build at`: design, dimension, spot, rotation, when and by whom.",

@@ -69,7 +69,7 @@ public final class RouteCommands {
                 }, with(List.of(NEW_NAME, TO, MoveCommands.ARRIVE, MoveCommands.NEAR), RouteSpecFlags.PARAMS))
                 .example("route new home --to 120 64 -35")
                 .example("route new mine --to 80 12 -40 --arrive near --near 3 --alter natural")
-                .example("route new ore --to ores/g3 --arrive near --near 3 --avoid_break area:house")
+                .example("route new ore --to ores/g3 --arrive dig --alter natural --avoid_break area:house")
                 .note("Instant; it only writes the route down, nothing moves. --to, --arrive and --near mean what the "
                         + "same fields of move goto mean (numbers are coordinates, a name is an area), and a destination "
                         + "that cannot mean anything here is refused at once the same way.")

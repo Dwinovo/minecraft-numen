@@ -530,7 +530,7 @@ public final class ModLanguageData {
         adder.add("numen.tool.status_self", "Self status");
         adder.add("numen.tool.todowrite", "Update plan");
         adder.add("numen.tool.transfer", "Transfer items");
-        adder.add("numen.tool.work_mine", "Mine");
+        adder.add("numen.tool.work_dig", "Dig");
         adder.add("numen.mcp.title", "Tool Extensions (MCP)");
         adder.add("numen.mcp.empty", "None · click ＋ Add (top-right)");
         adder.add("numen.mcp.add", "＋ Add");
@@ -1067,7 +1067,7 @@ public final class ModLanguageData {
         adder.add("numen.tool.status_self", "自身状态");
         adder.add("numen.tool.todowrite", "更新计划");
         adder.add("numen.tool.transfer", "转移物品");
-        adder.add("numen.tool.work_mine", "挖掘");
+        adder.add("numen.tool.work_dig", "挖掘");
         adder.add("numen.mcp.title", "工具扩展 (MCP)");
         adder.add("numen.mcp.empty", "无 · 点右上「＋ 添加」");
         adder.add("numen.mcp.add", "＋ 添加");

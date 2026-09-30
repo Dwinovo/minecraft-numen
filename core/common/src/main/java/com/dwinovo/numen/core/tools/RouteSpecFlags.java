@@ -30,7 +30,7 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.block.Block;
 
 /**
- * 路线规格的命令面:{@code move goto}、{@code route new}、{@code route spec} 与 {@code work mine} 共用的那一串标志({@link #PARAMS})
+ * 路线规格的命令面:{@code move goto}、{@code route new} 与 {@code route spec} 共用的那一串标志({@link #PARAMS})
  * 长什么样,读好的值怎么变成 {@link RouteSpec}({@link #parse})——标志到规格的翻译全仓只此一处。旋钮名用模型看得懂的
  * 普通词,按规格的四组组织:
  * <ul>

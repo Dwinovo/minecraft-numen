@@ -91,24 +91,24 @@ public final class ScanCommands {
                 .note("One group per line, nearest first; a long list comes in pages, and each page looks again.")
                 .note("Without --into it only looks: the groups have no ids. With --into ores each group becomes a "
                         + "part of the area ores (make it first with `area new ores`), and its id (ores/g5) is what "
-                        + "`work mine` takes as the area to dig, and `area show` too. Adding to an area your owner's rules name asks "
+                        + "`work dig` takes as the area to dig, and `area show` too. Adding to an area your owner's rules name asks "
                         + "your owner first.")
                 .note("--in base looks only inside the area base, as far as the radius reaches from you.")
                 .note("Only loaded terrain is read: anything further out is UNKNOWN, not empty.")
-                .seeAlso("area show", "work mine", "scan block")
+                .seeAlso("area show", "work dig", "scan block")
                 .promote("Find blocks of given type(s) near you, reported as GROUPS: matching cells "
                         + "that touch (diagonals count) and get the same permission answer for breaking them — so a "
                         + "player's log pillar standing against a wild tree comes back as two groups. One group per "
                         + "line (a JSON object), nearest first; groups_total counts them all when the whole radius was "
                         + "read. A long list comes in pages: pass page to read the next one (each page looks again). "
                         + "Each group gives: cells and a count per block type, the nearest cell with direction and "
-                        + "distance, permission for breaking its cells (allow; ask = work_mine asks the owner first; "
-                        + "deny = work_mine stops) with the reason, sources = source cells for water or lava (a source "
+                        + "distance, permission for breaking its cells (allow; ask = work_dig asks the owner first; "
+                        + "deny = work_dig stops) with the reason, sources = source cells for water or lava (a source "
                         + "behaves very differently from flowing), and for groups of up to 16 cells every position. A "
                         + "very large group comes back cut along 16-block section lines, one group per piece. "
                         + "into: keep what you found — each group becomes a part of that area (make it first with "
                         + "`area new ores`), its id is area/part (ores/g5), and it stays across restarts: pass it to "
-                        + "work_mine as area to dig exactly those cells, or read it back with `area show ores`. "
+                        + "work_dig as place to dig exactly those cells, or read it back with `area show ores`. "
                         + "Without into nothing is kept and the groups have no ids. in: look only inside that area "
                         + "(or part), as far as radius reaches. Sees terrain that is loaded right now; anything further "
                         + "out is UNKNOWN, not empty, and note says when that happened — walk that way and scan again. "
@@ -138,7 +138,7 @@ public final class ScanCommands {
                 .promote("Inspect a single block at the given integer coordinates. Returns block "
                         + "id, its block-state properties when any (e.g. an end_portal_frame's has_eye/facing), "
                         + "hardness, whether you have the correct tool in hand, an estimated dig-tick count, "
-                        + "and whether the block is in your 4.5-block mining reach. Call this before work_mine "
+                        + "and whether the block is in your 4.5-block mining reach. Call this before work_dig "
                         + "to confirm the operation will succeed, or to check which end_portal_frame cells "
                         + "still need an ender_eye.");
         scan.server("storage", "What a block holds — items, fluid, energy — read without opening it.",

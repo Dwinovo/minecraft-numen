@@ -28,7 +28,7 @@
 5. **第 1 层命令的三种来源**:
    - 包装第 0 层的指令,比如 `ysm switch`:限定只作用于她、按主人的授权、执行后回读确认;
    - 用模组的 API 直接补上模组没给的功能,比如 `ftbquests submit`;
-   - 核心动作,比如 `task status`,以及第 4 步迁来的 `move goto`、`work mine` 等。
+   - 核心动作,比如 `task status`,以及第 4 步迁来的 `move goto`、`work dig` 等。
 6. **快捷工具是 alias**:第 1 层里高频的几条提升为独立工具,名字就是 `组_动作`,用同一个处理函数,回执也一样。
 7. **权限**:
    - 第 1 层每条命令自己声明以谁的权威执行,默认是她自己。包装类命令可以借服务器的权威,但作用范围写死在代码里。
@@ -41,7 +41,7 @@
 
 ```
 模型
- ├─ 快捷工具 move_goto / work_mine / … ← 第 1 层里高频命令的 alias
+ ├─ 快捷工具 move_goto / work_dig / … ← 第 1 层里高频命令的 alias
  └─ command 工具 "<一行>"
           │
           ├─ 行首是 "/" → 第 0 层:服务端以她的 CommandSourceStack 解析(写不通当场失败,附用法)
@@ -105,7 +105,7 @@ task status                           第 1 层,核心动作
 
 - **同源**:把 JSON 参数按同一组参数类型读成值,交给同一个处理函数,回执与从 `command` 调用一字不差(附录 A)。
 - **叫什么**:工具名由命令路径生成,`组_动作`(`move goto` 提升成 `move_goto`),登记时不另起名字(附录 G)。
-- **提升哪些**:按调用频率定。现在提升的是 status_self、status_owner、scan_around、scan_blocks、scan_entities、scan_block、move_goto、work_mine、skill_load、task_stop 十个(附录 G)。
+- **提升哪些**:按调用频率定。现在提升的是 status_self、status_owner、scan_around、scan_blocks、scan_entities、scan_block、move_goto、work_dig、skill_load、task_stop 十个(附录 G)。
   - `task status` 与 `task timer` 只留命令:task_status 主要被拿来轮询,而收尾本来就会以 `task_finished` 送到。
   - 基线建议里的 build 不再是工具:建造改为 `build` 组的一串命令(原语、设计、`build at`),一次写完整栋房子的那一个调用没有了(附录 G)。
 - **独立工具**:除了快捷工具与 `command`,工具表里只留一个 `todowrite`——输入本身是一份结构化清单的动作留作独立工具,这是这条规则下唯一的例外(附录 G)。
@@ -594,7 +594,7 @@ gt_long lingre 40
 | | remember、recall、forget、load_skill | `memory remember`、`memory recall`、`memory forget`、`skill load` | skill_load |
 | | task_status、task_stop、set_timer | `task status`、`task stop`、`task timer` | task_stop |
 | C 长活 | goto、follow、plan_route | `move goto`、`move follow`、`route plan`(09-30 起;原 `move route`) | move_goto |
-| | mine、collect_items、fish | `work mine`、`work collect`、`work fish` | work_mine |
+| | mine、collect_items、fish | `work dig`(09-30 起;原 `work mine`)、`work collect`、`work fish` | work_dig |
 | | attack | `fight attack` | |
 | | blueprint、blueprint_read、build | `build` 组(本批,见下) | |
 | | scaffold_materials | `throwaway` 组(见下) | |
@@ -1034,6 +1034,30 @@ work mine logs --count 16 --avoid_break area:house
   寻路的位置代价(`PositionCosts`,寻路模块不依赖 api 的区域);收成区域再展开回去只多一层转换,判定仍是寻路模块那一处。
 - `scan storage --in`:不做。`scan storage` 的必填位置参数是一格 `x y z`,命令行没有可省的位置参数,`--in` 要么让同一个动作有两种
   写法、要么另起一个动作;"区域里的容器装了什么"眼下没有消费方,等要用时按真实用例开。
+
+### 挖掘统一:work dig、跟前的工作区、--arrive dig(09-30,`look-plan-act.md` §十一)
+
+```
+work dig ores/g3                 扫描来的格:只挖还是当时那种方块的
+work dig pit                     框出来的格:里面是什么挖什么(空气、流体跳过)
+work dig 120 12 -35              坐标:只有一格的区域;一串里名字与坐标可以混写
+work dig ores --count 10         --count 是新增的物品数
+move goto --x 120 --y 12 --z -35 --arrive dig --alter natural    走到手够得着它的地方,那一格留给 work dig
+route new ore --to ores/g3 --arrive dig --alter natural          路线的去处同一种写法
+```
+
+- `work dig`(快捷工具 `work_dig`,字段 `place`)取代 `work mine`,不收路线标志;"别碰什么"由 `area minus` 与主人的规则表达。
+  一串写法由 `Destination.Stop.each` 分成几处,每一处照 `Stop.of` 读(数是坐标、名字是区域)。
+- 工作区 = 跟前:受理时脚下为中心、半径 10 的球(`WorkArea`,理由在类注释),走动用 `PositionCosts.confine` 关在里面;`work collect`
+  的范围是同一个工作区,`--radius` 删掉。区外的只报告,下一步两种写法都给:
+  `4 cell(s) of targets lie beyond it and are left, the nearest at …, about 12 blocks from me. To dig there, open the way first: `route new targets --to targets --arrive dig --alter natural`, `route plan targets` to see what the way changes, `move go targets` — or straight away move_goto area:targets arrive:dig alter:natural — then `work dig targets` again.`
+- 派发时当场拒收的几种:区域是空的(`targets has no cells yet, so I did not start; `scan blocks <radius> <block ids> --into targets` or `area add targets --box <x1,y1,z1..x2,y2,z2>` fills it`)、整片在区外(`all 2 cell(s) of targets lie beyond my work area (within 10 blocks of …), so I did not start; …`)、
+  区里一格都不用挖(扫描来的都变了,或框出来的都是空气、流体)。
+- `--arrive dig`:模块现成的 `Goals.dig`;写错提醒:`arrive:dig names one block — give its y too (x, y and z).`、
+  `120,64,-35 is air — nothing there to dig. To get close: move_goto x:120 y:64 z:-35 arrive:near near:<blocks>.`。到了的回执:
+  `standing at …, with the ancient_debris at 30,3,30 within reach — `work dig 30 3 30` digs it from here, via route goto-….`
+- 建造清场(生存)交给同一个挖掘执行,创造模式照原版一下就碎;`use block left` 退回纯按键(手上什么用什么、准星落在谁按谁,
+  落在别的格照实说:`left-clicked dirt at 5,2,12 — the crosshair landed there, not on 6,2,12 — …`)。细节见 `look-plan-act.md` §十第 4 步。
 
 ### transfer 改成一次一步
 

@@ -80,7 +80,7 @@ final class McpAccessPrompt {
                 - Reply and narrate with `say(companion, text)` — the words appear in-game as the \
                 companion's chat line, speech bubble, and voice. Keep your own conversation history; \
                 the game stores none for you.
-                - Long actions — the tools `move_goto` and `work_mine`, and commands such as `build at`, \
+                - Long actions — the tools `move_goto` and `work_dig`, and commands such as `build at`, \
                 `work fish` or `fight attack` run through the `command` tool — are BACKGROUND tasks: \
                 they return a task id at once. The end of a task you started does NOT show up in \
                 `get_events`: run the command `task status` until the body is idle, then perceive to \
@@ -92,8 +92,10 @@ final class McpAccessPrompt {
                 - `scan_blocks` answers in groups of touching blocks, each saying whether breaking it is \
                 allowed, needs the owner's consent, or is refused. With `into` it keeps them in a saved area \
                 (make it first with the command `area new ores`) and each group gets an id like ores/g3; \
-                `work_mine` digs only such an area: pass it as `area` (ores, or ores/g3) and it digs exactly \
-                those cells, also after a restart.
+                `work_dig` digs such an area: pass it as `place` (ores, or ores/g3) and it digs those cells \
+                that still hold what the scan saw, also after a restart; framed areas and coordinates (x y z) \
+                are dug whatever they hold. It works only within a few blocks of where the body stands and \
+                reports the rest with the lines that open the way there (`move_goto` with arrive `dig`).
                 - It's survival mode — the tools do only what a real player can. No give, no setblock.
 
                 One more thing: talk to me in the language I'm writing to you in, even though these \

@@ -401,6 +401,62 @@ public class InteractGameTests {
         });
     }
 
+    /**
+     * 左键是一次纯按键:手里拿着一根木棍,包里有一把铁锹,{@code use block left} 对着一块泥土——她用木棍挖(挖得慢,但挖得掉),
+     * 不去换锹;锹原样躺在包里那一格,手里还是木棍,回执里没有换工具这一句。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_interact")
+    public static void use_block_left_hits_with_whatever_is_in_hand(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos dirt = helper.absolutePos(new BlockPos(5, 2, 8));
+        level.setBlockAndUpdate(dirt, Blocks.DIRT.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_bare_press", new BlockPos(3, 2, 8), false);
+        var inventory = companion.getInventory();
+        inventory.selected = 0;
+        inventory.setItem(0, new ItemStack(Items.STICK));
+        inventory.setItem(5, new ItemStack(Items.IRON_SHOVEL));
+        ToolRun press = command(companion, "use block left " + xyz(dirt));
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(press.done(), "use block has not finished");
+            helper.assertTrue(press.succeeded() && level.getBlockState(dirt).isAir(),
+                    "the dirt was not broken: " + press.outcome());
+            helper.assertTrue(inventory.selected == 0 && companion.getMainHandItem().is(Items.STICK)
+                            && inventory.getItem(5).is(Items.IRON_SHOVEL),
+                    "she swapped tools for a bare key press: holding " + companion.getMainHandItem());
+            helper.assertTrue(press.outcome().contains("left-clicked " + xyz(dirt).replace(' ', ',')),
+                    "the reply does not say what was clicked: " + press.outcome());
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 准星落在谁就按谁:她和石头之间隔着一块泥土,{@code use block left} 对着石头按下去,落在泥土上——挖掉的是泥土,石头原样;
+     * 回执照实说准星落在了泥土上,不是瞄的那一格。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_interact")
+    public static void use_block_left_presses_what_the_crosshair_lands_on(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos stone = helper.absolutePos(new BlockPos(6, 2, 12));
+        BlockPos dirt = helper.absolutePos(new BlockPos(5, 2, 12));
+        level.setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
+        level.setBlockAndUpdate(dirt, Blocks.DIRT.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_crosshair", new BlockPos(3, 2, 12), false);
+        ToolRun press = command(companion, "use block left " + xyz(stone));
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(press.done(), "use block has not finished");
+            helper.assertTrue(press.succeeded() && level.getBlockState(dirt).isAir()
+                            && level.getBlockState(stone).is(Blocks.STONE),
+                    "the press did not land on the dirt in front: " + press.outcome());
+            helper.assertTrue(press.outcome().contains("dirt at " + dirt.getX() + "," + dirt.getY() + ","
+                            + dirt.getZ() + " — the crosshair landed there, not on " + stone.getX() + ","
+                            + stone.getY() + "," + stone.getZ()),
+                    "the reply does not say the crosshair landed elsewhere: " + press.outcome());
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     /** 拿着圆石右键脚边的地面:圆石放在了那块地面上面一格,手里少了一块。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_at_places_a_block_on_the_floor(GameTestHelper helper) {

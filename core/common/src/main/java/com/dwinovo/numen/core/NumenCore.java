@@ -24,8 +24,8 @@ import com.dwinovo.numen.core.task.locate.LocateBiomeCompanionTask;
 import com.dwinovo.numen.core.task.locate.LocateBiomeTaskRecord;
 import com.dwinovo.numen.core.task.locate.LocateStructureCompanionTask;
 import com.dwinovo.numen.core.task.locate.LocateStructureTaskRecord;
-import com.dwinovo.numen.core.task.mine.MineBlockTaskRecord;
-import com.dwinovo.numen.core.task.mine.MineCompanionTask;
+import com.dwinovo.numen.core.task.dig.DigTaskRecord;
+import com.dwinovo.numen.core.task.dig.DigCompanionTask;
 import com.dwinovo.numen.core.task.move.MoveToCompanionTask;
 import com.dwinovo.numen.core.task.move.MoveToTaskRecord;
 
@@ -104,7 +104,7 @@ public final class NumenCore {
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.RouteCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.FightCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.locate.LocateCommands::install);
-        // work 组提升出 work_mine
+        // work 组提升出 work_dig
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.WorkCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.inventory.GearCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.BuildCommands::install);
@@ -130,7 +130,7 @@ public final class NumenCore {
         TaskFactory.register(MoveToTaskRecord.class, (p, r) -> new MoveToCompanionTask(p, r));
         TaskFactory.register(com.dwinovo.numen.core.task.move.FollowTaskRecord.class,
                 (p, r) -> new com.dwinovo.numen.core.task.move.FollowCompanionTask(p, r));
-        TaskFactory.register(MineBlockTaskRecord.class, (p, r) -> new MineCompanionTask(p, r));
+        TaskFactory.register(DigTaskRecord.class, (p, r) -> new DigCompanionTask(p, r));
         TaskFactory.register(EquipTaskRecord.class, (p, r) -> new EquipCompanionTask(p, r));
         TaskFactory.register(com.dwinovo.numen.core.task.inventory.UnequipTaskRecord.class,
                 (p, r) -> new com.dwinovo.numen.core.task.inventory.UnequipCompanionTask(p, r));

@@ -4,7 +4,11 @@ import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.FailureType;
+import com.dwinovo.numen.core.nav.CompanionHands;
+import com.dwinovo.numen.pathing.body.Crosshair;
+import com.dwinovo.numen.pathing.body.Effector;
 import com.dwinovo.numen.permission.Action;
+import com.dwinovo.numen.permission.Verdict;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -30,7 +34,8 @@ import net.minecraft.world.phys.HitResult;
  *
  * <h2>Native dispatch (the same server entry points a real client's packets reach)</h2>
  * <ul>
- *   <li>ATTACK + block  → {@link BlockDigger} (creative insta / survival timed) → {@code handleBlockBreakAction} START/STOP (server destroys)</li>
+ *   <li>ATTACK + block  → the body's own hands ({@link CompanionHands}: the vanilla dig loop behind the permission
+ *       layer; creative insta / survival timed) on the block the crosshair lands on, with whatever is held</li>
  *   <li>ATTACK + entity → {@code player.attack} (cooldown-scaled damage / sweep / knockback)</li>
  *   <li>USE + block     → {@code gameMode.useItemOn} (vanilla place / activate), both hands tried</li>
  *   <li>USE + entity    → {@code entity.interact} then {@code player.interactOn} (trade / breed / mount), both hands</li>
@@ -106,10 +111,7 @@ public final class Interaction {
     private final InteractionHand hand;
     private final Timing timing;
 
-    private final BlockDigger digger; // only for ATTACK + block
-    /** 左键挖方块时身体为这一下做的动作(把工具拿到手上)交给它,由任务记进回执;别的按法不动手上的东西,为 null。 */
-    private final java.util.function.Consumer<com.dwinovo.numen.pathing.body.BodyAction> told;
-    private BlockHitResult presetHit; // USE+block: the hit already resolved (crosshair, or the face the caller chose)
+    private BlockHitResult presetHit; // the block hit already resolved (crosshair, or the face the caller chose)
     /**
      * 准星语义的 USE 才有的兜底:方块/实体没吃掉点击时,同一次按键落到物品自用
      * ({@code gameMode.useItem})——真客户端就是这个顺序(useItemOn 不消费就发
@@ -133,31 +135,25 @@ public final class Interaction {
 
     private Interaction(NumenPlayer player, Button button, BlockPos block, Entity entity,
                         InteractionHand hand, Timing timing) {
-        this(player, button, block, entity, hand, timing, null);
-    }
-
-    private Interaction(NumenPlayer player, Button button, BlockPos block, Entity entity,
-                        InteractionHand hand, Timing timing,
-                        java.util.function.Consumer<com.dwinovo.numen.pathing.body.BodyAction> told) {
         this.player = player;
-        this.told = told;
         this.button = button;
         this.block = block == null ? null : block.immutable();
         this.entity = entity;
         this.hand = hand;
         this.timing = timing;
-        this.digger = (button == Button.ATTACK && block != null) ? new BlockDigger(player) : null;
     }
 
     // ---- factories (default timings; overloads take an explicit Timing) ----
 
     /**
-     * Left-click a block: break it (held until gone; creative insta / survival timed). {@code told} hears what the
-     * body did for it (the best tool taken into hand), for the task's reply.
+     * 左键按在准星落着的那一格上({@code hit}),按住直到它碎:手上是什么就用什么,不换工具、不挪步、不清别的格——一次纯按键。
+     * 创造一下就碎,生存按手上的东西算时间,都是原版的手自己分。
      */
-    public static Interaction attackBlock(NumenPlayer p, BlockPos pos,
-                                          java.util.function.Consumer<com.dwinovo.numen.pathing.body.BodyAction> told) {
-        return new Interaction(p, Button.ATTACK, pos, null, InteractionHand.MAIN_HAND, Timing.hold(), told);
+    public static Interaction attackBlock(NumenPlayer p, BlockHitResult hit) {
+        Interaction i = new Interaction(p, Button.ATTACK, hit.getBlockPos(), null, InteractionHand.MAIN_HAND,
+                Timing.hold());
+        i.presetHit = hit;
+        return i;
     }
 
     /** Left-click an entity once (cooldown-gated native attack). */
@@ -208,7 +204,7 @@ public final class Interaction {
      * Build the native action for a resolved crosshair {@code hit} + {@code button}, mapping
      * {@code holdTicks} to the cell's natural cadence — a 6-cell (button × target) dispatch:
      * <ul>
-     *   <li>ATTACK·BLOCK → break (BlockDigger holds till the block is gone);</li>
+     *   <li>ATTACK·BLOCK → break (the hands hold till the block is gone);</li>
      *   <li>ATTACK·ENTITY → hit (tap = one cooldown-gated hit; hold = keep hitting);</li>
      *   <li>USE·BLOCK → activate (tap once; hold re-clicks every rightClickDelay — modded crank);</li>
      *   <li>USE·ENTITY → interact (tap once; hold re-clicks);</li>
@@ -225,9 +221,8 @@ public final class Interaction {
      * @param sneak           按住潜行再点,见 {@link #crouched}
      */
     public static Interaction forHit(NumenPlayer p, HitResult hit, Button button, int holdTicks,
-                                     boolean itemFallthrough, boolean sneak,
-                                     java.util.function.Consumer<com.dwinovo.numen.pathing.body.BodyAction> told) {
-        Interaction i = press(p, hit, button, holdTicks, itemFallthrough, told);
+                                     boolean itemFallthrough, boolean sneak) {
+        Interaction i = press(p, hit, button, holdTicks, itemFallthrough);
         if (i != null) {
             i.sneak = sneak;
         }
@@ -235,14 +230,13 @@ public final class Interaction {
     }
 
     private static Interaction press(NumenPlayer p, HitResult hit, Button button, int holdTicks,
-                                     boolean itemFallthrough,
-                                     java.util.function.Consumer<com.dwinovo.numen.pathing.body.BodyAction> told) {
+                                     boolean itemFallthrough) {
         boolean hold = holdTicks != 0;
         switch (hit.getType()) {
             case BLOCK -> {
                 BlockHitResult bh = (BlockHitResult) hit;
                 if (button == Button.ATTACK) {
-                    return attackBlock(p, bh.getBlockPos(), told);
+                    return attackBlock(p, bh);
                 }
                 Interaction i = new Interaction(p, Button.USE, bh.getBlockPos(), null,
                         InteractionHand.MAIN_HAND,
@@ -318,19 +312,31 @@ public final class Interaction {
         return true;
     }
 
-    // ---- ATTACK + block: continuous break ----
+    // ---- ATTACK + block: hold the button on it ----
 
+    /**
+     * 按住左键:每刻朝按下时的那一点看着,准星还落在那一格上就接着挖;准星被挡开了(有东西走进来)就等着,不去挖挡着的。
+     * 那一格碎了就松手。权限层在第一下之前把门(同一格接着挖不再问),被拒只转述、不换法子。
+     */
     private Status breakBlock() {
         if (player.level().getBlockState(block).isAir()) return Status.DONE;
-        BlockDigger.DigResult result = digger.digStep(block, told);
-        if (result == BlockDigger.DigResult.REFUSED) {
-            // 权限层在挖掘落点把门;这里只转述,不换法子
-            failReason = "cannot break that block: " + digger.refusal().reason();
-            failType = FailureType.REFUSED;
-            hardFail = true;
-            return Status.FAILED;
+        player.controls().stop();
+        InputDriver.lookAt(player, presetHit.getLocation());
+        BlockHitResult hit = Crosshair.on(player, block);
+        if (hit == null) {
+            return Status.RUNNING;
         }
-        return result == BlockDigger.DigResult.BROKE_TARGET ? Status.DONE : Status.RUNNING;
+        return switch (CompanionHands.of(player).dig(hit)) {
+            case Effector.Strike.Swinging swinging -> Status.RUNNING;
+            case Effector.Strike.Broke broke -> Status.DONE;
+            case Effector.Strike.Refused refused -> {
+                failReason = "cannot break that block: " + (refused.reason() instanceof Verdict verdict
+                        ? verdict.reason() : BlockDigger.SERVER_REFUSED);
+                failType = FailureType.REFUSED;
+                hardFail = true;
+                yield Status.FAILED;
+            }
+        };
     }
 
     // ---- USE + air: tap or hold (food / bow) ----
@@ -482,7 +488,7 @@ public final class Interaction {
 
     /** Abandon any in-progress interaction (clears a dig overlay / releases a held use / lets go of sneak). */
     public void stop() {
-        if (digger != null) digger.cancel();
+        if (button == Button.ATTACK && block != null) CompanionHands.of(player).release();
         if (player.isUsingItem()) player.releaseUsingItem();
         player.controls().stop();
         if (sneak) player.controls().release(com.dwinovo.numen.pathing.body.Controls.Key.SNEAK);

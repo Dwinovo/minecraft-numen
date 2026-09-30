@@ -272,6 +272,34 @@ route reverse mine --as back                 反着的一条
   再展开回去只多一层转换);`scan storage --in` 没做(`x y z` 是必填位置参数,加 `--in` 就是一个动作两种写法,眼下也没有使用方);
   `area show` 只看她所在维度的区域;`--built`、`--route` 加进来的格是 `Area.Kind.CELLS`(编号 `c`)。
 
+### 第 4 步:挖掘统一(§十一 第 1–5 条,09-30)
+
+- **`work dig <区域或坐标...> [--count N]`**(快捷工具 `work_dig`,字段 `place`)取代 `work mine`,不留别名,不收路线标志。一串写法
+  由 `Destination.Stop.each` 分成几处(名字是区域,三个数一组是一格,每一处照 `Stop.of` 读),坐标是只有一格的区域。挖哪一格只在
+  `DigTaskRecord.wants` 判:附带方块的格(扫描来的)按 `Cells.Seen.holds`,不附带的(框的、点的、坐标)有方块就挖,空气与流体跳过。
+  派发时按活世界数工作区里要挖的格,空区域、整片在区外、区里都不用挖,当场拒收。
+- **工作区 = 跟前**:`WorkArea` 改成受理时脚下为中心、半径 10 的球(理由写在类注释:常见一团矿横竖四五格,`--arrive dig` 站到
+  交互距离 4.5 格内再开工,另一头在 9 格内,掉落物再留一格);`WorkArea.confine` 把站、过、挖、放都用 `PositionCosts.confine` 关在区里,
+  搜索展开的节点不多过区里的格数,不另设预算。走动的规格是 `alter natural`,要问主人的格不进路线、在动手那一刻逐格 `permit`,不走
+  `Trip` 的先整条规划。区外的只报告(`Beyond`,存 `Cells` 不展开成清单),下一步两种写法都给:`route new … --arrive dig --alter natural`、
+  `route plan`、`move go`,或 `move_goto … arrive:dig alter:natural`,到了再 `work dig`。
+- **任务**:`MineCompanionTask` 收成 `DigCompanionTask`(包 `core/task/dig`)。删掉的:卡死尺里"挪出两格就算进展"(只为走远路);
+  路线规格与 `DEFAULT_SPEC`(alter any)。卡死尺改成"二十秒里没挥一下、没挖掉、没捡到"。掉落物的目标与 `work collect` 同一个
+  (`DropTracker.pickUp`:离那一格一格以内),弹到区边外一格的也捡得到。
+- **`work collect`**:删掉 `--radius`,范围就是同一个工作区(与 `--area` 求交),走动同样关在里面。
+- **`--arrive dig`**:`Destination` 加一种到达,编成模块现成的 `Goals.dig`;写错提醒照 `GotoReminders`(没给 y、空气或流体、区域里
+  离她最近的那些格都没有方块)。到了的回执给出 `work dig` 那一行。
+- **建造清场**:生存模式下待办里立着东西、要成空气或要换成别的方块的格,走到外圈之后交给 `DigCompanionTask` 作为建造的子活
+  (`AbstractCompanionTask.runChild`:子活问主人记在父活名下;它跑时父活期限冻住、它按自己的期限走;收场时它的实际账与主人点过的头
+  并进父活,回执只说一次)。清场的工作区是工地外扩两格(外圈也离工地两格),图纸里不清的格禁挖禁放(`BuildSite.clearing`)。每格只交
+  一次,挖不掉的收工时归为 `BuildOutstanding.Cause.NOT_CLEARED`,连同挖掘执行的那句话。要放方块的格身上有料才清。创造模式照原版
+  一下就碎:写成空气(通知邻居)再落位,不走挖掘。`BlockDigger.destroyNow` 删掉,破坏方块只有她的手这一条路。
+- **`use block left`**:纯按键——朝那一格中心看,准星落在谁就按谁,手上是什么就用什么,按住直到碎或 `--hold_ticks` 到,不挪步;
+  落在别的格或实体上回执照实说。`Interaction` 的左键挖方块直接按 `CompanionHands`,不再经 `BlockDigger`(那里的换工具、清视线
+  归挖掘执行)。右键仍先清视线上的软遮挡再点(§十一第 5 条只说左键)。
+- **与设计稿的出入**:生存清场的格要身上有收得下它的工具才挖(与 `work dig` 同一条工具规矩),没有就如实报,不再像原来那样空手
+  毁掉;创造清场是"写成空气再落位",与原版创造一下就碎、再放一块同一个结果。
+
 ## 十一、挖掘统一(09-30 定)
 
 真机:挖远一点、深一点的矿连续 `OutOfBudget`(正下方 26 格、12 格外往下 8 格都一样)。病根是 `work mine` 在半径 48 的工作区里

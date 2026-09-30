@@ -127,7 +127,7 @@ public class CollectGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_collect")
     public static void work_collect_with_nothing_on_the_ground_says_none(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_empty_handed", new BlockPos(2, 2, 7), false);
-        ToolRun collect = command(companion, "work collect --radius 3");
+        ToolRun collect = command(companion, "work collect");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(collect.done(), "work collect has not finished");
@@ -193,7 +193,7 @@ public class CollectGameTests {
             level.setBlockAndUpdate(helper.absolutePos(new BlockPos(10, y, 10)), Blocks.STONE.defaultBlockState());
         }
         dropOnFloor(helper, new BlockPos(10, 5, 10), Items.IRON_INGOT, 3);
-        NumenPlayer companion = spawnAt(helper, "gametest_shortarm", new BlockPos(3, 2, 3), false);
+        NumenPlayer companion = spawnAt(helper, "gametest_shortarm", new BlockPos(6, 2, 6), false);
         ToolRun collect = command(companion, "work collect --item_ids minecraft:iron_ingot");
 
         succeedWhen(helper, () -> {

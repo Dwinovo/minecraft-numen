@@ -32,12 +32,6 @@ public final class InventoryOps {
     private static final int DROP_MAX_COUNT = 999;
 
     /**
-     * {@code collect} 不给半径时捡多远:身边一圈,自己刚打下、挖下的东西都在这里面;要更远由模型给,上限是工作区的半径
-     * ({@link WorkArea#RADIUS})。
-     */
-    public static final int COLLECT_DEFAULT_RADIUS = 16;
-
-    /**
      * {@code gear wear}:只做参数翻译。槽名随身体而定(模组会加槽),是不是真有这个槽、穿不穿得上,都由
      * {@link Wardrobe} 在身上答;{@code armor} 是卸下专用的别名,穿戴没有这个目标——四件甲各回各槽。
      */
@@ -80,11 +74,10 @@ public final class InventoryOps {
     }
 
     /**
-     * {@code work collect}:只捡一块区域里的——受理时她脚下为中心、半径 {@code radius} 的球(不给取默认,点名了区域时取工作区的
-     * 半径),点名了区域({@code areas})就再和它求交:区域说在哪儿,球说一趟走多远。
+     * {@code work collect}:只捡她工作区里的({@link WorkArea#around}:受理时她脚下为中心),点名了区域({@code areas})就再和它
+     * 求交:区域说在哪儿,工作区说一趟走多远。
      */
-    public TaskRecord collectItems(ServerSource src, List<ResourceLocation> itemIds, Integer radius,
-                                   List<AreaRef> areas) {
+    public TaskRecord collectItems(ServerSource src, List<ResourceLocation> itemIds, List<AreaRef> areas) {
         // Lenient set from the id list: unknown ids are skipped, and an absent list
         // yields an empty set — the "match everything" filter.
         Set<Item> filter = new LinkedHashSet<>();
@@ -96,19 +89,16 @@ public final class InventoryOps {
             }
         }
 
-        boolean named = areas != null && !areas.isEmpty();
-        int searchRadius = radius != null ? Math.clamp(radius, 1, WorkArea.RADIUS)
-                : named ? WorkArea.RADIUS : COLLECT_DEFAULT_RADIUS;
-        WorkArea around = WorkArea.around(src.companion(), searchRadius);
+        WorkArea around = WorkArea.around(src.companion());
         Area area = around.area();
         String where = around.describe();
-        if (named) {
+        if (areas != null && !areas.isEmpty()) {
             String name = String.join(" ", areas.stream().map(AreaRef::toString).toList());
             area = area.intersect(AreaOps.resolveAll(src.companion(), areas));
             where = "in " + name + ", " + where;
         }
         String label = filter.isEmpty() ? "all items" : labelFor(filter);
-        return new CollectItemsTaskRecord(src, filter, area, where, label);
+        return new CollectItemsTaskRecord(src, filter, around, area, where, label);
     }
 
     private static String labelFor(Set<Item> filter) {
