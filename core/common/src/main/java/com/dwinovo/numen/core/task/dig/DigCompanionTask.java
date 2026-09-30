@@ -5,6 +5,8 @@ import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.core.act.BlockDigger;
 import com.dwinovo.numen.core.nav.DigQuote;
 import com.dwinovo.numen.core.nav.Feet;
+import com.dwinovo.numen.core.nav.NavText;
+import com.dwinovo.numen.core.nav.Survey;
 import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.nav.WorkArea;
 import com.dwinovo.numen.core.scan.NearbyEntities;
@@ -17,9 +19,11 @@ import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
+import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.permission.Verdict;
+import com.dwinovo.numen.task.Preparation;
 import com.dwinovo.numen.task.TaskState;
 
 import net.minecraft.core.BlockPos;
@@ -52,6 +56,10 @@ import java.util.Set;
  * <h2>挖哪些格</h2>
  * 点名的区域在派发时解析成格子({@link DigTaskRecord#cells}):扫描来的格只挖还是当时那种方块的,框出来的格与点里面有什么挖什么
  * ({@link DigTaskRecord#wants})。格子途中被别人挖掉或变了,照常挖剩下的,回执如实交代。
+ *
+ * <h2>受理之前</h2>
+ * 区里有没有挖得了、挖得成、工具收得到、许挖的格,够不够得着(站着就够得着,或在区里对整批目标一次只搜不走的搜索),都在受理之前
+ * 判({@link #preparation}):不过就当场回那句收工时会说的话,没有任务编号;搜到的那条路是第一趟的开头。
  *
  * <h2>只在跟前干</h2>
  * 候选只取工作区({@link DigTaskRecord#work})里的,走动关在区里({@link WorkArea#confine}):挪几步、走进刚挖开的洞、捡弹开的
@@ -158,6 +166,8 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
     private final RouteSpec targetSpec;
     /** 给目标定价、判挖不挖得成的成本模型,每刻按此刻的身体与权限重组。 */
     private DigQuote pricing;
+    /** 受理之前的准备规划到的那条路:第一趟照它走({@link Trip#prepared});没有、或已经用过为 null。 */
+    private Route seed;
     /** 在走的那一趟朝着的目标,以及它是按哪一份名单与价钱编的——名单或价钱变了才把新目标交给那一趟。 */
     private Goal field;
     private FieldKey fieldKey;
@@ -211,11 +221,57 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
         });
     }
 
+    /**
+     * 受理之前:区里收候选、按此刻的身体与权限定价,看有没有挖得了的、挖得成的、工具收得到的、许挖的;有,就看够不够得着——
+     * 站着就够得着一格,或者在区里对整批目标一次只搜不走的搜索走得到。哪一步不过,就是开工后收工时说的那同一句话,当场作这次
+     * 调用的错误结果;走得到的那条路开工时照它走({@link Trip#prepared})。
+     */
     @Override
-    protected void onStart() {
-        // 件数按到手的物品数,不按挖掉的格:先算这些方块掉什么,再记下已有多少,进度是在它之上的增量
+    protected Preparation preparation() {
+        gather();
+        pricing = DigQuote.of(player, targetSpec);
+        admit();
+        if (knownOres.isEmpty()) {
+            return Preparation.refused(nothingToDig().why());
+        }
+        refreshField();
+        if (field == null) {
+            return Preparation.refused(refusedWhy());
+        }
+        if (reachableTarget() != null) {
+            return Preparation.ready("The nearest of them is within reach where I stand.");
+        }
+        Survey survey = Survey.of(player, List.of(new Survey.Leg(field, spec)));
+        return new Preparation() {
+            @Override
+            public Preparation.Readiness poll() {
+                List<Survey.Found> found = survey.poll();
+                if (found == null) {
+                    return null;
+                }
+                Survey.Found leg = found.get(0);
+                if (leg.reached()) {
+                    seed = leg.route();
+                    return Preparation.Readiness.ready("The first of them I head for is "
+                            + NavText.ahead(seed) + ".");
+                }
+                return Preparation.Readiness.refused(noneReached(
+                        NavText.failure(leg.outcome(), player, Feet.cell(player), towardField(), spec)));
+            }
+
+            @Override
+            public void cancel() {
+                survey.cancel();
+            }
+        };
+    }
+
+    /**
+     * 要挖的格与它们掉什么:受理之前准备时收一次;没准备过(建造清场派下的子活)在开工时收。件数按到手的物品数,不按挖掉的格,
+     * 所以先算这些方块掉什么。
+     */
+    private void gather() {
         dropItems = computeDropItems();
-        baseline = inventoryMatch();
         Level level = player.level();
         r.cells.intersect(r.work.cells()).forEach((x, y, z, seen) -> {
             BlockPos p = new BlockPos(x, y, z);
@@ -223,6 +279,15 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
                 remaining.add(p);
             }
         });
+    }
+
+    @Override
+    protected void onStart() {
+        if (!prepared()) {
+            gather();
+        }
+        // 记下已有多少,进度是在它之上的增量
+        baseline = inventoryMatch();
         lastProgressWork = workTicks();
         // 与 goto 的 start 日志对称:一任务一条,让日志里能看到任务确实启动了
         com.dwinovo.numen.core.Constants.LOG.info(
@@ -299,11 +364,13 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
             boolean moved = refreshField();
             if (field == null) {
                 // 名单上的每一格许可都不许挖,地上也没有要捡的:权限层的拒绝就是这件活的结果
-                fail("could not dig " + r.label + ": " + deniedWhy + "; " + soFar(), FailureType.REFUSED);
+                fail(refusedWhy(), FailureType.REFUSED);
                 return TaskState.FAILED;
             }
             if (nav == null) {
-                nav = Trip.to(player, field, spec, towardField());
+                // 受理之前规划好的那条只用在第一趟
+                nav = Trip.prepared(player, field, spec, seed, towardField());
+                seed = null;
             } else if (moved) {
                 // 名单每几刻就变:新目标交给在走的这一趟,停点还算数就照走,不算数才重搜
                 nav.retarget(field, towardField());
@@ -395,6 +462,11 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
         }
         BlockPos feet = player.blockPosition();
         return drops.stream().min(Comparator.comparingDouble(feet::distSqr)).orElse(feet);
+    }
+
+    /** 名单上的每一格许可都不许挖时说的那句话。 */
+    private String refusedWhy() {
+        return "could not dig " + r.label + ": " + deniedWhy + "; " + soFar();
     }
 
     /** 到了之后挖它的价钱;这一刻没算过的按不许挖的价。 */
@@ -854,19 +926,31 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
             return writeOffDrops(why);
         }
         stopNav();
-        BlockPos nearest = nearestOre();
-        String what = knownOres.isEmpty() ? "the drops lying on the ground"
-                : (r.getMined() > 0 ? "the remaining " : "any of the ") + knownOres.size() + " " + noun();
-        String next = nearest == null || r.beyond.openTheWay(nearest).isEmpty() ? ""
-                : " " + r.beyond.openTheWay(nearest);
         if (r.getMined() > 0) {
-            progressNote = "then could not reach " + what + " in my work area: " + why + "." + next
+            progressNote = "then could not reach " + unreached() + " in my work area: " + why + "." + openTheWay()
                     + leftovers(null) + beyondClause();
             return TaskState.SUCCESS;
         }
-        fail("could not reach " + what + " in my work area (" + r.work.describe() + "); gathered 0: " + why + "."
-                + next + leftovers(null) + beyondClause(), type);
+        fail(noneReached(why), type);
         return TaskState.FAILED;
+    }
+
+    /** 一格都没挖到就够不着了:说够不着的是哪些、寻路给的原因({@code why})、开路的写法与区里区外剩下的。 */
+    private String noneReached(String why) {
+        return "could not reach " + unreached() + " in my work area (" + r.work.describe() + "); gathered 0: " + why
+                + "." + openTheWay() + leftovers(null) + beyondClause();
+    }
+
+    /** 够不着的是哪些:名单上的格,名单空了就是地上的掉落物。 */
+    private String unreached() {
+        return knownOres.isEmpty() ? "the drops lying on the ground"
+                : (r.getMined() > 0 ? "the remaining " : "any of the ") + knownOres.size() + " " + noun();
+    }
+
+    /** 照抄就能朝最近那一格开路的写法(以空格起头);没有为空串。 */
+    private String openTheWay() {
+        BlockPos nearest = nearestOre();
+        return nearest == null || r.beyond.openTheWay(nearest).isEmpty() ? "" : " " + r.beyond.openTheWay(nearest);
     }
 
     /** 够数所靠的那批掉落物走不到:全部出账,下一刻按还拿得到的重新算够没够。 */
@@ -927,28 +1011,38 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
      * 再扫一遍的那一行)。「走不到」那一档不在这里 —— 它由 {@link #unreachable} 收工。
      */
     private TaskState nothingDug() {
+        Ending ending = nothingToDig();
+        fail(ending.why(), ending.type());
+        return TaskState.FAILED;
+    }
+
+    /** 收场的那句话,与归到哪一种失败。 */
+    private record Ending(String why, FailureType type) {}
+
+    /** 没有可去挖的了:按缘由的那句话与失败类型,见 {@link #nothingDug}。受理之前的准备收不到一个候选时说的也是它。 */
+    private Ending nothingToDig() {
         if (!unharvestable.isEmpty()) {
-            fail("found " + unharvestable.size() + " " + noun() + " but none can be harvested with"
+            return new Ending("found " + unharvestable.size() + " " + noun() + " but none can be harvested with"
                     + " the current tools (digging would destroy them without any drop); gathered "
                     + r.getMined() + ". Equip a better tool (gear wear) and retry; to break a block regardless of"
                     + " drops, move_goto its coordinates with arrive:use and run use block left on it with whatever"
                     + " is in hand." + leftovers(unharvestable) + beyondClause(), FailureType.WRONG_TOOL);
-        } else if (!unworkable.isEmpty()) {
-            fail("found " + unworkable.size() + " " + noun() + " nearby but no clear shot at any"
+        }
+        if (!unworkable.isEmpty()) {
+            return new Ending("found " + unworkable.size() + " " + noun() + " nearby but no clear shot at any"
                     + " of them from any stance I could take; gathered 0" + leftovers(unworkable) + beyondClause(),
                     FailureType.NO_PATH);
-        } else if (!ruledOut.isEmpty()) {
-            fail("found " + ruledOut.size() + " " + noun() + " but none of them can be broken here ("
-                    + RULED_OUT_WHY + "); gathered 0" + leftovers(ruledOut) + beyondClause(), FailureType.MINED_OUT);
-        } else {
-            // 区里的格都不用挖了:区外还有就说在哪、怎么过去;点的是扫描来的区域就给再扫一遍的那一行
-            fail("all " + r.total + " cell(s) of " + r.what + " in my work area (" + r.work.describe()
-                    + ") were gone or had changed before I got to them; gathered 0"
-                    + (!r.beyond.isEmpty() ? beyondClause()
-                            : r.into != null ? ". " + rescan() + " adds what is there now" : ""),
-                    FailureType.TARGET_LOST);
         }
-        return TaskState.FAILED;
+        if (!ruledOut.isEmpty()) {
+            return new Ending("found " + ruledOut.size() + " " + noun() + " but none of them can be broken here ("
+                    + RULED_OUT_WHY + "); gathered 0" + leftovers(ruledOut) + beyondClause(), FailureType.MINED_OUT);
+        }
+        // 区里的格都不用挖了:区外还有就说在哪、怎么过去;点的是扫描来的区域就给再扫一遍的那一行
+        return new Ending("all " + r.total + " cell(s) of " + r.what + " in my work area (" + r.work.describe()
+                + ") were gone or had changed before I got to them; gathered 0"
+                + (!r.beyond.isEmpty() ? beyondClause()
+                        : r.into != null ? ". " + rescan() + " adds what is there now" : ""),
+                FailureType.TARGET_LOST);
     }
 
     /** 再扫一遍这件活的方块、扫进点名的那块区域的那一行。 */
