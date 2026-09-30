@@ -20,15 +20,14 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 任务自己要挖一格时怎么挖:转过去看着它、把挖它最快的那件拿到手上、按住左键直到它碎。挖法只有一份,就是她身上那双手
- * ({@link CompanionHands}:原版的挖掘循环外面套着权限层)——导航路上挖、挖矿、{@code use block} 左键用的是同一双手,所以
- * 每一格动手之前都过权限层,被拒的格一下都不挥,报 {@link DigResult#REFUSED};服务端退回的(别的模组取消了破坏、出生点保护、
- * 冒险模式)同样报被拒,理由是 {@link #SERVER_REFUSED}——不空挥到超时,也不把没挖掉的方块报成挖掉了。
+ * 挖掘执行({@code work dig},建造清场也交给它)挖一格时怎么挖:转过去看着它、把挖它最快的那件拿到手上、按住左键直到它碎。
+ * 破坏方块只有一条路,就是她身上那双手({@link CompanionHands}:原版的挖掘循环外面套着权限层)——导航路上挖、挖掘执行、
+ * {@code use block} 左键用的是同一双手,所以每一格动手之前都过权限层,被拒的格一下都不挥,报 {@link DigResult#REFUSED};
+ * 服务端退回的(别的模组取消了破坏、出生点保护、冒险模式)同样报被拒,理由是 {@link #SERVER_REFUSED}——不空挥到超时,也不把
+ * 没挖掉的方块报成挖掉了。创造模式一下就碎、生存模式按工具算时间,是原版的手自己分的。
  *
  * <p>看不见目标(树叶挡着、头顶太窄)时,朝它身上够得着的那一点看过去({@link Aim#reachable}),准星落在的那一格就是挡着的:
  * 调用方说挖它不会出事、权限层也许,就先挖它把视线打开,而不是站着等一个永远不来的角度。
- *
- * <p>施工清障另走一次到位的原生破坏({@link #destroyNow}),同样先过权限层。
  */
 public final class BlockDigger {
 
@@ -66,30 +65,6 @@ public final class BlockDigger {
         return refusal;
     }
 
-    /**
-     * 施工清障:一次到位的原生破坏({@code ServerPlayerGameMode.destroyBlock}——掉落按手持结算、
-     * 创造不掉、别的模组的破坏事件照常触发),不走逐刻进度,也不要求视线。同样先过权限层。
-     *
-     * @return 方块真的没了;没碎而那一格不是空气时,{@link #refusal()} 说为什么
-     */
-    public boolean destroyNow(BlockPos target) {
-        BlockState state = player.level().getBlockState(target);
-        if (state.isAir()) {
-            return false;
-        }
-        Verdict verdict = Permission.judge(player, Action.breakBlock(target, state));
-        if (!verdict.allowed()) {
-            refusal = verdict;
-            return false;
-        }
-        if (!player.gameMode.destroyBlock(target)) {
-            // 权限层放行了,原生通道却没让它碎(别的模组取消了破坏事件、出生点保护):和逐刻挖掘被退回同一个说法
-            refusal = Verdict.deny(SERVER_REFUSED);
-            return false;
-        }
-        return true;
-    }
-
     /** 挖一刻的结果。 */
     public enum DigResult {
         /** 还在挖,或上一格刚碎、手还没缓过来——接着调。 */
@@ -110,11 +85,6 @@ public final class BlockDigger {
         public boolean broke() {
             return this == BROKE_TARGET || this == BROKE_OCCLUDER;
         }
-    }
-
-    /** 挖 {@code target} 一刻,挡在前面的哪一格都可以先挖开。 */
-    public DigResult digStep(BlockPos target, Consumer<BodyAction> told) {
-        return digStep(target, occluder -> true, told);
     }
 
     /**

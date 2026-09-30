@@ -26,6 +26,12 @@ public final class Journey {
         actions.addAll(report.actions());
     }
 
+    /** 并进另一本账:一件活派下的子活收场时,它的账归这件活。 */
+    public void add(Journey other) {
+        entries.addAll(other.entries);
+        actions.addAll(other.actions);
+    }
+
     /** 活自己为了干活让身体做了 {@code action}(比如把挖它最快的那件工具拿到手上)。 */
     public void did(BodyAction action) {
         actions.add(action);

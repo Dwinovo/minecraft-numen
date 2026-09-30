@@ -21,6 +21,14 @@ public final class BuildSite {
 
     private BuildSite() {}
 
+    /**
+     * 清场挖掘走的路:{@code base} 并上图纸里不清的格 {@code keep} 禁挖、禁放——砌好的不拆,还没放的不拿垫块埋上。要清的格她得
+     * 走进工地去挖,所以不对站进去加价。
+     */
+    public static RouteSpec clearing(RouteSpec base, LongSet keep) {
+        return base.edit().positions(base.positions().plus(PositionCosts.protect(keep))).build();
+    }
+
     /** {@code base} 并上工地格 {@code cells} 的三条:禁挖、禁放、站上与穿过加价。 */
     public static RouteSpec around(RouteSpec base, LongSet cells) {
         PositionCosts.Builder body = PositionCosts.builder();

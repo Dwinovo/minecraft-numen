@@ -2264,6 +2264,89 @@ public class BuildGameTests {
                 .thenSucceed();
     }
 
+    /**
+     * 生存模式清场是真挖,和 work dig 同一个挖掘执行:一行三块泥土,{@code build line air} 把它们清掉——她空着手走过去一块块挖
+     * (徒手挖一块泥土要十五刻),泥土掉下来进了她的包,回执说清了三格。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 4000, batch = "numen_build")
+    public static void survival_build_digs_out_what_must_go(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        List<BlockPos> dirt = List.of(helper.absolutePos(new BlockPos(8, 2, 8)), helper.absolutePos(new BlockPos(9, 2, 8)),
+                helper.absolutePos(new BlockPos(10, 2, 8)));
+        for (BlockPos pos : dirt) {
+            level.setBlockAndUpdate(pos, Blocks.DIRT.defaultBlockState());
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_clearer", new BlockPos(4, 2, 8), false);
+        long[] sentAt = {0};
+        ToolRun[] clear = {null};
+        steps(helper)
+                .thenExecute(() -> {
+                    sentAt[0] = helper.getTick();
+                    clear[0] = command(companion, "build line air " + xyz(dirt.get(0)) + " " + xyz(dirt.get(2)));
+                })
+                .thenWaitUntil(() -> helper.assertTrue(clear[0].done(), "the build has not finished"))
+                .thenExecute(() -> {
+                    long took = helper.getTick() - sentAt[0];
+                    helper.assertTrue(clear[0].succeeded() && clear[0].outcome().contains("cleared 3"),
+                            "the build did not clear the three cells: " + clear[0].outcome());
+                    for (BlockPos pos : dirt) {
+                        helper.assertTrue(level.getBlockState(pos).isAir(), "dirt still stands at " + pos.toShortString());
+                    }
+                    helper.assertTrue(companion.getInventory().countItem(Items.DIRT) == 3,
+                            "the dug dirt did not end up in her pack: " + companion.getInventory().countItem(Items.DIRT));
+                    helper.assertTrue(took >= 3 * 15, "three blocks of dirt went in " + took + " ticks — not dug by hand");
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * 创造模式直接替换:原版创造一下就碎。一行三块泥土上 {@code build line stone},另一行三块泥土上 {@code build line air}——她不走过去
+     * 挖,几刻之内一行成了石头、一行成了空气,地上没有掉落物;回执说换了三格、清了三格。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    public static void creative_build_replaces_what_stands_there_at_once(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        List<BlockPos> toStone = new ArrayList<>();
+        List<BlockPos> toAir = new ArrayList<>();
+        for (int x = 8; x <= 10; x++) {
+            toStone.add(helper.absolutePos(new BlockPos(x, 2, 6)));
+            toAir.add(helper.absolutePos(new BlockPos(x, 2, 10)));
+        }
+        for (BlockPos pos : toStone) {
+            level.setBlockAndUpdate(pos, Blocks.DIRT.defaultBlockState());
+        }
+        for (BlockPos pos : toAir) {
+            level.setBlockAndUpdate(pos, Blocks.DIRT.defaultBlockState());
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_creator", new BlockPos(4, 2, 8), true);
+        ToolRun[] runs = {null, null};
+        steps(helper)
+                .thenExecute(() -> runs[0] = command(companion, "build line stone " + xyz(toStone.get(0)) + " "
+                        + xyz(toStone.get(2))))
+                .thenWaitUntil(() -> helper.assertTrue(runs[0].done(), "the stone line has not finished"))
+                .thenExecute(() -> runs[1] = command(companion, "build line air " + xyz(toAir.get(0)) + " "
+                        + xyz(toAir.get(2))))
+                .thenWaitUntil(() -> helper.assertTrue(runs[1].done(), "the air line has not finished"))
+                .thenExecute(() -> {
+                    helper.assertTrue(runs[0].succeeded() && runs[0].outcome().contains("3 replacing what stood there"),
+                            "the stone line did not replace the dirt: " + runs[0].outcome());
+                    helper.assertTrue(runs[1].succeeded() && runs[1].outcome().contains("cleared 3"),
+                            "the air line did not clear the dirt: " + runs[1].outcome());
+                    for (BlockPos pos : toStone) {
+                        helper.assertTrue(level.getBlockState(pos).is(Blocks.STONE), "no stone at " + pos.toShortString());
+                    }
+                    for (BlockPos pos : toAir) {
+                        helper.assertTrue(level.getBlockState(pos).isAir(), "dirt still stands at " + pos.toShortString());
+                    }
+                    long drops = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                            new net.minecraft.world.phys.AABB(helper.absolutePos(new BlockPos(9, 2, 8))).inflate(6)).size();
+                    helper.assertTrue(drops == 0, drops + " drop(s) lie around after a creative build");
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
     /** 关在基岩牢里的一件建造活:她、她在牢里站的那一格、派下去的活。 */
     private record PennedBuild(NumenPlayer companion, BlockPos pen, BuildTaskRecord record) {}
 
@@ -2671,6 +2754,8 @@ public class BuildGameTests {
     public static void swapping_a_block_she_placed_asks_nobody(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_swapper", new BlockPos(2, 2, 2), false);
+        // 生存换一格是先把原来那块挖掉:石头要镐才挖得下
+        companion.getInventory().add(new ItemStack(Items.WOODEN_PICKAXE));
         NumenPlayer owner = presentOwner(helper, companion, "gametest_patron");
         companion.getInventory().add(new ItemStack(Items.STONE));
         companion.getInventory().add(new ItemStack(Items.GLASS));

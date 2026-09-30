@@ -107,6 +107,10 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     private Task child;
     /** Whether {@link #child}'s {@code start()} has been called yet. */
     private boolean childStarted;
+    /**
+     * 征询记在谁名下:自己的任务记录;作为子活跑时是派它的那件活的(它收尾时一并清掉,主人答应过的对整件活都算)。
+     */
+    private Object consentScope;
 
     protected AbstractCompanionTask(NumenPlayer player, R record) {
         this.player = player;
@@ -158,8 +162,8 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
             return TaskState.FAILED;
         }
         // 这一刻身体在等就不算干活:期限往后推一刻(与调度层被生存链抢占时的 freeze 同一原则),
-        // 干活的刻数不走。
-        if (waiting()) {
+        // 干活的刻数不走。子活在跑时它按自己的期限走,这件活的期限同样冻住
+        if (waiting() || child != null) {
             r.extendDeadlineTo(r.getDeadlineGameTime() + 1);
         } else {
             workTicks++;
@@ -187,6 +191,11 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     /** 身体这一刻在等,不在干活。见 {@link #workTicks()}。 */
     private boolean waiting() {
         return (nav != null && nav.waiting()) || consent != null || awaitingSearch;
+    }
+
+    /** 征询记在谁名下,见 {@link #consentScope}。 */
+    private Object scope() {
+        return consentScope != null ? consentScope : r;
     }
 
     /**
@@ -292,7 +301,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
             consent = null;
         }
         if (consent == null) {
-            consent = ConsentDesk.of(player).ask(r, items);
+            consent = ConsentDesk.of(player).ask(scope(), items);
         }
         ConsentAnswer answer = consent.poll();
         if (answer == null) {
@@ -347,16 +356,24 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
 
     @Override
     public final TaskResult result(TaskState finalState) {
+        if (child != null) {
+            endChild(TaskState.CANCELLED);
+        }
         cleanup();
         // 路上真动过的地形跟着每一种收场走:成功也好失败也罢,挖了什么、放了什么就说什么;主人点过头的也说
         String travelled = journey.describe();
         String enRoute = (travelled.isEmpty() ? "" : " " + travelled)
                 + (allowances.isEmpty() ? "" : " " + String.join("; ", allowances) + ".");
+        return outcome(finalState, enRoute);
+    }
+
+    /** 收场的回执:按终态取那一句,后面接上 {@code tail}。 */
+    private TaskResult outcome(TaskState finalState, String tail) {
         return switch (finalState) {
-            case SUCCESS   -> TaskResult.ok(successMessage() + enRoute, resultData());
-            case TIMEOUT   -> new TaskResult(false, timeoutMessage() + enRoute, true, false, resultData());
-            case CANCELLED -> new TaskResult(false, cancelledMessage() + enRoute, false, true, resultData());
-            default        -> TaskResult.fail(doneReason + enRoute, resultData());   // FAILED and any stray state
+            case SUCCESS   -> TaskResult.ok(successMessage() + tail, resultData());
+            case TIMEOUT   -> new TaskResult(false, timeoutMessage() + tail, true, false, resultData());
+            case CANCELLED -> new TaskResult(false, cancelledMessage() + tail, false, true, resultData());
+            default        -> TaskResult.fail(doneReason + tail, resultData());   // FAILED and any stray state
         };
     }
 
@@ -479,7 +496,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     // ---------------------------------------------------------------------
 
     /**
-     * Delegate this tick to a child {@link CompanionTask} representing a bounded
+     * Delegate this tick to a child {@link Task} representing a bounded
      * SUB-goal, driving its {@code start → tick} lifecycle for the parent.
      *
      * <p>Re-invoking with the SAME child instance continues it; passing a
@@ -489,30 +506,45 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
      * precondition) is observed on the very first {@link #tick} — no special
      * "state after start" path is needed.
      *
-     * @return the child's terminal {@link TaskState} on the tick it finishes (its
-     *         structured failure, if it exposes one, is copied up so this task's
-     *         {@link #lastFailure()} reflects the child's cause); or {@code null}
-     *         while the child is still running.
+     * <p>子活是这件活的一部分:它问主人的记在这件活名下;它跑的时候这件活的期限冻住,它按自己记录上的期限走,到了就按超时
+     * 收场;它收场时它的实际账(路上挖的放的、身体做的)与主人点过的头并进这件活,由这件活收场时说一次——所以交回的那句话
+     * 不带它自己的路上那一段。
+     *
+     * @return 子活收场的那一刻交回它的回执(它的失败类型抄上来,{@link #lastFailure()} 说的就是它的原因);还在跑是 null
      */
-    protected TaskState runChild(Task c) {
+    protected TaskResult runChild(Task c) {
         if (child != c) {
             child = c;
             childStarted = false;
+            if (c instanceof AbstractCompanionTask<?> a) {
+                a.consentScope = scope();
+            }
         }
         if (!childStarted) {
             child.start(player);
             childStarted = true;
         }
         TaskState st = child.tick(player);
-        if (st.isTerminal()) {
-            if (child instanceof AbstractCompanionTask<?> a) {
-                this.failType = a.lastFailure();
-            }
-            child = null;
-            childStarted = false;
-            return st;
+        if (!st.isTerminal() && child instanceof AbstractCompanionTask<?> a
+                && player.level().getGameTime() >= a.r.getDeadlineGameTime()) {
+            st = TaskState.TIMEOUT;
         }
-        return null;   // still running
+        return st.isTerminal() ? endChild(st) : null;
+    }
+
+    /** 子活收场:它自己收尾,账并进这件活,交回它不带路上那一段的回执。 */
+    private TaskResult endChild(TaskState st) {
+        Task ended = child;
+        child = null;
+        childStarted = false;
+        if (!(ended instanceof AbstractCompanionTask<?> a)) {
+            return ended.result(st);
+        }
+        a.cleanup();
+        this.failType = a.lastFailure();
+        journey.add(a.journey);
+        allowances.addAll(a.allowances);
+        return a.outcome(st, "");
     }
 
     // ---------------------------------------------------------------------

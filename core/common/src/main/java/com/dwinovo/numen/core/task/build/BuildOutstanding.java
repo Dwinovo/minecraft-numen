@@ -23,7 +23,8 @@ import java.util.function.Function;
  * 收不了尾时还缺的格:走一遍图纸,每一格归到一个病因下,得到一份清单。留案的日志、交给模型的回执、失败的类型都从这一份出,
  * 不各数各的。
  *
- * <p>剩下的格放不下去只有三种病因,修法各不相同:让占着的人挪开、认下图纸里原版不允许的那几格、找出是什么一再把它弄没。
+ * <p>剩下的格放不下去只有四种病因,修法各不相同:让占着的人挪开、把挖不掉的那一格挖开(换工具、先开路、问主人)、认下图纸里
+ * 原版不允许的那几格、找出是什么一再把它弄没。
  * 所以按病因分开报,每一堆点名到方块和坐标——笼统一句 "could not be placed" 等于裁决做了却不交代理由。
  */
 final class BuildOutstanding {
@@ -32,6 +33,8 @@ final class BuildOutstanding {
     enum Cause {
         /** 有身体占着这一格(可能是她自己)。 */
         OCCUPIED(FailureType.ENTITY_BLOCKED, "blocked by someone standing there — ask them to step aside"),
+        /** 清场没能把立在这一格里的方块挖掉(够不着、手里的工具收不下、被拒)。 */
+        NOT_CLEARED(FailureType.TERRAIN_BLOCKED, "still taken by a block I could not dig out of the way"),
         /** 原版在这个位置立不住它(花下面不是土、火把旁边没墙)。 */
         UNSUPPORTED(FailureType.NO_SUPPORT, "that vanilla physics will not hold at that spot"
                 + " (the blueprint asks for something impossible there)"),
@@ -64,7 +67,7 @@ final class BuildOutstanding {
      * 更不该在清单里冒充病灶(玩家箱子压着的格 canSurvive 为真,会一路落进"没留住")。
      */
     static BuildOutstanding survey(List<BuildTaskRecord.Target> targets, BuildCellRules rules, LongSet skipped,
-                                   Level level, int damagedCells) {
+                                   LongSet uncleared, Level level, int damagedCells) {
         List<Cell> cells = new ArrayList<>();
         for (BuildTaskRecord.Target target : targets) {
             BlockPos pos = target.pos();
@@ -76,6 +79,8 @@ final class BuildOutstanding {
             Cause cause;
             if (rules.blockedByEntity(pos, desired)) {
                 cause = Cause.OCCUPIED;
+            } else if (uncleared.contains(pos.asLong())) {
+                cause = Cause.NOT_CLEARED;
             } else if (!desired.canSurvive(level, pos)) {
                 cause = Cause.UNSUPPORTED;
             } else {
