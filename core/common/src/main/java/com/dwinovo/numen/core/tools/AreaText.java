@@ -29,6 +29,13 @@ public final class AreaText {
      * (stronghold_finding 靠它找门),够一棵普通树或一小撮矿;再多就是清单不是事实了。
      */
     public static final int LIST_CELLS_UP_TO = 16;
+    /**
+     * 这种一行一团(一部分)的清单一页至多多少字节({@link com.dwinovo.numen.cli.Listing#maxBytes})。整份输出的 50 KB 是照读文件
+     * 定的,一团一行时一页能放下近两百团、一万五千多 token,而且回执留在之后每一轮的输入里——真机一次 64 格的扫描扫到 196 团,
+     * 一轮输入从 1.1 万涨到 3.3 万。清单由近及远,她下一步用得上的是开头几团:一行 150–400 字节(小团逐格列坐标),8 KB 一页是
+     * 二三十到五十团、两三千 token,读得完;要更远的翻页(只是看时)或 {@code area show}(扫进区域后)。
+     */
+    public static final int PAGE_BYTES = 8 * 1024;
     /** 盒子两角之间的分隔:{@code x1,y1,z1..x2,y2,z2}。 */
     public static final String BOX_SEPARATOR = "..";
 

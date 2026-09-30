@@ -3,6 +3,7 @@ package com.dwinovo.numen.core.gametest;
 import com.dwinovo.numen.area.Area;
 import com.dwinovo.numen.area.AreaStore;
 import com.dwinovo.numen.core.Constants;
+import com.dwinovo.numen.core.tools.AreaText;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.permission.ConsentAnswer;
@@ -134,6 +135,53 @@ public class AreaGameTests {
                     "the second scan did not add to the area it made: " + second[0].reply());
             helper.assertTrue(areas(companion).get("fresh").parts().size() == 3,
                     "the area fresh does not have three parts: " + areas(companion).get("fresh"));
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 64 团分开的红色下界砖(地板里隔一格一块)。只是看:第一页不超过一团一行清单的那一页({@link AreaText#PAGE_BYTES}),说一共
+     * 64 团、下一页怎么取。扫进区域:回执只列最近 5 团,抬头说 64 团都加进了哪块区域、全部用 area show 看;区域里真有 64 部分;
+     * area show 同样一页一页地列。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 4000, batch = "numen_area")
+    public static void a_long_scan_comes_in_short_pages_and_into_an_area_as_a_summary(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 1; x < 16; x += 2) {
+            for (int z = 1; z < 16; z += 2) {
+                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, 1, z)), Blocks.RED_NETHER_BRICKS.defaultBlockState());
+            }
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_grid_reader", new BlockPos(8, 2, 8), false);
+        ToolRun look = command(companion, "scan blocks 12 minecraft:red_nether_bricks");
+        ToolRun[] kept = new ToolRun[1];
+        ToolRun[] shown = new ToolRun[1];
+
+        succeedWhen(helper, () -> {
+            if (kept[0] == null) {
+                helper.assertTrue(look.reply() != null, "the scan has not replied");
+                String page = message(look);
+                helper.assertTrue(look.succeeded() && page.startsWith("64 group(s)") && page.contains(" of 64. Use ")
+                                && page.contains("--page 2 to continue.]"),
+                        "the first page does not say how many there are and how to go on: " + page);
+                int bytes = page.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+                helper.assertTrue(bytes <= AreaText.PAGE_BYTES + 200, "the first page is " + bytes + " bytes");
+                kept[0] = command(companion, "scan blocks 12 minecraft:red_nether_bricks --into grid");
+            }
+            helper.assertTrue(kept[0].reply() != null, "the scan into grid has not replied");
+            String summary = message(kept[0]);
+            helper.assertTrue(kept[0].succeeded() && summary.startsWith("64 group(s)")
+                            && summary.contains("as g1 to g64") && summary.contains("the nearest 5 follow")
+                            && summary.contains("area show grid") && groupsIn(kept[0].reply()).size() == 5,
+                    "the reply is not a summary with the nearest five: " + summary);
+            helper.assertTrue(areas(companion).get("grid").parts().size() == 64,
+                    "the area does not hold all 64 groups");
+            if (shown[0] == null) {
+                shown[0] = command(companion, "area show grid");
+            }
+            String parts = message(shown[0]);
+            helper.assertTrue(shown[0].succeeded() && parts.contains(" of 64. Use area show grid --page 2"),
+                    "area show does not page the 64 parts: " + parts);
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }

@@ -385,7 +385,7 @@ public final class AreaOps {
                 + (shown.parts().isEmpty() ? "." : (ref.part() == null ? "" : "; showing " + ref.part()) + ". One part "
                         + "per line: blocks are as they were seen when added (framed parts carry none), permission is "
                         + "asked now for breaking what stands in each cell:");
-        return new Listing(head, rows, "", again).result(args).toJson();
+        return new Listing(head, rows, "", again, AreaText.PAGE_BYTES).result(args).toJson();
     }
 
     /**

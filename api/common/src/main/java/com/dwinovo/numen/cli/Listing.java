@@ -20,6 +20,9 @@ import java.util.Map;
  * 第几条、下一页怎么取({@code [Showing 1-20 of 60. Use build designs --page 2 to continue.]})。她读不了文件,下一段
  * 就是同一条命令加 {@code --page}。一条条目自己就比整页的预算大时,单占一页,只放得下的开头,后面注明它原来多大。
  *
+ * <p>那是整份读下去的输出(帮助、设计的步骤)的预算。有的清单读的人只用得上开头几条、其余要时再翻(由近及远的一团团方块),
+ * 列它的动作给一页更小的字节预算({@code maxBytes}),切页、翻页提示还是这里这一套。
+ *
  * <p>列清单的动作把 {@link #PAGE} 登记为自己的参数,处理函数里把读好的参数交给 {@link #result}:
  *
  * <pre>{@code
@@ -29,9 +32,10 @@ import java.util.Map;
  * }</pre>
  *
  * @param entries 条目,按顺序;一条可以占几行(设计的一步是它那一行命令加一行代价)
- * @param again   翻页时写的那条命令,{@code --page N} 接在它后面
+ * @param again    翻页时写的那条命令,{@code --page N} 接在它后面
+ * @param maxBytes 一页至多多少字节(UTF-8),不大于 {@link #MAX_BYTES}
  */
-public record Listing(String head, List<String> entries, String foot, String again) {
+public record Listing(String head, List<String> entries, String foot, String again, int maxBytes) {
 
     /** 一条命令的输出至多多少行。 */
     public static final int MAX_LINES = 2000;
@@ -47,6 +51,14 @@ public record Listing(String head, List<String> entries, String foot, String aga
 
     public Listing {
         entries = List.copyOf(entries);
+        if (maxBytes <= 0 || maxBytes > MAX_BYTES) {
+            throw new IllegalArgumentException("a page holds 1 to " + MAX_BYTES + " bytes: " + maxBytes);
+        }
+    }
+
+    /** 一页照整份输出的预算({@link #MAX_BYTES})。 */
+    public Listing(String head, List<String> entries, String foot, String again) {
+        this(head, entries, foot, again, MAX_BYTES);
     }
 
     /** 这次调用要的那一页({@code --page},没写是第一页);没有这一页是一条失败,说有几页。 */
@@ -101,7 +113,7 @@ public record Listing(String head, List<String> entries, String foot, String aga
                 String entry = entries.get(to);
                 int b = 1 + bytes(entry);
                 int l = lines(entry);
-                if (to > from && (usedBytes + b > MAX_BYTES || usedLines + l > MAX_LINES)) {
+                if (to > from && (usedBytes + b > maxBytes || usedLines + l > MAX_LINES)) {
                     break;
                 }
                 usedBytes += b;
@@ -148,7 +160,7 @@ public record Listing(String head, List<String> entries, String foot, String aga
      */
     private String within(String entry, int onPage) {
         int size = bytes(entry);
-        if (onPage > 1 || (size <= MAX_BYTES && lines(entry) <= MAX_LINES)) {
+        if (onPage > 1 || (size <= maxBytes && lines(entry) <= MAX_LINES)) {
             return entry;
         }
         String[] rows = entry.split("\n", -1);
@@ -156,8 +168,8 @@ public record Listing(String head, List<String> entries, String foot, String aga
         int used = 0;
         for (int i = 0; i < rows.length && i < MAX_LINES; i++) {
             String row = (i == 0 ? "" : "\n") + rows[i];
-            if (used + bytes(row) > MAX_BYTES) {
-                kept.append(cut(row, MAX_BYTES - used));
+            if (used + bytes(row) > maxBytes) {
+                kept.append(cut(row, maxBytes - used));
                 break;
             }
             kept.append(row);

@@ -36,6 +36,10 @@ import java.util.Set;
 public final class ScanOps {
 
     private static final int MIN_RADIUS = 1;
+    /**
+     * 扫进区域时回执列出的团数:最近的这几团够她定下一步挖哪儿、走哪儿;全部已在区域里,{@code area show} 一页一页列。
+     */
+    private static final int INTO_SHOWN = 5;
 
     private ScanOps() {}
 
@@ -116,7 +120,8 @@ public final class ScanOps {
 
     /**
      * 一次看的回执:抬头说在哪、多远、找到几团(写进了区域就说加成了哪几部分);没看全时抬头只说"读到的那部分里"有几团,结尾说清
-     * 哪里没读到。一团一行,按输出预算分页。{@code data} 是整次的小结,不随页变。
+     * 哪里没读到。只是看的一团一行,按 {@link AreaText#PAGE_BYTES} 分页;扫进区域的只列最近 {@value #INTO_SHOWN} 团,抬头说全部
+     * 在哪、怎么看。{@code data} 是整次的小结,不随页变。
      *
      * @param made  区域是这一次新建的
      * @param ids   写进区域后各团的编号;只是看为 null
@@ -125,8 +130,10 @@ public final class ScanOps {
     private static String listed(BlockScan.Found found, int radius, AreaRef in, String into, boolean made,
                                  List<String> ids, CommandArgs args, String again) {
         List<BlockGroups.Group> all = found.groups();
-        List<String> rows = new ArrayList<>(all.size());
-        for (int i = 0; i < all.size(); i++) {
+        // 扫进区域的,回执只列最近几团:全部都在区域里,细节归 area show
+        int shown = ids == null ? all.size() : Math.min(INTO_SHOWN, all.size());
+        List<String> rows = new ArrayList<>(shown);
+        for (int i = 0; i < shown; i++) {
             rows.add(groupJson(ids == null ? null : into + "/" + ids.get(i), all.get(i), found.center(), found.tick())
                     .toString());
         }
@@ -155,11 +162,16 @@ public final class ScanOps {
         String kept = ids == null || ids.isEmpty() ? ""
                 : ", added to " + area + " as " + (ids.size() == 1 ? ids.get(0)
                         : ids.get(0) + " to " + ids.get(ids.size() - 1));
+        String order = shown < all.size()
+                ? "; the nearest " + shown + " follow, one per line (area show " + into + " lists every part, work dig "
+                        + into + " digs them):"
+                : ", nearest first, one per line:";
         String head = all.isEmpty()
                 ? "No groups" + where + (into == null ? "."
                         : made ? "; made area " + into + ", still empty." : "; nothing was added to area " + into + ".")
-                : all.size() + " group(s)" + where + kept + ", nearest first, one per line:";
-        return new Listing(head, rows, note == null ? "" : "Note: " + note, again).result(args, data).toJson();
+                : all.size() + " group(s)" + where + kept + order;
+        return new Listing(head, rows, note == null ? "" : "Note: " + note, again, AreaText.PAGE_BYTES)
+                .result(args, data).toJson();
     }
 
     /**
