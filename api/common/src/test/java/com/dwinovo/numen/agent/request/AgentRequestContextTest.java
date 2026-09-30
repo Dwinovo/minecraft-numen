@@ -1,4 +1,4 @@
-package com.dwinovo.numen.client.agent;
+package com.dwinovo.numen.agent.request;
 
 import com.dwinovo.numen.agent.llm.ConvoState;
 import com.dwinovo.numen.agent.llm.ProtocolView;

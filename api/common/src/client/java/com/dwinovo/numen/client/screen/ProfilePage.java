@@ -343,7 +343,7 @@ final class ProfilePage {
     }
 
     /** 背包格子:左盔甲 2×2 + 副手,右合成 2×2 → 结果;下面 3×9 背包与快捷栏。 */
-    private void drawItems(GuiGraphics g, UiTheme t, ClientNumenState.Snapshot snap, AbstractClientPlayer e,
+    private void drawItems(GuiGraphics g, UiTheme t, com.dwinovo.numen.agent.request.BodySnapshot snap, AbstractClientPlayer e,
                            int cx, int cy, int mouseX, int mouseY, ItemStack[] hover) {
         int gx = cx - 9 * SLOT / 2;
         for (int i = 0; i < ARMOR.length; i++) {

@@ -1,20 +1,23 @@
-package com.dwinovo.numen.client.agent;
+package com.dwinovo.numen.agent.request;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.client.data.ClientNumenState;
 
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * 每一轮临时挂在请求里的 {@code <runtime_state>}:她此刻在做的活、背包、身上的效果、骑没骑着东西、
  * 身上穿戴的({@code <worn>})、插件从身体上读的片段。全部现算,一个字都不入会话历史——这些都会变,进了历史就是理直气壮的旧数。
  *
  * <p>她在做的那件活是<b>服务端推来的镜像</b>({@link #onCurrentTask}),头顶气泡的副文本、停止键亮不亮、
- * 目标续跑要不要让位也都读它,所以镜像只在这里存一份。
+ * 目标续跑要不要让位也都读它,所以镜像只在这里存一份。背包、效果、骑乘与身体片段读的是收到的最新一份
+ * {@link BodySnapshot},由持有它的一方给({@code body})。
  */
-final class RuntimeState {
+public final class RuntimeState {
 
     private final UUID entityUuid;
+    /** 最近收到的那份身体状态;一份都没收到是 {@code null}。 */
+    private final Supplier<BodySnapshot> body;
 
     /** 她此刻在做的那件后台活;{@code null} = 身体空闲。 */
     private CurrentTask currentTask;
@@ -27,8 +30,12 @@ final class RuntimeState {
     private record CurrentTask(String id, String tool, String describe, long sinceMs,
                                boolean standing) {}
 
-    RuntimeState(UUID entityUuid) {
+    /**
+     * @param body 最近收到的那份身体状态;一份都没收到时给 {@code null}
+     */
+    public RuntimeState(UUID entityUuid, Supplier<BodySnapshot> body) {
         this.entityUuid = entityUuid;
+        this.body = body;
     }
 
     /**
@@ -38,7 +45,7 @@ final class RuntimeState {
      * 客户端不靠"我派出去过什么"自己记账:那样服务器重启重放、死亡复活重放起来的活它一概不知道,
      * 头顶没气泡、模型也看不见。
      */
-    void onCurrentTask(com.dwinovo.numen.network.payload.CurrentTaskPayload p) {
+    public void onCurrentTask(com.dwinovo.numen.network.payload.CurrentTaskPayload p) {
         if (p.idle()) {
             currentTask = null;
             return;
@@ -52,7 +59,7 @@ final class RuntimeState {
      * 内核的事件里这边要接的:主人按停止、断线时清掉本地镜像。停止时服务端随后会推 idle,这里先清,停止键当场灭;
      * 断线时下一个存档跟这件活无关,而那时不会有服务端推送来纠正它。
      */
-    void on(com.dwinovo.numen.agent.loop.LoopEvent event) {
+    public void on(com.dwinovo.numen.agent.loop.LoopEvent event) {
         if (event instanceof com.dwinovo.numen.agent.loop.LoopEvent.Halted halted
                 && (halted.reason() == com.dwinovo.numen.agent.loop.HaltReason.OWNER_STOP
                 || halted.reason() == com.dwinovo.numen.agent.loop.HaltReason.DISCONNECT)) {
@@ -61,12 +68,12 @@ final class RuntimeState {
     }
 
     /** 身体手上有没有后台活。 */
-    boolean bodyTaskRunning() {
+    public boolean bodyTaskRunning() {
         return currentTask != null;
     }
 
     /** 身体手上有一件会结束的活(常驻的跟随这种不算:它永远不报完成)。 */
-    boolean bodyOnFiniteTask() {
+    public boolean bodyOnFiniteTask() {
         return currentTask != null && !currentTask.standing();
     }
 
@@ -74,7 +81,7 @@ final class RuntimeState {
      * 她手上那件活给人看的一句:服务端给的人话描述("挖 64 块泥土"),没有才退到工具 id;没有活返回 {@code null}。
      * 气泡是给主人看的,他不该在头顶上读内部标识符。
      */
-    String activity() {
+    public String activity() {
         if (currentTask == null) {
             return null;
         }
@@ -86,7 +93,7 @@ final class RuntimeState {
      * 这一轮临时挂载的运行期状态。全部现算,一个字都不入会话历史——包进同一个
      * {@code <runtime_state>} 里,模型只需认一个信封。
      */
-    String xml() {
+    public String xml() {
         // 插件的片段也挂这一层:它们和背包、状态效果一样是"此刻的她",
         // 会变,所以不能进字节级稳定的系统提示。身体上的那段随状态包从服务端来,
         // 只有这个客户端才知道的那段在这里现算。
@@ -124,7 +131,7 @@ final class RuntimeState {
 
     /** 上一次渲染背包块用的那份快照本身。收到新包时缓存会换一个新对象,比身份就够,
      *  不用拿时间戳去凑版本号(同一毫秒两次推送会撞号,而且读起来像在判断时效)。 */
-    private ClientNumenState.Snapshot inventoryRenderedFrom;
+    private BodySnapshot inventoryRenderedFrom;
     private String inventoryRendered = "";
     /** "请求里没背包"只说一次,别把每一轮都刷满。 */
     private boolean inventoryMissingLogged;
@@ -137,7 +144,7 @@ final class RuntimeState {
      * 再请求)。合并同类计数,不报耐久附魔:要精确到槽位时她该用 {@code use gui}。
      */
     private String inventoryXml() {
-        var snapshot = ClientNumenState.get(entityUuid).orElse(null);
+        var snapshot = body.get();
         if (snapshot == null || !snapshot.loaded()) {
             // 链路断在客户端这一节:服务端没推过,或者推的是别的同伴。请求里就没有背包这回事,
             // 她只能靠对话历史猜——这条日志的存在就是为了不用再靠猜去查它。只在进入这个
@@ -167,7 +174,7 @@ final class RuntimeState {
      * <p>没有效果就一个字都不发:空块也是要读的 token,而"没写"和"写了没有"对模型是一样的。
      */
     private String effectsXml() {
-        var snapshot = ClientNumenState.get(entityUuid).orElse(null);
+        var snapshot = body.get();
         if (snapshot == null || !snapshot.loaded() || snapshot.effects().isEmpty()) {
             return "";
         }
@@ -181,7 +188,7 @@ final class RuntimeState {
      * 会驾着它走、任何要走路的动作都会自己下来。
      */
     private String ridingXml() {
-        var snapshot = ClientNumenState.get(entityUuid).orElse(null);
+        var snapshot = body.get();
         if (snapshot == null || !snapshot.loaded() || snapshot.vehicleId() < 0) {
             return "";
         }
@@ -195,14 +202,14 @@ final class RuntimeState {
      * 和背包同一条路,所以她走远了、换了维度也在。
      */
     private String bodyStateXml() {
-        var snapshot = ClientNumenState.get(entityUuid).orElse(null);
+        var snapshot = body.get();
         if (snapshot == null || !snapshot.loaded()) {
             return "";
         }
         return snapshot.bodyState();
     }
 
-    static String renderEffects(ClientNumenState.Snapshot snapshot, long nowMs) {
+    static String renderEffects(BodySnapshot snapshot, long nowMs) {
         StringBuilder out = new StringBuilder();
         for (var effect : snapshot.effects()) {
             int left = snapshot.remainingTicks(effect, nowMs);
@@ -222,7 +229,7 @@ final class RuntimeState {
         return out.toString();
     }
 
-    static String renderInventory(ClientNumenState.Snapshot snapshot) {
+    static String renderInventory(BodySnapshot snapshot) {
         java.util.Map<String, Integer> totals = new java.util.TreeMap<>();
         for (net.minecraft.world.item.ItemStack stack : snapshot.items()) {
             if (!stack.isEmpty()) {

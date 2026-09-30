@@ -1,14 +1,37 @@
-package com.dwinovo.numen.client.agent;
+package com.dwinovo.numen.agent.request;
 
 import com.dwinovo.numen.agent.llm.ConvoState;
+import com.dwinovo.numen.agent.loop.ModelRequest;
+import com.dwinovo.numen.agent.tool.NumenTool;
+import com.dwinovo.numen.agent.tool.ToolRegistry;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/** Adds ephemeral runtime state to one model request without persisting it in conversation history. */
-final class AgentRequestContext {
+/**
+ * Adds ephemeral runtime state to one model request without persisting it in conversation history, and assembles
+ * the request of one turn. The owner's client and the bench both build their requests here.
+ */
+public final class AgentRequestContext {
 
     private AgentRequestContext() {}
+
+    /**
+     * <b>发给模型的就是这一份</b>——会话上下文加上这一轮临时挂载的运行期状态
+     * ({@code <runtime_state>}/{@code <current_task>})。源会话与落盘日志一个字不动。
+     *
+     * <p>工具表是全份:装在模组里的、联动插件带的、接进来的 MCP,一并发出去。
+     * 分批披露那套已经退役——她得先搜一次才能用的工具,省下的那点前缀是缓存本来就
+     * 不收钱的部分,换来的却是每次压缩之后重搜一遍。
+     *
+     * @param history     会话历史的快照
+     * @param runtimeXml  这一刻的运行期状态({@link RuntimeState#xml})
+     * @param personaText 人设正文;没有为 {@code null}(见 {@link SystemPromptComposer#compose})
+     */
+    public static ModelRequest turn(List<ConvoState.Msg> history, String runtimeXml, String personaText) {
+        List<NumenTool> tools = ToolRegistry.all();
+        return new ModelRequest(attach(history, runtimeXml), tools, SystemPromptComposer.compose(personaText));
+    }
 
     /**
      * 把运行期状态挂进这一次请求:<b>恒作为一条 role=user 的消息追加在末尾</b>。源列表与其中的
