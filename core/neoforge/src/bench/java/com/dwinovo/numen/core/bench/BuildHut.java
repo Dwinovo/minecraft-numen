@@ -20,7 +20,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 盖一个能住的小屋:一块空地,她包里两组橡木板和一扇橡木门。主人只说在这盖个能住的小屋。
+ * 盖一个能住的小屋:一块空地,她站在正中(四面各有十格,就地盖不会撞上场地边的屏障),包里两组橡木板和一扇橡木门。
+ * 主人只说在这盖个能住的小屋。
  *
  * <h2>怎么算"能住"</h2>
  * 场地里有一扇门,门的一侧围起来、另一侧通到外面:
@@ -38,8 +39,8 @@ public final class BuildHut implements Scenario {
     private static final int MIN_FLOOR = 4;
     private static final int MIN_WALL_PLANKS = 24;
     private static final int MIN_ROOF_PLANKS = 4;
-    /** 标准解那栋屋子的西北角(外沿),五乘五。 */
-    private static final BlockPos CORNER = new BlockPos(8, 1, 8);
+    /** 标准解那栋屋子的西北角(外沿),五乘五,在她东南边。 */
+    private static final BlockPos CORNER = new BlockPos(12, 1, 12);
 
     @Override
     public String id() {
@@ -48,7 +49,7 @@ public final class BuildHut implements Scenario {
 
     @Override
     public BlockPos start() {
-        return new BlockPos(5, 1, 5);
+        return new BlockPos(10, 1, 10);
     }
 
     @Override
