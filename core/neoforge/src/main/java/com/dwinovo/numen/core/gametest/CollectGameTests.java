@@ -119,10 +119,9 @@ public class CollectGameTests {
     }
 
     /**
-     * 地上什么都没有:照样收场,回执如实说一件没捡到。
+     * 地上什么都没有:这件活开始不了,受理之前就拒——回执如实说区里没有要捡的,没有任务编号。
      *
-     * <p>半径显式给小:问的就是她脚边这片空地。场地之间隔得比默认半径远(见 {@link GameTestKit}),
-     * 隔壁撒的铁锭本来也扫不进来。
+     * <p>场地之间隔得比工作区远(见 {@link GameTestKit}),隔壁撒的铁锭本来也扫不进来。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_collect")
     public static void work_collect_with_nothing_on_the_ground_says_none(GameTestHelper helper) {
@@ -130,9 +129,10 @@ public class CollectGameTests {
         ToolRun collect = command(companion, "work collect");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(collect.done(), "work collect has not finished");
-            helper.assertTrue(collect.outcome().startsWith("collected 0 "),
-                    "the reply does not say nothing was picked up: " + collect.outcome());
+            helper.assertTrue(collect.done(), "work collect has not replied");
+            helper.assertTrue(collect.refused(), "a sweep with nothing on the ground was accepted: " + collect.reply());
+            helper.assertTrue(collect.outcome().contains("nothing to pick up: no dropped items lie within"),
+                    "the reply does not say nothing lies there to pick up: " + collect.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -183,8 +183,8 @@ public class CollectGameTests {
 
 
     /**
-     * 三块铁锭搁在一根三格高的石柱顶上,捡东西从不改地形,她够不着。照样收场,但回执得交代还有三块留在那儿、
-     * 在哪——不能只说"捡了 0 块",让模型以为这一片已经干净了。
+     * 三块铁锭搁在一根三格高的石柱顶上,捡东西从不改地形,她够不着:这件活开始不了,受理之前就拒,回执得交代还有三块
+     * 留在那儿、在哪——不能让模型以为这一片已经干净了。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_collect")
     public static void work_collect_says_what_it_could_not_reach(GameTestHelper helper) {
@@ -197,10 +197,14 @@ public class CollectGameTests {
         ToolRun collect = command(companion, "work collect --item_ids minecraft:iron_ingot");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(collect.done(), "work collect has not finished");
+            helper.assertTrue(collect.done(), "work collect has not replied");
+            // 一件都走不到,这件活开始不了:受理之前就拒,回执说剩下几件、在哪
+            helper.assertTrue(collect.refused(), "a sweep that can reach nothing was accepted: " + collect.reply());
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 0
                             && onFloor(helper, Items.IRON_INGOT) == 3,
-                    "the ingots on the pillar were somehow taken");
+                    "the ingots on the pillar were somehow taken: she holds "
+                            + companion.getInventory().countItem(Items.IRON_INGOT) + ", the floor has "
+                            + onFloor(helper, Items.IRON_INGOT) + "; " + collect.outcome());
             BlockPos top = helper.absolutePos(new BlockPos(10, 5, 10));
             helper.assertTrue(collect.outcome().contains("3 ")
                             && collect.outcome().contains(top.getX() + "," + top.getY() + "," + top.getZ()),

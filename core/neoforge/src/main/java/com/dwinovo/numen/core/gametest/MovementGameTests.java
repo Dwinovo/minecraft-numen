@@ -85,14 +85,15 @@ public class MovementGameTests {
         NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
                 "gametest_stopped", UUID.randomUUID(), level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
-        TaskRecord record = call(companion, "move_goto", args(
+        ToolRun walk = call(companion, "move_goto", args(
                 "x", target.getX(),
-                "z", target.getZ())).task();
+                "z", target.getZ()));
         boolean[] stopped = {false};
 
         succeedWhen(helper, () -> {
+            TaskRecord record = walk.task();
             if (!stopped[0]) {
-                helper.assertTrue(record.getState() == com.dwinovo.numen.task.TaskState.RUNNING,
+                helper.assertTrue(record != null && record.getState() == com.dwinovo.numen.task.TaskState.RUNNING,
                         "goto is not running yet");
                 com.dwinovo.numen.task.CompanionTickDispatcher.cancelFor(companion);
                 stopped[0] = true;
@@ -275,19 +276,20 @@ public class MovementGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_guest", new BlockPos(7, 2, 7), false);
         BlockPos start = companion.blockPosition();
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        TaskRecord record = call(companion, "move_goto", args(
+        ToolRun walk = call(companion, "move_goto", args(
                 "x", target.getX(),
                 "y", target.getY(),
-                "z", target.getZ())).task();
+                "z", target.getZ()));
         String route = "goto-gametest_guest";
         ToolRun[] spec = new ToolRun[1];
         ToolRun[] plan = new ToolRun[1];
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(record.getResult() != null, "goto has not finished"))
+                .thenWaitUntil(() -> helper.assertTrue(walk.done(), "goto has not replied"))
                 .thenExecute(() -> {
-                    String reply = record.getResult().message();
-                    helper.assertTrue(!record.getResult().success() && reply.contains("without altering terrain"),
+                    helper.assertTrue(walk.refused(), "a walk with no clean route was accepted: " + walk.reply());
+                    String reply = walk.outcome();
+                    helper.assertTrue(reply.contains("without altering terrain"),
                             "the refusal does not say it needs altering terrain: " + reply);
                     helper.assertTrue(reply.contains("`route spec " + route + " --alter natural`")
                                     && reply.contains("`route plan " + route + "`"),
@@ -320,17 +322,17 @@ public class MovementGameTests {
         int planksBefore = plankCount(helper, 7, 7);
         NumenPlayer companion = spawnAt(helper, "gametest_digger", new BlockPos(7, 2, 7), false);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        TaskRecord record = call(companion, "move_goto", args(
+        ToolRun walk = call(companion, "move_goto", args(
                 "x", target.getX(),
                 "y", target.getY(),
                 "z", target.getZ(),
-                "alter", "natural")).task();
+                "alter", "natural"));
 
         succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "companion has not reached the target with consent to dig");
             helper.assertTrue(plankCount(helper, 7, 7) < planksBefore, "no plank was broken");
-            String reply = record.getResult() == null ? null : record.getResult().message();
+            String reply = walk.task() == null ? null : walk.outcome();
             helper.assertTrue(reply != null && reply.contains("En route") && reply.contains("oak_planks"),
                     "the reply does not report what was broken en route: " + reply);
             CompanionFactory.despawn(level.getServer(), companion);
@@ -803,24 +805,34 @@ public class MovementGameTests {
         UUID uuid = first.getUUID();
         ToolRun follow = command(first, "move follow --entity_id " + pig.getId() + " --distance 3");
         var registry = com.dwinovo.numen.entity.CompanionRegistry.get(server);
-        var recorded = registry.find(uuid);
-        helper.assertTrue(follow.task() != null, "follow was not accepted: " + follow.reply());
-        helper.assertTrue(recorded.taskArgs().contains("--entity_id " + pig.getUUID())
-                        && !recorded.taskArgs().contains("--entity_id " + pig.getId() + " "),
-                "the replay recipe names the pig by its runtime id, not its UUID: " + recorded.taskArgs());
-        com.dwinovo.numen.entity.Companions.dormant(server, first);
-        registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskTool(), recorded.taskArgs()));
-        NumenPlayer second = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
-        helper.assertTrue(second != null, "the body was not rebuilt");
+        NumenPlayer[] second = new NumenPlayer[1];
 
-        succeedWhen(helper, () -> {
-            TaskRecord now = com.dwinovo.numen.task.CompanionTickDispatcher.currentTaskFor(uuid);
-            helper.assertTrue(now instanceof com.dwinovo.numen.core.task.move.FollowTaskRecord f
-                            && pig.getUUID().equals(f.target),
-                    "the replayed follow is not after the same pig: " + now);
-            com.dwinovo.numen.entity.Companions.dismiss(server, second);
-            pig.discard();
-        });
+        // 猪在远处:受理之前先规划走过去的路,受理之后才落盘
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(follow.reply() != null, "follow has not replied"))
+                .thenExecute(() -> {
+                    helper.assertTrue(follow.task() != null, "follow was not accepted: " + follow.reply());
+                    var recorded = registry.find(uuid);
+                    helper.assertTrue(recorded.taskArgs().contains("--entity_id " + pig.getUUID())
+                                    && !recorded.taskArgs().contains("--entity_id " + pig.getId() + " "),
+                            "the replay recipe names the pig by its runtime id, not its UUID: " + recorded.taskArgs());
+                    com.dwinovo.numen.entity.Companions.dormant(server, first);
+                    registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskTool(),
+                            recorded.taskArgs()));
+                    second[0] = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
+                    helper.assertTrue(second[0] != null, "the body was not rebuilt");
+                })
+                .thenWaitUntil(() -> {
+                    TaskRecord now = com.dwinovo.numen.task.CompanionTickDispatcher.currentTaskFor(uuid);
+                    helper.assertTrue(now instanceof com.dwinovo.numen.core.task.move.FollowTaskRecord f
+                                    && pig.getUUID().equals(f.target),
+                            "the replayed follow is not after the same pig: " + now);
+                })
+                .thenExecute(() -> {
+                    com.dwinovo.numen.entity.Companions.dismiss(server, second[0]);
+                    pig.discard();
+                })
+                .thenSucceed();
     }
 
     /** 给了一个这里没有的实体编号:当场失败,叫她先扫一眼附近的实体。 */

@@ -117,16 +117,20 @@ public class ModeGameTests {
                     helper.absolutePos(rel), "cobblestone"));
         }
         var ctx = TaskDispatch.ctx("gametest-sbuild-broke", companion);
-        // dispatchAsync 的回调只回"已受理"收条;预检失败落在任务记录的终态上
+        // 盘料是受理之前的准备:料不齐,这次调用当场回错误,活不进槽、没有任务编号
         BuildTaskRecord record = buildJob(ctx.toolCallId(), ctx.deadline(3600L), targets, true, false);
-        TaskDispatch.setTask(companion, record, null, reply -> {});
+        java.util.concurrent.atomic.AtomicReference<String> replied = new java.util.concurrent.atomic.AtomicReference<>();
+        TaskDispatch.setTask(companion, record, null, replied::set);
         succeedWhen(helper, () -> {
-            var result = record.getResult();
-            helper.assertTrue(result != null && !result.success()
-                            && result.message() != null
-                            && result.message().contains("not enough materials"),
-                    "expected an itemized missing-materials refusal, got: "
-                            + (result == null ? "still running" : result.message()));
+            String reply = replied.get();
+            helper.assertTrue(reply != null, "the build has not replied");
+            var result = com.google.gson.JsonParser.parseString(reply).getAsJsonObject();
+            helper.assertTrue(!result.get("success").getAsBoolean()
+                            && result.get("message").getAsString().contains("not enough materials"),
+                    "expected an itemized missing-materials refusal, got: " + reply);
+            helper.assertTrue(record.getResult() == null && !result.has("data")
+                            && com.dwinovo.numen.task.CompanionTickDispatcher.currentTaskFor(companion.getUUID()) == null,
+                    "a build without materials was accepted instead of refused at once: " + reply);
             for (BuildTaskRecord.Target t : targets) {
                 helper.assertTrue(!level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),
                         "must not build anything without materials");
@@ -195,15 +199,14 @@ public class ModeGameTests {
         companion.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
         com.dwinovo.numen.core.nav.ThrowawayBlocks.store(companion, List.of("minecraft:cobblestone"));
         BlockPos target = helper.absolutePos(new BlockPos(12, 2, 12));
-        TaskRecord record = call(companion, "move_goto", args(
+        ToolRun walk = call(companion, "move_goto", args(
                 "x", target.getX(),
                 "y", target.getY(),
                 "z", target.getZ(),
-                "alter", "natural")).task();
+                "alter", "natural"));
         helper.onEachTick(() -> {
-            if (record.getResult() != null && !record.getResult().success()) {
-                helper.fail("she did not pillar out of the well with her own throwaway blocks: "
-                        + record.getResult().message());
+            if (walk.done() && !walk.succeeded()) {
+                helper.fail("she did not pillar out of the well with her own throwaway blocks: " + walk.outcome());
             }
         });
         succeedWhen(helper, () -> {

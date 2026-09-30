@@ -120,16 +120,22 @@ public class TaskControlGameTests {
         BlockPos far = helper.absolutePos(new BlockPos(14, 2, 14));
         ToolRun walk = call(companion, "move_goto", args("x", far.getX(), "y", far.getY(), "z", far.getZ()));
         ToolRun timer = command(companion, "task timer 600 check the furnace");
-        ToolRun status = command(companion, "task status");
+        AtomicReference<ToolRun> status = new AtomicReference<>();
 
-        succeedWhen(helper, () -> {
-            helper.assertTrue(walk.task() != null && timer.succeeded(), "goto or the timer did not go through: "
-                    + walk.reply() + " / " + timer.reply());
-            helper.assertTrue(status.succeeded() && status.reply().contains(walk.task().publicId())
-                            && status.reply().contains("move_goto") && status.reply().contains("check the furnace"),
-                    "task status does not name the walk and the timer: " + status.reply());
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
+        // goto 规划过、受理了才在走:那之后再查
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(walk.accepted() && timer.succeeded(),
+                        "goto or the timer did not go through: " + walk.reply() + " / " + timer.reply()))
+                .thenExecute(() -> status.set(command(companion, "task status")))
+                .thenExecute(() -> {
+                    helper.assertTrue(status.get().succeeded()
+                                    && status.get().reply().contains(walk.task().publicId())
+                                    && status.get().reply().contains("move_goto")
+                                    && status.get().reply().contains("check the furnace"),
+                            "task status does not name the walk and the timer: " + status.get().reply());
+                    CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+                })
+                .thenSucceed();
     }
 
     /** 不带编号叫停:走到一半的 goto 停下,收尾以 status=stopped 的 task_finished 送到。 */
@@ -142,6 +148,7 @@ public class TaskControlGameTests {
         EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
         steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(walk.accepted(), "goto has not been accepted: " + walk.reply()))
                 .thenExecuteAfter(5, () -> stop.set(command(companion, "task stop")))
                 .thenWaitUntil(() -> helper.assertTrue(stop.get().succeeded()
                                 && walk.task().getState() == TaskState.CANCELLED,
@@ -203,6 +210,7 @@ public class TaskControlGameTests {
         AtomicReference<ToolRun> status = new AtomicReference<>();
 
         steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(walk.accepted(), "goto has not been accepted: " + walk.reply()))
                 .thenExecuteAfter(3, () -> status.set(command(companion, "task status")))
                 .thenExecute(() -> {
                     helper.assertTrue(ToolRegistry.get("task_status") == null && ToolRegistry.get("set_timer") == null,
@@ -546,10 +554,13 @@ public class TaskControlGameTests {
         EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
         steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(walk.accepted(), "the first walk has not been accepted: "
+                        + walk.reply()))
                 .thenExecuteAfter(3, () -> instead.set(command(companion,
                         "move goto --x " + near.getX() + " --z " + near.getZ())))
                 .thenWaitUntil(() -> {
                     String reply = instead.get().reply();
+                    helper.assertTrue(reply != null, "the second walk has not replied");
                     helper.assertTrue(reply.contains("It replaced " + walk.task().publicId() + " (")
                                     && reply.contains("which is now stopped"),
                             "the receipt does not say which job it replaced: " + reply);
@@ -562,6 +573,104 @@ public class TaskControlGameTests {
                                         && e.text().contains("status=\"stopped\"")),
                         "the replaced walk did not wind down as stopped: " + outbox.peek(companion.getUUID()).entries()))
                 .thenExecute(() -> {
+                    outbox.forget(companion.getUUID());
+                    CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * 受理 = 这件活此刻真能开始。先走一段路:受理回执带着那份计划(几步、改不改地形)。到了之后她跟着主人(主人不在线,这件
+     * 常驻的活睡着占着槽);这时派一趟不改地形就没有路的 move_goto——目标在一间封死的木板屋里。它规划过后直接回错误:说要
+     * 改地形、给出改路线的那一行,没有任务编号,不发 task_finished;她手上的跟随还是那一件,照旧在跑。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 1200, batch = "numen_tasks")
+    public static void a_walk_with_no_clean_route_is_refused_and_the_work_in_hand_goes_on(GameTestHelper helper) {
+        plankRoomAround(helper, 10, 10);
+        NumenPlayer companion = spawnAt(helper, "gametest_undeterred", new BlockPos(2, 2, 2), false);
+        BlockPos far = helper.absolutePos(new BlockPos(2, 2, 14));
+        BlockPos shut = helper.absolutePos(new BlockPos(10, 2, 10));
+        ToolRun walk = call(companion, "move_goto", args("x", far.getX(), "y", far.getY(), "z", far.getZ()));
+        AtomicReference<ToolRun> follow = new AtomicReference<>();
+        AtomicReference<ToolRun> blocked = new AtomicReference<>();
+        EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
+
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(walk.reply() != null, "the first walk has not replied"))
+                .thenExecute(() -> {
+                    helper.assertTrue(walk.accepted(), "the first walk was not accepted: " + walk.reply());
+                    String reply = walk.reply();
+                    Constants.LOG.info("[numen-task] move_goto accepted -> {}", reply);
+                    helper.assertTrue(reply.contains("Accepted as " + walk.task().publicId())
+                                    && reply.contains("The plan of route goto-gametest_undeterred")
+                                    && reply.contains("steps") && reply.contains("no terrain change"),
+                            "the receipt does not carry the plan: " + reply);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(walk.done() && walk.succeeded(),
+                        "the first walk did not arrive: " + walk.outcome()))
+                .thenExecute(() -> follow.set(command(companion, "move follow")))
+                .thenWaitUntil(() -> helper.assertTrue(follow.get().accepted(),
+                        "following was not accepted: " + follow.get().reply()))
+                .thenExecute(() -> blocked.set(call(companion, "move_goto",
+                        args("x", shut.getX(), "y", shut.getY(), "z", shut.getZ()))))
+                .thenWaitUntil(() -> helper.assertTrue(blocked.get().done(), "the blocked walk has not replied"))
+                .thenExecute(() -> {
+                    ToolRun refused = blocked.get();
+                    helper.assertTrue(refused.refused(), "a walk with no clean route was accepted: " + refused.reply());
+                    String reply = refused.reply();
+                    Constants.LOG.info("[numen-task] move_goto refused -> {}", reply);
+                    helper.assertTrue(reply.contains("without altering terrain")
+                                    && reply.contains("`route spec goto-gametest_undeterred --alter natural`")
+                                    && !reply.contains("task_id"),
+                            "the refusal does not say why and what to change, or carries a task id: " + reply);
+                    TaskRecord inHand = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
+                    helper.assertTrue(inHand == follow.get().task() && inHand.getState() == TaskState.RUNNING,
+                            "the refused call interrupted the work in hand: " + inHand);
+                })
+                .thenExecuteAfter(10, () -> {
+                    // 收件箱里只有那段路自己的收尾:被拒的调用没有任务编号,也就没有 task_finished
+                    helper.assertTrue(outbox.peek(companion.getUUID()).entries().stream()
+                                    .filter(e -> e.type().equals("task_finished"))
+                                    .allMatch(e -> e.text().contains("id=\"" + walk.task().publicId() + "\"")
+                                            && e.text().contains("status=\"done\"")),
+                            "a refused call sent task_finished: " + outbox.peek(companion.getUUID()).entries());
+                    helper.assertTrue(CompanionTickDispatcher.currentTaskFor(companion.getUUID()) == follow.get().task()
+                                    && follow.get().task().getState() == TaskState.RUNNING,
+                            "the work in hand stopped after the refusal");
+                    outbox.forget(companion.getUUID());
+                    CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * 区里没有能挖的,受理之前就拒:点名的那一格是基岩,她拿着镐也挖不动。当场回错误说挖不动,没有任务编号、不发
+     * task_finished,也没有派活进槽。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
+    public static void a_dig_with_nothing_diggable_is_refused_at_once(GameTestHelper helper) {
+        BlockPos bedrock = helper.absolutePos(new BlockPos(6, 2, 6));
+        helper.getLevel().setBlockAndUpdate(bedrock, Blocks.BEDROCK.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_bedrock_digger", new BlockPos(4, 2, 4), false);
+        companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND_PICKAXE));
+        EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
+        ToolRun dig = command(companion, "work dig " + xyz(bedrock));
+
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(dig.done(), "the dig has not replied"))
+                .thenExecute(() -> {
+                    helper.assertTrue(dig.refused(), "a dig with nothing diggable was accepted: " + dig.reply());
+                    Constants.LOG.info("[numen-task] work dig refused -> {}", dig.reply());
+                    helper.assertTrue(dig.reply().contains("none of them can be broken here"),
+                            "the refusal does not say the block can't be broken: " + dig.reply());
+                    helper.assertTrue(CompanionTickDispatcher.currentTaskFor(companion.getUUID()) == null,
+                            "the refused dig reached the task slot");
+                })
+                .thenExecuteAfter(10, () -> {
+                    helper.assertTrue(outbox.peek(companion.getUUID()).entries().stream()
+                                    .noneMatch(e -> e.type().equals("task_finished")),
+                            "a refused dig sent task_finished: " + outbox.peek(companion.getUUID()).entries());
+                    helper.assertTrue(helper.getLevel().getBlockState(bedrock).is(Blocks.BEDROCK), "the bedrock is gone");
                     outbox.forget(companion.getUUID());
                     CompanionFactory.despawn(helper.getLevel().getServer(), companion);
                 })
