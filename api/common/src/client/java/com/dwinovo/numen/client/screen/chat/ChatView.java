@@ -261,7 +261,17 @@ public final class ChatView {
     }
 
     /** Forget scroll + fold state (companion or tab switch). */
+    /**
+     * 换了会话(或面板不再对着任何会话):上一个会话的一切连同它这一帧画出来的样子都忘掉——点击、滚轮、拖滑块按的是画出来的
+     * 几何,下一帧画了新会话才有新的;空面板不画对话,这里就什么也点不中。
+     */
     public void reset() {
+        gx = gy = gw = gh = 0;
+        hits.clear();
+        faces.clear();
+        lastMaxScroll = 0;
+        jumpShown = 0f;
+        barDragging = false;
         unreadSince = -1;
         scrollPos = 0;
         scrollTarget = 0;
