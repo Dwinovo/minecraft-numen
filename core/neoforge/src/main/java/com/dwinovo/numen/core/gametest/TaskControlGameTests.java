@@ -58,14 +58,16 @@ public class TaskControlGameTests {
             "How long to stand, in ticks.");
 
     static {
-        NumenPlugins.register(numen -> numen.registerCommands("gt_long",
-                "Test fixture: long work dispatched by a command.", g ->
-                        g.server("linger", "Stand still for a while, as background work.",
-                                (src, args) -> TaskDispatch.setTask(src, new LingerRecord(src, args.get(TICKS))),
-                                TICKS)
-                                .example("gt_long linger 40")
-                                .promote("Stand still for a while, as background work.")));
-        TaskFactory.register(LingerRecord.class, (body, record) -> new Linger(record));
+        if (GameTestKit.numenTestsEnabled()) {
+            NumenPlugins.register(numen -> numen.registerCommands("gt_long",
+                    "Test fixture: long work dispatched by a command.", g ->
+                            g.server("linger", "Stand still for a while, as background work.",
+                                    (src, args) -> TaskDispatch.setTask(src, new LingerRecord(src, args.get(TICKS))),
+                                    TICKS)
+                                    .example("gt_long linger 40")
+                                    .promote("Stand still for a while, as background work.")));
+            TaskFactory.register(LingerRecord.class, (body, record) -> new Linger(record));
+        }
     }
 
     /** 夹具的活:站着数够刻数就算干完。名字与调用 id 取自派它的那次调用。 */

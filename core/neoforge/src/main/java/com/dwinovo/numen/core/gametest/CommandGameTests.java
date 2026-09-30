@@ -84,36 +84,38 @@ public class CommandGameTests {
     private static final String TWIN = "gt_twin";
 
     static {
-        NumenPlugins.register(numen -> numen.registerCommands("gt_sync",
-                "Test fixture: a short action the caller waits on.", g ->
-                        g.server("hold", "Hold still for a few ticks while the caller waits.",
-                                (src, args) -> TaskDispatch.runSync(src.companion(),
-                                        new HoldRecord(src, args.get(TICKS)), src::reply),
-                                TICKS)
-                                .example("gt_sync hold 5")));
-        NumenPlugins.register(numen -> numen.registerCommands(TWIN,
-                "Test fixture: a group that shares its name with a native command.", g -> {
-                    g.server("ping", "Say which layer answered.",
-                                    (src, args) -> src.reply(TaskResult.ok("layer one").toJson()))
-                            .example(TWIN + " ping");
-                    g.server("mark", "Mark yourself through the native admin command.", (src, args) -> {
-                                OnHer her = src.onHer();
-                                List<String> words = her.next(TWIN + " mark");
-                                List<String> said = her.run(TWIN + " mark", words.get(0));
-                                src.reply(TaskResult.ok(String.join(",", words) + " | " + String.join(" ", said))
-                                        .toJson());
-                            })
-                            .authority(Authority.SERVER_ON_HER)
-                            .example(TWIN + " mark");
-                }));
-        // 一个不守输出预算的动作:回执比一个下行包还大,测网络层接得住
-        NumenPlugins.register(numen -> numen.registerCommands("gt_wire",
-                "Test fixture: an action whose reply is bigger than one payload to the client.", g ->
-                        g.server("flood", "Reply with more text than one payload carries.",
-                                (src, args) -> src.reply(TaskResult.ok(
-                                        "x".repeat(com.dwinovo.numen.network.Wire.TO_CLIENT.bytes() + 1)).toJson()))
-                                .example("gt_wire flood")));
-        TaskFactory.register(HoldRecord.class, (body, record) -> new Hold(record));
+        if (GameTestKit.numenTestsEnabled()) {
+            NumenPlugins.register(numen -> numen.registerCommands("gt_sync",
+                    "Test fixture: a short action the caller waits on.", g ->
+                            g.server("hold", "Hold still for a few ticks while the caller waits.",
+                                    (src, args) -> TaskDispatch.runSync(src.companion(),
+                                            new HoldRecord(src, args.get(TICKS)), src::reply),
+                                    TICKS)
+                                    .example("gt_sync hold 5")));
+            NumenPlugins.register(numen -> numen.registerCommands(TWIN,
+                    "Test fixture: a group that shares its name with a native command.", g -> {
+                        g.server("ping", "Say which layer answered.",
+                                        (src, args) -> src.reply(TaskResult.ok("layer one").toJson()))
+                                .example(TWIN + " ping");
+                        g.server("mark", "Mark yourself through the native admin command.", (src, args) -> {
+                                    OnHer her = src.onHer();
+                                    List<String> words = her.next(TWIN + " mark");
+                                    List<String> said = her.run(TWIN + " mark", words.get(0));
+                                    src.reply(TaskResult.ok(String.join(",", words) + " | " + String.join(" ", said))
+                                            .toJson());
+                                })
+                                .authority(Authority.SERVER_ON_HER)
+                                .example(TWIN + " mark");
+                    }));
+            // 一个不守输出预算的动作:回执比一个下行包还大,测网络层接得住
+            NumenPlugins.register(numen -> numen.registerCommands("gt_wire",
+                    "Test fixture: an action whose reply is bigger than one payload to the client.", g ->
+                            g.server("flood", "Reply with more text than one payload carries.",
+                                    (src, args) -> src.reply(TaskResult.ok(
+                                            "x".repeat(com.dwinovo.numen.network.Wire.TO_CLIENT.bytes() + 1)).toJson()))
+                                    .example("gt_wire flood")));
+            TaskFactory.register(HoldRecord.class, (body, record) -> new Hold(record));
+        }
     }
 
     /** 夹具的同步短活:站着数够刻数就干完。名字与调用 id 取自派它的那次调用。 */

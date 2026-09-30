@@ -87,6 +87,19 @@ public final class GameTestKit {
         level.setWeatherParameters(CLEAR_WEATHER_TICKS, 0, false, false);
     }
 
+    /**
+     * numen 自己的 GameTest 这次开没开。NeoForge 登记用例时会初始化每一个带 {@code @GameTestHolder} 的类,不管它的命名空间
+     * 开没开;夹具(只给用例用的命令组与任务)在这些类的静态块里登记,得先问这一句——评测与插件的 GameTest 只开自己的命名空间,
+     * 也会加载这些类,她的工具表与命令索引里不该多出夹具。判据与 NeoForge 的 {@code GameTestHooks} 读同一个属性:没给或
+     * 全是空白 = 全开。
+     */
+    static boolean numenTestsEnabled() {
+        String property = System.getProperty("neoforge.enabledGameTestNamespaces");
+        List<String> enabled = property == null ? List.of()
+                : java.util.Arrays.stream(property.split(",")).filter(s -> !s.isBlank()).toList();
+        return enabled.isEmpty() || enabled.contains(Constants.MOD_ID);
+    }
+
     static {
         String dir = System.getProperty("numen.gametest.structures");
         if (dir != null) {
