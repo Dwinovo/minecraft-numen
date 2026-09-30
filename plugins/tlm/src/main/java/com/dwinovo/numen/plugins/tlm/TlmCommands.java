@@ -16,11 +16,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code tlm}:现在穿哪套女仆模型、这里装了哪些、换上一套、脱下来。
+ * {@code tlm}:两件事住在同一个组里——她自己穿哪套女仆模型({@code models}、{@code wear}、{@code remove}),和她养的女仆
+ * ({@code maids}、{@code maid}、{@code task}、{@code config}、{@code open},见 {@link MaidCommands})。
  *
- * <h2>为什么都在主人客户端</h2>
+ * <h2>为什么穿模型的三个在主人客户端</h2>
  * 模型包只有客户端知道({@code CustomPackLoader} 是客户端类),穿什么也记在主人这边({@link Wardrobe}),
- * 发去服务端问,服务端也答不上来。命令树两侧都登记(帮助要它),处理函数只在客户端跑。
+ * 发去服务端问,服务端也答不上来。命令树两侧都登记(帮助要它),处理函数只在客户端跑。女仆是世界里的实体,管女仆的
+ * 那几个在服务端。
  *
  * <p>都不提升成快捷工具:联动的动作是长尾,走 {@code numen} 这一个入口就够了。
  */
@@ -48,28 +50,29 @@ final class TlmCommands {
     }
 
     static void install(NumenApi numen) {
-        numen.registerCommands(GROUP, "Touhou Little Maid models you can wear: list, wear, take off.",
+        numen.registerCommands(GROUP, "Touhou Little Maid: the maid model you wear yourself, and the maids you keep.",
                 TlmCommands::actions);
     }
 
     private static void actions(CommandGroup tlm) {
-        tlm.client(MODELS, "Which maid model you wear now, and which are installed.",
+        tlm.client(MODELS, "Your own look: which maid model you wear now, and which are installed.",
                 TlmCommands::models, SEARCH, Listing.PAGE)
                 .example(line(MODELS))
                 .example(line(MODELS) + " --search 灵梦")
                 .note("Read-only. Runs on your owner's client, where the model packs are.")
                 .note("One line per pack, or per model found; a long list comes a page at a time.")
                 .seeAlso(line(WEAR));
-        tlm.client(WEAR, "Put on a maid model.",
+        tlm.client(WEAR, "Your own look: put on a maid model.",
                 TlmCommands::wear, MODEL)
                 .example(line(WEAR) + " touhou_little_maid:hakurei_reimu")
                 .note("It covers your whole body: a YSM model or your own skin stops showing until you take it off.")
                 .note("It does not ask your owner; tell them what you changed into.")
                 .seeAlso(line(MODELS), line(REMOVE));
-        tlm.client(REMOVE, "Take the maid model off; your other look shows again.",
+        tlm.client(REMOVE, "Your own look: take the maid model off; your other look shows again.",
                 TlmCommands::remove)
                 .example(line(REMOVE))
                 .seeAlso(line(WEAR));
+        MaidCommands.actions(tlm);
     }
 
     /**
