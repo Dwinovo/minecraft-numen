@@ -210,10 +210,47 @@ public final class Goals {
         return rise > 0 ? rise * ActionCosts.ESTIMATE_UP : -rise * ActionCosts.ESTIMATE_DOWN;
     }
 
-    /** 眼睛(按脚在这一格的底算)到 {@code target} 那一格的距离超出交互距离的那一截,按水平每格的价钱。 */
+    /**
+     * 眼睛(按脚在这一格的底算)挪进 {@code target} 那一格的交互距离以内,最少要付多少:与 {@link #point} 同一套分轴的价,
+     * 水平每格按走、往上按跳、往下按落。眼睛离那一格水平差 {@code a}、竖直差 {@code b},交互距离是 {@code r},挪完之后剩下的
+     * 水平差 {@code u}、竖直差 {@code v} 要满足 {@code u² + v² < r²};在这些里取价钱最省的一处。
+     *
+     * <p>不按直线距离一个价钱估:那样目标在正下方深处时,横着走开十几格估价几乎不涨,地表每一格连同它底下挖开的一列都
+     * 像离目标一样近,搜索一圈圈铺开。
+     */
     private static double beyondReach(BlockPos target, BodyStats body, int x, int y, int z) {
-        double distance = Math.sqrt(new AABB(target).distanceToSqr(Reach.eye(body, Pose.STANDING, x, y, z)));
-        return Math.max(0, distance - body.blockReach()) * ActionCosts.ESTIMATE_PER_BLOCK;
+        Vec3 eye = Reach.eye(body, Pose.STANDING, x, y, z);
+        double dx = gap(eye.x, target.getX());
+        double dz = gap(eye.z, target.getZ());
+        double rise = eye.y < target.getY() ? target.getY() - eye.y : 0;
+        double drop = eye.y > target.getY() + 1 ? eye.y - (target.getY() + 1) : 0;
+        double perVertical = rise > 0 ? ActionCosts.ESTIMATE_UP : ActionCosts.ESTIMATE_DOWN;
+        return intoDisc(Math.sqrt(dx * dx + dz * dz), rise + drop, body.blockReach(), ActionCosts.ESTIMATE_PER_BLOCK,
+                perVertical);
+    }
+
+    /** 坐标 {@code v} 离 {@code [cell, cell + 1]} 这一段有多远:在段里为 0。 */
+    private static double gap(double v, int cell) {
+        return v < cell ? cell - v : Math.max(0, v - (cell + 1));
+    }
+
+    /**
+     * 平面上从 {@code (a, b)}({@code a, b ≥ 0})挪进以原点为心、半径 {@code r} 的圆,横向每格 {@code alpha}、纵向每格
+     * {@code beta},最少付多少。圆上 {@code alpha·u + beta·v} 最大的一点是 {@code r·(alpha, beta)/‖(alpha, beta)‖};它不越过
+     * {@code (a, b)} 时就停在那一点,越过了哪一轴就那一轴不挪、只挪另一轴到圆上。
+     */
+    private static double intoDisc(double a, double b, double r, double alpha, double beta) {
+        if (a * a + b * b <= r * r) {
+            return 0;
+        }
+        double norm = Math.sqrt(alpha * alpha + beta * beta);
+        if (r * alpha / norm > a) {
+            return beta * (b - Math.sqrt(r * r - a * a));
+        }
+        if (r * beta / norm > b) {
+            return alpha * (a - Math.sqrt(r * r - b * b));
+        }
+        return alpha * a + beta * b - r * norm;
     }
 
     // ==================== 排障 ====================

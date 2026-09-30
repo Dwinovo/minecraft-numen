@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import com.dwinovo.numen.pathing.Fixtures;
 import com.dwinovo.numen.pathing.TestWorld;
 import com.dwinovo.numen.pathing.Vanilla;
+import com.dwinovo.numen.pathing.plan.ActionCosts;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.plan.Stance;
@@ -36,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * 六种到达各自的判定与估价:位置坐标给几个比几个、身体怎么待着都算;距离范围只按一种量法,太近往外、太远往里、保留小数半径;
  * 站上去只认托着脚的那一块;用一格方块只认候选站位——敞开的面前、看得见、不占着它;挖在够得着的带里估价为零、从外面越近
- * 越便宜;离生物越近越贵、几只相加、半径越大越贵、每只在自己的半径上一样贵;几个同时成立取最大的估价。
+ * 越便宜、按分轴的价钱估;离生物越近越贵、几只相加、半径越大越贵、每只在自己的半径上一样贵;几个同时成立取最大的估价。
  * 搜索里走到哪儿由 {@code SearchTest} 验。
  */
 class GoalsTest {
@@ -174,6 +175,23 @@ class GoalsTest {
             double here = reach.estimate(x, 64, 0);
             assertTrue(here > 0 && here < previous, "x=" + x + ":" + here);
             previous = here;
+        }
+    }
+
+    /**
+     * 挖的估价按分轴的价钱:要挖的那一格在正下方二十格,正上方往下每一格按落的价;横着走开,每一格涨一格疾跑的价——
+     * 不因为离得深,横着走就几乎不涨。
+     */
+    @Test
+    void diggingABlockFarBelowPricesEachAxisOnItsOwn() {
+        BlockPos target = new BlockPos(0, 44, 0);
+        Goal dig = Goals.dig(target, SURVIVAL);
+        double eye = SURVIVAL.eyeHeight(Pose.STANDING);
+        double above = 64 + eye - (target.getY() + 1);
+        assertEquals((above - SURVIVAL.blockReach()) * ActionCosts.ESTIMATE_DOWN, dig.estimate(0, 64, 0), 1e-9);
+        for (int x = 6; x < 12; x++) {
+            assertEquals(ActionCosts.ESTIMATE_PER_BLOCK, dig.estimate(x + 1, 64, 0) - dig.estimate(x, 64, 0), 1e-9,
+                    "x=" + x);
         }
     }
 
