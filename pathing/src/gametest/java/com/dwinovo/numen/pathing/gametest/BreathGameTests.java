@@ -42,13 +42,16 @@ public class BreathGameTests {
     /**
      * 地板下面一条水道:沿 x 从 {@code a} 到 {@code b},水两格高(脚在 y = -2),{@code roofed} 时顶就是地板那一层基岩,只在两头
      * 各开一口竖井通到地面;否则地板那一层也是水,整条水道上面敞开。四壁与底都是基岩。一道基岩墙在两头之间横贯整个场地、
-     * 高过能跳上去的高度,地面上过不去:两边只有这条水道连着。敞开的水道在墙下留一格空气,浮在水面上就游得过墙,头不必没进水里。
+     * 高过能跳上去的高度,地面上过不去:两边只有这条水道连着。敞开的水道两岸砌两格高的基岩(不从半路爬上岸),在墙下留两格空气,
+     * 浮在水面上就游得过墙,头不必没进水里。
      */
     private static void channel(Trial t, int a, int b, boolean roofed) {
         int wall = (a + b) / 2;
         t.fill(wall, 1, 0, wall, 21, 39, Blocks.BEDROCK);
         if (!roofed) {
-            t.set(wall, 1, Z, Blocks.AIR);
+            t.fill(a, 1, Z - 1, b, 2, Z - 1, Blocks.BEDROCK);
+            t.fill(a, 1, Z + 1, b, 2, Z + 1, Blocks.BEDROCK);
+            t.fill(wall, 1, Z, wall, 2, Z, Blocks.AIR);
         }
         t.fill(a - 1, -3, Z - 1, b + 1, 0, Z + 1, Blocks.BEDROCK);
         t.fill(a, -2, Z, b, roofed ? -1 : 0, Z, Blocks.WATER);

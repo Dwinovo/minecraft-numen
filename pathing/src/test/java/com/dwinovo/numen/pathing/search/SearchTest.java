@@ -769,6 +769,18 @@ class SearchTest {
         assertEquals(1, wet.dives().size(), "憋得住时水道更便宜");
     }
 
+    /** 同样三十格长、两格深的水道,上面敞开(水面上两格空气):换着气游过去,路上没有一段憋得超过能安全憋的。 */
+    @Test
+    void aLongChannelOpenAboveIsSwumTakingBreaths() {
+        TestWorld world = sealedChannel(30).fill(0, Y + 2, 0, 30, Y + 3, 0, Blocks.AIR.defaultBlockState())
+                .fill(-4, Y + 4, -1, 34, Y + 4, 1, Blocks.BEDROCK.defaultBlockState());
+        SearchResult result = search(world, defaults(), WEST_ROOM, Goals.at(new BlockPos(32, Y, 0)));
+        assertTrue(result.arrived(), "敞开的水道游得过去:" + result.stop());
+        for (Route.Dive dive : result.route().dives()) {
+            assertTrue(dive.held() <= 240, "一口气憋得太久:" + dive);
+        }
+    }
+
     /** 同样三十格的封顶水道:带着水下呼吸效果、戴着海龟壳(下水先有 10 秒)、有水下呼吸附魔(同样的氧气憋两倍久)都游得过去。 */
     @Test
     void waterBreathingATurtleShellOrRespirationHoldLongEnough() {
