@@ -336,6 +336,36 @@ class EventQueueTest {
     }
 
     @Test
+    void overflowLetsAmbientGoFirst() {
+        // 捎带的话(服务端广播、旁听)刷满了队:先让位的是它们,更老的任务收尾与控制命令都留着
+        EventQueue q = new EventQueue(EventQueue.Journal.NONE, 3);
+        q.push(EventTypes.TASK_FINISHED, "<event>矿挖完了</event>", T0, false);
+        q.push(EventTypes.COMPACT, "整理", T0 + 1, false);
+        for (int i = 0; i < 4; i++) {
+            q.push(EventTypes.SERVER_MESSAGE, "<event>广播" + i + "</event>", T0 + 2 + i, false);
+        }
+
+        List<EventQueue.Entry> left = q.entries();
+        assertEquals(3, left.size());
+        assertEquals(EventTypes.TASK_FINISHED, left.get(0).type(), "任务收尾不让位给广播");
+        assertEquals(EventTypes.COMPACT, left.get(1).type(), "控制命令不让位给广播");
+        assertTrue(left.get(2).text().contains("广播3"), "捎带的留最新的一条");
+        assertEquals(3, q.droppedCount(), "让位的照样记账");
+    }
+
+    @Test
+    void overflowWithoutAmbientDropsTheOldest() {
+        EventQueue q = new EventQueue(EventQueue.Journal.NONE, 2);
+        q.push(EventTypes.TASK_FINISHED, "<event>一</event>", T0, false);
+        q.push(EventTypes.DEATH, "<event>二</event>", T0 + 1, true);
+        q.push(EventTypes.TASK_FINISHED, "<event>三</event>", T0 + 2, false);
+
+        List<EventQueue.Entry> left = q.entries();
+        assertEquals(List.of("<event>二</event>", "<event>三</event>"),
+                left.stream().map(EventQueue.Entry::text).toList(), "没有捎带的,丢的还是最老的");
+    }
+
+    @Test
     void dropNoteIsReportedOnceThenReset() {
         EventQueue q = new EventQueue(EventQueue.Journal.NONE, 1);
         q.push(EventTypes.TASK_FINISHED, "<event>一</event>", T0, false);

@@ -37,7 +37,7 @@ import java.util.List;
  * <b>不存在"错过的排空"</b>,也就不需要记住"我刚才想排空"这种会出错的状态。
  *
  * <h2>上限</h2>
- * {@value #DEFAULT_CAP} 条,满了丢最老的并记账,排空时如实补一句。消费者可能很久
+ * {@value #DEFAULT_CAP} 条,满了先丢最老的捎带、没有捎带再丢最老的,并记账,排空时如实补一句。消费者可能很久
  * 不来取(外接大脑失联、她死着躺一晚上),不设上限就会涨到把上下文撑爆;但丢弃
  * 不能无声无息——主人得知道自己看到的是全部还是残片。
  *
@@ -91,7 +91,7 @@ public final class EventQueue {
     // ---- 进 ----
 
     /**
-     * 收一条。满了丢最老的并记账。急不急按 {@link #urgent} 生效,条目记下的是生效后的结果,
+     * 收一条。满了按 {@link #evictee} 丢一条并记账。急不急按 {@link #urgent} 生效,条目记下的是生效后的结果,
      * 落盘、转发、熟度判断都只认它。
      *
      * @return 这条是否作为急件入队;空白输入不入队,返回 {@code false}
@@ -103,7 +103,7 @@ public final class EventQueue {
         boolean effective = urgent(EventTypes.get(type), urgent);
         entries.add(new Entry(type, text, now, effective));
         while (entries.size() > cap) {
-            entries.remove(0);
+            entries.remove(evictee());
             dropped++;
         }
         journal.save(entries);
@@ -115,6 +115,20 @@ public final class EventQueue {
             }
         }
         return effective;
+    }
+
+    /**
+     * 满了先丢哪一条:最老的一条捎带({@link EventTypes.Delivery#AMBIENT}——不叫醒她、也不是控制命令)先让位;队里没有捎带的,
+     * 才丢最老的那条。捎带的话本来就只是顺路听见的,一阵广播刷屏不能把任务收尾、急件挤出去。
+     */
+    private int evictee() {
+        for (int i = 0; i < entries.size(); i++) {
+            EventTypes.Delivery d = delivery(entries.get(i));
+            if (!d.wakes() && !d.control()) {
+                return i;
+            }
+        }
+        return 0;
     }
 
     /**

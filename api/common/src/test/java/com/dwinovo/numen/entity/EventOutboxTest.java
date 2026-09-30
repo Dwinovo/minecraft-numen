@@ -90,6 +90,26 @@ class EventOutboxTest {
     }
 
     @Test
+    void aFullBoxOfBroadcastsDoesNotCrowdOutATaskFinished() {
+        // 主人离线时服务器上的广播(成就、进出服)一句句进来,攒满了上限;要紧的事件不能被它们挤掉
+        EventOutbox box = new EventOutbox();
+        box.put(A, EventTypes.TASK_FINISHED, "<event>早先那件活做完了</event>", T0, true);
+        for (int i = 0; i < EventQueue.DEFAULT_CAP; i++) {
+            box.put(A, EventTypes.SERVER_MESSAGE, "<event>广播" + i + "</event>", T0 + 1 + i, false);
+        }
+        box.put(A, EventTypes.TASK_FINISHED, "<event>矿挖完了</event>", T0 + 1000, true);
+
+        List<EventQueue.Entry> taken = box.take(A, T0 + 2000);
+
+        List<String> finished = taken.stream().filter(e -> EventTypes.TASK_FINISHED.equals(e.type()))
+                .map(EventQueue.Entry::text).toList();
+        assertEquals(List.of("<event>早先那件活做完了</event>", "<event>矿挖完了</event>"), finished,
+                "暂存满了之后来的与之前攒着的任务收尾都在");
+        assertTrue(taken.stream().anyMatch(e -> EventTypes.DROPPED.equals(e.type()) && e.text().contains("2 件事")),
+                "让位的两句广播要记账:" + taken);
+    }
+
+    @Test
     void dismissedCompanionTakesHerBoxWithHer() {
         EventOutbox box = new EventOutbox();
         box.put(A, EventTypes.TASK_FINISHED, "<event>没人会再收</event>", T0, false);
