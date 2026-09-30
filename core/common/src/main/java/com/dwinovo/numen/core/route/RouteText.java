@@ -53,6 +53,21 @@ public final class RouteText {
      * @param now 此刻(主世界游戏刻)
      */
     public static String plan(Itinerary route, Plan plan, long now) {
+        return body(route, plan, now) + '\n' + next(route, plan);
+    }
+
+    /**
+     * 受理回执里的计划:这一趟开走前刚做的那一份,写法与 {@code route plan} 的回执同一种(抬头、每段一行),末尾交代开走前
+     * 要问主人几格。
+     */
+    public static String accepted(Itinerary route, Plan plan) {
+        int asks = plan.asks().size();
+        return "The " + body(route, plan, plan.at())
+                + (asks == 0 ? "" : "\nBefore setting off I ask your owner about " + asks + " cell(s) of it.");
+    }
+
+    /** 计划的抬头(从哪儿、多久以前、几段几步多少刻)与每段一行。 */
+    private static String body(Itinerary route, Plan plan, long now) {
         int steps = 0;
         int ticks = 0;
         for (Plan.Leg leg : plan.legs()) {
@@ -68,7 +83,7 @@ public final class RouteText {
             sb.append("\n  leg ").append(offset + i + 1).append(" to ")
                     .append(route.legs().get(offset + i).to().words()).append(": ").append(leg(plan.legs().get(i)));
         }
-        return sb.append('\n').append(next(route, plan)).toString();
+        return sb.toString();
     }
 
     private static String leg(Plan.Leg leg) {

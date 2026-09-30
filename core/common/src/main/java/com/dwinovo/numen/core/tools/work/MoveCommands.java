@@ -30,7 +30,8 @@ import net.minecraft.world.entity.Entity;
 /**
  * {@code move}:走一条路线、走到一处(站进去、站上去、去用那一格方块、停在附近)、跟着谁走。
  *
- * <p>三个动作都在服务端,都占身体,交任务槽(受理即回执,收尾走 task_finished;跟随是常驻的活,不收尾)。{@code go} 走一条
+ * <p>三个动作都在服务端,都占身体,交任务槽(受理即回执,收尾走 task_finished;跟随是常驻的活,不收尾)。受理之前先从她此刻
+ * 的位置规划,走不通当场拒绝、不受理,见 {@code MoveToCompanionTask}。{@code go} 走一条
  * 路线({@code route} 组里的名词):从她此刻的位置规划,守着那条路线上她看过的计划走。{@code goto} 是它的简写——把这一趟写成
  * 她自己的那条匿名路线({@link Itinerary#gotoOf}),再走它,同一份代码;提升成快捷工具 {@code move_goto},最常用的身体动作。
  * 去处是坐标或主人名下的一块区域({@code --area}):坐标就是只有一格的区域。去处与到达方式怎么对应到寻路的目标、写错了怎么提醒,
@@ -112,7 +113,11 @@ public final class MoveCommands {
                 .note("Shorthand for a route: it writes the walk as your own route goto-<your name>, plans it from "
                         + "where you stand and walks it, exactly as move go does. When it fails, the reply gives the "
                         + "line that changes that route, e.g. route spec with --alter natural, then route plan.")
-                .note("Background work: returns at once; the end arrives as a task_finished event.")
+                .note("Background work: it plans the walk from where you stand before it replies. A walk that "
+                        + "can't be made is refused with the reason and the lines that change it — no task id, no "
+                        + "task_finished, and whatever you were doing goes on; an accepted walk's reply carries the "
+                        + "plan: steps, the blocks it changes and the cells it asks your owner about. The end arrives "
+                        + "as a task_finished event.")
                 .note("Changes nothing in the world unless --alter natural or any, and then only the blocks its plan "
                         + "lists; blocks that are someone's are asked about before setting off.")
                 .note("Started while sitting in a boat, she pilots it toward the target; any other vehicle is "
@@ -135,11 +140,14 @@ public final class MoveCommands {
                         TERRAIN: the walk never changes the world unless you say so — walls, floors, other people's builds and the landscape stay exactly as they were. When there is no clean route, the call FAILS and says what a route would take (how many blocks) and the exact next line to copy, such as route spec on your route with --alter natural, then route plan to see which blocks before walking. Underground travel and climbing out of pits usually need alter:'natural'. Blocks that are someone's are asked about before setting off. Every call reports what it actually broke or placed.
                         ROUTE FIELDS (all optional): alter 'none'|'natural'|'any' — may the walk dig, bridge, pillar ('any' also through blocks that need the owner's consent, asking first); avoid — cell types to keep out of (water, flowing_water, lava, climbable, door, hazard, falling, trigger, fragile), or areas to stay out of ('area:farm'); allow — cell types kept out by default that this walk may use (flowing_water, trigger, fragile); penalty_place / penalty_break / penalty_jump / penalty_wade — make an action pricier so she detours instead; avoid_break / avoid_place / avoid_step — blocks (ids or #tags), cells ('x,y,z') or areas ('area:house') she must not break, place into, or stand on (a box of cells is an area); parkour — running jumps over gaps; max_fall — highest drop without water; alter_budget — how many blocks the whole route may change; routes over budget are dropped.
                         VEHICLES: start a move_goto while sitting in a boat (see <riding>) and she pilots it over the water toward the target — a destination on the water keeps her aboard, a destination ashore has her step off at the shore and finish on foot. Any other vehicle is stepped off the moment walking begins. Boarding is `use entity` right on the boat.
-                        BACKGROUND: a successful call means movement is already running; its end arrives as a matching task_finished. status=done means that destination is complete, so advance the plan and never resend identical coordinates. Only status=timeout permits the same call to resume.""");
+                        BACKGROUND: the reply comes once the walk is planned; a refused call started nothing and left what you were doing untouched. A successful call means movement is already running, and its reply carries the plan; its end arrives as a matching task_finished. status=done means that destination is complete, so advance the plan and never resend identical coordinates. Only status=timeout permits the same call to resume.""");
         move.server("go", "Walk a route: plan it from where you stand and walk it, keeping to the plan the route "
                         + "has.", MoveCommands::go, ROUTE)
                 .example("move go home")
-                .note("Background work: returns at once; the end arrives as a task_finished event.")
+                .note("Background work: it plans the route from where you stand before it replies; a route that "
+                        + "can't be walked, or would go beyond its plan, is refused with the reason — no task id, no "
+                        + "task_finished, and whatever you were doing goes on. An accepted walk's reply carries the "
+                        + "plan; the end arrives as a task_finished event.")
                 .note("A route planned before (route plan) is a promise: if planning from where you stand now would "
                         + "break, place or ask about any cell that plan did not, it does not set off and says which. "
                         + "A route never planned is planned and walked straight away, and that plan becomes its promise.")
@@ -155,7 +163,8 @@ public final class MoveCommands {
                 .note("A standing job: there is nothing to finish, so it never ends on its own and never sends "
                         + "task_finished. She goes quiet while already beside them.")
                 .note("Following a named entity ends if it dies or leaves the loaded area; following your owner "
-                        + "just waits while they are offline.")
+                        + "just waits while they are offline. When they are already out of reach as you call it, the "
+                        + "call is refused with the reason and nothing starts.")
                 .note("Never breaks or places a block. When the only way to them needs digging, bridging or "
                         + "pillaring, it ends with a failure saying so; move goto there with --alter natural (ask your "
                         + "owner unless it is obviously natural terrain), then follow again.")
@@ -184,7 +193,7 @@ public final class MoveCommands {
                 RouteFlags.written(args)));
         String label = stop.describe() + (spec.alter().mayAlter() ? "(可开路)" : "");
         TaskDispatch.setTask(src, new MoveToTaskRecord(src, name, label, "I keep this walk as my route " + name
-                + ": route show " + name + " shows its plan once it is made."));
+                + "; route show " + name + " shows it again."));
     }
 
     /** 走一条路线:路线得在;走的时候从存档里取它,规划、守承诺都在任务里。 */

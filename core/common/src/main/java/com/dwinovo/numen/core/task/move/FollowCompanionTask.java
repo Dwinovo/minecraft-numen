@@ -1,17 +1,24 @@
 package com.dwinovo.numen.core.task.move;
 
+import com.dwinovo.numen.core.nav.Feet;
+import com.dwinovo.numen.core.nav.NavText;
+import com.dwinovo.numen.core.nav.Survey;
 import com.dwinovo.numen.core.nav.Terrain;
 import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
+import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.task.Preparation;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.core.FailureType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
+
+import java.util.List;
 
 /**
  * 跟着走——第一个<b>常驻</b>任务。默认跟主人,点名了就跟那一只。
@@ -31,7 +38,7 @@ import net.minecraft.world.entity.Entity;
  * 在屋里、差几格高——退避多少次都一样。那就以失败收场,把原因连同候选路线清单交给
  * 模型,它决定先 goto 一条开路、换个办法、或者告诉主人。一个明确的失败原因不能攥在手里
  * 站着空算。主人飞在半空时跟的是他脚下能站的地方({@link #anchor}),一般够得着;真够不着
- * 也照样报。
+ * 也照样报。派下来那一刻就够不着的,受理之前就判({@link #preparation}),当场回、不受理。
  *
  * <h2>目标没了,主人和别人不一样</h2>
  * <b>主人下线是暂时的</b>——他会回来,所以休眠等着,这也是常驻该有的样子。而点名跟的
@@ -58,6 +65,9 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
     /** 他挪出上次的落脚点这么远(格)才把新目标交给在走的这一趟。 */
     private static final double RETARGET_DISTANCE = 2.0;
 
+    /** 受理之前的准备规划到的那条路:第一趟照它走;没有、或已经用过为 null。 */
+    private Route seed;
+
     public FollowCompanionTask(NumenPlayer player, FollowTaskRecord record) {
         super(player, record);
     }
@@ -76,6 +86,42 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
         }
         // 迟滞:走出 keepWithin + margin 才起步——一跟到就起步会让她在临界距离上一步一停地抖
         return companion.position().distanceTo(target.position()) > r.keepWithin + RESUME_MARGIN;
+    }
+
+    /**
+     * 受理之前:要跟的人此刻离她远到要起步时,一次只搜不走地规划过去的路——按同一份只走不改的规格走不到,就是开工后第一趟会
+     * 报的那句"跟不上",当场回,不受理;走得到的那条路是第一趟的开头({@link Trip#prepared})。就在身边、主人不在线,当场就绪。
+     */
+    @Override
+    protected Preparation preparation() {
+        Entity target = target(player);
+        if (target == null || !canRun(player)) {
+            return Preparation.READY;
+        }
+        BlockPos anchor = anchor(target);
+        Survey survey = Survey.of(player, List.of(new Survey.Leg(goal(anchor), TERRAIN)));
+        return new Preparation() {
+            @Override
+            public Preparation.Readiness poll() {
+                List<Survey.Found> found = survey.poll();
+                if (found == null) {
+                    return null;
+                }
+                Survey.Found leg = found.get(0);
+                if (leg.reached()) {
+                    seed = leg.route();
+                    return Preparation.Readiness.ready("The way to " + target.getName().getString() + " is "
+                            + NavText.ahead(seed) + ".");
+                }
+                return Preparation.Readiness.refused("can't keep up: "
+                        + NavText.failure(leg.outcome(), player, Feet.cell(player), anchor, TERRAIN));
+            }
+
+            @Override
+            public void cancel() {
+                survey.cancel();
+            }
+        };
     }
 
     @Override
@@ -99,7 +145,9 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
         if (nav == null) {
             // 只走不改;跟不上的时候回执照实说要改几格才过得去
             heading = anchor;
-            nav = Trip.to(player, goal(anchor), TERRAIN, anchor);
+            // 受理之前规划好的那条只用在第一趟
+            nav = Trip.prepared(player, goal(anchor), TERRAIN, seed, anchor);
+            seed = null;
         } else if (anchor.distSqr(heading) > RETARGET_DISTANCE * RETARGET_DISTANCE) {
             heading = anchor;
             nav.retarget(goal(anchor), anchor);
