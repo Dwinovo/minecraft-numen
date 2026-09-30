@@ -154,7 +154,8 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
                     InteractAtTaskRecord.bodyBoundReason(player.getMainHandItem().getItem()) == null
                     && InteractAtTaskRecord.bodyBoundReason(player.getOffhandItem().getItem()) == null;
             receipt = PressReceipt.before(player, r.aim);
-            interaction = Interaction.forHit(player, hit, button(), r.holdTicks, fallthroughOk, this::recordAction);
+            interaction = Interaction.forHit(player, hit, button(), r.holdTicks, fallthroughOk, r.sneak,
+                    this::recordAction);
             if (interaction == null) {       // left-click on air — a swing, nothing to do
                 successMsg = "nothing under the aim (left-click in the air)";
                 return TaskState.SUCCESS;
@@ -280,7 +281,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     private String describeDone() {
         String first = cleared.isEmpty() ? "" : "broke " + String.join(", ", cleared) + " out of the line of sight, then ";
         String verb = r.button == MouseButton.LEFT ? "left-clicked" : "right-clicked";
-        return first + verb + (r.aim != null ? " " + aimLabel() : " (forward)");
+        return first + verb + (r.aim != null ? " " + aimLabel() : " (forward)") + (r.sneak ? " while sneaking" : "");
     }
 
     /**

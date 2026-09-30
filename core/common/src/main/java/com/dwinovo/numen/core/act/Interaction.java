@@ -118,6 +118,10 @@ public final class Interaction {
      * 手里的东西扔出去。false = 兜底关闭或被任务层否决(身体约束物品)。
      */
     private boolean itemFallthrough;
+    /** 按住潜行再点({@code --sneak}),见 {@link #crouched}。 */
+    private boolean sneak;
+    /** 上一刻服务端就已经看到她按着潜行({@code isShiftKeyDown}),这一刻姿态也跟上了。 */
+    private boolean crouchSettled;
     private int fires;
     private int cooldown;             // ticks until the next discrete press
     private boolean started;          // USE+air: the hold has begun
@@ -218,8 +222,19 @@ public final class Interaction {
      * @param itemFallthrough USE 的准星兜底开关(见 {@link #itemFallthrough}):方块/实体
      *                        没吃掉点击就落到物品自用。任务层拿它挡身体约束物品——
      *                        手里是食物/末影珍珠时传 false,免得点了块石头把自己喂了。
+     * @param sneak           按住潜行再点,见 {@link #crouched}
      */
     public static Interaction forHit(NumenPlayer p, HitResult hit, Button button, int holdTicks,
+                                     boolean itemFallthrough, boolean sneak,
+                                     java.util.function.Consumer<com.dwinovo.numen.pathing.body.BodyAction> told) {
+        Interaction i = press(p, hit, button, holdTicks, itemFallthrough, told);
+        if (i != null) {
+            i.sneak = sneak;
+        }
+        return i;
+    }
+
+    private static Interaction press(NumenPlayer p, HitResult hit, Button button, int holdTicks,
                                      boolean itemFallthrough,
                                      java.util.function.Consumer<com.dwinovo.numen.pathing.body.BodyAction> told) {
         boolean hold = holdTicks != 0;
@@ -266,6 +281,9 @@ public final class Interaction {
     }
 
     public Status tick() {
+        if (!crouched()) {
+            return Status.RUNNING;
+        }
         if (button == Button.ATTACK && block != null) {
             return breakBlock();                       // inherently continuous
         }
@@ -273,6 +291,31 @@ public final class Interaction {
             return useAir();
         }
         return discrete();                             // attack entity / use block / use entity
+    }
+
+    /**
+     * 按住潜行再点:这一下点下去时她是不是已经蹲好了。没要潜行就总是蹲好了。
+     *
+     * <p>原版服务端判"按着潜行"读的是 {@code isShiftKeyDown}(方块与物品让不让潜行右键越过方块自己的反应,走的是
+     * {@code isSecondaryUseActive},就是它);身体的姿态({@code isCrouching})要等下一次身体 tick 才跟上,有的模组看的是
+     * 姿态。所以先按下潜行键,等服务端看到她按着({@link com.dwinovo.numen.pathing.body.Controls} 在身体的物理步进里把键落到
+     * {@code setShiftKeyDown}),再多等一刻让姿态跟上,才点——和真玩家先按住 Shift 再点一样。按键每刻都按一下:被抢占时
+     * 身体的键全松了,回来接着点之前重新蹲好。{@code Controls.stop()} 只松移动键,潜行一直按到 {@link #stop}。
+     */
+    private boolean crouched() {
+        if (!sneak) {
+            return true;
+        }
+        player.controls().press(com.dwinovo.numen.pathing.body.Controls.Key.SNEAK);
+        if (!player.isShiftKeyDown()) {
+            crouchSettled = false;
+            return false;
+        }
+        if (!crouchSettled) {
+            crouchSettled = true;
+            return false;
+        }
+        return true;
     }
 
     // ---- ATTACK + block: continuous break ----
@@ -437,10 +480,11 @@ public final class Interaction {
         return true;               // a press with no effect is still a press
     }
 
-    /** Abandon any in-progress interaction (clears a dig overlay / releases a held use). */
+    /** Abandon any in-progress interaction (clears a dig overlay / releases a held use / lets go of sneak). */
     public void stop() {
         if (digger != null) digger.cancel();
         if (player.isUsingItem()) player.releaseUsingItem();
         player.controls().stop();
+        if (sneak) player.controls().release(com.dwinovo.numen.pathing.body.Controls.Key.SNEAK);
     }
 }

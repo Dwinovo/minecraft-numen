@@ -190,7 +190,8 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
                     InteractAtTaskRecord.bodyBoundReason(player.getMainHandItem().getItem()) == null
                     && InteractAtTaskRecord.bodyBoundReason(player.getOffhandItem().getItem()) == null;
             receipt = com.dwinovo.numen.core.act.PressReceipt.before(player, null);
-            interaction = Interaction.forHit(player, hit, button(), r.holdTicks, fallthroughOk, this::recordAction);
+            interaction = Interaction.forHit(player, hit, button(), r.holdTicks, fallthroughOk, r.sneak,
+                    this::recordAction);
             if (r.holdTicks > 0) {
                 holdUntil = player.level().getGameTime() + r.holdTicks;
             }
@@ -273,7 +274,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
 
     private String describeDone() {
         String verb = r.button == MouseButton.LEFT ? "attacked" : "interacted with";
-        return verb + " " + targetName();
+        return verb + " " + targetName() + (r.sneak ? " while sneaking" : "");
     }
 
     /** 收尾对账,与 use block 同款:只报事实,判断留给读回执的人。 */

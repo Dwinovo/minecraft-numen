@@ -276,7 +276,50 @@ public class InteractGameTests {
         });
     }
 
-    // ---- 对她说的话 ----
+    // ---- --sneak;对她说的话 ----
+
+    /**
+     * 拿着圆石右键一只箱子:站着点,箱子开了;按住潜行点,箱子不开,圆石贴着箱子放下了——手里有东西时潜行右键越过方块自己的反应,
+     * 只有潜行才有。点完潜行松开,回执说是潜行点的。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_interact")
+    public static void use_block_sneaking_puts_a_block_on_a_chest_instead_of_opening_it(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos chest = helper.absolutePos(new BlockPos(6, 2, 14));
+        level.setBlockAndUpdate(chest, Blocks.CHEST.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_sneaker", new BlockPos(4, 2, 14), false);
+        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 4));
+        String click = "use block right " + xyz(chest) + " --item minecraft:cobblestone";
+        java.util.concurrent.atomic.AtomicReference<ToolRun> run = new java.util.concurrent.atomic.AtomicReference<>();
+
+        steps(helper)
+                .thenExecute(() -> run.set(command(companion, click)))
+                .thenWaitUntil(() -> helper.assertTrue(run.get().done()
+                                && companion.containerMenu instanceof net.minecraft.world.inventory.ChestMenu,
+                        "standing, the right click did not open the chest: " + run.get().outcome()))
+                .thenExecute(() -> run.set(command(companion, "use close")))
+                .thenWaitUntil(() -> helper.assertTrue(run.get().done()
+                                && companion.containerMenu == companion.inventoryMenu,
+                        "the chest did not close: " + run.get().outcome()))
+                .thenExecute(() -> run.set(command(companion, click + " --sneak true")))
+                .thenWaitUntil(() -> {
+                    helper.assertTrue(run.get().done(), "the sneaking click has not finished");
+                    helper.assertTrue(run.get().succeeded() && run.get().outcome().contains("while sneaking"),
+                            "the receipt does not say she clicked sneaking: " + run.get().outcome());
+                    helper.assertTrue(companion.containerMenu == companion.inventoryMenu,
+                            "sneaking, the right click still opened the chest");
+                    boolean placed = false;
+                    for (net.minecraft.core.Direction side : net.minecraft.core.Direction.values()) {
+                        placed |= level.getBlockState(chest.relative(side)).is(Blocks.COBBLESTONE);
+                    }
+                    helper.assertTrue(placed && companion.getInventory().countItem(Items.COBBLESTONE) == 3,
+                            "no cobblestone went onto the chest: " + run.get().outcome());
+                    helper.assertTrue(!companion.controls().held(com.dwinovo.numen.pathing.body.Controls.Key.SNEAK),
+                            "she still holds sneak after the click");
+                })
+                .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
+                .thenSucceed();
+    }
 
     /**
      * 正午右键一张床:原版在动作栏里告诉她只能在夜里睡,这句话作为一条 {@code server_message} 事件交给了模型

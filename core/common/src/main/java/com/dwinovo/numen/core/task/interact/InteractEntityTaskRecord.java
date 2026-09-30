@@ -19,7 +19,8 @@ import net.minecraft.world.item.Item;
  * </ul>
  * The hit only lands when the native raytrace actually REACHES the entity (a wall in between
  * blocks it — we re-position rather than hit through it). {@code holdTicks}: 0 = tap, &gt;0 =
- * hold N ticks, -1 = hold until done (dead / self-complete) or timeout.
+ * hold N ticks, -1 = hold until done (dead / self-complete) or timeout. {@code sneak}: hold sneak while pressing
+ * ({@code --sneak}).
  */
 public final class InteractEntityTaskRecord extends TaskRecord {
 
@@ -30,19 +31,22 @@ public final class InteractEntityTaskRecord extends TaskRecord {
     public final int entityId;
     public final int holdTicks;
     public final Item item;        // null → use whatever is in hand; else equip this first (food / shears / weapon)
+    public final boolean sneak;
 
-    public InteractEntityTaskRecord(ServerSource source, MouseButton button, int entityId, int holdTicks, Item item) {
+    public InteractEntityTaskRecord(ServerSource source, MouseButton button, int entityId, int holdTicks, Item item,
+                                    boolean sneak) {
         super(source, source.companion().level().getGameTime() + TIMEOUT_TICKS);
         this.button = button;
         this.entityId = entityId;
         this.holdTicks = holdTicks;
         this.item = item;
+        this.sneak = sneak;
     }
 
     @Override
     public String describe() {
         return getToolName() + " " + (button == MouseButton.LEFT ? "left" : "right")
                 + (item != null ? " " + BuiltInRegistries.ITEM.getKey(item).getPath() : "")
-                + " entity#" + entityId + (holdTicks != 0 ? " hold=" + holdTicks : "");
+                + " entity#" + entityId + (holdTicks != 0 ? " hold=" + holdTicks : "") + (sneak ? " sneak" : "");
     }
 }

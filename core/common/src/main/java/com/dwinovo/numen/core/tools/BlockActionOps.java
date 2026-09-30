@@ -77,9 +77,10 @@ public final class BlockActionOps {
 
     /**
      * {@code use block}({@code aim} 是那一格)与 {@code use ahead}({@code aim} 为 null,朝她此刻面对的方向)。
+     * {@code sneak}:按住潜行再点。
      */
     public TaskRecord interactAt(ServerSource source, String button, BlockPos aim, Integer hold_ticks,
-                                 String item_id) {
+                                 String item_id, boolean sneak) {
         MouseButton buttonVal = ToolParse.parseButton(button);
         int holdTicks = hold_ticks == null ? 0 : hold_ticks;
         Item item = item_id == null ? null : ToolArgs.parseItem(item_id);
@@ -87,15 +88,15 @@ public final class BlockActionOps {
         if (bodyBound != null) {
             throw new IllegalArgumentException(bodyBound);
         }
-        return new InteractAtTaskRecord(source, buttonVal, aim, holdTicks, item);
+        return new InteractAtTaskRecord(source, buttonVal, aim, holdTicks, item, sneak);
     }
 
     public TaskRecord interactEntity(ServerSource source, String button, int entity_id, Integer hold_ticks,
-                                     String item_id) {
+                                     String item_id, boolean sneak) {
         MouseButton buttonVal = ToolParse.parseButton(button);
         int holdTicks = hold_ticks == null ? 0 : hold_ticks;
         return new InteractEntityTaskRecord(source, buttonVal, entity_id, holdTicks,
-                item_id == null ? null : ToolArgs.parseItem(item_id));
+                item_id == null ? null : ToolArgs.parseItem(item_id), sneak);
     }
 }
 

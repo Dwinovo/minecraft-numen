@@ -51,6 +51,10 @@ public final class UseCommands {
     private static final Param<ResourceLocation> ITEM = Param.optional("item", ArgType.id(),
             "An item from your inventory to take in hand first, e.g. minecraft:bone_meal.")
             .whenOmitted("use what you hold");
+    private static final Param<Boolean> SNEAK = Param.optional("sneak", ArgType.bool(),
+            "Hold sneak while pressing, as a player holds Shift and clicks; while riding, that steps you off "
+                    + "first.")
+            .whenOmitted("press standing");
     private static final Param<Integer> BED_X = Param.optional("x", ArgType.integer(),
             "Block X of the bed; give --x, --y and --z together.")
             .whenOmitted("use whichever bed is in reach");
@@ -90,11 +94,14 @@ public final class UseCommands {
     private static void actions(CommandGroup use) {
         use.server(BLOCK, "Aim at a block, fluid or air cell within reach and press a mouse button: the full "
                         + "native click.",
-                UseCommands::block, BUTTON, X, Y, Z, HOLD_TICKS, ITEM)
+                UseCommands::block, BUTTON, X, Y, Z, HOLD_TICKS, ITEM, SNEAK)
                 .example(line(BLOCK) + " right 120 64 -35")
                 .example(line(BLOCK) + " right 120 63 -35 --item minecraft:bucket")
+                .example(line(BLOCK) + " right 120 64 -35 --item minecraft:oak_planks --sneak true")
                 .note("If the aimed block doesn't take a right click, the held item acts on its own, exactly like "
                         + "a real right-click: aiming at water with a bucket scoops it, with a boat places it.")
+                .note("With --sneak true and something in hand, a right click skips what the aimed block itself "
+                        + "does: a block goes onto a chest instead of opening it.")
                 .note("It does NOT travel: you must already be within working reach (~4.5 blocks) of the aim "
                         + "point; move_goto its coordinates with --arrive use stands you where one of its faces is "
                         + "in sight and in reach. Farther away it fails and names that move_goto.")
@@ -105,16 +112,17 @@ public final class UseCommands {
                 .seeAlso(line(GUI), line(ENTITY));
         use.server(AHEAD, "Press a mouse button at nothing in particular: the held item acts straight ahead, "
                         + "where you face.",
-                UseCommands::ahead, BUTTON, HOLD_TICKS, ITEM)
+                UseCommands::ahead, BUTTON, HOLD_TICKS, ITEM, SNEAK)
                 .example(line(AHEAD) + " right --item minecraft:snowball")
                 .note("To aim somewhere, `" + line(BLOCK) + "` at that cell instead; air cells work too.")
                 .note("Food and drink go through `inv eat`, not here.")
                 .seeAlso(line(BLOCK));
         use.server(ENTITY, "Press a mouse button on an entity: walk up to it, follow it, and act once your "
                         + "crosshair reaches it.",
-                UseCommands::entity, BUTTON, ENTITY_ID, HOLD_TICKS, ITEM)
+                UseCommands::entity, BUTTON, ENTITY_ID, HOLD_TICKS, ITEM, SNEAK)
                 .example(line(ENTITY) + " right 812 --item minecraft:shears")
                 .example(line(ENTITY) + " left 812")
+                .example(line(ENTITY) + " right 812 --sneak true")
                 .note("A wall in the way makes you re-position, not hit through it.")
                 .note("Right on a boat or rideable boards it: runtime_state then shows <riding>; move_goto pilots or "
                         + "steps off. Never click your own vehicle again.")
@@ -183,12 +191,12 @@ public final class UseCommands {
     /** 对一格按,或({@code aim} 为 null)朝着她面对的方向按:同一件活,只差瞄哪儿。 */
     private static void click(ServerSource src, CommandArgs args, BlockPos aim) {
         TaskDispatch.runSync(src.companion(), CLICKS.interactAt(src, args.get(BUTTON), aim, args.get(HOLD_TICKS),
-                idOf(args.get(ITEM))), src::reply);
+                idOf(args.get(ITEM)), sneaking(args)), src::reply);
     }
 
     private static void entity(ServerSource src, CommandArgs args) {
         TaskDispatch.runSync(src.companion(), CLICKS.interactEntity(src, args.get(BUTTON), args.get(ENTITY_ID),
-                args.get(HOLD_TICKS), idOf(args.get(ITEM))), src::reply);
+                args.get(HOLD_TICKS), idOf(args.get(ITEM)), sneaking(args)), src::reply);
     }
 
     private static void gui(ServerSource src, CommandArgs args) {
@@ -213,6 +221,10 @@ public final class UseCommands {
     /** 当场回:上床是一次调用的事,躺下就结束,不挂着等天亮。 */
     private static void sleep(ServerSource src, CommandArgs args) {
         src.reply(BEDS.sleep(args.get(BED_X), args.get(BED_Y), args.get(BED_Z), src.companion()));
+    }
+
+    private static boolean sneaking(CommandArgs args) {
+        return Boolean.TRUE.equals(args.get(SNEAK));
     }
 
     private static String idOf(ResourceLocation id) {
