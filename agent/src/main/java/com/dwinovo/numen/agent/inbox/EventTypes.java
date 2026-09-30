@@ -75,8 +75,13 @@ public final class EventTypes {
     /** 某个本能替身体做了一件事(溺水自救、下落放水、防御……),条目里带着是哪个本能。急不急由发送方定。 */
     public static final String REFLEX = "reflex";
     /**
-     * 服务端对她说的一句话:原版与模组发给她的系统聊天与动作栏("只能在夜间睡觉"、模组的提示与警告)。发送方一律不标急:
-     * 这些话多半是她刚做的事的回音,随下一次调模型带上就够,闲着时照常攒熟了再叫醒她。
+     * 服务端对她说的一句话:原版与模组发给她的系统聊天与动作栏("只能在夜间睡觉"、模组的提示与警告)。
+     *
+     * <p>走 {@link Delivery#AMBIENT}——不叫醒她:这些话多半是她刚做的事的回音,她按了床、回执回来之后的那次调模型
+     * 自然捎上;闲着时躺在队里,等别的事叫醒她时一起交。走插话档的话,非急件也会凑够条数、等够时长自己开一轮,
+     * 回合里本来要停时还会为它多调一次模型——一句"只能夜里睡"就多花一轮。
+     *
+     * <p>不进聊天流。
      * 她自己执行的指令说的话在那条指令的回执里,玩家聊天另走群聊,都不是这一种。
      */
     public static final String SERVER_MESSAGE = "server_message";
@@ -246,11 +251,12 @@ public final class EventTypes {
         register(event(WOKE, true));
         register(event(DIMENSION_CHANGE, false));
         register(event(REFLEX, false));
-        register(event(SERVER_MESSAGE, false));
         register(event(DROPPED, false));
         // 旁听到的话:捎带投递、不进聊天流,其余与世界的事同一行(原文、打断不清、不是主人说的)。
         register(new Type(TALK, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
         register(new Type(LEFT, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
+        // 服务端对她说的话:同一行,捎带投递,随下一次调模型交出去,自己不开一轮。
+        register(new Type(SERVER_MESSAGE, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
     }
 
     private EventTypes() {}

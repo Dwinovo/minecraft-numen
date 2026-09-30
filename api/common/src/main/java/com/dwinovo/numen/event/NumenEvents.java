@@ -96,7 +96,7 @@ public final class NumenEvents {
 
     /**
      * 服务端对她说了一句话(系统聊天或动作栏),原文照交。{@code repeats} 是这一句在上一次交出去之后又说了几遍——
-     * 同一句刷屏只在每个折叠窗口里交一次,收拢与窗口在 {@code ServerMessages}。永远不急,见类型表。
+     * 同一句刷屏只在每个折叠窗口里交一次,收拢与窗口在 {@code ServerMessages}。不急,也不叫醒她:捎带投递,见类型表。
      *
      * @param overlay  显示在动作栏(屏幕中下方那一行)而不是聊天栏
      * @param repeats  上次交出之后又说的遍数;0 = 头一回说
