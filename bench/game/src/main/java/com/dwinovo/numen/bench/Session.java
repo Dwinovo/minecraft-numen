@@ -8,8 +8,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestAssertException;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.Difficulty;
-import net.minecraft.world.level.GameRules;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -70,7 +68,6 @@ final class Session {
     void run(GameTestHelper helper) {
         level = helper.getLevel();
         anchor = helper.absolutePos(BlockPos.ZERO).above();
-        settleWorld(level);
         if (settings.repeats() > 0 && !settings.hasKey()) {
             problems.add("要跑真实模型却没有 API key(环境变量 " + Settings.KEY_ENV + ")");
             liveOff = true;
@@ -167,17 +164,5 @@ final class Session {
     private Scenario scenario(String id) {
         Supplier<? extends Scenario> make = suite.scenarios().get(id);
         return make.get();
-    }
-
-    /**
-     * 评测的世界:和平、正午且不走时间、晴天、不刷怪。每次运行都从同一个样子开始,不受上一次跑了多久影响。
-     */
-    private static void settleWorld(ServerLevel level) {
-        level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
-        level.setDayTime(6000);
-        level.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(false, level.getServer());
-        level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false, level.getServer());
-        level.getGameRules().getRule(GameRules.RULE_WEATHER_CYCLE).set(false, level.getServer());
-        level.setWeatherParameters(24000, 0, false, false);
     }
 }

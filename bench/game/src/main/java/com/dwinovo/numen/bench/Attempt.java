@@ -35,8 +35,10 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.GameRules;
 import net.minecraft.world.phys.Vec3;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -133,6 +135,7 @@ final class Attempt {
         MinecraftServer server = level.getServer();
         transcript = new Transcript(Results.get().transcript(suite, scenario.id(), variant.id(), number));
         meter = new Meter(transcript);
+        settleWorld(level);
         scenario.arena().build(level, origin);
         owner = OwnerConnection.join(server, level, OWNER_NAME, standOn(scenario.ownerAt()),
                 payload -> mail.add(() -> downlink(payload)));
@@ -392,6 +395,19 @@ final class Attempt {
     }
 
     // ---- 小工具 ----
+
+    /**
+     * 评测的世界:和平、正午且不走时间、晴天、不刷怪。每次运行开场都拨回这个样子,不受上一次跑了多久影响;场景要别的
+     * (夜里、有难度)就在搭场景时改,只管这一次。
+     */
+    private static void settleWorld(ServerLevel level) {
+        level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
+        level.setDayTime(6000);
+        level.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(false, level.getServer());
+        level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false, level.getServer());
+        level.getGameRules().getRule(GameRules.RULE_WEATHER_CYCLE).set(false, level.getServer());
+        level.setWeatherParameters(24000, 0, false, false);
+    }
 
     /** 场地里一格的正中,站在它上面。 */
     private Vec3 standOn(BlockPos rel) {
