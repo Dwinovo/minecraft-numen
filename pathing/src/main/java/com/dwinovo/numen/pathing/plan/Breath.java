@@ -2,7 +2,7 @@ package com.dwinovo.numen.pathing.plan;
 
 /**
  * 身体憋气的本钱与原版的掉氧、回气规则,全模块只此一处。规划时搜索沿路一步步推算({@link #after}),憋不住的路不走
- * ({@link #lasts});执行时每一步开始前按身体此刻的真实氧气把前面那一段水下重算一遍;没路时诊断问"憋得住的话有没有路",
+ * ({@link #lasts});执行时每一步开始前与执行中的每一刻按身体此刻的真实氧气把这一段水下剩下的部分重算一遍;没路时诊断问"憋得住的话有没有路",
  * 读的都是这里。一步里眼睛换不换得了气是那一步的事实({@link Maneuver#submerged}),要多少刻是那种走法的
  * {@link Move#ticks}。
  *
@@ -35,7 +35,7 @@ public record Breath(int supply, int maxSupply, double oxygenBonus, double shiel
     public static final int REFILL_PER_TICK = 4;
     /**
      * 憋完一段水下至少还要留着能再憋这么多刻:规划的刻数是估的(身体在水里的真实快慢、转弯、被水推一下),水下呼吸附魔的
-     * 扣氧是随机的;执行时按真实氧气每一步重算,这一段足够让她在估错时游完这一段,不必指望本能把她捞出去。三秒,
+     * 扣氧是随机的;执行时按真实氧气每一刻重算,这一段足够让她在估错时游完这一段,不必指望本能把她捞出去。三秒,
      * 原版满氧气的五分之一。
      */
     public static final double RESERVE = 60;
