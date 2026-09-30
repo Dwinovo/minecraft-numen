@@ -1,4 +1,4 @@
-package com.dwinovo.numen.client.agent;
+package com.dwinovo.numen.agent.request;
 
 import com.dwinovo.numen.agent.prompt.NumenPrompts;
 import com.dwinovo.numen.agent.skill.SkillRegistry;
@@ -9,15 +9,17 @@ import com.dwinovo.numen.platform.Services;
  * 系统提示:只放会话内稳定的那几层——人设、操作核心、技能表、命令索引、本能名册、札记的规矩、场面的规矩、说话规则——
  * 好让它成为字节级稳定的缓存前缀。会变的东西不在这里:背包、效果、当前任务挂在每一轮的
  * {@link RuntimeState} 里,她一写就变的札记索引随注入的 user 消息进历史。
+ *
+ * <p>不碰客户端:主人客户端上的大脑与评测组装的是同一份。
  */
-final class SystemPromptComposer {
+public final class SystemPromptComposer {
 
     private SystemPromptComposer() {}
 
     /**
      * @param personaText 这只同伴绑定的人设正文;没绑或条目没了为 {@code null}(退到全局配置,再退到内置默认人设)
      */
-    static String compose(String personaText) {
+    public static String compose(String personaText) {
         // 人设层:同伴绑的人设 → 全局配置的人设 → 内置默认人设。空着的槽会让她退回通用助手的腔调,
         // 所以最后一档是一个具体的性格,不是"自由发挥"。
         String base = (personaText != null && !personaText.isBlank())
@@ -26,7 +28,7 @@ final class SystemPromptComposer {
         String skillsXml = SkillRegistry.instance().formatXml();
 
         // 系统提示只放会话内稳定的层——人设/操作核心/技能表/情绪词表。
-        // 会变化的札记索引随注入的 user 消息进历史(见 EntityAgentLoop 的 injectionPreamble),
+        // 会变化的札记索引随注入的 user 消息进历史(见 MemoryPreamble),
         // 让这里成为字节级稳定的缓存前缀。
         StringBuilder sb = new StringBuilder();
         // Persona = the mutable "who you are" layer, wrapped so it's clearly delimited from the

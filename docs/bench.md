@@ -1,0 +1,197 @@
+# 真模型评测(bench)
+
+在无头 GameTest 服务器里用代码搭场景,让**产品里真实的大脑循环与提示词**接**真实的模型**去完成任务,量成功率、
+pass^k、轮数、token、每次成功的成本与失败类型。每次改命令、提示词、回执之后跑一遍,和上一份结果对比。
+
+它是独立的模块,不进发行 jar、不改产品行为:插件能给自己的联动加场景,别人也能换一个模型来比。
+
+---
+
+## 一、怎么跑
+
+```bash
+# 只跑两种基线(标准解、空操作),不花 API:验证场景与断言
+./gradlew --no-daemon :core:neoforge:runBench -Dbench.scenarios=all -Dbench.repeats=0
+
+# 真实模型,每个场景 3 次(key 只从环境变量读)
+NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :core:neoforge:runBench -Dbench.scenarios=all -Dbench.repeats=3
+
+# 车万女仆的场景:挂着车万女仆单开一次(原版那次不挂)
+NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :plugins:tlm:runBench -Dbench.scenarios=tlm -Dbench.repeats=3
+
+# 对比两份结果(路径相对仓库根,报告打到标准输出)
+./gradlew --no-daemon -q :bench:compare -Pbefore=core/neoforge/runs/bench/results/<时间戳> -Pafter=core/neoforge/runs/bench/results/<时间戳>
+```
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `bench.scenarios` | 空 = 什么都不跑 | 逗号隔开:`all`、组名(`vanilla`、`tlm`)、场景名(`mine_iron`)或 `组名/场景名` |
+| `bench.repeats` | 3 | 真实模型每个场景跑几次;0 = 只跑基线 |
+| `bench.provider` | `deepseek` | 服务商,同产品的服务商表 |
+| `bench.model` | `deepseek-v4-flash` | 模型 |
+| `bench.baseUrl` | `https://api.deepseek.com/beta` | 端点 |
+| `bench.reasoning` | 空(= 产品的 auto,不发) | 思考档位,同产品 |
+| 环境变量 `NUMEN_BENCH_API_KEY` | — | API key。**只从环境变量读**,不进任何属性、文件、日志、报告 |
+
+参数用 `-D` 或 `-P` 给 Gradle 都行,构建脚本转成游戏进程的系统属性;单价表 `bench/pricing.json` 与提交号由构建脚本
+自动带上。没选中任何场景时一条用例都不生成;平时的 `runGameTestServer` 不加载评测。
+
+温度等生成参数用产品的设置(服务商表里给这个模型配的),不为降方差另改。
+
+---
+
+## 二、它是怎么接起来的
+
+```
+GameTest 服务器(runs/bench)
+├─ 模组 numen            产品本体,原样
+└─ 模组 numen_bench      评测:只在 runBench 里加载
+     ├─ :bench           纯 JVM:记录、统计、报告、对比
+     ├─ :bench:game      场景接口、运行器、评测大脑、模拟主人
+     └─ 场景源码集        core/neoforge/src/bench(原版)、plugins/<联动>/src/bench
+```
+
+- **大脑**:循环内核 `AgentLoop` 原样,四个端口在服务端进程里接上(`Brain`)。请求由产品的
+  `AgentRequestContext.turn` 组装——系统提示(`SystemPromptComposer`)、运行期状态(`RuntimeState`)、工具表
+  只有那一份;札记索引是 `MemoryPreamble`,整理记忆是 `Compactor`,派工具的顺序与等待是 `SerialCalls`。
+  和主人客户端不同的只有:人设用内置默认人设,主动性用默认档位,插件在客户端现算的状态片段没有(没有客户端)。
+- **上行**:工具照产品的路走到 `ServerToolTransport`,它的上行出口 `uplink` 在评测里直接交给服务端真实入口
+  `ExecuteToolPayload.handle`,发送者是模拟主人。
+- **模拟主人**:一个在线的 `ServerPlayer`,连接是 `OwnerConnection`。发给主人的模组载荷截下来,按网络的样子
+  编解码一遍,照主人客户端的做法交给大脑:回执给传输层,当前任务与身体状态给运行期状态,世界事件进收件箱,
+  征询按剧本经 `ConsentDesk.reply` 答复,死亡切断循环。
+  下行包过得了 NeoForge 的频道检查,是因为连接用 NeoForge 给 GameTest 的 `NetworkRegistry.configureMockConnection`
+  写上了协商好的频道表(同伴的 `FakeConnection` 不需要:numen 的 mixin 在检查之前就把发给它的包丢了)。
+- **技能**:主人客户端起来时把自带技能接进技能表;评测没有客户端,`numen_bench` 构造时经同一扇门
+  (`NumenPlugins.bindSkills`)接上,玩家自己的技能目录不扫。
+- **每次运行从白纸开始**:新的场地(彼此隔 512 格,任何扫描都看不见上一块)、新的她(新 UUID)、新的主人、
+  临时目录里的札记与会话日志(收场后整个删掉,评测从不读它们)。
+
+---
+
+## 三、一次评测怎么跑
+
+一组场景是一条 GameTest 用例,场景一次一次地跑、不并行:
+
+1. 每个场景先跑**标准解**(按顺序直接执行场景写好的命令,必须过)和**空操作**(她只答一句,必须挂)。两种基线
+   不花 API,证明场景可解、断言不被什么都不做骗过。对不上的场景不跑真实模型,记为自检失败。
+2. 基线可信的场景跑真实模型 `bench.repeats` 次。
+3. 用例本身的成败只说评测靠不靠得住:自检全对、没有评测出错、没被余额不足打断就通过。模型成不成功只进报告。
+
+一次运行:搭场地 → 主人上线 → 召出她 → 搭场景 → 等服务端把她的身体状态推过来(第一次请求里就有背包)→
+主人开口 → 每刻推循环、看收不收场。
+
+评测按真实游戏**每秒 20 刻**走:GameTest 服务器本来不等下一刻、有多快跑多快(每秒上千刻),那样她等模型回话的
+几秒里世界已经过了好几分钟,活干多久、事件什么时候到、游戏刻预算都不对。评测每刻补足 50 毫秒。
+
+收场,按先后看:她死了;调模型的次数超预算;调模型失败且不再重试(或端点不可用);游戏刻或墙钟超预算;她闲下来
+保持 3 秒——没在跑的对话、没停牌、身体没有后台活、队里没有会叫醒她的条目。然后对终态判断言、记一行、清场。
+
+API 返回 402(余额不足)时不再调模型,余下的真实模型运行全部取消,用例失败并说明。
+
+---
+
+## 四、加一个场景
+
+场景实现 `Scenario`,组用 `Bench.suite` 登记,写法同登记命令组:
+
+```java
+@GameTestHolder(Bench.NAMESPACE)
+public final class TlmBench {
+    @GameTestGenerator
+    public static Collection<TestFunction> scenarios() {
+        return Bench.suite("tlm", "Touhou Little Maid: taming and keeping maids.",
+                suite -> suite.add(TameWildMaid::new));
+    }
+}
+```
+
+`Scenario` 要写的:
+
+| 方法 | 说明 |
+|---|---|
+| `id()` | 场景名,`bench.scenarios` 按它选 |
+| `setup(Scene)` | 搭场景:她与主人已在场地里。放方块、给物品、生成实体 |
+| `opening()` | 主人开场说的话 |
+| `checks()` | `Check.success`(成功断言)、`Check.guard`(负面断言)、`Check.subgoal`(子目标);写法同 GameTest,不成立就 `scene.assertTrue(false, "看到了什么")`。"她没死"每个场景都有 |
+| `solution(Scene)` | 标准解:一次回复里按顺序执行的命令行 |
+| `arena()`、`budget()`、`start()`、`ownerAt()`、`owner()` | 可选:场地大小、预算(默认 30 轮、10 分钟)、她和主人站哪、模拟主人的剧本(默认允许一次、不回话) |
+
+每次运行造一个新实例(`suite.add` 收构造器),这一次生成的东西(一只女仆)放在场景自己的字段里。坐标相对场地:
+地板在 y=0,站在地板上是 y=1。
+
+**插件的场景**放在插件自己的 `src/bench` 源码集里,由插件自己的 `runBench` 挂上目标模组跑(照 `plugins/tlm/build.gradle`):
+场景源码集编译对着 `:bench:game`,运行时和 `:bench`、`:bench:game` 一起组成模组 `numen_bench`。
+
+---
+
+## 五、指标
+
+| 指标 | 定义 |
+|---|---|
+| 成功 | 成功断言全过、负面断言全过 |
+| c/n、成功率 | n 次里成功 c 次;区间是 Wilson 95% |
+| pass^k | τ-bench 的定义:k 次全成功的概率的无偏估计 `C(c,k)/C(n,k)`。汇总表给 pass^3(n≥3) |
+| 子目标 | 达成的比例,不决定成败 |
+| 轮数 | 调模型的次数(一次 run 里的对话调用;整理记忆不算) |
+| 命令数、命令出错 | 工具调用数;其中结果 `success:false` 的 |
+| 重复失败 | 和之前某个失败的调用一字不差、又失败了的次数 |
+| 征询 | 身体向主人征询的次数 |
+| token | 未命中(含缓存写)/ 命中 / 输出,DeepSeek 的 `prompt_cache_miss_tokens` / `prompt_cache_hit_tokens` / `completion_tokens` |
+| 成本 | 按 `bench/pricing.json` 的单价折算;表里没有的模型不折。DeepSeek 记的是闲时价,峰时三项都翻倍 |
+| 每次成功成本 | 这些次的总花费 ÷ 成功次数 |
+| 游戏刻、墙钟 | 一次运行从开始到收场 |
+| 说完成没过 | 她自己收了工,断言却没过 |
+
+两份结果的对比(`:bench:compare`)只看真实模型:按场景配对算成功率差值,场景层 bootstrap(一万轮、固定种子)
+给均值的 95% 区间;一个场景"过"指过半数次数成功,列出由过变挂、由挂变过。
+
+---
+
+## 六、报告
+
+写到 `<游戏目录>/results/<时间戳>/`(原版是 `core/neoforge/runs/bench/results/`,车万女仆那次是
+`plugins/tlm/runs/bench/results/`):
+
+- `runs.jsonl`:一次一行。字段:`suite`、`scenario`、`variant`(solution / noop / live)、`attempt`、`commit`、
+  `promptHash`(系统提示 SHA-256 前 12 位)、`model`、`passed`、`checks` 与 `subgoals`(每条的名字、种类、过没过、
+  说明)、`end`(结束原因)、`turns`、`toolCalls`、`toolErrors`、`repeatedFailures`、`consents`、`tokensMiss`、
+  `tokensHit`、`tokensOut`、`cost`、`currency`、`wallMs`、`gameTicks`、`claimedDone`、`tag`(失败分类)、
+  `finalWords`(她最后说的话)、`transcript`(记录文件)、`error`。
+- `summary.md`:自检表、每个场景一行的汇总、失败分布与每次失败的去处。
+- `transcripts/<组>-<场景>-<变体>-<第几次>.jsonl`:一行一件事——主人的话、她的话、每个工具调用与结果的前 200 字、
+  进收件箱的世界事件、征询与答复、收场。
+
+**不落任何思考流**:评测不订阅流式增量,记录与报告里没有模型的思考;会话日志只在运行期间落在临时目录里供整理记忆用,
+收场即删,评测不读。
+
+结束原因:自己收工、权限被拒(自己收工,而最后一个失败的结果是主人拒绝或规则不许)、超轮数、超游戏刻、超墙钟、
+API 错、超上下文、死亡、评测出错。
+
+---
+
+## 七、失败分类
+
+| 标签 | 含义 | 自动打 |
+|---|---|---|
+| A | 理解:没听懂要什么 | |
+| B | 感知:没看见、看错了世界 | |
+| C | 规划:步骤、顺序不对 | |
+| D | 执行参数:命令写错、参数不合 | 有一行命令写错了(命令树读不通、参数不合、把工具名写进命令) |
+| E | 监控核验:没核对就说做完了 | |
+| F | 恢复:出错后没换办法、重复同一个失败 | |
+| G | 系统环境:API、网络、上下文 | API 错、超上下文 |
+| H | 评测自身 | 评测出错 |
+
+规则判不出的留空("待人工"),读记录后补。
+
+---
+
+## 八、第一版的场景
+
+| 组 | 场景 | 搭了什么 | 主人说 | 成功 | 负面 | 标准解 |
+|---|---|---|---|---|---|---|
+| vanilla | `mine_iron` | 七乘七、四层的石堆里埋 12 块铁矿,包里一把石镐 | 帮我挖 10 个铁回来。 | 粗铁 ≥ 10 | 没死 | `scan blocks 12 iron_ore --into ores`、`work dig ores --count 10` |
+| tlm | `tame_wild_maid` | 一只野生女仆,包里一块蛋糕 | 那边有只野生女仆,你去把她驯服了。 | 女仆的主人是她 | 没死、女仆活着 | `use entity right <女仆> --item minecraft:cake` |
+
+世界:和平、正午且不走时间、晴天、不刷怪。

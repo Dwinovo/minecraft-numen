@@ -1,10 +1,12 @@
-package com.dwinovo.numen.client.agent;
+package com.dwinovo.numen.agent.request;
 
-import com.dwinovo.numen.client.data.ClientNumenState;
 
+import com.mojang.brigadier.exceptions.BuiltInExceptionProvider;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -19,14 +21,19 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 /**
  * 挂进请求的那块背包长什么样。它是模型每一轮都会读的东西——数错了、漏了主手,她会照着
  * 错的事实决定下一步,而且不会有任何报错。需要 MC 注册表。
+ *
+ * <p>引导 MC 时 Brigadier 的内置报错被换成了 MC 的说法;测完换回引导之前的那一份,同一个 JVM 里读 Brigadier
+ * 原话的命令测试不随这个类先跑还是后跑而变(与 {@code BrigadierHelpTest} 同一个做法)。
  */
 @Tag("mc")
 class InventoryBlockTest {
 
     private static boolean booted;
+    private static BuiltInExceptionProvider brigadierWords;
 
     @BeforeAll
     static void boot() {
+        brigadierWords = CommandSyntaxException.BUILT_IN_EXCEPTIONS;
         try {
             net.minecraft.SharedConstants.tryDetectVersion();
             net.minecraft.server.Bootstrap.bootStrap();
@@ -36,17 +43,22 @@ class InventoryBlockTest {
         }
     }
 
-    private static ClientNumenState.Snapshot snapshot(int selected, ItemStack offhand,
+    @AfterAll
+    static void restoreBrigadierWords() {
+        CommandSyntaxException.BUILT_IN_EXCEPTIONS = brigadierWords;
+    }
+
+    private static BodySnapshot snapshot(int selected, ItemStack offhand,
                                                           ItemStack... items) {
-        return new ClientNumenState.Snapshot(true, List.of(items), List.of(), 20, 5f,
+        return new BodySnapshot(true, List.of(items), List.of(), 20, 5f,
                 selected, offhand, List.of(), "", -1, "", 1L);
     }
 
     // ==================== 身上在生效的 ====================
 
-    private static ClientNumenState.Snapshot withEffects(long receivedAtMs,
+    private static BodySnapshot withEffects(long receivedAtMs,
             net.minecraft.world.effect.MobEffectInstance... effects) {
-        return new ClientNumenState.Snapshot(true, List.of(), List.of(), 20, 5f,
+        return new BodySnapshot(true, List.of(), List.of(), 20, 5f,
                 0, ItemStack.EMPTY, List.of(effects), "", -1, "", receivedAtMs);
     }
 
@@ -232,10 +244,10 @@ class InventoryBlockTest {
     void mainHandIsBoundsCheckedOnTheSnapshot() {
         assumeTrue(booted);
         assertEquals(ItemStack.EMPTY,
-                new ClientNumenState.Snapshot(true, List.of(), List.of(), 20, 5f,
+                new BodySnapshot(true, List.of(), List.of(), 20, 5f,
                         3, ItemStack.EMPTY, List.of(), "", -1, "", 1L).mainHand());
         assertEquals(ItemStack.EMPTY,
-                new ClientNumenState.Snapshot(true, List.of(), List.of(), 20, 5f,
+                new BodySnapshot(true, List.of(), List.of(), 20, 5f,
                         -1, ItemStack.EMPTY, List.of(), "", -1, "", 1L).mainHand());
     }
 }

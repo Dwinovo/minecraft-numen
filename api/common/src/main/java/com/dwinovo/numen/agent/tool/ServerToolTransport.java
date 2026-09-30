@@ -6,11 +6,13 @@ import com.dwinovo.numen.network.payload.ExecuteToolPayload;
 import com.dwinovo.numen.network.NumenNetwork;
 import com.dwinovo.numen.network.Wire;
 import io.netty.buffer.Unpooled;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 
 import java.util.Collection;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 /**
  * numen-core's client-side tool transport — how a body-bound tool actually reaches
@@ -24,6 +26,13 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class ServerToolTransport {
 
     private static final Map<String, ToolCall> IN_FLIGHT = new ConcurrentHashMap<>();
+
+    /**
+     * 上行出口:这里送往服务端的包({@link ExecuteToolPayload}、{@link CancelTasksPayload})都从它走。主人客户端上是网络
+     * ({@link NumenNetwork#sendToServer});没有客户端的进程(评测)换成直接交给服务端的入口。回执照旧经
+     * {@link #deliver} 回来。写法同下行的 {@link com.dwinovo.numen.network.ClientPayloadSink}:主源码集里一个静态挂点。
+     */
+    public static volatile Consumer<CustomPacketPayload> uplink = NumenNetwork::sendToServer;
 
     private ServerToolTransport() {}
 
@@ -41,7 +50,7 @@ public final class ServerToolTransport {
             return;
         }
         IN_FLIGHT.put(call.id(), call);
-        NumenNetwork.sendToServer(payload);
+        uplink.accept(payload);
     }
 
     /** A server result came back (core's TaskResultPayload) — complete the parked call. */
@@ -56,7 +65,7 @@ public final class ServerToolTransport {
      * {@link #forget} 掉。
      */
     public static void abort(UUID companionUuid) {
-        NumenNetwork.sendToServer(new CancelTasksPayload(companionUuid));
+        uplink.accept(new CancelTasksPayload(companionUuid));
     }
 
     /**

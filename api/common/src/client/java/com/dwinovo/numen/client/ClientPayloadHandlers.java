@@ -53,10 +53,7 @@ public final class ClientPayloadHandlers {
         ClientPayloadSink.event = p ->
                 AgentLoopRegistry.getOrCreate(p.entityUuid()).pushEvents(p.entries());
         ClientPayloadSink.state = p ->
-                ClientNumenState.update(p.uuid(), new ClientNumenState.Snapshot(
-                        p.loaded(), p.items(), p.craft(), p.foodLevel(), p.saturation(),
-                        p.selectedSlot(), p.offhand(), p.effects(),
-                        p.vehicleType(), p.vehicleId(), p.bodyState(),
+                ClientNumenState.update(p.uuid(), com.dwinovo.numen.agent.request.BodySnapshot.of(p,
                         System.currentTimeMillis()));
         ClientPayloadSink.locations = ClientPayloadHandlers::handleLocations;
         ClientPayloadSink.respawn = ClientPayloadHandlers::handleRespawn;

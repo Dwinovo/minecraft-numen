@@ -23,8 +23,10 @@ import com.dwinovo.numen.agent.loop.ModelPort;
 import com.dwinovo.numen.agent.loop.ModelRequest;
 import com.dwinovo.numen.agent.loop.Phase;
 import com.dwinovo.numen.agent.provider.Usage;
-import com.dwinovo.numen.agent.tool.NumenTool;
-import com.dwinovo.numen.agent.tool.ToolRegistry;
+import com.dwinovo.numen.agent.request.AgentRequestContext;
+import com.dwinovo.numen.agent.request.MemoryPreamble;
+import com.dwinovo.numen.agent.request.RuntimeState;
+import com.dwinovo.numen.agent.request.SystemPromptComposer;
 import com.dwinovo.numen.data.ModLanguageData;
 import com.dwinovo.numen.mcp.server.McpMode;
 import net.minecraft.client.Minecraft;
@@ -75,8 +77,8 @@ public final class EntityAgentLoop {
     /** JSONL persistence under {@code config/numen/conversations/<uuid>.jsonl}. */
     private final ConvoLog log;
     private final ConvoState convo;
-    /** 她自己写的札记;索引作为 {@code <memory>} 注入。 */
-    private final com.dwinovo.numen.agent.memory.NoteBook notes;
+    /** 她自己写的札记的索引,作为 {@code <memory>} 注入。 */
+    private final MemoryPreamble memory;
     /**
      * 她此刻在哪个会话里——最后一次是被哪个会话叫醒的。<b>null = 就他俩</b>(她的单成员会话)。
      *
@@ -86,10 +88,6 @@ public final class EntityAgentLoop {
      */
     private volatile String conversation;
 
-    /** 札记索引上次贴进历史时的版本。 */
-    private int memoryRevisionInHistory = -1;
-    /** 历史里那份还在不在:开一局时不在,压缩/清空把它吃掉之后也不在。 */
-    private boolean memoryInHistory;
     /**
      * 收件箱(宪法 §4):主人的话与世界事件的统一进箱口,内核按类型表的投递方式取件。
      * 条目、落盘、年龄标注、熟度规则全在 {@link EventQueue};这里直接用它的只有外接模型取件口
@@ -155,8 +153,9 @@ public final class EntityAgentLoop {
         this.entityUuid = entityUuid;
         this.log = ConvoLog.atFile(CompanionHome.chat(entityUuid));
         this.convo = new ConvoState(msg -> log.append(msg, conversation));
-        this.notes = com.dwinovo.numen.agent.memory.NoteBook.of(entityUuid);
-        this.runtime = new RuntimeState(entityUuid);
+        this.memory = new MemoryPreamble(com.dwinovo.numen.agent.memory.NoteBook.of(entityUuid));
+        this.runtime = new RuntimeState(entityUuid,
+                () -> com.dwinovo.numen.client.data.ClientNumenState.get(entityUuid).orElse(null));
         this.queue = new EventQueue(JsonlJournal.atFile(CompanionHome.inbox(entityUuid)));
         this.providerEntryId = CompanionHome.binding(entityUuid).providerId();
         this.dispatcher = new ToolDispatcher(entityUuid, this::resolveEntity);
@@ -174,7 +173,7 @@ public final class EntityAgentLoop {
         loop.subscribe(tokens::on);
         loop.subscribe(compactor::on);
         loop.subscribe(goals::on);
-        loop.subscribe(this::onTranscriptBoundary);
+        loop.subscribe(memory::on);
         loop.subscribe(runtime::on);
         restoreFromDisk();
     }
@@ -187,17 +186,6 @@ public final class EntityAgentLoop {
     /** 她此刻在哪个会话里;null = 就他俩。 */
     public String conversation() {
         return conversation;
-    }
-
-    /**
-     * 整理或清空之后,历史里那份札记索引没了(摘要把它嚼掉了),下一次注入得重贴一份完整的。
-     *
-     * <p>真源在磁盘上,历史里的只是复述——所以复述丢了不要紧,照着真源再念一遍就行。
-     */
-    private void onTranscriptBoundary(com.dwinovo.numen.agent.loop.LoopEvent event) {
-        if (event instanceof com.dwinovo.numen.agent.loop.LoopEvent.TranscriptBoundary) {
-            memoryInHistory = false;
-        }
     }
 
     /**
@@ -730,19 +718,10 @@ public final class EntityAgentLoop {
             return endpointProblem();
         }
 
-        /**
-         * <b>发给模型的就是这一份</b>——会话上下文加上这一轮临时挂载的运行期状态
-         * ({@code <runtime_state>}/{@code <current_task>})。源会话与落盘日志一个字不动。
-         * 可调工具集从同一份消息里算:展开闸按模型这一次看见了什么判。
-         */
+        /** 这一轮的请求:组装只在 {@link AgentRequestContext#turn} 一处,评测调的也是它。 */
         @Override
         public ModelRequest turnRequest() {
-            List<ConvoState.Msg> messages = AgentRequestContext.attach(convo.snapshot(), runtime.xml());
-            // 工具表是全份:装在模组里的、联动插件带的、接进来的 MCP,一并发出去。
-            // 分批披露那套已经退役——她得先搜一次才能用的工具,省下的那点前缀是缓存本来就
-            // 不收钱的部分,换来的却是每次压缩之后重搜一遍。
-            List<NumenTool> tools = ToolRegistry.all();
-            return new ModelRequest(messages, tools, SystemPromptComposer.compose(personaText()));
+            return AgentRequestContext.turn(convo.snapshot(), runtime.xml(), personaText());
         }
 
         /**
@@ -815,22 +794,10 @@ public final class EntityAgentLoop {
             return McpMode.instance().driving();
         }
 
-        /**
-         * {@code <memory>} 索引随注入的 user 消息进历史,不放系统提示:她一 remember 它就变了,
-         * 放系统提示会打碎请求前缀的 prompt cache。
-         *
-         * <p>贴的是<b>全份</b>,但只在"历史里那份没了或者过时了"的时候贴:开一局、压缩/清空
-         * 之后、她刚写过。没变就不重贴——历史里已经躺着一份,再贴一份是白花的 token。
-         */
+        /** {@code <memory>} 索引,贴不贴见 {@link MemoryPreamble}。 */
         @Override
         public String injectionPreamble() {
-            int revision = notes.revision();
-            if (memoryInHistory && revision == memoryRevisionInHistory) {
-                return "";
-            }
-            memoryInHistory = true;
-            memoryRevisionInHistory = revision;
-            return notes.formatXml();
+            return memory.next();
         }
 
         @Override

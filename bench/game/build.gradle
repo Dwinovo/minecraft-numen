@@ -1,0 +1,33 @@
+// 评测在游戏里的那一半:场景接口、运行器、评测大脑、模拟主人。它是一个独立的模组 numen_bench,只在评测的运行配置里
+// 与场景的源码集一起加载(core/neoforge 与各联动的 runBench),平时的游戏、GameTest、发行 jar 里都没有它。
+// 模拟主人的连接要 NeoForge 的频道协商(见 OwnerConnection),所以对着 NeoForge 编译;评测也只在 NeoForge 上跑。
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev'
+}
+
+group = 'com.dwinovo.numen'
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version)
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs.add('-parameters')
+}
+
+repositories {
+    mavenCentral()
+}
+
+neoForge {
+    version = neoforge_version
+}
+
+dependencies {
+    // 场景的源码集编译时看得见这两样:报告的类型、引擎的类型(场景拿到的是她的身体)
+    api project(':bench')
+    // 整个引擎,不是瘦 api jar:评测大脑接的是引擎内部的零件(循环内核、传输层、召唤),和 core 的 GameTest 一样
+    api project(':api:neoforge')
+}

@@ -69,3 +69,13 @@ dependencies {
 tasks.matching { it.name == 'runGameTestServer' }.configureEach {
     dependsOn ':core:neoforge:classes', ':core:neoforge:syncGameTestStructures'
 }
+
+/*
+ * 车万女仆的评测场景:src/bench,挂着车万女仆单开一次 `./gradlew :plugins:tlm:runBench`(见 buildSrc 的 numen-bench.gradle
+ * 与 docs/bench.md)。和上面的 GameTest 同一个理由不挂进原版那一次。场景要车万女仆的类,运行时它由类路径带进来。
+ */
+apply plugin: 'numen-bench'
+
+dependencies {
+    benchImplementation "maven.modrinth:touhou-little-maid:${tlm_version}"
+}
