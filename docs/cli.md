@@ -828,9 +828,10 @@ throwaway clear
   near:3 only goes with arrive:near — write arrive:near near:3 to stop within 3 blocks; without it arrival is exact.
   ```
   `at` 指向站不进去、站不住的格只在这一趟不改地形(`alter none`)时提醒:许改地形时那是寻路去挖、去垫的事。
-- **`use block` 不自己走路**:够不着、看不见时下一步是能照抄的 `move_goto x:… y:… z:… arrive:use`。它点目标看得见的那一面
-  (`Aim.use`,与 `arrive:use` 同一个视线函数);视线上隔着软遮挡(高草、单层雪,判据是"放一块别种方块时原版会顶掉它")时先一格
-  一格左键清掉——每一格过权限层、回执里写 `broke tall_grass at … out of the line of sight, then right-clicked …`。
+- **`use block` 不自己走路**:够不着、看不见时下一步是能照抄的 `move_goto x:… y:… z:… arrive:use`。右键看向目标看得见的那一面
+  (`Aim.use`,与 `arrive:use` 同一个视线函数),两个键都是纯按键:准星落在谁就点谁,视线上挡着的(箱子前的高草)不清,回执照实说
+  并写出下一步,例如 `right-clicked tall_grass at … — the crosshair landed there, not on …. To click …: `work dig …` clears it
+  out of the way, or move_goto … arrive:use stands where another face of it is in sight`。清视线只归 `work dig`。
 - 别处"先走过去"的下一步一并改成能照抄的写法:合成找工作台、睡觉找床、森罗厨房的锅(`arrive:use`),挖矿区外的矿
   (`arrive:near near:8`)。
 

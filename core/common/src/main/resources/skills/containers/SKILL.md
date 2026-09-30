@@ -112,5 +112,6 @@ Every move's result tells you its outcome, and you can always `use gui` — you 
 - **Chest is full** → `use gui` shows no empty container slots. Find another chest (scan / known_blocks) or take something out first.
 - **Got a swap you didn't want** → `use transfer` put it onto a slot holding a different item. `use shift` instead to route it, or pick an empty slot.
 - **"no GUI open"** → you didn't open one, or walked out of range and it closed. Open it again with `use block`.
+- **"right-clicked tall_grass … the crosshair landed there"** → something stood between you and the container, and the click went to it. The result names the next step: `work dig` that cell, or `move goto --x 120 --y 64 --z -35 --arrive use` to stand where another side is in sight; then `use block` again.
 
 Always `use close` (or walk away) when finished so you don't leave a menu hanging.

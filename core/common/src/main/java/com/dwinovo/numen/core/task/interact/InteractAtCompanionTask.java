@@ -34,10 +34,10 @@ import java.util.Map;
  * 或到了 {@code holdTicks}——不换工具、不清挡着的、不挪步。准星落在别的格(高草、树叶)或实体上,按的就是它,回执照实说。
  * 挖东西(挑工具、清开视线、捡掉落)是 {@code work dig} 的事。
  *
- * <p>右键点方块:可点的目标点它看得见的一面({@link Aim#use},与 {@code move_goto arrive:use} 同一个视线函数),那条视线上的软遮挡
- * (草、单层雪)先一格一格左键清掉,每一格过权限层、记进回执;再按下右键({@link Interaction#forHit}):激活方块,或——对着空气——
- * 用手里的东西(扔、吃、拉弓)。The mouse model is the two record fields {@code button} (left/right) × {@code holdTicks}
- * (tap/hold).
+ * <p>右键同样是一次纯按键:可点的目标看向它看得见的一面({@link Aim#use},与 {@code move_goto arrive:use} 同一个视线函数),
+ * 准星落在谁就点谁({@link Interaction#forHit}):激活方块,或——对着空气——用手里的东西(扔、吃、拉弓)。视线上挡着的(箱子前的
+ * 高草)不清,点到的就是它,回执照实说,下一步写出 {@code work dig} 挖掉它或从另一面点。The mouse model is the two record fields
+ * {@code button} (left/right) × {@code holdTicks} (tap/hold).
  */
 public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTaskRecord> {
 
@@ -51,13 +51,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     // result names it — whether that station is worth a note is hers to decide.
     private net.minecraft.core.BlockPos activatedBlock;
     private String activatedBlockId;
-    /** 正在清掉的软遮挡(视线上的草、单层雪);没在清为 null。 */
-    private Interaction clearing;
-    private net.minecraft.core.BlockPos clearingAt;
-    private String clearingName;
-    /** 按键之前清掉的软遮挡,回执里说。 */
-    private final List<String> cleared = new java.util.ArrayList<>();
-    /** 左键时准星没落在瞄的那一格上、落在了别的东西上:回执里说按的是谁;落在瞄的那一格上为 null。 */
+    /** 准星没落在瞄的那一格上、落在了别的东西上:回执里说按的是谁;落在瞄的那一格上为 null。 */
     private String landedElsewhere;
 
     public InteractAtCompanionTask(NumenPlayer player, InteractAtTaskRecord record) {
@@ -97,25 +91,17 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
             if (r.item != null) {
                 Hotbar.grip(player, r.item);
             }
-            // 右键点可点的目标:看它看得见的一面(与 move_goto arrive:use 同一个视线函数)。准星先落在那条视线上的软遮挡上
-            // 就先清掉它,落在别的硬方块上就是看不见。左键、空气与流体都看格心:左键准星落在谁就按谁;对水面右键的原版含义
-            // 正是"射线穿过去,物品自己找水"(桶、船)
-            if (r.aim != null && button() == Interaction.Button.USE && Terrain.of(player).clickable(r.aim)) {
-                com.dwinovo.numen.pathing.world.Sight.Trace seen = Aim.use(player, r.aim);
-                if (seen == null) {
-                    return occluded();
-                }
-                InputDriver.lookAt(player, seen.point());
-                if (Crosshair.pick(player) instanceof net.minecraft.world.phys.BlockHitResult landed
-                        && landed.getType() == HitResult.Type.BLOCK && !landed.getBlockPos().equals(r.aim)) {
-                    return com.dwinovo.numen.pathing.world.Sight.soft(player.level().getBlockState(landed.getBlockPos()))
-                            ? clear(landed) : occluded();
-                }
-            } else if (r.aim != null) {
-                InputDriver.lookAt(player, Vec3.atCenterOf(r.aim));
+            // 右键点可点的目标:看向它看得见的那一面(与 move_goto arrive:use 同一个视线函数),哪一面都看不见就看格心。
+            // 左键、空气与流体都看格心;对水面右键的原版含义正是"射线穿过去,物品自己找水"(桶、船),落点不另说。
+            // 两个键都是纯按键:准星落在谁就按谁,挡在前面的不清,回执照实说
+            boolean clickable = r.aim != null && Terrain.of(player).clickable(r.aim);
+            if (r.aim != null) {
+                com.dwinovo.numen.pathing.world.Sight.Trace seen =
+                        button() == Interaction.Button.USE && clickable ? Aim.use(player, r.aim) : null;
+                InputDriver.lookAt(player, seen != null ? seen.point() : Vec3.atCenterOf(r.aim));
             }
             HitResult hit = Crosshair.pick(player);
-            if (button() == Interaction.Button.ATTACK && r.aim != null) {
+            if (r.aim != null && (button() == Interaction.Button.ATTACK || clickable)) {
                 landedElsewhere = elsewhere(hit);
             }
             // A consumable / ender pearl used in the AIR is body-bound (would feed or teleport the
@@ -188,58 +174,6 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     }
 
     /**
-     * 目标的哪一面都看不见、点不到:转过去看它身上够得着的那一点,准星落着的就是挡着的那一块。点名它,说挖它要不要主人同意
-     * (权限层说,回执只转述),下一步照抄 {@code move_goto … arrive:use}——那会走到看得见它一面的地方。
-     */
-    private TaskState occluded() {
-        Vec3 toward = Aim.reachable(player, r.aim);
-        InputDriver.lookAt(player, toward != null ? toward : Vec3.atCenterOf(r.aim));
-        String blockerNote = "";
-        if (Crosshair.pick(player) instanceof net.minecraft.world.phys.BlockHitResult blockedHit
-                && blockedHit.getType() == HitResult.Type.BLOCK && !blockedHit.getBlockPos().equals(r.aim)) {
-            var blocker = blockedHit.getBlockPos();
-            var blockerState = player.level().getBlockState(blocker);
-            var verdict = com.dwinovo.numen.permission.Permission.judge(player,
-                    com.dwinovo.numen.permission.Action.breakBlock(blocker, blockerState));
-            blockerNote = " — the crosshair lands on " + NavText.name(blockerState) + " at "
-                    + blocker.getX() + "," + blocker.getY() + "," + blocker.getZ() + " instead ("
-                    + switch (verdict.kind()) {
-                        case ALLOW -> "breaking it needs no consent";
-                        case ASK -> "breaking it needs the owner's consent: " + verdict.cause();
-                        case DENY -> "breaking it is refused: " + verdict.cause();
-                    } + ")";
-        }
-        fail("no face of " + aimLabel() + " is in sight and in reach from here" + blockerNote + ". "
-                + GotoReminders.call(r.aim, "arrive:use") + " stands where one is, then retry.", FailureType.OCCLUDED);
-        return TaskState.FAILED;
-    }
-
-    /**
-     * 右键之前清掉准星落着的那一格软遮挡:左键按住它直到碎(挖不挖得由权限层在挖掘落点裁决)。挖掉了记进回执,下一刻重新看目标。
-     */
-    private TaskState clear(net.minecraft.world.phys.BlockHitResult soft) {
-        if (clearing == null) {
-            clearingAt = soft.getBlockPos();
-            clearingName = NavText.name(player.level().getBlockState(clearingAt));
-            clearing = Interaction.attackBlock(player, soft);
-        }
-        return switch (clearing.tick()) {
-            case RUNNING -> TaskState.RUNNING;
-            case DONE -> {
-                cleared.add(clearingName + " at " + clearingAt.getX() + "," + clearingAt.getY() + ","
-                        + clearingAt.getZ());
-                clearing = null;
-                yield TaskState.RUNNING;
-            }
-            case FAILED -> {
-                fail(clearing.failReason(), clearing.failType());
-                clearing = null;
-                yield TaskState.FAILED;
-            }
-        };
-    }
-
-    /**
      * 准星落点上这一下要做的事:左键是挖、打;右键是右键方块、右键实体。右键方块时方块不吃这一下就轮到
      * 手里的东西,两只手里会往世界里放东西的({@link Interaction#placementOf})也一并算上。
      */
@@ -282,22 +216,29 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     }
 
     private String describeDone() {
-        String first = cleared.isEmpty() ? "" : "broke " + String.join(", ", cleared) + " out of the line of sight, then ";
         String verb = r.button == MouseButton.LEFT ? "left-clicked" : "right-clicked";
         String what = landedElsewhere != null ? " " + landedElsewhere
                 : r.aim != null ? " " + aimLabel() : " (forward)";
-        return first + verb + what + (r.sneak ? " while sneaking" : "");
+        return verb + what + (r.sneak ? " while sneaking" : "");
     }
 
     /**
-     * 左键准星落着的不是瞄的那一格时,回执里说按的是谁:{@code short_grass at 1,65,2 — the crosshair landed there, not on
-     * 1,64,2};落在瞄的那一格上(或什么都没落着)为 null。
+     * 准星落着的不是瞄的那一格时,回执里说按的是谁:{@code short_grass at 1,65,2 — the crosshair landed there, not on
+     * 1,64,2};右键落在别的格上,再写出够到它的两条路:挖掉挡着的那一格,或走到看得见它另一面的地方。落在瞄的那一格上
+     * (或什么都没落着)为 null。
      */
     private String elsewhere(HitResult hit) {
         if (hit instanceof net.minecraft.world.phys.BlockHitResult bh && hit.getType() == HitResult.Type.BLOCK) {
             var pos = bh.getBlockPos();
-            return pos.equals(r.aim) ? null : NavText.name(player.level().getBlockState(pos)) + " at " + pos.getX()
-                    + "," + pos.getY() + "," + pos.getZ() + " — the crosshair landed there, not on " + aimLabel();
+            if (pos.equals(r.aim)) {
+                return null;
+            }
+            String landed = NavText.name(player.level().getBlockState(pos)) + " at " + pos.getX() + "," + pos.getY()
+                    + "," + pos.getZ() + " — the crosshair landed there, not on " + aimLabel();
+            return button() == Interaction.Button.ATTACK ? landed
+                    : landed + ". To click " + aimLabel() + ": `work dig " + pos.getX() + " " + pos.getY() + " "
+                            + pos.getZ() + "` clears it out of the way, or " + GotoReminders.call(r.aim, "arrive:use")
+                            + " stands where another face of it is in sight";
         }
         if (hit instanceof net.minecraft.world.phys.EntityHitResult eh) {
             return eh.getEntity().getName().getString() + " (entity " + eh.getEntity().getId()
