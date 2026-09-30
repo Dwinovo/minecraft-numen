@@ -20,6 +20,9 @@ import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.permission.Action;
+import com.dwinovo.numen.permission.Permission;
+import com.dwinovo.numen.permission.Verdict;
+import com.dwinovo.numen.task.Preparation;
 import com.dwinovo.numen.task.TaskState;
 
 import net.minecraft.core.BlockPos;
@@ -176,6 +179,32 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     public AttackCompanionTask(NumenPlayer player, AttackTaskRecord record) {
         super(player, record);
         this.loot = new LootSweep(player);
+    }
+
+    /**
+     * 受理之前:点名的目标里还在的,权限层对每一只都说不许打,这件活就开始不了——和开打后一只都没打成时说的是同一句话
+     * ({@link #refusedSummary}),当场回。要问主人的不算开始不了,开打后问;无差别清场的对手是开打那一刻谁在追她,这里不判。
+     */
+    @Override
+    protected Preparation preparation() {
+        if (r.indiscriminate) {
+            return Preparation.READY;
+        }
+        var gate = Permission.gateFor(player);
+        List<String> denied = new ArrayList<>();
+        for (int id : r.entityIds) {
+            Entity e = liveEntity(id);
+            if (e == null) {
+                continue;   // 找不到的照旧交给任务记成丢失
+            }
+            Verdict verdict = gate.judgeLive(Action.attack(e), player.serverLevel());
+            if (verdict.kind() != Verdict.Kind.DENY) {
+                return Preparation.READY;
+            }
+            denied.add(refusal(id, verdict.reason()));
+        }
+        return denied.isEmpty() ? Preparation.READY
+                : Preparation.refused("could not attack: " + String.join("; ", denied));
     }
 
     @Override
@@ -426,8 +455,13 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     /** {@code entity 12 needs the owner's consent (has an owner); entity 15 ...}。 */
     private String refusedSummary() {
         List<String> parts = new ArrayList<>();
-        r.refused().forEach((id, why) -> parts.add("entity " + id + " " + why));
+        r.refused().forEach((id, why) -> parts.add(refusal(id, why)));
         return String.join("; ", parts);
+    }
+
+    /** 不许打的一只怎么说:{@code entity 12 denied by rule …}。 */
+    private static String refusal(int id, String why) {
+        return "entity " + id + " " + why;
     }
 
     private void logMove(AttackPlan.Move move, Battlefield field) {
