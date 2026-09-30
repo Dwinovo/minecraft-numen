@@ -6,6 +6,7 @@ import java.util.Optional;
 import com.dwinovo.numen.pathing.Fixtures;
 import com.dwinovo.numen.pathing.TestWorld;
 import com.dwinovo.numen.pathing.Vanilla;
+import com.dwinovo.numen.pathing.api.NavRequest;
 import com.dwinovo.numen.pathing.api.PlanQuery;
 import com.dwinovo.numen.pathing.plan.ActionCosts;
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
@@ -136,6 +137,24 @@ class SearchTest {
         assertEquals(SearchResult.Stop.BUDGET, result.stop());
         assertNotNull(result.route(), "挖隧道的长路搜不到头,也要交出朝目标挖过去的半程路线");
         assertTrue(result.route().end().getX() > AStar.MIN_PARTIAL, "半程路线朝目标推进:" + result.route().end());
+    }
+
+    /**
+     * 挖正下方二十六格深处的一格:脚下是往四面无边铺开的石头,快照与执行时一样装着周围六个区块,手上一把铁镐,许改自然地形。
+     * 每挖一格的价钱是估价里落一格的十几倍,埋深把这笔绕不开的挖掘算进估价:出厂预算内搜到头,路线从脚下直直往下挖——不在
+     * 地面与每一列底下一圈圈铺开。
+     */
+    @Test
+    void aBlockBuriedDeepBelowIsReachedWithinTheDefaultBudget() {
+        TestWorld ground = new TestWorld().ground(Y - 1, STONE).loadedWithin(6);
+        CostModel model = CostModel.of(natural(), Fixtures.carrying(0, new ItemStack(Items.IRON_PICKAXE)),
+                TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+        SearchResult result = search(ground, model, START, Goals.dig(new BlockPos(0, Y - 27, 0), SURVIVAL),
+                NavRequest.DEFAULT_BUDGET);
+        assertTrue(result.arrived(), result.stop() + ",展开了 " + result.expanded());
+        for (BlockPos node : result.route().nodes()) {
+            assertTrue(node.getX() == 0 && node.getZ() == 0, "没有直直往下挖:" + node);
+        }
     }
 
     /** 两块台子之间隔着三十格、下面空着的空隙,身上有圆石:过去只能一路搭桥,搜索在空中四面铺开。 */

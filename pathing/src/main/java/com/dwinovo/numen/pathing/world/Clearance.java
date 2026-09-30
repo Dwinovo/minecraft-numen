@@ -8,6 +8,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 
 /**
@@ -66,6 +67,13 @@ public final class Clearance {
     public static boolean occupies(BodyStats body, Pose pose, int x, double feetY, int z, BlockPos cell) {
         return cell.getX() == x && cell.getZ() == z && cell.getY() >= Footing.cellOf(feetY)
                 && cell.getY() <= topCell(body, pose, feetY);
+    }
+
+    /**
+     * {@code state} 整块实心:碰撞箱正好是整格,不随世界或身体变。身体哪一部分都进不了这样一格,要进去只能先挖掉它。
+     */
+    public static boolean solid(BlockState state) {
+        return Boxes.whole(state);
     }
 
     /** 身体以 {@code pose}、脚底中心在 {@code (cx, feetY, cz)} 时的碰撞盒。 */

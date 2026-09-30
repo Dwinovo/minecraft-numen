@@ -16,7 +16,7 @@ import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.material.FluidState;
 
 /**
- * 单测摆场景用的世界:一张坐标到方块状态的表,没摆的格是空气。默认所有区块都算加载了;{@link #loadedWithin} 把加载的区块
+ * 单测摆场景用的世界:一张坐标到方块状态的表,没摆的格是空气;铺了无边的地({@link #ground})时,地面以下没摆的格是地。默认所有区块都算加载了;{@link #loadedWithin} 把加载的区块
  * 限在以原点所在区块为中心的一块正方形里。
  */
 public final class TestWorld implements SearchView {
@@ -26,6 +26,8 @@ public final class TestWorld implements SearchView {
     private final Set<Long> occupied = new HashSet<>();
     private final WorldBorder border = new WorldBorder();
     private int loadedRadius = Integer.MAX_VALUE;
+    private BlockState ground = Blocks.AIR.defaultBlockState();
+    private int groundTop = Integer.MIN_VALUE;
 
     public TestWorld set(int x, int y, int z, BlockState state) {
         return set(new BlockPos(x, y, z), state);
@@ -53,6 +55,13 @@ public final class TestWorld implements SearchView {
                 }
             }
         }
+        return this;
+    }
+
+    /** 高度不超过 {@code top} 的格,没摆过的都是 {@code state}:一片往四面无边铺开的地。 */
+    public TestWorld ground(int top, BlockState state) {
+        this.groundTop = top;
+        this.ground = state;
         return this;
     }
 
@@ -85,11 +94,18 @@ public final class TestWorld implements SearchView {
 
     @Override
     public BlockState getBlockState(BlockPos pos) {
-        return blocks.getOrDefault(pos, Blocks.AIR.defaultBlockState());
+        BlockState set = blocks.get(pos);
+        if (set != null) {
+            return set;
+        }
+        return pos.getY() <= groundTop ? ground : Blocks.AIR.defaultBlockState();
     }
 
     @Override
     public boolean airSection(int x, int y, int z) {
+        if (SectionPos.blockToSectionCoord(y) <= SectionPos.blockToSectionCoord(groundTop) && !ground.isAir()) {
+            return false;
+        }
         return !occupied.contains(SectionPos.asLong(SectionPos.blockToSectionCoord(x), SectionPos.blockToSectionCoord(y),
                 SectionPos.blockToSectionCoord(z)));
     }

@@ -263,6 +263,15 @@ public final class CostModel {
     }
 
     /**
+     * 挖掉 {@code state} 至少要多少钱:{@link #digCost} 在最省的情形下——眼睛不在水里、脚踏实地、没有按位置加价、许可放行。
+     * 挖不动的(硬度为负)是无穷大。搜索的估价拿它给"绕不开的挖掘"定下界({@code search.Burial})。
+     */
+    public double digFloor(BlockState state) {
+        double ticks = tools.handTicks(state, false, true);
+        return ticks >= Integer.MAX_VALUE ? Double.POSITIVE_INFINITY : ticks + spec.breakPenalty();
+    }
+
+    /**
      * 放一块:规格的放置罚分加这一格的按位置加价,许可要问的乘 {@link ActionCosts#CONSENT_MULTIPLIER}。
      */
     public double placeCost(Edit.Place place) {

@@ -17,6 +17,8 @@ import com.dwinovo.numen.pathing.world.Faces;
 import com.dwinovo.numen.pathing.world.Reach;
 import com.dwinovo.numen.pathing.world.Sight;
 
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.entity.Pose;
@@ -327,6 +329,12 @@ public final class Goals {
             return (x != null ? horizontal(Math.abs(x - nx), Math.abs(z - nz)) : 0) + (y != null ? vertical(y - ny) : 0);
         }
 
+        /** 某一格就是那一格;列与高度没有边。 */
+        @Override
+        public LongSet endCells() {
+            return cell() ? LongSet.of(BlockPos.asLong(x, y, z)) : null;
+        }
+
         /** 某一格:别往要站的两格里放方块,别挖脚下那一格。列与高度不护着哪一格。 */
         @Override
         public PositionCosts protection() {
@@ -399,6 +407,11 @@ public final class Goals {
         }
 
         @Override
+        public LongSet endCells() {
+            return new LongOpenHashSet(stands.keySet());
+        }
+
+        @Override
         public double estimate(int x, int y, int z) {
             return beyondReach(target, body, x, y, z);
         }
@@ -437,6 +450,29 @@ public final class Goals {
         @Override
         public double estimate(int x, int y, int z) {
             return beyondReach(target, body, x, y, z);
+        }
+
+        /** 脚在这一格里任何一个高度时眼睛够得着它的那些格(与 {@link Reach#reaches} 同一个距离),连它自己那一格在内。 */
+        @Override
+        public LongSet endCells() {
+            double reach = body.blockReach();
+            double eye = body.eyeHeight(Pose.STANDING);
+            int span = (int) Math.ceil(reach + eye) + 1;
+            LongOpenHashSet out = new LongOpenHashSet();
+            for (int x = target.getX() - span; x <= target.getX() + span; x++) {
+                for (int y = target.getY() - span; y <= target.getY() + span; y++) {
+                    for (int z = target.getZ() - span; z <= target.getZ() + span; z++) {
+                        double dx = gap(x + 0.5, target.getX());
+                        double dz = gap(z + 0.5, target.getZ());
+                        // 脚在 [y, y + 1) 里,眼睛在 [y + eye, y + 1 + eye) 里:取离那一格最近的高度
+                        double dy = Math.max(0, Math.max(target.getY() - (y + 1 + eye), y + eye - (target.getY() + 1)));
+                        if (dx * dx + dy * dy + dz * dz < reach * reach) {
+                            out.add(BlockPos.asLong(x, y, z));
+                        }
+                    }
+                }
+            }
+            return out;
         }
 
         /**
@@ -561,6 +597,20 @@ public final class Goals {
             return min == Double.POSITIVE_INFINITY ? 0 : min;
         }
 
+        /** 各成员的合在一起;有一个没有边,合起来也没有。 */
+        @Override
+        public LongSet endCells() {
+            LongOpenHashSet all = new LongOpenHashSet();
+            for (Goal g : members) {
+                LongSet own = g.endCells();
+                if (own == null) {
+                    return null;
+                }
+                all.addAll(own);
+            }
+            return all;
+        }
+
         @Override
         public PositionCosts protection() {
             PositionCosts all = PositionCosts.EMPTY;
@@ -616,6 +666,18 @@ public final class Goals {
             return null;
         }
 
+        /** 每一个都要到:任何一个成员的就是超集,取第一个有边的。 */
+        @Override
+        public LongSet endCells() {
+            for (Goal g : members) {
+                LongSet own = g.endCells();
+                if (own != null) {
+                    return own;
+                }
+            }
+            return null;
+        }
+
         @Override
         public PositionCosts protection() {
             PositionCosts all = PositionCosts.EMPTY;
@@ -651,6 +713,11 @@ public final class Goals {
         @Override
         public Sighting sight(int x, int y, int z, Stance stance) {
             return inner.sight(x, y, z, stance);
+        }
+
+        @Override
+        public LongSet endCells() {
+            return inner.endCells();
         }
 
         @Override

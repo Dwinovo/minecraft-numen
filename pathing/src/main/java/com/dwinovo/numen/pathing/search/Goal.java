@@ -8,6 +8,7 @@ import com.dwinovo.numen.pathing.spec.PositionCosts;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.Sight;
 
+import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.BlockGetter;
@@ -31,6 +32,14 @@ public interface Goal {
      */
     default double arrival(BlockGetter level, int x, int y, int z, Stance stance) {
         return 0;
+    }
+
+    /**
+     * 到了时脚可能在哪些节点({@link BlockPos#asLong}):一个有限的超集,可以多、不能少。搜索拿它从目标往外算"至少还要挖开
+     * 多少"({@link Burial})。某一列、某一高度、距离范围、远离这些没有边的目标为 null。
+     */
+    default LongSet endCells() {
+        return null;
     }
 
     /**

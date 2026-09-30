@@ -45,6 +45,8 @@ import net.minecraft.world.level.material.FluidState;
  *       在封顶之前到了目标的,路线与搜到底一样;封顶时还没有够远的半程,就接着搜,直到有了或预算用完;</li>
  *   <li><b>接着一条路线往下搜</b>:起点是那条路线的终点({@link Search#arrival}),身体到那里时怎么待着按那一步的落点算,
  *       展开起点时叠上那一步的改动——快照里还没有它垫下的块;</li>
+ *   <li><b>估价</b>:目标的估价({@link Goal#estimate})加上埋深({@link Burial}):路上绕不开要挖掉的格至少多少钱。两样都是
+ *       下界,搜出来的仍是最便宜的路;埋深在开搜时从目标往外算一次;</li>
  *   <li><b>目标格保护</b>:目标的 {@link Goal#protection()} 并进路线规格的按位置禁令,规划不挖自己要站、要够的格;</li>
  *   <li><b>改动预算</b>(规格的 {@code alterBudget})在展开时就生效:设了预算时节点按"位置加已改几格"区分,超出预算的步子
  *       不展开,所以搜出来的路一定在预算内,而且是预算内最便宜的;</li>
@@ -69,6 +71,7 @@ public final class AStar {
     private final int alterBudget;
     private final Long2ObjectOpenHashMap<Node> nodes = new Long2ObjectOpenHashMap<>();
     private final Heap open = new Heap();
+    private Burial burial = Burial.NONE;
 
     private AStar(Search search) {
         this.search = search;
@@ -93,6 +96,7 @@ public final class AStar {
         if (startStance == null) {
             return new SearchResult(SearchResult.Stop.STRANDED, null, 0);
         }
+        burial = Burial.of(view, model, goal, startPos, search.budget());
         Node start = node(startPos.getX(), startPos.getY(), startPos.getZ(), 0);
         start.g = 0;
         start.stance = startStance;
@@ -259,7 +263,7 @@ public final class AStar {
                 return n;
             }
         }
-        Node n = new Node(x, y, z, used, search.goal().estimate(x, y, z));
+        Node n = new Node(x, y, z, used, search.goal().estimate(x, y, z) + burial.floor(x, y, z));
         n.sibling = head;
         nodes.put(key, n);
         return n;

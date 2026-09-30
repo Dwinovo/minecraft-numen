@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * 六种到达各自的判定与估价:位置坐标给几个比几个、身体怎么待着都算;距离范围只按一种量法,太近往外、太远往里、保留小数半径;
  * 站上去只认托着脚的那一块;用一格方块只认候选站位——敞开的面前、看得见、不占着它;挖在够得着的带里估价为零、从外面越近
- * 越便宜、按分轴的价钱估;离生物越近越贵、几只相加、半径越大越贵、每只在自己的半径上一样贵;几个同时成立取最大的估价。
+ * 越便宜、按分轴的价钱估、终点涵盖每一个够得着的节点;离生物越近越贵、几只相加、半径越大越贵、每只在自己的半径上一样贵;几个同时成立取最大的估价。
  * 搜索里走到哪儿由 {@code SearchTest} 验。
  */
 class GoalsTest {
@@ -192,6 +192,33 @@ class GoalsTest {
         for (int x = 6; x < 12; x++) {
             assertEquals(ActionCosts.ESTIMATE_PER_BLOCK, dig.estimate(x + 1, 64, 0) - dig.estimate(x, 64, 0), 1e-9,
                     "x=" + x);
+        }
+    }
+
+    /** 挖的终点:脚在一格里任何高度时够得着它的节点,全都在里面;离得够不着的不在。 */
+    @Test
+    void diggingEndCellsHoldEveryNodeThatReachesIt() {
+        BlockPos target = new BlockPos(3, 70, -2);
+        Goal dig = Goals.dig(target, SURVIVAL);
+        var ends = dig.endCells();
+        int span = 10;
+        for (int x = -span; x <= span; x++) {
+            for (int y = -span; y <= span; y++) {
+                for (int z = -span; z <= span; z++) {
+                    BlockPos node = target.offset(x, y, z);
+                    boolean reaches = false;
+                    for (double lift : new double[] {0, 0.5, 0.9375}) {
+                        Stance stance = new Stance(Stance.Kind.GROUND, node.getY() + lift, node.getY() - 1);
+                        reaches |= dig.contains(node.getX(), node.getY(), node.getZ(), stance);
+                    }
+                    if (reaches) {
+                        assertTrue(ends.contains(node.asLong()), "够得着却不在终点里:" + node);
+                    }
+                    if (Math.abs(x) > 5 || y < -8 || y > 4) {
+                        assertFalse(ends.contains(node.asLong()), "够不着却在终点里:" + node);
+                    }
+                }
+            }
         }
     }
 

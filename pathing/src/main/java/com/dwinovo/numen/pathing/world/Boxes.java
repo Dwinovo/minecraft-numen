@@ -80,7 +80,16 @@ final class Boxes {
         if (Semantics.dynamicCollision(state)) {
             return classify(split(state.getCollisionShape(level, new BlockPos(x, y, z), bodyAt(feetY))));
         }
-        // 与原版给这类状态缓存碰撞箱的是同一次调用:不看世界、不看身体
+        return cached(state);
+    }
+
+    /** 碰撞箱不随世界或身体变、而且正好是整格的状态。 */
+    static boolean whole(BlockState state) {
+        return !Semantics.dynamicCollision(state) && cached(state).fill() == Fill.WHOLE;
+    }
+
+    /** 与原版给这类状态缓存碰撞箱的是同一次调用:不看世界、不看身体。 */
+    private static Shape cached(BlockState state) {
         return CACHE.computeIfAbsent(state,
                 s -> classify(split(s.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO))));
     }
