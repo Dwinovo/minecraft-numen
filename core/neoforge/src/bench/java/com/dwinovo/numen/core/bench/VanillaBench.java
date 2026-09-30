@@ -16,6 +16,15 @@ public final class VanillaBench {
     @GameTestGenerator
     public static Collection<TestFunction> scenarios() {
         return Bench.suite("vanilla", "Vanilla Minecraft: gathering and the basics, no other mods.",
-                suite -> suite.add(MineIron::new));
+                suite -> suite.add(MineIron::new)
+                        .add(DeepDiamond::new)
+                        .add(OreBehindHouse::denied)
+                        .add(OreBehindHouse::allowedOnce)
+                        .add(WalledChest::new)
+                        .add(BuildHut::new)
+                        .add(CraftPickaxe::new)
+                        .add(GuardOwner::new)
+                        .add(PickUpDrops::new)
+                        .add(FarPillar::new));
     }
 }
