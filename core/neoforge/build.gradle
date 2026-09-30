@@ -120,3 +120,7 @@ tasks.named('jar', Jar) {
 tasks.named('check') {
     dependsOn(':plugins:ysm:test', ':plugins:tlm:test', ':plugins:kaleidoscope:test', ':plugins:ftbquests:test')
 }
+
+// 真模型评测:原版的场景在 src/bench,:core:neoforge:runBench 跑它们(见 buildSrc 的 numen-bench.gradle 与 docs/bench.md)。
+// 放在末尾:它要用到上面定义好的模组 numen。
+apply plugin: 'numen-bench'

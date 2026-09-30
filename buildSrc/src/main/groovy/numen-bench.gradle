@@ -1,0 +1,79 @@
+/**
+ * 真模型评测的场景源码集与运行配置(设计与用法见 docs/bench.md),原版(core/neoforge)与各联动共用这一份。
+ *
+ * <p>场景写在本项目的 {@code src/bench},和评测的机器({@code :bench}、{@code :bench:game})一起组成模组
+ * {@code numen_bench},只在 {@code runBench} 这一次运行里加载:发行 jar 只收 main,本项目别的运行只加载 {@code numen}。
+ *
+ * <pre>
+ * ./gradlew :core:neoforge:runBench -Dbench.scenarios=all -Dbench.repeats=3
+ * </pre>
+ *
+ * <p>在构建脚本的<b>末尾</b>应用({@code apply plugin: 'numen-bench'}):它要用到脚本里定义好的模组 {@code numen}。
+ * 本项目在 {@code benchImplementation} 里补上场景要的目标模组(车万女仆这类)。
+ */
+
+/** 评测的参数:{@code -P} 或 {@code -D} 给 Gradle 都认,原样转成游戏进程的系统属性;没给的传空串,由评测按默认值处理。 */
+def benchParameters = ['bench.scenarios', 'bench.repeats', 'bench.provider', 'bench.model', 'bench.baseUrl',
+                       'bench.reasoning']
+
+/** 跑的是哪个提交;工作区有改动时带 +dirty。只在真要跑评测时才去问 git。 */
+def benchCommit = providers.exec { commandLine 'git', 'rev-parse', '--short=9', 'HEAD' }.standardOutput.asText
+        .zip(providers.exec { commandLine 'git', 'status', '--porcelain', '--untracked-files=no' }.standardOutput.asText,
+                { head, status -> head.trim() + (status.trim().isEmpty() ? '' : '+dirty') })
+
+sourceSets {
+    bench {}
+}
+
+dependencies {
+    // 场景只对着评测的接口写;这些类在运行时由模组 numen_bench 提供,不作为依赖进类路径
+    benchCompileOnly project(':bench:game')
+    // 整个引擎:运行时它就是 numen_api 那个模组,和 GameTest 的运行一样
+    benchImplementation project(':api:neoforge')
+}
+
+def coreNeoForge = project(':core:neoforge')
+
+neoForge {
+    addModdingDependenciesTo(sourceSets.bench)
+    mods {
+        numen_bench {
+            sourceSet project(':bench').sourceSets.main
+            sourceSet project(':bench:game').sourceSets.main
+            sourceSet sourceSets.bench
+        }
+    }
+    runs {
+        configureEach {
+            if (it.name != 'bench') {
+                loadedMods = [mods.numen]
+            }
+        }
+        bench {
+            type = 'gameTestServer'
+            ideName = "NeoForge Bench (${project.path})"
+            sourceSet = sourceSets.bench
+            loadedMods = [mods.numen, mods.numen_bench]
+            gameDirectory = project.mkdir(project.file('runs/bench'))
+            systemProperty('neoforge.enabledGameTestNamespaces', 'numen_bench')
+            // 场地由代码现搭,GameTest 只要一块模板作落脚点:用 core 同步好的那一份模板目录
+            systemProperty('numen.gametest.structures',
+                    coreNeoForge.layout.buildDirectory.dir('gameteststructures').get().asFile.absolutePath)
+            systemProperty('bench.pricing', rootProject.file('bench/pricing.json').absolutePath)
+            systemProperties.put('bench.commit', benchCommit)
+            benchParameters.each { name ->
+                systemProperties.put(name, providers.gradleProperty(name).orElse(providers.systemProperty(name))
+                        .orElse(''))
+            }
+        }
+    }
+}
+
+tasks.matching { it.name == 'runBench' }.configureEach {
+    dependsOn ':bench:classes', ':bench:game:classes', ':core:neoforge:classes', ':core:neoforge:syncGameTestStructures'
+}
+
+// 场景跟着构建一起编译:产品的接口改了,评测当场编不过,而不是等下次跑评测才发现
+tasks.named('check') {
+    dependsOn 'benchClasses'
+}
