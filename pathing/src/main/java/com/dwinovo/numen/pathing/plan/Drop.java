@@ -123,7 +123,7 @@ final class Drop implements Move {
             return draft.failure();
         }
         return new Premise.Holds(new Maneuver(kind, heading, from, stance, to, landing, false, false, false, wading,
-                Semantics.speedFactor(draft, from.getX(), f0, from.getZ()), drop, damage, 1, draft.edits(), contact.cells(), contact.exposure(),
+                Strides.submerged(draft, body, from, stance, to, landing), Semantics.speedFactor(draft, from.getX(), f0, from.getZ()), drop, damage, 1, draft.edits(), contact.cells(), contact.exposure(),
                 support));
     }
 
@@ -142,6 +142,16 @@ final class Drop implements Move {
 
     @Override
     public double cost(CostModel model, Maneuver m) {
-        return ActionCosts.WALK_OFF_EDGE / m.speedFactor() + Strides.landing(model, m) + model.overhead(m);
+        return movement(m) + Strides.bruise(m) + model.overhead(m);
+    }
+
+    @Override
+    public double ticks(CostModel model, Maneuver m) {
+        return movement(m) + model.workTicks(m);
+    }
+
+    /** 身体下去的刻数:走出边沿,落下去,走回列中心。 */
+    private static double movement(Maneuver m) {
+        return ActionCosts.WALK_OFF_EDGE / m.speedFactor() + Strides.landing(m);
     }
 }

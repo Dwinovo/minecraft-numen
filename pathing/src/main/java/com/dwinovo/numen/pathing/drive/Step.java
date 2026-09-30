@@ -1,11 +1,16 @@
 package com.dwinovo.numen.pathing.drive;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.dwinovo.numen.pathing.drive.Blockage.Hitch;
+import com.dwinovo.numen.pathing.plan.Breath;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.Maneuver;
 import com.dwinovo.numen.pathing.plan.Moves;
 import com.dwinovo.numen.pathing.plan.Premise;
+import com.dwinovo.numen.pathing.plan.Reason;
 import com.dwinovo.numen.pathing.plan.Stance;
 import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.pathing.search.Goal;
@@ -16,14 +21,17 @@ import net.minecraft.core.BlockPos;
 /**
  * 执行路线上的一步。开始之前在活世界上复核它的前提——与规划时是同一个 {@code Moves.of(kind).premise},同一个方向,
  * 成本模型按此刻的身体与端口现组一份(目标格保护照样并进去);成立就照这一次复核交出的 {@link Maneuver} 去做(世界若已
- * 替它挖开了一格,那一格就不必再挖),不成立就停下,报出是哪一格、什么方块、哪一条前提。执行中由 {@link Watchdog} 看它
- * 有没有超期。
+ * 替它挖开了一格,那一格就不必再挖),不成立就停下,报出是哪一格、什么方块、哪一条前提。这一步憋着气时,再按身体此刻的
+ * 真实氧气把从这一步起的这一段水下重算一遍,判据与规划时同一个({@link Breath#after}、{@link Breath#lasts}):游不到换气的
+ * 地方就停下,报 {@link Reason#OUT_OF_BREATH}。执行中由 {@link Watchdog} 看它有没有超期。
  */
 final class Step {
 
     private final Rig rig;
     private final Maneuver planned;
     private final Maneuver next;
+    /** 这一步之后同一段水下接着的几步(都憋着气),按先后;这一步不在水下或后面换得了气为空。 */
+    private final List<Maneuver> diving;
     private final Goal goal;
     private final RouteSpec spec;
     private final Watchdog watchdog;
@@ -33,10 +41,11 @@ final class Step {
     /** 计划内的坠落预计掉几点血。 */
     private int expectedDamage;
 
-    Step(Rig rig, Maneuver planned, Maneuver next, Goal goal, RouteSpec spec, Watchdog watchdog) {
+    Step(Rig rig, Maneuver planned, Maneuver next, List<Maneuver> diving, Goal goal, RouteSpec spec, Watchdog watchdog) {
         this.rig = rig;
         this.planned = planned;
         this.next = next;
+        this.diving = List.copyOf(diving);
         this.goal = goal;
         this.spec = spec;
         this.watchdog = watchdog;
@@ -70,6 +79,11 @@ final class Step {
             Maneuver fresh = ((Premise.Holds) premise).maneuver();
             if (!fresh.to().equals(planned.to())) {
                 return new Beat.Blocked(blocked(planned.to(), Hitch.DIVERTED));
+            }
+            Maneuver drowns = outOfBreath(model, fresh);
+            if (drowns != null) {
+                return new Beat.Blocked(new Blockage(drowns.to(), rig.world().getBlockState(drowns.to()), planned.kind(),
+                        Reason.OUT_OF_BREATH, null));
             }
             control = Control.of(rig, fresh, next);
             double expected = Moves.of(fresh.kind()).cost(model, fresh);
@@ -116,13 +130,37 @@ final class Step {
                 PathLog.num(healthBefore - rig.entity.getHealth()), expectedDamage, PathLog.body(rig.entity));
     }
 
+    /**
+     * 这一步憋着气时,按身体此刻的真实氧气依次走过这一步与同一段水下接着的几步;在哪一步走完憋不住,交出那一步,
+     * 都憋得住为 null。
+     */
+    private Maneuver outOfBreath(CostModel model, Maneuver fresh) {
+        if (!fresh.submerged()) {
+            return null;
+        }
+        Breath breath = model.body().breath();
+        Breath.Air air = breath.now();
+        List<Maneuver> ahead = new ArrayList<>(diving.size() + 1);
+        ahead.add(fresh);
+        ahead.addAll(diving);
+        for (Maneuver m : ahead) {
+            air = breath.after(air, true, Moves.of(m.kind()).ticks(model, m));
+            if (!breath.lasts(air)) {
+                PathLog.info("{} 憋不住气 {} 起这一段水下到 {} 要憋 {} 刻,此刻的氧气撑不到 {}", rig.who, PathLog.step(fresh),
+                        PathLog.pos(m.to()), PathLog.num(air.held()), PathLog.body(rig.entity));
+                return m;
+            }
+        }
+        return null;
+    }
+
     /** 同一个前提函数在活世界上再判一次。 */
     private Premise recheck(CostModel model) {
         LiveWorld world = rig.world();
         BlockPos from = planned.from();
         Stance stance = Stance.at(world, model.body().stats(), from);
         if (stance == null) {
-            return Premise.fail(from, com.dwinovo.numen.pathing.plan.Reason.NOT_STANDING);
+            return Premise.fail(from, Reason.NOT_STANDING);
         }
         return Moves.of(planned.kind()).premise(model, world, from, stance, planned.heading());
     }

@@ -59,13 +59,22 @@ final class Climb implements Move {
             return draft.failure();
         }
         return new Premise.Holds(new Maneuver(MoveKind.CLIMB, heading, from, stance, to, landing, false, false, false,
-                Strides.inWater(draft, to), 1, Math.max(0, f0 - landing.feetY()), 0, 0, draft.edits(), contact.cells(), contact.exposure(),
+                Strides.inWater(draft, to), Strides.submerged(draft, body, from, stance, to, landing), 1, Math.max(0, f0 - landing.feetY()), 0, 0, draft.edits(), contact.cells(), contact.exposure(),
                 support));
     }
 
     @Override
     public double cost(CostModel model, Maneuver m) {
-        double move = m.to().getY() > m.from().getY() ? ActionCosts.CLIMB_UP_ONE : ActionCosts.CLIMB_DOWN_ONE;
-        return move + model.overhead(m);
+        return movement(m) + model.overhead(m);
+    }
+
+    @Override
+    public double ticks(CostModel model, Maneuver m) {
+        return movement(m) + model.workTicks(m);
+    }
+
+    /** 身体顺着爬一格的刻数:往上比往下慢。 */
+    private static double movement(Maneuver m) {
+        return m.to().getY() > m.from().getY() ? ActionCosts.CLIMB_UP_ONE : ActionCosts.CLIMB_DOWN_ONE;
     }
 }

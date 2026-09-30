@@ -250,4 +250,13 @@ public final class Semantics {
         FluidState fluid = level.getFluidState(pos);
         return fluid.is(FluidTags.WATER) && pos.getY() + fluid.getHeight(level, pos) > eyeY;
     }
+
+    /**
+     * 眼睛在 {@code (x, eyeY, z)} 时换不了气,照原版 {@code LivingEntity.baseTick}:眼睛泡在水里({@link #eyeInWater}),
+     * 而眼睛所在那一格不是气泡柱——气泡柱里原版不扣氧气,照常回气。憋气按它算。
+     */
+    public static boolean breathless(BlockGetter level, double x, double eyeY, double z) {
+        return eyeInWater(level, x, eyeY, z)
+                && !level.getBlockState(BlockPos.containing(x, eyeY, z)).is(Blocks.BUBBLE_COLUMN);
+    }
 }

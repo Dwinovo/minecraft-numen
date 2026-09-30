@@ -3,6 +3,7 @@ package com.dwinovo.numen.pathing.api;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 
+import com.dwinovo.numen.pathing.plan.Breath;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.Permit;
@@ -17,9 +18,11 @@ import com.dwinovo.numen.pathing.spec.RouteSpec;
 import net.minecraft.world.level.block.Blocks;
 
 /**
- * 一次搜索没交出路时,结局是什么:搜索只知道自己为什么停,"没路是因为许改的不够、没有料、改动预算不够、许可拒绝"
+ * 一次搜索没交出路时,结局是什么:搜索只知道自己为什么停,"没路是因为憋不住气、许改的不够、没有料、改动预算不够、许可拒绝"
  * 要在同一份快照、同一个起点与目标上换一样条件再搜才看得出来。依次问,第一个问出路的就是结局:
  * <ol>
+ *   <li>搜索因为憋不住气丢下过步子:憋得住就有路 → {@link Outcome.Breathless},连同那条路上头一段憋不住的水下——同样的规格下
+ *       路是有的,缺的是气,这是最贴近的原因,先报;</li>
  *   <li>规格不许改地形:许改自然地形就有路 → {@link Outcome.NeedsAlter}({@code NATURAL});连要主人同意的格也许改才有路
  *       → {@link Outcome.NeedsAlter}({@code ANY});都连同那条路要改几格;</li>
  *   <li>只许改自然地形:连要主人同意的格也许改就有路 → {@link Outcome.NeedsAlter}({@code ANY});</li>
@@ -39,13 +42,40 @@ final class Diagnosis {
 
     private Diagnosis() {}
 
-    static Outcome of(SearchResult.Stop stop, Search failed, BooleanSupplier cancelled) {
+    /**
+     * @param breathless 失败的那次搜索因为憋不住气丢下过步子({@link SearchResult#breathless})
+     */
+    static Outcome of(SearchResult.Stop stop, boolean breathless, Search failed, BooleanSupplier cancelled) {
         return switch (stop) {
             case BUDGET -> new Outcome.OutOfBudget();
             case UNLOADED -> new Outcome.Unloaded();
             case STRANDED -> new Outcome.Stranded(failed.start(), failed.view().getBlockState(failed.start()));
-            case EXHAUSTED, CANCELLED, ARRIVED -> exhausted(failed, cancelled);
+            case EXHAUSTED, CANCELLED, ARRIVED -> {
+                Outcome breath = breathless ? breathless(failed, cancelled) : null;
+                yield breath != null ? breath : exhausted(failed, cancelled);
+            }
         };
+    }
+
+    /**
+     * 憋得住的话有没有路:同样的规格,憋气从 {@link Breath#UNLIMITED} 起再搜;有路就按身体真实的憋气从起点重算一遍
+     * ({@link Route#breathed}),交出头一段憋不住的水下。没有这样的路为 null。
+     */
+    private static Outcome breathless(Search failed, BooleanSupplier cancelled) {
+        Route route = find(failed.breathing(Breath.UNLIMITED), failed.model(), cancelled);
+        if (route == null) {
+            return null;
+        }
+        Breath breath = failed.model().body().breath();
+        for (Route.Dive dive : route.breathed(failed.model(), failed.air()).dives()) {
+            if (!breath.lasts(dive.end())) {
+                // 下水时能安全憋的 = 憋完还能安全憋的加上这一段憋掉的
+                double spare = breath.spare(dive.end()) + dive.held();
+                return new Outcome.Breathless(dive.from(), dive.to(), (int) Math.ceil(dive.held()),
+                        (int) Math.max(0, Math.floor(spare)));
+            }
+        }
+        return null;
     }
 
     private static Outcome exhausted(Search failed, BooleanSupplier cancelled) {
@@ -103,10 +133,10 @@ final class Diagnosis {
         return model.placing().isPresent() ? model : model.withPlacing(ANY_BLOCK);
     }
 
-    /** 同一份快照、同一个起点(连同接在哪一步后面)、目标与预算,按这份成本模型搜到底;到了就交出路。 */
+    /** 同一份快照、同一个起点(连同接在哪一步后面、那时憋气的样子)、目标与预算,按这份成本模型搜到底;到了就交出路。 */
     private static Route find(Search failed, CostModel model, BooleanSupplier cancelled) {
         SearchResult result = AStar.run(new Search(failed.view(), model, failed.start(), failed.goal(),
-                failed.budget(), Favoring.NONE, failed.budget(), failed.arrival()), cancelled);
+                failed.budget(), Favoring.NONE, failed.budget(), failed.arrival(), failed.air()), cancelled);
         return result.arrived() ? result.route() : null;
     }
 }

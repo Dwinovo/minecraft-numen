@@ -9,9 +9,9 @@ import com.dwinovo.numen.pathing.Vanilla;
 import com.dwinovo.numen.pathing.api.PlanQuery;
 import com.dwinovo.numen.pathing.plan.ActionCosts;
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
+import com.dwinovo.numen.pathing.plan.Breath;
 import com.dwinovo.numen.pathing.plan.CostModel;
 import com.dwinovo.numen.pathing.plan.Edit;
-import com.dwinovo.numen.pathing.plan.Maneuver;
 import com.dwinovo.numen.pathing.plan.Materials;
 import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.pathing.plan.Stance;
@@ -207,7 +207,7 @@ class SearchTest {
         assertTrue(end.getX() > 2, "第一段搭到了空隙上方:" + end);
         Search fromEnd = new Search(world, model, end, goal, 50_000, Favoring.NONE).handingOverAt(2000);
         assertEquals(SearchResult.Stop.STRANDED, AStar.run(fromEnd, () -> false).stop(), "快照里桥还没搭,起点待不住");
-        SearchResult next = AStar.run(fromEnd.after(route.legs().get(route.legs().size() - 1).maneuver()), () -> false);
+        SearchResult next = AStar.run(fromEnd.after(route.legs().get(route.legs().size() - 1)), () -> false);
         assertNotNull(next.route(), "照最后一步的落点与它垫的块接着搜:" + next.stop());
         assertEquals(end, next.route().start());
         assertTrue(next.route().end().distSqr(ACROSS) < end.distSqr(ACROSS), "接着朝目标推进");
@@ -640,7 +640,7 @@ class SearchTest {
                 () -> false).route();
         assertNotNull(first);
         BlockPos end = first.end();
-        Maneuver last = first.legs().get(first.legs().size() - 1).maneuver();
+        Route.Leg last = first.legs().get(first.legs().size() - 1);
         RoutePlanner.Plan bare = RoutePlanner.run(new RoutePlanner.Query(world, model, end, goal, 50_000, 1),
                 () -> false);
         assertEquals(SearchResult.Stop.STRANDED, bare.unreached(), "快照里桥还没搭,起点待不住");
@@ -695,6 +695,108 @@ class SearchTest {
                 .anyMatch(n -> zombie.covers(n.getX(), n.getY(), n.getZ())), "没有生物时直穿");
         Route route = search(field(), wary, START, goal).route();
         assertTrue(route.nodes().stream().noneMatch(n -> zombie.covers(n.getX(), n.getY(), n.getZ())), "绕开它的危险半径");
+    }
+
+    // ==================== 憋气 ====================
+
+    /**
+     * 一条封顶的水道:两头各一间干的小屋(x = -3..-1 与 {@code length + 1..length + 3}),中间 x = 0..{@code length} 两格高的水,
+     * 地、四壁与顶都是基岩;除了这条水道,两间屋之间没有别的路。从西屋 x = -2 出发。
+     */
+    private static TestWorld sealedChannel(int length) {
+        TestWorld world = new TestWorld().fill(-4, Y - 1, -1, length + 4, Y + 2, 1, Blocks.BEDROCK.defaultBlockState());
+        world.fill(-3, Y, 0, -1, Y + 1, 0, Blocks.AIR.defaultBlockState());
+        world.fill(0, Y, 0, length, Y + 1, 0, Blocks.WATER.defaultBlockState());
+        return world.fill(length + 1, Y, 0, length + 3, Y + 1, 0, Blocks.AIR.defaultBlockState());
+    }
+
+    private static final BlockPos WEST_ROOM = new BlockPos(-2, Y, 0);
+
+    /** 原版身体,憋气的本钱是 {@code breath}。 */
+    private static CostModel breathing(Breath breath) {
+        BodySnapshot body = new BodySnapshot(SURVIVAL, net.minecraft.world.level.GameType.SURVIVAL, 20, 3, 1, 20, 0,
+                List.of(), BodySnapshot.Mining.VANILLA, breath);
+        return CostModel.of(RouteSpec.defaults(), body, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
+    }
+
+    /** 三十格长的封顶水道,一口气游完要约 285 刻,原版满氧气只憋得住 240 刻(留 3 秒):不走,搜完无路,说得出是憋气丢下了步子。 */
+    @Test
+    void aSealedChannelLongerThanOneBreathIsNotSwum() {
+        SearchResult result = search(sealedChannel(30), defaults(), WEST_ROOM, Goals.at(new BlockPos(32, Y, 0)));
+        assertEquals(SearchResult.Stop.EXHAUSTED, result.stop());
+        assertNull(result.route());
+        assertTrue(result.breathless(), "有步子是因为憋不住气才没走的");
+    }
+
+    /** 同样的水道只有十格:一口气游得完,照走;路线说得出这一段水下从哪儿到哪儿、憋多久、憋完还剩多少。 */
+    @Test
+    void aSealedChannelShortEnoughIsSwumAndTheRouteTellsTheDive() {
+        SearchResult result = search(sealedChannel(10), defaults(), WEST_ROOM, Goals.at(new BlockPos(12, Y, 0)));
+        assertTrue(result.arrived());
+        List<Route.Dive> dives = result.route().dives();
+        assertEquals(1, dives.size());
+        Route.Dive dive = dives.get(0);
+        assertEquals(new BlockPos(-1, Y, 0), dive.from(), "从踏进水里的那一步起");
+        assertEquals(new BlockPos(11, Y, 0), dive.to(), "到走出水的那一步止");
+        assertEquals(12, dive.steps());
+        assertTrue(dive.held() > 100 && dive.held() < 120, "十二步水里的工夫:" + dive.held());
+        assertEquals(300, dive.held() + dive.left(), 1e-6);
+        assertFalse(result.breathless());
+    }
+
+    /**
+     * 长水道旁边另有一条干路,干路每格加了价,不计憋气时水道更便宜:憋不住就走干路,一口水不下;憋得住(无限)时走的是水道——
+     * 选干路是因为憋气。
+     */
+    @Test
+    void aDearerWayOnDryLandIsTakenOverADiveTooLongToHold() {
+        TestWorld world = new TestWorld().fill(-4, Y - 1, -1, 34, Y + 2, 5, Blocks.BEDROCK.defaultBlockState());
+        world.fill(0, Y, 0, 30, Y + 1, 0, Blocks.WATER.defaultBlockState());
+        world.fill(-3, Y, 0, -1, Y + 1, 4, Blocks.AIR.defaultBlockState());
+        world.fill(31, Y, 0, 33, Y + 1, 4, Blocks.AIR.defaultBlockState());
+        world.fill(0, Y, 4, 30, Y + 1, 4, Blocks.AIR.defaultBlockState());
+        PositionCosts.Builder dear = PositionCosts.builder();
+        for (int x = 0; x <= 30; x++) {
+            dear.add(Use.PASS, new BlockPos(x, Y, 4).asLong(), 15);
+        }
+        CostModel model = Fixtures.model(RouteSpec.defaults().edit().positions(dear.build()).build());
+        Goal goal = Goals.at(new BlockPos(32, Y, 0));
+        Route dry = search(world, model, WEST_ROOM, goal).route();
+        assertNotNull(dry);
+        assertTrue(dry.dives().isEmpty(), "一口水不下:" + dry.dives());
+        Route wet = AStar.run(new Search(world, model, WEST_ROOM, goal, Fixtures.BUDGET, Favoring.NONE)
+                .breathing(Breath.UNLIMITED), () -> false).route();
+        assertEquals(1, wet.dives().size(), "憋得住时水道更便宜");
+    }
+
+    /** 同样三十格的封顶水道:带着水下呼吸效果、戴着海龟壳(下水先有 10 秒)、有水下呼吸附魔(同样的氧气憋两倍久)都游得过去。 */
+    @Test
+    void waterBreathingATurtleShellOrRespirationHoldLongEnough() {
+        TestWorld world = sealedChannel(30);
+        Goal goal = Goals.at(new BlockPos(32, Y, 0));
+        for (Breath breath : List.of(new Breath(300, 300, 0, 600, false), new Breath(300, 300, 0, Breath.TURTLE_SHELL_TICKS, true),
+                new Breath(300, 300, 1, 0, false))) {
+            SearchResult result = search(world, breathing(breath), WEST_ROOM, goal);
+            assertTrue(result.arrived(), breath + " 应当游得过去:" + result.stop());
+        }
+    }
+
+    /**
+     * 接着一条路线往下搜,憋气从走完那一步时的样子起:游到三十格水道的正中,再往前游完剩下一半要的气比那时剩的多,不走;
+     * 同一个起点满氧气出发就走得完。
+     */
+    @Test
+    void aSearchContinuedUnderWaterCarriesTheBreathItHadThere() {
+        TestWorld world = sealedChannel(30);
+        BlockPos middle = new BlockPos(15, Y, 0);
+        Route first = search(world, defaults(), WEST_ROOM, Goals.at(middle)).route();
+        assertNotNull(first);
+        Goal far = Goals.at(new BlockPos(32, Y, 0));
+        Search fromMiddle = new Search(world, defaults(), middle, far, Fixtures.BUDGET, Favoring.NONE);
+        SearchResult carried = AStar.run(fromMiddle.after(first.legs().get(first.legs().size() - 1)), () -> false);
+        assertEquals(SearchResult.Stop.EXHAUSTED, carried.stop());
+        assertTrue(carried.breathless());
+        assertTrue(AStar.run(fromMiddle, () -> false).arrived(), "满氧气从正中出发游得完");
     }
 
     // ==================== 起点 ====================

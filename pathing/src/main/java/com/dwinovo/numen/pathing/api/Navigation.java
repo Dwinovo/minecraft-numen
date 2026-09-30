@@ -66,7 +66,8 @@ public final class Navigation {
         switch (halt) {
             case Halt.Searched searched -> {
                 PathLog.info("{} 搜索没交出能走的路(停因 {}),在同一份快照上诊断为什么", who, searched.stop());
-                diagnosis = Searches.submit(cancelled -> Diagnosis.of(searched.stop(), searched.search(), cancelled));
+                diagnosis = Searches.submit(
+                        cancelled -> Diagnosis.of(searched.stop(), searched.breathless(), searched.search(), cancelled));
                 return;
             }
             case Halt.Blocked blocked -> status = NavStatus.failed(new Outcome.Blocked(blocked.blockage()));
@@ -132,7 +133,7 @@ public final class Navigation {
 
     /** 到此刻为止的实际账。 */
     public Report report() {
-        return new Report(driver.ledger(), driver.actions());
+        return new Report(driver.ledger(), driver.actions(), driver.dives());
     }
 
     /** 在推进:宿主的脱困反射读它。 */
@@ -156,6 +157,11 @@ public final class Navigation {
     /** 身体此刻是计划内的坠落:宿主的摔落反射只接管计划外的。 */
     public boolean plannedFall() {
         return driver.plannedFall();
+    }
+
+    /** 身体此刻在计划内的一段水下(规划与复核都按憋气算过):宿主的换气本能只接管计划外的。 */
+    public boolean plannedDive() {
+        return status.running() && diagnosis == null && driver.plannedDive();
     }
 
     /** 排障用:段状态机此刻的样子;走过的经过见日志。 */

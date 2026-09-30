@@ -73,7 +73,7 @@ public final class Planning {
             return result;
         }
         partial = plan.partial() == null ? null : PlanResult.Candidate.of(plan.partial());
-        diagnosis = Searches.submit(cancelled -> Diagnosis.of(plan.unreached(), probe, cancelled));
+        diagnosis = Searches.submit(cancelled -> Diagnosis.of(plan.unreached(), plan.breathless(), probe, cancelled));
         return null;
     }
 

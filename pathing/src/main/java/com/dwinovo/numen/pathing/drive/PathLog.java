@@ -1,6 +1,7 @@
 package com.dwinovo.numen.pathing.drive;
 
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -123,8 +124,23 @@ public final class PathLog {
         return out.toString();
     }
 
-    /** 一条路线的要点:几步、各种走法几步、总代价、改几格、终点。 */
+    /** 一条路线的要点:几步、各种走法几步、总代价、改几格、起终点,有水下的加上几段、最长憋几刻、最少还剩几刻。 */
     public static String route(Route route) {
+        String dives = "";
+        double held = 0;
+        double left = Double.POSITIVE_INFINITY;
+        List<Route.Dive> under = route.dives();
+        for (Route.Dive dive : under) {
+            held = Math.max(held, dive.held());
+            left = Math.min(left, dive.left());
+        }
+        if (!under.isEmpty()) {
+            dives = " 水下 " + under.size() + " 段 最长憋 " + num(held) + " 刻 最少还剩 " + num(left) + " 刻";
+        }
+        return steps(route) + dives;
+    }
+
+    private static String steps(Route route) {
         Map<MoveKind, Integer> kinds = new EnumMap<>(MoveKind.class);
         for (Route.Leg leg : route.legs()) {
             kinds.merge(leg.maneuver().kind(), 1, Integer::sum);
