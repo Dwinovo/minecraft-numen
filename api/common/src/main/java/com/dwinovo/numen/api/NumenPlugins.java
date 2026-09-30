@@ -77,8 +77,21 @@ public final class NumenPlugins {
         clientInput = input;
         clientReady = true;
         for (Runnable r : PENDING) runClientBlock(r);
-        for (Path root : PENDING_SKILLS) skillSink.accept(root);
         PENDING.clear();
+        flushSkills(skillSink);
+    }
+
+    /**
+     * 只接技能这一样,不算客户端起来了:没有客户端、却要照主人客户端的样子组装提示词的进程(评测)用它。
+     * 插件的 {@code onClient} 块照旧攒着不跑。<b>引擎内部调用</b>,插件不该碰。
+     */
+    public static void bindSkills(Consumer<Path> skillSink) {
+        skills = skillSink;
+        flushSkills(skillSink);
+    }
+
+    private static void flushSkills(Consumer<Path> skillSink) {
+        for (Path root : PENDING_SKILLS) skillSink.accept(root);
         PENDING_SKILLS.clear();
     }
 

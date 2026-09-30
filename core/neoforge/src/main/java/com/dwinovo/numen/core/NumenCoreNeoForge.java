@@ -1,15 +1,12 @@
 package com.dwinovo.numen.core;
 
-import com.dwinovo.numen.agent.skill.SkillRegistry;
 import com.dwinovo.numen.core.debug.DebugCommands;
 import com.dwinovo.numen.core.debug.PathDebugRenderer;
 import com.dwinovo.numen.task.CompanionTickDispatcher;
 import com.dwinovo.numen.core.scan.BlockSearch;
-import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
@@ -36,12 +33,9 @@ public class NumenCoreNeoForge {
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.RegisterCommandsEvent e) ->
                 DebugCommands.register(e.getDispatcher()));
 
-        // Client-only: declare core's built-in skills, read in place from the
-        // skills/ dir bundled in this jar. Skills feed the client-side LLM, so
-        // this never runs on a dedicated server.
-        if (FMLEnvironment.dist == Dist.CLIENT) {
-            declareBundledSkills();
-        }
+        // core 的自带技能和联动的一样经插件那扇门交出去,原地读 jar 里的 skills/ 目录。技能喂的是主人客户端上的
+        // 大脑,门在客户端接上时才声明(NumenPlugins.bindClient);专用服务器上没人接,它就一直攒着。
+        declareBundledSkills();
 
         Constants.LOG.info("numen-core initialised on NeoForge.");
     }
@@ -49,7 +43,7 @@ public class NumenCoreNeoForge {
     private static void declareBundledSkills() {
         Path root = ModJar.find("skills");
         if (root != null) {
-            SkillRegistry.instance().declareBundled(root);
+            com.dwinovo.numen.api.NumenPlugins.register(numen -> numen.bundleSkills(root));
         } else {
             Constants.LOG.warn("[numen-core] no bundled skills/ dir found in jar");
         }
