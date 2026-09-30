@@ -339,7 +339,7 @@ ftbquests submit <quest>
   - 命令派的活用 `TaskRecord(ServerSource, deadline)` 起记录,名字与调用 id 都取自源;交 `TaskDispatch.setTask(source, record)`。
   - 记录的名字不是能重放的工具名,所以重放记的是那次调用本身(`numen` 与那一行命令)。工具派的活照旧 `setTask(companion, record, args, reply)`,记录以工具名命名,重放按这个名字找回工具。
   - 落盘时名字与重放的调用一起记下(`CompanionRegistry.Entry` 的 `taskName`,取自受理时的记录):重启后接不回来,`task_finished` 用的就是这个名字,和受理时她看到的一样。
-- **客户端动作的插件也在两侧登记命令**:`tlm` 的三个动作都在主人客户端执行,命令组照样在 `NumenPlugins.register` 块里直接登记(专用服务器上只为帮助),插件原来放在 `onClient` 里的登记工具那两行随之删掉。
+- **客户端动作的插件也在两侧登记命令**:`tlm` 穿模型的三个动作(`models`、`wear`、`remove`)在主人客户端执行,命令组照样在 `NumenPlugins.register` 块里直接登记(专用服务器上只为帮助),插件原来放在 `onClient` 里的登记工具那两行随之删掉。同一组里管女仆的动作在服务端执行,见附录 I。
 - **工具表的账**(字符数粗估,英文约 4 字符一个 token、中文一字一个):8 个旧工具定义约 4500 字符、约 1350 token;换成 `<commands>` 里三行,约 250 字符、约 60 token。三个插件都装时每轮少发约 1300 token。
 
 ## 附录 C:第 5 步(`numen mc`)落地时定下的细节
@@ -1190,3 +1190,76 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
   - `fight attack` 不点名时收尾的名单随十分钟时限有界;`use block` 等收尾里新出现
     实体的行在半径 6 格内;后台任务收尾里"路上动了什么"按方块种类归堆。
   - 其余动作都是一个对象的回执,字段固定。
+
+## 附录 I:车万女仆——她养自己的女仆(09-30)
+
+目标:人能对车万女仆做的她都能做,她可以有自己的女仆。全部在 `tlm` 组里(组名是模组 id);同组的 `models`、`wear`、
+`remove` 是她自己的外观,在主人客户端执行,不变。
+
+### 原子动词与插件动作
+
+人养女仆时做的事,一半是世界里的一下点击,一半是女仆界面上的按钮。前一半本来就是原子动词,插件不另包:
+
+| 人做的事 | 她的写法 |
+|---|---|
+| 拿蛋糕右键野生女仆驯服 | `use entity right 812 --item minecraft:cake` |
+| 拿背包右键女仆给她换背包、剪刀右键卸背包 | `use entity right 812 --item touhou_little_maid:maid_backpack_small` |
+| 在女仆界面里搬装备、放东西 | `use gui`、`use transfer`、`use shift`、`use close` |
+| 右键墓碑取回东西、右键祭坛柱子放材料、神社放胶片与复活 | `use entity right <墓碑>`、`use block right x y z` |
+
+只有界面上的按钮只能由客户端发包触发,这几个是插件动作:
+
+| 命令 | 做什么 | 车万女仆里对应的 |
+|---|---|---|
+| `tlm maids` | 名下的女仆:加载着的(编号、名字、模型、工作、日程、家模式、血量、好感等级、坐没坐、距离),没加载区块里的(最后位置),墓碑 | 世界里的女仆实体、`MaidWorldData` |
+| `tlm maid <maid>` | 一只的详情,和每个工作模式能不能切、缺什么、干活用什么 | 任务列表每个按钮的提示 |
+| `tlm task <maid> <task>` | 切工作模式 | `MaidTaskPackage` |
+| `tlm config <maid> [--home] [--pickup] [--ride] [--schedule day\|night\|all]` | 改设置页上的四样 | `MaidConfigPackage` |
+| `tlm open <maid> backpack\|bauble\|curios` | 打开界面的一页,之后用 `use gui` 那一套 | `ToggleTabPackage` |
+
+女仆按 `scan entities` / `tlm maids` 给的运行时编号点名,参数类型与 `move follow --entity_id`、`fight attack --entity_ids`
+同一个(`ArgType.entity()`)。
+
+### 调车万女仆自己的包,判据留在它那一处
+
+- 按钮的判据(是不是主人、这个工作模式此刻开不开得了、家模式离日程点够不够近)全写在包的 `handle` 里。插件构造同一个
+  包,以她为发送者直接调 `handle`,调完读回女仆的状态写进回执;没照做就照读回的说,并附上车万女仆自己的规矩此刻怎么说
+  (不是主人、这个模式缺什么)。插件不另写一遍判据。
+- 不能从她的连接把包注进去:她的连接没协商过车万女仆的频道,NeoForge 会断开它。
+- 上下文用 `ServerPayloadContext(her.connection, TYPE.id())`,不自己实现 `IPayloadContext`:接口标着
+  `@ApiStatus.NonExtendable`,自己实现等于押 NeoForge 不往里加方法;`ServerPayloadContext` 标着 `@ApiStatus.Internal`,
+  但它就是真包到来时 NeoForge 给 `handle` 的那个对象,构造参数一变编译当场报错。
+- 插件碰车万女仆服务端类的只有 `Maids` 一处;命令、事件的类只拿原版的 `Entity` 和它交出的名字、数字。联动的防漂移测试
+  只执行登记命令那一段,那里没有车万女仆。
+
+### 距离与权限
+
+- 包本身不查距离,可人只有开着界面、离得够近才按得到。三个做事的动作照 `use block` 的规矩:先用女仆界面保持打开的同一
+  判据(`canInteractWithEntity(maid, 4.0)`,约 7 格)量够不够得着,不够就失败,回执给照抄的
+  `move goto --x … --y … --z … --arrive near --near 2`。
+- 三个做事的动作都是对这只女仆的 `use_entity`,经 `ServerSource.authorize` 交权限层:放行就做,拒绝如实回执,要问就挂起这
+  一次调用等主人答复——和第 0 层指令、改区域同一个口子。答复回来之后按同一个编号再认一次、再量一次。
+- 出厂规则里 `use_entity(!owned)` 放行、`owned` 一行都没说到,所以对她自己的女仆现在会问主人;出厂放行
+  `use_entity(self_owned)` 落地之后就不问了。
+
+### 事件与身体状态
+
+- `maid_tamed`(不急):她驯服了一只。`use entity` 的回执只说手里少了块蛋糕,归属变了是这条说的。
+- `maid_died`(恒为急件):她的女仆死了,死在哪、墓碑编号与位置。认的是车万女仆的 `MaidTombstoneEvent`(主人名下的女仆
+  死时把东西和胶片装进墓碑的那一刻),挂最低优先级、不收已取消的。
+- `maid_fed_you`(不急):"喂食"模式的女仆喂了她一口,喂的是什么、吃完的饱食度与血量。吃东西走原版 `Player.eat`,
+  不经任何事件,车万女仆也不发事件,所以插件带一个窄 mixin 包住 `TaskFeedOwner.feed`;配置单独一份
+  (`numen_tlm.mixins.json`),只在车万女仆在场时挂(`neoforge.mods.toml` 的 `requiredMods`),方法没了或签名变了启动当场报错。
+- 每轮身体状态 `<touhou_little_maid>`:她身上的 P 点(满 5)、车万女仆给她记的女仆数与上限。
+
+### 测试
+
+- 防漂移:`tlm` 组的说明与技能 `maid_keeping` 里写的每一行命令按命令树读一遍(`:plugins:tlm:test`)。
+- GameTest 单开一次跑批:`./gradlew --no-daemon :plugins:tlm:runGameTestServer`。运行配置在插件的 build.gradle,照成品拼
+  一个 numen 模组(本体 + 这个联动 + 用例),车万女仆 `maven.modrinth:touhou-little-maid` 在运行时类路径上当模组加载;
+  用例挂自己的命名空间 `numen_tlm`,只跑这个命名空间。不挂进 `:core:neoforge:runGameTestServer`:车万女仆的 mixin 会改掉
+  全部用例的环境。
+- 用例(从入口调):野生女仆拿蛋糕驯服并出现在 `tlm maids`、有 `maid_tamed`;切到种地、改成夜班并读回;开背包页后
+  `use transfer` 放进女仆的格子;离太远失败并给 `move goto`;别人的女仆被车万女仆的主人判据拒绝;女仆死亡的急件带墓碑;
+  喂食的女仆喂了饿着的她、有 `maid_fed_you`(拿掉 mixin 这一条就红)。
+
