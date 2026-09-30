@@ -276,6 +276,42 @@ public class InteractGameTests {
         });
     }
 
+    // ---- 对她说的话 ----
+
+    /**
+     * 正午右键一张床:原版在动作栏里告诉她只能在夜里睡,这句话作为一条 {@code server_message} 事件交给了模型
+     * (主人不在,进了出箱)。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_interact")
+    public static void a_bed_at_noon_tells_her_why_as_an_event(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos foot = helper.absolutePos(new BlockPos(6, 2, 2));
+        var bed = Blocks.RED_BED.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.BedBlock.FACING, net.minecraft.core.Direction.EAST);
+        level.setBlock(foot, bed.setValue(net.minecraft.world.level.block.BedBlock.PART,
+                net.minecraft.world.level.block.state.properties.BedPart.FOOT), 3);
+        level.setBlock(foot.east(), bed.setValue(net.minecraft.world.level.block.BedBlock.PART,
+                net.minecraft.world.level.block.state.properties.BedPart.HEAD), 3);
+        NumenPlayer companion = spawnAt(helper, "gametest_napper", new BlockPos(4, 2, 2), false);
+        ToolRun lie = command(companion, "use block right " + xyz(foot));
+        String onlyAtNight = net.minecraft.network.chat.Component.translatable("block.minecraft.bed.no_sleep")
+                .getString();
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(lie.done(), "use block has not finished");
+            java.util.List<String> told = com.dwinovo.numen.entity.EventOutbox.get(level.getServer())
+                    .peek(companion.getUUID()).entries().stream()
+                    .filter(e -> com.dwinovo.numen.agent.inbox.EventTypes.SERVER_MESSAGE.equals(e.type()))
+                    .map(com.dwinovo.numen.agent.inbox.EventQueue.Entry::text)
+                    .toList();
+            helper.assertTrue(told.stream().anyMatch(t -> t.contains("where=\"action_bar\"")
+                            && t.contains(onlyAtNight)),
+                    "what the bed told her is not an event: " + told + " — tool reply: " + lie.outcome());
+            helper.assertTrue(!companion.isSleeping(), "she fell asleep at noon");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     /** 拿着圆石右键脚边的地面:圆石放在了那块地面上面一格,手里少了一块。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_at_places_a_block_on_the_floor(GameTestHelper helper) {

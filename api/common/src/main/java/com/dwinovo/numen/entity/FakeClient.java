@@ -1,17 +1,32 @@
 package com.dwinovo.numen.entity;
 
+import com.dwinovo.numen.event.NumenEvents;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
+
+import java.util.function.Consumer;
 
 /**
  * 客户端那一半。这具身体没有客户端,凡是服务端"发出去、然后等对面回话"的握手都会永远悬着;
- * 这里代替客户端把回话送回去。
+ * 这里代替客户端把回话送回去。服务端对她说的话(系统聊天与动作栏)真客户端会显示给玩家看,这里交给模型。
  *
- * <h2>边界:只回握手,不报物理</h2>
- * 这里只认<b>服务端会等回执</b>的下行包。走路、视角这些"客户端本地算、再上报给服务端"的
- * 东西不归这儿——那是 {@link NumenPlayer#tick()} 里自己跑的物理:服务端算出来就是结果,
- * 没有谁在等一个回复。所以这个类不会长成一个客户端实现,它的面就是原版那几处握手。
+ * <h2>边界:只回握手、只传话,不报物理</h2>
+ * 这里只认两类下行包:<b>服务端会等回执</b>的握手,和<b>服务端对她说的话</b>。走路、视角这些"客户端本地算、
+ * 再上报给服务端"的东西不归这儿——那是 {@link NumenPlayer#tick()} 里自己跑的物理:服务端算出来就是结果,
+ * 没有谁在等一个回复。所以这个类不会长成一个客户端实现,它的面就是原版那几处握手加上聊天栏与动作栏。
+ *
+ * <h2>对她说的话,各有一个出处</h2>
+ * <ul>
+ *   <li>她自己执行的指令说的话(指令回给来源的、指令直接对她说的)是那条指令的回执,执行期间由
+ *       {@link #runCommand} 收给那条指令,不再当事件交;</li>
+ *   <li>她自己的死亡广播就是死亡事件里那句死因({@link NumenPlayer#deathMessage}),不再交一遍;</li>
+ *   <li>玩家聊天是另一种包,群聊那一路管,这里不碰;</li>
+ *   <li>其余的每一句交成一条 {@code server_message} 事件,同一句刷屏按 {@link ServerMessages} 折叠。</li>
+ * </ul>
+ * 文字在服务端按服务端的语言表拼出来,和指令回执({@code Echo})用的是同一个拼法。
  *
  * <p>反过来说,原版那趟 {@code ServerGamePacketListenerImpl.tick()} 也不能直接拿来跑:
  * 它是 {@code resetPosition()} 记下当前位置 → {@code doTick()} → {@code absMoveTo(firstGood)},
@@ -51,19 +66,56 @@ public final class FakeClient {
      */
     private int awaitingTeleport = -1;
 
+    /** 服务端对她说的话,折叠后交成事件。 */
+    private final ServerMessages messages;
+
+    /** 她正在执行的那条指令收话的地方;没在执行指令时为 null。 */
+    private Consumer<Component> commandOutput;
+
     FakeClient(NumenPlayer player) {
         this.player = player;
+        this.messages = new ServerMessages((text, overlay, repeats) -> NumenEvents.serverMessage(player, text,
+                overlay, repeats, ServerMessages.WINDOW_TICKS / 20));
     }
 
     /** 服务端刚往"客户端"发了一个包。 */
     public void onOutbound(Packet<?> packet) {
         if (packet instanceof ClientboundPlayerPositionPacket teleport) {
             awaitingTeleport = teleport.getId();
+        } else if (packet instanceof ClientboundSystemChatPacket said) {
+            heard(said.content(), said.overlay());
         }
     }
 
-    /** 每刻一次:把攒下的回执交还服务端,剩下的全由原版自己做。 */
+    /**
+     * 以她的名义执行一条指令:{@code command} 跑的期间服务端对她说的每一句都是这条指令说的,交给 {@code output},
+     * 与指令回给来源的话收在同一份回执里。指令执行是同步的,这期间到她这儿的话不会有别的出处。
+     */
+    public void runCommand(Consumer<Component> output, Runnable command) {
+        Consumer<Component> outer = commandOutput;
+        commandOutput = output;
+        try {
+            command.run();
+        } finally {
+            commandOutput = outer;
+        }
+    }
+
+    private void heard(Component content, boolean overlay) {
+        if (commandOutput != null) {
+            commandOutput.accept(content);
+            return;
+        }
+        String text = content.getString();
+        if (player.isDeadOrDying() && text.equals(player.deathMessage())) {
+            return;
+        }
+        messages.heard(text, overlay, player.server.getTickCount());
+    }
+
+    /** 每刻一次:把攒下的回执交还服务端,剩下的全由原版自己做;折叠窗口到了的话交出去。 */
     public void answer() {
+        messages.tick(player.server.getTickCount());
         if (awaitingTeleport < 0) {
             return;
         }

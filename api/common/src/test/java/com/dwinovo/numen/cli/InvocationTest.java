@@ -61,6 +61,21 @@ class InvocationTest {
     }
 
     @Test
+    void whatTheServerTellsHerDuringTheCommandJoinsTheReceiptButTheAdminCopyDoesNot() {
+        List<String> replies = new ArrayList<>();
+        Echo echo = new Echo(true);
+        Component said = Component.literal("Set own game mode to Creative Mode");
+        echo.sendSystemMessage(said);
+        echo.toHer(Component.translatable("chat.type.admin", Component.literal("Aria"), said));
+        echo.toHer(Component.literal("Your game mode has been updated to Creative Mode"));
+        echo.onResult(true, 1);
+        call(replies).reply(echo.receipt("gamemode creative", () -> ""));
+        assertEquals("ran /gamemode creative: Set own game mode to Creative Mode\n"
+                        + "Your game mode has been updated to Creative Mode",
+                only(replies).get("message").getAsString(), "抄给管理员的那份是同一句的抄本,不收第二遍");
+    }
+
+    @Test
     void anAllowedCallEndsItsReceiptWithTheOwnersAllowance() {
         List<String> replies = new ArrayList<>();
         ServerSource allowed = call(replies).allowed("the owner allowed: run /setblock 0 64 0 stone");

@@ -27,8 +27,9 @@ import java.util.function.Consumer;
  *       <li><b>过权限层</b>:执行一行指令是动作 {@code command(根名)},放行、问主人、拒绝由权限层裁决。</li>
  *       <li><b>执行</b>:{@link Commands#performPrefixedCommand},和玩家在聊天栏里敲的是同一条路,加载器的指令事件
  *           (别的模组在那里拦或记指令)照常。来源是她自己的,只把回话去处换成 {@link Echo}。</li>
- *       <li><b>回执</b>:指令说的话由 {@link Echo} 收成回执;{@code help <指令>} 在原版那一行用法之后接上从 Brigadier
- *           挖出的参数类型、例子与此刻的候选({@link BrigadierHelp})。</li>
+ *       <li><b>回执</b>:指令说的话(回给来源的,和执行期间直接对她说的)由 {@link Echo} 收成回执;
+ *           {@code help <指令>} 在原版那一行用法之后接上从 Brigadier 挖出的参数类型、例子与此刻的候选
+ *           ({@link BrigadierHelp})。</li>
  *     </ol>
  *     要问主人时这次调用悬着({@link PendingCommands}),主人答复后接着走。</li>
  * </ul>
@@ -120,8 +121,8 @@ public final class CommandRunner {
         NumenPlayer her = call.companion();
         Echo echo = new Echo(her.shouldInformAdmins());
         CommandDispatcher<CommandSourceStack> dispatcher = her.getServer().getCommands().getDispatcher();
-        her.getServer().getCommands().performPrefixedCommand(
-                her.createCommandSourceStack().withSource(echo).withCallback(echo), line);
+        her.fakeClient().runCommand(echo::toHer, () -> her.getServer().getCommands().performPrefixedCommand(
+                her.createCommandSourceStack().withSource(echo).withCallback(echo), line));
         String[] words = line.split(" ", 2);
         call.reply(echo.receipt(line, () -> words[0].equals(HELP) && words.length == 2
                 ? BrigadierHelp.mine(dispatcher, words[1], her.createCommandSourceStack())

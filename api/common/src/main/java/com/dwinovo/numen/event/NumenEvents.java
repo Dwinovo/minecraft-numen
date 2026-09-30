@@ -94,6 +94,22 @@ public final class NumenEvents {
         emit(companion, EventTypes.OWNER_HURT, attrs, text, urgent);
     }
 
+    /**
+     * 服务端对她说了一句话(系统聊天或动作栏),原文照交。{@code repeats} 是这一句在上一次交出去之后又说了几遍——
+     * 同一句刷屏只在每个折叠窗口里交一次,收拢与窗口在 {@code ServerMessages}。永远不急,见类型表。
+     *
+     * @param overlay  显示在动作栏(屏幕中下方那一行)而不是聊天栏
+     * @param repeats  上次交出之后又说的遍数;0 = 头一回说
+     * @param window   折叠窗口有多长,秒;{@code repeats} 为 0 时不用
+     */
+    public static void serverMessage(NumenPlayer companion, String text, boolean overlay, int repeats, int window) {
+        emit(companion, EventTypes.SERVER_MESSAGE, Map.of("where", overlay ? "action_bar" : "chat"),
+                repeats == 0 ? text
+                        : text + " (said " + repeats + " more time" + (repeats == 1 ? "" : "s") + " in the last "
+                                + window + "s)",
+                false);
+    }
+
     /** 异步任务收尾。{@code status} ∈ done / failed / timeout / stopped。
      *  <p>done/failed/timeout 是急的:她派出去的活有了结果,该当场决定下一步。
      *  stopped 是主人自己按的停止,他知道,不必吵他。 */

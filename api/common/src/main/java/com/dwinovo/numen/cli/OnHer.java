@@ -30,7 +30,7 @@ public final class OnHer {
     }
 
     /**
-     * 执行 {@code <command> <她> <values…>},返回指令对执行者说的每一句。
+     * 执行 {@code <command> <她> <values…>},返回指令说的每一句:对执行者说的,和执行期间直接对她说的。
      *
      * @param command 目标之前的那一截,原样写进指令
      * @param values  目标之后的值,各自需要时加引号
@@ -38,8 +38,8 @@ public final class OnHer {
     public List<String> run(String command, String... values) {
         MinecraftServer server = her.getServer();
         Echo echo = new Echo(server.shouldInformAdmins());
-        server.getCommands().performPrefixedCommand(
-                server.createCommandSourceStack().withSource(echo).withCallback(echo), line(name(), command, values));
+        her.fakeClient().runCommand(echo::toHer, () -> server.getCommands().performPrefixedCommand(
+                server.createCommandSourceStack().withSource(echo).withCallback(echo), line(name(), command, values)));
         return echo.lines();
     }
 

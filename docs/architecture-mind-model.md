@@ -104,7 +104,8 @@ CONTROL   否      不插进 run,等闲下来执行            开不了 run 时
   躺超过 10 分钟的条目标注年龄(跨会话恢复的旧闻尤其要紧)。
 - **进行中的请求永不因输入掐断**;主人的停止键是 `halt(OWNER_STOP)`,不是一条输入。
 - **事件的种类就是类型表的一行**:`task_finished`、`death`、`hungry`、`owner_hurt`、`timer`、`woke`、
-  `dimension_change`、`reflex`(本能做了什么,带上是哪个本能)、`dropped`。服务端只有一个发出口
+  `dimension_change`、`reflex`(本能做了什么,带上是哪个本能)、`server_message`(服务端对她说的系统聊天与动作栏,
+  同一句刷屏折叠)、`dropped`。服务端只有一个发出口
   `NumenEvents.emit`:主人在线直送,离线进出箱,重连时整批打成一个包补发。
 - **插件同一扇门**:`NumenApi` 登记事件类型、发出事件,与内置事件同一条路;客户端上的桥接(弹幕、群消息)
   发主人的话或登记过的世界事件,入口是 `NumenGateway.emit`——游戏里的面板和快捷对话也走它。
