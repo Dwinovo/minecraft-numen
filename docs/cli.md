@@ -1059,6 +1059,55 @@ route new ore --to ores/g3 --arrive dig --alter natural          路线的去处
 - 建造清场(生存)交给同一个挖掘执行,创造模式照原版一下就碎;`use block left` 退回纯按键(手上什么用什么、准星落在谁按谁,
   落在别的格照实说:`left-clicked dirt at 5,2,12 — the crosshair landed there, not on 6,2,12 — …`)。细节见 `look-plan-act.md` §十第 4 步。
 
+### 受理 = 这件活此刻真能开始(09-30)
+
+真机上 `move_goto` 受理后 0.12 秒就发 `task_finished failed`(不改地形没路):她那一轮已经对主人说了"往西边跑一趟",又被事件
+叫醒再开一轮;挖矿受理后两秒才报搜索预算用光。现在派成后台活的调用受理之前先准备,开始不了的当场回错误,不受理。
+
+- **机制只一份**(api):任务交出准备(`Task.prepare` → `Preparation`,`poll` 每刻问一次、`cancel` 作废在飞的搜索),`TaskDispatch`
+  交给这具身体的准备位(`Preparing`,一具身体一件)。结论就绪才受理:换进槽里、顶掉她手上那件、落盘、回"已受理",准备查到的事实
+  接在回执后面;不成就回错误结果——没有任务编号、没有 `task_finished`,她手上的活不动。不用搜索的当场回;要搜索的结论出来那一刻
+  才回(调用的回信口晚一点回,和 `route plan` 一样),内脑派发器本来就等这条回执才派下一个。准备花掉的刻不算这件活的期限。
+- **判的顺序**:参数写法(处理函数当场判,原样)→ 世界事实 → 规划(`Survey`/`RoutePlanning` 一次只搜不走,有展开预算)。
+  `AbstractCompanionTask` 的前置条件挪到准备里判(同步动作、子活没有准备,开工时照旧判);其余由各任务的 `preparation()` 判,
+  拒绝的说法与开工后收场时是同一句(同一个方法写成)。
+- **旧活何时被顶掉**:新活受理的那一刻。准备期间后派的调用顶替先派的(先派的回 `not started: a newer body action came in before
+  it was ready`),主人按停止回 `not started: the owner pressed Stop`,身体离开世界同理;她死了不回。
+- **起点变了**:规划按调用那一刻她脚下。受理时她已不在那一格(上一件活还在挪她),`move goto`/`move go` 从这里重新规划、拿准备时
+  那份当承诺比(与 `move go` 从别处出发同一口径);其余任务丢掉准备时的那条路、从脚下重搜(`Trip.prepared`)。
+- **受理之后**才冒出来的照旧走 `task_finished`:路上世界变了、主人拒绝、中途卡住。计划里有要问主人的格照样受理,运行中问。
+- **重启重放**走同一个入口,准备不过就是没接回来,`TaskPersistence` 报 `这件活没能接回来:…`。
+
+各任务在准备里判的:
+
+| 动作 | 准备里判什么 | 回执带的事实 |
+|---|---|---|
+| `move goto` / `move go` | 路线在、在这个维度;从脚下规划整条,走不通、超出承诺就拒(坐船先驾船的,规划留到靠岸) | 计划:几段几步多少刻、每段要改的格、开走前要问主人几格 |
+| `work dig` | 工具收得到(前置条件);区里有挖得成、许挖的候选;站着够得着一格,或对整批目标在区里搜得到路 | 第一格几步远、路上要改的格 |
+| `work collect` | 区里有要捡的掉落物;对它们搜得到路 | 几堆几件、最近在哪、第一件几步远 |
+| `work fish` | 有鱼竿(前置条件);附近有干站位抛得进的水 | 从哪一格钓、抛向哪 |
+| `build at` 与当场执行的原语 | 盘料(前置条件);要先走到外圈的,规划那条路(走不到外圈不算开始不了,落位不靠走位) | 走到外圈几步、要改的格,或者走不过去、就地盖 |
+| `move follow` | 要跟的已经远到要起步时,规划过去的路(只走不改) | 那条路几步 |
+| `fight attack --entity_ids` | 点名的还在的,权限层对每一只都说不许 | — |
+| `inv eat` | 前置条件(创造无饥饿、身上没有、不能吃) | — |
+| `kaleidoscope cook` | 这一格是锅、配方认得、有投料量、够得着、锅空着(半空里等站稳再判) | — |
+
+没改的:`fight attack` 不点名(对手是开打那一刻谁在追她)、`use`/`gear`/`inv` 其余与 `locate`、`ysm switch`(同步动作,回合本来就
+等它的结果,开始不了就是那个结果,没有 `task_finished`);`work fish` 走到站位走不到(区里换站位重试三次,是运行中的事);`tlm`、
+`ftbquests` 没有占身体的后台活。
+
+回执原文(GameTest):
+
+```
+move_goto 受理:Accepted as t27; your body is working on it in the background. … I keep this walk as my route goto-gametest_undeterred; route show goto-gametest_undeterred shows it again. The plan of route goto-gametest_undeterred, made from -2038064,-58,6638504 just now: 1 leg, 12 steps, about 43 ticks as priced.
+  leg 1 to -2038064,-58,6638516: 12 steps, about 43 ticks; no terrain change
+move_goto 拒绝:blocked on route goto-gametest_undeterred: got within 9.0 blocks of -2038056,-58,6638512 (now on the ground at y=-58). found no path to target without altering terrain (from -2038064, -58, 6638504 toward -2038056, -58, 6638512, about 11 blocks away; a route that digs, bridges or pillars through natural terrain exists, changing 2 block(s) — place 2 cobblestone (-2038059,-58,6638510; -2038059,-57,6638511):) `route spec goto-gametest_undeterred --alter natural` lets me take it; then `route plan goto-gametest_undeterred` shows the plan, and `move go goto-gametest_undeterred` walks it.
+work dig 拒绝:found 1 cells of bedrock but none of them can be broken here (unbreakable, or fluid or loose falling blocks beside them); gathered 0
+work collect 拒绝:nothing to pick up: no dropped items lie within 10 blocks of 2798277,-58,10086129, so I did not start
+```
+
+计划里有要问主人的格照样受理,回执末尾是 `Before setting off I ask your owner about 2 cell(s) of it.`,运行中挂征询等答复。
+
 ### transfer 改成一次一步
 
 `transfer` 工具与它的 `moves` 数组删掉,换成 `use` 组的两个动作,一个动作一个意思:
