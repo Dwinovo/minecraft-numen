@@ -17,8 +17,8 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.Block;
 
 /**
- * 一条路线最近一次的计划:从哪儿规划的、何时,每段多长、多少刻、要挖哪几格、要放哪几格、要问主人哪几格,到不了的段为什么,
- * 哪一段之后还是未知。计划是粗的——每段一次搜索,看得清的只有那一次快照里的地方。
+ * 一条路线最近一次的计划:从哪儿规划的、何时,每段多长、多少刻、要挖哪几格、要放哪几格、要问主人哪几格、要潜哪几段水,
+ * 到不了的段为什么,哪一段之后还是未知。计划是粗的——每段一次搜索,看得清的只有那一次快照里的地方。
  *
  * <p>计划是承诺:她看过的这一份就是 {@code move go} 许改的全部格子({@link #bind})。从别处出发重新规划的结果拿来和它比
  * ({@link #beyond}),要改的、要问的格没超出它才走。一步步的路不存:路线是推导出来的,能交接的是目标加规格。
@@ -54,6 +54,25 @@ public record Plan(BlockPos from, long at, List<Leg> legs) {
         }
     }
 
+    /**
+     * 路上一段眼睛换不了气的水下:从哪一格下去、到哪一格才换得了气,一口气憋几刻,憋完还能再撑几刻(规划按她规划时的氧气
+     * 与水下呼吸算的)。
+     */
+    public record Dive(BlockPos from, BlockPos to, int held, int left) {
+
+        static final Codec<Dive> CODEC = RecordCodecBuilder.create(i -> i.group(
+                Codec.LONG.fieldOf("from").forGetter(d -> d.from().asLong()),
+                Codec.LONG.fieldOf("to").forGetter(d -> d.to().asLong()),
+                Codec.INT.fieldOf("held").forGetter(Dive::held),
+                Codec.INT.fieldOf("left").forGetter(Dive::left)
+        ).apply(i, (from, to, held, left) -> new Dive(BlockPos.of(from), BlockPos.of(to), held, left)));
+
+        public Dive {
+            from = from.immutable();
+            to = to.immutable();
+        }
+    }
+
     /** 要问主人的一格,与许可给的为什么要问(照权限层的原话)。 */
     public record Ask(BlockPos pos, String cause) {
 
@@ -77,9 +96,10 @@ public record Plan(BlockPos from, long at, List<Leg> legs) {
      * @param places 要放方块的格(倒水接坠落的那一格记水,当步收回)
      * @param asks   其中要问主人的格
      * @param why    走不通、或只看清一截时为什么(寻路结局的原话);走得通、没规划为空串
+     * @param dives  路上要潜的每一段水下,按先后
      */
     public record Leg(Reach reach, int steps, int ticks, BlockPos end, List<Cell> digs, List<Cell> places,
-                      List<Ask> asks, String why) {
+                      List<Ask> asks, String why, List<Dive> dives) {
 
         static final Codec<Leg> CODEC = RecordCodecBuilder.create(i -> i.group(
                 Codec.STRING.fieldOf("reach").forGetter(l -> l.reach().name().toLowerCase(Locale.ROOT)),
@@ -89,25 +109,27 @@ public record Plan(BlockPos from, long at, List<Leg> legs) {
                 Cell.CODEC.listOf().fieldOf("digs").forGetter(Leg::digs),
                 Cell.CODEC.listOf().fieldOf("places").forGetter(Leg::places),
                 Ask.CODEC.listOf().fieldOf("asks").forGetter(Leg::asks),
-                Codec.STRING.fieldOf("why").forGetter(Leg::why)
-        ).apply(i, (reach, steps, ticks, end, digs, places, asks, why) -> new Leg(
+                Codec.STRING.fieldOf("why").forGetter(Leg::why),
+                Dive.CODEC.listOf().optionalFieldOf("dives", List.of()).forGetter(Leg::dives)
+        ).apply(i, (reach, steps, ticks, end, digs, places, asks, why, dives) -> new Leg(
                 Reach.valueOf(reach.toUpperCase(Locale.ROOT)), steps, ticks, end.map(BlockPos::of).orElse(null), digs,
-                places, asks, why)));
+                places, asks, why, dives)));
 
         public Leg {
             digs = List.copyOf(digs);
             places = List.copyOf(places);
             asks = List.copyOf(asks);
+            dives = List.copyOf(dives);
         }
 
         /** 前面走不通或没看清而没有规划的一段。 */
         public static Leg unplanned() {
-            return new Leg(Reach.UNPLANNED, 0, 0, null, List.of(), List.of(), List.of(), "");
+            return new Leg(Reach.UNPLANNED, 0, 0, null, List.of(), List.of(), List.of(), "", List.of());
         }
 
         /** 按这一段的规格走不通。 */
         public static Leg unreachable(String why) {
-            return new Leg(Reach.UNREACHABLE, 0, 0, null, List.of(), List.of(), List.of(), why);
+            return new Leg(Reach.UNREACHABLE, 0, 0, null, List.of(), List.of(), List.of(), why, List.of());
         }
     }
 

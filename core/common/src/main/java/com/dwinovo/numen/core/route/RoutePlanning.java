@@ -171,10 +171,10 @@ public final class RoutePlanning {
         return outcome instanceof Outcome.OutOfBudget || outcome instanceof Outcome.Unloaded;
     }
 
-    /** 一段看清了的路写成计划里的一段:几步、多少刻、停在哪、要挖要放要问的格。 */
+    /** 一段看清了的路写成计划里的一段:几步、多少刻、停在哪、要挖要放要问的格、要潜的水。 */
     private static Plan.Leg leg(Plan.Reach reach, Route route, String why) {
         if (route == null) {
-            return new Plan.Leg(reach, 0, 0, null, List.of(), List.of(), List.of(), why);
+            return new Plan.Leg(reach, 0, 0, null, List.of(), List.of(), List.of(), why, List.of());
         }
         NavText.Changes changes = NavText.Changes.of(route.edits());
         List<Plan.Cell> digs = new ArrayList<>();
@@ -183,7 +183,11 @@ public final class RoutePlanning {
         changes.digs().forEach((pos, block) -> digs.add(new Plan.Cell(pos, block)));
         changes.places().forEach((pos, block) -> places.add(new Plan.Cell(pos, block)));
         changes.asks().forEach((pos, cause) -> asks.add(new Plan.Ask(pos, cause)));
+        List<Plan.Dive> dives = new ArrayList<>();
+        for (Route.Dive dive : route.dives()) {
+            dives.add(new Plan.Dive(dive.from(), dive.to(), (int) Math.ceil(dive.held()), (int) Math.floor(dive.left())));
+        }
         return new Plan.Leg(reach, route.legs().size(), (int) Math.round(route.cost()), route.end(), digs, places,
-                asks, why);
+                asks, why, dives);
     }
 }

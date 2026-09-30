@@ -6,6 +6,7 @@ import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.body.BodyAction;
 import com.dwinovo.numen.pathing.drive.Blockage;
+import com.dwinovo.numen.pathing.drive.DiveLog;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.MoveKind;
@@ -63,10 +64,10 @@ class NavTextTest {
                 new BodyAction.Held(Items.COBBLESTONE, 3, 3), new BodyAction.Held(Items.COBBLESTONE, 3, 3));
         assertEquals("En route I had to break 2 oak_planks (120,64,-33; 120,65,-33) and place 1 cobblestone"
                 + " (121,64,-33). I also stepped off the boat and switched to cobblestone in my hotbar (2 times).",
-                NavText.journey(entries, actions));
-        assertEquals("", NavText.journey(List.of(), List.of()), "什么都没做就什么都不说");
+                NavText.journey(entries, actions, List.of()));
+        assertEquals("", NavText.journey(List.of(), List.of(), List.of()), "什么都没做就什么都不说");
         assertEquals("En route I took a stack of dirt from the creative inventory.",
-                NavText.journey(List.of(), List.of(new BodyAction.Conjured(Items.DIRT, 0))), "只有身体动作也要说");
+                NavText.journey(List.of(), List.of(new BodyAction.Conjured(Items.DIRT, 0)), List.of()), "只有身体动作也要说");
     }
 
     @Test
@@ -74,7 +75,7 @@ class NavTextTest {
         BlockState water = Blocks.WATER.defaultBlockState();
         BlockState air = Blocks.AIR.defaultBlockState();
         String said = NavText.journey(List.of(new EditLedger.Placed(C, air, water, null),
-                new EditLedger.Placed(C, water, air, null)), List.of());
+                new EditLedger.Placed(C, water, air, null)), List.of(), List.of());
         assertTrue(said.contains("pour 1 water (121,64,-33) to break a fall")
                 && said.contains("scoop 1 water (121,64,-33) back"), said);
     }
@@ -131,7 +132,32 @@ class NavTextTest {
     @Test
     void puttingAwayWhatWasInHandIsToldAsSuch() {
         assertEquals("En route I put away what was in my hand.",
-                NavText.journey(List.of(), List.of(new BodyAction.Held(Items.AIR, 8, 8))));
+                NavText.journey(List.of(), List.of(new BodyAction.Held(Items.AIR, 8, 8)), List.of()));
+    }
+
+    /** 路上潜过的水照实说:几段,憋得最久的那一段从哪儿到哪儿、憋了几秒、氧气最低到多少;跟在改动与身体动作后面。 */
+    @Test
+    void theDivesOnTheWayAreToldWithTheLongestHold() {
+        List<DiveLog.Dive> dives = List.of(new DiveLog.Dive(A, B, 30, 270, 300), new DiveLog.Dive(B, C, 245, 55, 300));
+        assertEquals("I went under water 2 times; the longest: 12 s without a breath from 120,65,-33 to 121,64,-33,"
+                + " air down to 55/300.", NavText.journey(List.of(), List.of(), dives));
+        String both = NavText.journey(List.of(new EditLedger.Dug(A, planks(), Permit.ALLOW)), List.of(),
+                List.of(new DiveLog.Dive(A, C, 10, 290, 300)));
+        assertEquals("En route I had to break 1 oak_planks (120,64,-33). I went under water once: under 1 s without a"
+                + " breath from 120,64,-33 to 121,64,-33, air down to 290/300.", both);
+    }
+
+    /** 憋不住气的结局:说出那一段水下在哪、要憋多久、此刻能安全憋多久,以及换成有水下呼吸就走得了;归到危险一类。 */
+    @Test
+    void aWayTooLongUnderWaterSaysWhereAndHowLong() {
+        Outcome.Breathless breathless = new Outcome.Breathless(A, C, 500, 240);
+        String said = NavText.failure(breathless, null, A, C, RouteSpec.defaults());
+        assertTrue(said.contains("swims under water from 120,64,-33 to 121,64,-33") && said.contains("about 25 s without a"
+                + " breath") && said.contains("about 12 s") && said.contains("water breathing"), said);
+        assertEquals(FailureType.HAZARD, NavText.type(breathless));
+        assertEquals("swimming at 120,64,-33 (water) kept failing: with the air I have left I could not reach air before"
+                + " drowning", NavText.blockage(new Blockage(A, Blocks.WATER.defaultBlockState(), MoveKind.SWIM,
+                Reason.OUT_OF_BREATH, null)));
     }
 
     @Test

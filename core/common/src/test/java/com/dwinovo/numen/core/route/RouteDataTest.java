@@ -38,21 +38,22 @@ class RouteDataTest {
     }
 
     private static Plan.Leg walkable(List<Plan.Cell> digs, List<Plan.Cell> places, List<Plan.Ask> asks) {
-        return new Plan.Leg(Plan.Reach.WALKABLE, 12, 60, new BlockPos(1, 64, 1), digs, places, asks, "");
+        return new Plan.Leg(Plan.Reach.WALKABLE, 12, 60, new BlockPos(1, 64, 1), digs, places, asks, "", List.of());
     }
 
     private static Plan.Cell dirt(int x) {
         return new Plan.Cell(new BlockPos(x, 64, 0), Blocks.DIRT);
     }
 
-    /** 存下去再读回来是同一条:途经点(连同空着的坐标、区域的名字与到达方式)、每段的标志、计划的每一段、走过的记录。 */
+    /** 存下去再读回来是同一条:途经点(连同空着的坐标、区域的名字与到达方式)、每段的标志、计划的每一段(连同要潜的水)、走过的记录。 */
     @Test
     void aRouteReadsBackAsItWasSaved() {
         Plan plan = new Plan(new BlockPos(0, 64, 0), 1200, List.of(
                 walkable(List.of(dirt(3)), List.of(new Plan.Cell(new BlockPos(4, 63, 0), Blocks.COBBLESTONE)),
                         List.of(new Plan.Ask(new BlockPos(3, 64, 0), "placed by a player"))),
                 new Plan.Leg(Plan.Reach.PARTIAL, 40, 200, new BlockPos(50, 64, 0), List.of(), List.of(), List.of(),
-                        "the search reached chunks that are not loaded"),
+                        "the search reached chunks that are not loaded",
+                        List.of(new Plan.Dive(new BlockPos(10, 60, 0), new BlockPos(20, 60, 0), 180, 90))),
                 Plan.Leg.unplanned()));
         Itinerary route = Itinerary.of("home", OVERWORLD, HOME, "--alter natural --avoid_break area:house")
                 .via(BRIDGE, 1).via(ORES, 2).withLegFlags(2, "--avoid water area:farm").planned(plan)
@@ -192,7 +193,7 @@ class RouteDataTest {
     @Test
     void theFirstUnwalkableLegIsFound() {
         Plan partial = new Plan(BlockPos.ZERO, 0, List.of(walkable(List.of(), List.of(), List.of()),
-                new Plan.Leg(Plan.Reach.PARTIAL, 3, 9, null, List.of(), List.of(), List.of(), "budget"),
+                new Plan.Leg(Plan.Reach.PARTIAL, 3, 9, null, List.of(), List.of(), List.of(), "budget", List.of()),
                 Plan.Leg.unplanned()));
         assertEquals(-1, partial.unreachable());
         Plan blocked = new Plan(BlockPos.ZERO, 0, List.of(walkable(List.of(), List.of(), List.of()),

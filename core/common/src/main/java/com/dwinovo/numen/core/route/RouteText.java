@@ -73,14 +73,30 @@ public final class RouteText {
 
     private static String leg(Plan.Leg leg) {
         return switch (leg.reach()) {
-            case WALKABLE -> leg.steps() + " steps, about " + leg.ticks() + " ticks; " + changes(leg);
+            case WALKABLE -> leg.steps() + " steps, about " + leg.ticks() + " ticks; " + changes(leg) + dives(leg);
             case PARTIAL -> (leg.end() == null ? "unknown from its start"
                     : "known for " + leg.steps() + " steps up to " + Listing.coords(leg.end()) + " (about "
-                            + leg.ticks() + " ticks; " + changes(leg) + "), unknown past that")
+                            + leg.ticks() + " ticks; " + changes(leg) + dives(leg) + "), unknown past that")
                     + ": " + leg.why();
             case UNREACHABLE -> "can't be walked: " + leg.why();
             case UNPLANNED -> "not planned yet, the leg before it is only partly known; it is worked out on the way";
         };
+    }
+
+    /**
+     * 这一段要潜的水,每一段从哪儿到哪儿、一口气憋多久、憋完还剩多少气;不下水是空串。例如
+     * {@code ; under water once: 10,40,5 to 20,40,5, about 12 s without a breath, 3 s of air left}。
+     */
+    private static String dives(Plan.Leg leg) {
+        if (leg.dives().isEmpty()) {
+            return "";
+        }
+        List<String> parts = new ArrayList<>();
+        for (Plan.Dive dive : leg.dives()) {
+            parts.add(Listing.coords(dive.from()) + " to " + Listing.coords(dive.to()) + ", about "
+                    + NavText.seconds(dive.held()) + " without a breath, " + NavText.seconds(dive.left()) + " of air left");
+        }
+        return "; under water " + (parts.size() == 1 ? "once: " : parts.size() + " times: ") + String.join("; ", parts);
     }
 
     /** 这一段要动的格。 */
