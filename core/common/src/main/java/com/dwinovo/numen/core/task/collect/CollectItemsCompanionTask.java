@@ -7,9 +7,9 @@ import com.dwinovo.numen.core.mixin.ItemEntityAccessor;
 import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.scan.NearbyEntities;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
+import com.dwinovo.numen.core.task.base.DropTracker;
 import com.dwinovo.numen.core.task.base.TargetSet;
 import com.dwinovo.numen.pathing.search.Goal;
-import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -38,8 +38,8 @@ import java.util.Map;
  * <p>SCAN ends only once every matching drop in range has been tried, so whatever
  * still lies there at the end is what she couldn't pick up — the reply names it.
  *
- * <p>范围是一块区域({@link CollectItemsTaskRecord#area}),以受理时她脚下那一格为中心,不跟着她走:捡完一件、站到那边,
- * 下一件仍只在这块地方里找,她不会一件接一件越捡越远;每一趟都在一次规划看得清的范围里。
+ * <p>范围是她的工作区({@link CollectItemsTaskRecord#work}),以受理时她脚下那一格为中心,不跟着她走:捡完一件、站到那边,
+ * 下一件仍只在这块地方里找,她不会一件接一件越捡越远;走动也关在区里({@link com.dwinovo.numen.core.nav.WorkArea#confine})。
  *
  * <p>回执里捡了多少,数的是到手的件数:背包里要捡的那几种比开工时多出来的,不是消失了几堆掉落物
  * ——一堆可能是好几个,消失的也可能是被别人捡走、到时候没了。
@@ -50,8 +50,6 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
 
     /** Close enough that vanilla auto-pickup should have absorbed the item (≈1.2 blocks). */
     private static final double PICKUP_REACH_SQR = 1.5;
-    /** 走到离它这么近(格):原版拾取框横向外扩一格,站进这一圈就捡得到。 */
-    private static final double PICKUP_RADIUS = 1.0;
 
     private Phase phase = Phase.SCAN;
     private ItemEntity target;
@@ -94,7 +92,7 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
         }
         target = best;
         heading = best.blockPosition();
-        nav = Trip.to(player, goal(heading), RouteSpec.defaults(), heading);
+        nav = Trip.to(player, goal(heading), r.work.confine(RouteSpec.defaults()), heading);
         phase = Phase.APPROACH;
         return TaskState.RUNNING;
     }
@@ -138,9 +136,9 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
         return TaskState.RUNNING;
     }
 
-    /** 走到离掉落物所在那一格 {@link #PICKUP_RADIUS} 格以内。 */
+    /** 走到捡得起那一格上的掉落物的地方({@link DropTracker#pickUp})。 */
     private static Goal goal(BlockPos item) {
-        return Goals.within(Goals.at(item), 0, PICKUP_RADIUS);
+        return DropTracker.pickUp(item);
     }
 
     /** Still counting down its pickup delay (vanilla gives fresh drops a few ticks) — not

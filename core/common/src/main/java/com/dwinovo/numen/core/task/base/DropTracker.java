@@ -1,5 +1,10 @@
 package com.dwinovo.numen.core.task.base;
 
+import com.dwinovo.numen.pathing.search.Goal;
+import com.dwinovo.numen.pathing.search.Goals;
+
+import net.minecraft.core.BlockPos;
+
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -25,6 +30,14 @@ import java.util.Set;
  * 任务里。
  */
 public final class DropTracker {
+
+    /** 走到离掉落物这么近(格)就捡得起:原版拾取框横向外扩一格,站进这一圈就捡得到。 */
+    private static final double PICKUP_RADIUS = 1.0;
+
+    /** 走过去捡 {@code item} 那一格上的掉落物、不必站进那一格时的目标:离它 {@link #PICKUP_RADIUS} 格以内。 */
+    public static Goal pickUp(BlockPos item) {
+        return Goals.within(Goals.at(item), 0, PICKUP_RADIUS);
+    }
 
     private final Set<Integer> preexisting = new HashSet<>();
     private final Map<Integer, Integer> preexistingCounts = new HashMap<>();

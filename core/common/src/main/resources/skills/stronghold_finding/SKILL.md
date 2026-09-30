@@ -31,7 +31,7 @@ Both are 2×2/shapeless recipes — `inv craft` makes them in your own grid, no 
 
 The room has a lava pool under the frame and a **silverfish spawner** on the stairs:
 
-1. `scan_blocks` for the `spawner` into an area and `work_mine` it immediately — unlike the blaze spawner, this one is pure liability.
+1. `scan_blocks` for the `spawner` into an area, `move_goto` it with arrive:'dig', and `work_dig` it immediately — unlike the blaze spawner, this one is pure liability.
 2. If silverfish are already out, scan them, then pass their runtime IDs to `fight attack`; don't let them burrow into the brickwork.
 3. Cover the lava pool edges where you'll stand with cobblestone: a `build layer` of it, or `build set` for single cells.
 

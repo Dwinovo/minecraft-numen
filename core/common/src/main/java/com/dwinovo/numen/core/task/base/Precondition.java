@@ -8,7 +8,7 @@ import com.dwinovo.numen.core.FailureType;
  *
  * <p>Preconditions replace the ad-hoc fail-fast blocks each concrete task used to
  * open with (e.g. {@code BuildCompanionTask} rejecting an occupied target with
- * replacement off, {@code MineCompanionTask} rejecting an un-harvestable
+ * replacement off, {@code DigCompanionTask} rejecting an un-harvestable
  * request). Expressing them as a small ordered list keeps the "why can't I start"
  * diagnosis uniform: the FIRST precondition that reports a {@link Failure} decides
  * the task's terminal result, carrying both a model-facing message and a

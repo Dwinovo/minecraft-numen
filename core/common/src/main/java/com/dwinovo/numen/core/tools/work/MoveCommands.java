@@ -202,7 +202,7 @@ public final class MoveCommands {
 
     /**
      * 跟着走——纯<b>常驻</b>的活:它没有"干完"这回事,只有被主人换掉。所以没有 count、没有期限,派下去之后她就一直
-     * 跟着,直到主人让她做别的({@code work mine}、{@code work fish}……都会顶掉它)。
+     * 跟着,直到主人让她做别的({@code work dig}、{@code work fish}……都会顶掉它)。
      *
      * <p>不给 {@code entity_id} 就是跟主人,给了就跟那一只——村民、狼、别的玩家都行。两者目标消失时的含义不同,
      * 见 {@code FollowTaskRecord#target}。点名的那只按 UUID 认:记录里存它,重启后重放的那一行也写它

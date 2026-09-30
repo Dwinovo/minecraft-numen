@@ -223,20 +223,20 @@ public final class GameTestKit {
 
     /**
      * 照模型挖矿的三步走一遍:建区域 {@link #MINED_AREA}、在半径 {@code radius} 内把 {@code blockId} 扫进去
-     * ({@code scan blocks … --into}),扫的回执一到就调 work_mine 挖这块区域;{@code extra} 是 work_mine 的其余参数
-     * (count、路线字段),键、值交替。扫描被拒或失败时不挖,这次挖矿的结论就是扫描的回执。
+     * ({@code scan blocks … --into}),扫的回执一到就调 work_dig 挖这块区域;{@code extra} 是 work_dig 的其余参数
+     * (count),键、值交替。扫描被拒或失败时不挖,这次挖矿的结论就是扫描的回执。
      */
     static Mining mineScanned(GameTestHelper helper, NumenPlayer companion, int radius, String blockId,
                               Object... extra) {
         ToolRun scan = scanInto(companion, radius, blockId, MINED_AREA);
         Object[] keyValues = new Object[extra.length + 2];
-        keyValues[0] = "area";
+        keyValues[0] = "place";
         keyValues[1] = List.of(MINED_AREA);
         System.arraycopy(extra, 0, keyValues, 2, extra.length);
         Mining mining = new Mining(scan);
         helper.onEachTick(() -> {
             if (mining.run.get() == null && scan.reply() != null) {
-                mining.run.set(scan.succeeded() ? call(companion, "work_mine", args(keyValues)) : scan);
+                mining.run.set(scan.succeeded() ? call(companion, "work_dig", args(keyValues)) : scan);
             }
         });
         return mining;

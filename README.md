@@ -32,7 +32,7 @@ Numen 在你的世界里放一个 AI 同伴。你用自然语言把要做的事�
 ```
 你：    挖一组铁矿回来
 Numen： 这就去。下矿找铁。
-        ▸ 4 步 · locate biome · move_goto · work_mine · work collect   ✔
+        ▸ 4 步 · locate biome · move_goto · work_dig · work collect   ✔
 Numen： 拿到 64 个粗铁——要我熔了吗？
 ```
 

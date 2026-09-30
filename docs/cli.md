@@ -28,7 +28,7 @@
 5. **第 1 层命令的三种来源**:
    - 包装第 0 层的指令,比如 `ysm switch`:限定只作用于她、按主人的授权、执行后回读确认;
    - 用模组的 API 直接补上模组没给的功能,比如 `ftbquests submit`;
-   - 核心动作,比如 `task status`,以及第 4 步迁来的 `move goto`、`work mine` 等。
+   - 核心动作,比如 `task status`,以及第 4 步迁来的 `move goto`、`work dig` 等。
 6. **快捷工具是 alias**:第 1 层里高频的几条提升为独立工具,名字就是 `组_动作`,用同一个处理函数,回执也一样。
 7. **权限**:
    - 第 1 层每条命令自己声明以谁的权威执行,默认是她自己。包装类命令可以借服务器的权威,但作用范围写死在代码里。
@@ -41,7 +41,7 @@
 
 ```
 模型
- ├─ 快捷工具 move_goto / work_mine / … ← 第 1 层里高频命令的 alias
+ ├─ 快捷工具 move_goto / work_dig / … ← 第 1 层里高频命令的 alias
  └─ command 工具 "<一行>"
           │
           ├─ 行首是 "/" → 第 0 层:服务端以她的 CommandSourceStack 解析(写不通当场失败,附用法)
@@ -105,7 +105,7 @@ task status                           第 1 层,核心动作
 
 - **同源**:把 JSON 参数按同一组参数类型读成值,交给同一个处理函数,回执与从 `command` 调用一字不差(附录 A)。
 - **叫什么**:工具名由命令路径生成,`组_动作`(`move goto` 提升成 `move_goto`),登记时不另起名字(附录 G)。
-- **提升哪些**:按调用频率定。现在提升的是 status_self、status_owner、scan_around、scan_blocks、scan_entities、scan_block、move_goto、work_mine、skill_load、task_stop 十个(附录 G)。
+- **提升哪些**:按调用频率定。现在提升的是 status_self、status_owner、scan_around、scan_blocks、scan_entities、scan_block、move_goto、work_dig、skill_load、task_stop 十个(附录 G)。
   - `task status` 与 `task timer` 只留命令:task_status 主要被拿来轮询,而收尾本来就会以 `task_finished` 送到。
   - 基线建议里的 build 不再是工具:建造改为 `build` 组的一串命令(原语、设计、`build at`),一次写完整栋房子的那一个调用没有了(附录 G)。
 - **独立工具**:除了快捷工具与 `command`,工具表里只留一个 `todowrite`——输入本身是一份结构化清单的动作留作独立工具,这是这条规则下唯一的例外(附录 G)。
@@ -594,7 +594,7 @@ gt_long lingre 40
 | | remember、recall、forget、load_skill | `memory remember`、`memory recall`、`memory forget`、`skill load` | skill_load |
 | | task_status、task_stop、set_timer | `task status`、`task stop`、`task timer` | task_stop |
 | C 长活 | goto、follow、plan_route | `move goto`、`move follow`、`route plan`(09-30 起;原 `move route`) | move_goto |
-| | mine、collect_items、fish | `work mine`、`work collect`、`work fish` | work_mine |
+| | mine、collect_items、fish | `work dig`(09-30 起;原 `work mine`)、`work collect`、`work fish` | work_dig |
 | | attack | `fight attack` | |
 | | blueprint、blueprint_read、build | `build` 组(本批,见下) | |
 | | scaffold_materials | `throwaway` 组(见下) | |

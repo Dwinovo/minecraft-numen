@@ -172,6 +172,35 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
             };
         }
 
+        /**
+         * 一串几处的写法({@code work dig} 那一串):一个名字是一处区域,连着的数三个一组是一处坐标;每一处照
+         * {@link #of(List, String, Integer)} 读,到达方式是 {@code at}。连着的数三个一组分完还剩一两个,照样交给它读(那是一列或
+         * 一个高度),收不收由用的一方判。
+         */
+        public static List<Stop> each(List<String> words) {
+            List<Stop> out = new ArrayList<>();
+            List<String> numbers = new ArrayList<>(3);
+            for (String word : words) {
+                if (integer(word)) {
+                    numbers.add(word);
+                    if (numbers.size() == 3) {
+                        out.add(of(numbers, null, null));
+                        numbers.clear();
+                    }
+                    continue;
+                }
+                if (!numbers.isEmpty()) {
+                    out.add(of(numbers, null, null));
+                    numbers.clear();
+                }
+                out.add(of(List.of(word), null, null));
+            }
+            if (!numbers.isEmpty()) {
+                out.add(of(numbers, null, null));
+            }
+            return out;
+        }
+
         /** 那一格(x、y、z 都给了时);否则为 null。 */
         public BlockPos cell() {
             return y != null && x != null ? new BlockPos(x, y, z) : null;

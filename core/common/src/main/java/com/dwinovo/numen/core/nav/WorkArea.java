@@ -2,69 +2,64 @@ package com.dwinovo.numen.core.nav;
 
 import com.dwinovo.numen.area.Area;
 import com.dwinovo.numen.area.Cells;
-import com.dwinovo.numen.pathing.search.WorldSnapshot;
+import com.dwinovo.numen.pathing.spec.PositionCosts;
+import com.dwinovo.numen.pathing.spec.RouteSpec;
 
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.SectionPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
 
 /**
- * 工作区:一件就地干的活(挖矿、捡东西)只在这块地方里干。它是一块区域({@link Area}):以受理时她脚下那一格为中心、半径
- * {@code radius} 格的球({@link Cells#sphere},距离按两格的整数坐标算),在她受理时所在的维度里。一格在不在区里只问这块区域,
- * 与别的区域同一种判定;挖矿把点名的区域和它求交、求差,也是区域运算。区里的目标她自己走过去干,区外的只报告、不去;要不要离开
- * 这块地方是模型的决定。
+ * 工作区:一件就地干的活(挖、捡)只在这块地方里干,身体也关在里面。它是一块区域({@link Area}):挖与捡用受理时她脚下那一格为
+ * 中心、半径 {@link #RADIUS} 的球({@link #around});建造清场用工地外扩 {@link #SITE_MARGIN} 格的盒子({@link #site})。
+ * 一格在不在区里只问这块区域,与别的区域同一种判定;挖的一方把点名的区域和它求交、求差,也是区域运算。区里的目标她自己挪几步
+ * 去干,区外的只报告、不去:去远处是一条路线(先规划、再走),要不要走是模型的决定。
  *
- * <p><b>半径的上限只有一个来源:寻路一次看得清的范围。</b>每次搜索拷贝以起点所在区块为中心、半径
- * {@link WorldSnapshot#SEARCH_RADIUS} 个区块的快照,所以从任何起点出发,水平方向至少 {@code SEARCH_RADIUS × 16}
- * 格以内都在这一份快照里。工作区的直径取这么大:区里任意两点相距不超过它,她站在区里任何地方朝区里任何目标搜,
- * 目标都在同一份快照里,一次规划就答得清"去得了还是去不了"。竖直方向快照整列都有,用同一个半径——这样区是个球。
- * 一次搜索还有展开节点的预算(默认四万):实心石头里挖 30 格隧道展开约一万一千个节点({@code docs/pathing.md} 第十三节),
- * 半径以内的竖井与横洞一般在预算里;超出时寻路如实报"预算用完",不说成无路。
+ * <p><b>移动关在区里</b>:寻路的"只许"({@link PositionCosts.Builder#confine})把站、过、挖、放都限在区里的格上({@link #confine})。
+ * 开不出远路是结构上做不到,不另写检查;一次搜索展开的节点也不会多过区里的格数,预算自然就小。
  *
- * <p>站位不在区里也无妨:目标在区里就行,够得着它的站位可能在区边外一两格。
+ * <p><b>半径 10 的理由</b>:原版一团矿(矿石特征按大小沿一段线撒的几个小球)常见的铁、金、钻石、红石、青金石那一档横竖不过四五格;
+ * 她用 {@code --arrive dig} 走到手够得着最近那一格(交互距离 4.5 格)的地方再开工,一团的另一头就在 4.5 + 4.5 ≈ 9 格内;挖碎的方块
+ * 掉落物会弹开一格上下,再留一格。更大的一团(煤、铜)另一头可能落在区外,回执照实说,下一步照抄。
  *
- * @param center 中心:受理时她脚下那一格
- * @param radius 半径(格),不超过 {@link #RADIUS}
- * @param area   这块球形区域本身:一格在不在区里只问它
+ * @param center 给人说"离哪儿多远"的那一格:球是受理时她脚下那一格,工地是盒子的中心
+ * @param area   这块区域本身:一格在不在区里只问它
+ * @param where  给模型读的一截:{@code within 10 blocks of 10,64,-3}
  */
-public record WorkArea(BlockPos center, int radius, Area area) {
+public record WorkArea(BlockPos center, Area area, String where) {
 
-    /** 工作区半径的上限:一次搜索从任何起点都看得见的水平距离的一半,见类注释。 */
-    public static final int RADIUS = SectionPos.sectionToBlockCoord(WorldSnapshot.SEARCH_RADIUS) / 2;
+    /** 挖、捡的工作区半径(格),理由见类注释。 */
+    public static final int RADIUS = 10;
+
+    /** 建造清场的工作区在工地包围盒外多留几格:站到工地边上挖,也走得进挖开的坑。 */
+    public static final int SITE_MARGIN = 2;
 
     public WorkArea {
         center = center.immutable();
     }
 
-    /** 以 {@code body} 此刻脚下那一格为中心、半径取上限的工作区。 */
+    /** 以 {@code body} 此刻脚下那一格为中心、半径 {@link #RADIUS} 的球。 */
     public static WorkArea around(Entity body) {
-        return around(body, RADIUS);
+        return around(body.level().dimension(), body.blockPosition());
     }
 
-    /**
-     * 以 {@code body} 此刻脚下那一格为中心、半径 {@code radius} 的工作区。
-     *
-     * @throws IllegalArgumentException 半径不在 1 到 {@link #RADIUS} 之间
-     */
-    public static WorkArea around(Entity body, int radius) {
-        return at(body.level().dimension(), body.blockPosition(), radius);
+    /** {@code dimension} 里以 {@code center} 为中心、半径 {@link #RADIUS} 的球。 */
+    public static WorkArea around(ResourceKey<Level> dimension, BlockPos center) {
+        return new WorkArea(center, Area.of(dimension, Area.Kind.SPHERE, Cells.sphere(center, RADIUS)),
+                "within " + RADIUS + " blocks of " + coords(center));
     }
 
-    /**
-     * {@code dimension} 里以 {@code center} 为中心、半径 {@code radius} 的工作区。
-     *
-     * @throws IllegalArgumentException 半径不在 1 到 {@link #RADIUS} 之间
-     */
-    public static WorkArea at(ResourceKey<Level> dimension, BlockPos center, int radius) {
-        if (radius < 1 || radius > RADIUS) {
-            throw new IllegalArgumentException("工作区半径要在 1 到 " + RADIUS + " 之间:" + radius);
-        }
-        return new WorkArea(center, radius, Area.of(dimension, Area.Kind.SPHERE, Cells.sphere(center, radius)));
+    /** 一处工地:{@code min}..{@code max} 这个盒子向外多留 {@link #SITE_MARGIN} 格。 */
+    public static WorkArea site(ResourceKey<Level> dimension, BlockPos min, BlockPos max) {
+        Cells box = Cells.box(min, max).grow(SITE_MARGIN);
+        return new WorkArea(new BlockPos((min.getX() + max.getX()) / 2, (min.getY() + max.getY()) / 2,
+                (min.getZ() + max.getZ()) / 2), Area.of(dimension, Area.Kind.BOX, box),
+                "the site " + coords(min) + ".." + coords(max) + " and " + SITE_MARGIN + " blocks around it");
     }
 
-    /** 这一格在不在区里:同一个维度、落在那个球里。 */
+    /** 这一格在不在区里:同一个维度、落在那块区域里。 */
     public boolean contains(ResourceKey<Level> dimension, BlockPos pos) {
         return area.contains(dimension, pos);
     }
@@ -74,8 +69,25 @@ public record WorkArea(BlockPos center, int radius, Area area) {
         return area.cells();
     }
 
-    /** 给模型读的一截:{@code within 48 blocks of 10,64,-3}。 */
+    /** 给模型读的一截:{@code within 10 blocks of 10,64,-3}。 */
     public String describe() {
-        return "within " + radius + " blocks of " + center.getX() + "," + center.getY() + "," + center.getZ();
+        return where;
+    }
+
+    /**
+     * {@code spec} 关进区里:站、过、挖、放都只许在区里的格上。与规格已有的按位置代价合并(同一栏的"只许"取交集)。
+     */
+    public RouteSpec confine(RouteSpec spec) {
+        LongOpenHashSet cells = new LongOpenHashSet((int) Math.min(Integer.MAX_VALUE, area.cells().size()));
+        area.cells().forEach((x, y, z, seen) -> cells.add(BlockPos.asLong(x, y, z)));
+        PositionCosts.Builder only = PositionCosts.builder();
+        for (PositionCosts.Use use : PositionCosts.Use.values()) {
+            only.confine(use, cells);
+        }
+        return spec.edit().positions(spec.positions().plus(only.build())).build();
+    }
+
+    private static String coords(BlockPos p) {
+        return p.getX() + "," + p.getY() + "," + p.getZ();
     }
 }
