@@ -104,7 +104,7 @@ area drop ores g2 / area refresh ores / area list / area delete ores
 | `scan blocks --into` | 权限层:规则项 `area:名字`,如 `deny break(area:house)`,一直有效、管所有动作 |
 | 框盒子、点 | route:终点、途经点、禁区、代价 |
 | 建成的房子 | 路线标志:`--avoid_break area:farm`、`--avoid area:…`,只管这一趟 |
-| 路线计划要改的格 | `work mine --area`:挖区域里还是当时那种方块的格 |
+| 路线计划要改的格 | `work mine <区域>`:挖区域里还是当时那种方块的格 |
 | 集合运算 | `work collect --area`:只捡区域里的掉落物 |
 | (以后)主人在客户端框选、模组插件的领地 | `scan blocks --in`:只在区域里找;`scan storage --in`:区域里的箱子装了什么 |
 | | (以后)`look --at`、`build fill`、事件"有怪进 base 就叫醒我"、本能"空闲时待在 home"、客户端画出轮廓 |
@@ -171,8 +171,9 @@ route reverse mine --as back                 反着的一条
 
 - 看:`scan blocks … --into ores`。
 - 规划:走到矿边是一条路线;在工作区里挖哪一格、先挖哪一格是每刻闭环的反射,留在 `work mine` 里。
-- 执行:`work mine --area ores/g3`,只挖区域里、工作区里、还是当时那种方块的格;区外的只报告。
-- `work mine --block_ids … --count N` 保留为简写:等于扫描进一块匿名区域再挖,与 `move goto` 同理。
+- 执行:`work mine ores/g3`,只挖区域里、工作区里、还是当时那种方块的格;区外的只报告。
+- `work mine` 只收区域(必填,`work mine <区域[/部分] …> [--count N]`),不留按方块种类挖的简写:找方块是看的事,挖矿自己
+  不找。范围不对先用 `area` 的增删与运算调,再挖。`--count N` 可选,是新增的物品数;不给就挖完区域里落在工作区里的格。
 
 ## 六、取代
 
@@ -202,7 +203,7 @@ route reverse mine --as back                 反着的一条
 - 区域重启后还在;集合运算结果正确(单测覆盖跨节、空区域、自己减自己);`refresh` 划掉被人换过的格。
 - `deny break(area:house)` 挡住挖矿、寻路、`use block` 左键;`area:` 规则经 `/numen permission rules add` 可加可删。
 - 计划超出承诺时 `move go` 不走并说出差别;路上世界变了、需要承诺外的格时停下并说明;`move goto` 简写与三步分开做结果相同;
-  重启后 `move go home`、`work mine --area ores/g3` 的重放照常。
+  重启后 `move go home`、`work mine ores/g3` 的重放照常。
 
 ## 九、以后
 
@@ -264,8 +265,9 @@ route reverse mine --as back                 反着的一条
   `deny edit_area(*)` 收紧。挂起等答复与第 0 层指令同一个口子(`ServerSource.authorize`),不占任务槽。
 - 扫描:`scan blocks --into` 每一团加成区域的一部分;不带 `--into` 不编号不存。`--in 区域` 与半径球求交。删 `GroupBook`、
   `staleMessage`、`NumenPlayer.nextIdNumber`、回执的 `in_work_area`/`box`。
-- 挖与捡:`work mine --area` 取代 `--groups`;`--block_ids` 简写开工时用同一处扫描(`BlockScan`,半径 192)收成一块匿名区域再挖,
-  任务里原来的补查、慢心跳重查删掉,候选只有一个来处。`work collect --area` 与半径球求交。`WorkArea` 带着一块球形区域,判定只问区域。
-- **与设计稿的出入**:简写的匿名区域不存盘(没有名字,没人再点它);`BuildSite` 没改成区域(它是交给寻路的位置代价,收成区域
+- 挖与捡:`work mine` 点名区域取代 `--groups`,任务里原来的补查、慢心跳重查删掉,候选只有一个来处。落地时还留过一个
+  `--block_ids` 简写(开工时现扫一块匿名区域再挖),09-30 删掉:`work mine` 只收区域,区域是必填的位置参数
+  (`work mine ores/g3 [--count N]`,命令行里必填即位置参数;快捷工具的字段仍叫 `area`),先 `scan blocks … --into` 再挖。`work collect --area` 与半径球求交。`WorkArea` 带着一块球形区域,判定只问区域。
+- **与设计稿的出入**:`work mine` 的区域是位置参数,不写 `--area`;`BuildSite` 没改成区域(它是交给寻路的位置代价,收成区域
   再展开回去只多一层转换);`scan storage --in` 没做(`x y z` 是必填位置参数,加 `--in` 就是一个动作两种写法,眼下也没有使用方);
   `area show` 只看她所在维度的区域;`--built`、`--route` 加进来的格是 `Area.Kind.CELLS`(编号 `c`)。

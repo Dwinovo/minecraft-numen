@@ -784,8 +784,8 @@ throwaway clear
 - **区里**:照旧——按"走过去加挖掉"一起定价挑最便宜的、就地挖通、垫高、捡掉落物,挪动用 `Trip`。首次找矿查询回来之前不出发。
   捡的掉落物是区里的,加上她自己敲出来、弹出区外一两格的。
 - **区外**:不去,只报告。找矿查询以工作区中心为球心、半径 32 个区块(服务器视距的上限,查询只读已加载的区块,即"她身边加载着的
-  全部地形"),区里的命中进名单,区外的记下来(09-30 起 `--block_ids` 是先扫进一块匿名区域的简写,扫的半径与 `scan blocks` 的上限
-  同为 192 格,区外的就是那块区域落在工作区外的格);回执说区外还有几个(查询凑够个数就停时说"至少")、最近一个在哪、离她多远,下一步照抄:
+  全部地形"),区里的命中进名单,区外的记下来(09-30 起挖矿只收区域、自己不找,区外的就是点名区域落在工作区外的格,说法见"看与挖收区域"
+  一节);回执说区外还有几个(查询凑够个数就停时说"至少")、最近一个在哪、离她多远,下一步照抄:
 
   ```
   found no ochre_froglight in my work area (within 48 blocks of -12553958,-58,11491503), so I stayed put; 2 more lie beyond it, the nearest at -12553911,-58,11491550, about 66 blocks from me: move_goto there first (x:-12553911 y:-58 z:11491550 arrive:near near:8), then work_mine again
@@ -991,7 +991,7 @@ scan blocks 32 iron_ore deepslate_iron_ore --into ores   每一团加成 ores �
 scan blocks 16 #minecraft:beds --in base                 只收落在 base 里的格;半径照旧是从她脚下看多远
 ```
 
-- 找方块、逐格问权限、分团收成 `core/scan/BlockScan`(`scan blocks` 与 `work mine` 的简写共用);看完的结果经 `Found.into` 写进
+- 找方块、逐格问权限、分团收成 `core/scan/BlockScan`(只有 `scan blocks` 用它,挖矿自己不找);看完的结果经 `Found.into` 写进
   区域,每格附带看到的方块状态与那一刻(主世界游戏刻)。`BlockGroups.Group` 只留格子与状态、说法、最近一格:各种几格、源头几格
   由区域的格子说,包围盒由 `area show` 说。
 - `--in`:半径参数不变,范围是"从她脚下的半径"与"点名的区域"两者都要在——区域判定只问 `Area.contains`,搜索的球只是看多远。
@@ -1002,18 +1002,27 @@ scan blocks 16 #minecraft:beds --in base                 只收落在 base 里�
 **`work mine`**:
 
 ```
-work mine --area ores/g3                  挖这一部分里还是当时那种方块的格,挖完为止
-work mine --area ores/g3 ores/g4 --count 10
-work mine --block_ids iron_ore deepslate_iron_ore --count 10   简写:先扫进一块匿名区域再挖
+work mine ores/g3                  挖这一部分里还是当时那种方块的格,挖完为止
+work mine ores/g3 ores/g4 --count 10
+work mine logs --count 16 --avoid_break area:house
 ```
+
+- 只收区域:先看、再规划、后执行——`area new ores`、`scan blocks 32 iron_ore deepslate_iron_ore --into ores`,范围不对用
+  `area drop/minus/intersect/filter` 调,再 `work mine ores`。区域是必填的位置参数 `<area...>`(命令行里必填即位置参数),快捷工具
+  `work_mine` 的字段仍叫 `area`、标成必填。`--count` 可选,是新增的物品数;不给就挖完区域里落在工作区里的格。
 
 - 候选只有一个来处:区域里附带了方块的格(`MineBlockTaskRecord.scanned`),每格动手前按 `Cells.Seen.holds` 复核,变了的记成"别人动过"
   (顺路挖掉的记她的),不往外扩。框出来的格不挖。
-- `--area` 在派发时解析:没有这块、没有这一部分、没有扫描过的格、整块落在工作区外,当场拒收不派活。落在工作区外的只报告
-  (`Beyond`),说法同前。
-- `--block_ids` 简写开工时先 `BlockScan`(半径 192,与 `scan blocks` 上限同一个),收成一块不存盘的匿名区域,之后与 `--area` 同一条路;
-  原来任务自己反复找候选(按需补查、慢心跳重查、在 `BlockSearch` 持有登记)的那一套删掉。没存盘的理由:它没有名字,没有人再点它;
-  要留着就先 `scan blocks … --into`。
+- 区域在派发时解析:没有这块、没有这一部分、没有扫描过的格、整块落在工作区外,当场拒收不派活,回执写照抄就能做的下一步:
+  `targets has no scanned cells, so I did not start: work_mine digs the cells a scan added, and framed cells carry no block. scan blocks 48 <block ids> --into targets adds what is there, then work_mine it`
+  `all 2 scanned cells of targets lie wholly beyond my work area (within 48 blocks of …), so I did not start; the nearest is at …, about 67 blocks away. move_goto there first (x:… y:… z:… arrive:near near:8), then work_mine again.`
+- 落在工作区外的只报告(`Beyond`),挖完区里的收场时接在回执后面:
+  `gathered 6/64 pearlescent_froglight (nothing left to dig in my work area, within 48 blocks of …; 7 scanned cells of targets lie beyond it and were left, the nearest at …, about … blocks from me: move_goto there first (…), then work_mine again)`
+- 区里的格到时都不在了(别人挖掉、换掉):区外还有就说在哪、怎么过去;没有就给再扫一遍的那一行(扫的就是这件活的方块,半径取工作区的):
+  `all 3 scanned cells of ores in my work area (within 48 blocks of …) were gone or had changed since the scan; gathered 0. Nothing of ores is left to dig; scan blocks 48 minecraft:iron_ore --into ores adds what is there now`
+- 删掉 `--block_ids` 简写(09-30):原来开工时先 `BlockScan`(半径 192)收成一块不存盘的匿名区域、看回来之前不出发,连同只为它存在的
+  `MineBlockTaskRecord.SCAN_RADIUS`、任务里的 `mapped`/`absorbScan`/搜索句柄、`Beyond` 的"至少"与 `more` 说法、"工作区里和身边加载着的
+  地形里都找不到"那句话一起删掉。找方块只有 `scan blocks` 一处。
 - 受理回执:点名区域时说 `all N scanned cells of ores/g3 lie in it`,或 `n of the N … lie in it; the other k lie beyond it and will be left`。
 
 **工作区与捡东西**:`WorkArea` 带着一块球形区域(`Cells.sphere`,`Area.Kind.SPHERE`),`contains` 问区域;挖矿把点名区域与它求交、
