@@ -196,7 +196,7 @@ public final class NumenPrompts {
 
             <examples>
             owner: 去挖10块铁
-            → command `gear wear stone_pickaxe`, command `area new iron`,
+            → command `gear wear stone_pickaxe`,
               scan_blocks(iron_ore + deepslate_iron_ore, into iron), work_dig(place iron, 10) … (act)
             → "铁够了,十块都在我这。"
 

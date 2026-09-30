@@ -85,8 +85,8 @@ area center mid ores                     中心附近的一格(单格区域)
 ### 命令
 
 ```
-area new ores
-scan blocks 32 iron_ore deepslate_iron_ore --into ores   扫描,每一团加成一部分
+area new ores                                            建一块空区域
+scan blocks 32 iron_ore deepslate_iron_ore --into ores   扫描,每一团加成一部分(没有 ores 就新建)
 area add house --box 10,60,5..20,70,15                    框一块
 area add chest --at 12 64 7                                一个点
 area add home --built house#1                              一栋建成的房子(Built 记着每一格)
@@ -296,7 +296,10 @@ route reverse mine --as back                 反着的一条
   一下就碎:写成空气(通知邻居)再落位,不走挖掘。`BlockDigger.destroyNow` 删掉,破坏方块只有她的手这一条路。
 - **`use block left`**:纯按键——朝那一格中心看,准星落在谁就按谁,手上是什么就用什么,按住直到碎或 `--hold_ticks` 到,不挪步;
   落在别的格或实体上回执照实说。`Interaction` 的左键挖方块直接按 `CompanionHands`,不再经 `BlockDigger`(那里的换工具、清视线
-  归挖掘执行)。右键仍先清视线上的软遮挡再点(§十一第 5 条只说左键)。
+  归挖掘执行)。
+- **`use block right`**(09-30 跟进):同样退回纯按键——看向目标看得见的那一面,准星落在谁就点谁,手上是什么就用什么,不挪步、
+  不换工具、不再先清视线上的软遮挡;点到别的格或实体照实说,右键落在别的格上时写出 `work dig` 挖掉它或 `arrive:use` 从另一面点。
+  清视线只剩 `work dig` 一处。
 - **与设计稿的出入**:生存清场的格要身上有收得下它的工具才挖(与 `work dig` 同一条工具规矩),没有就如实报,不再像原来那样空手
   毁掉;创造清场是"写成空气再落位",与原版创造一下就碎、再放一块同一个结果。
 

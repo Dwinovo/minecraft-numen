@@ -21,9 +21,13 @@ import net.minecraft.core.BlockPos;
 /**
  * 执行路线上的一步。开始之前在活世界上复核它的前提——与规划时是同一个 {@code Moves.of(kind).premise},同一个方向,
  * 成本模型按此刻的身体与端口现组一份(目标格保护照样并进去);成立就照这一次复核交出的 {@link Maneuver} 去做(世界若已
- * 替它挖开了一格,那一格就不必再挖),不成立就停下,报出是哪一格、什么方块、哪一条前提。这一步憋着气时,再按身体此刻的
- * 真实氧气把从这一步起的这一段水下重算一遍,判据与规划时同一个({@link Breath#after}、{@link Breath#lasts}):游不到换气的
- * 地方就停下,报 {@link Reason#OUT_OF_BREATH}。执行中由 {@link Watchdog} 看它有没有超期。
+ * 替它挖开了一格,那一格就不必再挖),不成立就停下,报出是哪一格、什么方块、哪一条前提。执行中由 {@link Watchdog} 看它有没有超期。
+ *
+ * <h2>憋气</h2>
+ * 这一步憋着气时,开始前与执行中的每一刻都按身体此刻的真实氧气把这一段水下剩下的部分重算一遍({@link #breathless}),判据与
+ * 规划时同一个({@link Breath#after}、{@link Breath#lasts}):游不到换气的地方就停下,报 {@link Reason#OUT_OF_BREATH}。每一刻都算,
+ * 是因为一步在水下被挡住拖长时,期限({@link Watchdog})按这一步的估价给,比氧气宽得多——憋不住的那一刻就得停下,把身体交给
+ * 宿主的换气本能,不等期限。
  */
 final class Step {
 
@@ -36,6 +40,10 @@ final class Step {
     private final RouteSpec spec;
     private final Watchdog watchdog;
     private Control control;
+    /** 这一步与同一段水下接着的几步,按先后;这一步开始时定下,不憋气为空。 */
+    private List<Maneuver> dive = List.of();
+    /** {@link #dive} 里每一步要几刻,开始时按那一刻的成本模型算好。 */
+    private double[] diveTicks = new double[0];
     /** 计划内的坠落开始时身体的血量;不是这样的一步为 NaN。落地时拿它对账。 */
     private float healthBefore = Float.NaN;
     /** 计划内的坠落预计掉几点血。 */
@@ -80,15 +88,20 @@ final class Step {
             if (!fresh.to().equals(planned.to())) {
                 return new Beat.Blocked(blocked(planned.to(), Hitch.DIVERTED));
             }
-            Maneuver drowns = outOfBreath(model, fresh);
+            dive(model, fresh);
+            Maneuver drowns = breathless(model.body().breath(), 0);
             if (drowns != null) {
-                return new Beat.Blocked(new Blockage(drowns.to(), rig.world().getBlockState(drowns.to()), planned.kind(),
-                        Reason.OUT_OF_BREATH, null));
+                return outOfBreath(drowns, 0);
             }
             control = Control.of(rig, fresh, next);
             double expected = Moves.of(fresh.kind()).cost(model, fresh);
             watchdog.begin(expected, rig.entity.position());
             begun(fresh, expected);
+        } else {
+            Maneuver drowns = breathless(rig.snapshot().breath(), watchdog.stepTicks());
+            if (drowns != null) {
+                return outOfBreath(drowns, watchdog.stepTicks());
+            }
         }
         Beat beat = control.tick();
         watchdog.observe(rig.entity.position(), beat instanceof Beat.Going going && going.worked());
@@ -130,28 +143,51 @@ final class Step {
                 PathLog.num(healthBefore - rig.entity.getHealth()), expectedDamage, PathLog.body(rig.entity));
     }
 
-    /**
-     * 这一步憋着气时,按身体此刻的真实氧气依次走过这一步与同一段水下接着的几步;在哪一步走完憋不住,交出那一步,
-     * 都憋得住为 null。
-     */
-    private Maneuver outOfBreath(CostModel model, Maneuver fresh) {
+    /** 这一步憋着气时,定下这一段水下剩下的几步(这一步与同一段接着的几步)与各要几刻。 */
+    private void dive(CostModel model, Maneuver fresh) {
         if (!fresh.submerged()) {
-            return null;
+            return;
         }
-        Breath breath = model.body().breath();
-        Breath.Air air = breath.now();
         List<Maneuver> ahead = new ArrayList<>(diving.size() + 1);
         ahead.add(fresh);
         ahead.addAll(diving);
-        for (Maneuver m : ahead) {
-            air = breath.after(air, true, Moves.of(m.kind()).ticks(model, m));
+        dive = List.copyOf(ahead);
+        diveTicks = new double[dive.size()];
+        for (int i = 0; i < dive.size(); i++) {
+            diveTicks[i] = Moves.of(dive.get(i).kind()).ticks(model, dive.get(i));
+        }
+    }
+
+    /**
+     * 此刻的氧气({@code breath})撑不撑得到这一段水下走完:先走完这一步还没用掉的刻数(估价减去已经做了的 {@code elapsed} 刻,
+     * 拖过了估价就是零),再依次走过同一段接着的几步;在哪一步走完憋不住,交出那一步,都憋得住(或这一步不憋气)为 null。
+     */
+    private Maneuver breathless(Breath breath, int elapsed) {
+        Breath.Air air = breath.now();
+        for (int i = 0; i < dive.size(); i++) {
+            double ticks = i == 0 ? Math.max(0, diveTicks[0] - elapsed) : diveTicks[i];
+            air = breath.after(air, true, ticks);
             if (!breath.lasts(air)) {
-                PathLog.info("{} 憋不住气 {} 起这一段水下到 {} 要憋 {} 刻,此刻的氧气撑不到 {}", rig.who, PathLog.step(fresh),
-                        PathLog.pos(m.to()), PathLog.num(air.held()), PathLog.body(rig.entity));
-                return m;
+                return dive.get(i);
             }
         }
         return null;
+    }
+
+    /**
+     * 此刻还在计划内的一段水下:这一步还没开始(开始前按真实氧气判),或已经开始而此刻的氧气撑得到这一段走完。宿主的换气本能
+     * 每刻问的就是它({@link Driver#plannedDive}),与 {@link #tick} 每刻判的是同一条。
+     */
+    boolean holdsBreath() {
+        return control == null || breathless(rig.snapshot().breath(), watchdog.stepTicks()) == null;
+    }
+
+    /** 憋不住了:记一行,这一步以 {@link Reason#OUT_OF_BREATH} 走不下去。 */
+    private Beat outOfBreath(Maneuver drowns, int elapsed) {
+        PathLog.info("{} 憋不住气 {} 做了 {} 刻,起这一段水下到 {},此刻的氧气撑不到 {}", rig.who, PathLog.step(planned),
+                elapsed, PathLog.pos(drowns.to()), PathLog.body(rig.entity));
+        return new Beat.Blocked(new Blockage(drowns.to(), rig.world().getBlockState(drowns.to()), planned.kind(),
+                Reason.OUT_OF_BREATH, null));
     }
 
     /** 同一个前提函数在活世界上再判一次。 */

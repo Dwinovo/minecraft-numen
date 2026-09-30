@@ -828,9 +828,10 @@ throwaway clear
   near:3 only goes with arrive:near — write arrive:near near:3 to stop within 3 blocks; without it arrival is exact.
   ```
   `at` 指向站不进去、站不住的格只在这一趟不改地形(`alter none`)时提醒:许改地形时那是寻路去挖、去垫的事。
-- **`use block` 不自己走路**:够不着、看不见时下一步是能照抄的 `move_goto x:… y:… z:… arrive:use`。它点目标看得见的那一面
-  (`Aim.use`,与 `arrive:use` 同一个视线函数);视线上隔着软遮挡(高草、单层雪,判据是"放一块别种方块时原版会顶掉它")时先一格
-  一格左键清掉——每一格过权限层、回执里写 `broke tall_grass at … out of the line of sight, then right-clicked …`。
+- **`use block` 不自己走路**:够不着、看不见时下一步是能照抄的 `move_goto x:… y:… z:… arrive:use`。右键看向目标看得见的那一面
+  (`Aim.use`,与 `arrive:use` 同一个视线函数),两个键都是纯按键:准星落在谁就点谁,视线上挡着的(箱子前的高草)不清,回执照实说
+  并写出下一步,例如 `right-clicked tall_grass at … — the crosshair landed there, not on …. To click …: `work dig …` clears it
+  out of the way, or move_goto … arrive:use stands where another face of it is in sight`。清视线只归 `work dig`。
 - 别处"先走过去"的下一步一并改成能照抄的写法:合成找工作台、睡觉找床、森罗厨房的锅(`arrive:use`),挖矿区外的矿
   (`arrive:near near:8`)。
 
@@ -995,8 +996,8 @@ scan blocks 16 #minecraft:beds --in base                 只收落在 base 里�
   区域,每格附带看到的方块状态与那一刻(主世界游戏刻)。`BlockGroups.Group` 只留格子与状态、说法、最近一格:各种几格、源头几格
   由区域的格子说,包围盒由 `area show` 说。
 - `--in`:半径参数不变,范围是"从她脚下的半径"与"点名的区域"两者都要在——区域判定只问 `Area.contains`,搜索的球只是看多远。
-- `--into` 的区域要先 `area new`(与 `build --into` 要先有设计同一个做法),要是整块(不收部分),看之前先过 `edit_area`;看的时候
-  区域被删了就不写、照实说。
+- `--into` 的区域没有就新建(像 shell 的 `>`,在她看的那个维度;回执说 `added to the new area ores (made just now)`),有就得在她
+  此刻的维度;要是整块(不收部分),看之前先过 `edit_area`(建区域也是它)。能不能写只在 `AreaOps.into` 判;`area new` 照旧建空区域。
 - 回执删掉 `in_work_area`、`box` 与小结里的 `work_area`:去不去得了归规划(`route plan`、`move goto --area`),框一块用 `area add --box`。
 
 **`work mine`**:

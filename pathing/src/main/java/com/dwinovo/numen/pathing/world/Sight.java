@@ -14,13 +14,13 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
  * 视线:从眼睛到一格方块某一面上的一点,中间隔着什么。"看不看得见那一格"只在这里判——搜索在快照上调它(用一格方块的站位、
- * 挖一格时挡着几格),执行在活世界上调它(到达复核、挖放的瞄点、{@code use block} 的遮挡)。
+ * 挖一格时挡着几格),执行在活世界上调它(到达复核、挖放与按键的瞄点)。
  *
  * <p>口径照原版准星拾取({@code BlockGetter.clip},{@code ClipContext.Block.OUTLINE},不看流体):沿射线逐格,按方块轮廓
  * (连同交互轮廓的覆写)算碰没碰上。与原版的 clip 只差一处:碰上别的格之后不停,一直数到目标,把挡着的格分成两种——
  * <ul>
  *   <li><b>软遮挡</b>({@link #soft}):往里放一块别种方块时原版会直接顶掉的格(第 0 层 {@link Replaceable#displaced}:草、高草、
- *       蕨、枯灌木、单层雪、没长满的藤蔓……)。一下就掉、清掉它不算改建,用那一格之前先清掉;</li>
+ *       蕨、枯灌木、单层雪、没长满的藤蔓……)。一下就掉、清掉它不算改建;清不清归用那一格的一方(挖掘执行清掉它,纯按键点到的就是它);</li>
  *   <li><b>硬遮挡</b>:其余有轮廓的格,要挖开才看得见。</li>
  * </ul>
  */
@@ -118,7 +118,7 @@ public final class Sight {
 
     /**
      * 从 {@code eye} 用 {@code target} 的 {@code side} 面:这一面敞开({@link #open})、面朝着眼睛、面上的点在交互距离
-     * {@code reach} 以内、视线上没有硬遮挡、碰上的就是这一面——这样交出这一次的视线(可能还隔着软遮挡,先清掉再用);否则为 null。
+     * {@code reach} 以内、视线上没有硬遮挡、碰上的就是这一面——这样交出这一次的视线(可能还隔着软遮挡);否则为 null。
      * 面前贴着整块硬方块的面不算,哪怕从一道细缝里斜着看得到它:那样的线差半个鼠标像素就落到别的方块上。
      */
     public static Trace use(BlockGetter level, Vec3 eye, double reach, BlockPos target, Direction side) {

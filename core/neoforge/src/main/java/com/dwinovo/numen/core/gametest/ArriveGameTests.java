@@ -136,41 +136,88 @@ public class ArriveGameTests {
         });
     }
 
-    /**
-     * 箱子只有西面敞开,面前立着一株高草:arrive:use 照样走到西面;use block 先把高草清掉,再打开箱子,回执说清掉了什么。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
-    public static void use_block_clears_tall_grass_in_the_way_first(GameTestHelper helper) {
+    /** 箱子只有西面敞开,面前立着一株高草(高草要长在泥土上,不然一次方块更新就掉了)。交出箱子那一格。 */
+    private static BlockPos chestBehindTallGrass(GameTestHelper helper) {
         set(helper, 8, 2, 8, Blocks.CHEST);
         set(helper, 8, 2, 7, Blocks.STONE);
         set(helper, 8, 2, 9, Blocks.STONE);
         set(helper, 9, 2, 8, Blocks.STONE);
         set(helper, 8, 3, 8, Blocks.GLASS);
-        // 高草要长在泥土上,不然一次方块更新就掉了
         set(helper, 7, 1, 8, Blocks.GRASS_BLOCK);
         BlockState grass = Blocks.TALL_GRASS.defaultBlockState();
         helper.getLevel().setBlock(helper.absolutePos(new BlockPos(7, 2, 8)),
                 grass.setValue(DoublePlantBlock.HALF, DoubleBlockHalf.LOWER), 2);
         helper.getLevel().setBlock(helper.absolutePos(new BlockPos(7, 3, 8)),
                 grass.setValue(DoublePlantBlock.HALF, DoubleBlockHalf.UPPER), 2);
-        BlockPos chest = helper.absolutePos(new BlockPos(8, 2, 8));
+        return helper.absolutePos(new BlockPos(8, 2, 8));
+    }
+
+    /**
+     * 箱子前立着高草:arrive:use 照样走到西面;{@code work dig} 挖掉高草,再 {@code use block right} 打开箱子。右键是纯按键,
+     * 清视线只归挖掘执行。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
+    public static void use_block_opens_a_chest_once_work_dig_clears_the_tall_grass(GameTestHelper helper) {
+        BlockPos chest = chestBehindTallGrass(helper);
+        BlockPos grass = helper.absolutePos(new BlockPos(7, 2, 8));
         NumenPlayer companion = spawnAt(helper, "gametest_grass_cutter", new BlockPos(2, 2, 8), false);
         ToolRun walk = gotoUse(companion, chest);
+        ToolRun[] dig = {null};
         ToolRun[] press = {null};
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
             helper.assertTrue(walk.succeeded(), "goto failed: " + walk.outcome());
+            if (dig[0] == null) {
+                dig[0] = command(companion, "work dig " + xyz(grass));
+            }
+            helper.assertTrue(dig[0].done(), "work dig has not finished");
+            helper.assertTrue(dig[0].succeeded(), "work dig failed: " + dig[0].outcome());
+            helper.assertTrue(helper.getLevel().getBlockState(grass).isAir()
+                            && helper.getLevel().getBlockState(grass.above()).isAir(),
+                    "the grass is still there after work dig: " + dig[0].outcome());
             if (press[0] == null) {
                 press[0] = command(companion, "use block right " + xyz(chest));
             }
             helper.assertTrue(press[0].done(), "use block has not finished");
-            helper.assertTrue(press[0].succeeded() && companion.containerMenu instanceof ChestMenu
-                            && press[0].outcome().contains("broke tall_grass"),
-                    "the chest was not opened after clearing the grass: " + press[0].outcome());
-            helper.assertTrue(helper.getLevel().getBlockState(helper.absolutePos(new BlockPos(7, 3, 8))).isAir(),
-                    "the grass is still there");
+            helper.assertTrue(press[0].succeeded() && companion.containerMenu instanceof ChestMenu,
+                    "the chest was not opened after the grass was dug: " + press[0].outcome());
             companion.closeContainer();
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /**
+     * 同一只箱子、同一株高草,不挖就右键:点到的是高草,箱子没开,高草还在,她一步没动;回执说准星落在高草上,写出
+     * {@code work dig} 挖掉它、或走到看得见另一面的地方这两条路。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
+    public static void use_block_right_clicks_the_tall_grass_in_the_way_and_says_so(GameTestHelper helper) {
+        BlockPos chest = chestBehindTallGrass(helper);
+        BlockPos grass = helper.absolutePos(new BlockPos(7, 2, 8));
+        NumenPlayer companion = spawnAt(helper, "gametest_grass_clicker", new BlockPos(2, 2, 8), false);
+        ToolRun walk = gotoUse(companion, chest);
+        ToolRun[] press = {null};
+        BlockPos[] stood = {null};
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(walk.done(), "goto has not finished");
+            helper.assertTrue(walk.succeeded(), "goto failed: " + walk.outcome());
+            if (press[0] == null) {
+                stood[0] = companion.blockPosition();
+                press[0] = command(companion, "use block right " + xyz(chest));
+            }
+            helper.assertTrue(press[0].done(), "use block has not finished");
+            String said = press[0].outcome();
+            helper.assertTrue(press[0].succeeded() && said.contains("right-clicked tall_grass at")
+                            && said.contains("the crosshair landed there, not on " + chest.getX() + "," + chest.getY()
+                                    + "," + chest.getZ())
+                            && said.contains("`work dig ") && said.contains("arrive:use"),
+                    "the reply does not say the click landed on the grass and what to do next: " + said);
+            helper.assertTrue(!(companion.containerMenu instanceof ChestMenu), "the chest opened through the grass");
+            helper.assertTrue(helper.getLevel().getBlockState(grass.above()).is(Blocks.TALL_GRASS),
+                    "the grass was cleared by a right click");
+            helper.assertTrue(companion.blockPosition().equals(stood[0]), "she moved while clicking");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

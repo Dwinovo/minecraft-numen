@@ -91,7 +91,7 @@ final class McpAccessPrompt {
                 `scan_entities` before and after acting.
                 - `scan_blocks` answers in groups of touching blocks, each saying whether breaking it is \
                 allowed, needs the owner's consent, or is refused. With `into` it keeps them in a saved area \
-                (make it first with the command `area new ores`) and each group gets an id like ores/g3; \
+                (made on the spot when it does not exist yet) and each group gets an id like ores/g3; \
                 `work_dig` digs such an area: pass it as `place` (ores, or ores/g3) and it digs those cells \
                 that still hold what the scan saw, also after a restart; framed areas and coordinates (x y z) \
                 are dug whatever they hold. It works only within a few blocks of where the body stands and \

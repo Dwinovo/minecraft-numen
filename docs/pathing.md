@@ -874,12 +874,15 @@ goto 超时、跟随报没路,还有 17 次 "Can't keep up"。新模块一行日
   (`Search.after(Route.Leg)`;执行分段接续与 `PlanQuery.after` 同一个)。
 - **执行**:`Step` 在一步开始前复核前提之后,若这一步憋着气,按身体此刻的真实氧气(`Breath.now`)把从这一步起的这一段水下
   重算一遍(同一个 `after`/`lasts`,刻数照 `Move.ticks`),憋不住就停下、报 `Reason.OUT_OF_BREATH`,从脚下带着真实氧气重搜。
+  执行中的每一刻再算一遍这一段剩下的部分(这一步的估价减去已做的刻数,再加同一段接着的几步;`Step.breathless`):一步在水下
+  被挡住拖长时,卡死期限按这一步的估价给(两倍加三秒),比氧气宽得多,不能等它。憋不住的那一刻这一步以 `OUT_OF_BREATH` 走不下去。
 - **诊断**:失败的那次搜索因憋气丢下过步子时,诊断先问"憋得住的话有没有路"(同样的规格,憋气从 `Breath.UNLIMITED` 起再搜);
   有,就按身体真实的憋气把那条路重算一遍(`Route.breathed`),交出头一段憋不住的水下 `Outcome.Breathless(从哪、到哪、要憋几刻、
   能安全憋几刻)`。它先于"许改的不够"报:同样的规格下路是有的,缺的是气。
 - **与换气本能**:Numen 的本能(`BreathChain`)原来在任何水下氧气不到 240 时接管身体,与规划判的是同一件事("该不该上去换气")。
   收成一处:在走的导航此刻是计划内的一段水下(`Navigation.plannedDive`,与摔落反射让开计划内坠落的 `plannedFall` 同一个做法)
-  时本能让开,憋多久由规划与每一步的复核定;复核憋不住、没路收场、导航之外的水下,仍由本能兜底。
+  时本能让开,憋多久由规划与执行中每一刻的复核定(`plannedDive` 每刻问 `Step.holdsBreath`,与执行判的是同一条);复核憋不住、
+  没路收场、导航之外的水下,仍由本能兜底。
 - **账与说法**:执行层的 `DiveLog` 按身体真实的眼睛(同一个 `Semantics.breathless`)记每一段水下:从哪到哪、憋了几刻、氧气最低
   到多少,随实际账交出(`Report.dives`);Numen 的 `Journey` 接起来,回执末尾 `NavText.journey` 说一句,例如
   `I went under water once: 5 s without a breath from 10,-1,20 to 18,-1,20, air down to 201/300.`。结局 `Breathless` 说出那一段在哪、

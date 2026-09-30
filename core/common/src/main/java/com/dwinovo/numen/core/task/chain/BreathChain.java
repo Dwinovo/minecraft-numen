@@ -72,8 +72,8 @@ public final class BreathChain implements Task, com.dwinovo.numen.task.reflex.Re
     public boolean canRun(NumenPlayer companion) {
         Trip trip = Trip.current(companion);
         if (trip != null && trip.plannedDive()) {
-            // 在走的路线里计划好的一段水下:憋多久寻路规划时已按她的氧气算过,每一步开始前再按真实氧气复核,憋不住就不走
-            // 那一步、这一段也就不再是计划内的。这条本能只接管计划外的,不在计划内的水下半路把她拽上去。
+            // 在走的路线里计划好的一段水下:憋多久寻路规划时已按她的氧气算过,每一刻再按真实氧气判剩下的这一段撑不撑得到,
+            // 撑不到的那一刻起就不再是计划内的(寻路停下那一步)。这条本能只接管计划外的,不在计划内的水下半路把她拽上去。
             submergedTicks = 0;
             return false;
         }

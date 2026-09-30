@@ -82,7 +82,7 @@ public final class WorkCommands {
                 .note("What to dig comes from the area itself: cells a scan added are dug only while they still hold "
                         + "the block the scan saw (mining); framed cells and coordinates are dug whatever they hold "
                         + "(a pit, a tree, clearing), air and fluid skipped. What cannot be broken is reported. Look, "
-                        + "then dig: `area new ores`, `scan blocks 16 iron_ore deepslate_iron_ore --into ores`, "
+                        + "then dig: `scan blocks 16 iron_ore deepslate_iron_ore --into ores`, "
                         + "`work dig ores`; `area minus` and rules like `deny break(area:house)` keep things standing.")
                 .note("Works only right in front of her: her work area is within " + WorkArea.RADIUS + " blocks of "
                         + "where she stands when you call it, and she moves only inside it — a few steps, into the "
@@ -101,7 +101,7 @@ public final class WorkCommands {
                         + "like. The area says what to dig: cells scan_blocks added with into are dug only while they "
                         + "still hold the block the scan saw (mining ore); framed cells (`area add --box`) and "
                         + "coordinates are dug whatever they hold (a pit, a tree, clearing), air and fluid skipped. "
-                        + "Look first for ore: `area new ores`, scan_blocks with into:'ores' for every variant "
+                        + "Look first for ore: scan_blocks with into:'ores' for every variant "
                         + "(iron_ore AND deepslate_iron_ore), then work_dig with place:['ores']. count: how many NEW "
                         + "items to gather (items, not blocks: redstone_ore drops ~4); without it she digs every cell "
                         + "in her work area. WORK AREA: she works only within " + WorkArea.RADIUS + " blocks of where "

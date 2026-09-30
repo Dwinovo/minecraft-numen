@@ -18,7 +18,7 @@ Mine it from a **ruined portal** — a structure that's just standing obsidian, 
 
 1. `locate structure #minecraft:ruined_portal` — searches the whole family and returns the nearest. **Skip `ruined_portal_ocean`** (underwater) if the result names it; re-search or pick a land one — I can't dive.
 2. `gear wear diamond_pickaxe` (obsidian needs diamond), `move_goto` the portal coordinates.
-3. `area new portal`, `scan_blocks` for `obsidian` into portal, then `move_goto` area:portal arrive:'dig' and `work_dig` with place portal and count 10 — it digs the frame's obsidian within its reach; call it again where it says for the rest. ~9.4s per block is normal.
+3. `scan_blocks` for `obsidian` into portal, then `move_goto` area:portal arrive:'dig' and `work_dig` with place portal and count 10 — it digs the frame's obsidian within its reach; call it again where it says for the rest. ~9.4s per block is normal.
 
 Notes:
 - A portal's frame mixes plain **obsidian** with **crying obsidian** (purple particles). Crying obsidian is a *different block and useless for a portal frame* — a scan for `obsidian` alone leaves it out, so a single portal may yield fewer than 10. If you come up short, `locate structure #minecraft:ruined_portal` again for the next nearest and top up.

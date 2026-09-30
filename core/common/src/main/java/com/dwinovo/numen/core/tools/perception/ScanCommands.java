@@ -43,8 +43,9 @@ public final class ScanCommands {
             .values("an area as `area list` lists it")
             .whenOmitted("look everywhere within the radius");
     private static final Param<AreaRef> INTO = Param.optional("into", ArgType.area(),
-            "Add each group found to this area as a new part (g1, g2, ... counted within the area).")
-            .values("an area made with `area new`")
+            "Add each group found to this area as a new part (g1, g2, ... counted within the area); an area that "
+                    + "does not exist yet is made.")
+            .values("an area name: one of yours, or a new one")
             .whenOmitted("only look: the groups get no ids and nothing is kept");
     private static final Param<Double> ENTITY_RADIUS = Param.required("radius", ArgType.number(1, 64),
             "Search radius in blocks.");
@@ -88,10 +89,12 @@ public final class ScanCommands {
                 .example("scan blocks 16 #minecraft:beds --in base")
                 .example("scan blocks 32 iron_ore deepslate_iron_ore --page 2")
                 .note("Read-only; the reply comes when the search is done. Name every variant you want.")
-                .note("One group per line, nearest first; a long list comes in pages, and each page looks again.")
+                .note("One group per line, nearest first; a long list comes in short pages (a few dozen groups), and "
+                        + "each page looks again. With --into the reply lists only the nearest few; `area show` lists "
+                        + "them all.")
                 .note("Without --into it only looks: the groups have no ids. With --into ores each group becomes a "
-                        + "part of the area ores (make it first with `area new ores`), and its id (ores/g5) is what "
-                        + "`work dig` takes as the area to dig, and `area show` too. Adding to an area your owner's rules name asks "
+                        + "part of the area ores (made then and there if you have no area ores yet — the result says "
+                        + "so), and its id (ores/g5) is what `work dig` takes as the area to dig, and `area show` too. Adding to an area your owner's rules name asks "
                         + "your owner first.")
                 .note("--in base looks only inside the area base, as far as the radius reaches from you.")
                 .note("Only loaded terrain is read: anything further out is UNKNOWN, not empty.")
@@ -106,9 +109,9 @@ public final class ScanCommands {
                         + "deny = work_dig stops) with the reason, sources = source cells for water or lava (a source "
                         + "behaves very differently from flowing), and for groups of up to 16 cells every position. A "
                         + "very large group comes back cut along 16-block section lines, one group per piece. "
-                        + "into: keep what you found — each group becomes a part of that area (make it first with "
-                        + "`area new ores`), its id is area/part (ores/g5), and it stays across restarts: pass it to "
-                        + "work_dig as place to dig exactly those cells, or read it back with `area show ores`. "
+                        + "into: keep what you found — each group becomes a part of that area (an area you don't have "
+                        + "yet is made on the spot), its id is area/part (ores/g5), and it stays across restarts; the "
+                        + "reply then lists only the nearest few. Pass it to work_dig as place to dig exactly those cells, or read it back with `area show ores`. "
                         + "Without into nothing is kept and the groups have no ids. in: look only inside that area "
                         + "(or part), as far as radius reaches. Sees terrain that is loaded right now; anything further "
                         + "out is UNKNOWN, not empty, and note says when that happened — walk that way and scan again. "

@@ -3,6 +3,7 @@ package com.dwinovo.numen.core.gametest;
 import com.dwinovo.numen.area.Area;
 import com.dwinovo.numen.area.AreaStore;
 import com.dwinovo.numen.core.Constants;
+import com.dwinovo.numen.core.tools.AreaText;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.permission.ConsentAnswer;
@@ -93,6 +94,94 @@ public class AreaGameTests {
                             && box(far, farTop).equals(g2.get("box").getAsString())
                             && "allow".equals(g2.get("permission").getAsString()),
                     "the part does not show its cells, blocks, box and permission: " + g2);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * {@code --into} 点名一块还没有的区域:一步扫进去,区域当场新建(像 shell 的 {@code >}),回执说新建了它、加成了 g1 到 g2;
+     * 存档里真有这块区域、两部分。再放一块、再扫进同一块:这回是往已有的区域里续(g3),回执不再说新建。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 4000, batch = "numen_area")
+    public static void scan_into_a_missing_area_makes_it_and_says_so(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos near = helper.absolutePos(new BlockPos(5, 2, 5));
+        BlockPos far = helper.absolutePos(new BlockPos(11, 2, 11));
+        BlockPos later = helper.absolutePos(new BlockPos(5, 2, 11));
+        level.setBlockAndUpdate(near, Blocks.PURPUR_BLOCK.defaultBlockState());
+        level.setBlockAndUpdate(far, Blocks.PURPUR_BLOCK.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_new_mapper", new BlockPos(3, 2, 3), false);
+        helper.assertTrue(areas(companion).get("fresh") == null, "the area fresh is there before the scan");
+        ToolRun first = command(companion, "scan blocks 12 minecraft:purpur_block --into fresh");
+        ToolRun[] second = new ToolRun[1];
+
+        succeedWhen(helper, () -> {
+            if (second[0] == null) {
+                helper.assertTrue(first.reply() != null, "the first scan has not replied");
+                helper.assertTrue(first.succeeded() && message(first).contains(
+                                "added to the new area fresh (made just now) as g1 to g2"),
+                        "the scan does not say it made the area: " + first.reply());
+                helper.assertTrue(areas(companion).get("fresh") != null
+                                && areas(companion).get("fresh").parts().size() == 2,
+                        "the area fresh was not made with two parts: " + areas(companion).get("fresh"));
+                level.setBlockAndUpdate(later, Blocks.PURPUR_BLOCK.defaultBlockState());
+                level.setBlockAndUpdate(near, Blocks.AIR.defaultBlockState());
+                level.setBlockAndUpdate(far, Blocks.AIR.defaultBlockState());
+                second[0] = command(companion, "scan blocks 12 minecraft:purpur_block --into fresh");
+            }
+            helper.assertTrue(second[0].reply() != null, "the second scan has not replied");
+            helper.assertTrue(second[0].succeeded() && message(second[0]).contains("added to area fresh as g3")
+                            && !message(second[0]).contains("new area"),
+                    "the second scan did not add to the area it made: " + second[0].reply());
+            helper.assertTrue(areas(companion).get("fresh").parts().size() == 3,
+                    "the area fresh does not have three parts: " + areas(companion).get("fresh"));
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 64 团分开的红色下界砖(地板里隔一格一块)。只是看:第一页不超过一团一行清单的那一页({@link AreaText#PAGE_BYTES}),说一共
+     * 64 团、下一页怎么取。扫进区域:回执只列最近 5 团,抬头说 64 团都加进了哪块区域、全部用 area show 看;区域里真有 64 部分;
+     * area show 同样一页一页地列。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 4000, batch = "numen_area")
+    public static void a_long_scan_comes_in_short_pages_and_into_an_area_as_a_summary(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 1; x < 16; x += 2) {
+            for (int z = 1; z < 16; z += 2) {
+                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, 1, z)), Blocks.RED_NETHER_BRICKS.defaultBlockState());
+            }
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_grid_reader", new BlockPos(8, 2, 8), false);
+        ToolRun look = command(companion, "scan blocks 12 minecraft:red_nether_bricks");
+        ToolRun[] kept = new ToolRun[1];
+        ToolRun[] shown = new ToolRun[1];
+
+        succeedWhen(helper, () -> {
+            if (kept[0] == null) {
+                helper.assertTrue(look.reply() != null, "the scan has not replied");
+                String page = message(look);
+                helper.assertTrue(look.succeeded() && page.startsWith("64 group(s)") && page.contains(" of 64. Use ")
+                                && page.contains("--page 2 to continue.]"),
+                        "the first page does not say how many there are and how to go on: " + page);
+                int bytes = page.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+                helper.assertTrue(bytes <= AreaText.PAGE_BYTES + 200, "the first page is " + bytes + " bytes");
+                kept[0] = command(companion, "scan blocks 12 minecraft:red_nether_bricks --into grid");
+            }
+            helper.assertTrue(kept[0].reply() != null, "the scan into grid has not replied");
+            String summary = message(kept[0]);
+            helper.assertTrue(kept[0].succeeded() && summary.startsWith("64 group(s)")
+                            && summary.contains("as g1 to g64") && summary.contains("the nearest 5 follow")
+                            && summary.contains("area show grid") && groupsIn(kept[0].reply()).size() == 5,
+                    "the reply is not a summary with the nearest five: " + summary);
+            helper.assertTrue(areas(companion).get("grid").parts().size() == 64,
+                    "the area does not hold all 64 groups");
+            if (shown[0] == null) {
+                shown[0] = command(companion, "area show grid");
+            }
+            String parts = message(shown[0]);
+            helper.assertTrue(shown[0].succeeded() && parts.contains(" of 64. Use area show grid --page 2"),
+                    "area show does not page the 64 parts: " + parts);
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }

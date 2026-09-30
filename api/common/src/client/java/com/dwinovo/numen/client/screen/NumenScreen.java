@@ -428,15 +428,32 @@ public final class NumenScreen extends Screen {
 
     /** Switch the panel to another conversation in place (left-rail click) — no reopen. */
     private void switchTo(Conversation c) {
-        boolean same = sameAs(c, conv);
-        Conversation from = conv;
-        conv = c;   // 同一个会话也换成最新的那份——成员表、名字可能刚变
-        SelectedCompanion.set(c);
-        if (same) return;
+        if (sameAs(c, conv)) {
+            conv = c;   // 同一个会话也换成最新的那份——成员表、名字可能刚变
+            SelectedCompanion.set(c);
+            return;
+        }
         // 没发出去的话留在原来那个会话里(Telegram 的草稿),切到的会话拿回它自己的
-        if (from != null && inputBar != null) Conversations.instance().setDraft(from, inputBar.text());
+        if (conv != null && inputBar != null) Conversations.instance().setDraft(conv, inputBar.text());
+        show(c);
+    }
+
+    /**
+     * 面板对着的会话没了(遣散了就他俩的那只、解散了它):跳到另一个会话,没有就回空面板。它的草稿随它去,不再存。
+     */
+    private void leave(Conversation gone) {
+        show(firstOther(gone));
+    }
+
+    /**
+     * 面板换成对着 {@code c}(null = 空面板):对话视图连同上一个会话画出来的样子一起清掉,之后的点击、滚轮只落在这一帧真画出来的
+     * 东西上。
+     */
+    private void show(Conversation c) {
+        conv = c;
+        SelectedCompanion.set(c);
         inputBar = null;
-        savedInput = Conversations.instance().draft(c);
+        savedInput = c == null ? "" : Conversations.instance().draft(c);
         savedQuote = null;   // 引用是对着原来那个会话里的话,不跟过去
         findOpen = false;     // 在对话里搜的那个词也是对着原来那个会话的
         findActive = false;
@@ -968,12 +985,8 @@ public final class NumenScreen extends Screen {
                     NumenNetwork.sendToServer(
                             new com.dwinovo.numen.network.payload.DismissRequestPayload(target));
                     if (target.equals(solo())) {   // 走的是当前这只:跳到另一个会话/回空屏
-                        Conversation next = firstOther(conv);
-                        if (next != null) {
-                            switchTo(next);
-                            return;
-                        }
-                        conv = null;
+                        leave(conv);
+                        return;
                     }
                     rebuild();
                 });
@@ -990,12 +1003,8 @@ public final class NumenScreen extends Screen {
                 () -> {
                     Conversations.instance().dissolve(target);
                     if (sameAs(target, conv)) {   // 解散的是当前这个:跳到另一个会话/回空屏
-                        Conversation next = firstOther(target);
-                        conv = null;
-                        if (next != null) {
-                            switchTo(next);
-                            return;
-                        }
+                        leave(target);
+                        return;
                     }
                     rebuild();
                 });

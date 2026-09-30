@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 输出预算只有一份({@link Listing#MAX_LINES} 行或 {@link Listing#MAX_BYTES} 字节,先到哪个算哪个),动作自己列的清单与帮助
+ * 输出预算照一份({@link Listing#MAX_LINES} 行或 {@link Listing#MAX_BYTES} 字节,先到哪个算哪个;列清单的动作可以给更小的一页),动作自己列的清单与帮助
  * 同一种分页:同一个 {@code --page} 标志、同样按预算切页、同样的翻页提示与越界的说法。
  */
 class ListingTest {
@@ -71,6 +71,24 @@ class ListingTest {
         CliFixture.Outcome beyond = onClient("gt_listing rows --page 99");
         assertFalse(beyond.success());
         assertTrue(beyond.message().startsWith("no page 99; gt_listing rows has pages 1-"), beyond.message());
+    }
+
+    /** 动作给了更小的一页:同一套切页与翻页提示,只是一页放到它给的字节数为止。 */
+    @Test
+    void aSmallerPageCutsAtItsOwnBudget() {
+        int budget = 8 * 1024;
+        CommandArgs first = CommandArgs.fromJson(List.of(Listing.PAGE), new com.google.gson.JsonObject());
+        String page = new Listing("Rows:", wideRows(), "", "gt_listing rows", budget).result(first).message();
+        int shown = shownTo(page, WIDE_ROWS, "gt_listing rows --page 2");
+        String content = page.substring(0, page.indexOf("\n[Showing"));
+        assertTrue(bytes(content) <= budget, "内容不超这一页的预算: " + bytes(content));
+        assertTrue(bytes(content) + 1 + bytes(wideRows().get(shown)) > budget, "再放一条就超了");
+
+        com.google.gson.JsonObject two = new com.google.gson.JsonObject();
+        two.addProperty("page", 2);
+        String second = new Listing("Rows:", wideRows(), "", "gt_listing rows", budget)
+                .result(CommandArgs.fromJson(List.of(Listing.PAGE), two)).message();
+        assertTrue(second.startsWith("Rows:\n" + String.format("  row %03d", shown + 1)), "第二页从停下的那条接着");
     }
 
     /** 按行先到:两千行一页。 */

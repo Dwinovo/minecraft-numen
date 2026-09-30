@@ -177,11 +177,13 @@ public final class Driver {
     }
 
     /**
-     * 身体此刻在计划内的一段水下:在走的这一步憋着气,规划时与这一步开始前都已按身体的氧气算过这一段憋得住(复核憋不住的,
-     * 这一步不走、从脚下重搜,就不再是计划内的了)。宿主的换气本能只接管计划外的。
+     * 身体此刻在计划内的一段水下:在走的这一步憋着气,而此刻的氧气撑得到这一段水下走完——规划时算过,这一步开始前与执行中的
+     * 每一刻再按真实氧气算({@link Step#holdsBreath})。撑不到的那一刻起就不是计划内的了:这一步以憋不住气走不下去、从脚下重搜。
+     * 宿主的换气本能只接管计划外的。
      */
     public boolean plannedDive() {
-        return state == State.RUNNING && !paused && cur < legs.size() && legs.get(cur).maneuver().submerged();
+        return state == State.RUNNING && !paused && cur < legs.size() && legs.get(cur).maneuver().submerged()
+                && (step == null || step.holdsBreath());
     }
 
     /** 身体此刻站着等一次搜索的结论:没有路可走(或路走完了还没到),派出去的搜索还没回来。 */

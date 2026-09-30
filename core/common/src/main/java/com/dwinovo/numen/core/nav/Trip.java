@@ -334,7 +334,7 @@ public final class Trip {
         return phase == Phase.DRIVING && navigation.plannedFall();
     }
 
-    /** 身体此刻在计划内的一段水下(规划与每一步开始前都按她的氧气算过憋得住)。 */
+    /** 身体此刻在计划内的一段水下(规划时算过,此刻的氧气也撑得到这一段走完)。 */
     public boolean plannedDive() {
         return phase == Phase.DRIVING && navigation.plannedDive();
     }

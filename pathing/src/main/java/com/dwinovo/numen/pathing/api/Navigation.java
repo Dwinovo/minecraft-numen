@@ -159,7 +159,7 @@ public final class Navigation {
         return driver.plannedFall();
     }
 
-    /** 身体此刻在计划内的一段水下(规划与复核都按憋气算过):宿主的换气本能只接管计划外的。 */
+    /** 身体此刻在计划内的一段水下(规划时算过,此刻的氧气也撑得到这一段走完):宿主的换气本能只接管计划外的。 */
     public boolean plannedDive() {
         return status.running() && diagnosis == null && driver.plannedDive();
     }
