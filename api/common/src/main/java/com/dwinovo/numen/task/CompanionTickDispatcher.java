@@ -49,6 +49,8 @@ public final class CompanionTickDispatcher {
      * 每个服务器都该重新证一次(它正是当初暴露这个 bug 的那把尺子)。
      */
     static void dropAll() {
+        // 还在准备的调用随世界作废:在飞的搜索停下,不回结果(调用它的那一方随世界一起没了)
+        BRAINS.values().forEach(brain -> brain.preparing.drop());
         BRAINS.clear();
         duplicateWarned.clear();
         heartbeatLogged = false;
@@ -69,8 +71,13 @@ public final class CompanionTickDispatcher {
     }
 
     /** 换掉她现在在做的事(首次使用时建脑),见 {@link CompanionBrain#assign}。 */
-    static void assign(NumenPlayer companion, TaskRecord record) {
-        brainFor(companion.getUUID()).assign(companion, record);
+    static void assign(NumenPlayer companion, TaskRecord record, Task runner) {
+        brainFor(companion.getUUID()).assign(companion, record, runner);
+    }
+
+    /** 开始准备一次调用(首次使用时建脑):她原来在准备的那一件被它顶替,见 {@link Preparing}。 */
+    static void prepare(NumenPlayer companion, Preparing.Call call) {
+        brainFor(companion.getUUID()).preparing.begin(call);
     }
 
     /**
@@ -213,7 +220,7 @@ public final class CompanionTickDispatcher {
         return target;
     }
 
-    /** Owner pressed Stop: cancel the pending queue and the running task (finalized next tick).
+    /** Owner pressed Stop: cancel the call being prepared, the pending queue and the running task (finalized next tick).
      *  The 取消边沿 also releases the task-scoped MAINHAND intent pin immediately —
      *  the explicit-hold session dies with the task it served (constitution §5). */
     public static void cancelFor(NumenPlayer player) {
@@ -221,6 +228,8 @@ public final class CompanionTickDispatcher {
         com.dwinovo.numen.cli.PendingCommands.stop(player, TaskRecord.StopCause.OWNER);
         CompanionBrain brain = BRAINS.get(player.getUUID());   // never create: a late cancel
         if (brain == null) return;                             // packet must not leak a brain
+        // 还在准备、没受理的那次调用同一下作罢,回执说被主人叫停、没有开始
+        brain.preparing.withdraw(TaskRecord.StopCause.OWNER.words());
         brain.sync.cancel(TaskRecord.StopCause.OWNER);
         brain.current.cancel(TaskRecord.StopCause.OWNER);
         TaskSessionHooks.fireSessionEnd(player);

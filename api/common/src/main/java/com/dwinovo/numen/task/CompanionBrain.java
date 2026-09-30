@@ -45,6 +45,8 @@ final class CompanionBrain {
     final TaskSlot sync = new TaskSlot(outbox::addLast);
     /** 她现在在做的事:钓鱼、跟随、挖 64 块——常驻还是一次性只看 tick 返不返终态。 */
     final TaskSlot current = new TaskSlot(outbox::addLast);
+    /** 受理之前在准备的那一次调用:结论出来才受理进 {@link #current},见 {@link Preparation}。 */
+    final Preparing preparing = new Preparing();
 
     private final List<Task> reflexes;
     /** 空闲姿态:没别的事做时才轮到,连身体都不算真正占用。 */
@@ -116,19 +118,21 @@ final class CompanionBrain {
     }
 
     /**
-     * 往当前任务槽派一件新活——派活只有这一个入口。重启前留下、还没接回来的那件由它顶替,
-     * 和槽里原有的活被换掉一样告诉她。
+     * 往当前任务槽派一件新活({@code runner} 是跑它的任务,准备过的就是准备它的那一个)——派活只有这一个入口。重启前留下、
+     * 还没接回来的那件由它顶替,和槽里原有的活被换掉一样告诉她。
      */
-    void assign(NumenPlayer companion, TaskRecord record) {
+    void assign(NumenPlayer companion, TaskRecord record, Task runner) {
         TaskPersistence.LeftOver superseded = takeLeftOver();
         if (superseded != null) {
             TaskPersistence.superseded(companion, superseded);
         }
-        current.put(companion, record);
+        current.put(companion, record, runner);
     }
 
     void tick(NumenPlayer companion) {
         body = companion;
+        // 准备不占身体:先问它有没有结论,就绪的这一刻受理进槽,接着和槽里的活一样参加这一刻的选择
+        preparing.tick();
         // 任务结束边沿(宪法 §5):两个槽都空过了宽限窗口,显式占用的会话就结束了,
         // 手还给反射。护甲的占用不动(它的生命是 §5 的四个自然终点),只有主手是任务作用域的。
         if (handPinRelease.tick(!sync.isEmpty() || !current.isEmpty())) {
@@ -228,8 +232,10 @@ final class CompanionBrain {
     /** 上一刻当前任务槽是不是空的——用来只在"刚变空"那一刻清记录,不必每刻写盘。 */
     private boolean wasIdle = true;
 
-    /** 死亡:丢掉在跑的任务,并结束任务作用域的手部占用。 */
+    /** 死亡:丢掉在跑的任务与在准备的调用,并结束任务作用域的手部占用。 */
     void dropActiveNoResult(NumenPlayer companion) {
+        // 在准备的那次调用也不回结果:客户端按死因结算了在飞的调用
+        preparing.drop();
         TaskSessionHooks.fireSessionEnd(companion);
         sync.dropNoResult(companion);
         current.dropNoResult(companion);
@@ -243,8 +249,9 @@ final class CompanionBrain {
         syncCurrentTask(companion);
     }
 
-    /** 身体离开世界:两个槽就地结算(它们不会再被 tick),结果照送。 */
+    /** 身体离开世界:在准备的调用回一条没开始的结果,两个槽就地结算(它们不会再被 tick),结果照送。 */
     void finalizeActive(NumenPlayer companion) {
+        preparing.withdraw(TaskRecord.StopCause.BODY_LEFT.words());
         sync.finalizeInline(companion);
         current.finalizeInline(companion);
         holder = null;

@@ -29,6 +29,14 @@ import java.util.function.Consumer;
  *       再派下一个。</li>
  * </ul>
  *
+ * <h2>受理 = 这件活此刻真能开始</h2>
+ * {@link #setTask} 派的活受理之前先准备({@link Task#prepare}、{@link Preparation}):参数的写法由处理函数当场判,
+ * 准备再判世界事实与规划(一次有展开预算的后台搜索)。都过了才受理——才换进槽里、顶掉她手上那件、回"已受理"并带上准备
+ * 查到的事实;任何一步不过,回错误结果,没有任务编号、没有 task_finished,她手上的活不受影响。能当场判的当场判,
+ * 要搜索的结论出来那一刻才回复——调用的回信口晚一点回,和 {@code route plan} 同一种写法;内脑的派发器本来就等这条
+ * 回执才派下一个,串行规矩不变。受理之后才冒出来的(路上世界变了、主人拒绝、中途卡住)照旧走 task_finished;
+ * 要问主人的不算开始不了,受理之后运行中问。
+ *
  * <h2>常驻不是另一条路</h2>
  * 「一直钓鱼」和「钓 64 条」走<b>同一个</b> {@link #setTask}:区别只在任务的
  * {@code tick()} 返不返终态——给了 {@code count} 就会返 SUCCESS 干完腾位,
@@ -57,15 +65,16 @@ public final class TaskDispatch {
      */
     public static void runSync(NumenPlayer companion, TaskRecord record, Consumer<String> reply) {
         record.replyTo(reply);
-        CompanionTickDispatcher.syncSlotFor(companion.getUUID()).put(companion, record);
+        CompanionTickDispatcher.syncSlotFor(companion.getUUID()).put(companion, record,
+                TaskFactory.create(companion, record));
     }
 
     /**
-     * 换掉她当前在做的事:受理即回执 task_id,身体后台执行,收尾经 task_finished 送达。
+     * 换掉她当前在做的事:准备过了才受理(见类注释),受理即回执 task_id,身体后台执行,收尾经 task_finished 送达。
      *
      * <p>槽里原来那件活会被<b>替换</b>,不拒绝新的——主人改主意是常态,而"她在挖矿所以不理你"是最直观的一种出戏。
-     * 新活的受理回执当场说顶掉了谁,被顶掉的那件照常以 stopped 收尾。同一轮里的几件活不会互相顶掉:内脑的派发器等
-     * 前一件收尾才派下一件,这里不必猜哪几件是同一批的。
+     * 新活真受理的那一刻才顶掉它,受理回执当场说顶掉了谁,被顶掉的那件照常以 stopped 收尾;被拒的调用不碰它。同一轮里的
+     * 几件活不会互相顶掉:内脑的派发器等前一件收尾才派下一件,这里不必猜哪几件是同一批的。
      *
      * <p>这是工具派活的写法:记录以工具名命名,重启后按这个名字找回那个工具、带 {@code args} 重放。
      */
@@ -85,17 +94,39 @@ public final class TaskDispatch {
     }
 
     /**
-     * 派身体任务的每个入口都经过这里,所以"顶掉了谁"只在这一处说:槽里原来的那件在派新活之前取出来,写进新活的受理回执。
+     * 派身体任务的每个入口都经过这里:造出跑它的任务,交给这具身体的准备位({@link Preparing})。准备有了结论才受理或回错误;
+     * 当场就有结论的(不用搜索的)当场回。
      *
      * @param replayTool 重启后重放用的工具名,与 {@code args} 一起就是那次调用
      */
     private static void accept(NumenPlayer companion, TaskRecord record, String replayTool, JsonObject args,
                                Consumer<String> reply) {
+        Task runner = TaskFactory.create(companion, record);
+        long asked = companion.level().getGameTime();
+        CompanionTickDispatcher.prepare(companion, new Preparing.Call(runner.prepare(companion), readiness -> {
+            if (readiness.ready()) {
+                accepted(companion, record, runner, replayTool, args, reply, readiness.words(), asked);
+            } else {
+                reply.accept(TaskResult.fail(readiness.words()).toJson());
+            }
+        }));
+    }
+
+    /**
+     * 准备过了,受理:"顶掉了谁"只在这一处说——槽里原来的那件在派新活之前取出来,写进新活的受理回执;准备查到的事实接在
+     * 受理那句话后面。
+     *
+     * @param facts 准备查到、要交代的事实;没有为 null
+     * @param asked 调用进来的那一刻(游戏刻):准备花掉的刻不算这件活的期限
+     */
+    private static void accepted(NumenPlayer companion, TaskRecord record, Task runner, String replayTool,
+                                 JsonObject args, Consumer<String> reply, String facts, long asked) {
         // 已经走到终态、只等这一刻结算的那件(刚被 task_stop 叫停)不是这次顶掉的
         TaskRecord current = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
         TaskRecord replaced = current != null && !current.getState().isTerminal() ? current : null;
         record.markAsync();
-        CompanionTickDispatcher.assign(companion, record);
+        record.extendDeadlineTo(record.getDeadlineGameTime() + (companion.level().getGameTime() - asked));
+        CompanionTickDispatcher.assign(companion, record, runner);
         // 记下"她现在在做什么",服务器重启后照着重放一遍(见 TaskPersistence)。
         TaskPersistence.remember(companion, record.getToolName(), replayTool, args);
         // 内置大脑靠 task_finished 事件收尾;外部(MCP)夺舍收不到事件
@@ -114,7 +145,10 @@ public final class TaskDispatch {
             note.append("Accepted as ").append(record.publicId()).append("; your body is working on it in the "
                     + "background. ").append(NumenPrompts.WHILE_IT_RUNS);
         }
-        String facts = record.acceptNote();
+        String told = record.acceptNote();
+        if (told != null) {
+            note.append(' ').append(told);
+        }
         if (facts != null) {
             note.append(' ').append(facts);
         }
@@ -131,14 +165,14 @@ public final class TaskDispatch {
         reply.accept(TaskResult.ok(note.toString(), data).toJson());
     }
 
-    /** 受理回执 {@code data} 里的键:{@link #accept} 按它们写,{@link #runningTaskOf} 按它们读。 */
+    /** 受理回执 {@code data} 里的键:{@link #accepted} 按它们写,{@link #runningTaskOf} 按它们读。 */
     private static final String TASK_ID = "task_id";
     private static final String ASYNC = "async";
     private static final String STANDING = "standing";
 
     /**
      * 一个调用的结果是不是一件后台活的受理回执、而且那件活会自己收尾(不是常驻的):是就返回它的编号,否则 null。
-     * 回执只在 {@link #accept} 一处写成,这里按同一组键读回;内脑的派发器据此等这件活的 task_finished 再派下一个调用。
+     * 回执只在 {@link #accepted} 一处写成,这里按同一组键读回;内脑的派发器据此等这件活的 task_finished 再派下一个调用。
      * 不是 JSON 对象的结果(感知的字符图、接进来的外部工具的原文)不是回执。
      */
     public static String runningTaskOf(String resultJson) {

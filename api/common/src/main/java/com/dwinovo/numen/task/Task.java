@@ -42,6 +42,17 @@ public interface Task {
     }
 
     /**
+     * 受理之前的准备:派成当前任务的活({@link TaskDispatch#setTask})受理之前调一次,准备给出就绪才受理、才拿到身体,
+     * 不成就当场回错误、没有任务编号(见 {@link Preparation})。调的时候身体可能还在干上一件活,准备不碰身体、不碰世界。
+     * 同步动作({@link TaskDispatch#runSync})与另一件活派下的子活不经过这里。
+     *
+     * <p>默认当场就绪:没有要先判的。
+     */
+    default Preparation prepare(NumenPlayer companion) {
+        return Preparation.READY;
+    }
+
+    /**
      * 拿到身体的第一 tick。被抢占后重新拿到身体<b>不会</b>再调这里(那是恢复,不是重来)。
      *
      * <p>默认什么都不做:反射没有"开始"这回事,它们只有触发。
