@@ -19,7 +19,7 @@ Phase 1 of the dragon route. You need diamond tools before you can mine obsidian
 
 `work_mine` checks your held tool: a too-low tier breaks the block with **no drop**. `gear wear` the right pickaxe before mining, and `scan_block` when unsure.
 
-`work_mine` only works its **work area** — the sphere around where you stand when you call it (its description gives the radius). It never walks off to ore further out; it reports how many lie beyond and where the nearest is. So: `scan_blocks` first; a group farther than that radius is out of reach from here — `move_goto` near it (x, y, z with near), then `work_mine`. To dig exactly what a scan found, keep it in an area: `area new ores`, then `scan_blocks` with into ores, then `work_mine` with area ores/g1 (or the whole ores); the area stays across restarts.
+`work_mine` digs an **area**, not block types: look first — `area new ores`, then `scan_blocks` for every variant with into ores, then `work_mine` with area ores (or one part of it, ores/g1) and a count when you want only so many items. `area show ores` lists the parts, and `area drop` / `area minus` / `area filter` trim it; the area stays across restarts. It only works its **work area** — the sphere around where you stand when you call it (its description gives the radius). It never walks off to cells further out; it reports how many lie beyond and where the nearest is — `move_goto` near it (x, y, z with near), then `work_mine` again.
 
 The same rule gates navigation: **`move_goto` only digs through blocks your held tool can harvest.** Descending into stone with a sword in hand fails with "no path" — travel with the pickaxe in your main hand; switch to a weapon only for the fight, then switch back.
 
@@ -33,7 +33,7 @@ The same rule gates navigation: **`move_goto` only digs through blocks your held
 
 ## Where ores live (1.21+ worldgen)
 
-Below Y 0 every ore is its **deepslate variant** — always pass both ids to `work_mine` / `scan_blocks` (e.g. `diamond_ore` *and* `deepslate_diamond_ore`).
+Below Y 0 every ore is its **deepslate variant** — always pass both ids to `scan_blocks` (e.g. `diamond_ore` *and* `deepslate_diamond_ore`).
 
 | Resource | Target Y | Notes |
 |---|---|---|
@@ -43,13 +43,13 @@ Below Y 0 every ore is its **deepslate variant** — always pass both ids to `wo
 
 ## Recommended order
 
-1. **Wood**: `scan_blocks` for logs, `move_goto` near a grove (arrive:'near') if it lies beyond your work area, then `work_mine` 8+ logs (any `*_log`; hand works) → craft planks → sticks → a `wooden_pickaxe`. Crafting = `inv craft` (it finds the recipe and lays the grid for you). 2×2 recipes (planks, sticks) use your own grid; a 3×3 (the pickaxe) needs a crafting table within reach — once you have planks, craft one and put it down with `build place crafting_table 120 64 -35` (next to you). Remember the table's coordinates and reuse it.
-2. **Stone**: `gear wear wooden_pickaxe` → `work_mine(stone, 20)` (drops cobblestone) → craft a `stone_pickaxe`, `stone_sword`, and a `furnace`.
+1. **Wood**: `scan_blocks` for logs into an area, `move_goto` near a grove (arrive:'near') if it lies beyond your work area, then `work_mine` that area for 8+ logs (any `*_log`; hand works) → craft planks → sticks → a `wooden_pickaxe`. Crafting = `inv craft` (it finds the recipe and lays the grid for you). 2×2 recipes (planks, sticks) use your own grid; a 3×3 (the pickaxe) needs a crafting table within reach — once you have planks, craft one and put it down with `build place crafting_table 120 64 -35` (next to you). Remember the table's coordinates and reuse it.
+2. **Stone**: `gear wear wooden_pickaxe` → `scan_blocks` for `stone` into an area → `work_mine` that area for 20 (drops cobblestone) → craft a `stone_pickaxe`, `stone_sword`, and a `furnace`.
 3. **Food**: scan cows/pigs/chickens and pass their runtime IDs to `fight attack` (6+ total) → cook the raw meat: `use block` a furnace, `use shift` the raw food (it goes to the top slot) and the fuel (coal or planks, it goes below), set a `task timer`, then `use shift` the cooked food out (see the `containers` skill). Always cook; raw meat barely heals.
-4. **Iron**: descend (`move goto --y 16 --alter natural` — navigation digs its own way down where you stand) → `gear wear stone_pickaxe` → `scan_blocks` for the ore, `move_goto` near the nearest vein (arrive:'near') if it lies beyond your work area → `work_mine(iron_ore, deepslate_iron_ore, 10+)` → smelt `raw_iron` (same furnace flow) → craft an `iron_pickaxe`, `iron_sword`, then armor as ingots allow (helmet 5, chestplate 8, leggings 7, boots 4).
-5. **Diamonds**: `move goto --y -58 --alter natural` → `gear wear iron_pickaxe` → `scan_blocks`, and `move_goto` near a vein beyond your work area (arrive:'near') → `work_mine(deepslate_diamond_ore, diamond_ore, 5+)`. When `work_mine` ends saying more lie beyond its work area, go where it says and call it again. Minimum 5 (pickaxe 3 + sword 2); 8+ if you also want a chestplate later. Watch HP near lava.
+4. **Iron**: descend (`move goto --y 16 --alter natural` — navigation digs its own way down where you stand) → `gear wear stone_pickaxe` → `scan_blocks` for `iron_ore` and `deepslate_iron_ore` into an area, `move_goto` near the nearest vein (arrive:'near') if it lies beyond your work area → `work_mine` that area for 10+ → smelt `raw_iron` (same furnace flow) → craft an `iron_pickaxe`, `iron_sword`, then armor as ingots allow (helmet 5, chestplate 8, leggings 7, boots 4).
+5. **Diamonds**: `move goto --y -58 --alter natural` → `gear wear iron_pickaxe` → `scan_blocks` for `deepslate_diamond_ore` and `diamond_ore` into an area, and `move_goto` near a vein beyond your work area (arrive:'near') → `work_mine` that area for 5+. When `work_mine` ends saying more lie beyond its work area, go where it says and call it again. Minimum 5 (pickaxe 3 + sword 2); 8+ if you also want a chestplate later. Watch HP near lava.
 6. **Diamond gear**: craft a `diamond_pickaxe` + `diamond_sword` on the crafting table. Keep the pickaxe in hand for travel and mining; equip the sword only when a fight starts.
-7. **Bow + arrows**: bow = 3 sticks + 3 string (scan spiders at night and pass their runtime IDs to `fight attack` for string); arrows = 1 flint + 1 stick + 1 feather → 4 (flint drops from `work_mine(gravel)` at ~10%, feathers from chickens). Target 32 arrows — more is comfort, not requirement; melee + food covers what arrows don't.
+7. **Bow + arrows**: bow = 3 sticks + 3 string (scan spiders at night and pass their runtime IDs to `fight attack` for string); arrows = 1 flint + 1 stick + 1 feather → 4 (flint drops from gravel you `work_mine` at ~10%, feathers from chickens). Target 32 arrows — more is comfort, not requirement; melee + food covers what arrows don't.
 8. **Top up**: 32+ cooked food, 64+ cobblestone. Re-run `status_self` against the "done when" list.
 
 ## Enchanting

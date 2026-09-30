@@ -21,24 +21,21 @@ class BeyondTest {
 
     @Test
     void whatLiesBeyondSaysHowManyTheNearestAndWhatToDo() {
-        Beyond seen = new Beyond(List.of(FAR, NEAR), false);
-        assertEquals("2 more lie beyond it, the nearest at 60,64,0, about 60 blocks from me: move_goto there first"
-                + " (x:60 y:64 z:0 arrive:near near:" + Beyond.NEAR + "), then work_mine again", seen.more(FROM));
-        assertTrue(new Beyond(List.of(FAR, NEAR), true).more(FROM).startsWith("at least 2 more lie beyond it"),
-                "查询凑够就停时个数只是下限");
-        assertTrue(seen.named(FROM).startsWith("2 of the named cells lie beyond it and were left, the nearest at"
-                + " 60,64,0"), seen.named(FROM));
+        Beyond seen = new Beyond(List.of(FAR, NEAR));
+        assertEquals("2 scanned cells of ores/g3 lie beyond it and were left, the nearest at 60,64,0, about 60 blocks"
+                + " from me: move_goto there first (x:60 y:64 z:0 arrive:near near:" + Beyond.NEAR + "), then work_mine"
+                + " again", seen.told("ores/g3", FROM));
     }
 
     @Test
     void theNearestIsCountedFromWhereSheStandsNow() {
-        Beyond seen = new Beyond(List.of(NEAR, FAR), false);
-        assertTrue(seen.more(new BlockPos(0, 64, 80)).contains("the nearest at 0,64,90, about 10 blocks from me"));
+        Beyond seen = new Beyond(List.of(NEAR, FAR));
+        assertTrue(seen.told("ores", new BlockPos(0, 64, 80)).contains("the nearest at 0,64,90, about 10 blocks from me"));
     }
 
     @Test
     void onlyWhatIsStillThereIsTold() {
-        Beyond seen = new Beyond(List.of(NEAR, FAR), false);
+        Beyond seen = new Beyond(List.of(NEAR, FAR));
         assertTrue(seen.keep(p -> false).isEmpty());
         assertEquals(List.of(FAR), seen.keep(FAR::equals).cells());
         assertTrue(Beyond.NONE.isEmpty());
@@ -47,9 +44,9 @@ class BeyondTest {
     @Test
     void anAreaWhollyBeyondTheWorkAreaIsRefusedWithWhereItIsAndHowToGetThere() {
         WorkArea work = WorkArea.at(Level.OVERWORLD, FROM, WorkArea.RADIUS);
-        assertEquals("ores/g3 lies wholly beyond my work area (within " + WorkArea.RADIUS + " blocks of 0,64,0), so I"
-                + " did not start; the nearest of its scanned cells is at 60,64,0, about 60 blocks away. move_goto there"
-                + " first (x:60 y:64 z:0 arrive:near near:" + Beyond.NEAR + "), then work_mine again.",
-                Beyond.areaOutside("ores/g3", work, NEAR));
+        assertEquals("all 3 scanned cells of ores/g3 lie wholly beyond my work area (within " + WorkArea.RADIUS
+                + " blocks of 0,64,0), so I did not start; the nearest is at 60,64,0, about 60 blocks away. move_goto"
+                + " there first (x:60 y:64 z:0 arrive:near near:" + Beyond.NEAR + "), then work_mine again.",
+                Beyond.areaOutside("ores/g3", 3, work, NEAR));
     }
 }

@@ -221,9 +221,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_lumberjack", new BlockPos(2, 2, 5), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_forester");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        TaskRecord record = call(companion, "work_mine", args(
-                "block_ids", List.of("minecraft:oak_log"),
-                "count", 2)).task();
+        Mining mine = mineScanned(helper, companion, 8, "minecraft:oak_log", "count", 2);
         java.util.Set<Long> requests = new java.util.HashSet<>();
         helper.onEachTick(() -> {
             var pending = desk(companion).pending();
@@ -233,11 +231,10 @@ public class PermissionGameTests {
         });
 
         succeedWhen(helper, () -> {
-            String reply = record.getResult() == null ? null : record.getResult().message();
-            helper.assertTrue(reply != null, "mine has not finished");
-            helper.assertTrue(record.getResult().success(), "mine failed after the owner allowed: " + reply);
+            helper.assertTrue(mine.done(), "mine has not finished");
+            helper.assertTrue(mine.succeeded(), "mine failed after the owner allowed: " + mine.outcome());
             helper.assertTrue(companion.getInventory().countItem(Items.OAK_LOG) >= 2,
-                    "companion has not gathered 2 logs: " + reply);
+                    "companion has not gathered 2 logs: " + mine.outcome());
             helper.assertTrue(requests.size() == 1, "asked " + requests.size() + " times for the same kind of log");
             CompanionFactory.despawn(level.getServer(), companion);
             CompanionFactory.despawn(level.getServer(), owner);
@@ -255,9 +252,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_hewer", new BlockPos(2, 2, 5), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_keeper");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        TaskRecord record = call(companion, "work_mine", args(
-                "block_ids", List.of("minecraft:jungle_log"),
-                "count", 2)).task();
+        Mining mine = mineScanned(helper, companion, 8, "minecraft:jungle_log", "count", 2);
         helper.onEachTick(() -> {
             var pending = desk(companion).pending();
             if (pending != null) {
@@ -266,10 +261,9 @@ public class PermissionGameTests {
         });
 
         succeedWhen(helper, () -> {
-            String reply = record.getResult() == null ? null : record.getResult().message();
-            helper.assertTrue(reply != null, "mine has not finished");
-            helper.assertTrue(!record.getResult().success() && reply.contains("留着当柱子"),
-                    "the refusal does not quote the owner: " + reply);
+            helper.assertTrue(mine.done(), "mine has not finished");
+            helper.assertTrue(!mine.succeeded() && mine.outcome().contains("留着当柱子"),
+                    "the refusal does not quote the owner: " + mine.outcome());
             for (BlockPos rel : logs) {
                 helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).is(Blocks.JUNGLE_LOG),
                         "a log was cut after the owner said no at " + rel.toShortString());
@@ -297,17 +291,14 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_ranger", new BlockPos(2, 2, 5), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_warden");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        TaskRecord record = call(companion, "work_mine", args(
-                "block_ids", List.of("minecraft:acacia_log"),
-                "count", 2)).task();
+        Mining mine = mineScanned(helper, companion, 12, "minecraft:acacia_log", "count", 2);
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 
         succeedWhen(helper, () -> {
-            String reply = record.getResult() == null ? null : record.getResult().message();
-            helper.assertTrue(reply != null, "mine has not finished");
+            helper.assertTrue(mine.done(), "mine has not finished");
             helper.assertTrue(companion.getInventory().countItem(Items.ACACIA_LOG) >= 2,
-                    "companion has not gathered 2 logs: " + reply);
+                    "companion has not gathered 2 logs: " + mine.outcome());
             for (BlockPos rel : placed) {
                 helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).is(Blocks.ACACIA_LOG),
                         "a player-placed log was cut while wild ones stood nearby at " + rel.toShortString());
@@ -335,14 +326,14 @@ public class PermissionGameTests {
         NumenPlayer owner = presentOwner(helper, companion, "gametest_shepherd");
         storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
                 com.dwinovo.numen.permission.Rule.parse("break(minecraft:white_wool)"));
-        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:pumpkin"), "count", 1));
+        Mining mine = mineScanned(helper, companion, 16, "minecraft:pumpkin", "count", 1);
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 
         succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
             String said = mine.outcome();
-            helper.assertTrue(!mine.succeeded() && said.contains("could not reach any of the 1 pumpkin")
+            helper.assertTrue(!mine.succeeded() && said.contains("could not reach any of the 1 cells of pumpkin")
                             && said.contains("is refused") && said.contains("denied by rule")
                             && said.contains("ask your owner") && !said.contains("without altering terrain"),
                     "the reply does not say which cell is refused, by what, and what to do: " + said);
@@ -502,17 +493,15 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_forager", new BlockPos(7, 2, 5), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         BlockPos kept = helper.absolutePos(keptRel);
-        TaskRecord record = call(companion, "work_mine", args(
-                "block_ids", List.of("minecraft:warped_stem"),
-                "count", 2,
-                "avoid_break", List.of(kept.getX() + "," + kept.getY() + "," + kept.getZ()))).task();
+        Mining mine = mineScanned(helper, companion, 8, "minecraft:warped_stem", "count", 2,
+                "avoid_break", List.of(kept.getX() + "," + kept.getY() + "," + kept.getZ()));
 
         succeedWhen(helper, () -> {
-            String reply = record.getResult() == null ? null : record.getResult().message();
-            helper.assertTrue(reply != null, "mine has not finished");
+            helper.assertTrue(mine.done(), "mine has not finished");
+            String reply = mine.outcome();
             helper.assertTrue(level.getBlockState(helper.absolutePos(freeRel)).isAir(), "the free stem was not mined");
             helper.assertTrue(level.getBlockState(kept).is(Blocks.WARPED_STEM), "the avoid_break cell was mined");
-            helper.assertTrue(record.getResult().success() && reply.contains("can't be broken here"),
+            helper.assertTrue(mine.succeeded() && reply.contains("can't be broken here"),
                     "the reply does not account for the cell the spec kept: " + reply);
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -790,18 +779,22 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_watcher", new BlockPos(3, 2, 7), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_viewer");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        com.dwinovo.numen.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.OBSERVE);
-        TaskRecord record = call(companion, "work_mine", args(
-                "block_ids", List.of("minecraft:birch_log"),
-                "count", 2)).task();
+        // 区域先扫好再切 observe:observe 也拒绝改区域,这条量的是挖
+        ToolRun scanned = scanInto(companion, 8, "minecraft:birch_log", "logs");
+        ToolRun[] mine = new ToolRun[1];
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 
         succeedWhen(helper, () -> {
-            String reply = record.getResult() == null ? null : record.getResult().message();
-            helper.assertTrue(reply != null, "mine has not finished");
-            helper.assertTrue(!record.getResult().success() && reply.contains("observe mode"),
-                    "observe mode must refuse with its reason: " + reply);
+            if (mine[0] == null) {
+                helper.assertTrue(scanned.succeeded(), "the scan has not kept the logs: " + scanned.reply());
+                com.dwinovo.numen.permission.Permission.setMode(companion,
+                        com.dwinovo.numen.permission.Mode.OBSERVE);
+                mine[0] = call(companion, "work_mine", args("area", List.of("logs"), "count", 2));
+            }
+            helper.assertTrue(mine[0].done(), "mine has not finished");
+            helper.assertTrue(!mine[0].succeeded() && mine[0].outcome().contains("observe mode"),
+                    "observe mode must refuse with its reason: " + mine[0].outcome());
             helper.assertTrue(!asked[0], "observe mode asked the owner");
             for (BlockPos rel : logs) {
                 helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).is(Blocks.BIRCH_LOG),
@@ -824,9 +817,7 @@ public class PermissionGameTests {
         NumenPlayer owner = presentOwner(helper, companion, "gametest_trusting");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         com.dwinovo.numen.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
-        TaskRecord record = call(companion, "work_mine", args(
-                "block_ids", List.of("minecraft:spruce_log"),
-                "count", 2)).task();
+        mineScanned(helper, companion, 8, "minecraft:spruce_log", "count", 2);
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 
@@ -1498,7 +1489,7 @@ public class PermissionGameTests {
         BlockPos chest = chestWithDiamonds(helper, new BlockPos(6, 2, 4), 5);
         NumenPlayer companion = spawnAt(helper, "gametest_looter", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:chest"), "count", 1));
+        Mining mine = mineScanned(helper, companion, 8, "minecraft:chest", "count", 1);
 
         succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
@@ -1520,7 +1511,7 @@ public class PermissionGameTests {
         level.setBlockAndUpdate(trapdoor, Blocks.OAK_TRAPDOOR.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_doorman", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:oak_trapdoor"), "count", 1));
+        Mining mine = mineScanned(helper, companion, 8, "minecraft:oak_trapdoor", "count", 1);
 
         succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
@@ -1633,8 +1624,8 @@ public class PermissionGameTests {
     }
 
     /**
-     * 主人不许挖谷仓那块区域:谷仓里的南瓜离她近,谷仓外的远。work mine 要一个南瓜,她去挖外面那个,谷仓里的一动不动;
-     * 再要一个,只剩谷仓里的,任务按拒绝收场、理由是那一行规则。不弹卡。
+     * 主人不许挖谷仓那块区域:谷仓里的南瓜离她近,谷仓外的远,两个都扫进区域。work mine 要一个南瓜,她去挖外面那个,谷仓里的
+     * 一动不动;对同一块区域再要一个,只剩谷仓里的,任务按拒绝收场、理由是那一行规则。不弹卡。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void work_mine_leaves_the_denied_area_standing(GameTestHelper helper) {
@@ -1649,7 +1640,7 @@ public class PermissionGameTests {
         areasOf(owner).create("barn", boxArea(helper, new BlockPos(4, 2, 4), new BlockPos(6, 3, 6)));
         storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
                 com.dwinovo.numen.permission.Rule.parse("break(area:barn)"));
-        ToolRun first = call(companion, "work_mine", args("block_ids", List.of("minecraft:pumpkin"), "count", 1));
+        Mining first = mineScanned(helper, companion, 16, "minecraft:pumpkin", "count", 1);
         ToolRun[] second = new ToolRun[1];
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
@@ -1661,7 +1652,7 @@ public class PermissionGameTests {
             helper.assertTrue(level.getBlockState(helper.absolutePos(insideRel)).is(Blocks.PUMPKIN),
                     "the pumpkin in the barn was mined");
             if (second[0] == null) {
-                second[0] = call(companion, "work_mine", args("block_ids", List.of("minecraft:pumpkin"), "count", 1));
+                second[0] = call(companion, "work_mine", args("area", List.of(MINED_AREA), "count", 1));
             }
             helper.assertTrue(second[0].done(), "the second mine has not finished");
             helper.assertTrue(!second[0].succeeded() && second[0].outcome().contains("break(area:barn)"),

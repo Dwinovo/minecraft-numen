@@ -17,7 +17,7 @@ import com.dwinovo.numen.entity.NumenPlayer;
 
 /**
  * {@code area}:区域这个名词——主人名下有名字、存盘的一堆格子,每一部分是一次扫描的一团、一个框的盒子、一个点、一栋房子或一条路线
- * 要改的格。它是"一块地方"唯一的写法:权限规则的 {@code area:} 项、{@code scan blocks --into/--in}、{@code work mine --area}、
+ * 要改的格。它是"一块地方"唯一的写法:权限规则的 {@code area:} 项、{@code scan blocks --into/--in}、{@code work mine <区域>}、
  * {@code work collect --area} 都点它。设计稿见 {@code docs/look-plan-act.md} §三。
  *
  * <p>命令层无状态:每一行都点名区域。看({@code show}、{@code list})当场回,不占身体;改区域的每一行先过权限层

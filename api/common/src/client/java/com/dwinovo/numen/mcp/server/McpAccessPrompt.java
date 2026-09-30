@@ -92,7 +92,8 @@ final class McpAccessPrompt {
                 - `scan_blocks` answers in groups of touching blocks, each saying whether breaking it is \
                 allowed, needs the owner's consent, or is refused. With `into` it keeps them in a saved area \
                 (make it first with the command `area new ores`) and each group gets an id like ores/g3; \
-                `work_mine` with `area` digs exactly those cells, also after a restart.
+                `work_mine` digs only such an area: pass it as `area` (ores, or ores/g3) and it digs exactly \
+                those cells, also after a restart.
                 - It's survival mode — the tools do only what a real player can. No give, no setblock.
 
                 One more thing: talk to me in the language I'm writing to you in, even though these \

@@ -53,8 +53,8 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
  * 可走的地板之间立一圈到顶的屏障,站在原来包围墙的位置——可走的地板、墙、rel 坐标都和原来一样。任意两块
  * 场地可走部分之间因此至少隔 21 格,比上面这些半径都大。改模板或加新模板时守住这一条。
  *
- * <p>更远的感知(mine 与 goto 找方块扫 32 个 chunk、mine 捡掉落物按视距、逃跑看 32~40 格)隔不开:
- * 这类用例靠场景用别的用例不会留下的东西(独一种方块、物品)来保证只看见自己的。
+ * <p>更远的感知(goto 找方块扫 32 个 chunk、{@code scan blocks} 按用例给的半径、mine 在工作区里捡掉落物、逃跑看 32~40 格)
+ * 隔不开:这类用例靠场景用别的用例不会留下的东西(独一种方块、物品)来保证只看见自己的。
  *
  * <h2>步骤一律经 {@link #steps} 与 {@link #succeedWhen}</h2>
  * 原版的 {@code helper.startSequence()} 与 {@code helper.succeedWhen} 在一步失败之后照样往下跑、也接不住断言以外的异常,
@@ -216,6 +216,76 @@ public final class GameTestKit {
             throw new IllegalStateException("area new " + area + " failed: " + made.reply());
         }
         return command(companion, "scan blocks " + radius + " " + blockId + " --into " + area);
+    }
+
+    /** {@link #mineScanned} 把找到的方块扫进的那块区域。 */
+    static final String MINED_AREA = "targets";
+
+    /**
+     * 照模型挖矿的三步走一遍:建区域 {@link #MINED_AREA}、在半径 {@code radius} 内把 {@code blockId} 扫进去
+     * ({@code scan blocks … --into}),扫的回执一到就调 work_mine 挖这块区域;{@code extra} 是 work_mine 的其余参数
+     * (count、路线字段),键、值交替。扫描被拒或失败时不挖,这次挖矿的结论就是扫描的回执。
+     */
+    static Mining mineScanned(GameTestHelper helper, NumenPlayer companion, int radius, String blockId,
+                              Object... extra) {
+        ToolRun scan = scanInto(companion, radius, blockId, MINED_AREA);
+        Object[] keyValues = new Object[extra.length + 2];
+        keyValues[0] = "area";
+        keyValues[1] = List.of(MINED_AREA);
+        System.arraycopy(extra, 0, keyValues, 2, extra.length);
+        Mining mining = new Mining(scan);
+        helper.onEachTick(() -> {
+            if (mining.run.get() == null && scan.reply() != null) {
+                mining.run.set(scan.succeeded() ? call(companion, "work_mine", args(keyValues)) : scan);
+            }
+        });
+        return mining;
+    }
+
+    /**
+     * {@link #mineScanned} 的那次挖矿:扫描回来之前还没派,{@link #done} 为假、{@link #outcome} 为 null;派下去之后与
+     * {@link ToolRun} 读法相同。
+     */
+    static final class Mining {
+
+        private final ToolRun scan;
+        private final AtomicReference<ToolRun> run = new AtomicReference<>();
+
+        private Mining(ToolRun scan) {
+            this.scan = scan;
+        }
+
+        /** 扫进区域的那一次。 */
+        ToolRun scan() {
+            return scan;
+        }
+
+        boolean done() {
+            ToolRun r = run.get();
+            return r != null && r.done();
+        }
+
+        boolean succeeded() {
+            ToolRun r = run.get();
+            return r != null && r.succeeded();
+        }
+
+        String outcome() {
+            ToolRun r = run.get();
+            return r == null ? null : r.outcome();
+        }
+
+        /** 派发当场的回执:受理的"已受理"或拒收的原因;还没派是 null。 */
+        String reply() {
+            ToolRun r = run.get();
+            return r == null ? null : r.reply();
+        }
+
+        /** 派下去的那件活;还没派或拒收了是 null。 */
+        TaskRecord task() {
+            ToolRun r = run.get();
+            return r == null ? null : r.task();
+        }
     }
 
     /** 回执这一页列出的团:消息里一团一行,每行一个 JSON 对象(抬头、翻页提示与结尾不是)。 */

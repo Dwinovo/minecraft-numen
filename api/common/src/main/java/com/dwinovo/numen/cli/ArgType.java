@@ -541,7 +541,7 @@ public final class ArgType<T> {
     /**
      * 一串同一种的值:命令行上是空格隔开的一个个值({@code iron_ore deepslate_iron_ore}),每个都按 {@code element} 的读法读,
      * 读到行尾或下一个标志({@code --} 打头)为止,所以它既能是动作的最后一个必填参数,也能是一个标志
-     * ({@code --block_ids iron_ore deepslate_iron_ore --count 10});快捷工具里是一个 JSON 数组,每一项按 {@code element}
+     * ({@code --item_ids iron_ingot raw_iron --radius 8});快捷工具里是一个 JSON 数组,每一项按 {@code element}
      * 读 JSON 值的规矩读。至少一个。一项只能是一个值:整数、词、id、id 或标签、方块或坐标格或区域、区域、一只实体、几个固定值之一(或区域)、一个值。
      */
     public static <T> ArgType<List<T>> list(ArgType<T> element) {

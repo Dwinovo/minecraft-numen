@@ -57,10 +57,10 @@ class WorkCommandGroupsTest {
         gotoFields.addAll(route);
         assertEquals(gotoFields, fields("move_goto"));
         assertEquals(List.of(), required("move_goto"));
-        List<String> mineFields = new ArrayList<>(List.of("block_ids", "area", "count"));
+        List<String> mineFields = new ArrayList<>(List.of("area", "count"));
         mineFields.addAll(route);
         assertEquals(mineFields, fields("work_mine"));
-        assertEquals(List.of(), required("work_mine"));
+        assertEquals(List.of("area"), required("work_mine"));
         for (String gone : List.of("follow", "plan_route", "collect_items", "fish", "attack", "blueprint",
                 "blueprint_read", "scaffold_materials", "build", "transfer")) {
             assertNull(ToolRegistry.get(gone), gone + " 已经是命令,不再是工具");
@@ -115,8 +115,7 @@ class WorkCommandGroupsTest {
         assertTrue(gotoHelp.contains("--avoid_break <block|cell|area...>"), gotoHelp);
         assertTrue(gotoHelp.endsWith("Shortcut tool: move_goto."), gotoHelp);
         String mineHelp = run("work mine --help").get("message").getAsString();
-        assertTrue(mineHelp.startsWith("work mine [--block_ids <id...>] [--area <area...>] [--count <integer>]"),
-                mineHelp);
+        assertTrue(mineHelp.startsWith("work mine <area...> [--count <integer>] [route flags]\n"), mineHelp);
         assertTrue(mineHelp.endsWith("Shortcut tool: work_mine."), mineHelp);
     }
 }

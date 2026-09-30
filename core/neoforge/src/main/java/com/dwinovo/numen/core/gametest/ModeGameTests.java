@@ -68,9 +68,7 @@ public class ModeGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_cminer", new BlockPos(2, 2, 2), true);
 
-        TaskRecord record = call(companion, "work_mine", args(
-                "block_ids", List.of("minecraft:gold_ore"),
-                "count", 4)).task();
+        mineScanned(helper, companion, 12, "minecraft:gold_ore", "count", 4);
 
         succeedWhen(helper, () -> {
             for (BlockPos ore : ores) {

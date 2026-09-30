@@ -4,7 +4,6 @@ import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.nav.WorkArea;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.task.TaskRecord;
 import java.util.List;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
@@ -65,9 +64,7 @@ public class MineGameTests {
 
         NumenPlayer companion = spawnAt(helper, "gametest_tunneler", new BlockPos(3, 2, 3), false);
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
-        TaskRecord record = call(companion, "work_mine", args(
-                "block_ids", List.of("minecraft:gold_ore"),
-                "count", 2)).task();
+        mineScanned(helper, companion, 16, "minecraft:gold_ore", "count", 2);
 
         BlockPos wallProbe = helper.absolutePos(new BlockPos(1, 3, 3));
         succeedWhen(helper, () -> {
@@ -105,15 +102,12 @@ public class MineGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_canopy", new BlockPos(4, 2, 8), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        TaskRecord record = call(companion, "work_mine", args(
-                "block_ids", List.of("minecraft:acacia_log"),
-                "count", 2)).task();
+        Mining mine = mineScanned(helper, companion, 12, "minecraft:acacia_log", "count", 2);
 
         succeedWhen(helper, () -> {
-            String reply = record.getResult() == null ? null : record.getResult().message();
-            helper.assertTrue(reply != null, "mine has not finished");
-            helper.assertTrue(record.getResult().success() && companion.getInventory().countItem(Items.ACACIA_LOG) >= 2,
-                    "the canopy logs were not gathered from the ground: " + reply);
+            helper.assertTrue(mine.done(), "mine has not finished");
+            helper.assertTrue(mine.succeeded() && companion.getInventory().countItem(Items.ACACIA_LOG) >= 2,
+                    "the canopy logs were not gathered from the ground: " + mine.outcome());
             for (BlockPos rel : logs) {
                 helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).isAir(),
                         "a canopy log is still up at " + rel.toShortString());
@@ -126,8 +120,8 @@ public class MineGameTests {
      * 够不着就如实收工:一根去皮白桦原木悬在她脚上八格,站在底下眼睛离它 5.38 格,出了交互距离;她没有垫脚的方块,
      * 爬不上去。任务不该站着一遍遍重搜同一条走不通的路,而是收场、说清楚够不着,原因是寻路给的那一条(要垫方块而身上没有)。
      *
-     * <p>用去皮白桦原木而不是和同批树冠用例一样的金合欢原木:mine 的工作区(半径 {@link WorkArea#RADIUS})盖得住隔壁场地,
-     * 同批别的场地里的同种方块在它的工作区里(见 {@link GameTestKit} 的场地隔离),"够不着"就成了"去隔壁挖"。
+     * <p>用去皮白桦原木而不是和同批树冠用例一样的金合欢原木:同批别的场地里的同种方块一旦扫进区域、落在 mine 的工作区
+     * (半径 {@link WorkArea#RADIUS})里(见 {@link GameTestKit} 的场地隔离),"够不着"就成了"去隔壁挖"。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mine")
     public static void mine_out_of_reach_ends_instead_of_hanging(GameTestHelper helper) {
@@ -136,14 +130,12 @@ public class MineGameTests {
         level.setBlockAndUpdate(helper.absolutePos(logRel), Blocks.STRIPPED_BIRCH_LOG.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_skyward", new BlockPos(7, 2, 8), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        TaskRecord record = call(companion, "work_mine", args(
-                "block_ids", List.of("minecraft:stripped_birch_log"),
-                "count", 1)).task();
+        Mining mine = mineScanned(helper, companion, 12, "minecraft:stripped_birch_log", "count", 1);
 
         succeedWhen(helper, () -> {
-            String reply = record.getResult() == null ? null : record.getResult().message();
-            helper.assertTrue(reply != null, "mine has not finished");
-            helper.assertTrue(!record.getResult().success() && reply.contains("could not reach")
+            helper.assertTrue(mine.done(), "mine has not finished");
+            String reply = mine.outcome();
+            helper.assertTrue(!mine.succeeded() && reply.contains("could not reach")
                             && reply.contains("blocks to pillar or bridge with"),
                     "an out-of-reach log did not end as unreachable for want of blocks to pillar with: " + reply);
             helper.assertTrue(level.getBlockState(helper.absolutePos(logRel)).is(Blocks.STRIPPED_BIRCH_LOG),
@@ -181,9 +173,7 @@ public class MineGameTests {
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
 
-        TaskRecord record = call(companion, "work_mine", args(
-                "block_ids", List.of("minecraft:spruce_log"),
-                "count", 8)).task();
+        mineScanned(helper, companion, 20, "minecraft:spruce_log", "count", 8);
 
         succeedWhen(helper, () -> {
             helper.assertTrue(companion.getInventory().countItem(Items.SPRUCE_LOG) >= 8,
@@ -228,7 +218,7 @@ public class MineGameTests {
                 helper.fail("she cut a second log instead of fetching the one she had already cut");
             }
         });
-        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:stripped_oak_log"), "count", 1));
+        Mining mine = mineScanned(helper, companion, 8, "minecraft:stripped_oak_log", "count", 1);
 
         succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
@@ -263,9 +253,7 @@ public class MineGameTests {
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
 
-        TaskRecord record = call(companion, "work_mine", args(
-                "block_ids", List.of("minecraft:deepslate_diamond_ore"),
-                "count", 2)).task();
+        mineScanned(helper, companion, 8, "minecraft:deepslate_diamond_ore", "count", 2);
 
         succeedWhen(helper, () -> {
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) >= 2,
@@ -291,7 +279,7 @@ public class MineGameTests {
         level.setBlockAndUpdate(lava, Blocks.LAVA.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_careful", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
-        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:iron_ore"), "count", 1));
+        Mining mine = mineScanned(helper, companion, 8, "minecraft:iron_ore", "count", 1);
 
         succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
@@ -340,7 +328,7 @@ public class MineGameTests {
         helper.getLevel().setBlockAndUpdate(ore, Blocks.DIAMOND_ORE.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_underequipped", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.WOODEN_PICKAXE));
-        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:diamond_ore"), "count", 1));
+        Mining mine = mineScanned(helper, companion, 8, "minecraft:diamond_ore", "count", 1);
 
         succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
@@ -351,19 +339,23 @@ public class MineGameTests {
         });
     }
 
-    /** 工作区里、身边加载着的地形里都没有要挖的东西:不满世界乱走,如实说找不到。 */
+    /**
+     * 扫描一格都没找到,区域是空的:点名它挖,派发当场拒收,不满世界乱走,如实说区域里没有扫描过的格、下一步照抄哪一行去扫。
+     */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mine")
     public static void mine_with_nothing_in_range_says_none_found(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_prospector", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
         BlockPos start = helper.absolutePos(new BlockPos(3, 2, 4));
-        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:emerald_ore"), "count", 1));
+        Mining mine = mineScanned(helper, companion, 16, "minecraft:emerald_ore", "count", 1);
 
         succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
-            helper.assertTrue(!mine.succeeded() && mine.outcome().contains("found no emerald_ore in my work area")
-                            && mine.outcome().contains("or anywhere else in the loaded terrain around me"),
-                    "the failure does not say nothing was found: " + mine.outcome());
+            helper.assertTrue(!mine.succeeded() && mine.task() == null
+                            && mine.outcome().contains(MINED_AREA + " has no scanned cells, so I did not start")
+                            && mine.outcome().contains("scan blocks " + WorkArea.RADIUS + " <block ids> --into "
+                                    + MINED_AREA),
+                    "the refusal does not say nothing was found and how to look: " + mine.outcome());
             helper.assertTrue(companion.blockPosition().distSqr(start) <= 4, "she wandered off looking for it");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -376,7 +368,7 @@ public class MineGameTests {
         helper.getLevel().setBlockAndUpdate(block, Blocks.OBSIDIAN.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_interrupted", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.DIAMOND_PICKAXE));
-        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:obsidian"), "count", 1));
+        Mining mine = mineScanned(helper, companion, 8, "minecraft:obsidian", "count", 1);
 
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(digging(companion),
@@ -420,7 +412,7 @@ public class MineGameTests {
         final int stones = field;
         NumenPlayer companion = spawnAt(helper, "gametest_counter", new BlockPos(2, 2, 8), false);
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
-        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:gold_block"), "count", 12));
+        Mining mine = mineScanned(helper, companion, 16, "minecraft:gold_block", "count", 12);
 
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(mine.done(), "mine has not finished"))
@@ -452,8 +444,8 @@ public class MineGameTests {
     }
 
     /**
-     * 同源:快捷工具 mine 与命令 work mine 是同一个处理函数。两块干海带块,先用工具挖一块、再用命令挖一块:两次都挖成、
-     * 各自到手一块,回执除了数字一字不差;派下的活一个叫工具名、一个叫"组 动作"。
+     * 同源:快捷工具 mine 与命令 work mine 是同一个处理函数。两块干海带块扫进同一块区域,先用工具挖一块、再用命令挖一块:
+     * 两次都挖成、各自到手一块,回执除了数字一字不差;派下的活一个叫工具名、一个叫"组 动作"。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mine")
     public static void mine_from_the_tool_and_the_command_is_the_same_work(GameTestHelper helper) {
@@ -461,13 +453,13 @@ public class MineGameTests {
         level.setBlockAndUpdate(helper.absolutePos(new BlockPos(8, 2, 6)), Blocks.DRIED_KELP_BLOCK.defaultBlockState());
         level.setBlockAndUpdate(helper.absolutePos(new BlockPos(8, 2, 10)), Blocks.DRIED_KELP_BLOCK.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_twin_digger", new BlockPos(3, 2, 8), false);
-        ToolRun viaTool = call(companion, "work_mine", args("block_ids", List.of("minecraft:dried_kelp_block"), "count", 1));
+        Mining viaTool = mineScanned(helper, companion, 8, "minecraft:dried_kelp_block", "count", 1);
         java.util.concurrent.atomic.AtomicReference<ToolRun> viaCommand = new java.util.concurrent.atomic.AtomicReference<>();
 
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(viaTool.done(), "mine has not finished"))
                 .thenExecute(() -> viaCommand.set(command(companion,
-                        "work mine --block_ids minecraft:dried_kelp_block --count 1")))
+                        "work mine " + MINED_AREA + " --count 1")))
                 .thenWaitUntil(() -> helper.assertTrue(viaCommand.get().done(), "work mine has not finished"))
                 .thenExecute(() -> {
                     helper.assertTrue(viaTool.succeeded() && viaCommand.get().succeeded(),
@@ -509,10 +501,10 @@ public class MineGameTests {
         level.setBlockAndUpdate(target, Blocks.TARGET.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_walker_miner", new BlockPos(3, 2, 3), false);
         BlockPos stand = companion.blockPosition();
-        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:target"), "count", 1));
-        String accepted = mine.reply();
+        Mining mine = mineScanned(helper, companion, 48, "minecraft:target", "count", 1);
 
         succeedWhen(helper, () -> {
+            String accepted = mine.reply();
             helper.assertTrue(accepted != null && accepted.contains("My work area is within " + WorkArea.RADIUS
                             + " blocks of " + coords(stand)),
                     "the acceptance does not say where the work area is: " + accepted);
@@ -525,8 +517,8 @@ public class MineGameTests {
     }
 
     /**
-     * 区外的不去:两块赭黄蛙明灯在场地另一角、六十多格外,工作区里一块都没有。她不出发,回执说区里没有、区外有两块、
-     * 最近那块在哪、多远,下一步照抄就能做。
+     * 区外的不去:两块赭黄蛙明灯在场地另一角、六十多格外,扫进区域后工作区里一格都没有。派发当场拒收,她不出发,回执说区域的
+     * 两格都在区外、最近那格在哪、多远,下一步照抄就能做。
      */
     @GameTest(template = "floor52", timeoutTicks = 100000, batch = "numen_mine_area")
     public static void mine_stays_put_when_the_ore_lies_beyond_its_work_area(GameTestHelper helper) {
@@ -537,14 +529,14 @@ public class MineGameTests {
         level.setBlockAndUpdate(farther, Blocks.OCHRE_FROGLIGHT.defaultBlockState());
         BlockPos start = helper.absolutePos(new BlockPos(3, 2, 3));
         NumenPlayer companion = spawnAt(helper, "gametest_stay_put", new BlockPos(3, 2, 3), false);
-        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:ochre_froglight"), "count", 1));
+        Mining mine = mineScanned(helper, companion, 72, "minecraft:ochre_froglight", "count", 1);
 
         succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
             String said = mine.outcome();
-            helper.assertTrue(!mine.succeeded() && said.contains("found no ochre_froglight in my work area")
-                            && said.contains("2 more lie beyond it")
-                            && said.contains("the nearest at " + coords(nearer))
+            helper.assertTrue(!mine.succeeded() && mine.task() == null
+                            && said.contains("all 2 scanned cells of " + MINED_AREA + " lie wholly beyond my work area")
+                            && said.contains("the nearest is at " + coords(nearer))
                             && said.contains("move_goto there first (x:" + nearer.getX() + " y:" + nearer.getY() + " z:"
                                     + nearer.getZ() + " arrive:near near:8), then work_mine again"),
                     "the reply does not say what lies beyond the work area and what to do: " + said);
@@ -598,8 +590,8 @@ public class MineGameTests {
     }
 
     /**
-     * 矿脉跨过工作区的边:一排珠光蛙明灯从区里伸到区外(离她 48 格以内的 6 块在区里,再往外 7 块在区外)。要 64 个:她把
-     * 区里那 6 块挖完就收场,算成功,回执说区里没有了、区外还有 7 块、最近那块在哪;区外那 7 块一块不少。
+     * 矿脉跨过工作区的边:一排珠光蛙明灯从区里伸到区外(离她 48 格以内的 6 块在区里,再往外 7 块在区外),整排扫进区域。
+     * 要 64 个:她把区里那 6 块挖完就收场,算成功,回执说区里没有了、区外还有 7 格、最近那格在哪;区外那 7 块一块不少。
      */
     @GameTest(template = "floor52", timeoutTicks = 100000, batch = "numen_mine_area")
     public static void mine_digs_the_part_of_a_vein_inside_its_work_area_and_reports_the_rest(GameTestHelper helper) {
@@ -614,15 +606,14 @@ public class MineGameTests {
             (area.contains(level.dimension(), cell) ? inside : outside).add(cell);
         }
         helper.assertTrue(inside.size() == 6 && outside.size() == 7, "the vein does not straddle the edge as laid out");
-        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:pearlescent_froglight"),
-                "count", 64));
+        Mining mine = mineScanned(helper, companion, 56, "minecraft:pearlescent_froglight", "count", 64);
 
         succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
             String said = mine.outcome();
             helper.assertTrue(mine.succeeded() && said.contains("gathered 6/64")
-                            && said.contains("no more pearlescent_froglight in my work area")
-                            && said.contains("7 more lie beyond it")
+                            && said.contains("nothing left to dig in my work area")
+                            && said.contains("7 scanned cells of " + MINED_AREA + " lie beyond it")
                             && said.contains("the nearest at " + coords(outside.get(0))),
                     "the reply does not account for the part of the vein beyond the work area: " + said);
             for (BlockPos cell : inside) {
@@ -651,13 +642,12 @@ public class MineGameTests {
         BlockPos light = helper.absolutePos(new BlockPos(12, 2, 12));
         level.setBlockAndUpdate(light, Blocks.SHROOMLIGHT.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_hut_bound", new BlockPos(4, 2, 4), false);
-        ToolRun mine = call(companion, "work_mine", args("block_ids", List.of("minecraft:shroomlight"), "count", 1,
-                "alter", "none"));
+        Mining mine = mineScanned(helper, companion, 16, "minecraft:shroomlight", "count", 1, "alter", "none");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(mine.done(), "mine has not finished");
             String said = mine.outcome();
-            helper.assertTrue(!mine.succeeded() && said.contains("could not reach any of the 1 shroomlight")
+            helper.assertTrue(!mine.succeeded() && said.contains("could not reach any of the 1 cells of shroomlight")
                             && said.contains("found no path to target without altering terrain")
                             && said.contains("block(s)") && said.contains("alter:'natural'"),
                     "the reply does not say it needs digging and what would allow it: " + said);

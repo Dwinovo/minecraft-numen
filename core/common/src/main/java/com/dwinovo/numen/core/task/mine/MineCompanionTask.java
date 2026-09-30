@@ -10,10 +10,7 @@ import com.dwinovo.numen.core.act.BlockDigger;
 import com.dwinovo.numen.core.nav.Feet;
 import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.nav.WorkArea;
-import com.dwinovo.numen.area.Area;
 import com.dwinovo.numen.area.Cells;
-import com.dwinovo.numen.core.scan.BlockScan;
-import com.dwinovo.numen.core.scan.BlockSearch;
 import com.dwinovo.numen.core.scan.NearbyEntities;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
@@ -51,10 +48,10 @@ import java.util.Set;
  * companion player body (a server-side fake player, so every break goes
  * through real server-side interaction rules, not client input).
  *
- * <h2>候选只有一个来处:一块区域</h2>
- * 候选是一块区域里扫描过的格:{@code --area} 点名的那块(派发时解析好、记在任务记录里),或 {@code --block_ids} 简写开工时
- * 现看的一块匿名区域({@link BlockScan},和 {@code scan blocks} 同一处)。每格还得是扫描时看到的那种方块
- * ({@link Cells.Seen#holds}),不往外扩。格子途中被别人挖掉或变了,照常挖剩下的,回执如实交代;全都没了就如实收场。
+ * <h2>候选只有一个来处:点名的区域</h2>
+ * 候选是点名的区域里扫描过的格(派发时解析好、记在任务记录里):先看、再规划、后执行,找方块是 {@code scan blocks --into}
+ * 的事,挖矿自己不找。每格还得是扫描时看到的那种方块({@link Cells.Seen#holds}),不往外扩。格子途中被别人挖掉或变了,
+ * 照常挖剩下的,回执如实交代;全都没了就如实收场。
  *
  * <h2>只在工作区里干</h2>
  * 候选只取工作区({@link MineBlockTaskRecord#work})里的:受理时她脚下那一格为中心,半径由寻路一次看得清的范围推出
@@ -66,9 +63,7 @@ import java.util.Set;
  * <ol>
  *   <li><b>knownOres</b> — fed on demand from the area's cells inside the work area, nearest first,
  *       and {@link #prune}d every tick (drop ones mined / no longer holding what was seen /
- *       unworkable / hazardous), sorted by distance, capped at {@link #MAX_ORES}. Nothing moves
- *       before the area is in hand (the shorthand's scan is back): until then she does not know what
- *       is there.</li>
+ *       unworkable / hazardous), sorted by distance, capped at {@link #MAX_ORES}.</li>
  *   <li><b>in place</b> — a target the body can reach from where it stands ({@link Goals#dig}: within
  *       block reach, not occupying it) is broken on the spot, cheapest first, auto-switching to the best
  *       tool — no pathing. The digger clears what stands in the line of sight first, if it can be broken
@@ -201,8 +196,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private final Set<BlockPos> remaining = new HashSet<>();
     /** 轮到时已经不是扫描时那种方块、而旅程账上也没有她挖过的格(别人挖掉、换掉的)。 */
     private final Set<BlockPos> gone = new HashSet<>();
-    /** 要挖的区域里扫描过的格,连同当时看到的方块;简写的那一块看回来之前为 null。 */
-    private Cells scanned;
     /** 挖不成的候选:挖不动的方块、规格禁挖的、贴着流体或悬空落沙的——{@link #breakable} 说不的。 */
     private final Set<BlockPos> ruledOut = new HashSet<>();
     /** 这件活的路线规格:mine 的默认叠上模型给的。只管走过去的那条路。 */
@@ -231,22 +224,10 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private long lastProgressWork;
     private BlockPos lastProgressPos;
 
-    /**
-     * 要挖的区域有了:点名的区域开工就有;简写的那一块要等先看的那一次回来。看按工作量收工,回来的就是这个问法在这个世界上
-     * 的完整答案——被节数上限截断也是确定的截断。还没回来时她不知道区里有什么:不出发(只认得地上掉落物时的一次无路说明不了
-     * 区里将会有的目标),终局判定("区里没有目标"、"都够不着")也等它。
-     */
-    private boolean mapped;
     /** 这件活的工作区:候选只取区里的。 */
     private final WorkArea work;
     /** 要挖的区域里落在工作区外的格:开工时就分出来,只报告,不去。 */
     private Beyond beyond = Beyond.NONE;
-    /** 简写先看的那一次被节数上限截断时的那句话({@link BlockSearch.ScanResult#sectionCapNote});没截断为 null。 */
-    private String capNote;
-    /** 简写在飞的那一次看的搜索句柄;0 表示没有。 */
-    private int searchId;
-    /** 简写看回来了、还没收成区域的结果。 */
-    private BlockScan.Found found;
 
     // Progressive dig (blocks break tick-by-tick at legitimate player speed, not
     // instabreak) — shared with the path executor so all breaking reads the same.
@@ -286,63 +267,24 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         });
     }
 
-    /** 这件活点名了区域(不是简写)。 */
-    private boolean named() {
-        return r.areaName != null;
-    }
-
     @Override
     protected void onStart() {
         // Count toward `count` by ITEMS gathered, not blocks broken: resolve what these
         // blocks drop, and snapshot how many we already hold so the tally is the delta above it.
         dropItems = computeDropItems();
         baseline = inventoryMatch();
-        if (r.scanned != null) {
-            load(r.scanned, false);
-        } else {
-            // 简写:先把这几种方块看一遍,收成一块匿名区域再挖;冷区域的读地形由每刻的读节配额分摊,看回来之前
-            // onTick 的终局判定会等着({@link #mapped})
-            searchId = BlockScan.start(player, MineBlockTaskRecord.SCAN_RADIUS, r.targets, null, f -> {
-                searchId = 0;
-                found = f;
-            });
-        }
+        // 工作区里的格排进待收,区外的记下只报告
+        r.scanned.intersect(work.cells()).forEach((x, y, z, seen) -> remaining.add(new BlockPos(x, y, z)));
+        List<BlockPos> outside = new ArrayList<>();
+        r.scanned.minus(work.cells()).forEach((x, y, z, seen) -> outside.add(new BlockPos(x, y, z)));
+        beyond = new Beyond(outside);
         lastProgressWork = workTicks();
         lastProgressPos = player.blockPosition();
         // 与 goto 的 start 日志对称:一任务一条,让日志里能看到任务确实启动了
         com.dwinovo.numen.core.Constants.LOG.info(
                 "[numen-task] mine start targets={} count={} area={} feet={} work={}",
-                r.label, r.count, named() ? r.areaName : "-", player.blockPosition().toShortString(),
+                r.label, r.count, r.areaName, player.blockPosition().toShortString(),
                 work.describe());
-    }
-
-    /**
-     * 要挖的区域到手:工作区里的格排进待收({@link #remaining}),区外的记下只报告。
-     *
-     * @param atLeast 简写先看的那一次没看全,区外可能还有更多
-     */
-    private void load(Cells cells, boolean atLeast) {
-        scanned = cells;
-        cells.intersect(work.cells()).forEach((x, y, z, seen) -> remaining.add(new BlockPos(x, y, z)));
-        List<BlockPos> outside = new ArrayList<>();
-        cells.minus(work.cells()).forEach((x, y, z, seen) -> outside.add(new BlockPos(x, y, z)));
-        beyond = new Beyond(outside, atLeast);
-        mapped = true;
-    }
-
-    /** 简写先看的那一次回来了:收成一块匿名区域(和 {@code scan blocks --into} 同一个收法),当作要挖的区域。 */
-    private void absorbScan() {
-        BlockScan.Found res = found;
-        if (res == null) {
-            return;
-        }
-        found = null;
-        BlockSearch.ScanResult coverage = res.coverage();
-        capNote = coverage.sectionCapNote();
-        com.dwinovo.numen.core.Constants.LOG.debug("[numen-task] mine scanned feet={} groups={} capped={}",
-                player.blockPosition().toShortString(), res.groups().size(), capNote != null);
-        Area seen = res.into(Area.empty(player.level().dimension())).area();
-        load(seen.cells(), coverage.stoppedEarly() || coverage.sectionCapHit() || coverage.collectCapHit());
     }
 
     @Override
@@ -372,7 +314,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // prune (cheap — knownOres is capped at 64) revalidates against the live world;
         // the list is refilled from the area's cells when it runs low.
         pricing = DigQuote.of(player, targetSpec);
-        absorbScan();
         prune();
         maybeQuery();
 
@@ -410,12 +351,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 return TaskState.FAILED;
             }
             return mineProgress(reachable);
-        }
-
-        // 首次查询回来之前不出发:她还不知道区里有什么
-        if (!mapped) {
-            awaitSearch();
-            return TaskState.RUNNING;
         }
 
         // 2) Head for the ore field + nearby drops (GoalComposite), arriving when a
@@ -485,8 +420,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         //    range still succeeds") — the body does not leave its work area looking for more;
         //    what lies beyond it is reported, and going there is the model's call.
         if (r.getMined() > 0) {
-            progressNote = (named() ? "nothing left to dig" : "no more " + r.label) + " in my work area, "
-                    + work.describe() + leftovers(null) + beyondClause();
+            progressNote = "nothing left to dig in my work area, " + work.describe() + leftovers(null)
+                    + beyondClause();
             return TaskState.SUCCESS;
         }
         return noOreFailure();
@@ -913,8 +848,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      */
     private boolean stillCandidate(Level level, BlockPos p) {
         var state = level.getBlockState(p);
-        Cells.Seen seen = scanned == null ? null : scanned.seenAt(p);
-        if (state.isAir() || seen == null || !seen.holds(state)) {
+        if (state.isAir() || !r.scanned.seenAt(p).holds(state)) {
             // 区域里的格不在了:旅程账上有,就是她顺路挖的(导航穿过它、为拉射线挖掉的遮挡物),算她挖掉的一格;
             // 账上没有,才记成别人动过。一格只会从名单或待收里各验出一次"不在了",不会重复计数
             if (brokeOnTheWay(p)) {
@@ -1065,9 +999,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private static final String RULED_OUT_WHY = "unbreakable, excluded by the spec, or fluid or loose falling"
             + " blocks beside them";
 
-    /** 回执里怎么称呼要挖的东西:方块名,点名区域的用法说"这些方块的格子"。 */
+    /** 回执里怎么称呼要挖的东西:这些方块的格子。 */
     private String noun() {
-        return named() ? "cells of " + r.label : r.label;
+        return "cells of " + r.label;
     }
 
     /** 到目前为止的收获,一句话。 */
@@ -1099,11 +1033,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         return parts.isEmpty() ? "" : "; not mined: " + String.join(", ", parts);
     }
 
-    /** Terminal "nothing gathered, no ore left to go for" failure, distinguishing a
-     *  genuinely empty field ({@code MINED_OUT} — widening the search or stopping is the
-     *  LLM's call) from a field that WAS found but every target turned out unworkable
-     *  ({@code NO_PATH} — 没有任何站位能对它拉出射线), with the counts.
-     *  「走不到」那一档不在这里 —— 它由 {@link #unreachable} 收工。 */
+    /**
+     * 一格没挖到、也没有可去挖的了,按缘由收场并带上计数:手里的工具收不下({@code WRONG_TOOL})、没有站位拉得出射线
+     * ({@code NO_PATH})、挖不成({@code MINED_OUT})、区里的格都不在了({@code TARGET_LOST},说区外还剩什么、怎么过去,或给
+     * 再扫一遍的那一行)。「走不到」那一档不在这里 —— 它由 {@link #unreachable} 收工。
+     */
     private TaskState noOreFailure() {
         if (!unharvestable.isEmpty()) {
             // Targets exist but the carried tools can't make them drop — the actionable
@@ -1121,19 +1055,14 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             fail("found " + ruledOut.size() + " " + noun() + " but none of them can be broken here ("
                     + RULED_OUT_WHY + "); gathered 0"
                     + leftovers(ruledOut) + beyondClause(), FailureType.MINED_OUT);
-        } else if (named()) {
-            fail("all " + (r.cells() - beyond.cells().size()) + " scanned cells of " + r.areaName
-                    + " in my work area were gone or had changed since the scan; gathered 0. area refresh strikes off"
-                    + " what changed, and scan_blocks shows what is there now" + beyondClause(),
-                    FailureType.TARGET_LOST);
-        } else if (!currentBeyond().isEmpty()) {
-            // 区里没有,区外有:不出发,说清区外在哪、怎么过去——离开这块地方是模型的决定
-            fail("found no " + r.label + " in my work area (" + work.describe() + "), so I stayed put"
-                    + beyondClause(), FailureType.MINED_OUT);
         } else {
-            fail("found no " + r.label + " in my work area (" + work.describe() + ") or anywhere else in the loaded"
-                    + " terrain around me (within " + MineBlockTaskRecord.SCAN_RADIUS + " blocks)"
-                    + (capNote == null ? "" : " (" + capNote + ")"), FailureType.MINED_OUT);
+            // 区里的格都不在了:区外还有就说在哪、怎么过去,没有了就给再扫一遍的那一行——去不去、扫不扫是模型的决定
+            fail("all " + (r.cells() - beyond.cells().size()) + " scanned cells of " + r.areaName
+                    + " in my work area (" + work.describe() + ") were gone or had changed since the scan; gathered 0"
+                    + (currentBeyond().isEmpty()
+                            ? ". Nothing of " + r.areaName + " is left to dig; " + r.rescan() + " adds what is there now"
+                            : beyondClause()),
+                    FailureType.TARGET_LOST);
         }
         return TaskState.FAILED;
     }
@@ -1141,7 +1070,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     /** 此刻还在那儿的区外目标:要挖的区域里落在工作区外、还是扫描时那种方块的格。 */
     private Beyond currentBeyond() {
         Level level = player.level();
-        return beyond.keep(p -> scanned.seenAt(p).holds(level.getBlockState(p)));
+        return beyond.keep(p -> r.scanned.seenAt(p).holds(level.getBlockState(p)));
     }
 
     /** 回执里说区外的那一截(以 {@code "; "} 起头);区外什么都没有是空串。 */
@@ -1151,20 +1080,16 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             return "";
         }
         BlockPos from = player.blockPosition();
-        return "; " + (named() ? left.named(from) : left.more(from));
+        return "; " + left.told(r.areaName, from);
     }
 
     @Override
     protected void cleanup() {
         // super.cleanup() = stopNav() (nav.stop clears the overlay when a nav exists) + an explicit
         // so a task that finished while shaft-mining (nav == null) still
-        // clears its lingering goal boxes. Then release the dig + the index registration.
+        // clears its lingering goal boxes. Then release the dig.
         super.cleanup();
         digger.cancel();
-        if (searchId != 0) {
-            BlockSearch.cancel(searchId);
-            searchId = 0;
-        }
     }
 
     @Override

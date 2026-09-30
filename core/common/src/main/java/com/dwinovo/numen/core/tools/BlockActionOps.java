@@ -31,62 +31,41 @@ import java.util.Set;
  */
 public final class BlockActionOps {
 
-    // mine bounds.
-    private static final int MAX_COUNT = 256;
+    /** mine 一次最多要多少个物品:帮助与快捷工具的 schema 写的范围就是它;读参数不查范围,受理时按它夹。 */
+    public static final int MAX_MINE_COUNT = 256;
 
     /**
-     * {@code mine} 的两种写法二选一,挖的都是一块区域里扫描过的格:{@code area}(点名的区域或它的几部分,{@code count} 可选、
-     * 不给就挖完)或 {@code block_ids}(简写:她开工时先把这几种方块扫进一块匿名区域,{@code count} 必给)。点名的区域在派发这一刻
+     * {@code mine}:挖点名的区域(或它的几部分的并)里扫描过的格,{@code count} 可选、不给就挖完工作区里的那些。区域在派发这一刻
      * 解析:没有这块、没有扫描过的格、整块都在工作区外,当场拒收,工具结果直接说明——不先回"已受理"再在后台失败。
      * {@code spec} 是已经叠在 mine 自己默认规格上的那份。
      *
      * <p>工作区在受理这一刻定下:以她此刻脚下那一格为中心({@link WorkArea#around})。区域有几格在区里的照常受理,区外那几格
      * 留着不挖,受理回执与结局都交代。
      */
-    public TaskRecord autoMine(ServerSource src, List<String> block_ids, List<AreaRef> areas, Integer count,
-                               RouteSpec spec) {
+    public TaskRecord autoMine(ServerSource src, List<AreaRef> areas, Integer count, RouteSpec spec) {
         NumenPlayer her = src.companion();
-        long now = her.level().getGameTime();
         WorkArea work = WorkArea.around(her);
-        boolean byIds = block_ids != null && !block_ids.isEmpty();
-        boolean byArea = areas != null && !areas.isEmpty();
-        if (byIds == byArea) {
-            throw new IllegalArgumentException(byIds
-                    ? "give block_ids or area, not both — block_ids scans for those types around her and mines them,"
-                            + " area digs the scanned cells of an area you name"
-                    : "give block_ids (block types; she scans for them herself) or area (an area or parts of it, as"
-                            + " scan blocks --into keeps them)");
+        String name = String.join(" ", areas.stream().map(AreaRef::toString).toList());
+        String into = areas.get(0).name();
+        Area area = AreaOps.resolveAll(her, areas);
+        Cells scanned = MineBlockTaskRecord.scanned(area);
+        if (scanned.isEmpty()) {
+            throw new IllegalArgumentException(name + " has no scanned cells, so I did not start: work_mine digs the "
+                    + "cells a scan added, and framed cells carry no block. "
+                    + MineBlockTaskRecord.rescan("<block ids>", into) + " adds what is there, then work_mine it");
         }
-        if (byArea) {
-            String name = String.join(" ", areas.stream().map(AreaRef::toString).toList());
-            Area area = AreaOps.resolveAll(her, areas);
-            Cells scanned = MineBlockTaskRecord.scanned(area);
-            if (scanned.isEmpty()) {
-                throw new IllegalArgumentException(name + " has no scanned cells: work_mine digs cells a scan added,"
-                        + " each still holding the block it saw, and framed cells carry none; scan blocks with into"
-                        + " adds them");
-            }
-            Cells inside = scanned.intersect(work.cells());
-            if (inside.isEmpty()) {
-                throw new IllegalArgumentException(Beyond.areaOutside(name, work, scanned.nearest(work.center())));
-            }
-            Set<Block> kinds = new LinkedHashSet<>();
-            scanned.forEach((x, y, z, seen) -> kinds.add(seen.state().getBlock()));
-            int until = count == null ? MineBlockTaskRecord.UNTIL_GONE : Math.clamp(count, 1, MAX_COUNT);
-            long timeout = MineBlockTaskRecord.timeoutTicks(until == MineBlockTaskRecord.UNTIL_GONE
-                    ? (int) inside.size() : until);
-            return new MineBlockTaskRecord(src, now + timeout, kinds, area, name, until, labelFor(kinds), spec, work);
+        Cells inside = scanned.intersect(work.cells());
+        if (inside.isEmpty()) {
+            throw new IllegalArgumentException(Beyond.areaOutside(name, scanned.size(), work,
+                    scanned.nearest(work.center())));
         }
-        Set<Block> targets = ToolParse.parseBlocks(block_ids);
-        if (targets.isEmpty()) {
-            throw new IllegalArgumentException("block_ids contained no valid block ids");
-        }
-        if (count == null) {
-            throw new IllegalArgumentException("count is required with block_ids: how many ITEMS to gather");
-        }
-        int clampedCount = Math.clamp(count, 1, MAX_COUNT);
-        long deadline = now + MineBlockTaskRecord.timeoutTicks(clampedCount);
-        return new MineBlockTaskRecord(src, deadline, targets, null, null, clampedCount, labelFor(targets), spec, work);
+        Set<Block> kinds = new LinkedHashSet<>();
+        scanned.forEach((x, y, z, seen) -> kinds.add(seen.state().getBlock()));
+        int until = count == null ? MineBlockTaskRecord.UNTIL_GONE : Math.clamp(count, 1, MAX_MINE_COUNT);
+        long timeout = MineBlockTaskRecord.timeoutTicks(until == MineBlockTaskRecord.UNTIL_GONE
+                ? (int) inside.size() : until);
+        return new MineBlockTaskRecord(src, her.level().getGameTime() + timeout, kinds, area, name, into, until,
+                labelFor(kinds), spec, work);
     }
 
     /** Short label for messages: the first target's path (e.g. "iron_ore"), "+N" if more. */

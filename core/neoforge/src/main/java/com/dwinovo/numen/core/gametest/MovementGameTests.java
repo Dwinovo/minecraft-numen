@@ -464,7 +464,7 @@ public class MovementGameTests {
     }
 
     /**
-     * 重启后接不回来的活不许让调度 tick 抛出去:存下的参数重放时已经不成立(mine 同时给了 block_ids 与 area,
+     * 重启后接不回来的活不许让调度 tick 抛出去:存下的参数重放时已经不成立(mine 点名的区域 ores 已经不在,
      * 工具当场拒收),新身体照样起来,她收到一条 task_finished 说清这件活没接回来,记录清掉。
      */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_terrain")
@@ -478,7 +478,7 @@ public class MovementGameTests {
         com.dwinovo.numen.entity.Companions.dormant(server, first);
         var registry = com.dwinovo.numen.entity.CompanionRegistry.get(server);
         registry.put(uuid, registry.find(uuid).doing("work_mine", "work_mine",
-                "{\"block_ids\":[\"minecraft:stone\"],\"area\":[\"ores/g1\"],\"count\":1}"));
+                "{\"area\":[\"ores/g1\"],\"count\":1}"));
         NumenPlayer second = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
         helper.assertTrue(second != null, "the body was not rebuilt");
         StringBuilder told = new StringBuilder();

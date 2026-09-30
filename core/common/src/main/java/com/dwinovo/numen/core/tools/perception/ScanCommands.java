@@ -91,7 +91,7 @@ public final class ScanCommands {
                 .note("One group per line, nearest first; a long list comes in pages, and each page looks again.")
                 .note("Without --into it only looks: the groups have no ids. With --into ores each group becomes a "
                         + "part of the area ores (make it first with `area new ores`), and its id (ores/g5) is what "
-                        + "`work mine` takes as its --area, and `area show` too. Adding to an area your owner's rules name asks "
+                        + "`work mine` takes as the area to dig, and `area show` too. Adding to an area your owner's rules name asks "
                         + "your owner first.")
                 .note("--in base looks only inside the area base, as far as the radius reaches from you.")
                 .note("Only loaded terrain is read: anything further out is UNKNOWN, not empty.")
