@@ -19,6 +19,8 @@ import com.dwinovo.numen.agent.request.AgentRequestContext;
 import com.dwinovo.numen.agent.request.BodySnapshot;
 import com.dwinovo.numen.agent.request.MemoryPreamble;
 import com.dwinovo.numen.agent.request.RuntimeState;
+import com.dwinovo.numen.agent.tool.CompanionToolPort;
+import com.dwinovo.numen.agent.tool.ToolAnchor;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -30,7 +32,7 @@ import java.util.function.Consumer;
 /**
  * 评测里她的大脑:产品的循环内核 {@link AgentLoop} 原样,四个端口在这里接到服务端进程里。和主人客户端上的
  * {@code EntityAgentLoop} 同一套零件:请求由 {@link AgentRequestContext} 组装(系统提示、运行期状态、工具表只有那一份)、
- * 札记索引由 {@link MemoryPreamble} 注入、整理记忆是 {@link Compactor}、派工具是 {@link Tools}。不同的只有回话的一方
+ * 札记索引由 {@link MemoryPreamble} 注入、整理记忆是 {@link Compactor}、派工具是 {@link CompanionToolPort}。不同的只有回话的一方
  * ({@link Mind})与两件客户端才有的事:人设用内置默认人设,主动性用默认档位。
  *
  * <p>全部在服务端主线程上:模型的回调、下行的包都先进 {@code mail},由运行器每刻取出来执行。
@@ -40,7 +42,7 @@ final class Brain {
     final UUID her;
     final EventQueue queue = new EventQueue(EventQueue.Journal.NONE);
     final RuntimeState runtime;
-    final Tools tools;
+    final CompanionToolPort tools;
     final AgentLoop loop;
     private final MemoryPreamble memory;
     private volatile BodySnapshot body;
@@ -57,7 +59,8 @@ final class Brain {
         ConvoState convo = new ConvoState(msg -> log.append(msg, null));
         this.runtime = new RuntimeState(her, () -> body);
         this.memory = new MemoryPreamble(NoteBook.of(her));
-        this.tools = new Tools(her);
+        ToolAnchor anchor = () -> her;
+        this.tools = new CompanionToolPort(her, () -> anchor);
         Compactor compactor = new Compactor(her.toString(), convo, log, () -> window);
         ModelPort model = new ModelPort() {
             @Override
