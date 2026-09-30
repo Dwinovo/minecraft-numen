@@ -42,7 +42,7 @@ class GoalStewardTest extends LoopHarness {
         GoalState goal = GoalState.of(objective, T0);
         assertTrue(goals.set(goal), "活着、没被外接驾驶:当场交给她");
         loop.push(List.of(new EventQueue.Entry(EventTypes.QUERY,
-                "<query>/goal " + objective + "</query>\n" + GoalPrompts.initialDirective(goal), 0, false)));
+                EventQueue.query("/goal " + objective) + "\n" + GoalPrompts.initialDirective(goal), 0, false)));
         model.last().say("好,这就去");
         return goal;
     }

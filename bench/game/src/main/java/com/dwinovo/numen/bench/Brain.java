@@ -130,7 +130,7 @@ final class Brain {
 
     /** 主人说一句,和他在聊天框里说的一样进她的收件箱。 */
     void ownerSays(String words) {
-        loop.push(List.of(new EventQueue.Entry(EventTypes.QUERY, "<query>" + words + "</query>",
+        loop.push(List.of(new EventQueue.Entry(EventTypes.QUERY, EventQueue.query(words),
                 System.currentTimeMillis(), false)));
     }
 

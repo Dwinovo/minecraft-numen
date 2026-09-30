@@ -480,7 +480,7 @@ public final class GameTestKit {
         /** 主人开口说一句,和他在聊天框里说的一样进她的收件箱。 */
         void ownerSays(String words) {
             arrive(new EventQueue.Entry(com.dwinovo.numen.agent.inbox.EventTypes.QUERY,
-                    "<query>" + words + "</query>", System.currentTimeMillis(), false));
+                    EventQueue.query(words), System.currentTimeMillis(), false));
         }
 
         private void arrive(EventQueue.Entry entry) {

@@ -68,7 +68,7 @@ class SerialCallsTest {
     }
 
     private static EventQueue.Entry ownerWords(String words) {
-        return new EventQueue.Entry(EventTypes.QUERY, "<query>" + words + "</query>", 0, false);
+        return new EventQueue.Entry(EventTypes.QUERY, EventQueue.query(words), 0, false);
     }
 
     @Test

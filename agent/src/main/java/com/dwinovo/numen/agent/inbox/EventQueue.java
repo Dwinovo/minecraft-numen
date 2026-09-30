@@ -215,6 +215,14 @@ public final class EventQueue {
         return out;
     }
 
+    /**
+     * 主人的话交给模型的样子:包进 {@code <query>}。模型靠这个标记分清哪句是主人亲口说的、哪些是一同注入的事件与状态;
+     * 面板与日志认它只在 {@code ConvoLog.queries} 一处。
+     */
+    public static String query(String words) {
+        return "<query>" + words + "</query>";
+    }
+
     /** 溢出丢弃的说明文本——服务端暂存与客户端收件共用一句话。kind 就是这条条目的类型 {@link EventTypes#DROPPED}。 */
     public static String droppedNote(int n) {
         return "<event kind=\"" + EventTypes.DROPPED + "\">期间还发生了约 " + n + " 件事,没能记下来</event>";

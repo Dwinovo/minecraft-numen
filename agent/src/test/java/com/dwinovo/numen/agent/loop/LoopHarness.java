@@ -251,7 +251,7 @@ public abstract class LoopHarness {
     // ---- 输入与读事件的小工具 ----
 
     protected void ownerSays(String words) {
-        loop.push(List.of(new EventQueue.Entry(EventTypes.QUERY, "<query>" + words + "</query>", 0, false)));
+        loop.push(List.of(new EventQueue.Entry(EventTypes.QUERY, EventQueue.query(words), 0, false)));
     }
 
     protected void worldEvent(String text, boolean urgent) {

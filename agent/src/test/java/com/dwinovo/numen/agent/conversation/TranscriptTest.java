@@ -1,5 +1,6 @@
 package com.dwinovo.numen.agent.conversation;
 
+import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.dwinovo.numen.agent.llm.ConvoLog;
 import com.dwinovo.numen.agent.llm.ConvoState;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
@@ -24,7 +25,7 @@ class TranscriptTest {
 
     private static ConvoLog.Line owner(long ts, String conv, int turn, String said, String audience) {
         return new ConvoLog.Line(ts, conv, new ConvoState.Msg.User(
-                "<query>" + said + "</query>\n" + Audience.line(turn, audience)));
+                EventQueue.query(said) + "\n" + Audience.line(turn, audience)));
     }
 
     private static ConvoLog.Line reply(long ts, String conv, String said) {

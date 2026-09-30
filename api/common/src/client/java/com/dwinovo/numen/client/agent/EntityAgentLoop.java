@@ -296,7 +296,7 @@ public final class EntityAgentLoop {
      *         所以 {@code Delivery} 在那种情况下单报 {@code TO_EXTERNAL_BRAIN}。
      */
     public boolean submitPrompt(String text) {
-        return enqueueOwnerWords("<query>" + text + "</query>", text);
+        return enqueueOwnerWords(EventQueue.query(text), text);
     }
 
     /**
@@ -315,7 +315,7 @@ public final class EntityAgentLoop {
      * @param expanded 客户端替他展开的内容(技能正文等);空则退化成一句普通的话
      */
     public boolean submitCommand(String echo, String expanded) {
-        String wire = "<query>" + echo + "</query>"
+        String wire = EventQueue.query(echo)
                 + (expanded == null || expanded.isBlank() ? "" : "\n" + expanded);
         return enqueueOwnerWords(wire, echo);
     }
