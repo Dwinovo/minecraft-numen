@@ -3,6 +3,7 @@ package com.dwinovo.numen.mixin;
 import com.dwinovo.numen.entity.FakeConnection;
 import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.network.Connection;
+import net.minecraft.network.PacketSendListener;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.server.network.ServerCommonPacketListenerImpl;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
@@ -33,10 +34,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * the body — an item's {@code use()} opening a screen (chiikawa's music box), a menu's
  * per-tick {@code broadcastChanges} (AE2 terminals), etc.
  *
- * <p>Cancelling at {@code HEAD} of the 1-arg {@code send(Packet)} short-circuits before
- * the (2-arg) overload that carries {@code checkPacket} is ever reached. It is a strict
- * superset of what {@link FakeConnection#send} already did (drop on the floor — there is
- * no client), so there is no behavioural regression: vanilla position/chunk/keep-alive
+ * <p>Cancelling at {@code HEAD} of the 2-arg {@code send(Packet, PacketSendListener)} short-circuits
+ * before its {@code checkPacket}. Every send goes through that overload — the 1-arg {@code send(Packet)}
+ * only forwards to it, and callers that want a delivery listener (a system chat message's
+ * "not delivered" fallback) call it directly — so it is the one exit, and the only place the fake client
+ * sees every packet. It is a strict superset of what {@link FakeConnection#send} already did (drop on the
+ * floor — there is no client), so there is no behavioural regression: vanilla position/chunk/keep-alive
  * packets were already discarded.
  *
  * <p>Common (all environments): the integrated server hits this path in singleplayer too,
@@ -49,8 +52,9 @@ public abstract class MixinServerCommonPacketListener {
     @Final
     protected Connection connection;
 
-    @Inject(method = "send(Lnet/minecraft/network/protocol/Packet;)V", at = @At("HEAD"), cancellable = true)
-    private void numen$dropOutboundForFakeConnection(Packet<?> packet, CallbackInfo ci) {
+    @Inject(method = "send(Lnet/minecraft/network/protocol/Packet;Lnet/minecraft/network/PacketSendListener;)V",
+            at = @At("HEAD"), cancellable = true)
+    private void numen$dropOutboundForFakeConnection(Packet<?> packet, PacketSendListener listener, CallbackInfo ci) {
         if (!(this.connection instanceof FakeConnection)) {
             return;
         }
