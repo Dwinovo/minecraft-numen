@@ -33,12 +33,15 @@ test {
     useJUnitPlatform()
 }
 
-/** 对比两份结果:{@code ./gradlew :bench:compare -Pbefore=<结果目录> -Pafter=<结果目录>},报告打到标准输出。 */
+/** 对比两份结果:{@code ./gradlew :bench:compare -Pbefore=<结果目录> -Pafter=<结果目录>},路径相对仓库根,报告打到标准输出。 */
 tasks.register('compare', JavaExec) {
     group = 'verification'
     description = '对比两份评测结果(见 docs/bench.md)'
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'com.dwinovo.numen.bench.report.Compare'
+    workingDir = rootProject.projectDir
+    // 报告是 UTF-8 的 Markdown;不跟着系统默认编码走(中文 Windows 上是 GBK)
+    jvmArgs '-Dstdout.encoding=UTF-8'
     doFirst {
         args(project.property('before'), project.property('after'))
     }
