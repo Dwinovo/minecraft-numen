@@ -61,7 +61,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * 一次运行:搭一块新场地、请主人上线、召出她、接上大脑、搭场景、主人开口;之后每刻取信箱、推循环、看收不收场;收场时
+ * 一次运行:拨回世界、清掉图纸库、搭一块新场地、请主人上线、召出她、接上大脑、搭场景、主人开口;之后每刻取信箱、推循环、看收不收场;收场时
  * 对终态判断言、记一行、把场地收拾干净。
  *
  * <h2>怎么算收场</h2>
@@ -82,6 +82,11 @@ final class Attempt {
     private static final int WARMUP_TICKS = 20;
     /** 等身体状态最多等这么久,还没来就是评测自己出了问题。 */
     private static final int WARMUP_LIMIT = 200;
+    /**
+     * 服务器目录下的图纸库(设计也存在里面):全服共用、跨次保留,她上一次画的设计会原样出现在下一次里、还占着名字。评测的
+     * 游戏目录只给评测用,每次运行开场整个清掉。
+     */
+    private static final String LIBRARY = "schematics";
     /** 她闲下来保持这么久算收工。 */
     static final int SETTLE_TICKS = 60;
     /** 她叫这个名字,主人叫那个。 */
@@ -136,6 +141,10 @@ final class Attempt {
         transcript = new Transcript(Results.get().transcript(suite, scenario.id(), variant.id(), number));
         meter = new Meter(transcript);
         settleWorld(level);
+        Path library = server.getServerDirectory().resolve(LIBRARY);
+        if (Files.exists(library)) {
+            deleteTree(library);
+        }
         scenario.arena().build(level, origin);
         owner = OwnerConnection.join(server, level, OWNER_NAME, standOn(scenario.ownerAt()),
                 payload -> mail.add(() -> downlink(payload)));
@@ -304,13 +313,17 @@ final class Attempt {
         }
         scenario.arena().clear(level, origin);
         if (home != null) {
-            try (Stream<Path> files = Files.walk(home)) {
-                for (Path p : files.sorted(Comparator.reverseOrder()).toList()) {
-                    Files.delete(p);
-                }
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
+            deleteTree(home);
+        }
+    }
+
+    private static void deleteTree(Path root) {
+        try (Stream<Path> files = Files.walk(root)) {
+            for (Path p : files.sorted(Comparator.reverseOrder()).toList()) {
+                Files.delete(p);
             }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 
