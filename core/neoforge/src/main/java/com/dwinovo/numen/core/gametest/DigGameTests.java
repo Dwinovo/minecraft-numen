@@ -225,6 +225,42 @@ public class DigGameTests {
     }
 
     /**
+     * 掉落物躺在工作区的边上:南瓜离她整十格,正落在工作区那个球的边上,挖下来的南瓜摆回那一格、不再弹动。那一格脚下在区里,
+     * 头顶那一格出了区,她站不进去——挨着它站在区里照样捡得到,于是走过去捡起来,算这一单的收获。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_dig")
+    public static void dig_picks_up_a_drop_lying_on_the_edge_of_its_work_area(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_edge_picker", new BlockPos(2, 2, 5), false);
+        BlockPos pumpkin = helper.absolutePos(new BlockPos(12, 2, 5));
+        level.setBlockAndUpdate(pumpkin, Blocks.PUMPKIN.defaultBlockState());
+        WorkArea area = WorkArea.around(companion);
+        helper.assertTrue(area.contains(level.dimension(), pumpkin) && !area.contains(level.dimension(), pumpkin.above()),
+                "the pumpkin does not lie on the edge of the work area as laid out");
+        Vec3 onTheEdge = Vec3.atBottomCenterOf(pumpkin);
+        boolean[] placed = {false};
+        helper.onEachTick(() -> {
+            if (!placed[0] && level.getBlockState(pumpkin).isAir()) {
+                for (net.minecraft.world.entity.item.ItemEntity drop : level.getEntitiesOfClass(
+                        net.minecraft.world.entity.item.ItemEntity.class, new net.minecraft.world.phys.AABB(pumpkin).inflate(2),
+                        ie -> ie.getItem().is(Items.PUMPKIN))) {
+                    drop.teleportTo(onTheEdge.x, onTheEdge.y, onTheEdge.z);
+                    drop.setDeltaMovement(Vec3.ZERO);
+                    placed[0] = true;
+                }
+            }
+        });
+        Mining mine = mineScanned(helper, companion, 10, "minecraft:pumpkin", "count", 1);
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(mine.done(), "dig has not finished");
+            helper.assertTrue(placed[0] && mine.succeeded() && companion.getInventory().countItem(Items.PUMPKIN) == 1,
+                    "the pumpkin lying on the edge of the work area was not picked up: " + mine.outcome());
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
      * 埋在石头里的钻石:一块九乘九、六层高的深板岩,中间埋着四颗深板岩钻石矿;她站在顶上,手持铁镐
      * 往下挖进去,采得 2 颗钻石。盯的是埋矿的站位:脚不能高于矿,得一路挖着往下走,再就地挖矿。
      */

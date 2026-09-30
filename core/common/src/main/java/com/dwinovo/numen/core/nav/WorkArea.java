@@ -64,6 +64,14 @@ public record WorkArea(BlockPos center, Area area, String where) {
         return area.contains(dimension, pos);
     }
 
+    /**
+     * 身体站得进 {@code feet} 这一格而不出区:脚那一格、头那一格与脚下踩着的那一格都在区里——移动关在区里时,站一格要这三格
+     * 都许({@link #confine} 把"过"与"站"都限在区里的格上)。区边上的一格自己在区里,头顶那一格却可能出了区。
+     */
+    public boolean holdsBody(ResourceKey<Level> dimension, BlockPos feet) {
+        return contains(dimension, feet) && contains(dimension, feet.above()) && contains(dimension, feet.below());
+    }
+
     /** 区里的格子,给区域运算用(点名的区域与工作区求交、求差)。 */
     public Cells cells() {
         return area.cells();

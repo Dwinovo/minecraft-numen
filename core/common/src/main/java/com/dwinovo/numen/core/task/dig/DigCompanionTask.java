@@ -447,11 +447,12 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
     }
 
     /**
-     * 去捡一件掉落物的目标:躺在区里的站进它那一格(原版拾取一定够得着);弹到区外的她进不去,站在区边上挨着它
-     * ({@link DropTracker#pickUp}:原版拾取框横向外扩一格)。
+     * 去捡一件掉落物的目标:身体站得进它那一格而不出区的,站进去(原版拾取一定够得着);站不进去的——弹到区外,或躺在区边上、
+     * 头顶那一格出了区——站在区里挨着它({@link DropTracker#pickUp}:原版拾取框横向外扩一格)。站不站得进去问工作区
+     * ({@link WorkArea#holdsBody}),与移动关在区里是同一块区域。
      */
     private Goal dropGoal(BlockPos drop) {
-        return r.work.contains(player.level().dimension(), drop) ? Goals.at(drop) : DropTracker.pickUp(drop);
+        return r.work.holdsBody(player.level().dimension(), drop) ? Goals.at(drop) : DropTracker.pickUp(drop);
     }
 
     /** 给人说"朝哪儿"的那一格:最近的候选,没有就是最近的掉落物。 */
