@@ -33,7 +33,7 @@ Carry a bow with arrows, then `scan_entities` → `fight attack --entity_ids 311
 Per caged pillar:
 
 1. `move_goto(pillar_top_x, top_y + 1, pillar_top_z)` — navigation pillars up the side on its own (this is what the spare cobblestone is for).
-2. `scan_blocks` for `iron_bars` into an area (`area new cage` first), then `work_dig` that area to open the cage (from the pillar top, so the bars are within its reach).
+2. `scan_blocks` for `iron_bars` into an area (`cage`), then `work_dig` that area to open the cage (from the pillar top, so the bars are within its reach).
 3. `move_goto` back down/away, then scan that crystal and call `fight attack --entity_ids 311` with its id — it keeps its own distance from there.
 
 While you're up high, the dragon may strafe the pillar — if `status_self` shows falling HP, finish the bars and get down first.

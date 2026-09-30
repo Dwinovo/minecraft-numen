@@ -98,6 +98,47 @@ public class AreaGameTests {
     }
 
     /**
+     * {@code --into} 点名一块还没有的区域:一步扫进去,区域当场新建(像 shell 的 {@code >}),回执说新建了它、加成了 g1 到 g2;
+     * 存档里真有这块区域、两部分。再放一块、再扫进同一块:这回是往已有的区域里续(g3),回执不再说新建。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 4000, batch = "numen_area")
+    public static void scan_into_a_missing_area_makes_it_and_says_so(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos near = helper.absolutePos(new BlockPos(5, 2, 5));
+        BlockPos far = helper.absolutePos(new BlockPos(11, 2, 11));
+        BlockPos later = helper.absolutePos(new BlockPos(5, 2, 11));
+        level.setBlockAndUpdate(near, Blocks.PURPUR_BLOCK.defaultBlockState());
+        level.setBlockAndUpdate(far, Blocks.PURPUR_BLOCK.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_new_mapper", new BlockPos(3, 2, 3), false);
+        helper.assertTrue(areas(companion).get("fresh") == null, "the area fresh is there before the scan");
+        ToolRun first = command(companion, "scan blocks 12 minecraft:purpur_block --into fresh");
+        ToolRun[] second = new ToolRun[1];
+
+        succeedWhen(helper, () -> {
+            if (second[0] == null) {
+                helper.assertTrue(first.reply() != null, "the first scan has not replied");
+                helper.assertTrue(first.succeeded() && message(first).contains(
+                                "added to the new area fresh (made just now) as g1 to g2"),
+                        "the scan does not say it made the area: " + first.reply());
+                helper.assertTrue(areas(companion).get("fresh") != null
+                                && areas(companion).get("fresh").parts().size() == 2,
+                        "the area fresh was not made with two parts: " + areas(companion).get("fresh"));
+                level.setBlockAndUpdate(later, Blocks.PURPUR_BLOCK.defaultBlockState());
+                level.setBlockAndUpdate(near, Blocks.AIR.defaultBlockState());
+                level.setBlockAndUpdate(far, Blocks.AIR.defaultBlockState());
+                second[0] = command(companion, "scan blocks 12 minecraft:purpur_block --into fresh");
+            }
+            helper.assertTrue(second[0].reply() != null, "the second scan has not replied");
+            helper.assertTrue(second[0].succeeded() && message(second[0]).contains("added to area fresh as g3")
+                            && !message(second[0]).contains("new area"),
+                    "the second scan did not add to the area it made: " + second[0].reply());
+            helper.assertTrue(areas(companion).get("fresh").parts().size() == 3,
+                    "the area fresh does not have three parts: " + areas(companion).get("fresh"));
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
      * 复核:三格石英块扫进 {@code quartz},其中一格被人换成了泥土;{@code area refresh quartz} 说划掉了 1 格,区域里剩两格,
      * 再复核一次什么都不改。
      */

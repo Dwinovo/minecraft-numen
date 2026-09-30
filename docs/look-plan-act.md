@@ -85,8 +85,8 @@ area center mid ores                     中心附近的一格(单格区域)
 ### 命令
 
 ```
-area new ores
-scan blocks 32 iron_ore deepslate_iron_ore --into ores   扫描,每一团加成一部分
+area new ores                                            建一块空区域
+scan blocks 32 iron_ore deepslate_iron_ore --into ores   扫描,每一团加成一部分(没有 ores 就新建)
 area add house --box 10,60,5..20,70,15                    框一块
 area add chest --at 12 64 7                                一个点
 area add home --built house#1                              一栋建成的房子(Built 记着每一格)

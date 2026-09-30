@@ -105,6 +105,20 @@ public final class AreaOps {
         return resolve(her, AreaRef.parse(name));
     }
 
+    /**
+     * {@code --into} 点名的那一整块能不能写:有就得在她此刻的维度,没有就在写的时候新建(像 shell 的 {@code >}),名字这里先验。
+     *
+     * @throws IllegalArgumentException 区域在别的维度,或名字不合规矩
+     */
+    static void into(NumenPlayer her, String name) {
+        Area area = store(her).get(name);
+        if (area == null) {
+            Names.checked("area", name);
+            return;
+        }
+        sameDimension(name, area, her.level().dimension());
+    }
+
     // ==================== 改区域 ====================
 
     /** 新建一块空的区域,在她此刻所在的维度。 */
@@ -424,7 +438,7 @@ public final class AreaOps {
         List<String> rows = new ArrayList<>();
         store(her).all().forEach((name, area) -> rows.add(AreaText.summary(name, area)));
         String head = rows.isEmpty()
-                ? "No areas yet: area new <name> makes one; scan blocks <radius> <block ids> --into <name> fills it."
+                ? "No areas yet: scan blocks <radius> <block ids> --into <name> makes one from what a scan finds; area new <name> makes an empty one."
                 : "Areas of your owner, shared by all of their companions:";
         return new Listing(head, rows, "", again).result(args).toJson();
     }

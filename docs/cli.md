@@ -996,8 +996,8 @@ scan blocks 16 #minecraft:beds --in base                 只收落在 base 里�
   区域,每格附带看到的方块状态与那一刻(主世界游戏刻)。`BlockGroups.Group` 只留格子与状态、说法、最近一格:各种几格、源头几格
   由区域的格子说,包围盒由 `area show` 说。
 - `--in`:半径参数不变,范围是"从她脚下的半径"与"点名的区域"两者都要在——区域判定只问 `Area.contains`,搜索的球只是看多远。
-- `--into` 的区域要先 `area new`(与 `build --into` 要先有设计同一个做法),要是整块(不收部分),看之前先过 `edit_area`;看的时候
-  区域被删了就不写、照实说。
+- `--into` 的区域没有就新建(像 shell 的 `>`,在她看的那个维度;回执说 `added to the new area ores (made just now)`),有就得在她
+  此刻的维度;要是整块(不收部分),看之前先过 `edit_area`(建区域也是它)。能不能写只在 `AreaOps.into` 判;`area new` 照旧建空区域。
 - 回执删掉 `in_work_area`、`box` 与小结里的 `work_area`:去不去得了归规划(`route plan`、`move goto --area`),框一块用 `area add --box`。
 
 **`work mine`**:

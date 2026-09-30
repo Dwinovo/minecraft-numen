@@ -11,9 +11,10 @@ import com.dwinovo.numen.core.scan.BlockScan;
 import com.dwinovo.numen.core.scan.BlockSearch;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.permission.Action;
-import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonObject;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 
 import java.util.ArrayList;
@@ -29,8 +30,8 @@ import java.util.Set;
  *
  * <p>结果按团给出:每一格先拿挖掘落点会提交的同一个动作问权限层,相连且说法相同的格子成一团,由近及远,一团一行。
  * 不带 {@code --into} 只是看:团没有编号,什么也不存,翻页就是再看一次。带 {@code --into <区域>} 就把每一团加成那块区域的一部分
- * (编号 {@code g} 在区域里续),回执里每团的编号就是能拿去点名的 {@code 区域/g5};改区域是动作 {@code edit_area},看之前先过
- * 权限层。{@code --in <区域>} 只收落在那块区域里的格,半径照旧是从她脚下看多远。
+ * (编号 {@code g} 在区域里续;没有这块区域就新建它,像 shell 的 {@code >}),回执里每团的编号就是能拿去点名的 {@code 区域/g5};
+ * 改区域与建区域都是动作 {@code edit_area},看之前先过权限层。{@code --in <区域>} 只收落在那块区域里的格,半径照旧是从她脚下看多远。
  */
 public final class ScanOps {
 
@@ -42,7 +43,7 @@ public final class ScanOps {
      * 看一次,回执是结果的第一页(或 {@code --page} 要的那一页)。
      *
      * @param in    只看这块区域(或它的一部分)里的;不限为 null
-     * @param into  把每一团加进这块区域;只是看为 null
+     * @param into  把每一团加进这块区域(没有就新建);只是看为 null
      * @param again 这一次看本身的那一行(不带 {@code --page}):翻页提示写它,改区域的征询也点名它
      */
     public static void scanBlocks(ServerSource src, int radius, List<String> blockIds, AreaRef in, AreaRef into,
@@ -55,7 +56,8 @@ public final class ScanOps {
         }
         Area only = in == null ? null : AreaOps.resolve(self, in);
         if (into == null) {
-            BlockScan.start(self, r, targets, only, found -> src.reply(listed(found, r, in, null, null, args, again)));
+            BlockScan.start(self, r, targets, only, found -> src.reply(listed(found, r, in, null, false, null, args,
+                    again)));
             return;
         }
         if (args.get(Listing.PAGE) != null) {
@@ -68,22 +70,24 @@ public final class ScanOps {
             throw new IllegalArgumentException("--into takes a whole area (" + name + "): each group becomes a new part "
                     + "of it");
         }
-        AreaOps.existing(self, name);
+        AreaOps.into(self, name);
+        ResourceKey<Level> dimension = self.level().dimension();
         src.authorize(Action.editArea(name), again, allowed -> BlockScan.start(self, r, targets, only,
-                found -> allowed.reply(added(self, found, r, in, name, args))));
+                found -> allowed.reply(added(self, found, r, in, name, dimension, args))));
     }
 
-    /** 看完,写进区域:那一刻的区域加上每一团。看的时候区域被删了就不写,照实说。 */
+    /** 看完,写进区域:那一刻的区域加上每一团;那一刻没有这块区域就新建它(在看的那个维度),回执说新建了。 */
     private static String added(NumenPlayer self, BlockScan.Found found, int radius, AreaRef in, String into,
-                                CommandArgs args) {
+                                ResourceKey<Level> dimension, CommandArgs args) {
         Area now = AreaOps.store(self).get(into);
-        if (now == null) {
-            return TaskResult.fail("area " + into + " was deleted while I was scanning, so nothing was added; area new "
-                    + into + " makes it again").toJson();
+        boolean made = now == null;
+        BlockScan.Added added = found.into(made ? Area.empty(dimension) : now);
+        if (made) {
+            AreaOps.store(self).create(into, added.area());
+        } else {
+            AreaOps.store(self).replace(into, added.area());
         }
-        BlockScan.Added added = found.into(now);
-        AreaOps.store(self).replace(into, added.area());
-        return listed(found, radius, in, into, added.ids(), args, "area show " + into);
+        return listed(found, radius, in, into, made, added.ids(), args, "area show " + into);
     }
 
     /**
@@ -114,11 +118,12 @@ public final class ScanOps {
      * 一次看的回执:抬头说在哪、多远、找到几团(写进了区域就说加成了哪几部分);没看全时抬头只说"读到的那部分里"有几团,结尾说清
      * 哪里没读到。一团一行,按输出预算分页。{@code data} 是整次的小结,不随页变。
      *
+     * @param made  区域是这一次新建的
      * @param ids   写进区域后各团的编号;只是看为 null
      * @param again 翻页提示写的那一行
      */
-    private static String listed(BlockScan.Found found, int radius, AreaRef in, String into, List<String> ids,
-                                 CommandArgs args, String again) {
+    private static String listed(BlockScan.Found found, int radius, AreaRef in, String into, boolean made,
+                                 List<String> ids, CommandArgs args, String again) {
         List<BlockGroups.Group> all = found.groups();
         List<String> rows = new ArrayList<>(all.size());
         for (int i = 0; i < all.size(); i++) {
@@ -146,11 +151,13 @@ public final class ScanOps {
         if (into != null) {
             data.put("area", into);
         }
+        String area = made ? "the new area " + into + " (made just now)" : "area " + into;
         String kept = ids == null || ids.isEmpty() ? ""
-                : ", added to area " + into + " as " + (ids.size() == 1 ? ids.get(0)
+                : ", added to " + area + " as " + (ids.size() == 1 ? ids.get(0)
                         : ids.get(0) + " to " + ids.get(ids.size() - 1));
         String head = all.isEmpty()
-                ? "No groups" + where + (into == null ? "." : "; nothing was added to area " + into + ".")
+                ? "No groups" + where + (into == null ? "."
+                        : made ? "; made area " + into + ", still empty." : "; nothing was added to area " + into + ".")
                 : all.size() + " group(s)" + where + kept + ", nearest first, one per line:";
         return new Listing(head, rows, note == null ? "" : "Note: " + note, again).result(args, data).toJson();
     }
