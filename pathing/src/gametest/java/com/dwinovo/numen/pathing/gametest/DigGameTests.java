@@ -1,6 +1,7 @@
 package com.dwinovo.numen.pathing.gametest;
 
 import static com.dwinovo.numen.pathing.gametest.Trial.ARENA;
+import static com.dwinovo.numen.pathing.gametest.Trial.TALL;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,7 +50,8 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 /**
  * 挖掘:头顶是沙子沙砾、挖了会漏水漏岩浆、冰,都不挖;挑对工具;空手挖原木、水下挖掘的耗时与原版、与定价一致;背包深处的好工具
  * 被计价也被用上;红石矿、修补附魔都不让挖掘重开;隧道里每一格只开挖一次;实体挡住准星时停手不打它;破坏事件被取消时以
- * 拒绝收场;慢挖硬方块不被当成卡住;创造模式五格交互距离;要挖的那一格同样够得着的几个站位里,停在挡得少的那一处。
+ * 拒绝收场;慢挖硬方块不被当成卡住;创造模式五格交互距离;要挖的那一格同样够得着的几个站位里,停在挡得少的那一处;
+ * 埋在石头深处、藏在石山里的矿,出厂预算的一次规划就搜到头,照着挖过去。
  */
 @GameTestHolder("numen")
 @PrefixGameTestTemplate(false)
@@ -493,5 +495,58 @@ public class DigGameTests {
                         throw new GameTestAssertException("停下的地方看不见它:" + t.rel(r.body.blockPosition()));
                     }
                 });
+    }
+
+    /**
+     * 脚下四十层石头,正下方二十七格深处埋着一块铁矿,手上一把铁镐,许改自然地形。挖一格的价钱是估价里落一格的十几倍,
+     * 估价加上埋深(绕不开的挖掘)之后,出厂预算的一次规划就搜到头,路线从脚下直直往下挖;照着这条路走,挖到够得着它。
+     */
+    @GameTest(template = TALL, batch = BATCH, timeoutTicks = 1600)
+    public static void plans_straight_down_to_an_ore_buried_deep(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(0, 1, 0, 15, 40, 15, Blocks.STONE);
+        t.set(8, 14, 8, Blocks.IRON_ORE);
+        TestBody body = t.body(8, 41, 8);
+        body.getInventory().setItem(0, new ItemStack(Items.IRON_PICKAXE));
+        BlockPos ore = t.at(8, 14, 8);
+        NavRequest request = NavRequest.to(Goals.dig(ore, Snapshots.of(body).stats()), NATURAL);
+        t.plan(body, PlanQuery.of(request.goal(), request.spec(), 1), plan -> {
+            if (plan.candidates().isEmpty()) {
+                throw new GameTestAssertException("出厂预算内没规划到头:" + plan.outcome());
+            }
+            Route route = plan.candidates().get(0).route();
+            for (BlockPos node : route.nodes()) {
+                if (node.getX() != ore.getX() || node.getZ() != ore.getZ()) {
+                    throw new GameTestAssertException("没有直直往下挖:" + t.rel(node));
+                }
+            }
+            t.go(body, request.following(route)).within(1400).arrives();
+        });
+    }
+
+    /**
+     * 一座横贯场地的石山(二十格高,身上没有垫路料,翻不过去),铁矿藏在离山面六格深处,手上一把铁镐:出厂预算的一次规划就
+     * 搜到头,只从正面挖进去几格、够得着就停;照着走,够着它。
+     */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 900)
+    public static void plans_into_a_hill_to_an_ore_inside(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        t.fill(10, 1, 0, 39, 20, 39, Blocks.STONE);
+        t.set(16, 2, 20, Blocks.IRON_ORE);
+        TestBody body = t.body(4, 1, 20);
+        body.getInventory().setItem(0, new ItemStack(Items.IRON_PICKAXE));
+        BlockPos ore = t.at(16, 2, 20);
+        NavRequest request = NavRequest.to(Goals.dig(ore, Snapshots.of(body).stats()), NATURAL);
+        t.plan(body, PlanQuery.of(request.goal(), request.spec(), 1), plan -> {
+            if (plan.candidates().isEmpty()) {
+                throw new GameTestAssertException("出厂预算内没规划到头:" + plan.outcome());
+            }
+            Route route = plan.candidates().get(0).route();
+            long digs = route.edits().stream().filter(e -> e instanceof Edit.Dig).count();
+            if (digs == 0 || digs > 8) {
+                throw new GameTestAssertException("该从正面挖进去几格,却挖 " + digs + " 格:" + route);
+            }
+            t.go(body, request.following(route)).within(800).arrives();
+        });
     }
 }
