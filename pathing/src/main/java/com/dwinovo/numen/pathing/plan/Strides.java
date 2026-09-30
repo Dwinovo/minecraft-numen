@@ -91,9 +91,24 @@ final class Strides {
         return model.body().fallDamage(drop, level.getBlockState(support));
     }
 
-    /** 从 {@code drop} 高处落到这个落点:下落耗时(至少要走回列中心那一截),摔疼的按掉的血折价。 */
-    static double landing(CostModel model, Maneuver m) {
-        return Math.max(ActionCosts.fall(m.drop()), ActionCosts.CENTER_AFTER_FALL)
-                + m.fallDamage() * ActionCosts.FALL_DAMAGE_PER_POINT;
+    /** 从 {@code drop} 高处落到这个落点的耗时:下落,至少要走回列中心那一截。 */
+    static double landing(Maneuver m) {
+        return Math.max(ActionCosts.fall(m.drop()), ActionCosts.CENTER_AFTER_FALL);
+    }
+
+    /** 落地摔疼的折价:掉的血按 {@link ActionCosts#FALL_DAMAGE_PER_POINT} 折成刻。 */
+    static double bruise(Maneuver m) {
+        return m.fallDamage() * ActionCosts.FALL_DAMAGE_PER_POINT;
+    }
+
+    /**
+     * 身体以 {@code start} 待在 {@code from}、走到 {@code to} 以 {@code landing} 待着,这一步里眼睛换不换得了气:起步或落定时
+     * 眼睛(列中心、脚高加站立眼高)换不了气({@link Semantics#breathless}),整步都按憋着气算——半截在水里的那一步也算进憋气,
+     * 宁可多算。
+     */
+    static boolean submerged(BlockGetter level, BodyStats body, BlockPos from, Stance start, BlockPos to, Stance landing) {
+        double eye = body.eyeHeight(Pose.STANDING);
+        return Semantics.breathless(level, from.getX() + 0.5, start.feetY() + eye, from.getZ() + 0.5)
+                || Semantics.breathless(level, to.getX() + 0.5, landing.feetY() + eye, to.getZ() + 0.5);
     }
 }

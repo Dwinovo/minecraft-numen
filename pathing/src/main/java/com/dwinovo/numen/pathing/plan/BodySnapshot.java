@@ -22,7 +22,8 @@ import net.minecraft.world.level.block.state.properties.DripstoneThickness;
 /**
  * 身体快照:规划要知道的身体的一切,由宿主在派发那一刻从真实的身体上抄下来。规划与执行复核读同一份形状,搜索线程只读。
  *
- * <p>摔掉几点血、摔落上限、能不能疾跑、能不能动方块这几条规则只写在这里,规格只能在其上收紧。
+ * <p>摔掉几点血、摔落上限、能不能疾跑、能不能动方块这几条规则只写在这里,规格只能在其上收紧;憋气的本钱与规则在
+ * {@link Breath}。
  *
  * @param stats                   第 0 层用的物理量(尺寸、迈步、起跳、交互距离、细雪托不托得住)
  * @param gameMode                游戏模式:创造模式瞬间挖掉、不摔伤;冒险与旁观模式动不了方块
@@ -33,10 +34,11 @@ import net.minecraft.world.level.block.state.properties.DripstoneThickness;
  * @param waterMovementEfficiency 属性 {@code water_movement_efficiency}:0 是原版水里的步速,1 与陆上一样快
  * @param inventory               主背包 36 格的副本,下标就是槽位;挑工具看全背包
  * @param mining                  挖掘速度相关的属性与效果
+ * @param breath                  氧气、水下呼吸附魔与效果、海龟壳:能憋多久
  */
 public record BodySnapshot(BodyStats stats, GameType gameMode, float health, double safeFallDistance,
                            double fallDamageMultiplier, int foodLevel, double waterMovementEfficiency,
-                           List<ItemStack> inventory, Mining mining) {
+                           List<ItemStack> inventory, Mining mining, Breath breath) {
 
     /** 摔完至少要留下的血量(三颗心):按血量推摔落上限时不把她摔到只剩一口气。 */
     static final float HEALTH_RESERVE = 6.0F;
@@ -61,6 +63,7 @@ public record BodySnapshot(BodyStats stats, GameType gameMode, float health, dou
         Objects.requireNonNull(stats, "stats");
         Objects.requireNonNull(gameMode, "gameMode");
         Objects.requireNonNull(mining, "mining");
+        Objects.requireNonNull(breath, "breath");
         inventory = inventory.stream().map(ItemStack::copy).toList();
     }
 

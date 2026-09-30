@@ -92,19 +92,27 @@ final class Diagonal implements Move {
         }
         boolean sprint = model.maySprint() && !wading && !jump && draft.edits().isEmpty();
         return new Premise.Holds(new Maneuver(MoveKind.DIAGONAL, heading, from, stance, to, landing, jump, sprint, false, wading,
-                Strides.speedFactor(draft, from, f0, to, f1), drop, damage, 1, draft.edits(),
+                Strides.submerged(draft, body, from, stance, to, landing), Strides.speedFactor(draft, from, f0, to, f1), drop, damage, 1, draft.edits(),
                 contact.cells(), contact.exposure(), support));
     }
 
     @Override
     public double cost(CostModel model, Maneuver m) {
+        return movement(model, m) + (m.jump() ? model.spec().jumpPenalty() : 0)
+                + (m.drop() > 0.5 ? Strides.bruise(m) : 0) + model.overhead(m);
+    }
+
+    @Override
+    public double ticks(CostModel model, Maneuver m) {
+        return movement(model, m) + model.workTicks(m);
+    }
+
+    /** 身体斜着过去的刻数:斜走一格,要跳的至少是起跳上一格的工夫,落差过半格的加上落地。 */
+    private static double movement(CostModel model, Maneuver m) {
         double move = Strides.pace(model, m) * Math.sqrt(2);
         if (m.jump()) {
-            move = Math.max(move, ActionCosts.JUMP_ONE_BLOCK) + model.spec().jumpPenalty();
+            move = Math.max(move, ActionCosts.JUMP_ONE_BLOCK);
         }
-        if (m.drop() > 0.5) {
-            move += Strides.landing(model, m);
-        }
-        return move + model.overhead(m);
+        return m.drop() > 0.5 ? move + Strides.landing(m) : move;
     }
 }

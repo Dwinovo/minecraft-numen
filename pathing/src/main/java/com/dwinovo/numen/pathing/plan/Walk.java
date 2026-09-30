@@ -94,7 +94,7 @@ final class Walk implements Move {
         boolean wading = Strides.inWater(draft, to);
         boolean sprint = model.maySprint() && !wading && !jump && draft.edits().isEmpty();
         return new Premise.Holds(new Maneuver(MoveKind.WALK, heading, from, stance, to, landing, jump, sprint, sneak, wading,
-                Strides.speedFactor(draft, from, f0, to, f1), Math.max(0, f0 - f1), 0, 1, draft.edits(),
+                Strides.submerged(draft, body, from, stance, to, landing), Strides.speedFactor(draft, from, f0, to, f1), Math.max(0, f0 - f1), 0, 1, draft.edits(),
                 contact.cells(), contact.exposure(), support));
     }
 
@@ -126,10 +126,17 @@ final class Walk implements Move {
 
     @Override
     public double cost(CostModel model, Maneuver m) {
+        return movement(model, m) + (m.jump() ? model.spec().jumpPenalty() : 0) + model.overhead(m);
+    }
+
+    @Override
+    public double ticks(CostModel model, Maneuver m) {
+        return movement(model, m) + model.workTicks(m);
+    }
+
+    /** 身体走过去的刻数:一格的步速,要跳的至少是起跳上一格的工夫。 */
+    private static double movement(CostModel model, Maneuver m) {
         double move = Strides.pace(model, m);
-        if (m.jump()) {
-            move = Math.max(move, ActionCosts.JUMP_ONE_BLOCK) + model.spec().jumpPenalty();
-        }
-        return move + model.overhead(m);
+        return m.jump() ? Math.max(move, ActionCosts.JUMP_ONE_BLOCK) : move;
     }
 }

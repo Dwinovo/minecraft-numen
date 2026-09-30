@@ -352,7 +352,7 @@ class MovesTest {
         RouteSpec spec = RouteSpec.defaults().edit().parkour(true).build();
         assertTrue(holds(MoveKind.PARKOUR, Fixtures.model(spec), gap(3), AT, EAST).sprint());
         BodySnapshot hungry = new BodySnapshot(Vanilla.SURVIVAL, GameType.SURVIVAL, 20, 3, 1, 6, 0, List.of(),
-                BodySnapshot.Mining.VANILLA);
+                BodySnapshot.Mining.VANILLA, Breath.VANILLA);
         CostModel model = CostModel.of(spec, hungry, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
         assertEquals(Reason.NO_SPRINT, fails(MoveKind.PARKOUR, model, gap(3), AT, EAST).reason());
     }
@@ -531,7 +531,7 @@ class MovesTest {
         // 一池两格深的静水,水面与岸齐平:穿冰霜行者的身体踩着水面走过去,脚在水面那一层之上
         TestWorld world = pool(2);
         BodySnapshot frost = new BodySnapshot(Vanilla.FROST_WALKER, GameType.SURVIVAL, 20, 3, 1, 20, 0, List.of(),
-                BodySnapshot.Mining.VANILLA);
+                BodySnapshot.Mining.VANILLA, Breath.VANILLA);
         CostModel model = CostModel.of(RouteSpec.defaults(), frost, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
         BlockPos shore = new BlockPos(-5, Y, 0);
         Maneuver m = holds(MoveKind.WALK, model, world, shore, EAST);
@@ -549,7 +549,8 @@ class MovesTest {
         // 没穿皮靴,细雪托不住脚,这一步走不成
         fails(MoveKind.WALK, defaults(), world, AT, EAST);
         BodySnapshot boots = new BodySnapshot(Vanilla.LEATHER_BOOTS, GameType.SURVIVAL, 20, 3, 1, 20, 0,
-                List.of(new ItemStack(net.minecraft.world.item.Items.LEATHER_BOOTS)), BodySnapshot.Mining.VANILLA);
+                List.of(new ItemStack(net.minecraft.world.item.Items.LEATHER_BOOTS)), BodySnapshot.Mining.VANILLA,
+                Breath.VANILLA);
         CostModel model = CostModel.of(RouteSpec.defaults(), boots, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
         Maneuver m = holds(MoveKind.WALK, model, world, AT, EAST);
         assertEquals(Y, m.landing().feetY(), 1e-9, "站在细雪顶上");

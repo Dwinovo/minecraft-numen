@@ -79,7 +79,7 @@ final class Ascend implements Move {
         // 攀着、浮着时身体是攀上去、游上去的,只有站着时要跨过高坎才起跳
         boolean jump = rises && grounded;
         return new Premise.Holds(new Maneuver(MoveKind.ASCEND, heading, from, stance, to, landing, jump, false, false,
-                Strides.inWater(draft, to), Strides.speedFactor(draft, from, f0, to, f1), 0, 0, 1, draft.edits(),
+                Strides.inWater(draft, to), Strides.submerged(draft, body, from, stance, to, landing), Strides.speedFactor(draft, from, f0, to, f1), 0, 0, 1, draft.edits(),
                 contact.cells(), contact.exposure(), support));
     }
 
@@ -93,12 +93,20 @@ final class Ascend implements Move {
 
     @Override
     public double cost(CostModel model, Maneuver m) {
+        return movement(model, m) + (m.jump() ? model.spec().jumpPenalty() : 0) + model.overhead(m);
+    }
+
+    @Override
+    public double ticks(CostModel model, Maneuver m) {
+        return movement(model, m) + model.workTicks(m);
+    }
+
+    /** 身体上去的刻数:一格的步速;跳上去的至少是起跳上一格的工夫,从水里、梯子上够上去的另加爬一格。 */
+    private static double movement(CostModel model, Maneuver m) {
         double move = Strides.pace(model, m);
         if (m.jump()) {
-            move = Math.max(move, ActionCosts.JUMP_ONE_BLOCK) + model.spec().jumpPenalty();
-        } else if (!m.start().grounded()) {
-            move += ActionCosts.CLIMB_UP_ONE;
+            return Math.max(move, ActionCosts.JUMP_ONE_BLOCK);
         }
-        return move + model.overhead(m);
+        return m.start().grounded() ? move : move + ActionCosts.CLIMB_UP_ONE;
     }
 }

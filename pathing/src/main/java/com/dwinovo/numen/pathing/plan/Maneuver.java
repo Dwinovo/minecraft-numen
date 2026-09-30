@@ -18,6 +18,7 @@ import net.minecraft.core.BlockPos;
  * @param sprint      可以疾跑过去
  * @param sneak       要潜行(贴着脚下那块的侧面搭桥时,身子探出边沿)
  * @param wading      落到的节点泡在水里
+ * @param submerged   这一步眼睛换不了气:起步或落定时眼睛泡在水里({@link Strides#submerged}),整步按憋着气算
  * @param speedFactor 脚下方块的步速系数(起步与落点两处的平均,灵魂沙、蜂蜜块慢)
  * @param drop        脚往下落了多高
  * @param fallDamage  落定时摔掉几点血({@link BodySnapshot#fallDamage}:按落差与脚踩的那一格);落进水里、不是站着落地为 0。
@@ -30,7 +31,7 @@ import net.minecraft.core.BlockPos;
  * @param support     落到之后脚踩的那一格;不是站着为 null
  */
 public record Maneuver(MoveKind kind, Heading heading, BlockPos from, Stance start, BlockPos to, Stance landing, boolean jump, boolean sprint,
-                       boolean sneak, boolean wading, double speedFactor, double drop, int fallDamage, int span, List<Edit> edits,
+                       boolean sneak, boolean wading, boolean submerged, double speedFactor, double drop, int fallDamage, int span, List<Edit> edits,
                        long[] cells, int exposure, BlockPos support) {
 
     public Maneuver {

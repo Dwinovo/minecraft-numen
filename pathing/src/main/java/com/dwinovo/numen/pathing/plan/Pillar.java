@@ -63,11 +63,16 @@ final class Pillar implements Move {
             return draft.failure();
         }
         return new Premise.Holds(new Maneuver(MoveKind.PILLAR, heading, from, stance, to, landing, true, false, false, false,
-                1, 0, 0, 0, draft.edits(), contact.cells(), contact.exposure(), support));
+                Strides.submerged(draft, body, from, stance, to, landing), 1, 0, 0, 0, draft.edits(), contact.cells(), contact.exposure(), support));
     }
 
     @Override
     public double cost(CostModel model, Maneuver m) {
         return Strides.jump(model) + model.overhead(m);
+    }
+
+    @Override
+    public double ticks(CostModel model, Maneuver m) {
+        return ActionCosts.JUMP_ONE_BLOCK + model.workTicks(m);
     }
 }

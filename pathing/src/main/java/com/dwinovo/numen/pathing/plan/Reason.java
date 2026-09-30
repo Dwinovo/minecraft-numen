@@ -59,5 +59,7 @@ public enum Reason {
     /** 身体正占着这一格,不能往里放方块。 */
     OCCUPIED,
     /** 手够不着这一格。 */
-    OUT_OF_REACH
+    OUT_OF_REACH,
+    /** 憋不住气:照身体此刻的氧气,从这一步起的这一段水下游不到换气的地方({@link Breath#lasts})。 */
+    OUT_OF_BREATH
 }

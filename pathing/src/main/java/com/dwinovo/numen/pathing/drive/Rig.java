@@ -17,7 +17,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.BlockHitResult;
 
 /**
- * 执行的一套家伙:身体与它的键盘、动手的端口、活世界、宿主的另外几个端口,以及这次导航的实际账与身体动作。一次导航
+ * 执行的一套家伙:身体与它的键盘、动手的端口、活世界、宿主的另外几个端口,以及这次导航的实际账、身体动作与潜过的水。一次导航
  * 一份,段状态机与每一步的控制器共用,账记在一处。
  */
 final class Rig {
@@ -31,6 +31,8 @@ final class Rig {
     final TerrainPolicy terrain;
     final Threats threats;
     final EditLedger ledger = new EditLedger();
+    /** 这次导航里身体真在水下憋过的气。 */
+    final DiveLog dives = new DiveLog();
     /** 日志里的"谁"({@link PathLog#who})。 */
     final String who;
     /** 这一刻主线程上寻路用了多久。 */

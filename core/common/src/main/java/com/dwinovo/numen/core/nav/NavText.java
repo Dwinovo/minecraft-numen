@@ -12,6 +12,7 @@ import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.body.BodyAction;
 import com.dwinovo.numen.pathing.body.Hotbar;
 import com.dwinovo.numen.pathing.drive.Blockage;
+import com.dwinovo.numen.pathing.drive.DiveLog;
 import com.dwinovo.numen.pathing.drive.EditLedger;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.MoveKind;
@@ -55,6 +56,7 @@ public final class NavText {
             case Outcome.NoMaterials none -> FailureType.NO_MATERIAL;
             case Outcome.Denied denied -> FailureType.REFUSED;
             case Outcome.NoLineOfSight sight -> FailureType.OCCLUDED;
+            case Outcome.Breathless breathless -> FailureType.HAZARD;
         };
     }
 
@@ -132,7 +134,17 @@ public final class NavText {
                     + " went out of sight after the walk was planned (something now stands in between); "
                     + (on == null ? gotoCall(sight.target(), "arrive:use") : "`move go " + on.name() + "`")
                     + " again picks a spot that sees it";
+            case Outcome.Breathless b -> "found no path to target (" + where + "; the way there swims under water"
+                    + " from " + Listing.coords(b.from()) + " to " + Listing.coords(b.to()) + " with no air on the way,"
+                    + " about " + seconds(b.held()) + " without a breath, longer than I can safely hold mine now (about "
+                    + seconds(b.spare()) + "): with water breathing (a potion of water breathing, or a turtle shell on"
+                    + " my head) I could take it, otherwise pick another destination";
         };
+    }
+
+    /** 刻数说成秒:{@code 14 s},不足一秒说 {@code under 1 s}。憋气的几处(回执、结局、计划)都这么说。 */
+    public static String seconds(int ticks) {
+        return ticks < 20 ? "under 1 s" : Math.round(ticks / 20.0) + " s";
     }
 
     private static String where(BlockPos from, BlockPos toward) {
@@ -202,6 +214,7 @@ public final class NavText {
             case NO_FACE -> "there is nothing to place against";
             case OCCUPIED -> "my own body is in that cell";
             case OUT_OF_REACH -> "it is out of my reach";
+            case OUT_OF_BREATH -> "with the air I have left I could not reach air before drowning";
         };
     }
 
@@ -218,16 +231,15 @@ public final class NavText {
     // ==================== 实际账与身体动作 ====================
 
     /**
-     * 回执末尾那一段:路上挖了什么、放了什么(与倒下又收回的水),身体为走路做了什么;什么都没有是空串。
+     * 回执末尾那一段:路上挖了什么、放了什么(与倒下又收回的水),身体为走路做了什么,潜过几段水;什么都没有是空串。
      * 例如 {@code En route I had to break 2 oak_planks (120,64,-33; 120,65,-33) and place 1 cobblestone (121,64,-33).
-     * I also stepped off the boat.}
+     * I also stepped off the boat. I went under water once: 12 s without a breath from 10,40,5 to 20,40,5, air down to
+     * 60/300.}
      */
-    public static String journey(List<EditLedger.Entry> entries, List<BodyAction> actions) {
+    public static String journey(List<EditLedger.Entry> entries, List<BodyAction> actions, List<DiveLog.Dive> dives) {
         String edits = edits(entries);
         String done = actions(actions);
-        if (edits.isEmpty() && done.isEmpty()) {
-            return "";
-        }
+        String under = dives(dives);
         StringBuilder sb = new StringBuilder();
         if (!edits.isEmpty()) {
             sb.append("En route I had to ").append(edits).append('.');
@@ -235,7 +247,30 @@ public final class NavText {
         if (!done.isEmpty()) {
             sb.append(sb.length() > 0 ? " I also " : "En route I ").append(done).append('.');
         }
+        if (!under.isEmpty()) {
+            sb.append(sb.length() > 0 ? " " : "").append(under);
+        }
         return sb.toString();
+    }
+
+    /**
+     * 路上潜过的水:几段,憋得最久的那一段从哪儿到哪儿、憋了多久、氧气最低到多少。没潜过是空串。例如
+     * {@code I went under water 2 times; the longest: 12 s without a breath from 10,40,5 to 20,40,5, air down to 60/300.}
+     */
+    static String dives(List<DiveLog.Dive> dives) {
+        if (dives.isEmpty()) {
+            return "";
+        }
+        DiveLog.Dive longest = dives.get(0);
+        for (DiveLog.Dive dive : dives) {
+            if (dive.ticks() > longest.ticks()) {
+                longest = dive;
+            }
+        }
+        return "I went under water " + (dives.size() == 1 ? "once: " : dives.size() + " times; the longest: ")
+                + seconds(longest.ticks()) + " without a breath from " + Listing.coords(longest.from()) + " to "
+                + Listing.coords(longest.to()) + ", air down to " + Math.max(0, longest.lowestAir()) + "/"
+                + longest.maxAir() + ".";
     }
 
     /** 实际账的正文:挖掉的、放下的、倒下的液体与收回的,各按方块归堆。空账是空串。 */
