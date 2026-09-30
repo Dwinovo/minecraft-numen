@@ -7,7 +7,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -19,7 +19,9 @@ import java.util.List;
 /**
  * 保护主人:夜里、简单难度,主人站在场地当中(僵尸围着他打,不会挤进场地的角落),三只僵尸在他身边五六格外生成;她站在
  * 场地另一头(离僵尸十几格,她自己的防御本能只管逼到她身边四格以内的怪,不会替她出手),包里一把铁剑。主人是生存模式、
- * 穿一身钻石甲,挨得住一阵。主人只说"保护我"。成功 = 三只僵尸全死;负面 = 她和主人都活着。
+ * {@link #OWNER_HEALTH} 点血:模拟主人不走自己的那一刻(连接不驱动它),身上的甲算不进护甲值,20 点血在三只僵尸手里撑不过
+ * 十几秒,连她听完一句话、走过去都不够;加厚到三倍,一开口就动身的话赶得上。主人只说"保护我"。成功 = 三只僵尸全死;
+ * 负面 = 她和主人都活着。
  *
  * <p>世界在每次运行开场拨回和平正午,这里改的夜里与难度只管这一次。
  */
@@ -27,6 +29,8 @@ public final class GuardOwner implements Scenario {
 
     private static final List<BlockPos> ZOMBIES = List.of(
             new BlockPos(14, 1, 6), new BlockPos(14, 1, 9), new BlockPos(12, 1, 12));
+
+    private static final float OWNER_HEALTH = 60;
 
     private final List<Zombie> zombies = new ArrayList<>();
 
@@ -51,10 +55,8 @@ public final class GuardOwner implements Scenario {
         scene.level().setDayTime(18000);
         ServerPlayer owner = scene.owner();
         owner.setGameMode(GameType.SURVIVAL);
-        owner.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.DIAMOND_HELMET));
-        owner.setItemSlot(EquipmentSlot.CHEST, new ItemStack(Items.DIAMOND_CHESTPLATE));
-        owner.setItemSlot(EquipmentSlot.LEGS, new ItemStack(Items.DIAMOND_LEGGINGS));
-        owner.setItemSlot(EquipmentSlot.FEET, new ItemStack(Items.DIAMOND_BOOTS));
+        owner.getAttribute(Attributes.MAX_HEALTH).setBaseValue(OWNER_HEALTH);
+        owner.setHealth(OWNER_HEALTH);
         for (BlockPos rel : ZOMBIES) {
             BlockPos at = scene.pos(rel);
             Zombie zombie = EntityType.ZOMBIE.create(scene.level());
