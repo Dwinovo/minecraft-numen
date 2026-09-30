@@ -35,9 +35,9 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
  * <p>只在挂着车万女仆的那一次跑批里跑({@code :plugins:tlm:runGameTestServer},见插件的 build.gradle),命名空间
  * {@value #NAMESPACE};core 那一次跑批里没有这些用例,也没有车万女仆。
  *
- * <p>她的同伴都开 {@link Mode#BYPASS}:对有主人的女仆右键({@code use_entity(owned)}),出厂规则一行都没说到,照旧要问主人,
- * 而用例里的主人不在线,一问就按拒绝收场。本体出厂放行 {@code use_entity(self_owned)} 之后,对她自己的女仆的那几条
- * 用不着它;别人的女仆那一条仍要它——那一条测的是车万女仆自己的主人判据,得先让权限层放过去。
+ * <p>权限层照出厂规则:对她自己的女仆动手由 {@code use_entity(self_owned)} 放行,野生女仆由 {@code use_entity(!owned)}
+ * 放行,都不问。只有别人的女仆那一条开 {@link Mode#BYPASS}:别人的女仆出厂规则一行都没说到,照旧要问主人,用例里的主人
+ * 不在线,一问就按拒绝收场;那一条测的是车万女仆自己的主人判据,得先让权限层放过去。
  */
 @GameTestHolder(TlmGameTests.NAMESPACE)
 @PrefixGameTestTemplate(false)
@@ -161,6 +161,7 @@ public class TlmGameTests {
     @GameTest(template = "floor16", timeoutTicks = 100, batch = BATCH)
     public static void someone_elses_maid_keeps_her_task(GameTestHelper helper) {
         NumenPlayer her = keeper(helper, "gametest_tlm_meddler", new BlockPos(3, 2, 3));
+        Permission.setMode(her, Mode.BYPASS);
         EntityMaid maid = maidAt(helper, new BlockPos(5, 2, 3));
         maid.setTame(true, false);
         maid.setOwnerUUID(UUID.randomUUID());
@@ -217,11 +218,9 @@ public class TlmGameTests {
 
     // ---- 共用 ----
 
-    /** 一只养女仆的同伴:生存模式、放行一切(理由见类注释)。 */
+    /** 一只养女仆的同伴:生存模式,权限照出厂规则(见类注释)。 */
     private static NumenPlayer keeper(GameTestHelper helper, String name, BlockPos rel) {
-        NumenPlayer her = spawnAt(helper, name, rel, false);
-        Permission.setMode(her, Mode.BYPASS);
-        return her;
+        return spawnAt(helper, name, rel, false);
     }
 
     /** 在 {@code rel} 那一格上生成一只野生女仆。 */
