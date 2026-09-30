@@ -11,7 +11,6 @@ import com.dwinovo.numen.core.task.base.Precondition;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.body.Hotbar;
-import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.task.Preparation;
@@ -52,8 +51,6 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
     private static final int STANCE_SEARCH_Y = 4;
     private static final int MAX_STANCE_CHECKS = 256;
     private static final int MAX_POSITION_FAILURES = 3;
-    /** 走去捡战果时走到离它这么近(格):原版拾取框横向外扩一格。 */
-    private static final double PICKUP_RADIUS = 1.0;
 
     private static final int CAST_SEARCH_RADIUS = 10;
     private static final int CAST_SEARCH_Y = 4;
@@ -377,11 +374,11 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
                 BlockPos at = lootTarget.blockPosition();
                 if (nav == null) {
                     lootHeading = at;
-                    nav = Trip.to(player, lootGoal(at), RouteSpec.defaults(), at);
+                    nav = Trip.to(player, com.dwinovo.numen.core.task.base.DropTracker.pickUp(at), RouteSpec.defaults(), at);
                 } else if (!at.equals(lootHeading)) {
                     // 战果滑走了、被水冲开了:目标跟着它挪
                     lootHeading = at;
-                    nav.retarget(lootGoal(at), at);
+                    nav.retarget(com.dwinovo.numen.core.task.base.DropTracker.pickUp(at), at);
                 }
                 switch (nav.tick()) {
                     case RUNNING -> {
@@ -588,11 +585,6 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
 
     private BlockPos feet() {
         return Feet.cell(player);
-    }
-
-    /** 走到离战果所在那一格 {@link #PICKUP_RADIUS} 格以内。 */
-    private static Goal lootGoal(BlockPos item) {
-        return Goals.within(Goals.at(item), 0, PICKUP_RADIUS);
     }
 
     private void aimAtTarget() {
