@@ -58,11 +58,16 @@ final class Downward implements Move {
             return draft.failure();
         }
         return new Premise.Holds(new Maneuver(MoveKind.DOWNWARD, heading, from, stance, below, landing, false, false, false,
-                wading, 1, drop, damage, 0, draft.edits(), contact.cells(), contact.exposure(), support));
+                wading, Strides.submerged(draft, body, from, stance, below, landing), 1, drop, damage, 0, draft.edits(), contact.cells(), contact.exposure(), support));
     }
 
     @Override
     public double cost(CostModel model, Maneuver m) {
-        return Strides.landing(model, m) + model.overhead(m);
+        return Strides.landing(m) + Strides.bruise(m) + model.overhead(m);
+    }
+
+    @Override
+    public double ticks(CostModel model, Maneuver m) {
+        return Strides.landing(m) + model.workTicks(m);
     }
 }

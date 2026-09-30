@@ -161,6 +161,11 @@ public final class Driver {
         return rig.actions();
     }
 
+    /** 到此刻为止身体真在水下憋过的每一段。 */
+    public List<DiveLog.Dive> dives() {
+        return rig.dives.dives(rig.entity);
+    }
+
     /** 在推进:{@link Watchdog} 对外交出的信号。 */
     public boolean progressing() {
         return watchdog.progressing();
@@ -169,6 +174,14 @@ public final class Driver {
     /** 身体此刻是计划内的坠落:宿主的摔落反射只接管计划外的。 */
     public boolean plannedFall() {
         return step != null && step.falls() && !rig.entity.onGround();
+    }
+
+    /**
+     * 身体此刻在计划内的一段水下:在走的这一步憋着气,规划时与这一步开始前都已按身体的氧气算过这一段憋得住(复核憋不住的,
+     * 这一步不走、从脚下重搜,就不再是计划内的了)。宿主的换气本能只接管计划外的。
+     */
+    public boolean plannedDive() {
+        return state == State.RUNNING && !paused && cur < legs.size() && legs.get(cur).maneuver().submerged();
     }
 
     /** 身体此刻站着等一次搜索的结论:没有路可走(或路走完了还没到),派出去的搜索还没回来。 */
@@ -255,6 +268,11 @@ public final class Driver {
             watchdog.waiting(rig.entity.position());
             return state;
         }
+        DiveLog.Dive surfaced = rig.dives.observe(rig.entity);
+        if (surfaced != null) {
+            PathLog.info("{} 出水 从 {} 到 {} 憋了 {} 刻 氧气最低 {}/{}", rig.who, PathLog.pos(surfaced.from()),
+                    PathLog.pos(surfaced.to()), surfaced.ticks(), surfaced.lowestAir(), surfaced.maxAir());
+        }
         if (rig.entity.isPassenger()) {
             // 原版按潜行就从载具上下来
             rig.keys.releaseAll();
@@ -327,7 +345,11 @@ public final class Driver {
         if (step == null) {
             Maneuver planned = legs.get(cur).maneuver();
             Maneuver after = cur + 1 < legs.size() ? legs.get(cur + 1).maneuver() : null;
-            step = new Step(rig, planned, after, goal, spec, watchdog);
+            List<Maneuver> diving = new ArrayList<>();
+            for (int i = cur + 1; planned.submerged() && i < legs.size() && legs.get(i).maneuver().submerged(); i++) {
+                diving.add(legs.get(i).maneuver());
+            }
+            step = new Step(rig, planned, after, diving, goal, spec, watchdog);
         }
         Beat beat = step.tick();
         switch (beat) {
@@ -503,9 +525,10 @@ public final class Driver {
 
     /**
      * 从 {@code from} 派一次搜索:在世界所在的线程上拷下以它为中心的快照,成本模型按此刻的身体与端口现组;展开到
-     * {@link #HAND_OVER} 个节点就先交出半程。接着路线往下搜时起点接在 {@code arrival} 那一步后面,从身体脚下搜为 null。
+     * {@link #HAND_OVER} 个节点就先交出半程。接着路线往下搜时起点接在 {@code arrival} 那一步后面(憋气从走完那一步时的样子起),
+     * 从身体脚下搜为 null(憋气从身体此刻的样子起)。
      */
-    private void dispatch(Purpose why, BlockPos from, Maneuver arrival) {
+    private void dispatch(Purpose why, BlockPos from, Route.Leg arrival) {
         long t0 = System.nanoTime();
         WorldSnapshot view = WorldSnapshot.around(rig.entity.serverLevel(), from);
         long t1 = System.nanoTime();
@@ -559,7 +582,7 @@ public final class Driver {
             }
             halt(lastBlockage != null && result.stop() == SearchResult.Stop.EXHAUSTED
                     ? new Halt.Blocked(lastBlockage)
-                    : new Halt.Searched(result.stop(), search));
+                    : new Halt.Searched(result.stop(), result.breathless(), search));
             return;
         }
         install(result.route(), result.arrived());
@@ -593,7 +616,7 @@ public final class Driver {
             stalePartials = 0;
         } else if (++stalePartials >= STALE_PARTIALS) {
             PathLog.info("{} 半程路线连续 {} 段没离目标更近,收场", rig.who, STALE_PARTIALS);
-            halt(new Halt.Searched(result.stop(), pendingSearch));
+            halt(new Halt.Searched(result.stop(), result.breathless(), pendingSearch));
         }
     }
 
@@ -619,8 +642,8 @@ public final class Driver {
             left += legs.get(i).cost();
         }
         if (left < LOOKAHEAD_TICKS) {
-            Maneuver last = legs.get(legs.size() - 1).maneuver();
-            dispatch(Purpose.NEXT, last.to(), last);
+            Route.Leg last = legs.get(legs.size() - 1);
+            dispatch(Purpose.NEXT, last.maneuver().to(), last);
         }
     }
 

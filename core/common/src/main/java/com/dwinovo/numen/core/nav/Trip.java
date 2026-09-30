@@ -324,6 +324,11 @@ public final class Trip {
         return phase == Phase.DRIVING && navigation.plannedFall();
     }
 
+    /** 身体此刻在计划内的一段水下(规划与每一步开始前都按她的氧气算过憋得住)。 */
+    public boolean plannedDive() {
+        return phase == Phase.DRIVING && navigation.plannedDive();
+    }
+
     /** 还没走完的那几步(排障画路线用)。 */
     public List<Route.Leg> remaining() {
         return navigation == null ? List.of() : navigation.remaining();

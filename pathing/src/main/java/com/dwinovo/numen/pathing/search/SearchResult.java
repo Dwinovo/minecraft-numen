@@ -3,11 +3,13 @@ package com.dwinovo.numen.pathing.search;
 /**
  * 一次搜索的结论:为什么停,以及交出的路线。到了目标交出整条;没到时,只有离起点足够远的半程路线才交出,否则没有路线。
  *
- * @param stop     为什么停
- * @param route    交出的路线;没有为 null
- * @param expanded 展开了几个节点
+ * @param stop       为什么停
+ * @param route      交出的路线;没有为 null
+ * @param expanded   展开了几个节点
+ * @param breathless 有前提成立的步子因为走过去憋不住气({@link com.dwinovo.numen.pathing.plan.Breath#lasts})没走:没路时诊断
+ *                   先问"憋得住的话有没有路"
  */
-public record SearchResult(Stop stop, Route route, int expanded) {
+public record SearchResult(Stop stop, Route route, int expanded, boolean breathless) {
 
     /** 搜索为什么停。"没有路"只有 {@link #EXHAUSTED} 能说;预算用完、碰到没加载的区块只是没搜完。 */
     public enum Stop {

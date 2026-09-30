@@ -286,6 +286,23 @@ public final class CostModel {
     }
 
     /**
+     * 一步里手上的活真要花的刻数:挖一格按挑中的工具挖到碎连同缓手({@link ToolChoice#handTicks}),倒水接坠落加上收水那一下;
+     * 放一块、开关门不另计时。{@link #overhead} 里这些刻数连同罚分一起算进价钱,这里只要刻数(憋气按它算)。
+     */
+    public double workTicks(Maneuver m) {
+        double ticks = 0;
+        for (Edit edit : m.edits()) {
+            ticks += switch (edit) {
+                case Edit.Dig dig -> tools.handTicks(dig.state(), dig.eyeInWater(), dig.grounded());
+                case Edit.Catch caught -> ActionCosts.SCOOP_WATER;
+                case Edit.Place place -> 0;
+                case Edit.Door door -> 0;
+            };
+        }
+        return ticks;
+    }
+
+    /**
      * 一步里除了身体移动本身以外的价钱,每种走法都一样加:要做的改动、身体新进入的格与落脚那一格的按位置加价、
      * 紧挨着伤身的格走过的加价、落到水里的涉水罚分。
      */

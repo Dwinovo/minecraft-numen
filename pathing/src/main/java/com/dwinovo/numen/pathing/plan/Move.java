@@ -23,4 +23,10 @@ public interface Move {
 
     /** 前提成立的这一步要多少刻:身体移动本身,加上 {@link CostModel#overhead} 里每种走法都一样加的那部分。 */
     double cost(CostModel model, Maneuver maneuver);
+
+    /**
+     * 身体真做完这一步要几刻:移动本身,加上手上的活({@link CostModel#workTicks}:挖到碎连同缓手、倒水收水),不含规格的罚分、
+     * 按位置的加价、摔疼的折价。憋气按它算({@link Breath#after})。
+     */
+    double ticks(CostModel model, Maneuver maneuver);
 }

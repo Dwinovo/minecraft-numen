@@ -70,12 +70,17 @@ final class Swim implements Move {
             return draft.failure();
         }
         return new Premise.Holds(new Maneuver(MoveKind.SWIM, heading, from, stance, to, landing, false, false, false, true,
-                1, Math.max(0, f0 - landing.feetY()), 0, heading.horizontal() ? 1 : 0, draft.edits(), contact.cells(), contact.exposure(),
+                Strides.submerged(draft, body, from, stance, to, landing), 1, Math.max(0, f0 - landing.feetY()), 0, heading.horizontal() ? 1 : 0, draft.edits(), contact.cells(), contact.exposure(),
                 support));
     }
 
     @Override
     public double cost(CostModel model, Maneuver m) {
         return model.waterStep() + model.overhead(m);
+    }
+
+    @Override
+    public double ticks(CostModel model, Maneuver m) {
+        return model.waterStep() + model.workTicks(m);
     }
 }

@@ -120,13 +120,23 @@ final class Parkour implements Move {
             return draft.failure();
         }
         return new Premise.Holds(new Maneuver(MoveKind.PARKOUR, heading, from, stance, to, landing, true, span == 4 || ascend,
-                false, Strides.inWater(view, to), Semantics.speedFactor(view, x, f0, z), Math.max(0, f0 - landing.feetY()), 0,
+                false, Strides.inWater(view, to), Strides.submerged(view, body, from, stance, to, landing),
+                Semantics.speedFactor(view, x, f0, z), Math.max(0, f0 - landing.feetY()), 0,
                 span, draft.edits(), contact.cells(), contact.exposure(), support));
     }
 
     @Override
     public double cost(CostModel model, Maneuver m) {
-        double pace = m.sprint() ? ActionCosts.SPRINT_ONE_BLOCK : ActionCosts.WALK_ONE_BLOCK;
-        return m.span() * pace + model.spec().jumpPenalty() + model.overhead(m);
+        return movement(m) + model.spec().jumpPenalty() + model.overhead(m);
+    }
+
+    @Override
+    public double ticks(CostModel model, Maneuver m) {
+        return movement(m) + model.workTicks(m);
+    }
+
+    /** 身体跳过去的刻数:按助跑的步速跨过这几列。 */
+    private static double movement(Maneuver m) {
+        return m.span() * (m.sprint() ? ActionCosts.SPRINT_ONE_BLOCK : ActionCosts.WALK_ONE_BLOCK);
     }
 }

@@ -51,6 +51,12 @@ public sealed interface Outcome {
     /** 规格的改动预算不够:最便宜的那条路要改 {@code needed} 格。 */
     record OverAlterBudget(int needed) implements Outcome {}
 
+    /**
+     * 憋不住气:照这次的规格有路,可路上有一段水下从 {@code from} 下去、到 {@code to} 才换得了气,要一口气憋 {@code held} 刻,
+     * 身体到那里时只能安全地憋 {@code spare} 刻({@link com.dwinovo.numen.pathing.plan.Breath#spare})。
+     */
+    record Breathless(BlockPos from, BlockPos to, int held, int spare) implements Outcome {}
+
     /** 许可拒绝了 {@code cell};{@code reason} 是许可给的理由,原样交还。 */
     record Denied(BlockPos cell, Object reason) implements Outcome {}
 

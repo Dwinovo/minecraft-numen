@@ -9,7 +9,6 @@ import com.dwinovo.numen.pathing.drive.LiveWorld;
 import com.dwinovo.numen.pathing.drive.PathLog;
 import com.dwinovo.numen.pathing.plan.BodySnapshot;
 import com.dwinovo.numen.pathing.plan.CostModel;
-import com.dwinovo.numen.pathing.plan.Maneuver;
 import com.dwinovo.numen.pathing.search.Favoring;
 import com.dwinovo.numen.pathing.search.Origin;
 import com.dwinovo.numen.pathing.search.Route;
@@ -48,11 +47,11 @@ public final class Navigator {
         BodySnapshot snapshot = body.snapshot();
         String who = PathLog.who(entity);
         BlockPos from;
-        Maneuver arrival = null;
+        Route.Leg arrival = null;
         if (query.after() != null) {
             Route previous = query.after();
             from = previous.end();
-            arrival = previous.legs().isEmpty() ? null : previous.legs().get(previous.legs().size() - 1).maneuver();
+            arrival = previous.legs().isEmpty() ? null : previous.legs().get(previous.legs().size() - 1);
         } else {
             Optional<BlockPos> start = Origin.of(new LiveWorld(entity.serverLevel()), snapshot.stats(),
                     entity.getX(), entity.getY(), entity.getZ());
@@ -70,8 +69,8 @@ public final class Navigator {
         PathLog.mainThread(who, "规划时拷快照与组成本模型", System.nanoTime() - t0);
         RoutePlanner.Query planned = new RoutePlanner.Query(view, model, from, query.goal(), query.budget(),
                 query.candidates(), arrival);
-        Search probe = new Search(view, model, from, query.goal(), query.budget(), Favoring.NONE);
-        return new Planning(Searches.submit(planned), arrival == null ? probe : probe.after(arrival), who);
+        Search probe = new Search(view, model, from, query.goal(), query.budget(), Favoring.NONE).after(arrival);
+        return new Planning(Searches.submit(planned), probe, who);
     }
 
     /** 去:交出一次在走的导航,宿主每刻 {@link Navigation#tick} 一次。 */
