@@ -812,6 +812,7 @@ public final class ModLanguageData {
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "block_entity", "functional block");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "contents",     "has things inside");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "owned",        "has an owner");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "self_owned",   "owned by herself");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "named",        "named");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "villager",     "villager");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "hostile",      "hostile");
@@ -1349,6 +1350,7 @@ public final class ModLanguageData {
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "block_entity", "功能方块");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "contents",     "装着东西");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "owned",        "有主人");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "self_owned",   "主人是她自己");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "named",        "起了名字");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "villager",     "村民");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "hostile",      "敌对");

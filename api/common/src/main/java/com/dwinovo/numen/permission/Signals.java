@@ -4,6 +4,7 @@ import com.dwinovo.numen.data.ModLanguageData;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.Container;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.npc.AbstractVillager;
@@ -12,6 +13,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * 给动作贴事实的函数,每个只回答一个通用问题、各自独立、无状态。规则文本里的信号名在
@@ -75,11 +77,19 @@ public enum Signals {
         }
     },
 
-    /** 有主人的实体:打死了就是主人的宠物没了,撤不回。 */
+    /** 有主人的实体,主人是谁都算(她自己驯服的也算):打死了就是谁的宠物没了,撤不回。 */
     OWNED("owned", "has an owner", true) {
         @Override
         boolean test(Action a, Facts f) {
-            return a.entity() instanceof OwnableEntity o && o.getOwnerUUID() != null;
+            return a.entity() != null && ownerOf(a.entity()) != null;
+        }
+    },
+
+    /** 主人就是要动手的这只同伴:她自己驯服的狼、猫、女仆。和 {@link #OWNED} 不是互斥的两半,是它的一部分。 */
+    SELF_OWNED("self_owned", "owned by herself", false) {
+        @Override
+        boolean test(Action a, Facts f) {
+            return a.entity() != null && f.actor() != null && f.actor().equals(ownerOf(a.entity()));
         }
     },
 
@@ -188,6 +198,14 @@ public enum Signals {
     private static PlacedBlocks.Placer placedByOther(Action a, Facts f) {
         PlacedBlocks.Placer placer = placerAt(a, f);
         return placer == null || placer.id().equals(f.actor()) ? null : placer;
+    }
+
+    /**
+     * 实体的主人是谁:原版 {@link OwnableEntity} 记的主人 UUID(狼、猫、鹦鹉,以及继承原版驯服的模组宠物,比如车万女仆);
+     * 没有主人或不是可驯服的实体为 null。"这只是谁的"只在这里读。
+     */
+    public static UUID ownerOf(Entity entity) {
+        return entity instanceof OwnableEntity o ? o.getOwnerUUID() : null;
     }
 
     /** 按规则文本里的名字取信号;没有这个名字返回 null(规则解析据此报错)。 */

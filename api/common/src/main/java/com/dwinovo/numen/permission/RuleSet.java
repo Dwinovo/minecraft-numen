@@ -25,7 +25,7 @@ public final class RuleSet {
      *       {@code ask break(self_placed)};</li>
      *   <li>放不危险的东西(空处也好、先拆掉再放的格也好),或者附近没有别人放的方块的危险物;</li>
      *   <li>打没主人、没名字、不是村民的(敌对生物与野生动物);</li>
-     *   <li>开关门、开容器、按按钮;对没主人的实体右键;从容器拿东西;</li>
+     *   <li>开关门、开容器、按按钮;对没主人的实体、她自己驯服的实体右键;从容器拿东西;</li>
      *   <li>执行只读或只说话的指令:帮助、在线名单、动作消息、私信、队伍消息、种子、随机数。别名随根名认
      *       ({@code tell}、{@code w} 归 {@code msg},{@code tm} 归 {@code teammsg}),见 {@link Action#command}。</li>
      *   <li>改主人的规则没点名的区域:她扫出来的矿、框的工地是她自己的笔记;主人的规则点名的那几块走 ask 表。</li>
@@ -41,6 +41,7 @@ public final class RuleSet {
             "attack(!owned & !named & !villager)",
             "use_block(*)",
             "use_entity(!owned)",
+            "use_entity(self_owned)",
             "take(*)",
             "command(help)",
             "command(list)",

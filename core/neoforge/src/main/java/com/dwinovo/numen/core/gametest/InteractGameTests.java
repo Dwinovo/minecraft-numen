@@ -276,7 +276,53 @@ public class InteractGameTests {
         });
     }
 
-    // ---- --sneak;对她说的话 ----
+    // ---- use entity 对宠物:她自己的不问,别人的问;--sneak;对她说的话 ----
+
+    /** 一只不动的狼,放在 {@code rel} 那一格。 */
+    static net.minecraft.world.entity.animal.Wolf wolfAt(GameTestHelper helper, BlockPos rel) {
+        var wolf = net.minecraft.world.entity.EntityType.WOLF.create(helper.getLevel());
+        BlockPos at = helper.absolutePos(rel);
+        wolf.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        wolf.setNoAi(true);
+        helper.getLevel().addFreshEntity(wolf);
+        return wolf;
+    }
+
+    /** 右键她自己驯服的狼:出厂的 {@code use_entity(self_owned)} 放行,不问主人,狼坐下了。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_interact")
+    public static void use_entity_on_her_own_wolf_does_not_ask(GameTestHelper helper) {
+        var wolf = wolfAt(helper, new BlockPos(10, 2, 14));
+        NumenPlayer companion = spawnAt(helper, "gametest_wolfkeeper", new BlockPos(3, 2, 14), false);
+        wolf.tame(companion);
+        ToolRun sit = command(companion, "use entity right " + wolf.getId());
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(sit.done(), "use entity has not finished");
+            helper.assertTrue(sit.succeeded() && wolf.isOrderedToSit(),
+                    "her own wolf was not told to sit: " + sit.outcome());
+            wolf.discard();
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 右键别人驯服的狼:没有一行放行,问主人;主人不在,问不到就不点,狼没坐下。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_interact")
+    public static void use_entity_on_someone_elses_wolf_asks_the_owner(GameTestHelper helper) {
+        var wolf = wolfAt(helper, new BlockPos(10, 2, 2));
+        wolf.setTame(true, true);
+        wolf.setOwnerUUID(java.util.UUID.randomUUID());
+        NumenPlayer companion = spawnAt(helper, "gametest_wolfpetter", new BlockPos(3, 2, 2), false);
+        ToolRun pet = command(companion, "use entity right " + wolf.getId());
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(pet.done(), "use entity has not finished");
+            helper.assertTrue(!pet.succeeded() && pet.outcome().contains("owner"),
+                    "the refusal does not come from asking the owner: " + pet.outcome());
+            helper.assertTrue(!wolf.isOrderedToSit(), "someone else's wolf was told to sit");
+            wolf.discard();
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
 
     /**
      * 拿着圆石右键一只箱子:站着点,箱子开了;按住潜行点,箱子不开,圆石贴着箱子放下了——手里有东西时潜行右键越过方块自己的反应,

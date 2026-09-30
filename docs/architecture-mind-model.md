@@ -205,7 +205,8 @@ interface Reflex {
 | self_placed | 这格是不是她自己放的 | 同一份放置记录,放的人就是要动手的这只同伴 |
 | block_entity | 这格有没有方块实体 | 方块状态 |
 | contents | 容器里有没有东西 | 世界(只在主线程读;搜索线程按"有") |
-| owned | 这只实体有没有主人 | `OwnableEntity` |
+| owned | 这只实体有没有主人(她自己也算) | `OwnableEntity`,主人只在 `Signals.ownerOf` 一处读 |
+| self_owned | 这只实体的主人是不是她自己 | 同一处读法,主人就是要动手的这只同伴 |
 | named | 有没有自定义名字 | 实体 |
 | villager | 是不是村民 | 实体类型 |
 | hostile | 是不是敌对 | 实体分类 |
@@ -224,7 +225,7 @@ deny 行与主人选的 observe;其余一律问。身体的物理与安全判断
 deny 空;allow 为 `break(!placed & !self_placed & !block_entity & !#minecraft:beds & !#minecraft:doors &
 !#minecraft:trapdoors & !#minecraft:fence_gates)`、`break(self_placed & !contents)`、`place(!hazard_item)`、
 `place(hazard_item & !near_placed)`、`attack(!owned & !named & !villager)`、`use_block(*)`、
-`use_entity(!owned)`、`take(*)`;ask 为 `break(block_entity & contents)`、`break(placed)`、
+`use_entity(!owned)`、`use_entity(self_owned)`、`take(*)`;ask 为 `break(block_entity & contents)`、`break(placed)`、
 `break(block_entity)`、`break(#minecraft:beds)`、`break(#minecraft:doors)`、
 `break(#minecraft:trapdoors)`、`break(#minecraft:fence_gates)`、`attack(owned)`、`attack(named)`、
 `attack(villager)`、`drop(*)`、`place(hazard_item & near_placed)`。

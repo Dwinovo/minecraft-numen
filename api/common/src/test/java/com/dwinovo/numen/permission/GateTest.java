@@ -113,7 +113,8 @@ class GateTest {
                         + " & !#minecraft:trapdoors & !#minecraft:fence_gates)",
                 "break(self_placed & !contents)",
                 "place(!hazard_item)", "place(hazard_item & !near_placed)",
-                "attack(!owned & !named & !villager)", "use_block(*)", "use_entity(!owned)", "take(*)",
+                "attack(!owned & !named & !villager)", "use_block(*)", "use_entity(!owned)", "use_entity(self_owned)",
+                "take(*)",
                 "command(help)", "command(list)", "command(me)", "command(msg)",
                 "command(teammsg)", "command(seed)", "command(random)", "edit_area(!ruled)"),
                 RuleSet.FACTORY_ALLOW);
