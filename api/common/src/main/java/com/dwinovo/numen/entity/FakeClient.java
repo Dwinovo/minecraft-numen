@@ -24,7 +24,8 @@ import java.util.function.Consumer;
  *       {@link #runCommand} 收给那条指令,不再当事件交;</li>
  *   <li>她自己的死亡广播就是死亡事件里那句死因({@link NumenPlayer#deathMessage}),不再交一遍;</li>
  *   <li>玩家聊天是另一种包,群聊那一路管,这里不碰;</li>
- *   <li>其余的每一句交成一条 {@code server_message} 事件,同一句刷屏按 {@link ServerMessages} 折叠。</li>
+ *   <li>其余的交成 {@code server_message} 事件:聊天栏同一句刷屏折叠,动作栏当一格、最新的为准,见
+ *       {@link ServerMessages}。这种事件捎带投递,不单独叫醒她。</li>
  * </ul>
  * 文字在服务端按服务端的语言表拼出来,和指令回执({@code Echo})用的是同一个拼法。
  *
