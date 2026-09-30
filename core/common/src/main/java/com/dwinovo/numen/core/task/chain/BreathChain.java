@@ -5,6 +5,7 @@ import com.dwinovo.numen.task.reflex.Reflex;
 import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.core.WorkProfile;
+import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
@@ -23,7 +24,9 @@ import net.minecraft.world.phys.Vec3;
  * executed, so a body left idle in deep water (a task that ended mid-swim, an
  * owner Stop, plain wandering) sinks, runs out of air, and drowns. This chain
  * polls head-submersion + air supply each tick; once air dips past
- * {@link SurvivalDecisions#LOW_AIR_TICKS} it takes the body, swims straight up
+ * {@link SurvivalDecisions#LOW_AIR_TICKS} it takes the body (unless the walk in
+ * progress planned this stretch under water — {@link Trip#plannedDive}: how long
+ * she can hold her breath there is pathing's call), swims straight up
  * until the head clears the water, then goes dormant — the wake/refill band
  * gives an idle body in deep water a natural bob cycle instead of a grave.
  *
@@ -67,6 +70,13 @@ public final class BreathChain implements Task, com.dwinovo.numen.task.reflex.Re
 
     @Override
     public boolean canRun(NumenPlayer companion) {
+        Trip trip = Trip.current(companion);
+        if (trip != null && trip.plannedDive()) {
+            // 在走的路线里计划好的一段水下:憋多久寻路规划时已按她的氧气算过,每一步开始前再按真实氧气复核,憋不住就不走
+            // 那一步、这一段也就不再是计划内的。这条本能只接管计划外的,不在计划内的水下半路把她拽上去。
+            submergedTicks = 0;
+            return false;
+        }
         // 无畏画像(创造)不扣氧气,airSupply 恒满——但这条反射是假玩家唯一的
         // 漂浮本能,不能跟着休眠(否则闲置沉底就永远留在水底)。改按
         // "眼在水下持续 N tick"触发,窗口对齐生存的低氧阈值。
