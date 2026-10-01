@@ -71,6 +71,8 @@ public final class Action {
     /** 提升时写的工具描述;没提升是 null。 */
     private String toolDescription;
     private Authority authority = Authority.HERS;
+    /** 脚本里它的函数直接返回的回执数据项;没声明是 null。 */
+    private String returns;
 
     Action(CommandGroup group, String name, String summary, List<Param<?>> params,
            OnServer onServer, OnClient onClient) {
@@ -133,6 +135,20 @@ public final class Action {
             throw new IllegalArgumentException(path() + " 在主人客户端执行,借不了服务器的权威");
         }
         this.authority = authority;
+        return this;
+    }
+
+    /**
+     * 脚本里这个动作的函数返回回执 {@code data} 里的 {@code key} 那一项——只要回执里有它,成败都返回:查询的结果拿来就能
+     * 循环、判断({@code for _, p in ipairs(area.parts("ores"))}、{@code while area.has(p)},没剩就是 false 而不是报错)。
+     * 回执里没有这一项(区域不存在这类)才在调用处抛出脚本错误。不调就是普通的直返:成功返回回执数据、失败抛错。
+     */
+    public Action returns(String key) {
+        group.requireOpen();
+        if (key == null || key.isBlank()) {
+            throw new IllegalArgumentException(path() + " 声明的返回项是空的");
+        }
+        this.returns = key;
         return this;
     }
 
@@ -260,6 +276,11 @@ public final class Action {
 
     Authority authority() {
         return authority;
+    }
+
+    /** 脚本里它的函数直接返回的回执数据项;没声明是 null。 */
+    String returns() {
+        return returns;
     }
 
     /** 服务端执行?(否则在主人客户端执行。) */

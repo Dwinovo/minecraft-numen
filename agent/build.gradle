@@ -48,6 +48,9 @@ repositories {
 dependencies {
     // 下一层:传输、会话状态与日志句柄都在 ai。api 配置让本模块的消费方透视得到 ai 的类型。
     api project(':ai')
+    // 脚本的语言是 Lua,跑在本仓自己维护的沙箱里(numen-lua,以 LuaJ 为底)。只在 agent.script.lua 用,对外的类型里不出现它,
+    // 所以是 implementation;发行 jar 由 api-loader.gradle 平铺它的类,和本模块一样。
+    implementation project(':lua')
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'

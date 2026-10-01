@@ -28,7 +28,8 @@ public final class ServerToolTransport {
     private static final Map<String, ToolCall> IN_FLIGHT = new ConcurrentHashMap<>();
 
     /**
-     * 上行出口:这里送往服务端的包({@link ExecuteToolPayload}、{@link CancelTasksPayload})都从它走。主人客户端上是网络
+     * 上行出口:大脑送往服务端的包({@link ExecuteToolPayload}、{@link CancelTasksPayload}、脚本的战绩
+     * {@code ScriptTallyPayload})都从它走。主人客户端上是网络
      * ({@link NumenNetwork#sendToServer});没有客户端的进程(评测)换成直接交给服务端的入口。回执照旧经
      * {@link #deliver} 回来。写法同下行的 {@link com.dwinovo.numen.network.ClientPayloadSink}:主源码集里一个静态挂点。
      */

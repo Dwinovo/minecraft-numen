@@ -1,0 +1,540 @@
+package com.dwinovo.lua;
+
+import com.dwinovo.lua.vm.Allocation;
+import com.dwinovo.lua.vm.Globals;
+import com.dwinovo.lua.vm.LuaError;
+import com.dwinovo.lua.vm.LuaTable;
+import com.dwinovo.lua.vm.LuaValue;
+import com.dwinovo.lua.vm.Prototype;
+import com.dwinovo.lua.vm.Varargs;
+import com.dwinovo.lua.vm.compiler.LuaC;
+import com.dwinovo.lua.vm.lib.BaseLib;
+import com.dwinovo.lua.vm.lib.JseMathLib;
+import com.dwinovo.lua.vm.lib.StringLib;
+import com.dwinovo.lua.vm.lib.TableLib;
+import com.dwinovo.lua.vm.lib.VarArgFunction;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.concurrent.CountDownLatch;
+import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * 沙箱里的 Lua 5.2:一段脚本在它自己的虚拟线程上跑,宿主登记的函数可以阻塞(等一件慢事做完),不碰调用方的线程。
+ *
+ * <h2>沙箱</h2>
+ * 全局只有基本函数(去掉了 load、loadstring、dofile、loadfile、require、collectgarbage、print 的上游实现)、string、table、math,
+ * 加上宿主登记的函数与 {@code print}(交给宿主)。没有 io、os、debug、package、coroutine、luajava,也装载不了二进制块。字符串的
+ * 元表与 string 库全 JVM 一份、只读,一段脚本改不了另一段看到的。
+ *
+ * <h2>预算</h2>
+ * 每段脚本一份 {@link Limits}:两次调宿主函数之间的指令数、总指令数、字符串分配的总字节数、墙钟。到了就停下,停的方式脚本接
+ * 不住(不是 Lua 错误,{@code pcall} 包着死循环也停),结局说哪一条、停在哪一行。{@link Running#interrupt} 随时喊停:在下一条
+ * 指令或正在阻塞的宿主函数处停下。
+ *
+ * <h2>桥接</h2>
+ * 宿主函数按 {@code 表名.函数名}(或全局名)登记,收按顺序的参数、交回一个值;值在两边按 {@link #toJava}/{@link #toLua} 换:nil 是
+ * null,布尔、数(整数是 Long,其余是 Double)、字符串,表是列表(键恰好 1..n)或名字到值的表。宿主函数抛 {@link ScriptError}
+ * 就是脚本在调用处得到的一个 Lua 错误(带上行号,{@code pcall} 接得住)。
+ *
+ * <p>这个包与 {@code com.dwinovo.lua.vm} 不引用任何别的模组或游戏的类型。
+ */
+public final class LuaSandbox {
+
+    /**
+     * 一段脚本的预算。
+     *
+     * @param instructionsPerSlice 两次调宿主函数之间(以及开头到第一次)最多执行多少条指令
+     * @param instructions         整段最多执行多少条指令
+     * @param stringBytes          整段为字符串分配的字节数上限
+     * @param wallClock            整段最长多久(含等宿主函数的时间)
+     */
+    public record Limits(long instructionsPerSlice, long instructions, long stringBytes, Duration wallClock) {}
+
+    /** 宿主登记的一个函数。在脚本的线程上调,可以阻塞;被打断时抛 {@link InterruptedException}。 */
+    @FunctionalInterface
+    public interface HostFunction {
+        /**
+         * @param args 按顺序的参数,已换成 Java 值
+         * @return 交回脚本的一个值(Java 值,见 {@link LuaSandbox});没有返回值给 null
+         * @throws ScriptError 让这次调用在脚本里失败
+         */
+        Object call(List<Object> args) throws InterruptedException;
+    }
+
+    /** 宿主函数让这次调用在脚本里失败:脚本在调用处得到一个 Lua 错误,消息就是它。 */
+    public static final class ScriptError extends RuntimeException {
+        public ScriptError(String message) {
+            super(message);
+        }
+    }
+
+    /** 一段脚本怎样结束的。 */
+    public enum Ending {
+        /** 跑到了最后。 */
+        FINISHED,
+        /** 读不通(语法错)。 */
+        UNREADABLE,
+        /** 脚本自己的错误没人接住(含 error(...))。 */
+        ERROR,
+        /** 两次调宿主函数之间的指令数超了。 */
+        SLICE,
+        /** 总指令数超了。 */
+        INSTRUCTIONS,
+        /** 字符串分配的字节数超了。 */
+        STRINGS,
+        /** 墙钟超了。 */
+        WALL_CLOCK,
+        /** 宿主喊了停。 */
+        INTERRUPTED,
+        /** 调用栈太深。 */
+        STACK
+    }
+
+    /**
+     * 一段脚本的结局。
+     *
+     * @param ending  怎样结束的
+     * @param line    结束在哪一行;跑完是 0,说不出是 0
+     * @param message 给人看的那句话(Lua 的报错原话,或哪一条预算到了);跑完是 null
+     */
+    public record Outcome(Ending ending, int line, String message) {
+        public boolean finished() {
+            return ending == Ending.FINISHED;
+        }
+    }
+
+    /** Lua 5.2 的保留字:表名、函数名撞上它们,在脚本里点不出来({@code move.goto} 是语法错)。 */
+    public static final Set<String> KEYWORDS = Collections.unmodifiableSet(new TreeSet<>(List.of(
+            "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "goto", "if", "in", "local", "nil",
+            "not", "or", "repeat", "return", "then", "true", "until", "while")));
+
+    /** 沙箱里本来就有的全局名:宿主登记的名字不能占用它们。 */
+    public static final Set<String> STANDARD_GLOBALS;
+
+    /** Lua 报错的开头 {@code 块名:行号:}。 */
+    private static final Pattern WHERE = Pattern.compile("^[^:\\n]*:(\\d+):");
+
+    /** 当前线程上正在跑的那一段(宿主函数里问行号用);不在脚本线程上是 null。 */
+    private static final ThreadLocal<Run> CURRENT = new ThreadLocal<>();
+
+    static {
+        Globals g = standardGlobals();
+        Set<String> names = new TreeSet<>();
+        LuaValue k = LuaValue.NIL;
+        while (true) {
+            Varargs next = g.next(k);
+            k = next.arg1();
+            if (k.isnil()) {
+                break;
+            }
+            names.add(k.tojstring());
+        }
+        names.add("print");
+        STANDARD_GLOBALS = Collections.unmodifiableSet(names);
+    }
+
+    private final Limits limits;
+    private final Consumer<String> print;
+    private final Map<String, HostFunction> globals;
+    private final Map<String, Map<String, HostFunction>> tables;
+
+    private LuaSandbox(Builder b) {
+        this.limits = b.limits;
+        this.print = b.print;
+        this.globals = Map.copyOf(b.globals);
+        Map<String, Map<String, HostFunction>> t = new LinkedHashMap<>();
+        b.tables.forEach((name, fns) -> t.put(name, Map.copyOf(fns)));
+        this.tables = Collections.unmodifiableMap(t);
+    }
+
+    public static Builder builder(Limits limits) {
+        return new Builder(limits);
+    }
+
+    /** 造一个沙箱:登记宿主函数与 print。 */
+    public static final class Builder {
+        private final Limits limits;
+        private Consumer<String> print = line -> { };
+        private final Map<String, HostFunction> globals = new LinkedHashMap<>();
+        private final Map<String, Map<String, HostFunction>> tables = new LinkedHashMap<>();
+
+        private Builder(Limits limits) {
+            this.limits = limits;
+        }
+
+        /** {@code print(...)} 写出的每一行(参数按 tostring 写、制表符隔开)交给它。 */
+        public Builder print(Consumer<String> print) {
+            this.print = print;
+            return this;
+        }
+
+        /** 登记一个全局函数。 */
+        public Builder function(String name, HostFunction fn) {
+            checkName(name);
+            if (tables.containsKey(name) || globals.put(name, fn) != null) {
+                throw new IllegalArgumentException("全局名 " + name + " 登记了两次");
+            }
+            return this;
+        }
+
+        /** 登记 {@code table.name} 这个函数;表没有就新建。 */
+        public Builder function(String table, String name, HostFunction fn) {
+            checkName(table);
+            checkName(name);
+            if (globals.containsKey(table)) {
+                throw new IllegalArgumentException("全局名 " + table + " 已经是一个函数");
+            }
+            if (tables.computeIfAbsent(table, t -> new LinkedHashMap<>()).put(name, fn) != null) {
+                throw new IllegalArgumentException(table + "." + name + " 登记了两次");
+            }
+            return this;
+        }
+
+        private static void checkName(String name) {
+            if (!name.matches("[A-Za-z_][A-Za-z0-9_]*") || KEYWORDS.contains(name)) {
+                throw new IllegalArgumentException("在 Lua 里点不出来的名字: " + name);
+            }
+            if (STANDARD_GLOBALS.contains(name)) {
+                throw new IllegalArgumentException("名字 " + name + " 是沙箱自带的全局");
+            }
+        }
+
+        public LuaSandbox build() {
+            return new LuaSandbox(this);
+        }
+    }
+
+    /**
+     * 读一段脚本,不运行:读不通返回 Lua 的报错原话({@code mine:3: '=' expected near 'x'}),读得通是 null。和运行时是同一个编译器。
+     */
+    public static String check(String chunkName, String code) {
+        try {
+            compile(chunkName, code);
+            return null;
+        } catch (LuaError e) {
+            return e.getMessage();
+        }
+    }
+
+    /** Lua 报错原话开头的行号({@code mine:3: ...} 是 3);说不出是 0。 */
+    public static int lineOf(String message) {
+        Matcher m = WHERE.matcher(message == null ? "" : message);
+        return m.find() ? Integer.parseInt(m.group(1)) : 0;
+    }
+
+    /**
+     * 在宿主函数里问:脚本是在哪一行调的这个函数。不在脚本的线程上是 0。
+     */
+    public static int currentLine() {
+        Run run = CURRENT.get();
+        return run == null ? 0 : run.line;
+    }
+
+    /**
+     * 开跑:新起一个虚拟线程跑这段脚本,当场返回。
+     *
+     * @param chunkName 报错开头的那个名字({@code mine:3: ...})
+     * @param args      运行参数:脚本里的 {@code ...} 与 {@code arg[1]}…
+     * @param done      结束时在脚本的线程上调一次
+     */
+    public Running start(String chunkName, String code, List<String> args, Consumer<Outcome> done) {
+        Run run = new Run(chunkName, code, args, done);
+        Thread thread = Thread.ofVirtual().name("lua-" + chunkName).unstarted(run);
+        run.thread = thread;
+        thread.start();
+        return run;
+    }
+
+    /** 一段在跑的脚本。 */
+    public interface Running {
+        /** 喊停:在下一条指令或正在阻塞的宿主函数处停下,结局是 {@link Ending#INTERRUPTED}。跑完了再喊没有作用。 */
+        void interrupt();
+
+        /** 等它结束,返回结局。 */
+        Outcome await() throws InterruptedException;
+    }
+
+    // ---- 一次运行 ----
+
+    /** 预算到了、或被喊停:沿 Lua 调用栈一路往外抛,pcall 接不住(它只接 Exception)。 */
+    private static final class Stop extends Error {
+        final Ending ending;
+
+        Stop(Ending ending, String message) {
+            super(message, null, false, false);
+            this.ending = ending;
+        }
+    }
+
+    private final class Run implements Runnable, Running, Globals.Hook, Allocation.Meter {
+
+        private final String chunkName;
+        private final String code;
+        private final List<String> args;
+        private final Consumer<Outcome> done;
+        private final long started = System.nanoTime();
+        private final CountDownLatch finished = new CountDownLatch(1);
+        private volatile boolean interrupted;
+        private volatile Outcome outcome;
+        Thread thread;
+
+        private long slice;
+        private long total;
+        private long stringBytes;
+        /** 最近执行的那条指令在哪一行。 */
+        int line;
+
+        Run(String chunkName, String code, List<String> args, Consumer<Outcome> done) {
+            this.chunkName = chunkName;
+            this.code = code;
+            this.args = List.copyOf(args);
+            this.done = done;
+        }
+
+        @Override
+        public void run() {
+            CURRENT.set(this);
+            Allocation.bind(this);
+            Outcome result;
+            try {
+                result = execute();
+            } finally {
+                Allocation.unbind();
+                CURRENT.remove();
+            }
+            outcome = result;
+            finished.countDown();
+            done.accept(result);
+        }
+
+        private Outcome execute() {
+            LuaValue main;
+            Globals g;
+            try {
+                g = standardGlobals();
+                install(g);
+                main = g.load(code, "=" + chunkName);
+            } catch (LuaError e) {
+                return new Outcome(Ending.UNREADABLE, lineOf(e.getMessage()), e.getMessage());
+            }
+            g.hook = this;
+            LuaValue[] values = new LuaValue[args.size()];
+            LuaTable arg = new LuaTable();
+            for (int i = 0; i < values.length; i++) {
+                values[i] = LuaValue.valueOf(args.get(i));
+                arg.rawset(i + 1, values[i]);
+            }
+            g.rawset("arg", arg);
+            try {
+                main.invoke(LuaValue.varargsOf(values));
+                return new Outcome(Ending.FINISHED, 0, null);
+            } catch (Stop stop) {
+                return new Outcome(stop.ending, line, chunkName + ":" + line + ": " + stop.getMessage());
+            } catch (LuaError e) {
+                return new Outcome(Ending.ERROR, line, e.getMessage());
+            } catch (StackOverflowError deep) {
+                return new Outcome(Ending.STACK, line, chunkName + ":" + line + ": stack overflow (a function that "
+                        + "calls itself without end?)");
+            }
+        }
+
+        private void install(Globals g) {
+            g.rawset("print", new VarArgFunction() {
+                @Override
+                public Varargs invoke(Varargs in) {
+                    LuaValue tostring = g.get("tostring");
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 1; i <= in.narg(); i++) {
+                        if (i > 1) {
+                            sb.append('\t');
+                        }
+                        sb.append(tostring.call(in.arg(i)).tojstring());
+                    }
+                    print.accept(sb.toString());
+                    return NONE;
+                }
+            });
+            globals.forEach((name, fn) -> g.rawset(name, host(fn)));
+            tables.forEach((name, fns) -> {
+                LuaTable t = new LuaTable();
+                fns.forEach((fnName, fn) -> t.rawset(fnName, host(fn)));
+                g.rawset(name, t);
+            });
+        }
+
+        private LuaValue host(HostFunction fn) {
+            return new VarArgFunction() {
+                @Override
+                public Varargs invoke(Varargs in) {
+                    List<Object> javaArgs = new ArrayList<>();
+                    for (int i = 1; i <= in.narg(); i++) {
+                        javaArgs.add(toJava(in.arg(i)));
+                    }
+                    Object out;
+                    try {
+                        out = fn.call(javaArgs);
+                    } catch (ScriptError e) {
+                        throw new LuaError(e.getMessage());
+                    } catch (InterruptedException e) {
+                        throw new Stop(Ending.INTERRUPTED, "the script was stopped");
+                    } finally {
+                        slice = 0;
+                    }
+                    if (interrupted) {
+                        throw new Stop(Ending.INTERRUPTED, "the script was stopped");
+                    }
+                    checkWall();
+                    return toLua(out);
+                }
+            };
+        }
+
+        // ---- 钩子与计量 ----
+
+        @Override
+        public void onInstruction(Prototype p, int pc) {
+            if (p.lineinfo != null && pc < p.lineinfo.length) {
+                line = p.lineinfo[pc];
+            }
+            if (++slice > limits.instructionsPerSlice()) {
+                throw new Stop(Ending.SLICE, "ran " + limits.instructionsPerSlice()
+                        + " instructions without calling a host function; a loop that never calls one never ends");
+            }
+            if (++total > limits.instructions()) {
+                throw new Stop(Ending.INSTRUCTIONS, "ran past " + limits.instructions() + " instructions in all");
+            }
+            if (interrupted) {
+                throw new Stop(Ending.INTERRUPTED, "the script was stopped");
+            }
+            if ((total & 1023) == 0) {
+                checkWall();
+            }
+        }
+
+        private void checkWall() {
+            if (System.nanoTime() - started > limits.wallClock().toNanos()) {
+                throw new Stop(Ending.WALL_CLOCK, "ran past " + limits.wallClock().toSeconds() + " seconds");
+            }
+        }
+
+        @Override
+        public void charge(long bytes) {
+            stringBytes += bytes;
+            if (stringBytes > limits.stringBytes()) {
+                throw new Stop(Ending.STRINGS, "made more than " + limits.stringBytes()
+                        + " bytes of strings; build long text in pieces, or not at all");
+            }
+        }
+
+        // ---- Running ----
+
+        @Override
+        public void interrupt() {
+            interrupted = true;
+            thread.interrupt();
+        }
+
+        @Override
+        public Outcome await() throws InterruptedException {
+            finished.await();
+            return outcome;
+        }
+    }
+
+    // ---- 环境与值 ----
+
+    /** 沙箱的标准环境:基本函数(上游 BaseLib 已去掉装载代码与碰 JVM 的那些)、string、table、math;编译器只收文本。 */
+    private static Globals standardGlobals() {
+        Globals g = new Globals();
+        g.load(new BaseLib());
+        g.load(new TableLib());
+        g.load(new StringLib());
+        g.load(new JseMathLib());
+        LuaC.install(g);
+        return g;
+    }
+
+    private static void compile(String chunkName, String code) {
+        standardGlobals().load(code, "=" + chunkName);
+    }
+
+    /** Lua 值换成 Java 值。函数、userdata 换不了,抛一个脚本接得住的错误。 */
+    public static Object toJava(LuaValue v) {
+        switch (v.type()) {
+            case LuaValue.TNIL:
+                return null;
+            case LuaValue.TBOOLEAN:
+                return v.toboolean();
+            case LuaValue.TNUMBER: {
+                double d = v.todouble();
+                return d == Math.rint(d) && Math.abs(d) < 9.0e15 ? (Object) (long) d : (Object) d;
+            }
+            case LuaValue.TSTRING:
+                return v.tojstring();
+            case LuaValue.TTABLE: {
+                LuaTable t = (LuaTable) v;
+                int n = t.length();
+                int keys = 0;
+                for (LuaValue k = t.next(LuaValue.NIL).arg1(); !k.isnil(); k = t.next(k).arg1()) {
+                    keys++;
+                }
+                if (keys == n) {
+                    List<Object> list = new ArrayList<>(n);
+                    for (int i = 1; i <= n; i++) {
+                        list.add(toJava(t.get(i)));
+                    }
+                    return list;
+                }
+                Map<String, Object> map = new LinkedHashMap<>();
+                for (Varargs kv = t.next(LuaValue.NIL); !kv.arg1().isnil(); kv = t.next(kv.arg1())) {
+                    map.put(kv.arg1().tojstring(), toJava(kv.arg(2)));
+                }
+                return map;
+            }
+            default:
+                throw new LuaError("a " + v.typename() + " cannot be passed to the host");
+        }
+    }
+
+    /** Java 值换成 Lua 值:null、布尔、数、字符串、列表、名字到值的表。 */
+    public static LuaValue toLua(Object o) {
+        if (o == null) {
+            return LuaValue.NIL;
+        }
+        if (o instanceof Boolean b) {
+            return LuaValue.valueOf(b);
+        }
+        if (o instanceof Integer || o instanceof Long || o instanceof Short || o instanceof Byte) {
+            long l = ((Number) o).longValue();
+            return l == (int) l ? LuaValue.valueOf((int) l) : LuaValue.valueOf((double) l);
+        }
+        if (o instanceof Number n) {
+            return LuaValue.valueOf(n.doubleValue());
+        }
+        if (o instanceof String s) {
+            return LuaValue.valueOf(s);
+        }
+        if (o instanceof List<?> list) {
+            LuaTable t = new LuaTable(list.size(), 0);
+            for (int i = 0; i < list.size(); i++) {
+                t.rawset(i + 1, toLua(list.get(i)));
+            }
+            return t;
+        }
+        if (o instanceof Map<?, ?> map) {
+            LuaTable t = new LuaTable();
+            map.forEach((k, v) -> t.rawset(String.valueOf(k), toLua(v)));
+            return t;
+        }
+        throw new IllegalArgumentException("not a value Lua can hold: " + o.getClass().getName());
+    }
+}

@@ -244,6 +244,11 @@ void end(RunEnd reason) {
   内核把入了队的条目连同急不急转给工具口(`ToolPort.arrived`),等的时候来了急件就不再等,余下的调用
   逐条回"没执行"(规则见宪法 §六)。最后一件受理了这批就结算,所以 run 往往在身体还在干活时就结束了;
   `task_finished` 作为插话进队,下次 pump 开新 run。这正是 pi 的"闲时来消息就开 run"。
+- **脚本也在这里派**(`docs/shell.md` §四):一个组合命令的调用(`ScriptTool`),或回执说"去跑这一份"的 `script run`,在 `SerialCalls`
+  里是一段脚本(`agent.script.ScriptCall`;语言只经 `ScriptEngine`)。脚本每调一个命令函数,派发器把那一行当一条 `command` 调用派出去,留下身体活
+  就用同一个等法等它的 `task_finished`,再让脚本从调用处接着跑;脚本里的每一件都等,因为脚本要按结局往下走。等的时候
+  来了急件,脚本停在命令之间,回执写明停在哪一行;一行在跑时来了急件,这一行的回执到了就停。脚本跑完,它的回执才是那个
+  调用的结果。上限(命令数、墙钟、两次调命令之间与一次运行的指令数、字符串字节数)只在 `ScriptLimits`。
 - **没有轮数上限、没有循环检测**:保持现状(模型合理地连着派很多任务;失控由主人停止)。
 
 ---
@@ -386,9 +391,9 @@ record Type(String id,
 
 ```java
 void halt(HaltReason reason) {
+    List<String> orphans = tools.cancel(reason.stopsBody());   // 先收工具口:在跑的脚本交出停在哪一行的回执
     if (run != null) {
         run.cancel.cancel();
-        List<String> orphans = tools.cancel(reason.stopsBody());
         if (run.phase == TOOLS || run.phase == MODEL) transcript.addHalt(reason);   // §九
         Run cut = run; run = null;
         emit(RunEnded(cut, HALTED(reason)));

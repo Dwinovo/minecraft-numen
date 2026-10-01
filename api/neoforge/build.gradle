@@ -40,6 +40,7 @@ neoForge {
             // 模组构造时找不到 IToolSpec,runData 直接起不来。
             sourceSet project(':ai').sourceSets.main
             sourceSet project(':agent').sourceSets.main
+            sourceSet project(':lua').sourceSets.main
             sourceSet project(':ui').sourceSets.main
             sourceSet project(':pathing').sourceSets.main
         }

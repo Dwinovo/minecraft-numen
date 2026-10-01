@@ -29,6 +29,7 @@ public final class RuleSet {
      *   <li>执行只读或只说话的指令:帮助、在线名单、动作消息、私信、队伍消息、种子、随机数。别名随根名认
      *       ({@code tell}、{@code w} 归 {@code msg},{@code tm} 归 {@code teammsg}),见 {@link Action#command}。</li>
      *   <li>改主人的规则没点名的区域:她扫出来的矿、框的工地是她自己的笔记;主人的规则点名的那几块走 ask 表。</li>
+     *   <li>存、改、删不是别的同伴存的脚本:新存一份、改她自己那份是她自己的笔记;别的同伴存的走 ask 表。</li>
      * </ul>
      * 其余指令没有一行说到,照旧问。
      */
@@ -50,12 +51,14 @@ public final class RuleSet {
             "command(teammsg)",
             "command(seed)",
             "command(random)",
-            "edit_area(!ruled)");
+            "edit_area(!ruled)",
+            "edit_script(!saved)");
 
     /**
      * 出厂 ask 表原文。同一个动作命中几行时第一行作数,所以更具体的在前:装着东西的容器先于
      * 玩家放的,有主人的先于有名字的——清单上标出撤不回的那一类靠它。改主人规则点名的区域要问:
-     * 那几块区域就是主人的规矩管到的地方,删改它等于替主人改规矩。
+     * 那几块区域就是主人的规矩管到的地方,删改它等于替主人改规矩。改、删别的同伴存的脚本要问:那是别人摸索出来的东西,
+     * 删了撤不回,该不该动只有主人说得清。
      */
     public static final List<String> FACTORY_ASK = List.of(
             "break(block_entity & contents)",
@@ -70,7 +73,8 @@ public final class RuleSet {
             "attack(villager)",
             "drop(*)",
             "place(hazard_item & near_placed)",
-            "edit_area(ruled)");
+            "edit_area(ruled)",
+            "edit_script(saved)");
 
     private final List<Rule> deny;
     private final List<Rule> ask;

@@ -36,6 +36,7 @@ public class NumenCoreNeoForge {
         // core 的自带技能和联动的一样经插件那扇门交出去,原地读 jar 里的 skills/ 目录。技能喂的是主人客户端上的
         // 大脑,门在客户端接上时才声明(NumenPlugins.bindClient);专用服务器上没人接,它就一直攒着。
         declareBundledSkills();
+        declareBundledScripts();
 
         Constants.LOG.info("numen-core initialised on NeoForge.");
     }
@@ -47,6 +48,18 @@ public class NumenCoreNeoForge {
         } else {
             Constants.LOG.warn("[numen-core] no bundled skills/ dir found in jar");
         }
+    }
+
+    /**
+     * core 的内置脚本同样经插件那扇门交出去,原地读 jar 里的 scripts/ 目录。脚本两侧都要(大脑跑它,服务端存取与列它),
+     * 所以直接登记,不等客户端。
+     */
+    private static void declareBundledScripts() {
+        Path root = ModJar.find("scripts");
+        if (root == null) {
+            throw new IllegalStateException("[numen-core] no bundled scripts/ dir found in jar");
+        }
+        com.dwinovo.numen.api.NumenPlugins.register(numen -> numen.bundleScripts(root));
     }
 
     private static void onServerTickPost(ServerTickEvent.Post event) {

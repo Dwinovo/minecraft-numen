@@ -1,8 +1,14 @@
 package com.dwinovo.numen.cli;
 
+import com.dwinovo.numen.agent.script.ScriptCatalog;
+import com.dwinovo.numen.agent.script.ScriptRun;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.Internal;
 import com.dwinovo.numen.task.TaskResult;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import com.mojang.brigadier.ParseResults;
 import com.mojang.brigadier.ImmutableStringReader;
 import com.mojang.brigadier.context.CommandContext;
@@ -181,6 +187,95 @@ public final class NumenCli {
             args = CommandArgs.fromCommand(action.positionals(), ctx, FlagsArgument.valuesIn(ctx));
         }
         return new Reading(String.join(" ", path), true, args);
+    }
+
+    /**
+     * 脚本里能调的函数:每个登记了的动作一个 {@code 组.动作},带上它声明的返回项({@link Action#returns})。由这张登记表
+     * 现算,不另记一份。
+     */
+    public static ScriptCatalog scriptCatalog() {
+        inUse();
+        Map<String, Map<String, ScriptCatalog.Verb>> groups = new TreeMap<>();
+        for (CommandGroup group : GROUPS.values()) {
+            Map<String, ScriptCatalog.Verb> verbs = new TreeMap<>();
+            for (Action action : group.actions()) {
+                verbs.put(action.name(), new ScriptCatalog.Verb(action.returns()));
+            }
+            groups.put(group.name(), verbs);
+        }
+        return new ScriptCatalog(groups);
+    }
+
+    /**
+     * 脚本里一个函数的调用写成一行命令。按顺序的对象依次给这个动作的位置参数,最后一个位置参数收下余下的全部对象(命令行上就是
+     * 那样写的:一串区域、三个坐标、余下整行);选项表的键是标志名({@code _} 与 {@code -} 同一)。脚本里的列表是命令行上写成几个
+     * 词的那个值({@code {120, 64, -35}} 是一格),一串值的每一项各是一个值。值经参数类型读成参数({@link CommandArgs#fromJson},
+     * 和快捷工具同一个读法——对象的写法只在 {@link ArgType} 一处读),再按同一张参数表写回命令行({@link CommandArgs#write})。
+     * 这一行随后照常交给命令入口,和她亲手写的一样解析、执行。
+     *
+     * @throws IllegalArgumentException 没有这个动作、对象多了、缺了必填的、选项名不对或值读不成;消息是给脚本的那句话,
+     *                                  附上这个动作的用法
+     */
+    public static String scriptLine(ScriptRun.Call call) {
+        inUse();
+        CommandGroup group = GROUPS.get(call.group());
+        Action action = group == null ? null : group.action(call.verb());
+        if (action == null) {
+            throw new IllegalArgumentException("there is no command " + call.group() + " " + call.verb());
+        }
+        List<Param<?>> positionals = action.positionals();
+        List<Object> objects = call.args();
+        try {
+            if (positionals.isEmpty() && !objects.isEmpty()) {
+                throw new IllegalArgumentException("takes no objects, got " + objects.size());
+            }
+            JsonObject json = new JsonObject();
+            for (int i = 0; i < positionals.size() && i < objects.size(); i++) {
+                Param<?> p = positionals.get(i);
+                boolean last = i == positionals.size() - 1;
+                List<Object> given = last ? objects.subList(i, objects.size()) : objects.subList(i, i + 1);
+                json.add(p.name(), given.size() == 1 && !(p.type().span() == ArgType.Span.SEVERAL)
+                        ? one(given.get(0))
+                        : several(p, given));
+            }
+            for (Map.Entry<String, Object> option : call.options().entrySet()) {
+                Param<?> p = action.params().stream().filter(q -> q.name().equals(Param.nameOf(option.getKey())))
+                        .findFirst().orElse(null);
+                json.add(option.getKey(), p != null && p.type().span() == ArgType.Span.SEVERAL
+                        ? several(p, option.getValue() instanceof List<?> list ? List.copyOf(list)
+                                : List.of(option.getValue()))
+                        : one(option.getValue()));
+            }
+            return CommandArgs.fromJson(action.params(), json).write(action.path(), action.params());
+        } catch (IllegalArgumentException wrong) {
+            throw new IllegalArgumentException(wrong.getMessage() + "; usage: " + action.usage());
+        }
+    }
+
+    /** 一个参数收下的几个对象:一串值是每项一个值的数组,别的(余下整行、几个词的一个值)是空格连起来的一串。 */
+    private static JsonElement several(Param<?> p, List<?> given) {
+        if (p.type().span() == ArgType.Span.SEVERAL) {
+            JsonArray array = new JsonArray();
+            given.forEach(v -> array.add(one(v)));
+            return array;
+        }
+        return new JsonPrimitive(words(given));
+    }
+
+    /** 一个对象写成 JSON:列表是命令行上的几个词(一格 {@code 120 64 -35}),其余照原样。 */
+    private static JsonElement one(Object value) {
+        return switch (value) {
+            case String s -> new JsonPrimitive(s);
+            case Number n -> new JsonPrimitive(n);
+            case Boolean b -> new JsonPrimitive(b);
+            case List<?> list -> new JsonPrimitive(words(list));
+            default -> throw new IllegalArgumentException("cannot pass " + value + " to a command");
+        };
+    }
+
+    private static String words(List<?> values) {
+        return String.join(" ", values.stream().map(v -> v instanceof List<?> l ? words(l) : String.valueOf(v))
+                .toList());
     }
 
     /** 登记了的各组,按名字排序。 */

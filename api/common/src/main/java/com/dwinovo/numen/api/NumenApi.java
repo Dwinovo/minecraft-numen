@@ -87,6 +87,18 @@ public interface NumenApi {
     void bundleSkills(Path skillsRoot);
 
     /**
+     * 把一个目录里的脚本交给引擎:每个 {@code <名字><扩展名>} 是一份随模组发布的脚本(扩展名随脚本语言,眼下是 {@code .lua}),她用 {@code script run <名字>} 跑、
+     * {@code script show <名字>} 读,只读。正文开头一行注释说它做什么,系统提示里的脚本索引就写
+     * 这一句;读不通、没写说明、名字撞了当场抛出,和命令登记同一种把关。
+     *
+     * <p>通常传你自己 jar 里的 {@code scripts/}。两侧都登记(跑脚本在大脑那一侧,存取在服务端),所以<b>在
+     * {@code NumenPlugins.register} 的块里直接调</b>,别放进 {@link #onClient}。
+     *
+     * @throws IllegalArgumentException 名字不合规矩、已有同名的、正文读不通或开头没写说明
+     */
+    void bundleScripts(Path scriptsRoot);
+
+    /**
      * 跑一段<b>只在客户端才有意义</b>的代码。专用服务器上整块不执行。
      *
      * <p>界面、渲染、头像这类东西只活在玩家的客户端上,而引擎的公共部分刻意不引用

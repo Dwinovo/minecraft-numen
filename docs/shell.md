@@ -1,4 +1,4 @@
-# 命令行与脚本:原子命令 + bash 子集
+# 命令行与脚本:原子命令 + Lua 脚本
 
 状态:设计稿(10-01),施工中。总纲见 `docs/architecture-mind-model.md` §零。
 
@@ -9,8 +9,8 @@
 `use block x y z` 漏了左右键(3/3)、`inv drop` 漏了数量。她是照 bash 的习惯写的,是我们的写法不像 bash。另一面,
 `work dig`、`build at` 这类胖命令在执行里替她做决定(下一格挖哪个、为够到它多挖哪些),违背总纲。
 
-做法:**命令照业界公认的命令行规矩来,一条命令只做一件事;组合交给 bash 子集的脚本**。不发明新语言——bash 是
-模型最熟的 DSL。
+做法:**命令照业界公认的命令行规矩来,一条命令只做一件事;组合交给 Lua 脚本**。不发明新语言——Lua 是游戏里
+跑脚本的通行做法(ComputerCraft/CC: Tweaked),模型熟,能在任何地方让出、等身体收尾。
 
 ## 二、命令行十条
 
@@ -55,51 +55,189 @@
   什么,挖掉的下一次自动不算。
 - **没有不可拆的行为,只有循环快慢之分**:秒级的决策循环(打哪只、按什么顺序、何时撤、打完捡东西)进脚本;每刻都要转
   的控制(盯着转头、追着保持在够得着处、等冷却出手、举盾)进原子命令内部。例如 `fight attack 27` 只管"打这一只"
-  (追、转头、等冷却、出手,目标死了/丢了/超时收尾),"打哪几只"由脚本 `for m in $(scan entities …); do fight attack "$m"
-  || break; done` 决定;安全兜底(血少逃跑、岩浆自救)由反射打断脚本。`build at`、`fight attack` 现在的胖实现在
+  (追、转头、等冷却、出手,目标死了/丢了/超时收尾),"打哪几只"由脚本 `for _, m in ipairs(…) do if not
+  pcall(fight.attack, m) then break end end` 决定;安全兜底(血少逃跑、岩浆自救)由反射打断脚本。`build at`、`fight attack` 现在的胖实现在
   命令层与脚本层落地、评测追平后,按这条拆成原子命令 + 内置脚本。
 
-## 四、脚本:bash 子集
+## 四、脚本:Lua
+
+组合语言是 Lua 5.2(10-01 定),只有这一套组合语言。语言只经 `agent.script.ScriptEngine` 一处认:工具名、扩展名、注释写法、
+"命令怎么调"那段说明、函数名的改写、读与跑;派发、等待、上限、打断、回执、脚本名词、命令函数的目录与参数换算都与语言
+无关(`ScriptRun` 的调用请求、结局、命令结果不带任何虚拟机类型)。实现在 `agent.script.lua.LuaEngine`,虚拟机的类型只在
+这个类里;换语言只改 `ScriptEngine.IN_USE` 与它的实现。
+
+虚拟机是本仓自己的纯 JVM 模块 `lua`(不碰 Minecraft 与 Numen 的类型):LuaJ 主干最后一次提交 `daf3da9`(2020-04-01)
+的源码,MIT,包名改成 `com.dwinovo.lua.vm`,只留解析、编译、解释与安全的标准库;从 FiguraMC/luaj 逐个挑了几处修复。
+上游是哪一次、挑了哪几个提交、我们改了什么,见 `lua/README.md`。对外只有 `com.dwinovo.lua.LuaSandbox`。
 
 ### 工具面
 
-一个 `sh` 工具收一段脚本(一行就是一条命令,与原来的 `command` 同一个入口——`command` 并进 `sh`)。快捷工具的 JSON
-写法先保留,是否收掉由评测 A/B 定。
+- `command`:一行命令,入口不变。
+- 组合命令的工具(`ScriptTool`,名字随语言,眼下是 `lua`):一段程序(参数 `code`),一次调用跑完,回一张回执。两种写法是两种语言,一个工具名说清它收哪一种。
+- 快捷工具的 JSON 写法先保留,是否收掉由评测 A/B 定。
+- 提示词(`NumenPrompts` 的 operating principles)告诉她:下一步要看上一步的结果时(一块区域的每一部分、挖到没有为止、
+  头一个失败就停),写成一段交给组合命令的工具;已有的脚本先看 `<scripts>`/`<saved_scripts>`;写好用得顺的 `script save` 存下。
 
-### 语法(第一版)
+### 命令函数:由登记处生成
 
-| 能写 | 例子 |
+每个登记了的动作是一个函数 `组.动作(对象..., {选项=值})`,背后就是那一行命令:同一份登记、同一次解析、同样过权限、
+照常记实际账、受理即能跑。
+
+| Lua | 写成的命令行 |
 |---|---|
-| 一行一条命令,`#` 注释,`;` 分隔 | `scan blocks iron_ore --into ores` |
-| `&&`、`||` 按成败接续 | `move goto ores/g3 --arrive dig && work dig ores/g3` |
-| 变量与引用 | `target=ores/g3`、`"$target"`、`${target}` |
-| 命令替换(只取查询命令的输出,一行一个词) | `for p in $(area parts ores); do …; done` |
-| `for … in …; do …; done`、`while 命令; do …; done`、`if 命令; then …; else …; fi`、`break`、`continue`、`exit` | `while area has ores; do …; done` |
+| `work.dig("ores/g3")` | `work dig ores/g3` |
+| `move.goto_("ores/g3", {arrive = "dig", alter = "natural"})` | `move goto ores/g3 --arrive dig --alter natural` |
+| `move.goto_(120, 64, -35)` 或 `move.goto_({120, 64, -35})` | `move goto 120 64 -35` |
+| `scan.blocks("iron_ore", {radius = 12, into = "ores"})` | `scan blocks iron_ore --radius 12 --into ores` |
+| 开关 `{sneak = true}` / `{sneak = false}` | `--sneak` / `--no-sneak` |
+| `script.run("mine", "ores")` | `script run mine ores` |
 
-**不做**(第一版):管道(名词就是文件,`--into` 写、下一条读)、重定向、后台 `&`、函数、算术。真需要时按 bash 的写法
-加,不另造语法。
+- 按顺序的对象依次给位置参数,最后一个位置参数收下余下的全部对象(几个词的一个值、`text` 的整行、几个 id);最后一个
+  参数是带名字键的表就是标志,键里的 `_` 与 `-` 同一。一个值占命令行上几个词(三个坐标、一串 id)时,在这里可以写成
+  列表 `{a, b, c}`,也可以直接摊开写。
+- 换算只在命令层一处(`NumenCli.scriptLine`):对象只经参数类型 `ArgType` 一处读(`CommandArgs.fromJson`,快捷工具同一个
+  读法),再按同一张参数表写回命令行(`CommandArgs.write`)。写不成(没有这个动作、对象多了、缺必填、标志名不对)在调用处
+  抛 Lua 错误,附这个动作的用法。
+- **成功直接返回值,失败抛错。** 占身体的命令等它的 task_finished 再返回,`done` 算成功。登记时声明了返回项的命令
+  (`Action.returns("has")`,如 `area has`、`area parts`)回执里有这一项就返回它,成败都返回(`area.has` 没剩是
+  `false`,不是错),拿来就能循环:`for _, p in ipairs(area.parts("ores")) do … end`、`while area.has("ores") do … end`。
+  其余命令成功返回回执数据转成的表,没有数据就返回回执那句话;失败在调用处抛 Lua 错误,消息是
+  `move.goto_: <回执那句话>`,`pcall` 接得住,接住了就是脚本自己决定往下走。不另包一层 `{ok, text, data}`。
+  帮助里这几个动作多一行 `In a script: area.has(...) returns data.has, whether the command succeeds or not.`
+- `print(...)` 写进回执(至多 2000 字)。按名字跑的脚本用 `...` 与 `arg` 取参数。`error("why", 0)` 让它以这句话失败。
+- **名字的改写只有一条**:组名或动作名撞上 Lua 的保留字(`goto`、`end`……)或沙箱自带的全局名(`string`、`table`、
+  `print`……)的,后面加 `_`:`move.goto_`。命令名本身不变,只是脚本里的写法;帮助里这样的动作多一行
+  `In a script: move.goto_(...).`,`lua` 工具的说明里也写了这一条。规则只在 `ScriptEngine.functionName` 一处,登记处的
+  目录、回执里的函数名、帮助都从它来;沙箱不收撞名的宿主函数,登记时就抛出。
 
-### 语义
+### 放在哪:`agent` 模块,和 `SerialCalls` 同一层
 
-- **成败 = 命令的结果**:当场回执的看 `success`;占身体的活等它收尾(与现在"同一轮里等 task_finished"同一处机制),
-  `done` 算成功,其余算失败。
-- 每条命令照常过权限层、记实际账、受理即能跑;等主人征询就在那一行等着。
-- **上限**:一段脚本执行的命令数、循环圈数、总墙钟都有上限(数值只一处定义),到了就停在当前行,如实说停在哪。
-- **打断**:主人按停止、主人说话、急件,脚本停在命令边界,回执写明执行到第几行、哪些做了哪些没做。
-- **回执**:每一行一句(成功/失败与一句摘要)、最后的状态、合并的实际账;不重复每条命令的全文。
-- 解释器是纯 JVM,放在大脑循环那一侧(`agent` 模块),经同一个工具口逐行派发;解析只一份。
+- 语言(`agent.script.ScriptEngine` 与实现)、一次运行(`ScriptRun`)、一次调用里的脚本(`ScriptCall`)、上限(`ScriptLimits`)
+  是纯 JVM,和派发器 `SerialCalls` 在同一个模块。理由:等身体收尾、急件打断等待的那处机制就在 `SerialCalls`,脚本每调
+  一个命令要的正是它;放进 api 要么另造一份等待,要么让 api 的工具反过来伸进派发器。
+- `lua` 模块由 `agent` 依赖;发行 jar 里和 `ai`、`agent` 一样平铺进引擎(`api-loader` 约定插件),许可随 jar 带
+  `LICENSE_numen-lua`。
+- 派发器经端口 `SerialCalls.Port`(继承 `ScriptCall.Host`)要这几样:执行一个调用、认出组合命令的调用里的程序、把一行命令写成
+  一次 `command` 调用、受理回执与 task_finished 的认法、命令目录与换算、记战绩、墙钟。主人客户端与评测大脑用
+  `CompanionToolPort`,GameTest 的一轮用服务端的 `ServerPort`(直接 `serve`,战绩直接记)。
 
-### 内置脚本
+### 运行:一个脚本一个虚拟线程
 
-- 流程固定的活写成随模组发布的脚本,放在内容那一侧(core、插件),由 api 的登记口收,写法照技能与命令登记。
-- `sh run <脚本名> [参数...]` 执行,`$1`… 取参数;`sh show <脚本名>` 读全文——她能照着改、能自己写一份。
-- 第一批:`mine`(挖一块区域,循环 `move goto --arrive dig` 与 `work dig`,最后 `work collect`)。
+- 每次运行一个新的虚拟机(`Globals`),跑在它自己的虚拟线程上。命令函数是宿主函数:收参数、把调用请求
+  (`ScriptRun.Call`:行号、组、动作、对象、选项)交给驱动方,然后在原地阻塞等结局,拿到后从调用处接着跑。驱动方只在
+  两次调命令之间等它算完(指令预算管着);等身体干活时谁都不等它,脚本线程停着不占平台线程。
+- 不装 `coroutine` 库,命令只有脚本本身调得到。
+- 一段调用里可以再跑一份有名字的脚本:`script run`(命令行上或 `script.run`)是一条普通命令,命令层按名字找到脚本、
+  把正文与参数放进回执 `data.run`;派发器见到这样的回执就在原地开一层跑它,跑完它的结局就是那次调用的结局。上限算
+  整段调用的总数,打断时每一层都停。外接大脑直接调工具、没有这个派发器:组合命令的工具回一条说明,`script run` 只交回正文。
+
+### 沙箱与上限
+
+- 只装基本函数、`string`、`table`、`math`;没有 `load`、`loadstring`、`dofile`、`loadfile`、`collectgarbage`、
+  `string.dump`、`coroutine`,也没有 io、os、debug、package、luajava。虚拟机只收源码文本(不收二进制块)。
+- 字符串库表与字符串元表全 JVM 只有一份,锁成只读:一个脚本改不了 `string.rep` 或 `getmetatable("").__index` 去影响
+  别的脚本。
+- 上限只在 `ScriptLimits` 一处,到了停在当前那一行,回执说停在哪、因为哪一条:
+  - 命令数 200(嵌套的算在一起):挖一块区域每圈"还剩没有、走过去、挖"三条,两百条够七十来圈;再多是循环条件写错了在空转。
+  - 两次调命令之间 100 万条指令(约几十毫秒),一次运行共 1000 万条。
+  - 一次运行为字符串分配的字节共 64 MB:每次开新字节数组之前记账,`s = s .. s` 翻倍几十次就停。
+  - 墙钟 20 分钟(原版一整天):沙箱在指令之间查,派发器在命令之间查;等身体收尾时不打断那件活,活有自己的期限。
+  - 循环圈数不另设:不调命令的循环由指令预算管,调命令的由命令数管。
+- 预算与打断都在每条指令前的钩子里查,到了抛的是 Java `Error`,`pcall` 只接 Lua 错误,接不住:`pcall` 里的死循环一样停。
+  外面也能随时打断一次运行(`Running.interrupt`),阻塞在命令函数里的脚本线程同样放手。
+
+### 打断:停在命令之间
+
+复用"同一轮里等 task_finished"的那处(`SerialCalls`)与它的口径:
+
+- 等某件身体活收尾时来了急件(主人说话、急事):不再等,脚本停,回执写 `your owner spoke; t8 keeps running`
+  (那件活照常跑);这一批余下的调用照旧各回"没执行"。
+- 一行命令在跑时来了急件:这一行的回执到了就停,停在命令之间。
+- 主人按停止(以及死亡、登出、外接接管、遣散):内核 `halt` 先收工具口再作废这次 run,在跑的脚本这时交出回执
+  `this turn was cut off; t8 was stopped too`(停止键叫停身体)或 `keeps running`,作为它那个调用的结果进历史,
+  切断点随后记下原因;所以模型看到的是真实的停处,而不是笼统的"被打断"。
+- 有名字的脚本被停下也记一次战绩(没跑完、停在哪一行、为什么)。
+
+### 回执
+
+第一行一句话说结局;之后按脚本的行各一句(调了几次、成败、最后一次那句话的第一行),不重复命令全文;最后是 `print`
+写的字。每件身体活的实际账照旧只在它自己的 task_finished 里说一次(`NavText` 一处),回执点它的编号与结局,不另写一份。
+数据里有 `status`(ok / error / stopped)、`commands`,按名字跑的有 `script`。例:
+
+```
+Script mine stopped at line 15 after 7 commands: could not dig ores: work.dig: 2 blocks are out of reach.
+line 8 area.has: 2 calls, none failed; last ok — ores has 2 blocks left
+line 9 move.goto_: 2 calls, none failed; last ok — t41 done: Arrived within reach of ores/g2.
+line 13 work.dig: 2 calls, 1 failed; last failed — t44 failed: 2 blocks are out of reach.
+line 20 work.collect: ok — t45 done: Picked up 9 raw_iron.
+```
+
+```
+The script stopped at line 1 (move.goto_) after 1 command: your owner spoke; t12 keeps running. Nothing after that ran.
+```
+
+(停在第 1 行时那件活还没收尾,那一行没有结局可记,回执只有第一句。)
+
+### 脚本这个名词:`script` 组
+
+- 内置的随模组发布、只读(`BuiltinScripts`);同伴存下的归主人(`ScriptStore`,主世界存档数据 `numen_scripts_<主人>`,
+  和 `AreaStore` 同一个做法),同一主人的同伴都看得见、都跑得了。名字规矩用 `Names`(小写字母、数字、`_`、`-`)。
+- `script list`(每份一行:说明、谁的、战绩)、`script show <名字>`、`script run <名字> [参数...]`、
+  `script save <正文> [--name <名字>]`、`script delete <名字>`。都不占身体。不写 `--name` 就存成下一个空着的 `script-N`。
+- 存之前用同一个编译器读一遍,读不通不收,报错带行号(`gt-broken:2: …`);正文开头一行注释(`-- …`)就是它的一句话
+  说明,没写不收——内置脚本也是这一条,说明只有正文里这一处。存同名的替换旧的、清掉旧战绩(旧战绩说的是旧正文);
+  内置的同名存不进,删不掉,想改就另存一份。
+- 正文怎么传:`script save` 的正文是一个位置参数,命令行上用引号括起来;在 Lua 里是
+  `script.save([[ … ]], {name = "sweep"})`。不另开工具字段,也不做 here-document:存脚本就是一条普通命令,同一次解析、
+  同样过权限。
+- 战绩:跑了几次、跑完几次、最近一次的时刻、最近一次没跑完停在哪一行与原因,只给事实。大脑跑完(跑完、出错、被停下)
+  一份有名字的脚本时经 `ScriptTallyPayload` 送到服务端(只认主人),和工具调用同一个上行出口。内置脚本的战绩也记在
+  主人名下。
+- 权限:改、删别的同伴存的脚本问主人。动作 `edit_script`,信号 `saved`(这份是别的同伴存的);出厂 allow
+  `edit_script(!saved)`(新存、改她自己的不问)、ask `edit_script(saved)`。理由:那是别人摸索出来的东西,删了撤不回,
+  该不该动只有主人说得清;不写死能或不能,主人改一行规则就能放开或收紧。主人看与删用同一组命令(`/numen drive`)。
+- 索引:内置脚本进系统提示 `<scripts>`(只随登记变,稳定前缀);同伴们存的随存删变,挂在她身上的状态
+  `<saved_scripts>`(身体状态片段,服务端算、随状态包推)。两处都只列名字与一句说明,和技能表同一种写法;全文按需
+  `script show`。
+
+### 内置脚本的登记
+
+照技能与命令的登记:`NumenApi.bundleScripts(Path)` 收一个目录,每个 `<名字>.lua` 一份;两侧都登记(大脑跑它,服务端
+存取与列它),在 `NumenPlugins.register` 的块里直接调。登记那一刻把关:名字合规矩、读得通、开头有说明、不重名,任何一条
+不过当场抛出。core 原地读 jar 里的 `scripts/`。
+
+第一批 `mine`(`core/common/src/main/resources/scripts/mine.lua`):
+
+```lua
+-- Dig out an area: walk within reach of what is left of it, dig what is in reach, pick up the drops, until nothing is left.
+-- usage: script run mine <area>   (an area from area list, or one part of it: ores/g3)
+local where = ...
+if where == nil then
+  error("usage: script run mine <area>", 0)
+end
+
+while area.has(where) do
+  local walked, why = pcall(move.goto_, where, {arrive = "dig", alter = "natural"})
+  if not walked then
+    error("could not get within reach of " .. where .. ": " .. why, 0)
+  end
+  local dug, err = pcall(work.dig, where)
+  if not dug then
+    error("could not dig " .. where .. ": " .. err, 0)
+  end
+  -- what was dug lies at your feet: pick up what you can walk to before walking on. work.collect fails when
+  -- nothing lies there or every drop is in a pit it cannot walk into; that is not a mining failure, and the
+  -- receipt's line for it says where they lie
+  pcall(work.collect)
+end
+```
 
 ## 五、落地
 
 在集成分支上两路并行:**命令层**(十条规矩与登记检查、对象统一解析、原子化 `work dig`/`collect`、`area parts/has`、
-`--arrive dig` 按覆盖定价、提示词与技能)与**脚本层**(解释器、`sh` 工具、上限与打断、内置脚本登记、`mine` 脚本)。
-接口:脚本的每一行就是一条命令行,交给命令层原样执行。
+`--arrive dig` 按覆盖定价、提示词与技能)与**脚本层**(脚本运行、组合命令的工具、上限与打断、脚本名词与内置脚本登记、
+`mine` 脚本)。接口:脚本的每个命令函数就是一条命令行,交给命令层原样执行;查询要直接返回值的,登记时声明
+`Action.returns`。
 
 **合回 1.21.1 的门槛:评测在同一批场景上追平或超过基线**(成功率、pass^3、命令出错率、轮数、墙钟),配对比较。
 
@@ -117,3 +255,21 @@
   优先够得着最多格的(`Goals.dig(List, …)`);新增 `area parts`、`area has`。`build at`、`fight attack` 标明是工作流。
 - 评测的标准解改成 `move goto … --arrive dig`、`work dig`、`work collect` 组合;挖一块区域的 GameTest 也用同样的组合
   (`GameTestKit.mine`),待脚本层的 `mine` 内置脚本到位后可换成它。
+
+### 脚本层(10-01)
+
+- **脚本层(10-01)**:组合命令的工具 `ScriptTool`、语言只经 `ScriptEngine`、命令函数由登记处生成
+  (`NumenCli.scriptCatalog`/`scriptLine`、`Action.returns`)、派发器逐条派与
+  等身体收尾(`SerialCalls` + `ScriptCall`)、上限(`ScriptLimits`)、在命令之间停下(急件、主人开口、`halt` 先收工具口)、
+  按行的回执、脚本名词(`script` 组、`ScriptStore`、`BuiltinScripts`、`edit_script`/`saved`、战绩经 `ScriptTallyPayload`、
+  `<scripts>` 与 `<saved_scripts>` 索引)、内置 `mine`。
+- 虚拟机:自己的模块 `lua`(LuaJ 主干 `daf3da9` 加 FiguraMC 的三处修复,见 `lua/README.md`),`LuaEngine` 接它;成功直接
+  返回值、失败抛错;撞名加 `_`。
+- 单测:`LuaSandboxTest`(语义、沙箱、元表锁、字符串预算、`pcall` 里的死循环、墙钟、外部打断、虚拟线程阻塞、值互转、撞名)、
+  `LuaEngineTest`(交出与接着跑、直接返回与抛错、声明的返回项、撞名)、`SerialCallsTest`(顺序、等收尾、分支、开口与急件、
+  切断时的回执、按名字跑与嵌套、两种上限)、`ScriptLineTest`、`ScriptStoreTest`、`GateTest`;GameTest:`ScriptGameTests`
+  (顺序、按失败分支、主人停止与开口、`for` 走 `area.parts`、`script run mine` 挖空埋在石头里的矿、存读跑删)。
+- 评测:`mine_iron_script` 和 `mine_iron` 同一个场景,标准解的挖矿交给 `script run mine ores`;一格高的矿洞里的掉落物
+  `work collect` 走不进去(它不改地形),两份标准解最后都站进挖空的芯再捡。
+- 外接大脑(MCP)直接调工具,没有派发器:组合命令的工具回一条说明,`script run` 只交回正文。要让外接大脑也跑脚本,得把它的调用
+  也经派发器、并把收件箱的到达转给它,另做。

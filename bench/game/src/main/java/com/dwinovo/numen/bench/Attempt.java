@@ -18,6 +18,7 @@ import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.EventOutbox;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.network.payload.CancelTasksPayload;
+import com.dwinovo.numen.network.payload.ScriptTallyPayload;
 import com.dwinovo.numen.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.network.payload.CurrentTaskPayload;
 import com.dwinovo.numen.network.payload.ExecuteToolPayload;
@@ -366,7 +367,9 @@ final class Attempt {
         switch (payload) {
             case ExecuteToolPayload p -> ExecuteToolPayload.handle(wire(ExecuteToolPayload.STREAM_CODEC, p), owner);
             case CancelTasksPayload p -> CancelTasksPayload.handle(wire(CancelTasksPayload.STREAM_CODEC, p), owner);
-            default -> throw new IllegalStateException("评测的上行只有工具调用与叫停,来了 " + payload.type().id());
+            case ScriptTallyPayload p -> ScriptTallyPayload.handle(wire(ScriptTallyPayload.STREAM_CODEC, p), owner);
+            default -> throw new IllegalStateException("评测的上行只有工具调用、叫停与脚本战绩,来了 "
+                    + payload.type().id());
         }
     }
 

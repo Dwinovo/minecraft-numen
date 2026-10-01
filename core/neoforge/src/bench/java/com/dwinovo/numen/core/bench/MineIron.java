@@ -14,6 +14,9 @@ import java.util.List;
  * 挖 10 个铁:场地中间一座七乘七、四层高的石堆,里面埋着 12 块铁矿,从外面一块都看不见;她站在石堆边上,包里一把石镐。
  * 主人只说要 10 个铁。要成事得先看见埋着的矿(扫描),走到够得着的地方(开路),再挖(挖掘会自己挖开挡着的石头)、再捡。
  * 成功 = 背包里粗铁不少于 10。
+ *
+ * <p>两个场景只差标准解:{@code mine_iron} 一行一行写命令挖,{@code mine_iron_script} 扫进区域后交给内置脚本
+ * {@code script run mine ores} 挖,证明内置的 mine 能把埋着的矿挖空。两份最后都站进挖空的芯再捡一遍。
  */
 public final class MineIron implements Scenario {
 
@@ -22,9 +25,25 @@ public final class MineIron implements Scenario {
     private static final int HI = 13;
     private static final int TOP = 4;
 
+    private final boolean byScript;
+
+    /** 标准解一行一行写命令。 */
+    public MineIron() {
+        this(false);
+    }
+
+    private MineIron(boolean byScript) {
+        this.byScript = byScript;
+    }
+
+    /** 标准解用内置脚本 mine。 */
+    public static MineIron byScript() {
+        return new MineIron(true);
+    }
+
     @Override
     public String id() {
-        return "mine_iron";
+        return byScript ? "mine_iron_script" : "mine_iron";
     }
 
     @Override
@@ -82,12 +101,18 @@ public final class MineIron implements Scenario {
 
     @Override
     public List<String> solution(Scene scene) {
-        // 一轮:走到一次够得着最多铁矿的地方(挖开石头过去),挖手够得着的;三轮挖得完那团芯。粗铁落在挖空的矿洞里,
-        // 有的洞只有一格高、走不进去:站进芯的正中(挖开头顶那格)一圈都捡得到,再把剩下的捡了
+        // 一轮:走到一次够得着最多铁矿的地方(挖开石头过去),挖手够得着的;三轮挖得完那团芯。mine 脚本做的就是这几轮,
+        // 每轮挖完捡一次走得到的
         List<String> lines = new java.util.ArrayList<>(List.of("scan blocks iron_ore --radius 12 --into ores"));
-        for (int i = 0; i < 3; i++) {
-            lines.addAll(List.of("move goto ores --arrive dig --alter natural", "work dig ores"));
+        if (byScript) {
+            lines.add("script run mine ores");
+        } else {
+            for (int i = 0; i < 3; i++) {
+                lines.addAll(List.of("move goto ores --arrive dig --alter natural", "work dig ores"));
+            }
         }
+        // 粗铁落在挖空的矿洞里,有的洞只有一格高、不改地形走不进去(work collect 不挖不放):站进芯的正中(挖开头顶那格)
+        // 一圈都捡得到,再把剩下的捡了
         BlockPos core = scene.pos(10, 1, 10);
         lines.add("move goto " + core.getX() + " " + core.getY() + " " + core.getZ() + " --alter natural");
         lines.add("work collect");

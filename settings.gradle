@@ -35,6 +35,8 @@ include('ai')
 // numen-agent:大脑本身(队列、目标),纯 JVM,依赖 ai、被 api 依赖(详见 agent/build.gradle 头注)。
 include('agent')
 include('ui')
+// numen-lua:沙箱里的 Lua 5.2,纯 JVM,不依赖 Minecraft 与 Numen(详见 lua/build.gradle 头注与 lua/README.md)。
+include('lua')
 // numen-pathing:寻路,只依赖原版 Minecraft,Numen 经端口接入(详见 pathing/build.gradle 头注)。
 include('pathing')
 

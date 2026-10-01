@@ -236,6 +236,11 @@ public final class NumenPlugins {
         }
 
         @Override
+        public void bundleScripts(Path scriptsRoot) {
+            com.dwinovo.numen.script.BuiltinScripts.bundle(scriptsRoot);
+        }
+
+        @Override
         public void onClient(Runnable clientOnly) {
             if (clientOnly == null) return;
             if (clientReady) runClientBlock(clientOnly); else PENDING.add(clientOnly);

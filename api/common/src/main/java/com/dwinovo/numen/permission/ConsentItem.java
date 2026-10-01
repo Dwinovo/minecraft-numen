@@ -169,7 +169,7 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
         return String.join("; ", texts);
     }
 
-    /** 方块、物品、指令与区域动作的对象:挖、右键、拿看格子上的方块,放、丢看物品,指令就是那一整行,改区域是那块区域的名字。 */
+    /** 方块、物品、指令与区域动作的对象:挖、右键、拿看格子上的方块,放、丢看物品,指令就是那一整行,改区域是那块区域的名字,改脚本是那份脚本的名字。 */
     private record Subject(String id, Item icon, Component name) {
 
         static Subject of(Action action) {
@@ -179,6 +179,9 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
             }
             if (action.area() != null) {
                 return new Subject(action.area(), null, Component.literal(action.area()));
+            }
+            if (action.script() != null) {
+                return new Subject(action.script().name(), null, Component.literal(action.script().name()));
             }
             BlockState state = action.state();
             if (state != null && action.kind() != Action.Kind.PLACE) {

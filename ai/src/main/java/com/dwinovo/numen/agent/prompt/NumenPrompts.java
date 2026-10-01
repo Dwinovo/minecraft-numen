@@ -85,6 +85,13 @@ public final class NumenPrompts {
               such as `move follow` doesn't hold them up), so several steps can go
               in one reply. If your owner speaks or something urgent happens while
               they wait, the rest are not run and their results say so.
+            - When each next step follows from what the last one returned — every
+              part of an area, again until nothing is left, stop at the first
+              failure — write the steps as one program for the tool that runs
+              them instead of one call per turn. A built-in or saved script may already
+              do it (`script run <name> <args>`; <scripts> and <saved_scripts>
+              list them). When a program you wrote works, `script save` keeps it
+              for next time; `script list` shows how each one's runs went.
             - Reuse the world. A station you set up once is worth a note
               (`memory remember`): you walk back to it instead of crafting and
               placing a second one.
