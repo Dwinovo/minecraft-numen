@@ -132,6 +132,64 @@ public class CombatGameTests {
     }
 
     /**
+     * 主人在线、却离她很远时,要打的那只站在隔壁区块里:她自己那块加载垫得让伸手所及的邻区块也在跑实体刻,否则那只是冻住的——挨了
+     * 第一下之后受击无敌帧永远不退,她一直等着出第二刀,它也打不死。GameTest 的场地区块是钉住的,这里搬到两千格外、高处
+     * 一块没人钉的地方现搭一条石台,让她的加载垫成为那里唯一的票据。僵尸不动,测的只是她能不能把它打死。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_combat")
+    public static void attack_finishes_a_target_across_a_chunk_border_far_from_players(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        // 她站在区块 cx 的东边沿上,僵尸站在隔壁区块 cx + 1 的西边沿上
+        BlockPos near = helper.absolutePos(BlockPos.ZERO);
+        int cx = (near.getX() >> 4) + 128;
+        int cz = near.getZ() >> 4;
+        int y = 200;
+        int z = cz * 16 + 7;
+        level.getChunk(cx, cz);
+        level.getChunk(cx + 1, cz);
+        for (int x = cx * 16 + 10; x <= cx * 16 + 20; x++) {
+            level.setBlockAndUpdate(new BlockPos(x, y - 1, z), net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+        }
+        // 加载垫只在主人在线时续:主人站在场地里(GameTest 没有真玩家,拿另一个同伴的身份顶上,它自己不带区块)
+        BlockPos home = helper.absolutePos(new BlockPos(2, 2, 2));
+        NumenPlayer owner = CompanionFactory.spawn(level.getServer(), java.util.UUID.randomUUID(),
+                "gametest_far_owner", java.util.UUID.randomUUID(), level,
+                new net.minecraft.world.phys.Vec3(home.getX() + 0.5, home.getY(), home.getZ() + 0.5));
+        NumenPlayer companion = CompanionFactory.spawn(level.getServer(), java.util.UUID.randomUUID(),
+                "gametest_far_fighter", owner.getUUID(), level,
+                new net.minecraft.world.phys.Vec3(cx * 16 + 13.5, y, z + 0.5));
+        companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.IRON_SWORD));
+        Zombie zombie = EntityType.ZOMBIE.create(level);
+        helper.assertTrue(zombie != null, "zombie did not spawn");
+        ToolRun[] attack = new ToolRun[1];
+
+        // 等她的加载垫把两块区块都立起来,放下僵尸;世界里找得到它了再下命令
+        steps(helper)
+                .thenIdle(40)
+                .thenExecute(() -> {
+                    zombie.moveTo(cx * 16 + 16.5, y, z + 0.5, 0.0f, 0.0f);
+                    zombie.setNoAi(true);
+                    level.addFreshEntity(zombie);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(level.getEntity(zombie.getId()) == zombie,
+                        "the zombie never showed up in the world; she is at " + companion.blockPosition()
+                                + " in chunk " + companion.chunkPosition()))
+                .thenExecute(() -> attack[0] = command(companion, "fight attack " + zombie.getId()))
+                .thenWaitUntil(() -> {
+                    helper.assertTrue(attack[0].task() != null, "the attack was not accepted: " + attack[0].reply());
+                    helper.assertTrue(zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion,
+                            "the zombie across the chunk border is still up (health " + zombie.getHealth()
+                                    + ", hurt time " + zombie.hurtTime + "): " + attack[0].task().getResult());
+                })
+                .thenExecute(() -> {
+                    zombie.discard();
+                    CompanionFactory.despawn(level.getServer(), companion);
+                    CompanionFactory.despawn(level.getServer(), owner);
+                })
+                .thenSucceed();
+    }
+
+    /**
      * 点名打不敌对的东西:一头猪,附近一只怪都没有。她必须走过去把它打掉——走位目标由
      * "有没有目标"决定,不由"附近有没有怪"决定;后者只是躲避场。
      */
