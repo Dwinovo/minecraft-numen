@@ -161,7 +161,7 @@ class ScanOpsTest {
         JsonObject part = AreaText.part("pond/g1", water, new BlockPos(0, 60, 0));
         assertEquals(3, part.getAsJsonObject("blocks").get("minecraft:water").getAsInt());
         assertEquals(2, part.get("sources").getAsInt());
-        assertEquals("5,60,5..7,61,6", AreaText.box(water.bounds()));
+        assertEquals("5,60,5 7,61,6", AreaText.box(water.bounds()));
         JsonObject framed = AreaText.part("pond/b1", Cells.box(new BlockPos(0, 60, 0), new BlockPos(1, 60, 0)),
                 new BlockPos(3, 60, 0));
         assertFalse(framed.has("blocks"), "框出来的格不附带方块");
