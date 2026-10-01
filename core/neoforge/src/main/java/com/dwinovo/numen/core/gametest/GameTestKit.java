@@ -53,7 +53,7 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
  * 可走的地板之间立一圈到顶的屏障,站在原来包围墙的位置——可走的地板、墙、rel 坐标都和原来一样。任意两块
  * 场地可走部分之间因此至少隔 21 格,比上面这些半径都大。改模板或加新模板时守住这一条。
  *
- * <p>更远的感知(goto 找方块扫 32 个 chunk、{@code scan blocks} 按用例给的半径、mine 在工作区里捡掉落物、逃跑看 32~40 格)
+ * <p>更远的感知(goto 找方块扫 32 个 chunk、{@code scan blocks} 按用例给的半径、work collect 在工作区里捡掉落物、逃跑看 32~40 格)
  * 隔不开:这类用例靠场景用别的用例不会留下的东西(独一种方块、物品)来保证只看见自己的。
  *
  * <h2>步骤一律经 {@link #steps} 与 {@link #succeedWhen}</h2>
@@ -228,76 +228,186 @@ public final class GameTestKit {
         if (!made.succeeded()) {
             throw new IllegalStateException("area new " + area + " failed: " + made.reply());
         }
-        return command(companion, "scan blocks " + radius + " " + blockId + " --into " + area);
+        return command(companion, "scan blocks " + blockId + " --radius " + radius + " --into " + area);
     }
 
     /** {@link #mineScanned} 把找到的方块扫进的那块区域。 */
     static final String MINED_AREA = "targets";
 
     /**
-     * 照模型挖矿的三步走一遍:建区域 {@link #MINED_AREA}、在半径 {@code radius} 内把 {@code blockId} 扫进去
-     * ({@code scan blocks … --into}),扫的回执一到就调 work_dig 挖这块区域;{@code extra} 是 work_dig 的其余参数
-     * (count),键、值交替。扫描被拒或失败时不挖,这次挖矿的结论就是扫描的回执。
+     * 照模型挖矿的写法走一遍:建区域 {@link #MINED_AREA}、在半径 {@code radius} 内把 {@code blockId} 扫进去
+     * ({@code scan blocks … --into}),扫的回执一到就{@linkplain #mine 挖这块区域}挖够 {@code count} 格。扫描被拒或失败时不挖,
+     * 这次挖矿的结论就是扫描的回执。
      */
-    static Mining mineScanned(GameTestHelper helper, NumenPlayer companion, int radius, String blockId,
-                              Object... extra) {
-        ToolRun scan = scanInto(companion, radius, blockId, MINED_AREA);
-        Object[] keyValues = new Object[extra.length + 2];
-        keyValues[0] = "place";
-        keyValues[1] = List.of(MINED_AREA);
-        System.arraycopy(extra, 0, keyValues, 2, extra.length);
-        Mining mining = new Mining(scan);
-        helper.onEachTick(() -> {
-            if (mining.run.get() == null && scan.reply() != null) {
-                mining.run.set(scan.succeeded() ? call(companion, "work_dig", args(keyValues)) : scan);
-            }
-        });
+    static Mining mineScanned(GameTestHelper helper, NumenPlayer companion, int radius, String blockId, int count) {
+        return mine(helper, companion, scanInto(companion, radius, blockId, MINED_AREA), MINED_AREA, count);
+    }
+
+    /**
+     * 挖一块区域,用原子命令一轮轮组合,和模型自己写的一样:{@code move goto <区域> --arrive dig --alter natural} 走到一次够得着
+     * 最多格的地方,{@code work dig <区域> --count <还差几格>} 挖手够得着的,{@code work collect} 捡掉落;还差、而且挖的回执说
+     * 还有够不着的格,就再来一轮。{@code before} 有了结论才开始,它失败就不挖。
+     *
+     * <p>哪一步(走、挖)失败,这次挖矿就以那一步的结论收场;挖够了,或够不着的不剩了,以最后一次挖的结论收场。
+     *
+     * @param count 挖够几格;0 是手边与够不着的都挖完为止
+     */
+    static Mining mine(GameTestHelper helper, NumenPlayer companion, ToolRun before, String area, int count) {
+        Mining mining = new Mining(companion, before, area, count);
+        helper.onEachTick(mining::tick);
         return mining;
     }
 
     /**
-     * {@link #mineScanned} 的那次挖矿:扫描回来之前还没派,{@link #done} 为假、{@link #outcome} 为 null;派下去之后与
-     * {@link ToolRun} 读法相同。
+     * 当场就挖一块区域(或它的一部分),组合同 {@link #mine(GameTestHelper, NumenPlayer, ToolRun, String, int)};给在
+     * {@code succeedWhen} 里才知道挖哪一部分的用例:不另挂每刻的回调,每次问 {@link Mining#done} 时往下推一步。
+     */
+    static Mining mine(NumenPlayer companion, String area, int count) {
+        return new Mining(companion, null, area, count);
+    }
+
+    /**
+     * {@link #mine} 那一次挖矿:每刻看当前这一步有没有结论,有就派下一步。收场之前 {@link #done} 为假、{@link #outcome} 为
+     * null;收场之后与收场那一步的 {@link ToolRun} 读法相同。
      */
     static final class Mining {
 
-        private final ToolRun scan;
-        private final AtomicReference<ToolRun> run = new AtomicReference<>();
+        /** 一块区域最多走几轮:每轮至少挖掉一格,轮数到了还没挖完就以最后一次挖的结论收场。 */
+        private static final int MAX_ROUNDS = 16;
 
-        private Mining(ToolRun scan) {
-            this.scan = scan;
+        /** 挖完等掉落物落定最多几刻:模型读完回执再写下一行要好几秒,掉落物早落地了。 */
+        private static final int SETTLE_TICKS = 40;
+
+        private enum Step { BEFORE, GOTO, DIG, SETTLE, COLLECT, FETCH, RECOLLECT }
+
+        private final NumenPlayer companion;
+        private final String area;
+        private final int count;
+        private Step step = Step.BEFORE;
+        private ToolRun current;
+        private ToolRun lastDig;
+        /** 收场的那一步;没收场是 null。 */
+        private ToolRun last;
+        private int dug;
+        private int rounds;
+        private int settling;
+
+        private Mining(NumenPlayer companion, ToolRun before, String area, int count) {
+            this.companion = companion;
+            this.area = area;
+            this.count = count;
+            this.current = before;
+            if (before == null) {
+                walk();
+            }
         }
 
-        /** 扫进区域的那一次。 */
-        ToolRun scan() {
-            return scan;
+        private void tick() {
+            if (step == Step.SETTLE) {
+                if (dropsSettled() || ++settling >= SETTLE_TICKS) {
+                    run(Step.COLLECT, "work collect");
+                }
+                return;
+            }
+            if (last != null || !current.done()) {
+                return;
+            }
+            com.dwinovo.numen.core.Constants.LOG.info("[numen-task] mine {} {} -> {}", area, step, current.outcome());
+            switch (step) {
+                case BEFORE, GOTO -> {
+                    if (!current.succeeded()) {
+                        last = current;
+                    } else if (step == Step.BEFORE) {
+                        walk();
+                    } else {
+                        run(Step.DIG, "work dig " + area + (count > 0 ? " --count " + (count - dug) : ""));
+                    }
+                }
+                case DIG -> {
+                    if (!current.succeeded()) {
+                        last = current;
+                        return;
+                    }
+                    lastDig = current;
+                    dug += ((Number) current.task().getResult().data().get("dug")).intValue();
+                    step = Step.SETTLE;
+                    settling = 0;
+                }
+                case COLLECT -> {
+                    // 捡完还有走不到的(落在挖出的坑里、台阶上),照回执说的写:改地形走到最近那一件跟前,再捡一次
+                    BlockPos drop = nearestDrop();
+                    if (drop != null) {
+                        run(Step.FETCH, "move goto " + xyz(drop) + " --alter natural");
+                    } else {
+                        nextRound();
+                    }
+                }
+                case FETCH -> run(Step.RECOLLECT, "work collect");
+                case RECOLLECT -> nextRound();
+            }
         }
 
+        /** 挖够了,或挖的回执说够不着的不剩了,就以最后一次挖的结论收场;否则再走一轮。 */
+        private void nextRound() {
+            long beyond = ((Number) lastDig.task().getResult().data().get("out_of_reach")).longValue();
+            if ((count > 0 && dug >= count) || beyond == 0 || ++rounds >= MAX_ROUNDS) {
+                last = lastDig;
+            } else {
+                walk();
+            }
+        }
+
+        /** 她工作区里的掉落物都落定了(着地或在水里)。 */
+        private boolean dropsSettled() {
+            return companion.level().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                            companion.getBoundingBox().inflate(com.dwinovo.numen.core.nav.WorkArea.RADIUS))
+                    .stream().allMatch(e -> e.onGround() || e.isInWater());
+        }
+
+        /** 她工作区里离她最近的掉落物所在的格;没有为 null。 */
+        private BlockPos nearestDrop() {
+            return companion.level().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                            companion.getBoundingBox().inflate(com.dwinovo.numen.core.nav.WorkArea.RADIUS))
+                    .stream().min(java.util.Comparator.comparingDouble(companion::distanceToSqr))
+                    .map(net.minecraft.world.entity.Entity::blockPosition).orElse(null);
+        }
+
+        private void run(Step next, String line) {
+            step = next;
+            current = command(companion, line);
+        }
+
+        private void walk() {
+            run(Step.GOTO, "move goto " + area + " --arrive dig --alter natural");
+        }
+
+        /** 各次 {@code work dig} 一共挖掉的格。 */
+        int dug() {
+            return dug;
+        }
+
+        /** 收场了。先往下推一步:当前这一步有了结论就派下一步。 */
         boolean done() {
-            ToolRun r = run.get();
-            return r != null && r.done();
+            tick();
+            return last != null;
         }
 
         boolean succeeded() {
-            ToolRun r = run.get();
-            return r != null && r.succeeded();
+            return last != null && last.succeeded();
         }
 
         String outcome() {
-            ToolRun r = run.get();
-            return r == null ? null : r.outcome();
+            return last == null ? null : last.outcome();
         }
 
-        /** 派发当场的回执:受理的"已受理"或拒收的原因;还没派是 null。 */
+        /** 收场那一步当场的回执:受理的"已受理"或拒收的原因;还没收场是 null。 */
         String reply() {
-            ToolRun r = run.get();
-            return r == null ? null : r.reply();
+            return last == null ? null : last.reply();
         }
 
-        /** 派下去的那件活;还没派或拒收了是 null。 */
+        /** 收场那一步派下的活;还没收场或那一步当场被拒是 null。 */
         TaskRecord task() {
-            ToolRun r = run.get();
-            return r == null ? null : r.task();
+            return last == null ? null : last.task();
         }
     }
 
@@ -337,7 +447,7 @@ public final class GameTestKit {
 
     /** {@code use block} 对着 {@code rel} 那一格按一下,同步调用。 */
     static TaskRecord click(GameTestHelper helper, NumenPlayer companion, String button, BlockPos rel) {
-        return command(companion, "use block " + button + " " + at(helper, rel)).task();
+        return command(companion, "use block " + at(helper, rel) + ("left".equals(button) ? " --left" : "")).task();
     }
 
     /** {@code rel} 那一格的绝对坐标,写成命令行上的 {@code x y z}。 */

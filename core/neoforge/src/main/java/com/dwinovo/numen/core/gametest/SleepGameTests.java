@@ -106,28 +106,28 @@ public class SleepGameTests {
     public static void sleep_at_coordinates_without_a_bed_says_so(GameTestHelper helper) {
         BlockPos floor = helper.absolutePos(new BlockPos(5, 1, 5));
         NumenPlayer companion = spawnAt(helper, "gametest_misled", new BlockPos(4, 2, 5), false);
-        ToolRun sleep = command(companion, "use sleep --x " + floor.getX() + " --y " + floor.getY() + " --z " + floor.getZ());
+        ToolRun sleep = command(companion, "use sleep --at " + floor.getX() + " " + floor.getY() + " " + floor.getZ());
 
         succeedWhen(helper, () -> {
             helper.assertTrue(sleep.done(), "use sleep has not replied");
             helper.assertTrue(!sleep.succeeded() && sleep.outcome().contains("no bed at those coordinates")
-                            && sleep.outcome().contains("scan_blocks"),
+                            && sleep.outcome().contains("`scan blocks #minecraft:beds`"),
                     "the reply does not say there is no bed there: " + sleep.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
 
-    /** 只给了床的一部分坐标:不猜是哪张床,也不改用手边那张,如实说三个要一起给;她没躺下。 */
+    /** 只给了床的两个坐标:一格是三个数,命令读不通,不猜是哪张床,也不改用手边那张;她没躺下。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_sleep_night")
     public static void sleep_with_part_of_the_coordinates_says_give_all_three(GameTestHelper helper) {
         placeBed(helper, new BlockPos(5, 2, 5));
         BlockPos head = helper.absolutePos(new BlockPos(6, 2, 5));
         NumenPlayer companion = spawnAt(helper, "gametest_halfsure", new BlockPos(4, 2, 5), false);
-        ToolRun sleep = command(companion, "use sleep --x " + head.getX() + " --z " + head.getZ());
+        ToolRun sleep = command(companion, "use sleep --at " + head.getX() + " " + head.getZ());
 
         succeedWhen(helper, () -> {
             helper.assertTrue(sleep.done(), "use sleep has not replied");
-            helper.assertTrue(!sleep.succeeded() && sleep.outcome().contains("needs all of --x --y --z"),
+            helper.assertTrue(!sleep.succeeded() && sleep.outcome().contains("expected a cell: three whole numbers x y z"),
                     "the reply does not ask for all three coordinates: " + sleep.outcome());
             helper.assertTrue(!companion.isSleeping(), "she lay down in a bed she did not fully name");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -163,7 +163,7 @@ public class SleepGameTests {
         BlockPos head = helper.absolutePos(new BlockPos(13, 2, 12));
         NumenPlayer companion = spawnAt(helper, "gametest_faraway", new BlockPos(3, 2, 3), false);
         BlockPos start = companion.blockPosition();
-        ToolRun sleep = command(companion, "use sleep --x " + head.getX() + " --y " + head.getY() + " --z " + head.getZ());
+        ToolRun sleep = command(companion, "use sleep --at " + head.getX() + " " + head.getY() + " " + head.getZ());
 
         succeedWhen(helper, () -> {
             helper.assertTrue(sleep.done(), "use sleep has not replied");

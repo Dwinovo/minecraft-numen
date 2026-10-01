@@ -45,7 +45,7 @@ public class InteractGameTests {
 
         NumenPlayer companion = spawnAt(helper, "gametest_scooper", new BlockPos(3, 2, 5), false);
         companion.getInventory().add(new ItemStack(Items.BUCKET));
-        ToolRun scoop = command(companion, "use block right " + xyz(water) + " --item minecraft:bucket");
+        ToolRun scoop = command(companion, "use block " + xyz(water) + " --item minecraft:bucket");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(companion.getInventory().countItem(Items.WATER_BUCKET) == 1,
@@ -78,7 +78,7 @@ public class InteractGameTests {
         // 瞄池心时船的碰撞箱(宽 1.375)会搭在石堤上被 noCollision 拒绝——
         // 真玩家放船也是往远处的水面看,不盯着脚边的岸沿。
         BlockPos aim = helper.absolutePos(new BlockPos(9, 2, 8));
-        ToolRun place = command(companion, "use block right " + xyz(aim) + " --item minecraft:oak_boat");
+        ToolRun place = command(companion, "use block " + xyz(aim) + " --item minecraft:oak_boat");
 
         succeedWhen(helper, () -> {
             var boats = level.getEntitiesOfClass(net.minecraft.world.entity.vehicle.Boat.class,
@@ -101,7 +101,7 @@ public class InteractGameTests {
         helper.getLevel().addFreshEntity(sheep);
         NumenPlayer companion = spawnAt(helper, "gametest_shearer", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.SHEARS));
-        ToolRun shear = command(companion, "use entity right " + sheep.getId() + " --item minecraft:shears");
+        ToolRun shear = command(companion, "use entity " + sheep.getId() + " --item minecraft:shears");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(shear.done(), "use entity has not finished");
@@ -119,7 +119,7 @@ public class InteractGameTests {
         pig.setNoAi(true);
         helper.getLevel().addFreshEntity(pig);
         NumenPlayer companion = spawnAt(helper, "gametest_poker_entity", new BlockPos(3, 2, 11), false);
-        ToolRun hit = command(companion, "use entity left " + pig.getId());
+        ToolRun hit = command(companion, "use entity " + pig.getId() + " --left");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(hit.done(), "use entity has not finished");
@@ -136,7 +136,7 @@ public class InteractGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_pitcher", new BlockPos(4, 2, 8), false);
         companion.setXRot(-30f);
         companion.getInventory().add(new ItemStack(Items.SNOWBALL, 4));
-        ToolRun toss = command(companion, "use ahead right --item minecraft:snowball");
+        ToolRun toss = command(companion, "use ahead --item minecraft:snowball");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(toss.done(), "use ahead has not finished");
@@ -146,19 +146,18 @@ public class InteractGameTests {
         });
     }
 
-    /** 目标在工作距离外:use block 不自己走过去,当场失败,下一步是能照抄的 move_goto … arrive:use,那一格原样。 */
+    /** 目标在工作距离外:use block 不自己走过去,当场失败,下一步是能照抄的 move goto … --arrive use,那一格原样。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_at_out_of_reach_says_goto_first(GameTestHelper helper) {
         BlockPos stone = helper.absolutePos(new BlockPos(13, 2, 13));
         helper.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_shortarmed", new BlockPos(2, 2, 2), false);
-        ToolRun click = command(companion, "use block left " + xyz(stone));
+        ToolRun click = command(companion, "use block " + xyz(stone) + " --left");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(click.done(), "use block has not finished");
             helper.assertTrue(!click.succeeded() && click.outcome().contains("out of working reach")
-                            && click.outcome().contains("move_goto x:" + stone.getX() + " y:" + stone.getY() + " z:"
-                                    + stone.getZ() + " arrive:use"),
+                            && click.outcome().contains("`move goto " + xyz(stone) + " --arrive use`"),
                     "the failure does not send her to goto first: " + click.outcome());
             helper.assertTrue(helper.getLevel().getBlockState(stone).is(Blocks.STONE), "the stone was touched");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -175,7 +174,7 @@ public class InteractGameTests {
         pig.setCustomName(net.minecraft.network.chat.Component.literal("Wilbur"));
         helper.getLevel().addFreshEntity(pig);
         NumenPlayer companion = spawnAt(helper, "gametest_restrained", new BlockPos(3, 2, 8), false);
-        ToolRun hit = command(companion, "use entity left " + pig.getId());
+        ToolRun hit = command(companion, "use entity " + pig.getId() + " --left");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(hit.done(), "use entity has not finished");
@@ -198,7 +197,7 @@ public class InteractGameTests {
         helper.getLevel().addFreshEntity(cow);
         NumenPlayer companion = spawnAt(helper, "gametest_milkmaid", new BlockPos(3, 2, 7), false);
         companion.getInventory().add(new ItemStack(Items.BUCKET));
-        ToolRun milk = command(companion, "use entity right " + cow.getId() + " --item minecraft:bucket");
+        ToolRun milk = command(companion, "use entity " + cow.getId() + " --item minecraft:bucket");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(milk.done(), "use entity has not finished");
@@ -220,7 +219,7 @@ public class InteractGameTests {
         helper.getLevel().addFreshEntity(cow);
         NumenPlayer companion = spawnAt(helper, "gametest_cowherd", new BlockPos(3, 2, 11), false);
         companion.getInventory().add(new ItemStack(Items.WHEAT, 2));
-        ToolRun feed = command(companion, "use entity right " + cow.getId() + " --item minecraft:wheat");
+        ToolRun feed = command(companion, "use entity " + cow.getId() + " --item minecraft:wheat");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(feed.done(), "use entity has not finished");
@@ -294,7 +293,7 @@ public class InteractGameTests {
         var wolf = wolfAt(helper, new BlockPos(10, 2, 14));
         NumenPlayer companion = spawnAt(helper, "gametest_wolfkeeper", new BlockPos(3, 2, 14), false);
         wolf.tame(companion);
-        ToolRun sit = command(companion, "use entity right " + wolf.getId());
+        ToolRun sit = command(companion, "use entity " + wolf.getId());
 
         succeedWhen(helper, () -> {
             helper.assertTrue(sit.done(), "use entity has not finished");
@@ -312,7 +311,7 @@ public class InteractGameTests {
         wolf.setTame(true, true);
         wolf.setOwnerUUID(java.util.UUID.randomUUID());
         NumenPlayer companion = spawnAt(helper, "gametest_wolfpetter", new BlockPos(3, 2, 2), false);
-        ToolRun pet = command(companion, "use entity right " + wolf.getId());
+        ToolRun pet = command(companion, "use entity " + wolf.getId());
 
         succeedWhen(helper, () -> {
             helper.assertTrue(pet.done(), "use entity has not finished");
@@ -335,7 +334,7 @@ public class InteractGameTests {
         level.setBlockAndUpdate(chest, Blocks.CHEST.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_sneaker", new BlockPos(4, 2, 14), false);
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 4));
-        String click = "use block right " + xyz(chest) + " --item minecraft:cobblestone";
+        String click = "use block " + xyz(chest) + " --item minecraft:cobblestone";
         java.util.concurrent.atomic.AtomicReference<ToolRun> run = new java.util.concurrent.atomic.AtomicReference<>();
 
         steps(helper)
@@ -347,7 +346,7 @@ public class InteractGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(run.get().done()
                                 && companion.containerMenu == companion.inventoryMenu,
                         "the chest did not close: " + run.get().outcome()))
-                .thenExecute(() -> run.set(command(companion, click + " --sneak true")))
+                .thenExecute(() -> run.set(command(companion, click + " --sneak")))
                 .thenWaitUntil(() -> {
                     helper.assertTrue(run.get().done(), "the sneaking click has not finished");
                     helper.assertTrue(run.get().succeeded() && run.get().outcome().contains("while sneaking"),
@@ -382,7 +381,7 @@ public class InteractGameTests {
         level.setBlock(foot.east(), bed.setValue(net.minecraft.world.level.block.BedBlock.PART,
                 net.minecraft.world.level.block.state.properties.BedPart.HEAD), 3);
         NumenPlayer companion = spawnAt(helper, "gametest_napper", new BlockPos(4, 2, 2), false);
-        ToolRun lie = command(companion, "use block right " + xyz(foot));
+        ToolRun lie = command(companion, "use block " + xyz(foot));
         String onlyAtNight = net.minecraft.network.chat.Component.translatable("block.minecraft.bed.no_sleep")
                 .getString();
 
@@ -415,7 +414,7 @@ public class InteractGameTests {
         inventory.selected = 0;
         inventory.setItem(0, new ItemStack(Items.STICK));
         inventory.setItem(5, new ItemStack(Items.IRON_SHOVEL));
-        ToolRun press = command(companion, "use block left " + xyz(dirt));
+        ToolRun press = command(companion, "use block " + xyz(dirt) + " --left");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(press.done(), "use block has not finished");
@@ -442,7 +441,7 @@ public class InteractGameTests {
         level.setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
         level.setBlockAndUpdate(dirt, Blocks.DIRT.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_crosshair", new BlockPos(3, 2, 12), false);
-        ToolRun press = command(companion, "use block left " + xyz(stone));
+        ToolRun press = command(companion, "use block " + xyz(stone) + " --left");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(press.done(), "use block has not finished");
@@ -463,7 +462,7 @@ public class InteractGameTests {
         BlockPos floor = helper.absolutePos(new BlockPos(6, 1, 12));
         NumenPlayer companion = spawnAt(helper, "gametest_paver", new BlockPos(4, 2, 12), false);
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 4));
-        ToolRun place = command(companion, "use block right " + xyz(floor) + " --item minecraft:cobblestone");
+        ToolRun place = command(companion, "use block " + xyz(floor) + " --item minecraft:cobblestone");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(place.done(), "use block has not finished");

@@ -46,8 +46,8 @@ public class PerceptionGameTests {
         helper.getLevel().setBlockAndUpdate(near, Blocks.STONE.defaultBlockState());
         helper.getLevel().setBlockAndUpdate(far, Blocks.STONE.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_inspector", new BlockPos(3, 2, 3), false);
-        ToolRun atNear = call(companion, "scan_block", args("x", near.getX(), "y", near.getY(), "z", near.getZ()));
-        ToolRun atFar = call(companion, "scan_block", args("x", far.getX(), "y", far.getY(), "z", far.getZ()));
+        ToolRun atNear = call(companion, "scan_block", args("cell", xyz(near)));
+        ToolRun atFar = call(companion, "scan_block", args("cell", xyz(far)));
         ToolRun viaCommand = command(companion, "scan block " + near.getX() + " " + near.getY() + " " + near.getZ());
 
         succeedWhen(helper, () -> {
@@ -123,7 +123,7 @@ public class PerceptionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_watcher", new BlockPos(3, 2, 3), false);
         ToolRun all = call(companion, "scan_entities", args("radius", 12, "type_filter", "all"));
         ToolRun hostile = call(companion, "scan_entities", args("radius", 12, "type_filter", "hostile"));
-        ToolRun viaCommand = command(companion, "scan entities 12 all");
+        ToolRun viaCommand = command(companion, "scan entities all --radius 12");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(listsEntity(all, pig) && all.reply().contains("pig"),
@@ -169,7 +169,7 @@ public class PerceptionGameTests {
         strangers.setTame(true, true);
         strangers.setOwnerUUID(stranger);
         var wild = InteractGameTests.wolfAt(helper, new BlockPos(1, 2, 1));
-        ToolRun scan = command(companion, "scan entities 8 passive");
+        ToolRun scan = command(companion, "scan entities passive --radius 8");
 
         succeedWhen(helper, () -> {
             var rows = java.util.stream.Stream.of(hers, owners, strangers, wild).map(w -> rowOf(scan, w)).toList();
@@ -359,7 +359,7 @@ public class PerceptionGameTests {
                 .thenExecute(() -> viaTool.set(call(companion, "scan_blocks",
                         args("radius", 8, "block_ids", List.of("minecraft:gold_block", "#minecraft:logs")))))
                 .thenWaitUntil(() -> helper.assertTrue(viaTool.get().reply() != null, "scan_blocks has not answered"))
-                .thenExecute(() -> viaCommand.set(command(companion, "scan blocks 8 minecraft:gold_block #minecraft:logs")))
+                .thenExecute(() -> viaCommand.set(command(companion, "scan blocks minecraft:gold_block #minecraft:logs --radius 8")))
                 .thenWaitUntil(() -> {
                     String tool = viaTool.get().reply();
                     String line = viaCommand.get().reply();
