@@ -89,6 +89,6 @@ public final class GuardOwner implements Scenario {
     public List<String> solution(Scene scene) {
         StringBuilder ids = new StringBuilder();
         zombies.forEach(z -> ids.append(' ').append(z.getId()));
-        return List.of("fight attack --entity_ids" + ids);
+        return List.of("fight attack" + ids);
     }
 }

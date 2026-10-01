@@ -14,7 +14,6 @@ import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.nav.WorkArea;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
-import com.dwinovo.numen.core.task.dig.DigCompanionTask;
 import com.dwinovo.numen.core.task.dig.DigTaskRecord;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.entity.InputDriver;
@@ -60,8 +59,8 @@ import java.util.Set;
  * <p>保留下来的是真正属于我们的东西:生存模式逐格扣料、期望状态精确落位、以及"支撑还没长出来就先放着,下一遍再来"的
  * 分遍推进。
  *
- * <p><b>清场只有一条路</b>——生存模式下图纸里要成空气、或要换成别的方块而现在立着东西的格,交给与 {@code work dig} 同一个
- * 挖掘执行({@link DigCompanionTask},作为这件活的子活):她走进工地挖,用工具、有掉落、每一格过权限层、路上的账并进这件活。
+ * <p><b>清场只有一条路</b>——生存模式下图纸里要成空气、或要换成别的方块而现在立着东西的格,交给清场子活({@link ClearSiteTask},
+ * 挖一格的判据与 {@code work dig} 同一些):她走进工地挖,用工具、有掉落、每一格过权限层、路上的账并进这件活。
  * 创造模式照原版一下就碎:图纸直接写上去顶掉原来的,不另挖。挖掘按原版规则自己分模式,建造不写两套破坏。
  *
  * <p><b>施工与表演分开</b>——施工只管下一格放哪、放没放成、差什么;走动和放块的动画归演出组件
@@ -122,7 +121,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private final BuildLedger ledger;
     private final BuildShowmanship show;
     /** 在跑的清场(挖掘执行,作为子活);没在清为 null。 */
-    private DigCompanionTask clearing;
+    private ClearSiteTask clearing;
     /** 交给清场的格:每一格只交一次,挖不掉的留在原处,收工时照实交代。 */
     private final LongOpenHashSet clearTried = new LongOpenHashSet();
     /** 清场挖掉的格。 */
@@ -403,7 +402,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 把 {@link #toClear} 派给挖掘执行,作为这件活的子活。工作区是工地外扩一圈(外圈就在它边上,她从外圈开挖),图纸里不清的格
+     * 把 {@link #toClear} 派给清场({@link ClearSiteTask}),作为这件活的子活。工作区是工地外扩一圈(外圈就在它边上,她从外圈开挖),图纸里不清的格
      * 她的路不挖不埋。
      *
      * @return 派下了一件清场
@@ -424,7 +423,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         Block first = kinds.iterator().next();
         String label = BuiltInRegistries.BLOCK.getKey(first).getPath() + (kinds.size() > 1 ? "+" + (kinds.size() - 1) : "");
-        clearing = new DigCompanionTask(player, new DigTaskRecord(r, player.level().getGameTime(),
+        clearing = new ClearSiteTask(player, new ClearSiteRecord(r, player.level().getGameTime(),
                 BuildSite.clearing(DigTaskRecord.SPEC, keep), Cells.of(cells),
                 WorkArea.site(player.level().dimension(), siteMin, siteMax), kinds, "the site", label));
         return true;

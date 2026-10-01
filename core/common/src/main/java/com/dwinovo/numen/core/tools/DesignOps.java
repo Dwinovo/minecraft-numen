@@ -51,23 +51,22 @@ public final class DesignOps {
                 Instant.now().truncatedTo(ChronoUnit.SECONDS).toString());
         Designs.save(server, design);
         return TaskResult.ok("made an empty design " + name + "; add steps with a primitive and --into " + name
-                + ", for example build layer 0 0 0 ##### --block stone_bricks --into " + name).toJson();
+                + ", for example build layer ##### --at 0 0 0 --block stone_bricks --into " + name).toJson();
     }
 
     /** 往设计末尾加一步:原语与读好的参数写回一行({@link Design.Step#line}),和当场执行是同一行字。 */
-    public static String append(NumenPlayer her, Primitive primitive, CommandArgs args) {
-        String name = args.get(Primitive.Params.INTO);
+    public static String append(NumenPlayer her, String name, Design.Step step) {
         Design design = Designs.load(her.getServer(), name);
         String refused = refusal(her, design);
         if (refused != null) {
             return refused;
         }
         List<String> steps = new ArrayList<>(design.steps());
-        steps.add(new Design.Step(primitive, args).line());
+        steps.add(step.line());
         return saved(her, design.withSteps(steps), "added step " + steps.size());
     }
 
-    /** 把第 {@code n} 步换成读好的这一步(命令行上写的是 {@code build} 之后的那一截,如 {@code layer 0 0 0 ###})。 */
+    /** 把第 {@code n} 步换成这一步。 */
     public static String replace(NumenPlayer her, String name, int n, Design.Step step) {
         Design design = Designs.load(her.getServer(), name);
         String refused = refusal(her, design);

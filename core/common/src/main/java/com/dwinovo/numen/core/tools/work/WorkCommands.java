@@ -11,7 +11,8 @@ import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.core.nav.WorkArea;
 import com.dwinovo.numen.core.task.fish.FishTaskRecord;
-import com.dwinovo.numen.core.task.move.Destination;
+import com.dwinovo.numen.cli.Place;
+import com.dwinovo.numen.core.task.dig.DigCompanionTask;
 import com.dwinovo.numen.core.tools.BlockActionOps;
 import com.dwinovo.numen.core.tools.InventoryOps;
 import com.dwinovo.numen.task.TaskDispatch;
@@ -22,12 +23,12 @@ import net.minecraft.resources.ResourceLocation;
 /**
  * {@code work}:采集类的活——挖方块、捡掉落物、钓鱼。
  *
- * <p>三个动作都占身体,交任务槽:受理即回执,收尾走 task_finished;开始不了的(区里没有能挖的、够不着、没有鱼竿……)受理之前就
- * 当场拒绝,判据在各自的任务里。{@code dig} 提升成快捷工具 {@code work_dig}。
+ * <p>三个动作都占身体,交任务槽:受理即回执,收尾走 task_finished;开始不了的(手够得着的一格都没有、地上没有能捡的、没有鱼竿……)
+ * 受理之前就当场拒绝,判据在各自的任务里。{@code dig} 提升成快捷工具 {@code work_dig}。
  *
- * <p>{@code dig} 与 {@code collect} 都只在跟前干,工作区是同一个({@link WorkArea}):受理时她脚下那一格为中心、半径
- * {@link WorkArea#RADIUS} 的球,走动关在里面。dig 挖点名的几处(区域、坐标)在区里的格,区外的只报告并给出开路的写法;collect 只捡
- * 区里的,{@code --area} 再把它收窄到点名的区域里。
+ * <p>{@code dig} 与 {@code collect} 各是一件原子的事:{@code dig} 只挖她站在原地手够得着的格,挡在前面的一并挖开,不走动、不捡
+ * ({@link DigCompanionTask});{@code collect} 只捡,走过去捡她工作区里的掉落物({@link WorkArea},受理时她脚下为中心、半径
+ * {@link WorkArea#RADIUS} 的球)。走到够得着的地方是 {@code move goto … --arrive dig} 的事;三件事的组合交给脚本。
  */
 public final class WorkCommands {
 
@@ -37,20 +38,14 @@ public final class WorkCommands {
     private static final long TICKS_PER_CATCH = 90L * 20L;
     private static final long MIN_FISH_TICKS = 120L * 20L;
 
-    /** 要挖的那一串:一个名字是一块区域,三个数是一格;怎么读成几处只在 {@link Destination.Stop#each}。 */
-    private static final ArgType<List<String>> PLACES = ArgType.list(ArgType.string()
-            .as("place", "x y z (one cell), or an area of your owner's: its name, or name/part like ores/g3",
-                    text -> text, text -> text));
-    private static final Param<List<String>> DIG_PLACES = Param.required("place", PLACES,
-            "What to dig: areas of your owner's (or parts of them) and cells, as many as you like — a coordinate is "
-                    + "an area of one cell. Scanned cells are dug only while they still hold the block the scan saw; "
-                    + "framed cells and coordinates are dug whatever they hold, air and fluid skipped.")
-            .values("area names as `area list` and `area show` list them (ores, ores/g3), or x y z");
+    private static final Param<List<Place>> DIG_PLACES = Param.required("place", ArgType.list(ArgType.place()),
+            "What to dig: areas of your owner's (or parts of them) and cells, as many as you like — a cell is an area "
+                    + "of one cell. Scanned cells are dug only while they still hold the block the scan saw; framed "
+                    + "cells and coordinates are dug whatever they hold, air and fluid skipped.")
+            .values("area names as `area list` and `area parts` list them (ores, ores/g3), or x y z");
     private static final Param<Integer> DIG_COUNT = Param.optional("count",
-            ArgType.integer(1, BlockActionOps.MAX_DIG_COUNT),
-            "How many ITEMS to gather (not blocks: a block may drop several), counting only items gained on top "
-                    + "of what you already hold.")
-            .whenOmitted("dig out every cell of it in her work area");
+            ArgType.integer(1, BlockActionOps.MAX_DIG_COUNT), "How many cells to dig at most.")
+            .whenOmitted("dig every cell of it within reach");
     private static final Param<List<ResourceLocation>> ITEM_IDS = Param.optional("item_ids",
             ArgType.list(ArgType.id()), "Item types to pick up.")
             .whenOmitted("pick up everything");
@@ -69,57 +64,46 @@ public final class WorkCommands {
     }
 
     private static void actions(CommandGroup work) {
-        work.server("dig", "Dig out the blocks of areas and cells right in front of you.", WorkCommands::dig,
+        work.server("dig", "Dig the blocks of areas and cells within reach of where you stand.", WorkCommands::dig,
                         DIG_PLACES, DIG_COUNT)
                 .example("work dig ores/g3")
-                .example("work dig ores --count 10")
+                .example("work dig ores --count 4")
                 .example("work dig 120 12 -35")
-                .example("work dig pit")
-                .note("Background work: before it replies she checks there is something in her work area she can "
-                        + "dig, harvest with what she carries and reach. When there isn't, the call is refused with "
-                        + "the reason — no task id, no task_finished, and whatever she was doing goes on. The end of "
-                        + "an accepted job arrives as a task_finished event.")
+                .example("work dig 120 12 -35 121 12 -35")
+                .note("Digs only what your hand reaches from where you stand: it never walks and never picks up. Get "
+                        + "within reach first with `move goto ores --arrive dig` (it picks the spot that reaches the "
+                        + "most cells), dig, and pick the drops up with `work collect`.")
+                .note("Background work: before it replies it checks something within reach can be dug, harvested "
+                        + "with your tools and is allowed; when nothing is, the call is refused with the reason and the "
+                        + "move goto line to copy — no task id, no task_finished, and whatever you were doing goes on. "
+                        + "The end of an accepted job arrives as a task_finished event saying how many cells it dug and "
+                        + "how many are still out of reach, with the next line to copy.")
                 .note("What to dig comes from the area itself: cells a scan added are dug only while they still hold "
                         + "the block the scan saw (mining); framed cells and coordinates are dug whatever they hold "
-                        + "(a pit, a tree, clearing), air and fluid skipped. What cannot be broken is reported. Look, "
-                        + "then dig: `scan blocks 16 iron_ore deepslate_iron_ore --into ores`, "
-                        + "`work dig ores`; `area minus` and rules like `deny break(area:house)` keep things standing.")
-                .note("Works only right in front of her: her work area is within " + WorkArea.RADIUS + " blocks of "
-                        + "where she stands when you call it, and she moves only inside it — a few steps, into the "
-                        + "hole she just dug, over to a drop. Cells beyond it are reported, not visited: the reply "
-                        + "says how many, where the nearest is, and the lines that open the way (route new … --arrive "
-                        + "dig --alter natural, route plan, move go; or move goto … --arrive dig), then dig again. "
-                        + "Something wholly beyond it is refused at once.")
-                .note("She takes the best tool for each block, breaks what is in the way of her hand, and picks up "
-                        + "what falls. Only digs what her tools actually harvest, and says which tier she needs when "
-                        + "nothing qualifies.")
-                .note("Asks your owner the moment she is about to break a block their rules want asked about; a "
-                        + "refusal stops the job with the reason.")
-                .seeAlso("scan blocks", "area show", "move goto", "route new", "work collect", "task stop")
-                .promote("Dig out blocks right in front of you. place: what to dig — areas of your owner's (ores, or "
-                        + "parts ores/g3 ores/g4) and cells (three numbers are one cell: 120 12 -35), as many as you "
-                        + "like. The area says what to dig: cells scan_blocks added with into are dug only while they "
-                        + "still hold the block the scan saw (mining ore); framed cells (`area add --box`) and "
-                        + "coordinates are dug whatever they hold (a pit, a tree, clearing), air and fluid skipped. "
-                        + "Look first for ore: scan_blocks with into:'ores' for every variant "
-                        + "(iron_ore AND deepslate_iron_ore), then work_dig with place:['ores']. count: how many NEW "
-                        + "items to gather (items, not blocks: redstone_ore drops ~4); without it she digs every cell "
-                        + "in her work area. WORK AREA: she works only within " + WorkArea.RADIUS + " blocks of where "
-                        + "she stands when you call it and moves only inside it; cells beyond it are reported with "
-                        + "the exact lines that open the way there (route new … --arrive dig --alter natural, route "
-                        + "plan, move go — or move_goto … arrive:'dig' alter:'natural'), then call work_dig again. "
-                        + "Something wholly beyond it is refused at once, and so is a job she can't start: nothing "
-                        + "her tools harvest, or no way to any of it in her work area. Keep things standing with area minus or "
-                        + "your owner's rules, not with flags. She takes the best tool, breaks what is in her way and "
-                        + "picks up the drops. Before breaking a block that needs the owner's consent she asks; a "
-                        + "refusal stops the job with the reason — decide what to do next, do not route around it. "
-                        + "Only digs what its tools actually harvest, and names the needed tier if nothing "
-                        + "qualifies. task_finished status=done means the job is complete; only timeout permits "
-                        + "resending the same arguments.");
+                        + "(a pit, a tree, clearing), air and fluid skipped. `area has ores` says whether anything is "
+                        + "left; `area minus` and rules like `deny break(area:house)` keep things standing.")
+                .note("A block in the way of your hand is dug open too when it is natural terrain. A block in the way "
+                        + "that needs your owner's consent or that their rules forbid is not touched: the reply names "
+                        + "it, where it is and why.")
+                .note("Takes the best tool for each block; only digs what your tools actually harvest, and says so "
+                        + "when nothing qualifies. Asks your owner before breaking a named block their rules want "
+                        + "asked about; a refusal stops the job with the reason.")
+                .seeAlso("move goto", "work collect", "area has", "scan blocks", "task stop")
+                .promote("Dig the blocks within reach of where you stand. place: what to dig — areas of your owner's "
+                        + "(ores, or parts ores/g3 ores/g4) and cells (\"120 12 -35\"), as many as you like. It never "
+                        + "walks and never picks up: first move_goto the same place with arrive:'dig' (it stands where "
+                        + "the hand reaches the most of it), then work_dig, then `work collect` for the drops; repeat "
+                        + "while `area has ores` says something is left. The area says what to dig: cells scan_blocks "
+                        + "added with into are dug only while they still hold the block the scan saw (mining ore); "
+                        + "framed cells and coordinates are dug whatever they hold, air and fluid skipped. Natural "
+                        + "blocks in the way of the hand are dug open; blocks in the way that need the owner's consent "
+                        + "or are forbidden are left and named. count: at most this many cells. A call with nothing "
+                        + "within reach is refused with the move_goto line to copy. The task_finished says how many "
+                        + "cells it dug and how many are still out of reach, with the next line to copy.");
         work.server("collect", "Pick up dropped items lying on the ground nearby.", WorkCommands::collect,
                         ITEM_IDS, COLLECT_AREA)
                 .example("work collect")
-                .example("work collect --item_ids minecraft:iron_ingot minecraft:raw_iron")
+                .example("work collect --item-ids minecraft:iron_ingot minecraft:raw_iron")
                 .example("work collect --area farm")
                 .note("Background work: refused with the reason when no drop lies in her work area or she can "
                         + "reach none of them — no task id, no task_finished. The end of an accepted sweep arrives as "
@@ -130,8 +114,8 @@ public final class WorkCommands {
                 .note("Only drops in her work area count — within " + WorkArea.RADIUS + " blocks of where she stood "
                         + "when you called it — and she moves only inside it, so she never wanders off chasing "
                         + "drops. --area narrows it to the drops lying in that area.")
-                .note("For drops left by your own interactions; `fight attack` and work_dig already walk over the "
-                        + "drops they make.")
+                .note("Picks up what `work dig` leaves on the ground; `fight attack` already walks over the drops "
+                        + "it makes.")
                 .seeAlso("work dig", "area show", "task stop");
         work.server("fish", "Fish from nearby water with a fishing rod.", WorkCommands::fish, CATCHES)
                 .example("work fish --count 5")
@@ -147,6 +131,7 @@ public final class WorkCommands {
                 .seeAlso("task stop");
     }
 
+    /** 点名的几处读成格子的那一步在 {@link BlockActionOps#dig},够不够得着在任务受理之前的准备里判。 */
     private static void dig(ServerSource src, CommandArgs args) {
         TaskDispatch.setTask(src, new BlockActionOps().dig(src, args.get(DIG_PLACES), args.get(DIG_COUNT)));
     }

@@ -20,6 +20,7 @@ import com.dwinovo.numen.core.build.Built;
 import com.dwinovo.numen.core.nav.NamedAreas;
 import com.dwinovo.numen.core.route.Itinerary;
 import com.dwinovo.numen.core.route.Routes;
+import com.dwinovo.numen.core.task.dig.DigTaskRecord;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.permission.Gate;
@@ -131,7 +132,7 @@ public final class AreaOps {
             requireNew(her, name);
             store(her).create(name, Area.empty(dimension));
             allowed.reply(TaskResult.ok("made area " + name + " in " + dimension.location() + ", empty. Add to it with "
-                    + "area add " + name + " (--box, --at, --built or --route), or scan blocks <radius> <block ids> "
+                    + "area add " + name + " (--box, --at, --built or --route), or scan blocks <block ids> "
                     + "--into " + name + " to add what a scan finds.").toJson());
         });
     }
@@ -146,53 +147,35 @@ public final class AreaOps {
     /** {@code area add} 加进来的一部分:怎么来的、哪些格、在哪个维度、回执里怎么说它。 */
     public record Source(Area.Kind kind, Cells cells, ResourceKey<Level> dimension, String words) {}
 
-    /** 盒子 {@code x1,y1,z1..x2,y2,z2}(两角任意顺序),在她此刻的维度。 */
-    public static Source box(NumenPlayer her, String written) {
-        return new Source(Area.Kind.BOX, boxCells(written), her.level().dimension(), "box " + written.strip());
+    /** 盒子:两个对角(任意顺序)之间的格,在她此刻的维度。 */
+    public static Source box(NumenPlayer her, List<BlockPos> corners) {
+        Cells cells = boxCells(corners);
+        return new Source(Area.Kind.BOX, cells, her.level().dimension(), "box " + AreaText.box(cells.bounds()));
     }
 
     /**
-     * 读盒子的写法 {@code x1,y1,z1..x2,y2,z2}(两角任意顺序)成格子。
+     * 两个对角(任意顺序)之间的格。
      *
-     * @throws IllegalArgumentException 写法不对,或大过 {@link #MAX_BOX_CELLS}
+     * @throws IllegalArgumentException 不是正好两角,或大过 {@link #MAX_BOX_CELLS}
      */
-    static Cells boxCells(String written) {
-        String raw = written.strip();
-        int sep = raw.indexOf(AreaText.BOX_SEPARATOR);
-        if (sep < 0) {
-            throw new IllegalArgumentException("a box is two corners x1,y1,z1..x2,y2,z2, got \"" + written + "\"");
+    static Cells boxCells(List<BlockPos> corners) {
+        if (corners.size() != 2) {
+            throw new IllegalArgumentException("a box is two corners, x1 y1 z1 x2 y2 z2; got " + corners.size()
+                    + " cell(s)");
         }
-        BlockPos a = corner(raw.substring(0, sep), written);
-        BlockPos b = corner(raw.substring(sep + AreaText.BOX_SEPARATOR.length()), written);
+        BlockPos a = corners.get(0);
+        BlockPos b = corners.get(1);
         long volume = (long) (Math.abs(a.getX() - b.getX()) + 1) * (Math.abs(a.getY() - b.getY()) + 1)
                 * (Math.abs(a.getZ() - b.getZ()) + 1);
         if (volume > MAX_BOX_CELLS) {
-            throw new IllegalArgumentException("a box holds at most " + MAX_BOX_CELLS + " cells and " + written
-                    + " holds " + volume + "; frame it in smaller boxes");
+            throw new IllegalArgumentException("a box holds at most " + MAX_BOX_CELLS + " cells and "
+                    + AreaText.cell(a) + " " + AreaText.cell(b) + " holds " + volume + "; frame it in smaller boxes");
         }
         return Cells.box(a, b);
     }
 
-    private static BlockPos corner(String text, String written) {
-        String[] xyz = text.split(",");
-        if (xyz.length != 3) {
-            throw new IllegalArgumentException("a box is two corners x1,y1,z1..x2,y2,z2, got \"" + written + "\"");
-        }
-        try {
-            return new BlockPos(Integer.parseInt(xyz[0].strip()), Integer.parseInt(xyz[1].strip()),
-                    Integer.parseInt(xyz[2].strip()));
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("a box is two corners x1,y1,z1..x2,y2,z2 of whole numbers, got \""
-                    + written + "\"");
-        }
-    }
-
-    /** 一个点 {@code x y z},在她此刻的维度。 */
-    public static Source point(NumenPlayer her, List<Integer> at) {
-        if (at.size() != 3) {
-            throw new IllegalArgumentException("--at takes one cell: x y z; got " + at.size() + " numbers");
-        }
-        BlockPos pos = new BlockPos(at.get(0), at.get(1), at.get(2));
+    /** 一个点,在她此刻的维度。 */
+    public static Source point(NumenPlayer her, BlockPos pos) {
         return new Source(Area.Kind.POINT, Cells.point(pos), her.level().dimension(), "the cell "
                 + AreaText.cell(pos));
     }
@@ -353,8 +336,14 @@ public final class AreaOps {
         });
     }
 
-    /** 按方块筛:留附带的方块是这几种(或这几类)的格;框出来的格不知道是什么,不留。 */
+    /**
+     * 按方块筛:留附带的方块是这几种(或这几类)的格;没点名哪几种就留附带了方块的每一格(扫描来的)。框出来的格不知道是什么,
+     * 不留。
+     */
     public static UnaryOperator<Area> filter(List<String> blocks) {
+        if (blocks == null) {
+            return area -> area.filter(state -> true);
+        }
         Set<Block> kinds = ToolParse.parseBlocks(blocks);
         if (kinds.isEmpty()) {
             throw new IllegalArgumentException("--blocks names no block this server knows: " + blocks);
@@ -433,12 +422,58 @@ public final class AreaOps {
         }
     }
 
+    /**
+     * 一块区域的各部分名,一行一个({@code ores/g1}),给脚本逐个取用;点名的是一部分就只有它那一行。区域里还没有部分是空的输出。
+     */
+    public static String parts(NumenPlayer her, AreaRef ref, CommandArgs args, String again) {
+        Area shown = resolve(her, ref);
+        List<String> rows = new ArrayList<>(shown.parts().size());
+        for (Area.Part part : shown.parts()) {
+            rows.add(ref.name() + "/" + part.id());
+        }
+        return new Listing("", rows, "", again).result(args, Map.of("parts", rows.size())).toJson();
+    }
+
+    /**
+     * 这块区域(或一部分)还有没有要挖的格:每一格按 {@code work dig} 的判据({@link DigTaskRecord#wants}:扫描来的格还是当时那种
+     * 方块,框出来的格立着方块)在活世界里问,没加载的读不到、不算。有就成功,没有就失败——成败即答案,回执一句话。
+     */
+    public static String has(NumenPlayer her, AreaRef ref) {
+        Area area = resolve(her, ref);
+        ServerLevel level = her.serverLevel();
+        BlockPos feet = her.blockPosition();
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        int[] counts = new int[2];
+        BlockPos[] nearest = new BlockPos[1];
+        area.cells().forEach((x, y, z, seen) -> {
+            pos.set(x, y, z);
+            if (!level.isLoaded(pos)) {
+                counts[1]++;
+                return;
+            }
+            if (DigTaskRecord.wants(seen, level.getBlockState(pos))) {
+                counts[0]++;
+                if (nearest[0] == null || feet.distSqr(pos) < feet.distSqr(nearest[0])) {
+                    nearest[0] = pos.immutable();
+                }
+            }
+        });
+        String unloaded = counts[1] == 0 ? "" : "; " + counts[1] + " cell(s) lie in unloaded terrain and were not read";
+        Map<String, Object> data = Map.of("left", counts[0], "cells", area.cells().size());
+        if (counts[0] == 0) {
+            return TaskResult.fail(ref + " has nothing left to dig (" + area.cells().size() + " cell(s), all gone or "
+                    + "changed since they were added)" + unloaded + ".", data).toJson();
+        }
+        return TaskResult.ok(ref + " has " + counts[0] + " cell(s) left to dig, the nearest at "
+                + AreaText.cell(nearest[0]) + unloaded + ".", data).toJson();
+    }
+
     /** 主人的全部区域,一块一行。 */
     public static String list(NumenPlayer her, CommandArgs args, String again) {
         List<String> rows = new ArrayList<>();
         store(her).all().forEach((name, area) -> rows.add(AreaText.summary(name, area)));
         String head = rows.isEmpty()
-                ? "No areas yet: scan blocks <radius> <block ids> --into <name> makes one from what a scan finds; area new <name> makes an empty one."
+                ? "No areas yet: scan blocks <block ids> --into <name> makes one from what a scan finds; area new <name> makes an empty one."
                 : "Areas of your owner, shared by all of their companions:";
         return new Listing(head, rows, "", again).result(args).toJson();
     }

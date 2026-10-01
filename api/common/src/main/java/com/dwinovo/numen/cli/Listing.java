@@ -44,7 +44,7 @@ public record Listing(String head, List<String> entries, String foot, String aga
 
     /** 翻页的标志:帮助认它,列清单的动作也登记它,{@code --page N} 的写法只有这一种。 */
     public static final Param<Integer> PAGE = Param.optional("page", ArgType.integer(1, 99),
-            "Which page of the list.");
+            "Which page of the list.").whenOmitted("show the first page");
 
     private static final DynamicCommandExceptionType NO_PAGE = new DynamicCommandExceptionType(
             what -> new LiteralMessage(String.valueOf(what)));

@@ -32,13 +32,17 @@ public final class TaskCommands {
     private static final Param<String> TASK_ID = Param.optional("task_id", ArgType.word(),
             "What to cancel: a task id (e.g. t42) or a timer id (e.g. tm3).")
             .whenOmitted("stop the background task, whatever it is");
-    private static final Param<Integer> AFTER_S = Param.required("after_s",
+    /** 不写 {@code --after} 时一分钟后提醒:够一炉东西烧上几件、庄稼长一截,又不至于把要看的事搁太久。 */
+    private static final int DEFAULT_AFTER_S = 60;
+
+    private static final Param<Integer> AFTER_S = Param.optional("after",
             ArgType.integer(TimerRegistry.MIN_SECONDS, TimerRegistry.MAX_SECONDS),
             "Delay in world-time seconds ("
                     + TimerRegistry.MIN_SECONDS + "-" + TimerRegistry.MAX_SECONDS
-                    + "; out-of-range values are clamped).");
-    private static final Param<String> REASON = Param.required("reason", ArgType.text(),
-            "What to look at or decide when it fires. The owner sees this too, "
+                    + "; out-of-range values are clamped).")
+            .whenOmitted("remind you in " + DEFAULT_AFTER_S + " seconds");
+    private static final Param<String> REASON = Param.required("reason", ArgType.string(),
+            "What to look at or decide when it fires; quote it. The owner sees this too, "
                     + "so name the thing: \"collect the iron from the furnace\" beats \"check back\".");
 
     private TaskCommands() {}
@@ -59,7 +63,7 @@ public final class TaskCommands {
         task.server("stop", "Cancel the background task, or a task or timer by its id.",
                 TaskCommands::stop, TASK_ID)
                 .example("task stop")
-                .example("task stop --task_id tm3")
+                .example("task stop --task-id tm3")
                 .note("Instant; does not ask your owner. A stopped task winds down and reports as a task_finished "
                         + "event with status=stopped.")
                 .note("When nothing matches it fails and lists what is pending.")
@@ -70,8 +74,8 @@ public final class TaskCommands {
                         + "that task or that timer (tm...). Fails, listing what is actually pending, when "
                         + "nothing matches.");
         task.server("timer", "Set a one-shot reminder that fires after a delay in world time.",
-                TaskCommands::timer, AFTER_S, REASON)
-                .example("task timer 300 collect the iron from the furnace")
+                TaskCommands::timer, REASON, AFTER_S)
+                .example("task timer \"collect the iron from the furnace\" --after 300")
                 .note("Returns at once and never occupies your body; your owner is told when and why.")
                 .note("For what the world will not announce on its own: a furnace finishing, crops growing, "
                         + "daybreak. When it fires, look: the reminder is not proof the thing happened.")
@@ -193,7 +197,7 @@ public final class TaskCommands {
             return;
         }
 
-        int asked = args.get(AFTER_S);
+        int asked = args.get(AFTER_S) == null ? DEFAULT_AFTER_S : args.get(AFTER_S);
         int seconds = TimerRegistry.clampSeconds(asked);
         TimerRegistry registry = TimerRegistry.get(server);
         long now = server.overworld().getGameTime();

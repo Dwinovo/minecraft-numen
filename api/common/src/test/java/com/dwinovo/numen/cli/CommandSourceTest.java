@@ -30,10 +30,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class CommandSourceTest {
 
-    static final Param<Integer> AFTER = Param.required("after_s", ArgType.integer(1, 1200), "Delay in seconds.");
-    static final Param<String> REASON = Param.required("reason", ArgType.text(), "Why.");
-    static final Param<String> ID = Param.optional("id", ArgType.word(), "Which one.");
-    static final Param<Integer> TRIES = Param.optional("tries", ArgType.integer(1, 5), "How often.");
+    static final Param<String> REASON = Param.required("reason", ArgType.string(), "Why.");
+    static final Param<Integer> AFTER = Param.optional("after_s", ArgType.integer(1, 1200), "Delay in seconds.")
+            .whenOmitted("remind in a minute");
+    static final Param<String> ID = Param.optional("id", ArgType.word(), "Which one.").whenOmitted("make a new one");
+    static final Param<Integer> TRIES = Param.optional("tries", ArgType.integer(1, 5), "How often.")
+            .whenOmitted("try once");
 
     /** 服务端处理函数收到的每一份参数。 */
     static final List<CommandArgs> SERVER_CALLS = new ArrayList<>();
@@ -46,7 +48,7 @@ class CommandSourceTest {
                 SERVER_CALLS.add(args);
                 src.reply(TaskResult.ok("reminder in " + args.get(AFTER) + "s: " + args.get(REASON),
                         Map.of("tool", src.toolName(), "task", src.taskName())).toJson());
-            }, AFTER, REASON).example("gt_side remind 60 check the furnace")
+            }, REASON, AFTER).example("gt_side remind \"check the furnace\" --after-s 60")
                     .promote("Set a reminder, as a tool.");
             g.client("jot", "Jot something down on the owner's client.", (src, args) -> {
                 CLIENT_CALLS.add(args);
@@ -63,7 +65,7 @@ class CommandSourceTest {
         assertEquals("jotted a1 xnull", jot.message());
 
         int before = SERVER_CALLS.size();
-        CliFixture.Outcome remind = onClient("gt_side remind 60 check the furnace");
+        CliFixture.Outcome remind = onClient("gt_side remind \"check the furnace\" --after-s 60");
         assertTrue(remind.forwarded, "服务端动作整条送去服务端");
         assertTrue(remind.replies.isEmpty(), "结果等服务端回来");
         assertEquals(before, SERVER_CALLS.size(), "客户端不跑服务端的处理函数");
@@ -74,8 +76,8 @@ class CommandSourceTest {
     void theServerTreeOnlyNamesAClientAction() {
         CliFixture.Outcome jot = onServer("gt_side jot --id a1");
         assertFalse(jot.success());
-        assertTrue(jot.message().startsWith("Unknown command"), jot.message());
-        assertTrue(jot.message().contains("\ngt_side jot [--id <word>] [--tries <integer>]\n"), jot.message());
+        assertTrue(jot.message().startsWith("error: Unknown command"), jot.message());
+        assertTrue(jot.message().contains("\nusage: gt_side jot [--id <word>] [--tries <integer>]\n"), jot.message());
         assertTrue(onServer("gt_side jot --help").success(), "帮助两侧都答得出");
     }
 
@@ -85,12 +87,12 @@ class CommandSourceTest {
         assertInstanceOf(PromotedTool.class, remind);
         assertEquals("Set a reminder, as a tool.", remind.description());
         assertEquals(Schema.object()
-                .integer("after_s", "Delay in seconds.", 1, 1200)
                 .string("reason", "Why.")
+                .optionalInteger("after_s", "Delay in seconds. Omit to remind in a minute.", 1, 1200)
                 .build(), remind.parameterSchema());
         assertEquals(Schema.object()
-                .optionalString("id", "Which one.")
-                .optionalInteger("tries", "How often.", 1, 5)
+                .optionalString("id", "Which one. Omit to make a new one.")
+                .optionalInteger("tries", "How often. Omit to try once.", 1, 5)
                 .build(), ToolRegistry.get("gt_side_jot").parameterSchema());
         assertEquals(Schema.object()
                 .string("command", "One command line: without a leading / a command from <commands>, e.g. "
@@ -109,10 +111,10 @@ class CommandSourceTest {
         JsonObject json = new JsonObject();
         json.addProperty("after_s", 60);
         json.addProperty("reason", "check the furnace");
-        CliFixture.Outcome viaCommand = onServer("gt_side remind 60 check the furnace");
+        CliFixture.Outcome viaCommand = onServer("gt_side remind \"check the furnace\" --after-s 60");
 
         assertEquals(1, SERVER_CALLS.size());
-        assertEquals(CommandArgs.fromJson(List.of(AFTER, REASON), json), SERVER_CALLS.get(0), "两个入口读出的参数相等");
+        assertEquals(CommandArgs.fromJson(List.of(REASON, AFTER), json), SERVER_CALLS.get(0), "两个入口读出的参数相等");
         assertEquals("reminder in 60s: check the furnace", viaCommand.message());
         assertEquals("command", viaCommand.json().getAsJsonObject("data").get("tool").getAsString());
         assertEquals("gt_side remind", viaCommand.json().getAsJsonObject("data").get("task").getAsString(),
@@ -122,11 +124,11 @@ class CommandSourceTest {
     @Test
     void aShortcutsBadJsonIsRefusedLikeAnyToolsBadArguments() {
         NumenTool remind = ToolRegistry.get("gt_side_remind");
-        assertEquals("invalid arguments: missing required argument: after_s",
-                message(serve(remind, JsonParser.parseString("{\"reason\":\"x\"}").getAsJsonObject())));
+        assertEquals("invalid arguments: missing required argument: reason",
+                message(serve(remind, JsonParser.parseString("{\"after_s\":5}").getAsJsonObject())));
         assertTrue(message(serve(remind, JsonParser.parseString("{\"after_s\":\"soon\",\"reason\":\"x\"}")
                 .getAsJsonObject())).startsWith("invalid arguments: argument 'after_s': Expected integer"));
-        assertEquals("invalid arguments: unknown argument 'when'; this takes: after_s, reason",
+        assertEquals("invalid arguments: unknown argument 'when'; this takes: reason, after_s",
                 message(serve(remind, JsonParser.parseString("{\"after_s\":5,\"reason\":\"x\",\"when\":1}")
                         .getAsJsonObject())));
     }

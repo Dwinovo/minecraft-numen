@@ -38,26 +38,33 @@ public final class CommandArgs {
     }
 
     /**
-     * 命令行这一侧:位置参数按名字从 Brigadier 的上下文里取,标志是 {@link FlagsArgument} 已经读好的那张表
-     * (这一行没写标志就是空表)。
+     * 命令行这一侧:位置参数按名字从 Brigadier 的上下文里取(可以不写的那一个,没写就不在),标志是 {@link FlagsArgument}
+     * 已经读好的那张表(这一行没写标志就是空表)。
      */
     static CommandArgs fromCommand(List<Param<?>> positionals, CommandContext<?> ctx, Map<String, Object> flags) {
         Map<String, Object> out = new LinkedHashMap<>();
         for (Param<?> p : positionals) {
-            out.put(p.name(), ctx.getArgument(p.name(), Object.class));
+            if (p.required() || ctx.getNodes().stream().anyMatch(n -> n.getNode().getName().equals(p.name()))) {
+                out.put(p.name(), ctx.getArgument(p.name(), Object.class));
+            }
         }
         out.putAll(flags);
         return new CommandArgs(out);
     }
 
     /**
-     * 快捷工具这一侧:每个声明过的参数按名字取 JSON 值,经它的类型读成值;JSON {@code null} 与没给同义。
+     * 快捷工具这一侧:每个声明过的参数按名字取 JSON 值,经它的类型读成值;JSON {@code null} 与没给同义。键里的 {@code -} 与
+     * {@code _} 是同一个字符,和命令行上的标志名同一条规矩({@link Param#nameOf})。
      * 没声明的键拒掉——命令行上写错的标志也是拒,两个入口认的是同一张参数表。
      *
      * @throws IllegalArgumentException 参数不对——工具契约里"参数不对"的信号,服务端的 {@code serve} 与客户端的
      *                                  派发器都把它变成一条模型读得懂的失败回执
      */
-    static CommandArgs fromJson(List<Param<?>> params, JsonObject json) {
+    static CommandArgs fromJson(List<Param<?>> params, JsonObject given) {
+        JsonObject json = new JsonObject();
+        for (String key : given.keySet()) {
+            json.add(Param.nameOf(key), given.get(key));
+        }
         Map<String, Object> out = new LinkedHashMap<>();
         for (Param<?> p : params) {
             JsonElement value = json.get(p.name());
@@ -82,8 +89,8 @@ public final class CommandArgs {
     }
 
     /**
-     * 这些参数写回一行命令:{@code path} 之后是写了值的位置参数,再是写了值的标志 {@code --name value},都按
-     * {@code params} 的顺序,值写成它在命令行上的样子({@link ArgType} 的写法)。这一行交给同一棵树读回来,得到的是相等的
+     * 这些参数写回一行命令:{@code path} 之后是写了值的位置参数,再是写了值的标志 {@code --name value}(开关写 {@code --name}
+     * 或 {@code --no-name}),都按 {@code params} 的顺序,值写成它在命令行上的样子({@link ArgType} 的写法)。这一行交给同一棵树读回来,得到的是相等的
      * 一份参数——读与写是同一张参数表的两个方向。{@code params} 里没列的参数(比如只管这次调用落到哪儿的标志)不写。
      *
      * @param path 这一行的动作路径,如 {@code build layer}
@@ -91,13 +98,19 @@ public final class CommandArgs {
     public String write(String path, List<Param<?>> params) {
         StringBuilder line = new StringBuilder(path);
         for (Param<?> p : params) {
-            if (p.required()) {
+            if (p.positional() && (p.required() || values.containsKey(p.name()))) {
                 line.append(' ').append(written(p));
             }
         }
         for (Param<?> p : params) {
-            if (!p.required() && values.containsKey(p.name())) {
-                line.append(' ').append(FlagsArgument.PREFIX).append(p.name()).append(' ').append(written(p));
+            if (p.positional() || !values.containsKey(p.name())) {
+                continue;
+            }
+            if (p.type().isSwitch()) {
+                line.append(' ').append(FlagsArgument.PREFIX).append(Boolean.TRUE.equals(values.get(p.name()))
+                        ? p.flag() : Param.NO.replace('_', '-') + p.flag());
+            } else {
+                line.append(' ').append(FlagsArgument.PREFIX).append(p.flag()).append(' ').append(written(p));
             }
         }
         return line.toString();

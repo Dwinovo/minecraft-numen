@@ -128,7 +128,7 @@ class ListingTest {
         assertEquals("""
                 gt_listing rows [--page <integer>]
                   List the rows.
-                  --page <integer> (integer 1-99; optional) — Which page of the list.
+                  --page <integer> (integer 1-99; optional) — Which page of the list. Omit to show the first page.
                   Examples:
                     gt_listing rows --page 2""",
                 onClient("gt_listing rows --help").message());

@@ -12,11 +12,12 @@ import java.util.List;
 
 /**
  * 挖 10 个铁:场地中间一座七乘七、四层高的石堆,里面埋着 12 块铁矿,从外面一块都看不见;她站在石堆边上,包里一把石镐。
- * 主人只说要 10 个铁。要成事得先看见埋着的矿(扫描),再挖(挖掘会自己挖开挡着的石头)。成功 = 背包里粗铁不少于 10。
+ * 主人只说要 10 个铁。要成事得先看见埋着的矿(扫描),走到够得着的地方(开路),再挖(挖掘会自己挖开挡着的石头)、再捡。
+ * 成功 = 背包里粗铁不少于 10。
  */
 public final class MineIron implements Scenario {
 
-    /** 石堆占的格子(含两端),都在她工作区的半径以内。 */
+    /** 石堆占的格子(含两端),都在扫描的半径以内。 */
     private static final int LO = 7;
     private static final int HI = 13;
     private static final int TOP = 4;
@@ -81,6 +82,15 @@ public final class MineIron implements Scenario {
 
     @Override
     public List<String> solution(Scene scene) {
-        return List.of("scan blocks 12 iron_ore --into ores", "work dig ores --count 10");
+        // 一轮:走到一次够得着最多铁矿的地方(挖开石头过去),挖手够得着的;三轮挖得完那团芯。粗铁落在挖空的矿洞里,
+        // 有的洞只有一格高、走不进去:站进芯的正中(挖开头顶那格)一圈都捡得到,再把剩下的捡了
+        List<String> lines = new java.util.ArrayList<>(List.of("scan blocks iron_ore --radius 12 --into ores"));
+        for (int i = 0; i < 3; i++) {
+            lines.addAll(List.of("move goto ores --arrive dig --alter natural", "work dig ores"));
+        }
+        BlockPos core = scene.pos(10, 1, 10);
+        lines.add("move goto " + core.getX() + " " + core.getY() + " " + core.getZ() + " --alter natural");
+        lines.add("work collect");
+        return lines;
     }
 }

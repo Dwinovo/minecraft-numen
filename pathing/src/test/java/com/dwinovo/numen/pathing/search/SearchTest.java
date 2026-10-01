@@ -393,6 +393,35 @@ class SearchTest {
     }
 
     /**
+     * 挖几格里的任意一格({@link Goals#dig(java.util.List, com.dwinovo.numen.pathing.world.BodyStats, Goals.Clearing)}):她站在一条南北向、一格宽的
+     * 石头走廊正中,走廊两头各嵌着矿——一头一格,另一头并排两格(多出来的那格在走廊外侧,不比正对走廊的那格近)。两头最先够得着矿的站位离她一样远、
+     * 估价一样,够着的格数不同:同样划算,
+     * 挑一次够得着最多格的那一头。两个朝向各试一次,不靠搜索先往哪边铺。
+     */
+    @Test
+    void diggingSeveralCellsStopsWhereTheHandReachesTheMost() {
+        for (int side : new int[]{-1, 1}) {
+            TestWorld world = field().fill(-3, Y, -8, 3, Y + 2, 8, STONE).fill(0, Y, -5, 0, Y + 1, 5,
+                    Blocks.AIR.defaultBlockState());
+            BlockPos single = new BlockPos(0, Y, -6 * side);
+            List<BlockPos> pair = List.of(new BlockPos(0, Y, 6 * side), new BlockPos(1, Y, 6 * side));
+            world.set(single, Blocks.IRON_ORE.defaultBlockState());
+            pair.forEach(ore -> world.set(ore, Blocks.IRON_ORE.defaultBlockState()));
+            List<BlockPos> targets = new java.util.ArrayList<>(List.of(single));
+            targets.addAll(pair);
+            SearchResult result = search(world, defaults(), START, Goals.dig(targets.stream().map(t -> new Goals.DigTarget(t, 0)).toList(), SURVIVAL,
+                    Goals.Clearing.ANY));
+            assertTrue(result.arrived(), result.stop().toString());
+            BlockPos end = result.route().end();
+            Stance stance = result.route().endStance();
+            long reached = pair.stream().filter(t -> Goals.dig(t, SURVIVAL).contains(end.getX(), end.getY(),
+                    end.getZ(), stance)).count();
+            assertTrue(Integer.signum(end.getZ()) == side && reached == 2,
+                    "停在嵌着两格的那一头:" + end + " 够得着 " + reached);
+        }
+    }
+
+    /**
      * 要挖的矿在一堵三格高的羊毛墙后面,墙向两边各伸出六格。站在墙前最近,手也够得着,但挖的一方清不掉羊毛:那里停下办不成,
      * 搜索绕过墙头,停在看得见它、不隔着羊毛的地方。谁挖都行的同一个目标,停在墙前(隔一格遮挡比绕路便宜)。
      */

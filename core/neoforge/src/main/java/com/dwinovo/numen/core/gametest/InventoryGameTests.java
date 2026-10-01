@@ -75,7 +75,7 @@ public class InventoryGameTests {
         companion.getInventory().add(pick);
         // 这条测的是丢出去的是不是原物;丢东西要不要问主人另有用例,这里让主人选"全放行"
         com.dwinovo.numen.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
-        TaskRecord record = command(companion, "inv drop minecraft:diamond_pickaxe 1").task();
+        TaskRecord record = command(companion, "inv drop minecraft:diamond_pickaxe --count 1").task();
 
         succeedWhen(helper, () -> {
             var drops = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
@@ -367,19 +367,22 @@ public class InventoryGameTests {
         });
     }
 
-    /** 卸甲不说卸哪个槽:按参数错误退回,告诉她要给 slot。 */
+    /** 卸甲不说卸哪个槽:{@code --slot} 不写就是盔甲(四件甲),头盔卸进背包,手上的剑不动。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
-    public static void unequip_without_a_slot_is_rejected(GameTestHelper helper) {
+    public static void unequip_without_a_slot_takes_off_the_armor(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_vague", new BlockPos(4, 2, 4), false);
         companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+        companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
         ToolRun unequip = command(companion, "gear remove");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(unequip.done(), "gear remove has not replied");
-            helper.assertTrue(!unequip.succeeded() && unequip.outcome().contains("slot is required"),
-                    "the rejection does not ask for a slot: " + unequip.outcome());
-            helper.assertTrue(companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
-                    .is(Items.IRON_HELMET), "the helmet came off anyway");
+            helper.assertTrue(unequip.succeeded() && unequip.outcome().contains("took off iron_helmet (head)"),
+                    "gear remove without a slot did not take the armor off: " + unequip.outcome());
+            helper.assertTrue(companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).isEmpty()
+                            && companion.getInventory().countItem(Items.IRON_HELMET) == 1,
+                    "the helmet did not go into the backpack");
+            helper.assertTrue(companion.getMainHandItem().is(Items.IRON_SWORD), "the sword in her hand came off");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

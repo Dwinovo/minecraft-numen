@@ -10,7 +10,7 @@ import net.minecraft.world.item.Item;
  * Typed descriptor for {@code use entity} — the entity-aimed half of the native
  * crosshair interaction (the ENTITY column of vanilla's {@code startAttack}/{@code startUseItem}).
  * Entities are the only MOVING interaction target, so this is the one that auto-paths AND
- * follows the live entity (by id from {@code scan_entities}) before pressing a button:
+ * follows the live entity (by id from {@code scan entities}) before pressing a button:
  * <ul>
  *   <li>{@link Button#LEFT} (attack): hit it. Tap = one cooldown-gated hit; hold = keep
  *       hitting until the target dies, the hold ends, or the task times out.</li>

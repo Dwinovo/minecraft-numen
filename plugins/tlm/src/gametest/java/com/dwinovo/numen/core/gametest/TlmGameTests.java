@@ -58,7 +58,7 @@ public class TlmGameTests {
         NumenPlayer her = keeper(helper, "gametest_tlm_tamer", new BlockPos(3, 2, 3));
         her.getInventory().add(new ItemStack(Items.CAKE));
         EntityMaid maid = maidAt(helper, new BlockPos(6, 2, 6));
-        ToolRun tame = command(her, "use entity right " + maid.getId() + " --item minecraft:cake");
+        ToolRun tame = command(her, "use entity " + maid.getId() + " --item minecraft:cake");
         AtomicReference<ToolRun> listed = new AtomicReference<>();
 
         steps(helper)
@@ -87,7 +87,7 @@ public class TlmGameTests {
         maid.tame(her);
 
         ToolRun detail = command(her, "tlm maid " + maid.getId());
-        ToolRun task = command(her, "tlm task " + maid.getId() + " " + FARM);
+        ToolRun task = command(her, "tlm task " + FARM + " --maid " + maid.getId());
         ToolRun config = command(her, "tlm config " + maid.getId() + " --schedule night");
 
         succeedWhen(helper, () -> {
@@ -109,7 +109,7 @@ public class TlmGameTests {
         EntityMaid maid = maidAt(helper, new BlockPos(5, 2, 3));
         maid.tame(her);
 
-        ToolRun open = command(her, "tlm open " + maid.getId() + " backpack");
+        ToolRun open = command(her, "tlm open " + maid.getId() + " --tab backpack");
         AtomicReference<ToolRun> moved = new AtomicReference<>();
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(open.succeeded()
@@ -147,10 +147,11 @@ public class TlmGameTests {
         // 坐着:不跟过来,也不传送到她身边
         maid.setInSittingPose(true);
 
-        ToolRun task = command(her, "tlm task " + maid.getId() + " " + FARM);
+        ToolRun task = command(her, "tlm task " + FARM + " --maid " + maid.getId());
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(task.reply() != null && !task.succeeded() && task.reply().contains("move goto --x"),
+            helper.assertTrue(task.reply() != null && !task.succeeded() && task.reply().contains("`move goto ")
+                            && task.reply().contains(" --arrive near --near 2` first"),
                     "far away, tlm task did not fail with the walk to copy: " + task.reply());
             helper.assertTrue(!maid.getTask().getUid().equals(FARM), "her task changed from out of reach");
             leave(helper, her, maid);
@@ -166,7 +167,7 @@ public class TlmGameTests {
         maid.setTame(true, false);
         maid.setOwnerUUID(UUID.randomUUID());
 
-        ToolRun task = command(her, "tlm task " + maid.getId() + " " + FARM);
+        ToolRun task = command(her, "tlm task " + FARM + " --maid " + maid.getId());
 
         succeedWhen(helper, () -> {
             helper.assertTrue(task.reply() != null && !task.succeeded() && task.reply().contains("not yours"),
@@ -205,7 +206,7 @@ public class TlmGameTests {
         EntityMaid maid = maidAt(helper, new BlockPos(4, 2, 3));
         maid.tame(her);
         maid.getMaidInv().setStackInSlot(0, new ItemStack(Items.COOKED_BEEF, 4));
-        ToolRun task = command(her, "tlm task " + maid.getId() + " touhou_little_maid:feed");
+        ToolRun task = command(her, "tlm task touhou_little_maid:feed --maid " + maid.getId());
 
         succeedWhen(helper, () -> {
             helper.assertTrue(task.succeeded(), "tlm task feed failed: " + task.reply());

@@ -59,17 +59,18 @@ class TaskCommandsTest {
         assertEquals("""
                 task: The background task and your pending timers. Actions:
                   task status — What you have in flight: the background task and your pending timers.
-                  task stop [--task_id <word>] — Cancel the background task, or a task or timer by its id.
-                  task timer <after_s> <reason...> — Set a one-shot reminder that fires after a delay in world time.
+                  task stop [--task-id <word>] — Cancel the background task, or a task or timer by its id.
+                  task timer <reason> [--after <integer>] — Set a one-shot reminder that fires after a delay in world time.
                 task <action> --help explains one action.""", help("task --help"));
         assertEquals("""
-                task timer <after_s> <reason...>
+                task timer <reason> [--after <integer>]
                   Set a one-shot reminder that fires after a delay in world time.
-                  <after_s> (integer 1-1200) — Delay in world-time seconds (1-1200; out-of-range values are clamped).
-                  <reason...> (text, the rest of the line) — What to look at or decide when it fires. The owner \
-                sees this too, so name the thing: "collect the iron from the furnace" beats "check back".
+                  <reason> (string, quote it if it has spaces) — What to look at or decide when it fires; quote it. \
+                The owner sees this too, so name the thing: "collect the iron from the furnace" beats "check back".
+                  --after <integer> (integer 1-1200; optional) — Delay in world-time seconds (1-1200; out-of-range \
+                values are clamped). Omit to remind you in 60 seconds.
                   Examples:
-                    task timer 300 collect the iron from the furnace
+                    task timer "collect the iron from the furnace" --after 300
                   Notes:
                     Returns at once and never occupies your body; your owner is told when and why.
                     For what the world will not announce on its own: a furnace finishing, crops growing, daybreak. \
@@ -78,13 +79,13 @@ class TaskCommandsTest {
                     At most 8 pending. World time stops while a single-player world is paused.
                   See also: task status, task stop""", help("task timer --help"));
         assertEquals("""
-                task stop [--task_id <word>]
+                task stop [--task-id <word>]
                   Cancel the background task, or a task or timer by its id.
-                  --task_id <word> (word; optional) — What to cancel: a task id (e.g. t42) or a timer id (e.g. tm3). \
+                  --task-id <word> (word; optional) — What to cancel: a task id (e.g. t42) or a timer id (e.g. tm3). \
                 Omit to stop the background task, whatever it is.
                   Examples:
                     task stop
-                    task stop --task_id tm3
+                    task stop --task-id tm3
                   Notes:
                     Instant; does not ask your owner. A stopped task winds down and reports as a task_finished event \
                 with status=stopped.

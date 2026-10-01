@@ -30,12 +30,14 @@ class ListFlagArgTypeTest {
 
     static final Param<List<String>> BLOCKS = Param.required("blocks", ArgType.list(ArgType.idOrTag()),
             "Which blocks.");
-    static final Param<List<Integer>> IDS = Param.optional("ids", ArgType.list(ArgType.integer()), "Which ones.");
-    static final Param<List<String>> KEEP = Param.optional("keep", ArgType.list(ArgType.blockCellOrArea()),
-            "What to leave standing.");
+    static final Param<List<Integer>> IDS = Param.optional("ids", ArgType.list(ArgType.integer()), "Which ones.")
+            .whenOmitted("take any");
+    static final Param<List<BlockCellOrArea>> KEEP = Param.optional("keep", ArgType.list(ArgType.blockCellOrArea()),
+            "What to leave standing.").whenOmitted("keep nothing");
     static final Param<List<ResourceLocation>> ITEMS = Param.optional("items", ArgType.list(ArgType.id()),
-            "What to take.");
-    static final Param<Integer> COUNT = Param.optional("count", ArgType.integer(1, 64), "How many.");
+            "What to take.").whenOmitted("take everything");
+    static final Param<Integer> COUNT = Param.optional("count", ArgType.integer(1, 64), "How many.")
+            .whenOmitted("take one");
     static final List<Param<?>> PARAMS = List.of(BLOCKS, IDS, KEEP, ITEMS, COUNT);
 
     static final AtomicReference<CommandArgs> LAST = new AtomicReference<>();
@@ -58,12 +60,26 @@ class ListFlagArgTypeTest {
         return LAST.get();
     }
 
+    /** 写错的一行:处理函数不被调到,回执以 {@code error:} 起头;返回 {@code error:} 之后的那一句。 */
     private static String failed(String line) {
         LAST.set(null);
         CliFixture.Outcome out = onServer(line);
         assertFalse(out.success(), line + " should fail");
         assertNull(LAST.get(), "处理函数不该被调到");
-        return out.message();
+        assertTrue(out.message().startsWith("error: "), out.message());
+        return out.message().substring("error: ".length());
+    }
+
+    private static BlockCellOrArea block(String id) {
+        return new BlockCellOrArea(id, null, null);
+    }
+
+    private static BlockCellOrArea cell(int x, int y, int z) {
+        return new BlockCellOrArea(null, new net.minecraft.core.BlockPos(x, y, z), null);
+    }
+
+    private static BlockCellOrArea area(String ref) {
+        return new BlockCellOrArea(null, null, com.dwinovo.numen.area.AreaRef.parse(ref));
     }
 
     @Test
@@ -73,7 +89,10 @@ class ListFlagArgTypeTest {
         assertEquals(List.of("iron_ore", "deepslate_iron_ore"), args.get(BLOCKS), "位置上的一串读到第一个标志为止");
         assertEquals(List.of(184, -2), args.get(IDS), "负数只有一个 -,不是标志");
         assertEquals(5, args.get(COUNT));
-        assertEquals(List.of("minecraft:chest", "12,60,8", "-1,-2,-3", "area:ores/g3", "#minecraft:beds"), args.get(KEEP));
+        assertEquals(List.of(block("minecraft:chest"), cell(12, 60, 8), cell(-1, -2, -3), area("ores/g3"),
+                block("#minecraft:beds")), args.get(KEEP));
+        assertEquals(List.of(cell(12, 60, 8), block("chest")), ran("gt_flags pick stone --keep 12 60 8 chest").get(KEEP),
+                "一格坐标也收三个数空格隔开");
         assertEquals(List.of(ResourceLocation.withDefaultNamespace("iron_ingot"),
                 ResourceLocation.withDefaultNamespace("raw_iron")), args.get(ITEMS), "标志里的一串一直读到行尾");
         assertEquals(List.of("stone"), ran("gt_flags pick stone").get(BLOCKS), "一个也是一串");
@@ -81,9 +100,11 @@ class ListFlagArgTypeTest {
 
     @Test
     void aBadItemSaysWhatWasExpected() {
-        assertTrue(failed("gt_flags pick stone --keep 1,2").startsWith("expected a cell x,y,z in whole numbers"));
-        assertTrue(failed("gt_flags pick stone --keep 1,two,3").startsWith("expected a cell x,y,z in whole numbers"));
-        assertTrue(failed("gt_flags pick stone --keep 1,2,3..4,5,6").startsWith("a cell is one x,y,z; a box or any "
+        assertTrue(failed("gt_flags pick stone --keep 1,2").startsWith("expected a cell: three whole numbers x y z, "
+                + "or x,y,z"));
+        assertTrue(failed("gt_flags pick stone --keep 1,two,3").startsWith("expected a cell: three whole numbers x y z, "
+                + "or x,y,z"));
+        assertTrue(failed("gt_flags pick stone --keep 1,2,3..4,5,6").startsWith("a cell is one x y z; a box or any "
                 + "other stretch of cells is an area"), "一片格子只有区域一种写法");
         assertTrue(failed("gt_flags pick stone --keep area:House").startsWith("area names are lowercase letters"));
         assertTrue(failed("gt_flags pick stone --keep area:ores/x3").startsWith("a part of an area is a letter"));
@@ -124,19 +145,19 @@ class ListFlagArgTypeTest {
         NumenTool tool = ToolRegistry.get("gt_flags_pick");
         assertEquals(new Gson().toJson(Schema.object()
                 .stringArray("blocks", "Which blocks.", 1)
-                .optionalIntArray("ids", "Which ones.", 0, 0)
-                .optionalStringArray("keep", "What to leave standing.")
-                .optionalStringArray("items", "What to take.")
-                .optionalInteger("count", "How many.", 1, 64)
+                .optionalIntArray("ids", "Which ones. Omit to take any.", 0, 0)
+                .optionalStringArray("keep", "What to leave standing. Omit to keep nothing.")
+                .optionalStringArray("items", "What to take. Omit to take everything.")
+                .optionalInteger("count", "How many. Omit to take one.", 1, 64)
                 .build()), new Gson().toJson(tool.parameterSchema()));
         assertEquals("""
                 gt_flags pick <blocks...> [--ids <integer...>] [--keep <block|cell|area...>] [--items <id...>] [--count <integer>]
                   Pick some things.
                   <blocks...> (id or #tag, e.g. minecraft:oak_log or #minecraft:logs; one or more, separated by spaces) — Which blocks.
-                  --ids <integer...> (integer; one or more, separated by spaces; optional) — Which ones.
-                  --keep <block|cell|area...> (block id, #tag, cell x,y,z or area:<name>; one or more, separated by spaces; optional) — What to leave standing.
-                  --items <id...> (id, e.g. minecraft:oak_log; one or more, separated by spaces; optional) — What to take.
-                  --count <integer> (integer 1-64; optional) — How many.
+                  --ids <integer...> (integer; one or more, separated by spaces; optional) — Which ones. Omit to take any.
+                  --keep <block|cell|area...> (block id, #tag, cell x,y,z or area:<name>; one or more, separated by spaces; optional) — What to leave standing. Omit to keep nothing.
+                  --items <id...> (id, e.g. minecraft:oak_log (minecraft: may be left out); one or more, separated by spaces; optional) — What to take. Omit to take everything.
+                  --count <integer> (integer 1-64; optional) — How many. Omit to take one.
                   Examples:
                     gt_flags pick iron_ore #minecraft:logs --ids 3 -4 --keep 1,2,3 area:house chest --count 2
                   Shortcut tool: gt_flags_pick.""", onClient("gt_flags pick --help").message());

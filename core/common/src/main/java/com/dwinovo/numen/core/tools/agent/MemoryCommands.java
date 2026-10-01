@@ -27,14 +27,19 @@ public final class MemoryCommands {
     static final String RECALL = "recall";
     static final String FORGET = "forget";
 
-    private static final Param<String> NEW_NAME = Param.required("name", ArgType.word(),
-            "Short kebab-case handle for the note, e.g. main-base; writing a name again replaces that note.");
-    /** 札记只有三种,索引里按它标出来。 */
-    private static final Param<String> TYPE = Param.required("type", ArgType.oneOf("owner", "world", "lesson"),
-            "What kind of note it is: owner = the owner's habits and wishes, world = places and things you have "
-                    + "seen, lesson = something you tried that did not work.");
+    /** 不写 {@code --type} 时记成哪一种:多数札记记的是看到的地方与东西。 */
+    private static final String DEFAULT_TYPE = "world";
+
     private static final Param<String> DESCRIPTION = Param.required("description", ArgType.string(),
-            "The one line you will see in your index: the fact itself, not a label.");
+            "The one line you will see in your index: the fact itself, not a label; quote it.");
+    private static final Param<String> NEW_NAME = Param.optional("name", ArgType.word(),
+            "Short kebab-case handle for the note, e.g. main-base; writing a name again replaces that note.")
+            .whenOmitted("give it the next free handle note-1, note-2, …");
+    /** 札记只有三种,索引里按它标出来。 */
+    private static final Param<String> TYPE = Param.optional("type", ArgType.oneOf("owner", "world", "lesson"),
+            "What kind of note it is: owner = the owner's habits and wishes, world = places and things you have "
+                    + "seen, lesson = something you tried that did not work.")
+            .whenOmitted("file it as " + DEFAULT_TYPE);
     private static final Param<String> CONTENT = Param.optional("content", ArgType.string(),
             "A longer body, read back with `memory recall`.")
             .whenOmitted("keep just the line, when it already says everything");
@@ -56,10 +61,10 @@ public final class MemoryCommands {
 
     private static void actions(CommandGroup memory) {
         memory.client(REMEMBER, "Write one note to your own memory; it comes back to you as a line in <memory>.",
-                MemoryCommands::remember, NEW_NAME, TYPE, DESCRIPTION, CONTENT)
-                .example(line(REMEMBER) + " main-base world \"main base -340,68,120, door faces east\"")
-                .example(line(REMEMBER) + " swamp-route lesson \"the swamp west of base is too deep to cross\" "
-                        + "--content \"tried twice on day 12; go around by the north ridge\"")
+                MemoryCommands::remember, DESCRIPTION, NEW_NAME, TYPE, CONTENT)
+                .example(line(REMEMBER) + " \"main base -340,68,120, door faces east\" --name main-base")
+                .example(line(REMEMBER) + " \"the swamp west of base is too deep to cross\" --name swamp-route "
+                        + "--type lesson --content \"tried twice on day 12; go around by the north ridge\"")
                 .note("It outlives this session. The description IS the index line, and for most notes the whole "
                         + "note: put the fact in it (\"main base -340,68,120\"), not a label (\"about the base\").")
                 .note("Use --content only when there is more worth reading later.")
@@ -81,7 +86,8 @@ public final class MemoryCommands {
     }
 
     private static void remember(ClientSource src, CommandArgs args) {
-        src.reply(NOTES.remember(src.companion(), args.get(NEW_NAME), args.get(DESCRIPTION), args.get(TYPE),
+        String type = args.get(TYPE) == null ? DEFAULT_TYPE : args.get(TYPE);
+        src.reply(NOTES.remember(src.companion(), args.get(NEW_NAME), args.get(DESCRIPTION), type,
                 args.get(CONTENT)));
     }
 

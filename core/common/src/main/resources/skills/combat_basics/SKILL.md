@@ -12,7 +12,7 @@ Load this support skill before a combat-heavy phase.
 Combat does not scan by mob type. First call `scan_entities`, select the exact entities you intend to attack, then pass 1-20 returned runtime integer IDs:
 
 ```
-fight attack --entity_ids 184 207 215
+fight attack 184 207 215
 ```
 
 Players and mobs use the same ID field. Never guess IDs and never include an entity you do not intend to attack. The task re-resolves moving targets every tick, paths across terrain when they are far away, and attacks only the authorized IDs.

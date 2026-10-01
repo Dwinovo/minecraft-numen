@@ -93,9 +93,11 @@ final class McpAccessPrompt {
                 allowed, needs the owner's consent, or is refused. With `into` it keeps them in a saved area \
                 (made on the spot when it does not exist yet) and each group gets an id like ores/g3; \
                 `work_dig` digs such an area: pass it as `place` (ores, or ores/g3) and it digs those cells \
-                that still hold what the scan saw, also after a restart; framed areas and coordinates (x y z) \
-                are dug whatever they hold. It works only within a few blocks of where the body stands and \
-                reports the rest with the lines that open the way there (`move_goto` with arrive `dig`).
+                that still hold what the scan saw, also after a restart; framed areas and coordinates ("x y z") \
+                are dug whatever they hold. It digs only what the hand reaches from where the body stands, \
+                never walks and never picks up: `move_goto` the same place with arrive `dig` first (it stands \
+                where the hand reaches the most of it), then `work_dig`, then the command `work collect` for \
+                the drops; `area has ores` says whether anything is left.
                 - It's survival mode — the tools do only what a real player can. No give, no setblock.
 
                 One more thing: talk to me in the language I'm writing to you in, even though these \

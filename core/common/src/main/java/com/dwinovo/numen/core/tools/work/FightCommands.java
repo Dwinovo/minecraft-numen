@@ -19,7 +19,8 @@ import com.dwinovo.numen.task.TaskResult;
 import net.minecraft.world.entity.Entity;
 
 /**
- * {@code fight}:打。一个动作 {@code attack},占身体、交任务槽。
+ * {@code fight}:打。一个动作 {@code attack},占身体、交任务槽。它是<b>工作流</b>,不是原子命令:除了每刻的控制(走近、挥、
+ * 换远程、躲爆炸),打哪几只、打完捡掉落这些决定也在里面,帮助与文档里写明(设计稿 {@code docs/shell.md} §三)。
  *
  * <p><b>不问模型用什么武器</b>——那要看走到跟前时还有多远、有没有视线、还剩几支箭,全是模型在派发那一刻看不到的东西。
  */
@@ -27,9 +28,9 @@ public final class FightCommands {
 
     static final String GROUP = "fight";
 
-    private static final Param<List<EntityRef>> ENTITY_IDS = Param.optional("entity_ids",
+    private static final Param<List<EntityRef>> ENTITY_IDS = Param.optionalPositional("entity",
             ArgType.list(ArgType.entity()), "The entities to fight, up to 20 distinct ones.")
-            .values("runtime entity ids from scan_entities")
+            .values("runtime entity ids from scan entities")
             .whenOmitted("fight off every hostile near you");
 
     private FightCommands() {}
@@ -40,10 +41,12 @@ public final class FightCommands {
     }
 
     private static void actions(CommandGroup fight) {
-        fight.server("attack", "Attack specific entities, or fight off every hostile near you.",
+        fight.server("attack", "Attack specific entities, or fight off every hostile near you (a workflow).",
                         FightCommands::attack, ENTITY_IDS)
-                .example("fight attack --entity_ids 184 207")
+                .example("fight attack 184 207")
                 .example("fight attack")
+                .note("A workflow, not a single step: it keeps closing in, swinging, shooting and dodging until the "
+                        + "fight is over.")
                 .note("Background work: returns at once; the end arrives as a task_finished event.")
                 .note("The body picks how: it closes in and swings when it can reach, shoots with a bow or "
                         + "crossbow when it cannot, keeps its distance from things that explode, and picks the "
@@ -80,7 +83,7 @@ public final class FightCommands {
             ids.add(e.getId());
         }
         if (found.isEmpty()) {
-            src.reply(TaskResult.fail("none of " + named + " is here — scan_entities first, ids do not "
+            src.reply(TaskResult.fail("none of " + named + " is here — `scan entities` first, ids do not "
                     + "survive restarts").toJson());
             return;
         }

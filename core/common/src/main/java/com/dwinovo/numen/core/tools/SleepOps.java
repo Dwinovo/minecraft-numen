@@ -41,14 +41,10 @@ public final class SleepOps {
     private static final int REACH_H = 3;
     private static final int REACH_V = 2;
 
-    /** @param x,y,z 指定哪张床:三个都给,或都不给(用手边够得着的那张) */
-    public String sleep(Integer x, Integer y, Integer z, NumenPlayer self) {
-        boolean given = x != null && y != null && z != null;
-        if (!given && (x != null || y != null || z != null)) {
-            return TaskResult.fail("a bed position needs all of --x --y --z; leave them all out to use the bed "
-                    + "within reach").toJson();
-        }
-        BlockPos bedHead = given ? headOf(self.level(), new BlockPos(x, y, z)) : nearestBedHeadInReach(self);
+    /** @param at 指定哪张床;为 null 时用手边够得着的那张 */
+    public String sleep(BlockPos at, NumenPlayer self) {
+        boolean given = at != null;
+        BlockPos bedHead = given ? headOf(self.level(), at) : nearestBedHeadInReach(self);
         if (bedHead == null) {
             return noBed(self, given);
         }
@@ -137,8 +133,8 @@ public final class SleepOps {
                 : "there is no bed within reach (you must be standing next to one)";
         String next = carried != null
                 ? " You are carrying " + carried + " — place it on flat ground and try again."
-                : " Use scan_blocks with #minecraft:beds to find one, move_goto its coordinates with arrive:use,"
-                        + " then run use sleep again.";
+                : " `scan blocks #minecraft:beds` finds one; `move goto <x y z> --arrive use` with its coordinates,"
+                        + " then `use sleep` again.";
         return TaskResult.fail(base + "." + next).toJson();
     }
 

@@ -270,7 +270,7 @@ public class CommandGameTests {
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 2, "no diamonds in the inventory");
             helper.assertTrue(!asked[0], "an allowed command still asked the owner");
             helper.assertTrue(typo.task() == null && !typo.succeeded()
-                            && typo.reply().contains("Usage: /give <targets> <item> [<count>]"),
+                            && typo.reply().contains("usage: /give <targets> <item> [<count>]"),
                     "a bad argument does not come back with the usage: " + typo.reply());
             cleanUp(helper, companion, owner);
         });
@@ -705,12 +705,12 @@ public class CommandGameTests {
 
         helper.assertTrue(!item.succeeded() && item.task() == null
                         && itemSaid.contains("minecraft:dimond") && itemSaid.contains("<--[HERE]")
-                        && itemSaid.contains("\nUsage: /give <targets> <item> [<count>]")
-                        && itemSaid.endsWith("\nDid you mean: minecraft:diamond?"),
+                        && itemSaid.contains("\nusage: /give <targets> <item> [<count>]")
+                        && itemSaid.endsWith("\nhint: Did you mean: minecraft:diamond?"),
                 "the item typo does not end with the nearest item: " + itemSaid);
         helper.assertTrue(!action.succeeded() && action.task() == null
                         && actionSaid.contains("<--[HERE]") && actionSaid.contains("gt_long linger <ticks>")
-                        && actionSaid.endsWith("\nDid you mean: linger?"),
+                        && actionSaid.endsWith("\nhint: Did you mean: linger?"),
                 "the action typo does not end with the nearest action: " + actionSaid);
         cleanUp(helper, companion, null);
         helper.succeed();

@@ -45,7 +45,7 @@ public class ContainerGameTests {
         // 动作放 thenExecute、断言放 thenWaitUntil:原版序列里 thenExecute 的断言失败后,后面的步骤照样在同一刻
         // 跑下去,报出来的是最后一个失败;等在 thenWaitUntil 里,哪一步没过就停在哪一步、报哪一步
         steps(helper)
-                .thenExecute(() -> step.set(command(companion, "use block right " + xyz(chest))))
+                .thenExecute(() -> step.set(command(companion, "use block " + xyz(chest))))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,
                         "the chest did not open: " + step.get().outcome()))
@@ -112,7 +112,7 @@ public class ContainerGameTests {
         AtomicReference<ToolRun> step = new AtomicReference<>();
 
         steps(helper)
-                .thenExecute(() -> step.set(command(companion, "use block right " + xyz(chest))))
+                .thenExecute(() -> step.set(command(companion, "use block " + xyz(chest))))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,
                         "the chest did not open: " + step.get().outcome()))
@@ -138,7 +138,7 @@ public class ContainerGameTests {
         AtomicReference<ToolRun> step = new AtomicReference<>();
 
         steps(helper)
-                .thenExecute(() -> step.set(command(companion, "use block right " + xyz(chest))))
+                .thenExecute(() -> step.set(command(companion, "use block " + xyz(chest))))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,
                         "the chest did not open: " + step.get().outcome()))

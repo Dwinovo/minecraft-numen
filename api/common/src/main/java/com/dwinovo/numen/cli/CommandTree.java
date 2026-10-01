@@ -2,14 +2,12 @@ package com.dwinovo.numen.cli;
 
 import com.dwinovo.numen.task.TaskResult;
 import com.mojang.brigadier.Command;
-import com.mojang.brigadier.LiteralMessage;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.ParseResults;
 import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
 
 import java.util.List;
 import java.util.Map;
@@ -30,15 +28,9 @@ import java.util.function.Supplier;
  *
  * <p>树上的源对象就是 Numen 自己的来源({@link ClientSource} 或 {@link ServerSource}),处理函数直接拿到它。
  *
- * <p>一个参数的值可以是本组的另一行命令({@link ArgType#command}):它由这棵树自己读({@link #lines}),和外面那一行同一个
- * 解析器。
- *
  * @param <S> 这一侧的来源
  */
 final class CommandTree<S extends CommandSource> {
-
-    private static final DynamicCommandExceptionType WRONG_LINE = new DynamicCommandExceptionType(
-            problem -> new LiteralMessage(String.valueOf(problem)));
 
     private final CommandDispatcher<S> dispatcher = new CommandDispatcher<>();
     private final Predicate<Action> runs;
@@ -79,8 +71,8 @@ final class CommandTree<S extends CommandSource> {
     }
 
     /**
-     * 一个动作:名字下挂 {@code --help};在这一侧执行的,再把必填参数一格一格往下接,最后一格可执行;有可选参数的话,
-     * 可执行的那一格下面再挂一格标志尾巴,同样可执行。
+     * 一个动作:名字下挂 {@code --help};在这一侧执行的,再把位置参数一格一格往下接,最后一格可执行;最后一个位置参数可以不写的,
+     * 它前面那一格也可执行。可执行的每一格下面再挂一格标志尾巴(有标志的话),同样可执行。
      */
     private LiteralArgumentBuilder<S> action(Action action) {
         LiteralArgumentBuilder<S> node = LiteralArgumentBuilder.literal(action.name());
@@ -91,15 +83,22 @@ final class CommandTree<S extends CommandSource> {
         if (!runs.test(action)) {
             return node;
         }
-        List<Param<?>> required = action.positionals();
-        if (required.isEmpty()) {
+        List<Param<?>> positionals = action.positionals();
+        if (positionals.isEmpty()) {
             executable(node, action);
             return node;
         }
-        GroupLines lines = lines(action.group());
-        ArgumentBuilder<S, ?> tip = executable(argument(required.get(required.size() - 1), lines), action);
-        for (int i = required.size() - 2; i >= 0; i--) {
-            tip = argument(required.get(i), lines).then(tip);
+        int last = positionals.size() - 1;
+        ArgumentBuilder<S, ?> tip = executable(argument(positionals.get(last)), action);
+        for (int i = last - 1; i >= 0; i--) {
+            RequiredArgumentBuilder<S, ?> before = argument(positionals.get(i));
+            if (i == last - 1 && !positionals.get(last).required()) {
+                executable(before, action);
+            }
+            tip = before.then(tip);
+        }
+        if (last == 0 && !positionals.get(0).required()) {
+            executable(node, action);
         }
         node.then(tip);
         return node;
@@ -112,32 +111,16 @@ final class CommandTree<S extends CommandSource> {
             return Command.SINGLE_SUCCESS;
         };
         builder.executes(run);
-        List<Param<?>> optional = action.params().stream().filter(p -> !p.required()).toList();
-        if (!optional.isEmpty()) {
+        List<Param<?>> flags = action.params().stream().filter(p -> !p.positional()).toList();
+        if (!flags.isEmpty()) {
             builder.then(RequiredArgumentBuilder.<S, Map<String, Object>>argument(
-                    FlagsArgument.NODE, new FlagsArgument(optional)).executes(run));
+                    FlagsArgument.NODE, new FlagsArgument(flags)).executes(run));
         }
         return builder;
     }
 
-    private <T> RequiredArgumentBuilder<S, T> argument(Param<T> param, GroupLines lines) {
-        return RequiredArgumentBuilder.argument(param.name(), param.type().brigadierIn(lines));
-    }
-
-    /**
-     * 在这棵树上读 {@code group} 的一行命令(不带组名):整行要走到可执行的一格,写不通的说法和单独执行这一行时一样
-     * ({@link NumenCli#problem})。解析不用来源:树上的节点不设 {@code requires}。
-     */
-    private GroupLines lines(CommandGroup group) {
-        return afterGroup -> {
-            String line = group.name() + " " + afterGroup;
-            ParseResults<S> parse = dispatcher.parse(line, null);
-            String problem = NumenCli.problem(parse, line);
-            if (problem != null) {
-                throw WRONG_LINE.create(problem);
-            }
-            return NumenCli.reading(parse, line, name -> name.equals(group.name()) ? group : null);
-        };
+    private <T> RequiredArgumentBuilder<S, T> argument(Param<T> param) {
+        return RequiredArgumentBuilder.argument(param.name(), param.type().brigadier());
     }
 
     /** 一个显示列表的帮助节点:不带标志是第一页,{@code --page N} 翻页;页码不存在时抛出,附着用法回去。 */

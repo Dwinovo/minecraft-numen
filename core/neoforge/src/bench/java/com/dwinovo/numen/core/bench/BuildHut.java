@@ -221,10 +221,10 @@ public final class BuildHut implements Scenario {
         int y = c.getY();
         BlockPos door = scene.pos(CORNER.offset(2, 0, 4));
         return List.of(
-                "build layer " + x + " " + y + " " + z + " ##### #...# #...# #...# ##.## --block oak_planks --up_to "
-                        + (y + 1),
-                "build layer " + x + " " + (y + 2) + " " + z + " ##### #...# #...# #...# ##### --block oak_planks",
-                "build layer " + x + " " + (y + 3) + " " + z + " ##### ##### ##### ##### ##### --block oak_planks",
-                "build set oak_door[facing=south] " + door.getX() + " " + door.getY() + " " + door.getZ());
+                "build layer ##### #...# #...# #...# ##.## --at " + x + " " + y + " " + z
+                        + " --block oak_planks --up-to " + (y + 1),
+                "build layer ##### #...# #...# #...# ##### --at " + x + " " + (y + 2) + " " + z + " --block oak_planks",
+                "build layer ##### ##### ##### ##### ##### --at " + x + " " + (y + 3) + " " + z + " --block oak_planks",
+                "build set " + door.getX() + " " + door.getY() + " " + door.getZ() + " --block oak_door[facing=south]");
     }
 }

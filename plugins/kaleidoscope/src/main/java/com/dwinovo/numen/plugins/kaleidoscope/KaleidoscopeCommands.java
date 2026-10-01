@@ -40,14 +40,17 @@ final class KaleidoscopeCommands {
     private static final Param<String> COOKWARE = Param.required("cookware", ArgType.word(), "Which cookware.")
             .values(Arrays.stream(Cookware.values()).map(Cookware::id).collect(Collectors.joining(" or ")));
     private static final Param<Boolean> HAVE_ONLY = Param.optional("have_only", ArgType.bool(),
-            "true = only dishes you can cook from your inventory right now.")
+            "Only dishes you can cook from your inventory right now.")
             .whenOmitted("list dishes whether you have the ingredients or not");
     private static final Param<String> NAME = Param.optional("name", ArgType.string(),
             "Only recipes whose recipe or dish id contains this, e.g. rice.")
             .whenOmitted("match every recipe");
-    private static final Param<Integer> X = Param.required("x", ArgType.integer(), "Block X of the cookware.");
-    private static final Param<Integer> Y = Param.required("y", ArgType.integer(), "Block Y of the cookware.");
-    private static final Param<Integer> Z = Param.required("z", ArgType.integer(), "Block Z of the cookware.");
+    /** 找手边的锅只翻她眼睛周围这么远:交互距离再多一格。 */
+    private static final int REACH_SPAN = 6;
+
+    private static final Param<BlockPos> COOKER = Param.required("cell", ArgType.cell(), "The cookware's cell.");
+    private static final Param<BlockPos> COOK_AT = Param.optional("at", ArgType.cell(), "The cookware's cell.")
+            .whenOmitted("cook on the pot or stockpot within your reach (the nearest one)");
     private static final Param<ResourceLocation> RECIPE = Param.required("recipe", ArgType.id(), "The dish to cook.")
             .values("a recipe id exactly as " + line(RECIPES) + " prints it");
 
@@ -67,21 +70,22 @@ final class KaleidoscopeCommands {
         kc.server(RECIPES, "What the cookware can cook: recipe id, ingredients with portions, carrier, kitchenware, "
                         + "time.",
                 KaleidoscopeCommands::recipes, COOKWARE, HAVE_ONLY, NAME, Listing.PAGE)
-                .example(line(RECIPES) + " pot --have_only true")
+                .example(line(RECIPES) + " pot --have-only")
                 .example(line(RECIPES) + " stockpot --name rice")
                 .note("Read-only. One recipe per line; a pot knows a few hundred, so the list comes in pages — "
-                        + "narrow it with --name or --have_only instead of paging through all of them.")
+                        + "narrow it with --name or --have-only instead of paging through all of them.")
                 .note("Flex recipes list THIS world's golden ratio; every save has its own.")
                 .seeAlso(line(INSPECT), line(COOK));
         kc.server(INSPECT, "Read one pot or stockpot from any distance: stage, contents, heat, ticks left, what it "
                         + "waits for.",
-                KaleidoscopeCommands::inspect, X, Y, Z)
+                KaleidoscopeCommands::inspect, COOKER)
                 .example(line(INSPECT) + " 120 64 -35")
                 .note("Read-only. Check a cookware is free before you cook on it.")
                 .seeAlso(line(COOK));
-        kc.server(COOK, "Cook one dish start to finish on the cookware at x y z.",
-                KaleidoscopeCommands::cook, X, Y, Z, RECIPE)
-                .example(line(COOK) + " 120 64 -35 kaleidoscope_cookery:flex_pot/braised_beef")
+        kc.server(COOK, "Cook one dish start to finish on a pot or stockpot within your reach.",
+                KaleidoscopeCommands::cook, RECIPE, COOK_AT)
+                .example(line(COOK) + " kaleidoscope_cookery:flex_pot/braised_beef")
+                .example(line(COOK) + " kaleidoscope_cookery:flex_pot/braised_beef --at 120 64 -35")
                 .note("Background work: the result arrives as a task_finished event. One dish at a time.")
                 .note("It does not walk: stand within reach of the cookware first. Out of reach, no pot or "
                         + "stockpot there, an unknown recipe or a cookware already in use is refused at once with the "
@@ -130,7 +134,7 @@ final class KaleidoscopeCommands {
     }
 
     private static void inspect(ServerSource src, CommandArgs args) {
-        BlockPos pos = new BlockPos(args.get(X), args.get(Y), args.get(Z));
+        BlockPos pos = args.get(COOKER);
         Cooker cooker = Cooker.at(src.companion().serverLevel(), pos);
         if (cooker == null) {
             src.reply(TaskResult.fail("nothing at " + Cooker.where(pos) + " is a pot or a stockpot"
@@ -140,9 +144,35 @@ final class KaleidoscopeCommands {
         src.reply(TaskResult.ok(cooker.kind().id() + " at " + Cooker.where(pos), cooker.report()).toJson());
     }
 
-    /** 派活式:受理即回执,收尾走 {@code task_finished}——一锅汤能炖好几分钟,回合挂着等它等于把对话冻住。 */
+    /**
+     * 派活式:受理即回执,收尾走 {@code task_finished}——一锅汤能炖好几分钟,回合挂着等它等于把对话冻住。没写 {@code --at} 就是
+     * 她手边够得着的那口锅(最近的);重启后重放照这一刻认下的那一格。
+     */
     private static void cook(ServerSource src, CommandArgs args) {
-        TaskDispatch.setTask(src, new CookRecord(src, new BlockPos(args.get(X), args.get(Y), args.get(Z)),
-                args.get(RECIPE)));
+        BlockPos at = args.get(COOK_AT) != null ? args.get(COOK_AT) : withinReach(src);
+        if (at == null) {
+            return;
+        }
+        TaskDispatch.setTask(src.replayedWith(args.with(COOK_AT, at)), new CookRecord(src, at, args.get(RECIPE)));
+    }
+
+    /** 她够得着的锅里离眼睛最近的那一口;一口都没有时回执已经写好,返回 null。 */
+    private static BlockPos withinReach(ServerSource src) {
+        var her = src.companion();
+        ServerLevel level = her.serverLevel();
+        BlockPos eye = BlockPos.containing(her.getEyePosition());
+        BlockPos best = null;
+        for (BlockPos pos : BlockPos.betweenClosed(eye.offset(-REACH_SPAN, -REACH_SPAN, -REACH_SPAN),
+                eye.offset(REACH_SPAN, REACH_SPAN, REACH_SPAN))) {
+            if (her.canInteractWithBlock(pos, 0.0) && Cooker.at(level, pos) != null
+                    && (best == null || pos.distSqr(eye) < best.distSqr(eye))) {
+                best = pos.immutable();
+            }
+        }
+        if (best == null) {
+            src.reply(TaskResult.fail("no pot or stockpot is within my reach. `move goto <x y z> --arrive use` with "
+                    + "its coordinates first, or give them with --at.").toJson());
+        }
+        return best;
     }
 }

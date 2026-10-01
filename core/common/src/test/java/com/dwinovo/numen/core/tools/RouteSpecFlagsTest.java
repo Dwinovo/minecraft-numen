@@ -86,7 +86,8 @@ class RouteSpecFlagsTest {
         String reply = run(flags);
         JsonObject result = JsonParser.parseString(reply).getAsJsonObject();
         assertFalse(result.get("success").getAsBoolean(), flags + " should fail");
-        return result.get("message").getAsString();
+        String message = result.get("message").getAsString();
+        return message.startsWith("error: ") ? message.substring("error: ".length()) : message;
     }
 
     private static String run(String flags) {
@@ -130,7 +131,7 @@ class RouteSpecFlagsTest {
     @Test
     void everyFlagLandsOnItsField() {
         RouteSpec s = spec("--alter natural --avoid water door --allow trigger --penalty_place 5 --penalty_break 7.5 "
-                + "--penalty_jump 9 --penalty_wade 0 --parkour true --max_fall 6 --alter_budget 4");
+                + "--penalty_jump 9 --penalty_wade 0 --parkour --max_fall 6 --alter_budget 4");
         assertEquals(RouteSpec.Alter.NATURAL, s.alter());
         assertEquals(RouteSpec.Alter.ANY, spec("--alter any").alter());
         assertTrue(s.excludes(Kind.WATER));
@@ -198,7 +199,7 @@ class RouteSpecFlagsTest {
     @Test
     void missingAreasAreNamedWithWhatThereIs() {
         String gone = error("--avoid_break area:shed");
-        assertTrue(gone.contains("--avoid_break area:shed: there is no area named shed; your owner's areas are camp, "
+        assertTrue(gone.contains("--avoid-break area:shed: there is no area named shed; your owner's areas are camp, "
                 + "farm, house, portal"), gone);
         String noPart = error("--avoid area:house/b7");
         assertTrue(noPart.contains("area house has no part b7; its parts are b1, b2"), noPart);
@@ -218,12 +219,12 @@ class RouteSpecFlagsTest {
                 "类型名照帮助里写的小写");
         assertTrue(error("--allow lava").contains("expected one of flowing_water, trigger, fragile"),
                 "伤身的种类放不开");
-        assertTrue(error("--penalty_jump -1").contains("--penalty_jump must be between 0 and 1000"));
+        assertTrue(error("--penalty_jump -1").contains("--penalty-jump must be between 0 and 1000"));
         assertTrue(error("--penalty_jump high").startsWith("Expected double"));
-        assertTrue(error("--avoid_break 1,2").startsWith("expected a cell x,y,z in whole numbers"));
-        assertTrue(error("--avoid_step 1,two,3").contains("in whole numbers"));
-        assertTrue(error("--max_fall -2").contains("--max_fall must be 0 or more"));
-        assertTrue(error("--parkour yes").startsWith("Invalid bool"));
+        assertTrue(error("--avoid_break 1,2").startsWith("expected a cell: three whole numbers x y z, or x,y,z"));
+        assertTrue(error("--avoid_step 1,two,3").contains("three whole numbers"));
+        assertTrue(error("--max_fall -2").contains("--max-fall must be 0 or more"));
+        assertTrue(error("--parkour yes").startsWith("--parkour is a switch and takes no value"));
 
         List<String> replies = new ArrayList<>();
         ToolRegistry.get("gt_route_plan").serve("test-call",
@@ -258,8 +259,8 @@ class RouteSpecFlagsTest {
 
     @Test
     void unknownBlocksAndEmptyTagsAreErrors() {
-        assertTrue(error("--avoid_break minecraft:no_such_block").contains("--avoid_break: unknown block"));
-        assertTrue(error("--avoid_step #minecraft:no_such_tag").contains("--avoid_step: tag '#minecraft:no_such_tag' "
+        assertTrue(error("--avoid_break minecraft:no_such_block").contains("--avoid-break: unknown block"));
+        assertTrue(error("--avoid_step #minecraft:no_such_tag").contains("--avoid-step: tag '#minecraft:no_such_tag' "
                 + "has no blocks"));
     }
 }

@@ -534,7 +534,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         return "timed out " + String.format("%.1f", repDistance()) + " blocks from target (now at " + here(gy) + "); "
                 + (stalled
                         ? "progress had stopped — likely blocked; move go " + route.name() + " tries again from here,"
-                                + " or add a waypoint (route via " + route.name() + ") or scan_blocks for a way through."
+                                + " or add a waypoint (route via " + route.name() + ") or `scan blocks` for a way through."
                         : "the journey was still progressing and simply exceeded its check-in budget; move go "
                                 + route.name() + " goes on from here.");
     }

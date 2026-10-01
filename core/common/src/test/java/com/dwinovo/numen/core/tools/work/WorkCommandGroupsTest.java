@@ -53,10 +53,10 @@ class WorkCommandGroupsTest {
     void moveGotoLaysTheRouteFieldsFlatAndWorkDigTakesNone() {
         List<String> route = List.of("alter", "avoid", "allow", "penalty_place", "penalty_break", "penalty_jump",
                 "penalty_wade", "avoid_break", "avoid_place", "avoid_step", "parkour", "max_fall", "alter_budget");
-        List<String> gotoFields = new ArrayList<>(List.of("x", "y", "z", "area", "arrive", "near"));
+        List<String> gotoFields = new ArrayList<>(List.of("place", "arrive", "near"));
         gotoFields.addAll(route);
         assertEquals(gotoFields, fields("move_goto"));
-        assertEquals(List.of(), required("move_goto"));
+        assertEquals(List.of("place"), required("move_goto"), "去处是 move goto 唯一的位置参数");
         assertEquals(List.of("place", "count"), fields("work_dig"));
         assertEquals(List.of("place"), required("work_dig"));
         for (String gone : List.of("work_mine", "follow", "plan_route", "collect_items", "fish", "attack", "blueprint",
@@ -73,8 +73,8 @@ class WorkCommandGroupsTest {
     void buildFitsOnOnePageAndThrowawayIsItsOwnGroup() {
         String build = run("build --help").get("message").getAsString();
         List<String> actions = build.lines().filter(l -> l.startsWith("  build ")).map(l -> l.split(" ")[3]).toList();
-        assertEquals(List.of("set", "place", "line", "layer", "cylinder", "sphere", "copy", "new", "show", "step",
-                "insert", "drop", "designs", "delete", "at", "built"), actions, build);
+        assertEquals(List.of("set", "place", "line", "layer", "cylinder", "sphere", "copy", "new", "show", "drop",
+                "designs", "delete", "at", "built"), actions, build);
         assertTrue(!build.contains("(page 1 of") && !build.contains("scaffold") && !build.contains("throwaway"), build);
         String throwaway = run("throwaway --help").get("message").getAsString();
         assertEquals(List.of("add", "remove", "set", "clear"), throwaway.lines()
@@ -103,19 +103,45 @@ class WorkCommandGroupsTest {
             assertTrue(help.get("message").getAsString().startsWith(group + ": "), help.toString());
         }
         String moveHelp = run("move --help").get("message").getAsString();
-        assertTrue(moveHelp.contains("\n  move goto [--x <integer>] [--y <integer>] [--z <integer>] [--area <area>] "
-                + "[--arrive <at|use|near|dig>] [--near <integer>] [route flags] — "), "组帮助里路线标志整组写成一格: " + moveHelp);
-        assertTrue(!moveHelp.contains("--avoid_break"), moveHelp);
+        assertTrue(moveHelp.contains("\n  move goto <place> [--arrive <at|use|near|dig>] [--near <integer>] [route flags] — "),
+                "组帮助里路线标志整组写成一格: " + moveHelp);
+        assertTrue(!moveHelp.contains("--avoid-break"), moveHelp);
         String gotoHelp = run("move goto --help").get("message").getAsString();
-        assertTrue(gotoHelp.startsWith("move goto [--x <integer>] [--y <integer>] [--z <integer>] [--area <area>] "
-                + "[--arrive <at|use|near|dig>] [--near <integer>] [route flags]\n"), gotoHelp);
+        assertTrue(gotoHelp.startsWith("move goto <place> [--arrive <at|use|near|dig>] [--near <integer>] "
+                + "[route flags]\n"), gotoHelp);
         assertTrue(gotoHelp.contains("\n  Route flags:\n    --alter <none|natural|any> "), gotoHelp);
-        assertTrue(gotoHelp.contains("--avoid_break <block|cell|area...>"), gotoHelp);
+        assertTrue(gotoHelp.contains("--avoid-break <block|cell|area...>"), gotoHelp);
         assertTrue(gotoHelp.endsWith("Shortcut tool: move_goto."), gotoHelp);
         String digHelp = run("work dig --help").get("message").getAsString();
         assertTrue(digHelp.startsWith("work dig <place...> [--count <integer>]\n"), digHelp);
         assertTrue(digHelp.endsWith("Shortcut tool: work_dig."), digHelp);
         JsonObject mine = run("work mine ores");
         assertTrue(!mine.get("success").getAsBoolean(), "work mine 删了,没有别名: " + mine);
+    }
+
+    /**
+     * 基线里最常写错的几行,照 bash 的习惯写就读得通:实体是位置参数、点一格默认右键、丢东西默认全丢、挖的位置是一整串坐标;
+     * 读出来是什么由命令树说(只读不执行,{@link com.dwinovo.numen.cli.NumenCli#read})。
+     */
+    @Test
+    void theLinesSheWritesTheBashWayRead() {
+        for (String line : List.of("fight attack 27 26", "fight attack", "use block 120 64 -35",
+                "use block 120,64,-35 --left --hold 1.5", "use entity 812 --sneak", "inv drop cobblestone",
+                "inv drop cobblestone --count 32", "work dig 120 64 -35", "work dig ores/g3 120 12 -35 --count 4",
+                "move goto ores --arrive dig", "move goto 120 -35", "move follow 184", "area parts ores",
+                "area has ores/g3", "area drop ores/g2", "area grow buffer house", "scan blocks iron_ore",
+                "scan entities", "scan block 1 2 3", "task timer \"check the furnace\" --after 90",
+                "route new back", "route drop home", "build set 1 2 3 --block stone",
+                "build layer ### --at 0 1 0 --block oak_planks --into house --step 2", "build drop house/4",
+                "build at house --at 100 64 -20", "memory remember \"main base -340,68,120\"")) {
+            assertTrue(com.dwinovo.numen.cli.NumenCli.read(line).runnable(), line);
+        }
+        com.dwinovo.numen.cli.NumenCli.Reading click = com.dwinovo.numen.cli.NumenCli.read("use block 120 64 -35");
+        assertEquals("use block", click.path());
+        for (String wrong : List.of("fight attack --entity_ids 27 26", "use block right 120 64 -35",
+                "inv drop cobblestone 32", "use block 120 64 -35 --sneak true")) {
+            org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                    () -> com.dwinovo.numen.cli.NumenCli.read(wrong), "旧写法不再收: " + wrong);
+        }
     }
 }

@@ -106,8 +106,8 @@ final class CookTask implements Task {
             double away = Math.sqrt(cook.distanceToSqr(r.pos.getX() + 0.5, r.pos.getY() + 0.5, r.pos.getZ() + 0.5));
             return "the " + cooker.kind().id() + " at " + Cooker.where(r.pos) + " is "
                     + String.format("%.1f", away) + " blocks away — out of working reach."
-                    + " move_goto x:" + r.pos.getX() + " y:" + r.pos.getY() + " z:" + r.pos.getZ()
-                    + " arrive:use first (it stands where the pot is in sight and in reach), then run "
+                    + " `move goto " + r.pos.getX() + " " + r.pos.getY() + " " + r.pos.getZ()
+                    + " --arrive use` first (it stands where the pot is in sight and in reach), then run "
                     + KaleidoscopeCommands.line(KaleidoscopeCommands.COOK) + " again.";
         }
         return null;

@@ -14,7 +14,7 @@ import java.util.Map;
 public record AreaRef(String name, String part) {
 
     /**
-     * 和方块、格子种类并列写在一串里时的记号:{@code area:house}、{@code area:ores/g3}(路线标志 {@code --avoid_break area:house}、
+     * 和方块、格子种类并列写在一串里时的记号:{@code area:house}、{@code area:ores/g3}(路线标志 {@code --avoid-break area:house}、
      * {@code --avoid area:farm})。
      */
     public static final String MARK = "area:";

@@ -28,12 +28,12 @@ Phase 3 of the dragon route. Eyes of ender need blaze powder; `locate structure`
 ## Farming loop
 
 1. Find the spawner room (`scan_blocks(spawner)` inside the fortress helps).
-2. `scan_entities` → `fight attack --entity_ids 184 207` (the ids it listed) in small batches.
+2. `scan_entities` → `fight attack 184 207` (the ids it listed) in small batches.
 3. `work collect` — rods drop on the floor; grab them before they burn in nearby lava... rods are fire-immune items, but lava destroys them. Don't let drops land in lava.
 4. `status_self` between batches: HP ≤ 8 → `move_goto` out of spawner range, eat, return.
 5. Repeat until `status_self` shows ≥7 rods. Drop rate is 0–1 per kill (avg 0.5) → expect **~14 kills**, more if unlucky.
 
-**Do not mine the spawner** — you need it spawning blazes until the count is met. (You *may* `build place` a block or two to wall off excess sight-lines if too many blazes volley at once.)
+**Do not mine the spawner** — you need it spawning blazes until the count is met. (You *may* `build place 120 64 -35 --block cobblestone` (with the cell's coordinates) a block or two to wall off excess sight-lines if too many blazes volley at once.)
 
 ## Hazards
 

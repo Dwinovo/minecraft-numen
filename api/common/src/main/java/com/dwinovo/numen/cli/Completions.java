@@ -70,7 +70,7 @@ final class Completions {
     }
 
     /**
-     * 一行写不通时接在报错与那一层用法后面的一句:出错那个位置上合法的候选里,和她写的那个词最接近的几个;
+     * 一行写不通时 {@code hint:} 那一句:出错那个位置上合法的候选里,和她写的那个词最接近的几个;
      * 一个都不够近,或者出错时这一行已经读完(缺东西,不是写错),是空串。
      */
     static <S> String didYouMean(ParseResults<S> parse) {
@@ -83,7 +83,7 @@ final class Completions {
         int end = line.indexOf(' ', at);
         String written = line.substring(at, end < 0 ? line.length() : end);
         List<String> near = nearest(written, texts(at(parse, at)));
-        return near.isEmpty() ? "" : "\n" + DID_YOU_MEAN + String.join(", ", near) + "?";
+        return near.isEmpty() ? "" : DID_YOU_MEAN + String.join(", ", near) + "?";
     }
 
     /**

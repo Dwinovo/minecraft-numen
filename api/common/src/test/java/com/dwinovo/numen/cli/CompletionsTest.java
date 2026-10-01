@@ -64,6 +64,6 @@ class CompletionsTest {
                 "她用不了 give,就不指给她");
 
         dispatcher.register(LiteralArgumentBuilder.literal("gift").executes(ctx -> 1));
-        assertEquals("\nDid you mean: gift?", Completions.didYouMean(dispatcher.parse("gfit", new Object())));
+        assertEquals("Did you mean: gift?", Completions.didYouMean(dispatcher.parse("gfit", new Object())));
     }
 }

@@ -193,7 +193,7 @@ public final class RuntimeState {
             return "";
         }
         return "<riding>" + xml(snapshot.vehicleType()) + " (entity id " + snapshot.vehicleId()
-                + "). move_goto pilots a boat over water toward the target; any action that needs "
+                + "). move goto pilots a boat over water toward the target; any action that needs "
                 + "walking steps off by itself — no need to click the vehicle again.</riding>";
     }
 

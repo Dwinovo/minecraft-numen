@@ -121,11 +121,27 @@ List<Todo> todos) {
 
     // ---- 札记 ----
 
-    /** 记一条。天数由札记本盖,回执只在条数到顶时多说一句——删哪条是她的事。 */
+    /** 不点名的札记用的名字的前缀:{@code note-1}、{@code note-2}…… */
+    private static final String UNNAMED = "note-";
+
+    /**
+     * 记一条。天数由札记本盖,回执只在条数到顶时多说一句——删哪条是她的事。{@code name} 为 null 时用还没用过的
+     * {@code note-N} 里最小的那个。
+     */
     public String remember(UUID companion, String name, String description, String type,
                            String content) {
         NoteBook book = NoteBook.of(companion);
-        NoteBook.Note note = book.write(name, description, type, content);
+        String chosen = name;
+        if (chosen == null) {
+            java.util.Set<String> taken = new java.util.HashSet<>();
+            book.index().forEach(n -> taken.add(n.name()));
+            int k = 1;
+            while (taken.contains(UNNAMED + k)) {
+                k++;
+            }
+            chosen = UNNAMED + k;
+        }
+        NoteBook.Note note = book.write(chosen, description, type, content);
         int count = book.index().size();
         JsonObject o = new JsonObject();
         o.addProperty("success", true);

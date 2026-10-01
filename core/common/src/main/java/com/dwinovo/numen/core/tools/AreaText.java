@@ -36,9 +36,6 @@ public final class AreaText {
      * 二三十到五十团、两三千 token,读得完;要更远的翻页(只是看时)或 {@code area show}(扫进区域后)。
      */
     public static final int PAGE_BYTES = 8 * 1024;
-    /** 盒子两角之间的分隔:{@code x1,y1,z1..x2,y2,z2}。 */
-    public static final String BOX_SEPARATOR = "..";
-
     private AreaText() {}
 
     /**
@@ -110,9 +107,9 @@ public final class AreaText {
                 + (box == null ? "" : ", box " + box(box));
     }
 
-    /** 包围盒写成 {@code x1,y1,z1..x2,y2,z2}:{@code area add --box} 收的就是这个写法。 */
+    /** 包围盒写成两个对角 {@code x1,y1,z1 x2,y2,z2}:{@code area add --box} 照抄就收。 */
     public static String box(BoundingBox box) {
-        return box.minX() + "," + box.minY() + "," + box.minZ() + BOX_SEPARATOR + box.maxX() + "," + box.maxY() + ","
+        return box.minX() + "," + box.minY() + "," + box.minZ() + " " + box.maxX() + "," + box.maxY() + ","
                 + box.maxZ();
     }
 

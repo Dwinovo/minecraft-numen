@@ -3,6 +3,7 @@ package com.dwinovo.numen.core.route;
 import java.util.List;
 
 import com.dwinovo.numen.area.AreaRef;
+import com.dwinovo.numen.cli.Place;
 import com.dwinovo.numen.core.task.move.Destination;
 import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
@@ -105,30 +106,27 @@ class RouteDataTest {
     }
 
     /**
-     * 一处的写法({@code route new --to}、{@code route via}):数是坐标——三个一格、两个一处、一个一个高度;一个名字是一块区域,
-     * 与坐标不能同时给;别的写法当场说能写什么。
+     * 一处({@link Place},写法在命令行一处读)加到达方式编成去处:坐标三个一格、两个一列、一个一个高度;区域名是一块区域。
+     * {@code --arrive near} 不写 {@code --near} 停在 {@link Destination#DEFAULT_NEAR} 格内;形状不成立的当场说。
      */
     @Test
-    void aPlaceIsCoordinatesOrAnArea() {
-        assertEquals(HOME, Destination.Stop.of(List.of("120", "64", "-35"), null, null));
-        assertEquals(HILL, Destination.Stop.of(List.of("90", "-10"), "at", null));
+    void aPlaceAndAnArrivalMakeAStop() {
+        assertEquals(HOME, Destination.Stop.of(new Place(120, 64, -35, null), null, null));
+        assertEquals(HILL, Destination.Stop.of(new Place(90, null, -10, null), "at", null));
         assertEquals(new Destination.Stop(null, 12, null, Destination.Arrive.AT, null),
-                Destination.Stop.of(List.of("12"), null, null));
-        assertEquals(ORES, Destination.Stop.of(List.of("ores/g3"), "near", 3));
-        Destination.Stop chests = Destination.Stop.of(List.of("chests"), "use", null);
+                Destination.Stop.of(new Place(null, 12, null, null), null, null));
+        assertEquals(ORES, Destination.Stop.of(Place.area(AreaRef.parse("ores/g3")), "near", 3));
+        assertEquals(new Place(120, 64, -35, null), HOME.place(), "去处写回的就是那一处");
+        Destination.Stop chests = Destination.Stop.of(Place.area(AreaRef.parse("chests")), "use", null);
         assertEquals("area chests (to use one of its blocks)", chests.words(), "区域的 use 不要 y");
         assertEquals("area ores/g3 (within 3)", ORES.words());
-        IllegalArgumentException mixed = assertThrows(IllegalArgumentException.class,
-                () -> Destination.Stop.of(List.of("farm", "64"), null, null));
-        assertTrue(mixed.getMessage().startsWith("a place is x y z (one cell)"), mixed.getMessage());
-        assertThrows(IllegalArgumentException.class, () -> Destination.Stop.of(List.of("1", "2", "3", "4"), null, null));
-        IllegalArgumentException badName = assertThrows(IllegalArgumentException.class,
-                () -> Destination.Stop.of(List.of("Farm"), null, null));
-        assertTrue(badName.getMessage().startsWith("area names are lowercase"), badName.getMessage());
+        assertEquals(Destination.DEFAULT_NEAR, Destination.Stop.of(Place.area(AreaRef.parse("farm")), "near", null)
+                .near(), "--arrive near 不写 --near 有默认");
         assertThrows(IllegalArgumentException.class, () -> new Destination.Stop(1, 2, 3, AreaRef.parse("farm"),
                 Destination.Arrive.AT, null), "坐标与区域不能同时给");
-        assertThrows(IllegalArgumentException.class, () -> Destination.Stop.of(List.of("farm"), "near", null),
-                "near 照样要给距离");
+        IllegalArgumentException nearAlone = assertThrows(IllegalArgumentException.class,
+                () -> Destination.Stop.of(Place.area(AreaRef.parse("farm")), null, 2));
+        assertTrue(nearAlone.getMessage().startsWith("--near 2 only goes with --arrive near"), nearAlone.getMessage());
     }
 
     /** 走过的记录只留最近几条。 */

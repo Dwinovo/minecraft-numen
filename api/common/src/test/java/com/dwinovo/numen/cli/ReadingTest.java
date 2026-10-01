@@ -24,22 +24,26 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ReadingTest {
 
-    static final Param<Integer> COUNT = Param.required("count", ArgType.integer(1, 9), "How many.");
     static final Param<String> NAME = Param.required("name", ArgType.string(), "A name.");
     static final Param<List<String>> ROWS = Param.required("rows", ArgType.list(ArgType.string()), "Rows.");
-    static final Param<ResourceLocation> ITEM = Param.optional("item", ArgType.id(), "An item.");
-    static final Param<Double> SPEED = Param.optional("speed", ArgType.number(0, 2), "How fast.");
-    static final Param<String> MODE = Param.optional("mode", ArgType.oneOf("walk", "run"), "How.");
+    static final Param<Integer> COUNT = Param.optional("count", ArgType.integer(1, 9), "How many.")
+            .whenOmitted("put one");
+    static final Param<ResourceLocation> ITEM = Param.optional("item", ArgType.id(), "An item.")
+            .whenOmitted("put what you hold");
+    static final Param<Double> SPEED = Param.optional("speed", ArgType.number(0, 2), "How fast.")
+            .whenOmitted("go at 1");
+    static final Param<String> MODE = Param.optional("mode", ArgType.oneOf("walk", "run"), "How.")
+            .whenOmitted("walk");
     static final Param<String> NOTE = Param.required("note", ArgType.text(), "Free text.");
 
-    static final List<Param<?>> PUT = List.of(COUNT, NAME, ROWS, ITEM, SPEED, MODE);
+    static final List<Param<?>> PUT = List.of(NAME, ROWS, COUNT, ITEM, SPEED, MODE);
 
     @BeforeAll
     static void register() {
         door().registerCommands("gt_read", "A group the reader reads.", g -> {
             g.server("put", "Put things.", (src, args) -> src.reply(TaskResult.ok("put").toJson()),
                             PUT.toArray(Param<?>[]::new))
-                    .example("gt_read put 3 \"two words\" ### #.# --item minecraft:stone");
+                    .example("gt_read put \"two words\" ### #.# --count 3 --item minecraft:stone");
             g.client("say", "Say something.", (src, args) -> src.reply(TaskResult.ok("said").toJson()), NOTE)
                     .example("gt_read say hello there");
         });
@@ -47,7 +51,7 @@ class ReadingTest {
 
     @Test
     void aWholeLineReadsIntoItsActionAndTheSameArgumentsExecutionGets() {
-        NumenCli.Reading r = NumenCli.read("gt_read put 3 \"two words\" ### #.# --speed 1.5 --item stone");
+        NumenCli.Reading r = NumenCli.read("gt_read put \"two words\" ### #.# --speed 1.5 --item stone --count 3");
         assertEquals("gt_read put", r.path());
         assertTrue(r.runnable());
         assertEquals(3, r.args().get(COUNT));
@@ -63,19 +67,20 @@ class ReadingTest {
     @Test
     void writtenBackTheArgumentsReadTheSame() {
         for (String line : List.of(
-                "gt_read put 3 \"two words\" ### #.# --speed 1.5 --item stone",
-                "gt_read put 1 \"\" \" leading space\" \"--looks like a flag\" '#' \"say \\\"hi\\\"\" --mode run",
-                "gt_read put 9 中文名 a --mode walk")) {
+                "gt_read put \"two words\" ### #.# --speed 1.5 --item stone --count 3",
+                "gt_read put \"\" \" leading space\" \"--looks like a flag\" '#' \"say \\\"hi\\\"\" --mode run --count 1",
+                "gt_read put 中文名 a --mode walk --count 9")) {
             CommandArgs args = NumenCli.read(line).args();
             String written = args.write("gt_read put", PUT);
             assertEquals(args, NumenCli.read(written).args(), "写回的一行读回来是同一份: " + written);
         }
-        assertEquals("gt_read put 3 \"two words\" ### #.# --item minecraft:stone --speed 1.5",
-                NumenCli.read("gt_read put 3 \"two words\" ### #.# --speed 1.5 --item stone").args()
+        assertEquals("gt_read put \"two words\" ### #.# --count 3 --item minecraft:stone --speed 1.5",
+                NumenCli.read("gt_read put \"two words\" ### #.# --speed 1.5 --item stone --count 3").args()
                         .write("gt_read put", PUT),
                 "位置参数按声明顺序,标志按声明顺序,id 写全命名空间");
-        assertEquals("gt_read put 3 x y",
-                NumenCli.read("gt_read put 3 x y --item stone").args().write("gt_read put", List.of(COUNT, NAME, ROWS)),
+        assertEquals("gt_read put x y --count 3",
+                NumenCli.read("gt_read put x y --item stone --count 3").args()
+                        .write("gt_read put", List.of(NAME, ROWS, COUNT)),
                 "没列进参数表的标志不写");
     }
 
@@ -91,13 +96,13 @@ class ReadingTest {
     @Test
     void aLineThatStopsHalfwayOrSaysTooMuchDoesNotRead() {
         IllegalArgumentException half = assertThrows(IllegalArgumentException.class,
-                () -> NumenCli.read("gt_read put 3"));
-        assertTrue(half.getMessage().contains("gt_read put <count> <name> <rows...>"), "附那个动作的帮助: "
+                () -> NumenCli.read("gt_read put x"));
+        assertTrue(half.getMessage().contains("usage: gt_read put <name> <rows...>"), "附那个动作的用法: "
                 + half.getMessage());
         IllegalArgumentException typo = assertThrows(IllegalArgumentException.class,
-                () -> NumenCli.read("gt_read pot 3 x y"));
-        assertTrue(typo.getMessage().contains("Did you mean: put?"), typo.getMessage());
-        assertThrows(IllegalArgumentException.class, () -> NumenCli.read("gt_read put 3 x y --nope 1"));
+                () -> NumenCli.read("gt_read pot x y"));
+        assertTrue(typo.getMessage().contains("hint: Did you mean: put?"), typo.getMessage());
+        assertThrows(IllegalArgumentException.class, () -> NumenCli.read("gt_read put x y --nope 1"));
         assertThrows(IllegalArgumentException.class, () -> NumenCli.read(""));
     }
 
@@ -107,13 +112,13 @@ class ReadingTest {
                 Open it with `gt_read put`, then `gt_read say hi`. Blocks like `oak_log` and tools like
                 `skill_load` are not commands; neither is `gt_reader`.
                 ```
-                gt_read put 3 x y
+                gt_read put x y
                 floor ### (a drawing, not a command)
                 /give @s stone
                 ```
                 Native: `/help`.
                 """;
-        assertEquals(List.of("gt_read put 3 x y", "/give @s stone", "gt_read put", "gt_read say hi", "/help"),
+        assertEquals(List.of("gt_read put x y", "/give @s stone", "gt_read put", "gt_read say hi", "/help"),
                 WrittenCommands.in(text));
     }
 
@@ -124,10 +129,10 @@ class ReadingTest {
                 RequiredArgumentBuilder.argument("count", IntegerArgumentType.integer()).executes(c -> 1)));
         WrittenCommands.NativeReader reader = line -> WrittenCommands.nativeProblem(mc, line, new Object());
         List<WrittenCommands.Wrong> wrong = WrittenCommands.check(List.of(
-                new WrittenCommands.Text("a", "`gt_read put 3 x y` then `gt_read pot` and `/give 2`, `/give`"),
-                new WrittenCommands.Text("b", "```\n/take 1\ngt_read put 3\n```")), reader);
+                new WrittenCommands.Text("a", "`gt_read put x y` then `gt_read pot` and `/give 2`, `/give`"),
+                new WrittenCommands.Text("b", "```\n/take 1\ngt_read put x\n```")), reader);
         assertEquals(List.of("a", "b", "b"), wrong.stream().map(WrittenCommands.Wrong::where).toList(), wrong::toString);
-        assertEquals(List.of("gt_read pot", "/take 1", "gt_read put 3"),
+        assertEquals(List.of("gt_read pot", "/take 1", "gt_read put x"),
                 wrong.stream().map(WrittenCommands.Wrong::line).toList());
         assertNull(WrittenCommands.problem("/give", reader), "只点名一条原生指令读得通");
         assertFalse(WrittenCommands.problem("/give x", reader) == null);

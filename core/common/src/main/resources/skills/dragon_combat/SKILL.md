@@ -1,6 +1,6 @@
 ---
 name: dragon_combat
-description: Final boss. End arena layout, crystal destruction from a safe distance (caged ones via auto-pillar + work_dig), dragon attack patterns and the perch melee window, HP discipline over a long fight.
+description: Final boss. End arena layout, crystal destruction from a safe distance (caged ones via auto-pillar + work dig), dragon attack patterns and the perch melee window, HP discipline over a long fight.
 ---
 
 # Skill: dragon_combat
@@ -26,15 +26,15 @@ The dragon's HP reaches 0: death animation plays, ~the exit portal opens in the 
 
 ## Step 1 — the 8 open crystals
 
-Carry a bow with arrows, then `scan_entities` → `fight attack --entity_ids 311 312` (the crystals' ids). Crystals die to one arrow and **explode with twice a creeper's power**, so `fight attack` refuses to close on one at all: it holds 12 blocks off and shoots. Without arrows it reports them unreachable rather than walking into the blast — that is the tool working, not failing.
+Carry a bow with arrows, then `scan_entities` → `fight attack 311 312` (the crystals' ids). Crystals die to one arrow and **explode with twice a creeper's power**, so `fight attack` refuses to close on one at all: it holds 12 blocks off and shoots. Without arrows it reports them unreachable rather than walking into the blast — that is the tool working, not failing.
 
 ## Step 2 — the 2 caged crystals
 
 Per caged pillar:
 
-1. `move_goto(pillar_top_x, top_y + 1, pillar_top_z)` — navigation pillars up the side on its own (this is what the spare cobblestone is for).
-2. `scan_blocks` for `iron_bars` into an area (`cage`), then `work_dig` that area to open the cage (from the pillar top, so the bars are within its reach).
-3. `move_goto` back down/away, then scan that crystal and call `fight attack --entity_ids 311` with its id — it keeps its own distance from there.
+1. `move goto` the cell on top of the pillar (its x, top y + 1, z) with `--alter natural` — navigation pillars up the side on its own (this is what the spare cobblestone is for).
+2. `scan blocks iron_bars --into cage`, then `work dig cage` to open the cage from the pillar top, where the bars are within reach (`move goto cage --arrive dig` first if they are not).
+3. `move_goto` back down/away, then scan that crystal and call `fight attack 311` with its id — it keeps its own distance from there.
 
 While you're up high, the dragon may strafe the pillar — if `status_self` shows falling HP, finish the bars and get down first.
 
@@ -42,7 +42,7 @@ While you're up high, the dragon may strafe the pillar — if `status_self` show
 
 Two modes, alternating:
 
-- **Flying**: scan the dragon runtime ID, then `fight attack --entity_ids 305` with it — out of reach means it shoots. Head shots take full damage, body shots are reduced; accept slow progress.
+- **Flying**: scan the dragon runtime ID, then `fight attack 305` with it — out of reach means it shoots. Head shots take full damage, body shots are reduced; accept slow progress.
 - **Perched** (it lands on the central fountain periodically, more often at low HP): the same `fight attack` line now reaches it and swings — the melee window does the real damage. Back off (`move_goto` 10+ blocks sideways) when it takes off again.
 
 ### Its attacks and your answers

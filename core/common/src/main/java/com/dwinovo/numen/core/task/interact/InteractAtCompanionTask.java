@@ -34,7 +34,7 @@ import java.util.Map;
  * 或到了 {@code holdTicks}——不换工具、不清挡着的、不挪步。准星落在别的格(高草、树叶)或实体上,按的就是它,回执照实说。
  * 挖东西(挑工具、清开视线、捡掉落)是 {@code work dig} 的事。
  *
- * <p>右键同样是一次纯按键:可点的目标看向它看得见的一面({@link Aim#use},与 {@code move_goto arrive:use} 同一个视线函数),
+ * <p>右键同样是一次纯按键:可点的目标看向它看得见的一面({@link Aim#use},与 {@code move goto --arrive use} 同一个视线函数),
  * 准星落在谁就点谁({@link Interaction#forHit}):激活方块,或——对着空气——用手里的东西(扔、吃、拉弓)。视线上挡着的(箱子前的
  * 高草)不清,点到的就是它,回执照实说,下一步写出 {@code work dig} 挖掉它或从另一面点。The mouse model is the two record fields
  * {@code button} (left/right) × {@code holdTicks} (tap/hold).
@@ -91,7 +91,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
             if (r.item != null) {
                 Hotbar.grip(player, r.item);
             }
-            // 右键点可点的目标:看向它看得见的那一面(与 move_goto arrive:use 同一个视线函数),哪一面都看不见就看格心。
+            // 右键点可点的目标:看向它看得见的那一面(与 move goto --arrive use 同一个视线函数),哪一面都看不见就看格心。
             // 左键、空气与流体都看格心;对水面右键的原版含义正是"射线穿过去,物品自己找水"(桶、船),落点不另说。
             // 两个键都是纯按键:准星落在谁就按谁,挡在前面的不清,回执照实说
             boolean clickable = r.aim != null && Terrain.of(player).clickable(r.aim);
@@ -237,7 +237,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
                     + "," + pos.getZ() + " — the crosshair landed there, not on " + aimLabel();
             return button() == Interaction.Button.ATTACK ? landed
                     : landed + ". To click " + aimLabel() + ": `work dig " + pos.getX() + " " + pos.getY() + " "
-                            + pos.getZ() + "` clears it out of the way, or " + GotoReminders.call(r.aim, "arrive:use")
+                            + pos.getZ() + "` clears it out of the way, or " + GotoReminders.call(r.aim, "--arrive use")
                             + " stands where another face of it is in sight";
         }
         if (hit instanceof net.minecraft.world.phys.EntityHitResult eh) {

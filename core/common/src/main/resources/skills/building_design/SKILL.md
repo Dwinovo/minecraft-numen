@@ -26,7 +26,7 @@ finished build looks wrong.
    (`build show cottage --layer 1`) — a map of that level seen from above as it
    will stand when built, in the same character grid `layer` takes, with z and
    x labelled. Fix what is off
-   (`build step`, `build insert`, `build drop`), look again, and only then write
+   (a primitive with `--into cottage --step 2` or `--before 2`, `build drop cottage/2`), look again, and only then write
    the next level on top of the one you saw. Do NOT work the whole building out
    in your head before the first step: a design is cheap to change, and the
    slice shows what you actually wrote, not what you meant. Within a level go big
@@ -37,7 +37,7 @@ finished build looks wrong.
 4. `build at` the design on the site: it prices the whole design first and builds
    it as one background job.
 5. After task_finished, LOOK at the result and run the checklist below. To fix
-   something, change the design (`build step`, `build insert`, `build drop`, or
+   something, change the design (`--step N` / `--before N` with `--into`, `build drop`, or
    one more step with `--into`) and `build at` the same spot again — it only adds
    what is missing, changes what differs and takes away blocks of yours the
    design no longer has.
@@ -78,10 +78,13 @@ want for a room.
 
 Seven primitives, all geometry, no style. What you build with them is yours.
 Each is one line: run it on its own and it is built at once, at world
-coordinates; add `--into` and it becomes the next step of a design.
+coordinates; add `--into` and it becomes the next step of a design. The cells
+come first (a cell is `x y z`), the block is `--block` — without it, the block
+in your main hand.
 
-- `layer` — a character grid with a `legend`, stamped at one level, or repeated
-  up to the level `up_to` names. The first row sits at the given z and runs +x,
+- `layer` — a character grid with a `legend`, stamped at one level (`--at x y z`
+  is where the first character goes), or repeated up to the level `--up-to`
+  names. The first row sits at that z and runs +x,
   so the grid reads like a map: north at the top, east to the right. `' '` and
   `'.'` leave a cell alone. One grid is a floor, a wall ring, an L-shaped
   footprint, a course of roof tiles, a window pattern, scattered flowers.
@@ -100,14 +103,14 @@ coordinates; add `--into` and it becomes the next step of a design.
 A small house, written as a design:
 ```
 build new cottage
-build layer 0 0 0 ####### ####### ####### ####### ####### --block cobblestone --into cottage
-build layer 0 1 0 ####### #.....# #.....# #.....# ####### --block "oak_planks*8, spruce_planks*2" --up_to 3 --into cottage
+build layer ####### ####### ####### ####### ####### --at 0 0 0 --block cobblestone --into cottage
+build layer ####### #.....# #.....# #.....# ####### --at 0 1 0 --block "oak_planks*8, spruce_planks*2" --up-to 3 --into cottage
 build show cottage --layer 1
-build layer 3 1 4 # --block air --up_to 2 --into cottage
-build set oak_door[facing=north] 3 1 4 --into cottage
+build layer # --at 3 1 4 --block air --up-to 2 --into cottage
+build set 3 1 4 --block oak_door[facing=north] --into cottage
 build show cottage --layer 1
 build show cottage
-build at cottage 120 64 -35
+build at cottage --at 120 64 -35
 ```
 
 The doorway and the door are in the same cell of the south wall (z=4), and the
@@ -464,12 +467,12 @@ reads it as texture rather than as a pattern.
 - a design is a named list of primitive steps: `build new` starts one, a
   primitive with `--into` appends a step, `build show` lists the steps and what
   they cost, `build show` with `--layer` draws one level as a map,
-  `build step` / `build insert` / `build drop` change them, `build at`
+  a primitive with `--into cottage --step 2` / `--before 2` and `build drop cottage/2` change them, `build at`
   builds it on a spot and — run again on the same spot — changes the building to
   match; block states ride in the block name; `air` clears; `mask` decides what
   may be overwritten; later steps overwrite earlier cells, so details go last
 - a primitive without `--into` is built at once, at world coordinates: a single
-  `build place crafting_table 120 64 -35` is the quick way to put one block down
+  `build place 120 64 -35 --block crafting_table` is the quick way to put one block down
 - whole structure files: `build designs` lists them with the designs, `build show`
   prices one, `build at` builds it; liquids are always skipped
 - `build built` lists what has been built and where

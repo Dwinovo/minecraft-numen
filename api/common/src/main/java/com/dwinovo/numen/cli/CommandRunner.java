@@ -81,9 +81,10 @@ public final class CommandRunner {
     }
 
     /**
-     * 这一行第 0 层指令她此刻写不写得通;写得通返回 null。和服务器执行前做的是同一道检查,写不通时说为什么——根不存在、
-     * 服务器不让她用这条、还是参数写错(附上这条的用法)。写错了的,最后接上"你是不是要写"({@link Completions#didYouMean}:
-     * 出错位置上她能写的候选里最接近的几个,和第 1 层同一个函数)。
+     * 这一行第 0 层指令她此刻写不写得通;写得通返回 null。和服务器执行前做的是同一道检查,写不通时与第 1 层同一种三段说法
+     * ({@link Problem}):{@code error:} 为什么——根不存在、服务器不让她用这条、还是参数写错;{@code usage:} 这条的用法;
+     * {@code hint:} "你是不是要写"({@link Completions#didYouMean}:出错位置上她能写的候选里最接近的几个,和第 1 层同一个函数),
+     * 没有就是原版的 {@code help}。
      */
     static String problem(CommandDispatcher<CommandSourceStack> dispatcher, String line, CommandSourceStack her) {
         ParseResults<CommandSourceStack> parse = dispatcher.parse(line, her);
@@ -97,14 +98,16 @@ public final class CommandRunner {
         } catch (CommandSyntaxException e) {
             String root = line.split(" ", 2)[0];
             CommandNode<CommandSourceStack> node = dispatcher.getRoot().getChild(root);
+            String nearest = Completions.didYouMean(parse);
+            String hint = nearest.isEmpty() ? HELP_HINT : nearest;
             if (node == null) {
-                return "there is no /" + root + " command on this server. " + HELP_HINT + Completions.didYouMean(parse);
+                return Problem.of("there is no /" + root + " command on this server", null, hint);
             }
             if (!node.canUse(her)) {
-                return "the server does not let you use /" + root + ". " + HELP_HINT;
+                return Problem.of("the server does not let you use /" + root, null, HELP_HINT);
             }
-            return e.getMessage() + "\nUsage: /" + dispatcher.getSmartUsage(dispatcher.getRoot(), her).get(node)
-                    + Completions.didYouMean(parse);
+            return Problem.of(e.getMessage(), Line.MC + dispatcher.getSmartUsage(dispatcher.getRoot(), her).get(node),
+                    hint);
         }
     }
 

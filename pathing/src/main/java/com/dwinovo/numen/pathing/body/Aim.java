@@ -29,8 +29,6 @@ public final class Aim {
 
     /** 鼠标灵敏度 0.5 时移一个像素视角转的角度(原版 {@code (s·0.6+0.2)³·8·0.15})。 */
     static final double PIXEL = Math.pow(0.5 * 0.6 + 0.2, 3) * 8 * 0.15;
-    /** 瞄面上离眼睛最近的一点时离棱留的边:准星不落在两格共用的棱上。 */
-    private static final double EDGE = 0.05;
 
     private Aim() {}
 
@@ -205,7 +203,7 @@ public final class Aim {
         return Sight.trace(body.level(), eye, point, pos).clear(side);
     }
 
-    /** {@code box} 的 {@code side} 面上离 {@code eye} 最近的一点,离面的四条棱各留 {@link #EDGE}。 */
+    /** {@code box} 的 {@code side} 面上离 {@code eye} 最近的一点,离面的四条棱各留 {@link Reach#EDGE}。 */
     private static Vec3 nearestOnFace(AABB box, Direction side, Vec3 eye) {
         double x = clampInside(eye.x, box.minX, box.maxX);
         double y = clampInside(eye.y, box.minY, box.maxY);
@@ -221,7 +219,7 @@ public final class Aim {
     }
 
     private static double clampInside(double v, double min, double max) {
-        double margin = Math.min(EDGE, (max - min) / 2);
+        double margin = Math.min(Reach.EDGE, (max - min) / 2);
         return Mth.clamp(v, min + margin, max - margin);
     }
 
