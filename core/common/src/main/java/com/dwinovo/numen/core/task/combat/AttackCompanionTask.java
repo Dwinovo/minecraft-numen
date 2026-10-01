@@ -9,12 +9,14 @@ import com.dwinovo.numen.core.combat.Loadout;
 import com.dwinovo.numen.core.combat.Haven;
 import com.dwinovo.numen.core.combat.Menace;
 import com.dwinovo.numen.core.combat.Swing;
+import com.dwinovo.numen.core.nav.Feet;
 import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.chain.MobDefenseChain;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.body.Hotbar;
+import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.plan.Threat;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
@@ -579,6 +581,10 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         // 这里曾经"没有近战武器就直接返回" —— 那是按"打怪"写的前提(赤手对上会还手的
         // 东西不是出路),模型让她打一只鸡时那个前提不成立,她会走到跟前站着不动。
         Loadout loadout = Loadout.forTarget(player, player);
+        Feet here = Feet.of(player);
+        if (here == null) {
+            return;   // 悬在半空:没有站着的那一格,够不够得着无从按站位判
+        }
         Entity victim = null;
         double best = Double.MAX_VALUE;
         for (var f : field.foes()) {
@@ -588,9 +594,9 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             if (f.armed() || f.distance() >= best) {
                 continue;   // 引信在走的不碰:打它等于自己引爆
             }
+            // 够不够得着与走位的到达问同一个目标(reachOf):走位说站到了,这里就挥得出去
             Entity e = liveEntity(f.id());
-            if (e != null && f.distance() <= Swing.reachTo(
-                    player.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE), e.getBbWidth())) {
+            if (e != null && here.in(reachOf(e))) {
                 victim = e;
                 best = f.distance();
             }
@@ -697,7 +703,10 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     /** 这一刻走的是弓那一套吗。环的内外沿、以及攻击层用什么,都看它。 */
     private boolean bowFighting;
 
-    /** 走位环的外沿:剑是够到距离,弓是 {@link #BOW_MAX_DISTANCE}。 */
+    /**
+     * 走位环的外沿,按离它的中心距:剑是够到距离({@link Swing#reachTo},用来判内沿还剩不剩一条带、打站位日志;剑的环本身由
+     * {@link #reachOf} 判),弓是 {@link #BOW_MAX_DISTANCE}。
+     */
     private double skirmishOuter() {
         return bowFighting ? BOW_MAX_DISTANCE : reachToTarget();
     }
@@ -710,6 +719,26 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         double inner = bowFighting ? BOW_MIN_DISTANCE
                 : target == null ? 0.0 : Menace.rawDangerRadius(target, player);
         return inner < skirmishOuter() ? inner : 0.0;
+    }
+
+    /**
+     * 站在哪一格手够得着 {@code e}:眼睛到它此刻的碰撞箱小于她的实体交互距离(第 0 层 {@link Goals#touch})。走位的到达与攻击层
+     * 出手都问它,按她此刻站的那一格判({@link Feet#in})。
+     */
+    private Goal reachOf(Entity e) {
+        return Goals.touch(e.getBoundingBox(), Snapshots.stats(player),
+                Swing.reachOf(player.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE)));
+    }
+
+    /** 剑的走位环:够得着它,而且出了它够得着她的距离(内沿为零时只要够得着)。 */
+    private Goal swordRing() {
+        Goal reach = reachOf(target);
+        double inner = skirmishInner();
+        if (inner <= 0) {
+            return reach;
+        }
+        return Goals.allOf(List.of(reach,
+                Goals.awayFrom(List.of(new Threat(target.getX(), target.getY(), target.getZ(), inner)))));
     }
 
     private double reachToTarget() {
@@ -760,13 +789,14 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         // 走位是<b>一个环</b>:外沿别跟丢,内沿是它够不着她(别的怪由躲避场管)。太近自然往外走,太远
         // 自然往回走 —— "拉开"不是另一个动作。
         //
-        // 外沿<b>就是她的够到距离</b>。寻路不负责"打",但必须把她送进打得到的范围,否则
-        // 攻击层一辈子没机会 —— 外沿放宽到 4.73 那一版,她走到 4.7 就"到位"停下,而够到
-        // 距离只有 3.30,于是站在那儿挨打,实测有效血量 8 掉到 5。
+        // 剑的外沿<b>就是攻击层出手的那个判据</b>(reachOf:站在这一格眼睛够得着它此刻的碰撞箱),同一个目标、
+        // 同一套站位坐标。走位说到了,攻击层就挥得出去;它挪出去了,这一格就不再算到,下一趟接着往前走。
         //
-        // 内沿用<b>裸</b>攻击距离(2.02),不加格量化补偿。带宽因此是 1.28 格,比格量化误差
-        // 0.71 宽出一截 —— 当初算出"带只有 0.57 格、做不出来",是因为把补偿也叠进了内沿。
-        Goal ring = Goals.within(Goals.column(target.getBlockX(), target.getBlockZ()), skirmishInner(), skirmishOuter());
+        // 内沿用<b>裸</b>攻击距离(2.02),不加格量化补偿,从格心量到它此刻的位置。带宽约 1.28 格,比格量化误差
+        // 0.71 宽出一截。弓的环在 8~12 格,问的是拉不拉得开弓,按它所在的那一列量。
+        Goal ring = bowFighting
+                ? Goals.within(Goals.column(target.getBlockX(), target.getBlockZ()), skirmishInner(), skirmishOuter())
+                : swordRing();
         // 要打的这一只离多远由环管(内沿就是它够不着她的距离),躲避场只收别的怪:再把它放进去,它够得比她还远时
         // "够得着它"与"出了它的危险半径"两头都要,就没有一格站得下
         List<Threat> others = Menace.field(player, field.stream().filter(mob -> mob != target).toList());

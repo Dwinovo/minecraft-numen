@@ -104,6 +104,34 @@ public class CombatGameTests {
     }
 
     /**
+     * 目标站在它那一格的远边上:她那一格离它那一格三格整,可她眼睛到它碰撞箱有三格多,手够不着。走位说到了、出手说够不着,
+     * 她就站在原地一刀不挥,直到任务超时;走位与出手问的是同一个"够得着",她就会再往前走一格去打。僵尸不动不还手,测的只是
+     * 她走不走进够得着的地方。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_combat")
+    public static void attack_steps_in_on_a_target_at_the_far_edge_of_its_cell(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = armedCompanion(helper, new BlockPos(5, 2, 8));
+        Zombie zombie = EntityType.ZOMBIE.create(level);
+        helper.assertTrue(zombie != null, "zombie did not spawn");
+        BlockPos at = helper.absolutePos(new BlockPos(8, 2, 8));
+        zombie.moveTo(at.getX() + 0.95, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        zombie.setNoAi(true);
+        level.addFreshEntity(zombie);
+        float startHealth = zombie.getHealth();
+        ToolRun attack = command(companion, "fight attack " + zombie.getId());
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(attack.task() != null, "the attack was not accepted: " + attack.reply());
+            helper.assertTrue(zombie.getHealth() < startHealth && zombie.getLastHurtByMob() == companion,
+                    "she stood " + String.format("%.2f", companion.distanceTo(zombie))
+                            + " away and never hit the zombie: " + attack.task().getResult());
+            zombie.discard();
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
      * 点名打不敌对的东西:一头猪,附近一只怪都没有。她必须走过去把它打掉——走位目标由
      * "有没有目标"决定,不由"附近有没有怪"决定;后者只是躲避场。
      */
