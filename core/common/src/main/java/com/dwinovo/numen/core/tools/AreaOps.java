@@ -431,7 +431,8 @@ public final class AreaOps {
         for (Area.Part part : shown.parts()) {
             rows.add(ref.name() + "/" + part.id());
         }
-        return new Listing("", rows, "", again).result(args, Map.of("parts", rows.size())).toJson();
+        // 数据里是全部名字(不分页):脚本里 area.parts 拿它直接循环
+        return new Listing("", rows, "", again).result(args, Map.of("parts", rows)).toJson();
     }
 
     /**
@@ -459,7 +460,8 @@ public final class AreaOps {
             }
         });
         String unloaded = counts[1] == 0 ? "" : "; " + counts[1] + " cell(s) lie in unloaded terrain and were not read";
-        Map<String, Object> data = Map.of("left", counts[0], "cells", area.cells().size());
+        // has 是脚本里 area.has 直接返回的那个布尔:成败都带着它,没剩是 false 而不是报错
+        Map<String, Object> data = Map.of("has", counts[0] > 0, "left", counts[0], "cells", area.cells().size());
         if (counts[0] == 0) {
             return TaskResult.fail(ref + " has nothing left to dig (" + area.cells().size() + " cell(s), all gone or "
                     + "changed since they were added)" + unloaded + ".", data).toJson();

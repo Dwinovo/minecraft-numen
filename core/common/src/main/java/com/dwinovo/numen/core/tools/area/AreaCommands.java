@@ -121,6 +121,7 @@ public final class AreaCommands {
                 .example("area parts ores")
                 .note("Instant and read-only. Nothing but the names, one per line: `move goto ores/g1 --arrive dig`, "
                         + "`work dig ores/g1` take each as it is.")
+                .returns("parts")
                 .seeAlso("area show", "area has");
         area.server("has", "Whether an area, or one part of it, still has a cell to dig: succeeds if so, fails if not.",
                         (src, args) -> src.reply(AreaOps.has(src.companion(), args.get(SHOWN))), SHOWN)
@@ -131,6 +132,7 @@ public final class AreaCommands {
                         + "stands in it. Cells in unloaded terrain are not read.")
                 .note("The answer is whether it succeeds; the reply says in one sentence how many are left and the "
                         + "nearest.")
+                .returns("has")
                 .seeAlso("work dig", "area parts");
         area.server("list", "The areas of your owner, one line each.",
                         (src, args) -> src.reply(AreaOps.list(src.companion(), args, GROUP + " list")), Listing.PAGE)
