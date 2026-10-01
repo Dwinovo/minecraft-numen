@@ -29,23 +29,26 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ArgTypeChoiceAndListTest {
 
-    static final Param<Double> RADIUS = Param.required("radius", ArgType.number(1, 64), "How far.");
-    static final Param<String> KIND = Param.required("kind", ArgType.oneOf("hostile", "passive", "player", "all"),
-            "Which kind.");
     static final Param<List<String>> IDS = Param.required("ids", ArgType.list(ArgType.idOrTag()), "What to find.");
-    static final List<Param<?>> FIND = List.of(RADIUS, KIND, IDS);
+    static final Param<Double> RADIUS = Param.optional("radius", ArgType.number(1, 64), "How far.")
+            .whenOmitted("look 16 blocks around");
+    static final Param<String> KIND = Param.optional("kind", ArgType.oneOf("hostile", "passive", "player", "all"),
+            "Which kind.").whenOmitted("take every kind");
+    static final List<Param<?>> FIND = List.of(IDS, RADIUS, KIND);
 
     static final Param<String> WHAT = Param.required("what", ArgType.idOrTag(), "Which one.");
-    static final Param<String> MODE = Param.optional("mode", ArgType.oneOf("near", "far"), "How to pick.");
-    static final Param<Double> REACH = Param.optional("reach", ArgType.number(0.5, 4.5), "How far to reach.");
+    static final Param<String> MODE = Param.optional("mode", ArgType.oneOf("near", "far"), "How to pick.")
+            .whenOmitted("pick the nearest");
+    static final Param<Double> REACH = Param.optional("reach", ArgType.number(0.5, 4.5), "How far to reach.")
+            .whenOmitted("reach as far as a hand does");
 
     static final AtomicReference<CommandArgs> LAST = new AtomicReference<>();
 
     @BeforeAll
     static void register() {
         door().registerCommands("gt_more", "A group whose actions take the choice, tag and list types.", g -> {
-            g.server("find", "Find things.", ArgTypeChoiceAndListTest::remember, RADIUS, KIND, IDS)
-                    .example("gt_more find 12.5 hostile #minecraft:logs iron_ore")
+            g.server("find", "Find things.", ArgTypeChoiceAndListTest::remember, IDS, RADIUS, KIND)
+                    .example("gt_more find #minecraft:logs iron_ore --radius 12.5 --kind hostile")
                     .promote("Find things, as a tool.");
             g.server("pick", "Pick one.", ArgTypeChoiceAndListTest::remember, WHAT, MODE, REACH)
                     .example("gt_more pick #minecraft:village --mode far --reach 2");
@@ -69,17 +72,19 @@ class ArgTypeChoiceAndListTest {
         CliFixture.Outcome out = onServer(line);
         assertFalse(out.success(), line + " should fail");
         assertNull(LAST.get(), "处理函数不该被调到");
-        return out.message();
+        assertTrue(out.message().startsWith("error: "), out.message());
+        return out.message().substring("error: ".length());
     }
 
     @Test
     void eachTypeReadsItsValueOffTheLine() {
-        CommandArgs find = ran("gt_more find 12.5 passive #minecraft:logs iron_ore minecraft:deepslate_iron_ore");
+        CommandArgs find = ran("gt_more find #minecraft:logs iron_ore minecraft:deepslate_iron_ore --radius 12.5 "
+                + "--kind passive");
         assertEquals(12.5, find.get(RADIUS));
         assertEquals("passive", find.get(KIND));
         assertEquals(List.of("#minecraft:logs", "iron_ore", "minecraft:deepslate_iron_ore"), find.get(IDS),
                 "一串值按写下的原文收下:标签带着 #,不写命名空间的也照原样");
-        assertEquals(100.0, ran("gt_more find 100 all stone").get(RADIUS), "越界的值原样交给处理函数");
+        assertEquals(100.0, ran("gt_more find stone --kind all --radius 100").get(RADIUS), "越界的值原样交给处理函数");
 
         CommandArgs pick = ran("gt_more pick minecraft:fortress");
         assertEquals("minecraft:fortress", pick.get(WHAT));
@@ -92,25 +97,25 @@ class ArgTypeChoiceAndListTest {
 
     @Test
     void aBadValueSaysWhatWasExpected() {
-        assertTrue(failed("gt_more find 12 monsters stone")
-                .startsWith("expected one of hostile, passive, player, all at position 16: "));
-        assertTrue(failed("gt_more find 12 all Iron_Ore")
-                .startsWith("expected an id like minecraft:oak_log at position 20: "));
-        assertTrue(failed("gt_more find 12 all stone #")
-                .startsWith("expected an id like minecraft:oak_log at position 26: "));
-        assertTrue(failed("gt_more find 12 all stone a:b:c").startsWith("'a:b:c' is not a valid id at position 26: "));
-        assertTrue(failed("gt_more find 12 all iron_ore,gold_ore")
-                .startsWith("Expected whitespace to end one argument, but found trailing data at position 28: "));
-        assertTrue(failed("gt_more find far all stone").startsWith("Expected double at position 13: "));
+        assertTrue(failed("gt_more find stone --kind monsters")
+                .startsWith("expected one of hostile, passive, player, all at position 26: "));
+        assertTrue(failed("gt_more find Iron_Ore --kind all")
+                .startsWith("expected an id like minecraft:oak_log at position 13: "));
+        assertTrue(failed("gt_more find stone #")
+                .startsWith("expected an id like minecraft:oak_log at position 19: "));
+        assertTrue(failed("gt_more find stone a:b:c").startsWith("'a:b:c' is not a valid id at position 19: "));
+        assertTrue(failed("gt_more find iron_ore,gold_ore")
+                .startsWith("Expected whitespace to end one argument, but found trailing data at position 21: "));
+        assertTrue(failed("gt_more find stone --radius far").startsWith("Expected double at position 28: "));
         assertTrue(failed("gt_more pick stone --mode middle").startsWith("expected one of near, far at position 26: "));
-        assertTrue(failed("gt_more find 12 all").contains("gt_more find <radius> <kind> <ids...>"),
-                "一个都没写就附上这个动作的用法");
+        assertTrue(failed("gt_more find").contains("\nusage: gt_more find <ids...> [--radius <number>] [--kind "
+                + "<hostile|passive|player|all>]"), "一个都没写就附上这个动作的用法");
     }
 
     /** 快捷工具在服务端把 JSON 按同一个参数表读成值,和命令行上读出来的是同一份;数组逐项按同一个读法读。 */
     @Test
     void theShortcutReadsTheSameValuesFromJson() {
-        CommandArgs viaLine = ran("gt_more find 12.5 player #minecraft:logs iron_ore");
+        CommandArgs viaLine = ran("gt_more find #minecraft:logs iron_ore --radius 12.5 --kind player");
         assertEquals(viaLine, read("{\"radius\": 12.5, \"kind\": \"player\", \"ids\": [\"#minecraft:logs\", \"iron_ore\"]}"));
 
         assertTrue(message(serve("{\"radius\": 1, \"kind\": \"all\", \"ids\": []}"))
@@ -135,25 +140,25 @@ class ArgTypeChoiceAndListTest {
     void theSchemaAndTheHelpNameEachType() {
         NumenTool tool = ToolRegistry.get("gt_more_find");
         assertEquals(new Gson().toJson(Schema.object()
-                .number("radius", "How far.", 1, 64)
-                .enumStr("kind", "Which kind.", "hostile", "passive", "player", "all")
                 .stringArray("ids", "What to find.", 1)
+                .optionalNumber("radius", "How far. Omit to look 16 blocks around.", 1, 64)
+                .optionalEnum("kind", "Which kind. Omit to take every kind.", "hostile", "passive", "player", "all")
                 .build()), new Gson().toJson(tool.parameterSchema()));
         assertEquals("""
-                gt_more find <radius> <kind> <ids...>
+                gt_more find <ids...> [--radius <number>] [--kind <hostile|passive|player|all>]
                   Find things.
-                  <radius> (number 1-64) — How far.
-                  <kind> (one of hostile, passive, player, all) — Which kind.
                   <ids...> (id or #tag, e.g. minecraft:oak_log or #minecraft:logs; one or more, separated by spaces) — What to find.
+                  --radius <number> (number 1-64; optional) — How far. Omit to look 16 blocks around.
+                  --kind <hostile|passive|player|all> (one of hostile, passive, player, all; optional) — Which kind. Omit to take every kind.
                   Examples:
-                    gt_more find 12.5 hostile #minecraft:logs iron_ore
+                    gt_more find #minecraft:logs iron_ore --radius 12.5 --kind hostile
                   Shortcut tool: gt_more_find.""", onClient("gt_more find --help").message());
         assertEquals("""
                 gt_more pick <what> [--mode <near|far>] [--reach <number>]
                   Pick one.
                   <what> (id or #tag, e.g. minecraft:oak_log or #minecraft:logs) — Which one.
-                  --mode <near|far> (one of near, far; optional) — How to pick.
-                  --reach <number> (number 0.5-4.5; optional) — How far to reach.
+                  --mode <near|far> (one of near, far; optional) — How to pick. Omit to pick the nearest.
+                  --reach <number> (number 0.5-4.5; optional) — How far to reach. Omit to reach as far as a hand does.
                   Examples:
                     gt_more pick #minecraft:village --mode far --reach 2""", onClient("gt_more pick --help").message());
     }

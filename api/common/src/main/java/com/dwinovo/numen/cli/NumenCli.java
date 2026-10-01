@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 /**
  * 第 1 层:Numen 给她的命令层。登记处、两侧各一棵 Numen 自己的调度器,以及两侧共用的帮助与报错。设计稿见
@@ -175,30 +174,13 @@ public final class NumenCli {
         if (problem != null) {
             throw new IllegalArgumentException(problem);
         }
-        return reading(parse, line, GROUPS::get);
-    }
-
-    /**
-     * 读通了、走到可执行一格的一行读成什么:动作路径,走到动作时还有读好的参数(帮助没有参数)。
-     *
-     * @param groups 按组名找组:读 {@link #read} 的是登记了的各组,树上读本组一行的({@link ArgType#command})是那一组
-     */
-    static Reading reading(ParseResults<?> parse, String line, Function<String, CommandGroup> groups) {
-        List<String> path = literalPath(parse);
-        Action action = path.size() == 2 ? groups.apply(path.get(0)).action(path.get(1)) : null;
+        Action action = path.size() == 2 ? GROUPS.get(path.get(0)).action(path.get(1)) : null;
         CommandArgs args = null;
         if (action != null) {
             CommandContext<?> ctx = parse.getContext().build(line);
             args = CommandArgs.fromCommand(action.positionals(), ctx, FlagsArgument.valuesIn(ctx));
         }
         return new Reading(String.join(" ", path), true, args);
-    }
-
-    /** 读好的一条命令写回组名之后的那一截({@link ArgType#command} 的值的写法):按那个动作的参数表写。 */
-    static String afterGroup(Reading reading) {
-        String[] path = reading.path().split(" ");
-        Action action = GROUPS.get(path[0]).action(path[1]);
-        return reading.args().write(reading.path(), action.params()).substring(path[0].length() + 1);
     }
 
     /** 登记了的各组,按名字排序。 */
@@ -228,7 +210,7 @@ public final class NumenCli {
         try {
             tree.execute(parse);
         } catch (CommandSyntaxException e) {
-            source.reply(TaskResult.fail(e.getMessage() + "\n" + helpAt(parse)).toJson());
+            source.reply(TaskResult.fail(Problem.of(e.getMessage(), usageAt(parse), hintAt(parse))).toJson());
         }
     }
 
@@ -288,9 +270,10 @@ public final class NumenCli {
     }
 
     /**
-     * 一行 Numen 命令写不写得通:写不通是 Brigadier 的报错(原话与出错位置)、出错那一层的帮助,再接上"你是不是要写"
-     * ({@link Completions#didYouMean},和原版与模组的指令同一个函数);写得通是 null。两侧同一种说法——两侧的树从同一份
-     * 声明长出来,同一行在两边的报错一字不差。第一个词是快捷工具名的,说法见 {@link #toolNameInstead}。
+     * 一行 Numen 命令写不写得通:写得通是 null;写不通是三段——{@code error:} Brigadier 的原话与出错位置,{@code usage:} 出错那一层的
+     * 正确写法({@link #usageAt}),{@code hint:} 能照抄的下一步:"你是不是要写"({@link Completions#didYouMean},和原版与模组的
+     * 指令同一个函数),没有就是那一层的 {@code --help}。两侧同一种说法——两侧的树从同一份声明长出来,同一行在两边的报错一字不差。
+     * 第一个词是快捷工具名的,说法见 {@link #toolNameInstead}。
      */
     static <S> String problem(ParseResults<S> parse, String line) {
         try {
@@ -298,7 +281,11 @@ public final class NumenCli {
             return null;
         } catch (CommandSyntaxException e) {
             String toolName = toolNameInstead(parse, line);
-            return toolName != null ? toolName : e.getMessage() + "\n" + helpAt(parse) + Completions.didYouMean(parse);
+            if (toolName != null) {
+                return toolName;
+            }
+            String nearest = Completions.didYouMean(parse);
+            return Problem.of(e.getMessage(), usageAt(parse), nearest.isEmpty() ? hintAt(parse) : nearest);
         }
     }
 
@@ -315,8 +302,9 @@ public final class NumenCli {
         if (action == null) {
             return null;
         }
-        return word + " is a tool name, not a command: call the tool " + word + " directly, or write the command `"
-                + action.path() + "` (`" + action.path() + " " + HELP_FLAG + "` shows its arguments).";
+        return Problem.of(word + " is a tool name, not a command", action.usage(), "call the tool " + word
+                + " directly, or write the command `" + action.path() + " …` (`" + action.path() + " " + HELP_FLAG
+                + "` shows its arguments).");
     }
 
     /**
@@ -330,6 +318,10 @@ public final class NumenCli {
             if (parse.getExceptions().size() == 1) {
                 throw parse.getExceptions().values().iterator().next();
             }
+            CommandSyntaxException positional = positionalProblem(parse);
+            if (positional != null) {
+                throw positional;
+            }
             if (parse.getExceptions().isEmpty() || parse.getContext().getRange().isEmpty()) {
                 throw CommandSyntaxException.BUILT_IN_EXCEPTIONS.dispatcherUnknownCommand().createWithContext(reader);
             }
@@ -341,17 +333,51 @@ public final class NumenCli {
     }
 
     /**
-     * 出错那一层的帮助:沿着已解析的字面节点走——根、组、动作,走到哪层算哪层。参数节点不算一层,
-     * 所以卡在某个参数上时给的是那个动作的帮助。
+     * 可以不写的位置参数后面也能直接接标志尾巴,于是那一格有两条路都读不通:位置参数的与标志尾巴的。写下的不以 {@code --} 打头时
+     * 她写的是位置参数,报它的那一句;否则是 null,照常判。
      */
-    private static String helpAt(ParseResults<?> parse) {
+    private static CommandSyntaxException positionalProblem(ParseResults<?> parse) {
+        ImmutableStringReader reader = parse.getReader();
+        if (reader.getString().startsWith(FlagsArgument.PREFIX, reader.getCursor())) {
+            return null;
+        }
+        CommandSyntaxException found = null;
+        for (Map.Entry<? extends CommandNode<?>, CommandSyntaxException> e : parse.getExceptions().entrySet()) {
+            if (e.getKey().getName().equals(FlagsArgument.NODE)) {
+                continue;
+            }
+            if (found != null) {
+                return null;
+            }
+            found = e.getValue();
+        }
+        return found;
+    }
+
+    /**
+     * 出错那一层的正确写法:沿着已解析的字面节点走——根、组、动作,走到哪层算哪层。参数节点不算一层,所以卡在某个参数上时给的是
+     * 那个动作的用法行与例子;停在组或根上时给那一层的动作或组的清单(第一页)。
+     */
+    private static String usageAt(ParseResults<?> parse) {
         List<String> path = literalPath(parse);
         CommandGroup group = path.isEmpty() ? null : GROUPS.get(path.get(0));
         if (group == null) {
             return rootListing().first();
         }
         Action action = path.size() > 1 ? group.action(path.get(1)) : null;
-        return action == null ? CommandHelp.group(group).first() : CommandHelp.action(action);
+        return action == null ? CommandHelp.group(group).first() : CommandHelp.usage(action);
+    }
+
+    /** 出错那一层的帮助怎么要:{@code work dig --help}、{@code work --help},根上是 {@code help}。 */
+    private static String hintAt(ParseResults<?> parse) {
+        List<String> path = literalPath(parse);
+        CommandGroup group = path.isEmpty() ? null : GROUPS.get(path.get(0));
+        if (group == null) {
+            return "`" + HELP + "` lists the command groups.";
+        }
+        Action action = path.size() > 1 ? group.action(path.get(1)) : null;
+        return "`" + (action == null ? group.name() : action.path()) + " " + HELP_FLAG + "` explains "
+                + (action == null ? "each action." : "every argument.");
     }
 
     /** 解析走过的字面节点的名字,从一级命令往下。 */

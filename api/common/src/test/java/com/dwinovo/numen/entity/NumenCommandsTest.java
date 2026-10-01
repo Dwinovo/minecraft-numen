@@ -38,7 +38,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class NumenCommandsTest {
 
     private static final Param<Integer> COUNT = Param.required("count", ArgType.integer(1, 64), "How many.");
-    private static final Param<String> FROM = Param.optional("from", ArgType.word(), "Where from.");
+    private static final Param<String> FROM = Param.optional("from", ArgType.word(), "Where from.")
+            .whenOmitted("take any");
 
     private static boolean booted;
     private CommandDispatcher<CommandSourceStack> dispatcher;

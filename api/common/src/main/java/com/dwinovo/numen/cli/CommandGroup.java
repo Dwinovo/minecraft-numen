@@ -2,6 +2,7 @@ package com.dwinovo.numen.cli;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -19,7 +20,8 @@ import java.util.Set;
  * }</pre>
  *
  * <p>它不给任何通向别的组或根的把手,所以插件<b>够不着别人的节点</b>——"不能往别人的节点下嫁接"由形状保证,
- * 不靠约定。组名撞了、动作名撞了、快捷工具名撞了、动作没写例子或例子写不通,都在登记的那一刻抛出。
+ * 不靠约定。组名撞了、动作名撞了、快捷工具名撞了、参数表违反命令行的规矩({@link #checkParams})、动作没写例子或例子写不通,
+ * 都在登记的那一刻抛出。
  * 登记块返回后这一组就封口,之后再往里加、再提升、再补帮助都会抛。
  */
 public final class CommandGroup {
@@ -39,7 +41,7 @@ public final class CommandGroup {
      *
      * @param name    动作名,小写英文
      * @param summary 一句话说明,列表与帮助里用
-     * @param params  参数:必填的依次是位置参数,可选的是 {@code --name value} 标志
+     * @param params  参数:位置参数按声明顺序写在动作后面,标志写成 {@code --name value}
      */
     public Action server(String name, String summary, Action.OnServer handler, Param<?>... params) {
         return add(name, summary, List.of(params), requireHandler(handler, name), null);
@@ -70,25 +72,51 @@ public final class CommandGroup {
     }
 
     /**
-     * 参数表的硬规矩:名字不重复;吃整行的参数只能是最后一个必填参数,而且这个动作不能再有标志——它会把后面的一切都当成
-     * 自己的值;一串值当位置参数时只能是最后一个必填参数——它读到行尾或下一个标志,后面的位置参数会被它吞掉。
+     * 参数表的规矩,登记时查,违反就抛出——核心与插件的命令同样受约束(设计稿 {@code docs/shell.md} §二):
+     * <ul>
+     *   <li>名字不重复;</li>
+     *   <li><b>一条命令只有一类位置参数</b>:它操作的东西,可以多个,类别({@link ArgType#noun})都一样;其余一律是标志;</li>
+     *   <li><b>没有必须写的标志</b>:每个标志与可以不写的位置参数都写明不写时会怎样({@link Param#whenOmitted}),默认就是对的;</li>
+     *   <li><b>开关不当位置参数</b>:{@code true}/{@code false} 不写在命令行上,开关只写 {@code --name} 或 {@code --no-name};</li>
+     *   <li>可以不写的位置参数只能是最后一个;一串值当位置参数只能是最后一个——它读到行尾或下一个标志,后面的位置参数会被它吞掉;
+     *       吃整行的参数只能是最后一个位置参数,而且这个动作不能再有标志——它会把后面的一切都当成自己的值。</li>
+     * </ul>
      */
     private static void checkParams(String path, List<Param<?>> params) {
         Set<String> seen = new HashSet<>();
-        List<Param<?>> required = params.stream().filter(Param::required).toList();
+        List<Param<?>> positionals = params.stream().filter(Param::positional).toList();
+        Set<String> nouns = new LinkedHashSet<>();
         for (Param<?> p : params) {
             if (!seen.add(p.name())) {
                 throw new IllegalArgumentException(path + " 的参数 " + p.name() + " 写了两次");
             }
-            boolean last = !required.isEmpty() && required.get(required.size() - 1) == p;
-            if (p.type().span() == ArgType.Span.REST && (!last || required.size() != params.size())) {
+            boolean last = !positionals.isEmpty() && positionals.get(positionals.size() - 1) == p;
+            if (p.type().isSwitch() && p.positional()) {
+                throw new IllegalArgumentException(path + " 的参数 " + p.name() + " 是开关,不能当位置参数:开关写成标志 --"
+                        + p.flag() + " / --no-" + p.flag());
+            }
+            if (!p.required() && p.whenOmitted() == null) {
+                throw new IllegalArgumentException(path + " 的参数 " + p.name() + " 可以不写,却没写不写时会怎样"
+                        + "(whenOmitted):没有必须写的标志——必须写的做成位置参数,否则给一个对的默认");
+            }
+            if (p.positional() && !p.required() && !last) {
+                throw new IllegalArgumentException(path + " 的参数 " + p.name() + " 是可以不写的位置参数,只能是最后一个");
+            }
+            if (p.type().span() == ArgType.Span.REST && (!last || positionals.size() != params.size())) {
                 throw new IllegalArgumentException(path + " 的参数 " + p.name()
                         + " 吃掉余下整行,只能是最后一个参数,且这个动作不能再有标志");
             }
-            if (p.type().span() == ArgType.Span.SEVERAL && p.required() && !last) {
+            if (p.type().span() == ArgType.Span.SEVERAL && p.positional() && !last) {
                 throw new IllegalArgumentException(path + " 的参数 " + p.name()
-                        + " 是一串值,当位置参数只能是最后一个必填参数");
+                        + " 是一串值,当位置参数只能是最后一个");
             }
+            if (p.positional()) {
+                nouns.add(p.type().noun());
+            }
+        }
+        if (nouns.size() > 1) {
+            throw new IllegalArgumentException(path + " 的位置参数有 " + nouns.size() + " 类对象(" + String.join("、", nouns)
+                    + "):一条命令只有一类位置参数——它操作的东西,可以多个;其余写成标志");
         }
     }
 

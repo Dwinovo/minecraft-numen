@@ -76,8 +76,8 @@ final class BrigadierHelp {
                 out.append(" (").append(SHOWN).append(" of ").append(next.size()).append(')');
             }
             out.append(": ").append(String.join(", ", next.subList(0, Math.min(SHOWN, next.size()))));
-        } else if (!whole) {
-            out.append(Completions.didYouMean(parse));
+        } else if (!whole && !Completions.didYouMean(parse).isEmpty()) {
+            out.append('\n').append(Completions.didYouMean(parse));
         }
         return out.toString();
     }

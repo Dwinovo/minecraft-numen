@@ -7,22 +7,30 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * 动作的一个参数:名字、类型、说明、必不必填,以及两条取值提示。它是这个参数的唯一声明——命令行的写法、帮助里的
+ * 动作的一个参数:名字、类型、说明、怎么写,以及两条取值提示。它是这个参数的唯一声明——命令行的写法、帮助里的
  * 一行、快捷工具 schema 里的字段、处理函数取值用的键,全从这里来。
  *
- * <p>必填的是位置参数,按声明顺序写在动作后面;可选的是标志,写成 {@code --name value},顺序随意
- * (见 {@link FlagsArgument})。名字就是 JSON 的键,也就是标志名,不另起一个。
+ * <h2>三种写法</h2>
+ * <ul>
+ *   <li>{@link #required}:位置参数,按声明顺序写在动作后面——它就是这条命令操作的东西;</li>
+ *   <li>{@link #optionalPositional}:可以不写的位置参数,只能是最后一个({@code fight attack [<entity>...]});</li>
+ *   <li>{@link #optional}:标志,写成 {@code --name value},顺序随意(见 {@link FlagsArgument});开关({@link ArgType#bool()})
+ *       只写 {@code --name} 或 {@code --no-name}。</li>
+ * </ul>
+ * 名字就是 JSON 的键(小写、下划线);命令行上标志名写短横线({@code --block-ids}),读的时候 {@code _} 与 {@code -} 是同一个字符
+ * ({@link #flagOf})。命令行的规矩(一条命令只有一类位置参数、不能写必填的标志……)在登记时查,见 {@link CommandGroup}。
  *
  * <h2>取值提示</h2>
- * 类型自己说得出的(整数的范围、布尔的 true/false)由 {@link ArgType} 说;类型说不出的由声明补上:
+ * 类型自己说得出的(整数的范围、开关)由 {@link ArgType} 说;类型说不出的由声明补上:
  * <ul>
  *   <li>{@link #values}:能写哪些值——固定的几个就列出来,不固定的写明去哪查(哪条命令、哪个事件给出它);</li>
- *   <li>{@link #whenOmitted}:可选参数不写时会怎样,写成 "Omit to …" 的后半句。</li>
+ *   <li>{@link #whenOmitted}:可以不写的参数不写时会怎样,写成 "Omit to …" 的后半句。可以不写的参数都得有它:
+ *       不写就有一个对的默认,登记时查。</li>
  * </ul>
  * 两条都接在说明后面({@link #explained}),帮助与 schema 读的是同一段文字。
  *
  * <h2>标志组</h2>
- * 成批出现、意思相关的可选标志(路线规格的十几个旋钮)可以归进一个组({@link #group}):动作的用法行只写一格
+ * 成批出现、意思相关的标志(路线规格的十几个旋钮)可以归进一个组({@link #group}):动作的用法行只写一格
  * {@code [route flags]},不逐个列;完整清单在动作自己的帮助里,列在组名那一小节下。组只是帮助里怎么排,
  * 命令行上怎么写、schema 里怎么摊都不变。
  *
@@ -34,17 +42,21 @@ import java.util.regex.Pattern;
  * String texture = args.get(TEXTURE);   // 没给是 null
  * }</pre>
  *
+ * @param required    必须写:只有位置参数能是
+ * @param positional  写在动作后面的位置参数;否则是标志
  * @param values      能写哪些值、去哪查;没写是 null
- * @param whenOmitted 可选参数不写时会怎样("Omit to" 后面那半句);必填参数与没写的都是 null
+ * @param whenOmitted 可以不写的参数不写时会怎样("Omit to" 后面那半句);必须写的是 null
  * @param group       归进的标志组,用法行里整组写成一格 {@code [组名]};不归组是 null
  */
-public record Param<T>(String name, ArgType<T> type, String description, boolean required,
+public record Param<T>(String name, ArgType<T> type, String description, boolean required, boolean positional,
                        String values, String whenOmitted, String group) {
 
     /** 参数名与 JSON 键同形:小写字母开头,小写字母、数字、下划线。 */
     private static final Pattern NAME = Pattern.compile("[a-z][a-z0-9_]{0,63}");
     /** 标志组的名字:用法行里写成 {@code [组名]},帮助里是那一小节的标题。 */
     private static final Pattern GROUP = Pattern.compile("[a-z]+( [a-z]+)*");
+    /** 关掉一个开关的前缀:{@code --no-sneak}。 */
+    static final String NO = "no_";
 
     public Param {
         if (name == null || !NAME.matcher(name).matches()) {
@@ -56,8 +68,11 @@ public record Param<T>(String name, ArgType<T> type, String description, boolean
         if (description == null || description.isBlank()) {
             throw new IllegalArgumentException("参数 " + name + " 没写说明——帮助和 schema 都从它来");
         }
-        if (!required && type.span() == ArgType.Span.REST) {
-            throw new IllegalArgumentException("参数 " + name + " 吃掉余下整行,不能当可选标志");
+        if (required && !positional) {
+            throw new IllegalArgumentException("参数 " + name + " 必须写却是标志:必须写的做成位置参数");
+        }
+        if (!positional && type.span() == ArgType.Span.REST) {
+            throw new IllegalArgumentException("参数 " + name + " 吃掉余下整行,不能当标志");
         }
         if (values != null && values.isBlank()) {
             throw new IllegalArgumentException("参数 " + name + " 的取值提示是空的");
@@ -68,33 +83,52 @@ public record Param<T>(String name, ArgType<T> type, String description, boolean
         if (whenOmitted != null && whenOmitted.isBlank()) {
             throw new IllegalArgumentException("参数 " + name + " 不写时会怎样是空的");
         }
-        if (group != null && (required || !GROUP.matcher(group).matches())) {
-            throw new IllegalArgumentException("参数 " + name + " 的标志组不合规:只有可选参数能归组,组名是小写英文词"
+        if (group != null && (positional || !GROUP.matcher(group).matches())) {
+            throw new IllegalArgumentException("参数 " + name + " 的标志组不合规:只有标志能归组,组名是小写英文词"
                     + "(如 \"route flags\"),得到 '" + group + "'");
         }
     }
 
+    /** 必须写的位置参数:这条命令操作的东西。 */
     public static <T> Param<T> required(String name, ArgType<T> type, String description) {
-        return new Param<>(name, type, description, true, null, null, null);
+        return new Param<>(name, type, description, true, true, null, null, null);
     }
 
+    /** 可以不写的位置参数:只能是最后一个位置参数,不写时会怎样要写明({@link #whenOmitted})。 */
+    public static <T> Param<T> optionalPositional(String name, ArgType<T> type, String description) {
+        return new Param<>(name, type, description, false, true, null, null, null);
+    }
+
+    /** 标志 {@code --name value};开关只写 {@code --name}。不写时会怎样要写明({@link #whenOmitted})。 */
     public static <T> Param<T> optional(String name, ArgType<T> type, String description) {
-        return new Param<>(name, type, description, false, null, null, null);
+        return new Param<>(name, type, description, false, false, null, null, null);
     }
 
     /** 能写哪些值、去哪查,例如 {@code "pot or stockpot"}、{@code "a model id as ysm options lists it"}。 */
     public Param<T> values(String values) {
-        return new Param<>(name, type, description, required, values, whenOmitted, group);
+        return new Param<>(name, type, description, required, positional, values, whenOmitted, group);
     }
 
-    /** 可选参数不写时会怎样,接在 "Omit to" 后面,例如 {@code "use the model's first texture"}。 */
+    /** 可以不写的参数不写时会怎样,接在 "Omit to" 后面,例如 {@code "use the model's first texture"}。 */
     public Param<T> whenOmitted(String whenOmitted) {
-        return new Param<>(name, type, description, required, values, whenOmitted, group);
+        return new Param<>(name, type, description, required, positional, values, whenOmitted, group);
     }
 
-    /** 归进一个标志组,例如 {@code "route flags"}:用法行里整组只写一格 {@code [route flags]}。只有可选参数能归组。 */
+    /** 归进一个标志组,例如 {@code "route flags"}:用法行里整组只写一格 {@code [route flags]}。只有标志能归组。 */
     public Param<T> group(String group) {
-        return new Param<>(name, type, description, required, values, whenOmitted, group);
+        return new Param<>(name, type, description, required, positional, values, whenOmitted, group);
+    }
+
+    /** 命令行上的标志名:参数名里的下划线写成短横线,{@code block_ids} 是 {@code block-ids}。 */
+    String flag() {
+        return name.replace('_', '-');
+    }
+
+    /**
+     * 命令行上写的一个标志名(不带 {@code --})对应的参数名:{@code _} 与 {@code -} 是同一个字符。JSON 的键也照这条认。
+     */
+    static String nameOf(String written) {
+        return written.replace('-', '_');
     }
 
     /** 一组参数的 JSON schema,字段按声明顺序。快捷工具与 command 工具的 schema 都经这里生成。 */
@@ -118,11 +152,15 @@ public record Param<T>(String name, ArgType<T> type, String description, boolean
         return sb.toString();
     }
 
-    /** 命令行上的样子:位置参数 {@code <name>},一串值或吃整行的 {@code <name...>},标志 {@code [--name <类型>]}。 */
+    /**
+     * 命令行上的样子:位置参数 {@code <name>},一串值或吃整行的 {@code <name...>},可以不写的包在 {@code [...]} 里;
+     * 标志 {@code [--name <类型>]},开关 {@code [--name]}。
+     */
     String usage() {
-        if (!required) {
-            return "[--" + name + " <" + type.kind() + ">]";
+        if (!positional) {
+            return type.isSwitch() ? "[--" + flag() + "]" : "[--" + flag() + " <" + type.kind() + ">]";
         }
-        return type.span() == ArgType.Span.ONE ? "<" + name + ">" : "<" + name + "...>";
+        String shown = type.span() == ArgType.Span.ONE ? "<" + name + ">" : "<" + name + "...>";
+        return required ? shown : "[" + shown + "]";
     }
 }

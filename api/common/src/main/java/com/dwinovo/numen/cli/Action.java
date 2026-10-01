@@ -94,9 +94,6 @@ public final class Action {
         if (description == null || description.isBlank()) {
             throw new IllegalArgumentException(path() + " 提升为快捷工具却没写工具描述");
         }
-        if (params.stream().anyMatch(p -> p.type().readsInTree())) {
-            throw new IllegalArgumentException(path() + " 有一个参数是本组的另一行命令,只在命令行上读得了,不能提升为快捷工具");
-        }
         this.toolDescription = description;
         return this;
     }
@@ -198,8 +195,9 @@ public final class Action {
         }
     }
 
+    /** 位置参数,按声明顺序;可以不写的那一个(若有)在最后。 */
     List<Param<?>> positionals() {
-        return params.stream().filter(Param::required).toList();
+        return params.stream().filter(Param::positional).toList();
     }
 
     List<Param<?>> params() {
@@ -237,17 +235,17 @@ public final class Action {
     }
 
     /**
-     * 整行用法:路径 + 必填参数 + 标志。归了组的标志整组写成一格 {@code [组名]},排在组里第一个标志的位置;
+     * 整行用法:路径 + 位置参数 + 标志。归了组的标志整组写成一格 {@code [组名]},排在组里第一个标志的位置;
      * 组里有哪些标志由动作自己的帮助列全({@link CommandHelp#action})。
      */
     String usage() {
         StringBuilder sb = new StringBuilder(path());
         for (Param<?> p : params) {
-            if (p.required()) sb.append(' ').append(p.usage());
+            if (p.positional()) sb.append(' ').append(p.usage());
         }
         List<String> groups = new ArrayList<>();
         for (Param<?> p : params) {
-            if (p.required()) {
+            if (p.positional()) {
                 continue;
             }
             if (p.group() == null) {

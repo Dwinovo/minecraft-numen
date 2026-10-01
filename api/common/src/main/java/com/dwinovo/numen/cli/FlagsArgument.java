@@ -22,9 +22,10 @@ import java.util.stream.Collectors;
  * Brigadier 解析,出错时报的位置是整行里的真实位置,用法照样附上;不另有一趟"先把标志拆出来"的预处理,
  * 也不靠 Brigadier 的 redirect 回环(那样每个标志一层子上下文,取值要一层层往回找)。
  *
- * <p>规矩:标志名就是参数名;每个标志都带一个值,{@code --name} 与值之间、两个标志之间各一个空格
- * (和 Brigadier 分隔位置参数的规矩一样);同一个标志不能写两次;没声明的标志拒掉并列出能写的。
- * 吃整行的类型不能当标志({@link Param} 登记时就拒),所以值总有边界。
+ * <p>规矩:标志名就是参数名,写成短横线({@code --block-ids}),读的时候 {@code _} 与 {@code -} 是同一个字符
+ * ({@link Param#nameOf});开关({@link ArgType#bool()})不带值,{@code --sneak} 是开、{@code --no-sneak} 是关;别的标志都带
+ * 一个值,{@code --name} 与值之间、两个标志之间各一个空格(和 Brigadier 分隔位置参数的规矩一样);同一个标志不能写两次;
+ * 没声明的标志拒掉并列出能写的。吃整行的类型不能当标志({@link Param} 登记时就拒),所以值总有边界。
  */
 final class FlagsArgument implements ArgumentType<Map<String, Object>> {
 
@@ -43,6 +44,9 @@ final class FlagsArgument implements ArgumentType<Map<String, Object>> {
             name -> new LiteralMessage("--" + name + " needs a value"));
     private static final DynamicCommandExceptionType EXPECTED_SPACE = new DynamicCommandExceptionType(
             name -> new LiteralMessage("expected a space after the value of --" + name));
+    private static final DynamicCommandExceptionType SWITCH_VALUE = new DynamicCommandExceptionType(
+            name -> new LiteralMessage("--" + name + " is a switch and takes no value: write --" + name + " to turn it "
+                    + "on, --no-" + name + " to turn it off"));
 
     private final Map<String, Param<?>> flags = new LinkedHashMap<>();
 
@@ -61,24 +65,46 @@ final class FlagsArgument implements ArgumentType<Map<String, Object>> {
                 throw EXPECTED_FLAG.createWithContext(reader, usage());
             }
             reader.setCursor(reader.getCursor() + PREFIX.length());
-            String name = reader.readUnquotedString();
+            String written = reader.readUnquotedString();
+            String name = Param.nameOf(written);
             Param<?> param = flags.get(name);
+            Boolean switched = null;
+            if (param != null && param.type().isSwitch()) {
+                switched = true;
+            } else if (param == null && name.startsWith(Param.NO) && flags.get(name.substring(Param.NO.length())) != null
+                    && flags.get(name.substring(Param.NO.length())).type().isSwitch()) {
+                param = flags.get(name.substring(Param.NO.length()));
+                switched = false;
+            }
             if (param == null) {
                 reader.setCursor(start);
-                throw UNKNOWN_FLAG.createWithContext(reader, "unknown flag --" + name + "; flags here: " + usage());
+                throw UNKNOWN_FLAG.createWithContext(reader, "unknown flag --" + written + "; flags here: " + usage());
             }
-            if (out.containsKey(name)) {
+            if (out.containsKey(param.name())) {
                 reader.setCursor(start);
-                throw REPEATED_FLAG.createWithContext(reader, name);
+                throw REPEATED_FLAG.createWithContext(reader, param.flag());
+            }
+            if (switched != null) {
+                out.put(param.name(), switched);
+                if (reader.canRead()) {
+                    if (reader.peek() != ' ') {
+                        throw EXPECTED_SPACE.createWithContext(reader, param.flag());
+                    }
+                    reader.skip();
+                    if (reader.canRead() && !reader.getString().startsWith(PREFIX, reader.getCursor())) {
+                        throw SWITCH_VALUE.createWithContext(reader, param.flag());
+                    }
+                }
+                continue;
             }
             if (!reader.canRead() || reader.peek() != ' ') {
-                throw MISSING_VALUE.createWithContext(reader, name);
+                throw MISSING_VALUE.createWithContext(reader, param.flag());
             }
             reader.skip();
-            out.put(name, param.type().read(reader));
+            out.put(param.name(), param.type().read(reader));
             if (reader.canRead()) {
                 if (reader.peek() != ' ') {
-                    throw EXPECTED_SPACE.createWithContext(reader, name);
+                    throw EXPECTED_SPACE.createWithContext(reader, param.flag());
                 }
                 reader.skip();
             }

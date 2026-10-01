@@ -81,11 +81,27 @@ final class CommandHelp {
         return sb.toString();
     }
 
-    /** 一个参数的那一行:写法、类型的完整称呼,接说明与取值提示。 */
+    /**
+     * 写错时 {@code usage:} 那一段:用法行,接着缩进列出例子——例子就是正确的写法,照着改比读语法可靠。
+     */
+    static String usage(Action action) {
+        StringBuilder sb = new StringBuilder(action.usage());
+        for (String example : action.examples()) {
+            sb.append("\n  e.g. ").append(example);
+        }
+        return sb.toString();
+    }
+
+    /** 一个参数的那一行:写法、类型的完整称呼,接说明与取值提示。开关写成 {@code --name} 一格,类型说它是开关。 */
     private static String paramLine(Param<?> p) {
-        String head = p.required()
-                ? p.usage() + " (" + p.type().hint() + ")"
-                : "--" + p.name() + " <" + p.type().kind() + "> (" + p.type().hint() + "; optional)";
+        String head;
+        if (p.positional()) {
+            head = p.usage() + " (" + p.type().hint() + (p.required() ? ")" : "; optional)");
+        } else if (p.type().isSwitch()) {
+            head = "--" + p.flag() + " (" + p.type().hint().replace("name", p.flag()) + "; optional)";
+        } else {
+            head = "--" + p.flag() + " <" + p.type().kind() + "> (" + p.type().hint() + "; optional)";
+        }
         return head + " — " + p.explained();
     }
 
