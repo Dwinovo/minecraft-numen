@@ -19,11 +19,6 @@ tasks.withType(JavaCompile).configureEach {
 
 repositories {
     mavenCentral()
-    // Cobalt(Lua 虚拟机,CC: Tweaked 用的那一份)只在 SquidDev 的仓库发布;只从这里取它,这个仓库也截不走别的坐标。
-    exclusiveContent {
-        forRepository { maven { name = 'SquidDev'; url = 'https://maven.squiddev.cc' } }
-        filter { includeGroup 'cc.tweaked' }
-    }
 }
 
 neoForge {

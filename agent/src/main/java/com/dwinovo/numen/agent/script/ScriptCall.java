@@ -164,10 +164,7 @@ public final class ScriptCall {
         pending = null;
         boolean ok = "done".equals(finish.status());
         log(p, ok, finish.task() + " " + finish.status() + (finish.words().isBlank() ? "" : ": " + finish.words()));
-        JsonObject data = new JsonObject();
-        data.addProperty("task", finish.task());
-        data.addProperty("status", finish.status());
-        return advance(p.frame.run.resume(new ScriptRun.Result(ok, finish.words(), data)));
+        return advance(p.frame.run.resume(new ScriptRun.Result(ok, finish.words(), new JsonObject())));
     }
 
     /**
@@ -180,6 +177,7 @@ public final class ScriptCall {
             if (frame.name != null) {
                 host.tally(frame.name, new Tally(false, lineIn(frame), why));
             }
+            frame.run.close();
         }
         return stopped(why);
     }

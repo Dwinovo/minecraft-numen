@@ -21,6 +21,9 @@ dependencies {
     api project(':ai')
     // 大脑本身(纯 JVM,输入队列与长期目标)同理:发行 jar 里的类由下方 jar 块平铺进来。
     api project(':agent')
+    // 沙箱 Lua(纯 JVM,agent 的脚本跑在它里面)同理:发行 jar 里的类由下方 jar 块平铺进来。包名是本仓自己的
+    // com.dwinovo.lua,不会和别的模组带的 LuaJ(org.luaj)撞包。
+    api project(':lua')
     // UI 组件库(纯 JVM)同理:屏幕组装层引用 widget/令牌类型,编译期要看得见;
     // 发行 jar 里的类由下方 jar 块平铺进来。
     api project(':ui')
@@ -68,6 +71,7 @@ tasks.named('sourcesJar', Jar) {
     from(configurations.commonResources)
     from({ project(':ai').sourceSets.main.allSource })
     from({ project(':agent').sourceSets.main.allSource })
+    from({ project(':lua').sourceSets.main.allSource })
     from({ project(':ui').sourceSets.main.allSource })
     from({ project(':pathing').sourceSets.main.allSource })
 }
@@ -80,6 +84,9 @@ tasks.named('sourcesJar', Jar) {
 tasks.named('jar', Jar) {
     from({ project(':ai').sourceSets.main.output })
     from({ project(':agent').sourceSets.main.output })
+    from({ project(':lua').sourceSets.main.output })
+    // 沙箱 Lua 的底子是 LuaJ(MIT):它的许可证随平铺进来的类一起发
+    from(project(':lua').file('LICENSE')) { rename { 'LICENSE_numen-lua' } }
     from({ project(':ui').sourceSets.main.output })
     from({ project(':pathing').sourceSets.main.output })
 }

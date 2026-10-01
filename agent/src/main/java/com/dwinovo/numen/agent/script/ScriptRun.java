@@ -25,6 +25,12 @@ public interface ScriptRun {
     /** 让交出去的那条命令在调用处失败,不执行它(写法不合这个动作的参数表);{@code why} 是给脚本的那句话。 */
     Step refuse(String why);
 
+    /**
+     * 不再跑它了(被打断、这一轮被切断、到了上限):正在等结局的命令处、或正在算的那一条指令处停下,占着的东西放掉。跑完了的
+     * 调了没有作用。
+     */
+    void close();
+
     /** 运行走到的下一步。 */
     sealed interface Step permits Call, Done {}
 
@@ -38,9 +44,9 @@ public interface ScriptRun {
     record Call(int line, String group, String verb, List<Object> args, Map<String, Object> options)
             implements Step {
 
-        /** 脚本里写的函数名,{@code work.dig}。 */
+        /** 脚本里写的函数名,{@code work.dig}、{@code move.goto_}(改写规则在 {@link ScriptEngine#functionName})。 */
         public String function() {
-            return group + "." + verb;
+            return ScriptEngine.IN_USE.function(group, verb);
         }
     }
 

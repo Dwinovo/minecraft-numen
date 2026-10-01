@@ -5,11 +5,6 @@ plugins { id 'numen-plugin' }
 neoForge { version = neoforge_version }
 
 repositories {
-    // Cobalt(Lua 虚拟机,CC: Tweaked 用的那一份)只在 SquidDev 的仓库发布;只从这里取它,这个仓库也截不走别的坐标。
-    exclusiveContent {
-        forRepository { maven { name = 'SquidDev'; url = 'https://maven.squiddev.cc' } }
-        filter { includeGroup 'cc.tweaked' }
-    }
     // FTB 全家与 Architectury 各自只从自己的仓库取,两个仓库也截不走别的坐标
     exclusiveContent {
         forRepository { maven { name = 'FTB'; url = 'https://maven.ftb.dev/releases' } }

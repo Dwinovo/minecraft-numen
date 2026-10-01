@@ -317,7 +317,7 @@ class SerialCallsTest {
     @Test
     void aScriptRunsItsCommandsOneByOneAndWaitsForBodyWork() {
         scripts.run(List.of(lua("s", """
-                move.goto("ores", {arrive = "dig"})
+                move.goto_("ores", {arrive = "dig"})
                 work.dig("ores")
                 work.collect()
                 """)), sink);
@@ -338,7 +338,7 @@ class SerialCallsTest {
         assertTrue(receipt.get("success").getAsBoolean(), receipt.toString());
         String msg = receipt.get("message").getAsString();
         assertTrue(msg.startsWith("The script ran to the end: 3 commands"), msg);
-        assertTrue(msg.contains("line 1 move.goto: ok — t1 done"), msg);
+        assertTrue(msg.contains("line 1 move.goto_: ok — t1 done"), msg);
         assertTrue(msg.contains("line 2 work.dig: ok — dug 4 blocks"), msg);
         assertEquals(1, settles);
     }
@@ -346,8 +346,8 @@ class SerialCallsTest {
     @Test
     void theScriptBranchesOnAResultAndAnErrorEndsItAtThatLine() {
         scripts.run(List.of(lua("s", """
-                local r = work.dig("ores")
-                if not r.ok then error("could not dig: " .. r.text) end
+                local ok, err = pcall(function() work.dig("ores") end)
+                if not ok then error("could not dig: " .. err) end
                 work.collect()
                 """), command("after", "x")), sink);
         answerLast("{\"success\":false,\"message\":\"out of reach\"}");
@@ -356,15 +356,15 @@ class SerialCallsTest {
         com.google.gson.JsonObject receipt = json(results.get("s"));
         assertFalse(receipt.get("success").getAsBoolean());
         String msg = receipt.get("message").getAsString();
-        assertTrue(msg.startsWith("The script stopped at line 2 after 1 command: lua:2: could not dig: out of reach"),
-                msg);
+        assertTrue(msg.startsWith("The script stopped at line 2 after 1 command: lua:2: could not dig: lua:1: work.dig: "
+                + "out of reach"), msg);
         assertTrue(msg.contains("line 1 work.dig: failed — out of reach"), msg);
     }
 
     @Test
     void theOwnerSpeakingWhileTheScriptWaitsStopsItBetweenCommands() {
         scripts.run(List.of(lua("s", """
-                move.goto("ores")
+                move.goto_("ores")
                 work.dig("ores")
                 """), command("after", "x")), sink);
         answerLast("running t1");
@@ -372,7 +372,7 @@ class SerialCallsTest {
 
         assertEquals(1, lines.size(), "停在命令之间,第二行没派");
         String msg = json(results.get("s")).get("message").getAsString();
-        assertTrue(msg.startsWith("The script stopped at line 1 (move.goto) after 1 command: your owner spoke; t1 "
+        assertTrue(msg.startsWith("The script stopped at line 1 (move.goto_) after 1 command: your owner spoke; t1 "
                 + "keeps running. Nothing after that ran."), msg);
         assertTrue(ToolOutcome.failed(results.get("after")), "这一批余下的调用照旧回没执行");
         assertTrue(results.get("after").contains("while you were waiting for t1 to finish, your owner spoke"),
@@ -398,7 +398,7 @@ class SerialCallsTest {
     @Test
     void cuttingTheTurnOffMakesTheScriptReportWhereItStopped() {
         scripts.run(List.of(lua("s", """
-                move.goto("ores")
+                move.goto_("ores")
                 work.dig("ores")
                 """)), sink);
         answerLast("running t1");
@@ -406,7 +406,7 @@ class SerialCallsTest {
 
         assertTrue(abandoned.isEmpty(), "脚本交出了自己的回执,不算放弃: " + abandoned);
         String msg = json(results.get("s")).get("message").getAsString();
-        assertTrue(msg.contains("stopped at line 1 (move.goto) after 1 command: this turn was cut off; t1 was "
+        assertTrue(msg.contains("stopped at line 1 (move.goto_) after 1 command: this turn was cut off; t1 was "
                 + "stopped too"), msg);
         assertFalse(scripts.holds("s"));
     }
@@ -429,8 +429,8 @@ class SerialCallsTest {
     @Test
     void aScriptCanRunANamedOneInsideAndItsEndIsThatCallsResult() {
         scripts.run(List.of(lua("s", """
-                local r = script.run("mine", "ores")
-                print(r.ok, r.text)
+                local ok, err = pcall(script.run, "mine", "ores")
+                print(ok, err)
                 """)), sink);
         answerLast("{\"success\":true,\"data\":{\"run\":{\"script\":\"mine\",\"code\":\"work.dig(...)\","
                 + "\"args\":[\"ores\"]}}}");
@@ -438,8 +438,10 @@ class SerialCallsTest {
 
         String msg = json(results.get("s")).get("message").getAsString();
         assertTrue(msg.contains("mine line 1 work.dig: failed — out of reach"), msg);
-        assertTrue(msg.contains("printed:\ntrue\tmine ran to the end"), msg);
-        assertEquals(List.of("mine ok"), linePort.tallies);
+        assertTrue(msg.contains("line 1 script.run: failed — mine:1: work.dig: out of reach"), msg);
+        assertTrue(msg.contains("printed:\nfalse\tscript.run: mine:1: work.dig: out of reach"), msg);
+        assertTrue(msg.startsWith("The script ran to the end"), "父脚本接住了里面那一份的失败: " + msg);
+        assertEquals(List.of("mine line 1"), linePort.tallies);
     }
 
     @Test
@@ -453,20 +455,20 @@ class SerialCallsTest {
         while (results.isEmpty()) {
             String line = lines.get(lines.size() - 1);
             answerLast(line.startsWith("area has") ? "{\"success\":true,\"data\":{\"has\":true}}"
-                    : "{\"success\":false,\"message\":\"nothing in reach\"}");
+                    : "{\"success\":true,\"message\":\"dug nothing new\"}");
             sent++;
         }
         assertEquals(com.dwinovo.numen.agent.script.ScriptLimits.COMMANDS, sent);
         String msg = json(results.get("s")).get("message").getAsString();
         assertTrue(msg.contains("it reached the limit of " + com.dwinovo.numen.agent.script.ScriptLimits.COMMANDS
                 + " commands per run"), msg);
-        assertTrue(msg.contains("work.dig: 100 calls, 100 failed"), msg);
+        assertTrue(msg.contains("work.dig: 100 calls, none failed"), msg);
     }
 
     @Test
     void aScriptRunningPastTheWallClockLimitStopsBeforeItsNextCommand() {
         scripts.run(List.of(lua("s", """
-                move.goto("ores")
+                move.goto_("ores")
                 work.dig("ores")
                 """)), sink);
         linePort.now = com.dwinovo.numen.agent.script.ScriptLimits.WALL_MILLIS + 1;

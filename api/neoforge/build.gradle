@@ -40,16 +40,11 @@ neoForge {
             // 模组构造时找不到 IToolSpec,runData 直接起不来。
             sourceSet project(':ai').sourceSets.main
             sourceSet project(':agent').sourceSets.main
+            sourceSet project(':lua').sourceSets.main
             sourceSet project(':ui').sourceSets.main
             sourceSet project(':pathing').sourceSets.main
         }
     }
-}
-
-dependencies {
-    // 脚本的 Lua 虚拟机(numen-agent 的依赖)嵌进发行 jar:是一个独立的库 jar,不平铺——装了 CC: Tweaked 时两份同名的类
-    // 由加载器按版本挑一份,平铺进来就成了两个模组里的同名包。开发期的 run 从 numen-agent 的依赖里拿到它。
-    jarJar 'cc.tweaked:cobalt:0.9.9'
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }

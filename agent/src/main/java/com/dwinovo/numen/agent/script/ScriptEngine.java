@@ -1,6 +1,6 @@
 package com.dwinovo.numen.agent.script;
 
-import com.dwinovo.numen.agent.script.lua.CobaltLua;
+import com.dwinovo.numen.agent.script.lua.LuaEngine;
 
 import java.util.List;
 import java.util.function.Consumer;
@@ -12,7 +12,7 @@ import java.util.function.Consumer;
 public interface ScriptEngine {
 
     /** 眼下用的那一种。 */
-    ScriptEngine IN_USE = new CobaltLua();
+    ScriptEngine IN_USE = new LuaEngine();
 
     /** 语言的名字,给模型看:{@code Lua 5.2}。 */
     String language();
@@ -27,6 +27,17 @@ public interface ScriptEngine {
      * 一个命令在这种语言里怎么调,给模型看的两三个例子与规则(对象、选项、多词的值、返回值、打印、参数),一段话。
      */
     String howToCall();
+
+    /**
+     * 一个命令组名或动作名在这种语言里写成什么:撞上语言自己用掉的名字(关键字、自带的全局)时改写的那一条规则只在这里。
+     * 帮助、提示与生成函数都经它,所以写法只有一种。
+     */
+    String functionName(String name);
+
+    /** 一个动作在这种语言里的函数全名:{@code move.goto_}。 */
+    default String function(String group, String verb) {
+        return functionName(group) + "." + functionName(verb);
+    }
 
     /** 一行说明在这种语言里写成注释的样子(说明从正文开头那行注释读,见 {@link #summary}):{@code -- Dig out an area.}。 */
     String comment(String text);

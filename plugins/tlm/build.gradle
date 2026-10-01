@@ -5,11 +5,6 @@ plugins { id 'numen-plugin' }
 neoForge { version = neoforge_version }
 
 repositories {
-    // Cobalt(Lua 虚拟机,CC: Tweaked 用的那一份)只在 SquidDev 的仓库发布;只从这里取它,这个仓库也截不走别的坐标。
-    exclusiveContent {
-        forRepository { maven { name = 'SquidDev'; url = 'https://maven.squiddev.cc' } }
-        filter { includeGroup 'cc.tweaked' }
-    }
     // 车万女仆发在 Modrinth;代码部分 MIT,不混淆,所以可以直接编译依赖拿真模型对象。
     exclusiveContent {
         forRepository { maven { name = 'Modrinth'; url = 'https://api.modrinth.com/maven' } }
