@@ -1417,7 +1417,8 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
 - 够不够得着(`Reach`)量到包围盒往里收 `Reach.EDGE` 的那一圈,与瞄准离棱留的边同一个数:原子的 `work dig` 不再走动去找别的
   站位,`Reach` 说够得着而瞄不着的那一点差距会让它站在原地挖不成。
 - `area parts`、`area has`:见上表;`area has` 按 `DigTaskRecord.wants`(扫来的格 `Cells.Seen.holds`,框来的格立着方块)在活世界里问。
-- `build at`、`fight attack` 在帮助与类说明里标明是工作流。
+- `build at`、`fight attack` 在帮助与类说明里标明是工作流(现在的实现里还替她做着决定,按 `shell.md` §三之后拆成原子命令
+  与内置脚本)。
 
 回执样例(坐标是示意;GameTest 断言的就是这些句子):
 
