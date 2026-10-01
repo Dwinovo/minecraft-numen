@@ -9,10 +9,18 @@ import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.Reason;
 import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.pathing.world.Sight;
+import com.dwinovo.numen.permission.Listing;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.state.BlockState;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 她挖一格:挖不挖得成、要付多少——与寻路给路上一格定价是同一个成本模型({@link CompanionPorts},此刻的身体、权限快照、
@@ -75,6 +83,29 @@ public final class DigQuote {
     public String uncleared(BlockPos pos) {
         CostModel.Admission admission = model.admitDig(world, pos, world.getBlockState(pos));
         return admission.ok() ? null : NavText.refused(admission.refused(), admission.detail());
+    }
+
+    /**
+     * {@code ore} 的每一面都贴着一整块按这份规格清不掉的方块时,说它被哪几格、为什么围住(那一格方块、坐标、许可或规格给的理由);
+     * 有一面露着或贴着清得掉的为 null。这样的一格从哪个站位都看不见:挖的一方说够不着它时就说这一句。
+     */
+    public String walledIn(BlockPos ore) {
+        Map<String, List<String>> cellsByWhy = new LinkedHashMap<>();
+        for (Direction side : Direction.values()) {
+            BlockPos front = ore.relative(side);
+            String why = Sight.open(world, ore, side) ? null : uncleared(front);
+            if (why == null) {
+                return null;
+            }
+            cellsByWhy.computeIfAbsent(why, k -> new ArrayList<>())
+                    .add(NavText.name(world.getBlockState(front)) + " at " + Listing.coords(front));
+        }
+        List<String> parts = new ArrayList<>(cellsByWhy.size());
+        cellsByWhy.forEach((why, cells) -> parts.add(String.join("; ", cells) + " (" + why + ")"));
+        return "every face of " + NavText.name(world.getBlockState(ore)) + " at " + Listing.coords(ore)
+                + " is covered by a block I may not break: " + String.join(", ", parts)
+                + "; no stance lets me see it, and those blocks are not mine to get around, so dig something else or"
+                + " ask your owner";
     }
 
     /**
