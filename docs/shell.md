@@ -55,18 +55,20 @@
   什么,挖掉的下一次自动不算。
 - **没有不可拆的行为,只有循环快慢之分**:秒级的决策循环(打哪只、按什么顺序、何时撤、打完捡东西)进脚本;每刻都要转
   的控制(盯着转头、追着保持在够得着处、等冷却出手、举盾)进原子命令内部。例如 `fight attack 27` 只管"打这一只"
-  (追、转头、等冷却、出手,目标死了/丢了/超时收尾),"打哪几只"由脚本 `for _, m in ipairs(scan.entities(…)) do if not
-  fight.attack(m).ok then break end end` 决定;安全兜底(血少逃跑、岩浆自救)由反射打断脚本。`build at`、`fight attack` 现在的胖实现在
+  (追、转头、等冷却、出手,目标死了/丢了/超时收尾),"打哪几只"由脚本 `for _, m in ipairs(…) do if not
+  pcall(fight.attack, m) then break end end` 决定;安全兜底(血少逃跑、岩浆自救)由反射打断脚本。`build at`、`fight attack` 现在的胖实现在
   命令层与脚本层落地、评测追平后,按这条拆成原子命令 + 内置脚本。
 
 ## 四、脚本:Lua
 
-组合语言是 Lua(10-01 定):照 ComputerCraft/CC: Tweaked 的路子,调命令时协程让出、等身体收尾再接着跑。只有这一套组合
-语言。语言只经 `agent.script.ScriptEngine` 一处认:工具名、扩展名、注释写法、"命令怎么调"那段说明、读与跑;派发、等待、
-上限、打断、回执、脚本名词、命令函数的目录与参数换算都与语言无关(`ScriptRun` 的调用请求、结局、命令结果不带任何
-虚拟机类型)。实现在 `agent.script.lua.CobaltLua`,虚拟机的类型只在这个类里;眼下接的是
-Cobalt 0.9.9,选型未定(Cobalt 的 README 声明版本间 API 不保证稳定、建议别处改用 LuaJ、JNLua 或 Rembulan),换虚拟机
-只改 `ScriptEngine.IN_USE` 与它的实现、构建里的依赖。
+组合语言是 Lua 5.2(10-01 定),只有这一套组合语言。语言只经 `agent.script.ScriptEngine` 一处认:工具名、扩展名、注释写法、
+"命令怎么调"那段说明、函数名的改写、读与跑;派发、等待、上限、打断、回执、脚本名词、命令函数的目录与参数换算都与语言
+无关(`ScriptRun` 的调用请求、结局、命令结果不带任何虚拟机类型)。实现在 `agent.script.lua.LuaEngine`,虚拟机的类型只在
+这个类里;换语言只改 `ScriptEngine.IN_USE` 与它的实现。
+
+虚拟机是本仓自己的纯 JVM 模块 `lua`(不碰 Minecraft 与 Numen 的类型):LuaJ 主干最后一次提交 `daf3da9`(2020-04-01)
+的源码,MIT,包名改成 `com.dwinovo.lua.vm`,只留解析、编译、解释与安全的标准库;从 FiguraMC/luaj 逐个挑了几处修复。
+上游是哪一次、挑了哪几个提交、我们改了什么,见 `lua/README.md`。对外只有 `com.dwinovo.lua.LuaSandbox`。
 
 ### 工具面
 
@@ -84,60 +86,65 @@ Cobalt 0.9.9,选型未定(Cobalt 的 README 声明版本间 API 不保证稳定�
 | Lua | 写成的命令行 |
 |---|---|
 | `work.dig("ores/g3")` | `work dig ores/g3` |
-| `move.goto("ores/g3", {arrive = "dig", alter = "natural"})` | `move goto ores/g3 --arrive dig --alter natural` |
-| `scan.blocks(12, {"iron_ore"}, {into = "ores"})` | `scan blocks 12 iron_ore --into ores` |
+| `move.goto_("ores/g3", {arrive = "dig", alter = "natural"})` | `move goto ores/g3 --arrive dig --alter natural` |
+| `move.goto_(120, 64, -35)` 或 `move.goto_({120, 64, -35})` | `move goto 120 64 -35` |
+| `scan.blocks("iron_ore", {radius = 12, into = "ores"})` | `scan blocks iron_ore --radius 12 --into ores` |
+| 开关 `{sneak = true}` / `{sneak = false}` | `--sneak` / `--no-sneak` |
 | `script.run("mine", "ores")` | `script run mine ores` |
 
-- 按顺序的对象依次是必填参数;最后一个必填参数吃掉余下整行(`text`)时,多出来的对象空格隔开写进它。最后一个参数是
-  带名字键的表就是选项。命令行上占几个词的一个值(一串 id、三个坐标)在这里是列表 `{a, b, c}`。
-- 换算只在命令层一处(`NumenCli.scriptLine`):值经参数类型读成参数(`CommandArgs.fromJson`,快捷工具同一个读法),再按
-  同一张参数表写回命令行(`CommandArgs.write`)。写不成(没有这个动作、对象多了、缺必填、选项名不对)在调用处抛 Lua 错误,
-  附这个动作的用法。
-- 函数返回 `{ok = 成没成, text = 回执那句话, data = 回执数据转成的表}`。占身体的命令等它的 task_finished 再返回,
-  `done` 算成功,`text` 是收尾那句话,`data` 是 `{task, status}`。
-- 登记时声明了返回项的查询(`Action.returns("has")`,如 `area has`、`area parts`)直接返回那一项,拿来就能循环:
-  `for _, p in ipairs(area.parts("ores")) do … end`、`while area.has("ores") do … end`;失败时没有值可给,在调用处抛
-  Lua 错误(照常往下走只会在错的东西上空转),`pcall` 接得住。帮助里这几个动作多一行 `In Lua: … returns data.<项>`。
-- `print(...)` 写进回执(至多 2000 字)。按名字跑的脚本用 `...` 与 `arg` 取参数。
-- 撞了 Lua 自己的全局名(`string`、`table`……)的命令组不进脚本,标准库不让给命令。动作名是 Lua 关键字的写成
-  `组["关键字"](...)`;`goto` 在 Cobalt 里只在语句开头算关键字,`move.goto(...)` 照常写。
+- 按顺序的对象依次给位置参数,最后一个位置参数收下余下的全部对象(几个词的一个值、`text` 的整行、几个 id);最后一个
+  参数是带名字键的表就是标志,键里的 `_` 与 `-` 同一。一个值占命令行上几个词(三个坐标、一串 id)时,在这里可以写成
+  列表 `{a, b, c}`,也可以直接摊开写。
+- 换算只在命令层一处(`NumenCli.scriptLine`):对象只经参数类型 `ArgType` 一处读(`CommandArgs.fromJson`,快捷工具同一个
+  读法),再按同一张参数表写回命令行(`CommandArgs.write`)。写不成(没有这个动作、对象多了、缺必填、标志名不对)在调用处
+  抛 Lua 错误,附这个动作的用法。
+- **成功直接返回值,失败抛错。** 占身体的命令等它的 task_finished 再返回,`done` 算成功。登记时声明了返回项的命令
+  (`Action.returns("has")`,如 `area has`、`area parts`)回执里有这一项就返回它,成败都返回(`area.has` 没剩是
+  `false`,不是错),拿来就能循环:`for _, p in ipairs(area.parts("ores")) do … end`、`while area.has("ores") do … end`。
+  其余命令成功返回回执数据转成的表,没有数据就返回回执那句话;失败在调用处抛 Lua 错误,消息是
+  `move.goto_: <回执那句话>`,`pcall` 接得住,接住了就是脚本自己决定往下走。不另包一层 `{ok, text, data}`。
+  帮助里这几个动作多一行 `In a script: area.has(...) returns data.has, whether the command succeeds or not.`
+- `print(...)` 写进回执(至多 2000 字)。按名字跑的脚本用 `...` 与 `arg` 取参数。`error("why", 0)` 让它以这句话失败。
+- **名字的改写只有一条**:组名或动作名撞上 Lua 的保留字(`goto`、`end`……)或沙箱自带的全局名(`string`、`table`、
+  `print`……)的,后面加 `_`:`move.goto_`。命令名本身不变,只是脚本里的写法;帮助里这样的动作多一行
+  `In a script: move.goto_(...).`,`lua` 工具的说明里也写了这一条。规则只在 `ScriptEngine.functionName` 一处,登记处的
+  目录、回执里的函数名、帮助都从它来;沙箱不收撞名的宿主函数,登记时就抛出。
 
 ### 放在哪:`agent` 模块,和 `SerialCalls` 同一层
 
 - 语言(`agent.script.ScriptEngine` 与实现)、一次运行(`ScriptRun`)、一次调用里的脚本(`ScriptCall`)、上限(`ScriptLimits`)
   是纯 JVM,和派发器 `SerialCalls` 在同一个模块。理由:等身体收尾、急件打断等待的那处机制就在 `SerialCalls`,脚本每调
   一个命令要的正是它;放进 api 要么另造一份等待,要么让 api 的工具反过来伸进派发器。
-- 眼下的 Cobalt 只在 `agent` 引入一处(`implementation 'cc.tweaked:cobalt:0.9.9'`,SquidDev 的仓库 `maven.squiddev.cc`,
-  group `cc.tweaked` 独占)。许可:Cobalt 本体 MIT(LuaJ 的可重入分支),内含的浮点格式化取自 V8,BSD-3-Clause,都与本仓
-  的 LGPL-3.0 兼容;0.9.9 是 CC: Tweaked 1.21.1 用的那一版,编译目标 Java 17,在 Java 21 上跑。发行 jar 不平铺它,
-  NeoForge 经 `jarJar`、Fabric 经 `include` 嵌进引擎的 jar:装了 CC: Tweaked 时两份同坐标的库由加载器按版本挑一份,
-  平铺就成了两个模组里的同名包。开发期的 run 从 `agent` 的依赖拿到它(再加 `additionalRuntimeClasspath` 会重复成两个
-  同名模块,起不来)。
+- `lua` 模块由 `agent` 依赖;发行 jar 里和 `ai`、`agent` 一样平铺进引擎(`api-loader` 约定插件),许可随 jar 带
+  `LICENSE_numen-lua`。
 - 派发器经端口 `SerialCalls.Port`(继承 `ScriptCall.Host`)要这几样:执行一个调用、认出组合命令的调用里的程序、把一行命令写成
   一次 `command` 调用、受理回执与 task_finished 的认法、命令目录与换算、记战绩、墙钟。主人客户端与评测大脑用
   `CompanionToolPort`,GameTest 的一轮用服务端的 `ServerPort`(直接 `serve`,战绩直接记)。
 
-### 运行:协程在调用处让出
+### 运行:一个脚本一个虚拟线程
 
-- 每次运行一个新的虚拟机。脚本在自己的协程里跑;命令函数是可恢复的 Java 函数,收参数、在调用处让出一个调用请求
-  (`ScriptRun.Call`:行号、组、动作、对象、选项),拿到结局后从调用处接着跑。等身体干活时脚本不占线程、不阻塞谁。
-- 命令只能由脚本本身调;在脚本自己开的协程里调会报错说明(那次让出会落到她自己的 `resume` 手里)。
+- 每次运行一个新的虚拟机(`Globals`),跑在它自己的虚拟线程上。命令函数是宿主函数:收参数、把调用请求
+  (`ScriptRun.Call`:行号、组、动作、对象、选项)交给驱动方,然后在原地阻塞等结局,拿到后从调用处接着跑。驱动方只在
+  两次调命令之间等它算完(指令预算管着);等身体干活时谁都不等它,脚本线程停着不占平台线程。
+- 不装 `coroutine` 库,命令只有脚本本身调得到。
 - 一段调用里可以再跑一份有名字的脚本:`script run`(命令行上或 `script.run`)是一条普通命令,命令层按名字找到脚本、
   把正文与参数放进回执 `data.run`;派发器见到这样的回执就在原地开一层跑它,跑完它的结局就是那次调用的结局。上限算
   整段调用的总数,打断时每一层都停。外接大脑直接调工具、没有这个派发器:组合命令的工具回一条说明,`script run` 只交回正文。
 
 ### 沙箱与上限
 
-- 只装 Lua 自己的安全标准库:基本函数、string、table、math、coroutine、utf8;拿掉 `load`、`loadstring`、`setfenv`、
-  `getfenv`、`string.dump`;Cobalt 本来就不装 io、os、debug、require、dofile。
+- 只装基本函数、`string`、`table`、`math`;没有 `load`、`loadstring`、`dofile`、`loadfile`、`collectgarbage`、
+  `string.dump`、`coroutine`,也没有 io、os、debug、package、luajava。虚拟机只收源码文本(不收二进制块)。
+- 字符串库表与字符串元表全 JVM 只有一份,锁成只读:一个脚本改不了 `string.rep` 或 `getmetatable("").__index` 去影响
+  别的脚本。
 - 上限只在 `ScriptLimits` 一处,到了停在当前那一行,回执说停在哪、因为哪一条:
   - 命令数 200(嵌套的算在一起):挖一块区域每圈"还剩没有、走过去、挖"三条,两百条够七十来圈;再多是循环条件写错了在空转。
-  - 墙钟 20 分钟(原版一整天):只在命令之间查,等身体收尾时不打断那件活,活有自己的期限。
-  - 两次调命令之间 100 万条指令:脚本在大脑的线程上跑(主人客户端主线程、评测时服务端主线程),正常脚本两条命令之间只做
-    几百条以内;一百万条约几十毫秒,再多是死循环。数指令的钩子挂在虚拟机主线程上、协程都继承它;超了把整个虚拟机挂起,
-    不是抛 Lua 错误,`pcall` 接不住。
+  - 两次调命令之间 100 万条指令(约几十毫秒),一次运行共 1000 万条。
+  - 一次运行为字符串分配的字节共 64 MB:每次开新字节数组之前记账,`s = s .. s` 翻倍几十次就停。
+  - 墙钟 20 分钟(原版一整天):沙箱在指令之间查,派发器在命令之间查;等身体收尾时不打断那件活,活有自己的期限。
   - 循环圈数不另设:不调命令的循环由指令预算管,调命令的由命令数管。
-- 内存不设上限(和 CC: Tweaked 一样):`string.rep` 有长度上限,反复拼接的字符串没有;记作遗留。
+- 预算与打断都在每条指令前的钩子里查,到了抛的是 Java `Error`,`pcall` 只接 Lua 错误,接不住:`pcall` 里的死循环一样停。
+  外面也能随时打断一次运行(`Running.interrupt`),阻塞在命令函数里的脚本线程同样放手。
 
 ### 打断:停在命令之间
 
@@ -158,15 +165,15 @@ Cobalt 0.9.9,选型未定(Cobalt 的 README 声明版本间 API 不保证稳定�
 数据里有 `status`(ok / error / stopped)、`commands`,按名字跑的有 `script`。例:
 
 ```
-Script mine stopped at line 24 after 7 commands: could not dig ores: 2 blocks are out of reach.
-line 9 area.has: 2 calls, none failed; last ok — ores has 2 blocks left
-line 10 move.goto: 2 calls, none failed; last ok — t41 done: Arrived within reach of ores/g2.
-line 15 work.dig: 2 calls, 1 failed; last failed — t44 failed: 2 blocks are out of reach.
-line 22 work.collect: ok — t45 done: Picked up 9 raw_iron.
+Script mine stopped at line 15 after 7 commands: could not dig ores: work.dig: 2 blocks are out of reach.
+line 8 area.has: 2 calls, none failed; last ok — ores has 2 blocks left
+line 9 move.goto_: 2 calls, none failed; last ok — t41 done: Arrived within reach of ores/g2.
+line 13 work.dig: 2 calls, 1 failed; last failed — t44 failed: 2 blocks are out of reach.
+line 19 work.collect: ok — t45 done: Picked up 9 raw_iron.
 ```
 
 ```
-The script stopped at line 1 (move.goto) after 1 command: your owner spoke; t12 keeps running. Nothing after that ran.
+The script stopped at line 1 (move.goto_) after 1 command: your owner spoke; t12 keeps running. Nothing after that ran.
 ```
 
 (停在第 1 行时那件活还没收尾,那一行没有结局可记,回执只有第一句。)
@@ -176,12 +183,13 @@ The script stopped at line 1 (move.goto) after 1 command: your owner spoke; t12 
 - 内置的随模组发布、只读(`BuiltinScripts`);同伴存下的归主人(`ScriptStore`,主世界存档数据 `numen_scripts_<主人>`,
   和 `AreaStore` 同一个做法),同一主人的同伴都看得见、都跑得了。名字规矩用 `Names`(小写字母、数字、`_`、`-`)。
 - `script list`(每份一行:说明、谁的、战绩)、`script show <名字>`、`script run <名字> [参数...]`、
-  `script save <名字> <正文>`、`script delete <名字>`。都不占身体。
+  `script save <正文> [--name <名字>]`、`script delete <名字>`。都不占身体。不写 `--name` 就存成下一个空着的 `script-N`。
 - 存之前用同一个编译器读一遍,读不通不收,报错带行号(`gt-broken:2: …`);正文开头一行注释(`-- …`)就是它的一句话
   说明,没写不收——内置脚本也是这一条,说明只有正文里这一处。存同名的替换旧的、清掉旧战绩(旧战绩说的是旧正文);
   内置的同名存不进,删不掉,想改就另存一份。
-- 正文怎么传:`script save` 的最后一个参数吃掉余下整行;在 Lua 里是 `script.save("sweep", [[ … ]])`。不另开工具字段,
-  也不做 here-document:存脚本就是一条普通命令,同一次解析、同样过权限。
+- 正文怎么传:`script save` 的正文是一个位置参数,命令行上用引号括起来;在 Lua 里是
+  `script.save([[ … ]], {name = "sweep"})`。不另开工具字段,也不做 here-document:存脚本就是一条普通命令,同一次解析、
+  同样过权限。
 - 战绩:跑了几次、跑完几次、最近一次的时刻、最近一次没跑完停在哪一行与原因,只给事实。大脑跑完(跑完、出错、被停下)
   一份有名字的脚本时经 `ScriptTallyPayload` 送到服务端(只认主人),和工具调用同一个上行出口。内置脚本的战绩也记在
   主人名下。
@@ -201,30 +209,25 @@ The script stopped at line 1 (move.goto) after 1 command: your owner spoke; t12 
 第一批 `mine`(`core/common/src/main/resources/scripts/mine.lua`):
 
 ```lua
--- Dig out an area: walk within reach of what is left of it, dig what is in reach, until nothing is left; then pick up the drops.
+-- Dig out an area: walk within reach of what is left of it, dig what is in reach, pick up the drops, until nothing is left.
 -- usage: script run mine <area>   (an area from area list, or one part of it: ores/g3)
 local where = ...
 if where == nil then
   error("usage: script run mine <area>", 0)
 end
 
-local stuck
 while area.has(where) do
-  local walk = move.goto(where, {arrive = "dig", alter = "natural"})
-  if not walk.ok then
-    stuck = "could not get within reach of " .. where .. ": " .. walk.text
-    break
+  local walked, why = pcall(move.goto_, where, {arrive = "dig", alter = "natural"})
+  if not walked then
+    error("could not get within reach of " .. where .. ": " .. why, 0)
   end
-  local dig = work.dig(where)
-  if not dig.ok then
-    stuck = "could not dig " .. where .. ": " .. dig.text
-    break
+  local dug, err = pcall(work.dig, where)
+  if not dug then
+    error("could not dig " .. where .. ": " .. err, 0)
   end
-end
-
-work.collect()
-if stuck then
-  error(stuck, 0)
+  -- what was dug lies at your feet: pick it up before walking on (with nothing on the ground work.collect
+  -- fails saying so, which is not a mining failure)
+  pcall(work.collect)
 end
 ```
 
@@ -258,8 +261,13 @@ end
   (`NumenCli.scriptCatalog`/`scriptLine`、`Action.returns`)、派发器逐条派与
   等身体收尾(`SerialCalls` + `ScriptCall`)、上限(`ScriptLimits`)、在命令之间停下(急件、主人开口、`halt` 先收工具口)、
   按行的回执、脚本名词(`script` 组、`ScriptStore`、`BuiltinScripts`、`edit_script`/`saved`、战绩经 `ScriptTallyPayload`、
-  `<scripts>` 与 `<saved_scripts>` 索引)、内置 `mine`。单测:`CobaltLuaTest`(让出与恢复、返回表与直接返回值、沙箱、指令预算、
-  报错行号)、`SerialCallsTest`(顺序、等收尾、分支、开口与急件、切断时的回执、按名字跑与嵌套、两种上限)、`ScriptLineTest`、
-  `ScriptStoreTest`、`GateTest`;GameTest:`ScriptGameTests`。
+  `<scripts>` 与 `<saved_scripts>` 索引)、内置 `mine`。
+- 虚拟机:自己的模块 `lua`(LuaJ 主干 `daf3da9` 加 FiguraMC 的三处修复,见 `lua/README.md`),`LuaEngine` 接它;成功直接
+  返回值、失败抛错;撞名加 `_`。
+- 单测:`LuaSandboxTest`(语义、沙箱、元表锁、字符串预算、`pcall` 里的死循环、墙钟、外部打断、虚拟线程阻塞、值互转、撞名)、
+  `LuaEngineTest`(交出与接着跑、直接返回与抛错、声明的返回项、撞名)、`SerialCallsTest`(顺序、等收尾、分支、开口与急件、
+  切断时的回执、按名字跑与嵌套、两种上限)、`ScriptLineTest`、`ScriptStoreTest`、`GateTest`;GameTest:`ScriptGameTests`
+  (顺序、按失败分支、主人停止与开口、`for` 走 `area.parts`、`script run mine` 挖空埋在石头里的矿、存读跑删)。
+- 评测:`mine_iron_script` 和 `mine_iron` 同一个场景,标准解是扫进区域后 `script run mine ores`。
 - 外接大脑(MCP)直接调工具,没有派发器:组合命令的工具回一条说明,`script run` 只交回正文。要让外接大脑也跑脚本,得把它的调用
   也经派发器、并把收件箱的到达转给它,另做。
