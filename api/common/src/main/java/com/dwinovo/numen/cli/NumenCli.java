@@ -207,9 +207,10 @@ public final class NumenCli {
     }
 
     /**
-     * 脚本里一个函数的调用写成一行命令:按顺序的对象依次是这个动作的必填参数,选项表的键是可选参数的名字;最后一个必填参数
-     * 吃掉余下整行时,多出来的对象按顺序空格隔开写进它(命令行上就是那样写的)。值经参数类型读成
-     * 参数({@link CommandArgs#fromJson},和快捷工具同一个读法),再按同一张参数表写回命令行({@link CommandArgs#write})。
+     * 脚本里一个函数的调用写成一行命令。按顺序的对象依次给这个动作的位置参数,最后一个位置参数收下余下的全部对象(命令行上就是
+     * 那样写的:一串区域、三个坐标、余下整行);选项表的键是标志名({@code _} 与 {@code -} 同一)。脚本里的列表是命令行上写成几个
+     * 词的那个值({@code {120, 64, -35}} 是一格),一串值的每一项各是一个值。值经参数类型读成参数({@link CommandArgs#fromJson},
+     * 和快捷工具同一个读法——对象的写法只在 {@link ArgType} 一处读),再按同一张参数表写回命令行({@link CommandArgs#write})。
      * 这一行随后照常交给命令入口,和她亲手写的一样解析、执行。
      *
      * @throws IllegalArgumentException 没有这个动作、对象多了、缺了必填的、选项名不对或值读不成;消息是给脚本的那句话,
@@ -224,23 +225,26 @@ public final class NumenCli {
         }
         List<Param<?>> positionals = action.positionals();
         List<Object> objects = call.args();
-        boolean rest = !positionals.isEmpty()
-                && positionals.get(positionals.size() - 1).type().span() == ArgType.Span.REST;
         try {
-            if (objects.size() > positionals.size() && !rest) {
-                throw new IllegalArgumentException("takes " + positionals.size() + " object"
-                        + (positionals.size() == 1 ? "" : "s") + ", got " + objects.size());
+            if (positionals.isEmpty() && !objects.isEmpty()) {
+                throw new IllegalArgumentException("takes no objects, got " + objects.size());
             }
             JsonObject json = new JsonObject();
-            for (int i = 0; i < Math.min(objects.size(), positionals.size()); i++) {
+            for (int i = 0; i < positionals.size() && i < objects.size(); i++) {
+                Param<?> p = positionals.get(i);
                 boolean last = i == positionals.size() - 1;
-                json.add(positionals.get(i).name(), rest && last
-                        ? new JsonPrimitive(String.join(" ", objects.subList(i, objects.size()).stream()
-                                .map(String::valueOf).toList()))
-                        : json(objects.get(i)));
+                List<Object> given = last ? objects.subList(i, objects.size()) : objects.subList(i, i + 1);
+                json.add(p.name(), given.size() == 1 && !(p.type().span() == ArgType.Span.SEVERAL)
+                        ? one(given.get(0))
+                        : several(p, given));
             }
             for (Map.Entry<String, Object> option : call.options().entrySet()) {
-                json.add(option.getKey(), json(option.getValue()));
+                Param<?> p = action.params().stream().filter(q -> q.name().equals(Param.nameOf(option.getKey())))
+                        .findFirst().orElse(null);
+                json.add(option.getKey(), p != null && p.type().span() == ArgType.Span.SEVERAL
+                        ? several(p, option.getValue() instanceof List<?> list ? List.copyOf(list)
+                                : List.of(option.getValue()))
+                        : one(option.getValue()));
             }
             return CommandArgs.fromJson(action.params(), json).write(action.path(), action.params());
         } catch (IllegalArgumentException wrong) {
@@ -248,19 +252,30 @@ public final class NumenCli {
         }
     }
 
-    /** 脚本交来的一个值(字符串、整数、小数、布尔、列表)写成 JSON。 */
-    private static JsonElement json(Object value) {
+    /** 一个参数收下的几个对象:一串值是每项一个值的数组,别的(余下整行、几个词的一个值)是空格连起来的一串。 */
+    private static JsonElement several(Param<?> p, List<?> given) {
+        if (p.type().span() == ArgType.Span.SEVERAL) {
+            JsonArray array = new JsonArray();
+            given.forEach(v -> array.add(one(v)));
+            return array;
+        }
+        return new JsonPrimitive(words(given));
+    }
+
+    /** 一个对象写成 JSON:列表是命令行上的几个词(一格 {@code 120 64 -35}),其余照原样。 */
+    private static JsonElement one(Object value) {
         return switch (value) {
             case String s -> new JsonPrimitive(s);
             case Number n -> new JsonPrimitive(n);
             case Boolean b -> new JsonPrimitive(b);
-            case List<?> list -> {
-                JsonArray array = new JsonArray();
-                list.forEach(v -> array.add(json(v)));
-                yield array;
-            }
+            case List<?> list -> new JsonPrimitive(words(list));
             default -> throw new IllegalArgumentException("cannot pass " + value + " to a command");
         };
+    }
+
+    private static String words(List<?> values) {
+        return String.join(" ", values.stream().map(v -> v instanceof List<?> l ? words(l) : String.valueOf(v))
+                .toList());
     }
 
     /** 登记了的各组,按名字排序。 */

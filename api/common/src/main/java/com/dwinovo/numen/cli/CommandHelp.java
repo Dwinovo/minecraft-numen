@@ -1,5 +1,6 @@
 package com.dwinovo.numen.cli;
 
+import com.dwinovo.numen.agent.script.ScriptEngine;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -78,11 +79,14 @@ final class CommandHelp {
         if (action.toolName() != null) {
             sb.append("\n  Shortcut tool: ").append(action.toolName()).append('.');
         }
-        // 函数怎么对应命令写在 lua 工具的描述里;只有直接返回值的那几个与众不同,在它们自己的帮助里说
+        // 函数怎么对应命令写在组合工具的描述里;名字被改写的、直接返回某一项的,在它们自己的帮助里说
+        ScriptEngine engine = ScriptEngine.IN_USE;
+        String function = engine.function(action.group().name(), action.name());
         if (action.returns() != null) {
-            sb.append("\n  In a script: ").append(action.group().name()).append('.').append(action.name())
-                    .append("(...) returns data.").append(action.returns())
-                    .append(" directly, and fails at the call when the command fails.");
+            sb.append("\n  In a script: ").append(function).append("(...) returns data.").append(action.returns())
+                    .append(", whether the command succeeds or not.");
+        } else if (!function.equals(action.group().name() + "." + action.name())) {
+            sb.append("\n  In a script: ").append(function).append("(...).");
         }
         return sb.toString();
     }

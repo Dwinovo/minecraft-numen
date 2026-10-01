@@ -139,9 +139,9 @@ public final class Action {
     }
 
     /**
-     * 脚本里这个动作的函数直接返回回执 {@code data} 里的 {@code key} 那一项,而不是整张结果表:查询的结果拿来就能
-     * 循环、判断({@code for _, p in ipairs(area.parts("ores"))}、{@code while area.has(p)})。命令失败时没有值可给,函数在
-     * 调用处抛出脚本错误。不调就是整份结果 {@code {ok, text, data}}。
+     * 脚本里这个动作的函数返回回执 {@code data} 里的 {@code key} 那一项——只要回执里有它,成败都返回:查询的结果拿来就能
+     * 循环、判断({@code for _, p in ipairs(area.parts("ores"))}、{@code while area.has(p)},没剩就是 false 而不是报错)。
+     * 回执里没有这一项(区域不存在这类)才在调用处抛出脚本错误。不调就是普通的直返:成功返回回执数据、失败抛错。
      */
     public Action returns(String key) {
         group.requireOpen();
