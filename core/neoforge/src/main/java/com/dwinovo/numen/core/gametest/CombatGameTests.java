@@ -132,6 +132,36 @@ public class CombatGameTests {
     }
 
     /**
+     * 要打的那只一刻不停地在原地晃(真的怪围着主人打时就是这样):走位的目标跟着它每刻都变,从她脚下派出去的那次搜索得搜完,
+     * 不能每变一次就作废重派——那样一次也搜不完,她站在远处一步不动。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_combat")
+    public static void attack_closes_in_on_a_target_that_never_stands_still(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = armedCompanion(helper, new BlockPos(2, 2, 8));
+        Zombie zombie = EntityType.ZOMBIE.create(level);
+        helper.assertTrue(zombie != null, "zombie did not spawn");
+        BlockPos at = helper.absolutePos(new BlockPos(12, 2, 8));
+        zombie.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        zombie.setNoAi(true);
+        level.addFreshEntity(zombie);
+        float startHealth = zombie.getHealth();
+        // 每刻在它那一格里挪一点,不出格
+        helper.onEachTick(() -> zombie.setPos(at.getX() + 0.5 + 0.2 * Math.sin(level.getGameTime() * 0.7),
+                zombie.getY(), at.getZ() + 0.5 + 0.2 * Math.cos(level.getGameTime() * 0.7)));
+        ToolRun attack = command(companion, "fight attack " + zombie.getId());
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(attack.task() != null, "the attack was not accepted: " + attack.reply());
+            helper.assertTrue(zombie.getHealth() < startHealth && zombie.getLastHurtByMob() == companion,
+                    "she is still " + String.format("%.2f", companion.distanceTo(zombie))
+                            + " away and never hit the jittering zombie: " + attack.task().getResult());
+            zombie.discard();
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
      * 主人在线、却离她很远时,要打的那只站在隔壁区块里:她自己那块加载垫得让伸手所及的邻区块也在跑实体刻,否则那只是冻住的——挨了
      * 第一下之后受击无敌帧永远不退,她一直等着出第二刀,它也打不死。GameTest 的场地区块是钉住的,这里搬到两千格外、高处
      * 一块没人钉的地方现搭一条石台,让她的加载垫成为那里唯一的票据。僵尸不动,测的只是她能不能把它打死。
