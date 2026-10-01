@@ -393,7 +393,7 @@ class SearchTest {
     }
 
     /**
-     * 挖几格里的任意一格({@link Goals#dig(java.util.List, com.dwinovo.numen.pathing.world.BodyStats)}):她站在一条南北向、一格宽的
+     * 挖几格里的任意一格({@link Goals#dig(java.util.List, com.dwinovo.numen.pathing.world.BodyStats, Goals.Clearing)}):她站在一条南北向、一格宽的
      * 石头走廊正中,走廊两头各嵌着矿——一头一格,另一头并排两格(多出来的那格在走廊外侧,不比正对走廊的那格近)。两头最先够得着矿的站位离她一样远、
      * 估价一样,够着的格数不同:同样划算,
      * 挑一次够得着最多格的那一头。两个朝向各试一次,不靠搜索先往哪边铺。
@@ -409,7 +409,8 @@ class SearchTest {
             pair.forEach(ore -> world.set(ore, Blocks.IRON_ORE.defaultBlockState()));
             List<BlockPos> targets = new java.util.ArrayList<>(List.of(single));
             targets.addAll(pair);
-            SearchResult result = search(world, defaults(), START, Goals.dig(targets, SURVIVAL));
+            SearchResult result = search(world, defaults(), START, Goals.dig(targets.stream().map(t -> new Goals.DigTarget(t, 0)).toList(), SURVIVAL,
+                    Goals.Clearing.ANY));
             assertTrue(result.arrived(), result.stop().toString());
             BlockPos end = result.route().end();
             Stance stance = result.route().endStance();

@@ -167,19 +167,28 @@ public final class Goals {
     }
 
     /**
-     * 挖 {@code targets} 里的任意一格:到了任何一格的挖目标({@link #dig(BlockPos, BodyStats)})就算到。同样划算的站位里优先一次
-     * 够得着最多格的——站位每少够着一格,停下多付 {@link ActionCosts#WALK_ONE_BLOCK} 除以格数(全少了也不到多走一格),
-     * 所以走路的价钱差得出一格时仍按近的挑,只在不相上下的站位之间按够得着几格分先后。
+     * 要挖的一格与挖它本身的价钱(与路线代价同一个单位;要主人同意的照价乘倍,由调用方按成本模型算好)。
      */
-    public static Goal dig(List<BlockPos> targets, BodyStats body) {
+    public record DigTarget(BlockPos cell, double price) {}
+
+    /**
+     * 挖 {@code targets} 里的任意一格:到了任何一格的挖目标({@link #dig(BlockPos, BodyStats, Clearing)},挡着的由
+     * {@code clearing} 这一方清)就算到。停下的价钱是够得着的那些格里"到达价 + 挖它的价钱"最低的一个,所以挖起来贵的格(要问
+     * 主人的)只在便宜的远出它那份价钱时才去。同样划算的站位里优先一次够得着最多格的——站位每少够着一格,停下多付
+     * {@link ActionCosts#WALK_ONE_BLOCK} 除以格数(全少了也不到多走一格),所以走路的价钱差得出一格时仍按近的挑,只在不相上下的
+     * 站位之间按够得着几格分先后。
+     */
+    public static Goal dig(List<DigTarget> targets, BodyStats body, Clearing clearing) {
         if (targets.isEmpty()) {
             throw new IllegalArgumentException("挖其中任意一格,至少要有一格");
         }
         List<Dig> members = new ArrayList<>(targets.size());
-        for (BlockPos target : targets) {
-            members.add(new Dig(target.immutable(), body, Clearing.ANY));
+        double[] prices = new double[targets.size()];
+        for (int i = 0; i < targets.size(); i++) {
+            members.add(new Dig(targets.get(i).cell().immutable(), body, clearing));
+            prices[i] = targets.get(i).price();
         }
-        return members.size() == 1 ? members.get(0) : new DigAny(List.copyOf(members));
+        return new DigAny(List.copyOf(members), prices);
     }
 
     /**
@@ -545,7 +554,7 @@ public final class Goals {
     }
 
     /** 挖几格里的任意一格,见 {@link #dig(List, BodyStats)}。 */
-    private record DigAny(List<Dig> members) implements Goal {
+    private record DigAny(List<Dig> members, double[] prices) implements Goal {
         @Override
         public boolean contains(int x, int y, int z, Stance stance) {
             for (Dig g : members) {
@@ -566,16 +575,17 @@ public final class Goals {
         }
 
         /**
-         * 够得着的那些格里最便宜的到达价,加上每一格够不着的那份:{@link ActionCosts#WALK_ONE_BLOCK} 除以格数。一格都够不着是 0
-         * (不在目标里,搜索不会在这里停)。
+         * 够得着的那些格里"到达价 + 挖它的价钱"最低的一个,加上每一格够不着的那份:{@link ActionCosts#WALK_ONE_BLOCK} 除以格数。
+         * 一格都够不着是 0(不在目标里,搜索不会在这里停)。
          */
         @Override
         public double arrival(WorldView level, int x, int y, int z, Stance stance) {
             double min = Double.POSITIVE_INFINITY;
             int missed = 0;
-            for (Dig g : members) {
+            for (int i = 0; i < members.size(); i++) {
+                Dig g = members.get(i);
                 if (g.contains(x, y, z, stance)) {
-                    min = Math.min(min, g.arrival(level, x, y, z, stance));
+                    min = Math.min(min, g.arrival(level, x, y, z, stance) + prices[i]);
                 } else {
                     missed++;
                 }
