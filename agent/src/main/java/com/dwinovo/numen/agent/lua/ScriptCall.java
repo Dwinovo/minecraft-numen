@@ -82,7 +82,7 @@ public final class ScriptCall {
     public static final String RUN_ARGS = "args";
 
     /** 她当场写的那一段在报错里叫什么。 */
-    public static final String INLINE = "lua";
+    private static final String INLINE = "lua";
 
     private static final int SAID = 160;
 
@@ -185,11 +185,6 @@ public final class ScriptCall {
             }
         }
         return stopped(why);
-    }
-
-    /** 正在跑的是哪一行的什么(给头顶气泡这类):{@code mine:3 work.dig};还没走到命令是 null。 */
-    public String doing() {
-        return pending == null ? null : where(pending.frame, pending.call.line()) + " " + pending.call.function();
     }
 
     // ---- 往下走 ----
