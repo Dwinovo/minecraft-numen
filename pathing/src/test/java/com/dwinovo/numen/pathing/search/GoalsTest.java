@@ -179,6 +179,31 @@ class GoalsTest {
     }
 
     /**
+     * 挖几格里的任意一格:够得着其中一格就算到;停下的价钱里每少够着一格加一小份,全少了也不到多走一格——同样划算的站位里,
+     * 一次够得着的越多越便宜。一格都够不着的站位不在目标里。
+     */
+    @Test
+    void diggingSeveralCellsPrefersTheStandThatReachesMoreOfThem() {
+        BlockPos a = new BlockPos(10, 64, 0);
+        BlockPos b = new BlockPos(10, 64, 1);
+        BlockPos far = new BlockPos(30, 64, 0);
+        Goal dig = Goals.dig(List.of(a, b, far), SURVIVAL);
+        Stance standing = new Stance(Stance.Kind.GROUND, 64, 63);
+        TestWorld world = new TestWorld().ground(63, Blocks.STONE.defaultBlockState())
+                .set(a, Blocks.STONE.defaultBlockState()).set(b, Blocks.STONE.defaultBlockState())
+                .set(far, Blocks.STONE.defaultBlockState());
+        assertTrue(dig.contains(8, 64, 0, standing), "够得着 a 就算到");
+        assertFalse(dig.contains(0, 64, 0, standing), "一格都够不着的不在目标里");
+        double both = dig.arrival(world, 8, 64, 0, standing);
+        double one = dig.arrival(world, 6, 64, -3, standing);
+        assertTrue(Goals.dig(a, SURVIVAL).contains(6, 64, -3, standing) && !Goals.dig(b, SURVIVAL)
+                .contains(6, 64, -3, standing), "这一处只够得着 a");
+        assertTrue(both < one, "够得着两格的停下更便宜:" + both + " / " + one);
+        assertTrue(one - both < ActionCosts.WALK_ONE_BLOCK, "差的不到多走一格:" + (one - both));
+        assertThrows(IllegalArgumentException.class, () -> Goals.dig(List.of(), SURVIVAL));
+    }
+
+    /**
      * 挖的估价按分轴的价钱:要挖的那一格在正下方二十格,正上方往下每一格按落的价;横着走开,每一格涨一格疾跑的价——
      * 不因为离得深,横着走就几乎不涨。
      */

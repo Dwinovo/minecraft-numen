@@ -167,6 +167,22 @@ public final class Goals {
     }
 
     /**
+     * 挖 {@code targets} 里的任意一格:到了任何一格的挖目标({@link #dig(BlockPos, BodyStats)})就算到。同样划算的站位里优先一次
+     * 够得着最多格的——站位每少够着一格,停下多付 {@link ActionCosts#WALK_ONE_BLOCK} 除以格数(全少了也不到多走一格),
+     * 所以走路的价钱差得出一格时仍按近的挑,只在不相上下的站位之间按够得着几格分先后。
+     */
+    public static Goal dig(List<BlockPos> targets, BodyStats body) {
+        if (targets.isEmpty()) {
+            throw new IllegalArgumentException("挖其中任意一格,至少要有一格");
+        }
+        List<Dig> members = new ArrayList<>(targets.size());
+        for (BlockPos target : targets) {
+            members.add(new Dig(target.immutable(), body, Clearing.ANY));
+        }
+        return members.size() == 1 ? members.get(0) : new DigAny(List.copyOf(members));
+    }
+
+    /**
      * 挖一格的一方清得掉哪些挡着视线的格。给站位定价(搜索时读快照)与挖的时候清遮挡(读活世界)问的是同一个;实现按冻结的
      * 数据回答,可以从任何线程调用。
      */
@@ -522,6 +538,72 @@ public final class Goals {
         @Override
         public String toString() {
             return "dig(" + xyz(target) + ")";
+        }
+    }
+
+    /** 挖几格里的任意一格,见 {@link #dig(List, BodyStats)}。 */
+    private record DigAny(List<Dig> members) implements Goal {
+        @Override
+        public boolean contains(int x, int y, int z, Stance stance) {
+            for (Dig g : members) {
+                if (g.contains(x, y, z, stance)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        @Override
+        public double estimate(int x, int y, int z) {
+            double min = Double.POSITIVE_INFINITY;
+            for (Dig g : members) {
+                min = Math.min(min, g.estimate(x, y, z));
+            }
+            return min;
+        }
+
+        /**
+         * 够得着的那些格里最便宜的到达价,加上每一格够不着的那份:{@link ActionCosts#WALK_ONE_BLOCK} 除以格数。一格都够不着是 0
+         * (不在目标里,搜索不会在这里停)。
+         */
+        @Override
+        public double arrival(WorldView level, int x, int y, int z, Stance stance) {
+            double min = Double.POSITIVE_INFINITY;
+            int missed = 0;
+            for (Dig g : members) {
+                if (g.contains(x, y, z, stance)) {
+                    min = Math.min(min, g.arrival(level, x, y, z, stance));
+                } else {
+                    missed++;
+                }
+            }
+            if (missed == members.size()) {
+                return 0;
+            }
+            return min + missed * ActionCosts.WALK_ONE_BLOCK / members.size();
+        }
+
+        @Override
+        public LongSet endCells() {
+            LongOpenHashSet all = new LongOpenHashSet();
+            for (Dig g : members) {
+                all.addAll(g.endCells());
+            }
+            return all;
+        }
+
+        @Override
+        public PositionCosts protection() {
+            PositionCosts all = PositionCosts.EMPTY;
+            for (Dig g : members) {
+                all = all.plus(g.protection());
+            }
+            return all;
+        }
+
+        @Override
+        public String toString() {
+            return "digAny" + listed(new ArrayList<>(members));
         }
     }
 
