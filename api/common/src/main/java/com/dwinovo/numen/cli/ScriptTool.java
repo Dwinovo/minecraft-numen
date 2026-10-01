@@ -50,7 +50,8 @@ public final class ScriptTool implements NumenTool {
                 + "calling a command. Your owner speaking, an urgent event or the stop button stops it between "
                 + "commands.\n"
                 + "- Scripts kept by name: `script list`, `script show <name>`, `script run <name> [args...]` "
-                + "(`script.run` in a program), `script save <name> <code>` to keep one you wrote.";
+                + "(`script.run` in a program), `script save <code> --name <name>` (`script.save(code, {name = ...})`) to "
+                + "keep one you wrote.";
     }
 
     @Override

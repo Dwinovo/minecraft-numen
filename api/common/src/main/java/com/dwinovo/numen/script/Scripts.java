@@ -41,9 +41,10 @@ public final class Scripts {
 
     private static final Param<String> NAME = Param.required("name", ArgType.word(),
             "The script, as `script list` lists it.").values("a script name, as `script list` lists it");
-    private static final Param<String> NEW_NAME = Param.required("name", ArgType.word(),
-            "Name to keep it under: lowercase letters, digits, _ and -.");
-    private static final Param<String> CODE = Param.required("code", ArgType.text(),
+    private static final Param<String> NEW_NAME = Param.optional("name", ArgType.word(),
+            "Name to keep it under: lowercase letters, digits, _ and -.")
+            .whenOmitted("give it the next free name script-1, script-2, …");
+    private static final Param<String> CODE = Param.required("code", ArgType.string(),
             "The program, the same as you would give the " + ScriptEngine.IN_USE.toolName() + " tool. Its first line is "
                     + "a comment saying what it does: " + ScriptEngine.IN_USE.comment("Dig every part of an area.")
                     + ".");
@@ -85,9 +86,9 @@ public final class Scripts {
                         + "comes up. In a program, script.run(\"mine\", \"ores\") runs it the same way.")
                 .seeAlso("script show", "script list");
         script.server("save", "Keep a program under a name so you can run it again.",
-                        Scripts::save, NEW_NAME, CODE)
-                .example("script save pit " + ScriptEngine.IN_USE.comment("Dig out the pit.") + "\n"
-                        + "work.dig(\"pit\")")
+                        Scripts::save, CODE, NEW_NAME)
+                .example("script save \"" + ScriptEngine.IN_USE.comment("Dig out the pit.") + "\n"
+                        + "work.dig('pit')\" --name pit")
                 .note("Instant. The program is read first and not kept if it does not compile; the error says the "
                         + "line. Its first line is a comment saying what it does: that is how the list describes it.")
                 .note("Saving under the name of one you saved replaces it and resets its record. Built-in scripts "
@@ -113,7 +114,7 @@ public final class Scripts {
                 + "] " + record(store.stats(name), true)));
         String head = rows.isEmpty() ? "No scripts yet. Write a program with the " + ScriptEngine.IN_USE.toolName()
                 + " tool, then keep it with "
-                + "script save <name> <code>." : rows.size() + " script" + (rows.size() == 1 ? "" : "s")
+                + "script save <code> --name <name>." : rows.size() + " script" + (rows.size() == 1 ? "" : "s")
                 + ". script show <name> prints one; script run <name> [args] runs it.";
         return new Listing(head, rows, "", GROUP + " list").result(args).toJson();
     }
@@ -189,11 +190,12 @@ public final class Scripts {
 
     private static void save(ServerSource src, CommandArgs args) {
         NumenPlayer her = src.companion();
-        String name = Names.checked("script", args.get(NEW_NAME));
+        ScriptStore store = store(her);
+        String name = args.get(NEW_NAME) == null ? freeName(store) : Names.checked("script", args.get(NEW_NAME));
         String code = args.get(CODE);
         if (BuiltinScripts.get(name) != null) {
             src.reply(TaskResult.fail(name + " is a built-in script and read-only; save your version under another "
-                    + "name, e.g. script save my-" + name + " <code>.").toJson());
+                    + "name, e.g. --name my-" + name + ".").toJson());
             return;
         }
         String problem = ScriptEngine.IN_USE.check(name, code);
@@ -207,7 +209,6 @@ public final class Scripts {
                     + "does, e.g. " + ScriptEngine.IN_USE.comment("Dig every part of an area, nearest first.")).toJson());
             return;
         }
-        ScriptStore store = store(her);
         ScriptStore.Saved before = store.get(name);
         src.authorize(Action.editScript(name, before == null ? null : before.author()), "script save " + name,
                 allowed -> {
@@ -284,6 +285,16 @@ public final class Scripts {
             throw new IllegalArgumentException("saved scripts belong to your owner, and you have no owner yet");
         }
         return ScriptStore.of(her.getServer(), owner);
+    }
+
+    /** 下一个空着的 {@code script-N}。 */
+    private static String freeName(ScriptStore store) {
+        for (int n = 1; ; n++) {
+            String name = "script-" + n;
+            if (store.get(name) == null && BuiltinScripts.get(name) == null) {
+                return name;
+            }
+        }
     }
 
     private static String missing(String name, ScriptStore store) {
