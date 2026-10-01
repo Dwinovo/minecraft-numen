@@ -51,12 +51,14 @@ public final class InvCommands {
             .values("something you carry");
     private static final Param<ResourceLocation> DROP_ITEM = Param.required("item", ArgType.id(),
             "The item to drop.");
-    private static final Param<Integer> DROP_COUNT = Param.required("count", ArgType.integer(1, 999),
-            "How many to drop; more than you carry drops all you have of it.");
+    private static final Param<Integer> DROP_COUNT = Param.optional("count", ArgType.integer(1, 999),
+            "How many to drop; more than you carry drops all you have of it.")
+            .whenOmitted("drop all you carry of it");
     private static final Param<ResourceLocation> TAKE_ITEM = Param.required("item", ArgType.id(),
             "The item to conjure.");
-    private static final Param<Integer> TAKE_COUNT = Param.required("count", ArgType.integer(1, TAKE_MAX),
-            "How many to take.");
+    private static final Param<Integer> TAKE_COUNT = Param.optional("count", ArgType.integer(1, TAKE_MAX),
+            "How many to take.")
+            .whenOmitted("take one, like /give");
 
     private static final CraftOps CRAFTING = new CraftOps();
     private static final QueryExtraOps RECIPES = new QueryExtraOps();
@@ -108,7 +110,8 @@ public final class InvCommands {
                         + "fails the same way when you are already full.");
         inv.server(DROP, "Drop items from your inventory on the ground in front of you.",
                 InvCommands::drop, DROP_ITEM, DROP_COUNT)
-                .example(line(DROP) + " minecraft:cobblestone 32")
+                .example(line(DROP) + " minecraft:cobblestone --count 32")
+                .example(line(DROP) + " rotten_flesh")
                 .note("Asks your owner first unless their rules allow it; the call waits for the answer.")
                 .note("Dropped items despawn after 5 minutes. To store things, open a chest with `use block` and "
                         + "`use shift` them into it instead.")
@@ -116,7 +119,7 @@ public final class InvCommands {
                 .seeAlso("use block");
         inv.server(TAKE, "Creative mode only: conjure items into your inventory, like the creative menu.",
                 InvCommands::take, TAKE_ITEM, TAKE_COUNT)
-                .example(line(TAKE) + " minecraft:diamond 64")
+                .example(line(TAKE) + " minecraft:diamond --count 64")
                 .note("Fails in survival mode; there you mine, craft, loot or trade for items instead.")
                 .note("What doesn't fit in your inventory drops at your feet.");
     }
@@ -154,7 +157,7 @@ public final class InvCommands {
             return;
         }
         Item item = ToolArgs.parseItem(id);
-        int want = Math.clamp(args.get(TAKE_COUNT), 1, TAKE_MAX);
+        int want = args.get(TAKE_COUNT) == null ? 1 : Math.clamp(args.get(TAKE_COUNT), 1, TAKE_MAX);
         // 按满栈分批塞;背包塞不下的原版 add 会留在栈里,掉在脚下
         int remaining = want;
         while (remaining > 0) {

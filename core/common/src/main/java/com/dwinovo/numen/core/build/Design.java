@@ -1,6 +1,5 @@
 package com.dwinovo.numen.core.build;
 
-import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.Names;
 import com.dwinovo.numen.cli.NumenCli;
@@ -14,11 +13,10 @@ import java.util.UUID;
  * ({@code build at})。
  *
  * <h2>文本就是命令</h2>
- * 设计的正文每行一条原语命令({@code build layer 0 0 0 ### #.# ### --block stone_bricks}),和她当场执行的写法一字不差;
+ * 设计的正文每行一条原语命令({@code build layer ### #.# ### --at 0 0 0 --block stone_bricks}),和她当场执行的写法一字不差;
  * 开头几行 {@code #} 注释记着名字、作者、所属主人、创建时间。读与写都过同一个解析器({@link NumenCli#read}):读的时候每一行
  * 按命令树读成原语与参数(方块名与状态在读的时候就认,见 {@link BuildPalette#ARG})、画一遍,写不通、画不出来就整份不认,
- * 报出是第几行;写的时候先把要写的文本照读的规矩读一遍,读得回来才写。{@code build step} 与 {@code build insert} 写来的那一步
- * 是那一行命令的一个参数({@link #STEP}),由读那一行的同一棵树读。所以设计文本的语法就是命令的语法,没有第二份。
+ * 报出是第几行;写的时候先把要写的文本照读的规矩读一遍,读得回来才写。所以设计文本的语法就是命令的语法,没有第二份。
  *
  * <h2>只存现状</h2>
  * 改了就是新的现状,没有版本。一栋已经盖好的房子由哪些格子组成,是那栋房子自己的记录({@link Built}),不靠设计的旧版推。
@@ -39,14 +37,6 @@ public record Design(String name, UUID owner, String ownerName, String author, S
     private static final String CREATED = "created: ";
     /** 设计里每一步都是 {@code build} 组的一个原语。 */
     public static final String GROUP = "build";
-
-    /**
-     * 写进设计的一步,当命令参数用:组名之后的那一截({@code layer 0 1 0 ### --block oak_planks}),由读外面那一行的同一棵树
-     * 读成原语与参数({@link ArgType#command}),再认它是一个原语({@link #step(NumenCli.Reading)})。
-     */
-    public static final ArgType<Step> STEP = ArgType.command().as("primitive",
-            "the rest of the line: one build primitive without build and without --into",
-            Design::step, Step::reading);
 
     /**
      * 设计名合规就原样返回,否则说清能用什么字。规矩见 {@link Names}:用作文件名,也是建成的房子的名字的前半
@@ -72,8 +62,7 @@ public record Design(String name, UUID owner, String ownerName, String author, S
     }
 
     /**
-     * 读一行原语,不画:按命令树读成原语与参数,确认是 {@code build} 组的原语。设计文件里的一步、{@code build step} 与
-     * {@code build insert} 写来的那一步,都经这里。
+     * 读一行原语,不画:按命令树读成原语与参数,确认是 {@code build} 组的原语。设计文件里的每一步都经这里。
      *
      * @throws IllegalArgumentException 读不通,或不是原语
      */
@@ -82,9 +71,9 @@ public record Design(String name, UUID owner, String ownerName, String author, S
     }
 
     /**
-     * 读好的一行认成一步:它得是 {@code build} 组的一个原语、带着参数,不带 {@code --into}。
+     * 读好的一行认成一步:它得是 {@code build} 组的一个原语、带着参数,不带 {@code --into}、{@code --step}、{@code --before}。
      *
-     * @throws IllegalArgumentException 不是原语,或带着 {@code --into}
+     * @throws IllegalArgumentException 不是原语,或带着说"记进哪份设计、哪一步"的标志
      */
     public static Step step(NumenCli.Reading reading) {
         String[] path = reading.path().split(" ");
@@ -94,9 +83,10 @@ public record Design(String name, UUID owner, String ownerName, String author, S
             throw new IllegalArgumentException("a design step is one build primitive (build set, place, line, layer, "
                     + "cylinder, sphere or copy), not " + reading.path());
         }
-        if (reading.args().get(Primitive.Params.INTO) != null) {
-            throw new IllegalArgumentException("--into names the design a step goes into; a step inside a design "
-                    + "does not carry it");
+        if (reading.args().get(Primitive.Params.INTO) != null || reading.args().get(Primitive.Params.STEP) != null
+                || reading.args().get(Primitive.Params.BEFORE) != null) {
+            throw new IllegalArgumentException("--into, --step and --before say where a step goes; a step inside a "
+                    + "design does not carry them");
         }
         return new Step(primitive, reading.args());
     }
@@ -107,11 +97,6 @@ public record Design(String name, UUID owner, String ownerName, String author, S
         /** 写回一行命令:原语的参数表按声明顺序写,只写这一步给了的。 */
         public String line() {
             return args.write(GROUP + " " + primitive.action, primitive.params());
-        }
-
-        /** 这一步当一行读好的命令看:{@link #STEP} 写回时用。 */
-        NumenCli.Reading reading() {
-            return new NumenCli.Reading(GROUP + " " + primitive.action, true, args);
         }
     }
 

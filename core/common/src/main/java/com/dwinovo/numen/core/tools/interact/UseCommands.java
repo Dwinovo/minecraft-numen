@@ -4,16 +4,19 @@ import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
+import com.dwinovo.numen.cli.EntityRef;
 import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.core.tools.BlockActionOps;
 import com.dwinovo.numen.core.tools.ContainerOps;
 import com.dwinovo.numen.core.tools.GuiOps;
+import com.dwinovo.numen.core.task.MouseButton;
 import com.dwinovo.numen.core.tools.SleepOps;
 import com.dwinovo.numen.task.TaskDispatch;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Entity;
 
 /**
  * {@code use}:像玩家那样点世界——对一格按鼠标键、对着前方用手里的东西、对一只实体按鼠标键,看打开的界面、在里面搬东西、
@@ -24,6 +27,10 @@ import net.minecraft.resources.ResourceLocation;
  * 拆成两个动作,一个动作一个意思;要搬好几样就同一轮发好几行。
  * 对准一格和不对准任何东西是两件事,拆成 {@code block} 与 {@code ahead} 两个动作,一个动作一个意思。
  * 上床放在这一组:原版里睡觉就是用一张床,和别的"用"是同一种动作,找床与走过去仍归扫描和 {@code move goto}。都不提升成快捷工具。
+ *
+ * <p>按哪个键是一个开关:默认右键(用、放、开),{@code --left} 是左键(打、挖)。照命令行的习惯,两个值里有一个是常用的那个时,
+ * 不写一个必须给值的 {@code --button},而是让常用的那个当默认、另一个是开关——右键是"用"这一组的本义,点一格、点一只实体十回里
+ * 九回是右键,左键是例外,所以名字是那个例外。按住多久照命令行的单位写秒({@code --hold 1.5})。
  */
 public final class UseCommands {
 
@@ -37,16 +44,17 @@ public final class UseCommands {
     static final String CLOSE = "close";
     static final String SLEEP = "sleep";
 
-    private static final Param<String> BUTTON = Param.required("button", ArgType.oneOf("left", "right"),
-            "The mouse button: right uses, activates, places or throws; left attacks or breaks.");
-    private static final Param<Integer> X = Param.required("x", ArgType.integer(), "Block X of the aim point.");
-    private static final Param<Integer> Y = Param.required("y", ArgType.integer(), "Block Y of the aim point.");
-    private static final Param<Integer> Z = Param.required("z", ArgType.integer(), "Block Z of the aim point.");
-    private static final Param<Integer> ENTITY_ID = Param.required("entity", ArgType.integer(),
-            "The entity to act on.")
-            .values("an entity id from scan_entities");
-    private static final Param<Integer> HOLD_TICKS = Param.optional("hold_ticks", ArgType.integer(),
-            "How long to hold the button, in ticks; -1 holds until the action completes or times out.")
+    /** 按住至多几秒。 */
+    private static final double MAX_HOLD_S = 60;
+
+    private static final Param<Boolean> LEFT = Param.optional("left", ArgType.bool(),
+            "Press the left button instead: attack or break.")
+            .whenOmitted("press the right button: use, activate, place or throw");
+    private static final Param<BlockPos> AIM = Param.required("cell", ArgType.cell(), "The cell to aim at.");
+    private static final Param<EntityRef> TARGET = Param.required("entity", ArgType.entity(), "The entity to act on.")
+            .values("an entity id from scan entities");
+    private static final Param<Double> HOLD = Param.optional("hold", ArgType.number(0.05, MAX_HOLD_S),
+            "How long to hold the button, in seconds; the press ends early once the action completes.")
             .whenOmitted("press once");
     private static final Param<ResourceLocation> ITEM = Param.optional("item", ArgType.id(),
             "An item from your inventory to take in hand first, e.g. minecraft:bone_meal.")
@@ -55,14 +63,7 @@ public final class UseCommands {
             "Hold sneak while pressing, as a player holds Shift and clicks; while riding, that steps you off "
                     + "first.")
             .whenOmitted("press standing");
-    private static final Param<Integer> BED_X = Param.optional("x", ArgType.integer(),
-            "Block X of the bed; give --x, --y and --z together.")
-            .whenOmitted("use whichever bed is in reach");
-    private static final Param<Integer> BED_Y = Param.optional("y", ArgType.integer(),
-            "Block Y of the bed; give --x, --y and --z together.")
-            .whenOmitted("use whichever bed is in reach");
-    private static final Param<Integer> BED_Z = Param.optional("z", ArgType.integer(),
-            "Block Z of the bed; give --x, --y and --z together.")
+    private static final Param<BlockPos> BED = Param.optional("at", ArgType.cell(), "The bed.")
             .whenOmitted("use whichever bed is in reach");
 
     private static final Param<Integer> FROM = Param.required("from", ArgType.integer(0, 999),
@@ -94,24 +95,24 @@ public final class UseCommands {
     private static void actions(CommandGroup use) {
         use.server(BLOCK, "Aim at a block, fluid or air cell within reach and press a mouse button: the full "
                         + "native click.",
-                UseCommands::block, BUTTON, X, Y, Z, HOLD_TICKS, ITEM, SNEAK)
-                .example(line(BLOCK) + " right 120 64 -35")
-                .example(line(BLOCK) + " right 120 63 -35 --item minecraft:bucket")
-                .example(line(BLOCK) + " right 120 64 -35 --item minecraft:oak_planks --sneak true")
+                UseCommands::block, AIM, LEFT, HOLD, ITEM, SNEAK)
+                .example(line(BLOCK) + " 120 64 -35")
+                .example(line(BLOCK) + " 120 63 -35 --item minecraft:bucket")
+                .example(line(BLOCK) + " 120 64 -35 --item minecraft:oak_planks --sneak")
+                .example(line(BLOCK) + " 120 64 -35 --left")
                 .note("If the aimed block doesn't take a right click, the held item acts on its own, exactly like "
                         + "a real right-click: aiming at water with a bucket scoops it, with a boat places it.")
-                .note("With --sneak true and something in hand, a right click skips what the aimed block itself "
+                .note("With --sneak and something in hand, a right click skips what the aimed block itself "
                         + "does: a block goes onto a chest instead of opening it.")
                 .note("It does NOT travel: you must already be within working reach (~4.5 blocks) of the aim "
-                        + "point; move_goto its coordinates with --arrive use stands you where one of its faces is "
-                        + "in sight and in reach. Farther away it fails and names that move_goto.")
+                        + "point; `move goto 120 64 -35 --arrive use` with its coordinates stands you where one of its faces is in sight and in "
+                        + "reach. Farther away it fails and names that move goto.")
                 .note("Both buttons are bare key presses: whatever you hold is what is used, and the block the "
                         + "crosshair lands on is the one clicked — if something else is in the way (tall grass in front "
                         + "of a chest, a leaf), that is what gets clicked, and the result says so and names the next "
                         + "step: `work dig` the thing in the way, or click from another side. It never moves, never "
-                        + "swaps tools, never clears the way. Left holds the button until the block breaks or "
-                        + "--hold_ticks run out. To dig something out properly — best tool, the way cleared, the drops "
-                        + "picked up — use work_dig.")
+                        + "swaps tools, never clears the way. --left holds the button until the block breaks or "
+                        + "--hold runs out. To dig something out properly — best tool, the way cleared — use work dig.")
                 .note("Breaking or placing near your owner's things may ask your owner first; the call waits for the "
                         + "answer.")
                 .note("The result reports what actually changed (hands, the aimed block, new entities); no "
@@ -119,19 +120,19 @@ public final class UseCommands {
                 .seeAlso(line(GUI), line(ENTITY));
         use.server(AHEAD, "Press a mouse button at nothing in particular: the held item acts straight ahead, "
                         + "where you face.",
-                UseCommands::ahead, BUTTON, HOLD_TICKS, ITEM, SNEAK)
-                .example(line(AHEAD) + " right --item minecraft:snowball")
+                UseCommands::ahead, LEFT, HOLD, ITEM, SNEAK)
+                .example(line(AHEAD) + " --item minecraft:snowball")
                 .note("To aim somewhere, `" + line(BLOCK) + "` at that cell instead; air cells work too.")
                 .note("Food and drink go through `inv eat`, not here.")
                 .seeAlso(line(BLOCK));
         use.server(ENTITY, "Press a mouse button on an entity: walk up to it, follow it, and act once your "
                         + "crosshair reaches it.",
-                UseCommands::entity, BUTTON, ENTITY_ID, HOLD_TICKS, ITEM, SNEAK)
-                .example(line(ENTITY) + " right 812 --item minecraft:shears")
-                .example(line(ENTITY) + " left 812")
-                .example(line(ENTITY) + " right 812 --sneak true")
+                UseCommands::entity, TARGET, LEFT, HOLD, ITEM, SNEAK)
+                .example(line(ENTITY) + " 812 --item minecraft:shears")
+                .example(line(ENTITY) + " 812 --left")
+                .example(line(ENTITY) + " 812 --sneak")
                 .note("A wall in the way makes you re-position, not hit through it.")
-                .note("Right on a boat or rideable boards it: runtime_state then shows <riding>; move_goto pilots or "
+                .note("Right on a boat or rideable boards it: runtime_state then shows <riding>; move goto pilots or "
                         + "steps off. Never click your own vehicle again.")
                 .note("Hitting pets, named mobs or villagers asks your owner first; the call waits for the answer.")
                 .seeAlso(line(BLOCK));
@@ -174,21 +175,20 @@ public final class UseCommands {
                         + "to close.")
                 .seeAlso(line(GUI));
         use.server(SLEEP, "Get into a bed you are standing next to, and say whether you are actually asleep.",
-                UseCommands::sleep, BED_X, BED_Y, BED_Z)
+                UseCommands::sleep, BED)
                 .example(line(SLEEP))
-                .example(line(SLEEP) + " --x 120 --y 64 --z -35")
-                .note("It does NOT travel: find a bed with scan_blocks using #minecraft:beds (that one tag covers "
-                        + "every colour), move_goto its coordinates with --arrive use, then run this.")
+                .example(line(SLEEP) + " --at 120 64 -35")
+                .note("It does NOT travel: find a bed with `scan blocks #minecraft:beds` (that one tag covers "
+                        + "every colour), `move goto 120 64 -35 --arrive use` with its coordinates, then run this.")
                 .note("Succeeds only when the server confirms you are sleeping; otherwise it hands back "
                         + "Minecraft's own reason. \"Only at night\" means wait (`task timer`), not retry; \"too far "
-                        + "away\" means move_goto.")
+                        + "away\" means move goto.")
                 .note("Returns the moment you lie down; night passes on its own.")
                 .seeAlso("task timer");
     }
 
     private static void block(ServerSource src, CommandArgs args) {
-        BlockPos aim = new BlockPos(args.get(X), args.get(Y), args.get(Z));
-        click(src, args, aim);
+        click(src, args, args.get(AIM));
     }
 
     private static void ahead(ServerSource src, CommandArgs args) {
@@ -197,13 +197,27 @@ public final class UseCommands {
 
     /** 对一格按,或({@code aim} 为 null)朝着她面对的方向按:同一件活,只差瞄哪儿。 */
     private static void click(ServerSource src, CommandArgs args, BlockPos aim) {
-        TaskDispatch.runSync(src.companion(), CLICKS.interactAt(src, args.get(BUTTON), aim, args.get(HOLD_TICKS),
-                idOf(args.get(ITEM)), sneaking(args)), src::reply);
+        TaskDispatch.runSync(src.companion(), CLICKS.interactAt(src, button(args), aim, holdTicks(args),
+                idOf(args.get(ITEM)), Boolean.TRUE.equals(args.get(SNEAK))), src::reply);
     }
 
+    /** 点名的那只按运行期编号认;按 UUID 写的(重放)换成它此刻的编号,不在了照编号交给任务,由任务如实说它不在。 */
     private static void entity(ServerSource src, CommandArgs args) {
-        TaskDispatch.runSync(src.companion(), CLICKS.interactEntity(src, args.get(BUTTON), args.get(ENTITY_ID),
-                args.get(HOLD_TICKS), idOf(args.get(ITEM)), sneaking(args)), src::reply);
+        EntityRef ref = args.get(TARGET);
+        Entity found = ref.in(src.companion().serverLevel());
+        int id = ref.id() != null ? ref.id() : found != null ? found.getId() : -1;
+        TaskDispatch.runSync(src.companion(), CLICKS.interactEntity(src, button(args), id, holdTicks(args),
+                idOf(args.get(ITEM)), Boolean.TRUE.equals(args.get(SNEAK))), src::reply);
+    }
+
+    private static MouseButton button(CommandArgs args) {
+        return Boolean.TRUE.equals(args.get(LEFT)) ? MouseButton.LEFT : MouseButton.RIGHT;
+    }
+
+    /** {@code --hold} 的秒数折成刻,至少一刻;不写是 0,按一下。 */
+    private static int holdTicks(CommandArgs args) {
+        Double seconds = args.get(HOLD);
+        return seconds == null ? 0 : (int) Math.max(1, Math.round(Math.min(seconds, MAX_HOLD_S) * 20));
     }
 
     private static void gui(ServerSource src, CommandArgs args) {
@@ -227,11 +241,7 @@ public final class UseCommands {
 
     /** 当场回:上床是一次调用的事,躺下就结束,不挂着等天亮。 */
     private static void sleep(ServerSource src, CommandArgs args) {
-        src.reply(BEDS.sleep(args.get(BED_X), args.get(BED_Y), args.get(BED_Z), src.companion()));
-    }
-
-    private static boolean sneaking(CommandArgs args) {
-        return Boolean.TRUE.equals(args.get(SNEAK));
+        src.reply(BEDS.sleep(args.get(BED), src.companion()));
     }
 
     private static String idOf(ResourceLocation id) {

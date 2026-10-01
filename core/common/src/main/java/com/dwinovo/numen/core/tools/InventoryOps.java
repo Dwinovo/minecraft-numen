@@ -5,6 +5,7 @@ import com.dwinovo.numen.area.Area;
 import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskRecord;
+import com.dwinovo.numen.core.PlayerInv;
 import com.dwinovo.numen.core.nav.WorkArea;
 import com.dwinovo.numen.core.task.collect.CollectItemsTaskRecord;
 import com.dwinovo.numen.core.task.inventory.DropItemsTaskRecord;
@@ -67,9 +68,12 @@ public final class InventoryOps {
         return new EatItemTaskRecord(source, item, BuiltInRegistries.ITEM.getKey(item).getPath());
     }
 
-    public TaskRecord dropItems(ServerSource source, String item_id, int count) {
-        Item item = ToolArgs.parseItem(item_id);
-        return new DropItemsTaskRecord(source, item, Math.clamp(count, 1, DROP_MAX_COUNT),
+    /** {@code inv drop}:{@code count} 没给就是她带着的全部(至少一件,一件都没有由任务的前置条件如实说)。 */
+    public TaskRecord dropItems(ServerSource source, String itemId, Integer count) {
+        Item item = ToolArgs.parseItem(itemId);
+        int carried = PlayerInv.count(source.companion().getInventory(), item);
+        int n = count == null ? Math.max(1, carried) : count;
+        return new DropItemsTaskRecord(source, item, Math.clamp(n, 1, DROP_MAX_COUNT),
                 BuiltInRegistries.ITEM.getKey(item).getPath());
     }
 

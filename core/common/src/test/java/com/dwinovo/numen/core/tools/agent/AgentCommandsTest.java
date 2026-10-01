@@ -56,7 +56,7 @@ class AgentCommandsTest {
 
     @Test
     void aNoteIsWrittenReadBackAndDroppedFromTheCommandLine() {
-        JsonObject wrote = run("memory remember main-base world \"main base -340,68,120\" --content \"door faces east\"");
+        JsonObject wrote = run("memory remember \"main base -340,68,120\" --name main-base --type world --content \"door faces east\"");
         assertTrue(wrote.get("success").getAsBoolean(), wrote.toString());
         assertEquals("main-base", wrote.get("name").getAsString());
 
@@ -74,7 +74,7 @@ class AgentCommandsTest {
     /** 札记只有三种:写别的这一行就写不通,当场拒并列出能写的几个,什么都不落盘。 */
     @Test
     void aNoteOfAnUnknownTypeIsRefused() {
-        JsonObject wrote = run("memory remember chores todo \"sweep the porch\"");
+        JsonObject wrote = run("memory remember \"sweep the porch\" --name chores --type todo");
         assertFalse(wrote.get("success").getAsBoolean(), wrote.toString());
         assertTrue(wrote.get("message").getAsString().contains("expected one of owner, world, lesson"), wrote.toString());
         assertTrue(NoteBook.of(HER).read("chores") == null, "a refused note was written anyway");

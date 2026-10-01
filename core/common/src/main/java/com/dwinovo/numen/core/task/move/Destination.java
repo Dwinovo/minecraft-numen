@@ -8,6 +8,7 @@ import java.util.Optional;
 
 import com.dwinovo.numen.area.Area;
 import com.dwinovo.numen.area.AreaRef;
+import com.dwinovo.numen.cli.Place;
 import com.dwinovo.numen.core.nav.NamedAreas;
 import com.dwinovo.numen.core.nav.NavText;
 import com.dwinovo.numen.core.nav.Terrain;
@@ -25,8 +26,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 
 /**
- * 去处:写法({@link Stop}:一处——坐标给几个算几个,或主人名下的一块区域——加怎样算到了,{@code --arrive at|use|near|dig},
- * {@code near} 只配 {@code near})与按那一刻的世界编好的寻路目标。写法到目标的对应只在这里:
+ * 去处:写法({@link Stop}:一处({@link Place},坐标给几个算几个,或主人名下的一块区域)加怎样算到了,{@code --arrive at|use|near|dig},
+ * {@code --near} 只配 {@code near})与按那一刻的世界编好的寻路目标。写法到目标的对应只在这里:
  * <ul>
  *   <li>{@code at}:位置——{@code x y z} 是那一格,{@code x z} 是那一列,只给 {@code y} 是那个高度({@link Goals#at}、
  *       {@link Goals#column}、{@link Goals#level})。站到一块方块上面也是 {@code at}:坐标是它上面脚所在的那一格;</li>
@@ -35,9 +36,10 @@ import net.minecraft.core.Direction;
  *   <li>{@code dig}:挖那一格方块——站到手够得着它、身体不占着它的地方,挡着的由挖的一方挖开({@link Goals#dig}),
  *       那一格本身留给 {@code work dig}。</li>
  * </ul>
- * 坐标就是只有一格的区域:去一块区域,四种到达对整块成立,用寻路模块现成的"多个取其一"({@link Goals#anyOf})组合,
- * 不另设一种到达——{@code at} 是走进区域里任意一格(站得住的),{@code use} 是用区域里任意一个能点、用得上的方块,
- * {@code near} 是离区域里任意一格不超过 {@code near} 格,{@code dig} 是够得着区域里任意一个有轮廓的方块。
+ * 坐标就是只有一格的区域:去一块区域,四种到达对整块成立——{@code at} 是走进区域里任意一格(站得住的),{@code use} 是用区域里
+ * 任意一个能点、用得上的方块,{@code near} 是离区域里任意一格不超过 {@code near} 格,三种用寻路模块现成的"多个取其一"
+ * ({@link Goals#anyOf})组合;{@code dig} 是够得着区域里任意一个有轮廓的方块,同样划算的站位里优先一次够得着最多格的
+ * ({@link Goals#dig(List, BodyStats)},定价只在寻路模块那一处)。
  *
  * <p><b>区域的目标有界</b>:只在区域里离出发点最近的 {@link #NEAREST} 格里挑成员({@code Cells.nearest} 按小节由近到远翻,
  * 四百万格的区域也只翻出发点附近那几节),{@code at}、{@code near}、{@code dig} 至多 {@link #MEMBERS} 个成员,{@code use} 至多
@@ -78,9 +80,8 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
     /** 命令行上 {@code --arrive} 能写的几个。 */
     public static final String[] ARRIVE_WORDS = {"at", "use", "near", "dig"};
 
-    /** {@code route new --to}、{@code route via} 那一处在帮助里怎么说。 */
-    public static final String PLACE_HINT = "x y z (one cell), x z (a place, at whatever height stands there), y (a "
-            + "height), or an area of your owner's: its name, or name/part like ores/g3";
+    /** {@code --arrive near} 不写 {@code --near} 时停在几格内:3 格大致是"就在旁边"。 */
+    public static final int DEFAULT_NEAR = 3;
 
     private static final Codec<AreaRef> AREA_CODEC = Codec.STRING.comapFlatMap(text -> {
         try {
@@ -92,7 +93,8 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
 
     /**
      * 一个去处的写法:一处(坐标给几个算几个,或一块区域)加怎样算到了。形状不成立(坐标缺一截、坐标与区域都给了、{@code near}
-     * 与到达方式对不上)在建的时候就报,报的话就是受理回执;和世界有关的在 {@link Destination#of} 里报。
+     * 与到达方式对不上)在建的时候就报,报的话就是受理回执;和世界有关的在 {@link Destination#of} 里报。存盘的样子({@link #CODEC})
+     * 是各个字段,不是命令行上的写法。
      *
      * @param x    没给为 null
      * @param y    没给为 null
@@ -130,7 +132,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
                 throw new IllegalArgumentException(GotoReminders.nearWithoutArriveNear(near));
             }
             if (arrive == Arrive.NEAR && near == null) {
-                throw new IllegalArgumentException(GotoReminders.arriveNearWithoutNear());
+                near = DEFAULT_NEAR;
             }
             if (area == null && x == null && arrive != Arrive.AT) {
                 throw new IllegalArgumentException(GotoReminders.heightTakesNoArrive(arrive.word()));
@@ -145,60 +147,14 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
             this(x, y, z, null, arrive, near);
         }
 
-        /** 命令行上读到的几样:{@code arriveWord} 没写是 {@code at}。 */
-        public static Stop of(Integer x, Integer y, Integer z, AreaRef area, String arriveWord, Integer near) {
-            return new Stop(x, y, z, area, Arrive.of(arriveWord), near);
+        /** 命令行上读到的几样:一处、{@code --arrive}(没写是 {@code at})、{@code --near}(没写为 null)。 */
+        public static Stop of(Place place, String arriveWord, Integer near) {
+            return new Stop(place.x(), place.y(), place.z(), place.area(), Arrive.of(arriveWord), near);
         }
 
-        /**
-         * {@code route new --to}、{@code route via} 写的那一处:数是坐标——三个是一格,两个是一处(x z),一个是一个高度;一个名字
-         * 是一块区域({@code farm}、{@code ores/g3})。
-         *
-         * @throws IllegalArgumentException 既不是一到三个整数,也不是一个区域名
-         */
-        public static Stop of(List<String> place, String arriveWord, Integer near) {
-            if (place.size() == 1 && !integer(place.get(0))) {
-                return of(null, null, null, AreaRef.parse(place.get(0)), arriveWord, near);
-            }
-            if (place.size() > 3 || !place.stream().allMatch(Destination::integer)) {
-                throw new IllegalArgumentException("a place is " + PLACE_HINT + "; got \"" + String.join(" ", place)
-                        + "\"");
-            }
-            List<Integer> n = place.stream().map(Integer::parseInt).toList();
-            return switch (n.size()) {
-                case 3 -> of(n.get(0), n.get(1), n.get(2), null, arriveWord, near);
-                case 2 -> of(n.get(0), null, n.get(1), null, arriveWord, near);
-                default -> of(null, n.get(0), null, null, arriveWord, near);
-            };
-        }
-
-        /**
-         * 一串几处的写法({@code work dig} 那一串):一个名字是一处区域,连着的数三个一组是一处坐标;每一处照
-         * {@link #of(List, String, Integer)} 读,到达方式是 {@code at}。连着的数三个一组分完还剩一两个,照样交给它读(那是一列或
-         * 一个高度),收不收由用的一方判。
-         */
-        public static List<Stop> each(List<String> words) {
-            List<Stop> out = new ArrayList<>();
-            List<String> numbers = new ArrayList<>(3);
-            for (String word : words) {
-                if (integer(word)) {
-                    numbers.add(word);
-                    if (numbers.size() == 3) {
-                        out.add(of(numbers, null, null));
-                        numbers.clear();
-                    }
-                    continue;
-                }
-                if (!numbers.isEmpty()) {
-                    out.add(of(numbers, null, null));
-                    numbers.clear();
-                }
-                out.add(of(List.of(word), null, null));
-            }
-            if (!numbers.isEmpty()) {
-                out.add(of(numbers, null, null));
-            }
-            return out;
+        /** 这一处的写法:命令行上写下的那一处({@link Place})。 */
+        public Place place() {
+            return new Place(x, y, z, area);
         }
 
         /** 那一格(x、y、z 都给了时);否则为 null。 */
@@ -249,11 +205,6 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
                 case DIG -> "走到够得着 " + where + " 的地方";
             };
         }
-    }
-
-    /** 可带负号的一串数字。 */
-    private static boolean integer(String text) {
-        return text.matches("-?\\d{1,9}");
     }
 
     /**
@@ -363,20 +314,21 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
                 toward = nearest.get(0);
             }
             case DIG -> {
-                BodyStats body = Snapshots.stats(her);
+                List<BlockPos> targets = new ArrayList<>();
                 for (BlockPos cell : nearest) {
                     // 空气与流体没有可挖的;没加载的列此刻判不了,留给走到那儿时的规划
                     if (!terrain.loaded(cell.getX(), cell.getZ()) || terrain.clickable(cell)) {
-                        members.add(Goals.dig(cell, body));
+                        targets.add(cell);
                         toward = toward == null ? cell : toward;
-                        if (members.size() == MEMBERS) {
+                        if (targets.size() == MEMBERS) {
                             break;
                         }
                     }
                 }
-                if (members.isEmpty()) {
+                if (targets.isEmpty()) {
                     throw new IllegalArgumentException(GotoReminders.areaNothingToDig(ref, nearest.size(), cells));
                 }
+                return new Destination(stop, Goals.dig(targets, Snapshots.stats(her)), toward);
             }
         }
         return new Destination(stop, members.size() == 1 ? members.get(0) : Goals.anyOf(members), toward);

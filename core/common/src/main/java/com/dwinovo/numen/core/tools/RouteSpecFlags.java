@@ -9,6 +9,7 @@ import java.util.Set;
 
 import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.cli.ArgType;
+import com.dwinovo.numen.cli.BlockCellOrArea;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.core.init.InitTag;
@@ -21,7 +22,6 @@ import com.dwinovo.numen.pathing.world.Semantics;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
@@ -34,12 +34,13 @@ import net.minecraft.world.level.block.Block;
  * 长什么样,读好的值怎么变成 {@link RouteSpec}({@link #parse})——标志到规格的翻译全仓只此一处。旋钮名用模型看得懂的
  * 普通词,按规格的四组组织:
  * <ul>
- *   <li>能力:{@code --alter}(none/natural/any)、{@code --parkour}、{@code --max_fall}、{@code --alter_budget};</li>
+ *   <li>能力:{@code --alter}(none/natural/any)、{@code --parkour}、{@code --max-fall}、{@code --alter-budget};</li>
  *   <li>格子种类与禁区:{@code --avoid}——还要排除的语义种类({@link Semantics.Kind} 名),或不进入的区域 {@code area:名字};
  *       {@code --allow}——放开出厂排除的那几种里可以放开的;</li>
- *   <li>按位置 / 按种类:{@code --avoid_break}、{@code --avoid_place}、{@code --avoid_step}——方块 id、{@code #标签},
- *       一格坐标 {@code x,y,z},或一块区域 {@code area:名字}、{@code area:名字/部分}。一片地方只有区域一种写法。</li>
- *   <li>动作代价:{@code --penalty_place}、{@code --penalty_break}、{@code --penalty_jump}、{@code --penalty_wade}。</li>
+ *   <li>按位置 / 按种类:{@code --avoid-break}、{@code --avoid-place}、{@code --avoid-step}——方块 id、{@code #标签},
+ *       一格坐标 {@code x,y,z},或一块区域 {@code area:名字}、{@code area:名字/部分}({@link BlockCellOrArea})。一片地方只有区域一种
+ *       写法。</li>
+ *   <li>动作代价:{@code --penalty-place}、{@code --penalty-break}、{@code --penalty-jump}、{@code --penalty-wade}。</li>
  * </ul>
  * 全部可选,不给的保持调用方的默认规格:goto 与路线是出厂值(只走不改),mine 是它自己的默认(可以改地形,要主人同意的
  * 格也算进去)。路线把写下的标志原样存成文字,用时再经这里翻译({@code core.route.RouteFlags})。写法上的错(不是数、坐标缺一截、不在几个固定值里)由参数类型在解析时报;这里报的是写法对了、意思不成立的
@@ -72,11 +73,13 @@ public final class RouteSpecFlags {
             "Whether the walk may change the world: none never breaks or places a block; natural may dig, bridge "
                     + "and pillar through natural terrain; any also counts blocks that need your owner's consent, "
                     + "asking before it touches them. Every change is itemised in the result.")
+            .whenOmitted("keep this walk's default: change no block")
             .group(GROUP);
     static final Param<List<String>> AVOID = Param.optional("avoid",
             ArgType.list(ArgType.oneOfOrArea(kindNames(AVOIDABLE))),
             "Cell types to keep out of entirely, e.g. water to stay dry, door to never pass doors; or an area of your "
                     + "owner's to stay out of, e.g. area:farm (never stand in it or on it).")
+            .whenOmitted("keep out of only what is kept out by default (lava, hazards, fragile cells…)")
             .group(GROUP);
     static final Param<List<String>> ALLOW = Param.optional("allow", ArgType.list(ArgType.oneOf(kindNames(ALLOWABLE))),
             "Cell types kept out by default that this walk may use: flowing_water (currents push her off the route),"
@@ -87,16 +90,20 @@ public final class RouteSpecFlags {
     static final Param<Double> PENALTY_BREAK = penalty("break", "Extra cost per block broken, on top of dig time", 30);
     static final Param<Double> PENALTY_JUMP = penalty("jump", "Extra cost per jump; raise it for a flatter walk", 2);
     static final Param<Double> PENALTY_WADE = penalty("wade", "Extra cost per block of water walked", 3);
-    static final Param<List<String>> AVOID_BREAK = Param.optional("avoid_break",
+    static final Param<List<BlockCellOrArea>> AVOID_BREAK = Param.optional("avoid_break",
             ArgType.list(ArgType.blockCellOrArea()),
             "Never break these blocks, or anything in these cells or areas (e.g. area:house).")
+            .whenOmitted("ban no block by name")
             .group(GROUP);
-    static final Param<List<String>> AVOID_PLACE = Param.optional("avoid_place",
+    static final Param<List<BlockCellOrArea>> AVOID_PLACE = Param.optional("avoid_place",
             ArgType.list(ArgType.blockCellOrArea()),
             "Never place a block into cells holding these (e.g. minecraft:water), or into these cells or areas.")
+            .whenOmitted("ban no block by name")
             .group(GROUP);
-    static final Param<List<String>> AVOID_STEP = Param.optional("avoid_step", ArgType.list(ArgType.blockCellOrArea()),
+    static final Param<List<BlockCellOrArea>> AVOID_STEP = Param.optional("avoid_step",
+            ArgType.list(ArgType.blockCellOrArea()),
             "Never stand on these blocks (e.g. minecraft:farmland, #minecraft:crops), or on these cells or areas.")
+            .whenOmitted("ban no block by name")
             .group(GROUP);
     static final Param<Boolean> PARKOUR = Param.optional("parkour", ArgType.bool(),
             "Allow running jumps over 2-4 block gaps.").whenOmitted("not jump gaps")
@@ -203,7 +210,7 @@ public final class RouteSpecFlags {
         double v = args.get(flag);
         if (v < 0 || v > MAX_PENALTY) {
             throw new IllegalArgumentException(
-                    "--" + flag.name() + " must be between 0 and " + (int) MAX_PENALTY + ", got " + v);
+                    "--" + flagName(flag) + " must be between 0 and " + (int) MAX_PENALTY + ", got " + v);
         }
         return v;
     }
@@ -211,7 +218,7 @@ public final class RouteSpecFlags {
     private static int nonNegative(Param<Integer> flag, CommandArgs args) {
         int v = args.get(flag);
         if (v < 0) {
-            throw new IllegalArgumentException("--" + flag.name() + " must be 0 or more, got " + v);
+            throw new IllegalArgumentException("--" + flagName(flag) + " must be 0 or more, got " + v);
         }
         return v;
     }
@@ -226,50 +233,38 @@ public final class RouteSpecFlags {
         }
     }
 
-    private static Bans bans(Param<List<String>> flag, CommandArgs args, NamedAreas areas) {
+    private static Bans bans(Param<List<BlockCellOrArea>> flag, CommandArgs args, NamedAreas areas) {
         Set<Block> blocks = new LinkedHashSet<>();
         LongSet cells = new LongOpenHashSet();
         List<PositionCosts.Region> regions = new ArrayList<>();
-        List<String> given = args.get(flag);
+        List<BlockCellOrArea> given = args.get(flag);
         if (given == null) {
             return new Bans(blocks, cells, regions);
         }
-        for (String raw : given) {
-            AreaRef area = AreaRef.marked(raw);
-            if (area != null) {
-                regions.add(region(flag, area, areas));
-            } else if (isCell(raw)) {
-                cells.add(cellOf(raw));
+        for (BlockCellOrArea one : given) {
+            if (one.area() != null) {
+                regions.add(region(flag, one.area(), areas));
+            } else if (one.cell() != null) {
+                cells.add(one.cell().asLong());
             } else {
-                blocks.addAll(blocksOf(flag, raw));
+                blocks.addAll(blocksOf(flag, one.block()));
             }
         }
         return new Bans(blocks, cells, regions);
     }
 
     /** 点名的区域交给寻路的样子;不在就报,说法照 {@link NamedAreas#resolve},前面写上是哪个标志。 */
-    private static PositionCosts.Region region(Param<List<String>> flag, AreaRef area, NamedAreas areas) {
+    private static PositionCosts.Region region(Param<?> flag, AreaRef area, NamedAreas areas) {
         try {
             return NamedAreas.region(areas.resolve(area));
         } catch (IllegalArgumentException missing) {
-            throw new IllegalArgumentException("--" + flag.name() + " " + area.marked() + ": " + missing.getMessage(),
+            throw new IllegalArgumentException("--" + flagName(flag) + " " + area.marked() + ": " + missing.getMessage(),
                     missing);
         }
     }
 
-    /** 以数字或负号开头的就是一格坐标——方块 id 从字母或 # 开头({@link ArgType#blockCellOrArea} 同一条分法)。 */
-    private static boolean isCell(String raw) {
-        return Character.isDigit(raw.charAt(0)) || raw.charAt(0) == '-';
-    }
-
-    /** {@code x,y,z} 那一格。写法已由参数类型读过。 */
-    private static long cellOf(String raw) {
-        String[] parts = raw.split(",");
-        return BlockPos.asLong(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]), Integer.parseInt(parts[2]));
-    }
-
     /** {@code #ns:tag} 展开成成员;{@code ns:block} 一种。不存在的报错,不静默跳过。 */
-    private static Set<Block> blocksOf(Param<List<String>> flag, String raw) {
+    private static Set<Block> blocksOf(Param<?> flag, String raw) {
         Set<Block> out = new LinkedHashSet<>();
         TagKey<Block> tag = InitTag.parseRef(Registries.BLOCK, raw);
         if (tag != null) {
@@ -277,17 +272,22 @@ public final class RouteSpecFlags {
                 out.add(holder.value());
             }
             if (out.isEmpty()) {
-                throw new IllegalArgumentException("--" + flag.name() + ": tag '" + raw + "' has no blocks");
+                throw new IllegalArgumentException("--" + flagName(flag) + ": tag '" + raw + "' has no blocks");
             }
             return out;
         }
         Block block = BuiltInRegistries.BLOCK.getOptional(ResourceLocation.parse(raw)).orElse(null);
         if (block == null) {
-            throw new IllegalArgumentException("--" + flag.name() + ": unknown block '" + raw
+            throw new IllegalArgumentException("--" + flagName(flag) + ": unknown block '" + raw
                     + "' — use a namespaced id like minecraft:chest, a tag like #minecraft:logs,"
                     + " a cell like 12,60,8, or an area like area:house");
         }
         out.add(block);
         return out;
+    }
+
+    /** 回执里写标志的样子:命令行上的短横线写法。 */
+    private static String flagName(Param<?> flag) {
+        return flag.name().replace('_', '-');
     }
 }
