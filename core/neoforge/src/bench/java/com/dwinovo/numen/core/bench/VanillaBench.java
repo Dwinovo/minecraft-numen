@@ -17,6 +17,7 @@ public final class VanillaBench {
     public static Collection<TestFunction> scenarios() {
         return Bench.suite("vanilla", "Vanilla Minecraft: gathering and the basics, no other mods.",
                 suite -> suite.add(MineIron::new)
+                        .add(MineIron::byScript)
                         .add(DeepDiamond::new)
                         .add(OreBehindHouse::denied)
                         .add(OreBehindHouse::allowedOnce)
