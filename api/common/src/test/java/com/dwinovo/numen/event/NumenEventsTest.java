@@ -52,7 +52,7 @@ class NumenEventsTest {
         attrs.put("status", "done");
         EventQueue.Entry finished = NumenEvents.entry(0L, EventTypes.TASK_FINISHED, attrs,
                 "set 1 cell; the id=\"t9\" in this text is not the task", 1L, true);
-        assertEquals(new com.dwinovo.numen.agent.lua.ScriptCall.Finish("t3", "done",
+        assertEquals(new com.dwinovo.numen.agent.script.ScriptCall.Finish("t3", "done",
                 "set 1 cell; the id=\"t9\" in this text is not the task"), NumenEvents.finishOf(finished));
 
         EventQueue.Entry hungry = NumenEvents.entry(0L, EventTypes.HUNGRY, Map.of("id", "t3"), "hungry", 1L, true);

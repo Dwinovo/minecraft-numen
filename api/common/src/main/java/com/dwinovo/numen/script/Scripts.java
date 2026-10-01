@@ -1,7 +1,7 @@
 package com.dwinovo.numen.script;
 
-import com.dwinovo.numen.agent.lua.LuaRun;
-import com.dwinovo.numen.agent.lua.ScriptCall;
+import com.dwinovo.numen.agent.script.ScriptEngine;
+import com.dwinovo.numen.agent.script.ScriptCall;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
@@ -26,7 +26,7 @@ import java.util.SortedMap;
 import java.util.UUID;
 
 /**
- * {@code script}:脚本这个名词——有名字的 Lua 程序。内置的随模组发布、只读({@link BuiltinScripts});同伴存下的归主人
+ * {@code script}:脚本这个名词——有名字的程序(语言见 {@link ScriptEngine})。内置的随模组发布、只读({@link BuiltinScripts});同伴存下的归主人
  * ({@link ScriptStore}),同一主人的同伴都看得见、都跑得了,存的那只改得了、删得了,改删别的同伴存的那份经权限层
  * ({@code edit_script},出厂要问主人)。每份脚本都记战绩:跑了几次、跑完几次、最近一次在什么时候、最近一次没跑完停在哪一行、
  * 为什么——只给事实,不替她评判。
@@ -44,8 +44,9 @@ public final class Scripts {
     private static final Param<String> NEW_NAME = Param.required("name", ArgType.word(),
             "Name to keep it under: lowercase letters, digits, _ and -.");
     private static final Param<String> CODE = Param.required("code", ArgType.text(),
-            "The Lua program, the same as you would give the lua tool. Its first line is a -- comment saying what it "
-                    + "does.");
+            "The program, the same as you would give the " + ScriptEngine.IN_USE.toolName() + " tool. Its first line is "
+                    + "a comment saying what it does: " + ScriptEngine.IN_USE.comment("Dig every part of an area.")
+                    + ".");
     private static final Param<String> RUN = Param.required("script", ArgType.text(),
             "The script's name, then its arguments: mine ores.");
 
@@ -58,7 +59,7 @@ public final class Scripts {
 
     /** 经插件那扇门登记这一组。 */
     public static void install(NumenApi numen) {
-        numen.registerCommands(GROUP, "Lua scripts kept by name — built in, and saved by your owner's companions — "
+        numen.registerCommands(GROUP, "Scripts kept by name — built in, and saved by your owner's companions — "
                 + "and how their runs went.", Scripts::actions);
         numen.contributeBodyState(Scripts::savedIndex);
     }
@@ -78,18 +79,17 @@ public final class Scripts {
         script.server("run", "Run a script by name with arguments; its receipt says how it ended, line by line.",
                         Scripts::run, RUN)
                 .example("script run mine ores")
-                .note("Runs like a program you give the lua tool: one command at a time, each waiting for the work "
+                .note("Runs like a program you give the " + ScriptEngine.IN_USE.toolName() + " tool: one command at a "
+                        + "time, each waiting for the work "
                         + "it starts to finish, stopping between commands when your owner speaks or something urgent "
-                        + "comes up. In a Lua program, script.run(\"mine\", \"ores\") runs it the same way.")
-                .note("The script reads its arguments as ... and arg.")
+                        + "comes up. In a program, script.run(\"mine\", \"ores\") runs it the same way.")
                 .seeAlso("script show", "script list");
-        script.server("save", "Keep a Lua program under a name so you can run it again.",
+        script.server("save", "Keep a program under a name so you can run it again.",
                         Scripts::save, NEW_NAME, CODE)
-                .example("script save sweep -- Dig every part of an area, nearest first.\n"
-                        + "for _, p in ipairs(area.parts(...)) do work.dig(p) end")
+                .example("script save pit " + ScriptEngine.IN_USE.comment("Dig out the pit.") + "\n"
+                        + "work.dig(\"pit\")")
                 .note("Instant. The program is read first and not kept if it does not compile; the error says the "
-                        + "line. Its first line is a -- comment saying what it does: that is how the list describes "
-                        + "it.")
+                        + "line. Its first line is a comment saying what it does: that is how the list describes it.")
                 .note("Saving under the name of one you saved replaces it and resets its record. Built-in scripts "
                         + "are read-only: save your own version under another name. Changing one another companion "
                         + "saved asks your owner first.")
@@ -111,7 +111,8 @@ public final class Scripts {
                 + record(store.stats(name), true)));
         store.saved().forEach((name, s) -> rows.add(name + " — " + s.summary() + " [saved by " + s.authorName()
                 + "] " + record(store.stats(name), true)));
-        String head = rows.isEmpty() ? "No scripts yet. Write a Lua program with the lua tool, then keep it with "
+        String head = rows.isEmpty() ? "No scripts yet. Write a program with the " + ScriptEngine.IN_USE.toolName()
+                + " tool, then keep it with "
                 + "script save <name> <code>." : rows.size() + " script" + (rows.size() == 1 ? "" : "s")
                 + ". script show <name> prints one; script run <name> [args] runs it.";
         return new Listing(head, rows, "", GROUP + " list").result(args).toJson();
@@ -195,15 +196,15 @@ public final class Scripts {
                     + "name, e.g. script save my-" + name + " <code>.").toJson());
             return;
         }
-        String problem = LuaRun.check(name, code);
+        String problem = ScriptEngine.IN_USE.check(name, code);
         if (problem != null) {
             src.reply(TaskResult.fail("did not save " + name + ": it does not compile: " + problem).toJson());
             return;
         }
-        String summary = LuaRun.summary(code);
+        String summary = ScriptEngine.IN_USE.summary(code);
         if (summary == null) {
-            src.reply(TaskResult.fail("did not save " + name + ": start it with a -- comment line saying what it "
-                    + "does, e.g. -- Dig every part of an area, nearest first.").toJson());
+            src.reply(TaskResult.fail("did not save " + name + ": start it with a comment line saying what it "
+                    + "does, e.g. " + ScriptEngine.IN_USE.comment("Dig every part of an area, nearest first.")).toJson());
             return;
         }
         ScriptStore store = store(her);
@@ -214,7 +215,7 @@ public final class Scripts {
                             her.getGameProfile().getName(), System.currentTimeMillis()));
                     allowed.reply(TaskResult.ok((before == null ? "Saved script " : "Replaced script ") + name + ": "
                             + summary + " Run it with script run " + name + " [args], or script.run(\"" + name
-                            + "\", ...) in a Lua program.").toJson());
+                            + "\", ...) in a program.").toJson());
                 });
     }
 

@@ -20,7 +20,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
 /**
- * Lua 脚本从入口跑:模型一次回复里的一条 {@code lua} 调用(或一行 {@code script run}),经内脑派发的同一个顺序
+ * 脚本从入口跑:模型一次回复里的一条组合命令的调用(或一行 {@code script run}),经内脑派发的同一个顺序
  * ({@link GameTestKit#round})逐条派命令——每个命令函数就是那一行命令,占身体的等它收尾再往下走;脚本按返回值分支;主人
  * 停止或开口时停在命令之间,回执如实写停在哪一行。脚本这个名词:存、读、列、删、按名字带参数跑,战绩记在主人名下。
  */
@@ -45,7 +45,7 @@ public class ScriptGameTests {
         BlockPos second = helper.absolutePos(new BlockPos(2, 2, 4));
         level.setBlockAndUpdate(first, Blocks.STONE.defaultBlockState());
         level.setBlockAndUpdate(second, Blocks.STONE.defaultBlockState());
-        LlmToolCall script = luaCall("""
+        LlmToolCall script = programCall("""
                 build.set("air", %s)
                 build.set("air", %s)
                 """.formatted(xyz(first).replace(' ', ','), xyz(second).replace(' ', ',')));
@@ -75,7 +75,7 @@ public class ScriptGameTests {
         BlockPos air = helper.absolutePos(new BlockPos(8, 2, 8));
         BlockPos kept = helper.absolutePos(new BlockPos(4, 2, 2));
         level.setBlockAndUpdate(kept, Blocks.STONE.defaultBlockState());
-        LlmToolCall script = luaCall("""
+        LlmToolCall script = programCall("""
                 local walk = move.goto({x = %d, y = %d, z = %d, arrive = "use"})
                 if not walk.ok then error("could not get there: " .. walk.text, 0) end
                 build.set("air", %s)
@@ -102,7 +102,7 @@ public class ScriptGameTests {
         BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
         BlockPos kept = helper.absolutePos(new BlockPos(4, 2, 2));
         level.setBlockAndUpdate(kept, Blocks.STONE.defaultBlockState());
-        LlmToolCall script = luaCall("""
+        LlmToolCall script = programCall("""
                 move.goto({x = %d, z = %d})
                 build.set("air", %s)
                 """.formatted(far.getX(), far.getZ(), xyz(kept).replace(' ', ',')));
@@ -133,7 +133,7 @@ public class ScriptGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer her = spawnAt(helper, "gametest_lua_spoken", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
-        LlmToolCall script = luaCall("""
+        LlmToolCall script = programCall("""
                 move.goto({x = %d, z = %d})
                 move.goto({x = %d, z = %d})
                 """.formatted(far.getX(), far.getZ(), far.getX() - 10, far.getZ()));

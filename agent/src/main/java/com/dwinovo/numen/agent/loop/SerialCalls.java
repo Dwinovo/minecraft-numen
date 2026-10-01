@@ -3,7 +3,7 @@ package com.dwinovo.numen.agent.loop;
 import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.agent.llm.ToolOutcome;
-import com.dwinovo.numen.agent.lua.ScriptCall;
+import com.dwinovo.numen.agent.script.ScriptCall;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 
 import java.util.ArrayDeque;
@@ -23,7 +23,7 @@ import java.util.function.Consumer;
  * 那件任务的收尾到没到——不猜"是不是同一批"。
  *
  * <h2>脚本</h2>
- * 一个调用是一段 Lua({@code lua} 工具),或者它的回执说"去跑这一份"({@code script run}),这个调用就是一段脚本
+ * 一个调用是一段程序(组合命令的那个工具),或者它的回执说"去跑这一份"({@code script run}),这个调用就是一段脚本
  * ({@link ScriptCall}):脚本每调一个命令函数,这里把那一行当一条普通命令派出去({@link Port#commandCall}),等它的回执;
  * 留下了身体活就用同一个等法等它收尾,再让脚本从调用处接着跑。脚本跑完,它的回执才是这个调用的结果。脚本里的命令都要等收尾:
  * 脚本要按它的结局往下走。
@@ -45,11 +45,11 @@ public final class SerialCalls {
         void invoke(LlmToolCall call, Consumer<String> done);
 
         /**
-         * 这个调用是不是一段 Lua 脚本:是就返回它的正文,别的工具是 null。
+         * 这个调用是不是一段程序(组合命令的那个工具):是就返回它的正文,别的工具是 null。
          *
          * @throws IllegalArgumentException 是脚本工具,但参数写错了;消息就是给模型的那句话
          */
-        String luaOf(LlmToolCall call);
+        String scriptOf(LlmToolCall call);
 
         /** 脚本里的一行命令写成一次调用,和模型直接调一行命令是同一个工具。 */
         LlmToolCall commandCall(String id, String line);
@@ -206,7 +206,7 @@ public final class SerialCalls {
                 sink.started(call);
                 String lua;
                 try {
-                    lua = port.luaOf(call);
+                    lua = port.scriptOf(call);
                 } catch (IllegalArgumentException invalid) {
                     sink.finished(call, ToolOutcome.failure("invalid arguments: " + invalid.getMessage()));
                     continue;

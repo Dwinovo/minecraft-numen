@@ -3,9 +3,9 @@ package com.dwinovo.numen.agent.loop;
 import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.agent.llm.ToolOutcome;
-import com.dwinovo.numen.agent.lua.LuaCatalog;
-import com.dwinovo.numen.agent.lua.LuaRun;
-import com.dwinovo.numen.agent.lua.ScriptCall;
+import com.dwinovo.numen.agent.script.ScriptCatalog;
+import com.dwinovo.numen.agent.script.ScriptRun;
+import com.dwinovo.numen.agent.script.ScriptCall;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import org.junit.jupiter.api.Test;
 
@@ -50,7 +50,7 @@ class SerialCallsTest {
         }
 
         @Override
-        public String luaOf(LlmToolCall call) {
+        public String scriptOf(LlmToolCall call) {
             return "lua".equals(call.name()) ? json(call.arguments()).get("code").getAsString() : null;
         }
 
@@ -74,12 +74,12 @@ class SerialCallsTest {
         }
 
         @Override
-        public LuaCatalog catalog() {
+        public ScriptCatalog catalog() {
             return CATALOG;
         }
 
         @Override
-        public String line(LuaRun.Call call) {
+        public String line(ScriptRun.Call call) {
             StringBuilder line = new StringBuilder(call.group() + " " + call.verb());
             call.args().forEach(a -> line.append(' ').append(a));
             call.options().forEach((k, v) -> line.append(" --").append(k).append(' ').append(v));
@@ -97,11 +97,11 @@ class SerialCallsTest {
         }
     }
 
-    private static final LuaCatalog CATALOG = new LuaCatalog(java.util.Map.of(
-            "work", java.util.Map.of("dig", new LuaCatalog.Verb(null), "collect", new LuaCatalog.Verb(null)),
-            "move", java.util.Map.of("goto", new LuaCatalog.Verb(null)),
-            "area", java.util.Map.of("has", new LuaCatalog.Verb("has")),
-            "script", java.util.Map.of("run", new LuaCatalog.Verb(null))));
+    private static final ScriptCatalog CATALOG = new ScriptCatalog(java.util.Map.of(
+            "work", java.util.Map.of("dig", new ScriptCatalog.Verb(null), "collect", new ScriptCatalog.Verb(null)),
+            "move", java.util.Map.of("goto", new ScriptCatalog.Verb(null)),
+            "area", java.util.Map.of("has", new ScriptCatalog.Verb("has")),
+            "script", java.util.Map.of("run", new ScriptCatalog.Verb(null))));
 
     private final FakePort port = new FakePort((call, done) -> {
         dispatched.add(call.id());
@@ -456,9 +456,9 @@ class SerialCallsTest {
                     : "{\"success\":false,\"message\":\"nothing in reach\"}");
             sent++;
         }
-        assertEquals(com.dwinovo.numen.agent.lua.ScriptLimits.COMMANDS, sent);
+        assertEquals(com.dwinovo.numen.agent.script.ScriptLimits.COMMANDS, sent);
         String msg = json(results.get("s")).get("message").getAsString();
-        assertTrue(msg.contains("it reached the limit of " + com.dwinovo.numen.agent.lua.ScriptLimits.COMMANDS
+        assertTrue(msg.contains("it reached the limit of " + com.dwinovo.numen.agent.script.ScriptLimits.COMMANDS
                 + " commands per run"), msg);
         assertTrue(msg.contains("work.dig: 100 calls, 100 failed"), msg);
     }
@@ -469,7 +469,7 @@ class SerialCallsTest {
                 move.goto("ores")
                 work.dig("ores")
                 """)), sink);
-        linePort.now = com.dwinovo.numen.agent.lua.ScriptLimits.WALL_MILLIS + 1;
+        linePort.now = com.dwinovo.numen.agent.script.ScriptLimits.WALL_MILLIS + 1;
         answerLast("{\"success\":true}");
         assertEquals(1, lines.size());
         String msg = json(results.get("s")).get("message").getAsString();

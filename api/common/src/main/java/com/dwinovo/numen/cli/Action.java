@@ -142,9 +142,9 @@ public final class Action {
     }
 
     /**
-     * 脚本(Lua)里这个动作的函数直接返回回执 {@code data} 里的 {@code key} 那一项,而不是整张结果表:查询的结果拿来就能
+     * 脚本里这个动作的函数直接返回回执 {@code data} 里的 {@code key} 那一项,而不是整张结果表:查询的结果拿来就能
      * 循环、判断({@code for _, p in ipairs(area.parts("ores"))}、{@code while area.has(p)})。命令失败时没有值可给,函数在
-     * 调用处抛出 Lua 错误。不调就是整张结果表 {@code {ok, text, data}}。
+     * 调用处抛出脚本错误。不调就是整份结果 {@code {ok, text, data}}。
      */
     public Action returns(String key) {
         group.requireOpen();

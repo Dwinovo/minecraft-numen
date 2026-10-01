@@ -474,9 +474,9 @@ public final class GameTestKit {
         }
 
         @Override
-        public String luaOf(LlmToolCall call) {
-            return ToolRegistry.get(call.name()) instanceof com.dwinovo.numen.cli.LuaTool
-                    ? com.dwinovo.numen.cli.LuaTool.code(call.arguments()) : null;
+        public String scriptOf(LlmToolCall call) {
+            return ToolRegistry.get(call.name()) instanceof com.dwinovo.numen.cli.ScriptTool
+                    ? com.dwinovo.numen.cli.ScriptTool.code(call.arguments()) : null;
         }
 
         @Override
@@ -491,22 +491,22 @@ public final class GameTestKit {
         }
 
         @Override
-        public com.dwinovo.numen.agent.lua.ScriptCall.Finish finish(EventQueue.Entry entry) {
+        public com.dwinovo.numen.agent.script.ScriptCall.Finish finish(EventQueue.Entry entry) {
             return com.dwinovo.numen.event.NumenEvents.finishOf(entry);
         }
 
         @Override
-        public com.dwinovo.numen.agent.lua.LuaCatalog catalog() {
-            return com.dwinovo.numen.cli.NumenCli.luaCatalog();
+        public com.dwinovo.numen.agent.script.ScriptCatalog catalog() {
+            return com.dwinovo.numen.cli.NumenCli.scriptCatalog();
         }
 
         @Override
-        public String line(com.dwinovo.numen.agent.lua.LuaRun.Call call) {
-            return com.dwinovo.numen.cli.NumenCli.luaLine(call);
+        public String line(com.dwinovo.numen.agent.script.ScriptRun.Call call) {
+            return com.dwinovo.numen.cli.NumenCli.scriptLine(call);
         }
 
         @Override
-        public void tally(String script, com.dwinovo.numen.agent.lua.ScriptCall.Tally tally) {
+        public void tally(String script, com.dwinovo.numen.agent.script.ScriptCall.Tally tally) {
             com.dwinovo.numen.script.Scripts.tally(body, script, tally.ok(), tally.line(), tally.error());
         }
 
@@ -516,9 +516,10 @@ public final class GameTestKit {
         }
     }
 
-    /** 一轮里的一段 Lua:一条 {@code lua} 工具调用。 */
-    static LlmToolCall luaCall(String code) {
-        return toolCall(com.dwinovo.numen.cli.LuaTool.NAME, args("code", code));
+    /** 一轮里的一段程序:一条组合命令的工具调用。 */
+    static LlmToolCall programCall(String code) {
+        return toolCall(com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.toolName(),
+                com.dwinovo.numen.cli.ScriptTool.args(code));
     }
 
     /** 一轮调用的现场:每条的结果、派出那一刻她站在哪、这一轮结算没有。 */

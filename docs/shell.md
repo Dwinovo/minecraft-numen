@@ -62,17 +62,19 @@
 ## 四、脚本:Lua
 
 组合语言是 Lua(10-01 定):照 ComputerCraft/CC: Tweaked 的路子,调命令时协程让出、等身体收尾再接着跑。只有这一套组合
-语言。虚拟机只在 `agent.lua.LuaRun` 一处接入,对外的类型(调用请求、结局、命令结果)不带虚拟机的任何类型;眼下接的是
+语言。语言只经 `agent.script.ScriptEngine` 一处认:工具名、扩展名、注释写法、"命令怎么调"那段说明、读与跑;派发、等待、
+上限、打断、回执、脚本名词、命令函数的目录与参数换算都与语言无关(`ScriptRun` 的调用请求、结局、命令结果不带任何
+虚拟机类型)。实现在 `agent.script.lua.CobaltLua`,虚拟机的类型只在这个类里;眼下接的是
 Cobalt 0.9.9,选型未定(Cobalt 的 README 声明版本间 API 不保证稳定、建议别处改用 LuaJ、JNLua 或 Rembulan),换虚拟机
-只改 `LuaRun` 的内部与构建里的依赖。
+只改 `ScriptEngine.IN_USE` 与它的实现、构建里的依赖。
 
 ### 工具面
 
 - `command`:一行命令,入口不变。
-- `lua`:一段 Lua 程序(参数 `code`),一次调用跑完,回一张回执。两种写法是两种语言,一个工具名说清它收哪一种。
+- 组合命令的工具(`ScriptTool`,名字随语言,眼下是 `lua`):一段程序(参数 `code`),一次调用跑完,回一张回执。两种写法是两种语言,一个工具名说清它收哪一种。
 - 快捷工具的 JSON 写法先保留,是否收掉由评测 A/B 定。
 - 提示词(`NumenPrompts` 的 operating principles)告诉她:下一步要看上一步的结果时(一块区域的每一部分、挖到没有为止、
-  头一个失败就停),写成一段交给 `lua`;已有的脚本先看 `<scripts>`/`<saved_scripts>`;写好用得顺的 `script save` 存下。
+  头一个失败就停),写成一段交给组合命令的工具;已有的脚本先看 `<scripts>`/`<saved_scripts>`;写好用得顺的 `script save` 存下。
 
 ### 命令函数:由登记处生成
 
@@ -88,7 +90,7 @@ Cobalt 0.9.9,选型未定(Cobalt 的 README 声明版本间 API 不保证稳定�
 
 - 按顺序的对象依次是必填参数;最后一个必填参数吃掉余下整行(`text`)时,多出来的对象空格隔开写进它。最后一个参数是
   带名字键的表就是选项。命令行上占几个词的一个值(一串 id、三个坐标)在这里是列表 `{a, b, c}`。
-- 换算只在命令层一处(`NumenCli.luaLine`):值经参数类型读成参数(`CommandArgs.fromJson`,快捷工具同一个读法),再按
+- 换算只在命令层一处(`NumenCli.scriptLine`):值经参数类型读成参数(`CommandArgs.fromJson`,快捷工具同一个读法),再按
   同一张参数表写回命令行(`CommandArgs.write`)。写不成(没有这个动作、对象多了、缺必填、选项名不对)在调用处抛 Lua 错误,
   附这个动作的用法。
 - 函数返回 `{ok = 成没成, text = 回执那句话, data = 回执数据转成的表}`。占身体的命令等它的 task_finished 再返回,
@@ -102,7 +104,7 @@ Cobalt 0.9.9,选型未定(Cobalt 的 README 声明版本间 API 不保证稳定�
 
 ### 放在哪:`agent` 模块,和 `SerialCalls` 同一层
 
-- 虚拟机与运行(`agent.lua.LuaRun`)、一次调用里的脚本(`agent.lua.ScriptCall`)、上限(`agent.lua.ScriptLimits`)
+- 语言(`agent.script.ScriptEngine` 与实现)、一次运行(`ScriptRun`)、一次调用里的脚本(`ScriptCall`)、上限(`ScriptLimits`)
   是纯 JVM,和派发器 `SerialCalls` 在同一个模块。理由:等身体收尾、急件打断等待的那处机制就在 `SerialCalls`,脚本每调
   一个命令要的正是它;放进 api 要么另造一份等待,要么让 api 的工具反过来伸进派发器。
 - 眼下的 Cobalt 只在 `agent` 引入一处(`implementation 'cc.tweaked:cobalt:0.9.9'`,SquidDev 的仓库 `maven.squiddev.cc`,
@@ -111,18 +113,18 @@ Cobalt 0.9.9,选型未定(Cobalt 的 README 声明版本间 API 不保证稳定�
   NeoForge 经 `jarJar`、Fabric 经 `include` 嵌进引擎的 jar:装了 CC: Tweaked 时两份同坐标的库由加载器按版本挑一份,
   平铺就成了两个模组里的同名包。开发期的 run 从 `agent` 的依赖拿到它(再加 `additionalRuntimeClasspath` 会重复成两个
   同名模块,起不来)。
-- 派发器经端口 `SerialCalls.Port`(继承 `ScriptCall.Host`)要这几样:执行一个调用、认出 `lua` 调用的正文、把一行命令写成
+- 派发器经端口 `SerialCalls.Port`(继承 `ScriptCall.Host`)要这几样:执行一个调用、认出组合命令的调用里的程序、把一行命令写成
   一次 `command` 调用、受理回执与 task_finished 的认法、命令目录与换算、记战绩、墙钟。主人客户端与评测大脑用
   `CompanionToolPort`,GameTest 的一轮用服务端的 `ServerPort`(直接 `serve`,战绩直接记)。
 
 ### 运行:协程在调用处让出
 
 - 每次运行一个新的虚拟机。脚本在自己的协程里跑;命令函数是可恢复的 Java 函数,收参数、在调用处让出一个调用请求
-  (`LuaRun.Call`:行号、组、动作、对象、选项),拿到结局后从调用处接着跑。等身体干活时脚本不占线程、不阻塞谁。
+  (`ScriptRun.Call`:行号、组、动作、对象、选项),拿到结局后从调用处接着跑。等身体干活时脚本不占线程、不阻塞谁。
 - 命令只能由脚本本身调;在脚本自己开的协程里调会报错说明(那次让出会落到她自己的 `resume` 手里)。
 - 一段调用里可以再跑一份有名字的脚本:`script run`(命令行上或 `script.run`)是一条普通命令,命令层按名字找到脚本、
   把正文与参数放进回执 `data.run`;派发器见到这样的回执就在原地开一层跑它,跑完它的结局就是那次调用的结局。上限算
-  整段调用的总数,打断时每一层都停。外接大脑直接调工具、没有这个派发器:`lua` 回一条说明,`script run` 只交回正文。
+  整段调用的总数,打断时每一层都停。外接大脑直接调工具、没有这个派发器:组合命令的工具回一条说明,`script run` 只交回正文。
 
 ### 沙箱与上限
 
@@ -229,7 +231,7 @@ end
 ## 五、落地
 
 在集成分支上两路并行:**命令层**(十条规矩与登记检查、对象统一解析、原子化 `work dig`/`collect`、`area parts/has`、
-`--arrive dig` 按覆盖定价、提示词与技能)与**脚本层**(Lua 运行、`lua` 工具、上限与打断、脚本名词与内置脚本登记、
+`--arrive dig` 按覆盖定价、提示词与技能)与**脚本层**(脚本运行、组合命令的工具、上限与打断、脚本名词与内置脚本登记、
 `mine` 脚本)。接口:脚本的每个命令函数就是一条命令行,交给命令层原样执行;查询要直接返回值的,登记时声明
 `Action.returns`。
 
@@ -237,11 +239,12 @@ end
 
 ## 六、落地记录
 
-- **脚本层(10-01)**:`lua` 工具、命令函数由登记处生成(`NumenCli.luaCatalog`/`luaLine`、`Action.returns`)、派发器逐条派与
+- **脚本层(10-01)**:组合命令的工具 `ScriptTool`、语言只经 `ScriptEngine`、命令函数由登记处生成
+  (`NumenCli.scriptCatalog`/`scriptLine`、`Action.returns`)、派发器逐条派与
   等身体收尾(`SerialCalls` + `ScriptCall`)、上限(`ScriptLimits`)、在命令之间停下(急件、主人开口、`halt` 先收工具口)、
   按行的回执、脚本名词(`script` 组、`ScriptStore`、`BuiltinScripts`、`edit_script`/`saved`、战绩经 `ScriptTallyPayload`、
-  `<scripts>` 与 `<saved_scripts>` 索引)、内置 `mine`。单测:`LuaRunTest`(让出与恢复、返回表与直接返回值、沙箱、指令预算、
-  报错行号)、`SerialCallsTest`(顺序、等收尾、分支、开口与急件、切断时的回执、按名字跑与嵌套、两种上限)、`LuaLineTest`、
+  `<scripts>` 与 `<saved_scripts>` 索引)、内置 `mine`。单测:`CobaltLuaTest`(让出与恢复、返回表与直接返回值、沙箱、指令预算、
+  报错行号)、`SerialCallsTest`(顺序、等收尾、分支、开口与急件、切断时的回执、按名字跑与嵌套、两种上限)、`ScriptLineTest`、
   `ScriptStoreTest`、`GateTest`;GameTest:`ScriptGameTests`。
-- 外接大脑(MCP)直接调工具,没有派发器:`lua` 回一条说明,`script run` 只交回正文。要让外接大脑也跑脚本,得把它的调用
+- 外接大脑(MCP)直接调工具,没有派发器:组合命令的工具回一条说明,`script run` 只交回正文。要让外接大脑也跑脚本,得把它的调用
   也经派发器、并把收件箱的到达转给它,另做。

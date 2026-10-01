@@ -2,15 +2,15 @@ package com.dwinovo.numen.agent.tool;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.inbox.EventQueue;
-import com.dwinovo.numen.agent.lua.LuaCatalog;
-import com.dwinovo.numen.agent.lua.LuaRun;
-import com.dwinovo.numen.agent.lua.ScriptCall;
+import com.dwinovo.numen.agent.script.ScriptCatalog;
+import com.dwinovo.numen.agent.script.ScriptRun;
+import com.dwinovo.numen.agent.script.ScriptCall;
 import com.dwinovo.numen.agent.loop.SerialCalls;
 import com.dwinovo.numen.agent.loop.ToolPort;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.CompanionEvent;
 import com.dwinovo.numen.cli.CommandTool;
-import com.dwinovo.numen.cli.LuaTool;
+import com.dwinovo.numen.cli.ScriptTool;
 import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.network.payload.ScriptTallyPayload;
 import com.dwinovo.numen.entity.CompanionEvents;
@@ -26,7 +26,7 @@ import java.util.function.Supplier;
 /**
  * 一只同伴的工具口:循环内核把模型一次回复里的调用交给它,它逐个执行、把结果报回。主人客户端的派发器与评测大脑都用这一份。
  *
- * <p>顺序与等待——一次一个、留下后台身体活的等它收尾再派下一个、等的时候来了急件怎么办、Lua 脚本怎么逐条派——是
+ * <p>顺序与等待——一次一个、留下后台身体活的等它收尾再派下一个、等的时候来了急件怎么办、脚本怎么逐条派——是
  * {@link SerialCalls} 的;身体活的受理回执与 task_finished 按 {@link TaskDispatch#runningTaskOf}、{@link NumenEvents#finishOf}
  * 认,和写它们的地方挨着。这里只管一个调用怎么执行:按名字取工具,交给它一个绑着这只同伴的 {@link ToolCall},由工具自己决定
  * 当场答还是送去服务端({@link ServerToolTransport}),结果之后从任何线程经 {@link ToolCall#complete} 回来;脚本的一行就是
@@ -102,8 +102,8 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
     // ---- SerialCalls.Port ----
 
     @Override
-    public String luaOf(LlmToolCall call) {
-        return ToolRegistry.resolve(call.name()) instanceof LuaTool ? LuaTool.code(call.arguments()) : null;
+    public String scriptOf(LlmToolCall call) {
+        return ToolRegistry.resolve(call.name()) instanceof ScriptTool ? ScriptTool.code(call.arguments()) : null;
     }
 
     @Override
@@ -122,13 +122,13 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
     }
 
     @Override
-    public LuaCatalog catalog() {
-        return NumenCli.luaCatalog();
+    public ScriptCatalog catalog() {
+        return NumenCli.scriptCatalog();
     }
 
     @Override
-    public String line(LuaRun.Call call) {
-        return NumenCli.luaLine(call);
+    public String line(ScriptRun.Call call) {
+        return NumenCli.scriptLine(call);
     }
 
     @Override

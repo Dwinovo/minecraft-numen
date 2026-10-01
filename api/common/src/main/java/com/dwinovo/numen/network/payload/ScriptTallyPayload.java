@@ -1,7 +1,7 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.agent.lua.ScriptCall;
+import com.dwinovo.numen.agent.script.ScriptCall;
 import com.dwinovo.numen.agent.tool.ServerToolTransport;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.script.Scripts;

@@ -1,4 +1,4 @@
-package com.dwinovo.numen.agent.lua;
+package com.dwinovo.numen.agent.script;
 
 /**
  * 一段脚本跑一次的上限,数值只在这里。到了就停在当前那一行,回执如实说停在哪、因为哪一条。
@@ -20,14 +20,11 @@ public final class ScriptLimits {
     public static final long WALL_MILLIS = 20L * 60L * 1000L;
 
     /**
-     * 两次调命令之间最多执行多少条 Lua 指令。脚本在大脑的线程上跑(主人客户端的主线程、评测时服务端的主线程),
+     * 两次调命令之间最多执行多少条脚本指令。脚本在大脑的线程上跑(主人客户端的主线程、评测时服务端的主线程),
      * 正常的脚本在两条命令之间只做几十上百条指令的判断与拼接;一百万条约是几十毫秒,再多就是死循环,中断它,
      * 不让游戏卡住。
      */
     public static final int INSTRUCTIONS_PER_SLICE = 1_000_000;
-
-    /** 数指令的粒度:每执行这么多条查一次。 */
-    static final int INSTRUCTION_CHECK = 1_000;
 
     /** {@code print} 写进回执的文字最多多少字;超出的截掉并说明。 */
     public static final int PRINTED_CHARS = 2_000;

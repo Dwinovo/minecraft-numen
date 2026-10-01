@@ -4,7 +4,7 @@ import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.EventOutbox;
 import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.dwinovo.numen.agent.inbox.EventTypes;
-import com.dwinovo.numen.agent.lua.ScriptCall;
+import com.dwinovo.numen.agent.script.ScriptCall;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.network.payload.NumenEventPayload;
 import com.dwinovo.numen.task.reflex.Reflex;

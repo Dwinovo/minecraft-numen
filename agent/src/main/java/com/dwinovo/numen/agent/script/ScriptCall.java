@@ -1,4 +1,4 @@
-package com.dwinovo.numen.agent.lua;
+package com.dwinovo.numen.agent.script;
 
 import com.dwinovo.numen.agent.llm.ToolOutcome;
 import com.google.gson.JsonArray;
@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 一次调用里跑的一段脚本:她当场写的一段 Lua,或按名字跑的一份({@code script run})。它把脚本每调一个命令函数变成一行命令交给
+ * 一次调用里跑的一段脚本:她当场写的一段程序,或按名字跑的一份({@code script run})。它把脚本每调一个命令函数变成一行命令交给
  * 派发的一方({@link Next.Dispatch}),那一行的回执、要等的身体活的收尾再交回来,脚本从调用处接着跑;跑完、出错、到了上限或被
  * 打断时写成一张回执。派发、等待与打断的时机在 {@code SerialCalls},这里只管脚本走到哪、回执怎么写。
  *
@@ -32,14 +32,14 @@ public final class ScriptCall {
     public interface Host {
 
         /** 脚本能调的函数。 */
-        LuaCatalog catalog();
+        ScriptCatalog catalog();
 
         /**
          * 一个命令函数的调用写成一行命令,和她在命令行上写的一样。
          *
          * @throws IllegalArgumentException 写不成(没有这个动作、选项名不对);消息是给脚本的那句话
          */
-        String line(LuaRun.Call call);
+        String line(ScriptRun.Call call);
 
         /** 一份有名字的脚本跑完了一次(跑完、出错或被停下),记进它的战绩。 */
         void tally(String script, Tally tally);
@@ -80,9 +80,6 @@ public final class ScriptCall {
     public static final String RUN_SCRIPT = "script";
     public static final String RUN_CODE = "code";
     public static final String RUN_ARGS = "args";
-
-    /** 她当场写的那一段在报错里叫什么。 */
-    private static final String INLINE = "lua";
 
     private static final int SAID = 160;
 
@@ -158,7 +155,7 @@ public final class ScriptCall {
         boolean ok = !ToolOutcome.failed(resultJson);
         String text = messageOf(resultJson);
         log(p, ok, text);
-        return advance(p.frame.run.resume(new LuaRun.Result(ok, text, dataOf(resultJson))));
+        return advance(p.frame.run.resume(new ScriptRun.Result(ok, text, dataOf(resultJson))));
     }
 
     /** 等的那件身体活收尾了:{@code done} 算成功。 */
@@ -170,7 +167,7 @@ public final class ScriptCall {
         JsonObject data = new JsonObject();
         data.addProperty("task", finish.task());
         data.addProperty("status", finish.status());
-        return advance(p.frame.run.resume(new LuaRun.Result(ok, finish.words(), data)));
+        return advance(p.frame.run.resume(new ScriptRun.Result(ok, finish.words(), data)));
     }
 
     /**
@@ -189,10 +186,10 @@ public final class ScriptCall {
 
     // ---- 往下走 ----
 
-    private Next advance(LuaRun.Step step) {
+    private Next advance(ScriptRun.Step step) {
         while (true) {
             Frame frame = frames.peek();
-            if (step instanceof LuaRun.Done done) {
+            if (step instanceof ScriptRun.Done done) {
                 if (frame.name != null) {
                     host.tally(frame.name, done.ok() ? new Tally(true, 0, null)
                             : new Tally(false, done.line(), done.error()));
@@ -204,10 +201,10 @@ public final class ScriptCall {
                 Pending caller = frame.calledFrom;
                 String text = done.ok() ? frame.name + " ran to the end" : done.error();
                 log(caller, done.ok(), text);
-                step = caller.frame.run.resume(new LuaRun.Result(done.ok(), text, new JsonObject()));
+                step = caller.frame.run.resume(new ScriptRun.Result(done.ok(), text, new JsonObject()));
                 continue;
             }
-            LuaRun.Call call = (LuaRun.Call) step;
+            ScriptRun.Call call = (ScriptRun.Call) step;
             if (commands >= ScriptLimits.COMMANDS) {
                 pending = new Pending(frame, call);
                 return new Next.Done(stop("it reached the limit of " + ScriptLimits.COMMANDS + " commands per run"));
@@ -230,8 +227,9 @@ public final class ScriptCall {
         }
     }
 
-    private LuaRun run(String name, String code, List<String> args) {
-        return new LuaRun(name == null ? INLINE : name, code, args, host.catalog(), this::print);
+    private ScriptRun run(String name, String code, List<String> args) {
+        ScriptEngine engine = ScriptEngine.IN_USE;
+        return engine.start(name == null ? engine.toolName() : name, code, args, host.catalog(), this::print);
     }
 
     private void print(String line) {
@@ -253,7 +251,7 @@ public final class ScriptCall {
         lines.computeIfAbsent(key, k -> new LineLog()).add(ok, text);
     }
 
-    private String finalReceipt(LuaRun.Done done) {
+    private String finalReceipt(ScriptRun.Done done) {
         String head;
         if (done.ok()) {
             head = name() + " ran to the end: " + commands + " command" + (commands == 1 ? "" : "s") + " in "
@@ -349,11 +347,11 @@ public final class ScriptCall {
 
     private static final class Frame {
         final String name;
-        final LuaRun run;
+        final ScriptRun run;
         /** 这一层是哪一行的 {@code script.run} 调起的;最外面一层是 null。 */
         Pending calledFrom;
 
-        Frame(String name, LuaRun run) {
+        Frame(String name, ScriptRun run) {
             this.name = name;
             this.run = run;
         }
@@ -361,9 +359,9 @@ public final class ScriptCall {
 
     private static final class Pending {
         final Frame frame;
-        final LuaRun.Call call;
+        final ScriptRun.Call call;
 
-        Pending(Frame frame, LuaRun.Call call) {
+        Pending(Frame frame, ScriptRun.Call call) {
             this.frame = frame;
             this.call = call;
         }

@@ -80,9 +80,9 @@ final class CommandHelp {
         }
         // 函数怎么对应命令写在 lua 工具的描述里;只有直接返回值的那几个与众不同,在它们自己的帮助里说
         if (action.returns() != null) {
-            sb.append("\n  In Lua: ").append(action.group().name()).append('.').append(action.name())
+            sb.append("\n  In a script: ").append(action.group().name()).append('.').append(action.name())
                     .append("(...) returns data.").append(action.returns())
-                    .append(" directly, and raises an error when it fails.");
+                    .append(" directly, and fails at the call when the command fails.");
         }
         return sb.toString();
     }

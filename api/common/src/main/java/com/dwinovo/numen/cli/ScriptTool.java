@@ -1,6 +1,7 @@
 package com.dwinovo.numen.cli;
 
-import com.dwinovo.numen.agent.lua.ScriptLimits;
+import com.dwinovo.numen.agent.script.ScriptEngine;
+import com.dwinovo.numen.agent.script.ScriptLimits;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolCall;
 import com.dwinovo.numen.task.TaskResult;
@@ -11,41 +12,34 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code lua} 工具:把几条命令组合成一段 Lua 程序,一次调用跑完。每个命令是一个函数({@code work.dig("ores/g3")}),背后就是
- * 那一行命令——同一份登记、同一次解析、同样过权限、照常记账、受理即能跑;一行命令仍然走 {@code command} 工具。
+ * 组合命令的那个工具:把几条命令写成一段程序,一次调用跑完。每个命令是一个函数({@code work.dig("ores/g3")}),背后就是那一行
+ * 命令——同一份登记、同一次解析、同样过权限、照常记账、受理即能跑;一行命令仍然走 {@code command} 工具。工具名与程序怎么写
+ * 随脚本语言({@link ScriptEngine}),其余都与语言无关。
  *
- * <p>为什么单开一个工具而不是让 {@code command} 也收 Lua:两种写法是两种语言,一个工具名说清它收哪一种,模型不必猜这一段该
- * 按命令行还是按 Lua 读。
+ * <p>为什么单开一个工具而不是让 {@code command} 也收程序:两种写法是两种语言,一个工具名说清它收哪一种,模型不必猜这一段该
+ * 按命令行还是按程序读。
  *
- * <p>脚本由大脑的派发器跑({@code SerialCalls} 认出这个工具,经 {@code ScriptCall} 逐条派命令、等身体收尾、在命令之间停下),
+ * <p>程序由大脑的派发器跑({@code SerialCalls} 认出这个工具,经 {@code ScriptCall} 逐条派命令、等身体收尾、在命令之间停下),
  * 不经 {@link #invoke}。外接大脑直接调工具,没有那个派发器,收到的是一条说明。
  */
-public final class LuaTool implements NumenTool {
+public final class ScriptTool implements NumenTool {
 
-    /** 工具名。 */
-    public static final String NAME = "lua";
-
-    private static final Param<String> CODE = Param.required("code", ArgType.text(),
-            "The Lua program.");
+    private static final Param<String> CODE = Param.required("code", ArgType.text(), "The program.");
 
     @Override
     public String name() {
-        return NAME;
+        return ScriptEngine.IN_USE.toolName();
     }
 
     @Override
     public String description() {
         // 照 Claude Code 的工具描述写:动词起头,只说它做什么、环境是什么样
-        return "Runs a Lua 5.2 program that combines your commands, and returns one receipt when it ends.\n"
-                + "- Every command `<group> <action> <objects...> [--option value]` is the function "
-                + "`group.action(objects..., {option = value})`: `work.dig(\"ores/g3\")`, "
-                + "`move.goto(\"ores/g3\", {arrive = \"dig\"})`. An object written as several words on the command "
-                + "line is a list here: `{120, 64, -35}`.\n"
+        ScriptEngine engine = ScriptEngine.IN_USE;
+        return "Runs a " + engine.language() + " program that combines your commands, and returns one receipt when it "
+                + "ends.\n"
+                + "- " + engine.howToCall() + "\n"
                 + "- A command function returns when the command is done; for work that occupies your body, when that "
-                + "task has finished. It returns `{ok = true or false, text = what the command said, data = {...}}`; "
-                + "a query whose help says so returns its value directly, so `for _, p in ipairs(area.parts(\"ores\"))` "
-                + "loops over it, and raises an error when it fails.\n"
-                + "- `print(...)` writes into the receipt. `...` and `arg` hold the arguments of a script run by name.\n"
+                + "task has finished.\n"
                 + "- Write one when each next step follows from what a command returned: going through the parts of "
                 + "an area, repeating until nothing is left, stopping on the first failure. A single command is just "
                 + "the command tool.\n"
@@ -56,7 +50,7 @@ public final class LuaTool implements NumenTool {
                 + "calling a command. Your owner speaking, an urgent event or the stop button stops it between "
                 + "commands.\n"
                 + "- Scripts kept by name: `script list`, `script show <name>`, `script run <name> [args...]` "
-                + "(`script.run` here), `script save <name> <code>` to keep one you wrote.";
+                + "(`script.run` in a program), `script save <name> <code>` to keep one you wrote.";
     }
 
     @Override
@@ -64,10 +58,10 @@ public final class LuaTool implements NumenTool {
         return Param.schemaOf(List.of(CODE));
     }
 
-    /** 外接大脑直接调到这里:它没有在命令之间等身体收尾、被打断时停下的派发器,跑不了脚本。 */
+    /** 外接大脑直接调到这里:它没有在命令之间等身体收尾、被打断时停下的派发器,跑不了程序。 */
     @Override
     public void invoke(ToolCall call) {
-        call.complete(TaskResult.fail("Lua programs run in the companion's own brain, which waits for each command "
+        call.complete(TaskResult.fail("Programs run in the companion's own brain, which waits for each command "
                 + "between lines; from here, run one command per call with the command tool.").toJson());
     }
 
@@ -85,5 +79,12 @@ public final class LuaTool implements NumenTool {
             throw new IllegalArgumentException("invalid arguments JSON: " + notJson.getMessage());
         }
         return CommandArgs.fromJson(List.of(CODE), args).get(CODE);
+    }
+
+    /** 一段程序写成这个工具的一次调用的参数。 */
+    public static JsonObject args(String code) {
+        JsonObject args = new JsonObject();
+        args.addProperty(CODE.name(), code);
+        return args;
     }
 }

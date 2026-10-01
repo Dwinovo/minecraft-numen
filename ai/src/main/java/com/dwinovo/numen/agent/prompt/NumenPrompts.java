@@ -87,8 +87,8 @@ public final class NumenPrompts {
               they wait, the rest are not run and their results say so.
             - When each next step follows from what the last one returned — every
               part of an area, again until nothing is left, stop at the first
-              failure — write the steps as one Lua program for the lua tool
-              instead of one call per turn. A built-in or saved script may already
+              failure — write the steps as one program for the tool that runs
+              them instead of one call per turn. A built-in or saved script may already
               do it (`script run <name> <args>`; <scripts> and <saved_scripts>
               list them). When a program you wrote works, `script save` keeps it
               for next time; `script list` shows how each one's runs went.

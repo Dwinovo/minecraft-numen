@@ -1,7 +1,7 @@
 package com.dwinovo.numen.cli;
 
-import com.dwinovo.numen.agent.lua.LuaCatalog;
-import com.dwinovo.numen.agent.lua.LuaRun;
+import com.dwinovo.numen.agent.script.ScriptCatalog;
+import com.dwinovo.numen.agent.script.ScriptRun;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.Internal;
 import com.dwinovo.numen.task.TaskResult;
@@ -208,20 +208,20 @@ public final class NumenCli {
     }
 
     /**
-     * 脚本(Lua)里能调的函数:每个登记了的动作一个 {@code 组.动作},带上它声明的返回项({@link Action#returns})。由这张登记表
+     * 脚本里能调的函数:每个登记了的动作一个 {@code 组.动作},带上它声明的返回项({@link Action#returns})。由这张登记表
      * 现算,不另记一份。
      */
-    public static LuaCatalog luaCatalog() {
+    public static ScriptCatalog scriptCatalog() {
         inUse();
-        Map<String, Map<String, LuaCatalog.Verb>> groups = new TreeMap<>();
+        Map<String, Map<String, ScriptCatalog.Verb>> groups = new TreeMap<>();
         for (CommandGroup group : GROUPS.values()) {
-            Map<String, LuaCatalog.Verb> verbs = new TreeMap<>();
+            Map<String, ScriptCatalog.Verb> verbs = new TreeMap<>();
             for (Action action : group.actions()) {
-                verbs.put(action.name(), new LuaCatalog.Verb(action.returns()));
+                verbs.put(action.name(), new ScriptCatalog.Verb(action.returns()));
             }
             groups.put(group.name(), verbs);
         }
-        return new LuaCatalog(groups);
+        return new ScriptCatalog(groups);
     }
 
     /**
@@ -233,7 +233,7 @@ public final class NumenCli {
      * @throws IllegalArgumentException 没有这个动作、对象多了、缺了必填的、选项名不对或值读不成;消息是给脚本的那句话,
      *                                  附上这个动作的用法
      */
-    public static String luaLine(LuaRun.Call call) {
+    public static String scriptLine(ScriptRun.Call call) {
         inUse();
         CommandGroup group = GROUPS.get(call.group());
         Action action = group == null ? null : group.action(call.verb());
