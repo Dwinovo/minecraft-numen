@@ -514,7 +514,7 @@ public class DigGameTests {
 
     /**
      * 挖一格:坐标就是只有一格的区域。一捆干草块在她手边,{@code work dig x y z} 当场挖掉;受理回执说手够得着几格,收场说挖了
-     * 1 格、掉落物在地上。她一步没动,干草块也没进她的包——捡是 {@code work collect} 的事。
+     * 1 格、掉落物在地上,捡是 {@code work collect} 的事。她一步没动(落在脚边的,原版照样会吸进包里,那不是挖的一方去捡)。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_dig")
     public static void dig_one_cell_by_its_coordinates(GameTestHelper helper) {
@@ -535,7 +535,6 @@ public class DigGameTests {
                     "the cell was not dug: " + dig.outcome());
             helper.assertTrue(level.getBlockState(hay).isAir(), "the hay is still there");
             helper.assertTrue(companion.blockPosition().equals(stand), "she moved to dig a cell within her reach");
-            helper.assertTrue(companion.getInventory().countItem(Items.HAY_BLOCK) == 0, "work dig picked the hay up");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
@@ -624,7 +623,7 @@ public class DigGameTests {
 
     /**
      * 只挖手够得着的:一排珠光蛙明灯从她跟前伸到十格外,整排扫进区域。{@code work dig} 挖掉手够得着的那几块就收场,算成功;
-     * 她一步没动、什么也没捡,回执说还剩几格够不着、最近那格在哪,以及能照抄的 {@code move goto … --arrive dig};够不着的一块不少。
+     * 她一步没动,回执说还剩几格够不着、最近那格在哪,以及能照抄的 {@code move goto … --arrive dig};够不着的一块不少。
      */
     @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_dig")
     public static void dig_digs_only_what_her_hand_reaches_and_reports_the_rest(GameTestHelper helper) {
@@ -663,8 +662,6 @@ public class DigGameTests {
                                     + MINED_AREA + "`"),
                     "the reply does not account for the cells beyond her reach: " + said);
             helper.assertTrue(companion.blockPosition().equals(stand), "she moved while digging");
-            helper.assertTrue(companion.getInventory().countItem(Items.PEARLESCENT_FROGLIGHT) == 0,
-                    "work dig picked the froglights up");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
