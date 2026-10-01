@@ -6,7 +6,7 @@ import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.platform.Services;
 
 /**
- * 系统提示:只放会话内稳定的那几层——人设、操作核心、技能表、命令索引、本能名册、札记的规矩、场面的规矩、说话规则——
+ * 系统提示:只放会话内稳定的那几层——人设、操作核心、技能表、命令索引、内置脚本索引、本能名册、札记的规矩、场面的规矩、说话规则——
  * 好让它成为字节级稳定的缓存前缀。会变的东西不在这里:背包、效果、当前任务挂在每一轮的
  * {@link RuntimeState} 里,她一写就变的札记索引随注入的 user 消息进历史。
  *
@@ -43,6 +43,12 @@ public final class SystemPromptComposer {
         String commands = com.dwinovo.numen.cli.NumenCli.index();
         if (!commands.isEmpty()) {
             sb.append("\n\n").append(commands);
+        }
+        // 内置脚本索引:一份一句,和技能表同一种写法;只随登记变,是稳定前缀的一部分。同伴们存的那些随存删变,挂在她身上的
+        // 状态里(Scripts.savedIndex),不在这里。
+        String scripts = com.dwinovo.numen.script.Scripts.builtinIndex();
+        if (!scripts.isEmpty()) {
+            sb.append("\n\n").append(scripts);
         }
         // 本能名册:她得知道身体会自己做哪些事,不然既可能重复去做,也可能对"我怎么突然挪了二十格"
         // 毫无头绪。名册是纯注册表内容、两端都注册,所以这里本地就算得出来,不需要任何网络。

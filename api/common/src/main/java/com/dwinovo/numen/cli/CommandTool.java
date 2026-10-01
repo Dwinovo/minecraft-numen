@@ -66,8 +66,8 @@ public final class CommandTool implements NumenTool {
         return CommandArgs.fromJson(List.of(LINE), args).get(LINE);
     }
 
-    /** 这一行作为一次调用的参数:{@code /numen drive} 与重放记的调用就是它。 */
-    static JsonObject args(String line) {
+    /** 这一行作为一次调用的参数:{@code /numen drive}、重放记的调用、脚本派出的每一行就是它。 */
+    public static JsonObject args(String line) {
         JsonObject args = new JsonObject();
         args.addProperty(LINE.name(), line);
         return args;

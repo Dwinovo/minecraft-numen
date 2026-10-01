@@ -34,6 +34,11 @@ tasks.withType(JavaCompile).configureEach {
 
 repositories {
     mavenCentral()
+    // Cobalt(Lua 虚拟机,CC: Tweaked 用的那一份)只在 SquidDev 的仓库发布;只从这里取它,这个仓库也截不走别的坐标。
+    exclusiveContent {
+        forRepository { maven { name = 'SquidDev'; url = 'https://maven.squiddev.cc' } }
+        filter { includeGroup 'cc.tweaked' }
+    }
     // numen-api 已并入本仓 api/ 子树,以 project 依赖直连——本地 maven 中转与
     // SNAPSHOT 缓存补丁均已随之退役。
     // https://docs.gradle.org/current/userguide/declaring_repositories.html#declaring_content_exclusively_found_in_one_repository

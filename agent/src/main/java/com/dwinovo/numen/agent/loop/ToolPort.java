@@ -24,7 +24,8 @@ public interface ToolPort {
     void arrived(EventQueue.Entry entry, boolean urgent);
 
     /**
-     * 放弃这批里还没结果的调用,只按它们自己的调用 id 收拾——外接模型挂着的调用不是这批的,不动。
+     * 放弃这批里还没结果的调用,只按它们自己的调用 id 收拾——外接模型挂着的调用不是这批的,不动。在跑的脚本不放弃:
+     * 它在返回之前经 {@link Sink#finished} 交出停在哪一行的回执,所以内核在作废这次 run 之前调它。
      *
      * @param stopBody 要不要连身体一起叫停(由切断原因决定,见 {@link HaltReason#stopsBody})
      * @return 被放弃的调用 id

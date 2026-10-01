@@ -460,6 +460,67 @@ public final class GameTestKit {
         return toolCall(com.dwinovo.numen.cli.CommandTool.NAME, args("command", line));
     }
 
+    /**
+     * 一轮调用在服务端怎么执行:每条从工具表取、走 {@link NumenTool#serve}(没有主人客户端,不经网络);脚本的一行是一条
+     * {@code command} 调用,函数怎么写成那一行、能调哪些、受理回执与收尾怎么认,问的都是产品里同样那几处;跑完的脚本直接记
+     * 战绩(产品里经 {@code ScriptTallyPayload} 送到服务端的同一个入口)。
+     */
+    private record ServerPort(NumenPlayer body) implements SerialCalls.Port {
+
+        @Override
+        public void invoke(LlmToolCall call, java.util.function.Consumer<String> done) {
+            ToolRegistry.get(call.name()).serve(call.id(), JsonParser.parseString(call.arguments()).getAsJsonObject(),
+                    body, done);
+        }
+
+        @Override
+        public String luaOf(LlmToolCall call) {
+            return ToolRegistry.get(call.name()) instanceof com.dwinovo.numen.cli.LuaTool
+                    ? com.dwinovo.numen.cli.LuaTool.code(call.arguments()) : null;
+        }
+
+        @Override
+        public LlmToolCall commandCall(String id, String line) {
+            return new LlmToolCall(id, com.dwinovo.numen.cli.CommandTool.NAME,
+                    com.dwinovo.numen.cli.CommandTool.args(line).toString());
+        }
+
+        @Override
+        public String leftRunning(String resultJson) {
+            return com.dwinovo.numen.task.TaskDispatch.runningTaskOf(resultJson);
+        }
+
+        @Override
+        public com.dwinovo.numen.agent.lua.ScriptCall.Finish finish(EventQueue.Entry entry) {
+            return com.dwinovo.numen.event.NumenEvents.finishOf(entry);
+        }
+
+        @Override
+        public com.dwinovo.numen.agent.lua.LuaCatalog catalog() {
+            return com.dwinovo.numen.cli.NumenCli.luaCatalog();
+        }
+
+        @Override
+        public String line(com.dwinovo.numen.agent.lua.LuaRun.Call call) {
+            return com.dwinovo.numen.cli.NumenCli.luaLine(call);
+        }
+
+        @Override
+        public void tally(String script, com.dwinovo.numen.agent.lua.ScriptCall.Tally tally) {
+            com.dwinovo.numen.script.Scripts.tally(body, script, tally.ok(), tally.line(), tally.error());
+        }
+
+        @Override
+        public long now() {
+            return System.currentTimeMillis();
+        }
+    }
+
+    /** 一轮里的一段 Lua:一条 {@code lua} 工具调用。 */
+    static LlmToolCall luaCall(String code) {
+        return toolCall(com.dwinovo.numen.cli.LuaTool.NAME, args("code", code));
+    }
+
     /** 一轮调用的现场:每条的结果、派出那一刻她站在哪、这一轮结算没有。 */
     static final class Round implements ToolPort.Sink {
 
@@ -475,10 +536,7 @@ public final class GameTestKit {
 
         private Round(NumenPlayer body) {
             this.body = body;
-            this.calls = new SerialCalls((call, done) -> ToolRegistry.get(call.name()).serve(call.id(),
-                    JsonParser.parseString(call.arguments()).getAsJsonObject(), body, done),
-                    com.dwinovo.numen.task.TaskDispatch::runningTaskOf,
-                    com.dwinovo.numen.event.NumenEvents::finishedTaskOf);
+            this.calls = new SerialCalls(new ServerPort(body));
         }
 
         /** 出箱里新到的事件交给这一轮。 */
@@ -494,6 +552,15 @@ public final class GameTestKit {
         void ownerSays(String words) {
             arrive(new EventQueue.Entry(com.dwinovo.numen.agent.inbox.EventTypes.QUERY,
                     EventQueue.query(words), System.currentTimeMillis(), false));
+        }
+
+        /**
+         * 主人按停止,和主人客户端上同一个顺序:先收这一轮(在跑的脚本交出停在哪一行的回执),再叫停身体(主人客户端经
+         * {@code CancelTasksPayload} 叫停的就是这一处)。
+         */
+        void ownerStops() {
+            calls.cancel(true);
+            CompanionTickDispatcher.cancelFor(body);
         }
 
         private void arrive(EventQueue.Entry entry) {

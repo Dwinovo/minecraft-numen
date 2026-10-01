@@ -78,6 +78,12 @@ final class CommandHelp {
         if (action.toolName() != null) {
             sb.append("\n  Shortcut tool: ").append(action.toolName()).append('.');
         }
+        // 函数怎么对应命令写在 lua 工具的描述里;只有直接返回值的那几个与众不同,在它们自己的帮助里说
+        if (action.returns() != null) {
+            sb.append("\n  In Lua: ").append(action.group().name()).append('.').append(action.name())
+                    .append("(...) returns data.").append(action.returns())
+                    .append(" directly, and raises an error when it fails.");
+        }
         return sb.toString();
     }
 

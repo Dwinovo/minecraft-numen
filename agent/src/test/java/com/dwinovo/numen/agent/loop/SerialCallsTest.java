@@ -3,6 +3,9 @@ package com.dwinovo.numen.agent.loop;
 import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.agent.llm.ToolOutcome;
+import com.dwinovo.numen.agent.lua.LuaCatalog;
+import com.dwinovo.numen.agent.lua.LuaRun;
+import com.dwinovo.numen.agent.lua.ScriptCall;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import org.junit.jupiter.api.Test;
 
@@ -31,13 +34,81 @@ class SerialCallsTest {
     private final Map<String, String> results = new LinkedHashMap<>();
     private int settles;
 
-    private final SerialCalls calls = new SerialCalls(
-            (call, done) -> {
-                dispatched.add(call.id());
-                pending.put(call.id(), done);
-            },
-            result -> result.startsWith("running ") ? result.substring("running ".length()) : null,
-            entry -> EventTypes.TASK_FINISHED.equals(entry.type()) ? entry.text() : null);
+    /** 假的执行口:调用停在 {@link #pending} 里;{@code lua} 工具的参数就是脚本正文;脚本里的一行写成 {@code 函数 参数...}。 */
+    private final class FakePort implements SerialCalls.Port {
+        final java.util.function.BiConsumer<LlmToolCall, Consumer<String>> invoker;
+        final List<String> tallies = new ArrayList<>();
+        long now;
+
+        FakePort(java.util.function.BiConsumer<LlmToolCall, Consumer<String>> invoker) {
+            this.invoker = invoker;
+        }
+
+        @Override
+        public void invoke(LlmToolCall call, Consumer<String> done) {
+            invoker.accept(call, done);
+        }
+
+        @Override
+        public String luaOf(LlmToolCall call) {
+            return "lua".equals(call.name()) ? json(call.arguments()).get("code").getAsString() : null;
+        }
+
+        @Override
+        public LlmToolCall commandCall(String id, String line) {
+            return command(id, line);
+        }
+
+        @Override
+        public String leftRunning(String result) {
+            return result.startsWith("running ") ? result.substring("running ".length()) : null;
+        }
+
+        @Override
+        public ScriptCall.Finish finish(EventQueue.Entry entry) {
+            if (!EventTypes.TASK_FINISHED.equals(entry.type())) {
+                return null;
+            }
+            String[] parts = entry.text().split(" ", 2);
+            return new ScriptCall.Finish(parts[0], parts.length > 1 ? parts[1] : "done", "");
+        }
+
+        @Override
+        public LuaCatalog catalog() {
+            return CATALOG;
+        }
+
+        @Override
+        public String line(LuaRun.Call call) {
+            StringBuilder line = new StringBuilder(call.group() + " " + call.verb());
+            call.args().forEach(a -> line.append(' ').append(a));
+            call.options().forEach((k, v) -> line.append(" --").append(k).append(' ').append(v));
+            return line.toString();
+        }
+
+        @Override
+        public void tally(String script, ScriptCall.Tally tally) {
+            tallies.add(script + " " + (tally.ok() ? "ok" : "line " + tally.line()));
+        }
+
+        @Override
+        public long now() {
+            return now;
+        }
+    }
+
+    private static final LuaCatalog CATALOG = new LuaCatalog(java.util.Map.of(
+            "work", java.util.Map.of("dig", new LuaCatalog.Verb(null), "collect", new LuaCatalog.Verb(null)),
+            "move", java.util.Map.of("goto", new LuaCatalog.Verb(null)),
+            "area", java.util.Map.of("has", new LuaCatalog.Verb("has")),
+            "script", java.util.Map.of("run", new LuaCatalog.Verb(null))));
+
+    private final FakePort port = new FakePort((call, done) -> {
+        dispatched.add(call.id());
+        pending.put(call.id(), done);
+    });
+
+    private final SerialCalls calls = new SerialCalls(port);
 
     private final ToolPort.Sink sink = new ToolPort.Sink() {
         @Override
@@ -164,7 +235,7 @@ class SerialCallsTest {
         calls.run(List.of(call("a"), call("b")), sink);
         Consumer<String> late = pending.get("a");
 
-        assertEquals(List.of("a", "b"), calls.cancel());
+        assertEquals(List.of("a", "b"), calls.cancel(false));
         late.accept("{\"success\":true}");
         assertTrue(results.isEmpty(), "放弃之后回来的结果无处可报");
         assertFalse(calls.holds("a"));
@@ -173,8 +244,7 @@ class SerialCallsTest {
 
     @Test
     void synchronousResultsDoNotRecurse() {
-        SerialCalls atOnce = new SerialCalls((call, done) -> done.accept("{\"success\":true}"),
-                result -> null, entry -> null);
+        SerialCalls atOnce = new SerialCalls(new FakePort((call, done) -> done.accept("{\"success\":true}")));
         List<LlmToolCall> many = new ArrayList<>();
         for (int i = 0; i < 20_000; i++) {
             many.add(call("c" + i));
@@ -186,8 +256,7 @@ class SerialCallsTest {
 
     @Test
     void aBatchHandedOverWhileSettlingIsRunToo() {
-        SerialCalls atOnce = new SerialCalls((call, done) -> done.accept("{\"success\":true}"),
-                result -> null, entry -> null);
+        SerialCalls atOnce = new SerialCalls(new FakePort((call, done) -> done.accept("{\"success\":true}")));
         List<LlmToolCall> second = List.of(call("second"));
         atOnce.run(List.of(call("first")), new ToolPort.Sink() {
             @Override
@@ -209,5 +278,201 @@ class SerialCallsTest {
         });
         assertTrue(results.containsKey("second"), "结算时当场收下的下一批照样执行");
         assertEquals(2, settles);
+    }
+
+    // ---- 脚本 ----
+
+    private static LlmToolCall lua(String id, String code) {
+        com.google.gson.JsonObject args = new com.google.gson.JsonObject();
+        args.addProperty("code", code);
+        return new LlmToolCall(id, "lua", args.toString());
+    }
+
+    private static LlmToolCall command(String id, String line) {
+        com.google.gson.JsonObject args = new com.google.gson.JsonObject();
+        args.addProperty("command", line);
+        return new LlmToolCall(id, "command", args.toString());
+    }
+
+    /** 派出去的那一行命令的原文(假执行口把脚本的一行记成调用的参数)。 */
+    private final List<String> lines = new ArrayList<>();
+
+    private final FakePort linePort = new FakePort((call, done) -> {
+        dispatched.add(call.id());
+        lines.add(json(call.arguments()).get("command").getAsString());
+        pending.put(call.id(), done);
+    });
+
+    private final SerialCalls scripts = new SerialCalls(linePort);
+
+    private void answerLast(String result) {
+        String id = dispatched.get(dispatched.size() - 1);
+        pending.remove(id).accept(result);
+    }
+
+    private static com.google.gson.JsonObject json(String s) {
+        return com.google.gson.JsonParser.parseString(s).getAsJsonObject();
+    }
+
+    @Test
+    void aScriptRunsItsCommandsOneByOneAndWaitsForBodyWork() {
+        scripts.run(List.of(lua("s", """
+                move.goto("ores", {arrive = "dig"})
+                work.dig("ores")
+                work.collect()
+                """)), sink);
+        assertEquals(List.of("move goto ores --arrive dig"), lines);
+
+        answerLast("running t1");
+        assertEquals(1, lines.size(), "t1 还没收尾,下一行不派");
+        scripts.arrived(finished("t1"), true);
+        assertEquals("work dig ores", lines.get(1));
+
+        answerLast("{\"success\":true,\"message\":\"dug 4 blocks\"}");
+        assertEquals("work collect", lines.get(2));
+        answerLast("running t2");
+        assertTrue(results.isEmpty(), "脚本里的最后一件也等收尾");
+        scripts.arrived(finished("t2"), true);
+
+        com.google.gson.JsonObject receipt = json(results.get("s"));
+        assertTrue(receipt.get("success").getAsBoolean(), receipt.toString());
+        String msg = receipt.get("message").getAsString();
+        assertTrue(msg.startsWith("The script ran to the end: 3 commands"), msg);
+        assertTrue(msg.contains("line 1 move.goto: ok — t1 done"), msg);
+        assertTrue(msg.contains("line 2 work.dig: ok — dug 4 blocks"), msg);
+        assertEquals(1, settles);
+    }
+
+    @Test
+    void theScriptBranchesOnAResultAndAnErrorEndsItAtThatLine() {
+        scripts.run(List.of(lua("s", """
+                local r = work.dig("ores")
+                if not r.ok then error("could not dig: " .. r.text) end
+                work.collect()
+                """), command("after", "x")), sink);
+        answerLast("{\"success\":false,\"message\":\"out of reach\"}");
+
+        assertEquals(List.of("work dig ores", "x"), lines, "collect 没派;脚本结束后照常派下一个调用");
+        com.google.gson.JsonObject receipt = json(results.get("s"));
+        assertFalse(receipt.get("success").getAsBoolean());
+        String msg = receipt.get("message").getAsString();
+        assertTrue(msg.startsWith("The script stopped at line 2 after 1 command: lua:2: could not dig: out of reach"),
+                msg);
+        assertTrue(msg.contains("line 1 work.dig: failed — out of reach"), msg);
+    }
+
+    @Test
+    void theOwnerSpeakingWhileTheScriptWaitsStopsItBetweenCommands() {
+        scripts.run(List.of(lua("s", """
+                move.goto("ores")
+                work.dig("ores")
+                """), command("after", "x")), sink);
+        answerLast("running t1");
+        scripts.arrived(ownerWords("先停一下"), true);
+
+        assertEquals(1, lines.size(), "停在命令之间,第二行没派");
+        String msg = json(results.get("s")).get("message").getAsString();
+        assertTrue(msg.startsWith("The script stopped at line 1 (move.goto) after 1 command: your owner spoke; t1 "
+                + "keeps running. Nothing after that ran."), msg);
+        assertTrue(ToolOutcome.failed(results.get("after")), "这一批余下的调用照旧回没执行");
+        assertTrue(results.get("after").contains("while you were waiting for t1 to finish, your owner spoke"),
+                results.get("after"));
+        assertEquals(1, settles);
+    }
+
+    @Test
+    void anUrgentEventWhileALineRunsStopsTheScriptWhenThatLineIsDone() {
+        scripts.run(List.of(lua("s", """
+                area.has("ores")
+                work.dig("ores")
+                """)), sink);
+        scripts.arrived(ownerWords("等等"), true);
+        assertTrue(results.isEmpty(), "那一行本身不打断");
+        answerLast("{\"success\":true,\"message\":\"yes\",\"data\":{\"has\":true}}");
+
+        assertEquals(1, lines.size());
+        String msg = json(results.get("s")).get("message").getAsString();
+        assertTrue(msg.contains("stopped at line 1 (area.has)") && msg.contains("your owner spoke"), msg);
+    }
+
+    @Test
+    void cuttingTheTurnOffMakesTheScriptReportWhereItStopped() {
+        scripts.run(List.of(lua("s", """
+                move.goto("ores")
+                work.dig("ores")
+                """)), sink);
+        answerLast("running t1");
+        List<String> abandoned = scripts.cancel(true);
+
+        assertTrue(abandoned.isEmpty(), "脚本交出了自己的回执,不算放弃: " + abandoned);
+        String msg = json(results.get("s")).get("message").getAsString();
+        assertTrue(msg.contains("stopped at line 1 (move.goto) after 1 command: this turn was cut off; t1 was "
+                + "stopped too"), msg);
+        assertFalse(scripts.holds("s"));
+    }
+
+    @Test
+    void aCommandThatHandsBackAScriptRunsItAndCountsTheRun() {
+        scripts.run(List.of(command("c", "script run mine ores")), sink);
+        answerLast("{\"success\":true,\"message\":\"ready\",\"data\":{\"run\":{\"script\":\"mine\",\"code\":"
+                + "\"work.dig(...)\\nwork.collect()\",\"args\":[\"ores\"]}}}");
+
+        assertEquals(List.of("script run mine ores", "work dig ores"), lines);
+        answerLast("{\"success\":true,\"message\":\"dug\"}");
+        answerLast("{\"success\":true,\"message\":\"picked up 3\"}");
+
+        String msg = json(results.get("c")).get("message").getAsString();
+        assertTrue(msg.startsWith("Script mine ran to the end: 2 commands"), msg);
+        assertEquals(List.of("mine ok"), linePort.tallies);
+    }
+
+    @Test
+    void aScriptCanRunANamedOneInsideAndItsEndIsThatCallsResult() {
+        scripts.run(List.of(lua("s", """
+                local r = script.run("mine", "ores")
+                print(r.ok, r.text)
+                """)), sink);
+        answerLast("{\"success\":true,\"data\":{\"run\":{\"script\":\"mine\",\"code\":\"work.dig(...)\","
+                + "\"args\":[\"ores\"]}}}");
+        answerLast("{\"success\":false,\"message\":\"out of reach\"}");
+
+        String msg = json(results.get("s")).get("message").getAsString();
+        assertTrue(msg.contains("mine line 1 work.dig: failed — out of reach"), msg);
+        assertTrue(msg.contains("printed:\ntrue\tmine ran to the end"), msg);
+        assertEquals(List.of("mine ok"), linePort.tallies);
+    }
+
+    @Test
+    void aLoopThatNeverEndsStopsAtTheCommandLimit() {
+        scripts.run(List.of(lua("s", """
+                while area.has("ores") do
+                  work.dig("ores")
+                end
+                """)), sink);
+        int sent = 0;
+        while (results.isEmpty()) {
+            String line = lines.get(lines.size() - 1);
+            answerLast(line.startsWith("area has") ? "{\"success\":true,\"data\":{\"has\":true}}"
+                    : "{\"success\":false,\"message\":\"nothing in reach\"}");
+            sent++;
+        }
+        assertEquals(com.dwinovo.numen.agent.lua.ScriptLimits.COMMANDS, sent);
+        String msg = json(results.get("s")).get("message").getAsString();
+        assertTrue(msg.contains("it reached the limit of " + com.dwinovo.numen.agent.lua.ScriptLimits.COMMANDS
+                + " commands per run"), msg);
+        assertTrue(msg.contains("work.dig: 100 calls, 100 failed"), msg);
+    }
+
+    @Test
+    void aScriptRunningPastTheWallClockLimitStopsBeforeItsNextCommand() {
+        scripts.run(List.of(lua("s", """
+                move.goto("ores")
+                work.dig("ores")
+                """)), sink);
+        linePort.now = com.dwinovo.numen.agent.lua.ScriptLimits.WALL_MILLIS + 1;
+        answerLast("{\"success\":true}");
+        assertEquals(1, lines.size());
+        String msg = json(results.get("s")).get("message").getAsString();
+        assertTrue(msg.contains("stopped at line 2 (work.dig)") && msg.contains("minutes per run"), msg);
     }
 }

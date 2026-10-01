@@ -52,11 +52,12 @@ class NumenEventsTest {
         attrs.put("status", "done");
         EventQueue.Entry finished = NumenEvents.entry(0L, EventTypes.TASK_FINISHED, attrs,
                 "set 1 cell; the id=\"t9\" in this text is not the task", 1L, true);
-        assertEquals("t3", NumenEvents.finishedTaskOf(finished));
+        assertEquals(new com.dwinovo.numen.agent.lua.ScriptCall.Finish("t3", "done",
+                "set 1 cell; the id=\"t9\" in this text is not the task"), NumenEvents.finishOf(finished));
 
         EventQueue.Entry hungry = NumenEvents.entry(0L, EventTypes.HUNGRY, Map.of("id", "t3"), "hungry", 1L, true);
-        assertEquals(null, NumenEvents.finishedTaskOf(hungry), "别的种类不是收尾");
-        assertEquals(null, NumenEvents.finishedTaskOf(new EventQueue.Entry(EventTypes.QUERY,
+        assertEquals(null, NumenEvents.finishOf(hungry), "别的种类不是收尾");
+        assertEquals(null, NumenEvents.finishOf(new EventQueue.Entry(EventTypes.QUERY,
                 "<query>t3 做完了吗</query>", 1L, false)));
     }
 
@@ -74,7 +75,7 @@ class NumenEventsTest {
 
         EventQueue.Entry shrunk = cut.entries().get(0);
         assertTrue(shrunk.text().endsWith("so its text was not delivered.</event>"), shrunk.text());
-        assertEquals("t3", NumenEvents.finishedTaskOf(shrunk));
+        assertEquals("t3", NumenEvents.finishOf(shrunk).task());
     }
 
     @Test

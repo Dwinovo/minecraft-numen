@@ -130,6 +130,12 @@ public final class NumenNetwork {
                 com.dwinovo.numen.network.payload.CancelTasksPayload.STREAM_CODEC,
                 com.dwinovo.numen.network.payload.CancelTasksPayload::handle);
 
+        // C→S: 大脑跑完了一份有名字的脚本,记进它的战绩(只认主人)。
+        toServer(
+                com.dwinovo.numen.network.payload.ScriptTallyPayload.TYPE,
+                com.dwinovo.numen.network.payload.ScriptTallyPayload.STREAM_CODEC,
+                com.dwinovo.numen.network.payload.ScriptTallyPayload::handle);
+
         // C→S: 大脑开始/结束输出——身体据此在说话期间注视主人(纯姿态信号)。
         toServer(
                 com.dwinovo.numen.network.payload.SpeakingStatePayload.TYPE,

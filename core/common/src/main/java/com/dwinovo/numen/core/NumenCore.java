@@ -114,6 +114,7 @@ public final class NumenCore {
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.inventory.InvCommands::install);
         // 引擎的 task 命令组,和插件走同一扇门;它提升出 task_stop
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.task.TaskCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.script.Scripts::install);
         // status 组提升出 status_self、status_owner
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.perception.StatusCommands::install);
         // scan 组提升出 scan_around、scan_blocks、scan_entities、scan_block

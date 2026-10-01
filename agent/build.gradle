@@ -43,11 +43,19 @@ tasks.withType(JavaCompile).configureEach {
 
 repositories {
     mavenCentral()
+    // Cobalt(Lua 虚拟机,CC: Tweaked 用的那一份)只在 SquidDev 的仓库发布;只从这里取它,这个仓库也截不走别的坐标。
+    exclusiveContent {
+        forRepository { maven { name = 'SquidDev'; url = 'https://maven.squiddev.cc' } }
+        filter { includeGroup 'cc.tweaked' }
+    }
 }
 
 dependencies {
     // 下一层:传输、会话状态与日志句柄都在 ai。api 配置让本模块的消费方透视得到 ai 的类型。
     api project(':ai')
+    // 脚本的语言是 Lua,虚拟机是 Cobalt(MIT,LuaJ 的可重入分支,CC: Tweaked 1.21.1 用的同一版):协程在任何地方都能让出,
+    // 等身体收尾时脚本停在调用处、不占线程。只在本模块用,对外的类型里不出现它,所以是 implementation。
+    implementation 'cc.tweaked:cobalt:0.9.9'
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'

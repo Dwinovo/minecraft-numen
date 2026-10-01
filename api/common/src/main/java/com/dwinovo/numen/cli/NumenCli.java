@@ -1,8 +1,14 @@
 package com.dwinovo.numen.cli;
 
+import com.dwinovo.numen.agent.lua.LuaCatalog;
+import com.dwinovo.numen.agent.lua.LuaRun;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.Internal;
 import com.dwinovo.numen.task.TaskResult;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import com.mojang.brigadier.ParseResults;
 import com.mojang.brigadier.ImmutableStringReader;
 import com.mojang.brigadier.context.CommandContext;
@@ -199,6 +205,80 @@ public final class NumenCli {
         String[] path = reading.path().split(" ");
         Action action = GROUPS.get(path[0]).action(path[1]);
         return reading.args().write(reading.path(), action.params()).substring(path[0].length() + 1);
+    }
+
+    /**
+     * 脚本(Lua)里能调的函数:每个登记了的动作一个 {@code 组.动作},带上它声明的返回项({@link Action#returns})。由这张登记表
+     * 现算,不另记一份。
+     */
+    public static LuaCatalog luaCatalog() {
+        inUse();
+        Map<String, Map<String, LuaCatalog.Verb>> groups = new TreeMap<>();
+        for (CommandGroup group : GROUPS.values()) {
+            Map<String, LuaCatalog.Verb> verbs = new TreeMap<>();
+            for (Action action : group.actions()) {
+                verbs.put(action.name(), new LuaCatalog.Verb(action.returns()));
+            }
+            groups.put(group.name(), verbs);
+        }
+        return new LuaCatalog(groups);
+    }
+
+    /**
+     * 脚本里一个函数的调用写成一行命令:按顺序的对象依次是这个动作的必填参数,选项表的键是可选参数的名字;最后一个必填参数
+     * 吃掉余下整行时,多出来的对象按顺序空格隔开写进它(命令行上就是那样写的)。值经参数类型读成
+     * 参数({@link CommandArgs#fromJson},和快捷工具同一个读法),再按同一张参数表写回命令行({@link CommandArgs#write})。
+     * 这一行随后照常交给命令入口,和她亲手写的一样解析、执行。
+     *
+     * @throws IllegalArgumentException 没有这个动作、对象多了、缺了必填的、选项名不对或值读不成;消息是给脚本的那句话,
+     *                                  附上这个动作的用法
+     */
+    public static String luaLine(LuaRun.Call call) {
+        inUse();
+        CommandGroup group = GROUPS.get(call.group());
+        Action action = group == null ? null : group.action(call.verb());
+        if (action == null) {
+            throw new IllegalArgumentException("there is no command " + call.group() + " " + call.verb());
+        }
+        List<Param<?>> positionals = action.positionals();
+        List<Object> objects = call.args();
+        boolean rest = !positionals.isEmpty()
+                && positionals.get(positionals.size() - 1).type().span() == ArgType.Span.REST;
+        try {
+            if (objects.size() > positionals.size() && !rest) {
+                throw new IllegalArgumentException("takes " + positionals.size() + " object"
+                        + (positionals.size() == 1 ? "" : "s") + ", got " + objects.size());
+            }
+            JsonObject json = new JsonObject();
+            for (int i = 0; i < Math.min(objects.size(), positionals.size()); i++) {
+                boolean last = i == positionals.size() - 1;
+                json.add(positionals.get(i).name(), rest && last
+                        ? new JsonPrimitive(String.join(" ", objects.subList(i, objects.size()).stream()
+                                .map(String::valueOf).toList()))
+                        : json(objects.get(i)));
+            }
+            for (Map.Entry<String, Object> option : call.options().entrySet()) {
+                json.add(option.getKey(), json(option.getValue()));
+            }
+            return CommandArgs.fromJson(action.params(), json).write(action.path(), action.params());
+        } catch (IllegalArgumentException wrong) {
+            throw new IllegalArgumentException(wrong.getMessage() + "; usage: " + action.usage());
+        }
+    }
+
+    /** 脚本交来的一个值(字符串、整数、小数、布尔、列表)写成 JSON。 */
+    private static JsonElement json(Object value) {
+        return switch (value) {
+            case String s -> new JsonPrimitive(s);
+            case Number n -> new JsonPrimitive(n);
+            case Boolean b -> new JsonPrimitive(b);
+            case List<?> list -> {
+                JsonArray array = new JsonArray();
+                list.forEach(v -> array.add(json(v)));
+                yield array;
+            }
+            default -> throw new IllegalArgumentException("cannot pass " + value + " to a command");
+        };
     }
 
     /** 登记了的各组,按名字排序。 */

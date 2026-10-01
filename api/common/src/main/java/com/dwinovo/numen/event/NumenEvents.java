@@ -4,6 +4,7 @@ import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.EventOutbox;
 import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.dwinovo.numen.agent.inbox.EventTypes;
+import com.dwinovo.numen.agent.lua.ScriptCall;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.network.payload.NumenEventPayload;
 import com.dwinovo.numen.task.reflex.Reflex;
@@ -118,25 +119,43 @@ public final class NumenEvents {
         Map<String, String> attrs = new LinkedHashMap<>();
         attrs.put(TASK_ID, taskId);
         attrs.put("task", tool);
-        attrs.put("status", status);
+        attrs.put(STATUS, status);
         emit(companion, EventTypes.TASK_FINISHED, attrs, message, !"stopped".equals(status));
     }
 
-    /** task_finished 里写着是哪件活的那个属性:{@link #taskFinished} 按它写,{@link #finishedTaskOf} 按它读。 */
+    /** task_finished 里写着是哪件活、收尾成什么样的属性:{@link #taskFinished} 按它写,{@link #finishOf} 按它读。 */
     private static final String TASK_ID = "id";
-    /** 事件开头那一截里的这个属性;属性值经 {@link #escape} 转义过,里面不会有引号和尖括号。 */
-    private static final Pattern FINISHED_ID = Pattern.compile("^<event [^>]* " + TASK_ID + "=\"([^\"]*)\"");
+    private static final String STATUS = "status";
+    /** 事件开头那一截里的一个属性;属性值经 {@link #escape} 转义过,里面不会有引号和尖括号。 */
+    private static final Pattern HEAD = Pattern.compile("^<event [^>]*>");
+    /** 事件正文:开头之后到收尾标记之前。 */
+    private static final Pattern BODY = Pattern.compile("^<event [^>]*>(.*)</event>$", Pattern.DOTALL);
 
     /**
-     * 这条输入是哪件后台活的收尾:一条 task_finished 事件就是它的编号,别的输入是 null。事件的样子只在这里拼
-     * ({@link #compose}),也在这里读回;内脑的派发器据此知道它在等的那件活做完了。
+     * 这条输入是哪件后台活的收尾:一条 task_finished 事件就是它的编号、收尾状态与交代的话,别的输入是 null。事件的样子只在
+     * 这里拼({@link #compose}),也在这里读回;内脑的派发器据此知道它在等的那件活做完了、做成了没有。
      */
-    public static String finishedTaskOf(EventQueue.Entry entry) {
+    public static ScriptCall.Finish finishOf(EventQueue.Entry entry) {
         if (!EventTypes.TASK_FINISHED.equals(entry.type())) {
             return null;
         }
-        Matcher m = FINISHED_ID.matcher(entry.text());
-        return m.find() ? m.group(1) : null;
+        Matcher head = HEAD.matcher(entry.text());
+        if (!head.find()) {
+            return null;
+        }
+        String id = attribute(head.group(), TASK_ID);
+        if (id == null) {
+            return null;
+        }
+        Matcher body = BODY.matcher(entry.text());
+        String status = attribute(head.group(), STATUS);
+        return new ScriptCall.Finish(id, status == null ? "" : status, body.find() ? unescape(body.group(1)) : "");
+    }
+
+    /** 开头那一截里一个属性的值;没有是 null。 */
+    private static String attribute(String head, String name) {
+        Matcher m = Pattern.compile(" " + name + "=\"([^\"]*)\"").matcher(head);
+        return m.find() ? unescape(m.group(1)) : null;
     }
 
     /**
@@ -242,7 +261,7 @@ public final class NumenEvents {
 
     /**
      * 同一条事件换一段正文:开头的 {@code <event …>} 连同种类、时刻与编号原样留着,只把正文换成 {@code body}。
-     * 包装不下时缩短正文用它({@code NumenEventPayload#shrunk}),{@link #finishedTaskOf} 照样读得出是哪件活。
+     * 包装不下时缩短正文用它({@code NumenEventPayload#shrunk}),{@link #finishOf} 照样读得出是哪件活。
      * 不是 {@code <event>} 的条目没有开头可留,整段换成 {@code body}。
      */
     public static String withBody(String text, String body) {
@@ -257,6 +276,11 @@ public final class NumenEvents {
         long inDay = Math.floorMod(dayTime, 24000L);
         long minutes = (inDay * 60L / 1000L + 6L * 60L) % (24L * 60L);
         return String.format("%02d:%02d", minutes / 60L, minutes % 60L);
+    }
+
+    /** {@link #escape} 的反方向。 */
+    private static String unescape(String s) {
+        return s.replace("&quot;", "\"").replace("&gt;", ">").replace("&lt;", "<").replace("&amp;", "&");
     }
 
     /** XML 属性/正文转义——事件正文里可能有实体名、物品名,是玩家能控制的输入。 */

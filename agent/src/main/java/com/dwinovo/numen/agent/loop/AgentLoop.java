@@ -510,11 +510,12 @@ public final class AgentLoop {
      */
     public void halt(HaltReason reason, String detail) {
         Run cut = run;
+        // 先收工具口、再作废 run:在跑的脚本这时交出它停在哪一行的回执,还记在这次 run 名下进历史
+        List<String> abandoned = tools.cancel(reason.stopsBody());
         if (cut != null) {
             run = null;
             cut.cancel.cancel();
         }
-        List<String> abandoned = tools.cancel(reason.stopsBody());
         if (cut != null) {
             // 切断的是一次模型回复或一批工具往返才记切断点:悬空调用的结果、给模型的说明由下一次请求的
             // ProtocolView 按它现算。整理记忆被切断时对话本身没断,不记。

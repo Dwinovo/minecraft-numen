@@ -107,7 +107,7 @@ class GateTest {
                 "break(block_entity & contents)", "break(placed)", "break(block_entity)", "break(#minecraft:beds)",
                 "break(#minecraft:doors)", "break(#minecraft:trapdoors)", "break(#minecraft:fence_gates)",
                 "attack(owned)", "attack(named)", "attack(villager)", "drop(*)",
-                "place(hazard_item & near_placed)", "edit_area(ruled)"), RuleSet.FACTORY_ASK);
+                "place(hazard_item & near_placed)", "edit_area(ruled)", "edit_script(saved)"), RuleSet.FACTORY_ASK);
         assertEquals(List.of(
                 "break(!placed & !self_placed & !block_entity & !#minecraft:beds & !#minecraft:doors"
                         + " & !#minecraft:trapdoors & !#minecraft:fence_gates)",
@@ -116,7 +116,8 @@ class GateTest {
                 "attack(!owned & !named & !villager)", "use_block(*)", "use_entity(!owned)", "use_entity(self_owned)",
                 "take(*)",
                 "command(help)", "command(list)", "command(me)", "command(msg)",
-                "command(teammsg)", "command(seed)", "command(random)", "edit_area(!ruled)"),
+                "command(teammsg)", "command(seed)", "command(random)", "edit_area(!ruled)",
+                "edit_script(!saved)"),
                 RuleSet.FACTORY_ALLOW);
         assertTrue(RuleSet.factory().deny().isEmpty(), "出厂不写死任何拒绝");
     }
@@ -131,6 +132,19 @@ class GateTest {
     /** 要动手的是她:只有出厂层,或者主人层压在上面。 */
     private static Gate hers(RuleSet owner, PlacedBlocks placed) {
         return new Gate(HER, Mode.ASK, owner, RuleSet.factory(), Level.OVERWORLD, placed, Map.of(), List.of());
+    }
+
+    /** 新存一份、改她自己存的放行;改、删别的同伴存的要问主人,说出是别的同伴存的。 */
+    @Test
+    void scriptsAnotherCompanionSavedAreAskedAbout() {
+        FakeWorld world = new FakeWorld();
+        Gate gate = hers(RuleSet.EMPTY, new PlacedBlocks());
+        assertTrue(gate.judge(Action.editScript("sweep", null), world).allowed(), "新存一份随便");
+        assertTrue(gate.judge(Action.editScript("sweep", HER), world).allowed(), "改她自己的随便");
+        Verdict other = gate.judge(Action.editScript("sweep", OTHER_COMPANION.id()), world);
+        assertTrue(other.asks(), "别的同伴存的要问");
+        assertEquals("edit_script(saved)", other.rule().toString());
+        assertTrue(other.reason().contains("saved by another companion"), other.reason());
     }
 
     @Test
