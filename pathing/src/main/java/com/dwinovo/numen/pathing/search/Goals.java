@@ -490,7 +490,10 @@ public final class Goals {
             return beyondReach(target, body, x, y, z);
         }
 
-        /** 脚在这一格里任何一个高度时眼睛够得着它的那些格(与 {@link Reach#reaches} 同一个距离),连它自己那一格在内。 */
+        /**
+         * 脚在这一格里任何一个高度时眼睛够得着它的那些格,连它自己那一格在内。按整块包围盒量,比 {@link Reach#reaches}(收了
+         * {@link Reach#EDGE} 的边)只多不少。
+         */
         @Override
         public LongSet endCells() {
             double reach = body.blockReach();
