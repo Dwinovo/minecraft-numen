@@ -78,6 +78,11 @@ public final class GotoReminders {
                 + call(pos, "--arrive near") + ".";
     }
 
+    /** --arrive dig 指向的方块站到哪儿都挖不成:物理上挖不动,或规则不许。{@code why} 是挖它被拒的缘由。 */
+    public static String cantDig(BlockPos pos, String block, String why) {
+        return block + " at " + Listing.coords(pos) + " can't be dug: " + why;
+    }
+
     /** 封着一面的那一格:哪一面、面前是什么、在哪。 */
     public record Cover(String face, String block, BlockPos at) {}
 
@@ -134,6 +139,14 @@ public final class GotoReminders {
     }
 
     /** --arrive dig 一块区域,离她最近的那一部分里没有一格有可挖的方块。 */
+    /**
+     * --arrive dig 一块区域,离她最近的那一部分里有方块,却一格也挖不成(物理上挖不动、规则不许、每一面都贴着清不掉的方块);
+     * {@code why} 是离她最近那一格的缘由。
+     */
+    public static String areaNoneDiggable(AreaRef area, int looked, long cells, String why) {
+        return "none of " + nearest(area, looked, cells) + " can be dug; the nearest: " + why + ".";
+    }
+
     public static String areaNothingToDig(AreaRef area, int looked, long cells) {
         return "none of " + nearest(area, looked, cells) + " holds a block to dig — they are air or fluid. "
                 + "To get close: " + call(area, "--arrive near") + ".";

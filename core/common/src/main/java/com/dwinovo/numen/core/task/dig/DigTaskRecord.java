@@ -32,6 +32,12 @@ public final class DigTaskRecord extends TaskRecord {
      */
     public static final RouteSpec SPEC = RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build();
 
+    /**
+     * 点名的目标按这份规格定价、判挖不挖得成:改地形一档放到 {@link RouteSpec.Alter#ANY}——目标是她点名要挖的,要问主人的照价乘倍、
+     * 动手前问,规则不许的、物理上挖不成的价钱无穷。{@code work dig} 挑目标与 {@code --arrive dig} 挑能去挖的格都按它。
+     */
+    public static final RouteSpec TARGET_SPEC = SPEC.edit().alter(RouteSpec.Alter.ANY).build();
+
     /** {@link #count} 取这个值:没给 {@code --count},手够得着的都挖。 */
     public static final int ALL = 0;
 

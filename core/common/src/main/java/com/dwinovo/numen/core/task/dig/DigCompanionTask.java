@@ -60,14 +60,12 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
     private static final int REACH_SPAN = 8;
 
     private final BlockDigger digger;
-    /** 给目标定价的规格:改地形一档放到 {@link RouteSpec.Alter#ANY}——目标是她点名要挖的,要问的照价乘倍、动手前问。 */
-    private final RouteSpec targetSpec = DigTaskRecord.SPEC.edit().alter(RouteSpec.Alter.ANY).build();
-    /** 给目标定价、判挖不挖得成的成本模型,每刻按此刻的身体与权限重组。 */
+    /** 给目标定价、判挖不挖得成的成本模型({@link DigTaskRecord#TARGET_SPEC}),每刻按此刻的身体与权限重组。 */
     private DigQuote pricing;
     /** 挡着视线的格清不清得掉:按 {@link DigTaskRecord#SPEC} 问,与每刻的 {@link #pricing} 一起重组。 */
     private DigQuote clearing;
 
-    /** 挖掉了的格,按挖掉的先后(为拉出射线挖开的遮挡不算,它们进实际账)。 */
+    /** 挖掉了的点名格,按挖掉的先后(为拉出射线挖开的遮挡也是点名格的算在里面,别的进实际账)。 */
     private final Set<BlockPos> dug = new LinkedHashSet<>();
     /** 手里的工具收不到掉落的格。 */
     private final Set<BlockPos> unharvestable = new HashSet<>();
@@ -166,7 +164,7 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
 
     /** 按此刻的身体与权限重组给目标定价与判遮挡的两份成本模型。 */
     private void quote() {
-        pricing = DigQuote.of(player, targetSpec);
+        pricing = DigQuote.of(player, DigTaskRecord.TARGET_SPEC);
         clearing = DigQuote.of(player, DigTaskRecord.SPEC);
     }
 

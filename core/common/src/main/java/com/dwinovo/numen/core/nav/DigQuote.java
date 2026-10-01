@@ -79,7 +79,7 @@ public final class DigQuote {
         return clearing().clears(world, pos);
     }
 
-    /** 挡着视线的这一格为什么清不掉(回执里的说法);清得掉为 null。 */
+    /** 按这份规格挖这一格为什么不行(回执里的说法):挡着视线的清不清得掉、点名的目标挖不挖得成都问它;挖得了为 null。 */
     public String uncleared(BlockPos pos) {
         CostModel.Admission admission = model.admitDig(world, pos, world.getBlockState(pos));
         return admission.ok() ? null : NavText.refused(admission.refused(), admission.detail());

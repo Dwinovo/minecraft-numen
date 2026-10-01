@@ -9,9 +9,11 @@ import java.util.Optional;
 import com.dwinovo.numen.area.Area;
 import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.cli.Place;
+import com.dwinovo.numen.core.nav.DigQuote;
 import com.dwinovo.numen.core.nav.NamedAreas;
 import com.dwinovo.numen.core.nav.NavText;
 import com.dwinovo.numen.core.nav.Terrain;
+import com.dwinovo.numen.core.task.dig.DigTaskRecord;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.search.Goal;
@@ -33,13 +35,15 @@ import net.minecraft.core.Direction;
  *       {@link Goals#column}、{@link Goals#level})。站到一块方块上面也是 {@code at}:坐标是它上面脚所在的那一格;</li>
  *   <li>{@code use}:用那一格方块——站在它敞开的面前、看得见、点得到({@link Goals#use});</li>
  *   <li>{@code near}:离那一格(或那一列)不超过 {@code near} 格({@link Goals#within});</li>
- *   <li>{@code dig}:挖那一格方块——站到手够得着它、身体不占着它的地方,挡着的由挖的一方挖开({@link Goals#dig}),
- *       那一格本身留给 {@code work dig}。</li>
+ *   <li>{@code dig}:挖那一格方块——站到手够得着它、身体不占着它、挡着视线的都是 {@code work dig} 清得掉的地方
+ *       ({@link Goals#dig},清不清得掉按 {@link #clearing} 问),那一格本身留给 {@code work dig}。到了就是 {@code work dig}
+ *       站在这儿办得成,两处问的是同一个判据。</li>
  * </ul>
  * 坐标就是只有一格的区域:去一块区域,四种到达对整块成立——{@code at} 是走进区域里任意一格(站得住的),{@code use} 是用区域里
  * 任意一个能点、用得上的方块,{@code near} 是离区域里任意一格不超过 {@code near} 格,三种用寻路模块现成的"多个取其一"
- * ({@link Goals#anyOf})组合;{@code dig} 是够得着区域里任意一个有轮廓的方块,同样划算的站位里优先一次够得着最多格的
- * ({@link Goals#dig(List, BodyStats)},定价只在寻路模块那一处)。
+ * ({@link Goals#anyOf})组合;{@code dig} 是够得着区域里任意一个 {@code work dig} 挖得成的方块,同样划算的站位里优先一次
+ * 够得着最多格的,挖起来贵的格(要问主人的)只在便宜的远出它那份价钱时才去({@link Goals#dig(List, BodyStats, Goals.Clearing)},
+ * 定价只在寻路模块那一处)。
  *
  * <p><b>区域的目标有界</b>:只在区域里离出发点最近的 {@link #NEAREST} 格里挑成员({@code Cells.nearest} 按小节由近到远翻,
  * 四百万格的区域也只翻出发点附近那几节),{@code at}、{@code near}、{@code dig} 至多 {@link #MEMBERS} 个成员,{@code use} 至多
@@ -314,21 +318,35 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
                 toward = nearest.get(0);
             }
             case DIG -> {
-                List<BlockPos> targets = new ArrayList<>();
+                DigQuote pricing = DigQuote.of(her, DigTaskRecord.TARGET_SPEC);
+                DigQuote clearing = clearing(her);
+                List<Goals.DigTarget> targets = new ArrayList<>();
+                String firstWhy = null;
                 for (BlockPos cell : nearest) {
-                    // 空气与流体没有可挖的;没加载的列此刻判不了,留给走到那儿时的规划
-                    if (!terrain.loaded(cell.getX(), cell.getZ()) || terrain.clickable(cell)) {
-                        targets.add(cell);
-                        toward = toward == null ? cell : toward;
-                        if (targets.size() == MEMBERS) {
-                            break;
-                        }
+                    // 没加载的列此刻判不了,留给走到那儿时的规划;空气与流体没有可挖的;挖不成的不去
+                    boolean loaded = terrain.loaded(cell.getX(), cell.getZ());
+                    if (loaded && !terrain.clickable(cell)) {
+                        continue;
+                    }
+                    String why = loaded ? undiggable(pricing, clearing, terrain, cell) : null;
+                    if (why != null) {
+                        firstWhy = firstWhy == null ? why : firstWhy;
+                        continue;
+                    }
+                    // 挖它本身的价钱与 work dig 挑目标时同一个报价;没加载的列此刻读不到,不另收
+                    targets.add(new Goals.DigTarget(cell,
+                            loaded ? pricing.price(cell, terrain.state(cell)).cost() : 0));
+                    toward = toward == null ? cell : toward;
+                    if (targets.size() == MEMBERS) {
+                        break;
                     }
                 }
                 if (targets.isEmpty()) {
-                    throw new IllegalArgumentException(GotoReminders.areaNothingToDig(ref, nearest.size(), cells));
+                    throw new IllegalArgumentException(firstWhy != null
+                            ? GotoReminders.areaNoneDiggable(ref, nearest.size(), cells, firstWhy)
+                            : GotoReminders.areaNothingToDig(ref, nearest.size(), cells));
                 }
-                return new Destination(stop, Goals.dig(targets, Snapshots.stats(her)), toward);
+                return new Destination(stop, Goals.dig(targets, Snapshots.stats(her), clearing.clearing()), toward);
             }
         }
         return new Destination(stop, members.size() == 1 ? members.get(0) : Goals.anyOf(members), toward);
@@ -357,12 +375,37 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
         return use;
     }
 
-    /** 挖一格方块的目标;空气、流体没有可挖的,当场提醒。 */
+    /** 挖一格方块的目标;空气、流体没有可挖的,站到哪儿 {@code work dig} 都挖不成的({@link #undiggable}),都当场提醒。 */
     private static Goal dig(NumenPlayer her, Terrain terrain, BlockPos cell) {
         if (!terrain.clickable(cell)) {
             throw new IllegalArgumentException(GotoReminders.nothingToDig(cell, NavText.name(terrain.state(cell))));
         }
-        return Goals.dig(cell, Snapshots.stats(her));
+        DigQuote clearing = clearing(her);
+        String why = undiggable(DigQuote.of(her, DigTaskRecord.TARGET_SPEC), clearing, terrain, cell);
+        if (why != null) {
+            throw new IllegalArgumentException(why + ".");
+        }
+        return Goals.dig(cell, Snapshots.stats(her), clearing.clearing());
+    }
+
+    /**
+     * 站到哪儿 {@code work dig} 都挖不成 {@code cell} 的缘由;挖得成为 null。问的是 {@code work dig} 挑目标时问的同几件事:按
+     * {@link DigTaskRecord#TARGET_SPEC} 挖它进不进得了(物理上挖不挖得动、规则许不许),每一面是不是都贴着清不掉的方块。
+     */
+    private static String undiggable(DigQuote pricing, DigQuote clearing, Terrain terrain, BlockPos cell) {
+        String refused = pricing.uncleared(cell);
+        if (refused != null) {
+            return GotoReminders.cantDig(cell, NavText.name(terrain.state(cell)), refused);
+        }
+        return clearing.walledIn(cell);
+    }
+
+    /**
+     * 到了之后 {@code work dig} 清得掉哪些挡着视线的格:它清遮挡用的那份规格({@link DigTaskRecord#SPEC}),按此刻的身体与许可。
+     * 走路许不许改地形是这一趟自己的事,与它无关。
+     */
+    private static DigQuote clearing(NumenPlayer her) {
+        return DigQuote.of(her, DigTaskRecord.SPEC);
     }
 
     /** 那一列里往下第一个站得住的节点;一直到底都没有为 null。 */
