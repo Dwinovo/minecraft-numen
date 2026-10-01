@@ -20,7 +20,7 @@ description: 主人提到车万女仆、要你驯服或照顾女仆、给女仆�
 
 野生女仆用蛋糕驯服。背包里有蛋糕就行:
 
-`use entity right 812 --item minecraft:cake`
+`use entity 812 --item minecraft:cake`
 
 它会走过去、拿着蛋糕右键她。成了会收到 `maid_tamed` 事件,她从此归你。别人的女仆用蛋糕驯服不了。
 
@@ -28,20 +28,20 @@ description: 主人提到车万女仆、要你驯服或照顾女仆、给女仆�
 
 她的界面在她身边才打得开(大约 7 格内),先走过去再开:
 
-1. `tlm open 812 backpack`:她的盔甲、主手副手、她自己的几格和背包。
+1. `tlm open 812`:她的盔甲、主手副手、她自己的几格和背包。
 2. `use gui` 看格子编号(你的背包在前,她的格子在后)。
 3. `use transfer 3 42` 把你那一格的东西放进她那一格;整叠送过去用 `use shift 3`。
 4. 弄完 `use close`。
 
-饰品在另一页:`tlm open 812 bauble`,装了 Curios 的话还有 `tlm open 812 curios`。
+饰品在另一页:`tlm open 812 --tab bauble`,装了 Curios 的话还有 `tlm open 812 --tab curios`。
 
 背包是穿上去的,不是放进格子:拿着背包右键她,例如
-`use entity right 812 --item touhou_little_maid:maid_backpack_small`。换下背包用剪刀右键她:
-`use entity right 812 --item minecraft:shears`,旧背包和里面的东西回到你手上。
+`use entity 812 --item touhou_little_maid:maid_backpack_small`。换下背包用剪刀右键她:
+`use entity 812 --item minecraft:shears`,旧背包和里面的东西回到你手上。
 
 ## 让她坐下、站起
 
-潜行右键她切换坐下与站起:`use entity right 812 --sneak true`。最好空手,拿着河童罗盘时这一下是罗盘的用法。
+潜行右键她切换坐下与站起:`use entity 812 --sneak`。最好空手,拿着河童罗盘时这一下是罗盘的用法。
 坐着的女仆不跟着你走,也不会传送到你身边。
 
 ## 让她干活
@@ -49,13 +49,13 @@ description: 主人提到车万女仆、要你驯服或照顾女仆、给女仆�
 1. `tlm maid 812` 看哪个工作模式能切、缺什么。比如远程攻击的 `works_with` 里有 `has_bow`、`has_arrow`,
    是 false 就是她还没有弓或箭。种地要她的格子里有种子。
 2. 缺什么就先按上一节放进她的主手或格子。
-3. `tlm task 812 touhou_little_maid:farm` 切过去。回执读回她现在的工作;没变就是车万女仆没照做,回执会说它的规矩怎么说。
+3. `tlm task touhou_little_maid:farm --maid 812` 切过去(不写 --maid 就是够得着的你那只女仆)。回执读回她现在的工作;没变就是车万女仆没照做,回执会说它的规矩怎么说。
 
 日程、家模式、拾取、骑乘用 `tlm config`:
 
 - `tlm config 812 --schedule night`:晚上干活、白天睡(`day` 反过来,`all` 全天)。
-- `tlm config 812 --home true`:在家干活,不再跟着你;没设过日程点的话,她站的地方就是家。
-- `tlm config 812 --pickup false`:不捡地上的东西。
+- `tlm config 812 --home`:在家干活,不再跟着你;没设过日程点的话,她站的地方就是家。
+- `tlm config 812 --no-pickup`:不捡地上的东西。
 
 `task`、`config`、`open` 都是在用她:对你自己的女仆出厂不问,主人另写了规矩要问时会先问主人,答复回来才做。
 
@@ -63,11 +63,11 @@ description: 主人提到车万女仆、要你驯服或照顾女仆、给女仆�
 
 会收到 `maid_died` 事件:死在哪、墓碑的编号和位置。墓碑里是她的全部东西和她的胶片(记着她的一切)。
 
-1. 走到墓碑旁,右键它把东西都拿回来:`use entity right 907`(`907` 换成事件里的墓碑编号)。你背包放不下时它不给,
+1. 走到墓碑旁,右键它把东西都拿回来:`use entity 907`(`907` 换成事件里的墓碑编号)。你背包放不下时它不给,
    先腾地方。
 2. 用胶片复活她,两种办法,都先跟主人说清楚:
    - **祭坛**:搭好的祭坛上放齐胶片、青金石、金锭、红石、铁锭、煤炭(拿着一样右键一根柱子放一样),需要 0.5 个 P 点,
      放齐那一下就复活。
    - **神社**:拿着胶片右键神社放进去,再空手右键神社。**它会把你的血直接设成 0.25**(血不到一半多一点时不让用),
      用之前一定先告诉主人,用完赶紧回血。放进去的胶片不用了,空手潜行右键神社取回:
-     `use block right 120 64 -35 --sneak true`(坐标换成神社的;手里拿着东西时潜行右键不碰神社)。
+     `use block 120 64 -35 --sneak`(坐标换成神社的;手里拿着东西时潜行右键不碰神社)。

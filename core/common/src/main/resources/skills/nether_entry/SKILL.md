@@ -18,7 +18,7 @@ Mine it from a **ruined portal** — a structure that's just standing obsidian, 
 
 1. `locate structure #minecraft:ruined_portal` — searches the whole family and returns the nearest. **Skip `ruined_portal_ocean`** (underwater) if the result names it; re-search or pick a land one — I can't dive.
 2. `gear wear diamond_pickaxe` (obsidian needs diamond), `move_goto` the portal coordinates.
-3. `scan_blocks` for `obsidian` into portal, then `move_goto` area:portal arrive:'dig' and `work_dig` with place portal and count 10 — it digs the frame's obsidian within its reach; call it again where it says for the rest. ~9.4s per block is normal.
+3. `scan blocks obsidian --into portal`, then `move goto portal --arrive dig` and `work dig portal --count 10` — it digs the frame's obsidian within its reach; `work collect` the drops, and repeat the three while `area has portal`. ~9.4s per block is normal.
 
 Notes:
 - A portal's frame mixes plain **obsidian** with **crying obsidian** (purple particles). Crying obsidian is a *different block and useless for a portal frame* — a scan for `obsidian` alone leaves it out, so a single portal may yield fewer than 10. If you come up short, `locate structure #minecraft:ruined_portal` again for the next nearest and top up.
@@ -30,14 +30,14 @@ Notes:
 - Pick flat ground near your base. Write the frame as a small design — two side columns of 3 plus top and bottom rows of 2 — and build it in one go; a single `build set` handles any one-off correction:
   ```
   build new portal
-  build line obsidian 0 1 0 0 3 0 --into portal
-  build line obsidian 3 1 0 3 3 0 --into portal
-  build line obsidian 1 0 0 2 0 0 --into portal
-  build line obsidian 1 4 0 2 4 0 --into portal
-  build at portal 120 64 -35
+  build line 0 1 0 0 3 0 --block obsidian --into portal
+  build line 3 1 0 3 3 0 --block obsidian --into portal
+  build line 1 0 0 2 0 0 --block obsidian --into portal
+  build line 1 4 0 2 4 0 --block obsidian --into portal
+  build at portal --at 120 64 -35
   ```
 - **Flint & steel**: craft `flint_and_steel` = 1 iron ingot + 1 flint, a 2×2 recipe (`inv craft` it; see the `containers` skill to lay a grid by hand). Flint drops from gravel you `work_dig`, ~10%/block.
-- **Ignite**: `use block right 121 65 -35 --item minecraft:flint_and_steel` aimed at an **empty air cell INSIDE the frame** (a bottom one), not at the obsidian. The fire lands in that cell and the portal forms.
+- **Ignite**: `use block 121 65 -35 --item minecraft:flint_and_steel` aimed at an **empty air cell INSIDE the frame** (a bottom one), not at the obsidian. The fire lands in that cell and the portal forms.
 - Enter: `move_goto` the portal cell and stand in it until the dimension changes (`status_self` confirms).
 
 ## Packlist (verify with `status_self` before igniting)

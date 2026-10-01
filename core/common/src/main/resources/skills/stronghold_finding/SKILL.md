@@ -24,22 +24,22 @@ Both are 2×2/shapeless recipes — `inv craft` makes them in your own grid, no 
 ## Step 2 — go there
 
 1. `locate structure minecraft:stronghold` → coordinates, direction, distance (often 1000–2500 blocks; the journey is the long part).
-2. `move_goto(x, ~60, z)` to cross the surface, then descend where you stand with `move goto --y 30 --alter natural` — navigation digs down on its own. Strongholds sit around Y 6–50.
+2. `move goto` the x z it gave (e.g. `move goto 1200 -340`) to cross the surface, then descend where you stand with `move goto 30 --alter natural` — navigation digs down on its own. Strongholds sit around Y 6–50.
 3. Hit stone bricks → you're inside. `scan_blocks(end_portal_frame)` to find the portal room; no match → explore corridors with `move_goto` and rescan. (Stronghold corridors are stone_bricks / mossy_stone_bricks / cracked_stone_bricks.)
 
 ## Step 3 — secure the portal room
 
 The room has a lava pool under the frame and a **silverfish spawner** on the stairs:
 
-1. `scan_blocks` for the `spawner` into an area, `move_goto` it with arrive:'dig', and `work_dig` it immediately — unlike the blaze spawner, this one is pure liability.
+1. `scan blocks spawner --into spawner`, `move goto spawner --arrive dig`, and `work dig spawner` immediately — unlike the blaze spawner, this one is pure liability.
 2. If silverfish are already out, scan them, then pass their runtime IDs to `fight attack`; don't let them burrow into the brickwork.
-3. Cover the lava pool edges where you'll stand with cobblestone: a `build layer` of it, or `build set` for single cells.
+3. Cover the lava pool edges where you'll stand with cobblestone: a `build layer` of it, or `build set 120 64 -35 --block cobblestone` for single cells.
 
 ## Step 4 — fill the frames
 
 1. The 12 `end_portal_frame` blocks ring a 3×3 opening. `scan_blocks(end_portal_frame)` returns them as one group that lists all 12 positions.
 2. `scan_block` each frame — the `has_eye` property tells you which are pre-filled.
-3. `use block right 120 64 -35 --item minecraft:ender_eye` on each empty frame, one line per frame. **Eyes cannot be taken back out.**
+3. `use block 120 64 -35 --item minecraft:ender_eye` on each empty frame, one line per frame. **Eyes cannot be taken back out.**
 4. The 12th eye activates the portal; the opening fills with the starfield surface.
 
 ## Before dropping in
