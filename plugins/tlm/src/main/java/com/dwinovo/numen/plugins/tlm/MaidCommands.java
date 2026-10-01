@@ -44,16 +44,19 @@ final class MaidCommands {
             .values("her entity id, as tlm maids or scan entities lists it");
     private static final Param<ResourceLocation> WORK = Param.required("task", ArgType.id(), "The work mode.")
             .values("a task id as tlm maid lists it, e.g. touhou_little_maid:farm");
+    private static final Param<EntityRef> FOR_MAID = Param.optional("maid", ArgType.entity(), "The maid.")
+            .values("her entity id, as tlm maids or scan entities lists it")
+            .whenOmitted("your maid within reach (the nearest one)");
     private static final Param<Boolean> HOME = Param.optional("home", ArgType.bool(),
-            "Home mode: true keeps her working and resting around her home or schedule points; false has her "
+            "Home mode: --home keeps her working and resting around her home or schedule points; --no-home has her "
                     + "follow you.")
             .whenOmitted("leave it as it is");
     private static final Param<Boolean> PICKUP = Param.optional("pickup", ArgType.bool(),
             "Whether she picks up items, experience and power points around her.")
             .whenOmitted("leave it as it is");
     private static final Param<Boolean> RIDE = Param.optional("ride", ArgType.bool(),
-            "Whether she may ride things; false also gets her off what she rides now (not off a chair or a flying "
-                    + "broom).")
+            "Whether she may ride things; --no-ride also gets her off what she rides now (not off a chair or a "
+                    + "flying broom).")
             .whenOmitted("leave it as it is");
     /** 日程的三种:车万女仆 {@code MaidSchedule} 的名字,小写。 */
     private static final Param<String> SCHEDULE = Param.optional("schedule", ArgType.oneOf("day", "night", "all"),
@@ -61,9 +64,10 @@ final class MaidCommands {
                     + "round the clock.")
             .whenOmitted("leave it as it is");
     /** 能打开的页:{@link Maids.Tab} 的写法。 */
-    private static final Param<String> TAB = Param.required("tab", ArgType.oneOf("backpack", "bauble", "curios"),
+    private static final Param<String> TAB = Param.optional("tab", ArgType.oneOf("backpack", "bauble", "curios"),
             "Which page of her GUI: backpack = armour, hands, her own slots and her backpack; bauble = her "
-                    + "bauble slots; curios = her Curios slots (with Curios installed).");
+                    + "bauble slots; curios = her Curios slots (with Curios installed).")
+            .whenOmitted("open the backpack page");
 
     private MaidCommands() {}
 
@@ -90,9 +94,9 @@ final class MaidCommands {
                         + "has_arrow for ranged_attack), true = she has it.")
                 .seeAlso(line(TASK), line(CONFIG));
         tlm.server(TASK, "Switch one of your maids to another work mode, like a click in her task list.",
-                        MaidCommands::task, WHICH, WORK)
-                .example(line(TASK) + " 812 touhou_little_maid:farm")
-                .example(line(TASK) + " 812 touhou_little_maid:idle")
+                        MaidCommands::task, WORK, FOR_MAID)
+                .example(line(TASK) + " touhou_little_maid:farm --maid 812")
+                .example(line(TASK) + " touhou_little_maid:idle")
                 .note("It does not travel: stand within about 7 blocks of her, the distance at which her GUI stays "
                         + "open. Farther away it fails and names the move goto line.")
                 .note("TLM decides: only the owner may switch, and a mode may wait for something first (see "
@@ -103,7 +107,7 @@ final class MaidCommands {
         tlm.server(CONFIG, "Change one of your maids' settings: home mode, picking up, riding, schedule.",
                         MaidCommands::config, WHICH, HOME, PICKUP, RIDE, SCHEDULE)
                 .example(line(CONFIG) + " 812 --schedule night")
-                .example(line(CONFIG) + " 812 --home true --pickup false")
+                .example(line(CONFIG) + " 812 --home --no-pickup")
                 .note("Give only what you change; the rest stays. The same reach, owner rule and asking as "
                         + line(TASK) + ".")
                 .note("TLM keeps home mode off when her schedule points are in another dimension or more than 32 "
@@ -112,8 +116,8 @@ final class MaidCommands {
                 .seeAlso(line(MAID), line(TASK));
         tlm.server(OPEN, "Open a page of one of your maids' GUI, then work it with use gui.",
                         MaidCommands::open, WHICH, TAB)
-                .example(line(OPEN) + " 812 backpack")
-                .example(line(OPEN) + " 812 bauble")
+                .example(line(OPEN) + " 812")
+                .example(line(OPEN) + " 812 --tab bauble")
                 .note("Then `use gui` lists its slots, `use transfer` and `use shift` move items (armour, hand, "
                         + "backpack or bauble slots), `use close` closes it. It stays open while you stay within "
                         + "reach.")
@@ -136,7 +140,7 @@ final class MaidCommands {
         tombstones.forEach(row -> rows.add(GSON.toJson(row)));
 
         String head = here.isEmpty() && away.isEmpty() && tombstones.isEmpty()
-                ? "You keep no maids. A wild maid is tamed with a cake: `use entity right 812 --item minecraft:cake`, "
+                ? "You keep no maids. A wild maid is tamed with a cake: `use entity 812 --item minecraft:cake`, "
                         + "with her entity id from `scan entities`."
                 : here.size() + " maid(s) here, " + away.size() + " in unloaded chunks, " + tombstones.size()
                         + " tombstone(s); one per line:";
@@ -168,10 +172,14 @@ final class MaidCommands {
             List<String> same = Maids.tasksNamed(task.getPath());
             src.reply(TaskResult.fail("TLM has no work mode " + task
                     + (same.isEmpty() ? "." : " — did you mean " + String.join(" or ", same) + "?")
-                    + " `" + line(MAID) + " " + args.get(WHICH) + "` lists them.").toJson());
+                    + " `" + line(MAID) + " <maid>` lists them.").toJson());
             return;
         }
-        act(src, args, TASK, List.of(WHICH, WORK), (her, maid) -> {
+        EntityRef which = args.get(FOR_MAID) != null ? args.get(FOR_MAID) : yoursWithinReach(src);
+        if (which == null) {
+            return;
+        }
+        act(src, args.with(FOR_MAID, which), which, TASK, List.of(WORK, FOR_MAID), (her, maid) -> {
             String was = Maids.task(maid);
             Maids.switchTask(her, maid, task);
             String now = Maids.task(maid);
@@ -197,7 +205,7 @@ final class MaidCommands {
                     + "`" + line(MAID) + " " + args.get(WHICH) + "` shows her settings now.").toJson());
             return;
         }
-        act(src, args, CONFIG, List.of(WHICH, HOME, PICKUP, RIDE, SCHEDULE), (her, maid) -> {
+        act(src, args, args.get(WHICH), CONFIG, List.of(WHICH, HOME, PICKUP, RIDE, SCHEDULE), (her, maid) -> {
             Maids.Settings was = Maids.settings(maid);
             Maids.configure(her, maid, new Maids.Settings(home != null ? home : was.home(),
                     pickup != null ? pickup : was.pickup(), ride != null ? ride : was.ride(),
@@ -210,9 +218,9 @@ final class MaidCommands {
             data.put("ride", now.ride());
             data.put("schedule", now.schedule());
             List<String> refused = new ArrayList<>();
-            if (home != null && now.home() != home) refused.add("--home " + home);
-            if (pickup != null && now.pickup() != pickup) refused.add("--pickup " + pickup);
-            if (ride != null && now.ride() != ride) refused.add("--ride " + ride);
+            if (home != null && now.home() != home) refused.add(home ? "--home" : "--no-home");
+            if (pickup != null && now.pickup() != pickup) refused.add(pickup ? "--pickup" : "--no-pickup");
+            if (ride != null && now.ride() != ride) refused.add(ride ? "--ride" : "--no-ride");
             if (schedule != null && !now.schedule().equals(schedule)) refused.add("--schedule " + schedule);
             String settings = "home " + now.home() + ", pickup " + now.pickup() + ", ride " + now.ride()
                     + ", schedule " + now.schedule();
@@ -225,8 +233,8 @@ final class MaidCommands {
     }
 
     private static void open(ServerSource src, CommandArgs args) {
-        Maids.Tab tab = Maids.Tab.byWord(args.get(TAB));
-        act(src, args, OPEN, List.of(WHICH, TAB), (her, maid) -> {
+        Maids.Tab tab = Maids.Tab.byWord(args.get(TAB) == null ? "backpack" : args.get(TAB));
+        act(src, args, args.get(WHICH), OPEN, List.of(WHICH, TAB), (her, maid) -> {
             Maids.open(her, maid, tab);
             String menu = Maids.showing(her, maid);
             Map<String, Object> data = new LinkedHashMap<>();
@@ -253,16 +261,18 @@ final class MaidCommands {
      * 做的三个动作共用的那一段:认出女仆、够不够得着、交权限层、动手。主人要问时这次调用挂着等答复,答复回来的时候女仆
      * 可能走开了,所以放行之后按同一个编号再认一次、再量一次。
      *
+     * @param which  点名的那只
      * @param action 动作名,和 {@code params} 一起写回这一行,权限层的回执与征询里点名的就是它
      */
-    private static void act(ServerSource src, CommandArgs args, String action, List<Param<?>> params, Deed deed) {
-        Entity maid = reached(src, args.get(WHICH));
+    private static void act(ServerSource src, CommandArgs args, EntityRef which, String action, List<Param<?>> params,
+                            Deed deed) {
+        Entity maid = reached(src, which);
         if (maid == null) {
             return;
         }
         String what = args.write(line(action), params);
         src.authorize(Action.useEntity(maid), what, allowed -> {
-            Entity still = reached(allowed, args.get(WHICH));
+            Entity still = reached(allowed, which);
             if (still != null) {
                 allowed.reply(deed.on(allowed.companion(), still).toJson());
             }
@@ -279,12 +289,30 @@ final class MaidCommands {
         if (!Maids.inReach(her, maid)) {
             BlockPos at = maid.blockPosition();
             src.reply(TaskResult.fail(Maids.label(maid) + " is " + String.format("%.1f", her.distanceTo(maid))
-                    + " blocks away — too far for her GUI, and this does not travel. `move goto --x " + at.getX()
-                    + " --y " + at.getY() + " --z " + at.getZ() + " --arrive near --near 2` first, then run this "
+                    + " blocks away — too far for her GUI, and this does not travel. `move goto " + at.getX()
+                    + " " + at.getY() + " " + at.getZ() + " --arrive near --near 2` first, then run this "
                     + "again.").toJson());
             return null;
         }
         return maid;
+    }
+
+    /** 她自己的、够得着的女仆里最近的那一只(按 UUID 点名,重启后认的还是她);一只都没有时回执已经写好,返回 null。 */
+    private static EntityRef yoursWithinReach(ServerSource src) {
+        NumenPlayer her = src.companion();
+        Entity nearest = null;
+        for (Entity maid : Maids.loaded(her)) {
+            if (Maids.ownedBy(maid, her) && Maids.inReach(her, maid)
+                    && (nearest == null || her.distanceToSqr(maid) < her.distanceToSqr(nearest))) {
+                nearest = maid;
+            }
+        }
+        if (nearest == null) {
+            src.reply(TaskResult.fail("none of your maids is within reach — `" + line(MAIDS) + "` lists them; name "
+                    + "one with --maid, or `move goto <x y z> --arrive near --near 2` to her first.").toJson());
+            return null;
+        }
+        return EntityRef.id(nearest.getId());
     }
 
     /** 点名的那只女仆;不在或不是女仆的话回执已经写好,返回 null。 */
@@ -311,7 +339,7 @@ final class MaidCommands {
     private static String whyNot(NumenPlayer her, Entity maid, ResourceLocation task) {
         if (!Maids.ownedBy(maid, her)) {
             String owner = Maids.owner(maid);
-            return owner == null ? " She is wild: tame her first with a cake (`use entity right " + maid.getId()
+            return owner == null ? " She is wild: tame her first with a cake (`use entity " + maid.getId()
                     + " --item minecraft:cake`)." : " She is not yours: TLM lets only her owner (" + owner
                     + ") do this.";
         }

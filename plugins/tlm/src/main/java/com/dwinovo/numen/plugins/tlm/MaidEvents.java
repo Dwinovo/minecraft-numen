@@ -50,7 +50,7 @@ public final class MaidEvents {
         numen.emit(her, DIED, attrs, Maids.label(maid) + " died at " + Maids.where(maid.blockPosition()) + " in "
                 + maid.level().dimension().location() + ": " + maid.getCombatTracker().getDeathMessage().getString()
                 + ". Her things and her film are in tombstone " + tombstone.getId() + " at "
-                + Maids.where(tombstone.blockPosition()) + "; right-click it (`use entity right " + tombstone.getId()
+                + Maids.where(tombstone.blockPosition()) + "; right-click it (`use entity " + tombstone.getId()
                 + "`) to take them.", true);
     }
 
