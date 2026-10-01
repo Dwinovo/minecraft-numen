@@ -179,6 +179,54 @@ class GoalsTest {
     }
 
     /**
+     * 挖几格里的任意一格:够得着其中一格就算到;停下的价钱里每少够着一格加一小份,全少了也不到多走一格——同样划算的站位里,
+     * 一次够得着的越多越便宜。一格都够不着的站位不在目标里。
+     */
+    @Test
+    void diggingSeveralCellsPrefersTheStandThatReachesMoreOfThem() {
+        BlockPos a = new BlockPos(10, 64, 0);
+        BlockPos b = new BlockPos(10, 64, 1);
+        BlockPos far = new BlockPos(30, 64, 0);
+        Goal dig = Goals.dig(free(a, b, far), SURVIVAL, Goals.Clearing.ANY);
+        Stance standing = new Stance(Stance.Kind.GROUND, 64, 63);
+        TestWorld world = new TestWorld().ground(63, Blocks.STONE.defaultBlockState())
+                .set(a, Blocks.STONE.defaultBlockState()).set(b, Blocks.STONE.defaultBlockState())
+                .set(far, Blocks.STONE.defaultBlockState());
+        assertTrue(dig.contains(8, 64, 0, standing), "够得着 a 就算到");
+        assertFalse(dig.contains(0, 64, 0, standing), "一格都够不着的不在目标里");
+        double both = dig.arrival(world, 8, 64, 0, standing);
+        double one = dig.arrival(world, 6, 64, -3, standing);
+        assertTrue(Goals.dig(a, SURVIVAL).contains(6, 64, -3, standing) && !Goals.dig(b, SURVIVAL)
+                .contains(6, 64, -3, standing), "这一处只够得着 a");
+        assertTrue(both < one, "够得着两格的停下更便宜:" + both + " / " + one);
+        assertTrue(one - both < ActionCosts.WALK_ONE_BLOCK, "差的不到多走一格:" + (one - both));
+        assertThrows(IllegalArgumentException.class, () -> Goals.dig(List.of(), SURVIVAL, Goals.Clearing.ANY));
+    }
+
+    /**
+     * 挖几格里的任意一格,各格挖起来的价钱不同:两处站位各只够得着一格、走到那儿一样贵,停下的价钱差的正是两格挖起来的价钱差——
+     * 贵的那格(要问主人的)只在便宜的远出它那份价钱时才去。
+     */
+    @Test
+    void diggingSeveralCellsCountsWhatEachCellCostsToDig() {
+        BlockPos cheap = new BlockPos(10, 64, 0);
+        BlockPos dear = new BlockPos(-10, 64, 0);
+        Goal dig = Goals.dig(List.of(new Goals.DigTarget(cheap, 1), new Goals.DigTarget(dear, 50)), SURVIVAL,
+                Goals.Clearing.ANY);
+        Stance standing = new Stance(Stance.Kind.GROUND, 64, 63);
+        TestWorld world = new TestWorld().ground(63, Blocks.STONE.defaultBlockState())
+                .set(cheap, Blocks.STONE.defaultBlockState()).set(dear, Blocks.STONE.defaultBlockState());
+        double nearCheap = dig.arrival(world, 8, 64, 0, standing);
+        double nearDear = dig.arrival(world, -8, 64, 0, standing);
+        assertEquals(49, nearDear - nearCheap, 1e-9, "两处只差两格挖起来的价钱");
+    }
+
+    /** 挖起来不另收钱的几格。 */
+    private static List<Goals.DigTarget> free(BlockPos... cells) {
+        return java.util.Arrays.stream(cells).map(c -> new Goals.DigTarget(c, 0)).toList();
+    }
+
+    /**
      * 挖的估价按分轴的价钱:要挖的那一格在正下方二十格,正上方往下每一格按落的价;横着走开,每一格涨一格疾跑的价——
      * 不因为离得深,横着走就几乎不涨。
      */

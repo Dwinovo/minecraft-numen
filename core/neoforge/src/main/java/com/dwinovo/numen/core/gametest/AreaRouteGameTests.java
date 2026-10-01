@@ -54,7 +54,7 @@ public class AreaRouteGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_penwalker", new BlockPos(2, 2, 2), false);
         Area pen = box(helper, new BlockPos(10, 2, 10), new BlockPos(12, 2, 12));
         areasOf(companion).create("pen", pen);
-        ToolRun walk = call(companion, "move_goto", args("area", "pen"));
+        ToolRun walk = call(companion, "move_goto", args("place", "pen"));
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "move_goto has not finished");
@@ -80,7 +80,7 @@ public class AreaRouteGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_chestuser", new BlockPos(2, 2, 2), false);
         areasOf(companion).create("chests", Area.of(level.dimension(), Area.Kind.POINT, Cells.point(near))
                 .with(Area.Kind.POINT, Cells.point(far)));
-        ToolRun walk = command(companion, "move goto --area chests --arrive use");
+        ToolRun walk = command(companion, "move goto chests --arrive use");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "move goto has not finished");
@@ -100,7 +100,7 @@ public class AreaRouteGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_hoverer", new BlockPos(2, 2, 2), false);
         Area pen = box(helper, new BlockPos(10, 2, 10), new BlockPos(13, 2, 13));
         areasOf(companion).create("pen", pen);
-        ToolRun walk = command(companion, "move goto --area pen --arrive near --near 3");
+        ToolRun walk = command(companion, "move goto pen --arrive near --near 3");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "move goto has not finished");
@@ -125,8 +125,7 @@ public class AreaRouteGameTests {
         Area farm = box(helper, new BlockPos(5, 1, 0), new BlockPos(10, 3, 11));
         areasOf(companion).create("farm", farm);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 6));
-        ToolRun walk = command(companion, "move goto --x " + target.getX() + " --y " + target.getY() + " --z "
-                + target.getZ() + " --avoid area:farm");
+        ToolRun walk = command(companion, "move goto " + xyz(target) + " --avoid area:farm");
         boolean[] entered = new boolean[1];
         helper.onEachTick(() -> {
             BlockPos feet = companion.blockPosition();
@@ -156,7 +155,7 @@ public class AreaRouteGameTests {
         Area eastWall = box(helper, new BlockPos(9, 2, 5), new BlockPos(9, 4, 9));
         areasOf(companion).create("house", eastWall);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        ToolRun walk = call(companion, "move_goto", args("x", target.getX(), "y", target.getY(), "z", target.getZ(),
+        ToolRun walk = call(companion, "move_goto", args("place", xyz(target),
                 "alter", "natural", "avoid_break", List.of("area:house")));
 
         succeedWhen(helper, () -> {
@@ -195,7 +194,7 @@ public class AreaRouteGameTests {
         areas.delete("pen");
         areas.delete("farm");
         ToolRun plan = command(companion, "route plan topen");
-        ToolRun direct = command(companion, "move goto --area pen");
+        ToolRun direct = command(companion, "move goto pen");
         ToolRun[] goPen = new ToolRun[1];
         ToolRun[] goAround = new ToolRun[1];
 
@@ -206,7 +205,7 @@ public class AreaRouteGameTests {
                                     + "pen; your owner's areas are shed"),
                             "route plan does not say the area is gone: " + plan.reply());
                     helper.assertTrue(!direct.succeeded() && direct.reply().contains("there is no area named pen"),
-                            "move goto --area pen was not refused at once: " + direct.reply());
+                            "move goto pen was not refused at once: " + direct.reply());
                     goPen[0] = command(companion, "move go topen");
                 })
                 .thenWaitUntil(() -> helper.assertTrue(goPen[0].done(), "move go topen has not finished"))

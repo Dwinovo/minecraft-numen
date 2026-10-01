@@ -107,7 +107,7 @@ class NavTextTest {
         assertTrue(leg.contains("`route spec home --leg 2 --alter any`") && leg.contains("asks the owner first"), leg);
         String budget = NavText.failure(new Outcome.OverAlterBudget(5), null, A, C,
                 spec.edit().alter(RouteSpec.Alter.NATURAL).alterBudget(1).build(), new NavText.OnRoute("home", 1, 1));
-        assertTrue(budget.contains("`route spec home --alter_budget 5`"), budget);
+        assertTrue(budget.contains("`route spec home --alter-budget 5`"), budget);
         String sight = NavText.failure(new Outcome.NoLineOfSight(B), null, A, C, spec, new NavText.OnRoute("home", 1, 1));
         assertTrue(sight.contains("`move go home` again"), sight);
     }
@@ -184,11 +184,11 @@ class NavTextTest {
         assertTrue(none.contains("pick another destination"), none);
         assertTrue(budget.contains("not proof there is none") && budget.contains("a nearer waypoint"), budget);
         assertTrue(unloaded.contains("not loaded") && unloaded.contains("walk toward it and try again"), unloaded);
-        assertTrue(alter.contains("walk with alter:'natural'"), alter);
+        assertTrue(alter.contains("walk with --alter natural"), alter);
         assertTrue(denied.contains("120,65,-33 is refused") && denied.contains("ask your owner"), denied);
         assertTrue(stranded.contains("can't stand where I am") && stranded.contains("free me first"), stranded);
         assertTrue(blocked.contains("no room for my body there") && blocked.contains("try again"), blocked);
-        assertTrue(sight.contains("went out of sight") && sight.contains("move_goto x:120 y:65 z:-33 arrive:use"), sight);
+        assertTrue(sight.contains("went out of sight") && sight.contains("`move goto 120 65 -33 --arrive use`"), sight);
         assertEquals(8, java.util.Set.of(none, budget, unloaded, alter, denied, stranded, blocked, sight).size());
     }
 

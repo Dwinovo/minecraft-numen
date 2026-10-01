@@ -63,7 +63,7 @@ class RouteFlagsTest {
         assertTrue(refused.getMessage().contains("there is no area named house"), refused.getMessage());
         String flags = RouteFlags.merged("home", "", line("--avoid_break area:house"),
                 new NamedAreas(Level.OVERWORLD, Map.of("house", small)));
-        assertEquals("--avoid_break area:house", flags);
+        assertEquals("--avoid-break area:house", flags, "存下的标志按命令行的写法写回:短横线");
 
         ResourceLocation overworld = ResourceLocation.withDefaultNamespace("overworld");
         Itinerary route = Itinerary.of("home", overworld, new Destination.Stop(20, 64, 20, Destination.Arrive.AT,
@@ -73,7 +73,7 @@ class RouteFlagsTest {
         assertFalse(now.positions().forbids(Use.DIG, new BlockPos(0, 64, 0).asLong()));
         IllegalArgumentException gone = assertThrows(IllegalArgumentException.class,
                 () -> RouteFlags.spec(route, 0, NONE));
-        assertTrue(gone.getMessage().contains("--avoid_break area:house: there is no area named house"),
+        assertTrue(gone.getMessage().contains("--avoid-break area:house: there is no area named house"),
                 gone.getMessage());
     }
 

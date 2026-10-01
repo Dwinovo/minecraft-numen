@@ -60,8 +60,9 @@ public final class CraftPickaxe implements Scenario {
                 "inv craft oak_planks --count 12",
                 "inv craft crafting_table",
                 "inv craft stick --count 4",
-                "build place crafting_table " + cell,
+                "build place " + cell + " --block crafting_table",
                 "inv craft wooden_pickaxe",
-                "work dig " + cell);
+                "work dig " + cell,
+                "work collect");
     }
 }

@@ -72,7 +72,7 @@ class CommandRegistrationTest {
     void theRestOfTheLineMustBeTheLastArgumentAndCannotBeAFlag() {
         Param<String> text = Param.required("text", ArgType.text(), "Free text.");
         Param<String> word = Param.required("word", ArgType.word(), "A word.");
-        Param<String> flag = Param.optional("flag", ArgType.word(), "A flag.");
+        Param<String> flag = Param.optional("flag", ArgType.word(), "A flag.").whenOmitted("leave it out");
         assertThrows(IllegalArgumentException.class, () -> Param.optional("note", ArgType.text(), "Free text."));
         NumenApi numen = door();
         assertThrows(IllegalArgumentException.class, () -> numen.registerCommands("gt_text_first", "x.",
@@ -83,6 +83,43 @@ class CommandRegistrationTest {
                 g -> g.server("x", "x.", OK, word, word)));
         assertThrows(IllegalArgumentException.class, () -> Param.required("Bad", ArgType.word(), "x."));
         assertThrows(IllegalArgumentException.class, () -> Param.required("ok", ArgType.word(), " "));
+    }
+
+    /**
+     * 命令行的规矩写在登记处,违反就在登记那一刻抛出,插件的命令同样受约束:一条命令只有一类位置参数;没有必须写的标志
+     * (每个标志写明不写时会怎样);开关不当位置参数;可以不写的位置参数只能是最后一个。
+     */
+    @Test
+    void theCommandLineRulesAreCheckedWhenRegistered() {
+        NumenApi numen = door();
+        Param<Integer> count = Param.required("count", ArgType.integer(1, 9), "How many.");
+        Param<String> item = Param.required("item", ArgType.word(), "Which item.");
+        IllegalArgumentException twoKinds = assertThrows(IllegalArgumentException.class, () -> numen.registerCommands(
+                "gt_rule_kinds", "x.", g -> g.server("take", "Take.", OK, count, item).example("gt_rule_kinds take 1 a")));
+        assertEquals("gt_rule_kinds take 的位置参数有 2 类对象(integer、word):一条命令只有一类位置参数——它操作的东西,"
+                + "可以多个;其余写成标志", twoKinds.getMessage());
+
+        Param<String> from = Param.optional("from", ArgType.word(), "Where from.");
+        IllegalArgumentException mustWrite = assertThrows(IllegalArgumentException.class, () -> numen.registerCommands(
+                "gt_rule_flag", "x.", g -> g.server("take", "Take.", OK, count, from).example("gt_rule_flag take 1")));
+        assertTrue(mustWrite.getMessage().startsWith("gt_rule_flag take 的参数 from 可以不写,却没写不写时会怎样"),
+                mustWrite.getMessage());
+
+        Param<Boolean> fast = Param.required("fast", ArgType.bool(), "Run.");
+        IllegalArgumentException switchFirst = assertThrows(IllegalArgumentException.class, () -> numen.registerCommands(
+                "gt_rule_switch", "x.", g -> g.server("go", "Go.", OK, fast).example("gt_rule_switch go true")));
+        assertTrue(switchFirst.getMessage().contains("是开关,不能当位置参数"), switchFirst.getMessage());
+
+        Param<Integer> maybe = Param.optionalPositional("maybe", ArgType.integer(), "Maybe one.").whenOmitted("use 1");
+        IllegalArgumentException notLast = assertThrows(IllegalArgumentException.class, () -> numen.registerCommands(
+                "gt_rule_optional", "x.", g -> g.server("go", "Go.", OK, maybe, count).example("gt_rule_optional go 1 2")));
+        assertTrue(notLast.getMessage().contains("是可以不写的位置参数,只能是最后一个"), notLast.getMessage());
+
+        Param<Integer> again = Param.required("again", ArgType.integer(1, 9), "How many more.");
+        assertDoesNotThrow(() -> numen.registerCommands("gt_rule_ok", "x.", g -> g.server("go", "Go.", OK, count,
+                again, Param.optional("from", ArgType.word(), "Where from.").whenOmitted("take any"))
+                .example("gt_rule_ok go 1 2 --from chest")), "同一类的位置参数可以有几个");
+        assertFalse(onServer("gt_rule_kinds --help").success(), "被拒的组没有挂上树");
     }
 
     @Test
@@ -129,7 +166,7 @@ class CommandRegistrationTest {
     void everyActionNeedsAnExampleThatReadsAsThatAction() {
         NumenApi numen = door();
         Param<Integer> count = Param.required("count", ArgType.integer(1, 64), "How many.");
-        Param<String> from = Param.optional("from", ArgType.word(), "Where from.");
+        Param<String> from = Param.optional("from", ArgType.word(), "Where from.").whenOmitted("take any");
         IllegalArgumentException none = assertThrows(IllegalArgumentException.class, () -> numen.registerCommands(
                 "gt_no_example", "x.", g -> g.server("go", "Go.", OK)));
         assertEquals("gt_no_example go 没写例子——模型照着例子写,每个动作至少一个", none.getMessage());

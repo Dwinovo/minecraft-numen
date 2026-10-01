@@ -51,7 +51,7 @@ public class AreaGameTests {
     }
 
     private static String box(BlockPos a, BlockPos b) {
-        return a.getX() + "," + a.getY() + "," + a.getZ() + ".." + b.getX() + "," + b.getY() + "," + b.getZ();
+        return a.getX() + "," + a.getY() + "," + a.getZ() + " " + b.getX() + "," + b.getY() + "," + b.getZ();
     }
 
     /**
@@ -99,6 +99,56 @@ public class AreaGameTests {
     }
 
     /**
+     * 逐部分取用:两团紫珀块扫进 {@code beads},{@code area parts beads} 一行一个部分名,别的什么都没有。{@code area has} 的成败
+     * 就是答案,按 {@code work dig} 的判据在活世界里问:扫来的格还是紫珀块才算。远处那团两格,上面那格换成石头,
+     * {@code area has beads/g2} 仍成功、说还剩一格;下面那格也挖掉,它就失败——立着的石头不是扫到的方块;整块区域还有近处那团,
+     * 照样成功。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 4000, batch = "numen_area")
+    public static void area_parts_names_each_part_and_area_has_answers_by_success(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos near = helper.absolutePos(new BlockPos(5, 2, 5));
+        BlockPos far = helper.absolutePos(new BlockPos(11, 2, 11));
+        BlockPos farTop = far.above();
+        level.setBlockAndUpdate(near, Blocks.PURPUR_BLOCK.defaultBlockState());
+        level.setBlockAndUpdate(far, Blocks.PURPUR_BLOCK.defaultBlockState());
+        level.setBlockAndUpdate(farTop, Blocks.PURPUR_BLOCK.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_bead_counter", new BlockPos(3, 2, 3), false);
+        ToolRun scanned = scanInto(companion, 12, "minecraft:purpur_block", "beads");
+
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(scanned.done() && scanned.succeeded(),
+                        "the scan has not replied: " + scanned.reply()))
+                .thenExecute(() -> {
+                    ToolRun parts = command(companion, "area parts beads");
+                    helper.assertTrue(parts.succeeded()
+                                    && message(parts).lines().toList().equals(List.of("beads/g1", "beads/g2")),
+                            "area parts does not list one part name per line: " + parts.reply());
+                    ToolRun whole = command(companion, "area has beads/g2");
+                    helper.assertTrue(whole.succeeded()
+                                    && message(whole).startsWith("beads/g2 has 2 cell(s) left to dig"),
+                            "area has does not count the two purpur blocks of g2: " + whole.reply());
+
+                    level.setBlockAndUpdate(farTop, Blocks.STONE.defaultBlockState());
+                    ToolRun changed = command(companion, "area has beads/g2");
+                    helper.assertTrue(changed.succeeded() && message(changed).startsWith(
+                                    "beads/g2 has 1 cell(s) left to dig, the nearest at " + far.getX() + "," + far.getY()
+                                            + "," + far.getZ()),
+                            "area has counts a cell that no longer holds the scanned block: " + changed.reply());
+
+                    level.setBlockAndUpdate(far, Blocks.AIR.defaultBlockState());
+                    ToolRun gone = command(companion, "area has beads/g2");
+                    helper.assertTrue(!gone.succeeded() && message(gone).startsWith("beads/g2 has nothing left to dig"),
+                            "area has does not fail once nothing of g2 is left: " + gone.reply());
+                    ToolRun rest = command(companion, "area has beads");
+                    helper.assertTrue(rest.succeeded() && message(rest).startsWith("beads has 1 cell(s) left to dig"),
+                            "area has does not see the part still standing: " + rest.reply());
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /**
      * {@code --into} 点名一块还没有的区域:一步扫进去,区域当场新建(像 shell 的 {@code >}),回执说新建了它、加成了 g1 到 g2;
      * 存档里真有这块区域、两部分。再放一块、再扫进同一块:这回是往已有的区域里续(g3),回执不再说新建。
      */
@@ -112,7 +162,7 @@ public class AreaGameTests {
         level.setBlockAndUpdate(far, Blocks.PURPUR_BLOCK.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_new_mapper", new BlockPos(3, 2, 3), false);
         helper.assertTrue(areas(companion).get("fresh") == null, "the area fresh is there before the scan");
-        ToolRun first = command(companion, "scan blocks 12 minecraft:purpur_block --into fresh");
+        ToolRun first = command(companion, "scan blocks minecraft:purpur_block --into fresh --radius 12");
         ToolRun[] second = new ToolRun[1];
 
         succeedWhen(helper, () -> {
@@ -127,7 +177,7 @@ public class AreaGameTests {
                 level.setBlockAndUpdate(later, Blocks.PURPUR_BLOCK.defaultBlockState());
                 level.setBlockAndUpdate(near, Blocks.AIR.defaultBlockState());
                 level.setBlockAndUpdate(far, Blocks.AIR.defaultBlockState());
-                second[0] = command(companion, "scan blocks 12 minecraft:purpur_block --into fresh");
+                second[0] = command(companion, "scan blocks minecraft:purpur_block --into fresh --radius 12");
             }
             helper.assertTrue(second[0].reply() != null, "the second scan has not replied");
             helper.assertTrue(second[0].succeeded() && message(second[0]).contains("added to area fresh as g3")
@@ -153,7 +203,7 @@ public class AreaGameTests {
             }
         }
         NumenPlayer companion = spawnAt(helper, "gametest_grid_reader", new BlockPos(8, 2, 8), false);
-        ToolRun look = command(companion, "scan blocks 12 minecraft:red_nether_bricks");
+        ToolRun look = command(companion, "scan blocks minecraft:red_nether_bricks --radius 12");
         ToolRun[] kept = new ToolRun[1];
         ToolRun[] shown = new ToolRun[1];
 
@@ -166,7 +216,7 @@ public class AreaGameTests {
                         "the first page does not say how many there are and how to go on: " + page);
                 int bytes = page.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
                 helper.assertTrue(bytes <= AreaText.PAGE_BYTES + 200, "the first page is " + bytes + " bytes");
-                kept[0] = command(companion, "scan blocks 12 minecraft:red_nether_bricks --into grid");
+                kept[0] = command(companion, "scan blocks minecraft:red_nether_bricks --into grid --radius 12");
             }
             helper.assertTrue(kept[0].reply() != null, "the scan into grid has not replied");
             String summary = message(kept[0]);
@@ -241,7 +291,7 @@ public class AreaGameTests {
                 command(companion, "area new post"),
                 command(companion, "area add post --at " + xyz(out)),
                 command(companion, "area union both ring post"),
-                command(companion, "area grow halo post 1"),
+                command(companion, "area grow halo post --by 1"),
                 command(companion, "area center heart yard"));
         for (ToolRun run : runs) {
             helper.assertTrue(run.succeeded(), "an area command failed: " + run.reply());
@@ -324,7 +374,7 @@ public class AreaGameTests {
         helper.assertTrue(command(companion, "area new lamp").succeeded()
                         && command(companion, "area add lamp --box " + box(inside.offset(-1, -1, -1),
                                 inside.offset(1, 1, 1))).succeeded(), "the lamp area could not be framed");
-        ToolRun scanned = command(companion, "scan blocks 16 minecraft:sea_lantern --in lamp");
+        ToolRun scanned = command(companion, "scan blocks minecraft:sea_lantern --in lamp --radius 16");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(scanned.reply() != null, "the scan has not replied");

@@ -204,7 +204,8 @@ public final class NumenPrompts {
             <examples>
             owner: 去挖10块铁
             → command `gear wear stone_pickaxe`,
-              scan_blocks(iron_ore + deepslate_iron_ore, into iron), work_dig(place iron, 10) … (act)
+              scan_blocks(iron_ore + deepslate_iron_ore, into iron), then move_goto(iron, arrive dig),
+              work_dig(iron), `work collect`, again while `area has iron` … (act)
             → "铁够了,十块都在我这。"
 
             owner: 附近有原木吗
@@ -212,7 +213,7 @@ public final class NumenPrompts {
             → "东南边有片林子,野树不少。你门口那排柱子是你放的,我不碰。"
 
             owner: 用之前那个熔炉烧点铁
-            → command `use block right 120 64 -35` (the furnace from your <memory>), then `use shift` the
+            → command `use block 120 64 -35` (the furnace from your <memory>), then `use shift` the
               iron and the fuel in … (act)
             → "烧上了。"
 

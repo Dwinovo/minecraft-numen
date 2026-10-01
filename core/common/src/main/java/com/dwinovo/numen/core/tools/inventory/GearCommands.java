@@ -24,6 +24,8 @@ public final class GearCommands {
     static final String GROUP = "gear";
     static final String WEAR = "wear";
     static final String REMOVE = "remove";
+    /** 四件甲一起:{@code --slot} 写它,两样都不写也是它。 */
+    private static final String ARMOR = "armor";
 
     private static final Param<ResourceLocation> WEAR_ITEM = Param.required("item", ArgType.id(),
             "The item to put on or hold; it must be in your backpack.");
@@ -34,8 +36,8 @@ public final class GearCommands {
                     + "(swapping out what was there), a shield to the off hand, anything else to the main hand");
     private static final Param<String> REMOVE_SLOT = Param.optional("slot", ArgType.string(),
             "Which slot to empty.")
-            .values("mainhand, offhand, a slot name listed in <worn>, or armor for all four armor pieces")
-            .whenOmitted("go by --item");
+            .values("mainhand, offhand, a slot name listed in <worn>, or " + ARMOR + " for all four armor pieces")
+            .whenOmitted("go by --item; with no --item either, take off all four armor pieces");
     private static final Param<ResourceLocation> REMOVE_ITEM = Param.optional("item", ArgType.id(),
             "Take off the piece you wear that is this item.")
             .whenOmitted("take off whatever --slot holds");
@@ -66,9 +68,11 @@ public final class GearCommands {
                 .seeAlso(line(REMOVE));
         gear.server(REMOVE, "Take gear off back into your backpack.",
                 GearCommands::remove, REMOVE_SLOT, REMOVE_ITEM)
-                .example(line(REMOVE) + " --slot armor")
+                .example(line(REMOVE))
+                .example(line(REMOVE) + " --slot offhand")
                 .example(line(REMOVE) + " --item minecraft:iron_helmet")
-                .note("Give --slot, --item, or both (then only that item in those slots).")
+                .note("Give --slot, --item, or both (then only that item in those slots); neither takes off all "
+                        + "four armor pieces.")
                 .note("A piece that doesn't fit in your backpack, or refuses to come off (curse of binding), "
                         + "stays on and the result says so.")
                 .seeAlso(line(WEAR));
@@ -81,7 +85,8 @@ public final class GearCommands {
 
     private static void remove(ServerSource src, CommandArgs args) {
         ResourceLocation item = args.get(REMOVE_ITEM);
+        String slot = args.get(REMOVE_SLOT) == null && item == null ? ARMOR : args.get(REMOVE_SLOT);
         TaskDispatch.runSync(src.companion(),
-                INVENTORY.remove(src, args.get(REMOVE_SLOT), item == null ? null : item.toString()), src::reply);
+                INVENTORY.remove(src, slot, item == null ? null : item.toString()), src::reply);
     }
 }

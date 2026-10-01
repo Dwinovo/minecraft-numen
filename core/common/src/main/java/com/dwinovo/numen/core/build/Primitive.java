@@ -21,41 +21,42 @@ import java.util.Map;
  * <p>原语只管几何,<b>不管风格</b>。屋顶怎么举架、脊用什么料、墙面怎么做凹凸,是建筑知识,住在 {@code building_design}
  * 技能里;这里只提供"把格子放到哪儿、放成什么状态"。
  *
- * <p>方块的写法和原版 {@code /setblock} 一字不差(状态跟在名字后面),也可以是加权混合({@link BuildPalette});
- * 每一步可以带自己的让路档位({@code --mask})。同一格后写覆盖先写,见 {@link Canvas}。
+ * <p>命令行上,原语操作的格是位置参数(一格、两头、三角、中心;{@code layer} 是那张字符图),方块是 {@code --block}——一条命令只有
+ * 一类位置参数。方块的写法和原版 {@code /setblock} 一字不差(状态跟在名字后面),也可以是加权混合({@link BuildPalette});
+ * 不写 {@code --block} 用的是她主手里那种方块,由执行这一行的一方在画之前填上({@code BuildCommands}),所以记进设计的每一步都写着
+ * 方块。每一步可以带自己的让路档位({@code --mask})。同一格后写覆盖先写,见 {@link Canvas}。
  */
 public enum Primitive {
 
     /** 一格,照写下的方块状态直写。 */
-    SET("set", List.of(Params.BLOCK, Params.X, Params.Y, Params.Z)) {
+    SET("set", List.of(Params.CELL, Params.BLOCK)) {
         @Override
         void paint(CommandArgs args, Canvas canvas) {
-            BlockPos pos = new BlockPos(args.get(Params.X), args.get(Params.Y), args.get(Params.Z));
-            canvas.put(masked(args, cell(args.get(Params.BLOCK), pos)));
+            canvas.put(masked(args, cell(block(args), args.get(Params.CELL))));
         }
     },
 
     /** 一格,像玩家右键那样放下这件东西:朝向随她的视线,模组钩在物品放置上的转换照常发生。 */
-    PLACE("place", List.of(Params.BLOCK, Params.X, Params.Y, Params.Z)) {
+    PLACE("place", List.of(Params.CELL, Params.BLOCK)) {
         @Override
         void paint(CommandArgs args, Canvas canvas) {
-            BlockPos pos = new BlockPos(args.get(Params.X), args.get(Params.Y), args.get(Params.Z));
-            canvas.put(masked(args, cell(args.get(Params.BLOCK), pos).asItemPlace()));
+            canvas.put(masked(args, cell(block(args), args.get(Params.CELL)).asItemPlace()));
         }
     },
 
     /** 两点之间一条线,斜的也行。 */
-    LINE("line", List.of(Params.BLOCK, Params.X1, Params.Y1, Params.Z1, Params.X2, Params.Y2, Params.Z2)) {
+    LINE("line", List.of(Params.FROM, Params.TO, Params.BLOCK)) {
         @Override
         void paint(CommandArgs args, Canvas canvas) {
-            shape(args, canvas, BuildShapes.shapeCells("line", false,
-                    args.get(Params.X1), args.get(Params.Y1), args.get(Params.Z1),
-                    args.get(Params.X2), args.get(Params.Y2), args.get(Params.Z2), null, null));
+            BlockPos a = args.get(Params.FROM);
+            BlockPos b = args.get(Params.TO);
+            shape(args, canvas, BuildShapes.shapeCells("line", false, a.getX(), a.getY(), a.getZ(),
+                    b.getX(), b.getY(), b.getZ(), null, null));
         }
     },
 
     /** 字符网格:图例里每个字符一种方块,铺一层,或从 y 一直铺到 {@code --up_to}。 */
-    LAYER("layer", List.of(Params.X, Params.Y, Params.Z, Params.ROWS, Params.LEGEND, Params.FILL, Params.UP_TO)) {
+    LAYER("layer", List.of(Params.ROWS, Params.AT, Params.LEGEND, Params.FILL, Params.UP_TO)) {
         @Override
         void paint(CommandArgs args, Canvas canvas) {
             Map<Character, BuildPalette> legend = new HashMap<>();
@@ -64,10 +65,14 @@ public enum Primitive {
                 legend.put(entry.key(), entry.block());
             }
             BuildPalette fallback = args.get(Params.FILL);
-            int y = args.get(Params.Y);
+            BlockPos at = args.get(Params.AT);
+            if (at == null) {
+                throw new IllegalArgumentException("layer: --at names the cell the first row starts at");
+            }
+            int y = at.getY();
             Integer upTo = args.get(Params.UP_TO);
-            for (BuildShapes.CharCell c : BuildShapes.layerCells(args.get(Params.X), y, upTo == null ? y : upTo,
-                    args.get(Params.Z), args.get(Params.ROWS))) {
+            for (BuildShapes.CharCell c : BuildShapes.layerCells(at.getX(), y, upTo == null ? y : upTo,
+                    at.getZ(), args.get(Params.ROWS))) {
                 BuildPalette palette = legend.getOrDefault(c.key(), fallback);
                 if (palette == null) {
                     throw new IllegalArgumentException("layer: character '" + c.key()
@@ -79,29 +84,27 @@ public enum Primitive {
     },
 
     /** 底面中心、半径、高度的圆柱。 */
-    CYLINDER("cylinder", List.of(Params.BLOCK, Params.X, Params.Y, Params.Z, Params.RADIUS, Params.HEIGHT,
-            Params.HOLLOW)) {
+    CYLINDER("cylinder", List.of(Params.CENTER, Params.BLOCK, Params.RADIUS, Params.HEIGHT, Params.HOLLOW)) {
         @Override
         void paint(CommandArgs args, Canvas canvas) {
+            BlockPos c = args.get(Params.CENTER);
             shape(args, canvas, BuildShapes.shapeCells("cylinder", Boolean.TRUE.equals(args.get(Params.HOLLOW)),
-                    args.get(Params.X), args.get(Params.Y), args.get(Params.Z), null, null, null,
-                    args.get(Params.RADIUS), args.get(Params.HEIGHT)));
+                    c.getX(), c.getY(), c.getZ(), null, null, null, radius(args), height(args)));
         }
     },
 
     /** 球心、半径的球。 */
-    SPHERE("sphere", List.of(Params.BLOCK, Params.X, Params.Y, Params.Z, Params.RADIUS, Params.HOLLOW)) {
+    SPHERE("sphere", List.of(Params.CENTER, Params.BLOCK, Params.RADIUS, Params.HOLLOW)) {
         @Override
         void paint(CommandArgs args, Canvas canvas) {
+            BlockPos c = args.get(Params.CENTER);
             shape(args, canvas, BuildShapes.shapeCells("sphere", Boolean.TRUE.equals(args.get(Params.HOLLOW)),
-                    args.get(Params.X), args.get(Params.Y), args.get(Params.Z), null, null, null,
-                    args.get(Params.RADIUS), null));
+                    c.getX(), c.getY(), c.getZ(), null, null, null, radius(args), null));
         }
     },
 
     /** 抄一片区域画到别处,可以转、可以镜像。 */
-    COPY("copy", List.of(Params.X1, Params.Y1, Params.Z1, Params.X2, Params.Y2, Params.Z2,
-            Params.X, Params.Y, Params.Z, Params.ROTATION, Params.MIRROR, Params.INCLUDE_AIR)) {
+    COPY("copy", List.of(Params.FROM, Params.TO, Params.DEST, Params.ROTATION, Params.MIRROR, Params.INCLUDE_AIR)) {
         @Override
         void paint(CommandArgs args, Canvas canvas) {
             Mirror mirror = switch (args.get(Params.MIRROR) == null ? "none" : args.get(Params.MIRROR)) {
@@ -109,10 +112,8 @@ public enum Primitive {
                 case "front_back" -> Mirror.FRONT_BACK;
                 default -> Mirror.NONE;
             };
-            BuildCopy.Result copied = BuildCopy.copy(canvas,
-                    new BlockPos(args.get(Params.X1), args.get(Params.Y1), args.get(Params.Z1)),
-                    new BlockPos(args.get(Params.X2), args.get(Params.Y2), args.get(Params.Z2)),
-                    new BlockPos(args.get(Params.X), args.get(Params.Y), args.get(Params.Z)),
+            BuildCopy.Result copied = BuildCopy.copy(canvas, args.get(Params.FROM), args.get(Params.TO),
+                    args.get(Params.DEST),
                     new Placement(BlockPos.ZERO, Placement.quarters(args.get(Params.ROTATION))).rotation(), mirror,
                     Boolean.TRUE.equals(args.get(Params.INCLUDE_AIR)));
             for (BuildTaskRecord.Target target : copied.targets()) {
@@ -157,10 +158,27 @@ public enum Primitive {
     }
 
     private static void shape(CommandArgs args, Canvas canvas, List<BlockPos> cells) {
-        BuildPalette palette = args.get(Params.BLOCK);
+        BuildPalette palette = block(args);
         for (BlockPos pos : cells) {
             canvas.put(masked(args, cell(palette, pos)));
         }
+    }
+
+    /** 这一步的方块:{@code --block};执行这一行的一方在画之前已经按她主手里的填好,还是没有就是这一步没写方块。 */
+    private static BuildPalette block(CommandArgs args) {
+        BuildPalette palette = args.get(Params.BLOCK);
+        if (palette == null) {
+            throw new IllegalArgumentException("this step names no block: write --block, e.g. --block stone_bricks");
+        }
+        return palette;
+    }
+
+    private static int radius(CommandArgs args) {
+        return args.get(Params.RADIUS) == null ? Params.DEFAULT_RADIUS : args.get(Params.RADIUS);
+    }
+
+    private static int height(CommandArgs args) {
+        return args.get(Params.HEIGHT) == null ? 1 : args.get(Params.HEIGHT);
     }
 
     /** 一格:调色板按位置取料,方块状态就是它自己带的那份。 */
@@ -215,29 +233,37 @@ public enum Primitive {
 
         private Params() {}
 
-        public static final Param<BuildPalette> BLOCK = Param.required("block", BuildPalette.ARG,
+        /** {@code --radius} 不写时的半径。 */
+        static final int DEFAULT_RADIUS = 3;
+        /** 不写 {@code --block} 时用什么:回执与帮助里这样说。 */
+        public static final String HELD = "use the block in your main hand";
+
+        public static final Param<BlockPos> CELL = Param.required("cell", ArgType.cell(), "The cell.");
+        public static final Param<BlockPos> FROM = Param.required("from", ArgType.cell(), "The first corner or end.");
+        public static final Param<BlockPos> TO = Param.required("to", ArgType.cell(), "The second corner or end.");
+        public static final Param<BlockPos> DEST = Param.required("dest", ArgType.cell(),
+                "Where the first corner's copy goes.");
+        public static final Param<BlockPos> CENTER = Param.required("center", ArgType.cell(),
+                "The centre: a cylinder's bottom centre, a sphere's middle.");
+        public static final Param<BlockPos> AT = Param.optional("at", ArgType.cell(),
+                        "Where the grid's first character goes: x y z.")
+                .whenOmitted("start at the design's origin 0 0 0 with --into, else at the cell you stand in");
+        public static final Param<BuildPalette> BLOCK = Param.optional("block", BuildPalette.ARG,
                         "The block, written exactly as /setblock takes it, block state included.")
                 .values("an id such as stone_bricks or oak_stairs[facing=north,half=top], or a weighted mix such as "
-                        + "\"stone_bricks*8, mossy_stone_bricks\" (quoted, it has spaces); air clears the cell");
-        public static final Param<Integer> X = Param.required("x", ArgType.integer(), "X of the cell.");
-        public static final Param<Integer> Y = Param.required("y", ArgType.integer(), "Y of the cell.");
-        public static final Param<Integer> Z = Param.required("z", ArgType.integer(), "Z of the cell.");
-        public static final Param<Integer> X1 = Param.required("x1", ArgType.integer(), "X of the first corner.");
-        public static final Param<Integer> Y1 = Param.required("y1", ArgType.integer(), "Y of the first corner.");
-        public static final Param<Integer> Z1 = Param.required("z1", ArgType.integer(), "Z of the first corner.");
-        public static final Param<Integer> X2 = Param.required("x2", ArgType.integer(), "X of the second corner.");
-        public static final Param<Integer> Y2 = Param.required("y2", ArgType.integer(), "Y of the second corner.");
-        public static final Param<Integer> Z2 = Param.required("z2", ArgType.integer(), "Z of the second corner.");
-        public static final Param<Integer> RADIUS = Param.required("radius", ArgType.integer(1, 64),
-                "Radius in blocks.");
-        public static final Param<Integer> HEIGHT = Param.required("height", ArgType.integer(1, 256),
-                "Height in blocks, upward from y.");
+                        + "\"stone_bricks*8, mossy_stone_bricks\" (quoted, it has spaces); air clears the cell")
+                .whenOmitted(HELD);
+        public static final Param<Integer> RADIUS = Param.optional("radius", ArgType.integer(1, 64),
+                "Radius in blocks.").whenOmitted("use " + DEFAULT_RADIUS);
+        public static final Param<Integer> HEIGHT = Param.optional("height", ArgType.integer(1, 256),
+                "Height in blocks, upward from the centre.").whenOmitted("make it one block high, a disc");
         public static final Param<Boolean> HOLLOW = Param.optional("hollow", ArgType.bool(),
                         "Keep only the outer shell.")
                 .whenOmitted("fill it solid");
         public static final Param<List<String>> ROWS = Param.required("rows", ArgType.list(ArgType.string()),
-                        "The grid, one row per value: the first row sits at z and each row runs +x from x, so it "
-                                + "reads like a map with north at the top. ' ' and '.' leave a cell alone.")
+                        "The grid, one row per value: the first row starts at --at and each row runs +x, the next row "
+                                + "one further south, so it reads like a map with north at the top. ' ' and '.' leave a "
+                                + "cell alone.")
                 .values("rows like ##### or #...#; quote a row that has spaces in it");
         public static final Param<List<Legend>> LEGEND = Param.optional("legend", ArgType.list(Legend.ARG),
                         "Which block each character of the grid is.")
@@ -246,9 +272,10 @@ public enum Primitive {
                 .whenOmitted("use --block for every character");
         public static final Param<BuildPalette> FILL = Param.optional("block", BuildPalette.ARG,
                         "The block for every grid character the legend does not name, written as /setblock takes it.")
-                .whenOmitted("require every character to be in the legend");
+                .whenOmitted(HELD + ", if you hold one; otherwise every character must be in the legend");
         public static final Param<Integer> UP_TO = Param.optional("up_to", ArgType.integer(),
-                        "Repeat the same grid on every level from y up to this one: a four-high wall ring is one layer.")
+                        "Repeat the same grid on every level from --at's y up to this one: a four-high wall ring is "
+                                + "one layer.")
                 .whenOmitted("lay the grid on level y only");
         public static final Param<Integer> ROTATION = Param.optional("rotation", ArgType.integer(),
                         "Turn the copy clockwise, in degrees.")
@@ -270,12 +297,20 @@ public enum Primitive {
                 .whenOmitted("carve");
         /**
          * 这一步记进哪份设计。它不是原语的一部分(不在 {@link #params()} 里):设计里的一步不带它,
-         * 写不写它只决定这一行是当场画到世界里还是记进设计。
+         * 写不写它只决定这一行是当场画到世界里还是记进设计({@link #STEP}、{@link #BEFORE} 说记在哪一步)。
          */
         public static final Param<String> INTO = Param.optional("into", ArgType.word(),
-                        "Add this step to the end of a design instead of building it now; the coordinates are then "
-                                + "relative to the design's origin (0,0,0).")
+                        "Add this step to a design instead of building it now; the coordinates are then relative to "
+                                + "the design's origin (0,0,0).")
                 .values("a design name, as build designs lists it")
                 .whenOmitted("build it now, at these world coordinates");
+        /** 和 {@link #INTO} 一起:换掉设计的这一步。 */
+        public static final Param<Integer> STEP = Param.optional("step", ArgType.integer(1, 999),
+                        "With --into: replace this step of the design, as `build show` numbers them.")
+                .whenOmitted("add it after the last step");
+        /** 和 {@link #INTO} 一起:插在这一步前面。 */
+        public static final Param<Integer> BEFORE = Param.optional("before", ArgType.integer(1, 999),
+                        "With --into: insert it before this step; one past the last step appends.")
+                .whenOmitted("add it after the last step");
     }
 }

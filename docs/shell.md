@@ -239,6 +239,21 @@ end
 
 ## 六、落地记录
 
+### 命令层(10-01)
+
+细节与新旧对照表在 `docs/cli.md` 附录 J。
+
+- 十条里的 2、4、5、6、10 写进登记处(`CommandGroup.checkParams`、`Param`、`FlagsArgument`):位置参数只有一类对象,可以不写的
+  参数都写明默认,开关不收值,标志名 `_`/`-` 同一,时长是秒;违反的在登记时抛出,插件同样。
+- 对象写法只在 `ArgType` 一处读(格子、去处、区域、实体、方块与标签);快捷工具的 JSON 走同一个读法。
+- 报错三段 `error:`/`usage:`/`hint:` 由 `Problem.of` 一处拼。
+- `work dig` 只挖手够得着的格、不走不捡;`work collect` 只捡;`--arrive dig` 到了 = `work dig` 站在那儿办得成,同样划算的站位
+  优先够得着最多格的(`Goals.dig(List, …)`);新增 `area parts`、`area has`。`build at`、`fight attack` 标明是工作流。
+- 评测的标准解改成 `move goto … --arrive dig`、`work dig`、`work collect` 组合;挖一块区域的 GameTest 也用同样的组合
+  (`GameTestKit.mine`),待脚本层的 `mine` 内置脚本到位后可换成它。
+
+### 脚本层(10-01)
+
 - **脚本层(10-01)**:组合命令的工具 `ScriptTool`、语言只经 `ScriptEngine`、命令函数由登记处生成
   (`NumenCli.scriptCatalog`/`scriptLine`、`Action.returns`)、派发器逐条派与
   等身体收尾(`SerialCalls` + `ScriptCall`)、上限(`ScriptLimits`)、在命令之间停下(急件、主人开口、`halt` 先收工具口)、

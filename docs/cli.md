@@ -71,7 +71,7 @@ task status                           第 1 层,核心动作
 
 第 1 层命令的形状沿用已落地的约定(附录 A),只是去掉了 `numen` 前缀:
 - 组 → 动作两级;
-- 必填参数按位置写,可选参数写成 `--name value`;
+- 它操作的对象按位置写(一条命令只有一类,可以多个),其余写成 `--name value`,没有必填的标志(附录 J);
 - 帮助是树上的节点,写错时附上那一层的用法,列表分页;
 - 长活的任务名叫"组 动作"。
 
@@ -1337,3 +1337,121 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
   `use transfer` 放进女仆的格子;离太远失败并给 `move goto`;别人的女仆被车万女仆的主人判据拒绝;女仆死亡的急件带墓碑;
   喂食的女仆喂了饿着的她、有 `maid_fed_you`(拿掉 mixin 这一条就红)。
 
+## 附录 J:命令行十条落地(10-01,`shell.md` §二、§三)
+
+### 规矩写在登记处
+
+- 参数是 `Param(名字, 类型, 说明, required, positional, whenOmitted)`:必填的就是位置参数;可以不写的位置参数
+  (`Param.optionalPositional`)只能是最后一个;标志一律可以不写。
+- 登记时查(`CommandGroup.checkParams`,核心与插件同一处,违反就在登记那一刻抛出):名字不重复;**位置参数只有一类对象**
+  (按 `ArgType.noun()` 比,`area minus <result> <from> <areas...>` 三个都是区域);**每个可以不写的参数都写明不写时会怎样**
+  (`whenOmitted`,也就是没有必填的标志);开关不当位置参数;一串值与吃整行的只能在最后。
+- 开关(`ArgType.bool()`)在命令行上写 `--sneak`、`--no-sneak`,写 `--sneak true` 报"是开关、不收值";快捷工具的 JSON 照旧给
+  布尔值。标志名在帮助、回执、重放里一律写短横线,解析时 `_` 与 `-` 是同一个字符(`Param.nameOf` 一处)。
+- 时长一律秒:`task timer --after`、`use … --hold`(收小数,换成刻在处理函数里一处)。
+- 报错三段:`error:` 错在哪、`usage:` 那个动作的用法(带例子)、`hint:` 能照抄的下一步(`Problem.of` 一处拼;第 0 层的原版
+  指令报错也走它)。
+
+### 对象写法只在一处读
+
+`ArgType` 里一份读法,命令只声明自己的对象是哪一类:
+
+| 类 | 写法 | 读法 |
+|---|---|---|
+| `cell` | `120 64 -35` 或 `120,64,-35`;后面接 `..` 的报"一片格子是区域,先框成区域" | `ArgType.cell()` |
+| `place` | 一格 `x y z`、一列 `x z`、一个高度 `y`,或区域 `ores`、`ores/g3` | `ArgType.place()` → `Place` |
+| `area` | `ores`、`ores/g3` | `ArgType.area()` |
+| `entity` | 运行时 id(重放时换成 UUID) | `ArgType.entity()` |
+| `id` / `idOrTag` | `iron_ore`、`minecraft:iron_ore`、`#minecraft:logs` | `ArgType.id()`、`idOrTag()` |
+| `block\|cell\|area` | 路线标志里混写的一串:数字打头是格,`area:` 打头是区域,其余是方块或标签 | `ArgType.blockCellOrArea()` |
+
+快捷工具的 JSON 走同一个读法:`{"place": "120 64 -35"}`、`{"place": ["ores/g3", "120 12 -35"]}`。
+
+### 对照表(普查过 core 与插件的全部命令,只列改了的;没列的本来就合规)
+
+| 旧 | 新 | 为什么 |
+|---|---|---|
+| `fight attack --entity_ids 27 26` | `fight attack 27 26`(不写 = 打附近所有敌对的) | 实体是它操作的东西 |
+| `use block right x y z`、`use block left x y z` | `use block x y z`、`use block x y z --left` | 见下 |
+| `use entity right 812`、`use ahead right` | `use entity 812`、`use ahead`(`--left` 同上) | 同上 |
+| `use … --hold_ticks 30`、`--sneak true` | `--hold 1.5`(秒)、`--sneak` | 秒;开关 |
+| `use sleep --x 1 --y 2 --z 3` | `use sleep --at 1 2 3`(不写 = 手边那张床) | 格子一处读 |
+| `inv drop cobblestone 32`、`inv take diamond 64` | `inv drop cobblestone [--count 32]`(不写 = 身上的全丢)、`inv take diamond [--count 64]`(不写 = 1) | 必填的数量给默认 |
+| `gear remove --slot armor` | `gear remove`(不写 = 盔甲) | 默认 |
+| `work dig ores --count 10`(走过去、挖到包里 10 个) | `work dig ores [120 12 -35 …] [--count 4]`(只挖手够得着的格,`--count` 是格数) | 原子化,见下 |
+| `move goto --x 120 --y 64 --z -35`、`--area farm` | `move goto 120 64 -35`、`move goto 120 -35`、`move goto 16`、`move goto farm` | 去处是它操作的东西 |
+| `move follow --entity_id 184` | `move follow [184]`(不写 = 跟主人) | 同上 |
+| `scan blocks 32 iron_ore`、`scan entities 24 hostile` | `scan blocks iron_ore [--radius 16]`、`scan entities [hostile] [--radius 24]` | 方块、种类是对象;半径给默认 |
+| `scan block x y z` | `scan block x y z`(也收 `x,y,z`) | 格子一处读 |
+| `area add house --box 1,2,3..4,5,6`、`--at 1 2 3` | `area add house [--box 1 2 3 4 5 6 \| --at 1 2 3]`(不写 = 脚下那一格) | 盒子是两格,格子一处读 |
+| `area drop ores g2` | `area drop ores/g2` | 部分就是区域的写法 |
+| `area grow buffer house 2`、`area filter … --blocks`(必填) | `area grow buffer house [--by 1]`、`area filter logs house [--blocks …]`(不写 = 只留扫到的格) | 必填标志给默认 |
+| — | `area parts <区域>`、`area has <区域或部分>` | 新增,给脚本逐个取、按成败判 |
+| `route new r --to …`(必填)、`route via r x y z --at 2`、`route drop r via 2`、`route reverse r --as r_back` | `route new r [--to …]`(不写 = 脚下)、`route via r [--at x y z] [--stop 2]`、`route drop r [--stop 2]`(不写 = 最后一个)、`route reverse r [--as …]`(不写 = `r_back`) | 一类位置参数;必填标志给默认 |
+| `task timer 300 collect the iron` | `task timer "collect the iron" [--after 300]`(不写 = 60 秒) | 秒;理由是对象 |
+| `task stop --task_id tm3` | `task stop --task-id tm3` | 短横线 |
+| `build set stone 1 2 3`、`build line air a b`、`build place chest 1 2 3` | `build set 1 2 3 [--block stone]`(不写 = 手上那块)、`build line a b --block air`、`build place 1 2 3 --block chest` | 格子是对象,方块是选项 |
+| `build layer 0 1 0 ### --up_to 3` | `build layer ### [--at 0 1 0] --up-to 3`(不写 = 设计原点或脚下) | 网格是对象 |
+| `build cylinder stone 5 0 5 3 6 --hollow true`、`build sphere glass 5 8 5 5` | `build cylinder 5 0 5 --radius 3 --height 6 --block stone --hollow`、`build sphere 5 8 5 --radius 5 --block glass` | 中心是对象;半径、高给默认 |
+| `build step house 2 layer …`、`build insert house 3 set …` | `build layer … --into house --step 2`、`build set … --into house --before 3` | 两个动作删掉,改成原语的选项 |
+| `build drop house 4`、`build at house 100 64 -20` | `build drop house/4`、`build at house [--at 100 64 -20]`(不写 = 脚下) | 一类位置参数 |
+| `memory remember name world "…"` | `memory remember "…" [--name …] [--type world]`(不写名字 = `note-N`) | 内容是对象 |
+| `kaleidoscope cook x y z <菜>`、`inspect` 三个数、`--have_only true` | `kaleidoscope cook <菜> [--at x y z]`(不写 = 够得着的最近一口锅)、`kaleidoscope inspect x y z`、`--have-only` | 一类位置参数;开关 |
+| `tlm task 812 <工作>`、`tlm config 812 --home true`、`tlm open 812 backpack` | `tlm task <工作> [--maid 812]`(不写 = 够得着的最近一只自己的)、`tlm config 812 --home --no-pickup`、`tlm open 812 [--tab backpack]` | 同上 |
+
+**`use block` 默认右键、`--left` 是左键**:照命令行的习惯,两个值里有一个是常用的那个时,不写一个必须给值的 `--button`,
+而是让常用的当默认、另一个做开关。右键是"用"这一组的本义(用、放、开),点一格、点一只实体十回里九回是右键;左键(打、挖)
+是例外,所以开关的名字是那个例外。
+
+### 原子化
+
+- `work dig <对象...> [--count N]`:只挖她**站在原地手够得着**的格(判据与 `Goals.dig` 同一个:够得着、身体不占着);挡在前面的
+  天然地形一并挖开,要主人同意的、规则不许的不挖、不替她问,回执说是哪一格、为什么(`DigQuote.walledIn`);点名的目标本身要问
+  就站着等主人。不走动、不捡。够不着的回执里说还剩几格、最近一格在哪、能照抄的 `move goto <对象> --arrive dig`。原来的
+  走动与捡拾(数物品、区外报告、重扫、工作区)删掉;建造清场那一份走动搬到 `build at` 的 `ClearSiteTask`。
+- `work collect` 只捡:工作区(脚下半径 10 格的球)归它。
+- `move goto <对象> --arrive dig`:到了 = `work dig` 站在这儿办得成——挡着视线的按 `work dig` 清遮挡的规格判清不清得掉、
+  目标按它定价的规格判挖不挖得成(`DigTaskRecord.SPEC`、`TARGET_SPEC` 各一处);一块区域里挖不成的格不去,一格都挖不成就
+  当场说最近那一格为什么。同样划算的站位里优先一次够得着最多格的,挖起来贵的格(要问主人的)只在便宜的远出它那份价钱时才去,
+  定价只在 `Goals.dig(List<DigTarget>, …)` 一处。
+- 够不够得着(`Reach`)量到包围盒往里收 `Reach.EDGE` 的那一圈,与瞄准离棱留的边同一个数:原子的 `work dig` 不再走动去找别的
+  站位,`Reach` 说够得着而瞄不着的那一点差距会让它站在原地挖不成。
+- `area parts`、`area has`:见上表;`area has` 按 `DigTaskRecord.wants`(扫来的格 `Cells.Seen.holds`,框来的格立着方块)在活世界里问。
+- `build at`、`fight attack` 在帮助与类说明里标明是工作流(现在的实现里还替她做着决定,按 `shell.md` §三之后拆成原子命令
+  与内置脚本)。
+
+回执样例(坐标是示意;GameTest 断言的就是这些句子):
+
+```
+work dig ores                    受理:3 cell(s) of ores are within my reach where I stand; 5 more cell(s) of ores are out of
+                                 my reach from here, the nearest at 131,12,-30 about 7 blocks away (later: `move goto ores
+                                 --arrive dig`, then `work dig ores`).
+                                 收工:dug 5 cell(s) of spruce_log; 16 more cell(s) of ores are out of my reach from here,
+                                 the nearest at 127,64,94 about 5 blocks away — to dig them: `move goto ores --arrive dig`,
+                                 then `work dig ores`. What I dug dropped on the ground: `work collect` picks it up.
+work dig ores --count 2          dug 2 cell(s) of oak_log (the --count 2 I was given). What I dug dropped on the ground:
+                                 `work collect` picks it up.
+work dig ores(手边一格都没有)   I did not start: none of the cells of ores still to dig is within my reach where I stand;
+                                 2 more cell(s) of ores are out of my reach from here, the nearest at 50,2,50 about 66 blocks
+                                 away — to dig them: `move goto ores --arrive dig`, then `work dig ores`.
+work dig 8 2 5(六面贴着别人放的木板)
+                                 I did not start: every face of pumpkin at 8,2,5 is covered by a block I may not break:
+                                 oak_planks at 7,2,5; oak_planks at 9,2,5; … (changing it needs the owner's consent); no
+                                 stance lets me see it, and those blocks are not mine to get around, so dig something else or
+                                 ask your owner.
+work collect                     collected 3 all items
+move goto ores --arrive dig      standing at 129,-58,90, within reach of a block of area ores — `work dig ores` digs it from
+                                 here, via route goto-aria.
+move goto barn --arrive dig      none of the 2 cell(s) of area barn can be dug; the nearest: pumpkin at 98,-58,93 can't be
+(整块不许挖)                    dug: denied by rule break(area:barn) (is in area barn).
+area parts ores                  ores/g1
+                                 ores/g2
+area has ores/g2                 成功:ores/g2 has 1 cell(s) left to dig, the nearest at 11,2,11.
+                                 失败:ores/g2 has nothing left to dig (2 cell(s), all gone or changed since they were added).
+```
+
+### 留下的
+
+- 存档里旧写法的设计步骤与路线标志(如 `--parkour true`、旧的原语写法)、旧的重放行读不通,要重写一遍。
+- 全是数字的区域名会读成坐标。
+- 路线标志里方块、格子、区域混写一串时区域仍要带 `area:`。

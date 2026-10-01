@@ -79,9 +79,15 @@ public final class RouteOps {
         return saved(her, next, "added stop " + place + " (" + stop.words() + ")");
     }
 
-    /** 删掉第 {@code n} 个途经点。 */
-    public static String drop(NumenPlayer her, String name, int n) {
-        return saved(her, named(her, name).dropVia(n), "dropped stop " + n);
+    /** 删掉第 {@code n} 个途经点;没给就是最后一个(终点前面那一个)。 */
+    public static String drop(NumenPlayer her, String name, Integer n) {
+        Itinerary route = named(her, name);
+        if (n == null && route.legs().size() == 1) {
+            throw new IllegalArgumentException("route " + name + " has no waypoint, only its destination; route delete "
+                    + name + " removes the whole route");
+        }
+        int stop = n == null ? route.legs().size() - 1 : n;
+        return saved(her, route.dropVia(stop), "dropped stop " + stop);
     }
 
     /** 改规格:整条,或第 {@code leg} 段;写了的标志换掉原来的,没写的照旧。 */
@@ -171,11 +177,8 @@ public final class RouteOps {
     }
 
     /** 反着的一条,叫 {@code as}:从这一条的终点回到它上次规划时的起点。 */
-    public static String reverse(NumenPlayer her, String name, String as) {
-        if (as == null) {
-            throw new IllegalArgumentException("route reverse needs --as <name> for the new route, e.g. route reverse "
-                    + name + " --as " + name + "_back");
-        }
+    public static String reverse(NumenPlayer her, String name, String given) {
+        String as = given != null ? given : name + "_back";
         if (routes(her).get(as) != null) {
             return TaskResult.fail("there is already a route named " + as + "; pick another name for --as").toJson();
         }

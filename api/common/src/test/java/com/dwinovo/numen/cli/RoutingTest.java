@@ -76,7 +76,7 @@ class RoutingTest {
     void aLayerOneLineIsNeverHandedToLayerZero() {
         CliFixture.Outcome give = answeredOnClient("give @s minecraft:diamond 2");
         assertFalse(give.success());
-        assertTrue(give.message().startsWith("Unknown command at position 0: "), give.message());
+        assertTrue(give.message().startsWith("error: Unknown command at position 0: "), give.message());
     }
 
     @Test

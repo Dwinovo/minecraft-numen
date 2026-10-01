@@ -13,6 +13,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
+import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
@@ -28,23 +29,34 @@ import java.util.stream.Collectors;
  * 命令行上的值由 Brigadier 的 {@link ArgumentType} 读;快捷工具收到的 JSON 值写成它在命令行上的样子,交给
  * <b>同一个</b> {@link ArgumentType} 读,而且必须整段读完。多数类型的样子就是字面文字;{@link #string()} 在命令行上
  * 靠引号装下空格,JSON 的字符串本身就有边界,所以它的值一律加上引号再读——否则带空格的名字命令行收、JSON 拒。一串值
- * ({@link #list})在 JSON 里是数组,每一项照同样的规矩读。所以同一个值从哪个入口进来,被接受还是被拒、报什么错都一样——
- * 转换只有这一处。这不是把整条命令拼回字符串再解析:每个值各自按自己的类型读,参数名来自 JSON 的键。
+ * ({@link #list})在 JSON 里是数组,每一项照同样的规矩读;一项占几个词的(坐标)把数组的几项接成一行再读,{@code ["120 64 -35"]}
+ * 与 {@code [120, 64, -35]} 是同一格。所以同一个值从哪个入口进来,被接受还是被拒、报什么错都一样——转换只有这一处。
+ *
+ * <h2>对象的写法只在这里读</h2>
+ * 命令操作的对象全仓一种写法,命令只声明它的对象是哪一类:
+ * <ul>
+ *   <li>一格坐标({@link #cell()}):三个整数 {@code 120 64 -35},也收一个词 {@code 120,64,-35};</li>
+ *   <li>一处({@link #place()}):一到三个整数(一格、一列 {@code x z}、一个高度 {@code y}),或主人名下的一块区域;</li>
+ *   <li>区域({@link #area()}):{@code ores} 指整块,{@code ores/g3} 指一部分,规矩在 {@link AreaRef#parse};</li>
+ *   <li>实体({@link #entity()}):{@code scan entities} 列出的运行期编号;</li>
+ *   <li>方块与物品({@link #id()}):资源 id,不写命名空间就是 {@code minecraft:};标签({@link #idOrTag()}):{@code #minecraft:logs}。</li>
+ * </ul>
  *
  * <h2>一个值占多宽</h2>
- * 多数类型是一个值({@link Span#ONE});一串值({@link #list})是空格隔开的几个,读到行尾或下一个标志为止
- * ({@link Span#SEVERAL});余下整行({@link #text})吃掉后面的一切({@link Span#REST})。宽度决定它能放在参数表的哪儿,
+ * 多数类型是一个值({@link Span#ONE},一格坐标也是一个值,只是占三个词);一串值({@link #list})是空格隔开的几个,读到行尾或下一个
+ * 标志为止({@link Span#SEVERAL});余下整行({@link #text})吃掉后面的一切({@link Span#REST})。宽度决定它能放在参数表的哪儿,
  * 这条规矩在 {@link Param} 与 {@link CommandGroup} 登记时查。
+ *
+ * <h2>开关</h2>
+ * {@link #bool()} 只做标志,而且是开关:写 {@code --sneak} 就是开,{@code --no-sneak} 是关,不写值(见 {@link FlagsArgument})。
+ * 快捷工具的 JSON 里照样是 {@code true}/{@code false}。
  *
  * <h2>读出来的是什么</h2>
  * 一个值的写法读通了,内容还可以交给用它的一方去认:{@link #as} 在一种写法上接一个解读(方块状态、图例的一项),认不了就是
  * 这个值写错了,报错指在它的开头。解读只在这里挂一次,命令行、快捷工具、只读不执行的那一棵树读到的都是认过的值。
  *
- * <h2>现有的几种</h2>
- * 按用到的才开:整数(带给模型看的范围,或不设范围的方块坐标)、小数(带范围)、布尔、一个词(编号这类)、
- * 几个固定值之一(或区域)、资源 id(配方、模型)、资源 id 或 {@code #标签}、方块或坐标格或区域、区域、一只实体、一个值(模组给的名字,可能带
- * 空格或非英文,带空格时加引号)、余下整行(自由文字),以及把一种值组合成"一串"的 {@link #list}。要新的,就在这里加一种,
- * schema 与帮助跟着有。
+ * <h2>对象的类别</h2>
+ * 每种类型有一个类别({@link #noun()}):登记时查"一条命令的位置参数只有一类对象"就比它。一串值的类别是它一项的类别。
  */
 public final class ArgType<T> {
 
@@ -61,12 +73,15 @@ public final class ArgType<T> {
     private static final DynamicCommandExceptionType NOT_A_CHOICE = new DynamicCommandExceptionType(
             choices -> new LiteralMessage("expected one of " + choices));
     private static final SimpleCommandExceptionType NO_CELL = new SimpleCommandExceptionType(
-            new LiteralMessage("expected a cell x,y,z in whole numbers"));
-    /** 一格后面还接着东西(多半是想写一个盒子):一片格子只有区域一种写法。 */
+            new LiteralMessage("expected a cell: three whole numbers x y z, or x,y,z"));
+    /** 一格后面接着 {@code ..}(多半是想写一个盒子):一格只是一格,一片格子是区域。 */
     private static final SimpleCommandExceptionType NOT_ONE_CELL = new SimpleCommandExceptionType(
-            new LiteralMessage("a cell is one x,y,z; a box or any other stretch of cells is an area — frame it as one "
-                    + "and write area:<name>"));
-    /** 读成了写法,内容却不成立(方块名认不出、不是本组的命令……):说法由认它的那一方给。 */
+            new LiteralMessage("a cell is one x y z; a box or any other stretch of cells is an area — frame it as one "
+                    + "(area add <name> --box x1 y1 z1 x2 y2 z2) and name the area"));
+    private static final SimpleCommandExceptionType NO_PLACE = new SimpleCommandExceptionType(
+            new LiteralMessage("expected a place: x y z (a cell), x z (a column), y (a height), or an area name like "
+                    + "ores or ores/g3"));
+    /** 读成了写法,内容却不成立(方块名认不出、区域名不合规矩……):说法由认它的那一方给。 */
     private static final DynamicCommandExceptionType REJECTED = new DynamicCommandExceptionType(
             why -> new LiteralMessage(String.valueOf(why)));
     private static final SimpleCommandExceptionType NO_ENTITY = new SimpleCommandExceptionType(
@@ -77,8 +92,12 @@ public final class ArgType<T> {
 
     /** 标签的记号:原版标签文件里引用别的标签就这么写,{@code #minecraft:logs}。 */
     private static final char TAG = '#';
-    /** 坐标格三个数之间的分隔。 */
-    private static final char CELL_SEPARATOR = ',';
+    /** 一格坐标写成一个词时三个数之间的分隔。 */
+    private static final char COMMA = ',';
+    /** 两格之间写 {@code ..} 是想写一段范围:报"一格只是一格"。 */
+    private static final String RANGE = "..";
+    /** 坐标里一个数至多几位:再长就超出整数了。 */
+    private static final int MAX_DIGITS = 9;
 
     /** 一个值在命令行上占多宽:一个值、空格隔开的几个(到行尾或下一个标志为止)、余下整行。 */
     enum Span { ONE, SEVERAL, REST }
@@ -98,41 +117,40 @@ public final class ArgType<T> {
         T read(JsonElement value) throws CommandSyntaxException;
     }
 
-    /** 命令行上的读法;要在某一棵树上才读得了的({@link #command})是 null,由 {@link #inTree} 给。 */
     private final ArgumentType<T> brigadier;
-    /** 在一棵树上的读法:只有 {@link #command} 这种要读本组的另一行命令的类型才有。 */
-    private final Function<GroupLines, ArgumentType<T>> inTree;
     private final String kind;
+    private final String noun;
     private final String hint;
     private final Span span;
     private final Item item;
+    /** 一个值在命令行上占几个词(坐标):一串这样的值从 JSON 读时,数组各项接成一行再读。 */
+    private final boolean words;
+    private final boolean flagSwitch;
     private final SchemaField schema;
     private final FromJson<T> json;
     private final Function<T, String> written;
 
     /**
      * 一个值;JSON 值是一个字面值,文字原样就是它在命令行上的样子,读好的值写回去也就是它的文字
-     * ({@link String#valueOf}:整数、布尔、小数、词、id、固定值之一都是这样)。
+     * ({@link String#valueOf}:整数、小数、词、id、固定值之一都是这样)。
      */
-    private ArgType(ArgumentType<T> brigadier, String kind, String hint, Item item, SchemaField schema) {
-        this(brigadier, kind, hint, Span.ONE, item, schema, literal(brigadier, hint, UnaryOperator.identity()),
-                String::valueOf);
+    private ArgType(ArgumentType<T> brigadier, String kind, String noun, String hint, Item item, SchemaField schema) {
+        this(brigadier, kind, noun, hint, Span.ONE, item, false, false, schema,
+                literal(brigadier, hint, UnaryOperator.identity()), String::valueOf);
     }
 
     /** @param written 读好的值写回命令行上是什么样子,再读一遍得到的是同一个值 */
-    private ArgType(ArgumentType<T> brigadier, String kind, String hint, Span span, Item item, SchemaField schema,
-                    FromJson<T> json, Function<T, String> written) {
-        this(brigadier, null, kind, hint, span, item, schema, json, written);
-    }
-
-    private ArgType(ArgumentType<T> brigadier, Function<GroupLines, ArgumentType<T>> inTree, String kind, String hint,
-                    Span span, Item item, SchemaField schema, FromJson<T> json, Function<T, String> written) {
+    private ArgType(ArgumentType<T> brigadier, String kind, String noun, String hint, Span span, Item item,
+                    boolean words, boolean flagSwitch, SchemaField schema, FromJson<T> json,
+                    Function<T, String> written) {
         this.brigadier = brigadier;
-        this.inTree = inTree;
         this.kind = kind;
+        this.noun = noun;
         this.hint = hint;
         this.span = span;
         this.item = item;
+        this.words = words;
+        this.flagSwitch = flagSwitch;
         this.schema = schema;
         this.json = json;
         this.written = written;
@@ -148,13 +166,49 @@ public final class ArgType<T> {
             if (value == null || !value.isJsonPrimitive()) {
                 throw NOT_A_VALUE.create(hint);
             }
-            StringReader reader = new StringReader(written.apply(value.getAsString()));
-            T parsed = brigadier.parse(reader);
-            if (reader.canRead()) {
-                throw TRAILING.createWithContext(reader, hint);
-            }
-            return parsed;
+            return whole(brigadier, written.apply(value.getAsString()), hint);
         };
+    }
+
+    /** 一段文字整段按 {@code brigadier} 读完;读不完是写错了。 */
+    private static <T> T whole(ArgumentType<T> brigadier, String text, String hint) throws CommandSyntaxException {
+        StringReader reader = new StringReader(text);
+        T parsed = brigadier.parse(reader);
+        if (reader.canRead()) {
+            throw TRAILING.createWithContext(reader, hint);
+        }
+        return parsed;
+    }
+
+    /**
+     * 占几个词的值(坐标)的 JSON:一个字符串就是它在命令行上的样子({@code "120 64 -35"}、{@code "120,64,-35"});一个数组把各项
+     * 接成一行({@code [120, 64, -35]})。都按同一个读法整段读完。
+     */
+    private static <T> FromJson<T> spoken(ArgumentType<T> brigadier, String hint) {
+        return value -> {
+            if (value == null || value.isJsonNull() || value.isJsonObject()) {
+                throw NOT_A_VALUE.create(hint);
+            }
+            return whole(brigadier, joined(value), hint);
+        };
+    }
+
+    /** JSON 值的文字:字面值原样,数组各项空格隔开接成一行。 */
+    private static String joined(JsonElement value) throws CommandSyntaxException {
+        if (value.isJsonPrimitive()) {
+            return value.getAsString();
+        }
+        if (!value.isJsonArray()) {
+            throw NOT_A_VALUE.create("a value");
+        }
+        List<String> parts = new ArrayList<>();
+        for (JsonElement item : value.getAsJsonArray()) {
+            if (!item.isJsonPrimitive()) {
+                throw NOT_A_VALUE.create("a value");
+            }
+            parts.add(item.getAsString());
+        }
+        return String.join(" ", parts);
     }
 
     /**
@@ -163,34 +217,39 @@ public final class ArgType<T> {
      * 和实际定的)——若在这里按 Brigadier 的范围拒掉,处理函数就没机会把话说清楚。
      */
     public static ArgType<Integer> integer(int min, int max) {
-        return new ArgType<>(IntegerArgumentType.integer(), "integer", "integer " + min + "-" + max, Item.INTEGER,
-                (s, name, desc, required) -> {
+        return new ArgType<>(IntegerArgumentType.integer(), "integer", "integer", "integer " + min + "-" + max,
+                Item.INTEGER, (s, name, desc, required) -> {
                     if (required) s.integer(name, desc, min, max);
                     else s.optionalInteger(name, desc, min, max);
                 });
     }
 
-    /** 不设范围的整数:方块坐标这类,哪个值都合法,范围没什么可告诉模型的。 */
+    /** 不设范围的整数:哪个值都合法,范围没什么可告诉模型的。 */
     public static ArgType<Integer> integer() {
-        return new ArgType<>(IntegerArgumentType.integer(), "integer", "integer", Item.INTEGER,
+        return new ArgType<>(IntegerArgumentType.integer(), "integer", "integer", "integer", Item.INTEGER,
                 (s, name, desc, required) -> {
                     if (required) s.integer(name, desc);
                     else s.optionalInteger(name, desc);
                 });
     }
 
-    /** 布尔:{@code true} 或 {@code false}。当标志时也要写值({@code --have_only true})。 */
+    /**
+     * 开关:只做标志,写 {@code --name} 是开、{@code --no-name} 是关,不跟值(见 {@link FlagsArgument})。快捷工具里是 JSON 的
+     * {@code true}/{@code false}。当位置参数在登记时就拒({@link CommandGroup})。
+     */
     public static ArgType<Boolean> bool() {
-        return new ArgType<>(BoolArgumentType.bool(), "boolean", "true or false", Item.NONE,
+        BoolArgumentType read = BoolArgumentType.bool();
+        String hint = "switch: --name turns it on, --no-name off";
+        return new ArgType<>(read, "switch", "switch", hint, Span.ONE, Item.NONE, false, true,
                 (s, name, desc, required) -> {
                     if (required) s.bool(name, desc);
                     else s.optionalBool(name, desc);
-                });
+                }, literal(read, hint, UnaryOperator.identity()), String::valueOf);
     }
 
     /** 一个词:字母、数字与 {@code _-.+},不带空格。编号(t42、tm3)这类。 */
     public static ArgType<String> word() {
-        return new ArgType<>(StringArgumentType.word(), "word", "word", Item.STRING, ArgType::stringField);
+        return new ArgType<>(StringArgumentType.word(), "word", "word", "word", Item.STRING, ArgType::stringField);
     }
 
     /**
@@ -198,8 +257,8 @@ public final class ArgType<T> {
      * 自己的规则({@code a-z0-9_.-} 加路径里的 {@code /}),不另写一份;不写命名空间就是 {@code minecraft:},和原版指令一样。
      */
     public static ArgType<ResourceLocation> id() {
-        return new ArgType<>(ArgType::readId, "id", "id, e.g. minecraft:oak_log", Item.STRING,
-                ArgType::stringField);
+        return new ArgType<>(ArgType::readId, "id", "id", "id, e.g. minecraft:oak_log (minecraft: may be left out)",
+                Item.STRING, ArgType::stringField);
     }
 
     /**
@@ -210,8 +269,8 @@ public final class ArgType<T> {
     public static ArgType<String> string() {
         ArgumentType<String> read = ArgType::readString;
         String hint = "string, quote it if it has spaces";
-        return new ArgType<>(read, "string", hint, Span.ONE, Item.STRING, ArgType::stringField,
-                literal(read, hint, ArgType::quoted), ArgType::quotedIfNeeded);
+        return new ArgType<>(read, "string", "string", hint, Span.ONE, Item.STRING, false, false,
+                ArgType::stringField, literal(read, hint, ArgType::quoted), ArgType::quotedIfNeeded);
     }
 
     /**
@@ -261,13 +320,13 @@ public final class ArgType<T> {
     }
 
     /**
-     * 余下的整行,原样收下(可以带空格,不必加引号)。它吃掉后面的一切,所以只能是动作的最后一个必填参数,
+     * 余下的整行,原样收下(可以带空格,不必加引号)。它吃掉后面的一切,所以只能是动作的最后一个位置参数,
      * 也不能当可选标志——这两条在 {@link Param} 与 {@link CommandGroup} 里登记时就查。
      */
     public static ArgType<String> text() {
         StringArgumentType read = StringArgumentType.greedyString();
         String hint = "text, the rest of the line";
-        return new ArgType<>(read, "text", hint, Span.REST, Item.NONE, ArgType::stringField,
+        return new ArgType<>(read, "text", "text", hint, Span.REST, Item.NONE, false, false, ArgType::stringField,
                 literal(read, hint, UnaryOperator.identity()), UnaryOperator.identity());
     }
 
@@ -276,7 +335,8 @@ public final class ArgType<T> {
      * 是动作自己的语义。
      */
     public static ArgType<Double> number(double min, double max) {
-        return new ArgType<>(DoubleArgumentType.doubleArg(), "number", "number " + plain(min) + "-" + plain(max), Item.NONE,
+        return new ArgType<>(DoubleArgumentType.doubleArg(), "number", "number",
+                "number " + plain(min) + "-" + plain(max), Item.NONE,
                 (s, name, desc, required) -> {
                     if (required) s.number(name, desc, min, max);
                     else s.optionalNumber(name, desc, min, max);
@@ -303,7 +363,7 @@ public final class ArgType<T> {
                 throw NOT_A_CHOICE.createWithContext(reader, listed);
             }
             return value;
-        }, String.join("|", allowed), "one of " + listed, Item.STRING,
+        }, String.join("|", allowed), "choice", "one of " + listed, Item.STRING,
                 (s, name, desc, required) -> {
                     if (required) s.enumStr(name, desc, choices);
                     else s.optionalEnum(name, desc, choices);
@@ -317,7 +377,7 @@ public final class ArgType<T> {
      * 怎么说,是用它的动作的事——同一个 {@code #minecraft:village} 在结构表里是一类、在群系表里查无此类。
      */
     public static ArgType<String> idOrTag() {
-        return new ArgType<>(ArgType::readIdOrTag, "id", "id or #tag, e.g. minecraft:oak_log or #minecraft:logs",
+        return new ArgType<>(ArgType::readIdOrTag, "id", "id", "id or #tag, e.g. minecraft:oak_log or #minecraft:logs",
                 Item.STRING, ArgType::stringField);
     }
 
@@ -343,40 +403,62 @@ public final class ArgType<T> {
     }
 
     /**
-     * 一种方块({@link #idOrTag} 的写法)、一格坐标 {@code x,y,z},或主人名下的一块区域 {@code area:名字}、{@code area:名字/部分}
-     * ({@link AreaRef#MARK} 打头,名字与编号的规矩在 {@link AreaRef#parse} 当场认)。数字或负号打头的是坐标。读出来是写下的原文,
-     * 是方块、坐标还是区域由用它的动作去认。一片地方只有区域一种写法:要一个盒子,先把它框成区域。
+     * 一格坐标:三个整数,空格隔开({@code 120 64 -35})或逗号隔开写成一个词({@code 120,64,-35})。快捷工具里是一个字符串,
+     * 两种写法都收,也收三个数的数组。
      */
-    public static ArgType<String> blockCellOrArea() {
-        return new ArgType<>(ArgType::readBlockCellOrArea, "block|cell|area",
-                "block id, #tag, cell x,y,z or area:<name>", Item.STRING, ArgType::stringField);
+    public static ArgType<BlockPos> cell() {
+        ArgumentType<BlockPos> read = ArgType::readCell;
+        String hint = "cell: x y z, or x,y,z";
+        return new ArgType<>(read, "x y z", "cell", hint, Span.ONE, Item.STRING, true, false, ArgType::stringField,
+                spoken(read, hint), pos -> pos.getX() + " " + pos.getY() + " " + pos.getZ());
     }
 
-    private static String readBlockCellOrArea(StringReader reader) throws CommandSyntaxException {
+    /**
+     * 一处({@link Place}):一到三个整数——三个是一格,两个是一列({@code x z}),一个是一个高度——或主人名下的一块区域
+     * ({@code ores}、{@code ores/g3})。数字或负号打头的是坐标,别的是区域名。
+     */
+    public static ArgType<Place> place() {
+        ArgumentType<Place> read = ArgType::readPlace;
+        String hint = "place: x y z (a cell), x z (a column), y (a height), or an area like ores or ores/g3";
+        return new ArgType<>(read, "place", "place", hint, Span.ONE, Item.STRING, true, false, ArgType::stringField,
+                spoken(read, hint), Place::written);
+    }
+
+    /**
+     * 一种方块({@link #idOrTag} 的写法)、一格坐标,或主人名下的一块区域 {@code area:名字}、{@code area:名字/部分}
+     * ({@link AreaRef#MARK} 打头:和方块写在一串里,区域名要带记号才分得开)。数字或负号打头的是坐标。一片地方只有区域一种写法:
+     * 要一个盒子,先把它框成区域。
+     */
+    public static ArgType<BlockCellOrArea> blockCellOrArea() {
+        ArgumentType<BlockCellOrArea> read = ArgType::readBlockCellOrArea;
+        String hint = "block id, #tag, cell x,y,z or area:<name>";
+        return new ArgType<>(read, "block|cell|area", "block|cell|area", hint, Span.ONE, Item.STRING, true, false,
+                ArgType::stringField, spoken(read, hint), BlockCellOrArea::written);
+    }
+
+    private static BlockCellOrArea readBlockCellOrArea(StringReader reader) throws CommandSyntaxException {
         if (reader.getString().startsWith(AreaRef.MARK, reader.getCursor())) {
-            return readMarkedArea(reader);
+            return new BlockCellOrArea(null, null, readMarkedArea(reader));
         }
-        if (!reader.canRead() || !(Character.isDigit(reader.peek()) || reader.peek() == '-')) {
-            return readIdOrTag(reader);
+        if (startsNumber(reader.getString(), reader.getCursor())) {
+            return new BlockCellOrArea(null, readCell(reader), null);
         }
-        int start = reader.getCursor();
-        readCell(reader);
-        if (reader.canRead() && reader.peek() != ' ') {
-            throw NOT_ONE_CELL.createWithContext(reader);
-        }
-        return reader.getString().substring(start, reader.getCursor());
+        return new BlockCellOrArea(readIdOrTag(reader), null, null);
     }
 
     /**
      * 几个固定值之一({@link #oneOf} 的写法),或主人名下的一块区域 {@code area:名字}、{@code area:名字/部分}:比如路线要避开的
-     * 格子种类与区域写在同一串里({@code --avoid water area:farm})。读出来是写下的原文。
+     * 格子种类与区域写在同一串里({@code --avoid water area:farm})。读出来是写下的原文;区域那一样由用它的一方经
+     * {@link AreaRef#marked} 认,和这里同一个读法。
      */
     public static ArgType<String> oneOfOrArea(String... choices) {
         List<String> allowed = List.of(choices);
         String listed = String.join(", ", allowed) + " or " + AreaRef.MARK + "<name>";
         return new ArgType<>(reader -> {
             if (reader.getString().startsWith(AreaRef.MARK, reader.getCursor())) {
-                return readMarkedArea(reader);
+                int start = reader.getCursor();
+                readMarkedArea(reader);
+                return reader.getString().substring(start, reader.getCursor());
             }
             int start = reader.getCursor();
             String value = reader.readUnquotedString();
@@ -385,7 +467,7 @@ public final class ArgType<T> {
                 throw NOT_A_CHOICE.createWithContext(reader, listed);
             }
             return value;
-        }, String.join("|", allowed) + "|" + AreaRef.MARK + "<name>", "one of " + listed, Item.STRING,
+        }, String.join("|", allowed) + "|" + AreaRef.MARK + "<name>", "choice|area", "one of " + listed, Item.STRING,
                 ArgType::stringField);
     }
 
@@ -396,16 +478,15 @@ public final class ArgType<T> {
     public static ArgType<AreaRef> area() {
         ArgumentType<AreaRef> read = reader -> readAreaRef(reader, reader.getCursor());
         String hint = "area name, or name/part like ores/g3";
-        return new ArgType<>(read, "area", hint, Span.ONE, Item.STRING, ArgType::stringField,
+        return new ArgType<>(read, "area", "area", hint, Span.ONE, Item.STRING, false, false, ArgType::stringField,
                 literal(read, hint, UnaryOperator.identity()), AreaRef::toString);
     }
 
-    /** {@code area:} 打头的一截读到空格为止,名字与编号当场认;读出来是原文。 */
-    private static String readMarkedArea(StringReader reader) throws CommandSyntaxException {
+    /** {@code area:} 打头的一截读到空格为止,名字与编号当场认。 */
+    private static AreaRef readMarkedArea(StringReader reader) throws CommandSyntaxException {
         int start = reader.getCursor();
         reader.setCursor(start + AreaRef.MARK.length());
-        readAreaRef(reader, start);
-        return reader.getString().substring(start, reader.getCursor());
+        return readAreaRef(reader, start);
     }
 
     /** 从当前位置读一个区域名(带不带部分),读到空格为止;认不了的报错指在 {@code start}。 */
@@ -422,23 +503,74 @@ public final class ArgType<T> {
         }
     }
 
-    /** {@code x,y,z}:三个整数,逗号隔开。 */
-    private static void readCell(StringReader reader) throws CommandSyntaxException {
-        readCoordinate(reader);
-        for (int i = 0; i < 2; i++) {
-            if (!reader.canRead() || reader.peek() != CELL_SEPARATOR) {
-                throw NO_CELL.createWithContext(reader);
-            }
-            reader.skip();
-            readCoordinate(reader);
+    private static BlockPos readCell(StringReader reader) throws CommandSyntaxException {
+        int start = reader.getCursor();
+        if (!startsNumber(reader.getString(), start)) {
+            throw NO_CELL.createWithContext(reader);
         }
+        List<Integer> n = readCoordinates(reader, 3);
+        if (n.size() != 3) {
+            reader.setCursor(start);
+            throw NO_CELL.createWithContext(reader);
+        }
+        if (reader.getString().startsWith(RANGE, reader.getCursor())) {
+            throw NOT_ONE_CELL.createWithContext(reader);
+        }
+        return new BlockPos(n.get(0), n.get(1), n.get(2));
+    }
+
+    private static Place readPlace(StringReader reader) throws CommandSyntaxException {
+        int start = reader.getCursor();
+        if (!reader.canRead()) {
+            throw NO_PLACE.createWithContext(reader);
+        }
+        if (!startsNumber(reader.getString(), start)) {
+            return Place.area(readAreaRef(reader, start));
+        }
+        List<Integer> n = readCoordinates(reader, 3);
+        return switch (n.size()) {
+            case 3 -> new Place(n.get(0), n.get(1), n.get(2), null);
+            case 2 -> new Place(n.get(0), null, n.get(1), null);
+            default -> new Place(null, n.get(0), null, null);
+        };
     }
 
     /**
-     * 一个坐标:可带负号的一串数字。只收数字,写成小数或别的字就报"要整数的一格"——不借 Brigadier 的 {@code readInt},
+     * 读一到 {@code max} 个坐标数。第一个数之后的分隔定下写法:逗号就一律逗号({@code 120,64,-35}),空格就一律空格
+     * ({@code 120 64 -35});空格隔开时下一个词不是数就停在它前面——那是下一个值或下一个标志。
+     */
+    private static List<Integer> readCoordinates(StringReader reader, int max) throws CommandSyntaxException {
+        List<Integer> out = new ArrayList<>(max);
+        out.add(readCoordinate(reader));
+        char separator = 0;
+        while (out.size() < max && reader.canRead()) {
+            char c = reader.peek();
+            boolean comma = c == COMMA && separator != ' ';
+            boolean space = c == ' ' && separator != COMMA && startsNumber(reader.getString(), reader.getCursor() + 1);
+            if (!comma && !space) {
+                break;
+            }
+            separator = c;
+            reader.skip();
+            out.add(readCoordinate(reader));
+        }
+        return out;
+    }
+
+    /** {@code text} 在 {@code at} 处是一个数的开头:一位数字,或负号接一位数字。 */
+    private static boolean startsNumber(String text, int at) {
+        if (at >= text.length()) {
+            return false;
+        }
+        char c = text.charAt(at);
+        return Character.isDigit(c) || (c == '-' && at + 1 < text.length() && Character.isDigit(text.charAt(at + 1)));
+    }
+
+    /**
+     * 一个坐标:可带负号的一串数字。只收整数,写成小数或别的字就报"要整数的一格"——不借 Brigadier 的 {@code readInt},
      * 它把 {@code .} 也读进来,报的是另一句。
      */
-    private static void readCoordinate(StringReader reader) throws CommandSyntaxException {
+    private static int readCoordinate(StringReader reader) throws CommandSyntaxException {
         int start = reader.getCursor();
         if (reader.canRead() && reader.peek() == '-') {
             reader.skip();
@@ -447,50 +579,29 @@ public final class ArgType<T> {
         while (reader.canRead() && Character.isDigit(reader.peek())) {
             reader.skip();
         }
-        if (reader.getCursor() == firstDigit) {
+        int digits = reader.getCursor() - firstDigit;
+        boolean decimal = reader.canRead() && reader.peek() == '.'
+                && !reader.getString().startsWith(RANGE, reader.getCursor());
+        if (digits == 0 || digits > MAX_DIGITS || decimal) {
             reader.setCursor(start);
             throw NO_CELL.createWithContext(reader);
         }
-    }
-
-    /**
-     * 余下的整行是本组的另一条命令,不带组名:{@code build step house 2 layer 0 1 0 ###} 里 {@code layer 0 1 0 ###} 这一截。
-     * 它由正在读外面这一行的那棵树读(同一个生成器长出的同一个形状,见 {@code CommandTree}),所以里面那一条和单独执行时
-     * 读得一样完整——每个参数按它自己的类型认,写错了报它自己的错。读出来的是那一条的动作路径与参数
-     * ({@link NumenCli.Reading});只能是必填的位置参数,也不能进快捷工具——JSON 里没有"本组"。
-     */
-    public static ArgType<NumenCli.Reading> command() {
-        String hint = "the rest of the line: one more command of this group, without the group name";
-        return new ArgType<>(null, lines -> reader -> {
-            int start = reader.getCursor();
-            String text = reader.getRemaining();
-            reader.setCursor(reader.getTotalLength());
-            try {
-                return lines.read(text);
-            } catch (CommandSyntaxException wrong) {
-                reader.setCursor(start);
-                throw REJECTED.createWithContext(reader, wrong.getMessage());
-            }
-        }, "command", hint, Span.REST, Item.NONE, ArgType::stringField,
-                value -> {
-                    throw new IllegalStateException("a command inside a command is read on the command line only");
-                },
-                NumenCli::afterGroup);
+        return Integer.parseInt(reader.getString().substring(start, reader.getCursor()));
     }
 
     /**
      * 同一种写法,读通之后交给 {@code parse} 认:认不了抛出的 {@link IllegalArgumentException} 的话就是这个值的报错,
-     * 位置指在它的开头。命令行、快捷工具与在树上读的都经这一处,读出来的都是认过的值。
+     * 位置指在它的开头。命令行、快捷工具都经这一处,读出来的都是认过的值。
      *
-     * @param kind    帮助与标志用法里的称呼
+     * @param kind    帮助与标志用法里的称呼,也是它的对象类别({@link #noun()})
      * @param hint    帮助里的完整称呼
      * @param parse   把这种写法读出的值认成要的东西
      * @param unparse 认好的东西写回这种写法的值:{@code parse} 读回来是同一个
      */
     public <R> ArgType<R> as(String kind, String hint, Function<T, R> parse, Function<R, T> unparse) {
-        Function<ArgumentType<T>, ArgumentType<R>> judged = base -> reader -> {
+        ArgumentType<R> judged = reader -> {
             int start = reader.getCursor();
-            T raw = base.parse(reader);
+            T raw = brigadier.parse(reader);
             try {
                 return parse.apply(raw);
             } catch (IllegalArgumentException wrong) {
@@ -506,9 +617,8 @@ public final class ArgType<T> {
                 throw REJECTED.create(wrong.getMessage());
             }
         };
-        return new ArgType<>(brigadier == null ? null : judged.apply(brigadier),
-                inTree == null ? null : lines -> judged.apply(inTree.apply(lines)),
-                kind, hint, span, item, schema, fromJson, value -> written.apply(unparse.apply(value)));
+        return new ArgType<>(judged, kind, kind, hint, span, item, words, flagSwitch, schema, fromJson,
+                value -> written.apply(unparse.apply(value)));
     }
 
     /**
@@ -518,8 +628,8 @@ public final class ArgType<T> {
     public static ArgType<EntityRef> entity() {
         ArgumentType<EntityRef> read = ArgType::readEntity;
         String hint = "entity id as scan entities lists it";
-        return new ArgType<>(read, "entity", hint, Span.ONE, Item.STRING, ArgType::stringField,
-                literal(read, hint, UnaryOperator.identity()), EntityRef::written);
+        return new ArgType<>(read, "entity", "entity", hint, Span.ONE, Item.STRING, false, false,
+                ArgType::stringField, literal(read, hint, UnaryOperator.identity()), EntityRef::written);
     }
 
     private static EntityRef readEntity(StringReader reader) throws CommandSyntaxException {
@@ -531,7 +641,7 @@ public final class ArgType<T> {
         if (UUID_TEXT.matcher(raw).matches()) {
             return new EntityRef(null, java.util.UUID.fromString(raw));
         }
-        if (!raw.isEmpty() && raw.chars().allMatch(Character::isDigit) && raw.length() <= 9) {
+        if (!raw.isEmpty() && raw.chars().allMatch(Character::isDigit) && raw.length() <= MAX_DIGITS) {
             return EntityRef.id(Integer.parseInt(raw));
         }
         reader.setCursor(start);
@@ -540,16 +650,17 @@ public final class ArgType<T> {
 
     /**
      * 一串同一种的值:命令行上是空格隔开的一个个值({@code iron_ore deepslate_iron_ore}),每个都按 {@code element} 的读法读,
-     * 读到行尾或下一个标志({@code --} 打头)为止,所以它既能是动作的最后一个必填参数,也能是一个标志
-     * ({@code --item_ids iron_ingot raw_iron --area farm});快捷工具里是一个 JSON 数组,每一项按 {@code element}
-     * 读 JSON 值的规矩读。至少一个。一项只能是一个值:整数、词、id、id 或标签、方块或坐标格或区域、区域、一只实体、几个固定值之一(或区域)、一个值。
+     * 读到行尾或下一个标志({@code --} 打头)为止,所以它既能是动作的最后一个位置参数,也能是一个标志
+     * ({@code --item-ids iron_ingot raw_iron --area farm});快捷工具里是一个 JSON 数组,每一项按 {@code element}
+     * 读 JSON 值的规矩读,一项占几个词的(坐标)各项接成一行再读。至少一个。一项只能是一个值:整数、词、id、id 或标签、坐标、一处、
+     * 方块或坐标格或区域、区域、一只实体、几个固定值之一(或区域)、一个值。
      */
     public static <T> ArgType<List<T>> list(ArgType<T> element) {
         if (element.item == Item.NONE) {
             throw new IllegalArgumentException(element.kind + " 不能做一串值里的一项:它不止一个值,或 JSON 数组里没有对应的项");
         }
         String hint = element.hint + "; one or more, separated by spaces";
-        return new ArgType<List<T>>(reader -> {
+        ArgumentType<List<T>> read = reader -> {
             List<T> values = new ArrayList<>();
             values.add(element.read(reader));
             while (reader.canRead()) {
@@ -564,25 +675,28 @@ public final class ArgType<T> {
                 values.add(element.read(reader));
             }
             return List.copyOf(values);
-        }, element.kind + "...", hint, Span.SEVERAL, Item.NONE,
+        };
+        FromJson<List<T>> fromJson = value -> {
+            if (value == null || !value.isJsonArray() || value.getAsJsonArray().isEmpty()) {
+                throw NOT_A_VALUE.create("a list: " + hint);
+            }
+            if (element.words) {
+                return whole(read, joined(value), hint);
+            }
+            List<T> values = new ArrayList<>();
+            for (JsonElement item : value.getAsJsonArray()) {
+                values.add(element.fromJson(item));
+            }
+            return List.copyOf(values);
+        };
+        return new ArgType<>(read, element.kind + "...", element.noun, hint, Span.SEVERAL, Item.NONE, false, false,
                 (s, name, desc, required) -> {
                     boolean integers = element.item == Item.INTEGER;
                     if (required && integers) s.intArray(name, desc, 1, 0);
                     else if (required) s.stringArray(name, desc, 1);
                     else if (integers) s.optionalIntArray(name, desc, 0, 0);
                     else s.optionalStringArray(name, desc);
-                },
-                value -> {
-                    if (value == null || !value.isJsonArray() || value.getAsJsonArray().isEmpty()) {
-                        throw NOT_A_VALUE.create("a list: " + hint);
-                    }
-                    List<T> values = new ArrayList<>();
-                    for (JsonElement item : value.getAsJsonArray()) {
-                        values.add(element.fromJson(item));
-                    }
-                    return List.copyOf(values);
-                },
-                values -> values.stream().map(element::write).collect(Collectors.joining(" ")));
+                }, fromJson, values -> values.stream().map(element::write).collect(Collectors.joining(" ")));
     }
 
     private static void stringField(Schema.Builder s, String name, String desc, boolean required) {
@@ -590,21 +704,13 @@ public final class ArgType<T> {
         else s.optionalString(name, desc);
     }
 
-    /** 在这棵树上的读法:{@code lines} 读本组的另一行命令,只有 {@link #command} 这种类型用得上它。 */
-    ArgumentType<T> brigadierIn(GroupLines lines) {
-        return inTree == null ? brigadier : inTree.apply(lines);
+    /** 命令行上的读法。 */
+    ArgumentType<T> brigadier() {
+        return brigadier;
     }
 
-    /** 这种值要不要在一棵树上才读得了({@link #command}):只能做位置参数,不进快捷工具。 */
-    boolean readsInTree() {
-        return inTree != null;
-    }
-
-    /** 从命令行当前位置读一个值(标志的值经这里)。要在树上读的类型只能做位置参数,不会走到这里。 */
+    /** 从命令行当前位置读一个值(标志的值经这里)。 */
     T read(StringReader reader) throws CommandSyntaxException {
-        if (brigadier == null) {
-            throw new IllegalStateException(kind + " is read in a command tree, as a positional argument");
-        }
         return brigadier.parse(reader);
     }
 
@@ -618,9 +724,14 @@ public final class ArgType<T> {
         return json.read(value);
     }
 
-    /** 类型的名字,比如 {@code integer};标志的用法里写它。 */
+    /** 类型的名字,比如 {@code integer};用法里写它。 */
     String kind() {
         return kind;
+    }
+
+    /** 它的对象类别:登记时比"位置参数是不是只有一类对象"就比它;一串值的类别是它一项的类别。 */
+    String noun() {
+        return noun;
     }
 
     /** 帮助里的完整称呼,比如 {@code integer 1-1200}。 */
@@ -631,6 +742,11 @@ public final class ArgType<T> {
     /** 一个值在命令行上占多宽。 */
     Span span() {
         return span;
+    }
+
+    /** 是开关:只做标志,不跟值。 */
+    boolean isSwitch() {
+        return flagSwitch;
     }
 
     void addTo(Schema.Builder builder, String name, String description, boolean required) {

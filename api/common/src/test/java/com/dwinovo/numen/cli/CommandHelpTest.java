@@ -26,13 +26,15 @@ class CommandHelpTest {
             .whenOmitted("walk");
     static final Param<String> BODY = Param.required("body", ArgType.text(), "What to write.")
             .values("any text; the owner reads it as written");
-    static final Param<Boolean> FAST = Param.optional("fast", ArgType.bool(), "Run.");
+    static final Param<Boolean> FAST = Param.optional("fast", ArgType.bool(), "Run.").whenOmitted("walk");
     static final Param<Boolean> WET = Param.optional("wet", ArgType.bool(), "Wade through water.")
+            .whenOmitted("keep dry")
             .group("path flags");
     static final Param<Boolean> DRY = Param.optional("dry", ArgType.bool(), "Stay out of water.")
             .whenOmitted("wade when it is shorter")
             .group("path flags");
     static final Param<Integer> LATE = Param.optional("late", ArgType.integer(0, 9), "How late may she be.")
+            .whenOmitted("be on time")
             .group("time flags");
 
     @BeforeAll
@@ -51,7 +53,7 @@ class CommandHelpTest {
         door().registerCommands("gt_grouped", "A group whose action takes a batch of flags.", g ->
                 g.server("go", "Go somewhere.", (src, args) -> src.reply(TaskResult.ok("went").toJson()),
                                 X, FAST, WET, DRY, LATE)
-                        .example("gt_grouped go 12 --wet true --late 3"));
+                        .example("gt_grouped go 12 --wet --late 3"));
         door().registerCommands("gt_many", "A group with a long list.", g -> {
             for (int i = 1; i <= 25; i++) {
                 String name = String.format("act%02d", i);
@@ -104,21 +106,21 @@ class CommandHelpTest {
     void aFlagGroupIsOneCellInTheUsageAndListedInFullUnderItsNameInTheActionHelp() {
         assertEquals("""
                 gt_grouped: A group whose action takes a batch of flags. Actions:
-                  gt_grouped go <x> [--fast <boolean>] [path flags] [time flags] — Go somewhere.
+                  gt_grouped go <x> [--fast] [path flags] [time flags] — Go somewhere.
                 gt_grouped <action> --help explains one action.""", onClient("gt_grouped --help").message());
         assertEquals("""
-                gt_grouped go <x> [--fast <boolean>] [path flags] [time flags]
+                gt_grouped go <x> [--fast] [path flags] [time flags]
                   Go somewhere.
                   <x> (integer 0-100) — X coordinate.
-                  --fast <boolean> (true or false; optional) — Run.
+                  --fast (switch: --fast turns it on, --no-fast off; optional) — Run. Omit to walk.
                   Path flags:
-                    --wet <boolean> (true or false; optional) — Wade through water.
-                    --dry <boolean> (true or false; optional) — Stay out of water. Omit to wade when it is shorter.
+                    --wet (switch: --wet turns it on, --no-wet off; optional) — Wade through water. Omit to keep dry.
+                    --dry (switch: --dry turns it on, --no-dry off; optional) — Stay out of water. Omit to wade when it is shorter.
                   Time flags:
-                    --late <integer> (integer 0-9; optional) — How late may she be.
+                    --late <integer> (integer 0-9; optional) — How late may she be. Omit to be on time.
                   Examples:
-                    gt_grouped go 12 --wet true --late 3""", onClient("gt_grouped go --help").message());
-        assertTrue(onServer("gt_grouped go 12 --dry true --fast true --late 1").success(),
+                    gt_grouped go 12 --wet --late 3""", onClient("gt_grouped go --help").message());
+        assertTrue(onServer("gt_grouped go 12 --dry --fast --late 1").success(),
                 "归组只改帮助的排法,标志照样顺序随意地写");
     }
 
@@ -145,8 +147,9 @@ class CommandHelpTest {
     /** 工具名写进了命令行:报错直接指给她两种写法,不倾倒整份组列表。 */
     @Test
     void aToolNameWrittenAsACommandPointsToBothSpellings() {
-        String expected = "gt_help_walk is a tool name, not a command: call the tool gt_help_walk directly, or write "
-                + "the command `gt_help walk` (`gt_help walk --help` shows its arguments).";
+        String expected = "error: gt_help_walk is a tool name, not a command\nusage: gt_help walk <x> [--mode <word>]\n"
+                + "hint: call the tool gt_help_walk directly, or write the command `gt_help walk …` (`gt_help walk "
+                + "--help` shows its arguments).";
         for (CliFixture.Outcome typed : new CliFixture.Outcome[]{onClient("gt_help_walk"),
                 onClient("gt_help_walk 12 --mode sprint"), onServer("gt_help_walk 12")}) {
             assertFalse(typed.success());
@@ -207,6 +210,6 @@ class CommandHelpTest {
 
         CliFixture.Outcome beyond = onClient("gt_many --help --page 9");
         assertFalse(beyond.success());
-        assertTrue(beyond.message().startsWith("no page 9; gt_many --help has pages 1-"), beyond.message());
+        assertTrue(beyond.message().startsWith("error: no page 9; gt_many --help has pages 1-"), beyond.message());
     }
 }

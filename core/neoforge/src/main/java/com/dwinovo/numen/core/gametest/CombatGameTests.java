@@ -91,7 +91,7 @@ public class CombatGameTests {
                         companion.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE), slime.getBbWidth()),
                 "this slime does not outreach her, the scene tests nothing");
         float startHealth = slime.getHealth();
-        TaskRecord record = command(companion, "fight attack --entity_ids " + slime.getId()).task();
+        TaskRecord record = command(companion, "fight attack " + slime.getId()).task();
 
         succeedWhen(helper, () -> {
             helper.assertTrue(record.getResult() == null || !record.getResult().message().contains("internal error"),
@@ -117,7 +117,7 @@ public class CombatGameTests {
         pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);   // 站着别跑,这条测的是她走不走过去,不是追逐
         level.addFreshEntity(pig);
-        TaskRecord record = command(companion, "fight attack --entity_ids " + pig.getId()).task();
+        TaskRecord record = command(companion, "fight attack " + pig.getId()).task();
 
         succeedWhen(helper, () -> {
             helper.assertTrue(pig.isDeadOrDying() && pig.getLastHurtByMob() == companion,
@@ -144,15 +144,15 @@ public class CombatGameTests {
         NumenPlayer companion = com.dwinovo.numen.entity.Companions.summon(server, java.util.UUID.randomUUID(),
                 "gametest_uuid_hunter", level, new net.minecraft.world.phys.Vec3(spawn.getX() + 0.5, spawn.getY(),
                         spawn.getZ() + 0.5));
-        ToolRun nobody = command(companion, "fight attack --entity_ids 999998");
-        ToolRun attack = command(companion, "fight attack --entity_ids " + pig.getId() + " 999999");
+        ToolRun nobody = command(companion, "fight attack 999998");
+        ToolRun attack = command(companion, "fight attack " + pig.getId() + " 999999");
         String recorded = com.dwinovo.numen.entity.CompanionRegistry.get(server).find(companion.getUUID()).taskArgs();
 
         succeedWhen(helper, () -> {
             helper.assertTrue(nobody.done() && !nobody.succeeded() && nobody.outcome().contains("999998"),
                     "naming only missing entities did not fail on the spot: " + nobody.reply());
             helper.assertTrue(attack.task() != null, "the attack was not accepted: " + attack.reply());
-            helper.assertTrue(recorded.contains("--entity_ids " + pig.getUUID() + "\"")
+            helper.assertTrue(recorded.contains("fight attack " + pig.getUUID() + "\"")
                             && !recorded.contains("999999"),
                     "the replay recipe does not name exactly the pig by its UUID: " + recorded);
             com.dwinovo.numen.entity.Companions.dismiss(server, companion);

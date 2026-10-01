@@ -9,7 +9,7 @@ You move items through real GUIs, exactly like a player: open the block, look at
 
 ## The loop
 
-1. **Open** — `use block right 120 64 -35` on the container block (it does not travel: first `move goto --x 120 --y 64 --z -35 --arrive use`, which stands you where the container is in sight and in reach). This opens its GUI and leaves it open.
+1. **Open** — `use block 120 64 -35` on the container block (it does not travel: first `move goto 120 64 -35 --arrive use`, which stands you where the container is in sight and in reach). This opens its GUI and leaves it open.
 2. **Look** — `use gui`. Lists every slot: `index: item xN`, which side (container vs your inventory), and `[output]` for take-only slots (a furnace result, a machine product).
 3. **Move** — one move per line (see below). To move several stacks, send several lines in the same turn; they run in order.
 4. **Verify** — each result already says what happened; `use gui` again only if you need to re-check.
@@ -75,7 +75,7 @@ Smelting is NOT crafting — there's no auto-tool, you load the furnace yourself
   1. `use block` the furnace / blast furnace / smoker.
   2. Load the input: `use shift` the raw item's slot — the menu routes it to the top input slot.
   3. Add fuel: `use shift` the coal's slot — it routes to the bottom fuel slot. **Fuel rule**: 1 coal/charcoal smelts 8 items; a log/plank ~1.5, so add ~⌈N/8⌉ coal.
-  4. `use close`, then set a timer for roughly when the batch should be done, like `task timer 90 collect the iron from the furnace` — a vanilla furnace takes ~10s per item, a blast furnace / smoker ~5s. The timer doesn't occupy your body, so walk away and do something else; don't stand there polling.
+  4. `use close`, then set a timer for roughly when the batch should be done, like `task timer "collect the iron from the furnace" --after 90` — a vanilla furnace takes ~10s per item, a blast furnace / smoker ~5s. The timer doesn't occupy your body, so walk away and do something else; don't stand there polling.
   5. When the `timer` event fires, come back and re-open the furnace. The timer is a reminder, not proof: `use gui` shows the real state (`data values` = `[litTime, litDuration, cookProgress, cookTotal]`). Not done? Set a shorter timer and leave again.
   6. `use shift` the output slot to collect (awards the smelting XP). `use close`.
 
@@ -87,7 +87,7 @@ A custom modded machine has its own slots. For a single input, `use shift` it �
 
 **Store everything of one type into the nearest chest** — open it, find your cobblestone stacks under "your inventory" in `use gui`, shift each one, close:
 ```
-use block right 120 64 -35
+use block 120 64 -35
 use gui
 use shift 30
 use shift 31
@@ -96,7 +96,7 @@ use close
 
 **Take 10 iron from a chest (exact)** — the iron's slot, a free slot of yours:
 ```
-use block right 120 64 -35
+use block 120 64 -35
 use gui
 use transfer 4 45 --count 10
 use close
@@ -112,6 +112,6 @@ Every move's result tells you its outcome, and you can always `use gui` — you 
 - **Chest is full** → `use gui` shows no empty container slots. Find another chest (scan / known_blocks) or take something out first.
 - **Got a swap you didn't want** → `use transfer` put it onto a slot holding a different item. `use shift` instead to route it, or pick an empty slot.
 - **"no GUI open"** → you didn't open one, or walked out of range and it closed. Open it again with `use block`.
-- **"right-clicked tall_grass … the crosshair landed there"** → something stood between you and the container, and the click went to it. The result names the next step: `work dig` that cell, or `move goto --x 120 --y 64 --z -35 --arrive use` to stand where another side is in sight; then `use block` again.
+- **"right-clicked tall_grass … the crosshair landed there"** → something stood between you and the container, and the click went to it. The result names the next step: `work dig` that cell, or `move goto 120 64 -35 --arrive use` to stand where another side is in sight; then `use block` again.
 
 Always `use close` (or walk away) when finished so you don't leave a menu hanging.

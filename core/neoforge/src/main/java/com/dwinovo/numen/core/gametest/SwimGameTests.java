@@ -69,7 +69,7 @@ public class SwimGameTests {
         sealedChannel(helper, 10, 18);
         NumenPlayer companion = spawnAt(helper, "gametest_diver", new BlockPos(7, 2, Z), false);
         BlockPos there = helper.absolutePos(new BlockPos(21, 2, Z));
-        ToolRun walk = call(companion, "move_goto", args("x", there.getX(), "y", there.getY(), "z", there.getZ()));
+        ToolRun walk = call(companion, "move_goto", args("place", xyz(there)));
         float[] lowest = {Float.MAX_VALUE};
         helper.onEachTick(() -> lowest[0] = Math.min(lowest[0], companion.getHealth()));
 
@@ -105,7 +105,7 @@ public class SwimGameTests {
         fill(helper, 28, 2, Z, 28, 2, Z, Blocks.AIR.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_held_diver", new BlockPos(7, 2, Z), false);
         BlockPos there = helper.absolutePos(new BlockPos(33, 2, Z));
-        ToolRun walk = call(companion, "move_goto", args("x", there.getX(), "y", there.getY(), "z", there.getZ()));
+        ToolRun walk = call(companion, "move_goto", args("place", xyz(there)));
         var outbox = com.dwinovo.numen.entity.EventOutbox.get(level.getServer());
         double wallX = helper.absolutePos(new BlockPos(28, 0, Z)).getX() + 0.5;
         boolean[] walled = {false};
@@ -173,7 +173,7 @@ public class SwimGameTests {
         sealedChannel(helper, 8, 36);
         NumenPlayer companion = spawnAt(helper, "gametest_breathless", new BlockPos(5, 2, Z), false);
         BlockPos there = helper.absolutePos(new BlockPos(39, 2, Z));
-        ToolRun walk = call(companion, "move_goto", args("x", there.getX(), "y", there.getY(), "z", there.getZ()));
+        ToolRun walk = call(companion, "move_goto", args("place", xyz(there)));
         boolean[] wet = {false};
         helper.onEachTick(() -> wet[0] |= companion.isInWater());
 

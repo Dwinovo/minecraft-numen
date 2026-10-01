@@ -39,7 +39,7 @@ public class CollectGameTests {
         dropOnFloor(helper, new BlockPos(10, 2, 4), Items.IRON_INGOT, 3);
         dropOnFloor(helper, new BlockPos(4, 2, 11), Items.COBBLESTONE, 4);
         NumenPlayer companion = spawnAt(helper, "gametest_gleaner", new BlockPos(2, 2, 2), false);
-        ToolRun collect = command(companion, "work collect --item_ids minecraft:iron_ingot");
+        ToolRun collect = command(companion, "work collect --item-ids minecraft:iron_ingot");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(collect.done(), "work collect has not finished");
@@ -64,9 +64,9 @@ public class CollectGameTests {
         BlockPos a = helper.absolutePos(new BlockPos(8, 1, 2));
         BlockPos b = helper.absolutePos(new BlockPos(12, 4, 6));
         ToolRun made = command(companion, "area new pen");
-        ToolRun framed = command(companion, "area add pen --box " + a.getX() + "," + a.getY() + "," + a.getZ() + ".."
+        ToolRun framed = command(companion, "area add pen --box " + a.getX() + "," + a.getY() + "," + a.getZ() + " "
                 + b.getX() + "," + b.getY() + "," + b.getZ());
-        ToolRun collect = command(companion, "work collect --item_ids minecraft:iron_ingot --area pen");
+        ToolRun collect = command(companion, "work collect --item-ids minecraft:iron_ingot --area pen");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(made.succeeded() && framed.succeeded(), "the pen was not framed: " + framed.reply());
@@ -106,7 +106,7 @@ public class CollectGameTests {
         dropOnFloor(helper, new BlockPos(9, 2, 4), Items.IRON_INGOT, 3);
         dropOnFloor(helper, new BlockPos(9, 2, 10), Items.IRON_INGOT, 2);
         NumenPlayer companion = spawnAt(helper, "gametest_tallier", new BlockPos(2, 2, 7), false);
-        ToolRun collect = command(companion, "work collect --item_ids minecraft:iron_ingot");
+        ToolRun collect = command(companion, "work collect --item-ids minecraft:iron_ingot");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(collect.done(), "work collect has not finished");
@@ -156,7 +156,7 @@ public class CollectGameTests {
         }
         dropOnFloor(helper, new BlockPos(8, 2, 8), Items.IRON_INGOT, 3);
         NumenPlayer companion = spawnAt(helper, "gametest_spelunker", new BlockPos(3, 4, 3), false);
-        ToolRun collect = command(companion, "work collect --item_ids minecraft:iron_ingot");
+        ToolRun collect = command(companion, "work collect --item-ids minecraft:iron_ingot");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(collect.done(), "work collect has not finished");
@@ -194,7 +194,7 @@ public class CollectGameTests {
         }
         dropOnFloor(helper, new BlockPos(10, 5, 10), Items.IRON_INGOT, 3);
         NumenPlayer companion = spawnAt(helper, "gametest_shortarm", new BlockPos(6, 2, 6), false);
-        ToolRun collect = command(companion, "work collect --item_ids minecraft:iron_ingot");
+        ToolRun collect = command(companion, "work collect --item-ids minecraft:iron_ingot");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(collect.done(), "work collect has not replied");
@@ -225,7 +225,7 @@ public class CollectGameTests {
         drop.setDeltaMovement(Vec3.ZERO);
         drop.setDefaultPickUpDelay();
         helper.getLevel().addFreshEntity(drop);
-        ToolRun collect = command(companion, "work collect --item_ids minecraft:iron_ingot");
+        ToolRun collect = command(companion, "work collect --item-ids minecraft:iron_ingot");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(collect.done(), "work collect has not finished");

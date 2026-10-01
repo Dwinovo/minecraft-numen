@@ -234,7 +234,7 @@ public class RouteGameTests {
         BlockPos end = helper.absolutePos(new BlockPos(2, 2, 13));
         BlockPos waypoint = helper.absolutePos(new BlockPos(13, 2, 7));
         ToolRun made = command(companion, "route new loop --to " + xyz(end));
-        ToolRun via = command(companion, "route via loop " + xyz(waypoint));
+        ToolRun via = command(companion, "route via loop --at " + xyz(waypoint));
         ToolRun walk = command(companion, "move go loop");
         double[] nearest = {Double.MAX_VALUE};
         helper.onEachTick(() -> nearest[0] = Math.min(nearest[0],
@@ -266,7 +266,7 @@ public class RouteGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_twin", startRel, false);
         BlockPos start = helper.absolutePos(startRel);
         BlockPos there = helper.absolutePos(new BlockPos(12, 2, 11));
-        ToolRun shorthand = call(companion, "move_goto", args("x", there.getX(), "y", there.getY(), "z", there.getZ()));
+        ToolRun shorthand = call(companion, "move_goto", args("place", xyz(there)));
         BlockPos[] firstEnd = new BlockPos[1];
         ToolRun[] plan = new ToolRun[1];
         ToolRun[] walk = new ToolRun[1];
@@ -336,7 +336,7 @@ public class RouteGameTests {
         longFloor(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_wanderer2", new BlockPos(2, 1, 12), false);
         BlockPos far = helper.absolutePos(new BlockPos(210, 1, 12));
-        ToolRun walk = call(companion, "move_goto", args("x", far.getX(), "z", far.getZ()));
+        ToolRun walk = call(companion, "move_goto", args("place", far.getX() + " " + far.getZ()));
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "move_goto has not finished");

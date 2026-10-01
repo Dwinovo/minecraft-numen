@@ -120,8 +120,8 @@ public class TaskControlGameTests {
     public static void task_status_names_the_running_task_and_the_timers(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_busy", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(14, 2, 14));
-        ToolRun walk = call(companion, "move_goto", args("x", far.getX(), "y", far.getY(), "z", far.getZ()));
-        ToolRun timer = command(companion, "task timer 600 check the furnace");
+        ToolRun walk = call(companion, "move_goto", args("place", xyz(far)));
+        ToolRun timer = command(companion, "task timer \"check the furnace\" --after 600");
         AtomicReference<ToolRun> status = new AtomicReference<>();
 
         // goto 规划过、受理了才在走:那之后再查
@@ -145,7 +145,7 @@ public class TaskControlGameTests {
     public static void task_stop_without_an_id_stops_the_background_task(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_halted", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(14, 2, 14));
-        ToolRun walk = call(companion, "move_goto", args("x", far.getX(), "y", far.getY(), "z", far.getZ()));
+        ToolRun walk = call(companion, "move_goto", args("place", xyz(far)));
         AtomicReference<ToolRun> stop = new AtomicReference<>();
         EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
@@ -169,7 +169,7 @@ public class TaskControlGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
     public static void task_stop_with_an_unknown_id_changes_nothing(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_confused", new BlockPos(2, 2, 2), false);
-        ToolRun timer = command(companion, "task timer 600 feed the pets");
+        ToolRun timer = command(companion, "task timer \"feed the pets\" --after 600");
         ToolRun stop = command(companion, "task stop --task_id t9999");
         ToolRun status = command(companion, "task status");
 
@@ -186,7 +186,7 @@ public class TaskControlGameTests {
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_tasks")
     public static void set_timer_fires_its_reason_back(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_alarmed", new BlockPos(2, 2, 2), false);
-        ToolRun timer = command(companion, "task timer 1 the bread should be baked");
+        ToolRun timer = command(companion, "task timer \"the bread should be baked\" --after 1");
         EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
         succeedWhen(helper, () -> {
@@ -207,8 +207,8 @@ public class TaskControlGameTests {
     public static void task_status_and_set_timer_are_commands_only(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_twice_asked", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(14, 2, 14));
-        ToolRun walk = call(companion, "move_goto", args("x", far.getX(), "y", far.getY(), "z", far.getZ()));
-        ToolRun timer = command(companion, "task timer 600 turn the compost");
+        ToolRun walk = call(companion, "move_goto", args("place", xyz(far)));
+        ToolRun timer = command(companion, "task timer \"turn the compost\" --after 600");
         AtomicReference<ToolRun> status = new AtomicReference<>();
 
         steps(helper)
@@ -232,7 +232,7 @@ public class TaskControlGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_tasks")
     public static void task_stop_refuses_the_same_from_the_tool_and_the_command(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_twice_refused", new BlockPos(2, 2, 2), false);
-        ToolRun timer = command(companion, "task timer 600 air out the cellar");
+        ToolRun timer = command(companion, "task timer \"air out the cellar\" --after 600");
         ToolRun viaTool = call(companion, "task_stop", args("task_id", "t9999"));
         ToolRun viaCommand = command(companion, "task stop --task_id t9999");
 
@@ -257,7 +257,7 @@ public class TaskControlGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_cmd_timer", new BlockPos(6, 2, 2), false);
         var server = helper.getLevel().getServer();
         long setAt = server.overworld().getGameTime();
-        ToolRun timer = command(companion, "task timer 5000 water the wheat");
+        ToolRun timer = command(companion, "task timer \"water the wheat\" --after 5000");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(timer.succeeded(), "the timer failed: " + timer.reply());
@@ -449,8 +449,8 @@ public class TaskControlGameTests {
         BlockPos second = helper.absolutePos(new BlockPos(2, 2, 4));
         level.setBlockAndUpdate(first, Blocks.STONE.defaultBlockState());
         level.setBlockAndUpdate(second, Blocks.STONE.defaultBlockState());
-        LlmToolCall clearFirst = commandCall("build set air " + xyz(first));
-        LlmToolCall clearSecond = commandCall("build set air " + xyz(second));
+        LlmToolCall clearFirst = commandCall("build set " + xyz(first) + " --block air");
+        LlmToolCall clearSecond = commandCall("build set " + xyz(second) + " --block air");
         Round round = round(helper, companion, clearFirst, clearSecond);
         EventOutbox outbox = EventOutbox.get(level.getServer());
 
@@ -474,7 +474,7 @@ public class TaskControlGameTests {
     public static void a_query_after_a_goto_in_one_round_runs_on_arrival(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_arriver", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
-        LlmToolCall walk = toolCall("move_goto", args("x", far.getX(), "z", far.getZ()));
+        LlmToolCall walk = toolCall("move_goto", args("place", far.getX() + " " + far.getZ()));
         LlmToolCall look = toolCall("status_self", args());
         Round round = round(helper, companion, walk, look);
         EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
@@ -516,7 +516,7 @@ public class TaskControlGameTests {
     public static void the_owner_speaking_while_she_walks_leaves_the_rest_unrun(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_interrupted", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
-        LlmToolCall walk = toolCall("move_goto", args("x", far.getX(), "z", far.getZ()));
+        LlmToolCall walk = toolCall("move_goto", args("place", far.getX() + " " + far.getZ()));
         LlmToolCall look = toolCall("status_self", args());
         LlmToolCall around = toolCall("scan_around", args());
         Round round = round(helper, companion, walk, look, around);
@@ -551,7 +551,7 @@ public class TaskControlGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_changed_mind", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
         BlockPos near = helper.absolutePos(new BlockPos(2, 2, 8));
-        ToolRun walk = call(companion, "move_goto", args("x", far.getX(), "z", far.getZ()));
+        ToolRun walk = call(companion, "move_goto", args("place", far.getX() + " " + far.getZ()));
         AtomicReference<ToolRun> instead = new AtomicReference<>();
         EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
@@ -559,7 +559,7 @@ public class TaskControlGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(walk.accepted(), "the first walk has not been accepted: "
                         + walk.reply()))
                 .thenExecuteAfter(3, () -> instead.set(command(companion,
-                        "move goto --x " + near.getX() + " --z " + near.getZ())))
+                        "move goto " + near.getX() + " " + near.getZ())))
                 .thenWaitUntil(() -> {
                     String reply = instead.get().reply();
                     helper.assertTrue(reply != null, "the second walk has not replied");
@@ -592,7 +592,7 @@ public class TaskControlGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_undeterred", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(2, 2, 14));
         BlockPos shut = helper.absolutePos(new BlockPos(10, 2, 10));
-        ToolRun walk = call(companion, "move_goto", args("x", far.getX(), "y", far.getY(), "z", far.getZ()));
+        ToolRun walk = call(companion, "move_goto", args("place", xyz(far)));
         AtomicReference<ToolRun> follow = new AtomicReference<>();
         AtomicReference<ToolRun> blocked = new AtomicReference<>();
         EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
@@ -614,7 +614,7 @@ public class TaskControlGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(follow.get().accepted(),
                         "following was not accepted: " + follow.get().reply()))
                 .thenExecute(() -> blocked.set(call(companion, "move_goto",
-                        args("x", shut.getX(), "y", shut.getY(), "z", shut.getZ()))))
+                        args("place", xyz(shut)))))
                 .thenWaitUntil(() -> helper.assertTrue(blocked.get().done(), "the blocked walk has not replied"))
                 .thenExecute(() -> {
                     ToolRun refused = blocked.get();
@@ -663,7 +663,8 @@ public class TaskControlGameTests {
                 .thenExecute(() -> {
                     helper.assertTrue(dig.refused(), "a dig with nothing diggable was accepted: " + dig.reply());
                     Constants.LOG.info("[numen-task] work dig refused -> {}", dig.reply());
-                    helper.assertTrue(dig.reply().contains("none of them can be broken here"),
+                    helper.assertTrue(dig.reply().contains("1 cell(s) of " + xyz(bedrock)
+                                    + " within my reach can't be broken here"),
                             "the refusal does not say the block can't be broken: " + dig.reply());
                     helper.assertTrue(CompanionTickDispatcher.currentTaskFor(companion.getUUID()) == null,
                             "the refused dig reached the task slot");

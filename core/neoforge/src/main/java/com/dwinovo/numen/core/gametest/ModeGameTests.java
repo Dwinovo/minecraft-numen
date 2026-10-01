@@ -42,9 +42,7 @@ public class ModeGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_cghost", new BlockPos(2, 2, 2), true);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
         TaskRecord record = call(companion, "move_goto", args(
-                "x", target.getX(),
-                "y", target.getY(),
-                "z", target.getZ())).task();
+                "place", xyz(target))).task();
         succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "creative companion has not reached the goto target");
@@ -68,12 +66,12 @@ public class ModeGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_cminer", new BlockPos(2, 2, 2), true);
 
-        mineScanned(helper, companion, 12, "minecraft:gold_ore", "count", 4);
+        Mining mine = mineScanned(helper, companion, 12, "minecraft:gold_ore", 4);
 
         succeedWhen(helper, () -> {
             for (BlockPos ore : ores) {
                 helper.assertTrue(level.getBlockState(ore).isAir(),
-                        "gold ore not broken at " + ore.toShortString());
+                        "gold ore not broken at " + ore.toShortString() + ": " + mine.outcome());
             }
             helper.assertTrue(companion.getInventory().countItem(Items.RAW_GOLD) == 0
                             && companion.getInventory().countItem(Items.GOLD_ORE.asItem()) == 0,
@@ -160,9 +158,7 @@ public class ModeGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_climber", new BlockPos(3, 2, 3), true);
         BlockPos target = helper.absolutePos(new BlockPos(12, 2, 12));
         TaskRecord record = call(companion, "move_goto", args(
-                "x", target.getX(),
-                "y", target.getY(),
-                "z", target.getZ(),
+                "place", xyz(target),
                 "alter", "natural")).task();
         succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
@@ -200,9 +196,7 @@ public class ModeGameTests {
         com.dwinovo.numen.core.nav.ThrowawayBlocks.store(companion, List.of("minecraft:cobblestone"));
         BlockPos target = helper.absolutePos(new BlockPos(12, 2, 12));
         ToolRun walk = call(companion, "move_goto", args(
-                "x", target.getX(),
-                "y", target.getY(),
-                "z", target.getZ(),
+                "place", xyz(target),
                 "alter", "natural"));
         helper.onEachTick(() -> {
             if (walk.done() && !walk.succeeded()) {
@@ -328,7 +322,7 @@ public class ModeGameTests {
     public static void creative_take_items(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_conjure", new BlockPos(2, 2, 2), true);
-        ToolRun reply = command(companion, "inv take minecraft:diamond 100");
+        ToolRun reply = command(companion, "inv take minecraft:diamond --count 100");
         succeedWhen(helper, () -> {
             helper.assertTrue(reply.reply() != null && reply.reply().contains("\"success\":true"),
                     "inv take should succeed in creative, got: " + reply.reply());
@@ -343,7 +337,7 @@ public class ModeGameTests {
     public static void survival_take_items_refused(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_honest", new BlockPos(2, 2, 2), false);
-        ToolRun reply = command(companion, "inv take minecraft:diamond 10");
+        ToolRun reply = command(companion, "inv take minecraft:diamond --count 10");
         succeedWhen(helper, () -> {
             helper.assertTrue(reply.reply() != null && reply.reply().contains("\"success\":false"),
                     "inv take must refuse in survival, got: " + reply.reply());

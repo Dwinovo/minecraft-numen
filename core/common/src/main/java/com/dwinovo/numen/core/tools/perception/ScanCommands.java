@@ -13,6 +13,8 @@ import com.dwinovo.numen.core.tools.PerceptionOps;
 import com.dwinovo.numen.core.tools.QueryExtraOps;
 import com.dwinovo.numen.core.tools.ScanOps;
 
+import net.minecraft.core.BlockPos;
+
 import java.util.List;
 
 /**
@@ -33,11 +35,17 @@ public final class ScanCommands {
     private static final Param<Integer> VIEW_RADIUS = Param.optional("radius",
             ArgType.integer(LookAround.MIN_RADIUS, LookAround.MAX_RADIUS), "Half-width of the square view in blocks.")
             .whenOmitted("use " + LookAround.DEFAULT_RADIUS);
-    private static final Param<Integer> SEARCH_RADIUS = Param.required("radius",
+    /** 找方块不写半径时搜多远:她"附近"的那一圈,一次搜索与一页结果都不大。 */
+    private static final int DEFAULT_SEARCH_RADIUS = 16;
+    /** 列实体不写半径时看多远。 */
+    private static final int DEFAULT_ENTITY_RADIUS = 24;
+
+    private static final Param<Integer> SEARCH_RADIUS = Param.optional("radius",
             ArgType.integer(1, BlockScan.MAX_RADIUS), "Spherical search radius in blocks (max " + BlockScan.MAX_RADIUS
-                    + ").");
+                    + ").")
+            .whenOmitted("search " + DEFAULT_SEARCH_RADIUS + " blocks around you");
     private static final Param<List<String>> BLOCK_IDS = Param.required("block_ids", ArgType.list(ArgType.idOrTag()),
-            "List of namespaced block ids to search for.");
+            "The block ids or #tags to search for; name every variant.");
     private static final Param<AreaRef> IN = Param.optional("in", ArgType.area(),
             "Only look inside this area, or one part of it (base, ores/g3).")
             .values("an area as `area list` lists it")
@@ -47,14 +55,14 @@ public final class ScanCommands {
                     + "does not exist yet is made.")
             .values("an area name: one of yours, or a new one")
             .whenOmitted("only look: the groups get no ids and nothing is kept");
-    private static final Param<Double> ENTITY_RADIUS = Param.required("radius", ArgType.number(1, 64),
-            "Search radius in blocks.");
-    private static final Param<String> TYPE_FILTER = Param.required("type_filter",
+    private static final Param<Double> ENTITY_RADIUS = Param.optional("radius", ArgType.number(1, 64),
+            "Search radius in blocks.")
+            .whenOmitted("look " + DEFAULT_ENTITY_RADIUS + " blocks around you");
+    private static final Param<String> TYPE_FILTER = Param.optionalPositional("type_filter",
             ArgType.oneOf("hostile", "passive", "player", "all"),
-            "Which entities: hostile = monsters, passive = animals and items, player = players, all = everything.");
-    private static final Param<Integer> X = Param.required("x", ArgType.integer(), "Block X.");
-    private static final Param<Integer> Y = Param.required("y", ArgType.integer(), "Block Y.");
-    private static final Param<Integer> Z = Param.required("z", ArgType.integer(), "Block Z.");
+            "Which entities: hostile = monsters, passive = animals and items, player = players, all = everything.")
+            .whenOmitted("list all of them");
+    private static final Param<BlockPos> CELL = Param.required("cell", ArgType.cell(), "The block's cell.");
 
     private ScanCommands() {}
 
@@ -83,19 +91,19 @@ public final class ScanCommands {
                         + "scan_entities. Optional `radius` (4-16, default 8).");
         scan.server("blocks", "Find blocks of the given types near you, reported as groups of touching blocks; "
                         + "--into keeps them in an area.",
-                        ScanCommands::blocks, SEARCH_RADIUS, BLOCK_IDS, IN, INTO, Listing.PAGE)
-                .example("scan blocks 32 iron_ore deepslate_iron_ore")
-                .example("scan blocks 32 iron_ore deepslate_iron_ore --into ores")
-                .example("scan blocks 16 #minecraft:beds --in base")
-                .example("scan blocks 32 iron_ore deepslate_iron_ore --page 2")
+                        ScanCommands::blocks, BLOCK_IDS, SEARCH_RADIUS, IN, INTO, Listing.PAGE)
+                .example("scan blocks iron_ore deepslate_iron_ore")
+                .example("scan blocks iron_ore deepslate_iron_ore --radius 32 --into ores")
+                .example("scan blocks #minecraft:beds --in base")
+                .example("scan blocks iron_ore deepslate_iron_ore --page 2")
                 .note("Read-only; the reply comes when the search is done. Name every variant you want.")
                 .note("One group per line, nearest first; a long list comes in short pages (a few dozen groups), and "
                         + "each page looks again. With --into the reply lists only the nearest few; `area show` lists "
                         + "them all.")
                 .note("Without --into it only looks: the groups have no ids. With --into ores each group becomes a "
                         + "part of the area ores (made then and there if you have no area ores yet — the result says "
-                        + "so), and its id (ores/g5) is what `work dig` takes as the area to dig, and `area show` too. Adding to an area your owner's rules name asks "
-                        + "your owner first.")
+                        + "so), and its id (ores/g5) is what `work dig`, `move goto ores/g5 --arrive dig` and `area show` take."
+                        + " Adding to an area your owner's rules name asks your owner first.")
                 .note("--in base looks only inside the area base, as far as the radius reaches from you.")
                 .note("Only loaded terrain is read: anything further out is UNKNOWN, not empty.")
                 .seeAlso("area show", "work dig", "scan block")
@@ -105,22 +113,24 @@ public final class ScanCommands {
                         + "line (a JSON object), nearest first; groups_total counts them all when the whole radius was "
                         + "read. A long list comes in pages: pass page to read the next one (each page looks again). "
                         + "Each group gives: cells and a count per block type, the nearest cell with direction and "
-                        + "distance, permission for breaking its cells (allow; ask = work_dig asks the owner first; "
-                        + "deny = work_dig stops) with the reason, sources = source cells for water or lava (a source "
+                        + "distance, permission for breaking its cells (allow; ask = work dig asks the owner first; "
+                        + "deny = work dig does not dig it) with the reason, sources = source cells for water or lava (a source "
                         + "behaves very differently from flowing), and for groups of up to 16 cells every position. A "
                         + "very large group comes back cut along 16-block section lines, one group per piece. "
                         + "into: keep what you found — each group becomes a part of that area (an area you don't have "
                         + "yet is made on the spot), its id is area/part (ores/g5), and it stays across restarts; the "
-                        + "reply then lists only the nearest few. Pass it to work_dig as place to dig exactly those cells, or read it back with `area show ores`. "
+                        + "reply then lists only the nearest few. Name it to dig exactly those cells (`move goto ores/g5 --arrive dig`, "
+                        + "then `work dig ores/g5`), or read it back with `area show ores`. "
                         + "Without into nothing is kept and the groups have no ids. in: look only inside that area "
                         + "(or part), as far as radius reaches. Sees terrain that is loaded right now; anything further "
                         + "out is UNKNOWN, not empty, and note says when that happened — walk that way and scan again. "
-                        + "Give every variant of what you want, e.g. both iron_ore and deepslate_iron_ore.");
+                        + "Give every variant of what you want, e.g. both iron_ore and deepslate_iron_ore. radius defaults to "
+                        + DEFAULT_SEARCH_RADIUS + ".");
         scan.server("entities", "List the entities near you, nearest first, with the ids other actions take.",
-                        ScanCommands::entities, ENTITY_RADIUS, TYPE_FILTER, Listing.PAGE)
-                .example("scan entities 24 hostile")
-                .example("scan entities 12 all")
-                .example("scan entities 64 all --page 2")
+                        ScanCommands::entities, TYPE_FILTER, ENTITY_RADIUS, Listing.PAGE)
+                .example("scan entities hostile")
+                .example("scan entities --radius 12")
+                .example("scan entities all --radius 64 --page 2")
                 .note("Instant and read-only. One entity per line, nearest first; a long list comes in pages, and "
                         + "each page is read fresh, so things that moved may shift between pages.")
                 .note("The ids are runtime ids: they do not survive a restart.")
@@ -131,21 +141,22 @@ public final class ScanCommands {
                         + "players, 'all' for everything. One entity per line (a JSON object); a long list comes in "
                         + "pages — pass page to read the next one. Each entry has id, type, position, distance, hp, and category; a "
                         + "tamed one also has owner: you, your owner, or the other player's name. Pass the returned "
-                        + "runtime ids to `fight attack`; it cannot attack anything outside that set.");
+                        + "runtime ids to `fight attack 184 207` or `use entity 184`. radius defaults to "
+                        + DEFAULT_ENTITY_RADIUS + ", type_filter to all.");
         scan.server("block", "One block: its id and state, hardness, whether your held tool is right, dig time, "
                         + "whether it is in reach.",
-                        ScanCommands::block, X, Y, Z)
+                        ScanCommands::block, CELL)
                 .example("scan block 120 64 -35")
                 .note("Instant and read-only, from any distance.")
                 .seeAlso("scan storage", "scan blocks")
-                .promote("Inspect a single block at the given integer coordinates. Returns block "
+                .promote("Inspect a single block; cell is its coordinates \"x y z\". Returns block "
                         + "id, its block-state properties when any (e.g. an end_portal_frame's has_eye/facing), "
                         + "hardness, whether you have the correct tool in hand, an estimated dig-tick count, "
-                        + "and whether the block is in your 4.5-block mining reach. Call this before work_dig "
+                        + "and whether the block is in your 4.5-block mining reach. Call this before work dig "
                         + "to confirm the operation will succeed, or to check which end_portal_frame cells "
                         + "still need an ender_eye.");
         scan.server("storage", "What a block holds — items, fluid, energy — read without opening it.",
-                        ScanCommands::storage, X, Y, Z, Listing.PAGE)
+                        ScanCommands::storage, CELL, Listing.PAGE)
                 .example("scan storage 120 64 -35")
                 .note("Instant and read-only, from any distance; nothing is opened or moved.")
                 .note("Works on chests, furnaces and most modded machines, tanks and batteries. Storage-network "
@@ -161,21 +172,27 @@ public final class ScanCommands {
 
     /** 搜索按刻分片,回执在搜完的那一刻经回信口送出。 */
     private static void blocks(ServerSource src, CommandArgs args) {
-        ScanOps.scanBlocks(src, args.get(SEARCH_RADIUS), args.get(BLOCK_IDS), args.get(IN), args.get(INTO), args,
-                args.write(GROUP + " blocks", List.of(SEARCH_RADIUS, BLOCK_IDS, IN, INTO)));
+        Integer radius = args.get(SEARCH_RADIUS);
+        ScanOps.scanBlocks(src, radius == null ? DEFAULT_SEARCH_RADIUS : radius, args.get(BLOCK_IDS), args.get(IN),
+                args.get(INTO), args, args.write(GROUP + " blocks", List.of(BLOCK_IDS, SEARCH_RADIUS, IN, INTO)));
     }
 
     private static void entities(ServerSource src, CommandArgs args) {
-        src.reply(QUERY.scanNearbyEntities(args.get(ENTITY_RADIUS), args.get(TYPE_FILTER), src.companion(), args,
-                args.write(GROUP + " entities", List.of(ENTITY_RADIUS, TYPE_FILTER))));
+        Double radius = args.get(ENTITY_RADIUS);
+        String filter = args.get(TYPE_FILTER);
+        src.reply(QUERY.scanNearbyEntities(radius == null ? DEFAULT_ENTITY_RADIUS : radius,
+                filter == null ? "all" : filter, src.companion(), args,
+                args.write(GROUP + " entities", List.of(TYPE_FILTER, ENTITY_RADIUS))));
     }
 
     private static void block(ServerSource src, CommandArgs args) {
-        src.reply(PERCEPTION.inspectBlock(args.get(X), args.get(Y), args.get(Z), src.companion()));
+        BlockPos cell = args.get(CELL);
+        src.reply(PERCEPTION.inspectBlock(cell.getX(), cell.getY(), cell.getZ(), src.companion()));
     }
 
     private static void storage(ServerSource src, CommandArgs args) {
-        src.reply(QUERY.inspectBlockStorage(args.get(X), args.get(Y), args.get(Z), src.companion(), args,
-                args.write(GROUP + " storage", List.of(X, Y, Z))));
+        BlockPos cell = args.get(CELL);
+        src.reply(QUERY.inspectBlockStorage(cell.getX(), cell.getY(), cell.getZ(), src.companion(), args,
+                args.write(GROUP + " storage", List.of(CELL))));
     }
 }

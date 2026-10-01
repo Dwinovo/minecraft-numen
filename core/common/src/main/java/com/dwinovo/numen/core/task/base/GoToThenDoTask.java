@@ -85,12 +85,12 @@ public abstract class GoToThenDoTask<R extends TaskRecord> extends AbstractCompa
                         t.getX() + 0.5, t.getY() + 0.5, t.getZ() + 0.5));
                 // 下一步照抄:有可点轮廓的方块走到看得见它一面的地方,空气与流体走到附近
                 String next = com.dwinovo.numen.core.task.move.GotoReminders.call(t,
-                        com.dwinovo.numen.core.nav.Terrain.of(player).clickable(t) ? "arrive:use" : "arrive:near near:3");
+                        com.dwinovo.numen.core.nav.Terrain.of(player).clickable(t) ? "--arrive use" : "--arrive near");
                 fail("target " + t.getX() + "," + t.getY() + "," + t.getZ() + " is "
                         + String.format("%.1f", dist) + " blocks away — out of working reach, and this action does"
                         + " not travel. " + next + " first, then call this again.", FailureType.OUT_OF_REACH);
             } else {
-                fail("out of working reach and this action does not travel — move_goto the spot"
+                fail("out of working reach and this action does not travel — `move goto` the spot"
                         + " first, then call this again.", FailureType.OUT_OF_REACH);
             }
             return TaskState.FAILED;

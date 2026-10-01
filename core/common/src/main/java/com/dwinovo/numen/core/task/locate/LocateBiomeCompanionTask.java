@@ -237,9 +237,9 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
             String dir = CompassUtil.compass(dx, dz);
             return "nearest " + r.biome + " around " + best.getX() + ","
                     + best.getY() + "," + best.getZ() + " (" + dir + ", ~" + dist
-                    + " blocks; accurate to ~" + SAMPLE_STEP_BLOCKS + "). move_goto the "
+                    + " blocks; accurate to ~" + SAMPLE_STEP_BLOCKS + "). `move goto` the "
                     + "x/z (pick a sensible y for the terrain), then confirm with "
-                    + "scan_blocks or scan_entities.";
+                    + "`scan blocks` or `scan entities`.";
         }
         String dim = player.level().dimension().location().getPath();
         int searched = Math.min(ring, SEARCH_RADIUS_RINGS) * SAMPLE_STEP_BLOCKS;

@@ -51,7 +51,7 @@ public class ArriveGameTests {
     }
 
     private static ToolRun gotoUse(NumenPlayer companion, BlockPos target) {
-        return call(companion, "move_goto", args("x", target.getX(), "y", target.getY(), "z", target.getZ(),
+        return call(companion, "move_goto", args("place", xyz(target),
                 "arrive", "use"));
     }
 
@@ -82,7 +82,7 @@ public class ArriveGameTests {
                     "she is not in the south tunnel facing the furnace: " + walk.outcome() + " at "
                             + feet(helper, companion));
             if (press[0] == null) {
-                press[0] = command(companion, "use block right " + xyz(furnace));
+                press[0] = command(companion, "use block " + xyz(furnace));
             }
             helper.assertTrue(press[0].done(), "use block has not finished");
             helper.assertTrue(press[0].succeeded() && companion.containerMenu instanceof FurnaceMenu,
@@ -153,7 +153,7 @@ public class ArriveGameTests {
     }
 
     /**
-     * 箱子前立着高草:arrive:use 照样走到西面;{@code work dig} 挖掉高草,再 {@code use block right} 打开箱子。右键是纯按键,
+     * 箱子前立着高草:arrive:use 照样走到西面;{@code work dig} 挖掉高草,再 {@code use block} 打开箱子。右键是纯按键,
      * 清视线只归挖掘执行。
      */
     @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
@@ -177,7 +177,7 @@ public class ArriveGameTests {
                             && helper.getLevel().getBlockState(grass.above()).isAir(),
                     "the grass is still there after work dig: " + dig[0].outcome());
             if (press[0] == null) {
-                press[0] = command(companion, "use block right " + xyz(chest));
+                press[0] = command(companion, "use block " + xyz(chest));
             }
             helper.assertTrue(press[0].done(), "use block has not finished");
             helper.assertTrue(press[0].succeeded() && companion.containerMenu instanceof ChestMenu,
@@ -205,14 +205,14 @@ public class ArriveGameTests {
             helper.assertTrue(walk.succeeded(), "goto failed: " + walk.outcome());
             if (press[0] == null) {
                 stood[0] = companion.blockPosition();
-                press[0] = command(companion, "use block right " + xyz(chest));
+                press[0] = command(companion, "use block " + xyz(chest));
             }
             helper.assertTrue(press[0].done(), "use block has not finished");
             String said = press[0].outcome();
             helper.assertTrue(press[0].succeeded() && said.contains("right-clicked tall_grass at")
                             && said.contains("the crosshair landed there, not on " + chest.getX() + "," + chest.getY()
                                     + "," + chest.getZ())
-                            && said.contains("`work dig ") && said.contains("arrive:use"),
+                            && said.contains("`work dig ") && said.contains("--arrive use`"),
                     "the reply does not say the click landed on the grass and what to do next: " + said);
             helper.assertTrue(!(companion.containerMenu instanceof ChestMenu), "the chest opened through the grass");
             helper.assertTrue(helper.getLevel().getBlockState(grass.above()).is(Blocks.TALL_GRASS),
@@ -239,7 +239,7 @@ public class ArriveGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.task() == null && walk.done() && !walk.succeeded(), "it was not refused at once");
             helper.assertTrue(walk.outcome().contains("walled in on every side")
-                            && walk.outcome().contains("use block left"),
+                            && walk.outcome().contains("--arrive dig`, then `work dig "),
                     "the refusal does not say it is sealed and what to dig: " + walk.outcome());
             helper.assertTrue(companion.blockPosition().equals(before), "she moved");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -253,7 +253,7 @@ public class ArriveGameTests {
         set(helper, 7, 2, 8, Blocks.STONE);
         BlockPos top = helper.absolutePos(new BlockPos(8, 3, 8));
         NumenPlayer companion = spawnAt(helper, "gametest_pillar_sitter", new BlockPos(2, 2, 8), false);
-        ToolRun walk = call(companion, "move_goto", args("x", top.getX(), "y", top.getY() + 1, "z", top.getZ()));
+        ToolRun walk = call(companion, "move_goto", args("place", xyz(top.above())));
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
@@ -273,7 +273,7 @@ public class ArriveGameTests {
         }
         BlockPos rung = helper.absolutePos(new BlockPos(8, 4, 8));
         NumenPlayer companion = spawnAt(helper, "gametest_ladder_hanger", new BlockPos(2, 2, 8), false);
-        ToolRun walk = call(companion, "move_goto", args("x", rung.getX(), "y", rung.getY(), "z", rung.getZ()));
+        ToolRun walk = call(companion, "move_goto", args("place", xyz(rung)));
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
@@ -290,7 +290,7 @@ public class ArriveGameTests {
         fill(helper, 7, 2, 7, 10, 3, 10, Blocks.WATER.defaultBlockState());
         BlockPos cell = helper.absolutePos(new BlockPos(8, 3, 8));
         NumenPlayer companion = spawnAt(helper, "gametest_floater", new BlockPos(2, 4, 8), false);
-        ToolRun walk = call(companion, "move_goto", args("x", cell.getX(), "y", cell.getY(), "z", cell.getZ()));
+        ToolRun walk = call(companion, "move_goto", args("place", xyz(cell)));
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
@@ -305,7 +305,7 @@ public class ArriveGameTests {
     public static void near_stops_within_the_distance(GameTestHelper helper) {
         BlockPos spot = helper.absolutePos(new BlockPos(13, 2, 13));
         NumenPlayer companion = spawnAt(helper, "gametest_nearby", new BlockPos(2, 2, 2), false);
-        ToolRun walk = call(companion, "move_goto", args("x", spot.getX(), "y", spot.getY(), "z", spot.getZ(),
+        ToolRun walk = call(companion, "move_goto", args("place", xyz(spot),
                 "arrive", "near", "near", 3));
 
         succeedWhen(helper, () -> {
