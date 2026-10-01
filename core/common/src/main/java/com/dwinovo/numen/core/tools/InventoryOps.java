@@ -46,14 +46,9 @@ public final class InventoryOps {
         return new EquipTaskRecord(source, item, slotName, BuiltInRegistries.ITEM.getKey(item).getPath());
     }
 
-    /** {@code gear remove}:按槽名摘,或按物品从戴着它的格子摘;两个都没给就不知道摘什么。 */
+    /** {@code gear remove}:按槽名摘,或按物品从戴着它的格子摘;两个都不写时摘什么由命令定(盔甲)。 */
     public TaskRecord remove(ServerSource source, String slot, String item_id) {
         String slotName = slotName(slot);
-        if (slotName == null && item_id == null) {
-            throw new IllegalArgumentException("slot is required for gear remove — --slot with a slot name from "
-                    + "<worn>, mainhand, offhand or armor (all four armor pieces) — unless you name "
-                    + "the worn item with --item");
-        }
         Item item = item_id == null ? null : ToolArgs.parseItem(item_id);
         String label = slotName != null ? slotName : BuiltInRegistries.ITEM.getKey(item).getPath();
         return new UnequipTaskRecord(source, slotName, item, label);
