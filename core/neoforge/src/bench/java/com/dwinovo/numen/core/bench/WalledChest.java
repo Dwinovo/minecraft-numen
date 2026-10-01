@@ -93,8 +93,8 @@ public final class WalledChest implements Scenario {
         BlockPos chest = scene.pos(CHEST);
         String cell = chest.getX() + " " + chest.getY() + " " + chest.getZ();
         return List.of(
-                "move goto --x " + chest.getX() + " --y " + chest.getY() + " --z " + chest.getZ() + " --arrive use",
-                "use block right " + cell,
+                "move goto " + cell + " --arrive use",
+                "use block " + cell,
                 "use shift 0",
                 "use close");
     }

@@ -12,8 +12,8 @@ import net.minecraft.world.level.block.Blocks;
 import java.util.List;
 
 /**
- * 挖深处的钻石:整块场地是十四层实心石头,她和主人站在顶上;一块钻石矿埋在她正下方 12 格,包里一把铁镐。钻石在她工作区
- * 以外,得先往下开路到够得着的地方(挖路、垫脚),再挖。成功 = 背包里有钻石且她活着。
+ * 挖深处的钻石:整块场地是十四层实心石头,她和主人站在顶上;一块钻石矿埋在她正下方 12 格,包里一把铁镐。钻石在她手够不着
+ * 的地方,得先往下开路到够得着的地方(挖路、垫脚),再挖、再捡。成功 = 背包里有钻石且她活着。
  */
 public final class DeepDiamond implements Scenario {
 
@@ -95,8 +95,8 @@ public final class DeepDiamond implements Scenario {
         BlockPos ore = scene.pos(ORE);
         String cell = ore.getX() + " " + ore.getY() + " " + ore.getZ();
         return List.of(
-                "move goto --x " + ore.getX() + " --y " + ore.getY() + " --z " + ore.getZ()
-                        + " --arrive dig --alter natural",
-                "work dig " + cell);
+                "move goto " + cell + " --arrive dig --alter natural",
+                "work dig " + cell,
+                "work collect");
     }
 }

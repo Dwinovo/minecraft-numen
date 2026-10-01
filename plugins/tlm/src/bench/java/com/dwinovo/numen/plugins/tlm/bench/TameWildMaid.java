@@ -55,6 +55,6 @@ public final class TameWildMaid implements Scenario {
 
     @Override
     public List<String> solution(Scene scene) {
-        return List.of("use entity right " + maid.getId() + " --item minecraft:cake");
+        return List.of("use entity " + maid.getId() + " --item minecraft:cake");
     }
 }
