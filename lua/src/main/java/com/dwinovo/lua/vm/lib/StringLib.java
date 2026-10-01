@@ -21,16 +21,14 @@
 ******************************************************************************/
 package com.dwinovo.lua.vm.lib;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 
+import com.dwinovo.lua.vm.Allocation;
 import com.dwinovo.lua.vm.Buffer;
-import com.dwinovo.lua.vm.LuaClosure;
 import com.dwinovo.lua.vm.LuaString;
 import com.dwinovo.lua.vm.LuaTable;
 import com.dwinovo.lua.vm.LuaValue;
+import com.dwinovo.lua.vm.ReadOnlyTable;
 import com.dwinovo.lua.vm.Varargs;
-import com.dwinovo.lua.vm.compiler.DumpState;
 
 /**
  * Subclass of {@link LibFunction} which implements the lua standard {@code string}
@@ -82,12 +80,29 @@ public class StringLib extends TwoArgFunction {
 	 * @param env the environment to load into, typically a Globals instance.
 	 */
 	public LuaValue call(LuaValue modname, LuaValue env) {
-		LuaTable string = new LuaTable();
+		env.set("string", SHARED);
+		return SHARED;
+	}
+
+	/**
+	 * Numen:string 库表全 JVM 只有这一份,造好就锁住;字符串的元表 {@code {__index = string}} 也只有一份、锁住。上游每装一次库造
+	 * 一张新表、谁先装谁的表进共享元表,哪个沙箱改了它(改 {@code string.rep}、改 {@code getmetatable("").__index}),别的沙箱
+	 * 跟着变;库里的函数都不带状态,所以共用一份只读的就够。脚本要自己的字符串工具就写成局部函数。
+	 */
+	private static final ReadOnlyTable SHARED = build();
+
+	static {
+		ReadOnlyTable meta = new ReadOnlyTable("the string metatable");
+		meta.rawset(INDEX, SHARED);
+		LuaString.s_metatable = meta.lock();
+	}
+
+	private static ReadOnlyTable build() {
+		ReadOnlyTable string = new ReadOnlyTable("the string library");
 		string.set("byte", new _byte());
 		string.set("char", new _char());
-		string.set("dump", new dump());
 		string.set("find", new find());
-		string.set("format", new format());
+		string.set("format", new StringLib().new format());
 		string.set("gmatch", new gmatch());
 		string.set("gsub", new gsub());
 		string.set("len", new len());
@@ -97,13 +112,7 @@ public class StringLib extends TwoArgFunction {
 		string.set("reverse", new reverse());
 		string.set("sub", new sub());
 		string.set("upper", new upper());
-		
-		env.set("string", string);
-		if (!env.get("package").isnil()) env.get("package").get("loaded").set("string", string);
-		if (LuaString.s_metatable == null) {
-			LuaString.s_metatable = LuaValue.tableOf(new LuaValue[] { INDEX, string });
-		}
-		return string;
+		return string.lock();
 	}
 	
 	/**
@@ -151,6 +160,7 @@ public class StringLib extends TwoArgFunction {
 	static final class _char extends VarArgFunction {
 		public Varargs invoke(Varargs args) {
 			int n = args.narg();
+			Allocation.charge(n);
 			byte[] bytes = new byte[n];
 			for ( int i=0, a=1; i<n; i++, a++ ) {
 				int c = args.checkint(a);
@@ -161,30 +171,6 @@ public class StringLib extends TwoArgFunction {
 		}
 	}
 		
-	/**
-	 * string.dump (function[, stripDebug])
-	 * 
-	 * Returns a string containing a binary representation of the given function,
-	 * so that a later loadstring on this string returns a copy of the function.
-	 * function must be a Lua function without upvalues.
-	 * Boolean param stripDebug - true to strip debugging info, false otherwise.
-	 * The default value for stripDebug is true.
-	 * 
-	 * TODO: port dumping code as optional add-on
-	 */
-	static final class dump extends VarArgFunction {
-		public Varargs invoke(Varargs args) {
-			LuaValue f = args.checkfunction(1);
-			ByteArrayOutputStream baos = new ByteArrayOutputStream();
-			try {
-				DumpState.dump( ((LuaClosure)f).p, baos, args.optboolean(2, true) );
-				return LuaString.valueUsing(baos.toByteArray());
-			} catch (IOException e) {
-				return error( e.getMessage() );
-			}
-		}
-	}
-
 	/**
 	 * string.find (s, pattern [, init [, plain]])
 	 * 
@@ -602,6 +588,8 @@ public class StringLib extends TwoArgFunction {
 			int lastmatch = -1; /* end of last match */
 			LuaValue repl = args.arg( 3 );
 			int max_s = args.optint( 4, srclen + 1 );
+			if ( max_s < 0 )
+				max_s = srclen+1;
 			final boolean anchor = p.length() > 0 && p.charAt( 0 ) == '^';
 			
 			Buffer lbuf = new Buffer( srclen );
@@ -676,7 +664,12 @@ public class StringLib extends TwoArgFunction {
 		public Varargs invoke(Varargs args) {
 			LuaString s = args.checkstring( 1 );
 			int n = args.checkint( 2 );
-			final byte[] bytes = new byte[ s.length() * n ];
+			// Numen:先按 long 算总长、记账,再分配;n<=0 是空串(上游在这里会负数组长或乘法溢出)
+			long total = n <= 0 ? 0 : (long) s.length() * n;
+			if ( total > Integer.MAX_VALUE - 8 )
+				error( "resulting string too large" );
+			Allocation.charge( total );
+			final byte[] bytes = new byte[ (int) total ];
 			int len = s.length();
 			for ( int offset = 0; offset < bytes.length; offset += len ) {
 				s.copyInto( 0, bytes, offset, len );
@@ -694,6 +687,7 @@ public class StringLib extends TwoArgFunction {
 		public LuaValue call(LuaValue arg) {
 			LuaString s = arg.checkstring();
 			int n = s.length();
+			Allocation.charge(n);
 			byte[] b = new byte[n];
 			for ( int i=0, j=n-1; i<n; i++, j-- )
 				b[j] = (byte) s.luaByte(i);

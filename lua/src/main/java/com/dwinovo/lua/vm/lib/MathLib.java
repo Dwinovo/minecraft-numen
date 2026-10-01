@@ -196,9 +196,9 @@ public class MathLib extends TwoArgFunction {
 
 	static class max extends VarArgFunction {
 		public Varargs invoke(Varargs args) {
-			LuaValue m = args.checkvalue(1);
+			LuaValue m = args.checknumber(1);
 			for ( int i=2,n=args.narg(); i<=n; ++i ) {
-				LuaValue v = args.checkvalue(i);
+				LuaValue v = args.checknumber(i);
 				if (m.lt_b(v)) m = v;
 			}
 			return m;
@@ -207,9 +207,9 @@ public class MathLib extends TwoArgFunction {
 	
 	static class min extends VarArgFunction {
 		public Varargs invoke(Varargs args) {
-			LuaValue m = args.checkvalue(1);
+			LuaValue m = args.checknumber(1);
 			for ( int i=2,n=args.narg(); i<=n; ++i ) {
-				LuaValue v = args.checkvalue(i);
+				LuaValue v = args.checknumber(i);
 				if (v.lt_b(m)) m = v;
 			}
 			return m;

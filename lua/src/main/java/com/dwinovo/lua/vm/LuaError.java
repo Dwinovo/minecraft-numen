@@ -60,8 +60,9 @@ public class LuaError extends RuntimeException {
 		String m = super.getMessage();
 		if (m == null)
 			return null;
+		// Numen:和原生 Lua 一样写成 "块名:行号: 消息"(上游少了冒号,行号读不出来)
 		if (fileline != null)
-			return fileline + " " + m;
+			return fileline + ": " + m;
 		return m;
 	}
 

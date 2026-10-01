@@ -68,6 +68,7 @@ public final class Buffer {
 	 * @param initialCapacity the initial capacity
 	 */
 	public Buffer( int initialCapacity ) {
+		Allocation.charge(initialCapacity);
 		bytes = new byte[ initialCapacity ];
 		length = 0;
 		offset = 0;
@@ -224,6 +225,7 @@ public final class Buffer {
 			value = null;
 			length = s.m_length;
 			offset = nbefore;
+			Allocation.charge((long) nbefore + length + nafter);
 			bytes = new byte[nbefore+length+nafter];
 			System.arraycopy(s.m_bytes, s.m_offset, bytes, offset, length);
 		} else if ( offset+length+nafter > bytes.length || offset<nbefore ) {
@@ -239,6 +241,7 @@ public final class Buffer {
 	 */
 	private final void realloc( int newSize, int newOffset ) {
 		if ( newSize != bytes.length ) {
+			Allocation.charge(newSize);
 			byte[] newBytes = new byte[ newSize ];
 			System.arraycopy( bytes, offset, newBytes, newOffset, length );
 			bytes = newBytes;

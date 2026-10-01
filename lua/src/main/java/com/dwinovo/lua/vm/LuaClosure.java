@@ -21,7 +21,6 @@
 ******************************************************************************/
 package com.dwinovo.lua.vm;
 
-import com.dwinovo.lua.vm.lib.DebugLib.CallFrame;
 
 /**
  * Extension of {@link LuaFunction} which executes lua bytecode.
@@ -191,15 +190,12 @@ public class LuaClosure extends LuaFunction {
 		// TODO: use linked list.
 		UpValue[] openups = p.p.length>0? new UpValue[stack.length]: null;
 		
-		// allow for debug hooks
-		if (globals != null && globals.debuglib != null)
-			globals.debuglib.onCall( this, varargs, stack );
 
 		// process instructions
 		try {
 			for (; true; ++pc) {
-				if (globals != null && globals.debuglib != null)
-					globals.debuglib.onInstruction( pc, v, top );
+				if (globals != null && globals.hook != null)
+					globals.hook.onInstruction( p, pc );
 				
 				// pull out instruction
 				i = code[pc];
@@ -521,8 +517,6 @@ public class LuaClosure extends LuaFunction {
 				for ( int u=openups.length; --u>=0; )
 					if ( openups[u] != null )
 						openups[u].close();
-			if (globals != null && globals.debuglib != null)
-				globals.debuglib.onReturn();
 		}
 	}
 
@@ -534,14 +528,13 @@ public class LuaClosure extends LuaFunction {
 		if (globals == null ) return msg;
 		final LuaThread r = globals.running;
 		if (r.errorfunc == null)
-			return globals.debuglib != null?
-					msg + "\n" + globals.debuglib.traceback(level):
-					msg;
+			return msg;
 		final LuaValue e = r.errorfunc;
 		r.errorfunc = null;
 		try {
 			return e.call( LuaValue.valueOf(msg) ).tojstring();
-		} catch ( Throwable t ) {
+		} catch ( Exception t ) {
+			// Numen:只接住错误处理函数自己出的错;宿主的停止(Error)照常往外传
 			return "error in error handling";
 		} finally {
 			r.errorfunc = e;
@@ -549,23 +542,9 @@ public class LuaClosure extends LuaFunction {
 	}
 
 	private void processErrorHooks(LuaError le, Prototype p, int pc) {
-		String file = "?";
-		int line = -1;
-		{
-			CallFrame frame = null;
-			if (globals != null && globals.debuglib != null) {
-				frame = globals.debuglib.getCallFrame(le.level);
-				if (frame != null) {
-					String src = frame.shortsource();
-					file = src != null ? src : "?";
-					line = frame.currentline();
-				}
-			}
-			if (frame == null) {
-				file = p.source != null? p.source.tojstring(): "?";
-				line = p.lineinfo != null && pc >= 0 && pc < p.lineinfo.length ? p.lineinfo[pc] : -1;
-			}
-		}
+		// Numen:和编译期报错一样按 chunkid 写块名("=mine" 写成 mine),运行期与编译期的报错开头一致
+		String file = p.source != null? Lua.chunkid(p.source.tojstring()): "?";
+		int line = p.lineinfo != null && pc >= 0 && pc < p.lineinfo.length ? p.lineinfo[pc] : -1;
 		le.fileline = file + ":" + line;
 		le.traceback = errorHook(le.getMessage(), le.level);
 	}

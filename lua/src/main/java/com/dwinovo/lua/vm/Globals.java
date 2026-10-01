@@ -23,14 +23,9 @@ package com.dwinovo.lua.vm;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PrintStream;
 import java.io.Reader;
 
 import com.dwinovo.lua.vm.lib.BaseLib;
-import com.dwinovo.lua.vm.lib.DebugLib;
-import com.dwinovo.lua.vm.lib.IoLib;
-import com.dwinovo.lua.vm.lib.PackageLib;
-import com.dwinovo.lua.vm.lib.ResourceFinder;
 
 /**
  * Global environment used by luaj.  Contains global variables referenced by executing lua.
@@ -114,29 +109,26 @@ import com.dwinovo.lua.vm.lib.ResourceFinder;
  */
 public class Globals extends LuaTable {
 
-	/** The current default input stream. */
-	public InputStream STDIN  = null;
-
-	/** The current default output stream. */
-	public PrintStream STDOUT = System.out;
-
-	/** The current default error stream. */
-	public PrintStream STDERR = System.err;
-
-	/** The installed ResourceFinder for looking files by name. */
-	public ResourceFinder finder;
-	
 	/** The currently running thread.  Should not be changed by non-library code. */
 	public LuaThread running = new LuaThread(this);
 
 	/** The BaseLib instance loaded into this Globals */
 	public BaseLib baselib;
 	
-	/** The PackageLib instance loaded into this Globals */
-	public PackageLib package_;
-	
-	/** The DebugLib instance loaded into this Globals, or null if debugging is not enabled */
-	public DebugLib debuglib;
+	/**
+	 * Numen:每执行一条指令之前调一次(见 {@link LuaClosure#execute});没装是 null。宿主在这里数指令、查墙钟与打断、
+	 * 记下当前行——取代了上游的调试库挂点,脚本自己碰不到它。
+	 */
+	public Hook hook;
+
+	/** Numen:逐条指令的钩子。 */
+	public interface Hook {
+		/**
+		 * 要执行 {@code p} 的第 {@code pc} 条指令了。抛出的东西照常沿 Lua 调用栈往外传:抛 {@link LuaError} 是一个脚本接得住的
+		 * 错误,抛 {@link Error} 的子类连 pcall 也接不住。
+		 */
+		void onInstruction(Prototype p, int pc);
+	}
 
 	/** Interface for module that converts a Prototype into a LuaFunction with an environment. */
 	public interface Loader {
@@ -150,12 +142,6 @@ public class Globals extends LuaTable {
 		Prototype compile(InputStream stream, String chunkname) throws IOException;
 	}
 
-	/** Interface for module that loads lua binary chunk into a prototype. */
-	public interface Undumper {
-		/** Load the supplied input stream into a prototype. */
-		Prototype undump(InputStream stream, String chunkname) throws IOException;
-	}
-	
 	/** Check that this object is a Globals object, and return it, otherwise throw an error. */
 	public Globals checkglobals() {
 		return this;
@@ -168,23 +154,6 @@ public class Globals extends LuaTable {
 	/** The installed compiler.
 	 * @see Compiler */
 	public Compiler compiler;
-
-	/** The installed undumper.
-	 * @see Undumper */
-	public Undumper undumper;
-
-	/** Convenience function for loading a file that is either binary lua or lua source.
-	 * @param filename Name of the file to load.
-	 * @return LuaValue that can be call()'ed or invoke()'ed.
-	 * @throws LuaError if the file could not be loaded.
-	 */
-	public LuaValue loadfile(String filename) {
-		try {
-			return load(finder.findResource(filename), "@"+filename, "bt", this);
-		} catch (Exception e) {
-			return error("load "+filename+": "+e);
-		}
-	}
 
 	/** Convenience function to load a string value as a script.  Must be lua source.
 	 * @param script Contents of a lua script, such as "print 'hello, world.'"
@@ -268,17 +237,7 @@ public class Globals extends LuaTable {
 	 * @param mode String containing 'b' or 't' or both to control loading as binary or text or either.
 	 */
 	public Prototype loadPrototype(InputStream is, String chunkname, String mode) throws IOException {
-		if (mode.indexOf('b') >= 0) {
-			if (undumper == null)
-				error("No undumper.");
-			if (!is.markSupported())
-				is = new BufferedStream(is);
-			is.mark(4);
-			final Prototype p = undumper.undump(is, chunkname);
-			if (p != null)
-				return p;
-			is.reset();
-		}
+		// Numen:只收源码文本,二进制块不装载(绕过编译器的字节码能做出编译器不会生成的指令)
 		if (mode.indexOf('t') >= 0) {
 			return compilePrototype(is, chunkname);
 		}

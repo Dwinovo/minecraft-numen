@@ -112,7 +112,9 @@ public class LuaString extends LuaValue {
 	 */
 	public static LuaString valueOf(String string) {
 		char[] c = string.toCharArray();
-		byte[] b = new byte[lengthAsUtf8(c)];
+		int n = lengthAsUtf8(c);
+		Allocation.charge(n);
+		byte[] b = new byte[n];
 		encodeToUtf8(c, c.length, b, 0);
 		return valueUsing(b, 0, b.length);
 	}
@@ -143,6 +145,7 @@ public class LuaString extends LuaValue {
 
 	/** Construct a new LuaString using a copy of the bytes array supplied */
 	private static LuaString valueFromCopy(byte[] bytes, int off, int len) {
+		Allocation.charge(len);
 		final byte[] copy = new byte[len];
 		System.arraycopy(bytes, off, copy, 0, len);
 		return new LuaString(copy, 0, len);
@@ -191,6 +194,7 @@ public class LuaString extends LuaValue {
 	 * @return {@link LuaString} wrapping a copy of the byte buffer
 	 */
 	public static LuaString valueOf(char[] bytes, int off, int len) {
+		Allocation.charge(len);
 		byte[] b = new byte[len];
 		for ( int i=0; i<len; i++ )
 			b[i] = (byte) bytes[i + off];
@@ -311,6 +315,7 @@ public class LuaString extends LuaValue {
 	public Buffer   concat(Buffer rhs)        { return rhs.concatTo(this); }
 	public LuaValue concatTo(LuaNumber lhs)   { return concatTo(lhs.strvalue()); }
 	public LuaValue concatTo(LuaString lhs)   {
+		Allocation.charge((long) lhs.m_length + this.m_length);
 		byte[] b = new byte[lhs.m_length+this.m_length];
 		System.arraycopy(lhs.m_bytes, lhs.m_offset, b, 0, lhs.m_length);
 		System.arraycopy(this.m_bytes, this.m_offset, b, lhs.m_length, this.m_length);
