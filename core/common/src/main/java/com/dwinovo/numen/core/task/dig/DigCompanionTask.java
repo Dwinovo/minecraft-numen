@@ -270,7 +270,7 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
 
     /**
      * 挖一刻(挖掘器自己把挖它最快的那件拿到手上);目标碎掉的那一刻记进挖掉的账。{@code BROKE_OCCLUDER}(为拉出射线挖开的那一格)
-     * 不是目标,进实际账,目标留着。连续的 {@code NO_SHOT} 满 {@link #MAX_NO_SHOT_TICKS} 就把那一格记进 {@link #unworkable}。
+     * 本身是点名要挖的就记进挖掉的账,否则进实际账,目标留着。连续的 {@code NO_SHOT} 满 {@link #MAX_NO_SHOT_TICKS} 就把那一格记进 {@link #unworkable}。
      */
     private TaskState digProgress(BlockPos pos) {
         digTarget = pos.immutable();
@@ -303,7 +303,13 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
                 }
             }
             case BROKE_OCCLUDER -> {
-                recordBreak(digger.lastBroken());
+                // 挡在前面的那一格本身也是点名要挖的,就记进挖掉的账;否则进实际账
+                BlockDigger.Broken broken = digger.lastBroken();
+                if (r.wantsAt(broken.pos(), broken.was())) {
+                    dug.add(broken.pos().immutable());
+                } else {
+                    recordBreak(broken);
+                }
                 clearNoShot();
             }
             default -> clearNoShot();

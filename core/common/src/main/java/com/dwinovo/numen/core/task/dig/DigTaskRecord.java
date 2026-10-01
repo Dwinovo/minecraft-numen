@@ -77,9 +77,9 @@ public final class DigTaskRecord extends TaskRecord {
         return !now.isAir() && !(now.getBlock() instanceof LiquidBlock);
     }
 
-    /** 这一格此刻要不要挖(按本件活的格子)。 */
+    /** 这一格此刻要不要挖:是本件活点名的格,而且 {@link #wants}。 */
     public boolean wantsAt(BlockPos pos, BlockState now) {
-        return wants(cells.seenAt(pos), now);
+        return cells.contains(pos) && wants(cells.seenAt(pos), now);
     }
 
     /** 身上有没有能让它掉东西的工具(整个背包,不只快捷栏:她能从包里拿工具挖)。不要求工具的方块总是有。 */
