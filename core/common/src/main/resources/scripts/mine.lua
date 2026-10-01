@@ -14,7 +14,8 @@ while area.has(where) do
   if not dug then
     error("could not dig " .. where .. ": " .. err, 0)
   end
-  -- what was dug lies at your feet: pick it up before walking on (with nothing on the ground work.collect
-  -- fails saying so, which is not a mining failure)
+  -- what was dug lies at your feet: pick up what you can walk to before walking on. work.collect fails when
+  -- nothing lies there or every drop is in a pit it cannot walk into; that is not a mining failure, and the
+  -- receipt's line for it says where they lie
   pcall(work.collect)
 end

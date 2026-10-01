@@ -169,7 +169,7 @@ Script mine stopped at line 15 after 7 commands: could not dig ores: work.dig: 2
 line 8 area.has: 2 calls, none failed; last ok — ores has 2 blocks left
 line 9 move.goto_: 2 calls, none failed; last ok — t41 done: Arrived within reach of ores/g2.
 line 13 work.dig: 2 calls, 1 failed; last failed — t44 failed: 2 blocks are out of reach.
-line 19 work.collect: ok — t45 done: Picked up 9 raw_iron.
+line 20 work.collect: ok — t45 done: Picked up 9 raw_iron.
 ```
 
 ```
@@ -225,8 +225,9 @@ while area.has(where) do
   if not dug then
     error("could not dig " .. where .. ": " .. err, 0)
   end
-  -- what was dug lies at your feet: pick it up before walking on (with nothing on the ground work.collect
-  -- fails saying so, which is not a mining failure)
+  -- what was dug lies at your feet: pick up what you can walk to before walking on. work.collect fails when
+  -- nothing lies there or every drop is in a pit it cannot walk into; that is not a mining failure, and the
+  -- receipt's line for it says where they lie
   pcall(work.collect)
 end
 ```
@@ -268,6 +269,7 @@ end
   `LuaEngineTest`(交出与接着跑、直接返回与抛错、声明的返回项、撞名)、`SerialCallsTest`(顺序、等收尾、分支、开口与急件、
   切断时的回执、按名字跑与嵌套、两种上限)、`ScriptLineTest`、`ScriptStoreTest`、`GateTest`;GameTest:`ScriptGameTests`
   (顺序、按失败分支、主人停止与开口、`for` 走 `area.parts`、`script run mine` 挖空埋在石头里的矿、存读跑删)。
-- 评测:`mine_iron_script` 和 `mine_iron` 同一个场景,标准解是扫进区域后 `script run mine ores`。
+- 评测:`mine_iron_script` 和 `mine_iron` 同一个场景,标准解的挖矿交给 `script run mine ores`;一格高的矿洞里的掉落物
+  `work collect` 走不进去(它不改地形),两份标准解最后都站进挖空的芯再捡。
 - 外接大脑(MCP)直接调工具,没有派发器:组合命令的工具回一条说明,`script run` 只交回正文。要让外接大脑也跑脚本,得把它的调用
   也经派发器、并把收件箱的到达转给它,另做。
