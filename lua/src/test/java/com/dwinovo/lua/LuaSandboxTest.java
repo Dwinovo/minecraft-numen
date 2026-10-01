@@ -79,6 +79,10 @@ class LuaSandboxTest {
         assertEquals(LuaSandbox.Ending.ERROR, o.ending());
         assertEquals(2, o.line());
         assertTrue(o.message().contains("t:2: nope"), o.message());
+        LuaSandbox.Outcome bare = run("local x = 1\nerror('as written', 0)\n");
+        assertEquals(LuaSandbox.Ending.ERROR, bare.ending());
+        assertEquals(2, bare.line());
+        assertEquals("as written", bare.message(), "error(消息, 0) 不带位置");
     }
 
     @Test

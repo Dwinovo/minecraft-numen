@@ -60,8 +60,9 @@ public class LuaError extends RuntimeException {
 		String m = super.getMessage();
 		if (m == null)
 			return null;
-		// Numen:和原生 Lua 一样写成 "块名:行号: 消息"(上游少了冒号,行号读不出来)
-		if (fileline != null)
+		// Numen:和原生 Lua 一样写成 "块名:行号: 消息"(上游少了冒号,行号读不出来);error(消息, 0) 与非字符串的
+		// 错误值不带位置
+		if (fileline != null && level > 0)
 			return fileline + ": " + m;
 		return m;
 	}
@@ -116,7 +117,7 @@ public class LuaError extends RuntimeException {
 	public LuaError(LuaValue message_object) {
 		super( message_object.tojstring() );
 		this.object = message_object;
-		this.level = 1;
+		this.level = 0;
 	}	
 
 
