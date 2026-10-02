@@ -274,4 +274,63 @@ class LuaSandboxTest {
                 () -> LuaSandbox.builder(ROOMY).function("string", "x", args -> null));
         assertTrue(LuaSandbox.KEYWORDS.contains("goto"));
     }
+
+    @Test
+    void aScriptReturnsItsFirstValue() throws InterruptedException {
+        assertEquals(Map.of("dug", 3L, "left", List.of("ores/g2")),
+                run("return {dug = 3, left = {\"ores/g2\"}}, \"ignored\"").value());
+        assertNull(run("local x = 1").value());
+        assertTrue(String.valueOf(run("return print").value()).startsWith("function"));
+        assertNull(run("error(\"no\")").value());
+    }
+
+    @Test
+    void librariesRunFirstAndTheirCallsCountAgainstTheScriptsOwnLine() throws InterruptedException {
+        List<Integer> lines = Collections.synchronizedList(new ArrayList<>());
+        LuaSandbox sandbox = LuaSandbox.builder(ROOMY)
+                .function("route", "plan", args -> {
+                    lines.add(LuaSandbox.currentLine());
+                    return null;
+                })
+                .library("walk", """
+                        -- Plan a route, then walk it.
+                        function move_there(name)
+                          route.plan(name)
+                          route.plan(name)
+                          return "walked " .. name
+                        end
+                        function route.twice(name) return move_there(name) end
+                        """)
+                .print(printed::add).build();
+        LuaSandbox.Outcome o = run(sandbox, """
+                local a = 1
+
+                print(route.twice("home"))
+                local b = move_there("mine")
+                error("stop here")
+                """);
+        assertEquals(LuaSandbox.Ending.ERROR, o.ending());
+        assertEquals(List.of(3, 3, 4, 4), lines);
+        assertEquals(List.of("walked home"), printed);
+        assertEquals(5, o.line());
+    }
+
+    @Test
+    void anErrorInsideALibrarySaysWhereInTheLibraryAndStopsAtTheScriptsLine() throws InterruptedException {
+        LuaSandbox sandbox = LuaSandbox.builder(ROOMY)
+                .library("lib", """
+                        function boom()
+                          local t = nil
+                          return t.x
+                        end
+                        """)
+                .build();
+        LuaSandbox.Outcome o = run(sandbox, """
+                local a = 1
+                boom()
+                """);
+        assertEquals(LuaSandbox.Ending.ERROR, o.ending());
+        assertEquals(2, o.line());
+        assertTrue(o.message().startsWith("lib:3:"), o.message());
+    }
 }
