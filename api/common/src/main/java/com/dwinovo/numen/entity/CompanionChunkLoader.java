@@ -18,7 +18,7 @@ import java.util.Comparator;
  * {@code skipPlayer == true} for companions — that strips the wasted client chunk-tracking /
  * packet machinery (a fake player has no client), but as a side effect also strips the player
  * loading ticket. This class adds the loading back, but <b>bounded</b>: a {@value #RADIUS}-chunk
- * region ticket (centre {@code ENTITY_TICKING}, a 5×5 loaded pad) instead of a real player's
+ * region ticket (3×3 {@code ENTITY_TICKING} around her, a 7×7 loaded pad) instead of a real player's
  * whole simulation-distance sphere. Remote autonomy is preserved; the per-companion footprint is
  * a fixed, small pad rather than full-player weight.
  *
@@ -33,8 +33,14 @@ import java.util.Comparator;
  */
 public final class CompanionChunkLoader {
 
-    /** Region-ticket radius. i = 2 → centre chunk level 31 (ENTITY_TICKING); a 5×5 pad is loaded. */
-    private static final int RADIUS = 2;
+    /**
+     * Region-ticket radius. i = 3 → centre chunk level 30, its ring level 31: the companion's chunk AND the eight
+     * around it are ENTITY_TICKING (3×3), a 7×7 pad is loaded. Whatever she can touch or fights over (reach ≤ 5
+     * blocks, the combat field 12) can lie across a chunk border; an entity in a chunk that is loaded but not
+     * entity-ticking is frozen — a mob she hits there keeps its hurt time forever, so she never gets a second
+     * swing in and it never dies.
+     */
+    private static final int RADIUS = 3;
 
     /**
      * Ticket timeout in ticks. The refresh re-adds the ticket at half this interval (or immediately

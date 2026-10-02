@@ -29,7 +29,7 @@
  * <h2>走位是一个环,不是两个状态</h2>
  * <pre>
  * 内沿 = 它够得着我   (Menace.rawDangerRadius,碰撞箱推)
- * 外沿 = 我够得着它   (Swing.reachTo,原版 ENTITY_INTERACTION_RANGE + 目标半宽)
+ * 外沿 = 我够得着它   (Goals.touch:站在这一格眼睛到它的碰撞箱小于原版 ENTITY_INTERACTION_RANGE,攻击层出手问的也是它)
  * 带内什么都不做,攻击层自己打
  * </pre>
  *

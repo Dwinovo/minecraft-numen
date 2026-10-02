@@ -27,7 +27,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 目标族:把"怎样算到了"的五种说法编成 {@link Goal}。每一种的定义与判定都写在这里,别处不另判;模块里没有别的宽限。
+ * 目标族:把"怎样算到了"的六种说法编成 {@link Goal}。每一种的定义与判定都写在这里,别处不另判;模块里没有别的宽限。
  *
  * <ol>
  *   <li><b>位置</b>({@link #at}、{@link #column}、{@link #level},同一种目标 {@link Position}):某一格、某一列、某一高度,
@@ -36,6 +36,7 @@ import net.minecraft.world.phys.Vec3;
  *   <li><b>距离范围</b>({@link #within}):离一个位置的距离在 [最小, 最大] 之间,距离只按 {@link Position#distanceSqr} 量;</li>
  *   <li><b>用</b>({@link #use}):站在那一格方块某个敞开的面前,眼睛直线看得到那一面、点得到它;</li>
  *   <li><b>挖</b>({@link #dig}):手够得着那一格;挡着的可以挖开,同样够得着时挑挡得少的站位;</li>
+ *   <li><b>够着</b>({@link #touch}):手够得着一个碰撞箱(要打的那只);</li>
  *   <li><b>远离</b>({@link #awayFrom}):离一组生物都在各自的危险半径之外。</li>
  * </ol>
  * 组合方式:多个取其一({@link #anyOf})、到了再付一笔({@link #priced});几个同时成立({@link #allOf})只给战斗走位
@@ -205,6 +206,19 @@ public final class Goals {
         boolean clears(WorldView view, BlockPos pos);
     }
 
+    // ==================== 够着 ====================
+
+    /**
+     * 够着 {@code box} 这个碰撞箱:站在这里眼睛到它的最近距离小于 {@code range}(第 0 层 {@link Reach},与近战出手读同一个
+     * "够得着")。碰撞箱是调用方此刻量下的,它挪了就交一个新的目标。
+     */
+    public static Goal touch(AABB box, BodyStats body, double range) {
+        if (!(range > 0) || Double.isInfinite(range)) {
+            throw new IllegalArgumentException("交互距离要是正的有限数:" + range);
+        }
+        return new Touch(box, body, range);
+    }
+
     // ==================== 远离 ====================
 
     /** 远离一组生物:脚所在的列离每一只的水平距离都不小于它的危险半径。 */
@@ -268,19 +282,28 @@ public final class Goals {
      * 像离目标一样近,搜索一圈圈铺开。
      */
     private static double beyondReach(BlockPos target, BodyStats body, int x, int y, int z) {
+        return beyondReach(new AABB(target), body.blockReach(), body, x, y, z);
+    }
+
+    /** 眼睛(按脚在这一格的底算)挪进 {@code box} 的 {@code reach} 以内最少要付多少,同 {@link #beyondReach(BlockPos, BodyStats, int, int, int)}。 */
+    private static double beyondReach(AABB box, double reach, BodyStats body, int x, int y, int z) {
         Vec3 eye = Reach.eye(body, Pose.STANDING, x, y, z);
-        double dx = gap(eye.x, target.getX());
-        double dz = gap(eye.z, target.getZ());
-        double rise = eye.y < target.getY() ? target.getY() - eye.y : 0;
-        double drop = eye.y > target.getY() + 1 ? eye.y - (target.getY() + 1) : 0;
+        double dx = gap(eye.x, box.minX, box.maxX);
+        double dz = gap(eye.z, box.minZ, box.maxZ);
+        double rise = eye.y < box.minY ? box.minY - eye.y : 0;
+        double drop = eye.y > box.maxY ? eye.y - box.maxY : 0;
         double perVertical = rise > 0 ? ActionCosts.ESTIMATE_UP : ActionCosts.ESTIMATE_DOWN;
-        return intoDisc(Math.sqrt(dx * dx + dz * dz), rise + drop, body.blockReach(), ActionCosts.ESTIMATE_PER_BLOCK,
-                perVertical);
+        return intoDisc(Math.sqrt(dx * dx + dz * dz), rise + drop, reach, ActionCosts.ESTIMATE_PER_BLOCK, perVertical);
     }
 
     /** 坐标 {@code v} 离 {@code [cell, cell + 1]} 这一段有多远:在段里为 0。 */
     private static double gap(double v, int cell) {
-        return v < cell ? cell - v : Math.max(0, v - (cell + 1));
+        return gap(v, cell, cell + 1);
+    }
+
+    /** 坐标 {@code v} 离 {@code [min, max]} 这一段有多远:在段里为 0。 */
+    private static double gap(double v, double min, double max) {
+        return v < min ? min - v : Math.max(0, v - max);
     }
 
     /**
@@ -617,6 +640,24 @@ public final class Goals {
         @Override
         public String toString() {
             return "digAny" + listed(new ArrayList<>(members));
+        }
+    }
+
+    private record Touch(AABB box, BodyStats body, double range) implements Goal {
+        @Override
+        public boolean contains(int x, int y, int z, Stance stance) {
+            return Reach.reaches(body, Pose.STANDING, x, stance.feetY(), z, box, range);
+        }
+
+        @Override
+        public double estimate(int x, int y, int z) {
+            return beyondReach(box, range, body, x, y, z);
+        }
+
+        @Override
+        public String toString() {
+            return String.format("touch(%.2f,%.2f,%.2f %.2f)", (box.minX + box.maxX) / 2, box.minY,
+                    (box.minZ + box.maxZ) / 2, range);
         }
     }
 

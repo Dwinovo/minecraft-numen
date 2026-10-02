@@ -198,7 +198,8 @@ public final class Driver {
 
     /**
      * 换目标(跟着的东西挪了):在走的这条路原本到得了目标,而它的终点在新目标里还算数、停在那儿没变贵
-     * ({@link Goal#keepsStop}),就照走;否则扔掉它,从身体脚下按新目标重搜,旧路打折。在飞的搜索是按旧目标派的,作废。
+     * ({@link Goal#keepsStop}),就照走;否则扔掉它,从身体脚下按新目标重搜,旧路打折,在飞的搜索作废。手上还没有路、从脚下的
+     * 搜索在飞时,让它搜完,交回来的路走到终点再按那时的目标判。
      * 交进来的还是同一个目标(目标是值,每刻重编一次也相等),什么都不变:在走的路与在飞的搜索照旧。
      */
     public void retarget(Goal next) {
@@ -209,6 +210,12 @@ public final class Driver {
         goal = next;
         bestEstimate = Double.POSITIVE_INFINITY;
         stalePartials = 0;
+        if (legs.isEmpty() && pending != null) {
+            // 手上没有路、从脚下的搜索还在飞:让它搜完。跟着会动的东西时目标每刻都变,变一次就作废重派的话,在飞的那一次永远
+            // 搜不完,她就一直站着;交回来的路照走,走到终点按那时的目标判,不在里面就从那儿重搜
+            PathLog.debug("{} 换目标 {} -> {},在飞的搜索搜完再说", rig.who, before, next);
+            return;
+        }
         BlockPos end = legs.isEmpty() ? start : legs.get(legs.size() - 1).maneuver().to();
         Stance endStance = legs.isEmpty() ? startStance : legs.get(legs.size() - 1).maneuver().landing();
         if (complete && end != null && endStance != null && Goal.keepsStop(rig.world(), before, next, end, endStance)) {

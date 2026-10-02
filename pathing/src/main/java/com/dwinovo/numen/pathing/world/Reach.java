@@ -6,7 +6,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 够得着:身体以某个姿势站在某处,手能不能碰到某一格。挖、放、交互、"挖"目标的到达都读这一个判据。
+ * 够得着:身体以某个姿势站在某处,手能不能碰到某一格或某个碰撞箱。挖、放、交互、近战出手,"挖"与"够着"目标的到达都读这一个判据。
  *
  * <p>口径照原版 {@code Player.canInteractWithBlock}:眼睛到这一格整块包围盒的最近距离小于交互距离,只是包围盒四面往里收
  * {@link #EDGE}——瞄准时({@code Aim})离棱留的那一圈边:这里说够得着,瞄面上离眼睛最近的那一点就一定在交互距离内,挖、放、用的
@@ -28,7 +28,15 @@ public final class Reach {
 
     /** 身体以 {@code pose} 站在 {@code (x, z)} 这一列、脚在 {@code feetY} 时,够不够得着 {@code target} 这一格。 */
     public static boolean reaches(BodyStats body, Pose pose, int x, double feetY, int z, BlockPos target) {
-        double range = body.blockReach();
-        return new AABB(target).deflate(EDGE).distanceToSqr(eye(body, pose, x, feetY, z)) < range * range;
+        return reaches(body, pose, x, feetY, z, new AABB(target).deflate(EDGE), body.blockReach());
+    }
+
+    /**
+     * 身体以 {@code pose} 站在 {@code (x, z)} 这一列、脚在 {@code feetY} 时,够不够得着 {@code box} 这个碰撞箱:眼睛到它的最近距离小于
+     * {@code range}。口径照原版 {@code Player.canInteractWithEntity},交互距离由调用方按身体的属性给(打实体是
+     * {@code entity_interaction_range},原版 3);服务端收包时另加的宽限同样不加。
+     */
+    public static boolean reaches(BodyStats body, Pose pose, int x, double feetY, int z, AABB box, double range) {
+        return box.distanceToSqr(eye(body, pose, x, feetY, z)) < range * range;
     }
 }
