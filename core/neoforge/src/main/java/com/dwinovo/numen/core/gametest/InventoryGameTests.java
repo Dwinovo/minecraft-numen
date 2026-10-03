@@ -616,4 +616,25 @@ public class InventoryGameTests {
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
+
+    /** 等一会儿:numen.time.wait(1) 站着等够一秒(至少 20 刻)才回,回的是等了几秒。 */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_inventory")
+    public static void time_wait_stands_for_the_time_given(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_patient", new BlockPos(3, 2, 3), false);
+        long start = helper.getLevel().getGameTime();
+        long[] ended = {-1};
+        ToolRun wait = lua(companion, "return numen.time.wait(1)");
+        helper.onEachTick(() -> {
+            if (ended[0] < 0 && wait.done()) {
+                ended[0] = helper.getLevel().getGameTime();
+            }
+        });
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(wait.done(), "time wait has not finished");
+            helper.assertTrue(wait.ranToTheEnd() && wait.receipt().contains("1"), "wait failed: " + wait.receipt());
+            helper.assertTrue(ended[0] - start >= 20, "she came back after " + (ended[0] - start) + " ticks");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
 }
