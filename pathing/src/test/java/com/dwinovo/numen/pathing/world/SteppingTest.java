@@ -134,6 +134,23 @@ class SteppingTest {
         assertEquals(Step.BLOCKED, step(low, from, Y, Direction.NORTH, Y + 1), "起跳时头顶撞上方块");
     }
 
+    /**
+     * 跳进炼药锅要越过一格高的锅沿:头顶空着就跳得进;锅上方两格压着一块关着的上半活板门,头顶的空只够脚贴着锅沿,真跳起来
+     * 脑袋先撞上活板门、挪不过去;顶是再高一格的整块,越过锅沿时还有余地,跳得进。
+     */
+    @Test
+    void aJumpNeedsRoomAboveTheRimNotJustToTouchIt() {
+        BlockPos from = AT.south();
+        BlockState cauldron = Blocks.CAULDRON.defaultBlockState();
+        BlockState lid = Blocks.SPRUCE_TRAPDOOR.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.TrapDoorBlock.HALF, Half.TOP);
+        assertEquals(Step.JUMP, step(ground().set(AT, cauldron), from, Y, Direction.NORTH, Y));
+        assertEquals(Step.BLOCKED, step(ground().set(AT, cauldron).set(AT.above(2), lid), from, Y, Direction.NORTH, Y),
+                "活板门压在锅上方两格:脚只能贴着锅沿过去,跳起来先撞头");
+        assertEquals(Step.JUMP, step(ground().set(AT, cauldron).set(AT.above(3), Blocks.STONE.defaultBlockState()), from,
+                Y, Direction.NORTH, Y), "顶在三格高处,越过锅沿时还有余地");
+    }
+
     @Test
     void honeyHalvesTheJump() {
         BlockPos from = AT.south();
