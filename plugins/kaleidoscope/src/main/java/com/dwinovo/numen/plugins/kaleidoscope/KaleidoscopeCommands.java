@@ -26,11 +26,11 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * {@code kaleidoscope}:查一口锅能做什么、看一格锅现在怎样、在一格锅上做一道菜。
+ * {@code kaleidoscope}:查一口锅能做什么、看一格锅现在怎样、在一格锅上做一步(倒油、放汤底、下料、盖盖、翻炒、装盘)。
  *
- * <p>三个动作都在服务端:锅的状态机、配方表、品质评估都住在那边。每个动作就是脚本里的一个函数
- * ({@code kaleidoscope.pot.cook(...)}),和别的动作同一个入口。{@code cook} 不走动、不找远处的锅:不点名就是她手够得着的那一口,
- * 走过去是脚本的事({@code numen.scan.blocks} 找到锅、{@code numen.move.goto_(…, {arrive = "use"})} 走到够得着)。
+ * <p>动作都在服务端:锅的状态机、配方表、品质评估都住在那边。每个动作就是脚本里的一个函数({@code kaleidoscope.pot.fill(...)}),
+ * 和别的动作同一个入口。一个动作只做锅上的一步,不走动、不找锅;一道菜从头做到尾是 Lua 模块 {@code kaleidoscope.pot.cook}
+ * 把这几步排起来。翻炒那一步跟着锅炒到好,炒的那段时间是锅自己的。
  */
 final class KaleidoscopeCommands {
 
@@ -39,7 +39,12 @@ final class KaleidoscopeCommands {
     static final String GROUP = "pot";
     static final String RECIPES = "recipes";
     static final String INSPECT = "inspect";
-    static final String COOK = "cook";
+    static final String OIL = PotAct.OIL.word;
+    static final String BASE = PotAct.BASE.word;
+    static final String FILL = PotAct.FILL.word;
+    static final String LID = PotAct.LID.word;
+    static final String STIR = PotAct.STIR.word;
+    static final String PLATE = PotAct.PLATE.word;
 
     private static final Gson GSON = new Gson();
 
@@ -51,12 +56,7 @@ final class KaleidoscopeCommands {
     private static final Param<String> NAME = Param.optional("name", ArgType.string(),
             "Only recipes whose recipe or dish id contains this, e.g. rice.")
             .whenOmitted("match every recipe");
-    /** 找手边的锅只翻她眼睛周围这么远:交互距离再多一格。 */
-    private static final int REACH_SPAN = 6;
-
     private static final Param<BlockPos> COOKER = Param.required("cell", ArgType.cell(), "The cookware's cell.");
-    private static final Param<BlockPos> COOK_AT = Param.optional("at", ArgType.cell(), "The cookware's cell.")
-            .whenOmitted("cook on the pot or stockpot within your reach (the nearest one)");
     private static final Param<ResourceLocation> RECIPE = Param.required("recipe", ArgType.id(), "The dish to cook.")
             .values("a recipe id exactly as " + line(RECIPES) + " prints it");
 
@@ -67,7 +67,7 @@ final class KaleidoscopeCommands {
         return NAMESPACE + "." + GROUP + "." + action;
     }
 
-    /** 相关动作里点名一个动作:{@code pot cook}。 */
+    /** 相关动作里点名一个动作:{@code pot fill}。 */
     private static String path(String action) {
         return GROUP + " " + action;
     }
@@ -83,7 +83,8 @@ final class KaleidoscopeCommands {
                 KaleidoscopeCommands::recipes, COOKWARE, HAVE_ONLY, NAME, Listing.PAGE)
                 .returns(ScriptType.table(
                         ScriptType.field("recipes", ScriptType.listOf(ScriptType.table(
-                                ScriptType.field("recipe", ScriptType.STRING, "What " + line(COOK) + " takes."),
+                                ScriptType.field("recipe", ScriptType.STRING, "What " + line(FILL) + " and "
+                                        + "kaleidoscope.pot.cook take."),
                                 ScriptType.field("dish", ScriptType.STRING, "What comes out, with x2 when more "
                                         + "than one."),
                                 ScriptType.field("ingredients", ScriptType.listOf(ScriptType.STRING),
@@ -102,7 +103,7 @@ final class KaleidoscopeCommands {
                 .note("Read-only. The reply lists one recipe per line; a pot knows a few hundred, so it comes in "
                         + "pages — narrow it with name or have_only instead of paging through all of them.")
                 .note("Flex recipes list THIS world's golden ratio; every save has its own.")
-                .seeAlso(path(INSPECT), path(COOK));
+                .seeAlso(path(INSPECT), path(FILL));
         kc.server(INSPECT, "Read one pot or stockpot from any distance: stage, contents, heat, ticks left, what it "
                         + "waits for.",
                 KaleidoscopeCommands::inspect, COOKER)
@@ -125,24 +126,59 @@ final class KaleidoscopeCommands {
                         ScriptType.field("needs", ScriptType.listOf(ScriptType.STRING), "What it waits for.")))
                 .example(line(INSPECT) + "({x = 120, y = 64, z = -35})")
                 .note("Read-only. Check a cookware is free before you cook on it.")
-                .seeAlso(path(COOK));
-        kc.server(COOK, "Cook one dish start to finish on a pot or stockpot within your reach.",
-                KaleidoscopeCommands::cook, RECIPE, COOK_AT)
-                .returns(ScriptType.table(ScriptType.field("recipe", ScriptType.STRING, null),
-                        ScriptType.field("pos", Shapes.POS.type(), "The cookware's cell."),
-                        ScriptType.optional("plated", ScriptType.STRING, "What came out.")))
-                .example(line(COOK) + "(\"kaleidoscope_cookery:flex_pot/braised_beef\")")
-                .example(line(COOK) + "(\"kaleidoscope_cookery:flex_pot/braised_beef\", {at = {x = 120, y = 64, "
-                        + "z = -35}})")
-                .note("Background work: the result arrives as a task_finished event. One dish at a time.")
-                .note("It does not walk and does not look for a pot further away: stand within reach of the "
-                        + "cookware first (`numen.scan.blocks` finds one, `numen.move.goto_` it with arrive = \"use\"). Out of "
-                        + "reach, no pot or "
-                        + "stockpot there, an unknown recipe or a cookware already in use is refused at once with the "
-                        + "reason, and nothing starts.")
-                .note("Uses the ingredients, oil and container from YOUR inventory. Asks your owner first when "
-                        + "their rules say so, for using the cookware and for taking the dish.")
-                .seeAlso(path(RECIPES), path(INSPECT), "numen task stop");
+                .seeAlso(path(FILL));
+        ScriptType done = ScriptType.table(ScriptType.field("pos", Shapes.POS.type(), "The cookware's cell."),
+                ScriptType.optional("plated", ScriptType.STRING, "What came out, from plate."));
+        step(kc, PotAct.OIL, "Pour oil into a pot: it opens a one-minute window for the ingredients.", done)
+                .example(line(OIL) + "({x = 120, y = 64, z = -35})");
+        step(kc, PotAct.BASE, "Pour the soup base a stockpot recipe needs into the stockpot (its lid off).", done,
+                        RECIPE)
+                .example(line(BASE) + "({x = 120, y = 64, z = -35}, \"kaleidoscope_cookery:stockpot/pumpkin_soup\")");
+        step(kc, PotAct.FILL, "Put a recipe's ingredients into the pot or stockpot, as many portions of each as this "
+                        + "world's golden ratio says.", done, RECIPE)
+                .example(line(FILL) + "({x = 120, y = 64, z = -35}, \"kaleidoscope_cookery:flex_pot/braised_beef\")")
+                .note("A pot takes ingredients only after oil and before it starts cooking; a stockpot after its soup "
+                        + "base, with the lid off.");
+        step(kc, PotAct.LID, "Put a stockpot's lid on, or take it off: on with ingredients inside, it starts "
+                        + "simmering.", done)
+                .example(line(LID) + "({x = 120, y = 64, z = -35})")
+                .note("Nothing goes in or comes out while the lid is on. A stockpot never burns; "
+                        + line(INSPECT) + " says done_in_ticks while it simmers.");
+        step(kc, PotAct.STIR, "Start a pot with a kitchen shovel and stir-fry it until the dish is done.", done)
+                .example(line(STIR) + "({x = 120, y = 64, z = -35})")
+                .note("Background work: it returns when the dish is done, and then it has to be plated within 40 "
+                        + "seconds or it burns.");
+        step(kc, PotAct.PLATE, "Take the dish out of the pot or stockpot with the carrier the recipe wants.", done,
+                        RECIPE)
+                .example(line(PLATE) + "({x = 120, y = 64, z = -35}, \"kaleidoscope_cookery:flex_pot/braised_beef\")")
+                .note("A dish that came out as something else (burnt, or the mix was off) still comes out and the "
+                        + "call fails saying what it is.");
+    }
+
+    /**
+     * 锅上的一步:都只站在原地动这口锅,够不着、不是锅、配方不成当场拒绝;翻炒跟着锅走到炒好,是派下的活,别的几步是有界短活。
+     */
+    private static com.dwinovo.numen.cli.Action step(CommandGroup kc, PotAct act, String summary, ScriptType returns,
+                                                     Param<?>... more) {
+        Param<?>[] params = new Param<?>[more.length + 1];
+        params[0] = COOKER;
+        System.arraycopy(more, 0, params, 1, more.length);
+        return kc.server(act.word, summary, (src, args) -> {
+                    PotActRecord record = new PotActRecord(src, args.get(COOKER), act,
+                            act.needsDish ? args.get(RECIPE) : null);
+                    if (act == PotAct.STIR) {
+                        TaskDispatch.setTask(src, record);
+                    } else {
+                        TaskDispatch.runSync(src.companion(), record, src::reply);
+                    }
+                }, params)
+                .returns(returns)
+                .note("It does not walk: stand within reach of the cookware first (`numen.move.goto_` it with "
+                        + "arrive = \"use\"); out of reach, no pot or stockpot there, or an unknown recipe is refused "
+                        + "at once with the reason.")
+                .note("Uses what you carry. Asks your owner first when their rules say so, for using the cookware "
+                        + "and for taking the dish.")
+                .seeAlso(path(INSPECT), path(RECIPES));
     }
 
     private static void recipes(ServerSource src, CommandArgs args) {
@@ -197,38 +233,5 @@ final class KaleidoscopeCommands {
             return;
         }
         src.reply(TaskResult.ok(cooker.kind().id() + " at " + Cooker.where(pos), cooker.report()).toJson());
-    }
-
-    /**
-     * 派活式:受理即回执,收尾走 {@code task_finished}——一锅汤能炖好几分钟,回合挂着等它等于把对话冻住。没写 {@code at} 就是
-     * 她手边够得着的那口锅(最近的);重启后重放照这一刻认下的那一格。
-     */
-    private static void cook(ServerSource src, CommandArgs args) {
-        BlockPos at = args.get(COOK_AT) != null ? args.get(COOK_AT) : withinReach(src);
-        if (at == null) {
-            return;
-        }
-        TaskDispatch.setTask(src.replayedWith(args.with(COOK_AT, at)), new CookRecord(src, at, args.get(RECIPE)));
-    }
-
-    /** 她够得着的锅里离眼睛最近的那一口;一口都没有时回执已经写好,返回 null。 */
-    private static BlockPos withinReach(ServerSource src) {
-        var her = src.companion();
-        ServerLevel level = her.serverLevel();
-        BlockPos eye = BlockPos.containing(her.getEyePosition());
-        BlockPos best = null;
-        for (BlockPos pos : BlockPos.betweenClosed(eye.offset(-REACH_SPAN, -REACH_SPAN, -REACH_SPAN),
-                eye.offset(REACH_SPAN, REACH_SPAN, REACH_SPAN))) {
-            if (her.canInteractWithBlock(pos, 0.0) && Cooker.at(level, pos) != null
-                    && (best == null || pos.distSqr(eye) < best.distSqr(eye))) {
-                best = pos.immutable();
-            }
-        }
-        if (best == null) {
-            src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, "no pot or stockpot is within my reach — find one, "
-                    + "numen.move.goto_ it with arrive = \"use\", then cook again",
-                    "numen.scan.blocks(\"kaleidoscope_cookery:pot\", \"kaleidoscope_cookery:stockpot\")").toJson());
-        }
-        return best;
     }
 }

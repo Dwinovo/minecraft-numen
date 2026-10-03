@@ -12,14 +12,27 @@ import static com.dwinovo.numen.core.WrittenCommandsLint.assertReads;
 
 /**
  * 森罗联动写着的命令不走样:随它发的技能文档与 {@code kaleidoscope} 组的说明,按命令树(core 的组、本组、原版的指令)读一遍。
- * 本组经 {@link NumenPlugins} 那扇门、用联动自己登记它的那一段装上,和 {@link NumenKaleidoscope#install} 里的一样。
+ * 本组和它的 Lua 模块经 {@link NumenPlugins} 那扇门、用联动自己登记它们的那一段装上,和 {@link NumenKaleidoscope#install} 里的一样。
  */
 class KaleidoscopeWrittenCommandsTest {
 
     @BeforeAll
     static void install() {
         WrittenCommandsLint.install();
-        NumenPlugins.register(KaleidoscopeCommands.NAMESPACE, KaleidoscopeCommands::install);
+        NumenPlugins.register(KaleidoscopeCommands.NAMESPACE, numen -> {
+            KaleidoscopeCommands.install(numen);
+            numen.bundleModules(modules());
+        });
+    }
+
+    /** 随联动发的 Lua 模块目录,和技能挨着:类路径上的 {@code plugins/kaleidoscope/modules}。 */
+    private static java.nio.file.Path modules() {
+        try {
+            return java.nio.file.Path.of(KaleidoscopeWrittenCommandsTest.class.getClassLoader()
+                    .getResource("plugins/kaleidoscope/modules").toURI());
+        } catch (URISyntaxException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     @Test

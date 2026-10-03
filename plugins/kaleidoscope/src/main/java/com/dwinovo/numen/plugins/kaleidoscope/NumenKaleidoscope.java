@@ -26,8 +26,8 @@ public final class NumenKaleidoscope {
         NumenPlugins.register(KaleidoscopeCommands.NAMESPACE, numen -> {
             KaleidoscopeCommands.install(numen);
 
-            // kaleidoscope cook 派下来的记录由谁来跑
-            TaskFactory.register(CookRecord.class, (player, record) -> new CookTask(record));
+            // kaleidoscope.pot 的每一步派下来的记录由谁来跑
+            TaskFactory.register(PotActRecord.class, (player, record) -> new PotActTask(record));
 
             // 事件两侧都要登记(服务端的发出口靠它挡,主人客户端的队列靠它投递),
             // 所以直接调,不放进 onClient
@@ -35,6 +35,8 @@ public final class NumenKaleidoscope {
 
             if (skillsRoot != null) {
                 numen.bundleSkills(skillsRoot);
+                // 随它发的 Lua 模块(kaleidoscope.pot.cook)和技能挨着放:plugins/kaleidoscope/modules/
+                numen.bundleModules(skillsRoot.resolveSibling("modules"));
             }
         });
     }

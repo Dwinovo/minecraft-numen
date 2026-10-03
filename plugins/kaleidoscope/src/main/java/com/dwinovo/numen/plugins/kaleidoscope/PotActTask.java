@@ -26,26 +26,23 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 在一格锅上把一道菜从头做到尾。
+ * 在一格锅上做一步({@link PotAct})。
  *
  * <h2>它不走路</h2>
  * 身体必须<b>已经</b>在够得着的距离内,否则受理之前就当场拒绝、教她先 {@code numen.move.goto_}——和 {@code numen.use.block}
- * 同一条规矩。这一格不是锅、配方不成、锅被占着,也在受理之前判({@link #prepare})。寻路住在核心里,联动够不着,自己再发明一套到场方式就是第二个判据。
+ * 同一条规矩。这一格不是锅、配方不成,也在受理之前判({@link #prepare})。
  *
  * <h2>能不能动这口锅,权限层说</h2>
- * 开工前把这件活要做的两件事交上去:<b>动这口锅</b>(倒油、下料、翻炒、盖盖都是右键它)和
- * <b>把成品拿走</b>。主人要问就站着等,拒绝就带着他的原话收场。这里不判"厨房里的东西可以随便动",
- * 那是替主人做决定。
+ * 每一步都是右键这口锅(倒油、下料、翻炒、盖盖都是),装盘还要<b>把成品拿走</b>。动手之前交上去,主人要问就站着等,
+ * 拒绝就带着他的原话收场。这里不判"厨房里的东西可以随便动",那是替主人做决定。
  */
-final class CookTask implements Task {
+final class PotActTask implements Task {
 
-    private final CookRecord r;
+    private final PotActRecord r;
 
     private Dish dish;
     private int[] portions;
     private boolean permitted;
-    /** 已经对这口锅下过第一手了——在那之前它必须一直是空的。 */
-    private boolean touched;
     private ConsentDesk.Ticket consent;
     /** 主人点头之后回执末尾要交代的那一句;没问过主人时是空串。 */
     private String allowance = "";
@@ -54,21 +51,21 @@ final class CookTask implements Task {
     /** 失败收场时是哪一类、能照抄的下一步(没有为 null)。 */
     private ErrorKind failKind = ErrorKind.FAILED;
     private String failHint;
-    /** 最后一次推进做了什么,超时收场时用它说清卡在哪一步。 */
+    /** 最后一次推进做了什么,超时收场时用它说清卡在哪。 */
     private String lastStep = "not started yet";
     private ItemStack plated = ItemStack.EMPTY;
 
-    CookTask(CookRecord record) {
+    PotActTask(PotActRecord record) {
         this.r = record;
     }
 
     @Override
     public String name() {
-        return KaleidoscopeCommands.NAMESPACE + " " + KaleidoscopeCommands.GROUP + " " + KaleidoscopeCommands.COOK;
+        return KaleidoscopeCommands.NAMESPACE + " " + KaleidoscopeCommands.GROUP + " " + r.act.word;
     }
 
     /**
-     * 受理之前:这一格是不是锅、配方在不在、这个存档有没有投料量、她够不够得着、锅是不是空着——和开工后每刻复核的是同一组判据
+     * 受理之前:这一格是不是锅、配方在不在、这个存档有没有投料量、她够不够得着——和动手之后每刻复核的是同一组判据
      * ({@link #blocker}),不过就当场回那句话,不受理。半空里判不了够不够得着,等她站稳再判。
      */
     @Override
@@ -78,10 +75,6 @@ final class CookTask implements Task {
                 return null;
             }
             TaskResult why = blocker(cook);
-            if (why == null) {
-                String taken = Cooker.at(cook.serverLevel(), r.pos).cannotStart(dish);
-                why = taken == null ? null : TaskResult.fail(ErrorKind.FAILED, taken, null);
-            }
             return why == null ? Preparation.Readiness.ready(null) : Preparation.Readiness.refused(why);
         };
     }
@@ -91,10 +84,7 @@ final class CookTask implements Task {
         return cook.onGround() || cook.isInWater() || cook.isPassenger();
     }
 
-    /**
-     * 此刻开不了工的那条失败:这一格不是锅、配方不成、她够不着;都没有为 null。认出配方时记下这道菜。锅空不空另判:下了第一手
-     * 之后锅就是我们的了。
-     */
+    /** 此刻做不了这一步的那条失败:这一格不是锅、配方不成、她够不着;都没有为 null。认出配方时记下这道菜。 */
     private TaskResult blocker(NumenPlayer cook) {
         ServerLevel level = cook.serverLevel();
         Cooker cooker = Cooker.at(level, r.pos);
@@ -102,7 +92,7 @@ final class CookTask implements Task {
             return TaskResult.fail(ErrorKind.NOT_FOUND, "nothing at " + Cooker.where(r.pos) + " is a pot or a "
                     + "stockpot (steamers, chopping boards, millstones and spits are not wired up yet)", null);
         }
-        if (dish == null) {
+        if (r.act.needsDish && dish == null) {
             TaskResult bad = order(level, cooker.kind());
             if (bad != null) {
                 return bad;
@@ -113,10 +103,35 @@ final class CookTask implements Task {
             // arrive = "use" 站到看得见、点得到锅的地方
             return TaskResult.fail(ErrorKind.OUT_OF_REACH, "the " + cooker.kind().id() + " at "
                     + Cooker.where(r.pos) + " is " + String.format("%.1f", away) + " blocks away — out of working "
-                    + "reach; walk there first, then call " + KaleidoscopeCommands.line(KaleidoscopeCommands.COOK)
-                    + " again", "numen.move.goto_(" + Shapes.literal(r.pos) + ", {arrive = \"use\"})",
+                    + "reach; walk there first, then call " + KaleidoscopeCommands.line(r.act.word) + " again",
+                    "numen.move.goto_(" + Shapes.literal(r.pos) + ", {arrive = \"use\"})",
                     Map.of("pos", Shapes.pos(r.pos)));
         }
+        return null;
+    }
+
+    /** 认菜:配方在不在、这个存档的投料量是多少;认不出是那条失败,认出了记下、返回 null。 */
+    private TaskResult order(ServerLevel level, Cookware cookware) {
+        Dish ordered = Dish.byId(level, r.recipe);
+        if (ordered == null) {
+            String path = r.recipe.getPath();
+            return TaskResult.fail(ErrorKind.NOT_FOUND, "no pot or stockpot recipe has id " + r.recipe
+                    + " — take the exact id from " + KaleidoscopeCommands.line(KaleidoscopeCommands.RECIPES)
+                    + ", do not guess it", KaleidoscopeCommands.line(KaleidoscopeCommands.RECIPES) + "(\""
+                    + cookware.id() + "\", {name = \"" + path.substring(path.lastIndexOf('/') + 1) + "\"})");
+        }
+        if (ordered.cookware() != cookware) {
+            return TaskResult.fail(ErrorKind.BAD_ARGUMENT, r.recipe + " is a " + ordered.cookware().id()
+                    + " recipe, not a " + cookware.id() + " one", null);
+        }
+        int[] want = ordered.portions(level);
+        if (want == null) {
+            return TaskResult.fail(ErrorKind.FAILED, r.recipe + " is a flex recipe and no mix that fits the pot's "
+                    + "9 slots grades SUPERB on this world, so there is no ratio to cook to — "
+                    + KaleidoscopeCommands.line(KaleidoscopeCommands.RECIPES) + " says the same", null);
+        }
+        dish = ordered;
+        portions = want;
         return null;
     }
 
@@ -131,81 +146,48 @@ final class CookTask implements Task {
         if (why != null) {
             return failed(why.kind(), why.message(), why.hint());
         }
-        Cooker cooker = Cooker.at(level, r.pos);
         if (!permitted) {
             TaskState pending = permit(cook, level);
             if (pending != null) {
                 return pending;
             }
         }
-        // 还没下第一手之前每刻都复核这口锅空不空:等主人答复可能要等上一分钟,这期间别人
-        // 完全可以先用上它。下了第一手之后锅就是我们的了,不能再拿"锅里有东西"判它被占。
-        if (!touched) {
-            String taken = cooker.cannotStart(dish);
-            if (taken != null) {
-                return failed(taken);
-            }
-        }
-        // 动锅之前先看着它:这些动作直接走方块实体,没有准星射线替身体转头,不看的话她会
-        // 背对着锅把菜炒完
+        // 动锅之前先看着它:这些动作直接走方块实体,没有准星射线替身体转头,不看的话她会背对着锅做
         InputDriver.lookAt(cook, Vec3.atCenterOf(r.pos));
-        Cooker.Step step = cooker.advance(cook, dish, portions);
+        Cooker cooker = Cooker.at(level, r.pos);
+        Cooker.Step step = r.act.on(cooker, cook, dish, portions);
         lastStep = step.note();
-        touched |= step.kind() != Cooker.Step.Kind.BLOCKED;
         return switch (step.kind()) {
             case WORKING -> TaskState.RUNNING;
-            case BLOCKED -> failed(step.note());
+            case BLOCKED -> failed(ErrorKind.FAILED, step.note(), null);
             case DONE -> {
                 plated = step.plated();
                 outcome = step.note();
-                KcEvents.done(cook, cooker.kind(), r.pos, r.recipe, plated);
+                if (!plated.isEmpty()) {
+                    KcEvents.done(cook, cooker.kind(), r.pos, r.recipe, plated);
+                }
                 yield TaskState.SUCCESS;
             }
             case RUINED -> {
                 plated = step.plated();
-                outcome = step.note();
-                KcEvents.ruined(cook, cooker.kind(), r.pos, r.recipe, plated, step.note());
-                yield TaskState.FAILED;
+                if (r.act == PotAct.PLATE) {
+                    KcEvents.ruined(cook, cooker.kind(), r.pos, r.recipe, plated, step.note());
+                }
+                yield failed(ErrorKind.FAILED, step.note(), null);
             }
         };
     }
 
     /**
-     * 认菜:配方在不在、这个存档的投料量是多少;认不出是那条失败,认出了记下、返回 null。锅空不空由上面每刻复核,不在这里判
-     * 第二遍。
-     */
-    private TaskResult order(ServerLevel level, Cookware cookware) {
-        Dish ordered = Dish.byId(level, r.recipe);
-        if (ordered == null) {
-            String path = r.recipe.getPath();
-            return TaskResult.fail(ErrorKind.NOT_FOUND, "no pot or stockpot recipe has id " + r.recipe
-                    + " — take the exact id from " + KaleidoscopeCommands.line(KaleidoscopeCommands.RECIPES)
-                    + ", do not guess it", KaleidoscopeCommands.line(KaleidoscopeCommands.RECIPES) + "(\""
-                    + cookware.id() + "\", {name = \"" + path.substring(path.lastIndexOf('/') + 1) + "\"})");
-        }
-        int[] want = ordered.portions(level);
-        if (want == null) {
-            return TaskResult.fail(ErrorKind.FAILED, r.recipe + " is a flex recipe and no mix that fits the pot's "
-                    + "9 slots grades SUPERB on this world, so there is no ratio to cook to — "
-                    + KaleidoscopeCommands.line(KaleidoscopeCommands.RECIPES) + " says the same", null);
-        }
-        dish = ordered;
-        portions = want;
-        // 炖煮那一段的时间只有认出配方之后才知道
-        r.extendDeadlineTo(level.getGameTime() + ordered.time() + CookRecord.PREP_BUDGET_TICKS);
-        return null;
-    }
-
-    /**
-     * 开工前过权限层:动这口锅、把成品拿走。
+     * 动手之前过权限层:动这口锅,装盘时还有把成品拿走。
      *
      * @return null = 可以动手;{@code RUNNING} = 在等主人答复;{@code FAILED} = 不许
      */
     private TaskState permit(NumenPlayer cook, ServerLevel level) {
         BlockState state = level.getBlockState(r.pos);
-        List<Action> proposed = List.of(
-                Action.useBlock(r.pos, state),
-                Action.take(r.pos, state, dish.result().getItem()));
+        List<Action> proposed = r.act == PotAct.PLATE
+                ? List.of(Action.useBlock(r.pos, state), Action.take(r.pos, state, dish.result().getItem()))
+                : List.of(Action.useBlock(r.pos, state));
         Gate gate = Permission.gateFor(cook);
         List<ConsentItem> asks = new ArrayList<>();
         for (Action action : proposed) {
@@ -239,10 +221,6 @@ final class CookTask implements Task {
         return null;
     }
 
-    private TaskState failed(String why) {
-        return failed(ErrorKind.FAILED, why, null);
-    }
-
     private TaskState failed(ErrorKind kind, String why, String hint) {
         outcome = why;
         failKind = kind;
@@ -258,7 +236,6 @@ final class CookTask implements Task {
     @Override
     public TaskResult result(TaskState terminal) {
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("recipe", r.recipe.toString());
         data.put("pos", Shapes.pos(r.pos));
         if (!plated.isEmpty()) {
             data.put("plated", Dish.idOf(plated.getItem()));
@@ -266,10 +243,10 @@ final class CookTask implements Task {
         String tail = allowance.isEmpty() ? "" : " " + allowance + ".";
         return switch (terminal) {
             case SUCCESS -> TaskResult.ok(outcome + tail, data);
-            case TIMEOUT -> TaskResult.timeout("ran out of time cooking " + r.recipe
-                    + "; last thing that happened: " + lastStep + "." + tail);
-            case CANCELLED -> TaskResult.cancelled("stopped while cooking " + r.recipe
-                    + "; last thing that happened: " + lastStep + "." + tail);
+            case TIMEOUT -> TaskResult.timeout("ran out of time at " + r.act.word + " on the "
+                    + Cooker.where(r.pos) + " cookware; last thing that happened: " + lastStep + "." + tail);
+            case CANCELLED -> TaskResult.cancelled("stopped at " + r.act.word + "; last thing that happened: "
+                    + lastStep + "." + tail);
             default -> TaskResult.fail(failKind, outcome + tail, failHint, data);
         };
     }

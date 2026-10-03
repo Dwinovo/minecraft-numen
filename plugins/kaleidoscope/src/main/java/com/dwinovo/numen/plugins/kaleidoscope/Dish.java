@@ -32,7 +32,7 @@ import java.util.Map;
  * ({@code flex_*},同一组料按投料比例判品质)。两张表的记录是四个互不相干的 record,
  * 这里是唯一一处把它们摊平的地方。
  *
- * @param id          配方 id,{@code kaleidoscope cook} 点菜用的就是它
+ * @param id          配方 id,{@code kaleidoscope.pot.fill} 与 {@code kaleidoscope.pot.cook} 点菜用的就是它
  * @param cookware    哪口锅做
  * @param result      出锅的东西
  * @param ingredients 要的料(已剔掉配方表里的空位)

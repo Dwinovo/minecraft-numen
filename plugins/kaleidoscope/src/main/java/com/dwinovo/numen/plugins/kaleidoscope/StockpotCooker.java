@@ -118,50 +118,34 @@ final class StockpotCooker implements Cooker {
         };
     }
 
-    @Override
-    public String cannotStart(Dish dish) {
-        if (dish.cookware() != Cookware.STOCKPOT) {
-            return dish.id() + " is a " + dish.cookware().id() + " recipe, not a stockpot one";
-        }
-        int status = stockpot.getStatus();
-        if (status == IStockpot.COOKING || status == IStockpot.FINISHED) {
-            return "the stockpot at " + Cooker.where(pos) + " is busy (" + stage(status) + ", "
-                    + Dish.idOf(stockpot.getResult().getItem()) + ") — " + KaleidoscopeCommands.line(KaleidoscopeCommands.INSPECT)
-                    + " it and wait or empty it";
-        }
-        if (status == IStockpot.PUT_INGREDIENT) {
-            if (!contents().isEmpty()) {
-                return "the stockpot at " + Cooker.where(pos) + " already has "
-                        + contents().stream().map(s -> Dish.idOf(s.getItem())).toList()
-                        + " in it — somebody else's mix, take it out first";
-            }
-            if (!stockpot.getSoupBaseId().equals(dish.soupBase())) {
-                return "the stockpot at " + Cooker.where(pos) + " holds soup base "
-                        + stockpot.getSoupBaseId() + " but this dish needs " + dish.soupBase()
-                        + " — ladle the old base out first";
-            }
-        }
-        return null;
+    /** 没火的时候锅整个不动,哪一步都白做。 */
+    private Step cold() {
+        return stockpot.hasHeatSource(level) ? null : Step.blocked("the stockpot at " + Cooker.where(pos)
+                + " has no lit heat source under it — nothing at all happens until the stove below is lit");
+    }
+
+    /** 盖着盖子什么都放不进也盛不出。 */
+    private Step lidOn(String what) {
+        return stockpot.hasLid() ? Step.blocked("the lid is on the stockpot at " + Cooker.where(pos) + " — take it off "
+                + "with " + KaleidoscopeCommands.line(KaleidoscopeCommands.LID) + " " + what) : null;
     }
 
     @Override
-    public Step advance(NumenPlayer cook, Dish dish, int[] portions) {
-        if (!stockpot.hasHeatSource(level)) {
-            return Step.blocked("the stockpot at " + Cooker.where(pos) + " has no lit heat source under it"
-                    + " — nothing at all happens until the stove below is lit");
-        }
-        return switch (stockpot.getStatus()) {
-            case IStockpot.PUT_SOUP_BASE -> pourBase(cook, dish);
-            case IStockpot.PUT_INGREDIENT -> fill(cook, dish, portions);
-            case IStockpot.COOKING -> Step.working("simmering");
-            case IStockpot.FINISHED -> ladle(cook, dish);
-            default -> Step.blocked("the stockpot at " + Cooker.where(pos) + " is in stage " + stockpot.getStatus());
-        };
+    public Step oil(NumenPlayer cook) {
+        return Step.blocked("a stockpot takes no oil — that is a pot step");
     }
 
-    private Step pourBase(NumenPlayer cook, Dish dish) {
-        if (stockpot.hasLid()) {
-            return takeLidOff(cook, "to pour the soup base in");
+    @Override
+    public Step base(NumenPlayer cook, Dish dish) {
+        Step stop = cold() != null ? cold() : lidOn("to pour the soup base in");
+        if (stop != null) {
+            return stop;
+        }
+        if (stockpot.getStatus() != IStockpot.PUT_SOUP_BASE) {
+            return stockpot.getSoupBaseId().equals(dish.soupBase())
+                    ? Step.done("the stockpot already holds the " + dish.soupBase() + " soup base")
+                    : Step.blocked("the stockpot at " + Cooker.where(pos) + " holds soup base "
+                            + stockpot.getSoupBaseId() + " but this dish needs " + dish.soupBase());
         }
         ISoupBase base = SoupBaseManager.getSoupBase(dish.soupBase());
         if (base == null) {
@@ -176,17 +160,24 @@ final class StockpotCooker implements Cooker {
             return Step.blocked("the stockpot would not take " + Dish.idOf(bucket.getItem()) + " as a soup base");
         }
         cook.swing(InteractionHand.MAIN_HAND);
-        return Step.working("poured the " + dish.soupBase() + " soup base");
+        return Step.done("poured the " + dish.soupBase() + " soup base");
     }
 
-    private Step fill(NumenPlayer cook, Dish dish, int[] portions) {
+    @Override
+    public Step fill(NumenPlayer cook, Dish dish, int[] portions) {
+        Step stop = cold() != null ? cold() : lidOn("to add the ingredients");
+        if (stop != null) {
+            return stop;
+        }
+        if (stockpot.getStatus() != IStockpot.PUT_INGREDIENT) {
+            return Step.blocked("the stockpot at " + Cooker.where(pos) + " is " + stage(stockpot.getStatus())
+                    + (stockpot.getStatus() == IStockpot.PUT_SOUP_BASE ? " — pour the soup base in first ("
+                    + KaleidoscopeCommands.line(KaleidoscopeCommands.BASE) + ")" : ""));
+        }
         int[] need = dish.stillNeeded(stockpot.getInputs(), portions);
         for (int i = 0; i < need.length; i++) {
             if (need[i] <= 0) {
                 continue;
-            }
-            if (stockpot.hasLid()) {
-                return takeLidOff(cook, "to add the rest of the ingredients");
             }
             Ingredient want = dish.ingredients().get(i);
             ItemStack have = Pantry.find(cook, want);
@@ -202,9 +193,33 @@ final class StockpotCooker implements Cooker {
             cook.swing(InteractionHand.MAIN_HAND);
             return Step.working("added " + added);
         }
-        // 料齐了,盖上盖子——盖上那一刻就开炖
+        return Step.done("everything for " + Dish.idOf(dish.result().getItem()) + " is in the stockpot: "
+                + contents().stream().map(s -> Dish.idOf(s.getItem())).toList());
+    }
+
+    /**
+     * 盖着就揭、揭着就盖。揭盖时森罗把盖子直接塞进主手那一格,所以先空出一格快捷栏握着——不然主手上原来那件东西会被盖子顶掉,
+     * 凭空没了。
+     */
+    @Override
+    public Step lid(NumenPlayer cook) {
+        Step cold = cold();
+        if (cold != null) {
+            return cold;
+        }
         if (stockpot.hasLid()) {
-            return Step.working("lid is on, cooking starts any moment");
+            Inventory inv = cook.getInventory();
+            if (!inv.getItem(inv.selected).isEmpty()) {
+                Hotbar.hold(cook, -1);
+                if (!inv.getItem(inv.selected).isEmpty()) {
+                    return Step.blocked("the hotbar is full, so there is no free hand to take the lid off");
+                }
+            }
+            if (!stockpot.onLitClick(level, cook, ItemStack.EMPTY)) {
+                return Step.blocked("the lid would not come off");
+            }
+            cook.swing(InteractionHand.MAIN_HAND);
+            return Step.done("took the lid off");
         }
         ItemStack lid = Pantry.find(cook, s -> s.is(ModItems.STOCKPOT_LID.get()));
         if (lid.isEmpty()) {
@@ -215,12 +230,23 @@ final class StockpotCooker implements Cooker {
             return Step.blocked("the stockpot would not take the lid");
         }
         cook.swing(InteractionHand.MAIN_HAND);
-        return Step.working("lid on, now simmering " + Dish.idOf(dish.result().getItem()));
+        return Step.done(contents().isEmpty() ? "put the lid on" : "put the lid on; it simmers now");
     }
 
-    private Step ladle(NumenPlayer cook, Dish dish) {
-        if (stockpot.hasLid()) {
-            return takeLidOff(cook, "to ladle the dish out");
+    @Override
+    public Step stir(NumenPlayer cook) {
+        return Step.blocked("a stockpot is not stir-fried — it simmers with the lid on");
+    }
+
+    @Override
+    public Step plate(NumenPlayer cook, Dish dish) {
+        Step stop = cold() != null ? cold() : lidOn("to ladle the dish out");
+        if (stop != null) {
+            return stop;
+        }
+        if (stockpot.getStatus() != IStockpot.FINISHED) {
+            return Step.blocked("the stockpot at " + Cooker.where(pos) + " is " + stage(stockpot.getStatus())
+                    + ", nothing to ladle out yet");
         }
         ItemStack inPot = stockpot.getResult();
         boolean ordered = ItemStack.isSameItem(inPot, dish.result());
@@ -246,24 +272,5 @@ final class StockpotCooker implements Cooker {
         }
         return Step.done(plated, "ladled out " + Dish.idOf(plated.getItem())
                 + "; " + stockpot.getTakeoutCount() + " serving(s) still in the pot");
-    }
-
-    /**
-     * 揭盖。森罗把盖子直接塞进主手那一格,所以先空出一格快捷栏握着——不然主手上原来
-     * 那件东西会被盖子顶掉,凭空没了。
-     */
-    private Step takeLidOff(NumenPlayer cook, String what) {
-        Inventory inv = cook.getInventory();
-        if (!inv.getItem(inv.selected).isEmpty()) {
-            Hotbar.hold(cook, -1);
-            if (!inv.getItem(inv.selected).isEmpty()) {
-                return Step.blocked("the hotbar is full, so there is no free hand to take the lid off " + what);
-            }
-        }
-        if (!stockpot.onLitClick(level, cook, ItemStack.EMPTY)) {
-            return Step.blocked("the lid would not come off");
-        }
-        cook.swing(InteractionHand.MAIN_HAND);
-        return Step.working("took the lid off " + what);
     }
 }

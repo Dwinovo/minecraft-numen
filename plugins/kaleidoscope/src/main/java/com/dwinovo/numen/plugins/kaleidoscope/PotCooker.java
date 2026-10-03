@@ -25,7 +25,7 @@ import java.util.Map;
  *
  * <p>节奏全由方块实体自己走,前提是<b>底下那格点着火</b>——没火 {@code tick} 整个不跑,
  * 倒计时也不动。倒油开出 60 秒的下料窗口,挥一下锅铲起锅;炒完只留 40 秒的出锅窗口,
- * 过了就转糊、再 20 秒自己倒成木炭。
+ * 过了就转糊、再 20 秒自己倒成木炭。所以 {@link #oil}、{@link #fill}、{@link #stir}、{@link #plate} 得一口气接着做。
  */
 final class PotCooker implements Cooker {
 
@@ -131,51 +131,56 @@ final class PotCooker implements Cooker {
         };
     }
 
+    /** 没火的时候锅整个不动,哪一步都白做。 */
+    private Step cold() {
+        return pot.hasHeatSource(level) ? null : Step.blocked("the pot at " + Cooker.where(pos) + " has no lit heat "
+                + "source under it — nothing at all happens until the stove below is lit");
+    }
+
     @Override
-    public String cannotStart(Dish dish) {
-        if (dish.cookware() != Cookware.POT) {
-            return dish.id() + " is a " + dish.cookware().id() + " recipe, not a pot one";
+    public Step oil(NumenPlayer cook) {
+        Step cold = cold();
+        if (cold != null) {
+            return cold;
         }
         if (pot.getStatus() != IPot.PUT_INGREDIENT) {
-            return "the pot at " + Cooker.where(pos) + " is busy (" + stage(pot.getStatus())
-                    + ", making " + Dish.idOf(pot.getResult().getItem()) + ") — " + KaleidoscopeCommands.line(KaleidoscopeCommands.INSPECT)
-                    + " it and wait or clear it";
+            return Step.blocked("the pot at " + Cooker.where(pos) + " is " + stage(pot.getStatus())
+                    + ", not waiting for oil");
         }
-        if (!contents().isEmpty()) {
-            return "the pot at " + Cooker.where(pos) + " already has "
-                    + contents().stream().map(s -> Dish.idOf(s.getItem())).toList()
-                    + " in it — somebody else's mix, take it out first";
+        if (hasOil()) {
+            return Step.done("the pot already has oil in it");
         }
-        return null;
+        ItemStack oil = Pantry.find(cook, s -> s.is(TagMod.OIL));
+        if (oil.isEmpty()) {
+            return Step.blocked("no oil in the inventory (anything in tag kaleidoscope_cookery:oil,"
+                    + " or an oil pot) — the pot will not take ingredients without it");
+        }
+        if (!pot.onPlaceOil(level, cook, oil)) {
+            return Step.blocked("the pot would not take " + Dish.idOf(oil.getItem()) + " as oil");
+        }
+        cook.swing(InteractionHand.MAIN_HAND);
+        return Step.done("poured " + Dish.idOf(oil.getItem()) + "; the ingredient window is open for "
+                + pot.getCurrentTick() / 20 + " seconds");
     }
 
     @Override
-    public Step advance(NumenPlayer cook, Dish dish, int[] portions) {
-        if (!pot.hasHeatSource(level)) {
-            return Step.blocked("the pot at " + Cooker.where(pos) + " has no lit heat source under it"
-                    + " — nothing at all happens until the stove below is lit");
-        }
-        return switch (pot.getStatus()) {
-            case IPot.PUT_INGREDIENT -> prep(cook, dish, portions);
-            case IPot.COOKING -> stir(cook);
-            case IPot.FINISHED, IPot.BURNT -> plate(cook, dish);
-            default -> Step.blocked("the pot at " + Cooker.where(pos) + " is in stage " + pot.getStatus());
-        };
+    public Step base(NumenPlayer cook, Dish dish) {
+        return Step.blocked("a pot takes no soup base — that is a stockpot step");
     }
 
-    /** 倒油 → 下料 → 挥一下锅铲起锅。 */
-    private Step prep(NumenPlayer cook, Dish dish, int[] portions) {
+    @Override
+    public Step fill(NumenPlayer cook, Dish dish, int[] portions) {
+        Step cold = cold();
+        if (cold != null) {
+            return cold;
+        }
+        if (pot.getStatus() != IPot.PUT_INGREDIENT) {
+            return Step.blocked("the pot at " + Cooker.where(pos) + " is " + stage(pot.getStatus())
+                    + " — ingredients go in before it starts cooking");
+        }
         if (!hasOil()) {
-            ItemStack oil = Pantry.find(cook, s -> s.is(TagMod.OIL));
-            if (oil.isEmpty()) {
-                return Step.blocked("no oil in the inventory (anything in tag kaleidoscope_cookery:oil,"
-                        + " or an oil pot) — the pot will not take ingredients without it");
-            }
-            if (!pot.onPlaceOil(level, cook, oil)) {
-                return Step.blocked("the pot would not take " + Dish.idOf(oil.getItem()) + " as oil");
-            }
-            cook.swing(InteractionHand.MAIN_HAND);
-            return Step.working("poured " + Dish.idOf(oil.getItem()));
+            return Step.blocked("the pot takes no ingredients before oil: " + KaleidoscopeCommands.line(
+                    KaleidoscopeCommands.OIL) + " it first");
         }
         int[] need = dish.stillNeeded(pot.getInputs(), portions);
         for (int i = 0; i < need.length; i++) {
@@ -195,19 +200,40 @@ final class PotCooker implements Cooker {
             cook.swing(InteractionHand.MAIN_HAND);
             return Step.working("added " + added);
         }
-        ItemStack shovel = Pantry.find(cook, s -> s.is(TagMod.KITCHEN_SHOVEL));
-        if (shovel.isEmpty()) {
-            return Step.blocked("no kitchen shovel in the inventory — cooking cannot be started");
-        }
-        pot.onShovelHit(level, cook, shovel);
-        cook.swing(InteractionHand.MAIN_HAND);
-        return Step.working("started cooking " + Dish.idOf(dish.result().getItem()));
+        return Step.done("everything for " + Dish.idOf(dish.result().getItem()) + " is in the pot: "
+                + contents().stream().map(s -> Dish.idOf(s.getItem())).toList());
     }
 
-    private Step stir(NumenPlayer cook) {
-        if (level.getGameTime() % STIR_INTERVAL != 0) {
-            return Step.working("stir-frying");
+    @Override
+    public Step lid(NumenPlayer cook) {
+        return Step.blocked("a pot has no lid — that is a stockpot step");
+    }
+
+    /** 下料阶段挥一下起锅,炒的阶段按人手的节奏一直挥;炒好了交出去,糊了如实说。 */
+    @Override
+    public Step stir(NumenPlayer cook) {
+        Step cold = cold();
+        if (cold != null) {
+            return cold;
         }
+        return switch (pot.getStatus()) {
+            case IPot.PUT_INGREDIENT -> {
+                if (contents().isEmpty()) {
+                    yield Step.blocked("the pot at " + Cooker.where(pos) + " is empty — nothing to stir-fry");
+                }
+                yield shovel(cook, "started cooking");
+            }
+            case IPot.COOKING -> level.getGameTime() % STIR_INTERVAL != 0
+                    ? Step.working("stir-frying") : shovel(cook, "stir-frying");
+            case IPot.FINISHED -> Step.done("cooked: " + Dish.idOf(pot.getResult().getItem()) + " is ready — plate "
+                    + "it within " + pot.getCurrentTick() / 20 + " seconds or it burns");
+            case IPot.BURNT -> Step.ruined(ItemStack.EMPTY, "it burnt in the pot");
+            default -> Step.blocked("the pot at " + Cooker.where(pos) + " is in stage " + pot.getStatus());
+        };
+    }
+
+    /** 挥一下锅铲。 */
+    private Step shovel(NumenPlayer cook, String doing) {
         ItemStack shovel = Pantry.find(cook, s -> s.is(TagMod.KITCHEN_SHOVEL));
         if (shovel.isEmpty()) {
             return Step.blocked("no kitchen shovel in the inventory — without stir-frying the dish"
@@ -215,11 +241,20 @@ final class PotCooker implements Cooker {
         }
         pot.onShovelHit(level, cook, shovel);
         cook.swing(InteractionHand.MAIN_HAND);
-        return Step.working("stir-frying");
+        return Step.working(doing);
     }
 
     /** 出锅装盘。糊了或者做砸了也照样端出来——锅腾出来,东西也如实交到她手上。 */
-    private Step plate(NumenPlayer cook, Dish dish) {
+    @Override
+    public Step plate(NumenPlayer cook, Dish dish) {
+        Step cold = cold();
+        if (cold != null) {
+            return cold;
+        }
+        if (pot.getStatus() != IPot.FINISHED && pot.getStatus() != IPot.BURNT) {
+            return Step.blocked("the pot at " + Cooker.where(pos) + " is " + stage(pot.getStatus())
+                    + ", nothing to take out yet");
+        }
         boolean burnt = pot.getStatus() == IPot.BURNT;
         ItemStack inPot = pot.getResult();
         boolean ordered = ItemStack.isSameItem(inPot, dish.result());
