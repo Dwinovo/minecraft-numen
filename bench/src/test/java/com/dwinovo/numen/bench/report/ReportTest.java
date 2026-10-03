@@ -117,4 +117,24 @@ class ReportTest {
         assertTrue(md.contains("2 个场景配对"), md);
         assertFalse(md.contains("只在前"), "基线不参与对比:" + md);
     }
+
+    /** 并行的几份并成一份:按组、场景、变体、第几次排好,记录文件搬到一处,汇总重写,各份的目录删掉。 */
+    @Test
+    void shardsMergeIntoOneResultInPlanOrder(@TempDir Path dir) throws java.io.IOException {
+        Path one = dir.resolve(Merge.SHARDS).resolve("0");
+        Path two = dir.resolve(Merge.SHARDS).resolve("1");
+        Runs.append(one.resolve(Runs.FILE), run("mine_iron", Variant.NOOP, 1, false, EndReason.DONE, null, null));
+        Runs.append(one.resolve(Runs.FILE), run("mine_iron", Variant.SOLUTION, 1, true, EndReason.DONE, null, null));
+        Runs.append(two.resolve(Runs.FILE), run("build_hut", Variant.SOLUTION, 1, true, EndReason.DONE, null, null));
+        java.nio.file.Files.createDirectories(two.resolve("transcripts"));
+        java.nio.file.Files.writeString(two.resolve("transcripts").resolve("vanilla-build_hut-solution-1.jsonl"), "{}");
+
+        assertEquals(3, Merge.merge(dir));
+        List<Run> merged = Runs.read(dir);
+        assertEquals(List.of("build_hut solution", "mine_iron solution", "mine_iron noop"),
+                merged.stream().map(r -> r.scenario() + " " + r.variant()).toList());
+        assertTrue(java.nio.file.Files.exists(dir.resolve("transcripts").resolve("vanilla-build_hut-solution-1.jsonl")));
+        assertTrue(java.nio.file.Files.exists(dir.resolve(Summary.FILE)));
+        assertFalse(java.nio.file.Files.exists(dir.resolve(Merge.SHARDS)));
+    }
 }

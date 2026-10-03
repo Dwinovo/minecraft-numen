@@ -62,7 +62,7 @@ final class Session {
     }
 
     int maxTicks() {
-        return maxTicks;
+        return Math.max(maxTicks, 20);
     }
 
     void run(GameTestHelper helper) {

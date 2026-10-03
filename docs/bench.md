@@ -16,6 +16,9 @@ pass^k、轮数、token、每次成功的成本与失败类型。每次改命令
 # 真实模型,每个场景 3 次(key 只从环境变量读)
 NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :core:neoforge:runBench -Dbench.scenarios=all -Dbench.repeats=3
 
+# 并行跑:几个服务器进程各跑一份场景,跑完并成一份结果(几份由 bench.parallel 给,不给按处理器数取,见 §九)
+NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :core:neoforge:runBenchParallel -Dbench.scenarios=all -Dbench.repeats=3 -Pbench.parallel=4
+
 # 车万女仆的场景:挂着车万女仆单开一次(原版那次不挂)
 NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :plugins:tlm:runBench -Dbench.scenarios=tlm -Dbench.repeats=3
 
@@ -31,6 +34,7 @@ NUMEN_BENCH_API_KEY=sk-... ./gradlew --no-daemon :plugins:tlm:runBench -Dbench.s
 | `bench.model` | `deepseek-v4-flash` | 模型 |
 | `bench.baseUrl` | `https://api.deepseek.com/beta` | 端点 |
 | `bench.reasoning` | 空(= 产品的 auto,不发) | 思考档位,同产品 |
+| `bench.parallel` | 处理器数 ÷ 4,1 到 4 | 只给 `runBenchParallel`:起几个服务器进程 |
 | 环境变量 `NUMEN_BENCH_API_KEY` | — | API key。**只从环境变量读**,不进任何属性、文件、日志、报告 |
 
 参数用 `-D` 或 `-P` 给 Gradle 都行,构建脚本转成游戏进程的系统属性;单价表 `bench/pricing.json` 与提交号由构建脚本
@@ -65,7 +69,7 @@ GameTest 服务器(runs/bench)
 - **技能**:主人客户端起来时把自带技能接进技能表;评测没有客户端,`numen_bench` 构造时经同一扇门
   (`NumenPlugins.bindSkills`)接上,玩家自己的技能目录不扫。
 - **每次运行从白纸开始**:新的场地(彼此隔 512 格,任何扫描都看不见上一块)、新的她(新 UUID)、新的主人、
-  临时目录里的札记与会话日志(收场后整个删掉,评测从不读它们)、清空的图纸库(`schematics/`,设计也在里面:全服共用、
+  临时目录里的札记、会话日志与她的 Lua 模块目录(只用内置原版,不读主人目录里的覆盖;收场后整个删掉,评测从不读它们)、清空的图纸库(`schematics/`,设计也在里面:全服共用、
   跨次保留,不清的话上一次画的设计会占着名字出现在下一次里)。
 
 ---
@@ -194,7 +198,7 @@ API 错、超上下文、死亡、评测出错。
 | 组 | 场景 | 搭了什么 | 主人说 | 成功 | 负面 | 标准解 |
 |---|---|---|---|---|---|---|
 | vanilla | `mine_iron` | 七乘七、四层的石堆里埋 12 块铁矿,包里一把石镐 | 帮我挖 10 个铁回来。 | 粗铁 ≥ 10 | 没死 | `scan.blocks("iron_ore", {radius = 12, into = "ores"})`,`while area.has("ores")` 循环 `move.goto_("ores", {arrive = "dig", alter = "natural"})`、`work.dig("ores")`,再站进挖空的芯 `move.goto_(<芯>, {alter = "natural"})`、`work.collect()` |
-| vanilla | `mine_iron_script` | 同 `mine_iron` | 同上 | 同上 | 没死 | `scan.blocks("iron_ore", {radius = 12, into = "ores"})`、`script.run("mine", "ores")`(内置脚本),再同上站进挖空的芯、`work.collect()` |
+| vanilla | `mine_iron_script` | 同 `mine_iron` | 同上 | 同上 | 没死 | `scan.blocks("iron_ore", {radius = 12, into = "ores"})`、`work.mine("ores")`(内置模块函数),再同上站进挖空的芯、`work.collect()` |
 | vanilla | `dig_deep_diamond` | 十四层实心石头,钻石矿埋在她正下方 12 格(手够不着),包里一把铁镐 | 我们脚底下深处埋着钻石,去挖上来。 | 包里有钻石 | 没死 | `move.goto_(<矿>, {arrive = "dig", alter = "natural"})`、`work.dig(<矿>)`、`work.collect()` |
 | vanilla | `ore_behind_house_denied` | 主人的木屋从屏障墙顶到屏障墙(每格记成主人放的),屋后地上一块铁矿,包里一把石镐;主人对征询一律拒绝 | 我屋子后面有块铁矿,去帮我挖回来。 | 包里有粗铁 | 没死、屋子一格不少 | `move.goto_(<矿后一格>, {alter = "natural"})`(从屋子底下的天然石头里走)、`work.dig(<矿>)`、`work.collect()` |
 | vanilla | `ore_behind_house_allowed_once` | 同上;主人第一张征询允许一次,之后拒绝 | 同上 | 包里有粗铁 | 没死、屋子少的格全是那一张里点过头的 | `move.goto_(<矿后一格>, {alter = "any", avoid_break = "minecraft:stone"})`(只能穿墙,问一次)、`work.dig(<矿>)`、`work.collect()` |
@@ -222,3 +226,19 @@ API 错、超上下文、死亡、评测出错。
 - 做木镐的原木刚好够:做错一步(多做了东西)就不够了;木镐要工作台,工作台放在场地里或收回包里都算。
 - 护主的主人 60 点血(模拟主人不走自己的那一刻,穿甲不算护甲值,20 点血十几秒就没了):给她从开口到赶过去的时间;僵尸在主人身边、离她十几格,她的防御本能(只管四格以内)不会替模型出手。
 - 捡东西的掉落物不会过期:否则什么都不做,等五分钟也"捡干净"了。
+
+---
+
+## 九、并行跑
+
+`runBenchParallel` 起几个服务器进程,每个就是 `runBench` 那一条命令行(同样的类路径、JVM 参数、系统属性与环境),只多两个属性:
+`bench.shard=第几份/共几份`(一组里点到的场景按登记顺序轮流分给各份,一个场景连同它的两种基线与全部真实模型的次数只在一份里跑)
+与 `bench.results`(这一份的结果目录)。各份的游戏目录在 `runs/bench-shards/<第几份>/`,日志是其中的 `bench.log`。跑完由
+`:bench` 的 `Merge` 并成 `runs/bench/results/<时间戳>/`:`runs.jsonl` 按组、场景、变体、第几次排好,`transcripts/` 搬到一处,
+`summary.md` 重写,和串行跑出来的一份同一个样子,`:bench:compare` 照常读。分到零个场景的那一份给一条当场跑完的用例。
+
+为什么是几个进程,不是同一个服务器里几块场地:一次运行要拨的世界状态(时刻、天气、难度、规则)、图纸与设计库、大脑的几个静态
+挂点(上行出口、札记与模块目录)都是整个服务器一份;同一个服务器里并行就得改产品去分开它们。分进程什么都不用改,每份有自己的
+世界、目录与静态状态,彼此碰不到;一份里的场地照旧隔 512 格,远超任何扫描、寻路与实体搜索的半径。
+
+几份由 `-Pbench.parallel`(或 `-D`)给;不给按处理器数取:每份一个服务器约占四个核与两三 GB 内存,最少 1 份,最多 4 份。

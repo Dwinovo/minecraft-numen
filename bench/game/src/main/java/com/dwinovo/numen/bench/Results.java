@@ -14,8 +14,9 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 /**
- * 这一次评测的结果目录 {@code <游戏目录>/results/<时间戳>/}:{@code runs.jsonl} 每跑完一次追加一行,{@code summary.md}
- * 随之重写,{@code transcripts/} 放每次的记录。一个进程一个目录,几组场景写进同一份。
+ * 这一次评测的结果目录 {@code <游戏目录>/results/<时间戳>/}(并行跑时是构建脚本给这一份的目录,{@code bench.results}):
+ * {@code runs.jsonl} 每跑完一次追加一行,{@code summary.md} 随之重写,{@code transcripts/} 放每次的记录。一个进程一个目录,
+ * 几组场景写进同一份;并行的几份跑完由构建脚本并成一份({@code Merge})。
  */
 final class Results {
 
@@ -32,7 +33,9 @@ final class Results {
     static synchronized Results get() {
         if (instance == null) {
             String stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
-            instance = new Results(FMLPaths.GAMEDIR.get().resolve("results").resolve(stamp), stamp);
+            Path given = Settings.fromSystem().results();
+            instance = given != null ? new Results(given, stamp)
+                    : new Results(FMLPaths.GAMEDIR.get().resolve("results").resolve(stamp), stamp);
         }
         return instance;
     }

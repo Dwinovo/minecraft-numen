@@ -24,7 +24,8 @@ import java.util.function.Consumer;
  * }</pre>
  *
  * 要跑哪些由 {@code -Dbench.scenarios} 选(见 {@code docs/bench.md});一个都没选中就一条用例都不给,什么都不跑。
- * 一组的场景在一条用例里一次一次地跑,组与组之间各占一批,也是一组跑完再跑下一组。
+ * 一组的场景在一条用例里一次一次地跑,组与组之间各占一批,也是一组跑完再跑下一组。并行跑({@code runBenchParallel})是几个
+ * 服务器进程各跑一份场景({@link Settings#mine}),每份自己的世界、目录与静态状态,彼此碰不到。
  */
 public final class Bench {
 
@@ -54,6 +55,8 @@ public final class Bench {
         if (picked.isEmpty()) {
             return List.of();
         }
+        // 并行跑时这一份只跑分给它的;一个都没分到也给一条当场跑完的用例:GameTest 服务器一条用例都没有就起不来
+        picked = settings.mine(picked);
         String structures = System.getProperty("numen.gametest.structures");
         if (structures == null) {
             throw new IllegalStateException("评测要 GameTest 的模板目录:运行配置没有给 -Dnumen.gametest.structures");
