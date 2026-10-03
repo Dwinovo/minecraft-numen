@@ -5,6 +5,7 @@ import com.dwinovo.lua.vm.FixedKeysTable;
 import com.dwinovo.lua.vm.Globals;
 import com.dwinovo.lua.vm.LuaClosure;
 import com.dwinovo.lua.vm.LuaError;
+import com.dwinovo.lua.vm.LuaString;
 import com.dwinovo.lua.vm.LuaTable;
 import com.dwinovo.lua.vm.LuaValue;
 import com.dwinovo.lua.vm.Prototype;
@@ -33,9 +34,11 @@ import java.util.regex.Pattern;
  * 沙箱里的 Lua 5.2:一段脚本在它自己的虚拟线程上跑,宿主登记的函数可以阻塞(等一件慢事做完),不碰调用方的线程。
  *
  * <h2>沙箱</h2>
- * 全局只有基本函数(去掉了 load、loadstring、dofile、loadfile、require、collectgarbage、print 的上游实现)、string、table、math,
- * 加上宿主登记的函数与 {@code print}(交给宿主)。没有 io、os、debug、package、coroutine、luajava,也装载不了二进制块。字符串的
- * 元表与 string 库全 JVM 一份、只读,一段脚本改不了另一段看到的。
+ * 虚拟机({@code com.dwinovo.lua.vm})是一份完整的 Lua 5.2 解释器,只带中立的挂点(逐条指令的钩子、字符串分配记账、定死几个键的表),
+ * 默认什么都不限。装什么、限什么全在这里({@link #standardGlobals}):全局只有基本函数(装载代码、碰文件与 JVM 的 load、dofile、
+ * loadfile、collectgarbage 不装,print 换成交给宿主的那一个)、string、table、math,加上宿主登记的函数。这一份虚拟机本来就不带 io、
+ * os、debug、package、coroutine、luajava 与二进制块的装载。string 库表与字符串元表全 JVM 一份、只读({@link #STRING}),一段脚本改不了
+ * 另一段看到的。
  *
  * <h2>预算</h2>
  * 每段脚本一份 {@link Limits}:两次调宿主函数之间的指令数、总指令数、字符串分配的总字节数、墙钟。到了就停下,停的方式脚本接
@@ -174,6 +177,27 @@ public final class LuaSandbox {
 
     /** 当前线程上正在跑的那一段(宿主函数里问行号用);不在脚本线程上是 null。 */
     private static final ThreadLocal<Run> CURRENT = new ThreadLocal<>();
+
+    /** 基本库里沙箱不装的:装载代码、碰文件与 JVM 的那几个;print 换成交给宿主的那一个。 */
+    private static final List<String> LEFT_OUT = List.of("load", "dofile", "loadfile", "collectgarbage", "print");
+
+    /**
+     * string 库表,全 JVM 一份、锁住;字符串的元表 {@code {__index = string}} 也一份、锁住({@link #STRING_META})。虚拟机里字符串的元表
+     * 是 JVM 级的静态对象,谁先装 string 库谁的表进去,一个沙箱改了它(改 {@code string.rep}、改 {@code getmetatable("").__index}),
+     * 别的沙箱跟着变;库里的函数都不带状态,所以共用一份只读的就够。脚本要自己的字符串工具就写成局部函数。
+     */
+    private static final ReadOnlyTable STRING = new ReadOnlyTable("the string library");
+    private static final ReadOnlyTable STRING_META = new ReadOnlyTable("the string metatable");
+
+    static {
+        LuaValue plain = new StringLib().call(LuaValue.valueOf("string"), new LuaTable());
+        for (Varargs kv = plain.next(LuaValue.NIL); !kv.arg1().isnil(); kv = plain.next(kv.arg1())) {
+            STRING.rawset(kv.arg1(), kv.arg(2));
+        }
+        STRING.lock();
+        STRING_META.rawset(LuaValue.INDEX, STRING);
+        LuaString.s_metatable = STRING_META.lock();
+    }
 
     static {
         Globals g = standardGlobals();
@@ -828,7 +852,10 @@ public final class LuaSandbox {
 
     // ---- 环境与值 ----
 
-    /** 沙箱的标准环境:基本函数(上游 BaseLib 已去掉装载代码与碰 JVM 的那些)、string、table、math;编译器只收文本。 */
+    /**
+     * 沙箱的标准环境:基本函数去掉 {@link #LEFT_OUT}、只读的 string({@link #STRING})、table、math;编译器只收文本。字符串的元表
+     * 在类初始化时已换成只读的那一份,虚拟机的 string 库再装也不会动它(它只在还没有元表时放进去)。
+     */
     private static Globals standardGlobals() {
         Globals g = new Globals();
         g.load(new BaseLib());
@@ -836,6 +863,12 @@ public final class LuaSandbox {
         g.load(new StringLib());
         g.load(new JseMathLib());
         LuaC.install(g);
+        LEFT_OUT.forEach(name -> g.rawset(name, LuaValue.NIL));
+        g.rawset("string", STRING);
+        g.finder = null;
+        g.STDIN = null;
+        g.STDOUT = null;
+        g.STDERR = null;
         return g;
     }
 

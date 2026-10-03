@@ -35,21 +35,36 @@ debug、os、io 库的修复(这些库我们不带)、`b121b65151e4` 与 `661309
 
 ## 我们改了什么
 
+分界:**`com.dwinovo.lua.vm` 只是一份正确的 Lua 5.2 解释器**(上游加 5.2 一致性修复),外加几个中立的挂点,默认什么都不限;
+**装什么、限什么全是 `com.dwinovo.lua.LuaSandbox` 的策略**。别的宿主拿 `vm` 去用,得到的就是一份完整的(不带上面那几个库的)Lua。
+
+### 虚拟机(`com.dwinovo.lua.vm`)
+
 | 文件 | 改动 | 为什么 |
 |---|---|---|
-| `lib/BaseLib` | 去掉 `load`、`loadstring`、`dofile`、`loadfile`、`collectgarbage`、`print` 与找资源文件的实现 | 沙箱里不装载代码、不碰文件与 JVM;`print` 交给宿主 |
-| `lib/StringLib` | string 库表与字符串元表全 JVM 只造一份、锁成只读(`ReadOnlyTable`);去掉 `string.dump`;`string.rep` 先按 long 算总长、记账再分配(上游会乘法溢出、负长度) | 上游的字符串元表是静态共享的,一个沙箱改了 `string.rep` 或 `getmetatable("").__index`,别的沙箱跟着变 |
-| `LuaString`、`Buffer`、`lib/StringLib` | 每次为字符串开新字节数组之前向 `Allocation` 记账 | 字符串操作是 Java 代码在干、不计指令;不记账的话 `s = s .. s` 翻倍四十次就要上千 GB |
-| `Globals` | 去掉标准输入输出、找文件、包库、调试库的挂点与二进制块的装载;加一个逐条指令的钩子 `Hook` | 只收源码文本(绕过编译器的字节码能做出编译器不会生成的指令);钩子取代调试库,脚本碰不到它 |
-| `LuaClosure` | 每条指令前调 `Globals.hook`;报错只带位置、块名照 chunkid 写;错误处理函数只接 `Exception` | 预算、打断、行号都在钩子里;宿主的停止(`Error`)不被吞掉 |
-| `LuaError` | 报错写成 `块名:行号: 消息`(上游少一个冒号);`error(消息, 0)` 与非字符串的错误值不带位置(上游照样加) | 和原生 Lua 一样,行号读得出来;脚本自己写好的报错原样交出去 |
-| `Globals`、新增 `FixedKeysTable` | 全局表与宿主函数表里定死的键:赋值(含 `rawset`)一律拒,拒的话由宿主给 | 宿主登记的函数是同伴的第 ① 层,程序与模块换不掉、遮不住 |
-| 新增 `Allocation`、`ReadOnlyTable` | 见上 | |
-| 新增 `com.dwinovo.lua.LuaSandbox` | 对外的沙箱:预算、虚拟线程、打断、宿主函数、值互转 | 见下 |
+| `LuaError` | 报错写成 `块名:行号: 消息`(上游少一个冒号);`error(消息, 0)` 与非字符串的错误值不带位置(上游照样加) | 和原生 Lua 5.2 一样 |
+| `LuaClosure` | 报错只带位置、块名照 chunkid 写;错误处理函数只接 `Exception` | 和原生 5.2 一样;宿主的停止(`Error`)不被 `pcall`/`xpcall` 吞掉 |
+| `lib/StringLib` | `string.rep` 先按 long 算总长再分配(上游会乘法溢出、负长度) | 正确性 |
+| `LuaTable`、`lib/StringLib`、`lib/MathLib` | 从 FiguraMC 拿的三处修复(见上表) | 对着原生 5.2 修 |
+| `lib/BaseLib` | 和上游一样完整(`load`、`dofile`、`loadfile`、`collectgarbage`、`print` 都在),只是 `pcall`/`xpcall` 里调试库的挂点不在 | 这一份不带调试库 |
+| `Globals` | 不带包库、调试库的挂点与二进制块的装载(`LoadState`),只读源码文本 | 这一份不带那几样(见"来源") |
+| `Globals.hook`(挂点) | 每条指令前调一次的钩子;没装是 null | 中立挂点:宿主在这里数指令、查打断、记行号 |
+| `Allocation`(挂点) | 每次为字符串开新字节数组之前向当前线程挂着的计量器报账(`LuaString`、`Buffer`、`lib/StringLib`);没挂计量器不记 | 中立挂点:字符串操作是 Java 代码在干、不计指令,预算要它 |
+| `FixedKeysTable`(挂点) | 一种能定死几个键的表,`Globals` 就是它;默认什么都不定死 | 中立挂点:宿主要定死哪些名字由宿主定 |
+
+### 沙箱(`com.dwinovo.lua`)
+
+| 文件 | 策略 | 为什么 |
+|---|---|---|
+| `LuaSandbox.standardGlobals` | 基本库不装 `load`、`dofile`、`loadfile`、`collectgarbage`;`print` 换成交给宿主的那一个;标准输入输出与找文件的挂点置空 | 沙箱里不装载代码、不碰文件与 JVM |
+| `LuaSandbox`、`ReadOnlyTable` | string 库表与字符串元表全 JVM 只造一份、锁成只读,每个沙箱拿的都是它 | 虚拟机的字符串元表是 JVM 级的静态对象,一个沙箱改了 `string.rep` 或 `getmetatable("").__index`,别的沙箱跟着变 |
+| `LuaSandbox.Limits` 与钩子、计量器 | 两次调宿主函数之间的指令数、总指令数、字符串字节数、墙钟 | 见下 |
+| `LuaSandbox` 与 `FixedKeysTable` | 宿主登记的全局函数、函数表与表里的宿主函数定死,话由宿主给 | 宿主登记的函数是同伴的第 ① 层,程序与模块换不掉、遮不住 |
+| `LuaSandbox` | 虚拟线程、打断、宿主函数、模块与名字空间、值互转 | 见下 |
 
 ## 沙箱与预算
 
-- **全局**:基本函数(去掉上面那些)、`string`、`table`、`math`,加上宿主登记的函数与 `print`。没有协程:LuaJ 的协程每个都起
+- **全局**:基本函数(不装上面那几个)、`string`、`table`、`math`,加上宿主登记的函数与 `print`。没有协程:LuaJ 的协程每个都起
   一个平台线程,脚本要并发以后再说。
 - **宿主的名字定死**:宿主登记的全局函数、函数表与表里的每个宿主函数换不掉也遮不住(`move = {}`、`function move.go() end`、
   `rawset(move, "go", f)` 都在那一行报错,话由 `Builder.redefined` 给);往宿主的表里加别的名字照常。

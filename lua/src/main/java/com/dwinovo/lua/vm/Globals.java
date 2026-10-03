@@ -23,9 +23,11 @@ package com.dwinovo.lua.vm;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintStream;
 import java.io.Reader;
 
 import com.dwinovo.lua.vm.lib.BaseLib;
+import com.dwinovo.lua.vm.lib.ResourceFinder;
 
 /**
  * Global environment used by luaj.  Contains global variables referenced by executing lua.
@@ -107,9 +109,21 @@ import com.dwinovo.lua.vm.lib.BaseLib;
  * @see com.dwinovo.lua.vm.compiler.LuaC
  * @see com.dwinovo.lua.vm.luajc.LuaJC
  * <p>
- * Numen:全局表是一张 {@link FixedKeysTable},宿主登记的全局名(函数与函数表)定死,脚本换不掉也遮不住。
+ * Numen:全局表是一张 {@link FixedKeysTable}:默认什么都不定死,宿主要定死哪些名字由宿主定(沙箱定死它登记的函数与函数表)。
  */
 public class Globals extends FixedKeysTable {
+
+	/** The current default input stream. */
+	public InputStream STDIN  = null;
+
+	/** The current default output stream. */
+	public PrintStream STDOUT = System.out;
+
+	/** The current default error stream. */
+	public PrintStream STDERR = System.err;
+
+	/** The installed ResourceFinder for looking files by name. */
+	public ResourceFinder finder;
 
 	/** The currently running thread.  Should not be changed by non-library code. */
 	public LuaThread running = new LuaThread(this);
@@ -156,6 +170,19 @@ public class Globals extends FixedKeysTable {
 	/** The installed compiler.
 	 * @see Compiler */
 	public Compiler compiler;
+
+	/** Convenience function for loading a file that is either binary lua or lua source.
+	 * @param filename Name of the file to load.
+	 * @return LuaValue that can be call()'ed or invoke()'ed.
+	 * @throws LuaError if the file could not be loaded.
+	 */
+	public LuaValue loadfile(String filename) {
+		try {
+			return load(finder.findResource(filename), "@"+filename, "bt", this);
+		} catch (Exception e) {
+			return error("load "+filename+": "+e);
+		}
+	}
 
 	/** Convenience function to load a string value as a script.  Must be lua source.
 	 * @param script Contents of a lua script, such as "print 'hello, world.'"
@@ -239,7 +266,7 @@ public class Globals extends FixedKeysTable {
 	 * @param mode String containing 'b' or 't' or both to control loading as binary or text or either.
 	 */
 	public Prototype loadPrototype(InputStream is, String chunkname, String mode) throws IOException {
-		// Numen:只收源码文本,二进制块不装载(绕过编译器的字节码能做出编译器不会生成的指令)
+		// Numen:这一份不带二进制块的装载(LoadState),只读源码文本
 		if (mode.indexOf('t') >= 0) {
 			return compilePrototype(is, chunkname);
 		}

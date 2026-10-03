@@ -1,10 +1,15 @@
-package com.dwinovo.lua.vm;
+package com.dwinovo.lua;
+
+import com.dwinovo.lua.vm.LuaError;
+import com.dwinovo.lua.vm.LuaTable;
+import com.dwinovo.lua.vm.LuaValue;
 
 /**
- * Numen:一张造好之后谁都改不了的表。字符串的元表与 string 库表在上游是全 JVM 共用的静态对象,一个沙箱改了它,别的沙箱里
- * {@code ("x"):rep(2)} 跟着变;所以它们只造一份、锁住,每个沙箱拿到的都是这一份。
+ * 一张造好之后谁都改不了的表。字符串的元表在虚拟机里是全 JVM 共用的静态对象,一个沙箱改了它(或改了它指向的 string 库表),别的
+ * 沙箱里 {@code ("x"):rep(2)} 跟着变;所以沙箱把 string 库表与字符串元表各造一份、锁住,每个沙箱拿到的都是这一份
+ * ({@link LuaSandbox})。
  */
-public final class ReadOnlyTable extends LuaTable {
+final class ReadOnlyTable extends LuaTable {
 
     private final String what;
     private boolean locked;

@@ -27,7 +27,6 @@ import com.dwinovo.lua.vm.Buffer;
 import com.dwinovo.lua.vm.LuaString;
 import com.dwinovo.lua.vm.LuaTable;
 import com.dwinovo.lua.vm.LuaValue;
-import com.dwinovo.lua.vm.ReadOnlyTable;
 import com.dwinovo.lua.vm.Varargs;
 
 /**
@@ -80,29 +79,11 @@ public class StringLib extends TwoArgFunction {
 	 * @param env the environment to load into, typically a Globals instance.
 	 */
 	public LuaValue call(LuaValue modname, LuaValue env) {
-		env.set("string", SHARED);
-		return SHARED;
-	}
-
-	/**
-	 * Numen:string 库表全 JVM 只有这一份,造好就锁住;字符串的元表 {@code {__index = string}} 也只有一份、锁住。上游每装一次库造
-	 * 一张新表、谁先装谁的表进共享元表,哪个沙箱改了它(改 {@code string.rep}、改 {@code getmetatable("").__index}),别的沙箱
-	 * 跟着变;库里的函数都不带状态,所以共用一份只读的就够。脚本要自己的字符串工具就写成局部函数。
-	 */
-	private static final ReadOnlyTable SHARED = build();
-
-	static {
-		ReadOnlyTable meta = new ReadOnlyTable("the string metatable");
-		meta.rawset(INDEX, SHARED);
-		LuaString.s_metatable = meta.lock();
-	}
-
-	private static ReadOnlyTable build() {
-		ReadOnlyTable string = new ReadOnlyTable("the string library");
+		LuaTable string = new LuaTable();
 		string.set("byte", new _byte());
 		string.set("char", new _char());
 		string.set("find", new find());
-		string.set("format", new StringLib().new format());
+		string.set("format", new format());
 		string.set("gmatch", new gmatch());
 		string.set("gsub", new gsub());
 		string.set("len", new len());
@@ -112,7 +93,13 @@ public class StringLib extends TwoArgFunction {
 		string.set("reverse", new reverse());
 		string.set("sub", new sub());
 		string.set("upper", new upper());
-		return string.lock();
+
+		env.set("string", string);
+		if (!env.get("package").isnil()) env.get("package").get("loaded").set("string", string);
+		if (LuaString.s_metatable == null) {
+			LuaString.s_metatable = LuaValue.tableOf(new LuaValue[] { INDEX, string });
+		}
+		return string;
 	}
 	
 	/**
