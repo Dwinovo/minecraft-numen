@@ -43,7 +43,8 @@ Numen 只经本模块寻路,旧的 `core/pathing` 已删除;下一步是合回 1
 这些在旧稿里定下、真机验过，新架构照旧:
 
 - **路线规格 `RouteSpec`** 按次传值，每次搜索和执行各带一份，成本模型只认它。四组谓词，每组一个出处:
-  格子类型与每类代价、能力开关与上限(含 `alter`:`none` / `natural` / `any`)、按位置的代价(`PositionCosts`)
+  格子类型与每类代价、能力开关与上限(含改地形的三个开关:`dig` 许不许挖、`place` 许不许放、`consent` 许不许走要问主人的格,
+  以及要问的格价钱乘几倍 `consentMultiplier`)、按位置的代价(`PositionCosts`)
   与按方块种类的禁令、动作代价(挖、放、跳、涉水)。服主总开关是上限，规格只能在其内收紧。
 - **路径不是可交接的东西**,能交接的是目标加规格;路径由引擎随时推导、拼接、重算。
 - **规划是查询，执行是任务。** 查询当场返回，不占身体;候选路线用惩罚法出(把已有候选踩过的格加价重搜，
@@ -131,7 +132,7 @@ EditLedger edits = run.stop();              // 叫停也交出实际账
 ```
 
 请求、结局、账单都是数据。结局是枚举加事实，例如 `NO_ROUTE`(搜完无路)、`OUT_OF_BUDGET`、
-`BLOCKED(位置, 方块, 动作, 原因)`、`NEEDS_ALTER`(规格不许改地形)、`NO_MATERIALS`、`DENIED(位置, 许可给的理由)`。
+`BLOCKED(位置, 方块, 动作, 原因)`、`NEEDS_CHANGES`(规格不许挖或不许放,带上要改的那几格)、`NO_MATERIALS`、`DENIED(位置, 许可给的理由)`。
 模块里没有一句给模型或玩家看的话。
 
 ### 端口：宿主实现的接口
@@ -267,14 +268,14 @@ core 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(在
 - **地形模型**:对照原版碰撞箱逐项核落脚高度、净空、迈步。楼梯(四个朝向、上下半、五种形状)、下半砖、上半砖、
   双层半砖、栅栏、墙、栅栏门、玻璃板与铁栏杆、地毯、雪层 1–8、灵魂沙、耕地、土径、门与活板门的开关与上下半、
   灯笼、床、箱子、附魔台、炼药锅、脚手架、梯子、藤蔓。
-- **规划**:在内存里摆小场景，看规划出的路线和代价。每种动作的前提成立与不成立各一组;`alter=none` 的路线
+- **规划**:在内存里摆小场景，看规划出的路线和代价。每种动作的前提成立与不成立各一组;不许挖不许放的路线
   一格不改;许可拒绝的格不进路线;没有料时不规划垫块;预算用完和搜完无路区分开。
 - **搜索**:目标族的到达判定与启发式、按节点数计的预算、候选路线的惩罚法与去重。
 
 ### GameTest(生成一个普通假玩家，交给 `Navigator.drive` 真走)
 
 用的假玩家不是 `NumenPlayer`,它能通过就说明模块不依赖 Numen。每条用例断言:在时限内到达(或按预期失败，
-失败原因正确);`alter=none` 时世界一格不变;实际账与世界的变化一致。
+失败原因正确);不许挖不许放时世界一格不变;实际账与世界的变化一致。
 
 场景从最基本的一路覆盖到复杂情况:
 
@@ -290,8 +291,8 @@ core 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(在
 | 攀爬 | 梯子上、下;藤蔓与梯子同一种攀爬;爬梯子进头顶压着屋顶楼梯的阁楼;梯子顶端出口;脚手架 |
 | 流体 | 浅水涉水;游过一片水;流水不走;岩浆拒绝;岩浆旁边加价绕行;细雪、蜘蛛网避开 |
 | 危险 | 仙人掌、火、甜浆果、岩浆块旁边绕开;压力板、绊线按规格避开 |
-| 不许改地形 | `alter=none` 遇墙绕行;绕不过去报"需要改地形",世界不变 |
-| 改地形 | `alter=natural` 挖穿土墙、垫柱上崖、搭桥过沟、向下挖;不挖许可拒绝的格(箱子、玩家放的);要问的格在 `alter=any` 下列进账单;挖掉的格与实际账一致 |
+| 不许改地形 | 不许挖不许放(规格默认)遇墙绕行;绕不过去报"需要改地形",世界不变 |
+| 改地形 | 许挖许放挖穿土墙、垫柱上崖、搭桥过沟、向下挖;不挖许可拒绝的格(箱子、玩家放的);要问的格在许征询(`consent`)时列进账单;挖掉的格与实际账一致 |
 | 垫路料 | 没料时不垫、报"没有料";创造模式凭空取料;路上放下的块记进实际账 |
 | 挖掘的物理约束 | 头顶是沙子、沙砾时不挖脚下支撑;挖了会漏水、漏岩浆的格绕开;冰不挖;挑对工具 |
 | 跑酷 | 1 格、2 格、3 格的沟;起跳落点有高度差;疾跑助跑 |
@@ -316,7 +317,7 @@ core 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(在
 | 憋气 | 封顶水道一口气游不完不下水,结局说出那一段水下;短到憋得住照游;上面敞开的长水道换着气游;戴海龟壳、带水下呼吸效果游得更长 |
 | 危险 | 两只怪之间不直穿;绊线与压力板按规格一致处理 |
 | 改地形 | 能绕 6 格以内就不挖;桥位上有高草或单层雪时块放进那一格，账和权限落在那一格;不往自己身体占的格放块;不挖正托着自己的那一格;改动预算不够时报最便宜那条要改几格;世界边界旁不挖不放;建造规格的按种类禁挖仍生效;导航不挖自己要去用的工作台 |
-| 垫路料 | `alter=none` 且身上有料时失败不提"没料";料只在背包深处且不许动背包时报"没有料";按清单优先级取料、副手回退;搭桥后原来手上的武器还在;路上垫的块托着她时先挪开再撤;创造模式按清单变料 |
+| 垫路料 | 不许放且身上有料时失败不提"没料";料只在背包深处且不许动背包时报"没有料";按清单优先级取料、副手回退;搭桥后原来手上的武器还在;路上垫的块托着她时先挪开再撤;创造模式按清单变料 |
 | 挖掘 | 空手挖原木耗时与原版一致;水下挖掘定价与执行一致;背包深处的更好工具被计价、被使用;红石矿不重复打;修补附魔工具不重开;准星贴棱线两格都能挖穿;挖掘中有实体挡住准星;破坏事件被取消时以拒绝收场;慢挖硬方块不被判卡死;创造模式 5 格交互距离 |
 | 跑酷 | 落点是耕地时不跳;饱食度不够时不规划需疾跑的跳 |
 | 动态世界 | 重规划不无谓换道;被打飞后回到路上 |
@@ -441,13 +442,14 @@ core 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(在
   以及从高处落上去会踩坏的格(耕地、海龟蛋,落差超过半格)。走法各自只管几何。
 - **成本模型**:`CostModel` 组合 `ActionCosts`、`RouteSpec`、`TerrainPolicy`、`Materials`(建模型时问一次 `next()`)、
   `BodySnapshot`(连同由它建的 `ToolChoice`)、`Threats`(建模型时折成按位置的代价),不许继承;换规格用 `withSpec`。
-  挖与放的准入(`admitDig`/`admitPlace`)与定价(`digCost`/`placeCost`/`overhead`)只在这里。准入依次问：规格许不许改地形
-  → 按位置与按种类 →(放)有没有料 → 物理(`DigRules`、`Replaceable`、`Faces`、边界)→ 许可。"不许改地形"是 `NEEDS_ALTER`,
-  "没有料"是 `NO_MATERIALS`;许可要问的格只在 `alter=any` 下准入，价钱乘 `CONSENT_MULTIPLIER`,凭据随 `Edit` 交出。
+  挖与放的准入(`admitDig`/`admitPlace`)与定价(`digCost`/`placeCost`/`overhead`)只在这里。准入依次问：规格许不许挖(放)
+  → 按位置与按种类 →(放)有没有料 → 物理(`DigRules`、`Replaceable`、`Faces`、边界)→ 许可。"不许挖"是 `NO_DIGGING`,
+  "不许放"是 `NO_PLACING`,"没有料"是 `NO_MATERIALS`;许可要问的格只在规格许征询(`consent`)时准入，价钱乘规格的
+  `consentMultiplier`(默认 `RouteSpec.CONSENT_MULTIPLIER` = 10),凭据随 `Edit` 交出;许可拒绝的格是墙。
 - **挖掘**:`DigRules` 物理上能不能挖(漏液、塌方、冰、虫蚀、基岩、冒险模式、边界);`DigTime` 照原版 `getDestroyProgress`
   与 `Player.getDestroySpeed`(效率附魔按原版属性算法叠加，急迫、疲劳、破坏速度、水下、离地),所需状态来自身体快照;
   `ToolChoice` 看全背包，一样快时空手优先、其次不耗耐久的。
-- **门**:开关门是 `Edit.Door`,不算改地形、不问许可,`alter=none` 也开;任何一种走法被门挡着都一样处理。
+- **门**:开关门是 `Edit.Door`,不算改地形、不问许可,不许挖不许放也开;任何一种走法被门挡着都一样处理。
 - **摔落**:上限只在 `BodySnapshot.maxFall`——摔不疼的高度都行，要掉血的只到摔完还剩 6 点血;
   `RouteSpec.maxFallHeightNoWater` 只能收紧它(`CostModel.fallLimit`)。落进水里、抓住梯子不受上限;摔疼的按掉的血折价。
 - **搜索**:`AStar` 展开一个节点时，前提读"快照加上走到这个节点那一步的改动"(`EditedView.after`),刚挖开的格是空的、
@@ -480,11 +482,11 @@ core 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(在
 
 - 控制器照 `Maneuver` 做;复核用同一个 `Moves.of(kind).premise` 在活世界上判，不成立就交出 `Fails`。
 - 从真实身体上抄 `BodySnapshot`(`Mining.efficiency` 要扣掉手上那件自己的修饰符)、端口在假玩家夹具与 Numen 适配层的实现。
-- 结局里的 `NEEDS_ALTER`、`NO_MATERIALS`、"改动预算不够、最便宜那条要改几格"要从搜索与前提的结论汇总出来，归门面。
+- 结局里的 `NEEDS_CHANGES`、`NO_MATERIALS`、"改动预算不够、最便宜那条要改几格"要从搜索与前提的结论汇总出来，归门面。
 - 没做的：带水桶的高落差(MLG)、霜行者、跑酷半空放块;按"有真实用例"再加。
 - 已知近似：展开节点只叠"走到这里那一步"的改动，更早的步子的改动不叠(身体已离开那里，只有路线折回来时才看不到);
   斜走找挡路的门时按两端身体盒的包络找。
-- 性能：单测的哈希表世界里,`alter=natural` 在实心地形中展开 10 万个节点约 3.5 秒;先在真实快照上量，再看第 0 层
+- 性能：单测的哈希表世界里,许挖许放在实心地形中展开 10 万个节点约 3.5 秒;先在真实快照上量，再看第 0 层
   `Stepping` 的取样与每一步草稿的分配。
 
 ### 第三批(09-27,`pathing-rewrite` 之上 caccab38..e4a9e8c2)
@@ -506,9 +508,10 @@ core 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(在
 - **第 4 层**(`api/`):`Navigator.of(body, ports)`;`plan(PlanQuery)` 交出 `Planning`(轮询出 `PlanResult`:候选路线各带
   预算账,没有候选时带结局),`drive(NavRequest)` 交出 `Navigation`(`tick`/`stop`/`report`/`progressing`/`plannedFall`/
   `retarget`/`pause`/`resume`),`takeBack` 交出 `Teardown`;请求可带先照走的候选路线与展开预算。结局 `Outcome` 是数据:
-  `Arrived`、`NoRoute`、`OutOfBudget`、`Unloaded`、`Stranded`、`NeedsAlter(级别, 要改几格)`、`NoMaterials`、
+  `Arrived`、`NoRoute`、`OutOfBudget`、`Unloaded`、`Stranded`、`NeedsChanges(要做的改动)`、`NoMaterials`、
   `OverAlterBudget(要改几格)`、`Denied(格, 理由)`、`Blocked(格, 方块, 走法, 前提或执行里出的事)`、`NoLineOfSight`。
-  搜索没交出路时,为什么没路由 `Diagnosis` 在同一份快照上换条件再搜得出(先问许改的够不够,再问料、改动预算、许可)。
+  搜索没交出路时,为什么没路由 `Diagnosis` 在同一份快照上换条件再搜得出(先问许挖许放够不够、再加上许征询,不许征询时问许征询够不够,
+  再问料、改动预算、许可)。
 - **端口的最终形状**:身体 `Body`(`entity()` 加 `snapshot()`)另给;`Ports` 四个——`Effector`(`dig`/`release`/`use`,
   如实交回碎了哪格、变了哪几格、被拒及理由)、`TerrainPolicy.judge(改动, 格, 方块) → Permit`(放行/要问带凭据/拒绝带理由)、
   `Materials.next()`、`Threats.current()`。第四节表里的 `PlacementAdvice`、`Limits`、`NavLog` 没有用到的地方,没做。
@@ -517,7 +520,7 @@ core 在适配层之外只 import 门面(`api`)、规格(`spec`)、目标族(在
   坠落备(`Edit.Catch`),执行中的计划坠落经 `plannedFall` 对外声明;#31 下载具记进 `BodyAction`;#16 到达只看目标的
   `contains`,视线由执行层到了之后复核(`NoLineOfSight`);#11 挖的时候照 `ToolChoice` 同一个选择拿工具;
   执行复核与规划用同一个前提函数。
-- **GameTest**:夹具 `Trial`(每刻推导航、收场断言结局、`alter=none` 不改地形、实际账与世界逐格对照)、`TestBody`
+- **GameTest**:夹具 `Trial`(每刻推导航、收场断言结局、不许挖不许放时不改地形、实际账与世界逐格对照)、`TestBody`
   (普通假玩家,不是 `NumenPlayer`)、`Scenes`、`Worlds`;第八节两张表的场景按类别分进 16 个用例类,共 18 批 170 条,全部通过。
   补上的类别:目标(`GoalGameTests`)、预算与长途(`BudgetGameTests`)、执行复核(`RecheckGameTests`)、tick 速率
   (`TickRateGameTests`)、门面(`FacadeGameTests`),以及门里"斜走途中的门"。
@@ -744,7 +747,8 @@ goto 超时、跟随报没路,还有 17 次 "Can't keep up"。新模块一行日
   由第十三节切换记录里的量测估:实心石头挖 30 格隧道约一万一千个节点。区外的只报告,去不去归模型(`move_goto` 过去再挖)。
   `work collect` 的半径上限是同一个数,也改成以受理时的位置为中心。
 - **开走前整条规划留着**:它是权限层"执行开始时整条路线过一次裁决"的时机(goto、follow 在 `alter=any` 下同样走它),不是为远处矿场
-  存在的;工作区里整条路都在一次规划的视野里,它不再撞快照边。
+  存在的;工作区里整条路都在一次规划的视野里,它不再撞快照边。(10-03 权限改成走到那一格才问,这次整条规划没有别的理由,删了,
+  见"规格的三个开关与越界才问"一节。)
 - **删掉的**:`NoPathVerdict`(首次找矿查询回来前的无路不算数——现在查询回来之前不出发)、同一局面第二次无路才收工(目标全在
   一份快照里,一次结局就是对这一批的完整回答)、按"进了新区块"补查(查询以工作区中心为球心,她在区里走到哪儿问的都是同一片)、
   掉落物按服务器视距找(改成工作区里的,加上她自己敲出来弹出区外的)。
@@ -782,7 +786,7 @@ goto 超时、跟随报没路,还有 17 次 "Can't keep up"。新模块一行日
   `Dig` 数遮挡)在快照上调它;执行在活世界上调它:到达复核(`Driver.arrive` 经 `Goal.Sighting.seen`)、瞄点(`Aim.hits`、`Aim.use`)、
   Numen 的 `use block`(`Aim.use`)。收掉的三份:`Aim.hits` 自己的 `clip`、`Driver.sees`(瞄点加准星比对)、`use block` 的
   "瞄点加准星比对"。准星拾取 `Crosshair.pick` 照旧是原版那一次(连实体),它答的是"这一下按在谁身上",不是"看不看得见"。
-- **软遮挡执行时先清掉再用**:导航不动它(`alter none` 时世界一格不变),用那一格的一方清——Numen 的 `use block` 按之前一格一格
+- **软遮挡执行时先清掉再用**:导航不动它(不许挖不许放时世界一格不变),用那一格的一方清——Numen 的 `use block` 按之前一格一格
   左键清掉,每一格过权限层,回执里说。
 - **四面封死**建目标时就知道(`Use.sealed`);有敞开的面却一处也站不了是 `Use.stands` 为空。Numen 受理时当场提醒,不出发。
 - **`offBlocks` 删掉**:它只给撤垫块与建造收场"从垫块上下来"用,两处随撤垫块一起删了(见下一节)。"别站上这几块"本来就是
@@ -833,7 +837,7 @@ goto 超时、跟随报没路,还有 17 次 "Can't keep up"。新模块一行日
   宿主拿它说"这一段看清到哪儿、之后未知",执行时拿它当这一段的开头,后面照这一段的目标边走边算(承诺照样绑着)。
 - 单测:`RouteSpecTest.aConfinedUseForbidsEveryOtherCellAndTwoConfinementsIntersect`、`SearchTest.aSpecConfinedToThePlannedDigsDigsOnlyThose`、
   `aPlanThatRunsOutOfBudgetHandsOverThePartOfTheWayItSaw`、`aPlanContinuingARouteStartsWhereItEndsAndCarriesItsLastStep`。
-- **要改地形才有路的那条路**:结局 `Outcome.NeedsAlter` 带上诊断搜出的那条路要做的改动(`changes`,挖哪几格、放哪几格连同许可的
+- **要改地形才有路的那条路**:结局 `Outcome.NeedsChanges` 带上诊断搜出的那条路要做的改动(`changes`,挖哪几格、放哪几格连同许可的
   答复;`alterations()` 是它的格数),宿主点名那几格,代替原来失败后另起一次规划列候选。诊断设想身上有料,点名的放块可能是身上没有的料。
 - 候选路线的惩罚法(`RoutePlanner` 多条候选)模块里留着(门面 GameTest 在测),Numen 侧只要一条。
 
@@ -963,9 +967,9 @@ C* = 286、h ≈ 21,地面铺开半径约 37 格,11589 个节点。挖掘的代�
   空中铺开(搭桥、垫柱)仍靠它们分段。
 
 **怎么量**:模块单测里的临时基准(不提交),函数给出的世界:地面在 y = 63,往下是石头,快照同执行一样装着周围六个区块;原版身体,
-背包里一把铁镐(注明"空手"的除外),许改地形时是 `alter=natural`,"有料"是身上带着圆石;预算四万、不先交半程(规划的口径);
+背包里一把铁镐(注明"空手"的除外),许改地形时是许挖许放、不征询,"有料"是身上带着圆石;预算四万、不先交半程(规划的口径);
 毫秒是这台机器上单线程五次取中位数,同时跑着别的会话,只看量级。挖掘场景的目标与规格就是 `move goto --arrive dig`(`Goals.dig`,
-`alter=natural`);`work dig` 一例是脚下为心、半径 10 的球,站、过、挖、放都只许在球里(`WorkArea.confine`),三块铁矿按
+许挖许放、不征询);`work dig` 一例是脚下为心、半径 10 的球,站、过、挖、放都只许在球里(`WorkArea.confine`),三块铁矿按
 `anyOf(priced(dig))` 挑。
 
 | 场景 | 改前 展开 / 毫秒 / 代价 / 步数 | 改后 展开 / 毫秒 / 埋深毫秒 / 代价 / 步数 |
@@ -1008,6 +1012,27 @@ C* = 286、h ≈ 21,地面铺开半径约 37 格,11589 个节点。挖掘的代�
   到达、直直往下挖;改前是预算用完)。模块 GameTest `DigGameTests.plans_straight_down_to_an_ore_buried_deep`(二十七格深的铁矿,一次
   规划搜到头、照着挖到)、`plans_into_a_hill_to_an_ore_inside`(石山里六格深的铁矿,只从正面挖进去几格)。性能数字只在这里与汇报里,
   不写成断言耗时的测试。
+
+### 规格的三个开关与越界才问(10-03,`api2` 之上)
+
+`alter` 的三级(`none` / `natural` / `any`)把三件事捆在一根旋钮上:许不许挖、许不许放、许不许走要问主人的格。脚本里一趟路的描述
+(`route.plan` 收的那张表,见 `shell.md` §七)要能分开说"只挖不放""不问主人",所以拆开:
+
+- **`RouteSpec`**:`dig`、`place`、`consent` 三个布尔,加 `consentMultiplier`(要问的格价钱乘几倍,不小于 1,默认
+  `RouteSpec.CONSENT_MULTIPLIER` = 10,原在 `ActionCosts`)。`changes()` 是"许挖或许放"。出厂默认不挖、不放、许征询;征询只在
+  许挖或许放时才碰得到。`Builder.changes(b)` 同时开关挖与放。
+- **准入**:`CostModel.admitDig` 不许挖是 `Reason.NO_DIGGING`,`admitPlace`/`admitCatch` 不许放是 `NO_PLACING`(取代 `NEEDS_ALTER`);
+  许可答"要问"时看 `consent`,不许征询这一格就是墙,许征询照常准入、价钱乘 `consentMultiplier`。许可答"拒绝"永远是墙。
+- **结局**:`Outcome.NeedsAlter(级别, 格数)` 换成 `NeedsChanges(changes)`,`digs()`/`places()`/`asks()` 说那条路要挖、要放、
+  要不要问,宿主据此点名该打开哪个开关。`Diagnosis` 先在原规格上补开挖与放,还不够再补开征询;规格本来就许挖许放但不许征询时,
+  只补开征询。
+- **路过不停**:`NavRequest.through`(`passing()`)让 `Driver` 进了目标就算到,不站稳;路线描述里 `type = "through"` 的途经点用它。
+  单测之外的模块 GameTest `GoalGameTests.passing_through_a_cell_does_not_stop_in_it`。
+- **权限只在越界那一刻问**:规划时许可(`GateTerrain`,与执行同一个 `Gate` 判定)把拒绝的格当墙、要问的格按价钱加倍列进计划;
+  执行时 `CompanionHands` 在活世界上再判同一格,答"要问"时不动手,交回 `Unasked`(裁决与那一格的征询项);Numen 的 `Trip` 停在
+  那一格跟前、问主人,答应了接着走剩下的路,拒绝了在那里收场(`kind = "denied"`,下一步是把那一格写进描述的 `avoid` 再规划)。
+  开走前整条规划一次、把要问的格一次问完的那一步删了——它唯一的理由就是权限的时机。
+- **模块没加的**:模块不认识"一趟路的描述""计划""途经点";多段、乘船、垫路料清单都在 Numen 侧(`core/route`、`core/nav`)。
 
 ## 参考
 

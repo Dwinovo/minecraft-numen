@@ -251,7 +251,7 @@ The script stopped at line 1 (move.go) after 3 calls: your owner spoke; t12 keep
 | 借的 | 出处 | 我们的落点 |
 |---|---|---|
 | 位置是一种带名字字段的值,方块带着它的 `position`,`bot.dig(block)` 收方块本身 | mineflayer 的 `Vec3`、`Block.position`、`bot.dig` | `Pos {x, y, z}`(`Shapes.POS`),Block/Entity/Item 都带 `pos`;收位置的参数收任何带 `pos` 的表(`ArgType.cellFromJson`、`placeFromJson`) |
-| 查到的东西直接交给下一步,在代码里筛,不让模型抄数 | Anthropic《Code execution with MCP》、Cloudflare Code Mode | `scan.blocks(...).groups[1].nearest` → `work.dig`;`scan.entities()[1]` → `fight.attack`、`move.goto_` |
+| 查到的东西直接交给下一步,在代码里筛,不让模型抄数 | Anthropic《Code execution with MCP》、Cloudflare Code Mode | `scan.blocks(...).groups[1].nearest` → `work.dig`;`scan.entities()[1]` → `fight.attack`、`move.to`;`route.plan(...)` 的计划 → `move.go` |
 | 函数签名写成类型,模型照签名写代码;只给一个写代码的工具 | Cloudflare Code Mode(TS 接口)、smolagents `CodeAgent`(带类型的函数签名) | `api.help` 给 LuaLS 注释:`---@class 组` 加每个函数一行 `---@field f fun(…): 返回`(`LuaEngine.groupText`、`functionText`) |
 | 先看索引,要用哪组再展开 | Anthropic 的渐进披露(`search_tools`) | 系统提示只放 `<api>` 索引(组名、一句话、函数名与共用的类);`api.help("组")` 展开一组,`api.help("组.函数")` 展开一个 |
 | 失败是一个值,带能拿来改正的信息,程序自己接住再改 | CodeAct(报错回给代码自纠)、Voyager 技能库抛 `Error` 再由技能接住 | 错误值 `{kind, message, hint, fn, data}`,`pcall` 接住按 `err.kind` 分支;库函数 `raise(kind, …)` |
@@ -265,7 +265,7 @@ The script stopped at line 1 (move.go) after 3 calls: your owner spoke; t12 keep
 - **旧写法删了**:`{120, 64, -35}`、`"120 64 -35"`、`"120,64,-35"` 都是 `bad_argument`,`hint` 是改好的那一整行调用;
   只给了一列却要一格,说缺 y。删的理由:同一处位置三种写法,模型在三种之间来回猜,查询结果也交不进动作。
 - 共用的类在 `Shapes` 与各组登记时声明(`CommandGroup.declare`):`Pos`、`Block`、`Entity`、`Item`(继承 Entity)、`Error`,
-  以及 `AreaPart`、`Area`、`Route`、`Placed`、`Design`、`Maid` 这些组自己的。
+  以及 `AreaPart`、`Area`、`Plan`、`Leg`、`Step`、`Ask`、`Stop`、`Costs`、`Placed`、`Design`、`Maid` 这些组自己的。
 
 ### 返回
 
@@ -278,7 +278,7 @@ The script stopped at line 1 (move.go) after 3 calls: your owner spoke; t12 keep
 
 - 错误值是一张表:`kind`(`bad_argument`、`no_function`、`not_found`、`out_of_reach`、`no_path`、`no_material`、
   `needs_consent`、`denied`、`interrupted`、`timeout`、`failed`;只在回执里的 `syntax`、`runtime`、`limit`)、`message`、
-  `hint`(能照抄的下一行程序,如 `move.goto_({x = …}, {arrive = "dig"})`)、`fn`、`data`。种类只在 `ErrorKind` 一处。
+  `hint`(能照抄的下一行程序,如 `move.to({x = …}, {arrive = "dig"})`)、`fn`、`data`。种类只在 `ErrorKind` 一处。
 - `tostring(err)` 与 `"…" .. err` 都是 `work.dig: out_of_reach — 原因` 加一行 `hint: …`(元表的 `__tostring`、`__concat`)。
 - 参数错说是哪个参数、要什么样子、给了什么(`argument 'at': expected a Pos {x = …, y = …, z = …} …; got {x = 1, z = 3},
   which has no y`)。
@@ -300,7 +300,7 @@ The script stopped at line 1 (move.go) after 3 calls: your owner spoke; t12 keep
 |---|---|---|
 | ⓪ 身体控制 | 寻路执行、瞄准、换工具、追着转头、等冷却、憋气;模型看不见 | Java,任务与身体 |
 | ① 原子 API | 对一个名词做一种意图;每刻控制在里面;过权限层;做的事报告给模型 | Java,登记处生成 Lua 函数 |
-| ② 内置模块 | 常见的组合(`move.goto_`、`work.collect`、`work.mine`、`fight.clear`、`build.raise`) | Lua,随模组或插件发布 |
+| ② 内置模块 | 常见的组合(`move.to`、`move.flee`、`move.explore`、`work.collect`、`work.mine`、`fight.clear`、`build.raise`) | Lua,随模组或插件发布 |
 | ③ 她的模块 | 她存下来的函数表,`my.<名字>` | Lua,主人客户端 `config/numen/lua/<主人>/my/` |
 | ④ 这一轮的程序 | `lua` 工具的 `code` | Lua |
 
@@ -346,3 +346,88 @@ The script stopped at line 1 (move.go) after 3 calls: your owner spoke; t12 keep
 ### 评测与 GameTest
 
 评测每次运行、GameTest 每次启动,模块目录指向这一次专用的空目录,只用内置原版,不读主人目录里的覆盖。
+
+## 十、路线是一张描述,权限走到那一格才问(10-03)
+
+照导航软件的样子:一个引擎,一趟路一张描述(去处与途经点、移动方式、偏好旋钮、避开),交出一份计划;没有备选路线。Lua 不存状态,
+`route` 组只剩 `route.plan`,`throwaway` 组整组删了。
+
+### 描述:`route.plan` 收的那张表
+
+| 项 | 写法 | 不写时 |
+|---|---|---|
+| `to` | 终点:Pos、Block、Entity(规划时它在哪)、带 `cells` 的表(扫描给的一团:其中任意一格)、一列 `{x, z}`、一个高度 `{y}` | 用 `stops` 的最后一站作终点 |
+| `arrive` | `at` 站进去;`near` 在 `range` 格内;`use` 看得见、够得着、能用;`dig` 手够得着(一团时一次够得着最多的),挡着的可以挖开;`place` 手够得着那一格、不站进去;`away` 离它至少 `range` 格 | `at` |
+| `range` | `near` 多近算到、`away` 多远算到,1–64 | `near` 3,`away` 8 |
+| `stops` | 终点之前的途经点 `{{to = …, type = "through" \| "stop", arrive = …, range = …}, …}`;`through` 路过不停,`stop` 先停稳 | 直接去终点 |
+| `mode` | `walk` 走路;`boat` 坐在船上驾到离每一站最近的水格(每一站是 Pos 或一列,`at`/`near`) | `walk` |
+| `costs` | 偏好旋钮 `{dig, place, consent, jump, swim, fall, parkour, max_changes}`,见下 | 不挖不放;许挖或许放时要问的格贵十倍 |
+| `avoid` | 整个不进:格子种类名(`"water"`、`"door"`、`"climbable"`……)、一格(Pos 或 Block)、一个盒子(两个 Pos 写成一项)、带 `cells` 的表 | 只避开出厂避开的(岩浆、危险、流水、机关、易碎) |
+| `allow` | 放开出厂避开的几种:`flowing_water`、`trigger`、`fragile` | 照出厂避开 |
+| `avoid_break` / `avoid_place` / `avoid_step` | 不挖 / 不往里放 / 不站上:方块 id 或 `#标签`,或一格、盒子、带 `cells` 的表 | 不按名字禁 |
+| `materials` | 这一趟可以垫掉的方块,好的在前(id 或 `#标签`) | 标签 `#numen:throwaway` 里的普通方块 |
+
+`costs` 的每一项:`dig`、`place` 是 `false`(不许,默认)、`true`(许,原价)或一个数(许,每挖/放一格另加这么多);`consent` 是
+`true`(许走要问主人的格,价钱乘 10,默认)、`false`(要问的格当墙,绕开)或一个不小于 1 的倍数;`jump`、`swim` 是每跳一下、每过一格
+水另加的价;`fall` 是脚下没水时最多跳多高;`parkour` 许不许疾跑跳过 2–4 格的空隙;`max_changes` 是整趟最多改几格。读法与翻成寻路
+规格(`RouteSpec`)只在 `core/route/Description` 一处。
+
+权限不是描述的一项。规划时每一格自动问权限层(`GateTerrain`,与执行同一个 `Gate` 判定):拒绝的当墙,要问的照 `costs.consent`
+算贵、列进计划的 `asks`,允许的照常。
+
+### 计划:`route.plan` 返回的那份
+
+只规划不动,走不通也不抛(`ok = false` 加 `why`);只有参数写错才抛 `bad_argument`。计划只在这一段程序里有效(按程序记在她身上,
+下一段程序 `move.go` 它是 `not_found`)。
+
+| 字段 | 是什么 |
+|---|---|
+| `ok` | 没有走不到的段,`move.go` 走得了 |
+| `why` | 走不通(或只看清一截)的那一段为什么 |
+| `id` | 这份计划,`move.go` 认它 |
+| `spec` | 交进来的描述原样带回,改一项再 `route.plan` 一次 |
+| `from` | 从哪一格规划的 |
+| `steps`、`seconds` | 看清的那部分一共几步、大约几秒 |
+| `legs` | 一站一段,终点最后:`to`(这一站)、`reach`(`reached` / `partial` 只看清开头一截 / `unreachable` / `unplanned` 前一段没走到)、`finish`(停在哪一格)、`steps`、`seconds`、`path`、`breaks`、`places`、`asks`、`dives`(憋气潜过的水下)、`why` |
+| `path` | 一步一项 `{pos, move}`,`move` 是 `walk`、`jump`、`fall`、`swim`、`climb`、`dig`、`place`、`sail`;取得到,不进回执、不进 `print` |
+| `breaks`、`places` | 要挖、要放的 Block |
+| `asks` | 其中要问主人的格:Block 加 `why` |
+
+例子:
+
+```lua
+local plan = route.plan({to = {x = 120, y = 64, z = -35}, costs = {dig = true, place = true}})
+if not plan.ok then return plan.why end
+print(plan.steps, #plan.legs[1].asks)
+move.go(plan)
+```
+
+```lua
+-- 最近那块铁矿,先路过桥头,站到手够得着它的地方;不问主人,要问的格绕开
+local ore = scan.blocks("iron_ore", {radius = 16}).groups[1].nearest
+local plan = route.plan({stops = {{to = {x = 10, y = 64, z = 5}, type = "through"}}, to = ore, arrive = "dig",
+  costs = {dig = true, place = true, consent = false}, materials = {"minecraft:cobblestone"}})
+```
+
+### 走:`move.go`、`move.follow`、`move.dismount`
+
+- `move.go(plan)`:照这份计划走,只改计划里列的格(承诺,`Plan.bind`);从当前位置重新规划,超出计划就不走、说多出哪几格。
+  路上走到一格要问主人的,停在它跟前问:答应了接着走;拒绝了在那里失败,`kind = "denied"`,说为什么,`hint` 是把那一格加进
+  `avoid` 再规划的那一行。走不通是 `no_path`。不出发前整条再裁决一次——什么时候问只看走到了哪儿。
+- `move.follow(entity?, {distance, seconds})`:跟着(不给就是主人),总有结束:`seconds` 不写是 60 秒。
+- `move.dismount()`:从坐着的东西上下来,当场返回 `{vehicle, pos}`。
+- 坐船是描述里的 `mode = "boat"`,不另设动作。
+
+### 库:`move.lua`
+
+- `move.to(target, spec)`:`route.plan` 加 `move.go`,`spec` 是描述的其余几项;规划走不通时以 `no_path` 抛出,带 `why`。
+- `move.flee(from, {distance})`:离开一处(Pos、Block、Entity),就是 `arrive = "away"`,默认 8 格。
+- `move.explore(dir, {until_, seconds})`:朝一个方向(`"north"` 这样的方位或一个 Pos)一跳一跳地走,`until_` 是每跳之后问的
+  函数(`until` 是 Lua 关键字),返回真就停;`seconds` 封顶。
+- 模块不吞错:`move.go` 的 `denied`、`no_path` 原样抛给程序。
+
+### 删掉的
+
+`route.new/via/drop/spec/show/list/delete/reverse`、`move.goto_`、`throwaway` 组(垫路料清单不再挂在她身上、不落盘,写在每一趟的
+`materials` 里)、`alter`(拆成 `costs` 的 `dig`/`place`/`consent`)、路线存档(`Itinerary`、`Routes`)与路线标志的翻译
+(`RouteFlags`、`RouteSpecFlags`、`RouteOps`)、`area.add` 的 `route` 选项、`Trip` 开走前整条规划并一次问完要问的格。
