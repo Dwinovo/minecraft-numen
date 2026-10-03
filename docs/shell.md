@@ -96,18 +96,19 @@
 每个登记了的动作是一个函数 `组.动作(对象..., {选项=值})`:同一份登记、同一个处理函数、同样过权限、照常记实际账、
 受理即能跑。
 
-- 按顺序的对象依次给位置参数,最后一个位置参数收下余下的全部对象;最后一个参数是名字到值的表就是选项,键里的 `_` 与
-  `-` 同一;写在最后的空表 `{}` 是没写选项的选项表。一格写成 `{120, 64, -35}`,一串值写成一张表。
+- 按顺序的对象依次给位置参数,最后一个位置参数收下余下的全部对象;最后一个参数是一张表、而且它的键都是这个函数的选项名,
+  它就是选项表(键里的 `_` 与 `-` 同一),否则它是一个对象(一个 Pos 也是一张表)。一处位置写成 Pos `{x = 120, y = 64,
+  z = -35}`,一串值写成一张列表。值的样子、返回与错误见 §八。
 - 换算只在 `NumenCli.invocation` 一处:对象与选项写成参数名到值的 JSON,当场经参数类型 `ArgType` 读一遍
   (`CommandArgs.fromJson`,执行的那一侧读的也是它),**不拼命令行**。读不成(没有这个函数、对象多了、缺必填、选项名不对、
-  值读不成)在调用处抛 Lua 错误,三段 `error:`/`usage:`/`hint:`。读一组里没有的函数当场报错,附最像的那个名字。
-- **成功直接返回值,失败抛错。** 占身体的命令等它的 task_finished 再返回,`done` 算成功。登记时声明了返回项的命令
-  (`Action.returns("has")`,如 `area has`、`area parts`)回执里有这一项就返回它,成败都返回(`area.has` 没剩是
-  `false`,不是错),拿来就能循环:`for _, p in ipairs(area.parts("ores")) do … end`、`while area.has("ores") do … end`。
-  其余命令成功返回回执数据转成的表,没有数据就返回回执那句话;失败在调用处抛 Lua 错误,消息是
-  `move.goto_: <回执那句话>`,`pcall` 接得住,接住了就是脚本自己决定往下走。不另包一层 `{ok, text, data}`。
-  帮助里这几个动作多一行 `In a script: area.has(...) returns data.has, whether the command succeeds or not.`
-- `print(...)` 写进回执(至多 2000 字)。按名字跑的脚本用 `...` 与 `arg` 取参数。`error("why", 0)` 让它以这句话失败。
+  值读不成)在调用处抛错误值,种类 `bad_argument` 或 `no_function`,`hint` 是改好的那一行调用(看得出想写什么时)或怎么看
+  帮助。读一组里没有的函数当场报错,附最像的那个名字。
+- **成功返回数据,失败抛错误值。** 占身体的命令等它的 task_finished 再返回,task_finished 带着那件活的结果数据。返回什么
+  由登记时声明的类型说(`Action.returns(类型)`,或 `returns("has", 布尔)` 只交数据里的一项):`area.has` 是 true 或 false,
+  `area.parts` 是名字的列表,`work.dig` 是 `{dug, left, out_of_reach, nearest}`,声明了不返回的是 nil。那句话只进回执,不进
+  程序。失败抛的错误值 `pcall` 接得住,接住了就按 `err.kind` 分支。
+- `print(...)` 写进回执(至多 6000 字;表按 Lua 的写法印出来)。按名字跑的脚本用 `...` 与 `arg` 取参数。
+  `raise(kind, message, hint)` 以一个错误值失败,`error("why", 0)` 是程序自己的运行错(`runtime`)。
 - **名字的改写只有一条**:组名或动作名撞上 Lua 的保留字(`goto`、`end`……)或沙箱自带的全局名(`string`、`table`、
   `print`……)的,后面加 `_`:`move.goto_`。命令名本身不变,只是脚本里的写法;帮助里这样的动作多一行
   `In a script: move.goto_(...).`,`lua` 工具的说明里也写了这一条。规则只在 `ScriptEngine.functionName` 一处,登记处的
@@ -163,19 +164,20 @@
 
 ### 回执
 
-第一行一句话说结局(跑完用了几次调用几秒;出错停在哪一行、那次调用的报错与用法;被停下停在哪、为什么);之后每次 API
-调用一行(在哪一段的哪一行、哪个函数、成败、它那句话的第一行),然后是返回值与 `print` 写的字。每件身体活的实际账照旧只在
-它自己的 task_finished 里说一次(`NavText` 一处),回执点它的编号与结局,不另写一份。数据里有 `status`(ok / error /
-stopped)、`calls`、`returned`,按名字跑的有 `script`,回显的调用(`todo.write`)在 `echoed`。例:
+第一行一句话说结局(跑完用了几次调用几秒;出错停在哪一行、那个错误值写出来的样子;被停下停在哪、为什么);之后每次 API
+调用一行(在哪一段的哪一行、哪个函数、`ok` 或错误的种类、它那句话的第一行),然后是返回值(照 Lua 的写法)与 `print`
+写的字。回执里的话由各次调用自己的那句话拼成,数据由同一份结果给程序,两样出自同一处。每件身体活的实际账照旧只在它自己的
+task_finished 里说一次(`NavText` 一处),回执点它的编号与结局,不另写一份。数据里有 `status`(ok / error / stopped)、
+`calls`、`returned`(返回值本身,是表就是 JSON 对象)、出错时的 `error`(`kind`、`message`、`hint`、`fn`),按名字跑的有
+`script`,回显的调用(`todo.write`)在 `echoed`。例:
 
 ```
-The script stopped at line 3 after 2 calls: lua:3: work.dig: error: argument 'places': expected a cell …
+The script stopped at line 3 after 2 calls: work.dig: bad_argument — argument 'place': a position is one table with named fields; got {120, 12, -35}
 usage: work.dig(place..., {count=…})
-hint: `api.help("work.dig")` explains every argument.
-line 1 scan.blocks: ok — Found 6 iron_ore in 1 group …
-line 2 move.goto_: ok
-work line 13 route.new: ok — …
-line 3 work.dig: failed — error: argument 'places': expected a cell …
+hint: work.dig({x = 120, y = 12, z = -35})
+line 1 scan.blocks: ok — 1 group(s) within 32 blocks of …
+line 2 route.new: ok — made route goto-…
+line 3 work.dig: bad_argument — argument 'place': a position is one table with named fields; …
 ```
 
 ```
@@ -210,8 +212,9 @@ The script stopped at line 1 (move.go) after 3 calls: your owner spoke; t12 keep
 照技能与命令的登记:`NumenApi.bundleScripts(Path)` 收一个目录,每个 `<名字>.lua` 一份;`NumenApi.bundleLibrary(Path)`
 收库,每个 `<组>.lua` 给那一组加函数(`function move.goto_(…)`)。两侧都登记,在 `NumenPlugins.register` 的块里直接调。
 登记那一刻把关:名字合规矩、读得通、开头有说明、不重名、库函数不和动作撞名、相关动作指得到,任何一条不过当场抛出。
-core 原地读 jar 里的 `library/` 与 `scripts/`(`ModJar.find`)。库函数的说明是它上面那几行注释,进 `<api>` 索引与
-`api.help`,和动作同一种写法。
+core 原地读 jar 里的 `library/` 与 `scripts/`(`ModJar.find`)。库函数的说明是它上面那几行 LuaLS 注释(`---@param`、
+`---@return`),组的清单照它写成同一种 `---@field 名字 fun(…)` 一行,`api.help("move.goto_")` 原样给出那几行注释;说明只有
+注释这一处。
 
 `mine`(`core/common/src/main/resources/scripts/mine.lua`),不接错:哪一步失败,那一步的错就是整段的错:
 
@@ -277,3 +280,51 @@ end
 - **回执**:每次 API 调用一行;出错带行号与那次调用的 `error:`/`usage:`/`hint:`;返回值与 `print` 在后面。
 - **测试**:GameTest 全部从 Lua 入口调(`GameTestKit.lua`);库函数各有端到端的 GameTest(`mine`、`work.collect`、
   `fight.clear`、`build.raise`),到达方式 `reach`、`build.left`、够不着时 `build.at` 的拒绝各有一条。
+
+## 八、值、错误与帮助一个样子(10-03)
+
+照主流的写法统一:位置是一种值,查询结果原样交给动作,API 返回数据,失败是带种类的错误值,帮助是从登记处生成的类型签名。
+
+| 借的 | 出处 | 我们的落点 |
+|---|---|---|
+| 位置是一种带名字字段的值,方块带着它的 `position`,`bot.dig(block)` 收方块本身 | mineflayer 的 `Vec3`、`Block.position`、`bot.dig` | `Pos {x, y, z}`(`Shapes.POS`),Block/Entity/Item 都带 `pos`;收位置的参数收任何带 `pos` 的表(`ArgType.cellFromJson`、`placeFromJson`) |
+| 查到的东西直接交给下一步,在代码里筛,不让模型抄数 | Anthropic《Code execution with MCP》、Cloudflare Code Mode | `scan.blocks(...).groups[1].nearest` → `work.dig`;`scan.entities()[1]` → `fight.attack`、`move.goto_` |
+| 函数签名写成类型,模型照签名写代码;只给一个写代码的工具 | Cloudflare Code Mode(TS 接口)、smolagents `CodeAgent`(带类型的函数签名) | `api.help` 给 LuaLS 注释:`---@class 组` 加每个函数一行 `---@field f fun(…): 返回`(`LuaEngine.groupText`、`functionText`) |
+| 先看索引,要用哪组再展开 | Anthropic 的渐进披露(`search_tools`) | 系统提示只放 `<api>` 索引(组名、一句话、函数名与共用的类);`api.help("组")` 展开一组,`api.help("组.函数")` 展开一个 |
+| 失败是一个值,带能拿来改正的信息,程序自己接住再改 | CodeAct(报错回给代码自纠)、Voyager 技能库抛 `Error` 再由技能接住 | 错误值 `{kind, message, hint, fn, data}`,`pcall` 接住按 `err.kind` 分支;库函数 `raise(kind, …)` |
+| 类型注解的写法 | LuaLS(`---@class`、`---@field`、`---@param`、`---@return`) | 登记处的 `ScriptType` 与库函数自己的注释,同一种写法 |
+
+### 值
+
+- **位置只有一种写法**:一格是 Pos `{x = 120, y = 64, z = -35}`,一列是 `{x = …, z = …}`,一个高度是 `{y = …}`。小数按所在的
+  那一格算(`BlockPos.containing`),所以 `status.self().pos` 原样能交。任何带 `pos` 字段的表(Block、Entity、Item、一团的
+  `nearest`)放在位置那一格就是它的 `pos`;收实体的参数收编号或带 `id` 的表。读法只在 `ArgType` 一处。
+- **旧写法删了**:`{120, 64, -35}`、`"120 64 -35"`、`"120,64,-35"` 都是 `bad_argument`,`hint` 是改好的那一整行调用;
+  只给了一列却要一格,说缺 y。删的理由:同一处位置三种写法,模型在三种之间来回猜,查询结果也交不进动作。
+- 共用的类在 `Shapes` 与各组登记时声明(`CommandGroup.declare`):`Pos`、`Block`、`Entity`、`Item`(继承 Entity)、`Error`,
+  以及 `AreaPart`、`Area`、`Route`、`Placed`、`Design`、`Maid` 这些组自己的。
+
+### 返回
+
+- 每个动作登记时必须声明返回的类型(`Action.returns`,`CommandGroup.close` 查;不返回值是 `ScriptType.NOTHING`)。处理函数交回
+  `TaskResult`:`data` 给程序,`message` 只给回执与 task_finished,两样在同一处从同一份事实写出。
+- 只读不跑一段正文时(帮助里的例子、技能里的写法),调用按声明的类型造一个样子返回(`ScriptType.sample`),取字段、取第一项、
+  循环的写法都读得通;所以例子写错一个字段名,登记时就查出来。
+
+### 错误
+
+- 错误值是一张表:`kind`(`bad_argument`、`no_function`、`not_found`、`out_of_reach`、`no_path`、`no_material`、
+  `needs_consent`、`denied`、`interrupted`、`timeout`、`failed`;只在回执里的 `syntax`、`runtime`、`limit`)、`message`、
+  `hint`(能照抄的下一行程序,如 `move.goto_({x = …}, {arrive = "dig"})`)、`fn`、`data`。种类只在 `ErrorKind` 一处。
+- `tostring(err)` 与 `"…" .. err` 都是 `work.dig: out_of_reach — 原因` 加一行 `hint: …`(元表的 `__tostring`、`__concat`)。
+- 参数错说是哪个参数、要什么样子、给了什么(`argument 'at': expected a Pos {x = …, y = …, z = …} …; got {x = 1, z = 3},
+  which has no y`)。
+- 库函数按种类处理,不吞错:`work.collect` 走不到的那件跳过(`no_path`),最后有剩的以 `no_path` 失败并在 `data.left` 里列出;
+  `fight.clear` 跳过已经没了的(`not_found`);别的错原样抛出。
+
+### 帮助
+
+- `<api>` 索引:一句怎么用帮助,共用的类,然后一组一行(说明与函数名)。`api.help("组")`:`---@class 组`、每个函数一行
+  `---@field 名字 fun(参数: 类型, opts?: {…}): 返回 说明`、`组 = {}`,再接这一组用到的类。`api.help("组.函数")`:完整的
+  `---@param`/`---@return`、选项表与结果写成 `组.函数.opts`、`组.函数.result` 两个类、例子与说明。都由登记处与库的注释生成,
+  没有手写的第二份。

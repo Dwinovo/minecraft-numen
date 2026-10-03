@@ -1487,6 +1487,27 @@ area has ores/g2                 成功:ores/g2 has 1 cell(s) left to dig, the n
 - `build.at` 一格都够不着时当场拒(`OUT_OF_REACH`),说够不着的几格、最低最近的那一格与照抄的 `move.goto_(…, {arrive =
   "reach"})`,要先挖开的几格与 `work.dig`;放完够得着的、还剩别的,以成功收场并在回执里说还剩什么。设计格里立着别的方块
   (生存)由 `work.dig` 挖,`build.*` 只放。
-- `scan.entities` 的掉落物带 `pickup_delay`(还要几刻才捡得起),格子写成 `{x, y, z}`。
-- 直接回一份数据的查询(`status.self` 这类)在脚本里返回读成的表。
+- `scan.entities` 的掉落物带 `pickup_delay`(还要几刻才捡得起),位置是 Pos(附录 L)。
+- 每个调用在脚本里返回它声明的数据(附录 L)。
 
+## 附录 L:值、错误与帮助一个样子(10-03,`shell.md` §八)
+
+### 前后对照
+
+| | 之前 | 现在 |
+|---|---|---|
+| 一格 | `{120, 64, -35}`、`"120 64 -35"`、`"120,64,-35"` 都收 | 只收 Pos `{x = 120, y = 64, z = -35}`,或任何带 `pos` 的表;旧写法 `bad_argument`,`hint` 是改好的那一行 |
+| 一列、一个高度 | `{120, -35}`、`16` | `{x = 120, z = -35}`、`{y = 16}` |
+| 查询结果的位置 | `"120,64,-35"` 字符串 | Pos;方块 `{pos, name, …}`、实体 `{id, pos, name, category, …}`、物品继承实体 |
+| 返回 | 有声明返回项的交那一项,其余是回执数据或回执那句话 | 每个动作必须声明返回类型;返回数据,声明不返回的是 nil;那句话只进回执 |
+| 失败 | Lua 错误是一个字符串 `work.dig: <那句话>`,种类靠读文字 | 错误值 `{kind, message, hint, fn, data}`,`tostring`/`..` 写成 `work.dig: out_of_reach — …` |
+| 参数错 | 三段 `error:`/`usage:`/`hint:` 的字符串 | `bad_argument`/`no_function` 的错误值,`message` 带用法,`hint` 是改好的那一行或怎么看帮助 |
+| 帮助 | 用法行 `work.dig(place..., {count=…}) — 说明` | LuaLS 注释:组是 `---@class` 加每个函数一行 `---@field f fun(…): 返回`;一个函数是完整的 `---@param`/`---@return` |
+| 库函数的说明 | 注释的第一行 | 注释的第一句;签名照它的 `---@param`/`---@return` |
+| 评测的失败分类 | 正则读回执文字 | 读回执 `data.error.kind`(`Meter.errorKind`),五类由种类归(`Meter.errorClass`) |
+
+### 删掉的
+
+- 三个数的列表与数字串的位置读法(`ArgType` 里的旧分支)、用法行风格的帮助(`CommandHelp` 的 usage 清单)、`NavText.lua(Place)`
+  (位置写进程序的另一处写法,改用 `Place.literal`/`Shapes.literal`)、回执消息里一行一个 JSON 的清单(`scan.blocks`、
+  `scan.entities` 的行改成数据里的列表)、`Meter` 里读文字的几条正则。
