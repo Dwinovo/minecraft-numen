@@ -19,7 +19,7 @@ import java.util.Set;
 
 /**
  * 水面导航:她驾着船,把船开到离目标最近的可达水格。规划({@link #chart})与驾驶(实例)分开:路线描述写了 {@code mode = "boat"}
- * 时,{@code route.plan} 照当时的水面画出航线,{@code move.go} 照航线驾船;与 {@link Trip} 同一份契约(tick → RUNNING/ARRIVED/FAILED)。
+ * 时,{@code numen.route.plan} 照当时的水面画出航线,{@code numen.move.go} 照航线驾船;与 {@link Trip} 同一份契约(tick → RUNNING/ARRIVED/FAILED)。
  *
  * <h2>为什么不并进步行 A*</h2>
  * 步行图的动作集(跳、垫、挖、贴边)对船一条都不成立;船的图是<b>同一水面高度的二维平面 + 岸线障碍</b>。硬塞进主引擎要给每个
@@ -28,7 +28,7 @@ import java.util.Set;
  *
  * <h2>目标在岸上是常态</h2>
  * 启发朝目标的水平投影;预算内到不了就取<b>离目标最近的已访问水格</b>当靠岸点({@link Chart#reached} 为假),开到那儿就到了——
- * 下船走路是她的下一步({@code move.dismount}、再规划步行),这里不越界。
+ * 下船走路是她的下一步({@code numen.move.dismount}、再规划步行),这里不越界。
  *
  * <p>驾驶输入走 {@link InputDriver#steerVehicle}(原版桨物理);服务端能动船的前提是载具权威开关(numen-api 的
  * MixinEntityVehicleControl)。

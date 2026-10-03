@@ -31,10 +31,9 @@ class LuaEngineTest {
             -- Walking helpers.
             local M = {}
 
-            -- Plan a route to a place, then walk it.
-            function M.goto_(place, opts)
-              numen.route.plan(place)
-              return numen.move.go(place)
+            -- Plan a walk to a place, then walk it.
+            function M.to(place, opts)
+              return numen.move.go(numen.route.plan({to = place}))
             end
 
             local function helper() end
@@ -90,7 +89,7 @@ class LuaEngineTest {
         ScriptRun run = run("""
                 local r = numen.work.dig("ores/g3")
                 print("dug: " .. r.dug)
-                numen.route.plan({x = 120, y = 64, z = -35}, {arrive = "dig", alter = "natural"})
+                numen.route.plan({x = 120, y = 64, z = -35}, {arrive = "dig", range = 2})
                 """);
         ScriptRun.Call first = assertInstanceOf(ScriptRun.Call.class, run.start());
         assertEquals("numen.work.dig", first.function());
@@ -103,7 +102,7 @@ class LuaEngineTest {
         assertEquals("numen.route.plan", second.function());
         assertEquals(3, second.line());
         assertEquals(List.of(Map.of("x", 120L, "y", 64L, "z", -35L)), second.args());
-        assertEquals(Map.of("arrive", "dig", "alter", "natural"), second.options());
+        assertEquals(Map.of("arrive", "dig", "range", 2L), second.options());
 
         assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(ok("arrived"))).ok());
     }
@@ -112,7 +111,7 @@ class LuaEngineTest {
     void aModuleFunctionCallsTheApiFromTheScriptsOwnLine() {
         ScriptRun run = run("""
                 local x = 1
-                local r = numen.move.goto_("home")
+                local r = numen.move.to("home")
                 return {walked = r}
                 """);
         ScriptRun.Call plan = assertInstanceOf(ScriptRun.Call.class, run.start());
@@ -131,24 +130,24 @@ class LuaEngineTest {
     void theFunctionsAModuleDefinesComeWithTheCommentsAboveThem() {
         List<com.dwinovo.numen.agent.script.ScriptEngine.Defined> defined = LUA.functions("numen.move", WALK);
         assertEquals(List.of(
-                new com.dwinovo.numen.agent.script.ScriptEngine.Defined("numen.move.goto_", List.of("place", "opts"),
-                        List.of("-- Plan a route to a place, then walk it.")),
+                new com.dwinovo.numen.agent.script.ScriptEngine.Defined("numen.move.to", List.of("place", "opts"),
+                        List.of("-- Plan a walk to a place, then walk it.")),
                 new com.dwinovo.numen.agent.script.ScriptEngine.Defined("numen.move.sweep", List.of("a", "b"), List.of())),
                 defined);
-        assertEquals("Plan a route to a place, then walk it.", LUA.summaryOf(defined.get(0)));
+        assertEquals("Plan a walk to a place, then walk it.", LUA.summaryOf(defined.get(0)));
     }
 
     @Test
     void readingWithoutRunningListsTheCallsAndTheirArguments() {
         List<ScriptRun.Call> calls = LUA.calls("example", """
                 numen.work.dig("ores", {count = 2})
-                numen.move.goto_({x = 1, y = 2, z = 3}, {arrive = "use"})
+                numen.move.to({x = 1, y = 2, z = 3}, {arrive = "use"})
                 """, CATALOG).calls();
         assertEquals(2, calls.size());
         assertEquals("numen.work.dig", calls.get(0).function());
         assertEquals(Map.of("count", 2L), calls.get(0).options());
         assertEquals("numen.move", calls.get(1).group(), "模块函数记成它自己的那一次调用,不进它的正文");
-        assertEquals("goto_", calls.get(1).verb());
+        assertEquals("to", calls.get(1).verb());
         assertEquals(List.of(Map.of("x", 1L, "y", 2L, "z", 3L)), calls.get(1).args());
         assertThrows(IllegalArgumentException.class, () -> LUA.calls("example", "numen.work.dig(", CATALOG),
                 "语法错读不通");
@@ -231,9 +230,9 @@ class LuaEngineTest {
         JsonObject data = new JsonObject();
         data.add("nearest", nearest);
         assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(new ScriptRun.Result(false, "too far", data,
-                "out_of_reach", "numen.move.goto_(\"ores\", {arrive = \"dig\"})"))).ok());
-        assertEquals(List.of("numen.move.goto_(\"ores\", {arrive = \"dig\"})\t7",
-                "numen.work.dig: out_of_reach — too far\nhint: numen.move.goto_(\"ores\", {arrive = \"dig\"})"), printed);
+                "out_of_reach", "numen.move.to({x = 7, y = 12, z = 3}, {arrive = \"dig\"})"))).ok());
+        assertEquals(List.of("numen.move.to({x = 7, y = 12, z = 3}, {arrive = \"dig\"})\t7",
+                "numen.work.dig: out_of_reach — too far\nhint: numen.move.to({x = 7, y = 12, z = 3}, {arrive = \"dig\"})"), printed);
     }
 
     /** 没有数据的成功返回 nil,不返回那句话。 */

@@ -212,7 +212,7 @@ final class BuildLedger {
                 restCount += sorted.get(i).getValue();
             }
             out.append(", and ").append(restKinds).append(" more kinds (")
-                    .append(restCount).append(" items) — `numen.build.show` lists every one");
+                    .append(restCount).append(" items) — the short_of of `numen.build.blueprint` lists every one");
         }
         int total = 0;
         for (int v : shortfall.values()) {

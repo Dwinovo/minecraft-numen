@@ -54,7 +54,7 @@ public final class UseCommands {
             .whenOmitted("use what you hold");
     private static final Param<Boolean> SNEAK = Param.optional("sneak", ArgType.bool(),
             "Hold sneak while pressing, as a player holds Shift and clicks; while riding, that steps you off "
-                    + "first (move.dismount() does just that).")
+                    + "first (numen.move.dismount() does just that).")
             .whenOmitted("press standing");
     private static final Param<BlockPos> BED = Param.optional("at", ArgType.cell(), "The bed.")
             .whenOmitted("use whichever bed is in reach");

@@ -1,7 +1,7 @@
 # 命令行与脚本:原子命令 + Lua 脚本
 
 状态:10-01 设计,10-03 改成只有 `lua` 一个工具(§七),10-04 模块统一成库、存在主人客户端(§九),同日 API 第二版:全名、
-值带方法、无名词增删改查(§十)。总纲与五层见
+值带方法、无名词增删改查(§十);路线是一张描述、越界才问(§十一),两版合在一起(§十二)。总纲与五层见
 `docs/architecture-mind-model.md` §零。
 
 ## 一、为什么
@@ -43,8 +43,9 @@
 | 函数 | 只管 | 不管 |
 |---|---|---|
 | `scan.*` | 读世界:`scan.blocks` 交回相连的团(Cluster)、`scan.map`、`scan.container`、`scan.sight` | 不存任何东西 |
-| `route.new` / `route.plan` | 寻路:写路线、算路线,写明要改的格、要问谁 | 不动 |
-| `move.go` | 移动:照规划好的路线走,只改承诺里的格 | 不挖目标、不捡 |
+| `route.plan` | 寻路:照一张描述(去处、途经点、旋钮、避开)只搜不走,交回计划(Plan),写明要改的格、要问谁(§十一) | 不动、不存 |
+| `move.go` | 移动:照这一段程序里的计划走,只改承诺里的格,走到要问的格跟前才问 | 不挖目标、不捡 |
+| `move.dismount` | 从坐着的东西上下来 | — |
 | `move.follow` | 跟着一个实体走,它走远了、没了、超时收尾 | 不打、不捡 |
 | `work.dig` | 挖**站在原地手够得着**的格:挡在前面的格一并挖开(要问/被禁的不挖,如实说),换工具 | 不走动、不捡 |
 | `build.place` | 把给的格(Cells 或蓝图句柄)里**站在原地手够得着**的放一遍 | 不走动、不挖、不重来 |
@@ -60,20 +61,22 @@
 
 | 模块函数 | 由哪几个原子函数组成 |
 |---|---|
-| `move.goto_(place, opts)` | `route.new` + `route.plan` + `move.go`,走的是她自己那条 `goto-<名字>` |
-| `work.collect(opts)` | `scan.entities("item")` + 一件件 `move.goto_` 走上去(原版玩家走过去就捡起) |
-| `work.mine(blocks)` | `work.dig(blocks)` 挖够得着的 + `work.collect` 捡 / 够不着时 `move.goto_(blocks, {arrive = "dig", alter = "natural"})`,挖完为止,返回挖了几格 |
+| `move.to(target, spec)` | `route.plan`(描述的其余几项加 `to = target`)+ `move.go`;走不通抛 `no_path` |
+| `move.flee(from, opts)` | `move.to` 的 `arrive = "away"`,离它至少 `distance` 格 |
+| `move.explore(dir, opts)` | 一跳一跳 `route.plan` + `move.go`,每跳之后问 `until_`,返回真就停 |
+| `work.collect(opts)` | `scan.entities("item")` + 一件件 `move.to` 走上去(原版玩家走过去就捡起) |
+| `work.mine(cluster)` | 先走后挖:`move.to(cluster, {arrive = "dig", costs = …})` 走到够得着最多格的地方 → `work.dig(cluster)` 挖够得着的 → `work.collect` 捡,那一团挖完为止,返回挖了几格 |
 | `fight.clear(radius)` | `scan.entities("hostile")` + 一只一只 `fight.attack` |
-| `build.raise(building, opts)` | `build.diff` 问还差什么 → `build.place` 放够得着的 / `move.goto_ … arrive "dig"` + `work.dig` 挖开挡路的 / `move.goto_ … arrive "reach"` 走到够得着最低最近那格的地方 |
+| `build.raise(building, opts)` | `build.diff` 问还差什么 → `build.place` 放够得着的 / `move.to … arrive "dig"` + `work.dig` 挖开挡路的 / `move.to … arrive "place"` 走到够得着最低最近那格的地方 |
 | `inv.make(item, count)` | `inv.recipes` 挑一条料够的合成配方 → 2x2 在自己的格里、3x3 开工作台(开着的、16 格内走过去的、或把带着的放在身边)→ `inv.craft` 到够数 → 关上它开的台 |
 | `inv.store` / `inv.fetch` / `inv.smelt` / `inv.give` | 走过去 `use.block` 开箱子(熔炉)、`Window:put`/`take`、关上;烧炼中间 `time.wait_until` 等烧完;给人是走到身边 `inv.drop` |
 | `time.wait_until(ready, opts)` | 看一眼,不成就 `time.wait` 一会儿再看,超时抛 `timeout` |
 | `shape.*` | 画格子:`box`、`line`、`cylinder`、`sphere`、`layer`,交回 Cells |
 
 - **"挖"的到达**(`arrive = "dig"`)= 手够得着目标区域里任意一格,不要求看得见。同样划算的站位里,优先一次能够到
-  最多目标格的(定价只在寻路模块 `Goals.dig` 一处)。**"放"的到达**(`arrive = "reach"`)= 手够得着往那一格里放方块,
+  最多目标格的(定价只在寻路模块 `Goals.dig` 一处)。**"放"的到达**(`arrive = "place"`)= 手够得着往那一格里放方块,
   不站进那一格(`Goals.place`,和 `Goals.dig` 同一套够得着的格,只多禁站进目标)。
-- `work.dig` 挖完回执说:挖了几格、还剩几格够不着、下一步能照抄的 `move.goto_(…, {arrive = "dig"})`。给的是扫描交回的
+- `work.dig` 挖完回执说:挖了几格、还剩几格够不着、下一步能照抄的 `move.to(…, {arrive = "dig"})`。给的是扫描交回的
   Block 时,那一格还是那种方块才挖,挖掉的下一次自动不算。
 - **没有不可拆的行为,只有循环快慢之分**:秒级的决策循环(打哪只、按什么顺序、何时撤、打完捡东西)进脚本;每刻都要转
   的控制(盯着转头、追着保持在够得着处、等冷却出手、举盾)进原子函数内部。例如 `fight.attack(27)` 只管"打这一只"
@@ -119,8 +122,8 @@
 - `print(...)` 写进回执(至多 6000 字;表按 Lua 的写法印出来)。
   `raise(kind, message, hint)` 以一个错误值失败,`error("why", 0)` 是程序自己的运行错(`runtime`)。
 - **名字的改写只有一条**:组名或动作名撞上 Lua 的保留字(`goto`、`end`……)或沙箱自带的全局名(`string`、`table`、
-  `print`……)的,后面加 `_`:`move.goto_`。命令名本身不变,只是脚本里的写法;帮助里这样的动作多一行
-  `In a script: move.goto_(...).`,`lua` 工具的说明里也写了这一条。规则只在 `ScriptEngine.functionName` 一处,登记处的
+  `print`……)的,后面加 `_`:`until_`。命令名本身不变,只是脚本里的写法;帮助里这样的动作多一行
+  `In a script: 组.名字_(...).`,`lua` 工具的说明里也写了这一条。规则只在 `ScriptEngine.functionName` 一处,登记处的
   目录、回执里的函数名、帮助都从它来;沙箱不收撞名的宿主函数,登记时就抛出。
 
 ### 放在哪:`agent` 模块,和 `SerialCalls` 同一层
@@ -183,12 +186,12 @@ The script stopped at line 3 after 2 calls: work.dig: bad_argument — argument 
 usage: work.dig(place..., {count=…})
 hint: work.dig({x = 120, y = 12, z = -35})
 line 1 scan.blocks: ok — 1 group(s) within 32 blocks of …
-line 2 route.new: ok — made route goto-…
+line 2 route.plan: ok — planned from …
 line 3 work.dig: bad_argument — argument 'place': a position is one table with named fields; …
 ```
 
 ```
-The script stopped at line 1 (move.go) after 3 calls: your owner spoke; t12 keeps running. Nothing after that ran.
+The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keeps running. Nothing after that ran.
 ```
 
 (停在第 1 行时那件活还没收尾,那一行没有结局可记,回执只有第一句。)
@@ -385,7 +388,7 @@ The script stopped at line 1 (move.go) after 3 calls: your owner spoke; t12 keep
 |---|---|
 | `build.new/drop/delete/show/designs/built`、原语 `set/place/line/layer/cylinder/sphere/copy` | 几何是模块 `numen.shape`;放格子是 `numen.build.place(cells)` 一遍 |
 | `build.at` 放到放完 | `build.place` 一遍即止,反复是 `numen.build.raise` |
-| `scan.blocks` 的 `into` 与区域 | `scan.blocks` 交回团,`work.mine(cluster.blocks)` |
+| `scan.blocks` 的 `into` 与区域 | `scan.blocks` 交回团,`work.mine(cluster)` 先走后挖(§十二) |
 | `use.block` 的左键、`use.gui/transfer/shift/close` | 左键一下 `use.hit`,挖是 `work.dig`;界面是 `numen.gui` 与 Window |
 | `inv.craft` 找配方、找台、走开合关 | `inv.craft` 在开着的格里合一次,`numen.inv.make` 挑配方与工作台 |
 | `inv.take`(创造取物) | `numen.creative.give` |
@@ -423,7 +426,8 @@ The script stopped at line 1 (move.go) after 3 calls: your owner spoke; t12 keep
 `costs` 的每一项:`dig`、`place` 是 `false`(不许,默认)、`true`(许,原价)或一个数(许,每挖/放一格另加这么多);`consent` 是
 `true`(许走要问主人的格,价钱乘 10,默认)、`false`(要问的格当墙,绕开)或一个不小于 1 的倍数;`jump`、`swim` 是每跳一下、每过一格
 水另加的价;`fall` 是脚下没水时最多跳多高;`parkour` 许不许疾跑跳过 2–4 格的空隙;`max_changes` 是整趟最多改几格。读法与翻成寻路
-规格(`RouteSpec`)只在 `core/route/Description` 一处。
+规格(`RouteSpec`)只在 `core/route/Description` 一处;一格、一团(Cluster)、一串格(Cells)的读法借 `ArgType.cellsOf`,
+和动作收一串格的参数(`ArgType.list`,一项是一团就展开成它的每一格)同一处。
 
 权限不是描述的一项。规划时每一格自动问权限层(`GateTerrain`,与执行同一个 `Gate` 判定):拒绝的当墙,要问的照 `costs.consent`
 算贵、列进计划的 `asks`,允许的照常。
@@ -485,3 +489,17 @@ local plan = numen.route.plan({stops = {{to = {x = 10, y = 64, z = 5}, type = "t
 `materials` 里)、`alter`(拆成 `costs` 的 `dig`/`place`/`consent`)、路线存档(`Itinerary`、`Routes`)与路线标志的翻译
 (`RouteFlags`、`RouteSpecFlags`、`RouteOps`)、`area.add` 的 `route` 选项、`Trip` 开走前整条规划并一次问完要问的格。
 
+## 十二、两版合在一起(10-04)
+
+§十(全名、值带方法、删名词)与 §十一(路线描述、计划、越界才问)合到同一条线上:命名空间、各组的形状、模块目录、删区域与设计
+按 §十;路线、移动、垫路料、寻路、征询卡片、计划与描述按 §十一。两边都碰到的几处:
+
+- **一团与一串格进描述**:`to`、`avoid`、`avoid_break/place/step` 收扫描交回的 Cluster 与 `numen.shape` 画的 Cells,读法见上;
+  §十一里"带 `cells` 的表"那种写法没有了。两个 Pos 写成一项仍是一个盒子(整片交给寻路、不逐格展开),两个 Block 是两格。
+- **`numen.work.mine(cluster)` 先走后挖**:`numen.move.to(cluster, {arrive = "dig", costs = {dig, place, consent = false}})`
+  走到够得着那一团最多格的地方,`numen.work.dig(cluster)` 挖手边的,`numen.work.collect` 捡,一轮一轮直到那一团不剩
+  (`left == 0`);一轮一格也没挖到抛 `failed`。`numen.work.dig` 收一团就是收它的每一格。GameTest 的挖矿辅助
+  (`GameTestKit.mine`)与评测 `mine_iron` 的标准解是同一个流程拆成原子调用。
+- `numen.inv.*`、`numen.build.raise`、`numen.work.collect` 等模块里的走路一律是 `numen.move.to`,`alter` 换成
+  `costs = {dig = true, place = true, consent = false}`(只改自然地形,要问的格绕开),`near` 换成 `range`、`arrive = "reach"`
+  换成 `"place"`;`throwaway` 清单删了,垫路料用每一趟的 `materials`(不写是标签 `#numen:throwaway`)。
