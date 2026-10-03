@@ -412,7 +412,7 @@ local plan = route.plan({stops = {{to = {x = 10, y = 64, z = 5}, type = "through
 ### 走:`move.go`、`move.follow`、`move.dismount`
 
 - `move.go(plan)`:照这份计划走,只改计划里列的格(承诺,`Plan.bind`);从当前位置重新规划,超出计划就不走、说多出哪几格。
-  路上走到一格要问主人的,停在它跟前问:答应了接着走;拒绝了在那里失败,`kind = "denied"`,说为什么,`hint` 是把那一格加进
+  路上走到一格要问主人的,停在它跟前问(卡片上连同剩下的路里这一声答应同样放行的同种格):答应了接着走;拒绝了在那里失败,`kind = "denied"`,说为什么,`hint` 是把那一格加进
   `avoid` 再规划的那一行。走不通是 `no_path`。不出发前整条再裁决一次——什么时候问只看走到了哪儿。
 - `move.follow(entity?, {distance, seconds})`:跟着(不给就是主人),总有结束:`seconds` 不写是 60 秒。
 - `move.dismount()`:从坐着的东西上下来,当场返回 `{vehicle, pos}`。

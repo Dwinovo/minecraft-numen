@@ -11,6 +11,8 @@ import com.dwinovo.numen.pathing.api.Navigation;
 import com.dwinovo.numen.pathing.api.Navigator;
 import com.dwinovo.numen.pathing.api.Outcome;
 import com.dwinovo.numen.pathing.api.Report;
+import com.dwinovo.numen.pathing.plan.Edit;
+import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Route;
@@ -189,7 +191,7 @@ public final class Trip {
             retire();
             seed = rest.isEmpty() ? null
                     : new Route(rest.get(0).maneuver().from(), rest.get(0).maneuver().start(), rest);
-            consent = List.of(unasked.item());
+            consent = covered(unasked.item(), rest);
             phase = Phase.CONSENT;
             com.dwinovo.numen.core.Constants.LOG.info("[numen-task] 走到 {} 要问主人({}),停下等答复",
                     denied.cell().toShortString(), unasked.verdict().reason());
@@ -262,7 +264,30 @@ public final class Trip {
         return out;
     }
 
-    /** 停在要问主人的那一格前,要问的那一条;没停着是空表。 */
+    /**
+     * 停在 {@code at} 前问主人时,问的是哪几条:这一格,加上没走完的那截路上主人这一声答应同样放行的格(同一个动作、同一行规则、
+     * 同一种东西,{@link ConsentItem#covers(ConsentItem)})。答应覆盖到哪儿,卡片上就列到哪儿;别的要问的格走到时再问。
+     */
+    private static List<ConsentItem> covered(ConsentItem at, List<Route.Leg> rest) {
+        List<ConsentItem> items = new ArrayList<>(List.of(at));
+        for (Route.Leg leg : rest) {
+            for (Edit edit : leg.maneuver().edits()) {
+                Permit permit = switch (edit) {
+                    case Edit.Dig dig -> dig.permit();
+                    case Edit.Place place -> place.permit();
+                    case Edit.Catch caught -> caught.permit();
+                    case Edit.Door door -> null;
+                };
+                if (permit instanceof Permit.Ask ask && ask.credential() instanceof ConsentItem item
+                        && at.covers(item) && items.stream().noneMatch(i -> java.util.Objects.equals(i.pos(), item.pos()))) {
+                    items.add(item);
+                }
+            }
+        }
+        return List.copyOf(items);
+    }
+
+    /** 停在要问主人的那一格前,要问的那几条;没停着是空表。 */
     public List<ConsentItem> consentNeeded() {
         return phase == Phase.CONSENT ? consent : List.of();
     }

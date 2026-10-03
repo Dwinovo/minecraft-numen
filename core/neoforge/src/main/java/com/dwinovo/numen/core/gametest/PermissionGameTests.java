@@ -134,7 +134,8 @@ public class PermissionGameTests {
 
     /**
      * 越过边界才问:穿主人墙的那条路照常规划、照常开走——不在开走前问。她走过屋里那两格,走到墙前要挖它时才停下挂一条征询,
-     * 这时墙一块不少;主人允许,她拆墙出去到达,回执说主人允许过。
+     * 这时墙一块不少;征询列出这一声答应放行的每一格,就是计划里要问的那几格(同一种木板、同一行规则),之后不再问;主人允许,
+     * 她拆墙出去到达,回执说主人允许过。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void a_walk_asks_at_the_owners_wall_and_goes_on_when_allowed(GameTestHelper helper) {
@@ -148,6 +149,8 @@ public class PermissionGameTests {
         ToolRun walk = lua(companion, "local p = route.plan({to = " + xyz(target) + ", costs = {dig = true, "
                 + "place = true}})\nprint(\"asks=\" .. #p.legs[1].asks)\nreturn move.go(p)");
         boolean[] answered = new boolean[1];
+        int[] listed = new int[1];
+        int[] requests = new int[1];
 
         succeedWhen(helper, () -> {
             TaskRecord record = walk.task();
@@ -162,18 +165,24 @@ public class PermissionGameTests {
                 helper.assertTrue(plankCount(helper, 7, 7) == planksBefore, "a plank broke before the owner said yes");
                 helper.assertTrue(pending.items().stream().allMatch(i -> i.subject().equals("oak_planks")),
                         "the request does not name the wall: " + pending.items());
+                listed[0] = pending.items().size();
+                requests[0]++;
                 answered[0] = desk(companion).answer(pending.id(),
                         com.dwinovo.numen.permission.ConsentAnswer.Decision.ALLOW_ONCE, "");
             }
             if (desk(companion).pending() != null) {
-                // 墙有两格高:第二格同一种木板,任务期授权放行,不该再问;真挂了就再答一次,让下面的断言说清
+                // 墙的其余几格同一种木板,第一声答应已经放行,不该再问;真挂了就记下再答一次,让下面的断言说清
+                requests[0]++;
                 desk(companion).answer(desk(companion).pending().id(),
                         com.dwinovo.numen.permission.ConsentAnswer.Decision.ALLOW_ONCE, "");
             }
             String reply = record.getResult() == null ? null : record.getResult().message();
             helper.assertTrue(reply != null, "the walk has not finished");
             helper.assertTrue(record.getResult().success(), "the walk failed after the owner allowed it: " + reply);
-            helper.assertTrue(walk.receipt().contains("asks="), "the plan did not list the cells to ask about");
+            helper.assertTrue(walk.receipt().contains("asks=" + listed[0]) && listed[0] >= 2,
+                    "the request did not list every cell of the plan the yes lets through (" + listed[0] + "): "
+                            + walk.receipt());
+            helper.assertTrue(requests[0] == 1, "the owner was asked " + requests[0] + " times");
             helper.assertTrue(plankCount(helper, 7, 7) < planksBefore, "no plank was broken");
             helper.assertTrue(reply.contains("the owner allowed"), "the reply does not say the owner allowed it: " + reply);
             CompanionFactory.despawn(level.getServer(), companion);
