@@ -196,7 +196,7 @@ public final class NumenPrompts {
             owner: 去挖10块铁
             → numen.gear.hold("stone_pickaxe")
               local veins = numen.scan.blocks("iron_ore", "deepslate_iron_ore")
-              numen.work.mine(veins[1].blocks)
+              numen.work.mine(veins[1])
             → "铁够了,十块都在我这。"
 
             owner: 附近有原木吗

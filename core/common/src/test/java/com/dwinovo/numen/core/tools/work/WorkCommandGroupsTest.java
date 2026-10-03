@@ -117,8 +117,8 @@ class WorkCommandGroupsTest {
                 + "{pos: Pos, distance_left: number} Walk to a place in one call: numen.route.plan with the description "
                 + "and to = target, then numen.move.go.\n"), "库函数的说明是它注释的第一句: " + moveHelp);
         String workHelp = help("numen.work");
-        assertTrue(functions(workHelp, "work").contains("mine") && workHelp.contains("\n---@field mine fun(blocks: "
-                + "Block[]): integer Dig out the given blocks"), "挖完一团是内置模块 work 里的 Lua 函数,不是动作: " + workHelp);
+        assertTrue(functions(workHelp, "work").contains("mine") && workHelp.contains("\n---@field mine fun(cluster: "
+                + "Cluster|Cells): integer Dig out one cluster, walking first"), "挖完一团是内置模块 work 里的 Lua 函数,不是动作: " + workHelp);
     }
 
     /**

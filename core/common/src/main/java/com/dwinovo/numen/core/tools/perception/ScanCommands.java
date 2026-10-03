@@ -85,12 +85,11 @@ public final class ScanCommands {
                 .example("local found = numen.scan.blocks(\"iron_ore\", \"deepslate_iron_ore\")\n"
                         + "print(#found, found[1].count, found[1].nearest.pos.x)")
                 .example("numen.scan.blocks({\"iron_ore\", \"deepslate_iron_ore\"}, {radius = 32})")
-                .example("numen.scan.blocks(\"#minecraft:beds\")")
-                .note("Read-only; the reply comes when the search is done. Name every variant you want.")
+                .example("numen.scan.blocks(\"#minecraft:beds\")")                .note("Read-only; the reply comes when the search is done. Name every variant you want.")
                 .note("A cluster is matching blocks that touch (diagonals count): every block of it nearest first "
-                        + "(a Block: name and pos), the nearest one, and how many. Hand a cluster's blocks on as they are: "
-                        + "`numen.work.dig` digs those still standing within reach, `numen.move.to` with arrive \"dig\" "
-                        + "walks within reach of them, `numen.work.mine` does both until they are gone.")
+                        + "(a Block: name and pos), the nearest one, and how many. Hand a cluster on as it is: "
+                        + "`numen.move.to` with arrive \"dig\" walks within reach of it, `numen.work.dig` digs what still "
+                        + "stands within reach, `numen.work.mine` walks and digs until it is gone.")
                 .note("Nothing is kept: to use what it found again, keep the result in the program, or scan again.")
                 .note("Only loaded terrain is read: anything further out is UNKNOWN, not empty; the reply says so.")
                 .seeAlso("work dig", "scan block");

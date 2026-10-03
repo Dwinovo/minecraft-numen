@@ -1,4 +1,4 @@
--- Picking up and digging out: walk onto the dropped items lying around, dig out the given blocks.
+-- Picking up and digging out: walk onto the dropped items lying around, dig out a cluster.
 local M = {}
 
 ---Pick up the dropped items around you, nearest first, walking onto each with numen.move.to. A fresh drop cannot be
@@ -62,33 +62,27 @@ function M.collect(opts)
   end
 end
 
----Dig out the given blocks: dig what is in reach (numen.work.dig), pick up the drops (numen.work.collect, digging and
----pillaring to them), walk within reach of what is left (numen.move.to with arrive "dig", digging and pillaring but
----keeping away from cells needing your owner's consent), until none of them is left. Blocks already gone end it
----(not_found from numen.work.dig). A walk that still leaves nothing within reach raises that out_of_reach; any other
----failing step raises its error as it is.
----@param blocks Block[] What to dig, as a scan gives them: a cluster's blocks.
+---Dig out one cluster, walking first: walk within reach of it (numen.move.to with arrive "dig": where your hand reaches
+---the most of what is left of it, digging and pillaring on the way but keeping away from cells needing your owner's
+---consent), dig what is in reach (numen.work.dig), pick up the drops (numen.work.collect), and again until none of it is
+---left. A round that digs nothing raises failed with what is left; any other failing step (a walk with no way there,
+---a dig refused) raises its error as it is.
+---@param cluster Cluster|Cells What to dig: a cluster numen.scan.blocks found, as it is (or Cells, or a list of Blocks).
 ---@return integer dug How many cells it dug.
-function M.mine(blocks)
+function M.mine(cluster)
+  local costs = {dig = true, place = true, consent = false}
   local dug = 0
-  local walk = {costs = {dig = true, place = true, consent = false}}
-  local walked = false
   while true do
-    local ok, r = pcall(numen.work.dig, blocks)
-    if ok then
-      dug = dug + r.dug
-      walked = false
-      M.collect(walk)
-      if r.left == 0 then
-        return dug
-      end
-    elseif r.kind == "not_found" then
+    numen.move.to(cluster, {arrive = "dig", costs = costs})
+    local r = numen.work.dig(cluster)
+    dug = dug + r.dug
+    M.collect({costs = costs})
+    if r.left == 0 then
       return dug
-    elseif r.kind == "out_of_reach" and not walked then
-      numen.move.to(blocks, {arrive = "dig", costs = walk.costs})
-      walked = true
-    else
-      error(r, 0)
+    end
+    if r.dug == 0 then
+      raise("failed", "dug nothing this round and " .. r.left .. " cell(s) of it are left", nil,
+          {left = r.left, nearest = r.nearest})
     end
   end
 end

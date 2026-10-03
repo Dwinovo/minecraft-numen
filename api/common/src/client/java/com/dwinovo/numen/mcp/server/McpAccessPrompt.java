@@ -86,7 +86,7 @@ final class McpAccessPrompt {
                 `numen.fight.attack(184)`, `numen.inv.craft(...)`, … `numen.api.help("numen.work")` lists a group's functions and \
                 `numen.api.help("numen.work.dig")` gives one function's full help. One call is a one-line program; \
                 when a next step depends on what a call returned, write the steps as one program \
-                (`for _, c in ipairs(numen.scan.blocks("iron_ore")) do numen.work.mine(c.blocks) end`).
+                (`for _, c in ipairs(numen.scan.blocks("iron_ore")) do numen.work.mine(c) end`).
                 - A program waits for each body task it starts and returns one receipt when it ends: how \
                 it ended (on an error: the line, the call's error, usage and hint), one line per API call, \
                 what it returned and printed. Each task's own account also arrives in `get_events` as a \
@@ -96,12 +96,12 @@ final class McpAccessPrompt {
                 `numen.scan.entities` before and after acting.
                 - `numen.scan.blocks` returns the clusters of touching blocks it found, nearest first, each \
                 with its `blocks` (every Block, nearest first), its `nearest` Block and its `count`. Nothing is \
-                kept: the world is the state, so scan again to see what is left. `numen.work.dig` takes those \
-                blocks as they are and digs the cells that still hold what the scan saw; cells ({x, y, z}) are dug \
+                kept: the world is the state, so scan again to see what is left. `numen.work.dig` takes a \
+                cluster (or its blocks) as it is and digs the cells that still hold what the scan saw; cells ({x, y, z}) are dug \
                 whatever they hold. It digs only what the hand reaches from where the body stands, never walks and \
-                never picks up: `numen.move.to` the same blocks with arrive "dig" first (it stands where the hand \
-                reaches the most of them), then `numen.work.dig`, then `numen.work.collect()` for the drops. The \
-                built-in module function `numen.work.mine` does all of that for one cluster's blocks.
+                never picks up: `numen.move.to` the same cluster with arrive "dig" first (it stands where the hand \
+                reaches the most of it), then `numen.work.dig`, then `numen.work.collect()` for the drops. The \
+                built-in module function `numen.work.mine(cluster)` does all of that until the cluster is gone.
                 - It's survival mode — the API does only what a real player can. No give, no setblock.
 
                 One more thing: talk to me in the language I'm writing to you in, even though these \

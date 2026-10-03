@@ -185,8 +185,8 @@ public class ScriptGameTests {
         LlmToolCall script = programCall("""
                 for _, c in ipairs(numen.scan.blocks("minecraft:iron_ore", {radius = 14})) do
                   print(c.nearest.pos.x, c.nearest.pos.z)
-                  numen.move.to(c.blocks, {arrive = "dig"})
-                  numen.work.dig(c.blocks)
+                  numen.move.to(c, {arrive = "dig"})
+                  numen.work.dig(c)
                 end
                 """);
         Round[] round = new Round[1];
@@ -227,7 +227,7 @@ public class ScriptGameTests {
         NumenPlayer her = spawnAt(helper, "gametest_lua_mine", new BlockPos(9, 7, 9), false);
         her.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
         LlmToolCall run = programCall(
-                "return numen.work.mine(numen.scan.blocks(\"minecraft:iron_ore\", {radius = 8})[1].blocks)");
+                "return numen.work.mine(numen.scan.blocks(\"minecraft:iron_ore\", {radius = 8})[1])");
         Round[] round = new Round[1];
 
         steps(helper)

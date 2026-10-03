@@ -101,16 +101,16 @@ public final class MineIron implements Scenario {
 
     @Override
     public String solution(Scene scene) {
-        // 一轮:走到一次够得着最多铁矿的地方(挖开石头过去),挖手够得着的,再扫一次看还剩什么,直到一块不剩;numen.work.mine
-        // 做的就是这几轮,每轮挖完捡一次走得到的
+        // 一轮:先走到一次够得着那一团最多格的地方(挖开石头过去),再挖手够得着的,再扫一次看还剩什么,直到一块不剩;
+        // numen.work.mine 做的就是这几轮(先走后挖,每轮挖完捡一次走得到的)
         StringBuilder program = new StringBuilder("local found = numen.scan.blocks(\"iron_ore\", {radius = 12})\n");
         if (byScript) {
-            program.append("numen.work.mine(found[1].blocks)\n");
+            program.append("numen.work.mine(found[1])\n");
         } else {
             program.append("""
                     while #found > 0 do
-                      numen.move.to(found[1].blocks, {arrive = "dig", costs = {dig = true, place = true, consent = false}})
-                      numen.work.dig(found[1].blocks)
+                      numen.move.to(found[1], {arrive = "dig", costs = {dig = true, place = true, consent = false}})
+                      numen.work.dig(found[1])
                       found = numen.scan.blocks("iron_ore", {radius = 12})
                     end
                     """);

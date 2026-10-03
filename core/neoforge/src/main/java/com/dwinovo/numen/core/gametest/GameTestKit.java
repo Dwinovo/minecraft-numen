@@ -231,13 +231,13 @@ public final class GameTestKit {
     }
 
     /**
-     * 当场就挖 {@code blocks}(一串 Block 或 Pos 的 Lua 写法),用原子调用一轮轮组合,和模型自己写的一样:
-     * {@code numen.move.to(blocks, {arrive = "dig", costs = …})} 走到一次够得着最多格的地方,
-     * {@code numen.work.dig(blocks, {count = 还差几格})} 挖手够得着的,{@code numen.work.collect} 许挖许放地捡掉落;还差、而且
-     * 挖的回执说还有够不着的格,就再来一轮。每一步是一段一行的程序,方块每次原样写进去;挖了几格读那件活的收尾数据,脚本里拿不到它。
+     * 当场就挖 {@code blocks}(一团,或一串 Block 或 Pos 的 Lua 写法),和库里的 {@code numen.work.mine} 同一个流程、拆成原子调用一轮轮
+     * 组合:先走——{@code numen.move.to(blocks, {arrive = "dig", costs = …})} 走到一次够得着最多格的地方,再挖——
+     * {@code numen.work.dig(blocks, {count = 还差几格})} 挖手够得着的,{@code numen.work.collect} 许挖许放地捡掉落;那一团还有没挖的
+     * 格,就再来一轮。每一步是一段一行的程序,方块每次原样写进去;挖了几格读那件活的收尾数据,脚本里拿不到它。
      * 不另挂每刻的回调,每次问 {@link Mining#done} 时往下推一步。
      *
-     * <p>哪一步(走、挖)失败,这次挖矿就以那一步的结论收场;挖够了,或够不着的不剩了,以最后一次挖的结论收场。
+     * <p>哪一步(走、挖)失败,这次挖矿就以那一步的结论收场;挖够了、那一团不剩了,或一轮一格也没挖到,以最后一次挖的结论收场。
      *
      * @param count 挖够几格;0 是手边与够不着的都挖完为止
      */
@@ -251,7 +251,7 @@ public final class GameTestKit {
      */
     static final class Mining {
 
-        /** 一块区域最多走几轮:每轮至少挖掉一格,轮数到了还没挖完就以最后一次挖的结论收场。 */
+        /** 一团最多走几轮:每轮至少挖掉一格,轮数到了还没挖完就以最后一次挖的结论收场。 */
         private static final int MAX_ROUNDS = 16;
 
         /** 挖完等掉落物落定最多几刻:模型读完回执再写下一行要好几秒,掉落物早落地了。 */
@@ -269,6 +269,7 @@ public final class GameTestKit {
         /** 收场的那一步;没收场是 null。 */
         private ToolRun last;
         private int dug;
+        private int dugThisRound;
         private int rounds;
         private int settling;
 
@@ -314,7 +315,8 @@ public final class GameTestKit {
                         return;
                     }
                     lastDig = current;
-                    dug += ((Number) current.task().getResult().data().get("dug")).intValue();
+                    dugThisRound = ((Number) current.task().getResult().data().get("dug")).intValue();
+                    dug += dugThisRound;
                     step = Step.SETTLE;
                     settling = 0;
                 }
@@ -323,10 +325,10 @@ public final class GameTestKit {
             }
         }
 
-        /** 挖够了,或挖的回执说够不着的不剩了,就以最后一次挖的结论收场;否则再走一轮。 */
+        /** 挖够了、那一团不剩了,或这一轮一格也没挖到,就以最后一次挖的结论收场;否则再走一轮。 */
         private void nextRound() {
-            long beyond = ((Number) lastDig.task().getResult().data().get("out_of_reach")).longValue();
-            if ((count > 0 && dug >= count) || beyond == 0 || ++rounds >= MAX_ROUNDS) {
+            long left = ((Number) lastDig.task().getResult().data().get("left")).longValue();
+            if ((count > 0 && dug >= count) || left == 0 || dugThisRound == 0 || ++rounds >= MAX_ROUNDS) {
                 last = lastDig;
             } else {
                 walk();
@@ -345,7 +347,7 @@ public final class GameTestKit {
             current = lua(companion, code);
         }
 
-        /** 走到一次够得着这块区域最多格的地方:区域此刻的每一格写成带 {@code cells} 的表交给 {@code move.to}。 */
+        /** 走到一次够得着这些方块最多格的地方。 */
         private void walk() {
             run(Step.GOTO, "numen.move.to(" + blocks + ", {arrive = \"dig\", " + COSTS + "})");
         }

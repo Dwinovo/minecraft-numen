@@ -33,8 +33,8 @@ public final class WorkCommands {
 
     private static final Param<List<Target>> DIG_TARGETS = Param.required("blocks", ArgType.list(ArgType.target()),
             "What to dig, as many as you like: a Block from a query is dug only while that cell still holds that "
-                    + "block; a Pos is dug whatever it holds, air and fluid skipped.")
-            .values("Blocks (a scan's cluster.blocks, numen.scan.block(...)) or Pos");
+                    + "block; a Pos is dug whatever it holds, air and fluid skipped; a Cluster is its blocks.")
+            .values("a Cluster from numen.scan.blocks, Blocks (numen.scan.block(...)) or Pos");
     private static final Param<Integer> DIG_COUNT = Param.optional("count",
             ArgType.integer(1, BlockActionOps.MAX_DIG_COUNT), "How many cells to dig at most.")
             .whenOmitted("dig every cell of it within reach");
@@ -60,10 +60,11 @@ public final class WorkCommands {
                 .example("numen.work.dig({x = 120, y = 12, z = -35})")
                 .example("local r = numen.work.dig({{x = 120, y = 64, z = -35}, {x = 120, y = 65, z = -35}}, {count = 1})\n"
                         + "print(r.dug, r.left, r.out_of_reach)")
-                .note("A Block from `numen.scan.block` or a cluster's blocks from `numen.scan.blocks` go in as they are.")
+                .note("A cluster from `numen.scan.blocks` or a Block from `numen.scan.block` goes in as it is.")
                 .note("Digs only what your hand reaches from where you stand: it never walks and never picks up. Get "
-                        + "within reach first with `numen.move.to(cluster, {arrive = \"dig\"})` on the same cluster or blocks (it picks "
-                        + "the spot that reaches the most cells), dig, and pick the drops up with `numen.work.collect()`.")
+                        + "within reach first with `numen.move.to(cluster, {arrive = \"dig\"})` (it picks the spot that "
+                        + "reaches the most cells), dig, and pick the drops up with `numen.work.collect()`; "
+                        + "`numen.work.mine(cluster)` does all three until the cluster is gone.")
                 .note("Background work: before it starts it checks something within reach can be dug, harvested "
                         + "with your tools and is allowed; when nothing is, it fails with kind out_of_reach (or denied, "
                         + "failed) and a hint with the numen.move.to call to copy — no task starts and whatever you were "
