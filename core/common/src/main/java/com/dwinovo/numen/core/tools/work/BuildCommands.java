@@ -86,7 +86,9 @@ public final class BuildCommands {
             ScriptType.optional("removed", ScriptType.INTEGER, null),
             ScriptType.optional("building", ScriptType.STRING, "The building's name, house#1."),
             ScriptType.optional("site", ScriptType.listOf(Shapes.POS.type()), "Two corners of the site."),
-            ScriptType.optional("still_short", ScriptType.STRING, "What you are short of.")));
+            ScriptType.optional("still_short", ScriptType.STRING, "What you are short of."),
+            ScriptType.optional("settled_away", ScriptType.INTEGER, "When the last cell went in: cells that changed "
+                    + "once the world settled (vanilla would not hold them as drawn, or their neighbours reshape them).")));
     /** 一份设计。 */
     static final ScriptType.Class DESIGN_CLASS = new ScriptType.Class("Design", "One of the designs.", null,
             java.util.List.of(ScriptType.field("name", ScriptType.STRING, null),

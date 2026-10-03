@@ -1128,6 +1128,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             // 施工期间被外力拆毁又补回去的格数。她盖得慢或反复返工,原因在这儿。
             data.put("destroyed_while_building", damagedCells);
         }
+        if (r.settledAway() > 0) {
+            // 整份放完、世界落定一次之后与图纸不同的格:原版的裁决,再放一遍还是这样
+            data.put("settled_away", r.settledAway());
+        }
         if (r.consumeMaterials) {
             Map<Item, Integer> shortfall = ledger.shortfallAgainstInventory(ledger.remainingNeed());
             if (!shortfall.isEmpty()) {
