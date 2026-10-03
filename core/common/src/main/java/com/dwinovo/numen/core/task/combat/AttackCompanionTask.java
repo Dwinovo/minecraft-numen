@@ -294,6 +294,11 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         java.util.Set<Integer> cleared = cleared(candidates);
         List<Battlefield.Foe> foes = new ArrayList<>();
         for (var mob : hostiles) {
+            // 点名的一场仗只看点名的那几只:打完了就收工,下一只打不打、打哪只是程序的事(fight.clear),路上被别的
+            // 贴脸是本能的事(反击链)。别的怪不进局面,也就不会被顺手砍、不会把这场仗拖着不收
+            if (!r.indiscriminate && !r.entityIds.contains(mob.getId())) {
+                continue;
+            }
             boolean engaging = mob.getTarget() == player || mob == player.getLastHurtByMob();
             boolean authorized = r.indiscriminate ? engaging : r.entityIds.contains(mob.getId());
             if (authorized && !r.terminal(mob.getId()) && !cleared.contains(mob.getId())) {
@@ -579,10 +584,8 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         Entity victim = null;
         double best = Double.MAX_VALUE;
         for (var f : field.foes()) {
-            // <b>名单只决定去打谁,不决定砍不砍眼前的。</b>"够得着就打"本来就是攻击层的
-            // 定义,掺进"这只在不在名单里"就又把两层耦上了 —— 而且点名模式下路上被贴脸
-            // 也不还手,得挨完一路才到目标。
-            if (f.armed() || f.distance() >= best) {
+            // 只砍这场仗里过了权限的:够得着的别的东西不是她该替自己决定去打的,也没过权限层
+            if (!f.authorized() || f.armed() || f.distance() >= best) {
                 continue;   // 引信在走的不碰:打它等于自己引爆
             }
             // 够不够得着与走位的到达问同一个目标(reachOf):走位说站到了,这里就挥得出去
