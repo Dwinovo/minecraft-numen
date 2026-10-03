@@ -1295,7 +1295,7 @@ public class PermissionGameTests {
         BlockPos spot = helper.absolutePos(new BlockPos(7, 2, 4));
         NumenPlayer companion = spawnAt(helper, "gametest_demolisher", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.TNT));
-        ToolRun build = lua(companion, "numen.build.place(" + xyz(spot) + ", {block = \"tnt\"})");
+        ToolRun build = lua(companion, "numen.build.place({{name = \"tnt\", pos = " + xyz(spot) + "}})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(build.done(), "build has not finished");
@@ -1315,7 +1315,7 @@ public class PermissionGameTests {
         BlockPos spot = helper.absolutePos(new BlockPos(10, 2, 10));
         NumenPlayer companion = spawnAt(helper, "gametest_quarryman", new BlockPos(9, 2, 8), false);
         companion.getInventory().add(new ItemStack(Items.TNT));
-        ToolRun build = lua(companion, "numen.build.place(" + xyz(spot) + ", {block = \"tnt\"})");
+        ToolRun build = lua(companion, "numen.build.place({{name = \"tnt\", pos = " + xyz(spot) + "}})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(build.done(), "build has not finished");

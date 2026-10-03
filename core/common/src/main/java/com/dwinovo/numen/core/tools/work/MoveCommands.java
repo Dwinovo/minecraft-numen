@@ -50,7 +50,7 @@ public final class MoveCommands {
                     + "stop within the near option's blocks of the cell, place or any of the cells. dig: stand where your "
                     + "hand reaches that block (or, for several, where it reaches the most of them), even if something "
                     + "is in the way, to dig it with numen.work.dig. reach: stand where your hand reaches that cell, air "
-                    + "too, without standing in it, to build into it with numen.build.at.")
+                    + "too, without standing in it, to build into it with numen.build.place.")
             .whenOmitted("arrive at");
     static final Param<Integer> NEAR = Param.optional("near", ArgType.integer(1, MAX_NEAR),
             "With arrive = \"near\" only: anywhere within this many blocks counts as there.")

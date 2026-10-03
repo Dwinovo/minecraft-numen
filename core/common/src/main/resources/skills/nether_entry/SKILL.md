@@ -27,14 +27,15 @@ Notes:
 ## Portal build
 
 - Frame: 4 wide × 5 tall, **corners omitted = exactly 10 obsidian**, standing vertically. Inner opening is 2×3 air.
-- Pick flat ground near your base. Write the frame as a small design — two side columns of 3 plus top and bottom rows of 2 — and build it in one go; a single `numen.build.set` handles any one-off correction:
-  ```
-  numen.build.new("portal")
-  numen.build.line({x = 0, y = 1, z = 0}, {x = 0, y = 3, z = 0}, {block = "obsidian", into = "portal"})
-  numen.build.line({x = 3, y = 1, z = 0}, {x = 3, y = 3, z = 0}, {block = "obsidian", into = "portal"})
-  numen.build.line({x = 1, y = 0, z = 0}, {x = 2, y = 0, z = 0}, {block = "obsidian", into = "portal"})
-  numen.build.line({x = 1, y = 4, z = 0}, {x = 2, y = 4, z = 0}, {block = "obsidian", into = "portal"})
-  numen.build.raise("portal", {at = {x = 120, y = 64, z = -35}})
+- Pick flat ground near your base. Draw the frame with `numen.shape` — two side columns of 3 plus top and bottom rows of 2 — and build it in one go with `numen.build.raise`; `numen.build.place` of a single Block handles any one-off correction:
+  ```lua
+  local S = numen.shape
+  local o = S.pos(120, 64, -35)
+  local frame = S.line(o:offset(0, 1, 0), o:offset(0, 3, 0), "obsidian")
+    :union(S.line(o:offset(3, 1, 0), o:offset(3, 3, 0), "obsidian"))
+    :union(S.line(o:offset(1, 0, 0), o:offset(2, 0, 0), "obsidian"))
+    :union(S.line(o:offset(1, 4, 0), o:offset(2, 4, 0), "obsidian"))
+  numen.build.raise(frame)
   ```
 - **Flint & steel**: craft `flint_and_steel` = 1 iron ingot + 1 flint, a 2×2 recipe (`numen.inv.craft` it; see the `containers` skill to lay a grid by hand). Flint drops from gravel you `numen.work.dig`, ~10%/block.
 - **Ignite**: `numen.use.block({x = 121, y = 65, z = -35}, {item = "minecraft:flint_and_steel"})` aimed at an **empty air cell INSIDE the frame** (a bottom one), not at the obsidian. The fire lands in that cell and the portal forms.

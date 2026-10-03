@@ -60,7 +60,6 @@ import java.util.stream.Collectors;
  * 这个值写错了,报错指在它的开头。解读只在这里挂一次,命令行、快捷工具、只读不执行的那一棵树读到的都是认过的值。
  *
  * <h2>对象的类别</h2>
- * 每种类型有一个类别({@link #noun()}):登记时查"一条命令的位置参数只有一类对象"就比它。一串值的类别是它一项的类别。
  */
 public final class ArgType<T> {
 
@@ -124,7 +123,6 @@ public final class ArgType<T> {
 
     private final ArgumentType<T> brigadier;
     private final String kind;
-    private final String noun;
     private final String hint;
     private final Span span;
     private final Item item;
@@ -149,18 +147,17 @@ public final class ArgType<T> {
      * 一个值;JSON 值是一个字面值,文字原样就是它在命令行上的样子,读好的值写回去也就是它的文字
      * ({@link String#valueOf}:整数、小数、词、id、固定值之一都是这样)。
      */
-    private ArgType(ArgumentType<T> brigadier, String kind, String noun, String hint, Item item, SchemaField schema) {
-        this(brigadier, kind, noun, hint, Span.ONE, item, false, false, schema,
+    private ArgType(ArgumentType<T> brigadier, String kind, String hint, Item item, SchemaField schema) {
+        this(brigadier, kind, hint, Span.ONE, item, false, false, schema,
                 literal(brigadier, hint, UnaryOperator.identity()), String::valueOf);
     }
 
     /** @param written 读好的值写回命令行上是什么样子,再读一遍得到的是同一个值 */
-    private ArgType(ArgumentType<T> brigadier, String kind, String noun, String hint, Span span, Item item,
+    private ArgType(ArgumentType<T> brigadier, String kind, String hint, Span span, Item item,
                     boolean words, boolean flagSwitch, SchemaField schema, FromJson<T> json,
                     Function<T, String> written) {
         this.brigadier = brigadier;
         this.kind = kind;
-        this.noun = noun;
         this.hint = hint;
         this.span = span;
         this.item = item;
@@ -359,7 +356,7 @@ public final class ArgType<T> {
      * 和实际定的)——若在这里按 Brigadier 的范围拒掉,处理函数就没机会把话说清楚。
      */
     public static ArgType<Integer> integer(int min, int max) {
-        return new ArgType<>(IntegerArgumentType.integer(), "integer", "integer", "integer " + min + "-" + max,
+        return new ArgType<>(IntegerArgumentType.integer(), "integer", "integer " + min + "-" + max,
                 Item.INTEGER, (s, name, desc, required) -> {
                     if (required) s.integer(name, desc, min, max);
                     else s.optionalInteger(name, desc, min, max);
@@ -368,7 +365,7 @@ public final class ArgType<T> {
 
     /** 不设范围的整数:哪个值都合法,范围没什么可告诉模型的。 */
     public static ArgType<Integer> integer() {
-        return new ArgType<>(IntegerArgumentType.integer(), "integer", "integer", "integer", Item.INTEGER,
+        return new ArgType<>(IntegerArgumentType.integer(), "integer", "integer", Item.INTEGER,
                 (s, name, desc, required) -> {
                     if (required) s.integer(name, desc);
                     else s.optionalInteger(name, desc);
@@ -382,7 +379,7 @@ public final class ArgType<T> {
     public static ArgType<Boolean> bool() {
         BoolArgumentType read = BoolArgumentType.bool();
         String hint = "switch: true or false";
-        return new ArgType<>(read, "switch", "switch", hint, Span.ONE, Item.NONE, false, true,
+        return new ArgType<>(read, "switch", hint, Span.ONE, Item.NONE, false, true,
                 (s, name, desc, required) -> {
                     if (required) s.bool(name, desc);
                     else s.optionalBool(name, desc);
@@ -392,7 +389,7 @@ public final class ArgType<T> {
 
     /** 一个词:字母、数字与 {@code _-.+},不带空格。编号(t42、tm3)这类。 */
     public static ArgType<String> word() {
-        return new ArgType<>(StringArgumentType.word(), "word", "word", "word", Item.STRING, ArgType::stringField);
+        return new ArgType<>(StringArgumentType.word(), "word", "word", Item.STRING, ArgType::stringField);
     }
 
     /**
@@ -400,7 +397,7 @@ public final class ArgType<T> {
      * 自己的规则({@code a-z0-9_.-} 加路径里的 {@code /}),不另写一份;不写命名空间就是 {@code minecraft:},和原版指令一样。
      */
     public static ArgType<ResourceLocation> id() {
-        return new ArgType<>(ArgType::readId, "id", "id", "id, e.g. minecraft:oak_log (minecraft: may be left out)",
+        return new ArgType<>(ArgType::readId, "id", "id, e.g. minecraft:oak_log (minecraft: may be left out)",
                 Item.STRING, ArgType::stringField);
     }
 
@@ -412,7 +409,7 @@ public final class ArgType<T> {
     public static ArgType<String> string() {
         ArgumentType<String> read = ArgType::readString;
         String hint = "string";
-        ArgType<String> string = new ArgType<>(read, "string", "string", hint, Span.ONE, Item.STRING, false, false,
+        ArgType<String> string = new ArgType<>(read, "string", hint, Span.ONE, Item.STRING, false, false,
                 ArgType::stringField, literal(read, hint, ArgType::quoted), ArgType::quotedIfNeeded);
         string.raw = UnaryOperator.identity();
         return string;
@@ -471,7 +468,7 @@ public final class ArgType<T> {
     public static ArgType<String> text() {
         StringArgumentType read = StringArgumentType.greedyString();
         String hint = "text";
-        return new ArgType<>(read, "text", "text", hint, Span.REST, Item.NONE, false, false, ArgType::stringField,
+        return new ArgType<>(read, "text", hint, Span.REST, Item.NONE, false, false, ArgType::stringField,
                 literal(read, hint, UnaryOperator.identity()), UnaryOperator.identity());
     }
 
@@ -480,7 +477,7 @@ public final class ArgType<T> {
      * 是动作自己的语义。
      */
     public static ArgType<Double> number(double min, double max) {
-        return new ArgType<>(DoubleArgumentType.doubleArg(), "number", "number",
+        return new ArgType<>(DoubleArgumentType.doubleArg(), "number",
                 "number " + plain(min) + "-" + plain(max), Item.NONE,
                 (s, name, desc, required) -> {
                     if (required) s.number(name, desc, min, max);
@@ -508,7 +505,7 @@ public final class ArgType<T> {
                 throw NOT_A_CHOICE.createWithContext(reader, listed);
             }
             return value;
-        }, String.join("|", allowed), "choice", "one of " + listed, Item.STRING,
+        }, String.join("|", allowed), "one of " + listed, Item.STRING,
                 (s, name, desc, required) -> {
                     if (required) s.enumStr(name, desc, choices);
                     else s.optionalEnum(name, desc, choices);
@@ -522,7 +519,7 @@ public final class ArgType<T> {
      * 怎么说,是用它的动作的事——同一个 {@code #minecraft:village} 在结构表里是一类、在群系表里查无此类。
      */
     public static ArgType<String> idOrTag() {
-        return new ArgType<>(ArgType::readIdOrTag, "id", "id", "id or #tag, e.g. minecraft:oak_log or #minecraft:logs",
+        return new ArgType<>(ArgType::readIdOrTag, "id", "id or #tag, e.g. minecraft:oak_log or #minecraft:logs",
                 Item.STRING, ArgType::stringField);
     }
 
@@ -554,7 +551,7 @@ public final class ArgType<T> {
     public static ArgType<BlockPos> cell() {
         ArgumentType<BlockPos> read = ArgType::readCell;
         String hint = "cell: " + POS_SHAPE;
-        return new ArgType<>(read, "x y z", "cell", hint, Span.ONE, Item.STRING, true, false, ArgType::stringField,
+        return new ArgType<>(read, "x y z", hint, Span.ONE, Item.STRING, true, false, ArgType::stringField,
                 ArgType::cellFromJson, pos -> pos.getX() + " " + pos.getY() + " " + pos.getZ())
                 .scripted(Shapes.POS.type(), Shapes::value);
     }
@@ -565,7 +562,7 @@ public final class ArgType<T> {
     public static ArgType<Target> target() {
         ArgumentType<Target> read = reader -> new Target(readCell(reader), null);
         String hint = "a cell: " + POS_SHAPE;
-        return new ArgType<>(read, "x y z", "cell", hint, Span.ONE, Item.STRING, true, false, ArgType::stringField,
+        return new ArgType<>(read, "x y z", hint, Span.ONE, Item.STRING, true, false, ArgType::stringField,
                 ArgType::targetFromJson, Target::written)
                 .scripted(ScriptType.union(Shapes.POS.type(), Shapes.BLOCK.type()), Target::value);
     }
@@ -576,7 +573,7 @@ public final class ArgType<T> {
     public static ArgType<Place> place() {
         ArgumentType<Place> read = ArgType::readPlace;
         String hint = "place: a Pos (a cell, or anything with a pos), a column {x = …, z = …} or a height {y = …}";
-        return new ArgType<>(read, "place", "place", hint, Span.ONE, Item.STRING, true, false, ArgType::stringField,
+        return new ArgType<>(read, "place", hint, Span.ONE, Item.STRING, true, false, ArgType::stringField,
                 ArgType::placeFromJson, Place::written)
                 .scripted(ScriptType.union(Shapes.POS.type(), ScriptType.table(
                                 ScriptType.field("x", ScriptType.NUMBER, null), ScriptType.field("z", ScriptType.NUMBER, null)),
@@ -590,7 +587,7 @@ public final class ArgType<T> {
     public static ArgType<BlockOrCell> blockOrCell() {
         ArgumentType<BlockOrCell> read = ArgType::readBlockOrCell;
         String hint = "block id, #tag, or a cell (" + POS_SHAPE + ")";
-        return new ArgType<>(read, "block|cell", "block|cell", hint, Span.ONE, Item.STRING, true, false,
+        return new ArgType<>(read, "block|cell", hint, Span.ONE, Item.STRING, true, false,
                 ArgType::stringField, ArgType::blockOrCellFromJson, BlockOrCell::written)
                 .scripted(ScriptType.union(ScriptType.STRING, Shapes.POS.type()),
                         v -> v.cell() != null ? Shapes.value(v.cell()) : v.written());
@@ -615,7 +612,7 @@ public final class ArgType<T> {
             }
             return new ChoiceOrCell(value, null);
         };
-        return new ArgType<>(read, String.join("|", allowed) + "|cell", "choice|cell", "one of " + listed, Span.ONE,
+        return new ArgType<>(read, String.join("|", allowed) + "|cell", "one of " + listed, Span.ONE,
                 Item.STRING, true, false, ArgType::stringField, value -> {
                     if (value != null && value.isJsonObject()) {
                         return new ChoiceOrCell(null, cellFromJson(value));
@@ -627,6 +624,137 @@ public final class ArgType<T> {
                 }, ChoiceOrCell::written)
                 .scripted(ScriptType.union(ScriptType.choice(allowed), Shapes.POS.type()),
                         v -> v.cell() != null ? Shapes.value(v.cell()) : v.choice());
+    }
+
+    /**
+     * 要盖成的样子({@link Building}):脚本里是一串格(Cells,或任何一串 Block 与 Pos;一个 Block 是只有一格的一串),或
+     * {@code numen.build.blueprint} 交回的那张表。命令行上一串格写成空格隔开的 {@code x,y,z=方块},一份蓝图写成
+     * {@code blueprint:名字@x,y,z@度数}。方块写得对不对由用它的动作按 {@code /setblock} 的读法认。
+     */
+    public static ArgType<Building> building() {
+        String hint = "Cells (Blocks: the block for each cell, written as /setblock takes it) or a Blueprint from "
+                + "numen.build.blueprint";
+        ArgumentType<Building> read = reader -> {
+            int start = reader.getCursor();
+            String first = readString(reader);
+            if (first.startsWith(Building.BLUEPRINT)) {
+                return new Building(null, blueprintWritten(first, reader, start));
+            }
+            List<Building.Cell> cells = new ArrayList<>();
+            cells.add(cellWritten(first, reader, start));
+            while (reader.canRead()) {
+                if (reader.peek() != ' ') {
+                    throw CommandSyntaxException.BUILT_IN_EXCEPTIONS.dispatcherExpectedArgumentSeparator()
+                            .createWithContext(reader);
+                }
+                if (reader.getString().startsWith(FlagsArgument.PREFIX, reader.getCursor() + 1)) {
+                    break;
+                }
+                reader.skip();
+                int at = reader.getCursor();
+                cells.add(cellWritten(readString(reader), reader, at));
+            }
+            return new Building(cells, null);
+        };
+        return new ArgType<>(read, "cells|blueprint", hint, Span.SEVERAL, Item.NONE, false, false,
+                ArgType::stringField, value -> buildingFromJson(value, hint), Building::written)
+                .scripted(ScriptType.union(Shapes.CELLS.type(), new ScriptType.Named("Blueprint")),
+                        ArgType::buildingValue);
+    }
+
+    /** 命令行上的一格:{@code x,y,z} 或 {@code x,y,z=方块}。 */
+    private static Building.Cell cellWritten(String token, StringReader reader, int start)
+            throws CommandSyntaxException {
+        int eq = token.indexOf('=');
+        String at = eq < 0 ? token : token.substring(0, eq);
+        BlockPos pos;
+        try {
+            pos = whole(ArgType::readCell, at, "cell");
+        } catch (CommandSyntaxException bad) {
+            reader.setCursor(start);
+            throw REJECTED.createWithContext(reader, "expected a cell x,y,z or x,y,z=block; got " + token);
+        }
+        return new Building.Cell(pos, eq < 0 ? null : token.substring(eq + 1));
+    }
+
+    /** 命令行上的一份蓝图:{@code blueprint:名字@x,y,z@度数}。 */
+    private static Building.Blueprint blueprintWritten(String token, StringReader reader, int start)
+            throws CommandSyntaxException {
+        String body = token.substring(Building.BLUEPRINT.length());
+        int second = body.lastIndexOf('@');
+        int first = second <= 0 ? -1 : body.lastIndexOf('@', second - 1);
+        try {
+            if (first <= 0) {
+                throw new NumberFormatException();
+            }
+            return new Building.Blueprint(body.substring(0, first),
+                    whole(ArgType::readCell, body.substring(first + 1, second), "cell"),
+                    Integer.parseInt(body.substring(second + 1)));
+        } catch (NumberFormatException | CommandSyntaxException bad) {
+            reader.setCursor(start);
+            throw REJECTED.createWithContext(reader, "expected blueprint:<name>@x,y,z@<rotation>; got " + token);
+        }
+    }
+
+    /**
+     * 要盖成的样子的 JSON:带 {@code blueprint} 的表是一份蓝图(一串值的参数收下的只有它一个时,读进来是只有它的一张列表),别的列表
+     * 是一串格,带 {@code pos} 的一个方块是一格。
+     */
+    private static Building buildingFromJson(JsonElement value, String hint) throws CommandSyntaxException {
+        JsonElement one = value != null && value.isJsonArray() && value.getAsJsonArray().size() == 1
+                ? value.getAsJsonArray().get(0) : value;
+        if (one != null && one.isJsonObject() && one.getAsJsonObject().get("blueprint") instanceof JsonElement name
+                && name.isJsonPrimitive()) {
+            JsonObject o = one.getAsJsonObject();
+            JsonElement turned = o.get("rotation");
+            return new Building(null, new Building.Blueprint(name.getAsString(), cellFromJson(o.get("origin")),
+                    turned == null || turned.isJsonNull() ? 0 : turned.getAsInt()));
+        }
+        if (value != null && value.isJsonArray()) {
+            List<Building.Cell> cells = new ArrayList<>();
+            for (JsonElement item : value.getAsJsonArray()) {
+                cells.add(cellFromJsonValue(item));
+            }
+            if (cells.isEmpty()) {
+                throw REJECTED.create("expected " + hint + "; got an empty list");
+            }
+            return new Building(cells, null);
+        }
+        if (value != null && value.isJsonObject()) {
+            return new Building(List.of(cellFromJsonValue(value)), null);
+        }
+        throw REJECTED.create("expected " + hint + "; got " + given(value));
+    }
+
+    /** 一串格里的一格:一个 Block 是那一格放那个方块,一个 Pos(或别的带 pos 的)只是那一格。 */
+    private static Building.Cell cellFromJsonValue(JsonElement item) throws CommandSyntaxException {
+        BlockPos pos = cellFromJson(item);
+        JsonObject o = item.getAsJsonObject();
+        boolean named = !o.has("id") && o.get("name") instanceof JsonElement name && name.isJsonPrimitive();
+        return new Building.Cell(pos, named ? o.get("name").getAsString() : null);
+    }
+
+    /** 要盖成的样子写成脚本里的值:一串 Block 或 Pos,或蓝图那张表。 */
+    private static Object buildingValue(Building building) {
+        if (building.cells() != null) {
+            List<Object> out = new ArrayList<>();
+            for (Building.Cell cell : building.cells()) {
+                if (cell.block() == null) {
+                    out.add(Shapes.value(cell.pos()));
+                } else {
+                    java.util.Map<String, Object> block = new java.util.LinkedHashMap<>();
+                    block.put("name", cell.block());
+                    block.put("pos", Shapes.value(cell.pos()));
+                    out.add(block);
+                }
+            }
+            return out;
+        }
+        java.util.Map<String, Object> out = new java.util.LinkedHashMap<>();
+        out.put("blueprint", building.blueprint().name());
+        out.put("origin", Shapes.value(building.blueprint().origin()));
+        out.put("rotation", (long) building.blueprint().rotation());
+        return out;
     }
 
     /** 方块或格子的 JSON:表是一格,字符串是方块 id 或标签。 */
@@ -741,7 +869,7 @@ public final class ArgType<T> {
      * 同一种写法,读通之后交给 {@code parse} 认:认不了抛出的 {@link IllegalArgumentException} 的话就是这个值的报错,
      * 位置指在它的开头。命令行、快捷工具都经这一处,读出来的都是认过的值。
      *
-     * @param kind    帮助与标志用法里的称呼,也是它的对象类别({@link #noun()})
+     * @param kind    帮助与标志用法里的称呼
      * @param hint    帮助里的完整称呼
      * @param parse   把这种写法读出的值认成要的东西
      * @param unparse 认好的东西写回这种写法的值:{@code parse} 读回来是同一个
@@ -765,7 +893,7 @@ public final class ArgType<T> {
                 throw REJECTED.create(wrong.getMessage());
             }
         };
-        ArgType<R> judgedType = new ArgType<>(judged, kind, kind, hint, span, item, words, flagSwitch, schema,
+        ArgType<R> judgedType = new ArgType<>(judged, kind, hint, span, item, words, flagSwitch, schema,
                 fromJson, value -> written.apply(unparse.apply(value)));
         judgedType.raw = value -> raw.apply(unparse.apply(value));
         judgedType.script = script;
@@ -782,7 +910,7 @@ public final class ArgType<T> {
     public static ArgType<EntityRef> entity() {
         ArgumentType<EntityRef> read = ArgType::readEntity;
         String hint = "entity: its id as numen.scan.entities lists it, or the Entity itself";
-        return new ArgType<>(read, "entity", "entity", hint, Span.ONE, Item.STRING, false, false,
+        return new ArgType<>(read, "entity", hint, Span.ONE, Item.STRING, false, false,
                 ArgType::stringField, ArgType::entityFromJson, EntityRef::written)
                 .scripted(ScriptType.union(ScriptType.INTEGER, Shapes.ENTITY.type()),
                         ref -> ref.id() != null ? (Object) (long) ref.id() : ref.uuid().toString());
@@ -851,7 +979,7 @@ public final class ArgType<T> {
             }
             return List.copyOf(values);
         };
-        ArgType<List<T>> list = new ArgType<>(read, element.kind + "...", element.noun, hint, Span.SEVERAL, Item.NONE,
+        ArgType<List<T>> list = new ArgType<>(read, element.kind + "...", hint, Span.SEVERAL, Item.NONE,
                 false, false,
                 (s, name, desc, required) -> {
                     boolean integers = element.item == Item.INTEGER;
@@ -926,11 +1054,6 @@ public final class ArgType<T> {
     /** 类型的名字,比如 {@code integer};用法里写它。 */
     String kind() {
         return kind;
-    }
-
-    /** 它的对象类别:登记时比"位置参数是不是只有一类对象"就比它;一串值的类别是它一项的类别。 */
-    String noun() {
-        return noun;
     }
 
     /** 帮助里的完整称呼,比如 {@code integer 1-1200}。 */

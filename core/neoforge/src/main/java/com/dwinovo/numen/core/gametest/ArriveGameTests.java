@@ -325,7 +325,7 @@ public class ArriveGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_reacher", new BlockPos(2, 2, 2), false);
         companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COBBLESTONE));
         ToolRun run = lua(companion, "numen.move.goto_(" + xyz(cell) + ", {arrive = \"reach\"})\n"
-                + "numen.build.place(" + xyz(cell) + ", {block = \"cobblestone\"})");
+                + "numen.build.place({{name = \"cobblestone\", pos = " + xyz(cell) + "}})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(run.receipt() != null, "the program has not finished");

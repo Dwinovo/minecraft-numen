@@ -60,17 +60,17 @@ class WorkCommandGroupsTest {
     }
 
     /**
-     * build 组只剩原语、设计与 at/left/built,一页放得下;她赶路时愿意消耗的方块是自己的一组 throwaway,四个动作只改清单,没有
+     * build 组只剩 blueprint/place/diff 与库里的 raise,一页放得下;她赶路时愿意消耗的方块是自己的一组 throwaway,四个动作只改清单,没有
      * "看清单"的动作(现状在身体状态里)。
      */
     @Test
     void buildFitsOnOnePageAndThrowawayIsItsOwnGroup() {
         String build = help("numen.build");
-        assertEquals(List.of("set", "place", "line", "layer", "cylinder", "sphere", "copy", "new", "show", "drop",
-                "designs", "delete", "at", "left", "built", "raise"), functions(build, "build"), build);
-        assertTrue(build.contains("\n---@field raise fun(name: string, opts?: table): integer "),
+        assertEquals(List.of("blueprint", "place", "diff", "raise"), functions(build, "build"), build);
+        assertTrue(build.contains("\n---@field raise fun(building: Cells|Blueprint, opts?: table): integer "),
                 "库里的 numen.build.raise 照它的类型注解列在组里: " + build);
-        assertTrue(build.contains("\n---@class Placed\n"), "组里返回值用到的类跟在后面: " + build);
+        assertTrue(build.contains("\n---@class Placed\n") && build.contains("\n---@class Blueprint\n"),
+                "组里返回值用到的类跟在后面: " + build);
         assertTrue(!build.contains("(page 1 of") && !build.contains("scaffold") && !build.contains("throwaway"), build);
         String throwaway = help("numen.throwaway");
         assertEquals(List.of("add", "remove", "set", "clear"), functions(throwaway, "throwaway"), throwaway);
@@ -130,9 +130,10 @@ class WorkCommandGroupsTest {
                 "numen.work.dig({name = \"iron_ore\", pos = {x = 120, y = 12, z = -35}}, {x = 121, y = 12, z = -35}, {count = 4})", "numen.move.go(\"home\")", "numen.move.follow(184)",
                 "numen.scan.blocks(\"iron_ore\")", "numen.scan.entities()",
                 "numen.scan.block({x = 1, y = 2, z = 3})", "numen.task.timer(\"check the furnace\", {after = 90})", "numen.route.new(\"back\")",
-                "numen.route.drop(\"home\")", "numen.build.set({x = 1, y = 2, z = 3}, {block = \"stone\"})",
-                "numen.build.layer({\"###\"}, {at = {x = 0, y = 1, z = 0}, block = \"oak_planks\", into = \"house\", step = 2})",
-                "numen.build.drop(\"house/4\")", "numen.build.at(\"house\", {at = {x = 100, y = 64, z = -20}})", "numen.build.left(\"house\")",
+                "numen.route.drop(\"home\")", "numen.build.place({{name = \"stone\", pos = {x = 1, y = 2, z = 3}}})",
+                "numen.build.place({name = \"oak_planks\", pos = {x = 0, y = 1, z = 0}})",
+                "numen.build.blueprint(\"house\", {x = 100, y = 64, z = -20}, {rotation = 90})",
+                "numen.build.diff({blueprint = \"house\", origin = {x = 100, y = 64, z = -20}, rotation = 0})",
                 "numen.memory.remember(\"main base -340,68,120\")", "numen.todo.write({\"[>] dig\"})")) {
             var reading = com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.calls("t", code,
                     com.dwinovo.numen.cli.NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.factory()));

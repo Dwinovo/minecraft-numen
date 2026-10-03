@@ -434,7 +434,7 @@ public class TaskControlGameTests {
 
     // ---- 一轮里的几条调用:一件做完才派下一件;下一轮派的替换正在做的 ----
 
-    /** 一轮里写了两条 {@code numen.build.set air}:第一件做完才派第二件,两格都拆掉,第二件没有顶掉第一件。 */
+    /** 一轮里写了两条放空气的 {@code numen.build.place}:第一件做完才派第二件,两格都拆掉,第二件没有顶掉第一件。 */
     @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_tasks")
     public static void two_build_sets_in_one_round_both_get_done(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -443,8 +443,8 @@ public class TaskControlGameTests {
         BlockPos second = helper.absolutePos(new BlockPos(2, 2, 4));
         level.setBlockAndUpdate(first, Blocks.STONE.defaultBlockState());
         level.setBlockAndUpdate(second, Blocks.STONE.defaultBlockState());
-        LlmToolCall clearFirst = programCall("numen.build.set(" + xyz(first) + ", {block = \"air\"})");
-        LlmToolCall clearSecond = programCall("numen.build.set(" + xyz(second) + ", {block = \"air\"})");
+        LlmToolCall clearFirst = programCall("numen.build.place({{name = \"air\", pos = " + xyz(first) + "}})");
+        LlmToolCall clearSecond = programCall("numen.build.place({{name = \"air\", pos = " + xyz(second) + "}})");
         Round round = round(helper, companion, clearFirst, clearSecond);
         EventOutbox outbox = EventOutbox.get(level.getServer());
 

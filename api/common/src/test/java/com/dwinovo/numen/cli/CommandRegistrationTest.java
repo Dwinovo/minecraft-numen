@@ -102,21 +102,13 @@ class CommandRegistrationTest {
     }
 
     /**
-     * 参数表的规矩写在登记处,违反就在登记那一刻抛出,插件的动作同样受约束:一次调用只有一类对象;没有必须写的选项
+     * 参数表的规矩写在登记处,违反就在登记那一刻抛出,插件的动作同样受约束:没有必须写的选项
      * (每个选项写明不写时会怎样);开关不当对象;可以不写的对象只能是最后一个;名字不能是脚本语言用掉的。
      */
     @Test
     void theParameterRulesAreCheckedWhenRegistered() {
         NumenApi numen = door();
         Param<Integer> count = Param.required("count", ArgType.integer(1, 9), "How many.");
-        Param<String> item = Param.required("item", ArgType.word(), "Which item.");
-        IllegalArgumentException twoKinds = assertThrows(IllegalArgumentException.class, () -> numen.registerCommands(
-                "gt_rule_kinds", "x.", g -> g.server("take", "Take.", OK, count, item)
-                        .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
-                        .example("gt.gt_rule_kinds.take(1, \"a\")")));
-        assertEquals("gt gt_rule_kinds take 的位置参数有 2 类对象(integer、word):一条命令只有一类位置参数——它操作的东西,"
-                + "可以多个;其余写成标志", twoKinds.getMessage());
-
         Param<String> from = Param.optional("from", ArgType.word(), "Where from.");
         IllegalArgumentException mustWrite = assertThrows(IllegalArgumentException.class, () -> numen.registerCommands(
                 "gt_rule_flag", "x.", g -> g.server("take", "Take.", OK, count, from).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt.gt_rule_flag.take(1)")));

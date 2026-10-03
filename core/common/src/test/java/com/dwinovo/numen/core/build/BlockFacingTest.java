@@ -35,7 +35,7 @@ class BlockFacingTest {
     }
 
     private static BlockState parse(String written) {
-        return BuildPalette.parse(written).first().state();
+        return BuildStates.resolve(written).state();
     }
 
     /**

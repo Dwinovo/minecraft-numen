@@ -3,18 +3,14 @@ package com.dwinovo.numen.core;
 import com.dwinovo.numen.agent.prompt.NumenPrompts;
 import com.dwinovo.numen.cli.ScriptTool;
 import com.dwinovo.numen.cli.WrittenCommands;
-import com.dwinovo.numen.core.build.Design;
 import com.dwinovo.numen.task.reflex.ReflexRegistry;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Stream;
 
 import static com.dwinovo.numen.core.WrittenCommandsLint.assertReads;
 
@@ -56,18 +52,5 @@ class WrittenCommandsTest {
         List<WrittenCommands.Text> texts = new ArrayList<>(WrittenCommands.registered());
         texts.addAll(WrittenCommands.toolTexts(new ScriptTool()));
         assertReads(texts, 150);
-    }
-
-    /** 随模组发的设计文件({@code .numen}):每一步和手写进设计库的一样,按设计的读法读(就是这棵命令树)。 */
-    @Test
-    void everyBundledDesignReads() throws IOException, URISyntaxException {
-        Path resources = Path.of(WrittenCommandsTest.class.getClassLoader()
-                .getResource("skills/building_design/SKILL.md").toURI()).getParent().getParent().getParent();
-        try (Stream<Path> walk = Files.walk(resources)) {
-            for (Path file : walk.filter(p -> p.toString().endsWith(".numen")).toList()) {
-                String name = file.getFileName().toString().replace(".numen", "");
-                Design.parse(name, Files.readString(file));
-            }
-        }
     }
 }

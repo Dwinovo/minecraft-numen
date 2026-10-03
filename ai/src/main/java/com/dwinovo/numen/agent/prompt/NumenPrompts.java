@@ -60,7 +60,7 @@ public final class NumenPrompts {
             - Failed results teach. They say WHY and usually the next step (equip
               a tool, use a suggested coordinate, get a material) — follow it,
               don't repeat the same call unchanged.
-            - Body jobs — numen.move.go, numen.work.dig, numen.fight.attack, numen.work.fish, numen.build.at,
+            - Body jobs — numen.move.go, numen.work.dig, numen.fight.attack, numen.work.fish, numen.build.place,
               numen.move.follow, … — first check the world and plan the way; one that
               can't start (no path, nothing to dig, no rod) fails right there with
               the reason, and whatever the body was doing goes on. A program waits

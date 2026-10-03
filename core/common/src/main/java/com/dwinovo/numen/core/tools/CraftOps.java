@@ -188,7 +188,8 @@ public final class CraftOps {
                                         + ", then craft again."
                                 : "None within " + HINT_H + " blocks — craft a crafting_table (4 planks, "
                                         + "fits your own 2x2), put it down on a cell beside you with `numen.build.place("
-                                        + "{x = …, y = …, z = …}, {block = \"crafting_table\"})`, then craft again.")).toJson();
+                                        + "{{name = \"crafting_table\", pos = {x = …, y = …, z = …}}})`, then craft again."))
+                        .toJson();
             }
             // 开台走 act 的按键原语:看向、右键、挥手都是身体动作,不归工具层手搓。
             // 预解析命中(不走射线)保持既有语义——门禁是"够得着",不是"看得见"。

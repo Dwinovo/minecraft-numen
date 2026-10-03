@@ -221,15 +221,18 @@ public final class BuildHut implements Scenario {
         int z = c.getZ();
         int y = c.getY();
         BlockPos door = scene.pos(CORNER.offset(2, 0, 4));
-        // 原语只放手够得着的格:先站进屋子正中,四面墙和屋顶都在手边
+        // numen.build.place 只放手够得着的格:先站进屋子正中,四面墙和屋顶都在手边
         BlockPos middle = scene.pos(CORNER.offset(2, 0, 2));
-        return "numen.move.goto_(" + Shapes.literal(middle) + ")\n"
-                + "numen.build.layer({\"#####\", \"#...#\", \"#...#\", \"#...#\", \"##.##\"}, {at = "
-                + Shapes.literal(new BlockPos(x, y, z)) + ", block = \"oak_planks\", up_to = " + (y + 1) + "})\n"
-                + "numen.build.layer({\"#####\", \"#...#\", \"#...#\", \"#...#\", \"#####\"}, {at = "
-                + Shapes.literal(new BlockPos(x, y + 2, z)) + ", block = \"oak_planks\"})\n"
-                + "numen.build.layer({\"#####\", \"#####\", \"#####\", \"#####\", \"#####\"}, {at = "
-                + Shapes.literal(new BlockPos(x, y + 3, z)) + ", block = \"oak_planks\"})\n"
-                + "numen.build.set(" + Shapes.literal(door) + ", {block = \"oak_door[facing=south]\"})";
+        return """
+                numen.move.goto_(%s)
+                local S = numen.shape
+                local o = S.pos(%d, %d, %d)
+                local planks = {["#"] = "oak_planks"}
+                local walls = S.layer(o, {"#####", "#...#", "#...#", "#...#", "##.##"}, planks)
+                local hut = walls:union(walls:shift(0, 1, 0))
+                hut = hut:union(S.layer(o:offset(0, 2, 0), {"#####", "#...#", "#...#", "#...#", "#####"}, planks))
+                hut = hut:union(S.layer(o:offset(0, 3, 0), {"#####", "#####", "#####", "#####", "#####"}, planks))
+                numen.build.place(hut:union({{name = "oak_door[facing=south]", pos = %s}}))
+                """.formatted(Shapes.literal(middle), x, y, z, Shapes.literal(door));
     }
 }

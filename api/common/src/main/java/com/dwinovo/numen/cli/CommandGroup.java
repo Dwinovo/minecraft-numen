@@ -6,7 +6,6 @@ import com.dwinovo.numen.agent.script.ScriptType;
 
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -82,7 +81,8 @@ public final class CommandGroup {
      * 参数表的规矩,登记时查,违反就抛出——核心与插件的动作同样受约束(设计稿 {@code docs/shell.md} §二):
      * <ul>
      *   <li>名字不重复,也不是脚本语言用掉的名字(选项表的键要写得出来:{@code {in = …}} 在 Lua 里是语法错);</li>
-     *   <li><b>一条命令只有一类位置参数</b>:它操作的东西,可以多个,类别({@link ArgType#noun})都一样;其余一律是标志;</li>
+     *   <li><b>位置参数按顺序写</b>:它操作的东西,再是这件事离不了的几个量({@code numen.build.blueprint(name, origin)});
+     *       别的一律是选项;</li>
      *   <li><b>没有必须写的标志</b>:每个标志与可以不写的位置参数都写明不写时会怎样({@link Param#whenOmitted}),默认就是对的;</li>
      *   <li><b>开关不当位置参数</b>:{@code true}/{@code false} 不写在命令行上,开关只写 {@code --name} 或 {@code --no-name};</li>
      *   <li>可以不写的位置参数只能是最后一个;一串值当位置参数只能是最后一个——它读到行尾或下一个标志,后面的位置参数会被它吞掉;
@@ -92,7 +92,6 @@ public final class CommandGroup {
     private static void checkParams(String path, List<Param<?>> params) {
         Set<String> seen = new HashSet<>();
         List<Param<?>> positionals = params.stream().filter(Param::positional).toList();
-        Set<String> nouns = new LinkedHashSet<>();
         for (Param<?> p : params) {
             if (!seen.add(p.name())) {
                 throw new IllegalArgumentException(path + " 的参数 " + p.name() + " 写了两次");
@@ -121,13 +120,6 @@ public final class CommandGroup {
                 throw new IllegalArgumentException(path + " 的参数 " + p.name()
                         + " 是一串值,当位置参数只能是最后一个");
             }
-            if (p.positional()) {
-                nouns.add(p.type().noun());
-            }
-        }
-        if (nouns.size() > 1) {
-            throw new IllegalArgumentException(path + " 的位置参数有 " + nouns.size() + " 类对象(" + String.join("、", nouns)
-                    + "):一条命令只有一类位置参数——它操作的东西,可以多个;其余写成标志");
         }
     }
 

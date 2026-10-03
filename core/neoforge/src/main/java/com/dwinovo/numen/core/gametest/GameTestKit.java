@@ -801,7 +801,7 @@ public final class GameTestKit {
      * 一张按输出预算分页的清单,从第一页往后翻,直到哪一页里有 {@code needle}:清单跨次攒下来,要找的那条落在第几页由
      * 前面有多少条定。翻到最后一页也没有、或者哪一页失败了,返回那一页,由用例的断言说明白。
      *
-     * @param function 不带别的参数的那个函数,如 {@code numen.build.built}
+     * @param function 不带别的参数的那个函数,如 {@code numen.module.list}
      */
     static ToolRun pageWith(NumenPlayer body, String function, String needle) {
         for (int page = 1; ; page++) {

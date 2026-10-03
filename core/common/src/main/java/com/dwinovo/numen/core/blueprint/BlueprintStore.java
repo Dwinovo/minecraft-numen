@@ -253,6 +253,6 @@ public final class BlueprintStore {
         } catch (Exception e) {
             throw new IllegalArgumentException("blueprint " + name + " cannot be read: " + e.getMessage(), e);
         }
-        throw new IllegalArgumentException("blueprint " + name + " not found; numen.build.designs() lists the files there are");
+        throw new IllegalArgumentException("there is no blueprint file named " + name + " in the schematics folder");
     }
 }

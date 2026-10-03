@@ -33,7 +33,7 @@ The room has a lava pool under the frame and a **silverfish spawner** on the sta
 
 1. `numen.scan.blocks("spawner")` and hand the spawner's cluster to `numen.work.mine` (its `blocks`) immediately — unlike the blaze spawner, this one is pure liability.
 2. If silverfish are already out, scan them, then `numen.fight.attack` each runtime id (or `numen.fight.clear()`); don't let them burrow into the brickwork.
-3. Cover the lava pool edges where you'll stand with cobblestone: a `numen.build.layer` of it, or `numen.build.set({x = 120, y = 64, z = -35}, {block = "cobblestone"})` for single cells.
+3. Cover the lava pool edges where you'll stand with cobblestone: `numen.build.place` a row of it drawn with `numen.shape.line`, or `numen.build.place({{name = "cobblestone", pos = {x = 120, y = 64, z = -35}}})` for single cells.
 
 ## Step 4 — fill the frames
 

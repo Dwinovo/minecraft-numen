@@ -149,10 +149,9 @@ class BuildTaskRecordTest {
         assertEquals(Blocks.OAK_STAIRS.defaultBlockState()
                         .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST)
                         .setValue(BlockStateProperties.HALF, Half.TOP),
-                com.dwinovo.numen.core.build.BuildPalette
-                        .parse("oak_stairs[facing=east,half=top]").first().state());
-        assertThrows(IllegalArgumentException.class, () -> com.dwinovo.numen.core.build.BuildPalette
-                .parse("stone[facing=north]"));
+                com.dwinovo.numen.core.build.BuildStates.resolve("oak_stairs[facing=east,half=top]").state());
+        assertThrows(IllegalArgumentException.class, () -> com.dwinovo.numen.core.build.BuildStates
+                .resolve("stone[facing=north]"));
     }
 
     @Test

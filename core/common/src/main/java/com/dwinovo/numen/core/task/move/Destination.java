@@ -372,7 +372,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
     }
 
     /**
-     * 往一格里放方块的目标:手够得着它、身体不占着它。{@code numen.build.at} 判"这一格够不够得着"问的也是它,走到了就放得了。
+     * 往一格里放方块的目标:手够得着它、身体不占着它。{@code numen.build.place} 判"这一格够不够得着"问的也是它,走到了就放得了。
      */
     public static Goal reach(NumenPlayer her, BlockPos cell) {
         return Goals.place(cell, Snapshots.stats(her));

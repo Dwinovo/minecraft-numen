@@ -30,7 +30,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 多格建造任务:站在原地,把施工图里手够得着的格一批一批落进世界。
+ * 多格建造任务:站在原地,把施工图里手够得着的格一批一批落进世界,每一格轮到一次就收场。
  *
  * <p><b>只放够得着的</b>——每一格够不够得着与 {@code numen.move.goto_(…, {arrive = "reach"})} 走到的地方同一个判据({@link BuildSurvey}):
  * 她不走动,够不着的格留给下一次,回执说还剩几格、最低最近的一格在哪。走到够得着的地方、挖开挡着的、再放,是脚本的事
@@ -39,8 +39,8 @@ import java.util.Map;
  * <p><b>不挖</b>——生存模式下图纸要的格里立着别的方块,那一格由 {@code numen.work.dig} 挖开(挖的判据、工具、掉落、权限都是它的),
  * 这里不碰,回执里算进"要先挖开的";创造模式照原版一下就碎:图纸直接写上去顶掉原来的。
  *
- * <p>保留下来的是施工自己的事:生存模式逐格扣料、期望状态精确落位、"支撑还没长出来就先放着,下一遍再来"的分遍推进,
- * 整份对上之后让世界落定一次、生成摆设。
+ * <p>保留下来的是施工自己的事:生存模式逐格扣料、期望状态精确落位、低层先放(支撑还没长出来的先放着,
+ * 留给下一次调用)、整份对上之后让世界落定一次、生成摆设。
  *
  * <p><b>施工与表演分开</b>——施工只管下一格放哪、放没放成、差什么;转头、挥手、粒子归演出组件 {@link BuildShowmanship},
  * 它手里没有放置入口,改不了世界。
@@ -51,14 +51,6 @@ import java.util.Map;
  * {@link BuildOutstanding}。
  */
 public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRecord> {
-
-    /** 连续几遍零进展才升级处置。 */
-    private static final int MAX_BARREN_PASSES = 3;
-    /**
-     * 一遍零进展(又不是断料)之后,等多少刻再来下一遍。她自己占着的格不算够得着;剩下的多半被人或活物站着,
-     * 裁决要等他们有机会走开——一遍全是"放不下去"会在同一刻跑完,不等的话三遍连着翻完只要三刻。
-     */
-    private static final int RETRY_WAIT_TICKS = 60;
 
     /**
      * 写入标志:{@code UPDATE_CLIENTS}(同步给客户端)+ {@code UPDATE_KNOWN_SHAPE}
@@ -131,7 +123,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     /** {@code skippedPos.size()} 的缓存——判完工在热路径上,不必每次问集合。 */
     private int skippedCells;
     private int passStartCompleted;
-    private int barrenPasses;
     /**
      * 本遍已经证明<b>付不起剩下任何一格</b>——缺料这件事在这一刻就成立了,不必走完这遍。
      *
@@ -140,8 +131,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * 那一拍里的每一刻都在为一个早就成立的结论排队——玩家看到的是她绕着工地转一圈才说没料。
      */
     private boolean passStarved;
-    /** 零进展遍之后还要等的刻数,见 {@link #RETRY_WAIT_TICKS}。 */
-    private int retryWait;
 
     private String note = "done";
 
@@ -201,6 +190,11 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      */
     private static String remaining(BuildSurvey.Tally tally) {
         List<String> parts = new ArrayList<>();
+        int reach = tally.count(BuildSurvey.State.REACH);
+        if (reach > 0) {
+            // 每格轮到一次就收场:撑着它们的这一次才立起来、或这一次没放进去的,下一次放
+            parts.add(reach + " cell(s) within reach go in on the next numen.build.place");
+        }
         if (!tally.far().isEmpty()) {
             BlockPos next = tally.far().get(0);
             parts.add(tally.far().size() + " cell(s) out of reach — the lowest nearest is " + xyz(next)
@@ -350,16 +344,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      */
     private TaskState tickWork() {
         TaskState state = TaskState.RUNNING;
-        if (retryWait > 0) {
-            retryWait--;
-        } else {
-            // 速率可以小于每刻一格,所以用信用累积而不是"每 N 刻放一批":
-            // 生存慢到每十刻一格时,每一格都自成一批,节奏自然就散开了。
-            placeCredit += cellsPerTick;
-            int budget = (int) Math.min(placeCredit, BuildOrder.MAX_CELLS_PER_TICK);
-            if (budget > 0) {
-                state = runBatch(budget);
-            }
+        // 速率可以小于每刻一格,所以用信用累积而不是"每 N 刻放一批":
+        // 生存慢到每十刻一格时,每一格都自成一批,节奏自然就散开了。
+        placeCredit += cellsPerTick;
+        int budget = (int) Math.min(placeCredit, BuildOrder.MAX_CELLS_PER_TICK);
+        if (budget > 0) {
+            state = runBatch(budget);
         }
         show.stand();
         return state;
@@ -468,7 +458,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         // 加载判定要在读取<b>之前</b>:反过来的话第一句 getBlockState 就已经把区块
         // 同步生成出来了,后面这句永远为真,等于没判。
         if (!player.level().isLoaded(pos)) {
-            return null;   // 区块这一刻没加载:临时状况,下一遍再来(不算注定动不了)
+            return null;   // 区块这一刻没加载:临时状况,留给下一次调用(不算注定动不了)
         }
         BlockState current = player.level().getBlockState(pos);
         if (target.matches(current)) {
@@ -483,7 +473,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         // 草坪挖出一条沟,然后一格墙都没砌。她自己站在那格里时更糟:脚下先被挖空。
         // 破坏是不可撤销的,所以它必须是这一格的最后一道动作,不是第一道。
         if (rules.blockedByEntity(pos, desired)) {
-            // 谁都不豁免——包括她自己:身体占着的格子这遍先放下,下一遍她已经挪开了。
+            // 谁都不豁免——包括她自己:身体占着的格子这一次先放下,下一次调用时她多半已经挪开了。
             // 防的是把方块塞进活物身体里这类真事故。
             return null;
         }
@@ -696,8 +686,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 一遍扫完的裁决。有进展就开下一遍(补漏);零进展先等一等再来(剩下的多半被人或活物站着),连着几遍颗粒无收
-     * 才认账——缺料是邀请,不是错误。
+     * 一遍走完就收场:够得着的每一格都轮到过一次。断了料,以缺料收场;一格都没放成,以放不下的缘由收场;放成了就是成功,回执说
+     * 还剩什么。再来一遍——剩下的等撑着它们的立起来、等站着的人走开、等补了料——是程序的事:{@code numen.build.raise} 再问一次
+     * {@code numen.build.diff},接着放。
      */
     private TaskState endPass() {
         // 收遍要判完工,这一次必须精确——每刻那次只轮扫一片
@@ -707,48 +698,24 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         boolean progressed = r.completed() > passStartCompleted;
         com.dwinovo.numen.core.Constants.LOG.debug(
-                "[numen-build] 收遍 {}/{} 本遍+{} 缺料{} 零进展遍{} 断料{}",
+                "[numen-build] 收遍 {}/{} 本遍+{} 缺料{} 断料{}",
                 r.completed(), r.targets.size(), r.completed() - passStartCompleted,
-                passMissing.size(), barrenPasses, passStarved);
-        // 断料:不重试、不等。判据的分野是"这个恢复动作能不能改变卡住的原因"——等一等能让站着的人走开,
-        // 却改变不了背包里的任何东西。为一个改不了的原因重试三遍就是纯粹在耗玩家的时间;
-        // 而回执本来就写着"补料后重发同一调用",重发很便宜。
-        //
-        // 注意这里不看 progressed:本遍砌了二十格然后断料,和一格没砌就断料,对玩家
-        // 是同一件事——她现在动不了了,而且再等下去也不会变。
-        if (passStarved) {
+                passMissing.size(), passStarved);
+        // 断料:这一遍砌了二十格然后断料,和一格没砌就断料,对玩家是同一件事——她现在动不了了。先报干了多少,再报还差什么:
+        // 玩家要的是"还要凑多少",不是一句材料不足。已经砌好的部分留在世界里,不回滚。
+        if (passStarved || (!progressed && !passMissing.isEmpty())) {
             return conclude(new Ending("built " + r.completed() + "/" + r.targets.size()
                     + " and ran out — " + ledger.missingReason(passMissing), FailureType.NO_MATERIAL));
         }
-        if (progressed) {
-            barrenPasses = 0;
-        } else if (++barrenPasses >= MAX_BARREN_PASSES) {
-            if (!passMissing.isEmpty()) {
-                // 有格子缺料、但不是断料(别的格还付得起,只是这一遍恰好没推进)。
-                // 先报干了多少,再报还差什么——玩家要的是"还要凑多少才能收工",
-                // 不是一句材料不足。已经砌好的部分留在世界里,不回滚。
-                return conclude(new Ending("built " + r.completed() + "/" + r.targets.size()
-                        + " and ran out — " + ledger.missingReason(passMissing), FailureType.NO_MATERIAL));
-            }
-            // 等过了也补不上:走一遍够得着却放不下的格,留案再交代,失败的类型跟主导病因走。放不下就是放不下,不粉饰成成功。
+        if (!progressed) {
+            // 够得着却一格都放不下:走一遍这些格,留案再交代,失败的类型跟主导病因走。放不下就是放不下,不粉饰成成功。
             BuildOutstanding outstanding = BuildOutstanding.survey(order, rules, skippedPos, player.level(),
                     damagedCells);
             outstanding.log(r.completed(), r.targets.size(), player.blockPosition(), designFrame());
             return conclude(new Ending(outstanding.describe(designFrame()) + "; built " + r.completed() + "/"
                     + r.targets.size(), outstanding.failure()));
         }
-        if (!progressed) {
-            retryWait = RETRY_WAIT_TICKS;
-        }
-        rebuildOrder();
-        passStartCompleted = r.completed();
-        passMissing.clear();
-        passStarved = false;   // 下一遍重新判:期间玩家可能补过料
-        if (order.isEmpty()) {
-            // 够得着的都对上了(或这一刻只剩要先挖开的):收工,回执说还剩什么
-            return conclude(null);
-        }
-        return TaskState.RUNNING;
+        return conclude(null);
     }
 
     /** 这件活照的施工图摆在哪儿、朝哪儿;当场执行的原语没有施工图,是 null。 */
@@ -1032,7 +999,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 skippedPos.remove(key);
                 if (observedCompleted.remove(key)) {
                     // 曾经达标、现在不达标:只可能是外力(玩家拆、苦力怕炸、
-                    // 水火漫过来)。下一遍重排会把它收回队列自动补上;这里只记账,
+                    // 水火漫过来)。下一次调用比差异时它又在要补的格里;这里只记账,
                     // 收尾时随结果一并交代。
                     //
                     // 【事件挂点】自家的活正在被拆 —— 典型的"有时效、错过就没了"。

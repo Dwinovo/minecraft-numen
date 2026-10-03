@@ -497,6 +497,38 @@ public final class LuaEngine implements ScriptEngine {
         return line(fn.name(), String.join(", ", params), returns, summaryOf(fn));
     }
 
+    /**
+     * 库里一个函数注释里声明的返回类型({@code ---@return Pos}):一个声明了的类、语言自带的一种,或它们的列表({@code Block[]});
+     * 没写、或写的是就地的表与几种之一,是 null。
+     */
+    private static ScriptType returnType(Defined fn, ScriptCatalog catalog) {
+        for (String l : fn.doc()) {
+            Matcher r = RETURN_DOC.matcher(l);
+            if (r.find()) {
+                return declared(leadingType(r.group(1)), catalog);
+            }
+        }
+        return null;
+    }
+
+    private static ScriptType declared(String text, ScriptCatalog catalog) {
+        String type = text.endsWith("?") ? text.substring(0, text.length() - 1) : text;
+        if (type.endsWith("[]")) {
+            ScriptType item = declared(type.substring(0, type.length() - 2), catalog);
+            return item == null ? null : ScriptType.listOf(item);
+        }
+        if (catalog.classes().containsKey(type)) {
+            return new ScriptType.Named(type);
+        }
+        return switch (type) {
+            case "integer" -> ScriptType.INTEGER;
+            case "number" -> ScriptType.NUMBER;
+            case "string" -> ScriptType.STRING;
+            case "boolean" -> ScriptType.BOOLEAN;
+            default -> null;
+        };
+    }
+
     /** 一行类型注解里打头的那个类型(括号配平地读到第一个括号外的空格为止)。 */
     private static String leadingType(String text) {
         int depth = 0;
@@ -594,13 +626,16 @@ public final class LuaEngine implements ScriptEngine {
         }
         List<ScriptRun.Call> seen = new ArrayList<>();
         LuaSandbox.Builder sandbox = reader(catalog, seen, LuaEngine::redefined);
-        // 只读不跑:模块里的函数也只记下调用
+        // 只读不跑:模块里的函数也只记下调用,返回它注释里声明的那种值的样子(和第 ① 层的函数一样),接着往下写的读得通
         for (String module : catalog.modules().names()) {
             for (Defined defined : functions(module, catalog.modules().code(module))) {
                 String fn = defined.name().substring(module.length() + 1);
+                ScriptType declared = returnType(defined, catalog);
+                Object sample = declared == null ? null : catalog.mark(
+                        ScriptType.sample(declared, catalog.classes()::get), declared, LuaEngine::instance);
                 sandbox.function(module, fn, in -> {
                     seen.add(call(module, fn, in, null));
-                    return null;
+                    return sample;
                 });
             }
         }

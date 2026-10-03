@@ -41,7 +41,7 @@ public class ScriptGameTests {
         return receipt(round, call).get("message").getAsString();
     }
 
-    /** 两行 {@code numen.build.set}:一行做完(那件活收尾)才派下一行,两格都拆掉;回执按行各一句,点出那件活的收尾。 */
+    /** 两行 {@code numen.build.place}:一行做完(那件活收尾)才派下一行,两格都拆掉;回执按行各一句,点出那件活的收尾。 */
     @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_scripts")
     public static void a_program_runs_its_calls_in_order(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -51,8 +51,8 @@ public class ScriptGameTests {
         level.setBlockAndUpdate(first, Blocks.STONE.defaultBlockState());
         level.setBlockAndUpdate(second, Blocks.STONE.defaultBlockState());
         LlmToolCall script = programCall("""
-                numen.build.set(%s, {block = "air"})
-                numen.build.set(%s, {block = "air"})
+                numen.build.place({{name = "air", pos = %s}})
+                numen.build.place({{name = "air", pos = %s}})
                 """.formatted(xyz(first), xyz(second)));
         Round round = round(helper, her, script);
         EventOutbox outbox = EventOutbox.get(level.getServer());
@@ -64,8 +64,8 @@ public class ScriptGameTests {
             helper.assertTrue(level.getBlockState(first).isAir() && level.getBlockState(second).isAir(),
                     "not both cells were cleared: " + msg);
             helper.assertTrue(msg.startsWith("The script ran to the end: 2 calls"), msg);
-            helper.assertTrue(msg.matches("(?s).*line 1 numen\\.build\\.set: ok — t\\d+ done.*")
-                            && msg.matches("(?s).*line 2 numen\\.build\\.set: ok — t\\d+ done.*"),
+            helper.assertTrue(msg.matches("(?s).*line 1 numen\\.build\\.place: ok — t\\d+ done.*")
+                            && msg.matches("(?s).*line 2 numen\\.build\\.place: ok — t\\d+ done.*"),
                     "a line did not wait for its task to finish: " + msg);
             outbox.forget(her.getUUID());
             CompanionFactory.despawn(level.getServer(), her);
@@ -86,7 +86,7 @@ public class ScriptGameTests {
         LlmToolCall script = programCall("""
                 local walked, why = pcall(numen.move.goto_, %s, {arrive = "use"})
                 if not walked then error("could not get there: " .. why, 0) end
-                numen.build.set(%s, {block = "air"})
+                numen.build.place({{name = "air", pos = %s}})
                 """.formatted(xyz(air), xyz(kept)));
         Round round = round(helper, her, script);
 
@@ -113,7 +113,7 @@ public class ScriptGameTests {
         level.setBlockAndUpdate(kept, Blocks.STONE.defaultBlockState());
         LlmToolCall script = programCall("""
                 numen.move.goto_({x = %d, z = %d})
-                numen.build.set(%s, {block = "air"})
+                numen.build.place({{name = "air", pos = %s}})
                 """.formatted(far.getX(), far.getZ(), xyz(kept)));
         Round round = round(helper, her, script);
         EventOutbox outbox = EventOutbox.get(level.getServer());
@@ -328,13 +328,13 @@ public class ScriptGameTests {
         ToolRun broken = lua(her, "numen.module.save(\"-- Never compiles.\\nlocal x = = 1\", {name = \"my.gt_broken\"})");
         helper.assertTrue(!broken.succeeded() && broken.reply().contains("my.gt_broken:2:"),
                 "a module that does not compile was kept: " + broken.reply());
-        ToolRun redefines = lua(her, "numen.module.save(\"-- Takes numen.build.set.\\nlocal M = {}\\nfunction numen.build.set() end\\n"
+        ToolRun redefines = lua(her, "numen.module.save(\"-- Takes numen.build.place.\\nlocal M = {}\\nfunction numen.build.place() end\\n"
                 + "return M\", {name = \"my.gt_thief\"})");
-        helper.assertTrue(!redefines.succeeded() && redefines.reply().contains("numen.build.set is an API function"),
+        helper.assertTrue(!redefines.succeeded() && redefines.reply().contains("numen.build.place is an API function"),
                 "a module that redefines an API function was kept: " + redefines.reply());
 
         ToolRun saved = lua(her, "numen.module.save(\"-- Clearing cells.\\nlocal M = {}\\n---Clear one cell.\\n"
-                + "function M.cell(p)\\n  numen.build.set(p, {block = 'air'})\\nend\\nreturn M\", {name = \"my.gt_clear\"})");
+                + "function M.cell(p)\\n  numen.build.place({{name = 'air', pos = p}})\\nend\\nreturn M\", {name = \"my.gt_clear\"})");
         helper.assertTrue(saved.succeeded() && saved.reply().contains("Saved module my.gt_clear"), saved.reply());
         ToolRun shown = lua(her, "numen.module.show(\"my.gt_clear\")");
         helper.assertTrue(shown.succeeded() && shown.reply().contains("(yours)")
@@ -349,7 +349,7 @@ public class ScriptGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(first.hasSettled(), "the first program has not finished"))
                 .thenExecute(() -> {
                     String msg = message(first, run);
-                    helper.assertTrue(msg.startsWith("The script ran to the end") && msg.contains("numen.build.set: ok"),
+                    helper.assertTrue(msg.startsWith("The script ran to the end") && msg.contains("numen.build.place: ok"),
                             msg);
                     helper.assertTrue(level.getBlockState(cell).isAir(), "the module did not clear the cell");
                     level.setBlockAndUpdate(cell, Blocks.STONE.defaultBlockState());
