@@ -9,8 +9,8 @@ import com.dwinovo.numen.agent.loop.ModelRequest;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.agent.provider.Usage;
-import com.dwinovo.numen.cli.CommandTool;
-import com.google.gson.JsonObject;
+import com.dwinovo.numen.agent.script.ScriptEngine;
+import com.dwinovo.numen.cli.ScriptTool;
 
 import java.util.List;
 import java.util.UUID;
@@ -108,17 +108,17 @@ interface Mind {
     }
 
     /**
-     * 基线:第一次调用把 {@code lines} 作为一次回复里的一串 {@code command} 调用交出去(没有就直接说话),之后每次都只说
-     * {@code words}。标准解是写好的命令,空操作是一行都没有。不花 API,用量记零。
+     * 基线:第一次调用把 {@code program} 作为一次 {@code lua} 调用交出去(没有就直接说话),之后每次都只说 {@code words}。
+     * 标准解是写好的程序,空操作没有程序。不花 API,用量记零。
      */
     final class Scripted implements Mind {
 
-        private final List<String> lines;
+        private final String program;
         private final String words;
         private boolean acted;
 
-        Scripted(List<String> lines, String words) {
-            this.lines = List.copyOf(lines);
+        Scripted(String program, String words) {
+            this.program = program;
             this.words = words;
         }
 
@@ -130,14 +130,10 @@ interface Mind {
         @Override
         public void ask(ModelRequest request, CancelToken cancel, Consumer<ModelOutcome> done) {
             AssistantTurn turn;
-            if (!acted && !lines.isEmpty()) {
+            if (!acted && program != null) {
                 acted = true;
-                List<LlmToolCall> calls = lines.stream().map(line -> {
-                    JsonObject args = new JsonObject();
-                    args.addProperty("command", line);
-                    return new LlmToolCall("bench-" + UUID.randomUUID(), CommandTool.NAME, args.toString());
-                }).toList();
-                turn = new AssistantTurn("", calls, null);
+                turn = new AssistantTurn("", List.of(new LlmToolCall("bench-" + UUID.randomUUID(), ScriptEngine.IN_USE.toolName(),
+                        ScriptTool.args(program).toString())), null);
             } else {
                 turn = new AssistantTurn(words, List.of(), null);
             }

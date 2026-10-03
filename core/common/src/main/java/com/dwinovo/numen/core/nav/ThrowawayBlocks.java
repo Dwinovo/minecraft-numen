@@ -189,7 +189,7 @@ public final class ThrowawayBlocks {
         if (accepted.isEmpty()) {
             return " Your throwaway list is EMPTY, so pathfinding may not place a single block —"
                     + " no pillaring, bridging or stepping up. That was your own call; put blocks"
-                    + " back with `throwaway add` if this route needs them.";
+                    + " back with `throwaway.add` if this route needs them.";
         }
         var inv = player.getInventory();
         Map<String, Integer> spare = new LinkedHashMap<>();
@@ -217,7 +217,7 @@ public final class ThrowawayBlocks {
             return out.append(" Mine some of those blocks first.").toString();
         }
         return out.append(" You ARE carrying: ").append(carrying)
-                .append(". Add what you are willing to spend with `throwaway add`, or go mine "
+                .append(". Add what you are willing to spend with `throwaway.add`, or go mine "
                         + "something already on the list.").toString();
     }
 

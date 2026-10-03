@@ -7,17 +7,15 @@ import com.dwinovo.numen.agent.skill.SkillRegistry;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.task.TaskResult;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
 
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
  * Agent-side (client-local) tool implementations — the business half of
- * {@code skill load} ({@code SkillCommands}), {@code TodoWriteTool} and {@code memory} ({@code MemoryCommands}). These run on
+ * {@code skill.load} ({@code SkillCommands}) and {@code memory} ({@code MemoryCommands}). These run on
  * the agent thread with no server body and return their result directly.
  */
 public final class AgentOps {
@@ -26,98 +24,34 @@ public final class AgentOps {
      * 技能正文或它的附属文件,按输出预算一页一页给(一行一条,{@link Listing});正文成型交给 {@link SkillInjection},和主人
      * 打斜杠命令同一个样子。
      *
-     * @param again 这一行本身(不带 {@code --page}):翻页时写它
      */
-    public String loadSkill(String name, String file, CommandArgs args, String again) {
+    public String loadSkill(String name, String file, CommandArgs args) {
         SkillRegistry registry = SkillRegistry.instance();
         if (file != null && !file.isBlank()) {
             // 三级披露:正文引用的附属文件按需拉取
             try {
                 String text = registry.readSupportFile(name, file);
-                return page(SkillInjection.supportFile(name, file, text), args, again);
+                return page(SkillInjection.supportFile(name, file, text), args);
             } catch (IllegalArgumentException ex) {
-                return "{\"success\":false,\"error\":\"" + escapeJson(ex.getMessage()) + "\"}";
+                return TaskResult.fail(ex.getMessage()).toJson();
             }
         }
         var maybe = registry.get(name);
         if (maybe.isEmpty()) {
-            String available = registry.all().stream()
-                    .map(SkillInfo::name)
-                    .map(AgentOps::quote)
-                    .collect(Collectors.joining(","));
-            return "{\"success\":false,\"error\":\"unknown skill: " + escapeJson(name)
-                    + "\",\"available\":[" + available + "]}";
+            String available = registry.all().stream().map(SkillInfo::name).collect(Collectors.joining(", "));
+            return TaskResult.fail("unknown skill: " + name + "; the skills are: "
+                    + (available.isEmpty() ? "(none installed)" : available)).toJson();
         }
 
         // 成型交给 SkillInjection:主人打斜杠命令走的是另一条路,进上下文的东西必须一样。
-        return page(SkillInjection.body(maybe.get(), null), args, again);
+        return page(SkillInjection.body(maybe.get(), null), args);
     }
 
     /** 一段文字按输出预算取这一页,一行一条;要的那一页不存在是一条失败。 */
-    private static String page(String text, CommandArgs args, String again) {
-        TaskResult page = new Listing("", List.of(text.split("\n", -1)), "", again).result(args);
-        return page.success() ? page.message() : page.toJson();
+    private static String page(String text, CommandArgs args) {
+        return new Listing("", List.of(text.split("\n", -1)), "").result(args).toJson();
     }
 
-    private static String quote(String s) {
-        return "\"" + escapeJson(s) + "\"";
-    }
-
-    private static String escapeJson(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\").replace("\"", "\\\"");
-    }
-
-
-    private static final Set<String> ALLOWED_STATUSES =
-            Set.of("pending", "in_progress", "completed", "cancelled");
-    private static final Set<String> ALLOWED_PRIORITIES =
-            Set.of("high", "medium", "low");
-
-    /** One todo entry — its @Arg components become the array item's object schema. */
-    public record Todo(
-String content,
-String status,
-String priority) {}
-
-    public String todowrite(
-List<Todo> todos) {
-        if (todos == null) {
-            throw new IllegalArgumentException("todos is required");
-        }
-        int inProgressCount = 0;
-        boolean workRemains = false;
-        // Echo back the canonical JSON; the model reads it next turn as its plan.
-        JsonArray echo = new JsonArray();
-        for (int i = 0; i < todos.size(); i++) {
-            Todo t = todos.get(i);
-            if (t == null || t.content() == null || t.content().isBlank()) {
-                throw new IllegalArgumentException("todos[" + i + "].content must not be blank");
-            }
-            if (!ALLOWED_STATUSES.contains(t.status())) {
-                throw new IllegalArgumentException(
-                        "todos[" + i + "].status must be one of " + ALLOWED_STATUSES + ", got: " + t.status());
-            }
-            if (!ALLOWED_PRIORITIES.contains(t.priority())) {
-                throw new IllegalArgumentException(
-                        "todos[" + i + "].priority must be one of " + ALLOWED_PRIORITIES + ", got: " + t.priority());
-            }
-            if ("in_progress".equals(t.status())) inProgressCount++;
-            if ("in_progress".equals(t.status()) || "pending".equals(t.status())) workRemains = true;
-            JsonObject o = new JsonObject();
-            o.addProperty("content", t.content());
-            o.addProperty("status", t.status());
-            o.addProperty("priority", t.priority());
-            echo.add(o);
-        }
-        String echoed = echo.toString();
-        if (workRemains && inProgressCount != 1) {
-            return "{\"success\":false,\"message\":\"unfinished work requires exactly one todo in_progress; got "
-                    + inProgressCount + "\",\"todos\":" + echoed + "}";
-        }
-        return "{\"success\":true,\"message\":\"plan snapshot replaced; continue only the in_progress item\",\"todos\":"
-                + echoed + "}";
-    }
 
     // ---- 札记 ----
 
@@ -143,50 +77,35 @@ List<Todo> todos) {
         }
         NoteBook.Note note = book.write(chosen, description, type, content);
         int count = book.index().size();
-        JsonObject o = new JsonObject();
-        o.addProperty("success", true);
-        o.addProperty("name", note.name());
-        o.addProperty("count", count);
-        o.addProperty("message", count >= NoteBook.SOFT_MAX
-                ? "remembered — you now keep " + count + " notes; look for ones to merge or forget"
-                : "remembered");
-        return o.toString();
+        return TaskResult.ok(count >= NoteBook.SOFT_MAX
+                ? "remembered " + note.name() + " — you now keep " + count + " notes; look for ones to merge or forget"
+                : "remembered " + note.name(), Map.of("name", note.name(), "count", count)).toJson();
     }
 
     /**
      * 读一条的正文,正文按输出预算一页一页给。没有这条就把有的名字列出来——她记的名字自己最清楚,别让她瞎猜。
      *
-     * @param again 这一行本身(不带 {@code --page}):翻页时写它
      */
-    public String recall(UUID companion, String name, CommandArgs args, String again) {
+    public String recall(UUID companion, String name, CommandArgs args) {
         NoteBook book = NoteBook.of(companion);
         NoteBook.Note note = book.read(name);
         if (note == null) {
-            String known = book.index().stream()
-                    .map(NoteBook.Note::name)
-                    .map(AgentOps::quote)
-                    .collect(Collectors.joining(","));
-            return "{\"success\":false,\"error\":\"no note named " + escapeJson(name)
-                    + "\",\"notes\":[" + known + "]}";
+            String known = book.index().stream().map(NoteBook.Note::name).collect(Collectors.joining(", "));
+            return TaskResult.fail("no note named " + name + "; your notes are: "
+                    + (known.isEmpty() ? "(none)" : known)).toJson();
         }
-        TaskResult content = new Listing("", List.of(note.content().split("\n", -1)), "", again).result(args);
+        TaskResult content = new Listing("", List.of(note.content().split("\n", -1)), "").result(args);
         if (!content.success()) {
             return content.toJson();
         }
-        JsonObject o = new JsonObject();
-        o.addProperty("success", true);
-        o.addProperty("name", note.name());
-        o.addProperty("day", note.day());
-        o.addProperty("content", content.message());
-        return o.toString();
+        // 正文也在数据里:脚本里读回来的是这张表,正文就是 content
+        return TaskResult.ok(content.message(), Map.of("name", note.name(), "day", note.day(),
+                "content", content.message())).toJson();
     }
 
     /** 忘掉一条。整理是她自己的事,我们不替她删,也不替她留。 */
     public String forget(UUID companion, String name) {
         boolean gone = NoteBook.of(companion).forget(name);
-        JsonObject o = new JsonObject();
-        o.addProperty("success", gone);
-        o.addProperty("message", gone ? "forgotten" : "no note named " + name);
-        return o.toString();
+        return (gone ? TaskResult.ok("forgotten") : TaskResult.fail("no note named " + name)).toJson();
     }
 }

@@ -53,16 +53,16 @@ public final class CraftPickaxe implements Scenario {
     }
 
     @Override
-    public List<String> solution(Scene scene) {
+    public String solution(Scene scene) {
         BlockPos table = scene.pos(TABLE);
-        String cell = table.getX() + " " + table.getY() + " " + table.getZ();
-        return List.of(
-                "inv craft oak_planks --count 12",
-                "inv craft crafting_table",
-                "inv craft stick --count 4",
-                "build place " + cell + " --block crafting_table",
-                "inv craft wooden_pickaxe",
-                "work dig " + cell,
-                "work collect");
+        String cell = "{" + table.getX() + ", " + table.getY() + ", " + table.getZ() + "}";
+        return """
+                inv.craft("oak_planks", {count = 12})
+                inv.craft("crafting_table")
+                inv.craft("stick", {count = 4})
+                build.place(%1$s, {block = "crafting_table"})
+                inv.craft("wooden_pickaxe")
+                work.dig(%1$s)
+                work.collect()""".formatted(cell);
     }
 }

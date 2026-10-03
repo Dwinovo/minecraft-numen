@@ -100,22 +100,26 @@ public final class MineIron implements Scenario {
     }
 
     @Override
-    public List<String> solution(Scene scene) {
-        // 一轮:走到一次够得着最多铁矿的地方(挖开石头过去),挖手够得着的;三轮挖得完那团芯。mine 脚本做的就是这几轮,
+    public String solution(Scene scene) {
+        // 一轮:走到一次够得着最多铁矿的地方(挖开石头过去),挖手够得着的,直到区域里不剩;mine 脚本做的就是这几轮,
         // 每轮挖完捡一次走得到的
-        List<String> lines = new java.util.ArrayList<>(List.of("scan blocks iron_ore --radius 12 --into ores"));
+        StringBuilder program = new StringBuilder("scan.blocks(\"iron_ore\", {radius = 12, into = \"ores\"})\n");
         if (byScript) {
-            lines.add("script run mine ores");
+            program.append("script.run(\"mine\", \"ores\")\n");
         } else {
-            for (int i = 0; i < 3; i++) {
-                lines.addAll(List.of("move goto ores --arrive dig --alter natural", "work dig ores"));
-            }
+            program.append("""
+                    while area.has("ores") do
+                      move.goto_("ores", {arrive = "dig", alter = "natural"})
+                      work.dig("ores")
+                    end
+                    """);
         }
-        // 粗铁落在挖空的矿洞里,有的洞只有一格高、不改地形走不进去(work collect 不挖不放):站进芯的正中(挖开头顶那格)
+        // 粗铁落在挖空的矿洞里,有的洞只有一格高、不改地形走不进去(work.collect 不挖不放):站进芯的正中(挖开头顶那格)
         // 一圈都捡得到,再把剩下的捡了
         BlockPos core = scene.pos(10, 1, 10);
-        lines.add("move goto " + core.getX() + " " + core.getY() + " " + core.getZ() + " --alter natural");
-        lines.add("work collect");
-        return lines;
+        program.append("move.goto_({").append(core.getX()).append(", ").append(core.getY()).append(", ")
+                .append(core.getZ()).append("}, {alter = \"natural\"})\n");
+        program.append("work.collect()\n");
+        return program.toString();
     }
 }

@@ -43,9 +43,9 @@ class ReadingTest {
         door().registerCommands("gt_read", "A group the reader reads.", g -> {
             g.server("put", "Put things.", (src, args) -> src.reply(TaskResult.ok("put").toJson()),
                             PUT.toArray(Param<?>[]::new))
-                    .example("gt_read put \"two words\" ### #.# --count 3 --item minecraft:stone");
+                    .example("gt_read.put(\"two words\", \"###\", \"#.#\", {count = 3, item = \"minecraft:stone\"})");
             g.client("say", "Say something.", (src, args) -> src.reply(TaskResult.ok("said").toJson()), NOTE)
-                    .example("gt_read say hello there");
+                    .example("gt_read.say(\"hello there\")");
         });
     }
 
@@ -97,7 +97,7 @@ class ReadingTest {
     void aLineThatStopsHalfwayOrSaysTooMuchDoesNotRead() {
         IllegalArgumentException half = assertThrows(IllegalArgumentException.class,
                 () -> NumenCli.read("gt_read put x"));
-        assertTrue(half.getMessage().contains("usage: gt_read put <name> <rows...>"), "附那个动作的用法: "
+        assertTrue(half.getMessage().contains("usage: gt_read.put(name, rows..., {"), "附那个动作的用法: "
                 + half.getMessage());
         IllegalArgumentException typo = assertThrows(IllegalArgumentException.class,
                 () -> NumenCli.read("gt_read pot x y"));
@@ -107,34 +107,41 @@ class ReadingTest {
     }
 
     @Test
-    void commandsInProseAreTheBackquotedAndFencedOnesThatStartWithAGroupOrASlash() {
+    void callsInProseAreTheBackquotedAndFencedOnesThatStartWithAGroupsFunction() {
         String text = """
-                Open it with `gt_read put`, then `gt_read say hi`. Blocks like `oak_log` and tools like
-                `skill_load` are not commands; neither is `gt_reader`.
+                Open it with `gt_read.put`, then `gt_read.say("hi")`. Blocks like `oak_log` and names like
+                `skill_load` are not calls; neither is `gt_reader.x`. The old ways `gt_read say hi` and `/help` are
+                picked up so they can be pointed at.
                 ```
-                gt_read put x y
-                floor ### (a drawing, not a command)
-                /give @s stone
+                gt_read.put("x", "y")
+                floor ### (a drawing, not a call)
                 ```
-                Native: `/help`.
+                ```lua
+                local n = 1
+                gt_read.say("one " .. n)
+                ```
                 """;
-        assertEquals(List.of("gt_read put x y", "/give @s stone", "gt_read put", "gt_read say hi", "/help"),
-                WrittenCommands.in(text));
+        assertEquals(List.of("gt_read.put(\"x\", \"y\")", "local n = 1\ngt_read.say(\"one \" .. n)",
+                "gt_read.put", "gt_read.say(\"hi\")", "gt_read say hi", "/help"), WrittenCommands.in(text));
     }
 
     @Test
-    void checkingPointsAtEachLineThatDoesNotRead() {
+    void checkingPointsAtEachCallThatDoesNotRead() {
         CommandDispatcher<Object> mc = new CommandDispatcher<>();
         mc.register(LiteralArgumentBuilder.literal("give").then(
                 RequiredArgumentBuilder.argument("count", IntegerArgumentType.integer()).executes(c -> 1)));
         WrittenCommands.NativeReader reader = line -> WrittenCommands.nativeProblem(mc, line, new Object());
         List<WrittenCommands.Wrong> wrong = WrittenCommands.check(List.of(
-                new WrittenCommands.Text("a", "`gt_read put x y` then `gt_read pot` and `/give 2`, `/give`"),
-                new WrittenCommands.Text("b", "```\n/take 1\ngt_read put x\n```")), reader);
-        assertEquals(List.of("a", "b", "b"), wrong.stream().map(WrittenCommands.Wrong::where).toList(), wrong::toString);
-        assertEquals(List.of("gt_read pot", "/take 1", "gt_read put x"),
+                new WrittenCommands.Text("a", "`gt_read.put(\"x\", \"y\")` then `gt_read.pot` and "
+                        + "`mc.run(\"give 2\")`, `mc.run(\"give x\")`, `gt_read put x y`, `/give 2`"),
+                new WrittenCommands.Text("b", "```lua\ngt_read.put(\"x\")\n```")), reader);
+        assertEquals(List.of("a", "a", "a", "a", "b"), wrong.stream().map(WrittenCommands.Wrong::where).toList(),
+                wrong::toString);
+        assertEquals(List.of("gt_read.pot", "mc.run(\"give x\")", "gt_read put x y", "/give 2", "gt_read.put(\"x\")"),
                 wrong.stream().map(WrittenCommands.Wrong::line).toList());
-        assertNull(WrittenCommands.problem("/give", reader), "只点名一条原生指令读得通");
-        assertFalse(WrittenCommands.problem("/give x", reader) == null);
+        assertNull(WrittenCommands.problem("mc.run(\"give\")", reader), "只点名一条原版指令读得通");
+        assertNull(WrittenCommands.problem("""
+                for _, p in ipairs(gt_read.say("x")) do gt_read.say(p) end""", reader),
+                "拿返回值往下算的写法:停在那一处之前调到的都读得通就算读得通");
     }
 }

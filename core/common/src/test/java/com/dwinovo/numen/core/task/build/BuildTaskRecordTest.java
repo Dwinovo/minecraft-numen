@@ -190,9 +190,4 @@ class BuildTaskRecordTest {
                 .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST)));
     }
 
-    /** 走向外圈的路可以改自然地形:挖掉挡路的、垫块过坎,都是为了到场干活。 */
-    @Test
-    void theBuildRouteMayAlterNaturalTerrain() {
-        assertEquals(RouteSpec.Alter.NATURAL, BuildCompanionTask.SPEC.alter());
-    }
 }

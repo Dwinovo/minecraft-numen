@@ -4,9 +4,9 @@ import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskRecord;
 
 /**
- * Typed task descriptor for {@code move go <route>} and its shorthand {@code move goto} (tool {@code move_goto}): walk a
+ * Typed task descriptor for {@code move.go(route)}, which the library function {@code move.goto_} calls: walk a
  * route by name. The route itself — waypoints, flags, the plan she saw — lives in the owner's route store, not here; a
- * {@code move goto} first writes her own anonymous route and then walks it like any other. The deadline is handled by
+ * {@code move.goto_} first writes her own anonymous route and then walks it like any other. The deadline is handled by
  * the base class.
  */
 public final class MoveToTaskRecord extends TaskRecord {
@@ -23,7 +23,7 @@ public final class MoveToTaskRecord extends TaskRecord {
 
     /**
      * @param label 头顶气泡、面板上给主人看的一句
-     * @param note  受理回执里要交代的事实(比如 {@code move goto} 把这一趟记成了哪条路线);没有为 null
+     * @param note  受理回执里要交代的事实(比如 {@code move.goto_} 把这一趟记成了哪条路线);没有为 null
      */
     public MoveToTaskRecord(ServerSource source, String route, String label, String note) {
         super(source, source.companion().level().getGameTime() + BUDGET_TICKS);

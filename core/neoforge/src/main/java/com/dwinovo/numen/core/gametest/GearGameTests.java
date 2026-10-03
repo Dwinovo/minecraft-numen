@@ -27,7 +27,7 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
 /**
  * 穿戴扩展点:测试经 {@code NumenApi.registerGear} 那扇门登记一处假的穿戴来源(两格 {@code gametest:ring}、
- * 一格封死的 {@code gametest:charm}),只对本测试的同伴生效。{@code gear wear} / {@code gear remove} 的自动选位、被拒、缺槽、
+ * 一格封死的 {@code gametest:charm}),只对本测试的同伴生效。{@code gear.wear} / {@code gear.remove} 的自动选位、被拒、缺槽、
  * 槽名写错、卸下、满包、摘不下,以及 {@code <worn>},都经这一处来源走和原版同一条路。
  */
 @GameTestHolder(Constants.MOD_ID)
@@ -125,7 +125,7 @@ public class GearGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_ringbearer", new BlockPos(4, 2, 4), false);
         FakeGear gear = dress(companion);
         companion.getInventory().add(new ItemStack(Items.AMETHYST_SHARD));
-        ToolRun equip = command(companion, "gear wear minecraft:amethyst_shard");
+        ToolRun equip = lua(companion, "gear.wear(\"minecraft:amethyst_shard\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(equip.done(), "gear wear has not finished");
@@ -145,7 +145,7 @@ public class GearGameTests {
         FakeGear gear = dress(companion);
         companion.getInventory().add(new ItemStack(Items.EMERALD));
         companion.getInventory().selected = 5;   // 主手是空的那格,绿宝石在第 0 格
-        ToolRun equip = command(companion, "gear wear minecraft:emerald");
+        ToolRun equip = lua(companion, "gear.wear(\"minecraft:emerald\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(equip.done(), "gear wear has not finished");
@@ -165,7 +165,7 @@ public class GearGameTests {
         dress(companion);
         companion.getInventory().add(new ItemStack(Items.DIAMOND));
         companion.getInventory().selected = 5;
-        ToolRun equip = command(companion, "gear wear minecraft:diamond");
+        ToolRun equip = lua(companion, "gear.wear(\"minecraft:diamond\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(equip.done(), "gear wear has not finished");
@@ -182,7 +182,7 @@ public class GearGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_crownless", new BlockPos(4, 2, 4), false);
         dress(companion);
         companion.getInventory().add(new ItemStack(Items.AMETHYST_SHARD));
-        ToolRun equip = command(companion, "gear wear minecraft:amethyst_shard --slot gametest:crown");
+        ToolRun equip = lua(companion, "gear.wear(\"minecraft:amethyst_shard\", {slot = \"gametest:crown\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(equip.done(), "gear wear has not finished");
@@ -196,14 +196,14 @@ public class GearGameTests {
         });
     }
 
-    /** 按槽名卸下:两格 ring 都戴着,gear remove --slot gametest:ring 两件都回背包。 */
+    /** 按槽名卸下:两格 ring 都戴着,gear.remove --slot gametest:ring 两件都回背包。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_gear")
     public static void gear_unequip_by_slot_name(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_unringed", new BlockPos(4, 2, 4), false);
         FakeGear gear = dress(companion);
         gear.ring(0).worn = new ItemStack(Items.AMETHYST_SHARD);
         gear.ring(1).worn = new ItemStack(Items.IRON_NUGGET);
-        ToolRun unequip = command(companion, "gear remove --slot gametest:ring");
+        ToolRun unequip = lua(companion, "gear.remove({slot = \"gametest:ring\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(unequip.done(), "gear remove has not finished");
@@ -217,14 +217,14 @@ public class GearGameTests {
         });
     }
 
-    /** 按物品卸下:不给 --slot,gear remove --item 紫水晶碎片,只从戴着它的那格摘,另一格不动。 */
+    /** 按物品卸下:不给 --slot,gear.remove --item 紫水晶碎片,只从戴着它的那格摘,另一格不动。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_gear")
     public static void gear_unequip_by_item(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_pickyring", new BlockPos(4, 2, 4), false);
         FakeGear gear = dress(companion);
         gear.ring(0).worn = new ItemStack(Items.IRON_NUGGET);
         gear.ring(1).worn = new ItemStack(Items.AMETHYST_SHARD);
-        ToolRun unequip = command(companion, "gear remove --item minecraft:amethyst_shard");
+        ToolRun unequip = lua(companion, "gear.remove({item = \"minecraft:amethyst_shard\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(unequip.done(), "gear remove has not finished");
@@ -246,7 +246,7 @@ public class GearGameTests {
             companion.getInventory().setItem(i, new ItemStack(Items.COBBLESTONE, 64));
         }
         gear.ring(0).worn = new ItemStack(Items.AMETHYST_SHARD);
-        ToolRun unequip = command(companion, "gear remove --slot gametest:ring");
+        ToolRun unequip = lua(companion, "gear.remove({slot = \"gametest:ring\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(unequip.done(), "gear remove has not finished");
@@ -266,7 +266,7 @@ public class GearGameTests {
         FakeGear gear = dress(companion);
         gear.ring(0).worn = new ItemStack(Items.AMETHYST_SHARD);
         gear.ring(0).refuseRemove = "the ring is stuck fast";
-        ToolRun unequip = command(companion, "gear remove --slot gametest:ring");
+        ToolRun unequip = lua(companion, "gear.remove({slot = \"gametest:ring\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(unequip.done(), "gear remove has not finished");
@@ -289,7 +289,7 @@ public class GearGameTests {
         FakeGear gear = dress(companion);
         gear.ring(0).worn = new ItemStack(Items.AMETHYST_SHARD);
         companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
-        ToolRun status = call(companion, "status_self", args());
+        ToolRun status = lua(companion, "status.self()");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(status.reply() != null, "status_self has not replied");

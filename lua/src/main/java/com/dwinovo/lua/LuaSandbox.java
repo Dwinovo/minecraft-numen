@@ -2,6 +2,7 @@ package com.dwinovo.lua;
 
 import com.dwinovo.lua.vm.Allocation;
 import com.dwinovo.lua.vm.Globals;
+import com.dwinovo.lua.vm.LuaClosure;
 import com.dwinovo.lua.vm.LuaError;
 import com.dwinovo.lua.vm.LuaTable;
 import com.dwinovo.lua.vm.LuaValue;
@@ -39,6 +40,11 @@ import java.util.regex.Pattern;
  * 每段脚本一份 {@link Limits}:两次调宿主函数之间的指令数、总指令数、字符串分配的总字节数、墙钟。到了就停下,停的方式脚本接
  * 不住(不是 Lua 错误,{@code pcall} 包着死循环也停),结局说哪一条、停在哪一行。{@link Running#interrupt} 随时喊停:在下一条
  * 指令或正在阻塞的宿主函数处停下。
+ *
+ * <h2>库</h2>
+ * 宿主可以登记几段库({@link Builder#library}):每段脚本开跑之前,它们按登记顺序在同一个全局环境里先跑一遍,定义的函数脚本里直接
+ * 能调(库可以往宿主函数的表里加函数,{@code function move.goto_(...) ... end})。行号只记脚本自己那一段:库里的函数调宿主函数时,
+ * {@link #currentLine} 说的是脚本里调这个库函数的那一行,结局停在的也是脚本里的那一行。
  *
  * <h2>桥接</h2>
  * 宿主函数按 {@code 表名.函数名}(或全局名)登记,收按顺序的参数、交回一个值;值在两边按 {@link #toJava}/{@link #toLua} 换:nil 是
@@ -103,10 +109,12 @@ public final class LuaSandbox {
      * 一段脚本的结局。
      *
      * @param ending  怎样结束的
-     * @param line    结束在哪一行;跑完是 0,说不出是 0
+     * @param line    结束在哪一行(脚本自己那一段里的);跑完是 0,说不出是 0
      * @param message 给人看的那句话(Lua 的报错原话,或哪一条预算到了);跑完是 null
+     * @param value   跑完时脚本 {@code return} 的第一个值,换成 Java 值(见 {@link LuaSandbox});没有返回值或没跑完是 null。
+     *                函数这类换不了的值是它的 {@code tostring}
      */
-    public record Outcome(Ending ending, int line, String message) {
+    public record Outcome(Ending ending, int line, String message, Object value) {
         public boolean finished() {
             return ending == Ending.FINISHED;
         }
@@ -146,11 +154,29 @@ public final class LuaSandbox {
     private final Consumer<String> print;
     private final Map<String, HostFunction> globals;
     private final Map<String, Map<String, HostFunction>> tables;
+    /** 库:块名 → 正文,按登记顺序。 */
+    private final Map<String, String> libraries;
+    /** 脚本读宿主函数表里没有的名字时报的那句话。 */
+    private final Missing missing;
+
+    /** 脚本读宿主函数表里没有的名字({@code area.hsa}):报什么错。 */
+    @FunctionalInterface
+    public interface Missing {
+
+        /**
+         * @param table   表名
+         * @param key     读的名字
+         * @param present 表里此刻有的名字(宿主函数与库加进去的)
+         */
+        String message(String table, String key, List<String> present);
+    }
 
     private LuaSandbox(Builder b) {
         this.limits = b.limits;
         this.print = b.print;
         this.globals = Map.copyOf(b.globals);
+        this.libraries = Collections.unmodifiableMap(new LinkedHashMap<>(b.libraries));
+        this.missing = b.missing;
         Map<String, Map<String, HostFunction>> t = new LinkedHashMap<>();
         b.tables.forEach((name, fns) -> t.put(name, Map.copyOf(fns)));
         this.tables = Collections.unmodifiableMap(t);
@@ -166,9 +192,17 @@ public final class LuaSandbox {
         private Consumer<String> print = line -> { };
         private final Map<String, HostFunction> globals = new LinkedHashMap<>();
         private final Map<String, Map<String, HostFunction>> tables = new LinkedHashMap<>();
+        private final Map<String, String> libraries = new LinkedHashMap<>();
+        private Missing missing = (table, key, present) -> "there is no function " + table + "." + key;
 
         private Builder(Limits limits) {
             this.limits = limits;
+        }
+
+        /** 脚本读宿主函数表里没有的名字时报的错:按它给的那句话停在那一行。 */
+        public Builder missing(Missing missing) {
+            this.missing = missing;
+            return this;
         }
 
         /** {@code print(...)} 写出的每一行(参数按 tostring 写、制表符隔开)交给它。 */
@@ -195,6 +229,17 @@ public final class LuaSandbox {
             }
             if (tables.computeIfAbsent(table, t -> new LinkedHashMap<>()).put(name, fn) != null) {
                 throw new IllegalArgumentException(table + "." + name + " 登记了两次");
+            }
+            return this;
+        }
+
+        /**
+         * 登记一段库:每段脚本开跑之前先跑它,按登记顺序。它的报错开头是 {@code chunkName}。库在宿主函数之后装,可以往宿主函数的
+         * 表里加函数。
+         */
+        public Builder library(String chunkName, String code) {
+            if (libraries.put(chunkName, code) != null) {
+                throw new IllegalArgumentException("库 " + chunkName + " 登记了两次");
             }
             return this;
         }
@@ -232,7 +277,8 @@ public final class LuaSandbox {
     }
 
     /**
-     * 在宿主函数里问:脚本是在哪一行调的这个函数。不在脚本的线程上是 0。
+     * 在宿主函数里问:脚本是在哪一行调的这个函数——脚本自己那一段里的行;经库里的函数调到这里的,是脚本里调那个库函数的那一行。
+     * 不在脚本的线程上是 0。
      */
     public static int currentLine() {
         Run run = CURRENT.get();
@@ -290,8 +336,10 @@ public final class LuaSandbox {
         private long slice;
         private long total;
         private long stringBytes;
-        /** 最近执行的那条指令在哪一行。 */
+        /** 脚本自己那一段里最近执行的那条指令在哪一行(库里的指令不算)。 */
         int line;
+        /** 脚本自己那一段的块名,{@link Prototype#source} 的写法:库里的指令据此不记行号。 */
+        private LuaValue mainSource;
 
         Run(String chunkName, String code, List<String> args, Consumer<Outcome> done) {
             this.chunkName = chunkName;
@@ -319,13 +367,18 @@ public final class LuaSandbox {
         private Outcome execute() {
             LuaValue main;
             Globals g;
+            List<LuaValue> libs = new ArrayList<>();
             try {
                 g = standardGlobals();
                 install(g);
+                for (Map.Entry<String, String> lib : libraries.entrySet()) {
+                    libs.add(g.load(lib.getValue(), "=" + lib.getKey()));
+                }
                 main = g.load(code, "=" + chunkName);
             } catch (LuaError e) {
-                return new Outcome(Ending.UNREADABLE, lineOf(e.getMessage()), e.getMessage());
+                return new Outcome(Ending.UNREADABLE, lineOf(e.getMessage()), e.getMessage(), null);
             }
+            mainSource = ((LuaClosure) main).p.source;
             g.hook = this;
             LuaValue[] values = new LuaValue[args.size()];
             LuaTable arg = new LuaTable();
@@ -335,15 +388,27 @@ public final class LuaSandbox {
             }
             g.rawset("arg", arg);
             try {
-                main.invoke(LuaValue.varargsOf(values));
-                return new Outcome(Ending.FINISHED, 0, null);
+                for (LuaValue lib : libs) {
+                    lib.call();
+                }
+                Varargs returned = main.invoke(LuaValue.varargsOf(values));
+                return new Outcome(Ending.FINISHED, 0, null, returned(returned.arg1()));
             } catch (Stop stop) {
-                return new Outcome(stop.ending, line, chunkName + ":" + line + ": " + stop.getMessage());
+                return new Outcome(stop.ending, line, chunkName + ":" + line + ": " + stop.getMessage(), null);
             } catch (LuaError e) {
-                return new Outcome(Ending.ERROR, line, e.getMessage());
+                return new Outcome(Ending.ERROR, line, e.getMessage(), null);
             } catch (StackOverflowError deep) {
                 return new Outcome(Ending.STACK, line, chunkName + ":" + line + ": stack overflow (a function that "
-                        + "calls itself without end?)");
+                        + "calls itself without end?)", null);
+            }
+        }
+
+        /** 脚本 return 的值换成 Java 值;函数这类换不了的,是它的 tostring。 */
+        private static Object returned(LuaValue value) {
+            try {
+                return toJava(value);
+            } catch (LuaError notAValue) {
+                return value.tojstring();
             }
         }
 
@@ -364,10 +429,28 @@ public final class LuaSandbox {
                 }
             });
             globals.forEach((name, fn) -> g.rawset(name, host(fn)));
-            tables.forEach((name, fns) -> {
+            tables.forEach((group, fns) -> {
                 LuaTable t = new LuaTable();
                 fns.forEach((fnName, fn) -> t.rawset(fnName, host(fn)));
-                g.rawset(name, t);
+                // 读表里没有的名字:当场报那句话,不让它成 nil 再在调用处报"调了一个 nil"
+                LuaTable meta = new LuaTable();
+                meta.rawset("__index", new VarArgFunction() {
+                    @Override
+                    public Varargs invoke(Varargs in) {
+                        List<String> present = new ArrayList<>();
+                        LuaValue k = LuaValue.NIL;
+                        while (true) {
+                            Varargs next = t.next(k);
+                            if ((k = next.arg1()).isnil()) {
+                                break;
+                            }
+                            present.add(k.tojstring());
+                        }
+                        throw new LuaError(missing.message(group, in.arg(2).tojstring(), present));
+                    }
+                });
+                t.setmetatable(meta);
+                g.rawset(group, t);
             });
         }
 
@@ -402,7 +485,7 @@ public final class LuaSandbox {
 
         @Override
         public void onInstruction(Prototype p, int pc) {
-            if (p.lineinfo != null && pc < p.lineinfo.length) {
+            if (p.lineinfo != null && pc < p.lineinfo.length && mainSource.raweq(p.source)) {
                 line = p.lineinfo[pc];
             }
             if (++slice > limits.instructionsPerSlice()) {

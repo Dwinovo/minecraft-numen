@@ -1,6 +1,6 @@
 ---
 name: building_design
-description: Building design doctrine for the build commands - designs written step by step and built with build at, blueprint files, planning workflow, size reference, single-floor rule, door alignment, composition order with walls, quality checklist. Load BEFORE designing or building any non-trivial structure.
+description: Building design doctrine for the build API - designs written step by step and built with build.raise, blueprint files, planning workflow, size reference, single-floor rule, door alignment, composition order with walls, quality checklist. Load BEFORE designing or building any non-trivial structure.
 ---
 
 # Skill: building_design
@@ -11,7 +11,7 @@ finished build looks wrong.
 ## Workflow
 
 1. PLAN first: purpose, footprint, height, one main material + one accent material.
-2. Inspect the site (move_goto / scan_around): flat enough? big enough? Note the GROUND
+2. Inspect the site (move.goto_ / scan.around): flat enough? big enough? Note the GROUND
    level — every vertical decision below is anchored to it.
    **Uneven ground is YOUR problem to solve, not the builder's**: the builder puts
    blocks exactly where told, so on a slope one side of the footprint will hang in
@@ -21,25 +21,27 @@ finished build looks wrong.
    (costs materials in survival like any build). Stilt houses are a valid choice
    too — just make it a choice, not an accident.
 3. Write the building as a DESIGN, one level at a time from the ground up:
-   `build new` it, add the foundation and the first storey as steps with
-   `--into`, then LOOK at what you wrote with `build show` and `--layer`
-   (`build show cottage --layer 1`) — a map of that level seen from above as it
+   `build.new` it, add the foundation and the first storey as steps with
+   `into`, then LOOK at what you wrote with `build.show` and `layer`
+   (`build.show("cottage", {layer = 1})`) — a map of that level seen from above as it
    will stand when built, in the same character grid `layer` takes, with z and
    x labelled. Fix what is off
-   (a primitive with `--into cottage --step 2` or `--before 2`, `build drop cottage/2`), look again, and only then write
+   (a primitive with `{into = "cottage", step = 2}` or `before = 2`, `build.drop("cottage/2")`), look again, and only then write
    the next level on top of the one you saw. Do NOT work the whole building out
    in your head before the first step: a design is cheap to change, and the
    slice shows what you actually wrote, not what you meant. Within a level go big
    to small — `layer` grids first, single `set` details last; later steps
    overwrite earlier cells. Coordinates in a design are relative to its origin
-   (0,0,0), so you can think in the building's own terms. `build show` lists
+   (0,0,0), so you can think in the building's own terms. `build.show` lists
    the steps with what each costs.
-4. `build at` the design on the site: it prices the whole design first and builds
-   it as one background job.
-5. After task_finished, LOOK at the result and run the checklist below. To fix
-   something, change the design (`--step N` / `--before N` with `--into`, `build drop`, or
-   one more step with `--into`) and `build at` the same spot again — it only adds
-   what is missing, changes what differs and takes away blocks of yours the
+4. `build.raise` the design on the site: each round it asks `build.left` what is
+   still to do from where you stand, places what your hand reaches (`build.at`,
+   which prices the whole design first), digs out what is in the way and walks on
+   to the lowest cell left, until all of it stands.
+5. When it ends, LOOK at the result and run the checklist below. To fix
+   something, change the design (`step = N` / `before = N` with `into`, `build.drop`,
+   or one more step with `into`) and `build.raise` the same spot again — it only
+   adds what is missing, changes what differs and takes away blocks of yours the
    design no longer has.
 
 ## Size reference (width x depth x height)
@@ -77,13 +79,13 @@ want for a room.
 ## The primitives
 
 Seven primitives, all geometry, no style. What you build with them is yours.
-Each is one line: run it on its own and it is built at once, at world
-coordinates; add `--into` and it becomes the next step of a design. The cells
-come first (a cell is `x y z`), the block is `--block` — without it, the block
-in your main hand.
+Each is one call: run it on its own and it is placed at once, at world
+coordinates, as far as your hand reaches from where you stand; add `into` and it
+becomes the next step of a design. The cells come first (a cell is `{x, y, z}`),
+the block is the `block` option — without it, the block in your main hand.
 
-- `layer` — a character grid with a `legend`, stamped at one level (`--at x y z`
-  is where the first character goes), or repeated up to the level `--up-to`
+- `layer` — a character grid with a `legend`, stamped at one level (`at = {x, y, z}`
+  is where the first character goes), or repeated up to the level `up_to`
   names. The first row sits at that z and runs +x,
   so the grid reads like a map: north at the top, east to the right. `' '` and
   `'.'` leave a cell alone. One grid is a floor, a wall ring, an L-shaped
@@ -102,27 +104,27 @@ in your main hand.
 
 A small house, written as a design:
 ```
-build new cottage
-build layer ####### ####### ####### ####### ####### --at 0 0 0 --block cobblestone --into cottage
-build layer ####### #.....# #.....# #.....# ####### --at 0 1 0 --block "oak_planks*8, spruce_planks*2" --up-to 3 --into cottage
-build show cottage --layer 1
-build layer # --at 3 1 4 --block air --up-to 2 --into cottage
-build set 3 1 4 --block oak_door[facing=north] --into cottage
-build show cottage --layer 1
-build show cottage
-build at cottage --at 120 64 -35
+build.new("cottage")
+build.layer("#######", "#######", "#######", "#######", "#######", {at = {0, 0, 0}, block = "cobblestone", into = "cottage"})
+build.layer("#######", "#.....#", "#.....#", "#.....#", "#######", {at = {0, 1, 0}, block = "oak_planks*8, spruce_planks*2", up_to = 3, into = "cottage"})
+build.show("cottage", {layer = 1})
+build.layer("#", {at = {3, 1, 4}, block = "air", up_to = 2, into = "cottage"})
+build.set({3, 1, 4}, {block = "oak_door[facing=north]", into = "cottage"})
+build.show("cottage", {layer = 1})
+build.show("cottage")
+build.raise("cottage", {at = {120, 64, -35}})
 ```
 
 The doorway and the door are in the same cell of the south wall (z=4), and the
 slice after the walls is where you would have caught a doorway cut into the
 wrong wall.
 
-Block states ride along with the block name, exactly as in `/setblock`:
+Block states ride along with the block name, exactly as in `mc.run("setblock")`:
 `oak_stairs[facing=north,half=top]`, `oak_slab[type=double]`, `oak_log[axis=x]`,
 `oak_trapdoor[open=true,facing=north]`. A door or tall flower is written as its
 lower half alone and a bed as its foot — the other half appears with it.
 
-Which way a block faces (these are the game's own rules; `--layer` shows the
+Which way a block faces (these are the game's own rules; `layer` shows the
 full state of every cell, so check a slice instead of reasoning it out):
 
 - **stairs** — `facing` is the side the tall back is on, the way you walk UP
@@ -464,18 +466,19 @@ reads it as texture rather than as a pattern.
 
 ## Command mapping
 
-- a design is a named list of primitive steps: `build new` starts one, a
-  primitive with `--into` appends a step, `build show` lists the steps and what
-  they cost, `build show` with `--layer` draws one level as a map,
-  a primitive with `--into cottage --step 2` / `--before 2` and `build drop cottage/2` change them, `build at`
-  builds it on a spot and — run again on the same spot — changes the building to
-  match; block states ride in the block name; `air` clears; `mask` decides what
+- a design is a named list of primitive steps: `build.new` starts one, a
+  primitive with `into` appends a step, `build.show` lists the steps and what
+  they cost, `build.show` with `layer` draws one level as a map,
+  a primitive with `{into = "cottage", step = 2}` / `before = 2` and `build.drop("cottage/2")` change them,
+  `build.at` places what your hand reaches of it on a spot, `build.left` says what
+  is still to do and where, and `build.raise` walks the site until all of it stands
+  — run again on the same spot, they change the building to match; block states ride in the block name; `air` clears; `mask` decides what
   may be overwritten; later steps overwrite earlier cells, so details go last
-- a primitive without `--into` is built at once, at world coordinates: a single
-  `build place 120 64 -35 --block crafting_table` is the quick way to put one block down
-- whole structure files: `build designs` lists them with the designs, `build show`
-  prices one, `build at` builds it; liquids are always skipped
-- `build built` lists what has been built and where
+- a primitive without `into` is placed at once, at world coordinates, within reach: a
+  single `build.place({120, 64, -35}, {block = "crafting_table"})` is the quick way to put one block down
+- whole structure files: `build.designs` lists them with the designs, `build.show`
+  prices one, `build.raise` builds it; liquids are always skipped
+- `build.built` lists what has been built and where
 
 ## Style references — how to read them
 
@@ -505,7 +508,7 @@ and wide with lifted corners"; translating that into courses, materials, an
 overhang and a corner lift is yours to do, and doing it differently on two
 buildings of the same style is the point, not a mistake.
 
-Load one with `skill load building_design --file references/baroque.md` (any style file name below).
+Load one with `skill.load("building_design", {file = "references/baroque.md"})` (any style file name below).
 
 ### East Asia
 `japanese_minka` 和风民居 · `japanese_shrine` 神社 · `japanese_castle` 天守 ·

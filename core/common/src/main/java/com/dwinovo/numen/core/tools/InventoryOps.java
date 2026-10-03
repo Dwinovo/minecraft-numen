@@ -6,8 +6,6 @@ import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.core.PlayerInv;
-import com.dwinovo.numen.core.nav.WorkArea;
-import com.dwinovo.numen.core.task.collect.CollectItemsTaskRecord;
 import com.dwinovo.numen.core.task.inventory.DropItemsTaskRecord;
 import com.dwinovo.numen.core.task.inventory.EatItemTaskRecord;
 import com.dwinovo.numen.core.task.inventory.EquipTaskRecord;
@@ -24,7 +22,7 @@ import java.util.Set;
 
 /**
  * Inventory-management implementations — the business half of {@code gear wear} / {@code gear remove} /
- * {@code inv eat} / {@code inv drop} ({@code GearCommands}, {@code InvCommands}) and {@code work collect}.
+ * {@code inv.eat} / {@code inv.drop} ({@code GearCommands}, {@code InvCommands}) and picking up (the library {@code work.collect} walks onto drops).
  * Each returns a {@link TaskRecord} the body's task queue runs, which takes its name, call id and deadline basis
  * from the call's {@link ServerSource}.
  */
@@ -40,7 +38,7 @@ public final class InventoryOps {
         String slotName = slotName(slot);
         if (Wardrobe.ARMOR.equals(slotName)) {
             throw new IllegalArgumentException(
-                    "--slot armor is only for gear remove (it means all four armor pieces)");
+                    "slot = \"armor\" is only for gear.remove (it means all four armor pieces)");
         }
         Item item = ToolArgs.parseItem(item_id);
         return new EquipTaskRecord(source, item, slotName, BuiltInRegistries.ITEM.getKey(item).getPath());
@@ -70,40 +68,6 @@ public final class InventoryOps {
         int n = count == null ? Math.max(1, carried) : count;
         return new DropItemsTaskRecord(source, item, Math.clamp(n, 1, DROP_MAX_COUNT),
                 BuiltInRegistries.ITEM.getKey(item).getPath());
-    }
-
-    /**
-     * {@code work collect}:只捡她工作区里的({@link WorkArea#around}:受理时她脚下为中心),点名了区域({@code areas})就再和它
-     * 求交:区域说在哪儿,工作区说一趟走多远。
-     */
-    public TaskRecord collectItems(ServerSource src, List<ResourceLocation> itemIds, List<AreaRef> areas) {
-        // Lenient set from the id list: unknown ids are skipped, and an absent list
-        // yields an empty set — the "match everything" filter.
-        Set<Item> filter = new LinkedHashSet<>();
-        if (itemIds != null) {
-            for (ResourceLocation id : itemIds) {
-                if (BuiltInRegistries.ITEM.containsKey(id)) {
-                    filter.add(BuiltInRegistries.ITEM.get(id));
-                }
-            }
-        }
-
-        WorkArea around = WorkArea.around(src.companion());
-        Area area = around.area();
-        String where = around.describe();
-        if (areas != null && !areas.isEmpty()) {
-            String name = String.join(" ", areas.stream().map(AreaRef::toString).toList());
-            area = area.intersect(AreaOps.resolveAll(src.companion(), areas));
-            where = "in " + name + ", " + where;
-        }
-        String label = filter.isEmpty() ? "all items" : labelFor(filter);
-        return new CollectItemsTaskRecord(src, filter, around, area, where, label);
-    }
-
-    private static String labelFor(Set<Item> filter) {
-        Item first = filter.iterator().next();
-        String path = BuiltInRegistries.ITEM.getKey(first).getPath();
-        return filter.size() == 1 ? path : path + "+" + (filter.size() - 1);
     }
 
 }

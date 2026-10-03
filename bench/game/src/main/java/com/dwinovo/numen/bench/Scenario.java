@@ -50,8 +50,8 @@ public interface Scenario {
     List<Check> checks();
 
     /**
-     * 标准解:一次回复里按顺序执行的几行命令(和她调 {@code command} 工具写的一样),执行完这个场景必须成功。
-     * 它证明场景可解;空操作必须失败,证明断言不被什么都不做骗过。
+     * 标准解:一段 Lua 程序(和她调 {@code lua} 工具写的一样),跑完这个场景必须成功。它证明场景可解;空操作必须失败,
+     * 证明断言不被什么都不做骗过。
      */
-    List<String> solution(Scene scene);
+    String solution(Scene scene);
 }

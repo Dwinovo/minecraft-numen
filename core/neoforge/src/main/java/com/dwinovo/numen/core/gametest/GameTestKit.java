@@ -4,8 +4,9 @@ import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.dwinovo.numen.agent.loop.SerialCalls;
 import com.dwinovo.numen.agent.loop.ToolPort;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
-import com.dwinovo.numen.agent.tool.NumenTool;
-import com.dwinovo.numen.agent.tool.ToolRegistry;
+import com.dwinovo.numen.agent.script.Invocation;
+import com.dwinovo.numen.agent.tool.ToolCall;
+import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -53,7 +54,7 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
  * 可走的地板之间立一圈到顶的屏障,站在原来包围墙的位置——可走的地板、墙、rel 坐标都和原来一样。任意两块
  * 场地可走部分之间因此至少隔 21 格,比上面这些半径都大。改模板或加新模板时守住这一条。
  *
- * <p>更远的感知(goto 找方块扫 32 个 chunk、{@code scan blocks} 按用例给的半径、work collect 在工作区里捡掉落物、逃跑看 32~40 格)
+ * <p>更远的感知(goto 找方块扫 32 个 chunk、{@code scan.blocks} 按用例给的半径、work.collect 在工作区里捡掉落物、逃跑看 32~40 格)
  * 隔不开:这类用例靠场景用别的用例不会留下的东西(独一种方块、物品)来保证只看见自己的。
  *
  * <h2>步骤一律经 {@link #steps} 与 {@link #succeedWhen}</h2>
@@ -214,21 +215,21 @@ public final class GameTestKit {
         return n;
     }
 
-    /** scan_blocks 在半径 {@code radius} 内找 {@code blockId}(回执稍后才到)。 */
+    /** {@code scan.blocks} 在半径 {@code radius} 内找 {@code blockId}(回执稍后才到)。 */
     static ToolRun scan(NumenPlayer companion, int radius, String blockId) {
-        return call(companion, "scan_blocks", args("radius", radius, "block_ids", List.of(blockId)));
+        return lua(companion, "scan.blocks(\"" + blockId + "\", {radius = " + radius + "})");
     }
 
     /**
-     * 先建一块区域,再把 {@code blockId} 扫进去({@code scan blocks … --into}):回执里每团的编号就是 {@code 区域/g1} 这种写法。
+     * 先建一块区域,再把 {@code blockId} 扫进去({@code scan.blocks(…, {into = …})}):回执里每团的编号就是 {@code 区域/g1} 这种写法。
      * 建区域当场回;扫的回执稍后才到。
      */
     static ToolRun scanInto(NumenPlayer companion, int radius, String blockId, String area) {
-        ToolRun made = command(companion, "area new " + area);
+        ToolRun made = lua(companion, "area.new(\"" + area + "\")");
         if (!made.succeeded()) {
-            throw new IllegalStateException("area new " + area + " failed: " + made.reply());
+            throw new IllegalStateException("area.new " + area + " failed: " + made.reply());
         }
-        return command(companion, "scan blocks " + blockId + " --radius " + radius + " --into " + area);
+        return lua(companion, "scan.blocks(\"" + blockId + "\", {radius = " + radius + ", into = \"" + area + "\"})");
     }
 
     /** {@link #mineScanned} 把找到的方块扫进的那块区域。 */
@@ -236,7 +237,7 @@ public final class GameTestKit {
 
     /**
      * 照模型挖矿的写法走一遍:建区域 {@link #MINED_AREA}、在半径 {@code radius} 内把 {@code blockId} 扫进去
-     * ({@code scan blocks … --into}),扫的回执一到就{@linkplain #mine 挖这块区域}挖够 {@code count} 格。扫描被拒或失败时不挖,
+     * ({@code scan.blocks(…, {into = …})}),扫的回执一到就{@linkplain #mine 挖这块区域}挖够 {@code count} 格。扫描被拒或失败时不挖,
      * 这次挖矿的结论就是扫描的回执。
      */
     static Mining mineScanned(GameTestHelper helper, NumenPlayer companion, int radius, String blockId, int count) {
@@ -244,9 +245,10 @@ public final class GameTestKit {
     }
 
     /**
-     * 挖一块区域,用原子命令一轮轮组合,和模型自己写的一样:{@code move goto <区域> --arrive dig --alter natural} 走到一次够得着
-     * 最多格的地方,{@code work dig <区域> --count <还差几格>} 挖手够得着的,{@code work collect} 捡掉落;还差、而且挖的回执说
-     * 还有够不着的格,就再来一轮。{@code before} 有了结论才开始,它失败就不挖。
+     * 挖一块区域,用原子调用一轮轮组合,和模型自己写的一样:{@code move.goto_(区域, {arrive = "dig", alter = "natural"})} 走到
+     * 一次够得着最多格的地方,{@code work.dig(区域, {count = 还差几格})} 挖手够得着的,{@code work.collect({alter = "natural"})}
+     * 捡掉落;还差、而且挖的回执说还有够不着的格,就再来一轮。每一步是一段一行的程序;挖了几格读那件活的收尾数据,脚本里拿不到它。
+     * {@code before} 有了结论才开始,它失败就不挖。
      *
      * <p>哪一步(走、挖)失败,这次挖矿就以那一步的结论收场;挖够了,或够不着的不剩了,以最后一次挖的结论收场。
      *
@@ -278,7 +280,7 @@ public final class GameTestKit {
         /** 挖完等掉落物落定最多几刻:模型读完回执再写下一行要好几秒,掉落物早落地了。 */
         private static final int SETTLE_TICKS = 40;
 
-        private enum Step { BEFORE, GOTO, DIG, SETTLE, COLLECT, FETCH, RECOLLECT }
+        private enum Step { BEFORE, GOTO, DIG, SETTLE, COLLECT }
 
         private final NumenPlayer companion;
         private final String area;
@@ -305,7 +307,7 @@ public final class GameTestKit {
         private void tick() {
             if (step == Step.SETTLE) {
                 if (dropsSettled() || ++settling >= SETTLE_TICKS) {
-                    run(Step.COLLECT, "work collect");
+                    run(Step.COLLECT, "work.collect({alter = \"natural\"})");
                 }
                 return;
             }
@@ -320,7 +322,8 @@ public final class GameTestKit {
                     } else if (step == Step.BEFORE) {
                         walk();
                     } else {
-                        run(Step.DIG, "work dig " + area + (count > 0 ? " --count " + (count - dug) : ""));
+                        run(Step.DIG, "work.dig(\"" + area + "\"" + (count > 0 ? ", {count = " + (count - dug) + "}" : "")
+                                + ")");
                     }
                 }
                 case DIG -> {
@@ -333,17 +336,8 @@ public final class GameTestKit {
                     step = Step.SETTLE;
                     settling = 0;
                 }
-                case COLLECT -> {
-                    // 捡完还有走不到的(落在挖出的坑里、台阶上),照回执说的写:改地形走到最近那一件跟前,再捡一次
-                    BlockPos drop = nearestDrop();
-                    if (drop != null) {
-                        run(Step.FETCH, "move goto " + xyz(drop) + " --alter natural");
-                    } else {
-                        nextRound();
-                    }
-                }
-                case FETCH -> run(Step.RECOLLECT, "work collect");
-                case RECOLLECT -> nextRound();
+                // 捡的库函数改地形走到每一件跟前;捡不到的(走不到、包满)不算挖矿失败,接着下一轮
+                case COLLECT -> nextRound();
             }
         }
 
@@ -357,31 +351,23 @@ public final class GameTestKit {
             }
         }
 
-        /** 她工作区里的掉落物都落定了(着地或在水里)。 */
+        /** 捡的库函数看得见的掉落物都落定了(着地或在水里):半径同 {@code work.collect} 的默认 8 格。 */
         private boolean dropsSettled() {
             return companion.level().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
-                            companion.getBoundingBox().inflate(com.dwinovo.numen.core.nav.WorkArea.RADIUS))
+                            companion.getBoundingBox().inflate(8))
                     .stream().allMatch(e -> e.onGround() || e.isInWater());
         }
 
-        /** 她工作区里离她最近的掉落物所在的格;没有为 null。 */
-        private BlockPos nearestDrop() {
-            return companion.level().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
-                            companion.getBoundingBox().inflate(com.dwinovo.numen.core.nav.WorkArea.RADIUS))
-                    .stream().min(java.util.Comparator.comparingDouble(companion::distanceToSqr))
-                    .map(net.minecraft.world.entity.Entity::blockPosition).orElse(null);
-        }
-
-        private void run(Step next, String line) {
+        private void run(Step next, String code) {
             step = next;
-            current = command(companion, line);
+            current = lua(companion, code);
         }
 
         private void walk() {
-            run(Step.GOTO, "move goto " + area + " --arrive dig --alter natural");
+            run(Step.GOTO, "move.goto_(\"" + area + "\", {arrive = \"dig\", alter = \"natural\"})");
         }
 
-        /** 各次 {@code work dig} 一共挖掉的格。 */
+        /** 各次 {@code work.dig} 一共挖掉的格。 */
         int dug() {
             return dug;
         }
@@ -416,7 +402,7 @@ public final class GameTestKit {
         return rowsIn(reply);
     }
 
-    /** 回执消息里一条一行的 JSON 对象({@code scan blocks}、{@code scan entities} 的清单)。 */
+    /** 回执消息里一条一行的 JSON 对象({@code scan.blocks}、{@code scan.entities} 的清单)。 */
     static com.google.gson.JsonArray rowsIn(String reply) {
         String message = com.google.gson.JsonParser.parseString(reply).getAsJsonObject().get("message").getAsString();
         com.google.gson.JsonArray rows = new com.google.gson.JsonArray();
@@ -445,19 +431,25 @@ public final class GameTestKit {
         return null;
     }
 
-    /** {@code use block} 对着 {@code rel} 那一格按一下,同步调用。 */
+    /** {@code use.block} 对着 {@code rel} 那一格按一下,同步调用。 */
     static TaskRecord click(GameTestHelper helper, NumenPlayer companion, String button, BlockPos rel) {
-        return command(companion, "use block " + at(helper, rel) + ("left".equals(button) ? " --left" : "")).task();
+        return lua(companion, "use.block(" + at(helper, rel) + ("left".equals(button) ? ", {left = true}" : "") + ")")
+                .task();
     }
 
-    /** {@code rel} 那一格的绝对坐标,写成命令行上的 {@code x y z}。 */
+    /** {@code rel} 那一格的绝对坐标,写成脚本里的一格 {@code {x, y, z}}。 */
     static String at(GameTestHelper helper, BlockPos rel) {
         return xyz(helper.absolutePos(rel));
     }
 
-    /** 一格的坐标写成命令行上的 {@code x y z}。 */
-    static String xyz(BlockPos pos) {
+    /** 一格的坐标照回执里说一处地方的写法:{@code x y z}。 */
+    static String words(BlockPos pos) {
         return pos.getX() + " " + pos.getY() + " " + pos.getZ();
+    }
+
+    /** 一格的坐标写成脚本里的一格 {@code {x, y, z}}。 */
+    static String xyz(BlockPos pos) {
+        return "{" + pos.getX() + ", " + pos.getY() + ", " + pos.getZ() + "}";
     }
 
 
@@ -472,21 +464,20 @@ public final class GameTestKit {
     }
 
     /**
-     * 让主人"在场":另起一具身体进玩家列表当主人。登记处只认主人在不在线——不在就当场按拒绝,
-     * 答不答复就无从测起。答复由用例直接调登记处,等于主人在卡片上按了键。
+     * 让主人"在场":一个玩家站到场地角上,认作她的主人。登记处只认主人在不在线——不在就当场按拒绝,答不答复就无从测起。
+     * 答复由用例直接调登记处,等于主人在卡片上按了键。用完经 {@link #leave} 离开。
      */
-    static NumenPlayer presentOwner(GameTestHelper helper, NumenPlayer companion, String name) {
-        ServerLevel level = helper.getLevel();
+    static net.minecraft.server.level.ServerPlayer presentOwner(GameTestHelper helper, NumenPlayer companion,
+                                                                String name) {
+        var owner = presentPlayer(helper, companion, name);
         BlockPos at = helper.absolutePos(new BlockPos(0, 2, 0));
-        NumenPlayer owner = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(), name, UUID.randomUUID(),
-                level, new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
-        companion.setOwnerUuid(owner.getUUID());
+        owner.teleportTo(helper.getLevel(), at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
         return owner;
     }
     /**
-     * 一个真玩家,不是同伴:主人要在聊天栏里敲 {@code /numen} 的管理指令(权限、征询)时用它——那些指令只给不是同伴的
-     * 来源,{@link #presentOwner} 那具替身敲不了。没有客户端,连接照同伴的假连接丢掉一切下行包。{@code companion}
-     * 非空时认他作主人。用完经 {@link #leave} 离开。
+     * 一个真玩家,不是同伴:主人要在聊天栏里敲 {@code /numen} 的管理指令(权限、征询)时也用它。没有客户端,连接是
+     * {@link OwnerLine}:她的世界事件照主人客户端那样交给在跑的程序,别的下行包丢掉。{@code companion} 非空时认他作主人。
+     * 用完经 {@link #leave} 离开。
      */
     static net.minecraft.server.level.ServerPlayer presentPlayer(GameTestHelper helper, NumenPlayer companion,
                                                                  String name) {
@@ -495,12 +486,81 @@ public final class GameTestKit {
         com.mojang.authlib.GameProfile profile = new com.mojang.authlib.GameProfile(UUID.randomUUID(), name);
         var player = new net.minecraft.server.level.ServerPlayer(server, level, profile,
                 net.minecraft.server.level.ClientInformation.createDefault());
-        server.getPlayerList().placeNewPlayer(new com.dwinovo.numen.entity.FakeConnection(), player,
+        server.getPlayerList().placeNewPlayer(new OwnerLine(), player,
                 net.minecraft.server.network.CommonListenerCookie.createInitial(profile, false));
         if (companion != null) {
             companion.setOwnerUuid(player.getUUID());
         }
         return player;
+    }
+
+    /**
+     * 在场主人的连接:没有客户端。主人在线时她的世界事件({@code NumenEventPayload})直送主人客户端、不进出箱,主人客户端把它们
+     * 交给在跑的那段程序——收尾事件就是这样让程序接着跑的;这里照做,交给她那几轮({@link #LIVE})。别的下行包没人要,丢掉。
+     * 和评测的模拟主人同一个做法:内存通道、回环地址、不跑心跳、不断线;{@code configureMockConnection} 给它一张频道表,下行的
+     * 模组载荷过得了 NeoForge 的频道检查。
+     */
+    private static final class OwnerLine extends net.minecraft.network.Connection {
+
+        private static final java.net.InetSocketAddress LOOPBACK =
+                new java.net.InetSocketAddress(java.net.InetAddress.getLoopbackAddress(), 0);
+
+        OwnerLine() {
+            super(net.minecraft.network.protocol.PacketFlow.SERVERBOUND);
+            new io.netty.channel.embedded.EmbeddedChannel(this);
+            net.neoforged.neoforge.network.registration.NetworkRegistry.configureMockConnection(this);
+        }
+
+        @Override
+        public java.net.SocketAddress getRemoteAddress() {
+            return LOOPBACK;
+        }
+
+        @Override
+        public void send(net.minecraft.network.protocol.Packet<?> packet, net.minecraft.network.PacketSendListener listener,
+                         boolean flush) {
+            if (packet instanceof net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket custom
+                    && custom.payload() instanceof com.dwinovo.numen.network.payload.NumenEventPayload events) {
+                for (Round round : LIVE) {
+                    if (round.body.getUUID().equals(events.entityUuid())) {
+                        events.entries().forEach(round::arrive);
+                    }
+                }
+            }
+        }
+
+        @Override
+        public void runOnceConnected(java.util.function.Consumer<net.minecraft.network.Connection> action) {
+        }
+
+        @Override
+        public boolean isConnected() {
+            return true;
+        }
+
+        @Override
+        public void tick() {
+        }
+
+        @Override
+        public void disconnect(net.minecraft.network.chat.Component message) {
+        }
+
+        @Override
+        public void disconnect(net.minecraft.network.DisconnectionDetails details) {
+        }
+
+        @Override
+        public void handleDisconnection() {
+        }
+
+        @Override
+        public void flushChannel() {
+        }
+
+        @Override
+        public void setReadOnly() {
+        }
     }
 
     /** {@link #presentPlayer} 请来的玩家离开服务器。 */
@@ -509,32 +569,41 @@ public final class GameTestKit {
     }
 
     /**
-     * 按模型的样子调一次工具:按名字从工具表里取(和网络入口是同一张表),交同一份 JSON 参数,走同一个
-     * {@link NumenTool#serve}。查询当场回执;身体动作派下去的那件活按调用 id 从调度器里取出来,
-     * 收尾后读它交给模型的那句话。测的是工具本身,不经过模型。
+     * 按模型的样子跑一段程序:交给内脑派发的同一个顺序({@link SerialCalls}),经同一个脚本入口逐个派 API 调用——读成动作与
+     * 参数({@link NumenCli#invocation})、服务端动作走 {@link NumenCli#serve}、客户端动作当场执行,和产品里同样那几处。程序等它派的
+     * 每件身体活收尾:主人不在线,收尾的事件进出箱,每个服务器刻把新到的条目按收件箱的急件规则交给这段程序({@link #LIVE});
+     * 主人在场时事件直送他的连接,{@link OwnerLine} 照主人客户端那样交给这段程序。
      *
-     * <p>派活的调用受理之前先准备,要搜索的准备结论出来那一刻才回执:那件活在回执到的那一刻取(受理时它已经进了槽);准备没过
-     * 的调用没有活,回执就是它的结论。同步动作在回执到之前已经结算离槽,所以派下去当场先取一次。
+     * <p>返回的 {@link ToolRun} 看的是程序里最后一次派出的 API 调用(一行的程序就是那一次)——它当场的回执、它派下的活——和整段
+     * 程序的回执。
      */
-    static ToolRun call(NumenPlayer body, String toolName, JsonObject args) {
-        NumenTool tool = ToolRegistry.get(toolName);
-        if (tool == null) {
-            throw new IllegalArgumentException("no tool named " + toolName);
-        }
-        String id = "gametest-" + toolName + "-" + UUID.randomUUID();
-        AtomicReference<String> replied = new AtomicReference<>();
-        AtomicReference<TaskRecord> task = new AtomicReference<>();
-        tool.serve(id, args, body, json -> {
-            task.compareAndSet(null, CompanionTickDispatcher.taskOf(body.getUUID(), id));
-            replied.set(json);
-        });
-        task.compareAndSet(null, CompanionTickDispatcher.taskOf(body.getUUID(), id));
-        return new ToolRun(toolName, replied, task);
+    static ToolRun lua(NumenPlayer body, String code) {
+        ToolRun run = new ToolRun(code);
+        Round round = new Round(body, run);
+        LIVE.add(round);
+        LlmToolCall program = programCall(code);
+        round.calls.run(List.of(program), round);
+        return run;
+    }
+
+    /** 在跑的程序:每个服务器刻把出箱里新到的事件交给它们,结算了的摘掉。 */
+    private static final List<Round> LIVE = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    static {
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                (net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) -> {
+                    for (Round round : LIVE) {
+                        round.feed();
+                        if (round.hasSettled()) {
+                            LIVE.remove(round);
+                        }
+                    }
+                });
     }
 
     /**
-     * 一件直接交执行器的建造活,不经命令:测的是执行器本身(施工顺序、扣料、落定、续建)。按设计或蓝图施工、当场执行原语
-     * 从 {@code build} 命令进来的,见 BuildGameTests 里经 {@link #command} 调的那些。
+     * 一件直接交执行器的建造活,不经脚本:测的是执行器本身(施工顺序、扣料、落定、续建)。按设计或蓝图施工、当场执行原语
+     * 从 {@code build} 的函数进来的,见 BuildGameTests 里经 {@link #lua} 调的那些。
      */
     static com.dwinovo.numen.core.task.build.BuildTaskRecord buildJob(String callId, long deadline,
             com.dwinovo.numen.core.build.Layout layout, boolean consume, boolean partial) {
@@ -549,50 +618,57 @@ public final class GameTestKit {
     }
 
     /**
-     * 按模型的样子派一轮调用:模型一次回复里写了这几条,交给内脑派发的同一个顺序({@link SerialCalls})——一条做完才派
-     * 下一条,后台活等它的 task_finished 进了队列才往下走。每条照 {@link #call} 从工具表取、走 {@link NumenTool#serve};
-     * 主人不在线,收尾的事件进出箱,每刻把新到的条目按收件箱的急件规则交给这一轮一次,和内核转给派发器的一样。
+     * 按模型的样子派一轮调用:模型一次回复里写了这几段程序,交给内脑派发的同一个顺序({@link SerialCalls})——一段跑完才派下一段。
+     * 收尾的事件照 {@link #lua} 每刻交给这一轮。
      */
     static Round round(GameTestHelper helper, NumenPlayer body, LlmToolCall... calls) {
-        Round round = new Round(body);
-        helper.onEachTick(round::feed);
+        Round round = new Round(body, new ToolRun(""));
+        LIVE.add(round);
         round.calls.run(List.of(calls), round);
         return round;
     }
 
-    /** 一轮里的一条工具调用。 */
-    static LlmToolCall toolCall(String toolName, JsonObject args) {
-        return new LlmToolCall("gametest-" + toolName + "-" + UUID.randomUUID(), toolName, args.toString());
-    }
-
-    /** 一轮里的一行指令:一条 {@code command} 工具调用。 */
-    static LlmToolCall commandCall(String line) {
-        return toolCall(com.dwinovo.numen.cli.CommandTool.NAME, args("command", line));
+    /** 一轮里的一段程序:一条跑脚本的工具调用。 */
+    static LlmToolCall programCall(String code) {
+        String tool = com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.toolName();
+        return new LlmToolCall("gametest-" + tool + "-" + UUID.randomUUID(), tool,
+                com.dwinovo.numen.cli.ScriptTool.args(code).toString());
     }
 
     /**
-     * 一轮调用在服务端怎么执行:每条从工具表取、走 {@link NumenTool#serve}(没有主人客户端,不经网络);脚本的一行是一条
-     * {@code command} 调用,函数怎么写成那一行、能调哪些、受理回执与收尾怎么认,问的都是产品里同样那几处;跑完的脚本直接记
-     * 战绩(产品里经 {@code ScriptTallyPayload} 送到服务端的同一个入口)。
+     * 一段程序在服务端怎么执行:脚本里的每次 API 调用读成动作({@link NumenCli#invocation}),服务端动作交 {@link NumenCli#serve}
+     * (没有主人客户端,不经网络),客户端动作经 {@link NumenCli#call} 当场执行;受理回执与收尾怎么认,问的都是产品里同样那几处;
+     * 跑完的脚本直接记战绩(产品里经 {@code ScriptTallyPayload} 送到服务端的同一个入口)。每次调用的回执与它派下的活记进
+     * {@code run}。
      */
-    private record ServerPort(NumenPlayer body) implements SerialCalls.Port {
+    private record ServerPort(NumenPlayer body, ToolRun run) implements SerialCalls.Port {
 
         @Override
         public void invoke(LlmToolCall call, java.util.function.Consumer<String> done) {
-            ToolRegistry.get(call.name()).serve(call.id(), JsonParser.parseString(call.arguments()).getAsJsonObject(),
-                    body, done);
+            done.accept(com.dwinovo.numen.task.TaskResult.fail("only programs run here, not " + call.name()).toJson());
         }
 
         @Override
         public String scriptOf(LlmToolCall call) {
-            return ToolRegistry.get(call.name()) instanceof com.dwinovo.numen.cli.ScriptTool
-                    ? com.dwinovo.numen.cli.ScriptTool.code(call.arguments()) : null;
+            return com.dwinovo.numen.cli.ScriptTool.code(call.arguments());
         }
 
         @Override
-        public LlmToolCall commandCall(String id, String line) {
-            return new LlmToolCall(id, com.dwinovo.numen.cli.CommandTool.NAME,
-                    com.dwinovo.numen.cli.CommandTool.args(line).toString());
+        public void dispatch(LlmToolCall call, Invocation invocation, java.util.function.Consumer<String> done) {
+            ToolRun.Call record = run.dispatched(invocation.function());
+            java.util.function.Consumer<String> landed = json -> {
+                record.taken.compareAndSet(null, CompanionTickDispatcher.taskOf(body.getUUID(), call.id()));
+                record.replied.set(json);
+                done.accept(json);
+            };
+            String path = NumenCli.pathOf(invocation);
+            if (NumenCli.runsOnServer(invocation)) {
+                NumenCli.serve(path, invocation.args(), body, call.id(), landed);
+            } else {
+                NumenCli.call(invocation, new ToolCall(call.id(), path, invocation.args().toString(), body::getUUID,
+                        landed));
+            }
+            record.taken.compareAndSet(null, CompanionTickDispatcher.taskOf(body.getUUID(), call.id()));
         }
 
         @Override
@@ -607,12 +683,12 @@ public final class GameTestKit {
 
         @Override
         public com.dwinovo.numen.agent.script.ScriptCatalog catalog() {
-            return com.dwinovo.numen.cli.NumenCli.scriptCatalog();
+            return NumenCli.scriptCatalog();
         }
 
         @Override
-        public String line(com.dwinovo.numen.agent.script.ScriptRun.Call call) {
-            return com.dwinovo.numen.cli.NumenCli.scriptLine(call);
+        public Invocation invocation(com.dwinovo.numen.agent.script.ScriptRun.Call call) {
+            return NumenCli.invocation(call);
         }
 
         @Override
@@ -626,36 +702,41 @@ public final class GameTestKit {
         }
     }
 
-    /** 一轮里的一段程序:一条组合命令的工具调用。 */
-    static LlmToolCall programCall(String code) {
-        return toolCall(com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.toolName(),
-                com.dwinovo.numen.cli.ScriptTool.args(code));
-    }
-
     /** 一轮调用的现场:每条的结果、派出那一刻她站在哪、这一轮结算没有。 */
     static final class Round implements ToolPort.Sink {
 
         private final NumenPlayer body;
+        private final ToolRun run;
         /** 她的收件箱:进来的条目急不急由它的规则算,和主人客户端上同一条。 */
         private final EventQueue inbox = new EventQueue(EventQueue.Journal.NONE);
         private final SerialCalls calls;
         private final java.util.Map<String, String> results = new java.util.HashMap<>();
         private final java.util.Map<String, Vec3> startedAt = new java.util.HashMap<>();
-        /** 出箱里已经交给这一轮的条目数。 */
-        private int fed;
+        /**
+         * 出箱里这一轮已经见过的条目(按对象认):开跑那一刻已在出箱里的不是它的。不按下标数:出箱有上限,攒满了旧的被挤掉,
+         * 条数不再变,新来的照样要交给它——跑几百次调用的长程序就是这样攒满的。
+         */
+        private final java.util.Set<EventQueue.Entry> seen =
+                java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
         private boolean settled;
 
-        private Round(NumenPlayer body) {
+        private Round(NumenPlayer body, ToolRun run) {
             this.body = body;
-            this.calls = new SerialCalls(new ServerPort(body));
+            this.run = run;
+            this.calls = new SerialCalls(new ServerPort(body, run));
+            seen.addAll(outbox(body));
+        }
+
+        private static List<EventQueue.Entry> outbox(NumenPlayer body) {
+            return com.dwinovo.numen.entity.EventOutbox.get(body.getServer()).peek(body.getUUID()).entries();
         }
 
         /** 出箱里新到的事件交给这一轮。 */
         private void feed() {
-            List<EventQueue.Entry> out = com.dwinovo.numen.entity.EventOutbox.get(body.getServer())
-                    .peek(body.getUUID()).entries();
-            for (; fed < out.size(); fed++) {
-                arrive(out.get(fed));
+            for (EventQueue.Entry entry : outbox(body)) {
+                if (seen.add(entry)) {
+                    arrive(entry);
+                }
             }
         }
 
@@ -686,6 +767,7 @@ public final class GameTestKit {
         @Override
         public void finished(LlmToolCall call, String resultJson) {
             results.put(call.id(), resultJson);
+            run.receipt.set(resultJson);
         }
 
         @Override
@@ -709,26 +791,23 @@ public final class GameTestKit {
         }
     }
 
-    /** 按模型的样子执行一行指令:就是调一次 {@code command} 工具,和 {@link #call} 同一个入口。 */
-    static ToolRun command(NumenPlayer body, String line) {
-        return call(body, com.dwinovo.numen.cli.CommandTool.NAME, args("command", line));
-    }
-
     /**
      * 一张按输出预算分页的清单,从第一页往后翻,直到哪一页里有 {@code needle}:清单跨次攒下来,要找的那条落在第几页由
      * 前面有多少条定。翻到最后一页也没有、或者哪一页失败了,返回那一页,由用例的断言说明白。
+     *
+     * @param function 不带别的参数的那个函数,如 {@code build.built}
      */
-    static ToolRun pageWith(NumenPlayer body, String line, String needle) {
+    static ToolRun pageWith(NumenPlayer body, String function, String needle) {
         for (int page = 1; ; page++) {
-            ToolRun run = command(body, line + " --page " + page);
+            ToolRun run = lua(body, function + "({page = " + page + "})");
             if (!run.succeeded() || run.reply().contains(needle)
-                    || !run.reply().contains(" --page " + (page + 1) + " to continue.]")) {
+                    || !run.reply().contains("page = " + (page + 1) + " to continue.]")) {
                 return run;
             }
         }
     }
 
-    /** 拼工具参数:键、值交替;值是字符串、数字、布尔、列表(成 JSON 数组)或现成的 JSON。 */
+    /** 拼一份 JSON:键、值交替;值是字符串、数字、布尔、列表(成 JSON 数组)或现成的 JSON。 */
     static JsonObject args(Object... keyValues) {
         JsonObject out = new JsonObject();
         for (int i = 0; i < keyValues.length; i += 2) {
@@ -747,24 +826,82 @@ public final class GameTestKit {
             list.forEach(v -> array.add(json(v)));
             return array;
         }
-        throw new IllegalArgumentException("not a tool argument value: " + value);
+        throw new IllegalArgumentException("not a JSON value: " + value);
     }
 
     /**
-     * 一次工具调用:当场的回执,以及它派下去的那件活(查询类没有)。
-     *
-     * @param replied 当场的回执:查询的结果、后台任务的"已受理"、派发被拒的原因;同步动作不当场回执
-     * @param task    派下去的那件活;没派活是 null
+     * 一段程序:它最后派出的那次 API 调用(当场的回执、派下去的那件活),派出过的每一次,和整段程序跑完的回执。一行的程序看的
+     * 就是那一次调用,读法与产品里模型读到的一样:查询的结果、后台任务的"已受理"、派发被拒的原因;后台活收尾时交给模型的那句话。
+     * 一次调用都没派出(脚本写错、调用的参数读不成)时,"那一次"的回执就是程序的回执。
      */
-    record ToolRun(String tool, AtomicReference<String> replied, AtomicReference<TaskRecord> taken) {
+    static final class ToolRun {
 
-        String reply() {
-            return replied.get();
+        /** 派出过的一次 API 调用。 */
+        static final class Call {
+            final String function;
+            final AtomicReference<String> replied = new AtomicReference<>();
+            final AtomicReference<TaskRecord> taken = new AtomicReference<>();
+
+            private Call(String function) {
+                this.function = function;
+            }
         }
 
-        /** 派下去的那件活;还没回执(准备还没结论)、或没派活(查询、准备没过)是 null。 */
+        private final String code;
+        private final List<Call> calls = new java.util.concurrent.CopyOnWriteArrayList<>();
+        final AtomicReference<String> receipt = new AtomicReference<>();
+
+        ToolRun(String code) {
+            this.code = code;
+        }
+
+        private Call dispatched(String function) {
+            Call call = new Call(function);
+            calls.add(call);
+            return call;
+        }
+
+        private Call last() {
+            return calls.isEmpty() ? null : calls.get(calls.size() - 1);
+        }
+
+        /** 这段程序。 */
+        String code() {
+            return code;
+        }
+
+        /** 最后一次调用当场的回执;一次都没派出时是程序的回执;都还没有是 null。 */
+        String reply() {
+            Call last = last();
+            return last != null ? last.replied.get() : receipt.get();
+        }
+
+        /** 最后一次调用派下去的那件活;还没回执、或没派活是 null。 */
         TaskRecord task() {
-            return taken.get();
+            Call last = last();
+            return last == null ? null : last.taken.get();
+        }
+
+        /** 每次调用 {@code function} 派下去的活,按先后;没派活的那几次不在里面。 */
+        List<TaskRecord> tasks(String function) {
+            List<TaskRecord> out = new ArrayList<>();
+            for (Call call : calls) {
+                if (call.function.equals(function) && call.taken.get() != null) {
+                    out.add(call.taken.get());
+                }
+            }
+            return out;
+        }
+
+        /** 整段程序的回执(跑完、出错或被停下);还在跑是 null。 */
+        String receipt() {
+            return receipt.get();
+        }
+
+        /** 整段程序跑完了,而且跑到了最后。 */
+        boolean ranToTheEnd() {
+            String r = receipt.get();
+            return r != null && JsonParser.parseString(r).getAsJsonObject().get("success").getAsBoolean();
         }
 
         /** 受理了:回执到了,而且派下了一件活。 */
@@ -774,24 +911,41 @@ public final class GameTestKit {
 
         /** 当场拒绝:回执到了,是失败,没有派活——没有任务编号,也不会有 task_finished。 */
         boolean refused() {
-            String r = replied.get();
+            String r = reply();
             return r != null && task() == null
                     && !JsonParser.parseString(r).getAsJsonObject().get("success").getAsBoolean();
         }
 
-        /** 有结论了:派了活的看那件活收没收尾,没派活的看回没回执。 */
+        /**
+         * 有结论了:整段程序跑完了。只看最后一次调用的回执不行:一段几次调用的程序(库函数 move.goto_ 是三次)头一次回了执,
+         * 后面的还没派。
+         */
         boolean done() {
-            TaskRecord task = task();
-            return task != null ? task.getResult() != null : replied.get() != null;
+            return receipt.get() != null;
         }
 
-        /** 结论的原话:派了活的是收尾时交给模型的那句话,没派活的是回执。还没有结论是 null。 */
+        /**
+         * 最后一次调用派下的那件活收尾了。跟随这类常驻的活不拦着程序:程序早跑完了,活还在跑——问活本身有没有结论看这里。
+         */
+        boolean ended() {
+            TaskRecord task = task();
+            return task != null && task.getResult() != null;
+        }
+
+        /**
+         * 结论的原话:派了活的是收尾时交给模型的那句话,没派活的是回执里那句话(回执不带话就是整张回执)。还没有结论是 null。
+         */
         String outcome() {
             TaskRecord task = task();
             if (task != null) {
                 return task.getResult() == null ? null : task.getResult().message();
             }
-            return replied.get();
+            String r = reply();
+            if (r == null) {
+                return null;
+            }
+            JsonObject o = JsonParser.parseString(r).getAsJsonObject();
+            return o.has("message") ? o.get("message").getAsString() : r;
         }
 
         /** 结论是成功。回执不带 success 的查询(直接回一份数据)回了就算成功。 */
@@ -800,7 +954,7 @@ public final class GameTestKit {
             if (task != null) {
                 return task.getResult() != null && task.getResult().success();
             }
-            String r = replied.get();
+            String r = reply();
             if (r == null) {
                 return false;
             }

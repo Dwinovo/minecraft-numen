@@ -80,25 +80,31 @@ final class McpAccessPrompt {
                 - Reply and narrate with `say(companion, text)` — the words appear in-game as the \
                 companion's chat line, speech bubble, and voice. Keep your own conversation history; \
                 the game stores none for you.
-                - Long actions — the tools `move_goto` and `work_dig`, and commands such as `build at`, \
-                `work fish` or `fight attack` run through the `command` tool — are BACKGROUND tasks: \
-                they return a task id at once. The end of a task you started does NOT show up in \
-                `get_events`: run the command `task status` until the body is idle, then perceive to \
-                confirm what happened. `task_stop` cancels. Short actions (`inv craft`, `gear wear`, \
-                `use block`, …) return when they are done.
+                - Besides list_companions, create_companion, delete_companion, get_events and say there \
+                is one more tool, `%s`: a program whose functions are the companion's API. `status.self()`, `scan.blocks("iron_ore", {into = "ores"})`, \
+                `move.goto_("ores/g3", {arrive = "dig"})`, `work.dig("ores/g3")`, `build.at(...)`, \
+                `fight.attack(184)`, `inv.craft(...)`, … `api.help("work")` lists a group's functions and \
+                `api.help("work.dig")` gives one function's full help. One call is a one-line program; \
+                when a next step depends on what a call returned, write the steps as one program \
+                (`while area.has("ores") do ... end`).
+                - A program waits for each body task it starts and returns one receipt when it ends: how \
+                it ended (on an error: the line, the call's error, usage and hint), one line per API call, \
+                what it returned and printed. Each task's own account also arrives in `get_events` as a \
+                task_finished event. `task.stop()` cancels the body's task.
                 - %s
-                - You're blind between calls: perceive with `status_self` / `scan_blocks` / \
-                `scan_entities` before and after acting.
-                - `scan_blocks` answers in groups of touching blocks, each saying whether breaking it is \
+                - You're blind between calls: perceive with `status.self()` / `scan.blocks` / \
+                `scan.entities` before and after acting.
+                - `scan.blocks` answers in groups of touching blocks, each saying whether breaking it is \
                 allowed, needs the owner's consent, or is refused. With `into` it keeps them in a saved area \
                 (made on the spot when it does not exist yet) and each group gets an id like ores/g3; \
-                `work_dig` digs such an area: pass it as `place` (ores, or ores/g3) and it digs those cells \
-                that still hold what the scan saw, also after a restart; framed areas and coordinates ("x y z") \
-                are dug whatever they hold. It digs only what the hand reaches from where the body stands, \
-                never walks and never picks up: `move_goto` the same place with arrive `dig` first (it stands \
-                where the hand reaches the most of it), then `work_dig`, then the command `work collect` for \
-                the drops; `area has ores` says whether anything is left.
-                - It's survival mode — the tools do only what a real player can. No give, no setblock.
+                `work.dig` digs such an area ("ores", or "ores/g3") and digs those cells that still hold what \
+                the scan saw, also after a restart; framed areas and cells ({x, y, z}) are dug whatever they \
+                hold. It digs only what the hand reaches from where the body stands, never walks and never \
+                picks up: `move.goto_` the same place with arrive "dig" first (it stands where the hand \
+                reaches the most of it), then `work.dig`, then `work.collect()` for the drops; \
+                `area.has("ores")` says whether anything is left. The bundled script `mine` does all of \
+                that: `script.run("mine", "ores")`.
+                - It's survival mode — the API does only what a real player can. No give, no setblock.
 
                 One more thing: talk to me in the language I'm writing to you in, even though these \
                 instructions are in English.""".formatted(
@@ -112,6 +118,7 @@ final class McpAccessPrompt {
                                 ? "\"-y\", \"mcp-remote\", \"" + endpoint + "\""
                                 : "\"-y\", \"mcp-remote\", \"" + endpoint + "\", \"--header\", "
                                         + "\"Authorization: Bearer " + auth + "\"",
+                        com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.toolName(),
                         McpServer.ONE_BODY);
     }
 }

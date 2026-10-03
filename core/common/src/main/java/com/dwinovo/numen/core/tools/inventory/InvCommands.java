@@ -80,28 +80,30 @@ public final class InvCommands {
         inv.server(CRAFT, "Craft an item from your inventory in one go: finds the recipe, lays it into a real "
                         + "crafting grid, takes the result.",
                 InvCommands::craft, CRAFT_ITEM, CRAFT_COUNT)
-                .example(line(CRAFT) + " minecraft:iron_pickaxe")
-                .example(line(CRAFT) + " oak_planks --count 8")
+                .example("inv.craft(\"minecraft:iron_pickaxe\")")
+                .example("inv.craft(\"oak_planks\", {count = 8})")
                 .note("2x2 recipes work anywhere; a 3x3 recipe needs a crafting table within reach (~4 blocks). "
                         + "The result says where the nearest one is, or that you should place one (a "
                         + "crafting_table is 4 planks, 2x2).")
                 .note("Missing materials are reported with exact shortfalls: get those first, then run it again. "
                         + "It stops early, and says so, when materials run out or the inventory fills.")
+                .note("It never walks and never places a table: the nearest table in reach is used, and a refusal "
+                        + "says where one is or how to place one.")
                 .note("Only [crafting] recipes. Smelting, stonecutting and smithing happen at the station: "
-                        + "`use block` it, `use gui`, then `use shift` or `use transfer` the items in.")
+                        + "`use.block` it, `use.gui`, then `use.shift` or `use.transfer` the items in.")
                 .seeAlso(line(RECIPE));
         inv.server(RECIPE, "How an item is made, like JEI: every recipe that outputs it, at every station.",
                 InvCommands::recipe, RECIPE_ITEM, Listing.PAGE)
-                .example(line(RECIPE) + " minecraft:diamond_pickaxe")
+                .example("inv.recipe(\"minecraft:diamond_pickaxe\")")
                 .note("Instant and read-only. Every recipe is listed; a long list comes in pages.")
                 .note("Each recipe is tagged [crafting], [smelting], [stonecutter], [smithing] …: [crafting] is "
-                        + "`" + line(CRAFT) + "`; the others are made at their station (`use block` it, `use gui`, "
-                        + "then `use shift` or `use transfer`).")
+                        + "`inv.craft`; the others are made at their station (`use.block` it, `use.gui`, then "
+                        + "`use.shift` or `use.transfer`).")
                 .note("No recipe found means the item is mined or traded, not made.")
                 .seeAlso(line(CRAFT));
         inv.server(EAT, "Eat or drink something from your inventory.",
                 InvCommands::eat, FOOD)
-                .example(line(EAT) + " minecraft:cooked_beef")
+                .example("inv.eat(\"minecraft:cooked_beef\")")
                 .note("Background work: the result arrives as a task_finished event.")
                 .note("A real timed action: only when the chewing finishes do hunger, saturation and the item's "
                         + "effects (a golden apple's absorption) apply. Health then regenerates from saturation, "
@@ -110,16 +112,16 @@ public final class InvCommands {
                         + "fails the same way when you are already full.");
         inv.server(DROP, "Drop items from your inventory on the ground in front of you.",
                 InvCommands::drop, DROP_ITEM, DROP_COUNT)
-                .example(line(DROP) + " minecraft:cobblestone --count 32")
-                .example(line(DROP) + " rotten_flesh")
+                .example("inv.drop(\"minecraft:cobblestone\", {count = 32})")
+                .example("inv.drop(\"rotten_flesh\")")
                 .note("Asks your owner first unless their rules allow it; the call waits for the answer.")
-                .note("Dropped items despawn after 5 minutes. To store things, open a chest with `use block` and "
-                        + "`use shift` them into it instead.")
+                .note("Dropped items despawn after 5 minutes. To store things, open a chest with `use.block` and "
+                        + "`use.shift` them into it instead.")
                 .note("Returns how many were dropped and how many remain.")
                 .seeAlso("use block");
         inv.server(TAKE, "Creative mode only: conjure items into your inventory, like the creative menu.",
                 InvCommands::take, TAKE_ITEM, TAKE_COUNT)
-                .example(line(TAKE) + " minecraft:diamond --count 64")
+                .example("inv.take(\"minecraft:diamond\", {count = 64})")
                 .note("Fails in survival mode; there you mine, craft, loot or trade for items instead.")
                 .note("What doesn't fit in your inventory drops at your feet.");
     }
@@ -129,8 +131,7 @@ public final class InvCommands {
     }
 
     private static void recipe(ServerSource src, CommandArgs args) {
-        src.reply(RECIPES.lookupRecipe(args.get(RECIPE_ITEM).toString(), src.companion(), args,
-                args.write(line(RECIPE), List.of(RECIPE_ITEM))));
+        src.reply(RECIPES.lookupRecipe(args.get(RECIPE_ITEM).toString(), src.companion(), args));
     }
 
     /** 长活:咀嚼要时间,一口一口吃到饱可能更久,占着一轮对话不合理;受理即回执,吃完发 task_finished。 */
@@ -153,7 +154,7 @@ public final class InvCommands {
         String id = args.get(TAKE_ITEM).toString();
         if (!WorkProfile.of(companion).freeMaterials()) {
             src.reply(TaskResult.fail("survival mode can't conjure items — mine, craft, loot or trade for " + id
-                    + " instead (" + line(TAKE) + " works only in creative mode)").toJson());
+                    + " instead (inv.take works only in creative mode)").toJson());
             return;
         }
         Item item = ToolArgs.parseItem(id);

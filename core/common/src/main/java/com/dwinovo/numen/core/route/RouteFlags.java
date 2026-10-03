@@ -8,7 +8,8 @@ import com.dwinovo.numen.core.tools.RouteSpecFlags;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
 /**
- * 路线上存的规格:她写的那一截路线标志原样存成文字(如 {@code --alter natural --avoid water}),{@code route show} 原样给她看;
+ * 路线上存的规格:她写的路线标志按命令行的写法存成一截文字(如 {@code --alter natural --avoid water}),{@code route.show} 写成
+ * 选项表给她看({@link #shown});
  * 用时读回来经 {@link RouteSpecFlags} 翻成规格——标志到规格的翻译只有那一处。读与写都过 {@code route spec} 这一行命令:
  * 写是那一行的参数写回命令行的样子({@link CommandArgs#write}),读是同一棵树把它读回来({@link NumenCli#read}),文字的语法就是
  * 命令的语法,没有第二份。
@@ -23,9 +24,14 @@ public final class RouteFlags {
 
     private RouteFlags() {}
 
-    /** 这一行里写了的路线标志,写成命令行上的那一截;一个都没写是空串。 */
+    /** 这一行里写了的路线标志,写成命令行上的那一截(存盘的写法);一个都没写是空串。 */
     public static String written(CommandArgs args) {
         return args.write("", RouteSpecFlags.PARAMS).strip();
+    }
+
+    /** 存下的那一截标志写成脚本里的选项表,给她看:{@code {alter = "natural", avoid = {"water"}}}。 */
+    public static String shown(String flags) {
+        return read("x", flags).options(RouteSpecFlags.PARAMS);
     }
 
     /**

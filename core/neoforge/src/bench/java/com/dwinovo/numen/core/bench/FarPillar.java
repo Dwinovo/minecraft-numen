@@ -82,8 +82,8 @@ public final class FarPillar implements Scenario {
     }
 
     @Override
-    public List<String> solution(Scene scene) {
+    public String solution(Scene scene) {
         BlockPos p = scene.pos(PILLAR);
-        return List.of("move goto " + (p.getX() - 2) + " " + p.getZ());
+        return "move.goto_({" + (p.getX() - 2) + ", " + p.getZ() + "})";
     }
 }

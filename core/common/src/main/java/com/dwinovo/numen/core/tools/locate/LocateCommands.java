@@ -47,21 +47,21 @@ public final class LocateCommands {
         locate.server("structure", "Find the nearest structure of a type: its coordinates, compass direction and "
                         + "distance.",
                         LocateCommands::structure, STRUCTURE)
-                .example("locate structure minecraft:stronghold")
-                .example("locate structure #minecraft:ruined_portal")
+                .example("locate.structure(\"minecraft:stronghold\")")
+                .example("locate.structure(\"#minecraft:ruined_portal\")")
                 .note("Searches YOUR CURRENT dimension only: fortresses and bastions are in the Nether, end cities "
                         + "in the End. You stand still until it answers; nothing is loaded or changed.")
                 .note("For the stronghold this replaces throwing eyes of ender: save the eyes for the portal frames.")
-                .note("The y it gives is approximate: travel by x/z, then `scan blocks` when you arrive.")
+                .note("The y it gives is approximate: travel by x/z, then `scan.blocks` when you arrive.")
                 .seeAlso("locate biome", "scan blocks");
         locate.server("biome", "Find the nearest biome of a type: its coordinates, compass direction and distance.",
                         LocateCommands::biome, BIOME)
-                .example("locate biome minecraft:warped_forest")
-                .example("locate biome #minecraft:is_forest")
+                .example("locate.biome(\"minecraft:warped_forest\")")
+                .example("locate.biome(\"#minecraft:is_forest\")")
                 .note("Searches YOUR CURRENT dimension only, about 6400 blocks out. You stand still until it "
                         + "answers; nothing is loaded or changed.")
                 .note("Biome edges are fuzzy: the answer is good to about 64 blocks. Travel to the x/z, pick a "
-                        + "sensible y, and confirm with `scan blocks` or `scan entities` when you arrive.")
+                        + "sensible y, and confirm with `scan.blocks` or `scan.entities` when you arrive.")
                 .seeAlso("locate structure", "scan entities");
     }
 

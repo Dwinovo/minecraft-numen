@@ -9,14 +9,14 @@ Phase 4 of the dragon route. You need **12 pearls** for up to 12 eyes of ender (
 
 ## Done when
 
-- `status_self` shows **≥12 ender_pearl**
+- `status.self` shows **≥12 ender_pearl**
 
 ## Endermen, from your perspective
 
 - **Your gaze does not anger them.** Look-aggro is a player-only mechanic — you're an entity. No pumpkin tricks needed; they turn hostile only when you hit them. (Warn your *owner* not to stare, though.)
 - 40 HP, melee-only (~7 dmg), teleport when struck — often behind you. Expected; keep swinging.
-- **They teleport away from arrows.** `fight attack` closes and swings whenever it can reach one, which is what you want here; keep the fight on ground it can walk to.
-- They teleport out of rain and away from water. Check `status world`: raining → wait or fight in the Nether instead. Don't fight next to water.
+- **They teleport away from arrows.** `fight.attack` closes and swings whenever it can reach one, which is what you want here; keep the fight on ground it can walk to.
+- They teleport out of rain and away from water. Check `status.world`: raining → wait or fight in the Nether instead. Don't fight next to water.
 - Drop: 0–1 pearl per kill (avg 0.5) → expect **~24 kills** for 12 pearls.
 
 ## Where to fight
@@ -24,23 +24,23 @@ Phase 4 of the dragon route. You need **12 pearls** for up to 12 eyes of ender (
 | Spot | Density | Notes |
 |---|---|---|
 | **Warped forest (Nether)** | High — best choice | Teal forest; endermen everywhere, no rain, you're already in the Nether after phase 3 |
-| Overworld at night | Low | Plains/desert, flat sight-lines; `status world` to confirm darkness |
+| Overworld at night | Low | Plains/desert, flat sight-lines; `status.world` to confirm darkness |
 | Soul sand valley | Medium | Slow walking (soul sand), watch for ghasts |
 
-**Finding the forest: `locate biome minecraft:warped_forest` — never wander-and-scan.** It answers with coordinates and distance up to ~6400 blocks out. The answer is accurate to ~64 blocks: `move_goto` the x/z, then `scan_entities` to confirm endermen (or `scan_blocks` for `warped_nylium`). Not found → travel a few thousand blocks and retry, same as `locate structure`.
+**Finding the forest: `locate.biome("minecraft:warped_forest")` — never wander-and-scan.** It answers with coordinates and distance up to ~6400 blocks out. The answer is accurate to ~64 blocks: `move.goto_` the x/z, then `scan.entities` to confirm endermen (or `scan.blocks` for `warped_nylium`). Not found → travel a few thousand blocks and retry, same as `locate.structure`.
 
 ## Hunting loop
 
-1. `gear wear diamond_sword`, food check (`status_self`).
-2. `scan_entities` to confirm endermen around; reposition with `move_goto` if the area is dry.
-3. scan nearby endermen, then call `fight attack` with up to four returned runtime IDs; it collects each pearl before selecting the next target.
-4. `status_self` between batches; HP ≤ 8 → disengage, eat.
+1. `gear.wear("diamond_sword")`, food check (`status.self`).
+2. `scan.entities` to confirm endermen around; reposition with `move.goto_` if the area is dry.
+3. scan nearby endermen, then `fight.attack` each returned runtime id in turn, and `work.collect()` after each kill to pick up the pearl.
+4. `status.self` between batches; HP ≤ 8 → disengage, eat.
 5. Repeat until ≥12 pearls.
 
 ## Piglin bartering (fallback only)
 
-Piglins drop ender pearls for gold ingots at ~2% per barter (~47 ingots per pearl on average). Only worth it if you looted a pile of gold; otherwise mining gold for this is slower than hunting. To barter: wear gold, drop ingots near a piglin, `work collect` what it throws back.
+Piglins drop ender pearls for gold ingots at ~2% per barter (~47 ingots per pearl on average). Only worth it if you looted a pile of gold; otherwise mining gold for this is slower than hunting. To barter: wear gold, drop ingots near a piglin, `work.collect` what it throws back.
 
 ## What to load next
 
-≥12 pearls → mark phase 4 `completed`, then `skill_load(name="stronghold_finding")`. The endgame is two skills away.
+≥12 pearls → mark phase 4 `completed`, then `skill.load("stronghold_finding")`. The endgame is two skills away.

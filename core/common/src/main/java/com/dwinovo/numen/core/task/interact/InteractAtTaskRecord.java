@@ -59,11 +59,11 @@ public final class InteractAtTaskRecord extends TaskRecord {
         }
         if (item.components().has(DataComponents.FOOD)) {
             return BuiltInRegistries.ITEM.getKey(item).getPath()
-                    + " is a consumable — use inv eat (using it through the world body wouldn't heal you).";
+                    + " is a consumable — use inv.eat (using it through the world body wouldn't heal you).";
         }
         if (item == Items.ENDER_PEARL) {
-            return "ender_pearl teleportation is body-bound and not supported — to travel use move goto, "
-                    + "to find a stronghold use locate structure minecraft:stronghold.";
+            return "ender_pearl teleportation is body-bound and not supported — to travel use move.goto_, "
+                    + "to find a stronghold use locate.structure(\"minecraft:stronghold\").";
         }
         return null;
     }

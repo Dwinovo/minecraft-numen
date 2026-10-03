@@ -2,7 +2,7 @@ package com.dwinovo.numen.agent.tool;
 
 import com.dwinovo.numen.agent.tool.ToolCall;
 import com.dwinovo.numen.network.payload.CancelTasksPayload;
-import com.dwinovo.numen.network.payload.ExecuteToolPayload;
+import com.dwinovo.numen.network.payload.ExecuteActionPayload;
 import com.dwinovo.numen.network.NumenNetwork;
 import com.dwinovo.numen.network.Wire;
 import io.netty.buffer.Unpooled;
@@ -15,20 +15,17 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 /**
- * numen-core's client-side tool transport — how a body-bound tool actually reaches
- * the server and comes back, entirely core's own packets. The engine scheduler
- * hands a {@link ToolCall} to a tool's {@code invoke}; a body-bound tool calls
- * {@link #ship} (sends core's {@link ExecuteToolPayload} and parks the call by
- * id); when core's {@code TaskResultPayload} returns, {@link #deliver} completes
- * that call. The engine knows none of this — to it the tool simply completes
- * later.
+ * The client-side transport of an API call to a server action — how a call a script made reaches the companion's
+ * body and comes back. {@link #ship} sends {@link ExecuteActionPayload} (the call's name is the action's path, its
+ * arguments the JSON the call was read into) and parks the call by id; when {@code TaskResultPayload} returns,
+ * {@link #deliver} completes that call.
  */
 public final class ServerToolTransport {
 
     private static final Map<String, ToolCall> IN_FLIGHT = new ConcurrentHashMap<>();
 
     /**
-     * 上行出口:大脑送往服务端的包({@link ExecuteToolPayload}、{@link CancelTasksPayload}、脚本的战绩
+     * 上行出口:大脑送往服务端的包({@link ExecuteActionPayload}、{@link CancelTasksPayload}、脚本的战绩
      * {@code ScriptTallyPayload})都从它走。主人客户端上是网络
      * ({@link NumenNetwork#sendToServer});没有客户端的进程(评测)换成直接交给服务端的入口。回执照旧经
      * {@link #deliver} 回来。写法同下行的 {@link com.dwinovo.numen.network.ClientPayloadSink}:主源码集里一个静态挂点。
@@ -38,16 +35,17 @@ public final class ServerToolTransport {
     private ServerToolTransport() {}
 
     /**
-     * Ship a body-bound tool to the server and park its call until the result returns. A call too big for one
-     * payload to the server ({@link Wire#TO_SERVER}) is not sent: it completes here with a failure that says so,
-     * because the server never hears of it and no result would come back.
+     * Ship an API call to the server and park it until the result returns: {@code call.toolName()} is the action's
+     * path, {@code call.rawArgs()} its arguments. A call too big for one payload to the server ({@link Wire#TO_SERVER})
+     * is not sent: it completes here with a failure that says so, because the server never hears of it and no result
+     * would come back.
      */
     public static void ship(ToolCall call) {
-        ExecuteToolPayload payload = new ExecuteToolPayload(call.ctx().entityUuid(), call.id(), call.toolName(),
+        ExecuteActionPayload payload = new ExecuteActionPayload(call.ctx().entityUuid(), call.id(), call.toolName(),
                 call.rawArgs());
-        int size = Wire.size(ExecuteToolPayload.STREAM_CODEC, payload, Unpooled::buffer);
+        int size = Wire.size(ExecuteActionPayload.STREAM_CODEC, payload, Unpooled::buffer);
         if (!Wire.TO_SERVER.holds(size)) {
-            call.complete(ExecuteToolPayload.tooBig(size));
+            call.complete(ExecuteActionPayload.tooBig(size));
             return;
         }
         IN_FLIGHT.put(call.id(), call);

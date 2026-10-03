@@ -47,7 +47,7 @@ final class PartyJoin {
         }
         if (chosen.size() > 1) {
             src.reply(TaskResult.fail("Several parties have invited you: " + listed(chosen)
-                    + ". Ask your owner which party to join, then name it with --team <short name>.").toJson());
+                    + ". Ask your owner which party to join, then name it with {team = <short name>}.").toJson());
             return;
         }
         Team party = chosen.get(0);

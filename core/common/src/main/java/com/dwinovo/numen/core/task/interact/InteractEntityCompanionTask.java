@@ -9,12 +9,9 @@ import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.act.Interaction;
-import com.dwinovo.numen.core.nav.Trip;
-import com.dwinovo.numen.core.task.base.GoToThenDoTask;
+import com.dwinovo.numen.core.task.base.InReachTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import com.dwinovo.numen.pathing.body.Crosshair;
-import com.dwinovo.numen.pathing.search.Goals;
-import com.dwinovo.numen.pathing.spec.RouteSpec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
@@ -27,33 +24,15 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code use entity} on the player body: the entity-aimed native interaction.
- * It auto-paths and follows the live entity, then aims at it and presses the
- * requested mouse button only when the native raytrace reaches that entity.
- * A wall in between blocks it, and the task repositions instead of acting on
- * whatever the ray returns. LEFT+hold repeats the native attack until the hold
- * ends, the target dies, or the task times out.
+ * {@code use.entity} on the player body: the entity-aimed native interaction. It does not travel: the entity must be within
+ * reach and in sight of where she stands; then she aims at it and presses the requested mouse button only when the native
+ * raytrace reaches that entity. Out of reach or behind a wall, the call fails with where it is and the
+ * {@code move.goto_} to copy. LEFT+hold repeats the native attack until the hold ends, the target dies, or the task
+ * times out.
  */
-public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEntityTaskRecord> {
-
-    /** 第一次走过去:走到离它所在那一格这么近(格)。 */
-    private static final double APPROACH_RADIUS = 1.0;
-    /** Reposition-rung stance radius: any feet cell this close to the entity's cell (inside the vanilla
-     *  entity interaction range, 3 by default, so an accepted stance is still within interact reach). */
-    private static final double REPOSITION_RADIUS = 2.5;
-    /** The reposition rung runs at most once. */
-    private static final int MAX_REPOSITIONS = 1;
+public final class InteractEntityCompanionTask extends InReachTask<InteractEntityTaskRecord> {
 
     private Entity entity;
-    /** 在走的这一趟朝着它的哪一格、走到离那一格多近;它挪了就换目标。 */
-    private BlockPos heading;
-    private double radius = APPROACH_RADIUS;
-    // ---- bounded recovery state (fields, so a Suspendable mid-rung suspend/resume
-    //      picks straight back up: the counter and the rebuilt nav both survive) ----
-    /** Executions of the reposition rung so far (capped at {@link #MAX_REPOSITIONS}). */
-    private int repositionAttempts;
-    /** The FIRST nav failure's reason, preserved so the final give-up keeps the original wording. */
-    private String firstNavFailReason;
     private Interaction interaction;
     /** 按键前的世界快照,收尾时对账出"真发生了什么"。 */
     private com.dwinovo.numen.core.act.PressReceipt receipt;
@@ -84,34 +63,14 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
                                 FailureType.NO_MATERIAL));
     }
 
+    /** 够不着时点名的那一格:它此刻所在的那一格。 */
     @Override
-    protected Trip buildNav() {
-        // 走到它旁边;够得着又看得见({@link #reached})就动手,不等这一趟走完——隔着一堵墙时接着走,
-        // 换个位置,而不是站在墙前面一直等
-        return approach();
-    }
-
-    /** 朝它此刻所在的那一格走,走到 {@link #radius} 格以内。 */
-    private Trip approach() {
-        heading = entity.blockPosition();
-        return Trip.to(player, Goals.within(Goals.at(heading), 0, radius), RouteSpec.defaults(), heading);
-    }
-
-    /** 它挪了就把新目标交给在走的这一趟。 */
-    @Override
-    protected void track() {
-        if (entity == null || !entity.isAlive()) {
-            return;
-        }
-        BlockPos at = entity.blockPosition();
-        if (!at.equals(heading)) {
-            heading = at;
-            nav.retarget(Goals.within(Goals.at(at), 0, radius), at);
-        }
+    protected BlockPos target() {
+        return entity.blockPosition();
     }
 
     /** Act this tick when the target is gone (report the outcome), a fixed hold has elapsed, or we're
-     *  in reach with a clear line of sight; otherwise the base drives the nav to follow the entity. */
+     *  in reach with a clear line of sight; otherwise the call fails without travelling. */
     @Override
     protected boolean reached() {
         return entity == null || !entity.isAlive()
@@ -139,7 +98,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
         if (entity == player.getVehicle()) {
             if (r.button == MouseButton.LEFT) {
                 fail("you are riding the " + targetName()
-                        + " — can't hit your own vehicle; a move goto somewhere else steps off first",
+                        + " — can't hit your own vehicle; a move.goto_ somewhere else steps off first",
                         FailureType.UNKNOWN);
                 return TaskState.FAILED;
             }
@@ -208,47 +167,6 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
             }
             case RUNNING -> TaskState.RUNNING;
         };
-    }
-
-    /**
-     * Bounded recovery — ONE reposition rung, as an inline attempt counter (a single
-     * rung doesn't warrant {@code RecoveryLadder}'s child-task plumbing). On an
-     * in-ladder nav cause ({@code NO_PATH} / {@code BOXED_IN} / {@code OUT_OF_REACH})
-     * retry the SAME bounded goal once with a looser stance goal — {@link Goals#within}
-     * within {@link #REPOSITION_RADIUS} (inside the entity interaction range) of the entity's LIVE cell,
-     * so "can't stand exactly next to it" becomes "stand anywhere within interact reach".
-     * {@link #track} re-reads the entity each tick, so a target that merely MOVED
-     * while we repositioned is tracked (the nav replans), not failed; a genuinely gone
-     * entity never reaches this seam — {@link #reached()} routes it to {@link #act()},
-     * which reports {@code TARGET_LOST} immediately (no ladder). Never widens the
-     * search, never acquires anything. Exhausted (or a cause no rung handles), give up
-     * preserving the original "can't reach {name}: {reason}" wording plus a note of
-     * what was tried, carrying the nav's failType.
-     */
-    @Override
-    protected TaskState handleNavFailure(FailureType type, String reason) {
-        if (repositionable(type) && repositionAttempts < MAX_REPOSITIONS) {
-            repositionAttempts++;
-            firstNavFailReason = reason;
-            stopNav();
-            radius = REPOSITION_RADIUS;
-            nav = approach();
-            return TaskState.RUNNING;
-        }
-        String original = firstNavFailReason != null ? firstNavFailReason : reason;
-        String tried = repositionAttempts > 0
-                ? " (also tried a looser stance anywhere within " + REPOSITION_RADIUS
-                        + " blocks of it: " + reason + ")"
-                : "";
-        fail("can't reach " + targetName() + ": " + original + tried, type);
-        return TaskState.FAILED;
-    }
-
-    /** In-ladder nav causes the reposition rung handles; anything else kicks straight back to the LLM. */
-    private static boolean repositionable(FailureType type) {
-        return type == FailureType.NO_PATH || type == FailureType.TERRAIN_BLOCKED
-                || type == FailureType.BOXED_IN
-                || type == FailureType.OUT_OF_REACH;
     }
 
     private Interaction.Button button() {

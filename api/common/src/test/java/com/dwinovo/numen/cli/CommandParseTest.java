@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.dwinovo.numen.cli.CliFixture.door;
-import static com.dwinovo.numen.cli.CliFixture.onClient;
+import static com.dwinovo.numen.cli.CliFixture.lua;
 import static com.dwinovo.numen.cli.CliFixture.onServer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -36,19 +36,18 @@ class CommandParseTest {
                 g.server("take", "Take some items.", (src, args) -> {
                     LAST.set(args);
                     src.reply(TaskResult.ok("took").toJson());
-                }, COUNT, ITEM, FROM, LIMIT).example("gt_parse take 3 --item apple --from chest"));
+                }, COUNT, ITEM, FROM, LIMIT).example("gt_parse.take(3, {item = \"apple\", from = \"chest\"})"));
     }
 
-    /** {@code usage:} 那一段:用法行接例子。 */
+    /** {@code usage:} 那一段:用法接例子,写成脚本里的样子(帮助只有一份)。 */
     private static final String TAKE_USAGE = """
-            usage: gt_parse take <count> [--item <word>] [--from <word>] [--limit <integer>]
-              e.g. gt_parse take 3 --item apple --from chest""";
-    private static final String TAKE_HINT = "hint: `gt_parse take --help` explains every argument.";
+            usage: gt_parse.take(count, {item=…, from=…, limit=…})
+              e.g. gt_parse.take(3, {item = "apple", from = "chest"})""";
+    private static final String TAKE_HINT = "hint: `api.help(\"gt_parse.take\")` explains every argument.";
 
     private static final String GROUP_USAGE = """
-            usage: gt_parse: A group the parser tests poke at. Actions:
-              gt_parse take <count> [--item <word>] [--from <word>] [--limit <integer>] — Take some items.
-            gt_parse <action> --help explains one action.""";
+            usage: gt_parse — A group the parser tests poke at.
+              gt_parse.take(count, {item=…, from=…, limit=…}) — Take some items.""";
 
     private static CommandArgs ran(String line) {
         LAST.set(null);
@@ -100,64 +99,52 @@ class CommandParseTest {
 
         String bare = failed("gt_parse");
         assertTrue(bare.startsWith("error: Unknown command"), bare);
-        assertTrue(bare.endsWith("\n" + GROUP_USAGE + "\nhint: `gt_parse --help` explains each action."), bare);
+        assertTrue(bare.endsWith("\n" + GROUP_USAGE + "\nhint: `api.help(\"gt_parse\")` lists its functions."), bare);
     }
 
     @Test
     void aLineOutsideEveryGroupShowsTheRootListing() {
         String prefixed = failed("numen gt_parse take 3");
         assertTrue(prefixed.startsWith("error: Unknown command at position 0: "), prefixed);
-        assertTrue(prefixed.contains("\nusage: <group> <action> [arguments]. Command groups:\n"), prefixed);
+        assertTrue(prefixed.contains("\nusage: Call these from the lua tool."), prefixed);
         String unknownGroup = failed("nosuchgroup take");
-        assertTrue(unknownGroup.contains("\nusage: <group> <action> [arguments]. Command groups:\n"), unknownGroup);
-        assertTrue(unknownGroup.endsWith("\nhint: `help` lists the command groups."), unknownGroup);
+        assertTrue(unknownGroup.contains("\nusage: Call these from the lua tool."), unknownGroup);
+        assertTrue(unknownGroup.contains("\napi — The API itself: the full help of one function or one group.\n"),
+                "根上按名字列出各组,第一页从第一组起: " + unknownGroup);
+        assertTrue(unknownGroup.endsWith("\nhint: `help` lists the groups."), unknownGroup);
     }
 
     @Test
     void flagMistakesEachSayWhatIsWrong() {
         String unknown = failed("gt_parse take 3 --form chest");
-        assertTrue(unknown.startsWith("error: unknown flag --form; flags here: [--item <word>] [--from <word>] "
-                + "[--limit <integer>]"), unknown);
+        assertTrue(unknown.startsWith("error: unknown flag --form; flags here: --item, --from, --limit"), unknown);
         assertTrue(unknown.endsWith("\n" + TAKE_USAGE + "\n" + TAKE_HINT), unknown);
 
         assertTrue(failed("gt_parse take 3 --from a --from b").startsWith("error: --from is given twice"));
         assertTrue(failed("gt_parse take 3 --from").startsWith("error: --from needs a value"));
         assertTrue(failed("gt_parse take 3 chest")
-                .startsWith("error: expected a flag ([--item <word>] [--from <word>] [--limit <integer>])"));
+                .startsWith("error: expected a flag (--item, --from, --limit)"));
         assertTrue(failed("gt_parse take 3 --limit two").startsWith("error: Expected integer"),
                 "标志的值用那个参数自己的类型读");
     }
 
-    /**
-     * 路由只有一条规则:解析到客户端动作才在客户端答。服务端动作写错了也原样送服务端,由那边的执行入口报——
-     * 报的是上面那一句,附着这个动作的用法。
-     */
+    /** 脚本里客户端动作的参数写错了,在调用处当场报,说法和一行命令写错时同一种三段,用法同一份。 */
     @Test
-    void aServerActionsMistakeIsReportedByTheServer() {
-        CliFixture.Outcome client = onClient("gt_parse take many");
-        assertTrue(client.forwarded, "服务端动作的一行整条送去服务端");
-        assertTrue(client.replies.isEmpty(), "客户端不替服务端答");
-        String server = failed("gt_parse take many");
-        assertTrue(server.startsWith("error: Expected integer at position 14: "), server);
-        assertTrue(server.endsWith("\n" + TAKE_USAGE + "\n" + TAKE_HINT), server);
-    }
-
-    /** 客户端动作写错了在客户端当场回,说法和服务端动作写错时同一种。 */
-    @Test
-    void aClientActionsMistakeIsAnsweredRightThere() {
+    void aClientActionsMistakeInAScriptIsAnsweredAtTheCall() {
         Param<Integer> pages = Param.required("pages", ArgType.integer(1, 9), "How many pages.");
         door().registerCommands("gt_parse_local", "A group with an action on the owner's client.", g ->
                 g.client("read", "Read some pages.", (src, args) -> src.reply(TaskResult.ok("read").toJson()), pages)
-                        .example("gt_parse_local read 2"));
-        CliFixture.Outcome client = onClient("gt_parse_local read many");
-        assertFalse(client.forwarded, "客户端动作的解析错误当场回");
-        assertFalse(client.success());
-        assertTrue(client.message().startsWith("error: Expected integer at position 20: "), client.message());
-        assertTrue(client.message().endsWith("""
+                        .example("gt_parse_local.read(2)"));
+        CliFixture.Outcome run = lua("gt_parse_local.read(\"many\")");
+        assertFalse(run.success());
+        assertTrue(run.message().startsWith("The script stopped at line 1 after 0 calls: lua:1: gt_parse_local.read: "
+                + "error: argument 'pages': Expected integer"), run.message());
+        assertTrue(run.message().contains("""
 
-                usage: gt_parse_local read <pages>
-                  e.g. gt_parse_local read 2
-                hint: `gt_parse_local read --help` explains every argument."""), client.message());
-        assertEquals("read", onClient("gt_parse_local read 2").message());
+                usage: gt_parse_local.read(pages)
+                  e.g. gt_parse_local.read(2)
+                hint: `api.help("gt_parse_local.read")` explains every argument."""), run.message());
+        CliFixture.Outcome ok = lua("return gt_parse_local.read(2)");
+        assertEquals("read", ok.json().getAsJsonObject("data").get("returned").getAsString());
     }
 }

@@ -52,12 +52,11 @@ public final class Slice {
      *
      * @param title 抬头里怎么称呼这份施工图(如 {@code design house})
      * @param cells 施工图的每一格,坐标就是图上要标的坐标
-     * @param again 翻页时写的那条命令(带着 {@code --layer})
      */
-    public static Listing of(String title, List<BuildTaskRecord.Target> cells, int y, String again) {
+    public static Listing of(String title, List<BuildTaskRecord.Target> cells, int y) {
         Map<BlockPos, BlockState> finished = finished(cells);
         if (finished.isEmpty()) {
-            return new Listing(title + " has nothing drawn yet.", List.of(), "", again);
+            return new Listing(title + " has nothing drawn yet.", List.of(), "");
         }
         int[] lo = {Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE};
         int[] hi = {Integer.MIN_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE};
@@ -70,7 +69,7 @@ public final class Slice {
         }
         if (y < lo[1] || y > hi[1]) {
             return new Listing(title + " has nothing at y=" + y + "; it spans y " + range(lo[1], hi[1]) + ".",
-                    List.of(), "", again);
+                    List.of(), "");
         }
         Map<BlockState, Character> legend = legend(finished, y, lo, hi);
         int zWidth = Math.max(String.valueOf(lo[2]).length(), String.valueOf(hi[2]).length());
@@ -91,7 +90,7 @@ public final class Slice {
                 + range(lo[0], hi[0]) + " left to right (east), z " + range(lo[2], hi[2])
                 + " top to bottom (south); the x row gives each column's last digit; " + NOTHING
                 + " = nothing here.\n" + ruler;
-        return new Listing(head, rows, legendLine(legend), again);
+        return new Listing(head, rows, legendLine(legend));
     }
 
     /** 建成之后的每一格:画了的照画的,主半带出来的另一半补上(那一格没被别的一步画过时)。 */

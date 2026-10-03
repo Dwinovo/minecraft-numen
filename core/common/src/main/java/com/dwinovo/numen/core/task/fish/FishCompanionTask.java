@@ -5,13 +5,11 @@ import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.mixin.FishingHookAccessor;
 import com.dwinovo.numen.core.nav.Feet;
 import com.dwinovo.numen.core.nav.Terrain;
-import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.body.Hotbar;
-import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.task.Preparation;
 import com.dwinovo.numen.task.TaskState;
@@ -20,13 +18,11 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.projectile.FishingHook;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -38,19 +34,13 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Tick-driven vanilla fishing from a nearby water surface. Before the work is accepted ({@link #preparation}) it checks
- * the rod and that there is water to fish from a dry stance nearby; without either the call is refused on the spot.
+ * {@code work.fish}:站在原地用钓竿钓鱼——每刻对准、抛竿、等咬钩、收线。它不走动:站的地方得是干的、抛得进水面,受理之前
+ * ({@link #preparation})就判,不成就当场拒绝,说清要先站到岸边。收线时原版把战果甩向她,落在半路的留在地上,{@code work.collect}
+ * 去捡;它不去追。
  */
 public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecord> {
 
-    private enum Phase { POSITION, PREPARE, AIM, WAIT, COLLECT, COOLDOWN }
-
-    private record FishingSetup(BlockPos stance, BlockPos water) {}
-
-    private static final int STANCE_SEARCH_RADIUS = 12;
-    private static final int STANCE_SEARCH_Y = 4;
-    private static final int MAX_STANCE_CHECKS = 256;
-    private static final int MAX_POSITION_FAILURES = 3;
+    private enum Phase { PREPARE, AIM, WAIT, COOLDOWN }
 
     private static final int CAST_SEARCH_RADIUS = 10;
     private static final int CAST_SEARCH_Y = 4;
@@ -63,41 +53,19 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
     private static final int COOLDOWN_TICKS = 10;
     private static final int MAX_FAILED_CASTS = 5;
 
-    /** Vanilla reels the loot toward the player, but terrain can stop it short. */
-    private static final double LOOT_SEARCH_RADIUS = 18.0;
-    private static final double PICKUP_REACH_SQR = 1.5;
-    private static final int LOOT_DISCOVERY_TICKS = 10;
-    /** Let vanilla's reel impulse bring the catch back before chasing it. */
-    private static final int LOOT_RETURN_GRACE_TICKS = 20;
-    private static final int LOOT_CLOSE_WAIT_TICKS = 20;
-    /** 收战果最多干这么多刻的活({@link #workTicks()}):等寻路规划的刻不算,那段时间长短看机器快慢。 */
-    private static final int LOOT_COLLECTION_TIMEOUT = 20 * 20;
 
     private static final double FISHING_DRAG = 0.92;
     private static final double FISHING_GRAVITY = 0.03;
     private static final int MAX_FLIGHT_TICKS = 80;
 
-    private final Set<BlockPos> rejectedStances = new HashSet<>();
     private final Set<BlockPos> rejectedTargets = new HashSet<>();
-    /** 本次收线的战果簿记:先快照现场旧物,差集出的新掉落才算这一竿的。 */
-    private final com.dwinovo.numen.core.task.base.DropTracker caught =
-            new com.dwinovo.numen.core.task.base.DropTracker();
-    /** 判定够不着而放弃的战果 id(留在地上,不再追)。 */
-    private final Set<Integer> abandonedLoot = new HashSet<>();
 
-    private Phase phase = Phase.POSITION;
+    private Phase phase = Phase.PREPARE;
+    /** 她站着钓的那一格:受理时脚下那一格,离开它就不钓了。 */
     private BlockPos stance;
     private BlockPos target;
     private int phaseTicks;
     private int failedCasts;
-    private int positionFailures;
-    private ItemEntity lootTarget;
-    private int lootCloseTicks;
-    /** 走去捡的那一趟朝着的那一格;战果滑走了就换目标。 */
-    private BlockPos lootHeading;
-    private int unreachableLoot;
-    /** 开始收这一竿战果时的 {@link #workTicks()}。 */
-    private long lootSince;
 
     public FishCompanionTask(NumenPlayer player, FishTaskRecord record) {
         super(player, record);
@@ -115,8 +83,6 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
         if (player.isDeadOrDying()) return TaskState.CANCELLED;
 
         player.controls().stop();
-        if (phase == Phase.POSITION) return positionForFishing();
-        if (phase == Phase.COLLECT) return collectCaughtLoot();
         // requested == 0 = 主人没说钓几条 —— 这一行永远不成立,任务就是常驻的:
         // 一直钓下去,直到主人换掉她手上的活。同一段逻辑,两种用法。
         if (r.requested > 0 && r.caught() >= r.requested) return TaskState.SUCCESS;
@@ -131,115 +97,41 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
         if (!player.getMainHandItem().is(Items.FISHING_ROD)) return TaskState.RUNNING;
 
         return switch (phase) {
-            case POSITION -> throw new IllegalStateException("position phase handled above");
             case PREPARE -> prepare();
             case AIM -> aimAndCast();
             case WAIT -> waitForBite();
-            case COLLECT -> throw new IllegalStateException("collect phase handled above");
             case COOLDOWN -> coolDown();
         };
     }
 
     /**
-     * 受理之前:身上有鱼竿(前置条件),附近有能钓的水——一处干燥的站位,从那儿抛得进水面。没有就当场回那句话,不受理;有就记下
-     * 站位与落点,开工先走过去。
+     * 受理之前:身上有鱼竿(前置条件),她站的地方是干的、从这儿抛得进水面。不成就当场回那句话,不受理;成就记下站位与落点。
      */
     @Override
     protected Preparation preparation() {
-        if (!pickSetup()) {
+        BlockPos here = feet();
+        if (!isDryStance(here)) {
+            return Preparation.refused(NOT_DRY);
+        }
+        BlockPos water = findCastTarget(here, player.getEyePosition());
+        if (water == null) {
             return Preparation.refused(NO_WATER);
         }
-        return Preparation.ready(atStance()
-                ? "I fish from where I stand, casting into the water at " + target.toShortString() + "."
-                : "I fish from the dry stance at " + stance.toShortString() + ", casting into the water at "
-                        + target.toShortString() + ".");
+        stance = here;
+        target = water;
+        return Preparation.ready("I fish from where I stand, casting into the water at " + target.toShortString()
+                + ".");
     }
 
-    /** 附近没有能钓的水时说的那句话。 */
-    private static final String NO_WATER =
-            "no safe dry fishing stance with reachable water nearby; move close to a shoreline and try work fish again";
+    /** 站的地方不干时说的那句话。 */
+    private static final String NOT_DRY = "I do not stand on dry ground here, and fishing does not move me: stand on "
+            + "the shore with open water " + (int) MIN_CAST_DISTANCE + "-" + CAST_SEARCH_RADIUS + " blocks away "
+            + "(scan.blocks finds water; move.goto_ takes you there), then work.fish again";
 
-    /** 挑一处站位与落点({@link #findFishingSetup}),挑到了记下;附近没有能钓的水返回 false。 */
-    private boolean pickSetup() {
-        FishingSetup setup = findFishingSetup();
-        if (setup == null) {
-            return false;
-        }
-        stance = setup.stance();
-        target = setup.water();
-        return true;
-    }
-
-    private TaskState positionForFishing() {
-        if ((stance == null || target == null) && !pickSetup()) {
-            fail(NO_WATER, FailureType.OUT_OF_REACH);
-            return TaskState.FAILED;
-        }
-
-        if (atStance()) {
-            stopNav();
-            phase = Phase.PREPARE;
-            return TaskState.RUNNING;
-        }
-        if (nav == null) {
-            nav = Trip.to(player, Goals.at(stance), RouteSpec.defaults(), stance);
-        }
-        return switch (nav.tick()) {
-            case RUNNING -> TaskState.RUNNING;
-            case ARRIVED -> {
-                stopNav();
-                phase = Phase.PREPARE;
-                yield TaskState.RUNNING;
-            }
-            case FAILED -> {
-                rejectedStances.add(stance);
-                stopNav();
-                stance = null;
-                target = null;
-                if (++positionFailures >= MAX_POSITION_FAILURES) {
-                    fail("nearby dry fishing stances were unreachable; move onto a clear shoreline and try work fish again",
-                            FailureType.NO_PATH);
-                    yield TaskState.FAILED;
-                }
-                yield TaskState.RUNNING;
-            }
-        };
-    }
-
-    private FishingSetup findFishingSetup() {
-        BlockPos current = feet();
-        if (isDryStance(current) && !rejectedStances.contains(current)) {
-            BlockPos water = findCastTarget(current, player.getEyePosition());
-            if (water != null) return new FishingSetup(current, water);
-            // Already safely on land but no water is in casting range. Long-distance
-            // water discovery belongs to the model's locate/move step, not this job.
-            return null;
-        }
-
-        List<BlockPos> candidates = new ArrayList<>();
-        BlockPos origin = player.blockPosition();
-        for (int dy = -STANCE_SEARCH_Y; dy <= STANCE_SEARCH_Y; dy++) {
-            for (int dx = -STANCE_SEARCH_RADIUS; dx <= STANCE_SEARCH_RADIUS; dx++) {
-                for (int dz = -STANCE_SEARCH_RADIUS; dz <= STANCE_SEARCH_RADIUS; dz++) {
-                    if (dx * dx + dz * dz > STANCE_SEARCH_RADIUS * STANCE_SEARCH_RADIUS) continue;
-                    BlockPos candidate = origin.offset(dx, dy, dz);
-                    if (!rejectedStances.contains(candidate) && isDryStance(candidate)) {
-                        candidates.add(candidate.immutable());
-                    }
-                }
-            }
-        }
-        candidates.sort(Comparator.comparingDouble(current::distSqr));
-        int checks = Math.min(MAX_STANCE_CHECKS, candidates.size());
-        for (int i = 0; i < checks; i++) {
-            BlockPos candidate = candidates.get(i);
-            Vec3 eye = new Vec3(candidate.getX() + 0.5,
-                    candidate.getY() + player.getEyeHeight(), candidate.getZ() + 0.5);
-            BlockPos water = findCastTarget(candidate, eye);
-            if (water != null) return new FishingSetup(candidate, water);
-        }
-        return null;
-    }
+    /** 从这儿抛不进水面时说的那句话。 */
+    private static final String NO_WATER = "no open water to cast into " + (int) MIN_CAST_DISTANCE + "-"
+            + CAST_SEARCH_RADIUS + " blocks from where I stand, and fishing does not move me: stand on the shore "
+            + "facing open water (scan.blocks finds water; move.goto_ takes you there), then work.fish again";
 
     private TaskState prepare() {
         if (player.fishing != null) {
@@ -248,13 +140,14 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
         }
 
         BlockPos current = feet();
-        if (!isDryStance(current)) {
-            resetPositioning();
-            return TaskState.RUNNING;
-        }
-        if (!current.equals(stance)) {
+        if (stance == null) {
+            // 重启后接回来的活不经受理前的准备:站位就是此刻脚下
             stance = current;
-            target = null;
+        }
+        if (!current.equals(stance) || !isDryStance(current)) {
+            fail("I was moved off the spot I fished from (" + stance.toShortString() + "), and fishing does not "
+                    + "walk me back", FailureType.OUT_OF_REACH);
+            return TaskState.FAILED;
         }
         if (target == null || !isCastableSurface(target)
                 || !trajectoryClear(player.getEyePosition(), target)) {
@@ -268,8 +161,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
             target = findCastTarget(stance, player.getEyePosition());
         }
         if (target == null) {
-            fail("no unobstructed fishing cast is available from this dry stance; move along the shoreline and try again",
-                    FailureType.OUT_OF_REACH);
+            fail(NO_WATER, FailureType.OUT_OF_REACH);
             return TaskState.FAILED;
         }
 
@@ -314,7 +206,8 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
 
         int nibble = ((FishingHookAccessor) (Object) hook).numen$getNibble();
         if (isBiteWindow(nibble)) {
-            beginLootCollection();
+            reelIn();
+            beginCooldown();
             r.caughtOne();
             Constants.LOG.debug("[numen-fish] caught={}/{} casts={}",
                     r.caught(), r.requested, r.casts());
@@ -333,136 +226,6 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
         return TaskState.RUNNING;
     }
 
-    /**
-     * Finish the semantic catch, not merely the rod interaction: walk to every
-     * ItemEntity created by this reel until vanilla pickup absorbs it. Fishing
-     * loot is launched toward the owner, but a bank, slab or ledge can intercept
-     * it several blocks away (the exact failure seen in ordinary play-testing).
-     */
-    private TaskState collectCaughtLoot() {
-        phaseTicks++;
-        if (phaseTicks <= LOOT_DISCOVERY_TICKS) caught.discover(player.level(), lootBox());
-
-        if (workTicks() - lootSince >= LOOT_COLLECTION_TIMEOUT) {
-            int remaining = liveCaught().size();
-            fail("reeled in fishing loot but timed out while retrieving " + remaining
-                    + " dropped loot item(s)", FailureType.NO_PATH);
-            return TaskState.FAILED;
-        }
-
-        // A vanilla reel launches its loot toward the owner. Planning against that
-        // still-moving entity makes the body step off the bank to "meet" a catch
-        // that would have arrived by itself. Hold the known-safe stance briefly;
-        // genuine stranded loot is still path-found after this grace period.
-        boolean returningLoot = !liveCaught().isEmpty();
-        if (returningLoot && phaseTicks <= LOOT_RETURN_GRACE_TICKS) {
-            return TaskState.RUNNING;
-        }
-
-        if (lootTarget != null) {
-            if (lootTarget.isRemoved()) {
-                lootTarget = null;
-                lootCloseTicks = 0;
-                stopNav();
-            } else if (player.distanceToSqr(lootTarget) <= PICKUP_REACH_SQR) {
-                // Give vanilla collision pickup a full second. This also produces
-                // a useful failure for a full inventory instead of looping forever.
-                stopNav();
-                if (++lootCloseTicks >= LOOT_CLOSE_WAIT_TICKS) abandonLootTarget();
-                return TaskState.RUNNING;
-            } else {
-                BlockPos at = lootTarget.blockPosition();
-                if (nav == null) {
-                    lootHeading = at;
-                    nav = Trip.to(player, com.dwinovo.numen.core.task.base.DropTracker.pickUp(at), RouteSpec.defaults(), at);
-                } else if (!at.equals(lootHeading)) {
-                    // 战果滑走了、被水冲开了:目标跟着它挪
-                    lootHeading = at;
-                    nav.retarget(com.dwinovo.numen.core.task.base.DropTracker.pickUp(at), at);
-                }
-                switch (nav.tick()) {
-                    case RUNNING -> {
-                        lootCloseTicks = 0;
-                        return TaskState.RUNNING;
-                    }
-                    case ARRIVED -> {
-                        // 站到了它旁边还没进包:和挨着它一样,给原版拾取一点时间,捡不起来就放弃
-                        if (++lootCloseTicks >= LOOT_CLOSE_WAIT_TICKS) abandonLootTarget();
-                        return TaskState.RUNNING;
-                    }
-                    case FAILED -> {
-                        abandonLootTarget();
-                        return TaskState.RUNNING;
-                    }
-                }
-            }
-        }
-
-        ServerLevel level = (ServerLevel) player.level();
-        caught.prune(level);
-        lootTarget = caught.nearest(level, player, abandonedLoot).orElse(null);
-        if (lootTarget != null) {
-            stopNav();
-            return TaskState.RUNNING;
-        }
-
-        // A freshly spawned catch can be absorbed on the same tick or become
-        // query-visible one tick later. Keep the short discovery window before
-        // deciding that there is nothing left to retrieve.
-        if (phaseTicks < LOOT_DISCOVERY_TICKS) return TaskState.RUNNING;
-        if (unreachableLoot > 0) {
-            fail("reeled in fishing loot but could not reach " + unreachableLoot
-                    + " dropped loot item(s)", FailureType.NO_PATH);
-            return TaskState.FAILED;
-        }
-        clearLootTracking();
-        beginCooldown();
-        return TaskState.RUNNING;
-    }
-
-    private void beginLootCollection() {
-        caught.clear();
-        abandonedLoot.clear();
-        lootTarget = null;
-        lootCloseTicks = 0;
-        unreachableLoot = 0;
-        caught.rememberExisting(player.level(), lootBox());
-
-        reelIn();
-        phase = Phase.COLLECT;
-        phaseTicks = 0;
-        lootSince = workTicks();
-        stopNav();
-        caught.discover(player.level(), lootBox());
-    }
-
-    /** 收线战果的搜索范围:落点可能被岸坡/台阶截在几格外。 */
-    private AABB lootBox() {
-        return player.getBoundingBox().inflate(LOOT_SEARCH_RADIUS);
-    }
-
-    /** 仍在世且未被放弃的本竿战果。 */
-    private List<ItemEntity> liveCaught() {
-        return caught.live((ServerLevel) player.level(), abandonedLoot);
-    }
-
-    private void abandonLootTarget() {
-        if (lootTarget != null) abandonedLoot.add(lootTarget.getId());
-        unreachableLoot++;
-        lootTarget = null;
-        lootCloseTicks = 0;
-        stopNav();
-    }
-
-    private void clearLootTracking() {
-        caught.clear();
-        abandonedLoot.clear();
-        lootTarget = null;
-        lootCloseTicks = 0;
-        unreachableLoot = 0;
-        stopNav();
-    }
-
     private TaskState coolDown() {
         if (++phaseTicks < COOLDOWN_TICKS) return TaskState.RUNNING;
         // requested == 0 = 主人没说钓几条 —— 这一行永远不成立,任务就是常驻的:
@@ -478,8 +241,8 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
         discardHook();
         if (rejectTarget && failedTarget != null) rejectedTargets.add(failedTarget);
         if (++failedCasts >= MAX_FAILED_CASTS) {
-            fail(reason + " after " + failedCasts
-                    + " attempts; move to a clearer shoreline and try work fish again", FailureType.OUT_OF_REACH);
+            fail(reason + " after " + failedCasts + " attempts; stand on a clearer shoreline and work.fish again",
+                    FailureType.OUT_OF_REACH);
             return TaskState.FAILED;
         }
         phase = Phase.PREPARE;
@@ -492,17 +255,6 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
         phase = Phase.COOLDOWN;
         phaseTicks = 0;
         failedCasts = 0;
-        rejectedTargets.clear();
-    }
-
-    private void resetPositioning() {
-        discardHook();
-        stopNav();
-        clearLootTracking();
-        phase = Phase.POSITION;
-        phaseTicks = 0;
-        stance = null;
-        target = null;
         rejectedTargets.clear();
     }
 
@@ -577,10 +329,6 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
         Terrain terrain = Terrain.of(player);
         return terrain.state(pos).getFluidState().isEmpty() && terrain.state(pos.above()).getFluidState().isEmpty()
                 && terrain.standingSpot(pos, RouteSpec.defaults());
-    }
-
-    private boolean atStance() {
-        return stance != null && feet().equals(stance) && isDryStance(stance);
     }
 
     private BlockPos feet() {
@@ -701,24 +449,16 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
 
     @Override
     public void stop(NumenPlayer companion, StopReason why) {
-        boolean wasPositioning = phase == Phase.POSITION;
-        boolean wasCollecting = phase == Phase.COLLECT;
         super.stop(companion, why);
         discardHook();
-        if (wasCollecting) {
-            // Survival preemption may stop the navigator, but the already-caught
-            // drops remain the same bounded sub-goal when the LLM task resumes.
-            stopNav();
-        } else if (!wasPositioning) {
-            resetPositioning();
-        }
+        phase = Phase.PREPARE;
+        phaseTicks = 0;
     }
 
     @Override
     protected void cleanup() {
         player.controls().stop();
         discardHook();
-        clearLootTracking();
         super.cleanup();
     }
 
@@ -733,7 +473,8 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
 
     @Override
     protected String successMessage() {
-        return "completed " + r.caught() + " successful fishing catch(es)";
+        return "completed " + r.caught() + " successful fishing catch(es); the reel throws each catch to me, and one "
+                + "that landed short lies on the ground: `work.collect()` picks it up";
     }
 
     @Override

@@ -24,8 +24,9 @@ import java.util.List;
  * 跟着走——第一个<b>常驻</b>任务。默认跟主人,点名了就跟那一只。
  *
  * <h2>它跟一次性任务差在哪</h2>
- * 只差一行:{@link #onTick} <b>永远不返终态</b>。同一个槽、同一套派发、同一个接口,
- * 「挖 64 块」干完腾位,而它一直占着,直到主人给她别的事做。
+ * 不给时长时只差一行:{@link #onTick} <b>永远不返终态</b>。同一个槽、同一套派发、同一个接口,
+ * 「挖 64 块」干完腾位,而它一直占着,直到主人给她别的事做。给了时长({@link FollowTaskRecord#forTicks}),到点就以成功收场:
+ * 睡着的也醒来收这个尾({@link #canRun})。
  *
  * <h2>跟到了就休眠,不是结束</h2>
  * 跟到了(这一趟的目标自己说到了,{@link Goals#within} 落脚点附近 {@code keepWithin} 格)之后
@@ -67,6 +68,8 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
 
     /** 受理之前的准备规划到的那条路:第一趟照它走;没有、或已经用过为 null。 */
     private Route seed;
+    /** 给了时长时到点的那一刻(游戏刻);常驻是 -1。 */
+    private long endsAt = -1;
 
     public FollowCompanionTask(NumenPlayer player, FollowTaskRecord record) {
         super(player, record);
@@ -74,6 +77,9 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
 
     @Override
     public boolean canRun(NumenPlayer companion) {
+        if (timeUp()) {
+            return true;
+        }
         Entity target = target(companion);
         if (target == null) {
             // 点名的目标没了:要放它跑一刻才收得了尾(canRun 返 false 的任务不会 tick,
@@ -127,10 +133,22 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
     @Override
     protected void onStart() {
         moving = false;
+        if (r.forTicks > 0 && endsAt < 0) {
+            endsAt = player.level().getGameTime() + r.forTicks;
+        }
+    }
+
+    /** 给了时长,而且到点了。 */
+    private boolean timeUp() {
+        return endsAt >= 0 && player.level().getGameTime() >= endsAt;
     }
 
     @Override
     protected TaskState onTick() {
+        if (timeUp()) {
+            stopNav();
+            return TaskState.SUCCESS;
+        }
         Entity target = target(player);
         if (target == null) {
             if (r.target == null) {
@@ -205,7 +223,7 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
 
     @Override
     protected String successMessage() {
-        // 常驻任务走不到 SUCCESS;真被换掉时走的是 cancelledMessage。
-        return "跟随结束";
+        // 只有给了时长的到点才走到 SUCCESS;常驻的被换掉时走的是 cancelledMessage。
+        return "followed " + r.who() + " for " + r.forTicks / 20 + " s";
     }
 }

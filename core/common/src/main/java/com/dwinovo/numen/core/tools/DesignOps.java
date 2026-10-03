@@ -41,8 +41,8 @@ public final class DesignOps {
         MinecraftServer server = her.getServer();
         Design.checkedName(name);
         if (Designs.exists(server, name)) {
-            return TaskResult.fail("there is already a design named " + name + "; build show " + name
-                    + " shows it").toJson();
+            return TaskResult.fail("there is already a design named " + name + "; build.show(\"" + name
+                    + "\") shows it").toJson();
         }
         if (BlueprintStore.list(server).contains(name)) {
             return TaskResult.fail("a blueprint file is already named " + name + "; pick another name").toJson();
@@ -50,8 +50,9 @@ public final class DesignOps {
         Design design = Design.fresh(name, her.getOwnerUuid(), her.ownerName(), her.getGameProfile().getName(),
                 Instant.now().truncatedTo(ChronoUnit.SECONDS).toString());
         Designs.save(server, design);
-        return TaskResult.ok("made an empty design " + name + "; add steps with a primitive and --into " + name
-                + ", for example build layer ##### --at 0 0 0 --block stone_bricks --into " + name).toJson();
+        return TaskResult.ok("made an empty design " + name + "; add steps with a primitive and {into = \"" + name
+                + "\"}, for example build.layer({\"#####\"}, {at = {0, 0, 0}, block = \"stone_bricks\", into = \""
+                + name + "\"})").toJson();
     }
 
     /** 往设计末尾加一步:原语与读好的参数写回一行({@link Design.Step#line}),和当场执行是同一行字。 */
@@ -113,11 +114,11 @@ public final class DesignOps {
             return refused;
         }
         Designs.delete(her.getServer(), name);
-        return TaskResult.ok("deleted design " + name + "; what was built from it stays standing, and build built "
+        return TaskResult.ok("deleted design " + name + "; what was built from it stays standing, and build.built() "
                 + "still lists it").toJson();
     }
 
-    /** 设计库:她们写的设计,和 {@code schematics/} 里的蓝图文件,都能 {@code build at}。 */
+    /** 设计库:她们写的设计,和 {@code schematics/} 里的蓝图文件,都能 {@code build.at}。 */
     public static String library(MinecraftServer server, CommandArgs args) {
         List<String> rows = new ArrayList<>();
         for (String name : Designs.names(server)) {
@@ -143,10 +144,10 @@ public final class DesignOps {
             rows.add("  " + name + " — blueprint file, " + size);
         }
         String head = rows.isEmpty()
-                ? "No designs or blueprint files yet. build new starts a design; blueprint files (.litematic, .schem, "
+                ? "No designs or blueprint files yet. build.new starts a design; blueprint files (.litematic, .schem, "
                         + ".nbt, .snbt) go into the server's schematics folder."
-                : "Designs and blueprint files, each buildable with build at:";
-        return new Listing(head, rows, "", "build designs").result(args).toJson();
+                : "Designs and blueprint files, each buildable with build.at (build.raise walks the site):";
+        return new Listing(head, rows, "").result(args).toJson();
     }
 
     /**
@@ -154,33 +155,32 @@ public final class DesignOps {
      * 俯视画成字符图({@link Slice}),设计与蓝图文件都行。
      *
      * @param layer 画哪一层;没给是 null,列步骤或报价
-     * @param again 这一行本身(不带 {@code --page}):翻页时写它
      */
-    public static String show(NumenPlayer her, String name, Integer layer, CommandArgs args, String again) {
+    public static String show(NumenPlayer her, String name, Integer layer, CommandArgs args) {
         MinecraftServer server = her.getServer();
         boolean design = Designs.kindOf(server, name) == Designs.Kind.DESIGN;
         if (layer != null) {
             return design
-                    ? Slice.of("design " + name, Designs.load(server, name).drawn().targets(), layer, again)
+                    ? Slice.of("design " + name, Designs.load(server, name).drawn().targets(), layer)
                             .result(args).toJson()
                     : Slice.of("blueprint file " + name + " (0 0 0 is its lowest north-west corner)",
-                            BlueprintStore.load(her.serverLevel(), name, BlockPos.ZERO, 0).targets(), layer, again)
+                            BlueprintStore.load(her.serverLevel(), name, BlockPos.ZERO, 0).targets(), layer)
                             .result(args).toJson();
         }
-        return design ? showDesign(her, Designs.load(server, name), args, again) : showFile(her, name, args, again);
+        return design ? showDesign(her, Designs.load(server, name), args) : showFile(her, name, args);
     }
 
     /**
      * 一份设计:抬头是整份的尺寸、范围、格数与料;每一步一条(那一行命令,加它占的范围、格数与料),按输出预算分页;结尾说
      * 这份设计是谁的、她缺不缺料。{@code data} 是整份的小结(尺寸、格数、全量料单、还缺多少),不随页变。
      */
-    private static String showDesign(NumenPlayer her, Design design, CommandArgs args, String again) {
+    private static String showDesign(NumenPlayer her, Design design, CommandArgs args) {
         List<BuildTaskRecord.Target> all = design.drawn().targets();
         Map<Item, Integer> cost = BuildBill.cost(all, Set.of());
         Map<String, Object> data = new LinkedHashMap<>();
         String head;
         if (design.steps().isEmpty()) {
-            head = design.name() + ": no steps yet; add one with a primitive and --into " + design.name();
+            head = design.name() + ": no steps yet; add one with a primitive and {into = \"" + design.name() + "\"}";
         } else {
             Vec3i size = Layout.of(all, 0).size();
             head = design.name() + ": " + design.steps().size() + " step(s), " + size.getX() + "x" + size.getY() + "x"
@@ -192,14 +192,14 @@ public final class DesignOps {
         for (int i = 0; i < design.steps().size(); i++) {
             List<BuildTaskRecord.Target> cells = drawn.get(i);
             String kind = Design.step(design.steps().get(i)).primitive().action;
-            steps.add((i + 1) + ". " + design.steps().get(i) + "\n   " + kind + " " + span(cells) + ", "
+            steps.add((i + 1) + ". " + Design.step(design.steps().get(i)).call() + "\n   " + kind + " " + span(cells) + ", "
                     + cells.size() + " cells: " + BuildBill.topLine(BuildBill.cost(cells, Set.of())));
         }
         data.put("cells", all.size());
         data.put("materials", BuildBill.summarize(cost));
         String foot = ownership(her, design) + (design.author().isEmpty() ? "" : " Written by " + design.author() + ".")
                 + "\n" + shortOf(her, cost, data);
-        return new Listing(head, steps, foot, again).result(args, data).toJson();
+        return new Listing(head, steps, foot).result(args, data).toJson();
     }
 
     /**
@@ -207,7 +207,7 @@ public final class DesignOps {
      * "white_banner x3" 而实际要的是三面绣好花纹的旗,玩家按报价备齐了照样一格都放不下去。判据严到哪里,报价就得说到哪里。
      * 它不随图纸变长(料按种类、分布按层),只有一页。
      */
-    private static String showFile(NumenPlayer her, String file, CommandArgs args, String again) {
+    private static String showFile(NumenPlayer her, String file, CommandArgs args) {
         Layout loaded = BlueprintStore.load(her.serverLevel(), file, BlockPos.ZERO, 0);
         Map<String, Integer> extra = new LinkedHashMap<>();
         Map<String, Integer> exact = new LinkedHashMap<>();
@@ -250,7 +250,7 @@ public final class DesignOps {
         String head = file + ": blueprint file, " + size.getX() + "x" + size.getY() + "x" + size.getZ() + ", "
                 + loaded.targets().size() + " cells, needs " + BuildBill.sum(cost) + " items across " + cost.size()
                 + " kinds — " + BuildBill.topLine(cost);
-        return new Listing(head, List.of(), shortOf(her, cost, data), again).result(args, data).toJson();
+        return new Listing(head, List.of(), shortOf(her, cost, data)).result(args, data).toJson();
     }
 
     /** 免耗材的画像说一句不花料;生存画像报她手上还缺多少(整份都盖要的,不减已经立着的),也记进 {@code data}。 */
@@ -323,6 +323,6 @@ public final class DesignOps {
         Designs.save(her.getServer(), design);
         List<BuildTaskRecord.Target> all = design.drawn().targets();
         return TaskResult.ok(design.name() + ": " + what + "; it now has " + design.steps().size() + " step(s), "
-                + all.size() + " cells. build show " + design.name() + " lists them.").toJson();
+                + all.size() + " cells. build.show(\"" + design.name() + "\") lists them.").toJson();
     }
 }

@@ -37,7 +37,7 @@ class SliceTest {
 
     private static String page(Design design, int y, String line) {
         CommandArgs args = NumenCli.read(line).args();
-        TaskResult result = Slice.of("design house", design.drawn().targets(), y, "build show house --layer " + y)
+        TaskResult result = Slice.of("design house", design.drawn().targets(), y)
                 .result(args);
         assertTrue(result.success(), result.message());
         return result.message();
@@ -99,7 +99,7 @@ class SliceTest {
     void aSliceOverTheOutputBudgetComesAPageAtATime() {
         Design wide = design("build set 0 0 0 --block stone", "build set 999 0 999 --block stone");
         String first = draw(wide, 0);
-        Matcher shown = Pattern.compile("\n\\[Showing 1-(\\d+) of 1000\\. Use build show house --layer 0 --page 2 "
+        Matcher shown = Pattern.compile("\n\\[Showing 1-(\\d+) of 1000\\. Call it again with page = 2 "
                 + "to continue\\.]\nlegend: s=stone$").matcher(first);
         assertTrue(shown.find(), first.substring(first.length() - 200));
         int rows = Integer.parseInt(shown.group(1));

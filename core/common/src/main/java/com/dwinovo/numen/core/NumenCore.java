@@ -4,8 +4,6 @@ import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.task.TaskFactory;
 import com.dwinovo.numen.core.task.build.BuildCompanionTask;
 import com.dwinovo.numen.core.task.build.BuildTaskRecord;
-import com.dwinovo.numen.core.task.collect.CollectItemsCompanionTask;
-import com.dwinovo.numen.core.task.collect.CollectItemsTaskRecord;
 import com.dwinovo.numen.core.task.inventory.DropCompanionTask;
 import com.dwinovo.numen.core.task.inventory.DropItemsTaskRecord;
 import com.dwinovo.numen.core.task.inventory.EatCompanionTask;
@@ -39,11 +37,8 @@ import com.dwinovo.numen.core.task.move.MoveToTaskRecord;
  * <p>Things plug into the engine here:
  * <ul>
  *   <li>command groups — registered through the plugin door, the same one third-party
- *       packs use; an action a group promotes to a quick tool enters the global
- *       {@link ToolRegistry} the moment its group registers, so the tool table's order
- *       is the order of the calls in {@link #registerTools()} (backends that cache the
- *       prompt key off it). {@code todowrite} is the one raw
- *       {@link com.dwinovo.numen.agent.tool.NumenTool};</li>
+ *       packs use; every action becomes a function of the script API, so the only model tool
+ *       is the engine's script tool;</li>
  *   <li>task runners — each {@code TaskRecord} type an action emits is paired with the
  *       {@code CompanionTask} that runs it, via {@link TaskFactory#register};</li>
  *   <li>the survival chains ({@link com.dwinovo.numen.task.BrainChains}) and their
@@ -98,13 +93,10 @@ public final class NumenCore {
     }
 
     private static void registerTools() {
-        // 登记的先后就是工具表的顺序(按工具表做提示词缓存的后端要它逐次一致)。每组提升出的快捷工具在它登记这一刻进表。
-        // move 组提升出 move_goto
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.MoveCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.RouteCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.FightCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.locate.LocateCommands::install);
-        // work 组提升出 work_dig
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.WorkCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.inventory.GearCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.BuildCommands::install);
@@ -112,16 +104,12 @@ public final class NumenCore {
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.ThrowawayCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.interact.UseCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.inventory.InvCommands::install);
-        // 引擎的 task 命令组,和插件走同一扇门;它提升出 task_stop
+        // 引擎的 task 命令组,和插件走同一扇门
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.task.TaskCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.script.Scripts::install);
-        // status 组提升出 status_self、status_owner
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.perception.StatusCommands::install);
-        // scan 组提升出 scan_around、scan_blocks、scan_entities、scan_block
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.perception.ScanCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.area.AreaCommands::install);
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.agent.TodoWriteTool());   // raw NumenTool
-        // skill 组提升出 skill_load
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.agent.SkillCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.agent.MemoryCommands::install);
     }
@@ -140,7 +128,6 @@ public final class NumenCore {
                 (p, r) -> new com.dwinovo.numen.core.task.inventory.TransferCompanionTask(p, r));
         TaskFactory.register(EatItemTaskRecord.class, (p, r) -> new EatCompanionTask(p, r));
         TaskFactory.register(AttackTaskRecord.class, (p, r) -> new AttackCompanionTask(p, r));
-        TaskFactory.register(CollectItemsTaskRecord.class, (p, r) -> new CollectItemsCompanionTask(p, r));
         TaskFactory.register(FishTaskRecord.class, (p, r) -> new FishCompanionTask(p, r));
         TaskFactory.register(BuildTaskRecord.class, (p, r) -> new BuildCompanionTask(p, r));
         TaskFactory.register(InteractAtTaskRecord.class, (p, r) -> new InteractAtCompanionTask(p, r));

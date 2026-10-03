@@ -1,15 +1,17 @@
 package com.dwinovo.numen.cli;
 
-import com.mojang.brigadier.ParseResults;
+import com.dwinovo.numen.agent.script.ScriptCatalog;
+import com.dwinovo.numen.agent.script.ScriptEngine;
+import com.dwinovo.numen.agent.script.ScriptRun;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * 一个动作:{@code <组> <动作> …} 的那一格。它持有这件事<b>唯一的处理函数</b>、参数表与说明,
- * 命令行、帮助、快捷工具都从这里取。
+ * 一个动作:脚本里的一个 API 函数 {@code 组.动作(...)},也是人写的一行命令 {@code 组 动作 …}。它持有这件事<b>唯一的处理函数</b>、
+ * 参数表与说明,两个前端、帮助、系统提示里的索引都从这里取。
  *
  * <p>执行侧由登记时给的处理函数决定:{@link CommandGroup#server} 给的是服务端函数,{@link CommandGroup#client}
  * 给的是客户端函数,二者只有一个。声明在两侧都登记(公共代码在每个进程里各跑一遍),每一侧的树由
@@ -20,17 +22,17 @@ import java.util.regex.Pattern;
  * 动作的帮助除了用法、说明、参数,还有三块,都接在登记处返回的这个动作上写:
  * <pre>{@code
  * quests.server("submit", "Hand in a quest's items from your own inventory.", QuestSubmit::submit, QUEST_ID)
- *       .example("ftbquests submit 15CDF6A098B95FDA")
+ *       .example("ftbquests.submit(\"15CDF6A098B95FDA\")")
  *       .note("Takes the items from YOUR inventory; FTB decides what counts.")
  *       .seeAlso("ftbquests list", "ftbquests show");
  * }</pre>
  * <ul>
- *   <li>{@link #example}:至少一个,可以多个。模型照着例子写,比读语法可靠,所以缺了在登记那一刻抛出,
- *       和名字不合规同一种把关;每个例子也在那一刻按这一组的树解析一遍,必须整行写得通、落在这个动作上,
- *       例子与语法不会走样。</li>
+ *   <li>{@link #example}:至少一个,可以多个,写成脚本里的样子({@code work.dig("ores", {count = 2})})。模型照着例子写,比读
+ *       语法可靠,所以缺了在登记那一刻抛出,和名字不合规同一种把关;每个例子也在那一刻经脚本的前端读一遍(只记下调了哪些函数,
+ *       不执行),必须调到这个动作、每次调用的参数都读得成,例子与语法不会走样。</li>
  *   <li>{@link #note}:可选,多条。写会不会问主人、是不是长活、会动她的什么、不会做什么。</li>
- *   <li>{@link #seeAlso}:可选。做完这件事下一步通常用的动作,同组别组都行,写整条路径。引用在全部组到齐之后
- *       一次查全(任一侧的树第一次被读时),理由见 {@link NumenCli}。</li>
+ *   <li>{@link #seeAlso}:可选。做完这件事下一步通常用的动作或库函数,同组别组都行,写整条路径 {@code 组 动作}。引用在全部组到齐
+ *       之后一次查全(登记处第一次被用时),理由见 {@link NumenCli}。</li>
  * </ul>
  *
  * <h2>以谁的权威执行</h2>
@@ -39,7 +41,7 @@ import java.util.regex.Pattern;
  * <pre>{@code
  * group.server("switch", "Switch to another model.", this::switchModel, MODEL)
  *      .authority(Authority.SERVER_ON_HER)
- *      .example("ysm switch misc/1_alex");
+ *      .example("ysm.switch(\"misc/1_alex\")");
  * }</pre>
  */
 public final class Action {
@@ -68,11 +70,11 @@ public final class Action {
     private final List<String> examples = new ArrayList<>();
     private final List<String> notes = new ArrayList<>();
     private final List<String> seeAlso = new ArrayList<>();
-    /** 提升时写的工具描述;没提升是 null。 */
-    private String toolDescription;
     private Authority authority = Authority.HERS;
     /** 脚本里它的函数直接返回的回执数据项;没声明是 null。 */
     private String returns;
+    /** 成功的调用的参数原样留在脚本回执里。 */
+    private boolean echoed;
 
     Action(CommandGroup group, String name, String summary, List<Param<?>> params,
            OnServer onServer, OnClient onClient) {
@@ -82,45 +84,6 @@ public final class Action {
         this.params = List.copyOf(params);
         this.onServer = onServer;
         this.onClient = onClient;
-    }
-
-    /**
-     * 提升为快捷工具:模型的工具表里多一个工具,名字由路径生成({@link #toolNameOf}),描述是 {@code description},
-     * 参数 schema 由这个动作的参数表生成。调用它就是执行这个动作——同一个处理函数,同一份回执。
-     */
-    public Action promote(String description) {
-        group.requireOpen();
-        if (toolDescription != null) {
-            throw new IllegalStateException(path() + " 已经提升为 " + toolName() + ",一个动作只提升一次");
-        }
-        if (description == null || description.isBlank()) {
-            throw new IllegalArgumentException(path() + " 提升为快捷工具却没写工具描述");
-        }
-        this.toolDescription = description;
-        return this;
-    }
-
-    /**
-     * 快捷工具名的唯一写法:{@code 组_动作}({@code move goto} 是 {@code move_goto})。一个能力只有一个名字,工具名与命令
-     * 两种写法可以机械地互推——反推是 {@link #promotedAs},和这里写在一起。
-     */
-    static String toolNameOf(String group, String action) {
-        return group + "_" + action;
-    }
-
-    /**
-     * 按 {@link #toolNameOf} 反推:{@code word} 是 {@code groups} 里哪个提升过的动作的工具名;不是任何一个的是 null。
-     * 模型把工具名写进 {@code command} 时,报错据此直接指给她两种写法。
-     */
-    static Action promotedAs(String word, Collection<CommandGroup> groups) {
-        for (CommandGroup group : groups) {
-            for (Action action : group.actions()) {
-                if (word.equals(action.toolName())) {
-                    return action;
-                }
-            }
-        }
-        return null;
     }
 
     /**
@@ -139,7 +102,7 @@ public final class Action {
     }
 
     /**
-     * 脚本里这个动作的函数返回回执 {@code data} 里的 {@code key} 那一项——只要回执里有它,成败都返回:查询的结果拿来就能
+     * 这个动作的函数返回回执 {@code data} 里的 {@code key} 那一项——只要回执里有它,成败都返回:查询的结果拿来就能
      * 循环、判断({@code for _, p in ipairs(area.parts("ores"))}、{@code while area.has(p)},没剩就是 false 而不是报错)。
      * 回执里没有这一项(区域不存在这类)才在调用处抛出脚本错误。不调就是普通的直返:成功返回回执数据、失败抛错。
      */
@@ -152,7 +115,17 @@ public final class Action {
         return this;
     }
 
-    /** 一个例子:一整行真实可用的命令,帮助里原样列出。可以调多次,按调用顺序列。 */
+    /**
+     * 这个动作成功的调用,参数原样留在脚本回执的数据里(见 {@code ScriptCall.ECHOED}):对话流按它画出这次写下的东西,比如她的
+     * 计划清单({@code todo.write})。
+     */
+    public Action echoed() {
+        group.requireOpen();
+        this.echoed = true;
+        return this;
+    }
+
+    /** 一个例子:一段真实可用的脚本,调到这个动作,帮助里原样列出。可以调多次,按调用顺序列。 */
     public Action example(String line) {
         examples.add(requireText(line, "例子"));
         return this;
@@ -164,7 +137,7 @@ public final class Action {
         return this;
     }
 
-    /** 相关命令:下一步通常用的动作,写整条路径,如 {@code ftbquests list}。可以调多次。 */
+    /** 相关:下一步通常用的动作或库函数,写整条路径,如 {@code ftbquests list}。可以调多次。 */
     public Action seeAlso(String... paths) {
         for (String path : paths) {
             seeAlso.add(requireText(path, "相关命令"));
@@ -181,32 +154,49 @@ public final class Action {
     }
 
     /**
-     * 例子的把关,登记块跑完时由组调用:至少一个;每个都在 {@code tree}(只有这一组、每个动作都长着参数的树,见
-     * {@link CommandGroup#close})上整行解析通过,走到可执行的一格,而且那一格属于这个动作。这棵树的节点不设
-     * {@code requires},解析用不到来源,源给 null。
+     * 例子的把关,登记块跑完时由组调用:至少一个;每个都经脚本的前端读一遍({@link ScriptEngine#calls},只记下调了哪些函数),
+     * {@code catalog} 里只有这一组——例子只该用到这一组自己的函数。每个例子都要调到这个动作,每次调用的对象与选项都读得成
+     * (同一个换法 {@link NumenCli#jsonOf} 与同一种参数类型)。
      */
-    void checkExamples(CommandTree<CommandSource> tree) {
+    void checkExamples(ScriptCatalog catalog) {
         if (examples.isEmpty()) {
             throw new IllegalArgumentException(path() + " 没写例子——模型照着例子写,每个动作至少一个");
         }
-        List<String> here = List.of(group.name(), name);
         for (String example : examples) {
-            ParseResults<CommandSource> parse = tree.parse(example, null);
-            if (parse.getReader().canRead() || !parse.getExceptions().isEmpty()
-                    || parse.getContext().getCommand() == null || !NumenCli.literalPath(parse).equals(here)) {
-                throw new IllegalArgumentException(path() + " 的例子写不通,或者落在别的动作上: " + example);
+            ScriptEngine.Reading reading;
+            try {
+                reading = ScriptEngine.IN_USE.calls(function(), example, catalog);
+            } catch (IllegalArgumentException wrong) {
+                throw new IllegalArgumentException(path() + " 的例子读不通: " + example + " — " + wrong.getMessage());
+            }
+            if (reading.error() != null) {
+                throw new IllegalArgumentException(path() + " 的例子读不通: " + example + " — " + reading.error());
+            }
+            List<ScriptRun.Call> calls = reading.calls();
+            boolean here = false;
+            for (ScriptRun.Call call : calls) {
+                Action action = group.action(call.verb());
+                try {
+                    CommandArgs.fromJson(action.params(), NumenCli.jsonOf(action, call.args(), call.options()));
+                } catch (IllegalArgumentException wrong) {
+                    throw new IllegalArgumentException(path() + " 的例子里 " + call.function() + " 的参数读不成: "
+                            + example + " — " + wrong.getMessage());
+                }
+                here |= action == this;
+            }
+            if (!here) {
+                throw new IllegalArgumentException(path() + " 的例子没调到它自己: " + example);
             }
         }
     }
 
     /**
-     * 读好的参数交给处理函数。树只把动作的可执行格长在执行它的那一侧,快捷工具也按 {@link #runsOnServer} 分路,
-     * 所以到这里的源对象总是这个动作那一侧的。服务端的源先绑上这个动作,派下的活才叫得出名字
-     * ({@link ServerSource#taskName})。
+     * 读好的参数交给处理函数。两个前端都按 {@link #runsOnServer} 分路,所以到这里的源对象总是这个动作那一侧的。服务端的源先绑上
+     * 这个动作与读好的参数,派下的活才叫得出名字({@link ServerSource#taskName}),重启后的重放才写得出那一行。
      */
     void execute(CommandSource source, CommandArgs args) {
         switch (source) {
-            case ServerSource server -> onServer.run(server.running(this), args);
+            case ServerSource server -> onServer.run(server.running(this, args), args);
             case ClientSource client -> onClient.run(client, args);
         }
     }
@@ -245,55 +235,63 @@ public final class Action {
         return seeAlso;
     }
 
-    /** {@code <组> <动作>}:整条路径,帮助与报错里这样写它;从命令派下的活也叫这个名字。 */
+    /** {@code <组> <动作>}:整条路径,一行命令这样写它,登记处按它认。 */
     String path() {
         return group.name() + " " + name;
     }
 
+    /** 脚本里的函数名:{@code work.dig}、{@code move.goto_};帮助、回执、派下的活都这样叫它。 */
+    String function() {
+        return ScriptEngine.IN_USE.function(group.name(), name);
+    }
+
     /**
-     * 整行用法:路径 + 位置参数 + 标志。归了组的标志整组写成一格 {@code [组名]},排在组里第一个标志的位置;
-     * 组里有哪些标志由动作自己的帮助列全({@link CommandHelp#action})。
+     * 怎么调它:函数名、按顺序的对象、选项表里能写的名字。归了组的标志整组写成一格 {@code …组名},排在组里第一个标志的位置;
+     * 组里有哪些由动作自己的帮助列全({@link CommandHelp#action})。{@code work.dig(place..., {count=…})}。
      */
     String usage() {
-        StringBuilder sb = new StringBuilder(path());
+        StringBuilder sb = new StringBuilder(function()).append('(');
+        List<String> parts = new ArrayList<>();
         for (Param<?> p : params) {
-            if (p.positional()) sb.append(' ').append(p.usage());
+            if (p.positional()) {
+                parts.add(p.usage());
+            }
         }
+        List<String> options = new ArrayList<>();
         List<String> groups = new ArrayList<>();
         for (Param<?> p : params) {
             if (p.positional()) {
                 continue;
             }
             if (p.group() == null) {
-                sb.append(' ').append(p.usage());
+                options.add(p.usage());
             } else if (!groups.contains(p.group())) {
                 groups.add(p.group());
-                sb.append(" [").append(p.group()).append(']');
+                options.add("…" + p.group());
             }
         }
-        return sb.toString();
+        if (!options.isEmpty()) {
+            parts.add("{" + String.join(", ", options) + "}");
+        }
+        return sb.append(String.join(", ", parts)).append(')').toString();
     }
 
     Authority authority() {
         return authority;
     }
 
-    /** 脚本里它的函数直接返回的回执数据项;没声明是 null。 */
+    /** 它的函数直接返回的回执数据项;没声明是 null。 */
     String returns() {
         return returns;
+    }
+
+    /** 它的脚本函数怎么交回结果、参数留不留在回执里。 */
+    ScriptCatalog.Verb verb() {
+        return new ScriptCatalog.Verb(returns, echoed);
     }
 
     /** 服务端执行?(否则在主人客户端执行。) */
     boolean runsOnServer() {
         return onServer != null;
-    }
-
-    /** 提升成的工具名;没提升是 {@code null}。 */
-    String toolName() {
-        return toolDescription == null ? null : toolNameOf(group.name(), name);
-    }
-
-    String toolDescription() {
-        return toolDescription;
     }
 }

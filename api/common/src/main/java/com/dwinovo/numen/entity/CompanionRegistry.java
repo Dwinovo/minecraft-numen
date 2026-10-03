@@ -48,8 +48,8 @@ public final class CompanionRegistry extends SavedData {
         }
 
         /**
-         * 她现在在做什么:这件活给模型看的名字,与重放它的那次调用(工具名 + 当时的参数);空串 = 闲着。
-         * 见 {@code TaskPersistence}。
+         * 她现在在做什么:这件活给模型看的名字、派它的动作的路径({@code taskTool})、重放它的那一行命令({@code taskArgs});
+         * 空串 = 闲着,只有名字 = 在做、但接不回来。见 {@code TaskPersistence}。
          */
         public Entry doing(String task, String tool, String args) {
             return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,

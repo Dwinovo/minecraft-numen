@@ -63,6 +63,12 @@ debug、os、io 库的修复(这些库我们不带)、`b121b65151e4` 与 `661309
 每段脚本在自己的虚拟线程上跑。宿主函数在这个线程上被调,可以阻塞(等一件慢事做完),不碰调用方的线程;调用方拿到
 `Running`,可以随时 `interrupt()`:脚本在下一条指令、或正在阻塞的宿主函数处停下,结局是 `INTERRUPTED`,带停下的那一行。
 
+## 库
+
+宿主可以登记几段库(`Builder.library(块名, 正文)`):每段脚本开跑之前,它们按登记顺序在同一个全局环境里先跑一遍,定义的函数脚本里
+直接能调,也可以往宿主函数的表里加函数(`function move.goto_(...) ... end`)。行号只记脚本自己那一段:库里的函数调宿主函数时,
+`currentLine()` 说的是脚本里调这个库函数的那一行,结局停在的也是脚本里的那一行;库里出的错,报错原话的开头是库的块名与行号。
+
 ## 如何嵌入
 
 ```java
@@ -77,6 +83,7 @@ LuaSandbox sandbox = LuaSandbox.builder(new LuaSandbox.Limits(1_000_000, 10_000_
         .build();
 LuaSandbox.Running running = sandbox.start("mine", code, List.of("ores"), outcome -> { /* 脚本线程上调一次 */ });
 LuaSandbox.Outcome outcome = running.await();       // FINISHED、ERROR(带行号)、SLICE、INSTRUCTIONS、STRINGS……
+Object returned = outcome.value();                   // 跑完时 return 的第一个值,换成 Java 值
 ```
 
 - `LuaSandbox.check(name, code)`:只读不跑,读不通返回带行号的原话。
@@ -87,4 +94,4 @@ LuaSandbox.Outcome outcome = running.await();       // FINISHED、ERROR(带行�
 ## 测试
 
 `src/test`:语义(表、闭包、元表、字符串库、错误与 pcall)、沙箱删干净、共享的字符串元表锁住、四种预算、外部打断(忙着与阻塞
-在宿主函数里)、宿主函数在虚拟线程上阻塞不碰调用方、值互转、保留字。
+在宿主函数里)、宿主函数在虚拟线程上阻塞不碰调用方、值互转、保留字、返回值、库先跑且行号记在脚本那一段。

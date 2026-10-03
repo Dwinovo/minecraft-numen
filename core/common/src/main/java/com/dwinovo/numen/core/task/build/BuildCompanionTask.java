@@ -1,89 +1,60 @@
 package com.dwinovo.numen.core.task.build;
 
-import com.dwinovo.numen.area.Cells;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.core.build.Built;
 import com.dwinovo.numen.core.build.Placement;
-import com.dwinovo.numen.core.nav.BuildSite;
 import com.dwinovo.numen.core.nav.Feet;
-import com.dwinovo.numen.core.nav.NavText;
-import com.dwinovo.numen.core.nav.Survey;
 import com.dwinovo.numen.core.nav.Terrain;
-import com.dwinovo.numen.core.nav.Trip;
-import com.dwinovo.numen.core.nav.WorkArea;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
-import com.dwinovo.numen.core.task.dig.DigTaskRecord;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.pathing.body.Hotbar;
-import com.dwinovo.numen.pathing.search.Route;
-import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.permission.PlacedBlocks;
-import com.dwinovo.numen.task.Preparation;
-import com.dwinovo.numen.task.TaskResult;
 import com.dwinovo.numen.task.TaskState;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
-import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
- * 多格建造任务:走到工地外圈、一边绕圈一边逐批落位。
+ * 多格建造任务:站在原地,把施工图里手够得着的格一批一批落进世界。
  *
- * <p><b>施工模型</b>——同伴走到工地外圈(开工时站在工地里就先走出去),然后按稳定的速率一批一批地把方块落进世界,
- * 伴随朝向、挥手、粒子与音效。她不逐格走到每个方块旁边,也不需要"够得着"。
+ * <p><b>只放够得着的</b>——每一格够不够得着与 {@code move.goto_(…, {arrive = "reach"})} 走到的地方同一个判据({@link BuildSurvey}):
+ * 她不走动,够不着的格留给下一次,回执说还剩几格、最低最近的一格在哪。走到够得着的地方、挖开挡着的、再放,是脚本的事
+ * (库里的 {@code build.raise})。受理之前看一眼:够得着的一格都没有就当场拒绝,说清该先去哪儿。
  *
- * <p>这是刻意的产品选择,不是偷懒。逐格走位是<b>客户端自动化模组</b>的生存约束
- * ——它必须让服务端看起来像有人在按键。我们是服务端模组,从来不需要骗谁;为那条
- * 约束付出的代价(站位求解、落脚点重试、视线射线、臂展判定、脚手架自救)全是
- * 为不存在的问题写的,并且把"高层够不着"变成了盖不完房子的硬天花板。
+ * <p><b>不挖</b>——生存模式下图纸要的格里立着别的方块,那一格由 {@code work.dig} 挖开(挖的判据、工具、掉落、权限都是它的),
+ * 这里不碰,回执里算进"要先挖开的";创造模式照原版一下就碎:图纸直接写上去顶掉原来的。
  *
- * <p>保留下来的是真正属于我们的东西:生存模式逐格扣料、期望状态精确落位、以及"支撑还没长出来就先放着,下一遍再来"的
- * 分遍推进。
+ * <p>保留下来的是施工自己的事:生存模式逐格扣料、期望状态精确落位、"支撑还没长出来就先放着,下一遍再来"的分遍推进,
+ * 整份对上之后让世界落定一次、生成摆设。
  *
- * <p><b>清场只有一条路</b>——生存模式下图纸里要成空气、或要换成别的方块而现在立着东西的格,交给清场子活({@link ClearSiteTask},
- * 挖一格的判据与 {@code work dig} 同一些):她走进工地挖,用工具、有掉落、每一格过权限层、路上的账并进这件活。
- * 创造模式照原版一下就碎:图纸直接写上去顶掉原来的,不另挖。挖掘按原版规则自己分模式,建造不写两套破坏。
+ * <p><b>施工与表演分开</b>——施工只管下一格放哪、放没放成、差什么;转头、挥手、粒子归演出组件 {@link BuildShowmanship},
+ * 它手里没有放置入口,改不了世界。
  *
- * <p><b>施工与表演分开</b>——施工只管下一格放哪、放没放成、差什么;走动和放块的动画归演出组件
- * {@link BuildShowmanship},挂在这件活上:施工每刻落完位后叫它走一步,从不问它走得怎样。它手里没有挖掘器、导航与放置
- * 入口,绕圈改不了世界。真要挪身体的只有开工时走出工地、走到外圈这一处,是施工的事,在这里用正式寻路。
- *
- * <p><b>受理之前</b>——盘料不齐当场拒绝;要走到外圈的,先只搜不走地规划那条路,几步、要改的格写进受理回执
- * ({@link #preparation})。
- *
- * <p><b>分工</b>——本类只持有施工的调度状态机(相位、遍、层窗口、落位循环)与
- * 轮扫对账;单格判据在 {@link BuildCellRules},背包口径在 {@link BuildInventory},
- * 材料账本在 {@link BuildLedger},摆设与善后在 {@link BuildFixtures},演出在
- * {@link BuildShowmanship},外圈的几何在 {@link SiteRing},顺序与节奏的纯函数在 {@link BuildOrder},
- * 收不了尾时的缺格清单在 {@link BuildOutstanding}。
+ * <p><b>分工</b>——本类只持有施工的调度状态机(相位、遍、层窗口、落位循环)与轮扫对账;每一格的情形在 {@link BuildSurvey},
+ * 单格判据在 {@link BuildCellRules},背包口径在 {@link BuildInventory},材料账本在 {@link BuildLedger},摆设与善后在
+ * {@link BuildFixtures},演出在 {@link BuildShowmanship},顺序与节奏的纯函数在 {@link BuildOrder},收不了尾时的缺格清单在
+ * {@link BuildOutstanding}。
  */
 public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRecord> {
 
-    /** 走到外圈的时限:走不到就地开工,绝不因为路不通而不干活。 */
-    private static final int TRAVEL_BUDGET_TICKS = 30 * 20;
     /** 连续几遍零进展才升级处置。 */
     private static final int MAX_BARREN_PASSES = 3;
     /**
-     * 一遍零进展(又不是断料)之后,等多少刻再来下一遍。她自己在圈上,压不住格子;剩下的多半被人或活物站着,
+     * 一遍零进展(又不是断料)之后,等多少刻再来下一遍。她自己占着的格不算够得着;剩下的多半被人或活物站着,
      * 裁决要等他们有机会走开——一遍全是"放不下去"会在同一刻跑完,不等的话三遍连着翻完只要三刻。
      */
     private static final int RETRY_WAIT_TICKS = 60;
@@ -109,8 +80,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             net.minecraft.world.level.block.Block.UPDATE_CLIENTS
                     | net.minecraft.world.level.block.Block.UPDATE_KNOWN_SHAPE;
 
-    /** CONSENT:开工前整批问主人;CLEAR:生存模式清场;TRAVEL:走到外圈(开工时在工地里就是走出去);WORK:施工。 */
-    private enum Phase { CONSENT, CLEAR, TRAVEL, WORK }
+    /** CONSENT:开工前整批问主人;WORK:施工。 */
+    private enum Phase { CONSENT, WORK }
 
     /** 干不下去时的结论:失败的理由与类型。 */
     private record Ending(String why, FailureType type) {}
@@ -120,37 +91,19 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private final BuildFixtures fixtures;
     private final BuildLedger ledger;
     private final BuildShowmanship show;
-    /** 在跑的清场(挖掘执行,作为子活);没在清为 null。 */
-    private ClearSiteTask clearing;
-    /** 交给清场的格:每一格只交一次,挖不掉的留在原处,收工时照实交代。 */
-    private final LongOpenHashSet clearTried = new LongOpenHashSet();
-    /** 清场挖掉的格。 */
-    private final LongOpenHashSet cleared = new LongOpenHashSet();
-    /** 清场没挖完时它的那句话;没有为 null。 */
-    private String clearNote;
 
     private final Map<Long, BuildTaskRecord.Target> targetByPos = new LinkedHashMap<>();
     /** 本遍缺料统计(遍末报告用)。 */
     private final Map<Item, Integer> passMissing = new LinkedHashMap<>();
 
     private LongOpenHashSet observedCompleted;
-    private Phase phase = Phase.TRAVEL;
-    /** 动身走向外圈时的 {@link #workTicks()}。 */
-    private long travelSince;
+    private Phase phase = Phase.WORK;
 
     /** 工地包围盒(全体目标格的最小/最大角)。 */
     private final BlockPos siteMin;
     private final BlockPos siteMax;
-    /** 包围盒外的那一圈:走出工地走到它上面,演出绕着它走。 */
-    private final SiteRing ring;
-    /** 走到外圈的路线规格:{@link #SPEC} 并上工地格的三条禁令(编一次,每次走出去都用它)。 */
-    private RouteSpec toRing;
-    /** 受理之前的准备规划到的走向外圈的那条路:第一趟照它走;没有、或已经用过为 null。 */
-    private Route ringRoute;
-    /** 走出工地没走成:她还在工地里时不再反复起寻路,就在原地接着盖;等她出了工地这一笔才清掉。 */
-    private boolean stuckInSite;
 
-    /** 本遍施工顺序:低层先、层内清障→骨架→贴附、蛇形走位。 */
+    /** 本遍施工顺序:只收够得着的待建格,低层先、层内清障→骨架→贴附。 */
     private List<BuildTaskRecord.Target> order = List.of();
     /** 当前层在 order 里的区间,以及本层已经轮到过的格。 */
     private int layerStart;
@@ -191,13 +144,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     private String note = "done";
 
-    /** 开工前要问主人的清单(清的格与放的格里裁决为要问的)。 */
+    /** 开工前要问主人的清单(这一次够得着的格里裁决为要问的)。 */
     private List<com.dwinovo.numen.permission.ConsentItem> consentItems = List.of();
-    /** 清单涉及的目标格——主人拒绝时,这些格按"主人不让动"交代。 */
-    private final LongOpenHashSet consentCells = new LongOpenHashSet();
-    /** 主人拒绝了的目标格,与他的原话。 */
-    private final LongOpenHashSet ownerRefused = new LongOpenHashSet();
-    private String ownerWords = "";
 
     public BuildCompanionTask(NumenPlayer player, BuildTaskRecord record) {
         super(player, record);
@@ -211,14 +159,61 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         BlockPos[] box = siteBox(player, record.targets);
         this.siteMin = box[0];
         this.siteMax = box[1];
-        this.ring = SiteRing.around(siteMin, siteMax);
-        // 小活是一个动作,不演:不给演出那一圈,它就只转头挥手
-        this.show = new BuildShowmanship(player, inv, BuildOrder.instant(record.targets.size()) ? null : ring);
+        this.show = new BuildShowmanship(player, inv);
+    }
+
+    /** 按她此刻站的地方数这件活的每一格。 */
+    private BuildSurvey survey() {
+        return new BuildSurvey(player, r, rules, inv, ledger);
     }
 
     @Override
     protected List<Precondition> preconditions() {
-        return List.of(this::checkMaterials);
+        return List.of(this::checkMaterials, this::checkReach);
+    }
+
+    /**
+     * 还有没了结的格,却一格都够不着:当场拒绝,说清还剩什么、先去哪儿。全都对上了不拒:这一趟照常收尾(落定、挂件),
+     * 回执说什么都没变。
+     */
+    private Precondition.Failure checkReach() {
+        BuildSurvey.Tally tally = survey().tally();
+        if (tally.count(BuildSurvey.State.REACH) > 0 || tally.left() == 0) {
+            return null;
+        }
+        return new Precondition.Failure("nothing of it to place within reach of where you stand. " + remaining(tally),
+                FailureType.OUT_OF_REACH);
+    }
+
+    /**
+     * 还剩什么、下一步照抄什么:够不着的几格与最低最近的一格(走过去的那一行),要先挖开的几格与最近的一格(挖它的那一行),
+     * 缺料的几格。什么都不剩是 "nothing left to do here"。
+     */
+    private static String remaining(BuildSurvey.Tally tally) {
+        List<String> parts = new ArrayList<>();
+        if (!tally.far().isEmpty()) {
+            BlockPos next = tally.far().get(0);
+            parts.add(tally.far().size() + " cell(s) out of reach — the lowest nearest is " + xyz(next)
+                    + ": move.goto_(" + lua(next) + ", {arrive = \"reach\"}) gets you within reach of it");
+        }
+        if (!tally.dig().isEmpty()) {
+            BlockPos next = tally.dig().get(0);
+            parts.add(tally.dig().size() + " cell(s) hold another block that must be dug out first — the nearest is "
+                    + xyz(next) + ": move.goto_(" + lua(next) + ", {arrive = \"dig\"}) then work.dig(" + lua(next) + ")");
+        }
+        int shortCells = tally.count(BuildSurvey.State.SHORT);
+        if (shortCells > 0) {
+            parts.add(shortCells + " cell(s) hold another block and you carry nothing to put there");
+        }
+        return parts.isEmpty() ? "Nothing left to do here." : "Still to do: " + String.join("; ", parts) + ".";
+    }
+
+    private static String xyz(BlockPos pos) {
+        return pos.getX() + " " + pos.getY() + " " + pos.getZ();
+    }
+
+    private static String lua(BlockPos pos) {
+        return "{" + pos.getX() + ", " + pos.getY() + ", " + pos.getZ() + "}";
     }
 
     /**
@@ -258,45 +253,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 FailureType.NO_MATERIAL);
     }
 
-    /**
-     * 受理之前:盘料(前置条件 {@link #checkMaterials},料不齐整批拒绝),再看开工前要不要先走到外圈——要的话一次只搜不走地规划
-     * 走过去的那条路。走不到外圈不是开不了工(落位不靠走位,见 {@link #tickTravel}),所以规划的结论只是回执里的事实:几步、
-     * 要改的格,或者走不过去、就在原地盖;走得到的那条路开工时照它走({@link Trip#prepared})。
-     */
-    @Override
-    protected Preparation preparation() {
-        rescanAll();
-        rebuildOrder();
-        if (!mustMove()) {
-            return Preparation.READY;
-        }
-        RouteSpec spec = siteSpec();
-        Survey survey = Survey.of(player, List.of(new Survey.Leg(ring.goal(), spec)));
-        return new Preparation() {
-            @Override
-            public Preparation.Readiness poll() {
-                List<Survey.Found> found = survey.poll();
-                if (found == null) {
-                    return null;
-                }
-                Survey.Found leg = found.get(0);
-                if (leg.reached()) {
-                    ringRoute = leg.route();
-                    return Preparation.Readiness.ready("I first walk to the ring around the site, "
-                            + NavText.ahead(ringRoute) + ".");
-                }
-                return Preparation.Readiness.ready("I found no way to the ring around the site ("
-                        + NavText.failure(leg.outcome(), player, Feet.cell(player), siteCenter(), spec)
-                        + "), so I build from where I stand.");
-            }
-
-            @Override
-            public void cancel() {
-                survey.cancel();
-            }
-        };
-    }
-
     @Override
     protected void onStart() {
         observedCompleted = new LongOpenHashSet();
@@ -306,27 +262,26 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         computePace();
         passStartCompleted = r.completed();
         collectConsent();
-        phase = consentItems.isEmpty() ? Phase.TRAVEL : Phase.CONSENT;
+        phase = consentItems.isEmpty() ? Phase.WORK : Phase.CONSENT;
+        placeCredit = 0;
     }
 
     /**
-     * 施工前把要清的格与要放的格整批过一遍权限层,裁决为要问的合成一张卡。放行的照建;
-     * 不许的(规则、模式、外部强制)由 {@link BuildCellRules#blockedByMode} 照常跳过。
+     * 施工前把这一次够得着的格整批过一遍权限层,裁决为要问的合成一张卡。放行的照建;不许的(规则、模式、外部强制)由
+     * {@link BuildCellRules#blockedByMode} 照常跳过。
      */
     private void collectConsent() {
         var gate = com.dwinovo.numen.permission.Permission.gateFor(player);
+        BuildSurvey survey = survey();
         List<com.dwinovo.numen.permission.ConsentItem> items = new ArrayList<>();
         for (BuildTaskRecord.Target target : r.targets) {
-            if (target.matches(rules.peek(target.pos()))
-                    || !target.mode().allows(rules.peek(target.pos()), target.desiredState())
-                    || rules.hopeless(target)) {
+            if (survey.of(target) != BuildSurvey.State.REACH) {
                 continue;
             }
             for (com.dwinovo.numen.permission.Action action : rules.actionsFor(target)) {
                 var verdict = gate.judgeLive(action, player.serverLevel());
                 if (verdict.asks()) {
                     items.add(gate.consentItemLive(action, verdict, player.serverLevel()));
-                    consentCells.add(target.pos().asLong());
                 }
             }
         }
@@ -334,8 +289,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 等主人答复:身体站住。答应了——那些格从此是放行,重扫重排后开工;拒绝了——那些格仍不许,
-     * 施工照常跳过,收工时按"主人不让动"连同他的原话交代。
+     * 等主人答复:身体站住。答应了——那些格从此是放行,重扫重排后开工;拒绝了——这件活停在这里,回执是他的原话与问的是什么,
+     * 一格不放(与 {@code work.dig} 被拒同一个收场)。
      */
     private TaskState tickConsent() {
         player.controls().stop();
@@ -344,13 +299,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             return TaskState.RUNNING;
         }
         if (!answer.allowed()) {
-            ownerRefused.addAll(consentCells);
-            ownerWords = answer.words();
+            return conclude(new Ending(answer.refusal(consentItems), FailureType.REFUSED));
         }
         consentItems = List.of();
         rescanAll();
         rebuildOrder();
-        phase = Phase.TRAVEL;
+        phase = Phase.WORK;
         return TaskState.RUNNING;
     }
 
@@ -358,10 +312,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     protected TaskState onTick() {
         if (phase == Phase.CONSENT) {
             return tickConsent();
-        }
-        if (phase == Phase.CLEAR) {
-            // 清场跑完再对账:挖掉最后一格的那一刻图纸就对上了,先收工的话清场挖掉的格记不进这一栋的账
-            return tickClear();
         }
         updateCompleted();
 
@@ -374,171 +324,17 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 return conclude(null);
             }
         }
-        return phase == Phase.TRAVEL ? tickTravel() : tickWork();
+        return tickWork();
     }
 
     // ------------------------------------------------------------------
-    // 〇、生存模式清场
-    // ------------------------------------------------------------------
-
-    /**
-     * 生存模式下要挖掉的格:本遍待办里此刻立着东西的格(与 {@code work dig} 框出来的格同一个判据,{@link DigTaskRecord#wants}),
-     * 要放方块的只在身上有料时清——没料清了只是在主人的地上挖个坑。每一格只交一次。创造模式没有,见 {@link #processCell}。
-     */
-    private List<BlockPos> toClear() {
-        if (WorkProfile.of(player).instaBreak()) {
-            return List.of();
-        }
-        List<BlockPos> cells = new ArrayList<>();
-        for (BuildTaskRecord.Target target : order) {
-            BlockPos pos = target.pos();
-            BlockState now = rules.peek(pos);
-            if (!clearTried.contains(pos.asLong()) && !target.matches(now) && DigTaskRecord.wants(null, now)
-                    && (BuildCellRules.isAirTarget(target) || affordable(target))) {
-                cells.add(pos);
-            }
-        }
-        return cells;
-    }
-
-    /**
-     * 把 {@link #toClear} 派给清场({@link ClearSiteTask}),作为这件活的子活。工作区是工地外扩一圈(外圈就在它边上,她从外圈开挖),图纸里不清的格
-     * 她的路不挖不埋。
-     *
-     * @return 派下了一件清场
-     */
-    private boolean startClear() {
-        List<BlockPos> cells = toClear();
-        if (cells.isEmpty()) {
-            return false;
-        }
-        Set<Block> kinds = new LinkedHashSet<>();
-        for (BlockPos pos : cells) {
-            kinds.add(rules.peek(pos).getBlock());
-        }
-        LongOpenHashSet keep = new LongOpenHashSet(protectedCells());
-        for (BlockPos pos : cells) {
-            clearTried.add(pos.asLong());
-            keep.remove(pos.asLong());
-        }
-        Block first = kinds.iterator().next();
-        String label = BuiltInRegistries.BLOCK.getKey(first).getPath() + (kinds.size() > 1 ? "+" + (kinds.size() - 1) : "");
-        clearing = new ClearSiteTask(player, new ClearSiteRecord(r, player.level().getGameTime(),
-                BuildSite.clearing(DigTaskRecord.SPEC, keep), Cells.of(cells),
-                WorkArea.site(player.level().dimension(), siteMin, siteMax), kinds, "the site", label));
-        return true;
-    }
-
-    /** 清场的一刻:挖掘执行在跑;收场时把它挖掉的格记进这一栋的账,再重扫重排,走到外圈去盖。 */
-    private TaskState tickClear() {
-        TaskResult done = runChild(clearing);
-        if (done == null) {
-            return TaskState.RUNNING;
-        }
-        int left = 0;
-        for (BlockPos pos : clearing.dug()) {
-            BuildTaskRecord.Target target = targetByPos.get(pos.asLong());
-            r.brokeOne(target.removes() != null);
-            recordCleared(pos);
-            cleared.add(pos.asLong());
-        }
-        for (long cell : clearTried) {
-            if (!cleared.contains(cell)) {
-                left++;
-            }
-        }
-        if (left > 0) {
-            clearNote = done.message();
-        }
-        clearing = null;
-        rescanAll();
-        rebuildOrder();
-        phase = Phase.TRAVEL;
-        return TaskState.RUNNING;
-    }
-
-    // ------------------------------------------------------------------
-    // 一、走到外圈
+    // 一、施工
     // ------------------------------------------------------------------
 
     /**
-     * 先挪身体再干活吗:她在工地里就得先走出去——站在图纸里会压住自己要放的格,墙砌起来还会把她关在里面;要绕圈的活、
-     * 要清场的活(清场的工作区围着工地,她得先到场)她还没站到外圈上,就走过去。
-     */
-    private boolean mustMove() {
-        return inSite() || ((!BuildOrder.instant(r.targets.size()) || !toClear().isEmpty()) && !show.onRing());
-    }
-
-    /** 她的身体碰着工地包围盒吗。 */
-    private boolean inSite() {
-        return new AABB(siteMin.getX(), siteMin.getY(), siteMin.getZ(),
-                siteMax.getX() + 1, siteMax.getY() + 1, siteMax.getZ() + 1).intersects(player.getBoundingBox());
-    }
-
-    /**
-     * 走到外圈,开工时站在工地里就是走出去。这是施工真要的一步,所以用正式寻路、可以改地形({@link #SPEC}):路上挖的、垫的
-     * 记在实际账里,每一种收场的回执末尾照账说。走到了、走不通、超时,都开工——落位不靠走位,绝不因为路不通而不干活。
-     */
-    private TaskState tickTravel() {
-        if (nav == null) {
-            if (!mustMove()) {
-                beginWork();
-                return TaskState.RUNNING;
-            }
-            travelSince = workTicks();
-            if (toRing == null) {
-                toRing = siteSpec();
-            }
-            // 受理之前规划好的那条只用在第一趟
-            nav = Trip.prepared(player, ring.goal(), toRing, ringRoute, siteCenter());
-            ringRoute = null;
-        }
-        boolean done = switch (nav.tick()) {
-            case ARRIVED, FAILED -> true;
-            // 预算只计"正在往那儿走"的刻(workTicks):等规划的刻长短看机器快慢,不计入。
-            case RUNNING -> workTicks() - travelSince > TRAVEL_BUDGET_TICKS;
-        };
-        if (done) {
-            beginWork();
-        }
-        return TaskState.RUNNING;
-    }
-
-    private void beginWork() {
-        stopNav();
-        player.controls().stop();
-        if (startClear()) {
-            // 到场了,要清的先清:清完再回外圈开工
-            phase = Phase.CLEAR;
-            return;
-        }
-        phase = Phase.WORK;
-        placeCredit = 0;
-        // 没走出去:就在原地接着盖,不反复起寻路去撞同一堵墙;压着的那几格收尾时如实交代
-        stuckInSite = inSite();
-        if (stuckInSite) {
-            com.dwinovo.numen.core.Constants.LOG.debug(
-                    "[numen-build] 没走出工地,就地开工 feet={} 工地={}..{}",
-                    player.blockPosition().toShortString(), siteMin.toShortString(), siteMax.toShortString());
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // 二、施工
-    // ------------------------------------------------------------------
-
-    /**
-     * 施工的一刻:按稳定的速率落位,落完叫演出走一步。速率只由信用定——层与层之间不停顿,她走到哪一面、那一面就长。
+     * 施工的一刻:按稳定的速率落位,身体站着。速率只由信用定——层与层之间不停顿。
      */
     private TaskState tickWork() {
-        if (!inSite()) {
-            stuckInSite = false;
-        } else if (!stuckInSite) {
-            // 被挤、被推、掉进了工地:先走出去,站在里面会压住要放的格
-            phase = Phase.TRAVEL;
-            player.controls().releaseAll();
-            return TaskState.RUNNING;
-        }
         TaskState state = TaskState.RUNNING;
         if (retryWait > 0) {
             retryWait--;
@@ -551,20 +347,13 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 state = runBatch(budget);
             }
         }
-        if (phase == Phase.WORK) {
-            // 落完位再迈步:脸朝哪儿这一刻已经定了,腿按它换算
-            show.walk();
-        }
+        show.stand();
         return state;
     }
 
     /**
      * 落一批:在<b>当前最低的未完成层</b>里,挑离她最近的几格;这一层轮完了接着翻下一层,预算用完或者这一遍到头为止。
-     *
-     * <p>顺序低层优先(上面的东西得有底下的东西撑着),层内则<b>跟着她的位置走</b>,
-     * 不走固定蛇形。落位顺序跟她在哪无关的话,观感是"她在那边溜达,方块在这边冒出来"
-     * ——两条互不相干的动画叠在一起,一眼就假。绑上之后,她走到东墙东墙就长,绕到
-     * 南边南边接着长。<b>因果对上,比加多少粒子都管用。</b>
+     * 顺序低层优先(上面的东西得有底下的东西撑着),层内由近及远。
      */
     private TaskState runBatch(int budget) {
         List<BlockPos> touched = new ArrayList<>();
@@ -601,7 +390,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * 当前层里离她最近、这一层还没轮到过的一格待建;这一层都轮到过了是 null。
      *
      * <p>{@code placedThisLayer} 只保证"这一层每格都轮到过一次",不决定顺序;
-     * 真正的顺序由距离决定,所以她走到哪里哪里就长。
+     * 真正的顺序由距离决定。
      */
     private BuildTaskRecord.Target nearestPendingInLayer() {
         BuildTaskRecord.Target best = null;
@@ -710,7 +499,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
         if (occupied) {
             if (!WorkProfile.of(player).instaBreak()) {
-                // 生存:要挖掉的格归清场(挖掘执行);轮到时还立着,就是还没挖掉或挖不掉——这遍放下,不往上放
+                // 生存:立着的方块由 work.dig 挖开,这里不挖;轮到时还立着就放下,回执算进"要先挖开的"
                 return null;
             }
             // 创造:原版一下就碎——写成空气,邻居照原版反应(贴着它的火把掉下来),所以这一次通知邻居;要放方块的接着落位
@@ -821,32 +610,15 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * 却还能砌十堵墙,那时候停下来是错的。
      */
     private boolean canStillAffordAnyPendingCell() {
+        BuildSurvey survey = survey();
         for (BuildTaskRecord.Target target : r.targets) {
             if (target.matches(rules.peek(target.pos()))) continue;
             if (rules.blockedByMode(target) || rules.hopeless(target)) continue;
-            if (affordable(target)) {
+            if (survey.affordable(target)) {
                 return true;
             }
         }
         return false;
-    }
-
-    /** 她此刻付不付得起这一格:不花料的格(清空格)永远付得起;有料单的格单子上每样都在,否则身上够件数。 */
-    private boolean affordable(BuildTaskRecord.Target target) {
-        int cost = r.consumeMaterials && rules.costsMaterial(target) ? target.materialCount() : 0;
-        if (cost <= 0) {
-            return true;
-        }
-        var needs = ledger.needsFor(target);
-        if (needs.isEmpty()) {
-            return inv.hasItems(target.item(), cost, true);
-        }
-        for (BuildTaskRecord.CellNeed need : needs) {
-            if (inv.countMatching(need) < 1) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /**
@@ -944,15 +716,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 return conclude(new Ending("built " + r.completed() + "/" + r.targets.size()
                         + " and ran out — " + ledger.missingReason(passMissing), FailureType.NO_MATERIAL));
             }
-            // 等过了也补不上:走一遍缺格,留案再交代,失败的类型跟主导病因走。盖不完就是盖不完,不粉饰成成功。
-            LongOpenHashSet uncleared = new LongOpenHashSet(clearTried);
-            uncleared.removeAll(cleared);
-            BuildOutstanding outstanding = BuildOutstanding.survey(r.targets, rules, skippedPos, uncleared,
-                    player.level(), damagedCells);
+            // 等过了也补不上:走一遍够得着却放不下的格,留案再交代,失败的类型跟主导病因走。放不下就是放不下,不粉饰成成功。
+            BuildOutstanding outstanding = BuildOutstanding.survey(order, rules, skippedPos, player.level(),
+                    damagedCells);
             outstanding.log(r.completed(), r.targets.size(), player.blockPosition(), designFrame());
             return conclude(new Ending(outstanding.describe(designFrame()) + "; built " + r.completed() + "/"
-                    + r.targets.size() + (clearNote == null ? "" : "; clearing them: " + clearNote),
-                    outstanding.failure()));
+                    + r.targets.size(), outstanding.failure()));
         }
         if (!progressed) {
             retryWait = RETRY_WAIT_TICKS;
@@ -961,10 +730,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         passStartCompleted = r.completed();
         passMissing.clear();
         passStarved = false;   // 下一遍重新判:期间玩家可能补过料
-        if (!toClear().isEmpty()) {
-            // 这一遍冒出了没清过的格(外力放下的、补料后付得起的):回到外圈先清场,再接着盖
-            stopNav();
-            phase = Phase.TRAVEL;
+        if (order.isEmpty()) {
+            // 够得着的都对上了(或这一刻只剩要先挖开的):收工,回执说还剩什么
+            return conclude(null);
         }
         return TaskState.RUNNING;
     }
@@ -975,12 +743,11 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     // ------------------------------------------------------------------
-    // 三、收场
+    // 二、收场
     // ------------------------------------------------------------------
 
-    /** 活到头了:建完({@code why} 为 null)或干不下去了。身体站住,按结论收场。 */
+    /** 活到头了:够得着的放完({@code why} 为 null)或干不下去了。身体站住,按结论收场。 */
     private TaskState conclude(Ending why) {
-        stopNav();
         player.controls().stop();
         if (why != null) {
             fail(why.why(), why.type());
@@ -1039,30 +806,27 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         return settled;
     }
 
-    /** 建成收工:让世界落定一次、生成摆设、外围补水,放一把庆祝的粒子。 */
+    /**
+     * 够得着的放完了。整份都对上了才收尾:让世界落定一次、生成摆设、外围补水,放一把庆祝的粒子——半成品上落定会让还没有墙
+     * 可靠的贴附件掉下来,所以还剩格时只交代还剩什么、下一步去哪儿。
+     */
     private TaskState finish() {
+        player.controls().stop();
+        if (r.completed() + skippedCells < r.targets.size()) {
+            note = remaining(survey().tally());
+            return TaskState.SUCCESS;
+        }
         int popped = settleWithWorld();
         fixtures.spawnAll();
         fixtures.nudgeSurroundingWater(siteMin, siteMax);
         show.celebrate(siteMin, siteMax);
-        player.controls().stop();
-        if (r.completed() + skippedCells >= r.targets.size()) {
-            // 三种交代要并列,不能互相吃掉:此前 skippedFixtures 一非零就只报摆设,
-            // 那句"有几格没动"被整段吞掉——两件事同时发生时回执只说一半。
+        {
+            // 几种交代要并列,不能互相吃掉:两件事同时发生时回执不能只说一半。
             List<String> notes = new ArrayList<>();
-            // 不说"全对上了"——有格子我们主动没动,得说清有几格、为什么;主人不让动的单说
-            int refusedByOwner = 0;
-            for (long cell : ownerRefused) {
-                if (skippedPos.contains(cell)) {
-                    refusedByOwner++;
-                }
-            }
-            if (refusedByOwner > 0) {
-                notes.add("left " + refusedByOwner + " cell(s) alone because the owner said no: " + ownerWords);
-            }
-            if (skippedCells > refusedByOwner) {
-                notes.add("left " + (skippedCells - refusedByOwner) + " cell(s) alone: what is there may not"
-                        + " be moved, or the spot cannot be built on");
+            // 不说"全对上了"——有格子我们主动没动,得说清有几格、为什么
+            if (skippedCells > 0) {
+                notes.add("left " + skippedCells + " cell(s) alone: what is there may not be moved, or the spot "
+                        + "cannot be built on");
             }
             if (popped > 0) {
                 notes.add(popped + " cell(s) ended up different once the world settled — vanilla would not"
@@ -1115,54 +879,22 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 重排本遍顺序:只收还没达标的格。低层在前(下面盖好了上面才有依托),
-     * 层内先清障、再骨架、最后贴附;同类蛇形走位(牛耕式),顺序完全确定
-     * ——没有"智能选点"可坏,断点续建也就成立。
+     * 重排本遍顺序:只收站在这里够得着、还没达标的格({@link BuildSurvey.State#REACH},开工前问过主人之后不许的照常跳过)。
+     * 低层在前(下面盖好了上面才有依托),层内先清障、再骨架、最后贴附,顺序完全确定。
      *
      * <p><b>贴附件整体推到第二趟</b>,排在所有层之后(见 {@link BuildOrder})。
      */
     private void rebuildOrder() {
+        BuildSurvey survey = survey();
         List<BuildTaskRecord.Target> pending = new ArrayList<>();
         for (BuildTaskRecord.Target target : r.targets) {
-            if (!target.matches(rules.peek(target.pos()))
-                    && !rules.blockedByMode(target) && !rules.hopeless(target)) {
+            if (survey.of(target) == BuildSurvey.State.REACH && !rules.blockedByMode(target)) {
                 pending.add(target);
             }
         }
         pending.sort(BuildOrder.BUILD_ORDER);
         order = pending;
         resetLayerWindow();
-    }
-
-    /**
-     * 寻路对工地格的三条禁令:<b>不许拆、不许埋、不许站进去</b>。
-     *
-     * <p>不许拆——否则她会为了抄近路把自己刚砌好的墙打个洞穿过去,一边建一边拆。
-     * 不许埋——否则寻路会拿垫柱材料把某个目标格填上,那格从此和图纸对不上,还得
-     * 先拆再放。
-     * 不许站进去——否则走向外圈时会从还是空气的图纸格里抄近路,一条腿走到一半
-     * 被截断,她就站在了自己要放的那格里:身体占着的格放不下,收工时报"有人站着"。
-     * 日式小屋那次差的两格门口台阶,病根就是这个。前两条是硬禁,第三条是重价:被外力挪进去时她还得走得出来。
-     * 三条怎么写进走向外圈那条路的规格,在工地的位置代价那一处({@link BuildSite})。
-     */
-    private LongSet protectedCells() {
-        if (siteCells == null) {
-            siteCells = new LongOpenHashSet(targetByPos.keySet());
-        }
-        return siteCells;
-    }
-
-    private LongOpenHashSet siteCells;
-
-    /** 走向外圈那条路的规格:{@link #SPEC} 并上工地格的三条禁令。 */
-    private RouteSpec siteSpec() {
-        return BuildSite.around(SPEC, protectedCells());
-    }
-
-    /** 工地包围盒的中心那一格:走向外圈没走成时,回执里说"朝哪儿"用。 */
-    private BlockPos siteCenter() {
-        return new BlockPos((siteMin.getX() + siteMax.getX()) / 2, (siteMin.getY() + siteMax.getY()) / 2,
-                (siteMin.getZ() + siteMax.getZ()) / 2);
     }
 
     /** 把层窗口对准 order 里最低的那一层。 */
@@ -1269,7 +1001,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 // 固体目标被液体淹着不豁免,照放,方块直接顶掉水(原版语义)
                 observedCompleted.add(key);
                 skippedPos.remove(key);
-            } else if (rules.blockedByMode(target) || rules.hopeless(target)) {
+            } else if (rules.refused(target) || rules.hopeless(target)) {
+                // 与 BuildSurvey 的"不去动"同一个判据:要问主人的格还算待办(问了才知道),不从分母里摘掉。
                 // 注意:这一支要在 damagedCells 之前。玩家把挡路的箱子搬走时,
                 // 这一格会从"不去动"变成"待办",若走下面那支就会被记成
                 // "已砌好又被拆了"——而它从头到尾没被建过。
@@ -1340,15 +1073,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
     }
 
-    /**
-     * 走出工地、走到外圈这一段可以改地形:挖掉挡路的、垫块过坎,都是为了到场干活。起跳比平时贵得多:工地上下层之间蹦跶
-     * 容易把刚砌的东西踩坏,能绕楼梯就绕。
-     */
-    static final RouteSpec SPEC = RouteSpec.defaults().edit()
-            .alter(RouteSpec.Alter.NATURAL)
-            .jumpPenalty(RouteSpec.defaults().jumpPenalty() + 10.0)
-            .build();
-
     @Override
     public void stop(NumenPlayer companion, StopReason why) {
         super.stop(companion, why);
@@ -1373,6 +1097,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     protected Map<String, Object> resultData() {
         Map<String, Object> data = new HashMap<>();
         data.put("requested", r.targets.size());
+        data.put("left", r.targets.size() - r.completed() - skippedCells);
         data.put("completed", r.completed());
         data.put("placed", r.placed());
         data.put("replaced", r.replaced());

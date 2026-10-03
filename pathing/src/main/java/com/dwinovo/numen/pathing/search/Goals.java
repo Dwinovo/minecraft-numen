@@ -206,6 +206,16 @@ public final class Goals {
         boolean clears(WorldView view, BlockPos pos);
     }
 
+    // ==================== 放 ====================
+
+    /**
+     * 往 {@code target} 这一格里放方块:站在这里手够得着它(第 0 层 {@link Reach},与挖同一个"够得着"),而且身体不占着它——
+     * 自己占着的格放不进去。那一格是不是空的、看不看得见都不问:放的一方照图写进去。路上不往这一格里垫东西。
+     */
+    public static Goal place(BlockPos target, BodyStats body) {
+        return new Place(new Dig(target.immutable(), body, Clearing.ANY));
+    }
+
     // ==================== 够着 ====================
 
     /**
@@ -640,6 +650,34 @@ public final class Goals {
         @Override
         public String toString() {
             return "digAny" + listed(new ArrayList<>(members));
+        }
+    }
+
+    /** 放一格:到没到、估价、终点格与挖那一格同一套几何({@link Dig}),只是不为看得见它加价,也不禁止挖它。 */
+    private record Place(Dig reach) implements Goal {
+        @Override
+        public boolean contains(int x, int y, int z, Stance stance) {
+            return reach.contains(x, y, z, stance);
+        }
+
+        @Override
+        public double estimate(int x, int y, int z) {
+            return reach.estimate(x, y, z);
+        }
+
+        @Override
+        public LongSet endCells() {
+            return reach.endCells();
+        }
+
+        @Override
+        public PositionCosts protection() {
+            return PositionCosts.builder().forbid(PositionCosts.Use.PLACE, reach.target().asLong()).build();
+        }
+
+        @Override
+        public String toString() {
+            return "place(" + xyz(reach.target()) + ")";
         }
     }
 

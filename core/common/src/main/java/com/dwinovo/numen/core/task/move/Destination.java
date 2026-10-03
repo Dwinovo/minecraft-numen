@@ -28,20 +28,20 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 
 /**
- * 去处:写法({@link Stop}:一处({@link Place},坐标给几个算几个,或主人名下的一块区域)加怎样算到了,{@code --arrive at|use|near|dig},
+ * 去处:写法({@link Stop}:一处({@link Place},坐标给几个算几个,或主人名下的一块区域)加怎样算到了,{@code arrive = "at"|"use"|"near"|"dig"},
  * {@code --near} 只配 {@code near})与按那一刻的世界编好的寻路目标。写法到目标的对应只在这里:
  * <ul>
  *   <li>{@code at}:位置——{@code x y z} 是那一格,{@code x z} 是那一列,只给 {@code y} 是那个高度({@link Goals#at}、
  *       {@link Goals#column}、{@link Goals#level})。站到一块方块上面也是 {@code at}:坐标是它上面脚所在的那一格;</li>
  *   <li>{@code use}:用那一格方块——站在它敞开的面前、看得见、点得到({@link Goals#use});</li>
  *   <li>{@code near}:离那一格(或那一列)不超过 {@code near} 格({@link Goals#within});</li>
- *   <li>{@code dig}:挖那一格方块——站到手够得着它、身体不占着它、挡着视线的都是 {@code work dig} 清得掉的地方
- *       ({@link Goals#dig},清不清得掉按 {@link #clearing} 问),那一格本身留给 {@code work dig}。到了就是 {@code work dig}
+ *   <li>{@code dig}:挖那一格方块——站到手够得着它、身体不占着它、挡着视线的都是 {@code work.dig} 清得掉的地方
+ *       ({@link Goals#dig},清不清得掉按 {@link #clearing} 问),那一格本身留给 {@code work.dig}。到了就是 {@code work.dig}
  *       站在这儿办得成,两处问的是同一个判据。</li>
  * </ul>
  * 坐标就是只有一格的区域:去一块区域,四种到达对整块成立——{@code at} 是走进区域里任意一格(站得住的),{@code use} 是用区域里
  * 任意一个能点、用得上的方块,{@code near} 是离区域里任意一格不超过 {@code near} 格,三种用寻路模块现成的"多个取其一"
- * ({@link Goals#anyOf})组合;{@code dig} 是够得着区域里任意一个 {@code work dig} 挖得成的方块,同样划算的站位里优先一次
+ * ({@link Goals#anyOf})组合;{@code dig} 是够得着区域里任意一个 {@code work.dig} 挖得成的方块,同样划算的站位里优先一次
  * 够得着最多格的,挖起来贵的格(要问主人的)只在便宜的远出它那份价钱时才去({@link Goals#dig(List, BodyStats, Goals.Clearing)},
  * 定价只在寻路模块那一处)。
  *
@@ -69,7 +69,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
 
     /** 怎样算到了。 */
     public enum Arrive {
-        AT, USE, NEAR, DIG;
+        AT, USE, NEAR, DIG, REACH;
 
         /** 命令行上的写法。 */
         public String word() {
@@ -81,10 +81,10 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
         }
     }
 
-    /** 命令行上 {@code --arrive} 能写的几个。 */
-    public static final String[] ARRIVE_WORDS = {"at", "use", "near", "dig"};
+    /** 选项 {@code arrive} 能写的几个。 */
+    public static final String[] ARRIVE_WORDS = {"at", "use", "near", "dig", "reach"};
 
-    /** {@code --arrive near} 不写 {@code --near} 时停在几格内:3 格大致是"就在旁边"。 */
+    /** {@code arrive = "near"} 不写 {@code near} 时停在几格内:3 格大致是"就在旁边"。 */
     public static final int DEFAULT_NEAR = 3;
 
     private static final Codec<AreaRef> AREA_CODEC = Codec.STRING.comapFlatMap(text -> {
@@ -141,7 +141,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
             if (area == null && x == null && arrive != Arrive.AT) {
                 throw new IllegalArgumentException(GotoReminders.heightTakesNoArrive(arrive.word()));
             }
-            if (area == null && y == null && (arrive == Arrive.USE || arrive == Arrive.DIG)) {
+            if (area == null && y == null && (arrive == Arrive.USE || arrive == Arrive.DIG || arrive == Arrive.REACH)) {
                 throw new IllegalArgumentException(GotoReminders.blockNeedsY(arrive.word()));
             }
         }
@@ -151,7 +151,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
             this(x, y, z, null, arrive, near);
         }
 
-        /** 命令行上读到的几样:一处、{@code --arrive}(没写是 {@code at})、{@code --near}(没写为 null)。 */
+        /** 调用里读到的几样:一处、{@code arrive}(没写是 {@code at})、{@code near}(没写为 null)。 */
         public static Stop of(Place place, String arriveWord, Integer near) {
             return new Stop(place.x(), place.y(), place.z(), place.area(), Arrive.of(arriveWord), near);
         }
@@ -188,6 +188,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
                 case USE -> where + (area != null ? " (to use one of its blocks)" : " (to use it)");
                 case NEAR -> where + " (within " + near + ")";
                 case DIG -> where + (area != null ? " (to dig one of its blocks)" : " (to dig it)");
+                case REACH -> where + (area != null ? " (to build into one of its cells)" : " (to build into it)");
             };
         }
 
@@ -199,6 +200,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
                     case USE -> "去用区域 " + area + " 里的方块";
                     case NEAR -> "走到区域 " + area + " " + near + " 格内";
                     case DIG -> "走到够得着区域 " + area + " 里方块的地方";
+                    case REACH -> "走到够得着区域 " + area + " 里一格、往里放方块的地方";
                 };
             }
             String where = x == null ? "y=" + y : y == null ? "x=" + x + " z=" + z : x + "," + y + "," + z;
@@ -207,6 +209,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
                 case USE -> "去用 " + where;
                 case NEAR -> "走到 " + where + " " + near + " 格内";
                 case DIG -> "走到够得着 " + where + " 的地方";
+                case REACH -> "走到够得着 " + where + "、往里放方块的地方";
             };
         }
     }
@@ -242,6 +245,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
             case USE -> use(her, terrain, cell);
             case NEAR -> Goals.within(position, 0, stop.near());
             case DIG -> dig(her, terrain, cell);
+            case REACH -> reach(her, cell);
         };
         return new Destination(stop, goal, stop.toward(from));
     }
@@ -317,6 +321,12 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
                 }
                 toward = nearest.get(0);
             }
+            case REACH -> {
+                for (BlockPos cell : nearest.subList(0, Math.min(MEMBERS, nearest.size()))) {
+                    members.add(reach(her, cell));
+                }
+                toward = nearest.get(0);
+            }
             case DIG -> {
                 DigQuote pricing = DigQuote.of(her, DigTaskRecord.TARGET_SPEC);
                 DigQuote clearing = clearing(her);
@@ -375,7 +385,14 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
         return use;
     }
 
-    /** 挖一格方块的目标;空气、流体没有可挖的,站到哪儿 {@code work dig} 都挖不成的({@link #undiggable}),都当场提醒。 */
+    /**
+     * 往一格里放方块的目标:手够得着它、身体不占着它。{@code build.at} 判"这一格够不够得着"问的也是它,走到了就放得了。
+     */
+    public static Goal reach(NumenPlayer her, BlockPos cell) {
+        return Goals.place(cell, Snapshots.stats(her));
+    }
+
+    /** 挖一格方块的目标;空气、流体没有可挖的,站到哪儿 {@code work.dig} 都挖不成的({@link #undiggable}),都当场提醒。 */
     private static Goal dig(NumenPlayer her, Terrain terrain, BlockPos cell) {
         if (!terrain.clickable(cell)) {
             throw new IllegalArgumentException(GotoReminders.nothingToDig(cell, NavText.name(terrain.state(cell))));
@@ -389,7 +406,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
     }
 
     /**
-     * 站到哪儿 {@code work dig} 都挖不成 {@code cell} 的缘由;挖得成为 null。问的是 {@code work dig} 挑目标时问的同几件事:按
+     * 站到哪儿 {@code work.dig} 都挖不成 {@code cell} 的缘由;挖得成为 null。问的是 {@code work.dig} 挑目标时问的同几件事:按
      * {@link DigTaskRecord#TARGET_SPEC} 挖它进不进得了(物理上挖不挖得动、规则许不许),每一面是不是都贴着清不掉的方块。
      */
     private static String undiggable(DigQuote pricing, DigQuote clearing, Terrain terrain, BlockPos cell) {
@@ -401,7 +418,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
     }
 
     /**
-     * 到了之后 {@code work dig} 清得掉哪些挡着视线的格:它清遮挡用的那份规格({@link DigTaskRecord#SPEC}),按此刻的身体与许可。
+     * 到了之后 {@code work.dig} 清得掉哪些挡着视线的格:它清遮挡用的那份规格({@link DigTaskRecord#SPEC}),按此刻的身体与许可。
      * 走路许不许改地形是这一趟自己的事,与它无关。
      */
     private static DigQuote clearing(NumenPlayer her) {

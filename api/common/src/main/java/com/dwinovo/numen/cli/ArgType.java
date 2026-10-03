@@ -73,19 +73,19 @@ public final class ArgType<T> {
     private static final DynamicCommandExceptionType NOT_A_CHOICE = new DynamicCommandExceptionType(
             choices -> new LiteralMessage("expected one of " + choices));
     private static final SimpleCommandExceptionType NO_CELL = new SimpleCommandExceptionType(
-            new LiteralMessage("expected a cell: three whole numbers x y z, or x,y,z"));
+            new LiteralMessage("expected a cell: three whole numbers, {x, y, z} or \"x y z\""));
     /** 一格后面接着 {@code ..}(多半是想写一个盒子):一格只是一格,一片格子是区域。 */
     private static final SimpleCommandExceptionType NOT_ONE_CELL = new SimpleCommandExceptionType(
             new LiteralMessage("a cell is one x y z; a box or any other stretch of cells is an area — frame it as one "
-                    + "(area add <name> --box x1 y1 z1 x2 y2 z2) and name the area"));
+                    + "(area.add(name, {box = {x1, y1, z1, x2, y2, z2}})) and name the area"));
     private static final SimpleCommandExceptionType NO_PLACE = new SimpleCommandExceptionType(
-            new LiteralMessage("expected a place: x y z (a cell), x z (a column), y (a height), or an area name like "
-                    + "ores or ores/g3"));
+            new LiteralMessage("expected a place: {x, y, z} (a cell), {x, z} (a column), y (a height), or an area "
+                    + "name like \"ores\" or \"ores/g3\""));
     /** 读成了写法,内容却不成立(方块名认不出、区域名不合规矩……):说法由认它的那一方给。 */
     private static final DynamicCommandExceptionType REJECTED = new DynamicCommandExceptionType(
             why -> new LiteralMessage(String.valueOf(why)));
     private static final SimpleCommandExceptionType NO_ENTITY = new SimpleCommandExceptionType(
-            new LiteralMessage("expected an entity id as scan entities lists it, like 184"));
+            new LiteralMessage("expected an entity id as scan.entities lists it, like 184"));
     /** UUID 的规范写法:8-4-4-4-12 位十六进制。 */
     private static final java.util.regex.Pattern UUID_TEXT = java.util.regex.Pattern.compile(
             "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
@@ -129,6 +129,12 @@ public final class ArgType<T> {
     private final SchemaField schema;
     private final FromJson<T> json;
     private final Function<T, String> written;
+    /** 读好的值的文字本身,不带一行命令上为装下空格加的引号:写进脚本的样子({@link #plain})从它来。 */
+    private Function<T, String> raw;
+    /** 一串值的一项占几个词(一串格子):脚本把一张全是数的表当成一项。不是一串值是 false。 */
+    private boolean itemWords;
+    /** 一串值的一项的类型;不是一串值是 null。 */
+    private ArgType<?> element;
 
     /**
      * 一个值;JSON 值是一个字面值,文字原样就是它在命令行上的样子,读好的值写回去也就是它的文字
@@ -154,6 +160,7 @@ public final class ArgType<T> {
         this.schema = schema;
         this.json = json;
         this.written = written;
+        this.raw = written;
     }
 
     /**
@@ -239,7 +246,7 @@ public final class ArgType<T> {
      */
     public static ArgType<Boolean> bool() {
         BoolArgumentType read = BoolArgumentType.bool();
-        String hint = "switch: --name turns it on, --no-name off";
+        String hint = "switch: true or false";
         return new ArgType<>(read, "switch", "switch", hint, Span.ONE, Item.NONE, false, true,
                 (s, name, desc, required) -> {
                     if (required) s.bool(name, desc);
@@ -268,9 +275,11 @@ public final class ArgType<T> {
      */
     public static ArgType<String> string() {
         ArgumentType<String> read = ArgType::readString;
-        String hint = "string, quote it if it has spaces";
-        return new ArgType<>(read, "string", "string", hint, Span.ONE, Item.STRING, false, false,
+        String hint = "string";
+        ArgType<String> string = new ArgType<>(read, "string", "string", hint, Span.ONE, Item.STRING, false, false,
                 ArgType::stringField, literal(read, hint, ArgType::quoted), ArgType::quotedIfNeeded);
+        string.raw = UnaryOperator.identity();
+        return string;
     }
 
     /**
@@ -325,7 +334,7 @@ public final class ArgType<T> {
      */
     public static ArgType<String> text() {
         StringArgumentType read = StringArgumentType.greedyString();
-        String hint = "text, the rest of the line";
+        String hint = "text";
         return new ArgType<>(read, "text", "text", hint, Span.REST, Item.NONE, false, false, ArgType::stringField,
                 literal(read, hint, UnaryOperator.identity()), UnaryOperator.identity());
     }
@@ -408,7 +417,7 @@ public final class ArgType<T> {
      */
     public static ArgType<BlockPos> cell() {
         ArgumentType<BlockPos> read = ArgType::readCell;
-        String hint = "cell: x y z, or x,y,z";
+        String hint = "cell: {x, y, z} or \"x y z\"";
         return new ArgType<>(read, "x y z", "cell", hint, Span.ONE, Item.STRING, true, false, ArgType::stringField,
                 spoken(read, hint), pos -> pos.getX() + " " + pos.getY() + " " + pos.getZ());
     }
@@ -419,7 +428,8 @@ public final class ArgType<T> {
      */
     public static ArgType<Place> place() {
         ArgumentType<Place> read = ArgType::readPlace;
-        String hint = "place: x y z (a cell), x z (a column), y (a height), or an area like ores or ores/g3";
+        String hint = "place: {x, y, z} (a cell), {x, z} (a column), y (a height), or an area like \"ores\" or "
+                + "\"ores/g3\"";
         return new ArgType<>(read, "place", "place", hint, Span.ONE, Item.STRING, true, false, ArgType::stringField,
                 spoken(read, hint), Place::written);
     }
@@ -431,7 +441,7 @@ public final class ArgType<T> {
      */
     public static ArgType<BlockCellOrArea> blockCellOrArea() {
         ArgumentType<BlockCellOrArea> read = ArgType::readBlockCellOrArea;
-        String hint = "block id, #tag, cell x,y,z or area:<name>";
+        String hint = "block id, #tag, cell \"x,y,z\" or \"area:<name>\"";
         return new ArgType<>(read, "block|cell|area", "block|cell|area", hint, Span.ONE, Item.STRING, true, false,
                 ArgType::stringField, spoken(read, hint), BlockCellOrArea::written);
     }
@@ -617,8 +627,10 @@ public final class ArgType<T> {
                 throw REJECTED.create(wrong.getMessage());
             }
         };
-        return new ArgType<>(judged, kind, kind, hint, span, item, words, flagSwitch, schema, fromJson,
-                value -> written.apply(unparse.apply(value)));
+        ArgType<R> judgedType = new ArgType<>(judged, kind, kind, hint, span, item, words, flagSwitch, schema,
+                fromJson, value -> written.apply(unparse.apply(value)));
+        judgedType.raw = value -> raw.apply(unparse.apply(value));
+        return judgedType;
     }
 
     /**
@@ -627,7 +639,7 @@ public final class ArgType<T> {
      */
     public static ArgType<EntityRef> entity() {
         ArgumentType<EntityRef> read = ArgType::readEntity;
-        String hint = "entity id as scan entities lists it";
+        String hint = "entity id as scan.entities lists it";
         return new ArgType<>(read, "entity", "entity", hint, Span.ONE, Item.STRING, false, false,
                 ArgType::stringField, literal(read, hint, UnaryOperator.identity()), EntityRef::written);
     }
@@ -659,7 +671,7 @@ public final class ArgType<T> {
         if (element.item == Item.NONE) {
             throw new IllegalArgumentException(element.kind + " 不能做一串值里的一项:它不止一个值,或 JSON 数组里没有对应的项");
         }
-        String hint = element.hint + "; one or more, separated by spaces";
+        String hint = element.hint + "; one, or several as a list {a, b}";
         ArgumentType<List<T>> read = reader -> {
             List<T> values = new ArrayList<>();
             values.add(element.read(reader));
@@ -689,7 +701,8 @@ public final class ArgType<T> {
             }
             return List.copyOf(values);
         };
-        return new ArgType<>(read, element.kind + "...", element.noun, hint, Span.SEVERAL, Item.NONE, false, false,
+        ArgType<List<T>> list = new ArgType<>(read, element.kind + "...", element.noun, hint, Span.SEVERAL, Item.NONE,
+                false, false,
                 (s, name, desc, required) -> {
                     boolean integers = element.item == Item.INTEGER;
                     if (required && integers) s.intArray(name, desc, 1, 0);
@@ -697,6 +710,9 @@ public final class ArgType<T> {
                     else if (integers) s.optionalIntArray(name, desc, 0, 0);
                     else s.optionalStringArray(name, desc);
                 }, fromJson, values -> values.stream().map(element::write).collect(Collectors.joining(" ")));
+        list.itemWords = element.words;
+        list.element = element;
+        return list;
     }
 
     private static void stringField(Schema.Builder s, String name, String desc, boolean required) {
@@ -717,6 +733,30 @@ public final class ArgType<T> {
     /** 读好的值写回命令行上的样子:同一个类型再读一遍,得到的是同一个值。 */
     String write(T value) {
         return written.apply(value);
+    }
+
+    /**
+     * 读好的值写成脚本里的一个值,和脚本这个前端读回来的是同一个:开关是布尔,整数与小数是数,一串值是一张表,占几个词而全是数的
+     * (一格坐标)是一张数的表,别的是它的文字。
+     */
+    Object plain(T value) {
+        if (flagSwitch || value instanceof Number) {
+            return value;
+        }
+        if (element != null) {
+            return ((List<?>) value).stream().map(this::plainItem).toList();
+        }
+        String text = raw.apply(value);
+        if (words && text.matches("-?\\d+( -?\\d+)*")) {
+            List<Long> numbers = java.util.Arrays.stream(text.split(" ")).map(Long::valueOf).toList();
+            return numbers.size() == 1 ? numbers.get(0) : numbers;
+        }
+        return text;
+    }
+
+    @SuppressWarnings("unchecked")
+    private <E> Object plainItem(Object item) {
+        return ((ArgType<E>) element).plain((E) item);
     }
 
     /** 快捷工具的 JSON 值:字面值写成它在命令行上的样子,用同一个读法整段读完;一串值({@link #list})逐个这样读。 */
@@ -742,6 +782,11 @@ public final class ArgType<T> {
     /** 一个值在命令行上占多宽。 */
     Span span() {
         return span;
+    }
+
+    /** 是一串值,而一项本身占几个词(一串格子)。 */
+    boolean itemTakesWords() {
+        return itemWords;
     }
 
     /** 是开关:只做标志,不跟值。 */

@@ -8,8 +8,9 @@ import java.util.UUID;
 /**
  * 「跟着」——她当前在做的事就是跟着某个东西走。默认是主人,给了 {@link #target} 就是跟着那一只。
  *
- * <p>没有"干完"这回事,所以 {@link com.dwinovo.numen.task.TaskRecord#NO_DEADLINE}:
- * 期限回答的是"该多久干完",而这件活的终点只有主人换掉它。
+ * <p>不给时长({@link #forTicks} 为 0)就没有"干完"这回事,所以 {@link com.dwinovo.numen.task.TaskRecord#NO_DEADLINE}:
+ * 期限回答的是"该多久干完",而这件活的终点只有主人换掉它。给了时长,到点就以成功收场、发 task_finished(脚本等的就是它);
+ * 期限比时长多留一截,到点收场的是任务自己,不是期限。
  *
  * <p>{@code keepWithin} 是跟到多近就算到位。到位之后任务<b>休眠</b>(而不是结束):
  * 身体让给别人,目标一走远它自己就醒过来。这跟原版 {@code Goal.canUse()} 是同一
@@ -37,11 +38,24 @@ public final class FollowTaskRecord extends TaskRecord {
     /** 点名的那只叫什么,给人看的;跟主人时为 null。 */
     private final String targetName;
 
-    public FollowTaskRecord(ServerSource source, double keepWithin, UUID target, String targetName) {
-        super(source, NO_DEADLINE);
+    /** 跟多久(游戏刻);0 是常驻,一直跟到被换掉。 */
+    public final long forTicks;
+
+    /** 期限比时长多留的那一截:到点收场的是任务自己。 */
+    private static final long GRACE_TICKS = 5 * 20;
+
+    public FollowTaskRecord(ServerSource source, double keepWithin, UUID target, String targetName, long forTicks) {
+        super(source, forTicks <= 0 ? NO_DEADLINE
+                : source.companion().level().getGameTime() + forTicks + GRACE_TICKS);
         this.keepWithin = keepWithin;
         this.target = target;
         this.targetName = targetName;
+        this.forTicks = Math.max(0, forTicks);
+    }
+
+    /** 跟的是谁,给人看的那个叫法。 */
+    String who() {
+        return target == null ? "you" : targetName;
     }
 
     /**
@@ -51,6 +65,6 @@ public final class FollowTaskRecord extends TaskRecord {
     @Override
     public String describe() {
         String who = target == null ? "你" : targetName;
-        return "跟着" + who + ",保持 " + (int) keepWithin + " 米";
+        return "跟着" + who + ",保持 " + (int) keepWithin + " 米" + (forTicks > 0 ? ",跟 " + forTicks / 20 + " 秒" : "");
     }
 }

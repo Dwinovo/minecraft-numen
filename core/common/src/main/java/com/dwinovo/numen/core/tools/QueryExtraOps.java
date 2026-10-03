@@ -51,18 +51,20 @@ public final class QueryExtraOps {
     private static final double MIN_RADIUS = 1.0;
     private static final double MAX_RADIUS = 64.0;
 
+    /** 回执数据里那份实体清单的键:脚本里 {@code scan.entities} 直接返回它。 */
+    public static final String ENTITIES = "entities";
+
     /**
-     * 半径内的实体由近及远,一只一行(一个 JSON 对象),按输出预算分页({@link Listing})。翻页现读:实体会走动,
-     * 编号是运行期编号,它还在世界里时不变。
+     * 半径内的实体由近及远,一只一行(一个 JSON 对象),按输出预算分页({@link Listing});数据里是同一份清单的全部
+     * ({@link #ENTITIES}),脚本拿它循环。翻页现读:实体会走动,编号是运行期编号,它还在世界里时不变。
      *
-     * @param filter hostile、passive、player 或 all,由参数类型把关
-     * @param again  这一行本身(不带 {@code --page}):翻页时写它
+     * @param filter hostile、passive、player、item 或 all,由参数类型把关
      */
-    public String scanNearbyEntities(double radius, String filter, NumenPlayer self, CommandArgs args,
-                                     String again) {
+    public String scanNearbyEntities(double radius, String filter, NumenPlayer self, CommandArgs args) {
         radius = Math.clamp(radius, MIN_RADIUS, MAX_RADIUS);
 
-        List<Entity> raw = NearbyEntities.within(self, radius, Entity.class, e -> true);
+        // 倒下、正在消失的(死亡动画那二十来刻)不列:它已经打不着、用不了,列出来脚本会对着一具尸体再打一场
+        List<Entity> raw = NearbyEntities.within(self, radius, Entity.class, Entity::isAlive);
 
         List<ScoredEntity> matched = new ArrayList<>(raw.size());
         for (Entity e : raw) {
@@ -73,6 +75,7 @@ public final class QueryExtraOps {
         matched.sort(Comparator.comparingDouble(s -> s.distance));
 
         List<String> rows = new ArrayList<>(matched.size());
+        com.google.gson.JsonArray all = new com.google.gson.JsonArray();
         for (ScoredEntity s : matched) {
             JsonObject o = new JsonObject();
             o.addProperty("id", s.entity.getId());
@@ -83,7 +86,20 @@ public final class QueryExtraOps {
             pos.addProperty("y", s.entity.getY());
             pos.addProperty("z", s.entity.getZ());
             o.add("position", pos);
+            BlockPos cell = s.entity.blockPosition();
+            com.google.gson.JsonArray xyz = new com.google.gson.JsonArray();
+            xyz.add(cell.getX());
+            xyz.add(cell.getY());
+            xyz.add(cell.getZ());
+            o.add("cell", xyz);
             o.addProperty("distance", s.distance);
+            if (s.entity instanceof net.minecraft.world.entity.item.ItemEntity item) {
+                o.addProperty("item", BuiltInRegistries.ITEM.getKey(item.getItem().getItem()).toString());
+                o.addProperty("count", item.getItem().getCount());
+                // 刚掉下来的东西原版要过一小段冷却才让人捡:还剩几刻,捡的库函数据此判断走上去没捡到是不是在等冷却
+                o.addProperty("pickup_delay",
+                        ((com.dwinovo.numen.core.mixin.ItemEntityAccessor) item).numen$getPickupDelay());
+            }
             if (s.entity instanceof LivingEntity le) {
                 o.addProperty("hp", le.getHealth());
                 o.addProperty("max_hp", le.getMaxHealth());
@@ -93,12 +109,13 @@ public final class QueryExtraOps {
                 o.addProperty("owner", owner);
             }
             rows.add(o.toString());
+            all.add(o);
         }
         String where = " within " + radius + " blocks (" + filter + ")";
         String head = rows.isEmpty()
                 ? "No entities" + where + "."
                 : rows.size() + " entit" + (rows.size() == 1 ? "y" : "ies") + where + ", nearest first, one per line:";
-        return new Listing(head, rows, "", again).result(args).toJson();
+        return new Listing(head, rows, "").result(args, Map.of(ENTITIES, all)).toJson();
     }
 
     /**
@@ -123,6 +140,7 @@ public final class QueryExtraOps {
     private static String categorise(Entity e) {
         if (e instanceof Player) return "player";
         if (e instanceof Monster) return "hostile";
+        if (e instanceof net.minecraft.world.entity.item.ItemEntity) return "item";
         return "passive";
     }
 
@@ -138,9 +156,8 @@ public final class QueryExtraOps {
     /**
      * 做这样东西的每一条配方,一条一个条目,按输出预算分页({@link Listing});结尾是各种工位怎么做。
      *
-     * @param again 这一行本身(不带 {@code --page}):翻页时写它
      */
-    public String lookupRecipe(String item_id, NumenPlayer self, CommandArgs args, String again) {
+    public String lookupRecipe(String item_id, NumenPlayer self, CommandArgs args) {
         Item target = ToolArgs.parseItem(item_id);
         if (!(self.level() instanceof ServerLevel level)) {
             return TaskResult.fail("recipe lookup needs a server level.").toJson();
@@ -199,15 +216,15 @@ public final class QueryExtraOps {
                     + "trade), not crafted or smelted.").toJson();
         }
         return new Listing(recipes.size() + " recipe(s) for " + name + ":", recipes, "To make it —\n"
-                + "• [crafting]: run inv craft <item> --count N — it lays out the grid and takes the "
+                + "• [crafting]: inv.craft(<item>, {count = N}) — it lays out the grid and takes the "
                 + "result for you (a 3x3 recipe needs a crafting table within reach; 2x2 works "
                 + "anywhere).\n"
-                + "• [smelting|blasting|smoking]: use block the furnace, then use shift the input and "
-                + "the fuel — the menu routes each to its slot. Wait, then use shift the output back "
+                + "• [smelting|blasting|smoking]: use.block the furnace, then use.shift the input and "
+                + "the fuel — the menu routes each to its slot. Wait, then use.shift the output back "
                 + "out.\n"
-                + "• [stonecutter]: use block it, use shift the input (the menu routes it in), take the "
-                + "output. [smithing]: use block it, use gui, then use transfer template + base + "
-                + "addition each into its own slot.", again).result(args).toJson();
+                + "• [stonecutter]: use.block it, use.shift the input (the menu routes it in), take the "
+                + "output. [smithing]: use.block it, use.gui, then use.transfer template + base + "
+                + "addition each into its own slot.").result(args).toJson();
     }
 
     private static String format(CraftingRecipe recipe, ItemStack result) {
@@ -298,9 +315,8 @@ public final class QueryExtraOps {
     /**
      * 一格方块里装着什么,一行一个条目,按输出预算分页({@link Listing})。
      *
-     * @param again 这一行本身(不带 {@code --page}):翻页时写它
      */
-    public String inspectBlockStorage(int x, int y, int z, NumenPlayer self, CommandArgs args, String again) {
+    public String inspectBlockStorage(int x, int y, int z, NumenPlayer self, CommandArgs args) {
         BlockPos pos = new BlockPos(x, y, z);
         BlockState state = self.level().getBlockState(pos);
         String coord = x + "," + y + "," + z;
@@ -312,8 +328,8 @@ public final class QueryExtraOps {
         if (caps.isEmpty()) {
             return TaskResult.ok(id + " at " + coord + " exposes no item/fluid/energy storage "
                     + "(not a machine/tank/battery, or it keeps its state elsewhere). "
-                    + "If it has a GUI, right-click it (use block) then use gui.").toJson();
+                    + "If it has a GUI, right-click it (use.block) then use.gui().").toJson();
         }
-        return new Listing(id + " at " + coord + ":", caps, "", again).result(args).toJson();
+        return new Listing(id + " at " + coord + ":", caps, "").result(args).toJson();
     }
 }

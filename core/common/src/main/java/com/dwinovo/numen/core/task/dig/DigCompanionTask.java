@@ -34,14 +34,14 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * {@code work dig}:挖她<b>站在原地手够得着</b>的那些格。一条原子命令,对一个名词(点名的几处)做一种意图(挖):
+ * {@code work.dig}:挖她<b>站在原地手够得着</b>的那些格。一条原子命令,对一个名词(点名的几处)做一种意图(挖):
  * <ul>
  *   <li>只挖手够得着的——站位就是此刻脚下,够不够得着与挖一格的寻路目标是同一个判据({@link Goals#dig}:够得着、身体不占着它);
- *       够不着的不走过去,回执说还剩几格、最近一格在哪、能照抄的 {@code move goto … --arrive dig};</li>
+ *       够不着的不走过去,回执说还剩几格、最近一格在哪、能照抄的 {@code move.goto_(…, {arrive = "dig"})};</li>
  *   <li>挡在前面的格一并挖开:挖掘器朝隔着的格都清得掉、挡得最少的那一点看过去,准星落在的那一格先挖({@link BlockDigger})。清不清得掉
  *       按 {@link DigTaskRecord#SPEC} 问({@link DigQuote#clearing}):天然地形挖开,要主人同意的、规则不许的不挖,如实说是哪一格、
  *       为什么({@link DigQuote#walledIn});</li>
- *   <li>不走动、不捡:掉落物留在地上,{@code work collect} 去捡。</li>
+ *   <li>不走动、不捡:掉落物留在地上,{@code work.collect} 去捡。</li>
  * </ul>
  * 每一格都经她的手(原版挖掘循环外套权限层),用工具、有掉落、进实际账。点名的目标格本身要主人同意时,动手之前问({@link #permit}):
  * 要问就站着等主人点头,不许就带着理由收场。
@@ -391,8 +391,8 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
     /** 工具收不到掉落时说的那句:要什么、下一步。 */
     private String noTool() {
         return "my tools can't harvest " + r.label + " — digging it would destroy it without any drop. Equip a "
-                + "suitable tool (gear wear, e.g. a pickaxe) first; to break a block regardless of drops, use block <x y z>"
-                + " --left on it with whatever is in hand";
+                + "suitable tool (gear.wear, e.g. a pickaxe) first; to break a block regardless of drops, "
+                + "use.block({x, y, z}, {left = true}) on it with whatever is in hand";
     }
 
     /** 要挖却没挖成的各因为什么(以 {@code "; "} 起头);都没有是空串。 */
@@ -431,14 +431,14 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
         return data;
     }
 
-    /** 收工:挖了几格;手边还能挖却因为 {@code --count} 停下的说一句;够不着的在哪、怎么去;掉落物留在地上,{@code work collect} 去捡。 */
+    /** 收工:挖了几格;手边还能挖却因为 {@code count} 停下的说一句;够不着的在哪、怎么去;掉落物留在地上,{@code work.collect} 去捡。 */
     @Override
     protected String successMessage() {
-        String stopped = r.count != DigTaskRecord.ALL && dug.size() >= r.count ? " (the --count " + r.count
+        String stopped = r.count != DigTaskRecord.ALL && dug.size() >= r.count ? " (the count " + r.count
                 + " I was given)" : "";
         return tally() + stopped + outOfReach(true) + leftovers() + "."
-                + (WorkProfile.of(player).dropsLoot() ? " What I dug dropped on the ground: `work collect` picks it up."
-                        : "");
+                + (WorkProfile.of(player).dropsLoot() ? " What I dug dropped on the ground: `work.collect()` picks it "
+                        + "up." : "");
     }
 
     @Override

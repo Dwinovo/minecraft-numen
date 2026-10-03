@@ -21,10 +21,11 @@ import java.util.Map;
  * <p>原语只管几何,<b>不管风格</b>。屋顶怎么举架、脊用什么料、墙面怎么做凹凸,是建筑知识,住在 {@code building_design}
  * 技能里;这里只提供"把格子放到哪儿、放成什么状态"。
  *
- * <p>命令行上,原语操作的格是位置参数(一格、两头、三角、中心;{@code layer} 是那张字符图),方块是 {@code --block}——一条命令只有
- * 一类位置参数。方块的写法和原版 {@code /setblock} 一字不差(状态跟在名字后面),也可以是加权混合({@link BuildPalette});
- * 不写 {@code --block} 用的是她主手里那种方块,由执行这一行的一方在画之前填上({@code BuildCommands}),所以记进设计的每一步都写着
- * 方块。每一步可以带自己的让路档位({@code --mask})。同一格后写覆盖先写,见 {@link Canvas}。
+ * <p>原语操作的格是依次给的对象(一格、两头、三角、中心;{@code layer} 是那张字符图),方块是选项 {@code block}——一次调用只有
+ * 一类对象。方块的写法和原版 {@code /setblock} 一字不差(状态跟在名字后面),也可以是加权混合({@link BuildPalette});
+ * 不写 {@code block} 用的是她主手里那种方块,由执行这一步的一方在画之前填上({@code BuildCommands}),所以记进设计的每一步都写着
+ * 方块。每一步可以带自己的让路档位({@code mask})。同一格后写覆盖先写,见 {@link Canvas}。设计文件里的一步是同一份参数写成的
+ * 一行命令({@link Design})。
  */
 public enum Primitive {
 
@@ -55,7 +56,7 @@ public enum Primitive {
         }
     },
 
-    /** 字符网格:图例里每个字符一种方块,铺一层,或从 y 一直铺到 {@code --up_to}。 */
+    /** 字符网格:图例里每个字符一种方块,铺一层,或从 y 一直铺到 {@code up_to}。 */
     LAYER("layer", List.of(Params.ROWS, Params.AT, Params.LEGEND, Params.FILL, Params.UP_TO)) {
         @Override
         void paint(CommandArgs args, Canvas canvas) {
@@ -67,7 +68,7 @@ public enum Primitive {
             BuildPalette fallback = args.get(Params.FILL);
             BlockPos at = args.get(Params.AT);
             if (at == null) {
-                throw new IllegalArgumentException("layer: --at names the cell the first row starts at");
+                throw new IllegalArgumentException("layer: the at option names the cell the first row starts at");
             }
             int y = at.getY();
             Integer upTo = args.get(Params.UP_TO);
@@ -76,7 +77,7 @@ public enum Primitive {
                 BuildPalette palette = legend.getOrDefault(c.key(), fallback);
                 if (palette == null) {
                     throw new IllegalArgumentException("layer: character '" + c.key()
-                            + "' is not in the legend and there is no --block to fall back on");
+                            + "' is not in the legend and there is no block option to fall back on");
                 }
                 canvas.put(masked(args, cell(palette, c.pos())));
             }
@@ -168,7 +169,7 @@ public enum Primitive {
     private static BuildPalette block(CommandArgs args) {
         BuildPalette palette = args.get(Params.BLOCK);
         if (palette == null) {
-            throw new IllegalArgumentException("this step names no block: write --block, e.g. --block stone_bricks");
+            throw new IllegalArgumentException("this step names no block: give the block option, e.g. {block = \"stone_bricks\"}");
         }
         return palette;
     }
@@ -246,12 +247,12 @@ public enum Primitive {
         public static final Param<BlockPos> CENTER = Param.required("center", ArgType.cell(),
                 "The centre: a cylinder's bottom centre, a sphere's middle.");
         public static final Param<BlockPos> AT = Param.optional("at", ArgType.cell(),
-                        "Where the grid's first character goes: x y z.")
-                .whenOmitted("start at the design's origin 0 0 0 with --into, else at the cell you stand in");
+                        "Where the grid's first character goes: {x, y, z}.")
+                .whenOmitted("start at the design's origin {0, 0, 0} with into, else at the cell you stand in");
         public static final Param<BuildPalette> BLOCK = Param.optional("block", BuildPalette.ARG,
                         "The block, written exactly as /setblock takes it, block state included.")
-                .values("an id such as stone_bricks or oak_stairs[facing=north,half=top], or a weighted mix such as "
-                        + "\"stone_bricks*8, mossy_stone_bricks\" (quoted, it has spaces); air clears the cell")
+                .values("an id such as \"stone_bricks\" or \"oak_stairs[facing=north,half=top]\", or a weighted mix "
+                        + "such as \"stone_bricks*8, mossy_stone_bricks\"; \"air\" clears the cell")
                 .whenOmitted(HELD);
         public static final Param<Integer> RADIUS = Param.optional("radius", ArgType.integer(1, 64),
                 "Radius in blocks.").whenOmitted("use " + DEFAULT_RADIUS);
@@ -261,20 +262,19 @@ public enum Primitive {
                         "Keep only the outer shell.")
                 .whenOmitted("fill it solid");
         public static final Param<List<String>> ROWS = Param.required("rows", ArgType.list(ArgType.string()),
-                        "The grid, one row per value: the first row starts at --at and each row runs +x, the next row "
-                                + "one further south, so it reads like a map with north at the top. ' ' and '.' leave a "
-                                + "cell alone.")
-                .values("rows like ##### or #...#; quote a row that has spaces in it");
+                        "The grid, one string per row: the first row starts at the at option and each row runs +x, the "
+                                + "next row one further south, so it reads like a map with north at the top. ' ' and "
+                                + "'.' leave a cell alone.")
+                .values("a list of rows like {\"#####\", \"#...#\", \"#####\"}");
         public static final Param<List<Legend>> LEGEND = Param.optional("legend", ArgType.list(Legend.ARG),
                         "Which block each character of the grid is.")
-                .values("entries like #=stone_bricks or <=oak_stairs[facing=south]; quote an entry whose block is "
-                        + "a mix with spaces")
-                .whenOmitted("use --block for every character");
+                .values("a list of entries like {\"#=stone_bricks\", \"<=oak_stairs[facing=south]\"}")
+                .whenOmitted("use the block option for every character");
         public static final Param<BuildPalette> FILL = Param.optional("block", BuildPalette.ARG,
                         "The block for every grid character the legend does not name, written as /setblock takes it.")
                 .whenOmitted(HELD + ", if you hold one; otherwise every character must be in the legend");
         public static final Param<Integer> UP_TO = Param.optional("up_to", ArgType.integer(),
-                        "Repeat the same grid on every level from --at's y up to this one: a four-high wall ring is "
+                        "Repeat the same grid on every level from at's y up to this one: a four-high wall ring is "
                                 + "one layer.")
                 .whenOmitted("lay the grid on level y only");
         public static final Param<Integer> ROTATION = Param.optional("rotation", ArgType.integer(),
@@ -302,15 +302,15 @@ public enum Primitive {
         public static final Param<String> INTO = Param.optional("into", ArgType.word(),
                         "Add this step to a design instead of building it now; the coordinates are then relative to "
                                 + "the design's origin (0,0,0).")
-                .values("a design name, as build designs lists it")
+                .values("a design name, as build.designs lists it")
                 .whenOmitted("build it now, at these world coordinates");
         /** 和 {@link #INTO} 一起:换掉设计的这一步。 */
         public static final Param<Integer> STEP = Param.optional("step", ArgType.integer(1, 999),
-                        "With --into: replace this step of the design, as `build show` numbers them.")
+                        "With into: replace this step of the design, as `build.show` numbers them.")
                 .whenOmitted("add it after the last step");
         /** 和 {@link #INTO} 一起:插在这一步前面。 */
         public static final Param<Integer> BEFORE = Param.optional("before", ArgType.integer(1, 999),
-                        "With --into: insert it before this step; one past the last step appends.")
+                        "With into: insert it before this step; one past the last step appends.")
                 .whenOmitted("add it after the last step");
     }
 }

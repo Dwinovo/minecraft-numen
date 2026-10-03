@@ -44,14 +44,14 @@ public final class ScanOps {
     private ScanOps() {}
 
     /**
-     * 看一次,回执是结果的第一页(或 {@code --page} 要的那一页)。
+     * 看一次,回执是结果的第一页(或 {@code page} 要的那一页)。
      *
-     * @param in    只看这块区域(或它的一部分)里的;不限为 null
-     * @param into  把每一团加进这块区域(没有就新建);只是看为 null
-     * @param again 这一次看本身的那一行(不带 {@code --page}):翻页提示写它,改区域的征询也点名它
+     * @param in   只看这块区域(或它的一部分)里的;不限为 null
+     * @param into 把每一团加进这块区域(没有就新建);只是看为 null
+     * @param what 这次调用写成脚本里的样子:改区域的征询点名它
      */
     public static void scanBlocks(ServerSource src, int radius, List<String> blockIds, AreaRef in, AreaRef into,
-                                  CommandArgs args, String again) {
+                                  CommandArgs args, String what) {
         NumenPlayer self = src.companion();
         int r = Math.clamp(radius, MIN_RADIUS, BlockScan.MAX_RADIUS);
         Set<Block> targets = ToolParse.parseBlocks(blockIds);
@@ -60,23 +60,22 @@ public final class ScanOps {
         }
         Area only = in == null ? null : AreaOps.resolve(self, in);
         if (into == null) {
-            BlockScan.start(self, r, targets, only, found -> src.reply(listed(found, r, in, null, false, null, args,
-                    again)));
+            BlockScan.start(self, r, targets, only, found -> src.reply(listed(found, r, in, null, false, null, args)));
             return;
         }
         if (args.get(Listing.PAGE) != null) {
-            throw new IllegalArgumentException("--page turns the pages of a scan that only looks; the groups a scan "
-                    + "added to " + into + " are its parts, and area show " + into + " --page " + args.get(Listing.PAGE)
-                    + " lists them");
+            throw new IllegalArgumentException("page turns the pages of a scan that only looks; the groups a scan "
+                    + "added to " + into + " are its parts, and `area.show(\"" + into + "\", {page = "
+                    + args.get(Listing.PAGE) + "})` lists them");
         }
         String name = into.name();
         if (into.part() != null) {
-            throw new IllegalArgumentException("--into takes a whole area (" + name + "): each group becomes a new part "
+            throw new IllegalArgumentException("into takes a whole area (" + name + "): each group becomes a new part "
                     + "of it");
         }
         AreaOps.into(self, name);
         ResourceKey<Level> dimension = self.level().dimension();
-        src.authorize(Action.editArea(name), again, allowed -> BlockScan.start(self, r, targets, only,
+        src.authorize(Action.editArea(name), what, allowed -> BlockScan.start(self, r, targets, only,
                 found -> allowed.reply(added(self, found, r, in, name, dimension, args))));
     }
 
@@ -91,7 +90,7 @@ public final class ScanOps {
         } else {
             AreaOps.store(self).replace(into, added.area());
         }
-        return listed(found, radius, in, into, made, added.ids(), args, "area show " + into);
+        return listed(found, radius, in, into, made, added.ids(), args);
     }
 
     /**
@@ -125,10 +124,9 @@ public final class ScanOps {
      *
      * @param made  区域是这一次新建的
      * @param ids   写进区域后各团的编号;只是看为 null
-     * @param again 翻页提示写的那一行
      */
     private static String listed(BlockScan.Found found, int radius, AreaRef in, String into, boolean made,
-                                 List<String> ids, CommandArgs args, String again) {
+                                 List<String> ids, CommandArgs args) {
         List<BlockGroups.Group> all = found.groups();
         // 扫进区域的,回执只列最近几团:全部都在区域里,细节归 area show
         int shown = ids == null ? all.size() : Math.min(INTO_SHOWN, all.size());
@@ -163,14 +161,14 @@ public final class ScanOps {
                 : ", added to " + area + " as " + (ids.size() == 1 ? ids.get(0)
                         : ids.get(0) + " to " + ids.get(ids.size() - 1));
         String order = shown < all.size()
-                ? "; the nearest " + shown + " follow, one per line (area show " + into + " lists every part, work dig "
-                        + into + " digs them):"
+                ? "; the nearest " + shown + " follow, one per line (area.show(\"" + into + "\") lists every part, "
+                        + "work.dig(\"" + into + "\") digs them):"
                 : ", nearest first, one per line:";
         String head = all.isEmpty()
                 ? "No groups" + where + (into == null ? "."
                         : made ? "; made area " + into + ", still empty." : "; nothing was added to area " + into + ".")
                 : all.size() + " group(s)" + where + kept + order;
-        return new Listing(head, rows, note == null ? "" : "Note: " + note, again, AreaText.PAGE_BYTES)
+        return new Listing(head, rows, note == null ? "" : "Note: " + note, AreaText.PAGE_BYTES)
                 .result(args, data).toJson();
     }
 

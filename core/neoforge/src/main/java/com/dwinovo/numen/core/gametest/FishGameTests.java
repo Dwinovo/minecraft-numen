@@ -34,7 +34,7 @@ public class FishGameTests {
         pool(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_angler", new BlockPos(4, 3, 7), false);
         companion.getInventory().add(new ItemStack(Items.FISHING_ROD));
-        ToolRun fish = command(companion, "work fish --count 1");
+        ToolRun fish = lua(companion, "work.fish({count = 1})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(fish.done(), "work fish has not finished");
@@ -52,7 +52,7 @@ public class FishGameTests {
     public static void fish_without_a_rod_says_so(GameTestHelper helper) {
         pool(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_rodless", new BlockPos(4, 3, 7), false);
-        ToolRun fish = command(companion, "work fish --count 1");
+        ToolRun fish = lua(companion, "work.fish({count = 1})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(fish.done(), "work fish has not finished");
@@ -80,12 +80,12 @@ public class FishGameTests {
         pool(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_recalled", new BlockPos(4, 3, 7), false);
         companion.getInventory().add(new ItemStack(Items.FISHING_ROD));
-        ToolRun fish = command(companion, "work fish --count 5");
+        ToolRun fish = lua(companion, "work.fish({count = 5})");
         java.util.concurrent.atomic.AtomicReference<ToolRun> stop = new java.util.concurrent.atomic.AtomicReference<>();
 
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(companion.fishing != null, "she has not cast yet"))
-                .thenExecute(() -> stop.set(command(companion, "task stop")))
+                .thenExecute(() -> stop.set(lua(companion, "task.stop()")))
                 .thenWaitUntil(() -> helper.assertTrue(stop.get().succeeded() && fish.done()
                                 && fish.task().getState() == com.dwinovo.numen.task.TaskState.CANCELLED,
                         "fishing was not stopped: " + stop.get().reply() + " / " + fish.outcome()))

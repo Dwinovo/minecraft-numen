@@ -54,7 +54,10 @@ public final class TameWildMaid implements Scenario {
     }
 
     @Override
-    public List<String> solution(Scene scene) {
-        return List.of("use entity " + maid.getId() + " --item minecraft:cake");
+    public String solution(Scene scene) {
+        // use.entity 不走动:先走到她两格内
+        BlockPos at = maid.blockPosition();
+        return "move.goto_({" + at.getX() + ", " + at.getY() + ", " + at.getZ() + "}, {arrive = \"near\", near = 2})\n"
+                + "use.entity(" + maid.getId() + ", {item = \"minecraft:cake\"})";
     }
 }

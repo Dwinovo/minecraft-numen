@@ -35,11 +35,11 @@ public final class RouteText {
                 .append(route.legs().size() > 1 ? " (the last is the destination)" : "");
         List<String> flags = new ArrayList<>();
         if (!route.flags().isEmpty()) {
-            flags.add(route.flags() + " on the whole route");
+            flags.add(RouteFlags.shown(route.flags()) + " on the whole route");
         }
         for (int i = 0; i < route.legs().size(); i++) {
             if (!route.legs().get(i).flags().isEmpty()) {
-                flags.add(route.legs().get(i).flags() + " on leg " + (i + 1));
+                flags.add(RouteFlags.shown(route.legs().get(i).flags()) + " on leg " + (i + 1));
             }
         }
         sb.append(". Route flags: ").append(flags.isEmpty() ? "none, so it changes no block" : String.join("; ", flags))
@@ -122,18 +122,19 @@ public final class RouteText {
     /** 计划之后能照抄的下一步。 */
     private static String next(Itinerary route, Plan plan) {
         if (plan.unreachable() >= 0) {
-            return "It can't be walked as it stands: that leg's reason says what would change it (route spec, route via, "
-                    + "route drop), then route plan " + route.name() + " again.";
+            return "It can't be walked as it stands: that leg's reason says what would change it (route.spec, "
+                    + "route.via, route.drop), then `route.plan(\"" + route.name() + "\")` again.";
         }
         int asks = plan.asks().size();
         String asking = asks == 0 ? "" : ", asking your owner about " + asks + " cell(s) before setting off";
         for (Plan.Leg leg : plan.legs()) {
             if (leg.reach() == Plan.Reach.PARTIAL) {
-                return "move go " + route.name() + " walks it" + asking + ", working out the unknown part on the "
-                        + "way; it changes only the cells listed here, and stops to say so if the unknown part needs more.";
+                return "`move.go(\"" + route.name() + "\")` walks it" + asking + ", working out the unknown part on "
+                        + "the way; it changes only the cells listed here, and stops to say so if the unknown part needs "
+                        + "more.";
             }
         }
-        return "move go " + route.name() + " walks it" + asking + "; it changes only the cells listed here.";
+        return "`move.go(\"" + route.name() + "\")` walks it" + asking + "; it changes only the cells listed here.";
     }
 
     /** 走过的记录,新的在前;没走过是空串。 */

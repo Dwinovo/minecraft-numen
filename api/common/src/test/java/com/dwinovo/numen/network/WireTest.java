@@ -6,7 +6,7 @@ import com.dwinovo.numen.agent.tool.ServerToolTransport;
 import com.dwinovo.numen.agent.tool.ToolCall;
 import com.dwinovo.numen.network.payload.CompanionListPayload;
 import com.dwinovo.numen.network.payload.CurrentTaskPayload;
-import com.dwinovo.numen.network.payload.ExecuteToolPayload;
+import com.dwinovo.numen.network.payload.ExecuteActionPayload;
 import com.dwinovo.numen.network.payload.NumenDeathPayload;
 import com.dwinovo.numen.network.payload.NumenEventPayload;
 import com.dwinovo.numen.network.payload.TaskResultPayload;
@@ -92,7 +92,7 @@ class WireTest {
         assertTrue(message.startsWith("The result of this call came to "), message);
         assertTrue(message.contains("more than the 1048576 bytes one message to your client can carry, so it was "
                 + "not delivered."), message);
-        assertTrue(message.contains("--page"), "说怎么要少一点: " + message);
+        assertTrue(message.contains("{page = N}"), "说怎么要少一点: " + message);
         int bytes = result.getAsJsonObject("data").get("result_bytes").getAsInt();
         assertTrue(bytes > Wire.TO_CLIENT.bytes(), "报的是整包的真实大小: " + bytes);
         assertEquals(Wire.TO_CLIENT.bytes(), result.getAsJsonObject("data").get("limit_bytes").getAsInt());
@@ -157,8 +157,8 @@ class WireTest {
     @Test
     void aToolCallTooBigForTheServerIsAnsweredOnTheClientAndNotSent() {
         AtomicReference<String> completed = new AtomicReference<>();
-        String args = "{\"command\":\"build layer 0 0 0 " + "#".repeat(Wire.TO_SERVER.bytes()) + "\"}";
-        ServerToolTransport.ship(new ToolCall("call-9", "command", args, () -> A, completed::set));
+        String args = "{\"grid\":[\"" + "#".repeat(Wire.TO_SERVER.bytes()) + "\"]}";
+        ServerToolTransport.ship(new ToolCall("call-9", "build layer", args, () -> A, completed::set));
 
         JsonObject result = JsonParser.parseString(completed.get()).getAsJsonObject();
         assertFalse(result.get("success").getAsBoolean());
@@ -171,12 +171,12 @@ class WireTest {
 
     @Test
     void aToolCallThatFitsTheServerRoundTrips() {
-        String args = "{\"command\":\"build layer 0 0 0 " + "#".repeat(20_000) + "\"}";
-        ExecuteToolPayload call = new ExecuteToolPayload(A, "call-10", "command", args);
+        String args = "{\"grid\":[\"" + "#".repeat(20_000) + "\"]}";
+        ExecuteActionPayload call = new ExecuteActionPayload(A, "call-10", "build layer", args);
         ByteBuf buf = Unpooled.buffer();
-        ExecuteToolPayload.STREAM_CODEC.encode(buf, call);
+        ExecuteActionPayload.STREAM_CODEC.encode(buf, call);
         assertTrue(Wire.TO_SERVER.holds(buf.readableBytes()));
-        assertEquals(call, ExecuteToolPayload.STREAM_CODEC.decode(buf), "从前 16384 字符就拦下,现在按整包的字节算");
+        assertEquals(call, ExecuteActionPayload.STREAM_CODEC.decode(buf), "从前 16384 字符就拦下,现在按整包的字节算");
     }
 
     /** 收的一方以整包上限为防线:一个字段比整包还长,那不是 Numen 发的。 */

@@ -19,8 +19,9 @@ import com.dwinovo.numen.task.TaskResult;
 import net.minecraft.world.entity.Entity;
 
 /**
- * {@code fight}:打。一个动作 {@code attack},占身体、交任务槽。它是<b>工作流</b>,不是原子命令:除了每刻的控制(走近、挥、
- * 换远程、躲爆炸),打哪几只、打完捡掉落这些决定也在里面,帮助与文档里写明(设计稿 {@code docs/shell.md} §三)。
+ * {@code fight}:打。一个动作 {@code attack} 只打点名的那一只,占身体、交任务槽。里面是这件事每刻必需的控制:追着保持在够得着处、
+ * 盯着转头、等冷却出手、换远程、躲爆炸;目标死了、丢了、超时就收尾。打哪几只、打完捡掉落都不在里面:那是秒级的决策,归脚本
+ * (库里的 {@code fight.clear} 扫一眼敌对的、一只一只打)。
  *
  * <p><b>不问模型用什么武器</b>——那要看走到跟前时还有多远、有没有视线、还剩几支箭,全是模型在派发那一刻看不到的东西。
  */
@@ -28,66 +29,46 @@ public final class FightCommands {
 
     static final String GROUP = "fight";
 
-    private static final Param<List<EntityRef>> ENTITY_IDS = Param.optionalPositional("entity",
-            ArgType.list(ArgType.entity()), "The entities to fight, up to 20 distinct ones.")
-            .values("runtime entity ids from scan entities")
-            .whenOmitted("fight off every hostile near you");
+    private static final Param<EntityRef> ENTITY = Param.required("entity", ArgType.entity(), "The entity to fight.")
+            .values("a runtime entity id from scan.entities");
 
     private FightCommands() {}
 
     public static void install(NumenApi numen) {
-        numen.registerCommands(GROUP, "Combat: attack the entities you name, or every hostile near you.",
-                FightCommands::actions);
+        numen.registerCommands(GROUP, "Combat: attack one entity you name. fight.clear (library) fights off every "
+                + "hostile near you, one by one.", FightCommands::actions);
     }
 
     private static void actions(CommandGroup fight) {
-        fight.server("attack", "Attack specific entities, or fight off every hostile near you (a workflow).",
-                        FightCommands::attack, ENTITY_IDS)
-                .example("fight attack 184 207")
-                .example("fight attack")
-                .note("A workflow, not a single step: it keeps closing in, swinging, shooting and dodging until the "
-                        + "fight is over.")
-                .note("Background work: returns at once; the end arrives as a task_finished event.")
+        fight.server("attack", "Attack one entity until it is dead, lost or out of reach.",
+                        FightCommands::attack, ENTITY)
+                .example("fight.attack(184)")
+                .note("Several: `for _, foe in ipairs(scan.entities(\"hostile\", {radius = 16})) do "
+                        + "fight.attack(foe.id) end`; `fight.clear()` (library) does that until none is left.")
+                .note("Background work: it keeps chasing, turning, swinging, shooting and dodging until that one is "
+                        + "dead, gone or out of reach; the end arrives as a task_finished event.")
                 .note("The body picks how: it closes in and swings when it can reach, shoots with a bow or "
                         + "crossbow when it cannot, keeps its distance from things that explode, and picks the "
-                        + "weapon you own that is strongest against that target. It walks over the drops "
-                        + "afterwards.")
-                .note("Without ids it ends when nothing is coming after you any more; that is the only way to "
-                        + "handle things that split (slimes, magma cubes), because splitting gives them new ids.")
+                        + "weapon you own that is strongest against that target.")
+                .note("It does not pick up what the target drops: `work.collect()` does. Things that split (slimes, "
+                        + "magma cubes) come back as new ids: scan again, or `fight.clear()`.")
                 .note("Asks your owner before hitting a pet, a named mob or a villager when their rules say so.")
-                .seeAlso("scan entities", "task stop");
+                .seeAlso("scan entities", "fight clear", "work collect", "task stop");
     }
 
     /**
-     * 点名的实体受理这一刻按运行期编号找到;找不到的那些照旧交给任务记成丢失。重启后重放的那一行只写找到的那些,
-     * 写成它们的 UUID({@link ServerSource#replayedWith}):运行期编号重启后会发给别的东西,照着旧号重放可能打到
-     * 毫不相干的一只。一只都找不到就当场失败——那一行没有可写的目标,照着它重放就成了不点名的清场。
+     * 点名的实体受理这一刻按运行期编号找到;找不到就当场失败。重启后重放的那一行写成它的 UUID({@link ServerSource#replayedWith}):
+     * 运行期编号重启后会发给别的东西,照着旧号重放可能打到毫不相干的一只。
      */
     private static void attack(ServerSource src, CommandArgs args) {
-        List<EntityRef> named = args.get(ENTITY_IDS);
-        if (named == null) {
-            TaskDispatch.setTask(src, new CombatOps().attack(src, List.of()));
-            return;
-        }
-        Map<Integer, Entity> found = new LinkedHashMap<>();
-        List<Integer> ids = new ArrayList<>();
-        for (EntityRef ref : named) {
-            Entity e = ref.in(src.companion().serverLevel());
-            if (e == null || e == src.companion()) {
-                if (ref.id() != null) {
-                    ids.add(ref.id());
-                }
-                continue;
-            }
-            found.putIfAbsent(e.getId(), e);
-            ids.add(e.getId());
-        }
-        if (found.isEmpty()) {
-            src.reply(TaskResult.fail("none of " + named + " is here — `scan entities` first, ids do not "
+        EntityRef named = args.get(ENTITY);
+        Entity e = named.in(src.companion().serverLevel());
+        if (e == null || e == src.companion()) {
+            src.reply(TaskResult.fail("no entity with id " + named + " is here — `scan.entities()` first, ids do not "
                     + "survive restarts").toJson());
             return;
         }
-        List<EntityRef> stable = found.values().stream().map(EntityRef::of).toList();
-        TaskDispatch.setTask(src.replayedWith(args.with(ENTITY_IDS, stable)), new CombatOps().attack(src, ids));
+        TaskDispatch.setTask(src.replayedWith(args.with(ENTITY, EntityRef.of(e))),
+                new CombatOps().attack(src, e.getId()));
     }
 }

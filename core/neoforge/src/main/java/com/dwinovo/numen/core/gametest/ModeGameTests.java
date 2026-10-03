@@ -41,8 +41,7 @@ public class ModeGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_cghost", new BlockPos(2, 2, 2), true);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
-        TaskRecord record = call(companion, "move_goto", args(
-                "place", xyz(target))).task();
+        TaskRecord record = lua(companion, "move.goto_(" + xyz(target) + ")").task();
         succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "creative companion has not reached the goto target");
@@ -84,7 +83,7 @@ public class ModeGameTests {
     @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_mode")
     public static void creative_build_empty_inventory(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        NumenPlayer companion = spawnAt(helper, "gametest_cmason", new BlockPos(2, 2, 2), true);
+        NumenPlayer companion = spawnAt(helper, "gametest_cmason", new BlockPos(9, 2, 7), true);
         List<BuildTaskRecord.Target> targets = new ArrayList<>();
         for (BlockPos rel : boxCells(new BlockPos(8, 2, 8), 3, 1, 3, false)) {
             targets.add(new BuildTaskRecord.Target(Blocks.COBBLESTONE, Items.COBBLESTONE,
@@ -92,7 +91,7 @@ public class ModeGameTests {
         }
         var ctx = TaskDispatch.ctx("gametest-cbuild", companion);
         TaskDispatch.setTask(companion, buildJob(ctx.toolCallId(),
-                ctx.deadline(3600L), targets, false, false), null, reply -> {});
+                ctx.deadline(3600L), targets, false, false), reply -> {});
         succeedWhen(helper, () -> {
             for (BuildTaskRecord.Target t : targets) {
                 helper.assertTrue(level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),
@@ -118,7 +117,7 @@ public class ModeGameTests {
         // 盘料是受理之前的准备:料不齐,这次调用当场回错误,活不进槽、没有任务编号
         BuildTaskRecord record = buildJob(ctx.toolCallId(), ctx.deadline(3600L), targets, true, false);
         java.util.concurrent.atomic.AtomicReference<String> replied = new java.util.concurrent.atomic.AtomicReference<>();
-        TaskDispatch.setTask(companion, record, null, replied::set);
+        TaskDispatch.setTask(companion, record, replied::set);
         succeedWhen(helper, () -> {
             String reply = replied.get();
             helper.assertTrue(reply != null, "the build has not replied");
@@ -157,9 +156,7 @@ public class ModeGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_climber", new BlockPos(3, 2, 3), true);
         BlockPos target = helper.absolutePos(new BlockPos(12, 2, 12));
-        TaskRecord record = call(companion, "move_goto", args(
-                "place", xyz(target),
-                "alter", "natural")).task();
+        TaskRecord record = lua(companion, "move.goto_(" + xyz(target) + ", {alter = \"natural\"})").task();
         succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "empty-handed creative companion has not pillared out");
@@ -195,9 +192,7 @@ public class ModeGameTests {
         companion.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
         com.dwinovo.numen.core.nav.ThrowawayBlocks.store(companion, List.of("minecraft:cobblestone"));
         BlockPos target = helper.absolutePos(new BlockPos(12, 2, 12));
-        ToolRun walk = call(companion, "move_goto", args(
-                "place", xyz(target),
-                "alter", "natural"));
+        ToolRun walk = lua(companion, "move.goto_(" + xyz(target) + ", {alter = \"natural\"})");
         helper.onEachTick(() -> {
             if (walk.done() && !walk.succeeded()) {
                 helper.fail("she did not pillar out of the well with her own throwaway blocks: " + walk.outcome());
@@ -317,12 +312,12 @@ public class ModeGameTests {
         helper.succeed();
     }
 
-    /** 创造取物:inv take 凭空取 100 钻石入背包(创造物品栏 GUI 的假体)。 */
+    /** 创造取物:inv.take 凭空取 100 钻石入背包(创造物品栏 GUI 的假体)。 */
     @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
     public static void creative_take_items(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_conjure", new BlockPos(2, 2, 2), true);
-        ToolRun reply = command(companion, "inv take minecraft:diamond --count 100");
+        ToolRun reply = lua(companion, "inv.take(\"minecraft:diamond\", {count = 100})");
         succeedWhen(helper, () -> {
             helper.assertTrue(reply.reply() != null && reply.reply().contains("\"success\":true"),
                     "inv take should succeed in creative, got: " + reply.reply());
@@ -332,12 +327,12 @@ public class ModeGameTests {
         });
     }
 
-    /** 生存取物拒绝:inv take 在生存画像下吃诚实拒绝,背包不动。 */
+    /** 生存取物拒绝:inv.take 在生存画像下吃诚实拒绝,背包不动。 */
     @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
     public static void survival_take_items_refused(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_honest", new BlockPos(2, 2, 2), false);
-        ToolRun reply = command(companion, "inv take minecraft:diamond --count 10");
+        ToolRun reply = lua(companion, "inv.take(\"minecraft:diamond\", {count = 10})");
         succeedWhen(helper, () -> {
             helper.assertTrue(reply.reply() != null && reply.reply().contains("\"success\":false"),
                     "inv take must refuse in survival, got: " + reply.reply());
@@ -351,7 +346,7 @@ public class ModeGameTests {
     @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_mode")
     public static void survival_build_consumes(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        NumenPlayer companion = spawnAt(helper, "gametest_frugal", new BlockPos(2, 2, 2), false);
+        NumenPlayer companion = spawnAt(helper, "gametest_frugal", new BlockPos(9, 2, 7), false);
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
         List<BuildTaskRecord.Target> targets = new ArrayList<>();
         for (BlockPos rel : boxCells(new BlockPos(8, 2, 8), 3, 1, 3, false)) {
@@ -360,7 +355,7 @@ public class ModeGameTests {
         }
         var ctx = TaskDispatch.ctx("gametest-sbuild", companion);
         TaskDispatch.setTask(companion, buildJob(ctx.toolCallId(),
-                ctx.deadline(3600L), targets, true, false), null, reply -> {});
+                ctx.deadline(3600L), targets, true, false), reply -> {});
         succeedWhen(helper, () -> {
             for (BuildTaskRecord.Target t : targets) {
                 helper.assertTrue(level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),

@@ -9,17 +9,21 @@ Load this support skill before a combat-heavy phase.
 
 ## Choose and authorize targets
 
-Combat does not scan by mob type. First call `scan_entities`, select the exact entities you intend to attack, then pass 1-20 returned runtime integer IDs:
+Combat does not scan by mob type. First call `scan.entities`, pick the exact entity you intend to attack, then pass its runtime id — one entity per call:
 
-```
-fight attack 184 207 215
+```lua
+fight.attack(184)
 ```
 
-Players and mobs use the same ID field. Never guess IDs and never include an entity you do not intend to attack. The task re-resolves moving targets every tick, paths across terrain when they are far away, and attacks only the authorized IDs.
+Players and mobs use the same id. Never guess ids and never attack an entity you did not pick. The task re-resolves the moving target every tick and paths across terrain when it is far away. To fight several, call it once for each in a program; `fight.clear()` (library) fights every hostile around you, nearest first:
+
+```lua
+for _, foe in ipairs(scan.entities("hostile", {radius = 16})) do fight.attack(foe.id) end
+```
 
 ## What the body decides, not you
 
-`fight attack` picks the weapon and the range on its own, every tick:
+`fight.attack` picks the weapon and the range on its own, every tick:
 
 - **Can it reach the target?** Then it closes in and swings. This also conserves arrows.
 - **Can it not get there** — the target is flying, across a chasm, on a pillar? Then it shoots, if it has a bow or crossbow with arrows.
@@ -31,29 +35,29 @@ It also picks the strongest weapon you own **against that specific target**: a S
 
 ## Before the fight
 
-1. Use `status_self` to check HP, equipment, food, and dimension.
+1. Use `status.self` to check HP, equipment, food, and dimension.
 2. Carry a melee weapon, and carry a bow with arrows if the phase involves anything airborne. Without arrows, an unreachable target is simply reported as unreachable.
-3. Keep dense food available and heal with `inv eat` before critical HP. Combat does not interrupt an active eating, potion, bow, or other use action.
+3. Keep dense food available and heal with `inv.eat` before critical HP. Combat does not interrupt an active eating, potion, bow, or other use action.
 
 ## During and after the fight
 
-The task follows the nearest authorized entity while it is out of reach, waits for weapon switching, target recovery and the vanilla attack cooldown, aims visibly, stops sprinting before the hit, and uses the native attack.
+The task follows the target while it is out of reach, waits for weapon switching, target recovery and the vanilla attack cooldown, aims visibly, stops sprinting before the hit, and uses the native attack.
 
-After every kill, target selection pauses while the body walks over newly spawned drops around that death point. Do not call `work collect` for ordinary combat drops. The final result reports defeated, lost and unreachable IDs plus `loot_gained`.
+It does not pick up what the target drops: its result says where the drops lie, and `work.collect()` walks onto them.
 
 ## Retreat rules
 
-Combat runs in the background. Check `task_finished` and `status_self` between engagements.
+A program waits for each fight to end; check `status.self()` between engagements.
 
-- HP <= 8: stop the task, move 20+ blocks away, heal, then scan again because runtime IDs may have changed.
+- HP <= 8: `task.stop()`, move 20+ blocks away, heal, then scan again because runtime IDs may have changed.
 - Weapon about to break or no arrows: disengage and restock.
-- Before a long `move_goto`, clear or outrun active pursuers.
+- Before a long `move.goto_`, clear or outrun active pursuers.
 - Avoid cliff edges, lava corridors, deep water, and cramped ledges where knockback or drops become unsafe.
 
 ## Aggro pitfalls
 
 - **Creepers**: the body will not melee one — it keeps outside the blast and shoots. Without a bow it reports the creeper as unreachable rather than trading a life for it. That is correct; get a bow or leave it.
-- Zombified piglins group-aggro. Do not authorize one unless the group fight is intentional.
+- Zombified piglins group-aggro. Do not attack one unless the group fight is intentional.
 - Piglins attack players without gold armor.
 - Endermen teleport in a fight; rescanning may be needed if one leaves the loaded world.
 - Wither skeletons apply Wither; kill quickly.

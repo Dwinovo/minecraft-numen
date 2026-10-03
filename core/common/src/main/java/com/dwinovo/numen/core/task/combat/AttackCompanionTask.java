@@ -69,8 +69,6 @@ import java.util.function.Supplier;
  */
 public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskRecord> {
 
-    private enum Phase { COMBAT, LOOT }
-
     /** 退避的寻路连续失败几次算"退不掉"。 */
     private static final int MAX_RETREAT_FAILURES = 3;
 
@@ -125,7 +123,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      */
     private static final int FLEE_REPLAN_TICKS = 20;
 
-    private Phase phase = Phase.COMBAT;
     private Entity target;
     private Vec3 lastTargetPosition;
     /**
@@ -142,8 +139,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      */
     private final java.util.Set<Integer> noPath = new java.util.HashSet<>();
 
-    private final Map<Item, Integer> inventoryBaseline = new HashMap<>();
-    private final LootSweep loot;
 
     /**
      * 这一场经手过的 id。无差别模式没有事先的名单,不记下来就无处结算战果
@@ -180,7 +175,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
 
     public AttackCompanionTask(NumenPlayer player, AttackTaskRecord record) {
         super(player, record);
-        this.loot = new LootSweep(player);
     }
 
     /**
@@ -211,7 +205,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
 
     @Override
     protected void onStart() {
-        snapshotInventory(inventoryBaseline);
         // 这场仗归我管了 —— 本能链别再为同一件事抢身体。空闲时自动解除,不必显式还。
         player.pauseReflex(MobDefenseChain.ID);
     }
@@ -219,7 +212,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     @Override
     protected TaskState onTick() {
         if (player.isDeadOrDying()) return TaskState.CANCELLED;
-        if (phase == Phase.LOOT) return tickLoot();
 
         Battlefield field = surveyField();
         for (var f : field.foes()) {
@@ -244,7 +236,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         }
         if (target != null) {
             lastTargetPosition = target.position();
-            loot.rememberPreexisting(BlockPos.containing(lastTargetPosition));
         }
         // 攻击与移动<b>正交</b>:每刻先问一次"冷却好了吗、够得着谁吗",够得着就打 ——
         // 不管这一刻在靠近、在拉开、还是站着。攻击不影响寻路,最多让她回个头。
@@ -397,13 +388,11 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             if (e == null || e.isRemoved()) {
                 if (r.strikes(id) > 0) {
                     r.defeated(id);
-                    beginLoot(lastTargetPosition);
                 } else {
                     r.lost(id);
                 }
             } else if (e instanceof LivingEntity living && living.isDeadOrDying()) {
                 r.defeated(id);
-                beginLoot(lastTargetPosition);
             }
         }
     }
@@ -983,45 +972,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
 
     // ==================== 拾荒 ====================
 
-    private void beginLoot(Vec3 where) {
-        stopNav();
-        abortShot();
-        player.controls().stop();
-        loot.begin(BlockPos.containing(where != null ? where : player.position()));
-        target = null;
-        lastMove = null;   // 目标没了,承诺一并作废
-        phase = Phase.LOOT;
-    }
-
-    private TaskState tickLoot() {
-        loot.discover();
-        if (loot.settling()) {
-            player.controls().stop();
-            return TaskState.RUNNING;
-        }
-        loot.prune();
-        if (loot.live().isEmpty()) {
-            stopNav();
-            loot.finish();
-            phase = Phase.COMBAT;
-            return TaskState.RUNNING;
-        }
-        if (nav == null) {
-            BlockPos nearest = loot.live().stream().map(ItemEntity::blockPosition)
-                    .min(java.util.Comparator.comparingDouble(p -> p.distSqr(player.blockPosition())))
-                    .orElse(player.blockPosition());
-            nav = Trip.to(player, loot.goal(), RouteSpec.defaults(), nearest);
-        }
-        switch (nav.tick()) {
-            case RUNNING -> { }
-            case ARRIVED, FAILED -> {
-                loot.noteApproachFailure();
-                stopNav();
-            }
-        }
-        return TaskState.RUNNING;
-    }
-
     // ==================== 收尾与回执 ====================
 
     private void abortShot() {
@@ -1029,25 +979,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             shot.abort();
             shot = null;
         }
-    }
-
-    private void snapshotInventory(Map<Item, Integer> out) {
-        out.clear();
-        Inventory inventory = player.getInventory();
-        for (ItemStack stack : inventory.items) {
-            if (!stack.isEmpty()) out.merge(stack.getItem(), stack.getCount(), Integer::sum);
-        }
-    }
-
-    private Map<String, Integer> lootGained() {
-        Map<Item, Integer> now = new HashMap<>();
-        snapshotInventory(now);
-        Map<String, Integer> gained = new LinkedHashMap<>();
-        now.forEach((item, count) -> {
-            int delta = count - inventoryBaseline.getOrDefault(item, 0);
-            if (delta > 0) gained.put(BuiltInRegistries.ITEM.getKey(item).toString(), delta);
-        });
-        return gained;
     }
 
     @Override
@@ -1084,28 +1015,30 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         }
         data.put("strikes", r.strikes());
         data.put("combat_by_entity", byEntity);
-        data.put("loot_gained", lootGained());
-        data.put("unreachable_drop_count", loot.unreachableCount());
         return data;
     }
 
     private String tally() {
-        return (r.indiscriminate
+        return r.indiscriminate
                 ? r.defeated().size() + " hostiles"
-                : r.defeated().size() + "/" + r.entityIds.size() + " requested entities")
-                + ", collected " + lootGained();
+                : r.defeated().size() + "/" + r.entityIds.size() + " requested entities";
+    }
+
+    /** 打倒了什么,它掉的东西留在地上:捡是 {@code work.collect} 的事。 */
+    private String drops() {
+        return r.defeated().isEmpty() ? "" : "; what they dropped lies on the ground: `work.collect()` picks it up";
     }
 
     @Override
     protected String successMessage() {
         String refusedNote = r.refused().isEmpty() ? "" : "; left alone: " + refusedSummary();
         if (r.indiscriminate) {
-            return "fought off " + tally() + "; nothing is coming after you any more" + refusedNote;
+            return "fought off " + tally() + "; nothing is coming after you any more" + refusedNote + drops();
         }
         int incomplete = r.lost().size() + r.unreachable().size();
         return "defeated " + tally()
                 + (incomplete == 0 ? "" : " (" + incomplete + " targets could not be completed)")
-                + refusedNote;
+                + refusedNote + drops();
     }
 
     @Override

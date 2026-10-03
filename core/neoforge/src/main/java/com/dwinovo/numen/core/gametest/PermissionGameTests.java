@@ -95,11 +95,9 @@ public class PermissionGameTests {
         ownersRoom(helper, 7, 7);
         int planksBefore = plankCount(helper, 7, 7);
         NumenPlayer companion = spawnAt(helper, "gametest_lodger", new BlockPos(7, 2, 7), false);
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_landlord");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_landlord");
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        ToolRun walk = call(companion, "move_goto", args(
-                "place", xyz(target),
-                "alter", "natural"));
+        ToolRun walk = lua(companion, "move.goto_(" + xyz(target) + ", {alter = \"natural\"})");
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
         ToolRun[] plan = new ToolRun[1];
@@ -110,10 +108,10 @@ public class PermissionGameTests {
                     String reply = walk.outcome();
                     helper.assertTrue(walk.refused(), "goto through the owner's wall was accepted: " + walk.reply());
                     helper.assertTrue(reply.contains("owner's consent")
-                                    && reply.contains("`route spec goto-gametest_lodger --alter any`"),
+                                    && reply.contains("`route.spec(\"goto-gametest_lodger\", {alter = \"any\"})`"),
                             "the refusal does not say it needs the owner's consent and how to allow it: " + reply);
-                    command(companion, "route spec goto-gametest_lodger --alter any");
-                    plan[0] = command(companion, "route plan goto-gametest_lodger");
+                    lua(companion, "route.spec(\"goto-gametest_lodger\", {alter = \"any\"})");
+                    plan[0] = lua(companion, "route.plan(\"goto-gametest_lodger\")");
                 })
                 .thenWaitUntil(() -> helper.assertTrue(plan[0].done(), "route plan has not replied"))
                 .thenExecute(() -> {
@@ -125,7 +123,7 @@ public class PermissionGameTests {
                     helper.assertTrue(companion.blockPosition().distSqr(target) > 3 * 3,
                             "companion got out through the owner's wall?!");
                     CompanionFactory.despawn(level.getServer(), companion);
-                    CompanionFactory.despawn(level.getServer(), owner);
+                    leave(owner);
                 })
                 .thenSucceed();
     }
@@ -140,12 +138,10 @@ public class PermissionGameTests {
         ownersRoom(helper, 7, 7);
         int planksBefore = plankCount(helper, 7, 7);
         NumenPlayer companion = spawnAt(helper, "gametest_tenant", new BlockPos(7, 2, 7), false);
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_host");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_host");
         BlockPos start = companion.blockPosition();
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        ToolRun walk = call(companion, "move_goto", args(
-                "place", xyz(target),
-                "alter", "any"));
+        ToolRun walk = lua(companion, "move.goto_(" + xyz(target) + ", {alter = \"any\"})");
         boolean[] answered = new boolean[1];
 
         succeedWhen(helper, () -> {
@@ -172,7 +168,7 @@ public class PermissionGameTests {
             helper.assertTrue(plankCount(helper, 7, 7) < planksBefore, "no plank was broken");
             helper.assertTrue(reply.contains("the owner allowed"), "the reply does not say the owner allowed it: " + reply);
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 
@@ -183,11 +179,9 @@ public class PermissionGameTests {
         ownersRoom(helper, 7, 7);
         int planksBefore = plankCount(helper, 7, 7);
         NumenPlayer companion = spawnAt(helper, "gametest_squatter", new BlockPos(7, 2, 7), false);
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_strict");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_strict");
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        ToolRun walk = call(companion, "move_goto", args(
-                "place", xyz(target),
-                "alter", "any"));
+        ToolRun walk = lua(companion, "move.goto_(" + xyz(target) + ", {alter = \"any\"})");
         boolean[] answered = new boolean[1];
 
         succeedWhen(helper, () -> {
@@ -205,7 +199,7 @@ public class PermissionGameTests {
             helper.assertTrue(plankCount(helper, 7, 7) == planksBefore, "the wall was damaged after a no");
             helper.assertTrue(companion.blockPosition().distSqr(target) > 3 * 3, "she left anyway");
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 
@@ -221,7 +215,7 @@ public class PermissionGameTests {
             playerPlaces(helper, rel, Items.OAK_LOG);
         }
         NumenPlayer companion = spawnAt(helper, "gametest_lumberjack", new BlockPos(2, 2, 5), false);
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_forester");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_forester");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         Mining mine = mineScanned(helper, companion, 8, "minecraft:oak_log", 2);
         java.util.Set<Long> requests = new java.util.HashSet<>();
@@ -239,7 +233,7 @@ public class PermissionGameTests {
                     "companion has not gathered 2 logs: " + mine.outcome());
             helper.assertTrue(requests.size() == 1, "asked " + requests.size() + " times for the same kind of log");
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 
@@ -252,7 +246,7 @@ public class PermissionGameTests {
             playerPlaces(helper, rel, Items.JUNGLE_LOG);
         }
         NumenPlayer companion = spawnAt(helper, "gametest_hewer", new BlockPos(2, 2, 5), false);
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_keeper");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_keeper");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         Mining mine = mineScanned(helper, companion, 8, "minecraft:jungle_log", 2);
         helper.onEachTick(() -> {
@@ -271,7 +265,7 @@ public class PermissionGameTests {
                         "a log was cut after the owner said no at " + rel.toShortString());
             }
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 
@@ -291,7 +285,7 @@ public class PermissionGameTests {
             level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.ACACIA_LOG.defaultBlockState());
         }
         NumenPlayer companion = spawnAt(helper, "gametest_ranger", new BlockPos(2, 2, 5), false);
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_warden");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_warden");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         Mining mine = mineScanned(helper, companion, 12, "minecraft:acacia_log", 2);
         boolean[] asked = new boolean[1];
@@ -307,7 +301,7 @@ public class PermissionGameTests {
             }
             helper.assertTrue(!asked[0], "asked the owner although wild logs were there");
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 
@@ -325,7 +319,7 @@ public class PermissionGameTests {
         BlockPos pumpkin = helper.absolutePos(new BlockPos(10, 2, 10));
         level.setBlockAndUpdate(pumpkin, Blocks.PUMPKIN.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_walled_in", new BlockPos(4, 2, 4), false);
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_shepherd");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_shepherd");
         storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
                 com.dwinovo.numen.permission.Rule.parse("break(minecraft:white_wool)"));
         Mining mine = mineScanned(helper, companion, 9, "minecraft:pumpkin", 1);
@@ -347,7 +341,7 @@ public class PermissionGameTests {
             }
             helper.assertTrue(!asked[0], "a denied way out raised a consent card");
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 
@@ -467,8 +461,8 @@ public class PermissionGameTests {
                 var group = groupHolding(groupsIn(scanned.reply()), helper.absolutePos(logRel));
                 helper.assertTrue(group != null && "logs/g1".equals(group.get("id").getAsString()),
                         "the scan did not keep the log as logs/g1: " + scanned.reply());
-                ToolRun missingPart = call(companion, "work_dig", args("place", List.of("logs/g7")));
-                ToolRun missingArea = call(companion, "work_dig", args("place", List.of("nowhere")));
+                ToolRun missingPart = lua(companion, "work.dig(\"logs/g7\")");
+                ToolRun missingArea = lua(companion, "work.dig(\"nowhere\")");
                 refusals[0] = missingPart.task() == null ? missingPart.reply() : "(accepted)";
                 refusals[1] = missingArea.task() == null ? missingArea.reply() : "(accepted)";
             }
@@ -483,7 +477,7 @@ public class PermissionGameTests {
     }
 
     /**
-     * "别碰这一格"由区域运算表达:两根野生诡异菌柄扫进区域,再框出要留的那一格,{@code area minus} 得到只剩另一根的区域,
+     * "别碰这一格"由区域运算表达:两根野生诡异菌柄扫进区域,再框出要留的那一格,{@code area.minus} 得到只剩另一根的区域,
      * 挖它、要两个。她挖了另一根就收场(区里没有了),留下的那格原样立着。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
@@ -502,11 +496,11 @@ public class PermissionGameTests {
         succeedWhen(helper, () -> {
             if (dig[0] == null) {
                 helper.assertTrue(scanned.succeeded(), "the scan has not kept the stems: " + scanned.reply());
-                helper.assertTrue(command(companion, "area new keep").succeeded()
-                                && command(companion, "area add keep --at " + xyz(kept)).succeeded()
-                                && command(companion, "area minus rest stems keep").succeeded(),
+                helper.assertTrue(lua(companion, "area.new(\"keep\")").succeeded()
+                                && lua(companion, "area.add(\"keep\", {at = " + xyz(kept) + "})").succeeded()
+                                && lua(companion, "area.minus(\"rest\", \"stems\", \"keep\")").succeeded(),
                         "the area to dig was not narrowed");
-                dig[0] = call(companion, "work_dig", args("place", List.of("rest"), "count", 2));
+                dig[0] = lua(companion, "work.dig(\"rest\", {count = " + 2 + "})");
             }
             helper.assertTrue(dig[0].done(), "dig has not finished");
             String reply = dig[0].outcome();
@@ -532,7 +526,7 @@ public class PermissionGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_objector", new BlockPos(3, 2, 6), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_botanist");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_botanist");
         storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
                 com.dwinovo.numen.permission.Rule.parse("break(minecraft:crimson_stem)"));
         ToolRun reply = scanInto(companion, 5, "minecraft:crimson_stem", "stems");
@@ -560,7 +554,7 @@ public class PermissionGameTests {
             }
             helper.assertTrue(!asked[0], "a denied group raised a consent card");
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 
@@ -616,7 +610,7 @@ public class PermissionGameTests {
     }
 
     /**
-     * use block 左键打主人的箱子:动手之前挂一条征询,这次调用悬着;主人允许后箱子没了。
+     * use.block 左键打主人的箱子:动手之前挂一条征询,这次调用悬着;主人允许后箱子没了。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void interact_left_click_on_owners_chest_asks(GameTestHelper helper) {
@@ -625,11 +619,11 @@ public class PermissionGameTests {
         playerPlaces(helper, chestRel, Items.CHEST);
         BlockPos chest = helper.absolutePos(chestRel);
         NumenPlayer companion = spawnAt(helper, "gametest_poker", new BlockPos(4, 2, 5), true);
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_hoarder");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_hoarder");
         TaskRecord[] dig = new TaskRecord[1];
         boolean[] answered = new boolean[1];
         helper.runAfterDelay(5, () -> {
-            dig[0] = command(companion, "use block " + xyz(chest) + " --left").task();
+            dig[0] = lua(companion, "use.block(" + xyz(chest) + ", {left = true})").task();
         });
 
         succeedWhen(helper, () -> {
@@ -646,7 +640,7 @@ public class PermissionGameTests {
             helper.assertTrue(level.getBlockState(chest).isAir(),
                     "the chest is still there after the owner allowed: " + dig[0].getResult().message());
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 
@@ -658,7 +652,7 @@ public class PermissionGameTests {
     public static void a_target_that_moves_keeps_its_consent_request(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(4, 2, 4));
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_swineherd");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_swineherd");
         var pig = EntityType.PIG.create(level);
         helper.assertTrue(pig != null, "pig did not spawn");
         BlockPos at = helper.absolutePos(new BlockPos(6, 2, 4));
@@ -666,7 +660,7 @@ public class PermissionGameTests {
         pig.setNoAi(true);
         pig.setCustomName(net.minecraft.network.chat.Component.literal("Wilbur"));
         level.addFreshEntity(pig);
-        TaskRecord record = command(companion, "fight attack " + pig.getId()).task();
+        TaskRecord record = lua(companion, "fight.attack(" + pig.getId() + ")").task();
         long[] asked = {0L};
         int[] waited = {0};
         boolean[] denied = {false};
@@ -697,18 +691,18 @@ public class PermissionGameTests {
             helper.assertTrue(denied[0] && record.getResult() != null, "attack has not finished after the no");
             helper.assertTrue(pig.isAlive(), "the pig was hit after the owner said no");
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 
-    /** inv drop 每次问:调用悬着等主人;允许后东西丢出来。 */
+    /** inv.drop 每次问:调用悬着等主人;允许后东西丢出来。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void drop_items_waits_for_the_owner(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_giver", new BlockPos(4, 2, 4), false);
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_receiver");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_receiver");
         companion.getInventory().add(new ItemStack(Items.DIAMOND, 3));
-        TaskRecord record = command(companion, "inv drop minecraft:diamond --count 3").task();
+        TaskRecord record = lua(companion, "inv.drop(\"minecraft:diamond\", {count = 3})").task();
         boolean[] answered = new boolean[1];
 
         succeedWhen(helper, () -> {
@@ -725,21 +719,21 @@ public class PermissionGameTests {
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0, "nothing was dropped");
             helper.assertTrue(reply.contains("the owner allowed"), "the reply does not say the owner allowed: " + reply);
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 
     /**
-     * 卡片挂着时主人按停止:inv drop 悬着等答复,主人没点卡片而是按了停止(与 CancelTasksPayload 同一个入口)。
+     * 卡片挂着时主人按停止:inv.drop 悬着等答复,主人没点卡片而是按了停止(与 CancelTasksPayload 同一个入口)。
      * 这件活按主人停止收场、消息写明是主人停的,挂着的征询随之撤掉,东西一件没丢。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void an_owner_stop_while_a_card_is_up_withdraws_the_card(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_hesitant", new BlockPos(4, 2, 4), false);
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_changed_mind");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_changed_mind");
         companion.getInventory().add(new ItemStack(Items.GOLD_INGOT, 4));
-        TaskRecord record = command(companion, "inv drop minecraft:gold_ingot --count 4").task();
+        TaskRecord record = lua(companion, "inv.drop(\"minecraft:gold_ingot\", {count = 4})").task();
         boolean[] stopped = new boolean[1];
 
         succeedWhen(helper, () -> {
@@ -755,7 +749,7 @@ public class PermissionGameTests {
             helper.assertTrue(desk(companion).pending() == null, "the card is still up after the stop");
             helper.assertTrue(companion.getInventory().countItem(Items.GOLD_INGOT) == 4, "dropped after the stop");
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 
@@ -764,9 +758,9 @@ public class PermissionGameTests {
     public static void unanswered_consent_times_out_as_denied(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_waiter", new BlockPos(4, 2, 4), false);
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_absent");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_absent");
         companion.getInventory().add(new ItemStack(Items.EMERALD, 2));
-        TaskRecord record = command(companion, "inv drop minecraft:emerald --count 2").task();
+        TaskRecord record = lua(companion, "inv.drop(\"minecraft:emerald\", {count = 2})").task();
 
         succeedWhen(helper, () -> {
             String reply = record.getResult() == null ? null : record.getResult().message();
@@ -777,7 +771,7 @@ public class PermissionGameTests {
             helper.assertTrue(companion.getInventory().countItem(Items.EMERALD) == 2, "dropped without consent");
             helper.assertTrue(desk(companion).pending() == null, "the card is still up");
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 
@@ -790,7 +784,7 @@ public class PermissionGameTests {
             level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.BIRCH_LOG.defaultBlockState());
         }
         NumenPlayer companion = spawnAt(helper, "gametest_watcher", new BlockPos(6, 2, 7), false);
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_viewer");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_viewer");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         // 区域先扫好再切 observe:observe 也拒绝改区域,这条量的是挖
         ToolRun scanned = scanInto(companion, 8, "minecraft:birch_log", "logs");
@@ -803,7 +797,7 @@ public class PermissionGameTests {
                 helper.assertTrue(scanned.succeeded(), "the scan has not kept the logs: " + scanned.reply());
                 com.dwinovo.numen.permission.Permission.setMode(companion,
                         com.dwinovo.numen.permission.Mode.OBSERVE);
-                mine[0] = call(companion, "work_dig", args("place", List.of("logs"), "count", 2));
+                mine[0] = lua(companion, "work.dig(\"logs\", {count = " + 2 + "})");
             }
             helper.assertTrue(mine[0].done(), "mine has not finished");
             helper.assertTrue(!mine[0].succeeded() && mine[0].outcome().contains("observe mode"),
@@ -814,7 +808,7 @@ public class PermissionGameTests {
                         "observe mode cut a log at " + rel.toShortString());
             }
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 
@@ -827,7 +821,7 @@ public class PermissionGameTests {
             playerPlaces(helper, rel, Items.SPRUCE_LOG);
         }
         NumenPlayer companion = spawnAt(helper, "gametest_trusted", new BlockPos(3, 2, 7), false);
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_trusting");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_trusting");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         com.dwinovo.numen.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
         mineScanned(helper, companion, 8, "minecraft:spruce_log", 2);
@@ -843,7 +837,7 @@ public class PermissionGameTests {
             }
             helper.assertTrue(!asked[0], "bypass mode asked the owner");
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 
@@ -895,7 +889,7 @@ public class PermissionGameTests {
         playerPlaces(helper, secondRel, Items.COBBLESTONE);
         playerPlaces(helper, plankRel, Items.OAK_PLANKS);
         NumenPlayer companion = spawnAt(helper, "gametest_mason", new BlockPos(4, 2, 5), true);
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_quarry");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_quarry");
         TaskRecord[] calls = new TaskRecord[3];
         int[] step = {0};
         helper.runAfterDelay(5, () -> {
@@ -954,7 +948,7 @@ public class PermissionGameTests {
             helper.assertTrue(allow.equals(List.of("break(placed & minecraft:cobblestone)")),
                     "the owner's allow table is not the remembered row: " + allow);
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 
@@ -1023,7 +1017,7 @@ public class PermissionGameTests {
         companion.getInventory().add(new ItemStack(Items.EMERALD, 4));
         TaskRecord[] calls = new TaskRecord[3];
         int[] step = {0};
-        calls[0] = command(companion, "inv drop minecraft:diamond --count 1").task();
+        calls[0] = lua(companion, "inv.drop(\"minecraft:diamond\", {count = 1})").task();
         helper.onEachTick(() -> {
             var pending = desk(companion).pending();
             switch (step[0]) {
@@ -1051,7 +1045,7 @@ public class PermissionGameTests {
                         helper.assertTrue(calls[0].getResult().success()
                                         && calls[0].getResult().message().contains("the owner allowed"),
                                 "the card answer did not go through: " + calls[0].getResult().message());
-                        calls[1] = command(companion, "inv drop minecraft:emerald --count 2")
+                        calls[1] = lua(companion, "inv.drop(\"minecraft:emerald\", {count = 2})")
                                 .task();
                         step[0] = 2;
                     }
@@ -1069,7 +1063,7 @@ public class PermissionGameTests {
                         helper.assertTrue(calls[1].getResult().success()
                                         && calls[1].getResult().message().contains("remembered it"),
                                 "the command answer did not go through: " + calls[1].getResult().message());
-                        calls[2] = command(companion, "inv drop minecraft:emerald --count 2")
+                        calls[2] = lua(companion, "inv.drop(\"minecraft:emerald\", {count = 2})")
                                 .task();
                         step[0] = 4;
                     }
@@ -1181,7 +1175,7 @@ public class PermissionGameTests {
 
     /** 把打开的界面里第 0 格整叠拿进背包。 */
     private static TaskRecord takeFirstSlot(NumenPlayer companion) {
-        return command(companion, "use shift 0").task();
+        return lua(companion, "use.shift(0)").task();
     }
 
     /**
@@ -1331,7 +1325,7 @@ public class PermissionGameTests {
 
     /**
      * 别的模组在原生通道里取消了破坏事件:权限层放行了(自然泥土),挖掘落点照真客户端挖下去,服务端退回来——
-     * use block 以 refused 收场,理由写明服务器没让挖掉,泥土一块不少。生存(STOP 那一下被退)与创造
+     * use.block 以 refused 收场,理由写明服务器没让挖掉,泥土一块不少。生存(STOP 那一下被退)与创造
      * (START 那一下被退)各一具身体。
      */
     @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_permission")
@@ -1378,11 +1372,11 @@ public class PermissionGameTests {
         BlockPos spot = helper.absolutePos(new BlockPos(7, 2, 4));
         NumenPlayer companion = spawnAt(helper, "gametest_demolisher", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.TNT));
-        ToolRun build = command(companion, "build place " + xyz(spot) + " --block tnt");
+        ToolRun build = lua(companion, "build.place(" + xyz(spot) + ", {block = \"tnt\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(build.done(), "build has not finished");
-            helper.assertTrue(build.outcome().contains("because the owner said no"),
+            helper.assertTrue(!build.succeeded() && build.outcome().contains("refused by the owner"),
                     "the reply does not say the owner refused that cell: " + build.outcome());
             helper.assertTrue(!level.getBlockState(spot).is(Blocks.TNT)
                             && companion.getInventory().countItem(Items.TNT) == 1,
@@ -1396,9 +1390,9 @@ public class PermissionGameTests {
     public static void build_tnt_away_from_player_blocks_goes_ahead(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos spot = helper.absolutePos(new BlockPos(10, 2, 10));
-        NumenPlayer companion = spawnAt(helper, "gametest_quarryman", new BlockPos(3, 2, 4), false);
+        NumenPlayer companion = spawnAt(helper, "gametest_quarryman", new BlockPos(9, 2, 8), false);
         companion.getInventory().add(new ItemStack(Items.TNT));
-        ToolRun build = command(companion, "build place " + xyz(spot) + " --block tnt");
+        ToolRun build = lua(companion, "build.place(" + xyz(spot) + ", {block = \"tnt\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(build.done(), "build has not finished");
@@ -1422,7 +1416,7 @@ public class PermissionGameTests {
         level.addFreshEntity(villager);
         NumenPlayer companion = spawnAt(helper, "gametest_peacekeeper", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
-        ToolRun attack = command(companion, "fight attack " + villager.getId());
+        ToolRun attack = lua(companion, "fight.attack(" + villager.getId() + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(attack.done(), "attack has not finished");
@@ -1445,8 +1439,8 @@ public class PermissionGameTests {
         level.addFreshEntity(villager);
         NumenPlayer companion = spawnAt(helper, "gametest_enforcer", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_magistrate");
-        ToolRun attack = command(companion, "fight attack " + villager.getId());
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_magistrate");
+        ToolRun attack = lua(companion, "fight.attack(" + villager.getId() + ")");
         java.util.Set<Long> requests = new java.util.HashSet<>();
         boolean[] hitBeforeYes = new boolean[1];
         helper.onEachTick(() -> {
@@ -1466,7 +1460,7 @@ public class PermissionGameTests {
                     "the villager was not hit after the owner said yes: " + attack.outcome());
             villager.discard();
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 
@@ -1483,7 +1477,7 @@ public class PermissionGameTests {
         level.addFreshEntity(wolf);
         NumenPlayer companion = spawnAt(helper, "gametest_dogcatcher", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
-        ToolRun attack = command(companion, "fight attack " + wolf.getId());
+        ToolRun attack = lua(companion, "fight.attack(" + wolf.getId() + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(attack.done(), "attack has not finished");
@@ -1537,7 +1531,7 @@ public class PermissionGameTests {
 
     /**
      * 拿水桶对着主人木板旁边的地面右键:倒水是危险品挨着玩家的东西,要问;主人不在,问不到就不倒——
-     * 走的是 use block 的放置路径,和 build 一样由权限层裁决。水没倒出来,桶还是满的。
+     * 走的是 use.block 的放置路径,和 build 一样由权限层裁决。水没倒出来,桶还是满的。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void interact_at_water_next_to_the_owners_planks_needs_the_owner(GameTestHelper helper) {
@@ -1546,7 +1540,7 @@ public class PermissionGameTests {
         BlockPos floor = helper.absolutePos(new BlockPos(6, 1, 5));
         NumenPlayer companion = spawnAt(helper, "gametest_waterer", new BlockPos(4, 2, 5), false);
         companion.getInventory().add(new ItemStack(Items.WATER_BUCKET));
-        ToolRun pour = command(companion, "use block " + xyz(floor) + " --item minecraft:water_bucket");
+        ToolRun pour = lua(companion, "use.block(" + xyz(floor) + ", {item = \"minecraft:water_bucket\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(pour.done(), "use block has not finished");
@@ -1570,7 +1564,7 @@ public class PermissionGameTests {
     }
 
     /**
-     * 主人用命令写 {@code deny break(area:house)}:区域还没建时这一行不收,说清没有这块区域;建好后收下。她 use block 左键打
+     * 主人用命令写 {@code deny break(area:house)}:区域还没建时这一行不收,说清没有这块区域;建好后收下。她 use.block 左键打
      * 房子里的石头被拒、理由是那一行规则,石头还在;房子外的石头照常挖掉。区域删掉以后 {@code rules list} 把这一行标成
      * 什么也管不到,房子原来那块地上的石头照出厂 allow 行挖掉。从头到尾不弹卡。
      */
@@ -1637,7 +1631,7 @@ public class PermissionGameTests {
     }
 
     /**
-     * 主人不许挖谷仓那块区域:谷仓里的南瓜离她近,谷仓外的远,两个都扫进区域。要一个南瓜,{@code --arrive dig} 只去挖得成的
+     * 主人不许挖谷仓那块区域:谷仓里的南瓜离她近,谷仓外的远,两个都扫进区域。要一个南瓜,{@code arrive = "dig"} 只去挖得成的
      * 那个,她挖外面那个,谷仓里的一动不动;对同一块区域再要一个,只剩谷仓里的,当场拒绝、理由是那一行规则。不弹卡。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
@@ -1766,7 +1760,7 @@ public class PermissionGameTests {
     }
 
     /**
-     * 挡着的是要主人同意才能动的格:南瓜在她手边,六面都贴着别的玩家放的木板。{@code work dig} 只挖开天然地形,要问主人的
+     * 挡着的是要主人同意才能动的格:南瓜在她手边,六面都贴着别的玩家放的木板。{@code work.dig} 只挖开天然地形,要问主人的
      * 遮挡不挖、也不替她去问,当场回:南瓜的每一面都贴着她不能挖的方块,点名是哪几格、为什么(要主人同意)。木板与南瓜原样,
      * 不弹卡,她一步没动。
      */
@@ -1785,9 +1779,9 @@ public class PermissionGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_boxed_out", new BlockPos(5, 2, 5), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        NumenPlayer owner = presentOwner(helper, companion, "gametest_joiner");
+        net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_joiner");
         BlockPos stand = companion.blockPosition();
-        ToolRun dig = command(companion, "work dig " + xyz(pumpkin));
+        ToolRun dig = lua(companion, "work.dig(" + xyz(pumpkin) + ")");
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 
@@ -1809,7 +1803,7 @@ public class PermissionGameTests {
             helper.assertTrue(!asked[0], "a block needing consent in the way raised a consent card");
             helper.assertTrue(companion.blockPosition().equals(stand), "she moved");
             CompanionFactory.despawn(level.getServer(), companion);
-            CompanionFactory.despawn(level.getServer(), owner);
+            leave(owner);
         });
     }
 }

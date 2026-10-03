@@ -57,14 +57,14 @@ public class TlmGameTests {
     public static void a_wild_maid_tamed_with_cake_is_listed_as_hers(GameTestHelper helper) {
         NumenPlayer her = keeper(helper, "gametest_tlm_tamer", new BlockPos(3, 2, 3));
         her.getInventory().add(new ItemStack(Items.CAKE));
-        EntityMaid maid = maidAt(helper, new BlockPos(6, 2, 6));
-        ToolRun tame = command(her, "use entity " + maid.getId() + " --item minecraft:cake");
+        EntityMaid maid = maidAt(helper, new BlockPos(5, 2, 4));
+        ToolRun tame = lua(her, "use.entity(" + maid.getId() + ", {item = \"minecraft:cake\"})");
         AtomicReference<ToolRun> listed = new AtomicReference<>();
 
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(maid.isOwnedBy(her),
                         "the cake did not tame her — use entity said: " + tame.outcome()))
-                .thenExecute(() -> listed.set(command(her, "tlm maids")))
+                .thenExecute(() -> listed.set(lua(her, "tlm.maids()")))
                 .thenWaitUntil(() -> {
                     String reply = listed.get().reply();
                     helper.assertTrue(reply != null && listed.get().succeeded()
@@ -86,9 +86,9 @@ public class TlmGameTests {
         EntityMaid maid = maidAt(helper, new BlockPos(5, 2, 3));
         maid.tame(her);
 
-        ToolRun detail = command(her, "tlm maid " + maid.getId());
-        ToolRun task = command(her, "tlm task " + FARM + " --maid " + maid.getId());
-        ToolRun config = command(her, "tlm config " + maid.getId() + " --schedule night");
+        ToolRun detail = lua(her, "tlm.maid(" + maid.getId() + ")");
+        ToolRun task = lua(her, "tlm.task(\"" + FARM + "\", {maid = " + maid.getId() + "})");
+        ToolRun config = lua(her, "tlm.config(" + maid.getId() + ", {schedule = \"night\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(detail.succeeded() && message(detail).contains("\"task\":\"" + FARM + "\""),
@@ -109,7 +109,7 @@ public class TlmGameTests {
         EntityMaid maid = maidAt(helper, new BlockPos(5, 2, 3));
         maid.tame(her);
 
-        ToolRun open = command(her, "tlm open " + maid.getId() + " --tab backpack");
+        ToolRun open = lua(her, "tlm.open(" + maid.getId() + ", {tab = \"backpack\"})");
         AtomicReference<ToolRun> moved = new AtomicReference<>();
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(open.succeeded()
@@ -129,7 +129,7 @@ public class TlmGameTests {
                         }
                     }
                     helper.assertTrue(from >= 0 && to >= 0, "no seed slot or no maid slot 0 in the open GUI");
-                    moved.set(command(her, "use transfer " + from + " " + to));
+                    moved.set(lua(her, "use.transfer(\"" + from + "\", \"" + to + "\")"));
                 })
                 .thenWaitUntil(() -> helper.assertTrue(maid.getMaidInv().getStackInSlot(0).is(Items.WHEAT_SEEDS),
                         "the seeds did not go into her slot — use transfer said: "
@@ -147,12 +147,12 @@ public class TlmGameTests {
         // 坐着:不跟过来,也不传送到她身边
         maid.setInSittingPose(true);
 
-        ToolRun task = command(her, "tlm task " + FARM + " --maid " + maid.getId());
+        ToolRun task = lua(her, "tlm.task(\"" + FARM + "\", {maid = " + maid.getId() + "})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(task.reply() != null && !task.succeeded() && task.reply().contains("`move goto ")
-                            && task.reply().contains(" --arrive near --near 2` first"),
-                    "far away, tlm task did not fail with the walk to copy: " + task.reply());
+            helper.assertTrue(task.reply() != null && !task.succeeded() && task.outcome().contains("`move.goto_({")
+                            && task.outcome().contains("{arrive = \"near\", near = 2})` first"),
+                    "far away, tlm task did not fail with the walk to copy: " + task.outcome());
             helper.assertTrue(!maid.getTask().getUid().equals(FARM), "her task changed from out of reach");
             leave(helper, her, maid);
         });
@@ -167,7 +167,7 @@ public class TlmGameTests {
         maid.setTame(true, false);
         maid.setOwnerUUID(UUID.randomUUID());
 
-        ToolRun task = command(her, "tlm task " + FARM + " --maid " + maid.getId());
+        ToolRun task = lua(her, "tlm.task(\"" + FARM + "\", {maid = " + maid.getId() + "})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(task.reply() != null && !task.succeeded() && task.reply().contains("not yours"),
@@ -191,7 +191,7 @@ public class TlmGameTests {
                     .filter(e -> e.type().equals("maid_died") && e.text().contains("maid=\"" + id + "\"")).toList();
             helper.assertTrue(died.size() == 1 && died.get(0).urgent() && died.get(0).text().contains("tombstone=\""),
                     "no urgent maid_died event with a tombstone: " + outbox(her).peek(her.getUUID()).entries());
-            ToolRun listed = command(her, "tlm maids");
+            ToolRun listed = lua(her, "tlm.maids()");
             helper.assertTrue(listed.succeeded() && message(listed).contains("\"kind\":\"tombstone\""),
                     "tlm maids does not list the tombstone: " + listed.reply());
             leave(helper, her, maid);
@@ -206,7 +206,7 @@ public class TlmGameTests {
         EntityMaid maid = maidAt(helper, new BlockPos(4, 2, 3));
         maid.tame(her);
         maid.getMaidInv().setStackInSlot(0, new ItemStack(Items.COOKED_BEEF, 4));
-        ToolRun task = command(her, "tlm task touhou_little_maid:feed --maid " + maid.getId());
+        ToolRun task = lua(her, "tlm.task(\"touhou_little_maid:feed\", {maid = " + maid.getId() + "})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(task.succeeded(), "tlm task feed failed: " + task.reply());

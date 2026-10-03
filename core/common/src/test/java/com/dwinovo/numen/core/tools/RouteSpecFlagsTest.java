@@ -2,10 +2,9 @@ package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.api.NumenPlugins;
-import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.area.Area;
 import com.dwinovo.numen.area.Cells;
-import com.dwinovo.numen.cli.CommandTool;
+import com.dwinovo.numen.core.CoreScripts;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.core.nav.NamedAreas;
 import com.dwinovo.numen.pathing.spec.BlockBans;
@@ -13,8 +12,6 @@ import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.Semantics.Kind;
 import com.dwinovo.numen.task.TaskResult;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
@@ -24,10 +21,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -61,8 +57,8 @@ class RouteSpecFlagsTest {
 
     @BeforeAll
     static void boot() {
-        net.minecraft.SharedConstants.tryDetectVersion();
-        net.minecraft.server.Bootstrap.bootStrap();
+        // 程序从她的入口跑,要整份登记处(各组、库、跑脚本的工具);这一组是装好之后加的测试组
+        com.dwinovo.numen.core.CoreCommandsFixture.install();
         AtomicReference<NumenApi> door = new AtomicReference<>();
         NumenPlugins.register(door::set);
         door.get().registerCommands("gt_route", "Test fixture: route flags read into a spec.", g ->
@@ -70,34 +66,28 @@ class RouteSpecFlagsTest {
                     LAST.set(RouteSpecFlags.parse(args, BASE.get(), AREAS));
                     src.reply(TaskResult.ok("read").toJson());
                 }, RouteSpecFlags.PARAMS.toArray(Param<?>[]::new))
-                        .example("gt_route plan --alter natural --avoid water")
-                        .promote("Read the route flags, as a tool."));
+                        .example("gt_route.plan({alter = \"natural\", avoid = {\"water\"}})"));
     }
 
-    /** 一整行交 {@code command} 工具,和她写的一样;回执失败时返回 null。 */
-    private static RouteSpec spec(String flags) {
-        String reply = run(flags);
-        JsonObject result = JsonParser.parseString(reply).getAsJsonObject();
-        assertTrue(result.get("success").getAsBoolean(), reply);
+    /** 选项表交给这一组的函数,和她写的一样;跑完返回读出的规格。 */
+    private static RouteSpec spec(String options) {
+        CoreScripts.Run run = run(options);
+        assertTrue(run.ok(), run.message());
         return LAST.get();
     }
 
-    private static String error(String flags) {
-        String reply = run(flags);
-        JsonObject result = JsonParser.parseString(reply).getAsJsonObject();
-        assertFalse(result.get("success").getAsBoolean(), flags + " should fail");
-        String message = result.get("message").getAsString();
-        return message.startsWith("error: ") ? message.substring("error: ".length()) : message;
+    /** 选项写错了:程序停在那一行,返回那次调用的报错。 */
+    private static String error(String options) {
+        CoreScripts.Run run = run(options);
+        assertFalse(run.ok(), options + " should fail");
+        String message = run.message();
+        String error = message.substring(message.indexOf("gt_route.plan: ") + "gt_route.plan: ".length());
+        return error.startsWith("error: ") ? error.substring("error: ".length()) : error;
     }
 
-    private static String run(String flags) {
+    private static CoreScripts.Run run(String options) {
         LAST.set(null);
-        JsonObject args = new JsonObject();
-        args.addProperty("command", ("gt_route plan " + flags).strip());
-        List<String> replies = new ArrayList<>();
-        new CommandTool().serve("test-call", args, null, replies::add);
-        assertEquals(1, replies.size(), "恰好一次回执: " + replies);
-        return replies.get(0);
+        return CoreScripts.run(UUID.randomUUID(), "gt_route.plan({" + options + "})");
     }
 
     /** mine 的规格叠在它自己的默认上:没写的保持默认,写了的覆盖,禁令并进默认已有的。 */
@@ -108,12 +98,12 @@ class RouteSpecFlagsTest {
         BASE.set(base);
         try {
             assertSame(base, spec(""));
-            RouteSpec kept = spec("--avoid_break 1,2,3 minecraft:oak_log");
+            RouteSpec kept = spec("avoid_break = {\"1,2,3\", \"minecraft:oak_log\"}");
             assertEquals(RouteSpec.Alter.ANY, kept.alter());
             assertTrue(kept.positions().forbids(Use.DIG, new BlockPos(1, 2, 3).asLong()));
             assertTrue(kept.bans().breaking().contains(Blocks.CHEST));
             assertTrue(kept.bans().breaking().contains(Blocks.OAK_LOG));
-            assertEquals(RouteSpec.Alter.NATURAL, spec("--alter natural").alter());
+            assertEquals(RouteSpec.Alter.NATURAL, spec("alter = \"natural\"").alter());
         } finally {
             BASE.set(RouteSpec.defaults());
         }
@@ -130,10 +120,9 @@ class RouteSpecFlagsTest {
 
     @Test
     void everyFlagLandsOnItsField() {
-        RouteSpec s = spec("--alter natural --avoid water door --allow trigger --penalty_place 5 --penalty_break 7.5 "
-                + "--penalty_jump 9 --penalty_wade 0 --parkour --max_fall 6 --alter_budget 4");
+        RouteSpec s = spec("alter = \"natural\", avoid = {\"water\", \"door\"}, allow = \"trigger\", penalty_place = 5, penalty_break = 7.5, penalty_jump = 9, penalty_wade = 0, parkour = true, max_fall = 6, alter_budget = 4");
         assertEquals(RouteSpec.Alter.NATURAL, s.alter());
-        assertEquals(RouteSpec.Alter.ANY, spec("--alter any").alter());
+        assertEquals(RouteSpec.Alter.ANY, spec("alter = \"any\"").alter());
         assertTrue(s.excludes(Kind.WATER));
         assertTrue(s.excludes(Kind.DOOR));
         assertFalse(s.excludes(Kind.CLIMBABLE));
@@ -150,7 +139,7 @@ class RouteSpecFlagsTest {
 
     @Test
     void cellsAndAreasGoIntoThePositionTable() {
-        RouteSpec s = spec("--avoid_break 1,2,3 --avoid_place area:house --avoid_step -5,60,-7");
+        RouteSpec s = spec("avoid_break = \"1,2,3\", avoid_place = \"area:house\", avoid_step = \"-5,60,-7\"");
         assertTrue(s.positions().forbids(Use.DIG, new BlockPos(1, 2, 3).asLong()));
         assertFalse(s.positions().forbids(Use.PLACE, new BlockPos(1, 2, 3).asLong()));
         HOUSE.cells().forEach((x, y, z, seen) -> assertTrue(s.positions().forbids(Use.PLACE, BlockPos.asLong(x, y, z)),
@@ -164,7 +153,7 @@ class RouteSpecFlagsTest {
     /** 一部分只管那一部分:house/b2 是门口那两格。 */
     @Test
     void aPartOfAnAreaIsOnlyThatPart() {
-        RouteSpec s = spec("--avoid_break area:house/b2");
+        RouteSpec s = spec("avoid_break = \"area:house/b2\"");
         assertTrue(s.positions().forbids(Use.DIG, new BlockPos(12, 65, 9).asLong()));
         assertFalse(s.positions().forbids(Use.DIG, new BlockPos(12, 65, 10).asLong()));
     }
@@ -172,7 +161,7 @@ class RouteSpecFlagsTest {
     /** --avoid area:farm 是不进入:身体不占它的格、脚下不踩它的格;格子种类照旧并列写在同一串里。 */
     @Test
     void avoidingAnAreaKeepsTheBodyOutOfItAndOffIt() {
-        RouteSpec s = spec("--avoid water area:farm");
+        RouteSpec s = spec("avoid = {\"water\", \"area:farm\"}");
         assertTrue(s.excludes(Kind.WATER));
         long inFarm = new BlockPos(-3, 63, -3).asLong();
         assertTrue(s.positions().forbids(Use.PASS, inFarm));
@@ -187,7 +176,7 @@ class RouteSpecFlagsTest {
     @Test
     void aFourMillionCellAreaIsHandedOverWholeNotCellByCell() {
         long start = System.nanoTime();
-        RouteSpec s = spec("--avoid_break area:camp --avoid area:camp");
+        RouteSpec s = spec("avoid_break = \"area:camp\", avoid = \"area:camp\"");
         long millis = (System.nanoTime() - start) / 1_000_000;
         assertTrue(s.positions().forbids(Use.DIG, new BlockPos(79, 119, 79).asLong()));
         assertTrue(s.positions().forbids(Use.PASS, new BlockPos(-80, -40, -80).asLong()));
@@ -198,57 +187,53 @@ class RouteSpecFlagsTest {
     /** 点名的区域不在、部分不在、在别的维度:当场说出事实与主人有哪些区域;写法不对由参数类型报。 */
     @Test
     void missingAreasAreNamedWithWhatThereIs() {
-        String gone = error("--avoid_break area:shed");
-        assertTrue(gone.contains("--avoid-break area:shed: there is no area named shed; your owner's areas are camp, "
+        String gone = error("avoid_break = \"area:shed\"");
+        assertTrue(gone.contains("avoid_break area:shed: there is no area named shed; your owner's areas are camp, "
                 + "farm, house, portal"), gone);
-        String noPart = error("--avoid area:house/b7");
+        String noPart = error("avoid = \"area:house/b7\"");
         assertTrue(noPart.contains("area house has no part b7; its parts are b1, b2"), noPart);
-        String elsewhere = error("--avoid_step area:portal");
+        String elsewhere = error("avoid_step = \"area:portal\"");
         assertTrue(elsewhere.contains("area portal lies in minecraft:the_nether, and I am in minecraft:overworld"),
                 elsewhere);
-        assertTrue(error("--avoid_break area:Shed").contains("area names are lowercase letters"));
-        assertTrue(error("--avoid_break 1,2,3..4,5,6").contains("a box or any other stretch of cells is an area"),
+        assertTrue(error("avoid_break = \"area:Shed\"").contains("area names are lowercase letters"));
+        assertTrue(error("avoid_break = \"1,2,3..4,5,6\"").contains("a box or any other stretch of cells is an area"),
                 "盒子写法没有了,报错指向区域");
     }
 
     @Test
     void mistakesAreTaught() {
-        assertTrue(error("--alter maybe").startsWith("expected one of none, natural, any"));
-        assertTrue(error("--avoid swamp").contains("expected one of water, flowing_water, lava, climbable, door"));
-        assertTrue(error("--avoid DOOR").contains("expected one of water, flowing_water, lava, climbable, door"),
+        assertTrue(error("alter = \"maybe\"").startsWith("argument 'alter': expected one of none, natural, any"));
+        assertTrue(error("avoid = \"swamp\"").contains("expected one of water, flowing_water, lava, climbable, door"));
+        assertTrue(error("avoid = \"DOOR\"").contains("expected one of water, flowing_water, lava, climbable, door"),
                 "类型名照帮助里写的小写");
-        assertTrue(error("--allow lava").contains("expected one of flowing_water, trigger, fragile"),
+        assertTrue(error("allow = \"lava\"").contains("expected one of flowing_water, trigger, fragile"),
                 "伤身的种类放不开");
-        assertTrue(error("--penalty_jump -1").contains("--penalty-jump must be between 0 and 1000"));
-        assertTrue(error("--penalty_jump high").startsWith("Expected double"));
-        assertTrue(error("--avoid_break 1,2").startsWith("expected a cell: three whole numbers x y z, or x,y,z"));
-        assertTrue(error("--avoid_step 1,two,3").contains("three whole numbers"));
-        assertTrue(error("--max_fall -2").contains("--max-fall must be 0 or more"));
-        assertTrue(error("--parkour yes").startsWith("--parkour is a switch and takes no value"));
-
-        List<String> replies = new ArrayList<>();
-        ToolRegistry.get("gt_route_plan").serve("test-call",
-                JsonParser.parseString("{\"avoid\": \"water\"}").getAsJsonObject(), null, replies::add);
-        assertTrue(replies.get(0).contains("argument 'avoid': expected a list"), "快捷工具里一串值是数组: " + replies);
+        assertTrue(error("penalty_jump = -1").contains("penalty_jump must be between 0 and 1000"));
+        assertTrue(error("penalty_jump = \"high\"").startsWith("argument 'penalty_jump': Expected double"));
+        assertTrue(error("avoid_break = \"1,2\"").startsWith("argument 'avoid_break': expected a cell: three whole "
+                + "numbers"));
+        assertTrue(error("avoid_step = \"1,two,3\"").contains("three whole numbers"));
+        assertTrue(error("max_fall = -2").contains("max_fall must be 0 or more"));
+        assertTrue(error("parkour = \"yes\"").contains("parkour"), "开关只收 true 或 false");
     }
 
     @Test
     void avoidAcceptsOnlyTypesAWalkCanKeepOutOf() {
-        RouteSpec s = spec("--avoid water flowing_water");
+        RouteSpec s = spec("avoid = {\"water\", \"flowing_water\"}");
         assertTrue(s.excludes(Kind.WATER));
         assertTrue(s.excludes(Kind.FLOWING_WATER));
         // 地面、空气、障碍不是"可以选择不走"的东西,写了就是规格写错了,报错列出能写的
-        assertTrue(error("--avoid ground").contains("expected one of water, flowing_water, lava, climbable, door, "
+        assertTrue(error("avoid = \"ground\"").contains("expected one of water, flowing_water, lava, climbable, door, "
                 + "hazard, falling, trigger, fragile or area:<name>"));
-        assertTrue(error("--avoid obstacle").contains("expected one of"));
-        assertTrue(error("--avoid lake").contains("expected one of"));
+        assertTrue(error("avoid = \"obstacle\"").contains("expected one of"));
+        assertTrue(error("avoid = \"lake\"").contains("expected one of"));
     }
 
     /** 标签要等数据包绑定,无头引导下全空——标签展开只在真机验,这里只钉方块 id。 */
     @Test
     void blockIdsBecomeKindBans() {
-        RouteSpec s = spec("--avoid_break minecraft:chest oak_log --avoid_place water "
-                + "--avoid_step minecraft:farmland 4,5,6");
+        RouteSpec s = spec("avoid_break = {\"minecraft:chest\", \"oak_log\"}, avoid_place = \"water\", "
+                + "avoid_step = {\"minecraft:farmland\", \"4,5,6\"}");
         assertTrue(s.bans().breaking().contains(Blocks.CHEST));
         assertTrue(s.bans().breaking().contains(Blocks.OAK_LOG));
         assertFalse(s.bans().breaking().contains(Blocks.STONE));
@@ -259,8 +244,8 @@ class RouteSpecFlagsTest {
 
     @Test
     void unknownBlocksAndEmptyTagsAreErrors() {
-        assertTrue(error("--avoid_break minecraft:no_such_block").contains("--avoid-break: unknown block"));
-        assertTrue(error("--avoid_step #minecraft:no_such_tag").contains("--avoid-step: tag '#minecraft:no_such_tag' "
+        assertTrue(error("avoid_break = \"minecraft:no_such_block\"").contains("avoid_break: unknown block"));
+        assertTrue(error("avoid_step = \"#minecraft:no_such_tag\"").contains("avoid_step: tag '#minecraft:no_such_tag' "
                 + "has no blocks"));
     }
 }

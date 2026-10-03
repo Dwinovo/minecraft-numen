@@ -19,8 +19,8 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
 /**
- * 容器:{@code use block} 右键打开、{@code use gui} 看格子、{@code use shift} 整叠挪到另一边或 {@code use transfer} 放进指定的一格、
- * {@code use close} 合上。
+ * 容器:{@code use.block} 右键打开、{@code use.gui} 看格子、{@code use.shift} 整叠挪到另一边或 {@code use.transfer} 放进指定的一格、
+ * {@code use.close} 合上。
  */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
@@ -45,20 +45,20 @@ public class ContainerGameTests {
         // 动作放 thenExecute、断言放 thenWaitUntil:原版序列里 thenExecute 的断言失败后,后面的步骤照样在同一刻
         // 跑下去,报出来的是最后一个失败;等在 thenWaitUntil 里,哪一步没过就停在哪一步、报哪一步
         steps(helper)
-                .thenExecute(() -> step.set(command(companion, "use block " + xyz(chest))))
+                .thenExecute(() -> step.set(lua(companion, "use.block(" + xyz(chest) + ")")))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,
                         "the chest did not open: " + step.get().outcome()))
-                .thenExecute(() -> step.set(command(companion, "use gui")))
+                .thenExecute(() -> step.set(lua(companion, "use.gui()")))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().succeeded() && step.get().reply().contains("0: ")
                                 && step.get().reply().contains("diamond"),
                         "use gui does not show the diamonds in slot 0: " + step.get().reply()))
-                .thenExecute(() -> step.set(command(companion, "use shift 0")))
+                .thenExecute(() -> step.set(lua(companion, "use.shift(0)")))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.getInventory().countItem(Items.DIAMOND) == 5
                                 && ((ChestBlockEntity) helper.getLevel().getBlockEntity(chest)).isEmpty(),
                         "the diamonds did not move from the chest into her inventory: " + step.get().outcome()))
-                .thenExecute(() -> step.set(command(companion, "use close")))
+                .thenExecute(() -> step.set(lua(companion, "use.close()")))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().succeeded()
                                 && companion.containerMenu == companion.inventoryMenu,
                         "use close did not close the chest: " + step.get().reply()))
@@ -71,7 +71,7 @@ public class ContainerGameTests {
     public static void transfer_with_no_container_open_moves_nothing(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_shuffler", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new net.minecraft.world.item.ItemStack(Items.DIAMOND, 5));
-        ToolRun transfer = command(companion, "use shift 90");
+        ToolRun transfer = lua(companion, "use.shift(90)");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(transfer.done(), "transfer has not finished");
@@ -86,7 +86,7 @@ public class ContainerGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_container")
     public static void close_gui_with_nothing_open_says_so(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_tidy", new BlockPos(3, 2, 3), false);
-        ToolRun close = command(companion, "use close");
+        ToolRun close = lua(companion, "use.close()");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(close.succeeded() && close.reply().contains("no block GUI was open"),
@@ -112,11 +112,11 @@ public class ContainerGameTests {
         AtomicReference<ToolRun> step = new AtomicReference<>();
 
         steps(helper)
-                .thenExecute(() -> step.set(command(companion, "use block " + xyz(chest))))
+                .thenExecute(() -> step.set(lua(companion, "use.block(" + xyz(chest) + ")")))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,
                         "the chest did not open: " + step.get().outcome()))
-                .thenExecute(() -> step.set(command(companion, "use shift " + menuSlotOf(companion, Items.DIAMOND))))
+                .thenExecute(() -> step.set(lua(companion, "use.shift(\"" + menuSlotOf(companion, Items.DIAMOND) + "\")")))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done()
                                 && step.get().outcome().contains("didn't move"),
                         "the reply does not say the diamonds stayed: " + step.get().outcome()))
@@ -124,7 +124,7 @@ public class ContainerGameTests {
                                 && box.countItem(Items.COBBLESTONE) == box.getContainerSize() * 64
                                 && box.countItem(Items.DIAMOND) == 0,
                         "something moved between her and the full chest"))
-                .thenExecute(() -> step.set(command(companion, "use close")))
+                .thenExecute(() -> step.set(lua(companion, "use.close()")))
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
                 .thenSucceed();
     }
@@ -138,12 +138,11 @@ public class ContainerGameTests {
         AtomicReference<ToolRun> step = new AtomicReference<>();
 
         steps(helper)
-                .thenExecute(() -> step.set(command(companion, "use block " + xyz(chest))))
+                .thenExecute(() -> step.set(lua(companion, "use.block(" + xyz(chest) + ")")))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,
                         "the chest did not open: " + step.get().outcome()))
-                .thenExecute(() -> step.set(command(companion,
-                        "use transfer 0 " + menuSlotOf(companion, Items.AIR) + " --count 2")))
+                .thenExecute(() -> step.set(lua(companion, "use.transfer(0, \"" + menuSlotOf(companion, Items.AIR) + "\", {count = 2})")))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && step.get().outcome().contains("moved 2 diamond"),
                         "the reply does not say two diamonds moved: " + step.get().outcome()))
@@ -151,12 +150,12 @@ public class ContainerGameTests {
                                 && box.countItem(Items.DIAMOND) == 3,
                         "she has " + companion.getInventory().countItem(Items.DIAMOND) + " and the chest "
                                 + box.countItem(Items.DIAMOND)))
-                .thenExecute(() -> step.set(command(companion, "use close")))
+                .thenExecute(() -> step.set(lua(companion, "use.close()")))
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
                 .thenSucceed();
     }
 
-    /** 她打开的界面里,她自己背包那一段第一个装着 {@code item} 的格子号(AIR = 第一个空格)——模型从 use gui 读到的就是它。 */
+    /** 她打开的界面里,她自己背包那一段第一个装着 {@code item} 的格子号(AIR = 第一个空格)——模型从 use.gui 读到的就是它。 */
     private static int menuSlotOf(NumenPlayer companion, net.minecraft.world.item.Item item) {
         var slots = companion.containerMenu.slots;
         for (int i = 0; i < slots.size(); i++) {

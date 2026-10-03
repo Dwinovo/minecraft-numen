@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.dwinovo.numen.cli.CliFixture.door;
-import static com.dwinovo.numen.cli.CliFixture.onClient;
+import static com.dwinovo.numen.cli.CliFixture.help;
 import static com.dwinovo.numen.cli.CliFixture.onServer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -28,9 +28,9 @@ class AuthorityTest {
         door().registerCommands("gt_authority", "A wrapper and a plain action.", g -> {
             g.server("wrap", "Wrap a native admin command.", AuthorityTest::borrow)
                     .authority(Authority.SERVER_ON_HER)
-                    .example("gt_authority wrap");
+                    .example("gt_authority.wrap()");
             g.server("plain", "Act with her own authority.", AuthorityTest::borrow)
-                    .example("gt_authority plain");
+                    .example("gt_authority.plain()");
         });
     }
 
@@ -68,14 +68,14 @@ class AuthorityTest {
 
     @Test
     void theHelpSaysWhoseAuthorityItIs() {
-        String wrap = onClient("gt_authority wrap --help").message();
+        String wrap = help("gt_authority.wrap");
         assertEquals("""
-                gt_authority wrap
+                gt_authority.wrap()
                   Wrap a native admin command.
                   Runs with the server's authority, and only on you.
                   Examples:
-                    gt_authority wrap""", wrap);
-        assertFalse(onClient("gt_authority plain --help").message().contains(CommandHelp.SERVER_ON_HER),
+                    gt_authority.wrap()""", wrap);
+        assertFalse(help("gt_authority.plain").contains(CommandHelp.SERVER_ON_HER),
                 "她自己的是默认,不写");
     }
 
@@ -84,12 +84,12 @@ class AuthorityTest {
         assertEquals(2, Authority.values().length);
         assertThrows(IllegalArgumentException.class, () -> door().registerCommands("gt_authority_client", "x.",
                 g -> g.client("jot", "Jot.", (src, args) -> { }).authority(Authority.SERVER_ON_HER)
-                        .example("gt_authority_client jot")), "客户端动作借不了服务器的权威");
+                        .example("gt_authority_client.jot()")), "客户端动作借不了服务器的权威");
         assertThrows(IllegalArgumentException.class, () -> door().registerCommands("gt_authority_null", "x.",
-                g -> g.server("go", "Go.", (src, args) -> { }).authority(null).example("gt_authority_null go")));
+                g -> g.server("go", "Go.", (src, args) -> { }).authority(null).example("gt_authority_null.go()")));
         AtomicReference<Action> leaked = new AtomicReference<>();
         door().registerCommands("gt_authority_closed", "x.",
-                g -> leaked.set(g.server("go", "Go.", (src, args) -> { }).example("gt_authority_closed go")));
+                g -> leaked.set(g.server("go", "Go.", (src, args) -> { }).example("gt_authority_closed.go()")));
         assertThrows(IllegalStateException.class, () -> leaked.get().authority(Authority.SERVER_ON_HER),
                 "封口之后不能再改权威");
     }

@@ -120,7 +120,8 @@ final class FlagsArgument implements ArgumentType<Map<String, Object>> {
         return written ? ctx.getArgument(NODE, Map.class) : Map.of();
     }
 
+    /** 这一格认的标志,写成一行命令上的样子:{@code --item, --from}。 */
     private String usage() {
-        return flags.values().stream().map(Param::usage).collect(Collectors.joining(" "));
+        return flags.values().stream().map(p -> PREFIX + p.flag()).collect(Collectors.joining(", "));
     }
 }

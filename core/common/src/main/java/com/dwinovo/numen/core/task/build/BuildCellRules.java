@@ -67,6 +67,18 @@ final class BuildCellRules {
      * 主人后来自己摆了——就不是她的,不碰。
      */
     boolean blockedByMode(BuildTaskRecord.Target target) {
+        return blocked(target, false);
+    }
+
+    /**
+     * 这一格不去动吗:{@link #blockedByMode} 去掉"要问主人"的那一种——问了才知道答不答应,所以还算要做的格。数还剩什么、受理前
+     * 看够得着的有没有({@link BuildSurvey}),问的是它;开工前整批问过主人之后,施工逐格问 {@link #blockedByMode}。
+     */
+    boolean refused(BuildTaskRecord.Target target) {
+        return blocked(target, true);
+    }
+
+    private boolean blocked(BuildTaskRecord.Target target, boolean askIsOpen) {
         BlockState current = peek(target.pos());
         if (!target.mode().allows(current, target.desiredState())) {
             return true;
@@ -78,7 +90,8 @@ final class BuildCellRules {
             return false;
         }
         for (Action action : actionsFor(target)) {
-            if (!Permission.judge(player, action).allowed()) {
+            var verdict = Permission.judge(player, action);
+            if (!verdict.allowed() && !(askIsOpen && verdict.asks())) {
                 return true;
             }
         }

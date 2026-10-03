@@ -132,15 +132,15 @@ public final class AreaOps {
             requireNew(her, name);
             store(her).create(name, Area.empty(dimension));
             allowed.reply(TaskResult.ok("made area " + name + " in " + dimension.location() + ", empty. Add to it with "
-                    + "area add " + name + " (--box, --at, --built or --route), or scan blocks <block ids> "
-                    + "--into " + name + " to add what a scan finds.").toJson());
+                    + "area.add(\"" + name + "\", {box = ...}) (or at, built, route), or scan.blocks(<block ids>, "
+                    + "{into = \"" + name + "\"}) to add what a scan finds.").toJson());
         });
     }
 
     private static void requireNew(NumenPlayer her, String name) {
         if (store(her).get(name) != null) {
-            throw new IllegalArgumentException("there is already an area named " + name + "; area show " + name
-                    + " shows it, area delete " + name + " removes it");
+            throw new IllegalArgumentException("there is already an area named " + name + "; area.show(\"" + name
+                    + "\") shows it, area.delete(\"" + name + "\") removes it");
         }
     }
 
@@ -193,7 +193,7 @@ public final class AreaOps {
                         "the " + cells.size() + " cells " + name + " was built of");
             }
         }
-        throw new IllegalArgumentException("there is no building named " + name + "; build built lists them"
+        throw new IllegalArgumentException("there is no building named " + name + "; build.built() lists them"
                 + (all.isEmpty() ? " (none yet)" : ""));
     }
 
@@ -202,10 +202,11 @@ public final class AreaOps {
         store(her);
         Itinerary route = Routes.of(her.getServer(), her.getOwnerUuid()).get(name);
         if (route == null) {
-            throw new IllegalArgumentException("there is no route named " + name + "; route list shows the routes");
+            throw new IllegalArgumentException("there is no route named " + name + "; route.list() shows the routes");
         }
         if (route.plan() == null) {
-            throw new IllegalArgumentException("route " + name + " has no plan yet; route plan " + name + " plans it");
+            throw new IllegalArgumentException("route " + name + " has no plan yet; route.plan(\"" + name
+                    + "\") plans it");
         }
         LongSet cells = new LongOpenHashSet(route.plan().digs());
         cells.addAll(route.plan().places());
@@ -346,7 +347,7 @@ public final class AreaOps {
         }
         Set<Block> kinds = ToolParse.parseBlocks(blocks);
         if (kinds.isEmpty()) {
-            throw new IllegalArgumentException("--blocks names no block this server knows: " + blocks);
+            throw new IllegalArgumentException("blocks names no block this server knows: " + blocks);
         }
         return area -> area.filter(state -> kinds.contains(state.getBlock()));
     }
@@ -357,7 +358,7 @@ public final class AreaOps {
      * 一块区域(或其中一部分):抬头是整块的小结,之后每部分一行——格数、附带的方块、最近一格、包围盒、挖它此刻许不许
      * (逐格用挖掘落点会提交的同一个动作问,在她此刻的世界里)。按输出预算分页。
      */
-    public static String show(NumenPlayer her, AreaRef ref, CommandArgs args, String again) {
+    public static String show(NumenPlayer her, AreaRef ref, CommandArgs args) {
         Area whole = existing(her, ref.name());
         Area shown = resolve(her, ref);
         ServerLevel level = her.serverLevel();
@@ -374,7 +375,7 @@ public final class AreaOps {
                 + (shown.parts().isEmpty() ? "." : (ref.part() == null ? "" : "; showing " + ref.part()) + ". One part "
                         + "per line: blocks are as they were seen when added (framed parts carry none), permission is "
                         + "asked now for breaking what stands in each cell:");
-        return new Listing(head, rows, "", again, AreaText.PAGE_BYTES).result(args).toJson();
+        return new Listing(head, rows, "", AreaText.PAGE_BYTES).result(args).toJson();
     }
 
     /**
@@ -425,14 +426,14 @@ public final class AreaOps {
     /**
      * 一块区域的各部分名,一行一个({@code ores/g1}),给脚本逐个取用;点名的是一部分就只有它那一行。区域里还没有部分是空的输出。
      */
-    public static String parts(NumenPlayer her, AreaRef ref, CommandArgs args, String again) {
+    public static String parts(NumenPlayer her, AreaRef ref, CommandArgs args) {
         Area shown = resolve(her, ref);
         List<String> rows = new ArrayList<>(shown.parts().size());
         for (Area.Part part : shown.parts()) {
             rows.add(ref.name() + "/" + part.id());
         }
         // 数据里是全部名字(不分页):脚本里 area.parts 拿它直接循环
-        return new Listing("", rows, "", again).result(args, Map.of("parts", rows)).toJson();
+        return new Listing("", rows, "").result(args, Map.of("parts", rows)).toJson();
     }
 
     /**
@@ -471,12 +472,13 @@ public final class AreaOps {
     }
 
     /** 主人的全部区域,一块一行。 */
-    public static String list(NumenPlayer her, CommandArgs args, String again) {
+    public static String list(NumenPlayer her, CommandArgs args) {
         List<String> rows = new ArrayList<>();
         store(her).all().forEach((name, area) -> rows.add(AreaText.summary(name, area)));
         String head = rows.isEmpty()
-                ? "No areas yet: scan blocks <block ids> --into <name> makes one from what a scan finds; area new <name> makes an empty one."
+                ? "No areas yet: scan.blocks(<block ids>, {into = <name>}) makes one from what a scan finds; "
+                        + "area.new(<name>) makes an empty one."
                 : "Areas of your owner, shared by all of their companions:";
-        return new Listing(head, rows, "", again).result(args).toJson();
+        return new Listing(head, rows, "").result(args).toJson();
     }
 }

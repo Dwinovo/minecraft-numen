@@ -70,7 +70,7 @@ public final class PickUpDrops implements Scenario {
     }
 
     @Override
-    public List<String> solution(Scene scene) {
-        return List.of("work collect");
+    public String solution(Scene scene) {
+        return "work.collect()";
     }
 }

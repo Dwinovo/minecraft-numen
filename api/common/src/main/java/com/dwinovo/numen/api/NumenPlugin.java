@@ -6,7 +6,7 @@ package com.dwinovo.numen.api;
  * <pre>{@code
  * public MyMod() {
  *     NumenPlugins.register(numen -> {
- *         numen.registerTool(new MyTool());
+ *         numen.registerCommands("mymod", "What your mod lets her do.", group -> { ... });
  *         numen.bundleSkills(mySkillsRoot());
  *         numen.on(CompanionEvent.SPAWN, body -> ...);
  *     });

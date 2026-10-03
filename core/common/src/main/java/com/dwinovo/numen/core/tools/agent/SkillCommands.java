@@ -42,23 +42,16 @@ public final class SkillCommands {
         skill.client(LOAD, "Load a skill's instructions when the task at hand matches one listed in "
                         + "<available_skills>.",
                 SkillCommands::load, NAME, FILE, Listing.PAGE)
-                .example(GROUP + " " + LOAD + " containers")
-                .example(GROUP + " " + LOAD + " building_design --file references/baroque.md")
-                .note("A skill body may reference supporting files by relative path; load one with --file only "
-                        + "when the body points you there.")
-                .note("A long skill or file comes a page at a time; the last line says how to get the next.")
-                .promote("""
-                        Load a specialized skill when the task at hand matches one of the skills listed in the system prompt.
-
-                        Use this tool to inject the skill's instructions and resources into the current conversation. The output contains detailed workflow guidance for the task.
-
-                        The skill name must match one of the skills listed in your system prompt's <available_skills> block.
-
-                        A skill body may reference supporting files by relative path (e.g. references/roofs.md). Call this tool again with the same name plus `file` to read one — only when the body points you there.""");
+                .example("skill.load(\"containers\")")
+                .example("skill.load(\"building_design\", {file = \"references/baroque.md\"})")
+                .note("The output is the skill's workflow guidance for the task; return it from your script to read "
+                        + "it: `return skill.load(\"containers\")`.")
+                .note("A skill body may reference supporting files by relative path; load one with the file option "
+                        + "only when the body points you there.")
+                .note("A long skill or file comes a page at a time; the last line says how to get the next.");
     }
 
     private static void load(ClientSource src, CommandArgs args) {
-        src.reply(SKILLS.loadSkill(args.get(NAME), args.get(FILE), args,
-                args.write(GROUP + " " + LOAD, List.of(NAME, FILE))));
+        src.reply(SKILLS.loadSkill(args.get(NAME), args.get(FILE), args));
     }
 }

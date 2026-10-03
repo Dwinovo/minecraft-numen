@@ -121,12 +121,13 @@ class RouteDataTest {
         assertEquals("area chests (to use one of its blocks)", chests.words(), "区域的 use 不要 y");
         assertEquals("area ores/g3 (within 3)", ORES.words());
         assertEquals(Destination.DEFAULT_NEAR, Destination.Stop.of(Place.area(AreaRef.parse("farm")), "near", null)
-                .near(), "--arrive near 不写 --near 有默认");
+                .near(), "arrive near 不写 near 有默认");
         assertThrows(IllegalArgumentException.class, () -> new Destination.Stop(1, 2, 3, AreaRef.parse("farm"),
                 Destination.Arrive.AT, null), "坐标与区域不能同时给");
         IllegalArgumentException nearAlone = assertThrows(IllegalArgumentException.class,
                 () -> Destination.Stop.of(Place.area(AreaRef.parse("farm")), null, 2));
-        assertTrue(nearAlone.getMessage().startsWith("--near 2 only goes with --arrive near"), nearAlone.getMessage());
+        assertTrue(nearAlone.getMessage().startsWith("near = 2 only goes with arrive = \"near\""),
+                nearAlone.getMessage());
     }
 
     /** 走过的记录只留最近几条。 */

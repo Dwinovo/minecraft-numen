@@ -23,7 +23,7 @@ import java.util.Map;
  * <p>三个都借服务器的权威({@link Authority#SERVER_ON_HER}):YSM 的这几条命令要权限等级 2,她自己多半没有;
  * 作用对象写死为她({@link OnHer}),能换成什么仍由 YSM 按镜像来的主人授权判。
  *
- * <p>都不提升成快捷工具:联动的动作是长尾,走 {@code command} 这一个入口就够了。
+ * <p>每个动作就是脚本里的一个函数({@code ysm.switch("misc/1_alex")}),和别的动作同一个入口。
  */
 final class YsmCommands {
 
@@ -36,10 +36,10 @@ final class YsmCommands {
     private static final String STOP = "stop";
 
     private static final Param<String> MODEL = Param.required("model", ArgType.string(), "The model to switch to.")
-            .values("a model id exactly as " + line(OPTIONS) + " lists it");
+            .values("a model id exactly as " + fn(OPTIONS) + " lists it");
     private static final Param<String> TEXTURE = Param.optional("texture", ArgType.string(),
             "Which of the model's textures to wear.")
-            .values("a texture id from the textures " + line(OPTIONS) + " lists")
+            .values("a texture id from the textures " + fn(OPTIONS) + " lists")
             .whenOmitted("use the model's first texture");
     private static final Param<String> ANIMATION = Param.required("animation", ArgType.string(),
             "The animation to play.")
@@ -52,9 +52,14 @@ final class YsmCommands {
         this.ysm = ysm;
     }
 
-    /** 回执里提到别的动作时写的那一行命令。 */
+    /** 相关动作里点名一个动作:{@code ysm switch}。 */
     static String line(String action) {
         return GROUP + " " + action;
+    }
+
+    /** 回执与说明里提到一个动作时写它的函数:{@code ysm.switch}。 */
+    static String fn(String action) {
+        return GROUP + "." + action;
     }
 
     static void install(NumenApi numen, Ysm ysm) {
@@ -66,15 +71,15 @@ final class YsmCommands {
         group.server(OPTIONS, "Your model and texture now, the models you can switch to, and this model's "
                 + "textures.", this::options, Listing.PAGE)
                 .authority(Authority.SERVER_ON_HER)
-                .example(line(OPTIONS))
+                .example(fn(OPTIONS) + "()")
                 .note("Read-only. Emotes are not listed: YSM does not tell the server which ones a model has.")
                 .note("One model per line; with many models installed it comes a page at a time.")
                 .seeAlso(line(SWITCH), line(EMOTE));
         group.server(SWITCH, "Switch to another model.",
                 this::switchModel, MODEL, TEXTURE)
                 .authority(Authority.SERVER_ON_HER)
-                .example(line(SWITCH) + " misc/1_alex")
-                .example(line(SWITCH) + " \"抽象鸣潮 菲比.ysm\"")
+                .example(fn(SWITCH) + "(\"misc/1_alex\")")
+                .example(fn(SWITCH) + "(\"抽象鸣潮 菲比.ysm\")")
                 .note("You can have exactly the models your owner is authorized for. A refusal comes from YSM, "
                         + "so don't retry the same model.")
                 .note("Short, not background work: it comes back once your body shows the new look, or with what "
@@ -83,8 +88,8 @@ final class YsmCommands {
         group.server(EMOTE, "Play one of this model's emotes, or stop the one playing.",
                 this::emote, ANIMATION)
                 .authority(Authority.SERVER_ON_HER)
-                .example(line(EMOTE) + " extra1")
-                .example(line(EMOTE) + " " + STOP)
+                .example(fn(EMOTE) + "(\"extra1\")")
+                .example(fn(EMOTE) + "(\"" + STOP + "\")")
                 .note("It only reports the command as sent: whether this model has that animation cannot be "
                         + "checked, and a missing one does nothing.")
                 .seeAlso(line(OPTIONS));
@@ -104,7 +109,7 @@ final class YsmCommands {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("current_model", look == null ? "(读不到,YSM 可能没装)" : look.model());
         data.put("current_texture", look == null ? "" : look.texture());
-        data.put("textures", textures);   // 当前模型的贴图 id,switch 的 --texture 从这里挑
+        data.put("textures", textures);   // 当前模型的贴图 id,switch 的 texture 从这里挑
 
         String head = look == null
                 ? "读不到当前模型,YSM 可能没装"
@@ -112,7 +117,7 @@ final class YsmCommands {
                         + (textures.isEmpty() ? "没列出" : String.join(", ", textures)) + ";可换 " + models.size()
                         + " 个模型:";
         List<String> rows = models.stream().map(m -> "  " + m).toList();
-        src.reply(new Listing(head, rows, "", line(OPTIONS)).result(args, data).toJson());
+        src.reply(new Listing(head, rows, "").result(args, data).toJson());
     }
 
     /**
@@ -131,13 +136,13 @@ final class YsmCommands {
         if (texture == null) {
             if (!ysm.models(her).contains(model)) {
                 src.reply(TaskResult.fail(
-                        "YSM 不认 '" + model + "' 这个模型。用 " + line(OPTIONS) + " 看清单里的 id").toJson());
+                        "YSM 不认 '" + model + "' 这个模型。用 " + fn(OPTIONS) + "() 看清单里的 id").toJson());
                 return;
             }
             var textures = ysm.textures(her, model);
             if (textures.isEmpty()) {
                 src.reply(TaskResult.fail(
-                        "YSM 没给 '" + model + "' 列出贴图,定不了默认贴图;用 --texture 指定一个").toJson());
+                        "YSM 没给 '" + model + "' 列出贴图,定不了默认贴图;用 {texture = ...} 指定一个").toJson());
                 return;
             }
             texture = textures.get(0);

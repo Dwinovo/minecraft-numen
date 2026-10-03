@@ -86,10 +86,10 @@ public final class ContainerOps {
         Integer to = m.to();
         Integer count = m.count();
         if (from < 0 || from > max) {
-            return "from slot " + from + " OUT OF RANGE (0.." + max + ") — skipped; use gui for indices.";
+            return "from slot " + from + " OUT OF RANGE (0.." + max + ") — skipped; use.gui() shows the indices.";
         }
         if (to != null && (to < 0 || to > max)) {
-            return "to slot " + to + " OUT OF RANGE (0.." + max + ") — skipped; use gui for indices.";
+            return "to slot " + to + " OUT OF RANGE (0.." + max + ") — skipped; use.gui() shows the indices.";
         }
         try {
             return to == null ? route(menu, self, from) : place(menu, self, from, to, count);
@@ -106,7 +106,7 @@ public final class ContainerOps {
                 // Empty crafting result = the grid doesn't form a valid recipe (usually a mis-placed
                 // 2x2 layout). Point the model back at the recipe so it self-corrects.
                 return "slot " + from + " (crafting result) is empty — the grid doesn't form a valid "
-                        + "recipe yet. Run inv recipe for the exact layout, then use gui and match "
+                        + "recipe yet. Call inv.recipe for the exact layout, then use.gui() and match "
                         + "it onto the grid cell-for-cell (a smaller recipe goes top-left; 2x2 slot "
                         + "indices are easy to guess wrong).";
             }

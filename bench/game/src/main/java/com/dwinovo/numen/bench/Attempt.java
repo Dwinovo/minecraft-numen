@@ -21,7 +21,7 @@ import com.dwinovo.numen.network.payload.CancelTasksPayload;
 import com.dwinovo.numen.network.payload.ScriptTallyPayload;
 import com.dwinovo.numen.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.network.payload.CurrentTaskPayload;
-import com.dwinovo.numen.network.payload.ExecuteToolPayload;
+import com.dwinovo.numen.network.payload.ExecuteActionPayload;
 import com.dwinovo.numen.network.payload.NumenDeathPayload;
 import com.dwinovo.numen.network.payload.NumenEventPayload;
 import com.dwinovo.numen.network.payload.NumenStatePayload;
@@ -71,7 +71,7 @@ import java.util.stream.Stream;
  * 最后一种是她自己收工;收工前最后一个失败的结果是主人拒绝或规则不许,记作权限被拒。
  *
  * <h2>上行与下行</h2>
- * 工具调用经 {@link ServerToolTransport#uplink} 直接交给服务端真实入口 {@link ExecuteToolPayload#handle},发送者是模拟
+ * 工具调用经 {@link ServerToolTransport#uplink} 直接交给服务端真实入口 {@link ExecuteActionPayload#handle},发送者是模拟
  * 主人;发给主人的模组载荷由 {@link OwnerConnection} 截下,按网络上的样子编解码一遍,再照主人客户端的处理方式交给大脑:
  * 回执给传输层、当前任务与身体状态给运行期状态、世界事件进收件箱、征询由剧本答复、死亡切断循环。
  */
@@ -158,7 +158,7 @@ final class Attempt {
         scenario.setup(scene);
         mind = switch (variant) {
             case SOLUTION -> new Mind.Scripted(scenario.solution(scene), "做好了。");
-            case NOOP -> new Mind.Scripted(List.of(), "好的。");
+            case NOOP -> new Mind.Scripted(null, "好的。");
             case LIVE -> new Mind.Live(settings.endpoint());
         };
         int window = ProviderRegistry.contextWindow(ProviderRegistry.canonicalId(settings.provider()),
@@ -365,7 +365,8 @@ final class Attempt {
 
     private void uplink(CustomPacketPayload payload) {
         switch (payload) {
-            case ExecuteToolPayload p -> ExecuteToolPayload.handle(wire(ExecuteToolPayload.STREAM_CODEC, p), owner);
+            case ExecuteActionPayload p -> ExecuteActionPayload.handle(wire(ExecuteActionPayload.STREAM_CODEC, p),
+                    owner);
             case CancelTasksPayload p -> CancelTasksPayload.handle(wire(CancelTasksPayload.STREAM_CODEC, p), owner);
             case ScriptTallyPayload p -> ScriptTallyPayload.handle(wire(ScriptTallyPayload.STREAM_CODEC, p), owner);
             default -> throw new IllegalStateException("评测的上行只有工具调用、叫停与脚本战绩,来了 "

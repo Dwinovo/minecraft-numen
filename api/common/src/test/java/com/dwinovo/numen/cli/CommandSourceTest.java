@@ -1,9 +1,5 @@
 package com.dwinovo.numen.cli;
 
-import com.dwinovo.numen.agent.tool.NumenTool;
-import com.dwinovo.numen.agent.tool.Schema;
-import com.dwinovo.numen.agent.tool.ToolCall;
-import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -13,20 +9,18 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 import static com.dwinovo.numen.cli.CliFixture.door;
-import static com.dwinovo.numen.cli.CliFixture.onClient;
+import static com.dwinovo.numen.cli.CliFixture.lua;
 import static com.dwinovo.numen.cli.CliFixture.onServer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 执行侧与同源:客户端动作当场跑,服务端动作送去服务端;快捷工具的 schema 由参数表生成,调它就是用同一份读好的
- * 参数调同一个处理函数。回执与从 {@code command} 调一字不差、派下的活叫什么,在 GameTest 里对着真服务器验
- * ({@code TaskControlGameTests}、{@code CommandGameTests})。
+ * 执行侧与同源:脚本里客户端动作当场跑、服务端动作在服务端跑;脚本与人写的一行命令按同一张参数表、同一种参数类型读,处理函数拿到
+ * 相等的参数,派下的活叫脚本里的函数名。服务端那一侧收到的 JSON 再按同一种类型读一遍,读不成的回执是三段。回执与派下的活在真服务器
+ * 上对得上号,在 GameTest 里验({@code TaskControlGameTests}、{@code CommandGameTests})。
  */
 class CommandSourceTest {
 
@@ -47,28 +41,25 @@ class CommandSourceTest {
             g.server("remind", "Set a reminder.", (src, args) -> {
                 SERVER_CALLS.add(args);
                 src.reply(TaskResult.ok("reminder in " + args.get(AFTER) + "s: " + args.get(REASON),
-                        Map.of("tool", src.toolName(), "task", src.taskName())).toJson());
-            }, REASON, AFTER).example("gt_side remind \"check the furnace\" --after-s 60")
-                    .promote("Set a reminder, as a tool.");
+                        Map.of("task", src.taskName())).toJson());
+            }, REASON, AFTER).example("gt_side.remind(\"check the furnace\", {after_s = 60})");
             g.client("jot", "Jot something down on the owner's client.", (src, args) -> {
                 CLIENT_CALLS.add(args);
                 src.reply(TaskResult.ok("jotted " + args.get(ID) + " x" + args.get(TRIES)).toJson());
-            }, ID, TRIES).example("gt_side jot --id a1")
-                    .promote("Jot something down, as a tool.");
+            }, ID, TRIES).example("gt_side.jot({id = \"a1\"})");
         });
     }
 
     @Test
-    void aClientActionRunsRightThereAndAServerActionIsShippedWhole() {
-        CliFixture.Outcome jot = onClient("gt_side jot --id a1");
-        assertFalse(jot.forwarded);
-        assertEquals("jotted a1 xnull", jot.message());
-
-        int before = SERVER_CALLS.size();
-        CliFixture.Outcome remind = onClient("gt_side remind \"check the furnace\" --after-s 60");
-        assertTrue(remind.forwarded, "服务端动作整条送去服务端");
-        assertTrue(remind.replies.isEmpty(), "结果等服务端回来");
-        assertEquals(before, SERVER_CALLS.size(), "客户端不跑服务端的处理函数");
+    void aClientActionRunsOnTheClientAndAServerActionOnTheServer() {
+        CLIENT_CALLS.clear();
+        SERVER_CALLS.clear();
+        CliFixture.Outcome run = lua("""
+                return {gt_side.jot({id = "a1"}), gt_side.remind("check", {after_s = 5})}
+                """);
+        assertTrue(run.success(), run.message());
+        assertEquals(1, CLIENT_CALLS.size());
+        assertEquals(1, SERVER_CALLS.size());
     }
 
     /** 服务端的树上客户端动作只有名字与帮助,没有参数、执行不了:写到它那儿是一行没写完的命令,附上它的帮助。 */
@@ -77,86 +68,51 @@ class CommandSourceTest {
         CliFixture.Outcome jot = onServer("gt_side jot --id a1");
         assertFalse(jot.success());
         assertTrue(jot.message().startsWith("error: Unknown command"), jot.message());
-        assertTrue(jot.message().contains("\nusage: gt_side jot [--id <word>] [--tries <integer>]\n"), jot.message());
+        assertTrue(jot.message().contains("\nusage: gt_side.jot({id=…, tries=…})\n"), jot.message());
         assertTrue(onServer("gt_side jot --help").success(), "帮助两侧都答得出");
     }
 
-    @Test
-    void theShortcutSchemaIsGeneratedFromTheParameters() {
-        NumenTool remind = ToolRegistry.get("gt_side_remind");
-        assertInstanceOf(PromotedTool.class, remind);
-        assertEquals("Set a reminder, as a tool.", remind.description());
-        assertEquals(Schema.object()
-                .string("reason", "Why.")
-                .optionalInteger("after_s", "Delay in seconds. Omit to remind in a minute.", 1, 1200)
-                .build(), remind.parameterSchema());
-        assertEquals(Schema.object()
-                .optionalString("id", "Which one. Omit to make a new one.")
-                .optionalInteger("tries", "How often. Omit to try once.", 1, 5)
-                .build(), ToolRegistry.get("gt_side_jot").parameterSchema());
-        assertEquals(Schema.object()
-                .string("command", "One command line: without a leading / a command from <commands>, e.g. "
-                        + "`task status`; with a leading / a Minecraft or mod command, e.g. `/help give`.")
-                .build(), new CommandTool().parameterSchema());
-    }
-
     /**
-     * 同一件事从两个入口进来,处理函数拿到的参数相等:快捷工具在服务端按同一张参数表把 JSON 读成值
-     * ({@link CommandArgs#fromJson}),命令从服务端那棵树上读。从 {@code command} 进来,源对象带着 {@code command}
-     * 这个工具名,派下的活叫"组 动作"。
+     * 同一件事从两个前端进来,处理函数拿到的参数相等:脚本的调用读成 JSON、在服务端按同一张参数表读成值
+     * ({@link CommandArgs#fromJson}),一行命令从服务端那棵树上读。派下的活叫脚本里的函数名。
      */
     @Test
-    void theShortcutAndTheCommandHandTheSameArgumentsToTheSameHandler() {
+    void aScriptAndALineHandTheSameArgumentsToTheSameHandler() {
         SERVER_CALLS.clear();
+        CliFixture.Outcome viaScript = lua("return gt_side.remind(\"check the furnace\", {after_s = 60})");
+        CliFixture.Outcome viaLine = onServer("gt_side remind \"check the furnace\" --after-s 60");
+
+        assertEquals(2, SERVER_CALLS.size());
         JsonObject json = new JsonObject();
         json.addProperty("after_s", 60);
         json.addProperty("reason", "check the furnace");
-        CliFixture.Outcome viaCommand = onServer("gt_side remind \"check the furnace\" --after-s 60");
-
-        assertEquals(1, SERVER_CALLS.size());
-        assertEquals(CommandArgs.fromJson(List.of(REASON, AFTER), json), SERVER_CALLS.get(0), "两个入口读出的参数相等");
-        assertEquals("reminder in 60s: check the furnace", viaCommand.message());
-        assertEquals("command", viaCommand.json().getAsJsonObject("data").get("tool").getAsString());
-        assertEquals("gt_side remind", viaCommand.json().getAsJsonObject("data").get("task").getAsString(),
-                "从 command 派下的活叫\"组 动作\",不叫 command");
+        assertEquals(CommandArgs.fromJson(List.of(REASON, AFTER), json), SERVER_CALLS.get(0));
+        assertEquals(SERVER_CALLS.get(0), SERVER_CALLS.get(1), "两个前端读出的参数相等");
+        assertEquals("reminder in 60s: check the furnace", viaLine.message());
+        assertEquals("gt_side.remind", viaLine.json().getAsJsonObject("data").get("task").getAsString());
+        assertEquals("gt_side.remind", viaScript.json().getAsJsonObject("data").getAsJsonObject("returned")
+                .get("task").getAsString(), "派下的活叫脚本里的函数名");
     }
 
+    /** 服务端那一侧把收到的 JSON 再读一遍:读不成就是三段的失败回执,处理函数不跑。 */
     @Test
-    void aShortcutsBadJsonIsRefusedLikeAnyToolsBadArguments() {
-        NumenTool remind = ToolRegistry.get("gt_side_remind");
-        assertEquals("invalid arguments: missing required argument: reason",
-                message(serve(remind, JsonParser.parseString("{\"after_s\":5}").getAsJsonObject())));
-        assertTrue(message(serve(remind, JsonParser.parseString("{\"after_s\":\"soon\",\"reason\":\"x\"}")
-                .getAsJsonObject())).startsWith("invalid arguments: argument 'after_s': Expected integer"));
-        assertEquals("invalid arguments: unknown argument 'when'; this takes: reason, after_s",
-                message(serve(remind, JsonParser.parseString("{\"after_s\":5,\"reason\":\"x\",\"when\":1}")
-                        .getAsJsonObject())));
+    void theServerReadsTheCallAgainAndRefusesWhatDoesNotFit() {
+        SERVER_CALLS.clear();
+        String missing = serve("{\"after_s\":5}");
+        assertTrue(missing.startsWith("error: missing required argument: reason\nusage: gt_side.remind(reason, "
+                + "{after_s=…})"), missing);
+        assertTrue(serve("{\"after_s\":\"soon\",\"reason\":\"x\"}")
+                .startsWith("error: argument 'after_s': Expected integer"));
+        assertTrue(serve("{\"after_s\":5,\"reason\":\"x\",\"when\":1}")
+                .startsWith("error: unknown argument 'when'; this takes: reason, after_s"));
+        assertTrue(SERVER_CALLS.isEmpty());
     }
 
-    @Test
-    void aShortcutForAClientActionRunsOnTheClientWithTheJsonReadTheSameWay() {
-        CLIENT_CALLS.clear();
-        String viaCommand = onClient("gt_side jot --tries 3 --id a1").replies.get(0);
-
+    private static String serve(String json) {
         List<String> replies = new ArrayList<>();
-        UUID companion = UUID.randomUUID();
-        ToolRegistry.get("gt_side_jot").invoke(new ToolCall("test-call", "gt_side_jot",
-                "{\"id\":\"a1\",\"tries\":3}", () -> companion, replies::add));
-
-        assertEquals(2, CLIENT_CALLS.size(), "快捷工具在客户端当场执行");
-        assertEquals(CLIENT_CALLS.get(0), CLIENT_CALLS.get(1));
-        assertEquals(List.of(viaCommand), replies, "回执一字不差");
-    }
-
-    private static String serve(NumenTool tool, JsonObject args) {
-        List<String> replies = new ArrayList<>();
-        tool.serve("test-call", args, null, replies::add);
+        NumenCli.serve("gt_side remind", JsonParser.parseString(json).getAsJsonObject(), null, "test-call",
+                replies::add);
         assertEquals(1, replies.size(), "恰好一次回执: " + replies);
-        return replies.get(0);
+        return JsonParser.parseString(replies.get(0)).getAsJsonObject().get("message").getAsString();
     }
-
-    private static String message(String json) {
-        return JsonParser.parseString(json).getAsJsonObject().get("message").getAsString();
-    }
-
 }

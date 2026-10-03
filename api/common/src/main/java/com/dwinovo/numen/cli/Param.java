@@ -7,18 +7,19 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * 动作的一个参数:名字、类型、说明、怎么写,以及两条取值提示。它是这个参数的唯一声明——命令行的写法、帮助里的
- * 一行、快捷工具 schema 里的字段、处理函数取值用的键,全从这里来。
+ * 动作的一个参数:名字、类型、说明、怎么写,以及两条取值提示。它是这个参数的唯一声明——脚本里的写法、一行命令的写法、帮助里的
+ * 一行、处理函数取值用的键,全从这里来。
  *
  * <h2>三种写法</h2>
  * <ul>
- *   <li>{@link #required}:位置参数,按声明顺序写在动作后面——它就是这条命令操作的东西;</li>
- *   <li>{@link #optionalPositional}:可以不写的位置参数,只能是最后一个({@code fight attack [<entity>...]});</li>
- *   <li>{@link #optional}:标志,写成 {@code --name value},顺序随意(见 {@link FlagsArgument});开关({@link ArgType#bool()})
- *       只写 {@code --name} 或 {@code --no-name}。</li>
+ *   <li>{@link #required}:按顺序的对象,写在函数的括号里(一行命令里写在动作后面)——它就是这次调用操作的东西;</li>
+ *   <li>{@link #optionalPositional}:可以不写的对象,只能是最后一个({@code move.follow([entity])});</li>
+ *   <li>{@link #optional}:选项,脚本里写在最后的选项表里 {@code {name = value}},一行命令里写成 {@code --name value};开关
+ *       ({@link ArgType#bool()})是 {@code true}/{@code false},一行命令里写 {@code --name} 或 {@code --no-name}。</li>
  * </ul>
- * 名字就是 JSON 的键(小写、下划线);命令行上标志名写短横线({@code --block-ids}),读的时候 {@code _} 与 {@code -} 是同一个字符
- * ({@link #flagOf})。命令行的规矩(一条命令只有一类位置参数、不能写必填的标志……)在登记时查,见 {@link CommandGroup}。
+ * 名字就是选项表与 JSON 的键(小写、下划线,不能是脚本语言的保留字);一行命令里标志名写短横线({@code --block-ids}),读的时候
+ * {@code _} 与 {@code -} 是同一个字符({@link #nameOf})。参数表的规矩(一次调用只有一类对象、没有必须写的选项……)在登记时查,见
+ * {@link CommandGroup}。
  *
  * <h2>取值提示</h2>
  * 类型自己说得出的(整数的范围、开关)由 {@link ArgType} 说;类型说不出的由声明补上:
@@ -131,7 +132,7 @@ public record Param<T>(String name, ArgType<T> type, String description, boolean
         return written.replace('-', '_');
     }
 
-    /** 一组参数的 JSON schema,字段按声明顺序。快捷工具与 command 工具的 schema 都经这里生成。 */
+    /** 一组参数的 JSON schema,字段按声明顺序。跑脚本的那个工具的 schema 经这里生成。 */
     static Map<String, Object> schemaOf(List<Param<?>> params) {
         Schema.Builder builder = Schema.object();
         for (Param<?> p : params) {
@@ -153,14 +154,14 @@ public record Param<T>(String name, ArgType<T> type, String description, boolean
     }
 
     /**
-     * 命令行上的样子:位置参数 {@code <name>},一串值或吃整行的 {@code <name...>},可以不写的包在 {@code [...]} 里;
-     * 标志 {@code [--name <类型>]},开关 {@code [--name]}。
+     * 用法里的样子:对象写名字,一串值或余下整段写 {@code name...},可以不写的包在 {@code [...]} 里;选项写 {@code name=…},开关写
+     * {@code name=true}。
      */
     String usage() {
         if (!positional) {
-            return type.isSwitch() ? "[--" + flag() + "]" : "[--" + flag() + " <" + type.kind() + ">]";
+            return type.isSwitch() ? name + "=true" : name + "=…";
         }
-        String shown = type.span() == ArgType.Span.ONE ? "<" + name + ">" : "<" + name + "...>";
+        String shown = type.span() == ArgType.Span.ONE ? name : name + "...";
         return required ? shown : "[" + shown + "]";
     }
 }

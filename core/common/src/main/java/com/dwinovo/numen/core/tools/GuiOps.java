@@ -25,9 +25,8 @@ public final class GuiOps {
      * 打开的界面:抬头是界面名与合成格的图,每个槽一条(界面这一侧的全列,空的也列;她自己那一侧只列有东西的),结尾是光标、
      * 机器的数值与提示。槽多的模组界面按输出预算分页({@link Listing})。
      *
-     * @param again 这一行本身(不带 {@code --page}):翻页时写它
      */
-    public String inspectGui(NumenPlayer self, CommandArgs args, String again) {
+    public String inspectGui(NumenPlayer self, CommandArgs args) {
         AbstractContainerMenu menu = self.containerMenu;
         if (menu == null) {
             return TaskResult.fail("no GUI open.").toJson();
@@ -123,8 +122,8 @@ public final class GuiOps {
         return new Listing(header + gridSection + "container slots:", slots,
                 "cursor: " + describe(menu.getCarried()) + "\n"
                         + dataLine
-                        + "tip: `use shift <slot>` sends a whole stack to the other section; `use transfer <from> <to>`"
-                        + " (with --count N for part of it) puts it into a specific slot.", again).result(args).toJson();
+                        + "tip: use.shift(slot) sends a whole stack to the other section; use.transfer(from, to)"
+                        + " (with {count = N} for part of it) puts it into a specific slot.").result(args).toJson();
     }
 
     private static String describe(ItemStack stack) {

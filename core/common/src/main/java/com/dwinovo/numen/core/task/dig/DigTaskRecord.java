@@ -19,7 +19,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * {@code work dig} 这件活的记录:点名的几处(区域、区域的部分、坐标)的并里要挖的格,她站在原地手够得着的那些挖掉。要挖的格由区域的
+ * {@code work.dig} 这件活的记录:点名的几处(区域、区域的部分、坐标)的并里要挖的格,她站在原地手够得着的那些挖掉。要挖的格由区域的
  * 数据定,不另设开关({@link #wants}):扫描来的格只挖还是当时那种方块的,框出来的格与点里面是什么挖什么(空气、流体跳过)。
  *
  * <p>点名的几处在派发这一刻解析成格子,记录里带着格子;扫描来的格附带当时的方块,框出来的格不带。
@@ -34,7 +34,7 @@ public final class DigTaskRecord extends TaskRecord {
 
     /**
      * 点名的目标按这份规格定价、判挖不挖得成:改地形一档放到 {@link RouteSpec.Alter#ANY}——目标是她点名要挖的,要问主人的照价乘倍、
-     * 动手前问,规则不许的、物理上挖不成的价钱无穷。{@code work dig} 挑目标与 {@code --arrive dig} 挑能去挖的格都按它。
+     * 动手前问,规则不许的、物理上挖不成的价钱无穷。{@code work.dig} 挑目标与 {@code arrive = "dig"} 挑能去挖的格都按它。
      */
     public static final RouteSpec TARGET_SPEC = SPEC.edit().alter(RouteSpec.Alter.ANY).build();
 
@@ -107,16 +107,16 @@ public final class DigTaskRecord extends TaskRecord {
     }
 
     /**
-     * 够不着的那些格的下一步,能照抄:{@code move goto <去处> --arrive dig},再 {@code work dig <同样的几处>}。只点了一块区域(或它的
-     * 一部分)时去处写它,她从离得最近的那一侧够过去;否则写 {@code nearest} 这一格。
+     * 够不着的那些格的下一步,能照抄:{@code move.goto_(去处, {arrive = "dig"})},再 {@code work.dig(同样的几处)}。只点了一块区域
+     * (或它的一部分)时去处写它,她从离得最近的那一侧够过去;否则写 {@code nearest} 这一格。
      *
      * @param named 她点名的几处,按写下的顺序
      */
     public static String reachThem(List<Place> named, BlockPos nearest) {
         AreaRef only = named.size() == 1 ? named.get(0).area() : null;
         Place to = only != null ? Place.area(only) : Place.cell(nearest);
-        return NavText.gotoCall(to, "--arrive dig") + ", then `work dig "
-                + named.stream().map(Place::written).collect(Collectors.joining(" ")) + "`";
+        return NavText.gotoCall(to, "arrive = \"dig\"") + ", then `work.dig("
+                + named.stream().map(NavText::lua).collect(Collectors.joining(", ")) + ")`";
     }
 
     public int getDug() {
