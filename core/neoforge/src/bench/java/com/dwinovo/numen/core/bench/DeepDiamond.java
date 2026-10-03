@@ -91,12 +91,12 @@ public final class DeepDiamond implements Scenario {
     }
 
     @Override
-    public List<String> solution(Scene scene) {
+    public String solution(Scene scene) {
         BlockPos ore = scene.pos(ORE);
-        String cell = ore.getX() + " " + ore.getY() + " " + ore.getZ();
-        return List.of(
-                "move goto " + cell + " --arrive dig --alter natural",
-                "work dig " + cell,
-                "work collect");
+        String cell = "{" + ore.getX() + ", " + ore.getY() + ", " + ore.getZ() + "}";
+        return """
+                move.goto_(%1$s, {arrive = "dig", alter = "natural"})
+                work.dig(%1$s)
+                work.collect()""".formatted(cell);
     }
 }

@@ -10,7 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
 /**
- * 一次运行的记录,一行一件事:主人说的话、她说的话、每个工具调用与结果的前 {@link #CLIP} 字、进她收件箱的世界事件、
+ * 一次运行的记录,一行一件事:主人说的话、她说的话、每个工具调用(她写的程序)与它的回执、进她收件箱的世界事件(前 {@link #CLIP} 字)、
  * 征询与答复、收场。<b>不含模型的思考</b>:思考流评测从不读、也不落。
  */
 final class Transcript {

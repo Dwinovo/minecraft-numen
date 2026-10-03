@@ -214,17 +214,22 @@ public final class BuildHut implements Scenario {
      * 五乘五的木屋:一、二层是留了门洞的一圈墙,第三层整圈,第四层整片屋顶,门洞里放门。71 块木板。
      */
     @Override
-    public List<String> solution(Scene scene) {
+    public String solution(Scene scene) {
         BlockPos c = scene.pos(CORNER);
-        String x = String.valueOf(c.getX());
-        String z = String.valueOf(c.getZ());
+        int x = c.getX();
+        int z = c.getZ();
         int y = c.getY();
         BlockPos door = scene.pos(CORNER.offset(2, 0, 4));
-        return List.of(
-                "build layer ##### #...# #...# #...# ##.## --at " + x + " " + y + " " + z
-                        + " --block oak_planks --up-to " + (y + 1),
-                "build layer ##### #...# #...# #...# ##### --at " + x + " " + (y + 2) + " " + z + " --block oak_planks",
-                "build layer ##### ##### ##### ##### ##### --at " + x + " " + (y + 3) + " " + z + " --block oak_planks",
-                "build set " + door.getX() + " " + door.getY() + " " + door.getZ() + " --block oak_door[facing=south]");
+        // 原语只放手够得着的格:先站进屋子正中,四面墙和屋顶都在手边
+        BlockPos middle = scene.pos(CORNER.offset(2, 0, 2));
+        return "move.goto_({" + middle.getX() + ", " + middle.getY() + ", " + middle.getZ() + "})\n"
+                + "build.layer({\"#####\", \"#...#\", \"#...#\", \"#...#\", \"##.##\"}, {at = {" + x + ", " + y + ", " + z
+                + "}, block = \"oak_planks\", up_to = " + (y + 1) + "})\n"
+                + "build.layer({\"#####\", \"#...#\", \"#...#\", \"#...#\", \"#####\"}, {at = {" + x + ", " + (y + 2) + ", "
+                + z + "}, block = \"oak_planks\"})\n"
+                + "build.layer({\"#####\", \"#####\", \"#####\", \"#####\", \"#####\"}, {at = {" + x + ", " + (y + 3) + ", "
+                + z + "}, block = \"oak_planks\"})\n"
+                + "build.set({" + door.getX() + ", " + door.getY() + ", " + door.getZ()
+                + "}, {block = \"oak_door[facing=south]\"})";
     }
 }
