@@ -420,7 +420,7 @@ public class InventoryGameTests {
     }
 
     /**
-     * 拿水桶不等于倒水:她低头对着地面,numen.gear.wear water_bucket 只把桶拿到主手,地上没有水、桶里的水还在。
+     * 拿水桶不等于倒水:她低头对着地面,numen.gear.hold water_bucket 只把桶拿到主手,地上没有水、桶里的水还在。
      * 倒水是改世界的动作,只能经权限层裁决,装备这条路上不许有第二个入口。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
@@ -428,10 +428,10 @@ public class InventoryGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_waterbearer", new BlockPos(4, 2, 4), false);
         companion.setXRot(90f);
         companion.getInventory().add(new ItemStack(Items.WATER_BUCKET));
-        ToolRun equip = lua(companion, "numen.gear.wear(\"minecraft:water_bucket\")");
+        ToolRun equip = lua(companion, "numen.gear.hold(\"minecraft:water_bucket\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(equip.done(), "gear wear has not finished");
+            helper.assertTrue(equip.done(), "gear hold has not finished");
             helper.assertTrue(equip.succeeded() && equip.outcome().contains("main hand"),
                     "the reply does not say the bucket is in her main hand: " + equip.outcome());
             helper.assertTrue(companion.getMainHandItem().is(Items.WATER_BUCKET),
@@ -444,15 +444,15 @@ public class InventoryGameTests {
         });
     }
 
-    /** 拿雪球不等于扔雪球:numen.gear.wear snowball 之后四个雪球都还在,拿在主手,周围没有飞出去的雪球。 */
+    /** 拿雪球不等于扔雪球:numen.gear.hold snowball 之后四个雪球都还在,拿在主手,周围没有飞出去的雪球。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
     public static void equip_a_snowball_does_not_throw_it(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_snowkeeper", new BlockPos(4, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.SNOWBALL, 4));
-        ToolRun equip = lua(companion, "numen.gear.wear(\"minecraft:snowball\")");
+        ToolRun equip = lua(companion, "numen.gear.hold(\"minecraft:snowball\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(equip.done(), "gear wear has not finished");
+            helper.assertTrue(equip.done(), "gear hold has not finished");
             helper.assertTrue(equip.succeeded() && equip.outcome().contains("main hand"),
                     "the reply does not say the snowball is in her main hand: " + equip.outcome());
             helper.assertTrue(companion.getInventory().countItem(Items.SNOWBALL) == 4,
@@ -488,15 +488,15 @@ public class InventoryGameTests {
         });
     }
 
-    /** 盾不是穿戴物:不给 slot 时进副手,回执说在副手。 */
+    /** 盾不是穿戴物:numen.gear.hold 不点名哪只手时照原版进副手,回执说在副手。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
     public static void equip_a_shield_goes_to_the_offhand(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_shieldbearer", new BlockPos(4, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.SHIELD));
-        ToolRun equip = lua(companion, "numen.gear.wear(\"minecraft:shield\")");
+        ToolRun equip = lua(companion, "numen.gear.hold(\"minecraft:shield\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(equip.done(), "gear wear has not finished");
+            helper.assertTrue(equip.done(), "gear hold has not finished");
             helper.assertTrue(equip.succeeded() && equip.outcome().contains("offhand"),
                     "the reply does not say the shield is in her off hand: " + equip.outcome());
             helper.assertTrue(companion.getOffhandItem().is(Items.SHIELD), "the shield is not in her off hand");
@@ -638,3 +638,37 @@ public class InventoryGameTests {
         });
     }
 }
+
+    /** 木棍不是穿的东西:numen.gear.wear 如实失败、叫她用 numen.gear.hold,主手不变、木棍还在包里。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void wear_a_stick_says_to_hold_it(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_stickler", new BlockPos(3, 2, 3), false);
+        companion.getInventory().add(new ItemStack(Items.STICK));
+        companion.getInventory().selected = 5;
+        ToolRun equip = lua(companion, "numen.gear.wear(\"minecraft:stick\")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(equip.done(), "gear wear has not finished");
+            helper.assertTrue(!equip.succeeded() && equip.outcome().contains("not something you wear")
+                            && equip.outcome().contains("numen.gear.hold(\"minecraft:stick\")"),
+                    "the failure does not send her to hold it: " + equip.outcome());
+            helper.assertTrue(companion.getMainHandItem().isEmpty(), "her main hand changed");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 拿到副手:numen.gear.hold 点名副手,火把到了副手,回执说在副手。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void hold_in_the_off_hand(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_torchbearer", new BlockPos(3, 2, 3), false);
+        companion.getInventory().add(new ItemStack(Items.TORCH, 8));
+        ToolRun hold = lua(companion, "numen.gear.hold(\"minecraft:torch\", {hand = \"off\"})");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(hold.done(), "gear hold has not finished");
+            helper.assertTrue(hold.succeeded() && hold.outcome().contains("offhand")
+                            && companion.getOffhandItem().is(Items.TORCH),
+                    "the torch is not in her off hand: " + hold.outcome());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }

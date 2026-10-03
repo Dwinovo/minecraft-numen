@@ -60,6 +60,11 @@ public final class Wardrobe {
         }
     }
 
+    /** 不点名哪只手时拿到哪只手:照原版的规矩,盾这类副手物进副手,其余进主手。 */
+    public static String handFor(NumenPlayer body, ItemStack stack) {
+        return body.getEquipmentSlotForItem(stack) == EquipmentSlot.OFFHAND ? OFFHAND : MAINHAND;
+    }
+
     /** 卸下时一个 {@code slot} 指的是哪些槽名:{@code armor} 展开成原版四件甲,其余就是它自己。 */
     public static List<String> namesFor(String slot) {
         return ARMOR.equals(slot) ? VanillaArmor.NAMES : List.of(slot);
@@ -72,9 +77,8 @@ public final class Wardrobe {
     /**
      * 把背包里的一件 {@code item} 穿上或拿到手上。
      *
-     * @param slot {@code null} = 自动选位:归某类穿戴位置管的进那类位置,不归任何来源管的交给手(按原版
-     *             的规矩,盾这类副手物进副手,其余进主手);否则是 {@code mainhand}、{@code offhand} 或
-     *             {@code <worn>} 里的槽名
+     * @param slot {@code null} = 自动选位:归某类穿戴位置管的进那类位置,不归任何来源管的不是穿的东西,如实失败;
+     *             否则是 {@code mainhand}、{@code offhand}(拿到手上,见 {@link #handFor})或 {@code <worn>} 里的槽名
      */
     public static Outcome wear(NumenPlayer body, Item item, String slot) {
         Inventory inv = body.getInventory();
@@ -92,7 +96,8 @@ public final class Wardrobe {
         if (where == null) {
             Set<String> kinds = NumenPlugins.gearKinds(body, one);
             if (kinds.isEmpty()) {
-                where = body.getEquipmentSlotForItem(one) == EquipmentSlot.OFFHAND ? OFFHAND : MAINHAND;
+                return Outcome.failed(label + " is not something you wear — numen.gear.hold(\""
+                        + BuiltInRegistries.ITEM.getKey(item) + "\") takes it in hand", FailureType.UNKNOWN, data);
             } else {
                 candidates = named(body, kinds);
                 if (candidates.isEmpty()) {

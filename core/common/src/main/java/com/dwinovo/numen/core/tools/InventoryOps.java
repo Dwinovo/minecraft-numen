@@ -30,7 +30,8 @@ public final class InventoryOps {
 
     /**
      * {@code gear wear}:只做参数翻译。槽名随身体而定(模组会加槽),是不是真有这个槽、穿不穿得上,都由
-     * {@link Wardrobe} 在身上答;{@code armor} 是卸下专用的别名,穿戴没有这个目标——四件甲各回各槽。
+     * {@link Wardrobe} 在身上答;{@code armor} 是卸下专用的别名,穿戴没有这个目标——四件甲各回各槽。两只手不是穿戴位置,
+     * 归 {@code gear hold}。
      */
     public TaskRecord wear(ServerSource source, String item_id, String slot) {
         String slotName = slotName(slot);
@@ -38,8 +39,22 @@ public final class InventoryOps {
             throw new IllegalArgumentException(
                     "slot = \"armor\" is only for numen.gear.remove (it means all four armor pieces)");
         }
+        if (Wardrobe.MAINHAND.equals(slotName) || Wardrobe.OFFHAND.equals(slotName)) {
+            throw new IllegalArgumentException("a hand is not a slot you wear: numen.gear.hold(\"" + item_id
+                    + "\"" + (Wardrobe.OFFHAND.equals(slotName) ? ", {hand = \"off\"}" : "") + ") takes it in hand");
+        }
         Item item = ToolArgs.parseItem(item_id);
         return new EquipTaskRecord(source, item, slotName, BuiltInRegistries.ITEM.getKey(item).getPath());
+    }
+
+    /**
+     * {@code gear hold}:哪只手。不写时照原版放东西的规矩(盾这类副手物进副手,其余进主手),同 {@link Wardrobe} 里那一条。
+     */
+    public TaskRecord hold(ServerSource source, String item_id, String hand) {
+        Item item = ToolArgs.parseItem(item_id);
+        String slot = "off".equals(hand) ? Wardrobe.OFFHAND : "main".equals(hand) ? Wardrobe.MAINHAND
+                : Wardrobe.handFor(source.companion(), new net.minecraft.world.item.ItemStack(item));
+        return new EquipTaskRecord(source, item, slot, BuiltInRegistries.ITEM.getKey(item).getPath());
     }
 
     /** {@code gear remove}:按槽名摘,或按物品从戴着它的格子摘;两个都不写时摘什么由命令定(盔甲)。 */

@@ -17,7 +17,7 @@ Phase 2 of the dragon route. Build a portal, ignite it, walk through. Actual Net
 Mine it from a **ruined portal** — a structure that's just standing obsidian, no lava-casting. This is the only route: casting your own (water over lava) leaves every fresh obsidian block touching lava, and I refuse to mine fluid-adjacent blocks (it would flood or burn the dig), so a cast wall is unminable by design.
 
 1. `numen.locate.structure("#minecraft:ruined_portal")` — searches the whole family and returns the nearest. **Skip `ruined_portal_ocean`** (underwater) if the result names it; re-search or pick a land one — I can't dive.
-2. `numen.gear.wear("diamond_pickaxe")` (obsidian needs diamond), `numen.move.goto_` the portal coordinates.
+2. `numen.gear.hold("diamond_pickaxe")` (obsidian needs diamond), `numen.move.goto_` the portal coordinates.
 3. `numen.scan.blocks("obsidian")`, then hand the frame's cluster to `numen.work.mine` (its `blocks`) — it walks within reach, digs, picks up the drops and goes on until none of them is left. ~9.4s per block is normal.
 
 Notes:

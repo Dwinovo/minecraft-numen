@@ -426,7 +426,7 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
     /** 工具收不到掉落时说的那句:要什么、下一步。 */
     private String noTool() {
         return "my tools can't harvest " + r.label + " — digging it would destroy it without any drop. Equip a "
-                + "suitable tool (numen.gear.wear, e.g. a pickaxe) first; to break a block regardless of drops, "
+                + "suitable tool (numen.gear.hold, e.g. a pickaxe) first; to break a block regardless of drops, "
                 + "numen.use.hit(pos) on it with whatever is in hand";
     }
 

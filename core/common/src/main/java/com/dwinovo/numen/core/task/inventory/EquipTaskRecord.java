@@ -5,11 +5,12 @@ import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.world.item.Item;
 
 /**
- * Typed task descriptor for {@code gear wear}: "take this item out of my inventory and wear/wield it."
+ * Typed task descriptor for {@code gear wear} and {@code gear hold}: "take this item out of my inventory and
+ * wear/wield it."
  * Completes in a single tick — no pathing.
  *
- * <p>{@link #slot} is {@code null} for auto-choosing, or a slot name the LLM forces:
- * {@code mainhand}, {@code offhand} or a name from {@code <worn>}. Slot names depend on the
+ * <p>{@link #slot} is {@code null} for auto-choosing a worn slot, a hand ({@code mainhand}, {@code offhand},
+ * from {@code gear hold}) or a name from {@code <worn>}. Slot names depend on the
  * body (mods add slots), so they are resolved when the task runs, not here.
  */
 public final class EquipTaskRecord extends TaskRecord {
