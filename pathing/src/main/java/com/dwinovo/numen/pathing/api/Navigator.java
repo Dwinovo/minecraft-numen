@@ -81,6 +81,6 @@ public final class Navigator {
                 request.route() != null ? " 先照候选 " + PathLog.route(request.route()) : "",
                 PathLog.num(entity.level().tickRateManager().tickrate()), PathLog.body(entity));
         return new Navigation(new Driver(body, ports.effector(), ports.terrain(), ports.materials(), ports.threats(),
-                request.goal(), request.spec(), request.budget(), request.route()), entity);
+                request.goal(), request.spec(), request.budget(), request.route(), request.through()), entity);
     }
 }
