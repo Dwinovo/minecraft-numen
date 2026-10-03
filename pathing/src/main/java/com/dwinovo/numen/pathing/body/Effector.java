@@ -32,8 +32,11 @@ public interface Effector {
     /** 左键按住这一刻的结果。 */
     sealed interface Strike {
 
-        /** 还在挖,或上一格刚碎、手还没缓过来。 */
-        record Swinging() implements Strike {}
+        /**
+         * 还在挖,或上一格刚碎、手还没缓过来。{@code pressed}:这一刻真按下去了(送出了这一下);手还没缓过来、这一下没按时为
+         * false——只点一下的人要等到按下去的那一刻。
+         */
+        record Swinging(boolean pressed) implements Strike {}
 
         /** 碎了:{@code pos} 这一格原来是 {@code before}。 */
         record Broke(BlockPos pos, BlockState before) implements Strike {}
@@ -41,7 +44,8 @@ public interface Effector {
         /** 没让挖:{@code reason} 是拒绝方自己的理由,模块不解读。 */
         record Refused(BlockPos pos, Object reason) implements Strike {}
 
-        Strike SWINGING = new Swinging();
+        Strike SWINGING = new Swinging(true);
+        Strike RECOVERING = new Swinging(false);
     }
 
     /** 右键这一下的结果。 */

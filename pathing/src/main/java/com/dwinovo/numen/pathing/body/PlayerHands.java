@@ -96,7 +96,7 @@ public final class PlayerHands implements Effector {
             return awaitStop(level);
         }
         if (now() < destroyReadyAt) {
-            return Strike.SWINGING;
+            return Strike.RECOVERING;
         }
         BlockPos pos = hit.getBlockPos().immutable();
         Direction face = hit.getDirection();

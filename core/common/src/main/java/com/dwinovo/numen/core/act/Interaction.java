@@ -317,7 +317,7 @@ public final class Interaction {
 
     /**
      * 左键一格:每刻朝按下时的那一点看着,准星还落在那一格上就按;准星被挡开了(有东西走进来)就等着,不去按挡着的。点一下
-     * ({@link Timing#once})按过一下就松手,按住的那一格碎了才松手。权限层在第一下之前把门(同一格接着按不再问),被拒只转述、
+     * ({@link Timing#once})等手缓过来、真按下去一下就松手,按住的那一格碎了才松手。权限层在第一下之前把门(同一格接着按不再问),被拒只转述、
      * 不换法子。
      */
     private Status breakBlock() {
@@ -329,7 +329,8 @@ public final class Interaction {
             return Status.RUNNING;
         }
         return switch (CompanionHands.of(player).dig(hit)) {
-            case Effector.Strike.Swinging swinging -> timing.hold ? Status.RUNNING : Status.DONE;
+            case Effector.Strike.Swinging swinging -> timing.hold || !swinging.pressed() ? Status.RUNNING
+                    : Status.DONE;
             case Effector.Strike.Broke broke -> Status.DONE;
             case Effector.Strike.Refused refused -> {
                 failReason = "cannot break that block: " + (refused.reason() instanceof Verdict verdict
