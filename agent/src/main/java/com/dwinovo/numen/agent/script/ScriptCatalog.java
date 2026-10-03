@@ -17,6 +17,12 @@ public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource 
     /** 模块从哪来。两个方法都可能在脚本的线程上被调。 */
     public interface ModuleSource {
 
+        /**
+         * 她自己的模块所在的名字空间:她存的模块 {@code lumber} 在程序里是 {@code my.lumber},模块名就写成 {@code my.lumber}。这个全局名
+         * 留给她,内置与插件的模块不能叫它。
+         */
+        String HERS = "my";
+
         /** 叫这个名字的模块此刻的正文;没有是 null。 */
         String code(String name);
 

@@ -66,13 +66,16 @@ public final class LuaEngine implements ScriptEngine {
 
     private static Object require(List<Object> in) {
         throw new LuaSandbox.ScriptError(ScriptRun.failure(ErrorKind.NO_FUNCTION.wire(), "there is no require in "
-                + "these programs", "modules are used by name: `lumber.chop(...)`", REQUIRE, null));
+                + "these programs", "modules are used by name: `work.collect()`, `my.lumber.chop(...)`", REQUIRE, null));
     }
 
     /** 读了一个既不是全局、也不是模块的名字:多半是模块名写错了,说有哪些。 */
     static LuaSandbox.ScriptError unknown(String name, List<String> modules) {
         return new LuaSandbox.ScriptError(ScriptRun.failure(ErrorKind.NO_FUNCTION.wire(), "there is no module named "
-                + name + " (nor a global or local of that name); the modules are: " + String.join(", ", modules),
+                + name + " (nor a global or local of that name); the modules are: " + String.join(", ", modules)
+                + (modules.contains(ScriptCatalog.ModuleSource.HERS + "." + name)
+                        ? "; yours are under " + ScriptCatalog.ModuleSource.HERS + ": "
+                        + ScriptCatalog.ModuleSource.HERS + "." + name : ""),
                 "script.list() lists the modules with what each does", null, null));
     }
 
@@ -145,7 +148,8 @@ public final class LuaEngine implements ScriptEngine {
                 + "(bad_argument, not_found, out_of_reach, no_path, denied, ...), `err.hint` is a line to run next; "
                 + "`raise(kind, message, hint)` raises your own. To read a value, `print(x)` (a table prints as a Lua "
                 + "table) or `return x`; the receipt shows one line per call and what you printed or returned. A module "
-                + "is used by its name like a group, with no require: `work.collect()`, `lumber.chop(t)`. "
+                + "is used by its name like a group, with no require: `work.collect()`; yours are under my: "
+                + "`my.lumber.chop(t)`. "
                 + "`api.help(\"work\")` lists a group's or a module's typed signatures, `api.help(\"work.dig\")` "
                 + "explains one.";
     }
@@ -239,17 +243,18 @@ public final class LuaEngine implements ScriptEngine {
     /** 模块名的写法:小写字母打头,小写字母、数字、下划线,最长 48。 */
     private static final Pattern MODULE_NAME = Pattern.compile("[a-z][a-z0-9_]{0,47}");
 
-    /** 引擎自己登记的全局函数:模块名不能占。 */
-    private static final java.util.Set<String> ENGINE_GLOBALS = java.util.Set.of(RAISE, REQUIRE);
+    /** 引擎自己占的全局名:模块名不能占。 */
+    private static final java.util.Set<String> ENGINE_GLOBALS = java.util.Set.of(RAISE, REQUIRE,
+            ScriptCatalog.ModuleSource.HERS);
 
     @Override
-    public String moduleName(String name) {
+    public String moduleName(String name, boolean global) {
         if (name == null || !MODULE_NAME.matcher(name).matches()) {
             return "a module name is lowercase letters, digits and _, starting with a letter, at most 48 long (a "
-                    + "program writes it as it is: lumber.chop()); got \"" + name + "\"";
+                    + "program writes it as it is: my.lumber.chop()); got \"" + name + "\"";
         }
-        if (LuaSandbox.KEYWORDS.contains(name) || LuaSandbox.STANDARD_GLOBALS.contains(name)
-                || ENGINE_GLOBALS.contains(name)) {
+        if (LuaSandbox.KEYWORDS.contains(name)
+                || global && (LuaSandbox.STANDARD_GLOBALS.contains(name) || ENGINE_GLOBALS.contains(name))) {
             return name + " is a name Lua or the API already uses; pick another";
         }
         return null;
@@ -533,7 +538,11 @@ public final class LuaEngine implements ScriptEngine {
         }
         List<ScriptRun.Call> seen = new ArrayList<>();
         LuaSandbox.Builder sandbox = reader(catalog, seen, LuaEngine::redefined);
+        // 只读不跑的是随模组发布的文字,用不到她名字空间里的模块:只换顶层的
         for (String module : catalog.modules().names()) {
+            if (module.contains(".")) {
+                continue;
+            }
             for (Defined defined : functions(module, catalog.modules().code(module))) {
                 String fn = defined.name().substring(module.length() + 1);
                 sandbox.function(module, fn, in -> {
@@ -575,7 +584,7 @@ public final class LuaEngine implements ScriptEngine {
                                       LuaSandbox.Redefined redefined) {
         LuaSandbox.Builder sandbox = LuaSandbox.builder(LIMITS).missing(LuaEngine::missing).errors(LuaEngine::render)
                 .redefined(redefined).unknown(LuaEngine::unknown).function(RAISE, LuaEngine::raise)
-                .function(REQUIRE, LuaEngine::require);
+                .function(REQUIRE, LuaEngine::require).namespace(ScriptCatalog.ModuleSource.HERS);
         catalog.groups().forEach((group, verbs) -> verbs.forEach((verb, declared) ->
                 sandbox.function(functionName(group), functionName(verb), in -> {
                     seen.add(call(group, verb, in, declared));
@@ -657,7 +666,7 @@ public final class LuaEngine implements ScriptEngine {
             LuaSandbox.Builder sandbox = LuaSandbox.builder(LIMITS).print(printer).missing(LuaEngine::missing)
                     .redefined(LuaEngine::redefined).unknown(LuaEngine::unknown).errors(LuaEngine::render)
                     .show(LuaEngine::literal).function(RAISE, LuaEngine::raise).function(REQUIRE, LuaEngine::require)
-                    .modules(source(catalog.modules()));
+                    .namespace(ScriptCatalog.ModuleSource.HERS).modules(source(catalog.modules()));
             catalog.groups().forEach((group, verbs) -> verbs.keySet().forEach(verb ->
                     sandbox.function(functionName(group), functionName(verb), in -> ask(group, verb, in))));
             running = sandbox.build().start(name, code, List.of(), outcome -> events.add(new Ended(outcome)));

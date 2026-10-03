@@ -18,7 +18,7 @@ import java.util.stream.Stream;
  * (扩展名随脚本语言,{@link ScriptEngine#extension})。模块返回一张函数表,程序里以模块名直接用({@code work.collect()});和第 ① 层的
  * 组同名的模块给那一组加函数。它们留在 jar 里,是她那一层的底:她存一份同名的就盖住它({@link Modules})。
  *
- * <p>登记那一刻把关,和动作登记同一种做法:名字合模块名的规矩({@link ScriptEngine#moduleName},规则只在那一处)、正文读得通(和运行时
+ * <p>登记那一刻把关,和动作登记同一种做法:名字合内置模块名的规矩(规矩只在 {@link Modules} 一处,{@code my} 留给她)、正文读得通(和运行时
  * 同一个编译器)、开头一行注释说它做什么、至少定义一个函数而且每个函数上面都写了注释(帮助与索引里它的说明就是那几行)。返回的是不是
  * 一张表、有没有给第 ① 层的名字赋值,要等各组到齐才查得全,在登记处第一次被用时查({@code NumenCli})。任何一条不过当场抛出,模组起
  * 不来,不会带着坏模块发出去。名字谁先登记归谁,撞了也当场抛出。
@@ -71,7 +71,7 @@ public final class BuiltinModules {
     public static synchronized void register(String name, String code) {
         ScriptEngine engine = ScriptEngine.IN_USE;
         String what = "内置模块 " + name;
-        String badName = engine.moduleName(name);
+        String badName = Modules.builtinProblem(name);
         if (badName != null) {
             throw new IllegalArgumentException(what + " 的名字不行: " + badName);
         }

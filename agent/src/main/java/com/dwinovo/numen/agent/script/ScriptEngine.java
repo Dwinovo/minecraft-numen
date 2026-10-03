@@ -95,10 +95,12 @@ public interface ScriptEngine {
     List<Defined> functions(String module, String code);
 
     /**
-     * 一个名字能不能当模块名,规则只在这里:脚本里它就是一个全局名,所以要写得出来、不撞语言的关键字与自带的全局、不撞引擎自己的全局
-     * 函数。和第 ① 层的组同名可以(那是给这一组加函数)。能是 null,不能是那句话。
+     * 一个名字在这种语言里能不能当模块名:写得出来、不是关键字。{@code global} 时它是一个全局名,还不能撞语言自带的全局与引擎自己的
+     * 全局({@code raise}、{@code require}、她的名字空间 {@link ScriptCatalog.ModuleSource#HERS});和第 ① 层的组同名可以(那是给这一组
+     * 加函数)。名字空间里的名字({@code my.lumber} 的 {@code lumber})只要写得出来、不是关键字。能是 null,不能是那句话。哪些名字归谁
+     * 的规矩在 api 的 {@code Modules}。
      */
-    String moduleName(String name);
+    String moduleName(String name, boolean global);
 
     /** 模块里定义的一个函数。{@code doc} 是它上面的注释行,原样;没写是空表。 */
     record Defined(String name, List<String> params, List<String> doc) {

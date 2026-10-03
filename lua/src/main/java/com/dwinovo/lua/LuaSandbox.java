@@ -50,6 +50,9 @@ import java.util.regex.Pattern;
  * 行号只记脚本自己那一段:模块里的函数调宿主函数时,{@link #currentLine} 说的是脚本里调这个模块函数的那一行,结局停在的也是脚本里的
  * 那一行。
  *
+ * <p>名字空间({@link Builder#namespace}):一个定死的全局表,下面一个名字一个模块——模块名 {@code my.lumber} 在脚本里就是
+ * {@code my.lumber},同样第一次用到才装,写错了同样说有哪些。
+ *
  * <h2>宿主登记的名字钉死</h2>
  * 宿主登记的全局函数、函数表,以及表里的每个宿主函数,脚本都换不掉、遮不住:{@code move = {}}、{@code function move.go() end}、
  * {@code rawset(move, "go", f)} 一律在那一行报错(那句话由 {@link Builder#redefined} 给)。往宿主的表里加别的名字照常(库就是这样往
@@ -198,6 +201,8 @@ public final class LuaSandbox {
     private final List<String> preload;
     /** 读一个既不是全局也不是模块的名字时报的那句话。 */
     private final Unknown unknown;
+    /** 名字空间:定死的全局表名,下面一个名字一个模块。 */
+    private final List<String> namespaces;
     /** 脚本读宿主函数表里没有的名字时报的那句话。 */
     private final Missing missing;
     /** 脚本给宿主登记的名字赋值时报的那句话。 */
@@ -261,6 +266,7 @@ public final class LuaSandbox {
         this.modules = b.modules;
         this.preload = List.copyOf(b.preload);
         this.unknown = b.unknown;
+        this.namespaces = List.copyOf(b.namespaces);
         this.missing = b.missing;
         this.redefined = b.redefined;
         this.errors = b.errors;
@@ -283,6 +289,7 @@ public final class LuaSandbox {
         private ModuleSource modules;
         private final List<String> preload = new ArrayList<>();
         private Unknown unknown = (name, present) -> new ScriptError("there is no module named " + name);
+        private final List<String> namespaces = new ArrayList<>();
         private Missing missing = (table, key, present) -> new ScriptError("there is no function " + table + "." + key);
         private Redefined redefined = (table, key) -> new ScriptError((table == null ? "" : table + ".") + key
                 + " is a host function and cannot be replaced");
@@ -357,6 +364,18 @@ public final class LuaSandbox {
         /** 开跑之前先装这个模块(不等用到):装不成,这段脚本就以那个错结束。 */
         public Builder preload(String module) {
             this.preload.add(module);
+            return this;
+        }
+
+        /**
+         * 一个名字空间:全局表 {@code name} 定死,模块名 {@code name.x} 的模块在脚本里就是 {@code name.x},第一次用到才装。
+         */
+        public Builder namespace(String name) {
+            checkName(name);
+            if (globals.containsKey(name) || tables.containsKey(name) || namespaces.contains(name)) {
+                throw new IllegalArgumentException("名字空间 " + name + " 和已有的全局名撞了");
+            }
+            namespaces.add(name);
             return this;
         }
 
@@ -633,6 +652,25 @@ public final class LuaSandbox {
                 g.rawset(group, t);
                 g.fix(LuaValue.valueOf(group), global);
             });
+            for (String space : namespaces) {
+                // 名字空间里读一个名字:是模块就装上它;否则写错了,当场说有哪些模块
+                FixedKeysTable ns = new FixedKeysTable();
+                LuaTable meta = new LuaTable();
+                meta.rawset("__index", new VarArgFunction() {
+                    @Override
+                    public Varargs invoke(Varargs in) {
+                        String module = space + "." + in.arg(2).tojstring();
+                        if (modules != null && modules.code(module) != null) {
+                            loadModule(LuaValue.valueOf(module));
+                            return ns.rawget(in.arg(2));
+                        }
+                        throw luaError(unknown.error(module, modules == null ? List.of() : modules.names()));
+                    }
+                });
+                ns.setmetatable(meta);
+                g.rawset(space, ns);
+                g.fix(LuaValue.valueOf(space), global);
+            }
             if (modules != null) {
                 // 读一个不在全局里的名字:是模块就装上它;否则写错了,当场说有哪些模块
                 LuaTable meta = new LuaTable();
@@ -677,8 +715,11 @@ public final class LuaSandbox {
                     throw new LuaError("module " + module + " returned " + returned.typename() + ", not a table of its "
                             + "functions; end it with: return M");
                 }
+                int dot = module.indexOf('.');
                 LuaValue group = tables.containsKey(module) ? g.rawget(name) : LuaValue.NIL;
-                if (group.istable()) {
+                if (dot > 0) {
+                    g.rawget(module.substring(0, dot)).rawset(module.substring(dot + 1), returned);
+                } else if (group.istable()) {
                     for (Varargs kv = returned.next(LuaValue.NIL); !kv.arg1().isnil(); kv = returned.next(kv.arg1())) {
                         group.rawset(kv.arg1(), kv.arg(2));
                     }

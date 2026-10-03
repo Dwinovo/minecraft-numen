@@ -445,6 +445,20 @@ class LuaSandboxTest {
     }
 
     @Test
+    void aModuleInANamespaceIsUsedUnderItsNameAndTheNamespaceIsFixed() throws InterruptedException {
+        Shelf shelf = new Shelf().with("my.lumber", "return {chop = function(n) return 'chopped ' .. n end}");
+        LuaSandbox sandbox = LuaSandbox.builder(ROOMY).modules(shelf).namespace("my")
+                .unknown((name, present) -> new LuaSandbox.ScriptError("no module named " + name))
+                .print(printed::add).build();
+        assertTrue(run(sandbox, "print(my.lumber.chop(3))").finished());
+        assertEquals(List.of("chopped 3"), printed);
+        assertTrue(run(sandbox, "return my.lumbr").message().contains("no module named my.lumbr"));
+        assertEquals(LuaSandbox.Ending.ERROR, run(sandbox, "my = {}").ending(), "名字空间定死");
+        assertTrue(run(sandbox, "return lumber").message().contains("no module named lumber"),
+                "名字空间里的模块不占顶层名字");
+    }
+
+    @Test
     void aModuleCannotReplaceTheHostsFunctionsOfItsGroup() throws InterruptedException {
         Shelf shelf = new Shelf().with("move", "return {go = function() return 'mine' end}");
         LuaSandbox sandbox = LuaSandbox.builder(ROOMY).function("move", "go", args -> "went").modules(shelf)

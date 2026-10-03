@@ -341,7 +341,8 @@ class LuaEngineTest {
         assertEquals(List.of("hi"), printed);
         ScriptRun.Done required = assertInstanceOf(ScriptRun.Done.class, run("local g = require('greet')").start());
         assertEquals("no_function", required.failure().get("kind"));
-        assertEquals("modules are used by name: `lumber.chop(...)`", required.failure().get("hint"));
+        assertEquals("modules are used by name: `work.collect()`, `my.lumber.chop(...)`",
+                required.failure().get("hint"));
         ScriptRun.Done typo = assertInstanceOf(ScriptRun.Done.class, run("grete.hi()").start());
         assertEquals("no_function", typo.failure().get("kind"));
         assertTrue(typo.error().contains("there is no module named grete") && typo.error().contains("greet, move"),
@@ -388,11 +389,30 @@ class LuaEngineTest {
         assertTrue(redefines.contains("move.go is an API function"), redefines);
         String inside = LUA.checkModule("lumber", "function work.dig() end\nreturn {}", CATALOG);
         assertTrue(inside.contains("work.dig is an API function"), inside);
-        assertNull(LUA.moduleName("lumber"));
-        assertNull(LUA.moduleName("move"), "和组同名是给这一组加函数");
-        assertTrue(LUA.moduleName("my-mod") != null);
-        assertTrue(LUA.moduleName("end") != null);
-        assertTrue(LUA.moduleName("string") != null);
-        assertTrue(LUA.moduleName("raise") != null);
+        assertNull(LUA.moduleName("lumber", true));
+        assertNull(LUA.moduleName("move", true), "和组同名是给这一组加函数");
+        assertTrue(LUA.moduleName("my-mod", false) != null);
+        assertTrue(LUA.moduleName("end", false) != null);
+        assertTrue(LUA.moduleName("string", true) != null);
+        assertNull(LUA.moduleName("string", false), "名字空间里的名字只要写得出来");
+        assertTrue(LUA.moduleName("raise", true) != null);
+        assertTrue(LUA.moduleName("my", true) != null, "my 留给她的名字空间");
+    }
+
+    /** 她的模块在 my 下面:按 my.名字 用,用到才装;名字空间定死。 */
+    @Test
+    void herModulesAreUnderMy() {
+        MODULES.put("my.lumber", "local M = {}\nfunction M.chop() return 'chopped' end\nreturn M");
+        try {
+            assertTrue(assertInstanceOf(ScriptRun.Done.class, run("print(my.lumber.chop())").start()).ok());
+            assertEquals(List.of("chopped"), printed);
+            ScriptRun.Done typo = assertInstanceOf(ScriptRun.Done.class, run("my.lumbr.chop()").start());
+            assertTrue(typo.error().contains("there is no module named my.lumbr"), typo.error());
+            ScriptRun.Done flat = assertInstanceOf(ScriptRun.Done.class, run("lumber.chop()").start());
+            assertTrue(flat.error().contains("yours are under my: my.lumber"), flat.error());
+            assertNull(LUA.checkModule("my.lumber", MODULES.get("my.lumber"), CATALOG));
+        } finally {
+            MODULES.remove("my.lumber");
+        }
     }
 }

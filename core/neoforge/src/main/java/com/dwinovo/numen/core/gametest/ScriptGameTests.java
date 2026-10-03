@@ -295,8 +295,9 @@ public class ScriptGameTests {
     }
 
     /**
-     * 她存一个自己的模块、读它、在两段程序里按名字用它,战绩累计;读不通的、改第 ① 层函数的不收、说哪一行;主人拿编辑器改了文件,
-     * 下一段程序就用新的;目录里一个坏模块只让用到它的程序出错;她自己的删得掉。模块目录是这次 GameTest 专用的,不是主人的。
+     * 她存一个自己的模块(在 my 下)、读它、在两段程序里按名字 {@code my.gt_clear} 用它,战绩累计;读不通的、改第 ① 层函数的、不在
+     * my 下又不是内置名字的不收、说为什么;主人拿编辑器改了文件,下一段程序就用新的;目录里一个坏模块只让用到它的程序出错;她自己的
+     * 删得掉。模块目录是这次 GameTest 专用的,不是主人的。
      */
     @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_scripts")
     public static void she_saves_uses_and_deletes_a_module_of_her_own(GameTestHelper helper) {
@@ -309,24 +310,27 @@ public class ScriptGameTests {
         helper.assertTrue(dir.getFileName().toString().startsWith("numen-gametest-lua-"),
                 "GameTest reads modules from " + dir + ", not from its own empty directory");
 
-        ToolRun broken = lua(her, "script.save(\"-- Never compiles.\\nlocal x = = 1\", {name = \"gt_broken\"})");
-        helper.assertTrue(!broken.succeeded() && broken.reply().contains("gt_broken:2:"),
+        ToolRun flat = lua(her, "script.save(\"-- Flat.\\nreturn {}\", {name = \"gt_flat\"})");
+        helper.assertTrue(!flat.succeeded() && flat.reply().contains("my.gt_flat"),
+                "a module of her own was kept outside my: " + flat.reply());
+        ToolRun broken = lua(her, "script.save(\"-- Never compiles.\\nlocal x = = 1\", {name = \"my.gt_broken\"})");
+        helper.assertTrue(!broken.succeeded() && broken.reply().contains("my.gt_broken:2:"),
                 "a module that does not compile was kept: " + broken.reply());
         ToolRun redefines = lua(her, "script.save(\"-- Takes build.set.\\nlocal M = {}\\nfunction build.set() end\\n"
-                + "return M\", {name = \"gt_thief\"})");
+                + "return M\", {name = \"my.gt_thief\"})");
         helper.assertTrue(!redefines.succeeded() && redefines.reply().contains("build.set is an API function"),
                 "a module that redefines an API function was kept: " + redefines.reply());
 
         ToolRun saved = lua(her, "script.save(\"-- Clearing cells.\\nlocal M = {}\\n---Clear one cell.\\n"
-                + "function M.cell(p)\\n  build.set(p, {block = 'air'})\\nend\\nreturn M\", {name = \"gt_clear\"})");
-        helper.assertTrue(saved.succeeded() && saved.reply().contains("Saved module gt_clear"), saved.reply());
-        ToolRun shown = lua(her, "script.show(\"gt_clear\")");
+                + "function M.cell(p)\\n  build.set(p, {block = 'air'})\\nend\\nreturn M\", {name = \"my.gt_clear\"})");
+        helper.assertTrue(saved.succeeded() && saved.reply().contains("Saved module my.gt_clear"), saved.reply());
+        ToolRun shown = lua(her, "script.show(\"my.gt_clear\")");
         helper.assertTrue(shown.succeeded() && shown.reply().contains("(yours)")
                 && shown.reply().contains("function M.cell(p)") && shown.reply().contains("No program used it yet."),
                 shown.reply());
 
         String at = com.dwinovo.numen.cli.Shapes.literal(cell);
-        LlmToolCall run = programCall("gt_clear.cell(" + at + ")");
+        LlmToolCall run = programCall("my.gt_clear.cell(" + at + ")");
         Round first = round(helper, her, run);
 
         steps(helper)
@@ -340,38 +344,38 @@ public class ScriptGameTests {
                     // 第一次的收尾事件已经读过;下一轮从空出箱读起,和主人客户端上取走即清一样
                     outbox.forget(her.getUUID());
                 })
-                .thenExecute(() -> round(helper, her, programCall("gt_clear.cell(" + at + ")")))
+                .thenExecute(() -> round(helper, her, programCall("my.gt_clear.cell(" + at + ")")))
                 .thenWaitUntil(() -> helper.assertTrue(level.getBlockState(cell).isAir(),
                         "the second program did not clear the cell"))
                 .thenWaitUntil(() -> {
                     String listed = lua(her, "script.list()").reply();
-                    helper.assertTrue(listed.contains("gt_clear — Clearing cells. [yours] Programs that used it: 2, "
+                    helper.assertTrue(listed.contains("my.gt_clear — Clearing cells. [yours] Programs that used it: 2, "
                             + "ran to the end: 2"), "the record does not add up: " + listed);
                     helper.assertTrue(listed.contains("work — ") && listed.contains("[built in]"), listed);
                 })
                 .thenExecute(() -> {
                     // 主人拿编辑器改了文件:不重启,下一段程序就用新的
                     try {
-                        java.nio.file.Files.writeString(dir.resolve("gt_clear.lua"),
+                        java.nio.file.Files.writeString(dir.resolve("my").resolve("gt_clear.lua"),
                                 "-- Clearing cells.\nlocal M = {}\n---Say which version this is.\n"
                                         + "function M.version() return 2 end\nreturn M\n");
-                        java.nio.file.Files.writeString(dir.resolve("gt_rotten.lua"), "local M = {\n");
+                        java.nio.file.Files.writeString(dir.resolve("my").resolve("gt_rotten.lua"), "local M = {\n");
                     } catch (java.io.IOException e) {
                         throw new java.io.UncheckedIOException(e);
                     }
-                    ToolRun edited = lua(her, "return gt_clear.version()");
+                    ToolRun edited = lua(her, "return my.gt_clear.version()");
                     helper.assertTrue(edited.ranToTheEnd() && edited.receipt().contains("returned: 2"),
                             "the edited file was not used: " + edited.receipt());
-                    ToolRun untouched = lua(her, "return gt_clear.version() + 1");
+                    ToolRun untouched = lua(her, "return my.gt_clear.version() + 1");
                     helper.assertTrue(untouched.ranToTheEnd(), "a broken module nobody uses broke a program: "
                             + untouched.receipt());
-                    ToolRun rotten = lua(her, "return gt_rotten.x");
-                    helper.assertTrue(!rotten.ranToTheEnd() && rotten.receipt().contains("module gt_rotten does not "
+                    ToolRun rotten = lua(her, "return my.gt_rotten.x");
+                    helper.assertTrue(!rotten.ranToTheEnd() && rotten.receipt().contains("module my.gt_rotten does not "
                             + "compile"), rotten.receipt());
-                    helper.assertTrue(lua(her, "script.delete(\"gt_rotten\")").succeeded(), "the rotten one stays");
-                    ToolRun deleted = lua(her, "script.delete(\"gt_clear\")");
+                    helper.assertTrue(lua(her, "script.delete(\"my.gt_rotten\")").succeeded(), "the rotten one stays");
+                    ToolRun deleted = lua(her, "script.delete(\"my.gt_clear\")");
                     helper.assertTrue(deleted.succeeded(), deleted.reply());
-                    helper.assertTrue(!lua(her, "script.show(\"gt_clear\")").succeeded(),
+                    helper.assertTrue(!lua(her, "script.show(\"my.gt_clear\")").succeeded(),
                             "the deleted module is still there");
                     outbox.forget(her.getUUID());
                     CompanionFactory.despawn(level.getServer(), her);

@@ -80,9 +80,9 @@ public final class NumenPrompts {
               program instead of one call per turn. A module may already do it
               (move.goto_, work.collect, work.mine, build.raise; <api> lists the
               modules, built-in ones first). When functions you wrote work,
-              `script.save` keeps them as a module of yours that later programs
-              use by name; `script.list()` shows how the programs that used each
-              module went.
+              `script.save` keeps them as a module of yours under my that later
+              programs use by name (my.lumber.chop(t)); `script.list()` shows
+              how the programs that used each module went.
             - Reuse the world. A station you set up once is worth a note
               (`memory.remember`): you walk back to it instead of crafting and
               placing a second one.

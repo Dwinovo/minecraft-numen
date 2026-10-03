@@ -38,9 +38,10 @@ public final class Scripts {
             "Show the built-in original, not the copy of yours that overrides it.")
             .whenOmitted("show the one in use");
     private static final Param<String> NEW_NAME = Param.optional("name", ArgType.word(),
-            "Name to keep it under, the name programs use it by: lowercase letters, digits and _, starting with a "
-                    + "letter.")
-            .whenOmitted("give it the next free name module_1, module_2, …");
+            "Name to keep it under, the name programs use it by: my.<name> for a module of your own (lowercase "
+                    + "letters, digits and _, starting with a letter), or a built-in module's name to use yours "
+                    + "instead of it.")
+            .whenOmitted("give it the next free name my.module_1, my.module_2, …");
     private static final Param<String> CODE = Param.required("code", ArgType.string(),
             "The module: a first comment line saying what it does, functions put in a table, and that table returned "
                     + "(local M = {} … function M.chop(tree) … end … return M).");
@@ -55,8 +56,8 @@ public final class Scripts {
     /** 经插件那扇门登记这一组。 */
     public static void install(NumenApi numen) {
         numen.registerCommands(GROUP, "Modules — functions written in " + ScriptEngine.IN_USE.language()
-                + " that programs use by name (work.collect(), lumber.chop()): the built-in ones, your own (saved on "
-                + "your owner's computer; one of yours with a built-in's name is used instead of it), and how the "
+                + " that programs use by name: the built-in ones (work.collect()), your own under my "
+                + "(my.lumber.chop(); saved on your owner's computer), your versions of built-in ones, and how the "
                 + "programs that used them went.", Scripts::actions);
     }
 
@@ -90,7 +91,7 @@ public final class Scripts {
                         (src, args) -> src.reply(save(modules(src), args)), CODE, NEW_NAME)
                 .returns(ScriptType.table(ScriptType.field("name", ScriptType.STRING, "The name it is kept under.")))
                 .example("script.save([[\n-- Clearing a pit.\nlocal M = {}\n---Dig out the pit area.\n"
-                        + "function M.clear()\n  work.dig(\"pit\")\nend\nreturn M\n]], {name = \"pit\"})")
+                        + "function M.clear()\n  work.dig(\"pit\")\nend\nreturn M\n]], {name = \"my.pit\"})")
                 .note("Instant. The module is read and loaded once first, and not kept if it does not compile, does "
                         + "not return a table, or redefines an API function; the error says the line. Its first line "
                         + "is a comment saying what it does, and the comment lines above each function say what that "
@@ -103,7 +104,7 @@ public final class Scripts {
         script.client("delete", "Delete a module of yours; one that overrides a built-in gives the built-in back.",
                         (src, args) -> src.reply(delete(modules(src), args.get(NAME))), NAME)
                 .returns(ScriptType.NOTHING)
-                .example("script.delete(\"pit\")")
+                .example("script.delete(\"my.pit\")")
                 .note("Instant. A built-in module you did not override has nothing of yours to delete.")
                 .seeAlso("script list");
     }
@@ -201,11 +202,12 @@ public final class Scripts {
     private static String save(Modules modules, CommandArgs args) {
         String name = args.get(NEW_NAME) == null ? freeName(modules) : args.get(NEW_NAME);
         String code = args.get(CODE);
-        String badName = ScriptEngine.IN_USE.moduleName(name);
+        String badName = Modules.problem(name);
         if (badName != null) {
+            String own = name.startsWith(Modules.MINE) ? name.substring(Modules.MINE.length()) : name;
             return TaskResult.fail(ErrorKind.BAD_ARGUMENT, "did not save " + name + ": " + badName,
-                    "{name = \"" + name.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9_]", "_") + "\"}")
-                    .toJson();
+                    "{name = \"" + Modules.MINE + own.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9_]", "_")
+                            + "\"}").toJson();
         }
         // 读不通、不返回表、撞第 ① 层:和运行时同一个解释器装它一次,规则只在沙箱里那一处
         String problem = ScriptEngine.IN_USE.checkModule(name, code, NumenCli.scriptCatalog(Modules.builtin()));
@@ -243,10 +245,10 @@ public final class Scripts {
 
     // ==================== 小件 ====================
 
-    /** 下一个空着的 {@code module_N}。 */
+    /** 下一个空着的 {@code my.module_N}。 */
     private static String freeName(Modules modules) {
         for (int n = 1; ; n++) {
-            String name = "module_" + n;
+            String name = Modules.MINE + "module_" + n;
             if (modules.get(name) == null) {
                 return name;
             }

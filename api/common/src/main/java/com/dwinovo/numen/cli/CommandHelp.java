@@ -71,7 +71,8 @@ final class CommandHelp {
             lines.addAll(builtin);
         }
         if (!hers.isEmpty()) {
-            lines.add("Yours (script.list() shows how the programs that used them went):");
+            lines.add("Yours, under " + com.dwinovo.numen.agent.script.ScriptCatalog.ModuleSource.HERS
+                    + " (script.list() shows how the programs that used them went):");
             lines.addAll(hers);
         }
         return String.join("\n", lines);
