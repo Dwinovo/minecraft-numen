@@ -2,6 +2,8 @@
 
 状态:
 - **已落地**:第 1–7 步,细节见附录 A–G。本稿正文描述的就是第 7 步"分层"之后的样子;第 6 步里"把她的命令挂进 MC 指令树 `/numen`"的做法已撤回(附录 F);第 4 步核心工具迁移按分层后的形态做完(附录 G)。
+- **10-03 起模型的入口只剩 `lua` 一个工具**(附录 K):登记处的每个动作是一个 Lua 函数,正文里"执行一行命令"的那一层现在是
+  人在聊天框里的第二个前端;模型写的是程序,`command` 工具与快捷工具删了。
 
 ## 一、为什么
 
@@ -1455,3 +1457,36 @@ area has ores/g2                 成功:ores/g2 has 1 cell(s) left to dig, the n
 - 存档里旧写法的设计步骤与路线标志(如 `--parkour true`、旧的原语写法)、旧的重放行读不通,要重写一遍。
 - 全是数字的区域名会读成坐标。
 - 路线标志里方块、格子、区域混写一串时区域仍要带 `area:`。
+
+## 附录 K:只有 lua 一个工具,API 原子化(10-03,`shell.md` §七)
+
+### 一个入口
+
+- 模型的工具表只剩 `lua`(`ScriptTool`)与外接 MCP 服务器的工具。`command` 工具、各组的快捷工具(`goto`、`work_dig`、
+  `task_stop`……)、`todowrite` 工具删了;计划清单是函数 `todo.write`,参数原样回显在回执的 `data.echoed` 里,聊天里的清单
+  从那里画(`PlanChecklist.of`)。
+- 一次 Lua 调用读成动作只在 `NumenCli.invocation` 一处:对象与选项写成参数名到值的 JSON,经 `CommandArgs.fromJson`
+  读一遍,执行侧读的也是它,中间不拼命令行。人敲的命令行经 `NumenCli.read`,两个前端共用同一张登记表与处理函数。
+- 系统提示 `<api>`、`api.help`、工具说明、技能、提示词里的例子都是 Lua;防漂移测试(`WrittenCommandsLint`)把反引号与
+  ```lua 代码块里的程序经脚本前端读一遍。
+- 外接大脑(MCP)的 `lua` 调用交给她自己的派发器(`AgentLoop.runAside`):同样的等收尾、上限与回执。
+
+### 原子化后的普查
+
+| 组 | 动作(原子) | 删掉或搬走的 | 组合它的库函数 |
+|---|---|---|---|
+| move | `go`(照规划好的路线走)、`follow`(跟一个实体,走远/没了/超时收尾) | `goto` 动作(规划+走) | `move.goto_` = `route.new` + `route.plan` + `move.go` |
+| route | `new`、`via`、`drop`、`spec`、`plan`(只规划不动)、`show`、`list`、`delete`、`reverse` | — | — |
+| work | `dig`(手够得着的)、`fish` | `collect` 动作 | `work.collect` = `scan.entities("item")` + 一件件 `move.goto_` |
+| fight | `attack`(只收一只) | "打一片"(`--entity_ids` 一串) | `fight.clear` = `scan.entities("hostile")` + 一只只 `fight.attack` |
+| build | 原语 `set/place/line/layer/cylinder/sphere/copy`、设计 `new/show/drop/designs/delete`、`at`(只放手够得着的格)、`left`(查还差什么)、`built` | `at` 的走动、绕外圈、清场(`ClearSiteTask`)、垫块记账(`DropTracker`) | `build.raise` = `build.left` + `build.at` / `move.goto_ … arrive "dig"` + `work.dig` / `move.goto_ … arrive "reach"` |
+| scan、area、locate、status、inv、use、gear、throwaway、task、script、memory、skill、todo、mc、api | 本来就是原子的,不变 | — | — |
+| 插件 tlm、kaleidoscope、ysm、ftbquests | 本来就是一种意图对一个名词(喂、开界面、换装、交任务……),只改了说明与例子 | — | — |
+
+- 到达方式新增 `reach`:手够得着往那一格里放方块、不站进那一格(`Goals.place`)。
+- `build.at` 一格都够不着时当场拒(`OUT_OF_REACH`),说够不着的几格、最低最近的那一格与照抄的 `move.goto_(…, {arrive =
+  "reach"})`,要先挖开的几格与 `work.dig`;放完够得着的、还剩别的,以成功收场并在回执里说还剩什么。设计格里立着别的方块
+  (生存)由 `work.dig` 挖,`build.*` 只放。
+- `scan.entities` 的掉落物带 `pickup_delay`(还要几刻才捡得起),格子写成 `{x, y, z}`。
+- 直接回一份数据的查询(`status.self` 这类)在脚本里返回读成的表。
+

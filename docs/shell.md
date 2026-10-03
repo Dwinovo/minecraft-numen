@@ -1,6 +1,6 @@
 # 命令行与脚本:原子命令 + Lua 脚本
 
-状态:设计稿(10-01),施工中。总纲见 `docs/architecture-mind-model.md` §零。
+状态:10-01 设计,10-03 改成只有 `lua` 一个工具(§七)。总纲见 `docs/architecture-mind-model.md` §零。
 
 ## 一、为什么
 
@@ -39,25 +39,37 @@
 判据(总纲):**一条原子命令 = 对一个名词做一种意图**;可以含完成这个意图必需的动作层控制,不在几种会改世界的
 方案之间替她选,不碰它那个名词以外的东西。
 
-| 命令 | 只管 | 不管 |
+| 函数 | 只管 | 不管 |
 |---|---|---|
-| `scan …` | 读世界,`--into` 存进区域 | — |
-| `area …` | 编辑地方;查询 `area parts`、`area has`(给脚本用) | — |
-| `route plan` | 寻路:算路线,写明要改的格、要问谁 | 不动 |
-| `move go` / `move goto` | 移动:照路线走,只改承诺里的格 | 不挖目标、不捡 |
-| `work dig` | 挖**站在原地手够得着**的格:挡在前面的格一并挖开(要问/被禁的不挖,如实说),换工具 | 不走动、不捡 |
-| `work collect` | 捡:走过去捡掉落物 | 不挖 |
-| `use …` | 按一下键 | — |
+| `scan.*` | 读世界,`into` 存进区域 | — |
+| `area.*` | 编辑地方;查询 `area.parts`、`area.has` | — |
+| `route.new` / `route.plan` | 寻路:写路线、算路线,写明要改的格、要问谁 | 不动 |
+| `move.go` | 移动:照规划好的路线走,只改承诺里的格 | 不挖目标、不捡 |
+| `move.follow` | 跟着一个实体走,它走远了、没了、超时收尾 | 不打、不捡 |
+| `work.dig` | 挖**站在原地手够得着**的格:挡在前面的格一并挖开(要问/被禁的不挖,如实说),换工具 | 不走动、不捡 |
+| `build.at` | 把落点上**站在原地手够得着**的格变成设计的样子 | 不走动、不挖设计以外的格 |
+| `build.left` | 查:落点还差什么,够得着的、要先挖的、够不着的与最低最近的那一格 | 不动 |
+| `fight.attack` | 打**一只**:追、转头、等冷却、出手,死了/丢了/超时收尾 | 不挑下一只 |
+| `use.*` | 按一下键 | — |
 
-- **"挖"的到达**(`--arrive dig`)= 手够得着目标区域里任意一格,不要求看得见。同样划算的站位里,优先一次能够到
-  最多目标格的(定价只在寻路模块 `Goals.dig` 一处)。
-- `work dig` 挖完回执说:挖了几格、还剩几格够不着、下一步能照抄的 `move goto … --arrive dig`。区域记着每格扫描时是
+库函数(Lua 写的,随模组发,`script.show` 看得到全文)在同一张目录里、和动作一样调用:
+
+| 库函数 | 由哪几个原子函数组成 |
+|---|---|
+| `move.goto_(place, opts)` | `route.new` + `route.plan` + `move.go`,走的是她自己那条 `goto-<名字>` |
+| `work.collect(opts)` | `scan.entities("item")` + 一件件 `move.goto_` 走上去(原版玩家走过去就捡起) |
+| `fight.clear(radius)` | `scan.entities("hostile")` + 一只一只 `fight.attack` |
+| `build.raise(name, opts)` | `build.left` 问还差什么 → `build.at` 放够得着的 / `move.goto_ … arrive "dig"` + `work.dig` 挖开挡路的 / `move.goto_ … arrive "reach"` 走到够得着最低最近那格的地方 |
+
+- **"挖"的到达**(`arrive = "dig"`)= 手够得着目标区域里任意一格,不要求看得见。同样划算的站位里,优先一次能够到
+  最多目标格的(定价只在寻路模块 `Goals.dig` 一处)。**"放"的到达**(`arrive = "reach"`)= 手够得着往那一格里放方块,
+  不站进那一格(`Goals.place`,和 `Goals.dig` 同一套够得着的格,只多禁站进目标)。
+- `work.dig` 挖完回执说:挖了几格、还剩几格够不着、下一步能照抄的 `move.goto_(…, {arrive = "dig"})`。区域记着每格扫描时是
   什么,挖掉的下一次自动不算。
 - **没有不可拆的行为,只有循环快慢之分**:秒级的决策循环(打哪只、按什么顺序、何时撤、打完捡东西)进脚本;每刻都要转
-  的控制(盯着转头、追着保持在够得着处、等冷却出手、举盾)进原子命令内部。例如 `fight attack 27` 只管"打这一只"
-  (追、转头、等冷却、出手,目标死了/丢了/超时收尾),"打哪几只"由脚本 `for _, m in ipairs(…) do if not
-  pcall(fight.attack, m) then break end end` 决定;安全兜底(血少逃跑、岩浆自救)由反射打断脚本。`build at`、`fight attack` 现在的胖实现在
-  命令层与脚本层落地、评测追平后,按这条拆成原子命令 + 内置脚本。
+  的控制(盯着转头、追着保持在够得着处、等冷却出手、举盾)进原子函数内部。例如 `fight.attack(27)` 只管"打这一只"
+  (追、转头、等冷却、出手,目标死了/丢了/超时收尾),"打哪几只"由程序决定(`fight.clear` 就是这样一段);安全兜底
+  (血少逃跑、岩浆自救)由反射打断程序。
 
 ## 四、脚本:Lua
 
@@ -72,32 +84,23 @@
 
 ### 工具面
 
-- `command`:一行命令,入口不变。
-- 组合命令的工具(`ScriptTool`,名字随语言,眼下是 `lua`):一段程序(参数 `code`),一次调用跑完,回一张回执。两种写法是两种语言,一个工具名说清它收哪一种。
-- 快捷工具的 JSON 写法先保留,是否收掉由评测 A/B 定。
-- 提示词(`NumenPrompts` 的 operating principles)告诉她:下一步要看上一步的结果时(一块区域的每一部分、挖到没有为止、
-  头一个失败就停),写成一段交给组合命令的工具;已有的脚本先看 `<scripts>`/`<saved_scripts>`;写好用得顺的 `script save` 存下。
+- 模型只有一个工具 `ScriptTool`(名字随语言,眼下是 `lua`):一段程序(参数 `code`),一次调用跑完,回一张回执。一次调用
+  就是一行程序:`status.self()`。外接 MCP 服务器的工具照旧挂着(`RemoteMcpTool`),不在这一套里。
+- 计划清单也是一个函数 `todo.write({"[x] …", "[>] …", "[ ] …"})`(主人客户端执行),它的参数原样记进回执的
+  `data.echoed`,聊天里的计划清单从那里画。
+- 系统提示的 `<api>` 索引、工具说明、`api.help` 都从登记处生成;提示词与技能里的例子全是 Lua,防漂移测试经脚本的前端读一遍。
+- 人在聊天框里敲的命令行(`/numen drive`)是第二个前端,读的是同一张登记表、同一个处理函数。
 
 ### 命令函数:由登记处生成
 
-每个登记了的动作是一个函数 `组.动作(对象..., {选项=值})`,背后就是那一行命令:同一份登记、同一次解析、同样过权限、
-照常记实际账、受理即能跑。
+每个登记了的动作是一个函数 `组.动作(对象..., {选项=值})`:同一份登记、同一个处理函数、同样过权限、照常记实际账、
+受理即能跑。
 
-| Lua | 写成的命令行 |
-|---|---|
-| `work.dig("ores/g3")` | `work dig ores/g3` |
-| `move.goto_("ores/g3", {arrive = "dig", alter = "natural"})` | `move goto ores/g3 --arrive dig --alter natural` |
-| `move.goto_(120, 64, -35)` 或 `move.goto_({120, 64, -35})` | `move goto 120 64 -35` |
-| `scan.blocks("iron_ore", {radius = 12, into = "ores"})` | `scan blocks iron_ore --radius 12 --into ores` |
-| 开关 `{sneak = true}` / `{sneak = false}` | `--sneak` / `--no-sneak` |
-| `script.run("mine", "ores")` | `script run mine ores` |
-
-- 按顺序的对象依次给位置参数,最后一个位置参数收下余下的全部对象(几个词的一个值、`text` 的整行、几个 id);最后一个
-  参数是带名字键的表就是标志,键里的 `_` 与 `-` 同一。一个值占命令行上几个词(三个坐标、一串 id)时,在这里可以写成
-  列表 `{a, b, c}`,也可以直接摊开写。
-- 换算只在命令层一处(`NumenCli.scriptLine`):对象只经参数类型 `ArgType` 一处读(`CommandArgs.fromJson`,快捷工具同一个
-  读法),再按同一张参数表写回命令行(`CommandArgs.write`)。写不成(没有这个动作、对象多了、缺必填、标志名不对)在调用处
-  抛 Lua 错误,附这个动作的用法。
+- 按顺序的对象依次给位置参数,最后一个位置参数收下余下的全部对象;最后一个参数是名字到值的表就是选项,键里的 `_` 与
+  `-` 同一;写在最后的空表 `{}` 是没写选项的选项表。一格写成 `{120, 64, -35}`,一串值写成一张表。
+- 换算只在 `NumenCli.invocation` 一处:对象与选项写成参数名到值的 JSON,当场经参数类型 `ArgType` 读一遍
+  (`CommandArgs.fromJson`,执行的那一侧读的也是它),**不拼命令行**。读不成(没有这个函数、对象多了、缺必填、选项名不对、
+  值读不成)在调用处抛 Lua 错误,三段 `error:`/`usage:`/`hint:`。读一组里没有的函数当场报错,附最像的那个名字。
 - **成功直接返回值,失败抛错。** 占身体的命令等它的 task_finished 再返回,`done` 算成功。登记时声明了返回项的命令
   (`Action.returns("has")`,如 `area has`、`area parts`)回执里有这一项就返回它,成败都返回(`area.has` 没剩是
   `false`,不是错),拿来就能循环:`for _, p in ipairs(area.parts("ores")) do … end`、`while area.has("ores") do … end`。
@@ -160,20 +163,23 @@
 
 ### 回执
 
-第一行一句话说结局;之后按脚本的行各一句(调了几次、成败、最后一次那句话的第一行),不重复命令全文;最后是 `print`
-写的字。每件身体活的实际账照旧只在它自己的 task_finished 里说一次(`NavText` 一处),回执点它的编号与结局,不另写一份。
-数据里有 `status`(ok / error / stopped)、`commands`,按名字跑的有 `script`。例:
+第一行一句话说结局(跑完用了几次调用几秒;出错停在哪一行、那次调用的报错与用法;被停下停在哪、为什么);之后每次 API
+调用一行(在哪一段的哪一行、哪个函数、成败、它那句话的第一行),然后是返回值与 `print` 写的字。每件身体活的实际账照旧只在
+它自己的 task_finished 里说一次(`NavText` 一处),回执点它的编号与结局,不另写一份。数据里有 `status`(ok / error /
+stopped)、`calls`、`returned`,按名字跑的有 `script`,回显的调用(`todo.write`)在 `echoed`。例:
 
 ```
-Script mine stopped at line 15 after 7 commands: could not dig ores: work.dig: 2 blocks are out of reach.
-line 8 area.has: 2 calls, none failed; last ok — ores has 2 blocks left
-line 9 move.goto_: 2 calls, none failed; last ok — t41 done: Arrived within reach of ores/g2.
-line 13 work.dig: 2 calls, 1 failed; last failed — t44 failed: 2 blocks are out of reach.
-line 20 work.collect: ok — t45 done: Picked up 9 raw_iron.
+The script stopped at line 3 after 2 calls: lua:3: work.dig: error: argument 'places': expected a cell …
+usage: work.dig(place..., {count=…})
+hint: `api.help("work.dig")` explains every argument.
+line 1 scan.blocks: ok — Found 6 iron_ore in 1 group …
+line 2 move.goto_: ok
+work line 13 route.new: ok — …
+line 3 work.dig: failed — error: argument 'places': expected a cell …
 ```
 
 ```
-The script stopped at line 1 (move.goto_) after 1 command: your owner spoke; t12 keeps running. Nothing after that ran.
+The script stopped at line 1 (move.go) after 3 calls: your owner spoke; t12 keeps running. Nothing after that ran.
 ```
 
 (停在第 1 行时那件活还没收尾,那一行没有结局可记,回执只有第一句。)
@@ -182,14 +188,13 @@ The script stopped at line 1 (move.goto_) after 1 command: your owner spoke; t12
 
 - 内置的随模组发布、只读(`BuiltinScripts`);同伴存下的归主人(`ScriptStore`,主世界存档数据 `numen_scripts_<主人>`,
   和 `AreaStore` 同一个做法),同一主人的同伴都看得见、都跑得了。名字规矩用 `Names`(小写字母、数字、`_`、`-`)。
-- `script list`(每份一行:说明、谁的、战绩)、`script show <名字>`、`script run <名字> [参数...]`、
-  `script save <正文> [--name <名字>]`、`script delete <名字>`。都不占身体。不写 `--name` 就存成下一个空着的 `script-N`。
+- `script.list()`(每份一行:说明、谁的、战绩)、`script.show(名字)`(全文,也在返回的 `code` 里)、
+  `script.run(名字, 参数...)`、`script.save(正文, {name = 名字})`、`script.delete(名字)`。都不占身体。不写 `name`
+  就存成下一个空着的 `script-N`。内置脚本与库函数一样能 `script.show` 读、读来改了 `script.save` 存成她自己的。
 - 存之前用同一个编译器读一遍,读不通不收,报错带行号(`gt-broken:2: …`);正文开头一行注释(`-- …`)就是它的一句话
   说明,没写不收——内置脚本也是这一条,说明只有正文里这一处。存同名的替换旧的、清掉旧战绩(旧战绩说的是旧正文);
   内置的同名存不进,删不掉,想改就另存一份。
-- 正文怎么传:`script save` 的正文是一个位置参数,命令行上用引号括起来;在 Lua 里是
-  `script.save([[ … ]], {name = "sweep"})`。不另开工具字段,也不做 here-document:存脚本就是一条普通命令,同一次解析、
-  同样过权限。
+- 正文怎么传:`script.save([[ … ]], {name = "sweep"})`。不另开工具字段:存脚本就是一次普通调用,同一次读法、同样过权限。
 - 战绩:跑了几次、跑完几次、最近一次的时刻、最近一次没跑完停在哪一行与原因,只给事实。大脑跑完(跑完、出错、被停下)
   一份有名字的脚本时经 `ScriptTallyPayload` 送到服务端(只认主人),和工具调用同一个上行出口。内置脚本的战绩也记在
   主人名下。
@@ -202,33 +207,20 @@ The script stopped at line 1 (move.goto_) after 1 command: your owner spoke; t12
 
 ### 内置脚本的登记
 
-照技能与命令的登记:`NumenApi.bundleScripts(Path)` 收一个目录,每个 `<名字>.lua` 一份;两侧都登记(大脑跑它,服务端
-存取与列它),在 `NumenPlugins.register` 的块里直接调。登记那一刻把关:名字合规矩、读得通、开头有说明、不重名,任何一条
-不过当场抛出。core 原地读 jar 里的 `scripts/`。
+照技能与命令的登记:`NumenApi.bundleScripts(Path)` 收一个目录,每个 `<名字>.lua` 一份;`NumenApi.bundleLibrary(Path)`
+收库,每个 `<组>.lua` 给那一组加函数(`function move.goto_(…)`)。两侧都登记,在 `NumenPlugins.register` 的块里直接调。
+登记那一刻把关:名字合规矩、读得通、开头有说明、不重名、库函数不和动作撞名、相关动作指得到,任何一条不过当场抛出。
+core 原地读 jar 里的 `library/` 与 `scripts/`(`ModJar.find`)。库函数的说明是它上面那几行注释,进 `<api>` 索引与
+`api.help`,和动作同一种写法。
 
-第一批 `mine`(`core/common/src/main/resources/scripts/mine.lua`):
+`mine`(`core/common/src/main/resources/scripts/mine.lua`),不接错:哪一步失败,那一步的错就是整段的错:
 
 ```lua
--- Dig out an area: walk within reach of what is left of it, dig what is in reach, pick up the drops, until nothing is left.
--- usage: script run mine <area>   (an area from area list, or one part of it: ores/g3)
 local where = ...
-if where == nil then
-  error("usage: script run mine <area>", 0)
-end
-
 while area.has(where) do
-  local walked, why = pcall(move.goto_, where, {arrive = "dig", alter = "natural"})
-  if not walked then
-    error("could not get within reach of " .. where .. ": " .. why, 0)
-  end
-  local dug, err = pcall(work.dig, where)
-  if not dug then
-    error("could not dig " .. where .. ": " .. err, 0)
-  end
-  -- what was dug lies at your feet: pick up what you can walk to before walking on. work.collect fails when
-  -- nothing lies there or every drop is in a pit it cannot walk into; that is not a mining failure, and the
-  -- receipt's line for it says where they lie
-  pcall(work.collect)
+  move.goto_(where, {arrive = "dig", alter = "natural"})
+  work.dig(where)
+  work.collect({alter = "natural"})
 end
 ```
 
@@ -271,5 +263,17 @@ end
   (顺序、按失败分支、主人停止与开口、`for` 走 `area.parts`、`script run mine` 挖空埋在石头里的矿、存读跑删)。
 - 评测:`mine_iron_script` 和 `mine_iron` 同一个场景,标准解的挖矿交给 `script run mine ores`;一格高的矿洞里的掉落物
   `work collect` 走不进去(它不改地形),两份标准解最后都站进挖空的芯再捡。
-- 外接大脑(MCP)直接调工具,没有派发器:组合命令的工具回一条说明,`script run` 只交回正文。要让外接大脑也跑脚本,得把它的调用
-  也经派发器、并把收件箱的到达转给它,另做。
+- 外接大脑(MCP)当时直接调工具、没有派发器;10-03 起它的 `lua` 调用经她自己的派发器跑(§七)。
+
+## 七、只有 lua 一个工具,API 原子化(10-03)
+
+- **一个入口**:模型的工具只剩 `lua`;`command` 与各组的快捷工具删了,`todowrite` 成了 `todo.write`。Lua 的对象与选项
+  直接按参数类型读成值交给处理函数,不经命令行字符串。外接大脑(MCP)的 `lua` 调用交给她自己的派发器跑
+  (`AgentLoop.runAside`):同一套等收尾、上限、回执;程序跑着的时候到达的事件转给它,不另起一轮对话。
+- **原子化**:`build.at` 只放站在原地够得着的格,一格都够不着就当场拒并说怎么走过去;施工绕外圈、清场(`ClearSiteTask`)、
+  垫块记账(`DropTracker`)都删了。走与挖由 `build.raise` 这段库函数组合。新增 `build.left`(查询)与到达方式 `reach`。
+  `work.collect` 变成库函数(扫掉落物、走上去),新增掉落物的 `pickup_delay`;`fight.attack` 只收一只,"打一片"是
+  `fight.clear`。
+- **回执**:每次 API 调用一行;出错带行号与那次调用的 `error:`/`usage:`/`hint:`;返回值与 `print` 在后面。
+- **测试**:GameTest 全部从 Lua 入口调(`GameTestKit.lua`);库函数各有端到端的 GameTest(`mine`、`work.collect`、
+  `fight.clear`、`build.raise`),到达方式 `reach`、`build.left`、够不着时 `build.at` 的拒绝各有一条。

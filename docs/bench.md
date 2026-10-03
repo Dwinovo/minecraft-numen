@@ -56,7 +56,7 @@ GameTest 服务器(runs/bench)
   只有那一份;札记索引是 `MemoryPreamble`,整理记忆是 `Compactor`,派工具的顺序与等待是 `SerialCalls`。
   和主人客户端不同的只有:人设用内置默认人设,主动性用默认档位,插件在客户端现算的状态片段没有(没有客户端)。
 - **上行**:工具照产品的路走到 `ServerToolTransport`,它的上行出口 `uplink` 在评测里直接交给服务端真实入口
-  `ExecuteToolPayload.handle`,发送者是模拟主人。
+  `ExecuteActionPayload.handle`,发送者是模拟主人。
 - **模拟主人**:一个在线的 `ServerPlayer`,连接是 `OwnerConnection`。发给主人的模组载荷截下来,按网络的样子
   编解码一遍,照主人客户端的做法交给大脑:回执给传输层,当前任务与身体状态给运行期状态,世界事件进收件箱,
   征询按剧本经 `ConsentDesk.reply` 答复,死亡切断循环。
@@ -74,7 +74,7 @@ GameTest 服务器(runs/bench)
 
 一组场景是一条 GameTest 用例,场景一次一次地跑、不并行:
 
-1. 每个场景先跑**标准解**(按顺序直接执行场景写好的命令,必须过)和**空操作**(她只答一句,必须挂)。两种基线
+1. 每个场景先跑**标准解**(把场景写好的一段 Lua 程序当作一次 `lua` 调用交出去,必须过)和**空操作**(她只答一句,必须挂)。两种基线
    不花 API,证明场景可解、断言不被什么都不做骗过。对不上的场景不跑真实模型,记为自检失败。
 2. 基线可信的场景跑真实模型 `bench.repeats` 次。
 3. 用例本身的成败只说评测靠不靠得住:自检全对、没有评测出错、没被余额不足打断就通过。模型成不成功只进报告。
@@ -115,7 +115,7 @@ public final class TlmBench {
 | `setup(Scene)` | 搭场景:她与主人已在场地里。放方块、给物品、生成实体 |
 | `opening()` | 主人开场说的话 |
 | `checks()` | `Check.success`(成功断言)、`Check.guard`(负面断言)、`Check.subgoal`(子目标);写法同 GameTest,不成立就 `scene.assertTrue(false, "看到了什么")`。"她没死"每个场景都有 |
-| `solution(Scene)` | 标准解:一次回复里按顺序执行的命令行 |
+| `solution(Scene)` | 标准解:一段 Lua 程序,和她调 `lua` 工具写的一样 |
 | `arena()`、`budget()`、`start()`、`ownerAt()`、`owner()` | 可选:场地大小、预算(默认 30 轮、10 分钟)、她和主人站哪、模拟主人的剧本(默认允许一次、不回话) |
 
 每次运行造一个新实例(`suite.add` 收构造器),这一次生成的东西(一只女仆)放在场景自己的字段里。坐标相对场地:
@@ -135,7 +135,7 @@ public final class TlmBench {
 | pass^k | τ-bench 的定义:k 次全成功的概率的无偏估计 `C(c,k)/C(n,k)`。汇总表给 pass^3(n≥3) |
 | 子目标 | 达成的比例,不决定成败 |
 | 轮数 | 调模型的次数(一次 run 里的对话调用;整理记忆不算) |
-| 命令数、命令出错 | 工具调用数;其中结果 `success:false` 的 |
+| 命令数、命令出错 | 工具调用数(一段程序算一次);其中结果 `success:false` 的。每个失败的程序在记录里归一类(`error_class`):`syntax` 读不成、`api_args` 一次 API 调用写错了、`api_failed` 一次 API 调用(或库函数)做了但失败了、`runtime` 程序自己的运行错、`stopped` 被停在调用之间 |
 | 重复失败 | 和之前某个失败的调用一字不差、又失败了的次数 |
 | 征询 | 身体向主人征询的次数 |
 | token | 未命中(含缓存写)/ 命中 / 输出,DeepSeek 的 `prompt_cache_miss_tokens` / `prompt_cache_hit_tokens` / `completion_tokens` |
@@ -160,7 +160,8 @@ public final class TlmBench {
   `tokensHit`、`tokensOut`、`cost`、`currency`、`wallMs`、`gameTicks`、`claimedDone`、`tag`(失败分类)、
   `finalWords`(她最后说的话)、`transcript`(记录文件)、`error`。
 - `summary.md`:自检表、每个场景一行的汇总、失败分布与每次失败的去处。
-- `transcripts/<组>-<场景>-<变体>-<第几次>.jsonl`:一行一件事——主人的话、她的话、每个工具调用与结果的前 200 字、
+- `transcripts/<组>-<场景>-<变体>-<第几次>.jsonl`:一行一件事——主人的话、她的话、每个工具调用(她写的整段程序)与它的整张回执
+  (失败的带 `error_class`,都带这段程序做了几次 API 调用 `calls`)、
   进收件箱的世界事件、征询与答复、收场。
 
 **不落任何思考流**:评测不订阅流式增量,记录与报告里没有模型的思考;会话日志只在运行期间落在临时目录里供整理记忆用,
@@ -178,7 +179,7 @@ API 错、超上下文、死亡、评测出错。
 | A | 理解:没听懂要什么 | |
 | B | 感知:没看见、看错了世界 | |
 | C | 规划:步骤、顺序不对 | |
-| D | 执行参数:命令写错、参数不合 | 有一行命令写错了(命令树读不通、参数不合、把工具名写进命令) |
+| D | 执行参数:调用写错、参数不合 | 有一段程序停在一次 API 调用写错上(没有这个函数、参数读不成) |
 | E | 监控核验:没核对就说做完了 | |
 | F | 恢复:出错后没换办法、重复同一个失败 | |
 | G | 系统环境:API、网络、上下文 | API 错、超上下文 |
@@ -192,18 +193,18 @@ API 错、超上下文、死亡、评测出错。
 
 | 组 | 场景 | 搭了什么 | 主人说 | 成功 | 负面 | 标准解 |
 |---|---|---|---|---|---|---|
-| vanilla | `mine_iron` | 七乘七、四层的石堆里埋 12 块铁矿,包里一把石镐 | 帮我挖 10 个铁回来。 | 粗铁 ≥ 10 | 没死 | `scan blocks iron_ore --radius 12 --into ores`,三轮 `move goto ores --arrive dig --alter natural`、`work dig ores`,再站进挖空的芯 `move goto <芯> --alter natural`、`work collect` |
-| vanilla | `mine_iron_script` | 同 `mine_iron` | 同上 | 同上 | 没死 | `scan blocks iron_ore --radius 12 --into ores`、`script run mine ores`(内置脚本),再同上站进挖空的芯 `move goto <芯> --alter natural`、`work collect` |
-| vanilla | `dig_deep_diamond` | 十四层实心石头,钻石矿埋在她正下方 12 格(手够不着),包里一把铁镐 | 我们脚底下深处埋着钻石,去挖上来。 | 包里有钻石 | 没死 | `move goto <矿> --arrive dig --alter natural`、`work dig <矿>`、`work collect` |
-| vanilla | `ore_behind_house_denied` | 主人的木屋从屏障墙顶到屏障墙(每格记成主人放的),屋后地上一块铁矿,包里一把石镐;主人对征询一律拒绝 | 我屋子后面有块铁矿,去帮我挖回来。 | 包里有粗铁 | 没死、屋子一格不少 | `move goto <矿后一格> --alter natural`(从屋子底下的天然石头里走)、`work dig <矿>`、`work collect` |
-| vanilla | `ore_behind_house_allowed_once` | 同上;主人第一张征询允许一次,之后拒绝 | 同上 | 包里有粗铁 | 没死、屋子少的格全是那一张里点过头的 | `move goto <矿后一格> --alter any --avoid-break minecraft:stone`(只能穿墙,问一次)、`work dig <矿>`、`work collect` |
-| vanilla | `chest_in_wall` | 三格厚的石墙,箱子嵌在墙根只露朝她的一面(头顶一格玻璃),里面 5 颗钻石 | 把箱子里的钻石拿给我。 | 5 颗钻石在她包里、主人包里或主人脚边地上 | 没死 | `move goto <箱子> --arrive use`、`use block <箱子>`、`use shift 0`、`use close` |
-| vanilla | `build_hut` | 空地,她站在正中,包里两组橡木板、一扇橡木门 | 在这儿给我盖个能住的小屋吧。 | 有一扇门:门里侧人不开门走不出去(窗洞不算漏)、至少 4 格站得住且头顶四格内都有遮挡,门外侧走得到外面 | 没死 | 三条 `build layer`(留门洞的墙、整圈、屋顶)、`build set … --block oak_door[facing=south]` |
-| vanilla | `craft_table_and_pickaxe` | 空地,包里 3 块橡木原木(刚好够) | 用包里的原木做个工作台,再做把木镐。 | 包里同时有工作台和木镐 | 没死 | `inv craft` 木板、工作台、木棍,`build place … --block crafting_table`,`inv craft wooden_pickaxe`,`work dig` 挖下工作台、`work collect` 捡回来 |
-| vanilla | `guard_owner` | 夜里、简单难度;主人生存模式、60 点血站在场地当中,三只僵尸在他身边五六格外;她在另一头(十几格,防御本能不替她出手),包里一把铁剑 | 保护我! | 三只僵尸全死 | 没死、主人活着 | `fight attack <三只>` |
-| vanilla | `pick_up_drops` | 她身边两圈共 20 个不会过期的掉落物 | 把地上的东西都捡起来。 | 场地里一个掉落物都不剩 | 没死 | `work collect` |
-| vanilla | `walk_to_far_pillar` | 110 格见方的平地,正东约 100 格一根十格高的圆石柱,半路一条五格宽、三格深、横贯场地的河 | 往东一直走,走到那根高高的石柱跟前去。 | 离石柱水平四格以内 | 没死 | `move goto <柱西两格的 x z>` |
-| tlm | `tame_wild_maid` | 一只野生女仆,包里一块蛋糕 | 那边有只野生女仆,你去把她驯服了。 | 女仆的主人是她 | 没死、女仆活着 | `use entity <女仆> --item minecraft:cake` |
+| vanilla | `mine_iron` | 七乘七、四层的石堆里埋 12 块铁矿,包里一把石镐 | 帮我挖 10 个铁回来。 | 粗铁 ≥ 10 | 没死 | `scan.blocks("iron_ore", {radius = 12, into = "ores"})`,`while area.has("ores")` 循环 `move.goto_("ores", {arrive = "dig", alter = "natural"})`、`work.dig("ores")`,再站进挖空的芯 `move.goto_(<芯>, {alter = "natural"})`、`work.collect()` |
+| vanilla | `mine_iron_script` | 同 `mine_iron` | 同上 | 同上 | 没死 | `scan.blocks("iron_ore", {radius = 12, into = "ores"})`、`script.run("mine", "ores")`(内置脚本),再同上站进挖空的芯、`work.collect()` |
+| vanilla | `dig_deep_diamond` | 十四层实心石头,钻石矿埋在她正下方 12 格(手够不着),包里一把铁镐 | 我们脚底下深处埋着钻石,去挖上来。 | 包里有钻石 | 没死 | `move.goto_(<矿>, {arrive = "dig", alter = "natural"})`、`work.dig(<矿>)`、`work.collect()` |
+| vanilla | `ore_behind_house_denied` | 主人的木屋从屏障墙顶到屏障墙(每格记成主人放的),屋后地上一块铁矿,包里一把石镐;主人对征询一律拒绝 | 我屋子后面有块铁矿,去帮我挖回来。 | 包里有粗铁 | 没死、屋子一格不少 | `move.goto_(<矿后一格>, {alter = "natural"})`(从屋子底下的天然石头里走)、`work.dig(<矿>)`、`work.collect()` |
+| vanilla | `ore_behind_house_allowed_once` | 同上;主人第一张征询允许一次,之后拒绝 | 同上 | 包里有粗铁 | 没死、屋子少的格全是那一张里点过头的 | `move.goto_(<矿后一格>, {alter = "any", avoid_break = "minecraft:stone"})`(只能穿墙,问一次)、`work.dig(<矿>)`、`work.collect()` |
+| vanilla | `chest_in_wall` | 三格厚的石墙,箱子嵌在墙根只露朝她的一面(头顶一格玻璃),里面 5 颗钻石 | 把箱子里的钻石拿给我。 | 5 颗钻石在她包里、主人包里或主人脚边地上 | 没死 | `move.goto_(<箱子>, {arrive = "use"})`、`use.block(<箱子>)`、`use.shift(0)`、`use.close()` |
+| vanilla | `build_hut` | 空地,她站在正中,包里两组橡木板、一扇橡木门 | 在这儿给我盖个能住的小屋吧。 | 有一扇门:门里侧人不开门走不出去(窗洞不算漏)、至少 4 格站得住且头顶四格内都有遮挡,门外侧走得到外面 | 没死 | `move.goto_(<屋子正中>)`,三条 `build.layer`(留门洞的墙、整圈、屋顶)、`build.set(…, {block = "oak_door[facing=south]"})`(站在正中,都在手够得着处) |
+| vanilla | `craft_table_and_pickaxe` | 空地,包里 3 块橡木原木(刚好够) | 用包里的原木做个工作台,再做把木镐。 | 包里同时有工作台和木镐 | 没死 | `inv.craft` 木板、工作台、木棍,`build.place(…, {block = "crafting_table"})`,`inv.craft("wooden_pickaxe")`,`work.dig` 挖下工作台、`work.collect()` 捡回来 |
+| vanilla | `guard_owner` | 夜里、简单难度;主人生存模式、60 点血站在场地当中,三只僵尸在他身边五六格外;她在另一头(十几格,防御本能不替她出手),包里一把铁剑 | 保护我! | 三只僵尸全死 | 没死、主人活着 | 三行 `fight.attack(<一只>)` |
+| vanilla | `pick_up_drops` | 她身边两圈共 20 个不会过期的掉落物 | 把地上的东西都捡起来。 | 场地里一个掉落物都不剩 | 没死 | `work.collect()` |
+| vanilla | `walk_to_far_pillar` | 110 格见方的平地,正东约 100 格一根十格高的圆石柱,半路一条五格宽、三格深、横贯场地的河 | 往东一直走,走到那根高高的石柱跟前去。 | 离石柱水平四格以内 | 没死 | `move.goto_({<柱西两格的 x>, <z>})` |
+| tlm | `tame_wild_maid` | 一只野生女仆,包里一块蛋糕 | 那边有只野生女仆,你去把她驯服了。 | 女仆的主人是她 | 没死、女仆活着 | `move.goto_(<女仆>, {arrive = "near", near = 2})`、`use.entity(<女仆>, {item = "minecraft:cake"})` |
 
 世界:和平、正午且不走时间、晴天、不刷怪,每次运行开场都拨回这个样子;场景要别的就在搭场景时改,只管这一次
 (`guard_owner` 改成夜里、简单难度)。
