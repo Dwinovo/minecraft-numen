@@ -66,9 +66,10 @@ public final class NumenCore {
                 ToolRegistry.size(), TaskFactory.size());
     }
 
-    /** 把 core 的四条生存本能链插进引擎的竞价调度(链登记口)。 */
+    /** 把 core 的五条生存本能链插进引擎的竞价调度(链登记口)。 */
     private static void registerReflexes() {
-        // 注册号小的先问 —— 与原版 addGoal(int priority, goal) 同一惯例:摔落缓冲 > 换气 > 自卫 > 脱困。
+        // 注册号小的先问 —— 与原版 addGoal(int priority, goal) 同一惯例:摔落缓冲 > 换气 > 逃跑 > 自卫 > 脱困。
+        // 逃跑压过自卫:扛不住时先跑,跑不掉它让出身体,自卫接着打。
         // 本能之间的先后是固定的,不随世界状态变,所以是一个序号,不是一个要现算的出价。
         //
         // 正在坠落是最迫近的死法,所以摔落缓冲压过一切;卡住只是烦人,绝不该压过
@@ -77,6 +78,8 @@ public final class NumenCore {
                 com.dwinovo.numen.core.task.chain.MLGChain::new);
         com.dwinovo.numen.task.BrainChains.register(20,
                 com.dwinovo.numen.core.task.chain.BreathChain::new);
+        com.dwinovo.numen.task.BrainChains.register(25,
+                com.dwinovo.numen.core.task.chain.FleeChain::new);
         com.dwinovo.numen.task.BrainChains.register(30,
                 com.dwinovo.numen.core.task.chain.MobDefenseChain::new);
         com.dwinovo.numen.task.BrainChains.register(50,
@@ -84,7 +87,7 @@ public final class NumenCore {
     }
 
     /**
-     * The reflex roster (constitution §6): enlist core's instincts — the four survival
+     * The reflex roster (constitution §6): enlist core's instincts — the five survival
      * chains — so their one-line self-descriptions reach the prompt. Runs on BOTH sides
      * like the rest of init.
      */

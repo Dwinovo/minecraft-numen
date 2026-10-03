@@ -82,9 +82,9 @@ public final class MobDefenseChain implements Task, Reflex {
     @Override
     public boolean canRun(NumenPlayer companion) {
         long now = companion.level().getGameTime();
-        // 有人正在替这条本能干活(模型派的 attack),就别抢 —— 除非她已经扛不住,
-        // 那一档只有本能看得见。按住的是本能不是目标,所以会分裂的怪不会让它失效。
-        if (fight == null && companion.reflexPaused(ID) && !Menace.outmatched(companion)) {
+        // 有人正在替这条本能干活(模型派的 attack),就别抢。按住的是本能不是目标,所以会分裂的怪不会让它失效。
+        // 扛不住时跑是逃跑本能的事(FleeChain,排在这条之前),跑不掉它让出身体,这里照常打。
+        if (fight == null && companion.reflexPaused(ID)) {
             return false;
         }
         if (fight != null) {
@@ -181,8 +181,7 @@ public final class MobDefenseChain implements Task, Reflex {
      * <p>只算正在针对她的——防守不是挑衅,一只路过的僵尸猪灵不该被"防御"链招惹。还没逼近的
      * 那些也不进来:模型看得见它们,该由它决定要不要动手。
      *
-     * <p>模型自己派的 {@code attack} 已经认领的目标同样不算:那场仗有人管了。但她扛不住时
-     * 一律接管——那一档只有本能看得见。
+     * <p>模型自己派的 {@code attack} 已经认领的目标同样不算:那场仗有人管了。
      */
     private List<Mob> dangersNear(NumenPlayer companion) {
         LivingEntity attacker = companion.getLastHurtByMob();

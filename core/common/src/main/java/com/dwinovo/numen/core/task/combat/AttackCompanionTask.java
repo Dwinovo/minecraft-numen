@@ -7,7 +7,6 @@ import com.dwinovo.numen.core.act.Ballistics;
 import com.dwinovo.numen.core.combat.AttackPlan;
 import com.dwinovo.numen.core.combat.Battlefield;
 import com.dwinovo.numen.core.combat.Loadout;
-import com.dwinovo.numen.core.combat.Haven;
 import com.dwinovo.numen.core.combat.Menace;
 import com.dwinovo.numen.core.combat.Swing;
 import com.dwinovo.numen.core.nav.Feet;
@@ -70,9 +69,6 @@ import java.util.function.Supplier;
  */
 public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskRecord> {
 
-    /** 退避的寻路连续失败几次算"退不掉"。 */
-    private static final int MAX_RETREAT_FAILURES = 3;
-
     // 弹道常数:箭的物理与两种发射器的初速。
     private static final double MAX_FIRING_RANGE = 32.0;
     private static final double ARROW_GRAVITY = 0.05;
@@ -86,12 +82,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private static final double RANGED_MIN_DISTANCE = 5.0;
     /** 组装局面看多远:势场要绕开谁、无差别模式打谁,都取这个半径。 */
     private static final double FIELD_RADIUS = 12.0;
-
-    /**
-     * 逃跑时扫多远。必须<b>大于</b> {@link Menace#FLEE_DISTANCE},否则她一边跑一边有新的怪
-     * 进入视野,目标每几刻换一次,等于没有目标。
-     */
-    private static final double FLEE_SCAN_RADIUS = 40.0;
 
     /**
      * 弓战斗的环内沿:比这更近就拉不开弓 —— 弹道压得平,而且白白挨打。
@@ -110,19 +100,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * 会走,那么远基本射不中。十二格是"稳稳能中、又够得开"的量级:太远就往回走。
      */
     private static final double BOW_MAX_DISTANCE = 12.0;
-
-    /** 离落点这么近就算到了,该重新挑下一个。 */
-    private static final double HAVEN_ARRIVED = 2.0;
-
-    /**
-     * 逃跑路上多久重算一次路线(刻)。
-     *
-     * <p><b>落点不变,只重算路线</b>:重算时这一刻的怪会折进边成本,路径拐开而方向不变。
-     * 不重算的话整段路只算一次——她起跑之后路上冒出来的怪一只都看不见,直接撞过去。
-     *
-     * <p>二十刻(一秒)是怪走四五格的量级。再密就是把路径反复拆了重建,疾跑的加速起不来。
-     */
-    private static final int FLEE_REPLAN_TICKS = 20;
 
     private Entity target;
     private Vec3 lastTargetPosition;
@@ -147,9 +124,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      */
     private final java.util.Set<Integer> touchedIds = new java.util.LinkedHashSet<>();
 
-    /** 退避的寻路连续失败次数。够了就是"退不掉",判据据此改判背水一战。 */
-    private int retreatFailures;
-
     /** 上一行站位日志。数字没变就不再打,免得每 tick 一行把别的全冲掉。 */
     private String lastStandoffLog;
 
@@ -159,20 +133,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private AttackPlan.Action lastLoggedAction;
     /** 上一刻的决定。判据靠它做迟滞与承诺,见 {@link AttackPlan#decide}。 */
     private AttackPlan.Move lastMove;
-
-    /**
-     * 逃跑的<b>落点</b>。一次挑定,跑到才换 —— 方向的连续性就是不绕圈的全部原因。
-     *
-     * <p>路径本身仍然每次重规划都重算,新冒出来的怪由边成本({@code Avoidance.forGoal})
-     * 折进去,路线会拐开而<b>目标不变</b>。以前重算连方向一起重掷,所以既反应了也绕圈了。
-     */
-    private BlockPos haven;
-
-    /**
-     * 这一段逃跑路线是在哪一刻({@link #workTicks()})派的。跑满 {@link #FLEE_REPLAN_TICKS} 刻就重算;等规划的刻
-     * 不算,否则慢于这个间隔的搜索每次都在出结论前被重算掐掉,她一步也跑不出去。
-     */
-    private long havenPlannedAt;
 
     public AttackCompanionTask(NumenPlayer player, AttackTaskRecord record) {
         super(player, record);
@@ -222,6 +182,17 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             }
         }
         settleFinishedTargets();
+        // 扛不住的时候跑是逃跑本能的事(FleeChain):它抢过身体跑开,跑开了把身体交还这里。回来时她还扛不住、也没有谁
+        // 在追她,就不再回去打——收工说清楚,下一步是程序的事
+        if (Menace.outmatched(player) && field.foes().stream().noneMatch(Battlefield.Foe::engaging)
+                && field.foes().stream().anyMatch(Battlefield.Foe::authorized)) {
+            stopNav();
+            abortShot();
+            fail("too hurt to go back to the fight (effective health "
+                    + Math.round(Menace.effectiveHealth(player)) + "); heal first (numen.inv.eat), then attack again",
+                    FailureType.HAZARD);
+            return TaskState.FAILED;
+        }
         AttackPlan.Move move = AttackPlan.decide(field, lastMove);
         lastMove = move;
         logMove(move, field);
@@ -243,10 +214,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         // 不管这一刻在靠近、在拉开、还是站着。攻击不影响寻路,最多让她回个头。
         tickShield();
         tickWeapon(field);
-        if (move.action() != AttackPlan.Action.DISENGAGE && haven != null) {
-            haven = null;   // 不再逃跑了:落点作废,下次要跑再重新挑
-            stopNav();
-        }
         return switch (move.action()) {
             case SKIRMISH -> {
                 bowFighting = false;
@@ -256,7 +223,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 bowFighting = true;
                 yield bowFight();
             }
-            case DISENGAGE -> tickFlee();
             case DONE -> finish();
         };
     }
@@ -337,8 +303,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         return new Battlefield(
                 Menace.effectiveHealth(player),
                 reachToTarget(),
-                loadout.hasMelee(), loadout.hasRanged(),
-                retreatFailures >= MAX_RETREAT_FAILURES, foes);
+                loadout.hasMelee(), loadout.hasRanged(), foes);
     }
 
     /**
@@ -893,87 +858,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         return shot != null ? shot.projectileVelocity(BOW_FULL_SPEED, CROSSBOW_SPEED)
                 : crossbow ? CROSSBOW_SPEED : BOW_FULL_SPEED * RangedShot.bowPowerForTicks(15);
     }
-
-    // ==================== 躲避 ====================
-
-    /**
-     * 脱离接触:她扛不住了,先活下来。
-     *
-     * <p>终止条件就是那 {@link Menace#FLEE_DISTANCE} 格 —— 与逃跑目标的到达条件同一个数。
-     */
-    /**
-     * 逃跑这一刻做什么:跑向落点。
-     *
-     * <p><b>它不是一个"状态"。</b>顶层每刻重判"还打不打得过",打不过就再走一次这里,
-     * 血回来了下一刻自然回到战斗——曾经这里是一个闩锁({@code fleeing}),进去就把判据
-     * 整个短路,于是血回满了也一直跑,实测一次 DISENGAGE 配四十七行逃跑采样。
-     *
-     * <p>三十二格是<b>跑的目标</b>,不是状态的出口:跑到了就没什么可跑的,判据自会改口。
-     */
-    private TaskState tickFlee() {
-        var around = Menace.hostilesAround(player, Menace.FLEE_DISTANCE);
-        if (around.isEmpty()) {
-            clearHaven();
-            player.controls().stop();
-            Constants.LOG.info("[numen-attack] 脱离成功 —— {} 格内没有敌对生物",
-                    (int) Menace.FLEE_DISTANCE);
-            fail(Menace.outmatched(player)
-                            ? "broke off — too hurt to keep fighting; nothing is near you now"
-                            : "broke off — nothing here can be fought with what you carry "
-                                    + "(explosive, or out of reach with no bow); you are clear now",
-                    FailureType.TARGET_LOST);
-            return TaskState.FAILED;
-        }
-        if (haven == null || player.blockPosition().closerThan(haven, HAVEN_ARRIVED)) {
-            haven = Haven.awayFrom(player, Menace.hostilesAround(player, FLEE_SCAN_RADIUS));
-            stopNav();
-            Constants.LOG.info("[numen-attack] 逃向 {} —— {} 格内 {} 只",
-                    haven, (int) Menace.FLEE_DISTANCE, around.size());
-        }
-        if (haven == null) {
-            Constants.LOG.info("[numen-attack] 没有可跑的方向");
-            return TaskState.RUNNING;
-        }
-        if (nav != null && workTicks() - havenPlannedAt >= FLEE_REPLAN_TICKS) {
-            stopNav();   // 到点重算:落点不变,只让这一刻的怪进边成本
-        }
-        if (nav == null) {
-            havenPlannedAt = workTicks();
-            // 路上要绕开谁:四十格内每一只,经过它们身边的格变贵;落点旁边站着一只怪也算到了,不然她永远到不了、
-            // 也就永远不换落点
-            nav = Trip.to(player, Goals.within(Goals.at(haven), 0, HAVEN_ARRIVED), RouteSpec.defaults(), haven)
-                    .avoiding(() -> Menace.dangers(player, FLEE_SCAN_RADIUS));
-        }
-        Trip.Status status = nav.tick();
-        if (status == Trip.Status.FAILED) {
-            stopNav();
-            haven = null;   // 这个方向走不通,下一刻换一个
-            retreatFailures++;
-        } else {
-            if (status == Trip.Status.ARRIVED) {
-                stopNav();
-                haven = null;
-            }
-            retreatFailures = 0;
-        }
-        return TaskState.RUNNING;
-    }
-
-    /** 丢掉落点与导航。跑到了、跑不动了、或者判据改口不跑了,都过这里。 */
-    private void clearHaven() {
-        haven = null;
-        stopNav();
-    }
-
-    /**
-     * 脱离接触:她扛不住了,先活下来。
-     *
-     * <p>终止条件就是那 {@link Menace#FLEE_DISTANCE} 格 —— 与逃跑目标的到达条件同一个数。
-     *
-     * <p>势场收当前<b>所有</b>敌对生物:逃跑路上撞进第二只怪,是旧的单点逃离目标最典型的死法。
-     */
-
-
 
     // ==================== 拾荒 ====================
 
