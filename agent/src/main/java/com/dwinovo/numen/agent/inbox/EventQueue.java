@@ -107,11 +107,16 @@ public final class EventQueue {
      * @return 这条是否作为急件入队;空白输入不入队,返回 {@code false}
      */
     public boolean push(String type, String text, long now, boolean urgent) {
+        return push(type, text, now, urgent, null);
+    }
+
+    /** 同上,条目带着一件身体活的结果({@link Entry#result})入队;结果只在内存里,落盘的不带它。 */
+    public boolean push(String type, String text, long now, boolean urgent, com.google.gson.JsonObject result) {
         if (text == null || text.isBlank()) {
             return false;
         }
         boolean effective = urgent(EventTypes.get(type), urgent);
-        entries.add(new Entry(type, text, now, effective));
+        entries.add(new Entry(type, text, now, effective, result));
         while (entries.size() > cap) {
             entries.remove(evictee());
             dropped++;

@@ -193,7 +193,7 @@ public final class NumenEvents {
                 kept -> {
                     // 主人不在:留着。他下线期间她照样在干活,回来该知道发生了什么。
                     EventOutbox outbox = EventOutbox.get(server);
-                    outbox.put(uuid, kept.type(), kept.text(), kept.ts(), kept.urgent());
+                    outbox.put(uuid, kept);
                     Constants.LOG.info("[numen-event] {} kind={}{} → 暂存(主人离线,已攒 {} 条)",
                             uuid, type, urgent ? " URGENT" : "", outbox.peek(uuid).size());
                 });
