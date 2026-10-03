@@ -1,6 +1,5 @@
 package com.dwinovo.numen.task;
 
-import com.dwinovo.numen.agent.prompt.NumenPrompts;
 import com.dwinovo.numen.agent.tool.api.ToolContext;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -76,36 +75,35 @@ public final class TaskDispatch {
      * 新活真受理的那一刻才顶掉它,受理回执当场说顶掉了谁,被顶掉的那件照常以 stopped 收尾;被拒的调用不碰它。同一轮里的
      * 几件活不会互相顶掉:内脑的派发器等前一件收尾才派下一件,这里不必猜哪几件是同一批的。
      *
-     * <p>这是工具派活的写法:记录以工具名命名,重启后按这个名字找回那个工具、带 {@code args} 重放。
+     * <p>这是直接交一件活的写法(测试直接测执行器时用):它不出自哪一次调用,重启后没有可重放的,不记。
      */
-    public static void setTask(NumenPlayer companion, TaskRecord record, JsonObject args,
-                               Consumer<String> reply) {
-        accept(companion, record, record.getToolName(), args, reply);
+    public static void setTask(NumenPlayer companion, TaskRecord record, Consumer<String> reply) {
+        accept(companion, record, null, null, reply);
     }
 
     /**
-     * 命令派活的写法,规矩同上。记录的名字是给模型看的"组 动作"({@link ServerSource#taskName()}),不是能重放的
-     * 工具名,所以重放记的是源给的那次调用({@link ServerSource#replayTool()} 与 {@link ServerSource#replayArgs()}):
-     * 默认就是这次调用本身——从 {@code command} 进来就重放那一行指令,从快捷工具进来就重放那次工具调用;处理函数把
-     * 只在这一次开服里有效的写法换掉了的,重放换过的那一行({@link ServerSource#replayedWith})。
+     * 动作派活的写法,规矩同上。记录的名字是给模型看的函数名({@link ServerSource#taskName()});重放记的是动作的路径与
+     * 这次调用读到的参数写回的那一行命令({@link ServerSource#replayLine()}),处理函数把只在这一次开服里有效的写法换掉了的,
+     * 是换过的那一行({@link ServerSource#replayedWith})。
      */
     public static void setTask(ServerSource source, TaskRecord record) {
-        accept(source.companion(), record, source.replayTool(), source.replayArgs(), source::reply);
+        accept(source.companion(), record, source.actionPath(), source.replayLine(), source::reply);
     }
 
     /**
      * 派身体任务的每个入口都经过这里:造出跑它的任务,交给这具身体的准备位({@link Preparing})。准备有了结论才受理或回错误;
      * 当场就有结论的(不用搜索的)当场回。
      *
-     * @param replayTool 重启后重放用的工具名,与 {@code args} 一起就是那次调用
+     * @param action     派活的动作的路径({@code move go});不出自动作的是 null
+     * @param replayLine 重启后重放的那一行命令;没有可重放的是 null
      */
-    private static void accept(NumenPlayer companion, TaskRecord record, String replayTool, JsonObject args,
+    private static void accept(NumenPlayer companion, TaskRecord record, String action, String replayLine,
                                Consumer<String> reply) {
         Task runner = TaskFactory.create(companion, record);
         long asked = companion.level().getGameTime();
         CompanionTickDispatcher.prepare(companion, new Preparing.Call(runner.prepare(companion), readiness -> {
             if (readiness.ready()) {
-                accepted(companion, record, runner, replayTool, args, reply, readiness.words(), asked);
+                accepted(companion, record, runner, action, replayLine, reply, readiness.words(), asked);
             } else {
                 reply.accept(TaskResult.fail(readiness.words()).toJson());
             }
@@ -119,8 +117,8 @@ public final class TaskDispatch {
      * @param facts 准备查到、要交代的事实;没有为 null
      * @param asked 调用进来的那一刻(游戏刻):准备花掉的刻不算这件活的期限
      */
-    private static void accepted(NumenPlayer companion, TaskRecord record, Task runner, String replayTool,
-                                 JsonObject args, Consumer<String> reply, String facts, long asked) {
+    private static void accepted(NumenPlayer companion, TaskRecord record, Task runner, String action,
+                                 String replayLine, Consumer<String> reply, String facts, long asked) {
         // 已经走到终态、只等这一刻结算的那件(刚被 task_stop 叫停)不是这次顶掉的
         TaskRecord current = CompanionTickDispatcher.currentTaskFor(companion.getUUID());
         TaskRecord replaced = current != null && !current.getState().isTerminal() ? current : null;
@@ -128,22 +126,16 @@ public final class TaskDispatch {
         record.extendDeadlineTo(record.getDeadlineGameTime() + (companion.level().getGameTime() - asked));
         CompanionTickDispatcher.assign(companion, record, runner);
         // 记下"她现在在做什么",服务器重启后照着重放一遍(见 TaskPersistence)。
-        TaskPersistence.remember(companion, record.getToolName(), replayTool, args);
-        // 内置大脑靠 task_finished 事件收尾;外部(MCP)夺舍收不到事件
-        // (那条投给内置大脑,不是它),得自己用 task status 轮询到身体空闲,再感知确认。
-        // 内置大脑这份回执写事实和接下来能做的事,说法与理由见 NumenPrompts.WHILE_IT_RUNS。
-        // 常驻的活没有终点,也就永远不会发 task_finished —— 回执必须说清楚,
-        // 否则她会照着"等事件"的指引干等下去。
+        TaskPersistence.remember(companion, record.getToolName(), action, replayLine);
+        // 有终点的活收尾时发 task_finished,派它的程序等的就是这一条(内脑与外接大脑的程序同一个等法)。
+        // 常驻的活没有终点,也就永远不会发 task_finished —— 回执必须说清楚:程序不等它,接着往下走。
         boolean standing = record.getDeadlineGameTime() >= TaskRecord.NO_DEADLINE;
         StringBuilder note = new StringBuilder();
         if (standing) {
             note.append("Accepted; it has no finish line, so it never ends on its own and never sends task_finished.");
-        } else if (record.isExternalCall()) {
-            note.append("Accepted; running in the background. Run the command task status until the body is idle, "
-                    + "then perceive to confirm the result; task_stop cancels it.");
         } else {
-            note.append("Accepted as ").append(record.publicId()).append("; your body is working on it in the "
-                    + "background. ").append(NumenPrompts.WHILE_IT_RUNS);
+            note.append("Accepted as ").append(record.publicId()).append("; its end arrives as a task_finished "
+                    + "event.");
         }
         String told = record.acceptNote();
         if (told != null) {

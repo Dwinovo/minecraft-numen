@@ -14,13 +14,14 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * 服务端唯一的执行入口。她要执行的每一行({@code command} 工具、{@code /numen drive}、重启后的重放)都从这里过,
- * 按 {@link Line} 分到两层:
+ * 一行命令的执行入口(人用的前端):OP 的 {@code /numen drive} 与重启后的重放都从这里过,按 {@link Line} 分到两层。她在脚本里
+ * 调的是同一批动作({@link NumenCli#serve(String, com.google.gson.JsonObject, NumenPlayer, String, Consumer)}),原版与模组的指令
+ * 经 {@code mc.run}({@link McCommands})走这里的第 0 层:
  *
  * <ul>
- *   <li><b>第 1 层</b>:在 Numen 服务端的树上解析、执行({@link NumenCli#serve}),处理函数拿到这次调用的
+ *   <li><b>第 1 层</b>:在服务端的树上解析、执行({@link NumenCli#serve(String, ServerSource)}),处理函数拿到这次调用的
  *       {@link ServerSource}。身体对世界的动作照常由权限层按动作裁决。</li>
- *   <li><b>第 0 层</b>(行首 {@code /}):MC 的指令树,以她自己的权限执行,和她在聊天栏里敲的一样。
+ *   <li><b>第 0 层</b>(行首 {@code /},或 {@code mc.run}):MC 的指令树,以她自己的权限执行,和她在聊天栏里敲的一样。
  *     <ol>
  *       <li><b>先解析</b>:以她的 {@code CommandSourceStack} 在服务器的指令树上解析。写不通(没有这条、服务器不让她用、
  *           参数写错)当场失败并附上用法,不打扰主人,不进任务槽。能用哪些是服务器按她的权限等级定的,这里不放宽也不收紧。</li>
@@ -39,21 +40,20 @@ public final class CommandRunner {
     /** 原版的 {@code help}:不带参数列她此刻能执行的指令,带一条指令给出它的用法。 */
     private static final String HELP = "help";
     /** 写不通时附的那一句:原版的 {@code help} 按她的来源过滤,列的就是她此刻能执行的。 */
-    private static final String HELP_HINT = Line.MC + HELP + " lists the commands you can run.";
+    private static final String HELP_HINT = "`" + McCommands.call(HELP) + "` lists the commands you can run.";
 
     private CommandRunner() {}
 
     /**
-     * 以她的身份执行模型写的一行:{@code /numen drive} 从这里进,和 {@code command} 工具是同一个入口。
+     * 以她的身份执行人写的一行:{@code /numen drive} 与重启后的重放从这里进。
      *
      * @param callId 这次调用的 id;长活的受理与收尾都对着它
      */
     public static void run(NumenPlayer her, String callId, String typed, Consumer<String> reply) {
-        String line = typed.strip();
-        line(new ServerSource(her, CommandTool.NAME, callId, CommandTool.args(line), reply), line);
+        line(new ServerSource(her, callId, reply), typed.strip());
     }
 
-    /** {@code command} 工具在服务端的入口:按 {@link Line} 分到两层。 */
+    /** 一行命令:按 {@link Line} 分到两层。 */
     static void line(ServerSource call, String typed) {
         Line line = Line.of(typed);
         if (line.mc()) {
@@ -64,7 +64,7 @@ public final class CommandRunner {
     }
 
     /** 第 0 层的一行:解析、过权限层、执行。 */
-    private static void mc(ServerSource call, String line) {
+    static void mc(ServerSource call, String line) {
         if (line.isEmpty()) {
             call.reply(TaskResult.fail("there is no command to run.").toJson());
             return;
@@ -106,8 +106,8 @@ public final class CommandRunner {
             if (!node.canUse(her)) {
                 return Problem.of("the server does not let you use /" + root, null, HELP_HINT);
             }
-            return Problem.of(e.getMessage(), Line.MC + dispatcher.getSmartUsage(dispatcher.getRoot(), her).get(node),
-                    hint);
+            return Problem.of(e.getMessage(), McCommands.call(dispatcher.getSmartUsage(dispatcher.getRoot(), her)
+                    .get(node)), hint);
         }
     }
 

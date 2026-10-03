@@ -19,7 +19,7 @@ import java.util.UUID;
  * Client → Server:主人在答复框上选的那一项;拒绝可以带一句附言。
  *
  * <h2>信任模型</h2>
- * 与 {@link ExecuteToolPayload} 同一条:目标必须是同伴(跨维度查找),发送者必须是它的主人。
+ * 与 {@link ExecuteActionPayload} 同一条:目标必须是同伴(跨维度查找),发送者必须是它的主人。
  * 认主人、对请求号都在 {@link ConsentDesk#reply}(与 {@code /numen consent} 命令同一个入口),这里只转交。
  *
  * @param companion 哪只同伴

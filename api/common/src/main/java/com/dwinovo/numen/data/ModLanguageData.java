@@ -519,18 +519,7 @@ public final class ModLanguageData {
         adder.add("numen.chat.steps", "%s steps");
         adder.add("numen.chat.plan", "Plan %s/%s");
         // Tool-chip labels (convention: numen.tool.<tool name>; unknown/MCP tools fall back to the raw name).
-        adder.add("numen.tool.build", "Build");
-        adder.add("numen.tool.move_goto", "Go to");
-        adder.add("numen.tool.scan_around", "Look around");
-        adder.add("numen.tool.scan_block", "Inspect block");
-        adder.add("numen.tool.scan_blocks", "Scan blocks");
-        adder.add("numen.tool.scan_entities", "Scan entities");
-        adder.add("numen.tool.skill_load", "Load skill");
-        adder.add("numen.tool.status_owner", "Owner status");
-        adder.add("numen.tool.status_self", "Self status");
-        adder.add("numen.tool.todowrite", "Update plan");
-        adder.add("numen.tool.transfer", "Transfer items");
-        adder.add("numen.tool.work_dig", "Dig");
+        adder.add("numen.tool.lua", "Run");
         adder.add("numen.mcp.title", "Tool Extensions (MCP)");
         adder.add("numen.mcp.empty", "None · click ＋ Add (top-right)");
         adder.add("numen.mcp.add", "＋ Add");
@@ -1058,18 +1047,7 @@ public final class ModLanguageData {
         adder.add("numen.chat.steps", "%s 步");
         adder.add("numen.chat.plan", "计划 %s/%s");
         // 工具 chip 标签(约定键 numen.tool.<工具名>;未知/MCP 工具回落原名)。
-        adder.add("numen.tool.build", "建造");
-        adder.add("numen.tool.move_goto", "前往");
-        adder.add("numen.tool.scan_around", "环顾四周");
-        adder.add("numen.tool.scan_block", "查看方块");
-        adder.add("numen.tool.scan_blocks", "扫描方块");
-        adder.add("numen.tool.scan_entities", "扫描实体");
-        adder.add("numen.tool.skill_load", "加载技能");
-        adder.add("numen.tool.status_owner", "主人状态");
-        adder.add("numen.tool.status_self", "自身状态");
-        adder.add("numen.tool.todowrite", "更新计划");
-        adder.add("numen.tool.transfer", "转移物品");
-        adder.add("numen.tool.work_dig", "挖掘");
+        adder.add("numen.tool.lua", "执行");
         adder.add("numen.mcp.title", "工具扩展 (MCP)");
         adder.add("numen.mcp.empty", "无 · 点右上「＋ 添加」");
         adder.add("numen.mcp.add", "＋ 添加");

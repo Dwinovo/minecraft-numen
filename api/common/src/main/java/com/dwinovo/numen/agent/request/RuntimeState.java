@@ -193,7 +193,7 @@ public final class RuntimeState {
             return "";
         }
         return "<riding>" + xml(snapshot.vehicleType()) + " (entity id " + snapshot.vehicleId()
-                + "). move goto pilots a boat over water toward the target; any action that needs "
+                + "). move.go pilots a boat over water toward the target; any action that needs "
                 + "walking steps off by itself — no need to click the vehicle again.</riding>";
     }
 
@@ -245,8 +245,8 @@ public final class RuntimeState {
         // 加起来(实测她把主手 64 个熔炉和清单里同一批数成了 128)。总数只有一处,手只指
         // 向它,结构上就没什么可重复计的。
         return "<inventory>Everything your body carries right now, totalled across all 36 backpack "
-                + "slots — trust it and do not spend a call on status_self to rediscover it. "
-                + "Run use gui only when exact slots matter. A newer tool result wins over this."
+                + "slots — trust it and do not spend a call on status.self() to rediscover it. "
+                + "Call use.gui() only when exact slots matter. A newer result wins over this."
                 + "\ncarrying=" + (items.length() == 0 ? "nothing" : items)
                 + "\nholding (already counted above)=main " + describe(snapshot.mainHand())
                 + ", off " + describe(snapshot.offhand())

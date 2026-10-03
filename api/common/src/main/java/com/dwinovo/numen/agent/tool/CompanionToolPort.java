@@ -2,6 +2,7 @@ package com.dwinovo.numen.agent.tool;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.inbox.EventQueue;
+import com.dwinovo.numen.agent.script.Invocation;
 import com.dwinovo.numen.agent.script.ScriptCatalog;
 import com.dwinovo.numen.agent.script.ScriptRun;
 import com.dwinovo.numen.agent.script.ScriptCall;
@@ -9,7 +10,6 @@ import com.dwinovo.numen.agent.loop.SerialCalls;
 import com.dwinovo.numen.agent.loop.ToolPort;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.CompanionEvent;
-import com.dwinovo.numen.cli.CommandTool;
 import com.dwinovo.numen.cli.ScriptTool;
 import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.network.payload.ScriptTallyPayload;
@@ -28,9 +28,9 @@ import java.util.function.Supplier;
  *
  * <p>顺序与等待——一次一个、留下后台身体活的等它收尾再派下一个、等的时候来了急件怎么办、脚本怎么逐条派——是
  * {@link SerialCalls} 的;身体活的受理回执与 task_finished 按 {@link TaskDispatch#runningTaskOf}、{@link NumenEvents#finishOf}
- * 认,和写它们的地方挨着。这里只管一个调用怎么执行:按名字取工具,交给它一个绑着这只同伴的 {@link ToolCall},由工具自己决定
- * 当场答还是送去服务端({@link ServerToolTransport}),结果之后从任何线程经 {@link ToolCall#complete} 回来;脚本的一行就是
- * 一次 {@code command} 调用,函数怎么写成那一行、能调哪些函数问命令层({@link NumenCli})。
+ * 认,和写它们的地方挨着。这里只管一个调用怎么执行:模型的调用按名字取工具({@link #invoke});脚本里的一次 API 调用交给登记处
+ * ({@link #dispatch}),客户端动作当场执行,服务端动作送去服务端({@link ServerToolTransport})。结果之后从任何线程经
+ * {@link ToolCall#complete} 回来;脚本里的调用怎么读成动作、能调哪些函数问登记处({@link NumenCli})。
  */
 public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
 
@@ -107,8 +107,13 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
     }
 
     @Override
-    public LlmToolCall commandCall(String id, String line) {
-        return new LlmToolCall(id, CommandTool.NAME, CommandTool.args(line).toString());
+    public void dispatch(LlmToolCall call, Invocation invocation, Consumer<String> done) {
+        Consumer<String> landed = landing(call, done);
+        ToolCall handle = new ToolCall(call.id(), NumenCli.pathOf(invocation), invocation.args().toString(),
+                anchor.get(), landed);
+        Constants.LOG.info("[numen-dispatch#{}] call {} id={} args={}", companion, call.name(), call.id(),
+                truncate(call.arguments()));
+        NumenCli.call(invocation, handle);
     }
 
     @Override
@@ -127,8 +132,8 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
     }
 
     @Override
-    public String line(ScriptRun.Call call) {
-        return NumenCli.scriptLine(call);
+    public Invocation invocation(ScriptRun.Call call) {
+        return NumenCli.invocation(call);
     }
 
     @Override
@@ -153,15 +158,7 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
             done.accept(TaskResult.fail("unknown tool: " + call.name()).toJson());
             return;
         }
-        Consumer<String> landed = json -> {
-            if (inFlightDone != null && call == calls.inFlight()) {
-                inFlightDone = null;
-            }
-            Constants.LOG.info("[numen-dispatch#{}] tool_result id={} tool={} → {}",
-                    companion, call.id(), call.name(), truncate(json));
-            done.accept(json);
-        };
-        inFlightDone = landed;
+        Consumer<String> landed = landing(call, done);
         // 带规范名(tool.name())而不是 LLM 写的那个:大小写宽松只在 resolve 这一步,
         // 服务端工具经 ServerToolTransport 原样带名字过去,那边按注册名严格查。
         ToolCall handle = new ToolCall(call.id(), tool.name(), call.arguments(), anchor.get(), landed);
@@ -174,6 +171,20 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
                     companion, call.name(), call.id(), ex.getMessage());
             landed.accept(TaskResult.fail(ex.getMessage()).toJson());
         }
+    }
+
+    /** 一个调用的回报口:记一笔,交给 {@code done};在飞时它也是 {@link #failInFlight} 用的那一个。 */
+    private Consumer<String> landing(LlmToolCall call, Consumer<String> done) {
+        Consumer<String> landed = json -> {
+            if (inFlightDone != null && call == calls.inFlight()) {
+                inFlightDone = null;
+            }
+            Constants.LOG.info("[numen-dispatch#{}] result id={} {} → {}",
+                    companion, call.id(), call.name(), truncate(json));
+            done.accept(json);
+        };
+        inFlightDone = landed;
+        return landed;
     }
 
     private static String truncate(String s) {

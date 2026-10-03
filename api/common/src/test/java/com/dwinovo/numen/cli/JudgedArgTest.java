@@ -34,7 +34,7 @@ class JudgedArgTest {
                 g.server("box", "A box.", (src, args) -> {
                     LAST.set(args);
                     src.reply(TaskResult.ok("box").toJson());
-                }, SIZE).example("gt_judge box 4"));
+                }, SIZE).example("gt_judge.box(4)"));
     }
 
     @Test

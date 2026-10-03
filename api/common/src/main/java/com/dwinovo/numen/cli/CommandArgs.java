@@ -75,7 +75,8 @@ public final class CommandArgs {
             try {
                 out.put(p.name(), p.type().fromJson(value));
             } catch (CommandSyntaxException e) {
-                throw new IllegalArgumentException("argument '" + p.name() + "': " + e.getMessage());
+                // 一个值单独读,读到第几个字符没有意义:只说哪个参数、错在哪
+                throw new IllegalArgumentException("argument '" + p.name() + "': " + e.getRawMessage().getString());
             }
         }
         for (String key : json.keySet()) {
@@ -114,6 +115,49 @@ public final class CommandArgs {
             }
         }
         return line.toString();
+    }
+
+    /**
+     * 这些参数写成脚本里的一次调用:{@code path} 的函数,按 {@code params} 的顺序先是写了值的对象,再是写了值的选项表,值是脚本里
+     * 的样子({@link ArgType#plain})。回执、征询与提示里点名一次调用都这样写,她照抄就是一次能跑的调用;脚本这个前端读回来是同一份
+     * 参数。{@code params} 里没列的参数不写。
+     *
+     * @param path 这次调用的动作路径,如 {@code area delete}
+     */
+    public String call(String path, List<Param<?>> params) {
+        String[] words = path.split(" ", 2);
+        List<Object> objects = new java.util.ArrayList<>();
+        Map<String, Object> options = new LinkedHashMap<>();
+        for (Param<?> p : params) {
+            if (!values.containsKey(p.name())) {
+                continue;
+            }
+            Object plain = plain(p);
+            if (p.positional() && plain instanceof List<?> several && p.type().span() == ArgType.Span.SEVERAL) {
+                objects.addAll(several);
+            } else if (p.positional()) {
+                objects.add(plain);
+            } else {
+                options.put(p.name(), plain);
+            }
+        }
+        return com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.call(
+                com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.function(words[0], words[1]), objects, options);
+    }
+
+    /** 这些参数里写了值的选项写成脚本里的一张选项表:{@code {alter = "natural"}};一个都没写是 {@code {}}。 */
+    public String options(List<Param<?>> params) {
+        Map<String, Object> options = new LinkedHashMap<>();
+        for (Param<?> p : params) {
+            if (values.containsKey(p.name()) && !p.positional()) {
+                options.put(p.name(), plain(p));
+            }
+        }
+        return com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.table(options);
+    }
+
+    private <T> Object plain(Param<T> param) {
+        return param.type().plain(get(param));
     }
 
     private <T> String written(Param<T> param) {

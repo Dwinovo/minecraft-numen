@@ -16,18 +16,36 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Lua 这一种语言接到脚本层:命令函数在调用处交出一条命令、拿到结局接着跑;成功直接返回值、失败抛错;声明了返回项的命令成败都
- * 返回那一项;撞上 Lua 自己的名字加 {@code _};停下时脚本线程放手。
+ * Lua 这一种语言接到脚本层:API 函数在调用处交出一次调用、拿到结局接着跑;成功直接返回值、失败抛错;声明了返回项的成败都
+ * 返回那一项;撞上 Lua 自己的名字加 {@code _};停下时脚本线程放手;库先跑、库函数调到的记在脚本里调它的那一行;只读不跑时
+ * 记下调了哪些函数;跑完交出返回值。
  */
 class LuaEngineTest {
 
+    /** 一段库:往 move 表里加一个函数,调两个宿主函数。 */
+    private static final String WALK = """
+            -- Walking helpers.
+
+            -- Plan a route to a place, then walk it.
+            function move.goto_(place, opts)
+              route.plan(place)
+              return move.go(place)
+            end
+
+            local function helper() end
+            function sweep(a, b) end
+            """;
+
     private static final ScriptCatalog CATALOG = new ScriptCatalog(Map.of(
             "work", Map.of("dig", new ScriptCatalog.Verb(null), "collect", new ScriptCatalog.Verb(null)),
-            "move", Map.of("goto", new ScriptCatalog.Verb(null)),
-            "area", Map.of("parts", new ScriptCatalog.Verb("parts"), "has", new ScriptCatalog.Verb("has"))));
+            "move", Map.of("go", new ScriptCatalog.Verb(null)),
+            "route", Map.of("plan", new ScriptCatalog.Verb(null)),
+            "area", Map.of("parts", new ScriptCatalog.Verb("parts"), "has", new ScriptCatalog.Verb("has"))),
+            Map.of("walk", WALK));
 
     private static final LuaEngine LUA = new LuaEngine();
 
@@ -52,11 +70,11 @@ class LuaEngineTest {
     }
 
     @Test
-    void aCommandIsHandedOverAtItsCallAndTheScriptGoesOnWithItsResult() {
+    void aCallIsHandedOverWhereItIsMadeAndTheScriptGoesOnWithItsResult() {
         ScriptRun run = run("""
                 local said = work.dig("ores/g3")
                 print("dug: " .. said)
-                move.goto_({120, 64, -35}, {arrive = "dig", alter = "natural"})
+                route.plan({120, 64, -35}, {arrive = "dig", alter = "natural"})
                 """);
         ScriptRun.Call first = assertInstanceOf(ScriptRun.Call.class, run.start());
         assertEquals("work.dig", first.function());
@@ -66,8 +84,7 @@ class LuaEngineTest {
 
         ScriptRun.Call second = assertInstanceOf(ScriptRun.Call.class, run.resume(ok("4 blocks")));
         assertEquals(List.of("dug: 4 blocks"), printed);
-        assertEquals("move.goto_", second.function());
-        assertEquals("goto", second.verb(), "命令名不变,只是脚本里的写法加了后缀");
+        assertEquals("route.plan", second.function());
         assertEquals(3, second.line());
         assertEquals(List.of(List.of(120L, 64L, -35L)), second.args());
         assertEquals(Map.of("arrive", "dig", "alter", "natural"), second.options());
@@ -76,7 +93,58 @@ class LuaEngineTest {
     }
 
     @Test
-    void aSucceedingCommandReturnsItsDataAndAFailingOneRaisesAtTheCall() {
+    void aLibraryFunctionCallsTheApiFromTheScriptsOwnLine() {
+        ScriptRun run = run("""
+                local x = 1
+                local r = move.goto_("home")
+                return {walked = r}
+                """);
+        ScriptRun.Call plan = assertInstanceOf(ScriptRun.Call.class, run.start());
+        assertEquals("route.plan", plan.function());
+        assertEquals(2, plan.line(), "库函数里的调用记在脚本里调它的那一行");
+        ScriptRun.Call go = assertInstanceOf(ScriptRun.Call.class, run.resume(ok("planned")));
+        assertEquals("move.go", go.function());
+        assertEquals(2, go.line());
+        ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(ok("t1 done")));
+        assertTrue(done.ok());
+        assertEquals(Map.of("walked", "t1 done"), done.value(), "跑完交出 return 的值");
+    }
+
+    @Test
+    void theFunctionsALibraryDefinesComeWithTheCommentsAboveThem() {
+        List<com.dwinovo.numen.agent.script.ScriptEngine.Defined> defined = LUA.functions(WALK);
+        assertEquals(List.of(
+                new com.dwinovo.numen.agent.script.ScriptEngine.Defined("move.goto_", List.of("place", "opts"),
+                        "Plan a route to a place, then walk it."),
+                new com.dwinovo.numen.agent.script.ScriptEngine.Defined("sweep", List.of("a", "b"), "")), defined);
+    }
+
+    @Test
+    void readingWithoutRunningListsTheCallsAndTheirArguments() {
+        List<ScriptRun.Call> calls = LUA.calls("example", """
+                work.dig("ores", {count = 2})
+                move.goto_({1, 2, 3}, {arrive = "use"})
+                """, CATALOG).calls();
+        assertEquals(2, calls.size());
+        assertEquals("work.dig", calls.get(0).function());
+        assertEquals(Map.of("count", 2L), calls.get(0).options());
+        assertEquals("move", calls.get(1).group(), "库函数记成它自己的那一次调用,不进它的正文");
+        assertEquals("goto_", calls.get(1).verb());
+        assertEquals(List.of(List.of(1L, 2L, 3L)), calls.get(1).args());
+        assertThrows(IllegalArgumentException.class, () -> LUA.calls("example", "work.dig(", CATALOG),
+                "语法错读不通");
+        com.dwinovo.numen.agent.script.ScriptEngine.Reading stopped = LUA.calls("example", """
+                work.dig("ores")
+                for _, p in ipairs(area.parts("ores")) do work.dig(p) end
+                """, CATALOG);
+        assertEquals(2, stopped.calls().size(), "停下之前调到的照记");
+        assertTrue(stopped.error() != null, "拿返回值往下算的写法跑到那儿停下,说出原因");
+        assertTrue(LUA.calls("example", "nope.dig()", CATALOG).error() != null);
+        assertNull(LUA.calls("example", "work.collect()", CATALOG).error());
+    }
+
+    @Test
+    void aSucceedingCallReturnsItsDataAndAFailingOneRaisesAtTheCall() {
         ScriptRun run = run("""
                 local r = work.collect()
                 print(r.picked, r.kinds[2])
@@ -101,7 +169,7 @@ class LuaEngineTest {
     }
 
     @Test
-    void aDeclaredValueComesBackWhetherTheCommandSucceededOrNot() {
+    void aDeclaredValueComesBackWhetherTheCallSucceededOrNot() {
         ScriptRun run = run("""
                 for _, p in ipairs(area.parts("ores")) do print(p) end
                 while area.has("ores") do work.dig("ores") end
@@ -142,6 +210,7 @@ class LuaEngineTest {
         assertEquals("string_", LUA.functionName("string"));
         assertEquals("dig", LUA.functionName("dig"));
         assertEquals("move.goto_", LUA.function("move", "goto"));
+        assertEquals("move.go", LUA.function("move", "go"));
         assertTrue(LUA.check("t", "move.goto(1)") != null, "goto 是保留字,原名写不出来");
         assertNull(LUA.check("t", "move.goto_(1)"));
     }

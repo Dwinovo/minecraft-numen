@@ -1,10 +1,6 @@
 package com.dwinovo.numen.cli;
 
-import com.dwinovo.numen.agent.tool.NumenTool;
-import com.dwinovo.numen.agent.tool.Schema;
-import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.task.TaskResult;
-import com.google.gson.Gson;
 import com.google.gson.JsonParser;
 import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.BeforeAll;
@@ -14,7 +10,6 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.dwinovo.numen.cli.CliFixture.door;
-import static com.dwinovo.numen.cli.CliFixture.onClient;
 import static com.dwinovo.numen.cli.CliFixture.onServer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -23,8 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 一串值当标志、当后面还跟着标志的位置参数,一串整数、一串 id,以及方块、坐标格或区域:命令行上怎么读、写错了说什么、
- * 快捷工具的 JSON 读出来是否同一个值、schema 与帮助里写成什么。
+ * 一串值当标志、当后面还跟着标志的位置参数,一串整数、一串 id,以及方块、坐标格或区域:一行命令上怎么读、写错了说什么、
+ * 脚本里的调用读出来是否同一个值、帮助里写成什么。
  */
 class ListFlagArgTypeTest {
 
@@ -49,8 +44,8 @@ class ListFlagArgTypeTest {
                     LAST.set(args);
                     src.reply(TaskResult.ok("picked").toJson());
                 }, BLOCKS, IDS, KEEP, ITEMS, COUNT)
-                        .example("gt_flags pick iron_ore #minecraft:logs --ids 3 -4 --keep 1,2,3 area:house chest --count 2")
-                        .promote("Pick some things, as a tool."));
+                        .example("gt_flags.pick(\"iron_ore\", \"#minecraft:logs\", {ids = {3, -4}, keep = {\"1,2,3\", "
+                                + "\"area:house\", \"chest\"}, count = 2})"));
     }
 
     private static CommandArgs ran(String line) {
@@ -100,10 +95,10 @@ class ListFlagArgTypeTest {
 
     @Test
     void aBadItemSaysWhatWasExpected() {
-        assertTrue(failed("gt_flags pick stone --keep 1,2").startsWith("expected a cell: three whole numbers x y z, "
-                + "or x,y,z"));
-        assertTrue(failed("gt_flags pick stone --keep 1,two,3").startsWith("expected a cell: three whole numbers x y z, "
-                + "or x,y,z"));
+        assertTrue(failed("gt_flags pick stone --keep 1,2").startsWith("expected a cell: three whole numbers, "
+                + "{x, y, z} or \"x y z\""));
+        assertTrue(failed("gt_flags pick stone --keep 1,two,3").startsWith("expected a cell: three whole numbers, "
+                + "{x, y, z} or \"x y z\""));
         assertTrue(failed("gt_flags pick stone --keep 1,2,3..4,5,6").startsWith("a cell is one x y z; a box or any "
                 + "other stretch of cells is an area"), "一片格子只有区域一种写法");
         assertTrue(failed("gt_flags pick stone --keep area:House").startsWith("area names are lowercase letters"));
@@ -115,7 +110,7 @@ class ListFlagArgTypeTest {
     }
 
     @Test
-    void theShortcutReadsTheSameValuesFromJsonArrays() {
+    void aScriptCallReadsTheSameValuesFromJsonArrays() {
         CommandArgs viaLine = ran("gt_flags pick iron_ore #minecraft:logs --ids 3 4 --keep area:house 1,2,3 chest "
                 + "--items iron_ingot --count 2");
         CommandArgs viaJson = CommandArgs.fromJson(PARAMS, JsonParser.parseString("""
@@ -133,33 +128,36 @@ class ListFlagArgTypeTest {
         IllegalArgumentException early = assertThrows(IllegalArgumentException.class, () ->
                 door().registerCommands("gt_flags_bad", "A group whose list is not last.", g ->
                         g.server("pick", "Pick.", (src, args) -> { }, BLOCKS, Param.required("n", ArgType.integer(), "N."))
-                                .example("gt_flags_bad pick stone 1")));
+                                .example("gt_flags_bad.pick(\"stone\", 1)")));
         assertTrue(early.getMessage().contains("是一串值"), early.getMessage());
         assertThrows(IllegalArgumentException.class, () -> ArgType.list(ArgType.bool()));
         assertThrows(IllegalArgumentException.class, () -> ArgType.list(ArgType.number(0, 1)));
         assertThrows(IllegalArgumentException.class, () -> ArgType.list(ArgType.list(ArgType.word())));
     }
 
+    /** 脚本里写成表的一串值,和一行命令上空格隔开的一串,处理函数拿到的是同一份。 */
     @Test
-    void theSchemaAndTheHelpNameEachType() {
-        NumenTool tool = ToolRegistry.get("gt_flags_pick");
-        assertEquals(new Gson().toJson(Schema.object()
-                .stringArray("blocks", "Which blocks.", 1)
-                .optionalIntArray("ids", "Which ones. Omit to take any.", 0, 0)
-                .optionalStringArray("keep", "What to leave standing. Omit to keep nothing.")
-                .optionalStringArray("items", "What to take. Omit to take everything.")
-                .optionalInteger("count", "How many. Omit to take one.", 1, 64)
-                .build()), new Gson().toJson(tool.parameterSchema()));
+    void aScriptGivesListsAsTables() {
+        CommandArgs viaLine = ran("gt_flags pick iron_ore #minecraft:logs --ids 3 -4 --keep 1,2,3 area:house chest");
+        LAST.set(null);
+        CliFixture.Outcome out = CliFixture.lua("gt_flags.pick({\"iron_ore\", \"#minecraft:logs\"}, "
+                + "{ids = {3, -4}, keep = {\"1,2,3\", \"area:house\", \"chest\"}})");
+        assertTrue(out.success(), out.message());
+        assertEquals(viaLine, LAST.get());
+    }
+
+    @Test
+    void theHelpNamesEachType() {
         assertEquals("""
-                gt_flags pick <blocks...> [--ids <integer...>] [--keep <block|cell|area...>] [--items <id...>] [--count <integer>]
+                gt_flags.pick(blocks..., {ids=…, keep=…, items=…, count=…})
                   Pick some things.
-                  <blocks...> (id or #tag, e.g. minecraft:oak_log or #minecraft:logs; one or more, separated by spaces) — Which blocks.
-                  --ids <integer...> (integer; one or more, separated by spaces; optional) — Which ones. Omit to take any.
-                  --keep <block|cell|area...> (block id, #tag, cell x,y,z or area:<name>; one or more, separated by spaces; optional) — What to leave standing. Omit to keep nothing.
-                  --items <id...> (id, e.g. minecraft:oak_log (minecraft: may be left out); one or more, separated by spaces; optional) — What to take. Omit to take everything.
-                  --count <integer> (integer 1-64; optional) — How many. Omit to take one.
+                  blocks... (id or #tag, e.g. minecraft:oak_log or #minecraft:logs; one, or several as a list {a, b}) — Which blocks.
+                  ids= (integer; one, or several as a list {a, b}; optional) — Which ones. Omit to take any.
+                  keep= (block id, #tag, cell "x,y,z" or "area:<name>"; one, or several as a list {a, b}; optional) — What to leave standing. Omit to keep nothing.
+                  items= (id, e.g. minecraft:oak_log (minecraft: may be left out); one, or several as a list {a, b}; optional) — What to take. Omit to take everything.
+                  count= (integer 1-64; optional) — How many. Omit to take one.
                   Examples:
-                    gt_flags pick iron_ore #minecraft:logs --ids 3 -4 --keep 1,2,3 area:house chest --count 2
-                  Shortcut tool: gt_flags_pick.""", onClient("gt_flags pick --help").message());
+                    gt_flags.pick("iron_ore", "#minecraft:logs", {ids = {3, -4}, keep = {"1,2,3", "area:house", "chest"}, count = 2})""",
+                CliFixture.help("gt_flags.pick"));
     }
 }

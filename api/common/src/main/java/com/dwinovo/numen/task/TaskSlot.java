@@ -122,7 +122,7 @@ final class TaskSlot {
      * 不要轮询",丢掉却不发收尾等于毁约。
      */
     void dropNoResult(NumenPlayer companion) {
-        if (record != null && record.isAsync() && !record.isExternalCall()) {
+        if (record != null && record.isAsync()) {
             com.dwinovo.numen.event.NumenEvents.taskFinished(companion, record.publicId(),
                     record.getToolName(), "interrupted", "任务因她死亡而中断");
         }

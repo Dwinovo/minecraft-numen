@@ -114,19 +114,6 @@ public abstract class TaskRecord {
     Consumer<String> reply() { return reply; }
     public final boolean isAsync() { return async; }
 
-    /**
-     * Prefix of the synthetic tool-call ids NumenActuator mints for external (MCP)
-     * invocations — disjoint from the LLM's ids. The async wind-down keys off this
-     * to route completion: internal tasks fire a task_finished event to the built-in
-     * brain; external ones don't (their driver polls task status instead).
-     */
-    public static final String EXTERNAL_CALL_PREFIX = "mcp-";
-
-    /** True if an external brain (MCP) dispatched this task, not the built-in LLM. */
-    public final boolean isExternalCall() {
-        return toolCallId != null && toolCallId.startsWith(EXTERNAL_CALL_PREFIX);
-    }
-
     /** 首次开跑打点(重复调用不覆盖——抢占恢复不算重新开始)。 */
     public final void markStarted(long gameTime) {
         if (startedGameTime < 0) startedGameTime = gameTime;
@@ -157,7 +144,7 @@ public abstract class TaskRecord {
      */
     public enum StopCause {
         OWNER("the owner pressed Stop", ConsentDesk.Withdrawal.OWNER_STOPPED),
-        TASK_STOP("you stopped it with task_stop", ConsentDesk.Withdrawal.TASK_ENDED),
+        TASK_STOP("you stopped it with task.stop", ConsentDesk.Withdrawal.TASK_ENDED),
         COMMAND("stopped by a /numen command", ConsentDesk.Withdrawal.TASK_ENDED),
         REPLACED("a newer body action replaced it", ConsentDesk.Withdrawal.TASK_ENDED),
         BODY_LEFT("the body left the world", ConsentDesk.Withdrawal.BODY_LEFT);

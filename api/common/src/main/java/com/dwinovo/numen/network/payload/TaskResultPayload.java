@@ -22,7 +22,7 @@ import java.util.function.Predicate;
  * next turn when all pending results are in.
  *
  * <h2>Pairing</h2>
- * {@link #toolCallId} matches the one in the originating {@link ExecuteToolPayload}
+ * {@link #toolCallId} matches the one in the originating {@link ExecuteActionPayload}
  * and, transitively, the LLM's tool_call.id — this is the field that
  * threads request→execution→reply through the network boundary.
  *
@@ -56,7 +56,7 @@ public record TaskResultPayload(UUID entityUuid,
     public TaskResultPayload shrunk(Predicate<TaskResultPayload> fits, int bytes, int budget) {
         return new TaskResultPayload(entityUuid, toolCallId, TaskResult.fail(
                 Wire.TO_CLIENT.tooBig("The result of this call", bytes) + ", so it was not delivered. Ask for less of "
-                        + "it at a time: a narrower range, or one page of a list with --page.",
+                        + "it at a time: a narrower range, or one page of a list ({page = N}).",
                 Map.of("result_bytes", bytes, "limit_bytes", budget)).toJson());
     }
 

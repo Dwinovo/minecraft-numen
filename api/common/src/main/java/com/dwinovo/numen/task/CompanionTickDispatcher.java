@@ -153,7 +153,7 @@ public final class CompanionTickDispatcher {
                     // 同一个 UUID 同时有两具身体:上一具还在世界里,来的这具是重影。
                     // 【不拆不建】—— 拆建会在两具之间无限自旋,每刻两次,每次还重放
                     // 一遍她手上的活。这里只吵一句就跳过;病根在"她被复活了两次",
-                    // 见 ExecuteToolPayload。
+                    // 见 ExecuteActionPayload。
                     if (duplicateWarned.add(ap.getUUID())) {
                         com.dwinovo.numen.Constants.LOG.warn(
                                 "[numen-task] {} 同时有两具身体在玩家列表里,忽略后来的那具", ap.getUUID());

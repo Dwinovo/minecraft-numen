@@ -37,9 +37,11 @@ import java.util.concurrent.TimeoutException;
  * POST and its response goes straight back in the HTTP body.
  *
  * <h2>Tool surface</h2>
- * Every engine tool (from {@link ToolRegistry}, minus the config's hidden set)
- * is advertised with an extra {@code companion} argument, and calls route to
- * {@link NumenActuator#invoke}. Three management tools — {@code list_companions},
+ * Every engine tool (from {@link ToolRegistry}, minus the config's hidden set) —
+ * the script tool, plus the tools of remote MCP servers the owner connected — is
+ * advertised with an extra {@code companion} argument, and calls route to
+ * {@link NumenActuator#invoke}: a program runs through the companion's own
+ * dispatcher and the call returns its receipt when it ends. Three management tools — {@code list_companions},
  * {@code create_companion}, {@code delete_companion} — wrap the actuator's roster
  * methods. There is no take-control handshake: 模式开启期间内置大脑一轮都不开
  * (见 {@link McpMode}), 所以外部驱动者直接派活即可。Since every call is addressed
@@ -65,8 +67,8 @@ public final class McpServer {
      * 调用没有"同一轮",每一条当场执行,要一件做完再派下一件就自己等身体空闲。说明与接入提示词({@link McpAccessPrompt})
      * 都用这一句。
      */
-    static final String ONE_BODY = NumenPrompts.ONE_BODY + " To do jobs one after another, wait until the command "
-            + "`task status` shows the body idle before starting the next.";
+    static final String ONE_BODY = NumenPrompts.ONE_BODY + " A program waits for each body task it starts, so jobs "
+            + "written one after another in one program run one after another.";
 
     /**
      * Sent to the connecting agent in the {@code initialize} handshake (MCP's
@@ -81,29 +83,33 @@ public final class McpServer {
             of it. Drive the body directly — there is no 'take control' handshake.
 
             Loop: (1) list_companions to see who is live — create_companion by name to summon a new one, \
-            delete_companion to dismiss one for good; (2) perceive with status_self / scan_blocks / \
-            scan_entities; (3) act with move_goto / work_dig, and the command tool for everything else \
-            (build at, fight attack, work fish, inv craft, gear wear, …). Long actions return a task_id at \
-            once and their end does not arrive in get_events — run the command 'task status' until the body \
-            is idle, then perceive to confirm. Every action tool takes a 'companion' argument (name or id), \
-            so each call targets one companion; just drive it, there is no take-control step.
+            delete_companion to dismiss one for good; (2) everything else is one tool, %s: a program \
+            whose functions are the companion's API — perceive with status.self(), scan.blocks(...), \
+            scan.entities(...); act with move.goto_(...), work.dig(...), build.at(...), fight.attack(...), \
+            inv.craft(...), …; api.help("work") lists a group's functions and api.help("work.dig") gives one \
+            function's full help. A program returns one receipt when it ends: how it ended, one line per API \
+            call, what it returned and printed. It waits for each body task it starts to finish, so a long \
+            job returns when it is done; each task's own account also arrives in get_events as a \
+            task_finished event. Every call takes a 'companion' argument (name or id), so each call targets \
+            one companion; just drive it, there is no take-control step.
 
-            Rules: survival mode — the tools do only what a real player can (mine to get stone; there is no \
-            give or setblock). You are blind between calls, so perceive before and after acting. Short \
-            actions (inv craft, gear wear, use block, …) return when they are done; long ones return at \
-            once, as above. %s You can drive several \
-            companions in parallel. Modded blocks, items, and GUIs (Create, AE2, Mekanism) work natively.
+            Rules: survival mode — the API does only what a real player can (mine to get stone; there is no \
+            give or setblock). You are blind between calls, so perceive before and after acting. %s You can \
+            drive several companions in parallel. Modded blocks, items, and GUIs (Create, AE2, Mekanism) \
+            work natively.
 
             You also carry the companion's conversation: call get_events(companion) about every 2 \
             seconds while you drive it. It waits 2 seconds by default and returns instantly the moment \
             something urgent lands, so you get the wheel back every couple of seconds and can act on \
             your own initiative instead of only reacting. The owner speaking to the companion (in-game \
-            chat or voice) arrives as a <query>; world happenings arrive as <event>s (the end of a task \
-            you started is not among them). Reply with \
+            chat or voice) arrives as a <query> and stops a running program between two calls; world \
+            happenings arrive as <event>s, the task_finished of every task your programs started among \
+            them. Reply with \
             say(companion, text): the words appear in-game as the companion's chat line, speech bubble, \
             and voice. Keep your own conversation history — the game stores none for you; between \
             get_events calls nothing is lost (events queue up). Raise wait_seconds (up to 50) only when \
-            you deliberately want to park and wait for the owner to speak.""".formatted(ONE_BODY);
+            you deliberately want to park and wait for the owner to speak.""".formatted(
+            com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.toolName(), ONE_BODY);
 
     private final McpConfig config;
     private final Gson gson = new Gson();

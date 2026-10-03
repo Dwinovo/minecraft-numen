@@ -1,28 +1,32 @@
 package com.dwinovo.numen.cli;
 
+import com.dwinovo.numen.agent.script.ScriptCatalog;
+import com.dwinovo.numen.agent.script.ScriptEngine;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 /**
- * 一个命令组({@code <组> …},组名就是一级命令):插件经 {@code NumenApi.registerCommands} 拿到的就是它,只能往这一组里加动作。
+ * 一个动作组(脚本里的一张表 {@code 组.动作},一行命令里的一级命令):插件经 {@code NumenApi.registerCommands} 拿到的就是它,只能
+ * 往这一组里加动作。
  *
  * <pre>{@code
  * numen.registerCommands("ftbquests", "Your quest book: chapters, quests, submitting.", quests -> {
  *     quests.server("submit", "Hand in the items a quest asks for.", Quests::submit, QUEST)
- *           .example("ftbquests submit 15CDF6A098B95FDA");
+ *           .example("ftbquests.submit(\"15CDF6A098B95FDA\")");
  *     quests.client("list", "List the quests you can work on now.", Quests::list)
- *           .example("ftbquests list")
- *           .promote("…");   // 快捷工具 ftbquests_list
+ *           .example("ftbquests.list()");
  * });
  * }</pre>
  *
- * <p>它不给任何通向别的组或根的把手,所以插件<b>够不着别人的节点</b>——"不能往别人的节点下嫁接"由形状保证,
- * 不靠约定。组名撞了、动作名撞了、快捷工具名撞了、参数表违反命令行的规矩({@link #checkParams})、动作没写例子或例子写不通,
- * 都在登记的那一刻抛出。
- * 登记块返回后这一组就封口,之后再往里加、再提升、再补帮助都会抛。
+ * <p>它不给任何通向别的组的把手,所以插件<b>够不着别人的节点</b>——"不能往别人的节点下嫁接"由形状保证,不靠约定。组名撞了、
+ * 动作名撞了、参数表违反规矩({@link #checkParams})、动作没写例子或例子读不通,都在登记的那一刻抛出。
+ * 登记块返回后这一组就封口,之后再往里加、再补帮助都会抛。
  */
 public final class CommandGroup {
 
@@ -41,7 +45,7 @@ public final class CommandGroup {
      *
      * @param name    动作名,小写英文
      * @param summary 一句话说明,列表与帮助里用
-     * @param params  参数:位置参数按声明顺序写在动作后面,标志写成 {@code --name value}
+     * @param params  参数:按顺序的对象,其余是选项
      */
     public Action server(String name, String summary, Action.OnServer handler, Param<?>... params) {
         return add(name, summary, List.of(params), requireHandler(handler, name), null);
@@ -72,9 +76,9 @@ public final class CommandGroup {
     }
 
     /**
-     * 参数表的规矩,登记时查,违反就抛出——核心与插件的命令同样受约束(设计稿 {@code docs/shell.md} §二):
+     * 参数表的规矩,登记时查,违反就抛出——核心与插件的动作同样受约束(设计稿 {@code docs/shell.md} §二):
      * <ul>
-     *   <li>名字不重复;</li>
+     *   <li>名字不重复,也不是脚本语言用掉的名字(选项表的键要写得出来:{@code {in = …}} 在 Lua 里是语法错);</li>
      *   <li><b>一条命令只有一类位置参数</b>:它操作的东西,可以多个,类别({@link ArgType#noun})都一样;其余一律是标志;</li>
      *   <li><b>没有必须写的标志</b>:每个标志与可以不写的位置参数都写明不写时会怎样({@link Param#whenOmitted}),默认就是对的;</li>
      *   <li><b>开关不当位置参数</b>:{@code true}/{@code false} 不写在命令行上,开关只写 {@code --name} 或 {@code --no-name};</li>
@@ -89,6 +93,10 @@ public final class CommandGroup {
         for (Param<?> p : params) {
             if (!seen.add(p.name())) {
                 throw new IllegalArgumentException(path + " 的参数 " + p.name() + " 写了两次");
+            }
+            if (!ScriptEngine.IN_USE.isKey(p.name())) {
+                throw new IllegalArgumentException(path + " 的参数 " + p.name() + " 是脚本语言的关键字,选项表里写不出来:"
+                        + "换一个名字");
             }
             boolean last = !positionals.isEmpty() && positionals.get(positionals.size() - 1) == p;
             if (p.type().isSwitch() && p.positional()) {
@@ -134,16 +142,18 @@ public final class CommandGroup {
     }
 
     /**
-     * 登记块跑完:封口,再查每个动作的例子。例子在一棵只有这一组的树上解析——组这时还没挂上共享的树,
-     * 而例子只该用到这一组自己的语法。这棵树由两侧的树同一个生成器长出来,只是每个动作都长着参数:
-     * 服务端动作与客户端动作的例子按同一种形状解析。
+     * 登记块跑完:封口,再查每个动作的例子。例子经脚本的前端读,能调的只有这一组——组这时还没进登记处,而例子只该用到这一组
+     * 自己的函数。
      */
     void close() {
         open = false;
-        CommandTree<CommandSource> tree = new CommandTree<>(action -> true);
-        tree.add(this);
+        Map<String, ScriptCatalog.Verb> verbs = new TreeMap<>();
         for (Action a : actions) {
-            a.checkExamples(tree);
+            verbs.put(a.name(), a.verb());
+        }
+        ScriptCatalog catalog = new ScriptCatalog(Map.of(name, verbs), Map.of());
+        for (Action a : actions) {
+            a.checkExamples(catalog);
         }
     }
 

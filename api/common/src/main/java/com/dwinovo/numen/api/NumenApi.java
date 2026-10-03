@@ -1,6 +1,5 @@
 package com.dwinovo.numen.api;
 
-import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.api.gear.GearSource;
 import com.dwinovo.numen.cli.CommandGroup;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -16,14 +15,14 @@ import java.util.function.Function;
  *
  * <pre>{@code
  * NumenPlugins.register(numen -> {
- *     numen.registerTool(new MyTool());
+ *     numen.registerCommands("mymod", "What your mod lets her do.", group -> { ... });
  *     numen.bundleSkills(myJarSkillsRoot());
  *     numen.on(CompanionEvent.SPAWN, body -> ...);
  * });
  * }</pre>
  *
  * <h2>为什么收成一扇门</h2>
- * 能力散在 {@code ToolRegistry} / {@code SkillRegistry} / 生命周期监听各处时,第三方得先猜今天这件事属于哪一派、类在哪个包、是静态方法还是单例。
+ * 能力散在动作登记处 / {@code SkillRegistry} / 生命周期监听各处时,第三方得先猜今天这件事属于哪一派、类在哪个包、是静态方法还是单例。
  * 收到一处之后,"我要扩展 Numen"只有一个答案。引擎内部照旧用原来那些类,
  * 这里只是它们对外的那一面。
  *
@@ -44,23 +43,18 @@ public interface NumenApi {
     <T> void on(CompanionEvent<T> event, Consumer<T> handler);
 
     /**
-     * 注册一个大模型可以调用的工具。它和内置工具一视同仁——同样进目录、同样被
-     * 渐进披露、同样按名字调用。
-     */
-    void registerTool(NumenTool tool);
-
-    /**
-     * 登记一组命令:{@code <namespace> <action> …},组名就是 Numen 命令层(第 1 层)的一级命令。模型经 {@code command}
-     * 工具写这一行调用它们,不必为每个动作多花一个工具定义;常用的动作可以
-     * {@link com.dwinovo.numen.cli.Action#promote 提升}成快捷工具,工具名就是 {@code <namespace>_<action>}。第 1 层是 Numen 自己的调度器,不挂进 MC 的指令树,
-     * 玩家看不到;服务端的动作在服务端执行,客户端的动作留在主人客户端。
+     * 登记一组动作:她的 API 里的一张表 {@code <namespace>.<action>(...)}。模型只有一个工具——跑一段脚本——脚本里每个 API 函数就是
+     * 一个动作,所以加动作不加工具;系统提示里的 API 索引与每个函数的帮助都由这份登记生成。服务端的动作在服务端执行,客户端的动作
+     * 留在主人客户端。人(OP)也能经 {@code /numen drive} 写一行命令 {@code <namespace> <action> …} 调同一批动作。
      *
      * <pre>{@code
      * numen.registerCommands("mymod", "What your mod lets her do, in one sentence.", cmds -> {
-     *     cmds.server("status", "Read the machine she is looking at.", MyCommands::status);
+     *     cmds.server("status", "Read the machine she is looking at.", MyCommands::status)
+     *         .example("mymod.status()");
      *     cmds.server("start", "Start a machine by its id.", MyCommands::start, MACHINE_ID)
-     *         .promote("Start one of your mod's machines …");   // 工具名 mymod_start
-     *     cmds.client("recipes", "List recipes in the owner's language.", MyCommands::recipes);
+     *         .example("mymod.start(\"m1\")");
+     *     cmds.client("recipes", "List recipes in the owner's language.", MyCommands::recipes)
+     *         .example("mymod.recipes()");
      * });
      * }</pre>
      *
@@ -73,8 +67,7 @@ public interface NumenApi {
      * @param namespace 一级命令名,小写英文,用你的 mod id
      * @param summary   一句话说明,进系统提示里的命令索引和 {@code help}
      * @param actions   往这一组里加动作;它返回后这一组就封口
-     * @throws IllegalArgumentException 组名已被占、名字不合规、动作或参数写错
-     * @throws IllegalStateException    提升成的工具名已被占
+     * @throws IllegalArgumentException 组名已被占、名字不合规、动作或参数写错、例子读不通
      */
     void registerCommands(String namespace, String summary, Consumer<CommandGroup> actions);
 
@@ -97,6 +90,18 @@ public interface NumenApi {
      * @throws IllegalArgumentException 名字不合规矩、已有同名的、正文读不通或开头没写说明
      */
     void bundleScripts(Path scriptsRoot);
+
+    /**
+     * 把一个目录里的库交给引擎:每个 {@code <名字><扩展名>} 是一份随模组发布的库,用脚本语言写成。每段脚本开跑之前它们先跑,定义的
+     * 函数脚本里直接能调——多半写进自己那一组的表里({@code function mymod.harvest(field) ... end}),把几个原子动作组合成一件事。
+     * 系统提示的 API 索引列出每个库函数,说明就是紧挨在定义上面的那几行注释;{@code script.show(<名字>)} 读全文,她能照着写。
+     *
+     * <p>登记那一刻把关,同 {@link #bundleScripts}:名字合规矩、读得通、开头一行注释说它做什么,而且每个顶层函数上面都写了注释;
+     * 库函数不能和动作撞名(登记处第一次被用时查)。两侧都登记,所以<b>在 {@code NumenPlugins.register} 的块里直接调</b>。
+     *
+     * @throws IllegalArgumentException 名字不合规矩、已有同名的、正文读不通、开头没写说明或有函数没写注释
+     */
+    void bundleLibrary(Path libraryRoot);
 
     /**
      * 跑一段<b>只在客户端才有意义</b>的代码。专用服务器上整块不执行。

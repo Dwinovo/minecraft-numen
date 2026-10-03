@@ -95,9 +95,9 @@ public final class NumenNetwork {
     public static void register() {
         // C→S: the client agent loop decided to run a body-bound tool on its companion.
         toServer(
-                com.dwinovo.numen.network.payload.ExecuteToolPayload.TYPE,
-                com.dwinovo.numen.network.payload.ExecuteToolPayload.STREAM_CODEC,
-                com.dwinovo.numen.network.payload.ExecuteToolPayload::handle);
+                com.dwinovo.numen.network.payload.ExecuteActionPayload.TYPE,
+                com.dwinovo.numen.network.payload.ExecuteActionPayload.STREAM_CODEC,
+                com.dwinovo.numen.network.payload.ExecuteActionPayload::handle);
 
         // S→C: a body-bound tool's result (or an async dispatch receipt) coming home.
         toClient(

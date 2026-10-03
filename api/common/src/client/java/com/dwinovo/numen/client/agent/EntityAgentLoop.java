@@ -529,6 +529,16 @@ public final class EntityAgentLoop {
         queue.removeUrgentListener(listener);
     }
 
+    /**
+     * 外接大脑跑一段程序:交给她自己的工具口,与内脑同一个派发器({@code AgentLoop#runAside}),不进会话历史。
+     *
+     * @return 收下了;内脑正在干活、或已有一段外接程序在跑时为 false
+     */
+    public boolean runExternal(com.dwinovo.numen.agent.provider.LlmToolCall program,
+                               java.util.function.Consumer<String> done) {
+        return loop.runAside(program, done);
+    }
+
     /** 外接大脑替她说话(say 工具)——画法与内脑说话同一套表现层,见 {@link TurnPresenter#sayExternal}。 */
     public void externalSay(String text) {
         presenter.sayExternal(text);

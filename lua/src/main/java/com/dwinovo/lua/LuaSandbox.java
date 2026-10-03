@@ -156,12 +156,27 @@ public final class LuaSandbox {
     private final Map<String, Map<String, HostFunction>> tables;
     /** 库:块名 → 正文,按登记顺序。 */
     private final Map<String, String> libraries;
+    /** 脚本读宿主函数表里没有的名字时报的那句话。 */
+    private final Missing missing;
+
+    /** 脚本读宿主函数表里没有的名字({@code area.hsa}):报什么错。 */
+    @FunctionalInterface
+    public interface Missing {
+
+        /**
+         * @param table   表名
+         * @param key     读的名字
+         * @param present 表里此刻有的名字(宿主函数与库加进去的)
+         */
+        String message(String table, String key, List<String> present);
+    }
 
     private LuaSandbox(Builder b) {
         this.limits = b.limits;
         this.print = b.print;
         this.globals = Map.copyOf(b.globals);
         this.libraries = Collections.unmodifiableMap(new LinkedHashMap<>(b.libraries));
+        this.missing = b.missing;
         Map<String, Map<String, HostFunction>> t = new LinkedHashMap<>();
         b.tables.forEach((name, fns) -> t.put(name, Map.copyOf(fns)));
         this.tables = Collections.unmodifiableMap(t);
@@ -178,9 +193,16 @@ public final class LuaSandbox {
         private final Map<String, HostFunction> globals = new LinkedHashMap<>();
         private final Map<String, Map<String, HostFunction>> tables = new LinkedHashMap<>();
         private final Map<String, String> libraries = new LinkedHashMap<>();
+        private Missing missing = (table, key, present) -> "there is no function " + table + "." + key;
 
         private Builder(Limits limits) {
             this.limits = limits;
+        }
+
+        /** 脚本读宿主函数表里没有的名字时报的错:按它给的那句话停在那一行。 */
+        public Builder missing(Missing missing) {
+            this.missing = missing;
+            return this;
         }
 
         /** {@code print(...)} 写出的每一行(参数按 tostring 写、制表符隔开)交给它。 */
@@ -407,10 +429,28 @@ public final class LuaSandbox {
                 }
             });
             globals.forEach((name, fn) -> g.rawset(name, host(fn)));
-            tables.forEach((name, fns) -> {
+            tables.forEach((group, fns) -> {
                 LuaTable t = new LuaTable();
                 fns.forEach((fnName, fn) -> t.rawset(fnName, host(fn)));
-                g.rawset(name, t);
+                // 读表里没有的名字:当场报那句话,不让它成 nil 再在调用处报"调了一个 nil"
+                LuaTable meta = new LuaTable();
+                meta.rawset("__index", new VarArgFunction() {
+                    @Override
+                    public Varargs invoke(Varargs in) {
+                        List<String> present = new ArrayList<>();
+                        LuaValue k = LuaValue.NIL;
+                        while (true) {
+                            Varargs next = t.next(k);
+                            if ((k = next.arg1()).isnil()) {
+                                break;
+                            }
+                            present.add(k.tojstring());
+                        }
+                        throw new LuaError(missing.message(group, in.arg(2).tojstring(), present));
+                    }
+                });
+                t.setmetatable(meta);
+                g.rawset(group, t);
             });
         }
 

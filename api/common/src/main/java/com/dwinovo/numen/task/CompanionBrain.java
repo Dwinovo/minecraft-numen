@@ -331,11 +331,6 @@ final class CompanionBrain {
             TaskRecord rec = outbox.pollFirst();
             TaskResult result = rec.getResult();
             if (rec.isAsync()) {
-                // 外部(MCP)派的异步任务不投 task_finished:那条事件会唤醒并没有派它的
-                // 内置大脑。外部驱动靠 task status 轮询 + 感知确认闭环。
-                if (rec.isExternalCall()) {
-                    continue;
-                }
                 String status = switch (rec.getState()) {
                     case SUCCESS -> "done";
                     case TIMEOUT -> "timeout";

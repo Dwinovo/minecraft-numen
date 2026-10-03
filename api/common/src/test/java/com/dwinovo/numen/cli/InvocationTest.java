@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class InvocationTest {
 
     private static ServerSource call(List<String> replies) {
-        return new ServerSource(null, CommandTool.NAME, "call-1", CommandTool.args("/give @s minecraft:diamond 2"),
+        return new ServerSource(null, "call-1",
                 replies::add);
     }
 

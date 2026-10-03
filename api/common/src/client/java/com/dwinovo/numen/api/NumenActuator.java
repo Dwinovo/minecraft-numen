@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api;
 
+import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.agent.tool.ClientToolContext;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolCall;
@@ -7,9 +8,9 @@ import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.client.agent.NumenRoster;
+import com.dwinovo.numen.cli.ScriptTool;
 import com.dwinovo.numen.network.payload.DismissRequestPayload;
 import com.dwinovo.numen.network.payload.SummonRequestPayload;
-import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.task.TaskResult;
 import com.dwinovo.numen.network.NumenNetwork;
 import net.minecraft.client.Minecraft;
@@ -70,6 +71,10 @@ public final class NumenActuator {
 
     /** Synthetic tool-call ids for headless invocations, disjoint from the LLM's ids. */
     private static final AtomicLong SEQ = new AtomicLong();
+    /** Ids of programs an external brain runs, disjoint from the LLM's ids. */
+    private static final String PROGRAM_PREFIX = "ext-";
+    /** Ids of the other tools an external brain calls (tools of remote MCP servers), disjoint from the LLM's ids. */
+    private static final String TOOL_PREFIX = "mcp-";
 
     private NumenActuator() {}
 
@@ -140,22 +145,6 @@ public final class NumenActuator {
         return f;
     }
 
-    /**
-     * Run one tool for {@code companion} directly — the same tools the built-in
-     * brain uses (see {@link ToolRegistry#all()} for the catalogue), invoked
-     * without the LLM. Perception tools resolve fast; world-action tools resolve
-     * when the body finishes the task.
-     *
-     * <p>不需要先取得控制权:内置大脑要么被「外接大脑」模式整体挂起,要么和这次调用
-     * 一起受"一具身体一件活"闸门约束(身体忙时收到带话术的拒绝)。The future carries
-     * the tool's result as a {@link TaskResult} JSON string; failures (unknown tool,
-     * bad args, a thrown tool) come back as a {@code TaskResult.fail} JSON, never an
-     * exceptional future.
-     *
-     * @param companion the body to act with
-     * @param toolName  a registered tool name (case-tolerant, see {@link ToolRegistry#resolve})
-     * @param argsJson  the tool's arguments as a JSON object string; null/blank means {@code {}}
-     */
     /**
      * Take whatever events are pending right now (the owner speaking arrives as a
      * {@code <query>}, world happenings as {@code <event>}s — same wire text the
@@ -244,6 +233,28 @@ public final class NumenActuator {
         return f;
     }
 
+    /**
+     * Run one tool for {@code companion} directly — the same tools the built-in
+     * brain uses (see {@link ToolRegistry#all()} for the catalogue), invoked
+     * without the LLM.
+     *
+     * <p>The script tool runs a program through the companion's own dispatcher
+     * ({@code EntityAgentLoop#runExternal}): the same one the built-in brain uses, so
+     * it waits for each body task to finish, stops between calls on an urgent event,
+     * and the future completes with the program's receipt when it ends. Its tasks send
+     * their task_finished events as usual (they land in get_events too). Other tools
+     * (tools of remote MCP servers) are invoked as they are.
+     *
+     * <p>不需要先取得控制权:内置大脑要么被「外接大脑」模式整体挂起,要么和这次调用
+     * 一起受"一具身体一件活"闸门约束(身体忙时收到带话术的拒绝)。The future carries
+     * the tool's result as a {@link TaskResult} JSON string; failures (unknown tool,
+     * bad args, a thrown tool) come back as a {@code TaskResult.fail} JSON, never an
+     * exceptional future.
+     *
+     * @param companion the body to act with
+     * @param toolName  a registered tool name (case-tolerant, see {@link ToolRegistry#resolve})
+     * @param argsJson  the tool's arguments as a JSON object string; null/blank means {@code {}}
+     */
     public static CompletableFuture<String> invoke(UUID companion, String toolName, String argsJson) {
         CompletableFuture<String> f = new CompletableFuture<>();
         if (companion == null || toolName == null || toolName.isBlank()) {
@@ -257,9 +268,18 @@ public final class NumenActuator {
                     f.complete(TaskResult.fail("unknown tool: " + toolName).toJson());
                     return;
                 }
-                AbstractClientPlayer body = ClientNumenLookup.resolve(companion);
-                String id = TaskRecord.EXTERNAL_CALL_PREFIX + SEQ.incrementAndGet();
                 String args = (argsJson == null || argsJson.isBlank()) ? "{}" : argsJson;
+                if (tool instanceof ScriptTool) {
+                    ScriptTool.code(args);   // 参数写错当场回失败,不占工具口
+                    LlmToolCall program = new LlmToolCall(PROGRAM_PREFIX + SEQ.incrementAndGet(), tool.name(), args);
+                    if (!AgentLoopRegistry.getOrCreate(companion).runExternal(program, f::complete)) {
+                        f.complete(TaskResult.fail("a program is already running for this companion, or its "
+                                + "built-in brain is acting; wait for it to end").toJson());
+                    }
+                    return;
+                }
+                AbstractClientPlayer body = ClientNumenLookup.resolve(companion);
+                String id = TOOL_PREFIX + SEQ.incrementAndGet();
                 ToolCall call = new ToolCall(id, toolName, args,
                         new ClientToolContext(body, companion),
                         f::complete);

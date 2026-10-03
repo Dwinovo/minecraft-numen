@@ -3,6 +3,7 @@ package com.dwinovo.numen.agent.loop;
 import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.agent.llm.ToolOutcome;
+import com.dwinovo.numen.agent.script.Invocation;
 import com.dwinovo.numen.agent.script.ScriptCall;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 
@@ -23,16 +24,15 @@ import java.util.function.Consumer;
  * 那件任务的收尾到没到——不猜"是不是同一批"。
  *
  * <h2>脚本</h2>
- * 一个调用是一段程序(组合命令的那个工具),或者它的回执说"去跑这一份"({@code script run}),这个调用就是一段脚本
- * ({@link ScriptCall}):脚本每调一个命令函数,这里把那一行当一条普通命令派出去({@link Port#commandCall}),等它的回执;
- * 留下了身体活就用同一个等法等它收尾,再让脚本从调用处接着跑。脚本跑完,它的回执才是这个调用的结果。脚本里的命令都要等收尾:
- * 脚本要按它的结局往下走。
+ * 一个调用是一段程序(跑脚本的那个工具),这个调用就是一段脚本({@link ScriptCall}):脚本每调一个 API 函数,这里把那次调用派出去
+ * ({@link Port#dispatch}),等它的回执;留下了身体活就用同一个等法等它收尾,再让脚本从调用处接着跑。脚本跑完,它的回执才是这个
+ * 调用的结果。脚本里的调用都要等收尾:脚本要按它的结局往下走。
  *
  * <h2>等的时候来了急件</h2>
  * 等身体收尾期间进来一条要立刻叫醒她的输入(主人说话、急事):不再等,还没派出去的调用各回一条"没执行"的结果写明原因,
  * 这一批结算,每个调用恰好一个结果。模型下一次调用时读到那条输入和这些结果,重新决定;等的那件活照常跑。
- * 单个工具在跑的时候不看输入:它们有界短,结算之后输入跟下一次调用走(队列的插话档)。脚本不一样,它由许多条命令组成:
- * 一行命令在跑时来了急件,这一行的回执到了就停,停在命令之间,回执写明停在哪一行、哪些做了。
+ * 单个工具在跑的时候不看输入:它们有界短,结算之后输入跟下一次调用走(队列的插话档)。脚本不一样,它由许多次 API 调用组成:
+ * 一次调用在跑时来了急件,它的回执到了就停,停在调用之间,回执写明停在哪一行、哪些做了。
  *
  * <p>纯 JVM。一切状态只在内核的线程上读写;{@link Port} 的结果回调要切回这个线程再交进来。
  */
@@ -45,14 +45,19 @@ public final class SerialCalls {
         void invoke(LlmToolCall call, Consumer<String> done);
 
         /**
-         * 这个调用是不是一段程序(组合命令的那个工具):是就返回它的正文,别的工具是 null。
+         * 这个调用是不是一段程序(跑脚本的那个工具):是就返回它的正文,别的工具是 null。
          *
          * @throws IllegalArgumentException 是脚本工具,但参数写错了;消息就是给模型的那句话
          */
         String scriptOf(LlmToolCall call);
 
-        /** 脚本里的一行命令写成一次调用,和模型直接调一行命令是同一个工具。 */
-        LlmToolCall commandCall(String id, String line);
+        /**
+         * 执行脚本里的一次 API 调用。结果经 {@code done} 恰好交回一次,当场或之后都行。
+         *
+         * @param call       这次调用的编号与写法(函数名、参数 JSON),在飞时它就是手上的那一个
+         * @param invocation 读好的动作与参数
+         */
+        void dispatch(LlmToolCall call, Invocation invocation, Consumer<String> done);
 
         /** 一个调用的结果留下的、还在跑且会自己收尾的身体任务的编号;没有是 null。 */
         String leftRunning(String resultJson);
@@ -65,17 +70,17 @@ public final class SerialCalls {
 
     /** 这一批还没派出去的调用。 */
     private final Deque<LlmToolCall> queue = new ArrayDeque<>();
-    /** 派出去、结果还没回来的那一个(脚本的一行也是);没有是 null。 */
+    /** 派出去、结果还没回来的那一个(脚本里的一次 API 调用也是);没有是 null。 */
     private LlmToolCall inFlight;
     /** 正在等哪件身体任务收尾;不在等是 null。 */
     private String awaiting;
     /** 正在跑的脚本与它所属的那个调用;没有是 null。 */
     private ScriptCall script;
     private LlmToolCall scriptCall;
-    /** 脚本那一行在跑时来的急件:这一行的回执到了就停;没有是 null。 */
+    /** 脚本里一次调用在跑时来的急件:它的回执到了就停;没有是 null。 */
     private EventQueue.Entry interruptedBy;
-    /** 脚本里派出的行的编号。 */
-    private int lineSeq;
+    /** 脚本里派出的调用的编号。 */
+    private int callSeq;
     /** 这一批的回报口;结算之后摘掉,之后再来的结果无处可报。 */
     private ToolPort.Sink sink;
     /** 正在 {@link #advance} 的那一圈里:当场回来的结果不递归,由这一圈接着往下走。 */
@@ -96,7 +101,7 @@ public final class SerialCalls {
 
     /**
      * 一条输入进了队列,{@code urgent} 是它要不要立刻叫醒她(队列的急件规则算出来的)。等身体收尾时:它是那件的收尾就接着走;
-     * 它是急件就不再等。脚本的一行在跑时来了急件:记下,这一行的回执到了就停。
+     * 它是急件就不再等。脚本里一次调用在跑时来了急件:记下,它的回执到了就停。
      */
     public void arrived(EventQueue.Entry entry, boolean urgent) {
         if (awaiting == null) {
@@ -128,7 +133,7 @@ public final class SerialCalls {
 
     /**
      * 放弃这一批里还没结果的调用(在飞的与排着的),返回它们的 id;等着的那件身体任务不归这里管。在跑的脚本这时交出它的回执——
-     * 停在哪一行、哪些做了——作为它那个调用的结果,所以它不在返回的 id 里;脚本那一行在飞的调用在里面。
+     * 停在哪一行、哪些做了——作为它那个调用的结果,所以它不在返回的 id 里;脚本里在飞的那次 API 调用在里面。
      *
      * @param stopBody 身体是不是一起叫停:回执照实说那件活停了还是照常跑
      */
@@ -168,7 +173,7 @@ public final class SerialCalls {
         return queue.stream().anyMatch(call -> call.id().equals(callId));
     }
 
-    /** 在飞的那一个(脚本里的一行也是);没有是 null。 */
+    /** 在飞的那一个(脚本里的一次 API 调用也是);没有是 null。 */
     public LlmToolCall inFlight() {
         return inFlight;
     }
@@ -182,7 +187,7 @@ public final class SerialCalls {
     }
 
     /**
-     * 往下走:没有在飞的、也不在等身体收尾,就派下一个——脚本在跑就是脚本的下一行,否则是下一个调用;这一批派完了就报 settled。
+     * 往下走:没有在飞的、也不在等身体收尾,就派下一个——脚本在跑就是脚本的下一次 API 调用,否则是下一个调用;这一批派完了就报 settled。
      * 当场回来的结果、settled 里当场收下的下一批都由这一圈接着走,不递归。
      */
     private void advance() {
@@ -226,19 +231,21 @@ public final class SerialCalls {
     private void startScript(LlmToolCall call, ScriptCall started) {
         script = started;
         scriptCall = call;
-        lineSeq = 0;
+        callSeq = 0;
         next = started.begin();
     }
 
-    /** 脚本的下一步:派一行、等一件活,或者脚本结束、交出这个调用的结果。 */
+    /** 脚本的下一步:派一次 API 调用、等一件活,或者脚本结束、交出这个调用的结果。 */
     private void stepScript() {
         ScriptCall.Next step = next;
         next = null;
         switch (step) {
             case ScriptCall.Next.Dispatch d -> {
-                LlmToolCall line = port.commandCall(scriptCall.id() + "#" + (++lineSeq), d.line());
+                Invocation invocation = d.invocation();
+                LlmToolCall line = new LlmToolCall(scriptCall.id() + "#" + (++callSeq), invocation.function(),
+                        invocation.args().toString());
                 inFlight = line;
-                port.invoke(line, json -> lineResult(line, json));
+                port.dispatch(line, invocation, json -> lineResult(line, json));
             }
             case ScriptCall.Next.Await a -> awaiting = a.task();
             case ScriptCall.Next.Done d -> endScript(d.receipt());
@@ -279,12 +286,6 @@ public final class SerialCalls {
             return;   // 已经被放弃,或者重复、迟到的结果
         }
         inFlight = null;
-        ScriptCall.ToRun toRun = ScriptCall.toRun(resultJson);
-        if (toRun != null) {
-            startScript(call, ScriptCall.named(toRun, port));
-            advance();
-            return;
-        }
         sink.finished(call, resultJson);
         // 后面还有调用才等:最后一件受理了,这一批就结算,活在后台做、她照常说话
         awaiting = queue.isEmpty() ? null : port.leftRunning(resultJson);

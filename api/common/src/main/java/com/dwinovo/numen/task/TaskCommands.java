@@ -21,9 +21,7 @@ import java.util.Map;
  * {@code task}:她派出去的东西——身体上那件活({@link TaskDispatch#setTask})和挂着的表({@link TimerRegistry})。
  *
  * <p>三个动作都当场返回、不占身体:{@code status} 查、{@code stop} 撤、{@code timer} 定。两条道共用这一组:
- * "我有什么在跑""停掉它"各只有一个问法,模型不必记哪一种去哪问。只有 {@code stop} 提升成快捷工具
- * {@code task_stop}:叫停常用。{@code status} 多被拿来轮询,而活干完会以 task_finished 事件叫醒她,不该轮询;
- * {@code timer} 很少用。这两个只作命令。
+ * "我有什么在跑""停掉它"各只有一个问法,模型不必记哪一种去哪问。
  */
 public final class TaskCommands {
 
@@ -42,12 +40,12 @@ public final class TaskCommands {
                     + "; out-of-range values are clamped).")
             .whenOmitted("remind you in " + DEFAULT_AFTER_S + " seconds");
     private static final Param<String> REASON = Param.required("reason", ArgType.string(),
-            "What to look at or decide when it fires; quote it. The owner sees this too, "
+            "What to look at or decide when it fires. The owner sees this too, "
                     + "so name the thing: \"collect the iron from the furnace\" beats \"check back\".");
 
     private TaskCommands() {}
 
-    /** 经插件那扇门登记这一组;快捷工具 task_stop 随之进工具表。 */
+    /** 经插件那扇门登记这一组。 */
     public static void install(NumenApi numen) {
         numen.registerCommands("task", "The background task and your pending timers.",
                 TaskCommands::actions);
@@ -56,26 +54,22 @@ public final class TaskCommands {
     private static void actions(CommandGroup task) {
         task.server("status", "What you have in flight: the background task and your pending timers.",
                 TaskCommands::status)
-                .example("task status")
+                .example("task.status()")
                 .note("Instant and read-only; it does not touch your body.")
                 .note("Usually not needed: a task ends with its own task_finished event and a timer fires on its own.")
                 .seeAlso("task stop");
         task.server("stop", "Cancel the background task, or a task or timer by its id.",
                 TaskCommands::stop, TASK_ID)
-                .example("task stop")
-                .example("task stop --task-id tm3")
-                .note("Instant; does not ask your owner. A stopped task winds down and reports as a task_finished "
-                        + "event with status=stopped.")
+                .example("task.stop()")
+                .example("task.stop({task_id = \"tm3\"})")
+                .note("Instant; does not ask your owner. With no id it stops the background task (the one "
+                        + "<current_task> shows) so the body frees up; a stopped task winds down and reports as a "
+                        + "task_finished event with status=stopped.")
                 .note("When nothing matches it fails and lists what is pending.")
-                .seeAlso("task status")
-                .promote("Cancel something you dispatched. With no id: aborts the background "
-                        + "task (the one <current_task> shows) so the body frees up; its "
-                        + "wind-down arrives as a task_finished event with status=stopped. With an id: cancels "
-                        + "that task or that timer (tm...). Fails, listing what is actually pending, when "
-                        + "nothing matches.");
+                .seeAlso("task status");
         task.server("timer", "Set a one-shot reminder that fires after a delay in world time.",
                 TaskCommands::timer, REASON, AFTER_S)
-                .example("task timer \"collect the iron from the furnace\" --after 300")
+                .example("task.timer(\"collect the iron from the furnace\", {after = 300})")
                 .note("Returns at once and never occupies your body; your owner is told when and why.")
                 .note("For what the world will not announce on its own: a furnace finishing, crops growing, "
                         + "daybreak. When it fires, look: the reminder is not proof the thing happened.")

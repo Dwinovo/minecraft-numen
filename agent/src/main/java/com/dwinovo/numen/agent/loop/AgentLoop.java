@@ -75,6 +75,8 @@ public final class AgentLoop {
     private boolean pumping;
     /** {@link #pump} 期间有人又要求推进(run 当场结束、订阅者推了新输入):那一圈做完接着再看一眼。 */
     private boolean pumpAgain;
+    /** 外接大脑交来、正借用工具口的那一个调用的回报口({@link #runAside});没有是 {@code null}。 */
+    private Consumer<String> aside;
 
     /**
      * @param name       日志里认这只同伴用的名字
@@ -130,7 +132,7 @@ public final class AgentLoop {
             ownerSpoke |= EventTypes.get(e.type()).ownerWords();
         }
         // 转给工具口可能让这一批当场结算、调下一次模型,那之后就不是它的事了
-        for (int i = 0; i < queued.size() && run != null && run.phase == Phase.TOOLS; i++) {
+        for (int i = 0; i < queued.size() && ((run != null && run.phase == Phase.TOOLS) || aside != null); i++) {
             tools.arrived(queued.get(i).entry(), queued.get(i).urgent());
         }
         if (ownerSpoke) {
@@ -141,6 +143,41 @@ public final class AgentLoop {
         }
         announceHold(null);
         pump();
+    }
+
+    /**
+     * 外接大脑的一次调用(一段程序):内核闲着时交给同一个工具口执行,结果交给 {@code done},不进会话历史。执行期间入队的条目
+     * 同样转给工具口——等身体收尾、被急件停在调用之间,和内脑自己的调用是同一个等法;这期间内核不开 run。切断({@link #halt})
+     * 照样收工具口,程序交出停在哪一行的回执。
+     *
+     * @return 收下了;内核手上有 run、或已有一个外接调用在跑时不收,{@code done} 不会被调
+     */
+    public boolean runAside(LlmToolCall call, Consumer<String> done) {
+        if (run != null || aside != null) {
+            return false;
+        }
+        aside = done;
+        tools.run(List.of(call), new ToolPort.Sink() {
+            @Override
+            public void started(LlmToolCall c) {
+            }
+
+            @Override
+            public void finished(LlmToolCall c, String resultJson) {
+                Consumer<String> reply = aside;
+                aside = null;
+                if (reply != null) {
+                    reply.accept(resultJson);
+                }
+            }
+
+            @Override
+            public void settled() {
+                aside = null;
+                pump();
+            }
+        });
+        return true;
     }
 
     /** 身体复活了。复活的叙事事件由调用方在这之前推进队列,解开后一起走。 */
@@ -203,8 +240,8 @@ public final class AgentLoop {
      * @return 这一步动了队列或停牌(开了 run、执行了控制条目),值得再看一眼;什么也没做、或者被端点挡下是 {@code false}
      */
     private boolean step() {
-        if (run != null) {
-            return false;   // run 里的边界自己取队列
+        if (run != null || aside != null) {
+            return false;   // run 里的边界自己取队列;外接大脑的调用借着工具口时不开 run
         }
         Hold hold = hold();
         if (hold == Hold.DEAD || hold == Hold.EXTERNAL) {

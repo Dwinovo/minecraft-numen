@@ -37,12 +37,11 @@ class ObjectArgTest {
     @BeforeAll
     static void register() {
         door().registerCommands("gt_obj", "A group whose actions take the object types.", g -> {
-            g.server("look", "Look at a cell.", ObjectArgTest::remember, CELL).example("gt_obj look 1 2 3")
-                    .promote("Look at a cell, as a tool.");
-            g.server("dig", "Dig places.", ObjectArgTest::remember, PLACES, TO).example("gt_obj dig ores 1 2 3")
-                    .promote("Dig places, as a tool.");
+            g.server("look", "Look at a cell.", ObjectArgTest::remember, CELL).example("gt_obj.look({1, 2, 3})");
+            g.server("dig", "Dig places.", ObjectArgTest::remember, PLACES, TO)
+                    .example("gt_obj.dig(\"ores\", {1, 2, 3})");
             g.server("hit", "Hit someone, or everyone.", ObjectArgTest::remember, WHO, TIMES)
-                    .example("gt_obj hit 27 26").example("gt_obj hit");
+                    .example("gt_obj.hit(27, 26)").example("gt_obj.hit()");
         });
     }
 
@@ -70,7 +69,8 @@ class ObjectArgTest {
     void aCellIsThreeNumbersOrOneWordWithCommas() {
         assertEquals(new BlockPos(120, 64, -35), ran("gt_obj look 120 64 -35").get(CELL));
         assertEquals(new BlockPos(120, 64, -35), ran("gt_obj look 120,64,-35").get(CELL));
-        assertTrue(failed("gt_obj look 120 64").startsWith("error: expected a cell: three whole numbers x y z, or x,y,z"));
+        assertTrue(failed("gt_obj look 120 64").startsWith("error: expected a cell: three whole numbers, {x, y, z} or "
+                + "\"x y z\""));
         assertTrue(failed("gt_obj look 120.5 64 -35").startsWith("error: expected a cell"));
         assertTrue(failed("gt_obj look 1,2 3").startsWith("error: expected a cell"), "一种写法里不混着两种分隔");
     }
@@ -87,9 +87,9 @@ class ObjectArgTest {
         assertTrue(failed("gt_obj dig Ores").startsWith("error: area names are lowercase letters"));
     }
 
-    /** 快捷工具 JSON:一个字符串就是它在命令行上的样子,一串值的数组各项接成一行再读——同一个读法。 */
+    /** 脚本里的调用读成的 JSON:一个字符串就是它在一行命令上的样子,一串值的数组各项接成一行再读——同一个读法。 */
     @Test
-    void theShortcutReadsTheSamePlacesFromAStringOrNumbers() {
+    void aScriptCallReadsTheSamePlacesFromAStringOrNumbers() {
         CommandArgs viaLine = ran("gt_obj dig 120 64 -35 ores");
         List<Param<?>> params = List.of(PLACES, TO);
         for (String json : List.of("{\"place\": [\"120 64 -35\", \"ores\"]}", "{\"place\": [120, 64, -35, \"ores\"]}",
@@ -101,6 +101,28 @@ class ObjectArgTest {
         assertEquals(new BlockPos(1, 2, 3), cell.get(CELL));
         assertEquals(new BlockPos(1, 2, 3), CommandArgs.fromJson(List.of(CELL), JsonParser.parseString(
                 "{\"cell\": [1, 2, 3]}").getAsJsonObject()).get(CELL), "三个数的数组也是一格");
+
+        for (String code : List.of("gt_obj.dig({120, 64, -35}, \"ores\")", "gt_obj.dig(\"120 64 -35\", \"ores\")",
+                "gt_obj.dig({{120, 64, -35}, \"ores\"})", "gt_obj.dig(\"120,64,-35\", \"ores\")")) {
+            LAST.set(null);
+            CliFixture.Outcome out = CliFixture.lua(code);
+            assertTrue(out.success(), code + ": " + out.message());
+            assertEquals(viaLine, LAST.get(), code);
+        }
+        LAST.set(null);
+        assertTrue(CliFixture.lua("gt_obj.look(120, 64, -35)").success());
+        assertEquals(new BlockPos(120, 64, -35), LAST.get().get(CELL), "三个数摊开写也是一格");
+        assertEquals(List.of(new Place(120, null, -35, null)), luaRan("gt_obj.dig({120, -35})").get(PLACES),
+                "两个数的表是一列");
+        assertEquals(List.of(new Place(null, 16, null, null)), luaRan("gt_obj.dig(16)").get(PLACES),
+                "一个数是一个高度");
+    }
+
+    private static CommandArgs luaRan(String code) {
+        LAST.set(null);
+        CliFixture.Outcome out = CliFixture.lua(code);
+        assertTrue(out.success(), code + ": " + out.message());
+        return LAST.get();
     }
 
     @Test
@@ -113,6 +135,6 @@ class ObjectArgTest {
         assertEquals(List.of(EntityRef.id(5)), ran("gt_obj hit 5 --times 3").get(WHO));
         assertEquals("gt_obj hit 5 --times 3", ran("gt_obj hit 5 --times 3").write("gt_obj hit", List.of(WHO, TIMES)));
         assertEquals("gt_obj hit", ran("gt_obj hit").write("gt_obj hit", List.of(WHO, TIMES)));
-        assertTrue(failed("gt_obj hit fox").startsWith("error: expected an entity id as scan entities lists it"));
+        assertTrue(failed("gt_obj hit fox").startsWith("error: expected an entity id as scan.entities lists it"));
     }
 }

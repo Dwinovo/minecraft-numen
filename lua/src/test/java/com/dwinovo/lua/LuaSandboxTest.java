@@ -238,6 +238,18 @@ class LuaSandboxTest {
         assertEquals(List.of("arrived"), printed);
     }
 
+    /** 读一组里没有的函数当场报错,报的话由宿主写,收到的是那一组的名字、读的名字与组里有的名字。 */
+    @Test
+    void readingAFunctionAGroupLacksRaisesTheHostsWords() throws InterruptedException {
+        LuaSandbox sandbox = LuaSandbox.builder(ROOMY)
+                .function("move", "to", args -> "arrived")
+                .missing((table, key, present) -> table + "|" + key + "|" + present).build();
+        LuaSandbox.Outcome o = run(sandbox, "local f = move.too");
+        assertFalse(o.finished());
+        assertEquals(1, o.line());
+        assertTrue(o.message().contains("move|too|[to]"), o.message());
+    }
+
     @Test
     void valuesCrossBothWaysAndAFailedCallIsACatchableErrorAtTheCall() throws InterruptedException {
         AtomicReference<List<Object>> got = new AtomicReference<>();

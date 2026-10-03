@@ -27,8 +27,9 @@ import java.util.List;
  *       loopback);</li>
  *   <li>{@code call_timeout_seconds} — how long one {@code tools/call} waits for a
  *       body action to finish before reporting a timeout;</li>
- *   <li>{@code hidden_tools} — engine tools NOT exposed to the external agent
- *       (agent-internal bookkeeping the external brain has no business calling);</li>
+ *   <li>{@code hidden_tools} — tools NOT exposed to the external agent (by default
+ *       none: the engine's one tool is the script tool, and its API is the external
+ *       brain's as much as the built-in one's);</li>
  *   <li>{@code quiet_fallback} — when the external brain goes quiet (no request for
  *       {@link McpMode#QUIET_AFTER_MS} ms) the built-in brain takes over until it
  *       returns. Default false: the companion stands by silently — the owner turned
@@ -44,15 +45,7 @@ public record McpConfig(
         List<String> hiddenTools,
         boolean quietFallback) {
 
-    /** Tools the built-in brain manages for itself — never handed to an external driver. */
-    private static final String SKILL_LOAD = "skill_load";
-    private static final List<String> DEFAULT_HIDDEN = List.of("todowrite", SKILL_LOAD);
-
-    /**
-     * 0.1.3 及更早的版本把 {@code skill_load} 记作 {@code load_skill} 写进了文件的 {@code hidden_tools}(出厂默认就有它)。
-     * 读档时认它一次,存档只写现在的名字:不认的话,升级之后这个工具会悄悄对外接大脑露出来。
-     */
-    private static final String SKILL_LOAD_IN_OLD_FILES = "load_skill";
+    private static final List<String> DEFAULT_HIDDEN = List.of();
 
     /**
      * 读配置;没有就播一份默认的。
@@ -76,7 +69,7 @@ public record McpConfig(
                     o.has("port") ? o.get("port").getAsInt() : 8765,
                     strOr(o, "token", ""),
                     o.has("call_timeout_seconds") ? o.get("call_timeout_seconds").getAsInt() : 300,
-                    o.has("hidden_tools") ? hiddenTools(strings(o, "hidden_tools")) : DEFAULT_HIDDEN,
+                    o.has("hidden_tools") ? strings(o, "hidden_tools") : DEFAULT_HIDDEN,
                     o.has("quiet_fallback") && o.get("quiet_fallback").getAsBoolean());
         } catch (IOException | RuntimeException ex) {
             Constants.LOG.warn("[numen-mcp] unreadable config {} — server disabled: {}", file, ex.toString());
@@ -175,11 +168,6 @@ public record McpConfig(
         } catch (IOException ex) {
             Constants.LOG.warn("[numen-mcp] failed to write config {}: {}", file, ex.toString());
         }
-    }
-
-    /** 文件里的 {@code hidden_tools} 读成现在的工具名,见 {@link #SKILL_LOAD_IN_OLD_FILES}。 */
-    private static List<String> hiddenTools(List<String> written) {
-        return written.stream().map(name -> SKILL_LOAD_IN_OLD_FILES.equals(name) ? SKILL_LOAD : name).toList();
     }
 
     private static List<String> strings(JsonObject o, String key) {

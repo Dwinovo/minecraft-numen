@@ -1,5 +1,7 @@
 package com.dwinovo.numen.cli;
 
+import com.dwinovo.numen.agent.script.ScriptEngine;
+import com.dwinovo.numen.agent.script.ScriptRun;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.mojang.brigadier.CommandDispatcher;
@@ -14,63 +16,77 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 文字里写着的命令:技能、系统提示、工具与动作的说明里提到的每一行命令,都要按命令树读得通——判据只有命令树这一处,
- * 不另记一份"有哪些命令"的清单。命令改名、改写法之后,还写着旧样子的地方由这里指出来。
+ * 文字里写着的调用:技能、系统提示、工具与动作的说明里提到的每一段 API 调用,都要经脚本的前端读得通——判据只有登记处这一处,
+ * 不另记一份"有哪些函数"的清单。动作改名、改写法之后,还写着旧样子的地方由这里指出来。
  *
- * <h2>怎么认出一行命令(约定)</h2>
+ * <h2>怎么认出一段调用(约定)</h2>
  * <ul>
- *   <li>它写在反引号里({@code `use gui`}),或者是 {@code ```} 围起的代码块里的一行;</li>
- *   <li>它以 {@code /} 打头(第 0 层,原版与模组的指令),或它的第一个词是第 1 层的一级命令(一个命令组的名字,
- *       或 {@code help})。</li>
+ *   <li>它写在反引号里({@code `work.dig("ores")`}),或者是 {@code ```lua} 围起的代码块(整块是一段脚本),或别的
+ *       {@code ```} 块里的一行;</li>
+ *   <li>它以一个组的函数打头({@code 组.动作}),前面可以有 {@code local x =}。</li>
  * </ul>
- * 别的反引号——方块 id、工具名、参数名、字符网格——不是命令,不读。所以文字里提到命令一律写进反引号,写成能照抄的
- * 样子:一条完整的命令,或只点名一组、一个动作({@code inv recipe})。占位符({@code <x>})与省略号不是命令的写法。
+ * 旧的写法也认出来,好指出它:一行命令({@code 组 动作 …},第一个词是一个组)与原版指令({@code /…})。别的反引号——方块 id、
+ * 参数名、字符网格——不读。文字里提到调用一律写进反引号,写成能照抄的样子:一段完整的调用,或只点名一个函数({@code inv.recipe})。
  *
  * <h2>读得通</h2>
- * 第 1 层交 {@link NumenCli#read}:和执行时同一个解析器,整行是一条能执行的命令,或整行只是一串名字。第 0 层交调用方给的
- * 那棵 MC 指令树({@link #nativeProblem}),同样两种读得通。
+ * 一段调用交脚本的前端只读不跑({@link ScriptEngine#calls}):语法要对;调到的每个动作的对象与选项要按它的参数表读得成
+ * ({@link NumenCli#invocation},和真跑同一个换法);库函数要存在;{@code mc.run} 的那一行原版指令交调用方给的那棵 MC 指令树
+ * ({@link #nativeProblem})。调用都返回 nil,所以拿返回值往下算的写法在那一处停下,之前调到的照查。
  */
 public final class WrittenCommands {
 
     private static final Pattern SPAN = Pattern.compile("`([^`\n]+)`");
     private static final String FENCE = "```";
+    private static final String LUA_FENCE = "```lua";
+    /** 以一个组的函数打头:{@code work.dig(...)}、{@code local r = area.has(...)}、{@code move.goto_}。 */
+    private static final Pattern CALL = Pattern.compile("^(?:local\\s+[A-Za-z_][A-Za-z0-9_]*\\s*=\\s*)?"
+            + "([a-z][a-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)");
+    /** 只点名一个函数:{@code inv.recipe}。 */
+    private static final Pattern MENTION = Pattern.compile("^([a-z][a-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)$");
 
     private WrittenCommands() {}
 
     /** 一段待查的文字:它在哪(给出错时指路)与正文。 */
     public record Text(String where, String body) {}
 
-    /** 一行写错的命令:在哪、那一行、读不通的原因。 */
+    /** 一段写错的调用:在哪、那一段、读不通的原因。 */
     public record Wrong(String where, String line, String problem) {
 
-        /** 在哪、哪一行、报错的第一句;报错里有"你是不是要写"就接上它(帮助正文不抄,那一层的帮助人人都查得到)。 */
+        /** 在哪、哪一段、报错的第一句。 */
         @Override
         public String toString() {
-            String[] said = problem.split("\n");
-            String hint = said[said.length - 1].startsWith(Completions.DID_YOU_MEAN) ? " " + said[said.length - 1] : "";
-            return where + ": `" + line + "` — " + said[0] + hint;
+            return where + ": `" + line + "` — " + problem.split("\n")[0];
         }
     }
 
-    /** 读一行第 0 层指令(不带开头的 {@code /}):读得通返回 null,否则是原因。 */
+    /** 读一行原版指令(不带开头的 {@code /}):读得通返回 null,否则是原因。 */
     @FunctionalInterface
     public interface NativeReader {
         String problem(String line);
     }
 
-    /** 按约定认出这段文字里写着的每一行命令,按出现的顺序。 */
+    /** 按约定认出这段文字里写着的每一段调用,按出现的顺序:先是代码块里的,再是反引号里的。 */
     public static List<String> in(String text) {
         List<String> found = new ArrayList<>();
         boolean fenced = false;
+        boolean lua = false;
+        StringBuilder block = new StringBuilder();
         StringBuilder prose = new StringBuilder();
         for (String raw : text.split("\n", -1)) {
             String line = raw.strip();
             if (line.startsWith(FENCE)) {
+                if (fenced && lua && !block.isEmpty()) {
+                    found.add(block.toString().stripTrailing());
+                }
+                lua = !fenced && line.equals(LUA_FENCE);
                 fenced = !fenced;
+                block.setLength(0);
                 continue;
             }
-            if (fenced) {
-                if (isCommand(line)) {
+            if (fenced && lua) {
+                block.append(raw).append('\n');
+            } else if (fenced) {
+                if (isCode(line)) {
                     found.add(line);
                 }
             } else {
@@ -80,52 +96,89 @@ public final class WrittenCommands {
         Matcher m = SPAN.matcher(prose);
         while (m.find()) {
             String span = m.group(1).strip();
-            if (isCommand(span)) {
+            if (isCode(span)) {
                 found.add(span);
             }
         }
         return found;
     }
 
-    /** 这段写着的是命令吗:{@code /} 打头接着字母,或第一个词是第 1 层的一级命令。 */
-    static boolean isCommand(String written) {
+    /** 这段写着的是调用吗(或旧写法的命令):以一个组的函数打头,一行命令以一个组打头,或原版指令。 */
+    static boolean isCode(String written) {
         if (written.length() > 1 && written.startsWith(Line.MC) && Character.isLetter(written.charAt(1))) {
             return true;
         }
-        return !written.isEmpty() && NumenCli.isTopLevel(written.split(" ", 2)[0]);
+        Matcher call = CALL.matcher(written);
+        if (call.find() && isGroup(call.group(1))) {
+            return true;
+        }
+        String first = written.split(" ", 2)[0];
+        return written.contains(" ") && NumenCli.isTopLevel(first) && !first.equals(NumenCli.HELP);
     }
 
-    /** 这些文字里写错的命令;都读得通是空表。 */
+    private static boolean isGroup(String table) {
+        return NumenCli.groups().stream().anyMatch(g -> ScriptEngine.IN_USE.functionName(g.name()).equals(table));
+    }
+
+    /** 这些文字里写错的调用;都读得通是空表。 */
     public static List<Wrong> check(List<Text> texts, NativeReader mc) {
         List<Wrong> wrong = new ArrayList<>();
         for (Text text : texts) {
-            for (String line : in(text.body())) {
-                String problem = problem(line, mc);
+            for (String code : in(text.body())) {
+                String problem = problem(code, mc);
                 if (problem != null) {
-                    wrong.add(new Wrong(text.where(), line, problem));
+                    wrong.add(new Wrong(text.where(), code, problem));
                 }
             }
         }
         return wrong;
     }
 
-    /** 一行命令读不读得通:读得通返回 null。第 0 层去掉开头的 {@code /} 交 {@code mc}。 */
-    public static String problem(String line, NativeReader mc) {
-        Line routed = Line.of(line);
-        if (routed.mc()) {
-            return mc.problem(routed.text());
+    /** 一段调用读不读得通:读得通返回 null。 */
+    public static String problem(String code, NativeReader mc) {
+        if (code.startsWith(Line.MC)) {
+            return "a Minecraft command is run as " + McCommands.call(code.substring(1)) + " in a script";
         }
+        Matcher call = CALL.matcher(code);
+        if (!(call.find() && isGroup(call.group(1))) && NumenCli.isTopLevel(code.split(" ", 2)[0])) {
+            return "write it as a call of the API, group.action(...): this is the old command-line way";
+        }
+        Matcher mention = MENTION.matcher(code);
+        if (mention.matches()) {
+            return NumenCli.help(code) == null ? "there is no API function " + code : null;
+        }
+        ScriptEngine.Reading reading;
         try {
-            NumenCli.read(routed.text());
-            return null;
-        } catch (IllegalArgumentException e) {
-            return e.getMessage();
+            reading = ScriptEngine.IN_USE.calls("written", code, NumenCli.scriptCatalog());
+        } catch (IllegalArgumentException unreadable) {
+            return unreadable.getMessage();
         }
+        if (reading.calls().isEmpty() && reading.error() != null) {
+            return reading.error();
+        }
+        for (ScriptRun.Call c : reading.calls()) {
+            if (NumenCli.libraryFunctions().containsKey(c.function())) {
+                continue;
+            }
+            try {
+                NumenCli.invocation(c);
+            } catch (IllegalArgumentException wrong) {
+                return wrong.getMessage();
+            }
+            if (c.group().equals(McCommands.GROUP) && !c.args().isEmpty()) {
+                String line = Line.of(String.valueOf(c.args().get(0))).text();
+                String problem = mc.problem(line);
+                if (problem != null) {
+                    return problem;
+                }
+            }
+        }
+        return null;
     }
 
     /**
-     * 按一棵 MC 指令树读一行第 0 层指令(不带 {@code /}):整行读完、没有报错,而且走到了可执行的一格或只是一串名字
-     * ({@code /setblock} 在文字里提到这条指令)。{@code source} 是按谁的权限读——要看得见文字提到的每一条。
+     * 按一棵 MC 指令树读一行原版指令(不带 {@code /}):整行读完、没有报错,而且走到了可执行的一格或只是一串名字
+     * ({@code setblock} 在文字里提到这条指令)。{@code source} 是按谁的权限读——要看得见文字提到的每一条。
      */
     public static <S> String nativeProblem(CommandDispatcher<S> dispatcher, String line, S source) {
         ParseResults<S> parse = dispatcher.parse(line, source);
@@ -145,8 +198,8 @@ public final class WrittenCommands {
     }
 
     /**
-     * 登记在册的说明文字:每个命令组的一句话,每个动作的说明、参数说明、例子与注意,工具表里每个工具的描述与参数说明
-     * (快捷工具、{@code command} 工具、独立工具都在这张表里)。
+     * 登记在册的说明文字:每个组的一句话,每个动作的说明、参数说明、例子与注意,库里每个函数上面的注释,工具表里每个工具的描述与
+     * 参数说明。
      */
     public static List<Text> registered() {
         List<Text> texts = new ArrayList<>();
@@ -155,7 +208,7 @@ public final class WrittenCommands {
             for (Action action : group.actions()) {
                 texts.add(new Text(action.path(), action.summary()));
                 for (Param<?> p : action.params()) {
-                    texts.add(new Text(action.path() + " --" + p.name(), p.explained()));
+                    texts.add(new Text(action.path() + " " + p.name(), p.explained()));
                 }
                 for (String example : action.examples()) {
                     texts.add(new Text(action.path() + " example", "`" + example + "`"));
@@ -165,6 +218,8 @@ public final class WrittenCommands {
                 }
             }
         }
+        NumenCli.libraryFunctions().forEach((name, fn) ->
+                texts.add(new Text("library " + fn.library() + " " + name, fn.defined().doc())));
         for (NumenTool tool : ToolRegistry.all()) {
             texts.addAll(toolTexts(tool));
         }

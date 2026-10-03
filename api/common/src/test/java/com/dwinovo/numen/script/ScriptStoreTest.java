@@ -54,18 +54,42 @@ class ScriptStoreTest {
 
     @Test
     void aBuiltInScriptIsCheckedWhenItIsRegistered() {
-        BuiltinScripts.register("gt-ok", "-- Does nothing.\nprint(1)");
+        BuiltinScripts.register("gt-ok", "-- Does nothing.\nprint(1)", false);
         assertEquals("Does nothing.", BuiltinScripts.get("gt-ok").summary());
 
         IllegalArgumentException twice = assertThrows(IllegalArgumentException.class,
-                () -> BuiltinScripts.register("gt-ok", "-- Again.\n"));
+                () -> BuiltinScripts.register("gt-ok", "-- Again.\n", false));
         assertTrue(twice.getMessage().contains("登记了两次"), twice.getMessage());
         IllegalArgumentException broken = assertThrows(IllegalArgumentException.class,
-                () -> BuiltinScripts.register("gt-broken", "-- Broken.\nlocal x = = 1"));
+                () -> BuiltinScripts.register("gt-broken", "-- Broken.\nlocal x = = 1", false));
         assertTrue(broken.getMessage().contains("gt-broken:2:"), broken.getMessage());
         IllegalArgumentException silent = assertThrows(IllegalArgumentException.class,
-                () -> BuiltinScripts.register("gt-silent", "print(1)"));
+                () -> BuiltinScripts.register("gt-silent", "print(1)", false));
         assertTrue(silent.getMessage().contains("注释"), silent.getMessage());
         assertNull(BuiltinScripts.get("gt-broken"));
+    }
+
+    /** 库同样把关,而且每个顶层函数上面都要写注释——API 索引里它的说明就是那几行。 */
+    @Test
+    void aLibraryIsCheckedWhenItIsRegisteredAndEveryFunctionCarriesItsComment() {
+        BuiltinScripts.register("gt-lib", """
+                -- Helpers for the tests.
+
+                -- Say hello to someone.
+                function gt_lib_hello(who) return "hello " .. who end
+                """, true);
+        assertTrue(BuiltinScripts.get("gt-lib").library());
+        assertTrue(BuiltinScripts.libraries().containsKey("gt-lib"));
+        IllegalArgumentException bare = assertThrows(IllegalArgumentException.class,
+                () -> BuiltinScripts.register("gt-bare", """
+                        -- Helpers without comments.
+                        local x = 1
+                        function gt_lib_bare() end
+                        """, true));
+        assertTrue(bare.getMessage().contains("gt_lib_bare 上面没写注释"), bare.getMessage());
+        IllegalArgumentException empty = assertThrows(IllegalArgumentException.class,
+                () -> BuiltinScripts.register("gt-empty", "-- Nothing in it.\nlocal x = 1", true));
+        assertTrue(empty.getMessage().contains("一个函数都没定义"), empty.getMessage());
+        assertNull(BuiltinScripts.libraries().get("gt-bare"));
     }
 }

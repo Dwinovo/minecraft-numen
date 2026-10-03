@@ -1,22 +1,18 @@
 package com.dwinovo.numen.cli;
 
-import com.dwinovo.numen.agent.tool.NumenTool;
-import com.dwinovo.numen.agent.tool.Schema;
-import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.task.TaskResult;
-import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.dwinovo.numen.cli.CliFixture.door;
-import static com.dwinovo.numen.cli.CliFixture.onClient;
+import static com.dwinovo.numen.cli.CliFixture.help;
+import static com.dwinovo.numen.cli.CliFixture.serveJson;
 import static com.dwinovo.numen.cli.CliFixture.onServer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -25,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 不设范围的整数、开关、资源 id、一个值(带空格加引号)这四种参数类型:命令行上怎么读、写错了说什么、
- * 快捷工具的 JSON 读出来是否同一个值、schema 与帮助里写成什么。一条命令只有一类位置参数,所以值是位置参数,其余几种是标志。
+ * 脚本里的调用读出来是否同一个值、帮助里写成什么。一条命令只有一类位置参数,所以值是位置参数,其余几种是标志。
  */
 class ArgTypeTest {
 
@@ -39,7 +35,7 @@ class ArgTypeTest {
             .whenOmitted("list all");
     static final Param<Integer> DEPTH = Param.optional("depth", ArgType.integer(), "How far down.")
             .whenOmitted("stay level");
-    /** 这个动作的参数表:快捷工具在服务端就是按它把 JSON 读成值,再交给处理函数。 */
+    /** 这个动作的参数表:脚本里的调用在服务端就是按它把 JSON 读成值,再交给处理函数。 */
     static final List<Param<?>> PARAMS = List.of(MODEL, X, RECIPE, HAVE_ONLY, SEARCH, DEPTH);
 
     static final AtomicReference<CommandArgs> LAST = new AtomicReference<>();
@@ -51,8 +47,7 @@ class ArgTypeTest {
                     LAST.set(args);
                     src.reply(TaskResult.ok("made").toJson());
                 }, MODEL, X, RECIPE, HAVE_ONLY, SEARCH, DEPTH)
-                        .example("gt_types make \"抽象鸣潮 菲比.ysm\" --x -12 --recipe stone --have-only")
-                        .promote("Make something, as a tool."));
+                        .example("gt_types.make(\"抽象鸣潮 菲比.ysm\", {x = -12, recipe = \"stone\", have_only = true})"));
     }
 
     private static CommandArgs ran(String line) {
@@ -104,11 +99,11 @@ class ArgTypeTest {
     }
 
     /**
-     * 快捷工具在服务端把 JSON 按同一个参数表读成值({@link CommandArgs#fromJson}),交给处理函数——读出来的和命令行上
-     * 读出来的是同一份。从工具一路走到处理函数、回执一字不差,在 GameTest 里对着真服务器验。
+     * 脚本里的调用在服务端把 JSON 按同一个参数表读成值({@link CommandArgs#fromJson}),交给处理函数——读出来的和一行命令上
+     * 读出来的是同一份。从脚本一路走到处理函数、回执一字不差,在 GameTest 里对着真服务器验。
      */
     @Test
-    void theShortcutReadsTheSameValuesFromJson() {
+    void aScriptCallReadsTheSameValuesFromJson() {
         CommandArgs viaLine = ran("gt_types make \"抽象鸣潮 菲比.ysm\" --x -12 "
                 + "--recipe kaleidoscope_cookery:flex_pot/braised_beef --no-have-only --search misc/1_Alex");
         JsonObject json = JsonParser.parseString("""
@@ -119,50 +114,40 @@ class ArgTypeTest {
 
         assertEquals("say \"hi\" \\ bye", read("{\"x\":1,\"recipe\":\"stone\",\"model\":\"say \\\"hi\\\" \\\\ bye\"}")
                 .get(MODEL), "JSON 里的引号与反斜杠原样读回");
-        assertTrue(message(serve(JsonParser.parseString("{\"x\":1,\"recipe\":\"a b\",\"model\":\"m\"}")
-                .getAsJsonObject())).startsWith("invalid arguments: argument 'recipe': expected a single id"));
-        assertTrue(message(serve(JsonParser.parseString("{\"x\":1,\"recipe\":\"stone\",\"model\":\"m\","
-                + "\"have_only\":\"maybe\"}").getAsJsonObject()))
-                .startsWith("invalid arguments: argument 'have_only': Invalid bool"));
+        assertTrue(serveJson("gt_types make", "{\"x\":1,\"recipe\":\"a b\",\"model\":\"m\"}").message()
+                .startsWith("error: argument 'recipe': expected a single id"));
+        assertTrue(serveJson("gt_types make", "{\"x\":1,\"recipe\":\"stone\",\"model\":\"m\","
+                + "\"have_only\":\"maybe\"}").message().startsWith("error: argument 'have_only': Invalid bool"));
+        assertEquals(viaLine, ranScript("gt_types.make(\"抽象鸣潮 菲比.ysm\", {x = -12, "
+                + "recipe = \"kaleidoscope_cookery:flex_pot/braised_beef\", have_only = false, search = \"misc/1_Alex\"})"),
+                "从脚本进来,处理函数拿到的是同一份");
     }
 
     @Test
-    void theSchemaAndTheHelpNameEachType() {
-        NumenTool tool = ToolRegistry.get("gt_types_make");
-        assertEquals(new Gson().toJson(Schema.object()
-                .string("model", "Which model.")
-                .optionalInteger("x", "Block X. Omit to use 0.")
-                .optionalString("recipe", "Which recipe. Omit to make anything.")
-                .optionalBool("have_only", "Only what you can make. Omit to list everything.")
-                .optionalString("search", "Narrow the list. Omit to list all.")
-                .optionalInteger("depth", "How far down. Omit to stay level.")
-                .build()), new Gson().toJson(tool.parameterSchema()));
+    void theHelpNamesEachType() {
         assertEquals("""
-                gt_types make <model> [--x <integer>] [--recipe <id>] [--have-only] [--search <string>] [--depth <integer>]
+                gt_types.make(model, {x=…, recipe=…, have_only=true, search=…, depth=…})
                   Make something.
-                  <model> (string, quote it if it has spaces) — Which model.
-                  --x <integer> (integer; optional) — Block X. Omit to use 0.
-                  --recipe <id> (id, e.g. minecraft:oak_log (minecraft: may be left out); optional) — Which recipe. Omit to make anything.
-                  --have-only (switch: --have-only turns it on, --no-have-only off; optional) — Only what you can make. Omit to list everything.
-                  --search <string> (string, quote it if it has spaces; optional) — Narrow the list. Omit to list all.
-                  --depth <integer> (integer; optional) — How far down. Omit to stay level.
+                  model (string) — Which model.
+                  x= (integer; optional) — Block X. Omit to use 0.
+                  recipe= (id, e.g. minecraft:oak_log (minecraft: may be left out); optional) — Which recipe. Omit to make anything.
+                  have_only=true|false (switch; optional) — Only what you can make. Omit to list everything.
+                  search= (string; optional) — Narrow the list. Omit to list all.
+                  depth= (integer; optional) — How far down. Omit to stay level.
                   Examples:
-                    gt_types make "抽象鸣潮 菲比.ysm" --x -12 --recipe stone --have-only
-                  Shortcut tool: gt_types_make.""", onClient("gt_types make --help").message());
+                    gt_types.make("抽象鸣潮 菲比.ysm", {x = -12, recipe = "stone", have_only = true})""",
+                help("gt_types.make"));
+    }
+
+    private static CommandArgs ranScript(String code) {
+        LAST.set(null);
+        CliFixture.Outcome out = CliFixture.lua(code);
+        assertTrue(out.success(), out.message());
+        return LAST.get();
     }
 
     private static CommandArgs read(String json) {
         return CommandArgs.fromJson(PARAMS, JsonParser.parseString(json).getAsJsonObject());
     }
 
-    private static String serve(JsonObject args) {
-        List<String> replies = new ArrayList<>();
-        ToolRegistry.get("gt_types_make").serve("test-call", args, null, replies::add);
-        assertEquals(1, replies.size(), "恰好一次回执: " + replies);
-        return replies.get(0);
-    }
-
-    private static String message(String json) {
-        return JsonParser.parseString(json).getAsJsonObject().get("message").getAsString();
-    }
 }

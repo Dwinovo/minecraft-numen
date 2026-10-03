@@ -80,7 +80,8 @@ public record TaskResult(boolean success,
             JsonObject dataObj = new JsonObject();
             for (Map.Entry<String, Object> e : data.entrySet()) {
                 Object v = e.getValue();
-                if (v instanceof Number n) dataObj.addProperty(e.getKey(), n);
+                if (v instanceof com.google.gson.JsonElement json) dataObj.add(e.getKey(), json);
+                else if (v instanceof Number n) dataObj.addProperty(e.getKey(), n);
                 else if (v instanceof Boolean b) dataObj.addProperty(e.getKey(), b);
                 // 列表/映射按 JSON 展开:塞进去的结构必须以结构的样子到达模型,
                 // 落成 Java 的 toString 就成了它读不动的 [{k=v}]。

@@ -60,9 +60,9 @@ class NumenCommandsTest {
         if (booted) {
             NumenPlugins.register(numen -> numen.registerCommands("gt_tree", "A group that stays off the MC tree.", g -> {
                 g.server("take", "Take some.", (src, args) -> src.reply(TaskResult.ok("took").toJson()), COUNT, FROM)
-                        .example("gt_tree take 3 --from chest");
+                        .example("gt_tree.take(3, {from = \"chest\"})");
                 g.client("jot", "Jot on the owner's client.", (src, args) -> src.reply(TaskResult.ok("jot").toJson()),
-                        COUNT).example("gt_tree jot 2");
+                        COUNT).example("gt_tree.jot(2)");
             }));
         }
     }

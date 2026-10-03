@@ -63,7 +63,8 @@ final class CommandTree<S extends CommandSource> {
     /** 一组:{@code --help}(可翻页)与各个动作,组本身不可执行。 */
     private LiteralArgumentBuilder<S> group(CommandGroup group) {
         LiteralArgumentBuilder<S> node = LiteralArgumentBuilder.literal(group.name());
-        node.then(help(NumenCli.HELP_FLAG, () -> CommandHelp.group(group)));
+        node.then(help(NumenCli.HELP_FLAG, () -> CommandHelp.listing(
+                CommandHelp.group(group, NumenCli.libraryFunctions()))));
         for (Action a : group.actions()) {
             node.then(action(a));
         }
