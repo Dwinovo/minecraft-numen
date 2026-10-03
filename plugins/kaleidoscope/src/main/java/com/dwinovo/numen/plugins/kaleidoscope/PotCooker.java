@@ -269,8 +269,12 @@ final class PotCooker implements Cooker {
             if (shovel.isEmpty()) {
                 return Step.blocked("this dish needs no carrier, but taking it out needs a kitchen shovel in hand");
             }
-            // 不用容器的菜森罗要求蹲着铲,真玩家也是这么做的
-            cook.controls().set(Controls.Key.SNEAK, true);
+            // 不用容器的菜森罗要求蹲着铲(它问的是 isSecondaryUseActive),真玩家也是这么做的。按住潜行键要等身体下一刻的物理步进
+            // 才真蹲下,所以这一刻按下、蹲下了那一刻再铲
+            if (!cook.isSecondaryUseActive()) {
+                cook.controls().set(Controls.Key.SNEAK, true);
+                return Step.working("crouching to take it out with the kitchen shovel");
+            }
             boolean took = pot.takeOutProduct(level, cook, shovel);
             cook.controls().set(Controls.Key.SNEAK, false);
             return took ? settle(cook, plated, burnt, ordered)
