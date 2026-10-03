@@ -34,7 +34,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 public class FacadeGameTests {
 
     private static final String BATCH = "pathing_facade";
-    private static final RouteSpec NATURAL = RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build();
+    private static final RouteSpec NATURAL = RouteSpec.defaults().edit().changes(true).consent(false).build();
 
     @BeforeBatch(batch = BATCH)
     public static void settle(ServerLevel level) {
@@ -109,7 +109,7 @@ public class FacadeGameTests {
     }
 
     /**
-     * 一道泥土墙横贯场地,许改自然地形,手上拿着剑、背包里有锹:只搜不走——规划出挖墙的候选,这期间身体一动不动,手上还是
+     * 一道泥土墙横贯场地,许挖许放,手上拿着剑、背包里有锹:只搜不走——规划出挖墙的候选,这期间身体一动不动,手上还是
      * 那把剑,世界一格不变。
      */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 300)

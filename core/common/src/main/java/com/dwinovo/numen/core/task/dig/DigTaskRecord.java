@@ -30,13 +30,13 @@ public final class DigTaskRecord extends TaskRecord {
      * 挡在前面的格清不清得掉按这份规格问:天然地形可以挖开,要主人同意的、规则不许的不挖(不问,如实说是哪一格、哪条规则)。
      * 建造清场的走动也从它起({@code ClearSiteRecord})。
      */
-    public static final RouteSpec SPEC = RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build();
+    public static final RouteSpec SPEC = RouteSpec.defaults().edit().changes(true).consent(false).build();
 
     /**
-     * 点名的目标按这份规格定价、判挖不挖得成:改地形一档放到 {@link RouteSpec.Alter#ANY}——目标是她点名要挖的,要问主人的照价乘倍、
+     * 点名的目标按这份规格定价、判挖不挖得成:要问主人的格也算挖得成({@link RouteSpec#consent})——目标是她点名要挖的,要问主人的照价乘倍、
      * 动手前问,规则不许的、物理上挖不成的价钱无穷。{@code work.dig} 挑目标与 {@code arrive = "dig"} 挑能去挖的格都按它。
      */
-    public static final RouteSpec TARGET_SPEC = SPEC.edit().alter(RouteSpec.Alter.ANY).build();
+    public static final RouteSpec TARGET_SPEC = SPEC.edit().consent(true).build();
 
     /** {@link #count} 取这个值:没给 {@code --count},手够得着的都挖。 */
     public static final int ALL = 0;

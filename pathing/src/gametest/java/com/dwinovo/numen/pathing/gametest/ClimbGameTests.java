@@ -104,7 +104,7 @@ public class ClimbGameTests {
         Trial t = new Trial(helper).floor();
         attic(t, 7);
         TestBody body = t.body(8, 1, 5);
-        t.go(body, Goals.at(t.at(6, 6, 8)), RouteSpec.defaults()).within(300).fails(Outcome.NeedsAlter.class);
+        t.go(body, Goals.at(t.at(6, 6, 8)), RouteSpec.defaults()).within(300).fails(Outcome.NeedsChanges.class);
     }
 
     /** 阁楼口是一扇关着的活板门:爬到顶,推开活板门,进阁楼。 */
@@ -149,7 +149,7 @@ public class ClimbGameTests {
                 .arrives();
     }
 
-    /** 梯子顶端的出口被一块泥土堵着:许改自然地形,挂在梯子上把它挖开再出去。 */
+    /** 梯子顶端的出口被一块泥土堵着:许挖许放,挂在梯子上把它挖开再出去。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 800)
     public static void digs_while_hanging_on_a_ladder(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
@@ -161,7 +161,7 @@ public class ClimbGameTests {
         t.set(8, 5, 5, Blocks.LADDER.defaultBlockState().setValue(LadderBlock.FACING, Direction.WEST));
         TestBody body = t.body(5, 1, 5);
         Trial.give(body, new ItemStack(Items.IRON_SHOVEL));
-        t.go(body, Goals.at(t.at(11, 5, 5)), RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build())
+        t.go(body, Goals.at(t.at(11, 5, 5)), RouteSpec.defaults().edit().changes(true).consent(false).build())
                 .within(700).arrives().then(r -> {
                     if (r.report.ledger().entries().stream().noneMatch(e -> e instanceof EditLedger.Dug)) {
                         throw new GameTestAssertException("没挖就出去了?" + r.report.ledger().entries());

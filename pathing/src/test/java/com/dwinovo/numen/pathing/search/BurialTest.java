@@ -45,7 +45,7 @@ class BurialTest {
         return new TestWorld().fill(-8, Y - 12, -8, 8, Y - 1, 8, STONE);
     }
 
-    /** 许改自然地形,背包里一把铁镐。 */
+    /** 许挖许放,背包里一把铁镐。 */
     private static CostModel natural() {
         return CostModel.of(Fixtures.natural(), Fixtures.carrying(0, new ItemStack(Items.IRON_PICKAXE)),
                 TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
@@ -81,7 +81,7 @@ class BurialTest {
 
     /** 规格不许改地形时路上不挖,不算埋深。 */
     @Test
-    void noBurialWhenTheSpecMayNotAlterTerrain() {
+    void noBurialWhenTheSpecMayNotDig() {
         CostModel none = natural().withSpec(RouteSpec.defaults());
         Burial burial = burial(slab(), none, Goals.at(new BlockPos(0, Y - 6, 0)));
         assertEquals(0, burial.floor(0, Y, 0));

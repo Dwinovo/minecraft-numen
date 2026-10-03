@@ -148,7 +148,8 @@ public final class RouteSpecFlags {
         }
         RouteSpec.Builder spec = base.edit();
         if (args.get(ALTER) != null) {
-            spec.alter(RouteSpec.Alter.valueOf(args.get(ALTER).toUpperCase(Locale.ROOT)));
+            String alter = args.get(ALTER);
+            spec.changes(!alter.equals("none")).consent(alter.equals("any"));
         }
         PositionCosts.Builder cells = PositionCosts.builder();
         if (args.get(AVOID) != null) {

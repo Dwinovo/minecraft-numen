@@ -64,7 +64,7 @@ public class RecheckGameTests {
                     .fails(Outcome.Blocked.class, o -> {
                         Blockage b = o.blockage();
                         if (!b.cell().equals(stone) || !b.block().is(Blocks.STONE) || b.move() != MoveKind.WALK
-                                || b.reason() != Reason.NEEDS_ALTER || b.hitch() != null) {
+                                || b.reason() != Reason.NO_DIGGING || b.hitch() != null) {
                             throw new GameTestAssertException("结局没点对:" + b);
                         }
                     })

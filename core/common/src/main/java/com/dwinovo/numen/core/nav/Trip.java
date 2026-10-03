@@ -158,7 +158,7 @@ public final class Trip {
     private void start() {
         Route route = seed;
         seed = null;
-        if (route == null && spec.alter() == RouteSpec.Alter.ANY) {
+        if (route == null && spec.changes() && spec.consent()) {
             plan();
         } else {
             drive(route);
@@ -222,7 +222,7 @@ public final class Trip {
         retire();
         this.outcome = outcome;
         if (outcome instanceof Outcome.Denied denied && denied.reason() instanceof Verdict verdict && verdict.asks()
-                && spec.alter() == RouteSpec.Alter.ANY) {
+                && spec.changes() && spec.consent()) {
             plan();
             return;
         }

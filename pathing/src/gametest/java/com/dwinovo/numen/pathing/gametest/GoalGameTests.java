@@ -49,7 +49,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 public class GoalGameTests {
 
     private static final String BATCH = "pathing_goals";
-    private static final RouteSpec NATURAL = RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build();
+    private static final RouteSpec NATURAL = RouteSpec.defaults().edit().changes(true).consent(false).build();
 
     /** 要拦住搜索线程池的用例单独一批,不挡着别的用例的搜索。 */
     private static final String HELD_BATCH = "pathing_goals_held";

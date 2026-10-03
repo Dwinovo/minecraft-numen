@@ -231,7 +231,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
         Goals.Position position = new Goals.Position(x, y, z);
         Terrain terrain = Terrain.of(her);
         BlockPos cell = stop.cell();
-        boolean alters = spec.alter().mayAlter();
+        boolean alters = spec.changes();
         Goal goal = switch (stop.arrive()) {
             case AT -> {
                 if (cell != null && !alters && !terrain.standable(cell)) {
@@ -275,7 +275,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
         BlockPos toward = null;
         switch (stop.arrive()) {
             case AT -> {
-                boolean alters = spec.alter().mayAlter();
+                boolean alters = spec.changes();
                 for (BlockPos cell : nearest) {
                     // 许改地形时站不进去的格由寻路去挖、去垫;没加载的列此刻判不了,留给走到那儿时的规划
                     if (alters || !terrain.loaded(cell.getX(), cell.getZ()) || terrain.standable(cell)) {

@@ -68,8 +68,11 @@ class RouteSpecTest {
     @Test
     void theDefaultsOnlyWalk() {
         RouteSpec d = RouteSpec.defaults();
-        assertEquals(RouteSpec.Alter.NONE, d.alter());
-        assertFalse(d.alter().mayAlter());
+        assertFalse(d.dig());
+        assertFalse(d.place());
+        assertFalse(d.changes());
+        assertTrue(d.consent(), "要问的格算能走,许挖或许放时才用得上");
+        assertEquals(RouteSpec.CONSENT_MULTIPLIER, d.consentMultiplier());
         assertFalse(d.budgeted());
         assertTrue(d.positions().isEmpty());
         assertTrue(d.bans().isEmpty());
@@ -86,8 +89,10 @@ class RouteSpecTest {
 
     @Test
     void editingKeepsEverythingElse() {
-        RouteSpec edited = RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).alterBudget(4).build();
-        assertEquals(RouteSpec.Alter.NATURAL, edited.alter());
+        RouteSpec edited = RouteSpec.defaults().edit().changes(true).consent(false).alterBudget(4).build();
+        assertTrue(edited.dig());
+        assertTrue(edited.place());
+        assertFalse(edited.consent());
         assertTrue(edited.budgeted());
         assertEquals(RouteSpec.defaults().jumpPenalty(), edited.jumpPenalty());
         assertEquals(RouteSpec.defaults().excluded(), edited.excluded());
@@ -101,6 +106,9 @@ class RouteSpecTest {
                 () -> RouteSpec.defaults().edit().placeCost(Double.POSITIVE_INFINITY).build());
         assertThrows(IllegalArgumentException.class, () -> RouteSpec.defaults().edit().alterBudget(-1).build());
         assertThrows(IllegalArgumentException.class, () -> RouteSpec.defaults().edit().maxFallHeightNoWater(-1).build());
+        assertThrows(IllegalArgumentException.class, () -> RouteSpec.defaults().edit().consentMultiplier(0.5).build());
+        assertThrows(IllegalArgumentException.class,
+                () -> RouteSpec.defaults().edit().consentMultiplier(Double.POSITIVE_INFINITY).build());
     }
 
     @Test

@@ -176,7 +176,7 @@ class RouteDataTest {
     void thePromiseBindsDigsAndPlacesToThePlannedCells() {
         Plan plan = new Plan(BlockPos.ZERO, 0, List.of(walkable(List.of(dirt(3)),
                 List.of(new Plan.Cell(new BlockPos(4, 63, 0), Blocks.COBBLESTONE)), List.of())));
-        RouteSpec bound = plan.bind(RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build());
+        RouteSpec bound = plan.bind(RouteSpec.defaults().edit().changes(true).consent(false).build());
         assertFalse(bound.positions().forbids(Use.DIG, new BlockPos(3, 64, 0).asLong()));
         assertTrue(bound.positions().forbids(Use.DIG, new BlockPos(5, 64, 0).asLong()));
         assertFalse(bound.positions().forbids(Use.PLACE, new BlockPos(4, 63, 0).asLong()));

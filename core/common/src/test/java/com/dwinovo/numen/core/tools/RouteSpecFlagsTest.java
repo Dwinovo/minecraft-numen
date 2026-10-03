@@ -95,17 +95,18 @@ class RouteSpecFlagsTest {
     /** mine 的规格叠在它自己的默认上:没写的保持默认,写了的覆盖,禁令并进默认已有的。 */
     @Test
     void flagsLayOverTheCallersDefault() {
-        RouteSpec base = RouteSpec.defaults().edit().alter(RouteSpec.Alter.ANY)
+        RouteSpec base = RouteSpec.defaults().edit().changes(true)
                 .bans(new BlockBans(Set.of(Blocks.CHEST), Set.of(), Set.of())).build();
         BASE.set(base);
         try {
             assertSame(base, spec(""));
             RouteSpec kept = spec("avoid_break = {{x = 1, y = 2, z = 3}, \"minecraft:oak_log\"}");
-            assertEquals(RouteSpec.Alter.ANY, kept.alter());
+            assertTrue(kept.changes() && kept.consent());
             assertTrue(kept.positions().forbids(Use.DIG, new BlockPos(1, 2, 3).asLong()));
             assertTrue(kept.bans().breaking().contains(Blocks.CHEST));
             assertTrue(kept.bans().breaking().contains(Blocks.OAK_LOG));
-            assertEquals(RouteSpec.Alter.NATURAL, spec("alter = \"natural\"").alter());
+            RouteSpec natural = spec("alter = \"natural\"");
+            assertTrue(natural.changes() && !natural.consent());
         } finally {
             BASE.set(RouteSpec.defaults());
         }
@@ -115,7 +116,7 @@ class RouteSpecFlagsTest {
     void noFlagsIsTheFactorySpec() {
         RouteSpec s = spec("");
         assertSame(RouteSpec.defaults(), s);
-        assertEquals(RouteSpec.Alter.NONE, s.alter());
+        assertFalse(s.changes());
         assertTrue(s.positions().isEmpty());
         assertTrue(s.bans().isEmpty());
     }
@@ -123,8 +124,9 @@ class RouteSpecFlagsTest {
     @Test
     void everyFlagLandsOnItsField() {
         RouteSpec s = spec("alter = \"natural\", avoid = {\"water\", \"door\"}, allow = \"trigger\", penalty_place = 5, penalty_break = 7.5, penalty_jump = 9, penalty_wade = 0, parkour = true, max_fall = 6, alter_budget = 4");
-        assertEquals(RouteSpec.Alter.NATURAL, s.alter());
-        assertEquals(RouteSpec.Alter.ANY, spec("alter = \"any\"").alter());
+        assertTrue(s.changes() && !s.consent());
+        RouteSpec any = spec("alter = \"any\"");
+        assertTrue(any.changes() && any.consent());
         assertTrue(s.excludes(Kind.WATER));
         assertTrue(s.excludes(Kind.DOOR));
         assertFalse(s.excludes(Kind.CLIMBABLE));

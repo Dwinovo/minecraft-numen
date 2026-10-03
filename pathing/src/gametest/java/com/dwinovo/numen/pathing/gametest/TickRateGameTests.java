@@ -37,7 +37,7 @@ public class TickRateGameTests {
 
     private static final String BATCH = "pathing_tickrate";
     private static final float RAISED = 100;
-    private static final RouteSpec NATURAL = RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build();
+    private static final RouteSpec NATURAL = RouteSpec.defaults().edit().changes(true).consent(false).build();
 
     private static float before;
 
@@ -95,7 +95,7 @@ public class TickRateGameTests {
         });
     }
 
-    /** 三格厚、三格高的泥土墙横贯场地,手上铁锹,许改自然地形:挖的正是规划要挖的那几格(破块冷却不改结果)。 */
+    /** 三格厚、三格高的泥土墙横贯场地,手上铁锹,许挖许放:挖的正是规划要挖的那几格(破块冷却不改结果)。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 2000)
     public static void digs_the_planned_cells(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();

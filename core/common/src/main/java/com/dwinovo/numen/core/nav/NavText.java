@@ -54,7 +54,7 @@ public final class NavText {
             case Outcome.OverAlterBudget over -> FailureType.NO_PATH;
             case Outcome.Stranded stranded -> FailureType.BOXED_IN;
             case Outcome.Blocked blocked -> FailureType.BOXED_IN;
-            case Outcome.NeedsAlter needs -> FailureType.TERRAIN_BLOCKED;
+            case Outcome.NeedsChanges needs -> FailureType.TERRAIN_BLOCKED;
             case Outcome.NoMaterials none -> FailureType.NO_MATERIAL;
             case Outcome.Denied denied -> FailureType.REFUSED;
             case Outcome.NoLineOfSight sight -> FailureType.OCCLUDED;
@@ -98,7 +98,7 @@ public final class NavText {
             case Outcome.Arrived arrived -> "arrived";
             // 诊断在许改一切、设想有料时也没搜出路才给这个结局:这条规格下从这里就是过不去
             case Outcome.NoRoute noRoute -> "found no path to target (" + where + "; every reachable cell was searched"
-                    + (spec.alter().mayAlter() ? ", digging, bridging and pillaring included" : "")
+                    + (spec.changes() ? ", digging, bridging and pillaring included" : "")
                     + "): there is no way there from here, pick another destination";
             case Outcome.OutOfBudget budget -> "found no path to target (" + where + "; the search used up its budget"
                     + " before finding one, so this is not proof there is none; a nearer waypoint in that direction"
@@ -108,7 +108,7 @@ public final class NavText {
             case Outcome.OverAlterBudget over -> "found no path to target (" + where + "; "
                     + overBudget(spec.alterBudget(), over.needed()) + ")"
                     + (on == null ? "" : ": `" + on.spec("alter_budget = " + over.needed()) + "` allows it");
-            case Outcome.NeedsAlter needs -> needs.level() == RouteSpec.Alter.NATURAL
+            case Outcome.NeedsChanges needs -> !needs.asks()
                     ? "found no path to target without altering terrain (" + where + "; a route that digs, bridges or"
                             + " pillars through natural terrain exists, changing " + needs.alterations() + " block(s) — "
                             + planned(needs.changes()) + ":"
@@ -207,7 +207,8 @@ public final class NavText {
             case EXCLUDED -> "this walk keeps out of that kind of cell";
             case TRAMPLES -> "landing there would trample it";
             case FORBIDDEN -> "this walk may not touch that cell";
-            case NEEDS_ALTER -> "it would change the terrain, which this walk may not";
+            case NO_DIGGING -> "it would dig, which this walk may not";
+            case NO_PLACING -> "it would place a block, which this walk may not";
             case NO_MATERIALS -> "it needs a block to place and I carry none of my throwaway blocks";
             case DENIED -> "changing it is refused";
             case NEEDS_CONSENT -> "changing it needs the owner's consent";

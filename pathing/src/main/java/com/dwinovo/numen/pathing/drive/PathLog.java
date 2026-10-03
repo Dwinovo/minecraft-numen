@@ -111,9 +111,10 @@ public final class PathLog {
         return String.format(Locale.ROOT, "%.1f", value);
     }
 
-    /** 规格的要点:改地形的级别,与出厂值不同的上限与开关。 */
+    /** 规格的要点:挖不挖、放不放、要问的格算不算能走,与出厂值不同的上限与开关。 */
     public static String spec(RouteSpec spec) {
-        StringBuilder out = new StringBuilder("alter=").append(spec.alter().name().toLowerCase(Locale.ROOT));
+        StringBuilder out = new StringBuilder("dig=").append(spec.dig()).append(" place=").append(spec.place())
+                .append(" consent=").append(spec.consent() ? num(spec.consentMultiplier()) : "false");
         out.append(" maxFall=").append(spec.maxFallHeightNoWater());
         if (spec.budgeted()) {
             out.append(" alterBudget=").append(spec.alterBudget());

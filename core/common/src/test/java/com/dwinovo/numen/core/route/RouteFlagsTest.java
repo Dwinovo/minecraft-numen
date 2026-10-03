@@ -85,8 +85,8 @@ class RouteFlagsTest {
                 .withLegFlags(2, "--avoid water");
         RouteSpec first = RouteFlags.spec(RouteSpec.defaults(), route, 0, NONE);
         RouteSpec second = RouteFlags.spec(RouteSpec.defaults(), route, 1, NONE);
-        assertEquals(RouteSpec.Alter.NATURAL, first.alter());
-        assertEquals(RouteSpec.Alter.NATURAL, second.alter());
+        assertTrue(first.changes() && !first.consent());
+        assertTrue(second.changes() && !second.consent());
         assertFalse(first.excludes(Kind.WATER));
         assertTrue(second.excludes(Kind.WATER));
     }

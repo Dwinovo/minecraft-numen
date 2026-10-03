@@ -146,7 +146,7 @@ public class UpDownGameTests {
         body.moveTo(body.getX() + 0.35, body.getY(), body.getZ(), -90, 0);
         Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
-        t.go(body, Goals.at(t.at(10, 3, 5)), RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build())
+        t.go(body, Goals.at(t.at(10, 3, 5)), RouteSpec.defaults().edit().changes(true).consent(false).build())
                 .arrives();
     }
 
@@ -228,7 +228,7 @@ public class UpDownGameTests {
             }
         });
         t.go(spikes, Goals.at(t.at(29, 1, 4)), spec).within(600)
-                .fails(com.dwinovo.numen.pathing.api.Outcome.NeedsAlter.class).then(UpDownGameTests::unhurt);
+                .fails(com.dwinovo.numen.pathing.api.Outcome.NeedsChanges.class).then(UpDownGameTests::unhurt);
     }
 
     /**
@@ -248,7 +248,7 @@ public class UpDownGameTests {
         stone.setHealth(8);
         hay.setHealth(8);
         t.go(stone, Goals.at(t.at(8, 1, 4)), spec).within(600)
-                .fails(com.dwinovo.numen.pathing.api.Outcome.NeedsAlter.class).then(r -> {
+                .fails(com.dwinovo.numen.pathing.api.Outcome.NeedsChanges.class).then(r -> {
                     if (r.lowestHealth < 8) {
                         throw new GameTestAssertException("落在石头上摔不起,却摔了下去:最低 " + r.lowestHealth);
                     }
@@ -272,7 +272,7 @@ public class UpDownGameTests {
     }
 
     /**
-     * 十六格高的柱顶,四周都是硬地,背包里有一桶水,许改自然地形:走出边沿之前才把水桶拿到手上,落到够得着地面时倒水,
+     * 十六格高的柱顶,四周都是硬地,背包里有一桶水,许挖许放:走出边沿之前才把水桶拿到手上,落到够得着地面时倒水,
      * 落进水里一点血不掉,再把水收回桶里;账上先有倒下的水、后有收回。另一具身体从三格高处走下来,背包里也有水桶——
      * 这一跳摔不疼,不备水桶。
      */
@@ -282,7 +282,7 @@ public class UpDownGameTests {
         t.fill(4, 1, 4, 4, 15, 4, Blocks.STONE);
         TestBody body = t.body(4, 16, 4);
         body.getInventory().setItem(5, new ItemStack(Items.WATER_BUCKET));
-        RouteSpec natural = RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build();
+        RouteSpec natural = RouteSpec.defaults().edit().changes(true).consent(false).build();
         t.go(body, Goals.at(t.at(12, 1, 4)), natural).within(500).arrives().then(r -> {
             unhurt(r);
             var entries = r.report.ledger().entries();
@@ -310,7 +310,7 @@ public class UpDownGameTests {
     }
 
     /**
-     * 十六格高的柱顶,去处就是柱脚紧挨着的那一格(高落差的落点),背包里有一桶水,许改自然地形:走出边沿、把水倒在去处那一格里
+     * 十六格高的柱顶,去处就是柱脚紧挨着的那一格(高落差的落点),背包里有一桶水,许挖许放:走出边沿、把水倒在去处那一格里
      * 接住自己,一点血不掉,收回水,到达。目标格保护不许往要站的格里放方块,倒下又当场收回的水不在其列。
      */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
@@ -319,7 +319,7 @@ public class UpDownGameTests {
         t.fill(4, 1, 4, 4, 15, 4, Blocks.STONE);
         TestBody body = t.body(4, 16, 4);
         body.getInventory().setItem(5, new ItemStack(Items.WATER_BUCKET));
-        RouteSpec natural = RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build();
+        RouteSpec natural = RouteSpec.defaults().edit().changes(true).consent(false).build();
         var goal = t.at(5, 1, 4);
         t.go(body, Goals.at(goal), natural).within(500).arrives().then(r -> {
             unhurt(r);

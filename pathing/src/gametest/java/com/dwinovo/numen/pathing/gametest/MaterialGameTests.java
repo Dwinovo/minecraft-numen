@@ -38,7 +38,7 @@ public class MaterialGameTests {
 
     private static final String BATCH = "pathing_materials";
 
-    private static final RouteSpec NATURAL = RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build();
+    private static final RouteSpec NATURAL = RouteSpec.defaults().edit().changes(true).consent(false).build();
 
     @BeforeBatch(batch = BATCH)
     public static void settle(ServerLevel level) {
@@ -85,10 +85,10 @@ public class MaterialGameTests {
         TestBody carrying = t.body(6, 5, 5);
         Trial.give(carrying, new ItemStack(Items.COBBLESTONE, 16));
         t.materials = Trial.carried(carrying, Blocks.COBBLESTONE);
-        t.go(carrying, Goals.at(t.at(17, 5, 5)), RouteSpec.defaults()).within(300).fails(Outcome.NeedsAlter.class);
+        t.go(carrying, Goals.at(t.at(17, 5, 5)), RouteSpec.defaults()).within(300).fails(Outcome.NeedsChanges.class);
         TestBody empty = t.body(6, 5, 20);
         t.materials = Materials.NONE;
-        t.go(empty, Goals.at(t.at(17, 5, 20)), RouteSpec.defaults()).within(300).fails(Outcome.NeedsAlter.class);
+        t.go(empty, Goals.at(t.at(17, 5, 20)), RouteSpec.defaults()).within(300).fails(Outcome.NeedsChanges.class);
     }
 
     /** 创造模式、背包空着:照料清单的第一种凭空取一叠搭桥,身体动作里记下取料。 */

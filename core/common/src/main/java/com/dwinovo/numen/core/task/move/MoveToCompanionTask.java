@@ -339,8 +339,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         nav = seed == null ? Trip.to(player, target.way().goal(), spec, target.toward())
                 : Trip.following(player, target.way().goal(), spec, seed, target.toward());
         phase = Phase.DRIVING;
-        com.dwinovo.numen.core.Constants.LOG.info("[numen-task] go {} 第 {} 段{} alter={}", route.name(), leg + 1,
-                found != null && found.reached() ? "" : "(计划只看清一截或没规划,边走边算)", spec.alter());
+        com.dwinovo.numen.core.Constants.LOG.info("[numen-task] go {} 第 {} 段{} dig={} place={} consent={}",
+                route.name(), leg + 1, found != null && found.reached() ? "" : "(计划只看清一截或没规划,边走边算)",
+                spec.dig(), spec.place(), spec.consent());
         return TaskState.RUNNING;
     }
 
