@@ -132,17 +132,6 @@ public enum Signals {
         }
     },
 
-    /**
-     * 要改的这份脚本是别的同伴存的:存过、而且存它的不是要动手的这只同伴。她自己存的、还没有的(新存一份)都不算。
-     * 只对 {@code edit_script} 成立。
-     */
-    SAVED("saved", "saved by another companion", false) {
-        @Override
-        boolean test(Action a, Facts f) {
-            return a.script() != null && a.script().author() != null && !a.script().author().equals(f.actor());
-        }
-    },
-
     /** 放置点附近有别人放的方块:和 {@link #PLACED} 同一个"别人",她自己放的不算。 */
     NEAR_PLACED("near_placed", "next to player-placed blocks", false) {
         @Override

@@ -796,7 +796,6 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_VERB_PREFIX + "drop",       "drop");
         adder.add(Keys.CONSENT_VERB_PREFIX + "command",    "run");
         adder.add(Keys.CONSENT_VERB_PREFIX + "edit_area",  "change the area");
-        adder.add(Keys.CONSENT_VERB_PREFIX + "edit_script", "change the script");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "placed",       "placed by a player");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "self_placed",  "placed by herself");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "block_entity", "functional block");
@@ -808,7 +807,6 @@ public final class ModLanguageData {
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "hostile",      "hostile");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "hazard_item",  "dangerous");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "ruled",        "named by your rules");
-        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "saved",        "saved by another companion");
         adder.add(Keys.PERMISSION_PLACED_BY,   "placed by %s");
         adder.add(Keys.PERMISSION_UNCOVERED,   "no rule");
         adder.add(Keys.CONSENT_SECONDS,        "%ss");
@@ -1325,7 +1323,6 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_VERB_PREFIX + "drop",       "丢");
         adder.add(Keys.CONSENT_VERB_PREFIX + "command",    "执行");
         adder.add(Keys.CONSENT_VERB_PREFIX + "edit_area",  "改区域");
-        adder.add(Keys.CONSENT_VERB_PREFIX + "edit_script", "改脚本");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "placed",       "玩家放的");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "self_placed",  "她自己放的");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "block_entity", "功能方块");
@@ -1337,7 +1334,6 @@ public final class ModLanguageData {
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "hostile",      "敌对");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "hazard_item",  "危险");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "ruled",        "你的规则点名的");
-        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "saved",        "别的同伴存的");
         adder.add(Keys.PERMISSION_PLACED_BY,   "%s 放的");
         adder.add(Keys.PERMISSION_UNCOVERED,   "没有规则");
         adder.add(Keys.CONSENT_SECONDS,        "%s 秒");

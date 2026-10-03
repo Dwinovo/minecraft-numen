@@ -51,14 +51,12 @@ public final class RuleSet {
             "command(teammsg)",
             "command(seed)",
             "command(random)",
-            "edit_area(!ruled)",
-            "edit_script(!saved)");
+            "edit_area(!ruled)");
 
     /**
      * 出厂 ask 表原文。同一个动作命中几行时第一行作数,所以更具体的在前:装着东西的容器先于
      * 玩家放的,有主人的先于有名字的——清单上标出撤不回的那一类靠它。改主人规则点名的区域要问:
-     * 那几块区域就是主人的规矩管到的地方,删改它等于替主人改规矩。改、删别的同伴存的脚本要问:那是别人摸索出来的东西,
-     * 删了撤不回,该不该动只有主人说得清。
+     * 那几块区域就是主人的规矩管到的地方,删改它等于替主人改规矩。
      */
     public static final List<String> FACTORY_ASK = List.of(
             "break(block_entity & contents)",
@@ -73,8 +71,7 @@ public final class RuleSet {
             "attack(villager)",
             "drop(*)",
             "place(hazard_item & near_placed)",
-            "edit_area(ruled)",
-            "edit_script(saved)");
+            "edit_area(ruled)");
 
     private final List<Rule> deny;
     private final List<Rule> ask;
