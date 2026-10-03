@@ -16,7 +16,6 @@ import com.dwinovo.numen.core.task.dig.DigCompanionTask;
 import com.dwinovo.numen.core.tools.BlockActionOps;
 import com.dwinovo.numen.core.tools.InventoryOps;
 import com.dwinovo.numen.task.TaskDispatch;
-import com.dwinovo.numen.task.TaskRecord;
 
 import net.minecraft.resources.ResourceLocation;
 
@@ -32,10 +31,6 @@ public final class WorkCommands {
 
     static final String GROUP = "work";
 
-    private static final int MAX_CATCHES = 64;
-    private static final long TICKS_PER_CATCH = 90L * 20L;
-    private static final long MIN_FISH_TICKS = 120L * 20L;
-
     private static final Param<List<Target>> DIG_TARGETS = Param.required("blocks", ArgType.list(ArgType.target()),
             "What to dig, as many as you like: a Block from a query is dug only while that cell still holds that "
                     + "block; a Pos is dug whatever it holds, air and fluid skipped.")
@@ -43,9 +38,6 @@ public final class WorkCommands {
     private static final Param<Integer> DIG_COUNT = Param.optional("count",
             ArgType.integer(1, BlockActionOps.MAX_DIG_COUNT), "How many cells to dig at most.")
             .whenOmitted("dig every cell of it within reach");
-    private static final Param<Integer> CATCHES = Param.optional("count", ArgType.integer(1, MAX_CATCHES),
-            "How many catches to reel in.")
-            .whenOmitted("keep fishing until given something else to do");
 
     private WorkCommands() {}
 
@@ -87,16 +79,16 @@ public final class WorkCommands {
                         + "when nothing qualifies. Asks your owner before breaking a named block their rules want "
                         + "asked about; a refusal stops the job with the reason.")
                 .seeAlso("move goto_", "work collect", "scan blocks", "task stop");
-        work.server("fish", "Fish from where you stand with a fishing rod.", WorkCommands::fish, CATCHES)
-                .returns(ScriptType.table(ScriptType.field("caught", ScriptType.INTEGER, null),
-                        ScriptType.field("casts", ScriptType.INTEGER, null),
-                        ScriptType.field("requested", ScriptType.INTEGER, "The count you gave; 0 = no count.")))
-                .example("numen.work.fish({count = 5})")
+        work.server("fish", "Cast a fishing rod once from where you stand, wait for a bite and reel it in.",
+                        WorkCommands::fish)
+                .returns("caught", ScriptType.listOf(ScriptType.STRING))
                 .example("numen.work.fish()")
+                .example("for i = 1, 5 do numen.work.fish() end")
                 .note("Background work: refused with the reason when she carries no fishing rod, does not stand on "
                         + "dry ground, or has no open water to cast into from where she stands — no task id, no "
-                        + "task_finished. Otherwise the end arrives as a task_finished event. Without count it is a "
-                        + "standing job: it never ends on its own and never sends task_finished.")
+                        + "task_finished. Otherwise it returns what came up on the line, minecraft:cod x1.")
+                .note("One cast per call: a cast that misses the water, hooks an entity or gets no bite in a minute "
+                        + "fails and says why; cast again by calling it again.")
                 .note("It never walks: stand on the shore first. The reel throws each catch to her; one that lands "
                         + "short lies on the ground for `numen.work.collect()`.")
                 .note("A catch is one bite reeled in: fish, junk or treasure, with vanilla loot, rod wear and "
@@ -109,15 +101,8 @@ public final class WorkCommands {
         TaskDispatch.setTask(src, new BlockActionOps().dig(src, args.get(DIG_TARGETS), args.get(DIG_COUNT)));
     }
 
-    /** 没给数量就是常驻:一直钓,不设期限——期限是给"该多久干完"用的,而它没有干完。 */
+    /** 抛一竿:一次调用一竿,钓几条是程序里调几次。 */
     private static void fish(ServerSource src, CommandArgs args) {
-        Integer asked = args.get(CATCHES);
-        if (asked == null) {
-            TaskDispatch.setTask(src, new FishTaskRecord(src, TaskRecord.NO_DEADLINE, 0));
-            return;
-        }
-        int count = Math.clamp(asked, 1, MAX_CATCHES);
-        long budget = Math.max(MIN_FISH_TICKS, count * TICKS_PER_CATCH);
-        TaskDispatch.setTask(src, new FishTaskRecord(src, src.companion().level().getGameTime() + budget, count));
+        TaskDispatch.setTask(src, new FishTaskRecord(src));
     }
 }

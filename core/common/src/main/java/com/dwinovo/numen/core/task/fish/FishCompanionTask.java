@@ -29,19 +29,18 @@ import net.minecraft.world.phys.Vec3;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
- * {@code numen.work.fish}:站在原地用钓竿钓鱼——每刻对准、抛竿、等咬钩、收线。它不走动:站的地方得是干的、抛得进水面,受理之前
- * ({@link #preparation})就判,不成就当场拒绝,说清要先站到岸边。收线时原版把战果甩向她,落在半路的留在地上,{@code numen.work.collect}
+ * {@code numen.work.fish}:站在原地用钓竿抛一竿——对准、抛竿、等咬钩、收线,钓上来就收工,回执说钓上来的是什么。它不走动:站的地方
+ * 得是干的、抛得进水面,受理之前({@link #preparation})就判,不成就当场拒绝,说清要先站到岸边。这一竿没落进水、钩到了实体、等不来
+ * 咬钩,就如实失败;再抛一竿、钓几条是程序里一圈一圈调它。收线时原版把战果甩向她,落在半路的留在地上,{@code numen.work.collect}
  * 去捡;它不去追。
  */
 public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecord> {
 
-    private enum Phase { PREPARE, AIM, WAIT, COOLDOWN }
+    private enum Phase { PREPARE, AIM, WAIT }
 
     private static final int CAST_SEARCH_RADIUS = 10;
     private static final int CAST_SEARCH_Y = 4;
@@ -50,23 +49,21 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
     private static final double WATER_SURFACE_OFFSET = 0.85;
     private static final int AIM_TICKS = 3;
     private static final int CAST_SETTLE_TIMEOUT = 5 * 20;
-    private static final int CAST_LIFETIME = 60 * 20;
-    private static final int COOLDOWN_TICKS = 10;
-    private static final int MAX_FAILED_CASTS = 5;
+    /** 一竿至多等多久的咬钩;任务的期限照它给({@link FishTaskRecord})。 */
+    static final int CAST_LIFETIME = 60 * 20;
 
 
     private static final double FISHING_DRAG = 0.92;
     private static final double FISHING_GRAVITY = 0.03;
     private static final int MAX_FLIGHT_TICKS = 80;
 
-    private final Set<BlockPos> rejectedTargets = new HashSet<>();
-
     private Phase phase = Phase.PREPARE;
     /** 她站着钓的那一格:受理时脚下那一格,离开它就不钓了。 */
     private BlockPos stance;
     private BlockPos target;
     private int phaseTicks;
-    private int failedCasts;
+    /** 收线时甩上来的东西:{@code minecraft:cod x1}。 */
+    private final List<String> caught = new ArrayList<>();
 
     public FishCompanionTask(NumenPlayer player, FishTaskRecord record) {
         super(player, record);
@@ -84,9 +81,6 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
         if (player.isDeadOrDying()) return TaskState.CANCELLED;
 
         player.controls().stop();
-        // requested == 0 = 主人没说钓几条 —— 这一行永远不成立,任务就是常驻的:
-        // 一直钓下去,直到主人换掉她手上的活。同一段逻辑,两种用法。
-        if (r.requested > 0 && r.caught() >= r.requested) return TaskState.SUCCESS;
 
         int rodSlot = findRodSlot();
         if (rodSlot < 0) {
@@ -101,7 +95,6 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
             case PREPARE -> prepare();
             case AIM -> aimAndCast();
             case WAIT -> waitForBite();
-            case COOLDOWN -> coolDown();
         };
     }
 
@@ -155,13 +148,6 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
                 || !trajectoryClear(player.getEyePosition(), target)) {
             target = findCastTarget(stance, player.getEyePosition());
         }
-        if (target == null && !rejectedTargets.isEmpty()) {
-            // A tiny pond may expose only one valid landing cell. After trying all
-            // distinct candidates, permit another ballistic attempt instead of
-            // converting one unlucky cast into a permanent "no water" verdict.
-            rejectedTargets.clear();
-            target = findCastTarget(stance, player.getEyePosition());
-        }
         if (target == null) {
             fail(NO_WATER, FailureType.OUT_OF_REACH);
             return TaskState.FAILED;
@@ -175,18 +161,17 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
 
     private TaskState aimAndCast() {
         if (!isCastableSurface(target) || !trajectoryClear(player.getEyePosition(), target)) {
-            return failedCast("the selected water surface became obstructed", true);
+            return failedCast("the selected water surface became obstructed");
         }
         aimAtTarget();
         if (++phaseTicks < AIM_TICKS) return TaskState.RUNNING;
 
         double pitch = castPitchDegrees(player.getEyePosition(), target);
         player.gameMode.useItem(player, player.level(), player.getMainHandItem(), InteractionHand.MAIN_HAND);
-        r.castOnce();
         if (player.fishing == null) {
-            return failedCast("the fishing rod did not cast", false);
+            return failedCast("the fishing rod did not cast");
         }
-        Constants.LOG.debug("[numen-fish] cast={} target={} pitch={}", r.casts(),
+        Constants.LOG.debug("[numen-fish] cast target={} pitch={}",
                 target.toShortString(), String.format(java.util.Locale.ROOT, "%.1f", pitch));
         phase = Phase.WAIT;
         phaseTicks = 0;
@@ -196,68 +181,49 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
     private TaskState waitForBite() {
         FishingHook hook = player.fishing;
         if (hook == null || hook.isRemoved()) {
-            return failedCast("the fishing hook disappeared before a catch", false);
+            return failedCast("the fishing hook disappeared before a catch");
         }
         phaseTicks++;
 
         Entity hooked = hook.getHookedIn();
         if (hooked != null) {
             reelIn();
-            return failedCast("the hook caught an entity instead of landing cleanly", true);
+            return failedCast("the hook caught an entity instead of landing in the water");
         }
 
         int nibble = ((FishingHookAccessor) (Object) hook).numen$getNibble();
         if (isBiteWindow(nibble)) {
+            Vec3 at = hook.position();
             reelIn();
-            beginCooldown();
-            r.caughtOne();
-            Constants.LOG.debug("[numen-fish] caught={}/{} casts={}",
-                    r.caught(), r.requested, r.casts());
-            return TaskState.RUNNING;
+            // 原版收线把战果就地生在浮漂那儿、甩向她:刚生出来的那几个就是这一竿钓上来的
+            for (net.minecraft.world.entity.item.ItemEntity item : hook.level().getEntitiesOfClass(
+                    net.minecraft.world.entity.item.ItemEntity.class, new net.minecraft.world.phys.AABB(at, at)
+                            .inflate(1.5), e -> e.tickCount == 0)) {
+                caught.add(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item.getItem().getItem())
+                        + " x" + item.getItem().getCount());
+            }
+            Constants.LOG.debug("[numen-fish] caught {}", caught);
+            succeed();
+            return TaskState.SUCCESS;
         }
 
         boolean inWater = hook.level().getFluidState(hook.blockPosition()).is(FluidTags.WATER);
         if (!inWater && phaseTicks >= CAST_SETTLE_TIMEOUT) {
             Constants.LOG.debug("[numen-fish] miss hook={} on_ground={} age={}",
                     hook.blockPosition().toShortString(), hook.onGround(), phaseTicks);
-            return failedCast("the fishing hook did not settle in water", true);
+            return failedCast("the fishing hook did not settle in water");
         }
         if (phaseTicks >= CAST_LIFETIME) {
-            return failedCast("no bite arrived before the cast timed out", false);
+            return failedCast("no bite came in " + CAST_LIFETIME / 20 + " seconds");
         }
         return TaskState.RUNNING;
     }
 
-    private TaskState coolDown() {
-        if (++phaseTicks < COOLDOWN_TICKS) return TaskState.RUNNING;
-        // requested == 0 = 主人没说钓几条 —— 这一行永远不成立,任务就是常驻的:
-        // 一直钓下去,直到主人换掉她手上的活。同一段逻辑,两种用法。
-        if (r.requested > 0 && r.caught() >= r.requested) return TaskState.SUCCESS;
-        phase = Phase.PREPARE;
-        phaseTicks = 0;
-        return TaskState.RUNNING;
-    }
-
-    private TaskState failedCast(String reason, boolean rejectTarget) {
-        BlockPos failedTarget = target;
+    /** 这一竿没成:收回浮漂,如实失败;再抛一竿是下一次调用。 */
+    private TaskState failedCast(String reason) {
         discardHook();
-        if (rejectTarget && failedTarget != null) rejectedTargets.add(failedTarget);
-        if (++failedCasts >= MAX_FAILED_CASTS) {
-            fail(reason + " after " + failedCasts + " attempts; stand on a clearer shoreline and numen.work.fish again",
-                    FailureType.OUT_OF_REACH);
-            return TaskState.FAILED;
-        }
-        phase = Phase.PREPARE;
-        phaseTicks = 0;
-        if (rejectTarget) target = null;
-        return TaskState.RUNNING;
-    }
-
-    private void beginCooldown() {
-        phase = Phase.COOLDOWN;
-        phaseTicks = 0;
-        failedCasts = 0;
-        rejectedTargets.clear();
+        fail(reason + "; numen.work.fish casts again", FailureType.OUT_OF_REACH);
+        return TaskState.FAILED;
     }
 
     private void reelIn() {
@@ -284,7 +250,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
                     double horizontal = Math.sqrt(dx * dx + dz * dz);
                     if (horizontal < MIN_CAST_DISTANCE || horizontal > CAST_SEARCH_RADIUS) continue;
                     BlockPos candidate = fromStance.offset(dx, dy, dz);
-                    if (!rejectedTargets.contains(candidate) && isCastableSurface(candidate)) {
+                    if (isCastableSurface(candidate)) {
                         candidates.add(candidate.immutable());
                     }
                 }
@@ -467,25 +433,23 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
     @Override
     protected Map<String, Object> resultData() {
         Map<String, Object> data = new HashMap<>();
-        data.put("requested", r.requested);
-        data.put("caught", r.caught());
-        data.put("casts", r.casts());
+        data.put("caught", List.copyOf(caught));
         return data;
     }
 
     @Override
     protected String successMessage() {
-        return "completed " + r.caught() + " successful fishing catch(es); the reel throws each catch to me, and one "
-                + "that landed short lies on the ground: `numen.work.collect()` picks it up";
+        return "reeled in " + (caught.isEmpty() ? "a catch" : String.join(", ", caught)) + "; the reel throws it to "
+                + "me, and what lands short lies on the ground: `numen.work.collect()` picks it up";
     }
 
     @Override
     protected String timeoutMessage() {
-        return "fishing timed out after " + r.caught() + "/" + r.requested + " successful catches";
+        return "the cast timed out without a catch";
     }
 
     @Override
     protected String cancelledMessage() {
-        return "fishing interrupted after " + r.caught() + "/" + r.requested + " successful catches";
+        return "fishing interrupted before a catch";
     }
 }

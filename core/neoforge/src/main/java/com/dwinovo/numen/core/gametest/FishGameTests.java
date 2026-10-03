@@ -28,13 +28,13 @@ public class FishGameTests {
         settleWorld(level, Difficulty.PEACEFUL, NOON);
     }
 
-    /** 站在池沿上、手里有竿:钓上一次,背包里多了钓上来的东西,鱼竿掉了耐久。 */
+    /** 站在池沿上、手里有竿:抛一竿钓上来,背包里多了钓上来的东西、回执点名是什么,鱼竿掉了耐久。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_fish")
     public static void fish_reels_in_from_a_pool(GameTestHelper helper) {
         pool(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_angler", new BlockPos(4, 3, 7), false);
         companion.getInventory().add(new ItemStack(Items.FISHING_ROD));
-        ToolRun fish = lua(companion, "numen.work.fish({count = 1})");
+        ToolRun fish = lua(companion, "numen.work.fish()");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(fish.done(), "work fish has not finished");
@@ -43,6 +43,8 @@ public class FishGameTests {
             boolean caught = inv.items.stream().anyMatch(s -> !s.isEmpty() && !s.is(Items.FISHING_ROD));
             boolean worn = inv.items.stream().anyMatch(s -> s.is(Items.FISHING_ROD) && s.getDamageValue() > 0);
             helper.assertTrue(caught && worn, "nothing was reeled in, or the rod took no wear: " + fish.outcome());
+            helper.assertTrue(fish.outcome().startsWith("reeled in minecraft:"),
+                    "the result does not name the catch: " + fish.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -52,7 +54,7 @@ public class FishGameTests {
     public static void fish_without_a_rod_says_so(GameTestHelper helper) {
         pool(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_rodless", new BlockPos(4, 3, 7), false);
-        ToolRun fish = lua(companion, "numen.work.fish({count = 1})");
+        ToolRun fish = lua(companion, "numen.work.fish()");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(fish.done(), "work fish has not finished");
@@ -80,7 +82,7 @@ public class FishGameTests {
         pool(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_recalled", new BlockPos(4, 3, 7), false);
         companion.getInventory().add(new ItemStack(Items.FISHING_ROD));
-        ToolRun fish = lua(companion, "numen.work.fish({count = 5})");
+        ToolRun fish = lua(companion, "numen.work.fish()");
         java.util.concurrent.atomic.AtomicReference<ToolRun> stop = new java.util.concurrent.atomic.AtomicReference<>();
 
         steps(helper)
