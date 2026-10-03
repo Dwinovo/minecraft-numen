@@ -187,17 +187,17 @@ final class MaidCommands {
                         + "blocks from her; turning it on with no points set makes where she stands her home.")
                 .note("The result reads every setting back and says which of yours did not take.")
                 .seeAlso(path(MAID), path(TASK));
-        tlm.server(OPEN, "Open a page of one of your maids' GUI, then work it with numen.use.gui.",
+        tlm.server(OPEN, "Open a page of one of your maids' GUI, then work it with numen.gui.view.",
                         MaidCommands::open, WHICH, TAB)
                 .returns(ScriptType.table(ScriptType.field("maid", ScriptType.INTEGER, "Her entity id."),
                         ScriptType.field("menu", ScriptType.STRING, "The menu now open.")))
                 .example(line(OPEN) + "(812)")
                 .example(line(OPEN) + "(812, {tab = \"bauble\"})")
-                .note("Then `numen.use.gui()` lists its slots, `numen.use.transfer` and `numen.use.shift` move items (armour, hand, "
-                        + "backpack or bauble slots), `numen.use.close()` closes it. It stays open while you stay within "
+                .note("Then `numen.gui.view()` lists its slots, `numen.gui.move` and `numen.gui.quick` move items (armour, hand, "
+                        + "backpack or bauble slots), `numen.gui.close()` closes it. It stays open while you stay within "
                         + "reach.")
                 .note("The same reach, owner rule and asking as " + line(TASK) + ". A sleeping maid does not open.")
-                .seeAlso("numen use gui", "numen use transfer", "numen use close");
+                .seeAlso("numen gui view", "numen gui move", "numen gui close");
     }
 
     // ---- 读 ----
@@ -339,8 +339,8 @@ final class MaidCommands {
             data.put("maid", maid.getId());
             if (menu != null) {
                 data.put("menu", menu);
-                return TaskResult.ok("Opened " + Maids.label(maid) + "'s GUI (" + menu + "). `numen.use.gui()` lists its "
-                        + "slots; `numen.use.transfer` and `numen.use.shift` move items; `numen.use.close()` closes it.", data);
+                return TaskResult.ok("Opened " + Maids.label(maid) + "'s GUI (" + menu + "). `numen.gui.view()` lists its "
+                        + "slots; `numen.gui.move` and `numen.gui.quick` move items; `numen.gui.close()` closes it.", data);
             }
             String said = "TLM did not open the " + tab.word() + " page of " + Maids.label(maid) + ".";
             if (Maids.asleep(maid)) {

@@ -103,7 +103,7 @@ public class TlmGameTests {
         });
     }
 
-    /** 开背包页,再用 {@code use transfer} 把她背包里的一把种子放进女仆自己的第一格。 */
+    /** 开背包页,再用 {@code gui move} 把她背包里的一把种子放进女仆自己的第一格。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
     public static void the_backpack_page_takes_seeds_by_use_transfer(GameTestHelper helper) {
         NumenPlayer her = keeper(helper, "gametest_tlm_packer", new BlockPos(3, 2, 3));
@@ -131,10 +131,10 @@ public class TlmGameTests {
                         }
                     }
                     helper.assertTrue(from >= 0 && to >= 0, "no seed slot or no maid slot 0 in the open GUI");
-                    moved.set(lua(her, "numen.use.transfer(\"" + from + "\", \"" + to + "\")"));
+                    moved.set(lua(her, "numen.gui.move(\"" + from + "\", \"" + to + "\")"));
                 })
                 .thenWaitUntil(() -> helper.assertTrue(maid.getMaidInv().getStackInSlot(0).is(Items.WHEAT_SEEDS),
-                        "the seeds did not go into her slot — use transfer said: "
+                        "the seeds did not go into her slot — gui move said: "
                                 + (moved.get() == null ? null : moved.get().outcome())))
                 .thenExecute(() -> leave(helper, her, maid))
                 .thenSucceed();

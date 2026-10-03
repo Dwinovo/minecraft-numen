@@ -119,7 +119,7 @@ public class InteractGameTests {
         pig.setNoAi(true);
         helper.getLevel().addFreshEntity(pig);
         NumenPlayer companion = spawnAt(helper, "gametest_poker_entity", new BlockPos(8, 2, 11), false);
-        ToolRun hit = lua(companion, "numen.use.entity(" + pig.getId() + ", {left = true})");
+        ToolRun hit = lua(companion, "numen.use.hit(" + pig.getId() + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(hit.done(), "use entity has not finished");
@@ -136,26 +136,26 @@ public class InteractGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_pitcher", new BlockPos(4, 2, 8), false);
         companion.setXRot(-30f);
         companion.getInventory().add(new ItemStack(Items.SNOWBALL, 4));
-        ToolRun toss = lua(companion, "numen.use.ahead({item = \"minecraft:snowball\"})");
+        ToolRun toss = lua(companion, "numen.use.item({item = \"minecraft:snowball\"})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(toss.done(), "use ahead has not finished");
+            helper.assertTrue(toss.done(), "use item has not finished");
             helper.assertTrue(toss.succeeded() && companion.getInventory().countItem(Items.SNOWBALL) == 3,
                     "the snowball was not thrown: " + toss.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
 
-    /** 目标在工作距离外:numen.use.block 不自己走过去,当场失败,下一步是能照抄的 numen.move.goto_(…, {arrive = "use"}),那一格原样。 */
+    /** 目标在工作距离外:numen.use.hit 不自己走过去,当场失败,下一步是能照抄的 numen.move.goto_(…, {arrive = "use"}),那一格原样。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_at_out_of_reach_says_goto_first(GameTestHelper helper) {
         BlockPos stone = helper.absolutePos(new BlockPos(13, 2, 13));
         helper.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_shortarmed", new BlockPos(2, 2, 2), false);
-        ToolRun click = lua(companion, "numen.use.block(" + xyz(stone) + ", {left = true})");
+        ToolRun click = lua(companion, "numen.use.hit(" + xyz(stone) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(click.done(), "use block has not finished");
+            helper.assertTrue(click.done(), "use hit has not finished");
             helper.assertTrue(!click.succeeded() && click.outcome().contains("out of working reach")
                             && click.outcome().contains("`numen.move.goto_(" + xyz(stone) + ", {arrive = \"use\"})`"),
                     "the failure does not send her to goto first: " + click.outcome());
@@ -174,7 +174,7 @@ public class InteractGameTests {
         pig.setCustomName(net.minecraft.network.chat.Component.literal("Wilbur"));
         helper.getLevel().addFreshEntity(pig);
         NumenPlayer companion = spawnAt(helper, "gametest_restrained", new BlockPos(6, 2, 8), false);
-        ToolRun hit = lua(companion, "numen.use.entity(" + pig.getId() + ", {left = true})");
+        ToolRun hit = lua(companion, "numen.use.hit(" + pig.getId() + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(hit.done(), "use entity has not finished");
@@ -342,7 +342,7 @@ public class InteractGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(run.get().done()
                                 && companion.containerMenu instanceof net.minecraft.world.inventory.ChestMenu,
                         "standing, the right click did not open the chest: " + run.get().outcome()))
-                .thenExecute(() -> run.set(lua(companion, "numen.use.close()")))
+                .thenExecute(() -> run.set(lua(companion, "numen.gui.close()")))
                 .thenWaitUntil(() -> helper.assertTrue(run.get().done()
                                 && companion.containerMenu == companion.inventoryMenu,
                         "the chest did not close: " + run.get().outcome()))
@@ -401,23 +401,23 @@ public class InteractGameTests {
     }
 
     /**
-     * 左键是一次纯按键:手里拿着一根木棍,包里有一把铁锹,{@code numen.use.block left} 对着一块泥土——她用木棍挖(挖得慢,但挖得掉),
-     * 不去换锹;锹原样躺在包里那一格,手里还是木棍,回执里没有换工具这一句。
+     * 左键是一次纯按键:创造模式的她手里拿着一根木棍,包里有一把铁锹,{@code numen.use.hit} 对着一块泥土——她用木棍点掉它
+     * (创造里点一下就碎),不去换锹;锹原样躺在包里那一格,手里还是木棍,回执里没有换工具这一句。
      */
     @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_interact")
     public static void use_block_left_hits_with_whatever_is_in_hand(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos dirt = helper.absolutePos(new BlockPos(5, 2, 8));
         level.setBlockAndUpdate(dirt, Blocks.DIRT.defaultBlockState());
-        NumenPlayer companion = spawnAt(helper, "gametest_bare_press", new BlockPos(3, 2, 8), false);
+        NumenPlayer companion = spawnAt(helper, "gametest_bare_press", new BlockPos(3, 2, 8), true);
         var inventory = companion.getInventory();
         inventory.selected = 0;
         inventory.setItem(0, new ItemStack(Items.STICK));
         inventory.setItem(5, new ItemStack(Items.IRON_SHOVEL));
-        ToolRun press = lua(companion, "numen.use.block(" + xyz(dirt) + ", {left = true})");
+        ToolRun press = lua(companion, "numen.use.hit(" + xyz(dirt) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(press.done(), "use block has not finished");
+            helper.assertTrue(press.done(), "use hit has not finished");
             helper.assertTrue(press.succeeded() && level.getBlockState(dirt).isAir(),
                     "the dirt was not broken: " + press.outcome());
             helper.assertTrue(inventory.selected == 0 && companion.getMainHandItem().is(Items.STICK)
@@ -430,8 +430,8 @@ public class InteractGameTests {
     }
 
     /**
-     * 准星落在谁就按谁:她和石头之间隔着一块泥土,{@code numen.use.block left} 对着石头按下去,落在泥土上——挖掉的是泥土,石头原样;
-     * 回执照实说准星落在了泥土上,不是瞄的那一格。
+     * 准星落在谁就按谁:创造模式的她和石头之间隔着一块泥土,{@code numen.use.hit} 对着石头按下去,落在泥土上——点掉的是泥土,
+     * 石头原样;回执照实说准星落在了泥土上,不是瞄的那一格。
      */
     @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_interact")
     public static void use_block_left_presses_what_the_crosshair_lands_on(GameTestHelper helper) {
@@ -440,11 +440,11 @@ public class InteractGameTests {
         BlockPos dirt = helper.absolutePos(new BlockPos(5, 2, 12));
         level.setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
         level.setBlockAndUpdate(dirt, Blocks.DIRT.defaultBlockState());
-        NumenPlayer companion = spawnAt(helper, "gametest_crosshair", new BlockPos(3, 2, 12), false);
-        ToolRun press = lua(companion, "numen.use.block(" + xyz(stone) + ", {left = true})");
+        NumenPlayer companion = spawnAt(helper, "gametest_crosshair", new BlockPos(3, 2, 12), true);
+        ToolRun press = lua(companion, "numen.use.hit(" + xyz(stone) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(press.done(), "use block has not finished");
+            helper.assertTrue(press.done(), "use hit has not finished");
             helper.assertTrue(press.succeeded() && level.getBlockState(dirt).isAir()
                             && level.getBlockState(stone).is(Blocks.STONE),
                     "the press did not land on the dirt in front: " + press.outcome());

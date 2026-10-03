@@ -6,12 +6,11 @@ import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
+import com.dwinovo.numen.cli.CellOrEntity;
 import com.dwinovo.numen.cli.EntityRef;
-import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.core.tools.BlockActionOps;
-import com.dwinovo.numen.core.tools.ContainerOps;
 import com.dwinovo.numen.core.tools.GuiOps;
 import com.dwinovo.numen.core.task.MouseButton;
 import com.dwinovo.numen.core.tools.SleepOps;
@@ -21,41 +20,32 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 
 /**
- * {@code use}:像玩家那样点世界——对一格按鼠标键、对着前方用手里的东西、对一只实体按鼠标键,看打开的界面、在里面搬东西、
- * 关掉它,上床。
+ * {@code use}:像玩家那样点世界——右键一格(打开它就交回那个界面)、对着前方用手里的东西、右键一只实体、左键点一格或一只实体一下,
+ * 上床。打开之后在界面里搬东西是 {@code gui} 那一组。
  *
- * <p>三个按键动作与两个搬东西的动作是有界短活({@code runSync}),动手前各自把动作交给权限层;看界面、关界面、上床当场回。
- * 按键动作都站在原地按:目标得在手够得着、看得见的地方,不然当场失败,说清先走过去({@code numen.move.goto_})。
- * 搬东西一次一步:{@code transfer} 放到指定的一格,{@code shift} 像按住 Shift 点它、整叠挪到另一边——"不给目标格就是另一件事"
- * 拆成两个动作,一个动作一个意思;要搬好几样就在脚本里调几次。
- * 对准一格和不对准任何东西是两件事,拆成 {@code block} 与 {@code ahead} 两个动作,一个动作一个意思。
+ * <p>按键动作是有界短活({@code runSync}),动手前各自把动作交给权限层;上床当场回。按键动作都站在原地按:目标得在手够得着、
+ * 看得见的地方,不然当场失败,说清先走过去({@code numen.move.goto_})。
+ * 对准一格和不对准任何东西是两件事,拆成 {@code block} 与 {@code item} 两个动作,一个动作一个意思。右键是"用"这一组的本义,
+ * 左键一下是 {@code hit};把一格挖下来是 {@code numen.work.dig}(挑工具、清挡路的),不在这一组。
  * 上床放在这一组:原版里睡觉就是用一张床,和别的"用"是同一种动作,找床与走过去仍归扫描和 {@code numen.move.goto_}。
- *
- * <p>按哪个键是一个开关:默认右键(用、放、开),{@code left = true} 是左键(打、挖)。两个值里有一个是常用的那个时,
- * 不写一个必须给值的 {@code button},而是让常用的那个当默认、另一个是开关——右键是"用"这一组的本义,点一格、点一只实体十回里
- * 九回是右键,左键是例外,所以名字是那个例外。按住多久写秒({@code hold = 1.5})。
  */
 public final class UseCommands {
 
     static final String GROUP = "use";
     static final String BLOCK = "block";
-    static final String AHEAD = "ahead";
+    static final String ITEM_ACTION = "item";
     static final String ENTITY = "entity";
-    static final String GUI = "gui";
-    static final String TRANSFER = "transfer";
-    static final String SHIFT = "shift";
-    static final String CLOSE = "close";
+    static final String HIT = "hit";
     static final String SLEEP = "sleep";
 
     /** 按住至多几秒。 */
     private static final double MAX_HOLD_S = 60;
 
-    private static final Param<Boolean> LEFT = Param.optional("left", ArgType.bool(),
-            "Press the left button instead: attack or break.")
-            .whenOmitted("press the right button: use, activate, place or throw");
     private static final Param<BlockPos> AIM = Param.required("cell", ArgType.cell(), "The cell to aim at.");
     private static final Param<EntityRef> TARGET = Param.required("entity", ArgType.entity(), "The entity to act on.")
             .values("an entity id from numen.scan.entities");
+    private static final Param<CellOrEntity> STRUCK = Param.required("target", ArgType.cellOrEntity(),
+            "What to hit: a cell (a Pos, a Block) or an entity.");
     private static final Param<Double> HOLD = Param.optional("hold", ArgType.number(0.05, MAX_HOLD_S),
             "How long to hold the button, in seconds; the press ends early once the action completes.")
             .whenOmitted("press once");
@@ -69,19 +59,7 @@ public final class UseCommands {
     private static final Param<BlockPos> BED = Param.optional("at", ArgType.cell(), "The bed.")
             .whenOmitted("use whichever bed is in reach");
 
-    private static final Param<Integer> FROM = Param.required("from", ArgType.integer(0, 999),
-                    "The slot to take the items from.")
-            .values("a slot index from `numen.use.gui()`");
-    private static final Param<Integer> TO = Param.required("to", ArgType.integer(0, 999),
-                    "The slot to put them in: an empty slot takes them, the same item merges, a different item swaps "
-                            + "places with them.")
-            .values("a slot index from `numen.use.gui()`");
-    private static final Param<Integer> COUNT = Param.optional("count", ArgType.integer(1, 99),
-                    "How many to move; needs an empty slot or the same item there.")
-            .whenOmitted("move the whole stack");
-
     private static final BlockActionOps CLICKS = new BlockActionOps();
-    private static final GuiOps GUIS = new GuiOps();
     private static final SleepOps BEDS = new SleepOps();
 
     private UseCommands() {}
@@ -101,19 +79,20 @@ public final class UseCommands {
                                 + "block, new entities."));
 
     public static void install(NumenApi numen) {
-        numen.registerCommands(GROUP, "Clicking the world like a player: blocks, entities, the open GUI, beds.",
-                UseCommands::actions);
+        numen.registerCommands(GROUP, "Clicking the world like a player: right-click a block (opening its window) or "
+                + "an entity, use what you hold, hit something once, get into bed.", UseCommands::actions);
     }
 
     private static void actions(CommandGroup use) {
-        use.server(BLOCK, "Aim at a block, fluid or air cell within reach and press a mouse button: the full "
-                        + "native click.",
-                UseCommands::block, AIM, LEFT, HOLD, ITEM, SNEAK)
-                .returns(CLICKED)
-                .example("numen.use.block({x = 120, y = 64, z = -35})")
+        use.server(BLOCK, "Aim at a block, fluid or air cell within reach and right-click it: the full native click. "
+                        + "When it opens a window (a chest, a furnace, a machine) it returns that Window.",
+                UseCommands::block, AIM, HOLD, ITEM, SNEAK)
+                .returns(ScriptType.union(GuiOps.WINDOW.type(), CLICKED))
+                .example("local w = numen.use.block({x = 120, y = 64, z = -35})")
                 .example("numen.use.block({x = 120, y = 63, z = -35}, {item = \"minecraft:bucket\"})")
                 .example("numen.use.block({x = 120, y = 64, z = -35}, {item = \"minecraft:oak_planks\", sneak = true})")
-                .example("numen.use.block({x = 120, y = 64, z = -35}, {left = true})")
+                .note("When the click opens a window, it returns the Window, the same as numen.gui.view(): its "
+                        + "methods put, take, move, quick and close work on it (see the numen.gui group).")
                 .note("If the aimed block doesn't take a right click, the held item acts on its own, exactly like "
                         + "a real right-click: aiming at water with a bucket scoops it, with a boat places it.")
                 .note("With sneak = true and something in hand, a right click skips what the aimed block itself "
@@ -121,82 +100,47 @@ public final class UseCommands {
                 .note("It does NOT travel: you must already be within working reach (~4.5 blocks) of the aim "
                         + "point; `numen.move.goto_({x = 120, y = 64, z = -35}, {arrive = \"use\"})` stands you where one of its faces "
                         + "is in sight and in reach. Farther away it fails and names that call.")
-                .note("Both buttons are bare key presses: whatever you hold is what is used, and the block the "
-                        + "crosshair lands on is the one clicked — if something else is in the way (tall grass in front "
-                        + "of a chest, a leaf), that is what gets clicked, and the result says so and names the next "
-                        + "step: `numen.work.dig` the thing in the way, or click from another side. It never moves, never "
-                        + "swaps tools, never clears the way. left = true holds the button until the block breaks or "
-                        + "hold runs out. To dig something out properly — best tool, the way cleared — use numen.work.dig.")
-                .note("Breaking or placing near your owner's things may ask your owner first; the call waits for the "
-                        + "answer.")
-                .note("The result reports what actually changed (hands, the aimed block, new entities); no "
+                .note("It is a bare key press: whatever you hold is what is used, and the block the crosshair lands "
+                        + "on is the one clicked — if something else is in the way (tall grass in front of a chest, a "
+                        + "leaf), that is what gets clicked, and the result says so and names the next step. It never "
+                        + "moves, never swaps tools, never clears the way.")
+                .note("Placing near your owner's things may ask your owner first; the call waits for the answer.")
+                .note("Otherwise the result reports what actually changed (hands, the aimed block, new entities); no "
                         + "change listed means the click did nothing.")
-                .seeAlso(line(GUI), line(ENTITY));
-        use.server(AHEAD, "Press a mouse button at nothing in particular: the held item acts straight ahead, "
-                        + "where you face.",
-                UseCommands::ahead, LEFT, HOLD, ITEM, SNEAK)
+                .seeAlso("gui view", line(HIT), line(ENTITY));
+        use.server(ITEM_ACTION, "Right-click at nothing in particular: the held item acts straight ahead, where you "
+                        + "face.",
+                UseCommands::item, HOLD, ITEM, SNEAK)
                 .returns(CLICKED)
-                .example("numen.use.ahead({item = \"minecraft:snowball\"})")
+                .example("numen.use.item({item = \"minecraft:snowball\"})")
                 .note("To aim somewhere, `numen.use.block` at that cell instead; air cells work too.")
                 .note("Food and drink go through `numen.inv.eat`, not here.")
                 .seeAlso(line(BLOCK));
-        use.server(ENTITY, "Press a mouse button on an entity within reach and in sight of where you stand.",
-                UseCommands::entity, TARGET, LEFT, HOLD, ITEM, SNEAK)
+        use.server(ENTITY, "Right-click an entity within reach and in sight of where you stand.",
+                UseCommands::entity, TARGET, HOLD, ITEM, SNEAK)
                 .returns(ScriptType.table(
                         ScriptType.field("button", ScriptType.choice(java.util.List.of("left", "right")), null),
                         ScriptType.field("entity_id", ScriptType.INTEGER, null),
                         ScriptType.optional("changes", ScriptType.listOf(ScriptType.STRING), "What changed.")))
                 .example("numen.use.entity(812, {item = \"minecraft:shears\"})")
-                .example("numen.use.entity(812, {left = true})")
                 .example("numen.use.entity(812, {sneak = true})")
                 .note("It does NOT travel: an entity farther than your reach, or behind a wall, fails with where it "
                         + "is and the numen.move.goto_ call to copy. numen.scan.entities gives its cell.")
                 .note("Right on a boat or rideable boards it: runtime_state then shows <riding>; numen.move.go pilots or "
                         + "steps off. Never click your own vehicle again.")
-                .note("Hitting pets, named mobs or villagers asks your owner first; the call waits for the answer.")
-                .seeAlso(line(BLOCK));
-        use.server(GUI, "Look at the GUI you have open, or at your own inventory menu when none is.",
-                UseCommands::gui, Listing.PAGE)
-                .returns(GuiOps.GUI)
-                .example("for _, s in ipairs(numen.use.gui().slots) do print(s.index, s.item, s.count) end")
-                .note("Instant and read-only. Lists every slot (index, side, item and count, [output] mark), "
-                        + "the cursor and any machine progress; a crafting grid is drawn as a 2D map of slot "
-                        + "numbers.")
-                .note("With nothing open it shows YOUR inventory menu, whose 2x2 grid crafts small recipes "
-                        + "without a table.")
-                .note("A modded GUI with very many slots comes a page at a time; the last line says how to get the "
-                        + "next.")
-                .note("Read slot indices here before `numen.use.transfer` or `numen.use.shift`, and to check one. Before laying "
-                        + "a recipe out by hand, `numen.inv.recipe` gives the exact layout: match it onto the map cell for "
-                        + "cell (a smaller recipe sits top-left); 2x2 slot indices are easy to guess wrong.")
-                .seeAlso(line(BLOCK), line(TRANSFER), line(SHIFT), line(CLOSE), "inv recipe");
-        use.server(TRANSFER, "Move items from one slot of the GUI you have open to another: move, merge or swap.",
-                        UseCommands::transfer, FROM, TO, COUNT)
-                .returns(ScriptType.NOTHING)
-                .example("numen.use.transfer(38, 1, {count = 1})")
-                .example("numen.use.transfer(12, 40)")
-                .note("One move per call. To move several stacks, call it several times in one script; each result "
-                        + "says what moved.")
-                .note("Taking something out of a container may ask your owner first; the call waits for the answer.")
-                .note("To send a whole stack to the other side (into the chest, back to your inventory, into a "
-                        + "furnace's input or fuel slot), `numen.use.shift` it instead of picking a slot.")
-                .seeAlso(line(GUI), line(SHIFT));
-        use.server(SHIFT, "Shift-click a slot of the GUI you have open: its whole stack goes to the other side.",
-                        UseCommands::shift, FROM)
-                .returns(ScriptType.NOTHING)
-                .example("numen.use.shift(5)")
-                .note("The menu picks where it lands, like a real shift-click: a chest's items go to your inventory "
-                        + "and yours into the chest, raw iron into a furnace's input and coal into its fuel slot.")
-                .note("On a crafting result it takes the result, crafting again while the grid still holds enough.")
-                .note("Taking something out of a container may ask your owner first; the call waits for the answer.")
-                .seeAlso(line(GUI), line(TRANSFER));
-        use.server(CLOSE, "Close the GUI you have open, once you have finished moving items.",
-                UseCommands::close)
-                .returns(ScriptType.NOTHING)
-                .example("numen.use.close()")
-                .note("Instant. Your own inventory menu is always there; with nothing else open there is nothing "
-                        + "to close.")
-                .seeAlso(line(GUI));
+                .seeAlso(line(BLOCK), line(HIT));
+        use.server(HIT, "Left-click a cell or an entity within reach once, with what you hold.",
+                UseCommands::hit, STRUCK)
+                .returns(CLICKED)
+                .example("numen.use.hit({x = 120, y = 64, z = -35})")
+                .example("numen.use.hit(812)")
+                .note("One press, never held: a block that takes several hits to break is only hit once — "
+                        + "`numen.work.dig` breaks blocks (best tool, the way cleared); `numen.fight.attack` fights.")
+                .note("It does NOT travel: the target must be within reach and in sight of where you stand; "
+                        + "otherwise it fails with the numen.move.goto_ call to copy.")
+                .note("Hitting your owner's blocks, pets, named mobs or villagers asks your owner first; the call "
+                        + "waits for the answer.")
+                .seeAlso(line(BLOCK), line(ENTITY));
         use.server(SLEEP, "Get into a bed you are standing next to, and say whether you are actually asleep.",
                 UseCommands::sleep, BED)
                 .returns(ScriptType.table(ScriptType.field("bed", Shapes.POS.type(), "The bed's head."),
@@ -217,52 +161,39 @@ public final class UseCommands {
         click(src, args, args.get(AIM));
     }
 
-    private static void ahead(ServerSource src, CommandArgs args) {
+    private static void item(ServerSource src, CommandArgs args) {
         click(src, args, null);
     }
 
-    /** 对一格按,或({@code aim} 为 null)朝着她面对的方向按:同一件活,只差瞄哪儿。 */
+    /** 对一格右键,或({@code aim} 为 null)朝着她面对的方向右键:同一件活,只差瞄哪儿。 */
     private static void click(ServerSource src, CommandArgs args, BlockPos aim) {
-        TaskDispatch.runSync(src.companion(), CLICKS.interactAt(src, button(args), aim, holdTicks(args),
+        TaskDispatch.runSync(src.companion(), CLICKS.interactAt(src, MouseButton.RIGHT, aim, holdTicks(args),
                 idOf(args.get(ITEM)), Boolean.TRUE.equals(args.get(SNEAK))), src::reply);
     }
 
     /** 点名的那只按运行期编号认;按 UUID 写的(重放)换成它此刻的编号,不在了照编号交给任务,由任务如实说它不在。 */
     private static void entity(ServerSource src, CommandArgs args) {
-        EntityRef ref = args.get(TARGET);
+        TaskDispatch.runSync(src.companion(), CLICKS.interactEntity(src, MouseButton.RIGHT, idOf(src, args.get(TARGET)),
+                holdTicks(args), idOf(args.get(ITEM)), Boolean.TRUE.equals(args.get(SNEAK))), src::reply);
+    }
+
+    /** 左键一下:一格是按一下就松开的那种点,一只实体同样。 */
+    private static void hit(ServerSource src, CommandArgs args) {
+        CellOrEntity target = args.get(STRUCK);
+        TaskDispatch.runSync(src.companion(), target.cell() != null
+                ? CLICKS.interactAt(src, MouseButton.LEFT, target.cell(), 0, null, false)
+                : CLICKS.interactEntity(src, MouseButton.LEFT, idOf(src, target.entity()), 0, null, false), src::reply);
+    }
+
+    private static int idOf(ServerSource src, EntityRef ref) {
         Entity found = ref.in(src.companion().serverLevel());
-        int id = ref.id() != null ? ref.id() : found != null ? found.getId() : -1;
-        TaskDispatch.runSync(src.companion(), CLICKS.interactEntity(src, button(args), id, holdTicks(args),
-                idOf(args.get(ITEM)), Boolean.TRUE.equals(args.get(SNEAK))), src::reply);
+        return ref.id() != null ? ref.id() : found != null ? found.getId() : -1;
     }
 
-    private static MouseButton button(CommandArgs args) {
-        return Boolean.TRUE.equals(args.get(LEFT)) ? MouseButton.LEFT : MouseButton.RIGHT;
-    }
-
-    /** {@code --hold} 的秒数折成刻,至少一刻;不写是 0,按一下。 */
+    /** {@code hold} 的秒数折成刻,至少一刻;不写是 0,按一下。 */
     private static int holdTicks(CommandArgs args) {
         Double seconds = args.get(HOLD);
         return seconds == null ? 0 : (int) Math.max(1, Math.round(Math.min(seconds, MAX_HOLD_S) * 20));
-    }
-
-    private static void gui(ServerSource src, CommandArgs args) {
-        src.reply(GUIS.inspectGui(src.companion(), args));
-    }
-
-    /** 有界短活:点击一刻就完,从容器里拿东西的那一步可能挂着等主人。 */
-    private static void transfer(ServerSource src, CommandArgs args) {
-        TaskDispatch.runSync(src.companion(), ContainerOps.transfer(src,
-                new ContainerOps.Move(args.get(FROM), args.get(TO), args.get(COUNT))), src::reply);
-    }
-
-    private static void shift(ServerSource src, CommandArgs args) {
-        TaskDispatch.runSync(src.companion(), ContainerOps.transfer(src,
-                new ContainerOps.Move(args.get(FROM), null, null)), src::reply);
-    }
-
-    private static void close(ServerSource src, CommandArgs args) {
-        src.reply(GUIS.closeGui(src.companion()));
     }
 
     /** 当场回:上床是一次调用的事,躺下就结束,不挂着等天亮。 */

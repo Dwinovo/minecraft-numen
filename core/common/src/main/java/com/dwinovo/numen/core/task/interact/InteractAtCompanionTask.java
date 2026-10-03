@@ -27,11 +27,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code numen.use.block} / {@code use ahead} on the player body — the point-aimed native interaction (BLOCK + AIR).
+ * {@code numen.use.block} / {@code use item} on the player body — the point-aimed native interaction (BLOCK + AIR).
  * It does not travel: the body must already be within reach of the aim (if one is given).
  *
- * <p>左键是一次纯按键:朝那一格的中心看过去,准星落在谁就按谁({@link Crosshair#pick}),手上是什么就用什么,按住直到它碎
- * 或到了 {@code holdTicks}——不换工具、不清挡着的、不挪步。准星落在别的格(高草、树叶)或实体上,按的就是它,回执照实说。
+ * <p>左键是一次纯按键:朝那一格的中心看过去,准星落在谁就按谁({@link Crosshair#pick}),手上是什么就用什么,点一下就松手
+ * (一下就碎的方块碎了,别的只是开了个头)——不换工具、不清挡着的、不挪步。准星落在别的格(高草、树叶)或实体上,按的就是它,回执照实说。
  * 挖东西(挑工具、清开视线、捡掉落)是 {@code numen.work.dig} 的事。
  *
  * <p>右键同样是一次纯按键:可点的目标看向它看得见的一面({@link Aim#use},与 {@code numen.move.goto_(…, {arrive = "use"})} 同一个视线函数),
@@ -262,12 +262,24 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
         super.cleanup();
     }
 
+    /**
+     * 右键打开了一个界面(箱子、熔炉、机器),交回的就是那个 Window,和 {@code numen.gui.view()} 读到的一样,外加点开它的那一格;
+     * 别的点击交回按了哪个键、瞄哪一格、变了什么。
+     */
     @Override
     protected Map<String, Object> resultData() {
         Map<String, Object> data = new HashMap<>();
-        data.put("button", r.button == MouseButton.LEFT ? "left" : "right");
-        if (r.aim != null) {
-            data.put("aim", Shapes.pos(r.aim));
+        boolean opened = r.button == MouseButton.RIGHT && player.containerMenu != player.inventoryMenu;
+        if (opened) {
+            data.putAll(com.dwinovo.numen.core.tools.GuiOps.window(player).data());
+        } else {
+            data.put("button", r.button == MouseButton.LEFT ? "left" : "right");
+            if (r.aim != null) {
+                data.put("aim", Shapes.pos(r.aim));
+            }
+            if (!changes.isEmpty()) {
+                data.put("changes", changes);
+            }
         }
         // Report the activated station (and its exact position, authoritative over the
         // raw aim): she can only note a place we told her about.
@@ -277,9 +289,6 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
             station.addProperty("name", activatedBlockId);
             station.add("pos", block);
             data.put("block", station);
-        }
-        if (!changes.isEmpty()) {
-            data.put("changes", changes);
         }
         return data;
     }

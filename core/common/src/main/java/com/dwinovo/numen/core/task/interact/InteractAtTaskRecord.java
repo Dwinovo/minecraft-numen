@@ -10,7 +10,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 
 /**
- * Typed descriptor for {@code use block} and {@code use ahead} — the point-aimed half of the native
+ * Typed descriptor for {@code use block} and {@code use item} — the point-aimed half of the native
  * crosshair interaction (the BLOCK and AIR columns of vanilla's
  * {@code startAttack}/{@code startUseItem}; the ENTITY column is {@code use entity}).
  *
@@ -22,7 +22,7 @@ import net.minecraft.world.item.Items;
  *       — when the aim is clear air — use the held item in that direction (throw an ender
  *       pearl, eat, draw a bow).</li>
  * </ul>
- * {@code aim} null ({@code use ahead}) = use the body's CURRENT facing (in-air use with no target).
+ * {@code aim} null ({@code use item}) = use the body's CURRENT facing (in-air use with no target).
  * {@code holdTicks}: 0 = a single press; &gt;0 = hold that many ticks (modded crank / bow draw);
  * -1 = hold until the action self-completes or the task times out.
  * {@code sneak}: hold sneak while pressing ({@code --sneak}).

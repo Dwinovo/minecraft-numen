@@ -430,9 +430,9 @@ public final class GameTestKit {
         return null;
     }
 
-    /** {@code numen.use.block} 对着 {@code rel} 那一格按一下,同步调用。 */
+    /** 对着 {@code rel} 那一格按一下,同步调用:左键是 {@code numen.use.hit},右键是 {@code numen.use.block}。 */
     static TaskRecord click(GameTestHelper helper, NumenPlayer companion, String button, BlockPos rel) {
-        return lua(companion, "numen.use.block(" + at(helper, rel) + ("left".equals(button) ? ", {left = true}" : "") + ")")
+        return lua(companion, ("left".equals(button) ? "numen.use.hit(" : "numen.use.block(") + at(helper, rel) + ")")
                 .task();
     }
 

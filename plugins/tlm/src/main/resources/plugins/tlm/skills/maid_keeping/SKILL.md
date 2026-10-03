@@ -30,9 +30,9 @@ description: 主人提到车万女仆、要你驯服或照顾女仆、给女仆�
 她的界面在她身边才打得开(大约 7 格内),先走过去再开:
 
 1. `tlm.maid.open(812)`:她的盔甲、主手副手、她自己的几格和背包。
-2. `numen.use.gui` 看格子编号(你的背包在前,她的格子在后)。
-3. `numen.use.transfer(3, 42)` 把你那一格的东西放进她那一格;整叠送过去用 `numen.use.shift(3)`。
-4. 弄完 `numen.use.close`。
+2. `numen.gui.view` 看格子编号(你的背包在前,她的格子在后)。
+3. `numen.gui.move(3, 42)` 把你那一格的东西放进她那一格;整叠送过去用 `numen.gui.quick(3)`。
+4. 弄完 `numen.gui.close`。
 
 饰品在另一页:`tlm.maid.open(812, {tab = "bauble"})`,装了 Curios 的话还有 `tlm.maid.open(812, {tab = "curios"})`。
 

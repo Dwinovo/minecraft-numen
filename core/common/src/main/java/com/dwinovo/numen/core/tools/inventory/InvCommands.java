@@ -94,7 +94,7 @@ public final class InvCommands {
                 .note("It never walks and never places a table: the nearest table in reach is used, and a refusal "
                         + "says where one is or how to place one.")
                 .note("Only [crafting] recipes. Smelting, stonecutting and smithing happen at the station: "
-                        + "`numen.use.block` it, `numen.use.gui`, then `numen.use.shift` or `numen.use.transfer` the items in.")
+                        + "`numen.use.block` it, `numen.gui.view`, then `numen.gui.quick` or `numen.gui.move` the items in.")
                 .seeAlso(line(RECIPE));
         inv.server(RECIPE, "How an item is made, like JEI: every recipe that outputs it, at every station.",
                 InvCommands::recipe, RECIPE_ITEM, Listing.PAGE)
@@ -102,8 +102,8 @@ public final class InvCommands {
                 .example("for _, r in ipairs(numen.inv.recipe(\"minecraft:diamond_pickaxe\")) do print(r) end")
                 .note("Instant and read-only. Every recipe is listed; a long list comes in pages.")
                 .note("Each recipe is tagged [crafting], [smelting], [stonecutter], [smithing] …: [crafting] is "
-                        + "`numen.inv.craft`; the others are made at their station (`numen.use.block` it, `numen.use.gui`, then "
-                        + "`numen.use.shift` or `numen.use.transfer`).")
+                        + "`numen.inv.craft`; the others are made at their station (`numen.use.block` it, `numen.gui.view`, then "
+                        + "`numen.gui.quick` or `numen.gui.move`).")
                 .note("No recipe found means the item is mined or traded, not made.")
                 .seeAlso(line(CRAFT));
         inv.server(EAT, "Eat or drink something from your inventory.",
@@ -127,7 +127,7 @@ public final class InvCommands {
                 .example("numen.inv.drop(\"rotten_flesh\")")
                 .note("Asks your owner first unless their rules allow it; the call waits for the answer.")
                 .note("Dropped items despawn after 5 minutes. To store things, open a chest with `numen.use.block` and "
-                        + "`numen.use.shift` them into it instead.")
+                        + "`numen.gui.quick` them into it instead.")
                 .note("Returns how many were dropped and how many remain.")
                 .seeAlso("use block");
         inv.server(TAKE, "Creative mode only: conjure items into your inventory, like the creative menu.",

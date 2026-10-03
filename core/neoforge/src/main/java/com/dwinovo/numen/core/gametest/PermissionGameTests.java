@@ -533,7 +533,7 @@ public class PermissionGameTests {
     }
 
     /**
-     * numen.use.block 左键打主人的箱子:动手之前挂一条征询,这次调用悬着;主人允许后箱子没了。
+     * numen.use.hit 左键打主人的箱子:动手之前挂一条征询,这次调用悬着;主人允许后箱子没了。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void interact_left_click_on_owners_chest_asks(GameTestHelper helper) {
@@ -546,7 +546,7 @@ public class PermissionGameTests {
         TaskRecord[] dig = new TaskRecord[1];
         boolean[] answered = new boolean[1];
         helper.runAfterDelay(5, () -> {
-            dig[0] = lua(companion, "numen.use.block(" + xyz(chest) + ", {left = true})").task();
+            dig[0] = lua(companion, "numen.use.hit(" + xyz(chest) + ")").task();
         });
 
         succeedWhen(helper, () -> {
@@ -559,7 +559,7 @@ public class PermissionGameTests {
                 answered[0] = desk(companion).answer(pending.id(),
                         com.dwinovo.numen.permission.ConsentAnswer.Decision.ALLOW_ONCE, "");
             }
-            helper.assertTrue(dig[0].getResult() != null, "use block has not finished");
+            helper.assertTrue(dig[0].getResult() != null, "use hit has not finished");
             helper.assertTrue(level.getBlockState(chest).isAir(),
                     "the chest is still there after the owner allowed: " + dig[0].getResult().message());
             CompanionFactory.despawn(level.getServer(), companion);
@@ -1098,7 +1098,7 @@ public class PermissionGameTests {
 
     /** 把打开的界面里第 0 格整叠拿进背包。 */
     private static TaskRecord takeFirstSlot(NumenPlayer companion) {
-        return lua(companion, "numen.use.shift(0)").task();
+        return lua(companion, "numen.gui.quick(0)").task();
     }
 
     /**
@@ -1248,8 +1248,8 @@ public class PermissionGameTests {
 
     /**
      * 别的模组在原生通道里取消了破坏事件:权限层放行了(自然泥土),挖掘落点照真客户端挖下去,服务端退回来——
-     * numen.use.block 以 refused 收场,理由写明服务器没让挖掉,泥土一块不少。生存(STOP 那一下被退)与创造
-     * (START 那一下被退)各一具身体。
+     * 以 refused 收场,理由写明服务器没让挖掉,泥土一块不少。生存的身体用 numen.work.dig 挖(STOP 那一下被退),
+     * 创造的用 numen.use.hit 点(START 那一下被退)。
      */
     @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_permission")
     public static void a_cancelled_break_event_refuses_the_dig(GameTestHelper helper) {
@@ -1264,7 +1264,7 @@ public class PermissionGameTests {
         BreakVeto.LOCKED.add(builder.getUUID());
         TaskRecord[] calls = new TaskRecord[2];
         helper.runAfterDelay(5, () -> {
-            calls[0] = click(helper, digger, "left", survivalRel);
+            calls[0] = lua(digger, "numen.work.dig(" + at(helper, survivalRel) + ")").task();
             calls[1] = click(helper, builder, "left", creativeRel);
         });
 
@@ -1477,7 +1477,7 @@ public class PermissionGameTests {
     }
 
     /**
-     * 主人用命令写 {@code deny break(placed)}:收下这一行。她 numen.use.block 左键打玩家放的石头被拒、理由是那一行规则,石头还在;
+     * 主人用命令写 {@code deny break(placed)}:收下这一行。她 numen.use.hit 左键打玩家放的石头被拒、理由是那一行规则,石头还在;
      * 天然的石头照常挖掉。从头到尾不弹卡。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")

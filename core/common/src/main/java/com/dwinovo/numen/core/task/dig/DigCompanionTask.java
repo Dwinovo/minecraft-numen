@@ -427,7 +427,7 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
     private String noTool() {
         return "my tools can't harvest " + r.label + " — digging it would destroy it without any drop. Equip a "
                 + "suitable tool (numen.gear.wear, e.g. a pickaxe) first; to break a block regardless of drops, "
-                + "numen.use.block(pos, {left = true}) on it with whatever is in hand";
+                + "numen.use.hit(pos) on it with whatever is in hand";
     }
 
     /** 要挖却没挖成的各因为什么(以 {@code "; "} 起头);都没有是空串。 */

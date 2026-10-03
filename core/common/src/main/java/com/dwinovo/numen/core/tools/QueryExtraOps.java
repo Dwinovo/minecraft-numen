@@ -206,11 +206,11 @@ public final class QueryExtraOps {
                 + "• [crafting]: numen.inv.craft(<item>, {count = N}) — it lays out the grid and takes the "
                 + "result for you (a 3x3 recipe needs a crafting table within reach; 2x2 works "
                 + "anywhere).\n"
-                + "• [smelting|blasting|smoking]: numen.use.block the furnace, then numen.use.shift the input and "
-                + "the fuel — the menu routes each to its slot. Wait, then numen.use.shift the output back "
+                + "• [smelting|blasting|smoking]: numen.use.block the furnace, then numen.gui.quick the input and "
+                + "the fuel — the menu routes each to its slot. Wait, then numen.gui.quick the output back "
                 + "out.\n"
-                + "• [stonecutter]: numen.use.block it, numen.use.shift the input (the menu routes it in), take the "
-                + "output. [smithing]: numen.use.block it, numen.use.gui, then numen.use.transfer template + base + "
+                + "• [stonecutter]: numen.use.block it, numen.gui.quick the input (the menu routes it in), take the "
+                + "output. [smithing]: numen.use.block it, numen.gui.view, then numen.gui.move template + base + "
                 + "addition each into its own slot.").result(args, Map.of(RECIPES, recipes)).toJson();
     }
 
@@ -321,7 +321,7 @@ public final class QueryExtraOps {
         if (caps.isEmpty()) {
             return TaskResult.ok(id + " at " + coord + " exposes no item/fluid/energy storage "
                     + "(not a machine/tank/battery, or it keeps its state elsewhere). "
-                    + "If it has a GUI, right-click it (numen.use.block) then numen.use.gui().", data).toJson();
+                    + "If it has a GUI, right-click it (numen.use.block) then numen.gui.view().", data).toJson();
         }
         return new Listing(id + " at " + coord + ":", caps, "").result(args, data).toJson();
     }

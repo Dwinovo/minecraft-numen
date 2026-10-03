@@ -141,7 +141,7 @@ public final class RuntimeState {
      * 这里只负责渲染——所以"换没换"只有一个信号:快照的时间戳。
      *
      * <p>放进请求而不是让她调 {@code status_self},省的是<b>一整轮</b>(请求 + 工具结果 +
-     * 再请求)。合并同类计数,不报耐久附魔:要精确到槽位时她该用 {@code use gui}。
+     * 再请求)。合并同类计数,不报耐久附魔:要精确到槽位时她该用 {@code gui view}。
      */
     private String inventoryXml() {
         var snapshot = body.get();
@@ -246,7 +246,7 @@ public final class RuntimeState {
         // 向它,结构上就没什么可重复计的。
         return "<inventory>Everything your body carries right now, totalled across all 36 backpack "
                 + "slots — trust it and do not spend a call on numen.status.self() to rediscover it. "
-                + "Call numen.use.gui() only when exact slots matter. A newer result wins over this."
+                + "Call numen.gui.view() only when exact slots matter. A newer result wins over this."
                 + "\ncarrying=" + (items.length() == 0 ? "nothing" : items)
                 + "\nholding (already counted above)=main " + describe(snapshot.mainHand())
                 + ", off " + describe(snapshot.offhand())

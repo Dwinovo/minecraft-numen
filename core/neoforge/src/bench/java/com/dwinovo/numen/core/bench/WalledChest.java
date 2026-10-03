@@ -95,7 +95,7 @@ public final class WalledChest implements Scenario {
         return """
                 numen.move.goto_(%1$s, {arrive = "use"})
                 numen.use.block(%1$s)
-                numen.use.shift(0)
-                numen.use.close()""".formatted(cell);
+                numen.gui.quick(0)
+                numen.gui.close()""".formatted(cell);
     }
 }

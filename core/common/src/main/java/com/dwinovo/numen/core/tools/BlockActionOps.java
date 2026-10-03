@@ -29,7 +29,7 @@ import java.util.Set;
 
 /**
  * Block-action implementations — the business half of {@code work dig} and of
- * {@code use block} / {@code use ahead} / {@code use entity} ({@code UseCommands}). Each method validates its
+ * {@code use block} / {@code use item} / {@code use entity} ({@code UseCommands}). Each method validates its
  * args and builds a {@link TaskRecord}, which takes its name, call id and deadline basis from the call's
  * {@link ServerSource}.
  */
@@ -96,7 +96,7 @@ public final class BlockActionOps {
     }
 
     /**
-     * {@code use block}({@code aim} 是那一格)与 {@code use ahead}({@code aim} 为 null,朝她此刻面对的方向)。
+     * {@code use block}({@code aim} 是那一格)与 {@code use item}({@code aim} 为 null,朝她此刻面对的方向)。
      *
      * @param holdTicks 按住几刻;0 是按一下
      * @param itemId    先拿到手上的物品;用手上的为 null

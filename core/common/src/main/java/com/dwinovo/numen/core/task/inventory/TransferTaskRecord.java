@@ -5,7 +5,7 @@ import com.dwinovo.numen.core.tools.ContainerOps;
 import com.dwinovo.numen.task.TaskRecord;
 
 /**
- * 在她打开的界面里搬一次东西({@code use transfer} 或 {@code use shift}):一次调用一步。要搬好几样就同一轮发好几行,
+ * 在她打开的界面里搬一次东西({@code gui move} 或 {@code gui quick}):一次调用一步。要搬好几样就同一轮发好几行,
  * 串行的派发器一行一行排开。
  */
 public final class TransferTaskRecord extends TaskRecord {

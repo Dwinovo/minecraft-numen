@@ -17,7 +17,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 
 /**
- * 在打开的界面里搬东西的业务半边:{@code use transfer}(一格挪到另一格:挪、并、换)与 {@code use shift}(整叠挪到另一边,
+ * 在打开的界面里搬东西的业务半边:{@code gui move}(一格挪到另一格:挪、并、换)与 {@code gui quick}(整叠挪到另一边,
  * 像按住 Shift 点它)。一次调用一步({@link Move}),作为有界短活跑({@code TransferCompanionTask}):从容器里拿东西的那一步
  * 和别的身体动作一样,可能要等主人点头。
  */
@@ -29,7 +29,7 @@ public final class ContainerOps {
     /**
      * 搬一步。
      *
-     * @param to    放到哪一格;null 是整叠挪到另一边({@code use shift})
+     * @param to    放到哪一格;null 是整叠挪到另一边({@code gui quick})
      * @param count 挪几个;null 是整叠。只和 {@code to} 一起用
      */
     public record Move(int from, Integer to, Integer count) {}
@@ -86,10 +86,10 @@ public final class ContainerOps {
         Integer to = m.to();
         Integer count = m.count();
         if (from < 0 || from > max) {
-            return "from slot " + from + " OUT OF RANGE (0.." + max + ") — skipped; numen.use.gui() shows the indices.";
+            return "from slot " + from + " OUT OF RANGE (0.." + max + ") — skipped; numen.gui.view() shows the indices.";
         }
         if (to != null && (to < 0 || to > max)) {
-            return "to slot " + to + " OUT OF RANGE (0.." + max + ") — skipped; numen.use.gui() shows the indices.";
+            return "to slot " + to + " OUT OF RANGE (0.." + max + ") — skipped; numen.gui.view() shows the indices.";
         }
         try {
             return to == null ? route(menu, self, from) : place(menu, self, from, to, count);
@@ -106,7 +106,7 @@ public final class ContainerOps {
                 // Empty crafting result = the grid doesn't form a valid recipe (usually a mis-placed
                 // 2x2 layout). Point the model back at the recipe so it self-corrects.
                 return "slot " + from + " (crafting result) is empty — the grid doesn't form a valid "
-                        + "recipe yet. Call numen.inv.recipe for the exact layout, then numen.use.gui() and match "
+                        + "recipe yet. Call numen.inv.recipe for the exact layout, then numen.gui.view() and match "
                         + "it onto the grid cell-for-cell (a smaller recipe goes top-left; 2x2 slot "
                         + "indices are easy to guess wrong).";
             }

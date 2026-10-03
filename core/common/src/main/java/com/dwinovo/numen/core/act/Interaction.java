@@ -149,9 +149,9 @@ public final class Interaction {
      * 左键按在准星落着的那一格上({@code hit}),按住直到它碎:手上是什么就用什么,不换工具、不挪步、不清别的格——一次纯按键。
      * 创造一下就碎,生存按手上的东西算时间,都是原版的手自己分。
      */
-    public static Interaction attackBlock(NumenPlayer p, BlockHitResult hit) {
+    public static Interaction attackBlock(NumenPlayer p, BlockHitResult hit, boolean hold) {
         Interaction i = new Interaction(p, Button.ATTACK, hit.getBlockPos(), null, InteractionHand.MAIN_HAND,
-                Timing.hold());
+                hold ? Timing.hold() : Timing.once());
         i.presetHit = hit;
         return i;
     }
@@ -204,7 +204,8 @@ public final class Interaction {
      * Build the native action for a resolved crosshair {@code hit} + {@code button}, mapping
      * {@code holdTicks} to the cell's natural cadence — a 6-cell (button × target) dispatch:
      * <ul>
-     *   <li>ATTACK·BLOCK → break (the hands hold till the block is gone);</li>
+     *   <li>ATTACK·BLOCK → hit it (tap = one press, which breaks only what breaks at once; hold = till the block is
+     *       gone);</li>
      *   <li>ATTACK·ENTITY → hit (tap = one cooldown-gated hit; hold = keep hitting);</li>
      *   <li>USE·BLOCK → activate (tap once; hold re-clicks every rightClickDelay — modded crank);</li>
      *   <li>USE·ENTITY → interact (tap once; hold re-clicks);</li>
@@ -236,7 +237,7 @@ public final class Interaction {
             case BLOCK -> {
                 BlockHitResult bh = (BlockHitResult) hit;
                 if (button == Button.ATTACK) {
-                    return attackBlock(p, bh);
+                    return attackBlock(p, bh, hold);
                 }
                 Interaction i = new Interaction(p, Button.USE, bh.getBlockPos(), null,
                         InteractionHand.MAIN_HAND,
@@ -312,11 +313,12 @@ public final class Interaction {
         return true;
     }
 
-    // ---- ATTACK + block: hold the button on it ----
+    // ---- ATTACK + block: press, or hold the button on it ----
 
     /**
-     * 按住左键:每刻朝按下时的那一点看着,准星还落在那一格上就接着挖;准星被挡开了(有东西走进来)就等着,不去挖挡着的。
-     * 那一格碎了就松手。权限层在第一下之前把门(同一格接着挖不再问),被拒只转述、不换法子。
+     * 左键一格:每刻朝按下时的那一点看着,准星还落在那一格上就按;准星被挡开了(有东西走进来)就等着,不去按挡着的。点一下
+     * ({@link Timing#once})按过一下就松手,按住的那一格碎了才松手。权限层在第一下之前把门(同一格接着按不再问),被拒只转述、
+     * 不换法子。
      */
     private Status breakBlock() {
         if (player.level().getBlockState(block).isAir()) return Status.DONE;
@@ -327,7 +329,7 @@ public final class Interaction {
             return Status.RUNNING;
         }
         return switch (CompanionHands.of(player).dig(hit)) {
-            case Effector.Strike.Swinging swinging -> Status.RUNNING;
+            case Effector.Strike.Swinging swinging -> timing.hold ? Status.RUNNING : Status.DONE;
             case Effector.Strike.Broke broke -> Status.DONE;
             case Effector.Strike.Refused refused -> {
                 failReason = "cannot break that block: " + (refused.reason() instanceof Verdict verdict

@@ -210,7 +210,7 @@ public class MovementGameTests {
             TaskRecord press = lua(companion, "numen.use.entity(" + boat.getId() + ")").task();
         });
         helper.runAfterDelay(30, () -> {
-            TaskRecord dig = lua(companion, "numen.use.block(" + xyz(stone) + ", {left = true})").task();
+            TaskRecord dig = lua(companion, "numen.use.hit(" + xyz(stone) + ")").task();
         });
 
         succeedWhen(helper, () -> {

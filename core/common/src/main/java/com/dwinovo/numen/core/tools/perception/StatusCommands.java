@@ -58,7 +58,7 @@ public final class StatusCommands {
                 .note("Instant and read-only: name, game mode, health, hunger and saturation, position, dimension, "
                         + "biome, the structures you stand in, what is in your hands, what you wear and what mods "
                         + "report about your body, movement state.")
-                .note("It does not list your backpack: what you carry is in front of you every turn; `numen.use.gui()` "
+                .note("It does not list your backpack: what you carry is in front of you every turn; `numen.gui.view()` "
                         + "shows exact slots.")
                 .seeAlso("status owner", "status world");
         status.server("owner", "Your owner: online or not, health, hunger, position, distance from you, held items.",

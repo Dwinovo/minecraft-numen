@@ -103,6 +103,7 @@ public final class NumenCore {
         // throwaway 组连同它挂进身体状态的那一段
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.work.ThrowawayCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.interact.UseCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.interact.GuiCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.inventory.InvCommands::install);
         // 引擎的 task 命令组,和插件走同一扇门
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.task.TaskCommands::install);
@@ -125,6 +126,8 @@ public final class NumenCore {
         TaskFactory.register(DropItemsTaskRecord.class, (p, r) -> new DropCompanionTask(p, r));
         TaskFactory.register(com.dwinovo.numen.core.task.inventory.TransferTaskRecord.class,
                 (p, r) -> new com.dwinovo.numen.core.task.inventory.TransferCompanionTask(p, r));
+        TaskFactory.register(com.dwinovo.numen.core.task.inventory.GuiItemsTaskRecord.class,
+                (p, r) -> new com.dwinovo.numen.core.task.inventory.GuiItemsCompanionTask(p, r));
         TaskFactory.register(EatItemTaskRecord.class, (p, r) -> new EatCompanionTask(p, r));
         TaskFactory.register(AttackTaskRecord.class, (p, r) -> new AttackCompanionTask(p, r));
         TaskFactory.register(FishTaskRecord.class, (p, r) -> new FishCompanionTask(p, r));

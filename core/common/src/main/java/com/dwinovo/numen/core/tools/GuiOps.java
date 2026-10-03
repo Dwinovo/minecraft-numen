@@ -16,45 +16,50 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * GUI tool implementations — the business half of {@code use gui} and
- * {@code use close} ({@code UseCommands}): read the open container menu and close it.
+ * 打开的界面:{@code numen.gui.view} 读它、{@code numen.gui.close} 关它,{@code numen.use.block} 的右键打开了一个界面时也交回它
+ * ({@link #window})。界面是一个 Window:每个槽一条,方法写在内置模块 {@code numen.gui} 里({@code w:put}、{@code w:take}……)。
  */
 public final class GuiOps {
 
-    /**
-     * 打开的界面:抬头是界面名与合成格的图,每个槽一条(界面这一侧的全列,空的也列;她自己那一侧只列有东西的),结尾是光标、
-     * 机器的数值与提示。槽多的模组界面按输出预算分页({@link Listing})。
-     *
-     */
-    /** 打开的界面:脚本拿到的那张表。 */
-    public static final com.dwinovo.numen.agent.script.ScriptType GUI = com.dwinovo.numen.agent.script.ScriptType.table(
-            com.dwinovo.numen.agent.script.ScriptType.field("menu", com.dwinovo.numen.agent.script.ScriptType.STRING,
-                    "InventoryMenu when it is your own inventory."),
-            com.dwinovo.numen.agent.script.ScriptType.field("slots", com.dwinovo.numen.agent.script.ScriptType.listOf(
-                    com.dwinovo.numen.agent.script.ScriptType.table(
-                            com.dwinovo.numen.agent.script.ScriptType.field("index",
-                                    com.dwinovo.numen.agent.script.ScriptType.INTEGER, "What numen.use.transfer and numen.use.shift take."),
-                            com.dwinovo.numen.agent.script.ScriptType.field("side",
-                                    com.dwinovo.numen.agent.script.ScriptType.choice(List.of("container", "you", "grid",
-                                            "result")), null),
-                            com.dwinovo.numen.agent.script.ScriptType.optional("item",
-                                    com.dwinovo.numen.agent.script.ScriptType.STRING, "Empty slots have none."),
-                            com.dwinovo.numen.agent.script.ScriptType.optional("count",
-                                    com.dwinovo.numen.agent.script.ScriptType.INTEGER, null),
-                            com.dwinovo.numen.agent.script.ScriptType.optional("output",
-                                    com.dwinovo.numen.agent.script.ScriptType.BOOLEAN, "A slot you only take from."))),
-                    "Every container and crafting-grid slot, and your own filled ones."),
-            com.dwinovo.numen.agent.script.ScriptType.optional("cursor", com.dwinovo.numen.agent.script.ScriptType.STRING,
-                    "What the cursor holds."),
-            com.dwinovo.numen.agent.script.ScriptType.field("data",
-                    com.dwinovo.numen.agent.script.ScriptType.listOf(com.dwinovo.numen.agent.script.ScriptType.INTEGER),
-                    "The menu's numbers: progress, fuel, energy (meaning is GUI-specific)."));
+    private static final com.dwinovo.numen.agent.script.ScriptType STRING = com.dwinovo.numen.agent.script.ScriptType.STRING;
+    private static final com.dwinovo.numen.agent.script.ScriptType INTEGER = com.dwinovo.numen.agent.script.ScriptType.INTEGER;
 
-    public String inspectGui(NumenPlayer self, CommandArgs args) {
+    /** 打开的界面:脚本拿到的那张表,带着 {@code numen.gui} 里的方法。 */
+    public static final com.dwinovo.numen.agent.script.ScriptType.Class WINDOW =
+            new com.dwinovo.numen.agent.script.ScriptType.Class("Window",
+                    "The window you have open (your own inventory menu when nothing else is): every container and "
+                            + "crafting-grid slot, and your own filled ones.", null, List.of(
+                    com.dwinovo.numen.agent.script.ScriptType.field("menu", STRING,
+                            "InventoryMenu when it is your own inventory."),
+                    com.dwinovo.numen.agent.script.ScriptType.field("slots",
+                            com.dwinovo.numen.agent.script.ScriptType.listOf(com.dwinovo.numen.agent.script.ScriptType.table(
+                                    com.dwinovo.numen.agent.script.ScriptType.field("index", INTEGER,
+                                            "What numen.gui.move and numen.gui.quick take."),
+                                    com.dwinovo.numen.agent.script.ScriptType.field("side",
+                                            com.dwinovo.numen.agent.script.ScriptType.choice(List.of("container", "you",
+                                                    "grid", "result")), null),
+                                    com.dwinovo.numen.agent.script.ScriptType.optional("item", STRING,
+                                            "Empty slots have none."),
+                                    com.dwinovo.numen.agent.script.ScriptType.optional("count", INTEGER, null),
+                                    com.dwinovo.numen.agent.script.ScriptType.optional("output",
+                                            com.dwinovo.numen.agent.script.ScriptType.BOOLEAN,
+                                            "A slot you only take from."))), null),
+                    com.dwinovo.numen.agent.script.ScriptType.optional("cursor", STRING, "What the cursor holds."),
+                    com.dwinovo.numen.agent.script.ScriptType.field("data",
+                            com.dwinovo.numen.agent.script.ScriptType.listOf(INTEGER),
+                            "The menu's numbers: progress, fuel, energy (meaning is GUI-specific)."),
+                    com.dwinovo.numen.agent.script.ScriptType.optional("block",
+                            com.dwinovo.numen.cli.Shapes.BLOCK.type(), "The block whose window it is, when a click on "
+                                    + "it opened it."))).methodsIn("numen.gui");
+
+    /**
+     * 打开的界面读成两样:给脚本的那张表({@link #WINDOW}),与回执里的那几段话(抬头与合成格的图、每个槽一行、结尾的光标与机器读数)。
+     */
+    public record View(java.util.Map<String, Object> data, String header, List<String> slots, String footer) {}
+
+    /** 她此刻打开的界面;没开别的就是她自己的背包界面(带 2x2 合成格)。 */
+    public static View window(NumenPlayer self) {
         AbstractContainerMenu menu = self.containerMenu;
-        if (menu == null) {
-            return TaskResult.fail(com.dwinovo.numen.agent.script.ErrorKind.NOT_FOUND, "no GUI open.", null).toJson();
-        }
         com.google.gson.JsonArray slotData = new com.google.gson.JsonArray();
         // With no block menu open, containerMenu IS your own InventoryMenu — which carries the 2x2
         // crafting grid. Surface it so the model can craft small recipes without a table.
@@ -157,11 +162,18 @@ public final class GuiOps {
             out.put("cursor", describe(menu.getCarried()));
         }
         out.put("data", numbers);
-        return new Listing(header + gridSection + "container slots:", slots,
+        return new View(out, header + gridSection + "container slots:", slots,
                 "cursor: " + describe(menu.getCarried()) + "\n"
                         + dataLine
-                        + "tip: numen.use.shift(slot) sends a whole stack to the other section; numen.use.transfer(from, to)"
-                        + " (with {count = N} for part of it) puts it into a specific slot.").result(args, out).toJson();
+                        + "tip: numen.gui.put(item) and numen.gui.take(item) move items of a kind in or out; "
+                        + "numen.gui.quick(slot) sends a whole stack to the other section; numen.gui.move(from, to) "
+                        + "(with {count = N} for part of it) puts it into a specific slot.");
+    }
+
+    /** {@code numen.gui.view}:读打开的界面,槽多的模组界面按输出预算分页({@link Listing})。 */
+    public String inspectGui(NumenPlayer self, CommandArgs args) {
+        View view = window(self);
+        return new Listing(view.header(), view.slots(), view.footer()).result(args, view.data()).toJson();
     }
 
     /** 一个槽的那张表。 */

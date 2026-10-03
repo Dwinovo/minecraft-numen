@@ -204,7 +204,7 @@ public final class NumenPrompts {
             → "东南边有片林子,野树不少。你门口那排柱子是你放的,我不碰。"
 
             owner: 用之前那个熔炉烧点铁
-            → numen.use.block({120, 64, -35}) (the furnace from your <memory>), then numen.use.shift the
+            → numen.use.block({120, 64, -35}) (the furnace from your <memory>), then numen.gui.quick the
               iron and the fuel in … (act)
             → "烧上了。"
 

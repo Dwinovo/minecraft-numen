@@ -1,50 +1,55 @@
 ---
 name: containers
-description: How to move items in/out of any container or machine GUI — chest, barrel, shulker, furnace, modded machine. The open (numen.use.block) → numen.use.gui → numen.use.shift / numen.use.transfer → numen.use.close loop, one move per call; crafting by laying a recipe into the grid, smelting by loading a furnace, and error recovery.
+description: How to move items in/out of any container or machine GUI — chest, barrel, shulker, furnace, modded machine. numen.use.block opens it and hands back its Window; w:put / w:take move items of a kind, w:quick / w:move one slot, w:close; crafting by laying a recipe into the grid, smelting by loading a furnace, and error recovery.
 ---
 
 # Skill: containers
 
-You move items through real GUIs, exactly like a player: open the block, look at the slots, move items, close. There is no per-item black box — you drive the menu yourself, one move per line, which works for **any** container or machine (vanilla or modded) and lets you **see and fix** what goes wrong.
+You move items through real GUIs, exactly like a player: open the block, look at the slots, move items, close. There is no per-item black box — you drive the menu yourself, which works for **any** container or machine (vanilla or modded) and lets you **see and fix** what goes wrong.
 
 ## The loop
 
-1. **Open** — `numen.use.block({x = 120, y = 64, z = -35})` on the container block (it does not travel: first `numen.move.goto_({x = 120, y = 64, z = -35}, {arrive = "use"})`, which stands you where the container is in sight and in reach). This opens its GUI and leaves it open.
-2. **Look** — `numen.use.gui`. Lists every slot: `index: item xN`, which side (container vs your inventory), and `[output]` for take-only slots (a furnace result, a machine product).
-3. **Move** — one move per call (see below). To move several stacks, call it several times in one program; they run in order.
-4. **Verify** — each result already says what happened; `numen.use.gui` again only if you need to re-check.
-5. **Close** — `numen.use.close` when done. (It also auto-closes if you walk away.)
+1. **Open** — `numen.use.block({x = 120, y = 64, z = -35})` on the container block (it does not travel: first `numen.move.goto_({x = 120, y = 64, z = -35}, {arrive = "use"})`, which stands you where the container is in sight and in reach). It opens the GUI, leaves it open and hands back its **Window**: every slot (`index`, `side`, `item`, `count`, `output` for take-only slots), the cursor and the machine's numbers.
+2. **Move** — the Window's methods (below). Several moves in one program run in order.
+3. **Verify** — each result already says what happened; `numen.gui.view()` reads the window again when you need to re-check.
+4. **Close** — `w:close()` when done. (It also auto-closes if you walk away.)
 
-## Moving items: two moves
+The methods are the `numen.gui` functions (`w:put` calls `numen.gui.put`), and both act on the window open now.
 
-- **`numen.use.shift`** — shift-click a slot: its whole stack goes to the *other section*, routed by the menu (into a chest, out of one, a smeltable into a furnace's input, coal into its fuel slot). This is the easy bulk deposit/withdraw — you don't pick a slot.
-- **`numen.use.transfer`** — put a slot's items into one EXACT slot: empty → moves there; same item → merges; **a different item → the two slots SWAP**. Add `count` to move only part of the stack (into an empty slot or onto the same item).
+## Moving items
 
-Each result spells out what actually happened — how much moved, a merge, a swap, or *why nothing moved* (full / output-only slot) — so you rarely need to re-inspect.
+- **`w:put(item, count?)`** — put items of one kind from your inventory into the window: all of them, or `count`. The window routes each stack like a shift-click: raw iron into a furnace's input, coal into its fuel slot, anything into a chest's free slots. Returns how many went in.
+- **`w:take(item, count?)`** — take items of one kind out of the window into your inventory. Returns how many came out.
+- **`w:quick(slot)`** — shift-click one slot: its whole stack goes to the other side, routed by the menu.
+- **`w:move(from, to, {count = N}?)`** — put a slot's items into one EXACT slot: empty → moves there; same item → merges; **a different item → the two slots SWAP**. Add `count` to move only part of the stack.
 
-**Deposit or take whole stacks** — one call per stack, all in one program:
+**Store all your cobblestone, take 10 iron:**
+```lua
+local w = numen.use.block({x = 120, y = 64, z = -35})
+w:put("minecraft:cobblestone")
+w:take("minecraft:iron_ingot", 10)
+w:close()
 ```
-numen.use.shift(5)
-numen.use.shift(6)
-```
 
-**Exact count** — the stack's slot, a free slot, how many:
-```
-numen.use.transfer(3, 40, {count = 10})
+**How much is in there** — `numen.gui.count(item)` counts the window's own side (not your inventory):
+```lua
+local w = numen.use.block({x = 120, y = 64, z = -35})
+print(numen.gui.count("minecraft:wheat"))
+w:close()
 ```
 
 **Swap two slots** — a slot holding a different item (e.g. swap a tool into a slot):
-```
-numen.use.transfer(38, 12)
+```lua
+numen.gui.view():move(38, 12)
 ```
 
 ## Reading machine progress
 
-`numen.use.gui` also shows a `data values: [...]` line — the menu's synced ints (the same numbers a real GUI uses to draw progress/fuel/energy bars), separate from the item slots. Meaning is machine-specific; for a **vanilla furnace** they are `[litTime, litDuration, cookProgress, cookTotal]`, so:
+The Window's `data` is the menu's synced ints (the same numbers a real GUI uses to draw progress/fuel/energy bars), separate from the item slots. Meaning is machine-specific; for a **vanilla furnace** they are `{litTime, litDuration, cookProgress, cookTotal}`, so:
 - cook % = `cookProgress / cookTotal` (the smelting arrow),
 - still burning if `litTime > 0`.
 
-So to check a furnace: `numen.use.block` it → `numen.use.gui` → read the input count (slots) + the data values. The output slot filling up is also a clear "an item finished" signal.
+So to check a furnace: `numen.use.block` it and read the input count (slots) and `data`. The output slot filling up is also a clear "an item finished" signal.
 
 ## Crafting
 
@@ -52,66 +57,46 @@ For an ordinary [crafting] recipe `numen.inv.craft` does all of this for you. La
 
 1. **`numen.inv.recipe`** the item — the ingredients and, for shaped recipes, the grid layout.
 2. **Open the grid:**
-   - **≤2×2 recipe** (planks, sticks, torches, a crafting table): NO table needed — `numen.use.gui` with nothing open shows your own 2×2 grid.
-   - **3×3 recipe** (most tools, etc.): `numen.use.block` a crafting table, then `numen.use.gui` — it draws the grid as a 2D map of slot numbers.
-3. **Place the recipe** — lay its layout onto the grid **top-left**: one `numen.use.transfer` with `{count = 1}` per NON-EMPTY cell, all in one program. A 1-ingredient recipe = ONE cell; don't fill the rest.
-4. **Take the result** — `numen.use.shift` the result slot (this performs the craft). Repeat steps 3–4 for each item you want.
-5. For a table, `numen.use.close` when done.
+   - **≤2×2 recipe** (planks, sticks, torches, a crafting table): NO table needed — `numen.gui.view()` with nothing open is your own 2×2 grid.
+   - **3×3 recipe** (most tools, etc.): `numen.use.block` a crafting table; `numen.gui.view` draws its grid as a 2D map of slot numbers.
+3. **Place the recipe** — lay its layout onto the grid **top-left**: one `w:move(from, cell, {count = 1})` per NON-EMPTY cell. A 1-ingredient recipe = ONE cell; don't fill the rest.
+4. **Take the result** — `w:quick` the result slot (this performs the craft). Repeat steps 3–4 for each item you want.
+5. For a table, `w:close()` when done.
 
-**Watch the cells** — the grid is wider than a small recipe. A 2-wide recipe in a 3-wide table uses the top-left cells, **NOT** consecutive slot numbers (e.g. a 2×2 recipe in a 3×3 grid skips the right column). Read the 2D map from `numen.use.gui` and match the layout cell-for-cell; this is the easiest thing to get wrong.
+**Watch the cells** — the grid is wider than a small recipe. A 2-wide recipe in a 3-wide table uses the top-left cells, **NOT** consecutive slot numbers (e.g. a 2×2 recipe in a 3×3 grid skips the right column). Read the 2D map from `numen.gui.view` and match the layout cell-for-cell; this is the easiest thing to get wrong.
 
-**Make many at once** — put a *stack* in each cell, then ONE `numen.use.shift` of the result crafts over and over until a cell runs dry. E.g. 7 logs in one grid cell → a single take = 28 planks; 8 planks in each of the two stick cells → one take = 32 sticks. Far fewer calls than one set at a time.
+**Make many at once** — put a *stack* in each cell, then ONE `w:quick` of the result crafts over and over until a cell runs dry. E.g. 7 logs in one grid cell → a single take = 28 planks; 8 planks in each of the two stick cells → one take = 32 sticks.
 
 *Example — sticks (2 oak_planks stacked vertically), your own grid with cells 1–4 and the result in slot 0, planks in slot 20:*
-```
-numen.use.transfer(20, 1, {count = 1})
-numen.use.transfer(20, 3, {count = 1})
-numen.use.shift(0)
+```lua
+local w = numen.gui.view()
+w:move(20, 1, {count = 1})
+w:move(20, 3, {count = 1})
+w:quick(0)
 ```
 
 ## Smelting
 
-Smelting is NOT crafting — there's no auto-tool, you load the furnace yourself (it's just two slots):
-  1. `numen.use.block` the furnace / blast furnace / smoker.
-  2. Load the input: `numen.use.shift` the raw item's slot — the menu routes it to the top input slot.
-  3. Add fuel: `numen.use.shift` the coal's slot — it routes to the bottom fuel slot. **Fuel rule**: 1 coal/charcoal smelts 8 items; a log/plank ~1.5, so add ~⌈N/8⌉ coal.
-  4. `numen.use.close`, then set a timer for roughly when the batch should be done, like `numen.task.timer("collect the iron from the furnace", {after = 90})` — a vanilla furnace takes ~10s per item, a blast furnace / smoker ~5s. The timer doesn't occupy your body, so walk away and do something else; don't stand there polling.
-  5. When the `timer` event fires, come back and re-open the furnace. The timer is a reminder, not proof: `numen.use.gui` shows the real state (`data values` = `[litTime, litDuration, cookProgress, cookTotal]`). Not done? Set a shorter timer and leave again.
-  6. `numen.use.shift` the output slot to collect (awards the smelting XP). `numen.use.close`.
+Smelting is NOT crafting — you load the furnace yourself (it's just two slots):
+  1. `local w = numen.use.block({x = 120, y = 64, z = -35})` on the furnace / blast furnace / smoker.
+  2. Load the input: `w:put("minecraft:raw_iron")` — the menu routes it to the top input slot.
+  3. Add fuel: `w:put("minecraft:coal", 2)` — it routes to the bottom fuel slot. **Fuel rule**: 1 coal/charcoal smelts 8 items; a log/plank ~1.5, so add ~⌈N/8⌉ coal.
+  4. `w:close()`, then set a timer for roughly when the batch should be done, like `numen.task.timer("collect the iron from the furnace", {after = 90})` — a vanilla furnace takes ~10s per item, a blast furnace / smoker ~5s. The timer doesn't occupy your body, so walk away and do something else; don't stand there polling.
+  5. When the `timer` event fires, come back and re-open the furnace. The timer is a reminder, not proof: the Window's slots and `data` show the real state. Not done? Set a shorter timer and leave again.
+  6. `w:take("minecraft:iron_ingot")` collects the output (awards the smelting XP). `w:close()`.
 
 ## Modded machines (hand-load)
 
-A custom modded machine has its own slots. For a single input, `numen.use.shift` it — the menu routes it. For a machine with several specific input slots, `numen.use.gui` then `numen.use.transfer` each input into its own slot. A modded *crafting* grid works the same as a vanilla one (see Crafting above): `numen.use.gui` draws it as a 2D map of slot numbers — lay the recipe onto it cell-for-cell (smaller recipe → top-left), one `numen.use.transfer` with `{count = 1}` per non-empty cell.
-
-## Common patterns
-
-**Store everything of one type into the nearest chest** — open it, find your cobblestone stacks under "your inventory" in `numen.use.gui`, shift each one, close:
-```
-numen.use.block({x = 120, y = 64, z = -35})
-numen.use.gui
-numen.use.shift(30)
-numen.use.shift(31)
-numen.use.close
-```
-
-**Take 10 iron from a chest (exact)** — the iron's slot, a free slot of yours:
-```
-numen.use.block({x = 120, y = 64, z = -35})
-numen.use.gui
-numen.use.transfer(4, 45, {count = 10})
-numen.use.close
-```
-
-**Empty a furnace's output:** `numen.use.gui` → the `[output]` slot → `numen.use.shift(2)`.
+A custom modded machine has its own slots. For a single input, `w:put` it — the menu routes it. For a machine with several specific input slots, read the slots and `w:move` each input into its own slot. A modded *crafting* grid works the same as a vanilla one (see Crafting above).
 
 ## Error recovery (your advantage)
 
-Every move's result tells you its outcome, and you can always `numen.use.gui` — you are never blind:
+Every move's result tells you its outcome, and `numen.gui.view()` reads the window any time — you are never blind:
 
-- **"nothing moved"** → the destination is full, or it's an `[output]` slot you can't put INTO. Try another slot or another container.
-- **Chest is full** → `numen.use.gui` shows no empty container slots. Find another chest (scan / known_blocks) or take something out first.
-- **Got a swap you didn't want** → `numen.use.transfer` put it onto a slot holding a different item. `numen.use.shift` instead to route it, or pick an empty slot.
+- **put fails, no room** → the window has no free slot that takes it (an `output` slot takes nothing). Take something out first, or use another container.
+- **take fails** → the window holds none of it (not_found), or your inventory is full.
+- **Got a swap you didn't want** → `w:move` put it onto a slot holding a different item. `w:quick` instead to route it, or pick an empty slot.
 - **"no GUI open"** → you didn't open one, or walked out of range and it closed. Open it again with `numen.use.block`.
 - **"right-clicked tall_grass … the crosshair landed there"** → something stood between you and the container, and the click went to it. The result names the next step: `numen.work.dig` that cell, or `numen.move.goto_({x = 120, y = 64, z = -35}, {arrive = "use"})` to stand where another side is in sight; then `numen.use.block` again.
 
-Always `numen.use.close` (or walk away) when finished so you don't leave a menu hanging.
+Always `w:close()` (or walk away) when finished so you don't leave a menu hanging.

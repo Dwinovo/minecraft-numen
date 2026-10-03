@@ -82,11 +82,11 @@ class WorkCommandGroupsTest {
 
     @Test
     void movingItemsInAGuiIsOneStepPerCall() {
-        String use = help("numen.use");
-        assertTrue(use.contains("\n---@field transfer fun(from: integer, to: integer, opts?: {count?: integer}) ")
-                && use.contains("\n---@field shift fun(from: integer) "), use);
-        CoreScripts.Run noGui = CoreScripts.run(HER, "numen.use.transfer(1)");
-        assertTrue(!noGui.ok() && noGui.message().contains("numen.use.transfer: bad_argument — ")
+        String gui = help("numen.gui");
+        assertTrue(gui.contains("\n---@field move fun(from: integer, to: integer, opts?: {count?: integer}) ")
+                && gui.contains("\n---@field quick fun(from: integer) "), gui);
+        CoreScripts.Run noGui = CoreScripts.run(HER, "numen.gui.move(1)");
+        assertTrue(!noGui.ok() && noGui.message().contains("numen.gui.move: bad_argument — ")
                         && noGui.message().contains("argument 'to' is missing"),
                 "少写一格目标是参数错、点名少的那个参数: " + noGui.message());
     }
@@ -125,7 +125,7 @@ class WorkCommandGroupsTest {
     @Test
     void theCallsSheWritesRead() {
         for (String code : List.of("numen.fight.attack(27)", "numen.use.block({x = 120, y = 64, z = -35})",
-                "numen.use.block({x = 120, y = 64, z = -35}, {left = true, hold = 1.5})", "numen.use.entity(812, {sneak = true})",
+                "numen.use.block({x = 120, y = 64, z = -35}, {hold = 1.5})", "numen.use.hit({x = 120, y = 64, z = -35})", "numen.use.entity(812, {sneak = true})",
                 "numen.inv.drop(\"cobblestone\")", "numen.inv.drop(\"cobblestone\", {count = 32})", "numen.work.dig({x = 120, y = 64, z = -35})",
                 "numen.work.dig({name = \"iron_ore\", pos = {x = 120, y = 12, z = -35}}, {x = 121, y = 12, z = -35}, {count = 4})", "numen.move.go(\"home\")", "numen.move.follow(184)",
                 "numen.scan.blocks(\"iron_ore\")", "numen.scan.entities()",

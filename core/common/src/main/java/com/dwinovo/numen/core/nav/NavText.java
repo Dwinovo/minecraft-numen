@@ -127,8 +127,8 @@ public final class NavText {
                     + reason(denied.reason()) + "); that is not mine to get around, so pick another destination or ask"
                     + " your owner";
             case Outcome.Stranded stranded -> "can't set off: I can't stand where I am (" + name(stranded.block())
-                    + " at " + Listing.coords(stranded.cell()) + "); free me first (break that block: `numen.use.block("
-                    + Place.cell(stranded.cell()).literal() + ", {left = true})`) or wait until I land";
+                    + " at " + Listing.coords(stranded.cell()) + "); free me first (break that block: `numen.work.dig("
+                    + Place.cell(stranded.cell()).literal() + ")`) or wait until I land";
             case Outcome.Blocked blocked -> "gave up: " + blockage(blocked.blockage())
                     + "; try again, and pick another destination if it keeps failing";
             case Outcome.NoLineOfSight sight -> "arrived, but " + Listing.coords(sight.target())
