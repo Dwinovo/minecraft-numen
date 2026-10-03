@@ -105,6 +105,7 @@ public final class NumenCore {
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.interact.UseCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.interact.GuiCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.inventory.InvCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.inventory.CreativeCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.time.TimeCommands::install);
         // 引擎的 task 命令组,和插件走同一扇门
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.task.TaskCommands::install);

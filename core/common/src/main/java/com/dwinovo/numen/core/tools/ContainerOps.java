@@ -106,7 +106,7 @@ public final class ContainerOps {
                 // Empty crafting result = the grid doesn't form a valid recipe (usually a mis-placed
                 // 2x2 layout). Point the model back at the recipe so it self-corrects.
                 return "slot " + from + " (crafting result) is empty — the grid doesn't form a valid "
-                        + "recipe yet. Call numen.inv.recipe for the exact layout, then numen.gui.view() and match "
+                        + "recipe yet. Call numen.inv.recipes for the exact layout, then numen.gui.view() and match "
                         + "it onto the grid cell-for-cell (a smaller recipe goes top-left; 2x2 slot "
                         + "indices are easy to guess wrong).";
             }

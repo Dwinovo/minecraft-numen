@@ -14,7 +14,7 @@ Phase 5 of the dragon route. With rods and pearls in hand you craft eyes, walk s
 
 ## Step 1 — craft the eyes
 
-Both are 2×2/shapeless recipes — `numen.inv.craft` makes them in your own grid, no crafting table needed (the `containers` skill shows how to lay a grid by hand).
+Both are 2×2/shapeless recipes — `numen.inv.make` makes them in your own grid, no crafting table needed (the `containers` skill shows how to lay a grid by hand).
 
 1. `blaze_powder` — each blaze rod grinds into 2 powder.
 2. `ender_eye` (×12) — 1 blaze powder + 1 ender pearl each.

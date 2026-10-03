@@ -39,7 +39,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Query implementations — the business half of the {@code inv recipe} command declared in
+ * Query implementations — the business half of the {@code inv recipes} command declared in
  * {@link com.dwinovo.numen.core.tools.inventory.InvCommands}, and of the
  * {@code scan entities} and {@code scan container} commands declared in
  * {@link com.dwinovo.numen.core.tools.perception.ScanCommands}.
@@ -138,11 +138,42 @@ public final class QueryExtraOps {
 
     private record ScoredEntity(Entity entity, String category, double distance) {}
 
-    // ---- inv recipe ----
+    // ---- inv recipes ----
+
+    private static final com.dwinovo.numen.agent.script.ScriptType STRING =
+            com.dwinovo.numen.agent.script.ScriptType.STRING;
+    private static final com.dwinovo.numen.agent.script.ScriptType INTEGER =
+            com.dwinovo.numen.agent.script.ScriptType.INTEGER;
+
+    /** 一条配方:{@code numen.inv.recipes} 与 {@code numen.inv.craftable} 返回的那一项。 */
+    public static final com.dwinovo.numen.agent.script.ScriptType.Class RECIPE =
+            new com.dwinovo.numen.agent.script.ScriptType.Class("Recipe",
+                    "One way to make an item, like a page of JEI.", null, List.of(
+                    com.dwinovo.numen.agent.script.ScriptType.field("id", STRING,
+                            "The recipe's id; numen.inv.craft takes it."),
+                    com.dwinovo.numen.agent.script.ScriptType.field("station",
+                            com.dwinovo.numen.agent.script.ScriptType.choice(List.of("crafting", "smelting",
+                                    "blasting", "smoking", "campfire", "stonecutter", "smithing")),
+                            "Where it is made."),
+                    com.dwinovo.numen.agent.script.ScriptType.field("item", STRING, "What it makes."),
+                    com.dwinovo.numen.agent.script.ScriptType.field("makes", INTEGER, "How many one craft makes."),
+                    com.dwinovo.numen.agent.script.ScriptType.field("ingredients",
+                            com.dwinovo.numen.agent.script.ScriptType.listOf(STRING),
+                            "One entry per filled cell: an item, or planks(any) for any of a kind."),
+                    com.dwinovo.numen.agent.script.ScriptType.optional("grid", INTEGER, "Crafting only: the "
+                            + "smallest grid it fits, 2 (your own) or 3 (a crafting table); 0 needs a modded station."),
+                    com.dwinovo.numen.agent.script.ScriptType.optional("missing",
+                            com.dwinovo.numen.agent.script.ScriptType.listOf(STRING), "Crafting only: what you are "
+                                    + "short of to craft it once, 3x iron_ingot (have 1); absent when you have it all."),
+                    com.dwinovo.numen.agent.script.ScriptType.optional("ticks", INTEGER,
+                            "Cooking only: how long one item takes.")));
+
+    /** {@code numen.inv.recipes} 返回的那一项:每条配方一张表({@link #RECIPE})。 */
+    public static final String RECIPES = "recipes";
 
     /**
-     * 做这样东西的每一条配方,一条一个条目,按输出预算分页({@link Listing});结尾是各种工位怎么做。
-     *
+     * 做这样东西的每一条配方:回执里一条一个条目(带编号),按输出预算分页({@link Listing});数据里是每一条的那张表
+     * ({@link #RECIPE}),合成配方带着装得下的最小的格和照她背着的还缺什么。结尾是各种工位怎么做。
      */
     public String lookupRecipe(String item_id, NumenPlayer self, CommandArgs args) {
         Item target = ToolArgs.parseItem(item_id);
@@ -152,11 +183,13 @@ public final class QueryExtraOps {
         String name = BuiltInRegistries.ITEM.getKey(target).getPath();
 
         List<String> recipes = new ArrayList<>();
+        List<Map<String, Object>> data = new ArrayList<>();
         for (RecipeHolder<?> holder : level.getRecipeManager().getRecipes()) {
             // 每条配方自成一格:整合包里一条坏配方(产出为 null、输入表为 null)
             // 只丢它自己,绝不让它杀掉整个查询。见 RecipeProbe。
             try {
                 Recipe<?> r = holder.value();
+                String id = " (id " + holder.id() + ")";
                 if (r instanceof CraftingRecipe cr) {
                     // 产出依赖输入的配方(烟花、镶零件的装备)静态描述答不了;
                     // 1.21.1 没有 PlacementInfo,空输入表的老启发式一并保留。
@@ -168,20 +201,27 @@ public final class QueryExtraOps {
                     if (result.isEmpty() || result.getItem() != target) {
                         continue;
                     }
-                    recipes.add("[crafting] " + format(cr, result));
+                    recipes.add("[crafting] " + format(cr, result) + id);
+                    data.add(CraftOps.recipeData(holder, cr, result, self));
                 } else if (r instanceof AbstractCookingRecipe cook) {
                     ItemStack result = RecipeProbe.resultOf(cook, level.registryAccess());
                     if (result.isEmpty() || result.getItem() != target) {
                         continue;
                     }
-                    recipes.add(formatCooking(cook, result));
+                    recipes.add(formatCooking(cook, result) + id);
+                    Map<String, Object> one = station(holder, cookingStation(cook.getType()), result,
+                            List.of(describeIngredient(cook.getIngredients().get(0))));
+                    one.put("ticks", cook.getCookingTime());
+                    data.add(one);
                 } else if (r instanceof StonecutterRecipe sc) {
                     ItemStack result = RecipeProbe.resultOf(sc, level.registryAccess());
                     if (result.isEmpty() || result.getItem() != target) {
                         continue;
                     }
                     recipes.add("[stonecutter] " + describeIngredient(sc.getIngredients().get(0))
-                            + " -> makes " + result.getCount());
+                            + " -> makes " + result.getCount() + id);
+                    data.add(station(holder, "stonecutter", result,
+                            List.of(describeIngredient(sc.getIngredients().get(0)))));
                 } else if (r instanceof SmithingRecipe sm) {
                     // 锻造不走展示产出,保留空输入 assemble 的既有语义:变换配方
                     // (下界合金升级)照样给出产物,纹饰配方产出(空的)基底、自然排除。
@@ -190,7 +230,8 @@ public final class QueryExtraOps {
                     if (result.isEmpty() || result.getItem() != target) {
                         continue;
                     }
-                    recipes.add(formatSmithing(sm, result));
+                    recipes.add(formatSmithing(sm, result) + id);
+                    data.add(station(holder, "smithing", result, List.of()));
                 }
             } catch (RuntimeException broken) {
                 com.dwinovo.numen.core.Constants.LOG.debug(
@@ -200,22 +241,34 @@ public final class QueryExtraOps {
 
         if (recipes.isEmpty()) {
             return TaskResult.ok("no recipe for " + name + " — it's obtained another way (mine it, or "
-                    + "trade), not crafted or smelted.", Map.of(RECIPES, recipes)).toJson();
+                    + "trade), not crafted or smelted.", Map.of(RECIPES, data)).toJson();
         }
         return new Listing(recipes.size() + " recipe(s) for " + name + ":", recipes, "To make it —\n"
-                + "• [crafting]: numen.inv.craft(<item>, {count = N}) — it lays out the grid and takes the "
-                + "result for you (a 3x3 recipe needs a crafting table within reach; 2x2 works "
-                + "anywhere).\n"
-                + "• [smelting|blasting|smoking]: numen.use.block the furnace, then numen.gui.quick the input and "
-                + "the fuel — the menu routes each to its slot. Wait, then numen.gui.quick the output back "
-                + "out.\n"
-                + "• [stonecutter]: numen.use.block it, numen.gui.quick the input (the menu routes it in), take the "
+                + "• [crafting]: numen.inv.make(<item>, N) picks the recipe and the grid (a crafting table for a "
+                + "3x3 one) and crafts; numen.inv.craft(<id>) crafts once in the grid you have open.\n"
+                + "• [smelting|blasting|smoking]: numen.inv.smelt(<furnace>, <input>, N) loads the furnace, waits "
+                + "and takes the output.\n"
+                + "• [stonecutter]: numen.use.block it, numen.gui.put the input (the menu routes it in), take the "
                 + "output. [smithing]: numen.use.block it, numen.gui.view, then numen.gui.move template + base + "
-                + "addition each into its own slot.").result(args, Map.of(RECIPES, recipes)).toJson();
+                + "addition each into its own slot.").result(args, Map.of(RECIPES, data)).toJson();
     }
 
-    /** {@code numen.inv.recipe} 返回的那一项:每条配方一段文字。 */
-    public static final String RECIPES = "recipes";
+    /** 不在合成格里做的一条配方的那张表。 */
+    private static Map<String, Object> station(RecipeHolder<?> holder, String station, ItemStack result,
+                                               List<String> ingredients) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("id", holder.id().toString());
+        out.put("station", station);
+        out.put("item", BuiltInRegistries.ITEM.getKey(result.getItem()).toString());
+        out.put("makes", result.getCount());
+        out.put("ingredients", ingredients);
+        return out;
+    }
+
+    private static String cookingStation(RecipeType<?> type) {
+        return type == RecipeType.BLASTING ? "blasting" : type == RecipeType.SMOKING ? "smoking"
+                : type == RecipeType.CAMPFIRE_COOKING ? "campfire" : "smelting";
+    }
 
     private static String format(CraftingRecipe recipe, ItemStack result) {
         int count = result.getCount();

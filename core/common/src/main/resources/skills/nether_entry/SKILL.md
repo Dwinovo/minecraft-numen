@@ -37,7 +37,7 @@ Notes:
     :union(S.line(o:offset(1, 4, 0), o:offset(2, 4, 0), "obsidian"))
   numen.build.raise(frame)
   ```
-- **Flint & steel**: craft `flint_and_steel` = 1 iron ingot + 1 flint, a 2×2 recipe (`numen.inv.craft` it; see the `containers` skill to lay a grid by hand). Flint drops from gravel you `numen.work.dig`, ~10%/block.
+- **Flint & steel**: craft `flint_and_steel` = 1 iron ingot + 1 flint, a 2×2 recipe (`numen.inv.make` it; see the `containers` skill to lay a grid by hand). Flint drops from gravel you `numen.work.dig`, ~10%/block.
 - **Ignite**: `numen.use.block({x = 121, y = 65, z = -35}, {item = "minecraft:flint_and_steel"})` aimed at an **empty air cell INSIDE the frame** (a bottom one), not at the obsidian. The fire lands in that cell and the portal forms.
 - Enter: `numen.move.goto_` the portal cell and stand in it until the dimension changes (`numen.status.self` confirms).
 

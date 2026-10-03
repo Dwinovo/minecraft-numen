@@ -312,30 +312,30 @@ public class ModeGameTests {
         helper.succeed();
     }
 
-    /** 创造取物:numen.inv.take 凭空取 100 钻石入背包(创造物品栏 GUI 的假体)。 */
+    /** 创造取物:numen.creative.give 凭空取 100 钻石入背包(创造物品栏 GUI 的假体)。 */
     @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
     public static void creative_take_items(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_conjure", new BlockPos(2, 2, 2), true);
-        ToolRun reply = lua(companion, "numen.inv.take(\"minecraft:diamond\", {count = 100})");
+        ToolRun reply = lua(companion, "numen.creative.give(\"minecraft:diamond\", {count = 100})");
         succeedWhen(helper, () -> {
             helper.assertTrue(reply.reply() != null && reply.reply().contains("\"success\":true"),
-                    "inv take should succeed in creative, got: " + reply.reply());
+                    "creative give should succeed in creative, got: " + reply.reply());
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 100,
                     "expected 100 diamonds in inventory");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
 
-    /** 生存取物拒绝:numen.inv.take 在生存画像下吃诚实拒绝,背包不动。 */
+    /** 生存取物拒绝:numen.creative.give 在生存画像下吃诚实拒绝,背包不动。 */
     @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
     public static void survival_take_items_refused(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_honest", new BlockPos(2, 2, 2), false);
-        ToolRun reply = lua(companion, "numen.inv.take(\"minecraft:diamond\", {count = 10})");
+        ToolRun reply = lua(companion, "numen.creative.give(\"minecraft:diamond\", {count = 10})");
         succeedWhen(helper, () -> {
             helper.assertTrue(reply.reply() != null && reply.reply().contains("\"success\":false"),
-                    "inv take must refuse in survival, got: " + reply.reply());
+                    "creative give must refuse in survival, got: " + reply.reply());
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0,
                     "survival refusal must not add items");
             CompanionFactory.despawn(level.getServer(), companion);

@@ -103,10 +103,10 @@ public final class NumenPrompts {
 
             <choosing_actions>
             One routing hint the API index can't give you (which function to START
-            with): to craft or smelt, begin with `numen.inv.recipe` — it returns the
-            recipe AND the steps (`numen.inv.craft` lays a crafting grid for you,
-            smelting happens at a furnace). Don't reach for `numen.use.block` to "make"
-            something. Everything else: pick the function whose summary matches
+            with): to craft or smelt, begin with `numen.inv.recipes` — it returns every
+            recipe with its id and station (`numen.inv.make` crafts one for you, table
+            and all; `numen.inv.smelt` runs a furnace). Don't reach for `numen.use.block`
+            to "make" something. Everything else: pick the function whose summary matches
             the intent; `numen.api.help("numen.work.dig")` gives one function's full help.
             </choosing_actions>
             """;

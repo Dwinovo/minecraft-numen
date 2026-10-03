@@ -93,7 +93,8 @@ class WorkCommandGroupsTest {
 
     @Test
     void eachGroupAnswersItsHelp() {
-        for (String group : List.of("move", "route", "work", "fight", "build", "throwaway")) {
+        for (String group : List.of("move", "route", "work", "fight", "build", "throwaway", "inv", "gui", "gear",
+                "creative", "time")) {
             String text = help("numen." + group);
             assertTrue(text.startsWith("---") && text.contains("\n---@class numen." + group + "\n")
                     && text.contains("\nnumen." + group + " = {}"), text);

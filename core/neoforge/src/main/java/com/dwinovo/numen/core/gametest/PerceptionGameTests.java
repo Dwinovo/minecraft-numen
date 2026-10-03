@@ -25,7 +25,7 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 /**
  * 感知:{@code scan} 组({@code numen.scan.block}、{@code numen.scan.container}、{@code numen.scan.map}、{@code numen.scan.entities}、
  * {@code numen.scan.blocks})、{@code status} 组({@code numen.status.self}、{@code numen.status.world}、{@code numen.status.owner}),以及
- * {@code numen.inv.recipe}、{@code throwaway}(清单现状在 {@code numen.status.self} 的身体状态里)。这些不动世界,测的是回执说的是不是眼前的真事;提升成快捷工具的
+ * {@code numen.inv.recipes}、{@code throwaway}(清单现状在 {@code numen.status.self} 的身体状态里)。这些不动世界,测的是回执说的是不是眼前的真事;提升成快捷工具的
  * 动作,同一刻从工具与从 {@code command} 读到的一字不差(同源)。
  */
 @GameTestHolder(Constants.MOD_ID)
@@ -254,16 +254,26 @@ public class PerceptionGameTests {
         });
     }
 
-    /** 查配方:铁锭既能炼(熔炉)也能合(铁块、铁粒),两种都列出来并标明在哪做。 */
+    /** 查配方:铁锭既能炼(熔炉)也能合(铁块、铁粒),两种都列出来并标明在哪做;脚本拿到的每一条带着编号和工位。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void lookup_recipe_lists_every_station(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_scholar", new BlockPos(3, 2, 3), false);
-        ToolRun recipe = lua(companion, "numen.inv.recipe(\"minecraft:iron_ingot\")");
+        ToolRun recipe = lua(companion, "numen.inv.recipes(\"minecraft:iron_ingot\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(recipe.succeeded() && recipe.reply().contains("[smelting")
                             && recipe.reply().contains("[crafting]"),
                     "iron ingot's smelting and crafting recipes are not both listed: " + recipe.reply());
+            java.util.Set<String> stations = new java.util.HashSet<>();
+            for (var one : dataIn(recipe.reply()).getAsJsonArray("recipes")) {
+                var r = one.getAsJsonObject();
+                helper.assertTrue(r.get("id").getAsString().contains(":")
+                                && r.get("item").getAsString().equals("minecraft:iron_ingot"),
+                        "a recipe has no id or names another item: " + r);
+                stations.add(r.get("station").getAsString());
+            }
+            helper.assertTrue(stations.contains("smelting") && stations.contains("crafting"),
+                    "the recipes' stations are not both there: " + stations);
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -472,7 +482,7 @@ public class PerceptionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void lookup_recipe_for_something_not_made_says_so(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_curious", new BlockPos(3, 2, 3), false);
-        ToolRun recipe = lua(companion, "numen.inv.recipe(\"minecraft:ender_pearl\")");
+        ToolRun recipe = lua(companion, "numen.inv.recipes(\"minecraft:ender_pearl\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(recipe.succeeded() && recipe.reply().contains("no recipe for ender_pearl"),
@@ -485,11 +495,11 @@ public class PerceptionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void lookup_recipe_for_an_unknown_item_is_rejected(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_misspeller", new BlockPos(3, 2, 3), false);
-        ToolRun recipe = lua(companion, "numen.inv.recipe(\"minecraft:no_such_item\")");
+        ToolRun recipe = lua(companion, "numen.inv.recipes(\"minecraft:no_such_item\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(!recipe.succeeded() && recipe.outcome().contains("unknown item: minecraft:no_such_item")
-                            && recipe.outcome().contains("\nusage: numen.inv.recipe("),
+                            && recipe.outcome().contains("\nusage: numen.inv.recipes("),
                     "the unknown id was not rejected by name: " + recipe.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });

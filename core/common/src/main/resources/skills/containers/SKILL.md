@@ -53,9 +53,9 @@ So to check a furnace: `numen.use.block` it and read the input count (slots) and
 
 ## Crafting
 
-For an ordinary [crafting] recipe `numen.inv.craft` does all of this for you. Lay a grid by hand only for a modded grid or when you want to see each step:
+For an ordinary [crafting] recipe `numen.inv.make` does all of this for you (it picks the recipe, finds and opens a crafting table, and crafts), and `numen.inv.craft` crafts one recipe in the grid you have open. Lay a grid by hand only for a modded grid or when you want to see each step:
 
-1. **`numen.inv.recipe`** the item — the ingredients and, for shaped recipes, the grid layout.
+1. **`numen.inv.recipes`** the item — the ingredients and, for shaped recipes, the grid layout.
 2. **Open the grid:**
    - **≤2×2 recipe** (planks, sticks, torches, a crafting table): NO table needed — `numen.gui.view()` with nothing open is your own 2×2 grid.
    - **3×3 recipe** (most tools, etc.): `numen.use.block` a crafting table; `numen.gui.view` draws its grid as a 2D map of slot numbers.
@@ -77,7 +77,7 @@ w:quick(0)
 
 ## Smelting
 
-Smelting is NOT crafting — you load the furnace yourself (it's just two slots):
+Smelting is NOT crafting. `numen.inv.smelt` loads a furnace, waits and takes the output; by hand it is just two slots:
   1. `local w = numen.use.block({x = 120, y = 64, z = -35})` on the furnace / blast furnace / smoker.
   2. Load the input: `w:put("minecraft:raw_iron")` — the menu routes it to the top input slot.
   3. Add fuel: `w:put("minecraft:coal", 2)` — it routes to the bottom fuel slot. **Fuel rule**: 1 coal/charcoal smelts 8 items; a log/plank ~1.5, so add ~⌈N/8⌉ coal.

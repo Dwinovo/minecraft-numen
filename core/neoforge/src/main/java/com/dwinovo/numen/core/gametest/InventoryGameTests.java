@@ -20,7 +20,11 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
-/** 穿戴与背包:{@code numen.gear.wear} / {@code numen.gear.remove}、{@code numen.inv.drop} 带出的物品组件、{@code numen.inv.craft}、{@code numen.inv.eat}、换皮回收。 */
+/**
+ * 穿戴与背包:{@code numen.gear.wear} / {@code numen.gear.hold} / {@code numen.gear.remove}、{@code numen.inv.drop} 带出的物品组件、
+ * {@code numen.inv.craft} 与模块 {@code numen.inv.make/store/fetch/smelt}、{@code numen.inv.items/count}、{@code numen.time.wait}、
+ * {@code numen.inv.eat}、换皮回收。
+ */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
 public class InventoryGameTests {
@@ -141,9 +145,12 @@ public class InventoryGameTests {
         });
     }
 
-    /** 3×3 的配方要工作台:够得着的地方没有,回执点出最近那张在哪,材料一样不动。 */
+    /**
+     * 3×3 的配方在她自己的 2×2 里合不了:numen.inv.craft 只用开着的格,回执叫她先开一张工作台(或交给 numen.inv.make),
+     * 材料一样不动。远处那张工作台它不去找——找台、走过去是 numen.inv.make 的事(见下一条)。
+     */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
-    public static void craft_3x3_without_a_table_in_reach_names_the_nearest(GameTestHelper helper) {
+    public static void craft_3x3_in_her_own_grid_says_to_open_a_table(GameTestHelper helper) {
         BlockPos table = helper.absolutePos(new BlockPos(13, 2, 13));
         helper.getLevel().setBlockAndUpdate(table, Blocks.CRAFTING_TABLE.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_seeker", new BlockPos(2, 2, 2), false);
@@ -152,27 +159,74 @@ public class InventoryGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(craft.done(), "inv craft has not replied");
-            helper.assertTrue(!craft.succeeded() && craft.outcome().contains(
-                            "Nearest one is at " + table.getX() + "," + table.getY() + "," + table.getZ()),
-                    "the reply does not point at the table: " + craft.outcome());
+            helper.assertTrue(!craft.succeeded() && craft.outcome().contains("needs a 3x3 grid; the open one is 2x2")
+                            && craft.outcome().contains("numen.use.block a crafting table"),
+                    "the reply does not say to open a crafting table: " + craft.outcome());
             helper.assertTrue(companion.getInventory().countItem(Items.OAK_PLANKS) == 8,
                     "the planks were touched although nothing could be crafted");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
 
-    /** 工作台就在手边:右键打开、摆好、取出一口箱子,木板用光,界面合上。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    /** numen.inv.make 自己找台:够得着的地方没有,它走到 16 格内最近的那张,打开、合出一口箱子,木板用光,界面合上。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_inventory")
+    public static void make_walks_to_the_nearest_table(GameTestHelper helper) {
+        BlockPos table = helper.absolutePos(new BlockPos(13, 2, 13));
+        helper.getLevel().setBlockAndUpdate(table, Blocks.CRAFTING_TABLE.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_seeker_walks", new BlockPos(2, 2, 2), false);
+        companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 8));
+        ToolRun make = lua(companion, "return numen.inv.make(\"minecraft:chest\")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(make.done(), "inv make has not finished");
+            helper.assertTrue(make.ranToTheEnd(), "make failed: " + make.receipt());
+            helper.assertTrue(companion.getInventory().countItem(Items.CHEST) == 1
+                            && companion.getInventory().countItem(Items.OAK_PLANKS) == 0,
+                    "the inventory does not hold the chest with the planks spent");
+            helper.assertTrue(companion.position().distanceTo(Vec3.atCenterOf(table)) < 6,
+                    "she did not walk to the table");
+            helper.assertTrue(companion.containerMenu == companion.inventoryMenu, "the crafting table was left open");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 附近没有工作台,包里有一张:numen.inv.make 把它放在身边一格,打开、合出一口箱子,界面合上,那张台留在原地。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_inventory")
+    public static void make_puts_down_the_table_she_carries(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_tablebearer", new BlockPos(7, 2, 7), false);
+        companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 8));
+        companion.getInventory().add(new ItemStack(Items.CRAFTING_TABLE));
+        ToolRun make = lua(companion, "return numen.inv.make(\"minecraft:chest\")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(make.done(), "inv make has not finished");
+            helper.assertTrue(make.ranToTheEnd(), "make failed: " + make.receipt());
+            helper.assertTrue(companion.getInventory().countItem(Items.CHEST) == 1
+                            && companion.getInventory().countItem(Items.CRAFTING_TABLE) == 0,
+                    "the chest was not made at the table she carried");
+            boolean placed = false;
+            for (BlockPos p : BlockPos.betweenClosed(helper.absolutePos(new BlockPos(5, 2, 5)),
+                    helper.absolutePos(new BlockPos(9, 2, 9)))) {
+                placed |= helper.getLevel().getBlockState(p).is(Blocks.CRAFTING_TABLE);
+            }
+            helper.assertTrue(placed, "no crafting table stands beside her");
+            helper.assertTrue(companion.containerMenu == companion.inventoryMenu, "the crafting table was left open");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 工作台就在手边:numen.inv.make 右键打开、摆好、取出一口箱子,木板用光,界面合上。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_inventory")
     public static void craft_3x3_at_a_table_within_reach(GameTestHelper helper) {
         helper.getLevel().setBlockAndUpdate(helper.absolutePos(new BlockPos(5, 2, 3)),
                 Blocks.CRAFTING_TABLE.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_carpenter", new BlockPos(3, 2, 3), false);
         companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 8));
-        ToolRun craft = lua(companion, "numen.inv.craft(\"minecraft:chest\", {count = 1})");
+        ToolRun craft = lua(companion, "return numen.inv.make(\"minecraft:chest\", 1)");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(craft.done(), "inv craft has not replied");
-            helper.assertTrue(craft.succeeded(), "craft at the table failed: " + craft.outcome());
+            helper.assertTrue(craft.done(), "inv make has not finished");
+            helper.assertTrue(craft.ranToTheEnd(), "craft at the table failed: " + craft.receipt());
             helper.assertTrue(companion.getInventory().countItem(Items.CHEST) == 1
                             && companion.getInventory().countItem(Items.OAK_PLANKS) == 0,
                     "the inventory does not hold the chest with the planks spent");
@@ -239,17 +293,18 @@ public class InventoryGameTests {
         });
     }
 
-    /** 没有这个物品的合成配方:回执叫她去查配方,背包不动。 */
+    /** 没有这个物品的合成配方:numen.inv.make 以 not_found 收场、叫她去查配方,背包不动。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
     public static void craft_something_without_a_recipe_says_so(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_dreamer", new BlockPos(3, 2, 3), false);
         companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 8));
-        ToolRun craft = lua(companion, "numen.inv.craft(\"minecraft:bedrock\", {count = 1})");
+        ToolRun craft = lua(companion, "numen.inv.make(\"minecraft:bedrock\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(craft.done(), "inv craft has not replied");
-            helper.assertTrue(!craft.succeeded() && craft.outcome().contains("no crafting recipe makes"),
-                    "the reply does not say there is no recipe: " + craft.outcome());
+            helper.assertTrue(craft.done(), "inv make has not finished");
+            helper.assertTrue(!craft.ranToTheEnd() && craft.receipt().contains("no crafting recipe makes")
+                            && craft.receipt().contains("not_found"),
+                    "the error does not say there is no recipe: " + craft.receipt());
             helper.assertTrue(companion.getInventory().countItem(Items.OAK_PLANKS) == 8, "the planks were touched");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -597,22 +652,89 @@ public class InventoryGameTests {
     }
 
     /** 箱子的配方认"任意木板":四块橡木加四块白桦木板,在手边的工作台合出一口箱子,两种木板都用光。 */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_inventory")
     public static void craft_a_chest_from_mixed_planks(GameTestHelper helper) {
         helper.getLevel().setBlockAndUpdate(helper.absolutePos(new BlockPos(5, 2, 3)),
                 Blocks.CRAFTING_TABLE.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_patchworker", new BlockPos(3, 2, 3), false);
         companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 4));
         companion.getInventory().add(new ItemStack(Items.BIRCH_PLANKS, 4));
-        ToolRun craft = lua(companion, "numen.inv.craft(\"minecraft:chest\", {count = 1})");
+        ToolRun craft = lua(companion, "return numen.inv.make(\"minecraft:chest\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(craft.done(), "inv craft has not replied");
-            helper.assertTrue(craft.succeeded(), "craft from mixed planks failed: " + craft.outcome());
+            helper.assertTrue(craft.done(), "inv make has not finished");
+            helper.assertTrue(craft.ranToTheEnd(), "craft from mixed planks failed: " + craft.receipt());
             helper.assertTrue(companion.getInventory().countItem(Items.CHEST) == 1
                             && companion.getInventory().countItem(Items.OAK_PLANKS) == 0
                             && companion.getInventory().countItem(Items.BIRCH_PLANKS) == 0,
                     "the chest was not made from both kinds of planks");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 背包里有什么、有几件:numen.inv.items 按种类合起来列出,numen.inv.count 数一种,没有的是 0。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void items_and_count_read_the_backpack(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_counter", new BlockPos(3, 2, 3), false);
+        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
+        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 6));
+        companion.getInventory().add(new ItemStack(Items.TORCH, 3));
+        ToolRun read = lua(companion, "local n = 0\nfor _, s in ipairs(numen.inv.items()) do\n"
+                + "  if s.item == \"minecraft:cobblestone\" then n = s.count end\nend\n"
+                + "return n .. \"/\" .. numen.inv.count(\"torch\") .. \"/\" .. numen.inv.count(\"minecraft:diamond\")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(read.done(), "the program has not finished");
+            helper.assertTrue(read.ranToTheEnd() && read.receipt().contains("70/3/0"),
+                    "items and count do not read what she carries: " + read.receipt());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 存进箱子再取出来:numen.inv.store 走过去放进 20 块圆石,numen.inv.fetch 取回 5 块;箱子里剩 15,界面合上。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_inventory")
+    public static void store_and_fetch_go_through_the_chest(GameTestHelper helper) {
+        BlockPos chest = helper.absolutePos(new BlockPos(11, 2, 7));
+        helper.getLevel().setBlockAndUpdate(chest, Blocks.CHEST.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_stocker", new BlockPos(3, 2, 7), false);
+        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 20));
+        ToolRun run = lua(companion, "local chest = " + xyz(chest) + "\nlocal put = numen.inv.store(chest, "
+                + "\"cobblestone\")\nlocal took = numen.inv.fetch(chest, \"cobblestone\", 5)\nreturn put .. \"/\" .. took");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(run.done(), "the program has not finished");
+            helper.assertTrue(run.ranToTheEnd() && run.receipt().contains("20/5"),
+                    "store and fetch did not move 20 and 5: " + run.receipt());
+            var box = (net.minecraft.world.level.block.entity.ChestBlockEntity) helper.getLevel().getBlockEntity(chest);
+            int inChest = 0;
+            for (int i = 0; i < box.getContainerSize(); i++) {
+                inChest += box.getItem(i).is(Items.COBBLESTONE) ? box.getItem(i).getCount() : 0;
+            }
+            helper.assertTrue(inChest == 15 && companion.getInventory().countItem(Items.COBBLESTONE) == 5,
+                    "the chest holds " + inChest + ", she carries " + companion.getInventory().countItem(Items.COBBLESTONE));
+            helper.assertTrue(companion.containerMenu == companion.inventoryMenu, "the chest was left open");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 烧两块粗铁:numen.inv.smelt 放进粗铁和一块煤,站着等烧完,取出两块铁锭,界面合上。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_inventory")
+    public static void smelt_loads_waits_and_takes_the_output(GameTestHelper helper) {
+        BlockPos furnace = helper.absolutePos(new BlockPos(5, 2, 7));
+        helper.getLevel().setBlockAndUpdate(furnace, Blocks.FURNACE.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_smelter", new BlockPos(3, 2, 7), false);
+        companion.getInventory().add(new ItemStack(Items.RAW_IRON, 2));
+        companion.getInventory().add(new ItemStack(Items.COAL, 4));
+        ToolRun run = lua(companion, "return numen.inv.smelt(" + xyz(furnace) + ", \"raw_iron\")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(run.done(), "smelt has not finished");
+            helper.assertTrue(run.ranToTheEnd(), "smelt failed: " + run.receipt());
+            helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 2
+                            && companion.getInventory().countItem(Items.RAW_IRON) == 0
+                            && companion.getInventory().countItem(Items.COAL) == 3,
+                    "she does not hold the two ingots with one coal spent");
+            helper.assertTrue(companion.containerMenu == companion.inventoryMenu, "the furnace was left open");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -637,7 +759,6 @@ public class InventoryGameTests {
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
-}
 
     /** 木棍不是穿的东西:numen.gear.wear 如实失败、叫她用 numen.gear.hold,主手不变、木棍还在包里。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
@@ -672,3 +793,4 @@ public class InventoryGameTests {
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
+}

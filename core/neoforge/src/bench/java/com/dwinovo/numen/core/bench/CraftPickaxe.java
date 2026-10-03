@@ -76,10 +76,10 @@ public final class CraftPickaxe implements Scenario {
         BlockPos table = scene.pos(TABLE);
         String cell = "{x = " + table.getX() + ", y = " + table.getY() + ", z = " + table.getZ() + "}";
         return """
-                numen.inv.craft("oak_planks", {count = 12})
-                numen.inv.craft("crafting_table")
-                numen.inv.craft("stick", {count = 4})
+                numen.inv.make("oak_planks", 12)
+                numen.inv.make("crafting_table")
+                numen.inv.make("stick", 4)
                 numen.build.place({{name = "crafting_table", pos = %1$s}})
-                numen.inv.craft("wooden_pickaxe")""".formatted(cell);
+                numen.inv.make("wooden_pickaxe")""".formatted(cell);
     }
 }
