@@ -1511,3 +1511,37 @@ area has ores/g2                 成功:ores/g2 has 1 cell(s) left to dig, the n
 - 三个数的列表与数字串的位置读法(`ArgType` 里的旧分支)、用法行风格的帮助(`CommandHelp` 的 usage 清单)、`NavText.lua(Place)`
   (位置写进程序的另一处写法,改用 `Place.literal`/`Shapes.literal`)、回执消息里一行一个 JSON 的清单(`scan.blocks`、
   `scan.entities` 的行改成数据里的列表)、`Meter` 里读文字的几条正则。
+
+## 附录 M:日式小屋盖不完的根因(10-03)
+
+`build_japanese_cottage` 在底层来回打转、卡在一千来格。修好一处,盖得更远,下一处才露出来;按露出来的先后:
+
+- **路线挖她刚放下的设计格。** `build.raise` 走去够下一格用 `alter = "natural"`;安山岩、花岗岩这类设计格在权限层眼里是
+  她自己放的(`self_placed`,放行),路线为了站进地面那一层把它挖开,下一轮 `build.at` 补上,再下一趟又挖。修法在规划的
+  禁区里:每段路的底子是 `RouteFlags.base(her)`,出厂规格加上 `Built` 记着、此刻还立着的格禁挖
+  (`Built.standingIn`、`PositionCosts.forbid(DIG, …)`),哪个路线标志都放不开;`Built` 是"哪些格算一栋房子"的唯一出处,
+  她垫的料不在里面,照旧可挖。站位与够得着照旧只由寻路的目标(`Goals`/`Reach`/`Feet`)判,禁区只让那些要挖房子的站位
+  进不了路线。复现:`AreaRouteGameTests.a_walk_never_digs_a_building_she_built`。
+- **托着它的还没盖好的格被当成"够得着就放"。** 地毯、挂着的灯这类格放下去要有相邻的方块托着;托着它的那格够不着时,
+  `build.at` 把它算进手边的活、放不下就以"原版立不住"失败,或者 `build.left` 让她去够它、到了又放不下,在两处之间来回走。
+  `BuildSurvey` 多一种情形 `UNHELD`:此刻立不住、而相邻的设计格还有没盖好的;`build.at` 不放它,`build.left` 数进
+  `unheld`、`next` 不指向它。只问走原生车道(像右键那样放)的格:物品落位时原版问的就是 `canSurvive`;照图直写的格立不立得住
+  由建完之后的落定说。相邻的都盖好了还立不住的,照旧交给 `build.at` 放、照实报"立不住"。复现:
+  `BuildGameTests.a_cell_whose_support_is_out_of_reach_is_not_within_reach`。
+- **跳进炼药锅:头顶的空只够贴着锅沿。** 迈步推导(`Stepping`)判起跳时只看身体在"最高的脚高"上平移得过去,好像能停在恰好
+  够高的那一点;真跳起来身体升到顶(约 1.25 格)再落,锅上方两格压着的上半活板门先撞头,挪不过锅沿,一步步卡死。改成按起跳
+  真能到的顶(起点那一列头顶撞上的为止)、在越过的高度再高 `JUMP_CLEARANCE`(0.2 格,高出这么多的有三四刻能往前挪)上平移。
+  复现:`SteppingTest.aJumpNeedsRoomAboveTheRimNotJustToTouchIt`。
+- **规划只问了能贴的面,执行瞄不中。** 上一级要先在面前垫一块台阶:规划判"能放"只看邻格有没有可贴的面,执行时从站着的
+  眼睛瞄那一面,准星那一点被栅栏北边的圆石挡着,放不下,一直空等。点得中的那一面挪到第 0 层 `Faces.inSight`,执行
+  (`Aim.face`)与规划(`Draft.placeInSight`,上一级垫台阶用它)问同一个。复现:`PlacementTest.aFaceTheEyeCannotReachIsNotInSight`。
+- **一圈圈落回去,期限永远从头算。** 走着一步落回了前面一步的起点,驱动层悄悄退回去重走;再加上每走成一步就清掉全部
+  "走不下去"的次数,同一处绕上几百圈也等不到卡住,只能等到这件活的期限。落回前面一步的起点现在照"走不下去"记一次
+  (`Hitch.FELL_BACK`),次数只勾掉走成了的那几步的,同一步第三次就收场。
+- **走到半路要改计划外的格。** `move.go` 守着规划时的承诺,半路重搜要多放一块就停下(`no_path`)。`build.raise` 把这次
+  `no_path` 当这一轮没走到:下一轮从站着的地方重新问还剩什么、重新规划;一轮什么都没变照旧以 `failed` 收场,并带上最后一次
+  没走到的原因。别的错原样抛。
+- **盖完、世界落定之后又去补。** 最后一格放下时世界落定一次,原版立不住或形状由邻居定的格会变;`build.left` 又数到它们,
+  `build.raise` 补了又落、落了又补。`build.at` 放完整份时回执数据带 `settled_away`(落定后变了的格数),`build.raise` 见它
+  放完(`left == 0`)就收工:落定之后的样子是原版的裁决,再放一遍还是这样。
+
