@@ -9,6 +9,7 @@ import java.util.Set;
 
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.BlockOrCell;
+import com.dwinovo.numen.cli.ChoiceOrCell;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.core.init.InitTag;
@@ -69,9 +70,10 @@ public final class RouteSpecFlags {
                     + "asking before it touches them. Every change is itemised in the result.")
             .whenOmitted("keep this walk's default: change no block")
             .group(GROUP);
-    static final Param<List<String>> AVOID = Param.optional("avoid",
-            ArgType.list(ArgType.oneOf(kindNames(AVOIDABLE))),
-            "Cell types to keep out of entirely, e.g. water to stay dry, door to never pass doors.")
+    static final Param<List<ChoiceOrCell>> AVOID = Param.optional("avoid",
+            ArgType.list(ArgType.oneOfOrCell(kindNames(AVOIDABLE))),
+            "Cell types to keep out of entirely, e.g. water to stay dry, door to never pass doors; or cells to stay "
+                    + "out of (never in them, never standing on them), e.g. a farm's soil.")
             .whenOmitted("keep out of only what is kept out by default (lava, hazards, fragile cells…)")
             .group(GROUP);
     static final Param<List<String>> ALLOW = Param.optional("allow", ArgType.list(ArgType.oneOf(kindNames(ALLOWABLE))),
@@ -144,8 +146,14 @@ public final class RouteSpecFlags {
         }
         PositionCosts.Builder cells = PositionCosts.builder();
         if (args.get(AVOID) != null) {
-            for (String name : args.get(AVOID)) {
-                spec.exclude(Semantics.Kind.valueOf(name.toUpperCase(Locale.ROOT)));
+            for (ChoiceOrCell avoided : args.get(AVOID)) {
+                if (avoided.choice() != null) {
+                    spec.exclude(Semantics.Kind.valueOf(avoided.choice().toUpperCase(Locale.ROOT)));
+                } else {
+                    // 不进入:身体不占这一格,脚下也不踩它
+                    long cell = avoided.cell().asLong();
+                    cells.forbid(Use.PASS, cell).forbid(Use.STAND, cell);
+                }
             }
         }
         if (args.get(ALLOW) != null) {

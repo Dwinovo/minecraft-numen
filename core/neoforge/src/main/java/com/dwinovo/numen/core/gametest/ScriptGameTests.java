@@ -294,7 +294,7 @@ public class ScriptGameTests {
         ToolRun gone = lua(her, "return gt.copied.version()");
         helper.assertTrue(!gone.ranToTheEnd() && gone.receipt().contains("no_function"),
                 "a deleted module is still used: " + gone.receipt());
-        helper.assertTrue(lua(her, "numen.module.list()").reply().contains("[built in, deleted; "
+        helper.assertTrue(lua(her, "numen.module.list()").outcome().contains("[built in, deleted; "
                 + "numen.module.reset(\"" + COPIED + "\") brings it back]"), "the list does not say it was deleted");
         ToolRun reset = lua(her, "numen.module.reset(\"" + COPIED + "\")");
         helper.assertTrue(reset.succeeded(), reset.reply());
@@ -432,7 +432,7 @@ public class ScriptGameTests {
         level.setBlockAndUpdate(second, Blocks.VERDANT_FROGLIGHT.defaultBlockState());
         LlmToolCall script = programCall("""
                 local found = numen.scan.blocks("minecraft:pearlescent_froglight", {radius = 6})
-                local a = numen.work.dig(found.groups[1].nearest)
+                local a = numen.work.dig(found[1].nearest)
                 local b = numen.work.dig(numen.scan.block(%s))
                 return {a.dug, b.dug}
                 """.formatted(xyz(second)));

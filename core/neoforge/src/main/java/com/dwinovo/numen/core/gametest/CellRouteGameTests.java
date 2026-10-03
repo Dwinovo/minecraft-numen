@@ -22,7 +22,7 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
- * 路线收一串格:{@code numen.move.goto_} 给几格,走进其中任意一格、用其中的箱子之一、停在它们附近;{@code avoid_step} 给几格,
+ * 路线收一串格:{@code numen.move.goto_} 给几格,走进其中任意一格、用其中的箱子之一、停在它们附近;{@code avoid} 给几格,
  * 绕开那片地;{@code avoid_break} 给几格,不挖那几格、改从别处挖出去。格子由程序写出来,和她拿扫描结果原样交过去一样;都从工具入口进。
  */
 @GameTestHolder(Constants.MOD_ID)
@@ -118,17 +118,16 @@ public class CellRouteGameTests {
     }
 
     /**
-     * 绕开一片地:农田横在她与终点之间,只在场地一边留出一条路。{@code avoid_step} 给农田的地面那一层,一趟一路没进农田(身子不在
-     * 里面、脚下不踩它),照样走到。
+     * 绕开一片地:农田横在她与终点之间,只在场地一边留出一条路。{@code avoid} 给农田的格,一趟一路没进农田(身子不在里面、脚下
+     * 不踩它),照样走到。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
-    public static void avoid_step_on_cells_walks_around_them(GameTestHelper helper) {
+    public static void avoiding_cells_walks_around_them(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_skirter", new BlockPos(2, 2, 6), false);
         List<BlockPos> farm = box(helper, new BlockPos(5, 1, 0), new BlockPos(10, 3, 11));
-        List<BlockPos> ground = box(helper, new BlockPos(5, 1, 0), new BlockPos(10, 1, 11));
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 6));
-        ToolRun walk = lua(companion, "numen.move.goto_(" + xyz(target) + ", {avoid_step = " + cells(ground) + "})");
+        ToolRun walk = lua(companion, "numen.move.goto_(" + xyz(target) + ", {avoid = " + cells(farm) + "})");
         boolean[] entered = new boolean[1];
         helper.onEachTick(() -> {
             BlockPos feet = companion.blockPosition();

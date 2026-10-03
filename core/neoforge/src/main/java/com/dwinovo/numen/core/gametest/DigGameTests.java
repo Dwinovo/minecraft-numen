@@ -441,10 +441,10 @@ public class DigGameTests {
                 .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
                 .thenSucceed();
     }
-    // ==================== 挖什么由区域的数据定 ====================
+    // ==================== 挖点名的格 ====================
 
     /**
-     * 挖一格:坐标就是只有一格的区域。一捆干草块在她手边,{@code numen.work.dig x y z} 当场挖掉;受理回执说手够得着几格,收场说挖了
+     * 挖一格:点名它的坐标。一捆干草块在她手边,{@code numen.work.dig x y z} 当场挖掉;受理回执说手够得着几格,收场说挖了
      * 1 格、掉落物在地上,捡是 {@code numen.work.collect} 的事。她一步没动(落在脚边的,原版照样会吸进包里,那不是挖的一方去捡)。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_dig")

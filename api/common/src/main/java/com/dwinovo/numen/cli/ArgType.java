@@ -596,6 +596,39 @@ public final class ArgType<T> {
                         v -> v.cell() != null ? Shapes.value(v.cell()) : v.written());
     }
 
+    /**
+     * 几个固定值之一(小写英文),或一格坐标({@link ChoiceOrCell}):路线规格的 {@code avoid} 收格子种类与一格格的地方。命令行上数打头的是
+     * 一格,别的按固定值认;脚本里表是一格,字符串是固定值。
+     */
+    public static ArgType<ChoiceOrCell> oneOfOrCell(String... choices) {
+        List<String> allowed = List.of(choices);
+        String listed = String.join(", ", allowed) + " or a cell (" + POS_SHAPE + ")";
+        ArgumentType<ChoiceOrCell> read = reader -> {
+            if (startsNumber(reader.getString(), reader.getCursor())) {
+                return new ChoiceOrCell(null, readCell(reader));
+            }
+            int start = reader.getCursor();
+            String value = reader.readUnquotedString();
+            if (!allowed.contains(value)) {
+                reader.setCursor(start);
+                throw NOT_A_CHOICE.createWithContext(reader, listed);
+            }
+            return new ChoiceOrCell(value, null);
+        };
+        return new ArgType<>(read, String.join("|", allowed) + "|cell", "choice|cell", "one of " + listed, Span.ONE,
+                Item.STRING, true, false, ArgType::stringField, value -> {
+                    if (value != null && value.isJsonObject()) {
+                        return new ChoiceOrCell(null, cellFromJson(value));
+                    }
+                    if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) {
+                        throw REJECTED.create("expected one of " + listed + "; got " + given(value));
+                    }
+                    return whole(read, value.getAsString(), "one of " + listed);
+                }, ChoiceOrCell::written)
+                .scripted(ScriptType.union(ScriptType.choice(allowed), Shapes.POS.type()),
+                        v -> v.cell() != null ? Shapes.value(v.cell()) : v.choice());
+    }
+
     /** 方块或格子的 JSON:表是一格,字符串是方块 id 或标签。 */
     private static BlockOrCell blockOrCellFromJson(JsonElement value) throws CommandSyntaxException {
         if (value != null && value.isJsonObject()) {
@@ -807,7 +840,7 @@ public final class ArgType<T> {
             for (JsonElement item : value.getAsJsonArray()) {
                 try {
                     values.add(element.fromJson(item));
-                } catch (WrongShape bad) {
+                } catch (WrongShape | CommandSyntaxException bad) {
                     // 一项是个数而这一项不收数,整张列表又是三个数:她写的是一处旧样子的坐标 {120, 64, -35},不是三处
                     Object whole = coordinates(value, 3);
                     if (item.isJsonPrimitive() && whole instanceof java.util.Map<?, ?> pos && pos.size() == 3) {

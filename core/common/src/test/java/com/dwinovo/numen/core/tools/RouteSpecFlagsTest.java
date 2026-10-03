@@ -136,6 +136,18 @@ class RouteSpecFlagsTest {
         assertTrue(s.bans().isEmpty());
     }
 
+    /** avoid 里的一格是不进入:身体不占它、脚下不踩它;格子种类照旧并列写在同一串里。 */
+    @Test
+    void avoidingCellsKeepsTheBodyOutOfThemAndOffThem() {
+        RouteSpec s = spec("avoid = {\"water\", {x = -3, y = 63, z = -3}}");
+        assertTrue(s.excludes(Kind.WATER));
+        long inFarm = new BlockPos(-3, 63, -3).asLong();
+        assertTrue(s.positions().forbids(Use.PASS, inFarm));
+        assertTrue(s.positions().forbids(Use.STAND, inFarm));
+        assertFalse(s.positions().forbids(Use.DIG, inFarm), "不进入不等于不挖");
+        assertFalse(s.positions().forbids(Use.PASS, new BlockPos(-3, 64, -3).asLong()), "上面一格不在给的格里");
+    }
+
     @Test
     void mistakesAreTaught() {
         assertTrue(error("alter = \"maybe\"").startsWith("argument 'alter': expected one of none, natural, any"));
@@ -162,7 +174,7 @@ class RouteSpecFlagsTest {
         assertTrue(s.excludes(Kind.FLOWING_WATER));
         // 地面、空气、障碍不是"可以选择不走"的东西,写了就是规格写错了,报错列出能写的
         assertTrue(error("avoid = \"ground\"").contains("expected one of water, flowing_water, lava, climbable, door, "
-                + "hazard, falling, trigger, fragile"));
+                + "hazard, falling, trigger, fragile or a cell"));
         assertTrue(error("avoid = \"obstacle\"").contains("expected one of"));
         assertTrue(error("avoid = \"lake\"").contains("expected one of"));
     }

@@ -58,7 +58,7 @@ public final class BlockActionOps {
             }
         }
         Cells cells = Cells.of(plain).union(Cells.seen(named, level.getGameTime()));
-        String what = "the " + targets.size() + " given";
+        String what = targets.size() == 1 ? targets.get(0).written() : "the " + targets.size() + " given";
         Set<Block> kinds = new LinkedHashSet<>();
         Set<Block> scannedKinds = new LinkedHashSet<>();
         cells.forEach((x, y, z, seen) -> {
