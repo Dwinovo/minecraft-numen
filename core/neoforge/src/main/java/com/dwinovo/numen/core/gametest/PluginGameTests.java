@@ -43,7 +43,7 @@ public class PluginGameTests {
             numen.emit(companion, "gametest_charm_changed", java.util.Map.of("slot", "neck"),
                     "put on a gametest charm", false);
         });
-        ToolRun reply = call(companion, "status_self", args());
+        ToolRun reply = lua(companion, "status.self()");
         var outbox = com.dwinovo.numen.entity.EventOutbox.get(level.getServer());
 
         succeedWhen(helper, () -> {

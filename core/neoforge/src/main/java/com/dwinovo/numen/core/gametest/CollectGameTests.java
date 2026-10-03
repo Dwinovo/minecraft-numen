@@ -3,7 +3,6 @@ package com.dwinovo.numen.core.gametest;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
-import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
@@ -22,7 +21,10 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
-/** 捡东西:{@code work collect} 走过去把地上的掉落物捡起来,可以只捡点名的那几种。 */
+/**
+ * 捡东西:库里的 {@code work.collect} 扫地上的掉落物、一件件走过去,原版玩家走近就捡起来。它返回走过去捡掉的件数;走不到的
+ * 那一步(寻路)失败,整段如实停在那里。
+ */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
 public class CollectGameTests {
@@ -33,64 +35,22 @@ public class CollectGameTests {
         settleWorld(level, Difficulty.PEACEFUL, NOON);
     }
 
-    /** 点名只捡铁锭:三块铁锭捡回来,旁边那堆圆石原样躺在地上。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_collect")
-    public static void work_collect_picks_up_only_the_named_items(GameTestHelper helper) {
-        dropOnFloor(helper, new BlockPos(10, 2, 4), Items.IRON_INGOT, 3);
-        dropOnFloor(helper, new BlockPos(4, 2, 11), Items.COBBLESTONE, 4);
-        NumenPlayer companion = spawnAt(helper, "gametest_gleaner", new BlockPos(2, 2, 2), false);
-        ToolRun collect = command(companion, "work collect --item-ids minecraft:iron_ingot");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(collect.done(), "work collect has not finished");
-            helper.assertTrue(collect.succeeded(), "work collect failed: " + collect.outcome());
-            helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 3,
-                    "the iron was not picked up");
-            helper.assertTrue(companion.getInventory().countItem(Items.COBBLESTONE) == 0
-                            && onFloor(helper, Items.COBBLESTONE) == 4,
-                    "the cobblestone was not left where it lay");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
+    /** 程序跑完了、跑到了最后,返回的是 {@code n}。 */
+    private static boolean returned(ToolRun run, int n) {
+        return run.ranToTheEnd() && run.receipt().contains("\\nreturned: " + n);
     }
 
-    /**
-     * 只捡区域里的:框一块盒子罩住一堆铁锭,{@code work collect --area pen} 只把那一堆捡回来;盒子外的另一堆铁锭原样躺着。
-     */
+    /** 散在两处的铁锭和圆石都到了身上,地上一件不剩;返回的是件数,不是几堆。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_collect")
-    public static void work_collect_area_picks_up_only_what_lies_in_the_area(GameTestHelper helper) {
-        dropOnFloor(helper, new BlockPos(10, 2, 4), Items.IRON_INGOT, 3);
-        dropOnFloor(helper, new BlockPos(4, 2, 11), Items.IRON_INGOT, 2);
-        NumenPlayer companion = spawnAt(helper, "gametest_penkeeper", new BlockPos(2, 2, 2), false);
-        BlockPos a = helper.absolutePos(new BlockPos(8, 1, 2));
-        BlockPos b = helper.absolutePos(new BlockPos(12, 4, 6));
-        ToolRun made = command(companion, "area new pen");
-        ToolRun framed = command(companion, "area add pen --box " + a.getX() + "," + a.getY() + "," + a.getZ() + " "
-                + b.getX() + "," + b.getY() + "," + b.getZ());
-        ToolRun collect = command(companion, "work collect --item-ids minecraft:iron_ingot --area pen");
-
-        succeedWhen(helper, () -> {
-            helper.assertTrue(made.succeeded() && framed.succeeded(), "the pen was not framed: " + framed.reply());
-            helper.assertTrue(collect.done(), "work collect has not finished");
-            helper.assertTrue(collect.succeeded() && collect.outcome().startsWith("collected 3 "),
-                    "work collect did not pick up the three ingots in the pen: " + collect.outcome());
-            helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 3
-                            && onFloor(helper, Items.IRON_INGOT) == 2,
-                    "the ingots outside the pen were not left where they lay");
-            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
-        });
-    }
-
-    /** 不点名就全捡:散在两处的铁锭和圆石都到了身上,地上一件不剩。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_collect")
-    public static void work_collect_without_names_picks_up_everything(GameTestHelper helper) {
-        dropOnFloor(helper, new BlockPos(10, 2, 4), Items.IRON_INGOT, 3);
-        dropOnFloor(helper, new BlockPos(4, 2, 11), Items.COBBLESTONE, 4);
+    public static void work_collect_picks_up_everything_around_her(GameTestHelper helper) {
+        dropOnFloor(helper, new BlockPos(7, 2, 4), Items.IRON_INGOT, 3);
+        dropOnFloor(helper, new BlockPos(4, 2, 7), Items.COBBLESTONE, 4);
         NumenPlayer companion = spawnAt(helper, "gametest_sweeper", new BlockPos(2, 2, 2), false);
-        ToolRun collect = command(companion, "work collect");
+        ToolRun collect = lua(companion, "return work.collect()");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(collect.done(), "work collect has not finished");
-            helper.assertTrue(collect.succeeded(), "work collect failed: " + collect.outcome());
+            helper.assertTrue(collect.receipt() != null, "work.collect has not finished");
+            helper.assertTrue(returned(collect, 7), "work.collect did not count seven items: " + collect.receipt());
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 3
                             && companion.getInventory().countItem(Items.COBBLESTONE) == 4,
                     "not everything was picked up");
@@ -100,39 +60,33 @@ public class CollectGameTests {
         });
     }
 
-    /** 回执报的是到手的件数,不是捡了几堆:一堆三块、一堆两块铁锭,说的是五块。 */
+    /** 返回的是到手的件数,不是捡了几堆:一堆三块、一堆两块铁锭,返回五。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_collect")
-    public static void work_collect_reports_items_not_stacks(GameTestHelper helper) {
-        dropOnFloor(helper, new BlockPos(9, 2, 4), Items.IRON_INGOT, 3);
-        dropOnFloor(helper, new BlockPos(9, 2, 10), Items.IRON_INGOT, 2);
+    public static void work_collect_counts_items_not_stacks(GameTestHelper helper) {
+        dropOnFloor(helper, new BlockPos(6, 2, 4), Items.IRON_INGOT, 3);
+        dropOnFloor(helper, new BlockPos(6, 2, 10), Items.IRON_INGOT, 2);
         NumenPlayer companion = spawnAt(helper, "gametest_tallier", new BlockPos(2, 2, 7), false);
-        ToolRun collect = command(companion, "work collect --item-ids minecraft:iron_ingot");
+        ToolRun collect = lua(companion, "return work.collect()");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(collect.done(), "work collect has not finished");
+            helper.assertTrue(collect.receipt() != null, "work.collect has not finished");
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 5,
                     "not all five ingots were picked up");
-            helper.assertTrue(collect.succeeded() && collect.outcome().startsWith("collected 5 "),
-                    "the reply does not count five items: " + collect.outcome());
+            helper.assertTrue(returned(collect, 5), "it does not count five items: " + collect.receipt());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
 
-    /**
-     * 地上什么都没有:这件活开始不了,受理之前就拒——回执如实说区里没有要捡的,没有任务编号。
-     *
-     * <p>场地之间隔得比工作区远(见 {@link GameTestKit}),隔壁撒的铁锭本来也扫不进来。
-     */
+    /** 地上什么都没有:一件都不走,看一眼就跑完,返回 0——扫过了、没有要捡的。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_collect")
-    public static void work_collect_with_nothing_on_the_ground_says_none(GameTestHelper helper) {
+    public static void work_collect_with_nothing_on_the_ground_returns_none(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_empty_handed", new BlockPos(2, 2, 7), false);
-        ToolRun collect = command(companion, "work collect");
+        ToolRun collect = lua(companion, "return work.collect()");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(collect.done(), "work collect has not replied");
-            helper.assertTrue(collect.refused(), "a sweep with nothing on the ground was accepted: " + collect.reply());
-            helper.assertTrue(collect.outcome().contains("nothing to pick up: no dropped items lie within"),
-                    "the reply does not say nothing lies there to pick up: " + collect.outcome());
+            helper.assertTrue(collect.receipt() != null, "work.collect has not finished");
+            helper.assertTrue(returned(collect, 0) && collect.receipt().contains(": 1 call in"),
+                    "a sweep with nothing on the ground did more than one look: " + collect.receipt());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -155,13 +109,13 @@ public class CollectGameTests {
             }
         }
         dropOnFloor(helper, new BlockPos(8, 2, 8), Items.IRON_INGOT, 3);
-        NumenPlayer companion = spawnAt(helper, "gametest_spelunker", new BlockPos(3, 4, 3), false);
-        ToolRun collect = command(companion, "work collect --item-ids minecraft:iron_ingot");
+        NumenPlayer companion = spawnAt(helper, "gametest_spelunker", new BlockPos(5, 4, 5), false);
+        ToolRun collect = lua(companion, "return work.collect()");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(collect.done(), "work collect has not finished");
-            helper.assertTrue(collect.succeeded() && companion.getInventory().countItem(Items.IRON_INGOT) == 3,
-                    "the ingots at the bottom of the pit were not picked up: " + collect.outcome());
+            helper.assertTrue(collect.receipt() != null, "work.collect has not finished");
+            helper.assertTrue(returned(collect, 3) && companion.getInventory().countItem(Items.IRON_INGOT) == 3,
+                    "the ingots at the bottom of the pit were not picked up: " + collect.receipt());
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
@@ -181,41 +135,36 @@ public class CollectGameTests {
                 .mapToInt(e -> e.getItem().getCount()).sum();
     }
 
-
     /**
-     * 三块铁锭搁在一根三格高的石柱顶上,捡东西从不改地形,她够不着:这件活开始不了,受理之前就拒,回执得交代还有三块
-     * 留在那儿、在哪——不能让模型以为这一片已经干净了。
+     * 三块铁锭搁在一根三格高的石柱顶上,不改地形的路走不上去:走过去的那一步(规划路线)失败,整段如实停在那里,回执说是哪一步、
+     * 为什么;铁锭原样留在柱顶——不能让模型以为这一片已经干净了。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_collect")
-    public static void work_collect_says_what_it_could_not_reach(GameTestHelper helper) {
+    public static void work_collect_stops_where_it_cannot_walk(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int y = 2; y <= 4; y++) {
             level.setBlockAndUpdate(helper.absolutePos(new BlockPos(10, y, 10)), Blocks.STONE.defaultBlockState());
         }
         dropOnFloor(helper, new BlockPos(10, 5, 10), Items.IRON_INGOT, 3);
         NumenPlayer companion = spawnAt(helper, "gametest_shortarm", new BlockPos(6, 2, 6), false);
-        ToolRun collect = command(companion, "work collect --item-ids minecraft:iron_ingot");
+        ToolRun collect = lua(companion, "return work.collect()");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(collect.done(), "work collect has not replied");
-            // 一件都走不到,这件活开始不了:受理之前就拒,回执说剩下几件、在哪
-            helper.assertTrue(collect.refused(), "a sweep that can reach nothing was accepted: " + collect.reply());
+            helper.assertTrue(collect.receipt() != null, "work.collect has not finished");
+            helper.assertTrue(!collect.ranToTheEnd() && collect.receipt().contains("route.plan: "),
+                    "a sweep that can reach nothing did not stop at the walk: " + collect.receipt());
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 0
                             && onFloor(helper, Items.IRON_INGOT) == 3,
                     "the ingots on the pillar were somehow taken: she holds "
                             + companion.getInventory().countItem(Items.IRON_INGOT) + ", the floor has "
-                            + onFloor(helper, Items.IRON_INGOT) + "; " + collect.outcome());
-            BlockPos top = helper.absolutePos(new BlockPos(10, 5, 10));
-            helper.assertTrue(collect.outcome().contains("3 ")
-                            && collect.outcome().contains(top.getX() + "," + top.getY() + "," + top.getZ()),
-                    "the reply does not say three ingots were left on the pillar: " + collect.outcome());
+                            + onFloor(helper, Items.IRON_INGOT) + "; " + collect.receipt());
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
 
     /**
-     * 刚掉下来的东西有一小段拾取冷却(原版方块掉落是 10 刻):三块铁锭就落在她脚边,冷却还没过。她得等冷却过了
-     * 捡起来,不能因为"走到了却没进背包"就当它捡不了。
+     * 刚掉下来的东西有一小段拾取冷却(原版方块掉落是 10 刻):三块铁锭就落在她脚边,冷却还没过。它还在冷却,她就再走上去一次,
+     * 直到捡起来——不能因为"走到了却没进背包"就当它捡不了。
      */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_collect")
     public static void work_collect_waits_out_a_fresh_drops_pickup_delay(GameTestHelper helper) {
@@ -225,13 +174,12 @@ public class CollectGameTests {
         drop.setDeltaMovement(Vec3.ZERO);
         drop.setDefaultPickUpDelay();
         helper.getLevel().addFreshEntity(drop);
-        ToolRun collect = command(companion, "work collect --item-ids minecraft:iron_ingot");
+        ToolRun collect = lua(companion, "return work.collect()");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(collect.done(), "work collect has not finished");
-            helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 3
-                            && collect.outcome().startsWith("collected 3 "),
-                    "the fresh drop at her feet was not picked up: " + collect.outcome());
+            helper.assertTrue(collect.receipt() != null, "work.collect has not finished");
+            helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 3 && returned(collect, 3),
+                    "the fresh drop at her feet was not picked up: " + collect.receipt());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

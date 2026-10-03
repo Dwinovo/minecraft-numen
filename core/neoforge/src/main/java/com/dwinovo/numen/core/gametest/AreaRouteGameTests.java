@@ -22,8 +22,8 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
- * 路线收区域:{@code move goto --area} 走进区域里任意一格、用区域里的箱子之一、停在区域附近;{@code --avoid area:…} 绕开一块地;
- * {@code --avoid_break area:…} 不挖那几格、改从别处挖出去;路线存的是区域的名字,区域删了 {@code route plan} 与 {@code move go}
+ * 路线收区域:{@code move.goto_ --area} 走进区域里任意一格、用区域里的箱子之一、停在区域附近;{@code --avoid area:…} 绕开一块地;
+ * {@code --avoid_break area:…} 不挖那几格、改从别处挖出去;路线存的是区域的名字,区域删了 {@code route.plan} 与 {@code move.go}
  * 如实说是哪一段、哪块区域不在了。区域由主人的存档直接建(命令组另有测试),其余都从工具入口进。
  */
 @GameTestHolder(Constants.MOD_ID)
@@ -54,7 +54,7 @@ public class AreaRouteGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_penwalker", new BlockPos(2, 2, 2), false);
         Area pen = box(helper, new BlockPos(10, 2, 10), new BlockPos(12, 2, 12));
         areasOf(companion).create("pen", pen);
-        ToolRun walk = call(companion, "move_goto", args("place", "pen"));
+        ToolRun walk = lua(companion, "move.goto_(\"pen\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "move_goto has not finished");
@@ -80,7 +80,7 @@ public class AreaRouteGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_chestuser", new BlockPos(2, 2, 2), false);
         areasOf(companion).create("chests", Area.of(level.dimension(), Area.Kind.POINT, Cells.point(near))
                 .with(Area.Kind.POINT, Cells.point(far)));
-        ToolRun walk = command(companion, "move goto chests --arrive use");
+        ToolRun walk = lua(companion, "move.goto_(\"chests\", {arrive = \"use\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "move goto has not finished");
@@ -100,7 +100,7 @@ public class AreaRouteGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_hoverer", new BlockPos(2, 2, 2), false);
         Area pen = box(helper, new BlockPos(10, 2, 10), new BlockPos(13, 2, 13));
         areasOf(companion).create("pen", pen);
-        ToolRun walk = command(companion, "move goto pen --arrive near --near 3");
+        ToolRun walk = lua(companion, "move.goto_(\"pen\", {arrive = \"near\", near = 3})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "move goto has not finished");
@@ -125,7 +125,7 @@ public class AreaRouteGameTests {
         Area farm = box(helper, new BlockPos(5, 1, 0), new BlockPos(10, 3, 11));
         areasOf(companion).create("farm", farm);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 6));
-        ToolRun walk = command(companion, "move goto " + xyz(target) + " --avoid area:farm");
+        ToolRun walk = lua(companion, "move.goto_(" + xyz(target) + ", {avoid = \"area:farm\"})");
         boolean[] entered = new boolean[1];
         helper.onEachTick(() -> {
             BlockPos feet = companion.blockPosition();
@@ -143,7 +143,7 @@ public class AreaRouteGameTests {
     }
 
     /**
-     * 不挖房子的那一面:关在木板屋里,终点在屋东边。东墙是区域 {@code house};{@code --alter natural --avoid_break area:house}
+     * 不挖房子的那一面:关在木板屋里,终点在屋东边。东墙是区域 {@code house};{@code alter = "natural" --avoid_break area:house}
      * 的一趟挖开别的墙绕出去,东墙一块不少,回执照实记下挖了哪几块木板。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
@@ -155,8 +155,7 @@ public class AreaRouteGameTests {
         Area eastWall = box(helper, new BlockPos(9, 2, 5), new BlockPos(9, 4, 9));
         areasOf(companion).create("house", eastWall);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        ToolRun walk = call(companion, "move_goto", args("place", xyz(target),
-                "alter", "natural", "avoid_break", List.of("area:house")));
+        ToolRun walk = lua(companion, "move.goto_(" + xyz(target) + ", {alter = \"natural\", avoid_break = \"area:house\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "move_goto has not finished");
@@ -173,8 +172,8 @@ public class AreaRouteGameTests {
     }
 
     /**
-     * 路线存的是区域的名字:终点是区域 {@code pen}、标志避开区域 {@code farm} 的两条路线建好之后,把两块区域删掉。{@code route plan}
-     * 说第一段去的区域不在了;两条的 {@code move go} 都不出发,说是哪块区域不在了、主人还有哪些;{@code move goto --area pen}
+     * 路线存的是区域的名字:终点是区域 {@code pen}、标志避开区域 {@code farm} 的两条路线建好之后,把两块区域删掉。{@code route.plan}
+     * 说第一段去的区域不在了;两条的 {@code move.go} 都不出发,说是哪块区域不在了、主人还有哪些;{@code move.goto_ --area pen}
      * 受理当场就说。她一步没动。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
@@ -186,15 +185,14 @@ public class AreaRouteGameTests {
         areas.create("pen", box(helper, new BlockPos(10, 2, 10), new BlockPos(12, 2, 12)));
         areas.create("farm", box(helper, new BlockPos(5, 1, 5), new BlockPos(7, 3, 7)));
         areas.create("shed", box(helper, new BlockPos(0, 2, 14), new BlockPos(1, 2, 15)));
-        ToolRun toPen = command(companion, "route new topen --to pen");
-        ToolRun around = command(companion, "route new around --to " + at(helper, new BlockPos(12, 2, 2))
-                + " --avoid area:farm");
+        ToolRun toPen = lua(companion, "route.new(\"topen\", {to = \"pen\"})");
+        ToolRun around = lua(companion, "route.new(\"around\", {to = " + at(helper, new BlockPos(12, 2, 2)) + ", avoid = \"area:farm\"})");
         helper.assertTrue(toPen.succeeded() && around.succeeded(), "making the routes failed: " + toPen.reply()
                 + " / " + around.reply());
         areas.delete("pen");
         areas.delete("farm");
-        ToolRun plan = command(companion, "route plan topen");
-        ToolRun direct = command(companion, "move goto pen");
+        ToolRun plan = lua(companion, "route.plan(\"topen\")");
+        ToolRun direct = lua(companion, "move.goto_(\"pen\")");
         ToolRun[] goPen = new ToolRun[1];
         ToolRun[] goAround = new ToolRun[1];
 
@@ -206,18 +204,19 @@ public class AreaRouteGameTests {
                             "route plan does not say the area is gone: " + plan.reply());
                     helper.assertTrue(!direct.succeeded() && direct.reply().contains("there is no area named pen"),
                             "move goto pen was not refused at once: " + direct.reply());
-                    goPen[0] = command(companion, "move go topen");
+                    goPen[0] = lua(companion, "move.go(\"topen\")");
                 })
                 .thenWaitUntil(() -> helper.assertTrue(goPen[0].done(), "move go topen has not finished"))
-                .thenExecute(() -> goAround[0] = command(companion, "move go around"))
-                .thenWaitUntil(() -> helper.assertTrue(goAround[0].done(), "move go around has not finished"))
+                // 区域没了之后 around 还没规划过:规划它,说是哪个标志点了不在的区域
+                .thenExecute(() -> goAround[0] = lua(companion, "route.plan(\"around\")"))
+                .thenWaitUntil(() -> helper.assertTrue(goAround[0].done(), "route plan around has not finished"))
                 .thenExecute(() -> {
                     helper.assertTrue(!goPen[0].succeeded() && goPen[0].outcome().contains(
                                     "can't walk route topen as it stands: there is no area named pen"),
                             "move go does not say the area is gone: " + goPen[0].outcome());
                     helper.assertTrue(!goAround[0].succeeded()
-                                    && goAround[0].outcome().contains("--avoid area:farm: there is no area named farm"),
-                            "move go does not say which flag names a missing area: " + goAround[0].outcome());
+                                    && goAround[0].outcome().contains("avoid area:farm: there is no area named farm"),
+                            "route plan does not say which flag names a missing area: " + goAround[0].outcome());
                     helper.assertTrue(companion.blockPosition().equals(start), "she moved");
                     CompanionFactory.despawn(level.getServer(), companion);
                 })

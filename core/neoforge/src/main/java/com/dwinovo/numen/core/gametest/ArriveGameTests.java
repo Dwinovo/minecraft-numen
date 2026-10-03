@@ -26,7 +26,7 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
 /**
  * 到达方式,从 {@code move_goto} 的工具入口:{@code arrive:use} 走到看得见、点得到的地方(狭窄矿道里的熔炉、只有一面敞开的箱子、
- * 悬崖上的工作台),隔着高草时 {@code use block} 先清掉再用;四面封死受理即提醒、不出发;{@code arrive:at} 到柱顶上面那一格、
+ * 悬崖上的工作台),隔着高草时 {@code use.block} 先清掉再用;四面封死受理即提醒、不出发;{@code arrive:at} 到柱顶上面那一格、
  * 梯子上、水里的一格;{@code arrive:near} 停在范围里。
  */
 @GameTestHolder(Constants.MOD_ID)
@@ -51,8 +51,7 @@ public class ArriveGameTests {
     }
 
     private static ToolRun gotoUse(NumenPlayer companion, BlockPos target) {
-        return call(companion, "move_goto", args("place", xyz(target),
-                "arrive", "use"));
+        return lua(companion, "move.goto_(" + xyz(target) + ", {arrive = \"use\"})");
     }
 
     /** 她脚下那一格(相对场地,与 {@code absolutePos} 同一个原点)。 */
@@ -62,7 +61,7 @@ public class ArriveGameTests {
 
     /**
      * 狭窄矿道里的熔炉:两条平行的一格宽两格高矿道,一头连通;熔炉嵌在南边那条的北壁上,只有朝矿道的南面敞开。她在北边那条里,
-     * 隔着一层石头几何上够得着它、却看不见:arrive:use 绕到南边矿道、站到正对开口的一侧;接着 use block 打开它。
+     * 隔着一层石头几何上够得着它、却看不见:arrive:use 绕到南边矿道、站到正对开口的一侧;接着 use.block 打开它。
      */
     @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
     public static void use_walks_to_the_open_side_of_a_furnace_in_a_narrow_tunnel(GameTestHelper helper) {
@@ -82,7 +81,7 @@ public class ArriveGameTests {
                     "she is not in the south tunnel facing the furnace: " + walk.outcome() + " at "
                             + feet(helper, companion));
             if (press[0] == null) {
-                press[0] = command(companion, "use block " + xyz(furnace));
+                press[0] = lua(companion, "use.block(" + xyz(furnace) + ")");
             }
             helper.assertTrue(press[0].done(), "use block has not finished");
             helper.assertTrue(press[0].succeeded() && companion.containerMenu instanceof FurnaceMenu,
@@ -153,7 +152,7 @@ public class ArriveGameTests {
     }
 
     /**
-     * 箱子前立着高草:arrive:use 照样走到西面;{@code work dig} 挖掉高草,再 {@code use block} 打开箱子。右键是纯按键,
+     * 箱子前立着高草:arrive:use 照样走到西面;{@code work.dig} 挖掉高草,再 {@code use.block} 打开箱子。右键是纯按键,
      * 清视线只归挖掘执行。
      */
     @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
@@ -169,7 +168,7 @@ public class ArriveGameTests {
             helper.assertTrue(walk.done(), "goto has not finished");
             helper.assertTrue(walk.succeeded(), "goto failed: " + walk.outcome());
             if (dig[0] == null) {
-                dig[0] = command(companion, "work dig " + xyz(grass));
+                dig[0] = lua(companion, "work.dig(" + xyz(grass) + ")");
             }
             helper.assertTrue(dig[0].done(), "work dig has not finished");
             helper.assertTrue(dig[0].succeeded(), "work dig failed: " + dig[0].outcome());
@@ -177,7 +176,7 @@ public class ArriveGameTests {
                             && helper.getLevel().getBlockState(grass.above()).isAir(),
                     "the grass is still there after work dig: " + dig[0].outcome());
             if (press[0] == null) {
-                press[0] = command(companion, "use block " + xyz(chest));
+                press[0] = lua(companion, "use.block(" + xyz(chest) + ")");
             }
             helper.assertTrue(press[0].done(), "use block has not finished");
             helper.assertTrue(press[0].succeeded() && companion.containerMenu instanceof ChestMenu,
@@ -189,7 +188,7 @@ public class ArriveGameTests {
 
     /**
      * 同一只箱子、同一株高草,不挖就右键:点到的是高草,箱子没开,高草还在,她一步没动;回执说准星落在高草上,写出
-     * {@code work dig} 挖掉它、或走到看得见另一面的地方这两条路。
+     * {@code work.dig} 挖掉它、或走到看得见另一面的地方这两条路。
      */
     @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
     public static void use_block_right_clicks_the_tall_grass_in_the_way_and_says_so(GameTestHelper helper) {
@@ -205,14 +204,14 @@ public class ArriveGameTests {
             helper.assertTrue(walk.succeeded(), "goto failed: " + walk.outcome());
             if (press[0] == null) {
                 stood[0] = companion.blockPosition();
-                press[0] = command(companion, "use block " + xyz(chest));
+                press[0] = lua(companion, "use.block(" + xyz(chest) + ")");
             }
             helper.assertTrue(press[0].done(), "use block has not finished");
             String said = press[0].outcome();
             helper.assertTrue(press[0].succeeded() && said.contains("right-clicked tall_grass at")
                             && said.contains("the crosshair landed there, not on " + chest.getX() + "," + chest.getY()
                                     + "," + chest.getZ())
-                            && said.contains("`work dig ") && said.contains("--arrive use`"),
+                            && said.contains("`work.dig({") && said.contains("{arrive = \"use\"})`"),
                     "the reply does not say the click landed on the grass and what to do next: " + said);
             helper.assertTrue(!(companion.containerMenu instanceof ChestMenu), "the chest opened through the grass");
             helper.assertTrue(helper.getLevel().getBlockState(grass.above()).is(Blocks.TALL_GRASS),
@@ -239,7 +238,7 @@ public class ArriveGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.task() == null && walk.done() && !walk.succeeded(), "it was not refused at once");
             helper.assertTrue(walk.outcome().contains("walled in on every side")
-                            && walk.outcome().contains("--arrive dig`, then `work dig "),
+                            && walk.outcome().contains("{arrive = \"dig\"})`, then `work.dig({"),
                     "the refusal does not say it is sealed and what to dig: " + walk.outcome());
             helper.assertTrue(companion.blockPosition().equals(before), "she moved");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -253,7 +252,7 @@ public class ArriveGameTests {
         set(helper, 7, 2, 8, Blocks.STONE);
         BlockPos top = helper.absolutePos(new BlockPos(8, 3, 8));
         NumenPlayer companion = spawnAt(helper, "gametest_pillar_sitter", new BlockPos(2, 2, 8), false);
-        ToolRun walk = call(companion, "move_goto", args("place", xyz(top.above())));
+        ToolRun walk = lua(companion, "move.goto_(" + xyz(top.above()) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
@@ -273,7 +272,7 @@ public class ArriveGameTests {
         }
         BlockPos rung = helper.absolutePos(new BlockPos(8, 4, 8));
         NumenPlayer companion = spawnAt(helper, "gametest_ladder_hanger", new BlockPos(2, 2, 8), false);
-        ToolRun walk = call(companion, "move_goto", args("place", xyz(rung)));
+        ToolRun walk = lua(companion, "move.goto_(" + xyz(rung) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
@@ -290,7 +289,7 @@ public class ArriveGameTests {
         fill(helper, 7, 2, 7, 10, 3, 10, Blocks.WATER.defaultBlockState());
         BlockPos cell = helper.absolutePos(new BlockPos(8, 3, 8));
         NumenPlayer companion = spawnAt(helper, "gametest_floater", new BlockPos(2, 4, 8), false);
-        ToolRun walk = call(companion, "move_goto", args("place", xyz(cell)));
+        ToolRun walk = lua(companion, "move.goto_(" + xyz(cell) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
@@ -305,14 +304,54 @@ public class ArriveGameTests {
     public static void near_stops_within_the_distance(GameTestHelper helper) {
         BlockPos spot = helper.absolutePos(new BlockPos(13, 2, 13));
         NumenPlayer companion = spawnAt(helper, "gametest_nearby", new BlockPos(2, 2, 2), false);
-        ToolRun walk = call(companion, "move_goto", args("place", xyz(spot),
-                "arrive", "near", "near", 3));
+        ToolRun walk = lua(companion, "move.goto_(" + xyz(spot) + ", {arrive = \"near\", near = " + 3 + "})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
             double d = Math.sqrt(companion.blockPosition().distSqr(spot));
             helper.assertTrue(walk.succeeded() && d <= 3 && d > 2,
                     "she did not stop just within three blocks: " + walk.outcome() + " at distance " + d);
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /**
+     * arrive "reach":一格半空(地面上两格、四周什么都没有),她走到手够得着往里放方块的地方停下,不站进那一格;接着
+     * {@code build.place} 原地放进去——够得着就是放得下。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 1200, batch = BATCH)
+    public static void reach_walks_within_hand_of_a_cell_in_the_air_and_it_takes_a_block(GameTestHelper helper) {
+        BlockPos cell = helper.absolutePos(new BlockPos(11, 4, 11));
+        NumenPlayer companion = spawnAt(helper, "gametest_reacher", new BlockPos(2, 2, 2), false);
+        companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COBBLESTONE));
+        ToolRun run = lua(companion, "move.goto_(" + xyz(cell) + ", {arrive = \"reach\"})\n"
+                + "build.place(" + xyz(cell) + ", {block = \"cobblestone\"})");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(run.receipt() != null, "the program has not finished");
+            helper.assertTrue(run.ranToTheEnd(), "walking within reach and placing failed: " + run.receipt());
+            helper.assertTrue(helper.getLevel().getBlockState(cell).is(Blocks.COBBLESTONE),
+                    "the cell in the air was not filled");
+            helper.assertTrue(!companion.blockPosition().equals(cell) && !companion.blockPosition().above().equals(cell),
+                    "she stood in the cell she was to fill");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** arrive "reach" 说的是一格:只给 {x, z} 当场拒,说要给 y,不出发。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
+    public static void reach_without_a_height_is_refused_at_once(GameTestHelper helper) {
+        BlockPos cell = helper.absolutePos(new BlockPos(11, 4, 11));
+        NumenPlayer companion = spawnAt(helper, "gametest_reach_flat", new BlockPos(2, 2, 2), false);
+        BlockPos start = companion.blockPosition();
+        ToolRun run = lua(companion, "move.goto_({" + cell.getX() + ", " + cell.getZ() + "}, {arrive = \"reach\"})");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(run.receipt() != null, "the program has not finished");
+            helper.assertTrue(!run.ranToTheEnd() && run.receipt().contains("arrive = \\\"reach\\\" names one block"),
+                    "the refusal does not say reach needs a y: " + run.receipt());
+            helper.assertTrue(run.tasks("move.go").isEmpty() && companion.blockPosition().equals(start),
+                    "she set off anyway");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

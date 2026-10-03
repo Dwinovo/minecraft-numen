@@ -15,7 +15,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
 /**
- * 找地方:{@code locate biome}、{@code locate structure},从 {@code command} 入口调。测试服的世界是超平坦,只有平原、
+ * 找地方:{@code locate.biome}、{@code locate.structure},从 {@code command} 入口调。测试服的世界是超平坦,只有平原、
  * 不生成结构——所以测的是"脚下的群系找得到"和"没有的东西如实说没有、说清楚找了多远"。
  */
 @GameTestHolder(Constants.MOD_ID)
@@ -32,14 +32,14 @@ public class LocateGameTests {
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_locate")
     public static void locate_biome_finds_the_plains_underfoot(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_cartographer", new BlockPos(3, 2, 3), false);
-        ToolRun locate = command(companion, "locate biome minecraft:plains");
+        ToolRun locate = lua(companion, "locate.biome(\"minecraft:plains\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(locate.done(), "locate biome has not finished");
             helper.assertTrue(locate.succeeded() && locate.outcome().startsWith("nearest ")
                             && locate.outcome().contains("plains"),
                     "the plains underfoot were not found: " + locate.outcome());
-            helper.assertTrue(locate.task().getToolName().equals("locate biome"),
+            helper.assertTrue(locate.task().getToolName().equals("locate.biome"),
                     "the search is not named after the command: " + locate.task().getToolName());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -49,7 +49,7 @@ public class LocateGameTests {
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_locate")
     public static void locate_biome_that_is_not_here_says_how_far_it_looked(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_wanderer", new BlockPos(3, 2, 3), false);
-        ToolRun locate = command(companion, "locate biome minecraft:desert");
+        ToolRun locate = lua(companion, "locate.biome(\"minecraft:desert\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(locate.done(), "locate biome has not finished");
@@ -60,11 +60,11 @@ public class LocateGameTests {
         });
     }
 
-    /** 把结构当群系找:当场失败,并指她去用 locate structure。 */
+    /** 把结构当群系找:当场失败,并指她去用 locate.structure。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_locate")
     public static void locate_biome_given_a_structure_points_to_locate_structure(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mixedup", new BlockPos(3, 2, 3), false);
-        ToolRun locate = command(companion, "locate biome minecraft:village_plains");
+        ToolRun locate = lua(companion, "locate.biome(\"minecraft:village_plains\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(locate.done(), "locate biome has not finished");
@@ -79,7 +79,7 @@ public class LocateGameTests {
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_locate")
     public static void locate_structure_that_is_not_here_says_so(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_pilgrim", new BlockPos(3, 2, 3), false);
-        ToolRun locate = command(companion, "locate structure minecraft:village");
+        ToolRun locate = lua(companion, "locate.structure(\"minecraft:village\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(locate.done(), "locate structure has not finished");

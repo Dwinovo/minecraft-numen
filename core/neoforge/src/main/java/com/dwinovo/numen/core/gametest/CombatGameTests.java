@@ -91,7 +91,7 @@ public class CombatGameTests {
                         companion.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE), slime.getBbWidth()),
                 "this slime does not outreach her, the scene tests nothing");
         float startHealth = slime.getHealth();
-        TaskRecord record = command(companion, "fight attack " + slime.getId()).task();
+        TaskRecord record = lua(companion, "fight.attack(" + slime.getId() + ")").task();
 
         succeedWhen(helper, () -> {
             helper.assertTrue(record.getResult() == null || !record.getResult().message().contains("internal error"),
@@ -119,7 +119,7 @@ public class CombatGameTests {
         zombie.setNoAi(true);
         level.addFreshEntity(zombie);
         float startHealth = zombie.getHealth();
-        ToolRun attack = command(companion, "fight attack " + zombie.getId());
+        ToolRun attack = lua(companion, "fight.attack(" + zombie.getId() + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(attack.task() != null, "the attack was not accepted: " + attack.reply());
@@ -149,7 +149,7 @@ public class CombatGameTests {
         // 每刻在它那一格里挪一点,不出格
         helper.onEachTick(() -> zombie.setPos(at.getX() + 0.5 + 0.2 * Math.sin(level.getGameTime() * 0.7),
                 zombie.getY(), at.getZ() + 0.5 + 0.2 * Math.cos(level.getGameTime() * 0.7)));
-        ToolRun attack = command(companion, "fight attack " + zombie.getId());
+        ToolRun attack = lua(companion, "fight.attack(" + zombie.getId() + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(attack.task() != null, "the attack was not accepted: " + attack.reply());
@@ -204,7 +204,7 @@ public class CombatGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(level.getEntity(zombie.getId()) == zombie,
                         "the zombie never showed up in the world; she is at " + companion.blockPosition()
                                 + " in chunk " + companion.chunkPosition()))
-                .thenExecute(() -> attack[0] = command(companion, "fight attack " + zombie.getId()))
+                .thenExecute(() -> attack[0] = lua(companion, "fight.attack(" + zombie.getId() + ")"))
                 .thenWaitUntil(() -> {
                     helper.assertTrue(attack[0].task() != null, "the attack was not accepted: " + attack[0].reply());
                     helper.assertTrue(zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion,
@@ -233,7 +233,7 @@ public class CombatGameTests {
         pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);   // 站着别跑,这条测的是她走不走过去,不是追逐
         level.addFreshEntity(pig);
-        TaskRecord record = command(companion, "fight attack " + pig.getId()).task();
+        TaskRecord record = lua(companion, "fight.attack(" + pig.getId() + ")").task();
 
         succeedWhen(helper, () -> {
             helper.assertTrue(pig.isDeadOrDying() && pig.getLastHurtByMob() == companion,
@@ -260,20 +260,56 @@ public class CombatGameTests {
         NumenPlayer companion = com.dwinovo.numen.entity.Companions.summon(server, java.util.UUID.randomUUID(),
                 "gametest_uuid_hunter", level, new net.minecraft.world.phys.Vec3(spawn.getX() + 0.5, spawn.getY(),
                         spawn.getZ() + 0.5));
-        ToolRun nobody = command(companion, "fight attack 999998");
-        ToolRun attack = command(companion, "fight attack " + pig.getId() + " 999999");
+        ToolRun nobody = lua(companion, "fight.attack(999998)");
+        ToolRun attack = lua(companion, "fight.attack(" + pig.getId() + ")");
         String recorded = com.dwinovo.numen.entity.CompanionRegistry.get(server).find(companion.getUUID()).taskArgs();
 
         succeedWhen(helper, () -> {
             helper.assertTrue(nobody.done() && !nobody.succeeded() && nobody.outcome().contains("999998"),
                     "naming only missing entities did not fail on the spot: " + nobody.reply());
             helper.assertTrue(attack.task() != null, "the attack was not accepted: " + attack.reply());
-            helper.assertTrue(recorded.contains("fight attack " + pig.getUUID() + "\"")
-                            && !recorded.contains("999999"),
+            helper.assertTrue(recorded.contains("fight attack " + pig.getUUID())
+                            && !recorded.contains("attack " + pig.getId()),
                     "the replay recipe does not name exactly the pig by its UUID: " + recorded);
             com.dwinovo.numen.entity.Companions.dismiss(server, companion);
             pig.discard();
         });
+    }
+
+    /**
+     * 库里的 {@code fight.clear}:四周两只僵尸,一次 {@code fight.attack} 打一只,打到范围里一只不剩,返回打了几场。两只都倒在
+     * 她手下,一场一个 fight.attack。半径给小,不扫到隔壁场地。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_combat")
+    public static void fight_clear_fights_every_hostile_around_her_one_at_a_time(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = armedCompanion(helper, new BlockPos(8, 2, 8));
+        List<Zombie> zombies = List.of(still(helper, new BlockPos(4, 2, 8)), still(helper, new BlockPos(12, 2, 9)));
+        ToolRun clear = lua(companion, "return fight.clear(7)");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(clear.receipt() != null, "fight.clear has not finished");
+            helper.assertTrue(clear.ranToTheEnd() && clear.receipt().contains("\\nreturned: 2"),
+                    "fight.clear did not end after two fights: " + clear.receipt());
+            helper.assertTrue(clear.tasks("fight.attack").size() == 2,
+                    "not one fight.attack per zombie: " + clear.receipt());
+            for (Zombie zombie : zombies) {
+                helper.assertTrue(zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion,
+                        "a zombie is still up, or it did not fall to her");
+            }
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 一只不动不还手的僵尸。 */
+    private static Zombie still(GameTestHelper helper, BlockPos rel) {
+        Zombie zombie = EntityType.ZOMBIE.create(helper.getLevel());
+        helper.assertTrue(zombie != null, "zombie did not spawn");
+        BlockPos at = helper.absolutePos(rel);
+        zombie.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        zombie.setNoAi(true);
+        helper.getLevel().addFreshEntity(zombie);
+        return zombie;
     }
 
     private static Zombie spawnZombie(GameTestHelper helper, BlockPos rel, NumenPlayer target) {
