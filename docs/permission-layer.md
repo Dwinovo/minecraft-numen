@@ -62,8 +62,7 @@
 
 **动作(Action)。** 身体要对世界做的一件具体的事及其目标:`break(pos)`、`place(pos, block)`、
 `attack(entity)`、`use_block(pos)`、`use_entity(entity)`、`take(container, item)`、`drop(item)`、
-`command(整行)`(以她的身份执行一条游戏指令,见下文"指令")、`edit_area(区域名)`(改主人名下的一块区域,见下文"区域")、
-`edit_script(脚本名)`(存、改、删主人名下的一份脚本,见下文"脚本")。
+`command(整行)`(以她的身份执行一条游戏指令,见下文"指令")、`edit_area(区域名)`(改主人名下的一块区域,见下文"区域")。
 不带工具名、不带 JSON。
 
 **信号(Signal)。** 给动作贴事实的函数,每个只回答一个通用问题:
@@ -142,10 +141,8 @@ command(msg)           指令按根名写
   `deny edit_area(*)` 一块都不许她改。写在 `*` 上的 `area:house` 同样盖住改 `house` 这件事。
 - "允许并记住"钉上的是那一块:`edit_area(ruled)` 问出来的 `house` 记成 `allow edit_area(ruled & area:house)`。
 
-**脚本。** 同伴存下的脚本归主人(`docs/shell.md` §四),同一主人的同伴都看得见、都跑得了。存一份新的、改她自己那份
-是她的笔记;改、删别的同伴存的那份,是动了别人摸索出来、删了撤不回的东西,该不该动只有主人说得清。所以 `script save`
-与 `script delete` 动手前送 `edit_script(脚本名)`,带上已有那一份是谁存的:出厂 allow 行 `edit_script(!saved)` 放行新存与
-改她自己的,出厂 ask 行 `edit_script(saved)` 让改删别人的先问主人。内置脚本只读,不是权限的事:存不进、删不掉,回执当场说。
+**Lua 模块不归权限层。** 她的模块存在主人客户端上(`docs/shell.md` §九),存、改、删不问主人,每一次写进回执;权限层只管
+世界与身体。
 
 **指令。** `command` 的项除了 `*` 都是指令的根名,不写斜杠:`allow command(msg)`、`allow command(trigger)`、
 `ask command(setblock)`、`deny command(tp)`、`ask command(!msg & !trigger)`。信号说的是方块与实体,一条指令没有
@@ -169,8 +166,8 @@ command(msg)           指令按根名写
 | 表 | 规则 |
 |---|---|
 | deny | 空 |
-| allow | `break(!placed & !self_placed & !block_entity & !#minecraft:beds & !#minecraft:doors & !#minecraft:trapdoors & !#minecraft:fence_gates)`、`break(self_placed & !contents)`、`place(!hazard_item)`、`place(hazard_item & !near_placed)`、`attack(!owned & !named & !villager)`、`use_block(*)`、`use_entity(!owned)`、`use_entity(self_owned)`、`take(*)`、`command(help)`、`command(list)`、`command(me)`、`command(msg)`、`command(teammsg)`、`command(seed)`、`command(random)`、`edit_area(!ruled)`、`edit_script(!saved)` |
-| ask | `break(block_entity & contents)`、`break(placed)`、`break(block_entity)`、`break(#minecraft:beds)`、`break(#minecraft:doors)`、`break(#minecraft:trapdoors)`、`break(#minecraft:fence_gates)`、`attack(owned)`、`attack(named)`、`attack(villager)`、`drop(*)`、`place(hazard_item & near_placed)`、`edit_area(ruled)`、`edit_script(saved)` |
+| allow | `break(!placed & !self_placed & !block_entity & !#minecraft:beds & !#minecraft:doors & !#minecraft:trapdoors & !#minecraft:fence_gates)`、`break(self_placed & !contents)`、`place(!hazard_item)`、`place(hazard_item & !near_placed)`、`attack(!owned & !named & !villager)`、`use_block(*)`、`use_entity(!owned)`、`use_entity(self_owned)`、`take(*)`、`command(help)`、`command(list)`、`command(me)`、`command(msg)`、`command(teammsg)`、`command(seed)`、`command(random)`、`edit_area(!ruled)` |
+| ask | `break(block_entity & contents)`、`break(placed)`、`break(block_entity)`、`break(#minecraft:beds)`、`break(#minecraft:doors)`、`break(#minecraft:trapdoors)`、`break(#minecraft:fence_gates)`、`attack(owned)`、`attack(named)`、`attack(villager)`、`drop(*)`、`place(hazard_item & near_placed)`、`edit_area(ruled)` |
 
 allow 行把日常动作一行一行写明:自然方块(谁都没放过)、她自己放的、不危险的放置、敌对生物与野生动物、开关门开容器、
 对没主人的实体和她自己驯服的实体右键、从容器拿东西、执行只读只说话的指令、改主人规则没点名的区域。ask 表里同一个动作命中几行时第一行作数,所以更具体的在前

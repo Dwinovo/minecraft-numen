@@ -1,6 +1,7 @@
 # 命令行与脚本:原子命令 + Lua 脚本
 
-状态:10-01 设计,10-03 改成只有 `lua` 一个工具(§七)。总纲见 `docs/architecture-mind-model.md` §零。
+状态:10-01 设计,10-03 改成只有 `lua` 一个工具(§七),10-04 模块统一成库、存在主人客户端(§九)。总纲与五层见
+`docs/architecture-mind-model.md` §零。
 
 ## 一、为什么
 
@@ -52,12 +53,13 @@
 | `fight.attack` | 打**一只**:追、转头、等冷却、出手,死了/丢了/超时收尾 | 不挑下一只 |
 | `use.*` | 按一下键 | — |
 
-库函数(Lua 写的,随模组发,`script.show` 看得到全文)在同一张目录里、和动作一样调用:
+模块函数(Lua 写的,随模组发,`script.show` 看得到全文;和组同名的模块给那一组加函数)在同一张目录里、和动作一样调用:
 
-| 库函数 | 由哪几个原子函数组成 |
+| 模块函数 | 由哪几个原子函数组成 |
 |---|---|
 | `move.goto_(place, opts)` | `route.new` + `route.plan` + `move.go`,走的是她自己那条 `goto-<名字>` |
 | `work.collect(opts)` | `scan.entities("item")` + 一件件 `move.goto_` 走上去(原版玩家走过去就捡起) |
+| `work.mine(where)` | `while area.has(where)`:`move.goto_(where, {arrive = "dig", alter = "natural"})` + `work.dig(where)` + `work.collect(…)`,返回挖了几格 |
 | `fight.clear(radius)` | `scan.entities("hostile")` + 一只一只 `fight.attack` |
 | `build.raise(name, opts)` | `build.left` 问还差什么 → `build.at` 放够得着的 / `move.goto_ … arrive "dig"` + `work.dig` 挖开挡路的 / `move.goto_ … arrive "reach"` 走到够得着最低最近那格的地方 |
 
@@ -107,7 +109,7 @@
   由登记时声明的类型说(`Action.returns(类型)`,或 `returns("has", 布尔)` 只交数据里的一项):`area.has` 是 true 或 false,
   `area.parts` 是名字的列表,`work.dig` 是 `{dug, left, out_of_reach, nearest}`,声明了不返回的是 nil。那句话只进回执,不进
   程序。失败抛的错误值 `pcall` 接得住,接住了就按 `err.kind` 分支。
-- `print(...)` 写进回执(至多 6000 字;表按 Lua 的写法印出来)。按名字跑的脚本用 `...` 与 `arg` 取参数。
+- `print(...)` 写进回执(至多 6000 字;表按 Lua 的写法印出来)。
   `raise(kind, message, hint)` 以一个错误值失败,`error("why", 0)` 是程序自己的运行错(`runtime`)。
 - **名字的改写只有一条**:组名或动作名撞上 Lua 的保留字(`goto`、`end`……)或沙箱自带的全局名(`string`、`table`、
   `print`……)的,后面加 `_`:`move.goto_`。命令名本身不变,只是脚本里的写法;帮助里这样的动作多一行
@@ -127,13 +129,11 @@
 
 ### 运行:一个脚本一个虚拟线程
 
-- 每次运行一个新的虚拟机(`Globals`),跑在它自己的虚拟线程上。命令函数是宿主函数:收参数、把调用请求
+- 每次运行一个新的虚拟机(`Globals`),跑在它自己的虚拟线程上;模块用到时才从磁盘或 jar 读此刻的正文(§九),所以改了文件下一段
+  程序就用新的。命令函数是宿主函数:收参数、把调用请求
   (`ScriptRun.Call`:行号、组、动作、对象、选项)交给驱动方,然后在原地阻塞等结局,拿到后从调用处接着跑。驱动方只在
   两次调命令之间等它算完(指令预算管着);等身体干活时谁都不等它,脚本线程停着不占平台线程。
 - 不装 `coroutine` 库,命令只有脚本本身调得到。
-- 一段调用里可以再跑一份有名字的脚本:`script run`(命令行上或 `script.run`)是一条普通命令,命令层按名字找到脚本、
-  把正文与参数放进回执 `data.run`;派发器见到这样的回执就在原地开一层跑它,跑完它的结局就是那次调用的结局。上限算
-  整段调用的总数,打断时每一层都停。外接大脑直接调工具、没有这个派发器:组合命令的工具回一条说明,`script run` 只交回正文。
 
 ### 沙箱与上限
 
@@ -160,7 +160,7 @@
 - 主人按停止(以及死亡、登出、外接接管、遣散):内核 `halt` 先收工具口再作废这次 run,在跑的脚本这时交出回执
   `this turn was cut off; t8 was stopped too`(停止键叫停身体)或 `keeps running`,作为它那个调用的结果进历史,
   切断点随后记下原因;所以模型看到的是真实的停处,而不是笼统的"被打断"。
-- 有名字的脚本被停下也记一次战绩(没跑完、停在哪一行、为什么)。
+- 程序被停下,它用到的每个模块也记一次战绩(没跑完、停在哪一行、为什么)。
 
 ### 回执
 
@@ -186,46 +186,9 @@ The script stopped at line 1 (move.go) after 3 calls: your owner spoke; t12 keep
 
 (停在第 1 行时那件活还没收尾,那一行没有结局可记,回执只有第一句。)
 
-### 脚本这个名词:`script` 组
+### 模块:`script` 组
 
-- 内置的随模组发布、只读(`BuiltinScripts`);同伴存下的归主人(`ScriptStore`,主世界存档数据 `numen_scripts_<主人>`,
-  和 `AreaStore` 同一个做法),同一主人的同伴都看得见、都跑得了。名字规矩用 `Names`(小写字母、数字、`_`、`-`)。
-- `script.list()`(每份一行:说明、谁的、战绩)、`script.show(名字)`(全文,也在返回的 `code` 里)、
-  `script.run(名字, 参数...)`、`script.save(正文, {name = 名字})`、`script.delete(名字)`。都不占身体。不写 `name`
-  就存成下一个空着的 `script-N`。内置脚本与库函数一样能 `script.show` 读、读来改了 `script.save` 存成她自己的。
-- 存之前用同一个编译器读一遍,读不通不收,报错带行号(`gt-broken:2: …`);正文开头一行注释(`-- …`)就是它的一句话
-  说明,没写不收——内置脚本也是这一条,说明只有正文里这一处。存同名的替换旧的、清掉旧战绩(旧战绩说的是旧正文);
-  内置的同名存不进,删不掉,想改就另存一份。
-- 正文怎么传:`script.save([[ … ]], {name = "sweep"})`。不另开工具字段:存脚本就是一次普通调用,同一次读法、同样过权限。
-- 战绩:跑了几次、跑完几次、最近一次的时刻、最近一次没跑完停在哪一行与原因,只给事实。大脑跑完(跑完、出错、被停下)
-  一份有名字的脚本时经 `ScriptTallyPayload` 送到服务端(只认主人),和工具调用同一个上行出口。内置脚本的战绩也记在
-  主人名下。
-- 权限:改、删别的同伴存的脚本问主人。动作 `edit_script`,信号 `saved`(这份是别的同伴存的);出厂 allow
-  `edit_script(!saved)`(新存、改她自己的不问)、ask `edit_script(saved)`。理由:那是别人摸索出来的东西,删了撤不回,
-  该不该动只有主人说得清;不写死能或不能,主人改一行规则就能放开或收紧。主人看与删用同一组命令(`/numen drive`)。
-- 索引:内置脚本进系统提示 `<scripts>`(只随登记变,稳定前缀);同伴们存的随存删变,挂在她身上的状态
-  `<saved_scripts>`(身体状态片段,服务端算、随状态包推)。两处都只列名字与一句说明,和技能表同一种写法;全文按需
-  `script show`。
-
-### 内置脚本的登记
-
-照技能与命令的登记:`NumenApi.bundleScripts(Path)` 收一个目录,每个 `<名字>.lua` 一份;`NumenApi.bundleLibrary(Path)`
-收库,每个 `<组>.lua` 给那一组加函数(`function move.goto_(…)`)。两侧都登记,在 `NumenPlugins.register` 的块里直接调。
-登记那一刻把关:名字合规矩、读得通、开头有说明、不重名、库函数不和动作撞名、相关动作指得到,任何一条不过当场抛出。
-core 原地读 jar 里的 `library/` 与 `scripts/`(`ModJar.find`)。库函数的说明是它上面那几行 LuaLS 注释(`---@param`、
-`---@return`),组的清单照它写成同一种 `---@field 名字 fun(…)` 一行,`api.help("move.goto_")` 原样给出那几行注释;说明只有
-注释这一处。
-
-`mine`(`core/common/src/main/resources/scripts/mine.lua`),不接错:哪一步失败,那一步的错就是整段的错:
-
-```lua
-local where = ...
-while area.has(where) do
-  move.goto_(where, {arrive = "dig", alter = "natural"})
-  work.dig(where)
-  work.collect({alter = "natural"})
-end
-```
+见 §九。模块是唯一一种存下来的 Lua:一个文件返回一张函数表,程序按名字直接用;唯一从头跑的程序是 `lua` 工具这一轮的 `code`。
 
 ## 五、落地
 
@@ -328,3 +291,58 @@ end
   `---@field 名字 fun(参数: 类型, opts?: {…}): 返回 说明`、`组 = {}`,再接这一组用到的类。`api.help("组.函数")`:完整的
   `---@param`/`---@return`、选项表与结果写成 `组.函数.opts`、`组.函数.result` 两个类、例子与说明。都由登记处与库的注释生成,
   没有手写的第二份。
+
+## 九、模块统一成库,存在主人客户端(10-04)
+
+### 五层
+
+| 层 | 是什么 | 在哪 |
+|---|---|---|
+| ⓪ 身体控制 | 寻路执行、瞄准、换工具、追着转头、等冷却、憋气;模型看不见 | Java,任务与身体 |
+| ① 原子 API | 对一个名词做一种意图;每刻控制在里面;过权限层;做的事报告给模型 | Java,登记处生成 Lua 函数 |
+| ② 内置模块 | 常见的组合(`move.goto_`、`work.collect`、`work.mine`、`fight.clear`、`build.raise`) | Lua,随模组或插件发布 |
+| ③ 她的模块 | 她存下来的函数表,`my.<名字>` | Lua,主人客户端 `config/numen/lua/<主人>/my/` |
+| ④ 这一轮的程序 | `lua` 工具的 `code` | Lua |
+
+权限层只守在 ①;反射独立于各层,能打断程序。判据:**秒级的决策进 Lua;每刻的控制、重计算(寻路搜索、大范围扫描)、权限、
+反射、名词的存取与校验留 Java。**
+
+### 一种文件:模块
+
+- 模块返回一张函数表(`local M = {} … function M.chop(t) … end … return M`),正文开头一行注释说它做什么,每个函数上面几行
+  LuaLS 注释说它做什么、收什么、返回什么——`<api>` 索引与 `api.help("模块")` 都从这些注释生成,和第 ① 层的签名同一种写法。
+- 程序里按名字直接用,**没有 `require`**:写了是 `no_function`,hint 是按名字用的写法;`<api>` 索引里写明"不需要也不能
+  require"。第一次用到才装(沙箱全局表的 `__index`),每段程序一个新环境,所以热重载不用重启。模块名写错报"没有叫 X 的模块"
+  并列出有哪些;一个模块读不通、跑出错、没返回表,只坏用到它的那一行。
+- 和第 ① 层的组同名的模块(`move`、`work`……)给那一组加函数。
+- 原来的内置脚本 `mine` 成了 `work` 模块里的 `work.mine(where)`(返回挖了几格),和 `work.collect` 同组:"挖一块区域"是 work
+  这个领域的组合,名字照组里动词的写法。`script.run` 与"整段当程序跑、`...` 取参"删了。
+
+### 存在哪、怎么覆盖、怎么还原
+
+规矩只在 `api` 的 `Modules` 一处(`problem`、`file`):
+
+- 内置的(core 与插件经 `NumenApi.bundleModules` 交来的目录,core 是 jar 里的 `modules/`)留在 jar 里,不复制到磁盘。名字是一个
+  全局名:写得出来、不撞 Lua 关键字与自带全局、不撞引擎的 `raise`、`require`,也不能叫 `my`。
+- 主人客户端上一个目录 `config/numen/lua/<主人 UUID>/`,同一主人的同伴共用,主人能拿编辑器改:
+  - 顶层 `work.lua`:和内置同名,盖住内置那份(改内置)。顶层只认内置有的名字。
+  - `my/lumber.lua`:她自己的库,模块名 `my.lumber`,程序里 `my.lumber.chop(t)`。名字只要写得出来、不是关键字。`my` 是定死的
+    全局名字空间,换不掉。
+- `script.save(code, {name = …})` 存(不写名字存成下一个空着的 `my.module_N`),`script.delete(name)` 删掉她的那份——盖住内置
+  的那份删掉就回到内置。`script.list()` 标出"用她的、不用内置的",存的时候记下内置那份的指纹(`modules.json`),内置之后变了
+  就标"内置已有新版";`script.show(name, {builtin = true})` 看内置原文。
+- 存前和运行时同一个解释器装一次(`ScriptEngine.checkModule`):读不通、不返回表、给第 ① 层的名字赋值都拒,回执说哪一行、
+  给 hint。主人拿编辑器绕过存直接改的文件,运行时同一条规则照样拦着。
+- 改模块不问主人(权限层的 `edit_script` 与信号 `saved` 删了,权限层只管世界与身体);存、改、删都写进回执与客户端日志。
+- 战绩(用到它的程序跑了几段、跑完几段、最近一次没跑完停在哪一行为什么)在客户端目录的 `modules.json` 里记;服务端的
+  `ScriptStore` 与 `ScriptTallyPayload` 删了。`script.*` 都是客户端动作;外接大脑(MCP)同在客户端,走同一处。
+
+### 第 ① 层不可覆盖
+
+沙箱把宿主登记的全局函数、函数表与表里的每个宿主函数定死(`FixedKeysTable`):`function move.go() end`、`move = {}`、
+`rawset(move, "go", f)` 都在那一行报错,种类 `runtime`,hint 是换个名字;往组里加别的名字照常。规则只在沙箱这一处,存前的检查
+就是装它一次。
+
+### 评测与 GameTest
+
+评测每次运行、GameTest 每次启动,模块目录指向这一次专用的空目录,只用内置原版,不读主人目录里的覆盖。
