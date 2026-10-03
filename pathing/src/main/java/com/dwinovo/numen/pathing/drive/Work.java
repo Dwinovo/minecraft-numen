@@ -8,6 +8,7 @@ import com.dwinovo.numen.pathing.drive.Blockage.Hitch;
 import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.MoveKind;
 import com.dwinovo.numen.pathing.plan.ToolChoice;
+import com.dwinovo.numen.pathing.world.Faces;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
@@ -118,7 +119,7 @@ final class Work {
         if (!grip.ready()) {
             return new Beat.Blocked(new Blockage(pos, rig.world().getBlockState(pos), move, null, Hitch.NO_MATERIALS));
         }
-        Aim.Face face = Aim.face(body, pos, edit.block());
+        Faces.Face face = Aim.face(body, pos, edit.block());
         if (face == null) {
             return blind(pos, Hitch.NO_FACE);
         }
@@ -160,7 +161,7 @@ final class Work {
             return new Beat.Blocked(new Blockage(caught.pos(), rig.world().getBlockState(caught.pos()), move, null,
                     Hitch.NO_MATERIALS));
         }
-        Aim.Face face = Aim.face(body, caught.pos(), Blocks.WATER);
+        Faces.Face face = Aim.face(body, caught.pos(), Blocks.WATER);
         if (face == null) {
             return Beat.IDLE;
         }

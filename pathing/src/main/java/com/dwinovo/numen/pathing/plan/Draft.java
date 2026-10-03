@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.dwinovo.numen.pathing.world.Clearance;
+import com.dwinovo.numen.pathing.world.Faces;
 import com.dwinovo.numen.pathing.world.Reach;
 import com.dwinovo.numen.pathing.world.Semantics;
 
@@ -76,6 +77,19 @@ final class Draft extends EditedView {
         edits.add(new Edit.Dig(pos.immutable(), state, admission.permit(), eyeInWater, grounded));
         dig(pos);
         return true;
+    }
+
+    /**
+     * 同 {@link #place},另要站在 {@code (bx, feetY, bz)} 那一列中心的眼睛点得中一个面({@link Faces#inSight}):先站定再放的走法
+     * (上一级垫一块台阶)执行时就是站在那儿瞄这个面,点不中就放不下。
+     */
+    boolean placeInSight(BlockPos pos, int bx, double feetY, int bz) {
+        Block block = model.placing().orElse(null);
+        if (block != null && Faces.inSight(this, Reach.eye(body, Pose.STANDING, bx, feetY, bz), body.blockReach(), pos,
+                block) == null) {
+            return fail(pos, Reason.NO_FACE);
+        }
+        return place(pos, bx, feetY, bz);
     }
 
     /**
