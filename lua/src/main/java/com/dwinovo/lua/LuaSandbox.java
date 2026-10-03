@@ -938,6 +938,11 @@ public final class LuaSandbox {
         }
     }
 
+    /** 一个数写成文字,和 {@code tostring} 与 {@code print} 写的一样:整数原样,小数十四位有效数字,从不写成科学计数法。 */
+    public static String number(double value) {
+        return LuaValue.valueOf(value).tojstring();
+    }
+
     /** Java 值换成 Lua 值:null、布尔、数、字符串、列表、名字到值的表。 */
     public static LuaValue toLua(Object o) {
         if (o == null) {

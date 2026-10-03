@@ -248,7 +248,9 @@ public class LuaDouble extends LuaNumber {
 			return JSTR_NAN;
 		if ( Double.isInfinite(v) )
 			return (v<0? JSTR_NEGINF: JSTR_POSINF);
-		return Float.toString((float)v);
+		// 14 significant digits as Lua 5.2's "%.14g", written out in full: a coordinate like -10537096.5 reads as
+		// itself, never as -1.05370965E7, and keeps the digits a float would drop
+		return new java.math.BigDecimal(v).round(new java.math.MathContext(14)).stripTrailingZeros().toPlainString();
 	}
 	
 	public LuaString strvalue() {

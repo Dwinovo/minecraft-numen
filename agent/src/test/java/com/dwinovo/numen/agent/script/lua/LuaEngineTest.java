@@ -235,6 +235,10 @@ class LuaEngineTest {
         assertTrue(assertInstanceOf(ScriptRun.Done.class,
                 run("print({pos = {z = 3, x = 1, y = 2}, name = \"iron_ore\"}, {1, 2})").start()).ok());
         assertEquals(List.of("{name = \"iron_ore\", pos = {x = 1, y = 2, z = 3}}\t{1, 2}"), printed);
+        printed.clear();
+        assertTrue(assertInstanceOf(ScriptRun.Done.class,
+                run("print({x = -10537096.5, y = 64, z = 0.00001})").start()).ok());
+        assertEquals(List.of("{x = -10537096.5, y = 64, z = 0.00001}"), printed, "数不写成科学计数法");
     }
 
     @Test

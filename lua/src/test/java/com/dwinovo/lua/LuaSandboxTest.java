@@ -327,6 +327,16 @@ class LuaSandboxTest {
         assertEquals("mine", printed.get(1));
     }
 
+    /** 数照 Lua 5.2 的十四位有效数字写,但从不写成科学计数法:远处的坐标、很小的数读出来就是它们自己。 */
+    @Test
+    void numbersPrintInFullWithoutAnExponent() throws InterruptedException {
+        LuaSandbox.Outcome o = run("print(-10537096.5, 0.1, 0.00001, 123456789012.25, 1/3, 2^60, -0.5 + 0.25)");
+        assertTrue(o.finished(), String.valueOf(o));
+        assertEquals(List.of("-10537096.5\t0.1\t0.00001\t123456789012.25\t0.33333333333333\t1152921504606846976"
+                + "\t-0.25"), printed);
+        assertEquals("-10537096.5", LuaSandbox.number(-10537096.5));
+    }
+
     @Test
     void namesLuaCannotSpellAreRefusedAtRegistration() {
         assertThrows(IllegalArgumentException.class,

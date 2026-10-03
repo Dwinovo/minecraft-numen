@@ -119,6 +119,15 @@ public final class Shapes {
         return Math.floor(v * 100.0) / 100.0;
     }
 
+    /** 身体或实体的位置在回执里的写法:{@code -10537096.5,64,20.25},和 {@link #pos(Vec3)} 同一份数,不写成科学计数法。 */
+    public static String coords(Vec3 at) {
+        return plain(truncate(at.x)) + "," + plain(truncate(at.y)) + "," + plain(truncate(at.z));
+    }
+
+    private static String plain(double v) {
+        return java.math.BigDecimal.valueOf(v).stripTrailingZeros().toPlainString();
+    }
+
     /** 一格方块:{@code name} 与 {@code pos};用的一方可以再加字段。 */
     public static JsonObject block(BlockPos cell, BlockState state) {
         JsonObject o = new JsonObject();

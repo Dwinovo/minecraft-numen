@@ -179,7 +179,7 @@ public final class LuaEngine implements ScriptEngine {
         return switch (value) {
             case null -> "nil";
             case String s -> "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"";
-            case Double d -> d == Math.rint(d) && !d.isInfinite() ? String.valueOf(d.longValue()) : String.valueOf(d);
+            case Double d -> LuaSandbox.number(d);
             case Number n -> String.valueOf(n);
             case Boolean b -> String.valueOf(b);
             case List<?> list -> "{" + String.join(", ", list.stream().map(LuaEngine::literal).toList()) + "}";

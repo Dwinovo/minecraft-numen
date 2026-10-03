@@ -97,8 +97,7 @@ public final class PerceptionOps {
 
     /** 一个位置在那句话里的写法:{@code 12.5,64,-3.2}。 */
     private static String at(Vec3 v) {
-        JsonObject p = Shapes.pos(v);
-        return p.get("x").getAsString() + "," + p.get("y").getAsString() + "," + p.get("z").getAsString();
+        return Shapes.coords(v);
     }
 
     @SuppressWarnings("deprecation")  // BlockBehaviour.isSolid() carries Mojang's
