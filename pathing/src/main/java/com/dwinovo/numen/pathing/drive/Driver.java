@@ -114,6 +114,7 @@ public final class Driver {
     private Search pendingSearch;
     private Favoring favoring = Favoring.NONE;
 
+    /** 每一步(走法、起点、落点)没走成的次数;走成了就勾掉那一步的。 */
     private final Map<List<Object>, Integer> strikes = new HashMap<>();
     private Blockage lastBlockage;
     private double bestEstimate = Double.POSITIVE_INFINITY;
@@ -437,8 +438,10 @@ public final class Driver {
                 }
                 for (int k = cur; k < j; k++) {
                     rig.ledger.stepped();
+                    // 走成了的这几步一笔勾销;别的步记着的不清——同一处一圈圈地绕回来、在同一步上没走成,次数要攒得起来
+                    Maneuver walked = legs.get(k).maneuver();
+                    strikes.remove(List.of(walked.kind(), walked.from(), walked.to()));
                 }
-                strikes.clear();
                 lastBlockage = null;
                 cur = j;
                 step = null;
@@ -454,9 +457,11 @@ public final class Driver {
         for (int j = Math.max(0, cur - WINDOW); j < cur; j++) {
             Maneuver earlier = legs.get(j).maneuver();
             if (earlier.from().equals(node) && settled(earlier.start().kind())) {
-                cur = j;
-                step = null;
+                // 落回了前面一步的起点:正在走的这一步没走成,和走不下去一样记一次、从这里重搜。悄悄退回去重走的话,同一处
+                // 一圈圈地退,每一步的期限都从头算,永远等不到"卡住"
                 offRoute = 0;
+                fail(new Blockage(current.to(), rig.world().getBlockState(current.to()), current.kind(), null,
+                        Blockage.Hitch.FELL_BACK));
                 return;
             }
         }
@@ -687,7 +692,7 @@ public final class Driver {
     /** 一步走不下去:记一次;同一步第三次,就以它收场,否则重新搜。 */
     private void fail(Blockage blockage) {
         lastBlockage = blockage;
-        Maneuver m = step.planned();
+        Maneuver m = legs.get(cur).maneuver();
         List<Object> key = List.of(m.kind(), m.from(), m.to());
         int count = strikes.merge(key, 1, Integer::sum);
         PathLog.info("{} 走不下去 {} 这一步 {} 第 {}/{} 次 -> {} {}", rig.who, PathLog.blockage(blockage), PathLog.step(m),

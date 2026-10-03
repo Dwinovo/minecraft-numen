@@ -26,6 +26,8 @@ public record Blockage(BlockPos cell, BlockState block, MoveKind move, Reason re
         /** 手上拿不到要放的料。 */
         NO_MATERIALS,
         /** 复核时这一步落到的已经不是规划的那个节点(比如脚下的落点变了)。 */
-        DIVERTED
+        DIVERTED,
+        /** 走着这一步,身体落回了路线上前面一步的起点:这一步没走成。 */
+        FELL_BACK
     }
 }

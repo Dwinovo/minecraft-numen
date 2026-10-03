@@ -233,6 +233,7 @@ public final class NavText {
             case NO_FACE -> "I could not point at a face to place against";
             case NO_MATERIALS -> "I could not get the block into my hand";
             case DIVERTED -> "the ground changed and the step would land somewhere else";
+            case FELL_BACK -> "I kept ending up back where the step before it started";
         };
     }
 
