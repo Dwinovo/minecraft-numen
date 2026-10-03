@@ -155,7 +155,7 @@ class CommandHelpTest {
 
     @Test
     void theIndexListsEveryFunctionByGroupAndTheRootIsTheIndex() {
-        String index = NumenCli.index(com.dwinovo.numen.script.Modules.builtin());
+        String index = NumenCli.index(com.dwinovo.numen.script.Modules.factory());
         assertTrue(index.startsWith("<api>\nCall these from the lua tool, always written in full: namespace.group.function. "
                 + "`numen.api.help(\"numen.move\")` lists a group's or a module's "
                 + "functions with their types; `numen.api.help(\"numen.move.go\")` explains one in full (every argument, what it "
@@ -167,7 +167,7 @@ class CommandHelpTest {
         assertTrue(index.endsWith("\n</api>"), index);
         assertTrue(index.contains("You neither need nor can require them; there is no require."),
                 "模块按名字直接用、不需要也不能 require,这一句在索引里: " + index);
-        assertEquals(index, NumenCli.index(com.dwinovo.numen.script.Modules.builtin()), "字节稳定");
+        assertEquals(index, NumenCli.index(com.dwinovo.numen.script.Modules.factory()), "字节稳定");
         for (String line : new String[]{"help", "--help"}) {
             String root = onServer(line).message();
             assertTrue(root.startsWith("Call these from the lua tool,"), root.substring(0, 60));

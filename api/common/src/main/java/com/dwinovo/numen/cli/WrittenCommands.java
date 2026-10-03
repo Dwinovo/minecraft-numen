@@ -166,11 +166,11 @@ public final class WrittenCommands {
         }
         Matcher mention = MENTION.matcher(code);
         if (mention.matches()) {
-            return NumenCli.help(code, Modules.builtin()) == null ? "there is no API function " + code : null;
+            return NumenCli.help(code, Modules.factory()) == null ? "there is no API function " + code : null;
         }
         ScriptEngine.Reading reading;
         try {
-            reading = ScriptEngine.IN_USE.calls("written", code, NumenCli.scriptCatalog(Modules.builtin()));
+            reading = ScriptEngine.IN_USE.calls("written", code, NumenCli.scriptCatalog(Modules.factory()));
         } catch (IllegalArgumentException unreadable) {
             return unreadable.getMessage();
         }
@@ -178,7 +178,7 @@ public final class WrittenCommands {
             return reading.error();
         }
         for (ScriptRun.Call c : reading.calls()) {
-            if (NumenCli.libraryFunctions(Modules.builtin()).containsKey(c.function())) {
+            if (NumenCli.libraryFunctions(Modules.factory()).containsKey(c.function())) {
                 continue;
             }
             try {
@@ -239,7 +239,7 @@ public final class WrittenCommands {
                 }
             }
         }
-        NumenCli.libraryFunctions(Modules.builtin()).forEach((name, fn) ->
+        NumenCli.libraryFunctions(Modules.factory()).forEach((name, fn) ->
                 texts.add(new Text("module " + fn.module() + " " + name, String.join("\n", fn.defined().doc()))));
         for (NumenTool tool : ToolRegistry.all()) {
             texts.addAll(toolTexts(tool));

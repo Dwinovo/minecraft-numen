@@ -60,8 +60,8 @@ final class CommandHelp {
             String line = "- " + name + ": " + (m.summary() == null ? "" : m.summary()) + " ("
                     + String.join(", ", functionsOf(name, library)) + ")"
                     + (groupNames.contains(name) ? " — adds to the " + name + " group" : "");
-            (m.origin() == Modules.Origin.HERS ? hers : builtin).add(m.origin() == Modules.Origin.OVERRIDE
-                    ? line + " — your version" : line);
+            (m.origin() == Modules.Origin.HERS ? hers : builtin).add(m.origin() == Modules.Origin.CHANGED
+                    ? line + " — changed by you" : line);
         });
         lines.add(NO_REQUIRE);
         if (!builtin.isEmpty()) {

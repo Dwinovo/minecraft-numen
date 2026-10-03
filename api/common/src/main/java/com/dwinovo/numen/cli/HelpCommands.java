@@ -47,12 +47,12 @@ public final class HelpCommands {
 
     /** 列出模块与战绩的那一次调用:{@code numen.module.list()}。 */
     static final String MODULES = ScriptEngine.IN_USE.function(com.dwinovo.numen.api.NumenPlugins.NUMEN + "."
-            + com.dwinovo.numen.script.Scripts.GROUP, "list") + "()";
+            + com.dwinovo.numen.script.ModuleCommands.GROUP, "list") + "()";
 
     /** 读一个模块全文的那一次调用:{@code numen.module.show("numen.work")}。 */
     static String showModule(String module) {
         return ScriptEngine.IN_USE.function(com.dwinovo.numen.api.NumenPlugins.NUMEN + "."
-                + com.dwinovo.numen.script.Scripts.GROUP, "show") + "(\"" + module + "\")";
+                + com.dwinovo.numen.script.ModuleCommands.GROUP, "show") + "(\"" + module + "\")";
     }
 
     /** 一个函数或一组的帮助,全文;回执那句话是它的第一行。 */

@@ -53,7 +53,7 @@ final class CommandTree<S extends CommandSource> {
         dispatcher.register(LiteralArgumentBuilder.<S>literal(group.namespace())
                 .then(help(NumenCli.HELP_FLAG, () -> CommandHelp.listing(CommandHelp.namespace(group.namespace(),
                         NumenCli.groupsIn(group.namespace()),
-                        NumenCli.libraryFunctions(com.dwinovo.numen.script.Modules.builtin())))))
+                        NumenCli.libraryFunctions(com.dwinovo.numen.script.Modules.factory())))))
                 .then(group(group)));
     }
 
@@ -69,7 +69,7 @@ final class CommandTree<S extends CommandSource> {
     private LiteralArgumentBuilder<S> group(CommandGroup group) {
         LiteralArgumentBuilder<S> node = LiteralArgumentBuilder.literal(group.name());
         node.then(help(NumenCli.HELP_FLAG, () -> CommandHelp.listing(
-                CommandHelp.group(group, NumenCli.libraryFunctions(com.dwinovo.numen.script.Modules.builtin())))));
+                CommandHelp.group(group, NumenCli.libraryFunctions(com.dwinovo.numen.script.Modules.factory())))));
         for (Action a : group.actions()) {
             node.then(action(a));
         }

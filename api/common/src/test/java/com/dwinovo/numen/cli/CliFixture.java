@@ -174,7 +174,7 @@ final class CliFixture {
 
         @Override
         public ScriptCatalog catalog() {
-            return NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.builtin());
+            return NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.factory());
         }
 
         @Override

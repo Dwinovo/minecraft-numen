@@ -26,7 +26,7 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 /**
  * 程序从入口跑:模型一次回复里的一段程序,经内脑派发的同一个顺序({@link GameTestKit#round})逐个派 API 调用——占身体的等它收尾
  * 再往下走;成功直接返回值、失败抛错,程序按它分支;主人停止或开口时停在调用之间,回执如实写停在哪一行。模块:按名字直接用,
- * 存、读、列、删,同名的盖住内置的、删掉回到内置,改了文件下一次就用新的,坏了只影响用它的程序,战绩记在主人那一份里;内置的
+ * 存、读、列、删、还原出厂的,改了文件下一次就用新的,坏了只影响用它的程序,战绩记在主人那一份里;内置的
  * numen.work.mine 挖空一块埋在石头里的矿;计划写进回执,对话流据此画清单。
  */
 @GameTestHolder(Constants.MOD_ID)
@@ -64,8 +64,8 @@ public class ScriptGameTests {
             helper.assertTrue(level.getBlockState(first).isAir() && level.getBlockState(second).isAir(),
                     "not both cells were cleared: " + msg);
             helper.assertTrue(msg.startsWith("The script ran to the end: 2 calls"), msg);
-            helper.assertTrue(msg.matches("(?s).*line 1 build\\.set: ok — t\\d+ done.*")
-                            && msg.matches("(?s).*line 2 build\\.set: ok — t\\d+ done.*"),
+            helper.assertTrue(msg.matches("(?s).*line 1 numen\\.build\\.set: ok — t\\d+ done.*")
+                            && msg.matches("(?s).*line 2 numen\\.build\\.set: ok — t\\d+ done.*"),
                     "a line did not wait for its task to finish: " + msg);
             outbox.forget(her.getUUID());
             CompanionFactory.despawn(level.getServer(), her);
@@ -129,7 +129,7 @@ public class ScriptGameTests {
                         "her body is still busy after the stop"))
                 .thenExecute(() -> {
                     String msg = message(round, script);
-                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(move\\.go\\) after 3 calls: "
+                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.go\\) after 3 calls: "
                             + "this turn was cut off; t\\d+ was stopped too\\. Nothing after that ran\\..*"), msg);
                     helper.assertTrue(level.getBlockState(kept).is(Blocks.STONE), "the line after the stop ran");
                     outbox.forget(her.getUUID());
@@ -157,7 +157,7 @@ public class ScriptGameTests {
                 .thenExecute(() -> round.ownerSays("wait, come back"))
                 .thenExecute(() -> {
                     String msg = message(round, script);
-                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(move\\.go\\) after 3 calls: "
+                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.go\\) after 3 calls: "
                             + "your owner spoke; t\\d+ keeps running\\..*"), msg);
                     TaskRecord now = CompanionTickDispatcher.currentTaskFor(her.getUUID());
                     helper.assertTrue(now != null && now.getToolName().equals("numen.move.go"),
@@ -258,38 +258,59 @@ public class ScriptGameTests {
                 .thenSucceed();
     }
 
+    /** 出厂的一个夹具模块:改它、删它、还原它,不碰别的 GameTest 在用的出厂模块。 */
+    private static final String COPIED = "gt.copied";
+
+    static {
+        if (GameTestKit.numenTestsEnabled()) {
+            com.dwinovo.numen.script.BuiltinModules.register(COPIED, """
+                    -- Test fixture: a factory module to change, delete and reset.
+                    local M = {}
+                    ---Say which version this is.
+                    function M.version() return 1 end
+                    return M
+                    """);
+        }
+    }
+
     /**
-     * 内置模块读得到、盖得住、还得回去:{@code numen.module.show("numen.work")} 给出全文;她照抄一份、加一个函数,存成同名的 work——程序里
-     * {@code work.gt_marker()} 用的就是她的,原有的 {@code numen.work.collect} 照样在;清单标出"用她的、不用内置的",
-     * {@code {builtin = true}} 还看得到内置原文;删掉她那份就回到内置,她加的函数没了。
+     * 出厂模块装在她的目录里,读得到、改得了、删得掉、还原得回:{@code numen.module.show} 给出全文;她照抄一份、加一个函数,存成同名的
+     * ——程序里用的就是改过的,原有的函数照样在;清单标出"出厂的,改过";{@code {factory = true}} 还看得到出厂原文;删掉之后程序里没有了,
+     * 不会自己装回;{@code reset} 装回出厂那一份,她加的函数没了。
      */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_scripts")
-    public static void a_built_in_module_is_overridden_and_given_back(GameTestHelper helper) {
+    public static void a_factory_module_is_changed_deleted_and_reset(GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_lua_copier", new BlockPos(2, 2, 2), false);
-        ToolRun shown = lua(her, "return numen.module.show(\"numen.work\")");
-        helper.assertTrue(shown.receipt() != null && shown.receipt().contains("function M.mine(where)"),
-                "the built-in work does not read as itself: " + shown.receipt());
-        ToolRun overridden = lua(her, """
-                local work_code = numen.module.show("numen.work").code
-                local mine = string.gsub(work_code, "\\nreturn M%s*$", "\\nfunction M.gt_marker() return 7 end\\nreturn M\\n")
-                numen.module.save(mine, {name = "numen.work"})
-                return numen.work.gt_marker()
+        ToolRun shown = lua(her, "return numen.module.show(\"" + COPIED + "\")");
+        helper.assertTrue(shown.receipt() != null && shown.receipt().contains("function M.version()"),
+                "the factory module does not read as itself: " + shown.receipt());
+        ToolRun changed = lua(her, """
+                local code = numen.module.show("gt.copied").code
+                local mine = string.gsub(code, "\\nreturn M%s*$", "\\nfunction M.gt_marker() return 7 end\\nreturn M\\n")
+                numen.module.save(mine, {name = "gt.copied"})
+                return gt.copied.gt_marker() + gt.copied.version()
                 """);
-        helper.assertTrue(overridden.ranToTheEnd() && overridden.receipt().contains("returned: 7"),
-                "her work was not used: " + overridden.receipt());
-        helper.assertTrue(lua(her, "return type(numen.work.collect)").receipt().contains("returned: function"),
-                "the copy lost numen.work.collect");
+        helper.assertTrue(changed.ranToTheEnd() && changed.receipt().contains("returned: 8"),
+                "her change was not used: " + changed.receipt());
         String listed = lua(her, "numen.module.list()").reply();
-        helper.assertTrue(listed.contains("[yours, used instead of the built-in one]"), listed);
-        helper.assertTrue(lua(her, "return numen.module.show(\"numen.work\", {builtin = true}).code").receipt()
-                        .contains("function M.mine(where)") && !lua(her, "return numen.module.show(\"numen.work\", {builtin = "
-                        + "true}).code").receipt().contains("gt_marker"), "the built-in text is gone");
-        ToolRun deleted = lua(her, "numen.module.delete(\"numen.work\")");
-        helper.assertTrue(deleted.succeeded() && deleted.reply().contains("the built-in numen.work is used again"),
+        helper.assertTrue(listed.contains(COPIED + " — Test fixture") && listed.contains("[built in, changed]"), listed);
+        helper.assertTrue(lua(her, "return numen.module.show(\"" + COPIED + "\", {factory = true}).code").receipt()
+                        .contains("function M.version()") && !lua(her, "return numen.module.show(\"" + COPIED
+                        + "\", {factory = true}).code").receipt().contains("gt_marker"), "the factory text is gone");
+        ToolRun deleted = lua(her, "numen.module.delete(\"" + COPIED + "\")");
+        helper.assertTrue(deleted.succeeded() && deleted.reply().contains("it stays deleted until numen.module.reset"),
                 deleted.reply());
-        ToolRun gone = lua(her, "return numen.work.gt_marker()");
+        ToolRun gone = lua(her, "return gt.copied.version()");
         helper.assertTrue(!gone.ranToTheEnd() && gone.receipt().contains("no_function"),
-                "her function outlived her copy: " + gone.receipt());
+                "a deleted module is still used: " + gone.receipt());
+        helper.assertTrue(lua(her, "numen.module.list()").reply().contains("[built in, deleted; "
+                + "numen.module.reset(\"" + COPIED + "\") brings it back]"), "the list does not say it was deleted");
+        ToolRun reset = lua(her, "numen.module.reset(\"" + COPIED + "\")");
+        helper.assertTrue(reset.succeeded(), reset.reply());
+        ToolRun back = lua(her, "return gt.copied.version(), type(gt.copied.gt_marker)");
+        helper.assertTrue(back.ranToTheEnd() && back.receipt().contains("returned: 1"),
+                "reset did not bring the factory text back: " + back.receipt());
+        helper.assertTrue(!lua(her, "return gt.copied.gt_marker()").ranToTheEnd(), "her function outlived the reset");
         CompanionFactory.despawn(helper.getLevel().getServer(), her);
         helper.succeed();
     }

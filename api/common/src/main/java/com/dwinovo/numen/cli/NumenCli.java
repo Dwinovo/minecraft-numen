@@ -591,7 +591,7 @@ public final class NumenCli {
 
     /** 内置模块里有没有定义这个函数(相关动作可以指向模块函数,写法同动作的路径:{@code "numen move goto_"})。 */
     private static boolean definedInLibrary(String path) {
-        return libraryFunctions(Modules.builtin()).containsKey(ScriptEngine.IN_USE.pathName(path.replace(' ', '.')));
+        return libraryFunctions(Modules.factory()).containsKey(ScriptEngine.IN_USE.pathName(path.replace(' ', '.')));
     }
 
     /**
@@ -599,7 +599,7 @@ public final class NumenCli {
      * 换掉那一组的动作)。各组到齐才查得全,所以在这里查;不过的一次列全,抛出。
      */
     private static void checkModules() {
-        ScriptCatalog catalog = catalog(Modules.builtin());
+        ScriptCatalog catalog = catalog(Modules.factory());
         List<String> broken = new ArrayList<>();
         BuiltinModules.all().forEach((name, module) -> {
             String problem = ScriptEngine.IN_USE.checkModule(name, module.code(), catalog);
@@ -695,7 +695,7 @@ public final class NumenCli {
             return rootListing().first();
         }
         Action action = path.size() > 2 ? group.action(path.get(2)) : null;
-        return action == null ? CommandHelp.group(group, libraryFunctions(Modules.builtin()))
+        return action == null ? CommandHelp.group(group, libraryFunctions(Modules.factory()))
                 : CommandHelp.usage(action);
     }
 
@@ -725,7 +725,7 @@ public final class NumenCli {
     }
 
     private static Listing rootListing() {
-        Modules builtin = Modules.builtin();
+        Modules builtin = Modules.factory();
         return CommandHelp.listing(CommandHelp.index(GROUPS.values(), libraryFunctions(builtin), builtin));
     }
 }

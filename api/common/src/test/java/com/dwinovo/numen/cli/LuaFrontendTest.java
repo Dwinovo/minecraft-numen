@@ -146,7 +146,7 @@ class LuaFrontendTest {
 
     @Test
     void theCatalogHasEveryActionAndWhatItReturns() {
-        ScriptCatalog catalog = NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.builtin());
+        ScriptCatalog catalog = NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.factory());
         assertNull(catalog.verb("gt.gt_script", "take").returns());
         assertEquals("has", catalog.verb("gt.gt_script", "has").returns());
         assertEquals(false, catalog.verb("gt.gt_script", "has").sample(), "只读不跑时它返回的样子照声明的类型造");

@@ -136,7 +136,7 @@ class WorkCommandGroupsTest {
                 "numen.build.drop(\"house/4\")", "numen.build.at(\"house\", {at = {x = 100, y = 64, z = -20}})", "numen.build.left(\"house\")",
                 "numen.memory.remember(\"main base -340,68,120\")", "numen.todo.write({\"[>] dig\"})")) {
             var reading = com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.calls("t", code,
-                    com.dwinovo.numen.cli.NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.builtin()));
+                    com.dwinovo.numen.cli.NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.factory()));
             assertNull(reading.error(), code + ": " + reading.error());
             assertEquals(1, reading.calls().size(), code);
             com.dwinovo.numen.cli.NumenCli.invocation(reading.calls().get(0));
@@ -144,7 +144,7 @@ class WorkCommandGroupsTest {
         for (String wrong : List.of("numen.fight.attack({entity_ids = {27, 26}})", "numen.fight.attack(27, 26)",
                 "numen.use.block(\"right\", {x = 120, y = 64, z = -35})", "numen.inv.drop(\"cobblestone\", 32)")) {
             var reading = com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.calls("t", wrong,
-                    com.dwinovo.numen.cli.NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.builtin()));
+                    com.dwinovo.numen.cli.NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.factory()));
             org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                     () -> com.dwinovo.numen.cli.NumenCli.invocation(reading.calls().get(0)), "旧写法不再收: " + wrong);
         }
