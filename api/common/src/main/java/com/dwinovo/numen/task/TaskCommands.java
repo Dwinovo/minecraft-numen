@@ -1,5 +1,7 @@
 package com.dwinovo.numen.task;
 
+import com.dwinovo.numen.agent.script.ErrorKind;
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
@@ -43,6 +45,12 @@ public final class TaskCommands {
             "What to look at or decide when it fires. The owner sees this too, "
                     + "so name the thing: \"collect the iron from the furnace\" beats \"check back\".");
 
+    /** 一个挂着的表。 */
+    private static final ScriptType TIMER = ScriptType.table(
+            ScriptType.field("timer_id", ScriptType.STRING, null),
+            ScriptType.field("remaining_s", ScriptType.INTEGER, "Seconds of world time until it fires."),
+            ScriptType.field("reason", ScriptType.STRING, null));
+
     private TaskCommands() {}
 
     /** 经插件那扇门登记这一组。 */
@@ -54,12 +62,21 @@ public final class TaskCommands {
     private static void actions(CommandGroup task) {
         task.server("status", "What you have in flight: the background task and your pending timers.",
                 TaskCommands::status)
+                .returns(ScriptType.table(
+                        ScriptType.optional("task_id", ScriptType.STRING, "The background task, when there is one."),
+                        ScriptType.optional("task", ScriptType.STRING, "Its function, move.go."),
+                        ScriptType.optional("state", ScriptType.choice(java.util.List.of("running", "queued")), null),
+                        ScriptType.optional("elapsed_s", ScriptType.INTEGER, null),
+                        ScriptType.optional("budget_left_s", ScriptType.INTEGER, null),
+                        ScriptType.field("timers", ScriptType.listOf(TIMER), "Your pending timers.")))
                 .example("task.status()")
                 .note("Instant and read-only; it does not touch your body.")
                 .note("Usually not needed: a task ends with its own task_finished event and a timer fires on its own.")
                 .seeAlso("task stop");
         task.server("stop", "Cancel the background task, or a task or timer by its id.",
                 TaskCommands::stop, TASK_ID)
+                .returns(ScriptType.table(ScriptType.optional("task_id", ScriptType.STRING, "The task it stopped."),
+                        ScriptType.optional("timer_id", ScriptType.STRING, "The timer it cancelled.")))
                 .example("task.stop()")
                 .example("task.stop({task_id = \"tm3\"})")
                 .note("Instant; does not ask your owner. With no id it stops the background task (the one "
@@ -69,6 +86,7 @@ public final class TaskCommands {
                 .seeAlso("task status");
         task.server("timer", "Set a one-shot reminder that fires after a delay in world time.",
                 TaskCommands::timer, REASON, AFTER_S)
+                .returns(TIMER)
                 .example("task.timer(\"collect the iron from the furnace\", {after = 300})")
                 .note("Returns at once and never occupies your body; your owner is told when and why.")
                 .note("For what the world will not announce on its own: a furnace finishing, crops growing, "
@@ -114,8 +132,8 @@ public final class TaskCommands {
         } else {
             msg.append("挂着 ").append(timers.size()).append(" 个表:")
                     .append(summarize(timers, now)).append('。');
-            data.put("timers", describe(timers, now));
         }
+        data.put("timers", describe(timers, now));
 
         src.reply(TaskResult.ok(msg.toString(), data).toJson());
     }
@@ -143,7 +161,8 @@ public final class TaskCommands {
         }
 
         if (active == null || (wanted != null && !wanted.equals(active.publicId()))) {
-            src.reply(TaskResult.fail(nothingMatched(wanted, active, server, companion, now)).toJson());
+            src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, nothingMatched(wanted, active, server, companion, now),
+                    "task.status()").toJson());
             return;
         }
 
@@ -179,7 +198,8 @@ public final class TaskCommands {
         NumenPlayer companion = src.companion();
         String reason = args.get(REASON).strip();
         if (reason.isEmpty()) {
-            src.reply(TaskResult.fail("reason 不能为空:醒来时你要靠它认出自己为什么定这个表。").toJson());
+            src.reply(TaskResult.fail(ErrorKind.BAD_ARGUMENT, "reason 不能为空:醒来时你要靠它认出自己为什么定这个表。",
+                    null).toJson());
             return;
         }
         if (reason.length() > MAX_REASON_LENGTH) {
@@ -198,9 +218,10 @@ public final class TaskCommands {
 
         TimerRegistry.Timer timer = registry.set(companion.getUUID(), now, seconds, reason);
         if (timer == null) {
-            src.reply(TaskResult.fail(
+            src.reply(TaskResult.fail(ErrorKind.FAILED,
                     "已经挂了 " + TimerRegistry.MAX_PER_COMPANION + " 个表,先撤一个再定。当前挂着:"
-                            + summarize(registry.list(companion.getUUID()), now),
+                            + summarize(registry.list(companion.getUUID()), now), "task.stop({task_id = \""
+                            + registry.list(companion.getUUID()).get(0).id() + "\"})",
                     Map.of("timers", describe(registry.list(companion.getUUID()), now))).toJson());
             return;
         }
@@ -214,7 +235,7 @@ public final class TaskCommands {
                 "已定表 " + timer.id() + "," + seconds + " 秒后提醒你:" + reason + "。" + clamped
                         + "身体没被占用,接着干别的就行;到点会自动收到 timer 事件,不要轮询。",
                 Map.of("timer_id", timer.id(),
-                        "after_s", seconds,
+                        "remaining_s", seconds,
                         "reason", reason)).toJson());
     }
 

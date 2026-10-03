@@ -43,8 +43,10 @@ class ReadingTest {
         door().registerCommands("gt_read", "A group the reader reads.", g -> {
             g.server("put", "Put things.", (src, args) -> src.reply(TaskResult.ok("put").toJson()),
                             PUT.toArray(Param<?>[]::new))
+                    .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
                     .example("gt_read.put(\"two words\", \"###\", \"#.#\", {count = 3, item = \"minecraft:stone\"})");
             g.client("say", "Say something.", (src, args) -> src.reply(TaskResult.ok("said").toJson()), NOTE)
+                    .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
                     .example("gt_read.say(\"hello there\")");
         });
     }

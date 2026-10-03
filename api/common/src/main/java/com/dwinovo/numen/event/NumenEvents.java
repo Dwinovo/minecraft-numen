@@ -9,6 +9,7 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.network.payload.NumenEventPayload;
 import com.dwinovo.numen.task.reflex.Reflex;
 import com.dwinovo.numen.network.NumenNetwork;
+import com.dwinovo.numen.task.TaskResult;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -111,16 +112,18 @@ public final class NumenEvents {
                 false);
     }
 
-    /** 异步任务收尾。{@code status} ∈ done / failed / timeout / stopped。
+    /** 异步任务收尾。{@code status} ∈ done / failed / timeout / stopped / interrupted。
      *  <p>done/failed/timeout 是急的:她派出去的活有了结果,该当场决定下一步。
-     *  stopped 是主人自己按的停止,他知道,不必吵他。 */
+     *  stopped 是主人自己按的停止,他知道,不必吵他。
+     *  <p>她读到的是结果那句话;整份结果(数据、失败的种类与下一步)随条目一起到,给等这件活的程序。 */
     public static void taskFinished(NumenPlayer companion, String taskId, String tool,
-                                    String status, String message) {
+                                    String status, TaskResult result) {
         Map<String, String> attrs = new LinkedHashMap<>();
         attrs.put(TASK_ID, taskId);
         attrs.put("task", tool);
         attrs.put(STATUS, status);
-        emit(companion, EventTypes.TASK_FINISHED, attrs, message, !"stopped".equals(status));
+        emit(companion, EventTypes.TASK_FINISHED, attrs, result.message(), !"stopped".equals(status),
+                com.google.gson.JsonParser.parseString(result.toJson()).getAsJsonObject());
     }
 
     /** task_finished 里写着是哪件活、收尾成什么样的属性:{@link #taskFinished} 按它写,{@link #finishOf} 按它读。 */
@@ -149,7 +152,8 @@ public final class NumenEvents {
         }
         Matcher body = BODY.matcher(entry.text());
         String status = attribute(head.group(), STATUS);
-        return new ScriptCall.Finish(id, status == null ? "" : status, body.find() ? unescape(body.group(1)) : "");
+        return new ScriptCall.Finish(id, status == null ? "" : status, body.find() ? unescape(body.group(1)) : "",
+                entry.result());
     }
 
     /** 开头那一截里一个属性的值;没有是 null。 */
@@ -168,9 +172,16 @@ public final class NumenEvents {
      */
     public static void emit(NumenPlayer companion, String type, Map<String, String> attrs,
                             String text, boolean urgent) {
+        emit(companion, type, attrs, text, urgent, null);
+    }
+
+    /** 同上,条目另带一件身体活的结果({@link EventQueue.Entry#result})。 */
+    private static void emit(NumenPlayer companion, String type, Map<String, String> attrs,
+                             String text, boolean urgent, com.google.gson.JsonObject result) {
         MinecraftServer server = companion.level().getServer();
-        EventQueue.Entry entry = entry(server.overworld().getDayTime(), type, attrs, text,
+        EventQueue.Entry plain = entry(server.overworld().getDayTime(), type, attrs, text,
                 System.currentTimeMillis(), urgent);
+        EventQueue.Entry entry = new EventQueue.Entry(plain.type(), plain.text(), plain.ts(), plain.urgent(), result);
         UUID uuid = companion.getUUID();
         ServerPlayer owner = companion.resolveOwnerPlayer();
         route(uuid, entry,

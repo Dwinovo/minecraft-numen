@@ -44,19 +44,23 @@ class LuaFrontendTest {
         door().registerCommands("gt_script", "A group the script bindings read.", g -> {
             g.server("take", "Take some items.", (src, args) -> src.reply(TaskResult.ok("took " + args.get(ITEMS)
                             + " from " + args.get(FROM) + " x" + args.get(COUNT)).toJson()), ITEMS, FROM, COUNT)
+                    .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
                     .example("gt_script.take(\"apple\", \"pear\", {from = \"chest\"})");
             g.server("at", "Put a block at a cell.", (src, args) -> src.reply(TaskResult.ok("put " + args.get(BLOCK)
                             + " at " + args.get(CELL).toShortString() + " and " + args.get(CELLS)).toJson()),
                             CELL, BLOCK, CELLS)
-                    .example("gt_script.at({1, 2, 3}, {block = \"stone\"})");
+                    .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
+                    .example("gt_script.at({x = 1, y = 2, z = 3}, {block = \"stone\"})");
             g.server("say", "Say something.", (src, args) -> src.reply(TaskResult.ok("said " + args.get(TEXT))
                     .toJson()), TEXT)
+                    .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
                     .example("gt_script.say(\"hello there\")");
             g.server("has", "Whether a thing exists.", (src, args) -> src.reply(TaskResult.ok("yes",
                     Map.of("has", !args.get(NAME).equals("nothing"))).toJson()), NAME)
                     .example("gt_script.has(\"apple\")")
-                    .returns("has");
+                    .returns("has", com.dwinovo.numen.agent.script.ScriptType.BOOLEAN);
             g.server("goto", "Go to a thing.", (src, args) -> src.reply(TaskResult.ok("went").toJson()), NAME)
+                    .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
                     .example("gt_script.goto_(\"apple\")");
         });
     }
@@ -79,18 +83,33 @@ class LuaFrontendTest {
         assertEquals("{\"items\":[\"apple\"]}", json(NumenCli.invocation(call("take", List.of("apple"), Map.of()))));
     }
 
+    /** 脚本的值原样换成 JSON:一个 Pos 是一个对象,一串值写成一张列表就是这一串,一串格子是一串 Pos。 */
     @Test
-    void aTableOfNumbersIsOneValueOfSeveralWordsAndAListCanBeOneTable() {
-        assertEquals("{\"cell\":\"1 2 3\",\"block\":\"stone\"}",
-                json(NumenCli.invocation(call("at", List.of(List.of(1L, 2L, 3L)), Map.of("block", "stone")))));
-        assertEquals("{\"cell\":\"1 2 3\"}", json(NumenCli.invocation(call("at", List.of(1L, 2L, 3L), Map.of()))));
+    void aScriptsValuesAreHandedOnAsTheyAre() {
+        Map<String, Object> pos = new java.util.LinkedHashMap<>();
+        pos.put("x", 1L);
+        pos.put("y", 2L);
+        pos.put("z", 3L);
+        assertEquals("{\"cell\":{\"x\":1,\"y\":2,\"z\":3},\"block\":\"stone\"}",
+                json(NumenCli.invocation(call("at", List.of(pos), Map.of("block", "stone")))));
         assertEquals("{\"items\":[\"apple\",\"pear\"]}",
                 json(NumenCli.invocation(call("take", List.of(List.of("apple", "pear")), Map.of()))),
                 "一串值写成一张表就是这一串");
-        assertEquals("{\"cell\":\"1 2 3\",\"cells\":[\"4 5 6\"]}",
-                json(NumenCli.invocation(call("at", List.of(List.of(1L, 2L, 3L)),
-                        Map.of("cells", List.of(4L, 5L, 6L))))),
-                "一串格子收到一张全是数的表:那是一格");
+        assertEquals("{\"cell\":{\"x\":1,\"y\":2,\"z\":3},\"cells\":[{\"x\":1,\"y\":2,\"z\":3}]}",
+                json(NumenCli.invocation(call("at", List.of(pos), Map.of("cells", pos)))),
+                "一串格子收到一个 Pos:那是一格");
+    }
+
+    /** 写在最后的那张名字表:键全是选项名才是选项表;一个 Pos、一个方块是一个对象。 */
+    @Test
+    void theLastTableIsTheOptionsOnlyWhenItsKeysAreOptionNames() {
+        CliFixture.Outcome run = lua("""
+                gt_script.at({x = 1, y = 2, z = 3})
+                gt_script.at({name = "stone", pos = {x = 4, y = 5, z = 6}}, {block = "dirt"})
+                """);
+        assertTrue(run.success(), run.message());
+        assertEquals("put null at 1, 2, 3 and null", run.call(0).get("message").getAsString());
+        assertEquals("put dirt at 4, 5, 6 and null", run.call(1).get("message").getAsString());
     }
 
     @Test
@@ -101,24 +120,28 @@ class LuaFrontendTest {
 
     @Test
     void mistakesSayWhatIsWrongWithTheUsageAndAreNotSent() {
-        IllegalArgumentException missing = assertThrows(IllegalArgumentException.class,
+        com.dwinovo.numen.agent.script.ApiError missing = assertThrows(com.dwinovo.numen.agent.script.ApiError.class,
                 () -> NumenCli.invocation(call("take", List.of(), Map.of())));
-        assertTrue(missing.getMessage().startsWith("error: missing required argument: items\n"
+        assertEquals(com.dwinovo.numen.agent.script.ErrorKind.BAD_ARGUMENT, missing.kind());
+        assertEquals("argument 'items' is missing (or nil)\n"
                 + "usage: gt_script.take(items..., {from=…, count=…})\n"
-                + "  e.g. gt_script.take(\"apple\", \"pear\", {from = \"chest\"})\n"
-                + "hint: `api.help(\"gt_script.take\")` explains every argument."), missing.getMessage());
+                + "  e.g. gt_script.take(\"apple\", \"pear\", {from = \"chest\"})", missing.getMessage());
+        assertEquals("print(api.help(\"gt_script.take\"))", missing.hint());
 
-        IllegalArgumentException option = assertThrows(IllegalArgumentException.class,
+        com.dwinovo.numen.agent.script.ApiError option = assertThrows(com.dwinovo.numen.agent.script.ApiError.class,
                 () -> NumenCli.invocation(call("take", List.of("apple"), Map.of("form", "chest"))));
-        assertTrue(option.getMessage().startsWith("error: unknown argument 'form'"), option.getMessage());
+        assertTrue(option.getMessage().startsWith("unknown argument 'form'"), option.getMessage());
 
-        IllegalArgumentException cell = assertThrows(IllegalArgumentException.class,
-                () -> NumenCli.invocation(call("at", List.of("1 2"), Map.of())));
-        assertTrue(cell.getMessage().startsWith("error: argument 'cell': expected a cell"), cell.getMessage());
+        com.dwinovo.numen.agent.script.ApiError cell = assertThrows(com.dwinovo.numen.agent.script.ApiError.class,
+                () -> NumenCli.invocation(call("at", List.of("1 2 3"), Map.of())));
+        assertTrue(cell.getMessage().startsWith("argument 'cell': a cell is a Pos with named fields; got \"1 2 3\""),
+                cell.getMessage());
+        assertEquals("gt_script.at({x = 1, y = 2, z = 3})", cell.hint(), "照新写法改好的那一行");
 
-        IllegalArgumentException none = assertThrows(IllegalArgumentException.class,
+        com.dwinovo.numen.agent.script.ApiError none = assertThrows(com.dwinovo.numen.agent.script.ApiError.class,
                 () -> NumenCli.invocation(new ScriptRun.Call(1, "gt_script", "fly", List.of(), Map.of())));
-        assertTrue(none.getMessage().startsWith("error: there is no API function gt_script.fly"), none.getMessage());
+        assertEquals(com.dwinovo.numen.agent.script.ErrorKind.NO_FUNCTION, none.kind());
+        assertTrue(none.getMessage().startsWith("there is no API function gt_script.fly"), none.getMessage());
     }
 
     @Test
@@ -126,21 +149,25 @@ class LuaFrontendTest {
         ScriptCatalog catalog = NumenCli.scriptCatalog();
         assertNull(catalog.verb("gt_script", "take").returns());
         assertEquals("has", catalog.verb("gt_script", "has").returns());
+        assertEquals(false, catalog.verb("gt_script", "has").sample(), "只读不跑时它返回的样子照声明的类型造");
+        assertEquals(java.util.Set.of("from", "count"), catalog.verb("gt_script", "take").options());
         assertNull(catalog.verb("gt_script", "fly"));
     }
 
     @Test
     void aScriptCallReachesTheActionWithTypedValues() {
         CliFixture.Outcome run = lua("""
-                local took = gt_script.take({"apple", "pear"}, {count = 2})
-                local put = gt_script.at(1, 2, 3, {block = "stone", cells = {{4, 5, 6}, {7, 8, 9}}})
+                gt_script.take({"apple", "pear"}, {count = 2})
+                gt_script.at({x = 1, y = 2, z = 3}, {block = "stone", cells = {{x = 4, y = 5, z = 6}, {x = 7, y = 8, z = 9}}})
                 local yes, no = gt_script.has("apple"), gt_script.has("nothing")
-                return {took, put, yes, no, gt_script.goto_("apple")}
+                return {yes, no, gt_script.goto_("apple")}
                 """);
         assertTrue(run.success(), run.message());
-        assertEquals(JsonParser.parseString("[\"took [apple, pear] from null x2\", \"put stone at 1, 2, 3 and "
-                + "[BlockPos{x=4, y=5, z=6}, BlockPos{x=7, y=8, z=9}]\", true, false, \"went\"]"),
-                run.json().getAsJsonObject("data").get("returned"));
+        assertEquals("took [apple, pear] from null x2", run.call(0).get("message").getAsString());
+        assertEquals("put stone at 1, 2, 3 and [BlockPos{x=4, y=5, z=6}, BlockPos{x=7, y=8, z=9}]",
+                run.call(1).get("message").getAsString());
+        assertEquals(JsonParser.parseString("[true, false]"), run.json().getAsJsonObject("data").get("returned"),
+                "声明了返回项的返回那一项;没有数据的返回 nil");
     }
 
     @Test
@@ -151,21 +178,25 @@ class LuaFrontendTest {
                 gt_script.at("1 2")
                 """);
         assertFalse(run.success());
-        assertTrue(run.message().startsWith("The script stopped at line 3 after 0 calls: lua:3: gt_script.at: error: "
-                + "argument 'cell': expected a cell"), run.message());
+        assertTrue(run.message().startsWith("The script stopped at line 3 after 0 calls: gt_script.at: bad_argument — "
+                + "argument 'cell': expected a Pos {x = …, y = …, z = …} or anything with a pos (a Block, an Entity, "
+                + "an Item); got \"1 2\""), run.message());
         assertTrue(run.message().contains("usage: gt_script.at(cell, {block=…, cells=…})"), run.message());
-        assertTrue(run.message().contains("line 1 gt_script.take: failed — error: argument 'count'"), run.message());
+        assertTrue(run.message().contains("line 1 gt_script.take: bad_argument — argument 'count'"), run.message());
+        assertEquals("bad_argument", run.json().getAsJsonObject("data").getAsJsonObject("error").get("kind")
+                .getAsString(), "回执数据里的错误值带着种类");
     }
 
     @Test
     void theHelpIsWrittenTheWayAScriptCallsIt() {
-        CliFixture.Outcome has = lua("return api.help(\"gt_script.has\")");
-        String help = has.json().getAsJsonObject("data").get("returned").getAsString();
-        assertTrue(help.startsWith("gt_script.has(name)\n  Whether a thing exists."), help);
-        assertTrue(help.contains("Returns data.has, whether it succeeds or not."), help);
-        String renamed = lua("return api.help(\"gt_script.goto_\")").json().getAsJsonObject("data").get("returned")
-                .getAsString();
-        assertTrue(renamed.startsWith("gt_script.goto_(name)"), renamed);
-        assertFalse(lua("return api.help(\"gt_script.nope\")").success());
+        String help = CliFixture.help("gt_script.has");
+        assertTrue(help.startsWith("---Whether a thing exists.\n---@param name string The thing.\n"
+                + "---@return boolean\nfunction gt_script.has(name) end"), help);
+        String renamed = CliFixture.help("gt_script.goto_");
+        assertTrue(renamed.contains("function gt_script.goto_(name) end"), renamed);
+        CliFixture.Outcome nope = lua("return api.help(\"gt_script.nope\")");
+        assertFalse(nope.success());
+        assertTrue(nope.message().contains("api.help: not_found — there is no function or group named gt_script.nope"),
+                nope.message());
     }
 }

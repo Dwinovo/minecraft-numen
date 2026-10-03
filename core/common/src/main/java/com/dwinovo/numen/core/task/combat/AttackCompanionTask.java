@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.task.combat;
 
+import com.dwinovo.numen.task.TaskResult;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.act.Ballistics;
@@ -200,7 +201,8 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             denied.add(refusal(id, verdict.reason()));
         }
         return denied.isEmpty() ? Preparation.READY
-                : Preparation.refused("could not attack: " + String.join("; ", denied));
+                : Preparation.refused(TaskResult.fail(com.dwinovo.numen.agent.script.ErrorKind.DENIED,
+                        "could not attack: " + String.join("; ", denied), null));
     }
 
     @Override
@@ -988,33 +990,28 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         super.cleanup();
     }
 
+    /**
+     * 每只经手过的(编号、怎样了、挨了几下):点名的那一只总在里面;一共出手几下。经手过的要全列,不能只列点名的——无差别那一种
+     * 点名清单是空的,只列它会把整场战果吞掉。
+     */
     @Override
     protected Map<String, Object> resultData() {
-        // 逐个报账要覆盖<b>所有经手过的 id</b>,不能只遍历请求清单 —— 无差别模式那份是空的,
-        // 照旧遍历会把整场战果吞掉。
         java.util.Set<Integer> touched = new java.util.LinkedHashSet<>(r.entityIds);
         touched.addAll(r.defeated());
         touched.addAll(r.lost());
         touched.addAll(r.unreachable());
         touched.addAll(r.refused().keySet());
-        Map<String, Object> byEntity = new LinkedHashMap<>();
+        List<Map<String, Object>> fought = new java.util.ArrayList<>();
         for (int id : touched) {
             Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("id", id);
             entry.put("status", r.status(id));
             entry.put("strikes", r.strikes(id));
-            byEntity.put(String.valueOf(id), entry);
+            fought.add(entry);
         }
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("mode", r.indiscriminate ? "nearby_hostiles" : "named_ids");
-        data.put("requested_entity_ids", r.entityIds);
-        data.put("defeated_entity_ids", r.defeated());
-        data.put("lost_entity_ids", r.lost());
-        data.put("unreachable_entity_ids", r.unreachable());
-        if (!r.refused().isEmpty()) {
-            data.put("refused_entity_ids", r.refused());
-        }
+        data.put("fought", fought);
         data.put("strikes", r.strikes());
-        data.put("combat_by_entity", byEntity);
         return data;
     }
 

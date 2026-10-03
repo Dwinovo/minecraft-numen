@@ -1,10 +1,12 @@
 -- Picking up: walk onto the dropped items lying around, the way a player picks things up by walking over them.
 
--- Pick up the dropped items around you, nearest first, walking onto each with move.goto_. opts.radius is how far to
--- look (default 8); the other opts are route flags for the walks (alter = "natural" lets it dig and pillar to drops
--- in a pit). Returns how many items it walked onto that are gone now. A fresh drop cannot be picked up for a few ticks
--- (its pickup_delay): standing on it, it walks onto it again until it is taken. An error when an item is still there
--- after walking onto it with no delay left (a full pack, or it lies where you cannot stand), or when its delay is long.
+---Pick up the dropped items around you, nearest first, walking onto each with move.goto_. A fresh drop cannot be
+---picked up for a few ticks (its pickup_delay): standing on it, it walks onto it again until it is taken. An item
+---with no way to it (move.goto_ fails with no_path) is passed over and the rest are picked up; at the end the ones
+---passed over raise no_path, with them in err.data.left. An item still there after walking onto it with no delay
+---left (a full pack, or a spot you cannot stand in) raises failed; any other error of a walk stops here as it is.
+---@param opts? table radius = how far to look (default 8); the rest are route flags for the walks (alter = "natural" lets it dig and pillar to drops in a pit).
+---@return integer picked How many items it walked onto that are gone now.
 function work.collect(opts)
   local walk = {}
   for k, v in pairs(opts or {}) do
@@ -13,24 +15,47 @@ function work.collect(opts)
   local radius = walk.radius or 8
   walk.radius = nil
   local walked = {}
+  local unreachable = {}
   while true do
-    local items = scan.entities("item", {radius = radius})
-    if #items == 0 then
-      local count = 0
-      for _, n in pairs(walked) do
-        count = count + n
+    local items = {}
+    for _, item in ipairs(scan.entities("item", {radius = radius})) do
+      if not unreachable[item.id] then
+        items[#items + 1] = item
       end
-      return count
+    end
+    if #items == 0 then
+      local picked = 0
+      for _, n in pairs(walked) do
+        picked = picked + n
+      end
+      local left = {}
+      for _, item in pairs(unreachable) do
+        left[#left + 1] = item
+      end
+      if #left > 0 then
+        local p = left[1].pos
+        raise("no_path", "picked up " .. picked .. " item(s); no way to the " .. #left .. " left, the nearest "
+            .. left[1].item .. " x" .. left[1].count, string.format("move.goto_({x = %d, y = %d, z = %d}, {alter = "
+            .. "\"natural\"})", math.floor(p.x), math.floor(p.y), math.floor(p.z)), {picked = picked, left = left})
+      end
+      return picked
     end
     local item = items[1]
-    local where = item.item .. " x" .. item.count .. " at " .. table.concat(item.cell, " ")
     if walked[item.id] and item.pickup_delay == 0 then
-      error(where .. " is still there after walking onto it: a full pack, or a spot you cannot stand in", 0)
+      raise("failed", item.item .. " x" .. item.count .. " is still there after walking onto it: a full pack, or a "
+          .. "spot you cannot stand in", nil, {item = item})
     end
     if item.pickup_delay > 100 then
-      error(where .. " cannot be picked up for another " .. item.pickup_delay .. " ticks", 0)
+      raise("failed", item.item .. " x" .. item.count .. " cannot be picked up for another " .. item.pickup_delay
+          .. " ticks", nil, {item = item})
     end
-    walked[item.id] = item.count
-    move.goto_(item.cell, walk)
+    local ok, err = pcall(move.goto_, item.pos, walk)
+    if ok then
+      walked[item.id] = item.count
+    elseif err.kind == "no_path" then
+      unreachable[item.id] = item
+    else
+      error(err, 0)
+    end
   end
 end

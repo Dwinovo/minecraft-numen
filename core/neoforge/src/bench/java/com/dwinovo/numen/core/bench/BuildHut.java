@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.bench;
 
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.bench.Check;
 import com.dwinovo.numen.bench.Scenario;
 import com.dwinovo.numen.bench.Scene;
@@ -222,14 +223,13 @@ public final class BuildHut implements Scenario {
         BlockPos door = scene.pos(CORNER.offset(2, 0, 4));
         // 原语只放手够得着的格:先站进屋子正中,四面墙和屋顶都在手边
         BlockPos middle = scene.pos(CORNER.offset(2, 0, 2));
-        return "move.goto_({" + middle.getX() + ", " + middle.getY() + ", " + middle.getZ() + "})\n"
-                + "build.layer({\"#####\", \"#...#\", \"#...#\", \"#...#\", \"##.##\"}, {at = {" + x + ", " + y + ", " + z
-                + "}, block = \"oak_planks\", up_to = " + (y + 1) + "})\n"
-                + "build.layer({\"#####\", \"#...#\", \"#...#\", \"#...#\", \"#####\"}, {at = {" + x + ", " + (y + 2) + ", "
-                + z + "}, block = \"oak_planks\"})\n"
-                + "build.layer({\"#####\", \"#####\", \"#####\", \"#####\", \"#####\"}, {at = {" + x + ", " + (y + 3) + ", "
-                + z + "}, block = \"oak_planks\"})\n"
-                + "build.set({" + door.getX() + ", " + door.getY() + ", " + door.getZ()
-                + "}, {block = \"oak_door[facing=south]\"})";
+        return "move.goto_(" + Shapes.literal(middle) + ")\n"
+                + "build.layer({\"#####\", \"#...#\", \"#...#\", \"#...#\", \"##.##\"}, {at = "
+                + Shapes.literal(new BlockPos(x, y, z)) + ", block = \"oak_planks\", up_to = " + (y + 1) + "})\n"
+                + "build.layer({\"#####\", \"#...#\", \"#...#\", \"#...#\", \"#####\"}, {at = "
+                + Shapes.literal(new BlockPos(x, y + 2, z)) + ", block = \"oak_planks\"})\n"
+                + "build.layer({\"#####\", \"#####\", \"#####\", \"#####\", \"#####\"}, {at = "
+                + Shapes.literal(new BlockPos(x, y + 3, z)) + ", block = \"oak_planks\"})\n"
+                + "build.set(" + Shapes.literal(door) + ", {block = \"oak_door[facing=south]\"})";
     }
 }

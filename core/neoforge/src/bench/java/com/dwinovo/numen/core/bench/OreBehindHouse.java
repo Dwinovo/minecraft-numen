@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.bench;
 
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.bench.Check;
 import com.dwinovo.numen.bench.OwnerScript;
 import com.dwinovo.numen.bench.Scenario;
@@ -138,8 +139,8 @@ public final class OreBehindHouse implements Scenario {
         // 站到矿后面的空地上再挖,掉的粗铁落在脚边,捡起来。拒绝的那一个只能从屋子底下的天然石头里走;允许的那一个不许动石头,
         // 只能穿墙,问一次——证明征询、点头、只拆点过头的格这条路走得通
         String alter = allowOnce ? "alter = \"any\", avoid_break = \"minecraft:stone\"" : "alter = \"natural\"";
-        return "move.goto_({" + ore.getX() + ", " + ore.getY() + ", " + (ore.getZ() + 1) + "}, {" + alter + "})\n"
-                + "work.dig({" + ore.getX() + ", " + ore.getY() + ", " + ore.getZ() + "})\n"
+        return "move.goto_(" + Shapes.literal(ore.south()) + ", {" + alter + "})\n"
+                + "work.dig({x = " + ore.getX() + ", y = " + ore.getY() + ", z = " + ore.getZ() + "})\n"
                 + "work.collect()";
     }
 }

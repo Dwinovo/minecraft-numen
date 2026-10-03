@@ -23,9 +23,11 @@ class RoutingTest {
         door().registerCommands("gt_route", "One action on each side.", g -> {
             g.server("take", "Take some.", (src, args) -> src.reply(TaskResult.ok("took " + args.get(count))
                     .toJson()), count)
+                    .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
                     .example("gt_route.take(2)");
             g.client("jot", "Jot it down.", (src, args) -> src.reply(TaskResult.ok("jotted " + args.get(count))
                     .toJson()), count)
+                    .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
                     .example("gt_route.jot(2)");
         });
     }
@@ -50,12 +52,12 @@ class RoutingTest {
     @Test
     void aScriptRunsClientActionsOnTheClientAndServerActionsOnTheServer() {
         CliFixture.Outcome both = lua("""
-                local a = gt_route.jot(2)
-                local b = gt_route.take(3)
-                return a .. " / " .. b
+                gt_route.jot(2)
+                gt_route.take(3)
                 """);
         assertTrue(both.success(), both.message());
-        assertEquals("jotted 2 / took 3", both.json().getAsJsonObject("data").get("returned").getAsString());
+        assertEquals("jotted 2", both.call(0).get("message").getAsString(), "客户端动作在客户端执行");
+        assertEquals("took 3", both.call(1).get("message").getAsString(), "服务端动作送到服务端执行");
     }
 
     @Test

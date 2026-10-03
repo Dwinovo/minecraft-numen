@@ -47,6 +47,13 @@ final class CliFixture {
     /** 一次调用的回执。 */
     static final class Outcome {
         final List<String> replies = new ArrayList<>();
+        /** 脚本里每次 API 调用的回执(那一次的 JSON:那句话、数据、失败的种类),按先后;一行命令的结果没有这些。 */
+        final List<String> calls = new ArrayList<>();
+
+        /** 第 {@code i} 次 API 调用的回执。 */
+        JsonObject call(int i) {
+            return JsonParser.parseString(calls.get(i)).getAsJsonObject();
+        }
 
         boolean success() {
             return json().get("success").getAsBoolean();
@@ -99,7 +106,7 @@ final class CliFixture {
     static Outcome lua(String code) {
         Outcome out = new Outcome();
         UUID her = UUID.randomUUID();
-        SerialCalls calls = new SerialCalls(new Port(her));
+        SerialCalls calls = new SerialCalls(new Port(her, out));
         calls.run(List.of(new LlmToolCall("test-lua", "lua", ScriptTool.args(code).toString())), new ToolPort.Sink() {
             @Override
             public void started(LlmToolCall call) {
@@ -118,7 +125,7 @@ final class CliFixture {
     }
 
     /** {@link #lua} 的派发口:没有身体、没有网络,其余都是产品里那几处。 */
-    private record Port(UUID her) implements SerialCalls.Port {
+    private record Port(UUID her, Outcome out) implements SerialCalls.Port {
 
         @Override
         public void invoke(LlmToolCall call, Consumer<String> done) {
@@ -132,11 +139,15 @@ final class CliFixture {
 
         @Override
         public void dispatch(LlmToolCall call, Invocation invocation, Consumer<String> done) {
+            Consumer<String> kept = result -> {
+                out.calls.add(result);
+                done.accept(result);
+            };
             if (NumenCli.runsOnServer(invocation)) {
-                NumenCli.serve(NumenCli.pathOf(invocation), invocation.args(), null, call.id(), done);
+                NumenCli.serve(NumenCli.pathOf(invocation), invocation.args(), null, call.id(), kept);
             } else {
                 NumenCli.call(invocation, new ToolCall(call.id(), NumenCli.pathOf(invocation),
-                        invocation.args().toString(), () -> her, done));
+                        invocation.args().toString(), () -> her, kept));
             }
         }
 

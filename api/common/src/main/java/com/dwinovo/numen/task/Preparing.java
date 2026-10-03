@@ -50,7 +50,7 @@ final class Preparing {
         Call dropped = call;
         call = null;
         dropped.preparation().cancel();
-        dropped.conclude().accept(Preparation.Readiness.refused("not started: " + why));
+        dropped.conclude().accept(Preparation.Readiness.refused(TaskResult.cancelled("not started: " + why)));
     }
 
     /** 在准备的那一件作废、不回结果:那次调用已经由别处了结(她死了,客户端按死因结算了在飞的调用)。 */

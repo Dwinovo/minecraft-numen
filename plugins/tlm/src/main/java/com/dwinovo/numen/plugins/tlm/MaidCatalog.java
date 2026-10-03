@@ -5,10 +5,8 @@ import com.github.tartaricacid.touhoulittlemaid.client.resource.pojo.MaidModelIn
 import net.minecraft.client.resources.language.I18n;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 /**
  * 把车万女仆的模型目录整理成<b>人能读的样子</b>再交给大模型。
@@ -91,9 +89,12 @@ public final class MaidCatalog {
         return out;
     }
 
-    /** 包级摘要:{包名: {count, samples}}。不带关键词时给这个。 */
-    public static Map<String, Object> summary() {
-        Map<String, Object> out = new LinkedHashMap<>();
+    /** 包级摘要里的一个包:包名、几个模型、举的几个名字。 */
+    public record Pack(String pack, int count, List<String> examples) {}
+
+    /** 包级摘要,按包的顺序。不带关键词时给这个。 */
+    public static List<Pack> summary() {
+        List<Pack> out = new ArrayList<>();
         for (CustomModelPack<MaidModelInfo> pack : Tlm.packs()) {
             List<MaidModelInfo> list = pack.getModelList();
             if (list.isEmpty()) continue;
@@ -101,10 +102,7 @@ public final class MaidCatalog {
             for (int i = 0; i < Math.min(SAMPLES, list.size()); i++) {
                 samples.add(display(list.get(i).getName()));
             }
-            Map<String, Object> one = new LinkedHashMap<>();
-            one.put("count", list.size());
-            one.put("examples", samples);
-            out.put(display(pack.getPackName()), one);
+            out.add(new Pack(display(pack.getPackName()), list.size(), samples));
         }
         return out;
     }

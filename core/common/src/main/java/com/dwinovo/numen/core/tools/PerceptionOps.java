@@ -1,8 +1,9 @@
 package com.dwinovo.numen.core.tools;
 
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonArray;
-import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
@@ -21,26 +22,21 @@ import net.minecraft.world.phys.Vec3;
 /**
  * 读身体、主人、世界与一格方块:{@code status self|owner|world} 与 {@code scan block} 的处理函数交到这里,
  * 命令的名字、说明与参数在 {@link com.dwinovo.numen.core.tools.perception.StatusCommands} 与
- * {@link com.dwinovo.numen.core.tools.perception.ScanCommands}。每个方法回一份 JSON,原样作回执。
+ * {@link com.dwinovo.numen.core.tools.perception.ScanCommands}。每个方法回一份结果:数据是那份读数(位置是 {@link Shapes} 的 Pos),
+ * 那句话是一行摘要。
  */
 public final class PerceptionOps {
 
-    public String getSelfStatus(NumenPlayer self) {
+    public TaskResult getSelfStatus(NumenPlayer self) {
         JsonObject root = new JsonObject();
-        root.addProperty("entity_id", self.getId());
+        root.addProperty("id", self.getId());
         root.addProperty("name", self.getName().getString());
         root.addProperty("game_mode", self.gameMode.getGameModeForPlayer().getName());
         root.addProperty("hp", self.getHealth());
         root.addProperty("max_hp", self.getMaxHealth());
         root.addProperty("hunger", self.getFoodData().getFoodLevel());
         root.addProperty("saturation", self.getFoodData().getSaturationLevel());
-
-        JsonObject pos = new JsonObject();
-        pos.addProperty("x", self.getX());
-        pos.addProperty("y", self.getY());
-        pos.addProperty("z", self.getZ());
-        root.add("position", pos);
-
+        root.add("pos", Shapes.pos(self.position()));
         root.addProperty("dimension", self.level().dimension().location().toString());
         root.addProperty("biome", self.level().getBiome(self.blockPosition())
                 .unwrapKey().map(k -> k.location().toString()).orElse("unknown"));
@@ -56,16 +52,16 @@ public final class PerceptionOps {
         root.add("structures", structures);
 
         // 只报两只手:身上穿戴的归 body_state 里的 <worn> 一处管,原版的甲和模组的饰品同一份
-        JsonObject equipment = new JsonObject();
+        JsonObject hands = new JsonObject();
         for (EquipmentSlot slot : new EquipmentSlot[]{EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND}) {
             ItemStack s = self.getItemBySlot(slot);
             if (s.isEmpty()) continue;
             JsonObject o = new JsonObject();
             o.addProperty("item", BuiltInRegistries.ITEM.getKey(s.getItem()).toString());
-            if (s.getCount() > 1) o.addProperty("count", s.getCount());
-            equipment.add(slot.getName(), o);
+            o.addProperty("count", s.getCount());
+            hands.add(slot.getName(), o);
         }
-        root.add("equipment", equipment);
+        root.add("hands", hands);
 
         // 背包不在这里。它是「状态」不是「事件」——工具结果会沉进对话历史,而历史里的
         // 状态永远不会过期:十轮之后她读到那份快照,上面写的还是十轮前的东西,而且和这一轮
@@ -81,12 +77,12 @@ public final class PerceptionOps {
         slots.addProperty("total", inv.getContainerSize());
         root.add("backpack_slots", slots);
 
-        root.add("target", JsonNull.INSTANCE);
         root.addProperty("on_ground", self.onGround());
         root.addProperty("in_water", self.isInWater());
         // Remaining breath — the one stat whose absence let a body drown while its
         // mind calmly planned an 870-block trip (frozen-ocean death, 2026-07-15).
-        root.addProperty("air", self.getAirSupply() + "/" + self.getMaxAirSupply() + " ticks");
+        root.addProperty("air", self.getAirSupply());
+        root.addProperty("max_air", self.getMaxAirSupply());
         root.addProperty("in_lava", self.isInLava());
         // 身体状态片段:<worn>(穿戴位置,原版与模组同一份)打头,其后是插件从身体上读的片段。
         // 与挂进 runtime_state 的是同一个汇总,一段都没有就不出这个字段。
@@ -94,23 +90,23 @@ public final class PerceptionOps {
         if (!bodyState.isEmpty()) {
             root.addProperty("body_state", bodyState);
         }
-        return root.toString();
+        return TaskResult.ok(self.getName().getString() + " at " + at(self.position()) + ", " + Math.round(
+                self.getHealth()) + "/" + Math.round(self.getMaxHealth()) + " hp, hunger "
+                + self.getFoodData().getFoodLevel() + "/20.", root);
+    }
+
+    /** 一个位置在那句话里的写法:{@code 12.5,64,-3.2}。 */
+    private static String at(Vec3 v) {
+        JsonObject p = Shapes.pos(v);
+        return p.get("x").getAsString() + "," + p.get("y").getAsString() + "," + p.get("z").getAsString();
     }
 
     @SuppressWarnings("deprecation")  // BlockBehaviour.isSolid() carries Mojang's
                                      // "deprecated for override" marker, not phased out.
-    public String inspectBlock(int x,
-int y,
-int z,
-                               NumenPlayer self) {
-        BlockPos pos = new BlockPos(x, y, z);
+    public TaskResult inspectBlock(BlockPos pos, NumenPlayer self) {
         BlockState state = self.level().getBlockState(pos);
 
-        JsonObject root = new JsonObject();
-        root.addProperty("x", x);
-        root.addProperty("y", y);
-        root.addProperty("z", z);
-        root.addProperty("block", BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString());
+        JsonObject root = Shapes.block(pos, state);
         // Block-state properties (e.g. end_portal_frame's has_eye/facing, so the
         // model can tell which of the 12 frames still need an ender_eye; stairs
         // facing; etc.). Omitted when the block has no properties.
@@ -149,11 +145,13 @@ int z,
         }
 
         Vec3 center = Vec3.atCenterOf(pos);
-        double distSqr = self.distanceToSqr(center);
-        root.addProperty("distance_to_me", Math.sqrt(distSqr));
-        root.addProperty("in_reach", self.canInteractWithBlock(pos, 0.0));
+        double distance = Math.sqrt(self.distanceToSqr(center));
+        root.addProperty("distance", Math.round(distance * 10.0) / 10.0);
+        boolean inReach = self.canInteractWithBlock(pos, 0.0);
+        root.addProperty("in_reach", inReach);
 
-        return root.toString();
+        return TaskResult.ok(root.get("name").getAsString() + " at " + pos.getX() + "," + pos.getY() + ","
+                + pos.getZ() + (inReach ? ", within reach." : ", out of reach."), root);
     }
 
     /** Serialized value of one block-state property (e.g. "true", "north"). */
@@ -161,51 +159,48 @@ int z,
         return p.getName(state.getValue(p));
     }
 
-    public String getOwnerStatus(NumenPlayer self) {
+    public TaskResult getOwnerStatus(NumenPlayer self) {
         JsonObject root = new JsonObject();
         java.util.UUID ownerUuid = self.getOwnerUuid();
         if (ownerUuid == null) {
             root.addProperty("online", false);
-            root.addProperty("message", "no owner (untamed)");
-            return root.toString();
+            return TaskResult.ok("You have no owner (untamed).", root);
         }
-        root.addProperty("owner_uuid", ownerUuid.toString());
 
         // Server-wide resolution: vanilla getOwner() is scoped to the PET's
         // level and would report a cross-dimension owner as "offline".
         Player player = self.resolveOwnerPlayer();
         if (player == null) {
             root.addProperty("online", false);
-            root.addProperty("message", "owner offline");
-            return root.toString();
+            return TaskResult.ok("Your owner is offline.", root);
         }
 
         root.addProperty("online", true);
+        root.addProperty("id", player.getId());
         root.addProperty("name", player.getName().getString());
         root.addProperty("hp", player.getHealth());
         root.addProperty("max_hp", player.getMaxHealth());
         root.addProperty("hunger", player.getFoodData().getFoodLevel());
         root.addProperty("saturation", player.getFoodData().getSaturationLevel());
-
-        JsonObject pos = new JsonObject();
-        pos.addProperty("x", player.getX());
-        pos.addProperty("y", player.getY());
-        pos.addProperty("z", player.getZ());
-        root.add("position", pos);
+        root.add("pos", Shapes.pos(player.position()));
 
         boolean sameDimension = self.level().dimension().equals(player.level().dimension());
         root.addProperty("same_dimension", sameDimension);
-        root.addProperty("owner_dimension", player.level().dimension().location().toString());
+        root.addProperty("dimension", player.level().dimension().location().toString());
+        String where;
         if (sameDimension) {
-            root.addProperty("distance_to_me", self.distanceTo(player));
+            double distance = Math.round(self.distanceTo(player) * 10.0) / 10.0;
+            root.addProperty("distance", distance);
+            where = "at " + at(player.position()) + ", " + distance + " blocks from you";
         } else {
-            root.addProperty("note", "owner is in a different dimension — their "
-                    + "position is in THAT dimension's coordinates, not yours");
+            where = "in " + player.level().dimension().location() + " — their pos is in THAT dimension's "
+                    + "coordinates, not yours";
         }
         root.addProperty("main_hand", itemKey(player.getMainHandItem()));
         root.addProperty("off_hand", itemKey(player.getOffhandItem()));
 
-        return root.toString();
+        return TaskResult.ok(player.getName().getString() + " is online " + where + ", " + Math.round(
+                player.getHealth()) + "/" + Math.round(player.getMaxHealth()) + " hp.", root);
     }
 
     private static String itemKey(ItemStack stack) {
@@ -213,7 +208,7 @@ int z,
         return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
     }
 
-    public String getWorldInfo(NumenPlayer self) {
+    public TaskResult getWorldInfo(NumenPlayer self) {
         var level = self.level();
 
         JsonObject root = new JsonObject();
@@ -228,6 +223,7 @@ int z,
         else weather = "clear";
         root.addProperty("weather", weather);
 
-        return root.toString();
+        return TaskResult.ok(level.dimension().location() + ", " + (level.isDay() ? "bright" : "dark") + " outside, "
+                + weather + ".", root);
     }
 }

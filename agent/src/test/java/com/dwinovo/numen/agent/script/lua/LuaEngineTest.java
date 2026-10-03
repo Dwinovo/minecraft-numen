@@ -20,9 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Lua 这一种语言接到脚本层:API 函数在调用处交出一次调用、拿到结局接着跑;成功直接返回值、失败抛错;声明了返回项的成败都
- * 返回那一项;撞上 Lua 自己的名字加 {@code _};停下时脚本线程放手;库先跑、库函数调到的记在脚本里调它的那一行;只读不跑时
- * 记下调了哪些函数;跑完交出返回值。
+ * Lua 这一种语言接到脚本层:API 函数在调用处交出一次调用、拿到结局接着跑;成功返回回执的数据(声明了返回项的是那一项,没有数据是
+ * nil)、失败抛错误值({@code kind}、{@code message}、{@code hint}……,tostring 可读);撞上 Lua 自己的名字加 {@code _};停下时脚本
+ * 线程放手;库先跑、库函数调到的记在脚本里调它的那一行;只读不跑时记下调了哪些函数;跑完交出返回值。
  */
 class LuaEngineTest {
 
@@ -56,25 +56,25 @@ class LuaEngineTest {
     }
 
     private static ScriptRun.Result ok(String text) {
-        return new ScriptRun.Result(true, text, new JsonObject());
+        return ScriptRun.Result.ok(text, new JsonObject());
     }
 
     private static ScriptRun.Result failed(String text) {
-        return new ScriptRun.Result(false, text, new JsonObject());
+        return new ScriptRun.Result(false, text, new JsonObject(), "failed", null);
     }
 
-    private static ScriptRun.Result data(boolean ok, String key, com.google.gson.JsonElement value) {
+    private static ScriptRun.Result data(String key, com.google.gson.JsonElement value) {
         JsonObject data = new JsonObject();
         data.add(key, value);
-        return new ScriptRun.Result(ok, "", data);
+        return ScriptRun.Result.ok("", data);
     }
 
     @Test
     void aCallIsHandedOverWhereItIsMadeAndTheScriptGoesOnWithItsResult() {
         ScriptRun run = run("""
-                local said = work.dig("ores/g3")
-                print("dug: " .. said)
-                route.plan({120, 64, -35}, {arrive = "dig", alter = "natural"})
+                local r = work.dig("ores/g3")
+                print("dug: " .. r.dug)
+                route.plan({x = 120, y = 64, z = -35}, {arrive = "dig", alter = "natural"})
                 """);
         ScriptRun.Call first = assertInstanceOf(ScriptRun.Call.class, run.start());
         assertEquals("work.dig", first.function());
@@ -82,11 +82,11 @@ class LuaEngineTest {
         assertEquals(List.of("ores/g3"), first.args());
         assertTrue(first.options().isEmpty());
 
-        ScriptRun.Call second = assertInstanceOf(ScriptRun.Call.class, run.resume(ok("4 blocks")));
-        assertEquals(List.of("dug: 4 blocks"), printed);
+        ScriptRun.Call second = assertInstanceOf(ScriptRun.Call.class, run.resume(data("dug", new JsonPrimitive(4))));
+        assertEquals(List.of("dug: 4"), printed, "脚本拿到的是数据,不是回执那句话");
         assertEquals("route.plan", second.function());
         assertEquals(3, second.line());
-        assertEquals(List.of(List.of(120L, 64L, -35L)), second.args());
+        assertEquals(List.of(Map.of("x", 120L, "y", 64L, "z", -35L)), second.args());
         assertEquals(Map.of("arrive", "dig", "alter", "natural"), second.options());
 
         assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(ok("arrived"))).ok());
@@ -105,9 +105,9 @@ class LuaEngineTest {
         ScriptRun.Call go = assertInstanceOf(ScriptRun.Call.class, run.resume(ok("planned")));
         assertEquals("move.go", go.function());
         assertEquals(2, go.line());
-        ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(ok("t1 done")));
+        ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(data("route", new JsonPrimitive("home"))));
         assertTrue(done.ok());
-        assertEquals(Map.of("walked", "t1 done"), done.value(), "跑完交出 return 的值");
+        assertEquals(Map.of("walked", Map.of("route", "home")), done.value(), "跑完交出 return 的值");
     }
 
     @Test
@@ -115,22 +115,23 @@ class LuaEngineTest {
         List<com.dwinovo.numen.agent.script.ScriptEngine.Defined> defined = LUA.functions(WALK);
         assertEquals(List.of(
                 new com.dwinovo.numen.agent.script.ScriptEngine.Defined("move.goto_", List.of("place", "opts"),
-                        "Plan a route to a place, then walk it."),
-                new com.dwinovo.numen.agent.script.ScriptEngine.Defined("sweep", List.of("a", "b"), "")), defined);
+                        List.of("-- Plan a route to a place, then walk it.")),
+                new com.dwinovo.numen.agent.script.ScriptEngine.Defined("sweep", List.of("a", "b"), List.of())), defined);
+        assertEquals("Plan a route to a place, then walk it.", LUA.summaryOf(defined.get(0)));
     }
 
     @Test
     void readingWithoutRunningListsTheCallsAndTheirArguments() {
         List<ScriptRun.Call> calls = LUA.calls("example", """
                 work.dig("ores", {count = 2})
-                move.goto_({1, 2, 3}, {arrive = "use"})
+                move.goto_({x = 1, y = 2, z = 3}, {arrive = "use"})
                 """, CATALOG).calls();
         assertEquals(2, calls.size());
         assertEquals("work.dig", calls.get(0).function());
         assertEquals(Map.of("count", 2L), calls.get(0).options());
         assertEquals("move", calls.get(1).group(), "库函数记成它自己的那一次调用,不进它的正文");
         assertEquals("goto_", calls.get(1).verb());
-        assertEquals(List.of(List.of(1L, 2L, 3L)), calls.get(1).args());
+        assertEquals(List.of(Map.of("x", 1L, "y", 2L, "z", 3L)), calls.get(1).args());
         assertThrows(IllegalArgumentException.class, () -> LUA.calls("example", "work.dig(", CATALOG),
                 "语法错读不通");
         com.dwinovo.numen.agent.script.ScriptEngine.Reading stopped = LUA.calls("example", """
@@ -149,7 +150,7 @@ class LuaEngineTest {
                 local r = work.collect()
                 print(r.picked, r.kinds[2])
                 local ok, err = pcall(function() work.dig("ores") end)
-                print(ok, err)
+                print(ok, err.kind, err.fn, tostring(err))
                 work.dig("ores")
                 """);
         run.start();
@@ -159,17 +160,67 @@ class LuaEngineTest {
         kinds.add("raw_iron");
         kinds.add("cobblestone");
         picked.add("kinds", kinds);
-        run.resume(new ScriptRun.Result(true, "picked up 3", picked));
+        run.resume(ScriptRun.Result.ok("picked up 3", picked));
         run.resume(failed("out of reach"));
         ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(failed("out of reach")));
-        assertEquals(List.of("3\tcobblestone", "false\tt:3: work.dig: out of reach"), printed);
+        assertEquals(List.of("3\tcobblestone", "false\tfailed\twork.dig\twork.dig: failed — out of reach"), printed);
         assertFalse(done.ok());
         assertEquals(5, done.line());
-        assertTrue(done.error().contains("t:5: work.dig: out of reach"), done.error());
+        assertEquals("work.dig: failed — out of reach", done.error());
+        assertEquals("failed", done.failure().get("kind"));
+    }
+
+    /** 失败的种类与下一步跟着错误值走:脚本按 kind 分支,hint 照抄,失败时的数据在 data 里;tostring 一并写出 hint。 */
+    @Test
+    void aFailureCarriesItsKindHintAndData() {
+        ScriptRun run = run("""
+                local ok, err = pcall(work.dig, "ores")
+                if err.kind == "out_of_reach" then print(err.hint, err.data.nearest.x) end
+                print(tostring(err))
+                """);
+        run.start();
+        JsonObject nearest = new JsonObject();
+        nearest.addProperty("x", 7);
+        JsonObject data = new JsonObject();
+        data.add("nearest", nearest);
+        assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(new ScriptRun.Result(false, "too far", data,
+                "out_of_reach", "move.goto_(\"ores\", {arrive = \"dig\"})"))).ok());
+        assertEquals(List.of("move.goto_(\"ores\", {arrive = \"dig\"})\t7",
+                "work.dig: out_of_reach — too far\nhint: move.goto_(\"ores\", {arrive = \"dig\"})"), printed);
+    }
+
+    /** 没有数据的成功返回 nil,不返回那句话。 */
+    @Test
+    void aCallWithoutDataReturnsNil() {
+        ScriptRun run = run("print(work.collect() == nil)");
+        run.start();
+        assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(ok("collected"))).ok());
+        assertEquals(List.of("true"), printed);
+    }
+
+    /** raise 抛同一种错误值;没接住时整段的错误值就是它,带上它的 kind。 */
+    @Test
+    void raiseThrowsTheSameKindOfErrorValue() {
+        ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class,
+                run("raise(\"stuck\", \"went round in circles\", \"build.left(\\\"house\\\")\", {left = 3})").start());
+        assertFalse(done.ok());
+        assertEquals("stuck", done.failure().get("kind"));
+        assertEquals(Map.of("left", 3L), done.failure().get("data"));
+        assertEquals("stuck — went round in circles\nhint: build.left(\"house\")", done.error());
+        ScriptRun.Done wrong = assertInstanceOf(ScriptRun.Done.class, run("raise(1)").start());
+        assertEquals("bad_argument", wrong.failure().get("kind"));
+    }
+
+    /** print 一张表写成 Lua 的字面量,键按名字排。 */
+    @Test
+    void printWritesATableAsLua() {
+        assertTrue(assertInstanceOf(ScriptRun.Done.class,
+                run("print({pos = {z = 3, x = 1, y = 2}, name = \"iron_ore\"}, {1, 2})").start()).ok());
+        assertEquals(List.of("{name = \"iron_ore\", pos = {x = 1, y = 2, z = 3}}\t{1, 2}"), printed);
     }
 
     @Test
-    void aDeclaredValueComesBackWhetherTheCallSucceededOrNot() {
+    void aDeclaredValueIsWhatTheCallReturns() {
         ScriptRun run = run("""
                 for _, p in ipairs(area.parts("ores")) do print(p) end
                 while area.has("ores") do work.dig("ores") end
@@ -179,29 +230,31 @@ class LuaEngineTest {
         JsonArray parts = new JsonArray();
         parts.add("ores/g1");
         parts.add("ores/g2");
-        assertInstanceOf(ScriptRun.Call.class, run.resume(data(true, "parts", parts)));
-        assertInstanceOf(ScriptRun.Call.class, run.resume(data(true, "has", new JsonPrimitive(true))));
+        assertInstanceOf(ScriptRun.Call.class, run.resume(data("parts", parts)));
+        assertInstanceOf(ScriptRun.Call.class, run.resume(data("has", new JsonPrimitive(true))));
         assertInstanceOf(ScriptRun.Call.class, run.resume(ok("dug")));
         assertTrue(assertInstanceOf(ScriptRun.Done.class,
-                run.resume(data(false, "has", new JsonPrimitive(false)))).ok(), "没剩是 false,不是报错");
+                run.resume(data("has", new JsonPrimitive(false)))).ok(), "没剩是 false,不是报错");
         assertEquals(List.of("ores/g1", "ores/g2", "done"), printed);
     }
 
     @Test
-    void aValueQueryWithoutItsValueIsAnError() {
+    void aFailedValueQueryRaises() {
         ScriptRun run = run("area.has('nope')");
         run.start();
-        ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(failed("there is no area nope")));
+        ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(new ScriptRun.Result(false,
+                "there is no area named nope", new JsonObject(), "not_found", "area.list()")));
         assertFalse(done.ok());
-        assertTrue(done.error().contains("area.has: there is no area nope"), done.error());
+        assertEquals("area.has: not_found — there is no area named nope\nhint: area.list()", done.error());
     }
 
     @Test
     void aRefusedCallFailsAtTheCallWithoutRunning() {
-        ScriptRun run = run("local ok, err = pcall(function() work.dig(1, 2) end)\nprint(err)");
+        ScriptRun run = run("local ok, err = pcall(function() work.dig(1, 2) end)\nprint(err.kind, tostring(err))");
         run.start();
-        assertTrue(assertInstanceOf(ScriptRun.Done.class, run.refuse("takes 1 object, got 2")).ok());
-        assertEquals(List.of("t:1: work.dig: takes 1 object, got 2"), printed);
+        assertTrue(assertInstanceOf(ScriptRun.Done.class, run.refuse(new com.dwinovo.numen.agent.script.ApiError(
+                com.dwinovo.numen.agent.script.ErrorKind.BAD_ARGUMENT, "takes 1 object, got 2", null))).ok());
+        assertEquals(List.of("bad_argument\twork.dig: bad_argument — takes 1 object, got 2"), printed);
     }
 
     @Test

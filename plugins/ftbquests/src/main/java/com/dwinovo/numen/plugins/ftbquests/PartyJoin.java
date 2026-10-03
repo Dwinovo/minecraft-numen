@@ -1,5 +1,6 @@
 package com.dwinovo.numen.plugins.ftbquests;
 
+import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -8,7 +9,9 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import dev.ftb.mods.ftbteams.api.Team;
 import dev.ftb.mods.ftbteams.data.PartyTeam;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * {@code ftbquests join}:替她点邀请消息里的"接受"。
@@ -34,36 +37,44 @@ final class PartyJoin {
         NumenPlayer her = src.companion();
         List<Team> invites = InviteWatch.pending(her.getUUID());
         if (invites.isEmpty()) {
-            src.reply(TaskResult.fail("No party has a pending invitation for you.").toJson());
+            src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, "No party has a pending invitation for you.", null)
+                    .toJson());
             return;
         }
         String wanted = args.get(FtbqCommands.TEAM);
         List<Team> chosen = wanted == null ? invites
                 : invites.stream().filter(team -> team.getShortName().equals(wanted)).toList();
+        Map<String, Object> pending = Map.of("pending", invites.stream().map(Team::getShortName).toList());
         if (chosen.isEmpty()) {
-            src.reply(TaskResult.fail("No pending invitation for you is from the party " + wanted
-                    + ". Your pending invitations: " + listed(invites) + ".").toJson());
+            src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, "No pending invitation for you is from the party " + wanted
+                    + ". Your pending invitations: " + listed(invites) + ".",
+                    invites.size() == 1 ? FtbqCommands.GROUP + ".join()" : null, pending).toJson());
             return;
         }
         if (chosen.size() > 1) {
-            src.reply(TaskResult.fail("Several parties have invited you: " + listed(chosen)
-                    + ". Ask your owner which party to join, then name it with {team = <short name>}.").toJson());
+            src.reply(TaskResult.fail(ErrorKind.FAILED, "Several parties have invited you: " + listed(chosen)
+                    + ". Ask your owner which party to join, then name it with {team = <short name>}.", null,
+                    pending).toJson());
             return;
         }
         Team party = chosen.get(0);
         try {
             ((PartyTeam) party).join(her);
         } catch (CommandSyntaxException e) {
-            src.reply(TaskResult.fail("FTB Teams did not let you join " + named(party) + ": " + e.getMessage())
-                    .toJson());
+            src.reply(TaskResult.fail(ErrorKind.DENIED, "FTB Teams did not let you join " + named(party) + ": "
+                    + e.getMessage(), null).toJson());
             return;
         }
         boolean ownerInside = her.getOwnerUuid() != null && party.getMembers().contains(her.getOwnerUuid());
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("party", party.getShortName());
+        data.put("name", party.getName().getString());
+        data.put("owner_inside", ownerInside);
         src.reply(TaskResult.ok("You joined the party " + named(party)
                 + (ownerInside ? ", your owner's party." : "; your owner is not in it.")
                 + " FTB merged the quest progress you had into the party's: each task keeps the larger count, "
-                + "and quests either side completed stay completed. From now on what you do counts for this party.")
-                .toJson());
+                + "and quests either side completed stay completed. From now on what you do counts for this party.",
+                data).toJson());
     }
 
     private static String listed(List<Team> parties) {

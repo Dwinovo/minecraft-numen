@@ -79,7 +79,7 @@ class AgentCommandsTest {
     void loadingAnUnknownSkillSaysSo() {
         CoreScripts.Run run = CoreScripts.run(HER, "return skill.load(\"no_such_skill\")");
         assertFalse(run.ok(), run.message());
-        assertTrue(run.message().contains("skill.load: unknown skill: no_such_skill"), run.message());
+        assertTrue(run.message().contains("skill.load: not_found — unknown skill: no_such_skill"), run.message());
         assertTrue(com.dwinovo.numen.agent.tool.ToolRegistry.get("skill_load") == null, "skill_load is still a tool");
     }
 }

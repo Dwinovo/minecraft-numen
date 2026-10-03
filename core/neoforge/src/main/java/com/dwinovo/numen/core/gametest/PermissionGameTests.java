@@ -373,7 +373,7 @@ public class PermissionGameTests {
             helper.assertTrue(reply.reply() != null, "scan_blocks has not replied");
             var data = com.google.gson.JsonParser.parseString(reply.reply()).getAsJsonObject().getAsJsonObject("data");
             var groups = groupsIn(reply.reply());
-            helper.assertTrue(groups.size() == 2 && data.has("groups_total") && data.get("groups_total").getAsInt() == 2,
+            helper.assertTrue(groups.size() == 2 && data.get("complete").getAsBoolean(),
                     "expected exactly two groups: " + reply.reply());
             var owners = groupHolding(groups, helper.absolutePos(pillar.get(0)));
             var wild = groupHolding(groups, helper.absolutePos(tree.get(0)));
@@ -387,10 +387,10 @@ public class PermissionGameTests {
                 helper.assertTrue(groupHolding(groups, helper.absolutePos(rel)) == wild,
                         "a tree log is not in the tree's group: " + rel.toShortString());
             }
-            helper.assertTrue(owners.get("cells").getAsInt() == 3 && "ask".equals(owners.get("permission").getAsString())
+            helper.assertTrue(owners.get("count").getAsInt() == 3 && "ask".equals(owners.get("permission").getAsString())
                             && owners.get("reason").getAsString().contains("placed by a player"),
                     "the pillar's group does not say breaking it needs the owner: " + owners);
-            helper.assertTrue(wild.get("cells").getAsInt() == 4 && "allow".equals(wild.get("permission").getAsString()),
+            helper.assertTrue(wild.get("count").getAsInt() == 4 && "allow".equals(wild.get("permission").getAsString()),
                     "the tree's group is not allowed: " + wild);
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -593,7 +593,7 @@ public class PermissionGameTests {
             if (mine[0] == null) {
                 helper.assertTrue(reply.reply() != null, "scan_blocks has not replied");
                 var group = groupHolding(groupsIn(reply.reply()), helper.absolutePos(column.get(0)));
-                helper.assertTrue(group != null && group.get("cells").getAsInt() == 4,
+                helper.assertTrue(group != null && group.get("count").getAsInt() == 4,
                         "the column is not one group of four: " + reply.reply());
                 mine[0] = mineArea(companion, group.get("id").getAsString());
             }

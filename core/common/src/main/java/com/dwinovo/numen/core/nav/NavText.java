@@ -129,7 +129,7 @@ public final class NavText {
                     + " your owner";
             case Outcome.Stranded stranded -> "can't set off: I can't stand where I am (" + name(stranded.block())
                     + " at " + Listing.coords(stranded.cell()) + "); free me first (break that block: `use.block("
-                    + lua(Place.cell(stranded.cell())) + ", {left = true})`) or wait until I land";
+                    + Place.cell(stranded.cell()).literal() + ", {left = true})`) or wait until I land";
             case Outcome.Blocked blocked -> "gave up: " + blockage(blocked.blockage())
                     + "; try again, and pick another destination if it keeps failing";
             case Outcome.NoLineOfSight sight -> "arrived, but " + Listing.coords(sight.target())
@@ -450,16 +450,7 @@ public final class NavText {
      * {@code `move.goto_("ores/g3", {arrive = "dig"})`};{@code options} 是选项表里的那几项,可以为空。
      */
     public static String gotoCall(Place to, String options) {
-        return "`move.goto_(" + lua(to) + (options.isEmpty() ? "" : ", {" + options + "}") + ")`";
-    }
-
-    /** 一处写成脚本里的值:一格 {@code {1, 2, 3}}、一列 {@code {1, 3}}、一个高度 {@code 64}、一块区域 {@code "ores/g3"}。 */
-    public static String lua(Place place) {
-        String written = place.written();
-        if (!written.matches("-?\\d+( -?\\d+)*")) {
-            return "\"" + written + "\"";
-        }
-        return written.contains(" ") ? "{" + written.replace(" ", ", ") + "}" : written;
+        return "`move.goto_(" + to.literal() + (options.isEmpty() ? "" : ", {" + options + "}") + ")`";
     }
 
     public static String name(BlockState state) {

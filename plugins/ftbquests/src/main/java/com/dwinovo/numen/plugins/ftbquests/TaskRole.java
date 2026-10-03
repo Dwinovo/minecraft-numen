@@ -16,6 +16,10 @@ import dev.ftb.mods.ftbquests.quest.task.StructureTask;
 import dev.ftb.mods.ftbquests.quest.task.Task;
 import dev.ftb.mods.ftbquests.quest.task.XPTask;
 
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
+
 /**
  * 一个任务条件由谁、怎么完成——list、show 给她看的"谁来完成",submit 决定交哪几个,都只问这一处。
  *
@@ -71,5 +75,15 @@ enum TaskRole {
     /** 列表与详情里跟在条件后面的那几个词。 */
     String label() {
         return label;
+    }
+
+    /** 数据里的写法:{@code submit}、{@code counts}。 */
+    String word() {
+        return name().toLowerCase(Locale.ROOT);
+    }
+
+    /** 数据里全部的写法,按声明顺序。 */
+    static List<String> words() {
+        return Arrays.stream(values()).map(TaskRole::word).toList();
     }
 }

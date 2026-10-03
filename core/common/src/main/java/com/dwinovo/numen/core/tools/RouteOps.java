@@ -1,5 +1,9 @@
 package com.dwinovo.numen.core.tools;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonArray;
+import com.dwinovo.numen.agent.script.ErrorKind;
+import com.dwinovo.numen.agent.script.ApiError;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -44,8 +48,8 @@ public final class RouteOps {
     private static Itinerary named(NumenPlayer her, String name) {
         Itinerary route = routes(her).get(name);
         if (route == null) {
-            throw new IllegalArgumentException("there is no route named " + name + "; `route.list()` shows the routes "
-                    + "you have, `route.new` makes one");
+            throw new ApiError(ErrorKind.NOT_FOUND, "there is no route named " + name + "; route.new makes one",
+                    "route.list()");
         }
         return route;
     }
@@ -57,8 +61,8 @@ public final class RouteOps {
      */
     public static String create(NumenPlayer her, String name, boolean own, Destination.Stop to, CommandArgs args) {
         if (!own && routes(her).get(name) != null) {
-            return TaskResult.fail("there is already a route named " + name + "; `route.show(\"" + name + "\")` "
-                    + "shows it, `route.delete(\"" + name + "\")` removes it").toJson();
+            return TaskResult.fail(ErrorKind.FAILED, "there is already a route named " + name + "; route.show(\""
+                    + name + "\") shows it", "route.delete(\"" + name + "\")").toJson();
         }
         String flags = RouteFlags.written(args);
         Itinerary route = Itinerary.of(name, her.level().dimension().location(), to, flags);
@@ -69,7 +73,7 @@ public final class RouteOps {
         return TaskResult.ok("made route " + name + ": from wherever I stand to " + to.words()
                 + (flags.isEmpty() ? ", changing no block" : ", with " + RouteFlags.shown(flags))
                 + ". `route.plan(" + call + ")` plans it without moving and lists every block it would change; "
-                + "`move.go(" + call + ")` then walks it.").toJson();
+                + "`move.go(" + call + ")` then walks it.", RouteText.info(route)).toJson();
     }
 
     /** 插一个途经点,成为第 {@code at} 个;没给就插在终点前面。 */
@@ -118,7 +122,7 @@ public final class RouteOps {
     private static String saved(NumenPlayer her, Itinerary route, String what) {
         routes(her).put(route);
         return TaskResult.ok(what + ". " + RouteText.intent(route) + " Its old plan is dropped; `route.plan(\""
-                + route.name() + "\")` plans it again.").toJson();
+                + route.name() + "\")` plans it again.", RouteText.info(route)).toJson();
     }
 
     /**
@@ -141,8 +145,13 @@ public final class RouteOps {
         Plan plan = result.plan();
         routes(her).plan(route, plan);
         String text = RouteText.plan(route, plan, now(her));
-        Map<String, Object> data = Map.of("route", route.name(), "walkable", plan.unreachable() < 0);
-        return (plan.unreachable() < 0 ? TaskResult.ok(text, data) : TaskResult.fail(text, data)).toJson();
+        JsonObject data = RouteText.planData(route, plan);
+        if (plan.unreachable() < 0) {
+            return TaskResult.ok(text, data).toJson();
+        }
+        Map<String, Object> failed = new java.util.LinkedHashMap<>();
+        data.entrySet().forEach(e -> failed.put(e.getKey(), e.getValue()));
+        return TaskResult.fail(ErrorKind.NO_PATH, text, null, failed).toJson();
     }
 
     /** 展示一条:意图、计划、走过的记录。 */
@@ -156,20 +165,27 @@ public final class RouteOps {
         if (!walks.isEmpty()) {
             sb.append('\n').append(walks);
         }
-        return TaskResult.ok(sb.toString()).toJson();
+        JsonObject data = new JsonObject();
+        data.add("route", RouteText.info(route));
+        if (route.plan() != null) {
+            data.add("plan", RouteText.planData(route, route.plan()));
+        }
+        return TaskResult.ok(sb.toString(), data).toJson();
     }
 
     /** 主人的全部路线,一条一行。 */
     public static String list(NumenPlayer her, CommandArgs args) {
         long now = now(her);
         List<String> rows = new ArrayList<>();
+        JsonArray all = new JsonArray();
         for (Itinerary route : routes(her).all()) {
             rows.add(RouteText.row(route, now));
+            all.add(RouteText.info(route));
         }
         String head = rows.isEmpty() ? "No routes yet: `route.new` makes one, and move.goto_ keeps each walk as your "
                 + "own route " + Itinerary.gotoOf(her.getGameProfile().getName()) + "."
                 : "Routes of your owner, shared by all of their companions:";
-        return new Listing(head, rows, "").result(args).toJson();
+        return new Listing(head, rows, "").result(args, Map.of("routes", all)).toJson();
     }
 
     /** 删掉一条。 */
@@ -183,11 +199,12 @@ public final class RouteOps {
     public static String reverse(NumenPlayer her, String name, String given) {
         String as = given != null ? given : name + "_back";
         if (routes(her).get(as) != null) {
-            return TaskResult.fail("there is already a route named " + as + "; pick another name for as").toJson();
+            return TaskResult.fail(ErrorKind.FAILED, "there is already a route named " + as + "; pick another name for "
+                    + "as", null).toJson();
         }
         Itinerary back = named(her, name).reversed(as);
         routes(her).put(back);
         return TaskResult.ok("made route " + as + ", " + name + " the other way. " + RouteText.intent(back)
-                + " `route.plan(\"" + as + "\")` plans it.").toJson();
+                + " `route.plan(\"" + as + "\")` plans it.", RouteText.info(back)).toJson();
     }
 }

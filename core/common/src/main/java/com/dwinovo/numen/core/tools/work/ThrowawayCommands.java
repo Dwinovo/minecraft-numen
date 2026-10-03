@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.tools.work;
 
+import com.dwinovo.numen.agent.script.ScriptType;
 import java.util.List;
 
 import com.dwinovo.numen.api.NumenApi;
@@ -28,6 +29,13 @@ public final class ThrowawayCommands {
 
     private static final ThrowawayOps OPS = new ThrowawayOps();
 
+    private static final ScriptType THROWAWAY = ScriptType.table(ScriptType.field("materials", ScriptType.listOf(ScriptType.STRING),
+                        "The blocks pathfinding may spend now."),
+                        ScriptType.field("customised", ScriptType.BOOLEAN, null),
+                        ScriptType.field("carrying_not_listed", ScriptType.listOf(ScriptType.table(
+                                ScriptType.field("block", ScriptType.STRING, null),
+                                ScriptType.field("count", ScriptType.INTEGER, null))), "Blocks you carry that are not on it."));
+
     private ThrowawayCommands() {}
 
     public static void install(NumenApi numen) {
@@ -40,6 +48,7 @@ public final class ThrowawayCommands {
     private static void actions(CommandGroup throwaway) {
         throwaway.server("add", "Add blocks you are willing to spend.",
                         (src, args) -> src.reply(OPS.add(src.companion(), ids(args))), BLOCKS)
+                .returns(THROWAWAY)
                 .example("throwaway.add(\"minecraft:cobblestone\", \"minecraft:cobbled_deepslate\")")
                 .note("Anything listed WILL be consumed and never comes back: list what is junk here and now. "
                         + "Cobblestone is junk in a mineshaft and precious in the End.")
@@ -48,16 +57,19 @@ public final class ThrowawayCommands {
                 .seeAlso("throwaway remove", "throwaway set");
         throwaway.server("remove", "Take blocks off the list.",
                         (src, args) -> src.reply(OPS.remove(src.companion(), ids(args))), BLOCKS)
+                .returns(THROWAWAY)
                 .example("throwaway.remove(\"minecraft:dirt\")")
                 .note("Instant; your owner is told what you changed.")
                 .seeAlso("throwaway add");
         throwaway.server("set", "Replace the whole list.",
                         (src, args) -> src.reply(OPS.set(src.companion(), ids(args))), BLOCKS)
+                .returns(THROWAWAY)
                 .example("throwaway.set(\"minecraft:netherrack\")")
                 .note("Instant; your owner is told what you changed. To allow nothing at all, use `throwaway.clear()`.")
                 .seeAlso("throwaway add", "throwaway clear");
         throwaway.server("clear", "Empty the list, so no block may be spent.",
                         (src, args) -> src.reply(OPS.clear(src.companion())))
+                .returns(THROWAWAY)
                 .example("throwaway.clear()")
                 .note("A real choice for when what you carry is earmarked (the dirt is for a build): you then "
                         + "cannot pillar or bridge at all, and routes that need it fail until you add some back.")

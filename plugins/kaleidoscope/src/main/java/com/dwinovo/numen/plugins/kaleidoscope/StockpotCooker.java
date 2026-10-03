@@ -1,5 +1,6 @@
 package com.dwinovo.numen.plugins.kaleidoscope;
 
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.body.Hotbar;
 import com.github.ysbbbbbb.kaleidoscopecookery.api.blockentity.IStockpot;
@@ -66,7 +67,7 @@ final class StockpotCooker implements Cooker {
         int status = stockpot.getStatus();
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("cookware", kind().id());
-        out.put("pos", Cooker.where(pos));
+        out.put("pos", Shapes.pos(pos));
         out.put("stage", stage(status));
         out.put("has_heat_source", heat);
         out.put("has_lid", lid);

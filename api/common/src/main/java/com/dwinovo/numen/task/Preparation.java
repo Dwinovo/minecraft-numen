@@ -30,8 +30,8 @@ public interface Preparation {
         return () -> readiness;
     }
 
-    /** 当场就知道开始不了:{@code why} 就是这次调用的错误结果。 */
-    static Preparation refused(String why) {
+    /** 当场就知道开始不了:{@code why} 就是这次调用的错误结果(种类、那句话、下一步、数据)。 */
+    static Preparation refused(TaskResult why) {
         Readiness readiness = Readiness.refused(why);
         return () -> readiness;
     }
@@ -39,17 +39,24 @@ public interface Preparation {
     /**
      * 准备的结论。
      *
-     * @param ready 能开始
-     * @param words 能开始时是要接在受理回执后面的事实(没有为 null);开始不了时是为什么,原样作这次调用的错误结果
+     * @param ready   能开始
+     * @param words   能开始时要接在受理回执后面的事实;没有、或开始不了时为 null
+     * @param refusal 开始不了时这次调用的错误结果;能开始时为 null
      */
-    record Readiness(boolean ready, String words) {
+    record Readiness(boolean ready, String words, TaskResult refusal) {
 
-        public static Readiness ready(String facts) {
-            return new Readiness(true, facts);
+        public Readiness {
+            if (ready == (refusal != null)) {
+                throw new IllegalArgumentException("ready, or refused with a result — exactly one");
+            }
         }
 
-        public static Readiness refused(String why) {
-            return new Readiness(false, why);
+        public static Readiness ready(String facts) {
+            return new Readiness(true, facts, null);
+        }
+
+        public static Readiness refused(TaskResult why) {
+            return new Readiness(false, null, why);
         }
     }
 }

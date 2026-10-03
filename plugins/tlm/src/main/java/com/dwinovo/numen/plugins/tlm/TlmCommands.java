@@ -1,5 +1,7 @@
 package com.dwinovo.numen.plugins.tlm;
 
+import com.dwinovo.numen.agent.script.ErrorKind;
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.ClientSource;
@@ -62,19 +64,38 @@ final class TlmCommands {
     private static void actions(CommandGroup tlm) {
         tlm.client(MODELS, "Your own look: which maid model you wear now, and which are installed.",
                 TlmCommands::models, SEARCH, Listing.PAGE)
+                .returns(ScriptType.table(
+                        ScriptType.optional("current_model", ScriptType.STRING, "The model you wear now; none when "
+                                + "you wear your own look."),
+                        ScriptType.optional("current_name", ScriptType.STRING, null),
+                        ScriptType.optional("total", ScriptType.INTEGER, "Without search: how many models in all."),
+                        ScriptType.optional("packs", ScriptType.listOf(ScriptType.table(
+                                ScriptType.field("pack", ScriptType.STRING, null),
+                                ScriptType.field("count", ScriptType.INTEGER, null),
+                                ScriptType.field("examples", ScriptType.listOf(ScriptType.STRING), "A few names."))),
+                                "Without search: every pack."),
+                        ScriptType.optional("models", ScriptType.listOf(ScriptType.table(
+                                ScriptType.field("id", ScriptType.STRING, "What " + line(WEAR) + " takes."),
+                                ScriptType.field("name", ScriptType.STRING, null),
+                                ScriptType.field("pack", ScriptType.STRING, null))),
+                                "With search: every model found.")))
                 .example(line(MODELS) + "()")
                 .example(line(MODELS) + "({search = \"灵梦\"})")
                 .note("Read-only. Runs on your owner's client, where the model packs are.")
-                .note("One line per pack, or per model found; a long list comes a page at a time.")
+                .note("Without search every pack, with search every model found; the reply lists one per line and a "
+                        + "long list comes a page at a time.")
                 .seeAlso(path(WEAR));
         tlm.client(WEAR, "Your own look: put on a maid model.",
                 TlmCommands::wear, MODEL)
+                .returns(ScriptType.table(ScriptType.field("current_model", ScriptType.STRING, null),
+                        ScriptType.field("current_name", ScriptType.STRING, null)))
                 .example(line(WEAR) + "(\"touhou_little_maid:hakurei_reimu\")")
                 .note("It covers your whole body: a YSM model or your own skin stops showing until you take it off.")
                 .note("It does not ask your owner; tell them what you changed into.")
                 .seeAlso(path(MODELS), path(REMOVE));
         tlm.client(REMOVE, "Your own look: take the maid model off; your other look shows again.",
                 TlmCommands::remove)
+                .returns(ScriptType.NOTHING)
                 .example(line(REMOVE) + "()")
                 .seeAlso(path(WEAR));
         MaidCommands.actions(tlm);
@@ -99,14 +120,20 @@ final class TlmCommands {
         String worn = wornId == null ? "现在是本来的样子" : "现在穿 " + MaidCatalog.nameOf(wornId);
 
         if (q.isEmpty()) {
-            Map<String, Object> packs = MaidCatalog.summary();
-            int total = packs.values().stream()
-                    .mapToInt(v -> (int) ((Map<?, ?>) v).get("count")).sum();
+            List<MaidCatalog.Pack> packs = MaidCatalog.summary();
+            int total = packs.stream().mapToInt(MaidCatalog.Pack::count).sum();
             List<String> rows = new ArrayList<>();
-            packs.forEach((pack, v) -> rows.add("  " + pack + " — " + ((Map<?, ?>) v).get("count") + " 个,比如 "
-                    + String.join("、", ((List<?>) ((Map<?, ?>) v).get("examples")).stream()
-                            .map(String::valueOf).toList())));
+            List<Map<String, Object>> listed = new ArrayList<>();
+            for (MaidCatalog.Pack p : packs) {
+                rows.add("  " + p.pack() + " — " + p.count() + " 个,比如 " + String.join("、", p.examples()));
+                Map<String, Object> one = new LinkedHashMap<>();
+                one.put("pack", p.pack());
+                one.put("count", p.count());
+                one.put("examples", p.examples());
+                listed.add(one);
+            }
             data.put("total", total);
+            data.put("packs", listed);
             src.reply(new Listing(worn + ";一共 " + total + " 个模型,分在 " + packs.size()
                     + " 个包里。想找具体哪个,用 {search = ...} 搜角色名或包名:", rows, "").result(args, data)
                     .toJson());
@@ -114,9 +141,16 @@ final class TlmCommands {
         }
 
         List<String> rows = new ArrayList<>();
+        List<Map<String, Object>> found = new ArrayList<>();
         for (MaidCatalog.Entry e : MaidCatalog.search(q)) {
             rows.add("  " + e.id() + " — " + e.name() + "(" + e.pack() + ")");
+            Map<String, Object> one = new LinkedHashMap<>();
+            one.put("id", e.id());
+            one.put("name", e.name());
+            one.put("pack", e.pack());
+            found.add(one);
         }
+        data.put("models", found);
         src.reply(new Listing(worn + ";搜「" + q + "」找到 " + rows.size() + " 个:", rows, "")
                 .result(args, data).toJson());
     }
@@ -133,8 +167,8 @@ final class TlmCommands {
         String model = args.get(MODEL).toString();
         if (!Tlm.exists(model)) {
             // 不把全量清单塞回去(两百多个,一次两万 token),指回清单去搜
-            src.reply(TaskResult.fail("没有叫 " + model + " 的模型;用 " + line(MODELS)
-                    + "({search = ...}) 搜一下正确的 id").toJson());
+            src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, "没有叫 " + model + " 的模型;搜一下正确的 id",
+                    line(MODELS) + "({search = \"" + args.get(MODEL).getPath() + "\"})").toJson());
             return;
         }
         Wardrobe.wear(src.companion(), model);

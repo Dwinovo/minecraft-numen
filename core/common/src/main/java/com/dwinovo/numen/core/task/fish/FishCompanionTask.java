@@ -1,4 +1,5 @@
 package com.dwinovo.numen.core.task.fish;
+import com.dwinovo.numen.task.TaskResult;
 import com.dwinovo.numen.core.FailureType;
 
 import com.dwinovo.numen.core.Constants;
@@ -111,11 +112,12 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
     protected Preparation preparation() {
         BlockPos here = feet();
         if (!isDryStance(here)) {
-            return Preparation.refused(NOT_DRY);
+            return Preparation.refused(TaskResult.fail(NOT_DRY));
         }
         BlockPos water = findCastTarget(here, player.getEyePosition());
         if (water == null) {
-            return Preparation.refused(NO_WATER);
+            return Preparation.refused(TaskResult.fail(com.dwinovo.numen.agent.script.ErrorKind.NOT_FOUND, NO_WATER,
+                    null));
         }
         stance = here;
         target = water;

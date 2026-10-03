@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core;
 
+import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.task.TaskState;
 
 /**
@@ -91,4 +92,22 @@ public enum FailureType {
     INTERNAL,
     /** Cause not classified. */
     UNKNOWN;
+
+    /**
+     * 这一类失败交给脚本时是哪一种错误值({@link ErrorKind}):脚本按它分支,所以只分到她下一步做法不同的那几种——路不通、
+     * 够不着、被拒、东西没了、缺料、被叫停、超时;其余是 {@link ErrorKind#FAILED}。
+     */
+    public ErrorKind kind() {
+        return switch (this) {
+            case NO_PATH, BOXED_IN, TERRAIN_BLOCKED, HAZARD -> ErrorKind.NO_PATH;
+            case OUT_OF_REACH, OCCLUDED -> ErrorKind.OUT_OF_REACH;
+            case REFUSED -> ErrorKind.DENIED;
+            case TARGET_LOST, MINED_OUT -> ErrorKind.NOT_FOUND;
+            case NO_MATERIAL -> ErrorKind.NO_MATERIAL;
+            case INTERRUPTED -> ErrorKind.INTERRUPTED;
+            case TIMED_OUT -> ErrorKind.TIMEOUT;
+            case NO_SPACE, NO_SUPPORT, ENTITY_BLOCKED, NOT_KEPT, WRONG_TOOL, UNSUPPORTED, INTERNAL, UNKNOWN ->
+                    ErrorKind.FAILED;
+        };
+    }
 }

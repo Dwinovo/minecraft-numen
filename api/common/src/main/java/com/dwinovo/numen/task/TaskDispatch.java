@@ -105,7 +105,7 @@ public final class TaskDispatch {
             if (readiness.ready()) {
                 accepted(companion, record, runner, action, replayLine, reply, readiness.words(), asked);
             } else {
-                reply.accept(TaskResult.fail(readiness.words()).toJson());
+                reply.accept(readiness.refusal().toJson());
             }
         }));
     }

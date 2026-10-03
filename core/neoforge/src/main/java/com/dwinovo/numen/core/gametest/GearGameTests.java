@@ -293,15 +293,15 @@ public class GearGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(status.reply() != null, "status_self has not replied");
-            var s = com.google.gson.JsonParser.parseString(status.reply()).getAsJsonObject();
+            var s = dataIn(status.reply());
             String body = s.get("body_state").getAsString();
             // 原版最先登记,排在最前;别的来源(装了的饰品模组)可能夹在中间,所以假来源那段只看在不在 <worn> 里
             helper.assertTrue(body.startsWith("<worn>head: minecraft:iron_helmet; chest: empty; legs: empty; "
                             + "feet: empty; ") && body.contains("; gametest:ring: minecraft:amethyst_shard, empty; "
                             + "gametest:charm: empty</worn>"),
                     "body_state does not open with the worn slots: " + body);
-            helper.assertTrue(!s.getAsJsonObject("equipment").has("head"),
-                    "equipment still reports armor beside <worn>: " + status.reply());
+            helper.assertTrue(!s.getAsJsonObject("hands").has("head"),
+                    "the hands report armor beside <worn>: " + status.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

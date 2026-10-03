@@ -3,6 +3,8 @@ package com.dwinovo.numen.core.nav;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import com.dwinovo.numen.agent.script.ApiError;
+import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.area.Area;
 import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.area.AreaStore;
@@ -45,19 +47,19 @@ public record NamedAreas(ResourceKey<Level> dimension, Map<String, Area> areas) 
         }
         Area area = areas.get(ref.name());
         if (area == null) {
-            throw new IllegalArgumentException("there is no area named " + ref.name() + "; " + (areas.isEmpty()
-                    ? "your owner has no areas yet (area.new makes one)"
-                    : "your owner's areas are " + String.join(", ", areas.keySet().stream().sorted().toList())
-                            + " (area.list() shows them)"));
+            throw new ApiError(ErrorKind.NOT_FOUND, "there is no area named " + ref.name() + "; " + (areas.isEmpty()
+                    ? "your owner has no areas yet"
+                    : "your owner's areas are " + String.join(", ", areas.keySet().stream().sorted().toList())),
+                    areas.isEmpty() ? "area.new(\"" + ref.name() + "\")" : "area.list()");
         }
         if (!area.dimension().equals(dimension)) {
             throw new IllegalArgumentException("area " + ref.name() + " lies in " + area.dimension().location()
                     + ", and I am in " + dimension.location() + "; an area belongs to one dimension");
         }
-        throw new IllegalArgumentException("area " + ref.name() + " has no part " + ref.part() + "; its parts are "
-                + (area.parts().isEmpty() ? "none"
-                        : area.parts().stream().map(Area.Part::id).collect(Collectors.joining(", ")))
-                + " (area.show(\"" + ref.name() + "\") lists them)");
+        throw new ApiError(ErrorKind.NOT_FOUND, "area " + ref.name() + " has no part " + ref.part()
+                + "; its parts are " + (area.parts().isEmpty() ? "none"
+                        : area.parts().stream().map(Area.Part::id).collect(Collectors.joining(", "))),
+                "area.parts(\"" + ref.name() + "\")");
     }
 
     /** {@code ref} 指的区域;没有这块区域、没有这一部分、或它在别的维度,是 null。 */

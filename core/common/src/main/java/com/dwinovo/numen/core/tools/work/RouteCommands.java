@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.tools.work;
 
+import com.dwinovo.numen.core.route.RouteText;
+import com.dwinovo.numen.agent.script.ScriptType;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -54,6 +56,8 @@ public final class RouteCommands {
     private static final Param<String> AS = Param.optional("as", ArgType.word(), "Name of the new, reversed route.")
             .whenOmitted("name it after this one with _back, e.g. mine_back");
 
+    private static final ScriptType ROUTE = RouteText.ROUTE_CLASS.type();
+
     private RouteCommands() {}
 
     public static void install(NumenApi numen) {
@@ -79,17 +83,21 @@ public final class RouteCommands {
     }
 
     private static void actions(CommandGroup route) {
+        route.declare(RouteText.ROUTE_CLASS);
+        route.declare(RouteText.PLAN_CLASS);
         route.server("new", "Make a route: from wherever you stand to a destination, with the route flags it walks "
                         + "under.", (src, args) -> src.reply(RouteOps.create(src.companion(), own(src,
                         args.get(NEW_NAME)), args.get(NEW_NAME) == null, stop(src, args.get(TO), args), args)),
                         with(List.of(NEW_NAME, TO, MoveCommands.ARRIVE, MoveCommands.NEAR), RouteSpecFlags.PARAMS))
-                .example("route.new(\"home\", {to = {120, 64, -35}})")
+                .returns(ROUTE)
+                .example("route.new(\"home\", {to = {x = 120, y = 64, z = -35}})")
                 .example("route.new(\"back\")")
                 .example("route.new({to = \"ores/g3\", arrive = \"dig\", alter = \"natural\"})")
                 .example("route.new(\"ore\", {to = \"ores/g3\", arrive = \"dig\", alter = \"natural\", "
                         + "avoid_break = \"area:house\"})")
-                .note("Instant; it only writes the route down, nothing moves. to is a cell {x, y, z}, a column "
-                        + "{x, z}, a height y, or an area of your owner's (\"ores\", \"ores/g3\"); arrive says what counts "
+                .note("Instant; it only writes the route down, nothing moves. to is a cell (a Pos, or anything with a "
+                        + "pos), a column {x = …, z = …}, a height {y = …}, or an area of your owner's (\"ores\", "
+                        + "\"ores/g3\"); arrive says what counts "
                         + "as there. A destination that cannot mean anything here is refused at once with the reason "
                         + "and the ways to write it: arrive at into a solid block or mid-air on a walk that changes "
                         + "nothing, arrive use or dig without y or on air, an area that does not exist. Without to the "
@@ -102,8 +110,9 @@ public final class RouteCommands {
         route.server("via", "Add a waypoint to a route.", (src, args) -> src.reply(RouteOps.via(src.companion(),
                         args.get(NAME), stop(src, args.get(WAYPOINT), args), args.get(AS_STOP))),
                         NAME, WAYPOINT, MoveCommands.ARRIVE, MoveCommands.NEAR, AS_STOP)
-                .example("route.via(\"home\", {at = {100, 70, -20}})")
-                .example("route.via(\"home\", {at = {100, 70, -20}, stop = 1})")
+                .returns(ROUTE)
+                .example("route.via(\"home\", {at = {x = 100, y = 70, z = -20}})")
+                .example("route.via(\"home\", {at = {x = 100, z = -20}, stop = 1})")
                 .example("route.via(\"home\", {at = \"farm\", arrive = \"near\", near = 2})")
                 .example("route.via(\"home\")")
                 .note("Instant. The route walks through its stops in order; the leg to each stop keeps its own flags. "
@@ -111,6 +120,7 @@ public final class RouteCommands {
                 .seeAlso("route drop", "route show");
         route.server("drop", "Remove a waypoint from a route.", (src, args) -> src.reply(RouteOps.drop(
                         src.companion(), args.get(NAME), args.get(DROPPED))), NAME, DROPPED)
+                .returns(ROUTE)
                 .example("route.drop(\"home\", {stop = 2})")
                 .example("route.drop(\"home\")")
                 .note("Instant. The stops after it move down by one; the destination itself stays (route.delete removes "
@@ -119,6 +129,7 @@ public final class RouteCommands {
         route.server("spec", "Change the route flags of a whole route or of one leg.", (src, args) -> src.reply(
                         RouteOps.spec(src.companion(), args.get(NAME), args.get(LEG), args)),
                         with(List.of(NAME, LEG), RouteSpecFlags.PARAMS))
+                .returns(ROUTE)
                 .example("route.spec(\"home\", {alter = \"natural\"})")
                 .example("route.spec(\"home\", {leg = 2, avoid = {\"water\", \"area:farm\"}})")
                 .note("Instant. Each flag you write replaces its earlier value, the rest stay; a leg's flags add to "
@@ -129,32 +140,38 @@ public final class RouteCommands {
         route.server("plan", "Plan a route from where you stand, without moving: each leg's length, the blocks it "
                         + "would break or place, and the ones needing your owner's consent.",
                         (src, args) -> RouteOps.plan(src, own(src, args.get(OWN))), OWN)
+                .returns(RouteText.PLAN_CLASS.type())
                 .example("route.plan(\"home\")")
                 .example("route.plan()")
-                .note("Read-only and does not take the body: it replies when the plan is ready, and fails with the "
-                        + "reason and the line that changes the route when a leg can't be walked. The plan stays on "
-                        + "the route and is what move.go keeps to: it changes only the cells listed here.")
+                .note("Read-only and does not take the body: it returns when the plan is ready, and fails with kind "
+                        + "no_path (the plan in err.data) when a leg can't be walked. The plan stays on the route and is "
+                        + "what move.go keeps to: it changes only the cells listed here.")
                 .note("Each leg is planned as far as one look reaches; a leg that goes past it says where the known "
                         + "part ends. move.go walks on past it, but changes no cell the plan did not list.")
                 .seeAlso("move go", "route show");
         route.server("show", "Show a route: its stops and flags, its latest plan and who walked it.",
                         (src, args) -> src.reply(RouteOps.show(src.companion(), args.get(NAME))), NAME)
+                .returns(ScriptType.table(ScriptType.field("route", ROUTE, null),
+                        ScriptType.optional("plan", RouteText.PLAN_CLASS.type(), "Its latest plan, when it has one.")))
                 .example("route.show(\"home\")")
                 .note("Instant and read-only.")
                 .seeAlso("route plan", "route list");
         route.server("list", "The routes of your owner, one line each.",
                         (src, args) -> src.reply(RouteOps.list(src.companion(), args)), Listing.PAGE)
+                .returns("routes", ScriptType.listOf(ROUTE))
                 .example("route.list()")
                 .note("Instant and read-only. Your own route goto-<your name> holds the latest walk move.goto_ made.")
                 .seeAlso("route show");
         route.server("delete", "Delete a route.", (src, args) -> src.reply(RouteOps.delete(src.companion(),
                         args.get(NAME))), NAME)
+                .returns(ScriptType.NOTHING)
                 .example("route.delete(\"home\")")
                 .note("Instant.")
                 .seeAlso("route list");
         route.server("reverse", "Make the route back: the same stops the other way, ending where the route was last "
                         + "planned from.", (src, args) -> src.reply(RouteOps.reverse(src.companion(), args.get(NAME),
                         args.get(AS))), NAME, AS)
+                .returns(ROUTE)
                 .example("route.reverse(\"mine\")")
                 .example("route.reverse(\"mine\", {as = \"mine_home\"})")
                 .note("Instant. Each leg's flags go with its stretch; the whole route's flags are copied. The new "

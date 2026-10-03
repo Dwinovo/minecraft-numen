@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.tools.inventory;
 
+import com.dwinovo.numen.agent.script.ErrorKind;
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.agent.tool.ToolArgs;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
@@ -80,6 +82,8 @@ public final class InvCommands {
         inv.server(CRAFT, "Craft an item from your inventory in one go: finds the recipe, lays it into a real "
                         + "crafting grid, takes the result.",
                 InvCommands::craft, CRAFT_ITEM, CRAFT_COUNT)
+                .returns(ScriptType.table(ScriptType.field("crafted", ScriptType.INTEGER, null),
+                        ScriptType.field("carrying", ScriptType.INTEGER, "How many you carry now.")))
                 .example("inv.craft(\"minecraft:iron_pickaxe\")")
                 .example("inv.craft(\"oak_planks\", {count = 8})")
                 .note("2x2 recipes work anywhere; a 3x3 recipe needs a crafting table within reach (~4 blocks). "
@@ -94,7 +98,8 @@ public final class InvCommands {
                 .seeAlso(line(RECIPE));
         inv.server(RECIPE, "How an item is made, like JEI: every recipe that outputs it, at every station.",
                 InvCommands::recipe, RECIPE_ITEM, Listing.PAGE)
-                .example("inv.recipe(\"minecraft:diamond_pickaxe\")")
+                .returns(QueryExtraOps.RECIPES, ScriptType.listOf(ScriptType.STRING))
+                .example("for _, r in ipairs(inv.recipe(\"minecraft:diamond_pickaxe\")) do print(r) end")
                 .note("Instant and read-only. Every recipe is listed; a long list comes in pages.")
                 .note("Each recipe is tagged [crafting], [smelting], [stonecutter], [smithing] …: [crafting] is "
                         + "`inv.craft`; the others are made at their station (`use.block` it, `use.gui`, then "
@@ -103,6 +108,9 @@ public final class InvCommands {
                 .seeAlso(line(CRAFT));
         inv.server(EAT, "Eat or drink something from your inventory.",
                 InvCommands::eat, FOOD)
+                .returns(ScriptType.table(ScriptType.field("item", ScriptType.STRING, null),
+                        ScriptType.field("hp", ScriptType.NUMBER, null),
+                        ScriptType.field("hunger", ScriptType.INTEGER, null)))
                 .example("inv.eat(\"minecraft:cooked_beef\")")
                 .note("Background work: the result arrives as a task_finished event.")
                 .note("A real timed action: only when the chewing finishes do hunger, saturation and the item's "
@@ -112,6 +120,9 @@ public final class InvCommands {
                         + "fails the same way when you are already full.");
         inv.server(DROP, "Drop items from your inventory on the ground in front of you.",
                 InvCommands::drop, DROP_ITEM, DROP_COUNT)
+                .returns(ScriptType.table(ScriptType.field("item", ScriptType.STRING, null),
+                        ScriptType.field("dropped", ScriptType.INTEGER, null),
+                        ScriptType.field("remaining_in_inventory", ScriptType.INTEGER, null)))
                 .example("inv.drop(\"minecraft:cobblestone\", {count = 32})")
                 .example("inv.drop(\"rotten_flesh\")")
                 .note("Asks your owner first unless their rules allow it; the call waits for the answer.")
@@ -121,6 +132,8 @@ public final class InvCommands {
                 .seeAlso("use block");
         inv.server(TAKE, "Creative mode only: conjure items into your inventory, like the creative menu.",
                 InvCommands::take, TAKE_ITEM, TAKE_COUNT)
+                .returns(ScriptType.table(ScriptType.field("took", ScriptType.INTEGER, null),
+                        ScriptType.field("carrying", ScriptType.INTEGER, null)))
                 .example("inv.take(\"minecraft:diamond\", {count = 64})")
                 .note("Fails in survival mode; there you mine, craft, loot or trade for items instead.")
                 .note("What doesn't fit in your inventory drops at your feet.");
@@ -153,8 +166,8 @@ public final class InvCommands {
         NumenPlayer companion = src.companion();
         String id = args.get(TAKE_ITEM).toString();
         if (!WorkProfile.of(companion).freeMaterials()) {
-            src.reply(TaskResult.fail("survival mode can't conjure items — mine, craft, loot or trade for " + id
-                    + " instead (inv.take works only in creative mode)").toJson());
+            src.reply(TaskResult.fail(ErrorKind.DENIED, "survival mode can't conjure items — mine, craft, loot or "
+                    + "trade for " + id + " instead (inv.take works only in creative mode)", null).toJson());
             return;
         }
         Item item = ToolArgs.parseItem(id);
@@ -169,7 +182,8 @@ public final class InvCommands {
             }
             remaining -= n;
         }
-        src.reply(TaskResult.ok("took " + want + " × " + id + " (now carrying "
-                + companion.getInventory().countItem(item) + ")").toJson());
+        int carrying = companion.getInventory().countItem(item);
+        src.reply(TaskResult.ok("took " + want + " × " + id + " (now carrying " + carrying + ")",
+                java.util.Map.of("took", want, "carrying", carrying)).toJson());
     }
 }

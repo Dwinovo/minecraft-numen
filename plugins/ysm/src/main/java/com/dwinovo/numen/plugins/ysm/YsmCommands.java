@@ -1,5 +1,7 @@
 package com.dwinovo.numen.plugins.ysm;
 
+import com.dwinovo.numen.agent.script.ErrorKind;
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.Authority;
@@ -71,13 +73,23 @@ final class YsmCommands {
         group.server(OPTIONS, "Your model and texture now, the models you can switch to, and this model's "
                 + "textures.", this::options, Listing.PAGE)
                 .authority(Authority.SERVER_ON_HER)
+                .returns(ScriptType.table(
+                        ScriptType.optional("current_model", ScriptType.STRING, "The model you wear now; none when "
+                                + "it cannot be read (YSM may be missing)."),
+                        ScriptType.optional("current_texture", ScriptType.STRING, null),
+                        ScriptType.field("textures", ScriptType.listOf(ScriptType.STRING),
+                                "This model's textures: what " + fn(SWITCH) + " takes as texture."),
+                        ScriptType.field("models", ScriptType.listOf(ScriptType.STRING),
+                                "Every model you can switch to, by the id " + fn(SWITCH) + " takes.")))
                 .example(fn(OPTIONS) + "()")
+                .example("for _, m in ipairs(" + fn(OPTIONS) + "().models) do print(m) end")
                 .note("Read-only. Emotes are not listed: YSM does not tell the server which ones a model has.")
-                .note("One model per line; with many models installed it comes a page at a time.")
+                .note("The reply lists one model per line; with many models installed it comes a page at a time.")
                 .seeAlso(line(SWITCH), line(EMOTE));
         group.server(SWITCH, "Switch to another model.",
                 this::switchModel, MODEL, TEXTURE)
                 .authority(Authority.SERVER_ON_HER)
+                .returns(ScriptType.NOTHING)
                 .example(fn(SWITCH) + "(\"misc/1_alex\")")
                 .example(fn(SWITCH) + "(\"抽象鸣潮 菲比.ysm\")")
                 .note("You can have exactly the models your owner is authorized for. A refusal comes from YSM, "
@@ -88,6 +100,7 @@ final class YsmCommands {
         group.server(EMOTE, "Play one of this model's emotes, or stop the one playing.",
                 this::emote, ANIMATION)
                 .authority(Authority.SERVER_ON_HER)
+                .returns(ScriptType.NOTHING)
                 .example(fn(EMOTE) + "(\"extra1\")")
                 .example(fn(EMOTE) + "(\"" + STOP + "\")")
                 .note("It only reports the command as sent: whether this model has that animation cannot be "
@@ -107,9 +120,12 @@ final class YsmCommands {
         var textures = look == null ? List.<String>of() : ysm.textures(her, look.model());
 
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("current_model", look == null ? "(读不到,YSM 可能没装)" : look.model());
-        data.put("current_texture", look == null ? "" : look.texture());
+        if (look != null) {
+            data.put("current_model", look.model());
+            data.put("current_texture", look.texture());
+        }
         data.put("textures", textures);   // 当前模型的贴图 id,switch 的 texture 从这里挑
+        data.put("models", models);
 
         String head = look == null
                 ? "读不到当前模型,YSM 可能没装"
@@ -135,14 +151,14 @@ final class YsmCommands {
         String texture = args.get(TEXTURE);
         if (texture == null) {
             if (!ysm.models(her).contains(model)) {
-                src.reply(TaskResult.fail(
-                        "YSM 不认 '" + model + "' 这个模型。用 " + fn(OPTIONS) + "() 看清单里的 id").toJson());
+                src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, "YSM 不认 '" + model + "' 这个模型;看清单里的 id",
+                        fn(OPTIONS) + "()").toJson());
                 return;
             }
             var textures = ysm.textures(her, model);
             if (textures.isEmpty()) {
-                src.reply(TaskResult.fail(
-                        "YSM 没给 '" + model + "' 列出贴图,定不了默认贴图;用 {texture = ...} 指定一个").toJson());
+                src.reply(TaskResult.fail(ErrorKind.FAILED,
+                        "YSM 没给 '" + model + "' 列出贴图,定不了默认贴图;用 {texture = ...} 指定一个", null).toJson());
                 return;
             }
             texture = textures.get(0);

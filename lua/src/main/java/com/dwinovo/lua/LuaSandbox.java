@@ -49,7 +49,12 @@ import java.util.regex.Pattern;
  * <h2>桥接</h2>
  * 宿主函数按 {@code 表名.函数名}(或全局名)登记,收按顺序的参数、交回一个值;值在两边按 {@link #toJava}/{@link #toLua} 换:nil 是
  * null,布尔、数(整数是 Long,其余是 Double)、字符串,表是列表(键恰好 1..n)或名字到值的表。宿主函数抛 {@link ScriptError}
- * 就是脚本在调用处得到的一个 Lua 错误(带上行号,{@code pcall} 接得住)。
+ * 就是脚本在调用处得到的一个 Lua 错误({@code pcall} 接得住)。
+ *
+ * <h2>错误值</h2>
+ * 宿主函数可以用一张名字到值的表做错误值({@link ScriptError#ScriptError(Map)}):脚本 {@code pcall} 接住的就是这张表,按字段分支;
+ * 它带着沙箱的错误元表,{@code tostring} 得到 {@link Builder#errors} 给的那段文字。没接住时结局的那句话也是这段文字,结局另带上这张表
+ * ({@link Outcome#error})。脚本自己 {@code error(表)} 抛出的表没接住时同样按这一处写成文字。
  *
  * <p>这个包与 {@code com.dwinovo.lua.vm} 不引用任何别的模组或游戏的类型。
  */
@@ -76,10 +81,28 @@ public final class LuaSandbox {
         Object call(List<Object> args) throws InterruptedException;
     }
 
-    /** 宿主函数让这次调用在脚本里失败:脚本在调用处得到一个 Lua 错误,消息就是它。 */
+    /**
+     * 宿主函数让这次调用在脚本里失败:脚本在调用处得到一个 Lua 错误——一句话,或一张错误值的表(见类注释"错误值")。
+     */
     public static final class ScriptError extends RuntimeException {
+
+        private final transient Map<String, Object> value;
+
+        /** 错误值是这句话。 */
         public ScriptError(String message) {
             super(message);
+            this.value = null;
+        }
+
+        /** 错误值是这张表(名字到 Java 值),带沙箱的错误元表。 */
+        public ScriptError(Map<String, Object> value) {
+            super(String.valueOf(value));
+            this.value = Collections.unmodifiableMap(new LinkedHashMap<>(value));
+        }
+
+        /** 错误值的表;错误值是一句话时为 null。 */
+        public Map<String, Object> value() {
+            return value;
         }
     }
 
@@ -113,8 +136,14 @@ public final class LuaSandbox {
      * @param message 给人看的那句话(Lua 的报错原话,或哪一条预算到了);跑完是 null
      * @param value   跑完时脚本 {@code return} 的第一个值,换成 Java 值(见 {@link LuaSandbox});没有返回值或没跑完是 null。
      *                函数这类换不了的值是它的 {@code tostring}
+     * @param error   没接住的错误值是一张表时,那张表(名字到 Java 值);错误值是一句话、或不是出错结束的是 null
      */
-    public record Outcome(Ending ending, int line, String message, Object value) {
+    public record Outcome(Ending ending, int line, String message, Object value, Map<String, Object> error) {
+
+        public Outcome(Ending ending, int line, String message, Object value) {
+            this(ending, line, message, value, null);
+        }
+
         public boolean finished() {
             return ending == Ending.FINISHED;
         }
@@ -158,6 +187,10 @@ public final class LuaSandbox {
     private final Map<String, String> libraries;
     /** 脚本读宿主函数表里没有的名字时报的那句话。 */
     private final Missing missing;
+    /** 错误值的表写成文字:错误元表的 {@code __tostring},没接住时结局的那句话。 */
+    private final java.util.function.Function<Map<String, Object>, String> errors;
+    /** {@code print} 一张没有 {@code __tostring} 的表时怎么写它(换成 Java 值之后)。 */
+    private final java.util.function.Function<Object, String> show;
 
     /** 脚本读宿主函数表里没有的名字({@code area.hsa}):报什么错。 */
     @FunctionalInterface
@@ -167,8 +200,9 @@ public final class LuaSandbox {
          * @param table   表名
          * @param key     读的名字
          * @param present 表里此刻有的名字(宿主函数与库加进去的)
+         * @return 停在那一行的错误:一句话,或一张错误值的表
          */
-        String message(String table, String key, List<String> present);
+        ScriptError error(String table, String key, List<String> present);
     }
 
     private LuaSandbox(Builder b) {
@@ -177,6 +211,8 @@ public final class LuaSandbox {
         this.globals = Map.copyOf(b.globals);
         this.libraries = Collections.unmodifiableMap(new LinkedHashMap<>(b.libraries));
         this.missing = b.missing;
+        this.errors = b.errors;
+        this.show = b.show;
         Map<String, Map<String, HostFunction>> t = new LinkedHashMap<>();
         b.tables.forEach((name, fns) -> t.put(name, Map.copyOf(fns)));
         this.tables = Collections.unmodifiableMap(t);
@@ -193,15 +229,32 @@ public final class LuaSandbox {
         private final Map<String, HostFunction> globals = new LinkedHashMap<>();
         private final Map<String, Map<String, HostFunction>> tables = new LinkedHashMap<>();
         private final Map<String, String> libraries = new LinkedHashMap<>();
-        private Missing missing = (table, key, present) -> "there is no function " + table + "." + key;
+        private Missing missing = (table, key, present) -> new ScriptError("there is no function " + table + "." + key);
+        private java.util.function.Function<Map<String, Object>, String> errors = String::valueOf;
+        private java.util.function.Function<Object, String> show = String::valueOf;
 
         private Builder(Limits limits) {
             this.limits = limits;
         }
 
+        /** 错误值的表怎样写成文字:{@code tostring(err)} 与没接住时结局的那句话都经它。 */
+        public Builder errors(java.util.function.Function<Map<String, Object>, String> errors) {
+            this.errors = errors;
+            return this;
+        }
+
         /** 脚本读宿主函数表里没有的名字时报的错:按它给的那句话停在那一行。 */
         public Builder missing(Missing missing) {
             this.missing = missing;
+            return this;
+        }
+
+        /**
+         * {@code print} 一张表(没有自己的 {@code __tostring})时写成什么:收它换成的 Java 值(列表、名字到值的表)。不设就是 Java 的
+         * {@code toString}。
+         */
+        public Builder show(java.util.function.Function<Object, String> show) {
+            this.show = show;
             return this;
         }
 
@@ -396,11 +449,25 @@ public final class LuaSandbox {
             } catch (Stop stop) {
                 return new Outcome(stop.ending, line, chunkName + ":" + line + ": " + stop.getMessage(), null);
             } catch (LuaError e) {
+                LuaValue thrown = e.getMessageObject();
+                if (thrown != null && thrown.istable()) {
+                    Map<String, Object> value = errorValue(thrown);
+                    return new Outcome(Ending.ERROR, line, errors.apply(value), null, value);
+                }
                 return new Outcome(Ending.ERROR, line, e.getMessage(), null);
             } catch (StackOverflowError deep) {
                 return new Outcome(Ending.STACK, line, chunkName + ":" + line + ": stack overflow (a function that "
                         + "calls itself without end?)", null);
             }
+        }
+
+        /** 一张错误值的表换成 Java 值;里面有换不了的值(函数)的那几项写成它们的 tostring。 */
+        private static Map<String, Object> errorValue(LuaValue table) {
+            Map<String, Object> out = new LinkedHashMap<>();
+            for (Varargs kv = table.next(LuaValue.NIL); !kv.arg1().isnil(); kv = table.next(kv.arg1())) {
+                out.put(kv.arg1().tojstring(), returned(kv.arg(2)));
+            }
+            return out;
         }
 
         /** 脚本 return 的值换成 Java 值;函数这类换不了的,是它的 tostring。 */
@@ -412,7 +479,28 @@ public final class LuaSandbox {
             }
         }
 
+        /** 宿主抛出的错误值的表共用的元表:{@code tostring} 按 {@link Builder#errors} 写。 */
+        private LuaTable errorMeta;
+
         private void install(Globals g) {
+            errorMeta = new LuaTable();
+            errorMeta.rawset("__tostring", new VarArgFunction() {
+                @Override
+                public Varargs invoke(Varargs in) {
+                    return LuaValue.valueOf(errors.apply(errorValue(in.arg1())));
+                }
+            });
+            // 错误值拼进字符串("could not dig: " .. err)时按它的文字拼,和一句话的错误值一样用
+            errorMeta.rawset("__concat", new VarArgFunction() {
+                @Override
+                public Varargs invoke(Varargs in) {
+                    return LuaValue.valueOf(text(in.arg(1)) + text(in.arg(2)));
+                }
+
+                private String text(LuaValue v) {
+                    return v.istable() && v.getmetatable() == errorMeta ? errors.apply(errorValue(v)) : v.tojstring();
+                }
+            });
             g.rawset("print", new VarArgFunction() {
                 @Override
                 public Varargs invoke(Varargs in) {
@@ -422,7 +510,10 @@ public final class LuaSandbox {
                         if (i > 1) {
                             sb.append('\t');
                         }
-                        sb.append(tostring.call(in.arg(i)).tojstring());
+                        LuaValue v = in.arg(i);
+                        LuaValue meta = v.getmetatable();
+                        boolean plain = v.istable() && (meta == null || meta.rawget("__tostring").isnil());
+                        sb.append(plain ? show.apply(returned(v)) : tostring.call(v).tojstring());
                     }
                     print.accept(sb.toString());
                     return NONE;
@@ -446,12 +537,22 @@ public final class LuaSandbox {
                             }
                             present.add(k.tojstring());
                         }
-                        throw new LuaError(missing.message(group, in.arg(2).tojstring(), present));
+                        throw luaError(missing.error(group, in.arg(2).tojstring(), present));
                     }
                 });
                 t.setmetatable(meta);
                 g.rawset(group, t);
             });
+        }
+
+        /** 宿主给的错误换成脚本里的 Lua 错误:一句话照原样,一张表带上错误元表。 */
+        private LuaError luaError(ScriptError e) {
+            if (e.value() == null) {
+                return new LuaError(e.getMessage());
+            }
+            LuaValue value = toLua(e.value());
+            value.setmetatable(errorMeta);
+            return new LuaError(value);
         }
 
         private LuaValue host(HostFunction fn) {
@@ -466,7 +567,7 @@ public final class LuaSandbox {
                     try {
                         out = fn.call(javaArgs);
                     } catch (ScriptError e) {
-                        throw new LuaError(e.getMessage());
+                        throw luaError(e);
                     } catch (InterruptedException e) {
                         throw new Stop(Ending.INTERRUPTED, "the script was stopped");
                     } finally {
@@ -577,7 +678,8 @@ public final class LuaSandbox {
                     }
                     return list;
                 }
-                Map<String, Object> map = new LinkedHashMap<>();
+                // 键按名字排:表里的先后是散列的先后,每次不一样;排好了写出来、读回来都是同一个样子
+                Map<String, Object> map = new java.util.TreeMap<>();
                 for (Varargs kv = t.next(LuaValue.NIL); !kv.arg1().isnil(); kv = t.next(kv.arg1())) {
                     map.put(kv.arg1().tojstring(), toJava(kv.arg(2)));
                 }

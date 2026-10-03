@@ -318,9 +318,7 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
             int dz = best.getZ() - me.getZ();
             int dist = (int) Math.sqrt((double) dx * dx + (double) dz * dz);
             data.put("found", true);
-            data.put("x", best.getX());
-            data.put("y", best.getY());
-            data.put("z", best.getZ());
+            data.put("pos", java.util.Map.of("x", best.getX(), "z", best.getZ()));
             data.put("direction", CompassUtil.compass(dx, dz));
             data.put("horizontal_distance", dist);
         } else {
@@ -339,7 +337,8 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
             String dir = CompassUtil.compass(dx, dz);
             return "nearest " + r.structure + " at " + best.getX() + ","
                     + best.getY() + "," + best.getZ() + " (" + dir + ", ~" + dist
-                    + " blocks). `move.goto_({" + best.getX() + ", " + best.getZ() + "})` goes there (it finds the "
+                    + " blocks). " + com.dwinovo.numen.core.nav.NavText.gotoCall(new com.dwinovo.numen.cli.Place(best.getX(), null,
+                    best.getZ(), null), "") + " goes there (it finds the "
                     + "height on its own), then `scan.blocks` finds its actual blocks.";
         }
         String dim = player.level().dimension().location().getPath();

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.tools.locate;
 
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
@@ -47,6 +48,11 @@ public final class LocateCommands {
         locate.server("structure", "Find the nearest structure of a type: its coordinates, compass direction and "
                         + "distance.",
                         LocateCommands::structure, STRUCTURE)
+                .returns(ScriptType.table(ScriptType.field("found", ScriptType.BOOLEAN, null),
+                        ScriptType.optional("pos", ScriptType.table(ScriptType.field("x", ScriptType.NUMBER, null),
+                                ScriptType.field("z", ScriptType.NUMBER, null)), "The column it is in: move.goto_ takes it."),
+                        ScriptType.optional("direction", ScriptType.STRING, null),
+                        ScriptType.optional("horizontal_distance", ScriptType.INTEGER, null)))
                 .example("locate.structure(\"minecraft:stronghold\")")
                 .example("locate.structure(\"#minecraft:ruined_portal\")")
                 .note("Searches YOUR CURRENT dimension only: fortresses and bastions are in the Nether, end cities "
@@ -56,6 +62,11 @@ public final class LocateCommands {
                 .seeAlso("locate biome", "scan blocks");
         locate.server("biome", "Find the nearest biome of a type: its coordinates, compass direction and distance.",
                         LocateCommands::biome, BIOME)
+                .returns(ScriptType.table(ScriptType.field("found", ScriptType.BOOLEAN, null),
+                        ScriptType.optional("pos", ScriptType.table(ScriptType.field("x", ScriptType.NUMBER, null),
+                                ScriptType.field("z", ScriptType.NUMBER, null)), "The column it is in: move.goto_ takes it."),
+                        ScriptType.optional("direction", ScriptType.STRING, null),
+                        ScriptType.optional("horizontal_distance", ScriptType.INTEGER, null)))
                 .example("locate.biome(\"minecraft:warped_forest\")")
                 .example("locate.biome(\"#minecraft:is_forest\")")
                 .note("Searches YOUR CURRENT dimension only, about 6400 blocks out. You stand still until it "

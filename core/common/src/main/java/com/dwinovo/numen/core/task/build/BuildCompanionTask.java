@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.task.build;
 
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.core.build.Built;
@@ -181,8 +182,11 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (tally.count(BuildSurvey.State.REACH) > 0 || tally.left() == 0) {
             return null;
         }
+        String hint = !tally.far().isEmpty()
+                ? "move.goto_(" + Shapes.literal(tally.far().get(0)) + ", {arrive = \"reach\"})"
+                : !tally.dig().isEmpty() ? "work.dig(" + Shapes.literal(tally.dig().get(0)) + ")" : null;
         return new Precondition.Failure("nothing of it to place within reach of where you stand. " + remaining(tally),
-                FailureType.OUT_OF_REACH);
+                FailureType.OUT_OF_REACH, hint);
     }
 
     /**
@@ -213,7 +217,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     private static String lua(BlockPos pos) {
-        return "{" + pos.getX() + ", " + pos.getY() + ", " + pos.getZ() + "}";
+        return Shapes.literal(pos);
     }
 
     /**
@@ -1107,8 +1111,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (building != null) {
             data.put("building", building);
         }
-        data.put("site_min", siteMin == null ? "-" : siteMin.toShortString());
-        data.put("site_max", siteMax == null ? "-" : siteMax.toShortString());
+        if (siteMin != null) {
+            data.put("site", List.of(Shapes.pos(siteMin), Shapes.pos(siteMax)));
+        }
         if (damagedCells > 0) {
             // 施工期间被外力拆毁又补回去的格数。她盖得慢或反复返工,原因在这儿。
             data.put("destroyed_while_building", damagedCells);

@@ -397,33 +397,28 @@ public final class GameTestKit {
         }
     }
 
-    /** 回执这一页列出的团:消息里一团一行,每行一个 JSON 对象(抬头、翻页提示与结尾不是)。 */
+    /** 回执数据里的团或部分:{@code scan.blocks} 的 {@code groups}、{@code area.show} 的 {@code parts}。 */
     static com.google.gson.JsonArray groupsIn(String reply) {
-        return rowsIn(reply);
+        com.google.gson.JsonObject data = dataIn(reply);
+        return data.has("groups") ? data.getAsJsonArray("groups") : data.getAsJsonArray("parts");
     }
 
-    /** 回执消息里一条一行的 JSON 对象({@code scan.blocks}、{@code scan.entities} 的清单)。 */
-    static com.google.gson.JsonArray rowsIn(String reply) {
-        String message = com.google.gson.JsonParser.parseString(reply).getAsJsonObject().get("message").getAsString();
-        com.google.gson.JsonArray rows = new com.google.gson.JsonArray();
-        for (String line : message.split("\n")) {
-            if (line.startsWith("{")) {
-                rows.add(com.google.gson.JsonParser.parseString(line));
-            }
-        }
-        return rows;
+    /** 回执里交给脚本的数据;没带数据是空表。 */
+    static com.google.gson.JsonObject dataIn(String reply) {
+        com.google.gson.JsonObject o = com.google.gson.JsonParser.parseString(reply).getAsJsonObject();
+        return o.has("data") ? o.getAsJsonObject("data") : new com.google.gson.JsonObject();
     }
 
-    /** 列出了 {@code cell} 这一格的那一团;没有为 null。 */
+    /** 列出了 {@code cell} 这一格的那一团(逐格的 Pos 里有它);没有为 null。 */
     static com.google.gson.JsonObject groupHolding(com.google.gson.JsonArray groups, BlockPos cell) {
-        String wanted = cell.getX() + "," + cell.getY() + "," + cell.getZ();
+        com.google.gson.JsonObject wanted = com.dwinovo.numen.cli.Shapes.pos(cell);
         for (var element : groups) {
             var group = element.getAsJsonObject();
             if (!group.has("positions")) {
                 continue;
             }
             for (var position : group.getAsJsonArray("positions")) {
-                if (position.getAsString().equals(wanted)) {
+                if (position.equals(wanted)) {
                     return group;
                 }
             }
@@ -437,7 +432,7 @@ public final class GameTestKit {
                 .task();
     }
 
-    /** {@code rel} 那一格的绝对坐标,写成脚本里的一格 {@code {x, y, z}}。 */
+    /** {@code rel} 那一格的绝对坐标,写成脚本里的一格 Pos。 */
     static String at(GameTestHelper helper, BlockPos rel) {
         return xyz(helper.absolutePos(rel));
     }
@@ -447,9 +442,9 @@ public final class GameTestKit {
         return pos.getX() + " " + pos.getY() + " " + pos.getZ();
     }
 
-    /** 一格的坐标写成脚本里的一格 {@code {x, y, z}}。 */
+    /** 一格的坐标写成脚本里的一格 Pos({@link com.dwinovo.numen.cli.Shapes#literal})。 */
     static String xyz(BlockPos pos) {
-        return "{" + pos.getX() + ", " + pos.getY() + ", " + pos.getZ() + "}";
+        return com.dwinovo.numen.cli.Shapes.literal(pos);
     }
 
 
@@ -946,6 +941,42 @@ public final class GameTestKit {
             }
             JsonObject o = JsonParser.parseString(r).getAsJsonObject();
             return o.has("message") ? o.get("message").getAsString() : r;
+        }
+
+        /** 失败的种类({@code out_of_reach}…):派了活的是收尾结果的,没派活的是回执里的;成功或还没结论是 null。 */
+        String kind() {
+            TaskRecord task = task();
+            if (task != null) {
+                return task.getResult() == null || task.getResult().kind() == null ? null
+                        : task.getResult().kind().wire();
+            }
+            return failure("kind");
+        }
+
+        /** 失败时能照抄的下一步,取法同 {@link #kind};没有是 null。 */
+        String hint() {
+            TaskRecord task = task();
+            if (task != null) {
+                return task.getResult() == null ? null : task.getResult().hint();
+            }
+            return failure("hint");
+        }
+
+        /**
+         * 没派活时失败的一项:一次调用的回执把它写在顶层,整段程序的回执(一次都没派出,参数就读不成)写在 {@code data.error} 里。
+         */
+        private String failure(String key) {
+            String r = reply();
+            if (r == null) {
+                return null;
+            }
+            JsonObject o = JsonParser.parseString(r).getAsJsonObject();
+            if (o.has(key)) {
+                return o.get(key).getAsString();
+            }
+            JsonObject data = o.has("data") ? o.getAsJsonObject("data") : null;
+            JsonObject error = data != null && data.has("error") ? data.getAsJsonObject("error") : null;
+            return error != null && error.has(key) ? error.get(key).getAsString() : null;
         }
 
         /** 结论是成功。回执不带 success 的查询(直接回一份数据)回了就算成功。 */

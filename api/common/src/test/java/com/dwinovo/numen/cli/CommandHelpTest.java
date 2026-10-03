@@ -39,78 +39,94 @@ class CommandHelpTest {
     static void register() {
         door().registerCommands("gt_help", "A group the tests read.", g -> {
             g.server("walk", "Walk somewhere.", (src, args) -> src.reply(TaskResult.ok("walked").toJson()), X, MODE)
+                    .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
                     .example("gt_help.walk(12)")
                     .example("gt_help.walk(12, {mode = \"sprint\"})")
                     .note("Background work: the result arrives as a task_finished event.")
                     .note("Does not ask your owner.")
                     .seeAlso("gt_help note");
             g.client("note", "Write a note.", (src, args) -> src.reply(TaskResult.ok("noted").toJson()), BODY)
+                    .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
                     .example("gt_help.note(\"buy more torches\")");
         });
         door().registerCommands("gt_grouped", "A group whose action takes a batch of flags.", g ->
                 g.server("go", "Go somewhere.", (src, args) -> src.reply(TaskResult.ok("went").toJson()),
                                 X, FAST, WET, DRY, LATE)
+                        .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
                         .example("gt_grouped.go(12, {wet = true, late = 3})"));
         door().registerCommands("gt_many", "A group with a long list.", g -> {
             for (int i = 1; i <= 25; i++) {
                 String name = String.format("act%02d", i);
                 g.server(name, "Action number " + i + ". " + "Long words. ".repeat(250),
                         (src, args) -> src.reply(TaskResult.ok("done").toJson()))
+                        .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
                         .example("gt_many." + name + "()");
             }
         });
     }
 
     private static final String GROUP_HELP = """
-            gt_help — A group the tests read.
-              gt_help.walk(x, {mode=…}) — Walk somewhere.
-              gt_help.note(body...) — Write a note.""";
+            ---A group the tests read.
+            ---@class gt_help
+            ---@field walk fun(x: integer, opts?: {mode?: string}) Walk somewhere.
+            ---@field note fun(body: string) Write a note.
+            gt_help = {}""";
 
     @Test
-    void aGroupListsItsFunctionsWithUsageAndOneSentenceEach() {
-        assertEquals(GROUP_HELP, help("gt_help"), "组的帮助一行一个函数,例子、注意、相关都不进来");
+    void aGroupListsItsFunctionsAsOneTypedLineEach() {
+        assertEquals(GROUP_HELP, help("gt_help"), "组的帮助一行一个函数的类型签名,例子、注意、相关都不进来");
     }
 
     @Test
     void anActionGivesEverything() {
         assertEquals("""
-                gt_help.walk(x, {mode=…})
-                  Walk somewhere.
-                  x (integer 0-100) — X coordinate.
-                  mode= (word; optional) — How to walk. Values: walk or sprint. Omit to walk.
-                  Examples:
-                    gt_help.walk(12)
-                    gt_help.walk(12, {mode = "sprint"})
-                  Notes:
-                    Background work: the result arrives as a task_finished event.
-                    Does not ask your owner.
-                  See also: gt_help.note""", help("gt_help.walk"));
+                ---Walk somewhere.
+                ---@param x integer X coordinate.
+                ---@param opts? gt_help.walk.opts
+                function gt_help.walk(x, opts) end
+
+                ---@class gt_help.walk.opts
+                ---@field mode? string How to walk. Values: walk or sprint. Omit to walk.
+                -- Examples:
+                --   gt_help.walk(12)
+                --   gt_help.walk(12, {mode = "sprint"})
+                -- Notes:
+                --   Background work: the result arrives as a task_finished event.
+                --   Does not ask your owner.
+                -- See also: gt_help.note""", help("gt_help.walk"));
         assertEquals("""
-                gt_help.note(body...)
-                  Write a note.
-                  body... (text) — What to write. Values: any text; the owner reads it as written.
-                  Examples:
-                    gt_help.note("buy more torches")""",
+                ---Write a note.
+                ---@param body string What to write. Values: any text; the owner reads it as written.
+                function gt_help.note(body) end
+                -- Examples:
+                --   gt_help.note("buy more torches")""",
                 help("gt_help.note"), "没有注意与相关时那两块不出现");
     }
 
+    /** 标志组在写错时附的用法行里是一格;签名里选项表照样一个个列出。 */
     @Test
-    void aFlagGroupIsOneCellInTheUsageAndListedInFullUnderItsNameInTheActionHelp() {
+    void aFlagGroupIsOneCellInTheUsageAndEveryOptionIsInTheSignature() {
         assertEquals("""
-                gt_grouped — A group whose action takes a batch of flags.
-                  gt_grouped.go(x, {fast=true, …path flags, …time flags}) — Go somewhere.""", help("gt_grouped"));
+                ---A group whose action takes a batch of flags.
+                ---@class gt_grouped
+                ---@field go fun(x: integer, opts?: {fast?: boolean, wet?: boolean, dry?: boolean, late?: integer}) Go somewhere.
+                gt_grouped = {}""", help("gt_grouped"));
         assertEquals("""
-                gt_grouped.go(x, {fast=true, …path flags, …time flags})
-                  Go somewhere.
-                  x (integer 0-100) — X coordinate.
-                  fast=true|false (switch; optional) — Run. Omit to walk.
-                  Path flags (options):
-                    wet=true|false (switch; optional) — Wade through water. Omit to keep dry.
-                    dry=true|false (switch; optional) — Stay out of water. Omit to wade when it is shorter.
-                  Time flags (options):
-                    late= (integer 0-9; optional) — How late may she be. Omit to be on time.
-                  Examples:
-                    gt_grouped.go(12, {wet = true, late = 3})""", help("gt_grouped.go"));
+                ---Go somewhere.
+                ---@param x integer X coordinate.
+                ---@param opts? gt_grouped.go.opts
+                function gt_grouped.go(x, opts) end
+
+                ---@class gt_grouped.go.opts
+                ---@field fast? boolean Run. Omit to walk.
+                ---@field wet? boolean Wade through water. Omit to keep dry.
+                ---@field dry? boolean Stay out of water. Omit to wade when it is shorter.
+                ---@field late? integer How late may she be. Omit to be on time.
+                -- Examples:
+                --   gt_grouped.go(12, {wet = true, late = 3})""", help("gt_grouped.go"));
+        assertTrue(onServer("gt_grouped go 12 --wet --late 1 --nope").message()
+                        .contains("\nusage: gt_grouped.go(x, {fast=true, …path flags, …time flags})"),
+                "写错时附的用法行里一组标志是一格");
         assertTrue(onServer("gt_grouped go 12 --dry --fast --late 1").success(),
                 "归组只改帮助的排法,标志照样顺序随意地写");
     }
@@ -140,37 +156,41 @@ class CommandHelpTest {
     @Test
     void theIndexListsEveryFunctionByGroupAndTheRootIsTheIndex() {
         String index = NumenCli.index();
-        assertTrue(index.startsWith("<api>\nCall these from the lua tool. Each line: how to call it — what it does. "
-                + "`api.help(\"work.dig\")` explains one function in full, `api.help(\"work\")` one group.\n"), index);
-        assertTrue(index.contains("\n" + GROUP_HELP + "\n"), "一组一段,和组的帮助同一份: " + index);
+        assertTrue(index.startsWith("<api>\nCall these from the lua tool. `api.help(\"move\")` lists a group's "
+                + "functions with their types; `api.help(\"move.go\")` explains one in full (every argument, what it "
+                + "returns, examples).\nValues the groups share:\n---A position."), index);
+        assertTrue(index.contains("\n---@class Pos\n---@field x number\n"), "共用的类在索引里声明: " + index);
+        assertTrue(index.contains("\ngt_help — A group the tests read. walk, note\n"),
+                "一组一行:说明与它的函数名: " + index);
         assertTrue(index.indexOf("gt_help — ") < index.indexOf("gt_many — "), "按名字排序: " + index);
         assertTrue(index.endsWith("\n</api>"), index);
         assertEquals(index, NumenCli.index(), "字节稳定");
         for (String line : new String[]{"help", "--help"}) {
             String root = onServer(line).message();
             assertTrue(root.startsWith("Call these from the lua tool."), root.substring(0, 60));
-            assertTrue(root.contains("\n" + GROUP_HELP + "\n"), "根上的帮助就是索引");
+            assertTrue(root.contains("\ngt_help — A group the tests read. walk, note\n"), "根上的帮助就是索引");
         }
     }
 
-    /** 帮助和动作自己列的清单同一个预算:二十五个函数、每个两三千字节的说明,一页放不下。 */
+    /**
+     * 一行命令要的帮助和动作自己列的清单同一个预算:二十五个函数、每个两三千字节的说明,一页放不下,翻页。脚本里 api.help 返回的是
+     * 全文(数据不分页,要看就 print,筛过再打)。
+     */
     @Test
-    void aLongGroupIsPagedAndSaysHowToTurnThePage() {
-        String first = said("api.help(\"gt_many\")");
-        assertTrue(first.startsWith("gt_many — A group with a long list.\n"
-                + "  gt_many.act01() — Action number 1. Long words."), first.substring(0, 80));
-        int shown = ListingTest.shownTo(first, 25, 2);
-        assertTrue(first.contains(String.format("gt_many.act%02d() — ", shown)), "显示到的那一条在这一页");
-        assertFalse(first.contains(String.format("gt_many.act%02d() — ", shown + 1)), "下一条不在");
+    void aLongGroupIsPagedOnTheLineAndWholeInAScript() {
+        String first = onServer("gt_many --help").message();
+        assertTrue(first.startsWith("---A group with a long list.\n---@class gt_many\n"
+                + "---@field act01 fun() Action number 1. Long words."), first.substring(0, 80));
+        // 一页的条目:类那一行、二十五个函数各一行、末尾那张表;显示到第 N 条就是显示到第 N - 1 个函数
+        int shown = ListingTest.shownTo(first, 27, 2);
+        assertTrue(first.contains(String.format("---@field act%02d fun() ", shown - 1)), "显示到的那一条在这一页");
+        assertFalse(first.contains(String.format("---@field act%02d fun() ", shown)), "下一条不在");
+        String second = onServer("gt_many --help --page 2").message();
+        assertTrue(second.startsWith("---A group with a long list.\n"
+                + String.format("---@field act%02d fun() ", shown)), second.substring(0, 80));
 
-        String second = said("api.help(\"gt_many\", {page = 2})");
-        assertTrue(second.startsWith("gt_many — A group with a long list.\n"
-                + String.format("  gt_many.act%02d() — ", shown + 1)), second.substring(0, 80));
-
-        CliFixture.Outcome beyond = CliFixture.lua("api.help(\"gt_many\", {page = 9})");
-        assertFalse(beyond.success());
-        assertTrue(beyond.message().contains("api.help: no page 9; this list has pages 1-"), beyond.message());
-        assertEquals(first, onServer("gt_many --help").message(), "一行命令要的同一页");
+        String whole = said("api.help(\"gt_many\")");
+        assertTrue(whole.contains("---@field act25 fun() Action number 25."), "脚本里拿到全文");
     }
 
     private static String said(String call) {

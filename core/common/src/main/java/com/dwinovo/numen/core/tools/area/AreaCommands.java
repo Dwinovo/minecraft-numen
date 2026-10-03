@@ -3,6 +3,7 @@ package com.dwinovo.numen.core.tools.area;
 import java.util.List;
 import java.util.function.UnaryOperator;
 
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.area.Area;
 import com.dwinovo.numen.area.AreaRef;
@@ -14,6 +15,7 @@ import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.core.nav.Feet;
 import com.dwinovo.numen.core.tools.AreaOps;
+import com.dwinovo.numen.core.tools.AreaText;
 import com.dwinovo.numen.entity.NumenPlayer;
 
 import net.minecraft.core.BlockPos;
@@ -40,10 +42,10 @@ public final class AreaCommands {
     private static final Param<AreaRef> PART = Param.required("part", ArgType.area(),
             "The part, written area/part as area.parts lists it (ores/g3).");
     private static final Param<List<BlockPos>> BOX = Param.optional("box", ArgType.list(ArgType.cell()),
-            "A box: two corners, x1 y1 z1 x2 y2 z2, in the dimension you are in.")
+            "A box: its two corners {from, to}, each a Pos, in the dimension you are in.")
             .whenOmitted("add no box");
     private static final Param<BlockPos> AT = Param.optional("at", ArgType.cell(),
-            "One cell {x, y, z}, in the dimension you are in.")
+            "One cell, in the dimension you are in.")
             .whenOmitted("add the cell you stand in, when nothing else is given");
     private static final Param<String> BUILT = Param.optional("built", ArgType.string(),
             "A building, as build.built names it (house#1): the cells it was built of.")
@@ -64,6 +66,8 @@ public final class AreaCommands {
             "How many cells to grow by, in every direction (diagonals too).")
             .whenOmitted("grow by 1");
 
+    private static final ScriptType AREA = AreaText.AREA_CLASS.type();
+
     private AreaCommands() {}
 
     public static void install(NumenApi numen) {
@@ -78,9 +82,12 @@ public final class AreaCommands {
     }
 
     private static void actions(CommandGroup area) {
+        area.declare(AreaText.AREA_CLASS);
+        area.declare(AreaText.PART_CLASS);
         area.server("new", "Make an empty area in the dimension you are in.",
                         (src, args) -> AreaOps.create(src, args.get(NEW_NAME), line(args, "new", List.of(NEW_NAME))),
                         NEW_NAME)
+                .returns(AREA)
                 .example("area.new(\"ores\")")
                 .note("Instant. Areas belong to your owner: every companion of theirs sees and changes the same ones, "
                         + "and they survive restarts.")
@@ -89,8 +96,9 @@ public final class AreaCommands {
                 .seeAlso("area add", "scan blocks");
         area.server("add", "Add a part to an area: a box, one cell, a building or a route's planned changes.",
                         AreaCommands::add, NAME, BOX, AT, BUILT, ROUTE)
-                .example("area.add(\"house\", {box = {10, 60, 5, 20, 70, 15}})")
-                .example("area.add(\"chest\", {at = {12, 64, 7}})")
+                .returns(AREA)
+                .example("area.add(\"house\", {box = {{x = 10, y = 60, z = 5}, {x = 20, y = 70, z = 15}}})")
+                .example("area.add(\"chest\", {at = {x = 12, y = 64, z = 7}})")
                 .example("area.add(\"here\")")
                 .example("area.add(\"home\", {built = \"house#1\"})")
                 .example("area.add(\"tunnel\", {route = \"mine\"})")
@@ -102,6 +110,7 @@ public final class AreaCommands {
                 .seeAlso("area show", "area drop");
         area.server("drop", "Remove one part of an area; the other parts keep their numbers.",
                         AreaCommands::drop, PART)
+                .returns(AREA)
                 .example("area.drop(\"ores/g2\")")
                 .note("Instant.")
                 .seeAlso("area show");
@@ -109,20 +118,22 @@ public final class AreaCommands {
                         + "breaking what stands there is allowed now.",
                         (src, args) -> src.reply(AreaOps.show(src.companion(), args.get(SHOWN), args)), SHOWN,
                         Listing.PAGE)
+                .returns(ScriptType.table(ScriptType.field("area", AREA, "The whole area."),
+                        ScriptType.field("parts", ScriptType.listOf(AreaText.PART_CLASS.type()),
+                                "The parts shown: all of them, or the one named.")))
                 .example("area.show(\"ores\")")
                 .example("area.show(\"ores/g3\")")
-                .note("Instant and read-only. One part per line; a long list comes in pages. Permission is asked for "
-                        + "every cell now, the way breaking it would be: allow, ask (your owner is asked first) or deny, "
-                        + "with the reason.")
+                .note("Instant and read-only. Permission is asked for every cell now, the way breaking it would be: "
+                        + "allow, ask (your owner is asked first) or deny, with the reason.")
                 .seeAlso("area list", "area parts", "area refresh", "work dig");
         area.server("parts", "The parts of an area, one name per line (ores/g1), for going through them one by one.",
                         (src, args) -> src.reply(AreaOps.parts(src.companion(), args.get(SHOWN), args)), SHOWN,
                         Listing.PAGE)
                 .example("area.parts(\"ores\")")
                 .note("Going through them: `for _, part in ipairs(area.parts(\"ores\")) do print(part) end`.")
-                .note("Instant and read-only. Nothing but the names, one per line; in a script the list of them. "
-                        + "`move.goto_(\"ores/g1\", {arrive = \"dig\"})` and `work.dig(\"ores/g1\")` take each as it is.")
-                .returns("parts")
+                .note("Instant and read-only: the list of the names. `move.goto_(\"ores/g1\", {arrive = \"dig\"})` and "
+                        + "`work.dig(\"ores/g1\")` take each as it is.")
+                .returns("parts", ScriptType.listOf(ScriptType.STRING))
                 .seeAlso("area show", "area has");
         area.server("has", "Whether an area, or one part of it, still has a cell to dig: true or false.",
                         (src, args) -> src.reply(AreaOps.has(src.companion(), args.get(SHOWN))), SHOWN)
@@ -131,22 +142,24 @@ public final class AreaCommands {
                 .note("Instant and read-only. Each cell is judged the way work.dig judges it, in the world now: a "
                         + "scanned cell counts while it still holds the block the scan saw, a framed cell while a block "
                         + "stands in it. Cells in unloaded terrain are not read.")
-                .note("The reply says in one sentence how many are left and the nearest.")
-                .returns("has")
+                .returns("has", ScriptType.BOOLEAN)
                 .seeAlso("work dig", "area parts");
         area.server("list", "The areas of your owner, one line each.",
                         (src, args) -> src.reply(AreaOps.list(src.companion(), args)), Listing.PAGE)
+                .returns("areas", ScriptType.listOf(AREA))
                 .example("area.list()")
                 .note("Instant and read-only.")
                 .seeAlso("area show");
         area.server("delete", "Delete an area.",
                         (src, args) -> AreaOps.delete(src, args.get(NAME), line(args, "delete", List.of(NAME))), NAME)
+                .returns(ScriptType.NOTHING)
                 .example("area.delete(\"ores\")")
                 .note("Instant.")
                 .seeAlso("area list");
         area.server("refresh", "Check the scanned cells of an area against the world now and strike off those that no "
                         + "longer hold what was seen.",
                         (src, args) -> AreaOps.refresh(src, args.get(NAME), line(args, "refresh", List.of(NAME))), NAME)
+                .returns(AREA)
                 .example("area.refresh(\"ores\")")
                 .note("Instant. Only cells a scan added carry a block to check; cells in unloaded terrain are kept and "
                         + "counted. Parts left with no cell are removed.")
@@ -154,12 +167,14 @@ public final class AreaCommands {
         area.server("union", "Keep the cells of several areas together as a new area.",
                         (src, args) -> derive(src, args, "union", List.of(RESULT, AREAS), args.get(AREAS).get(0),
                                 a -> unionRest(src.companion(), a, args.get(AREAS))), RESULT, AREAS)
+                .returns(AREA)
                 .example("area.union(\"all\", \"ores\", \"gold\")")
                 .note("Instant. The first area's parts keep their ids; the others' follow with new numbers.")
                 .seeAlso("area minus", "area intersect");
         area.server("minus", "Keep, as a new area, the cells of an area that are not in the others.",
                         (src, args) -> derive(src, args, "minus", List.of(RESULT, FROM, AREAS), args.get(FROM),
                                 a -> fold(src.companion(), a, args.get(AREAS), Area::minus)), RESULT, FROM, AREAS)
+                .returns(AREA)
                 .example("area.minus(\"safe\", \"house\", \"house/b2\")")
                 .note("Instant. Each part of the first area loses the cells in the others and keeps its id; a part left "
                         + "empty goes.")
@@ -167,12 +182,14 @@ public final class AreaCommands {
         area.server("intersect", "Keep, as a new area, the cells of an area that are also in all the others.",
                         (src, args) -> derive(src, args, "intersect", List.of(RESULT, FROM, AREAS), args.get(FROM),
                                 a -> fold(src.companion(), a, args.get(AREAS), Area::intersect)), RESULT, FROM, AREAS)
+                .returns(AREA)
                 .example("area.intersect(\"near\", \"ores\", \"base\")")
                 .note("Instant. Each part of the first area keeps only the cells the others share and keeps its id.")
                 .seeAlso("area union");
         area.server("filter", "Keep, as a new area, the cells whose block as seen is one of the given types.",
                         (src, args) -> derive(src, args, "filter", List.of(RESULT, FROM, BLOCKS), args.get(FROM),
                                 AreaOps.filter(args.get(BLOCKS))), RESULT, FROM, BLOCKS)
+                .returns(AREA)
                 .example("area.filter(\"logs\", \"house\", {blocks = \"#minecraft:logs\"})")
                 .example("area.filter(\"seen\", \"ores\")")
                 .note("Instant. It reads the blocks the area carries as seen, not the world: framed cells carry none "
@@ -181,6 +198,7 @@ public final class AreaCommands {
         area.server("grow", "Keep, as a new area, an area grown by some cells in every direction.",
                         (src, args) -> derive(src, args, "grow", List.of(RESULT, FROM, BY), args.get(FROM),
                                 a -> a.grow(args.get(BY) == null ? 1 : args.get(BY))), RESULT, FROM, BY)
+                .returns(AREA)
                 .example("area.grow(\"buffer\", \"house\", {by = 2})")
                 .example("area.grow(\"wall\", \"house\")")
                 .note("Instant. Each part grows by itself; the cells it gains carry no block.")
@@ -188,6 +206,7 @@ public final class AreaCommands {
         area.server("center", "Keep, as a new area, the one cell of an area nearest its middle.",
                         (src, args) -> derive(src, args, "center", List.of(RESULT, FROM), args.get(FROM),
                                 Area::center), RESULT, FROM)
+                .returns(AREA)
                 .example("area.center(\"mid\", \"ores\")")
                 .note("Instant. The cell is always one of the area's own, even for a ring or an L.")
                 .seeAlso("area show");

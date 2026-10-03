@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
+import com.dwinovo.numen.agent.script.ErrorKind;
+import com.dwinovo.numen.agent.script.ApiError;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.core.WorkProfile;
@@ -41,18 +43,19 @@ public final class DesignOps {
         MinecraftServer server = her.getServer();
         Design.checkedName(name);
         if (Designs.exists(server, name)) {
-            return TaskResult.fail("there is already a design named " + name + "; build.show(\"" + name
-                    + "\") shows it").toJson();
+            return TaskResult.fail(ErrorKind.FAILED, "there is already a design named " + name,
+                    "build.show(\"" + name + "\")").toJson();
         }
         if (BlueprintStore.list(server).contains(name)) {
-            return TaskResult.fail("a blueprint file is already named " + name + "; pick another name").toJson();
+            return TaskResult.fail(ErrorKind.FAILED, "a blueprint file is already named " + name + "; pick another "
+                    + "name", null).toJson();
         }
         Design design = Design.fresh(name, her.getOwnerUuid(), her.ownerName(), her.getGameProfile().getName(),
                 Instant.now().truncatedTo(ChronoUnit.SECONDS).toString());
         Designs.save(server, design);
         return TaskResult.ok("made an empty design " + name + "; add steps with a primitive and {into = \"" + name
-                + "\"}, for example build.layer({\"#####\"}, {at = {0, 0, 0}, block = \"stone_bricks\", into = \""
-                + name + "\"})").toJson();
+                + "\"}, for example build.layer({\"#####\"}, {at = {x = 0, y = 0, z = 0}, block = \"stone_bricks\", "
+                + "into = \"" + name + "\"})", info(design)).toJson();
     }
 
     /** 往设计末尾加一步:原语与读好的参数写回一行({@link Design.Step#line}),和当场执行是同一行字。 */
@@ -118,9 +121,19 @@ public final class DesignOps {
                 + "still lists it").toJson();
     }
 
+    /** 一份设计的数据:名字、几步、几格。 */
+    private static Map<String, Object> info(Design design) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("name", design.name());
+        data.put("steps", design.steps().size());
+        data.put("cells", design.drawn().targets().size());
+        return data;
+    }
+
     /** 设计库:她们写的设计,和 {@code schematics/} 里的蓝图文件,都能 {@code build.at}。 */
     public static String library(MinecraftServer server, CommandArgs args) {
         List<String> rows = new ArrayList<>();
+        List<Map<String, Object>> all = new ArrayList<>();
         for (String name : Designs.names(server)) {
             String row;
             try {
@@ -132,6 +145,7 @@ public final class DesignOps {
                 row = name + " — design that does not read: " + e.getMessage().replace('\n', ' ');
             }
             rows.add("  " + row);
+            all.add(Map.of("name", name, "kind", "design"));
         }
         for (String name : BlueprintStore.list(server)) {
             String size;
@@ -142,12 +156,13 @@ public final class DesignOps {
                 size = "size unreadable: " + e.getMessage();
             }
             rows.add("  " + name + " — blueprint file, " + size);
+            all.add(Map.of("name", name, "kind", "blueprint file"));
         }
         String head = rows.isEmpty()
                 ? "No designs or blueprint files yet. build.new starts a design; blueprint files (.litematic, .schem, "
                         + ".nbt, .snbt) go into the server's schematics folder."
                 : "Designs and blueprint files, each buildable with build.at (build.raise walks the site):";
-        return new Listing(head, rows, "").result(args).toJson();
+        return new Listing(head, rows, "").result(args, Map.of("designs", all)).toJson();
     }
 
     /**
@@ -160,12 +175,11 @@ public final class DesignOps {
         MinecraftServer server = her.getServer();
         boolean design = Designs.kindOf(server, name) == Designs.Kind.DESIGN;
         if (layer != null) {
-            return design
+            Listing slice = design
                     ? Slice.of("design " + name, Designs.load(server, name).drawn().targets(), layer)
-                            .result(args).toJson()
                     : Slice.of("blueprint file " + name + " (0 0 0 is its lowest north-west corner)",
-                            BlueprintStore.load(her.serverLevel(), name, BlockPos.ZERO, 0).targets(), layer)
-                            .result(args).toJson();
+                            BlueprintStore.load(her.serverLevel(), name, BlockPos.ZERO, 0).targets(), layer);
+            return slice.result(args, Map.of("name", name, "rows", slice.entries(), "legend", slice.foot())).toJson();
         }
         return design ? showDesign(her, Designs.load(server, name), args) : showFile(her, name, args);
     }
@@ -188,13 +202,18 @@ public final class DesignOps {
             data.put("size", size.getX() + "x" + size.getY() + "x" + size.getZ());
         }
         List<String> steps = new ArrayList<>();
+        List<String> calls = new ArrayList<>();
         List<List<BuildTaskRecord.Target>> drawn = design.drawn().steps();
         for (int i = 0; i < design.steps().size(); i++) {
             List<BuildTaskRecord.Target> cells = drawn.get(i);
             String kind = Design.step(design.steps().get(i)).primitive().action;
-            steps.add((i + 1) + ". " + Design.step(design.steps().get(i)).call() + "\n   " + kind + " " + span(cells) + ", "
+            String call = Design.step(design.steps().get(i)).call();
+            calls.add(call);
+            steps.add((i + 1) + ". " + call + "\n   " + kind + " " + span(cells) + ", "
                     + cells.size() + " cells: " + BuildBill.topLine(BuildBill.cost(cells, Set.of())));
         }
+        data.put("name", design.name());
+        data.put("steps", calls);
         data.put("cells", all.size());
         data.put("materials", BuildBill.summarize(cost));
         String foot = ownership(her, design) + (design.author().isEmpty() ? "" : " Written by " + design.author() + ".")
@@ -226,6 +245,7 @@ public final class DesignOps {
 
         Map<String, Object> data = new LinkedHashMap<>();
         Vec3i size = loaded.size();
+        data.put("name", file);
         data.put("size", size.getX() + "x" + size.getY() + "x" + size.getZ());
         data.put("cells", loaded.targets().size());
         data.put("cells_costing_materials", BuildBill.sum(cost));
@@ -287,8 +307,8 @@ public final class DesignOps {
 
     private static void checkStep(Design design, int n, int max) {
         if (n < 1 || n > max) {
-            throw new IllegalArgumentException(design.name() + " has " + design.steps().size() + " step(s); step "
-                    + n + " is not one of them");
+            throw new ApiError(ErrorKind.NOT_FOUND, design.name() + " has " + design.steps().size() + " step(s); "
+                    + "step " + n + " is not one of them", "build.show(\"" + design.name() + "\")");
         }
     }
 
@@ -307,13 +327,13 @@ public final class DesignOps {
     /** 这份设计她改不了的理由;改得了是 null。 */
     private static String refusal(NumenPlayer her, Design design) {
         if (design.owner() == null) {
-            return TaskResult.fail("design " + design.name() + " names no owner, so it can be shown and built but not "
-                    + "changed from here").toJson();
+            return TaskResult.fail(ErrorKind.DENIED, "design " + design.name() + " names no owner, so it can be shown "
+                    + "and built but not changed from here", null).toJson();
         }
         if (!design.owner().equals(her.getOwnerUuid())) {
-            return TaskResult.fail("design " + design.name() + " belongs to "
+            return TaskResult.fail(ErrorKind.DENIED, "design " + design.name() + " belongs to "
                     + (design.ownerName().isEmpty() ? "another player" : design.ownerName())
-                    + "'s companions: you can show it and build it, not change or delete it").toJson();
+                    + "'s companions: you can show it and build it, not change or delete it", null).toJson();
         }
         return null;
     }
@@ -323,6 +343,6 @@ public final class DesignOps {
         Designs.save(her.getServer(), design);
         List<BuildTaskRecord.Target> all = design.drawn().targets();
         return TaskResult.ok(design.name() + ": " + what + "; it now has " + design.steps().size() + " step(s), "
-                + all.size() + " cells. build.show(\"" + design.name() + "\") lists them.").toJson();
+                + all.size() + " cells. build.show(\"" + design.name() + "\") lists them.", info(design)).toJson();
     }
 }

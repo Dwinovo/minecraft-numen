@@ -5,6 +5,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.dwinovo.numen.agent.script.ErrorKind;
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
@@ -30,7 +32,7 @@ public final class FightCommands {
     static final String GROUP = "fight";
 
     private static final Param<EntityRef> ENTITY = Param.required("entity", ArgType.entity(), "The entity to fight.")
-            .values("a runtime entity id from scan.entities");
+            .values("an Entity from scan.entities, or its id");
 
     private FightCommands() {}
 
@@ -42,11 +44,19 @@ public final class FightCommands {
     private static void actions(CommandGroup fight) {
         fight.server("attack", "Attack one entity until it is dead, lost or out of reach.",
                         FightCommands::attack, ENTITY)
+                .returns(ScriptType.table(
+                        ScriptType.field("fought", ScriptType.listOf(ScriptType.table(
+                                ScriptType.field("id", ScriptType.INTEGER, null),
+                                ScriptType.field("status", ScriptType.STRING, "defeated, lost, unreachable, refused …"),
+                                ScriptType.field("strikes", ScriptType.INTEGER, null))),
+                                "Each entity it fought, the one you named first."),
+                        ScriptType.field("strikes", ScriptType.INTEGER, "Hits in all.")))
                 .example("fight.attack(184)")
+                .example("local r = fight.attack(184)\nprint(r.strikes, #r.fought)")
                 .note("Several: `for _, foe in ipairs(scan.entities(\"hostile\", {radius = 16})) do "
-                        + "fight.attack(foe.id) end`; `fight.clear()` (library) does that until none is left.")
+                        + "fight.attack(foe) end`; `fight.clear()` (library) does that until none is left.")
                 .note("Background work: it keeps chasing, turning, swinging, shooting and dodging until that one is "
-                        + "dead, gone or out of reach; the end arrives as a task_finished event.")
+                        + "dead, gone or out of reach, and returns then.")
                 .note("The body picks how: it closes in and swings when it can reach, shoots with a bow or "
                         + "crossbow when it cannot, keeps its distance from things that explode, and picks the "
                         + "weapon you own that is strongest against that target.")
@@ -64,8 +74,8 @@ public final class FightCommands {
         EntityRef named = args.get(ENTITY);
         Entity e = named.in(src.companion().serverLevel());
         if (e == null || e == src.companion()) {
-            src.reply(TaskResult.fail("no entity with id " + named + " is here — `scan.entities()` first, ids do not "
-                    + "survive restarts").toJson());
+            src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, "no entity with id " + named + " is here — ids do not "
+                    + "survive restarts", "scan.entities()").toJson());
             return;
         }
         TaskDispatch.setTask(src.replayedWith(args.with(ENTITY, EntityRef.of(e))),

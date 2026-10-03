@@ -24,9 +24,9 @@ class DigTaskRecordTest {
 
     @Test
     void cellsOrSeveralPlacesAreReachedAtTheNearestCell() {
-        assertEquals("`move.goto_({10, 1, 11}, {arrive = \"dig\"})`, then `work.dig({10, 1, 11}, {12, 1, 11})`",
+        assertEquals("`move.goto_({x = 10, y = 1, z = 11}, {arrive = \"dig\"})`, then `work.dig({x = 10, y = 1, z = 11}, {x = 12, y = 1, z = 11})`",
                 DigTaskRecord.reachThem(List.of(Place.cell(NEAREST), Place.cell(new BlockPos(12, 1, 11))), NEAREST));
-        assertEquals("`move.goto_({10, 1, 11}, {arrive = \"dig\"})`, then `work.dig(\"ores\", \"gold\")`",
+        assertEquals("`move.goto_({x = 10, y = 1, z = 11}, {arrive = \"dig\"})`, then `work.dig(\"ores\", \"gold\")`",
                 DigTaskRecord.reachThem(List.of(Place.area(AreaRef.parse("ores")), Place.area(AreaRef.parse("gold"))),
                         NEAREST));
     }

@@ -176,7 +176,7 @@ public class RouteGameTests {
                     helper.assertTrue(walled[0], "she never set off, so the wall was never put in her way");
                     String said = walk[0].outcome();
                     helper.assertTrue(!walk[0].succeeded() && said.contains("outside the plan")
-                                    && said.contains("stone") && said.contains("route.plan(\"tunnel\")"),
+                                    && said.contains("stone") && "route.plan(\"tunnel\")".equals(walk[0].hint()),
                             "the stop does not say which cells lie outside the plan: " + said);
                     helper.assertTrue(level.getBlockState(low).is(Blocks.STONE)
                                     && level.getBlockState(low.above()).is(Blocks.STONE),
@@ -336,7 +336,7 @@ public class RouteGameTests {
         longFloor(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_wanderer2", new BlockPos(2, 1, 12), false);
         BlockPos far = helper.absolutePos(new BlockPos(210, 1, 12));
-        ToolRun walk = lua(companion, "move.goto_({" + far.getX() + ", " + far.getZ() + "})");
+        ToolRun walk = lua(companion, "move.goto_({x = " + far.getX() + ", z = " + far.getZ() + "})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "move_goto has not finished");

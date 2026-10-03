@@ -106,7 +106,7 @@ public class SleepGameTests {
     public static void sleep_at_coordinates_without_a_bed_says_so(GameTestHelper helper) {
         BlockPos floor = helper.absolutePos(new BlockPos(5, 1, 5));
         NumenPlayer companion = spawnAt(helper, "gametest_misled", new BlockPos(4, 2, 5), false);
-        ToolRun sleep = lua(companion, "use.sleep({at = {" + floor.getX() + ", " + floor.getY() + ", " + floor.getZ() + "}})");
+        ToolRun sleep = lua(companion, "use.sleep({at = {x = " + floor.getX() + ", y = " + floor.getY() + ", z = " + floor.getZ() + "}})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(sleep.done(), "use sleep has not replied");
@@ -123,11 +123,12 @@ public class SleepGameTests {
         placeBed(helper, new BlockPos(5, 2, 5));
         BlockPos head = helper.absolutePos(new BlockPos(6, 2, 5));
         NumenPlayer companion = spawnAt(helper, "gametest_halfsure", new BlockPos(4, 2, 5), false);
-        ToolRun sleep = lua(companion, "use.sleep({at = {" + head.getX() + ", " + head.getZ() + "}})");
+        ToolRun sleep = lua(companion, "use.sleep({at = {x = " + head.getX() + ", z = " + head.getZ() + "}})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(sleep.done(), "use sleep has not replied");
-            helper.assertTrue(!sleep.succeeded() && sleep.outcome().contains("expected a cell: three whole numbers"),
+            helper.assertTrue(!sleep.succeeded() && "bad_argument".equals(sleep.kind())
+                            && sleep.outcome().contains("argument 'at': expected a Pos {x = …, y = …, z = …}"),
                     "the reply does not ask for all three coordinates: " + sleep.outcome());
             helper.assertTrue(!companion.isSleeping(), "she lay down in a bed she did not fully name");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -163,7 +164,7 @@ public class SleepGameTests {
         BlockPos head = helper.absolutePos(new BlockPos(13, 2, 12));
         NumenPlayer companion = spawnAt(helper, "gametest_faraway", new BlockPos(3, 2, 3), false);
         BlockPos start = companion.blockPosition();
-        ToolRun sleep = lua(companion, "use.sleep({at = {" + head.getX() + ", " + head.getY() + ", " + head.getZ() + "}})");
+        ToolRun sleep = lua(companion, "use.sleep({at = {x = " + head.getX() + ", y = " + head.getY() + ", z = " + head.getZ() + "}})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(sleep.done(), "use sleep has not replied");

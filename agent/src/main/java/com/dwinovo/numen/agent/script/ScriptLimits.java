@@ -38,6 +38,9 @@ public final class ScriptLimits {
      */
     public static final long STRING_BYTES = 64L << 20;
 
-    /** {@code print} 写进回执的文字最多多少字;超出的截掉并说明。 */
-    public static final int PRINTED_CHARS = 2_000;
+    /**
+     * {@code print} 写进回执的文字最多多少字;超出的截掉并说明。API 返回的是数据,要看就得 print:一组函数的类型签名
+     * ({@code api.help("area")})与一页查询结果要装得下,再多就该在脚本里筛过再打。
+     */
+    public static final int PRINTED_CHARS = 6_000;
 }

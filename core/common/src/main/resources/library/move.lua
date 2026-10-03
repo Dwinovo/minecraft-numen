@@ -1,8 +1,10 @@
 -- Going somewhere in one call: write your own route to the place, plan it, walk it.
 
--- Walk to a place: a cell {x, y, z}, a column {x, z}, a height y, or an area of your owner's ("ores", "ores/g3").
--- opts are what route.new takes besides the name: arrive, near and the route flags (alter, avoid, ...).
--- It is route.new, route.plan and move.go on your own route goto-<your name>; when a step fails, its error stops here.
+---Walk to a place: route.new, route.plan and move.go on your own route goto-<your name>. A step that fails raises
+---its error as it is (no_path when there is no way, not_found for an area that is gone).
+---@param place Pos|Block|Entity|string A Pos (or anything with a pos), a column {x = …, z = …}, a height {y = …}, or an area of your owner's ("ores", "ores/g3").
+---@param opts? table What route.new takes besides the name: arrive, near and the route flags (alter, avoid, ...).
+---@return {pos: Pos, route: string, distance_left: number} moved What move.go returns: where you stand now.
 function move.goto_(place, opts)
   local spec = {}
   for k, v in pairs(opts or {}) do
@@ -11,5 +13,5 @@ function move.goto_(place, opts)
   spec.to = place
   route.new(spec)
   route.plan()
-  move.go()
+  return move.go()
 end

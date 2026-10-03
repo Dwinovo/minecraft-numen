@@ -48,8 +48,18 @@ public final class EventQueue {
     /** 队列默认上限;服务端暂存与客户端收件共用这一个数。 */
     public static final int DEFAULT_CAP = 200;
 
-    /** 一条待处理的输入。{@code type} 查 {@link EventTypes};{@code ts} 是真实时间。 */
-    public record Entry(String type, String text, long ts, boolean urgent) {}
+    /**
+     * 一条待处理的输入。{@code type} 查 {@link EventTypes};{@code ts} 是真实时间。
+     *
+     * @param result 一件身体活收尾(task_finished)时它的结果({@code success}、{@code message}、{@code kind}、{@code hint}、
+     *               {@code data}),随条目一起到,给等这件活的程序;不进她读的文字、不落盘。别的条目是 null
+     */
+    public record Entry(String type, String text, long ts, boolean urgent, com.google.gson.JsonObject result) {
+
+        public Entry(String type, String text, long ts, boolean urgent) {
+            this(type, text, ts, urgent, null);
+        }
+    }
 
     /** 落盘口。队列不知道自己被存成 JSON 还是 NBT,存在哪。 */
     public interface Journal {

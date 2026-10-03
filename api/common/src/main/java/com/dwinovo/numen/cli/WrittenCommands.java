@@ -219,7 +219,7 @@ public final class WrittenCommands {
             }
         }
         NumenCli.libraryFunctions().forEach((name, fn) ->
-                texts.add(new Text("library " + fn.library() + " " + name, fn.defined().doc())));
+                texts.add(new Text("library " + fn.library() + " " + name, String.join("\n", fn.defined().doc()))));
         for (NumenTool tool : ToolRegistry.all()) {
             texts.addAll(toolTexts(tool));
         }

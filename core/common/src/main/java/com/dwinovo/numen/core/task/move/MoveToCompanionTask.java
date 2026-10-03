@@ -4,6 +4,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.dwinovo.numen.agent.script.ErrorKind;
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.nav.BoatNav;
 import com.dwinovo.numen.core.nav.Feet;
@@ -24,6 +26,7 @@ import com.dwinovo.numen.permission.ConsentAnswer;
 import com.dwinovo.numen.permission.ConsentItem;
 import com.dwinovo.numen.permission.Listing;
 import com.dwinovo.numen.task.Preparation;
+import com.dwinovo.numen.task.TaskResult;
 import com.dwinovo.numen.task.TaskState;
 
 import net.minecraft.core.BlockPos;
@@ -125,7 +128,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
      */
     @Override
     protected Preparation preparation() {
-        String missing = locate();
+        TaskResult missing = locate();
         if (missing != null) {
             return Preparation.refused(missing);
         }
@@ -143,7 +146,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                     return null;
                 }
                 Blocked blocked = hold(result);
-                return blocked != null ? Preparation.Readiness.refused(blocked.why())
+                return blocked != null ? Preparation.Readiness.refused(TaskResult.fail(blocked.type().kind(),
+                        blocked.why(), blocked.hint(), resultData()))
                         : Preparation.Readiness.ready(RouteText.accepted(route, result.plan()));
             }
 
@@ -156,21 +160,23 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
 
     /**
      * 从存档里取这条路线,认出终点是区域时量距离的那一格;路线不在了、还没规划过(走只照计划走,计划是 {@code route.plan} 的事)、
-     * 不在她这个维度里,返回那句话,否则 null。
+     * 不在她这个维度里,返回那个失败,否则 null。
      */
-    private String locate() {
+    private TaskResult locate() {
         route = routes().get(r.route);
         if (route == null) {
-            return "there is no route named " + r.route + " any more; `route.list()` shows the routes you have";
+            return TaskResult.fail(ErrorKind.NOT_FOUND, "there is no route named " + r.route + " any more",
+                    "route.list()");
         }
         if (route.plan() == null) {
-            return "route " + route.name() + " has no plan yet, and move.go only walks a planned route: "
-                    + "`route.plan(\"" + route.name() + "\")` plans it from where you stand without moving and lists "
-                    + "every block it changes; then `move.go(\"" + route.name() + "\")` walks it";
+            return TaskResult.fail(ErrorKind.FAILED, "route " + route.name() + " has no plan yet, and move.go only "
+                    + "walks a planned route: route.plan plans it from where you stand without moving and lists every "
+                    + "block it changes; then move.go walks it", "route.plan(\"" + route.name() + "\")");
         }
         if (!route.dimension().equals(player.level().dimension().location())) {
-            return "route " + route.name() + " lies in " + route.dimension() + ", and I am in "
-                    + player.level().dimension().location() + "; its coordinates mean nothing here";
+            return TaskResult.fail(ErrorKind.FAILED, "route " + route.name() + " lies in " + route.dimension()
+                    + ", and I am in " + player.level().dimension().location() + "; its coordinates mean nothing here",
+                    null);
         }
         if (route.destination().area() != null) {
             areaCell = Destination.toward(player, route.destination(), Feet.cell(player));
@@ -197,10 +203,10 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     protected void onStart() {
         startedAt = now();
         if (!prepared()) {
-            String missing = locate();
+            TaskResult missing = locate();
             if (missing != null) {
                 recorded = true;
-                fail(missing, FailureType.TARGET_LOST);
+                fail(missing.message(), FailureType.TARGET_LOST, missing.hint());
                 return;
             }
         }
@@ -251,7 +257,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                     yield TaskState.RUNNING;
                 }
                 if (!answer.allowed()) {
-                    yield end(answer.refusal(asks), FailureType.REFUSED);
+                    yield end(answer.refusal(asks), FailureType.REFUSED, null);
                 }
                 leg = 0;
                 yield startLeg();
@@ -269,11 +275,11 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     private TaskState decide(RoutePlanning.Result result) {
         planning = null;
         Blocked blocked = hold(result);
-        return blocked != null ? end(blocked.why(), blocked.type()) : setOff();
+        return blocked != null ? end(blocked.why(), blocked.type(), blocked.hint()) : setOff();
     }
 
-    /** 不走的那句话,与归到哪一种失败。 */
-    private record Blocked(String why, FailureType type) {}
+    /** 不走的那句话、归到哪一种失败、能照抄的下一步(没有为 null)。 */
+    private record Blocked(String why, FailureType type, String hint) {}
 
     /**
      * 从脚下规划出来的这一份拿来比:有走不通的段,或超出承诺(准备时定下的那份;还没有就是路线上她看过的那份),就是不走的原因;
@@ -286,21 +292,21 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         if (bad >= 0 && bad >= result.legs().size()) {
             // 那一段此刻就编不成目标(去处写不通、点名的区域不在了):没有搜过,照编不成的原话说
             return new Blocked("can't walk " + legName(bad) + " as it stands: " + fresh.legs().get(bad).why(),
-                    FailureType.NO_PATH);
+                    FailureType.NO_PATH, null);
         }
         if (bad >= 0) {
             FailureType type = bad < result.found().size() && !result.found().get(bad).reached()
                     ? NavText.type(result.found().get(bad).outcome()) : FailureType.NO_PATH;
             return new Blocked("blocked on " + legName(bad) + ": got within " + String.format("%.1f", repDistance())
                     + " blocks of " + route.destination().words() + " (now on the ground at y="
-                    + player.blockPosition().getY() + "). " + fresh.legs().get(bad).why() + ".", type);
+                    + player.blockPosition().getY() + "). " + fresh.legs().get(bad).why() + ".", type, null);
         }
         Plan.Difference diff = fresh.beyond(saw);
         if (!diff.isEmpty()) {
             return new Blocked("the way from here goes beyond the plan of route " + route.name() + " (made from "
                     + Listing.coords(saw.from()) + "), so I did not set off: it would also "
-                    + RouteText.beyond(diff) + ". `route.plan(\"" + route.name() + "\")` plans it from here and shows "
-                    + "it; then `move.go(\"" + route.name() + "\")` keeps to that plan.", FailureType.TERRAIN_BLOCKED);
+                    + RouteText.beyond(diff) + ". route.plan plans it from here and shows it; then move.go keeps to "
+                    + "that plan.", FailureType.TERRAIN_BLOCKED, "route.plan(\"" + route.name() + "\")");
         }
         promise = saw;
         planned = result;
@@ -370,15 +376,15 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         if (!diff.isEmpty()) {
             return end("stopped on " + legName(stoppedLeg) + " at " + here(player.blockPosition().getY())
                     + ": the way on from here needs cells outside the plan I keep to — it would "
-                    + RouteText.beyond(diff) + ". route.plan(\"" + route.name() + "\") plans it from here and shows "
-                    + "it; then move.go(\"" + route.name() + "\") keeps to that plan.", FailureType.TERRAIN_BLOCKED);
+                    + RouteText.beyond(diff) + ". route.plan plans it from here and shows it; then move.go keeps to "
+                    + "that plan.", FailureType.TERRAIN_BLOCKED, "route.plan(\"" + route.name() + "\")");
         }
         RoutePlanning.Leg target = planned.legs().get(stoppedLeg);
         String why = NavText.failure(stopped, player, Feet.cell(player), target.toward(), target.way().spec(),
                 new NavText.OnRoute(route.name(), stoppedLeg + 1, route.legs().size()));
         return end("blocked on " + legName(stoppedLeg) + ": got within " + String.format("%.1f", repDistance())
                 + " blocks of " + route.destination().words() + " (now on the ground at y="
-                + player.blockPosition().getY() + "). " + why + ".", NavText.type(stopped));
+                + player.blockPosition().getY() + "). " + why + ".", NavText.type(stopped), null);
     }
 
     /** 最后一段到了。 */
@@ -388,9 +394,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     }
 
     /** 这一趟以失败收场:记进路线,交给任务的收场。 */
-    private TaskState end(String why, FailureType type) {
+    private TaskState end(String why, FailureType type, String hint) {
         record(false, "failed (" + type.name().toLowerCase(java.util.Locale.ROOT) + ")");
-        fail(why, type);
+        fail(why, type, hint);
         return TaskState.FAILED;
     }
 
@@ -459,16 +465,14 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
 
+    /** 走完(或停下)时她在哪(Pos,小数)、走的哪条路线、离终点还有多远。 */
     @Override
     protected Map<String, Object> resultData() {
-        int gy = player.blockPosition().getY();
         Map<String, Object> data = new HashMap<>();
-        data.put("final_x", player.getX());
-        data.put("final_y", player.getY());
-        data.put("final_z", player.getZ());
-        data.put("ground_y", gy);
+        data.put("pos", Shapes.pos(player.position()));
         if (route != null) {
             data.put("route", route.name());
+            data.put("distance_left", Math.round(repDistance() * 10.0) / 10.0);
         }
         return data;
     }
@@ -502,8 +506,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             case NEAR -> "arrived within " + d.near() + " blocks of " + (cell != null ? coords(cell)
                     : "location x=" + d.x() + " z=" + d.z()) + ", standing at " + here(gy);
             case DIG -> "standing at " + here(gy) + ", with the " + block(cell) + " at " + coords(cell)
-                    + " within reach — `work.dig({" + cell.getX() + ", " + cell.getY() + ", " + cell.getZ()
-                    + "})` digs it from here";
+                    + " within reach — `work.dig({x = " + cell.getX() + ", y = " + cell.getY() + ", z = "
+                    + cell.getZ() + "})` digs it from here";
             case REACH -> "standing at " + here(gy) + ", with " + coords(cell) + " within reach to build into";
         };
         return reached + ", via route " + route.name() + ".";

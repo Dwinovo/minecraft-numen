@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.tools.agent;
 
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.ClientSource;
@@ -42,7 +43,8 @@ public final class SkillCommands {
         skill.client(LOAD, "Load a skill's instructions when the task at hand matches one listed in "
                         + "<available_skills>.",
                 SkillCommands::load, NAME, FILE, Listing.PAGE)
-                .example("skill.load(\"containers\")")
+                .returns("text", ScriptType.STRING)
+                .example("print(skill.load(\"containers\"))")
                 .example("skill.load(\"building_design\", {file = \"references/baroque.md\"})")
                 .note("The output is the skill's workflow guidance for the task; return it from your script to read "
                         + "it: `return skill.load(\"containers\")`.")

@@ -93,7 +93,7 @@ public final class DeepDiamond implements Scenario {
     @Override
     public String solution(Scene scene) {
         BlockPos ore = scene.pos(ORE);
-        String cell = "{" + ore.getX() + ", " + ore.getY() + ", " + ore.getZ() + "}";
+        String cell = "{x = " + ore.getX() + ", y = " + ore.getY() + ", z = " + ore.getZ() + "}";
         return """
                 move.goto_(%1$s, {arrive = "dig", alter = "natural"})
                 work.dig(%1$s)

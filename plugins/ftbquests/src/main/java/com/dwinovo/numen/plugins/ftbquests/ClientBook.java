@@ -25,11 +25,11 @@ final class ClientBook {
     private ClientBook() {}
 
     static void list(ClientSource src, CommandArgs args) {
-        src.reply(read(src, book -> book.list().result(args).toJson()));
+        src.reply(read(src, book -> book.list(args).toJson()));
     }
 
     static void show(ClientSource src, String quest) {
-        src.reply(read(src, book -> book.show(quest)));
+        src.reply(read(src, book -> book.show(quest).toJson()));
     }
 
     /** 翻开主人的任务书读一样东西;书还没从服务端同步过来时如实说。 */

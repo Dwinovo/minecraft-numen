@@ -2,7 +2,9 @@ package com.dwinovo.numen.core.tools.work;
 
 import java.util.List;
 
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.api.NumenApi;
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
@@ -39,7 +41,8 @@ public final class WorkCommands {
             "What to dig: areas of your owner's (or parts of them) and cells, as many as you like — a cell is an area "
                     + "of one cell. Scanned cells are dug only while they still hold the block the scan saw; framed "
                     + "cells and coordinates are dug whatever they hold, air and fluid skipped.")
-            .values("area names as area.list and area.parts list them (\"ores\", \"ores/g3\"), or a cell {x, y, z}");
+            .values("area names as area.list and area.parts list them (\"ores\", \"ores/g3\"), or a cell: a Pos, or a "
+                    + "Block or anything else with a pos");
     private static final Param<Integer> DIG_COUNT = Param.optional("count",
             ArgType.integer(1, BlockActionOps.MAX_DIG_COUNT), "How many cells to dig at most.")
             .whenOmitted("dig every cell of it within reach");
@@ -57,18 +60,26 @@ public final class WorkCommands {
     private static void actions(CommandGroup work) {
         work.server("dig", "Dig the blocks of areas and cells within reach of where you stand.", WorkCommands::dig,
                         DIG_PLACES, DIG_COUNT)
+                .returns(ScriptType.table(
+                        ScriptType.field("dug", ScriptType.INTEGER, "Cells it dug."),
+                        ScriptType.field("left", ScriptType.INTEGER, "Cells of what you named still to dig."),
+                        ScriptType.field("out_of_reach", ScriptType.INTEGER, "Of those, how many your hand does not "
+                                + "reach from where you stand."),
+                        ScriptType.optional("nearest", Shapes.POS.type(), "The nearest of those out of reach.")))
                 .example("work.dig(\"ores/g3\")")
                 .example("work.dig(\"ores\", {count = 4})")
-                .example("work.dig({120, 12, -35})")
-                .example("work.dig({120, 12, -35}, {121, 12, -35})")
+                .example("work.dig({x = 120, y = 12, z = -35})")
+                .example("local r = work.dig(\"ores\")\nprint(r.dug, r.left, r.out_of_reach)")
+                .note("A block or a nearest cell from a query goes in as it is: `work.dig(scan.block({x = 120, y = 12, "
+                        + "z = -35}))`, `for _, g in ipairs(scan.blocks(\"iron_ore\").groups) do work.dig(g.nearest) end`.")
                 .note("Digs only what your hand reaches from where you stand: it never walks and never picks up. Get "
                         + "within reach first with `move.goto_(\"ores\", {arrive = \"dig\"})` (it picks the spot that "
                         + "reaches the most cells), dig, and pick the drops up with `work.collect()`.")
-                .note("Background work: before it replies it checks something within reach can be dug, harvested "
-                        + "with your tools and is allowed; when nothing is, the call is refused with the reason and the "
-                        + "move.goto_ call to copy — no task id, no task_finished, and whatever you were doing goes on. "
-                        + "The end of an accepted job arrives as a task_finished event saying how many cells it dug and "
-                        + "how many are still out of reach, with the next call to copy.")
+                .note("Background work: before it starts it checks something within reach can be dug, harvested "
+                        + "with your tools and is allowed; when nothing is, it fails with kind out_of_reach (or denied, "
+                        + "failed) and a hint with the move.goto_ call to copy — no task starts and whatever you were "
+                        + "doing goes on. It returns when the job ends: how many cells it dug and how many are still out "
+                        + "of reach, the nearest of them as a pos.")
                 .note("What to dig comes from the area itself: cells a scan added are dug only while they still hold "
                         + "the block the scan saw (mining); framed cells and coordinates are dug whatever they hold "
                         + "(a pit, a tree, clearing), air and fluid skipped. `area.has(\"ores\")` says whether anything "
@@ -81,6 +92,9 @@ public final class WorkCommands {
                         + "asked about; a refusal stops the job with the reason.")
                 .seeAlso("move goto_", "work collect", "area has", "scan blocks", "task stop");
         work.server("fish", "Fish from where you stand with a fishing rod.", WorkCommands::fish, CATCHES)
+                .returns(ScriptType.table(ScriptType.field("caught", ScriptType.INTEGER, null),
+                        ScriptType.field("casts", ScriptType.INTEGER, null),
+                        ScriptType.field("requested", ScriptType.INTEGER, "The count you gave; 0 = no count.")))
                 .example("work.fish({count = 5})")
                 .example("work.fish()")
                 .note("Background work: refused with the reason when she carries no fishing rod, does not stand on "

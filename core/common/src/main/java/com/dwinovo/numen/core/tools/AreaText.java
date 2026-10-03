@@ -7,8 +7,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.area.Area;
 import com.dwinovo.numen.area.Cells;
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.core.task.CompassUtil;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -19,8 +21,9 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 /**
- * 区域与它的部分怎么说给模型听,只在这一处:{@code scan blocks} 列出的每一团与 {@code area show} 列出的每一部分是同一种一行
- * (一个 JSON 对象),格数、附带的方块、最近一格、小的逐格列坐标都由 {@link #part} 写;坐标、盒子、方向的写法也在这里。
+ * 区域与它的部分的数据与说法,只在这一处:{@code scan.blocks} 找到的每一团与 {@code area.show} 的每一部分是同一种表
+ * ({@link #PART_CLASS}:格数、附带的方块、最近一格、小的逐格列坐标,由 {@link #part} 写),一整块是 {@link #AREA_CLASS}
+ * ({@link #info});位置一律是 Pos。回执里那句话的坐标、盒子、方向的写法也在这里。
  */
 public final class AreaText {
 
@@ -36,7 +39,64 @@ public final class AreaText {
      * 二三十到五十团、两三千 token,读得完;要更远的翻页(只是看时)或 {@code area show}(扫进区域后)。
      */
     public static final int PAGE_BYTES = 8 * 1024;
+
+    /** 一块区域。 */
+    public static final ScriptType.Class AREA_CLASS = new ScriptType.Class("Area", "One of your owner's areas.", null,
+            List.of(ScriptType.field("name", ScriptType.STRING, null),
+                    ScriptType.field("dimension", ScriptType.STRING, null),
+                    ScriptType.field("parts", ScriptType.listOf(ScriptType.STRING), "Its parts, area/part (ores/g1)."),
+                    ScriptType.field("count", ScriptType.INTEGER, "How many cells in all."),
+                    ScriptType.optional("box", ScriptType.listOf(Shapes.POS.type()),
+                            "Two corners of the box around it."),
+                    ScriptType.optional("added", ScriptType.STRING, "The part this call added (area.add).")));
+
+    /** 一部分,或扫描找到的一团。 */
+    public static final ScriptType.Class PART_CLASS = new ScriptType.Class("AreaPart",
+            "One part of an area, or one group of touching blocks a scan found. Anything that takes a place takes its "
+                    + "id; work.dig and move.goto_ take its nearest as it is.", null,
+            List.of(ScriptType.optional("id", ScriptType.STRING, "area/part (ores/g3), when it is kept in an area."),
+                    ScriptType.field("count", ScriptType.INTEGER, "How many cells."),
+                    ScriptType.optional("blocks", new ScriptType.Simple("table<string, integer>"),
+                            "Cells per block type, as seen when added."),
+                    ScriptType.optional("sources", ScriptType.INTEGER, "Source cells of a fluid."),
+                    ScriptType.optional("nearest", ScriptType.table(
+                            ScriptType.field("pos", Shapes.POS.type(), null),
+                            ScriptType.optional("name", ScriptType.STRING, "The block seen there."),
+                            ScriptType.field("direction", ScriptType.STRING, "From where you stand."),
+                            ScriptType.field("distance", ScriptType.NUMBER, null)), "Its cell nearest to you."),
+                    ScriptType.optional("positions", ScriptType.listOf(Shapes.POS.type()),
+                            "Every cell, nearest first, for parts of up to " + LIST_CELLS_UP_TO + " cells."),
+                    ScriptType.optional("box", ScriptType.listOf(Shapes.POS.type()), "Two corners of the box around it."),
+                    ScriptType.optional("permission", new ScriptType.Simple("string|table<string, integer>"),
+                            "Breaking it: allow, ask (your owner is asked first) or deny; mixed cells give a count per "
+                                    + "answer."),
+                    ScriptType.optional("reason", ScriptType.STRING, "Why, when it is not allow.")));
+
     private AreaText() {}
+
+    /** 一整块区域的数据({@link #AREA_CLASS})。 */
+    public static JsonObject info(String name, Area area) {
+        JsonObject o = new JsonObject();
+        o.addProperty("name", name);
+        o.addProperty("dimension", area.dimension().location().toString());
+        JsonArray parts = new JsonArray();
+        area.parts().forEach(p -> parts.add(name + "/" + p.id()));
+        o.add("parts", parts);
+        o.addProperty("count", area.cells().size());
+        BoundingBox box = area.cells().bounds();
+        if (box != null) {
+            o.add("box", boxJson(box));
+        }
+        return o;
+    }
+
+    /** 包围盒的两个对角,两个 Pos。 */
+    public static JsonArray boxJson(BoundingBox box) {
+        JsonArray corners = new JsonArray();
+        corners.add(Shapes.pos(new BlockPos(box.minX(), box.minY(), box.minZ())));
+        corners.add(Shapes.pos(new BlockPos(box.maxX(), box.maxY(), box.maxZ())));
+        return corners;
+    }
 
     /**
      * 一部分(一团)的事实:编号(有的话)、格数、附带方块的各种格数(扫描时看到的)、流体的源头格数、离 {@code from} 最近的一格
@@ -50,7 +110,7 @@ public final class AreaText {
         if (id != null) {
             o.addProperty("id", id);
         }
-        o.addProperty("cells", cells.size());
+        o.addProperty("count", cells.size());
         Map<Block, Integer> counts = new LinkedHashMap<>();
         int[] fluids = new int[2];
         List<BlockPos> positions = new ArrayList<>();
@@ -84,7 +144,12 @@ public final class AreaText {
         }
         BlockPos nearest = cells.nearest(from);
         if (nearest != null) {
-            JsonObject at = xyz(nearest);
+            JsonObject at = new JsonObject();
+            at.add("pos", Shapes.pos(nearest));
+            Cells.Seen seen = cells.seenAt(nearest);
+            if (seen != null) {
+                at.addProperty("name", BuiltInRegistries.BLOCK.getKey(seen.state().getBlock()).toString());
+            }
             at.addProperty("direction", direction(from, nearest));
             at.addProperty("distance", Math.round(Math.sqrt(from.distSqr(nearest)) * 10) / 10.0);
             o.add("nearest", at);
@@ -92,7 +157,7 @@ public final class AreaText {
         if (list) {
             positions.sort(Comparator.comparingDouble(from::distSqr));
             JsonArray cellsOut = new JsonArray();
-            positions.forEach(p -> cellsOut.add(cell(p)));
+            positions.forEach(p -> cellsOut.add(Shapes.pos(p)));
             o.add("positions", cellsOut);
         }
         return o;
@@ -107,7 +172,7 @@ public final class AreaText {
                 + (box == null ? "" : ", box " + box(box));
     }
 
-    /** 包围盒写成两个对角 {@code x1,y1,z1 x2,y2,z2}:{@code area add --box} 照抄就收。 */
+    /** 包围盒在那句话里写成两个对角 {@code x1,y1,z1 x2,y2,z2}。 */
     public static String box(BoundingBox box) {
         return box.minX() + "," + box.minY() + "," + box.minZ() + " " + box.maxX() + "," + box.maxY() + ","
                 + box.maxZ();
@@ -131,13 +196,5 @@ public final class AreaText {
     /** 一格写成 {@code x,y,z}。 */
     public static String cell(BlockPos p) {
         return p.getX() + "," + p.getY() + "," + p.getZ();
-    }
-
-    private static JsonObject xyz(BlockPos p) {
-        JsonObject o = new JsonObject();
-        o.addProperty("x", p.getX());
-        o.addProperty("y", p.getY());
-        o.addProperty("z", p.getZ());
-        return o;
     }
 }

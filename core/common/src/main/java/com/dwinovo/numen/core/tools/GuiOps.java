@@ -26,11 +26,36 @@ public final class GuiOps {
      * 机器的数值与提示。槽多的模组界面按输出预算分页({@link Listing})。
      *
      */
+    /** 打开的界面:脚本拿到的那张表。 */
+    public static final com.dwinovo.numen.agent.script.ScriptType GUI = com.dwinovo.numen.agent.script.ScriptType.table(
+            com.dwinovo.numen.agent.script.ScriptType.field("menu", com.dwinovo.numen.agent.script.ScriptType.STRING,
+                    "InventoryMenu when it is your own inventory."),
+            com.dwinovo.numen.agent.script.ScriptType.field("slots", com.dwinovo.numen.agent.script.ScriptType.listOf(
+                    com.dwinovo.numen.agent.script.ScriptType.table(
+                            com.dwinovo.numen.agent.script.ScriptType.field("index",
+                                    com.dwinovo.numen.agent.script.ScriptType.INTEGER, "What use.transfer and use.shift take."),
+                            com.dwinovo.numen.agent.script.ScriptType.field("side",
+                                    com.dwinovo.numen.agent.script.ScriptType.choice(List.of("container", "you", "grid",
+                                            "result")), null),
+                            com.dwinovo.numen.agent.script.ScriptType.optional("item",
+                                    com.dwinovo.numen.agent.script.ScriptType.STRING, "Empty slots have none."),
+                            com.dwinovo.numen.agent.script.ScriptType.optional("count",
+                                    com.dwinovo.numen.agent.script.ScriptType.INTEGER, null),
+                            com.dwinovo.numen.agent.script.ScriptType.optional("output",
+                                    com.dwinovo.numen.agent.script.ScriptType.BOOLEAN, "A slot you only take from."))),
+                    "Every container and crafting-grid slot, and your own filled ones."),
+            com.dwinovo.numen.agent.script.ScriptType.optional("cursor", com.dwinovo.numen.agent.script.ScriptType.STRING,
+                    "What the cursor holds."),
+            com.dwinovo.numen.agent.script.ScriptType.field("data",
+                    com.dwinovo.numen.agent.script.ScriptType.listOf(com.dwinovo.numen.agent.script.ScriptType.INTEGER),
+                    "The menu's numbers: progress, fuel, energy (meaning is GUI-specific)."));
+
     public String inspectGui(NumenPlayer self, CommandArgs args) {
         AbstractContainerMenu menu = self.containerMenu;
         if (menu == null) {
-            return TaskResult.fail("no GUI open.").toJson();
+            return TaskResult.fail(com.dwinovo.numen.agent.script.ErrorKind.NOT_FOUND, "no GUI open.", null).toJson();
         }
+        com.google.gson.JsonArray slotData = new com.google.gson.JsonArray();
         // With no block menu open, containerMenu IS your own InventoryMenu — which carries the 2x2
         // crafting grid. Surface it so the model can craft small recipes without a table.
         boolean ownInventory = menu == self.inventoryMenu;
@@ -48,9 +73,11 @@ public final class GuiOps {
             ItemStack it = slot.getItem();
             if (slot instanceof ResultSlot) {
                 resultIndex = slot.index;
+                slotData.add(slotJson(i, "result", it, true));
                 continue;   // shown as part of the crafting-grid section, not the generic dump
             }
             if (slot.container instanceof CraftingContainer cc) {
+                slotData.add(slotJson(i, "grid", it, false));
                 if (gridCells == null) {
                     gridW = cc.getWidth();
                     gridH = cc.getHeight();
@@ -68,9 +95,11 @@ public final class GuiOps {
             if (playerSide) {
                 if (!it.isEmpty()) {
                     mine.add(line);   // only your filled slots — the items you can move in
+                    slotData.add(slotJson(i, "you", it, false));
                 }
             } else {
                 container.add(line);  // all container slots, empty included (placement targets)
+                slotData.add(slotJson(i, "container", it, output));
             }
         }
         // Data slots = the menu's OTHER synced channel, parallel to the item slots: the ints a real
@@ -79,6 +108,8 @@ public final class GuiOps {
         // [litTime, litDuration, cookProgress, cookTotal], so cook% = cookProgress/cookTotal).
         String dataLine = "";
         List<DataSlot> data = ((com.dwinovo.numen.mixin.MenuDataSlotsAccessor) (Object) menu).numen$dataSlots();
+        com.google.gson.JsonArray numbers = new com.google.gson.JsonArray();
+        data.forEach(d -> numbers.add(d.get()));
         if (!data.isEmpty()) {
             StringBuilder d = new StringBuilder("data values (machine state — progress/fuel/energy/…, "
                     + "meaning is GUI-specific): [");
@@ -119,11 +150,33 @@ public final class GuiOps {
         List<String> slots = new ArrayList<>(container.isEmpty() ? List.of("  (none)") : container);
         slots.add("your inventory (non-empty):");
         slots.addAll(mine.isEmpty() ? List.of("  (empty)") : mine);
+        java.util.Map<String, Object> out = new java.util.LinkedHashMap<>();
+        out.put("menu", ownInventory ? "InventoryMenu" : menu.getClass().getSimpleName());
+        out.put("slots", slotData);
+        if (!menu.getCarried().isEmpty()) {
+            out.put("cursor", describe(menu.getCarried()));
+        }
+        out.put("data", numbers);
         return new Listing(header + gridSection + "container slots:", slots,
                 "cursor: " + describe(menu.getCarried()) + "\n"
                         + dataLine
                         + "tip: use.shift(slot) sends a whole stack to the other section; use.transfer(from, to)"
-                        + " (with {count = N} for part of it) puts it into a specific slot.").result(args).toJson();
+                        + " (with {count = N} for part of it) puts it into a specific slot.").result(args, out).toJson();
+    }
+
+    /** 一个槽的那张表。 */
+    private static com.google.gson.JsonObject slotJson(int index, String side, ItemStack it, boolean output) {
+        com.google.gson.JsonObject o = new com.google.gson.JsonObject();
+        o.addProperty("index", index);
+        o.addProperty("side", side);
+        if (!it.isEmpty()) {
+            o.addProperty("item", BuiltInRegistries.ITEM.getKey(it.getItem()).toString());
+            o.addProperty("count", it.getCount());
+        }
+        if (output) {
+            o.addProperty("output", true);
+        }
+        return o;
     }
 
     private static String describe(ItemStack stack) {

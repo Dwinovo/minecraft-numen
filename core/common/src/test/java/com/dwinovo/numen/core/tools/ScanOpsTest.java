@@ -119,18 +119,23 @@ class ScanOpsTest {
 
         JsonObject small = ScanOps.groupJson("ores/g7", grouped.get(0), center, 100L);
         assertEquals("ores/g7", small.get("id").getAsString());
-        assertEquals(12, small.get("cells").getAsInt());
+        assertEquals(12, small.get("count").getAsInt());
         assertEquals(12, small.getAsJsonObject("blocks").get("minecraft:end_portal_frame").getAsInt());
         assertEquals(12, small.getAsJsonArray("positions").size());
-        assertEquals("4,64,4", small.getAsJsonArray("positions").get(0).getAsString());
+        assertEquals(com.dwinovo.numen.cli.Shapes.pos(new BlockPos(4, 64, 4)), small.getAsJsonArray("positions").get(0),
+                "逐格是 Pos");
         assertEquals("allow", small.get("permission").getAsString());
         assertFalse(small.has("reason"));
         assertFalse(small.has("sources"));
         assertEquals("south-east", small.getAsJsonObject("nearest").get("direction").getAsString());
+        assertEquals("minecraft:end_portal_frame", small.getAsJsonObject("nearest").get("name").getAsString(),
+                "最近一格带着看到的方块与它的 pos,原样能交给 work.dig");
+        assertEquals(com.dwinovo.numen.cli.Shapes.pos(new BlockPos(4, 64, 4)),
+                small.getAsJsonObject("nearest").get("pos"));
 
         JsonObject big = ScanOps.groupJson(null, grouped.get(1), center, 100L);
         assertFalse(big.has("id"), "只是看、没存:团没有编号");
-        assertEquals(AreaText.LIST_CELLS_UP_TO + 1, big.get("cells").getAsInt());
+        assertEquals(AreaText.LIST_CELLS_UP_TO + 1, big.get("count").getAsInt());
         assertFalse(big.has("positions"));
         assertEquals("west, 6 up", big.getAsJsonObject("nearest").get("direction").getAsString());
     }
@@ -165,6 +170,7 @@ class ScanOpsTest {
         JsonObject framed = AreaText.part("pond/b1", Cells.box(new BlockPos(0, 60, 0), new BlockPos(1, 60, 0)),
                 new BlockPos(3, 60, 0));
         assertFalse(framed.has("blocks"), "框出来的格不附带方块");
-        assertEquals("1,60,0", framed.getAsJsonArray("positions").get(0).getAsString(), "逐格由近及远列");
+        assertEquals(com.dwinovo.numen.cli.Shapes.pos(new BlockPos(1, 60, 0)), framed.getAsJsonArray("positions").get(0),
+                "逐格由近及远列");
     }
 }

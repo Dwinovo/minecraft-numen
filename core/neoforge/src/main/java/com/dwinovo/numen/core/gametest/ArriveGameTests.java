@@ -344,7 +344,7 @@ public class ArriveGameTests {
         BlockPos cell = helper.absolutePos(new BlockPos(11, 4, 11));
         NumenPlayer companion = spawnAt(helper, "gametest_reach_flat", new BlockPos(2, 2, 2), false);
         BlockPos start = companion.blockPosition();
-        ToolRun run = lua(companion, "move.goto_({" + cell.getX() + ", " + cell.getZ() + "}, {arrive = \"reach\"})");
+        ToolRun run = lua(companion, "move.goto_({x = " + cell.getX() + ", z = " + cell.getZ() + "}, {arrive = \"reach\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(run.receipt() != null, "the program has not finished");

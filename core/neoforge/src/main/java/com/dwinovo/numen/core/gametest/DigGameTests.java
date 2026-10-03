@@ -687,14 +687,15 @@ public class DigGameTests {
             }
             helper.assertTrue(dig[0].done(), "dig has not finished");
             String said = dig[0].outcome();
-            helper.assertTrue(!dig[0].succeeded() && dig[0].task() == null
+            helper.assertTrue(!dig[0].succeeded() && dig[0].task() == null && "out_of_reach".equals(dig[0].kind())
                             && said.contains("I did not start: none of the cells of " + MINED_AREA
                                     + " still to dig is within my reach where I stand")
                             && said.contains("2 more cell(s) of " + MINED_AREA + " are out of my reach from here, "
                                     + "the nearest at " + coords(nearer))
-                            && said.contains("`move.goto_(\"" + MINED_AREA + "\", {arrive = \"dig\"})`, then `work.dig(\""
-                                    + MINED_AREA + "\")`"),
-                    "the reply does not say what lies beyond her reach and how to get there: " + said);
+                            && ("move.goto_(\"" + MINED_AREA + "\", {arrive = \"dig\"})\nwork.dig(\"" + MINED_AREA
+                                    + "\")").equals(dig[0].hint()),
+                    "the reply does not say what lies beyond her reach and how to get there: " + said + " | "
+                            + dig[0].kind() + " | " + dig[0].hint());
             helper.assertTrue(companion.blockPosition().distSqr(start) <= 4, "she set off for blocks beyond her reach");
             helper.assertTrue(level.getBlockState(nearer).is(Blocks.OCHRE_FROGLIGHT)
                     && level.getBlockState(farther).is(Blocks.OCHRE_FROGLIGHT), "a froglight beyond her reach was dug");
@@ -730,11 +731,12 @@ public class DigGameTests {
                 refusal[1] = farGroup.get("id").getAsString();
                 ToolRun dig = lua(companion, "work.dig(\"" + refusal[1] + "\")");
                 helper.assertTrue(dig.task() == null, "a part wholly beyond her reach was accepted");
-                refusal[0] = dig.outcome();
+                refusal[0] = dig.kind() + " | " + dig.outcome() + " | " + dig.hint();
             }
-            helper.assertTrue(refusal[0] != null && refusal[0].contains("are out of my reach from here")
-                            && refusal[0].contains("`move.goto_(\"" + refusal[1] + "\", {arrive = \"dig\"})`, "
-                                    + "then `work.dig(\"" + refusal[1] + "\")`"),
+            helper.assertTrue(refusal[0] != null && refusal[0].startsWith("out_of_reach | ")
+                            && refusal[0].contains("are out of my reach from here")
+                            && refusal[0].endsWith(" | move.goto_(\"" + refusal[1] + "\", {arrive = \"dig\"})\n"
+                                    + "work.dig(\"" + refusal[1] + "\")"),
                     "the refusal does not say where the part is and how to get there: " + refusal[0]);
             for (BlockPos rel : far) {
                 helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).is(Blocks.VERDANT_FROGLIGHT),

@@ -53,7 +53,10 @@ public record NumenEventPayload(UUID entityUuid, List<EventQueue.Entry> entries)
                     Wire.TO_CLIENT.text(), EventQueue.Entry::text,
                     ByteBufCodecs.VAR_LONG, EventQueue.Entry::ts,
                     ByteBufCodecs.BOOL, EventQueue.Entry::urgent,
-                    EventQueue.Entry::new);
+                    ByteBufCodecs.optional(Wire.TO_CLIENT.text()), e -> java.util.Optional.ofNullable(e.result())
+                            .map(com.google.gson.JsonObject::toString),
+                    (type, text, ts, urgent, result) -> new EventQueue.Entry(type, text, ts, urgent,
+                            result.map(r -> com.google.gson.JsonParser.parseString(r).getAsJsonObject()).orElse(null)));
 
     public static final StreamCodec<ByteBuf, NumenEventPayload> STREAM_CODEC =
             StreamCodec.composite(
@@ -77,7 +80,7 @@ public record NumenEventPayload(UUID entityUuid, List<EventQueue.Entry> entries)
             out.set(i, new EventQueue.Entry(e.type(), NumenEvents.withBody(e.text(),
                     Wire.TO_CLIENT.tooBig("A " + e.type() + " event", ByteBufUtil.utf8Bytes(e.text()))
                             + " together with the rest, so its text was not delivered."),
-                    e.ts(), e.urgent()));
+                    e.ts(), e.urgent(), e.result()));
             candidate = new NumenEventPayload(entityUuid, List.copyOf(out));
             if (fits.test(candidate)) {
                 return candidate;

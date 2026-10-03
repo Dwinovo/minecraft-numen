@@ -1,6 +1,7 @@
 package com.dwinovo.numen.cli;
 
 import com.dwinovo.numen.agent.script.ScriptEngine;
+import com.dwinovo.numen.agent.script.ScriptType;
 
 /**
  * {@code mc}:原版与模组的指令,写法和玩家在聊天栏里敲的一样(前面的 {@code /} 可写可不写),以她自己的权限执行。解析、过权限层
@@ -21,6 +22,10 @@ public final class McCommands {
                 + "permission level.", mc ->
                 mc.server("run", "Run one Minecraft or mod command and return what it said.",
                                 (src, args) -> CommandRunner.mc(src, Line.of(args.get(LINE)).text()), LINE)
+                        .returns(ScriptType.table(
+                                ScriptType.field("command", ScriptType.STRING, "The command as it ran, with its /."),
+                                ScriptType.field("output", ScriptType.listOf(ScriptType.STRING), "What it said, line by line."),
+                                ScriptType.field("result", ScriptType.INTEGER, "The number the command returned.")))
                         .example(call("help give"))
                         .example(call("time query daytime"))
                         .note("The server decides which commands you may use at your permission level; "

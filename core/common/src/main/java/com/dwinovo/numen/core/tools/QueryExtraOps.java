@@ -77,22 +77,9 @@ public final class QueryExtraOps {
         List<String> rows = new ArrayList<>(matched.size());
         com.google.gson.JsonArray all = new com.google.gson.JsonArray();
         for (ScoredEntity s : matched) {
-            JsonObject o = new JsonObject();
-            o.addProperty("id", s.entity.getId());
-            o.addProperty("type", s.entity.getType().getDescriptionId());
+            JsonObject o = com.dwinovo.numen.cli.Shapes.entity(s.entity);
             o.addProperty("category", s.category);
-            JsonObject pos = new JsonObject();
-            pos.addProperty("x", s.entity.getX());
-            pos.addProperty("y", s.entity.getY());
-            pos.addProperty("z", s.entity.getZ());
-            o.add("position", pos);
-            BlockPos cell = s.entity.blockPosition();
-            com.google.gson.JsonArray xyz = new com.google.gson.JsonArray();
-            xyz.add(cell.getX());
-            xyz.add(cell.getY());
-            xyz.add(cell.getZ());
-            o.add("cell", xyz);
-            o.addProperty("distance", s.distance);
+            o.addProperty("distance", Math.round(s.distance * 10.0) / 10.0);
             if (s.entity instanceof net.minecraft.world.entity.item.ItemEntity item) {
                 o.addProperty("item", BuiltInRegistries.ITEM.getKey(item.getItem().getItem()).toString());
                 o.addProperty("count", item.getItem().getCount());
@@ -213,7 +200,7 @@ public final class QueryExtraOps {
 
         if (recipes.isEmpty()) {
             return TaskResult.ok("no recipe for " + name + " — it's obtained another way (mine it, or "
-                    + "trade), not crafted or smelted.").toJson();
+                    + "trade), not crafted or smelted.", Map.of(RECIPES, recipes)).toJson();
         }
         return new Listing(recipes.size() + " recipe(s) for " + name + ":", recipes, "To make it —\n"
                 + "• [crafting]: inv.craft(<item>, {count = N}) — it lays out the grid and takes the "
@@ -224,8 +211,11 @@ public final class QueryExtraOps {
                 + "out.\n"
                 + "• [stonecutter]: use.block it, use.shift the input (the menu routes it in), take the "
                 + "output. [smithing]: use.block it, use.gui, then use.transfer template + base + "
-                + "addition each into its own slot.").result(args).toJson();
+                + "addition each into its own slot.").result(args, Map.of(RECIPES, recipes)).toJson();
     }
+
+    /** {@code inv.recipe} 返回的那一项:每条配方一段文字。 */
+    public static final String RECIPES = "recipes";
 
     private static String format(CraftingRecipe recipe, ItemStack result) {
         int count = result.getCount();
@@ -316,20 +306,23 @@ public final class QueryExtraOps {
      * 一格方块里装着什么,一行一个条目,按输出预算分页({@link Listing})。
      *
      */
-    public String inspectBlockStorage(int x, int y, int z, NumenPlayer self, CommandArgs args) {
-        BlockPos pos = new BlockPos(x, y, z);
+    public String inspectBlockStorage(BlockPos pos, NumenPlayer self, CommandArgs args) {
         BlockState state = self.level().getBlockState(pos);
-        String coord = x + "," + y + "," + z;
+        String coord = pos.getX() + "," + pos.getY() + "," + pos.getZ();
         if (state.isAir()) {
-            return TaskResult.fail("block at " + coord + " is air — nothing to read.").toJson();
+            return TaskResult.fail(com.dwinovo.numen.agent.script.ErrorKind.NOT_FOUND, "block at " + coord
+                    + " is air — nothing to read.", null).toJson();
         }
         String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
         List<String> caps = Services.CAPS.describe(self.level(), pos);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("block", com.dwinovo.numen.cli.Shapes.block(pos, state));
+        data.put("storage", caps);
         if (caps.isEmpty()) {
             return TaskResult.ok(id + " at " + coord + " exposes no item/fluid/energy storage "
                     + "(not a machine/tank/battery, or it keeps its state elsewhere). "
-                    + "If it has a GUI, right-click it (use.block) then use.gui().").toJson();
+                    + "If it has a GUI, right-click it (use.block) then use.gui().", data).toJson();
         }
-        return new Listing(id + " at " + coord + ":", caps, "").result(args).toJson();
+        return new Listing(id + " at " + coord + ":", caps, "").result(args, data).toJson();
     }
 }

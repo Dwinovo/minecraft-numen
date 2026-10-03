@@ -43,8 +43,10 @@ class ArgTypeChoiceAndListTest {
     static void register() {
         door().registerCommands("gt_more", "A group whose actions take the choice, tag and list types.", g -> {
             g.server("find", "Find things.", ArgTypeChoiceAndListTest::remember, IDS, RADIUS, KIND)
+                    .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
                     .example("gt_more.find(\"#minecraft:logs\", \"iron_ore\", {radius = 12.5, kind = \"hostile\"})");
             g.server("pick", "Pick one.", ArgTypeChoiceAndListTest::remember, WHAT, MODE, REACH)
+                    .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
                     .example("gt_more.pick(\"#minecraft:village\", {mode = \"far\", reach = 2})");
         });
     }
@@ -117,16 +119,16 @@ class ArgTypeChoiceAndListTest {
         assertEquals(viaLine, LAST.get(), "从脚本进来,处理函数拿到的是同一份");
 
         assertTrue(serve("{\"radius\": 1, \"kind\": \"all\", \"ids\": []}")
-                .startsWith("error: argument 'ids': expected a list: id or #tag"));
+                .startsWith("argument 'ids': expected a list: id or #tag"));
         assertTrue(serve("{\"radius\": 1, \"kind\": \"all\", \"ids\": \"stone\"}")
-                .startsWith("error: argument 'ids': expected a list: id or #tag"));
+                .startsWith("argument 'ids': expected a list: id or #tag"));
         assertTrue(serve("{\"radius\": 1, \"kind\": \"all\", \"ids\": [\"stone\", \"Gold\"]}")
-                .startsWith("error: argument 'ids': expected an id like minecraft:oak_log"));
+                .startsWith("argument 'ids': expected an id like minecraft:oak_log"));
         assertTrue(serve("{\"radius\": 1, \"kind\": \"all\", \"ids\": [\"iron_ore gold_ore\"]}")
-                .startsWith("error: argument 'ids': expected a single id or #tag"),
+                .startsWith("argument 'ids': expected a single id or #tag"),
                 "数组里的一项只能是一个值,空格不拆");
         assertTrue(serve("{\"radius\": 1, \"kind\": \"monsters\", \"ids\": [\"stone\"]}")
-                .startsWith("error: argument 'kind': expected one of hostile, passive, player, all"));
+                .startsWith("argument 'kind': expected one of hostile, passive, player, all"));
     }
 
     @Test
@@ -137,22 +139,28 @@ class ArgTypeChoiceAndListTest {
     @Test
     void theHelpNamesEachType() {
         assertEquals("""
-                gt_more.find(ids..., {radius=…, kind=…})
-                  Find things.
-                  ids... (id or #tag, e.g. minecraft:oak_log or #minecraft:logs; one, or several as a list {a, b}) — What to find.
-                  radius= (number 1-64; optional) — How far. Omit to look 16 blocks around.
-                  kind= (one of hostile, passive, player, all; optional) — Which kind. Omit to take every kind.
-                  Examples:
-                    gt_more.find("#minecraft:logs", "iron_ore", {radius = 12.5, kind = "hostile"})""",
+                ---Find things.
+                ---@param ids string|string[] What to find.
+                ---@param opts? gt_more.find.opts
+                function gt_more.find(ids, opts) end
+
+                ---@class gt_more.find.opts
+                ---@field radius? number How far. Omit to look 16 blocks around.
+                ---@field kind? "hostile"|"passive"|"player"|"all" Which kind. Omit to take every kind.
+                -- Examples:
+                --   gt_more.find("#minecraft:logs", "iron_ore", {radius = 12.5, kind = "hostile"})""",
                 CliFixture.help("gt_more.find"));
         assertEquals("""
-                gt_more.pick(what, {mode=…, reach=…})
-                  Pick one.
-                  what (id or #tag, e.g. minecraft:oak_log or #minecraft:logs) — Which one.
-                  mode= (one of near, far; optional) — How to pick. Omit to pick the nearest.
-                  reach= (number 0.5-4.5; optional) — How far to reach. Omit to reach as far as a hand does.
-                  Examples:
-                    gt_more.pick("#minecraft:village", {mode = "far", reach = 2})""", CliFixture.help("gt_more.pick"));
+                ---Pick one.
+                ---@param what string Which one.
+                ---@param opts? gt_more.pick.opts
+                function gt_more.pick(what, opts) end
+
+                ---@class gt_more.pick.opts
+                ---@field mode? "near"|"far" How to pick. Omit to pick the nearest.
+                ---@field reach? number How far to reach. Omit to reach as far as a hand does.
+                -- Examples:
+                --   gt_more.pick("#minecraft:village", {mode = "far", reach = 2})""", CliFixture.help("gt_more.pick"));
     }
 
     private static CommandArgs read(String json) {

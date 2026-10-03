@@ -1,6 +1,8 @@
 package com.dwinovo.numen.script;
 
+import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.agent.script.ScriptEngine;
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.agent.script.ScriptCall;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
@@ -68,26 +70,36 @@ public final class Scripts {
     private static void actions(CommandGroup script) {
         script.server("list", "The scripts you can run and the built-in library, one line each: what it does, whose "
                         + "it is, how its runs went.", (src, args) -> src.reply(list(src.companion(), args)), Listing.PAGE)
+                .returns(SCRIPTS, ScriptType.listOf(ScriptType.table(
+                        ScriptType.field("name", ScriptType.STRING, null),
+                        ScriptType.field("summary", ScriptType.STRING, "Its first comment line."),
+                        ScriptType.field("whose", ScriptType.STRING, "built in, library, or saved by <companion>."),
+                        ScriptType.field("runs", ScriptType.INTEGER, "How many times it ran."),
+                        ScriptType.field("finished", ScriptType.INTEGER, "How many of those ran to the end."))))
                 .example("script.list()")
                 .note("Instant and read-only.")
                 .seeAlso("script show", "script run");
         script.server("show", "Show a script or a library in full, with how its runs went.",
                         (src, args) -> src.reply(show(src.companion(), args.get(NAME))), NAME)
-                .example("script.show(\"mine\")")
+                .returns(ScriptType.table(ScriptType.field("script", ScriptType.STRING, null),
+                        ScriptType.field("builtin", ScriptType.BOOLEAN, null),
+                        ScriptType.field("code", ScriptType.STRING, "The whole program.")))
+                .example("print(script.show(\"mine\").code)")
                 .note("Instant and read-only. Read one before running it for the first time, and before you write "
                         + "your own version of it; a library shows how its functions are put together. In a script it "
-                        + "returns {script, builtin, code}: `script.save(script.show(\"mine\").code, {name = \"mine2\"})` "
+                        + "returns {x = script, y = builtin, z = code}: `script.save(script.show(\"mine\").code, {name = \"mine2\"})` "
                         + "keeps a copy to change.")
                 .seeAlso("script run", "script save");
         script.server("run", "Run a script by name with arguments; the receipt says how it ended, call by call, and "
                         + "the call returns what the script returned.", Scripts::run, RUN)
-                .returns(ScriptCall.RETURNED)
+                .returns(ScriptCall.RETURNED, new ScriptType.Simple("any"))
                 .example("script.run(\"mine\", \"ores\")")
                 .note("Runs inside your program: one API call at a time, each waiting for the work it starts to "
                         + "finish, stopping between calls when your owner speaks or something urgent comes up.")
                 .seeAlso("script show", "script list");
         script.server("save", "Keep a program under a name so you can run it again.",
                         Scripts::save, CODE, NEW_NAME)
+                .returns(ScriptType.table(ScriptType.field("name", ScriptType.STRING, "The name it is kept under.")))
                 .example("script.save(\"" + ScriptEngine.IN_USE.comment("Dig out the pit.") + "\\n"
                         + "work.dig('pit')\", {name = \"pit\"})")
                 .note("Instant. The program is read first and not kept if it does not compile; the error says the "
@@ -98,6 +110,7 @@ public final class Scripts {
                 .seeAlso("script run", "script delete");
         script.server("delete", "Delete a script you or another companion saved.",
                         (src, args) -> delete(src, args.get(NAME)), NAME)
+                .returns(ScriptType.NOTHING)
                 .example("script.delete(\"sweep\")")
                 .note("Instant. Built-in scripts cannot be deleted. Deleting one another companion saved asks your "
                         + "owner first.")
@@ -106,18 +119,38 @@ public final class Scripts {
 
     // ==================== 看 ====================
 
+    /** {@code script.list} 返回的那一项:每份一张表。 */
+    private static final String SCRIPTS = "scripts";
+
     private static String list(NumenPlayer her, CommandArgs args) {
         ScriptStore store = store(her);
         List<String> rows = new ArrayList<>();
-        BuiltinScripts.all().forEach((name, b) -> rows.add(name + " — " + b.summary()
-                + (b.library() ? " [built-in library: its functions are in every script]" : " [built in] "
-                + record(store.stats(name), true))));
-        store.saved().forEach((name, s) -> rows.add(name + " — " + s.summary() + " [saved by " + s.authorName()
-                + "] " + record(store.stats(name), true)));
+        List<Map<String, Object>> scripts = new ArrayList<>();
+        BuiltinScripts.all().forEach((name, b) -> {
+            rows.add(name + " — " + b.summary() + (b.library() ? " [built-in library: its functions are in every "
+                    + "script]" : " [built in] " + record(store.stats(name), true)));
+            scripts.add(entry(name, b.summary(), b.library() ? "library" : "built in", store.stats(name)));
+        });
+        store.saved().forEach((name, s) -> {
+            rows.add(name + " — " + s.summary() + " [saved by " + s.authorName() + "] "
+                    + record(store.stats(name), true));
+            scripts.add(entry(name, s.summary(), "saved by " + s.authorName(), store.stats(name)));
+        });
         String head = rows.isEmpty() ? "No scripts yet. Write a program with the " + ScriptEngine.IN_USE.toolName()
                 + " tool, then keep it with script.save(code, {name = \"...\"})." : rows.size() + " script"
                 + (rows.size() == 1 ? "" : "s") + ". script.show(name) prints one; script.run(name, args...) runs one.";
-        return new Listing(head, rows, "").result(args).toJson();
+        return new Listing(head, rows, "").result(args, Map.of(SCRIPTS, scripts)).toJson();
+    }
+
+    /** 清单里一份脚本的那张表。 */
+    private static Map<String, Object> entry(String name, String summary, String whose, ScriptStore.Stats stats) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("name", name);
+        out.put("summary", summary);
+        out.put("whose", whose);
+        out.put("runs", stats.runs());
+        out.put("finished", stats.ok());
+        return out;
     }
 
     private static String show(NumenPlayer her, String name) {
@@ -125,7 +158,7 @@ public final class Scripts {
         BuiltinScripts.Builtin builtin = BuiltinScripts.get(name);
         ScriptStore.Saved saved = store.get(name);
         if (builtin == null && saved == null) {
-            return TaskResult.fail(missing(name, store)).toJson();
+            return TaskResult.fail(ErrorKind.NOT_FOUND, missing(name, store), "script.list()").toJson();
         }
         String whose = builtin != null ? (builtin.library() ? "built-in library, read-only" : "built in, read-only")
                 : "saved by " + saved.authorName() + " on " + WHEN.format(Instant.ofEpochMilli(saved.savedAt()));
@@ -167,12 +200,12 @@ public final class Scripts {
         BuiltinScripts.Builtin builtin = BuiltinScripts.get(name);
         ScriptStore.Saved saved = store.get(name);
         if (builtin == null && saved == null) {
-            src.reply(TaskResult.fail(missing(name, store)).toJson());
+            src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, missing(name, store), "script.list()").toJson());
             return;
         }
         if (builtin != null && builtin.library()) {
-            src.reply(TaskResult.fail(name + " is a library, not a script: its functions are in every script "
-                    + "already (the <api> index lists them); call them.").toJson());
+            src.reply(TaskResult.fail(ErrorKind.BAD_ARGUMENT, name + " is a library, not a script: its functions are "
+                    + "in every script already (the <api> index lists them); call them.", null).toJson());
             return;
         }
         Map<String, Object> run = new LinkedHashMap<>();
@@ -202,19 +235,21 @@ public final class Scripts {
         String name = args.get(NEW_NAME) == null ? freeName(store) : Names.checked("script", args.get(NEW_NAME));
         String code = args.get(CODE);
         if (BuiltinScripts.get(name) != null) {
-            src.reply(TaskResult.fail(name + " is built in and read-only; save your version under another "
-                    + "name, e.g. {name = \"my-" + name + "\"}.").toJson());
+            src.reply(TaskResult.fail(ErrorKind.BAD_ARGUMENT, name + " is built in and read-only; save your version "
+                    + "under another name.", "{name = \"my-" + name + "\"}").toJson());
             return;
         }
         String problem = ScriptEngine.IN_USE.check(name, code);
         if (problem != null) {
-            src.reply(TaskResult.fail("did not save " + name + ": it does not compile: " + problem).toJson());
+            src.reply(TaskResult.fail(ErrorKind.BAD_ARGUMENT, "did not save " + name + ": it does not compile: "
+                    + problem, null).toJson());
             return;
         }
         String summary = ScriptEngine.IN_USE.summary(code);
         if (summary == null) {
-            src.reply(TaskResult.fail("did not save " + name + ": start it with a comment line saying what it "
-                    + "does, e.g. " + ScriptEngine.IN_USE.comment("Dig every part of an area, nearest first.")).toJson());
+            src.reply(TaskResult.fail(ErrorKind.BAD_ARGUMENT, "did not save " + name + ": start it with a comment line "
+                    + "saying what it does", ScriptEngine.IN_USE.comment("Dig every part of an area, nearest first."))
+                    .toJson());
             return;
         }
         ScriptStore.Saved before = store.get(name);
@@ -223,20 +258,22 @@ public final class Scripts {
                     store.put(name, new ScriptStore.Saved(code, summary, her.getUUID(),
                             her.getGameProfile().getName(), System.currentTimeMillis()));
                     allowed.reply(TaskResult.ok((before == null ? "Saved script " : "Replaced script ") + name + ": "
-                            + summary + " Run it with script.run(\"" + name + "\", ...).").toJson());
+                            + summary + " Run it with script.run(\"" + name + "\", ...).", Map.of("name", name))
+                            .toJson());
                 });
     }
 
     private static void delete(ServerSource src, String name) {
         NumenPlayer her = src.companion();
         if (BuiltinScripts.get(name) != null) {
-            src.reply(TaskResult.fail(name + " is built in; built-in scripts and libraries cannot be deleted.").toJson());
+            src.reply(TaskResult.fail(ErrorKind.BAD_ARGUMENT, name + " is built in; built-in scripts and libraries "
+                    + "cannot be deleted.", null).toJson());
             return;
         }
         ScriptStore store = store(her);
         ScriptStore.Saved saved = store.get(name);
         if (saved == null) {
-            src.reply(TaskResult.fail(missing(name, store)).toJson());
+            src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, missing(name, store), "script.list()").toJson());
             return;
         }
         src.authorize(Action.editScript(name, saved.author()), "script.delete " + name, allowed -> {

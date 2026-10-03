@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.tools.work;
 
+import com.dwinovo.numen.cli.Shapes;
+import com.dwinovo.numen.agent.script.ScriptType;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -61,7 +63,8 @@ public final class BuildCommands {
             .values("a y in the design's own coordinates, as the steps write it; a blueprint file's lowest level is 0")
             .whenOmitted("list the steps, or price the blueprint file");
     private static final Param<BlockPos> AT_CELL = Param.optional("at", ArgType.cell(),
-            "The world cell the design's {0, 0, 0} goes to (a blueprint file's lowest north-west corner): what the "
+            "The world cell the design's origin {x = 0, y = 0, z = 0} goes to (a blueprint file's lowest north-west "
+                    + "corner): what the "
                     + "design draws at 0 0 0 is built there, y=1 one higher. A floor drawn at y=0 given the ground's "
                     + "own y replaces the top ground block, flush with the ground outside; given one more it sits on "
                     + "top of the ground.")
@@ -71,6 +74,26 @@ public final class BuildCommands {
                             + "runs south and what faced north faces east.")
             .values("0, 90, 180 or 270")
             .whenOmitted("keep it as drawn");
+
+    /** 一次放方块(当场放的原语、{@code build.at})收尾时的结果。 */
+    static final ScriptType.Class BUILT_CLASS = new ScriptType.Class("Placed",
+            "What a build.at or a primitive placed now did.", null, java.util.List.of(
+            ScriptType.field("placed", ScriptType.INTEGER, "Blocks placed."),
+            ScriptType.field("left", ScriptType.INTEGER, "Cells still to do."),
+            ScriptType.optional("completed", ScriptType.INTEGER, "Cells that now match."),
+            ScriptType.optional("replaced", ScriptType.INTEGER, null),
+            ScriptType.optional("cleared", ScriptType.INTEGER, null),
+            ScriptType.optional("removed", ScriptType.INTEGER, null),
+            ScriptType.optional("building", ScriptType.STRING, "The building's name, house#1."),
+            ScriptType.optional("site", ScriptType.listOf(Shapes.POS.type()), "Two corners of the site."),
+            ScriptType.optional("still_short", ScriptType.STRING, "What you are short of.")));
+    /** 一份设计。 */
+    static final ScriptType.Class DESIGN_CLASS = new ScriptType.Class("Design", "One of the designs.", null,
+            java.util.List.of(ScriptType.field("name", ScriptType.STRING, null),
+                    ScriptType.field("steps", ScriptType.INTEGER, null),
+                    ScriptType.field("cells", ScriptType.INTEGER, null)));
+    static final ScriptType BUILT = BUILT_CLASS.type();
+    static final ScriptType DESIGN_INFO = DESIGN_CLASS.type();
 
     private BuildCommands() {}
 
@@ -103,20 +126,23 @@ public final class BuildCommands {
     }
 
     private static void actions(CommandGroup build) {
+        build.declare(BUILT_CLASS);
+        build.declare(DESIGN_CLASS);
         primitives(build);
         designs(build);
         build.server("at", "Make the cells of a spot that your hand reaches from where you stand look like a design or "
                         + "blueprint file: builds it the first time, and changes it to match after.", BuildCommands::at,
                         SOURCE, AT_CELL, AT_ROTATION)
-                .example("build.at(\"house\", {at = {100, 64, -20}})")
-                .example("build.at(\"japanese_cottage\", {at = {100, 64, -20}, rotation = 90})")
+                .returns(BUILT)
+                .example("build.at(\"house\", {at = {x = 100, y = 64, z = -20}})")
+                .example("build.at(\"japanese_cottage\", {at = {x = 100, y = 64, z = -20}, rotation = 90})")
                 .note("It never walks and never digs: it places only the cells within reach of where you stand. "
                         + "`build.left` says what is still to do and where; `build.raise` (library) walks the site, "
                         + "digs what is in the way and calls this until the whole building stands.")
-                .note("Background work: refused at once when nothing of it is within reach to place, with how many "
-                        + "cells are left and the move.goto_ call to the lowest nearest one — no task id, no "
-                        + "task_finished. The end of an accepted job arrives as a task_finished event saying how many "
-                        + "blocks were placed and what is still to do.")
+                .note("Background work: fails at once with kind out_of_reach when nothing of it is within reach to "
+                        + "place, with how many cells are left and a hint with the move.goto_ call to the lowest "
+                        + "nearest one; nothing starts. Otherwise it returns when the job ends: how many blocks were "
+                        + "placed and how many cells are still to do.")
                 .note("The same design (or file) at the same dimension and spot is the same building: building it "
                         + "again after changing the design adds what is missing, replaces what differs, and removes "
                         + "only blocks you placed there before that the design no longer has and that nobody has "
@@ -133,18 +159,32 @@ public final class BuildCommands {
                         + "out of reach and the lowest nearest of those.",
                         (src, args) -> src.reply(BuildOps.left(src.companion(), args.get(SOURCE), spot(src, args),
                                 Placement.quarters(args.get(AT_ROTATION)))), SOURCE, AT_CELL, AT_ROTATION)
-                .example("build.left(\"house\", {at = {100, 64, -20}})")
-                .note("In a script: `local left = build.left(\"house\", {at = {100, 64, -20}})`, then "
-                        + "`if left.reach > 0 then build.at(\"house\", {at = {100, 64, -20}}) end`.")
-                .note("Instant and read-only. Returns a table: left (cells still to do), reach (within reach to "
-                        + "place now), dig (up to 16 cells {x, y, z} holding another block to dig out first, nearest "
-                        + "first), far (out of reach), next (the lowest, then nearest, of those; `move.goto_` it with "
-                        + "{arrive = \"reach\"} to get within reach), short (cells holding "
-                        + "another block with nothing of yours to put there), skipped (cells you leave alone).")
+                .returns(ScriptType.table(
+                        ScriptType.field("left", ScriptType.INTEGER, "Cells still to do."),
+                        ScriptType.field("reach", ScriptType.INTEGER, "Within reach to place now."),
+                        ScriptType.field("dig", ScriptType.listOf(Shapes.POS.type()), "Up to 16 cells holding another "
+                                + "block to dig out first, nearest first."),
+                        ScriptType.field("far", ScriptType.INTEGER, "Out of reach."),
+                        ScriptType.optional("next", Shapes.POS.type(), "The lowest, then nearest, of those out of "
+                                + "reach: move.goto_(left.next, {arrive = \"reach\"}) gets within reach of it."),
+                        ScriptType.optional("short", ScriptType.INTEGER, "Cells holding another block with nothing "
+                                + "of yours to put there."),
+                        ScriptType.optional("skipped", ScriptType.INTEGER, "Cells you leave alone.")))
+                .example("local left = build.left(\"house\", {at = {x = 100, y = 64, z = -20}})\n"
+                        + "if left.reach > 0 then build.at(\"house\", {at = {x = 100, y = 64, z = -20}}) end")
+                .note("Instant and read-only.")
                 .note("A cell is within reach exactly when build.at would place it from here.")
                 .seeAlso("build at", "build raise");
         build.server("built", "The buildings made with `build.at`: design, dimension, spot, rotation, when and by whom.",
                         (src, args) -> src.reply(BuildOps.built(src.companion().getServer(), args)), Listing.PAGE)
+                .returns("buildings", ScriptType.listOf(ScriptType.table(
+                        ScriptType.field("name", ScriptType.STRING, "house#1"),
+                        ScriptType.field("source", ScriptType.STRING, "The design or blueprint file."),
+                        ScriptType.field("dimension", ScriptType.STRING, null),
+                        ScriptType.field("at", Shapes.POS.type(), null),
+                        ScriptType.field("rotation", ScriptType.INTEGER, null),
+                        ScriptType.field("builder", ScriptType.STRING, null),
+                        ScriptType.field("cells", ScriptType.INTEGER, "Blocks on its record."))))
                 .example("build.built()")
                 .note("Instant and read-only. A building whose design was deleted is still listed, and says so.")
                 .seeAlso("build at");
@@ -153,38 +193,38 @@ public final class BuildCommands {
     /** 七个原语:同一个处理函数,带 {@code into} 记进设计,不带当场放。 */
     private static void primitives(CommandGroup build) {
         primitive(build, Primitive.SET, "Set one cell to exactly the block state written.")
-                .example("build.set({10, 65, 5}, {block = \"oak_stairs[facing=east,half=top]\"})")
-                .example("build.set({10, 64, 5}, {block = \"air\", into = \"house\"})")
+                .example("build.set({x = 10, y = 65, z = 5}, {block = \"oak_stairs[facing=east,half=top]\"})")
+                .example("build.set({x = 10, y = 64, z = 5}, {block = \"air\", into = \"house\"})")
                 .note("For a block that should face the way you look, like a chest or a furnace, use `build.place`.");
         primitive(build, Primitive.PLACE, "Place one block the way a player right-clicks it in: it faces the way "
                 + "you look.")
-                .example("build.place({10, 64, 5}, {block = \"crafting_table\"})")
-                .example("build.place({3, 1, 2}, {block = \"chest\", into = \"house\"})");
+                .example("build.place({x = 10, y = 64, z = 5}, {block = \"crafting_table\"})")
+                .example("build.place({x = 3, y = 1, z = 2}, {block = \"chest\", into = \"house\"})");
         primitive(build, Primitive.LINE, "A line of blocks between two points, diagonals included: beams, posts, "
                 + "ridges.")
-                .example("build.line({0, 1, 0}, {0, 3, 0}, {block = \"oak_log[axis=y]\", into = \"house\"})")
-                .example("build.line({10, 64, 5}, {20, 64, 5}, {block = \"cobblestone_wall\"})");
+                .example("build.line({x = 0, y = 1, z = 0}, {x = 0, y = 3, z = 0}, {block = \"oak_log[axis=y]\", into = \"house\"})")
+                .example("build.line({x = 10, y = 64, z = 5}, {x = 20, y = 64, z = 5}, {block = \"cobblestone_wall\"})");
         primitive(build, Primitive.LAYER, "Stamp a character grid: a floor, a wall ring, a roof course, a window "
                 + "pattern, anything you can draw.")
-                .example("build.layer({\"#####\", \"#####\", \"#####\"}, {at = {0, 0, 0}, block = \"cobblestone\", "
+                .example("build.layer({\"#####\", \"#####\", \"#####\"}, {at = {x = 0, y = 0, z = 0}, block = \"cobblestone\", "
                         + "into = \"house\"})")
-                .example("build.layer({\"#####\", \"#...#\", \"#####\"}, {at = {0, 1, 0}, "
+                .example("build.layer({\"#####\", \"#...#\", \"#####\"}, {at = {x = 0, y = 1, z = 0}, "
                         + "block = \"oak_planks*8, spruce_planks*2\", up_to = 3, into = \"house\"})")
-                .example("build.layer({\"<<<<<\", \".....\", \">>>>>\"}, {at = {0, 4, 0}, "
+                .example("build.layer({\"<<<<<\", \".....\", \">>>>>\"}, {at = {x = 0, y = 4, z = 0}, "
                         + "legend = {\"<=oak_stairs[facing=south]\", \">=oak_stairs[facing=north]\"}, into = \"house\"})")
-                .example("build.layer({\"#####\", \"#...#\", \"#####\"}, {at = {0, 1, 0}, block = \"stone_bricks\", "
+                .example("build.layer({\"#####\", \"#...#\", \"#####\"}, {at = {x = 0, y = 1, z = 0}, block = \"stone_bricks\", "
                         + "into = \"house\", step = 2})")
                 .note("Rows run +x from at, the first row at its z and each next row one further south, so the grid "
                         + "reads like a map. ' ' and '.' leave a cell alone; an air block digs one out.");
         primitive(build, Primitive.CYLINDER, "A cylinder from its bottom centre: towers, wells, round rooms.")
-                .example("build.cylinder({5, 0, 5}, {radius = 3, height = 6, block = \"stone_bricks\", hollow = true, "
+                .example("build.cylinder({x = 5, y = 0, z = 5}, {radius = 3, height = 6, block = \"stone_bricks\", hollow = true, "
                         + "into = \"tower\"})");
         primitive(build, Primitive.SPHERE, "A sphere around its centre: domes, globes.")
-                .example("build.sphere({5, 8, 5}, {radius = 5, block = \"glass\", hollow = true, into = \"tower\"})");
+                .example("build.sphere({x = 5, y = 8, z = 5}, {radius = 5, block = \"glass\", hollow = true, into = \"tower\"})");
         primitive(build, Primitive.COPY, "Copy a region to another corner, turned or mirrored: build one wing, "
                 + "mirror it.")
-                .example("build.copy({0, 0, 0}, {4, 5, 6}, {10, 0, 0}, {mirror = \"left_right\", into = \"house\"})")
-                .example("build.copy({100, 64, 20}, {104, 70, 26}, {110, 64, 20})")
+                .example("build.copy({x = 0, y = 0, z = 0}, {x = 4, y = 5, z = 6}, {x = 10, y = 0, z = 0}, {mirror = \"left_right\", into = \"house\"})")
+                .example("build.copy({x = 100, y = 64, z = 20}, {x = 104, y = 70, z = 26}, {x = 110, y = 64, z = 20})")
                 .note("In a design it copies the design's own earlier steps; run now it copies what already stands "
                         + "in the world.");
     }
@@ -200,11 +240,12 @@ public final class BuildCommands {
         params.add(Primitive.Params.BEFORE);
         return build.server(primitive.action, summary, (src, args) -> run(src, primitive, args),
                         params.toArray(Param<?>[]::new))
+                .returns(ScriptType.union(BUILT, DESIGN_INFO))
                 .note("Without into it is placed now, at world coordinates, as background work, and only the cells "
-                        + "within reach of where you stand: refused when none is, the end arrives as a task_finished "
-                        + "event. With into it becomes a step of that design, relative to its origin, and nothing is "
-                        + "built yet: added after the last step, or in place of step N with step = N, or before it "
-                        + "with before = N. `build.at` builds the design.")
+                        + "within reach of where you stand: it fails with out_of_reach when none is, and returns what it "
+                        + "placed when done. With into it becomes a step of that design, relative to its origin, and "
+                        + "nothing is built yet: added after the last step, or in place of step N with step = N, or "
+                        + "before it with before = N; it returns the design. `build.at` builds the design.")
                 .note("Blocks are written as /setblock takes them, block state included; a door or a bed is written "
                         + "as its lower half or foot. Without block it uses the block in your main hand. Later steps "
                         + "overwrite earlier cells.")
@@ -272,14 +313,30 @@ public final class BuildCommands {
     private static void designs(CommandGroup build) {
         build.server("new", "Start an empty design: a named list of primitive steps you can build anywhere.",
                         (src, args) -> src.reply(DesignOps.create(src.companion(), args.get(NEW_NAME))), NEW_NAME)
+                .returns(DESIGN_INFO)
                 .example("build.new(\"house\")")
                 .note("Instant. Add steps with any primitive and {into = \"house\"}; coordinates in a design are "
-                        + "relative to its origin {0, 0, 0}, which `build.at` puts on a spot.")
+                        + "relative to its origin {x = 0, y = 0, z = 0}, which `build.at` puts on a spot.")
                 .seeAlso("build layer", "build show", "build at");
         build.server("show", "Show a design step by step with what each costs, or price a blueprint file; or draw "
                         + "one level of either as a map.", (src, args) -> src.reply(DesignOps.show(src.companion(),
                         args.get(SOURCE), args.get(LAYER), args)),
                         SOURCE, LAYER, Listing.PAGE)
+                .returns(ScriptType.table(
+                        ScriptType.field("name", ScriptType.STRING, null),
+                        ScriptType.optional("steps", ScriptType.listOf(ScriptType.STRING),
+                                "A design's steps, each the call that makes it."),
+                        ScriptType.optional("cells", ScriptType.INTEGER, null),
+                        ScriptType.optional("size", ScriptType.STRING, "x by y by z."),
+                        ScriptType.optional("materials", new ScriptType.Simple("table<string, integer>"),
+                                "Items for all of it."),
+                        ScriptType.optional("short_of", new ScriptType.Simple("table<string, integer>"),
+                                "What you are still short of, in survival."),
+                        ScriptType.optional("layer_profile", new ScriptType.Simple("table<string, integer>"),
+                                "A blueprint file's cells per level."),
+                        ScriptType.optional("rows", ScriptType.listOf(ScriptType.STRING),
+                                "With layer: that level drawn as a map, north first."),
+                        ScriptType.optional("legend", ScriptType.STRING, "With layer: what each character is.")))
                 .example("build.show(\"house\")")
                 .example("build.show(\"house\", {layer = 1})")
                 .example("build.show(\"my cottage\", {layer = 0})")
@@ -295,17 +352,22 @@ public final class BuildCommands {
                 .seeAlso("build layer", "build at");
         build.server("drop", "Remove one step of a design.", (src, args) -> src.reply(DesignOps.drop(
                         src.companion(), args.get(STEP_REF).design(), args.get(STEP_REF).step())), STEP_REF)
+                .returns(DESIGN_INFO)
                 .example("build.drop(\"house/4\")")
                 .note("Instant. The steps after it move down by one.")
                 .seeAlso("build show");
         build.server("designs", "The designs and blueprint files you can build.",
                         (src, args) -> src.reply(DesignOps.library(src.companion().getServer(), args)), Listing.PAGE)
+                .returns("designs", ScriptType.listOf(ScriptType.table(ScriptType.field("name", ScriptType.STRING, null),
+                        ScriptType.field("kind", ScriptType.choice(java.util.List.of("design", "blueprint file")),
+                                null))))
                 .example("build.designs()")
                 .note("Instant and read-only. Designs are shared by everyone on this server; blueprint files are the "
                         + ".litematic, .schem, .nbt and .snbt files in its schematics folder.")
                 .seeAlso("build show", "build at");
         build.server("delete", "Delete a design.", (src, args) -> src.reply(DesignOps.delete(
                         src.companion(), args.get(DESIGN))), DESIGN)
+                .returns(ScriptType.NOTHING)
                 .example("build.delete(\"shed\")")
                 .note("Instant. What was built from it stays standing and stays in `build.built`; it just cannot be "
                         + "changed through the design any more. Only your owner's companions delete their designs.")

@@ -35,6 +35,13 @@ class WorkCommandGroupsTest {
         return run.receipt().getAsJsonObject("data").get("returned").getAsString();
     }
 
+    /** 一组帮助里列的函数名:{@code ---@class 组} 到 {@code 组 = {}} 之间每行 {@code ---@field 名字 fun(...)}。 */
+    private static List<String> functions(String help, String group) {
+        String body = help.substring(help.indexOf("---@class " + group + "\n"), help.indexOf("\n" + group + " = {}"));
+        return body.lines().filter(l -> l.startsWith("---@field "))
+                .map(l -> l.substring("---@field ".length(), l.indexOf(' ', "---@field ".length()))).toList();
+    }
+
     /** 一次调用的回执。 */
     private static JsonObject call(String code) {
         return CoreScripts.run(HER, code).lastReply();
@@ -58,18 +65,15 @@ class WorkCommandGroupsTest {
     @Test
     void buildFitsOnOnePageAndThrowawayIsItsOwnGroup() {
         String build = help("build");
-        List<String> actions = build.lines().filter(l -> l.startsWith("  build."))
-                .map(l -> l.substring("  build.".length(), l.indexOf('('))).toList();
         assertEquals(List.of("set", "place", "line", "layer", "cylinder", "sphere", "copy", "new", "show", "drop",
-                "designs", "delete", "at", "left", "built", "raise"), actions, build);
-        assertTrue(build.contains("\n  build.raise(name, opts) — ") && build.endsWith("(library build)"),
-                "库里的 build.raise 列在组里、标明出自库: " + build);
+                "designs", "delete", "at", "left", "built", "raise"), functions(build, "build"), build);
+        assertTrue(build.contains("\n---@field raise fun(name: string, opts?: table): integer "),
+                "库里的 build.raise 照它的类型注解列在组里: " + build);
+        assertTrue(build.contains("\n---@class Placed\n"), "组里返回值用到的类跟在后面: " + build);
         assertTrue(!build.contains("(page 1 of") && !build.contains("scaffold") && !build.contains("throwaway"), build);
         String throwaway = help("throwaway");
-        assertEquals(List.of("add", "remove", "set", "clear"), throwaway.lines()
-                .filter(l -> l.startsWith("  throwaway.")).map(l -> l.substring("  throwaway.".length(), l.indexOf('(')))
-                .toList(), throwaway);
-        assertTrue(throwaway.startsWith("throwaway — Your own setting: "), throwaway);
+        assertEquals(List.of("add", "remove", "set", "clear"), functions(throwaway, "throwaway"), throwaway);
+        assertTrue(throwaway.startsWith("---Your own setting: "), throwaway);
         CoreScripts.Run gone = CoreScripts.run(HER, "build.scaffold_add(\"minecraft:dirt\")");
         assertFalse(gone.ok(), "build 组里不再有垫路料的动作: " + gone.message());
         assertTrue(gone.message().contains("there is no API function build.scaffold_add"), gone.message());
@@ -78,29 +82,36 @@ class WorkCommandGroupsTest {
     @Test
     void movingItemsInAGuiIsOneStepPerCall() {
         String use = help("use");
-        assertTrue(use.contains("\n  use.transfer(from, to, {count=…}) — ") && use.contains("\n  use.shift(from) — "),
-                use);
+        assertTrue(use.contains("\n---@field transfer fun(from: integer, to: integer, opts?: {count?: integer}) ")
+                && use.contains("\n---@field shift fun(from: integer) "), use);
         CoreScripts.Run noGui = CoreScripts.run(HER, "use.transfer(1)");
-        assertTrue(!noGui.ok() && noGui.message().contains("use.transfer(from, to"),
-                "少写一格目标就附上这个动作的用法: " + noGui.message());
+        assertTrue(!noGui.ok() && noGui.message().contains("use.transfer: bad_argument — ")
+                        && noGui.message().contains("argument 'to' is missing"),
+                "少写一格目标是参数错、点名少的那个参数: " + noGui.message());
     }
 
     @Test
     void eachGroupAnswersItsHelp() {
         for (String group : List.of("move", "route", "work", "fight", "build", "throwaway")) {
-            assertTrue(help(group).startsWith(group + " — "), help(group));
+            String text = help(group);
+            assertTrue(text.startsWith("---") && text.contains("\n---@class " + group + "\n")
+                    && text.contains("\n" + group + " = {}"), text);
         }
         String routeHelp = help("route");
-        assertTrue(routeHelp.contains("\n  route.new([name], {to=…, arrive=…, near=…, …route flags}) — "),
-                "组帮助里路线标志整组写成一格: " + routeHelp);
+        assertTrue(routeHelp.contains("\n---@field new fun(name?: string, opts?: route.new.opts)"),
+                "组帮助里路线标志整组按名字引用: " + routeHelp);
         assertTrue(!routeHelp.contains("avoid_break"), routeHelp);
         String newHelp = help("route.new");
-        assertTrue(newHelp.contains("\n  Route flags (options):\n    alter= (one of none, natural, any;"), newHelp);
-        assertTrue(newHelp.contains("avoid_break="), newHelp);
+        assertTrue(newHelp.contains("\n---@class route.new.opts\n") && newHelp.contains("\n---@field alter? "),
+                newHelp);
+        assertTrue(newHelp.contains("\n---@field avoid_break? "), newHelp);
         String digHelp = help("work.dig");
-        assertTrue(digHelp.startsWith("work.dig(place..., {count=…})\n"), digHelp);
+        assertTrue(digHelp.contains("\nfunction work.dig(place, opts) end"), digHelp);
         String moveHelp = help("move");
-        assertTrue(moveHelp.contains("move.goto_") && moveHelp.contains("move.go("), "库函数与动作都列在组里: " + moveHelp);
+        assertEquals(List.of("go", "follow", "goto_"), functions(moveHelp, "move"), "库函数与动作都列在组里: " + moveHelp);
+        assertTrue(moveHelp.contains("\n---@field goto_ fun(place: Pos|Block|Entity|string, opts?: table): "
+                + "{pos: Pos, route: string, distance_left: number} Walk to a place: route.new, route.plan and move.go "
+                + "on your own route goto-<your name>.\n"), "库函数的说明是它注释的第一句: " + moveHelp);
         CoreScripts.Run mine = CoreScripts.run(HER, "work.mine(\"ores\")");
         assertTrue(!mine.ok() && mine.message().contains("there is no API function work.mine"),
                 "work mine 删了,没有别名: " + mine.message());
@@ -112,16 +123,16 @@ class WorkCommandGroupsTest {
      */
     @Test
     void theCallsSheWritesRead() {
-        for (String code : List.of("fight.attack(27)", "use.block({120, 64, -35})",
-                "use.block({120, 64, -35}, {left = true, hold = 1.5})", "use.entity(812, {sneak = true})",
-                "inv.drop(\"cobblestone\")", "inv.drop(\"cobblestone\", {count = 32})", "work.dig({120, 64, -35})",
-                "work.dig(\"ores/g3\", {120, 12, -35}, {count = 4})", "move.go(\"home\")", "move.follow(184)",
+        for (String code : List.of("fight.attack(27)", "use.block({x = 120, y = 64, z = -35})",
+                "use.block({x = 120, y = 64, z = -35}, {left = true, hold = 1.5})", "use.entity(812, {sneak = true})",
+                "inv.drop(\"cobblestone\")", "inv.drop(\"cobblestone\", {count = 32})", "work.dig({x = 120, y = 64, z = -35})",
+                "work.dig(\"ores/g3\", {x = 120, y = 12, z = -35}, {count = 4})", "move.go(\"home\")", "move.follow(184)",
                 "area.parts(\"ores\")", "area.has(\"ores/g3\")", "area.drop(\"ores/g2\")",
                 "area.grow(\"buffer\", \"house\")", "scan.blocks(\"iron_ore\")", "scan.entities()",
-                "scan.block({1, 2, 3})", "task.timer(\"check the furnace\", {after = 90})", "route.new(\"back\")",
-                "route.drop(\"home\")", "build.set({1, 2, 3}, {block = \"stone\"})",
-                "build.layer({\"###\"}, {at = {0, 1, 0}, block = \"oak_planks\", into = \"house\", step = 2})",
-                "build.drop(\"house/4\")", "build.at(\"house\", {at = {100, 64, -20}})", "build.left(\"house\")",
+                "scan.block({x = 1, y = 2, z = 3})", "task.timer(\"check the furnace\", {after = 90})", "route.new(\"back\")",
+                "route.drop(\"home\")", "build.set({x = 1, y = 2, z = 3}, {block = \"stone\"})",
+                "build.layer({\"###\"}, {at = {x = 0, y = 1, z = 0}, block = \"oak_planks\", into = \"house\", step = 2})",
+                "build.drop(\"house/4\")", "build.at(\"house\", {at = {x = 100, y = 64, z = -20}})", "build.left(\"house\")",
                 "memory.remember(\"main base -340,68,120\")", "todo.write({\"[>] dig\"})")) {
             var reading = com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.calls("t", code,
                     com.dwinovo.numen.cli.NumenCli.scriptCatalog());
@@ -130,7 +141,7 @@ class WorkCommandGroupsTest {
             com.dwinovo.numen.cli.NumenCli.invocation(reading.calls().get(0));
         }
         for (String wrong : List.of("fight.attack({entity_ids = {27, 26}})", "fight.attack(27, 26)",
-                "use.block(\"right\", {120, 64, -35})", "inv.drop(\"cobblestone\", 32)")) {
+                "use.block(\"right\", {x = 120, y = 64, z = -35})", "inv.drop(\"cobblestone\", 32)")) {
             var reading = com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.calls("t", wrong,
                     com.dwinovo.numen.cli.NumenCli.scriptCatalog());
             org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,

@@ -50,6 +50,35 @@ public interface ScriptEngine {
     /** 一张名字到值的表写成这种语言里的样子:{@code {alter = "natural"}}。 */
     String table(java.util.Map<String, Object> options);
 
+    /**
+     * 一个值写成这种语言里的字面量:字符串、数、布尔、列表、名字到值的表(按迭代顺序),{@code null} 是 nil。报错里说"你给了什么"、
+     * 提示里写一个位置都经它。
+     */
+    String value(Object value);
+
+    // ---- 签名:帮助与系统提示里的类型注解 ----
+
+    /** 一个类型写成这种语言的类型注解:{@code Pos|string}、{@code {count?: integer}}。 */
+    String typeText(ScriptType type);
+
+    /** 一个类的声明:名字、说明、每个字段一行。 */
+    String classText(ScriptType.Class type);
+
+    /** 一个函数的全部说明:签名(参数逐个带说明、返回什么)、选项与结果的字段、例子、注意、相关。 */
+    String functionText(FunctionDoc fn);
+
+    /** 一个函数在一组的清单里的一行:名字、参数与返回的类型、一句说明。 */
+    String functionLine(FunctionDoc fn);
+
+    /** 一组的清单:{@code group} 是组名,{@code lines} 是每个函数一行({@link #functionLine} 或 {@link #libraryLine})。 */
+    String groupText(String group, String summary, List<String> lines);
+
+    /** 库里一个函数的全部说明:它上面那几行注释(带类型注解)原样,接着它的定义行。 */
+    String libraryText(Defined fn);
+
+    /** 库里一个函数在一组的清单里的一行:按它的类型注解写,和 {@link #functionLine} 同一种样子。 */
+    String libraryLine(Defined fn);
+
     /** 一行说明在这种语言里写成注释的样子(说明从正文开头那行注释读,见 {@link #summary}):{@code -- Dig out an area.}。 */
     String comment(String text);
 
@@ -61,12 +90,21 @@ public interface ScriptEngine {
 
     /**
      * 一段库正文顶层定义的函数,按出现的顺序:函数名({@code work.collect} 或全局的 {@code sweep})、形参、紧挨在定义上面的那几行注释
-     * (去掉注释号,连成一段)。
+     * (原样,带注释号与类型注解)。
      */
     List<Defined> functions(String code);
 
-    /** 库里定义的一个函数。{@code doc} 是它上面的注释,没写是空串。 */
-    record Defined(String name, List<String> params, String doc) {}
+    /** 库里定义的一个函数。{@code doc} 是它上面的注释行,原样;没写是空表。 */
+    record Defined(String name, List<String> params, List<String> doc) {
+
+        public Defined {
+            params = List.copyOf(params);
+            doc = List.copyOf(doc);
+        }
+    }
+
+    /** 库函数的一句话说明:它上面那几行不是类型注解的注释连起来的第一句(到第一个句号);没写是空串。 */
+    String summaryOf(Defined fn);
 
     /**
      * 只读一段正文调了哪些 API 函数,不执行:每个宿主函数与库函数都换成只记下调用、返回 nil 的那一种,照常跑这段正文。

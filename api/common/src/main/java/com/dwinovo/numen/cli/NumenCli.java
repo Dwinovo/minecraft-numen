@@ -1,9 +1,12 @@
 package com.dwinovo.numen.cli;
 
+import com.dwinovo.numen.agent.script.ApiError;
+import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.agent.script.Invocation;
 import com.dwinovo.numen.agent.script.ScriptCatalog;
 import com.dwinovo.numen.agent.script.ScriptEngine;
 import com.dwinovo.numen.agent.script.ScriptRun;
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.agent.tool.ServerToolTransport;
 import com.dwinovo.numen.agent.tool.ToolCall;
 import com.dwinovo.numen.api.Internal;
@@ -12,6 +15,7 @@ import com.dwinovo.numen.script.BuiltinScripts;
 import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import com.mojang.brigadier.ImmutableStringReader;
@@ -67,6 +71,27 @@ public final class NumenCli {
             new CommandTree<CommandSource>(action -> true).withRootHelp(NumenCli::rootListing);
     /** 各组到齐、相关动作与库查过了没有;查过之后登记的组在登记那一刻就查(见 {@link #inUse()})。 */
     private static boolean inUse;
+    /** 声明了的类,按名字:{@link Shapes} 的几种,加各组声明的({@link CommandGroup#declare})。 */
+    private static final Map<String, ScriptType.Class> CLASSES = new TreeMap<>();
+
+    static {
+        Shapes.CLASSES.forEach(c -> CLASSES.put(c.name(), c));
+    }
+
+    /** 声明一个类;名字不合规矩或已经有了当场抛出。 */
+    static synchronized void declare(ScriptType.Class type) {
+        if (!type.name().matches("[A-Z][A-Za-z0-9]*")) {
+            throw new IllegalArgumentException("类名不合规(大写字母开头,只含字母数字): '" + type.name() + "'");
+        }
+        if (CLASSES.putIfAbsent(type.name(), type) != null) {
+            throw new IllegalArgumentException("类 " + type.name() + " 已经有人声明过了");
+        }
+    }
+
+    /** 这个名字的类;没有是 null。 */
+    static ScriptType.Class classNamed(String name) {
+        return CLASSES.get(name);
+    }
 
     private NumenCli() {}
 
@@ -179,35 +204,63 @@ public final class NumenCli {
 
     /**
      * 脚本里的一次调用读成一个动作和它的参数——脚本这个前端只有这一处换法。按顺序的对象依次给这个动作的位置参数,最后一个位置参数
-     * 收下余下的全部对象(一串区域、余下整行);选项表的键是参数名({@code _} 与 {@code -} 同一)。脚本里的列表是一个占几个词的值
-     * ({@code {120, 64, -35}} 是一格),一串值的每一项各是一个值。换成的 JSON 当场按参数类型读一遍({@link CommandArgs#fromJson},
-     * 执行的那一侧读的也是它),读不成就在这里报。
+     * 收下余下的全部对象(一串区域、余下整行);选项表的键是参数名({@code _} 与 {@code -} 同一)。脚本的值原样换成 JSON(表是对象、
+     * 列表是数组),当场按参数类型读一遍({@link CommandArgs#fromJson},执行的那一侧读的也是它),读不成就在这里报。
      *
-     * @throws IllegalArgumentException 没有这个动作、对象多了、缺了必填的、选项名不对或值读不成;消息是三段 error/usage/hint
+     * @throws ApiError 没有这个动作({@code no_function});对象多了、缺了必填的、选项名不对或值读不成({@code bad_argument}):错在哪
+     *                  与用法,下一步是改好的那一行(看得出想写什么时)或怎么看全部帮助
      */
     public static Invocation invocation(ScriptRun.Call call) {
         inUse();
         CommandGroup group = GROUPS.get(call.group());
         Action action = group == null ? null : group.action(call.verb());
         if (action == null) {
-            throw new IllegalArgumentException(Problem.of("there is no API function " + call.function(), null,
-                    "the <api> index lists every function."));
+            throw new ApiError(ErrorKind.NO_FUNCTION, "there is no API function " + call.function(),
+                    "the <api> index lists every group; api.help(\"" + call.group() + "\") lists one.");
         }
         JsonObject json;
         try {
             json = jsonOf(action, call.args(), call.options());
             CommandArgs.fromJson(action.params(), json);
         } catch (IllegalArgumentException wrong) {
-            throw new IllegalArgumentException(Problem.of(wrong.getMessage(), CommandHelp.usage(action),
-                    helpHint(action)));
+            throw new ApiError(ErrorKind.BAD_ARGUMENT, wrong.getMessage() + "\nusage: " + CommandHelp.usage(action),
+                    corrected(action, call, wrong));
         }
         return new Invocation(group.name(), action.name(), action.function(), json);
     }
 
     /**
-     * 脚本里的对象与选项写成参数名到值的 JSON——脚本这个前端的换法只在这里。一串值的参数只收到一个对象、而它是一张表时,那张表就是
-     * 这一串({@code work.dig({"ores/g1", "ores/g2"})});只有一项本身占几个词(一格坐标)而表里全是数时,它是一项
-     * ({@code {120, 64, -35}} 是一格)。
+     * 参数错了的下一步:看得出她想写什么(三个数想写一格)而那是一个对象或一个选项时,是改好的那一整行调用(一串值的参数只收了这一个
+     * 写错的对象时也是);是一串里的一项时,说那一项写成什么;都不是就是怎么看这个函数的全部帮助。
+     */
+    private static String corrected(Action action, ScriptRun.Call call, IllegalArgumentException wrong) {
+        if (!(wrong instanceof CommandArgs.BadArgument bad) || bad.instead == null || bad.param == null) {
+            return helpHint(action);
+        }
+        Param<?> p = bad.param;
+        List<Param<?>> positionals = action.positionals();
+        int index = positionals.indexOf(p);
+        boolean alone = index >= 0 && index == call.args().size() - 1
+                && !(call.args().get(index) instanceof List<?> list && !numbersOnly(list));
+        boolean single = p.type().span() != ArgType.Span.SEVERAL || alone;
+        if (single && index >= 0 && index < call.args().size()) {
+            List<Object> objects = new ArrayList<>(call.args());
+            objects.set(index, bad.instead);
+            return ScriptEngine.IN_USE.call(action.function(), objects, call.options());
+        }
+        if (single && index < 0) {
+            Map<String, Object> options = new LinkedHashMap<>();
+            call.options().forEach((k, v) -> options.put(k, Param.nameOf(k).equals(p.name()) ? bad.instead : v));
+            return ScriptEngine.IN_USE.call(action.function(), call.args(), options);
+        }
+        return "write each of " + p.name() + " like " + ScriptEngine.IN_USE.value(bad.instead) + ". "
+                + helpHint(action);
+    }
+
+    /**
+     * 脚本里的对象与选项写成参数名到值的 JSON——脚本这个前端的换法只在这里。值原样换:名字到值的表是 JSON 对象(一个 Pos、一只实体),
+     * 列表是数组,nil 是 null(读参数时报是哪一个)。一串值的参数收下的对象:只有一个而它是一张列表,那张列表就是这一串
+     * ({@code work.dig({b1, b2})});否则收下的那几个就是这一串({@code work.dig(b1, b2)})。
      */
     static JsonObject jsonOf(Action action, List<Object> objects, Map<String, Object> options) {
         List<Param<?>> positionals = action.positionals();
@@ -219,9 +272,16 @@ public final class NumenCli {
             Param<?> p = positionals.get(i);
             boolean last = i == positionals.size() - 1;
             List<Object> given = last ? objects.subList(i, objects.size()) : objects.subList(i, i + 1);
-            json.add(p.name(), given.size() == 1 && !(p.type().span() == ArgType.Span.SEVERAL)
-                    ? one(given.get(0))
-                    : several(p, spread(p, given)));
+            if (p.type().span() == ArgType.Span.SEVERAL) {
+                json.add(p.name(), several(given));
+            } else if (given.size() > 1 && p.type().span() == ArgType.Span.REST) {
+                json.add(p.name(), new JsonPrimitive(String.join(" ", given.stream().map(String::valueOf).toList())));
+            } else if (given.size() > 1) {
+                throw new IllegalArgumentException("takes " + positionals.size() + " object(s), got " + objects.size()
+                        + "; a position is one table {x = …, y = …, z = …}");
+            } else {
+                json.add(p.name(), one(given.get(0)));
+            }
         }
         for (Map.Entry<String, Object> option : options.entrySet()) {
             Param<?> p = action.params().stream().filter(q -> q.name().equals(Param.nameOf(option.getKey())))
@@ -231,48 +291,47 @@ public final class NumenCli {
                         + "order before the options table");
             }
             json.add(option.getKey(), p != null && p.type().span() == ArgType.Span.SEVERAL
-                    ? several(p, spread(p, List.of(option.getValue())))
+                    ? several(java.util.Collections.singletonList(option.getValue()))
                     : one(option.getValue()));
         }
         return json;
     }
 
-    /**
-     * 一串值的参数收到的对象:只有一个而它是一张表,那张表就是这一串——除非一项本身占几个词而表里全是数(那是一项)。别的照原样。
-     */
-    private static List<?> spread(Param<?> p, List<?> given) {
-        if (p.type().span() != ArgType.Span.SEVERAL || given.size() != 1 || !(given.get(0) instanceof List<?> list)) {
-            return given;
-        }
-        boolean oneItem = p.type().itemTakesWords() && list.stream().allMatch(v -> v instanceof Number);
-        return oneItem ? given : list;
-    }
-
-    /** 一个参数收下的几个对象:一串值是每项一个值的数组,别的(余下整行、几个词的一个值)是空格连起来的一串。 */
-    private static JsonElement several(Param<?> p, List<?> given) {
-        if (p.type().span() == ArgType.Span.SEVERAL) {
-            JsonArray array = new JsonArray();
+    /** 一串值:只给了一张列表,就是它;否则给的那几个。 */
+    private static JsonElement several(List<?> given) {
+        JsonArray array = new JsonArray();
+        if (given.size() == 1 && given.get(0) instanceof List<?> list) {
+            list.forEach(v -> array.add(one(v)));
+        } else {
             given.forEach(v -> array.add(one(v)));
-            return array;
         }
-        return new JsonPrimitive(words(given));
+        return array;
     }
 
-    /** 一个对象写成 JSON:列表是几个词的一个值(一格 {@code 120 64 -35}),其余照原样。 */
+    /** 一到三个数的列表:读参数时可能是写成旧样子的一处坐标({@link ArgType#list} 认它),改写时整个换掉。 */
+    private static boolean numbersOnly(List<?> list) {
+        return !list.isEmpty() && list.size() <= 3 && list.stream().allMatch(v -> v instanceof Number);
+    }
+
+    /** 一个脚本的值写成 JSON,原样:表是对象、列表是数组、nil 是 null。 */
     private static JsonElement one(Object value) {
         return switch (value) {
+            case null -> JsonNull.INSTANCE;
             case String s -> new JsonPrimitive(s);
             case Number n -> new JsonPrimitive(n);
             case Boolean b -> new JsonPrimitive(b);
-            case List<?> list -> new JsonPrimitive(words(list));
-            case null -> throw new IllegalArgumentException("got nil where a value goes");
+            case List<?> list -> {
+                JsonArray array = new JsonArray();
+                list.forEach(v -> array.add(one(v)));
+                yield array;
+            }
+            case Map<?, ?> map -> {
+                JsonObject object = new JsonObject();
+                map.forEach((k, v) -> object.add(String.valueOf(k), one(v)));
+                yield object;
+            }
             default -> throw new IllegalArgumentException("cannot pass " + value + " here");
         };
-    }
-
-    private static String words(List<?> values) {
-        return String.join(" ", values.stream().map(v -> v instanceof List<?> l ? words(l) : String.valueOf(v))
-                .toList());
     }
 
     /**
@@ -309,8 +368,8 @@ public final class NumenCli {
         CommandGroup group = words.length == 2 ? GROUPS.get(words[0]) : null;
         Action action = group == null ? null : group.action(words[1]);
         if (action == null || !action.runsOnServer()) {
-            reply.accept(TaskResult.fail("there is no API function " + path.replace(' ', '.') + " on the server")
-                    .toJson());
+            reply.accept(TaskResult.fail(ErrorKind.NO_FUNCTION, "there is no API function " + path.replace(' ', '.')
+                    + " on the server", null).toJson());
             return;
         }
         execute(action, new ServerSource(her, callId, reply), args);
@@ -325,26 +384,35 @@ public final class NumenCli {
         try {
             args = CommandArgs.fromJson(action.params(), json);
         } catch (IllegalArgumentException wrong) {
-            source.reply(TaskResult.fail(Problem.of(wrong.getMessage(), CommandHelp.usage(action), helpHint(action)))
-                    .toJson());
+            source.reply(badArgument(action, wrong).toJson());
             return;
         }
         run(action, source, args);
     }
 
-    /** 读好的参数交给处理函数;处理函数说参数在此刻不成立的,回执三段说明。 */
+    /**
+     * 读好的参数交给处理函数。处理函数当场说不成立的:抛 {@link ApiError} 的是它说的那一种(点名的区域不在是
+     * {@code not_found}……);别的 {@link IllegalArgumentException} 是参数在此刻不成立,一次 {@code bad_argument}。
+     */
     static void run(Action action, CommandSource source, CommandArgs args) {
         try {
             action.execute(source, args);
+        } catch (ApiError failed) {
+            source.reply(TaskResult.fail(failed.kind(), failed.getMessage(), failed.hint()).toJson());
         } catch (IllegalArgumentException wrong) {
-            source.reply(TaskResult.fail(Problem.of(wrong.getMessage(), CommandHelp.usage(action), helpHint(action)))
-                    .toJson());
+            source.reply(badArgument(action, wrong).toJson());
         }
     }
 
-    /** 一个动作的全部帮助怎么要:{@code api.help("work.dig")}。 */
+    /** 参数不成立的失败:错在哪接这个动作的用法,下一步是怎么看它的全部帮助。 */
+    private static TaskResult badArgument(Action action, IllegalArgumentException wrong) {
+        return TaskResult.fail(ErrorKind.BAD_ARGUMENT, wrong.getMessage() + "\nusage: " + CommandHelp.usage(action),
+                helpHint(action));
+    }
+
+    /** 一个动作的全部帮助怎么要,一行能照抄的程序:{@code print(api.help("work.dig"))}。 */
     static String helpHint(Action action) {
-        return "`" + HelpCommands.call(action.function()) + "` explains every argument.";
+        return "print(" + HelpCommands.call(action.function()) + ")";
     }
 
     /** 这个动作;没有就抛出(脚本里的调用读成动作时已经认过它)。 */
@@ -405,13 +473,14 @@ public final class NumenCli {
         ParseResults<ServerSource> parse = SERVER.parse(line, call);
         String problem = problem(parse, line);
         if (problem != null) {
-            call.reply(TaskResult.fail(problem).toJson());
+            call.reply(TaskResult.fail(ErrorKind.BAD_ARGUMENT, problem, null).toJson());
             return;
         }
         try {
             SERVER.execute(parse);
         } catch (CommandSyntaxException e) {
-            call.reply(TaskResult.fail(Problem.of(e.getMessage(), usageAt(parse), hintAt(parse))).toJson());
+            call.reply(TaskResult.fail(ErrorKind.BAD_ARGUMENT, Problem.of(e.getMessage(), usageAt(parse), hintAt(parse)),
+                    null).toJson());
         }
     }
 
@@ -427,7 +496,34 @@ public final class NumenCli {
         if (!inUse) {
             checkSeeAlso(GROUPS.values(), GROUPS);
             checkLibraries();
+            checkClasses();
             inUse = true;
+        }
+    }
+
+    /** 每个动作的参数与返回类型里按名字引用的类都得有人声明;找不到的一次列全,抛出。 */
+    private static void checkClasses() {
+        List<String> broken = new ArrayList<>();
+        for (CommandGroup group : GROUPS.values()) {
+            for (Action action : group.actions()) {
+                for (String name : CommandHelp.named(action.doc())) {
+                    if (!CLASSES.containsKey(name)) {
+                        broken.add(action.path() + " -> " + name);
+                    }
+                }
+            }
+        }
+        for (ScriptType.Class c : CLASSES.values()) {
+            for (ScriptType.Field f : c.fields()) {
+                for (String name : CommandHelp.named(f.type())) {
+                    if (!CLASSES.containsKey(name)) {
+                        broken.add("class " + c.name() + "." + f.name() + " -> " + name);
+                    }
+                }
+            }
+        }
+        if (!broken.isEmpty()) {
+            throw new IllegalStateException("引用了没人声明的类: " + String.join("; ", broken));
         }
     }
 
@@ -563,7 +659,7 @@ public final class NumenCli {
             return "`" + HELP + "` lists the groups.";
         }
         Action action = path.size() > 1 ? group.action(path.get(1)) : null;
-        return action == null ? "`" + HelpCommands.call(group.name()) + "` lists its functions." : helpHint(action);
+        return action == null ? "print(" + HelpCommands.call(group.name()) + ")" : helpHint(action);
     }
 
     /** 解析走过的字面节点的名字,从一级命令往下。 */

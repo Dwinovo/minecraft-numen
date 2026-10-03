@@ -1,5 +1,7 @@
 package com.dwinovo.numen.plugins.tlm;
 
+import com.dwinovo.numen.agent.script.ErrorKind;
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
@@ -7,10 +9,13 @@ import com.dwinovo.numen.cli.EntityRef;
 import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -39,6 +44,38 @@ final class MaidCommands {
     static final String OPEN = "open";
 
     private static final Gson GSON = new Gson();
+
+    /** 日程的三种,{@link #SCHEDULE} 收的、读回的都是它们。 */
+    private static final ScriptType SCHEDULE_WORD = ScriptType.choice(List.of("day", "night", "all"));
+
+    /** 一只加载着的女仆:{@code tlm.maids} 列的、{@code tlm.maid} 详述的都是它,由 {@link Maids#row} 写。 */
+    static final ScriptType.Class MAID_CLASS = new ScriptType.Class("Maid",
+            "A maid of Touhou Little Maid, loaded in the world: an Entity with her work and settings. Hand her on as "
+                    + "she is: tlm.maid(m), use.entity(m), move.goto_(m).", Shapes.ENTITY.name(),
+            List.of(ScriptType.field("model", ScriptType.STRING, "The model she wears."),
+                    ScriptType.field("task", ScriptType.STRING, "Her work mode, touhou_little_maid:farm."),
+                    ScriptType.field("schedule", SCHEDULE_WORD, null),
+                    ScriptType.field("home", ScriptType.BOOLEAN, "Home mode."),
+                    ScriptType.field("favorability_level", ScriptType.INTEGER, null),
+                    ScriptType.field("sitting", ScriptType.BOOLEAN, null),
+                    ScriptType.optional("dimension", ScriptType.STRING,
+                            "When she is in another dimension than you (then there is no distance).")));
+
+    /** 存档里记着的一只:待在没加载的区块里的女仆最后在哪,或一块墓碑在哪,由 {@link Maids#away} 与 {@link Maids#tombstones} 写。 */
+    private static final ScriptType RECORD = ScriptType.table(
+            ScriptType.field("name", ScriptType.STRING, null),
+            ScriptType.field("pos", Shapes.POS.type(), null),
+            ScriptType.field("dimension", ScriptType.STRING, null));
+
+    /** 一个工作模式,由 {@link Maids#tasks} 写。 */
+    private static final ScriptType WORK_MODE = ScriptType.table(
+            ScriptType.field("task", ScriptType.STRING, null),
+            ScriptType.optional("current", ScriptType.BOOLEAN, "true for the one she works as now."),
+            ScriptType.field("can_switch", ScriptType.BOOLEAN, "Whether TLM lets her switch to it now."),
+            ScriptType.optional("to_enable", new ScriptType.Simple("table<string, boolean>"),
+                    "What it waits for, true = met."),
+            ScriptType.optional("works_with", new ScriptType.Simple("table<string, boolean>"),
+                    "What the work uses (has_bow, has_arrow for ranged_attack), true = she has it."));
 
     private static final Param<EntityRef> WHICH = Param.required("maid", ArgType.entity(), "The maid.")
             .values("her entity id, as tlm.maids or scan.entities lists it");
@@ -80,29 +117,53 @@ final class MaidCommands {
     }
 
     static void actions(CommandGroup tlm) {
+        tlm.declare(MAID_CLASS);
         tlm.server(MAIDS, "The maids you keep: the ones here, the ones in unloaded chunks, and tombstones.",
                         MaidCommands::maids, Listing.PAGE)
+                .returns(ScriptType.table(
+                        ScriptType.field("here", ScriptType.listOf(MAID_CLASS.type()), "Loaded now, nearest first."),
+                        ScriptType.field("away", ScriptType.listOf(RECORD), "In unloaded chunks: where each was last."),
+                        ScriptType.field("tombstones", ScriptType.listOf(RECORD), "Where each tombstone stands.")))
                 .example(line(MAIDS) + "()")
-                .note("Read-only. One per line: a maid here gives her entity id, name, model, task, schedule, home "
-                        + "mode, health, favorability level, whether she sits and how far away she is; a maid in an "
+                .example("for _, m in ipairs(" + line(MAIDS) + "().here) do print(m.id, m.task, m.distance) end")
+                .note("Read-only. A maid here is a Maid: her entity id, name, model, task, schedule, home mode, "
+                        + "health, favorability level, whether she sits and how far away she is; a maid in an "
                         + "unloaded chunk gives where she was last; a tombstone gives where it stands.")
                 .note("Your power points and how many maids TLM counts as yours are in your body state every "
                         + "turn.")
                 .seeAlso(path(MAID), "scan entities");
         tlm.server(MAID, "One maid in full, and every work mode with what it needs.",
                         MaidCommands::maid, WHICH, Listing.PAGE)
+                .returns(ScriptType.table(
+                        ScriptType.field("maid", MAID_CLASS.type(), "Her, as tlm.maids lists her."),
+                        ScriptType.field("pickup", ScriptType.BOOLEAN, null),
+                        ScriptType.field("ride", ScriptType.BOOLEAN, null),
+                        ScriptType.field("favorability", ScriptType.INTEGER, null),
+                        ScriptType.field("favorability_to_next_level", ScriptType.INTEGER, null),
+                        ScriptType.field("backpack", ScriptType.STRING, null),
+                        ScriptType.optional("home_center", Shapes.POS.type(), "With home mode on."),
+                        ScriptType.optional("home_radius", ScriptType.NUMBER, "With home mode on."),
+                        ScriptType.optional("schedule_points", ScriptType.table(
+                                ScriptType.field("work", Shapes.POS.type(), null),
+                                ScriptType.field("idle", Shapes.POS.type(), null),
+                                ScriptType.field("sleep", Shapes.POS.type(), null),
+                                ScriptType.field("dimension", ScriptType.STRING, null)), "When they are set."),
+                        ScriptType.field("tasks", ScriptType.listOf(WORK_MODE), "Every work mode in her task list.")))
                 .example(line(MAID) + "(812)")
+                .example("for _, t in ipairs(" + line(MAID) + "(812).tasks) do print(t.task, t.can_switch) end")
                 .note("Read-only, from any distance, any maid (someone else's too).")
-                .note("One line per work mode: can_switch says whether TLM lets her switch to it now; to_enable lists "
+                .note("Every work mode: can_switch says whether TLM lets her switch to it now; to_enable lists "
                         + "what it waits for (true = met); works_with lists what the work uses (e.g. has_bow, "
                         + "has_arrow for ranged_attack), true = she has it.")
                 .seeAlso(path(TASK), path(CONFIG));
         tlm.server(TASK, "Switch one of your maids to another work mode, like a click in her task list.",
                         MaidCommands::task, WORK, FOR_MAID)
+                .returns(ScriptType.table(ScriptType.field("maid", ScriptType.INTEGER, "Her entity id."),
+                        ScriptType.field("task", ScriptType.STRING, "Her work mode, read back.")))
                 .example(line(TASK) + "(\"touhou_little_maid:farm\", {maid = 812})")
                 .example(line(TASK) + "(\"touhou_little_maid:idle\")")
                 .note("It does not travel: stand within about 7 blocks of her, the distance at which her GUI stays "
-                        + "open. Farther away it fails and names the move.goto_ call to copy.")
+                        + "open. Farther away it fails with out_of_reach, and its hint is the move.goto_ call to copy.")
                 .note("TLM decides: only the owner may switch, and a mode may wait for something first (see "
                         + "can_switch in " + line(MAID) + "). The result reads her task back; unchanged means TLM "
                         + "did not take it, and it says what TLM's rules show.")
@@ -110,6 +171,11 @@ final class MaidCommands {
                 .seeAlso(path(MAID), path(CONFIG));
         tlm.server(CONFIG, "Change one of your maids' settings: home mode, picking up, riding, schedule.",
                         MaidCommands::config, WHICH, HOME, PICKUP, RIDE, SCHEDULE)
+                .returns(ScriptType.table(ScriptType.field("maid", ScriptType.INTEGER, "Her entity id."),
+                        ScriptType.field("home", ScriptType.BOOLEAN, null),
+                        ScriptType.field("pickup", ScriptType.BOOLEAN, null),
+                        ScriptType.field("ride", ScriptType.BOOLEAN, null),
+                        ScriptType.field("schedule", SCHEDULE_WORD, null)))
                 .example(line(CONFIG) + "(812, {schedule = \"night\"})")
                 .example(line(CONFIG) + "(812, {home = true, pickup = false})")
                 .note("Give only what you change; the rest stays. The same reach, owner rule and asking as "
@@ -120,6 +186,8 @@ final class MaidCommands {
                 .seeAlso(path(MAID), path(TASK));
         tlm.server(OPEN, "Open a page of one of your maids' GUI, then work it with use.gui.",
                         MaidCommands::open, WHICH, TAB)
+                .returns(ScriptType.table(ScriptType.field("maid", ScriptType.INTEGER, "Her entity id."),
+                        ScriptType.field("menu", ScriptType.STRING, "The menu now open.")))
                 .example(line(OPEN) + "(812)")
                 .example(line(OPEN) + "(812, {tab = \"bauble\"})")
                 .note("Then `use.gui()` lists its slots, `use.transfer` and `use.shift` move items (armour, hand, "
@@ -133,15 +201,15 @@ final class MaidCommands {
 
     private static void maids(ServerSource src, CommandArgs args) {
         NumenPlayer her = src.companion();
+        List<JsonObject> here = new ArrayList<>();
+        Maids.loaded(her).forEach(maid -> here.add(Maids.row(maid, her)));
+        List<JsonObject> away = Maids.away(her);
+        List<JsonObject> tombstones = Maids.tombstones(her);
+        // 话里三份并成一张清单,一行一只,kind 说它是哪一份的;数据里三份各是一个列表,不用 kind
         List<String> rows = new ArrayList<>();
-        List<Entity> here = Maids.loaded(her);
-        for (Entity maid : here) {
-            rows.add(GSON.toJson(Maids.row(maid, her)));
-        }
-        List<Map<String, Object>> away = Maids.away(her);
-        away.forEach(row -> rows.add(GSON.toJson(row)));
-        List<Map<String, Object>> tombstones = Maids.tombstones(her);
-        tombstones.forEach(row -> rows.add(GSON.toJson(row)));
+        here.forEach(row -> rows.add(kinded("maid", row)));
+        away.forEach(row -> rows.add(kinded("maid_away", row)));
+        tombstones.forEach(row -> rows.add(kinded("tombstone", row)));
 
         String head = here.isEmpty() && away.isEmpty() && tombstones.isEmpty()
                 ? "You keep no maids. A wild maid is tamed with a cake: `use.entity(812, {item = \"minecraft:cake\"})`, "
@@ -149,10 +217,24 @@ final class MaidCommands {
                 : here.size() + " maid(s) here, " + away.size() + " in unloaded chunks, " + tombstones.size()
                         + " tombstone(s); one per line:";
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("here", here.size());
-        data.put("away", away.size());
-        data.put("tombstones", tombstones.size());
+        data.put("here", array(here));
+        data.put("away", array(away));
+        data.put("tombstones", array(tombstones));
         src.reply(new Listing(head, rows, "").result(args, data).toJson());
+    }
+
+    /** 清单里的一行:{@code kind} 打头,接着是那一只的数据。 */
+    private static String kinded(String kind, JsonObject row) {
+        JsonObject line = new JsonObject();
+        line.addProperty("kind", kind);
+        row.entrySet().forEach(e -> line.add(e.getKey(), e.getValue()));
+        return GSON.toJson(line);
+    }
+
+    private static JsonArray array(List<JsonObject> rows) {
+        JsonArray out = new JsonArray();
+        rows.forEach(out::add);
+        return out;
     }
 
     private static void maid(ServerSource src, CommandArgs args) {
@@ -160,12 +242,17 @@ final class MaidCommands {
         if (maid == null) {
             return;
         }
+        List<Map<String, Object>> tasks = Maids.tasks(maid);
         List<String> rows = new ArrayList<>();
-        for (Map<String, Object> task : Maids.tasks(maid)) {
+        for (Map<String, Object> task : tasks) {
             rows.add(GSON.toJson(task));
         }
-        String head = GSON.toJson(Maids.detail(maid, src.companion())) + "\nWork modes, one per line:";
-        src.reply(new Listing(head, rows, "").result(args).toJson());
+        JsonObject detail = Maids.detail(maid, src.companion());
+        String head = GSON.toJson(detail) + "\nWork modes, one per line:";
+        Map<String, Object> data = new LinkedHashMap<>();
+        detail.entrySet().forEach(e -> data.put(e.getKey(), e.getValue()));
+        data.put("tasks", GSON.toJsonTree(tasks));
+        src.reply(new Listing(head, rows, "").result(args, data).toJson());
     }
 
     // ---- 做 ----
@@ -174,9 +261,11 @@ final class MaidCommands {
         ResourceLocation task = args.get(WORK);
         if (!Maids.taskExists(task)) {
             List<String> same = Maids.tasksNamed(task.getPath());
-            src.reply(TaskResult.fail("TLM has no work mode " + task
-                    + (same.isEmpty() ? "." : " — did you mean " + String.join(" or ", same) + "?")
-                    + " `" + line(MAID) + "(<maid id>)` lists them.").toJson());
+            EntityRef named = args.get(FOR_MAID);
+            src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, "TLM has no work mode " + task
+                    + (same.isEmpty() ? "" : " — did you mean " + String.join(" or ", same) + "?")
+                    + (named == null ? "; " + line(MAID) + " lists a maid's work modes" : ""),
+                    named == null || named.id() == null ? null : line(MAID) + "(" + named.id() + ")").toJson());
             return;
         }
         EntityRef which = args.get(FOR_MAID) != null ? args.get(FOR_MAID) : yoursWithinReach(src);
@@ -194,8 +283,8 @@ final class MaidCommands {
                 return TaskResult.ok(Maids.label(maid) + (was.equals(now) ? " already works as " : " now works as ")
                         + now + ".", data);
             }
-            return TaskResult.fail(Maids.label(maid) + " still works as " + now + "; TLM did not switch her to "
-                    + task + "." + whyNot(her, maid, task), data);
+            return refused(her, maid, task, Maids.label(maid) + " still works as " + now
+                    + "; TLM did not switch her to " + task + ".", data);
         });
     }
 
@@ -205,8 +294,10 @@ final class MaidCommands {
         Boolean ride = args.get(RIDE);
         String schedule = args.get(SCHEDULE);
         if (home == null && pickup == null && ride == null && schedule == null) {
-            src.reply(TaskResult.fail("nothing to change: give one or more of home, pickup, ride, schedule. "
-                    + "`" + line(MAID) + "(" + args.get(WHICH) + ")` shows her settings now.").toJson());
+            EntityRef which = args.get(WHICH);
+            src.reply(TaskResult.fail(ErrorKind.BAD_ARGUMENT, "nothing to change: give one or more of home, pickup, "
+                    + "ride, schedule; " + line(MAID) + " shows her settings now",
+                    which.id() == null ? null : line(MAID) + "(" + which.id() + ")").toJson());
             return;
         }
         act(src, args, args.get(WHICH), CONFIG, List.of(WHICH, HOME, PICKUP, RIDE, SCHEDULE), (her, maid) -> {
@@ -231,8 +322,8 @@ final class MaidCommands {
             if (refused.isEmpty()) {
                 return TaskResult.ok(Maids.label(maid) + " is set: " + settings + ".", data);
             }
-            return TaskResult.fail(Maids.label(maid) + " is set: " + settings + "; TLM did not take "
-                    + String.join(", ", refused) + "." + whyNot(her, maid, null), data);
+            return refused(her, maid, null, Maids.label(maid) + " is set: " + settings + "; TLM did not take "
+                    + String.join(", ", refused) + ".", data);
         });
     }
 
@@ -248,10 +339,12 @@ final class MaidCommands {
                 return TaskResult.ok("Opened " + Maids.label(maid) + "'s GUI (" + menu + "). `use.gui()` lists its "
                         + "slots; `use.transfer` and `use.shift` move items; `use.close()` closes it.", data);
             }
-            String why = Maids.asleep(maid) ? " She is asleep; a sleeping maid's GUI does not open."
-                    : whyNot(her, maid, null);
-            return TaskResult.fail("TLM did not open the " + tab.word() + " page of " + Maids.label(maid) + "."
-                    + why, data);
+            String said = "TLM did not open the " + tab.word() + " page of " + Maids.label(maid) + ".";
+            if (Maids.asleep(maid)) {
+                return TaskResult.fail(ErrorKind.FAILED, said + " She is asleep; a sleeping maid's GUI does not open.",
+                        null, data);
+            }
+            return refused(her, maid, null, said, data);
         });
     }
 
@@ -292,28 +385,38 @@ final class MaidCommands {
         NumenPlayer her = src.companion();
         if (!Maids.inReach(her, maid)) {
             BlockPos at = maid.blockPosition();
-            src.reply(TaskResult.fail(Maids.label(maid) + " is " + String.format("%.1f", her.distanceTo(maid))
-                    + " blocks away — too far for her GUI, and this does not travel. `move.goto_({" + at.getX()
-                    + ", " + at.getY() + ", " + at.getZ() + "}, {arrive = \"near\", near = 2})` first, then call "
-                    + "this again.").toJson());
+            src.reply(TaskResult.fail(ErrorKind.OUT_OF_REACH, Maids.label(maid) + " is "
+                    + String.format("%.1f", her.distanceTo(maid)) + " blocks away — too far for her GUI, and this "
+                    + "does not travel; walk to her first, then call this again", goNear(at),
+                    Map.of("pos", Shapes.pos(at))).toJson());
             return null;
         }
         return maid;
+    }
+
+    /** 走到一格两格之内的那一次调用,够不着的失败把它当下一步。 */
+    private static String goNear(BlockPos at) {
+        return "move.goto_(" + Shapes.literal(at) + ", {arrive = \"near\", near = 2})";
     }
 
     /** 她自己的、够得着的女仆里最近的那一只(按 UUID 点名,重启后认的还是她);一只都没有时回执已经写好,返回 null。 */
     private static EntityRef yoursWithinReach(ServerSource src) {
         NumenPlayer her = src.companion();
         Entity nearest = null;
+        boolean any = false;
         for (Entity maid : Maids.loaded(her)) {
-            if (Maids.ownedBy(maid, her) && Maids.inReach(her, maid)
+            if (!Maids.ownedBy(maid, her)) {
+                continue;
+            }
+            any = true;
+            if (Maids.inReach(her, maid)
                     && (nearest == null || her.distanceToSqr(maid) < her.distanceToSqr(nearest))) {
                 nearest = maid;
             }
         }
         if (nearest == null) {
-            src.reply(TaskResult.fail("none of your maids is within reach — `" + line(MAIDS) + "()` lists them; name "
-                    + "one with {maid = <id>}, or `move.goto_({x, y, z}, {arrive = \"near\", near = 2})` to her first.")
+            src.reply(TaskResult.fail(any ? ErrorKind.OUT_OF_REACH : ErrorKind.NOT_FOUND, "none of your maids is "
+                    + "within reach — name one with {maid = <id>}, or walk to her first", line(MAIDS) + "()")
                     .toJson());
             return null;
         }
@@ -324,37 +427,44 @@ final class MaidCommands {
     private static Entity named(ServerSource src, EntityRef ref) {
         Entity entity = ref.in(src.companion().serverLevel());
         if (entity == null) {
-            src.reply(TaskResult.fail("no entity " + ref + " is here — `" + line(MAIDS) + "()` or `scan.entities` "
-                    + "gives the ids, and they do not survive restarts.").toJson());
+            src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, "no entity " + ref + " is here — ids do not survive "
+                    + "restarts", line(MAIDS) + "()").toJson());
             return null;
         }
         if (!Maids.is(entity)) {
-            src.reply(TaskResult.fail(ref + " is " + BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType())
-                    + ", not a maid.").toJson());
+            src.reply(TaskResult.fail(ErrorKind.BAD_ARGUMENT, ref + " is "
+                    + BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()) + ", not a maid", line(MAIDS) + "()")
+                    .toJson());
             return null;
         }
         return entity;
     }
 
     /**
-     * 车万女仆没照做时,它自己的规矩此刻怎么说:不是主人;这个工作模式还没开,开它要什么。只读、只说,判断仍在车万女仆的包里。
+     * 车万女仆没照做时的那条失败:话是 {@code said} 接上它自己的规矩此刻怎么说——不是主人(拒绝,野生的给出驯服那一下);
+     * 这个工作模式还没开,开它要什么。只读、只说,判断仍在车万女仆的包里。
      *
      * @param task 切工作模式时是要切的那个;别的动作为 null
      */
-    private static String whyNot(NumenPlayer her, Entity maid, ResourceLocation task) {
+    private static TaskResult refused(NumenPlayer her, Entity maid, ResourceLocation task, String said,
+                                      Map<String, Object> data) {
         if (!Maids.ownedBy(maid, her)) {
             String owner = Maids.owner(maid);
-            return owner == null ? " She is wild: tame her first with a cake (`use.entity(" + maid.getId()
-                    + ", {item = \"minecraft:cake\"})`)." : " She is not yours: TLM lets only her owner (" + owner
-                    + ") do this.";
+            if (owner == null) {
+                return TaskResult.fail(ErrorKind.DENIED, said + " She is wild: tame her first with a cake.",
+                        "use.entity(" + maid.getId() + ", {item = \"minecraft:cake\"})", data);
+            }
+            return TaskResult.fail(ErrorKind.DENIED, said + " She is not yours: TLM lets only her owner (" + owner
+                    + ") do this.", null, data);
         }
         if (task != null) {
             Map<String, Boolean> missing = Maids.notEnabled(maid, task);
             if (missing != null) {
-                return " TLM has not enabled " + task + " for her"
-                        + (missing.isEmpty() ? " (another mod holds it back)." : "; it waits for: " + missing + ".");
+                return TaskResult.fail(ErrorKind.FAILED, said + " TLM has not enabled " + task + " for her"
+                        + (missing.isEmpty() ? " (another mod holds it back)." : "; it waits for: " + missing + "."),
+                        null, data);
             }
         }
-        return "";
+        return TaskResult.fail(ErrorKind.FAILED, said, null, data);
     }
 }

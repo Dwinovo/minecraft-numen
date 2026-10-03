@@ -55,7 +55,7 @@ public final class CraftPickaxe implements Scenario {
     @Override
     public String solution(Scene scene) {
         BlockPos table = scene.pos(TABLE);
-        String cell = "{" + table.getX() + ", " + table.getY() + ", " + table.getZ() + "}";
+        String cell = "{x = " + table.getX() + ", y = " + table.getY() + ", z = " + table.getZ() + "}";
         return """
                 inv.craft("oak_planks", {count = 12})
                 inv.craft("crafting_table")

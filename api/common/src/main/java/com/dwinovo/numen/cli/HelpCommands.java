@@ -1,6 +1,8 @@
 package com.dwinovo.numen.cli;
 
+import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.agent.script.ScriptEngine;
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.task.TaskResult;
 
 /**
@@ -18,27 +20,32 @@ public final class HelpCommands {
 
     /** 引擎自己登记这一组:帮助是 API 的一部分,谁登记了动作都指望它在。 */
     public static void install() {
-        NumenCli.register(GROUP, "The API itself: the full help of one function or one group.", api ->
-                api.client("help", "Show the full help of a function (how to call it, every argument, examples, notes) "
-                                + "or list a group's functions.",
-                        (src, args) -> src.reply(help(args.get(NAME), args)), NAME, Listing.PAGE)
-                        .example(call("work.dig"))
-                        .example(call("move"))
+        NumenCli.register(GROUP, "The API itself: the typed signatures of a group's functions, or one function in "
+                + "full.", api ->
+                api.client("help", "The help of a function (its signature, every argument, what it returns, examples, "
+                                + "notes) or of a group (one typed line per function), as text.",
+                        (src, args) -> src.reply(help(args.get(NAME))), NAME)
+                        .returns(TEXT, ScriptType.STRING)
+                        .example("print(" + call("work.dig") + ")")
+                        .example("print(" + call("move") + ")")
                         .note("Instant; it reads the API's own declarations and changes nothing."));
     }
+
+    /** 返回的那一项:帮助的全文。 */
+    private static final String TEXT = "text";
 
     /** 要这个名字的帮助怎么写:{@code api.help("work.dig")}。 */
     static String call(String name) {
         return ScriptEngine.IN_USE.function(GROUP, "help") + "(\"" + name + "\")";
     }
 
-    /** 一个函数的帮助整份一页;一组的清单一行一个函数,长了按输出预算分页。 */
-    private static String help(String name, CommandArgs args) {
+    /** 一个函数或一组的帮助,全文;回执那句话是它的第一行。 */
+    private static String help(String name) {
         String text = NumenCli.help(name);
         if (text == null) {
-            return TaskResult.fail(Problem.of("there is no function or group named " + name, null,
-                    "the <api> index lists every function, by group.")).toJson();
+            return TaskResult.fail(ErrorKind.NOT_FOUND, "there is no function or group named " + name,
+                    "the <api> index lists every group; " + call("move") + " lists one.").toJson();
         }
-        return CommandHelp.listing(text).result(args).toJson();
+        return TaskResult.ok(text.lines().findFirst().orElse(""), java.util.Map.of(TEXT, text)).toJson();
     }
 }

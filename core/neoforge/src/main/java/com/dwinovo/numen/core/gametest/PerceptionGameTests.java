@@ -48,12 +48,12 @@ public class PerceptionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_inspector", new BlockPos(3, 2, 3), false);
         ToolRun atNear = lua(companion, "scan.block(" + xyz(near) + ")");
         ToolRun atFar = lua(companion, "scan.block(" + xyz(far) + ")");
-        ToolRun viaCommand = lua(companion, "scan.block({" + near.getX() + ", " + near.getY() + ", " + near.getZ() + "})");
+        ToolRun viaCommand = lua(companion, "scan.block({x = " + near.getX() + ", y = " + near.getY() + ", z = " + near.getZ() + "})");
 
         succeedWhen(helper, () -> {
             JsonObject n = json(atNear);
             JsonObject f = json(atFar);
-            helper.assertTrue(n.get("block").getAsString().equals("minecraft:stone") && n.get("in_reach").getAsBoolean(),
+            helper.assertTrue(n.get("name").getAsString().equals("minecraft:stone") && n.get("in_reach").getAsBoolean(),
                     "the stone beside her is not reported as stone within reach: " + atNear.reply());
             helper.assertTrue(!f.get("in_reach").getAsBoolean(),
                     "the stone across the site is reported within reach: " + atFar.reply());
@@ -68,7 +68,7 @@ public class PerceptionGameTests {
     public static void inspect_block_storage_reads_a_chest_without_opening_it(GameTestHelper helper) {
         BlockPos chest = chestWithDiamonds(helper, new BlockPos(5, 2, 3), 5);
         NumenPlayer companion = spawnAt(helper, "gametest_auditor", new BlockPos(3, 2, 3), false);
-        ToolRun storage = lua(companion, "scan.storage({" + chest.getX() + ", " + chest.getY() + ", " + chest.getZ() + "})");
+        ToolRun storage = lua(companion, "scan.storage({x = " + chest.getX() + ", y = " + chest.getY() + ", z = " + chest.getZ() + "})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(storage.succeeded() && storage.reply().contains("diamond")
@@ -101,11 +101,11 @@ public class PerceptionGameTests {
                     viaCommand.set(lua(companion, "scan.around()"));
                 })
                 .thenWaitUntil(() -> {
-                    String m = map.get().reply();
+                    String m = map.get().outcome();
                     helper.assertTrue(cell(m, 2, 0) == '#', "the wall two east is not #: \n" + m);
                     helper.assertTrue(cell(m, 0, -2) == '^', "the step two north is not ^: \n" + m);
                     helper.assertTrue(cell(m, -2, 0) == '~', "the water two west is not ~: \n" + m);
-                    helper.assertTrue(m.equals(viaCommand.get().reply()),
+                    helper.assertTrue(m.equals(viaCommand.get().outcome()),
                             "scan_around and scan around draw differently: \n" + m + "\n" + viaCommand.get().reply());
                 })
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
@@ -144,7 +144,7 @@ public class PerceptionGameTests {
 
     /** {@code scan.entities} 的这一页里这只实体的那一行;没列出为 null。 */
     private static com.google.gson.JsonObject rowOf(ToolRun scan, net.minecraft.world.entity.Entity entity) {
-        for (var row : rowsIn(scan.reply())) {
+        for (var row : dataIn(scan.reply()).getAsJsonArray("entities")) {
             if (row.getAsJsonObject().get("id").getAsInt() == entity.getId()) {
                 return row.getAsJsonObject();
             }
@@ -200,7 +200,7 @@ public class PerceptionGameTests {
 
         succeedWhen(helper, () -> {
             JsonObject s = json(status);
-            helper.assertTrue(s.get("equipment").toString().contains("minecraft:iron_sword"),
+            helper.assertTrue(s.get("hands").toString().contains("minecraft:iron_sword"),
                     "the sword in her hand is not reported: " + status.reply());
             helper.assertTrue(s.getAsJsonObject("backpack_slots").get("used").getAsInt() == 2,
                     "the backpack does not count two used slots: " + status.reply());
@@ -243,7 +243,7 @@ public class PerceptionGameTests {
                     "an absent owner is reported online: " + absent.reply());
             JsonObject p = json(present);
             helper.assertTrue(p.get("online").getAsBoolean() && p.get("name").getAsString().equals("gametest_guardian")
-                            && p.has("distance_to_me"),
+                            && p.has("distance"),
                     "the present owner is not reported with name and distance: " + present.reply());
             helper.assertTrue(present.reply().equals(viaCommand.reply()),
                     "status_owner and status owner read differently: " + present.reply() + " / "
@@ -270,7 +270,7 @@ public class PerceptionGameTests {
 
     /** {@code status.self} 的身体状态里,她的 throwaway 清单那一段(没有就是 null)。 */
     private static String throwawayIn(ToolRun status) {
-        String body = JsonParser.parseString(status.reply()).getAsJsonObject().get("body_state").getAsString();
+        String body = dataIn(status.reply()).get("body_state").getAsString();
         int from = body.indexOf("<throwaway>");
         return from < 0 ? null : body.substring(from, body.indexOf("</throwaway>", from) + "</throwaway>".length());
     }
@@ -319,7 +319,7 @@ public class PerceptionGameTests {
         ToolRun afterClear = lua(companion, "status.self()");
 
         succeedWhen(helper, () -> {
-            JsonObject list = JsonParser.parseString(set.reply()).getAsJsonObject();
+            JsonObject list = dataIn(set.reply());
             helper.assertTrue(set.succeeded() && list.getAsJsonArray("materials").size() == 2
                             && set.reply().contains("minecraft:netherrack") && set.reply().contains("minecraft:basalt"),
                     "the list is not exactly what was set: " + set.reply());
@@ -327,7 +327,7 @@ public class PerceptionGameTests {
                     "an unknown id is not reported: " + unknown.reply());
             helper.assertTrue("<throwaway>netherrack, basalt</throwaway>".equals(throwawayIn(afterUnknown)),
                     "a refused set changed the list: " + afterUnknown.reply());
-            JsonObject empty = JsonParser.parseString(cleared.reply()).getAsJsonObject();
+            JsonObject empty = dataIn(cleared.reply());
             helper.assertTrue(cleared.succeeded() && empty.getAsJsonArray("materials").isEmpty()
                             && cleared.reply().contains("EMPTY"),
                     "clearing does not empty the list and say what it means: " + cleared.reply());
@@ -376,8 +376,9 @@ public class PerceptionGameTests {
                 .thenSucceed();
     }
 
+    /** 这次调用交给脚本的数据。 */
     private static JsonObject json(ToolRun run) {
-        return JsonParser.parseString(run.reply()).getAsJsonObject();
+        return dataIn(run.reply());
     }
 
     /**
@@ -406,8 +407,8 @@ public class PerceptionGameTests {
         helper.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
         BlockPos air = helper.absolutePos(new BlockPos(5, 3, 3));
         NumenPlayer companion = spawnAt(helper, "gametest_prober", new BlockPos(3, 2, 3), false);
-        ToolRun onStone = lua(companion, "scan.storage({" + stone.getX() + ", " + stone.getY() + ", " + stone.getZ() + "})");
-        ToolRun onAir = lua(companion, "scan.storage({" + air.getX() + ", " + air.getY() + ", " + air.getZ() + "})");
+        ToolRun onStone = lua(companion, "scan.storage({x = " + stone.getX() + ", y = " + stone.getY() + ", z = " + stone.getZ() + "})");
+        ToolRun onAir = lua(companion, "scan.storage({x = " + air.getX() + ", y = " + air.getY() + ", z = " + air.getZ() + "})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(onStone.succeeded() && onStone.reply().contains("exposes no item/fluid/energy storage"),

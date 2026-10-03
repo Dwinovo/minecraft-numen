@@ -113,7 +113,7 @@ public final class TaskPersistence {
     private static void abandon(NumenPlayer companion, String taskName, String why) {
         Constants.LOG.warn("[numen-task] 重启前她在做的 {} 没能接回来: {}", taskName, why);
         NumenEvents.taskFinished(companion, REPLAY_CALL_ID + "-" + taskName, taskName, "failed",
-                "这件活没能接回来:" + why);
+                TaskResult.fail("这件活没能接回来:" + why));
         forget(companion);
     }
 
@@ -124,6 +124,6 @@ public final class TaskPersistence {
     static void superseded(NumenPlayer companion, LeftOver left) {
         Constants.LOG.info("[numen-task] {} 重启前的 {} 还没接回来就被新派的活顶替", companion.getUUID(), left.taskName());
         NumenEvents.taskFinished(companion, REPLAY_CALL_ID + "-" + left.taskName(), left.taskName(), "stopped",
-                "重启前的这件活还没接回来,新派的活顶替了它。");
+                TaskResult.cancelled("重启前的这件活还没接回来,新派的活顶替了它。"));
     }
 }
