@@ -21,8 +21,6 @@ import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.core.build.Built;
 import com.dwinovo.numen.core.nav.NamedAreas;
-import com.dwinovo.numen.core.route.Itinerary;
-import com.dwinovo.numen.core.route.Routes;
 import com.dwinovo.numen.core.task.dig.DigTaskRecord;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.permission.Action;
@@ -137,7 +135,7 @@ public final class AreaOps {
             Area made = Area.empty(dimension);
             store(her).create(name, made);
             allowed.reply(TaskResult.ok("made area " + name + " in " + dimension.location() + ", empty. Add to it with "
-                    + "area.add(\"" + name + "\", {box = ...}) (or at, built, route), or scan.blocks(<block ids>, "
+                    + "area.add(\"" + name + "\", {box = ...}) (or at, built), or scan.blocks(<block ids>, "
                     + "{into = \"" + name + "\"}) to add what a scan finds.", AreaText.info(name, made)).toJson());
         });
     }
@@ -200,28 +198,6 @@ public final class AreaOps {
         }
         throw new ApiError(ErrorKind.NOT_FOUND, "there is no building named " + name
                 + (all.isEmpty() ? " (none yet)" : ""), "build.built()");
-    }
-
-    /** 一条路线最近一次计划要改的格:要挖的与要放的。 */
-    public static Source route(NumenPlayer her, String name) {
-        store(her);
-        Itinerary route = Routes.of(her.getServer(), her.getOwnerUuid()).get(name);
-        if (route == null) {
-            throw new ApiError(ErrorKind.NOT_FOUND, "there is no route named " + name, "route.list()");
-        }
-        if (route.plan() == null) {
-            throw new IllegalArgumentException("route " + name + " has no plan yet; route.plan(\"" + name
-                    + "\") plans it");
-        }
-        LongSet cells = new LongOpenHashSet(route.plan().digs());
-        cells.addAll(route.plan().places());
-        if (cells.isEmpty()) {
-            throw new IllegalArgumentException("the plan of route " + name + " changes no cell");
-        }
-        List<BlockPos> list = new ArrayList<>(cells.size());
-        cells.forEach((long p) -> list.add(BlockPos.of(p)));
-        return new Source(Area.Kind.CELLS, Cells.of(list), dimension(route.dimension()),
-                "the " + list.size() + " cells the plan of route " + name + " changes");
     }
 
     private static ResourceKey<Level> dimension(ResourceLocation id) {

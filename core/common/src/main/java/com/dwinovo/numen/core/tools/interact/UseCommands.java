@@ -25,11 +25,11 @@ import net.minecraft.world.entity.Entity;
  * 关掉它,上床。
  *
  * <p>三个按键动作与两个搬东西的动作是有界短活({@code runSync}),动手前各自把动作交给权限层;看界面、关界面、上床当场回。
- * 按键动作都站在原地按:目标得在手够得着、看得见的地方,不然当场失败,说清先走过去({@code move.goto_})。
+ * 按键动作都站在原地按:目标得在手够得着、看得见的地方,不然当场失败,说清先走过去({@code move.to})。
  * 搬东西一次一步:{@code transfer} 放到指定的一格,{@code shift} 像按住 Shift 点它、整叠挪到另一边——"不给目标格就是另一件事"
  * 拆成两个动作,一个动作一个意思;要搬好几样就在脚本里调几次。
  * 对准一格和不对准任何东西是两件事,拆成 {@code block} 与 {@code ahead} 两个动作,一个动作一个意思。
- * 上床放在这一组:原版里睡觉就是用一张床,和别的"用"是同一种动作,找床与走过去仍归扫描和 {@code move.goto_}。
+ * 上床放在这一组:原版里睡觉就是用一张床,和别的"用"是同一种动作,找床与走过去仍归扫描和 {@code move.to}。
  *
  * <p>按哪个键是一个开关:默认右键(用、放、开),{@code left = true} 是左键(打、挖)。两个值里有一个是常用的那个时,
  * 不写一个必须给值的 {@code button},而是让常用的那个当默认、另一个是开关——右键是"用"这一组的本义,点一格、点一只实体十回里
@@ -64,7 +64,7 @@ public final class UseCommands {
             .whenOmitted("use what you hold");
     private static final Param<Boolean> SNEAK = Param.optional("sneak", ArgType.bool(),
             "Hold sneak while pressing, as a player holds Shift and clicks; while riding, that steps you off "
-                    + "first.")
+                    + "first (move.dismount() does just that).")
             .whenOmitted("press standing");
     private static final Param<BlockPos> BED = Param.optional("at", ArgType.cell(), "The bed.")
             .whenOmitted("use whichever bed is in reach");
@@ -119,7 +119,7 @@ public final class UseCommands {
                 .note("With sneak = true and something in hand, a right click skips what the aimed block itself "
                         + "does: a block goes onto a chest instead of opening it.")
                 .note("It does NOT travel: you must already be within working reach (~4.5 blocks) of the aim "
-                        + "point; `move.goto_({x = 120, y = 64, z = -35}, {arrive = \"use\"})` stands you where one of its faces "
+                        + "point; `move.to({x = 120, y = 64, z = -35}, {arrive = \"use\"})` stands you where one of its faces "
                         + "is in sight and in reach. Farther away it fails and names that call.")
                 .note("Both buttons are bare key presses: whatever you hold is what is used, and the block the "
                         + "crosshair lands on is the one clicked — if something else is in the way (tall grass in front "
@@ -150,9 +150,9 @@ public final class UseCommands {
                 .example("use.entity(812, {left = true})")
                 .example("use.entity(812, {sneak = true})")
                 .note("It does NOT travel: an entity farther than your reach, or behind a wall, fails with where it "
-                        + "is and the move.goto_ call to copy. scan.entities gives its cell.")
-                .note("Right on a boat or rideable boards it: runtime_state then shows <riding>; move.go pilots or "
-                        + "steps off. Never click your own vehicle again.")
+                        + "is and the move.to call to copy. scan.entities gives its cell.")
+                .note("Right on a boat or rideable boards it: runtime_state then shows <riding>; a plan with mode = "
+                        + "\"boat\" steers it, move.dismount() steps off. Never click your own vehicle again.")
                 .note("Hitting pets, named mobs or villagers asks your owner first; the call waits for the answer.")
                 .seeAlso(line(BLOCK));
         use.server(GUI, "Look at the GUI you have open, or at your own inventory menu when none is.",
@@ -204,11 +204,11 @@ public final class UseCommands {
                 .example("use.sleep()")
                 .example("use.sleep({at = {x = 120, y = 64, z = -35}})")
                 .note("It does NOT travel: find a bed with `scan.blocks(\"#minecraft:beds\")` (that one tag covers "
-                        + "every colour), `move.goto_({x = 120, y = 64, z = -35}, {arrive = \"use\"})` with its coordinates, then "
+                        + "every colour), `move.to({x = 120, y = 64, z = -35}, {arrive = \"use\"})` with its coordinates, then "
                         + "call this.")
                 .note("Succeeds only when the server confirms you are sleeping; otherwise it hands back "
                         + "Minecraft's own reason. \"Only at night\" means wait (`task.timer`), not retry; \"too far "
-                        + "away\" means move.goto_.")
+                        + "away\" means move.to.")
                 .note("Returns the moment you lie down; night passes on its own.")
                 .seeAlso("task timer");
     }

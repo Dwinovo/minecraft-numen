@@ -95,7 +95,7 @@ public final class DeepDiamond implements Scenario {
         BlockPos ore = scene.pos(ORE);
         String cell = "{x = " + ore.getX() + ", y = " + ore.getY() + ", z = " + ore.getZ() + "}";
         return """
-                move.goto_(%1$s, {arrive = "dig", alter = "natural"})
+                move.to(%1$s, {arrive = "dig", costs = {dig = true, place = true, consent = false}})
                 work.dig(%1$s)
                 work.collect()""".formatted(cell);
     }

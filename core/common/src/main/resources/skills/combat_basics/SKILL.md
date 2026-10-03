@@ -51,7 +51,7 @@ A program waits for each fight to end; check `status.self()` between engagements
 
 - HP <= 8: `task.stop()`, move 20+ blocks away, heal, then scan again because runtime IDs may have changed.
 - Weapon about to break or no arrows: disengage and restock.
-- Before a long `move.goto_`, clear or outrun active pursuers.
+- Before a long `move.to`, clear or outrun active pursuers (`move.flee(mob)` gets away from one).
 - Avoid cliff edges, lava corridors, deep water, and cramped ledges where knockback or drops become unsafe.
 
 ## Aggro pitfalls

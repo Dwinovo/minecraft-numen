@@ -101,24 +101,26 @@ public final class MineIron implements Scenario {
 
     @Override
     public String solution(Scene scene) {
-        // 一轮:走到一次够得着最多铁矿的地方(挖开石头过去),挖手够得着的,直到区域里不剩;work.mine 做的就是这几轮,
-        // 每轮挖完捡一次走得到的
+        // 一轮:挖手够得着的;一格都够不着时走到离最近那格够得着的地方(挖开石头过去),直到区域里不剩;work.mine 做的就是
+        // 这几轮,每轮挖完捡一次走得到的
         StringBuilder program = new StringBuilder("scan.blocks(\"iron_ore\", {radius = 12, into = \"ores\"})\n");
         if (byScript) {
             program.append("work.mine(\"ores\")\n");
         } else {
             program.append("""
                     while area.has("ores") do
-                      move.goto_("ores", {arrive = "dig", alter = "natural"})
-                      work.dig("ores")
+                      local ok, r = pcall(work.dig, "ores")
+                      if not ok then
+                        move.to(r.data.nearest, {arrive = "dig", costs = {dig = true, place = true, consent = false}})
+                      end
                     end
                     """);
         }
         // 粗铁落在挖空的矿洞里,有的洞只有一格高、不改地形走不进去(work.collect 不挖不放):站进芯的正中(挖开头顶那格)
         // 一圈都捡得到,再把剩下的捡了
         BlockPos core = scene.pos(10, 1, 10);
-        program.append("move.goto_(").append(com.dwinovo.numen.cli.Shapes.literal(core))
-                .append(", {alter = \"natural\"})\n");
+        program.append("move.to(").append(com.dwinovo.numen.cli.Shapes.literal(core))
+                .append(", {costs = {dig = true, place = true, consent = false}})\n");
         program.append("work.collect()\n");
         return program.toString();
     }

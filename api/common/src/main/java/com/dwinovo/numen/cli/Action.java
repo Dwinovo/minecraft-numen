@@ -256,7 +256,7 @@ public final class Action {
         return group.name() + " " + name;
     }
 
-    /** 脚本里的函数名:{@code work.dig}、{@code move.goto_};帮助、回执、派下的活都这样叫它。 */
+    /** 脚本里的函数名:{@code work.dig}、{@code move.go};帮助、回执、派下的活都这样叫它。 */
     String function() {
         return ScriptEngine.IN_USE.function(group.name(), name);
     }

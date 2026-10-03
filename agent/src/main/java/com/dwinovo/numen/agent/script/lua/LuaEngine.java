@@ -27,7 +27,7 @@ import java.util.regex.Pattern;
  *
  * <h2>API 函数怎么接</h2>
  * 每个动作是一个宿主函数 {@code 组.动作}(名字撞上 Lua 的保留字或沙箱自带的全局时加后缀 {@code _},{@link #functionName})。模块
- * 按名字直接用,第一次用到才装(和组同名的给那一组加函数,{@code move.goto_}),它们的函数照常调宿主函数;没有 {@code require}。
+ * 按名字直接用,第一次用到才装(和组同名的给那一组加函数,{@code move.to}),它们的函数照常调宿主函数;没有 {@code require}。
  * 脚本跑在它自己的虚拟线程上;调一个
  * API 函数,那个线程把这次调用交给驱动方({@link ScriptRun#start}/{@link ScriptRun#resume} 的返回值),然后停在那儿等结局。驱动方
  * (大脑的派发器)把它派出去、等身体收尾,再把结局交回来,脚本从调用处接着跑。驱动方只在脚本两次调用之间等它算完(指令预算管着,
@@ -138,9 +138,9 @@ public final class LuaEngine implements ScriptEngine {
                 + "{radius = 12, into = \"ores\"})`, `work.dig(\"ores/g3\")`. A position is a table with named "
                 + "fields, `{x = 120, y = 64, z = -35}` (a Pos); anything a call returns that has a `pos` (a Block, an "
                 + "Entity, an Item) goes where a position goes, as it is: `local e = scan.entities(\"hostile\")[1]; "
-                + "fight.attack(e)`, and the same with move.goto_(e.pos). A switch is `{sneak = true}`; a name Lua "
+                + "fight.attack(e)`, and the same with move.to(e.pos). A switch is `{sneak = true}`; a name Lua "
                 + "already uses gets "
-                + "a trailing underscore (`move.goto_`). A call returns when it is done (work that occupies your body: "
+                + "a trailing underscore (`until_`). A call returns when it is done (work that occupies your body: "
                 + "when it has finished) and returns data, never sentences: `area.has(\"ores\")` is true or false, "
                 + "`status.self()` a table whose pos is a Pos, `work.dig(\"ores\")` a table with what it dug. A call "
                 + "that fails raises an error value: `local ok, err = pcall(work.dig, \"ores\")` catches it, `err.kind` "
@@ -500,7 +500,7 @@ public final class LuaEngine implements ScriptEngine {
 
     /**
      * 程序或模块给第 ① 层的名字赋值({@code function move.go() end}、{@code move = {}}、{@code raise = f}):登记的 API 函数与它们的表
-     * 谁都换不掉、遮不住,停在那一行。往组里加别的名字照常({@code function move.goto_(…)})。
+     * 谁都换不掉、遮不住,停在那一行。往组里加别的名字照常({@code function move.to(…)})。
      */
     static LuaSandbox.ScriptError redefined(String table, String key) {
         String name = table == null ? key : table + "." + key;

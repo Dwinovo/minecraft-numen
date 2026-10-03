@@ -114,7 +114,7 @@ public final class ScanCommands {
                         + "lava, and every position for groups of up to 16 cells.")
                 .note("Without into it only looks: the groups have no ids. With into = \"ores\" each group becomes "
                         + "a part of the area ores (made then and there if you have no area ores yet — the result says "
-                        + "so), and its id (ores/g5) is what `work.dig`, `move.goto_(\"ores/g5\", {arrive = \"dig\"})` "
+                        + "so), and its id (ores/g5) is what `work.dig`, `work.mine` "
                         + "and `area.show` take. Adding to an area your owner's rules name asks your owner first.")
                 .note("within = \"base\" looks only inside the area base, as far as the radius reaches from you.")
                 .note("Only loaded terrain is read: anything further out is UNKNOWN, not empty.")
@@ -126,13 +126,13 @@ public final class ScanCommands {
                 .example("scan.entities({radius = 12})")
                 .example("scan.entities(\"item\", {radius = 8})")
                 .note("Going through them: `for _, e in ipairs(scan.entities(\"item\", {radius = 8})) do "
-                        + "move.goto_(e.pos) end`.")
+                        + "move.to(e.pos) end`.")
                 .note("Instant and read-only. The list of all of them, nearest first: each is an Entity (id, type, "
                         + "category, pos, distance, hp); a dropped item is an Item (also item, count and pickup_delay, "
                         + "ticks before anyone can pick it up); a tamed one has owner: you, your owner, or the other "
                         + "player's name.")
                 .note("Hand one on as it is: `local e = scan.entities(\"hostile\")[1]; fight.attack(e)`, and the same "
-                        + "with use.entity(e) or move.goto_(e.pos). The ids are runtime ids and do not survive a restart.")
+                        + "with use.entity(e) or move.to(e.pos). The ids are runtime ids and do not survive a restart.")
                 .seeAlso("scan around", "fight attack", "use entity");
         scan.server("block", "One block: its id and state, hardness, whether your held tool is right, dig time, "
                         + "whether it is in reach.",

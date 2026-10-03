@@ -142,7 +142,7 @@ public final class BuildCommands {
                         + "`build.left` says what is still to do and where; `build.raise` (library) walks the site, "
                         + "digs what is in the way and calls this until the whole building stands.")
                 .note("Background work: fails at once with kind out_of_reach when nothing of it is within reach to "
-                        + "place, with how many cells are left and a hint with the move.goto_ call to the lowest "
+                        + "place, with how many cells are left and a hint with the move.to call to the lowest "
                         + "nearest one; nothing starts. Otherwise it returns when the job ends: how many blocks were "
                         + "placed and how many cells are still to do.")
                 .note("The same design (or file) at the same dimension and spot is the same building: building it "
@@ -168,7 +168,7 @@ public final class BuildCommands {
                                 + "block to dig out first, nearest first."),
                         ScriptType.field("far", ScriptType.INTEGER, "Out of reach."),
                         ScriptType.optional("next", Shapes.POS.type(), "The lowest, then nearest, of those out of "
-                                + "reach: move.goto_(left.next, {arrive = \"reach\"}) gets within reach of it."),
+                                + "reach: move.to(left.next, {arrive = \"place\"}) gets within reach of it."),
                         ScriptType.optional("short", ScriptType.INTEGER, "Cells holding another block with nothing "
                                 + "of yours to put there."),
                         ScriptType.optional("unheld", ScriptType.INTEGER, "Cells that would not stay put yet: what "

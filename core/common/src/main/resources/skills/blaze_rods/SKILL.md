@@ -15,7 +15,7 @@ Phase 3 of the dragon route. Eyes of ender need blaze powder; `locate.structure`
 ## Finding a fortress
 
 1. **`locate.structure("minecraft:fortress")`** — exact coordinates, direction and distance in one call (must be called while IN the Nether). Don't wander looking for it.
-2. `move.goto_` the returned x/z (the returned y is approximate — travel around y≈70), then `scan.blocks("nether_bricks", {radius = 128})` to find the actual corridors — the nearest groups and how far they spread show where the brickwork runs; the structure spans many y-levels.
+2. `move.to` the returned x/z (the returned y is approximate — travel around y≈70), then `scan.blocks("nether_bricks", {radius = 128})` to find the actual corridors — the nearest groups and how far they spread show where the brickwork runs; the structure spans many y-levels.
 3. Beware the lookalike: blackstone with gold = **bastion** (`minecraft:bastion_remnant`) — different structure, avoid; its piglin brutes attack on sight.
 4. Track your portal's coordinates so you can navigate home.
 
@@ -30,7 +30,7 @@ Phase 3 of the dragon route. Eyes of ender need blaze powder; `locate.structure`
 1. Find the spawner room (`scan.blocks("spawner")` inside the fortress helps).
 2. `scan.entities` → `fight.attack(184)` for each id it listed, one fight after another in one program.
 3. `work.collect` — rods drop on the floor; grab them before they burn in nearby lava... rods are fire-immune items, but lava destroys them. Don't let drops land in lava.
-4. `status.self` between batches: HP ≤ 8 → `move.goto_` out of spawner range, eat, return.
+4. `status.self` between batches: HP ≤ 8 → `move.flee(spawner, {distance = 16})` out of its range, eat, return.
 5. Repeat until `status.self` shows ≥7 rods. Drop rate is 0–1 per kill (avg 0.5) → expect **~14 kills**, more if unlucky.
 
 **Do not mine the spawner** — you need it spawning blazes until the count is met. (You *may* `build.place({x = 120, y = 64, z = -35}, {block = "cobblestone"})` (with the cell's coordinates) a block or two to wall off excess sight-lines if too many blazes volley at once.)

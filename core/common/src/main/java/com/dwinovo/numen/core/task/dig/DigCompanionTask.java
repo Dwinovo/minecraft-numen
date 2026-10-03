@@ -40,7 +40,7 @@ import java.util.Set;
  * {@code work.dig}:挖她<b>站在原地手够得着</b>的那些格。一条原子命令,对一个名词(点名的几处)做一种意图(挖):
  * <ul>
  *   <li>只挖手够得着的——站位就是此刻脚下,够不够得着与挖一格的寻路目标是同一个判据({@link Goals#dig}:够得着、身体不占着它);
- *       够不着的不走过去,回执说还剩几格、最近一格在哪、能照抄的 {@code move.goto_(…, {arrive = "dig"})};</li>
+ *       够不着的不走过去,回执说还剩几格、最近一格在哪、能照抄的 {@code move.to(…, {arrive = "dig"})};</li>
  *   <li>挡在前面的格一并挖开:挖掘器朝隔着的格都清得掉、挡得最少的那一点看过去,准星落在的那一格先挖({@link BlockDigger})。清不清得掉
  *       按 {@link DigTaskRecord#SPEC} 问({@link DigQuote#clearing}):天然地形挖开,要主人同意的、规则不许的不挖,如实说是哪一格、
  *       为什么({@link DigQuote#walledIn});</li>

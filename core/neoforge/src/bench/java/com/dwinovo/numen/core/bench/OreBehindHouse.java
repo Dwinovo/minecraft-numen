@@ -138,8 +138,9 @@ public final class OreBehindHouse implements Scenario {
         BlockPos ore = scene.pos(ORE);
         // 站到矿后面的空地上再挖,掉的粗铁落在脚边,捡起来。拒绝的那一个只能从屋子底下的天然石头里走;允许的那一个不许动石头,
         // 只能穿墙,问一次——证明征询、点头、只拆点过头的格这条路走得通
-        String alter = allowOnce ? "alter = \"any\", avoid_break = \"minecraft:stone\"" : "alter = \"natural\"";
-        return "move.goto_(" + Shapes.literal(ore.south()) + ", {" + alter + "})\n"
+        String walk = allowOnce ? "costs = {dig = true, place = true}, avoid_break = \"minecraft:stone\""
+                : "costs = {dig = true, place = true, consent = false}";
+        return "move.to(" + Shapes.literal(ore.south()) + ", {" + walk + "})\n"
                 + "work.dig({x = " + ore.getX() + ", y = " + ore.getY() + ", z = " + ore.getZ() + "})\n"
                 + "work.collect()";
     }

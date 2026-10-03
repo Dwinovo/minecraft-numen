@@ -12,7 +12,7 @@ import net.minecraft.core.BlockPos;
 /**
  * "Act on something within reach of where she stands" — the shape every press task shares ({@code use.block},
  * {@code use.entity}). It never travels: each tick, if {@link #reached()} it {@link #act() acts}; otherwise, once the body
- * has settled, the call fails with how far the target is and the {@code move.goto_} to copy. Getting there is the
+ * has settled, the call fails with how far the target is and the {@code move.to} to copy. Getting there is the
  * script's step, not this task's.
  *
  * @param <R> the concrete {@link TaskRecord} subtype for this task.

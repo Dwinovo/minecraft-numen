@@ -223,7 +223,7 @@ public final class BuildHut implements Scenario {
         BlockPos door = scene.pos(CORNER.offset(2, 0, 4));
         // 原语只放手够得着的格:先站进屋子正中,四面墙和屋顶都在手边
         BlockPos middle = scene.pos(CORNER.offset(2, 0, 2));
-        return "move.goto_(" + Shapes.literal(middle) + ")\n"
+        return "move.to(" + Shapes.literal(middle) + ")\n"
                 + "build.layer({\"#####\", \"#...#\", \"#...#\", \"#...#\", \"##.##\"}, {at = "
                 + Shapes.literal(new BlockPos(x, y, z)) + ", block = \"oak_planks\", up_to = " + (y + 1) + "})\n"
                 + "build.layer({\"#####\", \"#...#\", \"#...#\", \"#...#\", \"#####\"}, {at = "

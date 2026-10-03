@@ -1,181 +1,87 @@
 package com.dwinovo.numen.core.tools.work;
 
-import com.dwinovo.numen.core.route.RouteText;
-import com.dwinovo.numen.agent.script.ScriptType;
-import java.util.List;
-import java.util.stream.Stream;
-
 import com.dwinovo.numen.api.NumenApi;
-import com.dwinovo.numen.cli.ArgType;
-import com.dwinovo.numen.cli.CommandGroup;
-import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.CommandArgs;
+import com.dwinovo.numen.cli.CommandGroup;
 import com.dwinovo.numen.cli.Param;
-import com.dwinovo.numen.cli.Place;
 import com.dwinovo.numen.cli.ServerSource;
-import com.dwinovo.numen.core.nav.Feet;
-import com.dwinovo.numen.core.route.Itinerary;
-import com.dwinovo.numen.core.task.move.Destination;
-import com.dwinovo.numen.core.tools.RouteOps;
-import com.dwinovo.numen.core.tools.RouteSpecFlags;
+import com.dwinovo.numen.core.nav.RouteQueries;
+import com.dwinovo.numen.core.route.Description;
+import com.dwinovo.numen.core.route.Plan;
+import com.dwinovo.numen.core.route.Planning;
+import com.dwinovo.numen.core.route.Plans;
+import com.dwinovo.numen.core.route.RouteText;
+import com.dwinovo.numen.core.route.Stop;
+import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.task.TaskResult;
 
 /**
- * {@code route}:寻路——路线这个名词的增删改查与规划。一条路线是意图(途经点、路线标志)加最近一次计划加走过的记录,跟着主人存盘;
- * {@code route.plan} 只搜不走、不占身体,写明要改的格与要问主人的格;{@code move.go} 才走,并且只改计划里列出的格。设计稿见
- * {@code docs/look-plan-act.md}。
- *
- * <p>无状态:每次调用都点名路线;不点名的是她自己的那条 {@code goto-<名字>}——库里的 {@code move.goto_} 每次把一趟写成它
- * ({@code route.new} 不给名字就替换它)、规划、再走。去处与到达方式的写法同一套({@link MoveCommands#ARRIVE}、
- * {@link MoveCommands#NEAR},对应到寻路目标只在 {@link Destination}),路线标志同一串({@link RouteSpecFlags})。
+ * {@code route}:寻路——照一份描述只搜不走地规划一趟路。描述是一张表(去处、途经点、移动方式、偏好旋钮、避开、垫路料,见
+ * {@link Description}),不是名词:不存、不起名,常走的路她记在札记里或写成模块。计划交回程序({@link RouteText#PLAN}),
+ * {@code move.go} 照它走;走不通不是错,计划的 {@code ok} 是 false、{@code why} 说为什么,她改描述再规划。只有描述本身写错才抛错。
  */
 public final class RouteCommands {
 
-    private static final Param<String> NAME = Param.required("name", ArgType.word(), "The route.")
-            .values("a route name, as `route.list()` lists it");
-    private static final Param<String> OWN = Param.optionalPositional("name", ArgType.word(), "The route.")
-            .values("a route name, as `route.list()` lists it")
-            .whenOmitted("use your own route goto-<your name>");
-    private static final Param<String> NEW_NAME = Param.optionalPositional("name", ArgType.word(),
-            "Name of the new route: lowercase letters, digits, _ and -.")
-            .whenOmitted("write it as your own route goto-<your name>, replacing the one there");
-    private static final Param<Place> TO = Param.optional("to", ArgType.place(),
-            "The destination: coordinates, or an area of your owner's to go into (see arrive).")
-            .whenOmitted("end where you stand now");
-    private static final Param<Place> WAYPOINT = Param.optional("at", ArgType.place(),
-            "The waypoint: coordinates, or an area of your owner's.")
-            .whenOmitted("add where you stand now");
-    private static final Param<Integer> AS_STOP = Param.optional("stop", ArgType.integer(1, 99),
-            "Which stop it becomes, counting from 1; one past the last makes it the new destination.")
-            .whenOmitted("put it just before the destination");
-    private static final Param<Integer> DROPPED = Param.optional("stop", ArgType.integer(1, 99),
-            "The waypoint's stop number, as route.show numbers them.")
-            .whenOmitted("drop the last waypoint, the one just before the destination");
-    private static final Param<Integer> LEG = Param.optional("leg", ArgType.integer(1, 99),
-            "Change only this leg, the stretch to stop N.")
-            .whenOmitted("change the whole route");
-    private static final Param<String> AS = Param.optional("as", ArgType.word(), "Name of the new, reversed route.")
-            .whenOmitted("name it after this one with _back, e.g. mine_back");
-
-    private static final ScriptType ROUTE = RouteText.ROUTE_CLASS.type();
+    static final String GROUP = "route";
 
     private RouteCommands() {}
 
     public static void install(NumenApi numen) {
-        numen.registerCommands(Itinerary.GROUP, "Pathfinding: routes with waypoints and route flags, planned without "
-                + "moving; move.go walks a planned route.", RouteCommands::actions);
-    }
-
-    /** 一个动作的参数表:自己的几个,再接上共用的那几串。 */
-    @SafeVarargs
-    private static Param<?>[] with(List<? extends Param<?>>... parts) {
-        return Stream.of(parts).flatMap(List::stream).toArray(Param<?>[]::new);
-    }
-
-    /** 一处写成去处:没写那一处就是她此刻脚下那一格。 */
-    private static Destination.Stop stop(ServerSource src, Place written, CommandArgs args) {
-        Place place = written != null ? written : Place.cell(Feet.cell(src.companion()));
-        return Destination.Stop.of(place, args.get(MoveCommands.ARRIVE), args.get(MoveCommands.NEAR));
-    }
-
-    /** 点名的那条;没点名是她自己的那条。 */
-    private static String own(ServerSource src, String named) {
-        return named != null ? named : Itinerary.gotoOf(src.companion().getGameProfile().getName());
+        numen.registerCommands(GROUP, "Pathfinding: plan a walk from a description, without moving; move.go walks the "
+                + "plan.", RouteCommands::actions);
     }
 
     private static void actions(CommandGroup route) {
-        route.declare(RouteText.ROUTE_CLASS);
-        route.declare(RouteText.PLAN_CLASS);
-        route.server("new", "Make a route: from wherever you stand to a destination, with the route flags it walks "
-                        + "under.", (src, args) -> src.reply(RouteOps.create(src.companion(), own(src,
-                        args.get(NEW_NAME)), args.get(NEW_NAME) == null, stop(src, args.get(TO), args), args)),
-                        with(List.of(NEW_NAME, TO, MoveCommands.ARRIVE, MoveCommands.NEAR), RouteSpecFlags.PARAMS))
-                .returns(ROUTE)
-                .example("route.new(\"home\", {to = {x = 120, y = 64, z = -35}})")
-                .example("route.new(\"back\")")
-                .example("route.new({to = \"ores/g3\", arrive = \"dig\", alter = \"natural\"})")
-                .example("route.new(\"ore\", {to = \"ores/g3\", arrive = \"dig\", alter = \"natural\", "
-                        + "avoid_break = \"area:house\"})")
-                .note("Instant; it only writes the route down, nothing moves. to is a cell (a Pos, or anything with a "
-                        + "pos), a column {x = …, z = …}, a height {y = …}, or an area of your owner's (\"ores\", "
-                        + "\"ores/g3\"); arrive says what counts "
-                        + "as there. A destination that cannot mean anything here is refused at once with the reason "
-                        + "and the ways to write it: arrive at into a solid block or mid-air on a walk that changes "
-                        + "nothing, arrive use or dig without y or on air, an area that does not exist. Without to the "
-                        + "route ends where you stand now: a way back here.")
-                .note("Without a name it is your own route goto-<your name>, replaced every time; a named route that "
-                        + "already exists is refused. An area is kept by name: each plan uses the area as it is then.")
-                .note("Without route flags the route changes no block. Routes belong to your owner: every companion "
-                        + "of theirs sees and walks the same ones, and they survive restarts.")
-                .seeAlso("route plan", "move go", "move goto_");
-        route.server("via", "Add a waypoint to a route.", (src, args) -> src.reply(RouteOps.via(src.companion(),
-                        args.get(NAME), stop(src, args.get(WAYPOINT), args), args.get(AS_STOP))),
-                        NAME, WAYPOINT, MoveCommands.ARRIVE, MoveCommands.NEAR, AS_STOP)
-                .returns(ROUTE)
-                .example("route.via(\"home\", {at = {x = 100, y = 70, z = -20}})")
-                .example("route.via(\"home\", {at = {x = 100, z = -20}, stop = 1})")
-                .example("route.via(\"home\", {at = \"farm\", arrive = \"near\", near = 2})")
-                .example("route.via(\"home\")")
-                .note("Instant. The route walks through its stops in order; the leg to each stop keeps its own flags. "
-                        + "The old plan is dropped.")
-                .seeAlso("route drop", "route show");
-        route.server("drop", "Remove a waypoint from a route.", (src, args) -> src.reply(RouteOps.drop(
-                        src.companion(), args.get(NAME), args.get(DROPPED))), NAME, DROPPED)
-                .returns(ROUTE)
-                .example("route.drop(\"home\", {stop = 2})")
-                .example("route.drop(\"home\")")
-                .note("Instant. The stops after it move down by one; the destination itself stays (route.delete removes "
-                        + "the whole route). The old plan is dropped.")
-                .seeAlso("route show");
-        route.server("spec", "Change the route flags of a whole route or of one leg.", (src, args) -> src.reply(
-                        RouteOps.spec(src.companion(), args.get(NAME), args.get(LEG), args)),
-                        with(List.of(NAME, LEG), RouteSpecFlags.PARAMS))
-                .returns(ROUTE)
-                .example("route.spec(\"home\", {alter = \"natural\"})")
-                .example("route.spec(\"home\", {leg = 2, avoid = {\"water\", \"area:farm\"}})")
-                .note("Instant. Each flag you write replaces its earlier value, the rest stay; a leg's flags add to "
-                        + "the whole route's. The old plan is dropped.")
-                .note("Areas in the flags (\"area:<name>\") are kept by name: one that does not exist is refused now, "
-                        + "one deleted later is named when the route is planned.")
-                .seeAlso("route show", "route plan");
-        route.server("plan", "Plan a route from where you stand, without moving: each leg's length, the blocks it "
-                        + "would break or place, and the ones needing your owner's consent.",
-                        (src, args) -> RouteOps.plan(src, own(src, args.get(OWN))), OWN)
-                .returns(RouteText.PLAN_CLASS.type())
-                .example("route.plan(\"home\")")
-                .example("route.plan()")
-                .note("Read-only and does not take the body: it returns when the plan is ready, and fails with kind "
-                        + "no_path (the plan in err.data) when a leg can't be walked. The plan stays on the route and is "
-                        + "what move.go keeps to: it changes only the cells listed here.")
-                .note("Each leg is planned as far as one look reaches; a leg that goes past it says where the known "
-                        + "part ends. move.go walks on past it, but changes no cell the plan did not list.")
-                .seeAlso("move go", "route show");
-        route.server("show", "Show a route: its stops and flags, its latest plan and who walked it.",
-                        (src, args) -> src.reply(RouteOps.show(src.companion(), args.get(NAME))), NAME)
-                .returns(ScriptType.table(ScriptType.field("route", ROUTE, null),
-                        ScriptType.optional("plan", RouteText.PLAN_CLASS.type(), "Its latest plan, when it has one.")))
-                .example("route.show(\"home\")")
-                .note("Instant and read-only.")
-                .seeAlso("route plan", "route list");
-        route.server("list", "The routes of your owner, one line each.",
-                        (src, args) -> src.reply(RouteOps.list(src.companion(), args)), Listing.PAGE)
-                .returns("routes", ScriptType.listOf(ROUTE))
-                .example("route.list()")
-                .note("Instant and read-only. Your own route goto-<your name> holds the latest walk move.goto_ made.")
-                .seeAlso("route show");
-        route.server("delete", "Delete a route.", (src, args) -> src.reply(RouteOps.delete(src.companion(),
-                        args.get(NAME))), NAME)
-                .returns(ScriptType.NOTHING)
-                .example("route.delete(\"home\")")
-                .note("Instant.")
-                .seeAlso("route list");
-        route.server("reverse", "Make the route back: the same stops the other way, ending where the route was last "
-                        + "planned from.", (src, args) -> src.reply(RouteOps.reverse(src.companion(), args.get(NAME),
-                        args.get(AS))), NAME, AS)
-                .returns(ROUTE)
-                .example("route.reverse(\"mine\")")
-                .example("route.reverse(\"mine\", {as = \"mine_home\"})")
-                .note("Instant. Each leg's flags go with its stretch; the whole route's flags are copied. The new "
-                        + "route has no plan yet.")
-                .seeAlso("route plan");
+        route.declare(RouteText.PLAN);
+        route.declare(RouteText.LEG);
+        route.declare(RouteText.STEP);
+        route.declare(RouteText.ASK);
+        route.declare(Stop.CLASS);
+        route.declare(Description.Costs.CLASS);
+        route.server("plan", "Plan a walk from where you stand, without moving: each leg's way, the blocks it would "
+                        + "break or place, and the cells it would ask your owner about.", RouteCommands::plan,
+                        Description.PARAMS.toArray(Param<?>[]::new))
+                .returns(RouteText.PLAN.type())
+                .example("local plan = route.plan({to = {x = 120, y = 64, z = -35}})\nprint(plan.ok, plan.steps, "
+                        + "plan.seconds)")
+                .example("local plan = route.plan({to = ore, arrive = \"dig\", costs = {dig = true, place = true}})\n"
+                        + "if not plan.ok then print(plan.why) end")
+                .example("route.plan({to = home, stops = {{to = {x = 10, y = 70, z = 5}}}, avoid = {\"water\"}})")
+                .example("route.plan({to = creeper, arrive = \"away\", range = 12})")
+                .note("Read-only and does not take the body: it returns when the plan is ready. A walk that can't be "
+                        + "made is not an error: the plan's ok is false and why says why (and which leg); change the "
+                        + "description (plan.spec is what you gave) and plan again. Only a description written wrong "
+                        + "raises bad_argument.")
+                .note("Cells needing your owner's consent are planned like any other at costs.consent times the "
+                        + "price (default 10), and listed in each leg's asks; move.go stops at each of them to ask. "
+                        + "costs = {consent = false} keeps away from them instead. Cells your owner's rules forbid are "
+                        + "walls.")
+                .note("Without costs the walk changes no block: costs = {dig = true, place = true} lets it dig, "
+                        + "pillar and bridge.")
+                .note("A plan is good only within this program: move.go(plan) walks it, and the next program plans "
+                        + "afresh. Each leg is planned as far as one look reaches; a leg seen only in part is worked out "
+                        + "on the way, changing no cell the plan did not list.")
+                .seeAlso("move go", "move to");
+    }
+
+    /** 规划:从她脚下只搜不走,不占身体。结论出来那一刻回复;去处此刻就编不成、驾船的一趟当场回。 */
+    private static void plan(ServerSource src, CommandArgs args) {
+        NumenPlayer her = src.companion();
+        Description description = Description.of(args);
+        String program = Plans.program(src.toolCallId());
+        Plans plans = Plans.of(her);
+        Planning planning = Planning.of(her, plans.nextId(program), description);
+        Plan now = planning.poll();
+        if (now != null) {
+            src.reply(planned(plans, program, now));
+            return;
+        }
+        RouteQueries.deliver(planning::poll, planning::cancel, plan -> src.reply(planned(plans, program, plan)));
+    }
+
+    /** 计划记下(这一段程序里 {@code move.go} 照它走),回执是那段话,数据是计划本身。走不通也是一份计划,不是失败。 */
+    private static String planned(Plans plans, String program, Plan plan) {
+        plans.put(program, plan);
+        return TaskResult.ok(RouteText.text(plan), RouteText.data(plan)).toJson();
     }
 }

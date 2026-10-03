@@ -330,8 +330,9 @@ public final class Interaction {
             case Effector.Strike.Swinging swinging -> Status.RUNNING;
             case Effector.Strike.Broke broke -> Status.DONE;
             case Effector.Strike.Refused refused -> {
-                failReason = "cannot break that block: " + (refused.reason() instanceof Verdict verdict
-                        ? verdict.reason() : BlockDigger.SERVER_REFUSED);
+                Verdict verdict = CompanionHands.verdict(refused.reason());
+                failReason = "cannot break that block: " + (verdict != null ? verdict.reason()
+                        : BlockDigger.SERVER_REFUSED);
                 failType = FailureType.REFUSED;
                 hardFail = true;
                 yield Status.FAILED;

@@ -107,8 +107,8 @@ public final class DigTaskRecord extends TaskRecord {
     }
 
     /**
-     * 够不着的那些格的下一步,能照抄:{@code move.goto_(去处, {arrive = "dig"})},再 {@code work.dig(同样的几处)}。只点了一块区域
-     * (或它的一部分)时去处写它,她从离得最近的那一侧够过去;否则写 {@code nearest} 这一格。
+     * 够不着的那些格的下一步,能照抄:{@code move.to(nearest, {arrive = "dig"})} 走到够得着离她最近的那一格的地方,再
+     * {@code work.dig(同样的几处)}。
      *
      * @param named 她点名的几处,按写下的顺序
      */
@@ -124,9 +124,7 @@ public final class DigTaskRecord extends TaskRecord {
 
     /** 走过去的那一次调用与挖的那一次调用。 */
     private static List<String> reach(List<Place> named, BlockPos nearest) {
-        AreaRef only = named.size() == 1 ? named.get(0).area() : null;
-        Place to = only != null ? Place.area(only) : Place.cell(nearest);
-        return List.of("move.goto_(" + to.literal() + ", {arrive = \"dig\"})",
+        return List.of("move.to(" + Place.cell(nearest).literal() + ", {arrive = \"dig\"})",
                 "work.dig(" + named.stream().map(Place::literal).collect(Collectors.joining(", ")) + ")");
     }
 

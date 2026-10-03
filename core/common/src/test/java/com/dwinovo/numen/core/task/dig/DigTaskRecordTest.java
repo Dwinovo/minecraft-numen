@@ -16,17 +16,18 @@ class DigTaskRecordTest {
 
     private static final BlockPos NEAREST = new BlockPos(10, 1, 11);
 
+    /** 一块区域也走到够得着它离她最近那一格的地方:去处只收格子,不收区域名。 */
     @Test
-    void oneAreaIsReachedByItsName() {
-        assertEquals("`move.goto_(\"ores/g3\", {arrive = \"dig\"})`, then `work.dig(\"ores/g3\")`",
+    void oneAreaIsReachedAtItsNearestCell() {
+        assertEquals("`move.to({x = 10, y = 1, z = 11}, {arrive = \"dig\"})`, then `work.dig(\"ores/g3\")`",
                 DigTaskRecord.reachThem(List.of(Place.area(AreaRef.parse("ores/g3"))), NEAREST));
     }
 
     @Test
     void cellsOrSeveralPlacesAreReachedAtTheNearestCell() {
-        assertEquals("`move.goto_({x = 10, y = 1, z = 11}, {arrive = \"dig\"})`, then `work.dig({x = 10, y = 1, z = 11}, {x = 12, y = 1, z = 11})`",
+        assertEquals("`move.to({x = 10, y = 1, z = 11}, {arrive = \"dig\"})`, then `work.dig({x = 10, y = 1, z = 11}, {x = 12, y = 1, z = 11})`",
                 DigTaskRecord.reachThem(List.of(Place.cell(NEAREST), Place.cell(new BlockPos(12, 1, 11))), NEAREST));
-        assertEquals("`move.goto_({x = 10, y = 1, z = 11}, {arrive = \"dig\"})`, then `work.dig(\"ores\", \"gold\")`",
+        assertEquals("`move.to({x = 10, y = 1, z = 11}, {arrive = \"dig\"})`, then `work.dig(\"ores\", \"gold\")`",
                 DigTaskRecord.reachThem(List.of(Place.area(AreaRef.parse("ores")), Place.area(AreaRef.parse("gold"))),
                         NEAREST));
     }

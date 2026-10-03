@@ -23,7 +23,7 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
 /**
  * 挖掘:{@code work.dig} 只挖站在原地手够得着的格(扫描来的一团、框出来的坑、一格坐标),挡着的天然地形一并挖开,不走、不捡,
- * 够不着的如实报告并给能照抄的 {@code move.goto_ … arrive = "dig"};{@code arrive = "dig"} 走到一次够得着最多格、挖得成的地方;
+ * 够不着的如实报告并给能照抄的 {@code move.to … arrive = "dig"};{@code arrive = "dig"} 走到一次够得着最多格、挖得成的地方;
  * {@code work.collect} 只捡。挖一块区域的整件事是这三条原子命令一轮轮组合({@link GameTestKit#mine}):开门出屋、树林与埋矿、
  * 够不着时如实收场。
  */
@@ -550,7 +550,7 @@ public class DigGameTests {
 
     /**
      * 只挖手够得着的:一排珠光蛙明灯从她跟前伸到十格外,整排扫进区域。{@code work.dig} 挖掉手够得着的那几块就收场,算成功;
-     * 她一步没动,回执说还剩几格够不着、最近那格在哪,以及能照抄的 {@code move.goto_ … arrive = "dig"};够不着的一块不少。
+     * 她一步没动,回执说还剩几格够不着、最近那格在哪,以及能照抄的 {@code move.to … arrive = "dig"};够不着的一块不少。
      */
     @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_dig")
     public static void dig_digs_only_what_her_hand_reaches_and_reports_the_rest(GameTestHelper helper) {
@@ -585,8 +585,8 @@ public class DigGameTests {
             helper.assertTrue(dig[0].succeeded() && said.startsWith("dug " + dug.size() + " cell(s) of pearlescent_froglight")
                             && said.contains(left.size() + " more cell(s) of " + MINED_AREA
                                     + " are out of my reach from here, the nearest at " + coords(nearest))
-                            && said.contains("to dig them: " + "`move.goto_(\"" + MINED_AREA + "\", {arrive = \"dig\"})`, then `work.dig(\""
-                                    + MINED_AREA + "\")`"),
+                            && said.contains("to dig them: " + "`move.to(" + xyz(nearest) + ", {arrive = \"dig\"})`, then "
+                                    + "`work.dig(\"" + MINED_AREA + "\")`"),
                     "the reply does not account for the cells beyond her reach: " + said);
             helper.assertTrue(companion.blockPosition().equals(stand), "she moved while digging");
             CompanionFactory.despawn(level.getServer(), companion);
@@ -594,7 +594,7 @@ public class DigGameTests {
     }
 
     /**
-     * {@code arrive = "dig"} 一块区域,停在一次够得着最多格的地方:一条两格高的石头走廊里,她站在当中;一头是一块孤零零的铁矿,
+     * {@code arrive = "dig"} 一堆格子(带 cells 的表),停在一次够得着最多格的地方:一条两格高的石头走廊里,她站在当中;一头是一块孤零零的铁矿,
      * 另一头一样远的地方并排两块。路一样长,她走到并排那两块跟前停下,站在那儿两块都够得着;接着 {@code work.dig} 当场挖掉两块,
      * 一步不挪。
      */
@@ -631,7 +631,8 @@ public class DigGameTests {
             if (walk[0] == null) {
                 helper.assertTrue(made.succeeded() && framed.stream().allMatch(ToolRun::succeeded),
                         "the area was not framed: " + framed.stream().map(ToolRun::reply).toList());
-                walk[0] = lua(companion, "move.goto_(\"irons\", {arrive = \"dig\"})");
+                walk[0] = lua(companion, "move.to({cells = {" + xyz(lone) + ", " + xyz(pairA) + ", " + xyz(pairB)
+                        + "}}, {arrive = \"dig\"})");
             }
             helper.assertTrue(walk[0].done(), "move goto has not finished");
             if (dig[0] == null) {
@@ -666,7 +667,7 @@ public class DigGameTests {
 
     /**
      * 够不着的不去:两块赭黄蛙明灯在场地另一角、六十多格外,扫进区域后她手边一格都没有。派发当场拒收,她不出发,回执说两格都
-     * 够不着、最近那格在哪,以及能照抄的 {@code move.goto_ … arrive = "dig"} 与之后再挖的那一行。
+     * 够不着、最近那格在哪,以及能照抄的 {@code move.to … arrive = "dig"} 与之后再挖的那一行。
      */
     @GameTest(template = "floor52", timeoutTicks = 100000, batch = "numen_dig_far")
     public static void dig_stays_put_and_gives_the_way_when_the_blocks_lie_beyond_her_reach(GameTestHelper helper) {
@@ -692,7 +693,7 @@ public class DigGameTests {
                                     + " still to dig is within my reach where I stand")
                             && said.contains("2 more cell(s) of " + MINED_AREA + " are out of my reach from here, "
                                     + "the nearest at " + coords(nearer))
-                            && ("move.goto_(\"" + MINED_AREA + "\", {arrive = \"dig\"})\nwork.dig(\"" + MINED_AREA
+                            && ("move.to(" + xyz(nearer) + ", {arrive = \"dig\"})\nwork.dig(\"" + MINED_AREA
                                     + "\")").equals(dig[0].hint()),
                     "the reply does not say what lies beyond her reach and how to get there: " + said + " | "
                             + dig[0].kind() + " | " + dig[0].hint());
@@ -735,8 +736,8 @@ public class DigGameTests {
             }
             helper.assertTrue(refusal[0] != null && refusal[0].startsWith("out_of_reach | ")
                             && refusal[0].contains("are out of my reach from here")
-                            && refusal[0].endsWith(" | move.goto_(\"" + refusal[1] + "\", {arrive = \"dig\"})\n"
-                                    + "work.dig(\"" + refusal[1] + "\")"),
+                            && refusal[0].endsWith(" | move.to(" + xyz(helper.absolutePos(far.get(0)))
+                                    + ", {arrive = \"dig\"})\nwork.dig(\"" + refusal[1] + "\")"),
                     "the refusal does not say where the part is and how to get there: " + refusal[0]);
             for (BlockPos rel : far) {
                 helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).is(Blocks.VERDANT_FROGLIGHT),
@@ -747,9 +748,9 @@ public class DigGameTests {
     }
 
     /**
-     * 开路再挖:一块远古残骸埋在二十多格外一座石头小丘的正中,四面都隔着两格石头。{@code move.goto_ … arrive = "dig"} 走到手够得着
+     * 开路再挖:一块远古残骸埋在二十多格外一座石头小丘的正中,四面都隔着两格石头。{@code move.to … arrive = "dig"} 走到手够得着
      * 它的地方就停,残骸原样(到达只管站位,那一格留给挖的一方);接着 {@code work.dig} 挖开挡着的石头,把它挖出来,掉落物
-     * 留在原地;再走进残骸那一格({@code move.goto_ … alter = "natural"}),捡到手。
+     * 留在原地;再走进残骸那一格({@code move.to},许挖许放),捡到手。
      */
     @GameTest(template = "floor52", timeoutTicks = 100000, batch = "numen_dig_far")
     public static void arrive_dig_reaches_a_buried_block_and_work_dig_digs_it_out(GameTestHelper helper) {
@@ -761,12 +762,12 @@ public class DigGameTests {
         level.setBlockAndUpdate(debris, Blocks.ANCIENT_DEBRIS.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_debris", new BlockPos(3, 2, 3), false);
         companion.getInventory().add(new ItemStack(Items.DIAMOND_PICKAXE));
-        ToolRun walk = lua(companion, "move.goto_(" + xyz(debris) + ", {arrive = \"dig\", alter = \"natural\"})");
+        ToolRun walk = lua(companion, "move.to(" + xyz(debris) + ", {arrive = \"dig\", costs = {dig = true, place = true, consent = false}})");
         ToolRun[] dig = new ToolRun[1];
         ToolRun[] fetch = new ToolRun[1];
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "move_goto has not finished");
+            helper.assertTrue(walk.done(), "move.to has not finished");
             if (dig[0] == null) {
                 helper.assertTrue(walk.succeeded() && walk.outcome().contains("within reach")
                                 && walk.outcome().contains("`work.dig(" + xyz(debris) + ")`"),
@@ -782,7 +783,7 @@ public class DigGameTests {
             helper.assertTrue(dig[0].succeeded() && level.getBlockState(debris).isAir(),
                     "the buried block was not dug out: " + dig[0].outcome());
             if (fetch[0] == null) {
-                fetch[0] = lua(companion, "move.goto_(" + xyz(debris) + ", {alter = \"natural\"})");
+                fetch[0] = lua(companion, "move.to(" + xyz(debris) + ", {costs = {dig = true, place = true, consent = false}})");
             }
             helper.assertTrue(fetch[0].done(), "the walk to the drop has not finished");
             helper.assertTrue(companion.getInventory().countItem(Items.ANCIENT_DEBRIS) == 1,

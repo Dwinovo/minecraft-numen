@@ -12,7 +12,7 @@ import java.util.Map;
 
 /**
  * 她唯一的工具:一段程序(语言见 {@link ScriptEngine},眼下是 Lua),一次调用跑完,回一张回执。程序里的每个 API 函数
- * ({@code work.dig("ores/g3")})就是登记处的一个动作,读法与执行见 {@link NumenCli};模块里的函数({@code move.goto_})用同一种语言写成,
+ * ({@code work.dig("ores/g3")})就是登记处的一个动作,读法与执行见 {@link NumenCli};模块里的函数({@code move.to})用同一种语言写成,
  * 程序按名字直接用。工具名与程序怎么写随脚本语言,其余都与语言无关。
  *
  * <p>程序由大脑的派发器跑({@code SerialCalls} 认出这个工具,经 {@code ScriptCall} 逐个派调用、等身体收尾、在调用之间停下),

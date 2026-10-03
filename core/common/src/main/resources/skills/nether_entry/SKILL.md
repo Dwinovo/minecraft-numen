@@ -17,8 +17,8 @@ Phase 2 of the dragon route. Build a portal, ignite it, walk through. Actual Net
 Mine it from a **ruined portal** — a structure that's just standing obsidian, no lava-casting. This is the only route: casting your own (water over lava) leaves every fresh obsidian block touching lava, and I refuse to mine fluid-adjacent blocks (it would flood or burn the dig), so a cast wall is unminable by design.
 
 1. `locate.structure("#minecraft:ruined_portal")` — searches the whole family and returns the nearest. **Skip `ruined_portal_ocean`** (underwater) if the result names it; re-search or pick a land one — I can't dive.
-2. `gear.wear("diamond_pickaxe")` (obsidian needs diamond), `move.goto_` the portal coordinates.
-3. `scan.blocks("obsidian", {into = "portal"})`, then `move.goto_("portal", {arrive = "dig"})` and `work.dig("portal", {count = 10})` — it digs the frame's obsidian within its reach; `work.collect` the drops, and repeat the three while `area.has("portal")`. ~9.4s per block is normal.
+2. `gear.wear("diamond_pickaxe")` (obsidian needs diamond), `move.to` the portal coordinates.
+3. `scan.blocks("obsidian", {into = "portal"})`, then `work.dig("portal", {count = 10})` — it digs the frame's obsidian within its reach (out of reach, it fails with a hint: the move.to line, arrive "dig", to copy first); `work.collect` the drops, and repeat while `area.has("portal")`. ~9.4s per block is normal.
 
 Notes:
 - A portal's frame mixes plain **obsidian** with **crying obsidian** (purple particles). Crying obsidian is a *different block and useless for a portal frame* — a scan for `obsidian` alone leaves it out, so a single portal may yield fewer than 10. If you come up short, `locate.structure("#minecraft:ruined_portal")` again for the next nearest and top up.
@@ -38,7 +38,7 @@ Notes:
   ```
 - **Flint & steel**: craft `flint_and_steel` = 1 iron ingot + 1 flint, a 2×2 recipe (`inv.craft` it; see the `containers` skill to lay a grid by hand). Flint drops from gravel you `work.dig`, ~10%/block.
 - **Ignite**: `use.block({x = 121, y = 65, z = -35}, {item = "minecraft:flint_and_steel"})` aimed at an **empty air cell INSIDE the frame** (a bottom one), not at the obsidian. The fire lands in that cell and the portal forms.
-- Enter: `move.goto_` the portal cell and stand in it until the dimension changes (`status.self` confirms).
+- Enter: `move.to` the portal cell and stand in it until the dimension changes (`status.self` confirms).
 
 ## Packlist (verify with `status.self` before igniting)
 
@@ -48,7 +48,7 @@ Notes:
 | Diamond sword + bow | 1 + 1 | Equip for combat only — hold the pickaxe while travelling (navigation digs with the held tool) |
 | Arrows | 32+ | `fight.attack` spends them only on what it cannot reach (~6 per blaze); run low → carry extra food and let it melee |
 | Diamond pickaxe (+ iron backup) | 1 + 1 | Obsidian, digging |
-| Cobblestone | 64+ | Throwaway blocks for navigation — bridging lava lakes eats it; keep it on your `throwaway` list |
+| Cobblestone | 64+ | What navigation spends to bridge and pillar — bridging lava lakes eats it; cobblestone is in the default `materials` of every walk |
 | Gold helmet (worn) | 1 | Piglin truce; 5 gold ingots if you must craft one |
 | Flint & steel | 1 | Re-light the portal if a ghast blows it out |
 

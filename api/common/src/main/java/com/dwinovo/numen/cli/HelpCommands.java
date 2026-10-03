@@ -15,7 +15,7 @@ public final class HelpCommands {
     static final String GROUP = "api";
 
     private static final Param<String> NAME = Param.required("name", ArgType.word(),
-            "A function, as the <api> index writes it (work.dig, move.goto_), a group (work) or a module.");
+            "A function, as the <api> index writes it (work.dig, move.to), a group (work) or a module.");
 
     private HelpCommands() {}
 

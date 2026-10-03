@@ -50,9 +50,6 @@ public final class AreaCommands {
     private static final Param<String> BUILT = Param.optional("built", ArgType.string(),
             "A building, as build.built names it (house#1): the cells it was built of.")
             .whenOmitted("add no building");
-    private static final Param<String> ROUTE = Param.optional("route", ArgType.word(),
-            "A route: the cells its latest plan breaks or places, as route.show lists it.")
-            .whenOmitted("add no route's cells");
     private static final Param<AreaRef> RESULT = Param.required("name", ArgType.area(),
             "Name of the new area the result is kept as: lowercase letters, digits, _ and -.");
     private static final Param<AreaRef> FROM = Param.required("area", ArgType.area(),
@@ -94,17 +91,16 @@ public final class AreaCommands {
                 .note("Changing an area your owner's rules name (`area:house` in a rule) asks your owner first; the "
                         + "call waits for the answer.")
                 .seeAlso("area add", "scan blocks");
-        area.server("add", "Add a part to an area: a box, one cell, a building or a route's planned changes.",
-                        AreaCommands::add, NAME, BOX, AT, BUILT, ROUTE)
+        area.server("add", "Add a part to an area: a box, one cell or a building.",
+                        AreaCommands::add, NAME, BOX, AT, BUILT)
                 .returns(AREA)
                 .example("area.add(\"house\", {box = {{x = 10, y = 60, z = 5}, {x = 20, y = 70, z = 15}}})")
                 .example("area.add(\"chest\", {at = {x = 12, y = 64, z = 7}})")
                 .example("area.add(\"here\")")
                 .example("area.add(\"home\", {built = \"house#1\"})")
-                .example("area.add(\"tunnel\", {route = \"mine\"})")
-                .note("Instant. Give one of box, at, built, route; none of them adds the cell you stand in. "
+                .note("Instant. Give one of box, at, built; none of them adds the cell you stand in. "
                         + "The part gets the next number of its letter: b for a box, p for a cell, c for a building's "
-                        + "or a route's cells; numbers are never reused.")
+                        + "cells; numbers are never reused.")
                 .note("Framed cells carry no block. To add blocks as they stand, scan them in: "
                         + "`scan.blocks(\"iron_ore\", {into = \"ores\"})`.")
                 .seeAlso("area show", "area drop");
@@ -131,8 +127,8 @@ public final class AreaCommands {
                         Listing.PAGE)
                 .example("area.parts(\"ores\")")
                 .note("Going through them: `for _, part in ipairs(area.parts(\"ores\")) do print(part) end`.")
-                .note("Instant and read-only: the list of the names. `move.goto_(\"ores/g1\", {arrive = \"dig\"})` and "
-                        + "`work.dig(\"ores/g1\")` take each as it is.")
+                .note("Instant and read-only: the list of the names. `work.dig(\"ores/g1\")` and "
+                        + "`work.mine(\"ores/g1\")` take each as it is.")
                 .returns("parts", ScriptType.listOf(ScriptType.STRING))
                 .seeAlso("area show", "area has");
         area.server("has", "Whether an area, or one part of it, still has a cell to dig: true or false.",
@@ -216,15 +212,14 @@ public final class AreaCommands {
     private static void add(ServerSource src, CommandArgs args) {
         NumenPlayer her = src.companion();
         int given = (args.get(BOX) == null ? 0 : 1) + (args.get(AT) == null ? 0 : 1)
-                + (args.get(BUILT) == null ? 0 : 1) + (args.get(ROUTE) == null ? 0 : 1);
+                + (args.get(BUILT) == null ? 0 : 1);
         if (given > 1) {
-            throw new IllegalArgumentException("area.add takes one of box, at, built or route; you gave " + given);
+            throw new IllegalArgumentException("area.add takes one of box, at or built; you gave " + given);
         }
         AreaOps.Source source = args.get(BOX) != null ? AreaOps.box(her, args.get(BOX))
                 : args.get(BUILT) != null ? AreaOps.built(her, args.get(BUILT))
-                : args.get(ROUTE) != null ? AreaOps.route(her, args.get(ROUTE))
                 : AreaOps.point(her, args.get(AT) != null ? args.get(AT) : Feet.cell(her));
-        AreaOps.add(src, args.get(NAME), source, line(args, "add", List.of(NAME, BOX, AT, BUILT, ROUTE)));
+        AreaOps.add(src, args.get(NAME), source, line(args, "add", List.of(NAME, BOX, AT, BUILT)));
     }
 
     /** 去掉一部分:点名的得是 {@code 区域/部分}。 */

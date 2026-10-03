@@ -53,7 +53,7 @@ public final class AreaText {
     /** 一部分,或扫描找到的一团。 */
     public static final ScriptType.Class PART_CLASS = new ScriptType.Class("AreaPart",
             "One part of an area, or one group of touching blocks a scan found. Anything that takes a place takes its "
-                    + "id; work.dig and move.goto_ take its nearest as it is.", null,
+                    + "id; work.dig and move.to take its nearest as it is.", null,
             List.of(ScriptType.optional("id", ScriptType.STRING, "area/part (ores/g3), when it is kept in an area."),
                     ScriptType.field("count", ScriptType.INTEGER, "How many cells."),
                     ScriptType.optional("blocks", new ScriptType.Simple("table<string, integer>"),

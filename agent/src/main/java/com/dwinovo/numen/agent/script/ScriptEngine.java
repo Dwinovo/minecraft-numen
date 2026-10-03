@@ -37,7 +37,7 @@ public interface ScriptEngine {
     /** 一个名字能不能直接写成选项表的键({@code {type = "world"}}):不是语言的关键字就能。 */
     boolean isKey(String name);
 
-    /** 一个动作在这种语言里的函数全名:{@code move.goto_}。 */
+    /** 一个动作在这种语言里的函数全名:{@code work.dig}。 */
     default String function(String group, String verb) {
         return functionName(group) + "." + functionName(verb);
     }
@@ -47,7 +47,7 @@ public interface ScriptEngine {
      */
     String call(String function, List<Object> objects, java.util.Map<String, Object> options);
 
-    /** 一张名字到值的表写成这种语言里的样子:{@code {alter = "natural"}}。 */
+    /** 一张名字到值的表写成这种语言里的样子:{@code {arrive = "dig"}}。 */
     String table(java.util.Map<String, Object> options);
 
     /**

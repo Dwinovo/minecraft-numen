@@ -82,7 +82,7 @@ final class McpAccessPrompt {
                 the game stores none for you.
                 - Besides list_companions, create_companion, delete_companion, get_events and say there \
                 is one more tool, `%s`: a program whose functions are the companion's API. `status.self()`, `scan.blocks("iron_ore", {into = "ores"})`, \
-                `move.goto_("ores/g3", {arrive = "dig"})`, `work.dig("ores/g3")`, `build.at(...)`, \
+                `move.to({x = 120, y = 12, z = -35}, {arrive = "dig"})`, `work.dig("ores/g3")`, `build.at(...)`, \
                 `fight.attack(184)`, `inv.craft(...)`, … `api.help("work")` lists a group's functions and \
                 `api.help("work.dig")` gives one function's full help. One call is a one-line program; \
                 when a next step depends on what a call returned, write the steps as one program \
@@ -100,8 +100,8 @@ final class McpAccessPrompt {
                 `work.dig` digs such an area ("ores", or "ores/g3") and digs those cells that still hold what \
                 the scan saw, also after a restart; framed areas and cells ({x, y, z}) are dug whatever they \
                 hold. It digs only what the hand reaches from where the body stands, never walks and never \
-                picks up: `move.goto_` the same place with arrive "dig" first (it stands where the hand \
-                reaches the most of it), then `work.dig`, then `work.collect()` for the drops; \
+                picks up: when nothing is in reach it fails with out_of_reach and a hint, the `move.to` \
+                line (arrive "dig") that stands you within reach; then `work.dig`, then `work.collect()` for the drops; \
                 `area.has("ores")` says whether anything is left. The built-in module function `work.mine` \
                 does all of that: `work.mine("ores")`.
                 - It's survival mode — the API does only what a real player can. No give, no setblock.

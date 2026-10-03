@@ -124,6 +124,12 @@ public final class ArgType<T> {
         T read(JsonElement value) throws CommandSyntaxException;
     }
 
+    /** 一张有自己结构的表({@link #table})读成值;读不成抛 {@link IllegalArgumentException},那句话就是这个参数的报错。 */
+    @FunctionalInterface
+    public interface TableReader<T> {
+        T read(JsonElement value);
+    }
+
     private final ArgumentType<T> brigadier;
     private final String kind;
     private final String noun;
@@ -293,6 +299,40 @@ public final class ArgType<T> {
             default -> pos.put("y", numbers.get(0));
         }
         return pos;
+    }
+
+    /**
+     * 有自己结构的表({@link #table})里的一格:读法与 {@link #cell()} 同一个。读不成抛 {@link IllegalArgumentException},说法与参数报错
+     * 同一句。
+     */
+    public static BlockPos cellOf(JsonElement value) {
+        return unwrapped(() -> cellFromJson(value));
+    }
+
+    /** 有自己结构的表里的一处(一格、一列、一个高度):读法与 {@link #place()} 同一个。 */
+    public static Place placeOf(JsonElement value) {
+        return unwrapped(() -> placeFromJson(value));
+    }
+
+    /** 有自己结构的表里的一只实体:读法与 {@link #entity()} 同一个。 */
+    public static EntityRef entityOf(JsonElement value) {
+        return unwrapped(() -> entityFromJson(value));
+    }
+
+    private static <T> T unwrapped(FromJsonCall<T> read) {
+        try {
+            return read.call();
+        } catch (CommandSyntaxException bad) {
+            throw new IllegalArgumentException(bad.getRawMessage().getString());
+        } catch (WrongShape wrong) {
+            throw new IllegalArgumentException(wrong.getMessage() + "; write it as "
+                    + ScriptEngine.IN_USE.value(wrong.instead));
+        }
+    }
+
+    @FunctionalInterface
+    private interface FromJsonCall<T> {
+        T call() throws CommandSyntaxException;
     }
 
     /** 一处的 JSON:区域名;带键的表是一格({@code x y z})、一列({@code x z})或一个高度({@code y});带 {@code pos} 的表是那一格。 */
@@ -879,6 +919,68 @@ public final class ArgType<T> {
         list.element = element;
         list.script = ScriptType.union(element.script, ScriptType.listOf(element.script));
         return list;
+    }
+
+    /**
+     * 一张有自己结构的表:脚本里是一张表(JSON 里是对象或数组,也可以是一个字面值),内容交给 {@code read} 读成值——路线描述里的去处、
+     * 途经点、旋钮表这类。读不成的那句话由 {@code read} 给。一行命令上写成 JSON(从 {@code {} 或 {@code [} 读到配对的括号为止,
+     * 别的读到空格为止),写回去也是 JSON。它不做一串值({@link #list})里的一项:要几项就让 {@code read} 自己读数组。
+     *
+     * @param kind   用法里的叫法,也是它的对象类别
+     * @param script 脚本里它的类型
+     * @param write  读好的值写回 JSON,再读一遍是同一个值
+     */
+    public static <T> ArgType<T> table(String kind, ScriptType script, TableReader<T> read,
+                                       Function<T, JsonElement> write) {
+        FromJson<T> fromJson = value -> {
+            try {
+                return read.read(value);
+            } catch (IllegalArgumentException bad) {
+                throw REJECTED.create(bad.getMessage());
+            }
+        };
+        ArgumentType<T> brigadier = reader -> fromJson.read(readJson(reader));
+        return new ArgType<>(brigadier, kind, kind, kind, Span.ONE, Item.NONE, false, false, ArgType::stringField,
+                fromJson, value -> write.apply(value).toString())
+                .scripted(script, value -> JsonValues.toJava(write.apply(value)));
+    }
+
+    /** 一行命令上的一段 JSON:{@code {} 或 {@code [} 打头读到配对的括号(引号里的不算),否则读到空格。 */
+    private static JsonElement readJson(StringReader reader) throws CommandSyntaxException {
+        int start = reader.getCursor();
+        if (reader.canRead() && (reader.peek() == '{' || reader.peek() == '[')) {
+            int depth = 0;
+            boolean quoted = false;
+            do {
+                char c = reader.read();
+                if (quoted) {
+                    if (c == '\\' && reader.canRead()) {
+                        reader.skip();
+                    } else if (c == '"') {
+                        quoted = false;
+                    }
+                } else if (c == '"') {
+                    quoted = true;
+                } else if (c == '{' || c == '[') {
+                    depth++;
+                } else if (c == '}' || c == ']') {
+                    depth--;
+                }
+            } while (depth > 0 && reader.canRead());
+        } else if (reader.canRead() && reader.peek() == '"') {
+            reader.readQuotedString();
+        } else {
+            while (reader.canRead() && reader.peek() != ' ') {
+                reader.skip();
+            }
+        }
+        String text = reader.getString().substring(start, reader.getCursor());
+        try {
+            return com.google.gson.JsonParser.parseString(text);
+        } catch (com.google.gson.JsonParseException bad) {
+            reader.setCursor(start);
+            throw NOT_A_VALUE.createWithContext(reader, "a table written as JSON");
+        }
     }
 
     private static void stringField(Schema.Builder s, String name, String desc, boolean required) {

@@ -6,6 +6,7 @@ import com.dwinovo.numen.core.nav.Feet;
 import com.dwinovo.numen.core.nav.NavText;
 import com.dwinovo.numen.core.nav.Survey;
 import com.dwinovo.numen.core.nav.Terrain;
+import com.dwinovo.numen.core.nav.ThrowawayBlocks;
 import com.dwinovo.numen.core.nav.Trip;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.pathing.search.Goal;
@@ -23,12 +24,8 @@ import net.minecraft.world.entity.Entity;
 import java.util.List;
 
 /**
- * 跟着走——第一个<b>常驻</b>任务。默认跟主人,点名了就跟那一只。
- *
- * <h2>它跟一次性任务差在哪</h2>
- * 不给时长时只差一行:{@link #onTick} <b>永远不返终态</b>。同一个槽、同一套派发、同一个接口,
- * 「挖 64 块」干完腾位,而它一直占着,直到主人给她别的事做。给了时长({@link FollowTaskRecord#forTicks}),到点就以成功收场:
- * 睡着的也醒来收这个尾({@link #canRun})。
+ * 跟着走一阵。默认跟主人,点名了就跟那一只;到点({@link FollowTaskRecord#forTicks})就以成功收场,睡着的也醒来收这个尾
+ * ({@link #canRun})。
  *
  * <h2>跟到了就休眠,不是结束</h2>
  * 跟到了(这一趟的目标自己说到了,{@link Goals#within} 落脚点附近 {@code keepWithin} 格)之后
@@ -37,14 +34,14 @@ import java.util.List;
  * 不腾槽、不惊动模型。到没到只看目标,这里不另拿距离判"差不多到了";离主人多远只决定要不要起步。
  *
  * <h2>够不着就报出去</h2>
- * 跟着走从不动世界(路线规格 alter=NONE,没有开关),于是"没有路"多半不是暂时的:隔着断崖、
- * 在屋里、差几格高——退避多少次都一样。那就以失败收场,把原因连同候选路线清单交给
- * 模型,它决定先 goto 一条开路、换个办法、或者告诉主人。一个明确的失败原因不能攥在手里
+ * 跟着走从不动世界(出厂路线规格,不挖不放,没有开关),于是"没有路"多半不是暂时的:隔着断崖、
+ * 在屋里、差几格高——退避多少次都一样。那就以失败收场,把原因交给模型,它决定先
+ * {@code move.to} 一条开路、换个办法、或者告诉主人。一个明确的失败原因不能攥在手里
  * 站着空算。主人飞在半空时跟的是他脚下能站的地方({@link #anchor}),一般够得着;真够不着
  * 也照样报。派下来那一刻就够不着的,受理之前就判({@link #preparation}),当场回、不受理。
  *
  * <h2>目标没了,主人和别人不一样</h2>
- * <b>主人下线是暂时的</b>——他会回来,所以休眠等着,这也是常驻该有的样子。而点名跟的
+ * <b>主人下线是暂时的</b>——他会回来,所以休眠等着,到点为止。而点名跟的
  * 那只羊死了、或者走出加载范围被卸载了,再等也不会回来:那时收尾报给模型,让它决定下
  * 一步。一套逻辑通吃的话,要么她对着一只死羊站到天荒地老,要么主人一下线任务就没了。
  *
@@ -70,7 +67,7 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
 
     /** 受理之前的准备规划到的那条路:第一趟照它走;没有、或已经用过为 null。 */
     private Route seed;
-    /** 给了时长时到点的那一刻(游戏刻);常驻是 -1。 */
+    /** 到点的那一刻(游戏刻);开工之前是 -1。 */
     private long endsAt = -1;
 
     public FollowCompanionTask(NumenPlayer player, FollowTaskRecord record) {
@@ -107,7 +104,7 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
             return Preparation.READY;
         }
         BlockPos anchor = anchor(target);
-        Survey survey = Survey.of(player, List.of(new Survey.Leg(goal(anchor), TERRAIN)));
+        Survey survey = Survey.of(player, List.of(new Survey.Leg(goal(anchor), TERRAIN)), ThrowawayBlocks.factory());
         return new Preparation() {
             @Override
             public Preparation.Readiness poll() {
@@ -122,7 +119,8 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
                             + NavText.ahead(seed) + ".");
                 }
                 return Preparation.Readiness.refused(TaskResult.fail(com.dwinovo.numen.agent.script.ErrorKind.NO_PATH,
-                        "can't keep up: " + NavText.failure(leg.outcome(), player, Feet.cell(player), anchor, TERRAIN),
+                        "can't keep up: " + NavText.failure(leg.outcome(), player, Feet.cell(player), anchor, TERRAIN,
+                                ThrowawayBlocks.factory()),
                         null, resultData()));
             }
 
@@ -136,12 +134,12 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
     @Override
     protected void onStart() {
         moving = false;
-        if (r.forTicks > 0 && endsAt < 0) {
+        if (endsAt < 0) {
             endsAt = player.level().getGameTime() + r.forTicks;
         }
     }
 
-    /** 给了时长,而且到点了。 */
+    /** 到点了。 */
     private boolean timeUp() {
         return endsAt >= 0 && player.level().getGameTime() >= endsAt;
     }
@@ -189,7 +187,7 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
                 return TaskState.FAILED;
             }
         }
-        // 不返终态就是"常驻"的全部含义;只有够不着和目标没了才收场。
+        // 到点之前不返终态;只有够不着和目标没了才提前收场。
         return TaskState.RUNNING;
     }
 
@@ -234,7 +232,7 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
 
     @Override
     protected String successMessage() {
-        // 只有给了时长的到点才走到 SUCCESS;常驻的被换掉时走的是 cancelledMessage。
+        // 到点走到 SUCCESS;被换掉、被叫停走的是 cancelledMessage。
         return "followed " + r.who() + " for " + r.forTicks / 20 + " s";
     }
 }

@@ -2,7 +2,6 @@ package com.dwinovo.numen.core.task.move;
 
 import java.util.List;
 
-import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.cli.Place;
 import com.dwinovo.numen.core.nav.NavText;
 import com.dwinovo.numen.permission.Listing;
@@ -10,38 +9,16 @@ import com.dwinovo.numen.permission.Listing;
 import net.minecraft.core.BlockPos;
 
 /**
- * 路线的去处写错时({@code route.new} 与 {@code route.via},库里的 {@code move.goto_} 经它们)当场给的提醒,只有这里写字。每一句说
- * 事实,再给能照抄的写法;不替她改成别的意思,也不去搜索。判断是不是写错由 {@link Destination} 问寻路模块,这里只把结论写成话。
+ * 一站这一趟走不通时({@link Destination} 编不成目标)的提醒,只有这里写字:规划把它写进那一段的为什么,{@code route.plan} 的计划
+ * 里照抄。每一句说事实,再给能照抄的写法;不替她改成别的意思,也不去搜索。判断由 {@link Destination} 问寻路模块,这里只把结论写成话。
  */
 public final class GotoReminders {
 
     private GotoReminders() {}
 
-    /** 一句能照抄的去那一格({@link NavText#gotoCall}),{@code options} 是选项表里的那几项,可以为空。 */
+    /** 一句能照抄的去那一格({@link NavText#gotoCall}),{@code options} 是描述里的那几项,可以为空。 */
     public static String call(BlockPos pos, String options) {
         return NavText.gotoCall(Place.cell(pos), options);
-    }
-
-    /** 去一块区域的那一句({@link NavText#gotoCall})。 */
-    public static String call(AreaRef area, String options) {
-        return NavText.gotoCall(Place.area(area), options);
-    }
-
-    /** 给了 near 却没写 arrive = "near"。 */
-    public static String nearWithoutArriveNear(int near) {
-        return "near = " + near + " only goes with arrive = \"near\" — write {arrive = \"near\", near = " + near
-                + "} to stop within " + near + " blocks; without it arrival is exact.";
-    }
-
-    /** arrive 是 use 或 dig 却只给了一列。 */
-    public static String blockNeedsY(String arrive) {
-        return "arrive = \"" + arrive + "\" names one block — give its y too ({x = …, y = …, z = …}).";
-    }
-
-    /** 只给了高度,却写了别的到达方式。 */
-    public static String heightTakesNoArrive(String arrive) {
-        return "a single number is a height to climb or descend to; arrive = \"" + arrive
-                + "\" needs a place ({x = …, z = …}, or {x = …, y = …, z = …}).";
     }
 
     /**
@@ -53,7 +30,7 @@ public final class GotoReminders {
                 + " To use it: " + call(pos, "arrive = \"use\"")
                 + (top == null ? "" : "; to stand on top of it: " + call(top, ""))
                 + "; to stop close by: " + call(pos, "arrive = \"near\"")
-                + "; to dig into it instead, add alter = \"natural\".";
+                + "; to dig into it instead, add costs = {dig = true}.";
     }
 
     /**
@@ -63,7 +40,7 @@ public final class GotoReminders {
         String there = ground == null ? "" : " (the ground in that column is at y=" + ground.getY() + ": "
                 + call(ground, "") + ")";
         return Listing.coords(pos) + " is in mid-air — nothing to stand on there" + there
-                + ". Give {x = …, z = …} alone to go to that column; to pillar up to it, add alter = \"natural\".";
+                + ". Give {x = …, z = …} alone to go to that column; to pillar up to it, add costs = {place = true}.";
     }
 
     /** arrive = "use" 指向没有可点的轮廓的格:空气、流体。 */
@@ -111,55 +88,41 @@ public final class GotoReminders {
                 + call(pos, "arrive = \"near\"") + ".";
     }
 
-    // ==================== 去一块区域 ====================
+    // ==================== 去一堆格子 ====================
 
-    /** 区域里还没有一格。 */
-    public static String emptyArea(AreaRef area) {
-        return "area " + area + " has no cells yet, so there is nowhere in it to go; area.add with a box, or "
-                + "scan.blocks with into = \"" + area.name() + "\", fills it.";
+    /** arrive = "at" 一堆格子,一格也站不了人,而这一趟不改地形。 */
+    public static String cellsNowhereToStand(int cells) {
+        return "none of the " + cells + " cell(s) is somewhere to stand, and this walk changes nothing. To stop close "
+                + "by: arrive = \"near\"; to dig or pillar into them, add costs = {dig = true, place = true}.";
     }
 
-    /** "它离我最近的那几格":看了整块就说整块。 */
-    private static String nearest(AreaRef area, int looked, long cells) {
-        return looked == cells ? "the " + cells + " cell(s) of area " + area
-                : "the " + looked + " cells of area " + area + " nearest me (of " + cells + ")";
+    /** arrive = "use" 一堆格子,没有一格有可点的轮廓。 */
+    public static String cellsNothingToUse(int cells) {
+        return "none of the " + cells + " cell(s) holds a block to click — they are air or fluid. To get close: "
+                + "arrive = \"near\".";
     }
 
-    /** arrive = "at" 一块区域,离她最近的那一部分里一格也站不了人,而这一趟不改地形。 */
-    public static String areaNowhereToStand(AreaRef area, int looked, long cells) {
-        return "none of " + nearest(area, looked, cells) + " is somewhere to stand, and this walk changes nothing. "
-                + "To stop close by: " + call(area, "arrive = \"near\"")
-                + "; to dig or pillar into it, add alter = \"natural\".";
-    }
-
-    /** arrive = "use" 一块区域,离她最近的那一部分里没有一格有可点的轮廓。 */
-    public static String areaNothingToUse(AreaRef area, int looked, long cells) {
-        return "none of " + nearest(area, looked, cells) + " holds a block to click — they are air or fluid. "
-                + "To get close: " + call(area, "arrive = \"near\"") + ".";
-    }
-
-    /** arrive = "dig" 一块区域,离她最近的那一部分里没有一格有可挖的方块。 */
     /**
-     * arrive = "dig" 一块区域,离她最近的那一部分里有方块,却一格也挖不成(物理上挖不动、规则不许、每一面都贴着清不掉的方块);
-     * {@code why} 是离她最近那一格的缘由。
+     * arrive = "dig" 一堆格子,有方块却一格也挖不成(物理上挖不动、规则不许、每一面都贴着清不掉的方块);{@code why} 是离她最近那一格的
+     * 缘由。
      */
-    public static String areaNoneDiggable(AreaRef area, int looked, long cells, String why) {
-        return "none of " + nearest(area, looked, cells) + " can be dug; the nearest: " + why + ".";
+    public static String cellsNoneDiggable(int cells, String why) {
+        return "none of the " + cells + " cell(s) can be dug; the nearest: " + why + ".";
     }
 
-    public static String areaNothingToDig(AreaRef area, int looked, long cells) {
-        return "none of " + nearest(area, looked, cells) + " holds a block to dig — they are air or fluid. "
-                + "To get close: " + call(area, "arrive = \"near\"") + ".";
+    /** arrive = "dig" 一堆格子,没有一格有可挖的方块。 */
+    public static String cellsNothingToDig(int cells) {
+        return "none of the " + cells + " cell(s) holds a block to dig — they are air or fluid. To get close: "
+                + "arrive = \"near\".";
     }
 
     /**
-     * arrive = "use" 一块区域,离她最近的那几个能点的方块一个也用不上:四面封死,或够得着的地方一处也站不了。{@code first} 是其中
+     * arrive = "use" 一堆格子,离她最近的那几个能点的方块一个也用不上:四面封死,或够得着的地方一处也站不了。{@code first} 是其中
      * 离她最近的那一个,单独去用它的那一句会说清是什么挡着。
      */
-    public static String areaNoneUsable(AreaRef area, int tried, BlockPos first) {
-        return "none of the " + tried + " block(s) of area " + area + " nearest me can be used: each is walled in on "
-                + "every side or has nowhere within reach to stand and see it. " + call(first, "arrive = \"use\"")
-                + " says what is in the way of the nearest one; to get as close as I can: "
-                + call(area, "arrive = \"near\"") + ".";
+    public static String cellsNoneUsable(int tried, BlockPos first) {
+        return "none of the " + tried + " block(s) nearest me can be used: each is walled in on every side or has "
+                + "nowhere within reach to stand and see it. " + call(first, "arrive = \"use\"")
+                + " says what is in the way of the nearest one; to get as close as I can: arrive = \"near\".";
     }
 }

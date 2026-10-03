@@ -131,7 +131,8 @@ public final class BlockDigger {
                 yield broke.pos().equals(target) ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;
             }
             case Strike.Refused refused -> {
-                refusal = refused.reason() instanceof Verdict verdict ? verdict : Verdict.deny(SERVER_REFUSED);
+                Verdict verdict = com.dwinovo.numen.core.nav.CompanionHands.verdict(refused.reason());
+                refusal = verdict != null ? verdict : Verdict.deny(SERVER_REFUSED);
                 yield DigResult.REFUSED;
             }
         };

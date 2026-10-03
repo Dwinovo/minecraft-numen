@@ -50,7 +50,7 @@ public final class LocateCommands {
                         LocateCommands::structure, STRUCTURE)
                 .returns(ScriptType.table(ScriptType.field("found", ScriptType.BOOLEAN, null),
                         ScriptType.optional("pos", ScriptType.table(ScriptType.field("x", ScriptType.NUMBER, null),
-                                ScriptType.field("z", ScriptType.NUMBER, null)), "The column it is in: move.goto_ takes it."),
+                                ScriptType.field("z", ScriptType.NUMBER, null)), "The column it is in: move.to takes it."),
                         ScriptType.optional("direction", ScriptType.STRING, null),
                         ScriptType.optional("horizontal_distance", ScriptType.INTEGER, null)))
                 .example("locate.structure(\"minecraft:stronghold\")")
@@ -64,7 +64,7 @@ public final class LocateCommands {
                         LocateCommands::biome, BIOME)
                 .returns(ScriptType.table(ScriptType.field("found", ScriptType.BOOLEAN, null),
                         ScriptType.optional("pos", ScriptType.table(ScriptType.field("x", ScriptType.NUMBER, null),
-                                ScriptType.field("z", ScriptType.NUMBER, null)), "The column it is in: move.goto_ takes it."),
+                                ScriptType.field("z", ScriptType.NUMBER, null)), "The column it is in: move.to takes it."),
                         ScriptType.optional("direction", ScriptType.STRING, null),
                         ScriptType.optional("horizontal_distance", ScriptType.INTEGER, null)))
                 .example("locate.biome(\"minecraft:warped_forest\")")

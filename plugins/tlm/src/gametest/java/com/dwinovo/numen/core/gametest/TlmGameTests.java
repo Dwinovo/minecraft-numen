@@ -154,8 +154,8 @@ public class TlmGameTests {
         succeedWhen(helper, () -> {
             JsonObject reply = task.reply() == null ? null : JsonParser.parseString(task.reply()).getAsJsonObject();
             helper.assertTrue(reply != null && !task.succeeded() && "out_of_reach".equals(reply.get("kind").getAsString())
-                            && reply.has("hint") && reply.get("hint").getAsString().startsWith("move.goto_({x = ")
-                            && reply.get("hint").getAsString().endsWith("{arrive = \"near\", near = 2})"),
+                            && reply.has("hint") && reply.get("hint").getAsString().startsWith("move.to({x = ")
+                            && reply.get("hint").getAsString().endsWith("{arrive = \"near\", range = 2})"),
                     "far away, tlm task did not fail out of reach with the walk to copy: " + task.reply());
             helper.assertTrue(!maid.getTask().getUid().equals(FARM), "her task changed from out of reach");
             leave(helper, her, maid);

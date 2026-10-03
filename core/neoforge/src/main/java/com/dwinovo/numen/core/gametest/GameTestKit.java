@@ -245,9 +245,10 @@ public final class GameTestKit {
     }
 
     /**
-     * 挖一块区域,用原子调用一轮轮组合,和模型自己写的一样:{@code move.goto_(区域, {arrive = "dig", alter = "natural"})} 走到
-     * 一次够得着最多格的地方,{@code work.dig(区域, {count = 还差几格})} 挖手够得着的,{@code work.collect({alter = "natural"})}
-     * 捡掉落;还差、而且挖的回执说还有够不着的格,就再来一轮。每一步是一段一行的程序;挖了几格读那件活的收尾数据,脚本里拿不到它。
+     * 挖一块区域,用原子调用一轮轮组合,和模型手里有那一团格子时写的一样:{@code move.to({cells = 区域的格}, {arrive = "dig",
+     * costs = …})} 走到一次够得着最多格的地方(挖得成的格里按挖的价钱挑:要问主人的贵,不许的不去),{@code work.dig(区域,
+     * {count = 还差几格})} 挖手够得着的,{@code work.collect} 许挖许放地捡掉落;还差、而且挖的回执说还有够不着的格,就再来一轮。
+     * 区域的格由主人的存档读出,写成带 {@code cells} 的表。每一步是一段一行的程序;挖了几格读那件活的收尾数据,脚本里拿不到它。
      * {@code before} 有了结论才开始,它失败就不挖。
      *
      * <p>哪一步(走、挖)失败,这次挖矿就以那一步的结论收场;挖够了,或够不着的不剩了,以最后一次挖的结论收场。
@@ -294,6 +295,9 @@ public final class GameTestKit {
         private int rounds;
         private int settling;
 
+        /** 许挖许放、要问主人的格当墙:走去挖、走去捡都按它。 */
+        private static final String COSTS = "costs = {dig = true, place = true, consent = false}";
+
         private Mining(NumenPlayer companion, ToolRun before, String area, int count) {
             this.companion = companion;
             this.area = area;
@@ -307,7 +311,7 @@ public final class GameTestKit {
         private void tick() {
             if (step == Step.SETTLE) {
                 if (dropsSettled() || ++settling >= SETTLE_TICKS) {
-                    run(Step.COLLECT, "work.collect({alter = \"natural\"})");
+                    run(Step.COLLECT, "work.collect({" + COSTS + "})");
                 }
                 return;
             }
@@ -322,8 +326,7 @@ public final class GameTestKit {
                     } else if (step == Step.BEFORE) {
                         walk();
                     } else {
-                        run(Step.DIG, "work.dig(\"" + area + "\"" + (count > 0 ? ", {count = " + (count - dug) + "}" : "")
-                                + ")");
+                        dig();
                     }
                 }
                 case DIG -> {
@@ -363,8 +366,18 @@ public final class GameTestKit {
             current = lua(companion, code);
         }
 
+        /** 走到一次够得着这块区域最多格的地方:区域此刻的每一格写成带 {@code cells} 的表交给 {@code move.to}。 */
         private void walk() {
-            run(Step.GOTO, "move.goto_(\"" + area + "\", {arrive = \"dig\", alter = \"natural\"})");
+            com.dwinovo.numen.area.Area found = com.dwinovo.numen.core.nav.NamedAreas.of(companion)
+                    .resolve(com.dwinovo.numen.area.AreaRef.parse(area));
+            StringBuilder cells = new StringBuilder("{cells = {");
+            found.cells().forEach((x, y, z, seen) -> cells.append(cells.length() > 10 ? ", " : "")
+                    .append(com.dwinovo.numen.cli.Shapes.literal(new BlockPos(x, y, z))));
+            run(Step.GOTO, "move.to(" + cells.append("}}") + ", {arrive = \"dig\", " + COSTS + "})");
+        }
+
+        private void dig() {
+            run(Step.DIG, "work.dig(\"" + area + "\"" + (count > 0 ? ", {count = " + (count - dug) + "}" : "") + ")");
         }
 
         /** 各次 {@code work.dig} 一共挖掉的格。 */
@@ -919,7 +932,7 @@ public final class GameTestKit {
         }
 
         /**
-         * 有结论了:整段程序跑完了。只看最后一次调用的回执不行:一段几次调用的程序(库函数 move.goto_ 是三次)头一次回了执,
+         * 有结论了:整段程序跑完了。只看最后一次调用的回执不行:一段几次调用的程序(库函数 move.to 是两次)头一次回了执,
          * 后面的还没派。
          */
         boolean done() {

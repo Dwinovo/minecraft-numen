@@ -51,7 +51,7 @@ final class MaidCommands {
     /** 一只加载着的女仆:{@code tlm.maids} 列的、{@code tlm.maid} 详述的都是它,由 {@link Maids#row} 写。 */
     static final ScriptType.Class MAID_CLASS = new ScriptType.Class("Maid",
             "A maid of Touhou Little Maid, loaded in the world: an Entity with her work and settings. Hand her on as "
-                    + "she is: tlm.maid(m), use.entity(m), move.goto_(m).", Shapes.ENTITY.name(),
+                    + "she is: tlm.maid(m), use.entity(m), move.to(m).", Shapes.ENTITY.name(),
             List.of(ScriptType.field("model", ScriptType.STRING, "The model she wears."),
                     ScriptType.field("task", ScriptType.STRING, "Her work mode, touhou_little_maid:farm."),
                     ScriptType.field("schedule", SCHEDULE_WORD, null),
@@ -163,7 +163,7 @@ final class MaidCommands {
                 .example(line(TASK) + "(\"touhou_little_maid:farm\", {maid = 812})")
                 .example(line(TASK) + "(\"touhou_little_maid:idle\")")
                 .note("It does not travel: stand within about 7 blocks of her, the distance at which her GUI stays "
-                        + "open. Farther away it fails with out_of_reach, and its hint is the move.goto_ call to copy.")
+                        + "open. Farther away it fails with out_of_reach, and its hint is the move.to call to copy.")
                 .note("TLM decides: only the owner may switch, and a mode may wait for something first (see "
                         + "can_switch in " + line(MAID) + "). The result reads her task back; unchanged means TLM "
                         + "did not take it, and it says what TLM's rules show.")
@@ -396,7 +396,7 @@ final class MaidCommands {
 
     /** 走到一格两格之内的那一次调用,够不着的失败把它当下一步。 */
     private static String goNear(BlockPos at) {
-        return "move.goto_(" + Shapes.literal(at) + ", {arrive = \"near\", near = 2})";
+        return "move.to(" + Shapes.literal(at) + ", {arrive = \"near\", range = 2})";
     }
 
     /** 她自己的、够得着的女仆里最近的那一只(按 UUID 点名,重启后认的还是她);一只都没有时回执已经写好,返回 null。 */

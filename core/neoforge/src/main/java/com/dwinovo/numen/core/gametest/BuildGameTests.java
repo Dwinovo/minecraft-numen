@@ -127,8 +127,7 @@ public class BuildGameTests {
         }
         String design = "gt_" + name.replace("gametest_", "");
         design(companion, design, step.apply(design));
-        ToolRun run = lua(companion, "throwaway.add(\"minecraft:cobblestone\")\n"
-                + "build.raise(\"" + design + "\", {at = " + at(helper, anchorRel) + ", alter = \"natural\"})");
+        ToolRun run = lua(companion, "build.raise(\"" + design + "\", {at = " + at(helper, anchorRel) + ", costs = {dig = true, place = true, consent = false}})");
         return new Raised(companion, run, relCells.stream().map(helper::absolutePos).toList());
     }
 
@@ -1891,8 +1890,7 @@ public class BuildGameTests {
                 "build.place({x = 2, y = 2, z = 0}, {block = \"glass_pane\", into = \"gt_cottage\"})",
                 "build.place({x = 9, y = 2, z = 0}, {block = \"glass_pane\", into = \"gt_cottage\"})",
                 "build.place({x = 5, y = 1, z = 4}, {block = \"torch\", into = \"gt_cottage\"})");
-        Raising build = new Raising(helper, companion, "throwaway.add(\"minecraft:cobblestone\")\n"
-                + "build.raise(\"gt_cottage\", {at = " + xyz(o) + ", alter = \"natural\"})");
+        Raising build = new Raising(helper, companion, "build.raise(\"gt_cottage\", {at = " + xyz(o) + ", costs = {dig = true, place = true, consent = false}})");
 
         // 收场了就判一次:停在别的原因上是失败,不等到时限
         steps(helper).thenWaitUntil(() -> helper.assertTrue(build.done(), "build.raise has not finished")).thenExecute(() -> {
@@ -1984,8 +1982,7 @@ public class BuildGameTests {
 
         BlockPos anchorPos = helper.absolutePos(new BlockPos(7, 2, 7));
         var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(level, "igloo_top", anchorPos, 0);
-        ToolRun raise = lua(companion, "throwaway.add(\"minecraft:cobblestone\")\n"
-                + "build.raise(\"igloo_top\", {at = " + xyz(anchorPos) + ", alter = \"natural\"})");
+        ToolRun raise = lua(companion, "build.raise(\"igloo_top\", {at = " + xyz(anchorPos) + ", costs = {dig = true, place = true, consent = false}})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(raise.receipt() != null, "build.raise has not finished");
@@ -2255,8 +2252,7 @@ public class BuildGameTests {
         var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
                 level, "japanese_cottage", anchor, 0);
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
-        Raising raise = new Raising(helper, companion, "throwaway.add(\"minecraft:cobblestone\")\n"
-                + "build.raise(\"japanese_cottage\", {at = " + xyz(anchor) + ", alter = \"natural\"})");
+        Raising raise = new Raising(helper, companion, "build.raise(\"japanese_cottage\", {at = " + xyz(anchor) + ", costs = {dig = true, place = true, consent = false}})");
         // 先看建造收没收工、成没成:一次真实的建造失败(比如最后两格被她自己站着)
         // 不能被翻译成"格数对不上",那会把真正的原因藏起来,还让这条用例空转到超时——收场了就判一次。
         steps(helper).thenWaitUntil(() -> helper.assertTrue(raise.done(), "build.raise has not finished")).thenExecute(() -> {
@@ -2316,7 +2312,7 @@ public class BuildGameTests {
                 .thenExecute(() -> {
                     ToolRun build = at.get();
                     helper.assertTrue(build.refused() && "out_of_reach".equals(build.kind())
-                                    && build.hint().contains("move.goto_(" + xyz(support) + ", {arrive = \"reach\"})"),
+                                    && build.hint().contains("move.to(" + xyz(support) + ", {arrive = \"place\"})"),
                             "build.at tried the carpet instead of saying where to go: " + build.reply());
                     helper.assertTrue(level.getBlockState(support).isAir() && level.getBlockState(support.above()).isAir(),
                             "a cell was placed by a refused build");
@@ -2394,7 +2390,7 @@ public class BuildGameTests {
                 .thenExecute(() -> {
                     ToolRun build = at.get();
                     helper.assertTrue(build.refused(), "a build with nothing in reach was dispatched: " + build.reply());
-                    helper.assertTrue(build.outcome().contains("within reach") && build.outcome().contains("move.goto_"),
+                    helper.assertTrue(build.outcome().contains("within reach") && build.outcome().contains("move.to("),
                             "the refusal does not say how to get within reach: " + build.outcome());
                     helper.assertTrue(BlockPos.betweenClosedStream(o, o.offset(2, 0, 2))
                                     .noneMatch(p -> level.getBlockState(p).is(Blocks.COBBLESTONE))
@@ -2407,7 +2403,7 @@ public class BuildGameTests {
 
     /**
      * 库里的 {@code build.raise}:一圈两格高的圆石墙落在她够不着的地方。它一轮轮问 {@code build.left}、走到够得着的地方
-     * ({@code move.goto_} 到达方式 reach)、放手够得着的({@code build.at}),直到一格不差;墙一格不缺,圆石按格扣。
+     * ({@code move.to} 到达方式 place)、放手够得着的({@code build.at}),直到一格不差;墙一格不缺,圆石按格扣。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_build")
     public static void build_raise_walks_the_site_and_builds_all_of_it(GameTestHelper helper) {

@@ -9,7 +9,7 @@ You move items through real GUIs, exactly like a player: open the block, look at
 
 ## The loop
 
-1. **Open** — `use.block({x = 120, y = 64, z = -35})` on the container block (it does not travel: first `move.goto_({x = 120, y = 64, z = -35}, {arrive = "use"})`, which stands you where the container is in sight and in reach). This opens its GUI and leaves it open.
+1. **Open** — `use.block({x = 120, y = 64, z = -35})` on the container block (it does not travel: first `move.to({x = 120, y = 64, z = -35}, {arrive = "use"})`, which stands you where the container is in sight and in reach). This opens its GUI and leaves it open.
 2. **Look** — `use.gui`. Lists every slot: `index: item xN`, which side (container vs your inventory), and `[output]` for take-only slots (a furnace result, a machine product).
 3. **Move** — one move per call (see below). To move several stacks, call it several times in one program; they run in order.
 4. **Verify** — each result already says what happened; `use.gui` again only if you need to re-check.
@@ -112,6 +112,6 @@ Every move's result tells you its outcome, and you can always `use.gui` — you 
 - **Chest is full** → `use.gui` shows no empty container slots. Find another chest (scan / known_blocks) or take something out first.
 - **Got a swap you didn't want** → `use.transfer` put it onto a slot holding a different item. `use.shift` instead to route it, or pick an empty slot.
 - **"no GUI open"** → you didn't open one, or walked out of range and it closed. Open it again with `use.block`.
-- **"right-clicked tall_grass … the crosshair landed there"** → something stood between you and the container, and the click went to it. The result names the next step: `work.dig` that cell, or `move.goto_({x = 120, y = 64, z = -35}, {arrive = "use"})` to stand where another side is in sight; then `use.block` again.
+- **"right-clicked tall_grass … the crosshair landed there"** → something stood between you and the container, and the click went to it. The result names the next step: `work.dig` that cell, or `move.to({x = 120, y = 64, z = -35}, {arrive = "use"})` to stand where another side is in sight; then `use.block` again.
 
 Always `use.close` (or walk away) when finished so you don't leave a menu hanging.

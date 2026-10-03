@@ -98,24 +98,23 @@ class NavTextTest {
         assertEquals("no terrain change", NavText.planned(java.util.Map.of(), java.util.Map.of(), java.util.Map.of()));
     }
 
-    /** 没走到的是路线上的一段时,下一步写成改这条路线的调用:点名路线,多于一段时点名是哪一段。 */
+    /**
+     * 许的改动不够:下一步写成描述里要加的那几项(要挖的许挖、要放的许放、要问主人的把要问的格算能走),规划时用的那条路要改的格
+     * 照实点名;要问主人的格说清走到时才问。超出改动上限说 max_changes 要多少。
+     */
     @Test
-    void onARouteTheNextStepIsTheLineThatChangesThatRoute() {
-        RouteSpec spec = RouteSpec.defaults();
-        String alone = NavText.failure(new Outcome.NeedsChanges(digs(2)), null, A, C, spec,
-                new NavText.OnRoute("goto-aria", 1, 1));
-        assertTrue(alone.contains("`route.spec(\"goto-aria\", {alter = \"natural\"})`")
-                && alone.contains("`route.plan(\"goto-aria\")`")
-                && alone.contains("changing 2 block(s) — break 2 oak_planks (120,64,-33; 120,65,-33)"), alone);
-        String leg = NavText.failure(new Outcome.NeedsChanges(digs(3, Permit.ask("x"))), null, A, C, spec,
-                new NavText.OnRoute("home", 2, 3));
-        assertTrue(leg.contains("`route.spec(\"home\", {leg = 2, alter = \"any\"})`")
-                && leg.contains("asks the owner first"), leg);
+    void notEnoughChangesNameTheKnobsToTurn() {
+        RouteSpec none = RouteSpec.defaults();
+        String digs = NavText.failure(new Outcome.NeedsChanges(digs(2)), null, A, C, none, List.of());
+        assertTrue(digs.contains("plan it again with costs = {dig = true, place = true}")
+                && digs.contains("changes 2 block(s) — break 2 oak_planks (120,64,-33; 120,65,-33)"), digs);
+        RouteSpec walls = none.edit().changes(true).consent(false).build();
+        String asks = NavText.failure(new Outcome.NeedsChanges(digs(3, Permit.ask("x"))), null, A, C, walls, List.of());
+        assertTrue(asks.contains("without touching what needs the owner's consent")
+                && asks.contains("costs = {consent = 10}") && asks.contains("asks your owner when I get to each"), asks);
         String budget = NavText.failure(new Outcome.OverAlterBudget(5), null, A, C,
-                spec.edit().changes(true).consent(false).alterBudget(1).build(), new NavText.OnRoute("home", 1, 1));
-        assertTrue(budget.contains("`route.spec(\"home\", {alter_budget = 5})`"), budget);
-        String sight = NavText.failure(new Outcome.NoLineOfSight(B), null, A, C, spec, new NavText.OnRoute("home", 1, 1));
-        assertTrue(sight.contains("`move.go(\"home\")` again"), sight);
+                walls.edit().alterBudget(1).build(), List.of());
+        assertTrue(budget.contains("costs = {max_changes = 5}"), budget);
     }
 
     @Test
@@ -157,7 +156,7 @@ class NavTextTest {
     @Test
     void aWayTooLongUnderWaterSaysWhereAndHowLong() {
         Outcome.Breathless breathless = new Outcome.Breathless(A, C, 500, 240);
-        String said = NavText.failure(breathless, null, A, C, RouteSpec.defaults());
+        String said = NavText.failure(breathless, null, A, C, RouteSpec.defaults(), List.of());
         assertTrue(said.contains("swims under water from 120,64,-33 to 121,64,-33") && said.contains("about 25 s without a"
                 + " breath") && said.contains("about 12 s") && said.contains("water breathing"), said);
         assertEquals(FailureType.HAZARD, NavText.type(breathless));
@@ -168,9 +167,9 @@ class NavTextTest {
 
     @Test
     void onlyASearchedOutWalkSaysEveryCellWasSearchedAndARunOutBudgetIsNoProof() {
-        String none = NavText.failure(new Outcome.NoRoute(), null, A, C, RouteSpec.defaults());
+        String none = NavText.failure(new Outcome.NoRoute(), null, A, C, RouteSpec.defaults(), List.of());
         assertTrue(none.contains("every reachable cell was searched"), none);
-        String budget = NavText.failure(new Outcome.OutOfBudget(), null, A, C, RouteSpec.defaults());
+        String budget = NavText.failure(new Outcome.OutOfBudget(), null, A, C, RouteSpec.defaults(), List.of());
         assertTrue(budget.contains("not proof there is none") && !budget.contains("every reachable cell"), budget);
     }
 
@@ -178,30 +177,31 @@ class NavTextTest {
     @Test
     void everyWayOfNotGettingThereSaysItsOwnReasonAndWhatToTryNext() {
         RouteSpec spec = RouteSpec.defaults();
-        String none = NavText.failure(new Outcome.NoRoute(), null, A, C, spec);
-        String budget = NavText.failure(new Outcome.OutOfBudget(), null, A, C, spec);
-        String unloaded = NavText.failure(new Outcome.Unloaded(), null, A, C, spec);
-        String alter = NavText.failure(new Outcome.NeedsChanges(digs(2)), null, A, C, spec);
-        String denied = NavText.failure(new Outcome.Denied(B, "no"), null, A, C, spec);
-        String stranded = NavText.failure(new Outcome.Stranded(A, planks()), null, A, C, spec);
+        String none = NavText.failure(new Outcome.NoRoute(), null, A, C, spec, List.of());
+        String budget = NavText.failure(new Outcome.OutOfBudget(), null, A, C, spec, List.of());
+        String unloaded = NavText.failure(new Outcome.Unloaded(), null, A, C, spec, List.of());
+        String alter = NavText.failure(new Outcome.NeedsChanges(digs(2)), null, A, C, spec, List.of());
+        String denied = NavText.failure(new Outcome.Denied(B, "no"), null, A, C, spec, List.of());
+        String stranded = NavText.failure(new Outcome.Stranded(A, planks()), null, A, C, spec, List.of());
         String blocked = NavText.failure(new Outcome.Blocked(new Blockage(B, planks(), MoveKind.WALK, Reason.NO_CLEARANCE,
-                null)), null, A, C, spec);
-        String sight = NavText.failure(new Outcome.NoLineOfSight(B), null, A, C, spec);
+                null)), null, A, C, spec, List.of());
+        String sight = NavText.failure(new Outcome.NoLineOfSight(B), null, A, C, spec, List.of());
         assertTrue(none.contains("pick another destination"), none);
-        assertTrue(budget.contains("not proof there is none") && budget.contains("a nearer waypoint"), budget);
+        assertTrue(budget.contains("not proof there is none") && budget.contains("a nearer stop"), budget);
         assertTrue(unloaded.contains("not loaded") && unloaded.contains("walk toward it and try again"), unloaded);
-        assertTrue(alter.contains("walk with alter = \"natural\""), alter);
-        assertTrue(denied.contains("120,65,-33 is refused") && denied.contains("ask your owner"), denied);
+        assertTrue(alter.contains("plan it again with costs = {dig = true, place = true}"), alter);
+        assertTrue(denied.contains("120,65,-33 is refused") && denied.contains("ask your owner")
+                && denied.contains("avoid = {{x = 120, y = 65, z = -33}}"), denied);
         assertTrue(stranded.contains("can't stand where I am") && stranded.contains("free me first"), stranded);
         assertTrue(blocked.contains("no room for my body there") && blocked.contains("try again"), blocked);
         assertTrue(sight.contains("went out of sight")
-                && sight.contains("`move.goto_({x = 120, y = 65, z = -33}, {arrive = \"use\"})`"), sight);
+                && sight.contains("`move.to({x = 120, y = 65, z = -33}, {arrive = \"use\"})`"), sight);
         assertEquals(8, java.util.Set.of(none, budget, unloaded, alter, denied, stranded, blocked, sight).size());
     }
 
     @Test
     void anOverBudgetWalkSaysWhatTheCheapestRouteWouldChange() {
-        assertEquals("no route within an alter_budget of 1 (the cheapest found would change 3 blocks)",
+        assertEquals("no route within max_changes = 1 (the cheapest found would change 3 blocks)",
                 NavText.overBudget(1, 3));
     }
 }

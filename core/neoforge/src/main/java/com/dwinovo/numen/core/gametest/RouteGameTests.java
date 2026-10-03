@@ -2,17 +2,14 @@ package com.dwinovo.numen.core.gametest;
 
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
-import java.util.UUID;
-
 import com.dwinovo.numen.core.Constants;
-import com.dwinovo.numen.core.route.Itinerary;
-import com.dwinovo.numen.core.route.Plan;
-import com.dwinovo.numen.core.route.Routes;
-import com.dwinovo.numen.core.task.move.MoveToTaskRecord;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.task.TaskRecord;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
@@ -20,16 +17,18 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
- * 路线:{@code route.new} + {@code route.plan} 只规划不动身体;{@code move.go} 照计划走,只改计划里的格;路上世界变了、要承诺外的格时
- * 停下并说是哪几格;远途一格不改的 goto 一路走到;走进计划看不清的部分后要改承诺外的格时停下;从别处出发、新计划超出
- * 承诺时不走并说出差别;途经点照顺序走;{@code move.goto_} 简写与分开三步结局相同;重启后 {@code move.go} 照常重放。
- * 都从工具入口进。
+ * 路线:{@code route.plan} 照一份描述只规划不动身体,走不通不抛错、计划说为什么;{@code move.go} 照计划走,只改计划里的格;路上世界
+ * 变了、要承诺外的格时停下并说是哪几格;远途一格不改的路一路走到;走进计划看不清的部分后要改承诺外的格时停下;从别处出发、新计划超出
+ * 承诺时不走并说出差别;途经点路过不停、要停的停下;{@code move.to} 与分开两步结局相同;不许挖时一格不改;{@code move.flee} 离开到
+ * 够远;{@code move.dismount} 从船上下来。都从脚本的入口进。
  */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
@@ -42,16 +41,32 @@ public class RouteGameTests {
         settleWorld(level, Difficulty.PEACEFUL, NOON);
     }
 
-    private static Routes routes(NumenPlayer companion) {
-        return Routes.of(companion.getServer(), companion.getOwnerUuid());
-    }
-
     /** 木板屋的屋外那一格(屋子围着 7,7,她在屋里)。 */
     private static final BlockPos OUTSIDE = new BlockPos(13, 2, 7);
 
+    /** 许挖许放、要问主人的格当墙。 */
+    private static final String DIGGING = "costs = {dig = true, place = true, consent = false}";
+
+    /** 整段程序返回的那个值(表)。 */
+    private static JsonObject returned(ToolRun run) {
+        JsonElement value = dataIn(run.receipt()).get("returned");
+        return value != null && value.isJsonObject() ? value.getAsJsonObject() : new JsonObject();
+    }
+
+    /** 一段计划里要挖的格(全部段)。 */
+    private static LongSet breaks(JsonObject plan) {
+        LongSet out = new LongOpenHashSet();
+        for (JsonElement leg : plan.getAsJsonArray("legs")) {
+            for (JsonElement block : leg.getAsJsonObject().getAsJsonArray("breaks")) {
+                JsonObject pos = block.getAsJsonObject().getAsJsonObject("pos");
+                out.add(BlockPos.asLong(pos.get("x").getAsInt(), pos.get("y").getAsInt(), pos.get("z").getAsInt()));
+            }
+        }
+        return out;
+    }
+
     /**
-     * 规划不动身体:关在木板屋里,{@code route.new} 带 {@code alter = "natural"},{@code route.plan}。回执列出要挖的木板;她一步没动,
-     * 墙一块不少;计划记在路线上,{@code route.show} 照着说。
+     * 规划不动身体:关在木板屋里,描述许挖。计划列出要挖的木板,数据里没有一步步的路(读得到,不进回执);她一步没动,墙一块不少。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
     public static void planning_a_route_moves_nothing_and_lists_the_digs(GameTestHelper helper) {
@@ -60,31 +75,27 @@ public class RouteGameTests {
         int planksBefore = plankCount(helper, 7, 7);
         NumenPlayer companion = spawnAt(helper, "gametest_surveyor2", new BlockPos(7, 2, 7), false);
         BlockPos start = companion.blockPosition();
-        ToolRun made = lua(companion, "route.new(\"out\", {to = " + at(helper, OUTSIDE) + ", alter = \"natural\"})");
-        ToolRun plan = lua(companion, "route.plan(\"out\")");
+        ToolRun plan = lua(companion, "local p = route.plan({to = " + at(helper, OUTSIDE) + ", " + DIGGING + "})\n"
+                + "print(#p.legs[1].path, p.legs[1].path[#p.legs[1].path].move)\nreturn p");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(made.succeeded(), "route new failed: " + made.outcome());
             helper.assertTrue(plan.done(), "route plan has not replied");
-            helper.assertTrue(plan.succeeded() && plan.outcome().contains("break")
-                            && plan.outcome().contains("oak_planks") && plan.outcome().contains("`move.go(\"out\")`"),
-                    "the plan does not list the planks it would break: " + plan.outcome());
+            helper.assertTrue(plan.ranToTheEnd(), "planning raised: " + plan.receipt());
+            JsonObject p = returned(plan);
+            JsonObject leg = p.getAsJsonArray("legs").get(0).getAsJsonObject();
+            helper.assertTrue(p.get("ok").getAsBoolean() && leg.get("reach").getAsString().equals("reached")
+                            && leg.getAsJsonArray("breaks").toString().contains("oak_planks"),
+                    "the plan does not list the planks it would break: " + p);
+            helper.assertTrue(!leg.has("path"), "the path is printed with the plan: " + leg);
+            helper.assertTrue(plan.receipt().contains("walk") && plan.reply().contains("`move.go(plan)` walks it"),
+                    "the path is not there to read, or the plan does not say what walks it: " + plan.receipt());
             helper.assertTrue(companion.blockPosition().equals(start), "planning moved the body");
             helper.assertTrue(plankCount(helper, 7, 7) == planksBefore, "planning altered the wall");
-            Itinerary route = routes(companion).get("out");
-            helper.assertTrue(route.plan() != null && !route.plan().digs().isEmpty(),
-                    "the plan was not kept on the route: " + route);
-            String shown = lua(companion, "route.show(\"out\")").reply();
-            helper.assertTrue(shown.contains("plan of route out") && shown.contains("oak_planks"),
-                    "route show does not tell the plan: " + shown);
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
 
-    /**
-     * 照计划走:同一间屋,规划之后 {@code move.go}。她拆墙出去到达,拆掉的每一块都在计划里,回执如实记账并点名路线;
-     * 这一趟记进路线走过的记录。
-     */
+    /** 照计划走:同一间屋,规划之后 {@code move.go}。她拆墙出去到达,拆掉的每一块都在计划里,回执如实记账。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
     public static void move_go_walks_the_plan_and_changes_only_its_cells(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -92,42 +103,30 @@ public class RouteGameTests {
         int planksBefore = plankCount(helper, 7, 7);
         NumenPlayer companion = spawnAt(helper, "gametest_keeper", new BlockPos(7, 2, 7), false);
         BlockPos target = helper.absolutePos(OUTSIDE);
-        lua(companion, "route.new(\"out\", {to = " + xyz(target) + ", alter = \"natural\"})");
-        ToolRun plan = lua(companion, "route.plan(\"out\")");
-        ToolRun[] walk = new ToolRun[1];
-        LongSet[] promised = new LongSet[1];
+        ToolRun walk = lua(companion, "local p = route.plan({to = " + xyz(target) + ", " + DIGGING + "})\n"
+                + "local moved = move.go(p)\nreturn {plan = p, moved = moved}");
 
-        steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(plan.done(), "route plan has not replied"))
-                .thenExecute(() -> {
-                    promised[0] = routes(companion).get("out").plan().digs();
-                    walk[0] = lua(companion, "move.go(\"out\")");
-                })
-                .thenWaitUntil(() -> helper.assertTrue(walk[0].done(), "move go has not finished"))
-                .thenExecute(() -> {
-                    helper.assertTrue(walk[0].succeeded() && companion.blockPosition().distSqr(target) <= 2,
-                            "she did not walk the route out: " + walk[0].outcome());
-                    helper.assertTrue(walk[0].outcome().contains("via route out")
-                                    && walk[0].outcome().contains("En route") && walk[0].outcome().contains("oak_planks"),
-                            "the reply does not name the route and what was broken: " + walk[0].outcome());
-                    helper.assertTrue(plankCount(helper, 7, 7) < planksBefore, "no plank was broken");
-                    for (int x = 5; x <= 9; x++) {
-                        for (int z = 5; z <= 9; z++) {
-                            for (int y = 2; y <= 4; y++) {
-                                BlockPos cell = helper.absolutePos(new BlockPos(x, y, z));
-                                boolean wall = x == 5 || x == 9 || z == 5 || z == 9;
-                                helper.assertTrue(!wall || level.getBlockState(cell).is(Blocks.OAK_PLANKS)
-                                                || promised[0].contains(cell.asLong()),
-                                        "a plank outside the plan was broken at " + cell.toShortString());
-                            }
-                        }
+        succeedWhen(helper, () -> {
+            helper.assertTrue(walk.done(), "move go has not finished");
+            helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(target) <= 2,
+                    "she did not walk out: " + walk.outcome());
+            helper.assertTrue(walk.outcome().contains("En route") && walk.outcome().contains("oak_planks"),
+                    "the reply does not say what was broken: " + walk.outcome());
+            LongSet promised = breaks(returned(walk).getAsJsonObject("plan"));
+            helper.assertTrue(plankCount(helper, 7, 7) < planksBefore, "no plank was broken");
+            for (int x = 5; x <= 9; x++) {
+                for (int z = 5; z <= 9; z++) {
+                    for (int y = 2; y <= 4; y++) {
+                        BlockPos cell = helper.absolutePos(new BlockPos(x, y, z));
+                        boolean wall = x == 5 || x == 9 || z == 5 || z == 9;
+                        helper.assertTrue(!wall || level.getBlockState(cell).is(Blocks.OAK_PLANKS)
+                                        || promised.contains(cell.asLong()),
+                                "a plank outside the plan was broken at " + cell.toShortString());
                     }
-                    Itinerary route = routes(companion).get("out");
-                    helper.assertTrue(route.walks().size() == 1 && route.walks().get(0).arrived(),
-                            "the walk was not written onto the route: " + route.walks());
-                    CompanionFactory.despawn(level.getServer(), companion);
-                })
-                .thenSucceed();
+                }
+            }
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
     }
 
     /**
@@ -151,44 +150,35 @@ public class RouteGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_promiser", new BlockPos(3, 2, 7), false);
         BlockPos start = companion.blockPosition();
-        lua(companion, "route.new(\"tunnel\", {to = " + at(helper, new BlockPos(12, 2, 7)) + ", alter = \"natural\"})");
-        ToolRun plan = lua(companion, "route.plan(\"tunnel\")");
-        ToolRun[] walk = new ToolRun[1];
+        ToolRun walk = lua(companion, "local p = route.plan({to = " + at(helper, new BlockPos(12, 2, 7)) + ", "
+                + DIGGING + "})\nprint(\"breaks=\" .. #p.legs[1].breaks)\nreturn move.go(p)");
         BlockPos low = helper.absolutePos(new BlockPos(7, 2, 7));
         boolean[] walled = new boolean[1];
         helper.onEachTick(() -> {
-            if (walk[0] != null && !walled[0] && companion.blockPosition().distSqr(start) >= 4) {
+            if (!walled[0] && companion.blockPosition().distSqr(start) >= 4) {
                 level.setBlockAndUpdate(low, Blocks.STONE.defaultBlockState());
                 level.setBlockAndUpdate(low.above(), Blocks.STONE.defaultBlockState());
                 walled[0] = true;
             }
         });
 
-        steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(plan.done(), "route plan has not replied"))
-                .thenExecute(() -> {
-                    helper.assertTrue(plan.succeeded() && plan.reply().contains("dirt"),
-                            "the plan does not dig the dirt wall: " + plan.reply());
-                    walk[0] = lua(companion, "move.go(\"tunnel\")");
-                })
-                .thenWaitUntil(() -> helper.assertTrue(walk[0].done(), "move go has not finished"))
-                .thenExecute(() -> {
-                    helper.assertTrue(walled[0], "she never set off, so the wall was never put in her way");
-                    String said = walk[0].outcome();
-                    helper.assertTrue(!walk[0].succeeded() && said.contains("outside the plan")
-                                    && said.contains("stone") && "route.plan(\"tunnel\")".equals(walk[0].hint()),
-                            "the stop does not say which cells lie outside the plan: " + said);
-                    helper.assertTrue(level.getBlockState(low).is(Blocks.STONE)
-                                    && level.getBlockState(low.above()).is(Blocks.STONE),
-                            "she dug the wall that was not in the plan");
-                    CompanionFactory.despawn(level.getServer(), companion);
-                })
-                .thenSucceed();
+        succeedWhen(helper, () -> {
+            helper.assertTrue(walk.done(), "move go has not finished");
+            helper.assertTrue(walled[0], "she never set off, so the wall was never put in her way");
+            String said = walk.outcome();
+            helper.assertTrue(!walk.succeeded() && said.contains("outside the plan") && said.contains("stone")
+                            && walk.hint() != null && walk.hint().contains("route.plan"),
+                    "the stop does not say which cells lie outside the plan: " + said + " / " + walk.hint());
+            helper.assertTrue(walk.receipt().contains("breaks=2"), "the plan did not dig the dirt wall: " + walk.receipt());
+            helper.assertTrue(level.getBlockState(low).is(Blocks.STONE) && level.getBlockState(low.above()).is(Blocks.STONE),
+                    "she dug the wall that was not in the plan");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
     }
 
     /**
-     * 从别处出发:在屋外规划(绕着屋子走,一格不改),再把她挪进木板屋里 {@code move.go}。从屋里走要拆墙,超出了那份计划:
-     * 她不走,说出多出来的是哪几格;墙一块不少,她还在屋里。
+     * 从别处出发:在屋外规划(绕着屋子走,一格不改),同一段程序里跟一会儿主人的空位,这期间她被挪进木板屋里,再 {@code move.go}。
+     * 从屋里走要拆墙,超出了那份计划:她不走,说出多出来的是哪几格;墙一块不少,她还在屋里。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
     public static void from_elsewhere_a_walk_beyond_the_promise_does_not_set_off(GameTestHelper helper) {
@@ -196,109 +186,211 @@ public class RouteGameTests {
         plankRoomAround(helper, 7, 7);
         int planksBefore = plankCount(helper, 7, 7);
         NumenPlayer companion = spawnAt(helper, "gametest_stickler", new BlockPos(2, 2, 2), false);
-        lua(companion, "route.new(\"out\", {to = " + at(helper, OUTSIDE) + ", alter = \"natural\"})");
-        ToolRun plan = lua(companion, "route.plan(\"out\")");
-        ToolRun[] walk = new ToolRun[1];
         BlockPos inside = helper.absolutePos(new BlockPos(7, 2, 7));
-
-        steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(plan.done(), "route plan has not replied"))
-                .thenExecute(() -> {
-                    helper.assertTrue(plan.succeeded() && plan.reply().contains("no terrain change"),
-                            "from outside the room the plan should change nothing: " + plan.reply());
-                    companion.teleportTo(inside.getX() + 0.5, inside.getY(), inside.getZ() + 0.5);
-                })
-                .thenIdle(5)
-                .thenExecute(() -> walk[0] = lua(companion, "move.go(\"out\")"))
-                .thenWaitUntil(() -> helper.assertTrue(walk[0].done(), "move go has not finished"))
-                .thenExecute(() -> {
-                    String said = walk[0].outcome();
-                    helper.assertTrue(!walk[0].succeeded() && said.contains("beyond the plan")
-                                    && said.contains("oak_planks") && said.contains("did not set off"),
-                            "the refusal does not say what goes beyond the plan: " + said);
-                    helper.assertTrue(plankCount(helper, 7, 7) == planksBefore, "a plank was broken");
-                    helper.assertTrue(companion.blockPosition().distSqr(inside) <= 1, "she left the room");
-                    CompanionFactory.despawn(level.getServer(), companion);
-                })
-                .thenSucceed();
-    }
-
-    /**
-     * 途经点照顺序走:从场地一角到同一边的另一角,中途要经过对面那一边的一点。她经过那一点(一格以内),再到终点;
-     * 计划有两段,走过的记录记着到了。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
-    public static void a_route_walks_through_its_waypoint(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer companion = spawnAt(helper, "gametest_rambler", new BlockPos(2, 2, 2), false);
-        BlockPos end = helper.absolutePos(new BlockPos(2, 2, 13));
-        BlockPos waypoint = helper.absolutePos(new BlockPos(13, 2, 7));
-        ToolRun made = lua(companion, "route.new(\"loop\", {to = " + xyz(end) + "})");
-        ToolRun via = lua(companion, "route.via(\"loop\", {at = " + xyz(waypoint) + "})");
-        ToolRun walk = lua(companion, "route.plan(\"loop\")\nmove.go(\"loop\")");
-        double[] nearest = {Double.MAX_VALUE};
-        helper.onEachTick(() -> nearest[0] = Math.min(nearest[0],
-                companion.position().distanceTo(Vec3.atBottomCenterOf(waypoint))));
+        ToolRun walk = lua(companion, "local p = route.plan({to = " + at(helper, OUTSIDE) + ", " + DIGGING + "})\n"
+                + "print(\"breaks=\" .. #p.legs[1].breaks)\nmove.follow({seconds = 2})\nreturn move.go(p)");
+        boolean[] moved = new boolean[1];
+        helper.onEachTick(() -> {
+            if (!moved[0] && !walk.tasks("move.follow").isEmpty()) {
+                companion.teleportTo(inside.getX() + 0.5, inside.getY(), inside.getZ() + 0.5);
+                moved[0] = true;
+            }
+        });
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(made.succeeded() && via.succeeded(), "making the route failed: " + made.outcome()
-                    + " / " + via.outcome());
             helper.assertTrue(walk.done(), "move go has not finished");
-            helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(end) <= 1,
-                    "she did not arrive: " + walk.outcome());
-            helper.assertTrue(nearest[0] <= 1.0, "she never passed the waypoint, nearest " + nearest[0]);
-            Itinerary route = routes(companion).get("loop");
-            helper.assertTrue(route.plan() != null && route.plan().legs().size() == 2
-                            && route.plan().legs().stream().allMatch(l -> l.reach() == Plan.Reach.WALKABLE),
-                    "the plan is not two walkable legs: " + route.plan());
+            helper.assertTrue(walk.receipt().contains("breaks=0"), "from outside the room the plan should change nothing: "
+                    + walk.receipt());
+            String said = walk.outcome();
+            helper.assertTrue(!walk.succeeded() && said.contains("beyond the plan") && said.contains("oak_planks")
+                            && said.contains("did not set off"),
+                    "the refusal does not say what goes beyond the plan: " + said);
+            helper.assertTrue(plankCount(helper, 7, 7) == planksBefore, "a plank was broken");
+            helper.assertTrue(companion.blockPosition().distSqr(inside) <= 1, "she left the room");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
 
     /**
-     * 简写与三步同一个结局:{@code move_goto} 走到一处;挪回原处,{@code route.new} + {@code route.plan} + {@code move.go} 走到同一处。
-     * 两次停在同一格,记下的计划一样,回执除了路线名与数字一字不差。
+     * 途经点:两条平行的直道,各有一个途经点在半路。路过的那一个(type 是 through,出厂就是)她经过时不停——站在那一格里的每一刻都
+     * 还带着走路的速度;要停的那一个(type = "stop")她在那里停稳过一刻。两个都走到终点。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
-    public static void goto_is_the_same_walk_as_new_plan_and_go(GameTestHelper helper) {
+    public static void a_through_stop_is_passed_and_a_stop_stop_is_come_to_rest_at(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer passer = spawnAt(helper, "gametest_rambler", new BlockPos(1, 2, 4), false);
+        NumenPlayer stopper = spawnAt(helper, "gametest_dawdler", new BlockPos(1, 2, 11), false);
+        BlockPos passEnd = helper.absolutePos(new BlockPos(14, 2, 4));
+        BlockPos stopEnd = helper.absolutePos(new BlockPos(14, 2, 11));
+        BlockPos passVia = helper.absolutePos(new BlockPos(8, 2, 4));
+        BlockPos stopVia = helper.absolutePos(new BlockPos(8, 2, 11));
+        ToolRun pass = lua(passer, "return move.go(route.plan({to = " + xyz(passEnd) + ", stops = {{to = "
+                + xyz(passVia) + "}}}))");
+        ToolRun stop = lua(stopper, "return move.go(route.plan({to = " + xyz(stopEnd) + ", stops = {{to = "
+                + xyz(stopVia) + ", type = \"stop\"}}}))");
+        double[] slowestPassing = {Double.MAX_VALUE};
+        double[] slowestStopping = {Double.MAX_VALUE};
+        helper.onEachTick(() -> {
+            if (passer.blockPosition().equals(passVia)) {
+                slowestPassing[0] = Math.min(slowestPassing[0], passer.getDeltaMovement().horizontalDistance());
+            }
+            if (stopper.blockPosition().equals(stopVia)) {
+                slowestStopping[0] = Math.min(slowestStopping[0], stopper.getDeltaMovement().horizontalDistance());
+            }
+        });
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(pass.done() && stop.done(), "the walks have not finished");
+            helper.assertTrue(pass.succeeded() && passer.blockPosition().distSqr(passEnd) <= 1,
+                    "the walk through did not arrive: " + pass.outcome());
+            helper.assertTrue(stop.succeeded() && stopper.blockPosition().distSqr(stopEnd) <= 1,
+                    "the walk with a stop did not arrive: " + stop.outcome());
+            helper.assertTrue(slowestPassing[0] != Double.MAX_VALUE && slowestPassing[0] > 0.03,
+                    "she slowed down to a stop at the through stop: " + slowestPassing[0]);
+            helper.assertTrue(slowestStopping[0] < 0.03, "she never came to rest at the stop: " + slowestStopping[0]);
+            CompanionFactory.despawn(level.getServer(), passer);
+            CompanionFactory.despawn(level.getServer(), stopper);
+        });
+    }
+
+    /**
+     * 库里的 {@code move.to} 就是 {@code route.plan} 加 {@code move.go}:{@code move.to} 走到一处;挪回原处,分开两步走到同一处。两次
+     * 停在同一格,回执除了数字一字不差。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
+    public static void move_to_is_the_same_walk_as_plan_and_go(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos startRel = new BlockPos(2, 2, 2);
         NumenPlayer companion = spawnAt(helper, "gametest_twin", startRel, false);
         BlockPos start = helper.absolutePos(startRel);
         BlockPos there = helper.absolutePos(new BlockPos(12, 2, 11));
-        ToolRun shorthand = lua(companion, "move.goto_(" + xyz(there) + ")");
+        ToolRun shorthand = lua(companion, "move.to(" + xyz(there) + ")");
         BlockPos[] firstEnd = new BlockPos[1];
-        ToolRun[] plan = new ToolRun[1];
         ToolRun[] walk = new ToolRun[1];
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(shorthand.done(), "move_goto has not finished"))
+                .thenWaitUntil(() -> helper.assertTrue(shorthand.done(), "move.to has not finished"))
                 .thenExecute(() -> {
                     firstEnd[0] = companion.blockPosition();
                     companion.teleportTo(start.getX() + 0.5, start.getY(), start.getZ() + 0.5);
                 })
                 .thenIdle(5)
-                .thenExecute(() -> {
-                    lua(companion, "route.new(\"trip\", {to = " + xyz(there) + "})");
-                    plan[0] = lua(companion, "route.plan(\"trip\")");
-                })
-                .thenWaitUntil(() -> helper.assertTrue(plan[0].done(), "route plan has not replied"))
-                .thenExecute(() -> walk[0] = lua(companion, "move.go(\"trip\")"))
+                .thenExecute(() -> walk[0] = lua(companion, "local p = route.plan({to = " + xyz(there) + "})\n"
+                        + "move.go(p)"))
                 .thenWaitUntil(() -> helper.assertTrue(walk[0].done(), "move go has not finished"))
                 .thenExecute(() -> {
                     helper.assertTrue(shorthand.succeeded() && walk[0].succeeded(),
                             "one of the two walks failed: " + shorthand.outcome() + " / " + walk[0].outcome());
                     helper.assertTrue(companion.blockPosition().equals(firstEnd[0]),
                             "the two walks ended apart: " + firstEnd[0] + " / " + companion.blockPosition());
-                    Plan anonymous = routes(companion).get(Itinerary.gotoOf("gametest_twin")).plan();
-                    Plan spelled = routes(companion).get("trip").plan();
-                    helper.assertTrue(anonymous != null && anonymous.legs().equals(spelled.legs()),
-                            "the two plans differ: " + anonymous + " / " + spelled);
-                    String a = shorthand.outcome().replace(Itinerary.gotoOf("gametest_twin"), "R")
-                            .replaceAll("-?\\d+", "#");
-                    String b = walk[0].outcome().replace("trip", "R").replaceAll("-?\\d+", "#");
+                    String a = shorthand.outcome().replaceAll("-?\\d+", "#");
+                    String b = walk[0].outcome().replaceAll("-?\\d+", "#");
                     helper.assertTrue(a.equals(b), "the shorthand reports differently: " + shorthand.outcome()
                             + " / " + walk[0].outcome());
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * 一道泥土墙横贯场地,只在一头留了口。描述不许挖({@code dig = false}):她绕到口子过去,墙一格不少,世界一格不改;同一道墙口子也堵上,
+     * 不许挖的计划走不通——{@code route.plan} 不抛错,{@code ok} 是 false,{@code why} 说许挖就有路。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
+    public static void without_digging_she_goes_around_and_a_dead_end_plan_says_why(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int z = 0; z <= 15; z++) {
+            for (int y = 2; y <= 3; y++) {
+                if (z != 14) {
+                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(8, y, z)), Blocks.DIRT.defaultBlockState());
+                }
+            }
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_detour", new BlockPos(2, 2, 2), false);
+        BlockPos target = helper.absolutePos(new BlockPos(13, 2, 2));
+        ToolRun walk = lua(companion, "return move.to(" + xyz(target) + ", {costs = {dig = false, place = false}})");
+        ToolRun[] dead = new ToolRun[1];
+
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(walk.done(), "the walk around has not finished"))
+                .thenExecute(() -> {
+                    helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(target) <= 1,
+                            "she did not get around the wall: " + walk.outcome());
+                    helper.assertTrue(!walk.outcome().contains("En route I had to"), "she changed the world: "
+                            + walk.outcome());
+                    for (int y = 2; y <= 3; y++) {
+                        level.setBlockAndUpdate(helper.absolutePos(new BlockPos(8, y, 14)), Blocks.DIRT.defaultBlockState());
+                    }
+                    dead[0] = lua(companion, "local p = route.plan({to = " + at(helper, new BlockPos(2, 2, 2))
+                            + ", costs = {dig = false}})\nreturn {ok = p.ok, why = p.why}");
+                })
+                .thenWaitUntil(() -> helper.assertTrue(dead[0].done(), "the dead-end plan has not replied"))
+                .thenExecute(() -> {
+                    helper.assertTrue(dead[0].ranToTheEnd(), "a plan that can't be walked raised: " + dead[0].receipt());
+                    JsonObject p = returned(dead[0]);
+                    helper.assertTrue(!p.get("ok").getAsBoolean() && p.get("why").getAsString().contains("dig = true"),
+                            "the dead end does not say how a way opens: " + p);
+                    for (int z = 0; z <= 15; z++) {
+                        helper.assertTrue(level.getBlockState(helper.absolutePos(new BlockPos(8, 2, z))).is(Blocks.DIRT),
+                                "the wall lost a block at z=" + z);
+                    }
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /** {@code move.flee}:离开一处至少几格(到达方式 away),停下时离它够远。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
+    public static void flee_gets_far_enough_from_a_place(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_skittish", new BlockPos(7, 2, 7), false);
+        BlockPos danger = helper.absolutePos(new BlockPos(8, 2, 8));
+        ToolRun flee = lua(companion, "return move.flee(" + xyz(danger) + ", {distance = 6})");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(flee.done(), "flee has not finished");
+            helper.assertTrue(flee.succeeded(), "flee failed: " + flee.outcome());
+            BlockPos at = companion.blockPosition();
+            double dx = at.getX() - danger.getX();
+            double dy = at.getY() - danger.getY();
+            double dz = at.getZ() - danger.getZ();
+            helper.assertTrue(dx * dx + dy * dy + dz * dz >= 36, "she stopped too close: " + at.toShortString());
+            helper.assertTrue(flee.outcome().contains("at least 6 blocks away"), flee.outcome());
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** {@code move.dismount}:坐在船上的她下来,交回下来了什么、站在哪;什么都没坐时是失败。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
+    public static void dismount_steps_off_the_boat(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_rower", new BlockPos(7, 2, 7), false);
+        Boat boat = EntityType.BOAT.create(level);
+        BlockPos at = helper.absolutePos(new BlockPos(7, 2, 7));
+        boat.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
+        level.addFreshEntity(boat);
+        companion.startRiding(boat, true);
+        ToolRun[] off = new ToolRun[1];
+        ToolRun[] again = new ToolRun[1];
+
+        steps(helper)
+                .thenExecute(() -> {
+                    helper.assertTrue(companion.getVehicle() == boat, "she did not board the boat");
+                    off[0] = lua(companion, "return move.dismount()");
+                })
+                .thenWaitUntil(() -> helper.assertTrue(off[0].done(), "dismount has not replied"))
+                .thenExecute(() -> {
+                    helper.assertTrue(off[0].ranToTheEnd() && !companion.isPassenger(),
+                            "she is still in the boat: " + off[0].receipt());
+                    helper.assertTrue(returned(off[0]).get("vehicle").getAsString().contains("boat"),
+                            "the reply does not say what she stepped off: " + off[0].receipt());
+                    again[0] = lua(companion, "move.dismount()");
+                })
+                .thenWaitUntil(() -> helper.assertTrue(again[0].done(), "the second dismount has not replied"))
+                .thenExecute(() -> {
+                    helper.assertTrue(!again[0].ranToTheEnd() && "failed".equals(again[0].kind()),
+                            "riding nothing should fail: " + again[0].receipt());
+                    boat.discard();
                     CompanionFactory.despawn(level.getServer(), companion);
                 })
                 .thenSucceed();
@@ -327,25 +419,25 @@ public class RouteGameTests {
     }
 
     /**
-     * 远途、一格不改:两百格外的一处,一次规划只看清开头那一截。{@code move_goto} 照样一路走到——一格不改的承诺怎么走都不越界,
-     * 看不清的部分由执行层边走边算。
+     * 远途、一格不改:两百格外的一处,一次规划只看清开头那一截(partial)。{@code move.go} 照样一路走到——一格不改的承诺怎么走都
+     * 不越界,看不清的部分由执行层边走边算。
      */
     @GameTest(template = LONG, timeoutTicks = 100000, batch = BATCH)
-    public static void a_far_goto_that_changes_nothing_walks_all_the_way(GameTestHelper helper) {
+    public static void a_far_walk_that_changes_nothing_walks_all_the_way(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         longFloor(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_wanderer2", new BlockPos(2, 1, 12), false);
         BlockPos far = helper.absolutePos(new BlockPos(210, 1, 12));
-        ToolRun walk = lua(companion, "move.goto_({x = " + far.getX() + ", z = " + far.getZ() + "})");
+        ToolRun walk = lua(companion, "local p = route.plan({to = {x = " + far.getX() + ", z = " + far.getZ() + "}})\n"
+                + "move.go(p)\nreturn {reach = p.legs[1].reach}");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "move_goto has not finished");
-            helper.assertTrue(walk.succeeded(), "the far walk did not arrive: " + walk.outcome());
+            helper.assertTrue(walk.done(), "the walk has not finished");
+            helper.assertTrue(walk.ranToTheEnd(), "the far walk did not arrive: " + walk.receipt());
             helper.assertTrue(companion.getBlockX() == far.getX() && companion.getBlockZ() == far.getZ(),
                     "she stopped short at " + companion.blockPosition().toShortString());
-            Plan plan = routes(companion).get(Itinerary.gotoOf("gametest_wanderer2")).plan();
-            helper.assertTrue(plan != null && plan.legs().get(0).reach() == Plan.Reach.PARTIAL,
-                    "the plan should have seen only the first stretch of a walk this long: " + plan);
+            helper.assertTrue("partial".equals(returned(walk).get("reach").getAsString()),
+                    "the plan should have seen only the first stretch of a walk this long: " + walk.receipt());
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
@@ -362,81 +454,53 @@ public class RouteGameTests {
         wallAcross(helper, 150, Blocks.STONE);
         NumenPlayer companion = spawnAt(helper, "gametest_pioneer", new BlockPos(2, 1, 12), false);
         BlockPos start = companion.blockPosition();
-        lua(companion, "route.new(\"far\", {to = " + at(helper, new BlockPos(210, 1, 12)) + ", alter = \"natural\"})");
-        ToolRun plan = lua(companion, "route.plan(\"far\")");
+        ToolRun walk = lua(companion, "local p = route.plan({to = " + at(helper, new BlockPos(210, 1, 12)) + ", "
+                + DIGGING + "})\nprint(\"seen=\" .. p.legs[1].reach .. \"/\" .. p.legs[1].breaks[1].name)\nreturn move.go(p)");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(walk.done(), "move go has not finished");
+            helper.assertTrue(walk.receipt().contains("seen=partial/minecraft:dirt"),
+                    "the plan should dig the dirt wall and see nothing of the stone one: " + walk.receipt());
+            String said = walk.outcome();
+            helper.assertTrue(!walk.succeeded() && said.contains("outside the plan") && said.contains("stone"),
+                    "the stop does not say which cells lie outside the plan: " + said);
+            helper.assertTrue(Math.sqrt(companion.blockPosition().distSqr(start)) > 100,
+                    "she did not walk on into the part the plan could not see: "
+                            + companion.blockPosition().toShortString());
+            int stone = 0;
+            for (int y = 1; y < 16; y++) {
+                for (int z = 0; z < 24; z++) {
+                    if (level.getBlockState(helper.absolutePos(new BlockPos(150, y, z))).is(Blocks.STONE)) {
+                        stone++;
+                    }
+                }
+            }
+            helper.assertTrue(stone == 15 * 24, "she dug the stone wall the plan never listed: " + stone);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 一份计划只在算出它的那一段程序里有效:下一段程序拿它走,说它已经作废,让她再规划。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
+    public static void a_plan_from_an_earlier_program_is_gone(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_forgetful", new BlockPos(2, 2, 2), false);
+        ToolRun plan = lua(companion, "return route.plan({to = " + at(helper, new BlockPos(12, 2, 12)) + "}).id");
         ToolRun[] walk = new ToolRun[1];
 
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(plan.done(), "route plan has not replied"))
                 .thenExecute(() -> {
-                    helper.assertTrue(plan.succeeded() && plan.reply().contains("dirt")
-                                    && plan.reply().contains("unknown") && !plan.reply().contains("stone"),
-                            "the plan should dig the dirt wall and see nothing of the stone one: " + plan.reply());
-                    walk[0] = lua(companion, "move.go(\"far\")");
+                    String id = dataIn(plan.receipt()).get("returned").getAsString();
+                    walk[0] = lua(companion, "move.go({id = \"" + id + "\"})");
                 })
-                .thenWaitUntil(() -> helper.assertTrue(walk[0].done(), "move go has not finished"))
+                .thenWaitUntil(() -> helper.assertTrue(walk[0].done(), "move go has not replied"))
                 .thenExecute(() -> {
-                    String said = walk[0].outcome();
-                    helper.assertTrue(!walk[0].succeeded() && said.contains("outside the plan") && said.contains("stone"),
-                            "the stop does not say which cells lie outside the plan: " + said);
-                    helper.assertTrue(Math.sqrt(companion.blockPosition().distSqr(start)) > 100,
-                            "she did not walk on into the part the plan could not see: "
-                                    + companion.blockPosition().toShortString());
-                    int stone = 0;
-                    for (int y = 1; y < 16; y++) {
-                        for (int z = 0; z < 24; z++) {
-                            if (level.getBlockState(helper.absolutePos(new BlockPos(150, y, z))).is(Blocks.STONE)) {
-                                stone++;
-                            }
-                        }
-                    }
-                    helper.assertTrue(stone == 15 * 24, "she dug the stone wall the plan never listed: " + stone);
+                    helper.assertTrue("not_found".equals(walk[0].kind())
+                                    && walk[0].outcome().contains("good only within the program that made it"),
+                            "a stale plan should be gone: " + walk[0].receipt());
                     CompanionFactory.despawn(level.getServer(), companion);
                 })
-                .thenSucceed();
-    }
-
-    /**
-     * 重启后照常重放:{@code move.go home} 派下去之后她休眠(身体落盘离场),把落盘的那条记录放回去再复活——路线在主人的存档里,
-     * 重放的那一行照样找到它,她走到 home。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
-    public static void a_restored_move_go_walks_on(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        var server = level.getServer();
-        BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 2));
-        NumenPlayer first = com.dwinovo.numen.entity.Companions.summon(server, UUID.randomUUID(),
-                "gametest_homebound", level, new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
-        UUID uuid = first.getUUID();
-        BlockPos home = helper.absolutePos(new BlockPos(13, 2, 12));
-        ToolRun made = lua(first, "route.new(\"home\", {to = " + xyz(home) + "})");
-        ToolRun go = lua(first, "route.plan(\"home\")\nmove.go(\"home\")");
-        var registry = com.dwinovo.numen.entity.CompanionRegistry.get(server);
-        NumenPlayer[] second = new NumenPlayer[1];
-        boolean[] replayed = new boolean[1];
-
-        // move.go 照规划好的路线走,受理了才落盘
-        steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(go.task() != null || go.receipt() != null,
-                        "move go has not replied"))
-                .thenExecute(() -> {
-                    helper.assertTrue(made.succeeded() && go.task() != null, "the walk was not accepted: "
-                            + made.outcome() + " / " + go.reply());
-                    var recorded = registry.find(uuid);
-                    com.dwinovo.numen.entity.Companions.dormant(server, first);
-                    registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskTool(),
-                            recorded.taskArgs()));
-                    second[0] = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
-                    helper.assertTrue(second[0] != null, "the body was not rebuilt");
-                })
-                .thenWaitUntil(() -> {
-                    TaskRecord now = com.dwinovo.numen.task.CompanionTickDispatcher.currentTaskFor(uuid);
-                    replayed[0] |= now instanceof MoveToTaskRecord m && m.route.equals("home");
-                    helper.assertTrue(replayed[0], "the replayed task is not the walk along home: " + now);
-                    helper.assertTrue(second[0].blockPosition().distSqr(home) <= 1,
-                            "she has not reached home after the restart");
-                })
-                .thenExecute(() -> com.dwinovo.numen.entity.Companions.dismiss(server, second[0]))
                 .thenSucceed();
     }
 }

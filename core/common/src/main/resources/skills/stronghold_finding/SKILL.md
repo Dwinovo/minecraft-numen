@@ -24,14 +24,14 @@ Both are 2×2/shapeless recipes — `inv.craft` makes them in your own grid, no 
 ## Step 2 — go there
 
 1. `locate.structure("minecraft:stronghold")` → coordinates, direction, distance (often 1000–2500 blocks; the journey is the long part).
-2. `move.goto_` the column it gave (its `pos`, e.g. `move.goto_({x = 1200, z = -340})`) to cross the surface, then descend where you stand with `move.goto_({y = 30}, {alter = "natural"})` — navigation digs down on its own. Strongholds sit around Y 6–50.
-3. Hit stone bricks → you're inside. `scan.blocks("end_portal_frame")` to find the portal room; no match → explore corridors with `move.goto_` and rescan. (Stronghold corridors are stone_bricks / mossy_stone_bricks / cracked_stone_bricks.)
+2. `move.to` the column it gave (its `pos`, e.g. `move.to({x = 1200, z = -340})`) to cross the surface, then descend where you stand with `move.to({y = 30}, {costs = {dig = true, place = true}})` — navigation digs down on its own. Strongholds sit around Y 6–50.
+3. Hit stone bricks → you're inside. `scan.blocks("end_portal_frame")` to find the portal room; no match → explore the corridors with `move.explore` (it heads out a hop at a time in a direction and calls the until_ function you give after each hop — one that rescans for end_portal_frame). (Stronghold corridors are stone_bricks / mossy_stone_bricks / cracked_stone_bricks.)
 
 ## Step 3 — secure the portal room
 
 The room has a lava pool under the frame and a **silverfish spawner** on the stairs:
 
-1. `scan.blocks("spawner", {into = "spawner"})`, `move.goto_("spawner", {arrive = "dig"})`, and `work.dig("spawner")` immediately — unlike the blaze spawner, this one is pure liability.
+1. `scan.blocks("spawner", {into = "spawner"})` and `work.mine("spawner")` immediately — unlike the blaze spawner, this one is pure liability.
 2. If silverfish are already out, scan them, then `fight.attack` each runtime id (or `fight.clear()`); don't let them burrow into the brickwork.
 3. Cover the lava pool edges where you'll stand with cobblestone: a `build.layer` of it, or `build.set({x = 120, y = 64, z = -35}, {block = "cobblestone"})` for single cells.
 

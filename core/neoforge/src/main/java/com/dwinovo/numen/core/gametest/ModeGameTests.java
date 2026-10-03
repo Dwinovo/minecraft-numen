@@ -41,7 +41,7 @@ public class ModeGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_cghost", new BlockPos(2, 2, 2), true);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
-        TaskRecord record = lua(companion, "move.goto_(" + xyz(target) + ")").task();
+        TaskRecord record = lua(companion, "move.to(" + xyz(target) + ")").task();
         succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "creative companion has not reached the goto target");
@@ -140,7 +140,7 @@ public class ModeGameTests {
      * 空手创造爬井:1×1 黑曜石竖井(徒手黑曜石按不可破计价,四面无路),
      * 背包全空——唯一出路是免耗材画像自动补脚手架泥土后原地垫柱。守两件事:
      * 规划器敢想放置路线(hasThrowaway 画像位)+ 执行层自动补料与垫柱动作。
-     * 垫柱是改地形,goto 带 alter=natural 的规格——不带的版本见 goto_refuses_to_tunnel_by_default。
+     * 垫柱是改地形,描述许挖许放——不许的版本见 goto_refuses_to_tunnel_by_default。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mode")
     public static void creative_pillar_out_empty_handed(GameTestHelper helper) {
@@ -156,7 +156,7 @@ public class ModeGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_climber", new BlockPos(3, 2, 3), true);
         BlockPos target = helper.absolutePos(new BlockPos(12, 2, 12));
-        TaskRecord record = lua(companion, "move.goto_(" + xyz(target) + ", {alter = \"natural\"})").task();
+        TaskRecord record = lua(companion, "move.to(" + xyz(target) + ", {costs = {dig = true, place = true, consent = false}})").task();
         succeedWhen(helper, () -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "empty-handed creative companion has not pillared out");
@@ -165,15 +165,15 @@ public class ModeGameTests {
     }
 
     /**
-     * 空手创造按她自己的垫路清单变料:清单里只有圆石,困在同一口黑曜石竖井里,照样垫圆石柱爬出来,
-     * 背包里也不多出一块清单外的料。
+     * 空手创造按这一趟描述写的料变料:{@code materials} 只写了圆石,困在同一口黑曜石竖井里,照样垫圆石柱爬出来,
+     * 背包里也不多出一块描述外的料。
      *
      * <p>钉的是"有料可垫"只有一个判据:规划器认定创造画像有料,执行器取料就得取得出规划器认下的那种。
-     * 两边各算一份时,执行器变出一组清单外的泥土、选不出能放的料,垫柱那一步采纳即夭折,重新规划又是
-     * 同一条路。用名册里登记过的同伴——清单跟着名册落盘。
+     * 两边各算一份时,执行器变出一组描述外的泥土、选不出能放的料,垫柱那一步采纳即夭折,重新规划又是
+     * 同一条路。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mode")
-    public static void creative_pillars_with_her_own_throwaway_list(GameTestHelper helper) {
+    public static void creative_pillars_with_the_walks_materials(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos floor = helper.absolutePos(new BlockPos(3, 2, 3));
         NumenPlayer companion = com.dwinovo.numen.entity.Companions.summon(level.getServer(),
@@ -190,12 +190,11 @@ public class ModeGameTests {
         }
         companion.teleportTo(floor.getX() + 0.5, floor.getY(), floor.getZ() + 0.5);
         companion.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
-        com.dwinovo.numen.core.nav.ThrowawayBlocks.store(companion, List.of("minecraft:cobblestone"));
         BlockPos target = helper.absolutePos(new BlockPos(12, 2, 12));
-        ToolRun walk = lua(companion, "move.goto_(" + xyz(target) + ", {alter = \"natural\"})");
+        ToolRun walk = lua(companion, "move.to(" + xyz(target) + ", {costs = {dig = true, place = true, consent = false}, materials = {\"minecraft:cobblestone\"}})");
         helper.onEachTick(() -> {
             if (walk.done() && !walk.succeeded()) {
-                helper.fail("she did not pillar out of the well with her own throwaway blocks: " + walk.outcome());
+                helper.fail("she did not pillar out of the well with the walk's materials: " + walk.outcome());
             }
         });
         succeedWhen(helper, () -> {
@@ -204,7 +203,7 @@ public class ModeGameTests {
             helper.assertTrue(level.getBlockState(floor).is(Blocks.COBBLESTONE),
                     "the pillar is not cobblestone: " + level.getBlockState(floor));
             helper.assertTrue(companion.getInventory().countItem(Items.DIRT) == 0,
-                    "she conjured dirt, which is not on her list");
+                    "she conjured dirt, which is not among the walk's materials");
             com.dwinovo.numen.entity.Companions.dismiss(level.getServer(), companion);
         });
     }

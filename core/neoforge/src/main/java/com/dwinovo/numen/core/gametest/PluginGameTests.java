@@ -49,10 +49,10 @@ public class PluginGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(reply.reply() != null, "status_self has not replied");
             var status = dataIn(reply.reply());
-            // 身体状态片段以引擎渲染的 <worn> 打头,之后按登记顺序接:core 自己的 <throwaway>,最后登记的这个插件的片段
+            // 身体状态片段以引擎渲染的 <worn> 打头,之后接插件登记的片段:这个插件的那段紧跟在 <worn> 后面
             helper.assertTrue(status.has("body_state") && status.get("body_state").getAsString().startsWith("<worn>")
                             && status.get("body_state").getAsString()
-                            .endsWith("</throwaway><gametest_charm>wearing a gametest charm</gametest_charm>"),
+                            .endsWith("</worn><gametest_charm>wearing a gametest charm</gametest_charm>"),
                     "status_self leaves out what the plugin reads off her body: " + reply.reply());
             var kept = outbox.peek(self).entries().stream()
                     .filter(e -> e.type().equals("gametest_charm_changed")).toList();

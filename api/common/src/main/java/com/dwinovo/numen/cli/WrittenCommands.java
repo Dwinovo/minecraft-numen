@@ -39,7 +39,7 @@ public final class WrittenCommands {
     private static final Pattern SPAN = Pattern.compile("`([^`\n]+)`");
     private static final String FENCE = "```";
     private static final String LUA_FENCE = "```lua";
-    /** 以一个组的函数打头:{@code work.dig(...)}、{@code local r = area.has(...)}、{@code move.goto_}。 */
+    /** 以一个组的函数打头:{@code work.dig(...)}、{@code local r = area.has(...)}、{@code move.to}。 */
     private static final Pattern CALL = Pattern.compile("^(?:local\\s+[A-Za-z_][A-Za-z0-9_]*\\s*=\\s*)?"
             + "([a-z][a-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)");
     /** 只点名一个函数:{@code inv.recipe}。 */

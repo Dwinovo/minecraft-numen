@@ -285,9 +285,6 @@ public final class ModLanguageData {
         public static final String CONVO_EDIT_TITLE     = "numen.convo.edit_title";
 
         // 服务端发给主人的通知:发的是键与参数,主人客户端按他自己的语言显示
-        public static final String NOTICE_THROWAWAY       = "numen.notice.throwaway";
-        public static final String NOTICE_THROWAWAY_EMPTY = "numen.notice.throwaway.empty";
-        public static final String NOTICE_THROWAWAY_MORE  = "numen.notice.throwaway.more";
         public static final String NOTICE_TIMER           = "numen.notice.timer";
         public static final String NOTICE_CREATIVE_NEEDS_OP = "numen.notice.creative_needs_op";
         public static final String NOTICE_NAME_TAKEN      = "numen.notice.name_taken";
@@ -827,9 +824,6 @@ public final class ModLanguageData {
         adder.add(Keys.SETTINGS_MESSAGE_NOTICES, "Message notifications (a card for chats you aren't viewing)");
         adder.add(Keys.EDIT_COMPANION_TITLE,   "Edit companion");
         adder.add(Keys.CONVO_EDIT_TITLE,       "Edit conversation");
-        adder.add(Keys.NOTICE_THROWAWAY,       "🧱 %s's throwaway blocks (%s): %s");
-        adder.add(Keys.NOTICE_THROWAWAY_EMPTY, "none");
-        adder.add(Keys.NOTICE_THROWAWAY_MORE,  "%s and %s more");
         adder.add(Keys.NOTICE_TIMER,           "⏱ %s: in %s s — %s");
         adder.add(Keys.NOTICE_CREATIVE_NEEDS_OP, "[Numen] Creative mode needs cheats or OP; set to Survival");
         adder.add(Keys.NOTICE_NAME_TAKEN,      "[Numen] The name \"%s\" is taken by a player who is online; pick another");
@@ -1354,9 +1348,6 @@ public final class ModLanguageData {
         adder.add(Keys.SETTINGS_MESSAGE_NOTICES, "消息通知(没在看的会话里她说了话,右下角弹一张卡)");
         adder.add(Keys.EDIT_COMPANION_TITLE,   "编辑同伴");
         adder.add(Keys.CONVO_EDIT_TITLE,       "编辑会话");
-        adder.add(Keys.NOTICE_THROWAWAY,       "🧱 %s 的 throwaway 垫路料(%s):%s");
-        adder.add(Keys.NOTICE_THROWAWAY_EMPTY, "空");
-        adder.add(Keys.NOTICE_THROWAWAY_MORE,  "%s 等 %s 种");
         adder.add(Keys.NOTICE_TIMER,           "⏱ %s:%s 秒后 —— %s");
         adder.add(Keys.NOTICE_CREATIVE_NEEDS_OP, "[Numen] 创造档需要作弊/OP 权限,已按生存");
         adder.add(Keys.NOTICE_NAME_TAKEN,      "[Numen] 名字「%s」已被在线玩家占用,换一个吧");

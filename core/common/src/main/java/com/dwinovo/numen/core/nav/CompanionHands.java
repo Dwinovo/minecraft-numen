@@ -9,6 +9,8 @@ import com.dwinovo.numen.pathing.body.PlayerHands;
 import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.plan.ToolChoice;
 import com.dwinovo.numen.permission.Action;
+import com.dwinovo.numen.permission.ConsentItem;
+import com.dwinovo.numen.permission.Gate;
 import com.dwinovo.numen.permission.Permission;
 import com.dwinovo.numen.permission.Verdict;
 
@@ -21,7 +23,8 @@ import net.minecraft.world.phys.BlockHitResult;
 
 /**
  * 端口 {@link Effector} 在同伴身上的实现:原版的两只手({@link PlayerHands})外面套一层权限——每一下之前把这个动作交给权限层
- * 裁决,不许就不动手,交回裁决本身当理由({@link Verdict})。一具身体一份,导航、挖矿、施工用的是同一双手。
+ * 裁决,不许就不动手:拒绝交回裁决本身当理由({@link Verdict}),要问交回 {@link Unasked}(裁决连同问主人的那一条)。一具身体一份,
+ * 导航、挖矿、施工用的是同一双手。问主人不在手上:手停下、交回要问的那一条,由派这一下的一方去问({@link Trip} 走到那一格时停下问)。
  *
  * <ul>
  *   <li>左键:换了一格挖,先问能不能拆这一格;同一格接着挖不再问。</li>
@@ -46,6 +49,20 @@ public final class CompanionHands implements Effector {
     }
 
     /**
+     * 要问主人而还没问过的一下:裁决({@link Verdict#asks})与发起征询要用的那一条。
+     */
+    public record Unasked(Verdict verdict, ConsentItem item) {}
+
+    /** 手交回的拒绝理由里权限层的裁决;服务端自己退回的(不是权限层的话)为 null。 */
+    public static Verdict verdict(Object refusal) {
+        return switch (refusal) {
+            case Verdict verdict -> verdict;
+            case Unasked unasked -> unasked.verdict();
+            case null, default -> null;
+        };
+    }
+
+    /**
      * 把挖 {@code state} 最快的那件拿到手上——与寻路给挖掘定价、执行路上挖时拿工具是同一份挑法({@link ToolChoice},看全背包,
      * 一样快时空手优先、其次不耗耐久的)。换了就交回做了什么。
      */
@@ -62,10 +79,10 @@ public final class CompanionHands implements Effector {
     public Strike dig(BlockHitResult hit) {
         BlockPos pos = hit.getBlockPos();
         if (!pos.equals(hands.pressing())) {
-            Verdict verdict = Permission.judge(player, Action.breakBlock(pos, player.level().getBlockState(pos)));
-            if (!verdict.allowed()) {
+            Object refusal = refusal(Action.breakBlock(pos, player.level().getBlockState(pos)));
+            if (refusal != null) {
                 hands.release();
-                return new Strike.Refused(pos.immutable(), verdict);
+                return new Strike.Refused(pos.immutable(), refusal);
             }
         }
         return hands.dig(hit);
@@ -83,16 +100,27 @@ public final class CompanionHands implements Effector {
             if (action == null) {
                 continue;
             }
-            Verdict verdict = Permission.judge(player, action);
-            if (!verdict.allowed()) {
-                return new Use.Refused(action.pos(), verdict);
+            Object refusal = refusal(action);
+            if (refusal != null) {
+                return new Use.Refused(action.pos(), refusal);
             }
         }
         BlockPos clicked = hit.getBlockPos();
-        Verdict verdict = Permission.judge(player, Action.useBlock(clicked, player.level().getBlockState(clicked)));
-        if (!verdict.allowed()) {
-            return new Use.Refused(clicked.immutable(), verdict);
+        Object refusal = refusal(Action.useBlock(clicked, player.level().getBlockState(clicked)));
+        if (refusal != null) {
+            return new Use.Refused(clicked.immutable(), refusal);
         }
         return hands.use(hit);
+    }
+
+    /** 这一下过权限层:放行为 null;拒绝是裁决;要问是 {@link Unasked}。 */
+    private Object refusal(Action action) {
+        Gate gate = Permission.gateFor(player);
+        Verdict verdict = gate.judgeLive(action, player.serverLevel());
+        return switch (verdict.kind()) {
+            case ALLOW -> null;
+            case DENY -> verdict;
+            case ASK -> new Unasked(verdict, gate.consentItemLive(action, verdict, player.serverLevel()));
+        };
     }
 }

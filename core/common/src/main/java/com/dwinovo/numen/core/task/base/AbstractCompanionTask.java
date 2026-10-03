@@ -221,8 +221,8 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     }
 
     /**
-     * 导航扣着一段要问主人的路时,这一刻归征询:身体站住、问主人;答应了放行那段路接着跑
-     * {@link #onTick},拒绝了按 {@link FailureType#REFUSED} 收场。任何带导航的任务都一样,
+     * 导航走到一格要问主人的地方停下时,这一刻归征询:身体站住、问主人;答应了那一格放行、接着跑
+     * {@link #onTick},拒绝了按 {@link FailureType#REFUSED} 收场,下一步由 {@link #refusedHint} 给。任何带导航的任务都一样,
      * 不各写各的。
      *
      * @return 这一刻的终态或 RUNNING;不用等(没有扣着的路,或刚放行)时为 null
@@ -241,10 +241,15 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
             return TaskState.RUNNING;
         }
         if (!answer.allowed()) {
-            fail(answer.refusal(needed), FailureType.REFUSED);
+            fail(answer.refusal(needed), FailureType.REFUSED, refusedHint(needed));
             return TaskState.FAILED;
         }
         nav.consentGranted();
+        return null;
+    }
+
+    /** 主人不答应路上那一格时,能照抄的下一步;没有为 null。 */
+    protected String refusedHint(List<ConsentItem> refused) {
         return null;
     }
 

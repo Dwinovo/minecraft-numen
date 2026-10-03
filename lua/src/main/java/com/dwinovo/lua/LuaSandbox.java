@@ -48,7 +48,7 @@ import java.util.regex.Pattern;
  * <h2>模块</h2>
  * 宿主可以给一个模块来源({@link Builder#modules}):模块是一段返回一张函数表的正文,脚本里以模块名作全局名直接用
  * ({@code lumber.chop(…)}),第一次用到时才向来源要正文、在同一个全局环境里跑一遍,所以每次运行拿到的都是来源此刻的那一份。和宿主
- * 函数表同名的模块不另占名字,它的函数加进那张表({@code move.goto_} 就是这样进 {@code move} 的)。没用到的模块不读;一个模块读不通、
+ * 函数表同名的模块不另占名字,它的函数加进那张表({@code move.to} 就是这样进 {@code move} 的)。没用到的模块不读;一个模块读不通、
  * 跑出错、没返回表,出错的是用到它的那一行。给了模块来源,读一个既不是全局、也不是模块的名字就是错(写错的模块名当场说有哪些)。
  * 行号只记脚本自己那一段:模块里的函数调宿主函数时,{@link #currentLine} 说的是脚本里调这个模块函数的那一行,结局停在的也是脚本里的
  * 那一行。
@@ -59,7 +59,7 @@ import java.util.regex.Pattern;
  * <h2>宿主登记的名字钉死</h2>
  * 宿主登记的全局函数、函数表,以及表里的每个宿主函数,脚本都换不掉、遮不住:{@code move = {}}、{@code function move.go() end}、
  * {@code rawset(move, "go", f)} 一律在那一行报错(那句话由 {@link Builder#redefined} 给)。往宿主的表里加别的名字照常(库就是这样往
- * {@code move} 里加 {@code move.goto_} 的)。
+ * {@code move} 里加 {@code move.to} 的)。
  *
  * <h2>桥接</h2>
  * 宿主函数按 {@code 表名.函数名}(或全局名)登记,收按顺序的参数、交回一个值;值在两边按 {@link #toJava}/{@link #toLua} 换:nil 是

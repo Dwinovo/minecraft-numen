@@ -128,12 +128,12 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
     /** 站的地方不干时说的那句话。 */
     private static final String NOT_DRY = "I do not stand on dry ground here, and fishing does not move me: stand on "
             + "the shore with open water " + (int) MIN_CAST_DISTANCE + "-" + CAST_SEARCH_RADIUS + " blocks away "
-            + "(scan.blocks finds water; move.goto_ takes you there), then work.fish again";
+            + "(scan.blocks finds water; move.to takes you there), then work.fish again";
 
     /** 从这儿抛不进水面时说的那句话。 */
     private static final String NO_WATER = "no open water to cast into " + (int) MIN_CAST_DISTANCE + "-"
             + CAST_SEARCH_RADIUS + " blocks from where I stand, and fishing does not move me: stand on the shore "
-            + "facing open water (scan.blocks finds water; move.goto_ takes you there), then work.fish again";
+            + "facing open water (scan.blocks finds water; move.to takes you there), then work.fish again";
 
     private TaskState prepare() {
         if (player.fishing != null) {

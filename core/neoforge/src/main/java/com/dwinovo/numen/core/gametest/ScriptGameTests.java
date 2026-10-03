@@ -73,7 +73,8 @@ public class ScriptGameTests {
     }
 
     /**
-     * 第一行当场失败(走去用一格空气):库里的 {@code move.goto_} 写路线那一步抛错,脚本接住、不往下走,第二行的那一格还在;
+     * 第一行当场失败(走去用一格空气):库里的 {@code move.to} 规划出一份走不通的计划,{@code move.go} 照它走就抛 no_path,脚本接住、
+     * 不往下走,第二行的那一格还在;
      * 回执说停在哪一行、为什么,失败的那次调用记在调库函数的那一行上。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
@@ -84,7 +85,7 @@ public class ScriptGameTests {
         BlockPos kept = helper.absolutePos(new BlockPos(4, 2, 2));
         level.setBlockAndUpdate(kept, Blocks.STONE.defaultBlockState());
         LlmToolCall script = programCall("""
-                local walked, why = pcall(move.goto_, %s, {arrive = "use"})
+                local walked, why = pcall(move.to, %s, {arrive = "use"})
                 if not walked then error("could not get there: " .. why, 0) end
                 build.set(%s, {block = "air"})
                 """.formatted(xyz(air), xyz(kept)));
@@ -94,10 +95,10 @@ public class ScriptGameTests {
             helper.assertTrue(round.hasSettled(), "the script has not finished");
             String msg = message(round, script);
             helper.assertTrue(!receipt(round, script).get("success").getAsBoolean(), "the script succeeded: " + msg);
-            // 库函数 move.goto_ 里调 route.new 抛出的错误值原样到了脚本:拼进字符串是"函数: 种类 — 原因"
-            helper.assertTrue(msg.startsWith("The script stopped at line 2 after 1 call: could not get there: "
-                    + "route.new: bad_argument — "), msg);
-            helper.assertTrue(msg.contains("line 1 route.new: bad_argument — "), msg);
+            // 库函数 move.to 里 move.go 抛出的错误值原样到了脚本:拼进字符串是"函数: 种类 — 原因";规划本身不抛
+            helper.assertTrue(msg.startsWith("The script stopped at line 2 after 2 calls: could not get there: "
+                    + "move.go: no_path — "), msg);
+            helper.assertTrue(msg.contains("line 1 route.plan: ok") && msg.contains("line 1 move.go: no_path — "), msg);
             helper.assertTrue(level.getBlockState(kept).is(Blocks.STONE), "the line after the failure ran: " + msg);
             CompanionFactory.despawn(level.getServer(), her);
         });
@@ -112,7 +113,7 @@ public class ScriptGameTests {
         BlockPos kept = helper.absolutePos(new BlockPos(4, 2, 2));
         level.setBlockAndUpdate(kept, Blocks.STONE.defaultBlockState());
         LlmToolCall script = programCall("""
-                move.goto_({x = %d, z = %d})
+                move.to({x = %d, z = %d})
                 build.set(%s, {block = "air"})
                 """.formatted(far.getX(), far.getZ(), xyz(kept)));
         Round round = round(helper, her, script);
@@ -129,7 +130,7 @@ public class ScriptGameTests {
                         "her body is still busy after the stop"))
                 .thenExecute(() -> {
                     String msg = message(round, script);
-                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(move\\.go\\) after 3 calls: "
+                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(move\\.go\\) after 2 calls: "
                             + "this turn was cut off; t\\d+ was stopped too\\. Nothing after that ran\\..*"), msg);
                     helper.assertTrue(level.getBlockState(kept).is(Blocks.STONE), "the line after the stop ran");
                     outbox.forget(her.getUUID());
@@ -145,8 +146,8 @@ public class ScriptGameTests {
         NumenPlayer her = spawnAt(helper, "gametest_lua_spoken", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
         LlmToolCall script = programCall("""
-                move.goto_({x = %d, z = %d})
-                move.goto_({x = %d, z = %d})
+                move.to({x = %d, z = %d})
+                move.to({x = %d, z = %d})
                 """.formatted(far.getX(), far.getZ(), far.getX() - 10, far.getZ()));
         Round round = round(helper, her, script);
         EventOutbox outbox = EventOutbox.get(level.getServer());
@@ -157,7 +158,7 @@ public class ScriptGameTests {
                 .thenExecute(() -> round.ownerSays("wait, come back"))
                 .thenExecute(() -> {
                     String msg = message(round, script);
-                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(move\\.go\\) after 3 calls: "
+                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(move\\.go\\) after 2 calls: "
                             + "your owner spoke; t\\d+ keeps running\\..*"), msg);
                     TaskRecord now = CompanionTickDispatcher.currentTaskFor(her.getUUID());
                     helper.assertTrue(now != null && now.getToolName().equals("move.go"),
@@ -169,7 +170,7 @@ public class ScriptGameTests {
     }
 
     /**
-     * 一块区域的每一部分:{@code area.parts} 直接给出名字的列表,脚本逐个走过去挖;两团矿都挖掉,打印的就是那两个名字。
+     * 一块区域的每一部分:{@code area.parts} 直接给出名字的列表,脚本逐个挖空({@code work.mine});两团矿都挖掉,打印的就是那两个名字。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_scripts")
     public static void a_program_goes_through_the_parts_of_an_area(GameTestHelper helper) {
@@ -184,8 +185,7 @@ public class ScriptGameTests {
         LlmToolCall script = programCall("""
                 for _, p in ipairs(area.parts("ores")) do
                   print(p)
-                  move.goto_(p, {arrive = "dig"})
-                  work.dig(p)
+                  work.mine(p)
                 end
                 """);
         Round[] round = new Round[1];
@@ -439,7 +439,7 @@ public class ScriptGameTests {
         });
     }
 
-    /** 一只实体原样就是一处地方:{@code scan.entities} 列出的那头牛交给 {@code move.goto_},她走到牛跟前。 */
+    /** 一只实体原样就是一处地方:{@code scan.entities} 列出的那头牛交给 {@code move.to},她走到牛跟前。 */
     @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_scripts")
     public static void an_entity_a_scan_found_is_a_place_to_walk_to(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -452,7 +452,7 @@ public class ScriptGameTests {
         level.addFreshEntity(cow);
         LlmToolCall script = programCall("""
                 local cow = scan.entities("passive", {radius = 20})[1]
-                move.goto_(cow, {arrive = "near"})
+                move.to(cow, {arrive = "near"})
                 return cow.id
                 """);
         Round round = round(helper, her, script);
@@ -499,7 +499,7 @@ public class ScriptGameTests {
             JsonObject got = receipt.getAsJsonObject("data").getAsJsonObject("returned");
             var farErr = got.getAsJsonArray("far");
             helper.assertTrue("out_of_reach".equals(farErr.get(0).getAsString())
-                            && farErr.get(1).getAsString().equals("move.goto_(" + xyz(far) + ", {arrive = \"dig\"})\n"
+                            && farErr.get(1).getAsString().equals("move.to(" + xyz(far) + ", {arrive = \"dig\"})\n"
                                     + "work.dig(" + xyz(far) + ")"),
                     "out of reach is not its own kind with the walk as the next line: " + got);
             String rewritten = "work.dig(" + xyz(near) + ")";

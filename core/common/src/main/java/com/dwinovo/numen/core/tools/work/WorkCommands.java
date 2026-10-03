@@ -26,7 +26,7 @@ import net.minecraft.resources.ResourceLocation;
  * (手够得着的一格都没有、站的地方抛不进水……)受理之前就当场拒绝,判据在各自的任务里。
  *
  * <p>{@code dig} 只挖她站在原地手够得着的格,挡在前面的一并挖开,不走动、不捡({@link DigCompanionTask});{@code fish} 只钓,
- * 不走去岸边、不追战果。走到够得着的地方是 {@code move.goto_(…, {arrive = "dig"})} 的事;捡是库里的 {@code work.collect}:
+ * 不走去岸边、不追战果。走到够得着的地方是 {@code move.to(…, {arrive = "dig"})} 的事;捡是库里的 {@code work.collect}:
  * 原版玩家走近掉落物就捡起来,所以捡就是扫掉落物、走到它跟前。组合交给脚本。
  */
 public final class WorkCommands {
@@ -73,11 +73,11 @@ public final class WorkCommands {
                 .note("A block or a nearest cell from a query goes in as it is: `work.dig(scan.block({x = 120, y = 12, "
                         + "z = -35}))`, `for _, g in ipairs(scan.blocks(\"iron_ore\").groups) do work.dig(g.nearest) end`.")
                 .note("Digs only what your hand reaches from where you stand: it never walks and never picks up. Get "
-                        + "within reach first with `move.goto_(\"ores\", {arrive = \"dig\"})` (it picks the spot that "
+                        + "within reach first with `move.to(cell, {arrive = \"dig\"})` (on a Cluster it picks the spot that "
                         + "reaches the most cells), dig, and pick the drops up with `work.collect()`.")
                 .note("Background work: before it starts it checks something within reach can be dug, harvested "
                         + "with your tools and is allowed; when nothing is, it fails with kind out_of_reach (or denied, "
-                        + "failed) and a hint with the move.goto_ call to copy — no task starts and whatever you were "
+                        + "failed) and a hint with the move.to call to copy — no task starts and whatever you were "
                         + "doing goes on. It returns when the job ends: how many cells it dug and how many are still out "
                         + "of reach, the nearest of them as a pos.")
                 .note("What to dig comes from the area itself: cells a scan added are dug only while they still hold "
@@ -90,7 +90,7 @@ public final class WorkCommands {
                 .note("Takes the best tool for each block; only digs what your tools actually harvest, and says so "
                         + "when nothing qualifies. Asks your owner before breaking a named block their rules want "
                         + "asked about; a refusal stops the job with the reason.")
-                .seeAlso("move goto_", "work collect", "area has", "scan blocks", "task stop");
+                .seeAlso("move to", "work collect", "area has", "scan blocks", "task stop");
         work.server("fish", "Fish from where you stand with a fishing rod.", WorkCommands::fish, CATCHES)
                 .returns(ScriptType.table(ScriptType.field("caught", ScriptType.INTEGER, null),
                         ScriptType.field("casts", ScriptType.INTEGER, null),

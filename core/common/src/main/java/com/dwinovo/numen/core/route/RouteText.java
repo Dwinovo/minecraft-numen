@@ -1,180 +1,241 @@
 package com.dwinovo.numen.core.route;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonArray;
-import com.dwinovo.numen.cli.Shapes;
-import com.dwinovo.numen.agent.script.ScriptType;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
+import com.dwinovo.numen.agent.script.JsonValues;
+import com.dwinovo.numen.agent.script.ScriptType;
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.core.nav.NavText;
+import com.dwinovo.numen.pathing.plan.Edit;
+import com.dwinovo.numen.pathing.plan.Maneuver;
+import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.permission.Listing;
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
 
 /**
- * 路线怎么说给模型:意图、计划、走过的记录、计划超出承诺的差别,都在这里,只此一处。要改的格与实际账同一种写法
- * ({@link NavText#planned});没走到的原因是寻路结局的原话,规划时已经写进计划。
+ * 计划怎么交给她:程序拿到的数据({@link #data},样子是 {@link #PLAN})与回执里的那段话({@link #text}),两样从同一份计划写出,只在
+ * 这里。要改的格与实际账同一种写法({@link NavText#planned});走不通的原因是寻路结局的原话,规划时已经写进计划。
  */
 public final class RouteText {
 
     private RouteText() {}
 
-    /** 途经点一串:{@code 1. 20,64,5  2. 30,70,5 (within 3)}。 */
-    /** 一条路线。 */
-    public static final ScriptType.Class ROUTE_CLASS = new ScriptType.Class("Route", "One of your owner's routes.", null,
-            List.of(ScriptType.field("name", ScriptType.STRING, null),
-                    ScriptType.field("stops", ScriptType.listOf(ScriptType.STRING),
-                            "Its stops in order, the destination last, as words."),
-                    ScriptType.field("flags", ScriptType.STRING, "The route flags of the whole route; empty = changes "
-                            + "no block."),
-                    ScriptType.field("planned", ScriptType.BOOLEAN, "Whether it has a plan move.go keeps to.")));
+    private static final Gson GSON = new Gson();
+
+    /** 路上的一步。 */
+    public static final ScriptType.Class STEP = new ScriptType.Class("Step", "One step of a planned way.", null, List.of(
+            ScriptType.field("pos", Shapes.POS.type(), "Where the step ends: the cell your feet are in."),
+            ScriptType.field("move", ScriptType.choice(List.of("walk", "jump", "fall", "swim", "climb", "dig",
+                    "place", "sail")), "How: walk, jump, fall, swim, climb, dig (breaks its way), place (pillars or "
+                    + "bridges), sail (in the boat).")));
+
+    /** 要问主人的一格。 */
+    public static final ScriptType.Class ASK = new ScriptType.Class("Ask",
+            "A cell the walk changes that needs your owner's consent: a Block with why. The walk stops there and asks; "
+                    + "give it to avoid (avoid = {ask}) to plan around it instead.", Shapes.BLOCK.name(),
+            List.of(ScriptType.field("why", ScriptType.STRING, "Why it needs consent, in the permission layer's "
+                    + "words (placed by a player …).")));
+
+    /** 计划里的一段。 */
+    public static final ScriptType.Class LEG = new ScriptType.Class("Leg", "One leg of a plan: the way to one stop.",
+            null, List.of(
+                    ScriptType.optional("to", Shapes.POS.type(), "The cell it heads for."),
+                    ScriptType.field("reach", ScriptType.choice(List.of("reached", "partial", "unreachable",
+                                    "unplanned")),
+                            "reached: seen all the way. partial: seen as far as one look reaches (or the water "
+                                    + "ends), worked out on the way. unreachable: can't be walked as described "
+                                    + "(why). unplanned: after a partial or unreachable leg, not planned."),
+                    ScriptType.optional("finish", Shapes.POS.type(), "Where the seen part ends."),
+                    ScriptType.field("steps", ScriptType.INTEGER, null),
+                    ScriptType.field("seconds", ScriptType.NUMBER, "About how long, as priced."),
+                    ScriptType.field("path", ScriptType.listOf(STEP.type()), "Step by step; not printed with the "
+                            + "plan, read it as leg.path."),
+                    ScriptType.field("breaks", ScriptType.listOf(Shapes.BLOCK.type()), "Blocks it breaks."),
+                    ScriptType.field("places", ScriptType.listOf(Shapes.BLOCK.type()), "Blocks it places (a water "
+                            + "bucket poured to break a fall shows as water)."),
+                    ScriptType.field("asks", ScriptType.listOf(ASK.type()), "Of those, the cells your owner is asked "
+                            + "about when you get there."),
+                    ScriptType.optional("dives", ScriptType.listOf(ScriptType.table(
+                            ScriptType.field("from", Shapes.POS.type(), null),
+                            ScriptType.field("to", Shapes.POS.type(), null),
+                            ScriptType.field("seconds", ScriptType.NUMBER, "Without a breath."),
+                            ScriptType.field("spare", ScriptType.NUMBER, "Seconds of air left after it."))),
+                            "Stretches under water with no air on the way."),
+                    ScriptType.optional("why", ScriptType.STRING, "Why it can't be walked, or why only part was "
+                            + "seen.")));
 
     /** 一份计划。 */
-    public static final ScriptType.Class PLAN_CLASS = new ScriptType.Class("Plan",
-            "A route planned from where you stood, without moving: what move.go keeps to.", null,
-            List.of(ScriptType.field("route", ScriptType.STRING, null),
-                    ScriptType.field("walkable", ScriptType.BOOLEAN, "Every leg can be walked."),
+    public static final ScriptType.Class PLAN = new ScriptType.Class("Plan",
+            "A walk planned from where you stood, without moving: what move.go walks and keeps to. Good only within "
+                    + "the program that made it.", null, List.of(
+                    ScriptType.field("ok", ScriptType.BOOLEAN, "No leg is unreachable: move.go can walk it."),
+                    ScriptType.optional("why", ScriptType.STRING, "When not ok: why the unreachable leg can't be "
+                            + "walked."),
+                    ScriptType.field("id", ScriptType.STRING, "Which plan this is, for move.go."),
+                    ScriptType.field("spec", new ScriptType.Simple("table"), "The description you gave, as given: change it and "
+                            + "plan again."),
                     ScriptType.field("from", Shapes.POS.type(), "Where it was planned from."),
-                    ScriptType.field("legs", ScriptType.listOf(ScriptType.table(
-                            ScriptType.field("reach", ScriptType.STRING,
-                                    "reached, partial (planned as far as one look reaches), unreachable or unplanned."),
-                            ScriptType.field("steps", ScriptType.INTEGER, null),
-                            ScriptType.field("ticks", ScriptType.INTEGER, "As priced by the planner."),
-                            ScriptType.optional("end", Shapes.POS.type(), "Where the planned part ends."),
-                            ScriptType.field("breaks", ScriptType.listOf(Shapes.BLOCK.type()), "Blocks it breaks."),
-                            ScriptType.field("places", ScriptType.listOf(Shapes.BLOCK.type()), "Blocks it places."),
-                            ScriptType.field("asks", ScriptType.listOf(Shapes.POS.type()),
-                                    "Cells your owner is asked about first."),
-                            ScriptType.optional("why", ScriptType.STRING, "Why it can't be walked, or why only part "
-                                    + "was seen."))), "Leg by leg, in order.")));
+                    ScriptType.field("steps", ScriptType.INTEGER, "Steps of the seen part, all legs."),
+                    ScriptType.field("seconds", ScriptType.NUMBER, "About how long the seen part takes."),
+                    ScriptType.field("legs", ScriptType.listOf(LEG.type()), "One per stop, the destination last.")));
 
-    /** 一条路线的数据({@link #ROUTE_CLASS})。 */
-    public static JsonObject info(Itinerary route) {
-        JsonObject o = new JsonObject();
-        o.addProperty("name", route.name());
-        JsonArray stops = new JsonArray();
-        route.legs().forEach(leg -> stops.add(leg.to().words()));
-        o.add("stops", stops);
-        o.addProperty("flags", route.flags());
-        o.addProperty("planned", route.plan() != null);
-        return o;
-    }
+    // ==================== 数据 ====================
 
-    /** 一份计划的数据({@link #PLAN_CLASS})。 */
-    public static JsonObject planData(Itinerary route, Plan plan) {
+    /** 程序拿到的那份({@link #PLAN})。 */
+    public static JsonObject data(Plan plan) {
         JsonObject o = new JsonObject();
-        o.addProperty("route", route.name());
-        o.addProperty("walkable", plan.unreachable() < 0);
-        o.add("from", Shapes.pos(plan.from()));
-        JsonArray legs = new JsonArray();
-        for (Plan.Leg leg : plan.legs()) {
-            JsonObject l = new JsonObject();
-            l.addProperty("reach", leg.reach().name().toLowerCase(java.util.Locale.ROOT));
-            l.addProperty("steps", leg.steps());
-            l.addProperty("ticks", leg.ticks());
-            if (leg.end() != null) {
-                l.add("end", Shapes.pos(leg.end()));
-            }
-            l.add("breaks", blocks(leg.digs()));
-            l.add("places", blocks(leg.places()));
-            JsonArray asks = new JsonArray();
-            leg.asks().forEach(a -> asks.add(Shapes.pos(a.pos())));
-            l.add("asks", asks);
-            if (!leg.why().isEmpty()) {
-                l.addProperty("why", leg.why());
-            }
-            legs.add(l);
+        o.addProperty("ok", plan.ok());
+        if (!plan.ok()) {
+            o.addProperty("why", plan.why());
         }
+        o.addProperty("id", plan.id());
+        o.add("spec", GSON.toJsonTree(plan.description().written()));
+        o.add("from", Shapes.pos(plan.from()));
+        o.addProperty("steps", plan.steps());
+        o.addProperty("seconds", plan.seconds());
+        JsonArray legs = new JsonArray();
+        plan.legs().forEach(leg -> legs.add(legData(leg)));
         o.add("legs", legs);
         return o;
     }
 
-    private static JsonArray blocks(List<Plan.Cell> cells) {
+    private static JsonObject legData(Plan.Leg leg) {
+        JsonObject l = new JsonObject();
+        BlockPos toward = leg.to() != null ? leg.to().toward()
+                : leg.stop().to() instanceof Target.Cell cell ? cell.pos() : null;
+        if (toward != null) {
+            l.add("to", Shapes.pos(toward));
+        }
+        l.addProperty("reach", leg.reach().name().toLowerCase(Locale.ROOT));
+        if (leg.finish() != null) {
+            l.add("finish", Shapes.pos(leg.finish()));
+        }
+        l.addProperty("steps", leg.steps());
+        l.addProperty("seconds", Math.round(leg.ticks() / 2.0) / 10.0);
+        NavText.Changes changes = leg.changes();
+        l.add("breaks", blocks(changes.digs()));
+        l.add("places", blocks(changes.places()));
+        JsonArray asks = new JsonArray();
+        changes.asks().forEach((pos, cause) -> {
+            Block block = changes.digs().containsKey(pos) ? changes.digs().get(pos) : changes.places().get(pos);
+            JsonObject ask = Shapes.block(pos, block.defaultBlockState());
+            ask.addProperty("why", cause);
+            asks.add(ask);
+        });
+        l.add("asks", asks);
+        if (leg.route() != null && !leg.route().dives().isEmpty()) {
+            JsonArray dives = new JsonArray();
+            for (Route.Dive dive : leg.route().dives()) {
+                JsonObject d = new JsonObject();
+                d.add("from", Shapes.pos(dive.from()));
+                d.add("to", Shapes.pos(dive.to()));
+                d.addProperty("seconds", Math.round(dive.held() / 2.0) / 10.0);
+                d.addProperty("spare", Math.round(dive.left() / 2.0) / 10.0);
+                dives.add(d);
+            }
+            l.add("dives", dives);
+        }
+        if (!leg.why().isEmpty()) {
+            l.addProperty("why", leg.why());
+        }
+        JsonObject folded = new JsonObject();
+        folded.add("path", path(leg));
+        l.add(JsonValues.FOLDED, folded);
+        return l;
+    }
+
+    /** 一步步:每一步落在哪一格、怎么走。 */
+    private static JsonArray path(Plan.Leg leg) {
         JsonArray out = new JsonArray();
-        cells.forEach(c -> out.add(Shapes.block(c.pos(), c.block().defaultBlockState())));
+        if (leg.chart() != null) {
+            for (BlockPos cell : leg.chart().path()) {
+                out.add(step(cell, "sail"));
+            }
+        } else if (leg.route() != null) {
+            for (Route.Leg step : leg.route().legs()) {
+                out.add(step(step.maneuver().to(), move(step.maneuver())));
+            }
+        }
         return out;
     }
 
-    public static String stops(Itinerary route) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < route.legs().size(); i++) {
-            sb.append(i == 0 ? "" : "  ").append(i + 1).append(". ").append(route.legs().get(i).to().words());
-        }
-        return sb.toString();
+    private static JsonObject step(BlockPos pos, String move) {
+        JsonObject s = new JsonObject();
+        s.add("pos", Shapes.pos(pos));
+        s.addProperty("move", move);
+        return s;
     }
 
-    /** 意图:在哪个维度、途经点、规格标志。 */
-    public static String intent(Itinerary route) {
-        StringBuilder sb = new StringBuilder("route ").append(route.name()).append(" in ").append(route.dimension())
-                .append(": starts wherever I stand, then ").append(stops(route))
-                .append(route.legs().size() > 1 ? " (the last is the destination)" : "");
-        List<String> flags = new ArrayList<>();
-        if (!route.flags().isEmpty()) {
-            flags.add(RouteFlags.shown(route.flags()) + " on the whole route");
+    /** 一步怎么走,说给她的那个词:手上要放的是 place,要挖的是 dig,其余照身体怎么挪。 */
+    static String move(Maneuver m) {
+        boolean places = m.edits().stream().anyMatch(e -> e instanceof Edit.Place || e instanceof Edit.Catch);
+        boolean digs = m.edits().stream().anyMatch(e -> e instanceof Edit.Dig);
+        if (places) {
+            return "place";
         }
-        for (int i = 0; i < route.legs().size(); i++) {
-            if (!route.legs().get(i).flags().isEmpty()) {
-                flags.add(RouteFlags.shown(route.legs().get(i).flags()) + " on leg " + (i + 1));
-            }
+        if (digs) {
+            return "dig";
         }
-        sb.append(". Route flags: ").append(flags.isEmpty() ? "none, so it changes no block" : String.join("; ", flags))
-                .append('.');
-        return sb.toString();
+        return switch (m.kind()) {
+            case WALK, DIAGONAL, DESCEND -> "walk";
+            case ASCEND -> m.jump() ? "jump" : "walk";
+            case PARKOUR -> "jump";
+            case FALL -> "fall";
+            case PILLAR -> "place";
+            case DOWNWARD -> "dig";
+            case CLIMB -> "climb";
+            case SWIM -> "swim";
+        };
     }
+
+    private static JsonArray blocks(Map<BlockPos, Block> cells) {
+        JsonArray out = new JsonArray();
+        cells.forEach((pos, block) -> out.add(Shapes.block(pos, block.defaultBlockState())));
+        return out;
+    }
+
+    // ==================== 话 ====================
 
     /**
-     * 一份计划:抬头(从哪儿、多久以前、几段几步多少刻),每段一行,末尾是能照抄的下一步。
-     *
-     * @param now 此刻(主世界游戏刻)
+     * 回执里的那段话:抬头(从哪儿、几段几步多久、走不走得通),每段一行,末尾是能照抄的下一步。
      */
-    public static String plan(Itinerary route, Plan plan, long now) {
-        return body(route, plan, now) + '\n' + next(route, plan);
-    }
-
-    /**
-     * 受理回执里的计划:这一趟开走前刚做的那一份,写法与 {@code route plan} 的回执同一种(抬头、每段一行),末尾交代开走前
-     * 要问主人几格。
-     */
-    public static String accepted(Itinerary route, Plan plan) {
-        int asks = plan.asks().size();
-        return "The " + body(route, plan, plan.at())
-                + (asks == 0 ? "" : "\nBefore setting off I ask your owner about " + asks + " cell(s) of it.");
-    }
-
-    /** 计划的抬头(从哪儿、多久以前、几段几步多少刻)与每段一行。 */
-    private static String body(Itinerary route, Plan plan, long now) {
-        int steps = 0;
-        int ticks = 0;
-        for (Plan.Leg leg : plan.legs()) {
-            steps += leg.steps();
-            ticks += leg.ticks();
-        }
-        StringBuilder sb = new StringBuilder("plan of route ").append(route.name()).append(", made from ")
-                .append(Listing.coords(plan.from())).append(' ').append(ago(now - plan.at())).append(": ")
-                .append(plan.legs().size()).append(plan.legs().size() == 1 ? " leg, " : " legs, ").append(steps)
-                .append(" steps, about ").append(ticks).append(" ticks as priced.");
-        int offset = route.legs().size() - plan.legs().size();
+    public static String text(Plan plan) {
+        StringBuilder sb = new StringBuilder("planned from ").append(Listing.coords(plan.from())).append(": ")
+                .append(plan.legs().size()).append(plan.legs().size() == 1 ? " leg, " : " legs, ").append(plan.steps())
+                .append(" steps, about ").append(plan.seconds()).append(" s");
+        sb.append(plan.ok() ? "." : "; it can't be walked as described.");
         for (int i = 0; i < plan.legs().size(); i++) {
-            sb.append("\n  leg ").append(offset + i + 1).append(" to ")
-                    .append(route.legs().get(offset + i).to().words()).append(": ").append(leg(plan.legs().get(i)));
+            Plan.Leg leg = plan.legs().get(i);
+            sb.append("\n  ").append(i + 1).append(". ").append(leg.stop().through() ? "through " : "")
+                    .append(leg.stop().words()).append(": ").append(leg(leg));
         }
+        sb.append('\n').append(next(plan));
         return sb.toString();
     }
 
     private static String leg(Plan.Leg leg) {
         return switch (leg.reach()) {
-            case WALKABLE -> leg.steps() + " steps, about " + leg.ticks() + " ticks; " + changes(leg) + dives(leg);
-            case PARTIAL -> (leg.end() == null ? "unknown from its start"
-                    : "known for " + leg.steps() + " steps up to " + Listing.coords(leg.end()) + " (about "
-                            + leg.ticks() + " ticks; " + changes(leg) + dives(leg) + "), unknown past that")
+            case REACHED -> leg.steps() + " steps, about " + seconds(leg) + " s; " + changes(leg) + dives(leg);
+            case PARTIAL -> (leg.finish() == null ? "unknown from its start"
+                    : "known for " + leg.steps() + " steps up to " + Listing.coords(leg.finish()) + " (about "
+                            + seconds(leg) + " s; " + changes(leg) + dives(leg) + "), unknown past that")
                     + ": " + leg.why();
             case UNREACHABLE -> "can't be walked: " + leg.why();
-            case UNPLANNED -> "not planned yet, the leg before it is only partly known; it is worked out on the way";
+            case UNPLANNED -> "not planned, the leg before it is not seen to the end; it is worked out on the way";
         };
+    }
+
+    private static double seconds(Plan.Leg leg) {
+        return Math.round(leg.ticks() / 2.0) / 10.0;
     }
 
     /**
@@ -182,74 +243,35 @@ public final class RouteText {
      * {@code ; under water once: 10,40,5 to 20,40,5, about 12 s without a breath, 3 s of air left}。
      */
     private static String dives(Plan.Leg leg) {
-        if (leg.dives().isEmpty()) {
+        if (leg.route() == null || leg.route().dives().isEmpty()) {
             return "";
         }
         List<String> parts = new ArrayList<>();
-        for (Plan.Dive dive : leg.dives()) {
+        for (Route.Dive dive : leg.route().dives()) {
             parts.add(Listing.coords(dive.from()) + " to " + Listing.coords(dive.to()) + ", about "
-                    + NavText.seconds(dive.held()) + " without a breath, " + NavText.seconds(dive.left()) + " of air left");
+                    + NavText.seconds((int) Math.ceil(dive.held())) + " without a breath, "
+                    + NavText.seconds((int) Math.floor(dive.left())) + " of air left");
         }
         return "; under water " + (parts.size() == 1 ? "once: " : parts.size() + " times: ") + String.join("; ", parts);
     }
 
     /** 这一段要动的格。 */
     private static String changes(Plan.Leg leg) {
-        return NavText.planned(cells(leg.digs()), cells(leg.places()), asks(leg.asks()));
+        NavText.Changes changes = leg.changes();
+        return NavText.planned(changes.digs(), changes.places(), changes.asks());
     }
 
     /** 计划之后能照抄的下一步。 */
-    private static String next(Itinerary route, Plan plan) {
-        if (plan.unreachable() >= 0) {
-            return "It can't be walked as it stands: that leg's reason says what would change it (route.spec, "
-                    + "route.via, route.drop), then `route.plan(\"" + route.name() + "\")` again.";
+    private static String next(Plan plan) {
+        if (!plan.ok()) {
+            return "Change what that leg's reason points at in the description (plan.spec) and route.plan it again.";
         }
         int asks = plan.asks().size();
-        String asking = asks == 0 ? "" : ", asking your owner about " + asks + " cell(s) before setting off";
-        for (Plan.Leg leg : plan.legs()) {
-            if (leg.reach() == Plan.Reach.PARTIAL) {
-                return "`move.go(\"" + route.name() + "\")` walks it" + asking + ", working out the unknown part on "
-                        + "the way; it changes only the cells listed here, and stops to say so if the unknown part needs "
-                        + "more.";
-            }
-        }
-        return "`move.go(\"" + route.name() + "\")` walks it" + asking + "; it changes only the cells listed here.";
-    }
-
-    /** 走过的记录,新的在前;没走过是空串。 */
-    public static String walks(Itinerary route, long now) {
-        if (route.walks().isEmpty()) {
-            return "";
-        }
-        List<String> parts = new ArrayList<>();
-        for (int i = route.walks().size() - 1; i >= 0; i--) {
-            Itinerary.Walk walk = route.walks().get(i);
-            parts.add(walk.who() + " " + ago(now - walk.at()) + ": " + walk.end() + " after " + walk.ticks() + " ticks");
-        }
-        return "walked: " + String.join("; ", parts) + ".";
-    }
-
-    /** {@code route list} 里的一行:终点、几段、计划、走过几次与上一次。 */
-    public static String row(Itinerary route, long now) {
-        StringBuilder sb = new StringBuilder("  ").append(route.name()).append(" — to ")
-                .append(route.destination().words()).append(", ").append(route.legs().size())
-                .append(route.legs().size() == 1 ? " leg" : " legs").append(", ");
-        Plan plan = route.plan();
-        if (plan == null) {
-            sb.append("not planned");
-        } else {
-            sb.append("planned ").append(ago(now - plan.at())).append(" (")
-                    .append(plan.unreachable() >= 0 ? "can't be walked"
-                            : plan.legs().stream().anyMatch(l -> l.reach() == Plan.Reach.PARTIAL) ? "partly known"
-                            : "walkable")
-                    .append(')');
-        }
-        if (!route.walks().isEmpty()) {
-            Itinerary.Walk last = route.walks().get(route.walks().size() - 1);
-            sb.append(", walked ").append(route.walks().size()).append(route.walks().size() == 1 ? " time" : " times")
-                    .append(", last ").append(ago(now - last.at())).append(": ").append(last.end());
-        }
-        return sb.toString();
+        String asking = asks == 0 ? "" : ", stopping to ask your owner at each of the " + asks + " cell(s) that need "
+                + "their consent";
+        boolean partial = plan.legs().stream().anyMatch(l -> l.reach() != Plan.Reach.REACHED);
+        return "`move.go(plan)` walks it" + asking + (partial ? ", working out the unseen part on the way" : "")
+                + "; it changes only the cells listed here.";
     }
 
     /** 从这里规划出来的路超出承诺的那些格,一句。 */
@@ -265,29 +287,9 @@ public final class RouteText {
         return String.join("; ", parts);
     }
 
-    /** 多久以前:按游戏刻换算成秒、分、时、天。 */
-    static String ago(long ticks) {
-        long seconds = Math.max(0, ticks) / 20;
-        if (seconds < 60) {
-            return "just now";
-        }
-        long minutes = seconds / 60;
-        if (minutes < 60) {
-            return minutes + " min ago";
-        }
-        long hours = minutes / 60;
-        return hours < 48 ? hours + " h ago" : hours / 24 + " days ago";
-    }
-
     private static Map<BlockPos, Block> cells(List<Plan.Cell> cells) {
         Map<BlockPos, Block> out = new LinkedHashMap<>();
         cells.forEach(c -> out.put(c.pos(), c.block()));
-        return out;
-    }
-
-    private static Map<BlockPos, String> asks(List<Plan.Ask> asks) {
-        Map<BlockPos, String> out = new LinkedHashMap<>();
-        asks.forEach(a -> out.put(a.pos(), a.cause()));
         return out;
     }
 }

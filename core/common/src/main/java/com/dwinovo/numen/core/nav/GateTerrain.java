@@ -24,15 +24,20 @@ record GateTerrain(Gate gate) implements TerrainPolicy {
 
     @Override
     public Permit judge(Change change, BlockPos pos, BlockState state, BlockGetter view) {
-        Action action = switch (change) {
-            case Change.Dig dig -> Action.breakBlock(pos, state);
-            case Change.Place place -> Action.place(pos, state, itemOf(place));
-        };
+        Action action = action(change, pos, state);
         Verdict verdict = gate.judge(action, view);
         return switch (verdict.kind()) {
             case ALLOW -> Permit.ALLOW;
             case ASK -> Permit.ask(gate.consentItem(action, verdict, view));
             case DENY -> Permit.deny(verdict);
+        };
+    }
+
+    /** 对 {@code pos}(此刻是 {@code state})做 {@code change} 是权限层的哪个动作:挖是拆这一格,放是往里放那块方块的物品。 */
+    static Action action(Change change, BlockPos pos, BlockState state) {
+        return switch (change) {
+            case Change.Dig dig -> Action.breakBlock(pos, state);
+            case Change.Place place -> Action.place(pos, state, itemOf(place));
         };
     }
 

@@ -25,7 +25,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
 /**
- * 到达方式,从 {@code move_goto} 的工具入口:{@code arrive:use} 走到看得见、点得到的地方(狭窄矿道里的熔炉、只有一面敞开的箱子、
+ * 到达方式,从 {@code move.to} 的入口:{@code arrive:use} 走到看得见、点得到的地方(狭窄矿道里的熔炉、只有一面敞开的箱子、
  * 悬崖上的工作台),隔着高草时 {@code use.block} 先清掉再用;四面封死受理即提醒、不出发;{@code arrive:at} 到柱顶上面那一格、
  * 梯子上、水里的一格;{@code arrive:near} 停在范围里。
  */
@@ -51,7 +51,7 @@ public class ArriveGameTests {
     }
 
     private static ToolRun gotoUse(NumenPlayer companion, BlockPos target) {
-        return lua(companion, "move.goto_(" + xyz(target) + ", {arrive = \"use\"})");
+        return lua(companion, "move.to(" + xyz(target) + ", {arrive = \"use\"})");
     }
 
     /** 她脚下那一格(相对场地,与 {@code absolutePos} 同一个原点)。 */
@@ -252,7 +252,7 @@ public class ArriveGameTests {
         set(helper, 7, 2, 8, Blocks.STONE);
         BlockPos top = helper.absolutePos(new BlockPos(8, 3, 8));
         NumenPlayer companion = spawnAt(helper, "gametest_pillar_sitter", new BlockPos(2, 2, 8), false);
-        ToolRun walk = lua(companion, "move.goto_(" + xyz(top.above()) + ")");
+        ToolRun walk = lua(companion, "move.to(" + xyz(top.above()) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
@@ -272,7 +272,7 @@ public class ArriveGameTests {
         }
         BlockPos rung = helper.absolutePos(new BlockPos(8, 4, 8));
         NumenPlayer companion = spawnAt(helper, "gametest_ladder_hanger", new BlockPos(2, 2, 8), false);
-        ToolRun walk = lua(companion, "move.goto_(" + xyz(rung) + ")");
+        ToolRun walk = lua(companion, "move.to(" + xyz(rung) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
@@ -289,7 +289,7 @@ public class ArriveGameTests {
         fill(helper, 7, 2, 7, 10, 3, 10, Blocks.WATER.defaultBlockState());
         BlockPos cell = helper.absolutePos(new BlockPos(8, 3, 8));
         NumenPlayer companion = spawnAt(helper, "gametest_floater", new BlockPos(2, 4, 8), false);
-        ToolRun walk = lua(companion, "move.goto_(" + xyz(cell) + ")");
+        ToolRun walk = lua(companion, "move.to(" + xyz(cell) + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
@@ -304,7 +304,7 @@ public class ArriveGameTests {
     public static void near_stops_within_the_distance(GameTestHelper helper) {
         BlockPos spot = helper.absolutePos(new BlockPos(13, 2, 13));
         NumenPlayer companion = spawnAt(helper, "gametest_nearby", new BlockPos(2, 2, 2), false);
-        ToolRun walk = lua(companion, "move.goto_(" + xyz(spot) + ", {arrive = \"near\", near = " + 3 + "})");
+        ToolRun walk = lua(companion, "move.to(" + xyz(spot) + ", {arrive = \"near\", range = " + 3 + "})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.done(), "goto has not finished");
@@ -324,7 +324,7 @@ public class ArriveGameTests {
         BlockPos cell = helper.absolutePos(new BlockPos(11, 4, 11));
         NumenPlayer companion = spawnAt(helper, "gametest_reacher", new BlockPos(2, 2, 2), false);
         companion.getInventory().add(new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.COBBLESTONE));
-        ToolRun run = lua(companion, "move.goto_(" + xyz(cell) + ", {arrive = \"reach\"})\n"
+        ToolRun run = lua(companion, "move.to(" + xyz(cell) + ", {arrive = \"place\"})\n"
                 + "build.place(" + xyz(cell) + ", {block = \"cobblestone\"})");
 
         succeedWhen(helper, () -> {
@@ -344,11 +344,11 @@ public class ArriveGameTests {
         BlockPos cell = helper.absolutePos(new BlockPos(11, 4, 11));
         NumenPlayer companion = spawnAt(helper, "gametest_reach_flat", new BlockPos(2, 2, 2), false);
         BlockPos start = companion.blockPosition();
-        ToolRun run = lua(companion, "move.goto_({x = " + cell.getX() + ", z = " + cell.getZ() + "}, {arrive = \"reach\"})");
+        ToolRun run = lua(companion, "move.to({x = " + cell.getX() + ", z = " + cell.getZ() + "}, {arrive = \"place\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(run.receipt() != null, "the program has not finished");
-            helper.assertTrue(!run.ranToTheEnd() && run.receipt().contains("arrive = \\\"reach\\\" names one block"),
+            helper.assertTrue(!run.ranToTheEnd() && run.receipt().contains("arrive = \\\"place\\\" names one block"),
                     "the refusal does not say reach needs a y: " + run.receipt());
             helper.assertTrue(run.tasks("move.go").isEmpty() && companion.blockPosition().equals(start),
                     "she set off anyway");
