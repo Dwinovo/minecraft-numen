@@ -68,11 +68,11 @@ class RouteFlagsTest {
         ResourceLocation overworld = ResourceLocation.withDefaultNamespace("overworld");
         Itinerary route = Itinerary.of("home", overworld, new Destination.Stop(20, 64, 20, Destination.Arrive.AT,
                 null), flags);
-        RouteSpec now = RouteFlags.spec(route, 0, new NamedAreas(Level.OVERWORLD, Map.of("house", moved)));
+        RouteSpec now = RouteFlags.spec(RouteSpec.defaults(), route, 0, new NamedAreas(Level.OVERWORLD, Map.of("house", moved)));
         assertTrue(now.positions().forbids(Use.DIG, new BlockPos(9, 64, 9).asLong()), "按此刻的区域");
         assertFalse(now.positions().forbids(Use.DIG, new BlockPos(0, 64, 0).asLong()));
         IllegalArgumentException gone = assertThrows(IllegalArgumentException.class,
-                () -> RouteFlags.spec(route, 0, NONE));
+                () -> RouteFlags.spec(RouteSpec.defaults(), route, 0, NONE));
         assertTrue(gone.getMessage().contains("avoid_break area:house: there is no area named house"),
                 gone.getMessage());
     }
@@ -83,8 +83,8 @@ class RouteFlagsTest {
         Destination.Stop to = new Destination.Stop(1, 64, 1, Destination.Arrive.AT, null);
         Itinerary route = Itinerary.of("home", overworld, to, "--alter natural").via(to, 1)
                 .withLegFlags(2, "--avoid water");
-        RouteSpec first = RouteFlags.spec(route, 0, NONE);
-        RouteSpec second = RouteFlags.spec(route, 1, NONE);
+        RouteSpec first = RouteFlags.spec(RouteSpec.defaults(), route, 0, NONE);
+        RouteSpec second = RouteFlags.spec(RouteSpec.defaults(), route, 1, NONE);
         assertEquals(RouteSpec.Alter.NATURAL, first.alter());
         assertEquals(RouteSpec.Alter.NATURAL, second.alter());
         assertFalse(first.excludes(Kind.WATER));

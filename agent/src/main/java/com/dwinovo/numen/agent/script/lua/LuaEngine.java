@@ -1,14 +1,15 @@
 package com.dwinovo.numen.agent.script.lua;
 
 import com.dwinovo.lua.LuaSandbox;
+import com.dwinovo.numen.agent.script.ApiError;
+import com.dwinovo.numen.agent.script.ErrorKind;
+import com.dwinovo.numen.agent.script.FunctionDoc;
+import com.dwinovo.numen.agent.script.JsonValues;
 import com.dwinovo.numen.agent.script.ScriptCatalog;
 import com.dwinovo.numen.agent.script.ScriptEngine;
 import com.dwinovo.numen.agent.script.ScriptLimits;
 import com.dwinovo.numen.agent.script.ScriptRun;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
+import com.dwinovo.numen.agent.script.ScriptType;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -32,9 +33,10 @@ import java.util.regex.Pattern;
  * 几十毫秒以内),等身体干活的时候它不等,谁都不阻塞。
  *
  * <h2>返回什么</h2>
- * 成功直接返回值、失败抛错:动作登记时声明了返回项({@link ScriptCatalog.Verb#returns})而回执里有这一项,就返回它(成败都返回,
- * {@code area.has} 有没有剩都是一个布尔);否则失败就在调用处抛 Lua 错误({@code pcall} 接得住),成功返回回执数据(没有数据就
- * 返回回执那句话)。
+ * 成功直接返回数据:回执的数据换成 Lua 的表(声明了返回项的,{@link ScriptCatalog.Verb#returns},是数据里的那一项),没有数据是 nil。
+ * 回执那句话不交给脚本,只进整段程序的回执。失败在调用处抛一个错误值:一张表 {@code {kind, message, hint, fn, data}}
+ * ({@link ScriptRun#failure}),带着错误元表,{@code tostring(err)} 是一段可读的文字({@link #render}),{@code pcall} 接住后按
+ * {@code err.kind} 分支。全局函数 {@code raise(kind, message, hint)} 抛同一种错误值,库与脚本自己的失败也这样说。
  */
 public final class LuaEngine implements ScriptEngine {
 
@@ -56,18 +58,65 @@ public final class LuaEngine implements ScriptEngine {
         return ".lua";
     }
 
+    /** 抛同一种错误值的全局函数:{@code raise("failed", "why", "what to do next")}。 */
+    static final String RAISE = "raise";
+
+    /**
+     * 一个错误值写成文字:{@code work.dig: out_of_reach — 那句话},下一行 {@code hint: …}。{@code tostring(err)} 与没接住时整段回执里的
+     * 那句话都是它。
+     */
+    static String render(Map<String, Object> error) {
+        Object fn = error.get(ScriptRun.FN);
+        Object kind = error.get(ScriptRun.KIND);
+        Object message = error.get(ScriptRun.MESSAGE);
+        Object hint = error.get(ScriptRun.HINT);
+        StringBuilder sb = new StringBuilder();
+        if (fn != null) {
+            sb.append(fn).append(": ");
+        }
+        sb.append(kind == null ? ErrorKind.RUNTIME.wire() : kind);
+        if (message != null) {
+            sb.append(" — ").append(message);
+        }
+        if (hint != null) {
+            sb.append("\nhint: ").append(hint);
+        }
+        return sb.toString();
+    }
+
+    /** {@code raise(kind, message, hint, data)}:kind 与 message 是字符串,hint(字符串)与 data(一张表)可以不写。 */
+    private static Object raise(List<Object> in) {
+        Object kind = in.isEmpty() ? null : in.get(0);
+        Object message = in.size() < 2 ? null : in.get(1);
+        Object hint = in.size() < 3 ? null : in.get(2);
+        Object data = in.size() < 4 ? null : in.get(3);
+        if (!(kind instanceof String k) || !(message instanceof String m) || (hint != null && !(hint instanceof String))
+                || (data != null && !(data instanceof Map<?, ?> || data instanceof List<?>))) {
+            throw new LuaSandbox.ScriptError(ScriptRun.failure(ErrorKind.BAD_ARGUMENT.wire(),
+                    "raise takes a kind and a message (strings), then an optional hint (a string) and data (a table)",
+                    "raise(\"failed\", \"why it stopped\", \"what to do next\")", RAISE, null));
+        }
+        throw new LuaSandbox.ScriptError(ScriptRun.failure(k, m, (String) hint, null, data));
+    }
+
     @Override
     public String howToCall() {
         return "Every API function is `group.verb(objects..., {option = value})`: `scan.blocks(\"iron_ore\", "
-                + "{radius = 12, into = \"ores\"})`, `work.dig(\"ores/g3\")`, `route.plan(\"home\")`. A cell is three "
-                + "numbers, `{120, 64, -35}` or `\"120 64 -35\"`; a switch is `{sneak = true}`; a name Lua already uses "
-                + "gets a trailing underscore (`move.goto_`). A call returns when it is done (for work that occupies "
-                + "your body, when that task has finished) and gives its result directly: a query returns its value "
-                + "(`area.has(\"ores\")` is true or false, `area.parts(\"ores\")` a list of names), other calls the "
-                + "data of their reply, or the reply's sentence when it has none. A call that fails raises an error "
-                + "with its message (for wrong arguments: error, usage, hint); `pcall(f, ...)` catches it when the "
-                + "script should go on. `print(...)` writes into the receipt, `return value` hands a value back in it; "
-                + "`...` holds the arguments of a script run by name; `error(\"why\", 0)` ends it as failed.";
+                + "{radius = 12, into = \"ores\"})`, `work.dig(\"ores/g3\")`. A position is a table with named "
+                + "fields, `{x = 120, y = 64, z = -35}` (a Pos); anything a call returns that has a `pos` (a Block, an "
+                + "Entity, an Item) goes where a position goes, as it is: `local e = scan.entities(\"hostile\")[1]; "
+                + "fight.attack(e)`, and the same with move.goto_(e.pos). A switch is `{sneak = true}`; a name Lua "
+                + "already uses gets "
+                + "a trailing underscore (`move.goto_`). A call returns when it is done (work that occupies your body: "
+                + "when it has finished) and returns data, never sentences: `area.has(\"ores\")` is true or false, "
+                + "`status.self()` a table whose pos is a Pos, `work.dig(\"ores\")` a table with what it dug. A call "
+                + "that fails raises an error value: `local ok, err = pcall(work.dig, \"ores\")` catches it, `err.kind` "
+                + "says what kind "
+                + "(bad_argument, not_found, out_of_reach, no_path, denied, ...), `err.hint` is a line to run next; "
+                + "`raise(kind, message, hint)` raises your own. To read a value, `print(x)` (a table prints as a Lua "
+                + "table) or `return x`; the receipt shows one line per call and what you printed or returned. `...` "
+                + "holds the arguments of a script run by name. `api.help(\"work\")` lists a group's typed "
+                + "signatures, `api.help(\"work.dig\")` explains one.";
     }
 
     @Override
@@ -82,21 +131,35 @@ public final class LuaEngine implements ScriptEngine {
 
     @Override
     public String table(Map<String, Object> options) {
-        List<String> named = new ArrayList<>();
-        options.forEach((k, v) -> named.add(k + " = " + literal(v)));
-        return "{" + String.join(", ", named) + "}";
+        return literal(options);
     }
 
-    /** 一个值写成 Lua 的字面量。 */
+    @Override
+    public String value(Object value) {
+        return literal(value);
+    }
+
+    /** 一个值写成 Lua 的字面量;名字到值的表按迭代顺序写,键不是合法名字的写成 {@code ["键"] = 值}。 */
     private static String literal(Object value) {
         return switch (value) {
+            case null -> "nil";
             case String s -> "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"";
             case Double d -> d == Math.rint(d) && !d.isInfinite() ? String.valueOf(d.longValue()) : String.valueOf(d);
             case Number n -> String.valueOf(n);
             case Boolean b -> String.valueOf(b);
             case List<?> list -> "{" + String.join(", ", list.stream().map(LuaEngine::literal).toList()) + "}";
+            case Map<?, ?> map -> {
+                List<String> named = new ArrayList<>();
+                map.forEach((k, v) -> named.add(key(String.valueOf(k)) + " = " + literal(v)));
+                yield "{" + String.join(", ", named) + "}";
+            }
             default -> throw new IllegalArgumentException("cannot write " + value + " in Lua");
         };
+    }
+
+    /** 表的一个键:合法的名字原样,别的写成 {@code ["键"]}。 */
+    private static String key(String k) {
+        return k.matches("[A-Za-z_][A-Za-z0-9_]*") && !LuaSandbox.KEYWORDS.contains(k) ? k : "[" + literal(k) + "]";
     }
 
     @Override
@@ -149,7 +212,7 @@ public final class LuaEngine implements ScriptEngine {
         for (String raw : code.split("\n", -1)) {
             String line = raw.strip();
             if (line.startsWith("--") && !line.startsWith("--[[")) {
-                doc.add(line.substring(2).strip());
+                doc.add(line);
                 continue;
             }
             Matcher m = DEFINITION.matcher(raw);
@@ -160,18 +223,210 @@ public final class LuaEngine implements ScriptEngine {
                         params.add(p.strip());
                     }
                 }
-                out.add(new Defined(m.group(1), List.copyOf(params), String.join(" ", doc).strip()));
+                out.add(new Defined(m.group(1), params, doc));
             }
             doc.clear();
         }
         return List.copyOf(out);
     }
 
+    // ---- 签名:LuaLS 的类型注解 ----
+
+    @Override
+    public String typeText(ScriptType type) {
+        return switch (type) {
+            case ScriptType.Simple s -> s.name();
+            case ScriptType.Named n -> n.name();
+            case ScriptType.ListOf l -> (l.item() instanceof ScriptType.Union ? "(" + typeText(l.item()) + ")"
+                    : typeText(l.item())) + "[]";
+            case ScriptType.Union u -> String.join("|", u.options().stream().map(this::typeText).toList());
+            case ScriptType.Choice c -> String.join("|", c.values().stream().map(LuaEngine::literal).toList());
+            case ScriptType.Table t -> "{" + String.join(", ", t.fields().stream()
+                    .map(f -> f.name() + (f.optional() ? "?" : "") + ": " + typeText(f.type())).toList()) + "}";
+        };
+    }
+
+    @Override
+    public String classText(ScriptType.Class type) {
+        StringBuilder sb = new StringBuilder();
+        if (type.doc() != null) {
+            for (String line : type.doc().split("\n")) {
+                sb.append("---").append(line).append('\n');
+            }
+        }
+        sb.append("---@class ").append(type.name());
+        if (type.parent() != null) {
+            sb.append(": ").append(type.parent());
+        }
+        fields(sb, type.fields());
+        return sb.toString();
+    }
+
+    /** 一个类的字段,每个一行 {@code ---@field 名字? 类型 说明}。 */
+    private void fields(StringBuilder sb, List<ScriptType.Field> fields) {
+        for (ScriptType.Field f : fields) {
+            sb.append("\n---@field ").append(f.name()).append(f.optional() ? "? " : " ").append(typeText(f.type()));
+            if (f.doc() != null) {
+                sb.append(' ').append(f.doc());
+            }
+        }
+    }
+
+    /** 一个参数的类型:收一个或几个的写成 {@code T|T[]}。 */
+    private String paramType(FunctionDoc.Param p) {
+        return p.several() ? typeText(p.type()) + "|" + typeText(new ScriptType.ListOf(p.type())) : typeText(p.type());
+    }
+
+    @Override
+    public String functionText(FunctionDoc fn) {
+        StringBuilder sb = new StringBuilder("---").append(fn.summary());
+        List<String> names = new ArrayList<>();
+        List<String> classes = new ArrayList<>();
+        for (FunctionDoc.Param p : fn.params()) {
+            names.add(p.name());
+            String type = paramType(p);
+            if (p.type() instanceof ScriptType.Table t) {
+                // 选项表的字段各带一句说明:写成一个类,参数引用它
+                String cls = fn.name() + "." + p.name();
+                classes.add(classText(new ScriptType.Class(cls, null, null, t.fields())));
+                type = cls;
+            }
+            sb.append("\n---@param ").append(p.name()).append(p.optional() ? "? " : " ").append(type);
+            if (p.doc() != null) {
+                sb.append(' ').append(p.doc());
+            }
+        }
+        String returns = typeText(fn.returns());
+        if (fn.returns() instanceof ScriptType.Table t) {
+            String cls = fn.name() + ".result";
+            classes.add(classText(new ScriptType.Class(cls, null, null, t.fields())));
+            returns = cls;
+        }
+        if (fn.returns() != ScriptType.NOTHING) {
+            sb.append("\n---@return ").append(returns);
+        }
+        sb.append("\nfunction ").append(fn.name()).append('(').append(String.join(", ", names)).append(") end");
+        for (String c : classes) {
+            sb.append("\n\n").append(c);
+        }
+        block(sb, "Examples:", fn.examples());
+        block(sb, "Notes:", fn.notes());
+        if (!fn.seeAlso().isEmpty()) {
+            sb.append("\n-- See also: ").append(String.join(", ", fn.seeAlso()));
+        }
+        return sb.toString();
+    }
+
+    /** 带标题的一块注释,一行一条;没有条目时整块不出现。 */
+    private static void block(StringBuilder sb, String title, List<String> lines) {
+        if (lines.isEmpty()) {
+            return;
+        }
+        sb.append("\n-- ").append(title);
+        for (String line : lines) {
+            sb.append("\n--   ").append(line.replace("\n", "\n--   "));
+        }
+    }
+
+    /** 清单里一张就地写出的表最多几个字段;再多就按名字引用({@code move.go.opts}),全部字段在这个函数自己的帮助里。 */
+    private static final int INLINE_FIELDS = 5;
+
+    @Override
+    public String functionLine(FunctionDoc fn) {
+        List<String> params = new ArrayList<>();
+        for (FunctionDoc.Param p : fn.params()) {
+            String type = p.type() instanceof ScriptType.Table t && t.fields().size() > INLINE_FIELDS
+                    ? fn.name() + "." + p.name() : paramType(p);
+            params.add(p.name() + (p.optional() ? "?" : "") + ": " + type);
+        }
+        String returns = fn.returns() == ScriptType.NOTHING ? null
+                : fn.returns() instanceof ScriptType.Table t && t.fields().size() > INLINE_FIELDS ? fn.name() + ".result"
+                : typeText(fn.returns());
+        return line(fn.name(), String.join(", ", params), returns, fn.summary());
+    }
+
+    /** 清单里的一行:{@code ---@field 名字 fun(参数): 返回 说明},写成这一组那张表的一个字段。 */
+    private static String line(String name, String params, String returns, String summary) {
+        String field = name.substring(name.indexOf('.') + 1);
+        return "---@field " + field + " fun(" + params + ")" + (returns == null ? "" : ": " + returns)
+                + (summary == null || summary.isEmpty() ? "" : " " + summary);
+    }
+
+    @Override
+    public String groupText(String group, String summary, List<String> lines) {
+        StringBuilder sb = new StringBuilder("---").append(summary).append("\n---@class ").append(group);
+        lines.forEach(l -> sb.append('\n').append(l));
+        return sb.append('\n').append(group).append(" = {}").toString();
+    }
+
+    @Override
+    public String libraryText(Defined fn) {
+        StringBuilder sb = new StringBuilder();
+        fn.doc().forEach(l -> sb.append(l).append('\n'));
+        return sb.append("function ").append(fn.name()).append('(').append(String.join(", ", fn.params()))
+                .append(") end").toString();
+    }
+
+    /** 库里注释的一行类型注解:{@code ---@param 名字? 类型 说明}、{@code ---@return 类型 说明}。 */
+    private static final Pattern PARAM_DOC = Pattern.compile("^---@param\\s+(\\S+)\\s+(.*)$");
+    private static final Pattern RETURN_DOC = Pattern.compile("^---@return\\s+(.*)$");
+
+    @Override
+    public String libraryLine(Defined fn) {
+        List<String> params = new ArrayList<>();
+        String returns = null;
+        for (String l : fn.doc()) {
+            Matcher p = PARAM_DOC.matcher(l);
+            Matcher r = RETURN_DOC.matcher(l);
+            if (p.find()) {
+                String name = p.group(1);
+                boolean optional = name.endsWith("?");
+                params.add((optional ? name.substring(0, name.length() - 1) + "?" : name) + ": "
+                        + leadingType(p.group(2)));
+            } else if (r.find()) {
+                returns = leadingType(r.group(1));
+            }
+        }
+        return line(fn.name(), String.join(", ", params), returns, summaryOf(fn));
+    }
+
+    /** 一行类型注解里打头的那个类型(括号配平地读到第一个括号外的空格为止)。 */
+    private static String leadingType(String text) {
+        int depth = 0;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '{' || c == '(' || c == '<' || c == '[') {
+                depth++;
+            } else if (c == '}' || c == ')' || c == '>' || c == ']') {
+                depth--;
+            } else if (c == ' ' && depth == 0) {
+                return text.substring(0, i);
+            }
+        }
+        return text;
+    }
+
+    @Override
+    public String summaryOf(Defined fn) {
+        StringBuilder text = new StringBuilder();
+        for (String l : fn.doc()) {
+            String line = l.replaceFirst("^-+", "").strip();
+            if (line.startsWith("@")) {
+                break;
+            }
+            if (!line.isEmpty()) {
+                text.append(text.isEmpty() ? "" : " ").append(line);
+            }
+        }
+        int end = text.indexOf(". ");
+        return end < 0 ? text.toString() : text.substring(0, end + 1);
+    }
+
     /**
      * 脚本读了一组里没有的函数({@code area.hsa}):说没有这个 API 函数,名字差一两个字的给出最近的那个,再说怎么列这一组。
      * 停在读它的那一行,不让它成 nil 再在调用处报"调了一个 nil"。
      */
-    static String missing(String table, String key, List<String> present) {
+    static LuaSandbox.ScriptError missing(String table, String key, List<String> present) {
         String nearest = null;
         int best = Integer.MAX_VALUE;
         for (String name : present) {
@@ -182,9 +437,10 @@ public final class LuaEngine implements ScriptEngine {
             }
         }
         boolean close = nearest != null && best <= Math.max(1, Math.min(2, key.length() / 3));
-        return "there is no API function " + table + "." + key
-                + (close ? "; did you mean " + table + "." + nearest + "?" : "")
-                + " api.help(\"" + table + "\") lists the group's functions.";
+        return new LuaSandbox.ScriptError(ScriptRun.failure(ErrorKind.NO_FUNCTION.wire(),
+                "there is no API function " + table + "." + key
+                        + (close ? "; did you mean " + table + "." + nearest + "?" : ""),
+                "api.help(\"" + table + "\") lists the group's functions.", null, null));
     }
 
     /** 两个名字的编辑距离(增、删、改各算一步)。 */
@@ -214,11 +470,12 @@ public final class LuaEngine implements ScriptEngine {
             throw new IllegalArgumentException(unreadable);
         }
         List<ScriptRun.Call> seen = new ArrayList<>();
-        LuaSandbox.Builder sandbox = LuaSandbox.builder(LIMITS).missing(LuaEngine::missing);
-        catalog.groups().forEach((group, verbs) -> verbs.keySet().forEach(verb ->
+        LuaSandbox.Builder sandbox = LuaSandbox.builder(LIMITS).missing(LuaEngine::missing).errors(LuaEngine::render)
+                .function(RAISE, LuaEngine::raise);
+        catalog.groups().forEach((group, verbs) -> verbs.forEach((verb, declared) ->
                 sandbox.function(functionName(group), functionName(verb), in -> {
-                    seen.add(call(group, verb, in));
-                    return null;
+                    seen.add(call(group, verb, in, declared));
+                    return declared.sample();
                 })));
         for (String library : catalog.libraries().values()) {
             for (Defined defined : functions(library)) {
@@ -226,7 +483,7 @@ public final class LuaEngine implements ScriptEngine {
                 String table = dot < 0 ? "" : defined.name().substring(0, dot);
                 String fn = defined.name().substring(dot + 1);
                 LuaSandbox.HostFunction record = in -> {
-                    seen.add(call(table, fn, in));
+                    seen.add(call(table, fn, in, null));
                     return null;
                 };
                 if (table.isEmpty()) {
@@ -250,23 +507,19 @@ public final class LuaEngine implements ScriptEngine {
      * 一次调用的参数:按顺序的对象,最后一个是名字到值的表就是选项。选项表只能在最后。最后一个是空表 {@code {}} 时它是没写选项的
      * 选项表:空表分不出是列表还是名字表,而写在最后的那张表就是选项的位置。
      */
-    private static ScriptRun.Call call(String group, String verb, List<Object> in) {
+    private static ScriptRun.Call call(String group, String verb, List<Object> in, ScriptCatalog.Verb declared) {
         List<Object> objects = new ArrayList<>(in);
         Map<String, Object> options = Map.of();
         Object last = objects.isEmpty() ? null : objects.get(objects.size() - 1);
-        if (last instanceof Map<?, ?> map) {
+        boolean optionsTable = last instanceof Map<?, ?> table
+                && (declared == null || declared.optionsTable(table, objects.size() - 1));
+        if (optionsTable && last instanceof Map<?, ?> map) {
             objects.remove(objects.size() - 1);
             Map<String, Object> named = new LinkedHashMap<>();
             map.forEach((k, v) -> named.put(String.valueOf(k), v));
             options = named;
         } else if (last instanceof List<?> list && list.isEmpty()) {
             objects.remove(objects.size() - 1);
-        }
-        for (Object o : objects) {
-            if (o instanceof Map<?, ?>) {
-                throw new LuaSandbox.ScriptError((group.isEmpty() ? "" : group + ".") + verb
-                        + ": options {name = value} go last");
-            }
         }
         // nil 照样交过去(位置要对得上),由读参数的那一处说是哪一个值是 nil
         return new ScriptRun.Call(LuaSandbox.currentLine(), group, verb, java.util.Collections.unmodifiableList(objects),
@@ -288,8 +541,8 @@ public final class LuaEngine implements ScriptEngine {
 
     private record Ended(LuaSandbox.Outcome outcome) implements Event {}
 
-    /** 驱动方交回脚本线程的东西:一个值,或者让那次调用失败的一句话。 */
-    private record Answer(Object value, String raise) {}
+    /** 驱动方交回脚本线程的东西:一个值,或者让那次调用失败的错误值。 */
+    private record Answer(Object value, Map<String, Object> raise) {}
 
     private final class Run implements ScriptRun {
 
@@ -314,7 +567,8 @@ public final class LuaEngine implements ScriptEngine {
 
         @Override
         public Step start() {
-            LuaSandbox.Builder sandbox = LuaSandbox.builder(LIMITS).print(printer).missing(LuaEngine::missing);
+            LuaSandbox.Builder sandbox = LuaSandbox.builder(LIMITS).print(printer).missing(LuaEngine::missing)
+                    .errors(LuaEngine::render).show(LuaEngine::literal).function(RAISE, LuaEngine::raise);
             catalog.groups().forEach((group, verbs) -> verbs.keySet().forEach(verb ->
                     sandbox.function(functionName(group), functionName(verb), in -> ask(group, verb, in))));
             catalog.libraries().forEach(sandbox::library);
@@ -326,26 +580,24 @@ public final class LuaEngine implements ScriptEngine {
         public Step resume(Result result) {
             Call call = pending;
             pending = null;
+            if (!result.ok()) {
+                return answer(new Answer(null, ScriptRun.failure(result.kind(), result.text(), result.hint(),
+                        call.function(), result.data().size() > 0 ? JsonValues.toJava(result.data()) : null)));
+            }
             ScriptCatalog.Verb verb = catalog.verb(call.group(), call.verb());
             String key = verb == null ? null : verb.returns();
-            Answer answer;
-            if (key != null && result.data().has(key)) {
-                answer = new Answer(toJava(result.data().get(key)), null);
-            } else if (!result.ok()) {
-                answer = new Answer(null, call.function() + ": " + result.text());
-            } else if (result.data().size() > 0) {
-                answer = new Answer(toJava(result.data()), null);
-            } else {
-                answer = new Answer(result.text(), null);
+            if (key != null) {
+                return answer(new Answer(JsonValues.toJava(result.data().get(key)), null));
             }
-            return answer(answer);
+            return answer(new Answer(result.data().size() > 0 ? JsonValues.toJava(result.data()) : null, null));
         }
 
         @Override
-        public Step refuse(String why) {
+        public Step refuse(ApiError why) {
             Call call = pending;
             pending = null;
-            return answer(new Answer(null, call.function() + ": " + why));
+            return answer(new Answer(null, ScriptRun.failure(why.kind().wire(), why.getMessage(), why.hint(),
+                    call.function(), null)));
         }
 
         @Override
@@ -384,43 +636,32 @@ public final class LuaEngine implements ScriptEngine {
         }
 
         private Done done(LuaSandbox.Outcome outcome) {
-            return outcome.finished() ? new Done(true, 0, null, outcome.value())
-                    : new Done(false, outcome.line(), outcome.message(), null);
+            if (outcome.finished()) {
+                return new Done(true, 0, null, outcome.value(), null);
+            }
+            Map<String, Object> failure;
+            if (outcome.error() != null && outcome.error().get(ScriptRun.KIND) instanceof String) {
+                failure = outcome.error();
+            } else {
+                ErrorKind kind = switch (outcome.ending()) {
+                    case UNREADABLE -> ErrorKind.SYNTAX;
+                    case ERROR -> ErrorKind.RUNTIME;
+                    case INTERRUPTED -> ErrorKind.INTERRUPTED;
+                    default -> ErrorKind.LIMIT;
+                };
+                failure = ScriptRun.failure(kind.wire(), outcome.message(), null, null, null);
+            }
+            return new Done(false, outcome.line(), outcome.message(), null, failure);
         }
 
         /** 脚本线程上:一个 API 函数被调了。交给驱动方,等它交回结局。 */
         private Object ask(String group, String verb, List<Object> in) throws InterruptedException {
-            events.add(new Asked(call(group, verb, in)));
+            events.add(new Asked(call(group, verb, in, catalog.verb(group, verb))));
             Answer answer = answers.take();
             if (answer.raise() != null) {
                 throw new LuaSandbox.ScriptError(answer.raise());
             }
             return answer.value();
         }
-    }
-
-    /** 回执里的 JSON 换成沙箱收的 Java 值:对象成名字到值的表、数组成列表、null 成 nil。 */
-    static Object toJava(JsonElement e) {
-        if (e == null || e.isJsonNull()) {
-            return null;
-        }
-        if (e instanceof JsonPrimitive p) {
-            if (p.isBoolean()) {
-                return p.getAsBoolean();
-            }
-            if (p.isNumber()) {
-                double d = p.getAsDouble();
-                return d == Math.rint(d) && Math.abs(d) < 9.0e15 ? (Object) (long) d : (Object) d;
-            }
-            return p.getAsString();
-        }
-        if (e instanceof JsonArray a) {
-            List<Object> list = new ArrayList<>(a.size());
-            a.forEach(item -> list.add(toJava(item)));
-            return list;
-        }
-        Map<String, Object> map = new LinkedHashMap<>();
-        ((JsonObject) e).entrySet().forEach(entry -> map.put(entry.getKey(), toJava(entry.getValue())));
-        return map;
     }
 }

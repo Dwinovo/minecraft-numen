@@ -81,7 +81,6 @@ public final class ThrowawayOps {
     /** 清单 + 背包里还没进清单的东西。两样一起给,模型读一次就能决定要不要 add。 */
     private String report(NumenPlayer self, List<String> materials, String verb) {
         JsonObject root = new JsonObject();
-        root.addProperty("success", true);
         JsonArray list = new JsonArray();
         materials.forEach(list::add);
         root.add("materials", list);
@@ -96,11 +95,10 @@ public final class ThrowawayOps {
         }
         root.add("carrying_not_listed", carrying);
         // 空清单不是出错,是她选的——但后果得说清,否则下一次 goto 撞墙她不知道是自己关的。
-        root.addProperty("message", materials.isEmpty()
+        return com.dwinovo.numen.task.TaskResult.ok(materials.isEmpty()
                 ? "your throwaway list is now EMPTY — pathfinding may not place a single block, "
                         + "so any route needing a pillar, bridge or step up will fail until you add some back"
-                : "throwaway list updated — this is what pathfinding will spend from now on");
-        return root.toString();
+                : "throwaway list updated — this is what pathfinding will spend from now on", root).toJson();
     }
 
     /** 给的 id 一个都认不出:下一步是查拼写,不是换动作。 */
@@ -156,12 +154,8 @@ public final class ThrowawayOps {
 
     /** 失败也把当前清单带上——参数写错了不该连"现在是什么"都看不到。 */
     private String error(NumenPlayer self, String why) {
-        JsonObject root = new JsonObject();
-        root.addProperty("success", false);
-        root.addProperty("error", why);
-        JsonArray list = new JsonArray();
-        ThrowawayBlocks.effectiveIds(self).forEach(list::add);
-        root.add("materials", list);
-        return root.toString();
+        List<String> list = ThrowawayBlocks.effectiveIds(self);
+        return com.dwinovo.numen.task.TaskResult.fail(com.dwinovo.numen.agent.script.ErrorKind.BAD_ARGUMENT, why,
+                null, Map.of("materials", list)).toJson();
     }
 }

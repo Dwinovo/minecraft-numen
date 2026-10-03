@@ -1,5 +1,9 @@
 package com.dwinovo.numen.core.route;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonArray;
+import com.dwinovo.numen.cli.Shapes;
+import com.dwinovo.numen.agent.script.ScriptType;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -20,6 +24,81 @@ public final class RouteText {
     private RouteText() {}
 
     /** 途经点一串:{@code 1. 20,64,5  2. 30,70,5 (within 3)}。 */
+    /** 一条路线。 */
+    public static final ScriptType.Class ROUTE_CLASS = new ScriptType.Class("Route", "One of your owner's routes.", null,
+            List.of(ScriptType.field("name", ScriptType.STRING, null),
+                    ScriptType.field("stops", ScriptType.listOf(ScriptType.STRING),
+                            "Its stops in order, the destination last, as words."),
+                    ScriptType.field("flags", ScriptType.STRING, "The route flags of the whole route; empty = changes "
+                            + "no block."),
+                    ScriptType.field("planned", ScriptType.BOOLEAN, "Whether it has a plan move.go keeps to.")));
+
+    /** 一份计划。 */
+    public static final ScriptType.Class PLAN_CLASS = new ScriptType.Class("Plan",
+            "A route planned from where you stood, without moving: what move.go keeps to.", null,
+            List.of(ScriptType.field("route", ScriptType.STRING, null),
+                    ScriptType.field("walkable", ScriptType.BOOLEAN, "Every leg can be walked."),
+                    ScriptType.field("from", Shapes.POS.type(), "Where it was planned from."),
+                    ScriptType.field("legs", ScriptType.listOf(ScriptType.table(
+                            ScriptType.field("reach", ScriptType.STRING,
+                                    "reached, partial (planned as far as one look reaches), unreachable or unplanned."),
+                            ScriptType.field("steps", ScriptType.INTEGER, null),
+                            ScriptType.field("ticks", ScriptType.INTEGER, "As priced by the planner."),
+                            ScriptType.optional("end", Shapes.POS.type(), "Where the planned part ends."),
+                            ScriptType.field("breaks", ScriptType.listOf(Shapes.BLOCK.type()), "Blocks it breaks."),
+                            ScriptType.field("places", ScriptType.listOf(Shapes.BLOCK.type()), "Blocks it places."),
+                            ScriptType.field("asks", ScriptType.listOf(Shapes.POS.type()),
+                                    "Cells your owner is asked about first."),
+                            ScriptType.optional("why", ScriptType.STRING, "Why it can't be walked, or why only part "
+                                    + "was seen."))), "Leg by leg, in order.")));
+
+    /** 一条路线的数据({@link #ROUTE_CLASS})。 */
+    public static JsonObject info(Itinerary route) {
+        JsonObject o = new JsonObject();
+        o.addProperty("name", route.name());
+        JsonArray stops = new JsonArray();
+        route.legs().forEach(leg -> stops.add(leg.to().words()));
+        o.add("stops", stops);
+        o.addProperty("flags", route.flags());
+        o.addProperty("planned", route.plan() != null);
+        return o;
+    }
+
+    /** 一份计划的数据({@link #PLAN_CLASS})。 */
+    public static JsonObject planData(Itinerary route, Plan plan) {
+        JsonObject o = new JsonObject();
+        o.addProperty("route", route.name());
+        o.addProperty("walkable", plan.unreachable() < 0);
+        o.add("from", Shapes.pos(plan.from()));
+        JsonArray legs = new JsonArray();
+        for (Plan.Leg leg : plan.legs()) {
+            JsonObject l = new JsonObject();
+            l.addProperty("reach", leg.reach().name().toLowerCase(java.util.Locale.ROOT));
+            l.addProperty("steps", leg.steps());
+            l.addProperty("ticks", leg.ticks());
+            if (leg.end() != null) {
+                l.add("end", Shapes.pos(leg.end()));
+            }
+            l.add("breaks", blocks(leg.digs()));
+            l.add("places", blocks(leg.places()));
+            JsonArray asks = new JsonArray();
+            leg.asks().forEach(a -> asks.add(Shapes.pos(a.pos())));
+            l.add("asks", asks);
+            if (!leg.why().isEmpty()) {
+                l.addProperty("why", leg.why());
+            }
+            legs.add(l);
+        }
+        o.add("legs", legs);
+        return o;
+    }
+
+    private static JsonArray blocks(List<Plan.Cell> cells) {
+        JsonArray out = new JsonArray();
+        cells.forEach(c -> out.add(Shapes.block(c.pos(), c.block().defaultBlockState())));
+        return out;
+    }
+
     public static String stops(Itinerary route) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < route.legs().size(); i++) {

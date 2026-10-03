@@ -30,7 +30,7 @@ class PreparingTest {
                 slot.set(job);
                 replies.add(job + " accepted" + (readiness.words() == null ? "" : ": " + readiness.words()));
             } else {
-                replies.add(job + " refused: " + readiness.words());
+                replies.add(job + " refused: " + readiness.refusal().message());
             }
         });
     }
@@ -86,7 +86,7 @@ class PreparingTest {
         Preparing preparing = new Preparing();
         Searching search = new Searching();
         preparing.begin(call("walk", search));
-        search.answer = Preparation.Readiness.refused("found no path");
+        search.answer = Preparation.Readiness.refused(TaskResult.fail("found no path"));
         preparing.tick();
         assertEquals(List.of("walk refused: found no path"), replies);
         assertEquals("digging", slot.get(), "a refused call interrupted the work in hand");
@@ -95,7 +95,7 @@ class PreparingTest {
     @Test
     void aFailedPreconditionIsRefusedOnTheSpot() {
         Preparing preparing = new Preparing();
-        preparing.begin(call("fish", Preparation.refused("fish needs a fishing rod in inventory")));
+        preparing.begin(call("fish", Preparation.refused(TaskResult.fail("fish needs a fishing rod in inventory"))));
         assertEquals(List.of("fish refused: fish needs a fishing rod in inventory"), replies);
         assertEquals("digging", slot.get());
     }

@@ -1,5 +1,7 @@
 package com.dwinovo.numen.plugins.kaleidoscope;
 
+import com.dwinovo.numen.agent.script.ErrorKind;
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.permission.Action;
@@ -49,6 +51,9 @@ final class CookTask implements Task {
     private String allowance = "";
     /** 走到终态时说给模型听的那句话。 */
     private String outcome = "";
+    /** 失败收场时是哪一类、能照抄的下一步(没有为 null)。 */
+    private ErrorKind failKind = ErrorKind.FAILED;
+    private String failHint;
     /** 最后一次推进做了什么,超时收场时用它说清卡在哪一步。 */
     private String lastStep = "not started yet";
     private ItemStack plated = ItemStack.EMPTY;
@@ -72,9 +77,10 @@ final class CookTask implements Task {
             if (!settled(cook)) {
                 return null;
             }
-            String why = blocker(cook);
+            TaskResult why = blocker(cook);
             if (why == null) {
-                why = Cooker.at(cook.serverLevel(), r.pos).cannotStart(dish);
+                String taken = Cooker.at(cook.serverLevel(), r.pos).cannotStart(dish);
+                why = taken == null ? null : TaskResult.fail(ErrorKind.FAILED, taken, null);
             }
             return why == null ? Preparation.Readiness.ready(null) : Preparation.Readiness.refused(why);
         };
@@ -86,29 +92,30 @@ final class CookTask implements Task {
     }
 
     /**
-     * 此刻开不了工的原因:这一格不是锅、配方不成、她够不着;都没有为 null。认出配方时记下这道菜。锅空不空另判:下了第一手之后
-     * 锅就是我们的了。
+     * 此刻开不了工的那条失败:这一格不是锅、配方不成、她够不着;都没有为 null。认出配方时记下这道菜。锅空不空另判:下了第一手
+     * 之后锅就是我们的了。
      */
-    private String blocker(NumenPlayer cook) {
+    private TaskResult blocker(NumenPlayer cook) {
         ServerLevel level = cook.serverLevel();
         Cooker cooker = Cooker.at(level, r.pos);
         if (cooker == null) {
-            return "nothing at " + Cooker.where(r.pos) + " is a pot or a stockpot"
-                    + " (steamers, chopping boards, millstones and spits are not wired up yet)";
+            return TaskResult.fail(ErrorKind.NOT_FOUND, "nothing at " + Cooker.where(r.pos) + " is a pot or a "
+                    + "stockpot (steamers, chopping boards, millstones and spits are not wired up yet)", null);
         }
         if (dish == null) {
-            String bad = order(level);
+            TaskResult bad = order(level, cooker.kind());
             if (bad != null) {
                 return bad;
             }
         }
         if (!cook.canInteractWithBlock(r.pos, 0.0)) {
             double away = Math.sqrt(cook.distanceToSqr(r.pos.getX() + 0.5, r.pos.getY() + 0.5, r.pos.getZ() + 0.5));
-            return "the " + cooker.kind().id() + " at " + Cooker.where(r.pos) + " is "
-                    + String.format("%.1f", away) + " blocks away — out of working reach."
-                    + " `move.goto_({" + r.pos.getX() + ", " + r.pos.getY() + ", " + r.pos.getZ()
-                    + "}, {arrive = \"use\"})` first (it stands where the pot is in sight and in reach), then call "
-                    + KaleidoscopeCommands.line(KaleidoscopeCommands.COOK) + " again.";
+            // arrive = "use" 站到看得见、点得到锅的地方
+            return TaskResult.fail(ErrorKind.OUT_OF_REACH, "the " + cooker.kind().id() + " at "
+                    + Cooker.where(r.pos) + " is " + String.format("%.1f", away) + " blocks away — out of working "
+                    + "reach; walk there first, then call " + KaleidoscopeCommands.line(KaleidoscopeCommands.COOK)
+                    + " again", "move.goto_(" + Shapes.literal(r.pos) + ", {arrive = \"use\"})",
+                    Map.of("pos", Shapes.pos(r.pos)));
         }
         return null;
     }
@@ -120,9 +127,9 @@ final class CookTask implements Task {
         if (!settled(cook)) {
             return TaskState.RUNNING;
         }
-        String why = blocker(cook);
+        TaskResult why = blocker(cook);
         if (why != null) {
-            return failed(why);
+            return failed(why.kind(), why.message(), why.hint());
         }
         Cooker cooker = Cooker.at(level, r.pos);
         if (!permitted) {
@@ -164,20 +171,23 @@ final class CookTask implements Task {
     }
 
     /**
-     * 认菜:配方在不在、这个存档的投料量是多少;认不出是那句话,认出了记下、返回 null。锅空不空由上面每刻复核,不在这里判第二遍。
+     * 认菜:配方在不在、这个存档的投料量是多少;认不出是那条失败,认出了记下、返回 null。锅空不空由上面每刻复核,不在这里判
+     * 第二遍。
      */
-    private String order(ServerLevel level) {
+    private TaskResult order(ServerLevel level, Cookware cookware) {
         Dish ordered = Dish.byId(level, r.recipe);
         if (ordered == null) {
-            return "no pot or stockpot recipe has id " + r.recipe
+            String path = r.recipe.getPath();
+            return TaskResult.fail(ErrorKind.NOT_FOUND, "no pot or stockpot recipe has id " + r.recipe
                     + " — take the exact id from " + KaleidoscopeCommands.line(KaleidoscopeCommands.RECIPES)
-                    + ", do not guess it";
+                    + ", do not guess it", KaleidoscopeCommands.line(KaleidoscopeCommands.RECIPES) + "(\""
+                    + cookware.id() + "\", {name = \"" + path.substring(path.lastIndexOf('/') + 1) + "\"})");
         }
         int[] want = ordered.portions(level);
         if (want == null) {
-            return r.recipe + " is a flex recipe and no mix that fits the pot's 9 slots grades SUPERB"
-                    + " on this world, so there is no ratio to cook to — "
-                    + KaleidoscopeCommands.line(KaleidoscopeCommands.RECIPES) + " says the same";
+            return TaskResult.fail(ErrorKind.FAILED, r.recipe + " is a flex recipe and no mix that fits the pot's "
+                    + "9 slots grades SUPERB on this world, so there is no ratio to cook to — "
+                    + KaleidoscopeCommands.line(KaleidoscopeCommands.RECIPES) + " says the same", null);
         }
         dish = ordered;
         portions = want;
@@ -203,7 +213,7 @@ final class CookTask implements Task {
             switch (verdict.kind()) {
                 case ALLOW -> { }
                 case DENY -> {
-                    return failed("cannot " + action.describe() + ": " + verdict.reason());
+                    return failed(ErrorKind.DENIED, "cannot " + action.describe() + ": " + verdict.reason(), null);
                 }
                 case ASK -> asks.add(gate.consentItemLive(action, verdict, level));
             }
@@ -222,7 +232,7 @@ final class CookTask implements Task {
         }
         consent = null;
         if (!answer.allowed()) {
-            return failed(answer.refusal(asks));
+            return failed(ErrorKind.DENIED, answer.refusal(asks), null);
         }
         allowance = answer.allowance(asks);
         permitted = true;
@@ -230,7 +240,13 @@ final class CookTask implements Task {
     }
 
     private TaskState failed(String why) {
+        return failed(ErrorKind.FAILED, why, null);
+    }
+
+    private TaskState failed(ErrorKind kind, String why, String hint) {
         outcome = why;
+        failKind = kind;
+        failHint = hint;
         return TaskState.FAILED;
     }
 
@@ -243,7 +259,7 @@ final class CookTask implements Task {
     public TaskResult result(TaskState terminal) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("recipe", r.recipe.toString());
-        data.put("at", Cooker.where(r.pos));
+        data.put("pos", Shapes.pos(r.pos));
         if (!plated.isEmpty()) {
             data.put("plated", Dish.idOf(plated.getItem()));
         }
@@ -254,7 +270,7 @@ final class CookTask implements Task {
                     + "; last thing that happened: " + lastStep + "." + tail);
             case CANCELLED -> TaskResult.cancelled("stopped while cooking " + r.recipe
                     + "; last thing that happened: " + lastStep + "." + tail);
-            default -> TaskResult.fail(outcome + tail, data);
+            default -> TaskResult.fail(failKind, outcome + tail, failHint, data);
         };
     }
 }

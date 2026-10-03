@@ -1,6 +1,10 @@
 package com.dwinovo.numen.core.tools.work;
 
+import com.dwinovo.numen.agent.script.ApiError;
+import com.dwinovo.numen.agent.script.ErrorKind;
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.api.NumenApi;
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
@@ -65,6 +69,12 @@ public final class MoveCommands {
             .values("a runtime entity id from scan.entities")
             .whenOmitted("follow your owner");
 
+    /** 走完时的结果:她在哪、走的哪条路线、离终点还有多远。 */
+    static final ScriptType MOVED = ScriptType.table(
+            ScriptType.field("pos", Shapes.POS.type(), "Where you stand now (decimals)."),
+            ScriptType.field("route", ScriptType.STRING, "The route walked."),
+            ScriptType.field("distance_left", ScriptType.NUMBER, "Blocks from the destination; 0 or so when there."));
+
     private MoveCommands() {}
 
     public static void install(NumenApi numen) {
@@ -74,15 +84,16 @@ public final class MoveCommands {
 
     private static void actions(CommandGroup move) {
         move.server("go", "Walk a planned route from where you stand, keeping to its plan.", MoveCommands::go, ROUTE)
+                .returns(MOVED)
                 .example("move.go(\"home\")")
                 .example("move.go()")
                 .note("It only walks: plan the route first with `route.plan`, which lists every block the walk "
                         + "changes and every cell it asks your owner about. That plan is a promise: if the way from "
                         + "where you stand now would break, place or ask about any cell it did not list, it does not "
                         + "set off and says which. A route with no plan is refused with the line that plans it.")
-                .note("Background work: it plans the way from where you stand before it replies; an accepted walk's "
-                        + "reply carries the plan, the end arrives as a task_finished event. A walk that can't be made "
-                        + "is refused with the reason — no task id, no task_finished.")
+                .note("Background work: it plans the way from where you stand before it starts and returns when the "
+                        + "walk ends, with where you stand. A walk that can't be made fails before it starts: kind "
+                        + "no_path, or not_found for a route that is gone.")
                 .note("Every cell needing your owner's consent is asked about before the first step. On the way it "
                         + "changes only the cells of the plan; when the world changes so that the way on needs more, it "
                         + "stops and says which. A leg the plan saw only part of is walked all the same, worked out on "
@@ -92,6 +103,7 @@ public final class MoveCommands {
                 .seeAlso("route plan", "route new", "move goto_", "task stop");
         move.server("follow", "Tag along with your owner, or with an entity you name.", MoveCommands::follow, WHO,
                         DISTANCE, SECONDS)
+                .returns(ScriptType.table(ScriptType.field("pos", Shapes.POS.type(), "Where you stand at the end.")))
                 .example("move.follow()")
                 .example("move.follow(184, {distance = 5, seconds = 60})")
                 .note("Without seconds it is a standing job: there is nothing to finish, so it ends only when your "
@@ -112,8 +124,8 @@ public final class MoveCommands {
         String name = args.get(ROUTE) != null ? args.get(ROUTE) : Itinerary.gotoOf(her.getGameProfile().getName());
         Itinerary route = Routes.of(her.getServer(), her.getOwnerUuid()).get(name);
         if (route == null) {
-            throw new IllegalArgumentException("there is no route named " + name + "; `route.list()` shows the "
-                    + "routes you have, `route.new` makes one");
+            throw new ApiError(ErrorKind.NOT_FOUND, "there is no route named " + name + "; route.new makes one",
+                    "route.list()");
         }
         TaskDispatch.setTask(src.replayedWith(args.with(ROUTE, name)), new MoveToTaskRecord(src, name,
                 "走路线 " + name + ",去 " + route.destination().describe(), null));
@@ -137,8 +149,8 @@ public final class MoveCommands {
         }
         Entity target = named.in(companion.serverLevel());
         if (target == null || target == companion) {
-            src.reply(TaskResult.fail("no entity with id " + named
-                    + " is here — `scan.entities()` first, ids do not survive restarts").toJson());
+            src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, "no entity with id " + named
+                    + " is here — ids do not survive restarts", "scan.entities()").toJson());
             return;
         }
         EntityRef stable = EntityRef.of(target);

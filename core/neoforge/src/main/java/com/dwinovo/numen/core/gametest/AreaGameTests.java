@@ -51,13 +51,16 @@ public class AreaGameTests {
     }
 
     /** 回执里一个长方体的写法:两个对角 {@code x,y,z x,y,z}。 */
-    private static String box(BlockPos a, BlockPos b) {
-        return a.getX() + "," + a.getY() + "," + a.getZ() + " " + b.getX() + "," + b.getY() + "," + b.getZ();
+    private static com.google.gson.JsonArray box(BlockPos a, BlockPos b) {
+        com.google.gson.JsonArray corners = new com.google.gson.JsonArray();
+        corners.add(com.dwinovo.numen.cli.Shapes.pos(a));
+        corners.add(com.dwinovo.numen.cli.Shapes.pos(b));
+        return corners;
     }
 
-    /** 一个长方体的两个对角写成脚本里的 {@code {x1, y1, z1, x2, y2, z2}}。 */
+    /** 一个长方体的两个对角写成脚本里的 {@code {from, to}},各是一格 Pos。 */
     private static String luaBox(BlockPos a, BlockPos b) {
-        return "{" + a.getX() + ", " + a.getY() + ", " + a.getZ() + ", " + b.getX() + ", " + b.getY() + ", " + b.getZ() + "}";
+        return "{" + xyz(a) + ", " + xyz(b) + "}";
     }
 
     /**
@@ -95,9 +98,9 @@ public class AreaGameTests {
                     "the head does not sum the area up: " + said);
             JsonObject g2 = groupHolding(groupsIn(shown[0].reply()), far);
             helper.assertTrue(g2 != null && "purpur/g2".equals(g2.get("id").getAsString())
-                            && g2.get("cells").getAsInt() == 2
+                            && g2.get("count").getAsInt() == 2
                             && g2.getAsJsonObject("blocks").get("minecraft:purpur_block").getAsInt() == 2
-                            && box(far, farTop).equals(g2.get("box").getAsString())
+                            && box(far, farTop).equals(g2.get("box"))
                             && "allow".equals(g2.get("permission").getAsString()),
                     "the part does not show its cells, blocks, box and permission: " + g2);
             CompanionFactory.despawn(level.getServer(), companion);
@@ -137,15 +140,18 @@ public class AreaGameTests {
 
                     level.setBlockAndUpdate(farTop, Blocks.STONE.defaultBlockState());
                     ToolRun changed = lua(companion, "area.has(\"beads/g2\")");
-                    helper.assertTrue(changed.succeeded() && message(changed).startsWith(
+                    helper.assertTrue(changed.succeeded() && dataIn(changed.reply()).get("left").getAsInt() == 1
+                                    && dataIn(changed.reply()).get("nearest").equals(com.dwinovo.numen.cli.Shapes.pos(far))
+                                    && message(changed).startsWith(
                                     "beads/g2 has 1 cell(s) left to dig, the nearest at " + far.getX() + "," + far.getY()
                                             + "," + far.getZ()),
                             "area has counts a cell that no longer holds the scanned block: " + changed.reply());
 
                     level.setBlockAndUpdate(far, Blocks.AIR.defaultBlockState());
                     ToolRun gone = lua(companion, "area.has(\"beads/g2\")");
-                    helper.assertTrue(!gone.succeeded() && message(gone).startsWith("beads/g2 has nothing left to dig"),
-                            "area has does not fail once nothing of g2 is left: " + gone.reply());
+                    helper.assertTrue(gone.succeeded() && !dataIn(gone.reply()).get("has").getAsBoolean()
+                                    && message(gone).startsWith("beads/g2 has nothing left to dig"),
+                            "area has does not answer false once nothing of g2 is left: " + gone.reply());
                     ToolRun rest = lua(companion, "area.has(\"beads\")");
                     helper.assertTrue(rest.succeeded() && message(rest).startsWith("beads has 1 cell(s) left to dig"),
                             "area has does not see the part still standing: " + rest.reply());
@@ -226,9 +232,12 @@ public class AreaGameTests {
             }
             helper.assertTrue(kept[0].reply() != null, "the scan into grid has not replied");
             String summary = message(kept[0]);
+            // 话里只列最近五团;交给程序的数据是全部 64 团(数据不分页,脚本要几团自己取)
             helper.assertTrue(kept[0].succeeded() && summary.startsWith("64 group(s)")
                             && summary.contains("as g1 to g64") && summary.contains("the nearest 5 follow")
-                            && summary.contains("area.show(\"grid\")") && groupsIn(kept[0].reply()).size() == 5,
+                            && summary.contains("area.show(\"grid\")")
+                            && summary.lines().filter(l -> l.startsWith("{")).count() == 5
+                            && groupsIn(kept[0].reply()).size() == 64,
                     "the reply is not a summary with the nearest five: " + summary);
             helper.assertTrue(areas(companion).get("grid").parts().size() == 64,
                     "the area does not hold all 64 groups");

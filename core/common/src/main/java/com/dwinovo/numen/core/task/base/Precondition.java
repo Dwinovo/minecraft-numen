@@ -31,6 +31,15 @@ public interface Precondition {
      */
     Failure check();
 
-    /** A precondition's verdict when it is NOT satisfied. */
-    record Failure(String message, FailureType type) {}
+    /**
+     * A precondition's verdict when it is NOT satisfied.
+     *
+     * @param hint 能照抄的下一步(走过去的那一行);没有为 null
+     */
+    record Failure(String message, FailureType type, String hint) {
+
+        public Failure(String message, FailureType type) {
+            this(message, type, null);
+        }
+    }
 }

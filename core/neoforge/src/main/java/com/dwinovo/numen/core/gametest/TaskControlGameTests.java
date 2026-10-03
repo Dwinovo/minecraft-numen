@@ -3,6 +3,7 @@ package com.dwinovo.numen.core.gametest;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.NumenPlugins;
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
@@ -64,6 +65,7 @@ public class TaskControlGameTests {
                             g.server("linger", "Stand still for a while, as background work.",
                                     (src, args) -> TaskDispatch.setTask(src, new LingerRecord(src, args.get(TICKS))),
                                     TICKS)
+                                    .returns(ScriptType.NOTHING)
                                     .example("gt_long.linger(40)")));
             TaskFactory.register(LingerRecord.class, (body, record) -> new Linger(record));
         }
@@ -466,7 +468,7 @@ public class TaskControlGameTests {
     public static void a_query_after_a_goto_in_one_round_runs_on_arrival(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_arriver", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
-        LlmToolCall walk = programCall("move.goto_({" + far.getX() + ", " + far.getZ() + "})");
+        LlmToolCall walk = programCall("move.goto_({x = " + far.getX() + ", z = " + far.getZ() + "})");
         LlmToolCall look = programCall("return status.self()");
         Round round = round(helper, companion, walk, look);
         EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
@@ -476,7 +478,7 @@ public class TaskControlGameTests {
             Vec3 at = round.startedAt(look);
             double off = Math.hypot(at.x - (far.getX() + 0.5), at.z - (far.getZ() + 0.5));
             helper.assertTrue(off < 1.5, "status self ran " + off + " blocks from where the walk ends");
-            helper.assertTrue(round.result(look).contains("\"position\""), "status self did not answer: "
+            helper.assertTrue(round.result(look).contains("\"pos\""), "status self did not answer: "
                     + round.result(look));
             outbox.forget(companion.getUUID());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -508,7 +510,7 @@ public class TaskControlGameTests {
     public static void the_owner_speaking_while_she_walks_leaves_the_rest_unrun(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_interrupted", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
-        LlmToolCall walk = programCall("move.goto_({" + far.getX() + ", " + far.getZ() + "})");
+        LlmToolCall walk = programCall("move.goto_({x = " + far.getX() + ", z = " + far.getZ() + "})");
         LlmToolCall look = programCall("return status.self()");
         LlmToolCall around = programCall("scan.around()");
         Round round = round(helper, companion, walk, look, around);
@@ -543,14 +545,14 @@ public class TaskControlGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_changed_mind", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
         BlockPos near = helper.absolutePos(new BlockPos(2, 2, 8));
-        ToolRun walk = lua(companion, "move.goto_({" + far.getX() + ", " + far.getZ() + "})");
+        ToolRun walk = lua(companion, "move.goto_({x = " + far.getX() + ", z = " + far.getZ() + "})");
         AtomicReference<ToolRun> instead = new AtomicReference<>();
         EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(walk.accepted(), "the first walk has not been accepted: "
                         + walk.reply()))
-                .thenExecuteAfter(3, () -> instead.set(lua(companion, "move.goto_({" + near.getX() + ", " + near.getZ() + "})")))
+                .thenExecuteAfter(3, () -> instead.set(lua(companion, "move.goto_({x = " + near.getX() + ", z = " + near.getZ() + "})")))
                 .thenWaitUntil(() -> {
                     String reply = instead.get().reply();
                     helper.assertTrue(reply != null, "the second walk has not replied");

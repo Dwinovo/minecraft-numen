@@ -337,14 +337,11 @@ final class CompanionBrain {
                     case CANCELLED -> "stopped";
                     default -> "failed";
                 };
-                String msg = result == null ? "no result produced" : result.message();
                 com.dwinovo.numen.event.NumenEvents.taskFinished(
-                        companion, rec.publicId(), rec.getToolName(), status, msg);
+                        companion, rec.publicId(), rec.getToolName(), status, result);
                 continue;
             }
-            rec.reply().accept(result == null
-                    ? "{\"success\":false,\"message\":\"no result produced\"}"
-                    : result.toJson());
+            rec.reply().accept(result.toJson());
         }
     }
 }

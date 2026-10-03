@@ -91,7 +91,7 @@ public final class WalledChest implements Scenario {
     @Override
     public String solution(Scene scene) {
         BlockPos chest = scene.pos(CHEST);
-        String cell = "{" + chest.getX() + ", " + chest.getY() + ", " + chest.getZ() + "}";
+        String cell = "{x = " + chest.getX() + ", y = " + chest.getY() + ", z = " + chest.getZ() + "}";
         return """
                 move.goto_(%1$s, {arrive = "use"})
                 use.block(%1$s)

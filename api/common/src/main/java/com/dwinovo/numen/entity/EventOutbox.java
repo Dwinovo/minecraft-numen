@@ -100,9 +100,9 @@ public final class EventOutbox extends SavedData {
         return queues.computeIfAbsent(companionUuid, k -> new EventQueue(EventQueue.Journal.NONE));
     }
 
-    /** 攒一条。 */
-    public void put(UUID companionUuid, String type, String text, long now, boolean urgent) {
-        queue(companionUuid).push(type, text, now, urgent);
+    /** 攒一条;一件身体活收尾的那条带着它的结果(在等它的程序读的就是它),结果不落盘。 */
+    public void put(UUID companionUuid, EventQueue.Entry entry) {
+        queue(companionUuid).push(entry.type(), entry.text(), entry.ts(), entry.urgent(), entry.result());
         setDirty();
     }
 

@@ -83,6 +83,9 @@ public final class BuildTaskRecord extends TaskRecord {
      */
     public final Built.Site site;
 
+    /** 按格找目标({@link #targetAt});第一次问时建。 */
+    private Map<Long, Target> byCell;
+
     private int placed;
     private int replaced;
     private int broken;
@@ -113,6 +116,16 @@ public final class BuildTaskRecord extends TaskRecord {
         this.cellNeeds = layout.cellNeeds();
         this.droppedAtLoad = layout.dropped();
         this.site = site;
+    }
+
+    /** 这一格的目标;不在这件活里是 null。 */
+    public Target targetAt(BlockPos pos) {
+        if (byCell == null) {
+            Map<Long, Target> index = new java.util.HashMap<>(targets.size() * 2);
+            targets.forEach(t -> index.put(t.pos().asLong(), t));
+            byCell = index;
+        }
+        return byCell.get(pos.asLong());
     }
 
     /**

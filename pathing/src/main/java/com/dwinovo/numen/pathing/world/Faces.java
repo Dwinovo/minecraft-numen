@@ -1,6 +1,8 @@
 package com.dwinovo.numen.pathing.world;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 
 import net.minecraft.core.BlockPos;
@@ -24,6 +26,35 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 public final class Faces {
 
     private Faces() {}
+
+    /** 放方块时点的那一下:点 {@code clicked} 这一格的 {@code side} 面上的 {@code point}。 */
+    public record Face(BlockPos clicked, Direction side, Vec3 point) {}
+
+    /**
+     * 眼睛在 {@code eye}、交互距离 {@code range} 时,往 {@code target} 放 {@code placing} 点得中的那个面:能贴的面由
+     * {@link #against} 给,点在 {@link #hitPoint};眼睛要在那个面朝外的一侧,射线({@link Sight})第一下碰上它,够得着,放下去
+     * 落在 {@code target}。一个都点不中为 null。优先点下面那一格的顶面。规划判"站在这里放得下"与执行时瞄哪一点问的都是它。
+     */
+    public static Face inSight(BlockGetter level, Vec3 eye, double range, BlockPos target, Block placing) {
+        List<Direction> sides = new ArrayList<>(against(level, target, placing));
+        sides.sort((a, b) -> Boolean.compare(b == Direction.DOWN, a == Direction.DOWN));
+        for (Direction dir : sides) {
+            BlockPos clicked = target.relative(dir);
+            Direction side = dir.getOpposite();
+            Vec3 onFace = hitPoint(level, target, dir);
+            Vec3 point = Sight.inset(onFace, side);
+            if (!Sight.facing(eye, onFace, side) || onFace.distanceTo(eye) >= range) {
+                continue;
+            }
+            if (!target.equals(Replaceable.landing(level, clicked, side, placing))) {
+                continue;
+            }
+            if (Sight.trace(level, eye, point, clicked).clear(side)) {
+                return new Face(clicked, side, point);
+            }
+        }
+        return null;
+    }
 
     /**
      * 往 {@code target} 放 {@code placing} 时,可以点的邻格所在的方向(从 {@code target} 看过去)。点的是那个邻格朝向

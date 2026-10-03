@@ -66,6 +66,7 @@ class RouteSpecFlagsTest {
                     LAST.set(RouteSpecFlags.parse(args, BASE.get(), AREAS));
                     src.reply(TaskResult.ok("read").toJson());
                 }, RouteSpecFlags.PARAMS.toArray(Param<?>[]::new))
+                        .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
                         .example("gt_route.plan({alter = \"natural\", avoid = {\"water\"}})"));
     }
 
@@ -82,7 +83,8 @@ class RouteSpecFlagsTest {
         assertFalse(run.ok(), options + " should fail");
         String message = run.message();
         String error = message.substring(message.indexOf("gt_route.plan: ") + "gt_route.plan: ".length());
-        return error.startsWith("error: ") ? error.substring("error: ".length()) : error;
+        assertTrue(error.startsWith("bad_argument — "), "规格写错是参数错: " + error);
+        return error.substring("bad_argument — ".length());
     }
 
     private static CoreScripts.Run run(String options) {
@@ -98,7 +100,7 @@ class RouteSpecFlagsTest {
         BASE.set(base);
         try {
             assertSame(base, spec(""));
-            RouteSpec kept = spec("avoid_break = {\"1,2,3\", \"minecraft:oak_log\"}");
+            RouteSpec kept = spec("avoid_break = {{x = 1, y = 2, z = 3}, \"minecraft:oak_log\"}");
             assertEquals(RouteSpec.Alter.ANY, kept.alter());
             assertTrue(kept.positions().forbids(Use.DIG, new BlockPos(1, 2, 3).asLong()));
             assertTrue(kept.bans().breaking().contains(Blocks.CHEST));
@@ -139,7 +141,7 @@ class RouteSpecFlagsTest {
 
     @Test
     void cellsAndAreasGoIntoThePositionTable() {
-        RouteSpec s = spec("avoid_break = \"1,2,3\", avoid_place = \"area:house\", avoid_step = \"-5,60,-7\"");
+        RouteSpec s = spec("avoid_break = {x = 1, y = 2, z = 3}, avoid_place = \"area:house\", avoid_step = {x = -5, y = 60, z = -7}");
         assertTrue(s.positions().forbids(Use.DIG, new BlockPos(1, 2, 3).asLong()));
         assertFalse(s.positions().forbids(Use.PLACE, new BlockPos(1, 2, 3).asLong()));
         HOUSE.cells().forEach((x, y, z, seen) -> assertTrue(s.positions().forbids(Use.PLACE, BlockPos.asLong(x, y, z)),
@@ -233,7 +235,7 @@ class RouteSpecFlagsTest {
     @Test
     void blockIdsBecomeKindBans() {
         RouteSpec s = spec("avoid_break = {\"minecraft:chest\", \"oak_log\"}, avoid_place = \"water\", "
-                + "avoid_step = {\"minecraft:farmland\", \"4,5,6\"}");
+                + "avoid_step = {\"minecraft:farmland\", {x = 4, y = 5, z = 6}}");
         assertTrue(s.bans().breaking().contains(Blocks.CHEST));
         assertTrue(s.bans().breaking().contains(Blocks.OAK_LOG));
         assertFalse(s.bans().breaking().contains(Blocks.STONE));

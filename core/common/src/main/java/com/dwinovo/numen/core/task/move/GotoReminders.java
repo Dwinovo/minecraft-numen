@@ -35,13 +35,13 @@ public final class GotoReminders {
 
     /** arrive 是 use 或 dig 却只给了一列。 */
     public static String blockNeedsY(String arrive) {
-        return "arrive = \"" + arrive + "\" names one block — give its y too ({x, y, z}).";
+        return "arrive = \"" + arrive + "\" names one block — give its y too ({x = …, y = …, z = …}).";
     }
 
     /** 只给了高度,却写了别的到达方式。 */
     public static String heightTakesNoArrive(String arrive) {
         return "a single number is a height to climb or descend to; arrive = \"" + arrive
-                + "\" needs a place ({x, z}, or {x, y, z}).";
+                + "\" needs a place ({x = …, z = …}, or {x = …, y = …, z = …}).";
     }
 
     /**
@@ -63,7 +63,7 @@ public final class GotoReminders {
         String there = ground == null ? "" : " (the ground in that column is at y=" + ground.getY() + ": "
                 + call(ground, "") + ")";
         return Listing.coords(pos) + " is in mid-air — nothing to stand on there" + there
-                + ". Give {x, z} alone to go to that column; to pillar up to it, add alter = \"natural\".";
+                + ". Give {x = …, z = …} alone to go to that column; to pillar up to it, add alter = \"natural\".";
     }
 
     /** arrive = "use" 指向没有可点的轮廓的格:空气、流体。 */
@@ -100,7 +100,7 @@ public final class GotoReminders {
         Cover nearest = covers.get(0);
         return sb.append(". Dig one of them open — the ").append(nearest.face()).append(" one is nearest me: ")
                 .append(call(nearest.at(), "arrive = \"dig\"")).append(", then `work.dig(")
-                .append(NavText.lua(Place.cell(nearest.at()))).append(")` — then ").append(call(pos, "arrive = \"use\""))
+                .append(Place.cell(nearest.at()).literal()).append(")` — then ").append(call(pos, "arrive = \"use\""))
                 .append(" again.").toString();
     }
 

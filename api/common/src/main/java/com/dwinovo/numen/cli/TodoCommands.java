@@ -1,6 +1,7 @@
 package com.dwinovo.numen.cli;
 
 import com.dwinovo.numen.agent.script.ScriptEngine;
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -75,6 +76,7 @@ public final class TodoCommands {
                 todo.client(WRITE, "Write down the whole plan for work of several physical phases; each call "
                                 + "replaces it.", (src, args) -> src.reply(write(args.get(ITEMS))), ITEMS)
                         .echoed()
+                        .returns(ScriptType.NOTHING)
                         .example("todo.write({\"[x] walk to the mine\", \"[>] dig the iron\", \"[ ] smelt it\"})")
                         .note("Write it before the first physical step, and again right after each verified result "
                                 + "to mark the finished step [x] and move exactly one step to [>]. While work remains "

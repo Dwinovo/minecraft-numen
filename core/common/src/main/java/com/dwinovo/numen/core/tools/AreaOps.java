@@ -8,6 +8,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.UnaryOperator;
 
+import com.dwinovo.numen.agent.script.ApiError;
+import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.area.Area;
 import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.area.AreaStore;
@@ -16,6 +18,7 @@ import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.Names;
 import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.core.build.Built;
 import com.dwinovo.numen.core.nav.NamedAreas;
 import com.dwinovo.numen.core.route.Itinerary;
@@ -27,6 +30,7 @@ import com.dwinovo.numen.permission.Gate;
 import com.dwinovo.numen.permission.Permission;
 import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.task.TaskResult;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -130,17 +134,18 @@ public final class AreaOps {
         ResourceKey<Level> dimension = her.level().dimension();
         src.authorize(Action.editArea(name), what, allowed -> {
             requireNew(her, name);
-            store(her).create(name, Area.empty(dimension));
+            Area made = Area.empty(dimension);
+            store(her).create(name, made);
             allowed.reply(TaskResult.ok("made area " + name + " in " + dimension.location() + ", empty. Add to it with "
                     + "area.add(\"" + name + "\", {box = ...}) (or at, built, route), or scan.blocks(<block ids>, "
-                    + "{into = \"" + name + "\"}) to add what a scan finds.").toJson());
+                    + "{into = \"" + name + "\"}) to add what a scan finds.", AreaText.info(name, made)).toJson());
         });
     }
 
     private static void requireNew(NumenPlayer her, String name) {
         if (store(her).get(name) != null) {
-            throw new IllegalArgumentException("there is already an area named " + name + "; area.show(\"" + name
-                    + "\") shows it, area.delete(\"" + name + "\") removes it");
+            throw new ApiError(ErrorKind.FAILED, "there is already an area named " + name + "; area.show(\"" + name
+                    + "\") shows it", "area.delete(\"" + name + "\")");
         }
     }
 
@@ -160,7 +165,7 @@ public final class AreaOps {
      */
     static Cells boxCells(List<BlockPos> corners) {
         if (corners.size() != 2) {
-            throw new IllegalArgumentException("a box is two corners, x1 y1 z1 x2 y2 z2; got " + corners.size()
+            throw new IllegalArgumentException("a box is two corners {from, to}, each a Pos; got " + corners.size()
                     + " cell(s)");
         }
         BlockPos a = corners.get(0);
@@ -193,8 +198,8 @@ public final class AreaOps {
                         "the " + cells.size() + " cells " + name + " was built of");
             }
         }
-        throw new IllegalArgumentException("there is no building named " + name + "; build.built() lists them"
-                + (all.isEmpty() ? " (none yet)" : ""));
+        throw new ApiError(ErrorKind.NOT_FOUND, "there is no building named " + name
+                + (all.isEmpty() ? " (none yet)" : ""), "build.built()");
     }
 
     /** 一条路线最近一次计划要改的格:要挖的与要放的。 */
@@ -202,7 +207,7 @@ public final class AreaOps {
         store(her);
         Itinerary route = Routes.of(her.getServer(), her.getOwnerUuid()).get(name);
         if (route == null) {
-            throw new IllegalArgumentException("there is no route named " + name + "; route.list() shows the routes");
+            throw new ApiError(ErrorKind.NOT_FOUND, "there is no route named " + name, "route.list()");
         }
         if (route.plan() == null) {
             throw new IllegalArgumentException("route " + name + " has no plan yet; route.plan(\"" + name
@@ -232,8 +237,10 @@ public final class AreaOps {
             Area next = existing(her, name).with(source.kind(), source.cells());
             store(her).replace(name, next);
             Area.Part added = next.parts().get(next.parts().size() - 1);
+            JsonObject data = AreaText.info(name, next);
+            data.addProperty("added", name + "/" + added.id());
             allowed.reply(TaskResult.ok("added " + name + "/" + added.id() + ": " + source.words() + ", "
-                    + added.cells().size() + " cells. " + AreaText.summary(name, next) + ".").toJson());
+                    + added.cells().size() + " cells. " + AreaText.summary(name, next) + ".", data).toJson());
         });
     }
 
@@ -251,8 +258,8 @@ public final class AreaOps {
         src.authorize(Action.editArea(name), what, allowed -> {
             Area next = existing(her, name).without(part);
             store(her).replace(name, next);
-            allowed.reply(TaskResult.ok("dropped " + name + "/" + part + ". " + AreaText.summary(name, next) + ".")
-                    .toJson());
+            allowed.reply(TaskResult.ok("dropped " + name + "/" + part + ". " + AreaText.summary(name, next) + ".",
+                    AreaText.info(name, next)).toJson());
         });
     }
 
@@ -277,7 +284,7 @@ public final class AreaOps {
         Recheck first = recheck(area, her.serverLevel());
         if (first.stale().isEmpty()) {
             src.reply(TaskResult.ok("all " + first.checked() + " scanned cells of " + name + " still hold what was "
-                    + "seen" + first.unloadedClause() + "; nothing to strike.").toJson());
+                    + "seen" + first.unloadedClause() + "; nothing to strike.", AreaText.info(name, area)).toJson());
             return;
         }
         src.authorize(Action.editArea(name), what, allowed -> {
@@ -288,7 +295,7 @@ public final class AreaOps {
             store(her).replace(name, next);
             allowed.reply(TaskResult.ok("struck off " + check.stale().size() + " of the " + check.checked()
                     + " scanned cells of " + name + ": they no longer hold what was seen" + check.unloadedClause()
-                    + ". " + AreaText.summary(name, next) + ".").toJson());
+                    + ". " + AreaText.summary(name, next) + ".", AreaText.info(name, next)).toJson());
         });
     }
 
@@ -333,7 +340,8 @@ public final class AreaOps {
         src.authorize(Action.editArea(result), what, allowed -> {
             requireNew(her, result);
             store(her).create(result, computed);
-            allowed.reply(TaskResult.ok("made area " + AreaText.summary(result, computed) + ".").toJson());
+            allowed.reply(TaskResult.ok("made area " + AreaText.summary(result, computed) + ".",
+                    AreaText.info(result, computed)).toJson());
         });
     }
 
@@ -365,17 +373,20 @@ public final class AreaOps {
         Gate gate = Permission.gateFor(her);
         BlockPos feet = her.blockPosition();
         List<String> rows = new ArrayList<>(shown.parts().size());
+        JsonArray parts = new JsonArray();
         for (Area.Part part : shown.parts()) {
             JsonObject row = AreaText.part(ref.name() + "/" + part.id(), part.cells(), feet);
-            row.addProperty("box", AreaText.box(part.cells().bounds()));
+            row.add("box", AreaText.boxJson(part.cells().bounds()));
             judgeNow(row, part.cells(), gate, level);
             rows.add(row.toString());
+            parts.add(row);
         }
         String head = "area " + AreaText.summary(ref.name(), whole)
                 + (shown.parts().isEmpty() ? "." : (ref.part() == null ? "" : "; showing " + ref.part()) + ". One part "
                         + "per line: blocks are as they were seen when added (framed parts carry none), permission is "
                         + "asked now for breaking what stands in each cell:");
-        return new Listing(head, rows, "", AreaText.PAGE_BYTES).result(args).toJson();
+        return new Listing(head, rows, "", AreaText.PAGE_BYTES)
+                .result(args, Map.of("area", AreaText.info(ref.name(), whole), "parts", parts)).toJson();
     }
 
     /**
@@ -438,7 +449,8 @@ public final class AreaOps {
 
     /**
      * 这块区域(或一部分)还有没有要挖的格:每一格按 {@code work dig} 的判据({@link DigTaskRecord#wants}:扫描来的格还是当时那种
-     * 方块,框出来的格立着方块)在活世界里问,没加载的读不到、不算。有就成功,没有就失败——成败即答案,回执一句话。
+     * 方块,框出来的格立着方块)在活世界里问,没加载的读不到、不算。答案是数据里的 {@code has}(脚本里 {@code area.has} 直接返回
+     * 它),还剩几格、最近一格也在数据里;回执一句话。
      */
     public static String has(NumenPlayer her, AreaRef ref) {
         Area area = resolve(her, ref);
@@ -461,10 +473,15 @@ public final class AreaOps {
             }
         });
         String unloaded = counts[1] == 0 ? "" : "; " + counts[1] + " cell(s) lie in unloaded terrain and were not read";
-        // has 是脚本里 area.has 直接返回的那个布尔:成败都带着它,没剩是 false 而不是报错
-        Map<String, Object> data = Map.of("has", counts[0] > 0, "left", counts[0], "cells", area.cells().size());
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("has", counts[0] > 0);
+        data.put("left", counts[0]);
+        data.put("count", area.cells().size());
+        if (nearest[0] != null) {
+            data.put("nearest", Shapes.pos(nearest[0]));
+        }
         if (counts[0] == 0) {
-            return TaskResult.fail(ref + " has nothing left to dig (" + area.cells().size() + " cell(s), all gone or "
+            return TaskResult.ok(ref + " has nothing left to dig (" + area.cells().size() + " cell(s), all gone or "
                     + "changed since they were added)" + unloaded + ".", data).toJson();
         }
         return TaskResult.ok(ref + " has " + counts[0] + " cell(s) left to dig, the nearest at "
@@ -474,11 +491,15 @@ public final class AreaOps {
     /** 主人的全部区域,一块一行。 */
     public static String list(NumenPlayer her, CommandArgs args) {
         List<String> rows = new ArrayList<>();
-        store(her).all().forEach((name, area) -> rows.add(AreaText.summary(name, area)));
+        JsonArray areas = new JsonArray();
+        store(her).all().forEach((name, area) -> {
+            rows.add(AreaText.summary(name, area));
+            areas.add(AreaText.info(name, area));
+        });
         String head = rows.isEmpty()
                 ? "No areas yet: scan.blocks(<block ids>, {into = <name>}) makes one from what a scan finds; "
                         + "area.new(<name>) makes an empty one."
                 : "Areas of your owner, shared by all of their companions:";
-        return new Listing(head, rows, "").result(args).toJson();
+        return new Listing(head, rows, "").result(args, Map.of("areas", areas)).toJson();
     }
 }

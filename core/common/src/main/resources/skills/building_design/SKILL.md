@@ -81,10 +81,10 @@ want for a room.
 Seven primitives, all geometry, no style. What you build with them is yours.
 Each is one call: run it on its own and it is placed at once, at world
 coordinates, as far as your hand reaches from where you stand; add `into` and it
-becomes the next step of a design. The cells come first (a cell is `{x, y, z}`),
+becomes the next step of a design. The cells come first (a cell is `{x = …, y = …, z = …}`),
 the block is the `block` option — without it, the block in your main hand.
 
-- `layer` — a character grid with a `legend`, stamped at one level (`at = {x, y, z}`
+- `layer` — a character grid with a `legend`, stamped at one level (`at = {x = …, y = …, z = …}`
   is where the first character goes), or repeated up to the level `up_to`
   names. The first row sits at that z and runs +x,
   so the grid reads like a map: north at the top, east to the right. `' '` and
@@ -105,14 +105,14 @@ the block is the `block` option — without it, the block in your main hand.
 A small house, written as a design:
 ```
 build.new("cottage")
-build.layer("#######", "#######", "#######", "#######", "#######", {at = {0, 0, 0}, block = "cobblestone", into = "cottage"})
-build.layer("#######", "#.....#", "#.....#", "#.....#", "#######", {at = {0, 1, 0}, block = "oak_planks*8, spruce_planks*2", up_to = 3, into = "cottage"})
+build.layer("#######", "#######", "#######", "#######", "#######", {at = {x = 0, y = 0, z = 0}, block = "cobblestone", into = "cottage"})
+build.layer("#######", "#.....#", "#.....#", "#.....#", "#######", {at = {x = 0, y = 1, z = 0}, block = "oak_planks*8, spruce_planks*2", up_to = 3, into = "cottage"})
 build.show("cottage", {layer = 1})
-build.layer("#", {at = {3, 1, 4}, block = "air", up_to = 2, into = "cottage"})
-build.set({3, 1, 4}, {block = "oak_door[facing=north]", into = "cottage"})
+build.layer("#", {at = {x = 3, y = 1, z = 4}, block = "air", up_to = 2, into = "cottage"})
+build.set({x = 3, y = 1, z = 4}, {block = "oak_door[facing=north]", into = "cottage"})
 build.show("cottage", {layer = 1})
 build.show("cottage")
-build.raise("cottage", {at = {120, 64, -35}})
+build.raise("cottage", {at = {x = 120, y = 64, z = -35}})
 ```
 
 The doorway and the door are in the same cell of the south wall (z=4), and the
@@ -475,7 +475,7 @@ reads it as texture rather than as a pattern.
   — run again on the same spot, they change the building to match; block states ride in the block name; `air` clears; `mask` decides what
   may be overwritten; later steps overwrite earlier cells, so details go last
 - a primitive without `into` is placed at once, at world coordinates, within reach: a
-  single `build.place({120, 64, -35}, {block = "crafting_table"})` is the quick way to put one block down
+  single `build.place({x = 120, y = 64, z = -35}, {block = "crafting_table"})` is the quick way to put one block down
 - whole structure files: `build.designs` lists them with the designs, `build.show`
   prices one, `build.raise` builds it; liquids are always skipped
 - `build.built` lists what has been built and where

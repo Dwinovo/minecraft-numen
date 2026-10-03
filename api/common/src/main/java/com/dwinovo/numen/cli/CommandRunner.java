@@ -1,6 +1,7 @@
 package com.dwinovo.numen.cli;
 
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.task.TaskResult;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.ParseResults;
@@ -66,13 +67,14 @@ public final class CommandRunner {
     /** 第 0 层的一行:解析、过权限层、执行。 */
     static void mc(ServerSource call, String line) {
         if (line.isEmpty()) {
-            call.reply(TaskResult.fail("there is no command to run.").toJson());
+            call.reply(TaskResult.fail(ErrorKind.BAD_ARGUMENT, "there is no command to run.", McCommands.call("help"))
+                    .toJson());
             return;
         }
         NumenPlayer her = call.companion();
         String problem = problem(her.getServer().getCommands().getDispatcher(), line, her.createCommandSourceStack());
         if (problem != null) {
-            call.reply(TaskResult.fail(problem).toJson());
+            call.reply(TaskResult.fail(ErrorKind.BAD_ARGUMENT, problem, null).toJson());
             return;
         }
         com.dwinovo.numen.permission.Action command = com.dwinovo.numen.permission.Action.command(line,
@@ -113,7 +115,8 @@ public final class CommandRunner {
 
     /** 没做这件事的回执:{@code what} 是这次调用要做的事(一行指令、一行命令),理由是规则、模式或主人的原话。 */
     static String refused(String what, String why) {
-        return TaskResult.fail("did not run " + what + ": " + why, Map.of("command", what)).toJson();
+        return TaskResult.fail(ErrorKind.DENIED, "did not run " + what + ": " + why, null, Map.of("command", what))
+                .toJson();
     }
 
     /**

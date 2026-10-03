@@ -83,12 +83,13 @@ public final class RoutePlanning {
         this.from = Feet.cell(her);
         this.at = her.server.overworld().getGameTime();
         NamedAreas areas = NamedAreas.of(her);
+        RouteSpec base = RouteFlags.base(her);
         // 每一段从上一段去的那一格算起:区域按离它的远近挑成员,坐标缺的那一截照它补
         BlockPos start = from;
         for (int i = first; i < route.legs().size(); i++) {
             Destination.Stop stop = route.legs().get(i).to();
             try {
-                RouteSpec spec = RouteFlags.spec(route, i, areas);
+                RouteSpec spec = RouteFlags.spec(base, route, i, areas);
                 Destination to = Destination.of(her, stop, spec, areas, start);
                 legs.add(new Leg(new Survey.Leg(to.goal(), spec), to));
                 start = to.toward();

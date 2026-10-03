@@ -9,6 +9,8 @@ import com.github.tartaricacid.touhoulittlemaid.entity.ai.brain.MaidSchedule;
 import com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid;
 import com.github.tartaricacid.touhoulittlemaid.inventory.container.AbstractMaidContainer;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
@@ -150,9 +152,11 @@ public class TlmGameTests {
         ToolRun task = lua(her, "tlm.task(\"" + FARM + "\", {maid = " + maid.getId() + "})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(task.reply() != null && !task.succeeded() && task.outcome().contains("`move.goto_({")
-                            && task.outcome().contains("{arrive = \"near\", near = 2})` first"),
-                    "far away, tlm task did not fail with the walk to copy: " + task.outcome());
+            JsonObject reply = task.reply() == null ? null : JsonParser.parseString(task.reply()).getAsJsonObject();
+            helper.assertTrue(reply != null && !task.succeeded() && "out_of_reach".equals(reply.get("kind").getAsString())
+                            && reply.has("hint") && reply.get("hint").getAsString().startsWith("move.goto_({x = ")
+                            && reply.get("hint").getAsString().endsWith("{arrive = \"near\", near = 2})"),
+                    "far away, tlm task did not fail out of reach with the walk to copy: " + task.reply());
             helper.assertTrue(!maid.getTask().getUid().equals(FARM), "her task changed from out of reach");
             leave(helper, her, maid);
         });
@@ -251,7 +255,7 @@ public class TlmGameTests {
 
     /** 清单这一页里有编号为 {@code id} 的那一行。 */
     private static boolean hasRow(String reply, int id) {
-        for (JsonElement row : rowsIn(reply)) {
+        for (JsonElement row : dataIn(reply).getAsJsonArray("here")) {
             var o = row.getAsJsonObject();
             if (o.has("id") && o.get("id").getAsInt() == id) {
                 return true;

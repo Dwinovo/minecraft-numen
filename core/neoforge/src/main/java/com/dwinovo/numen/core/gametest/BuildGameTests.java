@@ -136,7 +136,7 @@ public class BuildGameTests {
     private static java.util.function.Function<String, String> cobbleBox(int sx, int sy, int sz) {
         String row = "#".repeat(sx);
         String rows = rows((" " + row).repeat(sz));
-        return d -> "build.layer(" + rows + ", {at = {0, 0, 0}, block = \"cobblestone\""
+        return d -> "build.layer(" + rows + ", {at = {x = 0, y = 0, z = 0}, block = \"cobblestone\""
                 + (sy > 1 ? ", up_to = " + (sy - 1) : "") + ", into = \"" + d + "\"})";
     }
 
@@ -148,7 +148,7 @@ public class BuildGameTests {
                 "cylinder", true, center.getX(), center.getY(), center.getZ(),
                 null, null, null, 3, 4);
         raiseCase(helper, "gametest_mason2", center.offset(-3, 0, -3),
-                d -> "build.cylinder({3, 0, 3}, {block = \"cobblestone\", radius = 3, height = 4, hollow = true, "
+                d -> "build.cylinder({x = 3, y = 0, z = 3}, {block = \"cobblestone\", radius = 3, height = 4, hollow = true, "
                         + "into = \"" + d + "\"})", rel, 2);
     }
 
@@ -1869,28 +1869,28 @@ public class BuildGameTests {
         String stairs = "legend = {\"<=oak_stairs[facing=south]\", \">=oak_stairs[facing=north]\"}, into = \"gt_cottage\"";
         design(companion, "gt_cottage",
                 // 12 x 10 的占地:地基一层实心,墙圈三层,屋顶四课
-                "build.layer(" + rows(solid) + ", {at = {0, 0, 0}, block = \"cobblestone\", into = \"gt_cottage\"})",
-                "build.layer(" + rows(ring) + ", {at = {0, 1, 0}, block = \"oak_planks\", up_to = 3, "
+                "build.layer(" + rows(solid) + ", {at = {x = 0, y = 0, z = 0}, block = \"cobblestone\", into = \"gt_cottage\"})",
+                "build.layer(" + rows(ring) + ", {at = {x = 0, y = 1, z = 0}, block = \"oak_planks\", up_to = 3, "
                         + "into = \"gt_cottage\"})",
                 // 屋顶:每课一张网格,两侧楼梯对着爬,顶上一条半砖压脊
                 "build.layer(" + rows("<<<<<<<<<<<<" + " ............".repeat(8) + " >>>>>>>>>>>>")
-                        + ", {at = {0, 4, 0}, " + stairs + "})",
+                        + ", {at = {x = 0, y = 4, z = 0}, " + stairs + "})",
                 "build.layer(" + rows("............ <<<<<<<<<<<<" + " ............".repeat(6)
-                        + " >>>>>>>>>>>> ............") + ", {at = {0, 5, 0}, " + stairs + "})",
+                        + " >>>>>>>>>>>> ............") + ", {at = {x = 0, y = 5, z = 0}, " + stairs + "})",
                 "build.layer(" + rows(" ............".repeat(2) + " <<<<<<<<<<<<" + " ............".repeat(4)
-                        + " >>>>>>>>>>>>" + " ............".repeat(2)) + ", {at = {0, 6, 0}, " + stairs + "})",
+                        + " >>>>>>>>>>>>" + " ............".repeat(2)) + ", {at = {x = 0, y = 6, z = 0}, " + stairs + "})",
                 "build.layer(" + rows(" ............".repeat(3) + " ============".repeat(4)
-                        + " ............".repeat(3)) + ", {at = {0, 7, 0}, legend = {\"==oak_slab\"}, "
+                        + " ............".repeat(3)) + ", {at = {x = 0, y = 7, z = 0}, legend = {\"==oak_slab\"}, "
                         + "into = \"gt_cottage\"})",
                 // 细节:四角原木柱(状态跟在方块名里)、南面门洞、玻璃窗、屋内火把
-                "build.line({0, 1, 0}, {0, 3, 0}, {block = \"oak_log[axis=y]\", into = \"gt_cottage\"})",
-                "build.line({11, 1, 0}, {11, 3, 0}, {block = \"oak_log[axis=y]\", into = \"gt_cottage\"})",
-                "build.line({0, 1, 9}, {0, 3, 9}, {block = \"oak_log[axis=y]\", into = \"gt_cottage\"})",
-                "build.line({11, 1, 9}, {11, 3, 9}, {block = \"oak_log[axis=y]\", into = \"gt_cottage\"})",
-                "build.layer(\"##\", {at = {5, 1, 0}, block = \"air\", up_to = 2, into = \"gt_cottage\"})",
-                "build.place({2, 2, 0}, {block = \"glass_pane\", into = \"gt_cottage\"})",
-                "build.place({9, 2, 0}, {block = \"glass_pane\", into = \"gt_cottage\"})",
-                "build.place({5, 1, 4}, {block = \"torch\", into = \"gt_cottage\"})");
+                "build.line({x = 0, y = 1, z = 0}, {x = 0, y = 3, z = 0}, {block = \"oak_log[axis=y]\", into = \"gt_cottage\"})",
+                "build.line({x = 11, y = 1, z = 0}, {x = 11, y = 3, z = 0}, {block = \"oak_log[axis=y]\", into = \"gt_cottage\"})",
+                "build.line({x = 0, y = 1, z = 9}, {x = 0, y = 3, z = 9}, {block = \"oak_log[axis=y]\", into = \"gt_cottage\"})",
+                "build.line({x = 11, y = 1, z = 9}, {x = 11, y = 3, z = 9}, {block = \"oak_log[axis=y]\", into = \"gt_cottage\"})",
+                "build.layer(\"##\", {at = {x = 5, y = 1, z = 0}, block = \"air\", up_to = 2, into = \"gt_cottage\"})",
+                "build.place({x = 2, y = 2, z = 0}, {block = \"glass_pane\", into = \"gt_cottage\"})",
+                "build.place({x = 9, y = 2, z = 0}, {block = \"glass_pane\", into = \"gt_cottage\"})",
+                "build.place({x = 5, y = 1, z = 4}, {block = \"torch\", into = \"gt_cottage\"})");
         Raising build = new Raising(helper, companion, "throwaway.add(\"minecraft:cobblestone\")\n"
                 + "build.raise(\"gt_cottage\", {at = " + xyz(o) + ", alter = \"natural\"})");
 
@@ -2004,7 +2004,7 @@ public class BuildGameTests {
     @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
     public static void build_single_block(GameTestHelper helper) {
         raiseCase(helper, "gametest_handyman", new BlockPos(6, 3, 6),
-                d -> "build.set({0, 0, 0}, {block = \"cobblestone\", into = \"" + d + "\"})",
+                d -> "build.set({x = 0, y = 0, z = 0}, {block = \"cobblestone\", into = \"" + d + "\"})",
                 List.of(new BlockPos(6, 3, 6)), 1);
     }
 
@@ -2206,8 +2206,8 @@ public class BuildGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_unheld", new BlockPos(9, 2, 6), true);
         BlockPos o = helper.absolutePos(new BlockPos(8, 2, 8));
-        design(companion, "gt_unheld", "build.layer(\"###\", {at = {0, 0, 0}, block = \"stone\", into = \"gt_unheld\"})", "build.set({0, 1, 0}, {block = \"poppy\", into = \"gt_unheld\"})",
-                "build.set({2, 1, 0}, {block = \"poppy\", into = \"gt_unheld\"})");
+        design(companion, "gt_unheld", "build.layer(\"###\", {at = {x = 0, y = 0, z = 0}, block = \"stone\", into = \"gt_unheld\"})", "build.set({x = 0, y = 1, z = 0}, {block = \"poppy\", into = \"gt_unheld\"})",
+                "build.set({x = 2, y = 1, z = 0}, {block = \"poppy\", into = \"gt_unheld\"})");
         ToolRun build = lua(companion, "build.at(\"gt_unheld\", {at = " + xyz(o) + "})");
 
         succeedWhen(helper, () -> {
@@ -2280,6 +2280,52 @@ public class BuildGameTests {
         }).thenSucceed();
     }
 
+    /**
+     * 托着它的还没盖好,它就不算够得着:她站在三格高的石柱顶上,设计是地上一块石头、石头上铺一块地毯。从柱顶看,地毯够得着、
+     * 它下面那块石头够不着。{@code build.left} 说地毯还立不住({@code unheld})、手边能放的一格都没有、下一步去够那块石头;
+     * {@code build.at} 不去放那块地毯,当场说够不着、给出走过去的那一行,地毯与石头一块都没放。日式小屋停在一块地毯上
+     * (原版立不住它)就是把立不住的格当成了够得着。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    public static void a_cell_whose_support_is_out_of_reach_is_not_within_reach(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int y = 2; y <= 4; y++) {
+            level.setBlockAndUpdate(helper.absolutePos(new BlockPos(1, y, 7)), Blocks.STONE.defaultBlockState());
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_carpeter", new BlockPos(1, 5, 7), true);
+        design(companion, "gt_carpet", "build.set({x = 0, y = 0, z = 0}, {block = \"stone\", into = \"gt_carpet\"})",
+                "build.set({x = 0, y = 1, z = 0}, {block = \"red_carpet\", into = \"gt_carpet\"})");
+        BlockPos support = helper.absolutePos(new BlockPos(5, 2, 7));
+        AtomicReference<ToolRun> at = new AtomicReference<>();
+        AtomicReference<ToolRun> left = new AtomicReference<>();
+
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(companion.onGround(), "she has not landed on the pillar"))
+                .thenExecute(() -> left.set(lua(companion, "return build.left(\"gt_carpet\", {at = " + xyz(support) + "})")))
+                .thenWaitUntil(() -> helper.assertTrue(left.get().receipt() != null, "build.left has not finished"))
+                .thenExecute(() -> {
+                    var got = com.google.gson.JsonParser.parseString(left.get().receipt()).getAsJsonObject()
+                            .getAsJsonObject("data").getAsJsonObject("returned");
+                    helper.assertTrue(got.get("left").getAsInt() == 2 && got.get("reach").getAsInt() == 0
+                                    && got.get("unheld").getAsInt() == 1
+                                    && got.get("next").equals(com.dwinovo.numen.cli.Shapes.pos(support)),
+                            "build.left does not hold the carpet back until the stone under it is in: " + got);
+                    at.set(lua(companion, "build.at(\"gt_carpet\", {at = " + xyz(support) + "})"));
+                })
+                .thenWaitUntil(() -> helper.assertTrue(at.get().receipt() != null, "build.at has not finished"))
+                .thenExecute(() -> {
+                    ToolRun build = at.get();
+                    helper.assertTrue(build.refused() && "out_of_reach".equals(build.kind())
+                                    && build.hint().contains("move.goto_(" + xyz(support) + ", {arrive = \"reach\"})"),
+                            "build.at tried the carpet instead of saying where to go: " + build.reply());
+                    helper.assertTrue(level.getBlockState(support).isAir() && level.getBlockState(support.above()).isAir(),
+                            "a cell was placed by a refused build");
+                    com.dwinovo.numen.core.build.Designs.delete(level.getServer(), "gt_carpet");
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
     // ---- 从命令入口:原语、设计、build.at 与建成的房子 ----
 
     /** 当场执行一个 place:她像右键那样把手里的工作台放下,生存按格扣料;派下的活叫"组 动作"。 */
@@ -2327,7 +2373,7 @@ public class BuildGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_far_builder", new BlockPos(1, 2, 1), false);
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 9));
         BlockPos o = helper.absolutePos(new BlockPos(11, 2, 11));
-        design(companion, "gt_far", "build.layer({\"###\", \"###\", \"###\"}, {at = {0, 0, 0}, block = \"cobblestone\", "
+        design(companion, "gt_far", "build.layer({\"###\", \"###\", \"###\"}, {at = {x = 0, y = 0, z = 0}, block = \"cobblestone\", "
                 + "into = \"gt_far\"})");
         ToolRun left = lua(companion, "return build.left(\"gt_far\", {at = " + xyz(o) + "})");
         AtomicReference<ToolRun> at = new AtomicReference<>();
@@ -2337,8 +2383,10 @@ public class BuildGameTests {
                 .thenExecute(() -> {
                     helper.assertTrue(left.ranToTheEnd(), "build.left failed: " + left.receipt());
                     String r = left.receipt();
-                    helper.assertTrue(r.contains("\\\"left\\\":9") && r.contains("\\\"reach\\\":0")
-                                    && r.contains("\\\"far\\\":9") && r.contains("\\\"next\\\":["),
+                    var got = com.google.gson.JsonParser.parseString(r).getAsJsonObject().getAsJsonObject("data")
+                            .getAsJsonObject("returned");
+                    helper.assertTrue(got.get("left").getAsInt() == 9 && got.get("reach").getAsInt() == 0
+                                    && got.get("far").getAsInt() == 9 && got.get("next").isJsonObject(),
                             "build.left does not say nine left, none within reach, nine far and where next: " + r);
                     at.set(lua(companion, "build.at(\"gt_far\", {at = " + xyz(o) + "})"));
                 })
@@ -2368,7 +2416,7 @@ public class BuildGameTests {
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
         BlockPos min = helper.absolutePos(new BlockPos(7, 2, 7));
         design(companion, "gt_raise", "build.layer(" + rows("##### #...# #...# #...# #####")
-                + ", {at = {0, 0, 0}, block = \"cobblestone\", up_to = 1, into = \"gt_raise\"})");
+                + ", {at = {x = 0, y = 0, z = 0}, block = \"cobblestone\", up_to = 1, into = \"gt_raise\"})");
         ToolRun raise = lua(companion, "build.raise(\"gt_raise\", {at = " + xyz(min) + "})");
 
         succeedWhen(helper, () -> {
@@ -2410,10 +2458,10 @@ public class BuildGameTests {
         BlockPos max = helper.absolutePos(new BlockPos(7, 3, 7));
         BlockPos door = helper.absolutePos(new BlockPos(6, 2, 7));
         design(companion, "gt_walls",
-                "build.layer({\"###\", \"#.#\", \"###\"}, {at = {0, 0, 0}, block = \"cobblestone\", up_to = 1, "
+                "build.layer({\"###\", \"#.#\", \"###\"}, {at = {x = 0, y = 0, z = 0}, block = \"cobblestone\", up_to = 1, "
                         + "into = \"gt_walls\"})",
                 // 门只写下半格:另一半由原版的放置回调自己补,和图纸那条入口同一条纪律
-                "build.set({1, 0, 2}, {block = \"oak_door[facing=south]\", into = \"gt_walls\"})");
+                "build.set({x = 1, y = 0, z = 2}, {block = \"oak_door[facing=south]\", into = \"gt_walls\"})");
         ToolRun build = lua(companion, "build.at(\"gt_walls\", {at = " + xyz(min) + "})");
         AtomicReference<ToolRun> built = new AtomicReference<>();
 
@@ -2466,7 +2514,7 @@ public class BuildGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_skint", new BlockPos(2, 2, 2), false);
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 3));
         BlockPos o = helper.absolutePos(new BlockPos(6, 2, 6));
-        design(companion, "gt_floor", "build.layer(\"###\", \"###\", \"###\", {at = {0, 0, 0}, block = \"cobblestone\", into = \"gt_floor\"})");
+        design(companion, "gt_floor", "build.layer(\"###\", \"###\", \"###\", {at = {x = 0, y = 0, z = 0}, block = \"cobblestone\", into = \"gt_floor\"})");
         ToolRun build = lua(companion, "build.at(\"gt_floor\", {at = " + xyz(o) + "})");
 
         succeedWhen(helper, () -> {
@@ -2496,8 +2544,8 @@ public class BuildGameTests {
         helper.onEachTick(() -> asked[0] |= com.dwinovo.numen.permission.ConsentDesk.of(companion).pending() != null);
         BlockPos o = helper.absolutePos(new BlockPos(6, 2, 6));
         design(companion, "gt_shed",
-                "build.layer(\"###\", \"###\", \"###\", {at = {0, 0, 0}, block = \"stone\", into = \"gt_shed\"})",
-                "build.set({1, 1, 1}, {block = \"oak_planks\", into = \"gt_shed\"})");
+                "build.layer(\"###\", \"###\", \"###\", {at = {x = 0, y = 0, z = 0}, block = \"stone\", into = \"gt_shed\"})",
+                "build.set({x = 1, y = 1, z = 1}, {block = \"oak_planks\", into = \"gt_shed\"})");
         AtomicReference<ToolRun> run = new AtomicReference<>(lua(companion, "build.at(\"gt_shed\", {at = " + xyz(o) + "})"));
         List<ToolRun> edits = new ArrayList<>();
 
@@ -2513,9 +2561,9 @@ public class BuildGameTests {
                     com.dwinovo.numen.permission.PlacedBlocks.of(level).record(o.offset(0, 1, 0), neighbour);
                     com.dwinovo.numen.permission.PlacedBlocks.of(level).record(o.offset(2, 0, 2), neighbour);
                     // 地板少掉南边一排,木板换成玻璃,再加一块木板
-                    edits.add(lua(companion, "build.layer(\"###\", \"###\", {at = {0, 0, 0}, block = \"stone\", into = \"gt_shed\", step = 1})"));
-                    edits.add(lua(companion, "build.set({1, 1, 1}, {block = \"glass\", into = \"gt_shed\", step = 2})"));
-                    edits.add(lua(companion, "build.set({0, 1, 1}, {block = \"oak_planks\", into = \"gt_shed\", before = 3})"));
+                    edits.add(lua(companion, "build.layer(\"###\", \"###\", {at = {x = 0, y = 0, z = 0}, block = \"stone\", into = \"gt_shed\", step = 1})"));
+                    edits.add(lua(companion, "build.set({x = 1, y = 1, z = 1}, {block = \"glass\", into = \"gt_shed\", step = 2})"));
+                    edits.add(lua(companion, "build.set({x = 0, y = 1, z = 1}, {block = \"oak_planks\", into = \"gt_shed\", before = 3})"));
                     run.set(lua(companion, "build.at(\"gt_shed\", {at = " + xyz(o) + "})"));
                 })
                 .thenWaitUntil(() -> helper.assertTrue(run.get().done(), "the second build has not finished"))
@@ -2579,7 +2627,7 @@ public class BuildGameTests {
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= com.dwinovo.numen.permission.ConsentDesk.of(companion).pending() != null);
         BlockPos o = helper.absolutePos(new BlockPos(7, 2, 7));
-        design(companion, "gt_swap", "build.set({0, 0, 0}, {block = \"stone\", into = \"gt_swap\"})");
+        design(companion, "gt_swap", "build.set({x = 0, y = 0, z = 0}, {block = \"stone\", into = \"gt_swap\"})");
         AtomicReference<ToolRun> run = new AtomicReference<>(lua(companion, "build.at(\"gt_swap\", {at = " + xyz(o) + "})"));
 
         steps(helper)
@@ -2589,7 +2637,7 @@ public class BuildGameTests {
                     var placer = com.dwinovo.numen.permission.PlacedBlocks.of(level).placerAt(o, level.getBlockState(o));
                     helper.assertTrue(placer != null && placer.id().equals(companion.getUUID()),
                             "the stone she built is not recorded as hers: " + placer);
-                    requireOk(lua(companion, "build.set({0, 0, 0}, {block = \"glass\", into = \"gt_swap\", step = 1})"));
+                    requireOk(lua(companion, "build.set({x = 0, y = 0, z = 0}, {block = \"glass\", into = \"gt_swap\", step = 1})"));
                     run.set(lua(companion, "build.raise(\"gt_swap\", {at = " + xyz(o) + "})"));
                 })
                 .thenWaitUntil(() -> helper.assertTrue(run.get().done(), "the swap has not finished"))
@@ -2618,7 +2666,7 @@ public class BuildGameTests {
         companion.getInventory().add(new ItemStack(Items.GLASS));
         var desk = com.dwinovo.numen.permission.ConsentDesk.of(companion);
         BlockPos o = helper.absolutePos(new BlockPos(7, 2, 7));
-        design(companion, "gt_swap_owner", "build.set({0, 0, 0}, {block = \"stone\", into = \"gt_swap_owner\"})");
+        design(companion, "gt_swap_owner", "build.set({x = 0, y = 0, z = 0}, {block = \"stone\", into = \"gt_swap_owner\"})");
         AtomicReference<ToolRun> run = new AtomicReference<>(lua(companion, "build.at(\"gt_swap_owner\", {at = " + xyz(o) + "})"));
         boolean[] answered = new boolean[1];
 
@@ -2630,7 +2678,7 @@ public class BuildGameTests {
                     level.setBlockAndUpdate(o, Blocks.AIR.defaultBlockState());
                     level.setBlockAndUpdate(o, Blocks.STONE.defaultBlockState());
                     com.dwinovo.numen.permission.PlacedBlocks.placedBy(level, o, owner);
-                    requireOk(lua(companion, "build.set({0, 0, 0}, {block = \"glass\", into = \"gt_swap_owner\", step = 1})"));
+                    requireOk(lua(companion, "build.set({x = 0, y = 0, z = 0}, {block = \"glass\", into = \"gt_swap_owner\", step = 1})"));
                     run.set(lua(companion, "build.raise(\"gt_swap_owner\", {at = " + xyz(o) + "})"));
                 })
                 .thenWaitUntil(() -> {
@@ -2694,8 +2742,8 @@ public class BuildGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_estimator", new BlockPos(2, 2, 2), false);
         int cells = com.dwinovo.numen.core.blueprint.BlueprintStore.load(level, "fixture_read", BlockPos.ZERO, 0)
                 .targets().size();
-        design(companion, "gt_plan", "build.layer(\"####\", \"####\", {at = {0, 0, 0}, block = \"stone_bricks\", into = \"gt_plan\"})",
-                "build.set({1, 2, 1}, {block = \"lantern[hanging=true]\", into = \"gt_plan\"})");
+        design(companion, "gt_plan", "build.layer(\"####\", \"####\", {at = {x = 0, y = 0, z = 0}, block = \"stone_bricks\", into = \"gt_plan\"})",
+                "build.set({x = 1, y = 2, z = 1}, {block = \"lantern[hanging=true]\", into = \"gt_plan\"})");
         ToolRun file = lua(companion, "build.show(\"fixture_read\")");
         ToolRun plan = lua(companion, "build.show(\"gt_plan\")");
 
@@ -2706,8 +2754,8 @@ public class BuildGameTests {
                             && read.getAsJsonObject("data").has("short_of"),
                     "showing the blueprint file does not price it: " + file.reply());
             helper.assertTrue(plan.succeeded() && plan.outcome().contains("1. build.layer(\"####\", \"####\", "
-                            + "{at = {0, 0, 0}, block = \"stone_bricks\"})")
-                            && plan.outcome().contains("2. build.set({1, 2, 1}, {block = \"lantern[hanging=true]\"})")
+                            + "{at = {x = 0, y = 0, z = 0}, block = \"stone_bricks\"})")
+                            && plan.outcome().contains("2. build.set({x = 1, y = 2, z = 1}, {block = \"lantern[hanging=true]\"})")
                             && plan.outcome().contains("8 cells: stone_bricks x8"),
                     "showing the design does not list its steps with their cost: " + plan.outcome());
             CompanionFactory.despawn(level.getServer(), companion);
@@ -2741,14 +2789,14 @@ public class BuildGameTests {
         java.util.regex.Matcher shown = java.util.regex.Pattern.compile("\\[Showing 1-(\\d+) of 250\\. Call it "
                 + "again with page = 2 to continue\\.]").matcher(first.reply());
         helper.assertTrue(first.succeeded() && first.reply().contains("1. build.layer(")
-                        && first.reply().contains("#" + ".".repeat(198) + "#") && first.reply().contains("at = {0, 0, 0}")
+                        && first.reply().contains("#" + ".".repeat(198) + "#") && first.reply().contains("at = {x = 0, y = 0, z = 0}")
                         && shown.find(),
                 "the first page does not say how many steps and how to turn the page: "
                         + first.reply().substring(Math.max(0, first.reply().length() - 400)));
         int onFirst = Integer.parseInt(shown.group(1));
         ToolRun second = lua(companion, "build.show(\"gt_long\", {page = 2})");
         helper.assertTrue(second.succeeded() && second.outcome().contains("\n" + (onFirst + 1) + ". build.layer(")
-                        && second.reply().contains("at = {0, " + onFirst + ", 0}"),
+                        && second.reply().contains("at = {x = 0, y = " + onFirst + ", z = 0}"),
                 "the second page does not go on from the first: "
                         + second.reply().substring(0, Math.min(400, second.reply().length())));
         for (ToolRun page : List.of(first, second)) {
@@ -2776,7 +2824,7 @@ public class BuildGameTests {
         ServerLevel level = helper.getLevel();
         writeSmallHouse(level, "fixture_slice");
         NumenPlayer companion = spawnAt(helper, "gametest_slicer", new BlockPos(2, 2, 2), false);
-        design(companion, "gt_slice", "build.layer(\"###\", \"###\", \"###\", {at = {0, 0, 0}, block = \"stone\", into = \"gt_slice\"})", "build.set({1, 0, 1}, {block = \"oak_planks\", into = \"gt_slice\"})");
+        design(companion, "gt_slice", "build.layer(\"###\", \"###\", \"###\", {at = {x = 0, y = 0, z = 0}, block = \"stone\", into = \"gt_slice\"})", "build.set({x = 1, y = 0, z = 1}, {block = \"oak_planks\", into = \"gt_slice\"})");
         ToolRun plan = lua(companion, "build.show(\"gt_slice\", {layer = 0})");
         ToolRun file = lua(companion, "build.show(\"fixture_slice\", {layer = 0})");
         ToolRun above = lua(companion, "build.show(\"gt_slice\", {layer = 3})");
@@ -2853,7 +2901,7 @@ public class BuildGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_keeper", new BlockPos(5, 2, 5), true);
         BlockPos o = helper.absolutePos(new BlockPos(6, 2, 6));
-        design(companion, "gt_kept", "build.layer(\"##\", \"##\", {at = {0, 0, 0}, block = \"oak_planks\", into = \"gt_kept\"})", "build.place({0, 1, 0}, {block = \"torch\", into = \"gt_kept\"})");
+        design(companion, "gt_kept", "build.layer(\"##\", \"##\", {at = {x = 0, y = 0, z = 0}, block = \"oak_planks\", into = \"gt_kept\"})", "build.place({x = 0, y = 1, z = 0}, {block = \"torch\", into = \"gt_kept\"})");
         ToolRun build = lua(companion, "build.at(\"gt_kept\", {at = " + xyz(o) + "})");
 
         succeedWhen(helper, () -> {
@@ -2922,8 +2970,8 @@ public class BuildGameTests {
         BlockPos o = helper.absolutePos(new BlockPos(6, 2, 6));
         level.setBlockAndUpdate(o.offset(1, 0, 1), Blocks.GOLD_BLOCK.defaultBlockState());   // 屋里的记号
         design(companion, "gt_grid",
-                "build.layer(\"###\", \"#.#\", \"###\", {at = {0, 0, 0}, block = \"stone_bricks\", up_to = 2, into = \"gt_grid\"})",
-                "build.layer(\"<<<\", \"...\", \">>>\", {at = {0, 3, 0}, legend = {\"<=stone_brick_stairs[facing=south]\", \">=stone_brick_stairs[facing=north]\"}, into = \"gt_grid\"})");
+                "build.layer(\"###\", \"#.#\", \"###\", {at = {x = 0, y = 0, z = 0}, block = \"stone_bricks\", up_to = 2, into = \"gt_grid\"})",
+                "build.layer(\"<<<\", \"...\", \">>>\", {at = {x = 0, y = 3, z = 0}, legend = {\"<=stone_brick_stairs[facing=south]\", \">=stone_brick_stairs[facing=north]\"}, into = \"gt_grid\"})");
         ToolRun build = lua(companion, "build.at(\"gt_grid\", {at = " + xyz(o) + "})");
 
         succeedWhen(helper, () -> {
@@ -2990,8 +3038,8 @@ public class BuildGameTests {
         level.setBlockAndUpdate(o, Blocks.GOLD_BLOCK.defaultBlockState());          // 已经立着的
         level.setBlockAndUpdate(o.offset(2, 0, 0), Blocks.GOLD_BLOCK.defaultBlockState());   // 要挖掉的
         design(companion, "gt_mask",
-                "build.layer(\"##\", {at = {0, 0, 0}, block = \"stone_bricks\", mask = \"keep\", into = \"gt_mask\"})",
-                "build.set({2, 0, 0}, {block = \"air\", mask = \"carve\", into = \"gt_mask\"})");
+                "build.layer(\"##\", {at = {x = 0, y = 0, z = 0}, block = \"stone_bricks\", mask = \"keep\", into = \"gt_mask\"})",
+                "build.set({x = 2, y = 0, z = 0}, {block = \"air\", mask = \"carve\", into = \"gt_mask\"})");
         ToolRun build = lua(companion, "build.at(\"gt_mask\", {at = " + xyz(o) + "})");
 
         succeedWhen(helper, () -> {

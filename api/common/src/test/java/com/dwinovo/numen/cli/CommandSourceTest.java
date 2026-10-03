@@ -42,11 +42,11 @@ class CommandSourceTest {
                 SERVER_CALLS.add(args);
                 src.reply(TaskResult.ok("reminder in " + args.get(AFTER) + "s: " + args.get(REASON),
                         Map.of("task", src.taskName())).toJson());
-            }, REASON, AFTER).example("gt_side.remind(\"check the furnace\", {after_s = 60})");
+            }, REASON, AFTER).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt_side.remind(\"check the furnace\", {after_s = 60})");
             g.client("jot", "Jot something down on the owner's client.", (src, args) -> {
                 CLIENT_CALLS.add(args);
                 src.reply(TaskResult.ok("jotted " + args.get(ID) + " x" + args.get(TRIES)).toJson());
-            }, ID, TRIES).example("gt_side.jot({id = \"a1\"})");
+            }, ID, TRIES).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt_side.jot({id = \"a1\"})");
         });
     }
 
@@ -99,12 +99,12 @@ class CommandSourceTest {
     void theServerReadsTheCallAgainAndRefusesWhatDoesNotFit() {
         SERVER_CALLS.clear();
         String missing = serve("{\"after_s\":5}");
-        assertTrue(missing.startsWith("error: missing required argument: reason\nusage: gt_side.remind(reason, "
+        assertTrue(missing.startsWith("argument 'reason' is missing (or nil)\nusage: gt_side.remind(reason, "
                 + "{after_s=…})"), missing);
         assertTrue(serve("{\"after_s\":\"soon\",\"reason\":\"x\"}")
-                .startsWith("error: argument 'after_s': Expected integer"));
+                .startsWith("argument 'after_s': Expected integer"));
         assertTrue(serve("{\"after_s\":5,\"reason\":\"x\",\"when\":1}")
-                .startsWith("error: unknown argument 'when'; this takes: reason, after_s"));
+                .startsWith("unknown argument 'when'; this takes: reason, after_s"));
         assertTrue(SERVER_CALLS.isEmpty());
     }
 

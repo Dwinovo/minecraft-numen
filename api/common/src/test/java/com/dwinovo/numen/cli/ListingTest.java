@@ -31,6 +31,7 @@ class ListingTest {
         door().registerCommands("gt_listing", "A group whose action lists things.", g -> {
             g.client("rows", "List the rows.", (src, args) -> src.reply(new Listing("Rows:", wideRows(),
                     "That is all.").result(args).toJson()), Listing.PAGE)
+                    .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
                     .example("gt_listing.rows({page = 2})");
             g.client("short", "List many short rows.", (src, args) -> {
                 List<String> rows = new ArrayList<>();
@@ -38,18 +39,18 @@ class ListingTest {
                     rows.add("  r" + i);
                 }
                 src.reply(new Listing("Short:", rows, "").result(args).toJson());
-            }, Listing.PAGE).example("gt_listing.short()");
+            }, Listing.PAGE).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt_listing.short()");
             g.client("one", "One entry bigger than a page.", (src, args) -> src.reply(new Listing("One:",
                     List.of("字".repeat(Listing.MAX_BYTES)), "").result(args).toJson()),
-                    Listing.PAGE).example("gt_listing.one()");
+                    Listing.PAGE).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt_listing.one()");
         });
     }
 
-    /** 跑一次调用,它的回执那句话(脚本把它原样 return 出来)。 */
+    /** 跑一次调用,它的回执那句话:翻页的是给她读的文字,脚本拿到的数据不分页。 */
     private static String said(String call) {
-        CliFixture.Outcome run = lua("return " + call);
+        CliFixture.Outcome run = lua(call);
         assertTrue(run.success(), run.message());
-        return run.json().getAsJsonObject("data").get("returned").getAsString();
+        return run.call(0).get("message").getAsString();
     }
 
     private static List<String> wideRows() {
@@ -77,7 +78,8 @@ class ListingTest {
 
         CliFixture.Outcome beyond = lua("gt_listing.rows({page = 99})");
         assertFalse(beyond.success());
-        assertTrue(beyond.message().contains("gt_listing.rows: no page 99; this list has pages 1-"), beyond.message());
+        assertTrue(beyond.message().contains("gt_listing.rows: failed — no page 99; this list has pages 1-"),
+                beyond.message());
     }
 
     /** 动作给了更小的一页:同一套切页与翻页提示,只是一页放到它给的字节数为止。 */
@@ -133,12 +135,15 @@ class ListingTest {
     @Test
     void thePageOptionReadsTheSameAsInHelp() {
         assertEquals("""
-                gt_listing.rows({page=…})
-                  List the rows.
-                  page= (integer 1-99; optional) — Which page of the list. Omit to show the first page.
-                  Examples:
-                    gt_listing.rows({page = 2})""",
-                said("api.help(\"gt_listing.rows\")"));
+                ---List the rows.
+                ---@param opts? gt_listing.rows.opts
+                function gt_listing.rows(opts) end
+
+                ---@class gt_listing.rows.opts
+                ---@field page? integer Which page of the list. Omit to show the first page.
+                -- Examples:
+                --   gt_listing.rows({page = 2})""",
+                CliFixture.help("gt_listing.rows"));
     }
 
     /** 这一页的翻页提示说到第几条,并且下一页的写法对;返回显示到第几条。 */

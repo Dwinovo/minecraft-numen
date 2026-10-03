@@ -164,36 +164,12 @@ public final class Aim {
 
     // ==================== 放:点哪个面的哪一点 ====================
 
-    /** 放方块时点的那一下:点 {@code clicked} 这一格的 {@code side} 面上的 {@code point}。 */
-    public record Face(BlockPos clicked, Direction side, Vec3 point) {}
-
     /**
-     * 往 {@code target} 放 {@code placing} 时,从眼睛此刻的位置点得中的那个面:能贴的面由第 0 层 {@link Faces} 给,点在
-     * {@link Faces#hitPoint};眼睛要在那个面朝外的一侧,射线第一下碰上它,够得着,放下去落在 {@code target}。看不见任何一个
-     * 为 null。优先点下面那一格的顶面。
+     * 往 {@code target} 放 {@code placing} 时,从眼睛此刻的位置点得中的那个面(第 0 层 {@link Faces#inSight},规划判放不放得下
+     * 问的是同一个);看不见任何一个为 null。
      */
-    public static Face face(ServerPlayer body, BlockPos target, Block placing) {
-        Level level = body.level();
-        Vec3 eye = body.getEyePosition();
-        double range = body.blockInteractionRange();
-        List<Direction> sides = new ArrayList<>(Faces.against(level, target, placing));
-        sides.sort((a, b) -> Boolean.compare(b == Direction.DOWN, a == Direction.DOWN));
-        for (Direction dir : sides) {
-            BlockPos clicked = target.relative(dir);
-            Direction side = dir.getOpposite();
-            Vec3 onFace = Faces.hitPoint(level, target, dir);
-            Vec3 point = Sight.inset(onFace, side);
-            if (!Sight.facing(eye, onFace, side) || onFace.distanceTo(eye) >= range) {
-                continue;
-            }
-            if (!target.equals(Replaceable.landing(level, clicked, side, placing))) {
-                continue;
-            }
-            if (hits(body, eye, point, clicked, side)) {
-                return new Face(clicked, side, point);
-            }
-        }
-        return null;
+    public static Faces.Face face(ServerPlayer body, BlockPos target, Block placing) {
+        return Faces.inSight(body.level(), body.getEyePosition(), body.blockInteractionRange(), target, placing);
     }
 
     // ==================== 射线 ====================

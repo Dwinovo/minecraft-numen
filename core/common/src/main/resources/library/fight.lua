@@ -1,17 +1,32 @@
 -- Clearing hostiles: fight the hostile mobs around you one at a time.
 
--- Attack every hostile mob within radius blocks of you (default 16), nearest first, one fight.attack each, until none
--- is left. Returns how many fights it started. When a fight fails (it got away, you could not reach it), that error
--- stops here.
+---Attack every hostile mob within radius blocks of you, nearest first, one fight.attack each, until none is left.
+---One that is gone before the fight starts (not_found: it died or despawned since the scan) is skipped; any other
+---failure of a fight (it got away, you could not reach it) raises that error as it is.
+---@param radius? integer How far to look, default 16.
+---@return integer fights How many fights it started.
 function fight.clear(radius)
   radius = radius or 16
   local fights = 0
+  local gone = {}
   while true do
-    local hostiles = scan.entities("hostile", {radius = radius})
-    if #hostiles == 0 then
+    local foe = nil
+    for _, e in ipairs(scan.entities("hostile", {radius = radius})) do
+      if not gone[e.id] then
+        foe = e
+        break
+      end
+    end
+    if foe == nil then
       return fights
     end
-    fight.attack(hostiles[1].id)
-    fights = fights + 1
+    local ok, err = pcall(fight.attack, foe)
+    if ok then
+      fights = fights + 1
+    elseif err.kind == "not_found" then
+      gone[foe.id] = true
+    else
+      error(err, 0)
+    end
   end
 end

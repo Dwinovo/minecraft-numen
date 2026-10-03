@@ -133,9 +133,9 @@ public final class SleepOps {
                 : "there is no bed within reach (you must be standing next to one)";
         String next = carried != null
                 ? " You are carrying " + carried + " — place it on flat ground and try again."
-                : " `scan.blocks(\"#minecraft:beds\")` finds one; `move.goto_({x, y, z}, {arrive = \"use\"})` with "
-                        + "its coordinates, then `use.sleep()` again.";
-        return TaskResult.fail(base + "." + next).toJson();
+                : " `scan.blocks(\"#minecraft:beds\")` finds one; `move.goto_(bed, {arrive = \"use\"})` with "
+                        + "its pos, then `use.sleep()` again.";
+        return TaskResult.fail(com.dwinovo.numen.agent.script.ErrorKind.NOT_FOUND, base + "." + next, null).toJson();
     }
 
     /** 背包里的第一张床;没有则 null。 */
@@ -154,7 +154,7 @@ public final class SleepOps {
 
     private static Map<String, Object> data(BlockPos bed, boolean sleeping) {
         Map<String, Object> out = new LinkedHashMap<>();
-        out.put("bed", Map.of("x", bed.getX(), "y", bed.getY(), "z", bed.getZ()));
+        out.put("bed", com.dwinovo.numen.cli.Shapes.pos(bed));
         out.put("sleeping", sleeping);
         return out;
     }

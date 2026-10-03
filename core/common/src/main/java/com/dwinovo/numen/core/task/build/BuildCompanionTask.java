@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.task.build;
 
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.core.build.Built;
@@ -181,8 +182,17 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (tally.count(BuildSurvey.State.REACH) > 0 || tally.left() == 0) {
             return null;
         }
+        int unheld = tally.count(BuildSurvey.State.UNHELD);
+        if (unheld == tally.left()) {
+            // 剩下的全都放下去立不住:不是走过去的事
+            return new Precondition.Failure(unheld + " cell(s) would not stay where the design puts them: nothing "
+                    + "holds them there.", FailureType.NO_SUPPORT);
+        }
+        String hint = !tally.far().isEmpty()
+                ? "move.goto_(" + Shapes.literal(tally.far().get(0)) + ", {arrive = \"reach\"})"
+                : !tally.dig().isEmpty() ? "work.dig(" + Shapes.literal(tally.dig().get(0)) + ")" : null;
         return new Precondition.Failure("nothing of it to place within reach of where you stand. " + remaining(tally),
-                FailureType.OUT_OF_REACH);
+                FailureType.OUT_OF_REACH, hint);
     }
 
     /**
@@ -205,6 +215,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (shortCells > 0) {
             parts.add(shortCells + " cell(s) hold another block and you carry nothing to put there");
         }
+        int unheld = tally.count(BuildSurvey.State.UNHELD);
+        if (unheld > 0) {
+            parts.add(unheld + " cell(s) would not stay put yet: what holds them is not built");
+        }
         return parts.isEmpty() ? "Nothing left to do here." : "Still to do: " + String.join("; ", parts) + ".";
     }
 
@@ -213,7 +227,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     private static String lua(BlockPos pos) {
-        return "{" + pos.getX() + ", " + pos.getY() + ", " + pos.getZ() + "}";
+        return Shapes.literal(pos);
     }
 
     /**
@@ -1107,11 +1121,16 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (building != null) {
             data.put("building", building);
         }
-        data.put("site_min", siteMin == null ? "-" : siteMin.toShortString());
-        data.put("site_max", siteMax == null ? "-" : siteMax.toShortString());
+        if (siteMin != null) {
+            data.put("site", List.of(Shapes.pos(siteMin), Shapes.pos(siteMax)));
+        }
         if (damagedCells > 0) {
             // 施工期间被外力拆毁又补回去的格数。她盖得慢或反复返工,原因在这儿。
             data.put("destroyed_while_building", damagedCells);
+        }
+        if (r.settledAway() > 0) {
+            // 整份放完、世界落定一次之后与图纸不同的格:原版的裁决,再放一遍还是这样
+            data.put("settled_away", r.settledAway());
         }
         if (r.consumeMaterials) {
             Map<Item, Integer> shortfall = ledger.shortfallAgainstInventory(ledger.remainingNeed());

@@ -33,7 +33,7 @@ Phase 3 of the dragon route. Eyes of ender need blaze powder; `locate.structure`
 4. `status.self` between batches: HP ≤ 8 → `move.goto_` out of spawner range, eat, return.
 5. Repeat until `status.self` shows ≥7 rods. Drop rate is 0–1 per kill (avg 0.5) → expect **~14 kills**, more if unlucky.
 
-**Do not mine the spawner** — you need it spawning blazes until the count is met. (You *may* `build.place({120, 64, -35}, {block = "cobblestone"})` (with the cell's coordinates) a block or two to wall off excess sight-lines if too many blazes volley at once.)
+**Do not mine the spawner** — you need it spawning blazes until the count is met. (You *may* `build.place({x = 120, y = 64, z = -35}, {block = "cobblestone"})` (with the cell's coordinates) a block or two to wall off excess sight-lines if too many blazes volley at once.)
 
 ## Hazards
 

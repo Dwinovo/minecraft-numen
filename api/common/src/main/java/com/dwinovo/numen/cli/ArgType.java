@@ -1,8 +1,12 @@
 package com.dwinovo.numen.cli;
 
+import com.dwinovo.numen.agent.script.JsonValues;
+import com.dwinovo.numen.agent.script.ScriptEngine;
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.agent.tool.Schema;
 import com.dwinovo.numen.area.AreaRef;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.mojang.brigadier.LiteralMessage;
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.arguments.ArgumentType;
@@ -25,20 +29,21 @@ import java.util.stream.Collectors;
 /**
  * 一种命令参数的类型:命令行上怎么读、快捷工具的 JSON 怎么读、schema 里写成什么、帮助里怎么称呼。
  *
- * <h2>两个入口,一种读法</h2>
- * 命令行上的值由 Brigadier 的 {@link ArgumentType} 读;快捷工具收到的 JSON 值写成它在命令行上的样子,交给
- * <b>同一个</b> {@link ArgumentType} 读,而且必须整段读完。多数类型的样子就是字面文字;{@link #string()} 在命令行上
- * 靠引号装下空格,JSON 的字符串本身就有边界,所以它的值一律加上引号再读——否则带空格的名字命令行收、JSON 拒。一串值
- * ({@link #list})在 JSON 里是数组,每一项照同样的规矩读;一项占几个词的(坐标)把数组的几项接成一行再读,{@code ["120 64 -35"]}
- * 与 {@code [120, 64, -35]} 是同一格。所以同一个值从哪个入口进来,被接受还是被拒、报什么错都一样——转换只有这一处。
+ * <h2>两个入口</h2>
+ * 人写的一行命令由 Brigadier 的 {@link ArgumentType} 读(坐标是三个数 {@code 120 64 -35});脚本的值换成 JSON 交给
+ * {@link #fromJson}。多数类型的 JSON 值是一个字面值,写成它在命令行上的样子交给<b>同一个</b> {@link ArgumentType} 整段读完;
+ * {@link #string()} 在命令行上靠引号装下空格,JSON 的字符串本身就有边界,所以它的值一律加上引号再读。位置、实体这几样在脚本里是表
+ * ({@link Shapes}),JSON 这一侧另有读法:一格只认带键的表 {@code {x = …, y = …, z = …}} 或带 {@code pos} 的表,一只实体只认编号或带
+ * {@code id} 的表——一种值一种写法。读成什么、报什么错都在这一处。
  *
  * <h2>对象的写法只在这里读</h2>
  * 命令操作的对象全仓一种写法,命令只声明它的对象是哪一类:
  * <ul>
- *   <li>一格坐标({@link #cell()}):三个整数 {@code 120 64 -35},也收一个词 {@code 120,64,-35};</li>
- *   <li>一处({@link #place()}):一到三个整数(一格、一列 {@code x z}、一个高度 {@code y}),或主人名下的一块区域;</li>
+ *   <li>一格({@link #cell()}):脚本里是 Pos {@code {x = 120, y = 64, z = -35}},或任何带 {@code pos} 的表(方块、实体、掉落物);
+ *       小数按 Minecraft 的定义换成所在的那一格。一行命令里是三个整数 {@code 120 64 -35},也收 {@code 120,64,-35};</li>
+ *   <li>一处({@link #place()}):一格、一列 {@code {x = …, z = …}}、一个高度 {@code {y = …}},或主人名下的一块区域;</li>
  *   <li>区域({@link #area()}):{@code ores} 指整块,{@code ores/g3} 指一部分,规矩在 {@link AreaRef#parse};</li>
- *   <li>实体({@link #entity()}):{@code scan entities} 列出的运行期编号;</li>
+ *   <li>实体({@link #entity()}):{@code scan.entities} 列出的运行期编号,或那只实体的表(带 {@code id});</li>
  *   <li>方块与物品({@link #id()}):资源 id,不写命名空间就是 {@code minecraft:};标签({@link #idOrTag()}):{@code #minecraft:logs}。</li>
  * </ul>
  *
@@ -73,19 +78,21 @@ public final class ArgType<T> {
     private static final DynamicCommandExceptionType NOT_A_CHOICE = new DynamicCommandExceptionType(
             choices -> new LiteralMessage("expected one of " + choices));
     private static final SimpleCommandExceptionType NO_CELL = new SimpleCommandExceptionType(
-            new LiteralMessage("expected a cell: three whole numbers, {x, y, z} or \"x y z\""));
+            new LiteralMessage("expected a cell: three whole numbers x y z"));
     /** 一格后面接着 {@code ..}(多半是想写一个盒子):一格只是一格,一片格子是区域。 */
     private static final SimpleCommandExceptionType NOT_ONE_CELL = new SimpleCommandExceptionType(
             new LiteralMessage("a cell is one x y z; a box or any other stretch of cells is an area — frame it as one "
-                    + "(area.add(name, {box = {x1, y1, z1, x2, y2, z2}})) and name the area"));
+                    + "(area.add(name, {box = {from, to}})) and name the area"));
     private static final SimpleCommandExceptionType NO_PLACE = new SimpleCommandExceptionType(
-            new LiteralMessage("expected a place: {x, y, z} (a cell), {x, z} (a column), y (a height), or an area "
-                    + "name like \"ores\" or \"ores/g3\""));
+            new LiteralMessage("expected a place: x y z (a cell), x z (a column), y (a height), or an area "
+                    + "name like ores or ores/g3"));
     /** 读成了写法,内容却不成立(方块名认不出、区域名不合规矩……):说法由认它的那一方给。 */
     private static final DynamicCommandExceptionType REJECTED = new DynamicCommandExceptionType(
             why -> new LiteralMessage(String.valueOf(why)));
     private static final SimpleCommandExceptionType NO_ENTITY = new SimpleCommandExceptionType(
             new LiteralMessage("expected an entity id as scan.entities lists it, like 184"));
+    /** 脚本里一格的写法(JSON 这一侧):带键的表。 */
+    static final String POS_SHAPE = "a Pos {x = …, y = …, z = …} or anything with a pos (a Block, an Entity, an Item)";
     /** UUID 的规范写法:8-4-4-4-12 位十六进制。 */
     private static final java.util.regex.Pattern UUID_TEXT = java.util.regex.Pattern.compile(
             "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
@@ -135,6 +142,10 @@ public final class ArgType<T> {
     private boolean itemWords;
     /** 一串值的一项的类型;不是一串值是 null。 */
     private ArgType<?> element;
+    /** 脚本里它的类型:签名里写成什么({@link ScriptType})。 */
+    private ScriptType script;
+    /** 读好的值写成脚本里的值(位置是 Pos 的表、实体是编号);null 是按文字写({@link #plain})。 */
+    private Function<T, Object> toScript;
 
     /**
      * 一个值;JSON 值是一个字面值,文字原样就是它在命令行上的样子,读好的值写回去也就是它的文字
@@ -161,6 +172,14 @@ public final class ArgType<T> {
         this.json = json;
         this.written = written;
         this.raw = written;
+        this.script = item == Item.INTEGER ? ScriptType.INTEGER : ScriptType.STRING;
+    }
+
+    /** 定下脚本里的类型与写法(位置、实体这些在脚本里是表的)。 */
+    private ArgType<T> scripted(ScriptType type, Function<T, Object> toScript) {
+        this.script = type;
+        this.toScript = toScript;
+        return this;
     }
 
     /**
@@ -188,34 +207,144 @@ public final class ArgType<T> {
     }
 
     /**
-     * 占几个词的值(坐标)的 JSON:一个字符串就是它在命令行上的样子({@code "120 64 -35"}、{@code "120,64,-35"});一个数组把各项
-     * 接成一行({@code [120, 64, -35]})。都按同一个读法整段读完。
+     * 脚本给的值形状不对,而且看得出她想写的是什么(三个数的列表、{@code "x y z"} 的字符串想写一格):错在哪,加上照这一种写法该写成
+     * 的那个值。读参数的一处({@link CommandArgs#fromJson})把它写进错误值的 {@code hint}。
      */
-    private static <T> FromJson<T> spoken(ArgumentType<T> brigadier, String hint) {
-        return value -> {
-            if (value == null || value.isJsonNull() || value.isJsonObject()) {
-                throw NOT_A_VALUE.create(hint);
-            }
-            return whole(brigadier, joined(value), hint);
-        };
+    static final class WrongShape extends RuntimeException {
+
+        final transient Object instead;
+
+        WrongShape(String message, Object instead) {
+            super(message, null, false, false);
+            this.instead = instead;
+        }
     }
 
-    /** JSON 值的文字:字面值原样,数组各项空格隔开接成一行。 */
-    private static String joined(JsonElement value) throws CommandSyntaxException {
-        if (value.isJsonPrimitive()) {
-            return value.getAsString();
-        }
-        if (!value.isJsonArray()) {
-            throw NOT_A_VALUE.create("a value");
-        }
-        List<String> parts = new ArrayList<>();
-        for (JsonElement item : value.getAsJsonArray()) {
-            if (!item.isJsonPrimitive()) {
-                throw NOT_A_VALUE.create("a value");
+    /** 脚本给的一个 JSON 值写回脚本里的样子,报错里说"你给了什么"。 */
+    static String given(JsonElement value) {
+        return ScriptEngine.IN_USE.value(JsonValues.toJava(value));
+    }
+
+    /** 一格的 JSON:带键的表(小数换成所在的一格),或带 {@code pos} 的表。 */
+    private static BlockPos cellFromJson(JsonElement value) throws CommandSyntaxException {
+        if (value != null && value.isJsonObject()) {
+            JsonObject o = value.getAsJsonObject();
+            if (o.get("pos") instanceof JsonObject pos) {
+                return cellFromJson(pos);
             }
-            parts.add(item.getAsString());
+            Double x = number(o, "x");
+            Double y = number(o, "y");
+            Double z = number(o, "z");
+            if (x != null && y != null && z != null) {
+                return BlockPos.containing(x, y, z);
+            }
+            throw REJECTED.create("expected " + POS_SHAPE + "; got " + given(value)
+                    + (x != null && z != null ? ", which has no y" : ""));
         }
-        return String.join(" ", parts);
+        Object instead = coordinates(value, 3);
+        if (instead instanceof java.util.Map<?, ?> pos && pos.size() == 3) {
+            throw new WrongShape("a cell is a Pos with named fields; got " + given(value), instead);
+        }
+        throw REJECTED.create("expected " + POS_SHAPE + "; got " + given(value));
+    }
+
+    /** 一个数字段;没有或不是数是 null。 */
+    private static Double number(JsonObject o, String key) {
+        JsonElement v = o.get(key);
+        return v != null && v.isJsonPrimitive() && v.getAsJsonPrimitive().isNumber() ? v.getAsDouble() : null;
+    }
+
+    /**
+     * 想写坐标却写成了别的样子(数的列表、{@code "120 64 -35"} 这样的字符串、一个数):一到 {@code max} 个数时,照带键的写法该写成的那张表
+     * ({@code {x, y, z}}、{@code {x, z}}、{@code {y}});看不出是坐标是 null。
+     */
+    private static Object coordinates(JsonElement value, int max) {
+        List<Long> numbers = new ArrayList<>();
+        if (value != null && value.isJsonArray()) {
+            for (JsonElement e : value.getAsJsonArray()) {
+                if (!e.isJsonPrimitive() || !e.getAsJsonPrimitive().isNumber()) {
+                    return null;
+                }
+                numbers.add((long) Math.floor(e.getAsDouble()));
+            }
+        } else if (value != null && value.isJsonPrimitive()) {
+            String text = value.getAsString().strip();
+            if (!text.matches("-?\\d+(\\.\\d+)?([ ,]+-?\\d+(\\.\\d+)?)*")) {
+                return null;
+            }
+            for (String part : text.split("[ ,]+")) {
+                numbers.add((long) Math.floor(Double.parseDouble(part)));
+            }
+        }
+        if (numbers.isEmpty() || numbers.size() > max) {
+            return null;
+        }
+        java.util.Map<String, Object> pos = new java.util.LinkedHashMap<>();
+        switch (numbers.size()) {
+            case 3 -> {
+                pos.put("x", numbers.get(0));
+                pos.put("y", numbers.get(1));
+                pos.put("z", numbers.get(2));
+            }
+            case 2 -> {
+                pos.put("x", numbers.get(0));
+                pos.put("z", numbers.get(1));
+            }
+            default -> pos.put("y", numbers.get(0));
+        }
+        return pos;
+    }
+
+    /** 一处的 JSON:区域名;带键的表是一格({@code x y z})、一列({@code x z})或一个高度({@code y});带 {@code pos} 的表是那一格。 */
+    private static Place placeFromJson(JsonElement value) throws CommandSyntaxException {
+        if (value != null && value.isJsonObject()) {
+            JsonObject o = value.getAsJsonObject();
+            if (o.get("pos") instanceof JsonObject) {
+                return Place.cell(cellFromJson(value));
+            }
+            Double x = number(o, "x");
+            Double y = number(o, "y");
+            Double z = number(o, "z");
+            if (x != null && z != null) {
+                return y != null ? Place.cell(BlockPos.containing(x, y, z))
+                        : new Place((int) Math.floor(x), null, (int) Math.floor(z), null);
+            }
+            if (x == null && z == null && y != null) {
+                return new Place(null, (int) Math.floor(y), null, null);
+            }
+            throw REJECTED.create("expected a place: " + POS_SHAPE + ", a column {x = …, z = …}, a height {y = …}, or "
+                    + "an area name like \"ores\"; got " + given(value));
+        }
+        Object instead = coordinates(value, 3);
+        if (instead != null) {
+            throw new WrongShape("a place given by coordinates is a table with named fields; got " + given(value),
+                    instead);
+        }
+        if (value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isString()) {
+            String name = value.getAsString();
+            StringReader reader = new StringReader(name);
+            Place place = Place.area(readAreaRef(reader, 0));
+            if (reader.canRead()) {
+                throw TRAILING.createWithContext(reader, "area name");
+            }
+            return place;
+        }
+        throw REJECTED.create("expected a place: " + POS_SHAPE + ", a column {x = …, z = …}, a height {y = …}, or an "
+                + "area name like \"ores\"; got " + given(value));
+    }
+
+    /** 一只实体的 JSON:编号,或带 {@code id} 的那张表。 */
+    private static EntityRef entityFromJson(JsonElement value) throws CommandSyntaxException {
+        JsonElement id = value != null && value.isJsonObject() ? value.getAsJsonObject().get("id") : value;
+        if (id != null && id.isJsonPrimitive() && id.getAsJsonPrimitive().isNumber()
+                && id.getAsDouble() == Math.rint(id.getAsDouble())) {
+            return EntityRef.id(id.getAsInt());
+        }
+        if (id != null && id.isJsonPrimitive() && id.getAsString().matches("\\d{1," + MAX_DIGITS + "}")) {
+            throw new WrongShape("an entity id is a number; got " + given(value), Long.parseLong(id.getAsString()));
+        }
+        throw REJECTED.create("expected an entity: its id as scan.entities lists it (184), or the Entity itself; got "
+                + given(value));
     }
 
     /**
@@ -251,7 +380,8 @@ public final class ArgType<T> {
                 (s, name, desc, required) -> {
                     if (required) s.bool(name, desc);
                     else s.optionalBool(name, desc);
-                }, literal(read, hint, UnaryOperator.identity()), String::valueOf);
+                }, literal(read, hint, UnaryOperator.identity()), String::valueOf)
+                .scripted(ScriptType.BOOLEAN, null);
     }
 
     /** 一个词:字母、数字与 {@code _-.+},不带空格。编号(t42、tm3)这类。 */
@@ -349,7 +479,7 @@ public final class ArgType<T> {
                 (s, name, desc, required) -> {
                     if (required) s.number(name, desc, min, max);
                     else s.optionalNumber(name, desc, min, max);
-                });
+                }).scripted(ScriptType.NUMBER, null);
     }
 
     /** 帮助里的数不带多余的 {@code .0}:{@code 1-64} 而不是 {@code 1.0-64.0}。 */
@@ -376,7 +506,7 @@ public final class ArgType<T> {
                 (s, name, desc, required) -> {
                     if (required) s.enumStr(name, desc, choices);
                     else s.optionalEnum(name, desc, choices);
-                });
+                }).scripted(ScriptType.choice(allowed), null);
     }
 
     /**
@@ -417,9 +547,10 @@ public final class ArgType<T> {
      */
     public static ArgType<BlockPos> cell() {
         ArgumentType<BlockPos> read = ArgType::readCell;
-        String hint = "cell: {x, y, z} or \"x y z\"";
+        String hint = "cell: " + POS_SHAPE;
         return new ArgType<>(read, "x y z", "cell", hint, Span.ONE, Item.STRING, true, false, ArgType::stringField,
-                spoken(read, hint), pos -> pos.getX() + " " + pos.getY() + " " + pos.getZ());
+                ArgType::cellFromJson, pos -> pos.getX() + " " + pos.getY() + " " + pos.getZ())
+                .scripted(Shapes.POS.type(), Shapes::value);
     }
 
     /**
@@ -428,10 +559,14 @@ public final class ArgType<T> {
      */
     public static ArgType<Place> place() {
         ArgumentType<Place> read = ArgType::readPlace;
-        String hint = "place: {x, y, z} (a cell), {x, z} (a column), y (a height), or an area like \"ores\" or "
-                + "\"ores/g3\"";
+        String hint = "place: a Pos (a cell, or anything with a pos), a column {x = …, z = …}, a height {y = …}, or an "
+                + "area like \"ores\" or \"ores/g3\"";
         return new ArgType<>(read, "place", "place", hint, Span.ONE, Item.STRING, true, false, ArgType::stringField,
-                spoken(read, hint), Place::written);
+                ArgType::placeFromJson, Place::written)
+                .scripted(ScriptType.union(Shapes.POS.type(), ScriptType.table(
+                                ScriptType.field("x", ScriptType.NUMBER, null), ScriptType.field("z", ScriptType.NUMBER, null)),
+                        ScriptType.table(ScriptType.field("y", ScriptType.NUMBER, null)), ScriptType.STRING),
+                        Place::value);
     }
 
     /**
@@ -441,9 +576,27 @@ public final class ArgType<T> {
      */
     public static ArgType<BlockCellOrArea> blockCellOrArea() {
         ArgumentType<BlockCellOrArea> read = ArgType::readBlockCellOrArea;
-        String hint = "block id, #tag, cell \"x,y,z\" or \"area:<name>\"";
+        String hint = "block id, #tag, a cell (" + POS_SHAPE + ") or \"area:<name>\"";
         return new ArgType<>(read, "block|cell|area", "block|cell|area", hint, Span.ONE, Item.STRING, true, false,
-                ArgType::stringField, spoken(read, hint), BlockCellOrArea::written);
+                ArgType::stringField, ArgType::blockCellOrAreaFromJson, BlockCellOrArea::written)
+                .scripted(ScriptType.union(ScriptType.STRING, Shapes.POS.type()),
+                        v -> v.cell() != null ? Shapes.value(v.cell()) : v.written());
+    }
+
+    /** 方块、格子或区域的 JSON:表是一格,字符串是方块 id、标签或 {@code area:名字}。 */
+    private static BlockCellOrArea blockCellOrAreaFromJson(JsonElement value) throws CommandSyntaxException {
+        if (value != null && value.isJsonObject()) {
+            return new BlockCellOrArea(null, cellFromJson(value), null);
+        }
+        Object instead = coordinates(value, 3);
+        if (instead instanceof java.util.Map<?, ?> pos && pos.size() == 3) {
+            throw new WrongShape("a cell here is a Pos with named fields; got " + given(value), instead);
+        }
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) {
+            throw REJECTED.create("expected a block id, a #tag, a cell (" + POS_SHAPE + ") or \"area:<name>\"; got "
+                    + given(value));
+        }
+        return whole(ArgType::readBlockCellOrArea, value.getAsString(), "block id, #tag or area:<name>");
     }
 
     private static BlockCellOrArea readBlockCellOrArea(StringReader reader) throws CommandSyntaxException {
@@ -630,6 +783,10 @@ public final class ArgType<T> {
         ArgType<R> judgedType = new ArgType<>(judged, kind, kind, hint, span, item, words, flagSwitch, schema,
                 fromJson, value -> written.apply(unparse.apply(value)));
         judgedType.raw = value -> raw.apply(unparse.apply(value));
+        judgedType.script = script;
+        if (toScript != null) {
+            judgedType.toScript = value -> toScript.apply(unparse.apply(value));
+        }
         return judgedType;
     }
 
@@ -639,9 +796,11 @@ public final class ArgType<T> {
      */
     public static ArgType<EntityRef> entity() {
         ArgumentType<EntityRef> read = ArgType::readEntity;
-        String hint = "entity id as scan.entities lists it";
+        String hint = "entity: its id as scan.entities lists it, or the Entity itself";
         return new ArgType<>(read, "entity", "entity", hint, Span.ONE, Item.STRING, false, false,
-                ArgType::stringField, literal(read, hint, UnaryOperator.identity()), EntityRef::written);
+                ArgType::stringField, ArgType::entityFromJson, EntityRef::written)
+                .scripted(ScriptType.union(ScriptType.INTEGER, Shapes.ENTITY.type()),
+                        ref -> ref.id() != null ? (Object) (long) ref.id() : ref.uuid().toString());
     }
 
     private static EntityRef readEntity(StringReader reader) throws CommandSyntaxException {
@@ -692,12 +851,18 @@ public final class ArgType<T> {
             if (value == null || !value.isJsonArray() || value.getAsJsonArray().isEmpty()) {
                 throw NOT_A_VALUE.create("a list: " + hint);
             }
-            if (element.words) {
-                return whole(read, joined(value), hint);
-            }
             List<T> values = new ArrayList<>();
             for (JsonElement item : value.getAsJsonArray()) {
-                values.add(element.fromJson(item));
+                try {
+                    values.add(element.fromJson(item));
+                } catch (WrongShape bad) {
+                    // 一项是个数而这一项不收数,整张列表又是三个数:她写的是一处旧样子的坐标 {120, 64, -35},不是三处
+                    Object whole = coordinates(value, 3);
+                    if (item.isJsonPrimitive() && whole instanceof java.util.Map<?, ?> pos && pos.size() == 3) {
+                        throw new WrongShape("a position is one table with named fields; got " + given(value), whole);
+                    }
+                    throw bad;
+                }
             }
             return List.copyOf(values);
         };
@@ -712,6 +877,7 @@ public final class ArgType<T> {
                 }, fromJson, values -> values.stream().map(element::write).collect(Collectors.joining(" ")));
         list.itemWords = element.words;
         list.element = element;
+        list.script = ScriptType.union(element.script, ScriptType.listOf(element.script));
         return list;
     }
 
@@ -746,12 +912,20 @@ public final class ArgType<T> {
         if (element != null) {
             return ((List<?>) value).stream().map(this::plainItem).toList();
         }
-        String text = raw.apply(value);
-        if (words && text.matches("-?\\d+( -?\\d+)*")) {
-            List<Long> numbers = java.util.Arrays.stream(text.split(" ")).map(Long::valueOf).toList();
-            return numbers.size() == 1 ? numbers.get(0) : numbers;
+        if (toScript != null) {
+            return toScript.apply(value);
         }
-        return text;
+        return raw.apply(value);
+    }
+
+    /** 脚本里它的类型;一串值是"一项或一张表"。 */
+    ScriptType script() {
+        return script;
+    }
+
+    /** 一串值的一项的脚本类型;不是一串值是它自己的。 */
+    ScriptType itemScript() {
+        return element != null ? element.script : script;
     }
 
     @SuppressWarnings("unchecked")

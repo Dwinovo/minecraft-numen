@@ -1,6 +1,9 @@
 package com.dwinovo.numen.core.task.dig;
 
+import com.dwinovo.numen.task.TaskResult;
+import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.area.Cells;
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.core.act.BlockDigger;
@@ -110,7 +113,37 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
             return Preparation.ready(inReach() + " cell(s) of " + r.what + " are within my reach where I stand"
                     + outOfReach(false) + ".");
         }
-        return Preparation.refused(nothingHere(true));
+        BlockPos near = nearestBeyond();
+        return Preparation.refused(TaskResult.fail(nothingHereKind(), nothingHere(true), near == null ? null
+                : DigTaskRecord.reachLine(r.named, near), resultData()));
+    }
+
+    /** 手边没有可挖的那一刻是哪一类失败:被不许挖的挡着、目标本身不许挖是 denied,工具不对、挖不成是 failed,其余是够不着。 */
+    private ErrorKind nothingHereKind() {
+        Feet here = Feet.of(player);
+        for (BlockPos cell : wantedInReach(here)) {
+            if (clearing.walledIn(cell) != null) {
+                return ErrorKind.DENIED;
+            }
+        }
+        if (deniedWhy != null) {
+            return ErrorKind.DENIED;
+        }
+        if (!unharvestable.isEmpty() || !ruledOut.isEmpty() || here == null) {
+            return ErrorKind.FAILED;
+        }
+        return ErrorKind.OUT_OF_REACH;
+    }
+
+    /** 还要挖、站在这儿够不着的格里离她最近的那一格;都够得着(或一格不剩)是 null。 */
+    private BlockPos nearestBeyond() {
+        Feet here = Feet.of(player);
+        for (BlockPos cell : wanted()) {
+            if (!reaches(here, cell)) {
+                return cell;
+            }
+        }
+        return null;
     }
 
     @Override
@@ -142,7 +175,9 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
         BlockPos target = next();
         if (target == null) {
             if (dug.isEmpty()) {
-                fail(nothingHere(false), FailureType.NO_PATH);
+                BlockPos near = nearestBeyond();
+                fail(nothingHere(false), FailureType.OUT_OF_REACH, near == null ? null
+                        : DigTaskRecord.reachLine(r.named, near));
                 return TaskState.FAILED;
             }
             return TaskState.SUCCESS;
@@ -346,8 +381,8 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
         BlockPos near = beyond.get(0);
         long blocks = Math.round(Math.sqrt(player.blockPosition().distSqr(near)));
         return "; " + beyond.size() + " more cell(s) of " + r.what + " are out of my reach from here, the nearest at "
-                + Listing.coords(near) + " about " + blocks + " blocks away" + (done ? " — to dig them: " : " (later: ")
-                + DigTaskRecord.reachThem(r.named, near) + (done ? "" : ")");
+                + Listing.coords(near) + " about " + blocks + " blocks away" + (done ? " — to dig them: "
+                + DigTaskRecord.reachThem(r.named, near) : "");
     }
 
     /**
@@ -385,14 +420,14 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
         } else {
             why = "none of the cells of " + r.what + " still to dig is within my reach where I stand";
         }
-        return head + why + outOfReach(true) + leftovers() + ".";
+        return head + why + outOfReach(false) + leftovers() + ".";
     }
 
     /** 工具收不到掉落时说的那句:要什么、下一步。 */
     private String noTool() {
         return "my tools can't harvest " + r.label + " — digging it would destroy it without any drop. Equip a "
                 + "suitable tool (gear.wear, e.g. a pickaxe) first; to break a block regardless of drops, "
-                + "use.block({x, y, z}, {left = true}) on it with whatever is in hand";
+                + "use.block(pos, {left = true}) on it with whatever is in hand";
     }
 
     /** 要挖却没挖成的各因为什么(以 {@code "; "} 起头);都没有是空串。 */
@@ -421,13 +456,30 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
         digger.cancel();
     }
 
+    /**
+     * 挖了几格、点名的里还剩几格要挖、其中几格站在这儿够不着、够不着里最近的那一格(Pos,没有就不给)。
+     */
     @Override
     protected Map<String, Object> resultData() {
         Map<String, Object> data = new HashMap<>();
-        data.put("target", r.label);
         data.put("dug", dug.size());
         Feet here = Feet.of(player);
-        data.put("out_of_reach", wanted().stream().filter(c -> !reaches(here, c)).count());
+        List<BlockPos> left = wanted();
+        data.put("left", left.size());
+        BlockPos near = null;
+        int beyond = 0;
+        for (BlockPos cell : left) {
+            if (!reaches(here, cell)) {
+                beyond++;
+                if (near == null) {
+                    near = cell;
+                }
+            }
+        }
+        data.put("out_of_reach", beyond);
+        if (near != null) {
+            data.put("nearest", Shapes.pos(near));
+        }
         return data;
     }
 

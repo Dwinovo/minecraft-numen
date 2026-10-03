@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.tools.agent;
 
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.ClientSource;
@@ -62,6 +63,8 @@ public final class MemoryCommands {
     private static void actions(CommandGroup memory) {
         memory.client(REMEMBER, "Write one note to your own memory; it comes back to you as a line in <memory>.",
                 MemoryCommands::remember, DESCRIPTION, NEW_NAME, TYPE, CONTENT)
+                .returns(ScriptType.table(ScriptType.field("name", ScriptType.STRING, null),
+                        ScriptType.field("count", ScriptType.INTEGER, "How many notes you keep now.")))
                 .example("memory.remember(\"main base -340,68,120, door faces east\", {name = \"main-base\"})")
                 .example("memory.remember(\"the swamp west of base is too deep to cross\", {name = \"swamp-route\", "
                         + "type = \"lesson\", content = \"tried twice on day 12; go around by the north ridge\"})")
@@ -71,7 +74,10 @@ public final class MemoryCommands {
                 .seeAlso(line(RECALL), line(FORGET));
         memory.client(RECALL, "Read the body of one of your notes.",
                 MemoryCommands::recall, NAME, Listing.PAGE)
-                .example("memory.recall(\"main-base\")")
+                .returns(ScriptType.table(ScriptType.field("name", ScriptType.STRING, null),
+                        ScriptType.field("day", ScriptType.INTEGER, null),
+                        ScriptType.field("content", ScriptType.STRING, "The note's body.")))
+                .example("print(memory.recall(\"main-base\").content)")
                 .note("<memory> already carries each note's line; recall only when that line points at more you "
                         + "need.")
                 .note("A note says what was true when you wrote it; the world may have moved on.")
@@ -79,6 +85,7 @@ public final class MemoryCommands {
                 .seeAlso(line(REMEMBER));
         memory.client(FORGET, "Drop one of your notes for good.",
                 MemoryCommands::forget, NAME)
+                .returns(ScriptType.NOTHING)
                 .example("memory.forget(\"main-base\")")
                 .note("Use it when a note turned out wrong, or after merging several into one. Nothing else ever "
                         + "removes a note.")

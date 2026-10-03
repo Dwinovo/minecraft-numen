@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.tools.inventory;
 
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
@@ -58,6 +59,10 @@ public final class GearCommands {
     private static void actions(CommandGroup gear) {
         gear.server(WEAR, "Wear or hold an item from your backpack.",
                 GearCommands::wear, WEAR_ITEM, WEAR_SLOT)
+                .returns(ScriptType.table(ScriptType.optional("item", ScriptType.STRING, null),
+                        ScriptType.optional("slot", ScriptType.STRING, null),
+                        ScriptType.optional("removed", ScriptType.listOf(ScriptType.STRING), null),
+                        ScriptType.optional("still_worn", ScriptType.listOf(ScriptType.STRING), null)))
                 .example("gear.wear(\"minecraft:iron_helmet\")")
                 .example("gear.wear(\"minecraft:shield\", {slot = \"offhand\"})")
                 .note("Your wearable slots and what is on them are listed in <worn>.")
@@ -68,6 +73,10 @@ public final class GearCommands {
                 .seeAlso(line(REMOVE));
         gear.server(REMOVE, "Take gear off back into your backpack.",
                 GearCommands::remove, REMOVE_SLOT, REMOVE_ITEM)
+                .returns(ScriptType.table(ScriptType.optional("item", ScriptType.STRING, null),
+                        ScriptType.optional("slot", ScriptType.STRING, null),
+                        ScriptType.optional("removed", ScriptType.listOf(ScriptType.STRING), null),
+                        ScriptType.optional("still_worn", ScriptType.listOf(ScriptType.STRING), null)))
                 .example("gear.remove()")
                 .example("gear.remove({slot = \"offhand\"})")
                 .example("gear.remove({item = \"minecraft:iron_helmet\"})")

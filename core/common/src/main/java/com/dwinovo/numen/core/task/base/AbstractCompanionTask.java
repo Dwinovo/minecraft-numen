@@ -89,6 +89,8 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     private String doneReason = "done";
     /** Structured cause of the last failure, for a parent ladder to branch on. */
     private FailureType failType = FailureType.UNKNOWN;
+    /** 最近一次 {@link #fail} 给的下一步;没给是 null。 */
+    private String failHint;
     /**
      * A terminal state decided out-of-band (a start-time precondition, or a
      * {@link #fail} called from anywhere): {@link #tick} returns it verbatim
@@ -136,7 +138,8 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     public final Preparation prepare(NumenPlayer companion) {
         Precondition.Failure f = firstFailure();
         if (f != null) {
-            return Preparation.refused(f.message());
+            // 前提不成立时这件活还没开始,没有进度可交:只有种类、那句话与下一步
+            return Preparation.refused(TaskResult.fail(f.type().kind(), f.message(), f.hint()));
         }
         prepared = true;
         return preparation();
@@ -146,7 +149,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     public final void start(NumenPlayer companion) {
         Precondition.Failure f = prepared ? null : firstFailure();
         if (f != null) {
-            fail(f.message(), f.type());
+            fail(f.message(), f.type(), f.hint());
             r.setState(TaskState.FAILED);   // same-tick finalization (old dispatcher semantics)
             return;
         }
@@ -390,9 +393,9 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     private TaskResult outcome(TaskState finalState, String tail) {
         return switch (finalState) {
             case SUCCESS   -> TaskResult.ok(successMessage() + tail, resultData());
-            case TIMEOUT   -> new TaskResult(false, timeoutMessage() + tail, true, false, resultData());
-            case CANCELLED -> new TaskResult(false, cancelledMessage() + tail, false, true, resultData());
-            default        -> TaskResult.fail(doneReason + tail, resultData());   // FAILED and any stray state
+            case TIMEOUT   -> TaskResult.timeout(timeoutMessage() + tail, resultData());
+            case CANCELLED -> TaskResult.cancelled(cancelledMessage() + tail, resultData());
+            default        -> TaskResult.fail(failType.kind(), doneReason + tail, failHint, resultData());
         };
     }
 
@@ -468,11 +471,17 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
      * {@link #onTick()} pair this with {@code return TaskState.FAILED;}.
      */
     protected void fail(String why, FailureType t) {
+        fail(why, t, null);
+    }
+
+    /** 同上,另给脚本一个能照抄的下一步({@link TaskResult#hint}),比如走过去的那一行。 */
+    protected void fail(String why, FailureType t, String hint) {
         // 终局必须留声:任务凭什么收场是排障的第一现场,不能只活在返回值里
         com.dwinovo.numen.core.Constants.LOG.info("[numen-task] {} FAILED({}) {}",
                 getClass().getSimpleName(), t, why);
         this.doneReason = why;
         this.failType = t;
+        this.failHint = hint;
         this.pendingTerminal = TaskState.FAILED;
     }
 

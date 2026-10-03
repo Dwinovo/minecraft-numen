@@ -23,9 +23,10 @@ import java.util.List;
  * 这样的回执就在原地开一层,跑完那一层,它的结局就是那次调用的结局。上限算整段调用的总数,打断时每一层都停。
  *
  * <h2>回执</h2>
- * 第一行一句话说结局(跑完、出错在哪一行与原话、停在哪一行为什么);之后每次 API 调用一行——在哪一行、哪个函数、成败、回执那句话
- * 的第一行;再是脚本 {@code return} 的值;最后是 {@code print} 写的字。身体活的实际账照旧在它自己的 task_finished 里说一次,这里只
- * 点它的编号与结局。
+ * 第一行一句话说结局(跑完、出错在哪一行与那个错误值的文字、停在哪一行为什么);之后每次 API 调用一行——在哪一行、哪个函数、
+ * {@code ok} 或失败的种类、回执那句话的第一行;再是脚本 {@code return} 的值;最后是 {@code print} 写的字。脚本拿到的是数据,给她看的
+ * 文字只在这里,由同一张回执写成。身体活的实际账照旧在它自己的 task_finished 里说一次,这里只点它的编号与结局。出错时数据里的
+ * {@code error} 是那个错误值({@code kind}、{@code message}……)。
  */
 public final class ScriptCall {
 
@@ -38,7 +39,7 @@ public final class ScriptCall {
         /**
          * 脚本里的一次 API 调用读成一个动作和它的参数。
          *
-         * @throws IllegalArgumentException 读不成(没有这个动作、对象多了、选项名不对、值读不成);消息是给脚本的那句话
+         * @throws ApiError 读不成(没有这个动作、对象多了、选项名不对、值读不成):抛给脚本的就是它
          */
         Invocation invocation(ScriptRun.Call call);
 
@@ -58,8 +59,16 @@ public final class ScriptCall {
      */
     public record Tally(boolean ok, int line, String error) {}
 
-    /** 一件身体活收尾了:编号、状态({@code done}、{@code failed}、{@code timeout}、{@code stopped})、它交代的话。 */
-    public record Finish(String task, String status, String words) {}
+    /**
+     * 一件身体活收尾了。
+     *
+     * @param task   编号
+     * @param status {@code done}、{@code failed}、{@code timeout}、{@code stopped}、{@code interrupted}
+     * @param words  它交代的话
+     * @param result 它的结果({@code success}、{@code message}、失败时的 {@code kind} 与 {@code hint}、{@code data}),随事件一起到;
+     *               没带(重启前派的活补发的收尾)是 null
+     */
+    public record Finish(String task, String status, String words, JsonObject result) {}
 
     /** 要按名字跑的一份脚本:名字、正文、参数。 */
     public record ToRun(String script, String code, List<String> args) {}
@@ -160,7 +169,9 @@ public final class ScriptCall {
         }
         boolean ok = !ToolOutcome.failed(resultJson);
         String text = messageOf(resultJson);
-        log(p, ok, text);
+        JsonObject parsed = objectOf(resultJson);
+        String kind = ok ? null : failureKind(parsed);
+        log(p, ok ? null : kind, text);
         if (ok && p.invocation != null) {
             ScriptCatalog.Verb verb = host.catalog().verb(p.invocation.group(), p.invocation.verb());
             if (verb != null && verb.echoed()) {
@@ -170,16 +181,28 @@ public final class ScriptCall {
                 echoed.add(echo);
             }
         }
-        return advance(p.frame.run.resume(new ScriptRun.Result(ok, text, dataOf(resultJson))));
+        return advance(p.frame.run.resume(new ScriptRun.Result(ok, text, dataOf(resultJson), kind,
+                ok ? null : hintOf(parsed))));
     }
 
-    /** 等的那件身体活收尾了:{@code done} 算成功。 */
+    /**
+     * 等的那件身体活收尾了:{@code done} 算成功。脚本拿到的是它结果里的数据;失败的种类是结果说的那一种,被叫停是
+     * {@link ErrorKind#INTERRUPTED}、到了期限是 {@link ErrorKind#TIMEOUT}。
+     */
     public Next finished(Finish finish) {
         Pending p = pending;
         pending = null;
         boolean ok = "done".equals(finish.status());
-        log(p, ok, finish.task() + " " + finish.status() + (finish.words().isBlank() ? "" : ": " + finish.words()));
-        return advance(p.frame.run.resume(new ScriptRun.Result(ok, finish.words(), new JsonObject())));
+        JsonObject result = finish.result() == null ? new JsonObject() : finish.result();
+        String kind = ok ? null : switch (finish.status()) {
+            case "timeout" -> ErrorKind.TIMEOUT.wire();
+            case "stopped", "interrupted" -> ErrorKind.INTERRUPTED.wire();
+            default -> failureKind(result);
+        };
+        log(p, kind, finish.task() + " " + finish.status() + (finish.words().isBlank() ? "" : ": " + finish.words()));
+        JsonObject data = result.get("data") instanceof JsonObject d ? d : new JsonObject();
+        return advance(p.frame.run.resume(new ScriptRun.Result(ok, finish.words(), data, kind,
+                ok ? null : hintOf(result))));
     }
 
     /**
@@ -213,12 +236,15 @@ public final class ScriptCall {
                 }
                 Pending caller = frame.calledFrom;
                 String text = done.ok() ? frame.name + " ran to the end" : done.error();
-                log(caller, done.ok(), text);
+                String kind = done.ok() ? null : String.valueOf(done.failure().get(ScriptRun.KIND));
+                log(caller, kind, text);
                 JsonObject data = new JsonObject();
                 if (done.ok() && done.value() != null) {
                     data.add(RETURNED, GSON.toJsonTree(done.value()));
                 }
-                step = caller.frame.run.resume(new ScriptRun.Result(done.ok(), text, data));
+                Object hint = done.ok() ? null : done.failure().get(ScriptRun.HINT);
+                step = caller.frame.run.resume(new ScriptRun.Result(done.ok(), text, data, kind,
+                        hint == null ? null : hint.toString()));
                 continue;
             }
             ScriptRun.Call call = (ScriptRun.Call) step;
@@ -234,9 +260,10 @@ public final class ScriptCall {
             Invocation invocation;
             try {
                 invocation = host.invocation(call);
-            } catch (IllegalArgumentException wrong) {
-                log.add(where(frame, call.line()) + " " + call.function() + ": failed — " + firstLine(wrong.getMessage()));
-                step = frame.run.refuse(wrong.getMessage());
+            } catch (ApiError wrong) {
+                log.add(where(frame, call.line()) + " " + call.function() + ": " + wrong.kind().wire() + " — "
+                        + firstLine(wrong.getMessage()));
+                step = frame.run.refuse(wrong);
                 continue;
             }
             calls++;
@@ -265,9 +292,10 @@ public final class ScriptCall {
 
     // ---- 记录与回执 ----
 
-    private void log(Pending p, boolean ok, String text) {
+    /** 一次调用的那一行:{@code kind} 是失败的种类,成功是 null(写 {@code ok})。 */
+    private void log(Pending p, String kind, String text) {
         String said = firstLine(text);
-        log.add(where(p.frame, p.call.line()) + " " + p.call.function() + ": " + (ok ? "ok" : "failed")
+        log.add(where(p.frame, p.call.line()) + " " + p.call.function() + ": " + (kind == null ? "ok" : kind)
                 + (said.isEmpty() ? "" : " — " + said));
     }
 
@@ -280,7 +308,7 @@ public final class ScriptCall {
             head = name() + " stopped at line " + done.line() + " after " + calls + " call" + (calls == 1 ? "" : "s")
                     + ": " + done.error();
         }
-        return receipt(done.ok(), done.ok() ? "ok" : "error", head, done.value());
+        return receipt(done.ok() ? "ok" : "error", head, done.value(), done.failure());
     }
 
     /** 停下的回执。 */
@@ -289,7 +317,7 @@ public final class ScriptCall {
                 + pending.call.function() + ")";
         String head = name() + " stopped" + at + " after " + calls + " call" + (calls == 1 ? "" : "s")
                 + ": " + why + ". Nothing after that ran.";
-        return receipt(false, "stopped", head, null);
+        return receipt("stopped", head, null, null);
     }
 
     /** 这一层停在哪一行:手上那一次在它里面就是那一行,否则是它调起里面那一层的那一行。 */
@@ -305,12 +333,16 @@ public final class ScriptCall {
         return 0;
     }
 
-    private String receipt(boolean ok, String status, String head, Object returned) {
+    /** @param failure 出错时的错误值,进数据的 {@code error};别的是 null */
+    private String receipt(String status, String head, Object returned, java.util.Map<String, Object> failure) {
+        boolean ok = "ok".equals(status);
         StringBuilder msg = new StringBuilder(head);
         log.forEach(line -> msg.append('\n').append(line));
         JsonElement value = returned == null ? null : GSON.toJsonTree(returned);
         if (value != null) {
-            msg.append("\nreturned: ").append(value);
+            // 一段文字原样写,别的值写成脚本里的样子,和 print 一样
+            msg.append("\nreturned: ").append(returned instanceof String text ? text
+                    : ScriptEngine.IN_USE.value(returned));
         }
         if (!printed.isEmpty()) {
             msg.append("\nprinted:\n").append(printed.toString().stripTrailing());
@@ -326,6 +358,9 @@ public final class ScriptCall {
         }
         if (!echoed.isEmpty()) {
             data.add(ECHOED, echoed);
+        }
+        if (failure != null) {
+            data.add("error", GSON.toJsonTree(failure));
         }
         JsonObject result = new JsonObject();
         result.addProperty("success", ok);
@@ -352,20 +387,30 @@ public final class ScriptCall {
         return line.length() <= SAID ? line : line.substring(0, SAID) + "...";
     }
 
-    private static JsonObject dataOf(String resultJson) {
+    /** 结果整个读成 JSON 对象;不是对象是空对象。 */
+    private static JsonObject objectOf(String resultJson) {
         try {
             JsonElement parsed = JsonParser.parseString(resultJson);
-            if (parsed.isJsonObject() && parsed.getAsJsonObject().get("data") instanceof JsonObject data) {
-                return data;
-            }
-            // 直接回一份数据的查询(status.self 这类,不带 success):那一整份就是数据
-            if (parsed.isJsonObject() && !parsed.getAsJsonObject().has("success")) {
-                return parsed.getAsJsonObject();
-            }
+            return parsed.isJsonObject() ? parsed.getAsJsonObject() : new JsonObject();
         } catch (RuntimeException notJson) {
-            // 不是 JSON 的结果没有数据
+            return new JsonObject();
         }
-        return new JsonObject();
+    }
+
+    /** 失败的结果说的种类;没说(接进来的外部工具的结果这类)是 {@link ErrorKind#FAILED}。 */
+    private static String failureKind(JsonObject result) {
+        return result.get("kind") instanceof JsonElement k && k.isJsonPrimitive() ? k.getAsString()
+                : ErrorKind.FAILED.wire();
+    }
+
+    /** 失败的结果给的下一步;没有是 null。 */
+    private static String hintOf(JsonObject result) {
+        return result.get("hint") instanceof JsonElement h && h.isJsonPrimitive() ? h.getAsString() : null;
+    }
+
+    /** 回执里交给脚本的数据({@code data});没有是空对象。 */
+    private static JsonObject dataOf(String resultJson) {
+        return objectOf(resultJson).get("data") instanceof JsonObject data ? data : new JsonObject();
     }
 
     /** 回执那句话:{@code TaskResult} 的 message;不是这个形状的结果整段就是那句话。 */

@@ -42,7 +42,7 @@ final class Ascend implements Move {
             if (!grounded) {
                 return Premise.fail(to, Reason.NO_FOOTING);
             }
-            if (!draft.place(to.below(), from.getX(), f0, from.getZ())) {
+            if (!draft.placeInSight(to.below(), from.getX(), f0, from.getZ())) {
                 return draft.failure();
             }
             f1 = Footing.height(draft, body, to.getX(), to.getY(), to.getZ());

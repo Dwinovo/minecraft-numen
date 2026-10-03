@@ -44,7 +44,8 @@ class ListFlagArgTypeTest {
                     LAST.set(args);
                     src.reply(TaskResult.ok("picked").toJson());
                 }, BLOCKS, IDS, KEEP, ITEMS, COUNT)
-                        .example("gt_flags.pick(\"iron_ore\", \"#minecraft:logs\", {ids = {3, -4}, keep = {\"1,2,3\", "
+                        .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
+                        .example("gt_flags.pick(\"iron_ore\", \"#minecraft:logs\", {ids = {3, -4}, keep = {{x = 1, y = 2, z = 3}, "
                                 + "\"area:house\", \"chest\"}, count = 2})"));
     }
 
@@ -95,10 +96,8 @@ class ListFlagArgTypeTest {
 
     @Test
     void aBadItemSaysWhatWasExpected() {
-        assertTrue(failed("gt_flags pick stone --keep 1,2").startsWith("expected a cell: three whole numbers, "
-                + "{x, y, z} or \"x y z\""));
-        assertTrue(failed("gt_flags pick stone --keep 1,two,3").startsWith("expected a cell: three whole numbers, "
-                + "{x, y, z} or \"x y z\""));
+        assertTrue(failed("gt_flags pick stone --keep 1,2").startsWith("expected a cell: three whole numbers x y z"));
+        assertTrue(failed("gt_flags pick stone --keep 1,two,3").startsWith("expected a cell: three whole numbers x y z"));
         assertTrue(failed("gt_flags pick stone --keep 1,2,3..4,5,6").startsWith("a cell is one x y z; a box or any "
                 + "other stretch of cells is an area"), "一片格子只有区域一种写法");
         assertTrue(failed("gt_flags pick stone --keep area:House").startsWith("area names are lowercase letters"));
@@ -114,7 +113,7 @@ class ListFlagArgTypeTest {
         CommandArgs viaLine = ran("gt_flags pick iron_ore #minecraft:logs --ids 3 4 --keep area:house 1,2,3 chest "
                 + "--items iron_ingot --count 2");
         CommandArgs viaJson = CommandArgs.fromJson(PARAMS, JsonParser.parseString("""
-                {"blocks": ["iron_ore", "#minecraft:logs"], "ids": [3, 4], "keep": ["area:house", "1,2,3", "chest"],
+                {"blocks": ["iron_ore", "#minecraft:logs"], "ids": [3, 4], "keep": ["area:house", {"x": 1, "y": 2, "z": 3}, "chest"],
                  "items": ["iron_ingot"], "count": 2}""").getAsJsonObject());
         assertEquals(viaLine, viaJson);
         IllegalArgumentException notInts = assertThrows(IllegalArgumentException.class,
@@ -128,6 +127,7 @@ class ListFlagArgTypeTest {
         IllegalArgumentException early = assertThrows(IllegalArgumentException.class, () ->
                 door().registerCommands("gt_flags_bad", "A group whose list is not last.", g ->
                         g.server("pick", "Pick.", (src, args) -> { }, BLOCKS, Param.required("n", ArgType.integer(), "N."))
+                                .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
                                 .example("gt_flags_bad.pick(\"stone\", 1)")));
         assertTrue(early.getMessage().contains("是一串值"), early.getMessage());
         assertThrows(IllegalArgumentException.class, () -> ArgType.list(ArgType.bool()));
@@ -141,7 +141,7 @@ class ListFlagArgTypeTest {
         CommandArgs viaLine = ran("gt_flags pick iron_ore #minecraft:logs --ids 3 -4 --keep 1,2,3 area:house chest");
         LAST.set(null);
         CliFixture.Outcome out = CliFixture.lua("gt_flags.pick({\"iron_ore\", \"#minecraft:logs\"}, "
-                + "{ids = {3, -4}, keep = {\"1,2,3\", \"area:house\", \"chest\"}})");
+                + "{ids = {3, -4}, keep = {{x = 1, y = 2, z = 3}, \"area:house\", \"chest\"}})");
         assertTrue(out.success(), out.message());
         assertEquals(viaLine, LAST.get());
     }
@@ -149,15 +149,18 @@ class ListFlagArgTypeTest {
     @Test
     void theHelpNamesEachType() {
         assertEquals("""
-                gt_flags.pick(blocks..., {ids=…, keep=…, items=…, count=…})
-                  Pick some things.
-                  blocks... (id or #tag, e.g. minecraft:oak_log or #minecraft:logs; one, or several as a list {a, b}) — Which blocks.
-                  ids= (integer; one, or several as a list {a, b}; optional) — Which ones. Omit to take any.
-                  keep= (block id, #tag, cell "x,y,z" or "area:<name>"; one, or several as a list {a, b}; optional) — What to leave standing. Omit to keep nothing.
-                  items= (id, e.g. minecraft:oak_log (minecraft: may be left out); one, or several as a list {a, b}; optional) — What to take. Omit to take everything.
-                  count= (integer 1-64; optional) — How many. Omit to take one.
-                  Examples:
-                    gt_flags.pick("iron_ore", "#minecraft:logs", {ids = {3, -4}, keep = {"1,2,3", "area:house", "chest"}, count = 2})""",
+                ---Pick some things.
+                ---@param blocks string|string[] Which blocks.
+                ---@param opts? gt_flags.pick.opts
+                function gt_flags.pick(blocks, opts) end
+
+                ---@class gt_flags.pick.opts
+                ---@field ids? integer|integer[] Which ones. Omit to take any.
+                ---@field keep? string|Pos|(string|Pos)[] What to leave standing. Omit to keep nothing.
+                ---@field items? string|string[] What to take. Omit to take everything.
+                ---@field count? integer How many. Omit to take one.
+                -- Examples:
+                --   gt_flags.pick("iron_ore", "#minecraft:logs", {ids = {3, -4}, keep = {{x = 1, y = 2, z = 3}, "area:house", "chest"}, count = 2})""",
                 CliFixture.help("gt_flags.pick"));
     }
 }

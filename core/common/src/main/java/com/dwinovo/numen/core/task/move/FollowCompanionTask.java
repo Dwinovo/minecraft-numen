@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.task.move;
 
+import java.util.Map;
+import com.dwinovo.numen.task.TaskResult;
 import com.dwinovo.numen.core.nav.Feet;
 import com.dwinovo.numen.core.nav.NavText;
 import com.dwinovo.numen.core.nav.Survey;
@@ -119,8 +121,9 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
                     return Preparation.Readiness.ready("The way to " + target.getName().getString() + " is "
                             + NavText.ahead(seed) + ".");
                 }
-                return Preparation.Readiness.refused("can't keep up: "
-                        + NavText.failure(leg.outcome(), player, Feet.cell(player), anchor, TERRAIN));
+                return Preparation.Readiness.refused(TaskResult.fail(com.dwinovo.numen.agent.script.ErrorKind.NO_PATH,
+                        "can't keep up: " + NavText.failure(leg.outcome(), player, Feet.cell(player), anchor, TERRAIN),
+                        null, resultData()));
             }
 
             @Override
@@ -219,6 +222,14 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
      */
     private BlockPos anchor(Entity target) {
         return Terrain.of(player).settle(target.blockPosition());
+    }
+
+    /** 收尾时她站在哪。 */
+    @Override
+    protected Map<String, Object> resultData() {
+        Map<String, Object> data = new java.util.HashMap<>();
+        data.put("pos", com.dwinovo.numen.cli.Shapes.pos(player.position()));
+        return data;
     }
 
     @Override

@@ -1,5 +1,7 @@
 package com.dwinovo.numen.plugins.kaleidoscope;
 
+import com.dwinovo.numen.agent.script.ErrorKind;
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
@@ -7,6 +9,7 @@ import com.dwinovo.numen.cli.CommandGroup;
 import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.task.TaskDispatch;
 import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.Gson;
@@ -76,22 +79,59 @@ final class KaleidoscopeCommands {
         kc.server(RECIPES, "What the cookware can cook: recipe id, ingredients with portions, carrier, kitchenware, "
                         + "time.",
                 KaleidoscopeCommands::recipes, COOKWARE, HAVE_ONLY, NAME, Listing.PAGE)
+                .returns(ScriptType.table(
+                        ScriptType.field("recipes", ScriptType.listOf(ScriptType.table(
+                                ScriptType.field("recipe", ScriptType.STRING, "What " + line(COOK) + " takes."),
+                                ScriptType.field("dish", ScriptType.STRING, "What comes out, with x2 when more "
+                                        + "than one."),
+                                ScriptType.field("ingredients", ScriptType.listOf(ScriptType.STRING),
+                                        "Each with its portions, kaleidoscope_cookery:tomato x2."),
+                                ScriptType.optional("carrier", ScriptType.STRING, "What to take the dish out with."),
+                                ScriptType.optional("soup_base", ScriptType.STRING, null),
+                                ScriptType.field("kitchenware", ScriptType.listOf(ScriptType.STRING), null),
+                                ScriptType.field("cook_ticks", ScriptType.INTEGER, null),
+                                ScriptType.optional("stir_fries", ScriptType.INTEGER, "Pot recipes."),
+                                ScriptType.field("quality", ScriptType.STRING, "Fixed or flex, and what the "
+                                        + "portions mean."))), "Every recipe that matches."),
+                        ScriptType.field("quality_notes", ScriptType.listOf(ScriptType.STRING), null)))
                 .example(line(RECIPES) + "(\"pot\", {have_only = true})")
-                .example(line(RECIPES) + "(\"stockpot\", {name = \"rice\"})")
-                .note("Read-only. One recipe per line; a pot knows a few hundred, so the list comes in pages — "
-                        + "narrow it with name or have_only instead of paging through all of them.")
+                .example("for _, r in ipairs(" + line(RECIPES) + "(\"stockpot\", {name = \"rice\"}).recipes) do "
+                        + "print(r.recipe) end")
+                .note("Read-only. The reply lists one recipe per line; a pot knows a few hundred, so it comes in "
+                        + "pages — narrow it with name or have_only instead of paging through all of them.")
                 .note("Flex recipes list THIS world's golden ratio; every save has its own.")
                 .seeAlso(path(INSPECT), path(COOK));
         kc.server(INSPECT, "Read one pot or stockpot from any distance: stage, contents, heat, ticks left, what it "
                         + "waits for.",
                 KaleidoscopeCommands::inspect, COOKER)
-                .example(line(INSPECT) + "({120, 64, -35})")
+                .returns(ScriptType.table(
+                        ScriptType.field("cookware", ScriptType.choice(List.of("pot", "stockpot")), null),
+                        ScriptType.field("pos", Shapes.POS.type(), null),
+                        ScriptType.field("stage", ScriptType.STRING, "put_ingredient, cooking, finished, burnt "
+                                + "(pot); put_soup_base, put_ingredient, cooking, finished (stockpot)."),
+                        ScriptType.field("has_heat_source", ScriptType.BOOLEAN, null),
+                        ScriptType.optional("has_oil", ScriptType.BOOLEAN, "Pot."),
+                        ScriptType.optional("has_lid", ScriptType.BOOLEAN, "Stockpot."),
+                        ScriptType.optional("soup_base", ScriptType.STRING, "Stockpot, once it has one."),
+                        ScriptType.field("in_the_pot", ScriptType.listOf(ScriptType.STRING), null),
+                        ScriptType.optional("dish_being_made", ScriptType.STRING, null),
+                        ScriptType.optional("auto_starts_in_ticks", ScriptType.INTEGER, null),
+                        ScriptType.optional("done_in_ticks", ScriptType.INTEGER, null),
+                        ScriptType.optional("burns_in_ticks", ScriptType.INTEGER, null),
+                        ScriptType.optional("clears_in_ticks", ScriptType.INTEGER, null),
+                        ScriptType.optional("servings_left", ScriptType.INTEGER, null),
+                        ScriptType.field("needs", ScriptType.listOf(ScriptType.STRING), "What it waits for.")))
+                .example(line(INSPECT) + "({x = 120, y = 64, z = -35})")
                 .note("Read-only. Check a cookware is free before you cook on it.")
                 .seeAlso(path(COOK));
         kc.server(COOK, "Cook one dish start to finish on a pot or stockpot within your reach.",
                 KaleidoscopeCommands::cook, RECIPE, COOK_AT)
+                .returns(ScriptType.table(ScriptType.field("recipe", ScriptType.STRING, null),
+                        ScriptType.field("pos", Shapes.POS.type(), "The cookware's cell."),
+                        ScriptType.optional("plated", ScriptType.STRING, "What came out.")))
                 .example(line(COOK) + "(\"kaleidoscope_cookery:flex_pot/braised_beef\")")
-                .example(line(COOK) + "(\"kaleidoscope_cookery:flex_pot/braised_beef\", {at = {120, 64, -35}})")
+                .example(line(COOK) + "(\"kaleidoscope_cookery:flex_pot/braised_beef\", {at = {x = 120, y = 64, "
+                        + "z = -35}})")
                 .note("Background work: the result arrives as a task_finished event. One dish at a time.")
                 .note("It does not walk and does not look for a pot further away: stand within reach of the "
                         + "cookware first (`scan.blocks` finds one, `move.goto_` it with arrive = \"use\"). Out of "
@@ -106,8 +146,9 @@ final class KaleidoscopeCommands {
     private static void recipes(ServerSource src, CommandArgs args) {
         Cookware cookware = Cookware.byId(args.get(COOKWARE));
         if (cookware == null) {
-            src.reply(TaskResult.fail("unknown cookware '" + args.get(COOKWARE) + "' — only pot and stockpot"
-                    + " are wired up (steamer, chopping board, millstone and spit are not)").toJson());
+            src.reply(TaskResult.fail(ErrorKind.BAD_ARGUMENT, "unknown cookware '" + args.get(COOKWARE) + "' — only "
+                    + "pot and stockpot are wired up (steamer, chopping board, millstone and spit are not)", null)
+                    .toJson());
             return;
         }
         ServerLevel level = src.companion().serverLevel();
@@ -115,6 +156,7 @@ final class KaleidoscopeCommands {
         boolean haveOnly = Boolean.TRUE.equals(args.get(HAVE_ONLY));
 
         List<String> rows = new ArrayList<>();
+        List<Map<String, Object>> recipes = new ArrayList<>();
         for (Dish dish : Dish.menu(level, cookware)) {
             if (needle != null
                     && !dish.id().toString().toLowerCase(Locale.ROOT).contains(needle)
@@ -124,10 +166,13 @@ final class KaleidoscopeCommands {
             if (haveOnly && dish.missingFor(src.companion(), level) != null) {
                 continue;
             }
-            rows.add(GSON.toJson(dish.row(level)));
+            Map<String, Object> row = dish.row(level);
+            rows.add(GSON.toJson(row));
+            recipes.add(row);
         }
 
         Map<String, Object> data = new LinkedHashMap<>();
+        data.put("recipes", recipes);
         data.put("quality_notes", List.of(
                 "Quality grading only exists for flex recipes, and it compares the RATIO of the portions,"
                         + " not the total: the pot always hands the evaluator a 9-slot list, so the quantity"
@@ -144,8 +189,9 @@ final class KaleidoscopeCommands {
         BlockPos pos = args.get(COOKER);
         Cooker cooker = Cooker.at(src.companion().serverLevel(), pos);
         if (cooker == null) {
-            src.reply(TaskResult.fail("nothing at " + Cooker.where(pos) + " is a pot or a stockpot"
-                    + " (steamers, chopping boards, millstones and spits are not wired up yet)").toJson());
+            src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, "nothing at " + Cooker.where(pos) + " is a pot or a "
+                    + "stockpot (steamers, chopping boards, millstones and spits are not wired up yet)", null)
+                    .toJson());
             return;
         }
         src.reply(TaskResult.ok(cooker.kind().id() + " at " + Cooker.where(pos), cooker.report()).toJson());
@@ -177,8 +223,9 @@ final class KaleidoscopeCommands {
             }
         }
         if (best == null) {
-            src.reply(TaskResult.fail("no pot or stockpot is within my reach. `move.goto_({x, y, z}, {arrive = \"use\"})` "
-                    + "with its coordinates first (`scan.blocks` finds one), then cook again.").toJson());
+            src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, "no pot or stockpot is within my reach — find one, "
+                    + "move.goto_ it with arrive = \"use\", then cook again",
+                    "scan.blocks(\"kaleidoscope_cookery:pot\", \"kaleidoscope_cookery:stockpot\")").toJson());
         }
         return best;
     }

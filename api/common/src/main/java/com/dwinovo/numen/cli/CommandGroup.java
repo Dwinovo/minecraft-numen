@@ -2,6 +2,7 @@ package com.dwinovo.numen.cli;
 
 import com.dwinovo.numen.agent.script.ScriptCatalog;
 import com.dwinovo.numen.agent.script.ScriptEngine;
+import com.dwinovo.numen.agent.script.ScriptType;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -135,6 +136,15 @@ public final class CommandGroup {
         return handler;
     }
 
+    /**
+     * 声明一个类(脚本里一种有名字的表,如区域的一部分):返回值与参数按名字引用它({@code type.type()}),帮助里引用到它的地方列出它的
+     * 字段。名字全 API 只能有一个,{@link Shapes} 的几种已经在了;引用了却没人声明的名字,登记处第一次被用时一次查全。
+     */
+    public void declare(ScriptType.Class type) {
+        requireOpen();
+        NumenCli.declare(type);
+    }
+
     void requireOpen() {
         if (!open) {
             throw new IllegalStateException("命令组 " + name + " 已经登记完了,不能再往里加");
@@ -142,11 +152,16 @@ public final class CommandGroup {
     }
 
     /**
-     * 登记块跑完:封口,再查每个动作的例子。例子经脚本的前端读,能调的只有这一组——组这时还没进登记处,而例子只该用到这一组
-     * 自己的函数。
+     * 登记块跑完:封口,查每个动作声明了返回类型(签名里要写),再查每个动作的例子。例子经脚本的前端读,能调的只有这一组——组这时
+     * 还没进登记处,而例子只该用到这一组自己的函数。
      */
     void close() {
         open = false;
+        for (Action a : actions) {
+            if (a.returnType() == null) {
+                throw new IllegalArgumentException(a.path() + " 没声明返回类型——签名里要写它返回什么(不返回值是 ScriptType.NOTHING)");
+            }
+        }
         Map<String, ScriptCatalog.Verb> verbs = new TreeMap<>();
         for (Action a : actions) {
             verbs.put(a.name(), a.verb());

@@ -1,5 +1,8 @@
 package com.dwinovo.numen.core.tools;
 
+import com.dwinovo.numen.agent.script.ErrorKind;
+import com.dwinovo.numen.agent.script.ApiError;
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.ServerSource;
@@ -84,12 +87,13 @@ public final class BuildOps {
         data.put("left", tally.left());
         data.put("reach", tally.count(BuildSurvey.State.REACH));
         data.put("dig", tally.dig().subList(0, Math.min(LISTED_DIG, tally.dig().size())).stream()
-                .map(BuildOps::cell).toList());
+                .map(Shapes::pos).toList());
         data.put("far", tally.far().size());
         if (!tally.far().isEmpty()) {
-            data.put("next", cell(tally.far().get(0)));
+            data.put("next", Shapes.pos(tally.far().get(0)));
         }
         data.put("short", tally.count(BuildSurvey.State.SHORT));
+        data.put("unheld", tally.count(BuildSurvey.State.UNHELD));
         data.put("skipped", tally.count(BuildSurvey.State.SKIPPED));
         String text = tally.left() == 0
                 ? "nothing left to do: every cell that differs from " + name + " is one you leave alone ("
@@ -97,16 +101,13 @@ public final class BuildOps {
                 : tally.left() + " cell(s) of " + name + " still to do: " + tally.count(BuildSurvey.State.REACH)
                         + " within reach to place now, " + tally.dig().size() + " to dig out first, "
                         + tally.far().size() + " out of reach, " + tally.count(BuildSurvey.State.SHORT)
-                        + " holding another block with nothing of yours to put there";
+                        + " holding another block with nothing of yours to put there, "
+                        + tally.count(BuildSurvey.State.UNHELD) + " that would not stay put yet";
         return TaskResult.ok(text, data).toJson();
     }
 
     /** {@code build.left} 列出几格要先挖开的:一次 {@code work.dig} 交得完的量。 */
     private static final int LISTED_DIG = 16;
-
-    private static List<Integer> cell(BlockPos pos) {
-        return List.of(pos.getX(), pos.getY(), pos.getZ());
-    }
 
     /**
      * 摆好的一份施工图与它和世界的差异。同一份施工图、同一个维度、同一个落点已经有一栋,差异里带上该拆的格;第一次盖时这一栋
@@ -131,7 +132,7 @@ public final class BuildOps {
                 ? Designs.load(level.getServer(), name).drawn().laid(at)
                 : BlueprintStore.load(level, name, anchor, quarters);
         if (layout.targets().isEmpty()) {
-            throw new IllegalArgumentException(name + " has nothing to build yet");
+            throw new ApiError(ErrorKind.FAILED, name + " has nothing to build yet", "build.show(\"" + name + "\")");
         }
         Built.Site site = new Built.Site(name, level.dimension().location(), anchor, at.quarters());
         Built.Building was = Built.of(level.getServer()).at(site);
@@ -147,6 +148,7 @@ public final class BuildOps {
     /** 建成的房子,按盖下去的先后,每栋一行:名字、照什么盖的、在哪、朝向、何时、谁盖、记着几格。 */
     public static String built(MinecraftServer server, CommandArgs args) {
         List<String> rows = new ArrayList<>();
+        List<Map<String, Object>> buildings = new ArrayList<>();
         for (Built.Building b : Built.of(server).all()) {
             String source;
             if (Designs.exists(server, b.source())) {
@@ -162,11 +164,20 @@ public final class BuildOps {
                     + ", built on day " + day(b.builtAt()) + " by " + b.builder()
                     + (b.changedAt() == b.builtAt() ? "" : ", last changed on day " + day(b.changedAt()))
                     + ", " + b.cells().size() + " block(s) on its record");
+            Map<String, Object> one = new LinkedHashMap<>();
+            one.put("name", b.name());
+            one.put("source", b.source());
+            one.put("dimension", b.dimension().toString());
+            one.put("at", Shapes.pos(a));
+            one.put("rotation", b.quarters() * 90);
+            one.put("builder", b.builder());
+            one.put("cells", b.cells().size());
+            buildings.add(one);
         }
         String head = rows.isEmpty()
                 ? "Nothing has been built with build.at yet."
                 : "Built with build.at (build.at with the same design, dimension and spot changes that building):";
-        return new Listing(head, rows, "").result(args).toJson();
+        return new Listing(head, rows, "").result(args, Map.of("buildings", buildings)).toJson();
     }
 
     /** 游戏里的第几天(从 1 数)。 */
@@ -186,7 +197,7 @@ public final class BuildOps {
     private static void dispatch(ServerSource src, Layout layout, Changes changes, boolean partial,
                                  Built.Site site, String already) {
         if (changes.none()) {
-            src.reply(TaskResult.ok(already).toJson());
+            src.reply(TaskResult.ok(already, Map.of("placed", 0, "left", 0)).toJson());
             return;
         }
         NumenPlayer her = src.companion();

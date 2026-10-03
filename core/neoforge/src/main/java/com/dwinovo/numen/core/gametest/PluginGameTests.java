@@ -48,7 +48,7 @@ public class PluginGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(reply.reply() != null, "status_self has not replied");
-            var status = com.google.gson.JsonParser.parseString(reply.reply()).getAsJsonObject();
+            var status = dataIn(reply.reply());
             // 身体状态片段以引擎渲染的 <worn> 打头,之后按登记顺序接:core 自己的 <throwaway>,最后登记的这个插件的片段
             helper.assertTrue(status.has("body_state") && status.get("body_state").getAsString().startsWith("<worn>")
                             && status.get("body_state").getAsString()

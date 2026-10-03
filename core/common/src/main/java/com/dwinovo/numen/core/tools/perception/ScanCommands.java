@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.tools.perception;
 
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.cli.ArgType;
@@ -8,6 +9,8 @@ import com.dwinovo.numen.cli.CommandGroup;
 import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.cli.Shapes;
+import com.dwinovo.numen.core.tools.AreaText;
 import com.dwinovo.numen.core.scan.BlockScan;
 import com.dwinovo.numen.core.tools.PerceptionOps;
 import com.dwinovo.numen.core.tools.QueryExtraOps;
@@ -19,11 +22,8 @@ import java.util.List;
 
 /**
  * {@code scan}:看她周围——脚下一圈的地形图、某几种方块在哪、附近有谁、一格方块是什么、一格方块里装着什么。
- * 五个动作都在服务端读世界,不动世界,不占身体;回执照原样是那份结果(JSON,地形图是一张字符图)。找方块带
- * {@code --into} 时把看到的记进一块区域({@link ScanOps}),那是改区域,先过权限层。
- *
- * <p>前四个是做事之前最常用的眼睛,提升为快捷工具({@code scan_around}、{@code scan_blocks}、
- * {@code scan_entities}、{@code scan_block});{@code storage} 用得少,只留命令。
+ * 五个动作都在服务端读世界,不动世界,不占身体;脚本拿到的是读到的数据(方块、实体都带 Pos,原样能交给下一个函数)。找方块带
+ * {@code into} 时把看到的记进一块区域({@link ScanOps}),那是改区域,先过权限层。
  */
 public final class ScanCommands {
 
@@ -75,7 +75,13 @@ public final class ScanCommands {
     private static void actions(CommandGroup scan) {
         scan.server("around", "A top-down map of the ground around you: where you can walk, step, drop, swim.",
                         ScanCommands::around, VIEW_RADIUS)
-                .example("scan.around()")
+                .returns(ScriptType.table(
+                        ScriptType.field("rows", ScriptType.listOf(ScriptType.STRING),
+                                "The map, one string per row, north first; cells are separated by spaces."),
+                        ScriptType.field("center", Shapes.POS.type(), "The cell you stand in: the @."),
+                        ScriptType.field("facing", ScriptType.STRING, null),
+                        ScriptType.field("legend", ScriptType.STRING, null)))
+                .example("for _, row in ipairs(scan.around().rows) do print(row) end")
                 .example("scan.around({radius = 12})")
                 .note("Instant and read-only. @ is you, North is up, East is right, one cell is one block; each cell "
                         + "says how you could move onto it and the legend comes with it.")
@@ -85,18 +91,27 @@ public final class ScanCommands {
         scan.server("blocks", "Find blocks of the given types near you, reported as groups of touching blocks; "
                         + "into keeps them in an area.",
                         ScanCommands::blocks, BLOCK_IDS, SEARCH_RADIUS, WITHIN, INTO, Listing.PAGE)
-                .example("scan.blocks(\"iron_ore\", \"deepslate_iron_ore\")")
+                .returns(ScriptType.table(
+                        ScriptType.field("groups", ScriptType.listOf(AreaText.PART_CLASS.type()),
+                                "Every group found, nearest first."),
+                        ScriptType.field("complete", ScriptType.BOOLEAN, "Whether the whole sphere was read; when "
+                                + "not, note says what was left out."),
+                        ScriptType.optional("note", ScriptType.STRING, null),
+                        ScriptType.field("radius", ScriptType.INTEGER, null),
+                        ScriptType.optional("area", ScriptType.STRING, "The area the groups were added to (into).")))
+                .example("local found = scan.blocks(\"iron_ore\", \"deepslate_iron_ore\")\n"
+                        + "print(#found.groups, found.complete)")
+                .note("Going through them: `for _, g in ipairs(scan.blocks(\"iron_ore\").groups) do print(g.count, "
+                        + "g.nearest.pos.x, g.nearest.pos.z) end`.")
                 .example("scan.blocks({\"iron_ore\", \"deepslate_iron_ore\"}, {radius = 32, into = \"ores\"})")
                 .example("scan.blocks(\"#minecraft:beds\", {within = \"base\"})")
                 .example("scan.blocks(\"iron_ore\", \"deepslate_iron_ore\", {page = 2})")
                 .note("Read-only; the reply comes when the search is done. Name every variant you want.")
                 .note("Groups are matching cells that touch (diagonals count) and get the same answer for breaking "
-                        + "them, one per line (a JSON object), nearest first: cells and a count per block type, the "
-                        + "nearest cell with direction and distance, the permission for breaking (allow; ask = "
-                        + "work.dig asks your owner first; deny = work.dig does not dig it) with the reason, source "
-                        + "cells for water or lava, and every position for groups of up to 16 cells. A long list comes "
-                        + "in short pages (a few dozen groups), and each page looks again. With into the reply lists "
-                        + "only the nearest few; `area.show` lists them all.")
+                        + "them, nearest first: how many cells and a count per block type, the nearest cell (a pos, "
+                        + "with direction and distance), the permission for breaking (allow; ask = work.dig asks your "
+                        + "owner first; deny = work.dig does not dig it) with the reason, source cells for water or "
+                        + "lava, and every position for groups of up to 16 cells.")
                 .note("Without into it only looks: the groups have no ids. With into = \"ores\" each group becomes "
                         + "a part of the area ores (made then and there if you have no area ores yet — the result says "
                         + "so), and its id (ores/g5) is what `work.dig`, `move.goto_(\"ores/g5\", {arrive = \"dig\"})` "
@@ -106,30 +121,48 @@ public final class ScanCommands {
                 .seeAlso("area show", "work dig", "scan block");
         scan.server("entities", "List the entities near you, nearest first, with the ids other actions take.",
                         ScanCommands::entities, TYPE_FILTER, ENTITY_RADIUS, Listing.PAGE)
-                .returns(QueryExtraOps.ENTITIES)
+                .returns(QueryExtraOps.ENTITIES, ScriptType.listOf(Shapes.ENTITY.type()))
                 .example("scan.entities(\"hostile\")")
                 .example("scan.entities({radius = 12})")
                 .example("scan.entities(\"item\", {radius = 8})")
-                .note("Going through them: `for _, e in ipairs(scan.entities(\"item\", {radius = 8})) do print(e.item, "
-                        + "e.cell[1], e.cell[2], e.cell[3]) end`.")
-                .note("Instant and read-only. Each entity has id, type, category, position, cell (the block cell it "
-                        + "is in), distance, hp; an item also has item, count and pickup_delay (ticks before anyone "
-                        + "can pick it up); a tamed one has owner: you, your owner, or the other player's name. In a script it returns the list, nearest first, all of "
-                        + "them; the reply lists one per line and a long list comes in pages.")
-                .note("The ids are runtime ids: `fight.attack(184)`, `use.entity(184)`. They do not survive a "
-                        + "restart.")
+                .note("Going through them: `for _, e in ipairs(scan.entities(\"item\", {radius = 8})) do "
+                        + "move.goto_(e.pos) end`.")
+                .note("Instant and read-only. The list of all of them, nearest first: each is an Entity (id, type, "
+                        + "category, pos, distance, hp); a dropped item is an Item (also item, count and pickup_delay, "
+                        + "ticks before anyone can pick it up); a tamed one has owner: you, your owner, or the other "
+                        + "player's name.")
+                .note("Hand one on as it is: `local e = scan.entities(\"hostile\")[1]; fight.attack(e)`, and the same "
+                        + "with use.entity(e) or move.goto_(e.pos). The ids are runtime ids and do not survive a restart.")
                 .seeAlso("scan around", "fight attack", "use entity");
         scan.server("block", "One block: its id and state, hardness, whether your held tool is right, dig time, "
                         + "whether it is in reach.",
                         ScanCommands::block, CELL)
-                .example("scan.block({120, 64, -35})")
+                .returns(ScriptType.table(
+                        ScriptType.field("name", ScriptType.STRING, "Its id."),
+                        ScriptType.field("pos", Shapes.POS.type(), null),
+                        ScriptType.optional("properties", new ScriptType.Simple("table<string, string>"),
+                                "Its state, facing = \"north\" ..."),
+                        ScriptType.field("is_air", ScriptType.BOOLEAN, null),
+                        ScriptType.field("is_solid", ScriptType.BOOLEAN, null),
+                        ScriptType.field("is_liquid", ScriptType.BOOLEAN, null),
+                        ScriptType.field("hardness", ScriptType.NUMBER, null),
+                        ScriptType.field("unbreakable", ScriptType.BOOLEAN, null),
+                        ScriptType.field("needs_correct_tool", ScriptType.BOOLEAN, null),
+                        ScriptType.field("current_hand_correct_tool", ScriptType.BOOLEAN, null),
+                        ScriptType.optional("estimated_mining_ticks", ScriptType.INTEGER, null),
+                        ScriptType.field("distance", ScriptType.NUMBER, null),
+                        ScriptType.field("in_reach", ScriptType.BOOLEAN, null)))
+                .example("scan.block({x = 120, y = 64, z = -35})")
                 .note("Instant and read-only, from any distance: the block id and its state properties (an "
                         + "end_portal_frame's has_eye), hardness, whether the tool in hand is right, an estimated dig "
                         + "time, and whether it is within your reach.")
                 .seeAlso("scan storage", "scan blocks");
         scan.server("storage", "What a block holds — items, fluid, energy — read without opening it.",
                         ScanCommands::storage, CELL, Listing.PAGE)
-                .example("scan.storage({120, 64, -35})")
+                .returns(ScriptType.table(ScriptType.field("block", Shapes.BLOCK.type(), null),
+                        ScriptType.field("storage", ScriptType.listOf(ScriptType.STRING),
+                                "What it holds, one line per slot, tank or battery.")))
+                .example("scan.storage({x = 120, y = 64, z = -35})")
                 .note("Instant and read-only, from any distance; nothing is opened or moved.")
                 .note("Works on chests, furnaces and most modded machines, tanks and batteries. Storage-network "
                         + "terminals (AE2/RS) show only their local buffer, not the whole network.")
@@ -139,7 +172,7 @@ public final class ScanCommands {
 
     private static void around(ServerSource src, CommandArgs args) {
         Integer radius = args.get(VIEW_RADIUS);
-        src.reply(LookAround.render(src.companion(), radius == null ? LookAround.DEFAULT_RADIUS : radius));
+        src.reply(LookAround.render(src.companion(), radius == null ? LookAround.DEFAULT_RADIUS : radius).toJson());
     }
 
     /** 搜索按刻分片,回执在搜完的那一刻经回信口送出。 */
@@ -158,12 +191,10 @@ public final class ScanCommands {
     }
 
     private static void block(ServerSource src, CommandArgs args) {
-        BlockPos cell = args.get(CELL);
-        src.reply(PERCEPTION.inspectBlock(cell.getX(), cell.getY(), cell.getZ(), src.companion()));
+        src.reply(PERCEPTION.inspectBlock(args.get(CELL), src.companion()).toJson());
     }
 
     private static void storage(ServerSource src, CommandArgs args) {
-        BlockPos cell = args.get(CELL);
-        src.reply(QUERY.inspectBlockStorage(cell.getX(), cell.getY(), cell.getZ(), src.companion(), args));
+        src.reply(QUERY.inspectBlockStorage(args.get(CELL), src.companion(), args));
     }
 }

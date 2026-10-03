@@ -54,7 +54,7 @@ public final class BlockActionOps {
                 cells = cells.union(named.resolve(place.area()).cells());
                 firstArea = firstArea == null ? place.area() : firstArea;
             } else if (place.cell() == null) {
-                throw new IllegalArgumentException("work.dig takes cells ({x, y, z}, all three) and areas; " + place
+                throw new IllegalArgumentException("work.dig takes cells ({x = …, y = …, z = …}, all three) and areas; " + place
                         + " is " + (place.x() == null ? "a height" : "a column") + ", not one cell");
             } else {
                 points.add(place.cell());

@@ -33,23 +33,24 @@ public final class AgentOps {
                 String text = registry.readSupportFile(name, file);
                 return page(SkillInjection.supportFile(name, file, text), args);
             } catch (IllegalArgumentException ex) {
-                return TaskResult.fail(ex.getMessage()).toJson();
+                return TaskResult.fail(com.dwinovo.numen.agent.script.ErrorKind.NOT_FOUND, ex.getMessage(), null)
+                        .toJson();
             }
         }
         var maybe = registry.get(name);
         if (maybe.isEmpty()) {
             String available = registry.all().stream().map(SkillInfo::name).collect(Collectors.joining(", "));
-            return TaskResult.fail("unknown skill: " + name + "; the skills are: "
-                    + (available.isEmpty() ? "(none installed)" : available)).toJson();
+            return TaskResult.fail(com.dwinovo.numen.agent.script.ErrorKind.NOT_FOUND, "unknown skill: " + name
+                    + "; the skills are: " + (available.isEmpty() ? "(none installed)" : available), null).toJson();
         }
 
         // 成型交给 SkillInjection:主人打斜杠命令走的是另一条路,进上下文的东西必须一样。
         return page(SkillInjection.body(maybe.get(), null), args);
     }
 
-    /** 一段文字按输出预算取这一页,一行一条;要的那一页不存在是一条失败。 */
+    /** 一段文字按输出预算取这一页,一行一条;要的那一页不存在是一条失败。数据里是全文:脚本里 skill.load 返回它。 */
     private static String page(String text, CommandArgs args) {
-        return new Listing("", List.of(text.split("\n", -1)), "").result(args).toJson();
+        return new Listing("", List.of(text.split("\n", -1)), "").result(args, Map.of("text", text)).toJson();
     }
 
 
@@ -91,8 +92,8 @@ public final class AgentOps {
         NoteBook.Note note = book.read(name);
         if (note == null) {
             String known = book.index().stream().map(NoteBook.Note::name).collect(Collectors.joining(", "));
-            return TaskResult.fail("no note named " + name + "; your notes are: "
-                    + (known.isEmpty() ? "(none)" : known)).toJson();
+            return TaskResult.fail(com.dwinovo.numen.agent.script.ErrorKind.NOT_FOUND, "no note named " + name
+                    + "; your notes are: " + (known.isEmpty() ? "(none)" : known), null).toJson();
         }
         TaskResult content = new Listing("", List.of(note.content().split("\n", -1)), "").result(args);
         if (!content.success()) {
@@ -106,6 +107,7 @@ public final class AgentOps {
     /** 忘掉一条。整理是她自己的事,我们不替她删,也不替她留。 */
     public String forget(UUID companion, String name) {
         boolean gone = NoteBook.of(companion).forget(name);
-        return (gone ? TaskResult.ok("forgotten") : TaskResult.fail("no note named " + name)).toJson();
+        return (gone ? TaskResult.ok("forgotten") : TaskResult.fail(com.dwinovo.numen.agent.script.ErrorKind.NOT_FOUND,
+                "no note named " + name, null)).toJson();
     }
 }

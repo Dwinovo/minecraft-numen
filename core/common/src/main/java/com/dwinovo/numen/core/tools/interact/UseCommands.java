@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.tools.interact;
 
+import com.dwinovo.numen.cli.Shapes;
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
@@ -89,6 +91,15 @@ public final class UseCommands {
         return GROUP + " " + action;
     }
 
+    /** 按一下的结果。 */
+    private static final ScriptType CLICKED = ScriptType.table(
+                        ScriptType.field("button", ScriptType.choice(java.util.List.of("left", "right")), null),
+                        ScriptType.optional("aim", Shapes.POS.type(), "The cell aimed at."),
+                        ScriptType.optional("block", Shapes.BLOCK.type(), "The block the click used, when it opened "
+                                + "or worked a station."),
+                        ScriptType.optional("changes", ScriptType.listOf(ScriptType.STRING), "What changed: hands, the "
+                                + "block, new entities."));
+
     public static void install(NumenApi numen) {
         numen.registerCommands(GROUP, "Clicking the world like a player: blocks, entities, the open GUI, beds.",
                 UseCommands::actions);
@@ -98,16 +109,17 @@ public final class UseCommands {
         use.server(BLOCK, "Aim at a block, fluid or air cell within reach and press a mouse button: the full "
                         + "native click.",
                 UseCommands::block, AIM, LEFT, HOLD, ITEM, SNEAK)
-                .example("use.block({120, 64, -35})")
-                .example("use.block({120, 63, -35}, {item = \"minecraft:bucket\"})")
-                .example("use.block({120, 64, -35}, {item = \"minecraft:oak_planks\", sneak = true})")
-                .example("use.block({120, 64, -35}, {left = true})")
+                .returns(CLICKED)
+                .example("use.block({x = 120, y = 64, z = -35})")
+                .example("use.block({x = 120, y = 63, z = -35}, {item = \"minecraft:bucket\"})")
+                .example("use.block({x = 120, y = 64, z = -35}, {item = \"minecraft:oak_planks\", sneak = true})")
+                .example("use.block({x = 120, y = 64, z = -35}, {left = true})")
                 .note("If the aimed block doesn't take a right click, the held item acts on its own, exactly like "
                         + "a real right-click: aiming at water with a bucket scoops it, with a boat places it.")
                 .note("With sneak = true and something in hand, a right click skips what the aimed block itself "
                         + "does: a block goes onto a chest instead of opening it.")
                 .note("It does NOT travel: you must already be within working reach (~4.5 blocks) of the aim "
-                        + "point; `move.goto_({120, 64, -35}, {arrive = \"use\"})` stands you where one of its faces "
+                        + "point; `move.goto_({x = 120, y = 64, z = -35}, {arrive = \"use\"})` stands you where one of its faces "
                         + "is in sight and in reach. Farther away it fails and names that call.")
                 .note("Both buttons are bare key presses: whatever you hold is what is used, and the block the "
                         + "crosshair lands on is the one clicked — if something else is in the way (tall grass in front "
@@ -123,12 +135,17 @@ public final class UseCommands {
         use.server(AHEAD, "Press a mouse button at nothing in particular: the held item acts straight ahead, "
                         + "where you face.",
                 UseCommands::ahead, LEFT, HOLD, ITEM, SNEAK)
+                .returns(CLICKED)
                 .example("use.ahead({item = \"minecraft:snowball\"})")
                 .note("To aim somewhere, `use.block` at that cell instead; air cells work too.")
                 .note("Food and drink go through `inv.eat`, not here.")
                 .seeAlso(line(BLOCK));
         use.server(ENTITY, "Press a mouse button on an entity within reach and in sight of where you stand.",
                 UseCommands::entity, TARGET, LEFT, HOLD, ITEM, SNEAK)
+                .returns(ScriptType.table(
+                        ScriptType.field("button", ScriptType.choice(java.util.List.of("left", "right")), null),
+                        ScriptType.field("entity_id", ScriptType.INTEGER, null),
+                        ScriptType.optional("changes", ScriptType.listOf(ScriptType.STRING), "What changed.")))
                 .example("use.entity(812, {item = \"minecraft:shears\"})")
                 .example("use.entity(812, {left = true})")
                 .example("use.entity(812, {sneak = true})")
@@ -140,7 +157,8 @@ public final class UseCommands {
                 .seeAlso(line(BLOCK));
         use.server(GUI, "Look at the GUI you have open, or at your own inventory menu when none is.",
                 UseCommands::gui, Listing.PAGE)
-                .example("use.gui()")
+                .returns(GuiOps.GUI)
+                .example("for _, s in ipairs(use.gui().slots) do print(s.index, s.item, s.count) end")
                 .note("Instant and read-only. Lists every slot (index, side, item and count, [output] mark), "
                         + "the cursor and any machine progress; a crafting grid is drawn as a 2D map of slot "
                         + "numbers.")
@@ -154,6 +172,7 @@ public final class UseCommands {
                 .seeAlso(line(BLOCK), line(TRANSFER), line(SHIFT), line(CLOSE), "inv recipe");
         use.server(TRANSFER, "Move items from one slot of the GUI you have open to another: move, merge or swap.",
                         UseCommands::transfer, FROM, TO, COUNT)
+                .returns(ScriptType.NOTHING)
                 .example("use.transfer(38, 1, {count = 1})")
                 .example("use.transfer(12, 40)")
                 .note("One move per call. To move several stacks, call it several times in one script; each result "
@@ -164,6 +183,7 @@ public final class UseCommands {
                 .seeAlso(line(GUI), line(SHIFT));
         use.server(SHIFT, "Shift-click a slot of the GUI you have open: its whole stack goes to the other side.",
                         UseCommands::shift, FROM)
+                .returns(ScriptType.NOTHING)
                 .example("use.shift(5)")
                 .note("The menu picks where it lands, like a real shift-click: a chest's items go to your inventory "
                         + "and yours into the chest, raw iron into a furnace's input and coal into its fuel slot.")
@@ -172,16 +192,19 @@ public final class UseCommands {
                 .seeAlso(line(GUI), line(TRANSFER));
         use.server(CLOSE, "Close the GUI you have open, once you have finished moving items.",
                 UseCommands::close)
+                .returns(ScriptType.NOTHING)
                 .example("use.close()")
                 .note("Instant. Your own inventory menu is always there; with nothing else open there is nothing "
                         + "to close.")
                 .seeAlso(line(GUI));
         use.server(SLEEP, "Get into a bed you are standing next to, and say whether you are actually asleep.",
                 UseCommands::sleep, BED)
+                .returns(ScriptType.table(ScriptType.field("bed", Shapes.POS.type(), "The bed's head."),
+                        ScriptType.field("sleeping", ScriptType.BOOLEAN, null)))
                 .example("use.sleep()")
-                .example("use.sleep({at = {120, 64, -35}})")
+                .example("use.sleep({at = {x = 120, y = 64, z = -35}})")
                 .note("It does NOT travel: find a bed with `scan.blocks(\"#minecraft:beds\")` (that one tag covers "
-                        + "every colour), `move.goto_({120, 64, -35}, {arrive = \"use\"})` with its coordinates, then "
+                        + "every colour), `move.goto_({x = 120, y = 64, z = -35}, {arrive = \"use\"})` with its coordinates, then "
                         + "call this.")
                 .note("Succeeds only when the server confirms you are sleeping; otherwise it hands back "
                         + "Minecraft's own reason. \"Only at night\" means wait (`task.timer`), not retry; \"too far "

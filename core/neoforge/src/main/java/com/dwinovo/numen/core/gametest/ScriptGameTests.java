@@ -93,10 +93,10 @@ public class ScriptGameTests {
             helper.assertTrue(round.hasSettled(), "the script has not finished");
             String msg = message(round, script);
             helper.assertTrue(!receipt(round, script).get("success").getAsBoolean(), "the script succeeded: " + msg);
-            // 报错出在库函数 move.goto_ 里调 route.new 的那一行:出处写成"库名:行号"
-            helper.assertTrue(msg.startsWith("The script stopped at line 2 after 1 call: could not get there: move:")
-                    && msg.contains(": route.new: error: "), msg);
-            helper.assertTrue(msg.contains("line 1 route.new: failed"), msg);
+            // 库函数 move.goto_ 里调 route.new 抛出的错误值原样到了脚本:拼进字符串是"函数: 种类 — 原因"
+            helper.assertTrue(msg.startsWith("The script stopped at line 2 after 1 call: could not get there: "
+                    + "route.new: bad_argument — "), msg);
+            helper.assertTrue(msg.contains("line 1 route.new: bad_argument — "), msg);
             helper.assertTrue(level.getBlockState(kept).is(Blocks.STONE), "the line after the failure ran: " + msg);
             CompanionFactory.despawn(level.getServer(), her);
         });
@@ -111,7 +111,7 @@ public class ScriptGameTests {
         BlockPos kept = helper.absolutePos(new BlockPos(4, 2, 2));
         level.setBlockAndUpdate(kept, Blocks.STONE.defaultBlockState());
         LlmToolCall script = programCall("""
-                move.goto_({%d, %d})
+                move.goto_({x = %d, z = %d})
                 build.set(%s, {block = "air"})
                 """.formatted(far.getX(), far.getZ(), xyz(kept)));
         Round round = round(helper, her, script);
@@ -144,8 +144,8 @@ public class ScriptGameTests {
         NumenPlayer her = spawnAt(helper, "gametest_lua_spoken", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
         LlmToolCall script = programCall("""
-                move.goto_({%d, %d})
-                move.goto_({%d, %d})
+                move.goto_({x = %d, z = %d})
+                move.goto_({x = %d, z = %d})
                 """.formatted(far.getX(), far.getZ(), far.getX() - 10, far.getZ()));
         Round round = round(helper, her, script);
         EventOutbox outbox = EventOutbox.get(level.getServer());
@@ -301,11 +301,12 @@ public class ScriptGameTests {
         helper.assertTrue(!lua(her, "script.delete(\"mine\")").succeeded(), "a built-in script was deleted");
 
         ToolRun saved = lua(her, "script.save(\"-- Clear the cell at x y z.\\nlocal x, y, z = ...\\n"
-                + "build.set({tonumber(x), tonumber(y), tonumber(z)}, {block = 'air'})\", {name = \"gt-clear\"})");
+                + "build.set({x = tonumber(x), y = tonumber(y), z = tonumber(z)}, {block = 'air'})\", "
+                + "{name = \"gt-clear\"})");
         helper.assertTrue(saved.succeeded() && saved.reply().contains("Saved script gt-clear"), saved.reply());
         ToolRun shown = lua(her, "script.show(\"gt-clear\")");
         helper.assertTrue(shown.succeeded() && shown.reply().contains("saved by gametest_lua_saver")
-                && shown.reply().contains("build.set({tonumber(x)") && shown.reply().contains("Never run."),
+                && shown.reply().contains("build.set({x = tonumber(x)") && shown.reply().contains("Never run."),
                 shown.reply());
 
         String args = "\"" + cell.getX() + "\", \"" + cell.getY() + "\", \"" + cell.getZ() + "\"";
@@ -363,5 +364,116 @@ public class ScriptGameTests {
                 "a plan with two steps in progress was taken: " + two.receipt());
         CompanionFactory.despawn(helper.getLevel().getServer(), her);
         helper.succeed();
+    }
+
+    /**
+     * 查到的东西原样交给动作:{@code scan.blocks} 一团的最近一格、{@code scan.block} 读到的一块,都直接进 {@code work.dig};两格都挖掉,
+     * 程序拿到的是两份数据({@code dug} 各一格),不是话。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_scripts")
+    public static void what_a_query_returns_goes_into_an_action_as_it_is(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer her = spawnAt(helper, "gametest_lua_handover", new BlockPos(4, 2, 4), true);
+        BlockPos first = helper.absolutePos(new BlockPos(6, 2, 4));
+        BlockPos second = helper.absolutePos(new BlockPos(4, 2, 6));
+        level.setBlockAndUpdate(first, Blocks.PEARLESCENT_FROGLIGHT.defaultBlockState());
+        level.setBlockAndUpdate(second, Blocks.VERDANT_FROGLIGHT.defaultBlockState());
+        LlmToolCall script = programCall("""
+                local found = scan.blocks("minecraft:pearlescent_froglight", {radius = 6})
+                local a = work.dig(found.groups[1].nearest)
+                local b = work.dig(scan.block(%s))
+                return {a.dug, b.dug}
+                """.formatted(xyz(second)));
+        Round round = round(helper, her, script);
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(round.hasSettled(), "the script has not finished");
+            JsonObject receipt = receipt(round, script);
+            helper.assertTrue(receipt.get("success").getAsBoolean(), "the script failed: " + receipt);
+            helper.assertTrue(receipt.getAsJsonObject("data").get("returned").toString().equals("[1,1]"),
+                    "the two digs did not hand back one cell each as data: " + receipt);
+            helper.assertTrue(level.getBlockState(first).isAir() && level.getBlockState(second).isAir(),
+                    "a block handed on as it was is still standing: " + receipt);
+            EventOutbox.get(level.getServer()).forget(her.getUUID());
+            CompanionFactory.despawn(level.getServer(), her);
+        });
+    }
+
+    /** 一只实体原样就是一处地方:{@code scan.entities} 列出的那头牛交给 {@code move.goto_},她走到牛跟前。 */
+    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_scripts")
+    public static void an_entity_a_scan_found_is_a_place_to_walk_to(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer her = spawnAt(helper, "gametest_lua_herder", new BlockPos(2, 2, 2), false);
+        var cow = net.minecraft.world.entity.EntityType.COW.create(level);
+        helper.assertTrue(cow != null, "the cow did not spawn");
+        BlockPos at = helper.absolutePos(new BlockPos(12, 2, 12));
+        cow.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        cow.setNoAi(true);
+        level.addFreshEntity(cow);
+        LlmToolCall script = programCall("""
+                local cow = scan.entities("passive", {radius = 20})[1]
+                move.goto_(cow, {arrive = "near"})
+                return cow.id
+                """);
+        Round round = round(helper, her, script);
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(round.hasSettled(), "the script has not finished");
+            JsonObject receipt = receipt(round, script);
+            helper.assertTrue(receipt.get("success").getAsBoolean()
+                            && receipt.getAsJsonObject("data").get("returned").getAsInt() == cow.getId(),
+                    "the walk to the cow failed: " + receipt);
+            helper.assertTrue(her.distanceTo(cow) <= 4, "she did not get to the cow: " + her.distanceTo(cow));
+            EventOutbox.get(level.getServer()).forget(her.getUUID());
+            cow.discard();
+            CompanionFactory.despawn(level.getServer(), her);
+        });
+    }
+
+    /**
+     * 失败是一个值:{@code pcall} 接住的错误有种类与能照抄的下一行,拼进字符串是"函数: 种类 — 原因"。够不着的一格是
+     * {@code out_of_reach},下一行是走过去再挖;旧写法(三个数的列表、一串字)是 {@code bad_argument},下一行是改写好的那一次调用。
+     * 哪一次都没挖。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_scripts")
+    public static void a_failed_call_is_a_value_with_its_kind_and_next_line(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer her = spawnAt(helper, "gametest_lua_catcher", new BlockPos(1, 2, 1), true);
+        BlockPos far = helper.absolutePos(new BlockPos(14, 2, 14));
+        BlockPos near = helper.absolutePos(new BlockPos(3, 2, 1));
+        level.setBlockAndUpdate(far, Blocks.OCHRE_FROGLIGHT.defaultBlockState());
+        level.setBlockAndUpdate(near, Blocks.OCHRE_FROGLIGHT.defaultBlockState());
+        LlmToolCall script = programCall("""
+                local _, far = pcall(work.dig, %s)
+                local _, list = pcall(work.dig, {%d, %d, %d})
+                local _, text = pcall(work.dig, "%d %d %d")
+                print("caught: " .. far)
+                return {far = {far.kind, far.hint}, list = {list.kind, list.hint}, text = {text.kind, text.hint}}
+                """.formatted(xyz(far), near.getX(), near.getY(), near.getZ(), near.getX(), near.getY(), near.getZ()));
+        Round round = round(helper, her, script);
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(round.hasSettled(), "the script has not finished");
+            JsonObject receipt = receipt(round, script);
+            helper.assertTrue(receipt.get("success").getAsBoolean(), "the script did not catch the errors: " + receipt);
+            JsonObject got = receipt.getAsJsonObject("data").getAsJsonObject("returned");
+            var farErr = got.getAsJsonArray("far");
+            helper.assertTrue("out_of_reach".equals(farErr.get(0).getAsString())
+                            && farErr.get(1).getAsString().equals("move.goto_(" + xyz(far) + ", {arrive = \"dig\"})\n"
+                                    + "work.dig(" + xyz(far) + ")"),
+                    "out of reach is not its own kind with the walk as the next line: " + got);
+            String rewritten = "work.dig(" + xyz(near) + ")";
+            for (String shape : List.of("list", "text")) {
+                var err = got.getAsJsonArray(shape);
+                helper.assertTrue("bad_argument".equals(err.get(0).getAsString())
+                                && rewritten.equals(err.get(1).getAsString()),
+                        "the old " + shape + " shape is not refused with the call rewritten: " + got);
+            }
+            helper.assertTrue(receipt.get("message").getAsString().contains("caught: work.dig: out_of_reach — "),
+                    "an error joined into a string does not read as function, kind and why: " + receipt);
+            helper.assertTrue(level.getBlockState(far).is(Blocks.OCHRE_FROGLIGHT)
+                    && level.getBlockState(near).is(Blocks.OCHRE_FROGLIGHT), "a refused call dug a block");
+            CompanionFactory.despawn(level.getServer(), her);
+        });
     }
 }

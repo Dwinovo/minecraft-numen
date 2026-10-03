@@ -1,8 +1,10 @@
 package com.dwinovo.numen.cli;
 
+import com.dwinovo.numen.agent.script.FunctionDoc;
 import com.dwinovo.numen.agent.script.ScriptCatalog;
 import com.dwinovo.numen.agent.script.ScriptEngine;
 import com.dwinovo.numen.agent.script.ScriptRun;
+import com.dwinovo.numen.agent.script.ScriptType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -71,8 +73,10 @@ public final class Action {
     private final List<String> notes = new ArrayList<>();
     private final List<String> seeAlso = new ArrayList<>();
     private Authority authority = Authority.HERS;
-    /** 脚本里它的函数直接返回的回执数据项;没声明是 null。 */
+    /** 脚本里它的函数直接返回的回执数据项;返回整份数据是 null。 */
     private String returns;
+    /** 脚本里它的函数返回什么类型;登记时必须声明({@link #returns(ScriptType)})。 */
+    private ScriptType returnType;
     /** 成功的调用的参数原样留在脚本回执里。 */
     private boolean echoed;
 
@@ -102,12 +106,24 @@ public final class Action {
     }
 
     /**
-     * 这个动作的函数返回回执 {@code data} 里的 {@code key} 那一项——只要回执里有它,成败都返回:查询的结果拿来就能
-     * 循环、判断({@code for _, p in ipairs(area.parts("ores"))}、{@code while area.has(p)},没剩就是 false 而不是报错)。
-     * 回执里没有这一项(区域不存在这类)才在调用处抛出脚本错误。不调就是普通的直返:成功返回回执数据、失败抛错。
+     * 这个动作的函数成功时返回什么:回执的数据,类型是 {@code type}(签名里写的就是它);不返回值是 {@link ScriptType#NOTHING}。每个
+     * 动作都要声明,登记块跑完时查。数据的样子由处理函数在同一处写出,位置、方块、实体用 {@link Shapes} 的写法。
      */
-    public Action returns(String key) {
+    public Action returns(ScriptType type) {
         group.requireOpen();
+        if (type == null) {
+            throw new IllegalArgumentException(path() + " 声明的返回类型是空的");
+        }
+        this.returnType = type;
+        return this;
+    }
+
+    /**
+     * 这个动作的函数成功时返回回执 {@code data} 里的 {@code key} 那一项,类型是 {@code type}:查询的结果拿来就能循环、判断
+     * ({@code for _, p in ipairs(area.parts("ores"))}、{@code while area.has(p)})。
+     */
+    public Action returns(String key, ScriptType type) {
+        returns(type);
         if (key == null || key.isBlank()) {
             throw new IllegalArgumentException(path() + " 声明的返回项是空的");
         }
@@ -280,14 +296,57 @@ public final class Action {
         return authority;
     }
 
-    /** 它的函数直接返回的回执数据项;没声明是 null。 */
+    /** 它的函数直接返回的回执数据项;返回整份数据是 null。 */
     String returns() {
         return returns;
     }
 
+    /** 它的函数返回什么类型;没声明是 null(登记块跑完时查)。 */
+    ScriptType returnType() {
+        return returnType;
+    }
+
+    /**
+     * 它的说明,给脚本引擎写成签名:按顺序的对象各一个参数(收一个或几个的标明),选项合成最后一个选项表,字段带说明。
+     */
+    FunctionDoc doc() {
+        List<FunctionDoc.Param> out = new ArrayList<>();
+        List<ScriptType.Field> options = new ArrayList<>();
+        for (Param<?> p : params) {
+            if (p.positional()) {
+                boolean several = p.type().span() == ArgType.Span.SEVERAL;
+                out.add(new FunctionDoc.Param(p.name(), several ? p.type().itemScript() : p.type().script(), several,
+                        !p.required(), p.explained()));
+            } else {
+                options.add(ScriptType.optional(p.name(), p.type().script(), p.explained()));
+            }
+        }
+        if (!options.isEmpty()) {
+            out.add(new FunctionDoc.Param("opts", new ScriptType.Table(options), false, true, null));
+        }
+        List<String> notes = new ArrayList<>(this.notes);
+        if (authority == Authority.SERVER_ON_HER) {
+            notes.add(0, CommandHelp.SERVER_ON_HER);
+        }
+        return new FunctionDoc(function(), summary, out, returnType, examples, notes,
+                seeAlso.stream().map(path -> path.replace(' ', '.')).toList());
+    }
+
     /** 它的脚本函数怎么交回结果、参数留不留在回执里。 */
     ScriptCatalog.Verb verb() {
-        return new ScriptCatalog.Verb(returns, echoed);
+        java.util.Set<String> options = new java.util.LinkedHashSet<>();
+        int positions = 0;
+        for (Param<?> p : params) {
+            if (!p.positional()) {
+                options.add(p.name());
+            } else if (p.type().span() == ArgType.Span.ONE) {
+                positions++;
+            } else {
+                positions = Integer.MAX_VALUE;
+            }
+        }
+        return new ScriptCatalog.Verb(returns, echoed, options, positions,
+                returnType == null ? null : ScriptType.sample(returnType, NumenCli::classNamed));
     }
 
     /** 服务端执行?(否则在主人客户端执行。) */

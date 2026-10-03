@@ -24,7 +24,9 @@ import net.minecraft.world.phys.AABB;
  * </ul>
  * 每个坎都不高于迈步高度,就是走过去,与原版每刻碰撞时先试着抬一个迈步高度是同一回事。有坎高过迈步高度,就看起跳:
  * 一路上最高的脚高不超过起跳能到的高度({@link BodyStats#jumpHeight},按脚下方块的起跳系数),且从起点到最高处这一段,
- * 身体在最高的脚高上处处放得下(头顶不撞)。走完落到的脚高必须就是终点节点的脚高,否则这一步去的不是那个节点。
+ * 身体在起跳越过的高度上处处放得下(头顶不撞)。起跳停不在恰好够高的那一点上:身体沿抛物线升到顶再落下,只有高出要越过的
+ * 高度一截的那几刻能往前挪,所以越过的高度取最高的脚高加 {@link #JUMP_CLEARANCE}(起跳到不了那么高时取到得了的顶)。
+ * 走完落到的脚高必须就是终点节点的脚高,否则这一步去的不是那个节点。
  *
  * <h2>两种记法,一套推导</h2>
  * 推导只问三件事:取样的位置、脚底在某处撞上的最高顶面、脚底下最高的顶面({@link Obstacles})。要看的格全是全空或整块
@@ -42,6 +44,13 @@ public final class Stepping {
         /** 上不去,或走完落不到终点节点。 */
         BLOCKED
     }
+
+    /**
+     * 起跳时身体要比越过的高度再高出这么多、在那个高度上往前挪得过去。原版起跳从地面升到约 1.25 格:越过一格高的坎时,高出
+     * 0.2 格以上的有三四刻,够往前挪过坎沿;头顶的空只够贴着坎沿(高出不到一两刻)的,真跳起来脑袋先撞上,过不去——炼药锅
+     * 上方两格压着一块关着的上半活板门就是这样。
+     */
+    static final double JUMP_CLEARANCE = 0.2;
 
     private Stepping() {}
 
@@ -74,14 +83,17 @@ public final class Stepping {
         double half = body.width() / 2 - Clearance.DEFLATE;
         double sx = x + 0.5;
         double sz = z + 0.5;
-        // 起跳:从起点竖直升到最高的脚高,再平移到最高处,这一段头顶都不能撞
-        if (!Double.isNaN(obstacles.highestHit(sx, sz, half, walk.peak, height))) {
+        // 起跳:在起点那一列竖直升起,到顶(或头顶撞上的那一处)为止;连最高的脚高都升不到就过不去
+        double apex = Math.min(fromFeetY + jump, obstacles.ceiling(sx, sz, half, fromFeetY, height) - height);
+        if (apex < walk.peak - Footing.EPSILON) {
             return Step.BLOCKED;
         }
+        // 再在越过的高度上平移到最高处,这一段头顶都不能撞
+        double over = Math.max(walk.peak, Math.min(apex, walk.peak + JUMP_CLEARANCE));
         for (int i = 0; i <= walk.peakAt; i++) {
             double cx = sx + walk.points[i] * dx;
             double cz = sz + walk.points[i] * dz;
-            if (!Double.isNaN(obstacles.highestHit(cx, cz, half, walk.peak, height))) {
+            if (!Double.isNaN(obstacles.highestHit(cx, cz, half, over, height))) {
                 return Step.BLOCKED;
             }
         }
@@ -270,6 +282,9 @@ public final class Stepping {
 
         /** 脚底下最高的顶面(身体没撞上任何东西时往下落到那里);脚底下什么也没有,就落出取样的范围。 */
         abstract double support(double cx, double cz, double half, double feet);
+
+        /** 脚在 {@code feet} 时头顶上方、与脚底交叠的碰撞箱里最低的底面:身体往上升到头碰着它为止;上面什么也没有是正无穷。 */
+        abstract double ceiling(double cx, double cz, double half, double feet, double height);
     }
 
     /** 碰撞箱逐个记,绝对坐标。 */
@@ -313,6 +328,18 @@ public final class Stepping {
                 if (overlapsFootprint(box.minX, box.minZ, box.maxX, box.maxZ, cx, cz, half)
                         && box.maxY <= feet + Clearance.DEFLATE && box.maxY > best) {
                     best = box.maxY;
+                }
+            }
+            return best;
+        }
+
+        @Override
+        double ceiling(double cx, double cz, double half, double feet, double height) {
+            double best = Double.POSITIVE_INFINITY;
+            for (AABB box : boxes) {
+                if (overlapsFootprint(box.minX, box.minZ, box.maxX, box.maxZ, cx, cz, half)
+                        && box.minY >= feet + height - Clearance.DEFLATE && box.minY < best) {
+                    best = box.minY;
                 }
             }
             return best;
@@ -414,6 +441,27 @@ public final class Stepping {
                         if (cy + 1.0 > best) {
                             best = cy + 1.0;
                         }
+                        break;
+                    }
+                }
+            }
+            return best;
+        }
+
+        @Override
+        double ceiling(double cx, double cz, double half, double feet, double height) {
+            double limit = feet + height - Clearance.DEFLATE;
+            double best = Double.POSITIVE_INFINITY;
+            for (int i = 0; i < whole.length; i++) {
+                long bits = whole[i];
+                if (bits == 0 || !overlapsColumn(i, cx, cz, half)) {
+                    continue;
+                }
+                // 自下而上找第一个整个在头顶之上的整块
+                for (; bits != 0; bits &= bits - 1) {
+                    int cy = y0 + Long.numberOfTrailingZeros(bits);
+                    if (cy >= limit) {
+                        best = Math.min(best, cy);
                         break;
                     }
                 }

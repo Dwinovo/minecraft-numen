@@ -38,7 +38,7 @@ import net.minecraft.world.level.block.Block;
  *   <li>格子种类与禁区:{@code --avoid}——还要排除的语义种类({@link Semantics.Kind} 名),或不进入的区域 {@code area:名字};
  *       {@code --allow}——放开出厂排除的那几种里可以放开的;</li>
  *   <li>按位置 / 按种类:{@code --avoid-break}、{@code --avoid-place}、{@code --avoid-step}——方块 id、{@code #标签},
- *       一格坐标 {@code x,y,z},或一块区域 {@code area:名字}、{@code area:名字/部分}({@link BlockCellOrArea})。一片地方只有区域一种
+ *       一格(脚本里是一个 Pos,存下的命令行写法是 {@code x,y,z}),或一块区域 {@code area:名字}、{@code area:名字/部分}({@link BlockCellOrArea})。一片地方只有区域一种
  *       写法。</li>
  *   <li>动作代价:{@code --penalty-place}、{@code --penalty-break}、{@code --penalty-jump}、{@code --penalty-wade}。</li>
  * </ul>
@@ -280,7 +280,7 @@ public final class RouteSpecFlags {
         if (block == null) {
             throw new IllegalArgumentException(flagName(flag) + ": unknown block '" + raw
                     + "' — use a namespaced id like minecraft:chest, a tag like #minecraft:logs,"
-                    + " a cell like 12,60,8, or an area like area:house");
+                    + " a cell like {x = 12, y = 60, z = 8}, or an area like area:house");
         }
         out.add(block);
         return out;

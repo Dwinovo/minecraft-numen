@@ -1,5 +1,6 @@
 package com.dwinovo.numen.plugins.tlm;
 
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.github.tartaricacid.touhoulittlemaid.api.event.MaidTamedEvent;
 import com.github.tartaricacid.touhoulittlemaid.api.event.MaidTaskEnableEvent;
@@ -18,6 +19,7 @@ import com.github.tartaricacid.touhoulittlemaid.network.message.MaidTaskPackage;
 import com.github.tartaricacid.touhoulittlemaid.network.message.ToggleTabPackage;
 import com.github.tartaricacid.touhoulittlemaid.world.data.MaidInfo;
 import com.github.tartaricacid.touhoulittlemaid.world.data.MaidWorldData;
+import com.google.gson.JsonObject;
 import com.mojang.datafixers.util.Pair;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -141,82 +143,84 @@ final class Maids {
      * 她名下、待在没加载的区块里的女仆:车万女仆在女仆离开世界时记下的最后位置。它的存档({@code MaidWorldData})挂在主世界上,
      * 服务器开着主世界就在。
      */
-    static List<Map<String, Object>> away(ServerPlayer her) {
-        return records(MaidWorldData.get(her.level()).getInfos(her.getUUID()), "maid_away");
+    static List<JsonObject> away(ServerPlayer her) {
+        return records(MaidWorldData.get(her.level()).getInfos(her.getUUID()));
     }
 
     /** 她的女仆死后留下、还没被取空的墓碑,记在同一份存档里。 */
-    static List<Map<String, Object>> tombstones(ServerPlayer her) {
-        return records(MaidWorldData.get(her.level()).getTombstones(her.getUUID()), "tombstone");
+    static List<JsonObject> tombstones(ServerPlayer her) {
+        return records(MaidWorldData.get(her.level()).getTombstones(her.getUUID()));
     }
 
-    /** 存档里记着的那几条;这个主人一条都没记过时车万女仆给 null。 */
-    private static List<Map<String, Object>> records(List<MaidInfo> infos, String kind) {
-        List<Map<String, Object>> rows = new ArrayList<>();
+    /** 存档里记着的那几条({@code MaidCommands.RECORD}):名字、位置、维度;这个主人一条都没记过时车万女仆给 null。 */
+    private static List<JsonObject> records(List<MaidInfo> infos) {
+        List<JsonObject> rows = new ArrayList<>();
         if (infos == null) {
             return rows;
         }
         for (MaidInfo info : infos) {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("kind", kind);
-            row.put("name", info.getName().getString());
-            row.put("at", where(info.getChunkPos()));
-            row.put("dimension", info.getDimension());
+            JsonObject row = new JsonObject();
+            row.addProperty("name", info.getName().getString());
+            row.add("pos", Shapes.pos(info.getChunkPos()));
+            row.addProperty("dimension", info.getDimension());
             rows.add(row);
         }
         return rows;
     }
 
-    /** 清单里的一行:一只加载着的女仆此刻的样子。 */
-    static Map<String, Object> row(Entity entity, ServerPlayer her) {
+    /**
+     * 一只加载着的女仆此刻的样子({@code MaidCommands.MAID_CLASS}):一只实体(主人照 {@code scan.entities} 的说法),加上她的模型、
+     * 工作、设置与好感等级。
+     */
+    static JsonObject row(Entity entity, NumenPlayer her) {
         EntityMaid maid = (EntityMaid) entity;
-        Map<String, Object> row = new LinkedHashMap<>();
-        row.put("kind", "maid");
-        row.put("id", maid.getId());
-        if (maid.hasCustomName()) {
-            row.put("name", maid.getCustomName().getString());
-        }
-        row.put("model", maid.getModelId());
-        row.put("task", maid.getTask().getUid().toString());
-        row.put("schedule", schedule(maid.getSchedule()));
-        row.put("home", maid.isHomeModeEnable());
-        row.put("hp", tenth(maid.getHealth()));
-        row.put("max_hp", tenth(maid.getMaxHealth()));
-        row.put("favorability_level", maid.getFavorabilityManager().getLevel());
-        row.put("sitting", maid.isMaidInSittingPose());
-        row.put("at", where(maid.blockPosition()));
+        JsonObject row = Shapes.entity(maid);
+        row.addProperty("model", maid.getModelId());
+        row.addProperty("task", maid.getTask().getUid().toString());
+        row.addProperty("schedule", schedule(maid.getSchedule()));
+        row.addProperty("home", maid.isHomeModeEnable());
+        row.addProperty("hp", tenth(maid.getHealth()));
+        row.addProperty("max_hp", tenth(maid.getMaxHealth()));
+        row.addProperty("favorability_level", maid.getFavorabilityManager().getLevel());
+        row.addProperty("sitting", maid.isMaidInSittingPose());
         if (maid.level() == her.level()) {
-            row.put("distance", tenth(her.distanceTo(maid)));
+            row.addProperty("distance", tenth(her.distanceTo(maid)));
         } else {
-            row.put("dimension", maid.level().dimension().location().toString());
+            row.addProperty("dimension", maid.level().dimension().location().toString());
+        }
+        UUID owner = maid.getOwnerUUID();
+        if (owner != null) {
+            row.addProperty("owner", owner.equals(her.getUUID()) ? "you"
+                    : her.isOwnedByPlayer(owner) ? "your owner" : owner(entity));
         }
         return row;
     }
 
-    /** 一只女仆的详情:清单那一行,加上主人、设置页的其余几样、好感、背包、日程点。 */
-    static Map<String, Object> detail(Entity entity, ServerPlayer her) {
+    /**
+     * 一只女仆的详情({@code tlm.maid} 的数据,不含工作模式):清单里的她({@link #row}),加上设置页的其余几样、好感、背包、
+     * 日程点。
+     */
+    static JsonObject detail(Entity entity, NumenPlayer her) {
         EntityMaid maid = (EntityMaid) entity;
-        Map<String, Object> out = row(entity, her);
-        out.remove("kind");
-        String owner = owner(entity);
-        out.put("owner", owner == null ? "none (wild)" : ownedBy(entity, her) ? "you" : owner);
-        out.put("pickup", maid.isPickup());
-        out.put("ride", maid.isRideable());
-        out.put("favorability", maid.getFavorability());
-        out.put("favorability_to_next_level", maid.getFavorabilityManager().nextLevelPoint());
-        out.put("backpack", maid.getMaidBackpackType().getId().toString());
+        JsonObject out = new JsonObject();
+        out.add("maid", row(entity, her));
+        out.addProperty("pickup", maid.isPickup());
+        out.addProperty("ride", maid.isRideable());
+        out.addProperty("favorability", maid.getFavorability());
+        out.addProperty("favorability_to_next_level", maid.getFavorabilityManager().nextLevelPoint());
+        out.addProperty("backpack", maid.getMaidBackpackType().getId().toString());
         if (maid.isHomeModeEnable()) {
-            out.put("home_center", where(maid.getRestrictCenter()));
-            out.put("home_radius", tenth(maid.getRestrictRadius()));
+            out.add("home_center", Shapes.pos(maid.getRestrictCenter()));
+            out.addProperty("home_radius", tenth(maid.getRestrictRadius()));
         }
         SchedulePos points = maid.getSchedulePos();
         if (points.isConfigured()) {
-            Map<String, Object> at = new LinkedHashMap<>();
-            at.put("work", where(points.getWorkPos()));
-            at.put("idle", where(points.getIdlePos()));
-            at.put("sleep", where(points.getSleepPos()));
-            at.put("dimension", points.getDimension().toString());
-            out.put("schedule_points", at);
+            JsonObject at = new JsonObject();
+            at.add("work", Shapes.pos(points.getWorkPos()));
+            at.add("idle", Shapes.pos(points.getIdlePos()));
+            at.add("sleep", Shapes.pos(points.getSleepPos()));
+            at.addProperty("dimension", points.getDimension().toString());
+            out.add("schedule_points", at);
         }
         return out;
     }

@@ -36,18 +36,21 @@ class CommandParseTest {
                 g.server("take", "Take some items.", (src, args) -> {
                     LAST.set(args);
                     src.reply(TaskResult.ok("took").toJson());
-                }, COUNT, ITEM, FROM, LIMIT).example("gt_parse.take(3, {item = \"apple\", from = \"chest\"})"));
+                }, COUNT, ITEM, FROM, LIMIT).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt_parse.take(3, {item = \"apple\", from = \"chest\"})"));
     }
 
     /** {@code usage:} 那一段:用法接例子,写成脚本里的样子(帮助只有一份)。 */
     private static final String TAKE_USAGE = """
             usage: gt_parse.take(count, {item=…, from=…, limit=…})
               e.g. gt_parse.take(3, {item = "apple", from = "chest"})""";
-    private static final String TAKE_HINT = "hint: `api.help(\"gt_parse.take\")` explains every argument.";
+    private static final String TAKE_HINT = "hint: print(api.help(\"gt_parse.take\"))";
 
+    /** 停在组上时那一层的用法:这一组的类型签名,一个函数一行。 */
     private static final String GROUP_USAGE = """
-            usage: gt_parse — A group the parser tests poke at.
-              gt_parse.take(count, {item=…, from=…, limit=…}) — Take some items.""";
+            usage: ---A group the parser tests poke at.
+            ---@class gt_parse
+            ---@field take fun(count: integer, opts?: {item?: string, from?: string, limit?: integer}) Take some items.
+            gt_parse = {}""";
 
     private static CommandArgs ran(String line) {
         LAST.set(null);
@@ -99,7 +102,7 @@ class CommandParseTest {
 
         String bare = failed("gt_parse");
         assertTrue(bare.startsWith("error: Unknown command"), bare);
-        assertTrue(bare.endsWith("\n" + GROUP_USAGE + "\nhint: `api.help(\"gt_parse\")` lists its functions."), bare);
+        assertTrue(bare.endsWith("\n" + GROUP_USAGE + "\nhint: print(api.help(\"gt_parse\"))"), bare);
     }
 
     @Test
@@ -109,8 +112,8 @@ class CommandParseTest {
         assertTrue(prefixed.contains("\nusage: Call these from the lua tool."), prefixed);
         String unknownGroup = failed("nosuchgroup take");
         assertTrue(unknownGroup.contains("\nusage: Call these from the lua tool."), unknownGroup);
-        assertTrue(unknownGroup.contains("\napi — The API itself: the full help of one function or one group.\n"),
-                "根上按名字列出各组,第一页从第一组起: " + unknownGroup);
+        assertTrue(unknownGroup.contains("\napi — The API itself: the typed signatures of a group's functions, or one "
+                + "function in full. help\n"), "根上按名字列出各组与它们的函数名: " + unknownGroup);
         assertTrue(unknownGroup.endsWith("\nhint: `help` lists the groups."), unknownGroup);
     }
 
@@ -134,17 +137,18 @@ class CommandParseTest {
         Param<Integer> pages = Param.required("pages", ArgType.integer(1, 9), "How many pages.");
         door().registerCommands("gt_parse_local", "A group with an action on the owner's client.", g ->
                 g.client("read", "Read some pages.", (src, args) -> src.reply(TaskResult.ok("read").toJson()), pages)
+                        .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
                         .example("gt_parse_local.read(2)"));
         CliFixture.Outcome run = lua("gt_parse_local.read(\"many\")");
         assertFalse(run.success());
-        assertTrue(run.message().startsWith("The script stopped at line 1 after 0 calls: lua:1: gt_parse_local.read: "
-                + "error: argument 'pages': Expected integer"), run.message());
+        assertTrue(run.message().startsWith("The script stopped at line 1 after 0 calls: gt_parse_local.read: "
+                + "bad_argument — argument 'pages': Expected integer"), run.message());
         assertTrue(run.message().contains("""
 
                 usage: gt_parse_local.read(pages)
                   e.g. gt_parse_local.read(2)
-                hint: `api.help("gt_parse_local.read")` explains every argument."""), run.message());
-        CliFixture.Outcome ok = lua("return gt_parse_local.read(2)");
-        assertEquals("read", ok.json().getAsJsonObject("data").get("returned").getAsString());
+                hint: print(api.help("gt_parse_local.read"))"""), run.message());
+        CliFixture.Outcome ok = lua("gt_parse_local.read(2)");
+        assertEquals("read", ok.call(0).get("message").getAsString());
     }
 }

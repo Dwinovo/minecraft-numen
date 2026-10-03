@@ -82,7 +82,7 @@ public class MovementGameTests {
         NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
                 "gametest_stopped", UUID.randomUUID(), level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
-        ToolRun walk = lua(companion, "move.goto_({" + target.getX() + ", " + target.getZ() + "})");
+        ToolRun walk = lua(companion, "move.goto_({x = " + target.getX() + ", z = " + target.getZ() + "})");
         boolean[] stopped = {false};
 
         succeedWhen(helper, () -> {
@@ -556,7 +556,7 @@ public class MovementGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(walk.task() == null && walk.done() && !walk.succeeded(), "it was not refused at once");
-            helper.assertTrue(walk.outcome().contains("in mid-air") && walk.outcome().contains("Give {x, z} alone")
+            helper.assertTrue(walk.outcome().contains("in mid-air") && walk.outcome().contains("Give {x = …, z = …} alone")
                             && walk.outcome().contains("y=" + (target.getY() - 3)),
                     "the mid-air y was not refused with the reminder: " + walk.outcome());
             helper.assertTrue(companion.blockPosition().equals(before), "she moved");

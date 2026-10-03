@@ -56,8 +56,12 @@ final class LookAround {
 
     private LookAround() {}
 
-    /** The map of the {@code (2 * radius + 1)}-wide square around her feet; {@code radius} is clamped to 4-16. */
-    static String render(NumenPlayer self, int asked) {
+    /**
+     * The map of the {@code (2 * radius + 1)}-wide square around her feet; {@code radius} is clamped to 4-16. The data
+     * holds the same map row by row (north first), the cell it is centred on, her facing and the legend; the reply's
+     * sentence is the map itself.
+     */
+    static com.dwinovo.numen.task.TaskResult render(NumenPlayer self, int asked) {
         int radius = Math.clamp(asked, MIN_RADIUS, MAX_RADIUS);
         Terrain view = Terrain.of(self);
         BlockPos center = Feet.cell(self);
@@ -82,19 +86,28 @@ final class LookAround {
         sb.append("scan_around center=(").append(cx).append(',').append(cy).append(',').append(cz)
                 .append(") facing=").append(self.getDirection().getName())
                 .append(" | 1 cell = 1 block, @ = you, North = up (-Z), East = right (+X)\n\n");
+        com.google.gson.JsonArray rows = new com.google.gson.JsonArray();
         for (int r = 0; r < size; r++) {
+            StringBuilder row = new StringBuilder();
             for (int c = 0; c < size; c++) {
-                sb.append(grid[r][c]);
+                row.append(grid[r][c]);
                 if (c < size - 1) {
-                    sb.append(' ');
+                    row.append(' ');
                 }
             }
-            sb.append('\n');
+            rows.add(row.toString());
+            sb.append(row).append('\n');
         }
-        sb.append("\nlegend: @ you | . flat | ^ step-up 1 | , step-down 1-2 | v drop>=").append(DROP_DEPTH)
-                .append(" | # wall/blocked | ~ water | ! lava/hazard | x caution | T tree | ? unloaded\n")
+        String legend = "@ you | . flat | ^ step-up 1 | , step-down 1-2 | v drop>=" + DROP_DEPTH
+                + " | # wall/blocked | ~ water | ! lava/hazard | x caution | T tree | ? unloaded";
+        sb.append("\nlegend: ").append(legend).append('\n')
                 .append("to route: trace cell by cell (. ^ , are walkable; # ~ ! v x block or endanger you).\n");
-        return sb.toString();
+        com.google.gson.JsonObject data = new com.google.gson.JsonObject();
+        data.add("center", com.dwinovo.numen.cli.Shapes.pos(center));
+        data.addProperty("facing", self.getDirection().getName());
+        data.add("rows", rows);
+        data.addProperty("legend", legend);
+        return com.dwinovo.numen.task.TaskResult.ok(sb.toString(), data);
     }
 
     /** Semantic-pool the column at (x,z) to one movement-affordance glyph at the companion's Y band. */

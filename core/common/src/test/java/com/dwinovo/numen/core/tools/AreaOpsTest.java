@@ -34,7 +34,7 @@ class AreaOpsTest {
         for (List<BlockPos> bad : List.of(List.of(new BlockPos(1, 2, 3)),
                 List.of(new BlockPos(1, 2, 3), new BlockPos(4, 5, 6), new BlockPos(7, 8, 9)))) {
             IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> AreaOps.boxCells(bad));
-            assertTrue(e.getMessage().startsWith("a box is two corners, x1 y1 z1 x2 y2 z2"), e.getMessage());
+            assertTrue(e.getMessage().startsWith("a box is two corners {from, to}, each a Pos"), e.getMessage());
         }
     }
 

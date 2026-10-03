@@ -1,9 +1,12 @@
 package com.dwinovo.numen.plugins.ftbquests;
 
+import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskResult;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import dev.ftb.mods.ftbquests.quest.Quest;
 import dev.ftb.mods.ftbquests.quest.QuestObjectBase;
 import dev.ftb.mods.ftbquests.quest.ServerQuestFile;
@@ -11,7 +14,9 @@ import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.task.Task;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -38,31 +43,33 @@ final class QuestSubmit {
         ServerQuestFile file = ServerQuestFile.INSTANCE;
         Quest quest = file.getQuest(QuestObjectBase.parseCodeString(asked));
         if (quest == null) {
-            src.reply(TaskResult.fail("No quest has the id \"" + asked + "\". Use the id that "
-                    + FtbqCommands.LIST + " or " + FtbqCommands.SHOW + " prints.").toJson());
+            src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, "No quest has the id \"" + asked + "\"; use the id that "
+                    + FtbqCommands.LIST + " or " + FtbqCommands.SHOW + " prints.", FtbqCommands.LIST + "()").toJson());
             return;
         }
         Optional<TeamData> maybe = file.getTeamData(her);
         if (maybe.isEmpty()) {
-            src.reply(TaskResult.fail("FTB Quests has no team progress for you, so nothing can be handed in.")
-                    .toJson());
+            src.reply(TaskResult.fail(ErrorKind.FAILED, "FTB Quests has no team progress for you, so nothing can be "
+                    + "handed in.", null).toJson());
             return;
         }
         TeamData team = maybe.get();
         String named = "\"" + quest.getTitle().getString() + "\" (" + quest.getCodeString() + ")";
         String forTeam = "your team \"" + team.getName() + "\"";
+        String show = FtbqCommands.SHOW + "(\"" + quest.getCodeString() + "\")";
         if (team.isLocked()) {
-            src.reply(TaskResult.fail("The quest progress of " + forTeam + " is locked, so nothing can be handed in.")
-                    .toJson());
+            src.reply(TaskResult.fail(ErrorKind.DENIED, "The quest progress of " + forTeam + " is locked, so nothing "
+                    + "can be handed in.", null).toJson());
             return;
         }
         if (team.isCompleted(quest)) {
-            src.reply(TaskResult.fail(named + " is already completed for " + forTeam + ".").toJson());
+            src.reply(TaskResult.fail(ErrorKind.FAILED, named + " is already completed for " + forTeam + ".", null)
+                    .toJson());
             return;
         }
         if (!team.canStartTasks(quest)) {
-            src.reply(TaskResult.fail(named + " cannot be started yet for " + forTeam + ": "
-                    + team.getCannotStartReason(quest).getString()).toJson());
+            src.reply(TaskResult.fail(ErrorKind.FAILED, named + " cannot be started yet for " + forTeam + ": "
+                    + team.getCannotStartReason(quest).getString(), show).toJson());
             return;
         }
 
@@ -85,7 +92,8 @@ final class QuestSubmit {
                 + (observation ? " Observation is judged on the player's own screen (what the crosshair rests on);"
                         + " handing it in for you would skip that check, so your owner has to do it." : "");
         if (toHandIn.isEmpty()) {
-            src.reply(TaskResult.fail("Nothing in " + named + " is handed in by submitting." + others).toJson());
+            src.reply(TaskResult.fail(ErrorKind.FAILED, "Nothing in " + named + " is handed in by submitting."
+                    + others, show).toJson());
             return;
         }
 
@@ -93,26 +101,40 @@ final class QuestSubmit {
         before.copyFrom(her);
         boolean moved = false;
         StringBuilder lines = new StringBuilder();
+        JsonArray handed = new JsonArray();
         for (Task task : toHandIn) {
             long was = team.getProgress(task);
             file.withPlayerContext(her, () -> task.submitTask(team, her));
             long now = team.getProgress(task);
             moved |= now != was;
+            boolean done = team.isCompleted(task);
+            String progress = task.formatProgress(team, now) + "/" + task.formatMaxProgress();
             lines.append("\n  ").append(task.getTitle().getString()).append(": ")
-                    .append(task.formatProgress(team, was)).append(" -> ").append(task.formatProgress(team, now))
-                    .append('/').append(task.formatMaxProgress())
-                    .append(team.isCompleted(task) ? " (done)" : now == was ? " (nothing you carry counts)" : "");
+                    .append(task.formatProgress(team, was)).append(" -> ").append(progress)
+                    .append(done ? " (done)" : now == was ? " (nothing you carry counts)" : "");
+            JsonObject o = new JsonObject();
+            o.addProperty("title", task.getTitle().getString());
+            o.addProperty("was", task.formatProgress(team, was));
+            o.addProperty("progress", progress);
+            o.addProperty("done", done);
+            handed.add(o);
         }
         String change = before.changeTo(her);
         String body = lines + others + (change.isEmpty()
                 ? "\nYour inventory and experience did not change."
                 : "\nYour inventory changed: " + change + ".");
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("quest", quest.getCodeString());
+        data.put("tasks", handed);
+        data.put("inventory_change", change);
+        data.put("completed", team.isCompleted(quest));
         if (!moved) {
-            src.reply(TaskResult.fail("Nothing was handed in for " + named + " — " + forTeam + ":" + body).toJson());
+            src.reply(TaskResult.fail(ErrorKind.NO_MATERIAL, "Nothing was handed in for " + named + " — " + forTeam
+                    + ":" + body, null, data).toJson());
             return;
         }
         String done = team.isCompleted(quest)
                 ? "\nThe quest is completed; its completion and any rewards FTB hands out reach you as events." : "";
-        src.reply(TaskResult.ok("Handed in for " + named + " — " + forTeam + ":" + body + done).toJson());
+        src.reply(TaskResult.ok("Handed in for " + named + " — " + forTeam + ":" + body + done, data).toJson());
     }
 }

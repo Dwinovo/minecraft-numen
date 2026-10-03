@@ -41,6 +41,29 @@ public record Place(Integer x, Integer y, Integer z, AreaRef area) {
         return x != null && y != null ? new BlockPos(x, y, z) : null;
     }
 
+    /** 脚本里的写法:区域是名字,坐标是带键的表(给了几个写几个);{@link ArgType#place()} 读回来是同一处。 */
+    public Object value() {
+        if (area != null) {
+            return area.toString();
+        }
+        java.util.Map<String, Object> out = new java.util.LinkedHashMap<>();
+        if (x != null) {
+            out.put("x", (long) x);
+        }
+        if (y != null) {
+            out.put("y", (long) y);
+        }
+        if (z != null) {
+            out.put("z", (long) z);
+        }
+        return out;
+    }
+
+    /** 在回执与提示里写成的那一段程序:{@code {x = 1, y = 2, z = 3}}、{@code "ores/g3"}。 */
+    public String literal() {
+        return com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.value(value());
+    }
+
     /** 命令行上的写法:{@code 120 64 -35}、{@code 120 -35}、{@code 64} 或区域名;{@link ArgType#place()} 读回来是同一处。 */
     public String written() {
         if (area != null) {

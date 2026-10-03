@@ -243,7 +243,8 @@ class LuaSandboxTest {
     void readingAFunctionAGroupLacksRaisesTheHostsWords() throws InterruptedException {
         LuaSandbox sandbox = LuaSandbox.builder(ROOMY)
                 .function("move", "to", args -> "arrived")
-                .missing((table, key, present) -> table + "|" + key + "|" + present).build();
+                .missing((table, key, present) -> new LuaSandbox.ScriptError(table + "|" + key + "|" + present))
+                .build();
         LuaSandbox.Outcome o = run(sandbox, "local f = move.too");
         assertFalse(o.finished());
         assertEquals(1, o.line());
@@ -276,6 +277,54 @@ class LuaSandboxTest {
         assertNull(got.get().get(6));
         assertEquals("false\tt:3: work.dig: out of reach", printed.get(0));
         assertEquals("5", printed.get(1));
+    }
+
+    /**
+     * 宿主可以抛一张错误值的表:脚本 pcall 接住的就是这张表,按字段分支;tostring 是宿主写的那段文字;没接住时结局的那句话也是它,
+     * 结局另带上这张表。
+     */
+    @Test
+    void aHostCanRaiseAnErrorTableTheScriptBranchesOn() throws InterruptedException {
+        LuaSandbox sandbox = LuaSandbox.builder(ROOMY)
+                .function("work", "dig", args -> {
+                    throw new LuaSandbox.ScriptError(Map.of("kind", "out_of_reach", "message", "too far"));
+                })
+                .errors(e -> e.get("kind") + ": " + e.get("message"))
+                .print(printed::add).build();
+        LuaSandbox.Outcome caught = run(sandbox, """
+                local ok, err = pcall(work.dig, "ores")
+                print(ok, err.kind, err.message, tostring(err))
+                """);
+        assertTrue(caught.finished(), String.valueOf(caught));
+        assertEquals("false\tout_of_reach\ttoo far\tout_of_reach: too far", printed.get(0));
+
+        LuaSandbox.Outcome thrown = run(sandbox, "work.dig(\"ores\")");
+        assertFalse(thrown.finished());
+        assertEquals("out_of_reach: too far", thrown.message());
+        assertEquals(Map.of("kind", "out_of_reach", "message", "too far"), thrown.error());
+        assertEquals(1, thrown.line());
+    }
+
+    /** 脚本自己 error(表) 没接住时,结局的那句话同样按宿主的写法写成文字,结局带上这张表。 */
+    @Test
+    void aScriptsOwnErrorTableIsWrittenTheHostsWay() throws InterruptedException {
+        LuaSandbox sandbox = LuaSandbox.builder(ROOMY).errors(e -> "kind " + e.get("kind")).build();
+        LuaSandbox.Outcome o = run(sandbox, "error({kind = \"stuck\"})");
+        assertEquals("kind stuck", o.message());
+        assertEquals(Map.of("kind", "stuck"), o.error());
+    }
+
+    /** print 一张表(没有自己的 __tostring)按宿主给的写法写出,键按名字排;有 __tostring 的照它。 */
+    @Test
+    void printWritesAPlainTableTheHostsWay() throws InterruptedException {
+        LuaSandbox sandbox = LuaSandbox.builder(ROOMY).show(String::valueOf).print(printed::add).build();
+        LuaSandbox.Outcome o = run(sandbox, """
+                print({z = 3, x = 1, y = 2}, {1, 2})
+                print(setmetatable({}, {__tostring = function() return "mine" end}))
+                """);
+        assertTrue(o.finished(), String.valueOf(o));
+        assertEquals("{x=1, y=2, z=3}\t[1, 2]", printed.get(0));
+        assertEquals("mine", printed.get(1));
     }
 
     @Test

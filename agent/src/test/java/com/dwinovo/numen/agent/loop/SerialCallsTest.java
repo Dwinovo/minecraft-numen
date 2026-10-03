@@ -74,7 +74,7 @@ class SerialCallsTest {
                 return null;
             }
             String[] parts = entry.text().split(" ", 2);
-            return new ScriptCall.Finish(parts[0], parts.length > 1 ? parts[1] : "done", "");
+            return new ScriptCall.Finish(parts[0], parts.length > 1 ? parts[1] : "done", "", null);
         }
 
         @Override
@@ -85,7 +85,8 @@ class SerialCallsTest {
         @Override
         public Invocation invocation(ScriptRun.Call call) {
             if (call.options().containsKey("bad")) {
-                throw new IllegalArgumentException("there is no option bad; usage: " + call.function() + "(place)");
+                throw new com.dwinovo.numen.agent.script.ApiError(com.dwinovo.numen.agent.script.ErrorKind.BAD_ARGUMENT,
+                        "there is no option bad; usage: " + call.function() + "(place)", null);
             }
             com.google.gson.JsonObject args = new com.google.gson.JsonObject();
             com.google.gson.JsonArray objects = new com.google.gson.JsonArray();
@@ -352,20 +353,21 @@ class SerialCallsTest {
         String msg = receipt.get("message").getAsString();
         assertTrue(msg.startsWith("The script ran to the end: 3 calls"), msg);
         assertTrue(msg.contains("\nline 1 move.go: ok — t1 done\nline 2 work.dig: ok — dug 4 blocks\n"
-                + "line 3 work.collect: ok — t2 done\nreturned: \"all done\""), "每次调用一行,按先后: " + msg);
+                + "line 3 work.collect: ok — t2 done\nreturned: all done"), "每次调用一行,按先后: " + msg);
         assertEquals("all done", receipt.getAsJsonObject("data").get("returned").getAsString());
         assertEquals(3, receipt.getAsJsonObject("data").get("calls").getAsInt());
         assertEquals(1, settles);
     }
 
-    /** 直接回一份数据的查询(不带 success,如 status.self):程序拿到的是那一整份读成的表,不是一串 JSON 文字。 */
+    /** 一次调用的回执数据(status.self 这类):程序拿到的是读成的表,不是回执那句话,也不是一串 JSON 文字。 */
     @Test
-    void aQueryThatRepliesWithBareDataReturnsItAsATable() {
+    void aCallsDataComesBackAsATable() {
         scripts.run(List.of(lua("s", """
                 local me = work.dig("ores")
-                return me.position.y
+                return me.pos.y
                 """)), sink);
-        answerLast("{\"name\":\"Aria\",\"position\":{\"x\":1.5,\"y\":64,\"z\":-3}}");
+        answerLast("{\"success\":true,\"message\":\"Aria at 1.5,64,-3\",\"data\":{\"name\":\"Aria\","
+                + "\"pos\":{\"x\":1.5,\"y\":64,\"z\":-3}}}");
         com.google.gson.JsonObject receipt = json(results.get("s"));
         assertTrue(receipt.get("success").getAsBoolean(), receipt.toString());
         assertEquals(64, receipt.getAsJsonObject("data").get("returned").getAsInt());
@@ -382,8 +384,10 @@ class SerialCallsTest {
         answerLast("{\"success\":true,\"message\":\"dug\"}");
         String msg = json(results.get("s")).get("message").getAsString();
         assertTrue(msg.startsWith("The script ran to the end: 1 call"), "没派出去的不算一次调用: " + msg);
-        assertTrue(msg.contains("line 1 work.dig: failed — there is no option bad; usage: work.dig(place)"), msg);
-        assertTrue(msg.contains("printed:\nwork.dig: there is no option bad; usage: work.dig(place)"), msg);
+        assertTrue(msg.contains("line 1 work.dig: bad_argument — there is no option bad; usage: work.dig(place)"),
+                msg);
+        assertTrue(msg.contains("printed:\nwork.dig: bad_argument — there is no option bad; usage: work.dig(place)"),
+                msg);
     }
 
     @Test
@@ -399,9 +403,12 @@ class SerialCallsTest {
         com.google.gson.JsonObject receipt = json(results.get("s"));
         assertFalse(receipt.get("success").getAsBoolean());
         String msg = receipt.get("message").getAsString();
-        assertTrue(msg.startsWith("The script stopped at line 2 after 1 call: lua:2: could not dig: lua:1: work.dig: "
-                + "error: out of reach\nusage: work.dig(place)\nhint: walk"), "出错的行号与那次调用的整段原话: " + msg);
+        assertTrue(msg.startsWith("The script stopped at line 2 after 1 call: lua:2: could not dig: work.dig: "
+                + "failed — error: out of reach\nusage: work.dig(place)\nhint: walk"), "出错的行号与那次调用的整段原话: "
+                + msg);
         assertTrue(msg.contains("line 1 work.dig: failed — error: out of reach"), msg);
+        assertEquals("runtime", receipt.getAsJsonObject("data").getAsJsonObject("error").get("kind").getAsString(),
+                "程序自己 error 的一句话是 runtime");
     }
 
     @Test
@@ -467,8 +474,8 @@ class SerialCallsTest {
         String msg = json(results.get("s")).get("message").getAsString();
         assertEquals(List.of("script.run mine ores", "work.dig ores"), lines);
         assertTrue(msg.contains("mine line 1 work.dig: failed — out of reach"), msg);
-        assertTrue(msg.contains("line 1 script.run: failed — mine:1: work.dig: out of reach"), msg);
-        assertTrue(msg.contains("printed:\nfalse\tscript.run: mine:1: work.dig: out of reach"), msg);
+        assertTrue(msg.contains("line 1 script.run: failed — work.dig: failed — out of reach"), msg);
+        assertTrue(msg.contains("printed:\nfalse\tscript.run: failed — work.dig: failed — out of reach"), msg);
         assertTrue(msg.startsWith("The script ran to the end"), "父脚本接住了里面那一份的失败: " + msg);
         assertEquals(List.of("mine line 1"), linePort.tallies);
     }

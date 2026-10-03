@@ -57,8 +57,8 @@ public final class CommandArgs {
      * {@code _} 是同一个字符,和命令行上的标志名同一条规矩({@link Param#nameOf})。
      * 没声明的键拒掉——命令行上写错的标志也是拒,两个入口认的是同一张参数表。
      *
-     * @throws IllegalArgumentException 参数不对——工具契约里"参数不对"的信号,服务端的 {@code serve} 与客户端的
-     *                                  派发器都把它变成一条模型读得懂的失败回执
+     * @throws BadArgument 参数不对:哪个参数、错在哪;看得出想写什么时带上照这一种写法该写成的值。服务端的 {@code serve} 与脚本的
+     *                     前端都把它变成 {@code bad_argument} 的失败
      */
     static CommandArgs fromJson(List<Param<?>> params, JsonObject given) {
         JsonObject json = new JsonObject();
@@ -69,24 +69,43 @@ public final class CommandArgs {
         for (Param<?> p : params) {
             JsonElement value = json.get(p.name());
             if (value == null || value.isJsonNull()) {
-                if (p.required()) throw new IllegalArgumentException("missing required argument: " + p.name());
+                if (p.required()) {
+                    throw new BadArgument(p, "argument '" + p.name() + "' is missing (or nil)", null);
+                }
                 continue;
             }
             try {
                 out.put(p.name(), p.type().fromJson(value));
             } catch (CommandSyntaxException e) {
                 // 一个值单独读,读到第几个字符没有意义:只说哪个参数、错在哪
-                throw new IllegalArgumentException("argument '" + p.name() + "': " + e.getRawMessage().getString());
+                throw new BadArgument(p, "argument '" + p.name() + "': " + e.getRawMessage().getString(), null);
+            } catch (ArgType.WrongShape wrong) {
+                throw new BadArgument(p, "argument '" + p.name() + "': " + wrong.getMessage(), wrong.instead);
             }
         }
         for (String key : json.keySet()) {
             if (params.stream().noneMatch(p -> p.name().equals(key))) {
-                throw new IllegalArgumentException("unknown argument '" + key + "'; this takes: "
+                throw new BadArgument(null, "unknown argument '" + key + "'; this takes: "
                         + (params.isEmpty() ? "no arguments"
-                            : params.stream().map(Param::name).collect(Collectors.joining(", "))));
+                            : params.stream().map(Param::name).collect(Collectors.joining(", "))), null);
             }
         }
         return new CommandArgs(out);
+    }
+
+    /**
+     * 参数读不成:哪个参数(说不上是哪一个的是 null)、错在哪、看得出想写什么时照这一种写法该写成的那个值(脚本里的值,没有是 null)。
+     */
+    static final class BadArgument extends IllegalArgumentException {
+
+        final transient Param<?> param;
+        final transient Object instead;
+
+        BadArgument(Param<?> param, String message, Object instead) {
+            super(message);
+            this.param = param;
+            this.instead = instead;
+        }
     }
 
     /**

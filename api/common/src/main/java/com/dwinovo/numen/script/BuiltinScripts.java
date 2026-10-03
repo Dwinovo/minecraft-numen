@@ -99,7 +99,7 @@ public final class BuiltinScripts {
                 throw new IllegalArgumentException(what + name + " 一个函数都没定义");
             }
             for (ScriptEngine.Defined fn : functions) {
-                if (fn.doc().isBlank()) {
+                if (ScriptEngine.IN_USE.summaryOf(fn).isEmpty()) {
                     throw new IllegalArgumentException(what + name + " 的函数 " + fn.name() + " 上面没写注释——API 索引"
                             + "里它的说明就是这几行");
                 }

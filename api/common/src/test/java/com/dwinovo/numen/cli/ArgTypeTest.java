@@ -47,6 +47,7 @@ class ArgTypeTest {
                     LAST.set(args);
                     src.reply(TaskResult.ok("made").toJson());
                 }, MODEL, X, RECIPE, HAVE_ONLY, SEARCH, DEPTH)
+                        .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
                         .example("gt_types.make(\"抽象鸣潮 菲比.ysm\", {x = -12, recipe = \"stone\", have_only = true})"));
     }
 
@@ -115,9 +116,9 @@ class ArgTypeTest {
         assertEquals("say \"hi\" \\ bye", read("{\"x\":1,\"recipe\":\"stone\",\"model\":\"say \\\"hi\\\" \\\\ bye\"}")
                 .get(MODEL), "JSON 里的引号与反斜杠原样读回");
         assertTrue(serveJson("gt_types make", "{\"x\":1,\"recipe\":\"a b\",\"model\":\"m\"}").message()
-                .startsWith("error: argument 'recipe': expected a single id"));
+                .startsWith("argument 'recipe': expected a single id"));
         assertTrue(serveJson("gt_types make", "{\"x\":1,\"recipe\":\"stone\",\"model\":\"m\","
-                + "\"have_only\":\"maybe\"}").message().startsWith("error: argument 'have_only': Invalid bool"));
+                + "\"have_only\":\"maybe\"}").message().startsWith("argument 'have_only': Invalid bool"));
         assertEquals(viaLine, ranScript("gt_types.make(\"抽象鸣潮 菲比.ysm\", {x = -12, "
                 + "recipe = \"kaleidoscope_cookery:flex_pot/braised_beef\", have_only = false, search = \"misc/1_Alex\"})"),
                 "从脚本进来,处理函数拿到的是同一份");
@@ -126,16 +127,19 @@ class ArgTypeTest {
     @Test
     void theHelpNamesEachType() {
         assertEquals("""
-                gt_types.make(model, {x=…, recipe=…, have_only=true, search=…, depth=…})
-                  Make something.
-                  model (string) — Which model.
-                  x= (integer; optional) — Block X. Omit to use 0.
-                  recipe= (id, e.g. minecraft:oak_log (minecraft: may be left out); optional) — Which recipe. Omit to make anything.
-                  have_only=true|false (switch; optional) — Only what you can make. Omit to list everything.
-                  search= (string; optional) — Narrow the list. Omit to list all.
-                  depth= (integer; optional) — How far down. Omit to stay level.
-                  Examples:
-                    gt_types.make("抽象鸣潮 菲比.ysm", {x = -12, recipe = "stone", have_only = true})""",
+                ---Make something.
+                ---@param model string Which model.
+                ---@param opts? gt_types.make.opts
+                function gt_types.make(model, opts) end
+
+                ---@class gt_types.make.opts
+                ---@field x? integer Block X. Omit to use 0.
+                ---@field recipe? string Which recipe. Omit to make anything.
+                ---@field have_only? boolean Only what you can make. Omit to list everything.
+                ---@field search? string Narrow the list. Omit to list all.
+                ---@field depth? integer How far down. Omit to stay level.
+                -- Examples:
+                --   gt_types.make("抽象鸣潮 菲比.ysm", {x = -12, recipe = "stone", have_only = true})""",
                 help("gt_types.make"));
     }
 

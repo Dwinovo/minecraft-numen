@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.gametest;
 
 import com.dwinovo.numen.api.NumenPlugins;
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.Authority;
 import com.dwinovo.numen.cli.OnHer;
@@ -91,11 +92,13 @@ public class CommandGameTests {
                                     (src, args) -> TaskDispatch.runSync(src.companion(),
                                             new HoldRecord(src, args.get(TICKS)), src::reply),
                                     TICKS)
+                                    .returns(ScriptType.NOTHING)
                                     .example("gt_sync.hold(5)")));
             NumenPlugins.register(numen -> numen.registerCommands(TWIN,
                     "Test fixture: a group that shares its name with a native command.", g -> {
                         g.server("ping", "Say which layer answered.",
                                         (src, args) -> src.reply(TaskResult.ok("layer one").toJson()))
+                                .returns(ScriptType.NOTHING)
                                 .example(TWIN + ".ping()");
                         g.server("mark", "Mark yourself through the native admin command.", (src, args) -> {
                                     OnHer her = src.onHer();
@@ -105,6 +108,7 @@ public class CommandGameTests {
                                             .toJson());
                                 })
                                 .authority(Authority.SERVER_ON_HER)
+                                .returns(ScriptType.NOTHING)
                                 .example(TWIN + ".mark()");
                     }));
             // 一个不守输出预算的动作:回执比一个下行包还大,测网络层接得住
@@ -113,6 +117,7 @@ public class CommandGameTests {
                             g.server("flood", "Reply with more text than one payload carries.",
                                     (src, args) -> src.reply(TaskResult.ok(
                                             "x".repeat(com.dwinovo.numen.network.Wire.TO_CLIENT.bytes() + 1)).toJson()))
+                                    .returns(ScriptType.NOTHING)
                                     .example("gt_wire.flood()")));
             TaskFactory.register(HoldRecord.class, (body, record) -> new Hold(record));
         }
@@ -668,12 +673,13 @@ public class CommandGameTests {
         ToolRun groups = lua(companion, "api.help(\"task\")");
         String said = message(give.reply());
         String items = message(item.reply());
-        String listed = message(groups.reply());
+        String listed = dataIn(groups.reply()).get("text").getAsString();
         Constants.LOG.info("[numen-cli] /help give -> {}", said);
         Constants.LOG.info("[numen-cli] /help give @s minecraft:diamond_ -> {}", items);
         Constants.LOG.info("[numen-cli] api.help(task) -> {}", listed);
 
-        helper.assertTrue(groups.succeeded() && listed.contains("task.status") && listed.contains("task.stop"),
+        helper.assertTrue(groups.succeeded() && listed.contains("\n---@class task\n")
+                        && listed.contains("\n---@field status fun(") && listed.contains("\n---@field stop fun("),
                 "api.help of a group is not that group's own listing: " + listed);
         helper.assertTrue(give.succeeded() && said.startsWith("ran /help give: /give <targets> <item> [<count>]\n"),
                 "the vanilla usage does not come first: " + said);

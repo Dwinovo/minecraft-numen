@@ -17,13 +17,13 @@ public interface ScriptRun {
     Step start();
 
     /**
-     * 交回上一次 API 调用的结局,接着跑到下一次调用或结束。声明了返回项的({@link ScriptCatalog.Verb#returns})回执数据里有这一项
-     * 就返回它,成败都返回;其余成功返回回执数据(没有数据就是回执那句话),失败在调用处抛出脚本错误。
+     * 交回上一次 API 调用的结局,接着跑到下一次调用或结束。成功返回回执的数据:声明了返回项的({@link ScriptCatalog.Verb#returns})
+     * 是数据里的这一项,没有数据是 nil;失败在调用处抛出错误值({@link #failure})。回执那句话不交给脚本,它只进整段的回执。
      */
     Step resume(Result result);
 
-    /** 让交出去的那次调用在调用处失败,不执行它(参数对不上这个动作的参数表);{@code why} 是给脚本的那句话。 */
-    Step refuse(String why);
+    /** 让交出去的那次调用在调用处失败,不执行它(参数对不上这个动作的参数表):抛给脚本的就是这个错误。 */
+    Step refuse(ApiError why);
 
     /**
      * 不再跑它了(被打断、这一轮被切断、到了上限):正在等结局的调用处、或正在算的那一条指令处停下,占着的东西放掉。跑完了的
@@ -53,13 +53,55 @@ public interface ScriptRun {
     /**
      * 运行结束。
      *
-     * @param ok    跑到了最后,没有出错
-     * @param line  出错在哪一行;跑完是 0
-     * @param error 出错的原话(语言自己的写法);跑完是 null
-     * @param value 跑完时脚本返回的值(null、布尔、数、字符串、列表、名字到值的表);没有返回值或没跑完是 null
+     * @param ok      跑到了最后,没有出错
+     * @param line    出错在哪一行;跑完是 0
+     * @param error   出错的那段文字(错误值的 {@code tostring},语言自己的报错原话);跑完是 null
+     * @param value   跑完时脚本返回的值(null、布尔、数、字符串、列表、名字到值的表);没有返回值或没跑完是 null
+     * @param failure 没跑完时的错误值,至少有 {@code kind}({@link ErrorKind#wire})与 {@code message};跑完是 null
      */
-    record Done(boolean ok, int line, String error, Object value) implements Step {}
+    record Done(boolean ok, int line, String error, Object value, Map<String, Object> failure) implements Step {}
 
-    /** 一次 API 调用的结局:成没成、回执那句话、回执里的数据(没有是空对象)。 */
-    record Result(boolean ok, String text, JsonObject data) {}
+    /**
+     * 一次 API 调用的结局。
+     *
+     * @param ok   成没成
+     * @param text 回执那句话:进整段的回执,也是失败时错误值的 {@code message}
+     * @param data 回执里的数据,没有是空对象
+     * @param kind 失败是哪一类({@link ErrorKind#wire});成功是 null
+     * @param hint 失败时能照抄的下一步;没有是 null
+     */
+    record Result(boolean ok, String text, JsonObject data, String kind, String hint) {
+
+        /** 成功的结局。 */
+        public static Result ok(String text, JsonObject data) {
+            return new Result(true, text, data, null, null);
+        }
+    }
+
+    /**
+     * 失败的调用抛给脚本的错误值:{@code kind}、{@code message}、{@code fn}(哪个函数),有就带上 {@code hint} 与 {@code data}(失败时
+     * 回执里的数据,比如够不着的最近一格)。字段名只在这里。
+     */
+    static Map<String, Object> failure(String kind, String message, String hint, String fn, Object data) {
+        Map<String, Object> out = new java.util.LinkedHashMap<>();
+        out.put(KIND, kind);
+        out.put(MESSAGE, message);
+        if (hint != null) {
+            out.put(HINT, hint);
+        }
+        if (fn != null) {
+            out.put(FN, fn);
+        }
+        if (data != null) {
+            out.put(DATA, data);
+        }
+        return out;
+    }
+
+    /** 错误值的字段。 */
+    String KIND = "kind";
+    String MESSAGE = "message";
+    String HINT = "hint";
+    String FN = "fn";
+    String DATA = "data";
 }

@@ -113,10 +113,21 @@ public final class DigTaskRecord extends TaskRecord {
      * @param named 她点名的几处,按写下的顺序
      */
     public static String reachThem(List<Place> named, BlockPos nearest) {
+        List<String> calls = reach(named, nearest);
+        return "`" + calls.get(0) + "`, then `" + calls.get(1) + "`";
+    }
+
+    /** 同一个下一步写成两行能照抄的调用:走过去,再挖;失败的 {@code hint} 用它。 */
+    public static String reachLine(List<Place> named, BlockPos nearest) {
+        return String.join("\n", reach(named, nearest));
+    }
+
+    /** 走过去的那一次调用与挖的那一次调用。 */
+    private static List<String> reach(List<Place> named, BlockPos nearest) {
         AreaRef only = named.size() == 1 ? named.get(0).area() : null;
         Place to = only != null ? Place.area(only) : Place.cell(nearest);
-        return NavText.gotoCall(to, "arrive = \"dig\"") + ", then `work.dig("
-                + named.stream().map(NavText::lua).collect(Collectors.joining(", ")) + ")`";
+        return List.of("move.goto_(" + to.literal() + ", {arrive = \"dig\"})",
+                "work.dig(" + named.stream().map(Place::literal).collect(Collectors.joining(", ")) + ")");
     }
 
     public int getDug() {

@@ -75,10 +75,13 @@ debug、os、io 库的修复(这些库我们不带)、`b121b65151e4` 与 `661309
 LuaSandbox sandbox = LuaSandbox.builder(new LuaSandbox.Limits(1_000_000, 10_000_000, 64 << 20, Duration.ofMinutes(20)))
         .function("work", "dig", args -> {           // 脚本里是 work.dig(...)
             if (!dug(args.get(0))) {
-                throw new LuaSandbox.ScriptError("work.dig: out of reach");   // 脚本在调用处得到一个 Lua 错误
+                // 脚本在调用处得到一个错误值:这张表,带沙箱的错误元表
+                throw new LuaSandbox.ScriptError(Map.of("kind", "out_of_reach", "message", "too far"));
             }
             return Map.of("dug", 4L);                // 交回脚本的值:null、布尔、数、字符串、列表、名字到值的表
         })
+        .errors(error -> "work.dig: " + error.get("kind") + " — " + error.get("message"))  // 错误表写成字的样子
+        .show(value -> render(value))                // print 一张普通表时写成什么样子
         .print(line -> log.info(line))
         .build();
 LuaSandbox.Running running = sandbox.start("mine", code, List.of("ores"), outcome -> { /* 脚本线程上调一次 */ });
@@ -86,6 +89,9 @@ LuaSandbox.Outcome outcome = running.await();       // FINISHED、ERROR(带行�
 Object returned = outcome.value();                   // 跑完时 return 的第一个值,换成 Java 值
 ```
 
+- 错误值:`ScriptError(String)` 是一句话,`ScriptError(Map)` 是一张表。表带着沙箱的错误元表:`tostring(err)` 与 `"…" .. err`
+  都按 `Builder.errors` 写成字,脚本照常读 `err.kind`;没被接住的表结局是 `ERROR`,`Outcome.error()` 交回那张表(Java 值),
+  `message` 是写成的字。
 - `LuaSandbox.check(name, code)`:只读不跑,读不通返回带行号的原话。
 - `LuaSandbox.currentLine()`:在宿主函数里问脚本是在哪一行调的它。
 - `LuaSandbox.KEYWORDS`、`STANDARD_GLOBALS`:登记的表名、函数名不能用它们(`move.goto` 是语法错:`goto` 是保留字),

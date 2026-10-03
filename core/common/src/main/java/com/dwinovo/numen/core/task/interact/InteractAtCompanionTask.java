@@ -1,4 +1,5 @@
 package com.dwinovo.numen.core.task.interact;
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.core.task.MouseButton;
 import com.dwinovo.numen.core.PlayerInv;
 
@@ -228,8 +229,8 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
             String landed = NavText.name(player.level().getBlockState(pos)) + " at " + pos.getX() + "," + pos.getY()
                     + "," + pos.getZ() + " — the crosshair landed there, not on " + aimLabel();
             return button() == Interaction.Button.ATTACK ? landed
-                    : landed + ". To click " + aimLabel() + ": `work.dig({" + pos.getX() + ", " + pos.getY() + ", "
-                            + pos.getZ() + "})` clears it out of the way, or "
+                    : landed + ". To click " + aimLabel() + ": `work.dig(" + Shapes.literal(pos)
+                            + ")` clears it out of the way, or "
                             + GotoReminders.call(r.aim, "arrive = \"use\"")
                             + " stands where another face of it is in sight";
         }
@@ -266,17 +267,16 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
         Map<String, Object> data = new HashMap<>();
         data.put("button", r.button == MouseButton.LEFT ? "left" : "right");
         if (r.aim != null) {
-            data.put("x", r.aim.getX());
-            data.put("y", r.aim.getY());
-            data.put("z", r.aim.getZ());
+            data.put("aim", Shapes.pos(r.aim));
         }
         // Report the activated station (and its exact position, authoritative over the
         // raw aim): she can only note a place we told her about.
         if (activatedBlock != null) {
-            data.put("block", activatedBlockId);
-            data.put("x", activatedBlock.getX());
-            data.put("y", activatedBlock.getY());
-            data.put("z", activatedBlock.getZ());
+            com.google.gson.JsonObject block = Shapes.pos(activatedBlock);
+            com.google.gson.JsonObject station = new com.google.gson.JsonObject();
+            station.addProperty("name", activatedBlockId);
+            station.add("pos", block);
+            data.put("block", station);
         }
         if (!changes.isEmpty()) {
             data.put("changes", changes);

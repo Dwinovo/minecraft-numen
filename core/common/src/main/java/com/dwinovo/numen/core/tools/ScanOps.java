@@ -11,6 +11,7 @@ import com.dwinovo.numen.core.scan.BlockScan;
 import com.dwinovo.numen.core.scan.BlockSearch;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.permission.Action;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
@@ -131,11 +132,17 @@ public final class ScanOps {
         // 扫进区域的,回执只列最近几团:全部都在区域里,细节归 area show
         int shown = ids == null ? all.size() : Math.min(INTO_SHOWN, all.size());
         List<String> rows = new ArrayList<>(shown);
-        for (int i = 0; i < shown; i++) {
-            rows.add(groupJson(ids == null ? null : into + "/" + ids.get(i), all.get(i), found.center(), found.tick())
-                    .toString());
+        JsonArray groups = new JsonArray();
+        for (int i = 0; i < all.size(); i++) {
+            JsonObject group = groupJson(ids == null ? null : into + "/" + ids.get(i), all.get(i), found.center(),
+                    found.tick());
+            groups.add(group);
+            if (i < shown) {
+                rows.add(group.toString());
+            }
         }
         Map<String, Object> data = new LinkedHashMap<>();
+        data.put("groups", groups);
         // A total only when the walk actually covered the sphere. Cut short — hit the section cap or
         // the collect cap, skipped unloaded ground — whatever it saw is an artifact of stopping,
         // and a number in this slot gets read as "that is how much is there". The head says the
@@ -149,10 +156,11 @@ public final class ScanOps {
                 : " in the part of the " + radius + "-block radius around " + center + " that was read"
                         + (note == null ? "" : " (the note at the end says what was not)"))
                 + (in == null ? "" : ", inside area " + in);
-        if (whole) {
-            data.put("groups_total", all.size());
+        data.put("complete", whole);
+        if (note != null) {
+            data.put("note", note);
         }
-        data.put("radius_searched", radius);
+        data.put("radius", radius);
         if (into != null) {
             data.put("area", into);
         }
