@@ -35,8 +35,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * {@code work.fish}:站在原地用钓竿钓鱼——每刻对准、抛竿、等咬钩、收线。它不走动:站的地方得是干的、抛得进水面,受理之前
- * ({@link #preparation})就判,不成就当场拒绝,说清要先站到岸边。收线时原版把战果甩向她,落在半路的留在地上,{@code work.collect}
+ * {@code numen.work.fish}:站在原地用钓竿钓鱼——每刻对准、抛竿、等咬钩、收线。它不走动:站的地方得是干的、抛得进水面,受理之前
+ * ({@link #preparation})就判,不成就当场拒绝,说清要先站到岸边。收线时原版把战果甩向她,落在半路的留在地上,{@code numen.work.collect}
  * 去捡;它不去追。
  */
 public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecord> {
@@ -128,12 +128,12 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
     /** 站的地方不干时说的那句话。 */
     private static final String NOT_DRY = "I do not stand on dry ground here, and fishing does not move me: stand on "
             + "the shore with open water " + (int) MIN_CAST_DISTANCE + "-" + CAST_SEARCH_RADIUS + " blocks away "
-            + "(scan.blocks finds water; move.goto_ takes you there), then work.fish again";
+            + "(numen.scan.blocks finds water; numen.move.goto_ takes you there), then numen.work.fish again";
 
     /** 从这儿抛不进水面时说的那句话。 */
     private static final String NO_WATER = "no open water to cast into " + (int) MIN_CAST_DISTANCE + "-"
             + CAST_SEARCH_RADIUS + " blocks from where I stand, and fishing does not move me: stand on the shore "
-            + "facing open water (scan.blocks finds water; move.goto_ takes you there), then work.fish again";
+            + "facing open water (numen.scan.blocks finds water; numen.move.goto_ takes you there), then numen.work.fish again";
 
     private TaskState prepare() {
         if (player.fishing != null) {
@@ -243,7 +243,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
         discardHook();
         if (rejectTarget && failedTarget != null) rejectedTargets.add(failedTarget);
         if (++failedCasts >= MAX_FAILED_CASTS) {
-            fail(reason + " after " + failedCasts + " attempts; stand on a clearer shoreline and work.fish again",
+            fail(reason + " after " + failedCasts + " attempts; stand on a clearer shoreline and numen.work.fish again",
                     FailureType.OUT_OF_REACH);
             return TaskState.FAILED;
         }
@@ -476,7 +476,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
     @Override
     protected String successMessage() {
         return "completed " + r.caught() + " successful fishing catch(es); the reel throws each catch to me, and one "
-                + "that landed short lies on the ground: `work.collect()` picks it up";
+                + "that landed short lies on the ground: `numen.work.collect()` picks it up";
     }
 
     @Override

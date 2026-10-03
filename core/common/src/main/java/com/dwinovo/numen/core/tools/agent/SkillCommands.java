@@ -44,10 +44,10 @@ public final class SkillCommands {
                         + "<available_skills>.",
                 SkillCommands::load, NAME, FILE, Listing.PAGE)
                 .returns("text", ScriptType.STRING)
-                .example("print(skill.load(\"containers\"))")
-                .example("skill.load(\"building_design\", {file = \"references/baroque.md\"})")
+                .example("print(numen.skill.load(\"containers\"))")
+                .example("numen.skill.load(\"building_design\", {file = \"references/baroque.md\"})")
                 .note("The output is the skill's workflow guidance for the task; return it from your script to read "
-                        + "it: `return skill.load(\"containers\")`.")
+                        + "it: `return numen.skill.load(\"containers\")`.")
                 .note("A skill body may reference supporting files by relative path; load one with the file option "
                         + "only when the body points you there.")
                 .note("A long skill or file comes a page at a time; the last line says how to get the next.");

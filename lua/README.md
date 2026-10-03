@@ -60,14 +60,17 @@ debug、os、io 库的修复(这些库我们不带)、`b121b65151e4` 与 `661309
 | `LuaSandbox`、`ReadOnlyTable` | string 库表与字符串元表全 JVM 只造一份、锁成只读,每个沙箱拿的都是它 | 虚拟机的字符串元表是 JVM 级的静态对象,一个沙箱改了 `string.rep` 或 `getmetatable("").__index`,别的沙箱跟着变 |
 | `LuaSandbox.Limits` 与钩子、计量器 | 两次调宿主函数之间的指令数、总指令数、字符串字节数、墙钟 | 见下 |
 | `LuaSandbox` 与 `FixedKeysTable` | 宿主登记的全局函数、函数表与表里的宿主函数定死,话由宿主给 | 宿主登记的函数是同伴的第 ① 层,程序与模块换不掉、遮不住 |
-| `LuaSandbox` | 虚拟线程、打断、宿主函数、模块与名字空间、值互转 | 见下 |
+| `LuaSandbox` | 虚拟线程、打断、宿主函数与表的路径、模块、值互转 | 见下 |
 
 ## 沙箱与预算
 
 - **全局**:基本函数(不装上面那几个)、`string`、`table`、`math`,加上宿主登记的函数与 `print`。没有协程:LuaJ 的协程每个都起
   一个平台线程,脚本要并发以后再说。
-- **宿主的名字定死**:宿主登记的全局函数、函数表与表里的每个宿主函数换不掉也遮不住(`move = {}`、`function move.go() end`、
-  `rawset(move, "go", f)` 都在那一行报错,话由 `Builder.redefined` 给);往宿主的表里加别的名字照常。
+- **表的路径**:宿主函数登记在一条表的路径下(`function("numen.work", "dig", f)`),路径上每一段是一张表,外层装着里层,脚本里写全
+  路径 `numen.work.dig(…)`。
+- **宿主的名字定死**:宿主登记的全局函数、路径上的每一张表与表里的每个宿主函数换不掉也遮不住(`numen = {}`、`numen.move = {}`、
+  `function numen.move.go() end`、`rawset(numen.move, "go", f)` 都在那一行报错,话由 `Builder.redefined` 给);往宿主的表里加别的
+  名字照常。
 - **字符串只读**:`string` 表与字符串元表是全 JVM 共用的一份只读表,改它报错。要字符串工具就写成局部函数。
 - **预算**(`LuaSandbox.Limits`,每段脚本一份):
   - 两次调宿主函数之间的指令数:死循环停在这里,`pcall` 包着也停(停的方式是 `Error`,`pcall` 只接 `Exception`)。
@@ -83,11 +86,11 @@ debug、os、io 库的修复(这些库我们不带)、`b121b65151e4` 与 `661309
 
 ## 模块
 
-宿主可以给一个模块来源(`Builder.modules(ModuleSource)`):模块是一段返回一张函数表的正文,脚本里以模块名作全局名直接用
-(`lumber.chop(t)`),没有 `require`。第一次用到一个名字时才向来源要正文、在同一个全局环境里跑一遍,所以每次运行读到的都是来源此刻的
-那一份;和宿主函数表同名的模块不另占名字,它返回的函数加进那张表(宿主的名字定死,撞了就是 `Builder.redefined` 的错)。没用到的模块
-不读;一个模块读不通、跑出错、没返回表,出错的是用到它的那一行。读一个既不是全局、也不是模块的名字是错(`Builder.unknown` 给那句话,
-多半是模块名写错)。`Builder.preload` 让某个模块开跑前就装上。行号只记脚本自己那一段:模块里的函数调宿主函数时,`currentLine()`
+宿主可以给一个模块来源(`Builder.modules(ModuleSource)`):模块是一段返回一张函数表的正文,名字也是一条路径(`my.lumber`),脚本里按
+这条路径直接用(`my.lumber.chop(t)`),没有 `require`。第一次用到一个名字时才向来源要正文、在同一个全局环境里跑一遍,所以每次运行读到的
+都是来源此刻的那一份;路径上已经立着一张宿主函数表的模块不另占名字,它返回的函数加进那张表(宿主的名字定死,撞了就是
+`Builder.redefined` 的错)。没用到的模块不读;一个模块读不通、跑出错、没返回表,出错的是用到它的那一行。读一张表里没有的名字、或一个
+既不是全局也不是模块的名字是错(`Builder.missing`、`Builder.unknown` 给那句话,写错的名字当场说有哪些)。`Builder.preload` 让某个模块开跑前就装上。行号只记脚本自己那一段:模块里的函数调宿主函数时,`currentLine()`
 说的是脚本里调这个模块函数的那一行,结局停在的也是脚本里的那一行;模块里出的错,报错原话的开头是模块名与行号。
 `Running.modules()` 说这一段到此刻装上了哪些模块。
 
@@ -95,14 +98,14 @@ debug、os、io 库的修复(这些库我们不带)、`b121b65151e4` 与 `661309
 
 ```java
 LuaSandbox sandbox = LuaSandbox.builder(new LuaSandbox.Limits(1_000_000, 10_000_000, 64 << 20, Duration.ofMinutes(20)))
-        .function("work", "dig", args -> {           // 脚本里是 work.dig(...)
+        .function("numen.work", "dig", args -> {     // 脚本里是 numen.work.dig(...)
             if (!dug(args.get(0))) {
                 // 脚本在调用处得到一个错误值:这张表,带沙箱的错误元表
                 throw new LuaSandbox.ScriptError(Map.of("kind", "out_of_reach", "message", "too far"));
             }
             return Map.of("dug", 4L);                // 交回脚本的值:null、布尔、数、字符串、列表、名字到值的表
         })
-        .errors(error -> "work.dig: " + error.get("kind") + " — " + error.get("message"))  // 错误表写成字的样子
+        .errors(error -> "numen.work.dig: " + error.get("kind") + " — " + error.get("message"))  // 错误表写成字的样子
         .show(value -> render(value))                // print 一张普通表时写成什么样子
         .print(line -> log.info(line))
         .build();

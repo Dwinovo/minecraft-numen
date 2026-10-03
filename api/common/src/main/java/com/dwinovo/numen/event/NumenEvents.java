@@ -62,7 +62,7 @@ public final class NumenEvents {
     public static void gotHungry(NumenPlayer companion, int foodLevel) {
         emit(companion, EventTypes.HUNGRY, null,
                 "you are hungry (" + foodLevel + "/20) and you do not eat on your own — "
-                        + "inv.eat something from your inventory, or go get food",
+                        + "numen.inv.eat something from your inventory, or go get food",
                 true);
     }
 

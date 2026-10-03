@@ -100,18 +100,18 @@ class NavTextTest {
         RouteSpec spec = RouteSpec.defaults();
         String alone = NavText.failure(new Outcome.NeedsAlter(RouteSpec.Alter.NATURAL, digs(2)), null, A, C, spec,
                 new NavText.OnRoute("goto-aria", 1, 1));
-        assertTrue(alone.contains("`route.spec(\"goto-aria\", {alter = \"natural\"})`")
-                && alone.contains("`route.plan(\"goto-aria\")`")
+        assertTrue(alone.contains("`numen.route.spec(\"goto-aria\", {alter = \"natural\"})`")
+                && alone.contains("`numen.route.plan(\"goto-aria\")`")
                 && alone.contains("changing 2 block(s) — break 2 oak_planks (120,64,-33; 120,65,-33)"), alone);
         String leg = NavText.failure(new Outcome.NeedsAlter(RouteSpec.Alter.ANY, digs(3)), null, A, C, spec,
                 new NavText.OnRoute("home", 2, 3));
-        assertTrue(leg.contains("`route.spec(\"home\", {leg = 2, alter = \"any\"})`")
+        assertTrue(leg.contains("`numen.route.spec(\"home\", {leg = 2, alter = \"any\"})`")
                 && leg.contains("asks the owner first"), leg);
         String budget = NavText.failure(new Outcome.OverAlterBudget(5), null, A, C,
                 spec.edit().alter(RouteSpec.Alter.NATURAL).alterBudget(1).build(), new NavText.OnRoute("home", 1, 1));
-        assertTrue(budget.contains("`route.spec(\"home\", {alter_budget = 5})`"), budget);
+        assertTrue(budget.contains("`numen.route.spec(\"home\", {alter_budget = 5})`"), budget);
         String sight = NavText.failure(new Outcome.NoLineOfSight(B), null, A, C, spec, new NavText.OnRoute("home", 1, 1));
-        assertTrue(sight.contains("`move.go(\"home\")` again"), sight);
+        assertTrue(sight.contains("`numen.move.go(\"home\")` again"), sight);
     }
 
     @Test
@@ -191,7 +191,7 @@ class NavTextTest {
         assertTrue(stranded.contains("can't stand where I am") && stranded.contains("free me first"), stranded);
         assertTrue(blocked.contains("no room for my body there") && blocked.contains("try again"), blocked);
         assertTrue(sight.contains("went out of sight")
-                && sight.contains("`move.goto_({x = 120, y = 65, z = -33}, {arrive = \"use\"})`"), sight);
+                && sight.contains("`numen.move.goto_({x = 120, y = 65, z = -33}, {arrive = \"use\"})`"), sight);
         assertEquals(8, java.util.Set.of(none, budget, unloaded, alter, denied, stranded, blocked, sight).size());
     }
 

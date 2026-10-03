@@ -31,11 +31,11 @@ public final class RouteText {
                             "Its stops in order, the destination last, as words."),
                     ScriptType.field("flags", ScriptType.STRING, "The route flags of the whole route; empty = changes "
                             + "no block."),
-                    ScriptType.field("planned", ScriptType.BOOLEAN, "Whether it has a plan move.go keeps to.")));
+                    ScriptType.field("planned", ScriptType.BOOLEAN, "Whether it has a plan numen.move.go keeps to.")));
 
     /** 一份计划。 */
     public static final ScriptType.Class PLAN_CLASS = new ScriptType.Class("Plan",
-            "A route planned from where you stood, without moving: what move.go keeps to.", null,
+            "A route planned from where you stood, without moving: what numen.move.go keeps to.", null,
             List.of(ScriptType.field("route", ScriptType.STRING, null),
                     ScriptType.field("walkable", ScriptType.BOOLEAN, "Every leg can be walked."),
                     ScriptType.field("from", Shapes.POS.type(), "Where it was planned from."),
@@ -201,19 +201,19 @@ public final class RouteText {
     /** 计划之后能照抄的下一步。 */
     private static String next(Itinerary route, Plan plan) {
         if (plan.unreachable() >= 0) {
-            return "It can't be walked as it stands: that leg's reason says what would change it (route.spec, "
-                    + "route.via, route.drop), then `route.plan(\"" + route.name() + "\")` again.";
+            return "It can't be walked as it stands: that leg's reason says what would change it (numen.route.spec, "
+                    + "numen.route.via, numen.route.drop), then `numen.route.plan(\"" + route.name() + "\")` again.";
         }
         int asks = plan.asks().size();
         String asking = asks == 0 ? "" : ", asking your owner about " + asks + " cell(s) before setting off";
         for (Plan.Leg leg : plan.legs()) {
             if (leg.reach() == Plan.Reach.PARTIAL) {
-                return "`move.go(\"" + route.name() + "\")` walks it" + asking + ", working out the unknown part on "
+                return "`numen.move.go(\"" + route.name() + "\")` walks it" + asking + ", working out the unknown part on "
                         + "the way; it changes only the cells listed here, and stops to say so if the unknown part needs "
                         + "more.";
             }
         }
-        return "`move.go(\"" + route.name() + "\")` walks it" + asking + "; it changes only the cells listed here.";
+        return "`numen.move.go(\"" + route.name() + "\")` walks it" + asking + "; it changes only the cells listed here.";
     }
 
     /** 走过的记录,新的在前;没走过是空串。 */

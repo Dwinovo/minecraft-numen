@@ -24,11 +24,11 @@ class RoutingTest {
             g.server("take", "Take some.", (src, args) -> src.reply(TaskResult.ok("took " + args.get(count))
                     .toJson()), count)
                     .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
-                    .example("gt_route.take(2)");
+                    .example("gt.gt_route.take(2)");
             g.client("jot", "Jot it down.", (src, args) -> src.reply(TaskResult.ok("jotted " + args.get(count))
                     .toJson()), count)
                     .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
-                    .example("gt_route.jot(2)");
+                    .example("gt.gt_route.jot(2)");
         });
     }
 
@@ -36,7 +36,7 @@ class RoutingTest {
     void theLayerOfALineIsTheLeadingSlashAndNothingElse() {
         assertEquals(new Line(true, "give @s minecraft:diamond 2"), Line.of("  /give @s minecraft:diamond 2 "));
         assertEquals(new Line(true, "help give"), Line.of("/ help give"));
-        assertEquals(new Line(false, "gt_route take 2"), Line.of(" gt_route take 2"));
+        assertEquals(new Line(false, "gt gt_route take 2"), Line.of(" gt gt_route take 2"));
         assertEquals(new Line(false, "give @s minecraft:diamond 2"), Line.of("give @s minecraft:diamond 2"),
                 "不带 / 的就是 Numen 的动作,哪怕它像一条原版指令");
     }
@@ -52,8 +52,8 @@ class RoutingTest {
     @Test
     void aScriptRunsClientActionsOnTheClientAndServerActionsOnTheServer() {
         CliFixture.Outcome both = lua("""
-                gt_route.jot(2)
-                gt_route.take(3)
+                gt.gt_route.jot(2)
+                gt.gt_route.take(3)
                 """);
         assertTrue(both.success(), both.message());
         assertEquals("jotted 2", both.call(0).get("message").getAsString(), "客户端动作在客户端执行");
@@ -62,8 +62,8 @@ class RoutingTest {
 
     @Test
     void onTheServerALineRunsServerActionsAndOnlyNamesClientOnes() {
-        assertEquals("took 2", onServer("gt_route take 2").message());
-        CliFixture.Outcome jot = onServer("gt_route jot 2");
+        assertEquals("took 2", onServer("gt gt_route take 2").message());
+        CliFixture.Outcome jot = onServer("gt gt_route jot 2");
         assertFalse(jot.success(), "服务端的树上客户端动作只有名字与帮助");
     }
 }

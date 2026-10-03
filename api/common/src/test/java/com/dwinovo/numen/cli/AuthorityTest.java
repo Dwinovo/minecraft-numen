@@ -29,10 +29,10 @@ class AuthorityTest {
             g.server("wrap", "Wrap a native admin command.", AuthorityTest::borrow)
                     .authority(Authority.SERVER_ON_HER)
                     .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
-                    .example("gt_authority.wrap()");
+                    .example("gt.gt_authority.wrap()");
             g.server("plain", "Act with her own authority.", AuthorityTest::borrow)
                     .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
-                    .example("gt_authority.plain()");
+                    .example("gt.gt_authority.plain()");
         });
     }
 
@@ -49,11 +49,11 @@ class AuthorityTest {
     @Test
     void onlyADeclaredActionGetsTheServersAuthority() {
         REFUSED.set("not run");
-        assertTrue(onServer("gt_authority wrap").success());
+        assertTrue(onServer("gt gt_authority wrap").success());
         assertEquals(null, REFUSED.get(), "声明了的动作拿得到");
 
-        assertTrue(onServer("gt_authority plain").success());
-        assertEquals("gt_authority plain runs with her own authority; declare "
+        assertTrue(onServer("gt gt_authority plain").success());
+        assertEquals("gt gt_authority plain runs with her own authority; declare "
                 + "authority(Authority.SERVER_ON_HER) to borrow the server's", REFUSED.get(), "没声明的拿不到");
     }
 
@@ -70,15 +70,15 @@ class AuthorityTest {
 
     @Test
     void theHelpSaysWhoseAuthorityItIs() {
-        String wrap = help("gt_authority.wrap");
+        String wrap = help("gt.gt_authority.wrap");
         assertEquals("""
                 ---Wrap a native admin command.
-                function gt_authority.wrap() end
+                function gt.gt_authority.wrap() end
                 -- Examples:
-                --   gt_authority.wrap()
+                --   gt.gt_authority.wrap()
                 -- Notes:
                 --   Runs with the server's authority, and only on you.""", wrap);
-        assertFalse(help("gt_authority.plain").contains(CommandHelp.SERVER_ON_HER),
+        assertFalse(help("gt.gt_authority.plain").contains(CommandHelp.SERVER_ON_HER),
                 "她自己的是默认,不写");
     }
 
@@ -88,12 +88,12 @@ class AuthorityTest {
         assertThrows(IllegalArgumentException.class, () -> door().registerCommands("gt_authority_client", "x.",
                 g -> g.client("jot", "Jot.", (src, args) -> { }).authority(Authority.SERVER_ON_HER)
                         .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
-                        .example("gt_authority_client.jot()")), "客户端动作借不了服务器的权威");
+                        .example("gt.gt_authority_client.jot()")), "客户端动作借不了服务器的权威");
         assertThrows(IllegalArgumentException.class, () -> door().registerCommands("gt_authority_null", "x.",
-                g -> g.server("go", "Go.", (src, args) -> { }).authority(null).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt_authority_null.go()")));
+                g -> g.server("go", "Go.", (src, args) -> { }).authority(null).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt.gt_authority_null.go()")));
         AtomicReference<Action> leaked = new AtomicReference<>();
         door().registerCommands("gt_authority_closed", "x.",
-                g -> leaked.set(g.server("go", "Go.", (src, args) -> { }).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt_authority_closed.go()")));
+                g -> leaked.set(g.server("go", "Go.", (src, args) -> { }).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt.gt_authority_closed.go()")));
         assertThrows(IllegalStateException.class, () -> leaked.get().authority(Authority.SERVER_ON_HER),
                 "封口之后不能再改权威");
     }

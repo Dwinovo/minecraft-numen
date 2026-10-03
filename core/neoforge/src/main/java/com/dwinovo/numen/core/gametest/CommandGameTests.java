@@ -86,20 +86,20 @@ public class CommandGameTests {
 
     static {
         if (GameTestKit.numenTestsEnabled()) {
-            NumenPlugins.register(numen -> numen.registerCommands("gt_sync",
+            NumenPlugins.register("gt", numen -> numen.registerCommands("gt_sync",
                     "Test fixture: a short action the caller waits on.", g ->
                             g.server("hold", "Hold still for a few ticks while the caller waits.",
                                     (src, args) -> TaskDispatch.runSync(src.companion(),
                                             new HoldRecord(src, args.get(TICKS)), src::reply),
                                     TICKS)
                                     .returns(ScriptType.NOTHING)
-                                    .example("gt_sync.hold(5)")));
-            NumenPlugins.register(numen -> numen.registerCommands(TWIN,
+                                    .example("gt.gt_sync.hold(5)")));
+            NumenPlugins.register("gt", numen -> numen.registerCommands(TWIN,
                     "Test fixture: a group that shares its name with a native command.", g -> {
                         g.server("ping", "Say which layer answered.",
                                         (src, args) -> src.reply(TaskResult.ok("layer one").toJson()))
                                 .returns(ScriptType.NOTHING)
-                                .example(TWIN + ".ping()");
+                                .example("gt." + TWIN + ".ping()");
                         g.server("mark", "Mark yourself through the native admin command.", (src, args) -> {
                                     OnHer her = src.onHer();
                                     List<String> words = her.next(TWIN + " mark");
@@ -109,16 +109,16 @@ public class CommandGameTests {
                                 })
                                 .authority(Authority.SERVER_ON_HER)
                                 .returns(ScriptType.NOTHING)
-                                .example(TWIN + ".mark()");
+                                .example("gt." + TWIN + ".mark()");
                     }));
             // 一个不守输出预算的动作:回执比一个下行包还大,测网络层接得住
-            NumenPlugins.register(numen -> numen.registerCommands("gt_wire",
+            NumenPlugins.register("gt", numen -> numen.registerCommands("gt_wire",
                     "Test fixture: an action whose reply is bigger than one payload to the client.", g ->
                             g.server("flood", "Reply with more text than one payload carries.",
                                     (src, args) -> src.reply(TaskResult.ok(
                                             "x".repeat(com.dwinovo.numen.network.Wire.TO_CLIENT.bytes() + 1)).toJson()))
                                     .returns(ScriptType.NOTHING)
-                                    .example("gt_wire.flood()")));
+                                    .example("gt.gt_wire.flood()")));
             TaskFactory.register(HoldRecord.class, (body, record) -> new Hold(record));
         }
     }
@@ -214,9 +214,9 @@ public class CommandGameTests {
 
         com.dwinovo.numen.network.payload.ExecuteActionPayload.handle(
                 new com.dwinovo.numen.network.payload.ExecuteActionPayload(companion.getUUID(), "gt-flood",
-                        "gt_wire flood", "{}"), owner);
+                        "gt gt_wire flood", "{}"), owner);
 
-        ToolRun run = lua(companion, "gt_wire.flood()");
+        ToolRun run = lua(companion, "gt.gt_wire.flood()");
         var sent = com.dwinovo.numen.network.Wire.TO_CLIENT.fit(
                 com.dwinovo.numen.network.payload.TaskResultPayload.STREAM_CODEC,
                 new com.dwinovo.numen.network.payload.TaskResultPayload(companion.getUUID(), "gt-flood", run.reply()),
@@ -239,7 +239,7 @@ public class CommandGameTests {
     public static void command_without_op_is_refused_by_the_server(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_guest", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_host");
-        ToolRun give = lua(companion, "mc.run(\"give @s minecraft:diamond\")");
+        ToolRun give = lua(companion, "numen.mc.run(\"give @s minecraft:diamond\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(give.task() == null, "a command the server refuses must not reach the task slot");
@@ -264,8 +264,8 @@ public class CommandGameTests {
         storeOf(owner).add(Verdict.Kind.ALLOW, Rule.parse("command(give)"));
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= ConsentDesk.of(companion).pending() != null);
-        ToolRun give = lua(companion, "mc.run(\"give @s minecraft:diamond 2\")");
-        ToolRun typo = lua(companion, "mc.run(\"give @s minecraft:not_an_item\")");
+        ToolRun give = lua(companion, "numen.mc.run(\"give @s minecraft:diamond 2\")");
+        ToolRun typo = lua(companion, "numen.mc.run(\"give @s minecraft:not_an_item\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(give.done(), "give has not finished");
@@ -276,7 +276,7 @@ public class CommandGameTests {
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 2, "no diamonds in the inventory");
             helper.assertTrue(!asked[0], "an allowed command still asked the owner");
             helper.assertTrue(typo.task() == null && !typo.succeeded()
-                            && typo.outcome().contains("usage: mc.run(\"give <targets> <item> [<count>]\")"),
+                            && typo.outcome().contains("usage: numen.mc.run(\"give <targets> <item> [<count>]\")"),
                     "a bad argument does not come back with the usage: " + typo.outcome());
             cleanUp(helper, companion, owner);
         });
@@ -294,7 +294,7 @@ public class CommandGameTests {
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_landlord");
         grantOp(companion);
         String line = setblock(helper, target);
-        ToolRun run = lua(companion, "mc.run(\"" + line + "\")");
+        ToolRun run = lua(companion, "numen.mc.run(\"" + line + "\")");
         int[] waited = new int[1];
 
         succeedWhen(helper, () -> {
@@ -334,8 +334,8 @@ public class CommandGameTests {
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gt_mc_listener");
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= ConsentDesk.of(companion).pending() != null);
-        ToolRun help = lua(companion, "mc.run(\"help\")");
-        ToolRun tell = lua(companion, "mc.run(\"tell gt_mc_listener on my way\")");
+        ToolRun help = lua(companion, "numen.mc.run(\"help\")");
+        ToolRun tell = lua(companion, "numen.mc.run(\"tell gt_mc_listener on my way\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(help.done() && help.succeeded(), "help did not run: " + help.outcome());
@@ -356,7 +356,7 @@ public class CommandGameTests {
         storeOf(owner).add(Verdict.Kind.DENY, Rule.parse("command(setblock)"));
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= ConsentDesk.of(companion).pending() != null);
-        ToolRun run = lua(companion, "mc.run(\"" + setblock(helper, target) + "\")");
+        ToolRun run = lua(companion, "numen.mc.run(\"" + setblock(helper, target) + "\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(run.done(), "setblock has not settled");
@@ -375,13 +375,13 @@ public class CommandGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
     public static void command_help_lists_only_what_the_server_lets_her_run(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_reader", new BlockPos(4, 2, 4), false);
-        String guest = message(lua(companion, "mc.run(\"help\")").reply());
+        String guest = message(lua(companion, "numen.mc.run(\"help\")").reply());
         helper.assertTrue(guest.contains("/msg <targets> <message>") && !guest.contains("/give "),
                 "the no-op help lists the wrong commands: " + guest);
         helper.assertTrue(!guest.contains("/numen"), "her help shows the players' /numen: " + guest);
 
         grantOp(companion);
-        String op = message(lua(companion, "mc.run(\"help\")").reply());
+        String op = message(lua(companion, "numen.mc.run(\"help\")").reply());
         helper.assertTrue(op.contains("/give <targets> <item> [<count>]"), "the op help never lists /give: " + op);
         helper.assertTrue(!op.contains("/numen"), "her op help shows the players' /numen: " + op);
         cleanUp(helper, companion, null);
@@ -417,8 +417,8 @@ public class CommandGameTests {
                 "the MC tree carries an argument type the registry does not know: " + types);
         server.getCommands().sendCommands(companion);
 
-        ToolRun summon = lua(companion, "mc.run(\"numen player summon gametest_mc_twin\")");
-        ToolRun drive = lua(companion, "mc.run(\"numen drive gametest_mc_viewer /help\")");
+        ToolRun summon = lua(companion, "numen.mc.run(\"numen player summon gametest_mc_twin\")");
+        ToolRun drive = lua(companion, "numen.mc.run(\"numen drive gametest_mc_viewer /help\")");
         for (ToolRun refused : List.of(summon, drive)) {
             helper.assertTrue(!refused.succeeded() && refused.task() == null
                             && refused.reply().contains("the server does not let you use /numen"),
@@ -452,7 +452,7 @@ public class CommandGameTests {
     }
 
     /**
-     * 同一个名字两层都有,互不干扰:{@code gt_twin.ping()} 是她的第 1 层函数,{@code mc.run("gt_twin ping")} 是同名的原生指令,
+     * 同一个名字两层都有,互不干扰:{@code gt.gt_twin.ping()} 是她的第 1 层函数,{@code numen.mc.run("gt_twin ping")} 是同名的原生指令,
      * 各答各的。
      * 原生那条照第 0 层的规矩过权限层(主人允许了 {@code command(gt_twin)})。
      */
@@ -462,8 +462,8 @@ public class CommandGameTests {
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_mc_twin_owner");
         registerNativeTwin(helper.getLevel().getServer());
         storeOf(owner).add(Verdict.Kind.ALLOW, Rule.parse("command(" + TWIN + ")"));
-        ToolRun one = lua(companion, TWIN + ".ping()");
-        ToolRun zero = lua(companion, "mc.run(\"" + TWIN + " ping\")");
+        ToolRun one = lua(companion, "gt." + TWIN + ".ping()");
+        ToolRun zero = lua(companion, "numen.mc.run(\"" + TWIN + " ping\")");
 
         helper.assertTrue(one.succeeded() && message(one.reply()).equals("layer one"),
                 "layer 1 did not answer its own line: " + one.reply());
@@ -507,8 +507,8 @@ public class CommandGameTests {
         NumenPlayer companion = spawnAt(helper, "gt_mc_marked", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gt_mc_marker");
         registerNativeTwin(helper.getLevel().getServer());
-        ToolRun wrapped = lua(companion, TWIN + ".mark()");
-        ToolRun herself = lua(companion, "mc.run(\"" + TWIN + " mark gt_mc_marked alpha\")");
+        ToolRun wrapped = lua(companion, "gt." + TWIN + ".mark()");
+        ToolRun herself = lua(companion, "numen.mc.run(\"" + TWIN + " mark gt_mc_marked alpha\")");
 
         helper.assertTrue(wrapped.succeeded()
                         && message(wrapped.reply()).equals("alpha,beta | marked gt_mc_marked alpha"),
@@ -527,18 +527,18 @@ public class CommandGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
     public static void command_long_work_is_accepted_and_finished_under_one_id(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_worker", new BlockPos(4, 2, 4), false);
-        ToolRun run = lua(companion, "gt_long.linger(10)");
+        ToolRun run = lua(companion, "gt.gt_long.linger(10)");
         EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 
         succeedWhen(helper, () -> {
             helper.assertTrue(run.task() != null, "the long work was not found under the call's id: " + run.reply());
             JsonObject data = JsonParser.parseString(run.reply()).getAsJsonObject().getAsJsonObject("data");
             String id = data.get("task_id").getAsString();
-            helper.assertTrue(id.equals(run.task().publicId()) && data.get("task").getAsString().equals("gt_long.linger"),
+            helper.assertTrue(id.equals(run.task().publicId()) && data.get("task").getAsString().equals("gt.gt_long.linger"),
                     "the receipt names another task: " + run.reply());
             helper.assertTrue(outbox.peek(companion.getUUID()).entries().stream()
                             .anyMatch(e -> e.type().equals("task_finished") && e.text().contains(id)
-                                    && e.text().contains("task=\"gt_long.linger\"")),
+                                    && e.text().contains("task=\"gt.gt_long.linger\"")),
                     "task_finished does not answer the receipt: " + outbox.peek(companion.getUUID()).entries());
             outbox.forget(companion.getUUID());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -553,9 +553,9 @@ public class CommandGameTests {
     public static void command_drive_runs_a_line_through_her_entry(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_driven", new BlockPos(4, 2, 4), false);
         var server = helper.getLevel().getServer();
-        List<String> lines = List.of("task status", "task stauts", "/help help", "/gvie @s stone");
-        List<ToolRun> viaCommand = List.of(lua(companion, "task.status()"), lua(companion, "task.stauts()"),
-                lua(companion, "mc.run(\"help help\")"), lua(companion, "mc.run(\"gvie @s stone\")"));
+        List<String> lines = List.of("numen task status", "numen task stauts", "/help help", "/gvie @s stone");
+        List<ToolRun> viaCommand = List.of(lua(companion, "numen.task.status()"), lua(companion, "numen.task.stauts()"),
+                lua(companion, "numen.mc.run(\"help help\")"), lua(companion, "numen.mc.run(\"gvie @s stone\")"));
         List<String> heard = new ArrayList<>();
         CommandSourceStack console = console(server, heard);
         for (String line : lines) {
@@ -613,7 +613,7 @@ public class CommandGameTests {
         var server = helper.getLevel().getServer();
         List<String> heard = new ArrayList<>();
         server.getCommands().performPrefixedCommand(console(server, heard),
-                "numen drive gametest_mc_held gt_sync hold 5");
+                "numen drive gametest_mc_held gt gt_sync hold 5");
 
         succeedWhen(helper, () -> {
             String name = companion.getName().getString();
@@ -668,19 +668,19 @@ public class CommandGameTests {
     public static void command_help_give_mines_types_examples_and_candidates(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_learner", new BlockPos(4, 2, 4), false);
         grantOp(companion);
-        ToolRun give = lua(companion, "mc.run(\"help give\")");
-        ToolRun item = lua(companion, "mc.run(\"help give @s minecraft:diamond_\")");
-        ToolRun groups = lua(companion, "api.help(\"task\")");
+        ToolRun give = lua(companion, "numen.mc.run(\"help give\")");
+        ToolRun item = lua(companion, "numen.mc.run(\"help give @s minecraft:diamond_\")");
+        ToolRun groups = lua(companion, "numen.api.help(\"numen.task\")");
         String said = message(give.reply());
         String items = message(item.reply());
         String listed = dataIn(groups.reply()).get("text").getAsString();
         Constants.LOG.info("[numen-cli] /help give -> {}", said);
         Constants.LOG.info("[numen-cli] /help give @s minecraft:diamond_ -> {}", items);
-        Constants.LOG.info("[numen-cli] api.help(task) -> {}", listed);
+        Constants.LOG.info("[numen-cli] numen.api.help(task) -> {}", listed);
 
-        helper.assertTrue(groups.succeeded() && listed.contains("\n---@class task\n")
+        helper.assertTrue(groups.succeeded() && listed.contains("\n---@class numen.task\n")
                         && listed.contains("\n---@field status fun(") && listed.contains("\n---@field stop fun("),
-                "api.help of a group is not that group's own listing: " + listed);
+                "numen.api.help of a group is not that group's own listing: " + listed);
         helper.assertTrue(give.succeeded() && said.startsWith("ran /help give: /give <targets> <item> [<count>]\n"),
                 "the vanilla usage does not come first: " + said);
         helper.assertTrue(said.contains("\n  <targets> minecraft:entity (amount multiple, type players) — e.g. Player, ")
@@ -706,22 +706,22 @@ public class CommandGameTests {
     public static void command_a_typo_ends_with_the_nearest_candidate(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_mc_typist", new BlockPos(4, 2, 4), false);
         grantOp(companion);
-        ToolRun item = lua(companion, "mc.run(\"give @s minecraft:dimond\")");
-        ToolRun action = lua(companion, "gt_long.lingre(40)");
+        ToolRun item = lua(companion, "numen.mc.run(\"give @s minecraft:dimond\")");
+        ToolRun action = lua(companion, "gt.gt_long.lingre(40)");
         String itemSaid = message(item.reply());
         String actionSaid = message(action.reply());
         Constants.LOG.info("[numen-cli] /give @s minecraft:dimond -> {}", itemSaid);
-        Constants.LOG.info("[numen-cli] gt_long.lingre(40) -> {}", actionSaid);
+        Constants.LOG.info("[numen-cli] gt.gt_long.lingre(40) -> {}", actionSaid);
 
         helper.assertTrue(!item.succeeded() && item.task() == null
                         && itemSaid.contains("minecraft:dimond") && itemSaid.contains("<--[HERE]")
-                        && itemSaid.contains("\nusage: mc.run(\"give <targets> <item> [<count>]\")")
+                        && itemSaid.contains("\nusage: numen.mc.run(\"give <targets> <item> [<count>]\")")
                         && itemSaid.endsWith("\nhint: Did you mean: minecraft:diamond?"),
                 "the item typo does not end with the nearest item: " + itemSaid);
         helper.assertTrue(!action.succeeded() && action.task() == null
                         && actionSaid.contains("stopped at line 1")
-                        && actionSaid.contains("there is no API function gt_long.lingre")
-                        && actionSaid.contains("did you mean gt_long.linger?"),
+                        && actionSaid.contains("there is no API function gt.gt_long.lingre")
+                        && actionSaid.contains("did you mean gt.gt_long.linger?"),
                 "the function typo does not end with the nearest function: " + actionSaid);
         cleanUp(helper, companion, null);
         helper.succeed();

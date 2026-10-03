@@ -60,14 +60,14 @@ class RouteSpecFlagsTest {
         // 程序从她的入口跑,要整份登记处(各组、库、跑脚本的工具);这一组是装好之后加的测试组
         com.dwinovo.numen.core.CoreCommandsFixture.install();
         AtomicReference<NumenApi> door = new AtomicReference<>();
-        NumenPlugins.register(door::set);
+        NumenPlugins.register("gt", door::set);
         door.get().registerCommands("gt_route", "Test fixture: route flags read into a spec.", g ->
                 g.server("plan", "Read the route flags.", (src, args) -> {
                     LAST.set(RouteSpecFlags.parse(args, BASE.get(), AREAS));
                     src.reply(TaskResult.ok("read").toJson());
                 }, RouteSpecFlags.PARAMS.toArray(Param<?>[]::new))
                         .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
-                        .example("gt_route.plan({alter = \"natural\", avoid = {\"water\"}})"));
+                        .example("gt.gt_route.plan({alter = \"natural\", avoid = {\"water\"}})"));
     }
 
     /** 选项表交给这一组的函数,和她写的一样;跑完返回读出的规格。 */
@@ -82,14 +82,14 @@ class RouteSpecFlagsTest {
         CoreScripts.Run run = run(options);
         assertFalse(run.ok(), options + " should fail");
         String message = run.message();
-        String error = message.substring(message.indexOf("gt_route.plan: ") + "gt_route.plan: ".length());
+        String error = message.substring(message.indexOf("gt.gt_route.plan: ") + "gt.gt_route.plan: ".length());
         assertTrue(error.startsWith("bad_argument — "), "规格写错是参数错: " + error);
         return error.substring("bad_argument — ".length());
     }
 
     private static CoreScripts.Run run(String options) {
         LAST.set(null);
-        return CoreScripts.run(UUID.randomUUID(), "gt_route.plan({" + options + "})");
+        return CoreScripts.run(UUID.randomUUID(), "gt.gt_route.plan({" + options + "})");
     }
 
     /** mine 的规格叠在它自己的默认上:没写的保持默认,写了的覆盖,禁令并进默认已有的。 */

@@ -13,7 +13,7 @@ import com.dwinovo.numen.pathing.spec.RouteSpec;
 import it.unimi.dsi.fastutil.longs.LongSet;
 
 /**
- * 路线上存的规格:她写的路线标志按命令行的写法存成一截文字(如 {@code --alter natural --avoid water}),{@code route.show} 写成
+ * 路线上存的规格:她写的路线标志按命令行的写法存成一截文字(如 {@code --alter natural --avoid water}),{@code numen.route.show} 写成
  * 选项表给她看({@link #shown});
  * 用时读回来经 {@link RouteSpecFlags} 翻成规格——标志到规格的翻译只有那一处。读与写都过 {@code route spec} 这一行命令:
  * 写是那一行的参数写回命令行的样子({@link CommandArgs#write}),读是同一棵树把它读回来({@link NumenCli#read}),文字的语法就是
@@ -25,7 +25,7 @@ import it.unimi.dsi.fastutil.longs.LongSet;
 public final class RouteFlags {
 
     /** 读回存下的标志时借的那一行命令。 */
-    static final String SPEC = Itinerary.GROUP + " spec";
+    static final String SPEC = com.dwinovo.numen.api.NumenPlugins.NUMEN + " " + Itinerary.GROUP + " spec";
 
     private RouteFlags() {}
 

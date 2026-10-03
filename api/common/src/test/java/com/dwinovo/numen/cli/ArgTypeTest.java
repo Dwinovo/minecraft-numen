@@ -48,7 +48,7 @@ class ArgTypeTest {
                     src.reply(TaskResult.ok("made").toJson());
                 }, MODEL, X, RECIPE, HAVE_ONLY, SEARCH, DEPTH)
                         .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
-                        .example("gt_types.make(\"抽象鸣潮 菲比.ysm\", {x = -12, recipe = \"stone\", have_only = true})"));
+                        .example("gt.gt_types.make(\"抽象鸣潮 菲比.ysm\", {x = -12, recipe = \"stone\", have_only = true})"));
     }
 
     private static CommandArgs ran(String line) {
@@ -69,14 +69,14 @@ class ArgTypeTest {
 
     @Test
     void eachTypeReadsItsValueOffTheLine() {
-        CommandArgs plain = ran("gt_types make misc/1_Alex --x -12 --recipe kaleidoscope_cookery:flex_pot/braised_beef");
+        CommandArgs plain = ran("gt gt_types make misc/1_Alex --x -12 --recipe kaleidoscope_cookery:flex_pot/braised_beef");
         assertEquals(-12, plain.get(X));
         assertEquals(ResourceLocation.fromNamespaceAndPath("kaleidoscope_cookery", "flex_pot/braised_beef"),
                 plain.get(RECIPE));
         assertEquals("misc/1_Alex", plain.get(MODEL), "不加引号时一个值读到空格为止,斜杠与大写照收");
         assertNull(plain.get(HAVE_ONLY));
 
-        CommandArgs flagged = ran("gt_types make \"抽象鸣潮 菲比.ysm\" --x 30000000 --recipe stone --have-only "
+        CommandArgs flagged = ran("gt gt_types make \"抽象鸣潮 菲比.ysm\" --x 30000000 --recipe stone --have-only "
                 + "--search 灵梦 --depth -64");
         assertEquals(30000000, flagged.get(X));
         assertEquals(ResourceLocation.withDefaultNamespace("stone"), flagged.get(RECIPE), "不写命名空间就是 minecraft:");
@@ -84,19 +84,19 @@ class ArgTypeTest {
         assertEquals(true, flagged.get(HAVE_ONLY));
         assertEquals("灵梦", flagged.get(SEARCH));
         assertEquals(-64, flagged.get(DEPTH));
-        assertEquals("say \"hi\"", ran("gt_types make \"say \\\"hi\\\"\"").get(MODEL), "引号里反斜杠转义");
-        assertEquals(false, ran("gt_types make m --no-have-only").get(HAVE_ONLY), "开关写 --no-name 是关");
-        assertEquals(true, ran("gt_types make m --have_only").get(HAVE_ONLY), "标志名里 _ 与 - 是同一个字符");
+        assertEquals("say \"hi\"", ran("gt gt_types make \"say \\\"hi\\\"\"").get(MODEL), "引号里反斜杠转义");
+        assertEquals(false, ran("gt gt_types make m --no-have-only").get(HAVE_ONLY), "开关写 --no-name 是关");
+        assertEquals(true, ran("gt gt_types make m --have_only").get(HAVE_ONLY), "标志名里 _ 与 - 是同一个字符");
     }
 
     @Test
     void aBadValueSaysWhatWasExpected() {
-        assertTrue(failed("gt_types make m --recipe Stone").startsWith("expected an id like minecraft:oak_log at position 25: "));
-        assertTrue(failed("gt_types make m --recipe a:b:c").startsWith("'a:b:c' is not a valid id at position 25: "));
-        assertTrue(failed("gt_types make \"half open").startsWith("Unclosed quoted string"));
-        assertTrue(failed("gt_types make m --have-only yes").startsWith("--have-only is a switch and takes no value"),
+        assertTrue(failed("gt gt_types make m --recipe Stone").startsWith("expected an id like minecraft:oak_log at position 28: "));
+        assertTrue(failed("gt gt_types make m --recipe a:b:c").startsWith("'a:b:c' is not a valid id at position 28: "));
+        assertTrue(failed("gt gt_types make \"half open").startsWith("Unclosed quoted string"));
+        assertTrue(failed("gt gt_types make m --have-only yes").startsWith("--have-only is a switch and takes no value"),
                 "开关不写 true/false");
-        assertTrue(failed("gt_types make m --x 1.5").startsWith("Invalid integer '1.5'"));
+        assertTrue(failed("gt gt_types make m --x 1.5").startsWith("Invalid integer '1.5'"));
     }
 
     /**
@@ -105,7 +105,7 @@ class ArgTypeTest {
      */
     @Test
     void aScriptCallReadsTheSameValuesFromJson() {
-        CommandArgs viaLine = ran("gt_types make \"抽象鸣潮 菲比.ysm\" --x -12 "
+        CommandArgs viaLine = ran("gt gt_types make \"抽象鸣潮 菲比.ysm\" --x -12 "
                 + "--recipe kaleidoscope_cookery:flex_pot/braised_beef --no-have-only --search misc/1_Alex");
         JsonObject json = JsonParser.parseString("""
                 {"x": -12, "recipe": "kaleidoscope_cookery:flex_pot/braised_beef", "model": "抽象鸣潮 菲比.ysm",
@@ -115,11 +115,11 @@ class ArgTypeTest {
 
         assertEquals("say \"hi\" \\ bye", read("{\"x\":1,\"recipe\":\"stone\",\"model\":\"say \\\"hi\\\" \\\\ bye\"}")
                 .get(MODEL), "JSON 里的引号与反斜杠原样读回");
-        assertTrue(serveJson("gt_types make", "{\"x\":1,\"recipe\":\"a b\",\"model\":\"m\"}").message()
+        assertTrue(serveJson("gt gt_types make", "{\"x\":1,\"recipe\":\"a b\",\"model\":\"m\"}").message()
                 .startsWith("argument 'recipe': expected a single id"));
-        assertTrue(serveJson("gt_types make", "{\"x\":1,\"recipe\":\"stone\",\"model\":\"m\","
+        assertTrue(serveJson("gt gt_types make", "{\"x\":1,\"recipe\":\"stone\",\"model\":\"m\","
                 + "\"have_only\":\"maybe\"}").message().startsWith("argument 'have_only': Invalid bool"));
-        assertEquals(viaLine, ranScript("gt_types.make(\"抽象鸣潮 菲比.ysm\", {x = -12, "
+        assertEquals(viaLine, ranScript("gt.gt_types.make(\"抽象鸣潮 菲比.ysm\", {x = -12, "
                 + "recipe = \"kaleidoscope_cookery:flex_pot/braised_beef\", have_only = false, search = \"misc/1_Alex\"})"),
                 "从脚本进来,处理函数拿到的是同一份");
     }
@@ -129,18 +129,18 @@ class ArgTypeTest {
         assertEquals("""
                 ---Make something.
                 ---@param model string Which model.
-                ---@param opts? gt_types.make.opts
-                function gt_types.make(model, opts) end
+                ---@param opts? gt.gt_types.make.opts
+                function gt.gt_types.make(model, opts) end
 
-                ---@class gt_types.make.opts
+                ---@class gt.gt_types.make.opts
                 ---@field x? integer Block X. Omit to use 0.
                 ---@field recipe? string Which recipe. Omit to make anything.
                 ---@field have_only? boolean Only what you can make. Omit to list everything.
                 ---@field search? string Narrow the list. Omit to list all.
                 ---@field depth? integer How far down. Omit to stay level.
                 -- Examples:
-                --   gt_types.make("抽象鸣潮 菲比.ysm", {x = -12, recipe = "stone", have_only = true})""",
-                help("gt_types.make"));
+                --   gt.gt_types.make("抽象鸣潮 菲比.ysm", {x = -12, recipe = "stone", have_only = true})""",
+                help("gt.gt_types.make"));
     }
 
     private static CommandArgs ranScript(String code) {

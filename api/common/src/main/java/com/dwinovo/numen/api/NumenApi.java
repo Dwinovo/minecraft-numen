@@ -14,8 +14,8 @@ import java.util.function.Function;
  * 插件手里的那个对象——<b>扩展 Numen 的唯一一扇门</b>。
  *
  * <pre>{@code
- * NumenPlugins.register(numen -> {
- *     numen.registerCommands("mymod", "What your mod lets her do.", group -> { ... });
+ * NumenPlugins.register("mymod", numen -> {
+ *     numen.registerCommands("machine", "What your mod lets her do.", group -> { ... });
  *     numen.bundleSkills(myJarSkillsRoot());
  *     numen.on(CompanionEvent.SPAWN, body -> ...);
  * });
@@ -43,33 +43,35 @@ public interface NumenApi {
     <T> void on(CompanionEvent<T> event, Consumer<T> handler);
 
     /**
-     * 登记一组动作:她的 API 里的一张表 {@code <namespace>.<action>(...)}。模型只有一个工具——跑一段脚本——脚本里每个 API 函数就是
-     * 一个动作,所以加动作不加工具;系统提示里的 API 索引与每个函数的帮助都由这份登记生成。服务端的动作在服务端执行,客户端的动作
-     * 留在主人客户端。人(OP)也能经 {@code /numen drive} 写一行命令 {@code <namespace> <action> …} 调同一批动作。
+     * 登记一组动作:她的 API 里的一张表 {@code <名字空间>.<组>.<动作>(...)}。名字空间由登记者给出——你在
+     * {@link NumenPlugins#register(String, NumenPlugin)} 时写的那个 id,引擎自己的是 {@code numen}——这里只写组名。模型只有一个工具——
+     * 跑一段脚本——脚本里每个 API 函数就是一个动作,所以加动作不加工具;系统提示里的 API 索引与每个函数的帮助都由这份登记生成。服务端的
+     * 动作在服务端执行,客户端的动作留在主人客户端。人(OP)也能经 {@code /numen drive} 写一行命令
+     * {@code <名字空间> <组> <动作> …} 调同一批动作。
      *
      * <pre>{@code
-     * numen.registerCommands("mymod", "What your mod lets her do, in one sentence.", cmds -> {
+     * numen.registerCommands("machine", "What your mod lets her do, in one sentence.", cmds -> {
      *     cmds.server("status", "Read the machine she is looking at.", MyCommands::status)
-     *         .example("mymod.status()");
+     *         .example("mymod.machine.status()");
      *     cmds.server("start", "Start a machine by its id.", MyCommands::start, MACHINE_ID)
-     *         .example("mymod.start(\"m1\")");
+     *         .example("mymod.machine.start(\"m1\")");
      *     cmds.client("recipes", "List recipes in the owner's language.", MyCommands::recipes)
-     *         .example("mymod.recipes()");
+     *         .example("mymod.machine.recipes()");
      * });
      * }</pre>
      *
-     * <p>{@code namespace} 用你的 mod id。一个组名只能登记一次,你只能往自己的组里加动作——引擎自带的组和
-     * 别的插件的组都够不着。每个动作选一侧执行:{@code server}(动身体、读世界)或 {@code client}(只有主人
-     * 客户端才有的数据)。命令树在两侧都登记,所以<b>在 {@code NumenPlugins.register} 的块里直接调</b>,别放进
-     * {@link #onClient}。动作默认以她自己的权威执行;包装你的模组管理指令的服务端动作可以声明
-     * {@code .authority(Authority.SERVER_ON_HER)},借服务器的权威、只对她执行(见 {@link com.dwinovo.numen.cli.Authority})。
+     * <p>一个组名在名字空间里只能登记一次,你只能往自己名字空间的组里加动作——引擎自带的组和别的插件的组都够不着。每个动作选一侧执行:
+     * {@code server}(动身体、读世界)或 {@code client}(只有主人客户端才有的数据)。命令树在两侧都登记,所以
+     * <b>在 {@code NumenPlugins.register} 的块里直接调</b>,别放进 {@link #onClient}。动作默认以她自己的权威执行;包装你的模组管理指令
+     * 的服务端动作可以声明 {@code .authority(Authority.SERVER_ON_HER)},借服务器的权威、只对她执行(见
+     * {@link com.dwinovo.numen.cli.Authority})。
      *
-     * @param namespace 一级命令名,小写英文,用你的 mod id
-     * @param summary   一句话说明,进系统提示里的命令索引和 {@code help}
-     * @param actions   往这一组里加动作;它返回后这一组就封口
+     * @param group   组名,小写英文:领域名词({@code maid}、{@code quest})
+     * @param summary 一句话说明,进系统提示里的命令索引和 {@code help}
+     * @param actions 往这一组里加动作;它返回后这一组就封口
      * @throws IllegalArgumentException 组名已被占、名字不合规、动作或参数写错、例子读不通
      */
-    void registerCommands(String namespace, String summary, Consumer<CommandGroup> actions);
+    void registerCommands(String group, String summary, Consumer<CommandGroup> actions);
 
     /**
      * 把一个目录里的技能交给引擎。就地读,不复制:你的 jar 一卸载技能跟着消失。
@@ -80,11 +82,11 @@ public interface NumenApi {
     void bundleSkills(Path skillsRoot);
 
     /**
-     * 把一个目录里的 Lua 模块交给引擎:每个 {@code <名字><扩展名>} 是一个随模组发布的模块,用脚本语言写成(扩展名随语言,眼下是
-     * {@code .lua})。模块返回一张函数表({@code local M = {} … function M.harvest(field) … end … return M}),她的程序以模块名直接用
-     * ({@code mymod.harvest("wheat")},第一次用到才装);和你的命令组同名的模块给那一组加函数,把几个原子动作组合成一件事。系统提示
-     * 的 API 索引列出每个模块与它的函数,说明是开头那行注释与每个函数上面的几行注释;{@code script.show(<名字>)} 读全文。模块留在你的
-     * jar 里,她存一份同名的就盖住它,删掉她那份就回到你的。
+     * 把一个目录里的 Lua 模块交给引擎:每个 {@code <组名><扩展名>} 是一个随模组发布的模块,用脚本语言写成(扩展名随语言,眼下是
+     * {@code .lua}),模块名是你的名字空间加文件名({@code farm.lua} 是 {@code mymod.farm})。模块返回一张函数表
+     * ({@code local M = {} … function M.harvest(field) … end … return M}),她的程序以模块名直接用({@code mymod.farm.harvest("wheat")},
+     * 第一次用到才装);和你的命令组同名的模块给那一组加函数,把几个原子动作组合成一件事。系统提示的 API 索引列出每个模块与它的函数,
+     * 说明是开头那行注释与每个函数上面的几行注释;{@code numen.module.show(<名字>)} 读全文。
      *
      * <p>登记那一刻把关:名字合模块名的规矩、读得通、开头一行注释说它做什么、每个函数上面都写了注释;装出来是一张表、不换掉任何命令组
      * 的动作(登记处第一次被用时查)。两侧都登记,所以<b>在 {@code NumenPlugins.register} 的块里直接调</b>,别放进 {@link #onClient}。

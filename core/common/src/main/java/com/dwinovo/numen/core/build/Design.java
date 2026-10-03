@@ -35,8 +35,8 @@ public record Design(String name, UUID owner, String ownerName, String author, S
     private static final String OWNER = "owner: ";
     private static final String AUTHOR = "author: ";
     private static final String CREATED = "created: ";
-    /** 设计里每一步都是 {@code build} 组的一个原语。 */
-    public static final String GROUP = "build";
+    /** 设计里每一步都是 {@code numen build} 组的一个原语,写成一行命令时的路径开头。 */
+    public static final String GROUP = com.dwinovo.numen.api.NumenPlugins.NUMEN + " build";
 
     /**
      * 设计名合规就原样返回,否则说清能用什么字。规矩见 {@link Names}:用作文件名,也是建成的房子的名字的前半
@@ -77,10 +77,10 @@ public record Design(String name, UUID owner, String ownerName, String author, S
      */
     public static Step step(NumenCli.Reading reading) {
         String[] path = reading.path().split(" ");
-        Primitive primitive = path.length == 2 && path[0].equals(GROUP) && reading.args() != null
-                ? Primitive.named(path[1]) : null;
+        Primitive primitive = path.length == 3 && (path[0] + " " + path[1]).equals(GROUP) && reading.args() != null
+                ? Primitive.named(path[2]) : null;
         if (primitive == null) {
-            throw new IllegalArgumentException("a design step is one build primitive (build.set, place, line, layer, "
+            throw new IllegalArgumentException("a design step is one build primitive (numen.build.set, place, line, layer, "
                     + "cylinder, sphere or copy), not " + reading.path());
         }
         if (reading.args().get(Primitive.Params.INTO) != null || reading.args().get(Primitive.Params.STEP) != null

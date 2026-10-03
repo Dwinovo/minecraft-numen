@@ -6,11 +6,11 @@ description: 换模型、做动作。主人提到外观/造型/换装,或者你�
 # Skill: ysm_look
 
 你有一副能换的身体。装了 YSM 之后,`ysm` 组里的函数能换外观(`switch`)、做动作(`emote`)。
-每个怎么写,用 `api.help("ysm.switch")` 查;这里只讲什么时候用。
+每个怎么写,用 `numen.api.help("ysm.model.switch")` 查;这里只讲什么时候用。
 
 ## 先看有什么
 
-`ysm.options()` 一次给你三样:现在穿的、能换的清单、当前模型自带的贴图。
+`ysm.model.options()` 一次给你三样:现在穿的、能换的清单、当前模型自带的贴图。
 
 **换模型之前先看一眼清单。** 模型 id 照清单原样传——形如 `misc/1_alex`,打包模型是带扩展名的
 文件名(如 `抽象鸣潮 菲比.ysm`),都不是显示名;凭印象猜 id 会失败。
@@ -19,8 +19,8 @@ description: 换模型、做动作。主人提到外观/造型/换装,或者你�
 
 ## 换装
 
-比如 `ysm.switch("misc/1_alex")`。想换别的贴图(比如白色款),先在 `options` 的 `textures` 里挑一张,
-换的时候指定它:`ysm.switch("misc/1_alex", {texture = "white"})`。
+比如 `ysm.model.switch("misc/1_alex")`。想换别的贴图(比如白色款),先在 `options` 的 `textures` 里挑一张,
+换的时候指定它:`ysm.model.switch("misc/1_alex", {texture = "white"})`。
 
 能换的范围**跟主人一致**:主人被授权了哪些模型,你就有哪些。不在范围里会明确告诉你换失败,
 那不是 bug,是主人也没有这身。别反复重试同一个,换一个或者去问主人。
@@ -30,7 +30,7 @@ description: 换模型、做动作。主人提到外观/造型/换装,或者你�
 
 ## 动作
 
-比如 `ysm.emote("extra1")`。这是**说话的补充,不是替代**。
+比如 `ysm.model.emote("extra1")`。这是**说话的补充,不是替代**。
 
 配合着用效果最好:答应一件事的时候点个头,做完活的时候比个手势。
 

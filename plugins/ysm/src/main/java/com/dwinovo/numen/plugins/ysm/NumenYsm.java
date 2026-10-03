@@ -28,7 +28,7 @@ public final class NumenYsm {
         Ysm ysm = new Ysm(host.storage());
         OwnerSync sync = new OwnerSync(ysm);
 
-        NumenPlugins.register(numen -> {
+        NumenPlugins.register(YsmCommands.NAMESPACE, numen -> {
             YsmCommands.install(numen, ysm);
             // ysm switch 派下来的换装由谁来跑
             TaskFactory.register(SwitchRecord.class, (player, record) -> new SwitchTask(ysm, record));

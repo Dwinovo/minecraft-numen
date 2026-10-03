@@ -21,11 +21,14 @@ import java.nio.file.Path;
  */
 public final class NumenTlm {
 
+    /** 这个联动在她的 API 里的名字空间:{@code tlm.maid.*}、{@code tlm.skin.*}。 */
+    static final String NAMESPACE = "tlm";
+
     private NumenTlm() {}
 
     /** 由 {@code Builtin} 在确认车万女仆在场后调用。 */
     public static void install(IEventBus modBus, Path skillsRoot) {
-        NumenPlugins.register(numen -> {
+        NumenPlugins.register(NAMESPACE, numen -> {
             // 命令树两侧都登记(帮助要它的说明);穿模型的在主人客户端跑,管女仆的在服务端跑
             TlmCommands.install(numen);
 

@@ -28,8 +28,8 @@ import java.util.function.Consumer;
 final class CliFixture {
 
     static {
-        // API 自己的两组(帮助 api.help、原版指令 mc.run)产品里由引擎在初始化时登记;单测没有那一步,在这里登记一次
-        if (!NumenCli.isTopLevel(HelpCommands.GROUP)) {
+        // API 自己的两组(帮助 numen.api.help、原版指令 numen.mc.run)产品里由引擎在初始化时登记;单测没有那一步,在这里登记一次
+        if (!NumenCli.isNamespace(NumenPlugins.NUMEN)) {
             HelpCommands.install();
             McCommands.install();
         }
@@ -45,10 +45,13 @@ final class CliFixture {
 
     private CliFixture() {}
 
-    /** 插件拿到的那扇门——测试和插件走同一条路登记。 */
+    /** 测试组登记进的名字空间。 */
+    static final String NAMESPACE = "gt";
+
+    /** 插件拿到的那扇门——测试和插件走同一条路登记,名字空间是 {@link #NAMESPACE}。 */
     static NumenApi door() {
         AtomicReference<NumenApi> api = new AtomicReference<>();
-        NumenPlugins.register(api::set);
+        NumenPlugins.register(NAMESPACE, api::set);
         return api.get();
     }
 
@@ -96,9 +99,9 @@ final class CliFixture {
         return out;
     }
 
-    /** 一个函数或一组的全部帮助,经 {@code api.help} 取。 */
+    /** 一个函数或一组的全部帮助,经 {@code numen.api.help} 取。 */
     static String help(String name) {
-        Outcome run = lua("return api.help(\"" + name + "\")");
+        Outcome run = lua("return numen.api.help(\"" + name + "\")");
         if (!run.success()) {
             throw new AssertionError(run.message());
         }

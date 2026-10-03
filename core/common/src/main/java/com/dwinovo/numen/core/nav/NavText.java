@@ -71,9 +71,9 @@ public final class NavText {
      */
     public record OnRoute(String name, int leg, int legs) {
 
-        /** 改这一段规格的那一次调用:{@code route.spec("home", {leg = 2, alter = "natural"})}。 */
+        /** 改这一段规格的那一次调用:{@code numen.route.spec("home", {leg = 2, alter = "natural"})}。 */
         String spec(String option) {
-            return "route.spec(\"" + name + "\", {" + (legs > 1 ? "leg = " + leg + ", " : "") + option + "})";
+            return "numen.route.spec(\"" + name + "\", {" + (legs > 1 ? "leg = " + leg + ", " : "") + option + "})";
         }
     }
 
@@ -113,14 +113,14 @@ public final class NavText {
                             + " pillars through natural terrain exists, changing " + needs.alterations() + " block(s) — "
                             + planned(needs.changes()) + ":"
                             + (on == null ? " walk with alter = \"natural\" to take it)"
-                                    : ") `" + on.spec("alter = \"natural\"") + "` lets me take it; then `route.plan(\""
-                                            + on.name() + "\")` shows the plan, and `move.go(\"" + on.name()
+                                    : ") `" + on.spec("alter = \"natural\"") + "` lets me take it; then `numen.route.plan(\""
+                                            + on.name() + "\")` shows the plan, and `numen.move.go(\"" + on.name()
                                             + "\")` walks it")
                     : "found no route without touching what needs the owner's consent (" + where + "; one exists"
                             + " that changes " + needs.alterations() + " block(s), some of them someone's — "
                             + planned(needs.changes()) + ":"
                             + (on == null ? " walk with alter = \"any\" to ask the owner first)"
-                                    : ") `" + on.spec("alter = \"any\"") + "` lets me take it; then `route.plan(\""
+                                    : ") `" + on.spec("alter = \"any\"") + "` lets me take it; then `numen.route.plan(\""
                                             + on.name() + "\")` shows the plan, and walking it asks the owner first");
             case Outcome.NoMaterials none -> "found no path to target (" + where + "; every way needs blocks to"
                     + " pillar or bridge with)." + ThrowawayBlocks.shortageAdvice(player);
@@ -128,14 +128,14 @@ public final class NavText {
                     + reason(denied.reason()) + "); that is not mine to get around, so pick another destination or ask"
                     + " your owner";
             case Outcome.Stranded stranded -> "can't set off: I can't stand where I am (" + name(stranded.block())
-                    + " at " + Listing.coords(stranded.cell()) + "); free me first (break that block: `use.block("
+                    + " at " + Listing.coords(stranded.cell()) + "); free me first (break that block: `numen.use.block("
                     + Place.cell(stranded.cell()).literal() + ", {left = true})`) or wait until I land";
             case Outcome.Blocked blocked -> "gave up: " + blockage(blocked.blockage())
                     + "; try again, and pick another destination if it keeps failing";
             case Outcome.NoLineOfSight sight -> "arrived, but " + Listing.coords(sight.target())
                     + " went out of sight after the walk was planned (something now stands in between); "
                     + (on == null ? gotoCall(Place.cell(sight.target()), "arrive = \"use\"")
-                            : "`move.go(\"" + on.name() + "\")`")
+                            : "`numen.move.go(\"" + on.name() + "\")`")
                     + " again picks a spot that sees it";
             case Outcome.Breathless b -> "found no path to target (" + where + "; the way there swims under water"
                     + " from " + Listing.coords(b.from()) + " to " + Listing.coords(b.to()) + " with no air on the way,"
@@ -447,11 +447,11 @@ public final class NavText {
     }
 
     /**
-     * 一句能照抄的去一处,带反引号:{@code `move.goto_({1, 2, 3}, {arrive = "use"})`}、
-     * {@code `move.goto_("ores/g3", {arrive = "dig"})`};{@code options} 是选项表里的那几项,可以为空。
+     * 一句能照抄的去一处,带反引号:{@code `numen.move.goto_({1, 2, 3}, {arrive = "use"})`}、
+     * {@code `numen.move.goto_("ores/g3", {arrive = "dig"})`};{@code options} 是选项表里的那几项,可以为空。
      */
     public static String gotoCall(Place to, String options) {
-        return "`move.goto_(" + to.literal() + (options.isEmpty() ? "" : ", {" + options + "}") + ")`";
+        return "`numen.move.goto_(" + to.literal() + (options.isEmpty() ? "" : ", {" + options + "}") + ")`";
     }
 
     public static String name(BlockState state) {

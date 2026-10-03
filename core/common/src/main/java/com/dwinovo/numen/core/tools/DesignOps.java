@@ -44,7 +44,7 @@ public final class DesignOps {
         Design.checkedName(name);
         if (Designs.exists(server, name)) {
             return TaskResult.fail(ErrorKind.FAILED, "there is already a design named " + name,
-                    "build.show(\"" + name + "\")").toJson();
+                    "numen.build.show(\"" + name + "\")").toJson();
         }
         if (BlueprintStore.list(server).contains(name)) {
             return TaskResult.fail(ErrorKind.FAILED, "a blueprint file is already named " + name + "; pick another "
@@ -54,7 +54,7 @@ public final class DesignOps {
                 Instant.now().truncatedTo(ChronoUnit.SECONDS).toString());
         Designs.save(server, design);
         return TaskResult.ok("made an empty design " + name + "; add steps with a primitive and {into = \"" + name
-                + "\"}, for example build.layer({\"#####\"}, {at = {x = 0, y = 0, z = 0}, block = \"stone_bricks\", "
+                + "\"}, for example numen.build.layer({\"#####\"}, {at = {x = 0, y = 0, z = 0}, block = \"stone_bricks\", "
                 + "into = \"" + name + "\"})", info(design)).toJson();
     }
 
@@ -117,7 +117,7 @@ public final class DesignOps {
             return refused;
         }
         Designs.delete(her.getServer(), name);
-        return TaskResult.ok("deleted design " + name + "; what was built from it stays standing, and build.built() "
+        return TaskResult.ok("deleted design " + name + "; what was built from it stays standing, and numen.build.built() "
                 + "still lists it").toJson();
     }
 
@@ -130,7 +130,7 @@ public final class DesignOps {
         return data;
     }
 
-    /** 设计库:她们写的设计,和 {@code schematics/} 里的蓝图文件,都能 {@code build.at}。 */
+    /** 设计库:她们写的设计,和 {@code schematics/} 里的蓝图文件,都能 {@code numen.build.at}。 */
     public static String library(MinecraftServer server, CommandArgs args) {
         List<String> rows = new ArrayList<>();
         List<Map<String, Object>> all = new ArrayList<>();
@@ -159,9 +159,9 @@ public final class DesignOps {
             all.add(Map.of("name", name, "kind", "blueprint file"));
         }
         String head = rows.isEmpty()
-                ? "No designs or blueprint files yet. build.new starts a design; blueprint files (.litematic, .schem, "
+                ? "No designs or blueprint files yet. numen.build.new starts a design; blueprint files (.litematic, .schem, "
                         + ".nbt, .snbt) go into the server's schematics folder."
-                : "Designs and blueprint files, each buildable with build.at (build.raise walks the site):";
+                : "Designs and blueprint files, each buildable with numen.build.at (numen.build.raise walks the site):";
         return new Listing(head, rows, "").result(args, Map.of("designs", all)).toJson();
     }
 
@@ -308,7 +308,7 @@ public final class DesignOps {
     private static void checkStep(Design design, int n, int max) {
         if (n < 1 || n > max) {
             throw new ApiError(ErrorKind.NOT_FOUND, design.name() + " has " + design.steps().size() + " step(s); "
-                    + "step " + n + " is not one of them", "build.show(\"" + design.name() + "\")");
+                    + "step " + n + " is not one of them", "numen.build.show(\"" + design.name() + "\")");
         }
     }
 
@@ -343,6 +343,6 @@ public final class DesignOps {
         Designs.save(her.getServer(), design);
         List<BuildTaskRecord.Target> all = design.drawn().targets();
         return TaskResult.ok(design.name() + ": " + what + "; it now has " + design.steps().size() + " step(s), "
-                + all.size() + " cells. build.show(\"" + design.name() + "\") lists them.", info(design)).toJson();
+                + all.size() + " cells. numen.build.show(\"" + design.name() + "\") lists them.", info(design)).toJson();
     }
 }

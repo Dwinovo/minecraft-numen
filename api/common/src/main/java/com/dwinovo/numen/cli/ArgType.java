@@ -43,7 +43,7 @@ import java.util.stream.Collectors;
  *       小数按 Minecraft 的定义换成所在的那一格。一行命令里是三个整数 {@code 120 64 -35},也收 {@code 120,64,-35};</li>
  *   <li>一处({@link #place()}):一格、一列 {@code {x = …, z = …}}、一个高度 {@code {y = …}},或主人名下的一块区域;</li>
  *   <li>区域({@link #area()}):{@code ores} 指整块,{@code ores/g3} 指一部分,规矩在 {@link AreaRef#parse};</li>
- *   <li>实体({@link #entity()}):{@code scan.entities} 列出的运行期编号,或那只实体的表(带 {@code id});</li>
+ *   <li>实体({@link #entity()}):{@code numen.scan.entities} 列出的运行期编号,或那只实体的表(带 {@code id});</li>
  *   <li>方块与物品({@link #id()}):资源 id,不写命名空间就是 {@code minecraft:};标签({@link #idOrTag()}):{@code #minecraft:logs}。</li>
  * </ul>
  *
@@ -82,7 +82,7 @@ public final class ArgType<T> {
     /** 一格后面接着 {@code ..}(多半是想写一个盒子):一格只是一格,一片格子是区域。 */
     private static final SimpleCommandExceptionType NOT_ONE_CELL = new SimpleCommandExceptionType(
             new LiteralMessage("a cell is one x y z; a box or any other stretch of cells is an area — frame it as one "
-                    + "(area.add(name, {box = {from, to}})) and name the area"));
+                    + "(numen.area.add(name, {box = {from, to}})) and name the area"));
     private static final SimpleCommandExceptionType NO_PLACE = new SimpleCommandExceptionType(
             new LiteralMessage("expected a place: x y z (a cell), x z (a column), y (a height), or an area "
                     + "name like ores or ores/g3"));
@@ -90,7 +90,7 @@ public final class ArgType<T> {
     private static final DynamicCommandExceptionType REJECTED = new DynamicCommandExceptionType(
             why -> new LiteralMessage(String.valueOf(why)));
     private static final SimpleCommandExceptionType NO_ENTITY = new SimpleCommandExceptionType(
-            new LiteralMessage("expected an entity id as scan.entities lists it, like 184"));
+            new LiteralMessage("expected an entity id as numen.scan.entities lists it, like 184"));
     /** 脚本里一格的写法(JSON 这一侧):带键的表。 */
     static final String POS_SHAPE = "a Pos {x = …, y = …, z = …} or anything with a pos (a Block, an Entity, an Item)";
     /** UUID 的规范写法:8-4-4-4-12 位十六进制。 */
@@ -343,7 +343,7 @@ public final class ArgType<T> {
         if (id != null && id.isJsonPrimitive() && id.getAsString().matches("\\d{1," + MAX_DIGITS + "}")) {
             throw new WrongShape("an entity id is a number; got " + given(value), Long.parseLong(id.getAsString()));
         }
-        throw REJECTED.create("expected an entity: its id as scan.entities lists it (184), or the Entity itself; got "
+        throw REJECTED.create("expected an entity: its id as numen.scan.entities lists it (184), or the Entity itself; got "
                 + given(value));
     }
 
@@ -796,7 +796,7 @@ public final class ArgType<T> {
      */
     public static ArgType<EntityRef> entity() {
         ArgumentType<EntityRef> read = ArgType::readEntity;
-        String hint = "entity: its id as scan.entities lists it, or the Entity itself";
+        String hint = "entity: its id as numen.scan.entities lists it, or the Entity itself";
         return new ArgType<>(read, "entity", "entity", hint, Span.ONE, Item.STRING, false, false,
                 ArgType::stringField, ArgType::entityFromJson, EntityRef::written)
                 .scripted(ScriptType.union(ScriptType.INTEGER, Shapes.ENTITY.type()),

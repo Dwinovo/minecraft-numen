@@ -5,11 +5,11 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * 脚本里能调的:API 登记处的每个动作一个宿主函数 {@code 组.动词}(第 ① 层),加上模块(用脚本语言写的库,按名字直接用:
- * {@code lumber.chop(…)};和组同名的模块给那一组加函数)。目录由命令层现算交来(见 api 的 {@code NumenCli.scriptCatalog}),这里不另记
- * 一份动作表——脚本调一个函数,背后就是那一个动作。
+ * 脚本里能调的:API 登记处的每个动作一个宿主函数 {@code 名字空间.组.动词}(第 ① 层,{@code numen.work.dig}),加上模块(用脚本语言写的
+ * 库,按名字直接用:{@code my.lumber.chop(…)};和组同名的模块给那一组加函数)。目录由命令层现算交来(见 api 的
+ * {@code NumenCli.scriptCatalog}),这里不另记一份动作表——脚本调一个函数,背后就是那一个动作。
  *
- * @param groups  组名 → 动词名 → 这个动词的函数怎么交回结果
+ * @param groups  组的全名({@code numen.work})→ 动词名 → 这个动词的函数怎么交回结果
  * @param modules 模块从哪来:用到时才问,所以每次运行读到的是此刻的正文
  */
 public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource modules) {
@@ -17,13 +17,7 @@ public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource 
     /** 模块从哪来。两个方法都可能在脚本的线程上被调。 */
     public interface ModuleSource {
 
-        /**
-         * 她自己的模块所在的名字空间:她存的模块 {@code lumber} 在程序里是 {@code my.lumber},模块名就写成 {@code my.lumber}。这个全局名
-         * 留给她,内置与插件的模块不能叫它。
-         */
-        String HERS = "my";
-
-        /** 叫这个名字的模块此刻的正文;没有是 null。 */
+        /** 叫这个名字({@code numen.work}、{@code my.lumber})的模块此刻的正文;没有是 null。 */
         String code(String name);
 
         /** 有哪些模块,按名字排。 */

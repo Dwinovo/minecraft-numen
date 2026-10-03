@@ -22,7 +22,7 @@ import java.util.Set;
 
 /**
  * Inventory-management implementations — the business half of {@code gear wear} / {@code gear remove} /
- * {@code inv.eat} / {@code inv.drop} ({@code GearCommands}, {@code InvCommands}) and picking up (the library {@code work.collect} walks onto drops).
+ * {@code numen.inv.eat} / {@code numen.inv.drop} ({@code GearCommands}, {@code InvCommands}) and picking up (the library {@code numen.work.collect} walks onto drops).
  * Each returns a {@link TaskRecord} the body's task queue runs, which takes its name, call id and deadline basis
  * from the call's {@link ServerSource}.
  */
@@ -38,7 +38,7 @@ public final class InventoryOps {
         String slotName = slotName(slot);
         if (Wardrobe.ARMOR.equals(slotName)) {
             throw new IllegalArgumentException(
-                    "slot = \"armor\" is only for gear.remove (it means all four armor pieces)");
+                    "slot = \"armor\" is only for numen.gear.remove (it means all four armor pieces)");
         }
         Item item = ToolArgs.parseItem(item_id);
         return new EquipTaskRecord(source, item, slotName, BuiltInRegistries.ITEM.getKey(item).getPath());

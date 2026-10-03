@@ -50,7 +50,7 @@ public record NamedAreas(ResourceKey<Level> dimension, Map<String, Area> areas) 
             throw new ApiError(ErrorKind.NOT_FOUND, "there is no area named " + ref.name() + "; " + (areas.isEmpty()
                     ? "your owner has no areas yet"
                     : "your owner's areas are " + String.join(", ", areas.keySet().stream().sorted().toList())),
-                    areas.isEmpty() ? "area.new(\"" + ref.name() + "\")" : "area.list()");
+                    areas.isEmpty() ? "numen.area.new(\"" + ref.name() + "\")" : "numen.area.list()");
         }
         if (!area.dimension().equals(dimension)) {
             throw new IllegalArgumentException("area " + ref.name() + " lies in " + area.dimension().location()
@@ -59,7 +59,7 @@ public record NamedAreas(ResourceKey<Level> dimension, Map<String, Area> areas) 
         throw new ApiError(ErrorKind.NOT_FOUND, "area " + ref.name() + " has no part " + ref.part()
                 + "; its parts are " + (area.parts().isEmpty() ? "none"
                         : area.parts().stream().map(Area.Part::id).collect(Collectors.joining(", "))),
-                "area.parts(\"" + ref.name() + "\")");
+                "numen.area.parts(\"" + ref.name() + "\")");
     }
 
     /** {@code ref} 指的区域;没有这块区域、没有这一部分、或它在别的维度,是 null。 */

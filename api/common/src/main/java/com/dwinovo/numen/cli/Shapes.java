@@ -20,11 +20,11 @@ import static com.dwinovo.numen.agent.script.ScriptType.optional;
  * <h2>一种位置</h2>
  * 位置只有一种写法,带键的表 {@code {x = 120, y = 64, z = -35}}(Pos),和 mineflayer 的 Vec3 一样是 x、y、z 三个字段。格子的三个数是
  * 整数;身体、实体的位置是小数。收一格的参数读到小数时按 Minecraft 自己的定义换成它所在的那一格({@code BlockPos.containing},向下
- * 取整),所以 {@code status.self().pos}、一只实体的 {@code pos} 原样就能交给要一格的参数。
+ * 取整),所以 {@code numen.status.self().pos}、一只实体的 {@code pos} 原样就能交给要一格的参数。
  *
  * <h2>对象原样往下传</h2>
- * 方块、实体、掉落物都带 {@code pos} 字段:要一格的参数收下带 {@code pos} 的表就是那一格({@code work.dig(b)} 与
- * {@code work.dig(b.pos)} 一样);要一只实体的参数收下带 {@code id} 的表就是那一只({@code fight.attack(e)})。
+ * 方块、实体、掉落物都带 {@code pos} 字段:要一格的参数收下带 {@code pos} 的表就是那一格({@code numen.work.dig(b)} 与
+ * {@code numen.work.dig(b.pos)} 一样);要一只实体的参数收下带 {@code id} 的表就是那一只({@code numen.fight.attack(e)})。
  */
 public final class Shapes {
 
@@ -45,7 +45,7 @@ public final class Shapes {
 
     /** 一只实体。 */
     public static final ScriptType.Class ENTITY = new ScriptType.Class("Entity", "An entity near you.", null,
-            List.of(field("id", ScriptType.INTEGER, "Its runtime id, which fight.attack, use.entity and move.follow "
+            List.of(field("id", ScriptType.INTEGER, "Its runtime id, which numen.fight.attack, numen.use.entity and numen.move.follow "
                             + "take (or pass the whole Entity). It does not survive a restart."),
                     field("type", ScriptType.STRING, "Its type id, minecraft:zombie."),
                     field("pos", POS.type(), "Where it is (decimals)."),
@@ -66,14 +66,14 @@ public final class Shapes {
 
     /** 失败的调用抛出的错误值。 */
     public static final ScriptType.Class ERROR = new ScriptType.Class("Error",
-            "What a failed call raises. local ok, err = pcall(work.dig, b) catches it; tostring(err) reads it. "
+            "What a failed call raises. local ok, err = pcall(numen.work.dig, b) catches it; tostring(err) reads it. "
                     + "raise(kind, message, hint) raises one of your own.",
             null, List.of(
                     field("kind", ScriptType.STRING, "bad_argument, no_function, not_found, out_of_reach, no_path, "
                             + "no_material, needs_consent, denied, interrupted, timeout or failed."),
                     field("message", ScriptType.STRING, "What went wrong."),
                     optional("hint", ScriptType.STRING, "A next line to run."),
-                    optional("fn", ScriptType.STRING, "The function that failed, work.dig."),
+                    optional("fn", ScriptType.STRING, "The function that failed, numen.work.dig."),
                     optional("data", new ScriptType.Simple("table"), "What the call knew when it failed (the "
                             + "nearest cell out of reach …).")));
 

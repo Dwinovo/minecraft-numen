@@ -21,7 +21,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 /**
- * 区域与它的部分的数据与说法,只在这一处:{@code scan.blocks} 找到的每一团与 {@code area.show} 的每一部分是同一种表
+ * 区域与它的部分的数据与说法,只在这一处:{@code numen.scan.blocks} 找到的每一团与 {@code numen.area.show} 的每一部分是同一种表
  * ({@link #PART_CLASS}:格数、附带的方块、最近一格、小的逐格列坐标,由 {@link #part} 写),一整块是 {@link #AREA_CLASS}
  * ({@link #info});位置一律是 Pos。回执里那句话的坐标、盒子、方向的写法也在这里。
  */
@@ -48,12 +48,12 @@ public final class AreaText {
                     ScriptType.field("count", ScriptType.INTEGER, "How many cells in all."),
                     ScriptType.optional("box", ScriptType.listOf(Shapes.POS.type()),
                             "Two corners of the box around it."),
-                    ScriptType.optional("added", ScriptType.STRING, "The part this call added (area.add).")));
+                    ScriptType.optional("added", ScriptType.STRING, "The part this call added (numen.area.add).")));
 
     /** 一部分,或扫描找到的一团。 */
     public static final ScriptType.Class PART_CLASS = new ScriptType.Class("AreaPart",
             "One part of an area, or one group of touching blocks a scan found. Anything that takes a place takes its "
-                    + "id; work.dig and move.goto_ take its nearest as it is.", null,
+                    + "id; numen.work.dig and numen.move.goto_ take its nearest as it is.", null,
             List.of(ScriptType.optional("id", ScriptType.STRING, "area/part (ores/g3), when it is kept in an area."),
                     ScriptType.field("count", ScriptType.INTEGER, "How many cells."),
                     ScriptType.optional("blocks", new ScriptType.Simple("table<string, integer>"),

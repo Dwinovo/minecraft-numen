@@ -33,7 +33,7 @@ public final class GuiOps {
             com.dwinovo.numen.agent.script.ScriptType.field("slots", com.dwinovo.numen.agent.script.ScriptType.listOf(
                     com.dwinovo.numen.agent.script.ScriptType.table(
                             com.dwinovo.numen.agent.script.ScriptType.field("index",
-                                    com.dwinovo.numen.agent.script.ScriptType.INTEGER, "What use.transfer and use.shift take."),
+                                    com.dwinovo.numen.agent.script.ScriptType.INTEGER, "What numen.use.transfer and numen.use.shift take."),
                             com.dwinovo.numen.agent.script.ScriptType.field("side",
                                     com.dwinovo.numen.agent.script.ScriptType.choice(List.of("container", "you", "grid",
                                             "result")), null),
@@ -160,7 +160,7 @@ public final class GuiOps {
         return new Listing(header + gridSection + "container slots:", slots,
                 "cursor: " + describe(menu.getCarried()) + "\n"
                         + dataLine
-                        + "tip: use.shift(slot) sends a whole stack to the other section; use.transfer(from, to)"
+                        + "tip: numen.use.shift(slot) sends a whole stack to the other section; numen.use.transfer(from, to)"
                         + " (with {count = N} for part of it) puts it into a specific slot.").result(args, out).toJson();
     }
 

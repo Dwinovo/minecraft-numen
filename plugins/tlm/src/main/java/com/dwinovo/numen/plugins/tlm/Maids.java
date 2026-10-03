@@ -169,7 +169,7 @@ final class Maids {
     }
 
     /**
-     * 一只加载着的女仆此刻的样子({@code MaidCommands.MAID_CLASS}):一只实体(主人照 {@code scan.entities} 的说法),加上她的模型、
+     * 一只加载着的女仆此刻的样子({@code MaidCommands.MAID_CLASS}):一只实体(主人照 {@code numen.scan.entities} 的说法),加上她的模型、
      * 工作、设置与好感等级。
      */
     static JsonObject row(Entity entity, NumenPlayer her) {
@@ -197,7 +197,7 @@ final class Maids {
     }
 
     /**
-     * 一只女仆的详情({@code tlm.maid} 的数据,不含工作模式):清单里的她({@link #row}),加上设置页的其余几样、好感、背包、
+     * 一只女仆的详情({@code tlm.maid.info} 的数据,不含工作模式):清单里的她({@link #row}),加上设置页的其余几样、好感、背包、
      * 日程点。
      */
     static JsonObject detail(Entity entity, NumenPlayer her) {

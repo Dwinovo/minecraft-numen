@@ -34,12 +34,12 @@ import java.util.Map;
 import java.util.function.Function;
 
 /**
- * 建造动世界的这一半:当场执行一个原语、{@code build.at} 把一处够得着的格变成施工图的样子、{@code build.left} 数还剩什么、
+ * 建造动世界的这一半:当场执行一个原语、{@code numen.build.at} 把一处够得着的格变成施工图的样子、{@code numen.build.left} 数还剩什么、
  * 列出建成的房子。
  *
  * <p>两条派活的路是同一条:摆出一份施工图({@link Layout})→ 和世界比出要动的格({@link Changes})→ 没有要动的就不派活,
  * 有就交同一个执行器,它只放站在原地够得着的格。当场执行就是"只有一步、摆在世界坐标上、不算一栋房子"的那一种。
- * {@code build.left} 摆同一份施工图、比同一份差异,按执行器挑格的同一个判据({@link BuildSurvey})数,不派活。
+ * {@code numen.build.left} 摆同一份施工图、比同一份差异,按执行器挑格的同一个判据({@link BuildSurvey})数,不派活。
  */
 public final class BuildOps {
 
@@ -81,7 +81,7 @@ public final class BuildOps {
             data.put("far", 0);
             return TaskResult.ok(plan.already(), data).toJson();
         }
-        BuildTaskRecord record = new BuildTaskRecord("build.left", "", 0, work(plan.layout(), plan.changes()),
+        BuildTaskRecord record = new BuildTaskRecord("numen.build.left", "", 0, work(plan.layout(), plan.changes()),
                 !WorkProfile.of(her).freeMaterials(), plan.file(), plan.site());
         BuildSurvey.Tally tally = BuildSurvey.of(her, record).tally();
         data.put("left", tally.left());
@@ -106,7 +106,7 @@ public final class BuildOps {
         return TaskResult.ok(text, data).toJson();
     }
 
-    /** {@code build.left} 列出几格要先挖开的:一次 {@code work.dig} 交得完的量。 */
+    /** {@code numen.build.left} 列出几格要先挖开的:一次 {@code numen.work.dig} 交得完的量。 */
     private static final int LISTED_DIG = 16;
 
     /**
@@ -132,7 +132,7 @@ public final class BuildOps {
                 ? Designs.load(level.getServer(), name).drawn().laid(at)
                 : BlueprintStore.load(level, name, anchor, quarters);
         if (layout.targets().isEmpty()) {
-            throw new ApiError(ErrorKind.FAILED, name + " has nothing to build yet", "build.show(\"" + name + "\")");
+            throw new ApiError(ErrorKind.FAILED, name + " has nothing to build yet", "numen.build.show(\"" + name + "\")");
         }
         Built.Site site = new Built.Site(name, level.dimension().location(), anchor, at.quarters());
         Built.Building was = Built.of(level.getServer()).at(site);
@@ -175,8 +175,8 @@ public final class BuildOps {
             buildings.add(one);
         }
         String head = rows.isEmpty()
-                ? "Nothing has been built with build.at yet."
-                : "Built with build.at (build.at with the same design, dimension and spot changes that building):";
+                ? "Nothing has been built with numen.build.at yet."
+                : "Built with numen.build.at (numen.build.at with the same design, dimension and spot changes that building):";
         return new Listing(head, rows, "").result(args, Map.of("buildings", buildings)).toJson();
     }
 

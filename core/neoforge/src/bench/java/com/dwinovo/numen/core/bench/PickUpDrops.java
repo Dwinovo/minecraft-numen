@@ -71,6 +71,6 @@ public final class PickUpDrops implements Scenario {
 
     @Override
     public String solution(Scene scene) {
-        return "work.collect()";
+        return "numen.work.collect()";
     }
 }

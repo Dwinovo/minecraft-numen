@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * 一个动作:脚本里的一个 API 函数 {@code 组.动作(...)},也是人写的一行命令 {@code 组 动作 …}。它持有这件事<b>唯一的处理函数</b>、
+ * 一个动作:脚本里的一个 API 函数 {@code 名字空间.组.动作(...)},也是人写的一行命令 {@code 名字空间 组 动作 …}。它持有这件事<b>唯一的处理函数</b>、
  * 参数表与说明,两个前端、帮助、系统提示里的索引都从这里取。
  *
  * <p>执行侧由登记时给的处理函数决定:{@link CommandGroup#server} 给的是服务端函数,{@link CommandGroup#client}
@@ -24,17 +24,17 @@ import java.util.regex.Pattern;
  * 动作的帮助除了用法、说明、参数,还有三块,都接在登记处返回的这个动作上写:
  * <pre>{@code
  * quests.server("submit", "Hand in a quest's items from your own inventory.", QuestSubmit::submit, QUEST_ID)
- *       .example("ftbquests.submit(\"15CDF6A098B95FDA\")")
+ *       .example("ftbquests.quest.submit(\"15CDF6A098B95FDA\")")
  *       .note("Takes the items from YOUR inventory; FTB decides what counts.")
- *       .seeAlso("ftbquests list", "ftbquests show");
+ *       .seeAlso("quest list", "quest show");
  * }</pre>
  * <ul>
- *   <li>{@link #example}:至少一个,可以多个,写成脚本里的样子({@code work.dig("ores", {count = 2})})。模型照着例子写,比读
+ *   <li>{@link #example}:至少一个,可以多个,写成脚本里的样子({@code numen.work.dig(b, {count = 2})})。模型照着例子写,比读
  *       语法可靠,所以缺了在登记那一刻抛出,和名字不合规同一种把关;每个例子也在那一刻经脚本的前端读一遍(只记下调了哪些函数,
  *       不执行),必须调到这个动作、每次调用的参数都读得成,例子与语法不会走样。</li>
  *   <li>{@link #note}:可选,多条。写会不会问主人、是不是长活、会动她的什么、不会做什么。</li>
- *   <li>{@link #seeAlso}:可选。做完这件事下一步通常用的动作或库函数,同组别组都行,写整条路径 {@code 组 动作}。引用在全部组到齐
- *       之后一次查全(登记处第一次被用时),理由见 {@link NumenCli}。</li>
+ *   <li>{@link #seeAlso}:可选。做完这件事下一步通常用的动作或库函数,同组别组都行:自己名字空间里的写 {@code 组 动作},别的名字空间
+ *       里的写 {@code 名字空间 组 动作}。引用在全部组到齐之后一次查全(登记处第一次被用时),理由见 {@link NumenCli}。</li>
  * </ul>
  *
  * <h2>以谁的权威执行</h2>
@@ -43,7 +43,7 @@ import java.util.regex.Pattern;
  * <pre>{@code
  * group.server("switch", "Switch to another model.", this::switchModel, MODEL)
  *      .authority(Authority.SERVER_ON_HER)
- *      .example("ysm.switch(\"misc/1_alex\")");
+ *      .example("ysm.model.switch(\"misc/1_alex\")");
  * }</pre>
  */
 public final class Action {
@@ -120,7 +120,7 @@ public final class Action {
 
     /**
      * 这个动作的函数成功时返回回执 {@code data} 里的 {@code key} 那一项,类型是 {@code type}:查询的结果拿来就能循环、判断
-     * ({@code for _, p in ipairs(area.parts("ores"))}、{@code while area.has(p)})。
+     * ({@code for _, e in ipairs(numen.scan.entities("item"))})。
      */
     public Action returns(String key, ScriptType type) {
         returns(type);
@@ -133,7 +133,7 @@ public final class Action {
 
     /**
      * 这个动作成功的调用,参数原样留在脚本回执的数据里(见 {@code ScriptCall.ECHOED}):对话流按它画出这次写下的东西,比如她的
-     * 计划清单({@code todo.write})。
+     * 计划清单({@code numen.todo.write})。
      */
     public Action echoed() {
         group.requireOpen();
@@ -153,10 +153,14 @@ public final class Action {
         return this;
     }
 
-    /** 相关:下一步通常用的动作或库函数,写整条路径,如 {@code ftbquests list}。可以调多次。 */
+    /**
+     * 相关:下一步通常用的动作或库函数,写成一行命令的路径:自己名字空间里的 {@code quest list},别的名字空间里的
+     * {@code numen use block}。可以调多次。
+     */
     public Action seeAlso(String... paths) {
         for (String path : paths) {
-            seeAlso.add(requireText(path, "相关命令"));
+            String written = requireText(path, "相关命令");
+            seeAlso.add(written.split(" ").length == 2 ? group.namespace() + " " + written : written);
         }
         return this;
     }
@@ -246,24 +250,24 @@ public final class Action {
         return notes;
     }
 
-    /** 相关命令的整条路径,按登记顺序。 */
+    /** 相关命令的整条路径({@code numen scan blocks}),按登记顺序。 */
     List<String> seeAlso() {
         return seeAlso;
     }
 
-    /** {@code <组> <动作>}:整条路径,一行命令这样写它,登记处按它认。 */
+    /** {@code <名字空间> <组> <动作>}:整条路径,一行命令这样写它,登记处按它认。 */
     String path() {
-        return group.name() + " " + name;
+        return group.namespace() + " " + group.name() + " " + name;
     }
 
-    /** 脚本里的函数名:{@code work.dig}、{@code move.goto_};帮助、回执、派下的活都这样叫它。 */
+    /** 脚本里的函数名:{@code numen.work.dig}、{@code numen.move.goto_};帮助、回执、派下的活都这样叫它。 */
     String function() {
-        return ScriptEngine.IN_USE.function(group.name(), name);
+        return ScriptEngine.IN_USE.function(group.fullName(), name);
     }
 
     /**
      * 怎么调它:函数名、按顺序的对象、选项表里能写的名字。归了组的标志整组写成一格 {@code …组名},排在组里第一个标志的位置;
-     * 组里有哪些由动作自己的帮助列全({@link CommandHelp#action})。{@code work.dig(place..., {count=…})}。
+     * 组里有哪些由动作自己的帮助列全({@link CommandHelp#action})。{@code numen.work.dig(place..., {count=…})}。
      */
     String usage() {
         StringBuilder sb = new StringBuilder(function()).append('(');
@@ -329,7 +333,7 @@ public final class Action {
             notes.add(0, CommandHelp.SERVER_ON_HER);
         }
         return new FunctionDoc(function(), summary, out, returnType, examples, notes,
-                seeAlso.stream().map(path -> path.replace(' ', '.')).toList());
+                seeAlso.stream().map(path -> ScriptEngine.IN_USE.pathName(path.replace(' ', '.'))).toList());
     }
 
     /** 它的脚本函数怎么交回结果、参数留不留在回执里。 */

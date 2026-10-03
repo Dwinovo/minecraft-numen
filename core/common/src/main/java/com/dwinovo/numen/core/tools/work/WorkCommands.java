@@ -26,7 +26,7 @@ import net.minecraft.resources.ResourceLocation;
  * (手够得着的一格都没有、站的地方抛不进水……)受理之前就当场拒绝,判据在各自的任务里。
  *
  * <p>{@code dig} 只挖她站在原地手够得着的格,挡在前面的一并挖开,不走动、不捡({@link DigCompanionTask});{@code fish} 只钓,
- * 不走去岸边、不追战果。走到够得着的地方是 {@code move.goto_(…, {arrive = "dig"})} 的事;捡是库里的 {@code work.collect}:
+ * 不走去岸边、不追战果。走到够得着的地方是 {@code numen.move.goto_(…, {arrive = "dig"})} 的事;捡是库里的 {@code numen.work.collect}:
  * 原版玩家走近掉落物就捡起来,所以捡就是扫掉落物、走到它跟前。组合交给脚本。
  */
 public final class WorkCommands {
@@ -41,7 +41,7 @@ public final class WorkCommands {
             "What to dig: areas of your owner's (or parts of them) and cells, as many as you like — a cell is an area "
                     + "of one cell. Scanned cells are dug only while they still hold the block the scan saw; framed "
                     + "cells and coordinates are dug whatever they hold, air and fluid skipped.")
-            .values("area names as area.list and area.parts list them (\"ores\", \"ores/g3\"), or a cell: a Pos, or a "
+            .values("area names as numen.area.list and numen.area.parts list them (\"ores\", \"ores/g3\"), or a cell: a Pos, or a "
                     + "Block or anything else with a pos");
     private static final Param<Integer> DIG_COUNT = Param.optional("count",
             ArgType.integer(1, BlockActionOps.MAX_DIG_COUNT), "How many cells to dig at most.")
@@ -53,7 +53,7 @@ public final class WorkCommands {
     private WorkCommands() {}
 
     public static void install(NumenApi numen) {
-        numen.registerCommands(GROUP, "Gathering where you stand: digging blocks within reach, fishing. work.collect "
+        numen.registerCommands(GROUP, "Gathering where you stand: digging blocks within reach, fishing. numen.work.collect "
                 + "(library) walks to the drops and picks them up.", WorkCommands::actions);
     }
 
@@ -66,24 +66,24 @@ public final class WorkCommands {
                         ScriptType.field("out_of_reach", ScriptType.INTEGER, "Of those, how many your hand does not "
                                 + "reach from where you stand."),
                         ScriptType.optional("nearest", Shapes.POS.type(), "The nearest of those out of reach.")))
-                .example("work.dig(\"ores/g3\")")
-                .example("work.dig(\"ores\", {count = 4})")
-                .example("work.dig({x = 120, y = 12, z = -35})")
-                .example("local r = work.dig(\"ores\")\nprint(r.dug, r.left, r.out_of_reach)")
-                .note("A block or a nearest cell from a query goes in as it is: `work.dig(scan.block({x = 120, y = 12, "
-                        + "z = -35}))`, `for _, g in ipairs(scan.blocks(\"iron_ore\").groups) do work.dig(g.nearest) end`.")
+                .example("numen.work.dig(\"ores/g3\")")
+                .example("numen.work.dig(\"ores\", {count = 4})")
+                .example("numen.work.dig({x = 120, y = 12, z = -35})")
+                .example("local r = numen.work.dig(\"ores\")\nprint(r.dug, r.left, r.out_of_reach)")
+                .note("A block or a nearest cell from a query goes in as it is: `numen.work.dig(numen.scan.block({x = 120, y = 12, "
+                        + "z = -35}))`, `for _, g in ipairs(numen.scan.blocks(\"iron_ore\").groups) do numen.work.dig(g.nearest) end`.")
                 .note("Digs only what your hand reaches from where you stand: it never walks and never picks up. Get "
-                        + "within reach first with `move.goto_(\"ores\", {arrive = \"dig\"})` (it picks the spot that "
-                        + "reaches the most cells), dig, and pick the drops up with `work.collect()`.")
+                        + "within reach first with `numen.move.goto_(\"ores\", {arrive = \"dig\"})` (it picks the spot that "
+                        + "reaches the most cells), dig, and pick the drops up with `numen.work.collect()`.")
                 .note("Background work: before it starts it checks something within reach can be dug, harvested "
                         + "with your tools and is allowed; when nothing is, it fails with kind out_of_reach (or denied, "
-                        + "failed) and a hint with the move.goto_ call to copy — no task starts and whatever you were "
+                        + "failed) and a hint with the numen.move.goto_ call to copy — no task starts and whatever you were "
                         + "doing goes on. It returns when the job ends: how many cells it dug and how many are still out "
                         + "of reach, the nearest of them as a pos.")
                 .note("What to dig comes from the area itself: cells a scan added are dug only while they still hold "
                         + "the block the scan saw (mining); framed cells and coordinates are dug whatever they hold "
-                        + "(a pit, a tree, clearing), air and fluid skipped. `area.has(\"ores\")` says whether anything "
-                        + "is left; `area.minus` and rules like deny break(area:house) keep things standing.")
+                        + "(a pit, a tree, clearing), air and fluid skipped. `numen.area.has(\"ores\")` says whether anything "
+                        + "is left; `numen.area.minus` and rules like deny break(area:house) keep things standing.")
                 .note("A block in the way of your hand is dug open too when it is natural terrain. A block in the way "
                         + "that needs your owner's consent or that their rules forbid is not touched: the reply names "
                         + "it, where it is and why.")
@@ -95,14 +95,14 @@ public final class WorkCommands {
                 .returns(ScriptType.table(ScriptType.field("caught", ScriptType.INTEGER, null),
                         ScriptType.field("casts", ScriptType.INTEGER, null),
                         ScriptType.field("requested", ScriptType.INTEGER, "The count you gave; 0 = no count.")))
-                .example("work.fish({count = 5})")
-                .example("work.fish()")
+                .example("numen.work.fish({count = 5})")
+                .example("numen.work.fish()")
                 .note("Background work: refused with the reason when she carries no fishing rod, does not stand on "
                         + "dry ground, or has no open water to cast into from where she stands — no task id, no "
                         + "task_finished. Otherwise the end arrives as a task_finished event. Without count it is a "
                         + "standing job: it never ends on its own and never sends task_finished.")
                 .note("It never walks: stand on the shore first. The reel throws each catch to her; one that lands "
-                        + "short lies on the ground for `work.collect()`.")
+                        + "short lies on the ground for `numen.work.collect()`.")
                 .note("A catch is one bite reeled in: fish, junk or treasure, with vanilla loot, rod wear and "
                         + "stats.")
                 .seeAlso("work collect", "task stop");

@@ -137,15 +137,15 @@ public final class AreaOps {
             Area made = Area.empty(dimension);
             store(her).create(name, made);
             allowed.reply(TaskResult.ok("made area " + name + " in " + dimension.location() + ", empty. Add to it with "
-                    + "area.add(\"" + name + "\", {box = ...}) (or at, built, route), or scan.blocks(<block ids>, "
+                    + "numen.area.add(\"" + name + "\", {box = ...}) (or at, built, route), or numen.scan.blocks(<block ids>, "
                     + "{into = \"" + name + "\"}) to add what a scan finds.", AreaText.info(name, made)).toJson());
         });
     }
 
     private static void requireNew(NumenPlayer her, String name) {
         if (store(her).get(name) != null) {
-            throw new ApiError(ErrorKind.FAILED, "there is already an area named " + name + "; area.show(\"" + name
-                    + "\") shows it", "area.delete(\"" + name + "\")");
+            throw new ApiError(ErrorKind.FAILED, "there is already an area named " + name + "; numen.area.show(\"" + name
+                    + "\") shows it", "numen.area.delete(\"" + name + "\")");
         }
     }
 
@@ -199,7 +199,7 @@ public final class AreaOps {
             }
         }
         throw new ApiError(ErrorKind.NOT_FOUND, "there is no building named " + name
-                + (all.isEmpty() ? " (none yet)" : ""), "build.built()");
+                + (all.isEmpty() ? " (none yet)" : ""), "numen.build.built()");
     }
 
     /** 一条路线最近一次计划要改的格:要挖的与要放的。 */
@@ -207,10 +207,10 @@ public final class AreaOps {
         store(her);
         Itinerary route = Routes.of(her.getServer(), her.getOwnerUuid()).get(name);
         if (route == null) {
-            throw new ApiError(ErrorKind.NOT_FOUND, "there is no route named " + name, "route.list()");
+            throw new ApiError(ErrorKind.NOT_FOUND, "there is no route named " + name, "numen.route.list()");
         }
         if (route.plan() == null) {
-            throw new IllegalArgumentException("route " + name + " has no plan yet; route.plan(\"" + name
+            throw new IllegalArgumentException("route " + name + " has no plan yet; numen.route.plan(\"" + name
                     + "\") plans it");
         }
         LongSet cells = new LongOpenHashSet(route.plan().digs());
@@ -443,13 +443,13 @@ public final class AreaOps {
         for (Area.Part part : shown.parts()) {
             rows.add(ref.name() + "/" + part.id());
         }
-        // 数据里是全部名字(不分页):脚本里 area.parts 拿它直接循环
+        // 数据里是全部名字(不分页):脚本里 numen.area.parts 拿它直接循环
         return new Listing("", rows, "").result(args, Map.of("parts", rows)).toJson();
     }
 
     /**
      * 这块区域(或一部分)还有没有要挖的格:每一格按 {@code work dig} 的判据({@link DigTaskRecord#wants}:扫描来的格还是当时那种
-     * 方块,框出来的格立着方块)在活世界里问,没加载的读不到、不算。答案是数据里的 {@code has}(脚本里 {@code area.has} 直接返回
+     * 方块,框出来的格立着方块)在活世界里问,没加载的读不到、不算。答案是数据里的 {@code has}(脚本里 {@code numen.area.has} 直接返回
      * 它),还剩几格、最近一格也在数据里;回执一句话。
      */
     public static String has(NumenPlayer her, AreaRef ref) {
@@ -497,8 +497,8 @@ public final class AreaOps {
             areas.add(AreaText.info(name, area));
         });
         String head = rows.isEmpty()
-                ? "No areas yet: scan.blocks(<block ids>, {into = <name>}) makes one from what a scan finds; "
-                        + "area.new(<name>) makes an empty one."
+                ? "No areas yet: numen.scan.blocks(<block ids>, {into = <name>}) makes one from what a scan finds; "
+                        + "numen.area.new(<name>) makes an empty one."
                 : "Areas of your owner, shared by all of their companions:";
         return new Listing(head, rows, "").result(args, Map.of("areas", areas)).toJson();
     }

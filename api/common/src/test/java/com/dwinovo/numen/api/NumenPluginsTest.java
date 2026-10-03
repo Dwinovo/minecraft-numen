@@ -22,7 +22,7 @@ class NumenPluginsTest {
 
     private static NumenApi door() {
         AtomicReference<NumenApi> api = new AtomicReference<>();
-        NumenPlugins.register(api::set);
+        NumenPlugins.register("gt", api::set);
         return api.get();
     }
 

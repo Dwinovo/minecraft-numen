@@ -29,21 +29,26 @@ public interface ScriptEngine {
     String howToCall();
 
     /**
-     * 一个组名或动作名在这种语言里写成什么:撞上语言自己用掉的名字(关键字、自带的全局)时改写的那一条规则只在这里。
+     * 一个名字空间、组名或动作名在这种语言里写成什么:撞上语言自己用掉的名字(关键字、自带的全局)时改写的那一条规则只在这里。
      * 帮助、提示与生成函数都经它,所以写法只有一种。
      */
     String functionName(String name);
 
+    /** 一条点隔开的名字({@code numen.move}、{@code numen.move.goto})逐段经 {@link #functionName} 写:{@code numen.move.goto_}。 */
+    default String pathName(String path) {
+        return String.join(".", java.util.Arrays.stream(path.split("\\.", -1)).map(this::functionName).toList());
+    }
+
     /** 一个名字能不能直接写成选项表的键({@code {type = "world"}}):不是语言的关键字就能。 */
     boolean isKey(String name);
 
-    /** 一个动作在这种语言里的函数全名:{@code move.goto_}。 */
+    /** 一个动作在这种语言里的函数全名:组的全名加动作名,{@code numen.move.goto_}。 */
     default String function(String group, String verb) {
-        return functionName(group) + "." + functionName(verb);
+        return pathName(group) + "." + functionName(verb);
     }
 
     /**
-     * 一次调用写成这种语言里的样子:{@code work.dig("ores", {count = 2})}。对象是字符串、数、布尔或它们的列表,选项按名字。
+     * 一次调用写成这种语言里的样子:{@code numen.work.dig("ores", {count = 2})}。对象是字符串、数、布尔或它们的列表,选项按名字。
      */
     String call(String function, List<Object> objects, java.util.Map<String, Object> options);
 
@@ -89,18 +94,17 @@ public interface ScriptEngine {
     String summary(String code);
 
     /**
-     * 一个模块定义的函数,按出现的顺序:函数名写成用的人写的样子({@code lumber.chop}:模块名加它返回的那张表里的名字)、形参、紧挨在
+     * 一个模块定义的函数,按出现的顺序:函数名写成用的人写的样子({@code my.lumber.chop}:模块名加它返回的那张表里的名字)、形参、紧挨在
      * 定义上面的那几行注释(原样,带注释号与类型注解)。
      */
     List<Defined> functions(String module, String code);
 
     /**
-     * 一个名字在这种语言里能不能当模块名:写得出来、不是关键字。{@code global} 时它是一个全局名,还不能撞语言自带的全局与引擎自己的
-     * 全局({@code raise}、{@code require}、她的名字空间 {@link ScriptCatalog.ModuleSource#HERS});和第 ① 层的组同名可以(那是给这一组
-     * 加函数)。名字空间里的名字({@code my.lumber} 的 {@code lumber})只要写得出来、不是关键字。能是 null,不能是那句话。哪些名字归谁
-     * 的规矩在 api 的 {@code Modules}。
+     * 一个名字在这种语言里能不能当模块名:两段 {@code 名字空间.组}({@code numen.work}、{@code my.lumber}),每段写得出来、不是关键字,
+     * 名字空间是一个全局名,还不能撞语言自带的全局与引擎自己的全局({@code raise}、{@code require})。和第 ① 层的组同名可以(那是给这一组
+     * 加函数)。能是 null,不能是那句话。模块文件放在哪的规矩在 api 的 {@code Modules}。
      */
-    String moduleName(String name, boolean global);
+    String moduleName(String name);
 
     /** 模块里定义的一个函数。{@code doc} 是它上面的注释行,原样;没写是空表。 */
     record Defined(String name, List<String> params, List<String> doc) {

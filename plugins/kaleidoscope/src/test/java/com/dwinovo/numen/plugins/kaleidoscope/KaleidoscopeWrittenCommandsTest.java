@@ -19,7 +19,7 @@ class KaleidoscopeWrittenCommandsTest {
     @BeforeAll
     static void install() {
         WrittenCommandsLint.install();
-        NumenPlugins.register(KaleidoscopeCommands::install);
+        NumenPlugins.register(KaleidoscopeCommands.NAMESPACE, KaleidoscopeCommands::install);
     }
 
     @Test
@@ -29,6 +29,6 @@ class KaleidoscopeWrittenCommandsTest {
 
     @Test
     void theGroupsDescriptionsWriteCommandsThatRead() {
-        assertReads(WrittenCommandsLint.registeredUnder(KaleidoscopeCommands.GROUP), 4);
+        assertReads(WrittenCommandsLint.registeredUnder(KaleidoscopeCommands.NAMESPACE), 4);
     }
 }

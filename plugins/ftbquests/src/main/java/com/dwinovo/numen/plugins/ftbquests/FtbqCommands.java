@@ -14,15 +14,19 @@ import java.util.List;
  *
  * <p>读任务书({@code list}、{@code show})在主人的客户端上执行,见 {@link ClientBook};提交任务({@code submit})
  * 与接受邀请({@code join})在服务端执行,动的是她的背包与队伍。每个动作就是脚本里的一个函数
- * ({@code ftbquests.submit("…")}),和别的动作同一个入口。
+ * ({@code ftbquests.quest.submit("…")}),和别的动作同一个入口。
  */
 final class FtbqCommands {
 
-    static final String GROUP = "ftbquests";
+    /** 这个联动在她的 API 里的名字空间。 */
+    static final String NAMESPACE = "ftbquests";
+    static final String GROUP = "quest";
+    /** 组的全名,脚本里写的那张表。 */
+    static final String FULL = NAMESPACE + "." + GROUP;
     /** 回执与说明里点名这几个动作时写的函数。 */
-    static final String LIST = GROUP + ".list";
-    static final String SHOW = GROUP + ".show";
-    static final String SUBMIT = GROUP + ".submit";
+    static final String LIST = FULL + ".list";
+    static final String SHOW = FULL + ".show";
+    static final String SUBMIT = FULL + ".submit";
 
     /** 客户端按主人的语言认标题,所以 show 编号、标题都收;标题可以带空格,吃掉余下整行。 */
     private static final Param<String> QUEST_NAMED = Param.required("quest", ArgType.text(),
@@ -144,8 +148,8 @@ final class FtbqCommands {
                         ScriptType.field("party", ScriptType.STRING, "The party's short name."),
                         ScriptType.field("name", ScriptType.STRING, null),
                         ScriptType.field("owner_inside", ScriptType.BOOLEAN, "Whether your owner is in it.")))
-                .example(GROUP + ".join()")
-                .example(GROUP + ".join({team = \"Dwin_Party#1a2b3c4d\"})")
+                .example(FULL + ".join()")
+                .example(FULL + ".join({team = \"Dwin_Party#1a2b3c4d\"})")
                 .note("It does not ask your owner: join only when they agree. You cannot join while you are "
                         + "in another party.")
                 .note("Your quest progress merges into the party's; from then on what you do counts for it.")

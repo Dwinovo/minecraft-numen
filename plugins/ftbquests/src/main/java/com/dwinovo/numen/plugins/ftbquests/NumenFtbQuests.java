@@ -29,7 +29,7 @@ public final class NumenFtbQuests {
 
     /** 由 {@code Builtin} 在确认 FTB Quests 在场后调用。 */
     public static void install(Path skillsRoot) {
-        NumenPlugins.register(numen -> {
+        NumenPlugins.register(FtbqCommands.NAMESPACE, numen -> {
             // 事件两侧都要登记(服务端的发出口靠它挡,主人客户端的队列靠它投递),所以直接调,不放进 onClient
             FtbqEvents.bind(numen);
             // 命令树两侧都要有:客户端当场解析、执行读书的动作,服务端执行提交与入队

@@ -17,12 +17,12 @@ import java.util.function.Consumer;
 /**
  * 一行命令的执行入口(人用的前端):OP 的 {@code /numen drive} 与重启后的重放都从这里过,按 {@link Line} 分到两层。她在脚本里
  * 调的是同一批动作({@link NumenCli#serve(String, com.google.gson.JsonObject, NumenPlayer, String, Consumer)}),原版与模组的指令
- * 经 {@code mc.run}({@link McCommands})走这里的第 0 层:
+ * 经 {@code numen.mc.run}({@link McCommands})走这里的第 0 层:
  *
  * <ul>
  *   <li><b>第 1 层</b>:在服务端的树上解析、执行({@link NumenCli#serve(String, ServerSource)}),处理函数拿到这次调用的
  *       {@link ServerSource}。身体对世界的动作照常由权限层按动作裁决。</li>
- *   <li><b>第 0 层</b>(行首 {@code /},或 {@code mc.run}):MC 的指令树,以她自己的权限执行,和她在聊天栏里敲的一样。
+ *   <li><b>第 0 层</b>(行首 {@code /},或 {@code numen.mc.run}):MC 的指令树,以她自己的权限执行,和她在聊天栏里敲的一样。
  *     <ol>
  *       <li><b>先解析</b>:以她的 {@code CommandSourceStack} 在服务器的指令树上解析。写不通(没有这条、服务器不让她用、
  *           参数写错)当场失败并附上用法,不打扰主人,不进任务槽。能用哪些是服务器按她的权限等级定的,这里不放宽也不收紧。</li>

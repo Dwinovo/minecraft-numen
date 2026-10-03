@@ -25,11 +25,13 @@ import java.util.Map;
  * <p>三个都借服务器的权威({@link Authority#SERVER_ON_HER}):YSM 的这几条命令要权限等级 2,她自己多半没有;
  * 作用对象写死为她({@link OnHer}),能换成什么仍由 YSM 按镜像来的主人授权判。
  *
- * <p>每个动作就是脚本里的一个函数({@code ysm.switch("misc/1_alex")}),和别的动作同一个入口。
+ * <p>每个动作就是脚本里的一个函数({@code ysm.model.switch("misc/1_alex")}),和别的动作同一个入口。
  */
 final class YsmCommands {
 
-    static final String GROUP = "ysm";
+    /** 这个联动在她的 API 里的名字空间。 */
+    static final String NAMESPACE = "ysm";
+    static final String GROUP = "model";
     static final String OPTIONS = "options";
     static final String SWITCH = "switch";
     static final String EMOTE = "emote";
@@ -54,14 +56,14 @@ final class YsmCommands {
         this.ysm = ysm;
     }
 
-    /** 相关动作里点名一个动作:{@code ysm switch}。 */
+    /** 相关动作里点名一个动作:{@code model switch}。 */
     static String line(String action) {
         return GROUP + " " + action;
     }
 
-    /** 回执与说明里提到一个动作时写它的函数:{@code ysm.switch}。 */
+    /** 回执与说明里提到一个动作时写它的函数:{@code ysm.model.switch}。 */
     static String fn(String action) {
-        return GROUP + "." + action;
+        return NAMESPACE + "." + GROUP + "." + action;
     }
 
     static void install(NumenApi numen, Ysm ysm) {

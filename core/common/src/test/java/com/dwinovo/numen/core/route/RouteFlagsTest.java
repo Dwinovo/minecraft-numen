@@ -39,13 +39,13 @@ class RouteFlagsTest {
     }
 
     private static CommandArgs line(String flags) {
-        return NumenCli.read("route spec home " + flags).args();
+        return NumenCli.read("numen route spec home " + flags).args();
     }
 
     @Test
     void writtenFlagsReadBackAndEachGivenFlagReplacesItsOldValue() {
         assertEquals("--alter natural --avoid water", RouteFlags.written(line("--avoid water --alter natural")));
-        assertEquals("", RouteFlags.written(NumenCli.read("route spec home").args()));
+        assertEquals("", RouteFlags.written(NumenCli.read("numen route spec home").args()));
         String merged = RouteFlags.merged("home", "--alter natural --avoid water", line("--avoid lava hazard"),
                 NONE);
         assertEquals("--alter natural --avoid lava hazard", merged);

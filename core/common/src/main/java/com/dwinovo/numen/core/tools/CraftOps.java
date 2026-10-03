@@ -82,7 +82,7 @@ public final class CraftOps {
 
         List<Cand> candidates = candidatesFor(level, target);
         if (candidates.isEmpty()) {
-            return TaskResult.fail("no crafting recipe makes " + name + " — check inv.recipe: it may "
+            return TaskResult.fail("no crafting recipe makes " + name + " — check numen.inv.recipe: it may "
                     + "be smelted, stonecut, smithed, mined or traded instead.").toJson();
         }
 
@@ -111,7 +111,7 @@ public final class CraftOps {
         if (satisfiable.isEmpty()) {
             return TaskResult.fail("not enough materials for " + name + " — missing: "
                     + String.join(", ", bestMissing)
-                    + ". Collect or craft those first, then call inv.craft again.").toJson();
+                    + ". Collect or craft those first, then call numen.inv.craft again.").toJson();
         }
 
         // Pick the crafting surface: the open grid if a satisfiable recipe fits it, else the
@@ -160,7 +160,7 @@ public final class CraftOps {
             }
             if (chosen == null) {
                 return TaskResult.fail(name + "'s recipe needs a grid larger than 3x3 (modded station) — "
-                        + "use.block that station, then use.gui and use.transfer instead.").toJson();
+                        + "numen.use.block that station, then numen.use.gui and numen.use.transfer instead.").toJson();
             }
             CraftingRecipe recipe = chosen.recipe();
             // 够得着的工作台:原版交互的判据(眼睛到那一格外框在交互距离内),搜索盒以眼睛为中心罩住它
@@ -187,7 +187,7 @@ public final class CraftOps {
                                         + com.dwinovo.numen.core.task.move.GotoReminders.call(hintPos, "arrive = \"use\"")
                                         + ", then craft again."
                                 : "None within " + HINT_H + " blocks — craft a crafting_table (4 planks, "
-                                        + "fits your own 2x2), put it down on a cell beside you with `build.place("
+                                        + "fits your own 2x2), put it down on a cell beside you with `numen.build.place("
                                         + "{x = …, y = …, z = …}, {block = \"crafting_table\"})`, then craft again.")).toJson();
             }
             // 开台走 act 的按键原语:看向、右键、挥手都是身体动作,不归工具层手搓。
@@ -225,7 +225,7 @@ public final class CraftOps {
                                   int want, String name, String station, NumenPlayer self) {
         if (!settleCarried(menu, self)) {
             return TaskResult.fail("the cursor is holding items and no inventory slot is free to put "
-                    + "them down — free a slot first (inv.drop).").toJson();
+                    + "them down — free a slot first (numen.inv.drop).").toJson();
         }
         Map<Item, Integer> before = poolOf(menu, self);
         List<Ingredient> ings = ingredientsOf(chosen.recipe());

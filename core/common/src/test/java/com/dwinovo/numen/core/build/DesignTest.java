@@ -49,12 +49,12 @@ class DesignTest {
     @Test
     void aDesignTextReadsStepByStepAndWritesBackTheSameText() {
         Design design = Design.parse("house", text(
-                "build layer ### #.# ### --at 0 0 0 --block stone_bricks --up-to 2",
+                "numen build layer ### #.# ### --at 0 0 0 --block stone_bricks --up-to 2",
                 "",
                 "# the door",
-                "build set 1 0 2 --block oak_door[facing=south]"));
-        assertEquals(List.of("build layer ### #.# ### --at 0 0 0 --block stone_bricks --up-to 2",
-                "build set 1 0 2 --block oak_door[facing=south]"), design.steps(), "空行与注释不是步骤");
+                "numen build set 1 0 2 --block oak_door[facing=south]"));
+        assertEquals(List.of("numen build layer ### #.# ### --at 0 0 0 --block stone_bricks --up-to 2",
+                "numen build set 1 0 2 --block oak_door[facing=south]"), design.steps(), "空行与注释不是步骤");
         assertEquals(OWNER, design.owner());
         assertEquals("Dwin", design.ownerName());
         assertEquals("Aria", design.author());
@@ -65,9 +65,9 @@ class DesignTest {
 
     @Test
     void aStepIsWrittenBackInOneCanonicalLine() {
-        Design.Step step = Design.step("build layer \"# #\" --at 0 1 0 --block \"oak_planks*8, spruce_planks\" --up-to 3");
+        Design.Step step = Design.step("numen build layer \"# #\" --at 0 1 0 --block \"oak_planks*8, spruce_planks\" --up-to 3");
         assertEquals(Primitive.LAYER, step.primitive());
-        assertEquals("build layer \"# #\" --at 0 1 0 --block \"oak_planks*8, spruce_planks\" --up-to 3", step.line(),
+        assertEquals("numen build layer \"# #\" --at 0 1 0 --block \"oak_planks*8, spruce_planks\" --up-to 3", step.line(),
                 "标志按参数表的顺序写,带空格的值加引号");
         assertEquals(step.line(), Design.step(step.line()).line());
     }
@@ -75,17 +75,17 @@ class DesignTest {
     @Test
     void aLineThatDoesNotReadOrDrawIsReportedByItsLineInTheFile() {
         IllegalArgumentException typo = assertThrows(IllegalArgumentException.class, () -> Design.parse("house",
-                text("build set 0 0 0 --block stone", "build layr 0 0 0 ###")));
-        assertTrue(typo.getMessage().startsWith("line 6 (build layr 0 0 0 ###): error: "), typo.getMessage());
+                text("numen build set 0 0 0 --block stone", "numen build layr 0 0 0 ###")));
+        assertTrue(typo.getMessage().startsWith("line 6 (numen build layr 0 0 0 ###): error: "), typo.getMessage());
         assertTrue(typo.getMessage().contains("Did you mean: layer?"), "报错和执行时写错一样: " + typo.getMessage());
         IllegalArgumentException block = assertThrows(IllegalArgumentException.class, () -> Design.parse("house",
-                text("build set 0 0 0 --block notablock")));
-        assertTrue(block.getMessage().startsWith("line 5 (build set 0 0 0 --block notablock): error: notablock"), block.getMessage());
+                text("numen build set 0 0 0 --block notablock")));
+        assertTrue(block.getMessage().startsWith("line 5 (numen build set 0 0 0 --block notablock): error: notablock"), block.getMessage());
         IllegalArgumentException into = assertThrows(IllegalArgumentException.class, () -> Design.parse("house",
-                text("build set 0 0 0 --block stone --into house")));
+                text("numen build set 0 0 0 --block stone --into house")));
         assertTrue(into.getMessage().contains("into, step and before"), into.getMessage());
         IllegalArgumentException other = assertThrows(IllegalArgumentException.class, () -> Design.parse("house",
-                text("build new shed")));
+                text("numen build new shed")));
         assertTrue(other.getMessage().contains("one build primitive"), other.getMessage());
     }
 
@@ -96,42 +96,42 @@ class DesignTest {
     @Test
     void blocksAndStepsAreReadByTheCommandTree() {
         IllegalArgumentException state = assertThrows(IllegalArgumentException.class,
-                () -> NumenCli.read("build set 1 1 1 --block oak_stairs[facing=nrth]"));
+                () -> NumenCli.read("numen build set 1 1 1 --block oak_stairs[facing=nrth]"));
         assertTrue(state.getMessage().startsWith("error: oak_stairs[facing=nrth] — "), state.getMessage());
         IllegalArgumentException legend = assertThrows(IllegalArgumentException.class,
-                () -> NumenCli.read("build layer #X# --at 0 0 0 --legend X=notablock --block stone"));
+                () -> NumenCli.read("numen build layer #X# --at 0 0 0 --legend X=notablock --block stone"));
         assertTrue(legend.getMessage().startsWith("error: notablock — "), legend.getMessage());
 
-        NumenCli.Reading step = NumenCli.read("build layer ### --at 0 1 0 --block \"stone*3, andesite\" --into house "
+        NumenCli.Reading step = NumenCli.read("numen build layer ### --at 0 1 0 --block \"stone*3, andesite\" --into house "
                 + "--step 2");
-        assertEquals("build layer", step.path());
+        assertEquals("numen build layer", step.path());
         assertEquals(2, step.args().get(Primitive.Params.STEP));
         assertEquals("house", step.args().get(Primitive.Params.INTO));
         Design.Step written = new Design.Step(Primitive.LAYER, step.args());
-        assertEquals(Design.step("build layer ### --at 0 1 0 --block \"stone*3, andesite\""), Design.step(written.line()),
+        assertEquals(Design.step("numen build layer ### --at 0 1 0 --block \"stone*3, andesite\""), Design.step(written.line()),
                 "换进设计的那一步和设计文件里同样一行读成同一步");
         IllegalArgumentException inner = assertThrows(IllegalArgumentException.class,
-                () -> NumenCli.read("build set 1 0 0 --block oak_door[half=middle] --into house --step 2"));
+                () -> NumenCli.read("numen build set 1 0 0 --block oak_door[half=middle] --into house --step 2"));
         assertTrue(inner.getMessage().startsWith("error: oak_door[half=middle] — "), inner.getMessage());
         IllegalArgumentException typo = assertThrows(IllegalArgumentException.class,
-                () -> NumenCli.read("build layr ### --into house --before 1"));
+                () -> NumenCli.read("numen build layr ### --into house --before 1"));
         assertTrue(typo.getMessage().contains("Did you mean: layer?"), typo.getMessage());
         IllegalArgumentException carried = assertThrows(IllegalArgumentException.class,
-                () -> Design.step("build set 0 0 0 --block stone --step 2"));
+                () -> Design.step("numen build set 0 0 0 --block stone --step 2"));
         assertTrue(carried.getMessage().contains("into, step and before"), "设计里的一步不带说它记在哪的标志: " + carried.getMessage());
         IllegalArgumentException notAStep = assertThrows(IllegalArgumentException.class,
-                () -> Design.step("build designs"));
+                () -> Design.step("numen build designs"));
         assertTrue(notAStep.getMessage().startsWith("a design step is one build primitive"), notAStep.getMessage());
     }
 
     @Test
     void changingTheStepsRedrawsTheWholeDesignAndNamesTheStepThatFails() {
         Design fresh = Design.fresh("house", OWNER, "Dwin", "Aria", "2026-09-26T08:00:00Z");
-        Design two = fresh.withSteps(List.of("build set 0 0 0 --block stone", "build set 1 0 0 --block glass"));
+        Design two = fresh.withSteps(List.of("numen build set 0 0 0 --block stone", "numen build set 1 0 0 --block glass"));
         assertEquals(2, two.drawn().targets().size());
         IllegalArgumentException legend = assertThrows(IllegalArgumentException.class,
-                () -> two.withSteps(List.of("build set 0 0 0 --block stone", "build layer #X# --at 0 0 0 --legend #=stone")));
-        assertTrue(legend.getMessage().startsWith("step 2 (build layer #X# --at 0 0 0 --legend #=stone): layer: character 'X'"),
+                () -> two.withSteps(List.of("numen build set 0 0 0 --block stone", "numen build layer #X# --at 0 0 0 --legend #=stone")));
+        assertTrue(legend.getMessage().startsWith("step 2 (numen build layer #X# --at 0 0 0 --legend #=stone): layer: character 'X'"),
                 legend.getMessage());
         assertThrows(IllegalArgumentException.class, () -> Design.fresh("My House", OWNER, "", "", ""),
                 "设计名只用小写字母、数字、_ 与 -");
@@ -139,7 +139,7 @@ class DesignTest {
 
     @Test
     void laterStepsOverwriteEarlierCells() {
-        Design design = Design.parse("house", text("build layer ### --at 0 0 0 --block stone", "build set 1 0 0 --block air"));
+        Design design = Design.parse("house", text("numen build layer ### --at 0 0 0 --block stone", "numen build set 1 0 0 --block air"));
         Map<BlockPos, BlockState> cells = new HashMap<>();
         design.drawn().targets().forEach(t -> cells.put(t.pos(), t.desiredState()));
         assertTrue(cells.get(new BlockPos(1, 0, 0)).isAir(), "后一步把中间那格写成了空气");
@@ -151,8 +151,8 @@ class DesignTest {
     /** 门占两格:装在两格高的墙里,上半那格先前画的圆石被门盖掉,不留一笔让施工时为它把门拆了。 */
     @Test
     void aDoorOverwritesTheCellItsUpperHalfTakes() {
-        Design design = Design.parse("house", text("build layer ### --at 0 0 0 --block cobblestone --up-to 1",
-                "build set 1 0 0 --block oak_door[facing=south]"));
+        Design design = Design.parse("house", text("numen build layer ### --at 0 0 0 --block cobblestone --up-to 1",
+                "numen build set 1 0 0 --block oak_door[facing=south]"));
         Map<BlockPos, BlockState> cells = new HashMap<>();
         design.drawn().targets().forEach(t -> cells.put(t.pos(), t.desiredState()));
         assertTrue(cells.get(new BlockPos(1, 0, 0)).is(Blocks.OAK_DOOR));
@@ -162,7 +162,7 @@ class DesignTest {
 
     @Test
     void relativeCellsLandOnTheAnchorAndTurnClockwiseAboutTheOrigin() {
-        Design design = Design.parse("house", text("build set 2 0 1 --block oak_stairs[facing=east]", "build set 0 0 0 --block stone"));
+        Design design = Design.parse("house", text("numen build set 2 0 1 --block oak_stairs[facing=east]", "numen build set 0 0 0 --block stone"));
         BlockPos anchor = new BlockPos(100, 64, 50);
         Layout straight = design.drawn().laid(new Placement(anchor, 0));
         assertEquals(new BlockPos(102, 64, 51), straight.targets().get(0).pos());
@@ -176,11 +176,11 @@ class DesignTest {
 
     @Test
     void aCopyInADesignCopiesTheDesignsOwnEarlierSteps() {
-        Design design = Design.parse("house", text("build set 0 0 0 --block stone", "build copy 0 0 0 0 0 0 5 0 0"));
+        Design design = Design.parse("house", text("numen build set 0 0 0 --block stone", "numen build copy 0 0 0 0 0 0 5 0 0"));
         assertTrue(design.drawn().targets().stream()
                 .anyMatch(t -> t.pos().equals(new BlockPos(5, 0, 0)) && t.desiredState().is(Blocks.STONE)));
         IllegalArgumentException nothing = assertThrows(IllegalArgumentException.class,
-                () -> Design.parse("house", text("build copy 10 0 0 12 0 0 0 0 0")),
+                () -> Design.parse("house", text("numen build copy 10 0 0 12 0 0 0 0 0")),
                 "设计的底子是空的,抄不到世界里的东西");
         assertTrue(nothing.getMessage().contains("nothing to copy"), nothing.getMessage());
     }

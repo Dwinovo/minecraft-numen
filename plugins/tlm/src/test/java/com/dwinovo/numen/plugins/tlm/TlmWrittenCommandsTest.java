@@ -19,7 +19,7 @@ class TlmWrittenCommandsTest {
     @BeforeAll
     static void install() {
         WrittenCommandsLint.install();
-        NumenPlugins.register(TlmCommands::install);
+        NumenPlugins.register(NumenTlm.NAMESPACE, TlmCommands::install);
     }
 
     @Test
@@ -29,6 +29,6 @@ class TlmWrittenCommandsTest {
 
     @Test
     void theGroupsDescriptionsWriteCommandsThatRead() {
-        assertReads(WrittenCommandsLint.registeredUnder(TlmCommands.GROUP), 4);
+        assertReads(WrittenCommandsLint.registeredUnder(NumenTlm.NAMESPACE), 4);
     }
 }

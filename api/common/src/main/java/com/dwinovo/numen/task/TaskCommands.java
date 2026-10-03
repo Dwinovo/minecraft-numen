@@ -64,12 +64,12 @@ public final class TaskCommands {
                 TaskCommands::status)
                 .returns(ScriptType.table(
                         ScriptType.optional("task_id", ScriptType.STRING, "The background task, when there is one."),
-                        ScriptType.optional("task", ScriptType.STRING, "Its function, move.go."),
+                        ScriptType.optional("task", ScriptType.STRING, "Its function, numen.move.go."),
                         ScriptType.optional("state", ScriptType.choice(java.util.List.of("running", "queued")), null),
                         ScriptType.optional("elapsed_s", ScriptType.INTEGER, null),
                         ScriptType.optional("budget_left_s", ScriptType.INTEGER, null),
                         ScriptType.field("timers", ScriptType.listOf(TIMER), "Your pending timers.")))
-                .example("task.status()")
+                .example("numen.task.status()")
                 .note("Instant and read-only; it does not touch your body.")
                 .note("Usually not needed: a task ends with its own task_finished event and a timer fires on its own.")
                 .seeAlso("task stop");
@@ -77,8 +77,8 @@ public final class TaskCommands {
                 TaskCommands::stop, TASK_ID)
                 .returns(ScriptType.table(ScriptType.optional("task_id", ScriptType.STRING, "The task it stopped."),
                         ScriptType.optional("timer_id", ScriptType.STRING, "The timer it cancelled.")))
-                .example("task.stop()")
-                .example("task.stop({task_id = \"tm3\"})")
+                .example("numen.task.stop()")
+                .example("numen.task.stop({task_id = \"tm3\"})")
                 .note("Instant; does not ask your owner. With no id it stops the background task (the one "
                         + "<current_task> shows) so the body frees up; a stopped task winds down and reports as a "
                         + "task_finished event with status=stopped.")
@@ -87,7 +87,7 @@ public final class TaskCommands {
         task.server("timer", "Set a one-shot reminder that fires after a delay in world time.",
                 TaskCommands::timer, REASON, AFTER_S)
                 .returns(TIMER)
-                .example("task.timer(\"collect the iron from the furnace\", {after = 300})")
+                .example("numen.task.timer(\"collect the iron from the furnace\", {after = 300})")
                 .note("Returns at once and never occupies your body; your owner is told when and why.")
                 .note("For what the world will not announce on its own: a furnace finishing, crops growing, "
                         + "daybreak. When it fires, look: the reminder is not proof the thing happened.")
@@ -162,7 +162,7 @@ public final class TaskCommands {
 
         if (active == null || (wanted != null && !wanted.equals(active.publicId()))) {
             src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, nothingMatched(wanted, active, server, companion, now),
-                    "task.status()").toJson());
+                    "numen.task.status()").toJson());
             return;
         }
 
@@ -220,7 +220,7 @@ public final class TaskCommands {
         if (timer == null) {
             src.reply(TaskResult.fail(ErrorKind.FAILED,
                     "已经挂了 " + TimerRegistry.MAX_PER_COMPANION + " 个表,先撤一个再定。当前挂着:"
-                            + summarize(registry.list(companion.getUUID()), now), "task.stop({task_id = \""
+                            + summarize(registry.list(companion.getUUID()), now), "numen.task.stop({task_id = \""
                             + registry.list(companion.getUUID()).get(0).id() + "\"})",
                     Map.of("timers", describe(registry.list(companion.getUUID()), now))).toJson());
             return;

@@ -129,7 +129,7 @@ class ScanOpsTest {
         assertFalse(small.has("sources"));
         assertEquals("south-east", small.getAsJsonObject("nearest").get("direction").getAsString());
         assertEquals("minecraft:end_portal_frame", small.getAsJsonObject("nearest").get("name").getAsString(),
-                "最近一格带着看到的方块与它的 pos,原样能交给 work.dig");
+                "最近一格带着看到的方块与它的 pos,原样能交给 numen.work.dig");
         assertEquals(com.dwinovo.numen.cli.Shapes.pos(new BlockPos(4, 64, 4)),
                 small.getAsJsonObject("nearest").get("pos"));
 

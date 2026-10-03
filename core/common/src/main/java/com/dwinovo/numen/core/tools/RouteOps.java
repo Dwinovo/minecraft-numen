@@ -30,7 +30,7 @@ import com.dwinovo.numen.task.TaskResult;
  *
  * <p>路线跟着主人({@link Routes}):同一个主人的同伴都认得、都能改。每次调用都点名路线,没点名的是她自己的那条
  * ({@link Itinerary#gotoOf}),没有"当前路线"。改意图的每一步丢掉旧计划——计划是对着旧意图做的;回执说清下一步是
- * {@code route.plan}。
+ * {@code numen.route.plan}。
  */
 public final class RouteOps {
 
@@ -48,8 +48,8 @@ public final class RouteOps {
     private static Itinerary named(NumenPlayer her, String name) {
         Itinerary route = routes(her).get(name);
         if (route == null) {
-            throw new ApiError(ErrorKind.NOT_FOUND, "there is no route named " + name + "; route.new makes one",
-                    "route.list()");
+            throw new ApiError(ErrorKind.NOT_FOUND, "there is no route named " + name + "; numen.route.new makes one",
+                    "numen.route.list()");
         }
         return route;
     }
@@ -61,8 +61,8 @@ public final class RouteOps {
      */
     public static String create(NumenPlayer her, String name, boolean own, Destination.Stop to, CommandArgs args) {
         if (!own && routes(her).get(name) != null) {
-            return TaskResult.fail(ErrorKind.FAILED, "there is already a route named " + name + "; route.show(\""
-                    + name + "\") shows it", "route.delete(\"" + name + "\")").toJson();
+            return TaskResult.fail(ErrorKind.FAILED, "there is already a route named " + name + "; numen.route.show(\""
+                    + name + "\") shows it", "numen.route.delete(\"" + name + "\")").toJson();
         }
         String flags = RouteFlags.written(args);
         Itinerary route = Itinerary.of(name, her.level().dimension().location(), to, flags);
@@ -72,8 +72,8 @@ public final class RouteOps {
         String call = own ? "" : "\"" + name + "\"";
         return TaskResult.ok("made route " + name + ": from wherever I stand to " + to.words()
                 + (flags.isEmpty() ? ", changing no block" : ", with " + RouteFlags.shown(flags))
-                + ". `route.plan(" + call + ")` plans it without moving and lists every block it would change; "
-                + "`move.go(" + call + ")` then walks it.", RouteText.info(route)).toJson();
+                + ". `numen.route.plan(" + call + ")` plans it without moving and lists every block it would change; "
+                + "`numen.move.go(" + call + ")` then walks it.", RouteText.info(route)).toJson();
     }
 
     /** 插一个途经点,成为第 {@code at} 个;没给就插在终点前面。 */
@@ -91,7 +91,7 @@ public final class RouteOps {
         Itinerary route = named(her, name);
         if (n == null && route.legs().size() == 1) {
             throw new IllegalArgumentException("route " + name + " has no waypoint, only its destination; "
-                    + "`route.delete(\"" + name + "\")` removes the whole route");
+                    + "`numen.route.delete(\"" + name + "\")` removes the whole route");
         }
         int stop = n == null ? route.legs().size() - 1 : n;
         return saved(her, route.dropVia(stop), "dropped stop " + stop);
@@ -101,8 +101,8 @@ public final class RouteOps {
     public static String spec(NumenPlayer her, String name, Integer leg, CommandArgs args) {
         Itinerary route = named(her, name);
         if (!RouteSpecFlags.given(args)) {
-            throw new IllegalArgumentException("give at least one route flag to change, e.g. `route.spec(\"" + name
-                    + "\", {alter = \"natural\"})`; `route.show(\"" + name + "\")` shows the flags it has");
+            throw new IllegalArgumentException("give at least one route flag to change, e.g. `numen.route.spec(\"" + name
+                    + "\", {alter = \"natural\"})`; `numen.route.show(\"" + name + "\")` shows the flags it has");
         }
         Itinerary next;
         if (leg == null) {
@@ -121,7 +121,7 @@ public final class RouteOps {
     /** 改过意图的一条存下,回执报出现在的样子与下一步。 */
     private static String saved(NumenPlayer her, Itinerary route, String what) {
         routes(her).put(route);
-        return TaskResult.ok(what + ". " + RouteText.intent(route) + " Its old plan is dropped; `route.plan(\""
+        return TaskResult.ok(what + ". " + RouteText.intent(route) + " Its old plan is dropped; `numen.route.plan(\""
                 + route.name() + "\")` plans it again.", RouteText.info(route)).toJson();
     }
 
@@ -159,7 +159,7 @@ public final class RouteOps {
         Itinerary route = named(her, name);
         long now = now(her);
         StringBuilder sb = new StringBuilder(RouteText.intent(route)).append('\n');
-        sb.append(route.plan() == null ? "Not planned yet: `route.plan(\"" + name + "\")` plans it."
+        sb.append(route.plan() == null ? "Not planned yet: `numen.route.plan(\"" + name + "\")` plans it."
                 : RouteText.plan(route, route.plan(), now));
         String walks = RouteText.walks(route, now);
         if (!walks.isEmpty()) {
@@ -182,7 +182,7 @@ public final class RouteOps {
             rows.add(RouteText.row(route, now));
             all.add(RouteText.info(route));
         }
-        String head = rows.isEmpty() ? "No routes yet: `route.new` makes one, and move.goto_ keeps each walk as your "
+        String head = rows.isEmpty() ? "No routes yet: `numen.route.new` makes one, and numen.move.goto_ keeps each walk as your "
                 + "own route " + Itinerary.gotoOf(her.getGameProfile().getName()) + "."
                 : "Routes of your owner, shared by all of their companions:";
         return new Listing(head, rows, "").result(args, Map.of("routes", all)).toJson();
@@ -205,6 +205,6 @@ public final class RouteOps {
         Itinerary back = named(her, name).reversed(as);
         routes(her).put(back);
         return TaskResult.ok("made route " + as + ", " + name + " the other way. " + RouteText.intent(back)
-                + " `route.plan(\"" + as + "\")` plans it.", RouteText.info(back)).toJson();
+                + " `numen.route.plan(\"" + as + "\")` plans it.", RouteText.info(back)).toJson();
     }
 }

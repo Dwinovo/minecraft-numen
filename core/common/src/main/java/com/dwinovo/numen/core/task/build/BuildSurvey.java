@@ -18,11 +18,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 一件施工的每一格,对她此刻站的地方而言是什么情形:已经对上、不去动、得先挖开、还立不住、够得着就放、够不着。{@code build.at} 只放
- * "够得着就放"的那些、受理前问还有没有,{@code build.left} 把整份照这同一个判据数给脚本——施工与查询读的是同一份。
+ * 一件施工的每一格,对她此刻站的地方而言是什么情形:已经对上、不去动、得先挖开、还立不住、够得着就放、够不着。{@code numen.build.at} 只放
+ * "够得着就放"的那些、受理前问还有没有,{@code numen.build.left} 把整份照这同一个判据数给脚本——施工与查询读的是同一份。
  *
- * <p>"够得着"就是 {@code move.goto_(…, {arrive = "reach"})} 走到的地方({@link Destination#reach}):走到了,这一格就在这里算够得着。
- * 生存模式下图纸要的格里立着别的东西,得先由 {@code work.dig} 挖开,{@code build.at} 不挖;创造模式照原版一下就碎,放的时候
+ * <p>"够得着"就是 {@code numen.move.goto_(…, {arrive = "reach"})} 走到的地方({@link Destination#reach}):走到了,这一格就在这里算够得着。
+ * 生存模式下图纸要的格里立着别的东西,得先由 {@code numen.work.dig} 挖开,{@code numen.build.at} 不挖;创造模式照原版一下就碎,放的时候
  * 直接顶掉。立着东西、身上却没有要放的料的格不叫她挖:没料挖了只是在主人的地上挖个坑。
  */
 public final class BuildSurvey {
@@ -41,7 +41,7 @@ public final class BuildSurvey {
          * 走原生车道(像右键那样放,{@link BuildTaskRecord.Target#itemPlace})的格此刻放下去立不住(原版 {@code canSurvive}——物品
          * 落位时问的就是它),而它相邻的设计格还有没盖好的:托着它的(下面那块、背后那面墙、上面挂着它的)还没有,等那一格好了它才是
          * {@link #REACH} 或 {@link #FAR}。够不够得着都一样:走过去也放不下。照图直写的格不问这一句,立不立得住由建完之后的落定说;
-         * 相邻的都盖好了还立不住的也不在这里——图纸要的在那儿本来立不住,照常交给 {@code build.at},它放不下就照实说。
+         * 相邻的都盖好了还立不住的也不在这里——图纸要的在那儿本来立不住,照常交给 {@code numen.build.at},它放不下就照实说。
          */
         UNHELD,
         /** 站在这里够得着,放得进去。 */

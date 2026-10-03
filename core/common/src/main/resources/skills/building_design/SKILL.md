@@ -1,6 +1,6 @@
 ---
 name: building_design
-description: Building design doctrine for the build API - designs written step by step and built with build.raise, blueprint files, planning workflow, size reference, single-floor rule, door alignment, composition order with walls, quality checklist. Load BEFORE designing or building any non-trivial structure.
+description: Building design doctrine for the build API - designs written step by step and built with numen.build.raise, blueprint files, planning workflow, size reference, single-floor rule, door alignment, composition order with walls, quality checklist. Load BEFORE designing or building any non-trivial structure.
 ---
 
 # Skill: building_design
@@ -11,7 +11,7 @@ finished build looks wrong.
 ## Workflow
 
 1. PLAN first: purpose, footprint, height, one main material + one accent material.
-2. Inspect the site (move.goto_ / scan.around): flat enough? big enough? Note the GROUND
+2. Inspect the site (numen.move.goto_ / numen.scan.around): flat enough? big enough? Note the GROUND
    level — every vertical decision below is anchored to it.
    **Uneven ground is YOUR problem to solve, not the builder's**: the builder puts
    blocks exactly where told, so on a slope one side of the footprint will hang in
@@ -21,26 +21,26 @@ finished build looks wrong.
    (costs materials in survival like any build). Stilt houses are a valid choice
    too — just make it a choice, not an accident.
 3. Write the building as a DESIGN, one level at a time from the ground up:
-   `build.new` it, add the foundation and the first storey as steps with
-   `into`, then LOOK at what you wrote with `build.show` and `layer`
-   (`build.show("cottage", {layer = 1})`) — a map of that level seen from above as it
+   `numen.build.new` it, add the foundation and the first storey as steps with
+   `into`, then LOOK at what you wrote with `numen.build.show` and `layer`
+   (`numen.build.show("cottage", {layer = 1})`) — a map of that level seen from above as it
    will stand when built, in the same character grid `layer` takes, with z and
    x labelled. Fix what is off
-   (a primitive with `{into = "cottage", step = 2}` or `before = 2`, `build.drop("cottage/2")`), look again, and only then write
+   (a primitive with `{into = "cottage", step = 2}` or `before = 2`, `numen.build.drop("cottage/2")`), look again, and only then write
    the next level on top of the one you saw. Do NOT work the whole building out
    in your head before the first step: a design is cheap to change, and the
    slice shows what you actually wrote, not what you meant. Within a level go big
    to small — `layer` grids first, single `set` details last; later steps
    overwrite earlier cells. Coordinates in a design are relative to its origin
-   (0,0,0), so you can think in the building's own terms. `build.show` lists
+   (0,0,0), so you can think in the building's own terms. `numen.build.show` lists
    the steps with what each costs.
-4. `build.raise` the design on the site: each round it asks `build.left` what is
-   still to do from where you stand, places what your hand reaches (`build.at`,
+4. `numen.build.raise` the design on the site: each round it asks `numen.build.left` what is
+   still to do from where you stand, places what your hand reaches (`numen.build.at`,
    which prices the whole design first), digs out what is in the way and walks on
    to the lowest cell left, until all of it stands.
 5. When it ends, LOOK at the result and run the checklist below. To fix
-   something, change the design (`step = N` / `before = N` with `into`, `build.drop`,
-   or one more step with `into`) and `build.raise` the same spot again — it only
+   something, change the design (`step = N` / `before = N` with `into`, `numen.build.drop`,
+   or one more step with `into`) and `numen.build.raise` the same spot again — it only
    adds what is missing, changes what differs and takes away blocks of yours the
    design no longer has.
 
@@ -104,22 +104,22 @@ the block is the `block` option — without it, the block in your main hand.
 
 A small house, written as a design:
 ```
-build.new("cottage")
-build.layer("#######", "#######", "#######", "#######", "#######", {at = {x = 0, y = 0, z = 0}, block = "cobblestone", into = "cottage"})
-build.layer("#######", "#.....#", "#.....#", "#.....#", "#######", {at = {x = 0, y = 1, z = 0}, block = "oak_planks*8, spruce_planks*2", up_to = 3, into = "cottage"})
-build.show("cottage", {layer = 1})
-build.layer("#", {at = {x = 3, y = 1, z = 4}, block = "air", up_to = 2, into = "cottage"})
-build.set({x = 3, y = 1, z = 4}, {block = "oak_door[facing=north]", into = "cottage"})
-build.show("cottage", {layer = 1})
-build.show("cottage")
-build.raise("cottage", {at = {x = 120, y = 64, z = -35}})
+numen.build.new("cottage")
+numen.build.layer("#######", "#######", "#######", "#######", "#######", {at = {x = 0, y = 0, z = 0}, block = "cobblestone", into = "cottage"})
+numen.build.layer("#######", "#.....#", "#.....#", "#.....#", "#######", {at = {x = 0, y = 1, z = 0}, block = "oak_planks*8, spruce_planks*2", up_to = 3, into = "cottage"})
+numen.build.show("cottage", {layer = 1})
+numen.build.layer("#", {at = {x = 3, y = 1, z = 4}, block = "air", up_to = 2, into = "cottage"})
+numen.build.set({x = 3, y = 1, z = 4}, {block = "oak_door[facing=north]", into = "cottage"})
+numen.build.show("cottage", {layer = 1})
+numen.build.show("cottage")
+numen.build.raise("cottage", {at = {x = 120, y = 64, z = -35}})
 ```
 
 The doorway and the door are in the same cell of the south wall (z=4), and the
 slice after the walls is where you would have caught a doorway cut into the
 wrong wall.
 
-Block states ride along with the block name, exactly as in `mc.run("setblock")`:
+Block states ride along with the block name, exactly as in `numen.mc.run("setblock")`:
 `oak_stairs[facing=north,half=top]`, `oak_slab[type=double]`, `oak_log[axis=x]`,
 `oak_trapdoor[open=true,facing=north]`. A door or tall flower is written as its
 lower half alone and a bed as its foot — the other half appears with it.
@@ -466,19 +466,19 @@ reads it as texture rather than as a pattern.
 
 ## Command mapping
 
-- a design is a named list of primitive steps: `build.new` starts one, a
-  primitive with `into` appends a step, `build.show` lists the steps and what
-  they cost, `build.show` with `layer` draws one level as a map,
-  a primitive with `{into = "cottage", step = 2}` / `before = 2` and `build.drop("cottage/2")` change them,
-  `build.at` places what your hand reaches of it on a spot, `build.left` says what
-  is still to do and where, and `build.raise` walks the site until all of it stands
+- a design is a named list of primitive steps: `numen.build.new` starts one, a
+  primitive with `into` appends a step, `numen.build.show` lists the steps and what
+  they cost, `numen.build.show` with `layer` draws one level as a map,
+  a primitive with `{into = "cottage", step = 2}` / `before = 2` and `numen.build.drop("cottage/2")` change them,
+  `numen.build.at` places what your hand reaches of it on a spot, `numen.build.left` says what
+  is still to do and where, and `numen.build.raise` walks the site until all of it stands
   — run again on the same spot, they change the building to match; block states ride in the block name; `air` clears; `mask` decides what
   may be overwritten; later steps overwrite earlier cells, so details go last
 - a primitive without `into` is placed at once, at world coordinates, within reach: a
-  single `build.place({x = 120, y = 64, z = -35}, {block = "crafting_table"})` is the quick way to put one block down
-- whole structure files: `build.designs` lists them with the designs, `build.show`
-  prices one, `build.raise` builds it; liquids are always skipped
-- `build.built` lists what has been built and where
+  single `numen.build.place({x = 120, y = 64, z = -35}, {block = "crafting_table"})` is the quick way to put one block down
+- whole structure files: `numen.build.designs` lists them with the designs, `numen.build.show`
+  prices one, `numen.build.raise` builds it; liquids are always skipped
+- `numen.build.built` lists what has been built and where
 
 ## Style references — how to read them
 
@@ -508,7 +508,7 @@ and wide with lifted corners"; translating that into courses, materials, an
 overhang and a corner lift is yours to do, and doing it differently on two
 buildings of the same style is the point, not a mistake.
 
-Load one with `skill.load("building_design", {file = "references/baroque.md"})` (any style file name below).
+Load one with `numen.skill.load("building_design", {file = "references/baroque.md"})` (any style file name below).
 
 ### East Asia
 `japanese_minka` 和风民居 · `japanese_shrine` 神社 · `japanese_castle` 天守 ·

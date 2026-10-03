@@ -33,7 +33,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * {@code move.go(route)} (and the library function {@code move.goto_}, which writes her own route first) on the companion body: walk a route from wherever she
+ * {@code numen.move.go(route)} (and the library function {@code numen.move.goto_}, which writes her own route first) on the companion body: walk a route from wherever she
  * stands. Planning and walking are two things ({@link RoutePlanning} → {@link Trip}):
  * <ol>
  *   <li><b>plan from here</b> — every leg once, only searching, before the walk is accepted ({@link #preparation}):
@@ -159,19 +159,19 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     }
 
     /**
-     * 从存档里取这条路线,认出终点是区域时量距离的那一格;路线不在了、还没规划过(走只照计划走,计划是 {@code route.plan} 的事)、
+     * 从存档里取这条路线,认出终点是区域时量距离的那一格;路线不在了、还没规划过(走只照计划走,计划是 {@code numen.route.plan} 的事)、
      * 不在她这个维度里,返回那个失败,否则 null。
      */
     private TaskResult locate() {
         route = routes().get(r.route);
         if (route == null) {
             return TaskResult.fail(ErrorKind.NOT_FOUND, "there is no route named " + r.route + " any more",
-                    "route.list()");
+                    "numen.route.list()");
         }
         if (route.plan() == null) {
-            return TaskResult.fail(ErrorKind.FAILED, "route " + route.name() + " has no plan yet, and move.go only "
-                    + "walks a planned route: route.plan plans it from where you stand without moving and lists every "
-                    + "block it changes; then move.go walks it", "route.plan(\"" + route.name() + "\")");
+            return TaskResult.fail(ErrorKind.FAILED, "route " + route.name() + " has no plan yet, and numen.move.go only "
+                    + "walks a planned route: numen.route.plan plans it from where you stand without moving and lists every "
+                    + "block it changes; then numen.move.go walks it", "numen.route.plan(\"" + route.name() + "\")");
         }
         if (!route.dimension().equals(player.level().dimension().location())) {
             return TaskResult.fail(ErrorKind.FAILED, "route " + route.name() + " lies in " + route.dimension()
@@ -305,8 +305,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         if (!diff.isEmpty()) {
             return new Blocked("the way from here goes beyond the plan of route " + route.name() + " (made from "
                     + Listing.coords(saw.from()) + "), so I did not set off: it would also "
-                    + RouteText.beyond(diff) + ". route.plan plans it from here and shows it; then move.go keeps to "
-                    + "that plan.", FailureType.TERRAIN_BLOCKED, "route.plan(\"" + route.name() + "\")");
+                    + RouteText.beyond(diff) + ". numen.route.plan plans it from here and shows it; then numen.move.go keeps to "
+                    + "that plan.", FailureType.TERRAIN_BLOCKED, "numen.route.plan(\"" + route.name() + "\")");
         }
         promise = saw;
         planned = result;
@@ -376,8 +376,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         if (!diff.isEmpty()) {
             return end("stopped on " + legName(stoppedLeg) + " at " + here(player.blockPosition().getY())
                     + ": the way on from here needs cells outside the plan I keep to — it would "
-                    + RouteText.beyond(diff) + ". route.plan plans it from here and shows it; then move.go keeps to "
-                    + "that plan.", FailureType.TERRAIN_BLOCKED, "route.plan(\"" + route.name() + "\")");
+                    + RouteText.beyond(diff) + ". numen.route.plan plans it from here and shows it; then numen.move.go keeps to "
+                    + "that plan.", FailureType.TERRAIN_BLOCKED, "numen.route.plan(\"" + route.name() + "\")");
         }
         RoutePlanning.Leg target = planned.legs().get(stoppedLeg);
         String why = NavText.failure(stopped, player, Feet.cell(player), target.toward(), target.way().spec(),
@@ -489,7 +489,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                         + " in sight and in reach — use it from here";
                 case NEAR -> "arrived within " + d.near() + " blocks of area " + d.area() + ", standing at " + here(gy);
                 case DIG -> "standing at " + here(gy) + ", within reach of a block of area " + d.area()
-                        + " — `work.dig(\"" + d.area() + "\")` digs it from here";
+                        + " — `numen.work.dig(\"" + d.area() + "\")` digs it from here";
                 case REACH -> "standing at " + here(gy) + ", within reach of a cell of area " + d.area()
                         + " to build into";
             };
@@ -506,7 +506,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             case NEAR -> "arrived within " + d.near() + " blocks of " + (cell != null ? coords(cell)
                     : "location x=" + d.x() + " z=" + d.z()) + ", standing at " + here(gy);
             case DIG -> "standing at " + here(gy) + ", with the " + block(cell) + " at " + coords(cell)
-                    + " within reach — `work.dig({x = " + cell.getX() + ", y = " + cell.getY() + ", z = "
+                    + " within reach — `numen.work.dig({x = " + cell.getX() + ", y = " + cell.getY() + ", z = "
                     + cell.getZ() + "})` digs it from here";
             case REACH -> "standing at " + here(gy) + ", with " + coords(cell) + " within reach to build into";
         };
@@ -541,10 +541,10 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         boolean stalled = nav == null || !nav.progressing();
         return "timed out " + String.format("%.1f", repDistance()) + " blocks from target (now at " + here(gy) + "); "
                 + (stalled
-                        ? "progress had stopped — likely blocked; move.go(\"" + route.name() + "\") tries again from "
-                                + "here, or add a waypoint (route.via(\"" + route.name() + "\", {at = ...})) or "
-                                + "`scan.blocks` for a way through."
-                        : "the journey was still progressing and simply exceeded its check-in budget; move.go(\""
+                        ? "progress had stopped — likely blocked; numen.move.go(\"" + route.name() + "\") tries again from "
+                                + "here, or add a waypoint (numen.route.via(\"" + route.name() + "\", {at = ...})) or "
+                                + "`numen.scan.blocks` for a way through."
+                        : "the journey was still progressing and simply exceeded its check-in budget; numen.move.go(\""
                                 + route.name() + "\") goes on from here.");
     }
 

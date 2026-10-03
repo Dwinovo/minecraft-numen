@@ -21,7 +21,7 @@ class YsmWrittenCommandsTest {
     static void install() {
         WrittenCommandsLint.install();
         Ysm ysm = new Ysm(Ysm.Storage.NEOFORGE);
-        NumenPlugins.register(numen -> YsmCommands.install(numen, ysm));
+        NumenPlugins.register(YsmCommands.NAMESPACE, numen -> YsmCommands.install(numen, ysm));
     }
 
     @Test
@@ -31,6 +31,6 @@ class YsmWrittenCommandsTest {
 
     @Test
     void theGroupsDescriptionsWriteCommandsThatRead() {
-        assertReads(WrittenCommandsLint.registeredUnder(YsmCommands.GROUP), 5);
+        assertReads(WrittenCommandsLint.registeredUnder(YsmCommands.NAMESPACE), 5);
     }
 }

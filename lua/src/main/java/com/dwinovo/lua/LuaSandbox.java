@@ -45,24 +45,26 @@ import java.util.regex.Pattern;
  * 不住(不是 Lua 错误,{@code pcall} 包着死循环也停),结局说哪一条、停在哪一行。{@link Running#interrupt} 随时喊停:在下一条
  * 指令或正在阻塞的宿主函数处停下。
  *
+ * <h2>表的路径</h2>
+ * 宿主函数登记在一张表的路径下({@code numen.work} 的 {@code dig}):路径上的每一段是一张表,外层一张装着里层一张({@code numen} 装着
+ * {@code work}),脚本里写全路径 {@code numen.work.dig(…)}。
+ *
  * <h2>模块</h2>
- * 宿主可以给一个模块来源({@link Builder#modules}):模块是一段返回一张函数表的正文,脚本里以模块名作全局名直接用
- * ({@code lumber.chop(…)}),第一次用到时才向来源要正文、在同一个全局环境里跑一遍,所以每次运行拿到的都是来源此刻的那一份。和宿主
- * 函数表同名的模块不另占名字,它的函数加进那张表({@code move.goto_} 就是这样进 {@code move} 的)。没用到的模块不读;一个模块读不通、
- * 跑出错、没返回表,出错的是用到它的那一行。给了模块来源,读一个既不是全局、也不是模块的名字就是错(写错的模块名当场说有哪些)。
+ * 宿主可以给一个模块来源({@link Builder#modules}):模块是一段返回一张函数表的正文,名字也是一条路径({@code numen.work}、
+ * {@code my.lumber}),脚本里就按这条路径用({@code my.lumber.chop(…)})。第一次用到时才向来源要正文、在同一个全局环境里跑一遍,所以
+ * 每次运行拿到的都是来源此刻的那一份。路径上已经有一张宿主函数表的模块不另占名字,它的函数加进那张表({@code numen.move.goto_} 就是
+ * 这样进 {@code numen.move} 的)。没用到的模块不读;一个模块读不通、跑出错、没返回表,出错的是用到它的那一行。读一张表里没有的名字、
+ * 或一个既不是全局也不是模块的名字就是错({@link Builder#missing}、{@link Builder#unknown} 给那句话,写错的名字当场说有哪些)。
  * 行号只记脚本自己那一段:模块里的函数调宿主函数时,{@link #currentLine} 说的是脚本里调这个模块函数的那一行,结局停在的也是脚本里的
  * 那一行。
  *
- * <p>名字空间({@link Builder#namespace}):一个定死的全局表,下面一个名字一个模块——模块名 {@code my.lumber} 在脚本里就是
- * {@code my.lumber},同样第一次用到才装,写错了同样说有哪些。
- *
  * <h2>宿主登记的名字钉死</h2>
- * 宿主登记的全局函数、函数表,以及表里的每个宿主函数,脚本都换不掉、遮不住:{@code move = {}}、{@code function move.go() end}、
- * {@code rawset(move, "go", f)} 一律在那一行报错(那句话由 {@link Builder#redefined} 给)。往宿主的表里加别的名字照常(库就是这样往
- * {@code move} 里加 {@code move.goto_} 的)。
+ * 宿主登记的全局函数、路径上的每一张表,以及表里的每个宿主函数,脚本都换不掉、遮不住:{@code numen = {}}、
+ * {@code numen.move = {}}、{@code function numen.move.go() end}、{@code rawset(numen.move, "go", f)} 一律在那一行报错(那句话由
+ * {@link Builder#redefined} 给)。往宿主的表里加别的名字照常(模块就是这样往 {@code numen.move} 里加 {@code goto_} 的)。
  *
  * <h2>桥接</h2>
- * 宿主函数按 {@code 表名.函数名}(或全局名)登记,收按顺序的参数、交回一个值;值在两边按 {@link #toJava}/{@link #toLua} 换:nil 是
+ * 宿主函数按 {@code 表的路径.函数名}(或全局名)登记,收按顺序的参数、交回一个值;值在两边按 {@link #toJava}/{@link #toLua} 换:nil 是
  * null,布尔、数(整数是 Long,其余是 Double)、字符串,表是列表(键恰好 1..n)或名字到值的表。宿主函数抛 {@link ScriptError}
  * 就是脚本在调用处得到的一个 Lua 错误({@code pcall} 接得住)。
  *
@@ -218,6 +220,7 @@ public final class LuaSandbox {
     private final Limits limits;
     private final Consumer<String> print;
     private final Map<String, HostFunction> globals;
+    /** 表的路径({@code numen.work})→ 表里的宿主函数。 */
     private final Map<String, Map<String, HostFunction>> tables;
     /** 模块从哪来;没给是 null(读不认得的全局名照 Lua 的老样子是 nil)。 */
     private final ModuleSource modules;
@@ -225,8 +228,6 @@ public final class LuaSandbox {
     private final List<String> preload;
     /** 读一个既不是全局也不是模块的名字时报的那句话。 */
     private final Unknown unknown;
-    /** 名字空间:定死的全局表名,下面一个名字一个模块。 */
-    private final List<String> namespaces;
     /** 脚本读宿主函数表里没有的名字时报的那句话。 */
     private final Missing missing;
     /** 脚本给宿主登记的名字赋值时报的那句话。 */
@@ -236,14 +237,14 @@ public final class LuaSandbox {
     /** {@code print} 一张没有 {@code __tostring} 的表时怎么写它(换成 Java 值之后)。 */
     private final java.util.function.Function<Object, String> show;
 
-    /** 脚本读宿主函数表里没有的名字({@code area.hsa}):报什么错。 */
+    /** 脚本读路径上一张表里没有的名字({@code numen.work.dgi}、{@code numen.wrok}):报什么错。 */
     @FunctionalInterface
     public interface Missing {
 
         /**
-         * @param table   表名
+         * @param table   表的路径
          * @param key     读的名字
-         * @param present 表里此刻有的名字(宿主函数与库加进去的)
+         * @param present 表里此刻有的名字(宿主函数、里层的表、模块加进去的)与这条路径下还没装的模块
          * @return 停在那一行的错误:一句话,或一张错误值的表
          */
         ScriptError error(String table, String key, List<String> present);
@@ -276,7 +277,7 @@ public final class LuaSandbox {
     public interface Redefined {
 
         /**
-         * @param table 表名;改的是一个全局名时是 null
+         * @param table 表的路径;改的是一个全局名时是 null
          * @param key   改的名字
          * @return 停在那一行的错误:一句话,或一张错误值的表
          */
@@ -290,7 +291,6 @@ public final class LuaSandbox {
         this.modules = b.modules;
         this.preload = List.copyOf(b.preload);
         this.unknown = b.unknown;
-        this.namespaces = List.copyOf(b.namespaces);
         this.missing = b.missing;
         this.redefined = b.redefined;
         this.errors = b.errors;
@@ -313,7 +313,6 @@ public final class LuaSandbox {
         private ModuleSource modules;
         private final List<String> preload = new ArrayList<>();
         private Unknown unknown = (name, present) -> new ScriptError("there is no module named " + name);
-        private final List<String> namespaces = new ArrayList<>();
         private Missing missing = (table, key, present) -> new ScriptError("there is no function " + table + "." + key);
         private Redefined redefined = (table, key) -> new ScriptError((table == null ? "" : table + ".") + key
                 + " is a host function and cannot be replaced");
@@ -360,18 +359,20 @@ public final class LuaSandbox {
         /** 登记一个全局函数。 */
         public Builder function(String name, HostFunction fn) {
             checkName(name);
-            if (tables.containsKey(name) || globals.put(name, fn) != null) {
+            if (tables.keySet().stream().anyMatch(t -> head(t).equals(name)) || globals.put(name, fn) != null) {
                 throw new IllegalArgumentException("全局名 " + name + " 登记了两次");
             }
             return this;
         }
 
-        /** 登记 {@code table.name} 这个函数;表没有就新建。 */
+        /** 登记 {@code table.name} 这个函数:{@code table} 是表的路径({@code numen.work}),路径上的表没有就新建。 */
         public Builder function(String table, String name, HostFunction fn) {
-            checkName(table);
+            for (String segment : table.split("\\.", -1)) {
+                checkName(segment);
+            }
             checkName(name);
-            if (globals.containsKey(table)) {
-                throw new IllegalArgumentException("全局名 " + table + " 已经是一个函数");
+            if (globals.containsKey(head(table))) {
+                throw new IllegalArgumentException("全局名 " + head(table) + " 已经是一个函数");
             }
             if (tables.computeIfAbsent(table, t -> new LinkedHashMap<>()).put(name, fn) != null) {
                 throw new IllegalArgumentException(table + "." + name + " 登记了两次");
@@ -388,18 +389,6 @@ public final class LuaSandbox {
         /** 开跑之前先装这个模块(不等用到):装不成,这段脚本就以那个错结束。 */
         public Builder preload(String module) {
             this.preload.add(module);
-            return this;
-        }
-
-        /**
-         * 一个名字空间:全局表 {@code name} 定死,模块名 {@code name.x} 的模块在脚本里就是 {@code name.x},第一次用到才装。
-         */
-        public Builder namespace(String name) {
-            checkName(name);
-            if (globals.containsKey(name) || tables.containsKey(name) || namespaces.contains(name)) {
-                throw new IllegalArgumentException("名字空间 " + name + " 和已有的全局名撞了");
-            }
-            namespaces.add(name);
             return this;
         }
 
@@ -557,7 +546,7 @@ public final class LuaSandbox {
             g.rawset("arg", arg);
             try {
                 for (String module : preload) {
-                    loadModule(LuaValue.valueOf(module));
+                    loadModule(module);
                 }
                 Varargs returned = main.invoke(LuaValue.varargsOf(values));
                 return new Outcome(Ending.FINISHED, 0, null, returned(returned.arg1()));
@@ -639,63 +628,22 @@ public final class LuaSandbox {
                 g.rawset(name, host(fn));
                 g.fix(LuaValue.valueOf(name), global);
             });
-            tables.forEach((group, fns) -> {
-                FixedKeysTable t = new FixedKeysTable();
-                FixedKeysTable.Refusal member = key -> luaError(redefined.error(group, key.tojstring()));
+            nodes.clear();
+            tables.forEach((path, fns) -> {
+                FixedKeysTable t = node(path);
+                FixedKeysTable.Refusal member = key -> luaError(redefined.error(path, key.tojstring()));
                 fns.forEach((fnName, fn) -> {
                     t.rawset(fnName, host(fn));
                     t.fix(LuaValue.valueOf(fnName), member);
                 });
-                // 读表里没有的名字:同名的模块还没装就先装上再找;还是没有就当场报那句话,不让它成 nil 再在调用处报
-                // "调了一个 nil"
-                LuaTable meta = new LuaTable();
-                LuaValue groupName = LuaValue.valueOf(group);
-                meta.rawset("__index", new VarArgFunction() {
-                    @Override
-                    public Varargs invoke(Varargs in) {
-                        if (modules != null && !loaded.contains(group) && modules.code(group) != null) {
-                            loadModule(groupName);
-                            LuaValue found = t.rawget(in.arg(2));
-                            if (!found.isnil()) {
-                                return found;
-                            }
-                        }
-                        List<String> present = new ArrayList<>();
-                        LuaValue k = LuaValue.NIL;
-                        while (true) {
-                            Varargs next = t.next(k);
-                            if ((k = next.arg1()).isnil()) {
-                                break;
-                            }
-                            present.add(k.tojstring());
-                        }
-                        throw luaError(missing.error(group, in.arg(2).tojstring(), present));
-                    }
-                });
-                t.setmetatable(meta);
-                g.rawset(group, t);
-                g.fix(LuaValue.valueOf(group), global);
             });
-            for (String space : namespaces) {
-                // 名字空间里读一个名字:是模块就装上它;否则写错了,当场说有哪些模块
-                FixedKeysTable ns = new FixedKeysTable();
-                LuaTable meta = new LuaTable();
-                meta.rawset("__index", new VarArgFunction() {
-                    @Override
-                    public Varargs invoke(Varargs in) {
-                        String module = space + "." + in.arg(2).tojstring();
-                        if (modules != null && modules.code(module) != null) {
-                            loadModule(LuaValue.valueOf(module));
-                            return ns.rawget(in.arg(2));
-                        }
-                        throw luaError(unknown.error(module, modules == null ? List.of() : modules.names()));
-                    }
-                });
-                ns.setmetatable(meta);
-                g.rawset(space, ns);
-                g.fix(LuaValue.valueOf(space), global);
-            }
             if (modules != null) {
+                // 模块路径上的外层表先立起来(my.lumber 的 my),读它里面的名字时才装模块
+                for (String module : modules.names()) {
+                    if (module.contains(".")) {
+                        node(parent(module));
+                    }
+                }
                 // 读一个不在全局里的名字:是模块就装上它;否则写错了,当场说有哪些模块
                 LuaTable meta = new LuaTable();
                 meta.rawset("__index", new VarArgFunction() {
@@ -703,7 +651,7 @@ public final class LuaSandbox {
                     public Varargs invoke(Varargs in) {
                         LuaValue name = in.arg(2);
                         if (name.isstring() && modules.code(name.tojstring()) != null) {
-                            loadModule(name);
+                            loadModule(name.tojstring());
                             return g.rawget(name);
                         }
                         throw luaError(unknown.error(name.tojstring(), modules.names()));
@@ -713,13 +661,74 @@ public final class LuaSandbox {
             }
         }
 
+        /** 这次运行里路径上的表:路径 → 表。 */
+        private final Map<String, FixedKeysTable> nodes = new java.util.HashMap<>();
+
         /**
-         * 装上一个模块:向来源要此刻的正文,在这个全局环境里跑一遍,它返回的表就是这个模块。和宿主函数表同名的,表里的函数加进那张表
-         * (宿主的名字定死,撞了就是 {@link Builder#redefined} 那个错);否则这张表占下模块名这个全局。读不通、跑出错、没返回表都在用到它
-         * 的那一行报错,没装上的下次用到再装。
+         * 路径上的一张表,没有就立起来:放进外层那张(最外层放进全局),在那儿定死。读它里面没有的名字时:这条路径本身是一个还没装的
+         * 模块,先装上再找;这条路径下有个同名的模块,装上它;都不是就当场报那句话,不让它成 nil 再在调用处报"调了一个 nil"。
          */
-        private void loadModule(LuaValue name) {
-            String module = name.tojstring();
+        private FixedKeysTable node(String path) {
+            FixedKeysTable existing = nodes.get(path);
+            if (existing != null) {
+                return existing;
+            }
+            FixedKeysTable t = new FixedKeysTable();
+            nodes.put(path, t);
+            String parent = parent(path);
+            String key = path.substring(parent.isEmpty() ? 0 : parent.length() + 1);
+            FixedKeysTable container = parent.isEmpty() ? g : node(parent);
+            container.rawset(key, t);
+            container.fix(LuaValue.valueOf(key), k -> luaError(redefined.error(parent.isEmpty() ? null : parent,
+                    k.tojstring())));
+            LuaTable meta = new LuaTable();
+            meta.rawset("__index", new VarArgFunction() {
+                @Override
+                public Varargs invoke(Varargs in) {
+                    LuaValue name = in.arg(2);
+                    if (modules != null) {
+                        if (!loaded.contains(path) && !loading.contains(path) && modules.code(path) != null) {
+                            loadModule(path);
+                            LuaValue found = t.rawget(name);
+                            if (!found.isnil()) {
+                                return found;
+                            }
+                        }
+                        String inner = path + "." + name.tojstring();
+                        if (name.isstring() && !loaded.contains(inner) && modules.code(inner) != null) {
+                            loadModule(inner);
+                            return t.rawget(name);
+                        }
+                    }
+                    throw luaError(missing.error(path, name.tojstring(), present(t, path)));
+                }
+            });
+            t.setmetatable(meta);
+            return t;
+        }
+
+        /** 路径上一张表此刻有的名字,加上这条路径下还没装的模块,按名字排。 */
+        private List<String> present(LuaTable t, String path) {
+            Set<String> out = new TreeSet<>();
+            for (Varargs kv = t.next(LuaValue.NIL); !kv.arg1().isnil(); kv = t.next(kv.arg1())) {
+                out.add(kv.arg1().tojstring());
+            }
+            if (modules != null) {
+                for (String module : modules.names()) {
+                    if (parent(module).equals(path)) {
+                        out.add(module.substring(path.length() + 1));
+                    }
+                }
+            }
+            return List.copyOf(out);
+        }
+
+        /**
+         * 装上一个模块:向来源要此刻的正文,在这个全局环境里跑一遍,它返回的表就是这个模块,放在它的路径上。路径上已经立着一张表
+         * (宿主函数表,或装着里层模块的外层表)的,表里的函数加进那张表(宿主的名字定死,撞了就是 {@link Builder#redefined} 那个错);
+         * 否则这张表占下路径的最后一段。读不通、跑出错、没返回表都在用到它的那一行报错,没装上的下次用到再装。
+         */
+        private void loadModule(String module) {
             if (!loading.add(module)) {
                 throw new LuaError("module " + module + " uses itself while it is loading");
             }
@@ -739,16 +748,15 @@ public final class LuaSandbox {
                     throw new LuaError("module " + module + " returned " + returned.typename() + ", not a table of its "
                             + "functions; end it with: return M");
                 }
-                int dot = module.indexOf('.');
-                LuaValue group = tables.containsKey(module) ? g.rawget(name) : LuaValue.NIL;
-                if (dot > 0) {
-                    g.rawget(module.substring(0, dot)).rawset(module.substring(dot + 1), returned);
-                } else if (group.istable()) {
+                FixedKeysTable standing = nodes.get(module);
+                if (standing != null) {
                     for (Varargs kv = returned.next(LuaValue.NIL); !kv.arg1().isnil(); kv = returned.next(kv.arg1())) {
-                        group.rawset(kv.arg1(), kv.arg(2));
+                        standing.rawset(kv.arg1(), kv.arg(2));
                     }
                 } else {
-                    g.rawset(name, returned);
+                    String parent = parent(module);
+                    (parent.isEmpty() ? g : node(parent)).rawset(module.substring(parent.isEmpty() ? 0
+                            : parent.length() + 1), returned);
                 }
                 loaded.add(module);
             } finally {
@@ -850,6 +858,20 @@ public final class LuaSandbox {
         }
     }
 
+    // ---- 路径 ----
+
+    /** 路径的第一段:{@code numen.work} 是 {@code numen}。 */
+    private static String head(String path) {
+        int dot = path.indexOf('.');
+        return dot < 0 ? path : path.substring(0, dot);
+    }
+
+    /** 路径的外层:{@code numen.work} 是 {@code numen},只有一段的是空串。 */
+    private static String parent(String path) {
+        int dot = path.lastIndexOf('.');
+        return dot < 0 ? "" : path.substring(0, dot);
+    }
+
     // ---- 环境与值 ----
 
     /**
@@ -890,8 +912,9 @@ public final class LuaSandbox {
             case LuaValue.TSTRING:
                 return v.tojstring();
             case LuaValue.TTABLE: {
+                // 只读表里存的东西:类的元表(方法、运算)不算数据
                 LuaTable t = (LuaTable) v;
-                int n = t.length();
+                int n = t.rawlen();
                 int keys = 0;
                 for (LuaValue k = t.next(LuaValue.NIL).arg1(); !k.isnil(); k = t.next(k).arg1()) {
                     keys++;
@@ -899,7 +922,7 @@ public final class LuaSandbox {
                 if (keys == n) {
                     List<Object> list = new ArrayList<>(n);
                     for (int i = 1; i <= n; i++) {
-                        list.add(toJava(t.get(i)));
+                        list.add(toJava(t.rawget(i)));
                     }
                     return list;
                 }

@@ -33,8 +33,8 @@ class LuaEngineTest {
 
             -- Plan a route to a place, then walk it.
             function M.goto_(place, opts)
-              route.plan(place)
-              return move.go(place)
+              numen.route.plan(place)
+              return numen.move.go(place)
             end
 
             local function helper() end
@@ -44,13 +44,13 @@ class LuaEngineTest {
 
     /** 模块来源:一张名字到正文的表,每次问都读它此刻的样子。 */
     private static final Map<String, String> MODULES = new java.util.concurrent.ConcurrentHashMap<>(Map.of(
-            "move", WALK, "greet", "-- Greetings.\nlocal M = {}\nfunction M.hi() return 'hi' end\nreturn M"));
+            "numen.move", WALK, "my.greet", "-- Greetings.\nlocal M = {}\nfunction M.hi() return 'hi' end\nreturn M"));
 
     private static final ScriptCatalog CATALOG = new ScriptCatalog(Map.of(
-            "work", Map.of("dig", new ScriptCatalog.Verb(null), "collect", new ScriptCatalog.Verb(null)),
-            "move", Map.of("go", new ScriptCatalog.Verb(null)),
-            "route", Map.of("plan", new ScriptCatalog.Verb(null)),
-            "area", Map.of("parts", new ScriptCatalog.Verb("parts"), "has", new ScriptCatalog.Verb("has"))),
+            "numen.work", Map.of("dig", new ScriptCatalog.Verb(null), "collect", new ScriptCatalog.Verb(null)),
+            "numen.move", Map.of("go", new ScriptCatalog.Verb(null)),
+            "numen.route", Map.of("plan", new ScriptCatalog.Verb(null)),
+            "numen.area", Map.of("parts", new ScriptCatalog.Verb("parts"), "has", new ScriptCatalog.Verb("has"))),
             new ScriptCatalog.ModuleSource() {
                 @Override
                 public String code(String name) {
@@ -88,19 +88,19 @@ class LuaEngineTest {
     @Test
     void aCallIsHandedOverWhereItIsMadeAndTheScriptGoesOnWithItsResult() {
         ScriptRun run = run("""
-                local r = work.dig("ores/g3")
+                local r = numen.work.dig("ores/g3")
                 print("dug: " .. r.dug)
-                route.plan({x = 120, y = 64, z = -35}, {arrive = "dig", alter = "natural"})
+                numen.route.plan({x = 120, y = 64, z = -35}, {arrive = "dig", alter = "natural"})
                 """);
         ScriptRun.Call first = assertInstanceOf(ScriptRun.Call.class, run.start());
-        assertEquals("work.dig", first.function());
+        assertEquals("numen.work.dig", first.function());
         assertEquals(1, first.line());
         assertEquals(List.of("ores/g3"), first.args());
         assertTrue(first.options().isEmpty());
 
         ScriptRun.Call second = assertInstanceOf(ScriptRun.Call.class, run.resume(data("dug", new JsonPrimitive(4))));
         assertEquals(List.of("dug: 4"), printed, "脚本拿到的是数据,不是回执那句话");
-        assertEquals("route.plan", second.function());
+        assertEquals("numen.route.plan", second.function());
         assertEquals(3, second.line());
         assertEquals(List.of(Map.of("x", 120L, "y", 64L, "z", -35L)), second.args());
         assertEquals(Map.of("arrive", "dig", "alter", "natural"), second.options());
@@ -112,28 +112,28 @@ class LuaEngineTest {
     void aModuleFunctionCallsTheApiFromTheScriptsOwnLine() {
         ScriptRun run = run("""
                 local x = 1
-                local r = move.goto_("home")
+                local r = numen.move.goto_("home")
                 return {walked = r}
                 """);
         ScriptRun.Call plan = assertInstanceOf(ScriptRun.Call.class, run.start());
-        assertEquals("route.plan", plan.function());
+        assertEquals("numen.route.plan", plan.function());
         assertEquals(2, plan.line(), "模块函数里的调用记在脚本里调它的那一行");
         ScriptRun.Call go = assertInstanceOf(ScriptRun.Call.class, run.resume(ok("planned")));
-        assertEquals("move.go", go.function());
+        assertEquals("numen.move.go", go.function());
         assertEquals(2, go.line());
         ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(data("route", new JsonPrimitive("home"))));
         assertTrue(done.ok());
         assertEquals(Map.of("walked", Map.of("route", "home")), done.value(), "跑完交出 return 的值");
-        assertEquals(List.of("move"), run.modules(), "用到的模块,记战绩用");
+        assertEquals(List.of("numen.move"), run.modules(), "用到的模块,记战绩用");
     }
 
     @Test
     void theFunctionsAModuleDefinesComeWithTheCommentsAboveThem() {
-        List<com.dwinovo.numen.agent.script.ScriptEngine.Defined> defined = LUA.functions("move", WALK);
+        List<com.dwinovo.numen.agent.script.ScriptEngine.Defined> defined = LUA.functions("numen.move", WALK);
         assertEquals(List.of(
-                new com.dwinovo.numen.agent.script.ScriptEngine.Defined("move.goto_", List.of("place", "opts"),
+                new com.dwinovo.numen.agent.script.ScriptEngine.Defined("numen.move.goto_", List.of("place", "opts"),
                         List.of("-- Plan a route to a place, then walk it.")),
-                new com.dwinovo.numen.agent.script.ScriptEngine.Defined("move.sweep", List.of("a", "b"), List.of())),
+                new com.dwinovo.numen.agent.script.ScriptEngine.Defined("numen.move.sweep", List.of("a", "b"), List.of())),
                 defined);
         assertEquals("Plan a route to a place, then walk it.", LUA.summaryOf(defined.get(0)));
     }
@@ -141,35 +141,35 @@ class LuaEngineTest {
     @Test
     void readingWithoutRunningListsTheCallsAndTheirArguments() {
         List<ScriptRun.Call> calls = LUA.calls("example", """
-                work.dig("ores", {count = 2})
-                move.goto_({x = 1, y = 2, z = 3}, {arrive = "use"})
+                numen.work.dig("ores", {count = 2})
+                numen.move.goto_({x = 1, y = 2, z = 3}, {arrive = "use"})
                 """, CATALOG).calls();
         assertEquals(2, calls.size());
-        assertEquals("work.dig", calls.get(0).function());
+        assertEquals("numen.work.dig", calls.get(0).function());
         assertEquals(Map.of("count", 2L), calls.get(0).options());
-        assertEquals("move", calls.get(1).group(), "模块函数记成它自己的那一次调用,不进它的正文");
+        assertEquals("numen.move", calls.get(1).group(), "模块函数记成它自己的那一次调用,不进它的正文");
         assertEquals("goto_", calls.get(1).verb());
         assertEquals(List.of(Map.of("x", 1L, "y", 2L, "z", 3L)), calls.get(1).args());
-        assertThrows(IllegalArgumentException.class, () -> LUA.calls("example", "work.dig(", CATALOG),
+        assertThrows(IllegalArgumentException.class, () -> LUA.calls("example", "numen.work.dig(", CATALOG),
                 "语法错读不通");
         com.dwinovo.numen.agent.script.ScriptEngine.Reading stopped = LUA.calls("example", """
-                work.dig("ores")
-                for _, p in ipairs(area.parts("ores")) do work.dig(p) end
+                numen.work.dig("ores")
+                for _, p in ipairs(numen.area.parts("ores")) do numen.work.dig(p) end
                 """, CATALOG);
         assertEquals(2, stopped.calls().size(), "停下之前调到的照记");
         assertTrue(stopped.error() != null, "拿返回值往下算的写法跑到那儿停下,说出原因");
         assertTrue(LUA.calls("example", "nope.dig()", CATALOG).error() != null);
-        assertNull(LUA.calls("example", "work.collect()", CATALOG).error());
+        assertNull(LUA.calls("example", "numen.work.collect()", CATALOG).error());
     }
 
     @Test
     void aSucceedingCallReturnsItsDataAndAFailingOneRaisesAtTheCall() {
         ScriptRun run = run("""
-                local r = work.collect()
+                local r = numen.work.collect()
                 print(r.picked, r.kinds[2])
-                local ok, err = pcall(function() work.dig("ores") end)
+                local ok, err = pcall(function() numen.work.dig("ores") end)
                 print(ok, err.kind, err.fn, tostring(err))
-                work.dig("ores")
+                numen.work.dig("ores")
                 """);
         run.start();
         JsonObject picked = new JsonObject();
@@ -181,10 +181,10 @@ class LuaEngineTest {
         run.resume(ScriptRun.Result.ok("picked up 3", picked));
         run.resume(failed("out of reach"));
         ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(failed("out of reach")));
-        assertEquals(List.of("3\tcobblestone", "false\tfailed\twork.dig\twork.dig: failed — out of reach"), printed);
+        assertEquals(List.of("3\tcobblestone", "false\tfailed\tnumen.work.dig\tnumen.work.dig: failed — out of reach"), printed);
         assertFalse(done.ok());
         assertEquals(5, done.line());
-        assertEquals("work.dig: failed — out of reach", done.error());
+        assertEquals("numen.work.dig: failed — out of reach", done.error());
         assertEquals("failed", done.failure().get("kind"));
     }
 
@@ -192,7 +192,7 @@ class LuaEngineTest {
     @Test
     void aFailureCarriesItsKindHintAndData() {
         ScriptRun run = run("""
-                local ok, err = pcall(work.dig, "ores")
+                local ok, err = pcall(numen.work.dig, "ores")
                 if err.kind == "out_of_reach" then print(err.hint, err.data.nearest.x) end
                 print(tostring(err))
                 """);
@@ -202,15 +202,15 @@ class LuaEngineTest {
         JsonObject data = new JsonObject();
         data.add("nearest", nearest);
         assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(new ScriptRun.Result(false, "too far", data,
-                "out_of_reach", "move.goto_(\"ores\", {arrive = \"dig\"})"))).ok());
-        assertEquals(List.of("move.goto_(\"ores\", {arrive = \"dig\"})\t7",
-                "work.dig: out_of_reach — too far\nhint: move.goto_(\"ores\", {arrive = \"dig\"})"), printed);
+                "out_of_reach", "numen.move.goto_(\"ores\", {arrive = \"dig\"})"))).ok());
+        assertEquals(List.of("numen.move.goto_(\"ores\", {arrive = \"dig\"})\t7",
+                "numen.work.dig: out_of_reach — too far\nhint: numen.move.goto_(\"ores\", {arrive = \"dig\"})"), printed);
     }
 
     /** 没有数据的成功返回 nil,不返回那句话。 */
     @Test
     void aCallWithoutDataReturnsNil() {
-        ScriptRun run = run("print(work.collect() == nil)");
+        ScriptRun run = run("print(numen.work.collect() == nil)");
         run.start();
         assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(ok("collected"))).ok());
         assertEquals(List.of("true"), printed);
@@ -240,8 +240,8 @@ class LuaEngineTest {
     @Test
     void aDeclaredValueIsWhatTheCallReturns() {
         ScriptRun run = run("""
-                for _, p in ipairs(area.parts("ores")) do print(p) end
-                while area.has("ores") do work.dig("ores") end
+                for _, p in ipairs(numen.area.parts("ores")) do print(p) end
+                while numen.area.has("ores") do numen.work.dig("ores") end
                 print("done")
                 """);
         run.start();
@@ -258,21 +258,21 @@ class LuaEngineTest {
 
     @Test
     void aFailedValueQueryRaises() {
-        ScriptRun run = run("area.has('nope')");
+        ScriptRun run = run("numen.area.has('nope')");
         run.start();
         ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(new ScriptRun.Result(false,
-                "there is no area named nope", new JsonObject(), "not_found", "area.list()")));
+                "there is no area named nope", new JsonObject(), "not_found", "numen.area.list()")));
         assertFalse(done.ok());
-        assertEquals("area.has: not_found — there is no area named nope\nhint: area.list()", done.error());
+        assertEquals("numen.area.has: not_found — there is no area named nope\nhint: numen.area.list()", done.error());
     }
 
     @Test
     void aRefusedCallFailsAtTheCallWithoutRunning() {
-        ScriptRun run = run("local ok, err = pcall(function() work.dig(1, 2) end)\nprint(err.kind, tostring(err))");
+        ScriptRun run = run("local ok, err = pcall(function() numen.work.dig(1, 2) end)\nprint(err.kind, tostring(err))");
         run.start();
         assertTrue(assertInstanceOf(ScriptRun.Done.class, run.refuse(new com.dwinovo.numen.agent.script.ApiError(
                 com.dwinovo.numen.agent.script.ErrorKind.BAD_ARGUMENT, "takes 1 object, got 2", null))).ok());
-        assertEquals(List.of("bad_argument\twork.dig: bad_argument — takes 1 object, got 2"), printed);
+        assertEquals(List.of("bad_argument\tnumen.work.dig: bad_argument — takes 1 object, got 2"), printed);
     }
 
     @Test
@@ -280,15 +280,15 @@ class LuaEngineTest {
         assertEquals("goto_", LUA.functionName("goto"));
         assertEquals("string_", LUA.functionName("string"));
         assertEquals("dig", LUA.functionName("dig"));
-        assertEquals("move.goto_", LUA.function("move", "goto"));
-        assertEquals("move.go", LUA.function("move", "go"));
-        assertTrue(LUA.check("t", "move.goto(1)") != null, "goto 是保留字,原名写不出来");
-        assertNull(LUA.check("t", "move.goto_(1)"));
+        assertEquals("numen.move.goto_", LUA.function("numen.move", "goto"));
+        assertEquals("numen.move.go", LUA.function("numen.move", "go"));
+        assertTrue(LUA.check("t", "numen.move.goto(1)") != null, "goto 是保留字,原名写不出来");
+        assertNull(LUA.check("t", "numen.move.goto_(1)"));
     }
 
     @Test
     void optionsGoLast() {
-        ScriptRun run = run("local where = \"ores\"\nwork.dig(where, {count = 4})");
+        ScriptRun run = run("local where = \"ores\"\nnumen.work.dig(where, {count = 4})");
         ScriptRun.Call call = assertInstanceOf(ScriptRun.Call.class, run.start());
         assertEquals(List.of("ores"), call.args());
         assertEquals(Map.of("count", 4L), call.options());
@@ -297,7 +297,7 @@ class LuaEngineTest {
 
     @Test
     void closingAScriptThatWaitsForAResultLetsItsThreadGo() throws InterruptedException {
-        ScriptRun run = run("work.dig('ores')\nprint('never')");
+        ScriptRun run = run("numen.work.dig('ores')\nprint('never')");
         assertInstanceOf(ScriptRun.Call.class, run.start());
         run.close();
         Thread.sleep(100);
@@ -307,7 +307,7 @@ class LuaEngineTest {
     @Test
     void theSummaryIsTheFirstCommentLine() {
         assertEquals("Dig out an area.", LUA.summary("\n-- Dig out an area.\n-- usage: mine <area>\nwork.dig(...)"));
-        assertNull(LUA.summary("work.dig('x')\n-- late comment"));
+        assertNull(LUA.summary("numen.work.dig('x')\n-- late comment"));
     }
 
     @Test
@@ -323,93 +323,97 @@ class LuaEngineTest {
     @Test
     void anApiFunctionCannotBeRedefinedButAGroupTakesNewNames() {
         ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run("""
-                function move.mine() return 1 end
-                function move.go() end
+                function numen.move.mine() return 1 end
+                function numen.move.go() end
                 """).start());
         assertFalse(done.ok());
         assertEquals(2, done.line());
         assertEquals("runtime", done.failure().get("kind"));
-        assertTrue(done.error().startsWith("runtime — move.go is an API function"), done.error());
-        ScriptRun.Done shadowed = assertInstanceOf(ScriptRun.Done.class, run("move = {}").start());
-        assertTrue(shadowed.error().contains("move is built into the API"), shadowed.error());
+        assertTrue(done.error().startsWith("runtime — numen.move.go is an API function"), done.error());
+        ScriptRun.Done shadowed = assertInstanceOf(ScriptRun.Done.class, run("numen.move = {}").start());
+        assertTrue(shadowed.error().contains("numen.move is built into the API"), shadowed.error());
     }
 
     /** 模块按名字直接用,用到才装;没有 require;写错的名字说有哪些模块。 */
     @Test
     void aModuleIsUsedByNameAndThereIsNoRequire() {
-        assertTrue(assertInstanceOf(ScriptRun.Done.class, run("print(greet.hi())").start()).ok());
+        assertTrue(assertInstanceOf(ScriptRun.Done.class, run("print(my.greet.hi())").start()).ok());
         assertEquals(List.of("hi"), printed);
         ScriptRun.Done required = assertInstanceOf(ScriptRun.Done.class, run("local g = require('greet')").start());
         assertEquals("no_function", required.failure().get("kind"));
-        assertEquals("modules are used by name: `work.collect()`, `my.lumber.chop(...)`",
+        assertEquals("modules are used by name: `numen.work.collect()`, `my.lumber.chop(...)`",
                 required.failure().get("hint"));
-        ScriptRun.Done typo = assertInstanceOf(ScriptRun.Done.class, run("grete.hi()").start());
+        ScriptRun.Done typo = assertInstanceOf(ScriptRun.Done.class, run("my.grete.hi()").start());
         assertEquals("no_function", typo.failure().get("kind"));
-        assertTrue(typo.error().contains("there is no module named grete") && typo.error().contains("greet, move"),
+        assertTrue(typo.error().contains("there is no group or module my.grete; my has: greet"),
                 typo.error());
+        ScriptRun.Done space = assertInstanceOf(ScriptRun.Done.class, run("mine.greet.hi()").start());
+        assertTrue(space.error().contains("there is no global, namespace or module named mine")
+                && space.error().contains("my.greet, numen.move"), space.error());
     }
 
     /** 改了正文,下一次运行就是新的。 */
     @Test
     void theNextRunReadsTheModuleAsItIsNow() {
-        MODULES.put("fresh", "local M = {}\nfunction M.v() return 1 end\nreturn M");
+        MODULES.put("my.fresh", "local M = {}\nfunction M.v() return 1 end\nreturn M");
         try {
-            assertTrue(assertInstanceOf(ScriptRun.Done.class, run("print(fresh.v())").start()).ok());
-            MODULES.put("fresh", "local M = {}\nfunction M.v() return 2 end\nreturn M");
-            assertTrue(assertInstanceOf(ScriptRun.Done.class, run("print(fresh.v())").start()).ok());
+            assertTrue(assertInstanceOf(ScriptRun.Done.class, run("print(my.fresh.v())").start()).ok());
+            MODULES.put("my.fresh", "local M = {}\nfunction M.v() return 2 end\nreturn M");
+            assertTrue(assertInstanceOf(ScriptRun.Done.class, run("print(my.fresh.v())").start()).ok());
             assertEquals(List.of("1", "2"), printed);
         } finally {
-            MODULES.remove("fresh");
+            MODULES.remove("my.fresh");
         }
     }
 
     /** 一个模块坏了,只有用到它的程序出错。 */
     @Test
     void aBrokenModuleOnlyFailsTheProgramThatUsesIt() {
-        MODULES.put("broken", "local M = {\nreturn M");
+        MODULES.put("my.broken", "local M = {\nreturn M");
         try {
-            assertTrue(assertInstanceOf(ScriptRun.Done.class, run("print(greet.hi())").start()).ok());
-            ScriptRun.Done failed = assertInstanceOf(ScriptRun.Done.class, run("local x = 1\nbroken.go()").start());
+            assertTrue(assertInstanceOf(ScriptRun.Done.class, run("print(my.greet.hi())").start()).ok());
+            ScriptRun.Done failed = assertInstanceOf(ScriptRun.Done.class, run("local x = 1\nmy.broken.go()").start());
             assertFalse(failed.ok());
             assertEquals(2, failed.line());
-            assertTrue(failed.error().contains("module broken does not compile"), failed.error());
+            assertTrue(failed.error().contains("module my.broken does not compile"), failed.error());
         } finally {
-            MODULES.remove("broken");
+            MODULES.remove("my.broken");
         }
     }
 
     /** 存之前读一遍:读不通、不返回表、给第 ① 层赋值都说出来;好的是 null。名字的规矩只在一处。 */
     @Test
     void aModuleIsCheckedBeforeItIsKept() {
-        assertNull(LUA.checkModule("move", WALK, CATALOG));
-        assertNull(LUA.checkModule("lumber", "local M = {}\nfunction M.chop() work.dig('x') end\nreturn M", CATALOG));
-        assertTrue(LUA.checkModule("lumber", "local M = {", CATALOG) != null);
-        assertTrue(LUA.checkModule("lumber", "local x = 1", CATALOG).contains("not a table"));
-        String redefines = LUA.checkModule("move", "local M = {}\nfunction M.go() end\nreturn M", CATALOG);
-        assertTrue(redefines.contains("move.go is an API function"), redefines);
-        String inside = LUA.checkModule("lumber", "function work.dig() end\nreturn {}", CATALOG);
-        assertTrue(inside.contains("work.dig is an API function"), inside);
-        assertNull(LUA.moduleName("lumber", true));
-        assertNull(LUA.moduleName("move", true), "和组同名是给这一组加函数");
-        assertTrue(LUA.moduleName("my-mod", false) != null);
-        assertTrue(LUA.moduleName("end", false) != null);
-        assertTrue(LUA.moduleName("string", true) != null);
-        assertNull(LUA.moduleName("string", false), "名字空间里的名字只要写得出来");
-        assertTrue(LUA.moduleName("raise", true) != null);
-        assertTrue(LUA.moduleName("my", true) != null, "my 留给她的名字空间");
+        assertNull(LUA.checkModule("numen.move", WALK, CATALOG));
+        assertNull(LUA.checkModule("my.lumber", "local M = {}\nfunction M.chop() numen.work.dig('x') end\nreturn M", CATALOG));
+        assertTrue(LUA.checkModule("my.lumber", "local M = {", CATALOG) != null);
+        assertTrue(LUA.checkModule("my.lumber", "local x = 1", CATALOG).contains("not a table"));
+        String redefines = LUA.checkModule("numen.move", "local M = {}\nfunction M.go() end\nreturn M", CATALOG);
+        assertTrue(redefines.contains("numen.move.go is an API function"), redefines);
+        String inside = LUA.checkModule("my.lumber", "function numen.work.dig() end\nreturn {}", CATALOG);
+        assertTrue(inside.contains("numen.work.dig is an API function"), inside);
+        assertNull(LUA.moduleName("my.lumber"));
+        assertNull(LUA.moduleName("numen.move"), "和组同名是给这一组加函数");
+        assertNull(LUA.moduleName("my.string"), "组那一段只要写得出来");
+        assertTrue(LUA.moduleName("my-mod.x") != null);
+        assertTrue(LUA.moduleName("my.end") != null);
+        assertTrue(LUA.moduleName("string.x") != null, "名字空间是一个全局名");
+        assertTrue(LUA.moduleName("raise.x") != null);
+        assertTrue(LUA.moduleName("lumber") != null, "一段的不是模块名");
+        assertTrue(LUA.moduleName("a.b.c") != null);
     }
 
-    /** 她的模块在 my 下面:按 my.名字 用,用到才装;名字空间定死。 */
+    /** 模块名两段:路径就是名字,用到才装;外层的表定死。 */
     @Test
-    void herModulesAreUnderMy() {
+    void aModuleIsUsedUnderItsPath() {
         MODULES.put("my.lumber", "local M = {}\nfunction M.chop() return 'chopped' end\nreturn M");
         try {
             assertTrue(assertInstanceOf(ScriptRun.Done.class, run("print(my.lumber.chop())").start()).ok());
             assertEquals(List.of("chopped"), printed);
             ScriptRun.Done typo = assertInstanceOf(ScriptRun.Done.class, run("my.lumbr.chop()").start());
-            assertTrue(typo.error().contains("there is no module named my.lumbr"), typo.error());
+            assertTrue(typo.error().contains("there is no group or module my.lumbr"), typo.error());
             ScriptRun.Done flat = assertInstanceOf(ScriptRun.Done.class, run("lumber.chop()").start());
-            assertTrue(flat.error().contains("yours are under my: my.lumber"), flat.error());
+            assertTrue(flat.error().contains("there is no global, namespace or module named lumber"), flat.error());
             assertNull(LUA.checkModule("my.lumber", MODULES.get("my.lumber"), CATALOG));
         } finally {
             MODULES.remove("my.lumber");

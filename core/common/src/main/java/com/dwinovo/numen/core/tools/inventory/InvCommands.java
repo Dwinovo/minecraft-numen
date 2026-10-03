@@ -84,8 +84,8 @@ public final class InvCommands {
                 InvCommands::craft, CRAFT_ITEM, CRAFT_COUNT)
                 .returns(ScriptType.table(ScriptType.field("crafted", ScriptType.INTEGER, null),
                         ScriptType.field("carrying", ScriptType.INTEGER, "How many you carry now.")))
-                .example("inv.craft(\"minecraft:iron_pickaxe\")")
-                .example("inv.craft(\"oak_planks\", {count = 8})")
+                .example("numen.inv.craft(\"minecraft:iron_pickaxe\")")
+                .example("numen.inv.craft(\"oak_planks\", {count = 8})")
                 .note("2x2 recipes work anywhere; a 3x3 recipe needs a crafting table within reach (~4 blocks). "
                         + "The result says where the nearest one is, or that you should place one (a "
                         + "crafting_table is 4 planks, 2x2).")
@@ -94,16 +94,16 @@ public final class InvCommands {
                 .note("It never walks and never places a table: the nearest table in reach is used, and a refusal "
                         + "says where one is or how to place one.")
                 .note("Only [crafting] recipes. Smelting, stonecutting and smithing happen at the station: "
-                        + "`use.block` it, `use.gui`, then `use.shift` or `use.transfer` the items in.")
+                        + "`numen.use.block` it, `numen.use.gui`, then `numen.use.shift` or `numen.use.transfer` the items in.")
                 .seeAlso(line(RECIPE));
         inv.server(RECIPE, "How an item is made, like JEI: every recipe that outputs it, at every station.",
                 InvCommands::recipe, RECIPE_ITEM, Listing.PAGE)
                 .returns(QueryExtraOps.RECIPES, ScriptType.listOf(ScriptType.STRING))
-                .example("for _, r in ipairs(inv.recipe(\"minecraft:diamond_pickaxe\")) do print(r) end")
+                .example("for _, r in ipairs(numen.inv.recipe(\"minecraft:diamond_pickaxe\")) do print(r) end")
                 .note("Instant and read-only. Every recipe is listed; a long list comes in pages.")
                 .note("Each recipe is tagged [crafting], [smelting], [stonecutter], [smithing] …: [crafting] is "
-                        + "`inv.craft`; the others are made at their station (`use.block` it, `use.gui`, then "
-                        + "`use.shift` or `use.transfer`).")
+                        + "`numen.inv.craft`; the others are made at their station (`numen.use.block` it, `numen.use.gui`, then "
+                        + "`numen.use.shift` or `numen.use.transfer`).")
                 .note("No recipe found means the item is mined or traded, not made.")
                 .seeAlso(line(CRAFT));
         inv.server(EAT, "Eat or drink something from your inventory.",
@@ -111,7 +111,7 @@ public final class InvCommands {
                 .returns(ScriptType.table(ScriptType.field("item", ScriptType.STRING, null),
                         ScriptType.field("hp", ScriptType.NUMBER, null),
                         ScriptType.field("hunger", ScriptType.INTEGER, null)))
-                .example("inv.eat(\"minecraft:cooked_beef\")")
+                .example("numen.inv.eat(\"minecraft:cooked_beef\")")
                 .note("Background work: the result arrives as a task_finished event.")
                 .note("A real timed action: only when the chewing finishes do hunger, saturation and the item's "
                         + "effects (a golden apple's absorption) apply. Health then regenerates from saturation, "
@@ -123,18 +123,18 @@ public final class InvCommands {
                 .returns(ScriptType.table(ScriptType.field("item", ScriptType.STRING, null),
                         ScriptType.field("dropped", ScriptType.INTEGER, null),
                         ScriptType.field("remaining_in_inventory", ScriptType.INTEGER, null)))
-                .example("inv.drop(\"minecraft:cobblestone\", {count = 32})")
-                .example("inv.drop(\"rotten_flesh\")")
+                .example("numen.inv.drop(\"minecraft:cobblestone\", {count = 32})")
+                .example("numen.inv.drop(\"rotten_flesh\")")
                 .note("Asks your owner first unless their rules allow it; the call waits for the answer.")
-                .note("Dropped items despawn after 5 minutes. To store things, open a chest with `use.block` and "
-                        + "`use.shift` them into it instead.")
+                .note("Dropped items despawn after 5 minutes. To store things, open a chest with `numen.use.block` and "
+                        + "`numen.use.shift` them into it instead.")
                 .note("Returns how many were dropped and how many remain.")
                 .seeAlso("use block");
         inv.server(TAKE, "Creative mode only: conjure items into your inventory, like the creative menu.",
                 InvCommands::take, TAKE_ITEM, TAKE_COUNT)
                 .returns(ScriptType.table(ScriptType.field("took", ScriptType.INTEGER, null),
                         ScriptType.field("carrying", ScriptType.INTEGER, null)))
-                .example("inv.take(\"minecraft:diamond\", {count = 64})")
+                .example("numen.inv.take(\"minecraft:diamond\", {count = 64})")
                 .note("Fails in survival mode; there you mine, craft, loot or trade for items instead.")
                 .note("What doesn't fit in your inventory drops at your feet.");
     }
@@ -167,7 +167,7 @@ public final class InvCommands {
         String id = args.get(TAKE_ITEM).toString();
         if (!WorkProfile.of(companion).freeMaterials()) {
             src.reply(TaskResult.fail(ErrorKind.DENIED, "survival mode can't conjure items — mine, craft, loot or "
-                    + "trade for " + id + " instead (inv.take works only in creative mode)", null).toJson());
+                    + "trade for " + id + " instead (numen.inv.take works only in creative mode)", null).toJson());
             return;
         }
         Item item = ToolArgs.parseItem(id);

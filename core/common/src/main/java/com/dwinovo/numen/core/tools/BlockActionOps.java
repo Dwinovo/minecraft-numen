@@ -54,7 +54,7 @@ public final class BlockActionOps {
                 cells = cells.union(named.resolve(place.area()).cells());
                 firstArea = firstArea == null ? place.area() : firstArea;
             } else if (place.cell() == null) {
-                throw new IllegalArgumentException("work.dig takes cells ({x = …, y = …, z = …}, all three) and areas; " + place
+                throw new IllegalArgumentException("numen.work.dig takes cells ({x = …, y = …, z = …}, all three) and areas; " + place
                         + " is " + (place.x() == null ? "a height" : "a column") + ", not one cell");
             } else {
                 points.add(place.cell());
@@ -64,8 +64,8 @@ public final class BlockActionOps {
         String what = String.join(" ", places.stream().map(Place::written).toList());
         String into = firstArea != null ? firstArea.name() : "<area>";
         if (cells.isEmpty()) {
-            throw new IllegalArgumentException(what + " has no cells yet, so I did not start; `scan.blocks(<block ids>, "
-                    + "{into = \"" + into + "\"})` or `area.add(\"" + into + "\", {box = {x1, y1, z1, x2, y2, z2}})` "
+            throw new IllegalArgumentException(what + " has no cells yet, so I did not start; `numen.scan.blocks(<block ids>, "
+                    + "{into = \"" + into + "\"})` or `numen.area.add(\"" + into + "\", {box = {x1, y1, z1, x2, y2, z2}})` "
                     + "fills it");
         }
         Level level = her.level();
@@ -83,7 +83,7 @@ public final class BlockActionOps {
         if (kinds.isEmpty()) {
             if (!scannedKinds.isEmpty()) {
                 throw new IllegalArgumentException("the scanned cells of " + what + " are all gone or have changed since"
-                        + " the scan, so I did not start" + (firstArea != null ? "; `scan.blocks(" + ids(scannedKinds)
+                        + " the scan, so I did not start" + (firstArea != null ? "; `numen.scan.blocks(" + ids(scannedKinds)
                         + ", {into = \"" + firstArea.name() + "\"})` adds what is there now" : ""));
             }
             throw new IllegalArgumentException("the " + cells.size() + " cell(s) of " + what + " hold nothing to dig — "

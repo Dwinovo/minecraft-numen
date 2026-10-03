@@ -10,7 +10,7 @@ import com.dwinovo.numen.permission.Listing;
 import net.minecraft.core.BlockPos;
 
 /**
- * 路线的去处写错时({@code route.new} 与 {@code route.via},库里的 {@code move.goto_} 经它们)当场给的提醒,只有这里写字。每一句说
+ * 路线的去处写错时({@code numen.route.new} 与 {@code numen.route.via},库里的 {@code numen.move.goto_} 经它们)当场给的提醒,只有这里写字。每一句说
  * 事实,再给能照抄的写法;不替她改成别的意思,也不去搜索。判断是不是写错由 {@link Destination} 问寻路模块,这里只把结论写成话。
  */
 public final class GotoReminders {
@@ -99,7 +99,7 @@ public final class GotoReminders {
         sb.setLength(sb.length() - 1);
         Cover nearest = covers.get(0);
         return sb.append(". Dig one of them open — the ").append(nearest.face()).append(" one is nearest me: ")
-                .append(call(nearest.at(), "arrive = \"dig\"")).append(", then `work.dig(")
+                .append(call(nearest.at(), "arrive = \"dig\"")).append(", then `numen.work.dig(")
                 .append(Place.cell(nearest.at()).literal()).append(")` — then ").append(call(pos, "arrive = \"use\""))
                 .append(" again.").toString();
     }
@@ -115,8 +115,8 @@ public final class GotoReminders {
 
     /** 区域里还没有一格。 */
     public static String emptyArea(AreaRef area) {
-        return "area " + area + " has no cells yet, so there is nowhere in it to go; area.add with a box, or "
-                + "scan.blocks with into = \"" + area.name() + "\", fills it.";
+        return "area " + area + " has no cells yet, so there is nowhere in it to go; numen.area.add with a box, or "
+                + "numen.scan.blocks with into = \"" + area.name() + "\", fills it.";
     }
 
     /** "它离我最近的那几格":看了整块就说整块。 */

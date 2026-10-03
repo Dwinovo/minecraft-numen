@@ -44,10 +44,10 @@ class ArgTypeChoiceAndListTest {
         door().registerCommands("gt_more", "A group whose actions take the choice, tag and list types.", g -> {
             g.server("find", "Find things.", ArgTypeChoiceAndListTest::remember, IDS, RADIUS, KIND)
                     .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
-                    .example("gt_more.find(\"#minecraft:logs\", \"iron_ore\", {radius = 12.5, kind = \"hostile\"})");
+                    .example("gt.gt_more.find(\"#minecraft:logs\", \"iron_ore\", {radius = 12.5, kind = \"hostile\"})");
             g.server("pick", "Pick one.", ArgTypeChoiceAndListTest::remember, WHAT, MODE, REACH)
                     .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
-                    .example("gt_more.pick(\"#minecraft:village\", {mode = \"far\", reach = 2})");
+                    .example("gt.gt_more.pick(\"#minecraft:village\", {mode = \"far\", reach = 2})");
         });
     }
 
@@ -74,18 +74,18 @@ class ArgTypeChoiceAndListTest {
 
     @Test
     void eachTypeReadsItsValueOffTheLine() {
-        CommandArgs find = ran("gt_more find #minecraft:logs iron_ore minecraft:deepslate_iron_ore --radius 12.5 "
+        CommandArgs find = ran("gt gt_more find #minecraft:logs iron_ore minecraft:deepslate_iron_ore --radius 12.5 "
                 + "--kind passive");
         assertEquals(12.5, find.get(RADIUS));
         assertEquals("passive", find.get(KIND));
         assertEquals(List.of("#minecraft:logs", "iron_ore", "minecraft:deepslate_iron_ore"), find.get(IDS),
                 "一串值按写下的原文收下:标签带着 #,不写命名空间的也照原样");
-        assertEquals(100.0, ran("gt_more find stone --kind all --radius 100").get(RADIUS), "越界的值原样交给处理函数");
+        assertEquals(100.0, ran("gt gt_more find stone --kind all --radius 100").get(RADIUS), "越界的值原样交给处理函数");
 
-        CommandArgs pick = ran("gt_more pick minecraft:fortress");
+        CommandArgs pick = ran("gt gt_more pick minecraft:fortress");
         assertEquals("minecraft:fortress", pick.get(WHAT));
         assertNull(pick.get(MODE));
-        CommandArgs flagged = ran("gt_more pick #minecraft:village --reach 3 --mode near");
+        CommandArgs flagged = ran("gt gt_more pick #minecraft:village --reach 3 --mode near");
         assertEquals("#minecraft:village", flagged.get(WHAT));
         assertEquals("near", flagged.get(MODE));
         assertEquals(3.0, flagged.get(REACH));
@@ -93,28 +93,28 @@ class ArgTypeChoiceAndListTest {
 
     @Test
     void aBadValueSaysWhatWasExpected() {
-        assertTrue(failed("gt_more find stone --kind monsters")
-                .startsWith("expected one of hostile, passive, player, all at position 26: "));
-        assertTrue(failed("gt_more find Iron_Ore --kind all")
-                .startsWith("expected an id like minecraft:oak_log at position 13: "));
-        assertTrue(failed("gt_more find stone #")
-                .startsWith("expected an id like minecraft:oak_log at position 19: "));
-        assertTrue(failed("gt_more find stone a:b:c").startsWith("'a:b:c' is not a valid id at position 19: "));
-        assertTrue(failed("gt_more find iron_ore,gold_ore")
-                .startsWith("Expected whitespace to end one argument, but found trailing data at position 21: "));
-        assertTrue(failed("gt_more find stone --radius far").startsWith("Expected double at position 28: "));
-        assertTrue(failed("gt_more pick stone --mode middle").startsWith("expected one of near, far at position 26: "));
-        assertTrue(failed("gt_more find").contains("\nusage: gt_more.find(ids..., {radius=…, kind=…})"),
+        assertTrue(failed("gt gt_more find stone --kind monsters")
+                .startsWith("expected one of hostile, passive, player, all at position 29: "));
+        assertTrue(failed("gt gt_more find Iron_Ore --kind all")
+                .startsWith("expected an id like minecraft:oak_log at position 16: "));
+        assertTrue(failed("gt gt_more find stone #")
+                .startsWith("expected an id like minecraft:oak_log at position 22: "));
+        assertTrue(failed("gt gt_more find stone a:b:c").startsWith("'a:b:c' is not a valid id at position 22: "));
+        assertTrue(failed("gt gt_more find iron_ore,gold_ore")
+                .startsWith("Expected whitespace to end one argument, but found trailing data at position 24: "));
+        assertTrue(failed("gt gt_more find stone --radius far").startsWith("Expected double at position 31: "));
+        assertTrue(failed("gt gt_more pick stone --mode middle").startsWith("expected one of near, far at position 29: "));
+        assertTrue(failed("gt gt_more find").contains("\nusage: gt.gt_more.find(ids..., {radius=…, kind=…})"),
                 "一个都没写就附上这个动作的用法");
     }
 
     /** 脚本里的调用在服务端把 JSON 按同一个参数表读成值,和一行命令上读出来的是同一份;数组逐项按同一个读法读。 */
     @Test
     void aScriptCallReadsTheSameValuesFromJson() {
-        CommandArgs viaLine = ran("gt_more find #minecraft:logs iron_ore --radius 12.5 --kind player");
+        CommandArgs viaLine = ran("gt gt_more find #minecraft:logs iron_ore --radius 12.5 --kind player");
         assertEquals(viaLine, read("{\"radius\": 12.5, \"kind\": \"player\", \"ids\": [\"#minecraft:logs\", \"iron_ore\"]}"));
         LAST.set(null);
-        assertTrue(CliFixture.lua("gt_more.find({\"#minecraft:logs\", \"iron_ore\"}, {radius = 12.5, kind = \"player\"})")
+        assertTrue(CliFixture.lua("gt.gt_more.find({\"#minecraft:logs\", \"iron_ore\"}, {radius = 12.5, kind = \"player\"})")
                 .success());
         assertEquals(viaLine, LAST.get(), "从脚本进来,处理函数拿到的是同一份");
 
@@ -141,26 +141,26 @@ class ArgTypeChoiceAndListTest {
         assertEquals("""
                 ---Find things.
                 ---@param ids string|string[] What to find.
-                ---@param opts? gt_more.find.opts
-                function gt_more.find(ids, opts) end
+                ---@param opts? gt.gt_more.find.opts
+                function gt.gt_more.find(ids, opts) end
 
-                ---@class gt_more.find.opts
+                ---@class gt.gt_more.find.opts
                 ---@field radius? number How far. Omit to look 16 blocks around.
                 ---@field kind? "hostile"|"passive"|"player"|"all" Which kind. Omit to take every kind.
                 -- Examples:
-                --   gt_more.find("#minecraft:logs", "iron_ore", {radius = 12.5, kind = "hostile"})""",
-                CliFixture.help("gt_more.find"));
+                --   gt.gt_more.find("#minecraft:logs", "iron_ore", {radius = 12.5, kind = "hostile"})""",
+                CliFixture.help("gt.gt_more.find"));
         assertEquals("""
                 ---Pick one.
                 ---@param what string Which one.
-                ---@param opts? gt_more.pick.opts
-                function gt_more.pick(what, opts) end
+                ---@param opts? gt.gt_more.pick.opts
+                function gt.gt_more.pick(what, opts) end
 
-                ---@class gt_more.pick.opts
+                ---@class gt.gt_more.pick.opts
                 ---@field mode? "near"|"far" How to pick. Omit to pick the nearest.
                 ---@field reach? number How far to reach. Omit to reach as far as a hand does.
                 -- Examples:
-                --   gt_more.pick("#minecraft:village", {mode = "far", reach = 2})""", CliFixture.help("gt_more.pick"));
+                --   gt.gt_more.pick("#minecraft:village", {mode = "far", reach = 2})""", CliFixture.help("gt.gt_more.pick"));
     }
 
     private static CommandArgs read(String json) {
@@ -168,6 +168,6 @@ class ArgTypeChoiceAndListTest {
     }
 
     private static String serve(String json) {
-        return CliFixture.serveJson("gt_more find", json).message();
+        return CliFixture.serveJson("gt gt_more find", json).message();
     }
 }

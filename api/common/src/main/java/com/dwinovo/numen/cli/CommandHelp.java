@@ -14,7 +14,7 @@ import java.util.Map;
  * 文字都取自登记时写的说明、参数表、声明的返回类型({@link Action#doc})与模块里函数上面的注释——语法只有这一个来源,技能里不抄。
  *
  * <p>三层,越往下越全:索引(系统提示里的 {@code <api>}:共用的几种值的类声明,每组一行说明与它的函数名,再是模块一个一行)、组或模块
- * ({@code api.help("move")}:每个函数一行签名)、函数({@code api.help("move.go")}:逐个参数、返回值的字段、例子、注意、相关)。
+ * ({@code numen.api.help("numen.move")}:每个函数一行签名)、函数({@code numen.api.help("numen.move.go")}:逐个参数、返回值的字段、例子、注意、相关)。
  * 写错时附上的是那个函数的用法与例子。
  */
 final class CommandHelp {
@@ -24,7 +24,7 @@ final class CommandHelp {
      * 写法 require 的反而会漏写,所以只有这一种写法,并且明说。
      */
     static final String NO_REQUIRE = "Modules: functions written in " + ScriptEngine.IN_USE.language() + " that a "
-            + "program uses by name, like a group: `work.mine(\"ores\")`. You neither need nor can require them; "
+            + "program uses by name, like a group: `numen.work.collect()`. You neither need nor can require them; "
             + "there is no require.";
 
     /** 借了服务器权威的动作,帮助里写明的那一句。 */
@@ -40,9 +40,10 @@ final class CommandHelp {
                         Modules modules) {
         ScriptEngine engine = ScriptEngine.IN_USE;
         List<String> lines = new ArrayList<>();
-        lines.add("Call these from the " + engine.toolName() + " tool. `" + HelpCommands.call("move") + "` lists a "
-                + "group's or a module's functions with their types; `" + HelpCommands.call("move.go") + "` explains "
-                + "one in full (every argument, what it returns, examples).");
+        lines.add("Call these from the " + engine.toolName() + " tool, always written in full: namespace.group.function. `"
+                + HelpCommands.call("numen.move") + "` lists a group's or a module's functions with their types; `"
+                + HelpCommands.call("numen.move.go") + "` explains one in full (every argument, what it returns, "
+                + "examples).");
         lines.add("Values the groups share:");
         for (ScriptType.Class c : Shapes.CLASSES) {
             lines.add(engine.classText(c));
@@ -50,11 +51,8 @@ final class CommandHelp {
         lines.add("Groups:");
         java.util.Set<String> groupNames = new java.util.HashSet<>();
         for (CommandGroup group : groups) {
-            groupNames.add(group.name());
-            List<String> names = new ArrayList<>();
-            group.actions().forEach(a -> names.add(engine.functionName(a.name())));
-            names.addAll(functionsOf(engine.functionName(group.name()), library));
-            lines.add(engine.functionName(group.name()) + " — " + group.summary() + " " + String.join(", ", names));
+            groupNames.add(group.fullName());
+            lines.add(groupLine(group, library));
         }
         List<String> builtin = new ArrayList<>();
         List<String> hers = new ArrayList<>();
@@ -71,10 +69,27 @@ final class CommandHelp {
             lines.addAll(builtin);
         }
         if (!hers.isEmpty()) {
-            lines.add("Yours, under " + com.dwinovo.numen.agent.script.ScriptCatalog.ModuleSource.HERS
-                    + " (script.list() shows how the programs that used them went):");
+            lines.add("Yours (" + HelpCommands.MODULES + " shows how the programs that used them went):");
             lines.addAll(hers);
         }
+        return String.join("\n", lines);
+    }
+
+    /** 索引里一组的那一行:{@code numen.work — 说明 dig, fish, collect, mine}(和组同名的模块的函数接在动作后面)。 */
+    private static String groupLine(CommandGroup group, Map<String, NumenCli.LibraryFunction> library) {
+        ScriptEngine engine = ScriptEngine.IN_USE;
+        List<String> names = new ArrayList<>();
+        group.actions().forEach(a -> names.add(engine.functionName(a.name())));
+        names.addAll(functionsOf(engine.pathName(group.fullName()), library));
+        return engine.pathName(group.fullName()) + " — " + group.summary() + " " + String.join(", ", names);
+    }
+
+    /** 一个名字空间:它的每一组一行,和索引里同一种样子。 */
+    static String namespace(String namespace, List<CommandGroup> groups, Map<String, NumenCli.LibraryFunction> library) {
+        List<String> lines = new ArrayList<>();
+        lines.add(namespace + ": " + groups.size() + " group" + (groups.size() == 1 ? "" : "s") + ". `"
+                + HelpCommands.call(namespace + "." + groups.get(0).name()) + "` lists one with its types.");
+        groups.forEach(g -> lines.add(groupLine(g, library)));
         return String.join("\n", lines);
     }
 
@@ -101,13 +116,13 @@ final class CommandHelp {
             lines.add(engine.functionLine(a.doc()));
             named.addAll(named(a.doc()));
         }
-        String module = engine.functionName(group.name());
+        String module = engine.pathName(group.fullName());
         library.forEach((name, fn) -> {
             if (fn.module().equals(module)) {
                 lines.add(engine.libraryLine(fn.defined()));
             }
         });
-        return engine.groupText(engine.functionName(group.name()), group.summary(), lines) + classes(named);
+        return engine.groupText(module, group.summary(), lines) + classes(named);
     }
 
     /** 一个不和组同名的模块:说明,每个函数一行签名,和组同一种样子。 */
@@ -167,11 +182,11 @@ final class CommandHelp {
         }
     }
 
-    /** 模块函数的帮助:它上面的注释(带类型注解)与定义行,它在哪个模块里(全文用 {@code script.show} 看)。 */
+    /** 模块函数的帮助:它上面的注释(带类型注解)与定义行,它在哪个模块里(全文用 {@code numen.module.show} 看)。 */
     static String library(NumenCli.LibraryFunction fn) {
         ScriptEngine engine = ScriptEngine.IN_USE;
         return engine.libraryText(fn.defined()) + "\n" + engine.comment("Written in " + engine.language()
-                + " in the module " + fn.module() + ": script.show(\"" + fn.module() + "\") prints it.");
+                + " in the module " + fn.module() + ": " + HelpCommands.showModule(fn.module()) + " prints it.");
     }
 
     /** 函数,给全:签名(逐个参数带说明、返回什么)、选项与结果的字段、例子、注意、相关,再是它引用到的类。 */

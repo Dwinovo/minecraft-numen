@@ -28,7 +28,7 @@ public class NumenCoreFabric implements ModInitializer {
         // 才声明(NumenPlugins.bindClient);专用服务器上没人接,它就一直攒着。
         java.nio.file.Path skills = ModJar.find("skills");
         if (skills != null) {
-            com.dwinovo.numen.api.NumenPlugins.register(numen -> numen.bundleSkills(skills));
+            com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen -> numen.bundleSkills(skills));
         } else {
             Constants.LOG.warn("[numen-core] no bundled skills/ dir found in jar");
         }
@@ -39,7 +39,7 @@ public class NumenCoreFabric implements ModInitializer {
         if (modules == null) {
             throw new IllegalStateException("[numen-core] no bundled modules/ dir found in jar");
         }
-        com.dwinovo.numen.api.NumenPlugins.register(numen -> numen.bundleModules(modules));
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen -> numen.bundleModules(modules));
 
         // 排程机器的心跳随机器归了 numen-api;core 只 tick 自己的工具配套。
         // Advance budget-sliced block searches each tick (and sweep their shared index).

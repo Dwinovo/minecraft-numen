@@ -161,12 +161,12 @@ class BrigadierHelpTest {
         String item = CommandRunner.problem(dispatcher, "give her minecraft:dimond", her(2));
         assertEquals("""
                 error: unknown id minecraft:dimond at position 9: give her <--[HERE]
-                usage: mc.run("give <targets> <item>")
+                usage: numen.mc.run("give <targets> <item>")
                 hint: Did you mean: minecraft:diamond?""", item);
 
         assertEquals("error: there is no /gvie command on this server\nhint: Did you mean: give?",
                 CommandRunner.problem(dispatcher, "gvie her minecraft:diamond", her(2)));
-        assertEquals("error: there is no /gvie command on this server\nhint: `mc.run(\"help\")` lists the commands you can run.",
+        assertEquals("error: there is no /gvie command on this server\nhint: `numen.mc.run(\"help\")` lists the commands you can run.",
                 CommandRunner.problem(dispatcher, "gvie her minecraft:diamond", her(0)),
                 "没有 OP 时她用不了 give,就不指给她");
     }

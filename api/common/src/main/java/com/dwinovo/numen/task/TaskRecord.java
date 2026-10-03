@@ -144,7 +144,7 @@ public abstract class TaskRecord {
      */
     public enum StopCause {
         OWNER("the owner pressed Stop", ConsentDesk.Withdrawal.OWNER_STOPPED),
-        TASK_STOP("you stopped it with task.stop", ConsentDesk.Withdrawal.TASK_ENDED),
+        TASK_STOP("you stopped it with numen.task.stop", ConsentDesk.Withdrawal.TASK_ENDED),
         COMMAND("stopped by a /numen command", ConsentDesk.Withdrawal.TASK_ENDED),
         REPLACED("a newer body action replaced it", ConsentDesk.Withdrawal.TASK_ENDED),
         BODY_LEFT("the body left the world", ConsentDesk.Withdrawal.BODY_LEFT);

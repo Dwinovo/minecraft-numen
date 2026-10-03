@@ -70,7 +70,7 @@ public final class Designs {
         }
         if (!design && !file) {
             throw new IllegalArgumentException("there is no design or blueprint file named " + name
-                    + "; build.designs() lists them");
+                    + "; numen.build.designs() lists them");
         }
         return design ? Kind.DESIGN : Kind.BLUEPRINT_FILE;
     }
@@ -88,7 +88,7 @@ public final class Designs {
     public static Design load(MinecraftServer server, String name) {
         Path file = file(server, name);
         if (!Files.exists(file)) {
-            throw new IllegalArgumentException("there is no design named " + name + "; build.designs() lists them");
+            throw new IllegalArgumentException("there is no design named " + name + "; numen.build.designs() lists them");
         }
         String text;
         try {

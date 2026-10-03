@@ -54,7 +54,7 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
  * 可走的地板之间立一圈到顶的屏障,站在原来包围墙的位置——可走的地板、墙、rel 坐标都和原来一样。任意两块
  * 场地可走部分之间因此至少隔 21 格,比上面这些半径都大。改模板或加新模板时守住这一条。
  *
- * <p>更远的感知(goto 找方块扫 32 个 chunk、{@code scan.blocks} 按用例给的半径、work.collect 在工作区里捡掉落物、逃跑看 32~40 格)
+ * <p>更远的感知(goto 找方块扫 32 个 chunk、{@code numen.scan.blocks} 按用例给的半径、numen.work.collect 在工作区里捡掉落物、逃跑看 32~40 格)
  * 隔不开:这类用例靠场景用别的用例不会留下的东西(独一种方块、物品)来保证只看见自己的。
  *
  * <h2>步骤一律经 {@link #steps} 与 {@link #succeedWhen}</h2>
@@ -215,21 +215,21 @@ public final class GameTestKit {
         return n;
     }
 
-    /** {@code scan.blocks} 在半径 {@code radius} 内找 {@code blockId}(回执稍后才到)。 */
+    /** {@code numen.scan.blocks} 在半径 {@code radius} 内找 {@code blockId}(回执稍后才到)。 */
     static ToolRun scan(NumenPlayer companion, int radius, String blockId) {
-        return lua(companion, "scan.blocks(\"" + blockId + "\", {radius = " + radius + "})");
+        return lua(companion, "numen.scan.blocks(\"" + blockId + "\", {radius = " + radius + "})");
     }
 
     /**
-     * 先建一块区域,再把 {@code blockId} 扫进去({@code scan.blocks(…, {into = …})}):回执里每团的编号就是 {@code 区域/g1} 这种写法。
+     * 先建一块区域,再把 {@code blockId} 扫进去({@code numen.scan.blocks(…, {into = …})}):回执里每团的编号就是 {@code 区域/g1} 这种写法。
      * 建区域当场回;扫的回执稍后才到。
      */
     static ToolRun scanInto(NumenPlayer companion, int radius, String blockId, String area) {
-        ToolRun made = lua(companion, "area.new(\"" + area + "\")");
+        ToolRun made = lua(companion, "numen.area.new(\"" + area + "\")");
         if (!made.succeeded()) {
-            throw new IllegalStateException("area.new " + area + " failed: " + made.reply());
+            throw new IllegalStateException("numen.area.new " + area + " failed: " + made.reply());
         }
-        return lua(companion, "scan.blocks(\"" + blockId + "\", {radius = " + radius + ", into = \"" + area + "\"})");
+        return lua(companion, "numen.scan.blocks(\"" + blockId + "\", {radius = " + radius + ", into = \"" + area + "\"})");
     }
 
     /** {@link #mineScanned} 把找到的方块扫进的那块区域。 */
@@ -237,7 +237,7 @@ public final class GameTestKit {
 
     /**
      * 照模型挖矿的写法走一遍:建区域 {@link #MINED_AREA}、在半径 {@code radius} 内把 {@code blockId} 扫进去
-     * ({@code scan.blocks(…, {into = …})}),扫的回执一到就{@linkplain #mine 挖这块区域}挖够 {@code count} 格。扫描被拒或失败时不挖,
+     * ({@code numen.scan.blocks(…, {into = …})}),扫的回执一到就{@linkplain #mine 挖这块区域}挖够 {@code count} 格。扫描被拒或失败时不挖,
      * 这次挖矿的结论就是扫描的回执。
      */
     static Mining mineScanned(GameTestHelper helper, NumenPlayer companion, int radius, String blockId, int count) {
@@ -245,8 +245,8 @@ public final class GameTestKit {
     }
 
     /**
-     * 挖一块区域,用原子调用一轮轮组合,和模型自己写的一样:{@code move.goto_(区域, {arrive = "dig", alter = "natural"})} 走到
-     * 一次够得着最多格的地方,{@code work.dig(区域, {count = 还差几格})} 挖手够得着的,{@code work.collect({alter = "natural"})}
+     * 挖一块区域,用原子调用一轮轮组合,和模型自己写的一样:{@code numen.move.goto_(区域, {arrive = "dig", alter = "natural"})} 走到
+     * 一次够得着最多格的地方,{@code numen.work.dig(区域, {count = 还差几格})} 挖手够得着的,{@code numen.work.collect({alter = "natural"})}
      * 捡掉落;还差、而且挖的回执说还有够不着的格,就再来一轮。每一步是一段一行的程序;挖了几格读那件活的收尾数据,脚本里拿不到它。
      * {@code before} 有了结论才开始,它失败就不挖。
      *
@@ -307,7 +307,7 @@ public final class GameTestKit {
         private void tick() {
             if (step == Step.SETTLE) {
                 if (dropsSettled() || ++settling >= SETTLE_TICKS) {
-                    run(Step.COLLECT, "work.collect({alter = \"natural\"})");
+                    run(Step.COLLECT, "numen.work.collect({alter = \"natural\"})");
                 }
                 return;
             }
@@ -322,7 +322,7 @@ public final class GameTestKit {
                     } else if (step == Step.BEFORE) {
                         walk();
                     } else {
-                        run(Step.DIG, "work.dig(\"" + area + "\"" + (count > 0 ? ", {count = " + (count - dug) + "}" : "")
+                        run(Step.DIG, "numen.work.dig(\"" + area + "\"" + (count > 0 ? ", {count = " + (count - dug) + "}" : "")
                                 + ")");
                     }
                 }
@@ -351,7 +351,7 @@ public final class GameTestKit {
             }
         }
 
-        /** 捡的库函数看得见的掉落物都落定了(着地或在水里):半径同 {@code work.collect} 的默认 8 格。 */
+        /** 捡的库函数看得见的掉落物都落定了(着地或在水里):半径同 {@code numen.work.collect} 的默认 8 格。 */
         private boolean dropsSettled() {
             return companion.level().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
                             companion.getBoundingBox().inflate(8))
@@ -364,10 +364,10 @@ public final class GameTestKit {
         }
 
         private void walk() {
-            run(Step.GOTO, "move.goto_(\"" + area + "\", {arrive = \"dig\", alter = \"natural\"})");
+            run(Step.GOTO, "numen.move.goto_(\"" + area + "\", {arrive = \"dig\", alter = \"natural\"})");
         }
 
-        /** 各次 {@code work.dig} 一共挖掉的格。 */
+        /** 各次 {@code numen.work.dig} 一共挖掉的格。 */
         int dug() {
             return dug;
         }
@@ -397,7 +397,7 @@ public final class GameTestKit {
         }
     }
 
-    /** 回执数据里的团或部分:{@code scan.blocks} 的 {@code groups}、{@code area.show} 的 {@code parts}。 */
+    /** 回执数据里的团或部分:{@code numen.scan.blocks} 的 {@code groups}、{@code numen.area.show} 的 {@code parts}。 */
     static com.google.gson.JsonArray groupsIn(String reply) {
         com.google.gson.JsonObject data = dataIn(reply);
         return data.has("groups") ? data.getAsJsonArray("groups") : data.getAsJsonArray("parts");
@@ -426,9 +426,9 @@ public final class GameTestKit {
         return null;
     }
 
-    /** {@code use.block} 对着 {@code rel} 那一格按一下,同步调用。 */
+    /** {@code numen.use.block} 对着 {@code rel} 那一格按一下,同步调用。 */
     static TaskRecord click(GameTestHelper helper, NumenPlayer companion, String button, BlockPos rel) {
-        return lua(companion, "use.block(" + at(helper, rel) + ("left".equals(button) ? ", {left = true}" : "") + ")")
+        return lua(companion, "numen.use.block(" + at(helper, rel) + ("left".equals(button) ? ", {left = true}" : "") + ")")
                 .task();
     }
 
@@ -797,7 +797,7 @@ public final class GameTestKit {
      * 一张按输出预算分页的清单,从第一页往后翻,直到哪一页里有 {@code needle}:清单跨次攒下来,要找的那条落在第几页由
      * 前面有多少条定。翻到最后一页也没有、或者哪一页失败了,返回那一页,由用例的断言说明白。
      *
-     * @param function 不带别的参数的那个函数,如 {@code build.built}
+     * @param function 不带别的参数的那个函数,如 {@code numen.build.built}
      */
     static ToolRun pageWith(NumenPlayer body, String function, String needle) {
         for (int page = 1; ; page++) {
@@ -919,7 +919,7 @@ public final class GameTestKit {
         }
 
         /**
-         * 有结论了:整段程序跑完了。只看最后一次调用的回执不行:一段几次调用的程序(库函数 move.goto_ 是三次)头一次回了执,
+         * 有结论了:整段程序跑完了。只看最后一次调用的回执不行:一段几次调用的程序(库函数 numen.move.goto_ 是三次)头一次回了执,
          * 后面的还没派。
          */
         boolean done() {

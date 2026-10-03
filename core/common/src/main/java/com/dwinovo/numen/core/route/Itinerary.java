@@ -30,7 +30,7 @@ public record Itinerary(String name, ResourceLocation dimension, List<Leg> legs,
 
     /** 命令组的名字:路线的写法都是这一组的命令。 */
     public static final String GROUP = "route";
-    /** 走过的记录留几条:{@code move.goto_} 每次都走她那条匿名路线,记录不能无限长;几条足够看出这条路最近走不走得通。 */
+    /** 走过的记录留几条:{@code numen.move.goto_} 每次都走她那条匿名路线,记录不能无限长;几条足够看出这条路最近走不走得通。 */
     static final int WALKS_KEPT = 8;
 
     /**
@@ -86,7 +86,7 @@ public record Itinerary(String name, ResourceLocation dimension, List<Leg> legs,
     }
 
     /**
-     * 她自己的那条匿名路线叫什么:{@code move.goto_} 每次都把这一趟写成它再走,每个同伴一条、名字固定({@code goto-aria}),
+     * 她自己的那条匿名路线叫什么:{@code numen.move.goto_} 每次都把这一趟写成它再走,每个同伴一条、名字固定({@code goto-aria}),
      * 失败回执里改它的下一步照抄这个名字。同伴的名字是玩家名的字符(字母、数字、下划线),小写后合名字的规矩({@link Names})。
      */
     public static String gotoOf(String companionName) {
@@ -119,7 +119,7 @@ public record Itinerary(String name, ResourceLocation dimension, List<Leg> legs,
         checkStop(n, legs.size());
         if (n == legs.size()) {
             throw new IllegalArgumentException("stop " + n + " is the destination of " + name + ", not a waypoint; "
-                    + "route.delete(\"" + name + "\") removes the whole route");
+                    + "numen.route.delete(\"" + name + "\") removes the whole route");
         }
         List<Leg> next = new ArrayList<>(legs);
         next.remove(n - 1);
@@ -163,7 +163,7 @@ public record Itinerary(String name, ResourceLocation dimension, List<Leg> legs,
     public Itinerary reversed(String as) {
         if (plan == null) {
             throw new IllegalArgumentException("route " + name + " has no plan, so where it starts is not known: a route"
-                    + " starts wherever it was last planned from. Run `route.plan(\"" + name + "\")` where it should "
+                    + " starts wherever it was last planned from. Run `numen.route.plan(\"" + name + "\")` where it should "
                     + "start, then reverse it");
         }
         int n = legs.size();

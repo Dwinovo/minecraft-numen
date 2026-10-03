@@ -141,10 +141,10 @@ public final class CommandArgs {
      * 的样子({@link ArgType#plain})。回执、征询与提示里点名一次调用都这样写,她照抄就是一次能跑的调用;脚本这个前端读回来是同一份
      * 参数。{@code params} 里没列的参数不写。
      *
-     * @param path 这次调用的动作路径,如 {@code area delete}
+     * @param path 这次调用的动作路径,如 {@code numen work dig}
      */
     public String call(String path, List<Param<?>> params) {
-        String[] words = path.split(" ", 2);
+        String[] words = path.split(" ");
         List<Object> objects = new java.util.ArrayList<>();
         Map<String, Object> options = new LinkedHashMap<>();
         for (Param<?> p : params) {
@@ -161,7 +161,8 @@ public final class CommandArgs {
             }
         }
         return com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.call(
-                com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.function(words[0], words[1]), objects, options);
+                com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.function(words[0] + "." + words[1], words[2]), objects,
+                options);
     }
 
     /** 这些参数里写了值的选项写成脚本里的一张选项表:{@code {alter = "natural"}};一个都没写是 {@code {}}。 */

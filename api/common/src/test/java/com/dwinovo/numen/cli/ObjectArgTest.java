@@ -40,13 +40,13 @@ class ObjectArgTest {
         door().registerCommands("gt_obj", "A group whose actions take the object types.", g -> {
             g.server("look", "Look at a cell.", ObjectArgTest::remember, CELL)
                     .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
-                    .example("gt_obj.look({x = 1, y = 2, z = 3})");
+                    .example("gt.gt_obj.look({x = 1, y = 2, z = 3})");
             g.server("dig", "Dig places.", ObjectArgTest::remember, PLACES, TO)
                     .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
-                    .example("gt_obj.dig(\"ores\", {x = 1, y = 2, z = 3})");
+                    .example("gt.gt_obj.dig(\"ores\", {x = 1, y = 2, z = 3})");
             g.server("hit", "Hit someone, or everyone.", ObjectArgTest::remember, WHO, TIMES)
                     .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
-                    .example("gt_obj.hit(27, 26)").example("gt_obj.hit()");
+                    .example("gt.gt_obj.hit(27, 26)").example("gt.gt_obj.hit()");
         });
     }
 
@@ -72,23 +72,23 @@ class ObjectArgTest {
 
     @Test
     void aCellIsThreeNumbersOrOneWordWithCommas() {
-        assertEquals(new BlockPos(120, 64, -35), ran("gt_obj look 120 64 -35").get(CELL));
-        assertEquals(new BlockPos(120, 64, -35), ran("gt_obj look 120,64,-35").get(CELL));
-        assertTrue(failed("gt_obj look 120 64").startsWith("error: expected a cell: three whole numbers x y z"));
-        assertTrue(failed("gt_obj look 120.5 64 -35").startsWith("error: expected a cell"));
-        assertTrue(failed("gt_obj look 1,2 3").startsWith("error: expected a cell"), "一种写法里不混着两种分隔");
+        assertEquals(new BlockPos(120, 64, -35), ran("gt gt_obj look 120 64 -35").get(CELL));
+        assertEquals(new BlockPos(120, 64, -35), ran("gt gt_obj look 120,64,-35").get(CELL));
+        assertTrue(failed("gt gt_obj look 120 64").startsWith("error: expected a cell: three whole numbers x y z"));
+        assertTrue(failed("gt gt_obj look 120.5 64 -35").startsWith("error: expected a cell"));
+        assertTrue(failed("gt gt_obj look 1,2 3").startsWith("error: expected a cell"), "一种写法里不混着两种分隔");
     }
 
     @Test
     void aPlaceIsOneToThreeNumbersOrAnArea() {
-        List<Place> places = ran("gt_obj dig ores/g3 120 64 -35 1 2 3 7,8,9 farm").get(PLACES);
+        List<Place> places = ran("gt gt_obj dig ores/g3 120 64 -35 1 2 3 7,8,9 farm").get(PLACES);
         assertEquals(List.of(Place.area(AreaRef.parse("ores/g3")), Place.cell(new BlockPos(120, 64, -35)),
                 Place.cell(new BlockPos(1, 2, 3)), Place.cell(new BlockPos(7, 8, 9)), Place.area(AreaRef.parse("farm"))),
                 places, "连着的数三个一组是一格");
-        assertEquals(List.of(new Place(120, null, -35, null)), ran("gt_obj dig 120 -35").get(PLACES), "两个数是一列");
-        assertEquals(List.of(new Place(null, 16, null, null)), ran("gt_obj dig 16").get(PLACES), "一个数是一个高度");
-        assertEquals(Place.cell(new BlockPos(1, 2, 3)), ran("gt_obj dig ores --to 1 2 3").get(TO), "标志的值也照同一种读");
-        assertTrue(failed("gt_obj dig Ores").startsWith("error: area names are lowercase letters"));
+        assertEquals(List.of(new Place(120, null, -35, null)), ran("gt gt_obj dig 120 -35").get(PLACES), "两个数是一列");
+        assertEquals(List.of(new Place(null, 16, null, null)), ran("gt gt_obj dig 16").get(PLACES), "一个数是一个高度");
+        assertEquals(Place.cell(new BlockPos(1, 2, 3)), ran("gt gt_obj dig ores --to 1 2 3").get(TO), "标志的值也照同一种读");
+        assertTrue(failed("gt gt_obj dig Ores").startsWith("error: area names are lowercase letters"));
     }
 
     /** 查询交出的位置(实体、掉落物的小数位置)原样交回来,读成的就是它所在的那一格:留两位时往下舍,不会入到上面一格。 */
@@ -98,79 +98,79 @@ class ObjectArgTest {
         assertEquals(-72.01, pos.get("y").getAsDouble(), 1e-9);
         String literal = com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.value(
                 com.dwinovo.numen.agent.script.JsonValues.toJava(pos));
-        assertEquals(new BlockPos(0, -73, 0), luaRan("gt_obj.look(" + literal + ")").get(CELL));
+        assertEquals(new BlockPos(0, -73, 0), luaRan("gt.gt_obj.look(" + literal + ")").get(CELL));
     }
 
     /** 脚本里一格只有带键的表一种写法;带 pos 的表(查到的方块、实体)原样就是那一格,和一行命令上读出来的是同一份。 */
     @Test
     void aScriptCallReadsPositionsAsKeyedTablesOrAnythingWithAPos() {
-        CommandArgs viaLine = ran("gt_obj dig 120 64 -35 ores");
+        CommandArgs viaLine = ran("gt gt_obj dig 120 64 -35 ores");
         List<Param<?>> params = List.of(PLACES, TO);
         assertEquals(viaLine, CommandArgs.fromJson(params, JsonParser.parseString(
                 "{\"place\": [{\"x\": 120, \"y\": 64, \"z\": -35}, \"ores\"]}").getAsJsonObject()));
-        for (String code : List.of("gt_obj.dig({x = 120, y = 64, z = -35}, \"ores\")",
-                "gt_obj.dig({{x = 120, y = 64, z = -35}, \"ores\"})",
-                "gt_obj.dig({name = \"iron_ore\", pos = {x = 120, y = 64, z = -35}}, \"ores\")",
-                "local b = {pos = {x = 120.9, y = 64.5, z = -34.1}}\ngt_obj.dig(b, \"ores\")")) {
+        for (String code : List.of("gt.gt_obj.dig({x = 120, y = 64, z = -35}, \"ores\")",
+                "gt.gt_obj.dig({{x = 120, y = 64, z = -35}, \"ores\"})",
+                "gt.gt_obj.dig({name = \"iron_ore\", pos = {x = 120, y = 64, z = -35}}, \"ores\")",
+                "local b = {pos = {x = 120.9, y = 64.5, z = -34.1}}\ngt.gt_obj.dig(b, \"ores\")")) {
             assertEquals(viaLine, luaRan(code), code);
         }
-        assertEquals(new BlockPos(120, 64, -35), luaRan("gt_obj.look({x = 120.7, y = 64.0, z = -34.2})").get(CELL),
+        assertEquals(new BlockPos(120, 64, -35), luaRan("gt.gt_obj.look({x = 120.7, y = 64.0, z = -34.2})").get(CELL),
                 "小数是它所在的那一格:向下取整,和 Minecraft 的 BlockPos.containing 一样");
-        assertEquals(new BlockPos(1, 2, 3), luaRan("gt_obj.look({pos = {x = 1, y = 2, z = 3}, id = 7})").get(CELL),
+        assertEquals(new BlockPos(1, 2, 3), luaRan("gt.gt_obj.look({pos = {x = 1, y = 2, z = 3}, id = 7})").get(CELL),
                 "带 pos 的表(实体、掉落物)原样就是它所在的那一格");
-        assertEquals(List.of(new Place(120, null, -35, null)), luaRan("gt_obj.dig({x = 120, z = -35})").get(PLACES),
+        assertEquals(List.of(new Place(120, null, -35, null)), luaRan("gt.gt_obj.dig({x = 120, z = -35})").get(PLACES),
                 "只有 x、z 的表是一列");
-        assertEquals(List.of(new Place(null, 16, null, null)), luaRan("gt_obj.dig({y = 16})").get(PLACES),
+        assertEquals(List.of(new Place(null, 16, null, null)), luaRan("gt.gt_obj.dig({y = 16})").get(PLACES),
                 "只有 y 的表是一个高度");
         assertEquals(List.of(EntityRef.id(27), EntityRef.id(26)),
-                luaRan("gt_obj.hit({id = 27, type = \"minecraft:zombie\", pos = {x = 1, y = 2, z = 3}}, 26)").get(WHO),
+                luaRan("gt.gt_obj.hit({id = 27, type = \"minecraft:zombie\", pos = {x = 1, y = 2, z = 3}}, 26)").get(WHO),
                 "实体是编号,或带 id 的那张表");
     }
 
     /** 旧的写法都拒绝,种类是 bad_argument,说出是哪个参数、要什么、给了什么,hint 是照新写法改好的那一行。 */
     @Test
     void theOldShapesAreRefusedWithTheLineRewritten() {
-        CliFixture.Outcome list = CliFixture.lua("local ok, err = pcall(gt_obj.look, {120, 64, -35})\n"
+        CliFixture.Outcome list = CliFixture.lua("local ok, err = pcall(gt.gt_obj.look, {120, 64, -35})\n"
                 + "print(err.kind)\nprint(err.message)\nprint(err.hint)");
         String printed = list.message().substring(list.message().indexOf("printed:\n") + "printed:\n".length());
         assertEquals("""
                 bad_argument
                 argument 'cell': a cell is a Pos with named fields; got {120, 64, -35}
-                usage: gt_obj.look(cell)
-                  e.g. gt_obj.look({x = 1, y = 2, z = 3})
-                gt_obj.look({x = 120, y = 64, z = -35})""", printed);
+                usage: gt.gt_obj.look(cell)
+                  e.g. gt.gt_obj.look({x = 1, y = 2, z = 3})
+                gt.gt_obj.look({x = 120, y = 64, z = -35})""", printed);
 
-        CliFixture.Outcome text = CliFixture.lua("gt_obj.look(\"120 64 -35\")");
+        CliFixture.Outcome text = CliFixture.lua("gt.gt_obj.look(\"120 64 -35\")");
         assertFalse(text.success());
-        assertTrue(text.message().contains("hint: gt_obj.look({x = 120, y = 64, z = -35})"), text.message());
+        assertTrue(text.message().contains("hint: gt.gt_obj.look({x = 120, y = 64, z = -35})"), text.message());
 
-        CliFixture.Outcome height = CliFixture.lua("gt_obj.dig(16)");
+        CliFixture.Outcome height = CliFixture.lua("gt.gt_obj.dig(16)");
         assertFalse(height.success());
         assertTrue(height.message().contains("argument 'place': a place given by coordinates is a table with named "
                 + "fields; got 16"), height.message());
-        assertTrue(height.message().contains("hint: gt_obj.dig({y = 16})"), height.message());
+        assertTrue(height.message().contains("hint: gt.gt_obj.dig({y = 16})"), height.message());
 
-        CliFixture.Outcome listed = CliFixture.lua("gt_obj.dig({120, 64, -35})");
+        CliFixture.Outcome listed = CliFixture.lua("gt.gt_obj.dig({120, 64, -35})");
         assertFalse(listed.success());
-        assertTrue(listed.message().contains("hint: gt_obj.dig({x = 120, y = 64, z = -35})"),
+        assertTrue(listed.message().contains("hint: gt.gt_obj.dig({x = 120, y = 64, z = -35})"),
                 "三个数的列表交给一串值的参数,是写成旧样子的一处,不是三处: " + listed.message());
 
-        CliFixture.Outcome among = CliFixture.lua("gt_obj.dig(\"ores\", \"120 64 -35\")");
+        CliFixture.Outcome among = CliFixture.lua("gt.gt_obj.dig(\"ores\", \"120 64 -35\")");
         assertFalse(among.success());
         assertTrue(among.message().contains("hint: write each of place like {x = 120, y = 64, z = -35}."),
                 among.message());
 
-        CliFixture.Outcome spread = CliFixture.lua("gt_obj.look(120, 64, -35)");
+        CliFixture.Outcome spread = CliFixture.lua("gt.gt_obj.look(120, 64, -35)");
         assertTrue(spread.message().contains("takes 1 object(s), got 3"), spread.message());
 
-        CliFixture.Outcome nil = CliFixture.lua("gt_obj.look(nil)");
+        CliFixture.Outcome nil = CliFixture.lua("gt.gt_obj.look(nil)");
         assertTrue(nil.message().contains("argument 'cell' is missing (or nil)"), nil.message());
 
-        CliFixture.Outcome id = CliFixture.lua("gt_obj.hit(\"27\")");
+        CliFixture.Outcome id = CliFixture.lua("gt.gt_obj.hit(\"27\")");
         assertTrue(id.message().contains("argument 'entity': an entity id is a number; got \"27\""), id.message());
-        assertTrue(id.message().contains("hint: gt_obj.hit(27)"), id.message());
+        assertTrue(id.message().contains("hint: gt.gt_obj.hit(27)"), id.message());
 
-        CliFixture.Outcome column = CliFixture.lua("gt_obj.look({x = 1, z = 3})");
+        CliFixture.Outcome column = CliFixture.lua("gt.gt_obj.look({x = 1, z = 3})");
         assertTrue(column.message().contains("argument 'cell': expected a Pos {x = …, y = …, z = …} or anything with "
                 + "a pos (a Block, an Entity, an Item); got {x = 1, z = 3}, which has no y"), column.message());
     }
@@ -184,14 +184,14 @@ class ObjectArgTest {
 
     @Test
     void anOptionalPositionalReadsWrittenOrNot() {
-        assertEquals(List.of(EntityRef.id(27), EntityRef.id(26)), ran("gt_obj hit 27 26").get(WHO));
-        assertNull(ran("gt_obj hit").get(WHO));
-        CommandArgs flagged = ran("gt_obj hit --times 2");
+        assertEquals(List.of(EntityRef.id(27), EntityRef.id(26)), ran("gt gt_obj hit 27 26").get(WHO));
+        assertNull(ran("gt gt_obj hit").get(WHO));
+        CommandArgs flagged = ran("gt gt_obj hit --times 2");
         assertNull(flagged.get(WHO));
         assertEquals(2, flagged.get(TIMES));
-        assertEquals(List.of(EntityRef.id(5)), ran("gt_obj hit 5 --times 3").get(WHO));
-        assertEquals("gt_obj hit 5 --times 3", ran("gt_obj hit 5 --times 3").write("gt_obj hit", List.of(WHO, TIMES)));
-        assertEquals("gt_obj hit", ran("gt_obj hit").write("gt_obj hit", List.of(WHO, TIMES)));
-        assertTrue(failed("gt_obj hit fox").startsWith("error: expected an entity id as scan.entities lists it"));
+        assertEquals(List.of(EntityRef.id(5)), ran("gt gt_obj hit 5 --times 3").get(WHO));
+        assertEquals("gt gt_obj hit 5 --times 3", ran("gt gt_obj hit 5 --times 3").write("gt gt_obj hit", List.of(WHO, TIMES)));
+        assertEquals("gt gt_obj hit", ran("gt gt_obj hit").write("gt gt_obj hit", List.of(WHO, TIMES)));
+        assertTrue(failed("gt gt_obj hit fox").startsWith("error: expected an entity id as numen.scan.entities lists it"));
     }
 }

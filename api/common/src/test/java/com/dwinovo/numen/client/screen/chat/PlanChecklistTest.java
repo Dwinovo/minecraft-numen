@@ -47,7 +47,7 @@ class PlanChecklistTest {
 
     @Test
     void readsItemsInOrderWithTheirStates() {
-        List<Item> items = PlanChecklist.of(receipt(echo("todo.write", PLAN)));
+        List<Item> items = PlanChecklist.of(receipt(echo("numen.todo.write", PLAN)));
         assertEquals(List.of(
                 new Item("砍树", Status.COMPLETED),
                 new Item("做工作台", Status.IN_PROGRESS),
@@ -58,8 +58,8 @@ class PlanChecklistTest {
 
     @Test
     void theLastPlanOfARunIsTheOneShown() {
-        List<Item> items = PlanChecklist.of(receipt(echo("todo.write", PLAN),
-                echo("todo.write", List.of("[x] 砍树", "[x] 做工作台", "[>] 做木镐", "[-] 找铁"))));
+        List<Item> items = PlanChecklist.of(receipt(echo("numen.todo.write", PLAN),
+                echo("numen.todo.write", List.of("[x] 砍树", "[x] 做工作台", "[>] 做木镐", "[-] 找铁"))));
         assertEquals(2, PlanChecklist.done(items));
     }
 
@@ -75,16 +75,16 @@ class PlanChecklistTest {
         assertNull(PlanChecklist.of("not json"));
         assertNull(PlanChecklist.of("[]"));
         assertNull(PlanChecklist.of("{}"));
-        assertNull(PlanChecklist.of(receipt(echo("todo.write", List.of()))));
-        assertNull(PlanChecklist.of(receipt(echo("todo.write", List.of("[ ]  ")))));
-        assertNull(PlanChecklist.of(receipt(echo("todo.write", List.of("[done] a")))));
-        assertNull(PlanChecklist.of(receipt(echo("todo.write", List.of("a")))));
+        assertNull(PlanChecklist.of(receipt(echo("numen.todo.write", List.of()))));
+        assertNull(PlanChecklist.of(receipt(echo("numen.todo.write", List.of("[ ]  ")))));
+        assertNull(PlanChecklist.of(receipt(echo("numen.todo.write", List.of("[done] a")))));
+        assertNull(PlanChecklist.of(receipt(echo("numen.todo.write", List.of("a")))));
     }
 
     @Test
     void samePlanIsSameContentsRegardlessOfState() {
-        List<Item> before = PlanChecklist.of(receipt(echo("todo.write", PLAN)));
-        List<Item> after = PlanChecklist.of(receipt(echo("todo.write",
+        List<Item> before = PlanChecklist.of(receipt(echo("numen.todo.write", PLAN)));
+        List<Item> after = PlanChecklist.of(receipt(echo("numen.todo.write",
                 List.of("[x] 砍树", "[x] 做工作台", "[>] 做木镐", "[-] 找铁"))));
         assertTrue(PlanChecklist.sameItems(before, after));
         assertEquals(2, PlanChecklist.done(after));
@@ -92,8 +92,8 @@ class PlanChecklistTest {
 
     @Test
     void changedOrAddedItemsMakeANewPlan() {
-        List<Item> before = PlanChecklist.of(receipt(echo("todo.write", PLAN)));
-        assertFalse(PlanChecklist.sameItems(before, PlanChecklist.of(receipt(echo("todo.write",
+        List<Item> before = PlanChecklist.of(receipt(echo("numen.todo.write", PLAN)));
+        assertFalse(PlanChecklist.sameItems(before, PlanChecklist.of(receipt(echo("numen.todo.write",
                 List.of("[x] 砍树", "[>] 做工作台", "[ ] 做石镐", "[-] 找铁"))))));
         assertFalse(PlanChecklist.sameItems(before, before.subList(0, 3)));
     }

@@ -40,8 +40,8 @@ import java.util.function.Consumer;
  *
  * <h2>一份登记,两个前端</h2>
  * 动作组的声明是进程级的静态表,由各模组的公共初始化代码登记——客户端进程与服务端进程各跑一遍同一份登记。她只经一个前端用它:
- * 脚本(跑脚本的那个工具)里的每个 API 函数 {@code 组.动作(...)} 就是一个动作。人(OP 的 {@code /numen drive}、重启后的重放、
- * 设计文件里的一步)经另一个前端写一行命令 {@code 组 动作 对象... --选项 值},在服务端那棵 Brigadier 树上读。两个前端读的是同一张
+ * 脚本(跑脚本的那个工具)里的每个 API 函数 {@code 名字空间.组.动作(...)} 就是一个动作。人(OP 的 {@code /numen drive}、重启后的
+ * 重放)经另一个前端写一行命令 {@code 名字空间 组 动作 对象... --选项 值},在服务端那棵 Brigadier 树上读。两个前端读的是同一张
  * 参数表、同一种参数类型({@link ArgType}),帮助与报错也只有一份({@link CommandHelp}),写成脚本里的样子。
  *
  * <h2>脚本里的一次调用怎么走</h2>
@@ -58,7 +58,7 @@ public final class NumenCli {
     static final String HELP_FLAG = "--help";
     static final String HELP = "help";
 
-    /** 按名字排序:帮助与系统提示索引的顺序不随插件的加载先后变,字节稳定。 */
+    /** 组的全名({@code numen.work})→ 组,按名字排序:帮助与系统提示索引的顺序不随插件的加载先后变,字节稳定。 */
     private static final Map<String, CommandGroup> GROUPS = new TreeMap<>();
 
     /** 服务端的那一棵:人写的一行命令在这里读、执行服务端动作。 */
@@ -97,36 +97,55 @@ public final class NumenCli {
     private NumenCli() {}
 
     /**
-     * 登记一个动作组。{@code NumenApi.registerCommands} 背后就是它;插件经那扇门来,不直接调。
+     * 名字空间的名字合不合规矩:小写字母开头,只含 [a-z0-9_],脚本里写得出来(不是关键字、不撞语言与引擎的全局),不叫 {@code help}。
      *
-     * <p>组名谁先登记归谁,撞了当场抛出——插件只在自己的组里加动作,碰不到别人的(见 {@link CommandGroup})。
-     * 登记块跑完后:查过每个动作的例子(见 {@link CommandGroup#close}),组挂上树。各组已经到齐、查过相关动作之后才来的组,它的
-     * 相关动作也在这时查(见 {@link #inUse()})。
+     * @throws IllegalArgumentException 不合规矩
      */
     @Internal
-    public static synchronized void register(String name, String summary, Consumer<CommandGroup> actions) {
+    public static void checkNamespace(String namespace) {
+        if (namespace == null || !Action.NAME.matcher(namespace).matches() || HELP.equals(namespace)) {
+            throw new IllegalArgumentException("名字空间不合规(小写字母开头,只含 [a-z0-9_],不叫 help): '" + namespace + "'");
+        }
+        String problem = ScriptEngine.IN_USE.moduleName(namespace + ".x");
+        if (problem != null) {
+            throw new IllegalArgumentException("名字空间 " + namespace + " 不行: " + problem);
+        }
+    }
+
+    /**
+     * 登记一个动作组。{@code NumenApi.registerCommands} 背后就是它;插件经那扇门来,不直接调。
+     *
+     * <p>名字空间由登记者给出(插件登记时写的 id,引擎自己的是 {@code numen});组名在名字空间里谁先登记归谁,撞了当场抛出——插件只在自己
+     * 的组里加动作,碰不到别人的(见 {@link CommandGroup})。登记块跑完后:查过每个动作的例子(见 {@link CommandGroup#close}),组挂上树。
+     * 各组已经到齐、查过相关动作之后才来的组,它的相关动作也在这时查(见 {@link #inUse()})。
+     */
+    @Internal
+    public static synchronized void register(String namespace, String name, String summary,
+                                             Consumer<CommandGroup> actions) {
+        checkNamespace(namespace);
         if (name == null || !Action.NAME.matcher(name).matches()) {
             throw new IllegalArgumentException("动作组名不合规(小写字母开头,只含 [a-z0-9_]): '" + name + "'");
         }
-        if (HELP.equals(name) || GROUPS.containsKey(name)) {
-            throw new IllegalArgumentException("动作组 " + name
+        String full = namespace + "." + name;
+        if (GROUPS.containsKey(full)) {
+            throw new IllegalArgumentException("动作组 " + full
                     + " 已经有主了——每个插件只在自己的组里加动作,不往别人的组下挂");
         }
         if (summary == null || summary.isBlank()) {
-            throw new IllegalArgumentException("动作组 " + name + " 没写一句话说明");
+            throw new IllegalArgumentException("动作组 " + full + " 没写一句话说明");
         }
-        CommandGroup group = new CommandGroup(name, summary);
+        CommandGroup group = new CommandGroup(namespace, name, summary);
         actions.accept(group);
         group.close();
         if (group.actions().isEmpty()) {
-            throw new IllegalArgumentException("动作组 " + name + " 一个动作都没有");
+            throw new IllegalArgumentException("动作组 " + full + " 一个动作都没有");
         }
         if (inUse) {
             Map<String, CommandGroup> known = new TreeMap<>(GROUPS);
-            known.put(name, group);
+            known.put(full, group);
             checkSeeAlso(List.of(group), known);
         }
-        GROUPS.put(name, group);
+        GROUPS.put(full, group);
         SERVER.add(group);
         READ.add(group);
     }
@@ -168,7 +187,8 @@ public final class NumenCli {
         if (problem != null) {
             throw new IllegalArgumentException(problem);
         }
-        Action action = path.size() == 2 ? GROUPS.get(path.get(0)).action(path.get(1)) : null;
+        CommandGroup named = path.size() == 3 ? GROUPS.get(path.get(0) + "." + path.get(1)) : null;
+        Action action = named == null ? null : named.action(path.get(2));
         CommandArgs args = null;
         if (action != null) {
             CommandContext<?> ctx = parse.getContext().build(line);
@@ -180,14 +200,14 @@ public final class NumenCli {
     /**
      * 一行命令读成什么,不执行。
      *
-     * @param path     走过的字面节点,空格隔开:{@code build layer}、{@code build --help}、{@code help}、{@code build}
+     * @param path     走过的字面节点,空格隔开:{@code numen work dig}、{@code numen work --help}、{@code help}、{@code numen work}
      * @param runnable 走到了可执行的一格(一个动作或一个帮助);否则这一行只点到一组或一个动作的名字
      * @param args     走到一个动作时读好的参数,和执行时处理函数拿到的是同一份;帮助与只提到名字的是 null
      */
     public record Reading(String path, boolean runnable, CommandArgs args) {}
 
     /**
-     * 脚本里能调的:每个登记了的动作一个 {@code 组.动作},带上它声明的返回项({@link Action#returns}),加上模块。由登记表现算,
+     * 脚本里能调的:每个登记了的动作一个 {@code 名字空间.组.动作},带上它声明的返回项({@link Action#returns}),加上模块。由登记表现算,
      * 不另记一份。
      *
      * @param modules 模块从哪来:她的那一份({@link Modules#of}),或只读随模组发布的文字时只有内置那一层({@link Modules#builtin})
@@ -204,7 +224,7 @@ public final class NumenCli {
             for (Action action : group.actions()) {
                 verbs.put(action.name(), action.verb());
             }
-            groups.put(group.name(), verbs);
+            groups.put(group.fullName(), verbs);
         }
         return new ScriptCatalog(groups, modules);
     }
@@ -223,7 +243,7 @@ public final class NumenCli {
         Action action = group == null ? null : group.action(call.verb());
         if (action == null) {
             throw new ApiError(ErrorKind.NO_FUNCTION, "there is no API function " + call.function(),
-                    "the <api> index lists every group; api.help(\"" + call.group() + "\") lists one.");
+                    "the <api> index lists every group; " + HelpCommands.call(call.group()) + " lists one.");
         }
         JsonObject json;
         try {
@@ -233,7 +253,7 @@ public final class NumenCli {
             throw new ApiError(ErrorKind.BAD_ARGUMENT, wrong.getMessage() + "\nusage: " + CommandHelp.usage(action),
                     corrected(action, call, wrong));
         }
-        return new Invocation(group.name(), action.name(), action.function(), json);
+        return new Invocation(group.fullName(), action.name(), action.function(), json);
     }
 
     /**
@@ -267,7 +287,7 @@ public final class NumenCli {
     /**
      * 脚本里的对象与选项写成参数名到值的 JSON——脚本这个前端的换法只在这里。值原样换:名字到值的表是 JSON 对象(一个 Pos、一只实体),
      * 列表是数组,nil 是 null(读参数时报是哪一个)。一串值的参数收下的对象:只有一个而它是一张列表,那张列表就是这一串
-     * ({@code work.dig({b1, b2})});否则收下的那几个就是这一串({@code work.dig(b1, b2)})。
+     * ({@code numen.work.dig({b1, b2})});否则收下的那几个就是这一串({@code numen.work.dig(b1, b2)})。
      */
     static JsonObject jsonOf(Action action, List<Object> objects, Map<String, Object> options) {
         List<Param<?>> positionals = action.positionals();
@@ -360,9 +380,9 @@ public final class NumenCli {
         return action(invocation.group(), invocation.verb()).runsOnServer();
     }
 
-    /** 脚本里的一次调用在主人客户端的那一侧送去服务端时用的名字:动作的路径。 */
+    /** 脚本里的一次调用在主人客户端的那一侧送去服务端时用的名字:动作的路径({@code numen work dig})。 */
     public static String pathOf(Invocation invocation) {
-        return invocation.group() + " " + invocation.verb();
+        return action(invocation.group(), invocation.verb()).path();
     }
 
     /**
@@ -371,9 +391,9 @@ public final class NumenCli {
      */
     public static void serve(String path, JsonObject args, NumenPlayer her, String callId, Consumer<String> reply) {
         inUse();
-        String[] words = path.split(" ", 2);
-        CommandGroup group = words.length == 2 ? GROUPS.get(words[0]) : null;
-        Action action = group == null ? null : group.action(words[1]);
+        String[] words = path.split(" ");
+        CommandGroup group = words.length == 3 ? GROUPS.get(words[0] + "." + words[1]) : null;
+        Action action = group == null ? null : group.action(words[2]);
         if (action == null || !action.runsOnServer()) {
             reply.accept(TaskResult.fail(ErrorKind.NO_FUNCTION, "there is no API function " + path.replace(' ', '.')
                     + " on the server", null).toJson());
@@ -417,7 +437,7 @@ public final class NumenCli {
                 helpHint(action));
     }
 
-    /** 一个动作的全部帮助怎么要,一行能照抄的程序:{@code print(api.help("work.dig"))}。 */
+    /** 一个动作的全部帮助怎么要,一行能照抄的程序:{@code print(numen.api.help("numen.work.dig"))}。 */
     static String helpHint(Action action) {
         return "print(" + HelpCommands.call(action.function()) + ")";
     }
@@ -439,14 +459,19 @@ public final class NumenCli {
     }
 
     /**
-     * 名字({@code move}、{@code move.go}、{@code move.goto_}、{@code lumber}、{@code lumber.chop})指的组、模块或函数的帮助;不认得是
-     * null。和组同名的模块的函数在那一组的帮助里。
+     * 名字({@code numen}、{@code numen.move}、{@code numen.move.go}、{@code numen.move.goto_}、{@code my.lumber}、
+     * {@code my.lumber.chop})指的名字空间、组、模块或函数的帮助;不认得是 null。和组同名的模块的函数在那一组的帮助里。
      */
     static String help(String name, Modules modules) {
         inUse();
         Map<String, LibraryFunction> library = libraryFunctions(modules);
+        List<CommandGroup> inNamespace = GROUPS.values().stream()
+                .filter(g -> ScriptEngine.IN_USE.functionName(g.namespace()).equals(name)).toList();
+        if (!inNamespace.isEmpty()) {
+            return CommandHelp.namespace(name, inNamespace, library);
+        }
         for (CommandGroup group : GROUPS.values()) {
-            if (ScriptEngine.IN_USE.functionName(group.name()).equals(name)) {
+            if (ScriptEngine.IN_USE.pathName(group.fullName()).equals(name)) {
                 return CommandHelp.group(group, library);
             }
             for (Action action : group.actions()) {
@@ -466,7 +491,7 @@ public final class NumenCli {
     /** 模块里定义的一个函数:定义它的模块,与它的定义。 */
     record LibraryFunction(String module, ScriptEngine.Defined defined) {}
 
-    /** 模块里定义的函数:{@code 模块.函数} → 它,按模块名、模块里出现的顺序。 */
+    /** 模块里定义的函数:{@code 模块.函数}({@code numen.work.mine})→ 它,按模块名、模块里出现的顺序。 */
     static Map<String, LibraryFunction> libraryFunctions(Modules modules) {
         Map<String, LibraryFunction> out = new LinkedHashMap<>();
         modules.all().forEach((name, module) -> {
@@ -477,9 +502,14 @@ public final class NumenCli {
         return out;
     }
 
-    /** 这个词是不是一行命令的一级命令:一个组的名字,或根下的 {@code help}、{@code --help}。 */
+    /** 这个词是不是一行命令的一级命令:一个名字空间,或根下的 {@code help}、{@code --help}。 */
     public static boolean isTopLevel(String word) {
-        return HELP.equals(word) || HELP_FLAG.equals(word) || GROUPS.containsKey(word);
+        return HELP.equals(word) || HELP_FLAG.equals(word) || isNamespace(word);
+    }
+
+    /** 这个名字是不是一个登记了组的名字空间。 */
+    static boolean isNamespace(String word) {
+        return GROUPS.values().stream().anyMatch(g -> g.namespace().equals(word));
     }
 
     /** 服务端这一侧跑人写的一行命令:在服务端的树上解析、执行;写错了附用法。结果经 {@code call} 恰好回一次。 */
@@ -559,9 +589,9 @@ public final class NumenCli {
         }
     }
 
-    /** 内置模块里有没有定义 {@code 模块 函数} 这个函数(相关动作可以指向模块函数,写法同动作的路径:{@code "move goto_"})。 */
+    /** 内置模块里有没有定义这个函数(相关动作可以指向模块函数,写法同动作的路径:{@code "numen move goto_"})。 */
     private static boolean definedInLibrary(String path) {
-        return libraryFunctions(Modules.builtin()).containsKey(path.replace(' ', '.'));
+        return libraryFunctions(Modules.builtin()).containsKey(ScriptEngine.IN_USE.pathName(path.replace(' ', '.')));
     }
 
     /**
@@ -582,14 +612,14 @@ public final class NumenCli {
         }
     }
 
-    /** 一条整路径指的动作:{@code <组> <动作>};没有是 null。 */
+    /** 一条整路径指的动作:{@code <名字空间> <组> <动作>};没有是 null。 */
     private static Action resolve(String path, Map<String, CommandGroup> groups) {
         String[] words = path.split(" ");
-        if (words.length != 2) {
+        if (words.length != 3) {
             return null;
         }
-        CommandGroup group = groups.get(words[0]);
-        return group == null ? null : group.action(words[1]);
+        CommandGroup group = groups.get(words[0] + "." + words[1]);
+        return group == null ? null : group.action(words[2]);
     }
 
     /**
@@ -655,16 +685,16 @@ public final class NumenCli {
     }
 
     /**
-     * 出错那一层的正确写法:沿着已解析的字面节点走——根、组、动作,走到哪层算哪层。卡在某个参数上时给的是那个动作的用法与例子;
-     * 停在组或根上时给那一层的清单。
+     * 出错那一层的正确写法:沿着已解析的字面节点走——根、名字空间、组、动作,走到哪层算哪层。卡在某个参数上时给的是那个动作的用法与
+     * 例子;停在组或根上时给那一层的清单。
      */
     private static String usageAt(ParseResults<?> parse) {
         List<String> path = literalPath(parse);
-        CommandGroup group = path.isEmpty() ? null : GROUPS.get(path.get(0));
+        CommandGroup group = path.size() < 2 ? null : GROUPS.get(path.get(0) + "." + path.get(1));
         if (group == null) {
             return rootListing().first();
         }
-        Action action = path.size() > 1 ? group.action(path.get(1)) : null;
+        Action action = path.size() > 2 ? group.action(path.get(2)) : null;
         return action == null ? CommandHelp.group(group, libraryFunctions(Modules.builtin()))
                 : CommandHelp.usage(action);
     }
@@ -672,12 +702,17 @@ public final class NumenCli {
     /** 出错那一层的帮助怎么要。 */
     private static String hintAt(ParseResults<?> parse) {
         List<String> path = literalPath(parse);
-        CommandGroup group = path.isEmpty() ? null : GROUPS.get(path.get(0));
+        CommandGroup group = path.size() < 2 ? null : GROUPS.get(path.get(0) + "." + path.get(1));
         if (group == null) {
             return "`" + HELP + "` lists the groups.";
         }
-        Action action = path.size() > 1 ? group.action(path.get(1)) : null;
-        return action == null ? "print(" + HelpCommands.call(group.name()) + ")" : helpHint(action);
+        Action action = path.size() > 2 ? group.action(path.get(2)) : null;
+        return action == null ? "print(" + HelpCommands.call(group.fullName()) + ")" : helpHint(action);
+    }
+
+    /** 一个名字空间下的组,按名字。 */
+    static List<CommandGroup> groupsIn(String namespace) {
+        return GROUPS.values().stream().filter(g -> g.namespace().equals(namespace)).toList();
     }
 
     /** 解析走过的字面节点的名字,从一级命令往下。 */

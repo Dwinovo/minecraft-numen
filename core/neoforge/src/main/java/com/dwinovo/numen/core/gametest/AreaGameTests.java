@@ -27,8 +27,8 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
 /**
- * 区域:{@code scan.blocks --into} 把看到的团记成区域的部分,{@code area.show} 列出来;{@code area.refresh} 划掉被人换过的格;
- * 运算把结果存成新的一块;改主人规则点名的区域先问主人,主人拒绝则区域不变,没被点名的照常改;{@code scan.blocks --in} 只在区域里找。
+ * 区域:{@code numen.scan.blocks --into} 把看到的团记成区域的部分,{@code numen.area.show} 列出来;{@code numen.area.refresh} 划掉被人换过的格;
+ * 运算把结果存成新的一块;改主人规则点名的区域先问主人,主人拒绝则区域不变,没被点名的照常改;{@code numen.scan.blocks --in} 只在区域里找。
  * 全部从命令入口调。
  */
 @GameTestHolder(Constants.MOD_ID)
@@ -65,7 +65,7 @@ public class AreaGameTests {
 
     /**
      * 扫进区域、再看区域:两块分开的紫珀块扫进 {@code purpur},回执给每团一个编号 {@code purpur/g1}、{@code purpur/g2};
-     * {@code area.show purpur} 一部分一行,格数、看到的方块、包围盒、此刻挖它许不许(自然方块放行)都在,和扫描回执对得上。
+     * {@code numen.area.show purpur} 一部分一行,格数、看到的方块、包围盒、此刻挖它许不许(自然方块放行)都在,和扫描回执对得上。
      */
     @GameTest(template = "floor16", timeoutTicks = 4000, batch = "numen_area")
     public static void scan_into_keeps_each_group_and_area_show_lists_the_parts(GameTestHelper helper) {
@@ -90,7 +90,7 @@ public class AreaGameTests {
                 helper.assertTrue(nearGroup != null && "purpur/g1".equals(nearGroup.get("id").getAsString())
                                 && farGroup != null && "purpur/g2".equals(farGroup.get("id").getAsString()),
                         "the groups did not get their ids in the area: " + scanned.reply());
-                shown[0] = lua(companion, "area.show(\"purpur\")");
+                shown[0] = lua(companion, "numen.area.show(\"purpur\")");
             }
             helper.assertTrue(shown[0].succeeded(), "area show failed: " + shown[0].reply());
             String said = message(shown[0]);
@@ -108,9 +108,9 @@ public class AreaGameTests {
     }
 
     /**
-     * 逐部分取用:两团紫珀块扫进 {@code beads},{@code area.parts beads} 一行一个部分名,别的什么都没有。{@code area.has} 的成败
-     * 就是答案,按 {@code work.dig} 的判据在活世界里问:扫来的格还是紫珀块才算。远处那团两格,上面那格换成石头,
-     * {@code area.has beads/g2} 仍成功、说还剩一格;下面那格也挖掉,它就失败——立着的石头不是扫到的方块;整块区域还有近处那团,
+     * 逐部分取用:两团紫珀块扫进 {@code beads},{@code numen.area.parts beads} 一行一个部分名,别的什么都没有。{@code numen.area.has} 的成败
+     * 就是答案,按 {@code numen.work.dig} 的判据在活世界里问:扫来的格还是紫珀块才算。远处那团两格,上面那格换成石头,
+     * {@code numen.area.has beads/g2} 仍成功、说还剩一格;下面那格也挖掉,它就失败——立着的石头不是扫到的方块;整块区域还有近处那团,
      * 照样成功。
      */
     @GameTest(template = "floor16", timeoutTicks = 4000, batch = "numen_area")
@@ -129,17 +129,17 @@ public class AreaGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(scanned.done() && scanned.succeeded(),
                         "the scan has not replied: " + scanned.reply()))
                 .thenExecute(() -> {
-                    ToolRun parts = lua(companion, "area.parts(\"beads\")");
+                    ToolRun parts = lua(companion, "numen.area.parts(\"beads\")");
                     helper.assertTrue(parts.succeeded()
                                     && message(parts).lines().toList().equals(List.of("beads/g1", "beads/g2")),
                             "area parts does not list one part name per line: " + parts.reply());
-                    ToolRun whole = lua(companion, "area.has(\"beads/g2\")");
+                    ToolRun whole = lua(companion, "numen.area.has(\"beads/g2\")");
                     helper.assertTrue(whole.succeeded()
                                     && message(whole).startsWith("beads/g2 has 2 cell(s) left to dig"),
                             "area has does not count the two purpur blocks of g2: " + whole.reply());
 
                     level.setBlockAndUpdate(farTop, Blocks.STONE.defaultBlockState());
-                    ToolRun changed = lua(companion, "area.has(\"beads/g2\")");
+                    ToolRun changed = lua(companion, "numen.area.has(\"beads/g2\")");
                     helper.assertTrue(changed.succeeded() && dataIn(changed.reply()).get("left").getAsInt() == 1
                                     && dataIn(changed.reply()).get("nearest").equals(com.dwinovo.numen.cli.Shapes.pos(far))
                                     && message(changed).startsWith(
@@ -148,11 +148,11 @@ public class AreaGameTests {
                             "area has counts a cell that no longer holds the scanned block: " + changed.reply());
 
                     level.setBlockAndUpdate(far, Blocks.AIR.defaultBlockState());
-                    ToolRun gone = lua(companion, "area.has(\"beads/g2\")");
+                    ToolRun gone = lua(companion, "numen.area.has(\"beads/g2\")");
                     helper.assertTrue(gone.succeeded() && !dataIn(gone.reply()).get("has").getAsBoolean()
                                     && message(gone).startsWith("beads/g2 has nothing left to dig"),
                             "area has does not answer false once nothing of g2 is left: " + gone.reply());
-                    ToolRun rest = lua(companion, "area.has(\"beads\")");
+                    ToolRun rest = lua(companion, "numen.area.has(\"beads\")");
                     helper.assertTrue(rest.succeeded() && message(rest).startsWith("beads has 1 cell(s) left to dig"),
                             "area has does not see the part still standing: " + rest.reply());
                     CompanionFactory.despawn(level.getServer(), companion);
@@ -174,7 +174,7 @@ public class AreaGameTests {
         level.setBlockAndUpdate(far, Blocks.PURPUR_BLOCK.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_new_mapper", new BlockPos(3, 2, 3), false);
         helper.assertTrue(areas(companion).get("fresh") == null, "the area fresh is there before the scan");
-        ToolRun first = lua(companion, "scan.blocks(\"minecraft:purpur_block\", {into = \"fresh\", radius = 12})");
+        ToolRun first = lua(companion, "numen.scan.blocks(\"minecraft:purpur_block\", {into = \"fresh\", radius = 12})");
         ToolRun[] second = new ToolRun[1];
 
         succeedWhen(helper, () -> {
@@ -189,7 +189,7 @@ public class AreaGameTests {
                 level.setBlockAndUpdate(later, Blocks.PURPUR_BLOCK.defaultBlockState());
                 level.setBlockAndUpdate(near, Blocks.AIR.defaultBlockState());
                 level.setBlockAndUpdate(far, Blocks.AIR.defaultBlockState());
-                second[0] = lua(companion, "scan.blocks(\"minecraft:purpur_block\", {into = \"fresh\", radius = 12})");
+                second[0] = lua(companion, "numen.scan.blocks(\"minecraft:purpur_block\", {into = \"fresh\", radius = 12})");
             }
             helper.assertTrue(second[0].reply() != null, "the second scan has not replied");
             helper.assertTrue(second[0].succeeded() && message(second[0]).contains("added to area fresh as g3")
@@ -203,8 +203,8 @@ public class AreaGameTests {
 
     /**
      * 64 团分开的红色下界砖(地板里隔一格一块)。只是看:第一页不超过一团一行清单的那一页({@link AreaText#PAGE_BYTES}),说一共
-     * 64 团、下一页怎么取。扫进区域:回执只列最近 5 团,抬头说 64 团都加进了哪块区域、全部用 area.show 看;区域里真有 64 部分;
-     * area.show 同样一页一页地列。
+     * 64 团、下一页怎么取。扫进区域:回执只列最近 5 团,抬头说 64 团都加进了哪块区域、全部用 numen.area.show 看;区域里真有 64 部分;
+     * numen.area.show 同样一页一页地列。
      */
     @GameTest(template = "floor16", timeoutTicks = 4000, batch = "numen_area")
     public static void a_long_scan_comes_in_short_pages_and_into_an_area_as_a_summary(GameTestHelper helper) {
@@ -215,7 +215,7 @@ public class AreaGameTests {
             }
         }
         NumenPlayer companion = spawnAt(helper, "gametest_grid_reader", new BlockPos(8, 2, 8), false);
-        ToolRun look = lua(companion, "scan.blocks(\"minecraft:red_nether_bricks\", {radius = 12})");
+        ToolRun look = lua(companion, "numen.scan.blocks(\"minecraft:red_nether_bricks\", {radius = 12})");
         ToolRun[] kept = new ToolRun[1];
         ToolRun[] shown = new ToolRun[1];
 
@@ -228,21 +228,21 @@ public class AreaGameTests {
                         "the first page does not say how many there are and how to go on: " + page);
                 int bytes = page.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
                 helper.assertTrue(bytes <= AreaText.PAGE_BYTES + 200, "the first page is " + bytes + " bytes");
-                kept[0] = lua(companion, "scan.blocks(\"minecraft:red_nether_bricks\", {into = \"grid\", radius = 12})");
+                kept[0] = lua(companion, "numen.scan.blocks(\"minecraft:red_nether_bricks\", {into = \"grid\", radius = 12})");
             }
             helper.assertTrue(kept[0].reply() != null, "the scan into grid has not replied");
             String summary = message(kept[0]);
             // 话里只列最近五团;交给程序的数据是全部 64 团(数据不分页,脚本要几团自己取)
             helper.assertTrue(kept[0].succeeded() && summary.startsWith("64 group(s)")
                             && summary.contains("as g1 to g64") && summary.contains("the nearest 5 follow")
-                            && summary.contains("area.show(\"grid\")")
+                            && summary.contains("numen.area.show(\"grid\")")
                             && summary.lines().filter(l -> l.startsWith("{")).count() == 5
                             && groupsIn(kept[0].reply()).size() == 64,
                     "the reply is not a summary with the nearest five: " + summary);
             helper.assertTrue(areas(companion).get("grid").parts().size() == 64,
                     "the area does not hold all 64 groups");
             if (shown[0] == null) {
-                shown[0] = lua(companion, "area.show(\"grid\")");
+                shown[0] = lua(companion, "numen.area.show(\"grid\")");
             }
             String parts = message(shown[0]);
             helper.assertTrue(shown[0].succeeded() && parts.contains(" of 64. Call it again with page = 2"),
@@ -252,7 +252,7 @@ public class AreaGameTests {
     }
 
     /**
-     * 复核:三格石英块扫进 {@code quartz},其中一格被人换成了泥土;{@code area.refresh quartz} 说划掉了 1 格,区域里剩两格,
+     * 复核:三格石英块扫进 {@code quartz},其中一格被人换成了泥土;{@code numen.area.refresh quartz} 说划掉了 1 格,区域里剩两格,
      * 再复核一次什么都不改。
      */
     @GameTest(template = "floor16", timeoutTicks = 4000, batch = "numen_area")
@@ -270,8 +270,8 @@ public class AreaGameTests {
                 helper.assertTrue(scanned.reply() != null, "the scan has not replied");
                 helper.assertTrue(areas(companion).get("quartz").cells().size() == 3, "the scan did not keep 3 cells");
                 level.setBlockAndUpdate(cells.get(1), Blocks.DIRT.defaultBlockState());
-                refreshed[0] = lua(companion, "area.refresh(\"quartz\")");
-                refreshed[1] = lua(companion, "area.refresh(\"quartz\")");
+                refreshed[0] = lua(companion, "numen.area.refresh(\"quartz\")");
+                refreshed[1] = lua(companion, "numen.area.refresh(\"quartz\")");
             }
             helper.assertTrue(refreshed[0].succeeded() && message(refreshed[0]).startsWith(
                             "struck off 1 of the 3 scanned cells of quartz"),
@@ -299,15 +299,15 @@ public class AreaGameTests {
         BlockPos mid = helper.absolutePos(new BlockPos(6, 3, 6));
         BlockPos out = helper.absolutePos(new BlockPos(12, 3, 12));
         List<ToolRun> runs = List.of(
-                lua(companion, "area.new(\"yard\")"),
-                lua(companion, "area.add(\"yard\", {box = " + luaBox(a, b) + "})"),
-                lua(companion, "area.add(\"yard\", {at = " + xyz(mid) + "})"),
-                lua(companion, "area.minus(\"ring\", \"yard\", \"yard/p1\")"),
-                lua(companion, "area.new(\"post\")"),
-                lua(companion, "area.add(\"post\", {at = " + xyz(out) + "})"),
-                lua(companion, "area.union(\"both\", \"ring\", \"post\")"),
-                lua(companion, "area.grow(\"halo\", \"post\", {by = 1})"),
-                lua(companion, "area.center(\"heart\", \"yard\")"));
+                lua(companion, "numen.area.new(\"yard\")"),
+                lua(companion, "numen.area.add(\"yard\", {box = " + luaBox(a, b) + "})"),
+                lua(companion, "numen.area.add(\"yard\", {at = " + xyz(mid) + "})"),
+                lua(companion, "numen.area.minus(\"ring\", \"yard\", \"yard/p1\")"),
+                lua(companion, "numen.area.new(\"post\")"),
+                lua(companion, "numen.area.add(\"post\", {at = " + xyz(out) + "})"),
+                lua(companion, "numen.area.union(\"both\", \"ring\", \"post\")"),
+                lua(companion, "numen.area.grow(\"halo\", \"post\", {by = 1})"),
+                lua(companion, "numen.area.center(\"heart\", \"yard\")"));
         for (ToolRun run : runs) {
             helper.assertTrue(run.succeeded(), "an area command failed: " + run.reply());
         }
@@ -325,7 +325,7 @@ public class AreaGameTests {
         helper.assertTrue(store.get("halo").cells().size() == 27, "grow by one is not the 3×3×3 cube around the post");
         Area heart = store.get("heart");
         helper.assertTrue(heart.cells().size() == 1 && heart.cells().contains(mid), "center is not the middle cell");
-        ToolRun taken = lua(companion, "area.union(\"ring\", \"yard\")");
+        ToolRun taken = lua(companion, "numen.area.union(\"ring\", \"yard\")");
         helper.assertTrue(!taken.succeeded() && taken.reply().contains("there is already an area named ring"),
                 "an operation overwrote an existing area: " + taken.reply());
         CompanionFactory.despawn(level.getServer(), companion);
@@ -343,11 +343,11 @@ public class AreaGameTests {
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_landlord");
         BlockPos a = helper.absolutePos(new BlockPos(5, 2, 5));
         BlockPos b = helper.absolutePos(new BlockPos(9, 5, 9));
-        helper.assertTrue(lua(companion, "area.new(\"house\")").succeeded()
-                        && lua(companion, "area.add(\"house\", {box = " + luaBox(a, b) + "})").succeeded(),
+        helper.assertTrue(lua(companion, "numen.area.new(\"house\")").succeeded()
+                        && lua(companion, "numen.area.add(\"house\", {box = " + luaBox(a, b) + "})").succeeded(),
                 "the house area could not be made before any rule named it");
         PermissionStore.of(owner.getServer(), owner.getUUID()).add(Verdict.Kind.DENY, Rule.parse("break(area:house)"));
-        ToolRun delete = lua(companion, "area.delete(\"house\")");
+        ToolRun delete = lua(companion, "numen.area.delete(\"house\")");
         ConsentDesk desk = ConsentDesk.of(companion);
         boolean[] answered = new boolean[1];
         ToolRun[] free = new ToolRun[2];
@@ -359,11 +359,11 @@ public class AreaGameTests {
                 helper.assertTrue(delete.reply() == null, "the call did not wait for the owner");
                 helper.assertTrue(areas(companion).get("house") != null, "the house area was deleted before the answer");
                 answered[0] = desk.answer(pending.id(), ConsentAnswer.Decision.DENY, "");
-                free[0] = lua(companion, "area.new(\"ores\")");
-                free[1] = lua(companion, "area.add(\"ores\", {at = " + xyz(a) + "})");
+                free[0] = lua(companion, "numen.area.new(\"ores\")");
+                free[1] = lua(companion, "numen.area.add(\"ores\", {at = " + xyz(a) + "})");
             }
             helper.assertTrue(delete.reply() != null, "the refused call has not replied");
-            helper.assertTrue(!delete.succeeded() && delete.outcome().contains("did not run area.delete(\"house\")"),
+            helper.assertTrue(!delete.succeeded() && delete.outcome().contains("did not run numen.area.delete(\"house\")"),
                     "the refusal does not say what did not run: " + delete.reply());
             Area house = areas(companion).get("house");
             helper.assertTrue(house != null && house.cells().size() == 5L * 4 * 5, "the house area changed: " + house);
@@ -376,7 +376,7 @@ public class AreaGameTests {
     }
 
     /**
-     * 只在区域里找:两块海晶灯,框一个盒子罩住其中一块;{@code scan.blocks --in lamp} 只找到盒子里那一块,盒子外的不在回执里。
+     * 只在区域里找:两块海晶灯,框一个盒子罩住其中一块;{@code numen.scan.blocks --in lamp} 只找到盒子里那一块,盒子外的不在回执里。
      */
     @GameTest(template = "floor16", timeoutTicks = 4000, batch = "numen_area")
     public static void scan_blocks_in_an_area_looks_only_there(GameTestHelper helper) {
@@ -386,10 +386,10 @@ public class AreaGameTests {
         level.setBlockAndUpdate(inside, Blocks.SEA_LANTERN.defaultBlockState());
         level.setBlockAndUpdate(outside, Blocks.SEA_LANTERN.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_lamplighter", new BlockPos(3, 2, 3), false);
-        helper.assertTrue(lua(companion, "area.new(\"lamp\")").succeeded()
-                        && lua(companion, "area.add(\"lamp\", {box = " + luaBox(inside.offset(-1, -1, -1),
+        helper.assertTrue(lua(companion, "numen.area.new(\"lamp\")").succeeded()
+                        && lua(companion, "numen.area.add(\"lamp\", {box = " + luaBox(inside.offset(-1, -1, -1),
                                 inside.offset(1, 1, 1)) + "})").succeeded(), "the lamp area could not be framed");
-        ToolRun scanned = lua(companion, "scan.blocks(\"minecraft:sea_lantern\", {within = \"lamp\", radius = 16})");
+        ToolRun scanned = lua(companion, "numen.scan.blocks(\"minecraft:sea_lantern\", {within = \"lamp\", radius = 16})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(scanned.reply() != null, "the scan has not replied");

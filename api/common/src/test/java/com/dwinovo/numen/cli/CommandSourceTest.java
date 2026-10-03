@@ -42,11 +42,11 @@ class CommandSourceTest {
                 SERVER_CALLS.add(args);
                 src.reply(TaskResult.ok("reminder in " + args.get(AFTER) + "s: " + args.get(REASON),
                         Map.of("task", src.taskName())).toJson());
-            }, REASON, AFTER).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt_side.remind(\"check the furnace\", {after_s = 60})");
+            }, REASON, AFTER).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt.gt_side.remind(\"check the furnace\", {after_s = 60})");
             g.client("jot", "Jot something down on the owner's client.", (src, args) -> {
                 CLIENT_CALLS.add(args);
                 src.reply(TaskResult.ok("jotted " + args.get(ID) + " x" + args.get(TRIES)).toJson());
-            }, ID, TRIES).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt_side.jot({id = \"a1\"})");
+            }, ID, TRIES).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt.gt_side.jot({id = \"a1\"})");
         });
     }
 
@@ -55,7 +55,7 @@ class CommandSourceTest {
         CLIENT_CALLS.clear();
         SERVER_CALLS.clear();
         CliFixture.Outcome run = lua("""
-                return {gt_side.jot({id = "a1"}), gt_side.remind("check", {after_s = 5})}
+                return {gt.gt_side.jot({id = "a1"}), gt.gt_side.remind("check", {after_s = 5})}
                 """);
         assertTrue(run.success(), run.message());
         assertEquals(1, CLIENT_CALLS.size());
@@ -65,11 +65,11 @@ class CommandSourceTest {
     /** 服务端的树上客户端动作只有名字与帮助,没有参数、执行不了:写到它那儿是一行没写完的命令,附上它的帮助。 */
     @Test
     void theServerTreeOnlyNamesAClientAction() {
-        CliFixture.Outcome jot = onServer("gt_side jot --id a1");
+        CliFixture.Outcome jot = onServer("gt gt_side jot --id a1");
         assertFalse(jot.success());
         assertTrue(jot.message().startsWith("error: Unknown command"), jot.message());
-        assertTrue(jot.message().contains("\nusage: gt_side.jot({id=…, tries=…})\n"), jot.message());
-        assertTrue(onServer("gt_side jot --help").success(), "帮助两侧都答得出");
+        assertTrue(jot.message().contains("\nusage: gt.gt_side.jot({id=…, tries=…})\n"), jot.message());
+        assertTrue(onServer("gt gt_side jot --help").success(), "帮助两侧都答得出");
     }
 
     /**
@@ -79,8 +79,8 @@ class CommandSourceTest {
     @Test
     void aScriptAndALineHandTheSameArgumentsToTheSameHandler() {
         SERVER_CALLS.clear();
-        CliFixture.Outcome viaScript = lua("return gt_side.remind(\"check the furnace\", {after_s = 60})");
-        CliFixture.Outcome viaLine = onServer("gt_side remind \"check the furnace\" --after-s 60");
+        CliFixture.Outcome viaScript = lua("return gt.gt_side.remind(\"check the furnace\", {after_s = 60})");
+        CliFixture.Outcome viaLine = onServer("gt gt_side remind \"check the furnace\" --after-s 60");
 
         assertEquals(2, SERVER_CALLS.size());
         JsonObject json = new JsonObject();
@@ -89,8 +89,8 @@ class CommandSourceTest {
         assertEquals(CommandArgs.fromJson(List.of(REASON, AFTER), json), SERVER_CALLS.get(0));
         assertEquals(SERVER_CALLS.get(0), SERVER_CALLS.get(1), "两个前端读出的参数相等");
         assertEquals("reminder in 60s: check the furnace", viaLine.message());
-        assertEquals("gt_side.remind", viaLine.json().getAsJsonObject("data").get("task").getAsString());
-        assertEquals("gt_side.remind", viaScript.json().getAsJsonObject("data").getAsJsonObject("returned")
+        assertEquals("gt.gt_side.remind", viaLine.json().getAsJsonObject("data").get("task").getAsString());
+        assertEquals("gt.gt_side.remind", viaScript.json().getAsJsonObject("data").getAsJsonObject("returned")
                 .get("task").getAsString(), "派下的活叫脚本里的函数名");
     }
 
@@ -99,7 +99,7 @@ class CommandSourceTest {
     void theServerReadsTheCallAgainAndRefusesWhatDoesNotFit() {
         SERVER_CALLS.clear();
         String missing = serve("{\"after_s\":5}");
-        assertTrue(missing.startsWith("argument 'reason' is missing (or nil)\nusage: gt_side.remind(reason, "
+        assertTrue(missing.startsWith("argument 'reason' is missing (or nil)\nusage: gt.gt_side.remind(reason, "
                 + "{after_s=…})"), missing);
         assertTrue(serve("{\"after_s\":\"soon\",\"reason\":\"x\"}")
                 .startsWith("argument 'after_s': Expected integer"));
@@ -110,7 +110,7 @@ class CommandSourceTest {
 
     private static String serve(String json) {
         List<String> replies = new ArrayList<>();
-        NumenCli.serve("gt_side remind", JsonParser.parseString(json).getAsJsonObject(), null, "test-call",
+        NumenCli.serve("gt gt_side remind", JsonParser.parseString(json).getAsJsonObject(), null, "test-call",
                 replies::add);
         assertEquals(1, replies.size(), "恰好一次回执: " + replies);
         return JsonParser.parseString(replies.get(0)).getAsJsonObject().get("message").getAsString();

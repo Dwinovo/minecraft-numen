@@ -21,7 +21,7 @@ import static com.dwinovo.numen.core.WrittenCommandsLint.assertReads;
 /**
  * 写着的调用不走样:技能文档、系统提示、每个工具与动作的说明里写着的每一段调用,以及随模组发的设计文件,都读一遍,
  * 读不通就指出在哪一处、哪一段、为什么。读法在 {@link WrittenCommandsLint}:API 的调用经脚本的前端读({@link WrittenCommands}),
- * {@code mc.run} 里的原版指令按原版的指令树读——不另记一份"有哪些函数"。
+ * {@code numen.mc.run} 里的原版指令按原版的指令树读——不另记一份"有哪些函数"。
  *
  * <p>怎么认出一段调用见 {@link WrittenCommands}:反引号或代码块里、以一组的函数打头的那些。插件的技能与说明由
  * 各插件模块自己的防漂移测试读(同一个 {@link WrittenCommandsLint}),它们的命令组只进那个插件的测试进程。

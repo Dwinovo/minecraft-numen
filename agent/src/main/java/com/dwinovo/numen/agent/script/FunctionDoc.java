@@ -6,7 +6,7 @@ import java.util.List;
  * 一个 API 函数的说明,和写它的语言无关:由登记处现算(参数表、声明的返回类型、例子、注意),交给脚本引擎写成语言自己的签名
  * ({@link ScriptEngine#functionText}、{@link ScriptEngine#functionLine})。
  *
- * @param name     脚本里的全名,{@code work.dig}
+ * @param name     脚本里的全名,{@code numen.work.dig}
  * @param summary  一句话说明
  * @param params   参数,按调用时的顺序:按顺序的对象在前,最后一个是选项表(有的话)
  * @param returns  返回什么

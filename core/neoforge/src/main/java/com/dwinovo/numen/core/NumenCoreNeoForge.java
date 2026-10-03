@@ -44,7 +44,7 @@ public class NumenCoreNeoForge {
     private static void declareBundledSkills() {
         Path root = ModJar.find("skills");
         if (root != null) {
-            com.dwinovo.numen.api.NumenPlugins.register(numen -> numen.bundleSkills(root));
+            com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen -> numen.bundleSkills(root));
         } else {
             Constants.LOG.warn("[numen-core] no bundled skills/ dir found in jar");
         }
@@ -59,7 +59,7 @@ public class NumenCoreNeoForge {
         if (root == null) {
             throw new IllegalStateException("[numen-core] no bundled modules/ dir found in jar");
         }
-        com.dwinovo.numen.api.NumenPlugins.register(numen -> numen.bundleModules(root));
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen -> numen.bundleModules(root));
     }
 
     private static void onServerTickPost(ServerTickEvent.Post event) {

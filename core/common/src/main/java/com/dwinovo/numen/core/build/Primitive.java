@@ -302,11 +302,11 @@ public enum Primitive {
         public static final Param<String> INTO = Param.optional("into", ArgType.word(),
                         "Add this step to a design instead of building it now; the coordinates are then relative to "
                                 + "the design's origin (0,0,0).")
-                .values("a design name, as build.designs lists it")
+                .values("a design name, as numen.build.designs lists it")
                 .whenOmitted("build it now, at these world coordinates");
         /** 和 {@link #INTO} 一起:换掉设计的这一步。 */
         public static final Param<Integer> STEP = Param.optional("step", ArgType.integer(1, 999),
-                        "With into: replace this step of the design, as `build.show` numbers them.")
+                        "With into: replace this step of the design, as `numen.build.show` numbers them.")
                 .whenOmitted("add it after the last step");
         /** 和 {@link #INTO} 一起:插在这一步前面。 */
         public static final Param<Integer> BEFORE = Param.optional("before", ArgType.integer(1, 999),

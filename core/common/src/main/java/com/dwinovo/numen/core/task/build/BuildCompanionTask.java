@@ -32,11 +32,11 @@ import java.util.Map;
 /**
  * 多格建造任务:站在原地,把施工图里手够得着的格一批一批落进世界。
  *
- * <p><b>只放够得着的</b>——每一格够不够得着与 {@code move.goto_(…, {arrive = "reach"})} 走到的地方同一个判据({@link BuildSurvey}):
+ * <p><b>只放够得着的</b>——每一格够不够得着与 {@code numen.move.goto_(…, {arrive = "reach"})} 走到的地方同一个判据({@link BuildSurvey}):
  * 她不走动,够不着的格留给下一次,回执说还剩几格、最低最近的一格在哪。走到够得着的地方、挖开挡着的、再放,是脚本的事
- * (库里的 {@code build.raise})。受理之前看一眼:够得着的一格都没有就当场拒绝,说清该先去哪儿。
+ * (库里的 {@code numen.build.raise})。受理之前看一眼:够得着的一格都没有就当场拒绝,说清该先去哪儿。
  *
- * <p><b>不挖</b>——生存模式下图纸要的格里立着别的方块,那一格由 {@code work.dig} 挖开(挖的判据、工具、掉落、权限都是它的),
+ * <p><b>不挖</b>——生存模式下图纸要的格里立着别的方块,那一格由 {@code numen.work.dig} 挖开(挖的判据、工具、掉落、权限都是它的),
  * 这里不碰,回执里算进"要先挖开的";创造模式照原版一下就碎:图纸直接写上去顶掉原来的。
  *
  * <p>保留下来的是施工自己的事:生存模式逐格扣料、期望状态精确落位、"支撑还没长出来就先放着,下一遍再来"的分遍推进,
@@ -189,8 +189,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                     + "holds them there.", FailureType.NO_SUPPORT);
         }
         String hint = !tally.far().isEmpty()
-                ? "move.goto_(" + Shapes.literal(tally.far().get(0)) + ", {arrive = \"reach\"})"
-                : !tally.dig().isEmpty() ? "work.dig(" + Shapes.literal(tally.dig().get(0)) + ")" : null;
+                ? "numen.move.goto_(" + Shapes.literal(tally.far().get(0)) + ", {arrive = \"reach\"})"
+                : !tally.dig().isEmpty() ? "numen.work.dig(" + Shapes.literal(tally.dig().get(0)) + ")" : null;
         return new Precondition.Failure("nothing of it to place within reach of where you stand. " + remaining(tally),
                 FailureType.OUT_OF_REACH, hint);
     }
@@ -204,12 +204,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (!tally.far().isEmpty()) {
             BlockPos next = tally.far().get(0);
             parts.add(tally.far().size() + " cell(s) out of reach — the lowest nearest is " + xyz(next)
-                    + ": move.goto_(" + lua(next) + ", {arrive = \"reach\"}) gets you within reach of it");
+                    + ": numen.move.goto_(" + lua(next) + ", {arrive = \"reach\"}) gets you within reach of it");
         }
         if (!tally.dig().isEmpty()) {
             BlockPos next = tally.dig().get(0);
             parts.add(tally.dig().size() + " cell(s) hold another block that must be dug out first — the nearest is "
-                    + xyz(next) + ": move.goto_(" + lua(next) + ", {arrive = \"dig\"}) then work.dig(" + lua(next) + ")");
+                    + xyz(next) + ": numen.move.goto_(" + lua(next) + ", {arrive = \"dig\"}) then numen.work.dig(" + lua(next) + ")");
         }
         int shortCells = tally.count(BuildSurvey.State.SHORT);
         if (shortCells > 0) {
@@ -304,7 +304,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     /**
      * 等主人答复:身体站住。答应了——那些格从此是放行,重扫重排后开工;拒绝了——这件活停在这里,回执是他的原话与问的是什么,
-     * 一格不放(与 {@code work.dig} 被拒同一个收场)。
+     * 一格不放(与 {@code numen.work.dig} 被拒同一个收场)。
      */
     private TaskState tickConsent() {
         player.controls().stop();
@@ -513,7 +513,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
         if (occupied) {
             if (!WorkProfile.of(player).instaBreak()) {
-                // 生存:立着的方块由 work.dig 挖开,这里不挖;轮到时还立着就放下,回执算进"要先挖开的"
+                // 生存:立着的方块由 numen.work.dig 挖开,这里不挖;轮到时还立着就放下,回执算进"要先挖开的"
                 return null;
             }
             // 创造:原版一下就碎——写成空气,邻居照原版反应(贴着它的火把掉下来),所以这一次通知邻居;要放方块的接着落位

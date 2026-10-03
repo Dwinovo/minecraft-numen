@@ -23,24 +23,23 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code script}:Lua 模块({@link Modules})——每个返回一张函数表,程序里以模块名直接用。内置的随模组发布、留在 jar 里;她存的是主人
+ * {@code numen.module}:Lua 模块({@link Modules})——每个返回一张函数表,程序里以模块名直接用。内置的随模组发布、留在 jar 里;她存的是主人
  * 客户端上目录里的文件,同名的盖住内置那份,删掉就回到内置。都在主人客户端执行(她的大脑与 Lua 虚拟机就在那儿),当场回,不占身体;
  * 存、改、删不问主人,每一次写进回执。每个模块(连同内置的)都记战绩:用到它的程序跑了几段、跑完几段、最近一次在什么时候、最近一段
  * 没跑完停在哪一行、为什么——只给事实,不替她评判。战绩由跑程序的大脑在程序结束时记({@link Modules#tally})。
  */
 public final class Scripts {
 
-    private static final String GROUP = "script";
+    public static final String GROUP = "module";
 
     private static final Param<String> NAME = Param.required("name", ArgType.word(),
-            "The module, as script.list lists it.").values("a module name, as `script.list()` lists it");
+            "The module, as numen.module.list lists it.").values("a module name, as `numen.module.list()` lists it");
     private static final Param<Boolean> BUILTIN = Param.optional("builtin", ArgType.bool(),
             "Show the built-in original, not the copy of yours that overrides it.")
             .whenOmitted("show the one in use");
     private static final Param<String> NEW_NAME = Param.optional("name", ArgType.word(),
-            "Name to keep it under, the name programs use it by: my.<name> for a module of your own (lowercase "
-                    + "letters, digits and _, starting with a letter), or a built-in module's name to use yours "
-                    + "instead of it.")
+            "Name to keep it under, the name programs use it by: namespace.group, each lowercase letters, digits and _ "
+                    + "(my.lumber for one of your own; a built-in module's name to use yours instead of it).")
             .whenOmitted("give it the next free name my.module_1, my.module_2, …");
     private static final Param<String> CODE = Param.required("code", ArgType.string(),
             "The module: a first comment line saying what it does, functions put in a table, and that table returned "
@@ -56,9 +55,9 @@ public final class Scripts {
     /** 经插件那扇门登记这一组。 */
     public static void install(NumenApi numen) {
         numen.registerCommands(GROUP, "Modules — functions written in " + ScriptEngine.IN_USE.language()
-                + " that programs use by name: the built-in ones (work.collect()), your own under my "
-                + "(my.lumber.chop(); saved on your owner's computer), your versions of built-in ones, and how the "
-                + "programs that used them went.", Scripts::actions);
+                + " that programs use by name: the built-in ones (numen.work.collect()), your own (my.lumber.chop(); "
+                + "saved on your owner's computer), your versions of built-in ones, and how the programs that used "
+                + "them went.", Scripts::actions);
     }
 
     private static void actions(CommandGroup script) {
@@ -71,42 +70,42 @@ public final class Scripts {
                                 + "built-in."),
                         ScriptType.field("runs", ScriptType.INTEGER, "How many programs used it."),
                         ScriptType.field("finished", ScriptType.INTEGER, "How many of those ran to the end."))))
-                .example("script.list()")
-                .note("Instant and read-only. api.help(\"<module>\") lists a module's functions with their types.")
-                .seeAlso("script show");
+                .example("numen.module.list()")
+                .note("Instant and read-only. numen.api.help(\"<module>\") lists a module's functions with their types.")
+                .seeAlso("module show");
         script.client("show", "Show a module in full, with how the programs that used it went.",
                         (src, args) -> src.reply(show(modules(src), args.get(NAME),
                                 Boolean.TRUE.equals(args.get(BUILTIN)))), NAME, BUILTIN)
                 .returns(ScriptType.table(ScriptType.field("script", ScriptType.STRING, null),
                         ScriptType.field("builtin", ScriptType.BOOLEAN, "Whether the text is the built-in one."),
                         ScriptType.field("code", ScriptType.STRING, "The whole module.")))
-                .example("print(script.show(\"work\").code)")
-                .example("print(script.show(\"work\", {builtin = true}).code)")
+                .example("print(numen.module.show(\"numen.work\").code)")
+                .example("print(numen.module.show(\"numen.work\", {builtin = true}).code)")
                 .note("Instant and read-only. Read one before you write your own version of it: it shows how its "
-                        + "functions are put together. `script.save(script.show(\"work\").code, {name = \"work\"})` "
-                        + "makes the built-in work module yours to change.")
-                .seeAlso("script save");
+                        + "functions are put together. `numen.module.save(numen.module.show(\"numen.work\").code, {name = \"numen.work\"})` "
+                        + "makes the built-in numen.work module yours to change.")
+                .seeAlso("module save");
         script.client("save", "Keep a module under a name: programs then use its functions by that name; under a "
                         + "built-in's name, yours is used instead of the built-in.",
                         (src, args) -> src.reply(save(modules(src), args)), CODE, NEW_NAME)
                 .returns(ScriptType.table(ScriptType.field("name", ScriptType.STRING, "The name it is kept under.")))
-                .example("script.save([[\n-- Clearing a pit.\nlocal M = {}\n---Dig out the pit area.\n"
-                        + "function M.clear()\n  work.dig(\"pit\")\nend\nreturn M\n]], {name = \"my.pit\"})")
+                .example("numen.module.save([[\n-- Clearing a pit.\nlocal M = {}\n---Dig out the pit area.\n"
+                        + "function M.clear(b)\n  numen.work.dig(b)\nend\nreturn M\n]], {name = \"my.pit\"})")
                 .note("Instant. The module is read and loaded once first, and not kept if it does not compile, does "
                         + "not return a table, or redefines an API function; the error says the line. Its first line "
                         + "is a comment saying what it does, and the comment lines above each function say what that "
-                        + "one does: that is how the list and api.help describe them.")
-                .note("A module named after an API group (move, work, ...) adds its functions to that group. Saving "
+                        + "one does: that is how the list and numen.api.help describe them.")
+                .note("A module named after an API group (numen.move, numen.work, ...) adds its functions to that group. Saving "
                         + "under a name you used replaces it and resets its record. Saving under a built-in's name "
                         + "overrides the built-in until you delete yours. Your owner can edit the files too; the next "
                         + "program reads them as they are.")
-                .seeAlso("script delete");
+                .seeAlso("module delete");
         script.client("delete", "Delete a module of yours; one that overrides a built-in gives the built-in back.",
                         (src, args) -> src.reply(delete(modules(src), args.get(NAME))), NAME)
                 .returns(ScriptType.NOTHING)
-                .example("script.delete(\"my.pit\")")
+                .example("numen.module.delete(\"my.pit\")")
                 .note("Instant. A built-in module you did not override has nothing of yours to delete.")
-                .seeAlso("script list");
+                .seeAlso("module list");
     }
 
     private static Modules modules(ClientSource src) {
@@ -115,7 +114,7 @@ public final class Scripts {
 
     // ==================== 看 ====================
 
-    /** {@code script.list} 返回的那一项:每份一张表。 */
+    /** {@code numen.module.list} 返回的那一项:每份一张表。 */
     private static final String SCRIPTS = "scripts";
 
     private static String list(Modules modules, CommandArgs args) {
@@ -127,9 +126,9 @@ public final class Scripts {
                     + whose(m) + "] " + record(stats, true));
             scripts.add(entry(name, m.summary(), whose(m), stats));
         });
-        String head = rows.isEmpty() ? "No modules yet. Keep one with script.save(code, {name = \"...\"})."
+        String head = rows.isEmpty() ? "No modules yet. Keep one with numen.module.save(code, {name = \"...\"})."
                 : rows.size() + " module" + (rows.size() == 1 ? "" : "s") + ". Use one by name in a program "
-                + "(work.collect()); api.help(name) lists its functions, script.show(name) prints it.";
+                + "(numen.work.collect()); numen.api.help(name) lists its functions, numen.module.show(name) prints it.";
         return new Listing(head, rows, "").result(args, Map.of(SCRIPTS, scripts)).toJson();
     }
 
@@ -139,7 +138,7 @@ public final class Scripts {
             case BUILTIN -> "built in";
             case HERS -> "yours";
             case OVERRIDE -> "yours, used instead of the built-in one"
-                    + (m.builtinNewer() ? "; the built-in changed since you saved yours: script.show(\"" + m.name()
+                    + (m.builtinNewer() ? "; the built-in changed since you saved yours: numen.module.show(\"" + m.name()
                     + "\", {builtin = true}) shows it" : "");
         };
         return m.problem() == null ? whose : whose + "; does not compile: " + m.problem();
@@ -159,19 +158,19 @@ public final class Scripts {
     private static String show(Modules modules, String name, boolean original) {
         Modules.Module m = modules.get(name);
         if (m == null) {
-            return TaskResult.fail(ErrorKind.NOT_FOUND, missing(name, modules), "script.list()").toJson();
+            return TaskResult.fail(ErrorKind.NOT_FOUND, missing(name, modules), "numen.module.list()").toJson();
         }
         BuiltinModules.Builtin builtin = BuiltinModules.get(name);
         if (original && builtin == null) {
             return TaskResult.fail(ErrorKind.NOT_FOUND, name + " is yours; there is no built-in " + name,
-                    "script.show(\"" + name + "\")").toJson();
+                    "numen.module.show(\"" + name + "\")").toJson();
         }
         boolean showsBuiltin = original || m.origin() == Modules.Origin.BUILTIN;
         String code = showsBuiltin ? builtin.code() : m.code();
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("script", name);
         data.put("builtin", showsBuiltin);
-        // 正文也在数据里:脚本里读到它就能照抄一份改了另存(script.save(s.code, ...))
+        // 正文也在数据里:脚本里读到它就能照抄一份改了另存(numen.module.save(s.code, ...))
         data.put("code", code);
         String head = "Module " + name + " (" + (showsBuiltin ? "the built-in text" : whose(m)) + "). "
                 + record(modules.stats(name), false);
@@ -204,10 +203,10 @@ public final class Scripts {
         String code = args.get(CODE);
         String badName = Modules.problem(name);
         if (badName != null) {
-            String own = name.startsWith(Modules.MINE) ? name.substring(Modules.MINE.length()) : name;
+            String own = name.substring(name.lastIndexOf('.') + 1);
             return TaskResult.fail(ErrorKind.BAD_ARGUMENT, "did not save " + name + ": " + badName,
-                    "{name = \"" + Modules.MINE + own.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9_]", "_")
-                            + "\"}").toJson();
+                    "{name = \"" + Modules.MINE + "." + own.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9_]",
+                            "_") + "\"}").toJson();
         }
         // 读不通、不返回表、撞第 ① 层:和运行时同一个解释器装它一次,规则只在沙箱里那一处
         String problem = ScriptEngine.IN_USE.checkModule(name, code, NumenCli.scriptCatalog(Modules.builtin()));
@@ -225,7 +224,7 @@ public final class Scripts {
             case NEW -> "Saved module " + name + ".";
             case REPLACED -> "Replaced your module " + name + "; its record starts over.";
             case OVERRODE -> "Saved your " + name + "; it is used instead of the built-in " + name + " from now on "
-                    + "(script.delete(\"" + name + "\") gives the built-in back).";
+                    + "(numen.module.delete(\"" + name + "\") gives the built-in back).";
         };
         Constants.LOG.info("[numen-script] {} {} in {}", saved, name, modules.dir());
         return TaskResult.ok(said + " Programs use it by name: " + name + ".<function>(...).", Map.of("name", name))
@@ -236,7 +235,7 @@ public final class Scripts {
         boolean builtin = BuiltinModules.get(name) != null;
         if (modules.delete(name) == null) {
             return TaskResult.fail(ErrorKind.NOT_FOUND, builtin ? name + " is built in and you have no version of "
-                    + "your own to delete" : missing(name, modules), "script.list()").toJson();
+                    + "your own to delete" : missing(name, modules), "numen.module.list()").toJson();
         }
         Constants.LOG.info("[numen-script] deleted {} in {}", name, modules.dir());
         return TaskResult.ok(builtin ? "Deleted your " + name + "; the built-in " + name + " is used again."
@@ -248,7 +247,7 @@ public final class Scripts {
     /** 下一个空着的 {@code my.module_N}。 */
     private static String freeName(Modules modules) {
         for (int n = 1; ; n++) {
-            String name = Modules.MINE + "module_" + n;
+            String name = Modules.MINE + ".module_" + n;
             if (modules.get(name) == null) {
                 return name;
             }

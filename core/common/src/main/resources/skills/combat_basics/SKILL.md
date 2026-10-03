@@ -9,21 +9,21 @@ Load this support skill before a combat-heavy phase.
 
 ## Choose and authorize targets
 
-Combat does not scan by mob type. First call `scan.entities`, pick the exact entity you intend to attack, then pass its runtime id — one entity per call:
+Combat does not scan by mob type. First call `numen.scan.entities`, pick the exact entity you intend to attack, then pass its runtime id — one entity per call:
 
 ```lua
-fight.attack(184)
+numen.fight.attack(184)
 ```
 
-Players and mobs use the same id. Never guess ids and never attack an entity you did not pick. The task re-resolves the moving target every tick and paths across terrain when it is far away. To fight several, call it once for each in a program; `fight.clear()` (library) fights every hostile around you, nearest first:
+Players and mobs use the same id. Never guess ids and never attack an entity you did not pick. The task re-resolves the moving target every tick and paths across terrain when it is far away. To fight several, call it once for each in a program; `numen.fight.clear()` (library) fights every hostile around you, nearest first:
 
 ```lua
-for _, foe in ipairs(scan.entities("hostile", {radius = 16})) do fight.attack(foe.id) end
+for _, foe in ipairs(numen.scan.entities("hostile", {radius = 16})) do numen.fight.attack(foe.id) end
 ```
 
 ## What the body decides, not you
 
-`fight.attack` picks the weapon and the range on its own, every tick:
+`numen.fight.attack` picks the weapon and the range on its own, every tick:
 
 - **Can it reach the target?** Then it closes in and swings. This also conserves arrows.
 - **Can it not get there** — the target is flying, across a chasm, on a pillar? Then it shoots, if it has a bow or crossbow with arrows.
@@ -35,23 +35,23 @@ It also picks the strongest weapon you own **against that specific target**: a S
 
 ## Before the fight
 
-1. Use `status.self` to check HP, equipment, food, and dimension.
+1. Use `numen.status.self` to check HP, equipment, food, and dimension.
 2. Carry a melee weapon, and carry a bow with arrows if the phase involves anything airborne. Without arrows, an unreachable target is simply reported as unreachable.
-3. Keep dense food available and heal with `inv.eat` before critical HP. Combat does not interrupt an active eating, potion, bow, or other use action.
+3. Keep dense food available and heal with `numen.inv.eat` before critical HP. Combat does not interrupt an active eating, potion, bow, or other use action.
 
 ## During and after the fight
 
 The task follows the target while it is out of reach, waits for weapon switching, target recovery and the vanilla attack cooldown, aims visibly, stops sprinting before the hit, and uses the native attack.
 
-It does not pick up what the target drops: its result says where the drops lie, and `work.collect()` walks onto them.
+It does not pick up what the target drops: its result says where the drops lie, and `numen.work.collect()` walks onto them.
 
 ## Retreat rules
 
-A program waits for each fight to end; check `status.self()` between engagements.
+A program waits for each fight to end; check `numen.status.self()` between engagements.
 
-- HP <= 8: `task.stop()`, move 20+ blocks away, heal, then scan again because runtime IDs may have changed.
+- HP <= 8: `numen.task.stop()`, move 20+ blocks away, heal, then scan again because runtime IDs may have changed.
 - Weapon about to break or no arrows: disengage and restock.
-- Before a long `move.goto_`, clear or outrun active pursuers.
+- Before a long `numen.move.goto_`, clear or outrun active pursuers.
 - Avoid cliff edges, lava corridors, deep water, and cramped ledges where knockback or drops become unsafe.
 
 ## Aggro pitfalls

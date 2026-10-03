@@ -97,7 +97,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_lodger", new BlockPos(7, 2, 7), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_landlord");
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        ToolRun walk = lua(companion, "move.goto_(" + xyz(target) + ", {alter = \"natural\"})");
+        ToolRun walk = lua(companion, "numen.move.goto_(" + xyz(target) + ", {alter = \"natural\"})");
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
         ToolRun[] plan = new ToolRun[1];
@@ -108,10 +108,10 @@ public class PermissionGameTests {
                     String reply = walk.outcome();
                     helper.assertTrue(walk.refused(), "goto through the owner's wall was accepted: " + walk.reply());
                     helper.assertTrue(reply.contains("owner's consent")
-                                    && reply.contains("`route.spec(\"goto-gametest_lodger\", {alter = \"any\"})`"),
+                                    && reply.contains("`numen.route.spec(\"goto-gametest_lodger\", {alter = \"any\"})`"),
                             "the refusal does not say it needs the owner's consent and how to allow it: " + reply);
-                    lua(companion, "route.spec(\"goto-gametest_lodger\", {alter = \"any\"})");
-                    plan[0] = lua(companion, "route.plan(\"goto-gametest_lodger\")");
+                    lua(companion, "numen.route.spec(\"goto-gametest_lodger\", {alter = \"any\"})");
+                    plan[0] = lua(companion, "numen.route.plan(\"goto-gametest_lodger\")");
                 })
                 .thenWaitUntil(() -> helper.assertTrue(plan[0].done(), "route plan has not replied"))
                 .thenExecute(() -> {
@@ -141,7 +141,7 @@ public class PermissionGameTests {
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_host");
         BlockPos start = companion.blockPosition();
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        ToolRun walk = lua(companion, "move.goto_(" + xyz(target) + ", {alter = \"any\"})");
+        ToolRun walk = lua(companion, "numen.move.goto_(" + xyz(target) + ", {alter = \"any\"})");
         boolean[] answered = new boolean[1];
 
         succeedWhen(helper, () -> {
@@ -181,7 +181,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_squatter", new BlockPos(7, 2, 7), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_strict");
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        ToolRun walk = lua(companion, "move.goto_(" + xyz(target) + ", {alter = \"any\"})");
+        ToolRun walk = lua(companion, "numen.move.goto_(" + xyz(target) + ", {alter = \"any\"})");
         boolean[] answered = new boolean[1];
 
         succeedWhen(helper, () -> {
@@ -461,8 +461,8 @@ public class PermissionGameTests {
                 var group = groupHolding(groupsIn(scanned.reply()), helper.absolutePos(logRel));
                 helper.assertTrue(group != null && "logs/g1".equals(group.get("id").getAsString()),
                         "the scan did not keep the log as logs/g1: " + scanned.reply());
-                ToolRun missingPart = lua(companion, "work.dig(\"logs/g7\")");
-                ToolRun missingArea = lua(companion, "work.dig(\"nowhere\")");
+                ToolRun missingPart = lua(companion, "numen.work.dig(\"logs/g7\")");
+                ToolRun missingArea = lua(companion, "numen.work.dig(\"nowhere\")");
                 refusals[0] = missingPart.task() == null ? missingPart.reply() : "(accepted)";
                 refusals[1] = missingArea.task() == null ? missingArea.reply() : "(accepted)";
             }
@@ -477,7 +477,7 @@ public class PermissionGameTests {
     }
 
     /**
-     * "别碰这一格"由区域运算表达:两根野生诡异菌柄扫进区域,再框出要留的那一格,{@code area.minus} 得到只剩另一根的区域,
+     * "别碰这一格"由区域运算表达:两根野生诡异菌柄扫进区域,再框出要留的那一格,{@code numen.area.minus} 得到只剩另一根的区域,
      * 挖它、要两个。她挖了另一根就收场(区里没有了),留下的那格原样立着。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
@@ -496,11 +496,11 @@ public class PermissionGameTests {
         succeedWhen(helper, () -> {
             if (dig[0] == null) {
                 helper.assertTrue(scanned.succeeded(), "the scan has not kept the stems: " + scanned.reply());
-                helper.assertTrue(lua(companion, "area.new(\"keep\")").succeeded()
-                                && lua(companion, "area.add(\"keep\", {at = " + xyz(kept) + "})").succeeded()
-                                && lua(companion, "area.minus(\"rest\", \"stems\", \"keep\")").succeeded(),
+                helper.assertTrue(lua(companion, "numen.area.new(\"keep\")").succeeded()
+                                && lua(companion, "numen.area.add(\"keep\", {at = " + xyz(kept) + "})").succeeded()
+                                && lua(companion, "numen.area.minus(\"rest\", \"stems\", \"keep\")").succeeded(),
                         "the area to dig was not narrowed");
-                dig[0] = lua(companion, "work.dig(\"rest\", {count = " + 2 + "})");
+                dig[0] = lua(companion, "numen.work.dig(\"rest\", {count = " + 2 + "})");
             }
             helper.assertTrue(dig[0].done(), "dig has not finished");
             String reply = dig[0].outcome();
@@ -610,7 +610,7 @@ public class PermissionGameTests {
     }
 
     /**
-     * use.block 左键打主人的箱子:动手之前挂一条征询,这次调用悬着;主人允许后箱子没了。
+     * numen.use.block 左键打主人的箱子:动手之前挂一条征询,这次调用悬着;主人允许后箱子没了。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void interact_left_click_on_owners_chest_asks(GameTestHelper helper) {
@@ -623,7 +623,7 @@ public class PermissionGameTests {
         TaskRecord[] dig = new TaskRecord[1];
         boolean[] answered = new boolean[1];
         helper.runAfterDelay(5, () -> {
-            dig[0] = lua(companion, "use.block(" + xyz(chest) + ", {left = true})").task();
+            dig[0] = lua(companion, "numen.use.block(" + xyz(chest) + ", {left = true})").task();
         });
 
         succeedWhen(helper, () -> {
@@ -660,7 +660,7 @@ public class PermissionGameTests {
         pig.setNoAi(true);
         pig.setCustomName(net.minecraft.network.chat.Component.literal("Wilbur"));
         level.addFreshEntity(pig);
-        TaskRecord record = lua(companion, "fight.attack(" + pig.getId() + ")").task();
+        TaskRecord record = lua(companion, "numen.fight.attack(" + pig.getId() + ")").task();
         long[] asked = {0L};
         int[] waited = {0};
         boolean[] denied = {false};
@@ -695,14 +695,14 @@ public class PermissionGameTests {
         });
     }
 
-    /** inv.drop 每次问:调用悬着等主人;允许后东西丢出来。 */
+    /** numen.inv.drop 每次问:调用悬着等主人;允许后东西丢出来。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void drop_items_waits_for_the_owner(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_giver", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_receiver");
         companion.getInventory().add(new ItemStack(Items.DIAMOND, 3));
-        TaskRecord record = lua(companion, "inv.drop(\"minecraft:diamond\", {count = 3})").task();
+        TaskRecord record = lua(companion, "numen.inv.drop(\"minecraft:diamond\", {count = 3})").task();
         boolean[] answered = new boolean[1];
 
         succeedWhen(helper, () -> {
@@ -724,7 +724,7 @@ public class PermissionGameTests {
     }
 
     /**
-     * 卡片挂着时主人按停止:inv.drop 悬着等答复,主人没点卡片而是按了停止(与 CancelTasksPayload 同一个入口)。
+     * 卡片挂着时主人按停止:numen.inv.drop 悬着等答复,主人没点卡片而是按了停止(与 CancelTasksPayload 同一个入口)。
      * 这件活按主人停止收场、消息写明是主人停的,挂着的征询随之撤掉,东西一件没丢。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
@@ -733,7 +733,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_hesitant", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_changed_mind");
         companion.getInventory().add(new ItemStack(Items.GOLD_INGOT, 4));
-        TaskRecord record = lua(companion, "inv.drop(\"minecraft:gold_ingot\", {count = 4})").task();
+        TaskRecord record = lua(companion, "numen.inv.drop(\"minecraft:gold_ingot\", {count = 4})").task();
         boolean[] stopped = new boolean[1];
 
         succeedWhen(helper, () -> {
@@ -760,7 +760,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_waiter", new BlockPos(4, 2, 4), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_absent");
         companion.getInventory().add(new ItemStack(Items.EMERALD, 2));
-        TaskRecord record = lua(companion, "inv.drop(\"minecraft:emerald\", {count = 2})").task();
+        TaskRecord record = lua(companion, "numen.inv.drop(\"minecraft:emerald\", {count = 2})").task();
 
         succeedWhen(helper, () -> {
             String reply = record.getResult() == null ? null : record.getResult().message();
@@ -797,7 +797,7 @@ public class PermissionGameTests {
                 helper.assertTrue(scanned.succeeded(), "the scan has not kept the logs: " + scanned.reply());
                 com.dwinovo.numen.permission.Permission.setMode(companion,
                         com.dwinovo.numen.permission.Mode.OBSERVE);
-                mine[0] = lua(companion, "work.dig(\"logs\", {count = " + 2 + "})");
+                mine[0] = lua(companion, "numen.work.dig(\"logs\", {count = " + 2 + "})");
             }
             helper.assertTrue(mine[0].done(), "mine has not finished");
             helper.assertTrue(!mine[0].succeeded() && mine[0].outcome().contains("observe mode"),
@@ -1017,7 +1017,7 @@ public class PermissionGameTests {
         companion.getInventory().add(new ItemStack(Items.EMERALD, 4));
         TaskRecord[] calls = new TaskRecord[3];
         int[] step = {0};
-        calls[0] = lua(companion, "inv.drop(\"minecraft:diamond\", {count = 1})").task();
+        calls[0] = lua(companion, "numen.inv.drop(\"minecraft:diamond\", {count = 1})").task();
         helper.onEachTick(() -> {
             var pending = desk(companion).pending();
             switch (step[0]) {
@@ -1045,7 +1045,7 @@ public class PermissionGameTests {
                         helper.assertTrue(calls[0].getResult().success()
                                         && calls[0].getResult().message().contains("the owner allowed"),
                                 "the card answer did not go through: " + calls[0].getResult().message());
-                        calls[1] = lua(companion, "inv.drop(\"minecraft:emerald\", {count = 2})")
+                        calls[1] = lua(companion, "numen.inv.drop(\"minecraft:emerald\", {count = 2})")
                                 .task();
                         step[0] = 2;
                     }
@@ -1063,7 +1063,7 @@ public class PermissionGameTests {
                         helper.assertTrue(calls[1].getResult().success()
                                         && calls[1].getResult().message().contains("remembered it"),
                                 "the command answer did not go through: " + calls[1].getResult().message());
-                        calls[2] = lua(companion, "inv.drop(\"minecraft:emerald\", {count = 2})")
+                        calls[2] = lua(companion, "numen.inv.drop(\"minecraft:emerald\", {count = 2})")
                                 .task();
                         step[0] = 4;
                     }
@@ -1175,7 +1175,7 @@ public class PermissionGameTests {
 
     /** 把打开的界面里第 0 格整叠拿进背包。 */
     private static TaskRecord takeFirstSlot(NumenPlayer companion) {
-        return lua(companion, "use.shift(0)").task();
+        return lua(companion, "numen.use.shift(0)").task();
     }
 
     /**
@@ -1325,7 +1325,7 @@ public class PermissionGameTests {
 
     /**
      * 别的模组在原生通道里取消了破坏事件:权限层放行了(自然泥土),挖掘落点照真客户端挖下去,服务端退回来——
-     * use.block 以 refused 收场,理由写明服务器没让挖掉,泥土一块不少。生存(STOP 那一下被退)与创造
+     * numen.use.block 以 refused 收场,理由写明服务器没让挖掉,泥土一块不少。生存(STOP 那一下被退)与创造
      * (START 那一下被退)各一具身体。
      */
     @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_permission")
@@ -1372,7 +1372,7 @@ public class PermissionGameTests {
         BlockPos spot = helper.absolutePos(new BlockPos(7, 2, 4));
         NumenPlayer companion = spawnAt(helper, "gametest_demolisher", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.TNT));
-        ToolRun build = lua(companion, "build.place(" + xyz(spot) + ", {block = \"tnt\"})");
+        ToolRun build = lua(companion, "numen.build.place(" + xyz(spot) + ", {block = \"tnt\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(build.done(), "build has not finished");
@@ -1392,7 +1392,7 @@ public class PermissionGameTests {
         BlockPos spot = helper.absolutePos(new BlockPos(10, 2, 10));
         NumenPlayer companion = spawnAt(helper, "gametest_quarryman", new BlockPos(9, 2, 8), false);
         companion.getInventory().add(new ItemStack(Items.TNT));
-        ToolRun build = lua(companion, "build.place(" + xyz(spot) + ", {block = \"tnt\"})");
+        ToolRun build = lua(companion, "numen.build.place(" + xyz(spot) + ", {block = \"tnt\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(build.done(), "build has not finished");
@@ -1416,7 +1416,7 @@ public class PermissionGameTests {
         level.addFreshEntity(villager);
         NumenPlayer companion = spawnAt(helper, "gametest_peacekeeper", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
-        ToolRun attack = lua(companion, "fight.attack(" + villager.getId() + ")");
+        ToolRun attack = lua(companion, "numen.fight.attack(" + villager.getId() + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(attack.done(), "attack has not finished");
@@ -1440,7 +1440,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_enforcer", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_magistrate");
-        ToolRun attack = lua(companion, "fight.attack(" + villager.getId() + ")");
+        ToolRun attack = lua(companion, "numen.fight.attack(" + villager.getId() + ")");
         java.util.Set<Long> requests = new java.util.HashSet<>();
         boolean[] hitBeforeYes = new boolean[1];
         helper.onEachTick(() -> {
@@ -1477,7 +1477,7 @@ public class PermissionGameTests {
         level.addFreshEntity(wolf);
         NumenPlayer companion = spawnAt(helper, "gametest_dogcatcher", new BlockPos(3, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
-        ToolRun attack = lua(companion, "fight.attack(" + wolf.getId() + ")");
+        ToolRun attack = lua(companion, "numen.fight.attack(" + wolf.getId() + ")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(attack.done(), "attack has not finished");
@@ -1531,7 +1531,7 @@ public class PermissionGameTests {
 
     /**
      * 拿水桶对着主人木板旁边的地面右键:倒水是危险品挨着玩家的东西,要问;主人不在,问不到就不倒——
-     * 走的是 use.block 的放置路径,和 build 一样由权限层裁决。水没倒出来,桶还是满的。
+     * 走的是 numen.use.block 的放置路径,和 build 一样由权限层裁决。水没倒出来,桶还是满的。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void interact_at_water_next_to_the_owners_planks_needs_the_owner(GameTestHelper helper) {
@@ -1540,7 +1540,7 @@ public class PermissionGameTests {
         BlockPos floor = helper.absolutePos(new BlockPos(6, 1, 5));
         NumenPlayer companion = spawnAt(helper, "gametest_waterer", new BlockPos(4, 2, 5), false);
         companion.getInventory().add(new ItemStack(Items.WATER_BUCKET));
-        ToolRun pour = lua(companion, "use.block(" + xyz(floor) + ", {item = \"minecraft:water_bucket\"})");
+        ToolRun pour = lua(companion, "numen.use.block(" + xyz(floor) + ", {item = \"minecraft:water_bucket\"})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(pour.done(), "use block has not finished");
@@ -1564,7 +1564,7 @@ public class PermissionGameTests {
     }
 
     /**
-     * 主人用命令写 {@code deny break(area:house)}:区域还没建时这一行不收,说清没有这块区域;建好后收下。她 use.block 左键打
+     * 主人用命令写 {@code deny break(area:house)}:区域还没建时这一行不收,说清没有这块区域;建好后收下。她 numen.use.block 左键打
      * 房子里的石头被拒、理由是那一行规则,石头还在;房子外的石头照常挖掉。区域删掉以后 {@code rules list} 把这一行标成
      * 什么也管不到,房子原来那块地上的石头照出厂 allow 行挖掉。从头到尾不弹卡。
      */
@@ -1760,7 +1760,7 @@ public class PermissionGameTests {
     }
 
     /**
-     * 挡着的是要主人同意才能动的格:南瓜在她手边,六面都贴着别的玩家放的木板。{@code work.dig} 只挖开天然地形,要问主人的
+     * 挡着的是要主人同意才能动的格:南瓜在她手边,六面都贴着别的玩家放的木板。{@code numen.work.dig} 只挖开天然地形,要问主人的
      * 遮挡不挖、也不替她去问,当场回:南瓜的每一面都贴着她不能挖的方块,点名是哪几格、为什么(要主人同意)。木板与南瓜原样,
      * 不弹卡,她一步没动。
      */
@@ -1781,7 +1781,7 @@ public class PermissionGameTests {
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_joiner");
         BlockPos stand = companion.blockPosition();
-        ToolRun dig = lua(companion, "work.dig(" + xyz(pumpkin) + ")");
+        ToolRun dig = lua(companion, "numen.work.dig(" + xyz(pumpkin) + ")");
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 

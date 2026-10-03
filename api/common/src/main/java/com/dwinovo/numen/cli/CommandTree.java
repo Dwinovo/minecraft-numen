@@ -20,7 +20,8 @@ import java.util.function.Supplier;
  * 只有一处不同:
  *
  * <ul>
- *   <li>根下是 {@code help} 与 {@code --help};组下是 {@code --help} 与每一个动作;每个动作下是 {@code --help}。
+ *   <li>根下是 {@code help}、{@code --help} 与每个名字空间;名字空间下是 {@code --help} 与它的每个组;组下是 {@code --help} 与每一个
+ *       动作;每个动作下是 {@code --help}。
  *       帮助只读声明,所以哪一侧都答得出。</li>
  *   <li>动作的参数与标志尾巴、可执行的那一格,只长在<b>执行它的那一侧</b>({@code runs}):主人客户端的树里没有服务端动作的
  *       参数,服务端的树里没有客户端动作的参数。</li>
@@ -47,9 +48,13 @@ final class CommandTree<S extends CommandSource> {
         return this;
     }
 
-    /** 挂上一组:组名就是一级命令。 */
+    /** 挂上一组:名字空间是一级命令,组名是二级(同一名字空间的几组挂在同一个节点下)。 */
     void add(CommandGroup group) {
-        dispatcher.register(group(group));
+        dispatcher.register(LiteralArgumentBuilder.<S>literal(group.namespace())
+                .then(help(NumenCli.HELP_FLAG, () -> CommandHelp.listing(CommandHelp.namespace(group.namespace(),
+                        NumenCli.groupsIn(group.namespace()),
+                        NumenCli.libraryFunctions(com.dwinovo.numen.script.Modules.builtin())))))
+                .then(group(group)));
     }
 
     ParseResults<S> parse(String line, S source) {

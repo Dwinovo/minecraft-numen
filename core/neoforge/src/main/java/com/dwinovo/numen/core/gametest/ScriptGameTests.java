@@ -27,7 +27,7 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
  * 程序从入口跑:模型一次回复里的一段程序,经内脑派发的同一个顺序({@link GameTestKit#round})逐个派 API 调用——占身体的等它收尾
  * 再往下走;成功直接返回值、失败抛错,程序按它分支;主人停止或开口时停在调用之间,回执如实写停在哪一行。模块:按名字直接用,
  * 存、读、列、删,同名的盖住内置的、删掉回到内置,改了文件下一次就用新的,坏了只影响用它的程序,战绩记在主人那一份里;内置的
- * work.mine 挖空一块埋在石头里的矿;计划写进回执,对话流据此画清单。
+ * numen.work.mine 挖空一块埋在石头里的矿;计划写进回执,对话流据此画清单。
  */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
@@ -41,7 +41,7 @@ public class ScriptGameTests {
         return receipt(round, call).get("message").getAsString();
     }
 
-    /** 两行 {@code build.set}:一行做完(那件活收尾)才派下一行,两格都拆掉;回执按行各一句,点出那件活的收尾。 */
+    /** 两行 {@code numen.build.set}:一行做完(那件活收尾)才派下一行,两格都拆掉;回执按行各一句,点出那件活的收尾。 */
     @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_scripts")
     public static void a_program_runs_its_calls_in_order(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -51,8 +51,8 @@ public class ScriptGameTests {
         level.setBlockAndUpdate(first, Blocks.STONE.defaultBlockState());
         level.setBlockAndUpdate(second, Blocks.STONE.defaultBlockState());
         LlmToolCall script = programCall("""
-                build.set(%s, {block = "air"})
-                build.set(%s, {block = "air"})
+                numen.build.set(%s, {block = "air"})
+                numen.build.set(%s, {block = "air"})
                 """.formatted(xyz(first), xyz(second)));
         Round round = round(helper, her, script);
         EventOutbox outbox = EventOutbox.get(level.getServer());
@@ -73,7 +73,7 @@ public class ScriptGameTests {
     }
 
     /**
-     * 第一行当场失败(走去用一格空气):库里的 {@code move.goto_} 写路线那一步抛错,脚本接住、不往下走,第二行的那一格还在;
+     * 第一行当场失败(走去用一格空气):库里的 {@code numen.move.goto_} 写路线那一步抛错,脚本接住、不往下走,第二行的那一格还在;
      * 回执说停在哪一行、为什么,失败的那次调用记在调库函数的那一行上。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
@@ -84,9 +84,9 @@ public class ScriptGameTests {
         BlockPos kept = helper.absolutePos(new BlockPos(4, 2, 2));
         level.setBlockAndUpdate(kept, Blocks.STONE.defaultBlockState());
         LlmToolCall script = programCall("""
-                local walked, why = pcall(move.goto_, %s, {arrive = "use"})
+                local walked, why = pcall(numen.move.goto_, %s, {arrive = "use"})
                 if not walked then error("could not get there: " .. why, 0) end
-                build.set(%s, {block = "air"})
+                numen.build.set(%s, {block = "air"})
                 """.formatted(xyz(air), xyz(kept)));
         Round round = round(helper, her, script);
 
@@ -94,10 +94,10 @@ public class ScriptGameTests {
             helper.assertTrue(round.hasSettled(), "the script has not finished");
             String msg = message(round, script);
             helper.assertTrue(!receipt(round, script).get("success").getAsBoolean(), "the script succeeded: " + msg);
-            // 库函数 move.goto_ 里调 route.new 抛出的错误值原样到了脚本:拼进字符串是"函数: 种类 — 原因"
+            // 库函数 numen.move.goto_ 里调 numen.route.new 抛出的错误值原样到了脚本:拼进字符串是"函数: 种类 — 原因"
             helper.assertTrue(msg.startsWith("The script stopped at line 2 after 1 call: could not get there: "
-                    + "route.new: bad_argument — "), msg);
-            helper.assertTrue(msg.contains("line 1 route.new: bad_argument — "), msg);
+                    + "numen.route.new: bad_argument — "), msg);
+            helper.assertTrue(msg.contains("line 1 numen.route.new: bad_argument — "), msg);
             helper.assertTrue(level.getBlockState(kept).is(Blocks.STONE), "the line after the failure ran: " + msg);
             CompanionFactory.despawn(level.getServer(), her);
         });
@@ -112,8 +112,8 @@ public class ScriptGameTests {
         BlockPos kept = helper.absolutePos(new BlockPos(4, 2, 2));
         level.setBlockAndUpdate(kept, Blocks.STONE.defaultBlockState());
         LlmToolCall script = programCall("""
-                move.goto_({x = %d, z = %d})
-                build.set(%s, {block = "air"})
+                numen.move.goto_({x = %d, z = %d})
+                numen.build.set(%s, {block = "air"})
                 """.formatted(far.getX(), far.getZ(), xyz(kept)));
         Round round = round(helper, her, script);
         EventOutbox outbox = EventOutbox.get(level.getServer());
@@ -145,8 +145,8 @@ public class ScriptGameTests {
         NumenPlayer her = spawnAt(helper, "gametest_lua_spoken", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
         LlmToolCall script = programCall("""
-                move.goto_({x = %d, z = %d})
-                move.goto_({x = %d, z = %d})
+                numen.move.goto_({x = %d, z = %d})
+                numen.move.goto_({x = %d, z = %d})
                 """.formatted(far.getX(), far.getZ(), far.getX() - 10, far.getZ()));
         Round round = round(helper, her, script);
         EventOutbox outbox = EventOutbox.get(level.getServer());
@@ -160,7 +160,7 @@ public class ScriptGameTests {
                     helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(move\\.go\\) after 3 calls: "
                             + "your owner spoke; t\\d+ keeps running\\..*"), msg);
                     TaskRecord now = CompanionTickDispatcher.currentTaskFor(her.getUUID());
-                    helper.assertTrue(now != null && now.getToolName().equals("move.go"),
+                    helper.assertTrue(now != null && now.getToolName().equals("numen.move.go"),
                             "the walk is no longer running: " + now);
                     outbox.forget(her.getUUID());
                     CompanionFactory.despawn(level.getServer(), her);
@@ -169,7 +169,7 @@ public class ScriptGameTests {
     }
 
     /**
-     * 一块区域的每一部分:{@code area.parts} 直接给出名字的列表,脚本逐个走过去挖;两团矿都挖掉,打印的就是那两个名字。
+     * 一块区域的每一部分:{@code numen.area.parts} 直接给出名字的列表,脚本逐个走过去挖;两团矿都挖掉,打印的就是那两个名字。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_scripts")
     public static void a_program_goes_through_the_parts_of_an_area(GameTestHelper helper) {
@@ -182,10 +182,10 @@ public class ScriptGameTests {
         her.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
         ToolRun scanned = scanInto(her, 14, "minecraft:iron_ore", "ores");
         LlmToolCall script = programCall("""
-                for _, p in ipairs(area.parts("ores")) do
+                for _, p in ipairs(numen.area.parts("ores")) do
                   print(p)
-                  move.goto_(p, {arrive = "dig"})
-                  work.dig(p)
+                  numen.move.goto_(p, {arrive = "dig"})
+                  numen.work.dig(p)
                 end
                 """);
         Round[] round = new Round[1];
@@ -211,7 +211,7 @@ public class ScriptGameTests {
     }
 
     /**
-     * 内置的 work.mine:四颗铁矿埋在一块石头里,扫进区域后一行 {@code work.mine("ores")} 挖空它——走到够得着、挖、捡,直到区域
+     * 内置的 numen.work.mine:四颗铁矿埋在一块石头里,扫进区域后一行 {@code numen.work.mine("ores")} 挖空它——走到够得着、挖、捡,直到区域
      * 里一格不剩;铁都进了包,返回挖了几格,work 这个模块记一次用到它的程序跑完。它里面没有一处接住错误往下走:哪一步失败,整段就
      * 停在那一步。
      */
@@ -231,7 +231,7 @@ public class ScriptGameTests {
         NumenPlayer her = spawnAt(helper, "gametest_lua_mine", new BlockPos(9, 7, 9), false);
         her.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
         ToolRun scanned = scanInto(her, 8, "minecraft:iron_ore", "ores");
-        LlmToolCall run = programCall("return work.mine(\"ores\")");
+        LlmToolCall run = programCall("return numen.work.mine(\"ores\")");
         Round[] round = new Round[1];
 
         steps(helper)
@@ -241,11 +241,11 @@ public class ScriptGameTests {
                     round[0] = round(helper, her, run);
                 })
                 .thenWaitUntil(() -> {
-                    helper.assertTrue(round[0].hasSettled(), "work.mine has not finished");
+                    helper.assertTrue(round[0].hasSettled(), "numen.work.mine has not finished");
                     String msg = message(round[0], run);
                     helper.assertTrue(msg.startsWith("The script ran to the end"), msg);
                     helper.assertTrue(receipt(round[0], run).getAsJsonObject("data").get("returned").getAsInt()
-                            >= ores.size(), "work.mine did not return the cells it dug: " + msg);
+                            >= ores.size(), "numen.work.mine did not return the cells it dug: " + msg);
                     for (BlockPos ore : ores) {
                         helper.assertTrue(!level.getBlockState(ore).is(Blocks.IRON_ORE),
                                 "ore left at " + ore + ": " + msg);
@@ -259,35 +259,35 @@ public class ScriptGameTests {
     }
 
     /**
-     * 内置模块读得到、盖得住、还得回去:{@code script.show("work")} 给出全文;她照抄一份、加一个函数,存成同名的 work——程序里
-     * {@code work.gt_marker()} 用的就是她的,原有的 {@code work.collect} 照样在;清单标出"用她的、不用内置的",
+     * 内置模块读得到、盖得住、还得回去:{@code numen.module.show("numen.work")} 给出全文;她照抄一份、加一个函数,存成同名的 work——程序里
+     * {@code work.gt_marker()} 用的就是她的,原有的 {@code numen.work.collect} 照样在;清单标出"用她的、不用内置的",
      * {@code {builtin = true}} 还看得到内置原文;删掉她那份就回到内置,她加的函数没了。
      */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_scripts")
     public static void a_built_in_module_is_overridden_and_given_back(GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_lua_copier", new BlockPos(2, 2, 2), false);
-        ToolRun shown = lua(her, "return script.show(\"work\")");
+        ToolRun shown = lua(her, "return numen.module.show(\"numen.work\")");
         helper.assertTrue(shown.receipt() != null && shown.receipt().contains("function M.mine(where)"),
                 "the built-in work does not read as itself: " + shown.receipt());
         ToolRun overridden = lua(her, """
-                local work_code = script.show("work").code
+                local work_code = numen.module.show("numen.work").code
                 local mine = string.gsub(work_code, "\\nreturn M%s*$", "\\nfunction M.gt_marker() return 7 end\\nreturn M\\n")
-                script.save(mine, {name = "work"})
-                return work.gt_marker()
+                numen.module.save(mine, {name = "numen.work"})
+                return numen.work.gt_marker()
                 """);
         helper.assertTrue(overridden.ranToTheEnd() && overridden.receipt().contains("returned: 7"),
                 "her work was not used: " + overridden.receipt());
-        helper.assertTrue(lua(her, "return type(work.collect)").receipt().contains("returned: function"),
-                "the copy lost work.collect");
-        String listed = lua(her, "script.list()").reply();
+        helper.assertTrue(lua(her, "return type(numen.work.collect)").receipt().contains("returned: function"),
+                "the copy lost numen.work.collect");
+        String listed = lua(her, "numen.module.list()").reply();
         helper.assertTrue(listed.contains("[yours, used instead of the built-in one]"), listed);
-        helper.assertTrue(lua(her, "return script.show(\"work\", {builtin = true}).code").receipt()
-                        .contains("function M.mine(where)") && !lua(her, "return script.show(\"work\", {builtin = "
+        helper.assertTrue(lua(her, "return numen.module.show(\"numen.work\", {builtin = true}).code").receipt()
+                        .contains("function M.mine(where)") && !lua(her, "return numen.module.show(\"numen.work\", {builtin = "
                         + "true}).code").receipt().contains("gt_marker"), "the built-in text is gone");
-        ToolRun deleted = lua(her, "script.delete(\"work\")");
-        helper.assertTrue(deleted.succeeded() && deleted.reply().contains("the built-in work is used again"),
+        ToolRun deleted = lua(her, "numen.module.delete(\"numen.work\")");
+        helper.assertTrue(deleted.succeeded() && deleted.reply().contains("the built-in numen.work is used again"),
                 deleted.reply());
-        ToolRun gone = lua(her, "return work.gt_marker()");
+        ToolRun gone = lua(her, "return numen.work.gt_marker()");
         helper.assertTrue(!gone.ranToTheEnd() && gone.receipt().contains("no_function"),
                 "her function outlived her copy: " + gone.receipt());
         CompanionFactory.despawn(helper.getLevel().getServer(), her);
@@ -310,21 +310,21 @@ public class ScriptGameTests {
         helper.assertTrue(dir.getFileName().toString().startsWith("numen-gametest-lua-"),
                 "GameTest reads modules from " + dir + ", not from its own empty directory");
 
-        ToolRun flat = lua(her, "script.save(\"-- Flat.\\nreturn {}\", {name = \"gt_flat\"})");
+        ToolRun flat = lua(her, "numen.module.save(\"-- Flat.\\nreturn {}\", {name = \"gt_flat\"})");
         helper.assertTrue(!flat.succeeded() && flat.reply().contains("my.gt_flat"),
                 "a module of her own was kept outside my: " + flat.reply());
-        ToolRun broken = lua(her, "script.save(\"-- Never compiles.\\nlocal x = = 1\", {name = \"my.gt_broken\"})");
+        ToolRun broken = lua(her, "numen.module.save(\"-- Never compiles.\\nlocal x = = 1\", {name = \"my.gt_broken\"})");
         helper.assertTrue(!broken.succeeded() && broken.reply().contains("my.gt_broken:2:"),
                 "a module that does not compile was kept: " + broken.reply());
-        ToolRun redefines = lua(her, "script.save(\"-- Takes build.set.\\nlocal M = {}\\nfunction build.set() end\\n"
+        ToolRun redefines = lua(her, "numen.module.save(\"-- Takes numen.build.set.\\nlocal M = {}\\nfunction numen.build.set() end\\n"
                 + "return M\", {name = \"my.gt_thief\"})");
-        helper.assertTrue(!redefines.succeeded() && redefines.reply().contains("build.set is an API function"),
+        helper.assertTrue(!redefines.succeeded() && redefines.reply().contains("numen.build.set is an API function"),
                 "a module that redefines an API function was kept: " + redefines.reply());
 
-        ToolRun saved = lua(her, "script.save(\"-- Clearing cells.\\nlocal M = {}\\n---Clear one cell.\\n"
-                + "function M.cell(p)\\n  build.set(p, {block = 'air'})\\nend\\nreturn M\", {name = \"my.gt_clear\"})");
+        ToolRun saved = lua(her, "numen.module.save(\"-- Clearing cells.\\nlocal M = {}\\n---Clear one cell.\\n"
+                + "function M.cell(p)\\n  numen.build.set(p, {block = 'air'})\\nend\\nreturn M\", {name = \"my.gt_clear\"})");
         helper.assertTrue(saved.succeeded() && saved.reply().contains("Saved module my.gt_clear"), saved.reply());
-        ToolRun shown = lua(her, "script.show(\"my.gt_clear\")");
+        ToolRun shown = lua(her, "numen.module.show(\"my.gt_clear\")");
         helper.assertTrue(shown.succeeded() && shown.reply().contains("(yours)")
                 && shown.reply().contains("function M.cell(p)") && shown.reply().contains("No program used it yet."),
                 shown.reply());
@@ -337,7 +337,7 @@ public class ScriptGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(first.hasSettled(), "the first program has not finished"))
                 .thenExecute(() -> {
                     String msg = message(first, run);
-                    helper.assertTrue(msg.startsWith("The script ran to the end") && msg.contains("build.set: ok"),
+                    helper.assertTrue(msg.startsWith("The script ran to the end") && msg.contains("numen.build.set: ok"),
                             msg);
                     helper.assertTrue(level.getBlockState(cell).isAir(), "the module did not clear the cell");
                     level.setBlockAndUpdate(cell, Blocks.STONE.defaultBlockState());
@@ -348,10 +348,10 @@ public class ScriptGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(level.getBlockState(cell).isAir(),
                         "the second program did not clear the cell"))
                 .thenWaitUntil(() -> {
-                    String listed = lua(her, "script.list()").reply();
+                    String listed = lua(her, "numen.module.list()").reply();
                     helper.assertTrue(listed.contains("my.gt_clear — Clearing cells. [yours] Programs that used it: 2, "
                             + "ran to the end: 2"), "the record does not add up: " + listed);
-                    helper.assertTrue(listed.contains("work — ") && listed.contains("[built in]"), listed);
+                    helper.assertTrue(listed.contains("numen.work — ") && listed.contains("[built in]"), listed);
                 })
                 .thenExecute(() -> {
                     // 主人拿编辑器改了文件:不重启,下一段程序就用新的
@@ -372,10 +372,10 @@ public class ScriptGameTests {
                     ToolRun rotten = lua(her, "return my.gt_rotten.x");
                     helper.assertTrue(!rotten.ranToTheEnd() && rotten.receipt().contains("module my.gt_rotten does not "
                             + "compile"), rotten.receipt());
-                    helper.assertTrue(lua(her, "script.delete(\"my.gt_rotten\")").succeeded(), "the rotten one stays");
-                    ToolRun deleted = lua(her, "script.delete(\"my.gt_clear\")");
+                    helper.assertTrue(lua(her, "numen.module.delete(\"my.gt_rotten\")").succeeded(), "the rotten one stays");
+                    ToolRun deleted = lua(her, "numen.module.delete(\"my.gt_clear\")");
                     helper.assertTrue(deleted.succeeded(), deleted.reply());
-                    helper.assertTrue(!lua(her, "script.show(\"my.gt_clear\")").succeeded(),
+                    helper.assertTrue(!lua(her, "numen.module.show(\"my.gt_clear\")").succeeded(),
                             "the deleted module is still there");
                     outbox.forget(her.getUUID());
                     CompanionFactory.despawn(level.getServer(), her);
@@ -384,22 +384,22 @@ public class ScriptGameTests {
     }
 
     /**
-     * 计划写进回执:{@code todo.write} 收下整份计划,回执的数据里原样留着这次调用的参数,对话流从那里读出清单;做着的不止一项
+     * 计划写进回执:{@code numen.todo.write} 收下整份计划,回执的数据里原样留着这次调用的参数,对话流从那里读出清单;做着的不止一项
      * 被拒,说清只能有一项在做。
      */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_scripts")
     public static void a_written_plan_is_echoed_on_the_receipt(GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_lua_planner", new BlockPos(2, 2, 2), false);
-        ToolRun plan = lua(her, "todo.write({\"[x] walk to the mine\", \"[>] dig the iron\", \"[ ] smelt it\"})");
+        ToolRun plan = lua(her, "numen.todo.write({\"[x] walk to the mine\", \"[>] dig the iron\", \"[ ] smelt it\"})");
         helper.assertTrue(plan.ranToTheEnd(), "the plan was not written: " + plan.receipt());
         JsonObject data = JsonParser.parseString(plan.receipt()).getAsJsonObject().getAsJsonObject("data");
         var echoed = data.getAsJsonArray("echoed");
         helper.assertTrue(echoed != null && echoed.size() == 1
-                        && echoed.get(0).getAsJsonObject().get("function").getAsString().equals("todo.write")
+                        && echoed.get(0).getAsJsonObject().get("function").getAsString().equals("numen.todo.write")
                         && echoed.get(0).getAsJsonObject().getAsJsonObject("args").getAsJsonArray("items").size() == 3,
                 "the plan is not echoed on the receipt: " + plan.receipt());
         helper.assertTrue(plan.receipt().contains("plan written: 1/3 done; doing now: dig the iron"), plan.receipt());
-        ToolRun two = lua(her, "todo.write({\"[>] dig\", \"[>] smelt\"})");
+        ToolRun two = lua(her, "numen.todo.write({\"[>] dig\", \"[>] smelt\"})");
         helper.assertTrue(!two.ranToTheEnd() && two.receipt().contains("exactly one step is [>]"),
                 "a plan with two steps in progress was taken: " + two.receipt());
         CompanionFactory.despawn(helper.getLevel().getServer(), her);
@@ -407,7 +407,7 @@ public class ScriptGameTests {
     }
 
     /**
-     * 查到的东西原样交给动作:{@code scan.blocks} 一团的最近一格、{@code scan.block} 读到的一块,都直接进 {@code work.dig};两格都挖掉,
+     * 查到的东西原样交给动作:{@code numen.scan.blocks} 一团的最近一格、{@code numen.scan.block} 读到的一块,都直接进 {@code numen.work.dig};两格都挖掉,
      * 程序拿到的是两份数据({@code dug} 各一格),不是话。
      */
     @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_scripts")
@@ -419,9 +419,9 @@ public class ScriptGameTests {
         level.setBlockAndUpdate(first, Blocks.PEARLESCENT_FROGLIGHT.defaultBlockState());
         level.setBlockAndUpdate(second, Blocks.VERDANT_FROGLIGHT.defaultBlockState());
         LlmToolCall script = programCall("""
-                local found = scan.blocks("minecraft:pearlescent_froglight", {radius = 6})
-                local a = work.dig(found.groups[1].nearest)
-                local b = work.dig(scan.block(%s))
+                local found = numen.scan.blocks("minecraft:pearlescent_froglight", {radius = 6})
+                local a = numen.work.dig(found.groups[1].nearest)
+                local b = numen.work.dig(numen.scan.block(%s))
                 return {a.dug, b.dug}
                 """.formatted(xyz(second)));
         Round round = round(helper, her, script);
@@ -439,7 +439,7 @@ public class ScriptGameTests {
         });
     }
 
-    /** 一只实体原样就是一处地方:{@code scan.entities} 列出的那头牛交给 {@code move.goto_},她走到牛跟前。 */
+    /** 一只实体原样就是一处地方:{@code numen.scan.entities} 列出的那头牛交给 {@code numen.move.goto_},她走到牛跟前。 */
     @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_scripts")
     public static void an_entity_a_scan_found_is_a_place_to_walk_to(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -451,8 +451,8 @@ public class ScriptGameTests {
         cow.setNoAi(true);
         level.addFreshEntity(cow);
         LlmToolCall script = programCall("""
-                local cow = scan.entities("passive", {radius = 20})[1]
-                move.goto_(cow, {arrive = "near"})
+                local cow = numen.scan.entities("passive", {radius = 20})[1]
+                numen.move.goto_(cow, {arrive = "near"})
                 return cow.id
                 """);
         Round round = round(helper, her, script);
@@ -484,9 +484,9 @@ public class ScriptGameTests {
         level.setBlockAndUpdate(far, Blocks.OCHRE_FROGLIGHT.defaultBlockState());
         level.setBlockAndUpdate(near, Blocks.OCHRE_FROGLIGHT.defaultBlockState());
         LlmToolCall script = programCall("""
-                local _, far = pcall(work.dig, %s)
-                local _, list = pcall(work.dig, {%d, %d, %d})
-                local _, text = pcall(work.dig, "%d %d %d")
+                local _, far = pcall(numen.work.dig, %s)
+                local _, list = pcall(numen.work.dig, {%d, %d, %d})
+                local _, text = pcall(numen.work.dig, "%d %d %d")
                 print("caught: " .. far)
                 return {far = {far.kind, far.hint}, list = {list.kind, list.hint}, text = {text.kind, text.hint}}
                 """.formatted(xyz(far), near.getX(), near.getY(), near.getZ(), near.getX(), near.getY(), near.getZ()));
@@ -499,17 +499,17 @@ public class ScriptGameTests {
             JsonObject got = receipt.getAsJsonObject("data").getAsJsonObject("returned");
             var farErr = got.getAsJsonArray("far");
             helper.assertTrue("out_of_reach".equals(farErr.get(0).getAsString())
-                            && farErr.get(1).getAsString().equals("move.goto_(" + xyz(far) + ", {arrive = \"dig\"})\n"
-                                    + "work.dig(" + xyz(far) + ")"),
+                            && farErr.get(1).getAsString().equals("numen.move.goto_(" + xyz(far) + ", {arrive = \"dig\"})\n"
+                                    + "numen.work.dig(" + xyz(far) + ")"),
                     "out of reach is not its own kind with the walk as the next line: " + got);
-            String rewritten = "work.dig(" + xyz(near) + ")";
+            String rewritten = "numen.work.dig(" + xyz(near) + ")";
             for (String shape : List.of("list", "text")) {
                 var err = got.getAsJsonArray(shape);
                 helper.assertTrue("bad_argument".equals(err.get(0).getAsString())
                                 && rewritten.equals(err.get(1).getAsString()),
                         "the old " + shape + " shape is not refused with the call rewritten: " + got);
             }
-            helper.assertTrue(receipt.get("message").getAsString().contains("caught: work.dig: out_of_reach — "),
+            helper.assertTrue(receipt.get("message").getAsString().contains("caught: numen.work.dig: out_of_reach — "),
                     "an error joined into a string does not read as function, kind and why: " + receipt);
             helper.assertTrue(level.getBlockState(far).is(Blocks.OCHRE_FROGLIGHT)
                     && level.getBlockState(near).is(Blocks.OCHRE_FROGLIGHT), "a refused call dug a block");

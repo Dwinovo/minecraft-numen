@@ -26,7 +26,11 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * 插件的登记处:{@code NumenPlugins.register(numen -> …)}。
+ * 插件的登记处:{@code NumenPlugins.register("mymod", numen -> …)}。
+ *
+ * <h2>名字空间由登记者给出</h2>
+ * 插件登记时写自己的 id(一般就是 mod id 或它的简写:{@code tlm}、{@code ftbquests}),拿到的那扇门只往这个名字空间里登记:组
+ * {@code maid} 就是 {@code tlm.maid},模块 {@code skin.lua} 就是 {@code tlm.skin}。引擎自己的内容用 {@link #NUMEN}。
  *
  * <h2>时机不必你操心</h2>
  * 插件在自己模组的构造期登记就行。引擎内部该就绪的东西各有各的时机(工具注册表在
@@ -47,17 +51,23 @@ public final class NumenPlugins {
     /** 客户端接上来了没有。它同时就是"我现在是不是客户端"的答案。 */
     private static volatile boolean clientReady;
 
-    private static final NumenApi API = new Impl();
+    /** 引擎自己的名字空间:core 与引擎登记的组与模块都在它下面。 */
+    public static final String NUMEN = "numen";
 
     private NumenPlugins() {}
 
-    /** 登记一个插件。可在任何时候调用,通常在你模组的构造期。 */
-    public static void register(NumenPlugin plugin) {
+    /**
+     * 登记一个插件。可在任何时候调用,通常在你模组的构造期。
+     *
+     * @param namespace 你的名字空间:小写字母开头,只含 [a-z0-9_];她的程序里你的函数都写成 {@code <namespace>.<组>.<动作>}
+     */
+    public static void register(String namespace, NumenPlugin plugin) {
         if (plugin == null) return;
+        com.dwinovo.numen.cli.NumenCli.checkNamespace(namespace);
         try {
-            plugin.setup(API);
+            plugin.setup(new Impl(namespace));
         } catch (RuntimeException e) {
-            Constants.LOG.error("[numen] 插件登记失败,它挂的东西可能只生效了一半", e);
+            Constants.LOG.error("[numen] 插件 {} 登记失败,它挂的东西可能只生效了一半", namespace, e);
         }
     }
 
@@ -211,14 +221,21 @@ public final class NumenPlugins {
 
     private static final class Impl implements NumenApi {
 
+        /** 这扇门登记进的名字空间。 */
+        private final String namespace;
+
+        Impl(String namespace) {
+            this.namespace = namespace;
+        }
+
         @Override
         public <T> void on(CompanionEvent<T> event, Consumer<T> handler) {
             CompanionEvents.subscribe(event, handler);
         }
 
         @Override
-        public void registerCommands(String namespace, String summary, Consumer<CommandGroup> actions) {
-            NumenCli.register(namespace, summary, actions);
+        public void registerCommands(String group, String summary, Consumer<CommandGroup> actions) {
+            NumenCli.register(namespace, group, summary, actions);
         }
 
         @Override
@@ -230,7 +247,7 @@ public final class NumenPlugins {
 
         @Override
         public void bundleModules(Path modulesRoot) {
-            com.dwinovo.numen.script.BuiltinModules.bundle(modulesRoot);
+            com.dwinovo.numen.script.BuiltinModules.bundle(namespace, modulesRoot);
         }
 
         @Override

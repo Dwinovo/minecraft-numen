@@ -74,11 +74,11 @@ public final class WrittenCommandsLint {
         return texts;
     }
 
-    /** 登记在册的说明文字里,属于这一个命令组的那些:组的一句话,它每个动作的说明、参数、例子与注意。 */
-    public static List<WrittenCommands.Text> registeredUnder(String group) {
+    /** 登记在册的说明文字里,属于这一个名字空间的那些:每组的一句话,每个动作的说明、参数、例子与注意。 */
+    public static List<WrittenCommands.Text> registeredUnder(String namespace) {
         install();
         return WrittenCommands.registered().stream()
-                .filter(t -> t.where().equals(group) || t.where().startsWith(group + " "))
+                .filter(t -> t.where().startsWith(namespace + ".") || t.where().startsWith(namespace + " "))
                 .toList();
     }
 }

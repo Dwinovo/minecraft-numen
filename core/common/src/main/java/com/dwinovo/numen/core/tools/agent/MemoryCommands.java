@@ -42,7 +42,7 @@ public final class MemoryCommands {
                     + "seen, lesson = something you tried that did not work.")
             .whenOmitted("file it as " + DEFAULT_TYPE);
     private static final Param<String> CONTENT = Param.optional("content", ArgType.string(),
-            "A longer body, read back with memory.recall.")
+            "A longer body, read back with numen.memory.recall.")
             .whenOmitted("keep just the line, when it already says everything");
     private static final Param<String> NAME = Param.required("name", ArgType.word(),
             "The note's name, exactly as <memory> lists it.");
@@ -65,8 +65,8 @@ public final class MemoryCommands {
                 MemoryCommands::remember, DESCRIPTION, NEW_NAME, TYPE, CONTENT)
                 .returns(ScriptType.table(ScriptType.field("name", ScriptType.STRING, null),
                         ScriptType.field("count", ScriptType.INTEGER, "How many notes you keep now.")))
-                .example("memory.remember(\"main base -340,68,120, door faces east\", {name = \"main-base\"})")
-                .example("memory.remember(\"the swamp west of base is too deep to cross\", {name = \"swamp-route\", "
+                .example("numen.memory.remember(\"main base -340,68,120, door faces east\", {name = \"main-base\"})")
+                .example("numen.memory.remember(\"the swamp west of base is too deep to cross\", {name = \"swamp-route\", "
                         + "type = \"lesson\", content = \"tried twice on day 12; go around by the north ridge\"})")
                 .note("It outlives this session. The description IS the index line, and for most notes the whole "
                         + "note: put the fact in it (\"main base -340,68,120\"), not a label (\"about the base\").")
@@ -77,7 +77,7 @@ public final class MemoryCommands {
                 .returns(ScriptType.table(ScriptType.field("name", ScriptType.STRING, null),
                         ScriptType.field("day", ScriptType.INTEGER, null),
                         ScriptType.field("content", ScriptType.STRING, "The note's body.")))
-                .example("print(memory.recall(\"main-base\").content)")
+                .example("print(numen.memory.recall(\"main-base\").content)")
                 .note("<memory> already carries each note's line; recall only when that line points at more you "
                         + "need.")
                 .note("A note says what was true when you wrote it; the world may have moved on.")
@@ -86,7 +86,7 @@ public final class MemoryCommands {
         memory.client(FORGET, "Drop one of your notes for good.",
                 MemoryCommands::forget, NAME)
                 .returns(ScriptType.NOTHING)
-                .example("memory.forget(\"main-base\")")
+                .example("numen.memory.forget(\"main-base\")")
                 .note("Use it when a note turned out wrong, or after merging several into one. Nothing else ever "
                         + "removes a note.")
                 .seeAlso(line(REMEMBER));

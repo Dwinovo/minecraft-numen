@@ -23,9 +23,9 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
 /**
- * 感知:{@code scan} 组({@code scan.block}、{@code scan.storage}、{@code scan.around}、{@code scan.entities}、
- * {@code scan.blocks})、{@code status} 组({@code status.self}、{@code status.world}、{@code status.owner}),以及
- * {@code inv.recipe}、{@code throwaway}(清单现状在 {@code status.self} 的身体状态里)。这些不动世界,测的是回执说的是不是眼前的真事;提升成快捷工具的
+ * 感知:{@code scan} 组({@code numen.scan.block}、{@code numen.scan.storage}、{@code numen.scan.around}、{@code numen.scan.entities}、
+ * {@code numen.scan.blocks})、{@code status} 组({@code numen.status.self}、{@code numen.status.world}、{@code numen.status.owner}),以及
+ * {@code numen.inv.recipe}、{@code throwaway}(清单现状在 {@code numen.status.self} 的身体状态里)。这些不动世界,测的是回执说的是不是眼前的真事;提升成快捷工具的
  * 动作,同一刻从工具与从 {@code command} 读到的一字不差(同源)。
  */
 @GameTestHolder(Constants.MOD_ID)
@@ -46,9 +46,9 @@ public class PerceptionGameTests {
         helper.getLevel().setBlockAndUpdate(near, Blocks.STONE.defaultBlockState());
         helper.getLevel().setBlockAndUpdate(far, Blocks.STONE.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_inspector", new BlockPos(3, 2, 3), false);
-        ToolRun atNear = lua(companion, "scan.block(" + xyz(near) + ")");
-        ToolRun atFar = lua(companion, "scan.block(" + xyz(far) + ")");
-        ToolRun viaCommand = lua(companion, "scan.block({x = " + near.getX() + ", y = " + near.getY() + ", z = " + near.getZ() + "})");
+        ToolRun atNear = lua(companion, "numen.scan.block(" + xyz(near) + ")");
+        ToolRun atFar = lua(companion, "numen.scan.block(" + xyz(far) + ")");
+        ToolRun viaCommand = lua(companion, "numen.scan.block({x = " + near.getX() + ", y = " + near.getY() + ", z = " + near.getZ() + "})");
 
         succeedWhen(helper, () -> {
             JsonObject n = json(atNear);
@@ -68,7 +68,7 @@ public class PerceptionGameTests {
     public static void inspect_block_storage_reads_a_chest_without_opening_it(GameTestHelper helper) {
         BlockPos chest = chestWithDiamonds(helper, new BlockPos(5, 2, 3), 5);
         NumenPlayer companion = spawnAt(helper, "gametest_auditor", new BlockPos(3, 2, 3), false);
-        ToolRun storage = lua(companion, "scan.storage({x = " + chest.getX() + ", y = " + chest.getY() + ", z = " + chest.getZ() + "})");
+        ToolRun storage = lua(companion, "numen.scan.storage({x = " + chest.getX() + ", y = " + chest.getY() + ", z = " + chest.getZ() + "})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(storage.succeeded() && storage.reply().contains("diamond")
@@ -97,8 +97,8 @@ public class PerceptionGameTests {
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(companion.onGround(), "she has not landed"))
                 .thenExecute(() -> {
-                    map.set(lua(companion, "scan.around()"));
-                    viaCommand.set(lua(companion, "scan.around()"));
+                    map.set(lua(companion, "numen.scan.around()"));
+                    viaCommand.set(lua(companion, "numen.scan.around()"));
                 })
                 .thenWaitUntil(() -> {
                     String m = map.get().outcome();
@@ -121,9 +121,9 @@ public class PerceptionGameTests {
         pig.setNoAi(true);
         helper.getLevel().addFreshEntity(pig);
         NumenPlayer companion = spawnAt(helper, "gametest_watcher", new BlockPos(3, 2, 3), false);
-        ToolRun all = lua(companion, "scan.entities(\"all\", {radius = " + 12 + "})");
-        ToolRun hostile = lua(companion, "scan.entities(\"hostile\", {radius = " + 12 + "})");
-        ToolRun viaCommand = lua(companion, "scan.entities(\"all\", {radius = 12})");
+        ToolRun all = lua(companion, "numen.scan.entities(\"all\", {radius = " + 12 + "})");
+        ToolRun hostile = lua(companion, "numen.scan.entities(\"hostile\", {radius = " + 12 + "})");
+        ToolRun viaCommand = lua(companion, "numen.scan.entities(\"all\", {radius = 12})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(listsEntity(all, pig) && all.reply().contains("pig"),
@@ -137,12 +137,12 @@ public class PerceptionGameTests {
         });
     }
 
-    /** {@code scan.entities} 的这一页有没有列出这只实体(按它的运行期编号)。 */
+    /** {@code numen.scan.entities} 的这一页有没有列出这只实体(按它的运行期编号)。 */
     private static boolean listsEntity(ToolRun scan, net.minecraft.world.entity.Entity entity) {
         return rowOf(scan, entity) != null;
     }
 
-    /** {@code scan.entities} 的这一页里这只实体的那一行;没列出为 null。 */
+    /** {@code numen.scan.entities} 的这一页里这只实体的那一行;没列出为 null。 */
     private static com.google.gson.JsonObject rowOf(ToolRun scan, net.minecraft.world.entity.Entity entity) {
         for (var row : dataIn(scan.reply()).getAsJsonArray("entities")) {
             if (row.getAsJsonObject().get("id").getAsInt() == entity.getId()) {
@@ -169,7 +169,7 @@ public class PerceptionGameTests {
         strangers.setTame(true, true);
         strangers.setOwnerUUID(stranger);
         var wild = InteractGameTests.wolfAt(helper, new BlockPos(1, 2, 1));
-        ToolRun scan = lua(companion, "scan.entities(\"passive\", {radius = 8})");
+        ToolRun scan = lua(companion, "numen.scan.entities(\"passive\", {radius = 8})");
 
         succeedWhen(helper, () -> {
             var rows = java.util.stream.Stream.of(hers, owners, strangers, wild).map(w -> rowOf(scan, w)).toList();
@@ -195,8 +195,8 @@ public class PerceptionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_selfie", new BlockPos(3, 2, 3), false);
         companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
         companion.getInventory().add(new ItemStack(Items.DIAMOND, 3));
-        ToolRun status = lua(companion, "status.self()");
-        ToolRun viaCommand = lua(companion, "status.self()");
+        ToolRun status = lua(companion, "numen.status.self()");
+        ToolRun viaCommand = lua(companion, "numen.status.self()");
 
         succeedWhen(helper, () -> {
             JsonObject s = json(status);
@@ -216,7 +216,7 @@ public class PerceptionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void get_world_info_tells_day_and_clear_weather(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_skywatcher", new BlockPos(3, 2, 3), false);
-        ToolRun info = lua(companion, "status.world()");
+        ToolRun info = lua(companion, "numen.status.world()");
 
         succeedWhen(helper, () -> {
             JsonObject w = json(info);
@@ -234,9 +234,9 @@ public class PerceptionGameTests {
         NumenPlayer alone = spawnAt(helper, "gametest_orphan", new BlockPos(3, 2, 3), false);
         NumenPlayer companion = spawnAt(helper, "gametest_ward", new BlockPos(3, 2, 8), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_guardian");
-        ToolRun absent = lua(alone, "status.owner()");
-        ToolRun present = lua(companion, "status.owner()");
-        ToolRun viaCommand = lua(companion, "status.owner()");
+        ToolRun absent = lua(alone, "numen.status.owner()");
+        ToolRun present = lua(companion, "numen.status.owner()");
+        ToolRun viaCommand = lua(companion, "numen.status.owner()");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(!json(absent).get("online").getAsBoolean(),
@@ -258,7 +258,7 @@ public class PerceptionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void lookup_recipe_lists_every_station(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_scholar", new BlockPos(3, 2, 3), false);
-        ToolRun recipe = lua(companion, "inv.recipe(\"minecraft:iron_ingot\")");
+        ToolRun recipe = lua(companion, "numen.inv.recipe(\"minecraft:iron_ingot\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(recipe.succeeded() && recipe.reply().contains("[smelting")
@@ -268,7 +268,7 @@ public class PerceptionGameTests {
         });
     }
 
-    /** {@code status.self} 的身体状态里,她的 throwaway 清单那一段(没有就是 null)。 */
+    /** {@code numen.status.self} 的身体状态里,她的 throwaway 清单那一段(没有就是 null)。 */
     private static String throwawayIn(ToolRun status) {
         String body = dataIn(status.reply()).get("body_state").getAsString();
         int from = body.indexOf("<throwaway>");
@@ -277,7 +277,7 @@ public class PerceptionGameTests {
 
     /**
      * throwaway 清单是她自己的长期选择,跟着同伴名册落盘:加上木板就列在里面,删掉出厂就有的安山岩就不在了。清单现状不靠
-     * 一个"看清单"的动作,就在她的身体状态里,{@code status.self} 读得到。用和召唤同一条路生成的同伴——名册里没有她,清单就无处可存。
+     * 一个"看清单"的动作,就在她的身体状态里,{@code numen.status.self} 读得到。用和召唤同一条路生成的同伴——名册里没有她,清单就无处可存。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void throwaway_adds_and_removes_and_shows_in_her_status(GameTestHelper helper) {
@@ -285,10 +285,10 @@ public class PerceptionGameTests {
         BlockPos at = helper.absolutePos(new BlockPos(3, 2, 3));
         NumenPlayer companion = com.dwinovo.numen.entity.Companions.summon(level.getServer(), java.util.UUID.randomUUID(),
                 "gametest_mason", level, new net.minecraft.world.phys.Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
-        ToolRun before = lua(companion, "status.self()");
-        ToolRun added = lua(companion, "throwaway.add(\"minecraft:oak_planks\")");
-        ToolRun deleted = lua(companion, "throwaway.remove(\"minecraft:andesite\")");
-        ToolRun now = lua(companion, "status.self()");
+        ToolRun before = lua(companion, "numen.status.self()");
+        ToolRun added = lua(companion, "numen.throwaway.add(\"minecraft:oak_planks\")");
+        ToolRun deleted = lua(companion, "numen.throwaway.remove(\"minecraft:andesite\")");
+        ToolRun now = lua(companion, "numen.status.self()");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(added.succeeded() && deleted.succeeded(), "add or remove failed: " + added.reply()
@@ -312,11 +312,11 @@ public class PerceptionGameTests {
         BlockPos at = helper.absolutePos(new BlockPos(3, 2, 3));
         NumenPlayer companion = com.dwinovo.numen.entity.Companions.summon(level.getServer(), java.util.UUID.randomUUID(),
                 "gametest_resetter", level, new net.minecraft.world.phys.Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
-        ToolRun set = lua(companion, "throwaway.set(\"minecraft:netherrack\", \"minecraft:basalt\")");
-        ToolRun unknown = lua(companion, "throwaway.set(\"minecraft:no_such_block\")");
-        ToolRun afterUnknown = lua(companion, "status.self()");
-        ToolRun cleared = lua(companion, "throwaway.clear()");
-        ToolRun afterClear = lua(companion, "status.self()");
+        ToolRun set = lua(companion, "numen.throwaway.set(\"minecraft:netherrack\", \"minecraft:basalt\")");
+        ToolRun unknown = lua(companion, "numen.throwaway.set(\"minecraft:no_such_block\")");
+        ToolRun afterUnknown = lua(companion, "numen.status.self()");
+        ToolRun cleared = lua(companion, "numen.throwaway.clear()");
+        ToolRun afterClear = lua(companion, "numen.status.self()");
 
         succeedWhen(helper, () -> {
             JsonObject list = dataIn(set.reply());
@@ -339,7 +339,7 @@ public class PerceptionGameTests {
     }
 
     /**
-     * 同源:找方块从 scan_blocks 与 scan.blocks 读到同一份团。标签照原版写法({@code #minecraft:logs})认,一个 id 一个标签
+     * 同源:找方块从 scan_blocks 与 numen.scan.blocks 读到同一份团。标签照原版写法({@code #minecraft:logs})认,一个 id 一个标签
      * 同一次找;只是看,不存、没有编号,两份回执一字不差。
      */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_perception")
@@ -356,9 +356,9 @@ public class PerceptionGameTests {
         // 团的中心是她脚下那一格,落地之前那一格还没定
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(companion.onGround(), "she has not landed"))
-                .thenExecute(() -> viaTool.set(lua(companion, "scan.blocks(\"minecraft:gold_block\", \"#minecraft:logs\", {radius = " + 8 + "})")))
+                .thenExecute(() -> viaTool.set(lua(companion, "numen.scan.blocks(\"minecraft:gold_block\", \"#minecraft:logs\", {radius = " + 8 + "})")))
                 .thenWaitUntil(() -> helper.assertTrue(viaTool.get().reply() != null, "scan_blocks has not answered"))
-                .thenExecute(() -> viaCommand.set(lua(companion, "scan.blocks(\"minecraft:gold_block\", \"#minecraft:logs\", {radius = 8})")))
+                .thenExecute(() -> viaCommand.set(lua(companion, "numen.scan.blocks(\"minecraft:gold_block\", \"#minecraft:logs\", {radius = 8})")))
                 .thenWaitUntil(() -> {
                     String tool = viaTool.get().reply();
                     String line = viaCommand.get().reply();
@@ -407,8 +407,8 @@ public class PerceptionGameTests {
         helper.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
         BlockPos air = helper.absolutePos(new BlockPos(5, 3, 3));
         NumenPlayer companion = spawnAt(helper, "gametest_prober", new BlockPos(3, 2, 3), false);
-        ToolRun onStone = lua(companion, "scan.storage({x = " + stone.getX() + ", y = " + stone.getY() + ", z = " + stone.getZ() + "})");
-        ToolRun onAir = lua(companion, "scan.storage({x = " + air.getX() + ", y = " + air.getY() + ", z = " + air.getZ() + "})");
+        ToolRun onStone = lua(companion, "numen.scan.storage({x = " + stone.getX() + ", y = " + stone.getY() + ", z = " + stone.getZ() + "})");
+        ToolRun onAir = lua(companion, "numen.scan.storage({x = " + air.getX() + ", y = " + air.getY() + ", z = " + air.getZ() + "})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(onStone.succeeded() && onStone.reply().contains("exposes no item/fluid/energy storage"),
@@ -423,7 +423,7 @@ public class PerceptionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void lookup_recipe_for_something_not_made_says_so(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_curious", new BlockPos(3, 2, 3), false);
-        ToolRun recipe = lua(companion, "inv.recipe(\"minecraft:ender_pearl\")");
+        ToolRun recipe = lua(companion, "numen.inv.recipe(\"minecraft:ender_pearl\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(recipe.succeeded() && recipe.reply().contains("no recipe for ender_pearl"),
@@ -436,11 +436,11 @@ public class PerceptionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void lookup_recipe_for_an_unknown_item_is_rejected(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_misspeller", new BlockPos(3, 2, 3), false);
-        ToolRun recipe = lua(companion, "inv.recipe(\"minecraft:no_such_item\")");
+        ToolRun recipe = lua(companion, "numen.inv.recipe(\"minecraft:no_such_item\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(!recipe.succeeded() && recipe.outcome().contains("unknown item: minecraft:no_such_item")
-                            && recipe.outcome().contains("\nusage: inv.recipe("),
+                            && recipe.outcome().contains("\nusage: numen.inv.recipe("),
                     "the unknown id was not rejected by name: " + recipe.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });

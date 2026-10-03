@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
  * <h2>三种写法</h2>
  * <ul>
  *   <li>{@link #required}:按顺序的对象,写在函数的括号里(一行命令里写在动作后面)——它就是这次调用操作的东西;</li>
- *   <li>{@link #optionalPositional}:可以不写的对象,只能是最后一个({@code move.follow([entity])});</li>
+ *   <li>{@link #optionalPositional}:可以不写的对象,只能是最后一个({@code numen.move.follow([entity])});</li>
  *   <li>{@link #optional}:选项,脚本里写在最后的选项表里 {@code {name = value}},一行命令里写成 {@code --name value};开关
  *       ({@link ArgType#bool()})是 {@code true}/{@code false},一行命令里写 {@code --name} 或 {@code --no-name}。</li>
  * </ul>

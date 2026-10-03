@@ -35,13 +35,13 @@ import net.minecraft.core.Direction;
  *       {@link Goals#column}、{@link Goals#level})。站到一块方块上面也是 {@code at}:坐标是它上面脚所在的那一格;</li>
  *   <li>{@code use}:用那一格方块——站在它敞开的面前、看得见、点得到({@link Goals#use});</li>
  *   <li>{@code near}:离那一格(或那一列)不超过 {@code near} 格({@link Goals#within});</li>
- *   <li>{@code dig}:挖那一格方块——站到手够得着它、身体不占着它、挡着视线的都是 {@code work.dig} 清得掉的地方
- *       ({@link Goals#dig},清不清得掉按 {@link #clearing} 问),那一格本身留给 {@code work.dig}。到了就是 {@code work.dig}
+ *   <li>{@code dig}:挖那一格方块——站到手够得着它、身体不占着它、挡着视线的都是 {@code numen.work.dig} 清得掉的地方
+ *       ({@link Goals#dig},清不清得掉按 {@link #clearing} 问),那一格本身留给 {@code numen.work.dig}。到了就是 {@code numen.work.dig}
  *       站在这儿办得成,两处问的是同一个判据。</li>
  * </ul>
  * 坐标就是只有一格的区域:去一块区域,四种到达对整块成立——{@code at} 是走进区域里任意一格(站得住的),{@code use} 是用区域里
  * 任意一个能点、用得上的方块,{@code near} 是离区域里任意一格不超过 {@code near} 格,三种用寻路模块现成的"多个取其一"
- * ({@link Goals#anyOf})组合;{@code dig} 是够得着区域里任意一个 {@code work.dig} 挖得成的方块,同样划算的站位里优先一次
+ * ({@link Goals#anyOf})组合;{@code dig} 是够得着区域里任意一个 {@code numen.work.dig} 挖得成的方块,同样划算的站位里优先一次
  * 够得着最多格的,挖起来贵的格(要问主人的)只在便宜的远出它那份价钱时才去({@link Goals#dig(List, BodyStats, Goals.Clearing)},
  * 定价只在寻路模块那一处)。
  *
@@ -386,13 +386,13 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
     }
 
     /**
-     * 往一格里放方块的目标:手够得着它、身体不占着它。{@code build.at} 判"这一格够不够得着"问的也是它,走到了就放得了。
+     * 往一格里放方块的目标:手够得着它、身体不占着它。{@code numen.build.at} 判"这一格够不够得着"问的也是它,走到了就放得了。
      */
     public static Goal reach(NumenPlayer her, BlockPos cell) {
         return Goals.place(cell, Snapshots.stats(her));
     }
 
-    /** 挖一格方块的目标;空气、流体没有可挖的,站到哪儿 {@code work.dig} 都挖不成的({@link #undiggable}),都当场提醒。 */
+    /** 挖一格方块的目标;空气、流体没有可挖的,站到哪儿 {@code numen.work.dig} 都挖不成的({@link #undiggable}),都当场提醒。 */
     private static Goal dig(NumenPlayer her, Terrain terrain, BlockPos cell) {
         if (!terrain.clickable(cell)) {
             throw new IllegalArgumentException(GotoReminders.nothingToDig(cell, NavText.name(terrain.state(cell))));
@@ -406,7 +406,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
     }
 
     /**
-     * 站到哪儿 {@code work.dig} 都挖不成 {@code cell} 的缘由;挖得成为 null。问的是 {@code work.dig} 挑目标时问的同几件事:按
+     * 站到哪儿 {@code numen.work.dig} 都挖不成 {@code cell} 的缘由;挖得成为 null。问的是 {@code numen.work.dig} 挑目标时问的同几件事:按
      * {@link DigTaskRecord#TARGET_SPEC} 挖它进不进得了(物理上挖不挖得动、规则许不许),每一面是不是都贴着清不掉的方块。
      */
     private static String undiggable(DigQuote pricing, DigQuote clearing, Terrain terrain, BlockPos cell) {
@@ -418,7 +418,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
     }
 
     /**
-     * 到了之后 {@code work.dig} 清得掉哪些挡着视线的格:它清遮挡用的那份规格({@link DigTaskRecord#SPEC}),按此刻的身体与许可。
+     * 到了之后 {@code numen.work.dig} 清得掉哪些挡着视线的格:它清遮挡用的那份规格({@link DigTaskRecord#SPEC}),按此刻的身体与许可。
      * 走路许不许改地形是这一趟自己的事,与它无关。
      */
     private static DigQuote clearing(NumenPlayer her) {

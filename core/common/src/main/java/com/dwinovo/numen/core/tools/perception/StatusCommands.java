@@ -10,7 +10,7 @@ import com.dwinovo.numen.core.tools.PerceptionOps;
 
 /**
  * {@code status}:她此刻的身体、主人、世界。三个动作都在服务端当场读、当场回,不占身体、不动世界;脚本拿到的是那份读数,位置是
- * Pos,原样就能交给要一格的参数({@code move.goto_(status.owner().pos)})。
+ * Pos,原样就能交给要一格的参数({@code numen.move.goto_(numen.status.owner().pos)})。
  */
 public final class StatusCommands {
 
@@ -54,11 +54,11 @@ public final class StatusCommands {
                         ScriptType.field("max_air", ScriptType.INTEGER, null),
                         ScriptType.optional("body_state", ScriptType.STRING, "What you wear and what mods report "
                                 + "about your body.")))
-                .example("local me = status.self()\nprint(me.pos.x, me.pos.y, me.pos.z, me.hp)")
+                .example("local me = numen.status.self()\nprint(me.pos.x, me.pos.y, me.pos.z, me.hp)")
                 .note("Instant and read-only: name, game mode, health, hunger and saturation, position, dimension, "
                         + "biome, the structures you stand in, what is in your hands, what you wear and what mods "
                         + "report about your body, movement state.")
-                .note("It does not list your backpack: what you carry is in front of you every turn; `use.gui()` "
+                .note("It does not list your backpack: what you carry is in front of you every turn; `numen.use.gui()` "
                         + "shows exact slots.")
                 .seeAlso("status owner", "status world");
         status.server("owner", "Your owner: online or not, health, hunger, position, distance from you, held items.",
@@ -77,7 +77,7 @@ public final class StatusCommands {
                         ScriptType.optional("saturation", ScriptType.NUMBER, null),
                         ScriptType.optional("main_hand", ScriptType.STRING, null),
                         ScriptType.optional("off_hand", ScriptType.STRING, null)))
-                .example("local owner = status.owner()\nif owner.online then print(owner.pos.x, owner.pos.z) end")
+                .example("local owner = numen.status.owner()\nif owner.online then print(owner.pos.x, owner.pos.z) end")
                 .note("Instant and read-only. An offline owner comes back as online:false.")
                 .seeAlso("status self");
         status.server("world", "The world: dimension, game time, whether it is bright or dark outside, weather.",
@@ -89,7 +89,7 @@ public final class StatusCommands {
                         ScriptType.field("is_dark_outside", ScriptType.BOOLEAN, null),
                         ScriptType.field("weather", ScriptType.choice(java.util.List.of("clear", "rain", "thunder")),
                                 null)))
-                .example("status.world()")
+                .example("numen.status.world()")
                 .note("Instant and read-only. Darkness and weather matter for mobs, combat and sailing.")
                 .seeAlso("status self");
     }

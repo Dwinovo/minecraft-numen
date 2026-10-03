@@ -26,17 +26,12 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 /**
- * 她能用的 Lua 模块:每个模块返回一张函数表,程序里以模块名直接用({@code work.collect()}),和第 ① 层的组同名的给那一组加函数。
+ * 她能用的 Lua 模块:每个模块返回一张函数表,程序里以模块名直接用({@code numen.work.collect()}),和第 ① 层的组同名的给那一组加函数。
  *
- * <h2>两种名字,两处文件</h2>
- * 目录按主人分({@code config/numen/lua/<主人>/}),同一主人的同伴共用,主人也能拿编辑器直接改。名字是程序里的写法,文件在哪由名字定,
- * 规矩只在这里({@link #problem}、{@link #file}):
- * <ul>
- *   <li><b>内置的</b>随模组发布、留在 jar 里({@link BuiltinModules});目录顶层一个同名文件 {@code work.lua} 就盖住它(改内置),删掉
- *       回到内置。顶层只认内置有的名字。</li>
- *   <li><b>她自己的库</b>在名字空间 {@code my} 下:模块名 {@code my.lumber},程序里 {@code my.lumber.chop(t)},文件
- *       {@code my/lumber.lua}。</li>
- * </ul>
+ * <h2>名字就是路径</h2>
+ * 目录按主人分({@code config/numen/lua/<主人>/}),同一主人的同伴共用,主人也能拿编辑器直接改。模块名两段 {@code 名字空间.组},文件就在
+ * {@code <名字空间>/<组>.lua}:{@code numen/work.lua} 是 {@code numen.work},{@code my/lumber.lua} 是 {@code my.lumber}。规矩只在这里
+ * ({@link #problem}、{@link #file})。随模组发布的模块({@link BuiltinModules})留在 jar 里,她目录里同一路径的文件盖住它,删掉回到内置。
  *
  * <h2>每次都从磁盘读</h2>
  * 不缓存正文:每次运行、每次看都读最新的文件,所以她存的、主人改的,下一次调用就生效。
@@ -57,7 +52,7 @@ public final class Modules implements ScriptCatalog.ModuleSource {
         BUILTIN,
         /** 她的文件,盖住了同名的内置那份。 */
         OVERRIDE,
-        /** 她自己的库,在 {@code my} 下。 */
+        /** 她自己的库。 */
         HERS
     }
 
@@ -66,7 +61,7 @@ public final class Modules implements ScriptCatalog.ModuleSource {
      *
      * @param summary      正文开头那行注释;没写是 null
      * @param builtinNewer 盖住的那份内置在她存下之后变了
-     * @param problem      名字不合规矩(顶层一个没有同名内置的文件)、或正文读不通时的那句话;都没事是 null
+     * @param problem      正文读不通时的那句话;没事是 null
      */
     public record Module(String name, String code, String summary, Origin origin, boolean builtinNewer,
                          String problem) {}
@@ -131,56 +126,22 @@ public final class Modules implements ScriptCatalog.ModuleSource {
         return dir;
     }
 
-    // ==================== 读 ====================
-
     // ==================== 名字 ====================
 
-    /** 她的名字空间:模块名 {@code my.<名字>}。 */
-    public static final String MINE = ScriptCatalog.ModuleSource.HERS + ".";
+    /** 她自己的模块习惯放的名字空间:没写名字存成 {@code my.module_N}。 */
+    public static final String MINE = "my";
 
-    /** 是不是她自己的库的名字({@code my.lumber})。 */
-    public static boolean hers(String name) {
-        return name != null && name.startsWith(MINE);
-    }
-
-    /**
-     * 一个内置(或插件)模块的名字合不合规矩:它是一个全局名,写得出来、不撞语言与引擎的全局,不叫 {@code my}。能是 null,不能是那句话。
-     */
-    static String builtinProblem(String name) {
-        return ScriptEngine.IN_USE.moduleName(name, true);
-    }
-
-    /**
-     * 她存一份能不能用这个名字:{@code my.<名字>} 是她自己的库,名字写得出来、不是关键字就行;不带 {@code my.} 的只能是一个内置模块的名字
-     * (盖住它)。能是 null,不能是那句话。
-     */
+    /** 一个模块名合不合规矩:两段 {@code 名字空间.组},写得出来、不撞语言与引擎的全局。能是 null,不能是那句话。 */
     public static String problem(String name) {
-        if (hers(name)) {
-            return ScriptEngine.IN_USE.moduleName(name.substring(MINE.length()), false);
-        }
-        String bad = builtinProblem(name);
-        if (bad != null) {
-            return bad + "; your own modules go under " + ScriptCatalog.ModuleSource.HERS + ": " + MINE + "<name>";
-        }
-        return BuiltinModules.get(name) == null ? "there is no built-in module " + name + " to override; your own "
-                + "modules go under " + ScriptCatalog.ModuleSource.HERS + ": " + MINE + name : null;
+        return ScriptEngine.IN_USE.moduleName(name);
     }
 
     // ==================== 读 ====================
 
     /** 叫这个名字、此刻生效的那一份;没有是 null。 */
     public Module get(String name) {
-        if (name == null || name.isEmpty() || name.contains("/") || name.contains("\\")) {
+        if (problem(name) != null) {
             return null;
-        }
-        if (hers(name)) {
-            String code = dir == null ? null : read(file(name));
-            if (code == null) {
-                return null;
-            }
-            String problem = problem(name);
-            return new Module(name, code, ScriptEngine.IN_USE.summary(code), Origin.HERS, false,
-                    problem != null ? problem : ScriptEngine.IN_USE.check(name, code));
         }
         BuiltinModules.Builtin builtin = BuiltinModules.get(name);
         String hers = dir == null ? null : read(file(name));
@@ -188,22 +149,22 @@ public final class Modules implements ScriptCatalog.ModuleSource {
             return builtin == null ? null : new Module(name, builtin.code(), builtin.summary(), Origin.BUILTIN,
                     false, null);
         }
-        boolean newer = false;
-        if (builtin != null) {
-            String base = ledger().get(name) instanceof JsonObject e && e.get("builtin") instanceof JsonElement b
-                    ? b.getAsString() : null;
-            newer = base != null && !base.equals(fingerprint(builtin.code()));
+        if (builtin == null) {
+            return new Module(name, hers, ScriptEngine.IN_USE.summary(hers), Origin.HERS, false,
+                    ScriptEngine.IN_USE.check(name, hers));
         }
-        String problem = problem(name);
+        String base = ledger().get(name) instanceof JsonObject e && e.get("builtin") instanceof JsonElement b
+                ? b.getAsString() : null;
+        boolean newer = base != null && !base.equals(fingerprint(builtin.code()));
         return new Module(name, hers, ScriptEngine.IN_USE.summary(hers), Origin.OVERRIDE, newer,
-                problem != null ? problem : ScriptEngine.IN_USE.check(name, hers));
+                ScriptEngine.IN_USE.check(name, hers));
     }
 
-    /** 程序用到这个名字时装的正文;名字不合规矩(顶层一个没有同名内置的文件)的不装。 */
+    /** 程序用到这个名字时装的正文。 */
     @Override
     public String code(String name) {
         Module m = get(name);
-        return m == null || problem(name) != null && m.origin() != Origin.BUILTIN ? null : m.code();
+        return m == null ? null : m.code();
     }
 
     @Override
@@ -223,16 +184,23 @@ public final class Modules implements ScriptCatalog.ModuleSource {
         return Collections.unmodifiableSortedMap(out);
     }
 
-    /**
-     * 她目录里的模块:顶层的文件(盖住内置的)与 {@code my/} 下的文件(名字写成 {@code my.<名字>});名字不合规矩的也在,清单上说它为什么
-     * 用不了。
-     */
+    /** 她目录里的模块:每个 {@code <名字空间>/<组>.lua},名字合规矩的。 */
     private java.util.List<String> herNames() {
-        if (dir == null) {
+        if (dir == null || !Files.isDirectory(dir)) {
             return java.util.List.of();
         }
-        java.util.List<String> out = new java.util.ArrayList<>(filesIn(dir, ""));
-        out.addAll(filesIn(dir.resolve(ScriptCatalog.ModuleSource.HERS), MINE));
+        java.util.List<String> out = new java.util.ArrayList<>();
+        try (Stream<Path> spaces = Files.list(dir)) {
+            for (Path space : spaces.filter(Files::isDirectory).sorted().toList()) {
+                for (String name : filesIn(space, space.getFileName() + ".")) {
+                    if (problem(name) == null) {
+                        out.add(name);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("读不了模块目录 " + dir, e);
+        }
         return out;
     }
 
@@ -346,11 +314,10 @@ public final class Modules implements ScriptCatalog.ModuleSource {
         }
     }
 
-    /** 一个模块名的文件:{@code my.lumber} 在 {@code my/lumber.lua},别的在顶层 {@code work.lua}。 */
+    /** 一个模块名的文件:{@code my.lumber} 在 {@code my/lumber.lua},{@code numen.work} 在 {@code numen/work.lua}。 */
     private Path file(String name) {
-        String ext = ScriptEngine.IN_USE.extension();
-        return hers(name) ? dir.resolve(ScriptCatalog.ModuleSource.HERS).resolve(name.substring(MINE.length()) + ext)
-                : dir.resolve(name + ext);
+        int dot = name.indexOf('.');
+        return dir.resolve(name.substring(0, dot)).resolve(name.substring(dot + 1) + ScriptEngine.IN_USE.extension());
     }
 
     /** 文件的正文;不在是 null。 */

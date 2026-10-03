@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * {@code move}、{@code work}、{@code fight}、{@code build} 等组登记得上:每个动作的例子经脚本的前端读得通、相关动作都指得到
- * (登记与第一次用登记处时查;core 的各组照 NumenCore 同一份登记一起装),她唯一的工具是跑脚本的那一个,帮助从 {@code api.help}
+ * (登记与第一次用登记处时查;core 的各组照 NumenCore 同一份登记一起装),她唯一的工具是跑脚本的那一个,帮助从 {@code numen.api.help}
  * 答得出。动作的执行要身体,在 GameTest 里验。
  */
 class WorkCommandGroupsTest {
@@ -28,16 +28,17 @@ class WorkCommandGroupsTest {
 
     private static final UUID HER = UUID.randomUUID();
 
-    /** 一个函数或一组的帮助,经 {@code api.help} 取。 */
+    /** 一个函数或一组的帮助,经 {@code numen.api.help} 取。 */
     private static String help(String name) {
-        CoreScripts.Run run = CoreScripts.run(HER, "return api.help(\"" + name + "\")");
+        CoreScripts.Run run = CoreScripts.run(HER, "return numen.api.help(\"" + name + "\")");
         assertTrue(run.ok(), run.message());
         return run.receipt().getAsJsonObject("data").get("returned").getAsString();
     }
 
     /** 一组帮助里列的函数名:{@code ---@class 组} 到 {@code 组 = {}} 之间每行 {@code ---@field 名字 fun(...)}。 */
     private static List<String> functions(String help, String group) {
-        String body = help.substring(help.indexOf("---@class " + group + "\n"), help.indexOf("\n" + group + " = {}"));
+        String body = help.substring(help.indexOf("---@class numen." + group + "\n"),
+                help.indexOf("\nnumen." + group + " = {}"));
         return body.lines().filter(l -> l.startsWith("---@field "))
                 .map(l -> l.substring("---@field ".length(), l.indexOf(' ', "---@field ".length()))).toList();
     }
@@ -64,28 +65,28 @@ class WorkCommandGroupsTest {
      */
     @Test
     void buildFitsOnOnePageAndThrowawayIsItsOwnGroup() {
-        String build = help("build");
+        String build = help("numen.build");
         assertEquals(List.of("set", "place", "line", "layer", "cylinder", "sphere", "copy", "new", "show", "drop",
                 "designs", "delete", "at", "left", "built", "raise"), functions(build, "build"), build);
         assertTrue(build.contains("\n---@field raise fun(name: string, opts?: table): integer "),
-                "库里的 build.raise 照它的类型注解列在组里: " + build);
+                "库里的 numen.build.raise 照它的类型注解列在组里: " + build);
         assertTrue(build.contains("\n---@class Placed\n"), "组里返回值用到的类跟在后面: " + build);
         assertTrue(!build.contains("(page 1 of") && !build.contains("scaffold") && !build.contains("throwaway"), build);
-        String throwaway = help("throwaway");
+        String throwaway = help("numen.throwaway");
         assertEquals(List.of("add", "remove", "set", "clear"), functions(throwaway, "throwaway"), throwaway);
         assertTrue(throwaway.startsWith("---Your own setting: "), throwaway);
-        CoreScripts.Run gone = CoreScripts.run(HER, "build.scaffold_add(\"minecraft:dirt\")");
+        CoreScripts.Run gone = CoreScripts.run(HER, "numen.build.scaffold_add(\"minecraft:dirt\")");
         assertFalse(gone.ok(), "build 组里不再有垫路料的动作: " + gone.message());
-        assertTrue(gone.message().contains("there is no API function build.scaffold_add"), gone.message());
+        assertTrue(gone.message().contains("there is no API function numen.build.scaffold_add"), gone.message());
     }
 
     @Test
     void movingItemsInAGuiIsOneStepPerCall() {
-        String use = help("use");
+        String use = help("numen.use");
         assertTrue(use.contains("\n---@field transfer fun(from: integer, to: integer, opts?: {count?: integer}) ")
                 && use.contains("\n---@field shift fun(from: integer) "), use);
-        CoreScripts.Run noGui = CoreScripts.run(HER, "use.transfer(1)");
-        assertTrue(!noGui.ok() && noGui.message().contains("use.transfer: bad_argument — ")
+        CoreScripts.Run noGui = CoreScripts.run(HER, "numen.use.transfer(1)");
+        assertTrue(!noGui.ok() && noGui.message().contains("numen.use.transfer: bad_argument — ")
                         && noGui.message().contains("argument 'to' is missing"),
                 "少写一格目标是参数错、点名少的那个参数: " + noGui.message());
     }
@@ -93,26 +94,26 @@ class WorkCommandGroupsTest {
     @Test
     void eachGroupAnswersItsHelp() {
         for (String group : List.of("move", "route", "work", "fight", "build", "throwaway")) {
-            String text = help(group);
-            assertTrue(text.startsWith("---") && text.contains("\n---@class " + group + "\n")
-                    && text.contains("\n" + group + " = {}"), text);
+            String text = help("numen." + group);
+            assertTrue(text.startsWith("---") && text.contains("\n---@class numen." + group + "\n")
+                    && text.contains("\nnumen." + group + " = {}"), text);
         }
-        String routeHelp = help("route");
-        assertTrue(routeHelp.contains("\n---@field new fun(name?: string, opts?: route.new.opts)"),
+        String routeHelp = help("numen.route");
+        assertTrue(routeHelp.contains("\n---@field new fun(name?: string, opts?: numen.route.new.opts)"),
                 "组帮助里路线标志整组按名字引用: " + routeHelp);
         assertTrue(!routeHelp.contains("avoid_break"), routeHelp);
-        String newHelp = help("route.new");
-        assertTrue(newHelp.contains("\n---@class route.new.opts\n") && newHelp.contains("\n---@field alter? "),
+        String newHelp = help("numen.route.new");
+        assertTrue(newHelp.contains("\n---@class numen.route.new.opts\n") && newHelp.contains("\n---@field alter? "),
                 newHelp);
         assertTrue(newHelp.contains("\n---@field avoid_break? "), newHelp);
-        String digHelp = help("work.dig");
-        assertTrue(digHelp.contains("\nfunction work.dig(place, opts) end"), digHelp);
-        String moveHelp = help("move");
+        String digHelp = help("numen.work.dig");
+        assertTrue(digHelp.contains("\nfunction numen.work.dig(place, opts) end"), digHelp);
+        String moveHelp = help("numen.move");
         assertEquals(List.of("go", "follow", "goto_"), functions(moveHelp, "move"), "库函数与动作都列在组里: " + moveHelp);
         assertTrue(moveHelp.contains("\n---@field goto_ fun(place: Pos|Block|Entity|string, opts?: table): "
-                + "{pos: Pos, route: string, distance_left: number} Walk to a place: route.new, route.plan and move.go "
+                + "{pos: Pos, route: string, distance_left: number} Walk to a place: numen.route.new, numen.route.plan and numen.move.go "
                 + "on your own route goto-<your name>.\n"), "库函数的说明是它注释的第一句: " + moveHelp);
-        String workHelp = help("work");
+        String workHelp = help("numen.work");
         assertTrue(functions(workHelp, "work").contains("mine") && workHelp.contains("\n---@field mine fun(where: "
                 + "string): integer Dig out an area"), "挖一块区域是内置模块 work 里的 Lua 函数,不是动作: " + workHelp);
     }
@@ -123,25 +124,25 @@ class WorkCommandGroupsTest {
      */
     @Test
     void theCallsSheWritesRead() {
-        for (String code : List.of("fight.attack(27)", "use.block({x = 120, y = 64, z = -35})",
-                "use.block({x = 120, y = 64, z = -35}, {left = true, hold = 1.5})", "use.entity(812, {sneak = true})",
-                "inv.drop(\"cobblestone\")", "inv.drop(\"cobblestone\", {count = 32})", "work.dig({x = 120, y = 64, z = -35})",
-                "work.dig(\"ores/g3\", {x = 120, y = 12, z = -35}, {count = 4})", "move.go(\"home\")", "move.follow(184)",
-                "area.parts(\"ores\")", "area.has(\"ores/g3\")", "area.drop(\"ores/g2\")",
-                "area.grow(\"buffer\", \"house\")", "scan.blocks(\"iron_ore\")", "scan.entities()",
-                "scan.block({x = 1, y = 2, z = 3})", "task.timer(\"check the furnace\", {after = 90})", "route.new(\"back\")",
-                "route.drop(\"home\")", "build.set({x = 1, y = 2, z = 3}, {block = \"stone\"})",
-                "build.layer({\"###\"}, {at = {x = 0, y = 1, z = 0}, block = \"oak_planks\", into = \"house\", step = 2})",
-                "build.drop(\"house/4\")", "build.at(\"house\", {at = {x = 100, y = 64, z = -20}})", "build.left(\"house\")",
-                "memory.remember(\"main base -340,68,120\")", "todo.write({\"[>] dig\"})")) {
+        for (String code : List.of("numen.fight.attack(27)", "numen.use.block({x = 120, y = 64, z = -35})",
+                "numen.use.block({x = 120, y = 64, z = -35}, {left = true, hold = 1.5})", "numen.use.entity(812, {sneak = true})",
+                "numen.inv.drop(\"cobblestone\")", "numen.inv.drop(\"cobblestone\", {count = 32})", "numen.work.dig({x = 120, y = 64, z = -35})",
+                "numen.work.dig(\"ores/g3\", {x = 120, y = 12, z = -35}, {count = 4})", "numen.move.go(\"home\")", "numen.move.follow(184)",
+                "numen.area.parts(\"ores\")", "numen.area.has(\"ores/g3\")", "numen.area.drop(\"ores/g2\")",
+                "numen.area.grow(\"buffer\", \"house\")", "numen.scan.blocks(\"iron_ore\")", "numen.scan.entities()",
+                "numen.scan.block({x = 1, y = 2, z = 3})", "numen.task.timer(\"check the furnace\", {after = 90})", "numen.route.new(\"back\")",
+                "numen.route.drop(\"home\")", "numen.build.set({x = 1, y = 2, z = 3}, {block = \"stone\"})",
+                "numen.build.layer({\"###\"}, {at = {x = 0, y = 1, z = 0}, block = \"oak_planks\", into = \"house\", step = 2})",
+                "numen.build.drop(\"house/4\")", "numen.build.at(\"house\", {at = {x = 100, y = 64, z = -20}})", "numen.build.left(\"house\")",
+                "numen.memory.remember(\"main base -340,68,120\")", "numen.todo.write({\"[>] dig\"})")) {
             var reading = com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.calls("t", code,
                     com.dwinovo.numen.cli.NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.builtin()));
             assertNull(reading.error(), code + ": " + reading.error());
             assertEquals(1, reading.calls().size(), code);
             com.dwinovo.numen.cli.NumenCli.invocation(reading.calls().get(0));
         }
-        for (String wrong : List.of("fight.attack({entity_ids = {27, 26}})", "fight.attack(27, 26)",
-                "use.block(\"right\", {x = 120, y = 64, z = -35})", "inv.drop(\"cobblestone\", 32)")) {
+        for (String wrong : List.of("numen.fight.attack({entity_ids = {27, 26}})", "numen.fight.attack(27, 26)",
+                "numen.use.block(\"right\", {x = 120, y = 64, z = -35})", "numen.inv.drop(\"cobblestone\", 32)")) {
             var reading = com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.calls("t", wrong,
                     com.dwinovo.numen.cli.NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.builtin()));
             org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,

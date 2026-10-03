@@ -63,8 +63,8 @@ public final class GearCommands {
                         ScriptType.optional("slot", ScriptType.STRING, null),
                         ScriptType.optional("removed", ScriptType.listOf(ScriptType.STRING), null),
                         ScriptType.optional("still_worn", ScriptType.listOf(ScriptType.STRING), null)))
-                .example("gear.wear(\"minecraft:iron_helmet\")")
-                .example("gear.wear(\"minecraft:shield\", {slot = \"offhand\"})")
+                .example("numen.gear.wear(\"minecraft:iron_helmet\")")
+                .example("numen.gear.wear(\"minecraft:shield\", {slot = \"offhand\"})")
                 .note("Your wearable slots and what is on them are listed in <worn>.")
                 .note("Whatever it swaps out goes back into your backpack; nothing is dropped. It only moves the "
                         + "item: nothing is used, poured or thrown.")
@@ -77,9 +77,9 @@ public final class GearCommands {
                         ScriptType.optional("slot", ScriptType.STRING, null),
                         ScriptType.optional("removed", ScriptType.listOf(ScriptType.STRING), null),
                         ScriptType.optional("still_worn", ScriptType.listOf(ScriptType.STRING), null)))
-                .example("gear.remove()")
-                .example("gear.remove({slot = \"offhand\"})")
-                .example("gear.remove({item = \"minecraft:iron_helmet\"})")
+                .example("numen.gear.remove()")
+                .example("numen.gear.remove({slot = \"offhand\"})")
+                .example("numen.gear.remove({item = \"minecraft:iron_helmet\"})")
                 .note("Give slot, item, or both (then only that item in those slots); neither takes off all four "
                         + "armor pieces.")
                 .note("A piece that doesn't fit in your backpack, or refuses to come off (curse of binding), "

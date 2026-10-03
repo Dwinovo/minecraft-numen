@@ -12,7 +12,7 @@ import java.util.Map;
 
 /**
  * 她唯一的工具:一段程序(语言见 {@link ScriptEngine},眼下是 Lua),一次调用跑完,回一张回执。程序里的每个 API 函数
- * ({@code work.dig("ores/g3")})就是登记处的一个动作,读法与执行见 {@link NumenCli};模块里的函数({@code move.goto_})用同一种语言写成,
+ * ({@code numen.work.dig(b)})就是登记处的一个动作,读法与执行见 {@link NumenCli};模块里的函数({@code numen.move.goto_})用同一种语言写成,
  * 程序按名字直接用。工具名与程序怎么写随脚本语言,其余都与语言无关。
  *
  * <p>程序由大脑的派发器跑({@code SerialCalls} 认出这个工具,经 {@code ScriptCall} 逐个派调用、等身体收尾、在调用之间停下),
@@ -34,8 +34,8 @@ public final class ScriptTool implements NumenTool {
         return "Runs a " + engine.language() + " program that acts through your API, and returns one receipt when it "
                 + "ends. This is how you do anything in the world: every function is listed in <api>.\n"
                 + "- " + engine.howToCall() + "\n"
-                + "- One call is a one-line program: `status.self()`. When each next step follows from what a call "
-                + "returned — going through the parts of an area, repeating until nothing is left, stopping on the "
+                + "- One call is a one-line program: `numen.status.self()`. When each next step follows from what a "
+                + "call returned — going through what a scan found, repeating until nothing is left, stopping on the "
                 + "first failure — write the steps as one program.\n"
                 + "- The receipt says how the program ended (on an error: the line and the call's error, usage and "
                 + "hint), then one line per API call (where, which function, ok or failed, the first line of its "
@@ -45,9 +45,9 @@ public final class ScriptTool implements NumenTool {
                 + " minutes, and when it runs " + ScriptLimits.INSTRUCTIONS_PER_SLICE + " instructions without "
                 + "calling one. Your owner speaking, an urgent event or the stop button stops it between calls.\n"
                 + "- Modules (listed in <api>) are functions written in " + engine.language() + " that a program uses "
-                + "by name, with no require: `work.mine(\"ores\")`. `script.show(\"work\")` prints one; script.save "
-                + "keeps a module you wrote (its text: functions put in a table, and the table returned) under a name "
-                + "for later programs.";
+                + "by name, with no require: `numen.work.collect()`. `numen.module.show(\"numen.work\")` prints one; "
+                + "numen.module.save keeps a module you wrote (its text: functions put in a table, and the table "
+                + "returned) under a name for later programs.";
     }
 
     @Override

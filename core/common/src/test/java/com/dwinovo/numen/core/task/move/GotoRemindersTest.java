@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 去处写错时的提醒怎么组成:说事实,再给能照抄的写法;每一句里的 {@code move.goto_} 都是完整的一次调用,坐标加选项。
+ * 去处写错时的提醒怎么组成:说事实,再给能照抄的写法;每一句里的 {@code numen.move.goto_} 都是完整的一次调用,坐标加选项。
  */
 class GotoRemindersTest {
 
@@ -18,9 +18,9 @@ class GotoRemindersTest {
 
     @Test
     void aCopyableCallSpellsEveryCoordinateAndTheOptions() {
-        assertEquals("`move.goto_({x = 120, y = 64, z = -35}, {arrive = \"use\"})`", GotoReminders.call(FURNACE, "arrive = \"use\""));
-        assertEquals("`move.goto_({x = 120, y = 64, z = -35})`", GotoReminders.call(FURNACE, ""));
-        assertEquals("`move.goto_(\"ores/g3\", {arrive = \"dig\"})`",
+        assertEquals("`numen.move.goto_({x = 120, y = 64, z = -35}, {arrive = \"use\"})`", GotoReminders.call(FURNACE, "arrive = \"use\""));
+        assertEquals("`numen.move.goto_({x = 120, y = 64, z = -35})`", GotoReminders.call(FURNACE, ""));
+        assertEquals("`numen.move.goto_(\"ores/g3\", {arrive = \"dig\"})`",
                 GotoReminders.call(com.dwinovo.numen.area.AreaRef.parse("ores/g3"), "arrive = \"dig\""));
     }
 
@@ -32,9 +32,9 @@ class GotoRemindersTest {
     void anOccupiedCellNamesTheBlockAndEveryWayToWriteIt() {
         String said = GotoReminders.occupied(FURNACE, "furnace", FURNACE.above());
         assertTrue(said.startsWith("120,64,-35 is furnace — no room to stand in it"), said);
-        assertTrue(said.contains("To use it: `move.goto_({x = 120, y = 64, z = -35}, {arrive = \"use\"})`"), said);
-        assertTrue(said.contains("to stand on top of it: `move.goto_({x = 120, y = 65, z = -35})`;"), said);
-        assertTrue(said.contains("to stop close by: `move.goto_({x = 120, y = 64, z = -35}, {arrive = \"near\"})`"), said);
+        assertTrue(said.contains("To use it: `numen.move.goto_({x = 120, y = 64, z = -35}, {arrive = \"use\"})`"), said);
+        assertTrue(said.contains("to stand on top of it: `numen.move.goto_({x = 120, y = 65, z = -35})`;"), said);
+        assertTrue(said.contains("to stop close by: `numen.move.goto_({x = 120, y = 64, z = -35}, {arrive = \"near\"})`"), said);
         assertTrue(said.contains("add alter = \"natural\""), said);
         String covered = GotoReminders.occupied(FURNACE, "furnace", null);
         assertTrue(!covered.contains("on top"), covered);
@@ -45,7 +45,7 @@ class GotoRemindersTest {
     void midAirNamesTheGroundOfThatColumnWhenThereIsOne() {
         String withGround = GotoReminders.midAir(new BlockPos(120, 70, -35), new BlockPos(120, 64, -35));
         assertTrue(withGround.startsWith("120,70,-35 is in mid-air"), withGround);
-        assertTrue(withGround.contains("the ground in that column is at y=64: `move.goto_({x = 120, y = 64, z = -35})`"),
+        assertTrue(withGround.contains("the ground in that column is at y=64: `numen.move.goto_({x = 120, y = 64, z = -35})`"),
                 withGround);
         assertTrue(withGround.contains("Give {x = …, z = …} alone"), withGround);
         String without = GotoReminders.midAir(new BlockPos(120, 70, -35), null);
@@ -61,9 +61,9 @@ class GotoRemindersTest {
         String said = GotoReminders.sealed(FURNACE, "furnace", covers);
         assertTrue(said.startsWith("120,64,-35 (furnace) is walled in on every side"), said);
         assertTrue(said.contains("west stone at 119,64,-35, up dirt at 120,65,-35."), said);
-        assertTrue(said.contains("the west one is nearest me: `move.goto_({x = 119, y = 64, z = -35}, {arrive = \"dig\"})`, "
-                + "then `work.dig({x = 119, y = 64, z = -35})`"), said);
-        assertTrue(said.endsWith("`move.goto_({x = 120, y = 64, z = -35}, {arrive = \"use\"})` again."), said);
+        assertTrue(said.contains("the west one is nearest me: `numen.move.goto_({x = 119, y = 64, z = -35}, {arrive = \"dig\"})`, "
+                + "then `numen.work.dig({x = 119, y = 64, z = -35})`"), said);
+        assertTrue(said.endsWith("`numen.move.goto_({x = 120, y = 64, z = -35}, {arrive = \"use\"})` again."), said);
     }
 
     @Test
@@ -78,7 +78,7 @@ class GotoRemindersTest {
     void nothingToClickAndNowhereToStandSayWhy() {
         String air = GotoReminders.nothingToUse(FURNACE, "air");
         assertTrue(air.startsWith("120,64,-35 is air — nothing there to click"), air);
-        assertTrue(air.contains("`move.goto_({x = 120, y = 64, z = -35}, {arrive = \"near\"})`"), air);
+        assertTrue(air.contains("`numen.move.goto_({x = 120, y = 64, z = -35}, {arrive = \"near\"})`"), air);
         String nowhere = GotoReminders.nowhereToStand(FURNACE, "chest", List.of("up", "north"));
         assertTrue(nowhere.contains("is open on up, north, but there is nowhere within reach"), nowhere);
     }

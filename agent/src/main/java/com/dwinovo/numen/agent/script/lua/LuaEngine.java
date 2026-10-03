@@ -26,8 +26,9 @@ import java.util.regex.Pattern;
  * 脚本语言是 Lua 5.2,跑在 {@code numen-lua} 的沙箱里({@link LuaSandbox}):沙箱的类型只在这个类里出现。
  *
  * <h2>API 函数怎么接</h2>
- * 每个动作是一个宿主函数 {@code 组.动作}(名字撞上 Lua 的保留字或沙箱自带的全局时加后缀 {@code _},{@link #functionName})。模块
- * 按名字直接用,第一次用到才装(和组同名的给那一组加函数,{@code move.goto_}),它们的函数照常调宿主函数;没有 {@code require}。
+ * 每个动作是一个宿主函数 {@code 名字空间.组.动作}({@code numen.work.dig};名字撞上 Lua 的保留字或沙箱自带的全局时加后缀
+ * {@code _},{@link #functionName})。模块按名字直接用,第一次用到才装(和组同名的给那一组加函数,{@code numen.move.goto_}),它们的
+ * 函数照常调宿主函数;没有 {@code require}。
  * 脚本跑在它自己的虚拟线程上;调一个
  * API 函数,那个线程把这次调用交给驱动方({@link ScriptRun#start}/{@link ScriptRun#resume} 的返回值),然后停在那儿等结局。驱动方
  * (大脑的派发器)把它派出去、等身体收尾,再把结局交回来,脚本从调用处接着跑。驱动方只在脚本两次调用之间等它算完(指令预算管着,
@@ -66,17 +67,16 @@ public final class LuaEngine implements ScriptEngine {
 
     private static Object require(List<Object> in) {
         throw new LuaSandbox.ScriptError(ScriptRun.failure(ErrorKind.NO_FUNCTION.wire(), "there is no require in "
-                + "these programs", "modules are used by name: `work.collect()`, `my.lumber.chop(...)`", REQUIRE, null));
+                + "these programs", "modules are used by name: `numen.work.collect()`, `my.lumber.chop(...)`", REQUIRE,
+                null));
     }
 
-    /** 读了一个既不是全局、也不是模块的名字:多半是模块名写错了,说有哪些。 */
+    /** 读了一个既不是全局、也不是模块的名字:多半是名字空间写错了,说有哪些模块。 */
     static LuaSandbox.ScriptError unknown(String name, List<String> modules) {
-        return new LuaSandbox.ScriptError(ScriptRun.failure(ErrorKind.NO_FUNCTION.wire(), "there is no module named "
-                + name + " (nor a global or local of that name); the modules are: " + String.join(", ", modules)
-                + (modules.contains(ScriptCatalog.ModuleSource.HERS + "." + name)
-                        ? "; yours are under " + ScriptCatalog.ModuleSource.HERS + ": "
-                        + ScriptCatalog.ModuleSource.HERS + "." + name : ""),
-                "script.list() lists the modules with what each does", null, null));
+        return new LuaSandbox.ScriptError(ScriptRun.failure(ErrorKind.NO_FUNCTION.wire(), "there is no global, "
+                + "namespace or module named " + name + "; the API is under numen (and each mod's id), the modules "
+                + "are: " + String.join(", ", modules), "numen.module.list() lists the modules with what each does",
+                null, null));
     }
 
     /** 模块来源接到沙箱上。 */
@@ -95,7 +95,7 @@ public final class LuaEngine implements ScriptEngine {
     }
 
     /**
-     * 一个错误值写成文字:{@code work.dig: out_of_reach — 那句话},下一行 {@code hint: …}。{@code tostring(err)} 与没接住时整段回执里的
+     * 一个错误值写成文字:{@code numen.work.dig: out_of_reach — 那句话},下一行 {@code hint: …}。{@code tostring(err)} 与没接住时整段回执里的
      * 那句话都是它。
      */
     static String render(Map<String, Object> error) {
@@ -134,24 +134,24 @@ public final class LuaEngine implements ScriptEngine {
 
     @Override
     public String howToCall() {
-        return "Every API function is `group.verb(objects..., {option = value})`: `scan.blocks(\"iron_ore\", "
-                + "{radius = 12, into = \"ores\"})`, `work.dig(\"ores/g3\")`. A position is a table with named "
+        return "Every API function is written in full, `namespace.group.verb(objects..., {option = value})`: Numen's "
+                + "own are under numen (`numen.scan.blocks(\"iron_ore\", {radius = 12})`, `numen.work.dig({x = 120, y = 12, z = -35})`), a "
+                + "mod's under its id. A position is a table with named "
                 + "fields, `{x = 120, y = 64, z = -35}` (a Pos); anything a call returns that has a `pos` (a Block, an "
-                + "Entity, an Item) goes where a position goes, as it is: `local e = scan.entities(\"hostile\")[1]; "
-                + "fight.attack(e)`, and the same with move.goto_(e.pos). A switch is `{sneak = true}`; a name Lua "
-                + "already uses gets "
-                + "a trailing underscore (`move.goto_`). A call returns when it is done (work that occupies your body: "
-                + "when it has finished) and returns data, never sentences: `area.has(\"ores\")` is true or false, "
-                + "`status.self()` a table whose pos is a Pos, `work.dig(\"ores\")` a table with what it dug. A call "
-                + "that fails raises an error value: `local ok, err = pcall(work.dig, \"ores\")` catches it, `err.kind` "
-                + "says what kind "
+                + "Entity, an Item) goes where a position goes, as it is: `local e = numen.scan.entities(\"hostile\")[1]; "
+                + "numen.fight.attack(e)`, and the same with numen.move.goto_(e.pos). A switch is `{sneak = true}`; a "
+                + "name Lua already uses gets a trailing underscore (`numen.move.goto_`). A call returns when it is done "
+                + "(work that occupies your body: when it has finished) and returns data, never sentences: "
+                + "`numen.status.self()` is a table whose pos is a Pos, numen.work.dig(b) a table with what it dug. A "
+                + "call that fails raises an error value: `local ok, err = pcall(numen.work.dig, {x = 120, y = 12, "
+                + "z = -35})` catches it, "
+                + "`err.kind` says what kind "
                 + "(bad_argument, not_found, out_of_reach, no_path, denied, ...), `err.hint` is a line to run next; "
                 + "`raise(kind, message, hint)` raises your own. To read a value, `print(x)` (a table prints as a Lua "
                 + "table) or `return x`; the receipt shows one line per call and what you printed or returned. A module "
-                + "is used by its name like a group, with no require: `work.collect()`; yours are under my: "
-                + "`my.lumber.chop(t)`. "
-                + "`api.help(\"work\")` lists a group's or a module's typed signatures, `api.help(\"work.dig\")` "
-                + "explains one.";
+                + "is used by its name like a group, with no require: `numen.work.collect()`, `my.lumber.chop(t)`. "
+                + "`numen.api.help(\"numen.work\")` lists a group's or a module's typed signatures, "
+                + "`numen.api.help(\"numen.work.dig\")` explains one.";
     }
 
     @Override
@@ -240,22 +240,26 @@ public final class LuaEngine implements ScriptEngine {
     private static final Pattern DEFINITION = Pattern.compile(
             "^function\\s+[A-Za-z_][A-Za-z0-9_]*\\.([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)");
 
-    /** 模块名的写法:小写字母打头,小写字母、数字、下划线,最长 48。 */
+    /** 模块名每一段的写法:小写字母打头,小写字母、数字、下划线,最长 48。 */
     private static final Pattern MODULE_NAME = Pattern.compile("[a-z][a-z0-9_]{0,47}");
 
-    /** 引擎自己占的全局名:模块名不能占。 */
-    private static final java.util.Set<String> ENGINE_GLOBALS = java.util.Set.of(RAISE, REQUIRE,
-            ScriptCatalog.ModuleSource.HERS);
+    /** 引擎自己占的全局名:名字空间不能占。 */
+    private static final java.util.Set<String> ENGINE_GLOBALS = java.util.Set.of(RAISE, REQUIRE);
 
     @Override
-    public String moduleName(String name, boolean global) {
-        if (name == null || !MODULE_NAME.matcher(name).matches()) {
-            return "a module name is lowercase letters, digits and _, starting with a letter, at most 48 long (a "
-                    + "program writes it as it is: my.lumber.chop()); got \"" + name + "\"";
+    public String moduleName(String name) {
+        String[] parts = name == null ? new String[0] : name.split("\\.", -1);
+        if (parts.length != 2 || !MODULE_NAME.matcher(parts[0]).matches() || !MODULE_NAME.matcher(parts[1]).matches()) {
+            return "a module name is two parts, namespace.group, each lowercase letters, digits and _, starting with a "
+                    + "letter (a program writes it as it is: my.lumber.chop()); got \"" + name + "\"";
         }
-        if (LuaSandbox.KEYWORDS.contains(name)
-                || global && (LuaSandbox.STANDARD_GLOBALS.contains(name) || ENGINE_GLOBALS.contains(name))) {
-            return name + " is a name Lua or the API already uses; pick another";
+        for (String part : parts) {
+            if (LuaSandbox.KEYWORDS.contains(part)) {
+                return part + " is a Lua keyword; pick another name";
+            }
+        }
+        if (LuaSandbox.STANDARD_GLOBALS.contains(parts[0]) || ENGINE_GLOBALS.contains(parts[0])) {
+            return parts[0] + " is a name Lua or the API already uses; pick another namespace";
         }
         return null;
     }
@@ -383,7 +387,7 @@ public final class LuaEngine implements ScriptEngine {
         }
     }
 
-    /** 清单里一张就地写出的表最多几个字段;再多就按名字引用({@code move.go.opts}),全部字段在这个函数自己的帮助里。 */
+    /** 清单里一张就地写出的表最多几个字段;再多就按名字引用({@code numen.move.go.opts}),全部字段在这个函数自己的帮助里。 */
     private static final int INLINE_FIELDS = 5;
 
     @Override
@@ -402,7 +406,7 @@ public final class LuaEngine implements ScriptEngine {
 
     /** 清单里的一行:{@code ---@field 名字 fun(参数): 返回 说明},写成这一组那张表的一个字段。 */
     private static String line(String name, String params, String returns, String summary) {
-        String field = name.substring(name.indexOf('.') + 1);
+        String field = name.substring(name.lastIndexOf('.') + 1);
         return "---@field " + field + " fun(" + params + ")" + (returns == null ? "" : ": " + returns)
                 + (summary == null || summary.isEmpty() ? "" : " " + summary);
     }
@@ -478,8 +482,8 @@ public final class LuaEngine implements ScriptEngine {
     }
 
     /**
-     * 脚本读了一组里没有的函数({@code area.hsa}):说没有这个 API 函数,名字差一两个字的给出最近的那个,再说怎么列这一组。
-     * 停在读它的那一行,不让它成 nil 再在调用处报"调了一个 nil"。
+     * 脚本读了一组里没有的函数({@code numen.work.dgi}),或一个名字空间里没有的组({@code numen.wrok}):说没有这个,名字差一两个字的
+     * 给出最近的那个,再说怎么列。停在读它的那一行,不让它成 nil 再在调用处报"调了一个 nil"。
      */
     static LuaSandbox.ScriptError missing(String table, String key, List<String> present) {
         String nearest = null;
@@ -492,22 +496,26 @@ public final class LuaEngine implements ScriptEngine {
             }
         }
         boolean close = nearest != null && best <= Math.max(1, Math.min(2, key.length() / 3));
+        boolean namespace = !table.contains(".");
         return new LuaSandbox.ScriptError(ScriptRun.failure(ErrorKind.NO_FUNCTION.wire(),
-                "there is no API function " + table + "." + key
-                        + (close ? "; did you mean " + table + "." + nearest + "?" : ""),
-                "api.help(\"" + table + "\") lists the group's functions.", null, null));
+                "there is no " + (namespace ? "group or module " : "API function ") + table + "." + key
+                        + (close ? "; did you mean " + table + "." + nearest + "?" : "")
+                        + (namespace ? "; " + table + " has: " + String.join(", ", present) : ""),
+                namespace ? "the <api> index lists every group." : "numen.api.help(\"" + table
+                        + "\") lists the group's functions.", null, null));
     }
 
     /**
-     * 程序或模块给第 ① 层的名字赋值({@code function move.go() end}、{@code move = {}}、{@code raise = f}):登记的 API 函数与它们的表
-     * 谁都换不掉、遮不住,停在那一行。往组里加别的名字照常({@code function move.goto_(…)})。
+     * 程序或模块给第 ① 层的名字赋值({@code function numen.move.go() end}、{@code move = {}}、{@code raise = f}):登记的 API 函数与它们的表
+     * 谁都换不掉、遮不住,停在那一行。往组里加别的名字照常({@code function numen.move.goto_(…)})。
      */
     static LuaSandbox.ScriptError redefined(String table, String key) {
         String name = table == null ? key : table + "." + key;
+        boolean function = table != null && table.contains(".");
         return new LuaSandbox.ScriptError(ScriptRun.failure(ErrorKind.RUNTIME.wire(), name + " is "
-                + (table == null ? "built into the API" : "an API function") + "; a program or module cannot redefine "
-                + "or replace it", "give yours another name" + (table == null ? "" : " (" + table + "." + key
-                + "_mine, or a function of your own module)"), null, null));
+                + (function ? "an API function" : "built into the API") + "; a program or module cannot redefine "
+                + "or replace it", "give yours another name" + (function ? " (" + table + "." + key
+                + "_mine, or a function of your own module)" : ""), null, null));
     }
 
     /** 两个名字的编辑距离(增、删、改各算一步)。 */
@@ -538,11 +546,8 @@ public final class LuaEngine implements ScriptEngine {
         }
         List<ScriptRun.Call> seen = new ArrayList<>();
         LuaSandbox.Builder sandbox = reader(catalog, seen, LuaEngine::redefined);
-        // 只读不跑的是随模组发布的文字,用不到她名字空间里的模块:只换顶层的
+        // 只读不跑:模块里的函数也只记下调用
         for (String module : catalog.modules().names()) {
-            if (module.contains(".")) {
-                continue;
-            }
             for (Defined defined : functions(module, catalog.modules().code(module))) {
                 String fn = defined.name().substring(module.length() + 1);
                 sandbox.function(module, fn, in -> {
@@ -584,9 +589,9 @@ public final class LuaEngine implements ScriptEngine {
                                       LuaSandbox.Redefined redefined) {
         LuaSandbox.Builder sandbox = LuaSandbox.builder(LIMITS).missing(LuaEngine::missing).errors(LuaEngine::render)
                 .redefined(redefined).unknown(LuaEngine::unknown).function(RAISE, LuaEngine::raise)
-                .function(REQUIRE, LuaEngine::require).namespace(ScriptCatalog.ModuleSource.HERS);
+                .function(REQUIRE, LuaEngine::require);
         catalog.groups().forEach((group, verbs) -> verbs.forEach((verb, declared) ->
-                sandbox.function(functionName(group), functionName(verb), in -> {
+                sandbox.function(pathName(group), functionName(verb), in -> {
                     seen.add(call(group, verb, in, declared));
                     return declared.sample();
                 })));
@@ -666,9 +671,9 @@ public final class LuaEngine implements ScriptEngine {
             LuaSandbox.Builder sandbox = LuaSandbox.builder(LIMITS).print(printer).missing(LuaEngine::missing)
                     .redefined(LuaEngine::redefined).unknown(LuaEngine::unknown).errors(LuaEngine::render)
                     .show(LuaEngine::literal).function(RAISE, LuaEngine::raise).function(REQUIRE, LuaEngine::require)
-                    .namespace(ScriptCatalog.ModuleSource.HERS).modules(source(catalog.modules()));
+                    .modules(source(catalog.modules()));
             catalog.groups().forEach((group, verbs) -> verbs.keySet().forEach(verb ->
-                    sandbox.function(functionName(group), functionName(verb), in -> ask(group, verb, in))));
+                    sandbox.function(pathName(group), functionName(verb), in -> ask(group, verb, in))));
             running = sandbox.build().start(name, code, List.of(), outcome -> events.add(new Ended(outcome)));
             return next();
         }

@@ -19,7 +19,8 @@ public final class CoreCommandsFixture {
         net.minecraft.server.Bootstrap.bootStrap();
         NumenCore.init();
         // 内置的 Lua 模块产品里由加载器从 jar 里的 modules/ 交出去,单测从类路径上同一个目录交
-        com.dwinovo.numen.api.NumenPlugins.register(numen -> numen.bundleModules(resource("modules")));
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN,
+                numen -> numen.bundleModules(resource("modules")));
         // 她的 Lua 模块落在这次测试专用的空目录里,和评测、GameTest 一样只有内置那一层
         try {
             java.nio.file.Path modules = java.nio.file.Files.createTempDirectory("numen-test-lua-");

@@ -84,9 +84,9 @@ public final class McpServer {
 
             Loop: (1) list_companions to see who is live — create_companion by name to summon a new one, \
             delete_companion to dismiss one for good; (2) everything else is one tool, %s: a program \
-            whose functions are the companion's API — perceive with status.self(), scan.blocks(...), \
-            scan.entities(...); act with move.goto_(...), work.dig(...), build.at(...), fight.attack(...), \
-            inv.craft(...), …; api.help("work") lists a group's functions and api.help("work.dig") gives one \
+            whose functions are the companion's API — perceive with numen.status.self(), numen.scan.blocks(...), \
+            numen.scan.entities(...); act with numen.move.goto_(...), numen.work.dig(...), numen.build.at(...), numen.fight.attack(...), \
+            numen.inv.craft(...), …; numen.api.help("numen.work") lists a group's functions and numen.api.help("numen.work.dig") gives one \
             function's full help. A program returns one receipt when it ends: how it ended, one line per API \
             call, what it returned and printed. It waits for each body task it starts to finish, so a long \
             job returns when it is done; each task's own account also arrives in get_events as a \

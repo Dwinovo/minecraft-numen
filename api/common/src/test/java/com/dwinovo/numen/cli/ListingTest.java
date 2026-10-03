@@ -32,17 +32,17 @@ class ListingTest {
             g.client("rows", "List the rows.", (src, args) -> src.reply(new Listing("Rows:", wideRows(),
                     "That is all.").result(args).toJson()), Listing.PAGE)
                     .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
-                    .example("gt_listing.rows({page = 2})");
+                    .example("gt.gt_listing.rows({page = 2})");
             g.client("short", "List many short rows.", (src, args) -> {
                 List<String> rows = new ArrayList<>();
                 for (int i = 1; i <= SHORT_ROWS; i++) {
                     rows.add("  r" + i);
                 }
                 src.reply(new Listing("Short:", rows, "").result(args).toJson());
-            }, Listing.PAGE).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt_listing.short()");
+            }, Listing.PAGE).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt.gt_listing.short()");
             g.client("one", "One entry bigger than a page.", (src, args) -> src.reply(new Listing("One:",
                     List.of("字".repeat(Listing.MAX_BYTES)), "").result(args).toJson()),
-                    Listing.PAGE).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt_listing.one()");
+                    Listing.PAGE).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt.gt_listing.one()");
         });
     }
 
@@ -64,7 +64,7 @@ class ListingTest {
     /** 按字节先到:放满预算就停,整条整条地放,末尾照 pi 的样子说一共几条、这是哪一段、下一段怎么取。 */
     @Test
     void aListOverTheByteBudgetKeepsItsHeadAndSaysHowToGetTheRest() {
-        String first = said("gt_listing.rows()");
+        String first = said("gt.gt_listing.rows()");
         int shown = shownTo(first, WIDE_ROWS, 2);
         assertTrue(first.startsWith("Rows:\n  row 001 "), first);
         assertTrue(first.endsWith("That is all."), "结尾一句照旧在最后");
@@ -73,12 +73,12 @@ class ListingTest {
         assertTrue(bytes(content) + 1 + bytes(wideRows().get(shown)) > Listing.MAX_BYTES, "再放一条就超了");
         assertFalse(first.contains(String.format("row %03d", shown + 1)), "下一条不在这一页");
 
-        String second = said("gt_listing.rows({page = 2})");
+        String second = said("gt.gt_listing.rows({page = 2})");
         assertTrue(second.startsWith("Rows:\n" + String.format("  row %03d", shown + 1)), "第二页从停下的那条接着");
 
-        CliFixture.Outcome beyond = lua("gt_listing.rows({page = 99})");
+        CliFixture.Outcome beyond = lua("gt.gt_listing.rows({page = 99})");
         assertFalse(beyond.success());
-        assertTrue(beyond.message().contains("gt_listing.rows: failed — no page 99; this list has pages 1-"),
+        assertTrue(beyond.message().contains("gt.gt_listing.rows: failed — no page 99; this list has pages 1-"),
                 beyond.message());
     }
 
@@ -103,12 +103,12 @@ class ListingTest {
     /** 按行先到:两千行一页。 */
     @Test
     void aListOverTheLineBudgetStopsAtTheLineLimit() {
-        String first = said("gt_listing.short()");
+        String first = said("gt.gt_listing.short()");
         int shown = shownTo(first, SHORT_ROWS, 2);
         assertEquals(Listing.MAX_LINES - 1, shown, "抬头占一行");
         assertEquals(Listing.MAX_LINES + 1, first.split("\n").length, "内容两千行,加上翻页那一句");
 
-        String last = said("gt_listing.short({page = 2})");
+        String last = said("gt.gt_listing.short({page = 2})");
         assertTrue(last.startsWith("Short:\n  r" + Listing.MAX_LINES + "\n"), last.substring(0, 40));
         assertTrue(last.endsWith("\n  r" + SHORT_ROWS), "最后一页不再说翻页");
     }
@@ -116,7 +116,7 @@ class ListingTest {
     /** 一条条目自己就比一页大:单占一页,只放得下的开头(不切断一个字),注明它原来多大。 */
     @Test
     void anEntryBiggerThanAPageShowsItsHeadAndSaysSo() {
-        String page = said("gt_listing.one()");
+        String page = said("gt.gt_listing.one()");
         int size = bytes("字".repeat(Listing.MAX_BYTES));
         assertTrue(page.contains("\n[This entry is " + size + " bytes; only its first "), page.substring(0, 20));
         String kept = page.substring("One:\n".length(), page.indexOf("\n[This entry"));
@@ -136,14 +136,14 @@ class ListingTest {
     void thePageOptionReadsTheSameAsInHelp() {
         assertEquals("""
                 ---List the rows.
-                ---@param opts? gt_listing.rows.opts
-                function gt_listing.rows(opts) end
+                ---@param opts? gt.gt_listing.rows.opts
+                function gt.gt_listing.rows(opts) end
 
-                ---@class gt_listing.rows.opts
+                ---@class gt.gt_listing.rows.opts
                 ---@field page? integer Which page of the list. Omit to show the first page.
                 -- Examples:
-                --   gt_listing.rows({page = 2})""",
-                CliFixture.help("gt_listing.rows"));
+                --   gt.gt_listing.rows({page = 2})""",
+                CliFixture.help("gt.gt_listing.rows"));
     }
 
     /** 这一页的翻页提示说到第几条,并且下一页的写法对;返回显示到第几条。 */

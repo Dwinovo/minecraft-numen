@@ -13,15 +13,15 @@ import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * 一个动作组(脚本里的一张表 {@code 组.动作},一行命令里的一级命令):插件经 {@code NumenApi.registerCommands} 拿到的就是它,只能
- * 往这一组里加动作。
+ * 一个动作组(脚本里的一张表 {@code 名字空间.组},一行命令里的 {@code 名字空间 组}):插件经 {@code NumenApi.registerCommands} 拿到的
+ * 就是它,只能往这一组里加动作。名字空间由登记者给出,登记代码里只写组名。
  *
  * <pre>{@code
- * numen.registerCommands("ftbquests", "Your quest book: chapters, quests, submitting.", quests -> {
+ * numen.registerCommands("quest", "Your quest book: chapters, quests, submitting.", quests -> {
  *     quests.server("submit", "Hand in the items a quest asks for.", Quests::submit, QUEST)
- *           .example("ftbquests.submit(\"15CDF6A098B95FDA\")");
+ *           .example("ftbquests.quest.submit(\"15CDF6A098B95FDA\")");
  *     quests.client("list", "List the quests you can work on now.", Quests::list)
- *           .example("ftbquests.list()");
+ *           .example("ftbquests.quest.list()");
  * });
  * }</pre>
  *
@@ -31,12 +31,14 @@ import java.util.TreeMap;
  */
 public final class CommandGroup {
 
+    private final String namespace;
     private final String name;
     private final String summary;
     private final List<Action> actions = new ArrayList<>();
     private boolean open = true;
 
-    CommandGroup(String name, String summary) {
+    CommandGroup(String namespace, String name, String summary) {
+        this.namespace = namespace;
         this.name = name;
         this.summary = summary;
     }
@@ -60,7 +62,7 @@ public final class CommandGroup {
     private Action add(String action, String actionSummary, List<Param<?>> params,
                        Action.OnServer onServer, Action.OnClient onClient) {
         requireOpen();
-        String path = name + " " + action;
+        String path = namespace + " " + name + " " + action;
         if (action == null || !Action.NAME.matcher(action).matches()) {
             throw new IllegalArgumentException("动作名不合规(小写字母开头,只含 [a-z0-9_]): '" + action + "'");
         }
@@ -166,14 +168,25 @@ public final class CommandGroup {
         for (Action a : actions) {
             verbs.put(a.name(), a.verb());
         }
-        ScriptCatalog catalog = new ScriptCatalog(Map.of(name, verbs), ScriptCatalog.ModuleSource.NONE);
+        ScriptCatalog catalog = new ScriptCatalog(Map.of(fullName(), verbs), ScriptCatalog.ModuleSource.NONE);
         for (Action a : actions) {
             a.checkExamples(catalog);
         }
     }
 
+    /** 名字空间:{@code numen}、{@code tlm}。 */
+    String namespace() {
+        return namespace;
+    }
+
+    /** 组名,不带名字空间:{@code work}。 */
     String name() {
         return name;
+    }
+
+    /** 组的全名,脚本里那张表的路径:{@code numen.work}。 */
+    String fullName() {
+        return namespace + "." + name;
     }
 
     String summary() {

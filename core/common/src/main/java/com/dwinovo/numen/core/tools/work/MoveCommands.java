@@ -26,8 +26,8 @@ import net.minecraft.world.entity.Entity;
  * {@code move}:移动——照一条路线走({@code go}),跟着谁走({@code follow})。两个动作都在服务端,都占身体,交任务槽(受理即回执,
  * 收尾走 task_finished)。
  *
- * <p>{@code go} 只走:路线要先规划过({@code route.plan}),计划就是它守的承诺,从她此刻的位置起只改承诺里的格;没规划过的当场拒绝,
- * 说清先规划。规划与走分开,"去一处"是库里的 {@code move.goto_}:把这一趟写成她自己的路线、规划、再走,三次 API 调用。去处与到达
+ * <p>{@code go} 只走:路线要先规划过({@code numen.route.plan}),计划就是它守的承诺,从她此刻的位置起只改承诺里的格;没规划过的当场拒绝,
+ * 说清先规划。规划与走分开,"去一处"是库里的 {@code numen.move.goto_}:把这一趟写成她自己的路线、规划、再走,三次 API 调用。去处与到达
  * 方式怎么对应到寻路的目标只在 {@link Destination}。
  */
 public final class MoveCommands {
@@ -49,15 +49,15 @@ public final class MoveCommands {
                     + "where that block (or any block of the area) is in sight and in reach, to use it. near: stop "
                     + "within the near option's blocks of the cell, place or area. dig: stand where your hand reaches "
                     + "that block (or, for an area, where it reaches the most of its blocks), even if something is in "
-                    + "the way, to dig it with work.dig. reach: stand where your hand reaches that cell, air too, "
-                    + "without standing in it, to build into it with build.at.")
+                    + "the way, to dig it with numen.work.dig. reach: stand where your hand reaches that cell, air too, "
+                    + "without standing in it, to build into it with numen.build.at.")
             .whenOmitted("arrive at");
     static final Param<Integer> NEAR = Param.optional("near", ArgType.integer(1, MAX_NEAR),
             "With arrive = \"near\" only: anywhere within this many blocks counts as there.")
             .whenOmitted("stop within " + Destination.DEFAULT_NEAR + " blocks");
     private static final Param<String> ROUTE = Param.optionalPositional("route", ArgType.word(), "The route to walk.")
-            .values("a route name, as `route.list()` lists it")
-            .whenOmitted("walk your own route goto-<your name>, the one route.new writes when given no name");
+            .values("a route name, as `numen.route.list()` lists it")
+            .whenOmitted("walk your own route goto-<your name>, the one numen.route.new writes when given no name");
     private static final Param<Integer> DISTANCE = Param.optional("distance",
             ArgType.integer(MIN_DISTANCE, MAX_DISTANCE), "How close to stay, in blocks.")
             .whenOmitted("stay within " + DEFAULT_DISTANCE);
@@ -66,7 +66,7 @@ public final class MoveCommands {
             .whenOmitted("follow until something else is given to do: no end of its own and no task_finished");
     private static final Param<EntityRef> WHO = Param.optionalPositional("entity", ArgType.entity(),
             "Who to follow.")
-            .values("a runtime entity id from scan.entities")
+            .values("a runtime entity id from numen.scan.entities")
             .whenOmitted("follow your owner");
 
     /** 走完时的结果:她在哪、走的哪条路线、离终点还有多远。 */
@@ -78,16 +78,16 @@ public final class MoveCommands {
     private MoveCommands() {}
 
     public static void install(NumenApi numen) {
-        numen.registerCommands(GROUP, "Moving: walk a planned route, follow someone. move.goto_ (library) plans and "
+        numen.registerCommands(GROUP, "Moving: walk a planned route, follow someone. numen.move.goto_ (library) plans and "
                 + "walks to one place.", MoveCommands::actions);
     }
 
     private static void actions(CommandGroup move) {
         move.server("go", "Walk a planned route from where you stand, keeping to its plan.", MoveCommands::go, ROUTE)
                 .returns(MOVED)
-                .example("move.go(\"home\")")
-                .example("move.go()")
-                .note("It only walks: plan the route first with `route.plan`, which lists every block the walk "
+                .example("numen.move.go(\"home\")")
+                .example("numen.move.go()")
+                .note("It only walks: plan the route first with `numen.route.plan`, which lists every block the walk "
                         + "changes and every cell it asks your owner about. That plan is a promise: if the way from "
                         + "where you stand now would break, place or ask about any cell it did not list, it does not "
                         + "set off and says which. A route with no plan is refused with the line that plans it.")
@@ -104,8 +104,8 @@ public final class MoveCommands {
         move.server("follow", "Tag along with your owner, or with an entity you name.", MoveCommands::follow, WHO,
                         DISTANCE, SECONDS)
                 .returns(ScriptType.table(ScriptType.field("pos", Shapes.POS.type(), "Where you stand at the end.")))
-                .example("move.follow()")
-                .example("move.follow(184, {distance = 5, seconds = 60})")
+                .example("numen.move.follow()")
+                .example("numen.move.follow(184, {distance = 5, seconds = 60})")
                 .note("Without seconds it is a standing job: there is nothing to finish, so it ends only when your "
                         + "owner stops it or something else is given to do, and it never sends task_finished. With "
                         + "seconds it stops after that long and reports as a task_finished event, so a script waits for "
@@ -124,8 +124,8 @@ public final class MoveCommands {
         String name = args.get(ROUTE) != null ? args.get(ROUTE) : Itinerary.gotoOf(her.getGameProfile().getName());
         Itinerary route = Routes.of(her.getServer(), her.getOwnerUuid()).get(name);
         if (route == null) {
-            throw new ApiError(ErrorKind.NOT_FOUND, "there is no route named " + name + "; route.new makes one",
-                    "route.list()");
+            throw new ApiError(ErrorKind.NOT_FOUND, "there is no route named " + name + "; numen.route.new makes one",
+                    "numen.route.list()");
         }
         TaskDispatch.setTask(src.replayedWith(args.with(ROUTE, name)), new MoveToTaskRecord(src, name,
                 "走路线 " + name + ",去 " + route.destination().describe(), null));
@@ -150,7 +150,7 @@ public final class MoveCommands {
         Entity target = named.in(companion.serverLevel());
         if (target == null || target == companion) {
             src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, "no entity with id " + named
-                    + " is here — ids do not survive restarts", "scan.entities()").toJson());
+                    + " is here — ids do not survive restarts", "numen.scan.entities()").toJson());
             return;
         }
         EntityRef stable = EntityRef.of(target);

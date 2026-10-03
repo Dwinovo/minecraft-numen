@@ -29,12 +29,14 @@ import java.util.stream.Collectors;
  * {@code kaleidoscope}:查一口锅能做什么、看一格锅现在怎样、在一格锅上做一道菜。
  *
  * <p>三个动作都在服务端:锅的状态机、配方表、品质评估都住在那边。每个动作就是脚本里的一个函数
- * ({@code kaleidoscope.cook(...)}),和别的动作同一个入口。{@code cook} 不走动、不找远处的锅:不点名就是她手够得着的那一口,
- * 走过去是脚本的事({@code scan.blocks} 找到锅、{@code move.goto_(…, {arrive = "use"})} 走到够得着)。
+ * ({@code kaleidoscope.pot.cook(...)}),和别的动作同一个入口。{@code cook} 不走动、不找远处的锅:不点名就是她手够得着的那一口,
+ * 走过去是脚本的事({@code numen.scan.blocks} 找到锅、{@code numen.move.goto_(…, {arrive = "use"})} 走到够得着)。
  */
 final class KaleidoscopeCommands {
 
-    static final String GROUP = "kaleidoscope";
+    /** 这个联动在她的 API 里的名字空间。 */
+    static final String NAMESPACE = "kaleidoscope";
+    static final String GROUP = "pot";
     static final String RECIPES = "recipes";
     static final String INSPECT = "inspect";
     static final String COOK = "cook";
@@ -60,12 +62,12 @@ final class KaleidoscopeCommands {
 
     private KaleidoscopeCommands() {}
 
-    /** 回执与事件里提到别的动作时写它的函数:{@code kaleidoscope.recipes}。 */
+    /** 回执与事件里提到别的动作时写它的函数:{@code kaleidoscope.pot.recipes}。 */
     static String line(String action) {
-        return GROUP + "." + action;
+        return NAMESPACE + "." + GROUP + "." + action;
     }
 
-    /** 相关动作里点名一个动作:{@code kaleidoscope cook}。 */
+    /** 相关动作里点名一个动作:{@code pot cook}。 */
     private static String path(String action) {
         return GROUP + " " + action;
     }
@@ -134,13 +136,13 @@ final class KaleidoscopeCommands {
                         + "z = -35}})")
                 .note("Background work: the result arrives as a task_finished event. One dish at a time.")
                 .note("It does not walk and does not look for a pot further away: stand within reach of the "
-                        + "cookware first (`scan.blocks` finds one, `move.goto_` it with arrive = \"use\"). Out of "
+                        + "cookware first (`numen.scan.blocks` finds one, `numen.move.goto_` it with arrive = \"use\"). Out of "
                         + "reach, no pot or "
                         + "stockpot there, an unknown recipe or a cookware already in use is refused at once with the "
                         + "reason, and nothing starts.")
                 .note("Uses the ingredients, oil and container from YOUR inventory. Asks your owner first when "
                         + "their rules say so, for using the cookware and for taking the dish.")
-                .seeAlso(path(RECIPES), path(INSPECT), "task stop");
+                .seeAlso(path(RECIPES), path(INSPECT), "numen task stop");
     }
 
     private static void recipes(ServerSource src, CommandArgs args) {
@@ -224,8 +226,8 @@ final class KaleidoscopeCommands {
         }
         if (best == null) {
             src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, "no pot or stockpot is within my reach — find one, "
-                    + "move.goto_ it with arrive = \"use\", then cook again",
-                    "scan.blocks(\"kaleidoscope_cookery:pot\", \"kaleidoscope_cookery:stockpot\")").toJson());
+                    + "numen.move.goto_ it with arrive = \"use\", then cook again",
+                    "numen.scan.blocks(\"kaleidoscope_cookery:pot\", \"kaleidoscope_cookery:stockpot\")").toJson());
         }
         return best;
     }

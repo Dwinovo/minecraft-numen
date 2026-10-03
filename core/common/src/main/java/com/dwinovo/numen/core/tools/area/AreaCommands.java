@@ -22,8 +22,8 @@ import net.minecraft.core.BlockPos;
 
 /**
  * {@code area}:区域这个名词——主人名下有名字、存盘的一堆格子,每一部分是一次扫描的一团、一个框的盒子、一个点、一栋房子或一条路线
- * 要改的格。它是"一块地方"唯一的写法:权限规则的 {@code area:} 项、{@code scan.blocks} 的 {@code into}/{@code within}、
- * {@code work.dig(区域)} 都点它。设计稿见 {@code docs/look-plan-act.md} §三。
+ * 要改的格。它是"一块地方"唯一的写法:权限规则的 {@code area:} 项、{@code numen.scan.blocks} 的 {@code into}/{@code within}、
+ * {@code numen.work.dig(区域)} 都点它。设计稿见 {@code docs/look-plan-act.md} §三。
  *
  * <p>无状态:每次调用都点名区域。看({@code show}、{@code list})与给脚本用的查询({@code parts} 一行一个部分名、{@code has}
  * 还有没有要挖的格,成败即答案)当场回,不占身体;改区域的每一行先过权限层({@code edit_area},主人的规则点名的区域要问主人),
@@ -34,13 +34,13 @@ public final class AreaCommands {
     private static final String GROUP = "area";
 
     private static final Param<String> NAME = Param.required("name", ArgType.word(), "The area.")
-            .values("an area name, as `area.list()` lists it");
+            .values("an area name, as `numen.area.list()` lists it");
     private static final Param<String> NEW_NAME = Param.required("name", ArgType.word(),
             "Name of the new area: lowercase letters, digits, _ and -.");
     private static final Param<AreaRef> SHOWN = Param.required("area", ArgType.area(),
             "The area, or one part of it written area/part (ores/g3).");
     private static final Param<AreaRef> PART = Param.required("part", ArgType.area(),
-            "The part, written area/part as area.parts lists it (ores/g3).");
+            "The part, written area/part as numen.area.parts lists it (ores/g3).");
     private static final Param<List<BlockPos>> BOX = Param.optional("box", ArgType.list(ArgType.cell()),
             "A box: its two corners {from, to}, each a Pos, in the dimension you are in.")
             .whenOmitted("add no box");
@@ -48,10 +48,10 @@ public final class AreaCommands {
             "One cell, in the dimension you are in.")
             .whenOmitted("add the cell you stand in, when nothing else is given");
     private static final Param<String> BUILT = Param.optional("built", ArgType.string(),
-            "A building, as build.built names it (house#1): the cells it was built of.")
+            "A building, as numen.build.built names it (house#1): the cells it was built of.")
             .whenOmitted("add no building");
     private static final Param<String> ROUTE = Param.optional("route", ArgType.word(),
-            "A route: the cells its latest plan breaks or places, as route.show lists it.")
+            "A route: the cells its latest plan breaks or places, as numen.route.show lists it.")
             .whenOmitted("add no route's cells");
     private static final Param<AreaRef> RESULT = Param.required("name", ArgType.area(),
             "Name of the new area the result is kept as: lowercase letters, digits, _ and -.");
@@ -78,7 +78,7 @@ public final class AreaCommands {
 
     /** 这次调用写成脚本里的样子:回执与征询里点名这件事。 */
     private static String line(CommandArgs args, String action, List<Param<?>> params) {
-        return args.call(GROUP + " " + action, params);
+        return args.call(com.dwinovo.numen.api.NumenPlugins.NUMEN + " " + GROUP + " " + action, params);
     }
 
     private static void actions(CommandGroup area) {
@@ -88,7 +88,7 @@ public final class AreaCommands {
                         (src, args) -> AreaOps.create(src, args.get(NEW_NAME), line(args, "new", List.of(NEW_NAME))),
                         NEW_NAME)
                 .returns(AREA)
-                .example("area.new(\"ores\")")
+                .example("numen.area.new(\"ores\")")
                 .note("Instant. Areas belong to your owner: every companion of theirs sees and changes the same ones, "
                         + "and they survive restarts.")
                 .note("Changing an area your owner's rules name (`area:house` in a rule) asks your owner first; the "
@@ -97,21 +97,21 @@ public final class AreaCommands {
         area.server("add", "Add a part to an area: a box, one cell, a building or a route's planned changes.",
                         AreaCommands::add, NAME, BOX, AT, BUILT, ROUTE)
                 .returns(AREA)
-                .example("area.add(\"house\", {box = {{x = 10, y = 60, z = 5}, {x = 20, y = 70, z = 15}}})")
-                .example("area.add(\"chest\", {at = {x = 12, y = 64, z = 7}})")
-                .example("area.add(\"here\")")
-                .example("area.add(\"home\", {built = \"house#1\"})")
-                .example("area.add(\"tunnel\", {route = \"mine\"})")
+                .example("numen.area.add(\"house\", {box = {{x = 10, y = 60, z = 5}, {x = 20, y = 70, z = 15}}})")
+                .example("numen.area.add(\"chest\", {at = {x = 12, y = 64, z = 7}})")
+                .example("numen.area.add(\"here\")")
+                .example("numen.area.add(\"home\", {built = \"house#1\"})")
+                .example("numen.area.add(\"tunnel\", {route = \"mine\"})")
                 .note("Instant. Give one of box, at, built, route; none of them adds the cell you stand in. "
                         + "The part gets the next number of its letter: b for a box, p for a cell, c for a building's "
                         + "or a route's cells; numbers are never reused.")
                 .note("Framed cells carry no block. To add blocks as they stand, scan them in: "
-                        + "`scan.blocks(\"iron_ore\", {into = \"ores\"})`.")
+                        + "`numen.scan.blocks(\"iron_ore\", {into = \"ores\"})`.")
                 .seeAlso("area show", "area drop");
         area.server("drop", "Remove one part of an area; the other parts keep their numbers.",
                         AreaCommands::drop, PART)
                 .returns(AREA)
-                .example("area.drop(\"ores/g2\")")
+                .example("numen.area.drop(\"ores/g2\")")
                 .note("Instant.")
                 .seeAlso("area show");
         area.server("show", "Show an area part by part: cells, blocks as seen, the nearest cell, the box, and whether "
@@ -121,25 +121,25 @@ public final class AreaCommands {
                 .returns(ScriptType.table(ScriptType.field("area", AREA, "The whole area."),
                         ScriptType.field("parts", ScriptType.listOf(AreaText.PART_CLASS.type()),
                                 "The parts shown: all of them, or the one named.")))
-                .example("area.show(\"ores\")")
-                .example("area.show(\"ores/g3\")")
+                .example("numen.area.show(\"ores\")")
+                .example("numen.area.show(\"ores/g3\")")
                 .note("Instant and read-only. Permission is asked for every cell now, the way breaking it would be: "
                         + "allow, ask (your owner is asked first) or deny, with the reason.")
                 .seeAlso("area list", "area parts", "area refresh", "work dig");
         area.server("parts", "The parts of an area, one name per line (ores/g1), for going through them one by one.",
                         (src, args) -> src.reply(AreaOps.parts(src.companion(), args.get(SHOWN), args)), SHOWN,
                         Listing.PAGE)
-                .example("area.parts(\"ores\")")
-                .note("Going through them: `for _, part in ipairs(area.parts(\"ores\")) do print(part) end`.")
-                .note("Instant and read-only: the list of the names. `move.goto_(\"ores/g1\", {arrive = \"dig\"})` and "
-                        + "`work.dig(\"ores/g1\")` take each as it is.")
+                .example("numen.area.parts(\"ores\")")
+                .note("Going through them: `for _, part in ipairs(numen.area.parts(\"ores\")) do print(part) end`.")
+                .note("Instant and read-only: the list of the names. `numen.move.goto_(\"ores/g1\", {arrive = \"dig\"})` and "
+                        + "`numen.work.dig(\"ores/g1\")` take each as it is.")
                 .returns("parts", ScriptType.listOf(ScriptType.STRING))
                 .seeAlso("area show", "area has");
         area.server("has", "Whether an area, or one part of it, still has a cell to dig: true or false.",
                         (src, args) -> src.reply(AreaOps.has(src.companion(), args.get(SHOWN))), SHOWN)
-                .example("while area.has(\"ores\") do work.dig(\"ores\") end")
-                .example("area.has(\"ores/g3\")")
-                .note("Instant and read-only. Each cell is judged the way work.dig judges it, in the world now: a "
+                .example("while numen.area.has(\"ores\") do numen.work.dig(\"ores\") end")
+                .example("numen.area.has(\"ores/g3\")")
+                .note("Instant and read-only. Each cell is judged the way numen.work.dig judges it, in the world now: a "
                         + "scanned cell counts while it still holds the block the scan saw, a framed cell while a block "
                         + "stands in it. Cells in unloaded terrain are not read.")
                 .returns("has", ScriptType.BOOLEAN)
@@ -147,20 +147,20 @@ public final class AreaCommands {
         area.server("list", "The areas of your owner, one line each.",
                         (src, args) -> src.reply(AreaOps.list(src.companion(), args)), Listing.PAGE)
                 .returns("areas", ScriptType.listOf(AREA))
-                .example("area.list()")
+                .example("numen.area.list()")
                 .note("Instant and read-only.")
                 .seeAlso("area show");
         area.server("delete", "Delete an area.",
                         (src, args) -> AreaOps.delete(src, args.get(NAME), line(args, "delete", List.of(NAME))), NAME)
                 .returns(ScriptType.NOTHING)
-                .example("area.delete(\"ores\")")
+                .example("numen.area.delete(\"ores\")")
                 .note("Instant.")
                 .seeAlso("area list");
         area.server("refresh", "Check the scanned cells of an area against the world now and strike off those that no "
                         + "longer hold what was seen.",
                         (src, args) -> AreaOps.refresh(src, args.get(NAME), line(args, "refresh", List.of(NAME))), NAME)
                 .returns(AREA)
-                .example("area.refresh(\"ores\")")
+                .example("numen.area.refresh(\"ores\")")
                 .note("Instant. Only cells a scan added carry a block to check; cells in unloaded terrain are kept and "
                         + "counted. Parts left with no cell are removed.")
                 .seeAlso("area show");
@@ -168,14 +168,14 @@ public final class AreaCommands {
                         (src, args) -> derive(src, args, "union", List.of(RESULT, AREAS), args.get(AREAS).get(0),
                                 a -> unionRest(src.companion(), a, args.get(AREAS))), RESULT, AREAS)
                 .returns(AREA)
-                .example("area.union(\"all\", \"ores\", \"gold\")")
+                .example("numen.area.union(\"all\", \"ores\", \"gold\")")
                 .note("Instant. The first area's parts keep their ids; the others' follow with new numbers.")
                 .seeAlso("area minus", "area intersect");
         area.server("minus", "Keep, as a new area, the cells of an area that are not in the others.",
                         (src, args) -> derive(src, args, "minus", List.of(RESULT, FROM, AREAS), args.get(FROM),
                                 a -> fold(src.companion(), a, args.get(AREAS), Area::minus)), RESULT, FROM, AREAS)
                 .returns(AREA)
-                .example("area.minus(\"safe\", \"house\", \"house/b2\")")
+                .example("numen.area.minus(\"safe\", \"house\", \"house/b2\")")
                 .note("Instant. Each part of the first area loses the cells in the others and keeps its id; a part left "
                         + "empty goes.")
                 .seeAlso("area union");
@@ -183,15 +183,15 @@ public final class AreaCommands {
                         (src, args) -> derive(src, args, "intersect", List.of(RESULT, FROM, AREAS), args.get(FROM),
                                 a -> fold(src.companion(), a, args.get(AREAS), Area::intersect)), RESULT, FROM, AREAS)
                 .returns(AREA)
-                .example("area.intersect(\"near\", \"ores\", \"base\")")
+                .example("numen.area.intersect(\"near\", \"ores\", \"base\")")
                 .note("Instant. Each part of the first area keeps only the cells the others share and keeps its id.")
                 .seeAlso("area union");
         area.server("filter", "Keep, as a new area, the cells whose block as seen is one of the given types.",
                         (src, args) -> derive(src, args, "filter", List.of(RESULT, FROM, BLOCKS), args.get(FROM),
                                 AreaOps.filter(args.get(BLOCKS))), RESULT, FROM, BLOCKS)
                 .returns(AREA)
-                .example("area.filter(\"logs\", \"house\", {blocks = \"#minecraft:logs\"})")
-                .example("area.filter(\"seen\", \"ores\")")
+                .example("numen.area.filter(\"logs\", \"house\", {blocks = \"#minecraft:logs\"})")
+                .example("numen.area.filter(\"seen\", \"ores\")")
                 .note("Instant. It reads the blocks the area carries as seen, not the world: framed cells carry none "
                         + "and are dropped.")
                 .seeAlso("area refresh");
@@ -199,15 +199,15 @@ public final class AreaCommands {
                         (src, args) -> derive(src, args, "grow", List.of(RESULT, FROM, BY), args.get(FROM),
                                 a -> a.grow(args.get(BY) == null ? 1 : args.get(BY))), RESULT, FROM, BY)
                 .returns(AREA)
-                .example("area.grow(\"buffer\", \"house\", {by = 2})")
-                .example("area.grow(\"wall\", \"house\")")
+                .example("numen.area.grow(\"buffer\", \"house\", {by = 2})")
+                .example("numen.area.grow(\"wall\", \"house\")")
                 .note("Instant. Each part grows by itself; the cells it gains carry no block.")
                 .seeAlso("area minus");
         area.server("center", "Keep, as a new area, the one cell of an area nearest its middle.",
                         (src, args) -> derive(src, args, "center", List.of(RESULT, FROM), args.get(FROM),
                                 Area::center), RESULT, FROM)
                 .returns(AREA)
-                .example("area.center(\"mid\", \"ores\")")
+                .example("numen.area.center(\"mid\", \"ores\")")
                 .note("Instant. The cell is always one of the area's own, even for a ring or an L.")
                 .seeAlso("area show");
     }
@@ -218,7 +218,7 @@ public final class AreaCommands {
         int given = (args.get(BOX) == null ? 0 : 1) + (args.get(AT) == null ? 0 : 1)
                 + (args.get(BUILT) == null ? 0 : 1) + (args.get(ROUTE) == null ? 0 : 1);
         if (given > 1) {
-            throw new IllegalArgumentException("area.add takes one of box, at, built or route; you gave " + given);
+            throw new IllegalArgumentException("numen.area.add takes one of box, at, built or route; you gave " + given);
         }
         AreaOps.Source source = args.get(BOX) != null ? AreaOps.box(her, args.get(BOX))
                 : args.get(BUILT) != null ? AreaOps.built(her, args.get(BUILT))
@@ -231,8 +231,8 @@ public final class AreaCommands {
     private static void drop(ServerSource src, CommandArgs args) {
         AreaRef part = args.get(PART);
         if (part.part() == null) {
-            throw new IllegalArgumentException("area.drop removes one part, written area/part as `area.parts(\""
-                    + part.name() + "\")` lists them; `area.delete(\"" + part.name() + "\")` removes the whole area");
+            throw new IllegalArgumentException("numen.area.drop removes one part, written area/part as `numen.area.parts(\""
+                    + part.name() + "\")` lists them; `numen.area.delete(\"" + part.name() + "\")` removes the whole area");
         }
         AreaOps.drop(src, part.name(), part.part(), line(args, "drop", List.of(PART)));
     }

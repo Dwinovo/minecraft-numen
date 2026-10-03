@@ -51,7 +51,7 @@ public final class QueryExtraOps {
     private static final double MIN_RADIUS = 1.0;
     private static final double MAX_RADIUS = 64.0;
 
-    /** 回执数据里那份实体清单的键:脚本里 {@code scan.entities} 直接返回它。 */
+    /** 回执数据里那份实体清单的键:脚本里 {@code numen.scan.entities} 直接返回它。 */
     public static final String ENTITIES = "entities";
 
     /**
@@ -203,18 +203,18 @@ public final class QueryExtraOps {
                     + "trade), not crafted or smelted.", Map.of(RECIPES, recipes)).toJson();
         }
         return new Listing(recipes.size() + " recipe(s) for " + name + ":", recipes, "To make it —\n"
-                + "• [crafting]: inv.craft(<item>, {count = N}) — it lays out the grid and takes the "
+                + "• [crafting]: numen.inv.craft(<item>, {count = N}) — it lays out the grid and takes the "
                 + "result for you (a 3x3 recipe needs a crafting table within reach; 2x2 works "
                 + "anywhere).\n"
-                + "• [smelting|blasting|smoking]: use.block the furnace, then use.shift the input and "
-                + "the fuel — the menu routes each to its slot. Wait, then use.shift the output back "
+                + "• [smelting|blasting|smoking]: numen.use.block the furnace, then numen.use.shift the input and "
+                + "the fuel — the menu routes each to its slot. Wait, then numen.use.shift the output back "
                 + "out.\n"
-                + "• [stonecutter]: use.block it, use.shift the input (the menu routes it in), take the "
-                + "output. [smithing]: use.block it, use.gui, then use.transfer template + base + "
+                + "• [stonecutter]: numen.use.block it, numen.use.shift the input (the menu routes it in), take the "
+                + "output. [smithing]: numen.use.block it, numen.use.gui, then numen.use.transfer template + base + "
                 + "addition each into its own slot.").result(args, Map.of(RECIPES, recipes)).toJson();
     }
 
-    /** {@code inv.recipe} 返回的那一项:每条配方一段文字。 */
+    /** {@code numen.inv.recipe} 返回的那一项:每条配方一段文字。 */
     public static final String RECIPES = "recipes";
 
     private static String format(CraftingRecipe recipe, ItemStack result) {
@@ -321,7 +321,7 @@ public final class QueryExtraOps {
         if (caps.isEmpty()) {
             return TaskResult.ok(id + " at " + coord + " exposes no item/fluid/energy storage "
                     + "(not a machine/tank/battery, or it keeps its state elsewhere). "
-                    + "If it has a GUI, right-click it (use.block) then use.gui().", data).toJson();
+                    + "If it has a GUI, right-click it (numen.use.block) then numen.use.gui().", data).toJson();
         }
         return new Listing(id + " at " + coord + ":", caps, "").result(args, data).toJson();
     }

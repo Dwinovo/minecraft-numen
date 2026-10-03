@@ -294,7 +294,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         java.util.Set<Integer> cleared = cleared(candidates);
         List<Battlefield.Foe> foes = new ArrayList<>();
         for (var mob : hostiles) {
-            // 点名的一场仗只看点名的那几只:打完了就收工,下一只打不打、打哪只是程序的事(fight.clear),路上被别的
+            // 点名的一场仗只看点名的那几只:打完了就收工,下一只打不打、打哪只是程序的事(numen.fight.clear),路上被别的
             // 贴脸是本能的事(反击链)。别的怪不进局面,也就不会被顺手砍、不会把这场仗拖着不收
             if (!r.indiscriminate && !r.entityIds.contains(mob.getId())) {
                 continue;
@@ -1024,9 +1024,9 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 : r.defeated().size() + "/" + r.entityIds.size() + " requested entities";
     }
 
-    /** 打倒了什么,它掉的东西留在地上:捡是 {@code work.collect} 的事。 */
+    /** 打倒了什么,它掉的东西留在地上:捡是 {@code numen.work.collect} 的事。 */
     private String drops() {
-        return r.defeated().isEmpty() ? "" : "; what they dropped lies on the ground: `work.collect()` picks it up";
+        return r.defeated().isEmpty() ? "" : "; what they dropped lies on the ground: `numen.work.collect()` picks it up";
     }
 
     @Override

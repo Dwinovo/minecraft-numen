@@ -8,7 +8,7 @@ import com.google.gson.JsonObject;
  *
  * @param group    组名,{@code work}
  * @param verb     动作名,{@code dig}
- * @param function 脚本里的函数名,{@code work.dig}:回执与任务名都这样写它
+ * @param function 脚本里的函数名,{@code numen.work.dig}:回执与任务名都这样写它
  * @param args     参数名 → 值
  */
 public record Invocation(String group, String verb, String function, JsonObject args) {}

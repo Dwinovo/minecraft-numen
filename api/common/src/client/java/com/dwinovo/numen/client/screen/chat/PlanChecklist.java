@@ -10,7 +10,7 @@ import com.google.gson.JsonParser;
 import java.util.List;
 
 /**
- * 她在一次脚本运行里写下的计划({@code todo.write})读成一份清单(Telegram 的清单消息:一条消息里几项待办,做完就勾)。
+ * 她在一次脚本运行里写下的计划({@code numen.todo.write})读成一份清单(Telegram 的清单消息:一条消息里几项待办,做完就勾)。
  * 那次调用的参数原样留在脚本回执里({@link ScriptCall#ECHOED}),一项的写法只在 {@link TodoCommands.Item#parse}。
  * 对话流把它画成她说的一条消息;同一份计划只是状态变了,就在第一次出现的那条上原地更新,条目内容变了才另起一条——
  * "是不是同一份"只看 {@link #sameItems}。

@@ -49,7 +49,7 @@ public final class ThrowawayCommands {
         throwaway.server("add", "Add blocks you are willing to spend.",
                         (src, args) -> src.reply(OPS.add(src.companion(), ids(args))), BLOCKS)
                 .returns(THROWAWAY)
-                .example("throwaway.add(\"minecraft:cobblestone\", \"minecraft:cobbled_deepslate\")")
+                .example("numen.throwaway.add(\"minecraft:cobblestone\", \"minecraft:cobbled_deepslate\")")
                 .note("Anything listed WILL be consumed and never comes back: list what is junk here and now. "
                         + "Cobblestone is junk in a mineshaft and precious in the End.")
                 .note("Instant; your owner is told what you changed. The list persists across sessions and is used "
@@ -58,19 +58,19 @@ public final class ThrowawayCommands {
         throwaway.server("remove", "Take blocks off the list.",
                         (src, args) -> src.reply(OPS.remove(src.companion(), ids(args))), BLOCKS)
                 .returns(THROWAWAY)
-                .example("throwaway.remove(\"minecraft:dirt\")")
+                .example("numen.throwaway.remove(\"minecraft:dirt\")")
                 .note("Instant; your owner is told what you changed.")
                 .seeAlso("throwaway add");
         throwaway.server("set", "Replace the whole list.",
                         (src, args) -> src.reply(OPS.set(src.companion(), ids(args))), BLOCKS)
                 .returns(THROWAWAY)
-                .example("throwaway.set(\"minecraft:netherrack\")")
-                .note("Instant; your owner is told what you changed. To allow nothing at all, use `throwaway.clear()`.")
+                .example("numen.throwaway.set(\"minecraft:netherrack\")")
+                .note("Instant; your owner is told what you changed. To allow nothing at all, use `numen.throwaway.clear()`.")
                 .seeAlso("throwaway add", "throwaway clear");
         throwaway.server("clear", "Empty the list, so no block may be spent.",
                         (src, args) -> src.reply(OPS.clear(src.companion())))
                 .returns(THROWAWAY)
-                .example("throwaway.clear()")
+                .example("numen.throwaway.clear()")
                 .note("A real choice for when what you carry is earmarked (the dirt is for a build): you then "
                         + "cannot pillar or bridge at all, and routes that need it fail until you add some back.")
                 .note("Instant; your owner is told what you changed.")

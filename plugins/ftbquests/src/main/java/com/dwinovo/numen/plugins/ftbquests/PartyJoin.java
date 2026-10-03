@@ -48,7 +48,7 @@ final class PartyJoin {
         if (chosen.isEmpty()) {
             src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, "No pending invitation for you is from the party " + wanted
                     + ". Your pending invitations: " + listed(invites) + ".",
-                    invites.size() == 1 ? FtbqCommands.GROUP + ".join()" : null, pending).toJson());
+                    invites.size() == 1 ? FtbqCommands.FULL + ".join()" : null, pending).toJson());
             return;
         }
         if (chosen.size() > 1) {

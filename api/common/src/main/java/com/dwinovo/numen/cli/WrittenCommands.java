@@ -22,16 +22,17 @@ import java.util.regex.Pattern;
  *
  * <h2>怎么认出一段调用(约定)</h2>
  * <ul>
- *   <li>它写在反引号里({@code `work.dig("ores")`}),或者是 {@code ```lua} 围起的代码块(整块是一段脚本),或别的
+ *   <li>它写在反引号里({@code `numen.work.dig(b)`}),或者是 {@code ```lua} 围起的代码块(整块是一段脚本),或别的
  *       {@code ```} 块里的一行;</li>
- *   <li>它以一个组的函数打头({@code 组.动作}),前面可以有 {@code local x =}。</li>
+ *   <li>它以一个组的函数打头({@code 名字空间.组.动作}),前面可以有 {@code local x =}。</li>
  * </ul>
- * 旧的写法也认出来,好指出它:一行命令({@code 组 动作 …},第一个词是一个组)与原版指令({@code /…})。别的反引号——方块 id、
- * 参数名、字符网格——不读。文字里提到调用一律写进反引号,写成能照抄的样子:一段完整的调用,或只点名一个函数({@code inv.recipe})。
+ * 旧的写法也认出来,好指出它:没写名字空间的调用({@code numen.work.dig(…)},第一段是某个组的名字)、一行命令({@code numen work dig …},
+ * 第一个词是一个名字空间)与原版指令({@code /…})。别的反引号——方块 id、参数名、字符网格——不读。文字里提到调用一律写进反引号,
+ * 写成能照抄的样子:一段完整的调用,或只点名一个函数({@code numen.inv.recipes})或一组({@code numen.inv})。
  *
  * <h2>读得通</h2>
  * 一段调用交脚本的前端只读不跑({@link ScriptEngine#calls}):语法要对;调到的每个动作的对象与选项要按它的参数表读得成
- * ({@link NumenCli#invocation},和真跑同一个换法);库函数要存在;{@code mc.run} 的那一行原版指令交调用方给的那棵 MC 指令树
+ * ({@link NumenCli#invocation},和真跑同一个换法);库函数要存在;{@code numen.mc.run} 的那一行原版指令交调用方给的那棵 MC 指令树
  * ({@link #nativeProblem})。调用都返回 nil,所以拿返回值往下算的写法在那一处停下,之前调到的照查。
  */
 public final class WrittenCommands {
@@ -39,11 +40,14 @@ public final class WrittenCommands {
     private static final Pattern SPAN = Pattern.compile("`([^`\n]+)`");
     private static final String FENCE = "```";
     private static final String LUA_FENCE = "```lua";
-    /** 以一个组的函数打头:{@code work.dig(...)}、{@code local r = area.has(...)}、{@code move.goto_}。 */
+    /** 以一个组的函数打头:{@code numen.work.dig(...)}、{@code local r = numen.scan.blocks(...)}、{@code numen.move.goto_}。 */
     private static final Pattern CALL = Pattern.compile("^(?:local\\s+[A-Za-z_][A-Za-z0-9_]*\\s*=\\s*)?"
+            + "([a-z][a-z0-9_]*)\\.([a-z][a-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)");
+    /** 没写名字空间的旧写法:{@code numen.work.dig(...)}。 */
+    private static final Pattern BARE = Pattern.compile("^(?:local\\s+[A-Za-z_][A-Za-z0-9_]*\\s*=\\s*)?"
             + "([a-z][a-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)");
-    /** 只点名一个函数:{@code inv.recipe}。 */
-    private static final Pattern MENTION = Pattern.compile("^([a-z][a-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)$");
+    /** 只点名一个函数或一组:{@code numen.inv.recipes}、{@code numen.inv}。 */
+    private static final Pattern MENTION = Pattern.compile("^([a-z][a-z0-9_]*)\\.([a-z][a-z0-9_]*)(?:\\.([A-Za-z_][A-Za-z0-9_]*))?$");
 
     private WrittenCommands() {}
 
@@ -110,15 +114,26 @@ public final class WrittenCommands {
             return true;
         }
         Matcher call = CALL.matcher(written);
-        if (call.find() && isGroup(call.group(1))) {
+        if (call.find() && isGroup(call.group(1) + "." + call.group(2))) {
+            return true;
+        }
+        Matcher bare = BARE.matcher(written);
+        if (bare.find() && isBareGroup(bare.group(1))) {
             return true;
         }
         String first = written.split(" ", 2)[0];
         return written.contains(" ") && NumenCli.isTopLevel(first) && !first.equals(NumenCli.HELP);
     }
 
+    /** 一组的全名:{@code numen.work}。 */
     private static boolean isGroup(String table) {
-        return NumenCli.groups().stream().anyMatch(g -> ScriptEngine.IN_USE.functionName(g.name()).equals(table));
+        return NumenCli.groups().stream().anyMatch(g -> ScriptEngine.IN_USE.pathName(g.fullName()).equals(table));
+    }
+
+    /** 不带名字空间的组名,而它本身不是一个名字空间:{@code work}。 */
+    private static boolean isBareGroup(String table) {
+        return !NumenCli.isNamespace(table)
+                && NumenCli.groups().stream().anyMatch(g -> ScriptEngine.IN_USE.functionName(g.name()).equals(table));
     }
 
     /** 这些文字里写错的调用;都读得通是空表。 */
@@ -141,8 +156,13 @@ public final class WrittenCommands {
             return "a Minecraft command is run as " + McCommands.call(code.substring(1)) + " in a script";
         }
         Matcher call = CALL.matcher(code);
-        if (!(call.find() && isGroup(call.group(1))) && NumenCli.isTopLevel(code.split(" ", 2)[0])) {
-            return "write it as a call of the API, group.action(...): this is the old command-line way";
+        boolean full = call.find() && isGroup(call.group(1) + "." + call.group(2));
+        Matcher bare = BARE.matcher(code);
+        if (!full && bare.find() && isBareGroup(bare.group(1))) {
+            return "write the function in full, with its namespace: numen." + bare.group(1) + "." + bare.group(2);
+        }
+        if (!full && NumenCli.isTopLevel(code.split(" ", 2)[0])) {
+            return "write it as a call of the API, namespace.group.action(...): this is the old command-line way";
         }
         Matcher mention = MENTION.matcher(code);
         if (mention.matches()) {
@@ -166,7 +186,7 @@ public final class WrittenCommands {
             } catch (IllegalArgumentException wrong) {
                 return wrong.getMessage();
             }
-            if (c.group().equals(McCommands.GROUP) && !c.args().isEmpty()) {
+            if (c.group().equals(McCommands.FULL) && !c.args().isEmpty()) {
                 String line = Line.of(String.valueOf(c.args().get(0))).text();
                 String problem = mc.problem(line);
                 if (problem != null) {
@@ -205,7 +225,7 @@ public final class WrittenCommands {
     public static List<Text> registered() {
         List<Text> texts = new ArrayList<>();
         for (CommandGroup group : NumenCli.groups()) {
-            texts.add(new Text(group.name(), group.summary()));
+            texts.add(new Text(group.fullName(), group.summary()));
             for (Action action : group.actions()) {
                 texts.add(new Text(action.path(), action.summary()));
                 for (Param<?> p : action.params()) {

@@ -23,7 +23,7 @@ public final class NumenKaleidoscope {
 
     /** 由 {@code Builtin} 在确认森罗在场后调用。 */
     public static void install(Path skillsRoot) {
-        NumenPlugins.register(numen -> {
+        NumenPlugins.register(KaleidoscopeCommands.NAMESPACE, numen -> {
             KaleidoscopeCommands.install(numen);
 
             // kaleidoscope cook 派下来的记录由谁来跑

@@ -16,7 +16,7 @@ import java.util.List;
  * 成功 = 背包里粗铁不少于 10。
  *
  * <p>两个场景只差标准解:{@code mine_iron} 一行一行写命令挖,{@code mine_iron_script} 扫进区域后交给内置模块的
- * {@code work.mine("ores")} 挖,证明内置的 work.mine 能把埋着的矿挖空。两份最后都站进挖空的芯再捡一遍。
+ * {@code numen.work.mine("ores")} 挖,证明内置的 numen.work.mine 能把埋着的矿挖空。两份最后都站进挖空的芯再捡一遍。
  */
 public final class MineIron implements Scenario {
 
@@ -36,7 +36,7 @@ public final class MineIron implements Scenario {
         this.byScript = byScript;
     }
 
-    /** 标准解用内置模块函数 work.mine。 */
+    /** 标准解用内置模块函数 numen.work.mine。 */
     public static MineIron byScript() {
         return new MineIron(true);
     }
@@ -101,25 +101,25 @@ public final class MineIron implements Scenario {
 
     @Override
     public String solution(Scene scene) {
-        // 一轮:走到一次够得着最多铁矿的地方(挖开石头过去),挖手够得着的,直到区域里不剩;work.mine 做的就是这几轮,
+        // 一轮:走到一次够得着最多铁矿的地方(挖开石头过去),挖手够得着的,直到区域里不剩;numen.work.mine 做的就是这几轮,
         // 每轮挖完捡一次走得到的
-        StringBuilder program = new StringBuilder("scan.blocks(\"iron_ore\", {radius = 12, into = \"ores\"})\n");
+        StringBuilder program = new StringBuilder("numen.scan.blocks(\"iron_ore\", {radius = 12, into = \"ores\"})\n");
         if (byScript) {
-            program.append("work.mine(\"ores\")\n");
+            program.append("numen.work.mine(\"ores\")\n");
         } else {
             program.append("""
-                    while area.has("ores") do
-                      move.goto_("ores", {arrive = "dig", alter = "natural"})
-                      work.dig("ores")
+                    while numen.area.has("ores") do
+                      numen.move.goto_("ores", {arrive = "dig", alter = "natural"})
+                      numen.work.dig("ores")
                     end
                     """);
         }
-        // 粗铁落在挖空的矿洞里,有的洞只有一格高、不改地形走不进去(work.collect 不挖不放):站进芯的正中(挖开头顶那格)
+        // 粗铁落在挖空的矿洞里,有的洞只有一格高、不改地形走不进去(numen.work.collect 不挖不放):站进芯的正中(挖开头顶那格)
         // 一圈都捡得到,再把剩下的捡了
         BlockPos core = scene.pos(10, 1, 10);
-        program.append("move.goto_(").append(com.dwinovo.numen.cli.Shapes.literal(core))
+        program.append("numen.move.goto_(").append(com.dwinovo.numen.cli.Shapes.literal(core))
                 .append(", {alter = \"natural\"})\n");
-        program.append("work.collect()\n");
+        program.append("numen.work.collect()\n");
         return program.toString();
     }
 }

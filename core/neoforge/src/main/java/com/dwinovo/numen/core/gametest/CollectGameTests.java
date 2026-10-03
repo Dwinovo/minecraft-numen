@@ -22,7 +22,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
 /**
- * 捡东西:库里的 {@code work.collect} 扫地上的掉落物、一件件走过去,原版玩家走近就捡起来。它返回走过去捡掉的件数;走不到的
+ * 捡东西:库里的 {@code numen.work.collect} 扫地上的掉落物、一件件走过去,原版玩家走近就捡起来。它返回走过去捡掉的件数;走不到的
  * 那一步(寻路)失败,整段如实停在那里。
  */
 @GameTestHolder(Constants.MOD_ID)
@@ -46,11 +46,11 @@ public class CollectGameTests {
         dropOnFloor(helper, new BlockPos(7, 2, 4), Items.IRON_INGOT, 3);
         dropOnFloor(helper, new BlockPos(4, 2, 7), Items.COBBLESTONE, 4);
         NumenPlayer companion = spawnAt(helper, "gametest_sweeper", new BlockPos(2, 2, 2), false);
-        ToolRun collect = lua(companion, "return work.collect()");
+        ToolRun collect = lua(companion, "return numen.work.collect()");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(collect.receipt() != null, "work.collect has not finished");
-            helper.assertTrue(returned(collect, 7), "work.collect did not count seven items: " + collect.receipt());
+            helper.assertTrue(collect.receipt() != null, "numen.work.collect has not finished");
+            helper.assertTrue(returned(collect, 7), "numen.work.collect did not count seven items: " + collect.receipt());
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 3
                             && companion.getInventory().countItem(Items.COBBLESTONE) == 4,
                     "not everything was picked up");
@@ -66,10 +66,10 @@ public class CollectGameTests {
         dropOnFloor(helper, new BlockPos(6, 2, 4), Items.IRON_INGOT, 3);
         dropOnFloor(helper, new BlockPos(6, 2, 10), Items.IRON_INGOT, 2);
         NumenPlayer companion = spawnAt(helper, "gametest_tallier", new BlockPos(2, 2, 7), false);
-        ToolRun collect = lua(companion, "return work.collect()");
+        ToolRun collect = lua(companion, "return numen.work.collect()");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(collect.receipt() != null, "work.collect has not finished");
+            helper.assertTrue(collect.receipt() != null, "numen.work.collect has not finished");
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 5,
                     "not all five ingots were picked up");
             helper.assertTrue(returned(collect, 5), "it does not count five items: " + collect.receipt());
@@ -81,10 +81,10 @@ public class CollectGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_collect")
     public static void work_collect_with_nothing_on_the_ground_returns_none(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_empty_handed", new BlockPos(2, 2, 7), false);
-        ToolRun collect = lua(companion, "return work.collect()");
+        ToolRun collect = lua(companion, "return numen.work.collect()");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(collect.receipt() != null, "work.collect has not finished");
+            helper.assertTrue(collect.receipt() != null, "numen.work.collect has not finished");
             helper.assertTrue(returned(collect, 0) && collect.receipt().contains(": 1 call in"),
                     "a sweep with nothing on the ground did more than one look: " + collect.receipt());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
@@ -110,10 +110,10 @@ public class CollectGameTests {
         }
         dropOnFloor(helper, new BlockPos(8, 2, 8), Items.IRON_INGOT, 3);
         NumenPlayer companion = spawnAt(helper, "gametest_spelunker", new BlockPos(5, 4, 5), false);
-        ToolRun collect = lua(companion, "return work.collect()");
+        ToolRun collect = lua(companion, "return numen.work.collect()");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(collect.receipt() != null, "work.collect has not finished");
+            helper.assertTrue(collect.receipt() != null, "numen.work.collect has not finished");
             helper.assertTrue(returned(collect, 3) && companion.getInventory().countItem(Items.IRON_INGOT) == 3,
                     "the ingots at the bottom of the pit were not picked up: " + collect.receipt());
             CompanionFactory.despawn(level.getServer(), companion);
@@ -147,11 +147,11 @@ public class CollectGameTests {
         }
         dropOnFloor(helper, new BlockPos(10, 5, 10), Items.IRON_INGOT, 3);
         NumenPlayer companion = spawnAt(helper, "gametest_shortarm", new BlockPos(6, 2, 6), false);
-        ToolRun collect = lua(companion, "return work.collect()");
+        ToolRun collect = lua(companion, "return numen.work.collect()");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(collect.receipt() != null, "work.collect has not finished");
-            helper.assertTrue(!collect.ranToTheEnd() && collect.receipt().contains("route.plan: "),
+            helper.assertTrue(collect.receipt() != null, "numen.work.collect has not finished");
+            helper.assertTrue(!collect.ranToTheEnd() && collect.receipt().contains("numen.route.plan: "),
                     "a sweep that can reach nothing did not stop at the walk: " + collect.receipt());
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 0
                             && onFloor(helper, Items.IRON_INGOT) == 3,
@@ -174,10 +174,10 @@ public class CollectGameTests {
         drop.setDeltaMovement(Vec3.ZERO);
         drop.setDefaultPickUpDelay();
         helper.getLevel().addFreshEntity(drop);
-        ToolRun collect = lua(companion, "return work.collect()");
+        ToolRun collect = lua(companion, "return numen.work.collect()");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(collect.receipt() != null, "work.collect has not finished");
+            helper.assertTrue(collect.receipt() != null, "numen.work.collect has not finished");
             helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 3 && returned(collect, 3),
                     "the fresh drop at her feet was not picked up: " + collect.receipt());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);

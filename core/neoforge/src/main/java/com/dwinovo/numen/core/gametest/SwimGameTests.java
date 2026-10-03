@@ -21,7 +21,7 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /**
- * 水下的路,从 {@code move_goto} 与 {@code route.plan} 的工具入口:封顶的水道短到一口气游得完,她游过去,换气本能不在半路把她
+ * 水下的路,从 {@code move_goto} 与 {@code numen.route.plan} 的工具入口:封顶的水道短到一口气游得完,她游过去,换气本能不在半路把她
  * 拽上去,回执说潜过一段水、憋了多久;计划里写出要潜的那一段;长到憋不住的不下水,回执说出那一段水下在哪、要憋多久。
  */
 @GameTestHolder(Constants.MOD_ID)
@@ -69,7 +69,7 @@ public class SwimGameTests {
         sealedChannel(helper, 10, 18);
         NumenPlayer companion = spawnAt(helper, "gametest_diver", new BlockPos(7, 2, Z), false);
         BlockPos there = helper.absolutePos(new BlockPos(21, 2, Z));
-        ToolRun walk = lua(companion, "move.goto_(" + xyz(there) + ")");
+        ToolRun walk = lua(companion, "numen.move.goto_(" + xyz(there) + ")");
         float[] lowest = {Float.MAX_VALUE};
         helper.onEachTick(() -> lowest[0] = Math.min(lowest[0], companion.getHealth()));
 
@@ -105,7 +105,7 @@ public class SwimGameTests {
         fill(helper, 28, 2, Z, 28, 2, Z, Blocks.AIR.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_held_diver", new BlockPos(7, 2, Z), false);
         BlockPos there = helper.absolutePos(new BlockPos(33, 2, Z));
-        ToolRun walk = lua(companion, "move.goto_(" + xyz(there) + ")");
+        ToolRun walk = lua(companion, "numen.move.goto_(" + xyz(there) + ")");
         var outbox = com.dwinovo.numen.entity.EventOutbox.get(level.getServer());
         double wallX = helper.absolutePos(new BlockPos(28, 0, Z)).getX() + 0.5;
         boolean[] walled = {false};
@@ -142,15 +142,15 @@ public class SwimGameTests {
         });
     }
 
-    /** 同一条 8 格的封顶水道,{@code route.plan}:计划写出要潜的那一段水下、一口气憋多久、还剩多少气;她一步没动。 */
+    /** 同一条 8 格的封顶水道,{@code numen.route.plan}:计划写出要潜的那一段水下、一口气憋多久、还剩多少气;她一步没动。 */
     @GameTest(template = "floor52", timeoutTicks = 100000, batch = BATCH)
     public static void a_route_plan_tells_the_dive_on_the_way(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         sealedChannel(helper, 10, 18);
         NumenPlayer companion = spawnAt(helper, "gametest_planner", new BlockPos(7, 2, Z), false);
         BlockPos start = companion.blockPosition();
-        ToolRun made = lua(companion, "route.new(\"swim\", {to = " + at(helper, new BlockPos(21, 2, Z)) + "})");
-        ToolRun plan = lua(companion, "route.plan(\"swim\")");
+        ToolRun made = lua(companion, "numen.route.new(\"swim\", {to = " + at(helper, new BlockPos(21, 2, Z)) + "})");
+        ToolRun plan = lua(companion, "numen.route.plan(\"swim\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(made.succeeded(), "route new failed: " + made.outcome());
@@ -173,7 +173,7 @@ public class SwimGameTests {
         sealedChannel(helper, 8, 36);
         NumenPlayer companion = spawnAt(helper, "gametest_breathless", new BlockPos(5, 2, Z), false);
         BlockPos there = helper.absolutePos(new BlockPos(39, 2, Z));
-        ToolRun walk = lua(companion, "move.goto_(" + xyz(there) + ")");
+        ToolRun walk = lua(companion, "numen.move.goto_(" + xyz(there) + ")");
         boolean[] wet = {false};
         helper.onEachTick(() -> wet[0] |= companion.isInWater());
 

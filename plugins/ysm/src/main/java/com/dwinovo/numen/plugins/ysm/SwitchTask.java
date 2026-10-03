@@ -60,6 +60,6 @@ final class SwitchTask implements Task {
 
     @Override
     public String name() {
-        return YsmCommands.GROUP + " " + YsmCommands.SWITCH;
+        return YsmCommands.NAMESPACE + " " + YsmCommands.GROUP + " " + YsmCommands.SWITCH;
     }
 }

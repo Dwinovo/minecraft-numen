@@ -445,17 +445,42 @@ class LuaSandboxTest {
     }
 
     @Test
-    void aModuleInANamespaceIsUsedUnderItsNameAndTheNamespaceIsFixed() throws InterruptedException {
+    void aModuleOnAPathIsUsedUnderItsPathAndThePathIsFixed() throws InterruptedException {
         Shelf shelf = new Shelf().with("my.lumber", "return {chop = function(n) return 'chopped ' .. n end}");
-        LuaSandbox sandbox = LuaSandbox.builder(ROOMY).modules(shelf).namespace("my")
+        LuaSandbox sandbox = LuaSandbox.builder(ROOMY).modules(shelf)
                 .unknown((name, present) -> new LuaSandbox.ScriptError("no module named " + name))
+                .missing((table, key, present) -> new LuaSandbox.ScriptError("no " + table + "." + key + "; there are: "
+                        + String.join(", ", present)))
                 .print(printed::add).build();
         assertTrue(run(sandbox, "print(my.lumber.chop(3))").finished());
         assertEquals(List.of("chopped 3"), printed);
-        assertTrue(run(sandbox, "return my.lumbr").message().contains("no module named my.lumbr"));
-        assertEquals(LuaSandbox.Ending.ERROR, run(sandbox, "my = {}").ending(), "名字空间定死");
+        assertTrue(run(sandbox, "return my.lumbr").message().contains("no my.lumbr; there are: lumber"));
+        assertEquals(LuaSandbox.Ending.ERROR, run(sandbox, "my = {}").ending(), "外层的表定死");
         assertTrue(run(sandbox, "return lumber").message().contains("no module named lumber"),
-                "名字空间里的模块不占顶层名字");
+                "路径上的模块不占顶层名字");
+    }
+
+    @Test
+    void hostFunctionsLiveOnTablePathsAndAModuleOnTheSamePathAddsToThem() throws InterruptedException {
+        Shelf shelf = new Shelf().with("numen.work", "return {twice = function() return numen.work.dig() * 2 end}")
+                .with("numen.shape", "return {box = function() return 'a box' end}");
+        LuaSandbox sandbox = LuaSandbox.builder(ROOMY)
+                .function("numen.work", "dig", args -> 2L)
+                .function("numen.scan", "blocks", args -> 3L)
+                .modules(shelf)
+                .missing((table, key, present) -> new LuaSandbox.ScriptError("no " + table + "." + key + "; there are: "
+                        + String.join(", ", present)))
+                .redefined((table, key) -> new LuaSandbox.ScriptError((table == null ? "" : table + ".") + key
+                        + " is fixed"))
+                .build();
+        assertEquals(4L, run(sandbox, "return numen.work.twice()").value());
+        assertEquals("a box", run(sandbox, "return numen.shape.box()").value());
+        assertEquals(3L, run(sandbox, "return numen.scan.blocks()").value());
+        assertTrue(run(sandbox, "return numen.wrok").message().contains("no numen.wrok; there are: scan, shape, work"));
+        assertTrue(run(sandbox, "return numen.work.dgi").message().contains("no numen.work.dgi; there are: dig"));
+        assertTrue(run(sandbox, "numen.work = {}").message().contains("numen.work is fixed"));
+        assertTrue(run(sandbox, "numen = {}").message().contains("numen is fixed"));
+        assertTrue(run(sandbox, "function numen.work.dig() end").message().contains("numen.work.dig is fixed"));
     }
 
     @Test

@@ -19,7 +19,7 @@ class FtbqWrittenCommandsTest {
     @BeforeAll
     static void install() {
         WrittenCommandsLint.install();
-        NumenPlugins.register(FtbqCommands::install);
+        NumenPlugins.register(FtbqCommands.NAMESPACE, FtbqCommands::install);
     }
 
     @Test
@@ -29,6 +29,6 @@ class FtbqWrittenCommandsTest {
 
     @Test
     void theGroupsDescriptionsWriteCommandsThatRead() {
-        assertReads(WrittenCommandsLint.registeredUnder(FtbqCommands.GROUP), 7);
+        assertReads(WrittenCommandsLint.registeredUnder(FtbqCommands.NAMESPACE), 7);
     }
 }

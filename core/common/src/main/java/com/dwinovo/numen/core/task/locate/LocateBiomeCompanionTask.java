@@ -237,7 +237,7 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
                     + best.getY() + "," + best.getZ() + " (" + dir + ", ~" + dist
                     + " blocks; accurate to ~" + SAMPLE_STEP_BLOCKS + "). " + com.dwinovo.numen.core.nav.NavText.gotoCall(
                     new com.dwinovo.numen.cli.Place(best.getX(), null, best.getZ(), null), "") + " goes there (it finds the height on its own), then confirm with "
-                    + "`scan.blocks` or `scan.entities`.";
+                    + "`numen.scan.blocks` or `numen.scan.entities`.";
         }
         String dim = player.level().dimension().location().getPath();
         int searched = Math.min(ring, SEARCH_RADIUS_RINGS) * SAMPLE_STEP_BLOCKS;

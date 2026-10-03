@@ -16,6 +16,6 @@ public final class NumenCurios {
 
     /** 由 {@code Builtin} 在确认 Curios 在场后调用。穿戴发生在服务端,所以直接登记,不放进 onClient。 */
     public static void install() {
-        NumenPlugins.register(numen -> numen.registerGear(new CuriosGear()));
+        NumenPlugins.register("curios", numen -> numen.registerGear(new CuriosGear()));
     }
 }

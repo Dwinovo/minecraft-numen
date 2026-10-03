@@ -36,14 +36,14 @@ public class PluginGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_charmed", new BlockPos(4, 2, 4), false);
         UUID self = companion.getUUID();
-        com.dwinovo.numen.api.NumenPlugins.register(numen -> {
+        com.dwinovo.numen.api.NumenPlugins.register("gt", numen -> {
             numen.contributeBodyState(body -> body.getUUID().equals(self)
                     ? "<gametest_charm>wearing a gametest charm</gametest_charm>" : "");
             numen.registerEventType("gametest_charm_changed", false);
             numen.emit(companion, "gametest_charm_changed", java.util.Map.of("slot", "neck"),
                     "put on a gametest charm", false);
         });
-        ToolRun reply = lua(companion, "status.self()");
+        ToolRun reply = lua(companion, "numen.status.self()");
         var outbox = com.dwinovo.numen.entity.EventOutbox.get(level.getServer());
 
         succeedWhen(helper, () -> {

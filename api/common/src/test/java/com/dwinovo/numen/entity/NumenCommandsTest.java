@@ -58,12 +58,12 @@ class NumenCommandsTest {
             booted = false;
         }
         if (booted) {
-            NumenPlugins.register(numen -> numen.registerCommands("gt_tree", "A group that stays off the MC tree.", g -> {
+            NumenPlugins.register("gt", numen -> numen.registerCommands("gt_tree", "A group that stays off the MC tree.", g -> {
                 g.server("take", "Take some.", (src, args) -> src.reply(TaskResult.ok("took").toJson()), COUNT, FROM)
                         .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
-                        .example("gt_tree.take(3, {from = \"chest\"})");
+                        .example("gt.gt_tree.take(3, {from = \"chest\"})");
                 g.client("jot", "Jot on the owner's client.", (src, args) -> src.reply(TaskResult.ok("jot").toJson()),
-                        COUNT).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt_tree.jot(2)");
+                        COUNT).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt.gt_tree.jot(2)");
             }));
         }
     }
@@ -167,7 +167,7 @@ class NumenCommandsTest {
         for (CommandSourceStack source : new CommandSourceStack[]{console, her}) {
             assertTrue(fails("numen gt_tree take 3 --from chest", source));
             assertTrue(fails("numen help", source));
-            assertTrue(fails("gt_tree take 3", source));
+            assertTrue(fails("gt gt_tree take 3", source));
             assertTrue(dispatcher.getSmartUsage(dispatcher.getRoot(), source).values().stream()
                     .noneMatch(usage -> usage.contains("gt_tree")), "a usage lists her group");
         }

@@ -58,7 +58,7 @@ public final class NumenCore {
         registerTools();
         registerTaskRunners();
         // 原版四件甲是第一处穿戴来源,和模组的饰品栏走同一扇门;内嵌联动在这之后才开闸,所以原版排在最前
-        com.dwinovo.numen.api.NumenPlugins.register(numen ->
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen ->
                 numen.registerGear(new com.dwinovo.numen.core.gear.VanillaArmor()));
         registerReflexes();
         enlistReflexRoster();
@@ -93,25 +93,25 @@ public final class NumenCore {
     }
 
     private static void registerTools() {
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.MoveCommands::install);
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.RouteCommands::install);
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.FightCommands::install);
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.locate.LocateCommands::install);
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.WorkCommands::install);
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.inventory.GearCommands::install);
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.BuildCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.work.MoveCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.work.RouteCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.work.FightCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.locate.LocateCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.work.WorkCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.inventory.GearCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.work.BuildCommands::install);
         // throwaway 组连同它挂进身体状态的那一段
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.work.ThrowawayCommands::install);
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.interact.UseCommands::install);
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.inventory.InvCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.work.ThrowawayCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.interact.UseCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.inventory.InvCommands::install);
         // 引擎的 task 命令组,和插件走同一扇门
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.task.TaskCommands::install);
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.script.Scripts::install);
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.perception.StatusCommands::install);
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.perception.ScanCommands::install);
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.area.AreaCommands::install);
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.agent.SkillCommands::install);
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.core.tools.agent.MemoryCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.task.TaskCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.script.Scripts::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.perception.StatusCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.perception.ScanCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.area.AreaCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.agent.SkillCommands::install);
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.agent.MemoryCommands::install);
     }
 
 

@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 
 /**
  * Agent-side (client-local) tool implementations — the business half of
- * {@code skill.load} ({@code SkillCommands}) and {@code memory} ({@code MemoryCommands}). These run on
+ * {@code numen.skill.load} ({@code SkillCommands}) and {@code memory} ({@code MemoryCommands}). These run on
  * the agent thread with no server body and return their result directly.
  */
 public final class AgentOps {
@@ -48,7 +48,7 @@ public final class AgentOps {
         return page(SkillInjection.body(maybe.get(), null), args);
     }
 
-    /** 一段文字按输出预算取这一页,一行一条;要的那一页不存在是一条失败。数据里是全文:脚本里 skill.load 返回它。 */
+    /** 一段文字按输出预算取这一页,一行一条;要的那一页不存在是一条失败。数据里是全文:脚本里 numen.skill.load 返回它。 */
     private static String page(String text, CommandArgs args) {
         return new Listing("", List.of(text.split("\n", -1)), "").result(args, Map.of("text", text)).toJson();
     }

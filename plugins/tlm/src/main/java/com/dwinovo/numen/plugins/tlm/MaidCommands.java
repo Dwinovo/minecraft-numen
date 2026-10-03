@@ -30,15 +30,16 @@ import java.util.Map;
  * {@code tlm} 组里管她的女仆的那几个动作:名下有哪些、一只的详情、切工作模式、改设置、打开界面的一页。
  *
  * <p>都在服务端:女仆是世界里的实体。读的两个当场回、不问主人;做的三个是人在女仆界面里按的按钮,每一个都是对这只女仆的
- * {@code use_entity},交权限层裁决,放行了才调车万女仆的包({@link Maids})。和 {@code use.block} 同一条规矩:不走路,
+ * {@code use_entity},交权限层裁决,放行了才调车万女仆的包({@link Maids})。和 {@code numen.use.block} 同一条规矩:不走路,
  * 够不着就失败并给出照抄就能走过去的那一次调用。
  *
  * <p>本类不碰车万女仆的类,只经 {@link Maids}:联动的防漂移测试只执行登记命令的这一段,那里没有车万女仆。
  */
 final class MaidCommands {
 
-    static final String MAIDS = "maids";
-    static final String MAID = "maid";
+    static final String GROUP = "maid";
+    static final String MAIDS = "list";
+    static final String MAID = "info";
     static final String TASK = "task";
     static final String CONFIG = "config";
     static final String OPEN = "open";
@@ -48,10 +49,10 @@ final class MaidCommands {
     /** 日程的三种,{@link #SCHEDULE} 收的、读回的都是它们。 */
     private static final ScriptType SCHEDULE_WORD = ScriptType.choice(List.of("day", "night", "all"));
 
-    /** 一只加载着的女仆:{@code tlm.maids} 列的、{@code tlm.maid} 详述的都是它,由 {@link Maids#row} 写。 */
+    /** 一只加载着的女仆:{@code tlm.maid.list} 列的、{@code tlm.maid.info} 详述的都是它,由 {@link Maids#row} 写。 */
     static final ScriptType.Class MAID_CLASS = new ScriptType.Class("Maid",
             "A maid of Touhou Little Maid, loaded in the world: an Entity with her work and settings. Hand her on as "
-                    + "she is: tlm.maid(m), use.entity(m), move.goto_(m).", Shapes.ENTITY.name(),
+                    + "she is: tlm.maid.info(m), numen.use.entity(m), numen.move.goto_(m).", Shapes.ENTITY.name(),
             List.of(ScriptType.field("model", ScriptType.STRING, "The model she wears."),
                     ScriptType.field("task", ScriptType.STRING, "Her work mode, touhou_little_maid:farm."),
                     ScriptType.field("schedule", SCHEDULE_WORD, null),
@@ -78,11 +79,11 @@ final class MaidCommands {
                     "What the work uses (has_bow, has_arrow for ranged_attack), true = she has it."));
 
     private static final Param<EntityRef> WHICH = Param.required("maid", ArgType.entity(), "The maid.")
-            .values("her entity id, as tlm.maids or scan.entities lists it");
+            .values("her entity id, as tlm.maid.list or numen.scan.entities lists it");
     private static final Param<ResourceLocation> WORK = Param.required("task", ArgType.id(), "The work mode.")
-            .values("a task id as tlm.maid lists it, e.g. touhou_little_maid:farm");
+            .values("a task id as tlm.maid.info lists it, e.g. touhou_little_maid:farm");
     private static final Param<EntityRef> FOR_MAID = Param.optional("maid", ArgType.entity(), "The maid.")
-            .values("her entity id, as tlm.maids or scan.entities lists it")
+            .values("her entity id, as tlm.maid.list or numen.scan.entities lists it")
             .whenOmitted("your maid within reach (the nearest one)");
     private static final Param<Boolean> HOME = Param.optional("home", ArgType.bool(),
             "Home mode: true keeps her working and resting around her home or schedule points; false has her "
@@ -108,12 +109,14 @@ final class MaidCommands {
 
     private MaidCommands() {}
 
+    /** 回执与提示里提到一个动作时写它的函数:{@code tlm.maid.info}。 */
     static String line(String action) {
-        return TlmCommands.line(action);
+        return NumenTlm.NAMESPACE + "." + GROUP + "." + action;
     }
 
+    /** 相关动作里点名一个动作:{@code maid info}。 */
     private static String path(String action) {
-        return TlmCommands.path(action);
+        return GROUP + " " + action;
     }
 
     static void actions(CommandGroup tlm) {
@@ -131,11 +134,11 @@ final class MaidCommands {
                         + "unloaded chunk gives where she was last; a tombstone gives where it stands.")
                 .note("Your power points and how many maids TLM counts as yours are in your body state every "
                         + "turn.")
-                .seeAlso(path(MAID), "scan entities");
+                .seeAlso(path(MAID), "numen scan entities");
         tlm.server(MAID, "One maid in full, and every work mode with what it needs.",
                         MaidCommands::maid, WHICH, Listing.PAGE)
                 .returns(ScriptType.table(
-                        ScriptType.field("maid", MAID_CLASS.type(), "Her, as tlm.maids lists her."),
+                        ScriptType.field("maid", MAID_CLASS.type(), "Her, as tlm.maid.list lists her."),
                         ScriptType.field("pickup", ScriptType.BOOLEAN, null),
                         ScriptType.field("ride", ScriptType.BOOLEAN, null),
                         ScriptType.field("favorability", ScriptType.INTEGER, null),
@@ -163,7 +166,7 @@ final class MaidCommands {
                 .example(line(TASK) + "(\"touhou_little_maid:farm\", {maid = 812})")
                 .example(line(TASK) + "(\"touhou_little_maid:idle\")")
                 .note("It does not travel: stand within about 7 blocks of her, the distance at which her GUI stays "
-                        + "open. Farther away it fails with out_of_reach, and its hint is the move.goto_ call to copy.")
+                        + "open. Farther away it fails with out_of_reach, and its hint is the numen.move.goto_ call to copy.")
                 .note("TLM decides: only the owner may switch, and a mode may wait for something first (see "
                         + "can_switch in " + line(MAID) + "). The result reads her task back; unchanged means TLM "
                         + "did not take it, and it says what TLM's rules show.")
@@ -184,17 +187,17 @@ final class MaidCommands {
                         + "blocks from her; turning it on with no points set makes where she stands her home.")
                 .note("The result reads every setting back and says which of yours did not take.")
                 .seeAlso(path(MAID), path(TASK));
-        tlm.server(OPEN, "Open a page of one of your maids' GUI, then work it with use.gui.",
+        tlm.server(OPEN, "Open a page of one of your maids' GUI, then work it with numen.use.gui.",
                         MaidCommands::open, WHICH, TAB)
                 .returns(ScriptType.table(ScriptType.field("maid", ScriptType.INTEGER, "Her entity id."),
                         ScriptType.field("menu", ScriptType.STRING, "The menu now open.")))
                 .example(line(OPEN) + "(812)")
                 .example(line(OPEN) + "(812, {tab = \"bauble\"})")
-                .note("Then `use.gui()` lists its slots, `use.transfer` and `use.shift` move items (armour, hand, "
-                        + "backpack or bauble slots), `use.close()` closes it. It stays open while you stay within "
+                .note("Then `numen.use.gui()` lists its slots, `numen.use.transfer` and `numen.use.shift` move items (armour, hand, "
+                        + "backpack or bauble slots), `numen.use.close()` closes it. It stays open while you stay within "
                         + "reach.")
                 .note("The same reach, owner rule and asking as " + line(TASK) + ". A sleeping maid does not open.")
-                .seeAlso("use gui", "use transfer", "use close");
+                .seeAlso("numen use gui", "numen use transfer", "numen use close");
     }
 
     // ---- 读 ----
@@ -212,8 +215,8 @@ final class MaidCommands {
         tombstones.forEach(row -> rows.add(kinded("tombstone", row)));
 
         String head = here.isEmpty() && away.isEmpty() && tombstones.isEmpty()
-                ? "You keep no maids. A wild maid is tamed with a cake: `use.entity(812, {item = \"minecraft:cake\"})`, "
-                        + "with her entity id from `scan.entities`."
+                ? "You keep no maids. A wild maid is tamed with a cake: `numen.use.entity(812, {item = \"minecraft:cake\"})`, "
+                        + "with her entity id from `numen.scan.entities`."
                 : here.size() + " maid(s) here, " + away.size() + " in unloaded chunks, " + tombstones.size()
                         + " tombstone(s); one per line:";
         Map<String, Object> data = new LinkedHashMap<>();
@@ -336,8 +339,8 @@ final class MaidCommands {
             data.put("maid", maid.getId());
             if (menu != null) {
                 data.put("menu", menu);
-                return TaskResult.ok("Opened " + Maids.label(maid) + "'s GUI (" + menu + "). `use.gui()` lists its "
-                        + "slots; `use.transfer` and `use.shift` move items; `use.close()` closes it.", data);
+                return TaskResult.ok("Opened " + Maids.label(maid) + "'s GUI (" + menu + "). `numen.use.gui()` lists its "
+                        + "slots; `numen.use.transfer` and `numen.use.shift` move items; `numen.use.close()` closes it.", data);
             }
             String said = "TLM did not open the " + tab.word() + " page of " + Maids.label(maid) + ".";
             if (Maids.asleep(maid)) {
@@ -367,7 +370,7 @@ final class MaidCommands {
         if (maid == null) {
             return;
         }
-        String what = args.call(path(action), params);
+        String what = args.call(src.actionPath(), params);
         src.authorize(Action.useEntity(maid), what, allowed -> {
             Entity still = reached(allowed, which);
             if (still != null) {
@@ -396,7 +399,7 @@ final class MaidCommands {
 
     /** 走到一格两格之内的那一次调用,够不着的失败把它当下一步。 */
     private static String goNear(BlockPos at) {
-        return "move.goto_(" + Shapes.literal(at) + ", {arrive = \"near\", near = 2})";
+        return "numen.move.goto_(" + Shapes.literal(at) + ", {arrive = \"near\", near = 2})";
     }
 
     /** 她自己的、够得着的女仆里最近的那一只(按 UUID 点名,重启后认的还是她);一只都没有时回执已经写好,返回 null。 */
@@ -452,7 +455,7 @@ final class MaidCommands {
             String owner = Maids.owner(maid);
             if (owner == null) {
                 return TaskResult.fail(ErrorKind.DENIED, said + " She is wild: tame her first with a cake.",
-                        "use.entity(" + maid.getId() + ", {item = \"minecraft:cake\"})", data);
+                        "numen.use.entity(" + maid.getId() + ", {item = \"minecraft:cake\"})", data);
             }
             return TaskResult.fail(ErrorKind.DENIED, said + " She is not yours: TLM lets only her owner (" + owner
                     + ") do this.", null, data);

@@ -36,21 +36,21 @@ class CommandParseTest {
                 g.server("take", "Take some items.", (src, args) -> {
                     LAST.set(args);
                     src.reply(TaskResult.ok("took").toJson());
-                }, COUNT, ITEM, FROM, LIMIT).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt_parse.take(3, {item = \"apple\", from = \"chest\"})"));
+                }, COUNT, ITEM, FROM, LIMIT).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt.gt_parse.take(3, {item = \"apple\", from = \"chest\"})"));
     }
 
     /** {@code usage:} 那一段:用法接例子,写成脚本里的样子(帮助只有一份)。 */
     private static final String TAKE_USAGE = """
-            usage: gt_parse.take(count, {item=…, from=…, limit=…})
-              e.g. gt_parse.take(3, {item = "apple", from = "chest"})""";
-    private static final String TAKE_HINT = "hint: print(api.help(\"gt_parse.take\"))";
+            usage: gt.gt_parse.take(count, {item=…, from=…, limit=…})
+              e.g. gt.gt_parse.take(3, {item = "apple", from = "chest"})""";
+    private static final String TAKE_HINT = "hint: print(numen.api.help(\"gt.gt_parse.take\"))";
 
     /** 停在组上时那一层的用法:这一组的类型签名,一个函数一行。 */
     private static final String GROUP_USAGE = """
             usage: ---A group the parser tests poke at.
-            ---@class gt_parse
+            ---@class gt.gt_parse
             ---@field take fun(count: integer, opts?: {item?: string, from?: string, limit?: integer}) Take some items.
-            gt_parse = {}""";
+            gt.gt_parse = {}""";
 
     private static CommandArgs ran(String line) {
         LAST.set(null);
@@ -69,65 +69,65 @@ class CommandParseTest {
 
     @Test
     void flagsComeInAnyOrderAndMissingOnesAreNull() {
-        CommandArgs plain = ran("gt_parse take 3");
+        CommandArgs plain = ran("gt gt_parse take 3");
         assertEquals(3, plain.get(COUNT));
         assertNull(plain.get(ITEM));
         assertNull(plain.get(FROM));
         assertNull(plain.get(LIMIT));
 
-        CommandArgs flagged = ran("gt_parse take 3 --item apple --limit 2 --from chest");
+        CommandArgs flagged = ran("gt gt_parse take 3 --item apple --limit 2 --from chest");
         assertEquals("apple", flagged.get(ITEM));
         assertEquals("chest", flagged.get(FROM));
         assertEquals(2, flagged.get(LIMIT));
-        assertEquals(flagged, ran("gt_parse take 3 --from chest --limit 2 --item apple"), "标志顺序不影响读到的值");
+        assertEquals(flagged, ran("gt gt_parse take 3 --from chest --limit 2 --item apple"), "标志顺序不影响读到的值");
     }
 
     @Test
     void aBadArgumentSaysWhatAndShowsTheActionsUsage() {
-        String msg = failed("gt_parse take many");
-        assertTrue(msg.startsWith("error: Expected integer at position 14: "), msg);
+        String msg = failed("gt gt_parse take many");
+        assertTrue(msg.startsWith("error: Expected integer at position 17: "), msg);
         assertTrue(msg.endsWith("\n" + TAKE_USAGE + "\n" + TAKE_HINT), msg);
 
-        String incomplete = failed("gt_parse take");
+        String incomplete = failed("gt gt_parse take");
         assertTrue(incomplete.startsWith("error: Unknown command"), incomplete);
         assertTrue(incomplete.endsWith("\n" + TAKE_USAGE + "\n" + TAKE_HINT), incomplete);
     }
 
     @Test
     void anUnknownActionOrAnUnfinishedLineShowsTheGroupsListing() {
-        String typo = failed("gt_parse tke 3");
-        assertTrue(typo.startsWith("error: Unknown command at position 9: "), typo);
+        String typo = failed("gt gt_parse tke 3");
+        assertTrue(typo.startsWith("error: Unknown command at position 12: "), typo);
         assertTrue(typo.endsWith("\n" + GROUP_USAGE + "\nhint: Did you mean: take?"),
                 "那一层的用法之后,下一步是最接近的动作: " + typo);
 
-        String bare = failed("gt_parse");
+        String bare = failed("gt gt_parse");
         assertTrue(bare.startsWith("error: Unknown command"), bare);
-        assertTrue(bare.endsWith("\n" + GROUP_USAGE + "\nhint: print(api.help(\"gt_parse\"))"), bare);
+        assertTrue(bare.endsWith("\n" + GROUP_USAGE + "\nhint: print(numen.api.help(\"gt.gt_parse\"))"), bare);
     }
 
     @Test
     void aLineOutsideEveryGroupShowsTheRootListing() {
         String prefixed = failed("numen gt_parse take 3");
-        assertTrue(prefixed.startsWith("error: Unknown command at position 0: "), prefixed);
-        assertTrue(prefixed.contains("\nusage: Call these from the lua tool."), prefixed);
+        assertTrue(prefixed.startsWith("error: Unknown command at position 6: "), prefixed);
+        assertTrue(prefixed.contains("\nusage: Call these from the lua tool,"), prefixed);
         String unknownGroup = failed("nosuchgroup take");
-        assertTrue(unknownGroup.contains("\nusage: Call these from the lua tool."), unknownGroup);
-        assertTrue(unknownGroup.contains("\napi — The API itself: the typed signatures of a group's or a module's "
+        assertTrue(unknownGroup.contains("\nusage: Call these from the lua tool,"), unknownGroup);
+        assertTrue(unknownGroup.contains("\nnumen.api — The API itself: the typed signatures of a group's or a module's "
                 + "functions, or one function in full. help\n"), "根上按名字列出各组与它们的函数名: " + unknownGroup);
         assertTrue(unknownGroup.endsWith("\nhint: `help` lists the groups."), unknownGroup);
     }
 
     @Test
     void flagMistakesEachSayWhatIsWrong() {
-        String unknown = failed("gt_parse take 3 --form chest");
+        String unknown = failed("gt gt_parse take 3 --form chest");
         assertTrue(unknown.startsWith("error: unknown flag --form; flags here: --item, --from, --limit"), unknown);
         assertTrue(unknown.endsWith("\n" + TAKE_USAGE + "\n" + TAKE_HINT), unknown);
 
-        assertTrue(failed("gt_parse take 3 --from a --from b").startsWith("error: --from is given twice"));
-        assertTrue(failed("gt_parse take 3 --from").startsWith("error: --from needs a value"));
-        assertTrue(failed("gt_parse take 3 chest")
+        assertTrue(failed("gt gt_parse take 3 --from a --from b").startsWith("error: --from is given twice"));
+        assertTrue(failed("gt gt_parse take 3 --from").startsWith("error: --from needs a value"));
+        assertTrue(failed("gt gt_parse take 3 chest")
                 .startsWith("error: expected a flag (--item, --from, --limit)"));
-        assertTrue(failed("gt_parse take 3 --limit two").startsWith("error: Expected integer"),
+        assertTrue(failed("gt gt_parse take 3 --limit two").startsWith("error: Expected integer"),
                 "标志的值用那个参数自己的类型读");
     }
 
@@ -138,17 +138,17 @@ class CommandParseTest {
         door().registerCommands("gt_parse_local", "A group with an action on the owner's client.", g ->
                 g.client("read", "Read some pages.", (src, args) -> src.reply(TaskResult.ok("read").toJson()), pages)
                         .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
-                        .example("gt_parse_local.read(2)"));
-        CliFixture.Outcome run = lua("gt_parse_local.read(\"many\")");
+                        .example("gt.gt_parse_local.read(2)"));
+        CliFixture.Outcome run = lua("gt.gt_parse_local.read(\"many\")");
         assertFalse(run.success());
-        assertTrue(run.message().startsWith("The script stopped at line 1 after 0 calls: gt_parse_local.read: "
+        assertTrue(run.message().startsWith("The script stopped at line 1 after 0 calls: gt.gt_parse_local.read: "
                 + "bad_argument — argument 'pages': Expected integer"), run.message());
         assertTrue(run.message().contains("""
 
-                usage: gt_parse_local.read(pages)
-                  e.g. gt_parse_local.read(2)
-                hint: print(api.help("gt_parse_local.read"))"""), run.message());
-        CliFixture.Outcome ok = lua("gt_parse_local.read(2)");
+                usage: gt.gt_parse_local.read(pages)
+                  e.g. gt.gt_parse_local.read(2)
+                hint: print(numen.api.help("gt.gt_parse_local.read"))"""), run.message());
+        CliFixture.Outcome ok = lua("gt.gt_parse_local.read(2)");
         assertEquals("read", ok.call(0).get("message").getAsString());
     }
 }

@@ -81,29 +81,29 @@ final class McpAccessPrompt {
                 companion's chat line, speech bubble, and voice. Keep your own conversation history; \
                 the game stores none for you.
                 - Besides list_companions, create_companion, delete_companion, get_events and say there \
-                is one more tool, `%s`: a program whose functions are the companion's API. `status.self()`, `scan.blocks("iron_ore", {into = "ores"})`, \
-                `move.goto_("ores/g3", {arrive = "dig"})`, `work.dig("ores/g3")`, `build.at(...)`, \
-                `fight.attack(184)`, `inv.craft(...)`, … `api.help("work")` lists a group's functions and \
-                `api.help("work.dig")` gives one function's full help. One call is a one-line program; \
+                is one more tool, `%s`: a program whose functions are the companion's API. `numen.status.self()`, `numen.scan.blocks("iron_ore", {into = "ores"})`, \
+                `numen.move.goto_("ores/g3", {arrive = "dig"})`, `numen.work.dig("ores/g3")`, `numen.build.at(...)`, \
+                `numen.fight.attack(184)`, `numen.inv.craft(...)`, … `numen.api.help("numen.work")` lists a group's functions and \
+                `numen.api.help("numen.work.dig")` gives one function's full help. One call is a one-line program; \
                 when a next step depends on what a call returned, write the steps as one program \
-                (`while area.has("ores") do ... end`).
+                (`while numen.area.has("ores") do ... end`).
                 - A program waits for each body task it starts and returns one receipt when it ends: how \
                 it ended (on an error: the line, the call's error, usage and hint), one line per API call, \
                 what it returned and printed. Each task's own account also arrives in `get_events` as a \
-                task_finished event. `task.stop()` cancels the body's task.
+                task_finished event. `numen.task.stop()` cancels the body's task.
                 - %s
-                - You're blind between calls: perceive with `status.self()` / `scan.blocks` / \
-                `scan.entities` before and after acting.
-                - `scan.blocks` answers in groups of touching blocks, each saying whether breaking it is \
+                - You're blind between calls: perceive with `numen.status.self()` / `numen.scan.blocks` / \
+                `numen.scan.entities` before and after acting.
+                - `numen.scan.blocks` answers in groups of touching blocks, each saying whether breaking it is \
                 allowed, needs the owner's consent, or is refused. With `into` it keeps them in a saved area \
                 (made on the spot when it does not exist yet) and each group gets an id like ores/g3; \
-                `work.dig` digs such an area ("ores", or "ores/g3") and digs those cells that still hold what \
+                `numen.work.dig` digs such an area ("ores", or "ores/g3") and digs those cells that still hold what \
                 the scan saw, also after a restart; framed areas and cells ({x, y, z}) are dug whatever they \
                 hold. It digs only what the hand reaches from where the body stands, never walks and never \
-                picks up: `move.goto_` the same place with arrive "dig" first (it stands where the hand \
-                reaches the most of it), then `work.dig`, then `work.collect()` for the drops; \
-                `area.has("ores")` says whether anything is left. The built-in module function `work.mine` \
-                does all of that: `work.mine("ores")`.
+                picks up: `numen.move.goto_` the same place with arrive "dig" first (it stands where the hand \
+                reaches the most of it), then `numen.work.dig`, then `numen.work.collect()` for the drops; \
+                `numen.area.has("ores")` says whether anything is left. The built-in module function `numen.work.mine` \
+                does all of that: `numen.work.mine("ores")`.
                 - It's survival mode — the API does only what a real player can. No give, no setblock.
 
                 One more thing: talk to me in the language I'm writing to you in, even though these \

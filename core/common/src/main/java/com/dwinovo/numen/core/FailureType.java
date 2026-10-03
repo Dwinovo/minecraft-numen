@@ -53,7 +53,7 @@ public enum FailureType {
     /** No route within what the walk may change: none without altering terrain while a digging /
      *  bridging / pillaring one exists, or the way on needs cells beyond the plan she agreed to.
      *  The reason says how many blocks it would take and the exact line that allows it
-     *  ({@code route.spec(route, {alter = "natural"})}, then {@code route.plan(route)}). Approach tasks
+     *  ({@code numen.route.spec(route, {alter = "natural"})}, then {@code numen.route.plan(route)}). Approach tasks
      *  treat it in-ladder like NO_PATH (a looser stance may still avoid it); a route walk does not
      *  loosen anything on it — whether to allow more is the LLM's call. */
     TERRAIN_BLOCKED,

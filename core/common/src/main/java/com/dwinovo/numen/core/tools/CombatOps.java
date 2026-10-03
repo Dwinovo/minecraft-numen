@@ -6,7 +6,7 @@ import com.dwinovo.numen.task.TaskRecord;
 
 import java.util.List;
 
-/** 造 {@code fight.attack} 的任务账本。 */
+/** 造 {@code numen.fight.attack} 的任务账本。 */
 public final class CombatOps {
 
     /** 打一只给多久。 */

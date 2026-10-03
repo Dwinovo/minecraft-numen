@@ -66,7 +66,7 @@ public final class ScanOps {
         }
         if (args.get(Listing.PAGE) != null) {
             throw new IllegalArgumentException("page turns the pages of a scan that only looks; the groups a scan "
-                    + "added to " + into + " are its parts, and `area.show(\"" + into + "\", {page = "
+                    + "added to " + into + " are its parts, and `numen.area.show(\"" + into + "\", {page = "
                     + args.get(Listing.PAGE) + "})` lists them");
         }
         String name = into.name();
@@ -169,8 +169,8 @@ public final class ScanOps {
                 : ", added to " + area + " as " + (ids.size() == 1 ? ids.get(0)
                         : ids.get(0) + " to " + ids.get(ids.size() - 1));
         String order = shown < all.size()
-                ? "; the nearest " + shown + " follow, one per line (area.show(\"" + into + "\") lists every part, "
-                        + "work.dig(\"" + into + "\") digs them):"
+                ? "; the nearest " + shown + " follow, one per line (numen.area.show(\"" + into + "\") lists every part, "
+                        + "numen.work.dig(\"" + into + "\") digs them):"
                 : ", nearest first, one per line:";
         String head = all.isEmpty()
                 ? "No groups" + where + (into == null ? "."

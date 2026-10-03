@@ -18,20 +18,20 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code tlm}:两件事住在同一个组里——她自己穿哪套女仆模型({@code models}、{@code wear}、{@code remove}),和她养的女仆
- * ({@code maids}、{@code maid}、{@code task}、{@code config}、{@code open},见 {@link MaidCommands})。
+ * {@code tlm.skin}:她自己穿哪套女仆模型({@code list}、{@code wear}、{@code remove})。她养的女仆是另一组 {@code tlm.maid}
+ * (见 {@link MaidCommands})。
  *
  * <h2>为什么穿模型的三个在主人客户端</h2>
  * 模型包只有客户端知道({@code CustomPackLoader} 是客户端类),穿什么也记在主人这边({@link Wardrobe}),
  * 发去服务端问,服务端也答不上来。命令树两侧都登记(帮助要它),处理函数只在客户端跑。女仆是世界里的实体,管女仆的
  * 那几个在服务端。
  *
- * <p>每个动作就是脚本里的一个函数({@code tlm.wear("…")}),和别的动作同一个入口。
+ * <p>每个动作就是脚本里的一个函数({@code tlm.skin.wear("…")}),和别的动作同一个入口。
  */
 final class TlmCommands {
 
-    static final String GROUP = "tlm";
-    static final String MODELS = "models";
+    static final String GROUP = "skin";
+    static final String MODELS = "list";
     static final String WEAR = "wear";
     static final String REMOVE = "remove";
 
@@ -46,19 +46,20 @@ final class TlmCommands {
 
     private TlmCommands() {}
 
-    /** 回执与状态片段里提到别的动作时写它的函数:{@code tlm.wear}。 */
+    /** 回执与状态片段里提到别的动作时写它的函数:{@code tlm.skin.wear}。 */
     static String line(String action) {
-        return GROUP + "." + action;
+        return NumenTlm.NAMESPACE + "." + GROUP + "." + action;
     }
 
-    /** 相关动作里点名一个动作:{@code tlm wear}。 */
+    /** 相关动作里点名一个动作:{@code skin wear}。 */
     static String path(String action) {
         return GROUP + " " + action;
     }
 
     static void install(NumenApi numen) {
-        numen.registerCommands(GROUP, "Touhou Little Maid: the maid model you wear yourself, and the maids you keep.",
+        numen.registerCommands(GROUP, "Touhou Little Maid looks: the maid model you wear yourself.",
                 TlmCommands::actions);
+        numen.registerCommands(MaidCommands.GROUP, "Touhou Little Maid: the maids you keep.", MaidCommands::actions);
     }
 
     private static void actions(CommandGroup tlm) {
@@ -98,7 +99,6 @@ final class TlmCommands {
                 .returns(ScriptType.NOTHING)
                 .example(line(REMOVE) + "()")
                 .seeAlso(path(WEAR));
-        MaidCommands.actions(tlm);
     }
 
     /**

@@ -32,7 +32,7 @@ class SliceTest {
     }
 
     private static String draw(Design design, int y) {
-        return page(design, y, "build show house --layer " + y);
+        return page(design, y, "numen build show house --layer " + y);
     }
 
     private static String page(Design design, int y, String line) {
@@ -46,7 +46,7 @@ class SliceTest {
     /** 后写覆盖先写:中间那一格先铺石头、后改木板,画出来是木板。 */
     @Test
     void aLevelShowsTheLastBlockWrittenToEachCell() {
-        Design house = design("build layer ### ### ### --at 0 0 0 --block stone", "build set 1 0 1 --block oak_planks");
+        Design house = design("numen build layer ### ### ### --at 0 0 0 --block stone", "numen build set 1 0 1 --block oak_planks");
         assertEquals("""
                 design house at y=0 (it spans y 0), seen from above: x 0..2 left to right (east), z 0..2 top to \
                 bottom (south); the x row gives each column's last digit; . = nothing here.
@@ -60,7 +60,7 @@ class SliceTest {
     /** 和 build layer 同一个约定:'.' 是什么都没画;一格写成空气(挖掉)是图例里的一种,和没画分得开。 */
     @Test
     void nothingDrawnIsADotAndAnAirCellIsNamed() {
-        Design house = design("build layer #.# --at 0 0 0 --block stone", "build set 0 0 1 --block air");
+        Design house = design("numen build layer #.# --at 0 0 0 --block stone", "numen build set 0 0 1 --block air");
         String map = draw(house, 0);
         assertTrue(map.contains("\nz 0  s.s\nz 1  a..\n"), map);
         assertTrue(map.endsWith("legend: s=stone a=air"), map);
@@ -69,7 +69,7 @@ class SliceTest {
     /** 门的上半与床头不在施工图里,建成后在;看的是建成后这一层的样子。 */
     @Test
     void theUpperHalfOfADoorAndTheHeadOfABedAreDrawnWhereTheyWillStand() {
-        Design house = design("build set 0 0 0 --block oak_door[facing=south]", "build set 2 0 0 --block red_bed[facing=east]");
+        Design house = design("numen build set 0 0 0 --block oak_door[facing=south]", "numen build set 2 0 0 --block red_bed[facing=east]");
         String ground = draw(house, 0);
         assertTrue(ground.contains("\nz 0  o.rR\n"), ground);
         assertTrue(ground.contains("r=red_bed[facing=east,occupied=false,part=foot]"), ground);
@@ -82,7 +82,7 @@ class SliceTest {
     /** 每一层用同一个框:上面一层只有一格,也画出整份的 x、z 范围,两层叠得上。 */
     @Test
     void everyLevelIsDrawnInTheSameFrame() {
-        Design house = design("build layer #### #### --at 0 0 0 --block stone", "build set 3 1 1 --block torch");
+        Design house = design("numen build layer #### #### --at 0 0 0 --block stone", "numen build set 3 1 1 --block torch");
         String upper = draw(house, 1);
         assertTrue(upper.contains("x 0..3 left to right (east), z 0..1 top to bottom (south)"), upper);
         assertTrue(upper.contains("\nz 0  ....\nz 1  ...t\n"), upper);
@@ -90,14 +90,14 @@ class SliceTest {
 
     @Test
     void aLevelOutsideTheDesignSaysWhereItSpans() {
-        Design house = design("build layer ## --at 0 0 0 --block stone --up-to 2");
+        Design house = design("numen build layer ## --at 0 0 0 --block stone --up-to 2");
         assertEquals("design house has nothing at y=7; it spans y 0..2.", draw(house, 7));
     }
 
     /** 一张大图按输出预算分页:第一页说一共多少行、这是哪一段、下一页怎么取;第二页从停下的那一行接着。 */
     @Test
     void aSliceOverTheOutputBudgetComesAPageAtATime() {
-        Design wide = design("build set 0 0 0 --block stone", "build set 999 0 999 --block stone");
+        Design wide = design("numen build set 0 0 0 --block stone", "numen build set 999 0 999 --block stone");
         String first = draw(wide, 0);
         Matcher shown = Pattern.compile("\n\\[Showing 1-(\\d+) of 1000\\. Call it again with page = 2 "
                 + "to continue\\.]\nlegend: s=stone$").matcher(first);
@@ -106,19 +106,19 @@ class SliceTest {
         assertTrue(first.getBytes(java.nio.charset.StandardCharsets.UTF_8).length < Listing.MAX_BYTES + 200);
         assertFalse(first.contains(String.format("\nz %3d  ", rows)), "下一行不在这一页");
 
-        String second = page(wide, 0, "build show house --layer 0 --page 2");
+        String second = page(wide, 0, "numen build show house --layer 0 --page 2");
         assertTrue(second.contains(String.format("\nx      %s\nz %3d  ", "0123456789".repeat(100), rows)),
                 "第二页从停下的那一行接着,x 标尺照旧");
     }
 
     @Test
     void theLegendReadsAsTheLegendOfBuildLayer() {
-        Design house = design("build layer <<< ... >>> --at 0 0 0 --legend <=oak_stairs[facing=south] "
+        Design house = design("numen build layer <<< ... >>> --at 0 0 0 --legend <=oak_stairs[facing=south] "
                 + ">=oak_stairs[facing=north]");
         String map = draw(house, 0);
         String legend = map.substring(map.lastIndexOf("\nlegend: ") + "\nlegend: ".length());
         // 图例的每一项就是 build layer 的 --legend 一项:抄回去画出来是同一层
-        Design copied = design("build layer " + String.join(" ", rows(map)) + " --at 0 0 0 --legend " + legend);
+        Design copied = design("numen build layer " + String.join(" ", rows(map)) + " --at 0 0 0 --legend " + legend);
         assertEquals(map, draw(copied, 0));
     }
 

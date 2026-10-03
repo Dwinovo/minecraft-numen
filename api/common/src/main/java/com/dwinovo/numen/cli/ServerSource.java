@@ -94,7 +94,7 @@ public final class ServerSource implements CommandSource {
 
     /**
      * 这次调用派下的活叫什么——任务记录、{@code task_finished}、{@code <current_task>} 里写的名字:脚本里的函数名
-     * (如 {@code kaleidoscope.cook})。模型看到的就是它刚才调的那个函数。
+     * (如 {@code kaleidoscope.pot.cook})。模型看到的就是它刚才调的那个函数。
      */
     public String taskName() {
         return action.function();
@@ -111,7 +111,7 @@ public final class ServerSource implements CommandSource {
      * 是同一个口子。
      *
      * @param action 要做的事,如 {@code command(setblock)}、{@code edit_area(house)}
-     * @param what   回执里点名这件事:{@code /setblock 0 64 0 stone}、{@code area.delete("house")}
+     * @param what   回执里点名这件事:{@code /setblock 0 64 0 stone}、{@code numen.area.delete("house")}
      * @param go     放行之后接着做的;主人为它点过头时拿到的是交代了这一句的同一次调用
      */
     public void authorize(com.dwinovo.numen.permission.Action action, String what, Consumer<ServerSource> go) {
