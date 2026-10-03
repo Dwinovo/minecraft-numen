@@ -30,13 +30,14 @@ public final class Shapes {
 
     private Shapes() {}
 
-    /** 一个位置。 */
+    /** 一个位置;方法与运算写在内置模块 {@code numen.shape} 里。 */
     public static final ScriptType.Class POS = new ScriptType.Class("Pos",
             "A position. A cell's x, y, z are whole numbers; a body's or an entity's are decimals. Wherever a Pos is "
                     + "taken, anything with a pos field (a Block, an Entity, an Item) goes too, and decimals mean the "
-                    + "cell they fall in (rounded down, as Minecraft does).",
+                    + "cell they fall in (rounded down, as Minecraft does). p + q and p - q add and subtract, p == q "
+                    + "compares; numen.shape.pos(x, y, z) makes one.",
             null, List.of(field("x", ScriptType.NUMBER, null), field("y", ScriptType.NUMBER, null),
-                    field("z", ScriptType.NUMBER, null)));
+                    field("z", ScriptType.NUMBER, null))).methodsIn("numen.shape");
 
     /** 一格方块。 */
     public static final ScriptType.Class BLOCK = new ScriptType.Class("Block", "One block in the world.", null,
@@ -77,8 +78,14 @@ public final class Shapes {
                     optional("data", new ScriptType.Simple("table"), "What the call knew when it failed (the "
                             + "nearest cell out of reach …).")));
 
+    /** 一串格:每一格是一个 Block(那一格要放的方块)或一个 Pos(只是那一格);方法写在内置模块 {@code numen.shape} 里。 */
+    public static final ScriptType.Class CELLS = ScriptType.Class.listOf("Cells",
+            "A list of cells, each a Block (the block for that cell, written as /setblock takes it) or a Pos (just the "
+                    + "cell). numen.shape draws them; numen.shape.cells(list) makes Cells of any such list.",
+            ScriptType.union(BLOCK.type(), POS.type())).methodsIn("numen.shape");
+
     /** 帮助与系统提示里列出的共用类,按这个顺序。 */
-    public static final List<ScriptType.Class> CLASSES = List.of(POS, BLOCK, ENTITY, ITEM, ERROR);
+    public static final List<ScriptType.Class> CLASSES = List.of(POS, BLOCK, ENTITY, ITEM, CELLS, ERROR);
 
     /** 一格写成脚本里的值:带键的表,三个整数。 */
     public static java.util.Map<String, Object> value(BlockPos cell) {

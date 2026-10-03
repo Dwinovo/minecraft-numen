@@ -89,6 +89,11 @@ public final class NumenCli {
         }
     }
 
+    /** 此刻声明了的类,按名字。 */
+    static synchronized Map<String, ScriptType.Class> classes() {
+        return Map.copyOf(CLASSES);
+    }
+
     /** 这个名字的类;没有是 null。 */
     static ScriptType.Class classNamed(String name) {
         return CLASSES.get(name);
@@ -226,7 +231,7 @@ public final class NumenCli {
             }
             groups.put(group.fullName(), verbs);
         }
-        return new ScriptCatalog(groups, modules);
+        return new ScriptCatalog(groups, modules, classes());
     }
 
     /**
@@ -472,11 +477,11 @@ public final class NumenCli {
         }
         for (CommandGroup group : GROUPS.values()) {
             if (ScriptEngine.IN_USE.pathName(group.fullName()).equals(name)) {
-                return CommandHelp.group(group, library);
+                return CommandHelp.group(group, library, modules);
             }
             for (Action action : group.actions()) {
                 if (action.function().equals(name)) {
-                    return CommandHelp.action(action);
+                    return CommandHelp.action(action, modules);
                 }
             }
         }
@@ -695,7 +700,7 @@ public final class NumenCli {
             return rootListing().first();
         }
         Action action = path.size() > 2 ? group.action(path.get(2)) : null;
-        return action == null ? CommandHelp.group(group, libraryFunctions(Modules.factory()))
+        return action == null ? CommandHelp.group(group, libraryFunctions(Modules.factory()), Modules.factory())
                 : CommandHelp.usage(action);
     }
 

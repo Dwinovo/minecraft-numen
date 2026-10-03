@@ -350,7 +350,7 @@ public final class Action {
             }
         }
         return new ScriptCatalog.Verb(returns, echoed, options, positions,
-                returnType == null ? null : ScriptType.sample(returnType, NumenCli::classNamed));
+                returnType == null ? null : ScriptType.sample(returnType, NumenCli::classNamed), returnType);
     }
 
     /** 服务端执行?(否则在主人客户端执行。) */

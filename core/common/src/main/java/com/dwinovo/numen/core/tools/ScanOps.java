@@ -39,7 +39,7 @@ public final class ScanOps {
             "Touching blocks a scan found (diagonals count): every block, nearest first.", null, List.of(
             ScriptType.field("blocks", ScriptType.listOf(Shapes.BLOCK.type()), "Every block of it, nearest first."),
             ScriptType.field("nearest", Shapes.BLOCK.type(), "The block nearest to where you stood."),
-            ScriptType.field("count", ScriptType.INTEGER, "How many blocks.")));
+            ScriptType.field("count", ScriptType.INTEGER, "How many blocks."))).methodsIn("numen.scan");
 
     private ScanOps() {}
 

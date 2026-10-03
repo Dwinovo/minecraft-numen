@@ -355,6 +355,55 @@ class LuaSandboxTest {
         assertNull(run("error(\"no\")").value());
     }
 
+    /** 带方法的值:宿主交回的 Instance 换成 Lua 值时,模块里与类同名的表是它的元表;模块不在就是普通的表;交回宿主时元表不算数据。 */
+    @Test
+    void anInstanceTakesItsClassFromItsModule() throws InterruptedException {
+        Shelf shelf = new Shelf().with("geo", """
+                local M = {}
+                M.Pos = {}
+                M.Pos.__index = M.Pos
+                function M.Pos:twice() return self.x * 2 end
+                function M.Pos.__eq(a, b) return a.x == b.x end
+                function M.pos(x) return setmetatable({x = x}, M.Pos) end
+                return M
+                """);
+        List<Object> handed = Collections.synchronizedList(new ArrayList<>());
+        LuaSandbox sandbox = LuaSandbox.builder(ROOMY).print(printed::add).modules(shelf)
+                .function("api", "where", args -> List.of(new LuaSandbox.Instance("Pos", "geo", Map.of("x", 3L))))
+                .function("api", "plain", args -> new LuaSandbox.Instance("Pos", "nowhere", Map.of("x", 3L)))
+                .function("api", "take", args -> {
+                    handed.addAll(args);
+                    return null;
+                })
+                .build();
+        LuaSandbox.Outcome o = run(sandbox, """
+                local p = api.where()[1]
+                print(p:twice(), getmetatable(p) == geo.Pos, p == geo.pos(3), getmetatable(api.plain()) == nil)
+                api.take(p)
+                """);
+        assertTrue(o.finished(), String.valueOf(o));
+        assertEquals(List.of("6\ttrue\ttrue\ttrue"), printed);
+        assertEquals(List.of(Map.of("x", 3L)), handed, "交回宿主的是数据,没有元表");
+    }
+
+    /** 只读不跑(不给模块、只给类的来源)时,带方法的值从各自的模块另装一份取元表,方法照样调得通。 */
+    @Test
+    void readingWithoutModulesStillGivesAnInstanceItsMethods() throws InterruptedException {
+        Shelf shelf = new Shelf().with("geo", """
+                local M = {}
+                M.Pos = {}
+                M.Pos.__index = M.Pos
+                function M.Pos:twice() return self.x * 2 end
+                return M
+                """);
+        LuaSandbox sandbox = LuaSandbox.builder(ROOMY).print(printed::add).classes(shelf)
+                .function("api", "where", args -> new LuaSandbox.Instance("Pos", "geo", Map.of("x", 4L)))
+                .build();
+        LuaSandbox.Outcome o = run(sandbox, "print(api.where():twice())");
+        assertTrue(o.finished(), String.valueOf(o));
+        assertEquals(List.of("8"), printed);
+    }
+
     /** 模块来源:名字到正文,每次问都读这张表此刻的样子;记下被问了哪些。 */
     private static final class Shelf implements LuaSandbox.ModuleSource {
         final Map<String, String> modules = new java.util.concurrent.ConcurrentHashMap<>();

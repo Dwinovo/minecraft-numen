@@ -68,6 +68,11 @@ import java.util.regex.Pattern;
  * null,布尔、数(整数是 Long,其余是 Double)、字符串,表是列表(键恰好 1..n)或名字到值的表。宿主函数抛 {@link ScriptError}
  * 就是脚本在调用处得到的一个 Lua 错误({@code pcall} 接得住)。
  *
+ * <h2>带方法的值</h2>
+ * 宿主交回的值里可以有 {@link Instance}:一个值,加上它是哪个类、类的方法写在哪个模块里。换成 Lua 值时,那个模块里与类同名的表
+ * 是它的元表({@code numen.shape} 里的 {@code Pos}:{@code p:offset(1, 0, 0)}、{@code p + q})。模块此刻不在,它就是一张普通的表。
+ * 交回宿主时元表不算数据({@link #toJava} 只读表里存的东西)。
+ *
  * <h2>错误值</h2>
  * 宿主函数可以用一张名字到值的表做错误值({@link ScriptError#ScriptError(Map)}):脚本 {@code pcall} 接住的就是这张表,按字段分支;
  * 它带着沙箱的错误元表,{@code tostring} 得到 {@link Builder#errors} 给的那段文字。没接住时结局的那句话也是这段文字,结局另带上这张表
@@ -122,6 +127,15 @@ public final class LuaSandbox {
             return value;
         }
     }
+
+    /**
+     * 宿主交回的一个带方法的值:换成 Lua 值时,模块 {@code home} 里叫 {@code type} 的那张表是它的元表。
+     *
+     * @param type  类名,也是模块里那张元表的名字({@code Pos})
+     * @param home  方法写在哪个模块里({@code numen.shape})
+     * @param value 值本身(Java 值,见类注释"桥接";里面还可以有 Instance)
+     */
+    public record Instance(String type, String home, Object value) {}
 
     /** 一段脚本怎样结束的。 */
     public enum Ending {
@@ -224,6 +238,8 @@ public final class LuaSandbox {
     private final Map<String, Map<String, HostFunction>> tables;
     /** 模块从哪来;没给是 null(读不认得的全局名照 Lua 的老样子是 nil)。 */
     private final ModuleSource modules;
+    /** 没有 {@link #modules}、只读不跑时,{@link Instance} 的元表从这里的模块读(各自装一份,不放上路径);没给是 null。 */
+    private final ModuleSource classes;
     /** 开跑之前先装的模块,按顺序。 */
     private final List<String> preload;
     /** 读一个既不是全局也不是模块的名字时报的那句话。 */
@@ -289,6 +305,7 @@ public final class LuaSandbox {
         this.print = b.print;
         this.globals = Map.copyOf(b.globals);
         this.modules = b.modules;
+        this.classes = b.classes;
         this.preload = List.copyOf(b.preload);
         this.unknown = b.unknown;
         this.missing = b.missing;
@@ -311,6 +328,7 @@ public final class LuaSandbox {
         private final Map<String, HostFunction> globals = new LinkedHashMap<>();
         private final Map<String, Map<String, HostFunction>> tables = new LinkedHashMap<>();
         private ModuleSource modules;
+        private ModuleSource classes;
         private final List<String> preload = new ArrayList<>();
         private Unknown unknown = (name, present) -> new ScriptError("there is no module named " + name);
         private Missing missing = (table, key, present) -> new ScriptError("there is no function " + table + "." + key);
@@ -383,6 +401,15 @@ public final class LuaSandbox {
         /** 模块从这里来:脚本第一次用到一个名字时问它(见类注释"模块")。 */
         public Builder modules(ModuleSource modules) {
             this.modules = modules;
+            return this;
+        }
+
+        /**
+         * 不给 {@link #modules}(只读不跑)时,{@link Instance} 的元表从这里的模块读:每个模块在这次运行里另装一份,只取它的类表,
+         * 不放上路径。
+         */
+        public Builder classes(ModuleSource classes) {
+            this.classes = classes;
             return this;
         }
 
@@ -796,9 +823,67 @@ public final class LuaSandbox {
                         throw new Stop(Ending.INTERRUPTED, "the script was stopped");
                     }
                     checkWall();
-                    return toLua(out);
+                    return lua(out);
                 }
             };
+        }
+
+        /** 宿主交回的值换成 Lua 值:同 {@link #toLua},{@link Instance} 带上它的类的元表。 */
+        private LuaValue lua(Object o) {
+            if (o instanceof Instance instance) {
+                LuaValue value = lua(instance.value());
+                LuaValue meta = classMeta(instance.home(), instance.type());
+                if (meta != null && value.istable()) {
+                    value.setmetatable(meta);
+                }
+                return value;
+            }
+            if (o instanceof List<?> list) {
+                LuaTable t = new LuaTable(list.size(), 0);
+                for (int i = 0; i < list.size(); i++) {
+                    t.rawset(i + 1, lua(list.get(i)));
+                }
+                return t;
+            }
+            if (o instanceof Map<?, ?> map) {
+                LuaTable t = new LuaTable();
+                map.forEach((k, v) -> t.rawset(String.valueOf(k), lua(v)));
+                return t;
+            }
+            return toLua(o);
+        }
+
+        /** 只读不跑时各模块另装的那一份:模块名 → 它返回的表。 */
+        private final Map<String, LuaValue> classModules = new java.util.HashMap<>();
+
+        /**
+         * 一个类的元表:模块 {@code home} 里叫 {@code type} 的表。跑的时候就是路径上那个模块(和程序里 {@code numen.shape.Pos} 是同一张,
+         * 比较、运算对得上);只读不跑时从 {@link Builder#classes} 另装一份。模块不在、或模块里没有这张表,是 null。
+         */
+        private LuaValue classMeta(String home, String type) {
+            LuaValue module;
+            if (modules != null) {
+                if (modules.code(home) == null || loading.contains(home)) {
+                    return null;
+                }
+                if (!loaded.contains(home)) {
+                    loadModule(home);
+                }
+                module = g;
+                for (String part : home.split("\\.")) {
+                    module = module.istable() ? module.rawget(part) : LuaValue.NIL;
+                }
+            } else if (classes != null && classes.code(home) != null) {
+                module = classModules.get(home);
+                if (module == null) {
+                    module = g.load(classes.code(home), "=" + home).call();
+                    classModules.put(home, module);
+                }
+            } else {
+                return null;
+            }
+            LuaValue meta = module.istable() ? module.rawget(type) : LuaValue.NIL;
+            return meta.istable() ? meta : null;
         }
 
         // ---- 钩子与计量 ----

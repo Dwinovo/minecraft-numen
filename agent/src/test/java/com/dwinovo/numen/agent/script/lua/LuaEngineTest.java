@@ -241,6 +241,62 @@ class LuaEngineTest {
         assertEquals(List.of("{x = -10537096.5, y = 64, z = 0.00001}"), printed, "数不写成科学计数法");
     }
 
+    /**
+     * 返回值按声明的类型标出带方法的值:声明返回一串 Pos、Pos 的方法写在模块 geo.shape 里,返回的每个 Pos 都能调那里的方法;
+     * 帮助里类的声明带着这些方法的签名。
+     */
+    @Test
+    void aReturnedValueOfAClassWithMethodsCarriesThem() {
+        com.dwinovo.numen.agent.script.ScriptType.Class pos = new com.dwinovo.numen.agent.script.ScriptType.Class("Pos",
+                "A position.", null, List.of(com.dwinovo.numen.agent.script.ScriptType.field("x",
+                com.dwinovo.numen.agent.script.ScriptType.NUMBER, null))).methodsIn("geo.shape");
+        String shape = """
+                -- Positions.
+                local M = {}
+                M.Pos = {}
+                M.Pos.__index = M.Pos
+
+                ---Twice its x.
+                ---@return number
+                function M.Pos:twice() return self.x * 2 end
+
+                ---A Pos.
+                ---@param x number
+                ---@return Pos
+                function M.pos(x) return setmetatable({x = x}, M.Pos) end
+                return M
+                """;
+        ScriptCatalog catalog = new ScriptCatalog(Map.of("numen.work", Map.of("where", new ScriptCatalog.Verb(
+                "found", false, null, Integer.MAX_VALUE, List.of(Map.of("x", 0L)),
+                com.dwinovo.numen.agent.script.ScriptType.listOf(pos.type())))),
+                new ScriptCatalog.ModuleSource() {
+                    @Override
+                    public String code(String name) {
+                        return name.equals("geo.shape") ? shape : null;
+                    }
+
+                    @Override
+                    public List<String> names() {
+                        return List.of("geo.shape");
+                    }
+                }, Map.of("Pos", pos));
+        ScriptRun run = LUA.start("t", "local p = numen.work.where()[2]\nprint(p:twice())", catalog, printed::add);
+        run.start();
+        JsonArray found = new JsonArray();
+        JsonObject one = new JsonObject();
+        one.addProperty("x", 1);
+        JsonObject two = new JsonObject();
+        two.addProperty("x", 5);
+        found.add(one);
+        found.add(two);
+        assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(data("found", found))).ok());
+        assertEquals(List.of("10"), printed);
+        assertNull(LUA.calls("example", "print(numen.work.where()[1]:twice())", catalog).error(),
+                "只读不跑时,样子也带着方法");
+        String declared = LUA.classText(pos, LUA.methods("Pos", shape));
+        assertTrue(declared.contains("\n---@field twice fun(self: Pos): number Twice its x."), declared);
+    }
+
     @Test
     void aDeclaredValueIsWhatTheCallReturns() {
         ScriptRun run = run("""

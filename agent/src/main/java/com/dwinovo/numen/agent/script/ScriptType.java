@@ -44,11 +44,28 @@ public sealed interface ScriptType {
 
     /**
      * 一个有名字的类:名字、一句说明、继承的类(没有是 null)、字段。
+     *
+     * @param items 一串值的类({@code Cells}):每一项是什么;一张带字段的表是 null
+     * @param home  它的方法写在哪个模块里({@code numen.shape}):那个模块里与类同名的表是它的值的元表(方法、运算);只是数据的是 null
      */
-    record Class(String name, String doc, String parent, List<Field> fields) {
+    record Class(String name, String doc, String parent, List<Field> fields, ScriptType items, String home) {
 
         public Class {
             fields = List.copyOf(fields);
+        }
+
+        public Class(String name, String doc, String parent, List<Field> fields) {
+            this(name, doc, parent, fields, null, null);
+        }
+
+        /** 一串同一种值的类:{@code Cells} 是一串 Block 或 Pos。 */
+        public static Class listOf(String name, String doc, ScriptType items) {
+            return new Class(name, doc, null, List.of(), items, null);
+        }
+
+        /** 同一个类,方法写在模块 {@code home} 里。 */
+        public Class methodsIn(String home) {
+            return new Class(name, doc, parent, fields, items, home);
         }
 
         /** 按名字引用它。 */
@@ -75,6 +92,10 @@ public sealed interface ScriptType {
             };
             case Named n -> {
                 Class c = classes.apply(n.name());
+                if (c != null && c.items() != null) {
+                    Object item = sample(c.items(), classes);
+                    yield item == null ? java.util.List.of() : java.util.List.of(item);
+                }
                 java.util.Map<String, Object> out = new java.util.LinkedHashMap<>();
                 if (c != null) {
                     if (c.parent() != null && sample(new Named(c.parent()), classes) instanceof java.util.Map<?, ?> up) {

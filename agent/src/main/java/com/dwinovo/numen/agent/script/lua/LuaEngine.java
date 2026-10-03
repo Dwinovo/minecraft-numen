@@ -236,6 +236,10 @@ public final class LuaEngine implements ScriptEngine {
         return null;
     }
 
+    /** 模块里给一个类定义的方法:{@code function M.Pos:offset(dx, dy, dz)}——类名大写开头,冒号后是方法名。 */
+    private static final Pattern METHOD = Pattern.compile(
+            "^function\\s+[A-Za-z_][A-Za-z0-9_]*\\.([A-Z][A-Za-z0-9_]*):([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)");
+
     /** 模块里顶层的函数定义:{@code function M.collect(radius)}——它返回的那张表里的一个函数。 */
     private static final Pattern DEFINITION = Pattern.compile(
             "^function\\s+[A-Za-z_][A-Za-z0-9_]*\\.([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)");
@@ -289,6 +293,36 @@ public final class LuaEngine implements ScriptEngine {
         return List.copyOf(out);
     }
 
+    @Override
+    public List<Defined> methods(String type, String code) {
+        List<Defined> out = new ArrayList<>();
+        List<String> doc = new ArrayList<>();
+        for (String raw : code.split("\n", -1)) {
+            String line = raw.strip();
+            if (line.startsWith("--") && !line.startsWith("--[[")) {
+                doc.add(line);
+                continue;
+            }
+            Matcher m = METHOD.matcher(raw);
+            if (m.find() && m.group(1).equals(type)) {
+                List<String> params = new ArrayList<>();
+                for (String p : m.group(3).split(",")) {
+                    if (!p.isBlank()) {
+                        params.add(p.strip());
+                    }
+                }
+                out.add(new Defined(m.group(2), params, doc));
+            }
+            doc = new ArrayList<>();
+        }
+        return List.copyOf(out);
+    }
+
+    /** 一个返回值里带方法的值:换成 Lua 值时带上它的类的元表。 */
+    private static Object instance(ScriptType.Class type, Object value) {
+        return new LuaSandbox.Instance(type.name(), type.home(), value);
+    }
+
     // ---- 签名:LuaLS 的类型注解 ----
 
     @Override
@@ -306,7 +340,7 @@ public final class LuaEngine implements ScriptEngine {
     }
 
     @Override
-    public String classText(ScriptType.Class type) {
+    public String classText(ScriptType.Class type, List<Defined> methods) {
         StringBuilder sb = new StringBuilder();
         if (type.doc() != null) {
             for (String line : type.doc().split("\n")) {
@@ -317,8 +351,22 @@ public final class LuaEngine implements ScriptEngine {
         if (type.parent() != null) {
             sb.append(": ").append(type.parent());
         }
+        if (type.items() != null) {
+            sb.append("\n---@field [integer] ").append(typeText(type.items()));
+        }
         fields(sb, type.fields());
+        for (Defined method : methods) {
+            sb.append('\n').append(methodLine(type.name(), method));
+        }
         return sb.toString();
+    }
+
+    /** 类声明里一个方法的那一行:{@code ---@field offset fun(self: Pos, dx: number): Pos 说明},按它的类型注解写。 */
+    private String methodLine(String type, Defined method) {
+        String line = libraryLine(method);
+        int open = line.indexOf("fun(") + "fun(".length();
+        boolean none = line.charAt(open) == ')';
+        return line.substring(0, open) + "self: " + type + (none ? "" : ", ") + line.substring(open);
     }
 
     /** 一个类的字段,每个一行 {@code ---@field 名字? 类型 说明}。 */
@@ -593,9 +641,10 @@ public final class LuaEngine implements ScriptEngine {
         catalog.groups().forEach((group, verbs) -> verbs.forEach((verb, declared) ->
                 sandbox.function(pathName(group), functionName(verb), in -> {
                     seen.add(call(group, verb, in, declared));
-                    return declared.sample();
+                    return catalog.mark(declared.sample(), declared.type(), LuaEngine::instance);
                 })));
-        return sandbox;
+        // 只读不跑时模块不放上路径(它们的函数只记下调用),带方法的值从各自的模块另装一份取元表
+        return sandbox.classes(source(catalog.modules()));
     }
 
     private static LuaSandbox.Outcome read(LuaSandbox.Builder sandbox, String name, String code) {
@@ -688,10 +737,10 @@ public final class LuaEngine implements ScriptEngine {
             }
             ScriptCatalog.Verb verb = catalog.verb(call.group(), call.verb());
             String key = verb == null ? null : verb.returns();
-            if (key != null) {
-                return answer(new Answer(JsonValues.toJava(result.data().get(key)), null));
-            }
-            return answer(new Answer(result.data().size() > 0 ? JsonValues.toJava(result.data()) : null, null));
+            Object value = key != null ? JsonValues.toJava(result.data().get(key))
+                    : result.data().size() > 0 ? JsonValues.toJava(result.data()) : null;
+            return answer(new Answer(catalog.mark(value, verb == null ? null : verb.type(), LuaEngine::instance),
+                    null));
         }
 
         @Override

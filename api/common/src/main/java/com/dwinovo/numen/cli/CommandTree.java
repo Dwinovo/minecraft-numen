@@ -69,7 +69,8 @@ final class CommandTree<S extends CommandSource> {
     private LiteralArgumentBuilder<S> group(CommandGroup group) {
         LiteralArgumentBuilder<S> node = LiteralArgumentBuilder.literal(group.name());
         node.then(help(NumenCli.HELP_FLAG, () -> CommandHelp.listing(
-                CommandHelp.group(group, NumenCli.libraryFunctions(com.dwinovo.numen.script.Modules.factory())))));
+                CommandHelp.group(group, NumenCli.libraryFunctions(com.dwinovo.numen.script.Modules.factory()),
+                        com.dwinovo.numen.script.Modules.factory()))));
         for (Action a : group.actions()) {
             node.then(action(a));
         }
@@ -83,7 +84,8 @@ final class CommandTree<S extends CommandSource> {
     private LiteralArgumentBuilder<S> action(Action action) {
         LiteralArgumentBuilder<S> node = LiteralArgumentBuilder.literal(action.name());
         node.then(LiteralArgumentBuilder.<S>literal(NumenCli.HELP_FLAG).executes(ctx -> {
-            ctx.getSource().reply(TaskResult.ok(CommandHelp.action(action)).toJson());
+            ctx.getSource().reply(TaskResult.ok(CommandHelp.action(action, com.dwinovo.numen.script.Modules.factory()))
+                    .toJson());
             return Command.SINGLE_SUCCESS;
         }));
         if (!runs.test(action)) {

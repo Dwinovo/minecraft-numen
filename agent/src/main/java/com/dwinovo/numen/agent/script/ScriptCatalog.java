@@ -11,8 +11,15 @@ import java.util.TreeMap;
  *
  * @param groups  组的全名({@code numen.work})→ 动词名 → 这个动词的函数怎么交回结果
  * @param modules 模块从哪来:用到时才问,所以每次运行读到的是此刻的正文
+ * @param classes 声明了的类,按名字:返回值里哪些是带方法的值({@link ScriptType.Class#home})由它们说
  */
-public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource modules) {
+public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource modules,
+                            Map<String, ScriptType.Class> classes) {
+
+    /** 没有声明任何类的目录。 */
+    public ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource modules) {
+        this(groups, modules, Map.of());
+    }
 
     /** 模块从哪来。两个方法都可能在脚本的线程上被调。 */
     public interface ModuleSource {
@@ -48,8 +55,10 @@ public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource 
      * @param positions 按顺序的对象最多几个;最后一个收一串的是 {@link Integer#MAX_VALUE}
      * @param sample    它返回值的样子(按声明的返回类型现造,数都是 0、列表都是空的):只读不跑一段正文时,调用返回它,取字段的写法
      *                  照样读得通;没有是 null
+     * @param type      它返回的值的类型(声明了返回项的,是那一项的类型);没声明是 null
      */
-    public record Verb(String returns, boolean echoed, java.util.Set<String> options, int positions, Object sample) {
+    public record Verb(String returns, boolean echoed, java.util.Set<String> options, int positions, Object sample,
+                       ScriptType type) {
 
         public Verb {
             options = options == null ? null : java.util.Set.copyOf(options);
@@ -57,7 +66,7 @@ public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource 
 
         /** 只说返回项的那种(不知道参数表):写在最后的名字表都是选项表。 */
         public Verb(String returns) {
-            this(returns, false, null, Integer.MAX_VALUE, null);
+            this(returns, false, null, Integer.MAX_VALUE, null, null);
         }
 
         /**
@@ -77,6 +86,91 @@ public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource 
         TreeMap<String, Map<String, Verb>> copy = new TreeMap<>();
         groups.forEach((group, verbs) -> copy.put(group, Collections.unmodifiableMap(new TreeMap<>(verbs))));
         groups = Collections.unmodifiableMap(copy);
+        classes = Map.copyOf(classes);
+    }
+
+    /**
+     * 一个返回值按它的类型标出带方法的值:类型里遇到方法写在模块里的类({@link ScriptType.Class#home}),那一处的值包成
+     * {@code wrap.apply(类, 值)};列表与表照类型往里走。认不出的值(类型与值对不上)原样留着。
+     */
+    public Object mark(Object value, ScriptType type, java.util.function.BiFunction<ScriptType.Class, Object, Object> wrap) {
+        if (value == null || type == null) {
+            return value;
+        }
+        return switch (type) {
+            case ScriptType.Named n -> {
+                ScriptType.Class c = classes.get(n.name());
+                if (c == null) {
+                    yield value;
+                }
+                Object inner = value;
+                if (c.items() != null && value instanceof java.util.List<?> list) {
+                    inner = list.stream().map(v -> mark(v, c.items(), wrap)).toList();
+                } else if (value instanceof Map<?, ?> map) {
+                    inner = fields(map, c, wrap);
+                }
+                yield c.home() == null ? inner : wrap.apply(c, inner);
+            }
+            case ScriptType.ListOf l -> value instanceof java.util.List<?> list
+                    ? list.stream().map(v -> mark(v, l.item(), wrap)).toList() : value;
+            case ScriptType.Table t -> value instanceof Map<?, ?> map ? fields(map, t.fields(), wrap) : value;
+            case ScriptType.Union u -> {
+                for (ScriptType option : u.options()) {
+                    if (fits(value, option)) {
+                        yield mark(value, option, wrap);
+                    }
+                }
+                yield value;
+            }
+            case ScriptType.Simple s -> value;
+            case ScriptType.Choice c -> value;
+        };
+    }
+
+    /** 一个类的字段(连同继承来的)按各自的类型标。 */
+    private Map<String, Object> fields(Map<?, ?> map, ScriptType.Class c,
+                                       java.util.function.BiFunction<ScriptType.Class, Object, Object> wrap) {
+        java.util.List<ScriptType.Field> all = new java.util.ArrayList<>(c.fields());
+        for (ScriptType.Class up = c.parent() == null ? null : classes.get(c.parent()); up != null;
+             up = up.parent() == null ? null : classes.get(up.parent())) {
+            all.addAll(up.fields());
+        }
+        return fields(map, all, wrap);
+    }
+
+    private Map<String, Object> fields(Map<?, ?> map, java.util.List<ScriptType.Field> fields,
+                                       java.util.function.BiFunction<ScriptType.Class, Object, Object> wrap) {
+        Map<String, Object> out = new java.util.LinkedHashMap<>();
+        map.forEach((k, v) -> {
+            ScriptType field = fields.stream().filter(f -> f.name().equals(String.valueOf(k))).map(ScriptType.Field::type)
+                    .findFirst().orElse(null);
+            out.put(String.valueOf(k), mark(v, field, wrap));
+        });
+        return out;
+    }
+
+    /** 几种之一里这一种对不对得上这个值:列表对列表,表对表(类的必有字段都在),字符串、数、布尔对各自的。 */
+    private boolean fits(Object value, ScriptType type) {
+        return switch (type) {
+            case ScriptType.Named n -> {
+                ScriptType.Class c = classes.get(n.name());
+                if (c != null && c.items() != null) {
+                    yield value instanceof java.util.List<?>;
+                }
+                yield value instanceof Map<?, ?> map && (c == null || c.fields().stream()
+                        .allMatch(f -> f.optional() || map.containsKey(f.name())));
+            }
+            case ScriptType.ListOf l -> value instanceof java.util.List<?>;
+            case ScriptType.Table t -> value instanceof Map<?, ?>;
+            case ScriptType.Union u -> u.options().stream().anyMatch(o -> fits(value, o));
+            case ScriptType.Choice c -> value instanceof String;
+            case ScriptType.Simple s -> switch (s.name()) {
+                case "integer", "number" -> value instanceof Number;
+                case "string" -> value instanceof String;
+                case "boolean" -> value instanceof Boolean;
+                default -> true;
+            };
+        };
     }
 
     /** 这个动词;没有是 null。 */

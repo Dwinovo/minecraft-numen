@@ -168,7 +168,8 @@ public final class CommandGroup {
         for (Action a : actions) {
             verbs.put(a.name(), a.verb());
         }
-        ScriptCatalog catalog = new ScriptCatalog(Map.of(fullName(), verbs), ScriptCatalog.ModuleSource.NONE);
+        ScriptCatalog catalog = new ScriptCatalog(Map.of(fullName(), verbs), ScriptCatalog.ModuleSource.NONE,
+                NumenCli.classes());
         for (Action a : actions) {
             a.checkExamples(catalog);
         }

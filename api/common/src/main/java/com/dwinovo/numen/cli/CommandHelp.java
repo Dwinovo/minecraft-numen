@@ -46,7 +46,7 @@ final class CommandHelp {
                 + "examples).");
         lines.add("Values the groups share:");
         for (ScriptType.Class c : Shapes.CLASSES) {
-            lines.add(engine.classText(c));
+            lines.add(classText(c, modules));
         }
         lines.add("Groups:");
         java.util.Set<String> groupNames = new java.util.HashSet<>();
@@ -108,7 +108,7 @@ final class CommandHelp {
     /**
      * 一组:说明,每个函数一行签名(库里定义在这一组表里的接在动作后面),再是这些签名引用到的类(共用的几种在索引里,不重复)。
      */
-    static String group(CommandGroup group, Map<String, NumenCli.LibraryFunction> library) {
+    static String group(CommandGroup group, Map<String, NumenCli.LibraryFunction> library, Modules modules) {
         ScriptEngine engine = ScriptEngine.IN_USE;
         List<String> lines = new ArrayList<>();
         java.util.Set<String> named = new java.util.LinkedHashSet<>();
@@ -122,7 +122,7 @@ final class CommandHelp {
                 lines.add(engine.libraryLine(fn.defined()));
             }
         });
-        return engine.groupText(module, group.summary(), lines) + classes(named);
+        return engine.groupText(module, group.summary(), lines) + classes(named, modules);
     }
 
     /** 一个不和组同名的模块:说明,每个函数一行签名,和组同一种样子。 */
@@ -138,15 +138,22 @@ final class CommandHelp {
     }
 
     /** 引用到的类的声明,接在后面;共用的几种({@link Shapes#CLASSES})在索引里,不重复。没有是空串。 */
-    private static String classes(java.util.Set<String> named) {
+    private static String classes(java.util.Set<String> named, Modules modules) {
         StringBuilder sb = new StringBuilder();
         for (String name : named) {
             ScriptType.Class c = NumenCli.classNamed(name);
             if (c != null && !Shapes.CLASSES.contains(c)) {
-                sb.append("\n\n").append(ScriptEngine.IN_USE.classText(c));
+                sb.append("\n\n").append(classText(c, modules));
             }
         }
         return sb.toString();
+    }
+
+    /** 一个类的声明,带上写在它的模块里的方法(那个模块此刻在的话)。 */
+    static String classText(ScriptType.Class c, Modules modules) {
+        ScriptEngine engine = ScriptEngine.IN_USE;
+        Modules.Module home = c.home() == null ? null : modules.get(c.home());
+        return engine.classText(c, home == null ? List.of() : engine.methods(c.name(), home.code()));
     }
 
     /** 一个函数的参数与返回类型里按名字引用的类,连同这些类的字段里再引用的,按出现的先后。 */
@@ -190,8 +197,8 @@ final class CommandHelp {
     }
 
     /** 函数,给全:签名(逐个参数带说明、返回什么)、选项与结果的字段、例子、注意、相关,再是它引用到的类。 */
-    static String action(Action action) {
-        return ScriptEngine.IN_USE.functionText(action.doc()) + classes(named(action.doc()));
+    static String action(Action action, Modules modules) {
+        return ScriptEngine.IN_USE.functionText(action.doc()) + classes(named(action.doc()), modules);
     }
 
     /**

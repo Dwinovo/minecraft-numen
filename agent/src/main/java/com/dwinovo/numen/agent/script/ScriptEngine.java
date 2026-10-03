@@ -67,7 +67,12 @@ public interface ScriptEngine {
     String typeText(ScriptType type);
 
     /** 一个类的声明:名字、说明、每个字段一行。 */
-    String classText(ScriptType.Class type);
+    default String classText(ScriptType.Class type) {
+        return classText(type, List.of());
+    }
+
+    /** 一个类的声明,带上它的方法({@link #methods}),每个方法一行签名。 */
+    String classText(ScriptType.Class type, List<Defined> methods);
 
     /** 一个函数的全部说明:签名(参数逐个带说明、返回什么)、选项与结果的字段、例子、注意、相关。 */
     String functionText(FunctionDoc fn);
@@ -98,6 +103,12 @@ public interface ScriptEngine {
      * 定义上面的那几行注释(原样,带注释号与类型注解)。
      */
     List<Defined> functions(String module, String code);
+
+    /**
+     * 一个模块给类 {@code type} 定义的方法,按出现的顺序({@code function M.Pos:offset(dx, dy, dz)}):名字是方法名、形参(不含它自己)、
+     * 紧挨在定义上面的那几行注释。类的方法写在哪个模块见 {@link ScriptType.Class#home}。
+     */
+    List<Defined> methods(String type, String code);
 
     /**
      * 一个名字在这种语言里能不能当模块名:两段 {@code 名字空间.组}({@code numen.work}、{@code my.lumber}),每段写得出来、不是关键字,
