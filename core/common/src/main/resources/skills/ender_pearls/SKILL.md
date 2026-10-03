@@ -27,12 +27,12 @@ Phase 4 of the dragon route. You need **12 pearls** for up to 12 eyes of ender (
 | Overworld at night | Low | Plains/desert, flat sight-lines; `numen.status.world` to confirm darkness |
 | Soul sand valley | Medium | Slow walking (soul sand), watch for ghasts |
 
-**Finding the forest: `numen.locate.biome("minecraft:warped_forest")` — never wander-and-scan.** It answers with coordinates and distance up to ~6400 blocks out. The answer is accurate to ~64 blocks: `numen.move.goto_` the x/z, then `numen.scan.entities` to confirm endermen (or `numen.scan.blocks` for `warped_nylium`). Not found → travel a few thousand blocks and retry, same as `numen.locate.structure`.
+**Finding the forest: `numen.locate.biome("minecraft:warped_forest")` — never wander-and-scan.** It answers with coordinates and distance up to ~6400 blocks out. The answer is accurate to ~64 blocks: `numen.move.to` the x/z, then `numen.scan.entities` to confirm endermen (or `numen.scan.blocks` for `warped_nylium`). Not found → travel a few thousand blocks and retry, same as `numen.locate.structure`.
 
 ## Hunting loop
 
 1. `numen.gear.hold("diamond_sword")`, food check (`numen.status.self`).
-2. `numen.scan.entities` to confirm endermen around; reposition with `numen.move.goto_` if the area is dry.
+2. `numen.scan.entities` to confirm endermen around; reposition with `numen.move.to` if the area is dry.
 3. scan nearby endermen, then `numen.fight.attack` each returned runtime id in turn, and `numen.work.collect()` after each kill to pick up the pearl.
 4. `numen.status.self` between batches; HP ≤ 8 → disengage, eat.
 5. Repeat until ≥12 pearls.

@@ -127,12 +127,22 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
      * @param hit 这个动作此刻命中的那行 ask 规则;没有任何一行覆盖时为 null
      */
     public boolean covers(Action action, Rule hit) {
-        if (action.kind() != kind || !rule.equals(hit == null ? "" : hit.toString())) {
+        return covers(action.kind(), hit == null ? "" : hit.toString(),
+                action.entity() != null ? action.entity().getId() : NO_ENTITY, Subject.of(action).id);
+    }
+
+    /** 主人对这一条的同意覆盖不覆盖另一条征询:与 {@link #covers(Action, Rule)} 同一个判据。 */
+    public boolean covers(ConsentItem other) {
+        return covers(other.kind, other.rule, other.entityId, other.subject);
+    }
+
+    private boolean covers(Action.Kind otherKind, String otherRule, int otherEntity, String otherSubject) {
+        if (otherKind != kind || !rule.equals(otherRule)) {
             return false;
         }
         return switch (kind) {
-            case ATTACK, USE_ENTITY -> action.entity() != null && action.entity().getId() == entityId;
-            default -> subject.equals(Subject.of(action).id);
+            case ATTACK, USE_ENTITY -> otherEntity != NO_ENTITY && otherEntity == entityId;
+            default -> subject.equals(otherSubject);
         };
     }
 

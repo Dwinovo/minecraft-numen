@@ -30,13 +30,15 @@ public enum Reason {
     TRAMPLES,
     /** 规格按位置或按方块种类禁止这样用这一格。 */
     FORBIDDEN,
-    /** 要改地形,规格不许({@code alter=none})。 */
-    NEEDS_ALTER,
+    /** 要挖一格,这一趟不挖(规格的 {@code dig} 关着)。 */
+    NO_DIGGING,
+    /** 要放一块(垫柱、搭桥、倒水接坠落),这一趟不放(规格的 {@code place} 关着)。 */
+    NO_PLACING,
     /** 要垫一块,身上没有料。 */
     NO_MATERIALS,
     /** 许可拒绝;理由随失败交出。 */
     DENIED,
-    /** 许可要问主人,而规格不是 {@code alter=any}。 */
+    /** 许可要问主人,而这一趟把要问的格当墙(规格的 {@code consent} 关着)。 */
     NEEDS_CONSENT,
     /** 身体此刻的游戏模式动不了方块(冒险、旁观)。 */
     EDIT_RESTRICTED,

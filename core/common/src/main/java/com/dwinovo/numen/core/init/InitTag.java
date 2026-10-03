@@ -32,9 +32,9 @@ public final class InitTag {
     public static final TagKey<Item> TAME_FOODS = item("tame_foods");
 
     /**
-     * The factory throwaway list: blocks a new companion is willing to spend while
-     * travelling — bridging gaps, stepping up, and pillaring. Each companion then keeps
-     * her own list ({@code throwaway} commands); this tag is only where it starts.
+     * The factory throwaway list: blocks a walk is willing to spend — bridging gaps,
+     * stepping up, and pillaring — when its description names no {@code materials}
+     * (reflexes always use it).
      * Datapack-driven so packs can add their own cheap blocks — see
      * {@code data/numen/tags/item/throwaway.json}.
      */

@@ -146,7 +146,7 @@ public class InteractGameTests {
         });
     }
 
-    /** 目标在工作距离外:numen.use.hit 不自己走过去,当场失败,下一步是能照抄的 numen.move.goto_(…, {arrive = "use"}),那一格原样。 */
+    /** 目标在工作距离外:numen.use.hit 不自己走过去,当场失败,下一步是能照抄的 numen.move.to(…, {arrive = "use"}),那一格原样。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
     public static void interact_at_out_of_reach_says_goto_first(GameTestHelper helper) {
         BlockPos stone = helper.absolutePos(new BlockPos(13, 2, 13));
@@ -157,7 +157,7 @@ public class InteractGameTests {
         succeedWhen(helper, () -> {
             helper.assertTrue(click.done(), "use hit has not finished");
             helper.assertTrue(!click.succeeded() && click.outcome().contains("out of working reach")
-                            && click.outcome().contains("`numen.move.goto_(" + xyz(stone) + ", {arrive = \"use\"})`"),
+                            && click.outcome().contains("`numen.move.to(" + xyz(stone) + ", {arrive = \"use\"})`"),
                     "the failure does not send her to goto first: " + click.outcome());
             helper.assertTrue(helper.getLevel().getBlockState(stone).is(Blocks.STONE), "the stone was touched");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);

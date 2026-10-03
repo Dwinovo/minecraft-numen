@@ -1,12 +1,13 @@
 package com.dwinovo.numen.core.task.move;
 
 import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.core.route.Plan;
 import com.dwinovo.numen.task.TaskRecord;
 
 /**
- * Typed task descriptor for {@code numen.move.go(route)}, which the library function {@code numen.move.goto_} calls: walk a
- * route by name. The route itself — waypoints, flags, the plan she saw — lives in the owner's route store, not here; a
- * {@code numen.move.goto_} first writes her own anonymous route and then walks it like any other. The deadline is handled by
+ * Typed task descriptor for {@code numen.move.go(plan)}, which the library function {@code numen.move.to} calls: walk a plan that
+ * {@code numen.route.plan} made in the same program. The plan itself — stops, description, the way she saw — rides along
+ * in memory; it is not saved, so a restart has nothing to walk and the task ends saying so. The deadline is handled by
  * the base class.
  */
 public final class MoveToTaskRecord extends TaskRecord {
@@ -14,22 +15,12 @@ public final class MoveToTaskRecord extends TaskRecord {
     /** 基础期限:30 秒,出发后按路程再往后推(见 {@code MoveToCompanionTask})。 */
     private static final long BUDGET_TICKS = 30 * 20;
 
-    /** 走哪条路线。 */
-    public final String route;
-    /** 给主人看的那一句。 */
-    private final String label;
-    /** 受理时交代给模型的那一句;没有为 null。 */
-    private final String note;
+    /** 走哪一份计划。 */
+    public final Plan plan;
 
-    /**
-     * @param label 头顶气泡、面板上给主人看的一句
-     * @param note  受理回执里要交代的事实(比如 {@code numen.move.goto_} 把这一趟记成了哪条路线);没有为 null
-     */
-    public MoveToTaskRecord(ServerSource source, String route, String label, String note) {
+    public MoveToTaskRecord(ServerSource source, Plan plan) {
         super(source, source.companion().level().getGameTime() + BUDGET_TICKS);
-        this.route = route;
-        this.label = label;
-        this.note = note;
+        this.plan = plan;
     }
 
     /**
@@ -38,11 +29,9 @@ public final class MoveToTaskRecord extends TaskRecord {
      */
     @Override
     public String describe() {
-        return label;
-    }
-
-    @Override
-    public String acceptNote() {
-        return note;
+        var stops = plan.description().stops();
+        return (plan.description().mode() == com.dwinovo.numen.core.route.Description.Mode.BOAT ? "驾船," : "")
+                + stops.get(stops.size() - 1).describe() + (stops.size() > 1 ? "(途经 " + (stops.size() - 1) + " 处)"
+                : "");
     }
 }

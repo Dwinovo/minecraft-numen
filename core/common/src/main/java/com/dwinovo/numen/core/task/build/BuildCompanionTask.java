@@ -32,7 +32,7 @@ import java.util.Map;
 /**
  * 多格建造任务:站在原地,把施工图里手够得着的格一批一批落进世界,每一格轮到一次就收场。
  *
- * <p><b>只放够得着的</b>——每一格够不够得着与 {@code numen.move.goto_(…, {arrive = "reach"})} 走到的地方同一个判据({@link BuildSurvey}):
+ * <p><b>只放够得着的</b>——每一格够不够得着与 {@code numen.move.to(…, {arrive = "place"})} 走到的地方同一个判据({@link BuildSurvey}):
  * 她不走动,够不着的格留给下一次,回执说还剩几格、最低最近的一格在哪。走到够得着的地方、挖开挡着的、再放,是脚本的事
  * (库里的 {@code numen.build.raise})。受理之前看一眼:够得着的一格都没有就当场拒绝,说清该先去哪儿。
  *
@@ -178,7 +178,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                     + "holds them there.", FailureType.NO_SUPPORT);
         }
         String hint = !tally.far().isEmpty()
-                ? "numen.move.goto_(" + Shapes.literal(tally.far().get(0)) + ", {arrive = \"reach\"})"
+                ? "numen.move.to(" + Shapes.literal(tally.far().get(0)) + ", {arrive = \"place\"})"
                 : !tally.dig().isEmpty() ? "numen.work.dig(" + Shapes.literal(tally.dig().get(0)) + ")" : null;
         return new Precondition.Failure("nothing of it to place within reach of where you stand. " + remaining(tally),
                 FailureType.OUT_OF_REACH, hint);
@@ -198,12 +198,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (!tally.far().isEmpty()) {
             BlockPos next = tally.far().get(0);
             parts.add(tally.far().size() + " cell(s) out of reach — the lowest nearest is " + xyz(next)
-                    + ": numen.move.goto_(" + lua(next) + ", {arrive = \"reach\"}) gets you within reach of it");
+                    + ": numen.move.to(" + lua(next) + ", {arrive = \"place\"}) gets you within reach of it");
         }
         if (!tally.dig().isEmpty()) {
             BlockPos next = tally.dig().get(0);
             parts.add(tally.dig().size() + " cell(s) hold another block that must be dug out first — the nearest is "
-                    + xyz(next) + ": numen.move.goto_(" + lua(next) + ", {arrive = \"dig\"}) then numen.work.dig(" + lua(next) + ")");
+                    + xyz(next) + ": numen.move.to(" + lua(next) + ", {arrive = \"dig\"}) then numen.work.dig(" + lua(next) + ")");
         }
         int shortCells = tally.count(BuildSurvey.State.SHORT);
         if (shortCells > 0) {

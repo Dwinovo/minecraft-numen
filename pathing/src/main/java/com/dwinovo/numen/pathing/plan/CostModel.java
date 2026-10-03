@@ -159,12 +159,12 @@ public final class CostModel {
     }
 
     /**
-     * 挖 {@code pos} 能不能进路线,依次问:规格许不许改地形、按位置与按种类禁不禁、物理上挖不挖得了({@link DigRules})、
-     * 许可怎么答——拒绝不进,要问的只在 {@code alter=any} 下进。
+     * 挖 {@code pos} 能不能进路线,依次问:这一趟挖不挖、按位置与按种类禁不禁、物理上挖不挖得了({@link DigRules})、
+     * 许可怎么答——拒绝不进,要问的只在规格把要问的格算能走({@link RouteSpec#consent})时进。
      */
     public Admission admitDig(WorldView view, BlockPos pos, BlockState state) {
-        if (!spec.alter().mayAlter()) {
-            return Admission.refuse(Reason.NEEDS_ALTER);
+        if (!spec.dig()) {
+            return Admission.refuse(Reason.NO_DIGGING);
         }
         if (forbids(Use.DIG, pos.asLong()) || spec.bans().breaking().contains(state.getBlock())) {
             return Admission.refuse(Reason.FORBIDDEN);
@@ -177,13 +177,13 @@ public final class CostModel {
     }
 
     /**
-     * 往 {@code pos}(此刻是 {@code current})放一块垫路料能不能进路线,依次问:规格许不许改地形、按位置与按种类禁不禁、
+     * 往 {@code pos}(此刻是 {@code current})放一块垫路料能不能进路线,依次问:这一趟放不放、按位置与按种类禁不禁、
      * 身上有没有料、游戏模式与世界边界、这一格放不放得进去({@link Replaceable})、有没有能点的面({@link Faces})、许可怎么答。
-     * "不许改地形"与"没有料"分成两个原因,不合成一个。
+     * "这一趟不放"与"没有料"分成两个原因,不合成一个。
      */
     public Admission admitPlace(WorldView view, BlockPos pos, BlockState current) {
-        if (!spec.alter().mayAlter()) {
-            return Admission.refuse(Reason.NEEDS_ALTER);
+        if (!spec.place()) {
+            return Admission.refuse(Reason.NO_PLACING);
         }
         if (forbids(Use.PLACE, pos.asLong()) || spec.bans().placingInto().contains(current.getBlock())) {
             return Admission.refuse(Reason.FORBIDDEN);
@@ -218,8 +218,8 @@ public final class CostModel {
         if (!body.carriesWaterBucket() || view.ultraWarm()) {
             return Admission.refuse(Reason.TOO_FAR_TO_FALL);
         }
-        if (!spec.alter().mayAlter()) {
-            return Admission.refuse(Reason.NEEDS_ALTER);
+        if (!spec.place()) {
+            return Admission.refuse(Reason.NO_PLACING);
         }
         if (spec.bans().placingInto().contains(current.getBlock())) {
             return Admission.refuse(Reason.FORBIDDEN);
@@ -243,7 +243,7 @@ public final class CostModel {
         Permit permit = terrain.judge(change, pos.immutable(), state, view);
         return switch (permit) {
             case Permit.Allow allow -> new Admission(permit, null, null);
-            case Permit.Ask ask -> spec.alter() == RouteSpec.Alter.ANY
+            case Permit.Ask ask -> spec.consent()
                     ? new Admission(permit, null, null)
                     : Admission.refuse(Reason.NEEDS_CONSENT);
             case Permit.Deny deny -> new Admission(null, Reason.DENIED, deny.reason());
@@ -254,12 +254,12 @@ public final class CostModel {
 
     /**
      * 挖一格:用挑中的工具挖掉它手上要花的刻数(挖到碎,加碎了之后缓手的那几刻,{@link ToolChoice#handTicks}),加规格的挖掘罚分
-     * 与这一格的按位置加价;许可要问的乘 {@link ActionCosts#CONSENT_MULTIPLIER}。
+     * 与这一格的按位置加价;许可要问的乘规格的 {@link RouteSpec#consentMultiplier}。
      */
     public double digCost(Edit.Dig dig) {
         double cost = tools.handTicks(dig.state(), dig.eyeInWater(), dig.grounded()) + spec.breakPenalty()
                 + extra(Use.DIG, dig.pos().asLong());
-        return dig.permit() instanceof Permit.Ask ? cost * ActionCosts.CONSENT_MULTIPLIER : cost;
+        return dig.permit() instanceof Permit.Ask ? cost * spec.consentMultiplier() : cost;
     }
 
     /**
@@ -272,24 +272,24 @@ public final class CostModel {
     }
 
     /**
-     * 放一块:规格的放置罚分加这一格的按位置加价,许可要问的乘 {@link ActionCosts#CONSENT_MULTIPLIER}。
+     * 放一块:规格的放置罚分加这一格的按位置加价,许可要问的乘规格的 {@link RouteSpec#consentMultiplier}。
      */
     public double placeCost(Edit.Place place) {
         double cost = spec.placeCost() + extra(Use.PLACE, place.pos().asLong());
         if (place.permit() instanceof Permit.Ask) {
-            cost *= ActionCosts.CONSENT_MULTIPLIER;
+            cost *= spec.consentMultiplier();
         }
         return cost;
     }
 
     /**
-     * 倒一桶水接住坠落:与放一块同样的罚分(许可要问的乘 {@link ActionCosts#CONSENT_MULTIPLIER}),再加上落定之后把水收回桶里的
+     * 倒一桶水接住坠落:与放一块同样的罚分(许可要问的乘规格的 {@link RouteSpec#consentMultiplier}),再加上落定之后把水收回桶里的
      * 那一下。按位置的"放"加价管的是留在世界上的方块,水当场收回,不加。
      */
     public double catchCost(Edit.Catch caught) {
         double cost = spec.placeCost();
         if (caught.permit() instanceof Permit.Ask) {
-            cost *= ActionCosts.CONSENT_MULTIPLIER;
+            cost *= spec.consentMultiplier();
         }
         return cost + ActionCosts.SCOOP_WATER;
     }

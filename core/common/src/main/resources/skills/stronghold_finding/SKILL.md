@@ -24,8 +24,8 @@ Both are 2×2/shapeless recipes — `numen.inv.make` makes them in your own grid
 ## Step 2 — go there
 
 1. `numen.locate.structure("minecraft:stronghold")` → coordinates, direction, distance (often 1000–2500 blocks; the journey is the long part).
-2. `numen.move.goto_` the column it gave (its `pos`, e.g. `numen.move.goto_({x = 1200, z = -340})`) to cross the surface, then descend where you stand with `numen.move.goto_({y = 30}, {alter = "natural"})` — navigation digs down on its own. Strongholds sit around Y 6–50.
-3. Hit stone bricks → you're inside. `numen.scan.blocks("end_portal_frame")` to find the portal room; no match → explore corridors with `numen.move.goto_` and rescan. (Stronghold corridors are stone_bricks / mossy_stone_bricks / cracked_stone_bricks.)
+2. `numen.move.to` the column it gave (its `pos`, e.g. `numen.move.to({x = 1200, z = -340})`) to cross the surface, then descend where you stand with `numen.move.to({y = 30}, {costs = {dig = true, place = true}})` — navigation digs down on its own. Strongholds sit around Y 6–50.
+3. Hit stone bricks → you're inside. `numen.scan.blocks("end_portal_frame")` to find the portal room; no match → explore the corridors with `numen.move.explore` (it heads out a hop at a time in a direction and calls the until_ function you give after each hop — one that rescans for end_portal_frame). (Stronghold corridors are stone_bricks / mossy_stone_bricks / cracked_stone_bricks.)
 
 ## Step 3 — secure the portal room
 

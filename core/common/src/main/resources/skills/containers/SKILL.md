@@ -9,7 +9,7 @@ You move items through real GUIs, exactly like a player: open the block, look at
 
 ## The loop
 
-1. **Open** — `numen.use.block({x = 120, y = 64, z = -35})` on the container block (it does not travel: first `numen.move.goto_({x = 120, y = 64, z = -35}, {arrive = "use"})`, which stands you where the container is in sight and in reach). It opens the GUI, leaves it open and hands back its **Window**: every slot (`index`, `side`, `item`, `count`, `output` for take-only slots), the cursor and the machine's numbers.
+1. **Open** — `numen.use.block({x = 120, y = 64, z = -35})` on the container block (it does not travel: first `numen.move.to({x = 120, y = 64, z = -35}, {arrive = "use"})`, which stands you where the container is in sight and in reach). It opens the GUI, leaves it open and hands back its **Window**: every slot (`index`, `side`, `item`, `count`, `output` for take-only slots), the cursor and the machine's numbers.
 2. **Move** — the Window's methods (below). Several moves in one program run in order.
 3. **Verify** — each result already says what happened; `numen.gui.view()` reads the window again when you need to re-check.
 4. **Close** — `w:close()` when done. (It also auto-closes if you walk away.)
@@ -97,6 +97,6 @@ Every move's result tells you its outcome, and `numen.gui.view()` reads the wind
 - **take fails** → the window holds none of it (not_found), or your inventory is full.
 - **Got a swap you didn't want** → `w:move` put it onto a slot holding a different item. `w:quick` instead to route it, or pick an empty slot.
 - **"no GUI open"** → you didn't open one, or walked out of range and it closed. Open it again with `numen.use.block`.
-- **"right-clicked tall_grass … the crosshair landed there"** → something stood between you and the container, and the click went to it. The result names the next step: `numen.work.dig` that cell, or `numen.move.goto_({x = 120, y = 64, z = -35}, {arrive = "use"})` to stand where another side is in sight; then `numen.use.block` again.
+- **"right-clicked tall_grass … the crosshair landed there"** → something stood between you and the container, and the click went to it. The result names the next step: `numen.work.dig` that cell, or `numen.move.to({x = 120, y = 64, z = -35}, {arrive = "use"})` to stand where another side is in sight; then `numen.use.block` again.
 
 Always `w:close()` (or walk away) when finished so you don't leave a menu hanging.

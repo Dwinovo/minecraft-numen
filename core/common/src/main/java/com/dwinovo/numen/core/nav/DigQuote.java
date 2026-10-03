@@ -66,7 +66,7 @@ public final class DigQuote {
 
     /**
      * 挡着视线的格清不清得掉:按这份规格挖它能不能进路线({@link CostModel#admitDig})——规格的禁令、物理上挖不挖得了、许可
-     * 怎么答(要问主人的只在 {@code alter=any} 下进,不许的永远不进)。交给挖一格的目标给站位定价({@code Goals.dig}),也交给
+     * 怎么答(要问主人的只在规格把它们算能走时进,不许的永远不进)。交给挖一格的目标给站位定价({@code Goals.dig}),也交给
      * 挖掘器清遮挡:两处问的是这同一个。只读冻结的成本模型,可以在搜索线程上问。
      */
     public Goals.Clearing clearing() {

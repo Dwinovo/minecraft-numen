@@ -146,7 +146,8 @@ public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource 
                     .findFirst().orElse(null);
             out.put(String.valueOf(k), mark(v, field, wrap));
         });
-        return out;
+        // 收起来的字段同样按类型标,仍旧收着
+        return map instanceof JsonValues.Folded f ? new JsonValues.Folded(out, fields(f.folded(), fields, wrap)) : out;
     }
 
     /** 几种之一里这一种对不对得上这个值:列表对列表,表对表(类的必有字段都在),字符串、数、布尔对各自的。 */

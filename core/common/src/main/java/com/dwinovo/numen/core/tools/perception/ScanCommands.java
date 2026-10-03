@@ -89,7 +89,7 @@ public final class ScanCommands {
                 .note("Read-only; the reply comes when the search is done. Name every variant you want.")
                 .note("A cluster is matching blocks that touch (diagonals count): every block of it nearest first "
                         + "(a Block: name and pos), the nearest one, and how many. Hand a cluster's blocks on as they are: "
-                        + "`numen.work.dig` digs those still standing within reach, `numen.move.goto_` with arrive \"dig\" "
+                        + "`numen.work.dig` digs those still standing within reach, `numen.move.to` with arrive \"dig\" "
                         + "walks within reach of them, `numen.work.mine` does both until they are gone.")
                 .note("Nothing is kept: to use what it found again, keep the result in the program, or scan again.")
                 .note("Only loaded terrain is read: anything further out is UNKNOWN, not empty; the reply says so.")
@@ -101,13 +101,13 @@ public final class ScanCommands {
                 .example("numen.scan.entities({radius = 12})")
                 .example("numen.scan.entities(\"item\", {radius = 8})")
                 .note("Going through them: `for _, e in ipairs(numen.scan.entities(\"item\", {radius = 8})) do "
-                        + "numen.move.goto_(e.pos) end`.")
+                        + "numen.move.to(e.pos) end`.")
                 .note("Instant and read-only. The list of all of them, nearest first: each is an Entity (id, type, "
                         + "category, pos, distance, hp); a dropped item is an Item (also item, count and pickup_delay, "
                         + "ticks before anyone can pick it up); a tamed one has owner: you, your owner, or the other "
                         + "player's name.")
                 .note("Hand one on as it is: `local e = numen.scan.entities(\"hostile\")[1]; numen.fight.attack(e)`, and the same "
-                        + "with numen.use.entity(e) or numen.move.goto_(e.pos). The ids are runtime ids and do not survive a restart.")
+                        + "with numen.use.entity(e) or numen.move.to(e.pos). The ids are runtime ids and do not survive a restart.")
                 .seeAlso("scan map", "fight attack", "use entity");
         scan.server("block", "One block: its id and state, hardness, whether your held tool is right, dig time, "
                         + "whether it is in reach.",

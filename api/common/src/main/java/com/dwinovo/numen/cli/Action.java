@@ -260,7 +260,7 @@ public final class Action {
         return group.namespace() + " " + group.name() + " " + name;
     }
 
-    /** 脚本里的函数名:{@code numen.work.dig}、{@code numen.move.goto_};帮助、回执、派下的活都这样叫它。 */
+    /** 脚本里的函数名:{@code numen.work.dig}、{@code numen.move.to};帮助、回执、派下的活都这样叫它。 */
     String function() {
         return ScriptEngine.IN_USE.function(group.fullName(), name);
     }

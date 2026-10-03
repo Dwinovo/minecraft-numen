@@ -17,7 +17,7 @@ Phase 2 of the dragon route. Build a portal, ignite it, walk through. Actual Net
 Mine it from a **ruined portal** — a structure that's just standing obsidian, no lava-casting. This is the only route: casting your own (water over lava) leaves every fresh obsidian block touching lava, and I refuse to mine fluid-adjacent blocks (it would flood or burn the dig), so a cast wall is unminable by design.
 
 1. `numen.locate.structure("#minecraft:ruined_portal")` — searches the whole family and returns the nearest. **Skip `ruined_portal_ocean`** (underwater) if the result names it; re-search or pick a land one — I can't dive.
-2. `numen.gear.hold("diamond_pickaxe")` (obsidian needs diamond), `numen.move.goto_` the portal coordinates.
+2. `numen.gear.hold("diamond_pickaxe")` (obsidian needs diamond), `numen.move.to` the portal coordinates.
 3. `numen.scan.blocks("obsidian")`, then hand the frame's cluster to `numen.work.mine` (its `blocks`) — it walks within reach, digs, picks up the drops and goes on until none of them is left. ~9.4s per block is normal.
 
 Notes:
@@ -39,7 +39,7 @@ Notes:
   ```
 - **Flint & steel**: craft `flint_and_steel` = 1 iron ingot + 1 flint, a 2×2 recipe (`numen.inv.make` it; see the `containers` skill to lay a grid by hand). Flint drops from gravel you `numen.work.dig`, ~10%/block.
 - **Ignite**: `numen.use.block({x = 121, y = 65, z = -35}, {item = "minecraft:flint_and_steel"})` aimed at an **empty air cell INSIDE the frame** (a bottom one), not at the obsidian. The fire lands in that cell and the portal forms.
-- Enter: `numen.move.goto_` the portal cell and stand in it until the dimension changes (`numen.status.self` confirms).
+- Enter: `numen.move.to` the portal cell and stand in it until the dimension changes (`numen.status.self` confirms).
 
 ## Packlist (verify with `numen.status.self` before igniting)
 
@@ -49,7 +49,7 @@ Notes:
 | Diamond sword + bow | 1 + 1 | Equip for combat only — hold the pickaxe while travelling (navigation digs with the held tool) |
 | Arrows | 32+ | `numen.fight.attack` spends them only on what it cannot reach (~6 per blaze); run low → carry extra food and let it melee |
 | Diamond pickaxe (+ iron backup) | 1 + 1 | Obsidian, digging |
-| Cobblestone | 64+ | Throwaway blocks for navigation — bridging lava lakes eats it; keep it on your `throwaway` list |
+| Cobblestone | 64+ | What navigation spends to bridge and pillar — bridging lava lakes eats it; cobblestone is in the default `materials` of every walk |
 | Gold helmet (worn) | 1 | Piglin truce; 5 gold ingots if you must craft one |
 | Flint & steel | 1 | Re-light the portal if a ghast blows it out |
 

@@ -13,12 +13,14 @@ import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 
+import net.minecraft.world.item.Item;
+
 /**
  * 规划:只搜不走,不占身体、不碰世界。一串路段从她脚下起逐段规划,每段一次搜索(一次快照看得清的地方),下一段接在上一段的
  * 终点后面({@link PlanQuery#after});哪一段没走到就停在那一段,后面的不规划——它们从哪儿起还不知道。
  *
- * <p>执行是另一件事({@link Trip}):照一段规划出的路走,路上边走边细算。{@code route plan}、{@code move go} 与一趟路开走前
- * 要问主人的那次整条过目,规划都是这一处。
+ * <p>执行是另一件事({@link Trip}):照一段规划出的路走,路上边走边细算。{@code route.plan}、{@code move.go} 从别处出发时的重新规划、
+ * 跟随受理前的那一次,规划都是这一处。
  */
 public final class Survey {
 
@@ -53,9 +55,11 @@ public final class Survey {
         }
     }
 
-    /** 从她脚下起规划这几段,避开她附近此刻的敌对生物。在世界所在的线程上调:权限快照与垫路料在这一刻取。 */
-    public static Survey of(NumenPlayer player, List<Leg> legs) {
-        return of(CompanionPorts.navigator(player, CompanionPorts.dangers(player)), legs);
+    /**
+     * 从她脚下起规划这几段,避开她附近此刻的敌对生物,垫路从 {@code materials} 里挑。在世界所在的线程上调:权限快照与垫路料在这一刻取。
+     */
+    public static Survey of(NumenPlayer player, List<Leg> legs, List<Item> materials) {
+        return of(CompanionPorts.navigator(player, CompanionPorts.dangers(player), materials), legs);
     }
 
     /** 用这一副门面规划这几段。 */

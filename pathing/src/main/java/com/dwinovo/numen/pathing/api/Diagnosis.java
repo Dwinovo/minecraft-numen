@@ -1,6 +1,5 @@
 package com.dwinovo.numen.pathing.api;
 
-import java.util.List;
 import java.util.function.BooleanSupplier;
 
 import com.dwinovo.numen.pathing.plan.Breath;
@@ -18,20 +17,20 @@ import com.dwinovo.numen.pathing.spec.RouteSpec;
 import net.minecraft.world.level.block.Blocks;
 
 /**
- * 一次搜索没交出路时,结局是什么:搜索只知道自己为什么停,"没路是因为憋不住气、许改的不够、没有料、改动预算不够、许可拒绝"
+ * 一次搜索没交出路时,结局是什么:搜索只知道自己为什么停,"没路是因为憋不住气、许的改动不够、没有料、改动预算不够、许可拒绝"
  * 要在同一份快照、同一个起点与目标上换一样条件再搜才看得出来。依次问,第一个问出路的就是结局:
  * <ol>
  *   <li>搜索因为憋不住气丢下过步子:憋得住就有路 → {@link Outcome.Breathless},连同那条路上头一段憋不住的水下——同样的规格下
  *       路是有的,缺的是气,这是最贴近的原因,先报;</li>
- *   <li>规格不许改地形:许改自然地形就有路 → {@link Outcome.NeedsAlter}({@code NATURAL});连要主人同意的格也许改才有路
- *       → {@link Outcome.NeedsAlter}({@code ANY});都连同那条路要改几格;</li>
- *   <li>只许改自然地形:连要主人同意的格也许改就有路 → {@link Outcome.NeedsAlter}({@code ANY});</li>
+ *   <li>规格不许挖或不许放:两样都许就有路 → {@link Outcome.NeedsChanges};要问主人的格当墙时,再把它们算能走才有路
+ *       → 同样是 {@link Outcome.NeedsChanges}(那条路的改动里有要问的格);都连同那条路要做的改动;</li>
+ *   <li>挖与放都许、要问的格当墙:把要问的格算能走就有路 → {@link Outcome.NeedsChanges};</li>
  *   <li>身上没料:有料就有路 → {@link Outcome.NoMaterials};</li>
  *   <li>设了改动预算:不限预算就有路 → {@link Outcome.OverAlterBudget},连同最便宜那条要改几格;</li>
  *   <li>许可拒绝的格放行就有路 → {@link Outcome.Denied},连同路上第一格被拒的格与许可给的理由;</li>
  *   <li>都没有 → {@link Outcome.NoRoute}。</li>
  * </ol>
- * "许改的不够"总是先报,身上有没有料不提:不许改地形时问的是"许改又有料";只许改自然地形时问的是"连要同意的格也许改,
+ * "许的改动不够"总是先报,身上有没有料不提:不许挖或不许放时问的是"都许又有料";都许而要问的格当墙时问的是"要问的格也算能走,
  * 料照身上的"——设想出来的料会让一条只缺料的路冒充成要主人同意的路。换条件的搜索与原来的同一个预算;它也搜不完,
  * 那一条就不算数。在工作线程上跑,只读快照。
  */
@@ -82,19 +81,19 @@ final class Diagnosis {
         CostModel model = failed.model();
         RouteSpec spec = model.spec();
         boolean hadMaterials = model.placing().isPresent();
-        if (!spec.alter().mayAlter()) {
-            for (RouteSpec.Alter level : List.of(RouteSpec.Alter.NATURAL, RouteSpec.Alter.ANY)) {
-                Route route = find(failed, withMaterials(model).withSpec(spec.edit().alter(level).build()), cancelled);
-                if (route != null) {
-                    return new Outcome.NeedsAlter(level, route.edits().stream().filter(Edit::alters).toList());
-                }
+        if (!spec.dig() || !spec.place()) {
+            RouteSpec changing = spec.edit().changes(true).build();
+            Route route = find(failed, withMaterials(model).withSpec(changing), cancelled);
+            if (route == null && !spec.consent()) {
+                route = find(failed, withMaterials(model).withSpec(changing.edit().consent(true).build()), cancelled);
             }
-            return new Outcome.NoRoute();
+            return route != null ? new Outcome.NeedsChanges(route.edits().stream().filter(Edit::alters).toList())
+                    : new Outcome.NoRoute();
         }
-        if (spec.alter() == RouteSpec.Alter.NATURAL) {
-            Route route = find(failed, model.withSpec(spec.edit().alter(RouteSpec.Alter.ANY).build()), cancelled);
+        if (!spec.consent()) {
+            Route route = find(failed, model.withSpec(spec.edit().consent(true).build()), cancelled);
             if (route != null) {
-                return new Outcome.NeedsAlter(RouteSpec.Alter.ANY, route.edits().stream().filter(Edit::alters).toList());
+                return new Outcome.NeedsChanges(route.edits().stream().filter(Edit::alters).toList());
             }
         }
         if (!hadMaterials && find(failed, withMaterials(model), cancelled) != null) {

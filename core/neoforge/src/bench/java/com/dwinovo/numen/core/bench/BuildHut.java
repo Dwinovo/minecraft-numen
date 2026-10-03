@@ -224,7 +224,7 @@ public final class BuildHut implements Scenario {
         // numen.build.place 只放手够得着的格:先站进屋子正中,四面墙和屋顶都在手边
         BlockPos middle = scene.pos(CORNER.offset(2, 0, 2));
         return """
-                numen.move.goto_(%s)
+                numen.move.to(%s)
                 local S = numen.shape
                 local o = S.pos(%d, %d, %d)
                 local planks = {["#"] = "oak_planks"}

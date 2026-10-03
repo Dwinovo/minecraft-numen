@@ -23,7 +23,7 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
 /**
  * 挖掘:{@code numen.work.dig} 只挖站在原地手够得着的格(扫描来的一团、框出来的坑、一格坐标),挡着的天然地形一并挖开,不走、不捡,
- * 够不着的如实报告并给能照抄的 {@code numen.move.goto_ … arrive = "dig"};{@code arrive = "dig"} 走到一次够得着最多格、挖得成的地方;
+ * 够不着的如实报告并给能照抄的 {@code numen.move.to … arrive = "dig"};{@code arrive = "dig"} 走到一次够得着最多格、挖得成的地方;
  * {@code numen.work.collect} 只捡。挖一块区域的整件事是这三条原子命令一轮轮组合({@link GameTestKit#mine}):开门出屋、树林与埋矿、
  * 够不着时如实收场。
  */
@@ -554,7 +554,7 @@ public class DigGameTests {
 
     /**
      * 只挖手够得着的:一排珠光蛙明灯从她跟前伸到十格外,一扫成一团,整团交给 {@code numen.work.dig}。它挖掉手够得着的那几块就收场,算成功;
-     * 她一步没动,回执说还剩几格够不着、最近那格在哪,以及能照抄的 {@code numen.move.goto_ … arrive = "dig"};够不着的一块不少。
+     * 她一步没动,回执说还剩几格够不着、最近那格在哪,以及能照抄的 {@code numen.move.to … arrive = "dig"};够不着的一块不少。
      */
     @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_dig")
     public static void dig_digs_only_what_her_hand_reaches_and_reports_the_rest(GameTestHelper helper) {
@@ -589,7 +589,7 @@ public class DigGameTests {
             helper.assertTrue(dig[0].succeeded() && said.startsWith("dug " + dug.size() + " cell(s) of pearlescent_froglight")
                             && said.contains(left.size() + " more cell(s) of the " + vein.size()
                                     + " given are out of my reach from here, the nearest at " + coords(nearest))
-                            && said.contains("to dig them: `numen.move.goto_(" + xyz(nearest) + ", {arrive = \"dig\"})`, "
+                            && said.contains("to dig them: `numen.move.to(" + xyz(nearest) + ", {arrive = \"dig\"})`, "
                                     + "then dig the same blocks again"),
                     "the reply does not account for the cells beyond her reach: " + said);
             helper.assertTrue(companion.blockPosition().equals(stand), "she moved while digging");
@@ -630,7 +630,7 @@ public class DigGameTests {
 
         succeedWhen(helper, () -> {
             if (walk[0] == null) {
-                walk[0] = lua(companion, "numen.move.goto_(" + irons + ", {arrive = \"dig\"})");
+                walk[0] = lua(companion, "numen.move.to(" + irons + ", {arrive = \"dig\"})");
             }
             helper.assertTrue(walk[0].done(), "move goto has not finished");
             if (dig[0] == null) {
@@ -666,7 +666,7 @@ public class DigGameTests {
     /**
      * 够不着的不去:两块赭黄蛙明灯在场地另一角、六十多格外,扫到之后整团交给 {@code numen.work.dig},她手边一格都没有。派发当场拒收,
      * 她不出发,回执说两格都
-     * 够不着、最近那格在哪,以及能照抄的 {@code numen.move.goto_ … arrive = "dig"} 与之后再挖的那一行。
+     * 够不着、最近那格在哪,以及能照抄的 {@code numen.move.to … arrive = "dig"} 与之后再挖的那一行。
      */
     @GameTest(template = "floor52", timeoutTicks = 100000, batch = "numen_dig_far")
     public static void dig_stays_put_and_gives_the_way_when_the_blocks_lie_beyond_her_reach(GameTestHelper helper) {
@@ -694,7 +694,7 @@ public class DigGameTests {
                                     + "reach where I stand")
                             && said.contains("2 more cell(s) of the 2 given are out of my reach from here, "
                                     + "the nearest at " + coords(nearer))
-                            && ("numen.move.goto_(" + xyz(nearer) + ", {arrive = \"dig\"})\nnumen.work.dig("
+                            && ("numen.move.to(" + xyz(nearer) + ", {arrive = \"dig\"})\nnumen.work.dig("
                                     + blocks[0].substring(1, blocks[0].length() - 1) + ")").equals(dig[0].hint()),
                     "the reply does not say what lies beyond her reach and how to get there: " + said + " | "
                             + dig[0].kind() + " | " + dig[0].hint());
@@ -734,7 +734,7 @@ public class DigGameTests {
                                 + scanned.reply());
                 String blocks = blocksOf(farCluster);
                 var nearest = farCluster.getAsJsonObject("nearest").getAsJsonObject("pos");
-                refusal[1] = "numen.move.goto_({x = " + nearest.get("x").getAsInt() + ", y = " + nearest.get("y").getAsInt()
+                refusal[1] = "numen.move.to({x = " + nearest.get("x").getAsInt() + ", y = " + nearest.get("y").getAsInt()
                         + ", z = " + nearest.get("z").getAsInt() + "}, {arrive = \"dig\"})\nnumen.work.dig("
                         + blocks.substring(1, blocks.length() - 1) + ")";
                 ToolRun dig = lua(companion, "numen.work.dig(" + blocks + ")");
@@ -754,9 +754,9 @@ public class DigGameTests {
     }
 
     /**
-     * 开路再挖:一块远古残骸埋在二十多格外一座石头小丘的正中,四面都隔着两格石头。{@code numen.move.goto_ … arrive = "dig"} 走到手够得着
+     * 开路再挖:一块远古残骸埋在二十多格外一座石头小丘的正中,四面都隔着两格石头。{@code numen.move.to … arrive = "dig"} 走到手够得着
      * 它的地方就停,残骸原样(到达只管站位,那一格留给挖的一方);接着 {@code numen.work.dig} 挖开挡着的石头,把它挖出来,掉落物
-     * 留在原地;再走进残骸那一格({@code numen.move.goto_ … alter = "natural"}),捡到手。
+     * 留在原地;再走进残骸那一格({@code numen.move.to … costs = {dig = true, place = true, consent = false}}),捡到手。
      */
     @GameTest(template = "floor52", timeoutTicks = 100000, batch = "numen_dig_far")
     public static void arrive_dig_reaches_a_buried_block_and_work_dig_digs_it_out(GameTestHelper helper) {
@@ -768,12 +768,12 @@ public class DigGameTests {
         level.setBlockAndUpdate(debris, Blocks.ANCIENT_DEBRIS.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_debris", new BlockPos(3, 2, 3), false);
         companion.getInventory().add(new ItemStack(Items.DIAMOND_PICKAXE));
-        ToolRun walk = lua(companion, "numen.move.goto_(" + xyz(debris) + ", {arrive = \"dig\", alter = \"natural\"})");
+        ToolRun walk = lua(companion, "numen.move.to(" + xyz(debris) + ", {arrive = \"dig\", costs = {dig = true, place = true, consent = false}})");
         ToolRun[] dig = new ToolRun[1];
         ToolRun[] fetch = new ToolRun[1];
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(walk.done(), "move_goto has not finished");
+            helper.assertTrue(walk.done(), "numen.move.to has not finished");
             if (dig[0] == null) {
                 helper.assertTrue(walk.succeeded() && walk.outcome().contains("within reach")
                                 && walk.outcome().contains("`numen.work.dig(" + xyz(debris) + ")`"),
@@ -789,7 +789,7 @@ public class DigGameTests {
             helper.assertTrue(dig[0].succeeded() && level.getBlockState(debris).isAir(),
                     "the buried block was not dug out: " + dig[0].outcome());
             if (fetch[0] == null) {
-                fetch[0] = lua(companion, "numen.move.goto_(" + xyz(debris) + ", {alter = \"natural\"})");
+                fetch[0] = lua(companion, "numen.move.to(" + xyz(debris) + ", {costs = {dig = true, place = true, consent = false}})");
             }
             helper.assertTrue(fetch[0].done(), "the walk to the drop has not finished");
             helper.assertTrue(companion.getInventory().countItem(Items.ANCIENT_DEBRIS) == 1,

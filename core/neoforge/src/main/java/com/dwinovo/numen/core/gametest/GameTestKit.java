@@ -232,8 +232,8 @@ public final class GameTestKit {
 
     /**
      * 当场就挖 {@code blocks}(一串 Block 或 Pos 的 Lua 写法),用原子调用一轮轮组合,和模型自己写的一样:
-     * {@code numen.move.goto_(blocks, {arrive = "dig", alter = "natural"})} 走到一次够得着最多格的地方,
-     * {@code numen.work.dig(blocks, {count = 还差几格})} 挖手够得着的,{@code numen.work.collect({alter = "natural"})} 捡掉落;还差、而且
+     * {@code numen.move.to(blocks, {arrive = "dig", costs = …})} 走到一次够得着最多格的地方,
+     * {@code numen.work.dig(blocks, {count = 还差几格})} 挖手够得着的,{@code numen.work.collect} 许挖许放地捡掉落;还差、而且
      * 挖的回执说还有够不着的格,就再来一轮。每一步是一段一行的程序,方块每次原样写进去;挖了几格读那件活的收尾数据,脚本里拿不到它。
      * 不另挂每刻的回调,每次问 {@link Mining#done} 时往下推一步。
      *
@@ -272,6 +272,9 @@ public final class GameTestKit {
         private int rounds;
         private int settling;
 
+        /** 许挖许放、要问主人的格当墙:走去挖、走去捡都按它。 */
+        private static final String COSTS = "costs = {dig = true, place = true, consent = false}";
+
         private Mining(NumenPlayer companion, ToolRun before, String blocks, int count) {
             this.companion = companion;
             this.blocks = blocks;
@@ -285,7 +288,7 @@ public final class GameTestKit {
         private void tick() {
             if (step == Step.SETTLE) {
                 if (dropsSettled() || ++settling >= SETTLE_TICKS) {
-                    run(Step.COLLECT, "numen.work.collect({alter = \"natural\"})");
+                    run(Step.COLLECT, "numen.work.collect({" + COSTS + "})");
                 }
                 return;
             }
@@ -342,8 +345,9 @@ public final class GameTestKit {
             current = lua(companion, code);
         }
 
+        /** 走到一次够得着这块区域最多格的地方:区域此刻的每一格写成带 {@code cells} 的表交给 {@code move.to}。 */
         private void walk() {
-            run(Step.GOTO, "numen.move.goto_(" + blocks + ", {arrive = \"dig\", alter = \"natural\"})");
+            run(Step.GOTO, "numen.move.to(" + blocks + ", {arrive = \"dig\", " + COSTS + "})");
         }
 
         /** 挖的那些方块的 Lua 写法:再挖同样的那些时照抄;先扫再挖的,扫的回执到之前是 null。 */
@@ -923,7 +927,7 @@ public final class GameTestKit {
         }
 
         /**
-         * 有结论了:整段程序跑完了。只看最后一次调用的回执不行:一段几次调用的程序(库函数 numen.move.goto_ 是三次)头一次回了执,
+         * 有结论了:整段程序跑完了。只看最后一次调用的回执不行:一段几次调用的程序(库函数 numen.move.to 是两次)头一次回了执,
          * 后面的还没派。
          */
         boolean done() {

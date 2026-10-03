@@ -1,6 +1,7 @@
 # 先看、再规划、后执行:area 与 route
 
-状态:已落地(09-30,集成分支 look-plan-act),落地细节与和本稿的出入见 §十。
+状态:已落地(09-30,集成分支 look-plan-act),落地细节与和本稿的出入见 §十。10-03 起路线不再是存盘的名词:一趟路是交给
+`route.plan` 的一张描述,计划只在一段程序里有效,权限走到那一格才问(§十 第 5 步,`shell.md` §十);§四 是当时的设计。
 
 ## 一、为什么
 
@@ -302,6 +303,27 @@ route reverse mine --as back                 反着的一条
   清视线只剩 `work dig` 一处。
 - **与设计稿的出入**:生存清场的格要身上有收得下它的工具才挖(与 `work dig` 同一条工具规矩),没有就如实报,不再像原来那样空手
   毁掉;创造清场是"写成空气再落位",与原版创造一下就碎、再放一块同一个结果。
+
+### 第 5 步:路线成了一张描述(10-03)
+
+- **路线不存**:`Itinerary`、`Routes`(按主人的 SavedData)、`route new/via/drop/spec/show/list/delete/reverse`、路线标志的翻译
+  (`RouteFlags`、`RouteSpecFlags`、`RouteOps`、`RoutePlanning`)、`move goto` 的匿名路线 `goto-<名字>`、`area add --route` 都删了。
+  Lua 程序自己就有变量,一趟路是一张表(`core/route/Description`):去处与途经点(`to`、`stops`,途经点 `type = "through"` 路过不停、
+  `"stop"` 先停稳)、移动方式(`mode`:`walk` 或 `boat`)、偏好旋钮(`costs`)、避开(`avoid`、`avoid_break/place/step`)、
+  放开(`allow`)、垫路料(`materials`)。没有备选路线。去处与避开不收名字,收一格、一个盒子(两个 Pos)、带 `cells` 的表。
+- **计划**:`route.plan(描述)` 只规划不动,交回 `Plan`(`ok`、`why`、`spec`、`from`、`steps`、`seconds`、每站一段的 `legs`,段里有
+  `path`、`breaks`、`places`、`asks`)。走不通不抛,`ok = false` 加 `why`。计划按这段程序记在她身上(`Plans`,键是工具调用的程序号),
+  下一段程序里就没了。`move.go(plan)` 照它走,承诺照旧(`Plan.bind`、`Plan.beyond`)。
+- **`alter` 拆成三个开关**:`costs = {dig, place, consent}`,寻路规格是 `RouteSpec.dig/place/consent/consentMultiplier`
+  (`pathing.md`"规格的三个开关与越界才问")。
+- **权限的时机**:开走前把要问的格一次问完那一步删了(它只为权限而在)。规划时要问的格照 `consent` 计价并列进 `asks`;走到那一格
+  跟前才问,答应接着走,拒绝在那里以 `denied` 收场,`hint` 是加上 `avoid` 再规划的那一行。
+- **`move goto` → `move.to`**:库函数(`modules/move.lua`),等于 `route.plan` 加 `move.go`;同一处还有 `move.flee`(`arrive = "away"`)、
+  `move.explore`。到达方式 `reach` 改名 `place`,`near` 的选项 `near` 改名 `range`,新增 `away`。新增 `move.dismount()`;
+  `move.follow` 总有结束(`seconds` 默认 60)。
+- **垫路料**:`throwaway` 组与名册里那份清单删了,每趟在描述的 `materials` 里写,不写就是标签 `#numen:throwaway` 的普通方块。
+- **测试**:`RouteGameTests`、`PermissionGameTests` 的走路几条、`AreaRouteGameTests` 改成描述的写法;区域被删时路线怎么说的那条随
+  名字一起删了。
 
 ## 十一、挖掘统一(09-30 定)
 

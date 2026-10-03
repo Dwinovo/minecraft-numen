@@ -464,7 +464,7 @@ public final class NumenCli {
     }
 
     /**
-     * 名字({@code numen}、{@code numen.move}、{@code numen.move.go}、{@code numen.move.goto_}、{@code my.lumber}、
+     * 名字({@code numen}、{@code numen.move}、{@code numen.move.go}、{@code numen.move.to}、{@code my.lumber}、
      * {@code my.lumber.chop})指的名字空间、组、模块或函数的帮助;不认得是 null。和组同名的模块的函数在那一组的帮助里。
      */
     static String help(String name, Modules modules) {
@@ -594,7 +594,7 @@ public final class NumenCli {
         }
     }
 
-    /** 内置模块里有没有定义这个函数(相关动作可以指向模块函数,写法同动作的路径:{@code "numen move goto_"})。 */
+    /** 内置模块里有没有定义这个函数(相关动作可以指向模块函数,写法同动作的路径:{@code "numen move to"})。 */
     private static boolean definedInLibrary(String path) {
         return libraryFunctions(Modules.factory()).containsKey(ScriptEngine.IN_USE.pathName(path.replace(' ', '.')));
     }

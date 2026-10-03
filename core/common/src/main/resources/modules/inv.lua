@@ -28,7 +28,7 @@ end
 
 -- walk to a block and right-click it open; a block that opens no window raises failed
 local function open(at)
-  numen.move.goto_(at, {arrive = "use"})
+  numen.move.to(at, {arrive = "use"})
   local w = numen.use.block(at)
   if not w.slots then
     local p = at.pos or at
@@ -180,13 +180,13 @@ function M.smelt(furnace, item, count, opts)
 end
 
 ---Give count of item (all you carry by default) to a player or another entity: walk within 2 blocks of them
----(numen.move.goto_ with arrive "near") and drop it there for them to pick up.
+---(numen.move.to with arrive "near") and drop it there for them to pick up.
 ---@param target Entity|Pos Who gets it (an Entity from numen.scan.entities, or where they stand).
 ---@param item string
 ---@param count? integer
 ---@return integer dropped How many it dropped.
 function M.give(target, item, count)
-  numen.move.goto_(target.pos or target, {arrive = "near", near = 2})
+  numen.move.to(target.pos or target, {arrive = "near", range = 2})
   if count then
     return numen.inv.drop(id(item), {count = count}).dropped
   end

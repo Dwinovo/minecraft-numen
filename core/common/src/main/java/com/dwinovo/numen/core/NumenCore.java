@@ -103,8 +103,6 @@ public final class NumenCore {
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.work.WorkCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.inventory.GearCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.work.BuildCommands::install);
-        // throwaway 组连同它挂进身体状态的那一段
-        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.work.ThrowawayCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.interact.UseCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.interact.GuiCommands::install);
         com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, com.dwinovo.numen.core.tools.inventory.InvCommands::install);

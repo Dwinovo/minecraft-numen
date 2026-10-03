@@ -44,6 +44,7 @@ import net.minecraft.world.phys.Vec3;
  *
  * <h2>到达</h2>
  * 路线走完、身体在终点上停稳,只看目标自己的判定;目标要求看得见某一格时,在活世界上复核视线。模块里没有"差不多到了"。
+ * 路过的导航({@link com.dwinovo.numen.pathing.api.NavRequest#through})不停稳:身体走到终点、在目标里就算到了,键按着交给下一次导航。
  *
  * <h2>规划的结论</h2>
  * 搜索没有交出路线时,段状态机只交出那次搜索的停因与输入({@link Halt.Searched}),为什么没路由门面在同一份快照上诊断。
@@ -95,6 +96,8 @@ public final class Driver {
     private final Rig rig;
     private final RouteSpec spec;
     private final int budget;
+    /** 路过这个目标,不停下。 */
+    private final boolean passing;
     private final Watchdog watchdog = new Watchdog();
     private Goal goal;
 
@@ -130,14 +133,16 @@ public final class Driver {
 
     /**
      * @param budget 每次搜索最多展开几个节点
-     * @param seed   先照这条路走(调用方从候选里挑的);没有为 null。它只是第一段,走不下去照样按目标与规格重搜
+     * @param seed    先照这条路走(调用方从候选里挑的);没有为 null。它只是第一段,走不下去照样按目标与规格重搜
+     * @param passing 路过这个目标:走进去就算到了,不停稳
      */
     public Driver(Body body, Effector hands, TerrainPolicy terrain, Materials materials, Threats threats, Goal goal,
-                  RouteSpec spec, int budget, Route seed) {
+                  RouteSpec spec, int budget, Route seed, boolean passing) {
         this.rig = new Rig(body, hands, terrain, materials, threats);
         this.goal = goal;
         this.spec = spec;
         this.budget = budget;
+        this.passing = passing;
         if (seed != null) {
             install(seed, goalHas(seed.end(), seed.endStance()));
         }
@@ -476,12 +481,20 @@ public final class Driver {
 
     // ==================== 到达 ====================
 
-    /** 路线走完了:在终点上停稳,再看目标自己的判定与视线。 */
+    /** 路线走完了:在终点上停稳,再看目标自己的判定与视线;路过的导航走进目标就算到了。 */
     private void arrive(BlockPos node) {
         ServerPlayer body = rig.entity;
         BlockPos end = legs.isEmpty() ? start : legs.get(legs.size() - 1).maneuver().to();
         Stance endStance = legs.isEmpty() ? startStance : legs.get(legs.size() - 1).maneuver().landing();
         step = null;
+        if (passing && node != null) {
+            Stance passed = Stance.at(rig.world(), rig.snapshot().stats(), node);
+            if (passed != null && goal.contains(node.getX(), node.getY(), node.getZ(), passed)) {
+                PathLog.debug("{} 路过 {},不停", rig.who, PathLog.pos(node));
+                state = State.ARRIVED;
+                return;
+            }
+        }
         rig.keys.release(Key.SPRINT);
         rig.keys.release(Key.JUMP);
         rig.keys.set(Key.SNEAK, endStance.kind() == Stance.Kind.CLIMBING);

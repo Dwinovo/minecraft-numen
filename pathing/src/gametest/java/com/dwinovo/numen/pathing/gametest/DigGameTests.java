@@ -59,7 +59,7 @@ public class DigGameTests {
 
     private static final String BATCH = "pathing_dig";
 
-    private static final RouteSpec NATURAL = RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build();
+    private static final RouteSpec NATURAL = RouteSpec.defaults().edit().changes(true).consent(false).build();
 
     @BeforeBatch(batch = BATCH)
     public static void settle(ServerLevel level) {
@@ -109,7 +109,7 @@ public class DigGameTests {
     }
 
     /**
-     * 三格高的泥土墙横贯场地,手上木锹,许改自然地形:挖开身体高的两格穿过去。上一格碎了之后手要缓几刻(原版客户端的
+     * 三格高的泥土墙横贯场地,手上木锹,许挖许放:挖开身体高的两格穿过去。上一格碎了之后手要缓几刻(原版客户端的
      * {@code destroyDelay})才开挖下一格,缓的正是规划给挖一格定价时加上的那几刻({@link DigTime#cooldown})。
      */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
@@ -498,7 +498,7 @@ public class DigGameTests {
     }
 
     /**
-     * 脚下四十层石头,正下方二十七格深处埋着一块铁矿,手上一把铁镐,许改自然地形。挖一格的价钱是估价里落一格的十几倍,
+     * 脚下四十层石头,正下方二十七格深处埋着一块铁矿,手上一把铁镐,许挖许放。挖一格的价钱是估价里落一格的十几倍,
      * 估价加上埋深(绕不开的挖掘)之后,出厂预算的一次规划就搜到头,路线从脚下直直往下挖;照着这条路走,挖到够得着它。
      */
     @GameTest(template = TALL, batch = BATCH, timeoutTicks = 1600)

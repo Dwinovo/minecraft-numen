@@ -52,7 +52,7 @@ import java.util.regex.Pattern;
  * <h2>模块</h2>
  * 宿主可以给一个模块来源({@link Builder#modules}):模块是一段返回一张函数表的正文,名字也是一条路径({@code numen.work}、
  * {@code my.lumber}),脚本里就按这条路径用({@code my.lumber.chop(…)})。第一次用到时才向来源要正文、在同一个全局环境里跑一遍,所以
- * 每次运行拿到的都是来源此刻的那一份。路径上已经有一张宿主函数表的模块不另占名字,它的函数加进那张表({@code numen.move.goto_} 就是
+ * 每次运行拿到的都是来源此刻的那一份。路径上已经有一张宿主函数表的模块不另占名字,它的函数加进那张表({@code numen.move.to} 就是
  * 这样进 {@code numen.move} 的)。没用到的模块不读;一个模块读不通、跑出错、没返回表,出错的是用到它的那一行。读一张表里没有的名字、
  * 或一个既不是全局也不是模块的名字就是错({@link Builder#missing}、{@link Builder#unknown} 给那句话,写错的名字当场说有哪些)。
  * 行号只记脚本自己那一段:模块里的函数调宿主函数时,{@link #currentLine} 说的是脚本里调这个模块函数的那一行,结局停在的也是脚本里的
@@ -61,12 +61,13 @@ import java.util.regex.Pattern;
  * <h2>宿主登记的名字钉死</h2>
  * 宿主登记的全局函数、路径上的每一张表,以及表里的每个宿主函数,脚本都换不掉、遮不住:{@code numen = {}}、
  * {@code numen.move = {}}、{@code function numen.move.go() end}、{@code rawset(numen.move, "go", f)} 一律在那一行报错(那句话由
- * {@link Builder#redefined} 给)。往宿主的表里加别的名字照常(模块就是这样往 {@code numen.move} 里加 {@code goto_} 的)。
+ * {@link Builder#redefined} 给)。往宿主的表里加别的名字照常(模块就是这样往 {@code numen.move} 里加 {@code to} 的)。
  *
  * <h2>桥接</h2>
  * 宿主函数按 {@code 表的路径.函数名}(或全局名)登记,收按顺序的参数、交回一个值;值在两边按 {@link #toJava}/{@link #toLua} 换:nil 是
  * null,布尔、数(整数是 Long,其余是 Double)、字符串,表是列表(键恰好 1..n)或名字到值的表。宿主函数抛 {@link ScriptError}
- * 就是脚本在调用处得到的一个 Lua 错误({@code pcall} 接得住)。
+ * 就是脚本在调用处得到的一个 Lua 错误({@code pcall} 接得住)。宿主交来的 {@link Folded} 是一张收着几个字段的表:那几个字段挂在元表的
+ * {@code __index} 上,脚本照常读得到,{@code pairs} 与印出来(回到 {@link #toJava})都不带它们。
  *
  * <h2>带方法的值</h2>
  * 宿主交回的值里可以有 {@link Instance}:一个值,加上它是哪个类、类的方法写在哪个模块里。换成 Lua 值时,那个模块里与类同名的表
@@ -845,6 +846,9 @@ public final class LuaSandbox {
                 }
                 return t;
             }
+            if (o instanceof Folded folded) {
+                return folded((LuaTable) lua(folded.shown()), lua(folded.folded()));
+            }
             if (o instanceof Map<?, ?> map) {
                 LuaTable t = new LuaTable();
                 map.forEach((k, v) -> t.rawset(String.valueOf(k), lua(v)));
@@ -1029,6 +1033,21 @@ public final class LuaSandbox {
     }
 
     /** Java 值换成 Lua 值:null、布尔、数、字符串、列表、名字到值的表。 */
+    /**
+     * 一张收着几个字段的表:{@code shown} 是表自己的字段,{@code folded} 里的字段读得到({@code t.path}),不出现在 {@code pairs}
+     * 与印出来的样子里——大而少用的字段(一条路的每一步)不把回执撑满。
+     */
+    public record Folded(Map<String, Object> shown, Map<String, Object> folded) {}
+
+    /** 表自己的字段是 {@code shown},收起来的那几个挂在元表的 {@code __index} 上。 */
+    private static LuaTable folded(LuaTable shown, LuaValue folded) {
+        LuaTable meta = new LuaTable();
+        meta.rawset(LuaValue.INDEX, folded);
+        shown.setmetatable(meta);
+        return shown;
+    }
+
+    /** Java 值换成 Lua 值:null、布尔、数、字符串、列表、名字到值的表、收着几个字段的表({@link Folded})。 */
     public static LuaValue toLua(Object o) {
         if (o == null) {
             return LuaValue.NIL;
@@ -1052,6 +1071,9 @@ public final class LuaSandbox {
                 t.rawset(i + 1, toLua(list.get(i)));
             }
             return t;
+        }
+        if (o instanceof Folded folded) {
+            return folded((LuaTable) toLua(folded.shown()), toLua(folded.folded()));
         }
         if (o instanceof Map<?, ?> map) {
             LuaTable t = new LuaTable();

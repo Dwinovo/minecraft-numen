@@ -62,7 +62,7 @@ public final class InteractAtTaskRecord extends TaskRecord {
                     + " is a consumable — use numen.inv.eat (using it through the world body wouldn't heal you).";
         }
         if (item == Items.ENDER_PEARL) {
-            return "ender_pearl teleportation is body-bound and not supported — to travel use numen.move.goto_, "
+            return "ender_pearl teleportation is body-bound and not supported — to travel use numen.move.to, "
                     + "to find a stronghold use numen.locate.structure(\"minecraft:stronghold\").";
         }
         return null;

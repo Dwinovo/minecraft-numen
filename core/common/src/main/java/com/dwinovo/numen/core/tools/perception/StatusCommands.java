@@ -10,7 +10,7 @@ import com.dwinovo.numen.core.tools.PerceptionOps;
 
 /**
  * {@code status}:她此刻的身体、主人、世界。三个动作都在服务端当场读、当场回,不占身体、不动世界;脚本拿到的是那份读数,位置是
- * Pos,原样就能交给要一格的参数({@code numen.move.goto_(numen.status.owner().pos)})。
+ * Pos,原样就能交给要一格的参数({@code numen.move.to(numen.status.owner().pos)})。
  */
 public final class StatusCommands {
 

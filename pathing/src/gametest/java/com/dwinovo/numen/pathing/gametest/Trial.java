@@ -262,8 +262,8 @@ final class Trial {
                java.util.function.BiPredicate<BlockState, BlockState> passive, java.util.Set<BlockPos> others) {
         Map<BlockPos, BlockState> last = new HashMap<>();
         for (EditLedger.Entry e : entries) {
-            if (!spec.alter().mayAlter() && !(e instanceof EditLedger.Toggled)) {
-                throw new GameTestAssertException("alter=none,却在 " + rel(e.pos()) + " 改了地形:" + e);
+            if (!spec.changes() && !(e instanceof EditLedger.Toggled)) {
+                throw new GameTestAssertException("不许挖也不许放,却在 " + rel(e.pos()) + " 改了地形:" + e);
             }
             last.put(e.pos(), switch (e) {
                 case EditLedger.Dug d -> null;

@@ -2,20 +2,17 @@ package com.dwinovo.numen.core.nav;
 
 import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.core.init.InitTag;
-import com.dwinovo.numen.entity.CompanionRegistry;
 
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 
 import java.util.ArrayList;
@@ -27,135 +24,66 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 她的 throwaway 清单:赶路时愿意消耗掉的方块(名字取 Baritone 的 acceptableThrowawayItems)——<b>每个同伴一份,落盘</b>。
- * 垫柱子、搭桥、铺台阶都从这里取料,反射(逃跑/脱困/摔落自救)走的也是这一份。这是她自己的设置,由
- * {@code throwaway} 命令组增删;清单现状每轮挂在她的身体状态里({@link #bodyState})。
+ * 垫路料:一趟路往上垫柱、过沟搭桥时愿意消耗掉的方块(名字取 Baritone 的 acceptableThrowawayItems)。哪几种由这一趟的路线描述写
+ * ({@code numen.route.plan} 的 {@code materials},按先后就是挑的先后);没写的是出厂那一份({@link #factory}),反射(逃跑、脱困、摔落自救)
+ * 走的也是它。料是这一趟的事,不记在她身上。
  *
- * <h2>为什么不是一份硬编码清单</h2>
- * "什么东西是垃圾"没法预先枚举:模组世界里她背包里堆的石头我们一个都不认识,而同一块
- * 圆石在矿洞里是垃圾、背到末地就是唯一的垫路料。所以清单归她自己管——模型看着背包和
- * 当下的处境用 {@code throwaway add} 这一组命令增删,断料时的回执会把候选一并递到它面前。
- *
- * <h2>空表就是空表</h2>
- * 清空之后她一块都不垫——那是模型可以做的决定(背包里那些泥土留着盖房子),后果可见也可撤回。
- * "没设过"由 {@link CompanionRegistry#DEFAULT_THROWAWAY} 在读取时兜住,不靠空表兼职表达。
- *
- * <h2>出厂默认的选料判据</h2>
- * 遍地都是、没有功能、<b>放下去不会掉</b>——重力方块(沙/砂砾)一个不要,垫在半空会直接
- * 落下去。清单本身跟着同伴落盘,住在 {@link CompanionRegistry}。
+ * <h2>出厂那一份的判据</h2>
+ * 标签 {@code numen:throwaway}:遍地都是、没有功能、<b>放下去不会掉</b>——重力方块(沙、砂砾)一个不要,垫在半空会直接落下去。
+ * 标签内容来自数据包,每次现查,{@code /reload} 改了下一趟就生效;整合包改这个标签就改掉所有同伴的出厂料。
  */
 public final class ThrowawayBlocks {
 
     private ThrowawayBlocks() {}
 
-    /** 出厂默认的 id 形式。 */
-    public static List<String> factoryDefaultIds() {
-        return CompanionRegistry.DEFAULT_THROWAWAY;
-    }
-
-    /** 这个同伴实际认可的 throwaway 方块。清空过就是空表——她垫不了任何东西,如她所愿。 */
-    public static List<Item> of(ServerPlayer player) {
-        Set<Item> out = new LinkedHashSet<>();   // 标签之间会重叠,去重且保序
-        for (String entry : storedIds(player)) {
-            out.addAll(expand(entry));
+    /** 出厂的那一份:标签 {@code numen:throwaway} 此刻的成员。 */
+    public static List<Item> factory() {
+        List<Item> out = new ArrayList<>();
+        for (Holder<Item> holder : BuiltInRegistries.ITEM.getTagOrEmpty(InitTag.THROWAWAY)) {
+            out.add(holder.value());
         }
         return List.copyOf(out);
     }
 
-    /** 同上,但给出 id 形式(工具回执用)。 */
-    public static List<String> effectiveIds(ServerPlayer player) {
-        return of(player).stream().map(ThrowawayBlocks::idOf).toList();
-    }
-
-    /** 存储里那份原样。同伴还没落盘(无头测试的空壳身体)时给出厂默认。 */
-    public static List<String> storedIds(ServerPlayer player) {
-        CompanionRegistry.Entry entry = entry(player);
-        return entry == null ? CompanionRegistry.DEFAULT_THROWAWAY : entry.throwaway();
-    }
-
     /**
-     * 落盘这份清单。传空表 = 清空,她从此垫不了路;无效 id 直接丢掉,调用方回执报的是落盘后
-     * 读回来的实际结果,不是它请求的那份。
-     */
-    public static void store(ServerPlayer player, List<String> ids) {
-        MinecraftServer server = serverOf(player);
-        if (server == null) {
-            return;
-        }
-        CompanionRegistry registry = CompanionRegistry.get(server);
-        CompanionRegistry.Entry entry = registry.find(player.getUUID());
-        if (entry == null) {
-            return;
-        }
-        registry.put(player.getUUID(), entry.withThrowaway(normalize(ids)));
-    }
-
-    /**
-     * 去重、丢掉认不出的、保持给定顺序。<b>标签原样留着</b>不展开:她写 {@code #c:stones}
-     * 是想说"这个包里的石头都算",展开存下来就冻在了此刻,数据包再改也跟不上。
-     */
-    public static List<String> normalize(List<String> ids) {
-        if (ids == null) {
-            return List.of();
-        }
-        Set<String> out = new LinkedHashSet<>(ids.size());
-        for (String raw : ids) {
-            if (raw == null || raw.isBlank()) {
-                continue;
-            }
-            String trimmed = raw.trim().toLowerCase(java.util.Locale.ROOT);
-            if (InitTag.parseRef(Registries.ITEM, trimmed) != null) {
-                out.add(trimmed);   // 认得出是标签形式就留着,内容留到用时再查
-                continue;
-            }
-            Item item = parse(trimmed);
-            if (item != null && item != Items.AIR) {
-                out.add(idOf(item));
-            }
-        }
-        return List.copyOf(out);
-    }
-
-    /** {@code stone} 与 {@code minecraft:stone} 都收;认不出返回 null。标签走 {@link #expand}。 */
-    public static Item parse(String raw) {
-        if (raw == null || raw.isBlank()) {
-            return null;
-        }
-        ResourceLocation id = ResourceLocation.tryParse(raw.trim().toLowerCase(java.util.Locale.ROOT));
-        if (id == null) {
-            return null;
-        }
-        return BuiltInRegistries.ITEM.getOptional(id).orElse(null);
-    }
-
-    /**
-     * 一个条目展开成它代表的物品:{@code #ns:path} 是标签(当下的全部成员),否则是单个 id。
-     * 空表示认不出来。
+     * 写下的几项展开成物品,保持先后、去掉重复:{@code #ns:path} 是标签(此刻的全部成员),否则是一个方块物品的 id
+     * ({@code cobblestone} 与 {@code minecraft:cobblestone} 都收)。
      *
-     * <p>每次调用现查标签,所以 {@code /reload} 改了数据包下一次就生效——展开一次存起来
-     * 就等于把标签冻在了那一刻。
+     * @throws IllegalArgumentException 有一项认不出、标签是空的、或不是能放下的方块:说是哪一项
      */
-    private static List<Item> expand(String raw) {
-        TagKey<Item> tag = InitTag.parseRef(Registries.ITEM, raw);
-        if (tag != null) {
-            List<Item> out = new ArrayList<>();
-            for (Holder<Item> holder : BuiltInRegistries.ITEM.getTagOrEmpty(tag)) {
-                out.add(holder.value());
+    public static List<Item> of(List<String> written) {
+        Set<Item> out = new LinkedHashSet<>();
+        for (String raw : written) {
+            String entry = raw.trim().toLowerCase(java.util.Locale.ROOT);
+            TagKey<Item> tag = InitTag.parseRef(Registries.ITEM, entry);
+            if (tag != null) {
+                int before = out.size();
+                for (Holder<Item> holder : BuiltInRegistries.ITEM.getTagOrEmpty(tag)) {
+                    if (holder.value() instanceof BlockItem) {
+                        out.add(holder.value());
+                    }
+                }
+                if (out.size() == before) {
+                    throw new IllegalArgumentException("materials: tag '" + raw + "' has no blocks to place");
+                }
+                continue;
             }
-            return out;
+            ResourceLocation id = ResourceLocation.tryParse(entry);
+            Item item = id == null ? null : BuiltInRegistries.ITEM.getOptional(id).orElse(null);
+            if (!(item instanceof BlockItem)) {
+                throw new IllegalArgumentException("materials: '" + raw + "' is not a block you can place — give "
+                        + "block ids like minecraft:cobblestone or tags like #minecraft:dirt");
+            }
+            out.add(item);
         }
-        Item item = parse(raw);
-        return item == null || item == Items.AIR ? List.of() : List.of(item);
+        return List.copyOf(out);
     }
 
-    // ==================== 垫路料 ====================
-
     /**
-     * 端口 {@link com.dwinovo.numen.pathing.plan.Materials} 的答案:下一次垫路会放下哪种方块——按清单的先后,主背包或副手里
-     * 有哪一种就是哪一种;免耗材画像(创造)下清单不空,就是清单第一种(寻路拿到手上时凭空取一叠)。只看不拿;没有料可垫为空。
+     * 端口 {@link com.dwinovo.numen.pathing.plan.Materials} 的答案:下一次垫路会放下哪种方块——按 {@code list} 的先后,主背包或
+     * 副手里有哪一种就是哪一种;免耗材画像(创造)下就是清单第一种(寻路拿到手上时凭空取一叠)。只看不拿;没有料可垫为空。
      */
-    public static Optional<Block> next(ServerPlayer player) {
-        List<Item> list = of(player);
+    public static Optional<Block> next(ServerPlayer player, List<Item> list) {
         Inventory inventory = player.getInventory();
         for (Item item : list) {
             if (item instanceof BlockItem block && (inventory.contains(new ItemStack(item))
@@ -178,30 +106,15 @@ public final class ThrowawayBlocks {
     }
 
     /**
-     * 走不通时的那句话——只在<b>确实一件垫路料都没有</b>时给出,否则返回 null(路走不通是别的
-     * 原因,别把模型往岔路上引)。
-     *
-     * <p>光说"没料"没用:清单是她自己定的,背包里那 184 块模组花岗岩她也看不见。所以两样都端
-     * 出来,让"清单漏了"从死路变成一个能自己走出去的岔路口。背包里的方块一样不落地列:种数不会多过背包的格数。
+     * 每条路都要垫方块而身上一件料都没有时的那句话:这一趟能垫哪几种,背包里带着哪些别的方块——要用哪种,写进这一趟的
+     * {@code materials}。背包里的方块一样不落地列:种数不会多过背包的格数。
      */
-    public static String shortageAdvice(ServerPlayer player) {
-        List<Item> accepted = of(player);
-        if (accepted.isEmpty()) {
-            return " Your throwaway list is EMPTY, so pathfinding may not place a single block —"
-                    + " no pillaring, bridging or stepping up. That was your own call; put blocks"
-                    + " back with `numen.throwaway.add` if this route needs them.";
-        }
-        var inv = player.getInventory();
+    public static String shortageAdvice(ServerPlayer player, List<Item> list) {
+        Inventory inv = player.getInventory();
         Map<String, Integer> spare = new LinkedHashMap<>();
         for (int i = 0; i < inv.getContainerSize(); i++) {
             ItemStack stack = inv.getItem(i);
-            if (stack.isEmpty()) {
-                continue;
-            }
-            if (accepted.contains(stack.getItem())) {
-                return null;   // 有料,走不通是别的原因
-            }
-            if (stack.getItem() instanceof BlockItem) {
+            if (!stack.isEmpty() && stack.getItem() instanceof BlockItem && !list.contains(stack.getItem())) {
                 spare.merge(idOf(stack.getItem()), stack.getCount(), Integer::sum);
             }
         }
@@ -210,43 +123,14 @@ public final class ThrowawayBlocks {
                 .map(e -> e.getKey() + "×" + e.getValue())
                 .reduce((a, b) -> a + ", " + b)
                 .orElse("");
-        StringBuilder out = new StringBuilder(" You are carrying NONE of your throwaway blocks (")
-                .append(String.join(", ", effectiveIds(player)))
-                .append("), so pathfinding could not pillar, bridge or step anywhere.");
+        String allowed = list.isEmpty() ? "none" : String.join(", ", list.stream().map(ThrowawayBlocks::idOf).toList());
+        StringBuilder out = new StringBuilder(" I carry none of the blocks this walk may spend (").append(allowed)
+                .append(").");
         if (carrying.isEmpty()) {
-            return out.append(" Mine some of those blocks first.").toString();
+            return out.append(" Get some of those blocks first.").toString();
         }
-        return out.append(" You ARE carrying: ").append(carrying)
-                .append(". Add what you are willing to spend with `numen.throwaway.add`, or go mine "
-                        + "something already on the list.").toString();
-    }
-
-    /**
-     * 身体状态里的那一段:{@code <throwaway>cobblestone, dirt, create:limestone</throwaway>}。每轮挂进
-     * {@code <runtime_state>},{@code status self} 也照抄,清单现状只从这里读。原版的 id 省掉命名空间(命令里照样认),
-     * 模组的带着;清空了就说清后果。只随清单(或标签内容)变,不会每刻都推包。
-     */
-    public static String bodyState(ServerPlayer player) {
-        List<Item> items = of(player);
-        if (items.isEmpty()) {
-            return "<throwaway>empty: you place no blocks while moving</throwaway>";
-        }
-        StringBuilder out = new StringBuilder("<throwaway>");
-        for (int i = 0; i < items.size(); i++) {
-            ResourceLocation id = BuiltInRegistries.ITEM.getKey(items.get(i));
-            out.append(i == 0 ? "" : ", ")
-                    .append(id.getNamespace().equals(ResourceLocation.DEFAULT_NAMESPACE) ? id.getPath() : id.toString());
-        }
-        return out.append("</throwaway>").toString();
-    }
-
-    /** 没有世界的空壳身体(无头测试、构造中途)一律当"没定制过"——回落出厂默认,不炸。 */
-    private static MinecraftServer serverOf(ServerPlayer player) {
-        return player == null || player.level() == null ? null : player.level().getServer();
-    }
-
-    private static CompanionRegistry.Entry entry(ServerPlayer player) {
-        MinecraftServer server = serverOf(player);
-        return server == null ? null : CompanionRegistry.get(server).find(player.getUUID());
+        return out.append(" I do carry ").append(carrying)
+                .append(": name the ones to spend in the walk's materials, e.g. materials = {\"")
+                .append(spare.keySet().iterator().next()).append("\"}.").toString();
     }
 }

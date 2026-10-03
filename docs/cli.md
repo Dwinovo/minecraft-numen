@@ -600,7 +600,7 @@ gt_long lingre 40
 | | mine、collect_items、fish | `work dig`(09-30 起;原 `work mine`)、`work collect`、`work fish` | work_dig |
 | | attack | `fight attack` | |
 | | blueprint、blueprint_read、build | `build` 组(本批,见下) | |
-| | scaffold_materials | `throwaway` 组(见下) | |
+| | scaffold_materials | `throwaway` 组(见下;10-03 起是一趟路描述里的 `materials`) | |
 
 - A 批给参数类型补了小数、几个固定值之一、id 或 `#标签`、一串值(附录 B 的几种之外);C 批让一串值读到下一个标志为止,
   所以它也能当标志(`--avoid_break a b --count 3`),并补了方块或坐标格类型(路线规格的禁令)。
@@ -752,6 +752,9 @@ shed#1: built 18/22 block(s); placed 0, cleared 0 (left 4 cell(s) alone because 
 读回来还是同一栋、同样的格子。设计删掉,房子照样在 `build built` 里,写明它的设计已删。
 
 ### throwaway:她赶路时愿意消耗的方块
+
+10-03 起这一组删了:垫路料不再是挂在她身上、跟着名册落盘的一份清单,而是每一趟路描述里的 `materials`(不写就是标签
+`numen:throwaway` 的普通方块,`ThrowawayBlocks.factory`),见 `shell.md` §十。下面是当时的设计。
 
 寻路往上垫柱、过沟搭桥时愿意消耗掉的那份方块清单,是她自己的一项设置,单独一组 `throwaway`(名字取 Baritone 的
 acceptableThrowawayItems;不叫 scaffold,免得和原版的脚手架方块混在一起)。代码、命令、状态、存档用同一个词:
@@ -1476,17 +1479,17 @@ area has ores/g2                 成功:ores/g2 has 1 cell(s) left to dig, the n
 
 | 组 | 动作(原子) | 删掉或搬走的 | 组合它的库函数 |
 |---|---|---|---|
-| move | `go`(照规划好的路线走)、`follow`(跟一个实体,走远/没了/超时收尾) | `goto` 动作(规划+走) | `move.goto_` = `route.new` + `route.plan` + `move.go` |
-| route | `new`、`via`、`drop`、`spec`、`plan`(只规划不动)、`show`、`list`、`delete`、`reverse` | — | — |
-| work | `dig`(手够得着的)、`fish` | `collect` 动作 | `work.collect` = `scan.entities("item")` + 一件件 `move.goto_` |
+| move | `go`(照一份计划走)、`follow`(跟一个实体,总有结束)、`dismount`(下坐骑) | `goto` 动作(规划+走) | `move.to` = `route.plan` + `move.go`;`move.flee`、`move.explore` |
+| route | `plan`(收一张描述,只规划不动,交回计划) | `new`、`via`、`drop`、`spec`、`show`、`list`、`delete`、`reverse`(10-03,路线不存) | — |
+| work | `dig`(手够得着的)、`fish` | `collect` 动作 | `work.collect` = `scan.entities("item")` + 一件件 `move.to` |
 | fight | `attack`(只收一只) | "打一片"(`--entity_ids` 一串) | `fight.clear` = `scan.entities("hostile")` + 一只只 `fight.attack` |
-| build | 原语 `set/place/line/layer/cylinder/sphere/copy`、设计 `new/show/drop/designs/delete`、`at`(只放手够得着的格)、`left`(查还差什么)、`built` | `at` 的走动、绕外圈、清场(`ClearSiteTask`)、垫块记账(`DropTracker`) | `build.raise` = `build.left` + `build.at` / `move.goto_ … arrive "dig"` + `work.dig` / `move.goto_ … arrive "reach"` |
-| scan、area、locate、status、inv、use、gear、throwaway、task、script、memory、skill、todo、mc、api | 本来就是原子的,不变 | — | — |
+| build | 原语 `set/place/line/layer/cylinder/sphere/copy`、设计 `new/show/drop/designs/delete`、`at`(只放手够得着的格)、`left`(查还差什么)、`built` | `at` 的走动、绕外圈、清场(`ClearSiteTask`)、垫块记账(`DropTracker`) | `build.raise` = `build.left` + `build.at` / `move.to … arrive "dig"` + `work.dig` / `move.to … arrive "place"` |
+| scan、area、locate、status、inv、use、gear、task、script、memory、skill、todo、mc、api | 本来就是原子的,不变 | `throwaway` 组(10-03,改成描述的 `materials`) | — |
 | 插件 tlm、kaleidoscope、ysm、ftbquests | 本来就是一种意图对一个名词(喂、开界面、换装、交任务……),只改了说明与例子 | — | — |
 
-- 到达方式新增 `reach`:手够得着往那一格里放方块、不站进那一格(`Goals.place`)。
-- `build.at` 一格都够不着时当场拒(`OUT_OF_REACH`),说够不着的几格、最低最近的那一格与照抄的 `move.goto_(…, {arrive =
-  "reach"})`,要先挖开的几格与 `work.dig`;放完够得着的、还剩别的,以成功收场并在回执里说还剩什么。设计格里立着别的方块
+- 到达方式新增 `reach`(10-03 改名 `place`):手够得着往那一格里放方块、不站进那一格(`Goals.place`)。
+- `build.at` 一格都够不着时当场拒(`OUT_OF_REACH`),说够不着的几格、最低最近的那一格与照抄的 `move.to(…, {arrive =
+  "place"})`,要先挖开的几格与 `work.dig`;放完够得着的、还剩别的,以成功收场并在回执里说还剩什么。设计格里立着别的方块
   (生存)由 `work.dig` 挖,`build.*` 只放。
 - `scan.entities` 的掉落物带 `pickup_delay`(还要几刻才捡得起),位置是 Pos(附录 L)。
 - 每个调用在脚本里返回它声明的数据(附录 L)。

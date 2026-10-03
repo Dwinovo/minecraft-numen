@@ -44,8 +44,8 @@ public class AlterGameTests {
     private static final String BATCH = "pathing_alter";
     private static final String BORDER = "pathing_border";
 
-    private static final RouteSpec NATURAL = RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build();
-    private static final RouteSpec ANY = RouteSpec.defaults().edit().alter(RouteSpec.Alter.ANY).build();
+    private static final RouteSpec NATURAL = RouteSpec.defaults().edit().changes(true).consent(false).build();
+    private static final RouteSpec ANY = RouteSpec.defaults().edit().changes(true).build();
 
     @BeforeBatch(batch = BATCH)
     public static void settle(ServerLevel level) {
@@ -106,23 +106,23 @@ public class AlterGameTests {
         t.go(body, Goals.at(t.at(12, 1, 5)), RouteSpec.defaults()).within(600).arrives().then(Scenes::unaltered);
     }
 
-    /** 泥土墙横贯场地,没有口:不许改地形时报"许改自然地形就有路、要改两格",世界一格不变。 */
+    /** 泥土墙横贯场地,没有口:不许挖不许放时报"许挖许放就有路、要改两格",世界一格不变。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
     public static void needs_alter_when_it_cannot_get_around(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
         wall(t, 8, 3, Blocks.DIRT, -1);
         TestBody body = t.body(4, 1, 5);
         t.go(body, Goals.at(t.at(12, 1, 5)), RouteSpec.defaults()).within(300)
-                .fails(Outcome.NeedsAlter.class, o -> {
-                    if (o.level() != RouteSpec.Alter.NATURAL || o.alterations() <= 0) {
-                        throw new GameTestAssertException("应当是许改自然地形就有路:" + o);
+                .fails(Outcome.NeedsChanges.class, o -> {
+                    if (o.asks() || o.alterations() <= 0) {
+                        throw new GameTestAssertException("应当是许挖许放就有路:" + o);
                     }
                 });
     }
 
     // ==================== 改地形 ====================
 
-    /** 泥土墙横贯场地:许改自然地形,挖开身体高的两格穿过去,挖掉的正是墙上那两格。 */
+    /** 泥土墙横贯场地:许挖许放,挖开身体高的两格穿过去,挖掉的正是墙上那两格。 */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
     public static void digs_through_a_dirt_wall(GameTestHelper helper) {
         Trial t = new Trial(helper).floor();
@@ -220,8 +220,8 @@ public class AlterGameTests {
     }
 
     /**
-     * 关在泥土小屋里,屋子许可答"要问":{@code alter=any} 下挖出去,实际账单里列出挖的每一格与许可给的凭据;
-     * 只许改自然地形时,结局是"放宽到 any 才有路"。
+     * 关在泥土小屋里,屋子许可答"要问":把要问的格算能走时挖出去,实际账单里列出挖的每一格与许可给的凭据;
+     * 要问的格当墙时,结局是"把要问的格算能走才有路"。
      */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 500)
     public static void lists_cells_that_need_consent(GameTestHelper helper) {
@@ -243,16 +243,16 @@ public class AlterGameTests {
         TestBody other = t.body(5, 1, 20);
         t.fill(2, 1, 17, 8, 4, 23, Blocks.DIRT);
         t.fill(3, 1, 18, 7, 3, 22, Blocks.AIR);
-        t.go(other, Goals.at(t.at(12, 1, 20)), NATURAL).within(300).fails(Outcome.NeedsAlter.class, o -> {
-            if (o.level() != RouteSpec.Alter.ANY) {
-                throw new GameTestAssertException("应当是放宽到 any 才有路:" + o);
+        t.go(other, Goals.at(t.at(12, 1, 20)), NATURAL).within(300).fails(Outcome.NeedsChanges.class, o -> {
+            if (!o.asks()) {
+                throw new GameTestAssertException("应当是把要问的格算能走才有路:" + o);
             }
         });
     }
 
     /**
      * 关在没有顶的泥土围栏里(墙三格高,跳不出去),泥土许可答"要问",身上没有料:出去要么挖墙(要主人同意),要么垫柱翻过墙
-     * (要料)。只许改自然地形时,结局是"放宽到 any 才有路"——许改的不够先报,不说成没料。旁边一模一样的围栏里,带着圆石的
+     * (要料)。要问的格当墙时,结局是"把要问的格算能走才有路"——许的改动不够先报,不说成没料。旁边一模一样的围栏里,带着圆石的
      * 身体垫柱翻出去,墙一格不挖:这个场景里料确实是另一条出路。
      */
     @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 700)
@@ -264,9 +264,9 @@ public class AlterGameTests {
         t.fill(3, 1, 18, 7, 3, 22, Blocks.AIR);
         t.terrain = (change, pos, state, view) -> state.is(Blocks.DIRT) ? Permit.ask("pen") : Permit.ALLOW;
         TestBody empty = t.body(5, 1, 5);
-        t.go(empty, Goals.at(t.at(12, 1, 5)), NATURAL).within(300).fails(Outcome.NeedsAlter.class, o -> {
-            if (o.level() != RouteSpec.Alter.ANY) {
-                throw new GameTestAssertException("应当是放宽到 any 才有路:" + o);
+        t.go(empty, Goals.at(t.at(12, 1, 5)), NATURAL).within(300).fails(Outcome.NeedsChanges.class, o -> {
+            if (!o.asks()) {
+                throw new GameTestAssertException("应当是把要问的格算能走才有路:" + o);
             }
         }).then(Scenes::unaltered);
         TestBody carrying = t.body(5, 1, 20);

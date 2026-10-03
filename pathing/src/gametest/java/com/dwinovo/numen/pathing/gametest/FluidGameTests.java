@@ -101,7 +101,7 @@ public class FluidGameTests {
         t.fill(7, -1, 0, 11, -1, 39, Blocks.STONE);
         t.fill(8, 0, 0, 10, 0, 39, Blocks.LAVA);
         TestBody body = t.body(4, 1, 5);
-        t.go(body, Goals.at(t.at(14, 1, 5)), RouteSpec.defaults()).fails(Outcome.NeedsAlter.class)
+        t.go(body, Goals.at(t.at(14, 1, 5)), RouteSpec.defaults()).fails(Outcome.NeedsChanges.class)
                 .then(UpDownGameTests::unhurt);
     }
 
@@ -155,7 +155,7 @@ public class FluidGameTests {
         Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
         List<BlockPos> water = box(t, 4, -2, 3, 9, 0, 8);
-        t.go(body, Goals.at(t.at(12, 3, 5)), RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build())
+        t.go(body, Goals.at(t.at(12, 3, 5)), RouteSpec.defaults().edit().changes(true).consent(false).build())
                 .within(600).arrives().then(r -> {
                     for (var e : r.report.ledger().entries()) {
                         if (e instanceof com.dwinovo.numen.pathing.drive.EditLedger.Placed && water.contains(e.pos())) {
@@ -191,7 +191,7 @@ public class FluidGameTests {
         TestBody body = t.body(4, 1, 5);
         Trial.give(body, new ItemStack(Items.COBBLESTONE, 16));
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
-        RouteSpec spec = RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL)
+        RouteSpec spec = RouteSpec.defaults().edit().changes(true).consent(false)
                 .exclude(Semantics.Kind.WATER)
                 .bans(new com.dwinovo.numen.pathing.spec.BlockBans(java.util.Set.of(), java.util.Set.of(Blocks.WATER),
                         java.util.Set.of()))

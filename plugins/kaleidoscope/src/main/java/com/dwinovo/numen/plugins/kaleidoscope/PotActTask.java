@@ -29,7 +29,7 @@ import java.util.Map;
  * 在一格锅上做一步({@link PotAct})。
  *
  * <h2>它不走路</h2>
- * 身体必须<b>已经</b>在够得着的距离内,否则受理之前就当场拒绝、教她先 {@code numen.move.goto_}——和 {@code numen.use.block}
+ * 身体必须<b>已经</b>在够得着的距离内,否则受理之前就当场拒绝、教她先 {@code numen.move.to}——和 {@code numen.use.block}
  * 同一条规矩。这一格不是锅、配方不成,也在受理之前判({@link #prepare})。
  *
  * <h2>能不能动这口锅,权限层说</h2>
@@ -104,7 +104,7 @@ final class PotActTask implements Task {
             return TaskResult.fail(ErrorKind.OUT_OF_REACH, "the " + cooker.kind().id() + " at "
                     + Cooker.where(r.pos) + " is " + String.format("%.1f", away) + " blocks away — out of working "
                     + "reach; walk there first, then call " + KaleidoscopeCommands.line(r.act.word) + " again",
-                    "numen.move.goto_(" + Shapes.literal(r.pos) + ", {arrive = \"use\"})",
+                    "numen.move.to(" + Shapes.literal(r.pos) + ", {arrive = \"use\"})",
                     Map.of("pos", Shapes.pos(r.pos)));
         }
         return null;

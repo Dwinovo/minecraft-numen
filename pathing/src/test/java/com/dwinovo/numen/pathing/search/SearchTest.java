@@ -22,7 +22,6 @@ import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.pathing.spec.PositionCosts;
 import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
-import com.dwinovo.numen.pathing.spec.RouteSpec.Alter;
 import com.dwinovo.numen.pathing.world.Reach;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -140,7 +139,7 @@ class SearchTest {
     }
 
     /**
-     * 挖正下方二十六格深处的一格:脚下是往四面无边铺开的石头,快照与执行时一样装着周围六个区块,手上一把铁镐,许改自然地形。
+     * 挖正下方二十六格深处的一格:脚下是往四面无边铺开的石头,快照与执行时一样装着周围六个区块,手上一把铁镐,许挖许放。
      * 每挖一格的价钱是估价里落一格的十几倍,埋深把这笔绕不开的挖掘算进估价:出厂预算内搜到头,路线从脚下直直往下挖——不在
      * 地面与每一列底下一圈圈铺开。
      */
@@ -265,7 +264,7 @@ class SearchTest {
     // ==================== 改地形与许可 ====================
 
     @Test
-    void aRouteThatMayNotAlterTerrainChangesNothing() {
+    void aRouteThatMayNotDigOrPlaceChangesNothing() {
         TestWorld world = field().fill(5, Y, -6, 5, Y + 1, 6, STONE);
         SearchResult result = search(world, defaults(), START, Goals.at(new BlockPos(10, Y, 0)));
         assertTrue(result.arrived(), "绕过去");
@@ -273,7 +272,7 @@ class SearchTest {
     }
 
     @Test
-    void aWallAcrossTheOnlyWayIsCrossedOnlyWhenTheSpecMayAlterTerrain() {
+    void aWallAcrossTheOnlyWayIsCrossedOnlyWhenTheSpecMayDig() {
         TestWorld world = corridor().fill(5, Y, 0, 5, Y + 1, 0, Blocks.DIRT.defaultBlockState());
         Goal goal = Goals.at(new BlockPos(10, Y, 0));
         assertEquals(SearchResult.Stop.EXHAUSTED, search(world, defaults(), START, goal).stop());
@@ -304,7 +303,7 @@ class SearchTest {
         assertEquals(SearchResult.Stop.EXHAUSTED, narrower.stop(), "承诺外的那一格不挖,就过不去");
     }
 
-    /** 许改自然地形,但只许挖 {@code digs}、一格都不许放。 */
+    /** 许挖许放,但只许挖 {@code digs}、一格都不许放。 */
     private static RouteSpec confined(LongSet digs) {
         return natural().edit().positions(PositionCosts.builder().confine(Use.DIG, digs)
                 .confine(Use.PLACE, LongSet.of()).build()).build();
@@ -334,7 +333,7 @@ class SearchTest {
         Goal goal = Goals.at(new BlockPos(10, Y, 0));
         CostModel naturalModel = CostModel.of(natural(), Fixtures.body(), policy, Materials.NONE, Threats.NONE);
         assertEquals(SearchResult.Stop.EXHAUSTED, search(world, naturalModel, START, goal).stop());
-        CostModel anyModel = naturalModel.withSpec(RouteSpec.defaults().edit().alter(Alter.ANY).build());
+        CostModel anyModel = naturalModel.withSpec(RouteSpec.defaults().edit().changes(true).build());
         SearchResult result = search(world, anyModel, START, goal);
         assertTrue(result.arrived());
         assertTrue(result.route().edits().stream().filter(Edit::alters)

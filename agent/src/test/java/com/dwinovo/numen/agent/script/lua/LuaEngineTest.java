@@ -188,6 +188,35 @@ class LuaEngineTest {
         assertEquals("failed", done.failure().get("kind"));
     }
 
+    /**
+     * 回执数据里收起来的字段({@link com.dwinovo.numen.agent.script.JsonValues#FOLDED} 下的):脚本照常读得到,{@code pairs} 数不到,
+     * 返回出去、印出来都不带它——一条路的每一步不把回执撑满。
+     */
+    @Test
+    void aFoldedFieldIsReadButNotListedOrReturned() {
+        ScriptRun run = run("""
+                local r = numen.work.collect()
+                local n = 0
+                for k in pairs(r) do n = n + 1 end
+                print(#r.path, r.path[1].move, n)
+                return r
+                """);
+        run.start();
+        JsonObject step = new JsonObject();
+        step.addProperty("move", "walk");
+        JsonArray path = new JsonArray();
+        path.add(step);
+        JsonObject folded = new JsonObject();
+        folded.add("path", path);
+        JsonObject data = new JsonObject();
+        data.addProperty("picked", 3);
+        data.add(com.dwinovo.numen.agent.script.JsonValues.FOLDED, folded);
+        ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(ScriptRun.Result.ok("", data)));
+        assertTrue(done.ok(), done.error());
+        assertEquals(List.of("1\twalk\t1"), printed);
+        assertEquals(Map.of("picked", 3L), done.value(), "返回出去的只有表自己的字段");
+    }
+
     /** 失败的种类与下一步跟着错误值走:脚本按 kind 分支,hint 照抄,失败时的数据在 data 里;tostring 一并写出 hint。 */
     @Test
     void aFailureCarriesItsKindHintAndData() {

@@ -102,7 +102,7 @@ public final class BuildCommands {
                         + "is still to do and where; `numen.build.raise` (library) walks the site, digs what is in "
                         + "the way and calls this until the whole building stands.")
                 .note("Background work: fails at once with kind out_of_reach when nothing of it is within reach to "
-                        + "place, with how many cells are left and a hint with the numen.move.goto_ call to the lowest "
+                        + "place, with how many cells are left and a hint with the numen.move.to call to the lowest "
                         + "nearest one; nothing starts.")
                 .note("A blueprint at the same dimension, spot and rotation is the same building: placing it again "
                         + "adds what is missing, replaces what differs, and removes only blocks you placed there before "
@@ -125,7 +125,7 @@ public final class BuildCommands {
                                 + "block to dig out first, nearest first."),
                         ScriptType.field("far", ScriptType.INTEGER, "Out of reach."),
                         ScriptType.optional("next", Shapes.POS.type(), "The lowest, then nearest, of those out of "
-                                + "reach: numen.move.goto_(d.next, {arrive = \"reach\"}) gets within reach of it."),
+                                + "reach: numen.move.to(d.next, {arrive = \"place\"}) gets within reach of it."),
                         ScriptType.optional("short", ScriptType.INTEGER, "Cells holding another block with nothing "
                                 + "of yours to put there."),
                         ScriptType.optional("unheld", ScriptType.INTEGER, "Cells that would not stay put yet: what "

@@ -165,15 +165,20 @@ public final class CommandArgs {
                 options);
     }
 
-    /** 这些参数里写了值的选项写成脚本里的一张选项表:{@code {alter = "natural"}};一个都没写是 {@code {}}。 */
+    /** 这些参数里写了值的选项写成脚本里的一张选项表:{@code {arrive = "dig"}};一个都没写是 {@code {}}。 */
     public String options(List<Param<?>> params) {
+        return com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.table(optionValues(params));
+    }
+
+    /** 这些参数里写了值的选项,名字到脚本里的值({@link ArgType#plain}),按 {@code params} 的顺序。 */
+    public Map<String, Object> optionValues(List<Param<?>> params) {
         Map<String, Object> options = new LinkedHashMap<>();
         for (Param<?> p : params) {
             if (values.containsKey(p.name()) && !p.positional()) {
                 options.put(p.name(), plain(p));
             }
         }
-        return com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.table(options);
+        return options;
     }
 
     private <T> Object plain(Param<T> param) {

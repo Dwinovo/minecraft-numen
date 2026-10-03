@@ -109,7 +109,7 @@ public final class MineIron implements Scenario {
         } else {
             program.append("""
                     while #found > 0 do
-                      numen.move.goto_(found[1].blocks, {arrive = "dig", alter = "natural"})
+                      numen.move.to(found[1].blocks, {arrive = "dig", costs = {dig = true, place = true, consent = false}})
                       numen.work.dig(found[1].blocks)
                       found = numen.scan.blocks("iron_ore", {radius = 12})
                     end
@@ -118,8 +118,8 @@ public final class MineIron implements Scenario {
         // 粗铁落在挖空的矿洞里,有的洞只有一格高、不改地形走不进去(numen.work.collect 不挖不放):站进芯的正中(挖开头顶那格)
         // 一圈都捡得到,再把剩下的捡了
         BlockPos core = scene.pos(10, 1, 10);
-        program.append("numen.move.goto_(").append(com.dwinovo.numen.cli.Shapes.literal(core))
-                .append(", {alter = \"natural\"})\n");
+        program.append("numen.move.to(").append(com.dwinovo.numen.cli.Shapes.literal(core))
+                .append(", {costs = {dig = true, place = true, consent = false}})\n");
         program.append("numen.work.collect()\n");
         return program.toString();
     }

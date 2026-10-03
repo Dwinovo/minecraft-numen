@@ -1,7 +1,5 @@
 package com.dwinovo.numen.core.nav;
 
-import com.dwinovo.numen.core.init.InitTag;
-
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Abilities;
 import net.minecraft.world.entity.player.Inventory;
@@ -15,16 +13,14 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** 垫路料清单:解析与归一,以及下一次垫路放什么。需要 MC 注册表;出厂清单的标签由测试自己绑上。 */
+/** 垫路料:描述里写的料怎么读、出厂那一份,以及下一次垫路放什么。需要 MC 注册表;出厂标签由测试自己绑上。 */
 @Tag("mc")
 class ThrowawayBlocksTest {
 
@@ -38,74 +34,45 @@ class ThrowawayBlocksTest {
         player = allocatePlayer();
     }
 
-    // ==================== id 解析 ====================
+    // ==================== 描述里写的料 ====================
 
     @Test
     void aBareNameMeansTheVanillaBlock() {
-        assertEquals(Items.COBBLESTONE, ThrowawayBlocks.parse("cobblestone"));
-        assertEquals(Items.COBBLESTONE, ThrowawayBlocks.parse("minecraft:cobblestone"));
+        assertEquals(List.of(Items.COBBLESTONE), ThrowawayBlocks.of(List.of("cobblestone")));
+        assertEquals(List.of(Items.COBBLESTONE), ThrowawayBlocks.of(List.of("minecraft:cobblestone")));
     }
 
     @Test
     void surroundingSpaceAndCaseAreForgiven() {
-        assertEquals(Items.DEEPSLATE, ThrowawayBlocks.parse("  Minecraft:DeepSlate  "));
+        assertEquals(List.of(Items.DEEPSLATE), ThrowawayBlocks.of(List.of("  Minecraft:DeepSlate  ")));
     }
 
+    /** 顺序就是选料优先级,所以不重排;重复的只留第一次出现的位置。 */
     @Test
-    void somethingThatIsNotABlockIdIsRejectedRatherThanGuessed() {
-        assertNull(ThrowawayBlocks.parse("definitely_not_a_block"));
-        assertNull(ThrowawayBlocks.parse("not a resource location"));
-        assertNull(ThrowawayBlocks.parse(""));
-        assertNull(ThrowawayBlocks.parse(null));
+    void theGivenOrderIsKeptAndARepeatIsListedOnce() {
+        assertEquals(List.of(Items.STONE, Items.DIRT, Items.COBBLESTONE),
+                ThrowawayBlocks.of(List.of("stone", "dirt", "cobblestone")));
+        assertEquals(List.of(Items.DIRT, Items.STONE),
+                ThrowawayBlocks.of(List.of("dirt", "minecraft:stone", "dirt", "minecraft:dirt")));
     }
 
-    // ==================== 归一 ====================
-
-    /** 顺序就是选料优先级,所以归一不能重排。 */
+    /** 认不出的、不是能放下的方块是描述写错了:说是哪一项,不悄悄丢掉。 */
     @Test
-    void theGivenOrderIsKeptBecauseItIsThePickingOrder() {
-        assertEquals(List.of("minecraft:stone", "minecraft:dirt", "minecraft:cobblestone"),
-                ThrowawayBlocks.normalize(List.of("stone", "dirt", "cobblestone")));
+    void somethingThatIsNotABlockToPlaceIsRefusedRatherThanDropped() {
+        assertThrows(IllegalArgumentException.class, () -> ThrowawayBlocks.of(List.of("definitely_not_a_block")));
+        assertThrows(IllegalArgumentException.class, () -> ThrowawayBlocks.of(List.of("not a resource location")));
+        assertThrows(IllegalArgumentException.class, () -> ThrowawayBlocks.of(List.of("minecraft:diamond")));
+        assertThrows(IllegalArgumentException.class, () -> ThrowawayBlocks.of(List.of("#minecraft:no_such_tag")));
     }
 
-    @Test
-    void aRepeatedBlockIsListedOnceAtItsFirstPosition() {
-        assertEquals(List.of("minecraft:dirt", "minecraft:stone"),
-                ThrowawayBlocks.normalize(
-                        List.of("dirt", "minecraft:stone", "dirt", "minecraft:dirt")));
-    }
+    // ==================== 出厂那一份 ====================
 
-    /** 认不出的悄悄丢掉,调用方回报的是落盘后读回来的那份,模型看得见自己的 id 没生效。 */
+    /** 出厂那一份是标签 numen:throwaway 此刻的成员:整合包改标签就改掉所有同伴的出厂料;标签要真的解析得开。 */
     @Test
-    void unknownIdsAreDroppedAndTheRestSurvive() {
-        assertEquals(List.of("minecraft:dirt"),
-                ThrowawayBlocks.normalize(Arrays.asList("nope:whatever", "dirt", null, "")));
-    }
-
-    @Test
-    void nothingUsableNormalisesToAnEmptyList() {
-        assertTrue(ThrowawayBlocks.normalize(List.of("nope:whatever")).isEmpty());
-        assertTrue(ThrowawayBlocks.normalize(null).isEmpty());
-    }
-
-    // ==================== 出厂默认 ====================
-
-    /**
-     * 出厂默认是一条<b>标签引用</b>,不是展开后的清单。这样整合包改
-     * {@code numen:throwaway} 就能改掉所有新同伴的起点,而静态常量读不到数据包——
-     * 存引用、用时再解析,才躲得开那个时序。清单内容本身由 datagen 那份定义,
-     * 它的判据(不含重力方块、不含有功能的方块)在 {@code ModItemTagData} 那边钉。
-     */
-    @Test
-    void theFactoryDefaultIsATagReferenceSoPacksCanChangeIt() {
-        assertEquals(List.of("#numen:throwaway"), ThrowawayBlocks.factoryDefaultIds());
-    }
-
-    /** 标签引用必须真的解析得开——认不出就等于所有新同伴一件垫路料都没有。 */
-    @Test
-    void thatReferenceResolvesToRealItems() {
-        String ref = ThrowawayBlocks.factoryDefaultIds().get(0);
-        assertNotNull(InitTag.parseRef(net.minecraft.core.registries.Registries.ITEM, ref), ref);
+    void theFactoryListIsTheThrowawayTag() {
+        assertTrue(ThrowawayBlocks.factory().containsAll(List.of(Items.DIRT, Items.COBBLESTONE)),
+                "" + ThrowawayBlocks.factory());
+        assertEquals(ThrowawayBlocks.factory(), ThrowawayBlocks.of(List.of("#numen:throwaway")));
     }
 
     // ==================== 下一次垫什么(端口 Materials 的答案) ====================
@@ -116,7 +83,7 @@ class ThrowawayBlocksTest {
         clear();
         player.getInventory().items.set(0, new ItemStack(Items.COBBLESTONE));
         player.getInventory().items.set(3, new ItemStack(Items.DIRT));
-        assertEquals(Optional.of(Blocks.DIRT), ThrowawayBlocks.next(player));
+        assertEquals(Optional.of(Blocks.DIRT), ThrowawayBlocks.next(player, ThrowawayBlocks.factory()));
     }
 
     /** 背包深处的料一样算:她能把它换进快捷栏(换的那一下由寻路交回、记进回执)。 */
@@ -124,7 +91,7 @@ class ThrowawayBlocksTest {
     void blocksDeepInTheInventoryCount() {
         clear();
         player.getInventory().items.set(30, new ItemStack(Items.COBBLESTONE));
-        assertEquals(Optional.of(Blocks.COBBLESTONE), ThrowawayBlocks.next(player));
+        assertEquals(Optional.of(Blocks.COBBLESTONE), ThrowawayBlocks.next(player, ThrowawayBlocks.factory()));
     }
 
     /** 只有副手里有料也算:原版右键主手用不了就试副手。 */
@@ -133,15 +100,15 @@ class ThrowawayBlocksTest {
         clear();
         player.getInventory().items.set(0, new ItemStack(Items.STONE_SWORD));
         player.getInventory().offhand.set(0, new ItemStack(Items.DIRT));
-        assertEquals(Optional.of(Blocks.DIRT), ThrowawayBlocks.next(player));
+        assertEquals(Optional.of(Blocks.DIRT), ThrowawayBlocks.next(player, ThrowawayBlocks.factory()));
     }
 
-    /** 背包里的方块不在清单上就不是料:清单是她自己定的,别的方块留着盖房子。 */
+    /** 背包里的方块不在这一趟的料里就不是料:别的方块留着盖房子。 */
     @Test
     void nothingOnTheListIsNothingToPlace() {
         clear();
         player.getInventory().items.set(0, new ItemStack(Items.OAK_PLANKS));
-        assertEquals(Optional.empty(), ThrowawayBlocks.next(player));
+        assertEquals(Optional.empty(), ThrowawayBlocks.next(player, ThrowawayBlocks.factory()));
     }
 
     /** 创造模式身上没有料也有:寻路拿到手上时凭空取一叠清单上的第一种。 */
@@ -150,7 +117,7 @@ class ThrowawayBlocksTest {
         clear();
         player.getAbilities().instabuild = true;
         try {
-            assertEquals(Optional.of(Blocks.DIRT), ThrowawayBlocks.next(player));
+            assertEquals(Optional.of(Blocks.DIRT), ThrowawayBlocks.next(player, ThrowawayBlocks.factory()));
         } finally {
             player.getAbilities().instabuild = false;
         }

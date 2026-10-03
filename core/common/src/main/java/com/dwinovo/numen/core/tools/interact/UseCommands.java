@@ -24,10 +24,10 @@ import net.minecraft.world.entity.Entity;
  * 上床。打开之后在界面里搬东西是 {@code gui} 那一组。
  *
  * <p>按键动作是有界短活({@code runSync}),动手前各自把动作交给权限层;上床当场回。按键动作都站在原地按:目标得在手够得着、
- * 看得见的地方,不然当场失败,说清先走过去({@code numen.move.goto_})。
+ * 看得见的地方,不然当场失败,说清先走过去({@code numen.move.to})。
  * 对准一格和不对准任何东西是两件事,拆成 {@code block} 与 {@code item} 两个动作,一个动作一个意思。右键是"用"这一组的本义,
  * 左键一下是 {@code hit};把一格挖下来是 {@code numen.work.dig}(挑工具、清挡路的),不在这一组。
- * 上床放在这一组:原版里睡觉就是用一张床,和别的"用"是同一种动作,找床与走过去仍归扫描和 {@code numen.move.goto_}。
+ * 上床放在这一组:原版里睡觉就是用一张床,和别的"用"是同一种动作,找床与走过去仍归扫描和 {@code numen.move.to}。
  */
 public final class UseCommands {
 
@@ -54,7 +54,7 @@ public final class UseCommands {
             .whenOmitted("use what you hold");
     private static final Param<Boolean> SNEAK = Param.optional("sneak", ArgType.bool(),
             "Hold sneak while pressing, as a player holds Shift and clicks; while riding, that steps you off "
-                    + "first.")
+                    + "first (move.dismount() does just that).")
             .whenOmitted("press standing");
     private static final Param<BlockPos> BED = Param.optional("at", ArgType.cell(), "The bed.")
             .whenOmitted("use whichever bed is in reach");
@@ -98,7 +98,7 @@ public final class UseCommands {
                 .note("With sneak = true and something in hand, a right click skips what the aimed block itself "
                         + "does: a block goes onto a chest instead of opening it.")
                 .note("It does NOT travel: you must already be within working reach (~4.5 blocks) of the aim "
-                        + "point; `numen.move.goto_({x = 120, y = 64, z = -35}, {arrive = \"use\"})` stands you where one of its faces "
+                        + "point; `numen.move.to({x = 120, y = 64, z = -35}, {arrive = \"use\"})` stands you where one of its faces "
                         + "is in sight and in reach. Farther away it fails and names that call.")
                 .note("It is a bare key press: whatever you hold is what is used, and the block the crosshair lands "
                         + "on is the one clicked — if something else is in the way (tall grass in front of a chest, a "
@@ -125,9 +125,9 @@ public final class UseCommands {
                 .example("numen.use.entity(812, {item = \"minecraft:shears\"})")
                 .example("numen.use.entity(812, {sneak = true})")
                 .note("It does NOT travel: an entity farther than your reach, or behind a wall, fails with where it "
-                        + "is and the numen.move.goto_ call to copy. numen.scan.entities gives its cell.")
-                .note("Right on a boat or rideable boards it: runtime_state then shows <riding>; numen.move.go pilots or "
-                        + "steps off. Never click your own vehicle again.")
+                        + "is and the numen.move.to call to copy. numen.scan.entities gives its cell.")
+                .note("Right on a boat or rideable boards it: runtime_state then shows <riding>; a plan with mode = "
+                        + "\"boat\" steers it, numen.move.dismount() steps off. Never click your own vehicle again.")
                 .seeAlso(line(BLOCK), line(HIT));
         use.server(HIT, "Left-click a cell or an entity within reach once, with what you hold.",
                 UseCommands::hit, STRUCK)
@@ -137,7 +137,7 @@ public final class UseCommands {
                 .note("One press, never held: a block that takes several hits to break is only hit once — "
                         + "`numen.work.dig` breaks blocks (best tool, the way cleared); `numen.fight.attack` fights.")
                 .note("It does NOT travel: the target must be within reach and in sight of where you stand; "
-                        + "otherwise it fails with the numen.move.goto_ call to copy.")
+                        + "otherwise it fails with the numen.move.to call to copy.")
                 .note("Hitting your owner's blocks, pets, named mobs or villagers asks your owner first; the call "
                         + "waits for the answer.")
                 .seeAlso(line(BLOCK), line(ENTITY));
@@ -148,11 +148,11 @@ public final class UseCommands {
                 .example("numen.use.sleep()")
                 .example("numen.use.sleep({at = {x = 120, y = 64, z = -35}})")
                 .note("It does NOT travel: find a bed with `numen.scan.blocks(\"#minecraft:beds\")` (that one tag covers "
-                        + "every colour), `numen.move.goto_({x = 120, y = 64, z = -35}, {arrive = \"use\"})` with its coordinates, then "
+                        + "every colour), `numen.move.to({x = 120, y = 64, z = -35}, {arrive = \"use\"})` with its coordinates, then "
                         + "call this.")
                 .note("Succeeds only when the server confirms you are sleeping; otherwise it hands back "
                         + "Minecraft's own reason. \"Only at night\" means wait (`numen.task.timer`), not retry; \"too far "
-                        + "away\" means numen.move.goto_.")
+                        + "away\" means numen.move.to.")
                 .note("Returns the moment you lie down; night passes on its own.")
                 .seeAlso("task timer");
     }

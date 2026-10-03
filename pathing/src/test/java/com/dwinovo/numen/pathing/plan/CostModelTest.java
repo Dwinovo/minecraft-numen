@@ -10,7 +10,6 @@ import com.dwinovo.numen.pathing.spec.BlockBans;
 import com.dwinovo.numen.pathing.spec.PositionCosts;
 import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
-import com.dwinovo.numen.pathing.spec.RouteSpec.Alter;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.ItemStack;
@@ -44,9 +43,9 @@ class CostModelTest {
     private static final TerrainPolicy POLICY = (change, pos, state, view) -> pos.equals(ASK) ? Permit.ask("主人的箱子")
             : pos.equals(DENY) ? Permit.deny("玩家放的") : Permit.ALLOW;
 
-    private static CostModel model(Alter alter) {
-        return CostModel.of(RouteSpec.defaults().edit().alter(alter).build(), Fixtures.body(), POLICY, Fixtures.COBBLE,
-                Threats.NONE);
+    private static CostModel model(boolean changes, boolean consent) {
+        return CostModel.of(RouteSpec.defaults().edit().changes(changes).consent(consent).build(), Fixtures.body(), POLICY,
+                Fixtures.COBBLE, Threats.NONE);
     }
 
     private static TestWorld stones() {
@@ -54,34 +53,49 @@ class CostModelTest {
     }
 
     @Test
-    void noneRefusesEverythingNaturalTakesWhatIsAllowedAndAnyAlsoWhatNeedsConsent() {
+    void noChangesRefusesEverythingAWalledConsentRefusesWhatNeedsAskingAndOtherwiseItIsAdmitted() {
         TestWorld world = stones();
-        assertEquals(Reason.NEEDS_ALTER, model(Alter.NONE).admitDig(world, FREE, STONE).refused());
+        assertEquals(Reason.NO_DIGGING, model(false, true).admitDig(world, FREE, STONE).refused());
 
-        CostModel natural = model(Alter.NATURAL);
-        assertInstanceOf(Permit.Allow.class, natural.admitDig(world, FREE, STONE).permit());
-        assertEquals(Reason.NEEDS_CONSENT, natural.admitDig(world, ASK, STONE).refused());
-        CostModel.Admission denied = natural.admitDig(world, DENY, STONE);
+        CostModel walled = model(true, false);
+        assertInstanceOf(Permit.Allow.class, walled.admitDig(world, FREE, STONE).permit());
+        assertEquals(Reason.NEEDS_CONSENT, walled.admitDig(world, ASK, STONE).refused());
+        CostModel.Admission denied = walled.admitDig(world, DENY, STONE);
         assertEquals(Reason.DENIED, denied.refused());
         assertEquals("玩家放的", denied.detail(), "许可给的理由原样交还");
 
-        CostModel any = model(Alter.ANY);
-        assertEquals("主人的箱子", assertInstanceOf(Permit.Ask.class, any.admitDig(world, ASK, STONE).permit()).credential());
-        assertEquals(Reason.DENIED, any.admitDig(world, DENY, STONE).refused(), "拒绝的格在 any 下也不进");
+        CostModel asking = model(true, true);
+        assertEquals("主人的箱子", assertInstanceOf(Permit.Ask.class, asking.admitDig(world, ASK, STONE).permit()).credential());
+        assertEquals(Reason.DENIED, asking.admitDig(world, DENY, STONE).refused(), "拒绝的格把要问的算能走时也不进");
+    }
+
+    /** 挖与放是两个开关:只许挖时放一块不准入,原因是"这一趟不放";只许放时反过来。 */
+    @Test
+    void diggingAndPlacingAreSwitchedApart() {
+        TestWorld world = stones().set(FREE.above().above(), STONE);
+        BlockPos air = FREE.above();
+        CostModel digOnly = CostModel.of(RouteSpec.defaults().edit().dig(true).build(), Fixtures.body(),
+                TerrainPolicy.ALLOW_ALL, Fixtures.COBBLE, Threats.NONE);
+        assertNull(digOnly.admitDig(world, FREE, STONE).refused());
+        assertEquals(Reason.NO_PLACING, digOnly.admitPlace(world, air, Blocks.AIR.defaultBlockState()).refused());
+        CostModel placeOnly = digOnly.withSpec(RouteSpec.defaults().edit().place(true).build());
+        assertEquals(Reason.NO_DIGGING, placeOnly.admitDig(world, FREE, STONE).refused());
+        assertNull(placeOnly.admitPlace(world, air, Blocks.AIR.defaultBlockState()).refused());
     }
 
     @Test
-    void aCellThatNeedsConsentCostsMuchMore() {
-        CostModel any = model(Alter.ANY);
-        double free = any.digCost(new Edit.Dig(FREE, STONE, Permit.ALLOW, false, true));
-        double asked = any.digCost(new Edit.Dig(ASK, STONE, Permit.ask("x"), false, true));
-        assertEquals(free * ActionCosts.CONSENT_MULTIPLIER, asked, 1e-9);
+    void aCellThatNeedsConsentCostsTheSpecsMultiple() {
+        CostModel asking = CostModel.of(RouteSpec.defaults().edit().changes(true).consentMultiplier(4).build(),
+                Fixtures.body(), POLICY, Fixtures.COBBLE, Threats.NONE);
+        double free = asking.digCost(new Edit.Dig(FREE, STONE, Permit.ALLOW, false, true));
+        double asked = asking.digCost(new Edit.Dig(ASK, STONE, Permit.ask("x"), false, true));
+        assertEquals(free * 4, asked, 1e-9);
     }
 
     @Test
     void positionsAndBansForbidDiggingAndPlacing() {
         TestWorld world = stones();
-        RouteSpec spec = RouteSpec.defaults().edit().alter(Alter.NATURAL)
+        RouteSpec spec = RouteSpec.defaults().edit().changes(true).consent(false)
                 .positions(PositionCosts.builder().forbid(Use.DIG, FREE.asLong()).build())
                 .bans(new BlockBans(Set.of(), Set.of(Blocks.WATER), Set.of())).build();
         CostModel model = CostModel.of(spec, Fixtures.body(), TerrainPolicy.ALLOW_ALL, Fixtures.COBBLE, Threats.NONE);
@@ -95,7 +109,7 @@ class CostModelTest {
     @Test
     void placingIntoACellThePositionsForbidIsRefused() {
         TestWorld world = new TestWorld().set(FREE.below(), STONE);
-        RouteSpec natural = RouteSpec.defaults().edit().alter(Alter.NATURAL).build();
+        RouteSpec natural = RouteSpec.defaults().edit().changes(true).consent(false).build();
         CostModel open = CostModel.of(natural, Fixtures.body(), TerrainPolicy.ALLOW_ALL, Fixtures.COBBLE, Threats.NONE);
         assertNull(open.admitPlace(world, FREE, Blocks.AIR.defaultBlockState()).refused());
         CostModel forbidden = open.withSpec(natural.edit()
@@ -109,7 +123,7 @@ class CostModelTest {
      */
     @Test
     void diggingCostsTheDigTimeWithTheChosenToolPlusTheBreakPenalty() {
-        RouteSpec spec = RouteSpec.defaults().edit().alter(Alter.NATURAL).breakPenalty(7.5).build();
+        RouteSpec spec = RouteSpec.defaults().edit().changes(true).consent(false).breakPenalty(7.5).build();
         BodySnapshot body = Fixtures.carrying(3, new ItemStack(Items.WOODEN_PICKAXE));
         CostModel model = CostModel.of(spec, body, TerrainPolicy.ALLOW_ALL, Materials.NONE, Threats.NONE);
         for (boolean eyeInWater : new boolean[] {false, true}) {

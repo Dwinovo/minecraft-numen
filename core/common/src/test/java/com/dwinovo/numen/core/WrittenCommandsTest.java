@@ -51,6 +51,6 @@ class WrittenCommandsTest {
     void everyActionAndToolDescriptionWritesCommandsThatRead() {
         List<WrittenCommands.Text> texts = new ArrayList<>(WrittenCommands.registered());
         texts.addAll(WrittenCommands.toolTexts(new ScriptTool()));
-        assertReads(texts, 150);
+        assertReads(texts, 120);
     }
 }

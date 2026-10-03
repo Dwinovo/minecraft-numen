@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.nav;
 
+import java.util.List;
+
 import com.dwinovo.numen.core.combat.Menace;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.api.Navigator;
@@ -12,9 +14,11 @@ import com.dwinovo.numen.pathing.plan.Threats;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.permission.Permission;
 
+import net.minecraft.world.item.Item;
+
 /**
- * 同伴接入寻路的端口,只在这里组:她的身体、她的手({@link CompanionHands})、此刻的权限快照({@link GateTerrain})、她自己的
- * 垫路料清单({@link ThrowawayBlocks})、附近的敌对生物({@link Menace#dangers})。开一趟路、只搜不走地规划、给一格估挖掘的价钱,
+ * 同伴接入寻路的端口,只在这里组:她的身体、她的手({@link CompanionHands})、此刻的权限快照({@link GateTerrain})、这一趟愿意
+ * 垫的料({@link ThrowawayBlocks})、附近的敌对生物({@link Menace#dangers})。开一趟路、只搜不走地规划、给一格估挖掘的价钱,
  * 用的都是这一套。在世界所在的线程上调:权限快照与垫路料在这一刻取。
  */
 public final class CompanionPorts {
@@ -29,22 +33,23 @@ public final class CompanionPorts {
         return () -> Menace.dangers(player, DANGER_SCAN);
     }
 
-    /** 她的寻路门面,避开 {@code threats}。 */
-    public static Navigator navigator(NumenPlayer player, Threats threats) {
-        return Navigator.of(player, new Ports(CompanionHands.of(player), terrain(player), materials(player),
+    /** 她的寻路门面,避开 {@code threats},垫路从 {@code materials} 里挑。 */
+    public static Navigator navigator(NumenPlayer player, Threats threats, List<Item> materials) {
+        return Navigator.of(player, new Ports(CompanionHands.of(player), terrain(player), materials(player, materials),
                 threats));
     }
 
     /** 按 {@code spec} 与她此刻的身体、端口组一份成本模型:估一格挖多久、许不许挖,与寻路用的是同一份定价。 */
     static CostModel model(NumenPlayer player, RouteSpec spec) {
-        return CostModel.of(spec, Snapshots.of(player), terrain(player), materials(player), dangers(player));
+        return CostModel.of(spec, Snapshots.of(player), terrain(player), materials(player, ThrowawayBlocks.factory()),
+                dangers(player));
     }
 
     private static TerrainPolicy terrain(NumenPlayer player) {
         return new GateTerrain(Permission.gateFor(player));
     }
 
-    private static Materials materials(NumenPlayer player) {
-        return () -> ThrowawayBlocks.next(player);
+    private static Materials materials(NumenPlayer player, List<Item> materials) {
+        return () -> ThrowawayBlocks.next(player, materials);
     }
 }

@@ -49,7 +49,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 public class GoalGameTests {
 
     private static final String BATCH = "pathing_goals";
-    private static final RouteSpec NATURAL = RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build();
+    private static final RouteSpec NATURAL = RouteSpec.defaults().edit().changes(true).consent(false).build();
 
     /** 要拦住搜索线程池的用例单独一批,不挡着别的用例的搜索。 */
     private static final String HELD_BATCH = "pathing_goals_held";
@@ -73,6 +73,29 @@ public class GoalGameTests {
         if (!feet(t, r).equals(new BlockPos(x, y, z))) {
             throw new GameTestAssertException("应当停在 (" + x + "," + y + "," + z + "),却在 " + t.rel(r.body.blockPosition()));
         }
+    }
+
+    /**
+     * 路过一格:走进那一格就算到了,身体不停稳——到达的那一刻还带着走路的速度;同样的路停在那一格时,到达的那一刻身体已经停住。
+     */
+    @GameTest(template = ARENA, batch = BATCH, timeoutTicks = 400)
+    public static void passing_through_a_cell_does_not_stop_in_it(GameTestHelper helper) {
+        Trial t = new Trial(helper).floor();
+        TestBody passing = t.body(2, 1, 5);
+        t.go(passing, com.dwinovo.numen.pathing.api.NavRequest.to(Goals.at(t.at(14, 1, 5)), RouteSpec.defaults())
+                .passing()).within(300).arrives().then(r -> {
+                    at(t, r, 14, 1, 5);
+                    if (r.body.getDeltaMovement().horizontalDistance() < 0.05) {
+                        throw new GameTestAssertException("路过却停住了:" + r.body.getDeltaMovement());
+                    }
+                });
+        TestBody stopping = t.body(2, 1, 20);
+        t.go(stopping, Goals.at(t.at(14, 1, 20)), RouteSpec.defaults()).within(300).arrives().then(r -> {
+            at(t, r, 14, 1, 20);
+            if (r.body.getDeltaMovement().horizontalDistance() >= 0.05) {
+                throw new GameTestAssertException("停在那一格却还在走:" + r.body.getDeltaMovement());
+            }
+        });
     }
 
     /** 用:走到看得见它某一面、点得到它的地方。 */

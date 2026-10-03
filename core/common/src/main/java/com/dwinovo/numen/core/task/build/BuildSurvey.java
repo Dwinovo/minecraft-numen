@@ -21,7 +21,7 @@ import java.util.Map;
  * 一件施工的每一格,对她此刻站的地方而言是什么情形:已经对上、不去动、得先挖开、还立不住、够得着就放、够不着。{@code numen.build.at} 只放
  * "够得着就放"的那些、受理前问还有没有,{@code numen.build.left} 把整份照这同一个判据数给脚本——施工与查询读的是同一份。
  *
- * <p>"够得着"就是 {@code numen.move.goto_(…, {arrive = "reach"})} 走到的地方({@link Destination#reach}):走到了,这一格就在这里算够得着。
+ * <p>"够得着"就是 {@code numen.move.to(…, {arrive = "place"})} 走到的地方({@link Destination#reach}):走到了,这一格就在这里算够得着。
  * 生存模式下图纸要的格里立着别的东西,得先由 {@code numen.work.dig} 挖开,{@code numen.build.at} 不挖;创造模式照原版一下就碎,放的时候
  * 直接顶掉。立着东西、身上却没有要放的料的格不叫她挖:没料挖了只是在主人的地上挖个坑。
  */

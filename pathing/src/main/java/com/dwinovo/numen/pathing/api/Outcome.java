@@ -4,7 +4,7 @@ import java.util.List;
 
 import com.dwinovo.numen.pathing.drive.Blockage;
 import com.dwinovo.numen.pathing.plan.Edit;
-import com.dwinovo.numen.pathing.spec.RouteSpec;
+import com.dwinovo.numen.pathing.plan.Permit;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
@@ -30,18 +30,39 @@ public sealed interface Outcome {
     record Stranded(BlockPos cell, BlockState block) implements Outcome {}
 
     /**
-     * 规格许改的不够:放宽到 {@code level} 才有路,那条路要做 {@code changes} 这几件改地形的事(挖哪几格、放哪几格,连同许可的
-     * 答复)。不许改地形时是 {@code NATURAL}(许改自然地形就够)或 {@code ANY}(还要动主人得同意的格);只许改自然地形时是 {@code ANY}。
+     * 规格许的改动不够:放开之后才有路,那条路要做 {@code changes} 这几件改地形的事(挖哪几格、放哪几格,连同许可的答复)。
+     * 缺的是哪几样从改动本身读:有挖({@link #digs})要许挖,有放({@link #places})要许放,有许可答"要问"的格({@link #asks})
+     * 要把要问的格算能走。
      */
-    record NeedsAlter(RouteSpec.Alter level, List<Edit> changes) implements Outcome {
+    record NeedsChanges(List<Edit> changes) implements Outcome {
 
-        public NeedsAlter {
+        public NeedsChanges {
             changes = List.copyOf(changes);
         }
 
         /** 那条路要改几格。 */
         public int alterations() {
             return changes.size();
+        }
+
+        /** 那条路要挖。 */
+        public boolean digs() {
+            return changes.stream().anyMatch(e -> e instanceof Edit.Dig);
+        }
+
+        /** 那条路要放方块(倒水接坠落也算)。 */
+        public boolean places() {
+            return changes.stream().anyMatch(e -> e instanceof Edit.Place || e instanceof Edit.Catch);
+        }
+
+        /** 那条路上有许可答"要问"的格。 */
+        public boolean asks() {
+            return changes.stream().anyMatch(e -> switch (e) {
+                case Edit.Dig d -> d.permit() instanceof Permit.Ask;
+                case Edit.Place p -> p.permit() instanceof Permit.Ask;
+                case Edit.Catch c -> c.permit() instanceof Permit.Ask;
+                case Edit.Door door -> false;
+            });
         }
     }
 

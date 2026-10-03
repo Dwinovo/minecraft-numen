@@ -18,7 +18,7 @@ public final class HelpCommands {
     static final String FULL = com.dwinovo.numen.api.NumenPlugins.NUMEN + "." + GROUP;
 
     private static final Param<String> NAME = Param.required("name", ArgType.word(),
-            "A function as the <api> index writes it (numen.work.dig, numen.move.goto_), a group (numen.work), a "
+            "A function as the <api> index writes it (numen.work.dig, numen.move.to), a group (numen.work), a "
                     + "namespace (numen) or a module.");
 
     private HelpCommands() {}

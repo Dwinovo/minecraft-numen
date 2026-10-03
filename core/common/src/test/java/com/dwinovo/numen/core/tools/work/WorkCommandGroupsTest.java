@@ -60,11 +60,11 @@ class WorkCommandGroupsTest {
     }
 
     /**
-     * build 组只剩 blueprint/place/diff 与库里的 raise,一页放得下;她赶路时愿意消耗的方块是自己的一组 throwaway,四个动作只改清单,没有
-     * "看清单"的动作(现状在身体状态里)。
+     * build 组只剩 blueprint/place/diff 与库里的 raise,一页放得下;垫路料是一趟路的描述里的一项({@code numen.route.plan} 的
+     * materials),没有一组命令记在她身上。
      */
     @Test
-    void buildFitsOnOnePageAndThrowawayIsItsOwnGroup() {
+    void buildFitsOnOnePageAndMaterialsAreNoGroup() {
         String build = help("numen.build");
         assertEquals(List.of("blueprint", "place", "diff", "raise"), functions(build, "build"), build);
         assertTrue(build.contains("\n---@field raise fun(building: Cells|Blueprint, opts?: table): integer "),
@@ -72,9 +72,9 @@ class WorkCommandGroupsTest {
         assertTrue(build.contains("\n---@class Placed\n") && build.contains("\n---@class Blueprint\n"),
                 "组里返回值用到的类跟在后面: " + build);
         assertTrue(!build.contains("(page 1 of") && !build.contains("scaffold") && !build.contains("throwaway"), build);
-        String throwaway = help("numen.throwaway");
-        assertEquals(List.of("add", "remove", "set", "clear"), functions(throwaway, "throwaway"), throwaway);
-        assertTrue(throwaway.startsWith("---Your own setting: "), throwaway);
+        CoreScripts.Run noList = CoreScripts.run(HER, "numen.throwaway.add(\"minecraft:dirt\")");
+        assertFalse(noList.ok(), "垫路料不是她身上的一份清单: " + noList.message());
+        assertTrue(help("numen.route.plan").contains("\n---@field materials? "), "垫路料写在一趟路的描述里");
         CoreScripts.Run gone = CoreScripts.run(HER, "numen.build.scaffold_add(\"minecraft:dirt\")");
         assertFalse(gone.ok(), "build 组里不再有垫路料的动作: " + gone.message());
         assertTrue(gone.message().contains("there is no API function numen.build.scaffold_add"), gone.message());
@@ -93,27 +93,29 @@ class WorkCommandGroupsTest {
 
     @Test
     void eachGroupAnswersItsHelp() {
-        for (String group : List.of("move", "route", "work", "fight", "build", "throwaway", "inv", "gui", "gear",
-                "creative", "time")) {
+        for (String group : List.of("move", "route", "work", "fight", "build", "inv", "gui", "gear", "creative",
+                "time")) {
             String text = help("numen." + group);
             assertTrue(text.startsWith("---") && text.contains("\n---@class numen." + group + "\n")
                     && text.contains("\nnumen." + group + " = {}"), text);
         }
         String routeHelp = help("numen.route");
-        assertTrue(routeHelp.contains("\n---@field new fun(name?: string, opts?: numen.route.new.opts)"),
-                "组帮助里路线标志整组按名字引用: " + routeHelp);
+        assertEquals(List.of("plan"), functions(routeHelp, "route"), "路线不是名词,只有规划: " + routeHelp);
+        assertTrue(routeHelp.contains("\n---@field plan fun(opts?: numen.route.plan.opts): Plan"),
+                "组帮助里描述整张表按名字引用: " + routeHelp);
         assertTrue(!routeHelp.contains("avoid_break"), routeHelp);
-        String newHelp = help("numen.route.new");
-        assertTrue(newHelp.contains("\n---@class numen.route.new.opts\n") && newHelp.contains("\n---@field alter? "),
-                newHelp);
-        assertTrue(newHelp.contains("\n---@field avoid_break? "), newHelp);
+        String planHelp = help("numen.route.plan");
+        assertTrue(planHelp.contains("\n---@class numen.route.plan.opts\n") && planHelp.contains("\n---@field costs? ")
+                && planHelp.contains("\n---@field stops? ") && planHelp.contains("\n---@field avoid_break? "), planHelp);
+        assertTrue(!planHelp.contains("alter"), "没有 alter 这个旋钮了: " + planHelp);
         String digHelp = help("numen.work.dig");
         assertTrue(digHelp.contains("\nfunction numen.work.dig(blocks, opts) end"), digHelp);
         String moveHelp = help("numen.move");
-        assertEquals(List.of("go", "follow", "goto_"), functions(moveHelp, "move"), "库函数与动作都列在组里: " + moveHelp);
-        assertTrue(moveHelp.contains("\n---@field goto_ fun(place: Pos|Block|Entity|table, opts?: table): "
-                + "{pos: Pos, route: string, distance_left: number} Walk to a place: numen.route.new, numen.route.plan and numen.move.go "
-                + "on your own route goto-<your name>.\n"), "库函数的说明是它注释的第一句: " + moveHelp);
+        assertEquals(List.of("go", "follow", "dismount", "to", "flee", "explore"), functions(moveHelp, "move"),
+                "库函数与动作都列在组里: " + moveHelp);
+        assertTrue(moveHelp.contains("\n---@field to fun(target: Pos|Block|Entity|table, spec?: table): "
+                + "{pos: Pos, distance_left: number} Walk to a place in one call: numen.route.plan with the description "
+                + "and to = target, then numen.move.go.\n"), "库函数的说明是它注释的第一句: " + moveHelp);
         String workHelp = help("numen.work");
         assertTrue(functions(workHelp, "work").contains("mine") && workHelp.contains("\n---@field mine fun(blocks: "
                 + "Block[]): integer Dig out the given blocks"), "挖完一团是内置模块 work 里的 Lua 函数,不是动作: " + workHelp);
@@ -128,10 +130,13 @@ class WorkCommandGroupsTest {
         for (String code : List.of("numen.fight.attack(27)", "numen.use.block({x = 120, y = 64, z = -35})",
                 "numen.use.block({x = 120, y = 64, z = -35}, {hold = 1.5})", "numen.use.hit({x = 120, y = 64, z = -35})", "numen.use.entity(812, {sneak = true})",
                 "numen.inv.drop(\"cobblestone\")", "numen.inv.drop(\"cobblestone\", {count = 32})", "numen.work.dig({x = 120, y = 64, z = -35})",
-                "numen.work.dig({name = \"iron_ore\", pos = {x = 120, y = 12, z = -35}}, {x = 121, y = 12, z = -35}, {count = 4})", "numen.move.go(\"home\")", "numen.move.follow(184)",
+                "numen.work.dig({name = \"iron_ore\", pos = {x = 120, y = 12, z = -35}}, {x = 121, y = 12, z = -35}, {count = 4})",
+                "numen.move.go({id = \"p1\"})", "numen.move.follow(184)", "numen.move.dismount()",
                 "numen.scan.blocks(\"iron_ore\")", "numen.scan.entities()",
-                "numen.scan.block({x = 1, y = 2, z = 3})", "numen.task.timer(\"check the furnace\", {after = 90})", "numen.route.new(\"back\")",
-                "numen.route.drop(\"home\")", "numen.build.place({{name = \"stone\", pos = {x = 1, y = 2, z = 3}}})",
+                "numen.scan.block({x = 1, y = 2, z = 3})", "numen.task.timer(\"check the furnace\", {after = 90})",
+                "numen.route.plan({to = {x = 1, y = 2, z = 3}})",
+                "numen.route.plan({stops = {{to = {x = 1, z = 2}}}, costs = {dig = true, consent = false}, avoid = {\"water\"}})",
+                "numen.build.place({{name = \"stone\", pos = {x = 1, y = 2, z = 3}}})",
                 "numen.build.place({name = \"oak_planks\", pos = {x = 0, y = 1, z = 0}})",
                 "numen.build.blueprint(\"house\", {x = 100, y = 64, z = -20}, {rotation = 90})",
                 "numen.build.diff({blueprint = \"house\", origin = {x = 100, y = 64, z = -20}, rotation = 0})",
@@ -143,7 +148,9 @@ class WorkCommandGroupsTest {
             com.dwinovo.numen.cli.NumenCli.invocation(reading.calls().get(0));
         }
         for (String wrong : List.of("numen.fight.attack({entity_ids = {27, 26}})", "numen.fight.attack(27, 26)",
-                "numen.use.block(\"right\", {x = 120, y = 64, z = -35})", "numen.inv.drop(\"cobblestone\", 32)")) {
+                "numen.use.block(\"right\", {x = 120, y = 64, z = -35})", "numen.inv.drop(\"cobblestone\", 32)",
+                "numen.move.go(\"home\")", "numen.route.plan({to = \"ores\"})",
+                "numen.route.plan({to = {x = 1, y = 2, z = 3}, alter = \"natural\"})")) {
             var reading = com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.calls("t", wrong,
                     com.dwinovo.numen.cli.NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.factory()));
             org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,

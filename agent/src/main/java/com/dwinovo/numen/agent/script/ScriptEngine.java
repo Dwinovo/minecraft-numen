@@ -34,7 +34,7 @@ public interface ScriptEngine {
      */
     String functionName(String name);
 
-    /** 一条点隔开的名字({@code numen.move}、{@code numen.move.goto})逐段经 {@link #functionName} 写:{@code numen.move.goto_}。 */
+    /** 一条点隔开的名字({@code numen.move}、{@code numen.move.until})逐段经 {@link #functionName} 写:{@code numen.move.until_}。 */
     default String pathName(String path) {
         return String.join(".", java.util.Arrays.stream(path.split("\\.", -1)).map(this::functionName).toList());
     }
@@ -42,7 +42,7 @@ public interface ScriptEngine {
     /** 一个名字能不能直接写成选项表的键({@code {type = "world"}}):不是语言的关键字就能。 */
     boolean isKey(String name);
 
-    /** 一个动作在这种语言里的函数全名:组的全名加动作名,{@code numen.move.goto_}。 */
+    /** 一个动作在这种语言里的函数全名:组的全名加动作名,{@code numen.move.go}。 */
     default String function(String group, String verb) {
         return pathName(group) + "." + functionName(verb);
     }
@@ -52,7 +52,7 @@ public interface ScriptEngine {
      */
     String call(String function, List<Object> objects, java.util.Map<String, Object> options);
 
-    /** 一张名字到值的表写成这种语言里的样子:{@code {alter = "natural"}}。 */
+    /** 一张名字到值的表写成这种语言里的样子:{@code {arrive = "dig"}}。 */
     String table(java.util.Map<String, Object> options);
 
     /**

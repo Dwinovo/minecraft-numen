@@ -73,7 +73,8 @@ public class ScriptGameTests {
     }
 
     /**
-     * 第一行当场失败(走去用一格空气):库里的 {@code numen.move.goto_} 写路线那一步抛错,脚本接住、不往下走,第二行的那一格还在;
+     * 第一行当场失败(走去用一格空气):库里的 {@code numen.move.to} 规划出一份走不通的计划,{@code numen.move.go} 照它走就抛 no_path,脚本接住、
+     * 不往下走,第二行的那一格还在;
      * 回执说停在哪一行、为什么,失败的那次调用记在调库函数的那一行上。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
@@ -84,7 +85,7 @@ public class ScriptGameTests {
         BlockPos kept = helper.absolutePos(new BlockPos(4, 2, 2));
         level.setBlockAndUpdate(kept, Blocks.STONE.defaultBlockState());
         LlmToolCall script = programCall("""
-                local walked, why = pcall(numen.move.goto_, %s, {arrive = "use"})
+                local walked, why = pcall(numen.move.to, %s, {arrive = "use"})
                 if not walked then error("could not get there: " .. why, 0) end
                 numen.build.place({{name = "air", pos = %s}})
                 """.formatted(xyz(air), xyz(kept)));
@@ -94,10 +95,10 @@ public class ScriptGameTests {
             helper.assertTrue(round.hasSettled(), "the script has not finished");
             String msg = message(round, script);
             helper.assertTrue(!receipt(round, script).get("success").getAsBoolean(), "the script succeeded: " + msg);
-            // 库函数 numen.move.goto_ 里调 numen.route.new 抛出的错误值原样到了脚本:拼进字符串是"函数: 种类 — 原因"
-            helper.assertTrue(msg.startsWith("The script stopped at line 2 after 1 call: could not get there: "
-                    + "numen.route.new: bad_argument — "), msg);
-            helper.assertTrue(msg.contains("line 1 numen.route.new: bad_argument — "), msg);
+            // 库函数 numen.move.to 里 numen.move.go 抛出的错误值原样到了脚本:拼进字符串是"函数: 种类 — 原因";规划本身不抛
+            helper.assertTrue(msg.startsWith("The script stopped at line 2 after 2 calls: could not get there: "
+                    + "numen.move.go: no_path — "), msg);
+            helper.assertTrue(msg.contains("line 1 numen.route.plan: ok") && msg.contains("line 1 numen.move.go: no_path — "), msg);
             helper.assertTrue(level.getBlockState(kept).is(Blocks.STONE), "the line after the failure ran: " + msg);
             CompanionFactory.despawn(level.getServer(), her);
         });
@@ -112,7 +113,7 @@ public class ScriptGameTests {
         BlockPos kept = helper.absolutePos(new BlockPos(4, 2, 2));
         level.setBlockAndUpdate(kept, Blocks.STONE.defaultBlockState());
         LlmToolCall script = programCall("""
-                numen.move.goto_({x = %d, z = %d})
+                numen.move.to({x = %d, z = %d})
                 numen.build.place({{name = "air", pos = %s}})
                 """.formatted(far.getX(), far.getZ(), xyz(kept)));
         Round round = round(helper, her, script);
@@ -129,7 +130,7 @@ public class ScriptGameTests {
                         "her body is still busy after the stop"))
                 .thenExecute(() -> {
                     String msg = message(round, script);
-                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.go\\) after 3 calls: "
+                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.go\\) after 2 calls: "
                             + "this turn was cut off; t\\d+ was stopped too\\. Nothing after that ran\\..*"), msg);
                     helper.assertTrue(level.getBlockState(kept).is(Blocks.STONE), "the line after the stop ran");
                     outbox.forget(her.getUUID());
@@ -145,8 +146,8 @@ public class ScriptGameTests {
         NumenPlayer her = spawnAt(helper, "gametest_lua_spoken", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
         LlmToolCall script = programCall("""
-                numen.move.goto_({x = %d, z = %d})
-                numen.move.goto_({x = %d, z = %d})
+                numen.move.to({x = %d, z = %d})
+                numen.move.to({x = %d, z = %d})
                 """.formatted(far.getX(), far.getZ(), far.getX() - 10, far.getZ()));
         Round round = round(helper, her, script);
         EventOutbox outbox = EventOutbox.get(level.getServer());
@@ -157,7 +158,7 @@ public class ScriptGameTests {
                 .thenExecute(() -> round.ownerSays("wait, come back"))
                 .thenExecute(() -> {
                     String msg = message(round, script);
-                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.go\\) after 3 calls: "
+                    helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.go\\) after 2 calls: "
                             + "your owner spoke; t\\d+ keeps running\\..*"), msg);
                     TaskRecord now = CompanionTickDispatcher.currentTaskFor(her.getUUID());
                     helper.assertTrue(now != null && now.getToolName().equals("numen.move.go"),
@@ -184,7 +185,7 @@ public class ScriptGameTests {
         LlmToolCall script = programCall("""
                 for _, c in ipairs(numen.scan.blocks("minecraft:iron_ore", {radius = 14})) do
                   print(c.nearest.pos.x, c.nearest.pos.z)
-                  numen.move.goto_(c.blocks, {arrive = "dig"})
+                  numen.move.to(c.blocks, {arrive = "dig"})
                   numen.work.dig(c.blocks)
                 end
                 """);
@@ -451,7 +452,7 @@ public class ScriptGameTests {
         });
     }
 
-    /** 一只实体原样就是一处地方:{@code numen.scan.entities} 列出的那头牛交给 {@code numen.move.goto_},她走到牛跟前。 */
+    /** 一只实体原样就是一处地方:{@code numen.scan.entities} 列出的那头牛交给 {@code numen.move.to},她走到牛跟前。 */
     @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_scripts")
     public static void an_entity_a_scan_found_is_a_place_to_walk_to(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
@@ -464,7 +465,7 @@ public class ScriptGameTests {
         level.addFreshEntity(cow);
         LlmToolCall script = programCall("""
                 local cow = numen.scan.entities("passive", {radius = 20})[1]
-                numen.move.goto_(cow, {arrive = "near"})
+                numen.move.to(cow, {arrive = "near"})
                 return cow.id
                 """);
         Round round = round(helper, her, script);
@@ -511,7 +512,7 @@ public class ScriptGameTests {
             JsonObject got = receipt.getAsJsonObject("data").getAsJsonObject("returned");
             var farErr = got.getAsJsonArray("far");
             helper.assertTrue("out_of_reach".equals(farErr.get(0).getAsString())
-                            && farErr.get(1).getAsString().equals("numen.move.goto_(" + xyz(far) + ", {arrive = \"dig\"})\n"
+                            && farErr.get(1).getAsString().equals("numen.move.to(" + xyz(far) + ", {arrive = \"dig\"})\n"
                                     + "numen.work.dig(" + xyz(far) + ")"),
                     "out of reach is not its own kind with the walk as the next line: " + got);
             String rewritten = "numen.work.dig(" + xyz(near) + ")";

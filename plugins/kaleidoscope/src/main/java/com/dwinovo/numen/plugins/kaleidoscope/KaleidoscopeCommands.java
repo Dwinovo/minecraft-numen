@@ -173,7 +173,7 @@ final class KaleidoscopeCommands {
                     }
                 }, params)
                 .returns(returns)
-                .note("It does not walk: stand within reach of the cookware first (`numen.move.goto_` it with "
+                .note("It does not walk: stand within reach of the cookware first (`numen.move.to` it with "
                         + "arrive = \"use\"); out of reach, no pot or stockpot there, or an unknown recipe is refused "
                         + "at once with the reason.")
                 .note("Uses what you carry. Asks your owner first when their rules say so, for using the cookware "

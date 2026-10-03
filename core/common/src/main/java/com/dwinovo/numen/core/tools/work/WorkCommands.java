@@ -24,7 +24,7 @@ import net.minecraft.resources.ResourceLocation;
  * (手够得着的一格都没有、站的地方抛不进水……)受理之前就当场拒绝,判据在各自的任务里。
  *
  * <p>{@code dig} 只挖她站在原地手够得着的格,挡在前面的一并挖开,不走动、不捡({@link DigCompanionTask});{@code fish} 只钓,
- * 不走去岸边、不追战果。走到够得着的地方是 {@code numen.move.goto_(…, {arrive = "dig"})} 的事;捡是库里的 {@code numen.work.collect}:
+ * 不走去岸边、不追战果。走到够得着的地方是 {@code numen.move.to(…, {arrive = "dig"})} 的事;捡是库里的 {@code numen.work.collect}:
  * 原版玩家走近掉落物就捡起来,所以捡就是扫掉落物、走到它跟前。组合交给脚本。
  */
 public final class WorkCommands {
@@ -62,11 +62,11 @@ public final class WorkCommands {
                         + "print(r.dug, r.left, r.out_of_reach)")
                 .note("A Block from `numen.scan.block` or a cluster's blocks from `numen.scan.blocks` go in as they are.")
                 .note("Digs only what your hand reaches from where you stand: it never walks and never picks up. Get "
-                        + "within reach first with `numen.move.goto_` and arrive \"dig\", given the same blocks (it picks the "
-                        + "spot that reaches the most cells), dig, and pick the drops up with `numen.work.collect()`.")
+                        + "within reach first with `numen.move.to(cluster, {arrive = \"dig\"})` on the same cluster or blocks (it picks "
+                        + "the spot that reaches the most cells), dig, and pick the drops up with `numen.work.collect()`.")
                 .note("Background work: before it starts it checks something within reach can be dug, harvested "
                         + "with your tools and is allowed; when nothing is, it fails with kind out_of_reach (or denied, "
-                        + "failed) and a hint with the numen.move.goto_ call to copy — no task starts and whatever you were "
+                        + "failed) and a hint with the numen.move.to call to copy — no task starts and whatever you were "
                         + "doing goes on. It returns when the job ends: how many cells it dug and how many are still out "
                         + "of reach, the nearest of them as a pos.")
                 .note("What to dig comes from what you give: a Block is dug only while its cell still holds that block "
@@ -78,7 +78,7 @@ public final class WorkCommands {
                 .note("Takes the best tool for each block; only digs what your tools actually harvest, and says so "
                         + "when nothing qualifies. Asks your owner before breaking a named block their rules want "
                         + "asked about; a refusal stops the job with the reason.")
-                .seeAlso("move goto_", "work collect", "scan blocks", "task stop");
+                .seeAlso("move to", "work collect", "scan blocks", "task stop");
         work.server("fish", "Cast a fishing rod once from where you stand, wait for a bite and reel it in.",
                         WorkCommands::fish)
                 .returns("caught", ScriptType.listOf(ScriptType.STRING))

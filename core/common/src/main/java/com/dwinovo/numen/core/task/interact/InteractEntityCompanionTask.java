@@ -27,7 +27,7 @@ import java.util.Map;
  * {@code numen.use.entity} on the player body: the entity-aimed native interaction. It does not travel: the entity must be within
  * reach and in sight of where she stands; then she aims at it and presses the requested mouse button only when the native
  * raytrace reaches that entity. Out of reach or behind a wall, the call fails with where it is and the
- * {@code numen.move.goto_} to copy. LEFT+hold repeats the native attack until the hold ends, the target dies, or the task
+ * {@code numen.move.to} to copy. LEFT+hold repeats the native attack until the hold ends, the target dies, or the task
  * times out.
  */
 public final class InteractEntityCompanionTask extends InReachTask<InteractEntityTaskRecord> {
@@ -98,7 +98,7 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
         if (entity == player.getVehicle()) {
             if (r.button == MouseButton.LEFT) {
                 fail("you are riding the " + targetName()
-                        + " — can't hit your own vehicle; a numen.move.goto_ somewhere else steps off first",
+                        + " — can't hit your own vehicle; numen.move.dismount() steps off first",
                         FailureType.UNKNOWN);
                 return TaskState.FAILED;
             }

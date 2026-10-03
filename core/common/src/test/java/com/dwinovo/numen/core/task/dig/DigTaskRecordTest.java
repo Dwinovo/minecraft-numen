@@ -15,9 +15,10 @@ class DigTaskRecordTest {
 
     private static final BlockPos NEAREST = new BlockPos(10, 1, 11);
 
+    /** 一块区域也走到够得着它离她最近那一格的地方:去处只收格子,不收区域名。 */
     @Test
     void aFewCellsAreReachedAtTheNearestAndDugAgainInFull() {
-        assertEquals("`numen.move.goto_({x = 10, y = 1, z = 11}, {arrive = \"dig\"})`, then `numen.work.dig({x = 10, y = 1, z = 11}, {x = 12, y = 1, z = 11})`",
+        assertEquals("`numen.move.to({x = 10, y = 1, z = 11}, {arrive = \"dig\"})`, then `numen.work.dig({x = 10, y = 1, z = 11}, {x = 12, y = 1, z = 11})`",
                 DigTaskRecord.reachThem(List.of(new Target(NEAREST, null), new Target(new BlockPos(12, 1, 11), null)),
                         NEAREST));
     }
@@ -26,7 +27,7 @@ class DigTaskRecordTest {
     void manyCellsAreReachedAtTheNearestAndDugAgainByName() {
         List<Target> many = List.of(new Target(NEAREST, null), new Target(NEAREST.east(), null),
                 new Target(NEAREST.east(2), null), new Target(NEAREST.east(3), null));
-        assertEquals("`numen.move.goto_({x = 10, y = 1, z = 11}, {arrive = \"dig\"})`, then dig the same blocks again",
+        assertEquals("`numen.move.to({x = 10, y = 1, z = 11}, {arrive = \"dig\"})`, then dig the same blocks again",
                 DigTaskRecord.reachThem(many, NEAREST));
     }
 }

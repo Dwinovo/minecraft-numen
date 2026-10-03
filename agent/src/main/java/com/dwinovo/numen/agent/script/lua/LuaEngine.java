@@ -27,7 +27,7 @@ import java.util.regex.Pattern;
  *
  * <h2>API 函数怎么接</h2>
  * 每个动作是一个宿主函数 {@code 名字空间.组.动作}({@code numen.work.dig};名字撞上 Lua 的保留字或沙箱自带的全局时加后缀
- * {@code _},{@link #functionName})。模块按名字直接用,第一次用到才装(和组同名的给那一组加函数,{@code numen.move.goto_}),它们的
+ * {@code _},{@link #functionName})。模块按名字直接用,第一次用到才装(和组同名的给那一组加函数,{@code numen.move.to}),它们的
  * 函数照常调宿主函数;没有 {@code require}。
  * 脚本跑在它自己的虚拟线程上;调一个
  * API 函数,那个线程把这次调用交给驱动方({@link ScriptRun#start}/{@link ScriptRun#resume} 的返回值),然后停在那儿等结局。驱动方
@@ -139,8 +139,8 @@ public final class LuaEngine implements ScriptEngine {
                 + "mod's under its id. A position is a table with named "
                 + "fields, `{x = 120, y = 64, z = -35}` (a Pos); anything a call returns that has a `pos` (a Block, an "
                 + "Entity, an Item) goes where a position goes, as it is: `local e = numen.scan.entities(\"hostile\")[1]; "
-                + "numen.fight.attack(e)`, and the same with numen.move.goto_(e.pos). A switch is `{sneak = true}`; a "
-                + "name Lua already uses gets a trailing underscore (`numen.move.goto_`). A call returns when it is done "
+                + "numen.fight.attack(e)`, and the same with numen.move.to(e.pos). A switch is `{sneak = true}`; a "
+                + "name Lua already uses gets a trailing underscore (`until_`). A call returns when it is done "
                 + "(work that occupies your body: when it has finished) and returns data, never sentences: "
                 + "`numen.status.self()` is a table whose pos is a Pos, numen.work.dig(b) a table with what it dug. A "
                 + "call that fails raises an error value: `local ok, err = pcall(numen.work.dig, {x = 120, y = 12, "
@@ -587,7 +587,7 @@ public final class LuaEngine implements ScriptEngine {
 
     /**
      * 程序或模块给第 ① 层的名字赋值({@code function numen.move.go() end}、{@code move = {}}、{@code raise = f}):登记的 API 函数与它们的表
-     * 谁都换不掉、遮不住,停在那一行。往组里加别的名字照常({@code function numen.move.goto_(…)})。
+     * 谁都换不掉、遮不住,停在那一行。往组里加别的名字照常({@code function numen.move.to(…)})。
      */
     static LuaSandbox.ScriptError redefined(String table, String key) {
         String name = table == null ? key : table + "." + key;
@@ -768,14 +768,34 @@ public final class LuaEngine implements ScriptEngine {
             pending = null;
             if (!result.ok()) {
                 return answer(new Answer(null, ScriptRun.failure(result.kind(), result.text(), result.hint(),
-                        call.function(), result.data().size() > 0 ? JsonValues.toJava(result.data()) : null)));
+                        call.function(), result.data().size() > 0 ? lua(JsonValues.toJava(result.data())) : null)));
             }
             ScriptCatalog.Verb verb = catalog.verb(call.group(), call.verb());
             String key = verb == null ? null : verb.returns();
             Object value = key != null ? JsonValues.toJava(result.data().get(key))
                     : result.data().size() > 0 ? JsonValues.toJava(result.data()) : null;
-            return answer(new Answer(catalog.mark(value, verb == null ? null : verb.type(), LuaEngine::instance),
+            return answer(new Answer(lua(catalog.mark(value, verb == null ? null : verb.type(), LuaEngine::instance)),
                     null));
+        }
+
+        /**
+         * 交给沙箱的值:收着几个字段的表({@link JsonValues.Folded})换成沙箱的那一种,带方法的值({@link LuaSandbox.Instance})里面也换,
+         * 其余原样。
+         */
+        private static Object lua(Object value) {
+            return switch (value) {
+                case JsonValues.Folded f -> new LuaSandbox.Folded(luaMap(f), luaMap(f.folded()));
+                case LuaSandbox.Instance i -> new LuaSandbox.Instance(i.type(), i.home(), lua(i.value()));
+                case java.util.Map<?, ?> m -> luaMap(m);
+                case java.util.List<?> l -> l.stream().map(Run::lua).toList();
+                case null, default -> value;
+            };
+        }
+
+        private static java.util.Map<String, Object> luaMap(java.util.Map<?, ?> map) {
+            java.util.Map<String, Object> out = new java.util.LinkedHashMap<>();
+            map.forEach((k, v) -> out.put(String.valueOf(k), lua(v)));
+            return out;
         }
 
         @Override

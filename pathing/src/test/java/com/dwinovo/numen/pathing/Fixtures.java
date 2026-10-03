@@ -67,9 +67,9 @@ public final class Fixtures {
         return CostModel.of(spec, body(), TerrainPolicy.ALLOW_ALL, COBBLE, Threats.NONE);
     }
 
-    /** 能改自然地形({@code alter=natural})的规格。 */
+    /** 许挖许放、要问主人的格当墙的规格。 */
     public static RouteSpec natural() {
-        return RouteSpec.defaults().edit().alter(RouteSpec.Alter.NATURAL).build();
+        return RouteSpec.defaults().edit().changes(true).consent(false).build();
     }
 
     /** 在这个世界里按这份成本模型从 {@code start} 搜到 {@code goal}。 */

@@ -78,7 +78,7 @@ public final class NumenPrompts {
               what the last one returned — every cluster a scan found, again until
               nothing is left, stop at the first failure — write the steps as one
               program instead of one call per turn. A module may already do it
-              (numen.move.goto_, numen.work.collect, numen.work.mine, numen.build.raise; <api> lists the
+              (numen.move.to, numen.work.collect, numen.work.mine, numen.build.raise; <api> lists the
               modules, built-in ones first). When functions you wrote work,
               `numen.module.save` keeps them as a module of yours under my that later
               programs use by name (my.lumber.chop(t)); `numen.module.list()` shows
@@ -90,8 +90,8 @@ public final class NumenPrompts {
               or anything with a block entity (chests, furnaces, beds, doors),
               hitting pets, named mobs or villagers, dropping items. You don't
               ask for it yourself — your body asks the owner right before it
-              acts and the call waits for the answer; a route
-              listed as "needing consent" asks when you walk it. A result that
+              acts and the call waits for the answer; a planned walk lists the
+              cells needing consent and asks at each when you get there. A result that
               says "refused" is the owner's call (their words are quoted), not
               an obstacle — do NOT route around it (no other function, no other
               angle, no "clear it first"). Tell the owner what was refused and

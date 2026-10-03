@@ -1,12 +1,12 @@
 -- Picking up and digging out: walk onto the dropped items lying around, dig out the given blocks.
 local M = {}
 
----Pick up the dropped items around you, nearest first, walking onto each with numen.move.goto_. A fresh drop cannot be
+---Pick up the dropped items around you, nearest first, walking onto each with numen.move.to. A fresh drop cannot be
 ---picked up for a few ticks (its pickup_delay): standing on it, it walks onto it again until it is taken. An item
----with no way to it (numen.move.goto_ fails with no_path) is passed over and the rest are picked up; at the end the ones
+---with no way to it (numen.move.to fails with no_path) is passed over and the rest are picked up; at the end the ones
 ---passed over raise no_path, with them in err.data.left. An item still there after walking onto it with no delay
 ---left (a full pack, or a spot you cannot stand in) raises failed; any other error of a walk stops here as it is.
----@param opts? table radius = how far to look (default 8); the rest are route flags for the walks (alter = "natural" lets it dig and pillar to drops in a pit).
+---@param opts? table radius = how far to look (default 8); the rest is the description for the walks (costs = {dig = true, place = true} lets it dig and pillar to drops in a pit).
 ---@return integer picked How many items it walked onto that are gone now.
 function M.collect(opts)
   local walk = {}
@@ -36,8 +36,9 @@ function M.collect(opts)
       if #left > 0 then
         local p = left[1].pos
         raise("no_path", "picked up " .. picked .. " item(s); no way to the " .. #left .. " left, the nearest "
-            .. left[1].item .. " x" .. left[1].count, string.format("numen.move.goto_({x = %d, y = %d, z = %d}, {alter = "
-            .. "\"natural\"})", math.floor(p.x), math.floor(p.y), math.floor(p.z)), {picked = picked, left = left})
+            .. left[1].item .. " x" .. left[1].count, string.format("numen.move.to({x = %d, y = %d, z = %d}, {costs = "
+            .. "{dig = true, place = true}})", math.floor(p.x), math.floor(p.y), math.floor(p.z)),
+            {picked = picked, left = left})
       end
       return picked
     end
@@ -50,7 +51,7 @@ function M.collect(opts)
       raise("failed", item.item .. " x" .. item.count .. " cannot be picked up for another " .. item.pickup_delay
           .. " ticks", nil, {item = item})
     end
-    local ok, err = pcall(numen.move.goto_, item.pos, walk)
+    local ok, err = pcall(numen.move.to, item.pos, walk)
     if ok then
       walked[item.id] = item.count
     elseif err.kind == "no_path" then
@@ -61,28 +62,30 @@ function M.collect(opts)
   end
 end
 
----Dig out the given blocks: dig what is in reach (numen.work.dig), pick up the drops (numen.work.collect with alter
----"natural"), walk within reach of what is left (numen.move.goto_ with arrive "dig" and alter "natural"), until none of
----them is left. Blocks already gone end it (not_found from numen.work.dig). A walk that still leaves nothing within
----reach raises that out_of_reach; any other failing step raises its error as it is.
+---Dig out the given blocks: dig what is in reach (numen.work.dig), pick up the drops (numen.work.collect, digging and
+---pillaring to them), walk within reach of what is left (numen.move.to with arrive "dig", digging and pillaring but
+---keeping away from cells needing your owner's consent), until none of them is left. Blocks already gone end it
+---(not_found from numen.work.dig). A walk that still leaves nothing within reach raises that out_of_reach; any other
+---failing step raises its error as it is.
 ---@param blocks Block[] What to dig, as a scan gives them: a cluster's blocks.
 ---@return integer dug How many cells it dug.
 function M.mine(blocks)
   local dug = 0
+  local walk = {costs = {dig = true, place = true, consent = false}}
   local walked = false
   while true do
     local ok, r = pcall(numen.work.dig, blocks)
     if ok then
       dug = dug + r.dug
       walked = false
-      M.collect({alter = "natural"})
+      M.collect(walk)
       if r.left == 0 then
         return dug
       end
     elseif r.kind == "not_found" then
       return dug
     elseif r.kind == "out_of_reach" and not walked then
-      numen.move.goto_(blocks, {arrive = "dig", alter = "natural"})
+      numen.move.to(blocks, {arrive = "dig", costs = walk.costs})
       walked = true
     else
       error(r, 0)

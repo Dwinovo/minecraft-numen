@@ -58,7 +58,7 @@ public final class TameWildMaid implements Scenario {
     public String solution(Scene scene) {
         // numen.use.entity 不走动:先走到她两格内
         BlockPos at = maid.blockPosition();
-        return "numen.move.goto_(" + Shapes.literal(at) + ", {arrive = \"near\", near = 2})\n"
+        return "numen.move.to(" + Shapes.literal(at) + ", {arrive = \"near\", range = 2})\n"
                 + "numen.use.entity(" + maid.getId() + ", {item = \"minecraft:cake\"})";
     }
 }

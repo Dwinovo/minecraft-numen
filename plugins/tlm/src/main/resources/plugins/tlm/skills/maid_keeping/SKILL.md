@@ -23,7 +23,7 @@ description: 主人提到车万女仆、要你驯服或照顾女仆、给女仆�
 `numen.use.entity(812, {item = "minecraft:cake"})`
 
 它站在原地拿着蛋糕右键她,不走过去:先走到她旁边,`numen.scan.entities` 给的那只女仆 `m` 原样交过去就行,
-`numen.move.goto_(m, {arrive = "near", near = 2})`。成了会收到 `maid_tamed` 事件,她从此归你。别人的女仆用蛋糕驯服不了。
+`numen.move.to(m, {arrive = "near", range = 2})`。成了会收到 `maid_tamed` 事件,她从此归你。别人的女仆用蛋糕驯服不了。
 
 ## 配装备、放东西、背包
 
