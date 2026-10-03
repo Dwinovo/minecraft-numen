@@ -67,7 +67,7 @@ public final class RouteOps {
         String flags = RouteFlags.written(args);
         Itinerary route = Itinerary.of(name, her.level().dimension().location(), to, flags);
         NamedAreas areas = NamedAreas.of(her);
-        Destination.of(her, to, RouteFlags.spec(route, 0, areas), areas, Feet.cell(her));
+        Destination.of(her, to, RouteFlags.spec(RouteFlags.base(her), route, 0, areas), areas, Feet.cell(her));
         routes(her).put(route);
         String call = own ? "" : "\"" + name + "\"";
         return TaskResult.ok("made route " + name + ": from wherever I stand to " + to.words()
@@ -82,7 +82,7 @@ public final class RouteOps {
         int place = at == null ? route.legs().size() : at;
         Itinerary next = route.via(stop, place);
         NamedAreas areas = NamedAreas.of(her);
-        Destination.of(her, stop, RouteFlags.spec(next, place - 1, areas), areas, Feet.cell(her));
+        Destination.of(her, stop, RouteFlags.spec(RouteFlags.base(her), next, place - 1, areas), areas, Feet.cell(her));
         return saved(her, next, "added stop " + place + " (" + stop.words() + ")");
     }
 

@@ -3,6 +3,9 @@ package com.dwinovo.numen.core.build;
 import com.dwinovo.numen.core.Constants;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongSet;
+import it.unimi.dsi.fastutil.longs.LongSets;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -10,6 +13,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.saveddata.SavedData;
@@ -202,6 +206,28 @@ public final class Built extends SavedData {
     /** 建成的每一栋,按盖下去的先后。 */
     public List<Building> all() {
         return List.copyOf(buildings);
+    }
+
+    /**
+     * 这个维度里每一栋还立着的格:记着、加载着、世界里此刻仍是记下的那个方块(别人改过的、拆掉的不算,判据同 {@link Changes})。
+     * 在主线程上读世界,冻结成一份交出去:寻路的工作线程拿着它逐格问,不碰这份会变的记录。
+     */
+    public LongSet standingIn(ServerLevel level) {
+        ResourceLocation dimension = level.dimension().location();
+        LongOpenHashSet out = new LongOpenHashSet();
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        for (Building b : buildings) {
+            if (!b.dimension.equals(dimension)) {
+                continue;
+            }
+            for (Map.Entry<Long, Block> cell : b.cells.entrySet()) {
+                pos.set(cell.getKey());
+                if (level.isLoaded(pos) && level.getBlockState(pos).is(cell.getValue())) {
+                    out.add(cell.getKey().longValue());
+                }
+            }
+        }
+        return LongSets.unmodifiable(out);
     }
 
     /** 这一处的那一栋;还没盖过是 null。 */

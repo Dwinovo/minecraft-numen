@@ -8,8 +8,10 @@ import com.dwinovo.numen.area.Area;
 import com.dwinovo.numen.area.AreaStore;
 import com.dwinovo.numen.area.Cells;
 import com.dwinovo.numen.core.Constants;
+import com.dwinovo.numen.core.build.Built;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.permission.PlacedBlocks;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
@@ -167,6 +169,46 @@ public class AreaRouteGameTests {
             helper.assertTrue(plankCount(helper, 7, 7) < planksBefore, "she got out without breaking any plank?");
             helper.assertTrue(walk.outcome().contains("oak_planks"), "the reply does not say what was broken: "
                     + walk.outcome());
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 路上不挖她盖的房子:关在木板屋里,终点在屋东边;东墙是她照设计盖的一栋({@link Built} 记着这几格,放置记号也是她自己)。
+     * {@code alter = "natural"} 的一趟不点名任何禁区,也挖开别的墙绕出去,东墙一块不少——日式小屋卡在底层来回挖自己刚放下的格,
+     * 就是路线把房子的格当成了能挖的地形。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
+    public static void a_walk_never_digs_a_building_she_built(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        plankRoomAround(helper, 7, 7);
+        int planksBefore = plankCount(helper, 7, 7);
+        NumenPlayer companion = spawnAt(helper, "gametest_keeper", new BlockPos(7, 2, 7), false);
+        String her = companion.getGameProfile().getName();
+        Built.Site site = new Built.Site("gt_east_wall", level.dimension().location(),
+                helper.absolutePos(new BlockPos(9, 2, 5)), 0);
+        List<BlockPos> wall = new java.util.ArrayList<>();
+        for (int y = 2; y <= 4; y++) {
+            for (int z = 5; z <= 9; z++) {
+                BlockPos cell = helper.absolutePos(new BlockPos(9, y, z));
+                wall.add(cell);
+                Built.of(level.getServer()).placed(site, her, level.getGameTime(), cell, Blocks.OAK_PLANKS);
+                PlacedBlocks.of(level).record(cell, new PlacedBlocks.Placer(companion.getUUID(), her));
+            }
+        }
+        BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
+        ToolRun walk = lua(companion, "move.goto_(" + xyz(target) + ", {alter = \"natural\"})");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(walk.done(), "move.goto_ has not finished");
+            helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(target) <= 2,
+                    "she did not get out: " + walk.outcome());
+            for (BlockPos cell : wall) {
+                helper.assertTrue(level.getBlockState(cell).is(Blocks.OAK_PLANKS),
+                        "a plank of her building was broken at " + cell.toShortString() + ": " + walk.outcome());
+            }
+            helper.assertTrue(plankCount(helper, 7, 7) < planksBefore, "she got out without breaking any plank?");
+            wall.forEach(cell -> Built.of(level.getServer()).cleared(site, level.getGameTime(), cell));
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }

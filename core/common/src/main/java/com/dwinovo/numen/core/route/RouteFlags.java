@@ -3,9 +3,14 @@ package com.dwinovo.numen.core.route;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.cli.Param;
+import com.dwinovo.numen.core.build.Built;
 import com.dwinovo.numen.core.nav.NamedAreas;
 import com.dwinovo.numen.core.tools.RouteSpecFlags;
+import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.spec.PositionCosts;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
+
+import it.unimi.dsi.fastutil.longs.LongSet;
 
 /**
  * 路线上存的规格:她写的路线标志按命令行的写法存成一截文字(如 {@code --alter natural --avoid water}),{@code route.show} 写成
@@ -52,13 +57,28 @@ public final class RouteFlags {
     }
 
     /**
-     * 一段走的规格:出厂值上叠整条的标志,再叠这一段另加的。
+     * 一段走的规格:底子上叠整条的标志,再叠这一段另加的。
      *
+     * @param base 她的底子({@link #base});标志放不开它的禁令
      * @throws IllegalArgumentException 标志里点名的区域此刻不在了,说法同 {@link NamedAreas#resolve}
      */
-    public static RouteSpec spec(Itinerary route, int leg, NamedAreas areas) {
-        RouteSpec whole = RouteSpecFlags.parse(read(route.name(), route.flags()), RouteSpec.defaults(), areas);
+    public static RouteSpec spec(RouteSpec base, Itinerary route, int leg, NamedAreas areas) {
+        RouteSpec whole = RouteSpecFlags.parse(read(route.name(), route.flags()), base, areas);
         return RouteSpecFlags.parse(read(route.name(), route.legs().get(leg).flags()), whole, areas);
+    }
+
+    /**
+     * 她每一段路的底子:出厂值,加上盖好的房子不挖——{@link Built} 记着、此刻还立着的格(她照设计放下的)哪个标志都放不开,路线
+     * 只许绕开、从上面走或站在旁边够。房子是要留下来的东西,不是挡路的地形:{@code alter = "natural"} 许她挖开自然地形与她自己
+     * 垫的料,路上挖掉一格墙,下一轮又得补上,建造就在原地来回打转。在主线程上调。
+     */
+    public static RouteSpec base(NumenPlayer her) {
+        LongSet built = Built.of(her.getServer()).standingIn(her.serverLevel());
+        if (built.isEmpty()) {
+            return RouteSpec.defaults();
+        }
+        return RouteSpec.defaults().edit()
+                .positions(PositionCosts.builder().forbid(PositionCosts.Use.DIG, built::contains).build()).build();
     }
 
     private static CommandArgs read(String name, String flags) {
