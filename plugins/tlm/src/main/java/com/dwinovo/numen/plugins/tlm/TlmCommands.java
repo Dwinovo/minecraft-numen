@@ -24,7 +24,7 @@ import java.util.Map;
  * 发去服务端问,服务端也答不上来。命令树两侧都登记(帮助要它),处理函数只在客户端跑。女仆是世界里的实体,管女仆的
  * 那几个在服务端。
  *
- * <p>都不提升成快捷工具:联动的动作是长尾,走 {@code numen} 这一个入口就够了。
+ * <p>每个动作就是脚本里的一个函数({@code tlm.wear("…")}),和别的动作同一个入口。
  */
 final class TlmCommands {
 
@@ -40,12 +40,17 @@ final class TlmCommands {
             .whenOmitted("get one line per pack instead of single models");
     private static final Param<ResourceLocation> MODEL = Param.required("model", ArgType.id(),
             "The maid model to wear.")
-            .values("a model id exactly as " + line(MODELS) + " --search lists it");
+            .values("a model id exactly as " + line(MODELS) + "({search = ...}) lists it");
 
     private TlmCommands() {}
 
-    /** 回执与状态片段里提到别的动作时写的那一行命令。 */
+    /** 回执与状态片段里提到别的动作时写它的函数:{@code tlm.wear}。 */
     static String line(String action) {
+        return GROUP + "." + action;
+    }
+
+    /** 相关动作里点名一个动作:{@code tlm wear}。 */
+    static String path(String action) {
         return GROUP + " " + action;
     }
 
@@ -57,21 +62,21 @@ final class TlmCommands {
     private static void actions(CommandGroup tlm) {
         tlm.client(MODELS, "Your own look: which maid model you wear now, and which are installed.",
                 TlmCommands::models, SEARCH, Listing.PAGE)
-                .example(line(MODELS))
-                .example(line(MODELS) + " --search 灵梦")
+                .example(line(MODELS) + "()")
+                .example(line(MODELS) + "({search = \"灵梦\"})")
                 .note("Read-only. Runs on your owner's client, where the model packs are.")
                 .note("One line per pack, or per model found; a long list comes a page at a time.")
-                .seeAlso(line(WEAR));
+                .seeAlso(path(WEAR));
         tlm.client(WEAR, "Your own look: put on a maid model.",
                 TlmCommands::wear, MODEL)
-                .example(line(WEAR) + " touhou_little_maid:hakurei_reimu")
+                .example(line(WEAR) + "(\"touhou_little_maid:hakurei_reimu\")")
                 .note("It covers your whole body: a YSM model or your own skin stops showing until you take it off.")
                 .note("It does not ask your owner; tell them what you changed into.")
-                .seeAlso(line(MODELS), line(REMOVE));
+                .seeAlso(path(MODELS), path(REMOVE));
         tlm.client(REMOVE, "Your own look: take the maid model off; your other look shows again.",
                 TlmCommands::remove)
-                .example(line(REMOVE))
-                .seeAlso(line(WEAR));
+                .example(line(REMOVE) + "()")
+                .seeAlso(path(WEAR));
         MaidCommands.actions(tlm);
     }
 
@@ -93,7 +98,6 @@ final class TlmCommands {
 
         String worn = wornId == null ? "现在是本来的样子" : "现在穿 " + MaidCatalog.nameOf(wornId);
 
-        String again = args.write(line(MODELS), List.of(SEARCH));
         if (q.isEmpty()) {
             Map<String, Object> packs = MaidCatalog.summary();
             int total = packs.values().stream()
@@ -104,7 +108,7 @@ final class TlmCommands {
                             .map(String::valueOf).toList())));
             data.put("total", total);
             src.reply(new Listing(worn + ";一共 " + total + " 个模型,分在 " + packs.size()
-                    + " 个包里。想找具体哪个,用 --search 搜角色名或包名:", rows, "", again).result(args, data)
+                    + " 个包里。想找具体哪个,用 {search = ...} 搜角色名或包名:", rows, "").result(args, data)
                     .toJson());
             return;
         }
@@ -113,7 +117,7 @@ final class TlmCommands {
         for (MaidCatalog.Entry e : MaidCatalog.search(q)) {
             rows.add("  " + e.id() + " — " + e.name() + "(" + e.pack() + ")");
         }
-        src.reply(new Listing(worn + ";搜「" + q + "」找到 " + rows.size() + " 个:", rows, "", again)
+        src.reply(new Listing(worn + ";搜「" + q + "」找到 " + rows.size() + " 个:", rows, "")
                 .result(args, data).toJson());
     }
 
@@ -130,7 +134,7 @@ final class TlmCommands {
         if (!Tlm.exists(model)) {
             // 不把全量清单塞回去(两百多个,一次两万 token),指回清单去搜
             src.reply(TaskResult.fail("没有叫 " + model + " 的模型;用 " + line(MODELS)
-                    + " --search 搜一下正确的 id").toJson());
+                    + "({search = ...}) 搜一下正确的 id").toJson());
             return;
         }
         Wardrobe.wear(src.companion(), model);

@@ -25,8 +25,9 @@ import java.util.stream.Collectors;
 /**
  * {@code kaleidoscope}:查一口锅能做什么、看一格锅现在怎样、在一格锅上做一道菜。
  *
- * <p>三个动作都在服务端:锅的状态机、配方表、品质评估都住在那边。都不提升成快捷工具——联动的动作是长尾,
- * 走 {@code numen} 这一个入口就够了。
+ * <p>三个动作都在服务端:锅的状态机、配方表、品质评估都住在那边。每个动作就是脚本里的一个函数
+ * ({@code kaleidoscope.cook(...)}),和别的动作同一个入口。{@code cook} 不走动、不找远处的锅:不点名就是她手够得着的那一口,
+ * 走过去是脚本的事({@code scan.blocks} 找到锅、{@code move.goto_(…, {arrive = "use"})} 走到够得着)。
  */
 final class KaleidoscopeCommands {
 
@@ -56,8 +57,13 @@ final class KaleidoscopeCommands {
 
     private KaleidoscopeCommands() {}
 
-    /** 回执与事件里提到别的动作时写的那一行命令。 */
+    /** 回执与事件里提到别的动作时写它的函数:{@code kaleidoscope.recipes}。 */
     static String line(String action) {
+        return GROUP + "." + action;
+    }
+
+    /** 相关动作里点名一个动作:{@code kaleidoscope cook}。 */
+    private static String path(String action) {
         return GROUP + " " + action;
     }
 
@@ -70,29 +76,31 @@ final class KaleidoscopeCommands {
         kc.server(RECIPES, "What the cookware can cook: recipe id, ingredients with portions, carrier, kitchenware, "
                         + "time.",
                 KaleidoscopeCommands::recipes, COOKWARE, HAVE_ONLY, NAME, Listing.PAGE)
-                .example(line(RECIPES) + " pot --have-only")
-                .example(line(RECIPES) + " stockpot --name rice")
+                .example(line(RECIPES) + "(\"pot\", {have_only = true})")
+                .example(line(RECIPES) + "(\"stockpot\", {name = \"rice\"})")
                 .note("Read-only. One recipe per line; a pot knows a few hundred, so the list comes in pages — "
-                        + "narrow it with --name or --have-only instead of paging through all of them.")
+                        + "narrow it with name or have_only instead of paging through all of them.")
                 .note("Flex recipes list THIS world's golden ratio; every save has its own.")
-                .seeAlso(line(INSPECT), line(COOK));
+                .seeAlso(path(INSPECT), path(COOK));
         kc.server(INSPECT, "Read one pot or stockpot from any distance: stage, contents, heat, ticks left, what it "
                         + "waits for.",
                 KaleidoscopeCommands::inspect, COOKER)
-                .example(line(INSPECT) + " 120 64 -35")
+                .example(line(INSPECT) + "({120, 64, -35})")
                 .note("Read-only. Check a cookware is free before you cook on it.")
-                .seeAlso(line(COOK));
+                .seeAlso(path(COOK));
         kc.server(COOK, "Cook one dish start to finish on a pot or stockpot within your reach.",
                 KaleidoscopeCommands::cook, RECIPE, COOK_AT)
-                .example(line(COOK) + " kaleidoscope_cookery:flex_pot/braised_beef")
-                .example(line(COOK) + " kaleidoscope_cookery:flex_pot/braised_beef --at 120 64 -35")
+                .example(line(COOK) + "(\"kaleidoscope_cookery:flex_pot/braised_beef\")")
+                .example(line(COOK) + "(\"kaleidoscope_cookery:flex_pot/braised_beef\", {at = {120, 64, -35}})")
                 .note("Background work: the result arrives as a task_finished event. One dish at a time.")
-                .note("It does not walk: stand within reach of the cookware first. Out of reach, no pot or "
+                .note("It does not walk and does not look for a pot further away: stand within reach of the "
+                        + "cookware first (`scan.blocks` finds one, `move.goto_` it with arrive = \"use\"). Out of "
+                        + "reach, no pot or "
                         + "stockpot there, an unknown recipe or a cookware already in use is refused at once with the "
                         + "reason, and nothing starts.")
                 .note("Uses the ingredients, oil and container from YOUR inventory. Asks your owner first when "
                         + "their rules say so, for using the cookware and for taking the dish.")
-                .seeAlso(line(RECIPES), line(INSPECT), "task stop");
+                .seeAlso(path(RECIPES), path(INSPECT), "task stop");
     }
 
     private static void recipes(ServerSource src, CommandArgs args) {
@@ -129,8 +137,7 @@ final class KaleidoscopeCommands {
         String head = rows.isEmpty()
                 ? "No " + cookware.id() + " recipe matches."
                 : rows.size() + " " + cookware.id() + " recipe(s), one per line:";
-        String again = args.write(line(RECIPES), List.of(COOKWARE, HAVE_ONLY, NAME));
-        src.reply(new Listing(head, rows, "", again).result(args, data).toJson());
+        src.reply(new Listing(head, rows, "").result(args, data).toJson());
     }
 
     private static void inspect(ServerSource src, CommandArgs args) {
@@ -145,7 +152,7 @@ final class KaleidoscopeCommands {
     }
 
     /**
-     * 派活式:受理即回执,收尾走 {@code task_finished}——一锅汤能炖好几分钟,回合挂着等它等于把对话冻住。没写 {@code --at} 就是
+     * 派活式:受理即回执,收尾走 {@code task_finished}——一锅汤能炖好几分钟,回合挂着等它等于把对话冻住。没写 {@code at} 就是
      * 她手边够得着的那口锅(最近的);重启后重放照这一刻认下的那一格。
      */
     private static void cook(ServerSource src, CommandArgs args) {
@@ -170,8 +177,8 @@ final class KaleidoscopeCommands {
             }
         }
         if (best == null) {
-            src.reply(TaskResult.fail("no pot or stockpot is within my reach. `move goto <x y z> --arrive use` with "
-                    + "its coordinates first, or give them with --at.").toJson());
+            src.reply(TaskResult.fail("no pot or stockpot is within my reach. `move.goto_({x, y, z}, {arrive = \"use\"})` "
+                    + "with its coordinates first (`scan.blocks` finds one), then cook again.").toJson());
         }
         return best;
     }

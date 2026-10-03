@@ -13,6 +13,7 @@ import com.dwinovo.numen.core.build.Layout;
 import com.dwinovo.numen.core.build.Placement;
 import com.dwinovo.numen.core.build.Primitive;
 import com.dwinovo.numen.core.task.build.BuildOrder;
+import com.dwinovo.numen.core.task.build.BuildSurvey;
 import com.dwinovo.numen.core.task.build.BuildTaskRecord;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskDispatch;
@@ -24,14 +25,18 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 
 /**
- * 建造动世界的这一半:当场执行一个原语、{@code build at} 把一处变成施工图的样子、列出建成的房子。
+ * 建造动世界的这一半:当场执行一个原语、{@code build.at} 把一处够得着的格变成施工图的样子、{@code build.left} 数还剩什么、
+ * 列出建成的房子。
  *
  * <p>两条派活的路是同一条:摆出一份施工图({@link Layout})→ 和世界比出要动的格({@link Changes})→ 没有要动的就不派活,
- * 有就交同一个执行器。当场执行就是"只有一步、摆在世界坐标上、不算一栋房子"的那一种。
+ * 有就交同一个执行器,它只放站在原地够得着的格。当场执行就是"只有一步、摆在世界坐标上、不算一栋房子"的那一种。
+ * {@code build.left} 摆同一份施工图、比同一份差异,按执行器挑格的同一个判据({@link BuildSurvey})数,不派活。
  */
 public final class BuildOps {
 
@@ -54,7 +59,71 @@ public final class BuildOps {
      * @param name 设计名或蓝图文件名
      */
     public static void at(ServerSource src, String name, BlockPos anchor, int quarters) {
-        NumenPlayer her = src.companion();
+        Planned plan = plan(src.companion(), name, anchor, quarters);
+        // 蓝图文件一趟运不完是常态,分段施工 + 精确续建;设计是她自己写的一栋,整份一次预检,缺料一格不放
+        dispatch(src, plan.layout(), plan.changes(), plan.file(), plan.site(), plan.already());
+    }
+
+    /**
+     * 这一处离施工图的样子还差什么,按她此刻站的地方数:还剩几格、几格够得着、几格要先挖开(给出最近的几格)、几格够不着
+     * (给出最低最近的一格)。只读,当场回;数的判据与 {@link #at} 挑格的是同一个。
+     */
+    public static String left(NumenPlayer her, String name, BlockPos anchor, int quarters) {
+        Planned plan = plan(her, name, anchor, quarters);
+        Map<String, Object> data = new LinkedHashMap<>();
+        if (plan.changes().none()) {
+            data.put("left", 0);
+            data.put("reach", 0);
+            data.put("dig", List.of());
+            data.put("far", 0);
+            return TaskResult.ok(plan.already(), data).toJson();
+        }
+        BuildTaskRecord record = new BuildTaskRecord("build.left", "", 0, work(plan.layout(), plan.changes()),
+                !WorkProfile.of(her).freeMaterials(), plan.file(), plan.site());
+        BuildSurvey.Tally tally = BuildSurvey.of(her, record).tally();
+        data.put("left", tally.left());
+        data.put("reach", tally.count(BuildSurvey.State.REACH));
+        data.put("dig", tally.dig().subList(0, Math.min(LISTED_DIG, tally.dig().size())).stream()
+                .map(BuildOps::cell).toList());
+        data.put("far", tally.far().size());
+        if (!tally.far().isEmpty()) {
+            data.put("next", cell(tally.far().get(0)));
+        }
+        data.put("short", tally.count(BuildSurvey.State.SHORT));
+        data.put("skipped", tally.count(BuildSurvey.State.SKIPPED));
+        String text = tally.left() == 0
+                ? "nothing left to do: every cell that differs from " + name + " is one you leave alone ("
+                        + tally.count(BuildSurvey.State.SKIPPED) + ")"
+                : tally.left() + " cell(s) of " + name + " still to do: " + tally.count(BuildSurvey.State.REACH)
+                        + " within reach to place now, " + tally.dig().size() + " to dig out first, "
+                        + tally.far().size() + " out of reach, " + tally.count(BuildSurvey.State.SHORT)
+                        + " holding another block with nothing of yours to put there";
+        return TaskResult.ok(text, data).toJson();
+    }
+
+    /** {@code build.left} 列出几格要先挖开的:一次 {@code work.dig} 交得完的量。 */
+    private static final int LISTED_DIG = 16;
+
+    private static List<Integer> cell(BlockPos pos) {
+        return List.of(pos.getX(), pos.getY(), pos.getZ());
+    }
+
+    /**
+     * 摆好的一份施工图与它和世界的差异。同一份施工图、同一个维度、同一个落点已经有一栋,差异里带上该拆的格;第一次盖时这一栋
+     * 还没有记录,差异就是整栋。
+     */
+    private record Planned(String name, BlockPos anchor, Layout layout, Changes changes, boolean file,
+                           Built.Site site, Built.Building was) {
+
+        /** 已经是这个样子时的那句话。 */
+        String already() {
+            return (was == null ? name : was.name()) + " at " + anchor.getX() + " " + anchor.getY() + " "
+                    + anchor.getZ() + " already looks like " + name + "; nothing to change";
+        }
+    }
+
+    /** 摆出施工图、比出差异;施工图一格都没有就当场说。 */
+    private static Planned plan(NumenPlayer her, String name, BlockPos anchor, int quarters) {
         ServerLevel level = her.serverLevel();
         Placement at = new Placement(anchor, quarters);
         boolean file = Designs.kindOf(level.getServer(), name) == Designs.Kind.BLUEPRINT_FILE;
@@ -62,16 +131,17 @@ public final class BuildOps {
                 ? Designs.load(level.getServer(), name).drawn().laid(at)
                 : BlueprintStore.load(level, name, anchor, quarters);
         if (layout.targets().isEmpty()) {
-            src.reply(TaskResult.fail(name + " has nothing to build yet").toJson());
-            return;
+            throw new IllegalArgumentException(name + " has nothing to build yet");
         }
         Built.Site site = new Built.Site(name, level.dimension().location(), anchor, at.quarters());
         Built.Building was = Built.of(level.getServer()).at(site);
-        String where = anchor.getX() + " " + anchor.getY() + " " + anchor.getZ();
-        // 蓝图文件一趟运不完是常态,分段施工 + 精确续建;设计是她自己写的一栋,整份一次预检,缺料一格不放
-        dispatch(src, layout, Changes.between(layout.targets(), was, seen(level)), file, site,
-                (was == null ? name : was.name()) + " at " + where + " already looks like " + name
-                        + "; nothing to change");
+        return new Planned(name, anchor, layout, Changes.between(layout.targets(), was, seen(level)), file, site, was);
+    }
+
+    /** 交给执行器的施工图:要动的格,带上原图的尺寸、方块实体数据、摆设与料单。 */
+    private static Layout work(Layout layout, Changes changes) {
+        return new Layout(changes.work(), layout.size(), layout.blockEntityData(), layout.entities(),
+                layout.cellNeeds(), layout.dropped());
     }
 
     /** 建成的房子,按盖下去的先后,每栋一行:名字、照什么盖的、在哪、朝向、何时、谁盖、记着几格。 */
@@ -94,9 +164,9 @@ public final class BuildOps {
                     + ", " + b.cells().size() + " block(s) on its record");
         }
         String head = rows.isEmpty()
-                ? "Nothing has been built with build at yet."
-                : "Built with build at (build at the same design, dimension and spot changes that building):";
-        return new Listing(head, rows, "", "build built").result(args).toJson();
+                ? "Nothing has been built with build.at yet."
+                : "Built with build.at (build.at with the same design, dimension and spot changes that building):";
+        return new Listing(head, rows, "").result(args).toJson();
     }
 
     /** 游戏里的第几天(从 1 数)。 */
@@ -121,8 +191,7 @@ public final class BuildOps {
         }
         NumenPlayer her = src.companion();
         boolean consume = !WorkProfile.of(her).freeMaterials();
-        Layout work = new Layout(changes.work(), layout.size(), layout.blockEntityData(), layout.entities(),
-                layout.cellNeeds(), layout.dropped());
+        Layout work = work(layout, changes);
         long deadline = her.level().getGameTime() + BuildOrder.deadlineTicks(work.targets().size(), consume);
         TaskDispatch.setTask(src, new BuildTaskRecord(src, deadline, work, consume, partial, site));
     }

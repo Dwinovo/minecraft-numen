@@ -74,8 +74,8 @@ final class QuestBook {
                 ? "Nothing to work on right now: every quest in the book is done or still waiting on others."
                 : "Quests you can work on now (" + quests.size() + "):");
         String foot = pinnedLine() + "\n" + unclaimedLine() + "\n"
-                + FtbqCommands.SHOW + " <quest> shows one quest in full.";
-        return new Listing(head, rows, foot, FtbqCommands.LIST);
+                + FtbqCommands.SHOW + "(<quest id or title>) shows one quest in full.";
+        return new Listing(head, rows, foot);
     }
 
     /** {@code show}:按编号或标题找一个书里找得到的任务,把它摊开。 */

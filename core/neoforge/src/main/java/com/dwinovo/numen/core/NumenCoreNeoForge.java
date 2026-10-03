@@ -51,15 +51,22 @@ public class NumenCoreNeoForge {
     }
 
     /**
-     * core 的内置脚本同样经插件那扇门交出去,原地读 jar 里的 scripts/ 目录。脚本两侧都要(大脑跑它,服务端存取与列它),
-     * 所以直接登记,不等客户端。
+     * core 的内置脚本与库同样经插件那扇门交出去,原地读 jar 里的 scripts/ 与 library/ 目录。两侧都要(大脑跑它们,服务端存取与
+     * 列它们),所以直接登记,不等客户端。
      */
     private static void declareBundledScripts() {
         Path root = ModJar.find("scripts");
         if (root == null) {
             throw new IllegalStateException("[numen-core] no bundled scripts/ dir found in jar");
         }
-        com.dwinovo.numen.api.NumenPlugins.register(numen -> numen.bundleScripts(root));
+        Path library = ModJar.find("library");
+        if (library == null) {
+            throw new IllegalStateException("[numen-core] no bundled library/ dir found in jar");
+        }
+        com.dwinovo.numen.api.NumenPlugins.register(numen -> {
+            numen.bundleLibrary(library);
+            numen.bundleScripts(root);
+        });
     }
 
     private static void onServerTickPost(ServerTickEvent.Post event) {

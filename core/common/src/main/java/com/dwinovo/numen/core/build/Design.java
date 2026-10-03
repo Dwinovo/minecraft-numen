@@ -80,12 +80,12 @@ public record Design(String name, UUID owner, String ownerName, String author, S
         Primitive primitive = path.length == 2 && path[0].equals(GROUP) && reading.args() != null
                 ? Primitive.named(path[1]) : null;
         if (primitive == null) {
-            throw new IllegalArgumentException("a design step is one build primitive (build set, place, line, layer, "
+            throw new IllegalArgumentException("a design step is one build primitive (build.set, place, line, layer, "
                     + "cylinder, sphere or copy), not " + reading.path());
         }
         if (reading.args().get(Primitive.Params.INTO) != null || reading.args().get(Primitive.Params.STEP) != null
                 || reading.args().get(Primitive.Params.BEFORE) != null) {
-            throw new IllegalArgumentException("--into, --step and --before say where a step goes; a step inside a "
+            throw new IllegalArgumentException("into, step and before say where a step goes; a step inside a "
                     + "design does not carry them");
         }
         return new Step(primitive, reading.args());
@@ -94,9 +94,14 @@ public record Design(String name, UUID owner, String ownerName, String author, S
     /** 读好的一步:哪个原语、什么参数。 */
     public record Step(Primitive primitive, CommandArgs args) {
 
-        /** 写回一行命令:原语的参数表按声明顺序写,只写这一步给了的。 */
+        /** 写回一行命令(设计文件里存的样子):原语的参数表按声明顺序写,只写这一步给了的。 */
         public String line() {
             return args.write(GROUP + " " + primitive.action, primitive.params());
+        }
+
+        /** 写成脚本里的一次调用(给她看的样子):同一份参数,照抄加上 {@code into} 就是这一步。 */
+        public String call() {
+            return args.call(GROUP + " " + primitive.action, primitive.params());
         }
     }
 

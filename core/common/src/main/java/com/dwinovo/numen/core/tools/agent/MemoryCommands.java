@@ -31,7 +31,7 @@ public final class MemoryCommands {
     private static final String DEFAULT_TYPE = "world";
 
     private static final Param<String> DESCRIPTION = Param.required("description", ArgType.string(),
-            "The one line you will see in your index: the fact itself, not a label; quote it.");
+            "The one line you will see in your index: the fact itself, not a label.");
     private static final Param<String> NEW_NAME = Param.optional("name", ArgType.word(),
             "Short kebab-case handle for the note, e.g. main-base; writing a name again replaces that note.")
             .whenOmitted("give it the next free handle note-1, note-2, …");
@@ -41,7 +41,7 @@ public final class MemoryCommands {
                     + "seen, lesson = something you tried that did not work.")
             .whenOmitted("file it as " + DEFAULT_TYPE);
     private static final Param<String> CONTENT = Param.optional("content", ArgType.string(),
-            "A longer body, read back with `memory recall`.")
+            "A longer body, read back with memory.recall.")
             .whenOmitted("keep just the line, when it already says everything");
     private static final Param<String> NAME = Param.required("name", ArgType.word(),
             "The note's name, exactly as <memory> lists it.");
@@ -62,16 +62,16 @@ public final class MemoryCommands {
     private static void actions(CommandGroup memory) {
         memory.client(REMEMBER, "Write one note to your own memory; it comes back to you as a line in <memory>.",
                 MemoryCommands::remember, DESCRIPTION, NEW_NAME, TYPE, CONTENT)
-                .example(line(REMEMBER) + " \"main base -340,68,120, door faces east\" --name main-base")
-                .example(line(REMEMBER) + " \"the swamp west of base is too deep to cross\" --name swamp-route "
-                        + "--type lesson --content \"tried twice on day 12; go around by the north ridge\"")
+                .example("memory.remember(\"main base -340,68,120, door faces east\", {name = \"main-base\"})")
+                .example("memory.remember(\"the swamp west of base is too deep to cross\", {name = \"swamp-route\", "
+                        + "type = \"lesson\", content = \"tried twice on day 12; go around by the north ridge\"})")
                 .note("It outlives this session. The description IS the index line, and for most notes the whole "
                         + "note: put the fact in it (\"main base -340,68,120\"), not a label (\"about the base\").")
-                .note("Use --content only when there is more worth reading later.")
+                .note("Use the content option only when there is more worth reading later.")
                 .seeAlso(line(RECALL), line(FORGET));
         memory.client(RECALL, "Read the body of one of your notes.",
                 MemoryCommands::recall, NAME, Listing.PAGE)
-                .example(line(RECALL) + " main-base")
+                .example("memory.recall(\"main-base\")")
                 .note("<memory> already carries each note's line; recall only when that line points at more you "
                         + "need.")
                 .note("A note says what was true when you wrote it; the world may have moved on.")
@@ -79,7 +79,7 @@ public final class MemoryCommands {
                 .seeAlso(line(REMEMBER));
         memory.client(FORGET, "Drop one of your notes for good.",
                 MemoryCommands::forget, NAME)
-                .example(line(FORGET) + " main-base")
+                .example("memory.forget(\"main-base\")")
                 .note("Use it when a note turned out wrong, or after merging several into one. Nothing else ever "
                         + "removes a note.")
                 .seeAlso(line(REMEMBER));
@@ -92,7 +92,7 @@ public final class MemoryCommands {
     }
 
     private static void recall(ClientSource src, CommandArgs args) {
-        src.reply(NOTES.recall(src.companion(), args.get(NAME), args, args.write(line(RECALL), List.of(NAME))));
+        src.reply(NOTES.recall(src.companion(), args.get(NAME), args));
     }
 
     private static void forget(ClientSource src, CommandArgs args) {

@@ -26,31 +26,21 @@ public final class StatusCommands {
         status.server("self", "Your body: health, hunger, position, biome, what is in your hands and on you, "
                         + "movement state.",
                         StatusCommands::self)
-                .example("status self")
-                .note("Instant and read-only.")
-                .note("It does not list your backpack: what you carry is in front of you every turn.")
-                .seeAlso("status owner", "status world")
-                // 本能名册不在这里:它在系统提示的 <instincts> 里,每次请求都在,不必再随这条描述发一遍。
-                .promote("Read your body's condition in one call: name, game mode, HP / max HP, "
-                        + "hunger / saturation, position, dimension, biome, the structures you are "
-                        + "standing in, what is in your hands, what you wear (<worn>) and what mods report "
-                        + "about your body, and movement "
-                        + "state. ALWAYS call this before "
-                        + "combat or planning decisions. It does NOT list your backpack — what you carry "
-                        + "is already in front of you every turn; run `use gui` when exact slots matter. "
-                        + "No arguments.");
+                .example("status.self()")
+                .note("Instant and read-only: name, game mode, health, hunger and saturation, position, dimension, "
+                        + "biome, the structures you stand in, what is in your hands, what you wear and what mods "
+                        + "report about your body, movement state.")
+                .note("It does not list your backpack: what you carry is in front of you every turn; `use.gui()` "
+                        + "shows exact slots.")
+                .seeAlso("status owner", "status world");
         status.server("owner", "Your owner: online or not, health, hunger, position, distance from you, held items.",
                         StatusCommands::owner)
-                .example("status owner")
+                .example("status.owner()")
                 .note("Instant and read-only. An offline owner comes back as online:false.")
-                .seeAlso("status self")
-                .promote("Read your owner's current status: name, online state, HP, hunger, "
-                        + "position, distance from you, and held item. Call before any 'follow', 'protect', or "
-                        + "'rendezvous' decision. If the owner is offline the call returns online:false "
-                        + "— default to autonomous mode until they return. No arguments.");
+                .seeAlso("status self");
         status.server("world", "The world: dimension, game time, whether it is bright or dark outside, weather.",
                         StatusCommands::world)
-                .example("status world")
+                .example("status.world()")
                 .note("Instant and read-only. Darkness and weather matter for mobs, combat and sailing.")
                 .seeAlso("status self");
     }

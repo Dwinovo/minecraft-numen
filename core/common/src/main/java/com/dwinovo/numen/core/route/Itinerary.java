@@ -17,7 +17,8 @@ import net.minecraft.resources.ResourceLocation;
  * 叫 Itinerary 而不叫 Route,是为了和寻路模块推导出来的一步步的路({@code search.Route})分开:那个不存,这里存的是意图与计划。
  * 不存起点:从哪儿出发都行,计划里记着那一次是从哪儿规划的。
  *
- * <p>规格存的是她写的那一截标志(如 {@code --alter natural --avoid water}),原样给她看,用时经 {@link RouteFlags} 翻成规格。
+ * <p>规格存的是她写的那几个路线标志,按命令行的写法存成一截文字(如 {@code --alter natural --avoid water});给她看时写成选项表
+ * ({@link RouteFlags#shown}),用时经 {@link RouteFlags} 翻成规格。
  * 改意图(加减途经点、改规格)的每一步都丢掉计划:计划是对着旧意图做的。
  *
  * @param flags 整条的规格标志;没写是空串
@@ -29,7 +30,7 @@ public record Itinerary(String name, ResourceLocation dimension, List<Leg> legs,
 
     /** 命令组的名字:路线的写法都是这一组的命令。 */
     public static final String GROUP = "route";
-    /** 走过的记录留几条:{@code move goto} 每次都走她那条匿名路线,记录不能无限长;几条足够看出这条路最近走不走得通。 */
+    /** 走过的记录留几条:{@code move.goto_} 每次都走她那条匿名路线,记录不能无限长;几条足够看出这条路最近走不走得通。 */
     static final int WALKS_KEPT = 8;
 
     /**
@@ -85,7 +86,7 @@ public record Itinerary(String name, ResourceLocation dimension, List<Leg> legs,
     }
 
     /**
-     * 她自己的那条匿名路线叫什么:{@code move goto} 每次都把这一趟写成它再走,每个同伴一条、名字固定({@code goto-aria}),
+     * 她自己的那条匿名路线叫什么:{@code move.goto_} 每次都把这一趟写成它再走,每个同伴一条、名字固定({@code goto-aria}),
      * 失败回执里改它的下一步照抄这个名字。同伴的名字是玩家名的字符(字母、数字、下划线),小写后合名字的规矩({@link Names})。
      */
     public static String gotoOf(String companionName) {
@@ -118,7 +119,7 @@ public record Itinerary(String name, ResourceLocation dimension, List<Leg> legs,
         checkStop(n, legs.size());
         if (n == legs.size()) {
             throw new IllegalArgumentException("stop " + n + " is the destination of " + name + ", not a waypoint; "
-                    + "route delete " + name + " removes the whole route");
+                    + "route.delete(\"" + name + "\") removes the whole route");
         }
         List<Leg> next = new ArrayList<>(legs);
         next.remove(n - 1);
@@ -162,8 +163,8 @@ public record Itinerary(String name, ResourceLocation dimension, List<Leg> legs,
     public Itinerary reversed(String as) {
         if (plan == null) {
             throw new IllegalArgumentException("route " + name + " has no plan, so where it starts is not known: a route"
-                    + " starts wherever it was last planned from. Run route plan " + name + " where it should start, then"
-                    + " reverse it");
+                    + " starts wherever it was last planned from. Run `route.plan(\"" + name + "\")` where it should "
+                    + "start, then reverse it");
         }
         int n = legs.size();
         List<Leg> back = new ArrayList<>(n);

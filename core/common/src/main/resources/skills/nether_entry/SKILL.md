@@ -1,6 +1,6 @@
 ---
 name: nether_entry
-description: Acquire obsidian, build a Nether portal with build, ignite it with flint & steel via use block, and enter the Nether with the right packlist.
+description: Acquire obsidian, build a Nether portal with build, ignite it with flint & steel via use.block, and enter the Nether with the right packlist.
 ---
 
 # Skill: nether_entry
@@ -16,37 +16,37 @@ Phase 2 of the dragon route. Build a portal, ignite it, walk through. Actual Net
 
 Mine it from a **ruined portal** — a structure that's just standing obsidian, no lava-casting. This is the only route: casting your own (water over lava) leaves every fresh obsidian block touching lava, and I refuse to mine fluid-adjacent blocks (it would flood or burn the dig), so a cast wall is unminable by design.
 
-1. `locate structure #minecraft:ruined_portal` — searches the whole family and returns the nearest. **Skip `ruined_portal_ocean`** (underwater) if the result names it; re-search or pick a land one — I can't dive.
-2. `gear wear diamond_pickaxe` (obsidian needs diamond), `move_goto` the portal coordinates.
-3. `scan blocks obsidian --into portal`, then `move goto portal --arrive dig` and `work dig portal --count 10` — it digs the frame's obsidian within its reach; `work collect` the drops, and repeat the three while `area has portal`. ~9.4s per block is normal.
+1. `locate.structure("#minecraft:ruined_portal")` — searches the whole family and returns the nearest. **Skip `ruined_portal_ocean`** (underwater) if the result names it; re-search or pick a land one — I can't dive.
+2. `gear.wear("diamond_pickaxe")` (obsidian needs diamond), `move.goto_` the portal coordinates.
+3. `scan.blocks("obsidian", {into = "portal"})`, then `move.goto_("portal", {arrive = "dig"})` and `work.dig("portal", {count = 10})` — it digs the frame's obsidian within its reach; `work.collect` the drops, and repeat the three while `area.has("portal")`. ~9.4s per block is normal.
 
 Notes:
-- A portal's frame mixes plain **obsidian** with **crying obsidian** (purple particles). Crying obsidian is a *different block and useless for a portal frame* — a scan for `obsidian` alone leaves it out, so a single portal may yield fewer than 10. If you come up short, `locate structure #minecraft:ruined_portal` again for the next nearest and top up.
-- If `work_dig` reports obsidian that "can't be broken here" with fluid beside it, that portal sits in a wet/lava pocket — relocate to a cleaner one rather than fighting the fluid.
+- A portal's frame mixes plain **obsidian** with **crying obsidian** (purple particles). Crying obsidian is a *different block and useless for a portal frame* — a scan for `obsidian` alone leaves it out, so a single portal may yield fewer than 10. If you come up short, `locate.structure("#minecraft:ruined_portal")` again for the next nearest and top up.
+- If `work.dig` reports obsidian that "can't be broken here" with fluid beside it, that portal sits in a wet/lava pocket — relocate to a cleaner one rather than fighting the fluid.
 
 ## Portal build
 
 - Frame: 4 wide × 5 tall, **corners omitted = exactly 10 obsidian**, standing vertically. Inner opening is 2×3 air.
-- Pick flat ground near your base. Write the frame as a small design — two side columns of 3 plus top and bottom rows of 2 — and build it in one go; a single `build set` handles any one-off correction:
+- Pick flat ground near your base. Write the frame as a small design — two side columns of 3 plus top and bottom rows of 2 — and build it in one go; a single `build.set` handles any one-off correction:
   ```
-  build new portal
-  build line 0 1 0 0 3 0 --block obsidian --into portal
-  build line 3 1 0 3 3 0 --block obsidian --into portal
-  build line 1 0 0 2 0 0 --block obsidian --into portal
-  build line 1 4 0 2 4 0 --block obsidian --into portal
-  build at portal --at 120 64 -35
+  build.new("portal")
+  build.line({0, 1, 0}, {0, 3, 0}, {block = "obsidian", into = "portal"})
+  build.line({3, 1, 0}, {3, 3, 0}, {block = "obsidian", into = "portal"})
+  build.line({1, 0, 0}, {2, 0, 0}, {block = "obsidian", into = "portal"})
+  build.line({1, 4, 0}, {2, 4, 0}, {block = "obsidian", into = "portal"})
+  build.raise("portal", {at = {120, 64, -35}})
   ```
-- **Flint & steel**: craft `flint_and_steel` = 1 iron ingot + 1 flint, a 2×2 recipe (`inv craft` it; see the `containers` skill to lay a grid by hand). Flint drops from gravel you `work_dig`, ~10%/block.
-- **Ignite**: `use block 121 65 -35 --item minecraft:flint_and_steel` aimed at an **empty air cell INSIDE the frame** (a bottom one), not at the obsidian. The fire lands in that cell and the portal forms.
-- Enter: `move_goto` the portal cell and stand in it until the dimension changes (`status_self` confirms).
+- **Flint & steel**: craft `flint_and_steel` = 1 iron ingot + 1 flint, a 2×2 recipe (`inv.craft` it; see the `containers` skill to lay a grid by hand). Flint drops from gravel you `work.dig`, ~10%/block.
+- **Ignite**: `use.block({121, 65, -35}, {item = "minecraft:flint_and_steel"})` aimed at an **empty air cell INSIDE the frame** (a bottom one), not at the obsidian. The fire lands in that cell and the portal forms.
+- Enter: `move.goto_` the portal cell and stand in it until the dimension changes (`status.self` confirms).
 
-## Packlist (verify with `status_self` before igniting)
+## Packlist (verify with `status.self` before igniting)
 
 | Item | Qty | Why |
 |---|---|---|
 | Cooked food | 32+ | Your healing |
 | Diamond sword + bow | 1 + 1 | Equip for combat only — hold the pickaxe while travelling (navigation digs with the held tool) |
-| Arrows | 32+ | `fight attack` spends them only on what it cannot reach (~6 per blaze); run low → carry extra food and let it melee |
+| Arrows | 32+ | `fight.attack` spends them only on what it cannot reach (~6 per blaze); run low → carry extra food and let it melee |
 | Diamond pickaxe (+ iron backup) | 1 + 1 | Obsidian, digging |
 | Cobblestone | 64+ | Throwaway blocks for navigation — bridging lava lakes eats it; keep it on your `throwaway` list |
 | Gold helmet (worn) | 1 | Piglin truce; 5 gold ingots if you must craft one |
@@ -58,10 +58,10 @@ Notes:
 
 - **Don't dig straight down**; lava oceans sit under most terrain. Navigation bridges lava when it must — keep cobblestone stocked.
 - **Water doesn't exist here**: buckets won't place.
-- **Zombified piglins are pacifists until hit — and then they ALL swarm.** Never `fight attack` them.
-- **Ghasts** snipe from far; their fireballs can break the portal. On arrival, note the Nether-side portal coordinates (`status_self`) and report them to your owner. Overworld↔Nether coordinates map 8:1 horizontally.
+- **Zombified piglins are pacifists until hit — and then they ALL swarm.** Never `fight.attack` them.
+- **Ghasts** snipe from far; their fireballs can break the portal. On arrival, note the Nether-side portal coordinates (`status.self`) and report them to your owner. Overworld↔Nether coordinates map 8:1 horizontally.
 
 ## What to load next
 
-Standing in the Nether, packlist intact → mark phase 2 `completed`, `skill_load(name="blaze_rods")`. Load `combat_basics` too if you haven't — blazes are the first real combat test.
+Standing in the Nether, packlist intact → mark phase 2 `completed`, `skill.load("blaze_rods")`. Load `combat_basics` too if you haven't — blazes are the first real combat test.
 

@@ -30,11 +30,11 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.block.Block;
 
 /**
- * 路线规格的命令面:{@code move goto}、{@code route new} 与 {@code route spec} 共用的那一串标志({@link #PARAMS})
+ * 路线规格的命令面:{@code move.goto_}、{@code route.new} 与 {@code route.spec} 共用的那一串标志({@link #PARAMS})
  * 长什么样,读好的值怎么变成 {@link RouteSpec}({@link #parse})——标志到规格的翻译全仓只此一处。旋钮名用模型看得懂的
  * 普通词,按规格的四组组织:
  * <ul>
- *   <li>能力:{@code --alter}(none/natural/any)、{@code --parkour}、{@code --max-fall}、{@code --alter-budget};</li>
+ *   <li>能力:{@code alter}(none/natural/any)、{@code parkour}、{@code max_fall}、{@code alter_budget};</li>
  *   <li>格子种类与禁区:{@code --avoid}——还要排除的语义种类({@link Semantics.Kind} 名),或不进入的区域 {@code area:名字};
  *       {@code --allow}——放开出厂排除的那几种里可以放开的;</li>
  *   <li>按位置 / 按种类:{@code --avoid-break}、{@code --avoid-place}、{@code --avoid-step}——方块 id、{@code #标签},
@@ -210,7 +210,7 @@ public final class RouteSpecFlags {
         double v = args.get(flag);
         if (v < 0 || v > MAX_PENALTY) {
             throw new IllegalArgumentException(
-                    "--" + flagName(flag) + " must be between 0 and " + (int) MAX_PENALTY + ", got " + v);
+                    flagName(flag) + " must be between 0 and " + (int) MAX_PENALTY + ", got " + v);
         }
         return v;
     }
@@ -218,7 +218,7 @@ public final class RouteSpecFlags {
     private static int nonNegative(Param<Integer> flag, CommandArgs args) {
         int v = args.get(flag);
         if (v < 0) {
-            throw new IllegalArgumentException("--" + flagName(flag) + " must be 0 or more, got " + v);
+            throw new IllegalArgumentException(flagName(flag) + " must be 0 or more, got " + v);
         }
         return v;
     }
@@ -258,7 +258,7 @@ public final class RouteSpecFlags {
         try {
             return NamedAreas.region(areas.resolve(area));
         } catch (IllegalArgumentException missing) {
-            throw new IllegalArgumentException("--" + flagName(flag) + " " + area.marked() + ": " + missing.getMessage(),
+            throw new IllegalArgumentException(flagName(flag) + " " + area.marked() + ": " + missing.getMessage(),
                     missing);
         }
     }
@@ -272,13 +272,13 @@ public final class RouteSpecFlags {
                 out.add(holder.value());
             }
             if (out.isEmpty()) {
-                throw new IllegalArgumentException("--" + flagName(flag) + ": tag '" + raw + "' has no blocks");
+                throw new IllegalArgumentException(flagName(flag) + ": tag '" + raw + "' has no blocks");
             }
             return out;
         }
         Block block = BuiltInRegistries.BLOCK.getOptional(ResourceLocation.parse(raw)).orElse(null);
         if (block == null) {
-            throw new IllegalArgumentException("--" + flagName(flag) + ": unknown block '" + raw
+            throw new IllegalArgumentException(flagName(flag) + ": unknown block '" + raw
                     + "' — use a namespaced id like minecraft:chest, a tag like #minecraft:logs,"
                     + " a cell like 12,60,8, or an area like area:house");
         }
@@ -287,7 +287,8 @@ public final class RouteSpecFlags {
     }
 
     /** 回执里写标志的样子:命令行上的短横线写法。 */
+    /** 说法里点名一个标志:脚本里选项表的那个键。 */
     private static String flagName(Param<?> flag) {
-        return flag.name().replace('_', '-');
+        return flag.name();
     }
 }

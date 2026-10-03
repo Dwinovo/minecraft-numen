@@ -73,7 +73,7 @@ class RouteFlagsTest {
         assertFalse(now.positions().forbids(Use.DIG, new BlockPos(0, 64, 0).asLong()));
         IllegalArgumentException gone = assertThrows(IllegalArgumentException.class,
                 () -> RouteFlags.spec(route, 0, NONE));
-        assertTrue(gone.getMessage().contains("--avoid-break area:house: there is no area named house"),
+        assertTrue(gone.getMessage().contains("avoid_break area:house: there is no area named house"),
                 gone.getMessage());
     }
 

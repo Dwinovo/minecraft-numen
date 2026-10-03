@@ -37,10 +37,10 @@ public final class GearCommands {
     private static final Param<String> REMOVE_SLOT = Param.optional("slot", ArgType.string(),
             "Which slot to empty.")
             .values("mainhand, offhand, a slot name listed in <worn>, or " + ARMOR + " for all four armor pieces")
-            .whenOmitted("go by --item; with no --item either, take off all four armor pieces");
+            .whenOmitted("go by the item option; with no item either, take off all four armor pieces");
     private static final Param<ResourceLocation> REMOVE_ITEM = Param.optional("item", ArgType.id(),
             "Take off the piece you wear that is this item.")
-            .whenOmitted("take off whatever --slot holds");
+            .whenOmitted("take off whatever the slot option holds");
 
     private static final InventoryOps INVENTORY = new InventoryOps();
 
@@ -58,8 +58,8 @@ public final class GearCommands {
     private static void actions(CommandGroup gear) {
         gear.server(WEAR, "Wear or hold an item from your backpack.",
                 GearCommands::wear, WEAR_ITEM, WEAR_SLOT)
-                .example(line(WEAR) + " minecraft:iron_helmet")
-                .example(line(WEAR) + " minecraft:shield --slot offhand")
+                .example("gear.wear(\"minecraft:iron_helmet\")")
+                .example("gear.wear(\"minecraft:shield\", {slot = \"offhand\"})")
                 .note("Your wearable slots and what is on them are listed in <worn>.")
                 .note("Whatever it swaps out goes back into your backpack; nothing is dropped. It only moves the "
                         + "item: nothing is used, poured or thrown.")
@@ -68,11 +68,11 @@ public final class GearCommands {
                 .seeAlso(line(REMOVE));
         gear.server(REMOVE, "Take gear off back into your backpack.",
                 GearCommands::remove, REMOVE_SLOT, REMOVE_ITEM)
-                .example(line(REMOVE))
-                .example(line(REMOVE) + " --slot offhand")
-                .example(line(REMOVE) + " --item minecraft:iron_helmet")
-                .note("Give --slot, --item, or both (then only that item in those slots); neither takes off all "
-                        + "four armor pieces.")
+                .example("gear.remove()")
+                .example("gear.remove({slot = \"offhand\"})")
+                .example("gear.remove({item = \"minecraft:iron_helmet\"})")
+                .note("Give slot, item, or both (then only that item in those slots); neither takes off all four "
+                        + "armor pieces.")
                 .note("A piece that doesn't fit in your backpack, or refuses to come off (curse of binding), "
                         + "stays on and the result says so.")
                 .seeAlso(line(WEAR));

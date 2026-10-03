@@ -83,7 +83,7 @@ class DesignTest {
         assertTrue(block.getMessage().startsWith("line 5 (build set 0 0 0 --block notablock): error: notablock"), block.getMessage());
         IllegalArgumentException into = assertThrows(IllegalArgumentException.class, () -> Design.parse("house",
                 text("build set 0 0 0 --block stone --into house")));
-        assertTrue(into.getMessage().contains("--into"), into.getMessage());
+        assertTrue(into.getMessage().contains("into, step and before"), into.getMessage());
         IllegalArgumentException other = assertThrows(IllegalArgumentException.class, () -> Design.parse("house",
                 text("build new shed")));
         assertTrue(other.getMessage().contains("one build primitive"), other.getMessage());
@@ -118,7 +118,7 @@ class DesignTest {
         assertTrue(typo.getMessage().contains("Did you mean: layer?"), typo.getMessage());
         IllegalArgumentException carried = assertThrows(IllegalArgumentException.class,
                 () -> Design.step("build set 0 0 0 --block stone --step 2"));
-        assertTrue(carried.getMessage().contains("--step"), "设计里的一步不带说它记在哪的标志: " + carried.getMessage());
+        assertTrue(carried.getMessage().contains("into, step and before"), "设计里的一步不带说它记在哪的标志: " + carried.getMessage());
         IllegalArgumentException notAStep = assertThrows(IllegalArgumentException.class,
                 () -> Design.step("build designs"));
         assertTrue(notAStep.getMessage().startsWith("a design step is one build primitive"), notAStep.getMessage());
