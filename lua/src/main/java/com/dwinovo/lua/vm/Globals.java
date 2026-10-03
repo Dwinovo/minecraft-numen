@@ -106,8 +106,10 @@ import com.dwinovo.lua.vm.lib.BaseLib;
  * @see ResourceFinder
  * @see com.dwinovo.lua.vm.compiler.LuaC
  * @see com.dwinovo.lua.vm.luajc.LuaJC
+ * <p>
+ * Numen:全局表是一张 {@link FixedKeysTable},宿主登记的全局名(函数与函数表)定死,脚本换不掉也遮不住。
  */
-public class Globals extends LuaTable {
+public class Globals extends FixedKeysTable {
 
 	/** The currently running thread.  Should not be changed by non-library code. */
 	public LuaThread running = new LuaThread(this);

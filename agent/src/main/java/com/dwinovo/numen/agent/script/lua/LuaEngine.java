@@ -443,6 +443,18 @@ public final class LuaEngine implements ScriptEngine {
                 "api.help(\"" + table + "\") lists the group's functions.", null, null));
     }
 
+    /**
+     * 程序或模块给第 ① 层的名字赋值({@code function move.go() end}、{@code move = {}}、{@code raise = f}):登记的 API 函数与它们的表
+     * 谁都换不掉、遮不住,停在那一行。往组里加别的名字照常({@code function move.goto_(…)})。
+     */
+    static LuaSandbox.ScriptError redefined(String table, String key) {
+        String name = table == null ? key : table + "." + key;
+        return new LuaSandbox.ScriptError(ScriptRun.failure(ErrorKind.RUNTIME.wire(), name + " is "
+                + (table == null ? "built into the API" : "an API function") + "; a program or module cannot redefine "
+                + "or replace it", "give yours another name" + (table == null ? "" : " (" + table + "." + key
+                + "_mine, or a function of your own module)"), null, null));
+    }
+
     /** 两个名字的编辑距离(增、删、改各算一步)。 */
     private static int distance(String a, String b) {
         int[] prev = new int[b.length() + 1];
@@ -471,7 +483,7 @@ public final class LuaEngine implements ScriptEngine {
         }
         List<ScriptRun.Call> seen = new ArrayList<>();
         LuaSandbox.Builder sandbox = LuaSandbox.builder(LIMITS).missing(LuaEngine::missing).errors(LuaEngine::render)
-                .function(RAISE, LuaEngine::raise);
+                .redefined(LuaEngine::redefined).function(RAISE, LuaEngine::raise);
         catalog.groups().forEach((group, verbs) -> verbs.forEach((verb, declared) ->
                 sandbox.function(functionName(group), functionName(verb), in -> {
                     seen.add(call(group, verb, in, declared));
@@ -568,7 +580,8 @@ public final class LuaEngine implements ScriptEngine {
         @Override
         public Step start() {
             LuaSandbox.Builder sandbox = LuaSandbox.builder(LIMITS).print(printer).missing(LuaEngine::missing)
-                    .errors(LuaEngine::render).show(LuaEngine::literal).function(RAISE, LuaEngine::raise);
+                    .redefined(LuaEngine::redefined).errors(LuaEngine::render).show(LuaEngine::literal)
+                    .function(RAISE, LuaEngine::raise);
             catalog.groups().forEach((group, verbs) -> verbs.keySet().forEach(verb ->
                     sandbox.function(functionName(group), functionName(verb), in -> ask(group, verb, in))));
             catalog.libraries().forEach(sandbox::library);

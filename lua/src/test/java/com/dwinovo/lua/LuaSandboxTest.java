@@ -394,4 +394,33 @@ class LuaSandboxTest {
         assertEquals(2, o.line());
         assertTrue(o.message().startsWith("lib:3:"), o.message());
     }
+
+    @Test
+    void theHostsNamesCannotBeReplacedOrShadowedButItsTablesTakeNewOnes() throws InterruptedException {
+        LuaSandbox sandbox = LuaSandbox.builder(ROOMY)
+                .function("move", "go", args -> "went")
+                .function("raise", args -> null)
+                .redefined((table, key) -> new LuaSandbox.ScriptError(Map.of("kind", "fixed",
+                        "message", (table == null ? "" : table + ".") + key)))
+                .library("lib", """
+                        function move.twice() return move.go() .. move.go() end
+                        """)
+                .build();
+        LuaSandbox.Outcome o = run(sandbox, """
+                local function refused(f)
+                  local ok, err = pcall(f)
+                  assert(not ok and err.kind == "fixed", tostring(err))
+                  return err.message
+                end
+                assert(refused(function() function move.go() return "mine" end end) == "move.go")
+                assert(refused(function() move.go = nil end) == "move.go")
+                assert(refused(function() rawset(move, "go", print) end) == "move.go")
+                assert(refused(function() move = {} end) == "move")
+                assert(refused(function() rawset(_G, "move", {}) end) == "move")
+                assert(refused(function() raise = print end) == "raise")
+                move.extra = function() return "extra" end
+                assert(move.go() == "went" and move.twice() == "wentwent" and move.extra() == "extra")
+                """);
+        assertTrue(o.finished(), String.valueOf(o));
+    }
 }

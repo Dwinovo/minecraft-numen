@@ -1,6 +1,7 @@
 package com.dwinovo.lua;
 
 import com.dwinovo.lua.vm.Allocation;
+import com.dwinovo.lua.vm.FixedKeysTable;
 import com.dwinovo.lua.vm.Globals;
 import com.dwinovo.lua.vm.LuaClosure;
 import com.dwinovo.lua.vm.LuaError;
@@ -45,6 +46,11 @@ import java.util.regex.Pattern;
  * 宿主可以登记几段库({@link Builder#library}):每段脚本开跑之前,它们按登记顺序在同一个全局环境里先跑一遍,定义的函数脚本里直接
  * 能调(库可以往宿主函数的表里加函数,{@code function move.goto_(...) ... end})。行号只记脚本自己那一段:库里的函数调宿主函数时,
  * {@link #currentLine} 说的是脚本里调这个库函数的那一行,结局停在的也是脚本里的那一行。
+ *
+ * <h2>宿主登记的名字钉死</h2>
+ * 宿主登记的全局函数、函数表,以及表里的每个宿主函数,脚本都换不掉、遮不住:{@code move = {}}、{@code function move.go() end}、
+ * {@code rawset(move, "go", f)} 一律在那一行报错(那句话由 {@link Builder#redefined} 给)。往宿主的表里加别的名字照常(库就是这样往
+ * {@code move} 里加 {@code move.goto_} 的)。
  *
  * <h2>桥接</h2>
  * 宿主函数按 {@code 表名.函数名}(或全局名)登记,收按顺序的参数、交回一个值;值在两边按 {@link #toJava}/{@link #toLua} 换:nil 是
@@ -187,6 +193,8 @@ public final class LuaSandbox {
     private final Map<String, String> libraries;
     /** 脚本读宿主函数表里没有的名字时报的那句话。 */
     private final Missing missing;
+    /** 脚本给宿主登记的名字赋值时报的那句话。 */
+    private final Redefined redefined;
     /** 错误值的表写成文字:错误元表的 {@code __tostring},没接住时结局的那句话。 */
     private final java.util.function.Function<Map<String, Object>, String> errors;
     /** {@code print} 一张没有 {@code __tostring} 的表时怎么写它(换成 Java 值之后)。 */
@@ -205,12 +213,25 @@ public final class LuaSandbox {
         ScriptError error(String table, String key, List<String> present);
     }
 
+    /** 脚本给宿主登记的名字赋值({@code function move.go() end}、{@code move = {}}):报什么错。 */
+    @FunctionalInterface
+    public interface Redefined {
+
+        /**
+         * @param table 表名;改的是一个全局名时是 null
+         * @param key   改的名字
+         * @return 停在那一行的错误:一句话,或一张错误值的表
+         */
+        ScriptError error(String table, String key);
+    }
+
     private LuaSandbox(Builder b) {
         this.limits = b.limits;
         this.print = b.print;
         this.globals = Map.copyOf(b.globals);
         this.libraries = Collections.unmodifiableMap(new LinkedHashMap<>(b.libraries));
         this.missing = b.missing;
+        this.redefined = b.redefined;
         this.errors = b.errors;
         this.show = b.show;
         Map<String, Map<String, HostFunction>> t = new LinkedHashMap<>();
@@ -230,6 +251,8 @@ public final class LuaSandbox {
         private final Map<String, Map<String, HostFunction>> tables = new LinkedHashMap<>();
         private final Map<String, String> libraries = new LinkedHashMap<>();
         private Missing missing = (table, key, present) -> new ScriptError("there is no function " + table + "." + key);
+        private Redefined redefined = (table, key) -> new ScriptError((table == null ? "" : table + ".") + key
+                + " is a host function and cannot be replaced");
         private java.util.function.Function<Map<String, Object>, String> errors = String::valueOf;
         private java.util.function.Function<Object, String> show = String::valueOf;
 
@@ -246,6 +269,12 @@ public final class LuaSandbox {
         /** 脚本读宿主函数表里没有的名字时报的错:按它给的那句话停在那一行。 */
         public Builder missing(Missing missing) {
             this.missing = missing;
+            return this;
+        }
+
+        /** 脚本给宿主登记的名字赋值时报的错:按它给的那句话停在那一行。 */
+        public Builder redefined(Redefined redefined) {
+            this.redefined = redefined;
             return this;
         }
 
@@ -519,10 +548,18 @@ public final class LuaSandbox {
                     return NONE;
                 }
             });
-            globals.forEach((name, fn) -> g.rawset(name, host(fn)));
+            FixedKeysTable.Refusal global = key -> luaError(redefined.error(null, key.tojstring()));
+            globals.forEach((name, fn) -> {
+                g.rawset(name, host(fn));
+                g.fix(LuaValue.valueOf(name), global);
+            });
             tables.forEach((group, fns) -> {
-                LuaTable t = new LuaTable();
-                fns.forEach((fnName, fn) -> t.rawset(fnName, host(fn)));
+                FixedKeysTable t = new FixedKeysTable();
+                FixedKeysTable.Refusal member = key -> luaError(redefined.error(group, key.tojstring()));
+                fns.forEach((fnName, fn) -> {
+                    t.rawset(fnName, host(fn));
+                    t.fix(LuaValue.valueOf(fnName), member);
+                });
                 // 读表里没有的名字:当场报那句话,不让它成 nil 再在调用处报"调了一个 nil"
                 LuaTable meta = new LuaTable();
                 meta.rawset("__index", new VarArgFunction() {
@@ -542,6 +579,7 @@ public final class LuaSandbox {
                 });
                 t.setmetatable(meta);
                 g.rawset(group, t);
+                g.fix(LuaValue.valueOf(group), global);
             });
         }
 

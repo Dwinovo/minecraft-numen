@@ -300,4 +300,19 @@ class LuaEngineTest {
         assertEquals(2, done.line());
         assertTrue(done.error().contains("without calling a host function"), done.error());
     }
+
+    /** 第 ① 层的函数与组谁都换不掉:停在那一行,种类是程序自己的运行错,说换个名字;往组里加别的名字照常。 */
+    @Test
+    void anApiFunctionCannotBeRedefinedButAGroupTakesNewNames() {
+        ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run("""
+                function move.mine() return 1 end
+                function move.go() end
+                """).start());
+        assertFalse(done.ok());
+        assertEquals(2, done.line());
+        assertEquals("runtime", done.failure().get("kind"));
+        assertTrue(done.error().startsWith("runtime — move.go is an API function"), done.error());
+        ScriptRun.Done shadowed = assertInstanceOf(ScriptRun.Done.class, run("move = {}").start());
+        assertTrue(shadowed.error().contains("move is built into the API"), shadowed.error());
+    }
 }
