@@ -4,6 +4,7 @@
 - **已落地**:第 1–7 步,细节见附录 A–G。本稿正文描述的就是第 7 步"分层"之后的样子;第 6 步里"把她的命令挂进 MC 指令树 `/numen`"的做法已撤回(附录 F);第 4 步核心工具迁移按分层后的形态做完(附录 G)。
 - **10-03 起模型的入口只剩 `lua` 一个工具**(附录 K):登记处的每个动作是一个 Lua 函数,正文里"执行一行命令"的那一层现在是
   人在聊天框里的第二个前端;模型写的是程序,`command` 工具与快捷工具删了。
+- **10-04 API 第二版**(附录 N):全名 `numen.<组>.<函数>`、值带方法、没有区域与设计这类名词;附录里更早的命令名是当时的记录。
 
 ## 一、为什么
 
@@ -109,7 +110,7 @@ task status                           第 1 层,核心动作
 - **叫什么**:工具名由命令路径生成,`组_动作`(`move goto` 提升成 `move_goto`),登记时不另起名字(附录 G)。
 - **提升哪些**:按调用频率定。现在提升的是 status_self、status_owner、scan_around、scan_blocks、scan_entities、scan_block、move_goto、work_dig、skill_load、task_stop 十个(附录 G)。
   - `task status` 与 `task timer` 只留命令:task_status 主要被拿来轮询,而收尾本来就会以 `task_finished` 送到。
-  - 基线建议里的 build 不再是工具:建造改为 `build` 组的一串命令(原语、设计、`build at`),一次写完整栋房子的那一个调用没有了(附录 G)。
+  - 基线建议里的 build 不再是工具:建造改为 `numen.build.place` 放给它的格、`numen.build.raise` 盖完一整份(附录 G、附录 N)。
 - **独立工具**:除了快捷工具与 `command`,工具表里只留一个 `todowrite`——输入本身是一份结构化清单的动作留作独立工具,这是这条规则下唯一的例外(附录 G)。
 
 ## 九、帮助与报错:像真正的 CLI 一样把她教会
@@ -172,7 +173,7 @@ ftbquests submit <quest>
   第几条、下一段怎么取——她读不了文件,下一段就是同一条命令加 `--page`:
 
   ```
-  [Showing 1-12 of 43. Use build show house --page 2 to continue.]
+  [Showing 1-12 of 43. Use inv recipes minecraft:stick --page 2 to continue.]
   ```
 
   最后一页不写这一句。抬头与结尾算在预算里,这一句不算(和 pi 一样只算内容)。
@@ -1521,7 +1522,7 @@ area has ores/g2                 成功:ores/g2 has 1 cell(s) left to dig, the n
   禁区里:每段路的底子是 `RouteFlags.base(her)`,出厂规格加上 `Built` 记着、此刻还立着的格禁挖
   (`Built.standingIn`、`PositionCosts.forbid(DIG, …)`),哪个路线标志都放不开;`Built` 是"哪些格算一栋房子"的唯一出处,
   她垫的料不在里面,照旧可挖。站位与够得着照旧只由寻路的目标(`Goals`/`Reach`/`Feet`)判,禁区只让那些要挖房子的站位
-  进不了路线。复现:`AreaRouteGameTests.a_walk_never_digs_a_building_she_built`。
+  进不了路线。复现:`CellRouteGameTests.a_walk_never_digs_a_building_she_built`。
 - **托着它的还没盖好的格被当成"够得着就放"。** 地毯、挂着的灯这类格放下去要有相邻的方块托着;托着它的那格够不着时,
   `build.at` 把它算进手边的活、放不下就以"原版立不住"失败,或者 `build.left` 让她去够它、到了又放不下,在两处之间来回走。
   `BuildSurvey` 多一种情形 `UNHELD`:此刻立不住、而相邻的设计格还有没盖好的;`build.at` 不放它,`build.left` 数进
@@ -1544,4 +1545,31 @@ area has ores/g2                 成功:ores/g2 has 1 cell(s) left to dig, the n
 - **盖完、世界落定之后又去补。** 最后一格放下时世界落定一次,原版立不住或形状由邻居定的格会变;`build.left` 又数到它们,
   `build.raise` 补了又落、落了又补。`build.at` 放完整份时回执数据带 `settled_away`(落定后变了的格数),`build.raise` 见它
   放完(`left == 0`)就收工:落定之后的样子是原版的裁决,再放一遍还是这样。
+
+## 附录 N:API 第二版(10-04,`shell.md` §十)
+
+### 全名
+
+脚本与文字里一律写全名:`numen.<组>.<函数>`,插件 `<模组 id>.<组>.<函数>`。名字空间由 `NumenPlugins.register(名字空间, …)` 定,
+组的登记代码不写名字空间;帮助、`<api>` 索引、回执里的函数名、提示与技能的例子都按全名写,防漂移测试按全名读。
+
+### 删掉的
+
+| 删掉的 | 去了哪 |
+|---|---|
+| `area` 组、`scan.blocks` 的 `into`、`work.dig` 收区域、路线标志里的区域名 | 没有区域:`scan.blocks` 交回团(Cluster),`work.dig` 收 Block 或 Pos,路线的 `avoid` 收选项或格 |
+| `build.new/drop/delete/show/designs/built`,原语 `build.set/place/line/layer/cylinder/sphere/copy` | 模块 `numen.shape` 画 Cells;`numen.build.place(cells)`、`numen.build.diff(cells)`;蓝图句柄 `numen.build.blueprint` |
+| `build.at`、`build.left` | `build.place`(放一遍)、`build.diff` |
+| `scan.around`、`scan.storage` | `scan.map`、`scan.container` |
+| `use.ahead`、`use` 的 `left`、`use.gui/transfer/shift/close` | `use.item`、`use.hit`、`numen.gui.view/move/quick/close` 与 Window |
+| `inv.recipe`、`inv.take`、`inv.craft` 找台走开合关 | `inv.recipes`、`numen.creative.give`、`inv.craft` 合一次 + 模块 `numen.inv.make` |
+| `work.fish` 的 `count` 与常驻 | 一次一竿 |
+| `fight.attack` 里的逃跑 | 逃跑本能 `FleeChain` |
+| `kaleidoscope.pot.cook` 的 Java 版 | 锅上的六步 + 模块 `kaleidoscope.pot.cook` |
+| 登记检查"位置参数只有一类" | 删了:`build.blueprint(name, origin)` 这样一个函数收两种对象是这一版要的签名 |
+
+### 新增的
+
+`scan.sight`、`use.hit`、`gui.put/take`、`inv.recipes/items/count/craftable`、`gear.hold`、`time.wait`、`creative.give`,
+模块 `numen.shape`、`numen.gui`、`numen.inv`、`numen.time`;类 Recipe、Window、Blueprint、Cluster 与 Pos/Cells 的方法。
 

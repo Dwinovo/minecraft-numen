@@ -1,6 +1,7 @@
 # 命令行与脚本:原子命令 + Lua 脚本
 
-状态:10-01 设计,10-03 改成只有 `lua` 一个工具(§七),10-04 模块统一成库、存在主人客户端(§九)。总纲与五层见
+状态:10-01 设计,10-03 改成只有 `lua` 一个工具(§七),10-04 模块统一成库、存在主人客户端(§九),同日 API 第二版:全名、
+值带方法、无名词增删改查(§十)。总纲与五层见
 `docs/architecture-mind-model.md` §零。
 
 ## 一、为什么
@@ -17,22 +18,21 @@
 
 依据:POSIX 工具语法规范、GNU 长选项约定、clig.dev(Command Line Interface Guidelines)。
 
-1. **结构**:`组 动词 [对象...] [--选项 值]...`。组是领域名词(move、work、area、route、scan、use、inv、build、fight、
-   task、插件的模组 id)。
+1. **结构**:`组 动词 [对象...] [--选项 值]...`。组是领域名词(move、work、route、scan、use、gui、inv、gear、build、
+   fight、time、creative、task、module 等);脚本里一律写全名 `numen.<组>.<函数>`,插件是 `<模组 id>.<组>.<函数>`(§十)。
 2. **一条命令只有一种位置参数**——它要操作的东西,可以多个;其余一律是 `--选项`。
-3. **对象写法全局统一、只在一处解析**:坐标是三个数(`120 64 -35`,也收 `120,64,-35`);区域、路线是名字
-   (`ores`、`ores/g3`);实体是运行时 id;方块与物品是 id(`minecraft:` 可省);标签 `#minecraft:logs`。命令只声明
-   "我的对象是哪一类"。
+3. **对象写法全局统一、只在一处解析**:坐标是三个数(`120 64 -35`,也收 `120,64,-35`);路线是名字;实体是运行时 id;
+   方块与物品是 id(`minecraft:` 可省);标签 `#minecraft:logs`。命令只声明"我的对象是哪一类"。
 4. **不要必填的 `--选项`**:必填的做成位置参数,否则给默认值,默认就是对的。
 5. **开关写 `--sneak`**,不写 `true`;默认开的用 `--no-xxx` 关。
 6. **选项名用短横线**(`--block-ids`),解析时 `_` 与 `-` 视为同一个字符(同一条解析规则,不是两份写法)。
-7. **常用选项用标准名**:`--help`、`--count`、`--radius`、`--page`、`--into`。
+7. **常用选项用标准名**:`--help`、`--count`、`--radius`、`--page`。
 8. **输出**:第一行一句话说结果,细节其后,列表一行一个 JSON;出错依次 `error:`(错在哪)、`usage:`(正确写法)、
    `hint:`(能照抄的下一步)。
 9. **帮助**:`组 --help` 列动词,`组 动词 --help` 给用法、选项、例子,都由登记自动生成。
 10. **单位统一**:时长一律秒。
 
-**规矩写进命令登记处,登记时检查,违反就启动报错**(两种位置参数、必填选项、要写 `true` 的开关……)。插件登记的
+**规矩写进命令登记处,登记时检查,违反就启动报错**(必填选项、要写 `true` 的开关、例子读不通……)。插件登记的
 命令同样受约束。这是机制里的一处判定,不是另写守卫测试。
 
 ## 三、原子命令
@@ -42,36 +42,43 @@
 
 | 函数 | 只管 | 不管 |
 |---|---|---|
-| `scan.*` | 读世界,`into` 存进区域 | — |
-| `area.*` | 编辑地方;查询 `area.parts`、`area.has` | — |
+| `scan.*` | 读世界:`scan.blocks` 交回相连的团(Cluster)、`scan.map`、`scan.container`、`scan.sight` | 不存任何东西 |
 | `route.new` / `route.plan` | 寻路:写路线、算路线,写明要改的格、要问谁 | 不动 |
 | `move.go` | 移动:照规划好的路线走,只改承诺里的格 | 不挖目标、不捡 |
 | `move.follow` | 跟着一个实体走,它走远了、没了、超时收尾 | 不打、不捡 |
 | `work.dig` | 挖**站在原地手够得着**的格:挡在前面的格一并挖开(要问/被禁的不挖,如实说),换工具 | 不走动、不捡 |
-| `build.at` | 把落点上**站在原地手够得着**的格变成设计的样子 | 不走动、不挖设计以外的格 |
-| `build.left` | 查:落点还差什么,够得着的、要先挖的、够不着的与最低最近的那一格 | 不动 |
-| `fight.attack` | 打**一只**:追、转头、等冷却、出手,死了/丢了/超时收尾 | 不挑下一只 |
-| `use.*` | 按一下键 | — |
+| `build.place` | 把给的格(Cells 或蓝图句柄)里**站在原地手够得着**的放一遍 | 不走动、不挖、不重来 |
+| `build.diff` | 查:还差什么,够得着的、要先挖的、够不着的与最低最近的那一格 | 不动 |
+| `fight.attack` | 打**一只**:追、转头、等冷却、出手,死了/丢了/超时收尾 | 不挑下一只、不跑(跑是逃跑本能) |
+| `use.*` | 按一下键:右键一格/一只实体/前方,左键一下 `use.hit` | 不挖(挖是 `work.dig`) |
+| `gui.*` | 开着的界面(Window):看、按种类放进拿出、挪一格、整叠挪、关 | 不开界面(开是 `use.block`) |
+| `inv.craft` | 在开着的合成格里照一条配方合一次 | 不挑配方、不找工作台 |
+| `work.fish` | 抛一竿,钓上来或如实失败 | 不再抛 |
+| `time.wait` | 站着等几秒,主人一喊停就停 | — |
 
-模块函数(Lua 写的,随模组发,`script.show` 看得到全文;和组同名的模块给那一组加函数)在同一张目录里、和动作一样调用:
+模块函数(Lua 写的,随模组发,`numen.module.show` 看得到全文;和组同名的模块给那一组加函数)在同一张目录里、和动作一样调用:
 
 | 模块函数 | 由哪几个原子函数组成 |
 |---|---|
 | `move.goto_(place, opts)` | `route.new` + `route.plan` + `move.go`,走的是她自己那条 `goto-<名字>` |
 | `work.collect(opts)` | `scan.entities("item")` + 一件件 `move.goto_` 走上去(原版玩家走过去就捡起) |
-| `work.mine(where)` | `while area.has(where)`:`move.goto_(where, {arrive = "dig", alter = "natural"})` + `work.dig(where)` + `work.collect(…)`,返回挖了几格 |
+| `work.mine(blocks)` | `work.dig(blocks)` 挖够得着的 + `work.collect` 捡 / 够不着时 `move.goto_(blocks, {arrive = "dig", alter = "natural"})`,挖完为止,返回挖了几格 |
 | `fight.clear(radius)` | `scan.entities("hostile")` + 一只一只 `fight.attack` |
-| `build.raise(name, opts)` | `build.left` 问还差什么 → `build.at` 放够得着的 / `move.goto_ … arrive "dig"` + `work.dig` 挖开挡路的 / `move.goto_ … arrive "reach"` 走到够得着最低最近那格的地方 |
+| `build.raise(building, opts)` | `build.diff` 问还差什么 → `build.place` 放够得着的 / `move.goto_ … arrive "dig"` + `work.dig` 挖开挡路的 / `move.goto_ … arrive "reach"` 走到够得着最低最近那格的地方 |
+| `inv.make(item, count)` | `inv.recipes` 挑一条料够的合成配方 → 2x2 在自己的格里、3x3 开工作台(开着的、16 格内走过去的、或把带着的放在身边)→ `inv.craft` 到够数 → 关上它开的台 |
+| `inv.store` / `inv.fetch` / `inv.smelt` / `inv.give` | 走过去 `use.block` 开箱子(熔炉)、`Window:put`/`take`、关上;烧炼中间 `time.wait_until` 等烧完;给人是走到身边 `inv.drop` |
+| `time.wait_until(ready, opts)` | 看一眼,不成就 `time.wait` 一会儿再看,超时抛 `timeout` |
+| `shape.*` | 画格子:`box`、`line`、`cylinder`、`sphere`、`layer`,交回 Cells |
 
 - **"挖"的到达**(`arrive = "dig"`)= 手够得着目标区域里任意一格,不要求看得见。同样划算的站位里,优先一次能够到
   最多目标格的(定价只在寻路模块 `Goals.dig` 一处)。**"放"的到达**(`arrive = "reach"`)= 手够得着往那一格里放方块,
   不站进那一格(`Goals.place`,和 `Goals.dig` 同一套够得着的格,只多禁站进目标)。
-- `work.dig` 挖完回执说:挖了几格、还剩几格够不着、下一步能照抄的 `move.goto_(…, {arrive = "dig"})`。区域记着每格扫描时是
-  什么,挖掉的下一次自动不算。
+- `work.dig` 挖完回执说:挖了几格、还剩几格够不着、下一步能照抄的 `move.goto_(…, {arrive = "dig"})`。给的是扫描交回的
+  Block 时,那一格还是那种方块才挖,挖掉的下一次自动不算。
 - **没有不可拆的行为,只有循环快慢之分**:秒级的决策循环(打哪只、按什么顺序、何时撤、打完捡东西)进脚本;每刻都要转
   的控制(盯着转头、追着保持在够得着处、等冷却出手、举盾)进原子函数内部。例如 `fight.attack(27)` 只管"打这一只"
   (追、转头、等冷却、出手,目标死了/丢了/超时收尾),"打哪几只"由程序决定(`fight.clear` 就是这样一段);安全兜底
-  (血少逃跑、岩浆自救)由反射打断程序。
+  (打不过就跑的逃跑本能、岩浆自救)由反射打断程序。
 
 ## 四、脚本:Lua
 
@@ -106,8 +113,8 @@
   值读不成)在调用处抛错误值,种类 `bad_argument` 或 `no_function`,`hint` 是改好的那一行调用(看得出想写什么时)或怎么看
   帮助。读一组里没有的函数当场报错,附最像的那个名字。
 - **成功返回数据,失败抛错误值。** 占身体的命令等它的 task_finished 再返回,task_finished 带着那件活的结果数据。返回什么
-  由登记时声明的类型说(`Action.returns(类型)`,或 `returns("has", 布尔)` 只交数据里的一项):`area.has` 是 true 或 false,
-  `area.parts` 是名字的列表,`work.dig` 是 `{dug, left, out_of_reach, nearest}`,声明了不返回的是 nil。那句话只进回执,不进
+  由登记时声明的类型说(`Action.returns(类型)`,或 `returns("count", 整数)` 只交数据里的一项):`inv.count` 是一个整数,
+  `scan.blocks` 是团的列表,`work.dig` 是 `{dug, left, out_of_reach, nearest}`,声明了不返回的是 nil。那句话只进回执,不进
   程序。失败抛的错误值 `pcall` 接得住,接住了就按 `err.kind` 分支。
 - `print(...)` 写进回执(至多 6000 字;表按 Lua 的写法印出来)。
   `raise(kind, message, hint)` 以一个错误值失败,`error("why", 0)` 是程序自己的运行错(`runtime`)。
@@ -186,7 +193,7 @@ The script stopped at line 1 (move.go) after 3 calls: your owner spoke; t12 keep
 
 (停在第 1 行时那件活还没收尾,那一行没有结局可记,回执只有第一句。)
 
-### 模块:`script` 组
+### 模块:`module` 组
 
 见 §九。模块是唯一一种存下来的 Lua:一个文件返回一张函数表,程序按名字直接用;唯一从头跑的程序是 `lua` 工具这一轮的 `code`。
 
@@ -300,8 +307,8 @@ The script stopped at line 1 (move.go) after 3 calls: your owner spoke; t12 keep
 |---|---|---|
 | ⓪ 身体控制 | 寻路执行、瞄准、换工具、追着转头、等冷却、憋气;模型看不见 | Java,任务与身体 |
 | ① 原子 API | 对一个名词做一种意图;每刻控制在里面;过权限层;做的事报告给模型 | Java,登记处生成 Lua 函数 |
-| ② 内置模块 | 常见的组合(`move.goto_`、`work.collect`、`work.mine`、`fight.clear`、`build.raise`) | Lua,随模组或插件发布 |
-| ③ 她的模块 | 她存下来的函数表,`my.<名字>` | Lua,主人客户端 `config/numen/lua/<主人>/my/` |
+| ② 出厂模块 | 常见的组合(`numen.move.goto_`、`numen.work.mine`、`numen.build.raise`、`numen.inv.make`、`numen.shape` …) | Lua,随模组或插件发布,装进主人客户端的模块目录 |
+| ③ 她的模块 | 她存下来或改过的函数表 | Lua,主人客户端 `config/numen/lua/<主人>/<名字空间>/<组>.lua` |
 | ④ 这一轮的程序 | `lua` 工具的 `code` | Lua |
 
 权限层只守在 ①;反射独立于各层,能打断程序。判据:**秒级的决策进 Lua;每刻的控制、重计算(寻路搜索、大范围扫描)、权限、
@@ -315,27 +322,27 @@ The script stopped at line 1 (move.go) after 3 calls: your owner spoke; t12 keep
   require"。第一次用到才装(沙箱全局表的 `__index`),每段程序一个新环境,所以热重载不用重启。模块名写错报"没有叫 X 的模块"
   并列出有哪些;一个模块读不通、跑出错、没返回表,只坏用到它的那一行。
 - 和第 ① 层的组同名的模块(`move`、`work`……)给那一组加函数。
-- 原来的内置脚本 `mine` 成了 `work` 模块里的 `work.mine(where)`(返回挖了几格),和 `work.collect` 同组:"挖一块区域"是 work
-  这个领域的组合,名字照组里动词的写法。`script.run` 与"整段当程序跑、`...` 取参"删了。
+- 原来的内置脚本 `mine` 成了 `numen.work` 模块里的 `numen.work.mine(blocks)`(返回挖了几格),和 `numen.work.collect` 同组:
+  "挖出这些方块"是 work 这个领域的组合,名字照组里动词的写法。"整段当程序跑、`...` 取参"删了。
 
-### 存在哪、怎么覆盖、怎么还原
+### 存在哪、怎么升级、怎么还原
 
-规矩只在 `api` 的 `Modules` 一处(`problem`、`file`):
+规矩只在 `api` 的 `Modules` 一处:
 
-- 内置的(core 与插件经 `NumenApi.bundleModules` 交来的目录,core 是 jar 里的 `modules/`)留在 jar 里,不复制到磁盘。名字是一个
-  全局名:写得出来、不撞 Lua 关键字与自带全局、不撞引擎的 `raise`、`require`,也不能叫 `my`。
-- 主人客户端上一个目录 `config/numen/lua/<主人 UUID>/`,同一主人的同伴共用,主人能拿编辑器改:
-  - 顶层 `work.lua`:和内置同名,盖住内置那份(改内置)。顶层只认内置有的名字。
-  - `my/lumber.lua`:她自己的库,模块名 `my.lumber`,程序里 `my.lumber.chop(t)`。名字只要写得出来、不是关键字。`my` 是定死的
-    全局名字空间,换不掉。
-- `script.save(code, {name = …})` 存(不写名字存成下一个空着的 `my.module_N`),`script.delete(name)` 删掉她的那份——盖住内置
-  的那份删掉就回到内置。`script.list()` 标出"用她的、不用内置的",存的时候记下内置那份的指纹(`modules.json`),内置之后变了
-  就标"内置已有新版";`script.show(name, {builtin = true})` 看内置原文。
+- **名字就是路径。** 主人客户端上一个目录 `config/numen/lua/<主人 UUID>/`,同一主人的同伴共用,主人能拿编辑器改。模块名两段
+  `名字空间.组`,文件在 `<名字空间>/<组>.lua`:`numen/work.lua` 是 `numen.work`,`tlm/skin.lua` 是 `tlm.skin`,`my/lumber.lua`
+  是 `my.lumber`——`my` 只是她习惯放自己模块的名字空间,没有别的特殊规则。程序运行时只读这个目录这一个来源。
+- **出厂的只是安装包,升级照 dpkg 的 conffile。** core 与插件经 `NumenApi.bundleModules` 交来的目录(core 是 jar 里的 `modules/`,
+  插件挨着它的技能放在 `plugins/<插件>/modules/`)第一次用到目录时装进对应的文件,账本 `modules.json` 记下每个文件上次装进去的
+  出厂指纹:没改过的换成这一版出厂的;改过的留着她的、出厂变了就标"出厂有新版";删了的尊重删除、不再装回;她新建的撞上新出厂的
+  同名一份当作改过;出厂不再发的,没改过的删掉、改过的留给她。`numen.module.reset(name)` 还原成这一版出厂的。
+- `numen.module.save(code, {name = …})` 存(不写名字存成下一个空着的 `my.module_N`),`numen.module.delete(name)` 删,
+  `numen.module.list()` 标出每一份是出厂的、改过的还是她的,`numen.module.show(name, {factory = true})` 看出厂原文。
 - 存前和运行时同一个解释器装一次(`ScriptEngine.checkModule`):读不通、不返回表、给第 ① 层的名字赋值都拒,回执说哪一行、
   给 hint。主人拿编辑器绕过存直接改的文件,运行时同一条规则照样拦着。
-- 改模块不问主人(权限层的 `edit_script` 与信号 `saved` 删了,权限层只管世界与身体);存、改、删都写进回执与客户端日志。
-- 战绩(用到它的程序跑了几段、跑完几段、最近一次没跑完停在哪一行为什么)在客户端目录的 `modules.json` 里记;服务端的
-  `ScriptStore` 与 `ScriptTallyPayload` 删了。`script.*` 都是客户端动作;外接大脑(MCP)同在客户端,走同一处。
+- 改模块不问主人(权限层只管世界与身体);存、改、删都写进回执与客户端日志。
+- 战绩(用到它的程序跑了几段、跑完几段、最近一次没跑完停在哪一行为什么)记在同一本账里;`numen.module.*` 都是客户端动作,
+  外接大脑(MCP)同在客户端,走同一处。
 
 ### 第 ① 层不可覆盖
 
@@ -345,4 +352,51 @@ The script stopped at line 1 (move.go) after 3 calls: your owner spoke; t12 keep
 
 ### 评测与 GameTest
 
-评测每次运行、GameTest 每次启动,模块目录指向这一次专用的空目录,只用内置原版,不读主人目录里的覆盖。
+评测每次运行、GameTest 每次启动,模块目录指向这一次专用的空目录,装进去的是没改过的出厂一套,不读主人目录里的改动。
+
+## 十、API 第二版(10-04)
+
+### 全名与名字空间
+
+- 脚本里一律写全名:引擎与 core 的是 `numen.<组>.<函数>`(`numen.work.dig`),插件的是 `<模组 id>.<组>.<函数>`
+  (`tlm.maid.task`、`kaleidoscope.pot.fill`)。名字空间由登记者定(`NumenPlugins.register(名字空间, …)`),路线、移动等组
+  不改登记代码就落在 `numen.*` 下。模块按名字空间与组放(§九),和同名的组合在一起。
+- 没有名词的增删改查。Lua 不留状态,世界就是状态:区域、设计、存下来的扫描结果都删了;要记住的东西只走 `numen.memory`。
+
+### 值带方法(照 mineflayer)
+
+- **Pos**(`numen.shape.pos(x, y, z)`):`p:offset(dx, dy, dz)`、`p:dist(q)`、`p + q`、`p - q`、`p == q`。
+- **Block、Entity、Item**:带 `pos` 的数据;身体动作永远是 `numen.*` 的函数,收这些对象(`numen.work.dig(b)`、
+  `numen.fight.attack(e)`)。
+- **Cells**(`numen.shape.*` 画出来的):`rotate(quarters, origin)`、`shift(dx, dy, dz)`、`union(other)`、`minus(other)`。
+- **Cluster**(`numen.scan.blocks` 交回的一团):`filter(keep)`、`minus(other)`。
+- **Window**(`numen.use.block` 打开界面时交回、`numen.gui.view()` 读到的):`put(item, count?)`、`take(item, count?)`、
+  `move(from, to, opts?)`、`quick(slot)`、`close()`,就是 `numen.gui` 的函数。
+- **Recipe**(`numen.inv.recipes`、`numen.inv.craftable`):编号、工位、合出几件、每格的料;合成配方带最小的格和还缺什么。
+- **蓝图句柄** `numen.build.blueprint(name, origin, {rotation})`:数据里有尺寸、格子、材料与缺什么;`numen.build.diff`、
+  `numen.build.place` 与模块都收句柄或一串格。
+- 查不到交 nil 或空表;失败抛 `{kind, message, hint, data}`。数打印成十进制原样,不出科学计数法。
+- 方法写在类所在的模块里(`Pos`、`Cells` 在 `numen.shape`,`Cluster` 在 `numen.scan`,`Window` 在 `numen.gui`),登记的类用
+  `methodsIn` 指过去;帮助里类的方法从模块的注释读出来。
+
+### 原子与组合各归其位
+
+| 删掉或改原子的 | 组合去了哪 |
+|---|---|
+| `build.new/drop/delete/show/designs/built`、原语 `set/place/line/layer/cylinder/sphere/copy` | 几何是模块 `numen.shape`;放格子是 `numen.build.place(cells)` 一遍 |
+| `build.at` 放到放完 | `build.place` 一遍即止,反复是 `numen.build.raise` |
+| `scan.blocks` 的 `into` 与区域 | `scan.blocks` 交回团,`work.mine(cluster.blocks)` |
+| `use.block` 的左键、`use.gui/transfer/shift/close` | 左键一下 `use.hit`,挖是 `work.dig`;界面是 `numen.gui` 与 Window |
+| `inv.craft` 找配方、找台、走开合关 | `inv.craft` 在开着的格里合一次,`numen.inv.make` 挑配方与工作台 |
+| `inv.take`(创造取物) | `numen.creative.give` |
+| `work.fish` 钓几条、常驻 | 一次调用抛一竿,钓几条是程序里调几次 |
+| `fight.attack` 里的逃跑(DISENGAGE) | 逃跑本能 `FleeChain`(反射层):打不过且有东西在追就跑,跑不掉让出身体接着打 |
+| 森罗 `kaleidoscope.pot.cook` 一口气做完 | 锅上的一步一个函数(`oil/base/fill/lid/stir/plate`),`kaleidoscope.pot.cook` 是模块;翻炒那段时间窗留在 Java |
+
+新增的原子:`scan.sight`、`use.hit`、`gui.put/take`、`inv.recipes/items/count/craftable`、`gear.hold`、`time.wait`。
+
+### 保护只有"玩家放的"
+
+权限层不再认区域:出厂规则里要问的是"玩家放的"(`break(placed)`),主人要护一片地方,护的是他放下的方块。测试与评测原先靠区域
+造的场景,改成由玩家放下方块。
+
