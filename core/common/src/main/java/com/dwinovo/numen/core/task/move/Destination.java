@@ -6,11 +6,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
-import com.dwinovo.numen.area.Area;
-import com.dwinovo.numen.area.AreaRef;
+import com.dwinovo.numen.area.Cells;
 import com.dwinovo.numen.cli.Place;
 import com.dwinovo.numen.core.nav.DigQuote;
-import com.dwinovo.numen.core.nav.NamedAreas;
 import com.dwinovo.numen.core.nav.NavText;
 import com.dwinovo.numen.core.nav.Terrain;
 import com.dwinovo.numen.core.task.dig.DigTaskRecord;
@@ -21,14 +19,13 @@ import com.dwinovo.numen.pathing.search.Goals;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.BodyStats;
 import com.mojang.serialization.Codec;
-import com.mojang.serialization.DataResult;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 
 /**
- * 去处:写法({@link Stop}:一处({@link Place},坐标给几个算几个,或主人名下的一块区域)加怎样算到了,{@code arrive = "at"|"use"|"near"|"dig"},
+ * 去处:写法({@link Stop}:一处({@link Place},坐标给几个算几个),或几格,加怎样算到了,{@code arrive = "at"|"use"|"near"|"dig"},
  * {@code --near} 只配 {@code near})与按那一刻的世界编好的寻路目标。写法到目标的对应只在这里:
  * <ul>
  *   <li>{@code at}:位置——{@code x y z} 是那一格,{@code x z} 是那一列,只给 {@code y} 是那个高度({@link Goals#at}、
@@ -39,26 +36,25 @@ import net.minecraft.core.Direction;
  *       ({@link Goals#dig},清不清得掉按 {@link #clearing} 问),那一格本身留给 {@code numen.work.dig}。到了就是 {@code numen.work.dig}
  *       站在这儿办得成,两处问的是同一个判据。</li>
  * </ul>
- * 坐标就是只有一格的区域:去一块区域,四种到达对整块成立——{@code at} 是走进区域里任意一格(站得住的),{@code use} 是用区域里
- * 任意一个能点、用得上的方块,{@code near} 是离区域里任意一格不超过 {@code near} 格,三种用寻路模块现成的"多个取其一"
- * ({@link Goals#anyOf})组合;{@code dig} 是够得着区域里任意一个 {@code numen.work.dig} 挖得成的方块,同样划算的站位里优先一次
+ * 一格就是只有一格的几格:去几格,四种到达对其中任意一格成立——{@code at} 是走进其中任意一格(站得住的),{@code use} 是用其中
+ * 任意一个能点、用得上的方块,{@code near} 是离其中任意一格不超过 {@code near} 格,三种用寻路模块现成的"多个取其一"
+ * ({@link Goals#anyOf})组合;{@code dig} 是够得着其中任意一个 {@code numen.work.dig} 挖得成的方块,同样划算的站位里优先一次
  * 够得着最多格的,挖起来贵的格(要问主人的)只在便宜的远出它那份价钱时才去({@link Goals#dig(List, BodyStats, Goals.Clearing)},
  * 定价只在寻路模块那一处)。
  *
- * <p><b>区域的目标有界</b>:只在区域里离出发点最近的 {@link #NEAREST} 格里挑成员({@code Cells.nearest} 按小节由近到远翻,
- * 四百万格的区域也只翻出发点附近那几节),{@code at}、{@code near}、{@code dig} 至多 {@link #MEMBERS} 个成员,{@code use} 至多
- * {@link #USE_MEMBERS} 个(每个要按世界列一遍候选站位,至多试 {@link #USE_TRIES} 个能点的方块)。离出发点最近的那一侧就是她要
- * 走进去的那一侧;那一侧走不通,回执说的也是这一侧——要去区域的别处,点名那一部分({@code ores/g3})或另框一块区域。
+ * <p><b>几格的目标有界</b>:只在离出发点最近的 {@link #NEAREST} 格里挑成员,{@code at}、{@code near}、{@code dig} 至多
+ * {@link #MEMBERS} 个成员,{@code use} 至多 {@link #USE_MEMBERS} 个(每个要按世界列一遍候选站位,至多试 {@link #USE_TRIES} 个能点的
+ * 方块)。离出发点最近的那一侧就是她要走进去的那一侧;那一侧走不通,回执说的也是这一侧。
  *
- * <p>路线的每个途经点存的是写法(区域存名字),规划时照当时的世界、当时的区域编成目标。写错了当场提醒({@link GotoReminders}),
- * 不替她改写、不去搜索;要不要提醒一律问模块({@link Terrain}),这里不另判。
+ * <p>路线的每个途经点存的是写法,规划时照当时的世界编成目标。写错了当场提醒({@link GotoReminders}),不替她改写、不去搜索;要不要
+ * 提醒一律问模块({@link Terrain}),这里不另判。
  *
  * @param goal   编好的目标;{@code use} 的候选站位按编的那一刻的世界列定
- * @param toward 给人说"朝哪儿"的那一格(回执里的方向与距离):坐标见 {@link Stop#toward},区域是离出发点最近的那个成员
+ * @param toward 给人说"朝哪儿"的那一格(回执里的方向与距离):坐标见 {@link Stop#toward},几格是离出发点最近的那个成员
  */
 public record Destination(Stop stop, Goal goal, BlockPos toward) {
 
-    /** 一块区域里,只在离出发点最近的这么多格里挑成员:一个 16³ 小节的格数。 */
+    /** 几格里,只在离出发点最近的这么多格里挑成员:一个 16³ 小节的格数。 */
     static final int NEAREST = 4096;
     /** {@code at}、{@code near}、{@code dig} 至多几个成员:估价与判到没到逐个问成员,几十个仍是一次比较的量级。 */
     static final int MEMBERS = 64;
@@ -87,49 +83,41 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
     /** {@code arrive = "near"} 不写 {@code near} 时停在几格内:3 格大致是"就在旁边"。 */
     public static final int DEFAULT_NEAR = 3;
 
-    private static final Codec<AreaRef> AREA_CODEC = Codec.STRING.comapFlatMap(text -> {
-        try {
-            return DataResult.success(AreaRef.parse(text));
-        } catch (IllegalArgumentException bad) {
-            return DataResult.error(bad::getMessage);
-        }
-    }, AreaRef::toString);
-
     /**
-     * 一个去处的写法:一处(坐标给几个算几个,或一块区域)加怎样算到了。形状不成立(坐标缺一截、坐标与区域都给了、{@code near}
-     * 与到达方式对不上)在建的时候就报,报的话就是受理回执;和世界有关的在 {@link Destination#of} 里报。存盘的样子({@link #CODEC})
-     * 是各个字段,不是命令行上的写法。
+     * 一个去处的写法:一处(坐标给几个算几个)或几格,加怎样算到了。形状不成立(坐标缺一截、坐标与几格都给了、{@code near} 与到达方式
+     * 对不上)在建的时候就报,报的话就是受理回执;和世界有关的在 {@link Destination#of} 里报。存盘的样子({@link #CODEC})是各个字段,
+     * 不是命令行上的写法。
      *
-     * @param x    没给为 null
-     * @param y    没给为 null
-     * @param z    没给为 null
-     * @param area 主人名下的一块区域(存名字,规划时按当时的区域解析);给了坐标为 null
-     * @param near {@code arrive=near} 时的距离,否则为 null
+     * @param x     没给为 null
+     * @param y     没给为 null
+     * @param z     没给为 null
+     * @param cells 到其中任意一格;给了坐标为 null
+     * @param near  {@code arrive=near} 时的距离,否则为 null
      */
-    public record Stop(Integer x, Integer y, Integer z, AreaRef area, Arrive arrive, Integer near) {
+    public record Stop(Integer x, Integer y, Integer z, List<BlockPos> cells, Arrive arrive, Integer near) {
 
         public static final Codec<Stop> CODEC = RecordCodecBuilder.create(i -> i.group(
                 Codec.INT.optionalFieldOf("x").forGetter(s -> Optional.ofNullable(s.x())),
                 Codec.INT.optionalFieldOf("y").forGetter(s -> Optional.ofNullable(s.y())),
                 Codec.INT.optionalFieldOf("z").forGetter(s -> Optional.ofNullable(s.z())),
-                AREA_CODEC.optionalFieldOf("area").forGetter(s -> Optional.ofNullable(s.area())),
+                BlockPos.CODEC.listOf().optionalFieldOf("cells").forGetter(s -> Optional.ofNullable(s.cells())),
                 Codec.STRING.fieldOf("arrive").forGetter(s -> s.arrive().word()),
                 Codec.INT.optionalFieldOf("near").forGetter(s -> Optional.ofNullable(s.near()))
-        ).apply(i, (x, y, z, area, arrive, near) -> new Stop(x.orElse(null), y.orElse(null), z.orElse(null),
-                area.orElse(null), Arrive.of(arrive), near.orElse(null))));
+        ).apply(i, (x, y, z, cells, arrive, near) -> new Stop(x.orElse(null), y.orElse(null), z.orElse(null),
+                cells.orElse(null), Arrive.of(arrive), near.orElse(null))));
 
         public Stop {
-            if (area != null) {
-                if (x != null || y != null || z != null) {
-                    throw new IllegalArgumentException("a destination is coordinates or an area, not both; got area "
-                            + area + " and " + (x != null ? "x" : "") + (y != null ? "y" : "") + (z != null ? "z" : ""));
+            if (cells != null) {
+                if (x != null || y != null || z != null || cells.isEmpty()) {
+                    throw new IllegalArgumentException("a destination is coordinates or several cells, not both");
                 }
+                cells = List.copyOf(cells);
             } else {
                 boolean hasXz = x != null && z != null;
                 if ((x == null) != (z == null) || (!hasXz && y == null)) {
                     throw new IllegalArgumentException("a destination is x and z (a place), x, y and z (one cell), y"
-                            + " alone (a height), or an area; got " + (x != null ? "x" : "") + (y != null ? "y" : "")
-                            + (z != null ? "z" : ""));
+                            + " alone (a height), or several cells; got " + (x != null ? "x" : "")
+                            + (y != null ? "y" : "") + (z != null ? "z" : ""));
                 }
             }
             if (near != null && arrive != Arrive.NEAR) {
@@ -138,10 +126,10 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
             if (arrive == Arrive.NEAR && near == null) {
                 near = DEFAULT_NEAR;
             }
-            if (area == null && x == null && arrive != Arrive.AT) {
+            if (cells == null && x == null && arrive != Arrive.AT) {
                 throw new IllegalArgumentException(GotoReminders.heightTakesNoArrive(arrive.word()));
             }
-            if (area == null && y == null && (arrive == Arrive.USE || arrive == Arrive.DIG || arrive == Arrive.REACH)) {
+            if (cells == null && y == null && (arrive == Arrive.USE || arrive == Arrive.DIG || arrive == Arrive.REACH)) {
                 throw new IllegalArgumentException(GotoReminders.blockNeedsY(arrive.word()));
             }
         }
@@ -151,14 +139,23 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
             this(x, y, z, null, arrive, near);
         }
 
-        /** 调用里读到的几样:一处、{@code arrive}(没写是 {@code at})、{@code near}(没写为 null)。 */
-        public static Stop of(Place place, String arriveWord, Integer near) {
-            return new Stop(place.x(), place.y(), place.z(), place.area(), Arrive.of(arriveWord), near);
-        }
-
-        /** 这一处的写法:命令行上写下的那一处({@link Place})。 */
-        public Place place() {
-            return new Place(x, y, z, area);
+        /**
+         * 调用里读到的几样:一处或几格、{@code arrive}(没写是 {@code at})、{@code near}(没写为 null)。几格时每一处都得是一格。
+         */
+        public static Stop of(List<Place> places, String arriveWord, Integer near) {
+            if (places.size() == 1) {
+                Place place = places.get(0);
+                return new Stop(place.x(), place.y(), place.z(), null, Arrive.of(arriveWord), near);
+            }
+            List<BlockPos> cells = new ArrayList<>();
+            for (Place place : places) {
+                if (place.cell() == null) {
+                    throw new IllegalArgumentException("several places are several cells, each {x = …, y = …, z = …}; "
+                            + place.literal() + " is " + (place.x() == null ? "a height" : "a column"));
+                }
+                cells.add(place.cell());
+            }
+            return new Stop(null, null, null, cells, Arrive.of(arriveWord), near);
         }
 
         /** 那一格(x、y、z 都给了时);否则为 null。 */
@@ -168,7 +165,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
 
         /**
          * 坐标的去处给人说"朝哪儿"的那一格:一格就是它,一列是那一列上与 {@code from} 同高的一格,一个高度是 {@code from} 那一列上
-         * 的那个高度。区域的那一格要看区域,见 {@link Destination#toward}。
+         * 的那个高度。几格的那一格见 {@link Destination#toward}。
          */
         BlockPos toward(BlockPos from) {
             if (x == null) {
@@ -178,29 +175,29 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
         }
 
         /**
-         * 给模型看的一截:{@code 120,64,-35}、{@code x=120 z=-35}、{@code y=64} 或 {@code area farm},不是 at 时接上怎样算到了。
+         * 给模型看的一截:{@code 120,64,-35}、{@code x=120 z=-35}、{@code y=64} 或 {@code 5 cells},不是 at 时接上怎样算到了。
          */
         public String words() {
-            String where = area != null ? "area " + area
+            String where = cells != null ? cells.size() + " cells"
                     : x == null ? "y=" + y : y == null ? "x=" + x + " z=" + z : x + "," + y + "," + z;
             return switch (arrive) {
                 case AT -> where;
-                case USE -> where + (area != null ? " (to use one of its blocks)" : " (to use it)");
+                case USE -> where + (cells != null ? " (to use one of them)" : " (to use it)");
                 case NEAR -> where + " (within " + near + ")";
-                case DIG -> where + (area != null ? " (to dig one of its blocks)" : " (to dig it)");
-                case REACH -> where + (area != null ? " (to build into one of its cells)" : " (to build into it)");
+                case DIG -> where + (cells != null ? " (to dig one of them)" : " (to dig it)");
+                case REACH -> where + (cells != null ? " (to build into one of them)" : " (to build into it)");
             };
         }
 
         /** 给主人看的一句(头顶气泡、面板)。 */
         public String describe() {
-            if (area != null) {
+            if (cells != null) {
                 return switch (arrive) {
-                    case AT -> "走进区域 " + area;
-                    case USE -> "去用区域 " + area + " 里的方块";
-                    case NEAR -> "走到区域 " + area + " " + near + " 格内";
-                    case DIG -> "走到够得着区域 " + area + " 里方块的地方";
-                    case REACH -> "走到够得着区域 " + area + " 里一格、往里放方块的地方";
+                    case AT -> "走进 " + cells.size() + " 格之一";
+                    case USE -> "去用 " + cells.size() + " 格里的方块";
+                    case NEAR -> "走到 " + cells.size() + " 格 " + near + " 格内";
+                    case DIG -> "走到够得着 " + cells.size() + " 格里方块的地方";
+                    case REACH -> "走到够得着 " + cells.size() + " 格里一格、往里放方块的地方";
                 };
             }
             String where = x == null ? "y=" + y : y == null ? "x=" + x + " z=" + z : x + "," + y + "," + z;
@@ -215,15 +212,14 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
     }
 
     /**
-     * 按此刻的世界(与此刻的区域)把写法编成去处;写错了抛出带提醒的 {@link IllegalArgumentException}(受理回执就是这句话)。
+     * 按此刻的世界把写法编成去处;写错了抛出带提醒的 {@link IllegalArgumentException}(受理回执就是这句话)。
      *
-     * @param spec  走到这里的路线规格:许改地形时,站不进去、站不上去的格由寻路去挖、去垫,不算写错
-     * @param areas 点名的区域在这里找
-     * @param from  从哪儿去:坐标缺的那一截照它补("朝哪儿"那一格),区域按离它的远近挑成员
+     * @param spec 走到这里的路线规格:许改地形时,站不进去、站不上去的格由寻路去挖、去垫,不算写错
+     * @param from 从哪儿去:坐标缺的那一截照它补("朝哪儿"那一格),几格按离它的远近挑成员
      */
-    public static Destination of(NumenPlayer her, Stop stop, RouteSpec spec, NamedAreas areas, BlockPos from) {
-        if (stop.area() != null) {
-            return area(her, stop, spec, areas.resolve(stop.area()), from);
+    public static Destination of(NumenPlayer her, Stop stop, RouteSpec spec, BlockPos from) {
+        if (stop.cells() != null) {
+            return cells(her, stop, spec, from);
         }
         Integer x = stop.x();
         Integer y = stop.y();
@@ -250,27 +246,17 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
         return new Destination(stop, goal, stop.toward(from));
     }
 
-    /**
-     * 一块区域给人说"朝哪儿"的那一格:离 {@code from} 最近的一格;坐标照 {@link Stop#toward}。区域此刻不在(删了、没有这一部分、
-     * 在别的维度)或还是空的,为 null——规划时会如实说为什么。
-     */
-    public static BlockPos toward(NumenPlayer her, Stop stop, BlockPos from) {
-        if (stop.area() == null) {
-            return stop.toward(from);
-        }
-        Area area = NamedAreas.of(her).find(stop.area());
-        return area == null ? null : area.cells().nearest(from);
+    /** 给人说"朝哪儿"的那一格:几格是离 {@code from} 最近的一格;坐标照 {@link Stop#toward}。 */
+    public static BlockPos toward(Stop stop, BlockPos from) {
+        return stop.cells() == null ? stop.toward(from) : Cells.of(stop.cells()).nearest(from);
     }
 
-    /** 去一块区域:在离出发点最近的那一部分里挑成员,按到达方式编成"多个取其一"(见类说明)。 */
-    private static Destination area(NumenPlayer her, Stop stop, RouteSpec spec, Area area, BlockPos from) {
-        AreaRef ref = stop.area();
-        List<BlockPos> nearest = area.cells().nearest(from, NEAREST);
-        if (nearest.isEmpty()) {
-            throw new IllegalArgumentException(GotoReminders.emptyArea(ref));
-        }
+    /** 去几格之一:在离出发点最近的那些里挑成员,按到达方式编成"多个取其一"(见类说明)。 */
+    private static Destination cells(NumenPlayer her, Stop stop, RouteSpec spec, BlockPos from) {
+        Cells given = Cells.of(stop.cells());
+        List<BlockPos> nearest = given.nearest(from, NEAREST);
         Terrain terrain = Terrain.of(her);
-        long cells = area.cells().size();
+        long cells = given.size();
         List<Goal> members = new ArrayList<>();
         BlockPos toward = null;
         switch (stop.arrive()) {
@@ -287,7 +273,7 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
                     }
                 }
                 if (members.isEmpty()) {
-                    throw new IllegalArgumentException(GotoReminders.areaNowhereToStand(ref, nearest.size(), cells));
+                    throw new IllegalArgumentException(GotoReminders.noneToStand(nearest.get(0), nearest.size(), cells));
                 }
             }
             case USE -> {
@@ -309,10 +295,10 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
                     }
                 }
                 if (firstTried == null) {
-                    throw new IllegalArgumentException(GotoReminders.areaNothingToUse(ref, nearest.size(), cells));
+                    throw new IllegalArgumentException(GotoReminders.noneToUse(nearest.get(0), nearest.size(), cells));
                 }
                 if (members.isEmpty()) {
-                    throw new IllegalArgumentException(GotoReminders.areaNoneUsable(ref, tried, firstTried));
+                    throw new IllegalArgumentException(GotoReminders.noneUsable(nearest.get(0), tried, firstTried));
                 }
             }
             case NEAR -> {
@@ -353,8 +339,8 @@ public record Destination(Stop stop, Goal goal, BlockPos toward) {
                 }
                 if (targets.isEmpty()) {
                     throw new IllegalArgumentException(firstWhy != null
-                            ? GotoReminders.areaNoneDiggable(ref, nearest.size(), cells, firstWhy)
-                            : GotoReminders.areaNothingToDig(ref, nearest.size(), cells));
+                            ? GotoReminders.noneDiggable(nearest.size(), cells, firstWhy)
+                            : GotoReminders.noneToDig(nearest.get(0), nearest.size(), cells));
                 }
                 return new Destination(stop, Goals.dig(targets, Snapshots.stats(her), clearing.clearing()), toward);
             }

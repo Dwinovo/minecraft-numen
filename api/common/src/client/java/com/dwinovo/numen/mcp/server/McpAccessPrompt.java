@@ -81,12 +81,12 @@ final class McpAccessPrompt {
                 companion's chat line, speech bubble, and voice. Keep your own conversation history; \
                 the game stores none for you.
                 - Besides list_companions, create_companion, delete_companion, get_events and say there \
-                is one more tool, `%s`: a program whose functions are the companion's API. `numen.status.self()`, `numen.scan.blocks("iron_ore", {into = "ores"})`, \
-                `numen.move.goto_("ores/g3", {arrive = "dig"})`, `numen.work.dig("ores/g3")`, `numen.build.at(...)`, \
+                is one more tool, `%s`: a program whose functions are the companion's API. `numen.status.self()`, `numen.scan.blocks("iron_ore")`, \
+                `numen.move.goto_({x = 120, y = 12, z = -35}, {arrive = "dig"})`, `numen.work.dig({x = 120, y = 12, z = -35})`, \
                 `numen.fight.attack(184)`, `numen.inv.craft(...)`, … `numen.api.help("numen.work")` lists a group's functions and \
                 `numen.api.help("numen.work.dig")` gives one function's full help. One call is a one-line program; \
                 when a next step depends on what a call returned, write the steps as one program \
-                (`while numen.area.has("ores") do ... end`).
+                (`for _, c in ipairs(numen.scan.blocks("iron_ore")) do numen.work.mine(c.blocks) end`).
                 - A program waits for each body task it starts and returns one receipt when it ends: how \
                 it ended (on an error: the line, the call's error, usage and hint), one line per API call, \
                 what it returned and printed. Each task's own account also arrives in `get_events` as a \
@@ -94,16 +94,14 @@ final class McpAccessPrompt {
                 - %s
                 - You're blind between calls: perceive with `numen.status.self()` / `numen.scan.blocks` / \
                 `numen.scan.entities` before and after acting.
-                - `numen.scan.blocks` answers in groups of touching blocks, each saying whether breaking it is \
-                allowed, needs the owner's consent, or is refused. With `into` it keeps them in a saved area \
-                (made on the spot when it does not exist yet) and each group gets an id like ores/g3; \
-                `numen.work.dig` digs such an area ("ores", or "ores/g3") and digs those cells that still hold what \
-                the scan saw, also after a restart; framed areas and cells ({x, y, z}) are dug whatever they \
-                hold. It digs only what the hand reaches from where the body stands, never walks and never \
-                picks up: `numen.move.goto_` the same place with arrive "dig" first (it stands where the hand \
-                reaches the most of it), then `numen.work.dig`, then `numen.work.collect()` for the drops; \
-                `numen.area.has("ores")` says whether anything is left. The built-in module function `numen.work.mine` \
-                does all of that: `numen.work.mine("ores")`.
+                - `numen.scan.blocks` returns the clusters of touching blocks it found, nearest first, each \
+                with its `blocks` (every Block, nearest first), its `nearest` Block and its `count`. Nothing is \
+                kept: the world is the state, so scan again to see what is left. `numen.work.dig` takes those \
+                blocks as they are and digs the cells that still hold what the scan saw; cells ({x, y, z}) are dug \
+                whatever they hold. It digs only what the hand reaches from where the body stands, never walks and \
+                never picks up: `numen.move.goto_` the same blocks with arrive "dig" first (it stands where the hand \
+                reaches the most of them), then `numen.work.dig`, then `numen.work.collect()` for the drops. The \
+                built-in module function `numen.work.mine` does all of that for one cluster's blocks.
                 - It's survival mode — the API does only what a real player can. No give, no setblock.
 
                 One more thing: talk to me in the language I'm writing to you in, even though these \

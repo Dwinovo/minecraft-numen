@@ -1,6 +1,5 @@
 package com.dwinovo.numen.cli;
 
-import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonParser;
 import net.minecraft.core.BlockPos;
@@ -43,7 +42,7 @@ class ObjectArgTest {
                     .example("gt.gt_obj.look({x = 1, y = 2, z = 3})");
             g.server("dig", "Dig places.", ObjectArgTest::remember, PLACES, TO)
                     .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
-                    .example("gt.gt_obj.dig(\"ores\", {x = 1, y = 2, z = 3})");
+                    .example("gt.gt_obj.dig({y = 16}, {x = 1, y = 2, z = 3})");
             g.server("hit", "Hit someone, or everyone.", ObjectArgTest::remember, WHO, TIMES)
                     .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
                     .example("gt.gt_obj.hit(27, 26)").example("gt.gt_obj.hit()");
@@ -80,15 +79,15 @@ class ObjectArgTest {
     }
 
     @Test
-    void aPlaceIsOneToThreeNumbersOrAnArea() {
-        List<Place> places = ran("gt gt_obj dig ores/g3 120 64 -35 1 2 3 7,8,9 farm").get(PLACES);
-        assertEquals(List.of(Place.area(AreaRef.parse("ores/g3")), Place.cell(new BlockPos(120, 64, -35)),
-                Place.cell(new BlockPos(1, 2, 3)), Place.cell(new BlockPos(7, 8, 9)), Place.area(AreaRef.parse("farm"))),
-                places, "连着的数三个一组是一格");
-        assertEquals(List.of(new Place(120, null, -35, null)), ran("gt gt_obj dig 120 -35").get(PLACES), "两个数是一列");
-        assertEquals(List.of(new Place(null, 16, null, null)), ran("gt gt_obj dig 16").get(PLACES), "一个数是一个高度");
-        assertEquals(Place.cell(new BlockPos(1, 2, 3)), ran("gt gt_obj dig ores --to 1 2 3").get(TO), "标志的值也照同一种读");
-        assertTrue(failed("gt gt_obj dig Ores").startsWith("error: area names are lowercase letters"));
+    void aPlaceIsOneToThreeNumbers() {
+        List<Place> places = ran("gt gt_obj dig 120 64 -35 1 2 3 7,8,9").get(PLACES);
+        assertEquals(List.of(Place.cell(new BlockPos(120, 64, -35)), Place.cell(new BlockPos(1, 2, 3)),
+                Place.cell(new BlockPos(7, 8, 9))), places, "连着的数三个一组是一格");
+        assertEquals(List.of(new Place(120, null, -35)), ran("gt gt_obj dig 120 -35").get(PLACES), "两个数是一列");
+        assertEquals(List.of(new Place(null, 16, null)), ran("gt gt_obj dig 16").get(PLACES), "一个数是一个高度");
+        assertEquals(Place.cell(new BlockPos(1, 2, 3)), ran("gt gt_obj dig 16 --to 1 2 3").get(TO), "标志的值也照同一种读");
+        assertTrue(failed("gt gt_obj dig ores").startsWith("error: expected a place: x y z (a cell), x z (a column) or y "
+                + "(a height)"), "一片地方是一串格子,不是一个名字");
     }
 
     /** 查询交出的位置(实体、掉落物的小数位置)原样交回来,读成的就是它所在的那一格:留两位时往下舍,不会入到上面一格。 */
@@ -104,23 +103,23 @@ class ObjectArgTest {
     /** 脚本里一格只有带键的表一种写法;带 pos 的表(查到的方块、实体)原样就是那一格,和一行命令上读出来的是同一份。 */
     @Test
     void aScriptCallReadsPositionsAsKeyedTablesOrAnythingWithAPos() {
-        CommandArgs viaLine = ran("gt gt_obj dig 120 64 -35 ores");
+        CommandArgs viaLine = ran("gt gt_obj dig 120 64 -35 16");
         List<Param<?>> params = List.of(PLACES, TO);
         assertEquals(viaLine, CommandArgs.fromJson(params, JsonParser.parseString(
-                "{\"place\": [{\"x\": 120, \"y\": 64, \"z\": -35}, \"ores\"]}").getAsJsonObject()));
-        for (String code : List.of("gt.gt_obj.dig({x = 120, y = 64, z = -35}, \"ores\")",
-                "gt.gt_obj.dig({{x = 120, y = 64, z = -35}, \"ores\"})",
-                "gt.gt_obj.dig({name = \"iron_ore\", pos = {x = 120, y = 64, z = -35}}, \"ores\")",
-                "local b = {pos = {x = 120.9, y = 64.5, z = -34.1}}\ngt.gt_obj.dig(b, \"ores\")")) {
+                "{\"place\": [{\"x\": 120, \"y\": 64, \"z\": -35}, {\"y\": 16}]}").getAsJsonObject()));
+        for (String code : List.of("gt.gt_obj.dig({x = 120, y = 64, z = -35}, {y = 16})",
+                "gt.gt_obj.dig({{x = 120, y = 64, z = -35}, {y = 16}})",
+                "gt.gt_obj.dig({name = \"iron_ore\", pos = {x = 120, y = 64, z = -35}}, {y = 16})",
+                "local b = {pos = {x = 120.9, y = 64.5, z = -34.1}}\ngt.gt_obj.dig(b, {y = 16})")) {
             assertEquals(viaLine, luaRan(code), code);
         }
         assertEquals(new BlockPos(120, 64, -35), luaRan("gt.gt_obj.look({x = 120.7, y = 64.0, z = -34.2})").get(CELL),
                 "小数是它所在的那一格:向下取整,和 Minecraft 的 BlockPos.containing 一样");
         assertEquals(new BlockPos(1, 2, 3), luaRan("gt.gt_obj.look({pos = {x = 1, y = 2, z = 3}, id = 7})").get(CELL),
                 "带 pos 的表(实体、掉落物)原样就是它所在的那一格");
-        assertEquals(List.of(new Place(120, null, -35, null)), luaRan("gt.gt_obj.dig({x = 120, z = -35})").get(PLACES),
+        assertEquals(List.of(new Place(120, null, -35)), luaRan("gt.gt_obj.dig({x = 120, z = -35})").get(PLACES),
                 "只有 x、z 的表是一列");
-        assertEquals(List.of(new Place(null, 16, null, null)), luaRan("gt.gt_obj.dig({y = 16})").get(PLACES),
+        assertEquals(List.of(new Place(null, 16, null)), luaRan("gt.gt_obj.dig({y = 16})").get(PLACES),
                 "只有 y 的表是一个高度");
         assertEquals(List.of(EntityRef.id(27), EntityRef.id(26)),
                 luaRan("gt.gt_obj.hit({id = 27, type = \"minecraft:zombie\", pos = {x = 1, y = 2, z = 3}}, 26)").get(WHO),
@@ -155,7 +154,7 @@ class ObjectArgTest {
         assertTrue(listed.message().contains("hint: gt.gt_obj.dig({x = 120, y = 64, z = -35})"),
                 "三个数的列表交给一串值的参数,是写成旧样子的一处,不是三处: " + listed.message());
 
-        CliFixture.Outcome among = CliFixture.lua("gt.gt_obj.dig(\"ores\", \"120 64 -35\")");
+        CliFixture.Outcome among = CliFixture.lua("gt.gt_obj.dig({y = 16}, \"120 64 -35\")");
         assertFalse(among.success());
         assertTrue(among.message().contains("hint: write each of place like {x = 120, y = 64, z = -35}."),
                 among.message());

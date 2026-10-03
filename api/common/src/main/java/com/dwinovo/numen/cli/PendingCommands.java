@@ -28,7 +28,7 @@ public final class PendingCommands {
     /** 一次挂着的调用。它自己就是征询的作用域:主人允许的授权记在它名下,收场时一并清掉。 */
     private static final class Waiting {
         final ServerSource call;
-        /** 这次调用要做的事,回执里点名它:{@code /setblock …}、{@code area delete house}。 */
+        /** 这次调用要做的事,回执里点名它:{@code /setblock …}、{@code route delete home}。 */
         final String what;
         final List<ConsentItem> items;
         final Consumer<ServerSource> go;

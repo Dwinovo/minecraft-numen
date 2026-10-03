@@ -177,9 +177,6 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
                 String line = "/" + action.command().line();
                 return new Subject(line, null, Component.literal(line));
             }
-            if (action.area() != null) {
-                return new Subject(action.area(), null, Component.literal(action.area()));
-            }
             BlockState state = action.state();
             if (state != null && action.kind() != Action.Kind.PLACE) {
                 Item form = state.getBlock().asItem();

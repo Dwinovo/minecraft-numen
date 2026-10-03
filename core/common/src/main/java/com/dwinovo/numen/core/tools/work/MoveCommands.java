@@ -45,12 +45,12 @@ public final class MoveCommands {
 
     /** 怎样算到了:route 组写去处的地方共用。 */
     static final Param<String> ARRIVE = Param.optional("arrive", ArgType.oneOf(Destination.ARRIVE_WORDS),
-            "What counts as there. at: stand in that cell (or column, or height, or any cell of the area). use: stand "
-                    + "where that block (or any block of the area) is in sight and in reach, to use it. near: stop "
-                    + "within the near option's blocks of the cell, place or area. dig: stand where your hand reaches "
-                    + "that block (or, for an area, where it reaches the most of its blocks), even if something is in "
-                    + "the way, to dig it with numen.work.dig. reach: stand where your hand reaches that cell, air too, "
-                    + "without standing in it, to build into it with numen.build.at.")
+            "What counts as there. at: stand in that cell (or column, or height, or any of the cells given). use: "
+                    + "stand where that block (or any of the blocks given) is in sight and in reach, to use it. near: "
+                    + "stop within the near option's blocks of the cell, place or any of the cells. dig: stand where your "
+                    + "hand reaches that block (or, for several, where it reaches the most of them), even if something "
+                    + "is in the way, to dig it with numen.work.dig. reach: stand where your hand reaches that cell, air "
+                    + "too, without standing in it, to build into it with numen.build.at.")
             .whenOmitted("arrive at");
     static final Param<Integer> NEAR = Param.optional("near", ArgType.integer(1, MAX_NEAR),
             "With arrive = \"near\" only: anywhere within this many blocks counts as there.")

@@ -1,6 +1,5 @@
 package com.dwinovo.numen.permission;
 
-import com.dwinovo.numen.area.Area;
 
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
@@ -14,10 +13,8 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * 一次裁决用的快照:模式、两层规则(连同主人层点名了哪些区域)、所在维度与这一维度的放置记录、主人名下的区域、
- * 主人答应下来的任务期授权。
- * 主线程建({@link Permission#gateFor}),之后任何线程只读——寻路工作线程拿着它给每条边定价。区域是取快照时
- * 一并取好的不可变值,{@code area:} 项在哪个线程上判都不回头读存档。
+ * 一次裁决用的快照:模式、两层规则、所在维度的放置记录、主人答应下来的任务期授权。
+ * 主线程建({@link Permission#gateFor}),之后任何线程只读——寻路工作线程拿着它给每条边定价。
  *
  * <h2>查的顺序</h2>
  * 第一个命中即定:模式 → 主人层(deny → allow → ask)→ 出厂层(deny → allow → ask,出厂 deny 表
@@ -40,35 +37,22 @@ public final class Gate {
     private final Mode mode;
     /** 先查的在前:主人层,出厂层。 */
     private final List<RuleSet> layers;
-    private final ResourceKey<Level> dimension;
     private final PlacedBlocks placed;
-    private final Map<String, Area> areas;
-    /** 主人层规则点名的区域名:这些区域改了,主人的规矩管到的格子跟着变({@link Signals#RULED})。 */
-    private final Set<String> ruled;
     private final List<ConsentItem> granted;
 
     /**
      * @param actor   要动手的同伴是谁;测试可传 null
      * @param owner   主人自己写的规则层({@link PermissionStore#rules});没有主人是 {@link RuleSet#EMPTY}
      * @param factory   出厂规则层({@link RuleSet#factory})
-     * @param dimension 她所在的维度:这份快照裁决的动作都发生在这里
-     * @param placed    这一维度的放置记录
-     * @param areas     主人名下的区域({@link com.dwinovo.numen.area.AreaStore#all});没有主人是空表
+     * @param placed    她所在维度的放置记录:这份快照裁决的动作都发生在那里
      * @param granted   主人答应下来的任务期授权({@link ConsentDesk#granted})
      */
-    public Gate(UUID actor, Mode mode, RuleSet owner, RuleSet factory, ResourceKey<Level> dimension,
-                PlacedBlocks placed, Map<String, Area> areas, List<ConsentItem> granted) {
+    public Gate(UUID actor, Mode mode, RuleSet owner, RuleSet factory, PlacedBlocks placed,
+                List<ConsentItem> granted) {
         this.actor = actor;
         this.mode = mode;
         this.layers = List.of(owner, factory);
-        this.dimension = dimension;
         this.placed = placed;
-        this.areas = Map.copyOf(areas);
-        Set<String> named = new HashSet<>();
-        for (Verdict.Kind table : Verdict.Kind.values()) {
-            owner.table(table).forEach(rule -> named.addAll(rule.areaNames()));
-        }
-        this.ruled = Set.copyOf(named);
         this.granted = List.copyOf(granted);
     }
 
@@ -97,7 +81,7 @@ public final class Gate {
     }
 
     private Facts facts(BlockGetter view, ServerLevel live) {
-        return new Facts(view, placed, live, actor, dimension, areas, ruled);
+        return new Facts(view, placed, live, actor);
     }
 
     private Verdict decide(Action action, Facts facts) {

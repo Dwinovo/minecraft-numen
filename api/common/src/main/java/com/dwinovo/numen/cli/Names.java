@@ -20,7 +20,7 @@ public final class Names {
     /**
      * 名字合规就原样返回,否则说清能用什么字。
      *
-     * @param kind 起名的是什么({@code design}、{@code area}),只进错误消息
+     * @param kind 起名的是什么({@code design}、{@code route}),只进错误消息
      */
     public static String checked(String kind, String name) {
         if (!valid(name)) {

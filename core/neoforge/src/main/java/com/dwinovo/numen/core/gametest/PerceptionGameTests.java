@@ -363,7 +363,7 @@ public class PerceptionGameTests {
                     String tool = viaTool.get().reply();
                     String line = viaCommand.get().reply();
                     helper.assertTrue(line != null, "scan blocks has not answered");
-                    helper.assertTrue(groupHolding(groupsIn(tool), gold) != null && groupHolding(groupsIn(tool), log) != null,
+                    helper.assertTrue(clusterHolding(clustersIn(tool), gold) != null && clusterHolding(clustersIn(tool), log) != null,
                             "the gold block and the log are not both found: " + tool);
                     helper.assertTrue(tool.equals(line),
                             "scan_blocks and scan blocks find differently: " + tool + " / " + line);

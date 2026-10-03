@@ -18,7 +18,7 @@ Mine it from a **ruined portal** — a structure that's just standing obsidian, 
 
 1. `numen.locate.structure("#minecraft:ruined_portal")` — searches the whole family and returns the nearest. **Skip `ruined_portal_ocean`** (underwater) if the result names it; re-search or pick a land one — I can't dive.
 2. `numen.gear.wear("diamond_pickaxe")` (obsidian needs diamond), `numen.move.goto_` the portal coordinates.
-3. `numen.scan.blocks("obsidian", {into = "portal"})`, then `numen.move.goto_("portal", {arrive = "dig"})` and `numen.work.dig("portal", {count = 10})` — it digs the frame's obsidian within its reach; `numen.work.collect` the drops, and repeat the three while `numen.area.has("portal")`. ~9.4s per block is normal.
+3. `numen.scan.blocks("obsidian")`, then hand the frame's cluster to `numen.work.mine` (its `blocks`) — it walks within reach, digs, picks up the drops and goes on until none of them is left. ~9.4s per block is normal.
 
 Notes:
 - A portal's frame mixes plain **obsidian** with **crying obsidian** (purple particles). Crying obsidian is a *different block and useless for a portal frame* — a scan for `obsidian` alone leaves it out, so a single portal may yield fewer than 10. If you come up short, `numen.locate.structure("#minecraft:ruined_portal")` again for the next nearest and top up.

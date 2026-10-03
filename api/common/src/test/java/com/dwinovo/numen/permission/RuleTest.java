@@ -45,7 +45,7 @@ class RuleTest {
     }
 
     private static Facts facts(FakeWorld world, PlacedBlocks placed) {
-        return new Facts(world, placed, null, null, Level.OVERWORLD, Map.of(), java.util.Set.of());
+        return new Facts(world, placed, null, null);
     }
 
     // ==================== 解析 ====================
@@ -110,8 +110,8 @@ class RuleTest {
         PlacedBlocks placed = new PlacedBlocks();
         Action dig = Action.breakBlock(POS, world.getBlockState(POS));
         java.util.UUID her = java.util.UUID.fromString("00000000-0000-0000-0000-0000000000bb");
-        Facts asHer = new Facts(world, placed, null, her, Level.OVERWORLD, Map.of(), java.util.Set.of());
-        Facts asSteve = new Facts(world, placed, null, STEVE.id(), Level.OVERWORLD, Map.of(), java.util.Set.of());
+        Facts asHer = new Facts(world, placed, null, her);
+        Facts asSteve = new Facts(world, placed, null, STEVE.id());
         assertFalse(Rule.parse("break(self_placed)").matches(dig, asHer), "没有记号:谁都没放过");
         placed.record(POS, new PlacedBlocks.Placer(her, "Aria"));
         assertTrue(Rule.parse("break(self_placed)").matches(dig, asHer));

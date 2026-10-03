@@ -217,7 +217,7 @@ public final class LuaEngine implements ScriptEngine {
         return LuaSandbox.check(name, code);
     }
 
-    /** 正文开头那段注释的第一行({@code -- Dig out an area.});空行与 {@code #!} 行不算开头。 */
+    /** 正文开头那段注释的第一行({@code -- Dig out the given blocks.});空行与 {@code #!} 行不算开头。 */
     @Override
     public String summary(String code) {
         for (String raw : code.split("\n", -1)) {

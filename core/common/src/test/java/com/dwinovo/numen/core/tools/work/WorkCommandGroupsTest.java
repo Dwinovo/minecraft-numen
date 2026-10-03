@@ -107,15 +107,15 @@ class WorkCommandGroupsTest {
                 newHelp);
         assertTrue(newHelp.contains("\n---@field avoid_break? "), newHelp);
         String digHelp = help("numen.work.dig");
-        assertTrue(digHelp.contains("\nfunction numen.work.dig(place, opts) end"), digHelp);
+        assertTrue(digHelp.contains("\nfunction numen.work.dig(blocks, opts) end"), digHelp);
         String moveHelp = help("numen.move");
         assertEquals(List.of("go", "follow", "goto_"), functions(moveHelp, "move"), "库函数与动作都列在组里: " + moveHelp);
-        assertTrue(moveHelp.contains("\n---@field goto_ fun(place: Pos|Block|Entity|string, opts?: table): "
+        assertTrue(moveHelp.contains("\n---@field goto_ fun(place: Pos|Block|Entity|table, opts?: table): "
                 + "{pos: Pos, route: string, distance_left: number} Walk to a place: numen.route.new, numen.route.plan and numen.move.go "
                 + "on your own route goto-<your name>.\n"), "库函数的说明是它注释的第一句: " + moveHelp);
         String workHelp = help("numen.work");
-        assertTrue(functions(workHelp, "work").contains("mine") && workHelp.contains("\n---@field mine fun(where: "
-                + "string): integer Dig out an area"), "挖一块区域是内置模块 work 里的 Lua 函数,不是动作: " + workHelp);
+        assertTrue(functions(workHelp, "work").contains("mine") && workHelp.contains("\n---@field mine fun(blocks: "
+                + "Block[]): integer Dig out the given blocks"), "挖完一团是内置模块 work 里的 Lua 函数,不是动作: " + workHelp);
     }
 
     /**
@@ -127,9 +127,8 @@ class WorkCommandGroupsTest {
         for (String code : List.of("numen.fight.attack(27)", "numen.use.block({x = 120, y = 64, z = -35})",
                 "numen.use.block({x = 120, y = 64, z = -35}, {left = true, hold = 1.5})", "numen.use.entity(812, {sneak = true})",
                 "numen.inv.drop(\"cobblestone\")", "numen.inv.drop(\"cobblestone\", {count = 32})", "numen.work.dig({x = 120, y = 64, z = -35})",
-                "numen.work.dig(\"ores/g3\", {x = 120, y = 12, z = -35}, {count = 4})", "numen.move.go(\"home\")", "numen.move.follow(184)",
-                "numen.area.parts(\"ores\")", "numen.area.has(\"ores/g3\")", "numen.area.drop(\"ores/g2\")",
-                "numen.area.grow(\"buffer\", \"house\")", "numen.scan.blocks(\"iron_ore\")", "numen.scan.entities()",
+                "numen.work.dig({name = \"iron_ore\", pos = {x = 120, y = 12, z = -35}}, {x = 121, y = 12, z = -35}, {count = 4})", "numen.move.go(\"home\")", "numen.move.follow(184)",
+                "numen.scan.blocks(\"iron_ore\")", "numen.scan.entities()",
                 "numen.scan.block({x = 1, y = 2, z = 3})", "numen.task.timer(\"check the furnace\", {after = 90})", "numen.route.new(\"back\")",
                 "numen.route.drop(\"home\")", "numen.build.set({x = 1, y = 2, z = 3}, {block = \"stone\"})",
                 "numen.build.layer({\"###\"}, {at = {x = 0, y = 1, z = 0}, block = \"oak_planks\", into = \"house\", step = 2})",

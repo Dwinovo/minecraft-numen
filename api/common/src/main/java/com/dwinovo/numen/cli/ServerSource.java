@@ -110,8 +110,8 @@ public final class ServerSource implements CommandSource {
      * 这次调用({@link PendingCommands}),主人答复后再走或如实回执。等的只是这一次调用,不占任务槽。原版指令与改一块区域都经这里,
      * 是同一个口子。
      *
-     * @param action 要做的事,如 {@code command(setblock)}、{@code edit_area(house)}
-     * @param what   回执里点名这件事:{@code /setblock 0 64 0 stone}、{@code numen.area.delete("house")}
+     * @param action 要做的事,如 {@code command(setblock)}、{@code break(placed)}
+     * @param what   回执里点名这件事:{@code /setblock 0 64 0 stone}、{@code numen.work.dig({x = 1, y = 2, z = 3})}
      * @param go     放行之后接着做的;主人为它点过头时拿到的是交代了这一句的同一次调用
      */
     public void authorize(com.dwinovo.numen.permission.Action action, String what, Consumer<ServerSource> go) {

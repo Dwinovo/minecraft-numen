@@ -1,12 +1,12 @@
 package com.dwinovo.numen.core.tools;
 
+import com.dwinovo.numen.agent.script.ApiError;
+import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.agent.tool.ToolArgs;
-import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.area.Cells;
 import com.dwinovo.numen.cli.ServerSource;
-import com.dwinovo.numen.core.nav.NamedAreas;
+import com.dwinovo.numen.cli.Target;
 import com.dwinovo.numen.core.task.MouseButton;
-import com.dwinovo.numen.cli.Place;
 import com.dwinovo.numen.core.task.dig.DigCompanionTask;
 import com.dwinovo.numen.core.task.dig.DigTaskRecord;
 import com.dwinovo.numen.core.task.interact.InteractAtTaskRecord;
@@ -21,8 +21,10 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -37,38 +39,26 @@ public final class BlockActionOps {
     public static final int MAX_DIG_COUNT = 256;
 
     /**
-     * {@code dig}:挖点名的几处(区域、区域的部分、一格坐标)的并里要挖的格,她站在原地手够得着的那些;{@code count} 可选,至多挖几格。
-     * 几处在派发这一刻解析:没有这块区域、点的是一列或一个高度、区域是空的、一格要挖的都没有(都是空气流体,或扫描来的都变了),
-     * 当场拒收,工具结果直接说明——不先回"已受理"再在后台失败。手够不够得着在任务受理之前的准备里判({@link DigCompanionTask})。
+     * {@code dig}:挖点名的几格里要挖的,她站在原地手够得着的那些;{@code count} 可选,至多挖几格。点名的 Block 带着当时那里的方块,
+     * 那一格换了别的就不挖;一格要挖的都没有(都是空气流体,或点名的方块都变了)当场拒收,工具结果直接说明——不先回"已受理"再在后台
+     * 失败。手够不够得着在任务受理之前的准备里判({@link DigCompanionTask})。
      *
-     * @param places 命令行上那一串:区域或一格坐标
+     * @param targets 点名的几格
      */
-    public TaskRecord dig(ServerSource src, List<Place> places, Integer count) {
+    public TaskRecord dig(ServerSource src, List<Target> targets, Integer count) {
         NumenPlayer her = src.companion();
-        NamedAreas named = NamedAreas.of(her);
-        Cells cells = Cells.EMPTY;
-        List<BlockPos> points = new ArrayList<>();
-        AreaRef firstArea = null;
-        for (Place place : places) {
-            if (place.area() != null) {
-                cells = cells.union(named.resolve(place.area()).cells());
-                firstArea = firstArea == null ? place.area() : firstArea;
-            } else if (place.cell() == null) {
-                throw new IllegalArgumentException("numen.work.dig takes cells ({x = …, y = …, z = …}, all three) and areas; " + place
-                        + " is " + (place.x() == null ? "a height" : "a column") + ", not one cell");
+        Level level = her.level();
+        List<BlockPos> plain = new ArrayList<>();
+        Map<BlockPos, BlockState> named = new LinkedHashMap<>();
+        for (Target target : targets) {
+            if (target.block() == null) {
+                plain.add(target.cell());
             } else {
-                points.add(place.cell());
+                named.put(target.cell(), target.block().defaultBlockState());
             }
         }
-        cells = cells.union(Cells.of(points));
-        String what = String.join(" ", places.stream().map(Place::written).toList());
-        String into = firstArea != null ? firstArea.name() : "<area>";
-        if (cells.isEmpty()) {
-            throw new IllegalArgumentException(what + " has no cells yet, so I did not start; `numen.scan.blocks(<block ids>, "
-                    + "{into = \"" + into + "\"})` or `numen.area.add(\"" + into + "\", {box = {x1, y1, z1, x2, y2, z2}})` "
-                    + "fills it");
-        }
-        Level level = her.level();
+        Cells cells = Cells.of(plain).union(Cells.seen(named, level.getGameTime()));
+        String what = "the " + targets.size() + " given";
         Set<Block> kinds = new LinkedHashSet<>();
         Set<Block> scannedKinds = new LinkedHashSet<>();
         cells.forEach((x, y, z, seen) -> {
@@ -80,17 +70,17 @@ public final class BlockActionOps {
                 kinds.add(now.getBlock());
             }
         });
+        // 点名的格里已经没有要挖的了:不是写错,是那些东西不在了
         if (kinds.isEmpty()) {
             if (!scannedKinds.isEmpty()) {
-                throw new IllegalArgumentException("the scanned cells of " + what + " are all gone or have changed since"
-                        + " the scan, so I did not start" + (firstArea != null ? "; `numen.scan.blocks(" + ids(scannedKinds)
-                        + ", {into = \"" + firstArea.name() + "\"})` adds what is there now" : ""));
+                throw new ApiError(ErrorKind.NOT_FOUND, "the blocks given are all gone or have changed since they were "
+                        + "seen, so I did not start", "numen.scan.blocks(" + ids(scannedKinds) + ")");
             }
-            throw new IllegalArgumentException("the " + cells.size() + " cell(s) of " + what + " hold nothing to dig — "
-                    + "air or fluid — so I did not start");
+            throw new ApiError(ErrorKind.NOT_FOUND, "the " + cells.size() + " cell(s) given hold nothing to dig — air "
+                    + "or fluid — so I did not start", null);
         }
         int until = count == null ? DigTaskRecord.ALL : Math.clamp(count, 1, MAX_DIG_COUNT);
-        return new DigTaskRecord(src, level.getGameTime(), cells, places, kinds, until, labelFor(kinds));
+        return new DigTaskRecord(src, level.getGameTime(), cells, targets, kinds, until, labelFor(kinds), what);
     }
 
     /** 方块 id,空格隔开。 */

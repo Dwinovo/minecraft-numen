@@ -4,7 +4,6 @@ import com.dwinovo.numen.agent.script.JsonValues;
 import com.dwinovo.numen.agent.script.ScriptEngine;
 import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.agent.tool.Schema;
-import com.dwinovo.numen.area.AreaRef;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.mojang.brigadier.LiteralMessage;
@@ -18,6 +17,7 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
@@ -41,8 +41,7 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li>一格({@link #cell()}):脚本里是 Pos {@code {x = 120, y = 64, z = -35}},或任何带 {@code pos} 的表(方块、实体、掉落物);
  *       小数按 Minecraft 的定义换成所在的那一格。一行命令里是三个整数 {@code 120 64 -35},也收 {@code 120,64,-35};</li>
- *   <li>一处({@link #place()}):一格、一列 {@code {x = …, z = …}}、一个高度 {@code {y = …}},或主人名下的一块区域;</li>
- *   <li>区域({@link #area()}):{@code ores} 指整块,{@code ores/g3} 指一部分,规矩在 {@link AreaRef#parse};</li>
+ *   <li>一处({@link #place()}):一格、一列 {@code {x = …, z = …}}、一个高度 {@code {y = …}};一片格子是一串格子;</li>
  *   <li>实体({@link #entity()}):{@code numen.scan.entities} 列出的运行期编号,或那只实体的表(带 {@code id});</li>
  *   <li>方块与物品({@link #id()}):资源 id,不写命名空间就是 {@code minecraft:};标签({@link #idOrTag()}):{@code #minecraft:logs}。</li>
  * </ul>
@@ -79,14 +78,13 @@ public final class ArgType<T> {
             choices -> new LiteralMessage("expected one of " + choices));
     private static final SimpleCommandExceptionType NO_CELL = new SimpleCommandExceptionType(
             new LiteralMessage("expected a cell: three whole numbers x y z"));
-    /** 一格后面接着 {@code ..}(多半是想写一个盒子):一格只是一格,一片格子是区域。 */
+    /** 一格后面接着 {@code ..}(多半是想写一个盒子):一格只是一格,一片格子是一串格子。 */
     private static final SimpleCommandExceptionType NOT_ONE_CELL = new SimpleCommandExceptionType(
-            new LiteralMessage("a cell is one x y z; a box or any other stretch of cells is an area — frame it as one "
-                    + "(numen.area.add(name, {box = {from, to}})) and name the area"));
+            new LiteralMessage("a cell is one x y z; a box or any other stretch of cells is a list of cells "
+                    + "(numen.shape.box(from, to) makes one)"));
     private static final SimpleCommandExceptionType NO_PLACE = new SimpleCommandExceptionType(
-            new LiteralMessage("expected a place: x y z (a cell), x z (a column), y (a height), or an area "
-                    + "name like ores or ores/g3"));
-    /** 读成了写法,内容却不成立(方块名认不出、区域名不合规矩……):说法由认它的那一方给。 */
+            new LiteralMessage("expected a place: x y z (a cell), x z (a column) or y (a height)"));
+    /** 读成了写法,内容却不成立(方块名认不出、状态写错……):说法由认它的那一方给。 */
     private static final DynamicCommandExceptionType REJECTED = new DynamicCommandExceptionType(
             why -> new LiteralMessage(String.valueOf(why)));
     private static final SimpleCommandExceptionType NO_ENTITY = new SimpleCommandExceptionType(
@@ -248,6 +246,23 @@ public final class ArgType<T> {
         throw REJECTED.create("expected " + POS_SHAPE + "; got " + given(value));
     }
 
+    /**
+     * 点名的一格的 JSON:一个 Pos(或带 {@code pos} 的表)是那一格;带方块 {@code name} 的(查询交回的 Block,不是带 {@code id} 的实体)
+     * 还记下当时那里是什么方块。
+     */
+    private static Target targetFromJson(JsonElement value) throws CommandSyntaxException {
+        BlockPos cell = cellFromJson(value);
+        JsonObject o = value.getAsJsonObject();
+        if (o.has("id") || !(o.get("name") instanceof JsonElement name) || !name.isJsonPrimitive()) {
+            return new Target(cell, null);
+        }
+        ResourceLocation id = ResourceLocation.tryParse(name.getAsString());
+        if (id == null || !BuiltInRegistries.BLOCK.containsKey(id)) {
+            throw REJECTED.create("expected a Block's name to be a block id; got " + given(value));
+        }
+        return new Target(cell, BuiltInRegistries.BLOCK.get(id));
+    }
+
     /** 一个数字段;没有或不是数是 null。 */
     private static Double number(JsonObject o, String key) {
         JsonElement v = o.get(key);
@@ -295,7 +310,7 @@ public final class ArgType<T> {
         return pos;
     }
 
-    /** 一处的 JSON:区域名;带键的表是一格({@code x y z})、一列({@code x z})或一个高度({@code y});带 {@code pos} 的表是那一格。 */
+    /** 一处的 JSON:带键的表是一格({@code x y z})、一列({@code x z})或一个高度({@code y});带 {@code pos} 的表是那一格。 */
     private static Place placeFromJson(JsonElement value) throws CommandSyntaxException {
         if (value != null && value.isJsonObject()) {
             JsonObject o = value.getAsJsonObject();
@@ -307,30 +322,21 @@ public final class ArgType<T> {
             Double z = number(o, "z");
             if (x != null && z != null) {
                 return y != null ? Place.cell(BlockPos.containing(x, y, z))
-                        : new Place((int) Math.floor(x), null, (int) Math.floor(z), null);
+                        : new Place((int) Math.floor(x), null, (int) Math.floor(z));
             }
             if (x == null && z == null && y != null) {
-                return new Place(null, (int) Math.floor(y), null, null);
+                return new Place(null, (int) Math.floor(y), null);
             }
-            throw REJECTED.create("expected a place: " + POS_SHAPE + ", a column {x = …, z = …}, a height {y = …}, or "
-                    + "an area name like \"ores\"; got " + given(value));
+            throw REJECTED.create("expected a place: " + POS_SHAPE + ", a column {x = …, z = …} or a height "
+                    + "{y = …}; got " + given(value));
         }
         Object instead = coordinates(value, 3);
         if (instead != null) {
             throw new WrongShape("a place given by coordinates is a table with named fields; got " + given(value),
                     instead);
         }
-        if (value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isString()) {
-            String name = value.getAsString();
-            StringReader reader = new StringReader(name);
-            Place place = Place.area(readAreaRef(reader, 0));
-            if (reader.canRead()) {
-                throw TRAILING.createWithContext(reader, "area name");
-            }
-            return place;
-        }
-        throw REJECTED.create("expected a place: " + POS_SHAPE + ", a column {x = …, z = …}, a height {y = …}, or an "
-                + "area name like \"ores\"; got " + given(value));
+        throw REJECTED.create("expected a place: " + POS_SHAPE + ", a column {x = …, z = …} or a height {y = …}; "
+                + "got " + given(value));
     }
 
     /** 一只实体的 JSON:编号,或带 {@code id} 的那张表。 */
@@ -554,116 +560,62 @@ public final class ArgType<T> {
     }
 
     /**
-     * 一处({@link Place}):一到三个整数——三个是一格,两个是一列({@code x z}),一个是一个高度——或主人名下的一块区域
-     * ({@code ores}、{@code ores/g3})。数字或负号打头的是坐标,别的是区域名。
+     * 点名的一格({@link Target}):脚本里是一个 Pos,或一个 Block(带着当时那里是什么方块);一行命令里是三个整数。
+     */
+    public static ArgType<Target> target() {
+        ArgumentType<Target> read = reader -> new Target(readCell(reader), null);
+        String hint = "a cell: " + POS_SHAPE;
+        return new ArgType<>(read, "x y z", "cell", hint, Span.ONE, Item.STRING, true, false, ArgType::stringField,
+                ArgType::targetFromJson, Target::written)
+                .scripted(ScriptType.union(Shapes.POS.type(), Shapes.BLOCK.type()), Target::value);
+    }
+
+    /**
+     * 一处({@link Place}):一到三个整数——三个是一格,两个是一列({@code x z}),一个是一个高度。
      */
     public static ArgType<Place> place() {
         ArgumentType<Place> read = ArgType::readPlace;
-        String hint = "place: a Pos (a cell, or anything with a pos), a column {x = …, z = …}, a height {y = …}, or an "
-                + "area like \"ores\" or \"ores/g3\"";
+        String hint = "place: a Pos (a cell, or anything with a pos), a column {x = …, z = …} or a height {y = …}";
         return new ArgType<>(read, "place", "place", hint, Span.ONE, Item.STRING, true, false, ArgType::stringField,
                 ArgType::placeFromJson, Place::written)
                 .scripted(ScriptType.union(Shapes.POS.type(), ScriptType.table(
                                 ScriptType.field("x", ScriptType.NUMBER, null), ScriptType.field("z", ScriptType.NUMBER, null)),
-                        ScriptType.table(ScriptType.field("y", ScriptType.NUMBER, null)), ScriptType.STRING),
+                        ScriptType.table(ScriptType.field("y", ScriptType.NUMBER, null))),
                         Place::value);
     }
 
     /**
-     * 一种方块({@link #idOrTag} 的写法)、一格坐标,或主人名下的一块区域 {@code area:名字}、{@code area:名字/部分}
-     * ({@link AreaRef#MARK} 打头:和方块写在一串里,区域名要带记号才分得开)。数字或负号打头的是坐标。一片地方只有区域一种写法:
-     * 要一个盒子,先把它框成区域。
+     * 一种方块({@link #idOrTag} 的写法),或一格坐标。数字或负号打头的是坐标。一片地方是一串格子。
      */
-    public static ArgType<BlockCellOrArea> blockCellOrArea() {
-        ArgumentType<BlockCellOrArea> read = ArgType::readBlockCellOrArea;
-        String hint = "block id, #tag, a cell (" + POS_SHAPE + ") or \"area:<name>\"";
-        return new ArgType<>(read, "block|cell|area", "block|cell|area", hint, Span.ONE, Item.STRING, true, false,
-                ArgType::stringField, ArgType::blockCellOrAreaFromJson, BlockCellOrArea::written)
+    public static ArgType<BlockOrCell> blockOrCell() {
+        ArgumentType<BlockOrCell> read = ArgType::readBlockOrCell;
+        String hint = "block id, #tag, or a cell (" + POS_SHAPE + ")";
+        return new ArgType<>(read, "block|cell", "block|cell", hint, Span.ONE, Item.STRING, true, false,
+                ArgType::stringField, ArgType::blockOrCellFromJson, BlockOrCell::written)
                 .scripted(ScriptType.union(ScriptType.STRING, Shapes.POS.type()),
                         v -> v.cell() != null ? Shapes.value(v.cell()) : v.written());
     }
 
-    /** 方块、格子或区域的 JSON:表是一格,字符串是方块 id、标签或 {@code area:名字}。 */
-    private static BlockCellOrArea blockCellOrAreaFromJson(JsonElement value) throws CommandSyntaxException {
+    /** 方块或格子的 JSON:表是一格,字符串是方块 id 或标签。 */
+    private static BlockOrCell blockOrCellFromJson(JsonElement value) throws CommandSyntaxException {
         if (value != null && value.isJsonObject()) {
-            return new BlockCellOrArea(null, cellFromJson(value), null);
+            return new BlockOrCell(null, cellFromJson(value));
         }
         Object instead = coordinates(value, 3);
         if (instead instanceof java.util.Map<?, ?> pos && pos.size() == 3) {
             throw new WrongShape("a cell here is a Pos with named fields; got " + given(value), instead);
         }
         if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) {
-            throw REJECTED.create("expected a block id, a #tag, a cell (" + POS_SHAPE + ") or \"area:<name>\"; got "
-                    + given(value));
+            throw REJECTED.create("expected a block id, a #tag or a cell (" + POS_SHAPE + "); got " + given(value));
         }
-        return whole(ArgType::readBlockCellOrArea, value.getAsString(), "block id, #tag or area:<name>");
+        return whole(ArgType::readBlockOrCell, value.getAsString(), "block id or #tag");
     }
 
-    private static BlockCellOrArea readBlockCellOrArea(StringReader reader) throws CommandSyntaxException {
-        if (reader.getString().startsWith(AreaRef.MARK, reader.getCursor())) {
-            return new BlockCellOrArea(null, null, readMarkedArea(reader));
-        }
+    private static BlockOrCell readBlockOrCell(StringReader reader) throws CommandSyntaxException {
         if (startsNumber(reader.getString(), reader.getCursor())) {
-            return new BlockCellOrArea(null, readCell(reader), null);
+            return new BlockOrCell(null, readCell(reader));
         }
-        return new BlockCellOrArea(readIdOrTag(reader), null, null);
-    }
-
-    /**
-     * 几个固定值之一({@link #oneOf} 的写法),或主人名下的一块区域 {@code area:名字}、{@code area:名字/部分}:比如路线要避开的
-     * 格子种类与区域写在同一串里({@code --avoid water area:farm})。读出来是写下的原文;区域那一样由用它的一方经
-     * {@link AreaRef#marked} 认,和这里同一个读法。
-     */
-    public static ArgType<String> oneOfOrArea(String... choices) {
-        List<String> allowed = List.of(choices);
-        String listed = String.join(", ", allowed) + " or " + AreaRef.MARK + "<name>";
-        return new ArgType<>(reader -> {
-            if (reader.getString().startsWith(AreaRef.MARK, reader.getCursor())) {
-                int start = reader.getCursor();
-                readMarkedArea(reader);
-                return reader.getString().substring(start, reader.getCursor());
-            }
-            int start = reader.getCursor();
-            String value = reader.readUnquotedString();
-            if (!allowed.contains(value)) {
-                reader.setCursor(start);
-                throw NOT_A_CHOICE.createWithContext(reader, listed);
-            }
-            return value;
-        }, String.join("|", allowed) + "|" + AreaRef.MARK + "<name>", "choice|area", "one of " + listed, Item.STRING,
-                ArgType::stringField);
-    }
-
-    /**
-     * 主人名下的一块区域({@link AreaRef}):{@code 名字} 指整块,{@code 名字/部分} 指其中一部分。写法在 {@link AreaRef#parse} 认,
-     * 名字不合规矩、编号不像编号当场报;有没有这块区域是用它的动作按主人的存档去认。
-     */
-    public static ArgType<AreaRef> area() {
-        ArgumentType<AreaRef> read = reader -> readAreaRef(reader, reader.getCursor());
-        String hint = "area name, or name/part like ores/g3";
-        return new ArgType<>(read, "area", "area", hint, Span.ONE, Item.STRING, false, false, ArgType::stringField,
-                literal(read, hint, UnaryOperator.identity()), AreaRef::toString);
-    }
-
-    /** {@code area:} 打头的一截读到空格为止,名字与编号当场认。 */
-    private static AreaRef readMarkedArea(StringReader reader) throws CommandSyntaxException {
-        int start = reader.getCursor();
-        reader.setCursor(start + AreaRef.MARK.length());
-        return readAreaRef(reader, start);
-    }
-
-    /** 从当前位置读一个区域名(带不带部分),读到空格为止;认不了的报错指在 {@code start}。 */
-    private static AreaRef readAreaRef(StringReader reader, int start) throws CommandSyntaxException {
-        int from = reader.getCursor();
-        while (reader.canRead() && reader.peek() != ' ') {
-            reader.skip();
-        }
-        try {
-            return AreaRef.parse(reader.getString().substring(from, reader.getCursor()));
-        } catch (IllegalArgumentException wrong) {
-            reader.setCursor(start);
-            throw REJECTED.createWithContext(reader, wrong.getMessage());
-        }
+        return new BlockOrCell(readIdOrTag(reader), null);
     }
 
     private static BlockPos readCell(StringReader reader) throws CommandSyntaxException {
@@ -688,13 +640,13 @@ public final class ArgType<T> {
             throw NO_PLACE.createWithContext(reader);
         }
         if (!startsNumber(reader.getString(), start)) {
-            return Place.area(readAreaRef(reader, start));
+            throw NO_PLACE.createWithContext(reader);
         }
         List<Integer> n = readCoordinates(reader, 3);
         return switch (n.size()) {
-            case 3 -> new Place(n.get(0), n.get(1), n.get(2), null);
-            case 2 -> new Place(n.get(0), null, n.get(1), null);
-            default -> new Place(null, n.get(0), null, null);
+            case 3 -> new Place(n.get(0), n.get(1), n.get(2));
+            case 2 -> new Place(n.get(0), null, n.get(1));
+            default -> new Place(null, n.get(0), null);
         };
     }
 
@@ -822,9 +774,9 @@ public final class ArgType<T> {
     /**
      * 一串同一种的值:命令行上是空格隔开的一个个值({@code iron_ore deepslate_iron_ore}),每个都按 {@code element} 的读法读,
      * 读到行尾或下一个标志({@code --} 打头)为止,所以它既能是动作的最后一个位置参数,也能是一个标志
-     * ({@code --item-ids iron_ingot raw_iron --area farm});快捷工具里是一个 JSON 数组,每一项按 {@code element}
+     * ({@code --item-ids iron_ingot raw_iron --avoid water lava});快捷工具里是一个 JSON 数组,每一项按 {@code element}
      * 读 JSON 值的规矩读,一项占几个词的(坐标)各项接成一行再读。至少一个。一项只能是一个值:整数、词、id、id 或标签、坐标、一处、
-     * 方块或坐标格或区域、区域、一只实体、几个固定值之一(或区域)、一个值。
+     * 方块或坐标格、点名的一格、一只实体、几个固定值之一、一个值。
      */
     public static <T> ArgType<List<T>> list(ArgType<T> element) {
         if (element.item == Item.NONE) {

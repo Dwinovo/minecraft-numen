@@ -20,8 +20,6 @@ class GotoRemindersTest {
     void aCopyableCallSpellsEveryCoordinateAndTheOptions() {
         assertEquals("`numen.move.goto_({x = 120, y = 64, z = -35}, {arrive = \"use\"})`", GotoReminders.call(FURNACE, "arrive = \"use\""));
         assertEquals("`numen.move.goto_({x = 120, y = 64, z = -35})`", GotoReminders.call(FURNACE, ""));
-        assertEquals("`numen.move.goto_(\"ores/g3\", {arrive = \"dig\"})`",
-                GotoReminders.call(com.dwinovo.numen.area.AreaRef.parse("ores/g3"), "arrive = \"dig\""));
     }
 
     /**

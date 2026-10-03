@@ -2,7 +2,6 @@ package com.dwinovo.numen.core.tools.perception;
 
 import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.api.NumenApi;
-import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.cli.ArgType;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
@@ -10,7 +9,6 @@ import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.cli.Param;
 import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.cli.Shapes;
-import com.dwinovo.numen.core.tools.AreaText;
 import com.dwinovo.numen.core.scan.BlockScan;
 import com.dwinovo.numen.core.tools.PerceptionOps;
 import com.dwinovo.numen.core.tools.QueryExtraOps;
@@ -22,8 +20,7 @@ import java.util.List;
 
 /**
  * {@code scan}:看她周围——脚下一圈的地形图、某几种方块在哪、附近有谁、一格方块是什么、一格方块里装着什么。
- * 五个动作都在服务端读世界,不动世界,不占身体;脚本拿到的是读到的数据(方块、实体都带 Pos,原样能交给下一个函数)。找方块带
- * {@code into} 时把看到的记进一块区域({@link ScanOps}),那是改区域,先过权限层。
+ * 五个动作都在服务端读世界,不动世界,不占身体,什么也不存;脚本拿到的是读到的数据(方块、实体都带 Pos,原样能交给下一个函数)。
  */
 public final class ScanCommands {
 
@@ -46,15 +43,6 @@ public final class ScanCommands {
             .whenOmitted("search " + DEFAULT_SEARCH_RADIUS + " blocks around you");
     private static final Param<List<String>> BLOCK_IDS = Param.required("block_ids", ArgType.list(ArgType.idOrTag()),
             "The block ids or #tags to search for; name every variant.");
-    private static final Param<AreaRef> WITHIN = Param.optional("within", ArgType.area(),
-            "Only look inside this area, or one part of it (base, ores/g3).")
-            .values("an area as `numen.area.list()` lists it")
-            .whenOmitted("look everywhere within the radius");
-    private static final Param<AreaRef> INTO = Param.optional("into", ArgType.area(),
-            "Add each group found to this area as a new part (g1, g2, ... counted within the area); an area that "
-                    + "does not exist yet is made.")
-            .values("an area name: one of yours, or a new one")
-            .whenOmitted("only look: the groups get no ids and nothing is kept");
     private static final Param<Double> ENTITY_RADIUS = Param.optional("radius", ArgType.number(1, 64),
             "Search radius in blocks.")
             .whenOmitted("look " + DEFAULT_ENTITY_RADIUS + " blocks around you");
@@ -73,6 +61,7 @@ public final class ScanCommands {
     }
 
     private static void actions(CommandGroup scan) {
+        scan.declare(ScanOps.CLUSTER);
         scan.server("around", "A top-down map of the ground around you: where you can walk, step, drop, swim.",
                         ScanCommands::around, VIEW_RADIUS)
                 .returns(ScriptType.table(
@@ -88,37 +77,21 @@ public final class ScanCommands {
                 .note("One map instead of many single-block looks; for things further out use `numen.scan.blocks` or "
                         + "`numen.scan.entities`.")
                 .seeAlso("scan blocks", "scan entities", "scan block");
-        scan.server("blocks", "Find blocks of the given types near you, reported as groups of touching blocks; "
-                        + "into keeps them in an area.",
-                        ScanCommands::blocks, BLOCK_IDS, SEARCH_RADIUS, WITHIN, INTO, Listing.PAGE)
-                .returns(ScriptType.table(
-                        ScriptType.field("groups", ScriptType.listOf(AreaText.PART_CLASS.type()),
-                                "Every group found, nearest first."),
-                        ScriptType.field("complete", ScriptType.BOOLEAN, "Whether the whole sphere was read; when "
-                                + "not, note says what was left out."),
-                        ScriptType.optional("note", ScriptType.STRING, null),
-                        ScriptType.field("radius", ScriptType.INTEGER, null),
-                        ScriptType.optional("area", ScriptType.STRING, "The area the groups were added to (into).")))
+        scan.server("blocks", "Find blocks of the given types near you, as clusters of touching blocks, nearest "
+                        + "first.", ScanCommands::blocks, BLOCK_IDS, SEARCH_RADIUS)
+                .returns("clusters", ScriptType.listOf(ScanOps.CLUSTER.type()))
                 .example("local found = numen.scan.blocks(\"iron_ore\", \"deepslate_iron_ore\")\n"
-                        + "print(#found.groups, found.complete)")
-                .note("Going through them: `for _, g in ipairs(numen.scan.blocks(\"iron_ore\").groups) do print(g.count, "
-                        + "g.nearest.pos.x, g.nearest.pos.z) end`.")
-                .example("numen.scan.blocks({\"iron_ore\", \"deepslate_iron_ore\"}, {radius = 32, into = \"ores\"})")
-                .example("numen.scan.blocks(\"#minecraft:beds\", {within = \"base\"})")
-                .example("numen.scan.blocks(\"iron_ore\", \"deepslate_iron_ore\", {page = 2})")
+                        + "print(#found, found[1].count, found[1].nearest.pos.x)")
+                .example("numen.scan.blocks({\"iron_ore\", \"deepslate_iron_ore\"}, {radius = 32})")
+                .example("numen.scan.blocks(\"#minecraft:beds\")")
                 .note("Read-only; the reply comes when the search is done. Name every variant you want.")
-                .note("Groups are matching cells that touch (diagonals count) and get the same answer for breaking "
-                        + "them, nearest first: how many cells and a count per block type, the nearest cell (a pos, "
-                        + "with direction and distance), the permission for breaking (allow; ask = numen.work.dig asks your "
-                        + "owner first; deny = numen.work.dig does not dig it) with the reason, source cells for water or "
-                        + "lava, and every position for groups of up to 16 cells.")
-                .note("Without into it only looks: the groups have no ids. With into = \"ores\" each group becomes "
-                        + "a part of the area ores (made then and there if you have no area ores yet — the result says "
-                        + "so), and its id (ores/g5) is what `numen.work.dig`, `numen.move.goto_(\"ores/g5\", {arrive = \"dig\"})` "
-                        + "and `numen.area.show` take. Adding to an area your owner's rules name asks your owner first.")
-                .note("within = \"base\" looks only inside the area base, as far as the radius reaches from you.")
-                .note("Only loaded terrain is read: anything further out is UNKNOWN, not empty.")
-                .seeAlso("area show", "work dig", "scan block");
+                .note("A cluster is matching blocks that touch (diagonals count): every block of it nearest first "
+                        + "(a Block: name and pos), the nearest one, and how many. Hand a cluster's blocks on as they are: "
+                        + "`numen.work.dig` digs those still standing within reach, `numen.move.goto_` with arrive \"dig\" "
+                        + "walks within reach of them, `numen.work.mine` does both until they are gone.")
+                .note("Nothing is kept: to use what it found again, keep the result in the program, or scan again.")
+                .note("Only loaded terrain is read: anything further out is UNKNOWN, not empty; the reply says so.")
+                .seeAlso("work dig", "scan block");
         scan.server("entities", "List the entities near you, nearest first, with the ids other actions take.",
                         ScanCommands::entities, TYPE_FILTER, ENTITY_RADIUS, Listing.PAGE)
                 .returns(QueryExtraOps.ENTITIES, ScriptType.listOf(Shapes.ENTITY.type()))
@@ -178,9 +151,7 @@ public final class ScanCommands {
     /** 搜索按刻分片,回执在搜完的那一刻经回信口送出。 */
     private static void blocks(ServerSource src, CommandArgs args) {
         Integer radius = args.get(SEARCH_RADIUS);
-        ScanOps.scanBlocks(src, radius == null ? DEFAULT_SEARCH_RADIUS : radius, args.get(BLOCK_IDS),
-                args.get(WITHIN), args.get(INTO), args,
-                args.call(src.actionPath(), List.of(BLOCK_IDS, SEARCH_RADIUS, WITHIN, INTO)));
+        ScanOps.scanBlocks(src, radius == null ? DEFAULT_SEARCH_RADIUS : radius, args.get(BLOCK_IDS));
     }
 
     private static void entities(ServerSource src, CommandArgs args) {

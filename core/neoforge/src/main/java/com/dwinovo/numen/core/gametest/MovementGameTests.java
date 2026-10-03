@@ -327,51 +327,7 @@ public class MovementGameTests {
     }
 
     /**
-     * 扫进区域的东西不随身体走:扫一次进一块区域,拿到 {@code marks/g1};她休眠(身体落盘离场)再回来,是一具新身体——
-     * {@code numen.area.show marks} 照样列出那一部分和那一格;再扫一次进同一块,编号接着往上数成 {@code marks/g2},旧编号不会指到新团上。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 4000, batch = "numen_terrain")
-    public static void an_area_a_scan_kept_outlives_the_body(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        var server = level.getServer();
-        BlockPos markRel = new BlockPos(6, 2, 6);
-        BlockPos mark = helper.absolutePos(markRel);
-        level.setBlockAndUpdate(mark, Blocks.HONEYCOMB_BLOCK.defaultBlockState());
-        BlockPos spawn = helper.absolutePos(new BlockPos(3, 2, 6));
-        NumenPlayer first = com.dwinovo.numen.entity.Companions.summon(server, UUID.randomUUID(),
-                "gametest_numberer", level, new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
-        UUID uuid = first.getUUID();
-        // 召唤会替她挑一个站得住的落点,不一定正好在 spawn 那格:半径给宽一点
-        ToolRun firstScan = scanInto(first, 10, "minecraft:honeycomb_block", "marks");
-        NumenPlayer[] second = new NumenPlayer[1];
-        ToolRun[] secondScan = new ToolRun[1];
-        String[] shown = new String[1];
-
-        succeedWhen(helper, () -> {
-            if (shown[0] == null) {
-                helper.assertTrue(firstScan.reply() != null, "the first scan has not replied");
-                var group = groupHolding(groupsIn(firstScan.reply()), mark);
-                helper.assertTrue(group != null && "marks/g1".equals(group.get("id").getAsString()),
-                        "the first scan did not keep the block as marks/g1: " + firstScan.reply());
-                com.dwinovo.numen.entity.Companions.dormant(server, first);
-                second[0] = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
-                helper.assertTrue(second[0] != null && second[0] != first, "the body was not rebuilt");
-                shown[0] = lua(second[0], "numen.area.show(\"marks\")").reply();
-                secondScan[0] = lua(second[0], "numen.scan.blocks(\"minecraft:honeycomb_block\", {into = \"marks\", radius = 10})");
-            }
-            var kept = groupHolding(groupsIn(shown[0]), mark);
-            helper.assertTrue(kept != null && "marks/g1".equals(kept.get("id").getAsString()),
-                    "the rebuilt body does not see what the scan kept: " + shown[0]);
-            helper.assertTrue(secondScan[0].reply() != null, "the second scan has not replied");
-            var again = groupHolding(groupsIn(secondScan[0].reply()), mark);
-            helper.assertTrue(again != null && "marks/g2".equals(again.get("id").getAsString()),
-                    "the second scan did not number on in the area: " + secondScan[0].reply());
-            com.dwinovo.numen.entity.Companions.dismiss(server, second[0]);
-        });
-    }
-
-    /**
-     * 重启后接不回来的活不许让调度 tick 抛出去:存下的参数重放时已经不成立(dig 点名的区域 ores 已经不在,
+     * 重启后接不回来的活不许让调度 tick 抛出去:存下的参数重放时已经不成立(dig 点名的那块铁矿已经不在了,
      * 工具当场拒收),新身体照样起来,她收到一条 task_finished 说清这件活没接回来,记录清掉。
      */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_terrain")
@@ -384,8 +340,10 @@ public class MovementGameTests {
         UUID uuid = first.getUUID();
         com.dwinovo.numen.entity.Companions.dormant(server, first);
         var registry = com.dwinovo.numen.entity.CompanionRegistry.get(server);
+        BlockPos gone = helper.absolutePos(new BlockPos(8, 2, 6));
         registry.put(uuid, registry.find(uuid).doing("work_dig", "work_dig",
-                "{\"place\":[\"ores/g1\"],\"count\":1}"));
+                "{\"blocks\":[{\"name\":\"minecraft:iron_ore\",\"pos\":{\"x\":" + gone.getX() + ",\"y\":" + gone.getY()
+                        + ",\"z\":" + gone.getZ() + "}}],\"count\":1}"));
         NumenPlayer second = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
         helper.assertTrue(second != null, "the body was not rebuilt");
         StringBuilder told = new StringBuilder();

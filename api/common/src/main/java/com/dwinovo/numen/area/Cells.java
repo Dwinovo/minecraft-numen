@@ -21,7 +21,7 @@ import java.util.Map;
 import java.util.function.Predicate;
 
 /**
- * 一堆格子(不带维度,维度归 {@link Area}),每格可附带"当时看到的方块与游戏刻"。不可变值:运算都交回新值,任何线程可读。
+ * 一堆格子(不带维度),每格可附带"当时看到的方块与游戏刻"。不可变值:运算都交回新值,任何线程可读。
  *
  * <h2>存法</h2>
  * 和原版存区块同一个思路:按 16×16×16 小节({@link SectionPos#asLong} 作键)存位图,每节 4096 位、{@code long[64]},
@@ -42,7 +42,7 @@ public final class Cells {
 
         /**
          * 这一格现在还是当时看到的那种方块:比方块种类,不比朝向、含水这类状态——原木换了朝向还是那根原木。消费方动手前
-         * (挖之前)与复核({@code area refresh})都按这一条认,不各写一份。
+         * (挖之前)都按这一条认,不各写一份。
          */
         public boolean holds(BlockState now) {
             return now.getBlock() == state.getBlock();

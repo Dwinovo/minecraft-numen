@@ -52,7 +52,7 @@ class GateTerrainTest {
 
     private static Gate gate(PlacedBlocks placed) {
         return new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(),
-                Level.OVERWORLD, placed, java.util.Map.of(), List.of());
+                placed, List.of());
     }
 
     private static Permit dig(Gate gate, BlockState state) {

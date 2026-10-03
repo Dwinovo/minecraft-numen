@@ -1,4 +1,4 @@
--- Picking up and digging out: walk onto the dropped items lying around, dig out a whole area.
+-- Picking up and digging out: walk onto the dropped items lying around, dig out the given blocks.
 local M = {}
 
 ---Pick up the dropped items around you, nearest first, walking onto each with numen.move.goto_. A fresh drop cannot be
@@ -61,19 +61,33 @@ function M.collect(opts)
   end
 end
 
----Dig out an area: walk within reach of what is left of it (numen.move.goto_ with arrive "dig" and alter "natural"), dig
----what is in reach (numen.work.dig), pick up the drops (numen.work.collect with alter "natural"), until nothing of it is left. A
----step that fails raises its error as it is.
----@param where string An area of your owner's from numen.area.list(), or one part of it ("ores/g3").
+---Dig out the given blocks: dig what is in reach (numen.work.dig), pick up the drops (numen.work.collect with alter
+---"natural"), walk within reach of what is left (numen.move.goto_ with arrive "dig" and alter "natural"), until none of
+---them is left. Blocks already gone end it (not_found from numen.work.dig). A walk that still leaves nothing within
+---reach raises that out_of_reach; any other failing step raises its error as it is.
+---@param blocks Block[] What to dig, as a scan gives them: a cluster's blocks.
 ---@return integer dug How many cells it dug.
-function M.mine(where)
+function M.mine(blocks)
   local dug = 0
-  while numen.area.has(where) do
-    numen.move.goto_(where, {arrive = "dig", alter = "natural"})
-    dug = dug + numen.work.dig(where).dug
-    M.collect({alter = "natural"})
+  local walked = false
+  while true do
+    local ok, r = pcall(numen.work.dig, blocks)
+    if ok then
+      dug = dug + r.dug
+      walked = false
+      M.collect({alter = "natural"})
+      if r.left == 0 then
+        return dug
+      end
+    elseif r.kind == "not_found" then
+      return dug
+    elseif r.kind == "out_of_reach" and not walked then
+      numen.move.goto_(blocks, {arrive = "dig", alter = "natural"})
+      walked = true
+    else
+      error(r, 0)
+    end
   end
-  return dug
 end
 
 return M

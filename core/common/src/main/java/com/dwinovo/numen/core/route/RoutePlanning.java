@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.dwinovo.numen.core.nav.Feet;
-import com.dwinovo.numen.core.nav.NamedAreas;
 import com.dwinovo.numen.core.nav.NavText;
 import com.dwinovo.numen.core.nav.Survey;
 import com.dwinovo.numen.core.task.move.Destination;
@@ -21,9 +20,6 @@ import net.minecraft.core.BlockPos;
  * 规划一条路线:按此刻的世界把每一段的途经点编成目标({@link Destination#of})、按每一段的规格({@link RouteFlags#spec}),
  * 交给 {@link Survey} 从她脚下起逐段只搜不走;出结论时写成计划({@link Plan})——每段多长、多少刻、要挖要放要问的格,走不通或
  * 没看清的为什么。{@code route plan} 与 {@code move go} 共用这一处;{@code move go} 还要拿规划出的路开走。
- *
- * <p>路线里点名的区域(途经点与标志里的)按此刻主人名下的区域解析,一次取好({@link NamedAreas}),各段共用:区域删了、部分删了,
- * 引用它的那一段编不成,计划里那一段写的就是哪块区域不在了。
  */
 public final class RoutePlanning {
 
@@ -82,15 +78,14 @@ public final class RoutePlanning {
         this.first = first;
         this.from = Feet.cell(her);
         this.at = her.server.overworld().getGameTime();
-        NamedAreas areas = NamedAreas.of(her);
         RouteSpec base = RouteFlags.base(her);
-        // 每一段从上一段去的那一格算起:区域按离它的远近挑成员,坐标缺的那一截照它补
+        // 每一段从上一段去的那一格算起:几格按离它的远近挑成员,坐标缺的那一截照它补
         BlockPos start = from;
         for (int i = first; i < route.legs().size(); i++) {
             Destination.Stop stop = route.legs().get(i).to();
             try {
-                RouteSpec spec = RouteFlags.spec(base, route, i, areas);
-                Destination to = Destination.of(her, stop, spec, areas, start);
+                RouteSpec spec = RouteFlags.spec(base, route, i);
+                Destination to = Destination.of(her, stop, spec, start);
                 legs.add(new Leg(new Survey.Leg(to.goal(), spec), to));
                 start = to.toward();
             } catch (IllegalArgumentException e) {

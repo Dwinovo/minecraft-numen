@@ -1,9 +1,9 @@
 package com.dwinovo.numen.core.task.dig;
 
-import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.area.Cells;
 import com.dwinovo.numen.cli.Place;
 import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.cli.Target;
 import com.dwinovo.numen.core.nav.NavText;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.task.TaskRecord;
@@ -19,10 +19,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * {@code numen.work.dig} 这件活的记录:点名的几处(区域、区域的部分、坐标)的并里要挖的格,她站在原地手够得着的那些挖掉。要挖的格由区域的
- * 数据定,不另设开关({@link #wants}):扫描来的格只挖还是当时那种方块的,框出来的格与点里面是什么挖什么(空气、流体跳过)。
+ * {@code numen.work.dig} 这件活的记录:点名的几格里要挖的,她站在原地手够得着的那些挖掉。要挖的格由点名的方式定,不另设开关
+ * ({@link #wants}):点名的 Block 只挖还是那种方块的,点名的 Pos 里面是什么挖什么(空气、流体跳过)。
  *
- * <p>点名的几处在派发这一刻解析成格子,记录里带着格子;扫描来的格附带当时的方块,框出来的格不带。
+ * <p>记录里带着格子;点名 Block 的格附带当时的方块,点名 Pos 的不带。
  */
 public final class DigTaskRecord extends TaskRecord {
 
@@ -45,15 +45,15 @@ public final class DigTaskRecord extends TaskRecord {
     private static final long TICKS_PER_BLOCK = 30 * 20;
     private static final long MIN_TIMEOUT_TICKS = 60 * 20;
 
-    /** 要挖的格(点名的区域与坐标的并);扫描来的附带当时的方块。 */
+    /** 要挖的格;点名 Block 的附带当时的方块。 */
     public final Cells cells;
-    /** 她点名的几处,按写下的顺序:回执里能照抄的下一步照它写。 */
-    public final List<Place> named;
+    /** 她点名的几格,按写下的顺序:回执里能照抄的下一步照它写。 */
+    public final List<Target> named;
     /** 此刻要挖的那几种方块:工具收不收得到掉落按它们判。 */
     public final Set<Block> targets;
     /** 至多挖几格,或 {@link #ALL}。 */
     public final int count;
-    /** 回执里怎么称呼要挖的东西({@code ores/g3}、{@code 10 64 5})。 */
+    /** 回执里怎么称呼要挖的东西({@code the 5 given})。 */
     public final String what;
     /** 这几种方块的简称({@code iron_ore}、{@code oak_log+1}),主人也读它。 */
     public final String label;
@@ -61,20 +61,20 @@ public final class DigTaskRecord extends TaskRecord {
     /** 进度:挖掉的格数。任务每刻写。 */
     private int dug = 0;
 
-    public DigTaskRecord(ServerSource source, long now, Cells cells, List<Place> named, Set<Block> targets,
-                         int count, String label) {
+    public DigTaskRecord(ServerSource source, long now, Cells cells, List<Target> named, Set<Block> targets,
+                         int count, String label, String what) {
         super(source, now + timeoutTicks(count == ALL ? (int) Math.min(cells.size(), 64) : count));
         this.cells = cells;
         this.named = List.copyOf(named);
         this.targets = Set.copyOf(targets);
         this.count = count;
-        this.what = named.stream().map(Place::written).collect(Collectors.joining(" "));
+        this.what = what;
         this.label = label;
     }
 
     /**
-     * 这一格此刻要不要挖:扫描来的格({@code seen} 不为 null)还是当时那种方块({@link Cells.Seen#holds})才挖;框出来的格与点
-     * 里面有方块就挖,空气与流体不挖。判据只此一处:派发时数格、干活时收候选、建造清场、{@code area has} 都问它。
+     * 这一格此刻要不要挖:点名 Block 的格({@code seen} 不为 null)还是当时那种方块({@link Cells.Seen#holds})才挖;点名 Pos
+     * 的格里面有方块就挖,空气与流体不挖。判据只此一处:派发时数格、干活时收候选都问它。
      */
     public static boolean wants(Cells.Seen seen, BlockState now) {
         if (seen != null) {
@@ -107,27 +107,34 @@ public final class DigTaskRecord extends TaskRecord {
     }
 
     /**
-     * 够不着的那些格的下一步,能照抄:{@code numen.move.goto_(去处, {arrive = "dig"})},再 {@code numen.work.dig(同样的几处)}。只点了一块区域
-     * (或它的一部分)时去处写它,她从离得最近的那一侧够过去;否则写 {@code nearest} 这一格。
+     * 够不着的那些格的下一步,能照抄:{@code numen.move.goto_(最近那一格, {arrive = "dig"})},再挖同样的几格。点名的不超过
+     * {@value #WRITTEN_OUT} 格时挖的那一次写全;再多就说"再挖同样的那些"。
      *
-     * @param named 她点名的几处,按写下的顺序
+     * @param named 她点名的几格,按写下的顺序
      */
-    public static String reachThem(List<Place> named, BlockPos nearest) {
+    public static String reachThem(List<Target> named, BlockPos nearest) {
         List<String> calls = reach(named, nearest);
-        return "`" + calls.get(0) + "`, then `" + calls.get(1) + "`";
+        return "`" + calls.get(0) + "`, then " + (calls.size() > 1 ? "`" + calls.get(1) + "`" : "dig the same blocks "
+                + "again");
     }
 
-    /** 同一个下一步写成两行能照抄的调用:走过去,再挖;失败的 {@code hint} 用它。 */
-    public static String reachLine(List<Place> named, BlockPos nearest) {
+    /** 同一个下一步写成能照抄的调用:走过去,再挖(写得全时);失败的 {@code hint} 用它。 */
+    public static String reachLine(List<Target> named, BlockPos nearest) {
         return String.join("\n", reach(named, nearest));
     }
 
-    /** 走过去的那一次调用与挖的那一次调用。 */
-    private static List<String> reach(List<Place> named, BlockPos nearest) {
-        AreaRef only = named.size() == 1 ? named.get(0).area() : null;
-        Place to = only != null ? Place.area(only) : Place.cell(nearest);
-        return List.of("numen.move.goto_(" + to.literal() + ", {arrive = \"dig\"})",
-                "numen.work.dig(" + named.stream().map(Place::literal).collect(Collectors.joining(", ")) + ")");
+    /** 回执里写全"再挖同样的几格"那一次调用的上限:再多,一行调用写不下。 */
+    private static final int WRITTEN_OUT = 3;
+
+    /** 走过去的那一次调用,与(写得全时)挖的那一次调用。 */
+    private static List<String> reach(List<Target> named, BlockPos nearest) {
+        String walk = "numen.move.goto_(" + Place.cell(nearest).literal() + ", {arrive = \"dig\"})";
+        if (named.size() > WRITTEN_OUT) {
+            return List.of(walk);
+        }
+        return List.of(walk, "numen.work.dig(" + named.stream()
+                .map(t -> com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.value(t.value()))
+                .collect(Collectors.joining(", ")) + ")");
     }
 
     public int getDug() {

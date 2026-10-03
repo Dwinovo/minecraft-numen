@@ -75,7 +75,7 @@ public final class NumenPrompts {
             -\s""" + ONE_BODY + """
 
             - One call is a one-line program. When each next step follows from
-              what the last one returned — every part of an area, again until
+              what the last one returned — every cluster a scan found, again until
               nothing is left, stop at the first failure — write the steps as one
               program instead of one call per turn. A module may already do it
               (numen.move.goto_, numen.work.collect, numen.work.mine, numen.build.raise; <api> lists the
@@ -195,8 +195,8 @@ public final class NumenPrompts {
             <examples>
             owner: 去挖10块铁
             → numen.gear.wear("stone_pickaxe")
-              numen.scan.blocks("iron_ore", "deepslate_iron_ore", {into = "iron"})
-              numen.work.mine("iron")
+              local veins = numen.scan.blocks("iron_ore", "deepslate_iron_ore")
+              numen.work.mine(veins[1].blocks)
             → "铁够了,十块都在我这。"
 
             owner: 附近有原木吗

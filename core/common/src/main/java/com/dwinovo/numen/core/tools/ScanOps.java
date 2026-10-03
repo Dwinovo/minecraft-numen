@@ -1,102 +1,62 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.area.Area;
-import com.dwinovo.numen.area.AreaRef;
-import com.dwinovo.numen.area.Cells;
-import com.dwinovo.numen.cli.CommandArgs;
-import com.dwinovo.numen.cli.Listing;
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.core.scan.BlockGroups;
 import com.dwinovo.numen.core.scan.BlockScan;
 import com.dwinovo.numen.core.scan.BlockSearch;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.permission.Action;
+import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.level.Level;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * {@code scan blocks} 的实现(登记、提升成 {@code scan_blocks} 在 {@link com.dwinovo.numen.core.tools.perception.ScanCommands})。
- * 看是按刻分片的({@link BlockScan}),回执在看完的那一刻经这次调用的回信口送出。
+ * {@code numen.scan.blocks} 的实现(登记在 {@link com.dwinovo.numen.core.tools.perception.ScanCommands})。看是按刻分片的
+ * ({@link BlockScan}),回执在看完的那一刻经这次调用的回信口送出。
  *
- * <p>结果按团给出:每一格先拿挖掘落点会提交的同一个动作问权限层,相连且说法相同的格子成一团,由近及远,一团一行。
- * 不带 {@code --into} 只是看:团没有编号,什么也不存,翻页就是再看一次。带 {@code --into <区域>} 就把每一团加成那块区域的一部分
- * (编号 {@code g} 在区域里续;没有这块区域就新建它,像 shell 的 {@code >}),回执里每团的编号就是能拿去点名的 {@code 区域/g5};
- * 改区域与建区域都是动作 {@code edit_area},看之前先过权限层。{@code --in <区域>} 只收落在那块区域里的格,半径照旧是从她脚下看多远。
+ * <p>结果是一串团(Cluster):相连的命中格(对角也算)成一团,由近及远;每团带着它的每一格(方块与位置,近的在前)、最近的那一格与格数。
+ * 只是看,什么也不存:要再用,程序就拿着这份结果,或再看一次。
  */
 public final class ScanOps {
 
     private static final int MIN_RADIUS = 1;
-    /**
-     * 扫进区域时回执列出的团数:最近的这几团够她定下一步挖哪儿、走哪儿;全部已在区域里,{@code area show} 一页一页列。
-     */
-    private static final int INTO_SHOWN = 5;
+    /** 回执那句话里列出的团数:最近的这几团;全部都在返回的数据里。 */
+    private static final int SHOWN = 8;
+
+    /** 一团。 */
+    public static final ScriptType.Class CLUSTER = new ScriptType.Class("Cluster",
+            "Touching blocks a scan found (diagonals count): every block, nearest first.", null, List.of(
+            ScriptType.field("blocks", ScriptType.listOf(Shapes.BLOCK.type()), "Every block of it, nearest first."),
+            ScriptType.field("nearest", Shapes.BLOCK.type(), "The block nearest to where you stood."),
+            ScriptType.field("count", ScriptType.INTEGER, "How many blocks.")));
 
     private ScanOps() {}
 
-    /**
-     * 看一次,回执是结果的第一页(或 {@code page} 要的那一页)。
-     *
-     * @param in   只看这块区域(或它的一部分)里的;不限为 null
-     * @param into 把每一团加进这块区域(没有就新建);只是看为 null
-     * @param what 这次调用写成脚本里的样子:改区域的征询点名它
-     */
-    public static void scanBlocks(ServerSource src, int radius, List<String> blockIds, AreaRef in, AreaRef into,
-                                  CommandArgs args, String what) {
+    /** 看一次,回执在看完时送出;返回的数据是全部的团。 */
+    public static void scanBlocks(ServerSource src, int radius, List<String> blockIds) {
         NumenPlayer self = src.companion();
         int r = Math.clamp(radius, MIN_RADIUS, BlockScan.MAX_RADIUS);
         Set<Block> targets = ToolParse.parseBlocks(blockIds);
         if (targets.isEmpty()) {
-            throw new IllegalArgumentException("no valid block_ids provided");
+            throw new IllegalArgumentException("no valid block ids provided");
         }
-        Area only = in == null ? null : AreaOps.resolve(self, in);
-        if (into == null) {
-            BlockScan.start(self, r, targets, only, found -> src.reply(listed(found, r, in, null, false, null, args)));
-            return;
-        }
-        if (args.get(Listing.PAGE) != null) {
-            throw new IllegalArgumentException("page turns the pages of a scan that only looks; the groups a scan "
-                    + "added to " + into + " are its parts, and `numen.area.show(\"" + into + "\", {page = "
-                    + args.get(Listing.PAGE) + "})` lists them");
-        }
-        String name = into.name();
-        if (into.part() != null) {
-            throw new IllegalArgumentException("into takes a whole area (" + name + "): each group becomes a new part "
-                    + "of it");
-        }
-        AreaOps.into(self, name);
-        ResourceKey<Level> dimension = self.level().dimension();
-        src.authorize(Action.editArea(name), what, allowed -> BlockScan.start(self, r, targets, only,
-                found -> allowed.reply(added(self, found, r, in, name, dimension, args))));
-    }
-
-    /** 看完,写进区域:那一刻的区域加上每一团;那一刻没有这块区域就新建它(在看的那个维度),回执说新建了。 */
-    private static String added(NumenPlayer self, BlockScan.Found found, int radius, AreaRef in, String into,
-                                ResourceKey<Level> dimension, CommandArgs args) {
-        Area now = AreaOps.store(self).get(into);
-        boolean made = now == null;
-        BlockScan.Added added = found.into(made ? Area.empty(dimension) : now);
-        if (made) {
-            AreaOps.store(self).create(into, added.area());
-        } else {
-            AreaOps.store(self).replace(into, added.area());
-        }
-        return listed(found, radius, in, into, made, added.ids(), args);
+        BlockScan.start(self, r, targets, found -> src.reply(listed(found, r)));
     }
 
     /**
      * What the scan actually covered, in the model's words — {@code null} when it
-     * covered everything asked for. A group list on its own can't distinguish "no
+     * covered everything asked for. A cluster list on its own can't distinguish "no
      * iron within 192 blocks" from "most of that sphere was never looked at", and
      * the model will read the first meaning into silence every time.
      */
@@ -107,8 +67,8 @@ public final class ScanOps {
             notes.add(capped);
         }
         if (res.collectCapHit()) {
-            notes.add("stopped at " + BlockSearch.MAX_COLLECT + " matching blocks — only the area nearest you "
-                    + "was read and groups at its edge may be cut off; scan a smaller radius");
+            notes.add("stopped at " + BlockSearch.MAX_COLLECT + " matching blocks — only the part nearest you "
+                    + "was read and clusters at its edge may be cut off; scan a smaller radius");
         }
         if (res.columnsUnloaded() > 0) {
             notes.add(res.columnsUnloaded() + " of " + res.columnsTotal() + " chunk columns in this "
@@ -119,79 +79,63 @@ public final class ScanOps {
     }
 
     /**
-     * 一次看的回执:抬头说在哪、多远、找到几团(写进了区域就说加成了哪几部分);没看全时抬头只说"读到的那部分里"有几团,结尾说清
-     * 哪里没读到。只是看的一团一行,按 {@link AreaText#PAGE_BYTES} 分页;扫进区域的只列最近 {@value #INTO_SHOWN} 团,抬头说全部
-     * 在哪、怎么看。{@code data} 是整次的小结,不随页变。
-     *
-     * @param made  区域是这一次新建的
-     * @param ids   写进区域后各团的编号;只是看为 null
+     * 一次看的回执:那句话说在哪、多远、找到几团,最近几团各一行(格数、方块、最近一格在哪多远);没看全时说只是读到的那部分里,并说清
+     * 哪里没读到。数据是全部的团({@link #CLUSTER}),由近及远。
      */
-    private static String listed(BlockScan.Found found, int radius, AreaRef in, String into, boolean made,
-                                 List<String> ids, CommandArgs args) {
+    private static String listed(BlockScan.Found found, int radius) {
         List<BlockGroups.Group> all = found.groups();
-        // 扫进区域的,回执只列最近几团:全部都在区域里,细节归 area show
-        int shown = ids == null ? all.size() : Math.min(INTO_SHOWN, all.size());
-        List<String> rows = new ArrayList<>(shown);
-        JsonArray groups = new JsonArray();
+        JsonArray clusters = new JsonArray();
+        List<String> rows = new ArrayList<>();
         for (int i = 0; i < all.size(); i++) {
-            JsonObject group = groupJson(ids == null ? null : into + "/" + ids.get(i), all.get(i), found.center(),
-                    found.tick());
-            groups.add(group);
-            if (i < shown) {
-                rows.add(group.toString());
+            BlockGroups.Group group = all.get(i);
+            clusters.add(clusterJson(group));
+            if (i < SHOWN) {
+                rows.add(summary(group, found.center()));
             }
         }
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("groups", groups);
-        // A total only when the walk actually covered the sphere. Cut short — hit the section cap or
-        // the collect cap, skipped unloaded ground — whatever it saw is an artifact of stopping,
-        // and a number in this slot gets read as "that is how much is there". The head says the
-        // same thing in words.
         BlockSearch.ScanResult res = found.coverage();
-        boolean whole = res.coveredEverything();
         String note = coverageNote(res);
-        String center = AreaText.cell(found.center());
-        String where = (whole
+        String center = cell(found.center());
+        String where = res.coveredEverything()
                 ? " within " + radius + " blocks of " + center
-                : " in the part of the " + radius + "-block radius around " + center + " that was read"
-                        + (note == null ? "" : " (the note at the end says what was not)"))
-                + (in == null ? "" : ", inside area " + in);
-        data.put("complete", whole);
+                : " in the part of the " + radius + "-block radius around " + center + " that was read";
+        StringBuilder said = new StringBuilder(all.isEmpty() ? "No cluster" + where + "."
+                : all.size() + " cluster(s)" + where + ", nearest first" + (all.size() > SHOWN ? " (the nearest "
+                + SHOWN + " here; all of them in what it returns)" : "") + ":");
+        rows.forEach(row -> said.append("\n").append(row));
         if (note != null) {
-            data.put("note", note);
+            said.append("\nNote: ").append(note);
         }
-        data.put("radius", radius);
-        if (into != null) {
-            data.put("area", into);
-        }
-        String area = made ? "the new area " + into + " (made just now)" : "area " + into;
-        String kept = ids == null || ids.isEmpty() ? ""
-                : ", added to " + area + " as " + (ids.size() == 1 ? ids.get(0)
-                        : ids.get(0) + " to " + ids.get(ids.size() - 1));
-        String order = shown < all.size()
-                ? "; the nearest " + shown + " follow, one per line (numen.area.show(\"" + into + "\") lists every part, "
-                        + "numen.work.dig(\"" + into + "\") digs them):"
-                : ", nearest first, one per line:";
-        String head = all.isEmpty()
-                ? "No groups" + where + (into == null ? "."
-                        : made ? "; made area " + into + ", still empty." : "; nothing was added to area " + into + ".")
-                : all.size() + " group(s)" + where + kept + order;
-        return new Listing(head, rows, note == null ? "" : "Note: " + note, AreaText.PAGE_BYTES)
-                .result(args, data).toJson();
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("clusters", clusters);
+        return TaskResult.ok(said.toString(), data).toJson();
     }
 
-    /**
-     * 一团的事实:与区域一部分同一种一行({@link AreaText#part},格子附带看到的方块),接上挖它权限层怎么说(不是放行时附上理由)。
-     *
-     * @param id     写进区域后的编号({@code ores/g5});只是看为 null
-     * @param center 看的中心,也就是她当时脚下那一格:方向与距离从这里量
-     */
-    static JsonObject groupJson(String id, BlockGroups.Group group, BlockPos center, long tick) {
-        JsonObject o = AreaText.part(id, Cells.seen(group.cells(), tick), center);
-        o.addProperty("permission", group.verdict().kind().name().toLowerCase(Locale.ROOT));
-        if (!group.verdict().allowed()) {
-            o.addProperty("reason", group.verdict().reason());
-        }
+    /** 一团的数据:每一格是一个 Block(近的在前),最近的那一格,格数。 */
+    static JsonObject clusterJson(BlockGroups.Group group) {
+        JsonArray blocks = new JsonArray();
+        group.cells().forEach((pos, state) -> blocks.add(Shapes.block(pos, state)));
+        JsonObject o = new JsonObject();
+        o.add("blocks", blocks);
+        o.add("nearest", Shapes.block(group.nearest(), group.cells().get(group.nearest())));
+        o.addProperty("count", group.cells().size());
         return o;
+    }
+
+    /** 回执里一团的那一行:{@code 3 × iron_ore, 1 × deepslate_iron_ore; nearest 12,-40,5, 6 blocks away}。 */
+    private static String summary(BlockGroups.Group group, BlockPos center) {
+        Map<Block, Integer> kinds = new LinkedHashMap<>();
+        for (BlockState state : group.cells().values()) {
+            kinds.merge(state.getBlock(), 1, Integer::sum);
+        }
+        List<String> counted = new ArrayList<>();
+        kinds.forEach((block, n) -> counted.add(n + " × " + BuiltInRegistries.BLOCK.getKey(block).getPath()));
+        return "- " + String.join(", ", counted) + "; nearest " + cell(group.nearest()) + ", "
+                + Math.round(Math.sqrt(group.nearest().distSqr(center))) + " blocks away";
+    }
+
+    /** 一格在回执里的写法:{@code 12,-40,5}。 */
+    static String cell(BlockPos p) {
+        return p.getX() + "," + p.getY() + "," + p.getZ();
     }
 }

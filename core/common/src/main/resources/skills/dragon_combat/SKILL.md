@@ -33,7 +33,7 @@ Carry a bow with arrows, then `numen.scan.entities` → `numen.fight.attack(311)
 Per caged pillar:
 
 1. `numen.move.goto_` the cell on top of the pillar (its x, top y + 1, z) with `{alter = "natural"}` — navigation pillars up the side on its own (this is what the spare cobblestone is for).
-2. `numen.scan.blocks("iron_bars", {into = "cage"})`, then `numen.work.dig("cage")` to open the cage from the pillar top, where the bars are within reach (`numen.move.goto_("cage", {arrive = "dig"})` first if they are not).
+2. `numen.scan.blocks("iron_bars")`, then hand the nearest cluster's blocks to `numen.work.dig` to open the cage from the pillar top, where the bars are within reach (`numen.move.goto_` the same blocks with arrive "dig" first if they are not).
 3. `numen.move.goto_` back down/away, then scan that crystal and call `numen.fight.attack(311)` with its id — it keeps its own distance from there.
 
 While you're up high, the dragon may strafe the pillar — if `numen.status.self` shows falling HP, finish the bars and get down first.

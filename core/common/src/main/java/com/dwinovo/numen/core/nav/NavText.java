@@ -5,7 +5,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.cli.Place;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -447,8 +446,8 @@ public final class NavText {
     }
 
     /**
-     * 一句能照抄的去一处,带反引号:{@code `numen.move.goto_({1, 2, 3}, {arrive = "use"})`}、
-     * {@code `numen.move.goto_("ores/g3", {arrive = "dig"})`};{@code options} 是选项表里的那几项,可以为空。
+     * 一句能照抄的去一处,带反引号:{@code `numen.move.goto_({x = 1, y = 2, z = 3}, {arrive = "use"})`};{@code options} 是选项表
+     * 里的那几项,可以为空。
      */
     public static String gotoCall(Place to, String options) {
         return "`numen.move.goto_(" + to.literal() + (options.isEmpty() ? "" : ", {" + options + "}") + ")`";

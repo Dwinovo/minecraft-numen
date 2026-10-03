@@ -20,20 +20,13 @@ import java.util.TreeSet;
  * @param entity  实体动作的对象
  * @param item    放/拿/丢的物品;规划期还不知道会用哪种耗材时为 null
  * @param command 执行的游戏指令;其余动作为 null
- * @param area    改的是主人名下哪一块区域(区域名);其余动作为 null
  */
-public record Action(Kind kind, BlockPos pos, BlockState state, Entity entity, Item item, CommandLine command,
-                     String area) {
+public record Action(Kind kind, BlockPos pos, BlockState state, Entity entity, Item item, CommandLine command) {
 
     /** 动词。{@link #verb} 是规则文本里写的那个词。 */
     public enum Kind {
         BREAK("break", true), PLACE("place", true), ATTACK("attack", false), USE_BLOCK("use_block", true),
-        USE_ENTITY("use_entity", false), TAKE("take", true), DROP("drop", false), COMMAND("command", false),
-        /**
-         * 改主人名下的一块区域:新建、加减部分、复核后划掉格、删掉,或把运算结果存成它。区域是主人规则里 {@code area:} 项
-         * 的所指,改它就是改那几行规则管到的格子,所以和改世界一样经权限层。
-         */
-        EDIT_AREA("edit_area", false);
+        USE_ENTITY("use_entity", false), TAKE("take", true), DROP("drop", false), COMMAND("command", false);
 
         private final String verb;
         private final boolean atBlock;
@@ -83,32 +76,32 @@ public record Action(Kind kind, BlockPos pos, BlockState state, Entity entity, I
     }
 
     public static Action breakBlock(BlockPos pos, BlockState state) {
-        return new Action(Kind.BREAK, pos, state, null, null, null, null);
+        return new Action(Kind.BREAK, pos, state, null, null, null);
     }
 
     /** @param item 要放的物品;规划期未定时传 null */
     public static Action place(BlockPos pos, BlockState current, Item item) {
-        return new Action(Kind.PLACE, pos, current, null, item, null, null);
+        return new Action(Kind.PLACE, pos, current, null, item, null);
     }
 
     public static Action attack(Entity target) {
-        return new Action(Kind.ATTACK, null, null, target, null, null, null);
+        return new Action(Kind.ATTACK, null, null, target, null, null);
     }
 
     public static Action useBlock(BlockPos pos, BlockState state) {
-        return new Action(Kind.USE_BLOCK, pos, state, null, null, null, null);
+        return new Action(Kind.USE_BLOCK, pos, state, null, null, null);
     }
 
     public static Action useEntity(Entity target) {
-        return new Action(Kind.USE_ENTITY, null, null, target, null, null, null);
+        return new Action(Kind.USE_ENTITY, null, null, target, null, null);
     }
 
     public static Action take(BlockPos container, BlockState state, Item item) {
-        return new Action(Kind.TAKE, container, state, null, item, null, null);
+        return new Action(Kind.TAKE, container, state, null, item, null);
     }
 
     public static Action drop(Item item) {
-        return new Action(Kind.DROP, null, null, null, item, null, null);
+        return new Action(Kind.DROP, null, null, null, item, null);
     }
 
     /**
@@ -133,12 +126,7 @@ public record Action(Kind kind, BlockPos pos, BlockState state, Entity entity, I
                 }
             }
         }
-        return new Action(Kind.COMMAND, null, null, null, null, new CommandLine(text, root, names), null);
-    }
-
-    /** 改主人名下叫 {@code name} 的那块区域(建、改、删都是它)。 */
-    public static Action editArea(String name) {
-        return new Action(Kind.EDIT_AREA, null, null, null, null, null, name);
+        return new Action(Kind.COMMAND, null, null, null, null, new CommandLine(text, root, names));
     }
 
     /** 一个根真正指向的节点:别名重定向去的那个,不是别名就是它自己。 */
@@ -147,15 +135,12 @@ public record Action(Kind kind, BlockPos pos, BlockState state, Entity entity, I
     }
 
     /**
-     * 回执里点名用:{@code break oak_log at 1,2,3}、{@code attack zombie}、{@code command /give @s diamond}、
-     * {@code edit_area house}。
+     * 回执里点名用:{@code break oak_log at 1,2,3}、{@code attack zombie}、{@code command /give @s diamond}。
      */
     public String describe() {
         StringBuilder sb = new StringBuilder(kind.verb);
         if (command != null) {
             sb.append(" /").append(command.line());
-        } else if (area != null) {
-            sb.append(' ').append(area);
         } else if (state != null) {
             sb.append(' ').append(net.minecraft.core.registries.BuiltInRegistries.BLOCK
                     .getKey(state.getBlock()).getPath());

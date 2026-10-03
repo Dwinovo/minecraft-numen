@@ -221,51 +221,28 @@ public final class GameTestKit {
     }
 
     /**
-     * 先建一块区域,再把 {@code blockId} 扫进去({@code numen.scan.blocks(…, {into = …})}):回执里每团的编号就是 {@code 区域/g1} 这种写法。
-     * 建区域当场回;扫的回执稍后才到。
-     */
-    static ToolRun scanInto(NumenPlayer companion, int radius, String blockId, String area) {
-        ToolRun made = lua(companion, "numen.area.new(\"" + area + "\")");
-        if (!made.succeeded()) {
-            throw new IllegalStateException("numen.area.new " + area + " failed: " + made.reply());
-        }
-        return lua(companion, "numen.scan.blocks(\"" + blockId + "\", {radius = " + radius + ", into = \"" + area + "\"})");
-    }
-
-    /** {@link #mineScanned} 把找到的方块扫进的那块区域。 */
-    static final String MINED_AREA = "targets";
-
-    /**
-     * 照模型挖矿的写法走一遍:建区域 {@link #MINED_AREA}、在半径 {@code radius} 内把 {@code blockId} 扫进去
-     * ({@code numen.scan.blocks(…, {into = …})}),扫的回执一到就{@linkplain #mine 挖这块区域}挖够 {@code count} 格。扫描被拒或失败时不挖,
-     * 这次挖矿的结论就是扫描的回执。
+     * 照模型挖矿的写法走一遍:在半径 {@code radius} 内找 {@code blockId}({@code numen.scan.blocks}),扫的回执一到,就把找到的
+     * 全部方块原样写进程序({@link #blocksIn}){@linkplain #mine 挖}够 {@code count} 格。扫描失败时不挖,这次挖矿的结论就是扫描的回执。
      */
     static Mining mineScanned(GameTestHelper helper, NumenPlayer companion, int radius, String blockId, int count) {
-        return mine(helper, companion, scanInto(companion, radius, blockId, MINED_AREA), MINED_AREA, count);
-    }
-
-    /**
-     * 挖一块区域,用原子调用一轮轮组合,和模型自己写的一样:{@code numen.move.goto_(区域, {arrive = "dig", alter = "natural"})} 走到
-     * 一次够得着最多格的地方,{@code numen.work.dig(区域, {count = 还差几格})} 挖手够得着的,{@code numen.work.collect({alter = "natural"})}
-     * 捡掉落;还差、而且挖的回执说还有够不着的格,就再来一轮。每一步是一段一行的程序;挖了几格读那件活的收尾数据,脚本里拿不到它。
-     * {@code before} 有了结论才开始,它失败就不挖。
-     *
-     * <p>哪一步(走、挖)失败,这次挖矿就以那一步的结论收场;挖够了,或够不着的不剩了,以最后一次挖的结论收场。
-     *
-     * @param count 挖够几格;0 是手边与够不着的都挖完为止
-     */
-    static Mining mine(GameTestHelper helper, NumenPlayer companion, ToolRun before, String area, int count) {
-        Mining mining = new Mining(companion, before, area, count);
+        Mining mining = new Mining(companion, scan(companion, radius, blockId), null, count);
         helper.onEachTick(mining::tick);
         return mining;
     }
 
     /**
-     * 当场就挖一块区域(或它的一部分),组合同 {@link #mine(GameTestHelper, NumenPlayer, ToolRun, String, int)};给在
-     * {@code succeedWhen} 里才知道挖哪一部分的用例:不另挂每刻的回调,每次问 {@link Mining#done} 时往下推一步。
+     * 当场就挖 {@code blocks}(一串 Block 或 Pos 的 Lua 写法),用原子调用一轮轮组合,和模型自己写的一样:
+     * {@code numen.move.goto_(blocks, {arrive = "dig", alter = "natural"})} 走到一次够得着最多格的地方,
+     * {@code numen.work.dig(blocks, {count = 还差几格})} 挖手够得着的,{@code numen.work.collect({alter = "natural"})} 捡掉落;还差、而且
+     * 挖的回执说还有够不着的格,就再来一轮。每一步是一段一行的程序,方块每次原样写进去;挖了几格读那件活的收尾数据,脚本里拿不到它。
+     * 不另挂每刻的回调,每次问 {@link Mining#done} 时往下推一步。
+     *
+     * <p>哪一步(走、挖)失败,这次挖矿就以那一步的结论收场;挖够了,或够不着的不剩了,以最后一次挖的结论收场。
+     *
+     * @param count 挖够几格;0 是手边与够不着的都挖完为止
      */
-    static Mining mine(NumenPlayer companion, String area, int count) {
-        return new Mining(companion, null, area, count);
+    static Mining mine(NumenPlayer companion, String blocks, int count) {
+        return new Mining(companion, null, blocks, count);
     }
 
     /**
@@ -283,7 +260,8 @@ public final class GameTestKit {
         private enum Step { BEFORE, GOTO, DIG, SETTLE, COLLECT }
 
         private final NumenPlayer companion;
-        private final String area;
+        /** 挖的那些方块的 Lua 写法;先扫再挖的,扫的回执到了才有。 */
+        private String blocks;
         private final int count;
         private Step step = Step.BEFORE;
         private ToolRun current;
@@ -294,9 +272,9 @@ public final class GameTestKit {
         private int rounds;
         private int settling;
 
-        private Mining(NumenPlayer companion, ToolRun before, String area, int count) {
+        private Mining(NumenPlayer companion, ToolRun before, String blocks, int count) {
             this.companion = companion;
-            this.area = area;
+            this.blocks = blocks;
             this.count = count;
             this.current = before;
             if (before == null) {
@@ -314,15 +292,16 @@ public final class GameTestKit {
             if (last != null || !current.done()) {
                 return;
             }
-            com.dwinovo.numen.core.Constants.LOG.info("[numen-task] mine {} {} -> {}", area, step, current.outcome());
+            com.dwinovo.numen.core.Constants.LOG.info("[numen-task] mine {} -> {}", step, current.outcome());
             switch (step) {
                 case BEFORE, GOTO -> {
                     if (!current.succeeded()) {
                         last = current;
                     } else if (step == Step.BEFORE) {
+                        blocks = blocksIn(current.reply());
                         walk();
                     } else {
-                        run(Step.DIG, "numen.work.dig(\"" + area + "\"" + (count > 0 ? ", {count = " + (count - dug) + "}" : "")
+                        run(Step.DIG, "numen.work.dig(" + blocks + (count > 0 ? ", {count = " + (count - dug) + "}" : "")
                                 + ")");
                     }
                 }
@@ -364,7 +343,12 @@ public final class GameTestKit {
         }
 
         private void walk() {
-            run(Step.GOTO, "numen.move.goto_(\"" + area + "\", {arrive = \"dig\", alter = \"natural\"})");
+            run(Step.GOTO, "numen.move.goto_(" + blocks + ", {arrive = \"dig\", alter = \"natural\"})");
+        }
+
+        /** 挖的那些方块的 Lua 写法:再挖同样的那些时照抄;先扫再挖的,扫的回执到之前是 null。 */
+        String blocks() {
+            return blocks;
         }
 
         /** 各次 {@code numen.work.dig} 一共挖掉的格。 */
@@ -397,10 +381,33 @@ public final class GameTestKit {
         }
     }
 
-    /** 回执数据里的团或部分:{@code numen.scan.blocks} 的 {@code groups}、{@code numen.area.show} 的 {@code parts}。 */
-    static com.google.gson.JsonArray groupsIn(String reply) {
-        com.google.gson.JsonObject data = dataIn(reply);
-        return data.has("groups") ? data.getAsJsonArray("groups") : data.getAsJsonArray("parts");
+    /** {@code numen.scan.blocks} 回执数据里的团,近的在前。 */
+    static com.google.gson.JsonArray clustersIn(String reply) {
+        return dataIn(reply).getAsJsonArray("clusters");
+    }
+
+    /** 一团的方块写成 Lua 的一串 Block,和程序把扫描结果原样交出去一样。 */
+    static String blocksOf(com.google.gson.JsonObject cluster) {
+        List<String> blocks = new java.util.ArrayList<>();
+        for (var element : cluster.getAsJsonArray("blocks")) {
+            var block = element.getAsJsonObject();
+            var pos = block.getAsJsonObject("pos");
+            blocks.add("{name = \"" + block.get("name").getAsString() + "\", pos = {x = " + pos.get("x").getAsInt()
+                    + ", y = " + pos.get("y").getAsInt() + ", z = " + pos.get("z").getAsInt() + "}}");
+        }
+        return "{" + String.join(", ", blocks) + "}";
+    }
+
+    /** 一次扫描找到的全部方块(各团连在一起)写成 Lua 的一串 Block。 */
+    static String blocksIn(String scanReply) {
+        List<String> all = new java.util.ArrayList<>();
+        for (var cluster : clustersIn(scanReply)) {
+            String blocks = blocksOf(cluster.getAsJsonObject());
+            if (blocks.length() > 2) {
+                all.add(blocks.substring(1, blocks.length() - 1));
+            }
+        }
+        return "{" + String.join(", ", all) + "}";
     }
 
     /** 回执里交给脚本的数据;没带数据是空表。 */
@@ -409,17 +416,14 @@ public final class GameTestKit {
         return o.has("data") ? o.getAsJsonObject("data") : new com.google.gson.JsonObject();
     }
 
-    /** 列出了 {@code cell} 这一格的那一团(逐格的 Pos 里有它);没有为 null。 */
-    static com.google.gson.JsonObject groupHolding(com.google.gson.JsonArray groups, BlockPos cell) {
+    /** 有 {@code cell} 这一格的那一团(它的方块里有一块的 pos 是这一格);没有为 null。 */
+    static com.google.gson.JsonObject clusterHolding(com.google.gson.JsonArray clusters, BlockPos cell) {
         com.google.gson.JsonObject wanted = com.dwinovo.numen.cli.Shapes.pos(cell);
-        for (var element : groups) {
-            var group = element.getAsJsonObject();
-            if (!group.has("positions")) {
-                continue;
-            }
-            for (var position : group.getAsJsonArray("positions")) {
-                if (position.equals(wanted)) {
-                    return group;
+        for (var element : clusters) {
+            var cluster = element.getAsJsonObject();
+            for (var block : cluster.getAsJsonArray("blocks")) {
+                if (block.getAsJsonObject().get("pos").equals(wanted)) {
+                    return cluster;
                 }
             }
         }

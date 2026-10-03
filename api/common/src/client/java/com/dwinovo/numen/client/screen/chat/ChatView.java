@@ -1736,7 +1736,7 @@ public final class ChatView {
                 var v = o.get(k);
                 if (v != null && v.isJsonPrimitive()) parts.add(stripNs(v.getAsString()));
             }
-            for (String k : new String[]{"block_ids", "items", "area"}) {
+            for (String k : new String[]{"block_ids", "items"}) {
                 if (!parts.isEmpty()) break;
                 var v = o.get(k);
                 if (v != null && v.isJsonArray() && !v.getAsJsonArray().isEmpty()) {

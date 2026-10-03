@@ -50,7 +50,7 @@ class LuaEngineTest {
             "numen.work", Map.of("dig", new ScriptCatalog.Verb(null), "collect", new ScriptCatalog.Verb(null)),
             "numen.move", Map.of("go", new ScriptCatalog.Verb(null)),
             "numen.route", Map.of("plan", new ScriptCatalog.Verb(null)),
-            "numen.area", Map.of("parts", new ScriptCatalog.Verb("parts"), "has", new ScriptCatalog.Verb("has"))),
+            "numen.scan", Map.of("blocks", new ScriptCatalog.Verb("clusters"), "sight", new ScriptCatalog.Verb("visible"))),
             new ScriptCatalog.ModuleSource() {
                 @Override
                 public String code(String name) {
@@ -154,7 +154,7 @@ class LuaEngineTest {
                 "语法错读不通");
         com.dwinovo.numen.agent.script.ScriptEngine.Reading stopped = LUA.calls("example", """
                 numen.work.dig("ores")
-                for _, p in ipairs(numen.area.parts("ores")) do numen.work.dig(p) end
+                for _, c in ipairs(numen.scan.blocks("iron_ore")) do numen.work.dig(c.blocks) end
                 """, CATALOG);
         assertEquals(2, stopped.calls().size(), "停下之前调到的照记");
         assertTrue(stopped.error() != null, "拿返回值往下算的写法跑到那儿停下,说出原因");
@@ -240,30 +240,31 @@ class LuaEngineTest {
     @Test
     void aDeclaredValueIsWhatTheCallReturns() {
         ScriptRun run = run("""
-                for _, p in ipairs(numen.area.parts("ores")) do print(p) end
-                while numen.area.has("ores") do numen.work.dig("ores") end
+                for _, c in ipairs(numen.scan.blocks("iron_ore")) do print(c) end
+                while numen.scan.sight("ores") do numen.work.dig("ores") end
                 print("done")
                 """);
         run.start();
-        JsonArray parts = new JsonArray();
-        parts.add("ores/g1");
-        parts.add("ores/g2");
-        assertInstanceOf(ScriptRun.Call.class, run.resume(data("parts", parts)));
-        assertInstanceOf(ScriptRun.Call.class, run.resume(data("has", new JsonPrimitive(true))));
+        JsonArray clusters = new JsonArray();
+        clusters.add("ores/g1");
+        clusters.add("ores/g2");
+        assertInstanceOf(ScriptRun.Call.class, run.resume(data("clusters", clusters)));
+        assertInstanceOf(ScriptRun.Call.class, run.resume(data("visible", new JsonPrimitive(true))));
         assertInstanceOf(ScriptRun.Call.class, run.resume(ok("dug")));
         assertTrue(assertInstanceOf(ScriptRun.Done.class,
-                run.resume(data("has", new JsonPrimitive(false)))).ok(), "没剩是 false,不是报错");
+                run.resume(data("visible", new JsonPrimitive(false)))).ok(), "没剩是 false,不是报错");
         assertEquals(List.of("ores/g1", "ores/g2", "done"), printed);
     }
 
     @Test
     void aFailedValueQueryRaises() {
-        ScriptRun run = run("numen.area.has('nope')");
+        ScriptRun run = run("numen.scan.sight('nope')");
         run.start();
         ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(new ScriptRun.Result(false,
-                "there is no area named nope", new JsonObject(), "not_found", "numen.area.list()")));
+                "there is nothing named nope", new JsonObject(), "not_found", "numen.scan.entities()")));
         assertFalse(done.ok());
-        assertEquals("numen.area.has: not_found — there is no area named nope\nhint: numen.area.list()", done.error());
+        assertEquals("numen.scan.sight: not_found — there is nothing named nope\nhint: numen.scan.entities()",
+                done.error());
     }
 
     @Test

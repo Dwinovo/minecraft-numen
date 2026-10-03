@@ -48,7 +48,7 @@ public interface ScriptEngine {
     }
 
     /**
-     * 一次调用写成这种语言里的样子:{@code numen.work.dig("ores", {count = 2})}。对象是字符串、数、布尔或它们的列表,选项按名字。
+     * 一次调用写成这种语言里的样子:{@code numen.work.dig({x = 1, y = 2, z = 3}, {count = 2})}。对象是字符串、数、布尔或它们的列表,选项按名字。
      */
     String call(String function, List<Object> objects, java.util.Map<String, Object> options);
 
@@ -84,7 +84,7 @@ public interface ScriptEngine {
     /** 库里一个函数在一组的清单里的一行:按它的类型注解写,和 {@link #functionLine} 同一种样子。 */
     String libraryLine(Defined fn);
 
-    /** 一行说明在这种语言里写成注释的样子(说明从正文开头那行注释读,见 {@link #summary}):{@code -- Dig out an area.}。 */
+    /** 一行说明在这种语言里写成注释的样子(说明从正文开头那行注释读,见 {@link #summary}):{@code -- Dig out the given blocks.}。 */
     String comment(String text);
 
     /** 读一段正文,不运行:读不通返回语言自己的报错原话(带行号),读得通是 null。 */

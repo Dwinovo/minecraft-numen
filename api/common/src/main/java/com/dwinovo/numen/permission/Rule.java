@@ -1,7 +1,5 @@
 package com.dwinovo.numen.permission;
 
-import com.dwinovo.numen.area.Area;
-import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.data.ModLanguageData;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
@@ -19,7 +17,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -27,16 +24,8 @@ import java.util.stream.Collectors;
 /**
  * 一条规则:一行字符串 {@code 动作(项 & 项 & !项)},与 Claude Code 的 {@code Tool(specifier)}
  * 同形。动词是 {@link Action.Kind#verb} 或 {@code *};项是信号名、方块/实体种类 id
- * ({@code minecraft:chest})、标签({@code #minecraft:beds})、某一只实体({@code entity:<uuid>})、
- * 主人名下的一块区域或其中一部分({@code area:house}、{@code area:house/b2},写法见 {@link AreaRef})
- * 或 {@code *};{@code !} 取反。全仓只在这一个类里解析。
- *
- * <p>{@code area:} 项按名字活引用区域:区域改了,这一行跟着管新的格子。动作落在一格上({@link Action.Kind#atBlock})、
- * 与区域同一维度、那一格在区域里就命中;{@code edit_area} 改的正是点名的那一整块时也命中({@code allow edit_area(area:ores)})。
- * 所以它只写在挖、放、右键方块、拿、改区域这几个动词(或 {@code *})上,写在打、右键实体、丢上解析时就拒;写在
- * {@code edit_area} 上只点整块,不点一部分。一行规则点名的区域(或部分)不存在时,这一行整行不作数、什么也不命中——
- * 取反的 {@code !area:house} 也不例外:说不清管哪儿的规则不放行、不拒绝、也不问。加规则时点名不存在的区域由命令当场
- * 拒收,区域后来被删的由 {@code rules list} 标出来({@link #missingAreas})。
+ * ({@code minecraft:chest})、标签({@code #minecraft:beds})、某一只实体({@code entity:<uuid>})或 {@code *};{@code !} 取反。
+ * 全仓只在这一个类里解析。主人的东西用信号认({@code placed}:玩家放下的方块),不按地方圈。
  *
  * <p>{@code command} 的项不一样:除了 {@code *},每一项都是指令的根名({@code command(msg)}、
  * {@code command(!tp)}),认的是 {@link Action.CommandLine#names}。信号说的是方块与实体,一条指令没有它们,
@@ -98,15 +87,10 @@ public final class Rule {
         return kind;
     }
 
-    /** 这条规则对这个动作成立吗;点名的区域不在了就整行不成立(见类说明)。 */
+    /** 这条规则对这个动作成立吗。 */
     public boolean matches(Action action, Facts facts) {
         if (kind != null && kind != action.kind()) {
             return false;
-        }
-        for (Term t : terms) {
-            if (t.type == Term.Type.AREA && t.area.resolve(facts.areas()) == null) {
-                return false;
-            }
         }
         for (Term t : terms) {
             if (!t.matches(action, facts)) {
@@ -114,31 +98,6 @@ public final class Rule {
             }
         }
         return true;
-    }
-
-    /**
-     * 这一行点名、却在 {@code areas} 里找不到的区域或部分,按原文({@code house}、{@code ores/g3});都在是空表。
-     * 这样的一行什么也不命中:命令加规则时据此拒收,列规则时据此标出。
-     */
-    public List<String> missingAreas(Map<String, Area> areas) {
-        List<String> out = new ArrayList<>();
-        for (Term t : terms) {
-            if (t.type == Term.Type.AREA && t.area.resolve(areas) == null) {
-                out.add(t.area.toString());
-            }
-        }
-        return out;
-    }
-
-    /** 这一行 {@code area:} 项点名的区域名(不带部分),不论它们在不在;给权限层认"主人的规矩点名着哪几块"。 */
-    public List<String> areaNames() {
-        List<String> out = new ArrayList<>();
-        for (Term t : terms) {
-            if (t.type == Term.Type.AREA) {
-                out.add(t.area.name());
-            }
-        }
-        return out;
     }
 
     /** 命中这条规则的动作撤不回:它的正项里有撤不回的信号({@link Signals#irreversible})。 */
@@ -217,8 +176,7 @@ public final class Rule {
         if (subject != null && !terms.contains(subject)) {
             terms.add(subject);
         }
-        Facts blind = new Facts(facts.view(), facts.placed(), null, facts.actor(), facts.dimension(), facts.areas(),
-                facts.ruled());
+        Facts blind = new Facts(facts.view(), facts.placed(), null, facts.actor());
         for (Signals s : Signals.values()) {
             if (s.irreversible() && !mentioned.contains(s) && !s.test(action, facts) && s.test(action, blind)) {
                 terms.add("!" + s.ruleName());
@@ -245,27 +203,24 @@ public final class Rule {
     // ==================== 项 ====================
 
     private static final class Term {
-        private enum Type { ANY, SIGNAL, TAG, ID, ENTITY, COMMAND, AREA }
+        private enum Type { ANY, SIGNAL, TAG, ID, ENTITY, COMMAND }
 
         final Type type;
         final boolean negated;
         final Signals signal;
         final ResourceLocation id;
         final UUID uuid;
-        final AreaRef area;
         /** 这一项的原文({@code !placed}、{@code minecraft:chest});指令项的原文就是根名。 */
         final String text;
         /** 不带 {@code !} 的那一截。 */
         final String body;
 
-        private Term(Type type, boolean negated, Signals signal, ResourceLocation id, UUID uuid, AreaRef area,
-                     String body) {
+        private Term(Type type, boolean negated, Signals signal, ResourceLocation id, UUID uuid, String body) {
             this.type = type;
             this.negated = negated;
             this.signal = signal;
             this.id = id;
             this.uuid = uuid;
-            this.area = area;
             this.body = body;
             this.text = (negated ? "!" : "") + body;
         }
@@ -278,43 +233,25 @@ public final class Rule {
                 throw new IllegalArgumentException("empty term in rule '" + rule + "'");
             }
             if (body.equals("*")) {
-                return new Term(Type.ANY, negated, null, null, null, null, body);
+                return new Term(Type.ANY, negated, null, null, null, body);
             }
             if (kind == Action.Kind.COMMAND) {
                 if (body.startsWith("/") || body.chars().anyMatch(Character::isWhitespace)) {
                     throw new IllegalArgumentException("bad command name '" + body + "' in rule '" + rule
                             + "'; write the command's root name without the slash, e.g. command(setblock)");
                 }
-                return new Term(Type.COMMAND, negated, null, null, null, null, body);
-            }
-            if (body.startsWith(AreaRef.MARK)) {
-                if (kind != null && !kind.atBlock() && kind != Action.Kind.EDIT_AREA) {
-                    throw new IllegalArgumentException("area terms match actions at a block (break, place, use_block, "
-                            + "take), edit_area or *, not " + kind.verb() + ", in rule '" + rule + "'");
-                }
-                AreaRef ref;
-                try {
-                    ref = AreaRef.marked(body);
-                } catch (IllegalArgumentException e) {
-                    throw new IllegalArgumentException("bad area '" + body + "' in rule '" + rule + "': "
-                            + e.getMessage());
-                }
-                if (kind == Action.Kind.EDIT_AREA && ref.part() != null) {
-                    throw new IllegalArgumentException("edit_area changes a whole area; name it without a part (area:"
-                            + ref.name() + "), in rule '" + rule + "'");
-                }
-                return new Term(Type.AREA, negated, null, null, null, ref, body);
+                return new Term(Type.COMMAND, negated, null, null, null, body);
             }
             if (body.startsWith("#")) {
                 ResourceLocation id = ResourceLocation.tryParse(body.substring(1));
                 if (id == null) {
                     throw new IllegalArgumentException("bad tag '" + body + "' in rule '" + rule + "'");
                 }
-                return new Term(Type.TAG, negated, null, id, null, null, body);
+                return new Term(Type.TAG, negated, null, id, null, body);
             }
             if (body.startsWith("entity:")) {
                 try {
-                    return new Term(Type.ENTITY, negated, null, null, UUID.fromString(body.substring(7)), null, body);
+                    return new Term(Type.ENTITY, negated, null, null, UUID.fromString(body.substring(7)), body);
                 } catch (IllegalArgumentException e) {
                     throw new IllegalArgumentException("bad entity uuid '" + body + "' in rule '" + rule + "'");
                 }
@@ -324,16 +261,15 @@ public final class Rule {
                 if (id == null) {
                     throw new IllegalArgumentException("bad id '" + body + "' in rule '" + rule + "'");
                 }
-                return new Term(Type.ID, negated, null, id, null, null, body);
+                return new Term(Type.ID, negated, null, id, null, body);
             }
             Signals signal = Signals.byName(body);
             if (signal == null) {
                 throw new IllegalArgumentException("unknown signal '" + body + "' in rule '" + rule + "'; signals are "
                         + Arrays.stream(Signals.values()).map(Signals::ruleName).collect(Collectors.joining(", "))
-                        + ", or write a namespaced id (minecraft:chest), a tag (#minecraft:beds), entity:<uuid>, "
-                        + "area:<name> or *");
+                        + ", or write a namespaced id (minecraft:chest), a tag (#minecraft:beds), entity:<uuid> or *");
             }
-            return new Term(Type.SIGNAL, negated, signal, null, null, null, body);
+            return new Term(Type.SIGNAL, negated, signal, null, null, body);
         }
 
         boolean matches(Action action, Facts facts) {
@@ -344,7 +280,6 @@ public final class Rule {
                 case ID -> idHit(action);
                 case ENTITY -> action.entity() != null && uuid.equals(action.entity().getUUID());
                 case COMMAND -> action.command() != null && action.command().names().contains(body);
-                case AREA -> inArea(action, facts);
             };
             return negated != hit;
         }
@@ -357,20 +292,7 @@ public final class Rule {
                 case ID -> "is " + id;
                 case ENTITY -> "is entity " + uuid;
                 case COMMAND -> "runs /" + body;
-                case AREA -> "is in area " + area;
             };
-        }
-
-        /**
-         * 动作落在一格上,那一格在点名的区域里(同一维度);改区域的动作改的就是点名的那一整块。区域不在由
-         * {@link Rule#matches} 先挡掉。
-         */
-        private boolean inArea(Action action, Facts facts) {
-            if (action.area() != null) {
-                return area.part() == null && area.name().equals(action.area());
-            }
-            Area a = area.resolve(facts.areas());
-            return a != null && action.pos() != null && a.contains(facts.dimension(), action.pos());
         }
 
         /** 给主人看的这一项;只对正项、非 {@code *} 调。 */
@@ -399,15 +321,11 @@ public final class Rule {
         }
 
         /**
-         * "允许并记住"钉上的对象:指令是她打的那个根名,改区域是那一块({@code area:house}),其余是 {@link #subjectId}。
-         * 没有对象为 null。
+         * "允许并记住"钉上的对象:指令是她打的那个根名,其余是 {@link #subjectId}。没有对象为 null。
          */
         static String subject(Action a) {
             if (a.command() != null) {
                 return a.command().root();
-            }
-            if (a.area() != null) {
-                return AreaRef.parse(a.area()).marked();
             }
             ResourceLocation id = subjectId(a);
             return id == null ? null : id.toString();

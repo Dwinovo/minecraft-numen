@@ -38,11 +38,11 @@ public final class RouteCommands {
     private static final Param<String> NEW_NAME = Param.optionalPositional("name", ArgType.word(),
             "Name of the new route: lowercase letters, digits, _ and -.")
             .whenOmitted("write it as your own route goto-<your name>, replacing the one there");
-    private static final Param<Place> TO = Param.optional("to", ArgType.place(),
-            "The destination: coordinates, or an area of your owner's to go into (see arrive).")
+    private static final Param<List<Place>> TO = Param.optional("to", ArgType.list(ArgType.place()),
+            "The destination: coordinates, or several cells (a cluster's blocks) to reach any one of (see arrive).")
             .whenOmitted("end where you stand now");
-    private static final Param<Place> WAYPOINT = Param.optional("at", ArgType.place(),
-            "The waypoint: coordinates, or an area of your owner's.")
+    private static final Param<List<Place>> WAYPOINT = Param.optional("at", ArgType.list(ArgType.place()),
+            "The waypoint: coordinates, or several cells to reach any one of.")
             .whenOmitted("add where you stand now");
     private static final Param<Integer> AS_STOP = Param.optional("stop", ArgType.integer(1, 99),
             "Which stop it becomes, counting from 1; one past the last makes it the new destination.")
@@ -71,10 +71,10 @@ public final class RouteCommands {
         return Stream.of(parts).flatMap(List::stream).toArray(Param<?>[]::new);
     }
 
-    /** 一处写成去处:没写那一处就是她此刻脚下那一格。 */
-    private static Destination.Stop stop(ServerSource src, Place written, CommandArgs args) {
-        Place place = written != null ? written : Place.cell(Feet.cell(src.companion()));
-        return Destination.Stop.of(place, args.get(MoveCommands.ARRIVE), args.get(MoveCommands.NEAR));
+    /** 一处或几格写成去处:没写就是她此刻脚下那一格。 */
+    private static Destination.Stop stop(ServerSource src, List<Place> written, CommandArgs args) {
+        List<Place> places = written != null ? written : List.of(Place.cell(Feet.cell(src.companion())));
+        return Destination.Stop.of(places, args.get(MoveCommands.ARRIVE), args.get(MoveCommands.NEAR));
     }
 
     /** 点名的那条;没点名是她自己的那条。 */
@@ -92,18 +92,18 @@ public final class RouteCommands {
                 .returns(ROUTE)
                 .example("numen.route.new(\"home\", {to = {x = 120, y = 64, z = -35}})")
                 .example("numen.route.new(\"back\")")
-                .example("numen.route.new({to = \"ores/g3\", arrive = \"dig\", alter = \"natural\"})")
-                .example("numen.route.new(\"ore\", {to = \"ores/g3\", arrive = \"dig\", alter = \"natural\", "
-                        + "avoid_break = \"area:house\"})")
+                .example("numen.route.new({to = {{x = 120, y = 12, z = -35}, {x = 121, y = 12, z = -35}}, arrive = \"dig\", "
+                        + "alter = \"natural\"})")
+                .example("numen.route.new(\"ore\", {to = {x = 120, y = 12, z = -35}, arrive = \"dig\", "
+                        + "alter = \"natural\", avoid_break = {{x = 121, y = 12, z = -35}}})")
                 .note("Instant; it only writes the route down, nothing moves. to is a cell (a Pos, or anything with a "
-                        + "pos), a column {x = …, z = …}, a height {y = …}, or an area of your owner's (\"ores\", "
-                        + "\"ores/g3\"); arrive says what counts "
-                        + "as there. A destination that cannot mean anything here is refused at once with the reason "
-                        + "and the ways to write it: arrive at into a solid block or mid-air on a walk that changes "
-                        + "nothing, arrive use or dig without y or on air, an area that does not exist. Without to the "
-                        + "route ends where you stand now: a way back here.")
+                        + "pos), a column {x = …, z = …}, a height {y = …}, or several cells (a cluster's blocks) to "
+                        + "reach any one of; arrive says what counts as there. A destination that cannot mean anything "
+                        + "here is refused at once with the reason and the ways to write it: arrive at into a solid "
+                        + "block or mid-air on a walk that changes nothing, arrive use or dig without y or on air. "
+                        + "Without to the route ends where you stand now: a way back here.")
                 .note("Without a name it is your own route goto-<your name>, replaced every time; a named route that "
-                        + "already exists is refused. An area is kept by name: each plan uses the area as it is then.")
+                        + "already exists is refused.")
                 .note("Without route flags the route changes no block. Routes belong to your owner: every companion "
                         + "of theirs sees and walks the same ones, and they survive restarts.")
                 .seeAlso("route plan", "move go", "move goto_");
@@ -113,7 +113,7 @@ public final class RouteCommands {
                 .returns(ROUTE)
                 .example("numen.route.via(\"home\", {at = {x = 100, y = 70, z = -20}})")
                 .example("numen.route.via(\"home\", {at = {x = 100, z = -20}, stop = 1})")
-                .example("numen.route.via(\"home\", {at = \"farm\", arrive = \"near\", near = 2})")
+                .example("numen.route.via(\"home\", {at = {x = 90, y = 64, z = -10}, arrive = \"near\", near = 2})")
                 .example("numen.route.via(\"home\")")
                 .note("Instant. The route walks through its stops in order; the leg to each stop keeps its own flags. "
                         + "The old plan is dropped.")
@@ -131,11 +131,9 @@ public final class RouteCommands {
                         with(List.of(NAME, LEG), RouteSpecFlags.PARAMS))
                 .returns(ROUTE)
                 .example("numen.route.spec(\"home\", {alter = \"natural\"})")
-                .example("numen.route.spec(\"home\", {leg = 2, avoid = {\"water\", \"area:farm\"}})")
+                .example("numen.route.spec(\"home\", {leg = 2, avoid = {\"water\"}})")
                 .note("Instant. Each flag you write replaces its earlier value, the rest stay; a leg's flags add to "
                         + "the whole route's. The old plan is dropped.")
-                .note("Areas in the flags (\"area:<name>\") are kept by name: one that does not exist is refused now, "
-                        + "one deleted later is named when the route is planned.")
                 .seeAlso("route show", "route plan");
         route.server("plan", "Plan a route from where you stand, without moving: each leg's length, the blocks it "
                         + "would break or place, and the ones needing your owner's consent.",

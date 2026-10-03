@@ -1,7 +1,5 @@
 package com.dwinovo.numen.core.scan;
 
-import com.dwinovo.numen.permission.Verdict;
-
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntArrays;
 import it.unimi.dsi.fastutil.ints.Int2ObjectLinkedOpenHashMap;
@@ -19,12 +17,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 把一次搜索的命中分成"团":按 3×3×3 邻域相连(对角也算),并且"挖掉这一格"权限层给出同样说法的格子,
- * 算同一团。说法就是整份 {@link Verdict}——放行、要问(连同命中的那一行规则)、拒绝(连同理由)——所以
- * 玩家放的原木柱贴着一棵野树,是两团。
- *
- * <p>这里只做几何与记账,不判权限:每格的裁决由调用方拿挖掘落点会提交的同一个动作去问权限层,再交进来。
- * 也不猜"这是不是谁的建筑"——团只由相连与说法定。
+ * 把一次搜索的命中分成"团":按 3×3×3 邻域相连(对角也算)的格子算同一团。这里只做几何与记账,不判权限,也不猜"这是不是谁的建筑"
+ * ——团只由相连定。
  *
  * <p>{@link #add} 时就把新格与已收的邻格并起来(并查集),分团的活因此可以逐格跨 tick 摊开做。
  */
@@ -32,39 +26,36 @@ public final class BlockGroups {
 
     /**
      * 超过这么多格的团按 section 立方体(16³,与区块对齐)切成几块,各自成团;不超过的整团保留,跨区块边界
-     * 也不切。取 256:一棵巨型云杉或丛林树的原木、一条大矿脉都在这之内,切开就把"一棵树"拆成两个编号;
+     * 也不切。取 256:一棵巨型云杉或丛林树的原木、一条大矿脉都在这之内,切开就把"一棵树"拆成两团;
      * 比这还大的已经是地形(一片水域、一整层石头),按 section 分块说"在哪一片"比一个横跨上百格的包围盒
-     * 有用,也让写进区域的一部分量有个边。
+     * 有用,也让一团的量有个边。
      */
     public static final int SPLIT_ABOVE = 256;
 
     /**
-     * 一团。各种方块几格、流体源头几格这类摘要不在这里记:团写进区域的一部分之后,由区域的格子说({@code AreaText#part})。
+     * 一团。
      *
      * @param cells    每一格和看到的方块状态,由近及远
-     * @param verdict  挖掉其中任何一格,权限层的说法
      * @param nearest  离中心最近的那一格
      * @param distance 那一格离中心的距离
      */
-    public record Group(Map<BlockPos, BlockState> cells, Verdict verdict, BlockPos nearest, double distance) {}
+    public record Group(Map<BlockPos, BlockState> cells, BlockPos nearest, double distance) {}
 
     private final Long2IntOpenHashMap indexOf = new Long2IntOpenHashMap();
     private final LongArrayList cells = new LongArrayList();
     private final List<BlockState> states = new ArrayList<>();
-    private final List<Verdict> verdicts = new ArrayList<>();
     private final IntArrayList parent = new IntArrayList();
 
     public BlockGroups() {
         indexOf.defaultReturnValue(-1);
     }
 
-    /** 收一格:它的方块状态,和挖掉它权限层怎么说。 */
-    public void add(BlockPos pos, BlockState state, Verdict verdict) {
+    /** 收一格和它的方块状态。 */
+    public void add(BlockPos pos, BlockState state) {
         long key = pos.asLong();
         int i = cells.size();
         cells.add(key);
         states.add(state);
-        verdicts.add(verdict);
         parent.add(i);
         indexOf.put(key, i);
         for (int dx = -1; dx <= 1; dx++) {
@@ -74,7 +65,7 @@ public final class BlockGroups {
                         continue;
                     }
                     int j = indexOf.get(BlockPos.offset(key, dx, dy, dz));
-                    if (j >= 0 && verdicts.get(j).equals(verdict)) {
+                    if (j >= 0) {
                         union(i, j);
                     }
                 }
@@ -133,7 +124,7 @@ public final class BlockGroups {
             byCell.put(BlockPos.of(cells.getLong(i)), states.get(i));
         }
         int first = members[0];
-        return new Group(Collections.unmodifiableMap(byCell), verdicts.get(first), BlockPos.of(cells.getLong(first)),
+        return new Group(Collections.unmodifiableMap(byCell), BlockPos.of(cells.getLong(first)),
                 Math.sqrt(distSq(first, center)));
     }
 

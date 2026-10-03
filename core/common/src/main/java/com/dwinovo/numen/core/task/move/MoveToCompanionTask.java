@@ -104,8 +104,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     /** 这一趟已经记进路线了。 */
     private boolean recorded;
     /**
-     * 终点是一块区域时,量"离终点多远"的那一格:出发时离她最近的一格,这一趟里不变。区域那时就不在,规划当场拒绝、不出发,
-     * 用不上它,为 null。
+     * 终点是几格之一时,量"离终点多远"的那一格:出发时离她最近的一格,这一趟里不变;终点是坐标时为 null。
      */
     private BlockPos areaCell;
 
@@ -159,7 +158,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     }
 
     /**
-     * 从存档里取这条路线,认出终点是区域时量距离的那一格;路线不在了、还没规划过(走只照计划走,计划是 {@code numen.route.plan} 的事)、
+     * 从存档里取这条路线,认出终点是几格时量距离的那一格;路线不在了、还没规划过(走只照计划走,计划是 {@code numen.route.plan} 的事)、
      * 不在她这个维度里,返回那个失败,否则 null。
      */
     private TaskResult locate() {
@@ -178,14 +177,14 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                     + ", and I am in " + player.level().dimension().location() + "; its coordinates mean nothing here",
                     null);
         }
-        if (route.destination().area() != null) {
-            areaCell = Destination.toward(player, route.destination(), Feet.cell(player));
+        if (route.destination().cells() != null) {
+            areaCell = Destination.toward(route.destination(), Feet.cell(player));
         }
         return null;
     }
 
     /**
-     * 载具处置:坐在船上而第一个途经点有 x、z(或是一块此刻在的区域),先驾船——船腿走到离它最近的水格,靠岸后接规划与步行
+     * 载具处置:坐在船上而第一个途经点有 x、z(或是几格),先驾船——船腿走到离它最近的水格,靠岸后接规划与步行
      * (见 tickBoatLeg)。其余情况(矿车没有舵、马的寻路仍按步行物理算)直接规划;下座驾是步行导航自己的事,记进身体动作。
      *
      * @return 船腿驶向的那一格;不先驾船为 null
@@ -195,8 +194,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             return null;
         }
         Destination.Stop first = route.legs().get(0).to();
-        return first.x() == null && first.area() == null ? null
-                : Destination.toward(player, first, player.blockPosition());
+        return first.x() == null && first.cells() == null ? null
+                : Destination.toward(first, player.blockPosition());
     }
 
     @Override
@@ -290,7 +289,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         Plan saw = promise != null ? promise : route.plan();
         int bad = fresh.unreachable();
         if (bad >= 0 && bad >= result.legs().size()) {
-            // 那一段此刻就编不成目标(去处写不通、点名的区域不在了):没有搜过,照编不成的原话说
+            // 那一段此刻就编不成目标(去处写不通):没有搜过,照编不成的原话说
             return new Blocked("can't walk " + legName(bad) + " as it stands: " + fresh.legs().get(bad).why(),
                     FailureType.NO_PATH, null);
         }
@@ -453,7 +452,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     /** Representative remaining distance (blocks) to the destination, for the deadline estimate and the replies. */
     private double repDistance() {
         Destination.Stop d = route.destination();
-        if (d.area() != null) {
+        if (d.cells() != null) {
             return areaCell == null ? 0 : Math.sqrt(player.distanceToSqr(Vec3.atBottomCenterOf(areaCell)));
         }
         if (d.x() == null) {
@@ -482,18 +481,19 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     protected String successMessage() {
         int gy = player.blockPosition().getY();
         Destination.Stop d = route.destination();
-        if (d.area() != null) {
-            String inArea = switch (d.arrive()) {
-                case AT -> "reached area " + d.area() + ", standing at " + here(gy);
-                case USE -> "standing at " + here(gy) + ", with " + usedBlock() + " of area " + d.area()
+        if (d.cells() != null) {
+            String given = "the " + d.cells().size() + " cells given";
+            String inCells = switch (d.arrive()) {
+                case AT -> "reached one of " + given + ", standing at " + here(gy);
+                case USE -> "standing at " + here(gy) + ", with " + usedBlock() + " of " + given
                         + " in sight and in reach — use it from here";
-                case NEAR -> "arrived within " + d.near() + " blocks of area " + d.area() + ", standing at " + here(gy);
-                case DIG -> "standing at " + here(gy) + ", within reach of a block of area " + d.area()
-                        + " — `numen.work.dig(\"" + d.area() + "\")` digs it from here";
-                case REACH -> "standing at " + here(gy) + ", within reach of a cell of area " + d.area()
+                case NEAR -> "arrived within " + d.near() + " blocks of " + given + ", standing at " + here(gy);
+                case DIG -> "standing at " + here(gy) + ", within reach of a block of " + given
+                        + " — numen.work.dig with the same blocks digs it from here";
+                case REACH -> "standing at " + here(gy) + ", within reach of a cell of " + given
                         + " to build into";
             };
-            return inArea + ", via route " + route.name() + ".";
+            return inCells + ", via route " + route.name() + ".";
         }
         BlockPos cell = d.cell();
         String reached = switch (d.arrive()) {
@@ -518,7 +518,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     }
 
     /**
-     * 到了一块区域的 {@code use}:她在看的是哪一个方块——终点那一段的目标说停在这里要看得见的是谁({@link Goal#sight},
+     * 到了几格之一的 {@code use}:她在看的是哪一个方块——终点那一段的目标说停在这里要看得见的是谁({@link Goal#sight},
      * 多个取其一时是站在这里满足的那个成员的)。
      */
     private String usedBlock() {

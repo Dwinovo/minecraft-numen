@@ -16,6 +16,6 @@ public final class GateTestSupport {
 
     public static Gate open() {
         return new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(),
-                Level.OVERWORLD, new PlacedBlocks(), java.util.Map.of(), java.util.List.of());
+                new PlacedBlocks(), java.util.List.of());
     }
 }

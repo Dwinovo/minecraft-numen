@@ -1,7 +1,5 @@
 package com.dwinovo.numen.entity;
 
-import com.dwinovo.numen.area.Area;
-import com.dwinovo.numen.area.AreaStore;
 import com.dwinovo.numen.cli.CommandRunner;
 import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.network.payload.ClientUiActionPayload;
@@ -277,21 +275,17 @@ public final class NumenCommands {
     private static int listRules(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer owner = ctx.getSource().getPlayerOrException();
         RuleSet mine = PermissionStore.of(owner.getServer(), owner.getUUID()).rules();
-        Map<String, Area> areas = AreaStore.of(owner.getServer(), owner.getUUID()).all();
         MutableComponent text = Component.translatable(Keys.COMMAND_RULES_YOURS);
-        appendLayer(text, mine, true, areas);
+        appendLayer(text, mine, true);
         text.append("\n").append(Component.translatable(Keys.COMMAND_RULES_FACTORY));
-        appendLayer(text, RuleSet.factory(), false, areas);
+        appendLayer(text, RuleSet.factory(), false);
         text.append("\n").append(Component.translatable(Keys.COMMAND_RULES_UNMATCHED));
         ctx.getSource().sendSuccess(() -> text, false);
         return 1;
     }
 
-    /**
-     * 一层规则的三张表:表名与规则行照命令里的写法,只有"没有"一词与区域不在了的标注随主人的语言。点名的区域已经没了的行
-     * 照列,后面标出来——它什么也不命中({@link Rule#missingAreas})。
-     */
-    private static void appendLayer(MutableComponent text, RuleSet layer, boolean numbered, Map<String, Area> areas) {
+    /** 一层规则的三张表:表名与规则行照命令里的写法,只有"没有"一词随主人的语言。 */
+    private static void appendLayer(MutableComponent text, RuleSet layer, boolean numbered) {
         for (Verdict.Kind table : List.of(Verdict.Kind.DENY, Verdict.Kind.ALLOW, Verdict.Kind.ASK)) {
             List<Rule> rows = layer.table(table);
             text.append("\n  " + tableName(table) + ":");
@@ -300,17 +294,11 @@ public final class NumenCommands {
             }
             for (int i = 0; i < rows.size(); i++) {
                 text.append("\n    " + (numbered ? (i + 1) + ". " : "- ") + rows.get(i));
-                List<String> gone = rows.get(i).missingAreas(areas);
-                if (!gone.isEmpty()) {
-                    text.append(" ").append(Component.translatable(Keys.COMMAND_RULE_AREA_GONE, String.join(", ", gone)));
-                }
             }
         }
     }
 
-    /**
-     * 主人加一行规则。点名的区域在他名下找不到就不加:那样的一行什么也不命中,加进去只会让他以为管住了。
-     */
+    /** 主人加一行规则。 */
     private static int addRule(CommandContext<CommandSourceStack> ctx, Verdict.Kind table)
             throws CommandSyntaxException {
         ServerPlayer owner = ctx.getSource().getPlayerOrException();
@@ -319,14 +307,6 @@ public final class NumenCommands {
             rule = Rule.parse(StringArgumentType.getString(ctx, "rule"));
         } catch (IllegalArgumentException mistake) {
             ctx.getSource().sendFailure(Component.literal(mistake.getMessage()));
-            return 0;
-        }
-        Map<String, Area> areas = AreaStore.of(owner.getServer(), owner.getUUID()).all();
-        List<String> missing = rule.missingAreas(areas);
-        if (!missing.isEmpty()) {
-            ctx.getSource().sendFailure(Component.translatable(Keys.COMMAND_RULE_NO_AREA, String.join(", ", missing),
-                    areas.isEmpty() ? Component.translatable(Keys.COMMAND_RULES_NONE)
-                            : Component.literal(String.join(", ", areas.keySet()))));
             return 0;
         }
         boolean added = PermissionStore.of(owner.getServer(), owner.getUUID()).add(table, rule);

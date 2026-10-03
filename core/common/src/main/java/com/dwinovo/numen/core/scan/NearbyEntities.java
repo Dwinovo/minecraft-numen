@@ -1,17 +1,12 @@
 package com.dwinovo.numen.core.scan;
 
-import com.dwinovo.numen.area.Area;
-
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.levelgen.structure.BoundingBox;
-import net.minecraft.world.phys.AABB;
 
 import java.util.List;
 import java.util.function.Predicate;
 
 /**
- * "她身边半径 r 内的实体"与"一块区域里的实体",全仓按范围找实体都从这里问。
+ * "她身边半径 r 内的实体",全仓按范围找实体都从这里问。
  *
  * <p>半径就是离她的距离:先拿外接的方盒向世界要候选(实体分区只认盒子),再按距离滤掉盒角——
  * 方盒的角离她有 r·√3 远,只拿盒子当半径,说好的 16 格实际够到 27 格外。工具对模型说的是半径,
@@ -27,19 +22,5 @@ public final class NearbyEntities {
         double radiusSqr = radius * radius;
         return self.level().getEntitiesOfClass(type, self.getBoundingBox().inflate(radius),
                 e -> e != self && self.distanceToSqr(e) <= radiusSqr && filter.test(e));
-    }
-
-    /**
-     * 区域 {@code area} 里(工作区、点名的区域)、类型为 {@code type} 且满足 {@code filter} 的实体。先拿区域的包围盒向世界要
-     * 候选,在不在区里按实体所在的那一格问区域({@link Area#contains}),与区域判方块是同一个判定。区域在别的维度、或是空的,
-     * 就没有。
-     */
-    public static <T extends Entity> List<T> in(Level level, Area area, Class<T> type, Predicate<? super T> filter) {
-        BoundingBox box = area.cells().bounds();
-        if (box == null || !area.dimension().equals(level.dimension())) {
-            return List.of();
-        }
-        return level.getEntitiesOfClass(type, AABB.of(box),
-                e -> area.contains(level.dimension(), e.blockPosition()) && filter.test(e));
     }
 }

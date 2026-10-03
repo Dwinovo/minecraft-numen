@@ -169,10 +169,11 @@ public class ScriptGameTests {
     }
 
     /**
-     * 一块区域的每一部分:{@code numen.area.parts} 直接给出名字的列表,脚本逐个走过去挖;两团矿都挖掉,打印的就是那两个名字。
+     * 一次扫描的每一团:{@code numen.scan.blocks} 直接给出团的列表(近的在前),脚本逐个走过去挖;两团矿都挖掉,打印的是两团最近那一格,
+     * 近的在前。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_scripts")
-    public static void a_program_goes_through_the_parts_of_an_area(GameTestHelper helper) {
+    public static void a_program_goes_through_the_clusters_of_a_scan(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos near = helper.absolutePos(new BlockPos(4, 2, 4));
         BlockPos far = helper.absolutePos(new BlockPos(11, 2, 11));
@@ -180,40 +181,34 @@ public class ScriptGameTests {
         level.setBlockAndUpdate(far, Blocks.IRON_ORE.defaultBlockState());
         NumenPlayer her = spawnAt(helper, "gametest_lua_parts", new BlockPos(2, 2, 2), false);
         her.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
-        ToolRun scanned = scanInto(her, 14, "minecraft:iron_ore", "ores");
         LlmToolCall script = programCall("""
-                for _, p in ipairs(numen.area.parts("ores")) do
-                  print(p)
-                  numen.move.goto_(p, {arrive = "dig"})
-                  numen.work.dig(p)
+                for _, c in ipairs(numen.scan.blocks("minecraft:iron_ore", {radius = 14})) do
+                  print(c.nearest.pos.x, c.nearest.pos.z)
+                  numen.move.goto_(c.blocks, {arrive = "dig"})
+                  numen.work.dig(c.blocks)
                 end
                 """);
         Round[] round = new Round[1];
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(scanned.done(), "the scan has not replied"))
-                .thenExecute(() -> {
-                    helper.assertTrue(scanned.succeeded(), "the scan failed: " + scanned.reply());
-                    round[0] = round(helper, her, script);
-                })
+                .thenExecute(() -> round[0] = round(helper, her, script))
                 .thenWaitUntil(() -> {
                     helper.assertTrue(round[0].hasSettled(), "the script has not finished");
                     String msg = message(round[0], script);
                     helper.assertTrue(receipt(round[0], script).get("success").getAsBoolean(),
                             "the script failed: " + msg);
-                    helper.assertTrue(msg.contains("printed:\nores/g1\nores/g2"),
-                            "it did not go through both parts: " + msg);
+                    helper.assertTrue(msg.contains("printed:\n" + near.getX() + "\t" + near.getZ() + "\n" + far.getX()
+                                    + "\t" + far.getZ()), "it did not go through both clusters, near first: " + msg);
                     helper.assertTrue(!level.getBlockState(near).is(Blocks.IRON_ORE)
-                            && !level.getBlockState(far).is(Blocks.IRON_ORE), "not both parts were dug: " + msg);
+                            && !level.getBlockState(far).is(Blocks.IRON_ORE), "not both clusters were dug: " + msg);
                 })
                 .thenExecute(() -> CompanionFactory.despawn(level.getServer(), her))
                 .thenSucceed();
     }
 
     /**
-     * 内置的 numen.work.mine:四颗铁矿埋在一块石头里,扫进区域后一行 {@code numen.work.mine("ores")} 挖空它——走到够得着、挖、捡,直到区域
-     * 里一格不剩;铁都进了包,返回挖了几格,work 这个模块记一次用到它的程序跑完。它里面没有一处接住错误往下走:哪一步失败,整段就
-     * 停在那一步。
+     * 内置的 numen.work.mine:四颗铁矿埋在一块石头里,一段程序扫到它们,把那一团交给 {@code numen.work.mine} 挖空——走到够得着、挖、
+     * 捡,直到交给它的一格不剩;铁都进了包,返回挖了几格。它里面没有一处接住错误往下走:哪一步失败,整段就停在那一步。
      */
     @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_scripts")
     public static void work_mine_digs_out_ore_buried_in_stone(GameTestHelper helper) {
@@ -230,16 +225,12 @@ public class ScriptGameTests {
         ores.forEach(ore -> level.setBlockAndUpdate(ore, Blocks.IRON_ORE.defaultBlockState()));
         NumenPlayer her = spawnAt(helper, "gametest_lua_mine", new BlockPos(9, 7, 9), false);
         her.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
-        ToolRun scanned = scanInto(her, 8, "minecraft:iron_ore", "ores");
-        LlmToolCall run = programCall("return numen.work.mine(\"ores\")");
+        LlmToolCall run = programCall(
+                "return numen.work.mine(numen.scan.blocks(\"minecraft:iron_ore\", {radius = 8})[1].blocks)");
         Round[] round = new Round[1];
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(scanned.done(), "the scan has not replied"))
-                .thenExecute(() -> {
-                    helper.assertTrue(scanned.succeeded(), "the scan failed: " + scanned.reply());
-                    round[0] = round(helper, her, run);
-                })
+                .thenExecute(() -> round[0] = round(helper, her, run))
                 .thenWaitUntil(() -> {
                     helper.assertTrue(round[0].hasSettled(), "numen.work.mine has not finished");
                     String msg = message(round[0], run);

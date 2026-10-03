@@ -2,7 +2,6 @@ package com.dwinovo.numen.core.route;
 
 import java.util.List;
 
-import com.dwinovo.numen.area.AreaRef;
 import com.dwinovo.numen.cli.Place;
 import com.dwinovo.numen.core.task.move.Destination;
 import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
@@ -29,7 +28,8 @@ class RouteDataTest {
     private static final Destination.Stop HOME = new Destination.Stop(120, 64, -35, Destination.Arrive.AT, null);
     private static final Destination.Stop BRIDGE = new Destination.Stop(100, 70, -20, Destination.Arrive.NEAR, 3);
     private static final Destination.Stop HILL = new Destination.Stop(90, null, -10, Destination.Arrive.AT, null);
-    private static final Destination.Stop ORES = new Destination.Stop(null, null, null, AreaRef.parse("ores/g3"),
+    private static final List<BlockPos> ORE_CELLS = List.of(new BlockPos(10, 12, 10), new BlockPos(11, 12, 10));
+    private static final Destination.Stop ORES = new Destination.Stop(null, null, null, ORE_CELLS,
             Destination.Arrive.NEAR, 3);
 
     @BeforeAll
@@ -56,8 +56,8 @@ class RouteDataTest {
                         "the search reached chunks that are not loaded",
                         List.of(new Plan.Dive(new BlockPos(10, 60, 0), new BlockPos(20, 60, 0), 180, 90))),
                 Plan.Leg.unplanned()));
-        Itinerary route = Itinerary.of("home", OVERWORLD, HOME, "--alter natural --avoid_break area:house")
-                .via(BRIDGE, 1).via(ORES, 2).withLegFlags(2, "--avoid water area:farm").planned(plan)
+        Itinerary route = Itinerary.of("home", OVERWORLD, HOME, "--alter natural --avoid_break 3,64,7")
+                .via(BRIDGE, 1).via(ORES, 2).withLegFlags(2, "--avoid water").planned(plan)
                 .walked(new Itinerary.Walk("Aria", 1300, 412, true, "arrived"));
         Routes routes = new Routes();
         routes.put(route);
@@ -106,26 +106,28 @@ class RouteDataTest {
     }
 
     /**
-     * 一处({@link Place},写法在命令行一处读)加到达方式编成去处:坐标三个一格、两个一列、一个一个高度;区域名是一块区域。
+     * 一处或几格({@link Place},写法在命令行一处读)加到达方式编成去处:坐标三个一格、两个一列、一个一个高度;几处是几格之一。
      * {@code --arrive near} 不写 {@code --near} 停在 {@link Destination#DEFAULT_NEAR} 格内;形状不成立的当场说。
      */
     @Test
     void aPlaceAndAnArrivalMakeAStop() {
-        assertEquals(HOME, Destination.Stop.of(new Place(120, 64, -35, null), null, null));
-        assertEquals(HILL, Destination.Stop.of(new Place(90, null, -10, null), "at", null));
+        assertEquals(HOME, Destination.Stop.of(List.of(new Place(120, 64, -35)), null, null));
+        assertEquals(HILL, Destination.Stop.of(List.of(new Place(90, null, -10)), "at", null));
         assertEquals(new Destination.Stop(null, 12, null, Destination.Arrive.AT, null),
-                Destination.Stop.of(new Place(null, 12, null, null), null, null));
-        assertEquals(ORES, Destination.Stop.of(Place.area(AreaRef.parse("ores/g3")), "near", 3));
-        assertEquals(new Place(120, 64, -35, null), HOME.place(), "去处写回的就是那一处");
-        Destination.Stop chests = Destination.Stop.of(Place.area(AreaRef.parse("chests")), "use", null);
-        assertEquals("area chests (to use one of its blocks)", chests.words(), "区域的 use 不要 y");
-        assertEquals("area ores/g3 (within 3)", ORES.words());
-        assertEquals(Destination.DEFAULT_NEAR, Destination.Stop.of(Place.area(AreaRef.parse("farm")), "near", null)
-                .near(), "arrive near 不写 near 有默认");
-        assertThrows(IllegalArgumentException.class, () -> new Destination.Stop(1, 2, 3, AreaRef.parse("farm"),
-                Destination.Arrive.AT, null), "坐标与区域不能同时给");
+                Destination.Stop.of(List.of(new Place(null, 12, null)), null, null));
+        List<Place> ores = ORE_CELLS.stream().map(Place::cell).toList();
+        assertEquals(ORES, Destination.Stop.of(ores, "near", 3));
+        Destination.Stop chests = Destination.Stop.of(ores, "use", null);
+        assertEquals("2 cells (to use one of them)", chests.words());
+        assertEquals("2 cells (within 3)", ORES.words());
+        assertEquals(Destination.DEFAULT_NEAR, Destination.Stop.of(ores, "near", null).near(),
+                "arrive near 不写 near 有默认");
+        assertThrows(IllegalArgumentException.class, () -> new Destination.Stop(1, 2, 3, ORE_CELLS,
+                Destination.Arrive.AT, null), "坐标与几格不能同时给");
+        assertThrows(IllegalArgumentException.class, () -> Destination.Stop.of(List.of(new Place(1, 2, 3),
+                new Place(4, null, 5)), null, null), "几处都得是一格");
         IllegalArgumentException nearAlone = assertThrows(IllegalArgumentException.class,
-                () -> Destination.Stop.of(Place.area(AreaRef.parse("farm")), null, 2));
+                () -> Destination.Stop.of(ores, null, 2));
         assertTrue(nearAlone.getMessage().startsWith("near = 2 only goes with arrive = \"near\""),
                 nearAlone.getMessage());
     }
