@@ -41,7 +41,7 @@ import java.util.stream.Collectors;
 /**
  * Query implementations — the business half of the {@code inv recipe} command declared in
  * {@link com.dwinovo.numen.core.tools.inventory.InvCommands}, and of the
- * {@code scan entities} and {@code scan storage} commands declared in
+ * {@code scan entities} and {@code scan container} commands declared in
  * {@link com.dwinovo.numen.core.tools.perception.ScanCommands}.
  */
 public final class QueryExtraOps {
@@ -300,7 +300,7 @@ public final class QueryExtraOps {
         return token;
     }
 
-    // ---- scan storage ----
+    // ---- scan container ----
 
     /**
      * 一格方块里装着什么,一行一个条目,按输出预算分页({@link Listing})。

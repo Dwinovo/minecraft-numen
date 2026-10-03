@@ -512,7 +512,7 @@ public class TaskControlGameTests {
         BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
         LlmToolCall walk = programCall("numen.move.goto_({x = " + far.getX() + ", z = " + far.getZ() + "})");
         LlmToolCall look = programCall("return numen.status.self()");
-        LlmToolCall around = programCall("numen.scan.around()");
+        LlmToolCall around = programCall("numen.scan.map()");
         Round round = round(helper, companion, walk, look, around);
         EventOutbox outbox = EventOutbox.get(helper.getLevel().getServer());
 

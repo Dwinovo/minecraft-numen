@@ -27,7 +27,7 @@ import net.minecraft.world.level.block.state.BlockState;
  * costmap practice in autonomous-driving navigation (e.g. Occ3D; ROS Nav2
  * costmap_2d). Sparse far-field objects are left to {@code scan blocks} /
  * {@code scan entities}; this map is the dense near-field half. The command and its
- * shortcut ({@code scan around} / {@code scan_around}) are declared in {@link ScanCommands}.
+ * shortcut ({@code scan map}) are declared in {@link ScanCommands}.
  *
  * <p>Where she can stand and where her body fits are read off her {@link Terrain} — the pathing module's terrain
  * geometry (layer 0) bound to her body, the very rules the route planner walks by, so the map and the walk never

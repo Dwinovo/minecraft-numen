@@ -916,6 +916,32 @@ public final class ArgType<T> {
                         ref -> ref.id() != null ? (Object) (long) ref.id() : ref.uuid().toString());
     }
 
+    /**
+     * 一格或一只实体({@link CellOrEntity}):脚本里带 {@code id} 的表(一只 Entity)或一个整数是实体,别的带位置的(Pos、Block)是一格;
+     * 命令行上三个数是一格,一个数或 UUID 是实体。
+     */
+    public static ArgType<CellOrEntity> cellOrEntity() {
+        ArgumentType<CellOrEntity> read = reader -> {
+            int start = reader.getCursor();
+            String rest = reader.getRemaining();
+            if (startsNumber(reader.getString(), start) && readCoordinates(new StringReader(rest), 3).size() == 3) {
+                return new CellOrEntity(readCell(reader), null);
+            }
+            return new CellOrEntity(null, readEntity(reader));
+        };
+        String hint = "a cell (" + POS_SHAPE + ") or an entity (its id, or the Entity itself)";
+        return new ArgType<>(read, "cell|entity", hint, Span.ONE, Item.STRING, true, false, ArgType::stringField,
+                value -> {
+                    boolean entity = value != null && (value.isJsonPrimitive() && value.getAsJsonPrimitive().isNumber()
+                            || value.isJsonObject() && value.getAsJsonObject().has("id"));
+                    return entity ? new CellOrEntity(null, entityFromJson(value))
+                            : new CellOrEntity(cellFromJson(value), null);
+                }, CellOrEntity::written)
+                .scripted(ScriptType.union(Shapes.POS.type(), Shapes.ENTITY.type()),
+                        t -> t.cell() != null ? Shapes.value(t.cell())
+                                : t.entity().id() != null ? (Object) (long) t.entity().id() : t.entity().uuid().toString());
+    }
+
     private static EntityRef readEntity(StringReader reader) throws CommandSyntaxException {
         int start = reader.getCursor();
         while (reader.canRead() && reader.peek() != ' ') {

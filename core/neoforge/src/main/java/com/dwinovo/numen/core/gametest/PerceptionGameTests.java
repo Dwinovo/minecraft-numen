@@ -23,7 +23,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
 /**
- * 感知:{@code scan} 组({@code numen.scan.block}、{@code numen.scan.storage}、{@code numen.scan.around}、{@code numen.scan.entities}、
+ * 感知:{@code scan} 组({@code numen.scan.block}、{@code numen.scan.container}、{@code numen.scan.map}、{@code numen.scan.entities}、
  * {@code numen.scan.blocks})、{@code status} 组({@code numen.status.self}、{@code numen.status.world}、{@code numen.status.owner}),以及
  * {@code numen.inv.recipe}、{@code throwaway}(清单现状在 {@code numen.status.self} 的身体状态里)。这些不动世界,测的是回执说的是不是眼前的真事;提升成快捷工具的
  * 动作,同一刻从工具与从 {@code command} 读到的一字不差(同源)。
@@ -68,7 +68,7 @@ public class PerceptionGameTests {
     public static void inspect_block_storage_reads_a_chest_without_opening_it(GameTestHelper helper) {
         BlockPos chest = chestWithDiamonds(helper, new BlockPos(5, 2, 3), 5);
         NumenPlayer companion = spawnAt(helper, "gametest_auditor", new BlockPos(3, 2, 3), false);
-        ToolRun storage = lua(companion, "numen.scan.storage({x = " + chest.getX() + ", y = " + chest.getY() + ", z = " + chest.getZ() + "})");
+        ToolRun storage = lua(companion, "numen.scan.container({x = " + chest.getX() + ", y = " + chest.getY() + ", z = " + chest.getZ() + "})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(storage.succeeded() && storage.reply().contains("diamond")
@@ -97,8 +97,8 @@ public class PerceptionGameTests {
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(companion.onGround(), "she has not landed"))
                 .thenExecute(() -> {
-                    map.set(lua(companion, "numen.scan.around()"));
-                    viaCommand.set(lua(companion, "numen.scan.around()"));
+                    map.set(lua(companion, "numen.scan.map()"));
+                    viaCommand.set(lua(companion, "numen.scan.map()"));
                 })
                 .thenWaitUntil(() -> {
                     String m = map.get().outcome();
@@ -106,7 +106,7 @@ public class PerceptionGameTests {
                     helper.assertTrue(cell(m, 0, -2) == '^', "the step two north is not ^: \n" + m);
                     helper.assertTrue(cell(m, -2, 0) == '~', "the water two west is not ~: \n" + m);
                     helper.assertTrue(m.equals(viaCommand.get().outcome()),
-                            "scan_around and scan around draw differently: \n" + m + "\n" + viaCommand.get().reply());
+                            "two numen.scan.map calls draw differently: \n" + m + "\n" + viaCommand.get().reply());
                 })
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
                 .thenSucceed();
@@ -407,8 +407,8 @@ public class PerceptionGameTests {
         helper.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
         BlockPos air = helper.absolutePos(new BlockPos(5, 3, 3));
         NumenPlayer companion = spawnAt(helper, "gametest_prober", new BlockPos(3, 2, 3), false);
-        ToolRun onStone = lua(companion, "numen.scan.storage({x = " + stone.getX() + ", y = " + stone.getY() + ", z = " + stone.getZ() + "})");
-        ToolRun onAir = lua(companion, "numen.scan.storage({x = " + air.getX() + ", y = " + air.getY() + ", z = " + air.getZ() + "})");
+        ToolRun onStone = lua(companion, "numen.scan.container({x = " + stone.getX() + ", y = " + stone.getY() + ", z = " + stone.getZ() + "})");
+        ToolRun onAir = lua(companion, "numen.scan.container({x = " + air.getX() + ", y = " + air.getY() + ", z = " + air.getZ() + "})");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(onStone.succeeded() && onStone.reply().contains("exposes no item/fluid/energy storage"),
@@ -416,6 +416,55 @@ public class PerceptionGameTests {
             helper.assertTrue(!onAir.succeeded() && onAir.reply().contains("is air"),
                     "air was not reported as nothing to read: " + onAir.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /**
+     * {@code numen.scan.sight}:她眼前一块金块,中间什么都没有,看得见;一堵石墙后面的金块与一头牛都看不见,挡着的是那堵墙的一格。
+     * 只读:墙与金块原样。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
+    public static void scan_sight_says_what_is_in_the_way(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos open = helper.absolutePos(new BlockPos(6, 2, 7));
+        BlockPos hidden = helper.absolutePos(new BlockPos(10, 2, 3));
+        level.setBlockAndUpdate(open, Blocks.GOLD_BLOCK.defaultBlockState());
+        level.setBlockAndUpdate(hidden, Blocks.GOLD_BLOCK.defaultBlockState());
+        int wallX = helper.absolutePos(new BlockPos(8, 2, 0)).getX();
+        for (int y = 2; y <= 5; y++) {
+            for (int z = 0; z <= 9; z++) {
+                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(8, y, z)), Blocks.STONE.defaultBlockState());
+            }
+        }
+        var cow = net.minecraft.world.entity.EntityType.COW.create(level);
+        helper.assertTrue(cow != null, "the cow did not spawn");
+        BlockPos pen = helper.absolutePos(new BlockPos(11, 2, 6));
+        cow.moveTo(pen.getX() + 0.5, pen.getY(), pen.getZ() + 0.5, 0.0f, 0.0f);
+        cow.setNoAi(true);
+        level.addFreshEntity(cow);
+        NumenPlayer companion = spawnAt(helper, "gametest_lookout", new BlockPos(3, 2, 7), false);
+        ToolRun seen = lua(companion, "return {open = numen.scan.sight(" + xyz(open) + "), hidden = numen.scan.sight("
+                + xyz(hidden) + "), cow = numen.scan.sight(" + cow.getId() + ")}");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(seen.receipt() != null, "numen.scan.sight has not answered");
+            helper.assertTrue(seen.ranToTheEnd(), "numen.scan.sight failed: " + seen.receipt());
+            var got = com.google.gson.JsonParser.parseString(seen.receipt()).getAsJsonObject().getAsJsonObject("data")
+                    .getAsJsonObject("returned");
+            helper.assertTrue(got.getAsJsonObject("open").get("visible").getAsBoolean()
+                            && !got.getAsJsonObject("open").has("blocked_by"),
+                    "the gold block right in front of her is not seen: " + got);
+            for (String behind : List.of("hidden", "cow")) {
+                var one = got.getAsJsonObject(behind);
+                helper.assertTrue(!one.get("visible").getAsBoolean() && one.has("blocked_by")
+                                && "minecraft:stone".equals(one.getAsJsonObject("blocked_by").get("name").getAsString())
+                                && one.getAsJsonObject("blocked_by").getAsJsonObject("pos").get("x").getAsInt() == wallX,
+                        "the " + behind + " behind the wall is not reported as hidden by it: " + got);
+            }
+            helper.assertTrue(level.getBlockState(hidden).is(Blocks.GOLD_BLOCK)
+                    && level.getBlockState(helper.absolutePos(new BlockPos(8, 2, 3))).is(Blocks.STONE), "looking changed the world");
+            CompanionFactory.despawn(level.getServer(), companion);
+            cow.discard();
         });
     }
 

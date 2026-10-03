@@ -1,7 +1,11 @@
 package com.dwinovo.numen.core.tools;
 
+import com.dwinovo.numen.agent.script.ApiError;
+import com.dwinovo.numen.agent.script.ErrorKind;
+import com.dwinovo.numen.cli.CellOrEntity;
 import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.pathing.world.Sight;
 import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -20,7 +24,7 @@ import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * 读身体、主人、世界与一格方块:{@code status self|owner|world} 与 {@code scan block} 的处理函数交到这里,
+ * 读身体、主人、世界、一格方块与视线:{@code status self|owner|world}、{@code scan block} 与 {@code scan sight} 的处理函数交到这里,
  * 命令的名字、说明与参数在 {@link com.dwinovo.numen.core.tools.perception.StatusCommands} 与
  * {@link com.dwinovo.numen.core.tools.perception.ScanCommands}。每个方法回一份结果:数据是那份读数(位置是 {@link Shapes} 的 Pos),
  * 那句话是一行摘要。
@@ -224,5 +228,62 @@ public final class PerceptionOps {
 
         return TaskResult.ok(level.dimension().location() + ", " + (level.isDay() ? "bright" : "dark") + " outside, "
                 + weather + ".", root);
+    }
+
+    /**
+     * 她看不看得见:一格是从她的眼睛朝那一格冲着她的各面打视线({@link Sight},看不看得见一格只在那里判),有一面碰上它、路上
+     * 没隔着东西就看得见;空着的一格(没有轮廓)是视线到它中心不隔东西;一只实体照原版的视线判(看它的眼睛)。看不见时说挡着的
+     * 第一格:先说要挖开的硬遮挡,只隔着草这类软遮挡时是那一格。只读。
+     */
+    public TaskResult sight(NumenPlayer her, CellOrEntity target) {
+        ServerLevel level = her.serverLevel();
+        Vec3 eye = her.getEyePosition();
+        boolean visible;
+        Sight.Trace seen;
+        Vec3 to;
+        String what;
+        if (target.entity() != null) {
+            net.minecraft.world.entity.Entity entity = target.entity().in(level);
+            if (entity == null) {
+                throw new ApiError(ErrorKind.NOT_FOUND, "there is no entity " + target.entity().written() + " near you",
+                        "numen.scan.entities()");
+            }
+            to = entity.getEyePosition();
+            visible = her.hasLineOfSight(entity);
+            seen = Sight.trace(level, eye, to, null);
+            what = entity.getName().getString();
+        } else {
+            BlockPos cell = target.cell();
+            boolean solid = Sight.clickable(level, cell);
+            to = Vec3.atCenterOf(cell);
+            seen = null;
+            visible = false;
+            for (Vec3 point : solid ? Sight.faces(level, eye, cell) : java.util.List.of(to)) {
+                Sight.Trace trace = Sight.trace(level, eye, point, cell);
+                boolean clear = solid ? trace.clear(null) : trace.hard().isEmpty() && trace.soft().isEmpty();
+                if (clear || seen == null || trace.hard().size() < seen.hard().size()) {
+                    seen = trace;
+                    visible = clear;
+                }
+                if (clear) {
+                    break;
+                }
+            }
+            what = BuiltInRegistries.BLOCK.getKey(level.getBlockState(cell).getBlock()).getPath() + " at "
+                    + cell.getX() + "," + cell.getY() + "," + cell.getZ();
+        }
+        JsonObject data = new JsonObject();
+        data.addProperty("visible", visible);
+        data.addProperty("distance", Math.round(eye.distanceTo(to) * 10.0) / 10.0);
+        BlockPos blocker = visible || seen == null ? null : !seen.hard().isEmpty() ? seen.hard().get(0)
+                : seen.soft().isEmpty() ? null : seen.soft().get(0);
+        if (blocker != null) {
+            data.add("blocked_by", Shapes.block(blocker, level.getBlockState(blocker)));
+        }
+        String said = visible ? "You can see " + what + "."
+                : "You cannot see " + what + (blocker == null ? "." : ": " + BuiltInRegistries.BLOCK.getKey(
+                        level.getBlockState(blocker).getBlock()).getPath() + " at " + blocker.getX() + ","
+                        + blocker.getY() + "," + blocker.getZ() + " is in the way.");
+        return TaskResult.ok(said, data);
     }
 }

@@ -19,8 +19,8 @@ import net.minecraft.core.BlockPos;
 import java.util.List;
 
 /**
- * {@code scan}:看她周围——脚下一圈的地形图、某几种方块在哪、附近有谁、一格方块是什么、一格方块里装着什么。
- * 五个动作都在服务端读世界,不动世界,不占身体,什么也不存;脚本拿到的是读到的数据(方块、实体都带 Pos,原样能交给下一个函数)。
+ * {@code scan}:看她周围——脚下一圈的地形图、某几种方块在哪、附近有谁、一格方块是什么、一格方块里装着什么、看不看得见一处。
+ * 六个动作都在服务端读世界,不动世界,不占身体,什么也不存;脚本拿到的是读到的数据(方块、实体都带 Pos,原样能交给下一个函数)。
  */
 public final class ScanCommands {
 
@@ -52,26 +52,28 @@ public final class ScanCommands {
                     + "lying on the ground, all = everything.")
             .whenOmitted("list all of them");
     private static final Param<BlockPos> CELL = Param.required("cell", ArgType.cell(), "The block's cell.");
+    private static final Param<com.dwinovo.numen.cli.CellOrEntity> SEEN = Param.required("target",
+            ArgType.cellOrEntity(), "What to look at: a cell (a Pos, a Block) or an entity.");
 
     private ScanCommands() {}
 
     public static void install(NumenApi numen) {
         numen.registerCommands(GROUP, "Look around you: the ground map, where blocks are, who is near, one block "
-                + "and what it holds.", ScanCommands::actions);
+                + "and what it holds, whether you can see something.", ScanCommands::actions);
     }
 
     private static void actions(CommandGroup scan) {
         scan.declare(ScanOps.CLUSTER);
-        scan.server("around", "A top-down map of the ground around you: where you can walk, step, drop, swim.",
-                        ScanCommands::around, VIEW_RADIUS)
+        scan.server("map", "A top-down map of the ground around you: where you can walk, step, drop, swim.",
+                        ScanCommands::map, VIEW_RADIUS)
                 .returns(ScriptType.table(
                         ScriptType.field("rows", ScriptType.listOf(ScriptType.STRING),
                                 "The map, one string per row, north first; cells are separated by spaces."),
                         ScriptType.field("center", Shapes.POS.type(), "The cell you stand in: the @."),
                         ScriptType.field("facing", ScriptType.STRING, null),
                         ScriptType.field("legend", ScriptType.STRING, null)))
-                .example("for _, row in ipairs(numen.scan.around().rows) do print(row) end")
-                .example("numen.scan.around({radius = 12})")
+                .example("for _, row in ipairs(numen.scan.map().rows) do print(row) end")
+                .example("numen.scan.map({radius = 12})")
                 .note("Instant and read-only. @ is you, North is up, East is right, one cell is one block; each cell "
                         + "says how you could move onto it and the legend comes with it.")
                 .note("One map instead of many single-block looks; for things further out use `numen.scan.blocks` or "
@@ -106,7 +108,7 @@ public final class ScanCommands {
                         + "player's name.")
                 .note("Hand one on as it is: `local e = numen.scan.entities(\"hostile\")[1]; numen.fight.attack(e)`, and the same "
                         + "with numen.use.entity(e) or numen.move.goto_(e.pos). The ids are runtime ids and do not survive a restart.")
-                .seeAlso("scan around", "fight attack", "use entity");
+                .seeAlso("scan map", "fight attack", "use entity");
         scan.server("block", "One block: its id and state, hardness, whether your held tool is right, dig time, "
                         + "whether it is in reach.",
                         ScanCommands::block, CELL)
@@ -129,21 +131,35 @@ public final class ScanCommands {
                 .note("Instant and read-only, from any distance: the block id and its state properties (an "
                         + "end_portal_frame's has_eye), hardness, whether the tool in hand is right, an estimated dig "
                         + "time, and whether it is within your reach.")
-                .seeAlso("scan storage", "scan blocks");
-        scan.server("storage", "What a block holds — items, fluid, energy — read without opening it.",
-                        ScanCommands::storage, CELL, Listing.PAGE)
+                .seeAlso("scan container", "scan blocks", "scan sight");
+        scan.server("container", "What a block holds — items, fluid, energy — read without opening it.",
+                        ScanCommands::container, CELL, Listing.PAGE)
                 .returns(ScriptType.table(ScriptType.field("block", Shapes.BLOCK.type(), null),
                         ScriptType.field("storage", ScriptType.listOf(ScriptType.STRING),
                                 "What it holds, one line per slot, tank or battery.")))
-                .example("numen.scan.storage({x = 120, y = 64, z = -35})")
+                .example("numen.scan.container({x = 120, y = 64, z = -35})")
                 .note("Instant and read-only, from any distance; nothing is opened or moved.")
                 .note("Works on chests, furnaces and most modded machines, tanks and batteries. Storage-network "
                         + "terminals (AE2/RS) show only their local buffer, not the whole network.")
                 .note("Use it instead of opening a machine's GUI when you only need its contents or fill levels.")
                 .seeAlso("scan block");
+        scan.server("sight", "Whether you can see a cell or an entity from where you stand, and what is in the way "
+                        + "when you cannot.", (src, args) -> src.reply(PERCEPTION.sight(src.companion(), args.get(SEEN))
+                        .toJson()), SEEN)
+                .returns(ScriptType.table(
+                        ScriptType.field("visible", ScriptType.BOOLEAN, "A line from your eyes reaches it."),
+                        ScriptType.field("distance", ScriptType.NUMBER, "Blocks from your eyes."),
+                        ScriptType.optional("blocked_by", Shapes.BLOCK.type(), "When you cannot see it: the first "
+                                + "block in the way, one to dig out before grass and the like.")))
+                .example("local s = numen.scan.sight({x = 120, y = 64, z = -35})\nprint(s.visible, s.blocked_by)")
+                .example("numen.scan.sight(184)")
+                .note("Instant and read-only. A cell is seen when a line from your eyes reaches one of its faces "
+                        + "turned to you (an empty cell: its middle) with nothing in between; an entity, when you see "
+                        + "its eyes.")
+                .seeAlso("scan block", "scan entities");
     }
 
-    private static void around(ServerSource src, CommandArgs args) {
+    private static void map(ServerSource src, CommandArgs args) {
         Integer radius = args.get(VIEW_RADIUS);
         src.reply(LookAround.render(src.companion(), radius == null ? LookAround.DEFAULT_RADIUS : radius).toJson());
     }
@@ -165,7 +181,7 @@ public final class ScanCommands {
         src.reply(PERCEPTION.inspectBlock(args.get(CELL), src.companion()).toJson());
     }
 
-    private static void storage(ServerSource src, CommandArgs args) {
+    private static void container(ServerSource src, CommandArgs args) {
         src.reply(QUERY.inspectBlockStorage(args.get(CELL), src.companion(), args));
     }
 }
