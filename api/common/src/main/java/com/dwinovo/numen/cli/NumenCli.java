@@ -11,7 +11,8 @@ import com.dwinovo.numen.agent.tool.ServerToolTransport;
 import com.dwinovo.numen.agent.tool.ToolCall;
 import com.dwinovo.numen.api.Internal;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.script.BuiltinScripts;
+import com.dwinovo.numen.script.BuiltinModules;
+import com.dwinovo.numen.script.Modules;
 import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -131,15 +132,17 @@ public final class NumenCli {
     }
 
     /**
-     * 系统提示里的 API 索引:每个组一行说明,其下每个函数一行——怎么调、一句说明、直接返回什么;库里的函数也列在它所在的组下。
-     * 由登记处与库现算,只在组与库增减时变,按名字排好,字节稳定,不打碎 prompt 缓存。一个组都没有时是空串。
+     * 系统提示里的 API 索引:每个组一行说明与函数名(和组同名的模块的函数也列在那一组下),再是模块:内置的在前、她的在后,一个一行。
+     * 由登记处与模块现算,只在组与模块增减、改了说明时变,按名字排好,字节稳定,不打碎 prompt 缓存。一个组都没有时是空串。
+     *
+     * @param modules 她能用的模块(主人那一份)
      */
-    public static String index() {
+    public static String index(Modules modules) {
         inUse();
         if (GROUPS.isEmpty()) {
             return "";
         }
-        return "<api>\n" + CommandHelp.index(GROUPS.values(), libraryFunctions()) + "\n</api>";
+        return "<api>\n" + CommandHelp.index(GROUPS.values(), libraryFunctions(modules), modules) + "\n</api>";
     }
 
     /**
@@ -184,11 +187,17 @@ public final class NumenCli {
     public record Reading(String path, boolean runnable, CommandArgs args) {}
 
     /**
-     * 脚本里能调的:每个登记了的动作一个 {@code 组.动作},带上它声明的返回项({@link Action#returns}),加上内置库。由登记表现算,
+     * 脚本里能调的:每个登记了的动作一个 {@code 组.动作},带上它声明的返回项({@link Action#returns}),加上模块。由登记表现算,
      * 不另记一份。
+     *
+     * @param modules 模块从哪来:她的那一份({@link Modules#of}),或只读随模组发布的文字时只有内置那一层({@link Modules#builtin})
      */
-    public static ScriptCatalog scriptCatalog() {
+    public static ScriptCatalog scriptCatalog(Modules modules) {
         inUse();
+        return catalog(modules);
+    }
+
+    private static ScriptCatalog catalog(Modules modules) {
         Map<String, Map<String, ScriptCatalog.Verb>> groups = new TreeMap<>();
         for (CommandGroup group : GROUPS.values()) {
             Map<String, ScriptCatalog.Verb> verbs = new TreeMap<>();
@@ -197,9 +206,7 @@ public final class NumenCli {
             }
             groups.put(group.name(), verbs);
         }
-        Map<String, String> libraries = new LinkedHashMap<>();
-        BuiltinScripts.libraries().forEach((name, lib) -> libraries.put(name, lib.code()));
-        return new ScriptCatalog(groups, libraries);
+        return new ScriptCatalog(groups, modules);
     }
 
     /**
@@ -431,12 +438,16 @@ public final class NumenCli {
         return GROUPS.values();
     }
 
-    /** 名字({@code move}、{@code move.go}、{@code move.goto_})指的组或函数的帮助;不认得是 null。 */
-    static String help(String name) {
+    /**
+     * 名字({@code move}、{@code move.go}、{@code move.goto_}、{@code lumber}、{@code lumber.chop})指的组、模块或函数的帮助;不认得是
+     * null。和组同名的模块的函数在那一组的帮助里。
+     */
+    static String help(String name, Modules modules) {
         inUse();
+        Map<String, LibraryFunction> library = libraryFunctions(modules);
         for (CommandGroup group : GROUPS.values()) {
             if (ScriptEngine.IN_USE.functionName(group.name()).equals(name)) {
-                return CommandHelp.group(group, libraryFunctions());
+                return CommandHelp.group(group, library);
             }
             for (Action action : group.actions()) {
                 if (action.function().equals(name)) {
@@ -444,18 +455,22 @@ public final class NumenCli {
                 }
             }
         }
-        LibraryFunction fn = libraryFunctions().get(name);
+        Modules.Module module = modules.get(name);
+        if (module != null) {
+            return CommandHelp.module(module, library);
+        }
+        LibraryFunction fn = library.get(name);
         return fn == null ? null : CommandHelp.library(fn);
     }
 
-    /** 库里定义的一个函数:定义它的库,与它的定义。 */
-    record LibraryFunction(String library, ScriptEngine.Defined defined) {}
+    /** 模块里定义的一个函数:定义它的模块,与它的定义。 */
+    record LibraryFunction(String module, ScriptEngine.Defined defined) {}
 
-    /** 库里定义的函数:函数名 → 它,按库登记的先后、库里出现的顺序。 */
-    static Map<String, LibraryFunction> libraryFunctions() {
+    /** 模块里定义的函数:{@code 模块.函数} → 它,按模块名、模块里出现的顺序。 */
+    static Map<String, LibraryFunction> libraryFunctions(Modules modules) {
         Map<String, LibraryFunction> out = new LinkedHashMap<>();
-        BuiltinScripts.libraries().forEach((name, lib) -> {
-            for (ScriptEngine.Defined fn : ScriptEngine.IN_USE.functions(lib.code())) {
+        modules.all().forEach((name, module) -> {
+            for (ScriptEngine.Defined fn : ScriptEngine.IN_USE.functions(name, module.code())) {
                 out.put(fn.name(), new LibraryFunction(name, fn));
             }
         });
@@ -495,7 +510,7 @@ public final class NumenCli {
     private static synchronized void inUse() {
         if (!inUse) {
             checkSeeAlso(GROUPS.values(), GROUPS);
-            checkLibraries();
+            checkModules();
             checkClasses();
             inUse = true;
         }
@@ -544,24 +559,26 @@ public final class NumenCli {
         }
     }
 
-    /** 库里有没有定义 {@code 组 函数} 这个函数(相关动作可以指向库函数,写法同动作的路径:{@code "move goto_"})。 */
+    /** 内置模块里有没有定义 {@code 模块 函数} 这个函数(相关动作可以指向模块函数,写法同动作的路径:{@code "move goto_"})。 */
     private static boolean definedInLibrary(String path) {
-        return libraryFunctions().containsKey(path.replace(' ', '.'));
+        return libraryFunctions(Modules.builtin()).containsKey(path.replace(' ', '.'));
     }
 
     /**
-     * 库函数不能和动作撞名:同一个 {@code 组.函数} 在脚本里只能有一个意思。库里调到的函数在库登记时已经读过一遍(见
-     * {@link BuiltinScripts}),这里只查撞名。
+     * 每个内置模块照运行时的装法装一次({@link ScriptEngine#checkModule}):返回一张表、不给第 ① 层的名字赋值(和组同名的模块不能
+     * 换掉那一组的动作)。各组到齐才查得全,所以在这里查;不过的一次列全,抛出。
      */
-    private static void checkLibraries() {
-        for (String fn : libraryFunctions().keySet()) {
-            for (CommandGroup group : GROUPS.values()) {
-                for (Action action : group.actions()) {
-                    if (action.function().equals(fn)) {
-                        throw new IllegalStateException("库函数 " + fn + " 和动作 " + action.path() + " 撞名");
-                    }
-                }
+    private static void checkModules() {
+        ScriptCatalog catalog = catalog(Modules.builtin());
+        List<String> broken = new ArrayList<>();
+        BuiltinModules.all().forEach((name, module) -> {
+            String problem = ScriptEngine.IN_USE.checkModule(name, module.code(), catalog);
+            if (problem != null) {
+                broken.add(name + ": " + problem);
             }
+        });
+        if (!broken.isEmpty()) {
+            throw new IllegalStateException("内置模块装不上: " + String.join("; ", broken));
         }
     }
 
@@ -648,7 +665,8 @@ public final class NumenCli {
             return rootListing().first();
         }
         Action action = path.size() > 1 ? group.action(path.get(1)) : null;
-        return action == null ? CommandHelp.group(group, libraryFunctions()) : CommandHelp.usage(action);
+        return action == null ? CommandHelp.group(group, libraryFunctions(Modules.builtin()))
+                : CommandHelp.usage(action);
     }
 
     /** 出错那一层的帮助怎么要。 */
@@ -672,6 +690,7 @@ public final class NumenCli {
     }
 
     private static Listing rootListing() {
-        return CommandHelp.listing(CommandHelp.index(GROUPS.values(), libraryFunctions()));
+        Modules builtin = Modules.builtin();
+        return CommandHelp.listing(CommandHelp.index(GROUPS.values(), libraryFunctions(builtin), builtin));
     }
 }

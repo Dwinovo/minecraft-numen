@@ -1,57 +1,49 @@
 package com.dwinovo.numen.script;
 
+import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.agent.script.ScriptEngine;
 import com.dwinovo.numen.agent.script.ScriptType;
-import com.dwinovo.numen.agent.script.ScriptCall;
 import com.dwinovo.numen.api.NumenApi;
 import com.dwinovo.numen.cli.ArgType;
+import com.dwinovo.numen.cli.ClientSource;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.CommandGroup;
 import com.dwinovo.numen.cli.Listing;
-import com.dwinovo.numen.cli.Names;
+import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.cli.Param;
-import com.dwinovo.numen.cli.ServerSource;
-import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.task.TaskResult;
 
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.SortedMap;
-import java.util.UUID;
 
 /**
- * {@code script}:脚本这个名词——有名字的程序(语言见 {@link ScriptEngine})。内置的脚本与库随模组发布、只读({@link BuiltinScripts});同伴存下的归主人
- * ({@link ScriptStore}),同一主人的同伴都看得见、都跑得了,存的那只改得了、删得了,改删别的同伴存的那份经权限层
- * ({@code edit_script},出厂要问主人)。每份脚本都记战绩:跑了几次、跑完几次、最近一次在什么时候、最近一次没跑完停在哪一行、
- * 为什么——只给事实,不替她评判。
- *
- * <p>无状态:每次调用都点名脚本。看({@code list}、{@code show})当场回;存、删先过权限层再当场回;都不占身体。
- * {@code run} 只按名字找到那份脚本、把正文与参数交回——跑它的是派发这次调用的大脑({@code SerialCalls}),它在调用之间等身体
- * 收尾、被打断时停下,跑完把战绩记回这里({@link #tally})。库不按名字跑:每段脚本开跑之前它已经跑过了。
+ * {@code script}:Lua 模块({@link Modules})——每个返回一张函数表,程序里以模块名直接用。内置的随模组发布、留在 jar 里;她存的是主人
+ * 客户端上目录里的文件,同名的盖住内置那份,删掉就回到内置。都在主人客户端执行(她的大脑与 Lua 虚拟机就在那儿),当场回,不占身体;
+ * 存、改、删不问主人,每一次写进回执。每个模块(连同内置的)都记战绩:用到它的程序跑了几段、跑完几段、最近一次在什么时候、最近一段
+ * 没跑完停在哪一行、为什么——只给事实,不替她评判。战绩由跑程序的大脑在程序结束时记({@link Modules#tally})。
  */
 public final class Scripts {
 
     private static final String GROUP = "script";
 
     private static final Param<String> NAME = Param.required("name", ArgType.word(),
-            "The script, as script.list lists it.").values("a script name, as `script.list()` lists it");
+            "The module, as script.list lists it.").values("a module name, as `script.list()` lists it");
+    private static final Param<Boolean> BUILTIN = Param.optional("builtin", ArgType.bool(),
+            "Show the built-in original, not the copy of yours that overrides it.")
+            .whenOmitted("show the one in use");
     private static final Param<String> NEW_NAME = Param.optional("name", ArgType.word(),
-            "Name to keep it under: lowercase letters, digits, _ and -.")
-            .whenOmitted("give it the next free name script-1, script-2, …");
+            "Name to keep it under, the name programs use it by: lowercase letters, digits and _, starting with a "
+                    + "letter.")
+            .whenOmitted("give it the next free name module_1, module_2, …");
     private static final Param<String> CODE = Param.required("code", ArgType.string(),
-            "The program, the same as you would give the " + ScriptEngine.IN_USE.toolName() + " tool. Its first line is "
-                    + "a comment saying what it does: " + ScriptEngine.IN_USE.comment("Dig every part of an area.")
-                    + ".");
-    private static final Param<String> RUN = Param.required("script", ArgType.text(),
-            "The script's name, then its arguments: \"mine\", \"ores\".");
+            "The module: a first comment line saying what it does, functions put in a table, and that table returned "
+                    + "(local M = {} … function M.chop(tree) … end … return M).");
 
     private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'UTC'")
             .withZone(ZoneOffset.UTC);
@@ -62,59 +54,62 @@ public final class Scripts {
 
     /** 经插件那扇门登记这一组。 */
     public static void install(NumenApi numen) {
-        numen.registerCommands(GROUP, "Scripts kept by name — built in, and saved by your owner's companions — "
-                + "the built-in library, and how their runs went.", Scripts::actions);
-        numen.contributeBodyState(Scripts::savedIndex);
+        numen.registerCommands(GROUP, "Modules — functions written in " + ScriptEngine.IN_USE.language()
+                + " that programs use by name (work.collect(), lumber.chop()): the built-in ones, your own (saved on "
+                + "your owner's computer; one of yours with a built-in's name is used instead of it), and how the "
+                + "programs that used them went.", Scripts::actions);
     }
 
     private static void actions(CommandGroup script) {
-        script.server("list", "The scripts you can run and the built-in library, one line each: what it does, whose "
-                        + "it is, how its runs went.", (src, args) -> src.reply(list(src.companion(), args)), Listing.PAGE)
+        script.client("list", "The modules, one line each: what it does, whose it is, how the programs that used it "
+                        + "went.", (src, args) -> src.reply(list(modules(src), args)), Listing.PAGE)
                 .returns(SCRIPTS, ScriptType.listOf(ScriptType.table(
                         ScriptType.field("name", ScriptType.STRING, null),
                         ScriptType.field("summary", ScriptType.STRING, "Its first comment line."),
-                        ScriptType.field("whose", ScriptType.STRING, "built in, library, or saved by <companion>."),
-                        ScriptType.field("runs", ScriptType.INTEGER, "How many times it ran."),
+                        ScriptType.field("whose", ScriptType.STRING, "built in, yours, or yours overriding the "
+                                + "built-in."),
+                        ScriptType.field("runs", ScriptType.INTEGER, "How many programs used it."),
                         ScriptType.field("finished", ScriptType.INTEGER, "How many of those ran to the end."))))
                 .example("script.list()")
-                .note("Instant and read-only.")
-                .seeAlso("script show", "script run");
-        script.server("show", "Show a script or a library in full, with how its runs went.",
-                        (src, args) -> src.reply(show(src.companion(), args.get(NAME))), NAME)
+                .note("Instant and read-only. api.help(\"<module>\") lists a module's functions with their types.")
+                .seeAlso("script show");
+        script.client("show", "Show a module in full, with how the programs that used it went.",
+                        (src, args) -> src.reply(show(modules(src), args.get(NAME),
+                                Boolean.TRUE.equals(args.get(BUILTIN)))), NAME, BUILTIN)
                 .returns(ScriptType.table(ScriptType.field("script", ScriptType.STRING, null),
-                        ScriptType.field("builtin", ScriptType.BOOLEAN, null),
-                        ScriptType.field("code", ScriptType.STRING, "The whole program.")))
-                .example("print(script.show(\"mine\").code)")
-                .note("Instant and read-only. Read one before running it for the first time, and before you write "
-                        + "your own version of it; a library shows how its functions are put together. In a script it "
-                        + "returns {x = script, y = builtin, z = code}: `script.save(script.show(\"mine\").code, {name = \"mine2\"})` "
-                        + "keeps a copy to change.")
-                .seeAlso("script run", "script save");
-        script.server("run", "Run a script by name with arguments; the receipt says how it ended, call by call, and "
-                        + "the call returns what the script returned.", Scripts::run, RUN)
-                .returns(ScriptCall.RETURNED, new ScriptType.Simple("any"))
-                .example("script.run(\"mine\", \"ores\")")
-                .note("Runs inside your program: one API call at a time, each waiting for the work it starts to "
-                        + "finish, stopping between calls when your owner speaks or something urgent comes up.")
-                .seeAlso("script show", "script list");
-        script.server("save", "Keep a program under a name so you can run it again.",
-                        Scripts::save, CODE, NEW_NAME)
+                        ScriptType.field("builtin", ScriptType.BOOLEAN, "Whether the text is the built-in one."),
+                        ScriptType.field("code", ScriptType.STRING, "The whole module.")))
+                .example("print(script.show(\"work\").code)")
+                .example("print(script.show(\"work\", {builtin = true}).code)")
+                .note("Instant and read-only. Read one before you write your own version of it: it shows how its "
+                        + "functions are put together. `script.save(script.show(\"work\").code, {name = \"work\"})` "
+                        + "makes the built-in work module yours to change.")
+                .seeAlso("script save");
+        script.client("save", "Keep a module under a name: programs then use its functions by that name; under a "
+                        + "built-in's name, yours is used instead of the built-in.",
+                        (src, args) -> src.reply(save(modules(src), args)), CODE, NEW_NAME)
                 .returns(ScriptType.table(ScriptType.field("name", ScriptType.STRING, "The name it is kept under.")))
-                .example("script.save(\"" + ScriptEngine.IN_USE.comment("Dig out the pit.") + "\\n"
-                        + "work.dig('pit')\", {name = \"pit\"})")
-                .note("Instant. The program is read first and not kept if it does not compile; the error says the "
-                        + "line. Its first line is a comment saying what it does: that is how the list describes it.")
-                .note("Saving under the name of one you saved replaces it and resets its record. Built-in scripts "
-                        + "are read-only: save your own version under another name. Changing one another companion "
-                        + "saved asks your owner first.")
-                .seeAlso("script run", "script delete");
-        script.server("delete", "Delete a script you or another companion saved.",
-                        (src, args) -> delete(src, args.get(NAME)), NAME)
+                .example("script.save([[\n-- Clearing a pit.\nlocal M = {}\n---Dig out the pit area.\n"
+                        + "function M.clear()\n  work.dig(\"pit\")\nend\nreturn M\n]], {name = \"pit\"})")
+                .note("Instant. The module is read and loaded once first, and not kept if it does not compile, does "
+                        + "not return a table, or redefines an API function; the error says the line. Its first line "
+                        + "is a comment saying what it does, and the comment lines above each function say what that "
+                        + "one does: that is how the list and api.help describe them.")
+                .note("A module named after an API group (move, work, ...) adds its functions to that group. Saving "
+                        + "under a name you used replaces it and resets its record. Saving under a built-in's name "
+                        + "overrides the built-in until you delete yours. Your owner can edit the files too; the next "
+                        + "program reads them as they are.")
+                .seeAlso("script delete");
+        script.client("delete", "Delete a module of yours; one that overrides a built-in gives the built-in back.",
+                        (src, args) -> src.reply(delete(modules(src), args.get(NAME))), NAME)
                 .returns(ScriptType.NOTHING)
-                .example("script.delete(\"sweep\")")
-                .note("Instant. Built-in scripts cannot be deleted. Deleting one another companion saved asks your "
-                        + "owner first.")
+                .example("script.delete(\"pit\")")
+                .note("Instant. A built-in module you did not override has nothing of yours to delete.")
                 .seeAlso("script list");
+    }
+
+    private static Modules modules(ClientSource src) {
+        return Modules.of(src.companion());
     }
 
     // ==================== 看 ====================
@@ -122,231 +117,145 @@ public final class Scripts {
     /** {@code script.list} 返回的那一项:每份一张表。 */
     private static final String SCRIPTS = "scripts";
 
-    private static String list(NumenPlayer her, CommandArgs args) {
-        ScriptStore store = store(her);
+    private static String list(Modules modules, CommandArgs args) {
         List<String> rows = new ArrayList<>();
         List<Map<String, Object>> scripts = new ArrayList<>();
-        BuiltinScripts.all().forEach((name, b) -> {
-            rows.add(name + " — " + b.summary() + (b.library() ? " [built-in library: its functions are in every "
-                    + "script]" : " [built in] " + record(store.stats(name), true)));
-            scripts.add(entry(name, b.summary(), b.library() ? "library" : "built in", store.stats(name)));
+        modules.all().forEach((name, m) -> {
+            Modules.Stats stats = modules.stats(name);
+            rows.add(name + " — " + (m.summary() == null ? "(no first comment line)" : m.summary()) + " ["
+                    + whose(m) + "] " + record(stats, true));
+            scripts.add(entry(name, m.summary(), whose(m), stats));
         });
-        store.saved().forEach((name, s) -> {
-            rows.add(name + " — " + s.summary() + " [saved by " + s.authorName() + "] "
-                    + record(store.stats(name), true));
-            scripts.add(entry(name, s.summary(), "saved by " + s.authorName(), store.stats(name)));
-        });
-        String head = rows.isEmpty() ? "No scripts yet. Write a program with the " + ScriptEngine.IN_USE.toolName()
-                + " tool, then keep it with script.save(code, {name = \"...\"})." : rows.size() + " script"
-                + (rows.size() == 1 ? "" : "s") + ". script.show(name) prints one; script.run(name, args...) runs one.";
+        String head = rows.isEmpty() ? "No modules yet. Keep one with script.save(code, {name = \"...\"})."
+                : rows.size() + " module" + (rows.size() == 1 ? "" : "s") + ". Use one by name in a program "
+                + "(work.collect()); api.help(name) lists its functions, script.show(name) prints it.";
         return new Listing(head, rows, "").result(args, Map.of(SCRIPTS, scripts)).toJson();
     }
 
-    /** 清单里一份脚本的那张表。 */
-    private static Map<String, Object> entry(String name, String summary, String whose, ScriptStore.Stats stats) {
+    /** 谁的、和内置那份是什么关系、读不读得通。 */
+    private static String whose(Modules.Module m) {
+        String whose = switch (m.origin()) {
+            case BUILTIN -> "built in";
+            case HERS -> "yours";
+            case OVERRIDE -> "yours, used instead of the built-in one"
+                    + (m.builtinNewer() ? "; the built-in changed since you saved yours: script.show(\"" + m.name()
+                    + "\", {builtin = true}) shows it" : "");
+        };
+        return m.problem() == null ? whose : whose + "; does not compile: " + m.problem();
+    }
+
+    /** 清单里一份的那张表。 */
+    private static Map<String, Object> entry(String name, String summary, String whose, Modules.Stats stats) {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("name", name);
-        out.put("summary", summary);
+        out.put("summary", summary == null ? "" : summary);
         out.put("whose", whose);
         out.put("runs", stats.runs());
         out.put("finished", stats.ok());
         return out;
     }
 
-    private static String show(NumenPlayer her, String name) {
-        ScriptStore store = store(her);
-        BuiltinScripts.Builtin builtin = BuiltinScripts.get(name);
-        ScriptStore.Saved saved = store.get(name);
-        if (builtin == null && saved == null) {
-            return TaskResult.fail(ErrorKind.NOT_FOUND, missing(name, store), "script.list()").toJson();
+    private static String show(Modules modules, String name, boolean original) {
+        Modules.Module m = modules.get(name);
+        if (m == null) {
+            return TaskResult.fail(ErrorKind.NOT_FOUND, missing(name, modules), "script.list()").toJson();
         }
-        String whose = builtin != null ? (builtin.library() ? "built-in library, read-only" : "built in, read-only")
-                : "saved by " + saved.authorName() + " on " + WHEN.format(Instant.ofEpochMilli(saved.savedAt()));
-        String code = builtin != null ? builtin.code() : saved.code();
+        BuiltinModules.Builtin builtin = BuiltinModules.get(name);
+        if (original && builtin == null) {
+            return TaskResult.fail(ErrorKind.NOT_FOUND, name + " is yours; there is no built-in " + name,
+                    "script.show(\"" + name + "\")").toJson();
+        }
+        boolean showsBuiltin = original || m.origin() == Modules.Origin.BUILTIN;
+        String code = showsBuiltin ? builtin.code() : m.code();
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("script", name);
-        data.put("builtin", builtin != null);
+        data.put("builtin", showsBuiltin);
         // 正文也在数据里:脚本里读到它就能照抄一份改了另存(script.save(s.code, ...))
         data.put("code", code);
-        return TaskResult.ok("Script " + name + " (" + whose + "). " + record(store.stats(name), false) + "\n"
-                + code.stripTrailing(), data).toJson();
+        String head = "Module " + name + " (" + (showsBuiltin ? "the built-in text" : whose(m)) + "). "
+                + record(modules.stats(name), false);
+        return TaskResult.ok(head + "\n" + code.stripTrailing(), data).toJson();
     }
 
     /** 战绩,只给事实。{@code brief} 是清单里那一版:原因截短。 */
-    private static String record(ScriptStore.Stats stats, boolean brief) {
+    private static String record(Modules.Stats stats, boolean brief) {
         if (stats.runs() == 0) {
-            return "Never run.";
+            return "No program used it yet.";
         }
-        StringBuilder sb = new StringBuilder("Runs: ").append(stats.runs()).append(", ran to the end: ")
-                .append(stats.ok()).append(", last run ").append(WHEN.format(Instant.ofEpochMilli(stats.lastRun())))
+        StringBuilder sb = new StringBuilder("Programs that used it: ").append(stats.runs()).append(", ran to the end: ")
+                .append(stats.ok()).append(", last ").append(WHEN.format(Instant.ofEpochMilli(stats.lastRun())))
                 .append('.');
         if (stats.failedWhy() != null) {
             String why = stats.failedWhy();
             if (brief && why.length() > WHY_IN_LIST) {
                 why = why.substring(0, WHY_IN_LIST) + "...";
             }
-            sb.append(" Last unfinished run stopped at line ").append(stats.failedLine()).append(": ").append(why);
+            sb.append(" The last one that did not finish stopped at its line ").append(stats.failedLine()).append(": ")
+                    .append(why);
         }
         return sb.toString();
     }
 
-    // ==================== 跑 ====================
-
-    /** 按名字找到那份脚本,把正文与参数交回给派发这次调用的大脑去跑(回执的形状见 {@link ScriptCall#toRun})。 */
-    private static void run(ServerSource src, CommandArgs args) {
-        List<String> words = Arrays.stream(args.get(RUN).strip().split("\\s+")).toList();
-        String name = words.get(0);
-        ScriptStore store = store(src.companion());
-        BuiltinScripts.Builtin builtin = BuiltinScripts.get(name);
-        ScriptStore.Saved saved = store.get(name);
-        if (builtin == null && saved == null) {
-            src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, missing(name, store), "script.list()").toJson());
-            return;
-        }
-        if (builtin != null && builtin.library()) {
-            src.reply(TaskResult.fail(ErrorKind.BAD_ARGUMENT, name + " is a library, not a script: its functions are "
-                    + "in every script already (the <api> index lists them); call them.", null).toJson());
-            return;
-        }
-        Map<String, Object> run = new LinkedHashMap<>();
-        run.put(ScriptCall.RUN_SCRIPT, name);
-        run.put(ScriptCall.RUN_CODE, builtin != null ? builtin.code() : saved.code());
-        run.put(ScriptCall.RUN_ARGS, words.subList(1, words.size()));
-        src.reply(TaskResult.ok("Script " + name + " is handed to the brain that runs scripts; it has not run yet.",
-                Map.of(ScriptCall.RUN, run)).toJson());
-    }
-
-    /**
-     * 记一次运行:大脑跑完一份有名字的脚本(跑完、出错或被停下)时经网络送来。记在她主人的那一份里;她没有主人就不记。
-     */
-    public static void tally(NumenPlayer her, String name, boolean ok, int line, String why) {
-        UUID owner = her.getOwnerUuid();
-        if (owner == null || !Names.valid(name)) {
-            return;
-        }
-        ScriptStore.of(her.getServer(), owner).tally(name, ok, line, why, System.currentTimeMillis());
-    }
-
     // ==================== 存与删 ====================
 
-    private static void save(ServerSource src, CommandArgs args) {
-        NumenPlayer her = src.companion();
-        ScriptStore store = store(her);
-        String name = args.get(NEW_NAME) == null ? freeName(store) : Names.checked("script", args.get(NEW_NAME));
+    private static String save(Modules modules, CommandArgs args) {
+        String name = args.get(NEW_NAME) == null ? freeName(modules) : args.get(NEW_NAME);
         String code = args.get(CODE);
-        if (BuiltinScripts.get(name) != null) {
-            src.reply(TaskResult.fail(ErrorKind.BAD_ARGUMENT, name + " is built in and read-only; save your version "
-                    + "under another name.", "{name = \"my-" + name + "\"}").toJson());
-            return;
+        String badName = ScriptEngine.IN_USE.moduleName(name);
+        if (badName != null) {
+            return TaskResult.fail(ErrorKind.BAD_ARGUMENT, "did not save " + name + ": " + badName,
+                    "{name = \"" + name.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9_]", "_") + "\"}")
+                    .toJson();
         }
-        String problem = ScriptEngine.IN_USE.check(name, code);
+        // 读不通、不返回表、撞第 ① 层:和运行时同一个解释器装它一次,规则只在沙箱里那一处
+        String problem = ScriptEngine.IN_USE.checkModule(name, code, NumenCli.scriptCatalog(Modules.builtin()));
         if (problem != null) {
-            src.reply(TaskResult.fail(ErrorKind.BAD_ARGUMENT, "did not save " + name + ": it does not compile: "
-                    + problem, null).toJson());
-            return;
+            return TaskResult.fail(ErrorKind.BAD_ARGUMENT, "did not save " + name + ": " + problem,
+                    "fix that line, then save it again").toJson();
         }
-        String summary = ScriptEngine.IN_USE.summary(code);
-        if (summary == null) {
-            src.reply(TaskResult.fail(ErrorKind.BAD_ARGUMENT, "did not save " + name + ": start it with a comment line "
+        if (ScriptEngine.IN_USE.summary(code) == null) {
+            return TaskResult.fail(ErrorKind.BAD_ARGUMENT, "did not save " + name + ": start it with a comment line "
                     + "saying what it does", ScriptEngine.IN_USE.comment("Dig every part of an area, nearest first."))
-                    .toJson());
-            return;
+                    .toJson();
         }
-        ScriptStore.Saved before = store.get(name);
-        src.authorize(Action.editScript(name, before == null ? null : before.author()), "script.save " + name,
-                allowed -> {
-                    store.put(name, new ScriptStore.Saved(code, summary, her.getUUID(),
-                            her.getGameProfile().getName(), System.currentTimeMillis()));
-                    allowed.reply(TaskResult.ok((before == null ? "Saved script " : "Replaced script ") + name + ": "
-                            + summary + " Run it with script.run(\"" + name + "\", ...).", Map.of("name", name))
-                            .toJson());
-                });
+        Modules.Saved saved = modules.save(name, code);
+        String said = switch (saved) {
+            case NEW -> "Saved module " + name + ".";
+            case REPLACED -> "Replaced your module " + name + "; its record starts over.";
+            case OVERRODE -> "Saved your " + name + "; it is used instead of the built-in " + name + " from now on "
+                    + "(script.delete(\"" + name + "\") gives the built-in back).";
+        };
+        Constants.LOG.info("[numen-script] {} {} in {}", saved, name, modules.dir());
+        return TaskResult.ok(said + " Programs use it by name: " + name + ".<function>(...).", Map.of("name", name))
+                .toJson();
     }
 
-    private static void delete(ServerSource src, String name) {
-        NumenPlayer her = src.companion();
-        if (BuiltinScripts.get(name) != null) {
-            src.reply(TaskResult.fail(ErrorKind.BAD_ARGUMENT, name + " is built in; built-in scripts and libraries "
-                    + "cannot be deleted.", null).toJson());
-            return;
+    private static String delete(Modules modules, String name) {
+        boolean builtin = BuiltinModules.get(name) != null;
+        if (modules.delete(name) == null) {
+            return TaskResult.fail(ErrorKind.NOT_FOUND, builtin ? name + " is built in and you have no version of "
+                    + "your own to delete" : missing(name, modules), "script.list()").toJson();
         }
-        ScriptStore store = store(her);
-        ScriptStore.Saved saved = store.get(name);
-        if (saved == null) {
-            src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, missing(name, store), "script.list()").toJson());
-            return;
-        }
-        src.authorize(Action.editScript(name, saved.author()), "script.delete " + name, allowed -> {
-            store.delete(name);
-            allowed.reply(TaskResult.ok("Deleted script " + name + ", saved by " + saved.authorName() + ".").toJson());
-        });
-    }
-
-    // ==================== 索引 ====================
-
-    /**
-     * 系统提示里的内置脚本索引,和技能表同一种写法;没有内置脚本是空串。库不在这里:它的函数在 API 索引里。只随登记变,按名字排好,
-     * 字节稳定。
-     */
-    public static String builtinIndex() {
-        SortedMap<String, BuiltinScripts.Builtin> all = new java.util.TreeMap<>(BuiltinScripts.all());
-        all.values().removeIf(BuiltinScripts.Builtin::library);
-        if (all.isEmpty()) {
-            return "";
-        }
-        StringBuilder sb = new StringBuilder("<scripts>\nThe following built-in scripts are available for use with "
-                + "`script.run(name, args...)` (`script.show(name)` prints one):");
-        all.forEach((name, b) -> sb.append("\n- ").append(name).append(": ").append(b.summary()));
-        return sb.append("\n</scripts>").toString();
-    }
-
-    /**
-     * 她身上状态里的已存脚本索引:主人名下同伴们存的,一份一行,同一种写法;一份都没有、她没有主人是空串。只随存、删变。
-     */
-    public static String savedIndex(NumenPlayer her) {
-        UUID owner = her.getOwnerUuid();
-        if (owner == null) {
-            return "";
-        }
-        SortedMap<String, ScriptStore.Saved> saved = ScriptStore.of(her.getServer(), owner).saved();
-        if (saved.isEmpty()) {
-            return "";
-        }
-        StringBuilder sb = new StringBuilder("<saved_scripts>\nThe following scripts your owner's companions saved "
-                + "are available for use with `script.run(name, args...)`:");
-        saved.forEach((name, s) -> sb.append("\n- ").append(name).append(": ").append(s.summary()));
-        return sb.append("\n</saved_scripts>").toString();
+        Constants.LOG.info("[numen-script] deleted {} in {}", name, modules.dir());
+        return TaskResult.ok(builtin ? "Deleted your " + name + "; the built-in " + name + " is used again."
+                : "Deleted module " + name + ".").toJson();
     }
 
     // ==================== 小件 ====================
 
-    /**
-     * 主人名下的脚本。
-     *
-     * @throws IllegalArgumentException 她还没有主人:存下的脚本归主人
-     */
-    private static ScriptStore store(NumenPlayer her) {
-        UUID owner = her.getOwnerUuid();
-        if (owner == null) {
-            throw new IllegalArgumentException("saved scripts belong to your owner, and you have no owner yet");
-        }
-        return ScriptStore.of(her.getServer(), owner);
-    }
-
-    /** 下一个空着的 {@code script-N}。 */
-    private static String freeName(ScriptStore store) {
+    /** 下一个空着的 {@code module_N}。 */
+    private static String freeName(Modules modules) {
         for (int n = 1; ; n++) {
-            String name = "script-" + n;
-            if (store.get(name) == null && BuiltinScripts.get(name) == null) {
+            String name = "module_" + n;
+            if (modules.get(name) == null) {
                 return name;
             }
         }
     }
 
-    private static String missing(String name, ScriptStore store) {
-        List<String> names = new ArrayList<>(BuiltinScripts.all().keySet());
-        names.addAll(store.saved().keySet());
-        return "there is no script named " + name + (names.isEmpty() ? "; none are saved yet"
+    private static String missing(String name, Modules modules) {
+        List<String> names = new ArrayList<>(modules.all().keySet());
+        return "there is no module named " + name + (names.isEmpty() ? "; there are none"
                 : "; there are: " + String.join(", ", names)) + ".";
     }
 }

@@ -31,6 +31,9 @@ public interface ScriptRun {
      */
     void close();
 
+    /** 到此刻为止用到了(装上了)哪些模块,按先后:记战绩用。 */
+    List<String> modules();
+
     /** 运行走到的下一步。 */
     sealed interface Step permits Call, Done {}
 

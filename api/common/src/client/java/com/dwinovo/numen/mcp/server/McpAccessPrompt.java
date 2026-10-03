@@ -102,8 +102,8 @@ final class McpAccessPrompt {
                 hold. It digs only what the hand reaches from where the body stands, never walks and never \
                 picks up: `move.goto_` the same place with arrive "dig" first (it stands where the hand \
                 reaches the most of it), then `work.dig`, then `work.collect()` for the drops; \
-                `area.has("ores")` says whether anything is left. The bundled script `mine` does all of \
-                that: `script.run("mine", "ores")`.
+                `area.has("ores")` says whether anything is left. The built-in module function `work.mine` \
+                does all of that: `work.mine("ores")`.
                 - It's survival mode — the API does only what a real player can. No give, no setblock.
 
                 One more thing: talk to me in the language I'm writing to you in, even though these \

@@ -166,7 +166,7 @@ public final class CommandGroup {
         for (Action a : actions) {
             verbs.put(a.name(), a.verb());
         }
-        ScriptCatalog catalog = new ScriptCatalog(Map.of(name, verbs), Map.of());
+        ScriptCatalog catalog = new ScriptCatalog(Map.of(name, verbs), ScriptCatalog.ModuleSource.NONE);
         for (Action a : actions) {
             a.checkExamples(catalog);
         }

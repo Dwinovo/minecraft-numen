@@ -26,8 +26,9 @@ import java.util.regex.Pattern;
  * 脚本语言是 Lua 5.2,跑在 {@code numen-lua} 的沙箱里({@link LuaSandbox}):沙箱的类型只在这个类里出现。
  *
  * <h2>API 函数怎么接</h2>
- * 每个动作是一个宿主函数 {@code 组.动作}(名字撞上 Lua 的保留字或沙箱自带的全局时加后缀 {@code _},{@link #functionName})。内置库
- * 每次运行开跑之前先跑,它们定义的函数(多半就在组的表里,{@code move.goto_})照常调宿主函数。脚本跑在它自己的虚拟线程上;调一个
+ * 每个动作是一个宿主函数 {@code 组.动作}(名字撞上 Lua 的保留字或沙箱自带的全局时加后缀 {@code _},{@link #functionName})。模块
+ * 按名字直接用,第一次用到才装(和组同名的给那一组加函数,{@code move.goto_}),它们的函数照常调宿主函数;没有 {@code require}。
+ * 脚本跑在它自己的虚拟线程上;调一个
  * API 函数,那个线程把这次调用交给驱动方({@link ScriptRun#start}/{@link ScriptRun#resume} 的返回值),然后停在那儿等结局。驱动方
  * (大脑的派发器)把它派出去、等身体收尾,再把结局交回来,脚本从调用处接着跑。驱动方只在脚本两次调用之间等它算完(指令预算管着,
  * 几十毫秒以内),等身体干活的时候它不等,谁都不阻塞。
@@ -60,6 +61,35 @@ public final class LuaEngine implements ScriptEngine {
 
     /** 抛同一种错误值的全局函数:{@code raise("failed", "why", "what to do next")}。 */
     static final String RAISE = "raise";
+    /** 没有 require:模块按名字直接用。写了它就在那一行说怎么用。 */
+    static final String REQUIRE = "require";
+
+    private static Object require(List<Object> in) {
+        throw new LuaSandbox.ScriptError(ScriptRun.failure(ErrorKind.NO_FUNCTION.wire(), "there is no require in "
+                + "these programs", "modules are used by name: `lumber.chop(...)`", REQUIRE, null));
+    }
+
+    /** 读了一个既不是全局、也不是模块的名字:多半是模块名写错了,说有哪些。 */
+    static LuaSandbox.ScriptError unknown(String name, List<String> modules) {
+        return new LuaSandbox.ScriptError(ScriptRun.failure(ErrorKind.NO_FUNCTION.wire(), "there is no module named "
+                + name + " (nor a global or local of that name); the modules are: " + String.join(", ", modules),
+                "script.list() lists the modules with what each does", null, null));
+    }
+
+    /** 模块来源接到沙箱上。 */
+    private static LuaSandbox.ModuleSource source(ScriptCatalog.ModuleSource modules) {
+        return new LuaSandbox.ModuleSource() {
+            @Override
+            public String code(String name) {
+                return modules.code(name);
+            }
+
+            @Override
+            public List<String> names() {
+                return modules.names();
+            }
+        };
+    }
 
     /**
      * 一个错误值写成文字:{@code work.dig: out_of_reach — 那句话},下一行 {@code hint: …}。{@code tostring(err)} 与没接住时整段回执里的
@@ -114,9 +144,10 @@ public final class LuaEngine implements ScriptEngine {
                 + "says what kind "
                 + "(bad_argument, not_found, out_of_reach, no_path, denied, ...), `err.hint` is a line to run next; "
                 + "`raise(kind, message, hint)` raises your own. To read a value, `print(x)` (a table prints as a Lua "
-                + "table) or `return x`; the receipt shows one line per call and what you printed or returned. `...` "
-                + "holds the arguments of a script run by name. `api.help(\"work\")` lists a group's typed "
-                + "signatures, `api.help(\"work.dig\")` explains one.";
+                + "table) or `return x`; the receipt shows one line per call and what you printed or returned. A module "
+                + "is used by its name like a group, with no require: `work.collect()`, `lumber.chop(t)`. "
+                + "`api.help(\"work\")` lists a group's or a module's typed signatures, `api.help(\"work.dig\")` "
+                + "explains one.";
     }
 
     @Override
@@ -201,12 +232,31 @@ public final class LuaEngine implements ScriptEngine {
         return null;
     }
 
-    /** 库里顶层的函数定义:{@code function work.collect(radius)}、{@code function sweep(a, b)}。 */
+    /** 模块里顶层的函数定义:{@code function M.collect(radius)}——它返回的那张表里的一个函数。 */
     private static final Pattern DEFINITION = Pattern.compile(
-            "^function\\s+([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?)\\s*\\(([^)]*)\\)");
+            "^function\\s+[A-Za-z_][A-Za-z0-9_]*\\.([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)");
+
+    /** 模块名的写法:小写字母打头,小写字母、数字、下划线,最长 48。 */
+    private static final Pattern MODULE_NAME = Pattern.compile("[a-z][a-z0-9_]{0,47}");
+
+    /** 引擎自己登记的全局函数:模块名不能占。 */
+    private static final java.util.Set<String> ENGINE_GLOBALS = java.util.Set.of(RAISE, REQUIRE);
 
     @Override
-    public List<Defined> functions(String code) {
+    public String moduleName(String name) {
+        if (name == null || !MODULE_NAME.matcher(name).matches()) {
+            return "a module name is lowercase letters, digits and _, starting with a letter, at most 48 long (a "
+                    + "program writes it as it is: lumber.chop()); got \"" + name + "\"";
+        }
+        if (LuaSandbox.KEYWORDS.contains(name) || LuaSandbox.STANDARD_GLOBALS.contains(name)
+                || ENGINE_GLOBALS.contains(name)) {
+            return name + " is a name Lua or the API already uses; pick another";
+        }
+        return null;
+    }
+
+    @Override
+    public List<Defined> functions(String module, String code) {
         List<Defined> out = new ArrayList<>();
         List<String> doc = new ArrayList<>();
         for (String raw : code.split("\n", -1)) {
@@ -223,7 +273,7 @@ public final class LuaEngine implements ScriptEngine {
                         params.add(p.strip());
                     }
                 }
-                out.add(new Defined(m.group(1), params, doc));
+                out.add(new Defined(module + "." + m.group(1), params, doc));
             }
             doc.clear();
         }
@@ -482,37 +532,65 @@ public final class LuaEngine implements ScriptEngine {
             throw new IllegalArgumentException(unreadable);
         }
         List<ScriptRun.Call> seen = new ArrayList<>();
+        LuaSandbox.Builder sandbox = reader(catalog, seen, LuaEngine::redefined);
+        for (String module : catalog.modules().names()) {
+            for (Defined defined : functions(module, catalog.modules().code(module))) {
+                String fn = defined.name().substring(module.length() + 1);
+                sandbox.function(module, fn, in -> {
+                    seen.add(call(module, fn, in, null));
+                    return null;
+                });
+            }
+        }
+        LuaSandbox.Outcome outcome = read(sandbox, name, code);
+        return new Reading(List.copyOf(seen), outcome.finished() ? null : outcome.message());
+    }
+
+    @Override
+    public String checkModule(String name, String code, ScriptCatalog catalog) {
+        String unreadable = check(name, code);
+        if (unreadable != null) {
+            return unreadable;
+        }
+        // 和运行时同一套装法装它一次:返回的是不是一张表、给第 ① 层的名字赋没赋值,都由沙箱那一处说
+        LuaSandbox.Builder sandbox = reader(catalog, new ArrayList<>(), LuaEngine::redefined)
+                .modules(source(new ScriptCatalog.ModuleSource() {
+                    @Override
+                    public String code(String module) {
+                        return module.equals(name) ? code : null;
+                    }
+
+                    @Override
+                    public List<String> names() {
+                        return List.of(name);
+                    }
+                }))
+                .preload(name);
+        LuaSandbox.Outcome outcome = read(sandbox, "check", "");
+        return outcome.finished() ? null : outcome.message();
+    }
+
+    /** 只读不跑用的沙箱:每个 API 函数只记下这次调用、返回它声明的样子。 */
+    private LuaSandbox.Builder reader(ScriptCatalog catalog, List<ScriptRun.Call> seen,
+                                      LuaSandbox.Redefined redefined) {
         LuaSandbox.Builder sandbox = LuaSandbox.builder(LIMITS).missing(LuaEngine::missing).errors(LuaEngine::render)
-                .redefined(LuaEngine::redefined).function(RAISE, LuaEngine::raise);
+                .redefined(redefined).unknown(LuaEngine::unknown).function(RAISE, LuaEngine::raise)
+                .function(REQUIRE, LuaEngine::require);
         catalog.groups().forEach((group, verbs) -> verbs.forEach((verb, declared) ->
                 sandbox.function(functionName(group), functionName(verb), in -> {
                     seen.add(call(group, verb, in, declared));
                     return declared.sample();
                 })));
-        for (String library : catalog.libraries().values()) {
-            for (Defined defined : functions(library)) {
-                int dot = defined.name().indexOf('.');
-                String table = dot < 0 ? "" : defined.name().substring(0, dot);
-                String fn = defined.name().substring(dot + 1);
-                LuaSandbox.HostFunction record = in -> {
-                    seen.add(call(table, fn, in, null));
-                    return null;
-                };
-                if (table.isEmpty()) {
-                    sandbox.function(fn, record);
-                } else {
-                    sandbox.function(table, fn, record);
-                }
-            }
-        }
-        LuaSandbox.Outcome outcome;
+        return sandbox;
+    }
+
+    private static LuaSandbox.Outcome read(LuaSandbox.Builder sandbox, String name, String code) {
         try {
-            outcome = sandbox.build().start(name, code, List.of(), o -> { }).await();
+            return sandbox.build().start(name, code, List.of(), o -> { }).await();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("interrupted while reading " + name, e);
         }
-        return new Reading(List.copyOf(seen), outcome.finished() ? null : outcome.message());
     }
 
     /**
@@ -539,9 +617,8 @@ public final class LuaEngine implements ScriptEngine {
     }
 
     @Override
-    public ScriptRun start(String name, String code, List<String> args, ScriptCatalog catalog,
-                           Consumer<String> printer) {
-        return new Run(name, code, args, catalog, printer);
+    public ScriptRun start(String name, String code, ScriptCatalog catalog, Consumer<String> printer) {
+        return new Run(name, code, catalog, printer);
     }
 
     // ---- 一次运行 ----
@@ -560,7 +637,6 @@ public final class LuaEngine implements ScriptEngine {
 
         private final String name;
         private final String code;
-        private final List<String> args;
         private final ScriptCatalog catalog;
         private final Consumer<String> printer;
         private final LinkedBlockingQueue<Event> events = new LinkedBlockingQueue<>();
@@ -569,10 +645,9 @@ public final class LuaEngine implements ScriptEngine {
         /** 交出去、还没交回结局的那一条。 */
         private Call pending;
 
-        Run(String name, String code, List<String> args, ScriptCatalog catalog, Consumer<String> printer) {
+        Run(String name, String code, ScriptCatalog catalog, Consumer<String> printer) {
             this.name = name;
             this.code = code;
-            this.args = List.copyOf(args);
             this.catalog = catalog;
             this.printer = printer;
         }
@@ -580,12 +655,12 @@ public final class LuaEngine implements ScriptEngine {
         @Override
         public Step start() {
             LuaSandbox.Builder sandbox = LuaSandbox.builder(LIMITS).print(printer).missing(LuaEngine::missing)
-                    .redefined(LuaEngine::redefined).errors(LuaEngine::render).show(LuaEngine::literal)
-                    .function(RAISE, LuaEngine::raise);
+                    .redefined(LuaEngine::redefined).unknown(LuaEngine::unknown).errors(LuaEngine::render)
+                    .show(LuaEngine::literal).function(RAISE, LuaEngine::raise).function(REQUIRE, LuaEngine::require)
+                    .modules(source(catalog.modules()));
             catalog.groups().forEach((group, verbs) -> verbs.keySet().forEach(verb ->
                     sandbox.function(functionName(group), functionName(verb), in -> ask(group, verb, in))));
-            catalog.libraries().forEach(sandbox::library);
-            running = sandbox.build().start(name, code, args, outcome -> events.add(new Ended(outcome)));
+            running = sandbox.build().start(name, code, List.of(), outcome -> events.add(new Ended(outcome)));
             return next();
         }
 
@@ -618,6 +693,11 @@ public final class LuaEngine implements ScriptEngine {
             if (running != null) {
                 running.interrupt();
             }
+        }
+
+        @Override
+        public List<String> modules() {
+            return running == null ? List.of() : running.modules();
         }
 
         private Step answer(Answer answer) {

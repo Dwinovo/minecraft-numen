@@ -1,4 +1,5 @@
--- Picking up: walk onto the dropped items lying around, the way a player picks things up by walking over them.
+-- Picking up and digging out: walk onto the dropped items lying around, dig out a whole area.
+local M = {}
 
 ---Pick up the dropped items around you, nearest first, walking onto each with move.goto_. A fresh drop cannot be
 ---picked up for a few ticks (its pickup_delay): standing on it, it walks onto it again until it is taken. An item
@@ -7,7 +8,7 @@
 ---left (a full pack, or a spot you cannot stand in) raises failed; any other error of a walk stops here as it is.
 ---@param opts? table radius = how far to look (default 8); the rest are route flags for the walks (alter = "natural" lets it dig and pillar to drops in a pit).
 ---@return integer picked How many items it walked onto that are gone now.
-function work.collect(opts)
+function M.collect(opts)
   local walk = {}
   for k, v in pairs(opts or {}) do
     walk[k] = v
@@ -59,3 +60,20 @@ function work.collect(opts)
     end
   end
 end
+
+---Dig out an area: walk within reach of what is left of it (move.goto_ with arrive "dig" and alter "natural"), dig
+---what is in reach (work.dig), pick up the drops (work.collect with alter "natural"), until nothing of it is left. A
+---step that fails raises its error as it is.
+---@param where string An area of your owner's from area.list(), or one part of it ("ores/g3").
+---@return integer dug How many cells it dug.
+function M.mine(where)
+  local dug = 0
+  while area.has(where) do
+    move.goto_(where, {arrive = "dig", alter = "natural"})
+    dug = dug + work.dig(where).dug
+    M.collect({alter = "natural"})
+  end
+  return dug
+end
+
+return M

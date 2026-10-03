@@ -42,10 +42,13 @@ import java.util.regex.Pattern;
  * 不住(不是 Lua 错误,{@code pcall} 包着死循环也停),结局说哪一条、停在哪一行。{@link Running#interrupt} 随时喊停:在下一条
  * 指令或正在阻塞的宿主函数处停下。
  *
- * <h2>库</h2>
- * 宿主可以登记几段库({@link Builder#library}):每段脚本开跑之前,它们按登记顺序在同一个全局环境里先跑一遍,定义的函数脚本里直接
- * 能调(库可以往宿主函数的表里加函数,{@code function move.goto_(...) ... end})。行号只记脚本自己那一段:库里的函数调宿主函数时,
- * {@link #currentLine} 说的是脚本里调这个库函数的那一行,结局停在的也是脚本里的那一行。
+ * <h2>模块</h2>
+ * 宿主可以给一个模块来源({@link Builder#modules}):模块是一段返回一张函数表的正文,脚本里以模块名作全局名直接用
+ * ({@code lumber.chop(…)}),第一次用到时才向来源要正文、在同一个全局环境里跑一遍,所以每次运行拿到的都是来源此刻的那一份。和宿主
+ * 函数表同名的模块不另占名字,它的函数加进那张表({@code move.goto_} 就是这样进 {@code move} 的)。没用到的模块不读;一个模块读不通、
+ * 跑出错、没返回表,出错的是用到它的那一行。给了模块来源,读一个既不是全局、也不是模块的名字就是错(写错的模块名当场说有哪些)。
+ * 行号只记脚本自己那一段:模块里的函数调宿主函数时,{@link #currentLine} 说的是脚本里调这个模块函数的那一行,结局停在的也是脚本里的
+ * 那一行。
  *
  * <h2>宿主登记的名字钉死</h2>
  * 宿主登记的全局函数、函数表,以及表里的每个宿主函数,脚本都换不掉、遮不住:{@code move = {}}、{@code function move.go() end}、
@@ -189,8 +192,12 @@ public final class LuaSandbox {
     private final Consumer<String> print;
     private final Map<String, HostFunction> globals;
     private final Map<String, Map<String, HostFunction>> tables;
-    /** 库:块名 → 正文,按登记顺序。 */
-    private final Map<String, String> libraries;
+    /** 模块从哪来;没给是 null(读不认得的全局名照 Lua 的老样子是 nil)。 */
+    private final ModuleSource modules;
+    /** 开跑之前先装的模块,按顺序。 */
+    private final List<String> preload;
+    /** 读一个既不是全局也不是模块的名字时报的那句话。 */
+    private final Unknown unknown;
     /** 脚本读宿主函数表里没有的名字时报的那句话。 */
     private final Missing missing;
     /** 脚本给宿主登记的名字赋值时报的那句话。 */
@@ -213,6 +220,28 @@ public final class LuaSandbox {
         ScriptError error(String table, String key, List<String> present);
     }
 
+    /** 模块从哪来。两个方法都可能在脚本的线程上被调。 */
+    public interface ModuleSource {
+
+        /** 叫这个名字的模块的正文;没有是 null。用到时才问,所以拿到的是此刻的那一份。 */
+        String code(String name);
+
+        /** 有哪些模块,按名字排(写错名字时列给脚本看)。 */
+        List<String> names();
+    }
+
+    /** 脚本读一个既不是全局、也不是模块的名字:报什么错。 */
+    @FunctionalInterface
+    public interface Unknown {
+
+        /**
+         * @param name    读的名字
+         * @param modules 有哪些模块
+         * @return 停在那一行的错误:一句话,或一张错误值的表
+         */
+        ScriptError error(String name, List<String> modules);
+    }
+
     /** 脚本给宿主登记的名字赋值({@code function move.go() end}、{@code move = {}}):报什么错。 */
     @FunctionalInterface
     public interface Redefined {
@@ -229,7 +258,9 @@ public final class LuaSandbox {
         this.limits = b.limits;
         this.print = b.print;
         this.globals = Map.copyOf(b.globals);
-        this.libraries = Collections.unmodifiableMap(new LinkedHashMap<>(b.libraries));
+        this.modules = b.modules;
+        this.preload = List.copyOf(b.preload);
+        this.unknown = b.unknown;
         this.missing = b.missing;
         this.redefined = b.redefined;
         this.errors = b.errors;
@@ -249,7 +280,9 @@ public final class LuaSandbox {
         private Consumer<String> print = line -> { };
         private final Map<String, HostFunction> globals = new LinkedHashMap<>();
         private final Map<String, Map<String, HostFunction>> tables = new LinkedHashMap<>();
-        private final Map<String, String> libraries = new LinkedHashMap<>();
+        private ModuleSource modules;
+        private final List<String> preload = new ArrayList<>();
+        private Unknown unknown = (name, present) -> new ScriptError("there is no module named " + name);
         private Missing missing = (table, key, present) -> new ScriptError("there is no function " + table + "." + key);
         private Redefined redefined = (table, key) -> new ScriptError((table == null ? "" : table + ".") + key
                 + " is a host function and cannot be replaced");
@@ -315,14 +348,21 @@ public final class LuaSandbox {
             return this;
         }
 
-        /**
-         * 登记一段库:每段脚本开跑之前先跑它,按登记顺序。它的报错开头是 {@code chunkName}。库在宿主函数之后装,可以往宿主函数的
-         * 表里加函数。
-         */
-        public Builder library(String chunkName, String code) {
-            if (libraries.put(chunkName, code) != null) {
-                throw new IllegalArgumentException("库 " + chunkName + " 登记了两次");
-            }
+        /** 模块从这里来:脚本第一次用到一个名字时问它(见类注释"模块")。 */
+        public Builder modules(ModuleSource modules) {
+            this.modules = modules;
+            return this;
+        }
+
+        /** 开跑之前先装这个模块(不等用到):装不成,这段脚本就以那个错结束。 */
+        public Builder preload(String module) {
+            this.preload.add(module);
+            return this;
+        }
+
+        /** 读一个既不是全局也不是模块的名字时报的错:按它给的那句话停在那一行。 */
+        public Builder unknown(Unknown unknown) {
+            this.unknown = unknown;
             return this;
         }
 
@@ -389,6 +429,9 @@ public final class LuaSandbox {
 
         /** 等它结束,返回结局。 */
         Outcome await() throws InterruptedException;
+
+        /** 到此刻为止装上了的模块,按装上的先后。 */
+        List<String> modules();
     }
 
     // ---- 一次运行 ----
@@ -420,8 +463,13 @@ public final class LuaSandbox {
         private long stringBytes;
         /** 脚本自己那一段里最近执行的那条指令在哪一行(库里的指令不算)。 */
         int line;
-        /** 脚本自己那一段的块名,{@link Prototype#source} 的写法:库里的指令据此不记行号。 */
+        /** 脚本自己那一段的块名,{@link Prototype#source} 的写法:模块里的指令据此不记行号。 */
         private LuaValue mainSource;
+        /** 装上了的模块,按先后。 */
+        private final List<String> loaded = new java.util.concurrent.CopyOnWriteArrayList<>();
+        /** 正在装的模块:装的时候又用到自己是一个环。 */
+        private final java.util.Set<String> loading = new java.util.HashSet<>();
+        private Globals g;
 
         Run(String chunkName, String code, List<String> args, Consumer<Outcome> done) {
             this.chunkName = chunkName;
@@ -448,14 +496,9 @@ public final class LuaSandbox {
 
         private Outcome execute() {
             LuaValue main;
-            Globals g;
-            List<LuaValue> libs = new ArrayList<>();
             try {
                 g = standardGlobals();
                 install(g);
-                for (Map.Entry<String, String> lib : libraries.entrySet()) {
-                    libs.add(g.load(lib.getValue(), "=" + lib.getKey()));
-                }
                 main = g.load(code, "=" + chunkName);
             } catch (LuaError e) {
                 return new Outcome(Ending.UNREADABLE, lineOf(e.getMessage()), e.getMessage(), null);
@@ -470,8 +513,8 @@ public final class LuaSandbox {
             }
             g.rawset("arg", arg);
             try {
-                for (LuaValue lib : libs) {
-                    lib.call();
+                for (String module : preload) {
+                    loadModule(LuaValue.valueOf(module));
                 }
                 Varargs returned = main.invoke(LuaValue.varargsOf(values));
                 return new Outcome(Ending.FINISHED, 0, null, returned(returned.arg1()));
@@ -560,11 +603,20 @@ public final class LuaSandbox {
                     t.rawset(fnName, host(fn));
                     t.fix(LuaValue.valueOf(fnName), member);
                 });
-                // 读表里没有的名字:当场报那句话,不让它成 nil 再在调用处报"调了一个 nil"
+                // 读表里没有的名字:同名的模块还没装就先装上再找;还是没有就当场报那句话,不让它成 nil 再在调用处报
+                // "调了一个 nil"
                 LuaTable meta = new LuaTable();
+                LuaValue groupName = LuaValue.valueOf(group);
                 meta.rawset("__index", new VarArgFunction() {
                     @Override
                     public Varargs invoke(Varargs in) {
+                        if (modules != null && !loaded.contains(group) && modules.code(group) != null) {
+                            loadModule(groupName);
+                            LuaValue found = t.rawget(in.arg(2));
+                            if (!found.isnil()) {
+                                return found;
+                            }
+                        }
                         List<String> present = new ArrayList<>();
                         LuaValue k = LuaValue.NIL;
                         while (true) {
@@ -581,6 +633,62 @@ public final class LuaSandbox {
                 g.rawset(group, t);
                 g.fix(LuaValue.valueOf(group), global);
             });
+            if (modules != null) {
+                // 读一个不在全局里的名字:是模块就装上它;否则写错了,当场说有哪些模块
+                LuaTable meta = new LuaTable();
+                meta.rawset("__index", new VarArgFunction() {
+                    @Override
+                    public Varargs invoke(Varargs in) {
+                        LuaValue name = in.arg(2);
+                        if (name.isstring() && modules.code(name.tojstring()) != null) {
+                            loadModule(name);
+                            return g.rawget(name);
+                        }
+                        throw luaError(unknown.error(name.tojstring(), modules.names()));
+                    }
+                });
+                g.setmetatable(meta);
+            }
+        }
+
+        /**
+         * 装上一个模块:向来源要此刻的正文,在这个全局环境里跑一遍,它返回的表就是这个模块。和宿主函数表同名的,表里的函数加进那张表
+         * (宿主的名字定死,撞了就是 {@link Builder#redefined} 那个错);否则这张表占下模块名这个全局。读不通、跑出错、没返回表都在用到它
+         * 的那一行报错,没装上的下次用到再装。
+         */
+        private void loadModule(LuaValue name) {
+            String module = name.tojstring();
+            if (!loading.add(module)) {
+                throw new LuaError("module " + module + " uses itself while it is loading");
+            }
+            try {
+                String code = modules.code(module);
+                if (code == null) {
+                    throw luaError(unknown.error(module, modules.names()));
+                }
+                LuaValue chunk;
+                try {
+                    chunk = g.load(code, "=" + module);
+                } catch (LuaError unreadable) {
+                    throw new LuaError("module " + module + " does not compile: " + unreadable.getMessage());
+                }
+                LuaValue returned = chunk.call();
+                if (!returned.istable()) {
+                    throw new LuaError("module " + module + " returned " + returned.typename() + ", not a table of its "
+                            + "functions; end it with: return M");
+                }
+                LuaValue group = tables.containsKey(module) ? g.rawget(name) : LuaValue.NIL;
+                if (group.istable()) {
+                    for (Varargs kv = returned.next(LuaValue.NIL); !kv.arg1().isnil(); kv = returned.next(kv.arg1())) {
+                        group.rawset(kv.arg1(), kv.arg(2));
+                    }
+                } else {
+                    g.rawset(name, returned);
+                }
+                loaded.add(module);
+            } finally {
+                loading.remove(module);
+            }
         }
 
         /** 宿主给的错误换成脚本里的 Lua 错误:一句话照原样,一张表带上错误元表。 */
@@ -669,6 +777,11 @@ public final class LuaSandbox {
         public Outcome await() throws InterruptedException {
             finished.await();
             return outcome;
+        }
+
+        @Override
+        public List<String> modules() {
+            return List.copyOf(loaded);
         }
     }
 

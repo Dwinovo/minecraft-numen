@@ -229,13 +229,8 @@ public final class NumenPlugins {
         }
 
         @Override
-        public void bundleScripts(Path scriptsRoot) {
-            com.dwinovo.numen.script.BuiltinScripts.bundle(scriptsRoot, false);
-        }
-
-        @Override
-        public void bundleLibrary(Path libraryRoot) {
-            com.dwinovo.numen.script.BuiltinScripts.bundle(libraryRoot, true);
+        public void bundleModules(Path modulesRoot) {
+            com.dwinovo.numen.script.BuiltinModules.bundle(modulesRoot);
         }
 
         @Override

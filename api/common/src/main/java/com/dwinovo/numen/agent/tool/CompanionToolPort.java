@@ -12,9 +12,9 @@ import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.CompanionEvent;
 import com.dwinovo.numen.cli.ScriptTool;
 import com.dwinovo.numen.cli.NumenCli;
-import com.dwinovo.numen.network.payload.ScriptTallyPayload;
 import com.dwinovo.numen.entity.CompanionEvents;
 import com.dwinovo.numen.event.NumenEvents;
+import com.dwinovo.numen.script.Modules;
 import com.dwinovo.numen.task.TaskDispatch;
 import com.dwinovo.numen.task.TaskResult;
 
@@ -128,7 +128,7 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
 
     @Override
     public ScriptCatalog catalog() {
-        return NumenCli.scriptCatalog();
+        return NumenCli.scriptCatalog(Modules.of(companion));
     }
 
     @Override
@@ -137,8 +137,8 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
     }
 
     @Override
-    public void tally(String script, ScriptCall.Tally tally) {
-        ScriptTallyPayload.send(companion, script, tally);
+    public void tally(String module, ScriptCall.Tally tally) {
+        Modules.of(companion).tally(module, tally.ok(), tally.line(), tally.error(), now());
     }
 
     @Override

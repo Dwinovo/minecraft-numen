@@ -36,7 +36,7 @@ public class NumenCoreNeoForge {
         // core 的自带技能和联动的一样经插件那扇门交出去,原地读 jar 里的 skills/ 目录。技能喂的是主人客户端上的
         // 大脑,门在客户端接上时才声明(NumenPlugins.bindClient);专用服务器上没人接,它就一直攒着。
         declareBundledSkills();
-        declareBundledScripts();
+        declareBundledModules();
 
         Constants.LOG.info("numen-core initialised on NeoForge.");
     }
@@ -51,22 +51,15 @@ public class NumenCoreNeoForge {
     }
 
     /**
-     * core 的内置脚本与库同样经插件那扇门交出去,原地读 jar 里的 scripts/ 与 library/ 目录。两侧都要(大脑跑它们,服务端存取与
-     * 列它们),所以直接登记,不等客户端。
+     * core 的内置 Lua 模块同样经插件那扇门交出去,原地读 jar 里的 modules/ 目录。跑程序的大脑在哪一侧都要它们(主人客户端;评测与
+     * GameTest 在服务端),所以直接登记,不等客户端。
      */
-    private static void declareBundledScripts() {
-        Path root = ModJar.find("scripts");
+    private static void declareBundledModules() {
+        Path root = ModJar.find("modules");
         if (root == null) {
-            throw new IllegalStateException("[numen-core] no bundled scripts/ dir found in jar");
+            throw new IllegalStateException("[numen-core] no bundled modules/ dir found in jar");
         }
-        Path library = ModJar.find("library");
-        if (library == null) {
-            throw new IllegalStateException("[numen-core] no bundled library/ dir found in jar");
-        }
-        com.dwinovo.numen.api.NumenPlugins.register(numen -> {
-            numen.bundleLibrary(library);
-            numen.bundleScripts(root);
-        });
+        com.dwinovo.numen.api.NumenPlugins.register(numen -> numen.bundleModules(root));
     }
 
     private static void onServerTickPost(ServerTickEvent.Post event) {

@@ -146,7 +146,7 @@ class LuaFrontendTest {
 
     @Test
     void theCatalogHasEveryActionAndWhatItReturns() {
-        ScriptCatalog catalog = NumenCli.scriptCatalog();
+        ScriptCatalog catalog = NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.builtin());
         assertNull(catalog.verb("gt_script", "take").returns());
         assertEquals("has", catalog.verb("gt_script", "has").returns());
         assertEquals(false, catalog.verb("gt_script", "has").sample(), "只读不跑时它返回的样子照声明的类型造");
@@ -196,7 +196,7 @@ class LuaFrontendTest {
         assertTrue(renamed.contains("function gt_script.goto_(name) end"), renamed);
         CliFixture.Outcome nope = lua("return api.help(\"gt_script.nope\")");
         assertFalse(nope.success());
-        assertTrue(nope.message().contains("api.help: not_found — there is no function or group named gt_script.nope"),
+        assertTrue(nope.message().contains("api.help: not_found — there is no function, group or module named gt_script.nope"),
                 nope.message());
     }
 }

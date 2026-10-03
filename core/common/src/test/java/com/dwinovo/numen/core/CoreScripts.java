@@ -117,7 +117,7 @@ public final class CoreScripts {
 
         @Override
         public ScriptCatalog catalog() {
-            return NumenCli.scriptCatalog();
+            return NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.builtin());
         }
 
         @Override

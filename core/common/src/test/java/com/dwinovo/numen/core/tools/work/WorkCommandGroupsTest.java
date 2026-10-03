@@ -112,9 +112,9 @@ class WorkCommandGroupsTest {
         assertTrue(moveHelp.contains("\n---@field goto_ fun(place: Pos|Block|Entity|string, opts?: table): "
                 + "{pos: Pos, route: string, distance_left: number} Walk to a place: route.new, route.plan and move.go "
                 + "on your own route goto-<your name>.\n"), "库函数的说明是它注释的第一句: " + moveHelp);
-        CoreScripts.Run mine = CoreScripts.run(HER, "work.mine(\"ores\")");
-        assertTrue(!mine.ok() && mine.message().contains("there is no API function work.mine"),
-                "work mine 删了,没有别名: " + mine.message());
+        String workHelp = help("work");
+        assertTrue(functions(workHelp, "work").contains("mine") && workHelp.contains("\n---@field mine fun(where: "
+                + "string): integer Dig out an area"), "挖一块区域是内置模块 work 里的 Lua 函数,不是动作: " + workHelp);
     }
 
     /**
@@ -135,7 +135,7 @@ class WorkCommandGroupsTest {
                 "build.drop(\"house/4\")", "build.at(\"house\", {at = {x = 100, y = 64, z = -20}})", "build.left(\"house\")",
                 "memory.remember(\"main base -340,68,120\")", "todo.write({\"[>] dig\"})")) {
             var reading = com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.calls("t", code,
-                    com.dwinovo.numen.cli.NumenCli.scriptCatalog());
+                    com.dwinovo.numen.cli.NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.builtin()));
             assertNull(reading.error(), code + ": " + reading.error());
             assertEquals(1, reading.calls().size(), code);
             com.dwinovo.numen.cli.NumenCli.invocation(reading.calls().get(0));
@@ -143,7 +143,7 @@ class WorkCommandGroupsTest {
         for (String wrong : List.of("fight.attack({entity_ids = {27, 26}})", "fight.attack(27, 26)",
                 "use.block(\"right\", {x = 120, y = 64, z = -35})", "inv.drop(\"cobblestone\", 32)")) {
             var reading = com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.calls("t", wrong,
-                    com.dwinovo.numen.cli.NumenCli.scriptCatalog());
+                    com.dwinovo.numen.cli.NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.builtin()));
             org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                     () -> com.dwinovo.numen.cli.NumenCli.invocation(reading.calls().get(0)), "旧写法不再收: " + wrong);
         }

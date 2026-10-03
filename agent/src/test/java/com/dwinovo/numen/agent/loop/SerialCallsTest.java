@@ -97,8 +97,8 @@ class SerialCallsTest {
         }
 
         @Override
-        public void tally(String script, ScriptCall.Tally tally) {
-            tallies.add(script + " " + (tally.ok() ? "ok" : "line " + tally.line()));
+        public void tally(String module, ScriptCall.Tally tally) {
+            tallies.add(module + " " + (tally.ok() ? "ok" : "line " + tally.line()));
         }
 
         @Override
@@ -110,8 +110,19 @@ class SerialCallsTest {
     private static final ScriptCatalog CATALOG = new ScriptCatalog(java.util.Map.of(
             "work", java.util.Map.of("dig", new ScriptCatalog.Verb(null), "collect", new ScriptCatalog.Verb(null)),
             "move", java.util.Map.of("go", new ScriptCatalog.Verb(null)),
-            "area", java.util.Map.of("has", new ScriptCatalog.Verb("has")),
-            "script", java.util.Map.of("run", new ScriptCatalog.Verb("returned"))), java.util.Map.of());
+            "area", java.util.Map.of("has", new ScriptCatalog.Verb("has"))), new ScriptCatalog.ModuleSource() {
+                /** 一个模块:挖一处、交回 3。 */
+                @Override
+                public String code(String name) {
+                    return "pit".equals(name) ? "local M = {}\nfunction M.out(a)\n  work.dig(a)\n  return 3\nend\n"
+                            + "return M" : null;
+                }
+
+                @Override
+                public List<String> names() {
+                    return List.of("pit");
+                }
+            });
 
     private final FakePort port = new FakePort((call, done) -> {
         dispatched.add(call.id());
@@ -462,37 +473,30 @@ class SerialCallsTest {
     }
 
     @Test
-    void aScriptCanRunANamedOneInsideAndItsEndIsThatCallsResult() {
+    void aModulesCallsGoOutOneByOneAndTheModuleRecordsTheProgramThatUsedIt() {
         scripts.run(List.of(lua("s", """
-                local ok, err = pcall(script.run, "mine", "ores")
-                print(ok, err)
+                local n = pit.out("ores")
+                return n + 1
                 """)), sink);
-        answerLast("{\"success\":true,\"data\":{\"run\":{\"script\":\"mine\",\"code\":\"work.dig(...)\","
-                + "\"args\":[\"ores\"]}}}");
-        answerLast("{\"success\":false,\"message\":\"out of reach\"}");
-
-        String msg = json(results.get("s")).get("message").getAsString();
-        assertEquals(List.of("script.run mine ores", "work.dig ores"), lines);
-        assertTrue(msg.contains("mine line 1 work.dig: failed — out of reach"), msg);
-        assertTrue(msg.contains("line 1 script.run: failed — work.dig: failed — out of reach"), msg);
-        assertTrue(msg.contains("printed:\nfalse\tscript.run: failed — work.dig: failed — out of reach"), msg);
-        assertTrue(msg.startsWith("The script ran to the end"), "父脚本接住了里面那一份的失败: " + msg);
-        assertEquals(List.of("mine line 1"), linePort.tallies);
+        assertEquals(List.of("work.dig ores"), lines);
+        answerLast("{\"success\":true,\"message\":\"dug\"}");
+        com.google.gson.JsonObject receipt = json(results.get("s"));
+        assertTrue(receipt.get("success").getAsBoolean(), receipt.toString());
+        assertEquals(4, receipt.getAsJsonObject("data").get("returned").getAsInt());
+        assertTrue(receipt.get("message").getAsString().contains("line 1 work.dig: ok — dug"), receipt.toString());
+        assertEquals(List.of("pit ok"), linePort.tallies);
     }
 
     @Test
-    void aNamedScriptHandsItsReturnValueBackToTheCall() {
+    void aProgramStoppedInsideAModuleRecordsWhereItStoppedForThatModule() {
         scripts.run(List.of(lua("s", """
-                local left = script.run("count", "ores")
-                return left.n + 1
+                local x = 1
+                pit.out("ores")
                 """)), sink);
-        answerLast("{\"success\":true,\"data\":{\"run\":{\"script\":\"count\",\"code\":"
-                + "\"return {n = 41}\",\"args\":[]}}}");
-        com.google.gson.JsonObject receipt = json(results.get("s"));
-        assertTrue(receipt.get("success").getAsBoolean(), receipt.toString());
-        assertEquals(42, receipt.getAsJsonObject("data").get("returned").getAsInt());
-        assertTrue(receipt.get("message").getAsString().contains("line 1 script.run: ok — count ran to the end"),
-                receipt.toString());
+        answerLast("{\"success\":false,\"message\":\"out of reach\"}");
+        String msg = json(results.get("s")).get("message").getAsString();
+        assertTrue(msg.startsWith("The script stopped at line 2"), msg);
+        assertEquals(List.of("pit line 2"), linePort.tallies);
     }
 
     @Test
@@ -528,5 +532,19 @@ class SerialCallsTest {
         assertEquals(1, lines.size());
         String msg = json(results.get("s")).get("message").getAsString();
         assertTrue(msg.contains("stopped at line 2 (work.dig)") && msg.contains("minutes per run"), msg);
+    }
+
+    /** 中文的字面量原样进回执:print 的、error 的一句话,错误值里的 message 也是。 */
+    @Test
+    void chineseWordsComeThroughTheReceiptWhole() {
+        scripts.run(List.of(lua("s", """
+                print("砍了 3 棵")
+                error("手边没有合成台", 0)
+                """)), sink);
+        com.google.gson.JsonObject receipt = json(results.get("s"));
+        String msg = receipt.get("message").getAsString();
+        assertTrue(msg.contains("手边没有合成台") && msg.contains("printed:\n砍了 3 棵"), msg);
+        assertEquals("手边没有合成台", receipt.getAsJsonObject("data").getAsJsonObject("error").get("message")
+                .getAsString());
     }
 }

@@ -585,6 +585,13 @@ public final class GameTestKit {
     private static final List<Round> LIVE = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     static {
+        // 她的 Lua 模块落在这一次 GameTest 运行专用的空目录里:只用内置原版,不读主人目录里的
+        try {
+            java.nio.file.Path modules = java.nio.file.Files.createTempDirectory("numen-gametest-lua-");
+            com.dwinovo.numen.script.Modules.init(uuid -> modules);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
                 (net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) -> {
                     for (Round round : LIVE) {
@@ -633,8 +640,7 @@ public final class GameTestKit {
     /**
      * 一段程序在服务端怎么执行:脚本里的每次 API 调用读成动作({@link NumenCli#invocation}),服务端动作交 {@link NumenCli#serve}
      * (没有主人客户端,不经网络),客户端动作经 {@link NumenCli#call} 当场执行;受理回执与收尾怎么认,问的都是产品里同样那几处;
-     * 跑完的脚本直接记战绩(产品里经 {@code ScriptTallyPayload} 送到服务端的同一个入口)。每次调用的回执与它派下的活记进
-     * {@code run}。
+     * 程序用到的模块记战绩,和产品里同一处({@code Modules})。每次调用的回执与它派下的活记进 {@code run}。
      */
     private record ServerPort(NumenPlayer body, ToolRun run) implements SerialCalls.Port {
 
@@ -678,7 +684,7 @@ public final class GameTestKit {
 
         @Override
         public com.dwinovo.numen.agent.script.ScriptCatalog catalog() {
-            return NumenCli.scriptCatalog();
+            return NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.of(body.getUUID()));
         }
 
         @Override
@@ -687,8 +693,9 @@ public final class GameTestKit {
         }
 
         @Override
-        public void tally(String script, com.dwinovo.numen.agent.script.ScriptCall.Tally tally) {
-            com.dwinovo.numen.script.Scripts.tally(body, script, tally.ok(), tally.line(), tally.error());
+        public void tally(String module, com.dwinovo.numen.agent.script.ScriptCall.Tally tally) {
+            com.dwinovo.numen.script.Modules.of(body.getUUID()).tally(module, tally.ok(), tally.line(), tally.error(),
+                    now());
         }
 
         @Override

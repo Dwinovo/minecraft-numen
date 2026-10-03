@@ -6,7 +6,7 @@ import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.platform.Services;
 
 /**
- * 系统提示:只放会话内稳定的那几层——人设、操作核心、技能表、命令索引、内置脚本索引、本能名册、札记的规矩、场面的规矩、说话规则——
+ * 系统提示:只放会话内稳定的那几层——人设、操作核心、技能表、API 索引(含模块)、本能名册、札记的规矩、场面的规矩、说话规则——
  * 好让它成为字节级稳定的缓存前缀。会变的东西不在这里:背包、效果、当前任务挂在每一轮的
  * {@link RuntimeState} 里,她一写就变的札记索引随注入的 user 消息进历史。
  *
@@ -18,8 +18,9 @@ public final class SystemPromptComposer {
 
     /**
      * @param personaText 这只同伴绑定的人设正文;没绑或条目没了为 {@code null}(退到全局配置,再退到内置默认人设)
+     * @param modules     她能用的模块(主人那一份):进 API 索引
      */
-    public static String compose(String personaText) {
+    public static String compose(String personaText, com.dwinovo.numen.script.Modules modules) {
         // 人设层:同伴绑的人设 → 全局配置的人设 → 内置默认人设。空着的槽会让她退回通用助手的腔调,
         // 所以最后一档是一个具体的性格,不是"自由发挥"。
         String base = (personaText != null && !personaText.isBlank())
@@ -38,17 +39,11 @@ public final class SystemPromptComposer {
         if (!skillsXml.isEmpty()) {
             sb.append("\n\n").append(skillsXml);
         }
-        // 命令索引:装了哪些命令组,一组一句,她不必先 help 就知道去哪找。只随组的增减变、按名字排好,
-        // 和技能表一样是稳定前缀的一部分;各组的动作与语法只在帮助里。
-        String commands = com.dwinovo.numen.cli.NumenCli.index();
+        // API 索引:装了哪些组,一组一句,再是模块(内置的在前,她的在后),她不必先 help 就知道去哪找。只随组与模块的增减变、
+        // 按名字排好,是稳定前缀的一部分(她存一个模块,前缀变一次);各组的动作与语法只在帮助里。
+        String commands = com.dwinovo.numen.cli.NumenCli.index(modules);
         if (!commands.isEmpty()) {
             sb.append("\n\n").append(commands);
-        }
-        // 内置脚本索引:一份一句,和技能表同一种写法;只随登记变,是稳定前缀的一部分。同伴们存的那些随存删变,挂在她身上的
-        // 状态里(Scripts.savedIndex),不在这里。
-        String scripts = com.dwinovo.numen.script.Scripts.builtinIndex();
-        if (!scripts.isEmpty()) {
-            sb.append("\n\n").append(scripts);
         }
         // 本能名册:她得知道身体会自己做哪些事,不然既可能重复去做,也可能对"我怎么突然挪了二十格"
         // 毫无头绪。名册是纯注册表内容、两端都注册,所以这里本地就算得出来,不需要任何网络。

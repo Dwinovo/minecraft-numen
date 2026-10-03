@@ -80,28 +80,18 @@ public interface NumenApi {
     void bundleSkills(Path skillsRoot);
 
     /**
-     * 把一个目录里的脚本交给引擎:每个 {@code <名字><扩展名>} 是一份随模组发布的脚本(扩展名随脚本语言,眼下是 {@code .lua}),她用 {@code script run <名字>} 跑、
-     * {@code script show <名字>} 读,只读。正文开头一行注释说它做什么,系统提示里的脚本索引就写
-     * 这一句;读不通、没写说明、名字撞了当场抛出,和命令登记同一种把关。
+     * 把一个目录里的 Lua 模块交给引擎:每个 {@code <名字><扩展名>} 是一个随模组发布的模块,用脚本语言写成(扩展名随语言,眼下是
+     * {@code .lua})。模块返回一张函数表({@code local M = {} … function M.harvest(field) … end … return M}),她的程序以模块名直接用
+     * ({@code mymod.harvest("wheat")},第一次用到才装);和你的命令组同名的模块给那一组加函数,把几个原子动作组合成一件事。系统提示
+     * 的 API 索引列出每个模块与它的函数,说明是开头那行注释与每个函数上面的几行注释;{@code script.show(<名字>)} 读全文。模块留在你的
+     * jar 里,她存一份同名的就盖住它,删掉她那份就回到你的。
      *
-     * <p>通常传你自己 jar 里的 {@code scripts/}。两侧都登记(跑脚本在大脑那一侧,存取在服务端),所以<b>在
-     * {@code NumenPlugins.register} 的块里直接调</b>,别放进 {@link #onClient}。
+     * <p>登记那一刻把关:名字合模块名的规矩、读得通、开头一行注释说它做什么、每个函数上面都写了注释;装出来是一张表、不换掉任何命令组
+     * 的动作(登记处第一次被用时查)。两侧都登记,所以<b>在 {@code NumenPlugins.register} 的块里直接调</b>,别放进 {@link #onClient}。
      *
-     * @throws IllegalArgumentException 名字不合规矩、已有同名的、正文读不通或开头没写说明
+     * @throws IllegalArgumentException 名字不合规矩、已有同名的、正文读不通、开头没写说明、一个函数都没有或有函数没写注释
      */
-    void bundleScripts(Path scriptsRoot);
-
-    /**
-     * 把一个目录里的库交给引擎:每个 {@code <名字><扩展名>} 是一份随模组发布的库,用脚本语言写成。每段脚本开跑之前它们先跑,定义的
-     * 函数脚本里直接能调——多半写进自己那一组的表里({@code function mymod.harvest(field) ... end}),把几个原子动作组合成一件事。
-     * 系统提示的 API 索引列出每个库函数,说明就是紧挨在定义上面的那几行注释;{@code script.show(<名字>)} 读全文,她能照着写。
-     *
-     * <p>登记那一刻把关,同 {@link #bundleScripts}:名字合规矩、读得通、开头一行注释说它做什么,而且每个顶层函数上面都写了注释;
-     * 库函数不能和动作撞名(登记处第一次被用时查)。两侧都登记,所以<b>在 {@code NumenPlugins.register} 的块里直接调</b>。
-     *
-     * @throws IllegalArgumentException 名字不合规矩、已有同名的、正文读不通、开头没写说明或有函数没写注释
-     */
-    void bundleLibrary(Path libraryRoot);
+    void bundleModules(Path modulesRoot);
 
     /**
      * 跑一段<b>只在客户端才有意义</b>的代码。专用服务器上整块不执行。

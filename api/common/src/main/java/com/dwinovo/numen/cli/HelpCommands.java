@@ -3,6 +3,7 @@ package com.dwinovo.numen.cli;
 import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.agent.script.ScriptEngine;
 import com.dwinovo.numen.agent.script.ScriptType;
+import com.dwinovo.numen.script.Modules;
 import com.dwinovo.numen.task.TaskResult;
 
 /**
@@ -14,17 +15,18 @@ public final class HelpCommands {
     static final String GROUP = "api";
 
     private static final Param<String> NAME = Param.required("name", ArgType.word(),
-            "A function, as the <api> index writes it (work.dig, move.goto_), or a group (work).");
+            "A function, as the <api> index writes it (work.dig, move.goto_), a group (work) or a module.");
 
     private HelpCommands() {}
 
     /** 引擎自己登记这一组:帮助是 API 的一部分,谁登记了动作都指望它在。 */
     public static void install() {
-        NumenCli.register(GROUP, "The API itself: the typed signatures of a group's functions, or one function in "
-                + "full.", api ->
+        NumenCli.register(GROUP, "The API itself: the typed signatures of a group's or a module's functions, or one "
+                + "function in full.", api ->
                 api.client("help", "The help of a function (its signature, every argument, what it returns, examples, "
-                                + "notes) or of a group (one typed line per function), as text.",
-                        (src, args) -> src.reply(help(args.get(NAME))), NAME)
+                                + "notes) or of a group or module (one typed line per function), as text.",
+                        (src, args) -> src.reply(help(args.get(NAME),
+                                Modules.of(src.companion()))), NAME)
                         .returns(TEXT, ScriptType.STRING)
                         .example("print(" + call("work.dig") + ")")
                         .example("print(" + call("move") + ")")
@@ -40,10 +42,10 @@ public final class HelpCommands {
     }
 
     /** 一个函数或一组的帮助,全文;回执那句话是它的第一行。 */
-    private static String help(String name) {
-        String text = NumenCli.help(name);
+    private static String help(String name, Modules modules) {
+        String text = NumenCli.help(name, modules);
         if (text == null) {
-            return TaskResult.fail(ErrorKind.NOT_FOUND, "there is no function or group named " + name,
+            return TaskResult.fail(ErrorKind.NOT_FOUND, "there is no function, group or module named " + name,
                     "the <api> index lists every group; " + call("move") + " lists one.").toJson();
         }
         return TaskResult.ok(text.lines().findFirst().orElse(""), java.util.Map.of(TEXT, text)).toJson();

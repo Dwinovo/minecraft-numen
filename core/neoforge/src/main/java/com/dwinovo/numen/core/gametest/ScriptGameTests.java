@@ -25,8 +25,9 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
 /**
  * 程序从入口跑:模型一次回复里的一段程序,经内脑派发的同一个顺序({@link GameTestKit#round})逐个派 API 调用——占身体的等它收尾
- * 再往下走;成功直接返回值、失败抛错,程序按它分支;主人停止或开口时停在调用之间,回执如实写停在哪一行。脚本这个名词:存、读、
- * 列、删、按名字带参数跑,战绩记在主人名下;内置的 mine 挖空一块埋在石头里的矿;计划写进回执,对话流据此画清单。
+ * 再往下走;成功直接返回值、失败抛错,程序按它分支;主人停止或开口时停在调用之间,回执如实写停在哪一行。模块:按名字直接用,
+ * 存、读、列、删,同名的盖住内置的、删掉回到内置,改了文件下一次就用新的,坏了只影响用它的程序,战绩记在主人那一份里;内置的
+ * work.mine 挖空一块埋在石头里的矿;计划写进回执,对话流据此画清单。
  */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
@@ -210,11 +211,12 @@ public class ScriptGameTests {
     }
 
     /**
-     * 内置的 mine:四颗铁矿埋在一块石头里,扫进区域后一行 {@code script.run("mine", "ores")} 挖空它——走到够得着、挖、捡,直到区域
-     * 里一格不剩;铁都进了包,回执说跑完了,战绩记一次跑完。它里面没有一处接住错误往下走:哪一步失败,整段就停在那一步。
+     * 内置的 work.mine:四颗铁矿埋在一块石头里,扫进区域后一行 {@code work.mine("ores")} 挖空它——走到够得着、挖、捡,直到区域
+     * 里一格不剩;铁都进了包,返回挖了几格,work 这个模块记一次用到它的程序跑完。它里面没有一处接住错误往下走:哪一步失败,整段就
+     * 停在那一步。
      */
     @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_scripts")
-    public static void the_mine_script_digs_out_ore_buried_in_stone(GameTestHelper helper) {
+    public static void work_mine_digs_out_ore_buried_in_stone(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int x = 6; x <= 12; x++) {
             for (int z = 6; z <= 12; z++) {
@@ -229,7 +231,7 @@ public class ScriptGameTests {
         NumenPlayer her = spawnAt(helper, "gametest_lua_mine", new BlockPos(9, 7, 9), false);
         her.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
         ToolRun scanned = scanInto(her, 8, "minecraft:iron_ore", "ores");
-        LlmToolCall run = programCall("script.run(\"mine\", \"ores\")");
+        LlmToolCall run = programCall("return work.mine(\"ores\")");
         Round[] round = new Round[1];
 
         steps(helper)
@@ -239,10 +241,11 @@ public class ScriptGameTests {
                     round[0] = round(helper, her, run);
                 })
                 .thenWaitUntil(() -> {
-                    helper.assertTrue(round[0].hasSettled(), "mine has not finished");
+                    helper.assertTrue(round[0].hasSettled(), "work.mine has not finished");
                     String msg = message(round[0], run);
                     helper.assertTrue(msg.startsWith("The script ran to the end"), msg);
-                    helper.assertTrue(msg.contains("line 1 script.run: ok — mine ran to the end"), msg);
+                    helper.assertTrue(receipt(round[0], run).getAsJsonObject("data").get("returned").getAsInt()
+                            >= ores.size(), "work.mine did not return the cells it dug: " + msg);
                     for (BlockPos ore : ores) {
                         helper.assertTrue(!level.getBlockState(ore).is(Blocks.IRON_ORE),
                                 "ore left at " + ore + ": " + msg);
@@ -250,93 +253,126 @@ public class ScriptGameTests {
                     helper.assertTrue(her.getInventory().countItem(Items.RAW_IRON) == ores.size(),
                             "she carries " + her.getInventory().countItem(Items.RAW_IRON) + " raw iron of "
                                     + ores.size() + ": " + msg);
-                    helper.assertTrue(lua(her, "script.list()").reply().contains("Runs: 1, ran to the end: 1"),
-                            "the run was not counted");
                 })
                 .thenExecute(() -> CompanionFactory.despawn(level.getServer(), her))
                 .thenSucceed();
     }
 
     /**
-     * 内置的 mine 读得到、照抄得了:{@code script.show("mine")} 给出全文,里面没有 pcall——哪一步失败就如实停下;她照抄一份另起
-     * 名字存下,读回来是同一段正文。
+     * 内置模块读得到、盖得住、还得回去:{@code script.show("work")} 给出全文;她照抄一份、加一个函数,存成同名的 work——程序里
+     * {@code work.gt_marker()} 用的就是她的,原有的 {@code work.collect} 照样在;清单标出"用她的、不用内置的",
+     * {@code {builtin = true}} 还看得到内置原文;删掉她那份就回到内置,她加的函数没了。
      */
     @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_scripts")
-    public static void a_built_in_script_reads_and_copies_as_her_own(GameTestHelper helper) {
+    public static void a_built_in_module_is_overridden_and_given_back(GameTestHelper helper) {
         NumenPlayer her = spawnAt(helper, "gametest_lua_copier", new BlockPos(2, 2, 2), false);
-        ToolRun shown = lua(her, "return script.show(\"mine\")");
-        String receipt = shown.receipt();
-        helper.assertTrue(receipt != null && receipt.contains("while area.has(where) do")
-                        && !receipt.contains("pcall"),
-                "the built-in mine does not read as itself: " + receipt);
-        ToolRun copied = lua(her, """
-                local mine = script.show("mine")
-                script.save(mine.code, {name = "gt-mine-copy"})
-                return script.show("gt-mine-copy").code
+        ToolRun shown = lua(her, "return script.show(\"work\")");
+        helper.assertTrue(shown.receipt() != null && shown.receipt().contains("function M.mine(where)"),
+                "the built-in work does not read as itself: " + shown.receipt());
+        ToolRun overridden = lua(her, """
+                local work_code = script.show("work").code
+                local mine = string.gsub(work_code, "\\nreturn M%s*$", "\\nfunction M.gt_marker() return 7 end\\nreturn M\\n")
+                script.save(mine, {name = "work"})
+                return work.gt_marker()
                 """);
-        helper.assertTrue(copied.ranToTheEnd() && copied.receipt().contains("while area.has(where) do"),
-                "the copy did not save or read back: " + copied.receipt());
-        helper.assertTrue(lua(her, "script.delete(\"gt-mine-copy\")").succeeded(), "the copy was not deleted");
+        helper.assertTrue(overridden.ranToTheEnd() && overridden.receipt().contains("returned: 7"),
+                "her work was not used: " + overridden.receipt());
+        helper.assertTrue(lua(her, "return type(work.collect)").receipt().contains("returned: function"),
+                "the copy lost work.collect");
+        String listed = lua(her, "script.list()").reply();
+        helper.assertTrue(listed.contains("[yours, used instead of the built-in one]"), listed);
+        helper.assertTrue(lua(her, "return script.show(\"work\", {builtin = true}).code").receipt()
+                        .contains("function M.mine(where)") && !lua(her, "return script.show(\"work\", {builtin = "
+                        + "true}).code").receipt().contains("gt_marker"), "the built-in text is gone");
+        ToolRun deleted = lua(her, "script.delete(\"work\")");
+        helper.assertTrue(deleted.succeeded() && deleted.reply().contains("the built-in work is used again"),
+                deleted.reply());
+        ToolRun gone = lua(her, "return work.gt_marker()");
+        helper.assertTrue(!gone.ranToTheEnd() && gone.receipt().contains("no_function"),
+                "her function outlived her copy: " + gone.receipt());
         CompanionFactory.despawn(helper.getLevel().getServer(), her);
         helper.succeed();
     }
 
     /**
-     * 她存一份自己的脚本、读它、带参数按名字跑两次,战绩累计;读不通的不收、说哪一行;内置的同名存不进、删不掉;她自己的删得掉。
+     * 她存一个自己的模块、读它、在两段程序里按名字用它,战绩累计;读不通的、改第 ① 层函数的不收、说哪一行;主人拿编辑器改了文件,
+     * 下一段程序就用新的;目录里一个坏模块只让用到它的程序出错;她自己的删得掉。模块目录是这次 GameTest 专用的,不是主人的。
      */
     @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_scripts")
-    public static void she_saves_reads_runs_and_deletes_her_own_script(GameTestHelper helper) {
+    public static void she_saves_uses_and_deletes_a_module_of_her_own(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer her = spawnAt(helper, "gametest_lua_saver", new BlockPos(2, 2, 2), true);
         BlockPos cell = helper.absolutePos(new BlockPos(4, 2, 2));
         level.setBlockAndUpdate(cell, Blocks.STONE.defaultBlockState());
         EventOutbox outbox = EventOutbox.get(level.getServer());
+        java.nio.file.Path dir = com.dwinovo.numen.script.Modules.of(her.getUUID()).dir();
+        helper.assertTrue(dir.getFileName().toString().startsWith("numen-gametest-lua-"),
+                "GameTest reads modules from " + dir + ", not from its own empty directory");
 
-        ToolRun broken = lua(her, "script.save(\"-- Never compiles.\\nlocal x = = 1\", {name = \"gt-broken\"})");
-        helper.assertTrue(!broken.succeeded() && broken.reply().contains("does not compile")
-                && broken.reply().contains("gt-broken:2:"), "a script that does not compile was kept: " + broken.reply());
-        ToolRun builtin = lua(her, "script.save(\"-- Mine nothing.\\nprint(1)\", {name = \"mine\"})");
-        helper.assertTrue(!builtin.succeeded() && builtin.reply().contains("read-only"),
-                "a built-in script was overwritten: " + builtin.reply());
-        helper.assertTrue(!lua(her, "script.delete(\"mine\")").succeeded(), "a built-in script was deleted");
+        ToolRun broken = lua(her, "script.save(\"-- Never compiles.\\nlocal x = = 1\", {name = \"gt_broken\"})");
+        helper.assertTrue(!broken.succeeded() && broken.reply().contains("gt_broken:2:"),
+                "a module that does not compile was kept: " + broken.reply());
+        ToolRun redefines = lua(her, "script.save(\"-- Takes build.set.\\nlocal M = {}\\nfunction build.set() end\\n"
+                + "return M\", {name = \"gt_thief\"})");
+        helper.assertTrue(!redefines.succeeded() && redefines.reply().contains("build.set is an API function"),
+                "a module that redefines an API function was kept: " + redefines.reply());
 
-        ToolRun saved = lua(her, "script.save(\"-- Clear the cell at x y z.\\nlocal x, y, z = ...\\n"
-                + "build.set({x = tonumber(x), y = tonumber(y), z = tonumber(z)}, {block = 'air'})\", "
-                + "{name = \"gt-clear\"})");
-        helper.assertTrue(saved.succeeded() && saved.reply().contains("Saved script gt-clear"), saved.reply());
-        ToolRun shown = lua(her, "script.show(\"gt-clear\")");
-        helper.assertTrue(shown.succeeded() && shown.reply().contains("saved by gametest_lua_saver")
-                && shown.reply().contains("build.set({x = tonumber(x)") && shown.reply().contains("Never run."),
+        ToolRun saved = lua(her, "script.save(\"-- Clearing cells.\\nlocal M = {}\\n---Clear one cell.\\n"
+                + "function M.cell(p)\\n  build.set(p, {block = 'air'})\\nend\\nreturn M\", {name = \"gt_clear\"})");
+        helper.assertTrue(saved.succeeded() && saved.reply().contains("Saved module gt_clear"), saved.reply());
+        ToolRun shown = lua(her, "script.show(\"gt_clear\")");
+        helper.assertTrue(shown.succeeded() && shown.reply().contains("(yours)")
+                && shown.reply().contains("function M.cell(p)") && shown.reply().contains("No program used it yet."),
                 shown.reply());
 
-        String args = "\"" + cell.getX() + "\", \"" + cell.getY() + "\", \"" + cell.getZ() + "\"";
-        LlmToolCall run = programCall("script.run(\"gt-clear\", " + args + ")");
+        String at = com.dwinovo.numen.cli.Shapes.literal(cell);
+        LlmToolCall run = programCall("gt_clear.cell(" + at + ")");
         Round first = round(helper, her, run);
 
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(first.hasSettled(), "the first run has not finished"))
+                .thenWaitUntil(() -> helper.assertTrue(first.hasSettled(), "the first program has not finished"))
                 .thenExecute(() -> {
                     String msg = message(first, run);
-                    helper.assertTrue(msg.contains("line 1 script.run: ok — gt-clear ran to the end"), msg);
-                    helper.assertTrue(level.getBlockState(cell).isAir(), "the script did not clear the cell");
+                    helper.assertTrue(msg.startsWith("The script ran to the end") && msg.contains("build.set: ok"),
+                            msg);
+                    helper.assertTrue(level.getBlockState(cell).isAir(), "the module did not clear the cell");
                     level.setBlockAndUpdate(cell, Blocks.STONE.defaultBlockState());
                     // 第一次的收尾事件已经读过;下一轮从空出箱读起,和主人客户端上取走即清一样
                     outbox.forget(her.getUUID());
                 })
-                .thenExecute(() -> round(helper, her, programCall("script.run(\"gt-clear\", " + args + ")")))
+                .thenExecute(() -> round(helper, her, programCall("gt_clear.cell(" + at + ")")))
                 .thenWaitUntil(() -> helper.assertTrue(level.getBlockState(cell).isAir(),
-                        "the second run did not clear the cell"))
+                        "the second program did not clear the cell"))
                 .thenWaitUntil(() -> {
                     String listed = lua(her, "script.list()").reply();
-                    helper.assertTrue(listed.contains("gt-clear — Clear the cell at x y z. [saved by gametest_lua_saver]"
-                            + " Runs: 2, ran to the end: 2"), "the record does not add up: " + listed);
-                    helper.assertTrue(listed.contains("mine — ") && listed.contains("[built in]"), listed);
+                    helper.assertTrue(listed.contains("gt_clear — Clearing cells. [yours] Programs that used it: 2, "
+                            + "ran to the end: 2"), "the record does not add up: " + listed);
+                    helper.assertTrue(listed.contains("work — ") && listed.contains("[built in]"), listed);
                 })
                 .thenExecute(() -> {
-                    ToolRun deleted = lua(her, "script.delete(\"gt-clear\")");
+                    // 主人拿编辑器改了文件:不重启,下一段程序就用新的
+                    try {
+                        java.nio.file.Files.writeString(dir.resolve("gt_clear.lua"),
+                                "-- Clearing cells.\nlocal M = {}\n---Say which version this is.\n"
+                                        + "function M.version() return 2 end\nreturn M\n");
+                        java.nio.file.Files.writeString(dir.resolve("gt_rotten.lua"), "local M = {\n");
+                    } catch (java.io.IOException e) {
+                        throw new java.io.UncheckedIOException(e);
+                    }
+                    ToolRun edited = lua(her, "return gt_clear.version()");
+                    helper.assertTrue(edited.ranToTheEnd() && edited.receipt().contains("returned: 2"),
+                            "the edited file was not used: " + edited.receipt());
+                    ToolRun untouched = lua(her, "return gt_clear.version() + 1");
+                    helper.assertTrue(untouched.ranToTheEnd(), "a broken module nobody uses broke a program: "
+                            + untouched.receipt());
+                    ToolRun rotten = lua(her, "return gt_rotten.x");
+                    helper.assertTrue(!rotten.ranToTheEnd() && rotten.receipt().contains("module gt_rotten does not "
+                            + "compile"), rotten.receipt());
+                    helper.assertTrue(lua(her, "script.delete(\"gt_rotten\")").succeeded(), "the rotten one stays");
+                    ToolRun deleted = lua(her, "script.delete(\"gt_clear\")");
                     helper.assertTrue(deleted.succeeded(), deleted.reply());
-                    helper.assertTrue(!lua(her, "script.show(\"gt-clear\")").succeeded(),
-                            "the deleted script is still there");
+                    helper.assertTrue(!lua(her, "script.show(\"gt_clear\")").succeeded(),
+                            "the deleted module is still there");
                     outbox.forget(her.getUUID());
                     CompanionFactory.despawn(level.getServer(), her);
                 })

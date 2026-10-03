@@ -18,11 +18,16 @@ public final class CoreCommandsFixture {
         net.minecraft.SharedConstants.tryDetectVersion();
         net.minecraft.server.Bootstrap.bootStrap();
         NumenCore.init();
-        // 内置的库与脚本产品里由加载器从 jar 里的 library/、scripts/ 交出去,单测从类路径上同样的两个目录交
-        com.dwinovo.numen.api.NumenPlugins.register(numen -> {
-            numen.bundleLibrary(resource("library"));
-            numen.bundleScripts(resource("scripts"));
-        });
+        // 内置的 Lua 模块产品里由加载器从 jar 里的 modules/ 交出去,单测从类路径上同一个目录交
+        com.dwinovo.numen.api.NumenPlugins.register(numen -> numen.bundleModules(resource("modules")));
+        // 她的 Lua 模块落在这次测试专用的空目录里,和评测、GameTest 一样只有内置那一层
+        try {
+            java.nio.file.Path modules = java.nio.file.Files.createTempDirectory("numen-test-lua-");
+            modules.toFile().deleteOnExit();
+            com.dwinovo.numen.script.Modules.init(uuid -> modules);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
         // 引擎自己的工具与几组(跑脚本的工具、api、mc、todo)产品里在客户端初始化时登记,单测里同一个入口登记一次
         com.dwinovo.numen.CommonClass.registerTools();
         installed = true;

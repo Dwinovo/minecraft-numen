@@ -18,7 +18,6 @@ import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.EventOutbox;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.network.payload.CancelTasksPayload;
-import com.dwinovo.numen.network.payload.ScriptTallyPayload;
 import com.dwinovo.numen.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.network.payload.CurrentTaskPayload;
 import com.dwinovo.numen.network.payload.ExecuteActionPayload;
@@ -152,9 +151,11 @@ final class Attempt {
         her = CompanionFactory.spawn(server, UUID.randomUUID(), HER_NAME, owner.getUUID(), level,
                 standOn(scenario.start()));
         scene = new Scene(level, origin, her, owner);
-        // 札记与会话日志落在这次自己的临时目录里,收场整个删掉:每次都从白纸开始,评测也从不读它们
+        // 札记、会话日志与她的 Lua 模块落在这次自己的临时目录里,收场整个删掉:每次都从白纸开始,模块只用内置原版、不读主人目录
+        // 里的,评测也从不读它们
         home = Files.createTempDirectory("numen-bench-");
         NoteBook.init(uuid -> home.resolve("memory"), () -> (int) (level.getDayTime() / 24000L));
+        com.dwinovo.numen.script.Modules.init(uuid -> home.resolve("lua"));
         scenario.setup(scene);
         mind = switch (variant) {
             case SOLUTION -> new Mind.Scripted(scenario.solution(scene), "做好了。");
@@ -168,7 +169,8 @@ final class Attempt {
         brain.subscribe(meter);
         brain.subscribe(this::onLoopEvent);
         ServerToolTransport.uplink = this::uplink;
-        promptHash = sha256(SystemPromptComposer.compose(NumenPrompts.DEFAULT_PERSONA)).substring(0, 12);
+        promptHash = sha256(SystemPromptComposer.compose(NumenPrompts.DEFAULT_PERSONA,
+                com.dwinovo.numen.script.Modules.of(her.getUUID()))).substring(0, 12);
     }
 
     /** 每个服务端 tick 一次。 */
@@ -368,8 +370,7 @@ final class Attempt {
             case ExecuteActionPayload p -> ExecuteActionPayload.handle(wire(ExecuteActionPayload.STREAM_CODEC, p),
                     owner);
             case CancelTasksPayload p -> CancelTasksPayload.handle(wire(CancelTasksPayload.STREAM_CODEC, p), owner);
-            case ScriptTallyPayload p -> ScriptTallyPayload.handle(wire(ScriptTallyPayload.STREAM_CODEC, p), owner);
-            default -> throw new IllegalStateException("评测的上行只有工具调用、叫停与脚本战绩,来了 "
+            default -> throw new IllegalStateException("评测的上行只有工具调用与叫停,来了 "
                     + payload.type().id());
         }
     }

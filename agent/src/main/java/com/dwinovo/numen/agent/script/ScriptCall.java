@@ -7,20 +7,14 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.List;
 
 /**
- * 一次调用里跑的一段脚本:她当场写的一段程序,或按名字跑的一份({@code script.run})。脚本每调一个 API 函数,这里把它换成一次
- * 动作调用({@link Invocation})交给派发的一方({@link Next.Dispatch}),那次调用的回执、要等的身体活的收尾再交回来,脚本从调用处
- * 接着跑;跑完、出错、到了上限或被打断时写成一张回执。派发、等待与打断的时机在 {@code SerialCalls},这里只管脚本走到哪、回执
- * 怎么写。
- *
- * <h2>脚本里再跑脚本</h2>
- * {@code script.run("mine", "ores")} 是一次普通的 API 调用:命令层按名字找到那份脚本,回执里带上它的正文({@link #toRun})。这里见到
- * 这样的回执就在原地开一层,跑完那一层,它的结局就是那次调用的结局。上限算整段调用的总数,打断时每一层都停。
+ * 一次调用里跑的一段程序:她这一轮写的那段 {@code code}。程序每调一个 API 函数,这里把它换成一次动作调用({@link Invocation})交给
+ * 派发的一方({@link Next.Dispatch}),那次调用的回执、要等的身体活的收尾再交回来,程序从调用处接着跑;跑完、出错、到了上限或被打断时
+ * 写成一张回执。派发、等待与打断的时机在 {@code SerialCalls},这里只管程序走到哪、回执怎么写。模块里的函数是程序的一部分,它们的
+ * API 调用照样一次一次地交出来;程序结束时,用到的每个模块记一次战绩。
  *
  * <h2>回执</h2>
  * 第一行一句话说结局(跑完、出错在哪一行与那个错误值的文字、停在哪一行为什么);之后每次 API 调用一行——在哪一行、哪个函数、
@@ -43,18 +37,18 @@ public final class ScriptCall {
          */
         Invocation invocation(ScriptRun.Call call);
 
-        /** 一份有名字的脚本跑完了一次(跑完、出错或被停下),记进它的战绩。 */
-        void tally(String script, Tally tally);
+        /** 一段用到了这个模块的程序结束了(跑完、出错或被停下),记进这个模块的战绩。 */
+        void tally(String module, Tally tally);
 
         /** 墙钟,毫秒。 */
         long now();
     }
 
     /**
-     * 一次运行的结局,记战绩用。
+     * 用到某个模块的一段程序的结局,记战绩用。
      *
-     * @param ok    跑到了最后
-     * @param line  没跑完时停在哪一行;跑完是 0
+     * @param ok    程序跑到了最后
+     * @param line  没跑完时停在程序的哪一行;跑完是 0
      * @param error 没跑完的原因;跑完是 null
      */
     public record Tally(boolean ok, int line, String error) {}
@@ -70,9 +64,6 @@ public final class ScriptCall {
      */
     public record Finish(String task, String status, String words, JsonObject result) {}
 
-    /** 要按名字跑的一份脚本:名字、正文、参数。 */
-    public record ToRun(String script, String code, List<String> args) {}
-
     /** 接下来该做什么。 */
     public sealed interface Next {
         /** 执行这次 API 调用,把回执交回 {@link #result}。 */
@@ -85,12 +76,7 @@ public final class ScriptCall {
         record Done(String receipt) implements Next {}
     }
 
-    /** 回执与 {@code script.run} 回执里的键:命令层按它们写({@code Scripts}),这里按它们读。 */
-    public static final String RUN = "run";
-    public static final String RUN_SCRIPT = "script";
-    public static final String RUN_CODE = "code";
-    public static final String RUN_ARGS = "args";
-    /** 回执数据里脚本 {@code return} 的那个值;按名字跑的脚本,它就是 {@code script.run} 那次调用直接返回的。 */
+    /** 回执数据里程序 {@code return} 的那个值。 */
     public static final String RETURNED = "returned";
     /**
      * 回执数据里留下参数的那几次调用(动作登记时声明了 {@code echoed}),按先后,每次 {@code {"function": …, "args": {…}}}:
@@ -103,51 +89,32 @@ public final class ScriptCall {
 
     private final Host host;
     private final long started;
-    /** 正在跑的各层,最里面的在栈顶。 */
-    private final Deque<Frame> frames = new ArrayDeque<>();
+    private final ScriptRun run;
     /** 每次 API 调用一行,按先后。 */
     private final List<String> log = new ArrayList<>();
     /** 留下参数的那几次成功的调用,见 {@link #ECHOED}。 */
     private final JsonArray echoed = new JsonArray();
     private final StringBuilder printed = new StringBuilder();
     private boolean printedCut;
-    /** 最外面那一层的名字:当场写的一段是 null。 */
-    private final String topName;
     private int calls;
     /** 交出去、还没有结局的那一次。 */
     private Pending pending;
 
-    private ScriptCall(Host host, String name, String code, List<String> args) {
+    private ScriptCall(Host host, String code) {
         this.host = host;
         this.started = host.now();
-        this.topName = name;
-        frames.push(new Frame(name, run(name, code, args)));
+        ScriptEngine engine = ScriptEngine.IN_USE;
+        this.run = engine.start(engine.toolName(), code, host.catalog(), this::print);
     }
 
-    /** 她当场写的一段。 */
+    /** 她这一轮写的一段。 */
     public static ScriptCall inline(String code, Host host) {
-        return new ScriptCall(host, null, code, List.of());
-    }
-
-    /**
-     * 一条回执是不是 {@code script.run} 交来的"去跑这一份":是就返回它,否则 null。命令层只负责按名字找到脚本、交出正文,
-     * 跑它的是派发这次调用的大脑。
-     */
-    public static ToRun toRun(String resultJson) {
-        JsonObject data = dataOf(resultJson);
-        if (ToolOutcome.failed(resultJson) || !(data.get(RUN) instanceof JsonObject run)) {
-            return null;
-        }
-        List<String> args = new ArrayList<>();
-        if (run.get(RUN_ARGS) instanceof JsonArray array) {
-            array.forEach(e -> args.add(e.getAsString()));
-        }
-        return new ToRun(run.get(RUN_SCRIPT).getAsString(), run.get(RUN_CODE).getAsString(), List.copyOf(args));
+        return new ScriptCall(host, code);
     }
 
     /** 开跑,走到第一次要执行的调用或结束。 */
     public Next begin() {
-        return advance(frames.peek().run.start());
+        return advance(run.start());
     }
 
     /**
@@ -161,12 +128,6 @@ public final class ScriptCall {
         }
         Pending p = pending;
         pending = null;
-        ToRun nested = toRun(resultJson);
-        if (nested != null) {
-            frames.push(new Frame(nested.script(), run(nested.script(), nested.code(), nested.args())));
-            frames.peek().calledFrom = p;
-            return advance(frames.peek().run.start());
-        }
         boolean ok = !ToolOutcome.failed(resultJson);
         String text = messageOf(resultJson);
         JsonObject parsed = objectOf(resultJson);
@@ -181,7 +142,7 @@ public final class ScriptCall {
                 echoed.add(echo);
             }
         }
-        return advance(p.frame.run.resume(new ScriptRun.Result(ok, text, dataOf(resultJson), kind,
+        return advance(run.resume(new ScriptRun.Result(ok, text, dataOf(resultJson), kind,
                 ok ? null : hintOf(parsed))));
     }
 
@@ -201,59 +162,43 @@ public final class ScriptCall {
         };
         log(p, kind, finish.task() + " " + finish.status() + (finish.words().isBlank() ? "" : ": " + finish.words()));
         JsonObject data = result.get("data") instanceof JsonObject d ? d : new JsonObject();
-        return advance(p.frame.run.resume(new ScriptRun.Result(ok, finish.words(), data, kind,
+        return advance(run.resume(new ScriptRun.Result(ok, finish.words(), data, kind,
                 ok ? null : hintOf(result))));
     }
 
     /**
-     * 停在调用之间:主人说话、来了急件、这一轮被切断。每一层有名字的脚本记一次没跑完;回执写明停在哪一行、为什么。
+     * 停在调用之间:主人说话、来了急件、这一轮被切断。用到的每个模块记一次没跑完;回执写明停在哪一行、为什么。
      *
      * @param why 为什么停,一句话(含那件还在跑的活怎样了)
      */
     public String stop(String why) {
-        for (Frame frame : frames) {
-            if (frame.name != null) {
-                host.tally(frame.name, new Tally(false, lineIn(frame), why));
-            }
-            frame.run.close();
-        }
+        tally(new Tally(false, pending == null ? 0 : pending.call.line(), why));
+        run.close();
         return stopped(why);
+    }
+
+    /** 这段程序用到的每个模块记一次。 */
+    private void tally(Tally tally) {
+        for (String module : run.modules()) {
+            host.tally(module, tally);
+        }
     }
 
     // ---- 往下走 ----
 
     private Next advance(ScriptRun.Step step) {
         while (true) {
-            Frame frame = frames.peek();
             if (step instanceof ScriptRun.Done done) {
-                if (frame.name != null) {
-                    host.tally(frame.name, done.ok() ? new Tally(true, 0, null)
-                            : new Tally(false, done.line(), done.error()));
-                }
-                frames.pop();
-                if (frames.isEmpty()) {
-                    return new Next.Done(finalReceipt(done));
-                }
-                Pending caller = frame.calledFrom;
-                String text = done.ok() ? frame.name + " ran to the end" : done.error();
-                String kind = done.ok() ? null : String.valueOf(done.failure().get(ScriptRun.KIND));
-                log(caller, kind, text);
-                JsonObject data = new JsonObject();
-                if (done.ok() && done.value() != null) {
-                    data.add(RETURNED, GSON.toJsonTree(done.value()));
-                }
-                Object hint = done.ok() ? null : done.failure().get(ScriptRun.HINT);
-                step = caller.frame.run.resume(new ScriptRun.Result(done.ok(), text, data, kind,
-                        hint == null ? null : hint.toString()));
-                continue;
+                tally(done.ok() ? new Tally(true, 0, null) : new Tally(false, done.line(), done.error()));
+                return new Next.Done(finalReceipt(done));
             }
             ScriptRun.Call call = (ScriptRun.Call) step;
             if (calls >= ScriptLimits.COMMANDS) {
-                pending = new Pending(frame, call);
+                pending = new Pending(call);
                 return new Next.Done(stop("it reached the limit of " + ScriptLimits.COMMANDS + " calls per run"));
             }
             if (host.now() - started > ScriptLimits.WALL_MILLIS) {
-                pending = new Pending(frame, call);
+                pending = new Pending(call);
                 return new Next.Done(stop("it ran past the limit of " + ScriptLimits.WALL_MILLIS / 60_000
                         + " minutes per run"));
             }
@@ -261,21 +206,16 @@ public final class ScriptCall {
             try {
                 invocation = host.invocation(call);
             } catch (ApiError wrong) {
-                log.add(where(frame, call.line()) + " " + call.function() + ": " + wrong.kind().wire() + " — "
+                log.add(where(call.line()) + " " + call.function() + ": " + wrong.kind().wire() + " — "
                         + firstLine(wrong.getMessage()));
-                step = frame.run.refuse(wrong);
+                step = run.refuse(wrong);
                 continue;
             }
             calls++;
-            pending = new Pending(frame, call);
+            pending = new Pending(call);
             pending.invocation = invocation;
             return new Next.Dispatch(invocation);
         }
-    }
-
-    private ScriptRun run(String name, String code, List<String> args) {
-        ScriptEngine engine = ScriptEngine.IN_USE;
-        return engine.start(name == null ? engine.toolName() : name, code, args, host.catalog(), this::print);
     }
 
     private void print(String line) {
@@ -295,7 +235,7 @@ public final class ScriptCall {
     /** 一次调用的那一行:{@code kind} 是失败的种类,成功是 null(写 {@code ok})。 */
     private void log(Pending p, String kind, String text) {
         String said = firstLine(text);
-        log.add(where(p.frame, p.call.line()) + " " + p.call.function() + ": " + (kind == null ? "ok" : kind)
+        log.add(where(p.call.line()) + " " + p.call.function() + ": " + (kind == null ? "ok" : kind)
                 + (said.isEmpty() ? "" : " — " + said));
     }
 
@@ -313,24 +253,11 @@ public final class ScriptCall {
 
     /** 停下的回执。 */
     private String stopped(String why) {
-        String at = pending == null ? "" : " at " + where(pending.frame, pending.call.line()) + " ("
+        String at = pending == null ? "" : " at " + where(pending.call.line()) + " ("
                 + pending.call.function() + ")";
         String head = name() + " stopped" + at + " after " + calls + " call" + (calls == 1 ? "" : "s")
                 + ": " + why + ". Nothing after that ran.";
         return receipt("stopped", head, null, null);
-    }
-
-    /** 这一层停在哪一行:手上那一次在它里面就是那一行,否则是它调起里面那一层的那一行。 */
-    private int lineIn(Frame frame) {
-        if (pending != null && pending.frame == frame) {
-            return pending.call.line();
-        }
-        for (Frame inner : frames) {
-            if (inner.calledFrom != null && inner.calledFrom.frame == frame) {
-                return inner.calledFrom.call.line();
-            }
-        }
-        return 0;
     }
 
     /** @param failure 出错时的错误值,进数据的 {@code error};别的是 null */
@@ -348,9 +275,6 @@ public final class ScriptCall {
             msg.append("\nprinted:\n").append(printed.toString().stripTrailing());
         }
         JsonObject data = new JsonObject();
-        if (topName != null) {
-            data.addProperty("script", topName);
-        }
         data.addProperty("status", status);
         data.addProperty("calls", calls);
         if (value != null) {
@@ -370,16 +294,16 @@ public final class ScriptCall {
     }
 
     private String name() {
-        return topName == null ? "The script" : "Script " + topName;
+        return "The script";
     }
 
     private long seconds() {
         return Math.round((host.now() - started) / 1000.0);
     }
 
-    /** 行的写法:最外面那一段是 {@code line 3},里面跑的一份带上名字 {@code mine line 3}。 */
-    private String where(Frame frame, int line) {
-        return (frame == frames.peekLast() ? "" : frame.name + " ") + "line " + line;
+    /** 行的写法:{@code line 3}(程序里的那一行;经模块函数调到的,是程序里调那个函数的那一行)。 */
+    private static String where(int line) {
+        return "line " + line;
     }
 
     private static String firstLine(String text) {
@@ -429,26 +353,12 @@ public final class ScriptCall {
 
     // ---- 小件 ----
 
-    private static final class Frame {
-        final String name;
-        final ScriptRun run;
-        /** 这一层是哪一次 {@code script.run} 调起的;最外面一层是 null。 */
-        Pending calledFrom;
-
-        Frame(String name, ScriptRun run) {
-            this.name = name;
-            this.run = run;
-        }
-    }
-
     private static final class Pending {
-        final Frame frame;
         final ScriptRun.Call call;
         /** 交出去的那个动作;停在调用之前(到了上限)的是 null。 */
         Invocation invocation;
 
-        Pending(Frame frame, ScriptRun.Call call) {
-            this.frame = frame;
+        Pending(ScriptRun.Call call) {
             this.call = call;
         }
     }

@@ -163,7 +163,7 @@ class ObjectArgTest {
         CliFixture.Outcome spread = CliFixture.lua("gt_obj.look(120, 64, -35)");
         assertTrue(spread.message().contains("takes 1 object(s), got 3"), spread.message());
 
-        CliFixture.Outcome nil = CliFixture.lua("gt_obj.look(nothing_here)");
+        CliFixture.Outcome nil = CliFixture.lua("gt_obj.look(nil)");
         assertTrue(nil.message().contains("argument 'cell' is missing (or nil)"), nil.message());
 
         CliFixture.Outcome id = CliFixture.lua("gt_obj.hit(\"27\")");

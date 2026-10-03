@@ -1,18 +1,41 @@
 package com.dwinovo.numen.agent.script;
 
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * 脚本里能调的:API 登记处的每个动作一个宿主函数 {@code 组.动词},加上内置库(用脚本语言写、随模组发布的函数)。目录由命令层现算交来
- * (见 api 的 {@code NumenCli.scriptCatalog}),这里不另记一份动作表——脚本调一个函数,背后就是那一个动作。
+ * 脚本里能调的:API 登记处的每个动作一个宿主函数 {@code 组.动词}(第 ① 层),加上模块(用脚本语言写的库,按名字直接用:
+ * {@code lumber.chop(…)};和组同名的模块给那一组加函数)。目录由命令层现算交来(见 api 的 {@code NumenCli.scriptCatalog}),这里不另记
+ * 一份动作表——脚本调一个函数,背后就是那一个动作。
  *
- * @param groups    组名 → 动词名 → 这个动词的函数怎么交回结果
- * @param libraries 库名 → 正文,按登记顺序;每次运行开跑之前先跑它们,它们定义的函数脚本里直接能调
+ * @param groups  组名 → 动词名 → 这个动词的函数怎么交回结果
+ * @param modules 模块从哪来:用到时才问,所以每次运行读到的是此刻的正文
  */
-public record ScriptCatalog(Map<String, Map<String, Verb>> groups, Map<String, String> libraries) {
+public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource modules) {
+
+    /** 模块从哪来。两个方法都可能在脚本的线程上被调。 */
+    public interface ModuleSource {
+
+        /** 叫这个名字的模块此刻的正文;没有是 null。 */
+        String code(String name);
+
+        /** 有哪些模块,按名字排。 */
+        java.util.List<String> names();
+
+        /** 一个模块都没有。 */
+        ModuleSource NONE = new ModuleSource() {
+            @Override
+            public String code(String name) {
+                return null;
+            }
+
+            @Override
+            public java.util.List<String> names() {
+                return java.util.List.of();
+            }
+        };
+    }
 
     /**
      * 一个动词的函数。
@@ -54,7 +77,6 @@ public record ScriptCatalog(Map<String, Map<String, Verb>> groups, Map<String, S
         TreeMap<String, Map<String, Verb>> copy = new TreeMap<>();
         groups.forEach((group, verbs) -> copy.put(group, Collections.unmodifiableMap(new TreeMap<>(verbs))));
         groups = Collections.unmodifiableMap(copy);
-        libraries = Collections.unmodifiableMap(new LinkedHashMap<>(libraries));
     }
 
     /** 这个动词;没有是 null。 */

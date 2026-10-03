@@ -1,4 +1,5 @@
 -- Building all of a design: walk the site, dig out what is in the way, place what is within reach.
+local M = {}
 
 ---Build a design or blueprint file at a spot until all of it went in. Each round asks build.left what is still to do
 ---from where you stand, then places what is within reach (build.at), or digs out the blocks in the way (move.goto_
@@ -10,7 +11,7 @@
 ---@param name string The design or blueprint file.
 ---@param opts? table at and rotation are build.at's (at defaults to where you stand); the rest are route flags for the walks (alter = "natural" lets it pillar up to high cells and dig its way).
 ---@return integer rounds How many rounds it took.
-function build.raise(name, opts)
+function M.raise(name, opts)
   local spot = {}
   local walk = {}
   for k, v in pairs(opts or {}) do
@@ -77,3 +78,5 @@ function build.raise(name, opts)
     end
   end
 end
+
+return M

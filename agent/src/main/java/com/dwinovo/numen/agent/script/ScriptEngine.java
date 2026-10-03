@@ -89,12 +89,18 @@ public interface ScriptEngine {
     String summary(String code);
 
     /**
-     * 一段库正文顶层定义的函数,按出现的顺序:函数名({@code work.collect} 或全局的 {@code sweep})、形参、紧挨在定义上面的那几行注释
-     * (原样,带注释号与类型注解)。
+     * 一个模块定义的函数,按出现的顺序:函数名写成用的人写的样子({@code lumber.chop}:模块名加它返回的那张表里的名字)、形参、紧挨在
+     * 定义上面的那几行注释(原样,带注释号与类型注解)。
      */
-    List<Defined> functions(String code);
+    List<Defined> functions(String module, String code);
 
-    /** 库里定义的一个函数。{@code doc} 是它上面的注释行,原样;没写是空表。 */
+    /**
+     * 一个名字能不能当模块名,规则只在这里:脚本里它就是一个全局名,所以要写得出来、不撞语言的关键字与自带的全局、不撞引擎自己的全局
+     * 函数。和第 ① 层的组同名可以(那是给这一组加函数)。能是 null,不能是那句话。
+     */
+    String moduleName(String name);
+
+    /** 模块里定义的一个函数。{@code doc} 是它上面的注释行,原样;没写是空表。 */
     record Defined(String name, List<String> params, List<String> doc) {
 
         public Defined {
@@ -103,17 +109,24 @@ public interface ScriptEngine {
         }
     }
 
-    /** 库函数的一句话说明:它上面那几行不是类型注解的注释连起来的第一句(到第一个句号);没写是空串。 */
+    /** 模块函数的一句话说明:它上面那几行不是类型注解的注释连起来的第一句(到第一个句号);没写是空串。 */
     String summaryOf(Defined fn);
 
     /**
-     * 只读一段正文调了哪些 API 函数,不执行:每个宿主函数与库函数都换成只记下调用、返回 nil 的那一种,照常跑这段正文。
-     * 给写在文字里的例子用(帮助里的例子、技能与提示里的写法),和真跑同一套从调用到参数的换法。库函数的调用记成
-     * {@link ScriptRun.Call},组与动词是它在库里的表名与函数名(全局函数的组是空串)。
+     * 只读一段正文调了哪些 API 函数,不执行:每个宿主函数与模块函数都换成只记下调用、返回 nil 的那一种,照常跑这段正文。
+     * 给写在文字里的例子用(帮助里的例子、技能与提示里的写法),和真跑同一套从调用到参数的换法。模块函数的调用记成
+     * {@link ScriptRun.Call},组与动词是模块名与函数名。
      *
      * @throws IllegalArgumentException 读不通(语法错);消息是语言自己的报错原话
      */
     Reading calls(String name, String code, ScriptCatalog catalog);
+
+    /**
+     * 存一份模块之前读一遍,和运行时同一个解释器:读不通,或它给第 ① 层的名字(登记的 API 函数与它们的组)赋值,返回那句话(第一处);
+     * 都没有是 null。API 函数都换成只记下调用、返回声明的样子的那一种,照常跑一遍正文——赋值的那一行跑到了才查得出来,运行时同一条
+     * 规则照样拦着。
+     */
+    String checkModule(String name, String code, ScriptCatalog catalog);
 
     /**
      * 只读不跑的结果。
@@ -126,10 +139,9 @@ public interface ScriptEngine {
     /**
      * 开一次运行。读不通的正文也开得出来,第一步就是带着报错的 {@link ScriptRun.Done}。
      *
-     * @param name    脚本名,进报错的开头;她当场写的一段是工具名
-     * @param args    运行参数
-     * @param catalog 能调的 API 函数与库
+     * @param name    这段程序叫什么,进报错的开头(她当场写的一段是工具名)
+     * @param catalog 能调的 API 函数与模块
      * @param printer 打印出的每一行
      */
-    ScriptRun start(String name, String code, List<String> args, ScriptCatalog catalog, Consumer<String> printer);
+    ScriptRun start(String name, String code, ScriptCatalog catalog, Consumer<String> printer);
 }

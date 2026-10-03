@@ -155,8 +155,8 @@ class CommandHelpTest {
 
     @Test
     void theIndexListsEveryFunctionByGroupAndTheRootIsTheIndex() {
-        String index = NumenCli.index();
-        assertTrue(index.startsWith("<api>\nCall these from the lua tool. `api.help(\"move\")` lists a group's "
+        String index = NumenCli.index(com.dwinovo.numen.script.Modules.builtin());
+        assertTrue(index.startsWith("<api>\nCall these from the lua tool. `api.help(\"move\")` lists a group's or a module's "
                 + "functions with their types; `api.help(\"move.go\")` explains one in full (every argument, what it "
                 + "returns, examples).\nValues the groups share:\n---A position."), index);
         assertTrue(index.contains("\n---@class Pos\n---@field x number\n"), "共用的类在索引里声明: " + index);
@@ -164,7 +164,9 @@ class CommandHelpTest {
                 "一组一行:说明与它的函数名: " + index);
         assertTrue(index.indexOf("gt_help — ") < index.indexOf("gt_many — "), "按名字排序: " + index);
         assertTrue(index.endsWith("\n</api>"), index);
-        assertEquals(index, NumenCli.index(), "字节稳定");
+        assertTrue(index.contains("You neither need nor can require them; there is no require."),
+                "模块按名字直接用、不需要也不能 require,这一句在索引里: " + index);
+        assertEquals(index, NumenCli.index(com.dwinovo.numen.script.Modules.builtin()), "字节稳定");
         for (String line : new String[]{"help", "--help"}) {
             String root = onServer(line).message();
             assertTrue(root.startsWith("Call these from the lua tool."), root.substring(0, 60));

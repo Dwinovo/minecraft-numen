@@ -64,7 +64,7 @@ final class CommandTree<S extends CommandSource> {
     private LiteralArgumentBuilder<S> group(CommandGroup group) {
         LiteralArgumentBuilder<S> node = LiteralArgumentBuilder.literal(group.name());
         node.then(help(NumenCli.HELP_FLAG, () -> CommandHelp.listing(
-                CommandHelp.group(group, NumenCli.libraryFunctions()))));
+                CommandHelp.group(group, NumenCli.libraryFunctions(com.dwinovo.numen.script.Modules.builtin())))));
         for (Action a : group.actions()) {
             node.then(action(a));
         }

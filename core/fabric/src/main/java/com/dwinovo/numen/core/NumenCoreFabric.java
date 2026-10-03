@@ -33,20 +33,13 @@ public class NumenCoreFabric implements ModInitializer {
             Constants.LOG.warn("[numen-core] no bundled skills/ dir found in jar");
         }
 
-        // core 的内置脚本与库同样经插件那扇门交出去,原地读 jar 里的 scripts/ 与 library/ 目录。两侧都要(大脑跑它们,服务端
-        // 存取与列它们),所以直接登记,不等客户端。
-        java.nio.file.Path scripts = ModJar.find("scripts");
-        if (scripts == null) {
-            throw new IllegalStateException("[numen-core] no bundled scripts/ dir found in jar");
+        // core 的内置 Lua 模块同样经插件那扇门交出去,原地读 jar 里的 modules/ 目录。跑程序的大脑在哪一侧都要它们(主人客户端;
+        // 评测与 GameTest 在服务端),所以直接登记,不等客户端。
+        java.nio.file.Path modules = ModJar.find("modules");
+        if (modules == null) {
+            throw new IllegalStateException("[numen-core] no bundled modules/ dir found in jar");
         }
-        java.nio.file.Path library = ModJar.find("library");
-        if (library == null) {
-            throw new IllegalStateException("[numen-core] no bundled library/ dir found in jar");
-        }
-        com.dwinovo.numen.api.NumenPlugins.register(numen -> {
-            numen.bundleLibrary(library);
-            numen.bundleScripts(scripts);
-        });
+        com.dwinovo.numen.api.NumenPlugins.register(numen -> numen.bundleModules(modules));
 
         // 排程机器的心跳随机器归了 numen-api;core 只 tick 自己的工具配套。
         // Advance budget-sliced block searches each tick (and sweep their shared index).

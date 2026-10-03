@@ -345,54 +345,113 @@ class LuaSandboxTest {
         assertNull(run("error(\"no\")").value());
     }
 
+    /** 模块来源:名字到正文,每次问都读这张表此刻的样子;记下被问了哪些。 */
+    private static final class Shelf implements LuaSandbox.ModuleSource {
+        final Map<String, String> modules = new java.util.concurrent.ConcurrentHashMap<>();
+        final List<String> asked = Collections.synchronizedList(new ArrayList<>());
+
+        Shelf with(String name, String code) {
+            modules.put(name, code);
+            return this;
+        }
+
+        @Override
+        public String code(String name) {
+            asked.add(name);
+            return modules.get(name);
+        }
+
+        @Override
+        public List<String> names() {
+            return modules.keySet().stream().sorted().toList();
+        }
+    }
+
     @Test
-    void librariesRunFirstAndTheirCallsCountAgainstTheScriptsOwnLine() throws InterruptedException {
+    void aModuleIsUsedByNameLoadedWhenFirstUsedAndItsCallsCountAgainstTheScriptsOwnLine()
+            throws InterruptedException {
         List<Integer> lines = Collections.synchronizedList(new ArrayList<>());
+        Shelf shelf = new Shelf().with("walk", """
+                local M = {}
+                function M.there(name)
+                  route.plan(name)
+                  route.plan(name)
+                  return "walked " .. name
+                end
+                return M
+                """).with("route", """
+                local M = {}
+                function M.twice(name) return walk.there(name) end
+                return M
+                """).with("unused", "this does not compile");
         LuaSandbox sandbox = LuaSandbox.builder(ROOMY)
                 .function("route", "plan", args -> {
                     lines.add(LuaSandbox.currentLine());
                     return null;
                 })
-                .library("walk", """
-                        -- Plan a route, then walk it.
-                        function move_there(name)
-                          route.plan(name)
-                          route.plan(name)
-                          return "walked " .. name
-                        end
-                        function route.twice(name) return move_there(name) end
-                        """)
+                .modules(shelf)
                 .print(printed::add).build();
-        LuaSandbox.Outcome o = run(sandbox, """
+        LuaSandbox.Running running = sandbox.start("t", """
                 local a = 1
 
                 print(route.twice("home"))
-                local b = move_there("mine")
+                local b = walk.there("mine")
                 error("stop here")
-                """);
+                """, List.of(), o -> { });
+        LuaSandbox.Outcome o = running.await();
         assertEquals(LuaSandbox.Ending.ERROR, o.ending());
         assertEquals(List.of(3, 3, 4, 4), lines);
         assertEquals(List.of("walked home"), printed);
         assertEquals(5, o.line());
+        assertEquals(List.of("route", "walk"), running.modules(), "route 的模块加进 route 表;没用到的模块不读");
+        assertFalse(shelf.asked.contains("unused"));
     }
 
     @Test
-    void anErrorInsideALibrarySaysWhereInTheLibraryAndStopsAtTheScriptsLine() throws InterruptedException {
-        LuaSandbox sandbox = LuaSandbox.builder(ROOMY)
-                .library("lib", """
-                        function boom()
-                          local t = nil
-                          return t.x
-                        end
-                        """)
+    void eachRunReadsTheModuleAsItIsNow() throws InterruptedException {
+        Shelf shelf = new Shelf().with("greet", "return {hi = function() return 'one' end}");
+        LuaSandbox sandbox = LuaSandbox.builder(ROOMY).modules(shelf).print(printed::add).build();
+        assertTrue(run(sandbox, "print(greet.hi())").finished());
+        shelf.with("greet", "return {hi = function() return 'two' end}");
+        assertTrue(run(sandbox, "print(greet.hi())").finished());
+        assertEquals(List.of("one", "two"), printed);
+    }
+
+    @Test
+    void aBrokenModuleFailsOnlyWhereItIsUsedAndSaysWhere() throws InterruptedException {
+        Shelf shelf = new Shelf().with("lib", """
+                local M = {}
+                function M.boom()
+                  local t = nil
+                  return t.x
+                end
+                return M
+                """).with("broken", "local = 1").with("bare", "local x = 1");
+        LuaSandbox sandbox = LuaSandbox.builder(ROOMY).modules(shelf)
+                .unknown((name, present) -> new LuaSandbox.ScriptError("no module named " + name + "; there are: "
+                        + String.join(", ", present)))
                 .build();
-        LuaSandbox.Outcome o = run(sandbox, """
-                local a = 1
-                boom()
-                """);
+        assertTrue(run(sandbox, "local x = 1 + 1").finished(), "不用它们的程序照常跑");
+        LuaSandbox.Outcome boom = run(sandbox, "local a = 1\nlib.boom()\n");
+        assertEquals(LuaSandbox.Ending.ERROR, boom.ending());
+        assertEquals(2, boom.line());
+        assertTrue(boom.message().startsWith("lib:4:"), boom.message());
+        LuaSandbox.Outcome broken = run(sandbox, "local ok, err = pcall(function() return broken.x end)\n"
+                + "assert(not ok and err:find('module broken does not compile'), err)\nreturn bare.x");
+        assertEquals(LuaSandbox.Ending.ERROR, broken.ending());
+        assertTrue(broken.message().contains("module bare returned nil, not a table"), broken.message());
+        LuaSandbox.Outcome typo = run(sandbox, "return lbi.boom()");
+        assertTrue(typo.message().contains("no module named lbi; there are: bare, broken, lib"), typo.message());
+    }
+
+    @Test
+    void aModuleCannotReplaceTheHostsFunctionsOfItsGroup() throws InterruptedException {
+        Shelf shelf = new Shelf().with("move", "return {go = function() return 'mine' end}");
+        LuaSandbox sandbox = LuaSandbox.builder(ROOMY).function("move", "go", args -> "went").modules(shelf)
+                .preload("move").build();
+        LuaSandbox.Outcome o = run(sandbox, "return 1");
         assertEquals(LuaSandbox.Ending.ERROR, o.ending());
-        assertEquals(2, o.line());
-        assertTrue(o.message().startsWith("lib:3:"), o.message());
+        assertTrue(o.message().contains("move.go is a host function"), o.message());
     }
 
     @Test
@@ -402,9 +461,11 @@ class LuaSandboxTest {
                 .function("raise", args -> null)
                 .redefined((table, key) -> new LuaSandbox.ScriptError(Map.of("kind", "fixed",
                         "message", (table == null ? "" : table + ".") + key)))
-                .library("lib", """
-                        function move.twice() return move.go() .. move.go() end
-                        """)
+                .modules(new Shelf().with("move", """
+                        local M = {}
+                        function M.twice() return move.go() .. move.go() end
+                        return M
+                        """))
                 .build();
         LuaSandbox.Outcome o = run(sandbox, """
                 local function refused(f)
@@ -422,5 +483,17 @@ class LuaSandboxTest {
                 assert(move.go() == "went" and move.twice() == "wentwent" and move.extra() == "extra")
                 """);
         assertTrue(o.finished(), String.valueOf(o));
+    }
+
+    /** 中文的字符串字面量原样进出:print 的、error 的一句话、错误值表里的、return 的,都不截成乱码。 */
+    @Test
+    void chineseStringLiteralsComeOutWhole() throws InterruptedException {
+        assertTrue(run("print(\"砍了 3 棵\", #\"砍\")").finished());
+        assertEquals(List.of("砍了 3 棵\t3"), printed, "一个汉字是三个 UTF-8 字节");
+        LuaSandbox.Outcome said = run("local x = 1\nerror(\"手边没有合成台\", 0)");
+        assertEquals("手边没有合成台", said.message());
+        LuaSandbox.Outcome table = run("error({kind = \"failed\", message = \"箱子里没有钻石\"})");
+        assertEquals("箱子里没有钻石", table.error().get("message"));
+        assertEquals("铁镐", run("return \"铁\" .. \"镐\"").value());
     }
 }

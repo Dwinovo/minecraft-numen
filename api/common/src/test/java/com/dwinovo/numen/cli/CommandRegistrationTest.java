@@ -167,7 +167,7 @@ class CommandRegistrationTest {
     @Test
     void onceTheTreeIsInUseAGroupsReferencesAreCheckedAsItRegisters() {
         NumenApi numen = door();
-        NumenCli.index();
+        NumenCli.index(com.dwinovo.numen.script.Modules.builtin());
         numen.registerCommands("gt_see_target", "Pointed at from another group.",
                 g -> g.server("go", "Go.", OK).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt_see_target.go()"));
 

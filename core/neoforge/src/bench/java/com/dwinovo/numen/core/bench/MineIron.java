@@ -15,8 +15,8 @@ import java.util.List;
  * 主人只说要 10 个铁。要成事得先看见埋着的矿(扫描),走到够得着的地方(开路),再挖(挖掘会自己挖开挡着的石头)、再捡。
  * 成功 = 背包里粗铁不少于 10。
  *
- * <p>两个场景只差标准解:{@code mine_iron} 一行一行写命令挖,{@code mine_iron_script} 扫进区域后交给内置脚本
- * {@code script run mine ores} 挖,证明内置的 mine 能把埋着的矿挖空。两份最后都站进挖空的芯再捡一遍。
+ * <p>两个场景只差标准解:{@code mine_iron} 一行一行写命令挖,{@code mine_iron_script} 扫进区域后交给内置模块的
+ * {@code work.mine("ores")} 挖,证明内置的 work.mine 能把埋着的矿挖空。两份最后都站进挖空的芯再捡一遍。
  */
 public final class MineIron implements Scenario {
 
@@ -36,7 +36,7 @@ public final class MineIron implements Scenario {
         this.byScript = byScript;
     }
 
-    /** 标准解用内置脚本 mine。 */
+    /** 标准解用内置模块函数 work.mine。 */
     public static MineIron byScript() {
         return new MineIron(true);
     }
@@ -101,11 +101,11 @@ public final class MineIron implements Scenario {
 
     @Override
     public String solution(Scene scene) {
-        // 一轮:走到一次够得着最多铁矿的地方(挖开石头过去),挖手够得着的,直到区域里不剩;mine 脚本做的就是这几轮,
+        // 一轮:走到一次够得着最多铁矿的地方(挖开石头过去),挖手够得着的,直到区域里不剩;work.mine 做的就是这几轮,
         // 每轮挖完捡一次走得到的
         StringBuilder program = new StringBuilder("scan.blocks(\"iron_ore\", {radius = 12, into = \"ores\"})\n");
         if (byScript) {
-            program.append("script.run(\"mine\", \"ores\")\n");
+            program.append("work.mine(\"ores\")\n");
         } else {
             program.append("""
                     while area.has("ores") do

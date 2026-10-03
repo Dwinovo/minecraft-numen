@@ -70,7 +70,8 @@ final class Brain {
 
             @Override
             public ModelRequest turnRequest() {
-                return AgentRequestContext.turn(convo.snapshot(), runtime.xml(), NumenPrompts.DEFAULT_PERSONA);
+                return AgentRequestContext.turn(convo.snapshot(), runtime.xml(), NumenPrompts.DEFAULT_PERSONA,
+                        com.dwinovo.numen.script.Modules.of(her));
             }
 
             @Override

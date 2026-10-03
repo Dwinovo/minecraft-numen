@@ -112,8 +112,8 @@ class CommandParseTest {
         assertTrue(prefixed.contains("\nusage: Call these from the lua tool."), prefixed);
         String unknownGroup = failed("nosuchgroup take");
         assertTrue(unknownGroup.contains("\nusage: Call these from the lua tool."), unknownGroup);
-        assertTrue(unknownGroup.contains("\napi — The API itself: the typed signatures of a group's functions, or one "
-                + "function in full. help\n"), "根上按名字列出各组与它们的函数名: " + unknownGroup);
+        assertTrue(unknownGroup.contains("\napi — The API itself: the typed signatures of a group's or a module's "
+                + "functions, or one function in full. help\n"), "根上按名字列出各组与它们的函数名: " + unknownGroup);
         assertTrue(unknownGroup.endsWith("\nhint: `help` lists the groups."), unknownGroup);
     }
 

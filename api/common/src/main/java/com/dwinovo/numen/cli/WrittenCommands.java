@@ -4,6 +4,7 @@ import com.dwinovo.numen.agent.script.ScriptEngine;
 import com.dwinovo.numen.agent.script.ScriptRun;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
+import com.dwinovo.numen.script.Modules;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.ParseResults;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -145,11 +146,11 @@ public final class WrittenCommands {
         }
         Matcher mention = MENTION.matcher(code);
         if (mention.matches()) {
-            return NumenCli.help(code) == null ? "there is no API function " + code : null;
+            return NumenCli.help(code, Modules.builtin()) == null ? "there is no API function " + code : null;
         }
         ScriptEngine.Reading reading;
         try {
-            reading = ScriptEngine.IN_USE.calls("written", code, NumenCli.scriptCatalog());
+            reading = ScriptEngine.IN_USE.calls("written", code, NumenCli.scriptCatalog(Modules.builtin()));
         } catch (IllegalArgumentException unreadable) {
             return unreadable.getMessage();
         }
@@ -157,7 +158,7 @@ public final class WrittenCommands {
             return reading.error();
         }
         for (ScriptRun.Call c : reading.calls()) {
-            if (NumenCli.libraryFunctions().containsKey(c.function())) {
+            if (NumenCli.libraryFunctions(Modules.builtin()).containsKey(c.function())) {
                 continue;
             }
             try {
@@ -218,8 +219,8 @@ public final class WrittenCommands {
                 }
             }
         }
-        NumenCli.libraryFunctions().forEach((name, fn) ->
-                texts.add(new Text("library " + fn.library() + " " + name, String.join("\n", fn.defined().doc()))));
+        NumenCli.libraryFunctions(Modules.builtin()).forEach((name, fn) ->
+                texts.add(new Text("module " + fn.module() + " " + name, String.join("\n", fn.defined().doc()))));
         for (NumenTool tool : ToolRegistry.all()) {
             texts.addAll(toolTexts(tool));
         }

@@ -33,6 +33,14 @@ final class CliFixture {
             HelpCommands.install();
             McCommands.install();
         }
+        // 她的 Lua 模块落在这次测试专用的空目录里,和评测、GameTest 一样只有内置那一层
+        try {
+            java.nio.file.Path modules = java.nio.file.Files.createTempDirectory("numen-test-lua-");
+            modules.toFile().deleteOnExit();
+            com.dwinovo.numen.script.Modules.init(uuid -> modules);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 
     private CliFixture() {}
@@ -163,7 +171,7 @@ final class CliFixture {
 
         @Override
         public ScriptCatalog catalog() {
-            return NumenCli.scriptCatalog();
+            return NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.builtin());
         }
 
         @Override

@@ -27,10 +27,12 @@ public final class AgentRequestContext {
      * @param history     会话历史的快照
      * @param runtimeXml  这一刻的运行期状态({@link RuntimeState#xml})
      * @param personaText 人设正文;没有为 {@code null}(见 {@link SystemPromptComposer#compose})
+     * @param modules     她能用的模块(见 {@link SystemPromptComposer#compose})
      */
-    public static ModelRequest turn(List<ConvoState.Msg> history, String runtimeXml, String personaText) {
+    public static ModelRequest turn(List<ConvoState.Msg> history, String runtimeXml, String personaText,
+                                    com.dwinovo.numen.script.Modules modules) {
         List<NumenTool> tools = ToolRegistry.all();
-        return new ModelRequest(attach(history, runtimeXml), tools, SystemPromptComposer.compose(personaText));
+        return new ModelRequest(attach(history, runtimeXml), tools, SystemPromptComposer.compose(personaText, modules));
     }
 
     /**
