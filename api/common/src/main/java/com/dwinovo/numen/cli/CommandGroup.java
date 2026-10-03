@@ -63,7 +63,8 @@ public final class CommandGroup {
         requireOpen();
         String path = namespace + " " + name + " " + action;
         if (action == null || !Action.NAME.matcher(action).matches()) {
-            throw new IllegalArgumentException("动作名不合规(小写字母开头,只含 [a-z0-9_]): '" + action + "'");
+            throw new IllegalArgumentException(namespace + " " + name + " 的动作名不合规(小写字母开头,只含 [a-z0-9_]): '"
+                    + action + "'");
         }
         if (actions.stream().anyMatch(a -> action.equals(a.name()))) {
             throw new IllegalArgumentException(path + " 登记了两次");
@@ -123,9 +124,9 @@ public final class CommandGroup {
         }
     }
 
-    private static <H> H requireHandler(H handler, String action) {
+    private <H> H requireHandler(H handler, String action) {
         if (handler == null) {
-            throw new IllegalArgumentException("动作 " + action + " 没给处理函数");
+            throw new IllegalArgumentException(namespace + " " + name + " " + action + " 没给处理函数");
         }
         return handler;
     }

@@ -59,16 +59,15 @@ public final class NumenPlugins {
     /**
      * 登记一个插件。可在任何时候调用,通常在你模组的构造期。
      *
+     * <p>登记里有一条不合规矩(例子读不通、没声明返回、相关动作指向不存在的函数……),异常原样抛出,启动就此失败;那句话写着是
+     * 哪个名字空间、哪一组的哪个动作、哪条规矩。一组登记不全就不让它上线,模型看到的组永远是登记完整的那些。
+     *
      * @param namespace 你的名字空间:小写字母开头,只含 [a-z0-9_];她的程序里你的函数都写成 {@code <namespace>.<组>.<动作>}
      */
     public static void register(String namespace, NumenPlugin plugin) {
         if (plugin == null) return;
         com.dwinovo.numen.cli.NumenCli.checkNamespace(namespace);
-        try {
-            plugin.setup(new Impl(namespace));
-        } catch (RuntimeException e) {
-            Constants.LOG.error("[numen] 插件 {} 登记失败,它挂的东西可能只生效了一半", namespace, e);
-        }
+        plugin.setup(new Impl(namespace));
     }
 
     /** 主人客户端那一侧的输入口,形状与 {@link NumenApi#emit(UUID, String, String)} 相同。 */

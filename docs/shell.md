@@ -503,3 +503,5 @@ local plan = numen.route.plan({stops = {{to = {x = 10, y = 64, z = 5}, type = "t
 - `numen.inv.*`、`numen.build.raise`、`numen.work.collect` 等模块里的走路一律是 `numen.move.to`,`alter` 换成
   `costs = {dig = true, place = true, consent = false}`(只改自然地形,要问的格绕开),`near` 换成 `range`、`arrive = "reach"`
   换成 `"place"`;`throwaway` 清单删了,垫路料用每一趟的 `materials`(不写是标签 `#numen:throwaway`)。
+- **登记不合规矩当场抛出**:`NumenPlugins.register` 不再接住插件登记块里的异常记一行日志——那样一组会悄悄缺席(例子读不通、
+  没声明返回……),模型看到的 API 少了一块却没人知道。现在异常原样抛出、启动失败,那句话写着名字空间、组、动作与哪条规矩。
