@@ -4,7 +4,8 @@
 ---from where you stand, then places what is within reach (build.at), or digs out the blocks in the way (move.goto_
 ---with arrive "dig", then work.dig), or walks within reach of the lowest nearest cell left (move.goto_ with arrive
 ---"reach"). Drops of what it digs stay where they fall: work.collect() picks them up. A round that leaves everything
----as it was raises failed with what is left; a step that fails raises its own error.
+---as it was raises failed with what is left, and so do cells nothing holds once all else stands; a step that fails
+---raises its own error.
 ---@param name string The design or blueprint file.
 ---@param opts? table at and rotation are build.at's (at defaults to where you stand); the rest are route flags for the walks (alter = "natural" lets it pillar up to high cells and dig its way).
 ---@return integer rounds How many rounds it took.
@@ -52,9 +53,12 @@ function build.raise(name, opts)
       work.dig(left.dig)
     elseif left.next then
       to(left.next, "reach")
-    else
+    elseif left.short > 0 then
       raise("no_material", left.short .. " cell(s) of " .. name .. " hold another block and you carry nothing to put "
           .. "there", nil)
+    else
+      raise("failed", left.unheld .. " cell(s) of " .. name .. " would not stay where the design puts them: nothing "
+          .. "holds them there", "build.left(\"" .. name .. "\")")
     end
   end
 end

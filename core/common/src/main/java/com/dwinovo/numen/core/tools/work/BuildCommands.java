@@ -169,6 +169,8 @@ public final class BuildCommands {
                                 + "reach: move.goto_(left.next, {arrive = \"reach\"}) gets within reach of it."),
                         ScriptType.optional("short", ScriptType.INTEGER, "Cells holding another block with nothing "
                                 + "of yours to put there."),
+                        ScriptType.optional("unheld", ScriptType.INTEGER, "Cells that would not stay put yet: what "
+                                + "holds them (the block below, the wall behind) is not built."),
                         ScriptType.optional("skipped", ScriptType.INTEGER, "Cells you leave alone.")))
                 .example("local left = build.left(\"house\", {at = {x = 100, y = 64, z = -20}})\n"
                         + "if left.reach > 0 then build.at(\"house\", {at = {x = 100, y = 64, z = -20}}) end")

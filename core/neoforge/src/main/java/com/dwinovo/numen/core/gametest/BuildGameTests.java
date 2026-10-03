@@ -2280,6 +2280,52 @@ public class BuildGameTests {
         }).thenSucceed();
     }
 
+    /**
+     * 托着它的还没盖好,它就不算够得着:她站在三格高的石柱顶上,设计是地上一块石头、石头上铺一块地毯。从柱顶看,地毯够得着、
+     * 它下面那块石头够不着。{@code build.left} 说地毯还立不住({@code unheld})、手边能放的一格都没有、下一步去够那块石头;
+     * {@code build.at} 不去放那块地毯,当场说够不着、给出走过去的那一行,地毯与石头一块都没放。日式小屋停在一块地毯上
+     * (原版立不住它)就是把立不住的格当成了够得着。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    public static void a_cell_whose_support_is_out_of_reach_is_not_within_reach(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int y = 2; y <= 4; y++) {
+            level.setBlockAndUpdate(helper.absolutePos(new BlockPos(1, y, 7)), Blocks.STONE.defaultBlockState());
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_carpeter", new BlockPos(1, 5, 7), true);
+        design(companion, "gt_carpet", "build.set({x = 0, y = 0, z = 0}, {block = \"stone\", into = \"gt_carpet\"})",
+                "build.set({x = 0, y = 1, z = 0}, {block = \"red_carpet\", into = \"gt_carpet\"})");
+        BlockPos support = helper.absolutePos(new BlockPos(5, 2, 7));
+        AtomicReference<ToolRun> at = new AtomicReference<>();
+        AtomicReference<ToolRun> left = new AtomicReference<>();
+
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(companion.onGround(), "she has not landed on the pillar"))
+                .thenExecute(() -> left.set(lua(companion, "return build.left(\"gt_carpet\", {at = " + xyz(support) + "})")))
+                .thenWaitUntil(() -> helper.assertTrue(left.get().receipt() != null, "build.left has not finished"))
+                .thenExecute(() -> {
+                    var got = com.google.gson.JsonParser.parseString(left.get().receipt()).getAsJsonObject()
+                            .getAsJsonObject("data").getAsJsonObject("returned");
+                    helper.assertTrue(got.get("left").getAsInt() == 2 && got.get("reach").getAsInt() == 0
+                                    && got.get("unheld").getAsInt() == 1
+                                    && got.get("next").equals(com.dwinovo.numen.cli.Shapes.pos(support)),
+                            "build.left does not hold the carpet back until the stone under it is in: " + got);
+                    at.set(lua(companion, "build.at(\"gt_carpet\", {at = " + xyz(support) + "})"));
+                })
+                .thenWaitUntil(() -> helper.assertTrue(at.get().receipt() != null, "build.at has not finished"))
+                .thenExecute(() -> {
+                    ToolRun build = at.get();
+                    helper.assertTrue(build.refused() && "out_of_reach".equals(build.kind())
+                                    && build.hint().contains("move.goto_(" + xyz(support) + ", {arrive = \"reach\"})"),
+                            "build.at tried the carpet instead of saying where to go: " + build.reply());
+                    helper.assertTrue(level.getBlockState(support).isAir() && level.getBlockState(support.above()).isAir(),
+                            "a cell was placed by a refused build");
+                    com.dwinovo.numen.core.build.Designs.delete(level.getServer(), "gt_carpet");
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
     // ---- 从命令入口:原语、设计、build.at 与建成的房子 ----
 
     /** 当场执行一个 place:她像右键那样把手里的工作台放下,生存按格扣料;派下的活叫"组 动作"。 */

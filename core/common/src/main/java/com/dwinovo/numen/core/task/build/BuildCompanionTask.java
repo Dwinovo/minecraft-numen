@@ -182,6 +182,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (tally.count(BuildSurvey.State.REACH) > 0 || tally.left() == 0) {
             return null;
         }
+        int unheld = tally.count(BuildSurvey.State.UNHELD);
+        if (unheld == tally.left()) {
+            // 剩下的全都放下去立不住:不是走过去的事
+            return new Precondition.Failure(unheld + " cell(s) would not stay where the design puts them: nothing "
+                    + "holds them there.", FailureType.NO_SUPPORT);
+        }
         String hint = !tally.far().isEmpty()
                 ? "move.goto_(" + Shapes.literal(tally.far().get(0)) + ", {arrive = \"reach\"})"
                 : !tally.dig().isEmpty() ? "work.dig(" + Shapes.literal(tally.dig().get(0)) + ")" : null;
@@ -208,6 +214,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         int shortCells = tally.count(BuildSurvey.State.SHORT);
         if (shortCells > 0) {
             parts.add(shortCells + " cell(s) hold another block and you carry nothing to put there");
+        }
+        int unheld = tally.count(BuildSurvey.State.UNHELD);
+        if (unheld > 0) {
+            parts.add(unheld + " cell(s) would not stay put yet: what holds them is not built");
         }
         return parts.isEmpty() ? "Nothing left to do here." : "Still to do: " + String.join("; ", parts) + ".";
     }

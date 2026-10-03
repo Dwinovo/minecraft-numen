@@ -93,6 +93,7 @@ public final class BuildOps {
             data.put("next", Shapes.pos(tally.far().get(0)));
         }
         data.put("short", tally.count(BuildSurvey.State.SHORT));
+        data.put("unheld", tally.count(BuildSurvey.State.UNHELD));
         data.put("skipped", tally.count(BuildSurvey.State.SKIPPED));
         String text = tally.left() == 0
                 ? "nothing left to do: every cell that differs from " + name + " is one you leave alone ("
@@ -100,7 +101,8 @@ public final class BuildOps {
                 : tally.left() + " cell(s) of " + name + " still to do: " + tally.count(BuildSurvey.State.REACH)
                         + " within reach to place now, " + tally.dig().size() + " to dig out first, "
                         + tally.far().size() + " out of reach, " + tally.count(BuildSurvey.State.SHORT)
-                        + " holding another block with nothing of yours to put there";
+                        + " holding another block with nothing of yours to put there, "
+                        + tally.count(BuildSurvey.State.UNHELD) + " that would not stay put yet";
         return TaskResult.ok(text, data).toJson();
     }
 
