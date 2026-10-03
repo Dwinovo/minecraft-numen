@@ -803,7 +803,6 @@ public final class ModLanguageData {
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "villager",     "villager");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "hostile",      "hostile");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "hazard_item",  "dangerous");
-        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "ruled",        "named by your rules");
         adder.add(Keys.PERMISSION_PLACED_BY,   "placed by %s");
         adder.add(Keys.PERMISSION_UNCOVERED,   "no rule");
         adder.add(Keys.CONSENT_SECONDS,        "%ss");
@@ -1327,7 +1326,6 @@ public final class ModLanguageData {
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "villager",     "村民");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "hostile",      "敌对");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "hazard_item",  "危险");
-        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "ruled",        "你的规则点名的");
         adder.add(Keys.PERMISSION_PLACED_BY,   "%s 放的");
         adder.add(Keys.PERMISSION_UNCOVERED,   "没有规则");
         adder.add(Keys.CONSENT_SECONDS,        "%s 秒");
