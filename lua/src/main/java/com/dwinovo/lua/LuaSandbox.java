@@ -64,7 +64,8 @@ import java.util.regex.Pattern;
  * <h2>桥接</h2>
  * 宿主函数按 {@code 表名.函数名}(或全局名)登记,收按顺序的参数、交回一个值;值在两边按 {@link #toJava}/{@link #toLua} 换:nil 是
  * null,布尔、数(整数是 Long,其余是 Double)、字符串,表是列表(键恰好 1..n)或名字到值的表。宿主函数抛 {@link ScriptError}
- * 就是脚本在调用处得到的一个 Lua 错误({@code pcall} 接得住)。
+ * 就是脚本在调用处得到的一个 Lua 错误({@code pcall} 接得住)。宿主交来的 {@link Folded} 是一张收着几个字段的表:那几个字段挂在元表的
+ * {@code __index} 上,脚本照常读得到,{@code pairs} 与印出来(回到 {@link #toJava})都不带它们。
  *
  * <h2>错误值</h2>
  * 宿主函数可以用一张名字到值的表做错误值({@link ScriptError#ScriptError(Map)}):脚本 {@code pcall} 接住的就是这张表,按字段分支;
@@ -915,7 +916,13 @@ public final class LuaSandbox {
         }
     }
 
-    /** Java 值换成 Lua 值:null、布尔、数、字符串、列表、名字到值的表。 */
+    /**
+     * 一张收着几个字段的表:{@code shown} 是表自己的字段,{@code folded} 里的字段读得到({@code t.path}),不出现在 {@code pairs}
+     * 与印出来的样子里——大而少用的字段(一条路的每一步)不把回执撑满。
+     */
+    public record Folded(Map<String, Object> shown, Map<String, Object> folded) {}
+
+    /** Java 值换成 Lua 值:null、布尔、数、字符串、列表、名字到值的表、收着几个字段的表({@link Folded})。 */
     public static LuaValue toLua(Object o) {
         if (o == null) {
             return LuaValue.NIL;
@@ -938,6 +945,13 @@ public final class LuaSandbox {
             for (int i = 0; i < list.size(); i++) {
                 t.rawset(i + 1, toLua(list.get(i)));
             }
+            return t;
+        }
+        if (o instanceof Folded folded) {
+            LuaTable t = (LuaTable) toLua(folded.shown());
+            LuaTable meta = new LuaTable();
+            meta.rawset(LuaValue.INDEX, toLua(folded.folded()));
+            t.setmetatable(meta);
             return t;
         }
         if (o instanceof Map<?, ?> map) {

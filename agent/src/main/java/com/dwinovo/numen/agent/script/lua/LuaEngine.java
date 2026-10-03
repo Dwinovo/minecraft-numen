@@ -679,14 +679,30 @@ public final class LuaEngine implements ScriptEngine {
             pending = null;
             if (!result.ok()) {
                 return answer(new Answer(null, ScriptRun.failure(result.kind(), result.text(), result.hint(),
-                        call.function(), result.data().size() > 0 ? JsonValues.toJava(result.data()) : null)));
+                        call.function(), result.data().size() > 0 ? lua(JsonValues.toJava(result.data())) : null)));
             }
             ScriptCatalog.Verb verb = catalog.verb(call.group(), call.verb());
             String key = verb == null ? null : verb.returns();
             if (key != null) {
-                return answer(new Answer(JsonValues.toJava(result.data().get(key)), null));
+                return answer(new Answer(lua(JsonValues.toJava(result.data().get(key))), null));
             }
-            return answer(new Answer(result.data().size() > 0 ? JsonValues.toJava(result.data()) : null, null));
+            return answer(new Answer(result.data().size() > 0 ? lua(JsonValues.toJava(result.data())) : null, null));
+        }
+
+        /** 交给沙箱的值:收着几个字段的表({@link JsonValues.Folded})换成沙箱的那一种,其余原样。 */
+        private static Object lua(Object value) {
+            return switch (value) {
+                case JsonValues.Folded f -> new LuaSandbox.Folded(luaMap(f), luaMap(f.folded()));
+                case java.util.Map<?, ?> m -> luaMap(m);
+                case java.util.List<?> l -> l.stream().map(Run::lua).toList();
+                case null, default -> value;
+            };
+        }
+
+        private static java.util.Map<String, Object> luaMap(java.util.Map<?, ?> map) {
+            java.util.Map<String, Object> out = new java.util.LinkedHashMap<>();
+            map.forEach((k, v) -> out.put(String.valueOf(k), lua(v)));
+            return out;
         }
 
         @Override
