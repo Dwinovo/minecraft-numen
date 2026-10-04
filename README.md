@@ -19,7 +19,7 @@
 
 ## 安装
 
-言出法随已发布在 CurseForge，在你常用的 Minecraft 启动器中搜索 "Numen" 即可下载。Fabric 端需要同时安装 [Fabric API](https://modrinth.com/mod/fabric-api)。
+言出法随已发布在 CurseForge，在你常用的 Minecraft 启动器中搜索 "Numen" 即可下载。
 
 | Minecraft 版本 | 加载器 | Java |
 |---|---|---|
