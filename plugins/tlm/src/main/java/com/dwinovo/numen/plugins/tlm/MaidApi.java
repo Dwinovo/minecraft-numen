@@ -28,7 +28,7 @@ import java.util.Optional;
 /**
  * {@code tlm.maid}:她养的女仆——名下有哪些、一只的详情、切工作模式、改设置、攻击名单、改名、换模型、打开界面的一页。
  *
- * <p>都在服务端:女仆是世界里的实体。读的(清单、详情,以及不带改动参数的攻击名单与模型)当场回、不问主人;做的是人在女仆界面里按的按钮,每一个都是用这只女仆
+ * <p>都在服务端:女仆是世界里的实体。读的(清单、详情、攻击名单、模型)当场回、不问主人;做的是人在女仆界面里按的按钮,每一个都是用这只女仆
  * ({@link ServerCall#use}:够不够得着、权限层的 {@code use_entity}、放行后再认一次),放行了才调车万女仆的包({@link Maids})。和
  * {@code numen.use.block} 同一条规矩:不走路,够不着就失败并给出照抄就能走过去的那一次调用。
  *
@@ -309,35 +309,43 @@ public final class MaidApi {
         });
     }
 
-    /** 攻击名单:读或改。 */
-    public record Targets(@Doc("The maid.") EntityRef maid,
-                          @Doc("Entity type id to stance, e.g. {[\"minecraft:cow\"] = \"hostile\"}: friendly is never "
-                                  + "attacked, neutral only when it hurt you or her or was hurt by either of you, hostile "
-                                  + "on sight.") @Omitted("change nothing") Optional<Map<String, Stance>> set,
-                          @Doc("Entity type ids to take off her list, so TLM's default for them applies again.")
-                          @Omitted("remove nothing") Optional<List<String>> remove) {}
+    /** 改攻击名单的哪几条。 */
+    public record SetTargets(@Doc("The maid.") EntityRef maid,
+                             @Doc("Entity type id to stance, e.g. {[\"minecraft:cow\"] = \"hostile\"}: friendly is "
+                                     + "never attacked, neutral only when it hurt you or her or was hurt by either of "
+                                     + "you, hostile on sight.") @Omitted("change nothing")
+                             Optional<Map<String, Stance>> set,
+                             @Doc("Entity type ids to take off her list, so TLM's default for them applies again.")
+                             @Omitted("remove nothing") Optional<List<String>> remove) {}
 
     /** 她的攻击名单。 */
-    @Doc("Her attack list, read back.")
+    @Doc("Her attack list.")
     public record Aims(@Doc("Her entity id.") int maid,
                        @Doc("Entity type id to stance; only the types she was given a stance for.")
                        Map<String, Stance> stances) {}
 
-    @Fn("Whom one maid attacks: read her attack list, or change it like the attack mode's config page.")
+    @Fn("Whom one maid attacks: her attack list.")
     @Example("tlm.maid.targets(812)")
-    @Example("tlm.maid.targets(812, {set = {[\"minecraft:creeper\"] = \"friendly\"}})")
-    @Example("tlm.maid.targets(812, {remove = {\"minecraft:creeper\"}})")
-    @Note("Without set and remove it only reads, from any distance, any maid. Changing is using your maid: the same "
-            + "reach, owner rule and asking as tlm.maid.task.")
+    @Note("Read-only, from any distance, any maid.")
     @Note("The list holds only the types given a stance; any other type is judged by TLM's default: monsters hostile, "
             + "tamed animals and villagers friendly, the rest neutral.")
+    @SeeAlso({"tlm.maid.set_targets", "tlm.maid.info"})
+    public static Aims targets(ServerCall call, Which args) {
+        return Maids.aims(maid(call, args.maid()));
+    }
+
+    @Fn("Change whom one maid attacks, like the attack mode's config page.")
+    @Example("tlm.maid.set_targets(812, {set = {[\"minecraft:creeper\"] = \"friendly\"}})")
+    @Example("tlm.maid.set_targets(812, {remove = {\"minecraft:creeper\"}})")
+    @Note("Give only what you change. The same reach, owner rule and asking as tlm.maid.task.")
     @Note("It reads the list back; when it did not take, it fails and says so.")
-    @SeeAlso({"tlm.maid.info", "tlm.maid.task"})
-    public static Pending<Aims> targets(ServerCall call, Targets args) {
-        Entity maid = maid(call, args.maid());
+    @SeeAlso({"tlm.maid.targets", "tlm.maid.task"})
+    public static Pending<Aims> setTargets(ServerCall call, SetTargets args) {
         if (args.set().isEmpty() && args.remove().isEmpty()) {
-            return Pending.of(Maids.aims(maid));
+            throw new ApiError(ErrorKind.BAD_ARGUMENT, "nothing to change: give set or remove; tlm.maid.targets shows "
+                    + "her list now", Call.of("tlm.maid.targets", args.maid().id()));
         }
+        Entity maid = maid(call, args.maid());
         Map<String, Stance> wanted = new java.util.TreeMap<>(Maids.aims(maid).stances());
         args.set().ifPresent(set -> set.forEach((type, stance) -> wanted.put(Maids.entityType(type), stance)));
         args.remove().ifPresent(types -> types.forEach(type -> wanted.remove(Maids.entityType(type))));
@@ -394,28 +402,31 @@ public final class MaidApi {
     }
 
     /** 换哪一只的模型。 */
-    public record Model(@Doc("The maid.") EntityRef maid,
-                        @Doc("A model id as tlm.skin.list lists it.") @Omitted("only read the model she wears")
-                        Optional<String> model) {}
+    public record SetModel(@Doc("The maid.") EntityRef maid,
+                           @Doc("A model id as tlm.skin.list lists it.") String model) {}
 
     /** 她穿的模型。 */
     @Doc("The model a maid wears.")
     public record Wearing(@Doc("Her entity id.") int maid, String model) {}
 
-    @Fn("Which model one maid wears, or change it like picking a model in her model screen.")
+    @Fn("Which model one maid wears.")
     @Example("tlm.maid.model(812)")
-    @Example("tlm.maid.model(812, {model = \"touhou_little_maid:hakurei_reimu\"})")
-    @Note("Without model it only reads, from any distance, any maid. Changing is using your maid: the same reach, "
-            + "owner rule and asking as tlm.maid.task. The ids are the ones tlm.skin.list shows.")
+    @Note("Read-only, from any distance, any maid.")
+    @SeeAlso({"tlm.maid.set_model", "tlm.skin.list"})
+    public static Wearing model(ServerCall call, Which args) {
+        Entity maid = maid(call, args.maid());
+        return new Wearing(maid.getId(), Maids.model(maid));
+    }
+
+    @Fn("Change the model one maid wears, like picking a model in her model screen.")
+    @Example("tlm.maid.set_model(812, \"touhou_little_maid:hakurei_reimu\")")
+    @Note("The same reach, owner rule and asking as tlm.maid.task. The ids are the ones tlm.skin.list shows.")
     @Note("TLM's server setting may forbid changing a maid's model; it reads the model back and fails when it did "
             + "not change.")
-    @SeeAlso({"tlm.skin.list", "tlm.maid.info"})
-    public static Pending<Wearing> model(ServerCall call, Model args) {
+    @SeeAlso({"tlm.maid.model", "tlm.skin.list"})
+    public static Pending<Wearing> setModel(ServerCall call, SetModel args) {
         Entity maid = maid(call, args.maid());
-        if (args.model().isEmpty()) {
-            return Pending.of(new Wearing(maid.getId(), Maids.model(maid)));
-        }
-        String model = args.model().get();
+        String model = args.model();
         if (!Maids.hasModel(model)) {
             throw new ApiError(ErrorKind.NOT_FOUND, "this server has no maid model " + model
                     + "; tlm.skin.list shows the installed ones", Call.of("tlm.skin.list", Map.of("search", model)));

@@ -179,7 +179,7 @@ public class TlmGameTests {
         AtomicReference<ToolRun> read = new AtomicReference<>();
         AtomicReference<ToolRun> clear = new AtomicReference<>();
 
-        ToolRun set = lua(her, "tlm.maid.targets(" + maid.getId() + ", {set = {[\"minecraft:creeper\"] = \"friendly\"}})");
+        ToolRun set = lua(her, "tlm.maid.set_targets(" + maid.getId() + ", {set = {[\"minecraft:creeper\"] = \"friendly\"}})");
         steps(helper)
                 .thenWaitUntil(() -> {
                     helper.assertTrue(set.succeeded(), "tlm maid targets set failed: " + set.reply());
@@ -191,8 +191,8 @@ public class TlmGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(read.get().succeeded()
                                 && "friendly".equals(dataIn(read.get().reply()).getAsJsonObject("stances")
                                 .get("minecraft:creeper").getAsString()),
-                        "targets without arguments does not read the list: " + read.get().reply()))
-                .thenExecute(() -> clear.set(lua(her, "tlm.maid.targets(" + maid.getId()
+                        "targets does not read the list: " + read.get().reply()))
+                .thenExecute(() -> clear.set(lua(her, "tlm.maid.set_targets(" + maid.getId()
                         + ", {remove = {\"minecraft:creeper\"}})")))
                 .thenWaitUntil(() -> helper.assertTrue(clear.get().succeeded()
                                 && maid.getData(InitTaskData.ATTACK_LIST).attackGroups().isEmpty(),
@@ -237,7 +237,7 @@ public class TlmGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(read.succeeded()
                                 && maid.getModelId().equals(dataIn(read.reply()).get("model").getAsString()),
                         "tlm maid model does not read her model: " + read.reply()))
-                .thenExecute(() -> change.set(lua(her, "tlm.maid.model(" + maid.getId() + ", {model = \"" + other + "\"})")))
+                .thenExecute(() -> change.set(lua(her, "tlm.maid.set_model(" + maid.getId() + ", \"" + other + "\")")))
                 .thenWaitUntil(() -> helper.assertTrue(change.get().succeeded() && other.equals(maid.getModelId()),
                         "her model did not change to " + other + ": " + change.get().reply()))
                 .thenExecute(() -> leave(helper, her, maid))
