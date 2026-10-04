@@ -108,11 +108,3 @@
 ## 致谢
 
 感谢每一位关注、下载和使用言出法随的人。
-
-言出法随的寻路借鉴了 [Baritone](https://github.com/cabaletta/baritone) 公开的机制，例如加权 A*、部分路径提交与执行期的成本复核，但没有复制、移植或改写其任何源码。提供给大语言模型的空间感知采用以自我为中心的语义字符网格，其格式原则取自 Gao 等人的 *Exploring Spatial Representation to Enhance LLM Reasoning in Aerial Vision-Language Navigation*（arXiv:2410.08500，2024），并针对方块世界做了三维适配。项目基于 [MultiLoader Template](https://github.com/jaredlll08/MultiLoader-Template) 构建。
-
----
-
-<div align="center">
-<sub>源代码采用 <a href="LICENSE">LGPL-3.0</a> 协议，你分发的修改版需以同一协议继续开源；单独发布、通过 API 使用言出法随的插件与兼容模组可以采用任何协议，包括闭源。美术与资源<a href="LICENSE-ASSETS">保留所有权利</a>，"Numen" 与 "言出法随" 的名称亦予保留。</sub>
-</div>
