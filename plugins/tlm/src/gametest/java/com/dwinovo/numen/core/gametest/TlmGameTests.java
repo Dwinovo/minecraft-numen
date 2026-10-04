@@ -6,7 +6,11 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.permission.Mode;
 import com.dwinovo.numen.permission.Permission;
 import com.github.tartaricacid.touhoulittlemaid.entity.ai.brain.MaidSchedule;
+import com.github.tartaricacid.touhoulittlemaid.entity.info.ServerCustomPackLoader;
+import com.github.tartaricacid.touhoulittlemaid.entity.misc.MonsterType;
 import com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid;
+import com.github.tartaricacid.touhoulittlemaid.entity.passive.PickType;
+import com.github.tartaricacid.touhoulittlemaid.init.InitTaskData;
 import com.github.tartaricacid.touhoulittlemaid.inventory.container.AbstractMaidContainer;
 import com.google.gson.JsonElement;
 import net.minecraft.core.BlockPos;
@@ -16,6 +20,10 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -98,6 +106,161 @@ public class TlmGameTests {
             helper.assertTrue(config.succeeded() && maid.getSchedule() == MaidSchedule.NIGHT,
                     "she is not on the night shift — tlm config said: " + config.reply());
             leave(helper, her, maid);
+        });
+    }
+
+    /** 「女仆配置」页的八样一次改完,女仆身上的设置就是改成的样子,回执读回的也是。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
+    public static void her_maid_takes_every_setting_of_the_config_page(GameTestHelper helper) {
+        NumenPlayer her = keeper(helper, "gametest_tlm_configurer", new BlockPos(3, 2, 3));
+        EntityMaid maid = maidAt(helper, new BlockPos(5, 2, 3));
+        maid.tame(her);
+
+        ToolRun config = lua(her, "tlm.maid.config(" + maid.getId() + ", {show_backpack = false, "
+                + "show_back_item = false, chat_bubble = false, sound_frequency = 0.3, pickup_kind = \"xp\", "
+                + "open_door = false, open_fence_gate = false, active_climbing = false})");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(config.succeeded(), "tlm maid config failed: " + config.reply());
+            var manager = maid.getConfigManager();
+            helper.assertTrue(!manager.isShowBackpack() && !manager.isShowBackItem() && !manager.isChatBubbleShow()
+                            && Math.abs(manager.getSoundFreq() - 0.3f) < 0.001f
+                            && manager.getPickupType() == PickType.ONLY_XP && !manager.isOpenDoor()
+                            && !manager.isOpenFenceGate() && !manager.isActiveClimbing(),
+                    "the config page did not take: " + config.reply());
+            var read = dataIn(config.reply()).getAsJsonObject("preferences");
+            helper.assertTrue("xp".equals(read.get("pickup_kind").getAsString()) && !read.get("open_door").getAsBoolean(),
+                    "the receipt does not read the settings back: " + config.reply());
+            leave(helper, her, maid);
+        });
+    }
+
+    /** 详情里有装备、药水效果、经验、无敌、此刻在做的事,都是女仆身上此刻的样子。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
+    public static void her_maid_info_reads_gear_effects_and_activity(GameTestHelper helper) {
+        NumenPlayer her = keeper(helper, "gametest_tlm_reader", new BlockPos(3, 2, 3));
+        EntityMaid maid = maidAt(helper, new BlockPos(5, 2, 3));
+        maid.tame(her);
+        maid.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+        maid.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_SWORD));
+        maid.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 600, 1));
+        maid.setExperience(42);
+        maid.setEntityInvulnerable(true);
+
+        ToolRun info = lua(her, "tlm.maid.info(" + maid.getId() + ")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(info.succeeded(), "tlm maid info failed: " + info.reply());
+            var detail = dataIn(info.reply());
+            var equipment = detail.getAsJsonObject("equipment");
+            helper.assertTrue("minecraft:iron_helmet".equals(equipment.getAsJsonObject("head").get("item").getAsString())
+                            && "minecraft:iron_sword".equals(equipment.getAsJsonObject("mainhand").get("item").getAsString())
+                            && !equipment.has("feet"),
+                    "info does not list what she wears and holds: " + info.reply());
+            var effect = detail.getAsJsonArray("effects").get(0).getAsJsonObject();
+            helper.assertTrue("minecraft:regeneration".equals(effect.get("effect").getAsString())
+                            && effect.get("amplifier").getAsInt() == 1,
+                    "info does not list her effect: " + info.reply());
+            helper.assertTrue(detail.get("experience").getAsInt() == 42 && detail.get("invulnerable").getAsBoolean()
+                            && detail.get("activity").getAsString().startsWith("minecraft:")
+                            && !detail.get("sleeping").getAsBoolean(),
+                    "info does not read experience, invulnerability and activity: " + info.reply());
+            leave(helper, her, maid);
+        });
+    }
+
+    /** 攻击名单:改一条、读回来、再去掉;名单就是女仆身上的那份数据。 */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = BATCH)
+    public static void her_maid_attack_list_is_set_read_and_cleared(GameTestHelper helper) {
+        NumenPlayer her = keeper(helper, "gametest_tlm_hunter", new BlockPos(3, 2, 3));
+        EntityMaid maid = maidAt(helper, new BlockPos(5, 2, 3));
+        maid.tame(her);
+        ResourceLocation creeper = ResourceLocation.withDefaultNamespace("creeper");
+        AtomicReference<ToolRun> read = new AtomicReference<>();
+        AtomicReference<ToolRun> clear = new AtomicReference<>();
+
+        ToolRun set = lua(her, "tlm.maid.targets(" + maid.getId() + ", {set = {[\"minecraft:creeper\"] = \"friendly\"}})");
+        steps(helper)
+                .thenWaitUntil(() -> {
+                    helper.assertTrue(set.succeeded(), "tlm maid targets set failed: " + set.reply());
+                    var data = maid.getData(InitTaskData.ATTACK_LIST);
+                    helper.assertTrue(data != null && data.attackGroups().get(creeper) == MonsterType.FRIENDLY,
+                            "the attack list on her has no friendly creeper: " + set.reply());
+                })
+                .thenExecute(() -> read.set(lua(her, "tlm.maid.targets(" + maid.getId() + ")")))
+                .thenWaitUntil(() -> helper.assertTrue(read.get().succeeded()
+                                && "friendly".equals(dataIn(read.get().reply()).getAsJsonObject("stances")
+                                .get("minecraft:creeper").getAsString()),
+                        "targets without arguments does not read the list: " + read.get().reply()))
+                .thenExecute(() -> clear.set(lua(her, "tlm.maid.targets(" + maid.getId()
+                        + ", {remove = {\"minecraft:creeper\"}})")))
+                .thenWaitUntil(() -> helper.assertTrue(clear.get().succeeded()
+                                && maid.getData(InitTaskData.ATTACK_LIST).attackGroups().isEmpty(),
+                        "the creeper stayed on her attack list: " + clear.get().reply()))
+                .thenExecute(() -> leave(helper, her, maid))
+                .thenSucceed();
+    }
+
+    /** 拿着名牌给女仆改名:名字和常显都照给的,名牌被用掉一块,回执说明。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
+    public static void her_maid_is_named_with_a_name_tag(GameTestHelper helper) {
+        NumenPlayer her = keeper(helper, "gametest_tlm_namer", new BlockPos(3, 2, 3));
+        EntityMaid maid = maidAt(helper, new BlockPos(5, 2, 3));
+        maid.tame(her);
+        her.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.NAME_TAG, 2));
+
+        ToolRun name = lua(her, "tlm.maid.name(" + maid.getId() + ", \"Reimu\", {always_show = true})");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(name.succeeded(), "tlm maid name failed: " + name.reply());
+            helper.assertTrue(maid.hasCustomName() && "Reimu".equals(maid.getCustomName().getString())
+                            && maid.isCustomNameVisible(), "she was not named: " + name.reply());
+            helper.assertTrue(her.getMainHandItem().getCount() == 1
+                            && dataIn(name.reply()).get("name_tag_used").getAsBoolean(),
+                    "the name tag was not used up or not reported: " + name.reply());
+            leave(helper, her, maid);
+        });
+    }
+
+    /** 换模型:读到她穿的,换成服务器装着的另一个,她身上就是那个。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
+    public static void her_maid_model_is_read_and_changed(GameTestHelper helper) {
+        NumenPlayer her = keeper(helper, "gametest_tlm_tailor", new BlockPos(3, 2, 3));
+        EntityMaid maid = maidAt(helper, new BlockPos(5, 2, 3));
+        maid.tame(her);
+        String other = ServerCustomPackLoader.SERVER_MAID_MODELS.getModelIdSet().stream()
+                .filter(id -> !id.equals(maid.getModelId())).findFirst().orElseThrow();
+
+        ToolRun read = lua(her, "tlm.maid.model(" + maid.getId() + ")");
+        AtomicReference<ToolRun> change = new AtomicReference<>();
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(read.succeeded()
+                                && maid.getModelId().equals(dataIn(read.reply()).get("model").getAsString()),
+                        "tlm maid model does not read her model: " + read.reply()))
+                .thenExecute(() -> change.set(lua(her, "tlm.maid.model(" + maid.getId() + ", {model = \"" + other + "\"})")))
+                .thenWaitUntil(() -> helper.assertTrue(change.get().succeeded() && other.equals(maid.getModelId()),
+                        "her model did not change to " + other + ": " + change.get().reply()))
+                .thenExecute(() -> leave(helper, her, maid))
+                .thenSucceed();
+    }
+
+    /** 祭坛配方清单:有让女仆复活的那条,带材料和 P 点。 */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = BATCH)
+    public static void the_altar_lists_its_recipes(GameTestHelper helper) {
+        NumenPlayer her = keeper(helper, "gametest_tlm_priest", new BlockPos(3, 2, 3));
+
+        ToolRun recipes = lua(her, "tlm.altar.recipes()");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(recipes.succeeded(), "tlm altar recipes failed: " + recipes.reply());
+            boolean revive = false;
+            for (JsonElement row : valueIn(recipes.reply()).getAsJsonArray()) {
+                var recipe = row.getAsJsonObject();
+                revive |= recipe.has("spawns") && "touhou_little_maid:maid".equals(recipe.get("spawns").getAsString())
+                        && recipe.getAsJsonArray("needs").size() > 0 && recipe.get("power").getAsDouble() > 0;
+            }
+            helper.assertTrue(revive, "the altar's maid revival recipe is not listed: " + recipes.reply());
+            CompanionFactory.despawn(helper.getLevel().getServer(), her);
         });
     }
 

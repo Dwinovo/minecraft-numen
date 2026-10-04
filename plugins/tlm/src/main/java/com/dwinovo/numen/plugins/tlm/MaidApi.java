@@ -26,9 +26,9 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * {@code tlm.maid}:她养的女仆——名下有哪些、一只的详情、切工作模式、改设置、打开界面的一页。
+ * {@code tlm.maid}:她养的女仆——名下有哪些、一只的详情、切工作模式、改设置、攻击名单、改名、换模型、打开界面的一页。
  *
- * <p>都在服务端:女仆是世界里的实体。读的两个当场回、不问主人;做的三个是人在女仆界面里按的按钮,每一个都是用这只女仆
+ * <p>都在服务端:女仆是世界里的实体。读的(清单、详情,以及不带改动参数的攻击名单与模型)当场回、不问主人;做的是人在女仆界面里按的按钮,每一个都是用这只女仆
  * ({@link ServerCall#use}:够不够得着、权限层的 {@code use_entity}、放行后再认一次),放行了才调车万女仆的包({@link Maids})。和
  * {@code numen.use.block} 同一条规矩:不走路,够不着就失败并给出照抄就能走过去的那一次调用。
  *
@@ -46,6 +46,23 @@ public final class MaidApi {
 
     /** 界面的一页。 */
     public enum Tab { BACKPACK, BAUBLE, CURIOS }
+
+    /** 她拾取什么:物品、经验,或两样都捡。 */
+    public enum PickupKind { ITEM, XP, ALL }
+
+    /** 攻击名单上对一种实体的态度:不打、被惹了才打、见了就打。 */
+    public enum Stance { FRIENDLY, NEUTRAL, HOSTILE }
+
+    /** 一只女仆在设置页「女仆配置」那一页上的八样。 */
+    @Doc("The settings on the maid config page of her GUI.")
+    public record Preferences(@Doc("Whether her backpack shows on her back.") boolean showBackpack,
+                              @Doc("Whether the item she carries on her back shows.") boolean showBackItem,
+                              @Doc("Whether her chat bubbles show.") boolean chatBubble,
+                              @Doc("How often she speaks, 0 to 1.") double soundFrequency,
+                              @Doc("What she picks up when picking up is on.") PickupKind pickupKind,
+                              @Doc("Whether she opens doors.") boolean openDoor,
+                              @Doc("Whether she opens fence gates.") boolean openFenceGate,
+                              @Doc("Whether she climbs on her own.") boolean activeClimbing) {}
 
     /** 一只加载着的女仆。 */
     @Doc("A maid of Touhou Little Maid, loaded in the world: an Entity with her work and settings. Hand her on as she "
@@ -97,6 +114,14 @@ public final class MaidApi {
     @Doc("Where she works, idles and sleeps on her schedule.")
     public record SchedulePoints(BlockPos work, BlockPos idle, BlockPos sleep, String dimension) {}
 
+    /** 身上穿着或拿着的一样。 */
+    @Doc("What she wears or holds in one equipment slot.")
+    public record Held(String item, int count) {}
+
+    /** 身上的一个药水效果。 */
+    @Doc("A potion effect on her.")
+    public record Effect(String effect, int amplifier, @Doc("Ticks left; -1 for endless.") int ticks) {}
+
     /** 一只女仆的详情。 */
     @Doc("One maid in full.")
     public record Detail(@Doc("Her, as tlm.maid.list lists her.") Maid maid,
@@ -108,20 +133,31 @@ public final class MaidApi {
                          @Doc("With home mode on.") Optional<BlockPos> homeCenter,
                          @Doc("With home mode on.") Optional<Double> homeRadius,
                          @Doc("When they are set.") Optional<SchedulePoints> schedulePoints,
+                         Preferences preferences,
+                         @Doc("By slot: mainhand, offhand, head, chest, legs, feet; an empty slot is left out.")
+                         Map<String, Held> equipment,
+                         List<Effect> effects,
+                         @Doc("The experience she carries.") int experience,
+                         @Doc("Whether she cannot be hurt.") boolean invulnerable,
+                         @Doc("What her schedule has her doing now: minecraft:work, minecraft:idle or "
+                                 + "minecraft:rest.") String activity,
+                         boolean sleeping,
+                         @Doc("What she is fighting now.") Optional<EntityInfo> target,
                          @Doc("Every work mode in her task list.") List<WorkMode> tasks) {}
 
     /** 哪一只。 */
     public record Which(@Doc("The maid: her Maid or Entity, or her entity id as tlm.maid.list or numen.scan.entities "
             + "lists it.") EntityRef maid) {}
 
-    @Fn("One maid in full, and every work mode with what it needs.")
+    @Fn("One maid in full: settings, gear, effects, what she is doing, and every work mode with what it needs.")
     @Example("tlm.maid.info(812)")
     @Example("for _, t in ipairs(tlm.maid.info(812).tasks) do print(t.task, t.can_switch) end")
     @Note("Read-only, from any distance, any maid (someone else's too).")
     @Note("Every work mode: can_switch says whether TLM lets her switch to it now; to_enable lists what it waits for "
             + "(true = met); works_with lists what the work uses (e.g. has_bow, has_arrow for ranged_attack), true = "
             + "she has it.")
-    @SeeAlso({"tlm.maid.task", "tlm.maid.config"})
+    @Note("Whom she attacks is tlm.maid.targets.")
+    @SeeAlso({"tlm.maid.task", "tlm.maid.config", "tlm.maid.targets"})
     public static Detail info(ServerCall call, Which args) {
         return Maids.detail(maid(call, args.maid()), call.her());
     }
@@ -177,44 +213,220 @@ public final class MaidApi {
                          @Doc("Whether she may ride things; false also gets her off what she rides now (not off a chair "
                                  + "or a flying broom).") @Omitted("leave it as it is") Optional<Boolean> ride,
                          @Doc("When she works: day works by day and sleeps at night, night the other way round, all "
-                                 + "works round the clock.") @Omitted("leave it as it is") Optional<Schedule> schedule) {}
+                                 + "works round the clock.") @Omitted("leave it as it is") Optional<Schedule> schedule,
+                         @Doc("Whether her backpack shows on her back.") @Omitted("leave it as it is")
+                         Optional<Boolean> showBackpack,
+                         @Doc("Whether the item she carries on her back shows.") @Omitted("leave it as it is")
+                         Optional<Boolean> showBackItem,
+                         @Doc("Whether her chat bubbles show.") @Omitted("leave it as it is")
+                         Optional<Boolean> chatBubble,
+                         @Doc("How often she speaks, 0 to 1.") @Omitted("leave it as it is")
+                         Optional<Double> soundFrequency,
+                         @Doc("What she picks up while picking up is on: item, xp or all.")
+                         @Omitted("leave it as it is") Optional<PickupKind> pickupKind,
+                         @Doc("Whether she opens doors.") @Omitted("leave it as it is") Optional<Boolean> openDoor,
+                         @Doc("Whether she opens fence gates.") @Omitted("leave it as it is")
+                         Optional<Boolean> openFenceGate,
+                         @Doc("Whether she climbs on her own.") @Omitted("leave it as it is")
+                         Optional<Boolean> activeClimbing) {
+
+        /** 落在「女仆配置」那一页上的有没有。 */
+        boolean touchesPreferences() {
+            return showBackpack.isPresent() || showBackItem.isPresent() || chatBubble.isPresent()
+                    || soundFrequency.isPresent() || pickupKind.isPresent() || openDoor.isPresent()
+                    || openFenceGate.isPresent() || activeClimbing.isPresent();
+        }
+    }
 
     /** 改完读回的设置。 */
     @Doc("Her settings, read back.")
     public record Configured(@Doc("Her entity id.") int maid, boolean home, boolean pickup, boolean ride,
-                             Schedule schedule) {}
+                             Schedule schedule, Preferences preferences) {}
 
-    @Fn("Change one of your maids' settings: home mode, picking up, riding, schedule.")
+    @Fn("Change one of your maids' settings: home mode, picking up, riding, schedule, and the maid config page.")
     @Example("tlm.maid.config(812, {schedule = \"night\"})")
     @Example("tlm.maid.config(812, {home = true, pickup = false})")
+    @Example("tlm.maid.config(812, {pickup_kind = \"xp\", open_door = false, sound_frequency = 0.3})")
     @Note("Give only what you change; the rest stays. The same reach, owner rule and asking as tlm.maid.task.")
     @Note("TLM keeps home mode off when her schedule points are in another dimension or more than 32 blocks from her; "
             + "turning it on with no points set makes where she stands her home.")
     @Note("It reads every setting back; when one of yours did not take, it fails and says which.")
     @SeeAlso({"tlm.maid.info", "tlm.maid.task"})
     public static Pending<Configured> config(ServerCall call, Config args) {
-        if (args.home().isEmpty() && args.pickup().isEmpty() && args.ride().isEmpty() && args.schedule().isEmpty()) {
-            throw new ApiError(ErrorKind.BAD_ARGUMENT, "nothing to change: give one or more of home, pickup, ride, "
-                    + "schedule; tlm.maid.info shows her settings now",
+        if (args.home().isEmpty() && args.pickup().isEmpty() && args.ride().isEmpty() && args.schedule().isEmpty()
+                && !args.touchesPreferences()) {
+            throw new ApiError(ErrorKind.BAD_ARGUMENT, "nothing to change: give one or more settings; tlm.maid.info "
+                    + "shows her settings now",
                     args.maid().id() == null ? null : Call.of("tlm.maid.info", args.maid().id()));
         }
+        args.soundFrequency().filter(v -> v < 0 || v > 1).ifPresent(v -> {
+            throw new ApiError(ErrorKind.BAD_ARGUMENT, "sound_frequency is 0 to 1, not " + v, null);
+        });
         return call.use(maid(call, args.maid()), GUI, still -> {
             NumenPlayer her = call.her();
             Maids.Settings was = Maids.settings(still);
             Maids.configure(her, still, new Maids.Settings(args.home().orElse(was.home()),
                     args.pickup().orElse(was.pickup()), args.ride().orElse(was.ride()),
                     args.schedule().orElse(was.schedule())));
+            if (args.touchesPreferences()) {
+                Preferences p = Maids.preferences(still);
+                Maids.configure(her, still, new Preferences(args.showBackpack().orElse(p.showBackpack()),
+                        args.showBackItem().orElse(p.showBackItem()), args.chatBubble().orElse(p.chatBubble()),
+                        args.soundFrequency().orElse(p.soundFrequency()), args.pickupKind().orElse(p.pickupKind()),
+                        args.openDoor().orElse(p.openDoor()), args.openFenceGate().orElse(p.openFenceGate()),
+                        args.activeClimbing().orElse(p.activeClimbing())));
+            }
             Maids.Settings now = Maids.settings(still);
-            Configured read = new Configured(still.getId(), now.home(), now.pickup(), now.ride(), now.schedule());
+            Preferences nowPreferences = Maids.preferences(still);
+            Configured read = new Configured(still.getId(), now.home(), now.pickup(), now.ride(), now.schedule(),
+                    nowPreferences);
             List<String> refused = new ArrayList<>();
             args.home().filter(v -> v != now.home()).ifPresent(v -> refused.add("home = " + v));
             args.pickup().filter(v -> v != now.pickup()).ifPresent(v -> refused.add("pickup = " + v));
             args.ride().filter(v -> v != now.ride()).ifPresent(v -> refused.add("ride = " + v));
             args.schedule().filter(v -> v != now.schedule()).ifPresent(v -> refused.add("schedule = \""
                     + v.name().toLowerCase(java.util.Locale.ROOT) + "\""));
+            args.showBackpack().filter(v -> v != nowPreferences.showBackpack())
+                    .ifPresent(v -> refused.add("show_backpack = " + v));
+            args.showBackItem().filter(v -> v != nowPreferences.showBackItem())
+                    .ifPresent(v -> refused.add("show_back_item = " + v));
+            args.chatBubble().filter(v -> v != nowPreferences.chatBubble())
+                    .ifPresent(v -> refused.add("chat_bubble = " + v));
+            args.soundFrequency().filter(v -> Math.abs(v - nowPreferences.soundFrequency()) > 0.005)
+                    .ifPresent(v -> refused.add("sound_frequency = " + v));
+            args.pickupKind().filter(v -> v != nowPreferences.pickupKind()).ifPresent(v -> refused
+                    .add("pickup_kind = \"" + v.name().toLowerCase(java.util.Locale.ROOT) + "\""));
+            args.openDoor().filter(v -> v != nowPreferences.openDoor()).ifPresent(v -> refused.add("open_door = " + v));
+            args.openFenceGate().filter(v -> v != nowPreferences.openFenceGate())
+                    .ifPresent(v -> refused.add("open_fence_gate = " + v));
+            args.activeClimbing().filter(v -> v != nowPreferences.activeClimbing())
+                    .ifPresent(v -> refused.add("active_climbing = " + v));
             if (!refused.isEmpty()) {
                 throw refused(her, still, null, Maids.label(still) + " did not take " + String.join(", ", refused)
                         + ".", read);
+            }
+            return read;
+        });
+    }
+
+    /** 攻击名单:读或改。 */
+    public record Targets(@Doc("The maid.") EntityRef maid,
+                          @Doc("Entity type id to stance, e.g. {[\"minecraft:cow\"] = \"hostile\"}: friendly is never "
+                                  + "attacked, neutral only when it hurt you or her or was hurt by either of you, hostile "
+                                  + "on sight.") @Omitted("change nothing") Optional<Map<String, Stance>> set,
+                          @Doc("Entity type ids to take off her list, so TLM's default for them applies again.")
+                          @Omitted("remove nothing") Optional<List<String>> remove) {}
+
+    /** 她的攻击名单。 */
+    @Doc("Her attack list, read back.")
+    public record Aims(@Doc("Her entity id.") int maid,
+                       @Doc("Entity type id to stance; only the types she was given a stance for.")
+                       Map<String, Stance> stances) {}
+
+    @Fn("Whom one maid attacks: read her attack list, or change it like the attack mode's config page.")
+    @Example("tlm.maid.targets(812)")
+    @Example("tlm.maid.targets(812, {set = {[\"minecraft:creeper\"] = \"friendly\"}})")
+    @Example("tlm.maid.targets(812, {remove = {\"minecraft:creeper\"}})")
+    @Note("Without set and remove it only reads, from any distance, any maid. Changing is using your maid: the same "
+            + "reach, owner rule and asking as tlm.maid.task.")
+    @Note("The list holds only the types given a stance; any other type is judged by TLM's default: monsters hostile, "
+            + "tamed animals and villagers friendly, the rest neutral.")
+    @Note("It reads the list back; when it did not take, it fails and says so.")
+    @SeeAlso({"tlm.maid.info", "tlm.maid.task"})
+    public static Pending<Aims> targets(ServerCall call, Targets args) {
+        Entity maid = maid(call, args.maid());
+        if (args.set().isEmpty() && args.remove().isEmpty()) {
+            return Pending.of(Maids.aims(maid));
+        }
+        Map<String, Stance> wanted = new java.util.TreeMap<>(Maids.aims(maid).stances());
+        args.set().ifPresent(set -> set.forEach((type, stance) -> wanted.put(Maids.entityType(type), stance)));
+        args.remove().ifPresent(types -> types.forEach(type -> wanted.remove(Maids.entityType(type))));
+        return call.use(maid, GUI, still -> {
+            Maids.aim(call.her(), still, wanted);
+            Aims read = Maids.aims(still);
+            if (!read.stances().equals(wanted)) {
+                throw refused(call.her(), still, null, Maids.label(still) + " did not take the attack list.", read);
+            }
+            return read;
+        });
+    }
+
+    /** 改名,和拿名牌右键她、在名牌界面里点完成一样。 */
+    public record Name(@Doc("The maid.") EntityRef maid,
+                       @Doc("The new name, up to 32 characters.") String name,
+                       @Doc("Whether the name shows above her all the time.") @Omitted("it does not")
+                       Optional<Boolean> alwaysShow) {}
+
+    /** 改完读回的名字。 */
+    @Doc("Her name, read back.")
+    public record Named(@Doc("Her entity id.") int maid, String name, boolean alwaysShow,
+                        @Doc("Whether TLM took the name tag from your hand.") boolean nameTagUsed) {}
+
+    @Fn("Name one of your maids, like using a name tag on her.")
+    @Example("tlm.maid.name(812, \"Reimu\")")
+    @Example("tlm.maid.name(812, \"Reimu\", {always_show = true})")
+    @Note("TLM names a maid only while you hold a name tag in your main hand, and uses the tag up: "
+            + "`numen.gear.hold(\"minecraft:name_tag\")` first. The tag's own text does not matter.")
+    @Note("The same reach, owner rule and asking as tlm.maid.task. It reads her name back.")
+    @SeeAlso({"tlm.maid.info", "numen.gear.hold"})
+    public static Pending<Named> name(ServerCall call, Name args) {
+        if (args.name().isBlank() || args.name().length() > Maids.NAME_MAX) {
+            throw new ApiError(ErrorKind.BAD_ARGUMENT, "a maid's name is 1 to " + Maids.NAME_MAX + " characters", null);
+        }
+        boolean show = args.alwaysShow().orElse(false);
+        return call.use(maid(call, args.maid()), GUI, still -> {
+            NumenPlayer her = call.her();
+            int tags = Maids.nameTags(her);
+            Maids.name(her, still, args.name(), show);
+            boolean tagged = tags > 0;
+            Named read = new Named(still.getId(), still.hasCustomName() ? still.getCustomName().getString() : "",
+                    still.isCustomNameVisible(), Maids.nameTags(her) < tags);
+            if (!args.name().equals(read.name()) || show != read.alwaysShow()) {
+                String said = Maids.label(still) + " was not named.";
+                if (Maids.ownedBy(still, her) && !tagged) {
+                    throw new ApiError(ErrorKind.FAILED, said + " TLM names a maid only with a name tag in your main "
+                            + "hand.", Call.of("numen.gear.hold", "minecraft:name_tag"), read);
+                }
+                throw refused(her, still, null, said, read);
+            }
+            return read;
+        });
+    }
+
+    /** 换哪一只的模型。 */
+    public record Model(@Doc("The maid.") EntityRef maid,
+                        @Doc("A model id as tlm.skin.list lists it.") @Omitted("only read the model she wears")
+                        Optional<String> model) {}
+
+    /** 她穿的模型。 */
+    @Doc("The model a maid wears.")
+    public record Wearing(@Doc("Her entity id.") int maid, String model) {}
+
+    @Fn("Which model one maid wears, or change it like picking a model in her model screen.")
+    @Example("tlm.maid.model(812)")
+    @Example("tlm.maid.model(812, {model = \"touhou_little_maid:hakurei_reimu\"})")
+    @Note("Without model it only reads, from any distance, any maid. Changing is using your maid: the same reach, "
+            + "owner rule and asking as tlm.maid.task. The ids are the ones tlm.skin.list shows.")
+    @Note("TLM's server setting may forbid changing a maid's model; it reads the model back and fails when it did "
+            + "not change.")
+    @SeeAlso({"tlm.skin.list", "tlm.maid.info"})
+    public static Pending<Wearing> model(ServerCall call, Model args) {
+        Entity maid = maid(call, args.maid());
+        if (args.model().isEmpty()) {
+            return Pending.of(new Wearing(maid.getId(), Maids.model(maid)));
+        }
+        String model = args.model().get();
+        if (!Maids.hasModel(model)) {
+            throw new ApiError(ErrorKind.NOT_FOUND, "this server has no maid model " + model
+                    + "; tlm.skin.list shows the installed ones", Call.of("tlm.skin.list", Map.of("search", model)));
+        }
+        return call.use(maid, GUI, still -> {
+            Maids.model(call.her(), still, model);
+            Wearing read = new Wearing(still.getId(), Maids.model(still));
+            if (!model.equals(read.model())) {
+                throw refused(call.her(), still, null, Maids.label(still) + " still wears " + read.model()
+                        + "; TLM did not change it to " + model + " (its server setting may forbid changing a "
+                        + "maid's model).", read);
             }
             return read;
         });

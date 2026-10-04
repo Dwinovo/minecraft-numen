@@ -34,6 +34,7 @@ public final class SkinApi {
     static void install(NumenApi numen) {
         numen.api("skin", "Touhou Little Maid looks: the maid model you wear yourself.", SkinApi.class);
         numen.api("maid", "Touhou Little Maid: the maids you keep.", MaidApi.class);
+        numen.api("altar", "Touhou Little Maid: what the altar can craft.", AltarApi.class);
     }
 
     /** 一个模型。 */

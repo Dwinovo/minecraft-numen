@@ -1,5 +1,7 @@
 package com.dwinovo.numen.plugins.tlm;
 
+import com.dwinovo.numen.agent.script.ApiError;
+import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.sdk.EntityInfo;
 import com.github.tartaricacid.touhoulittlemaid.api.event.MaidTamedEvent;
@@ -7,14 +9,26 @@ import com.github.tartaricacid.touhoulittlemaid.api.event.MaidTaskEnableEvent;
 import com.github.tartaricacid.touhoulittlemaid.api.event.MaidTombstoneEvent;
 import com.github.tartaricacid.touhoulittlemaid.api.task.IMaidTask;
 import com.github.tartaricacid.touhoulittlemaid.data.MaidNumAttachment;
+import com.github.tartaricacid.touhoulittlemaid.crafting.AltarRecipe;
 import com.github.tartaricacid.touhoulittlemaid.entity.ai.brain.MaidSchedule;
+import com.github.tartaricacid.touhoulittlemaid.entity.data.inner.AttackListData;
+import com.github.tartaricacid.touhoulittlemaid.entity.info.ServerCustomPackLoader;
+import com.github.tartaricacid.touhoulittlemaid.entity.misc.MonsterType;
+import com.github.tartaricacid.touhoulittlemaid.entity.passive.MaidConfigManager;
+import com.github.tartaricacid.touhoulittlemaid.entity.passive.PickType;
 import com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid;
 import com.github.tartaricacid.touhoulittlemaid.entity.passive.SchedulePos;
 import com.github.tartaricacid.touhoulittlemaid.entity.passive.TabIndex;
 import com.github.tartaricacid.touhoulittlemaid.entity.task.TaskManager;
 import com.github.tartaricacid.touhoulittlemaid.init.InitDataAttachment;
+import com.github.tartaricacid.touhoulittlemaid.init.InitRecipes;
+import com.github.tartaricacid.touhoulittlemaid.init.InitTaskData;
 import com.github.tartaricacid.touhoulittlemaid.inventory.container.AbstractMaidContainer;
 import com.github.tartaricacid.touhoulittlemaid.network.message.MaidConfigPackage;
+import com.github.tartaricacid.touhoulittlemaid.network.message.MaidModelPackage;
+import com.github.tartaricacid.touhoulittlemaid.network.message.MaidSubConfigPackage;
+import com.github.tartaricacid.touhoulittlemaid.network.message.SendNameTagPackage;
+import com.github.tartaricacid.touhoulittlemaid.network.message.SetAttackListPackage;
 import com.github.tartaricacid.touhoulittlemaid.network.message.MaidTaskPackage;
 import com.github.tartaricacid.touhoulittlemaid.network.message.ToggleTabPackage;
 import com.github.tartaricacid.touhoulittlemaid.world.data.MaidInfo;
@@ -26,9 +40,15 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.RecipeHolder;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
@@ -41,6 +61,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Predicate;
 
@@ -71,6 +92,9 @@ final class Maids {
      * 界面上的按钮也就只有离这么近才按得到。插件的动作照同一个距离判够不够得着。
      */
     private static final double GUI_REACH_BUFFER = 4.0;
+
+    /** 车万女仆的名牌界面把名字截到这么长(它的 {@code SendNameTagPackage} 里的同一个数)。 */
+    static final int NAME_MAX = 32;
 
     private Maids() {}
 
@@ -183,7 +207,35 @@ final class Maids {
                 points.isConfigured() ? Optional.of(new MaidApi.SchedulePoints(points.getWorkPos().immutable(),
                         points.getIdlePos().immutable(), points.getSleepPos().immutable(),
                         points.getDimension().toString())) : Optional.empty(),
-                tasks(maid));
+                preferences(maid), equipment(maid), effects(maid), maid.getExperience(), maid.getIsInvulnerable(),
+                BuiltInRegistries.ACTIVITY.getKey(maid.getScheduleDetail()).toString(), maid.isSleeping(),
+                Optional.ofNullable(maid.getTarget()).map(EntityInfo::of), tasks(maid));
+    }
+
+    /** 各装备位上穿着、拿着的;空着的不列。 */
+    private static Map<String, MaidApi.Held> equipment(EntityMaid maid) {
+        Map<String, MaidApi.Held> worn = new LinkedHashMap<>();
+        for (EquipmentSlot slot : new EquipmentSlot[] {EquipmentSlot.MAINHAND, EquipmentSlot.OFFHAND,
+                EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET}) {
+            ItemStack stack = maid.getItemBySlot(slot);
+            if (!stack.isEmpty()) {
+                worn.put(slot.getName(), held(stack));
+            }
+        }
+        return worn;
+    }
+
+    private static MaidApi.Held held(ItemStack stack) {
+        return new MaidApi.Held(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), stack.getCount());
+    }
+
+    private static List<MaidApi.Effect> effects(EntityMaid maid) {
+        List<MaidApi.Effect> out = new ArrayList<>();
+        for (MobEffectInstance effect : maid.getActiveEffects()) {
+            out.add(new MaidApi.Effect(BuiltInRegistries.MOB_EFFECT.getKey(effect.getEffect().value()).toString(),
+                    effect.getAmplifier(), effect.isInfiniteDuration() ? -1 : effect.getDuration()));
+        }
+        return out;
     }
 
     /**
@@ -265,6 +317,49 @@ final class Maids {
         return new Settings(maid.isHomeModeEnable(), maid.isPickup(), maid.isRideable(), schedule(maid.getSchedule()));
     }
 
+    /** 设置页「女仆配置」那一页上的八样。 */
+    static MaidApi.Preferences preferences(Entity entity) {
+        MaidConfigManager.SyncNetwork now = ((EntityMaid) entity).getConfigManager().getSyncNetwork();
+        return new MaidApi.Preferences(now.showBackpack(), now.showBackItem(), now.showChatBubble(),
+                Math.round(now.soundFreq() * 100) / 100.0, pickupKind(now.pickType()), now.openDoor(),
+                now.openFenceGate(), now.activeClimbing());
+    }
+
+    /** 她的攻击名单:只有被指定过态度的实体种类;别的种类由车万女仆按默认判。 */
+    static MaidApi.Aims aims(Entity entity) {
+        AttackListData list = ((EntityMaid) entity).getData(InitTaskData.ATTACK_LIST);
+        Map<String, MaidApi.Stance> stances = new TreeMap<>();
+        if (list != null) {
+            list.attackGroups().forEach((type, stance) -> stances.put(type.toString(), stance(stance)));
+        }
+        return new MaidApi.Aims(entity.getId(), stances);
+    }
+
+    /** 写进名单的实体种类:得是注册过的(攻击名单界面添加时也这样查)。 */
+    static String entityType(String id) {
+        ResourceLocation type = ResourceLocation.tryParse(id);
+        if (type == null || !BuiltInRegistries.ENTITY_TYPE.containsKey(type)) {
+            throw new ApiError(ErrorKind.BAD_ARGUMENT, id + " is not an entity type", null);
+        }
+        return type.toString();
+    }
+
+    /** 她穿的模型。 */
+    static String model(Entity maid) {
+        return ((EntityMaid) maid).getModelId();
+    }
+
+    /** 这个服务器的车万女仆装没装这个模型。 */
+    static boolean hasModel(String model) {
+        return ServerCustomPackLoader.SERVER_MAID_MODELS.containsInfo(model);
+    }
+
+    /** 她主手里的名牌有几块:车万女仆只在主手拿着名牌时给女仆改名,改完拿走一块。 */
+    static int nameTags(Player her) {
+        ItemStack hand = her.getMainHandItem();
+        return hand.is(Items.NAME_TAG) ? hand.getCount() : 0;
+    }
+
     /** 她睡着没有:睡着的女仆打不开界面。 */
     static boolean asleep(Entity maid) {
         return ((EntityMaid) maid).isSleeping();
@@ -289,6 +384,34 @@ final class Maids {
     static void configure(ServerPlayer her, Entity maid, Settings wanted) {
         MaidConfigPackage.handle(new MaidConfigPackage(maid.getId(), wanted.home(), wanted.pickup(), wanted.ride(),
                 MaidSchedule.valueOf(wanted.schedule().name())), from(her, MaidConfigPackage.TYPE));
+    }
+
+    /** 改「女仆配置」那一页上的八样,和在那一页上点按钮一样:包里是整份,没改的照现在的填。 */
+    static void configure(ServerPlayer her, Entity maid, MaidApi.Preferences wanted) {
+        MaidSubConfigPackage.handle(new MaidSubConfigPackage(maid.getId(), new MaidConfigManager.SyncNetwork(
+                wanted.showBackpack(), wanted.showBackItem(), wanted.chatBubble(), (float) wanted.soundFrequency(),
+                pickType(wanted.pickupKind()), wanted.openDoor(), wanted.openFenceGate(), wanted.activeClimbing())),
+                from(her, MaidSubConfigPackage.TYPE));
+    }
+
+    /** 写攻击名单,和攻击模式的设置页关闭时发的包一样:整份名单。 */
+    static void aim(ServerPlayer her, Entity maid, Map<String, MaidApi.Stance> stances) {
+        Map<ResourceLocation, MonsterType> groups = new java.util.HashMap<>();
+        stances.forEach((type, stance) -> groups.put(ResourceLocation.parse(type), monsterType(stance)));
+        SetAttackListPackage.handle(new SetAttackListPackage(maid.getId(), groups),
+                from(her, SetAttackListPackage.TYPE));
+    }
+
+    /** 改名,和在名牌界面里点完成一样。 */
+    static void name(ServerPlayer her, Entity maid, String name, boolean alwaysShow) {
+        SendNameTagPackage.handle(new SendNameTagPackage(maid.getId(), name, alwaysShow),
+                from(her, SendNameTagPackage.TYPE));
+    }
+
+    /** 换模型,和在女仆的模型界面里选一个一样。 */
+    static void model(ServerPlayer her, Entity maid, String model) {
+        MaidModelPackage.handle(new MaidModelPackage(maid.getId(), ResourceLocation.parse(model)),
+                from(her, MaidModelPackage.TYPE));
     }
 
     /** 打开界面的一页,和点边上的页签一样。 */
@@ -338,6 +461,31 @@ final class Maids {
         });
     }
 
+    // ---- 祭坛 ----
+
+    /** 祭坛的每一条配方:产物、需要的材料、要的 P 点。 */
+    static List<AltarApi.Recipe> altarRecipes(NumenPlayer her) {
+        List<AltarApi.Recipe> out = new ArrayList<>();
+        for (RecipeHolder<AltarRecipe> holder : her.serverLevel().getRecipeManager()
+                .getAllRecipesFor(InitRecipes.ALTAR_CRAFTING.get())) {
+            AltarRecipe recipe = holder.value();
+            List<AltarApi.Need> needs = new ArrayList<>();
+            for (Ingredient ingredient : recipe.getIngredients()) {
+                List<String> items = new ArrayList<>();
+                for (ItemStack stack : ingredient.getItems()) {
+                    items.add(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+                }
+                needs.add(new AltarApi.Need(items));
+            }
+            boolean item = recipe.isItemCraft();
+            out.add(new AltarApi.Recipe(holder.id().toString(),
+                    item ? Optional.of(held(recipe.getResult())) : Optional.empty(),
+                    item ? Optional.empty() : Optional.of(recipe.getEntityType().toString()),
+                    needs, tenth(recipe.getPower())));
+        }
+        return out;
+    }
+
     // ---- 写法 ----
 
     /** 一只女仆在回执与事件里的称呼:编号,起过名字的带上名字。 */
@@ -347,6 +495,30 @@ final class Maids {
 
     static String where(BlockPos pos) {
         return pos.getX() + "," + pos.getY() + "," + pos.getZ();
+    }
+
+    private static MaidApi.PickupKind pickupKind(PickType type) {
+        return switch (type) {
+            case ONLY_ITEM -> MaidApi.PickupKind.ITEM;
+            case ONLY_XP -> MaidApi.PickupKind.XP;
+            case ALL -> MaidApi.PickupKind.ALL;
+        };
+    }
+
+    private static PickType pickType(MaidApi.PickupKind kind) {
+        return switch (kind) {
+            case ITEM -> PickType.ONLY_ITEM;
+            case XP -> PickType.ONLY_XP;
+            case ALL -> PickType.ALL;
+        };
+    }
+
+    private static MaidApi.Stance stance(MonsterType type) {
+        return MaidApi.Stance.valueOf(type.name());
+    }
+
+    private static MonsterType monsterType(MaidApi.Stance stance) {
+        return MonsterType.valueOf(stance.name());
     }
 
     private static MaidApi.Schedule schedule(MaidSchedule schedule) {
