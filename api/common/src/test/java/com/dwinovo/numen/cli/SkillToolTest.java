@@ -15,7 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 装技能的工具,从模型的入口调:技能正文原样是这次调用的结果;点了一个没有的技能,结果说没有这一份并列出有哪些。
+ * 装技能的工具,从模型的入口调:技能正文原样是这次调用的结果;点了一个没有的技能,结果说没有这一份并列出能用的那些——主人在设置里
+ * 关掉的不列,和 {@code <available_skills>} 索引一样。
  */
 class SkillToolTest {
 
@@ -35,7 +36,17 @@ class SkillToolTest {
 
                 Start from the lowest log.
                 """);
+        Path off = Files.createDirectories(home.resolve("skills").resolve("masonry"));
+        Files.writeString(off.resolve(SkillRegistry.SKILL_FILENAME), """
+                ---
+                name: masonry
+                description: Lay stone walls.
+                ---
+
+                # Walls
+                """);
         SkillRegistry.instance().scan(home.resolve("skills"));
+        SkillRegistry.instance().setEnabled("masonry", false);
     }
 
     @AfterAll
@@ -61,9 +72,11 @@ class SkillToolTest {
     }
 
     @Test
-    void anUnknownSkillSaysSoAndNamesTheSkillsThereAre() {
+    void anUnknownSkillSaysSoAndNamesTheSkillsSheCanUse() {
         String result = call("{\"skill\": \"no_such_skill\"}");
         assertTrue(result.contains("\"success\":false"), result);
-        assertTrue(result.contains("unknown skill: no_such_skill; the skills are: lumber"), result);
+        assertTrue(result.contains("unknown skill: no_such_skill; the skills are: lumber\""), result);
+        assertTrue(SkillRegistry.instance().formatXml().contains("<name>lumber</name>")
+                && !SkillRegistry.instance().formatXml().contains("masonry"), SkillRegistry.instance().formatXml());
     }
 }

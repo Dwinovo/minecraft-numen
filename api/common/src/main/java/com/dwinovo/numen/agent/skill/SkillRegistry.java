@@ -247,6 +247,17 @@ public final class SkillRegistry {
         return skills.values();
     }
 
+    /**
+     * 她能用的技能:有描述的(模型对一份什么都不知道的技能挑不出来,同 opencode),主人在面板里关掉的不算。系统提示的
+     * {@code <available_skills>} 索引与点错名字时列出的"有哪些"都是这一份。
+     */
+    public List<SkillInfo> available() {
+        return skills.values().stream()
+                .filter(s -> s.description() != null && !s.description().isBlank())
+                .filter(s -> !disabled.contains(s.name()))
+                .toList();
+    }
+
     public int size() {
         return skills.size();
     }
@@ -305,13 +316,7 @@ public final class SkillRegistry {
      * and the LLM doesn't need).
      */
     public String formatXml() {
-        // Mirror opencode: only show skills with a description (the LLM can't
-        // pick something it knows nothing about). Skills the player switched off
-        // in the panel are hidden here too, so the brain stops loading them.
-        var described = skills.values().stream()
-                .filter(s -> s.description() != null && !s.description().isBlank())
-                .filter(s -> !disabled.contains(s.name()))
-                .toList();
+        List<SkillInfo> described = available();
         if (described.isEmpty()) return "";
 
         StringBuilder sb = new StringBuilder(256);

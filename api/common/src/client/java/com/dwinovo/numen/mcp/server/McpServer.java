@@ -92,7 +92,7 @@ public final class McpServer {
             job returns when it is done, with the task's account of what it changed in its line. Every call takes a 'companion' argument (name or id), so each call targets \
             one companion; just drive it, there is no take-control step. The %s tool loads one of the \
             companion's skills — the workflow guide for one kind of task — and returns its text; a name it \
-            does not know answers with the list of installed skills. The %s tool writes down your plan for \
+            does not know answers with the list of the skills it can use. The %s tool writes down your plan for \
             work of several phases (the whole plan each call, replacing the last one); the owner sees it as a \
             checklist.
 

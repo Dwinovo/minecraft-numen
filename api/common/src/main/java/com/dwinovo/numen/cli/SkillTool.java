@@ -85,9 +85,10 @@ public final class SkillTool implements NumenTool {
         } else {
             Optional<SkillInfo> skill = registry.get(name);
             if (skill.isEmpty()) {
-                String known = registry.all().stream().map(SkillInfo::name).collect(Collectors.joining(", "));
+                String known = registry.available().stream().map(SkillInfo::name)
+                        .collect(Collectors.joining(", "));
                 return TaskResult.fail(ErrorKind.NOT_FOUND, "unknown skill: " + name + "; the skills are: "
-                        + (known.isEmpty() ? "(none installed)" : known), null).toJson();
+                        + (known.isEmpty() ? "(none available)" : known), null).toJson();
             }
             text = SkillInjection.body(skill.get(), null);
         }
