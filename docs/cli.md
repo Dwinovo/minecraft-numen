@@ -7,6 +7,8 @@
 - **10-04 技能改由 `skill` 工具装**:`skill load` 与 `numen.skill.load` 删了,见 `docs/shell.md` §七;附录里的 `skill_load` 是当时的记录。
 - **10-04 计划改由 `todo` 工具记**:`numen.todo.write` 删了,见 `docs/shell.md` §七;附录里的 `todowrite`、`todo.write` 是当时的记录。
 - **10-04 API 第二版**(附录 N):全名 `numen.<组>.<函数>`、值带方法、没有区域与设计这类名词;附录里更早的命令名是当时的记录。
+- **10-04 命令行前端删了**:登记处、参数类型、Brigadier 树与一行字的读法(`cli` 包)都没有了;API 函数是带 `@Fn` 的静态方法,签名就是
+  契约,脚本是唯一的入口,`/numen drive` 跑一段 Lua。见 `docs/shell.md` §十三;本稿正文与附录是当时的记录。
 
 ## 一、为什么
 

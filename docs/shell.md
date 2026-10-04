@@ -100,7 +100,7 @@
   就是一行程序:`status.self()`。外接 MCP 服务器的工具照旧挂着(`RemoteMcpTool`),不在这一套里。
 - 计划清单是另一个工具 `todo`(见 §七),不是函数;聊天里的计划清单从这次调用的参数画。
 - 系统提示的 `<api>` 索引、工具说明、`api.help` 都从登记处生成;提示词与技能里的例子全是 Lua,防漂移测试经脚本的前端读一遍。
-- 人在聊天框里敲的命令行(`/numen drive`)是第二个前端,读的是同一张登记表、同一个处理函数。
+- 管理员的 `/numen drive <同伴> <程序>` 跑一段 Lua,和她的程序同一个入口(§十三);没有第二个前端。
 
 ### 命令函数:由登记处生成
 
@@ -110,14 +110,13 @@
 - 按顺序的对象依次给位置参数,最后一个位置参数收下余下的全部对象;最后一个参数是一张表、而且它的键都是这个函数的选项名,
   它就是选项表(键里的 `_` 与 `-` 同一),否则它是一个对象(一个 Pos 也是一张表)。一处位置写成 Pos `{x = 120, y = 64,
   z = -35}`,一串值写成一张列表。值的样子、返回与错误见 §八。
-- 换算只在 `NumenCli.invocation` 一处:对象与选项写成参数名到值的 JSON,当场经参数类型 `ArgType` 读一遍
-  (`CommandArgs.fromJson`,执行的那一侧读的也是它),**不拼命令行**。读不成(没有这个函数、对象多了、缺必填、选项名不对、
-  值读不成)在调用处抛错误值,种类 `bad_argument` 或 `no_function`,`hint` 是改好的那一行调用(看得出想写什么时)或怎么看
-  帮助。读一组里没有的函数当场报错,附最像的那个名字。
-- **成功返回数据,失败抛错误值。** 占身体的命令等它的 task_finished 再返回,task_finished 带着那件活的结果数据。返回什么
-  由登记时声明的类型说(`Action.returns(类型)`,或 `returns("count", 整数)` 只交数据里的一项):`inv.count` 是一个整数,
-  `scan.blocks` 是团的列表,`work.dig` 是 `{dug, left, out_of_reach, nearest}`,声明了不返回的是 nil。那句话只进回执,不进
-  程序。失败抛的错误值 `pcall` 接得住,接住了就按 `err.kind` 分支。
+- 换算只在 `Dispatcher.invocation` 一处:对象与选项按函数的参数表经各自的值转换读一遍(§十三),执行的一侧拿到的是读好的
+  参数 record,**不拼命令行**。读不成(没有这个函数、对象多了、缺必填、选项名不对、值读不成)在调用处抛错误值,种类
+  `bad_argument` 或 `no_function`,`hint` 是改好的那一行调用(看得出想写什么时)或怎么看帮助。读一组里没有的函数当场报错,
+  附最像的那个名字。
+- **成功返回值,失败抛错误值。** 占身体的函数等它的 task_finished 再返回,task_finished 带着那件活的值。返回什么由函数的
+  返回类型说(§十三):`inv.count` 是一个整数,`scan.blocks` 是团的列表,`work.dig` 是 `{dug, left, out_of_reach, nearest,
+  drops}`,`void` 的是 nil。身体做了什么的账只进回执,不进程序。失败抛的错误值 `pcall` 接得住,接住了就按 `err.kind` 分支。
 - `print(...)` 写进回执(至多 6000 字;表按 Lua 的写法印出来)。
   `raise(kind, message, hint)` 以一个错误值失败,`error("why", 0)` 是程序自己的运行错(`runtime`)。
 - **名字的改写只有一条**:组名或动作名撞上 Lua 的保留字(`goto`、`end`……)或沙箱自带的全局名(`string`、`table`、
@@ -129,12 +128,12 @@
 
 - 语言(`agent.script.ScriptEngine` 与实现)、一次运行(`ScriptRun`)、一次调用里的脚本(`ScriptCall`)、上限(`ScriptLimits`)
   是纯 JVM,和派发器 `SerialCalls` 在同一个模块。理由:等身体收尾、急件打断等待的那处机制就在 `SerialCalls`,脚本每调
-  一个命令要的正是它;放进 api 要么另造一份等待,要么让 api 的工具反过来伸进派发器。
+  一个函数要的正是它;放进 api 要么另造一份等待,要么让 api 的工具反过来伸进派发器。
 - `lua` 模块由 `agent` 依赖;发行 jar 里和 `ai`、`agent` 一样平铺进引擎(`api-loader` 约定插件),许可随 jar 带
   `LICENSE_numen-lua`。
-- 派发器经端口 `SerialCalls.Port`(继承 `ScriptCall.Host`)要这几样:执行一个调用、认出组合命令的调用里的程序、把一行命令写成
-  一次 `command` 调用、受理回执与 task_finished 的认法、命令目录与换算、记战绩、墙钟。主人客户端与评测大脑用
-  `CompanionToolPort`,GameTest 的一轮用服务端的 `ServerPort`(直接 `serve`,战绩直接记)。
+- 派发器经端口 `SerialCalls.Port`(继承 `ScriptCall.Host`)要这几样:执行一个调用、认出跑程序的那个工具调用里的程序、
+  task_finished 的认法、函数目录与换算、记战绩、墙钟。主人客户端与评测大脑用 `CompanionToolPort`,`/numen drive`、重启后再跑、
+  GameTest 与单测用同一个进程里的 `ProgramPort`(服务端函数直接交派发,战绩直接记)。
 
 ### 运行:一个脚本一个虚拟线程
 
@@ -270,7 +269,7 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
 
 | 借的 | 出处 | 我们的落点 |
 |---|---|---|
-| 位置是一种带名字字段的值,方块带着它的 `position`,`bot.dig(block)` 收方块本身 | mineflayer 的 `Vec3`、`Block.position`、`bot.dig` | `Pos {x, y, z}`(`Shapes.POS`),Block/Entity/Item 都带 `pos`;收位置的参数收任何带 `pos` 的表(`ArgType.cellFromJson`、`placeFromJson`) |
+| 位置是一种带名字字段的值,方块带着它的 `position`,`bot.dig(block)` 收方块本身 | mineflayer 的 `Vec3`、`Block.position`、`bot.dig` | `Pos {x, y, z}`(`LuaCodecs.POS`),Block/Entity/Item 都带 `pos`;收位置的参数收任何带 `pos` 的表(`Positions.cell`、`Place` 的读法) |
 | 查到的东西直接交给下一步,在代码里筛,不让模型抄数 | Anthropic《Code execution with MCP》、Cloudflare Code Mode | `scan.blocks(...).groups[1].nearest` → `work.dig`;`scan.entities()[1]` → `fight.attack`、`move.to`;`route.plan(...)` 的计划 → `move.go` |
 | 函数签名写成类型,模型照签名写代码;只给一个写代码的工具 | Cloudflare Code Mode(TS 接口)、smolagents `CodeAgent`(带类型的函数签名) | `api.help` 给 LuaLS 注释:`---@class 组` 加每个函数一行 `---@field f fun(…): 返回`(`LuaEngine.groupText`、`functionText`) |
 | 先看索引,要用哪组再展开 | Anthropic 的渐进披露(`search_tools`) | 系统提示只放 `<api>` 索引(组名、一句话、函数名与共用的类);`api.help("组")` 展开一组,`api.help("组.函数")` 展开一个 |
@@ -281,18 +280,18 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
 
 - **位置只有一种写法**:一格是 Pos `{x = 120, y = 64, z = -35}`,一列是 `{x = …, z = …}`,一个高度是 `{y = …}`。小数按所在的
   那一格算(`BlockPos.containing`),所以 `status.self().pos` 原样能交。任何带 `pos` 字段的表(Block、Entity、Item、一团的
-  `nearest`)放在位置那一格就是它的 `pos`;收实体的参数收编号或带 `id` 的表。读法只在 `ArgType` 一处。
+  `nearest`)放在位置那一格就是它的 `pos`;收实体的参数收编号或带 `id` 的表。读法只在 `Positions` 一处。
 - **旧写法删了**:`{120, 64, -35}`、`"120 64 -35"`、`"120,64,-35"` 都是 `bad_argument`,`hint` 是改好的那一整行调用;
   只给了一列却要一格,说缺 y。删的理由:同一处位置三种写法,模型在三种之间来回猜,查询结果也交不进动作。
-- 共用的类在 `Shapes` 与各组登记时声明(`CommandGroup.declare`):`Pos`、`Block`、`Entity`、`Item`(继承 Entity)、`Error`,
-  以及 `AreaPart`、`Area`、`Plan`、`Leg`、`Step`、`Ask`、`Stop`、`Costs`、`Placed`、`Design`、`Maid` 这些组自己的。
+- 共用的类在 `LuaCodecs`:`Pos`、`Block`、`Entity`、`Item`(继承 Entity)、`Cells`、`Error`;各组自己的类(`Plan`、`Leg`、
+  `Step`、`Ask`、`Stop`、`Costs`、`Placed`、`Window`、`tlm.Maid`……)从函数签名里的 record 来(§十三)。
 
 ### 返回
 
-- 每个动作登记时必须声明返回的类型(`Action.returns`,`CommandGroup.close` 查;不返回值是 `ScriptType.NOTHING`)。处理函数交回
-  `TaskResult`:`data` 给程序,`message` 只给回执与 task_finished,两样在同一处从同一份事实写出。
-- 只读不跑一段正文时(帮助里的例子、技能里的写法),调用按声明的类型造一个样子返回(`ScriptType.sample`),取字段、取第一项、
-  循环的写法都读得通;所以例子写错一个字段名,登记时就查出来。
+- 返回的类型就是函数的返回类型(§十三)。值给程序;身体做了什么的账(活的收尾、短活与主人点头)只进回执与 task_finished,两样从
+  同一份事实写出。
+- 只读不跑一段正文时(帮助里的例子、技能里的写法),调用按返回类型造一个样子返回(`ScriptType.sample`),取字段、取第一项、
+  循环的写法都读得通;所以例子写错一个字段名,lint 报告(`ApiTester.lint`)就指出来。
 
 ### 错误
 
@@ -436,8 +435,8 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
 `costs` 的每一项:`dig`、`place` 是 `false`(不许,默认)、`true`(许,原价)或一个数(许,每挖/放一格另加这么多);`consent` 是
 `true`(许走要问主人的格,价钱乘 10,默认)、`false`(要问的格当墙,绕开)或一个不小于 1 的倍数;`jump`、`swim` 是每跳一下、每过一格
 水另加的价;`fall` 是脚下没水时最多跳多高;`parkour` 许不许疾跑跳过 2–4 格的空隙;`max_changes` 是整趟最多改几格。读法与翻成寻路
-规格(`RouteSpec`)只在 `core/route/Description` 一处;一格、一团(Cluster)、一串格(Cells)的读法借 `ArgType.cellsOf`,
-和动作收一串格的参数(`ArgType.list`,一项是一团就展开成它的每一格)同一处。
+规格(`RouteSpec`)只在 `core/route/Description` 一处;一格、一团(Cluster)、一串格(Cells)的读法借 `Positions.cells`,
+和动作收一串格的参数(`@Rest`,经 `Positions.items`:一项是一团就展开成它的每一格)同一处。
 
 权限不是描述的一项。规划时每一格自动问权限层(`GateTerrain`,与执行同一个 `Gate` 判定):拒绝的当墙,要问的照 `costs.consent`
 算贵、列进计划的 `asks`,允许的照常。
@@ -523,3 +522,154 @@ local plan = numen.route.plan({stops = {{to = {x = 10, y = 64, z = 5}, type = "t
   换成 `"place"`;`throwaway` 清单删了,垫路料用每一趟的 `materials`(不写是标签 `#numen:throwaway`)。
 - **登记不合规矩当场抛出**:`NumenPlugins.register` 不再接住插件登记块里的异常记一行日志——那样一组会悄悄缺席(例子读不通、
   没声明返回……),模型看到的 API 少了一块却没人知道。现在异常原样抛出、启动失败,那句话写着名字空间、组、动作与哪条规矩。
+
+## 十三、API 登记:签名就是契约(10-04)
+
+照主流的写法(Python 的类型注解生成工具 schema、Cloudflare Code Mode 的 TS 接口、Spring 的注解方法):**一个函数就是一个带 `@Fn`
+的静态方法,它的签名就是契约**——名字、在哪执行、怎么交回、参数(位置与选项)、返回的类型、帮助,全从签名读出来,不另写一份。命令行
+前端(Brigadier 树、把一行字读成调用)删了,脚本是唯一的入口;Numen 自己的各组与每个插件走同一扇门
+(`NumenPlugins.register(名字空间, numen -> numen.api(组, 一句话, XxxApi.class))`)。包在 `api` 的 `com.dwinovo.numen.sdk`。
+
+### 写法
+
+```java
+public final class LocateApi {                         // 一组:一个公开类,每个 @Fn 静态方法一个函数
+
+    public static void install(NumenApi numen) {
+        numen.api("locate", "Find the nearest structure or biome in the dimension you are in.", LocateApi.class);
+    }
+
+    /** 参数是一个 record:组件就是参数。 */
+    public record Biome(@Doc("Biome id or #tag ...") String biome) {}
+
+    @Fn("Find the nearest biome of a type: its column, compass direction and distance.")
+    @Example("numen.locate.biome(\"minecraft:warped_forest\")")
+    @Note("Searches YOUR CURRENT dimension only ...")
+    @SeeAlso({"numen.locate.structure", "numen.scan.entities"})
+    public static Pending<Located> biome(ServerCall call, Biome args) { ... }
+}
+```
+
+- **第一个参数说在哪执行**:`ServerCall`(服务端:身体、世界)或 `ClientCall`(主人客户端:只有那里才有的数据,比如模型包、任务书)。
+- **第二个参数是一个 record**,组件就是参数:名字从驼峰换成下划线(`maxCount` 是 `max_count`);不是 `Optional` 的按顺序是位置参数,
+  `Optional` 的进最后的选项表;`@Positional` 标一个可以不写的位置参数(只能在位置参数最后),`@Rest` 标收下余下全部对象的那一个
+  (`f(a, b)` 与 `f({a, b})` 一样,一项是扫描交回的一团时展开成它的每一格)。说明写 `@Doc`,省略时的意思写 `@Omitted("…")`。
+  不收参数的函数只有调用这一个参数。
+- **返回类型说怎么交回**:`R` 当场;`Pending<R>` 等一会儿(主人点头、按刻分片的搜索、一件有界短身体活 `call.sync(record)`),
+  不占任务槽;`Job<R>` 占身体、进任务槽,受理回活的编号,程序等它的 task_finished;要的样子此刻已经是了(`build.place` 的格都对了)
+  是 `Job.done(值)`,不派活。`R` 是 record、枚举、`List`、`Map<String, T>`、Minecraft 的值(`BlockPos`、`Item`、`Block`……)或
+  `void`;只有一个字段的结果直接交那个值(`inv.count` 是整数、`work.fish` 是一串字)。
+- **失败只抛 `ApiError(kind, message, hint, data)`**;`hint` 是能照抄的下一行程序,用 `Call.of("numen.move.to", pos,
+  Map.of("arrive", "dig"))` 写,不手拼。查不到不是失败:交回空表或 nil。函数说参数此刻不成立抛 `IllegalArgumentException`,和读不成
+  同一种 `bad_argument`(附用法与帮助的写法)。
+- **值转换**(`LuaCodecs`):record 是一张表(字段说明来自 `@Doc`,`@Folded` 的字段收起来,`@Flatten` 的第一个组件摊进这张表并成为
+  父类,`@Methods("numen.scan")` 说值带的方法写在哪个模块),枚举是小写的名字,内置 `Pos`、`Block`、`Entity`、`Item`、`EntityRef`、
+  `Place`、`Target`……;一种自己的类型登记一次 `numen.codec(X.class, codec)`(读、写与签名里写成什么在同一个对象上)。类名:引擎自己的
+  不带前缀(`Plan`、`Window`),插件的带名字空间(`tlm.Maid`)。
+- **够不着、用一只实体、过权限是原语**:`call.entity(ref)` 认出点名的实体(不在了是 `not_found`),`call.reach(entity, Reach.hand())`
+  量够不够得着(够不着是 `out_of_reach`,`hint` 是走过去的那一行),`call.use(entity, reach, deed)` 是这三样加上权限层的
+  `use_entity`,放行之后按同一个编号再认一次、再量一次才做 `deed`;`call.authorize(action)` 直接问权限层。许不许只在原语执行的那一刻
+  由权限层裁决,`@Fn` 上没有任何许可字段。模组的管理指令经 `call.onHer()` 以服务器的权威、只对她执行。
+- **身体做了什么都要说**:一件短活的实际账、主人点头允许了什么、一次扫描没看全哪里,随等到的值交回(`Pending.report`),写进程序回执的
+  那一行;占身体的活的账照旧在收尾那一行。
+
+### 只拦会破坏系统的
+
+登记时(`Binder`、`ApiRegistry`、`LuaCodecs`)硬错误只有这几条,抛 `IllegalArgumentException`,说是哪个函数、哪一条,启动失败:
+
+- 名字写不出来:不是 `[a-z][a-z0-9_]*`,或撞上 Lua 的关键字(`end`)与沙箱自带的全局(名字空间 `string`);
+- 组已经有主,或往别人的名字空间里加;
+- 签名绑定不了:不是 `public static`、第一个参数不是 `ServerCall`/`ClientCall`、第二个参数不是 record、主人客户端的函数不当场返回;
+- 一个参数或返回值的类型没有值转换;
+- 可以不写的位置参数不在最后,`@Rest` 不在最后或不是 `List`;
+- 两个类型争同一个类名。
+
+写法上的问题不拦,交给 `ApiTester.lint()` 的报告:没写说明、参数没写 `@Doc`、没写例子、例子读不通或没调到自己或参数读不成、
+`@SeeAlso` 指的函数不存在、随模组发的模块开头没写说明或函数上面没写注释;`ApiTester.lint(texts)` 读技能与提示词里写着的调用。core 与
+各插件的单测各写一份报告到 `build/reports/api-lint.txt`(不让构建失败),core 的那份旁边还有整份 API 的 LuaLS 存根 `numen-api.lua`
+与机器可读的元数据 `numen-api.json`。好写法好不好用,由评测的分数说话(见下)。
+
+### 组成
+
+| 部件 | 做什么 |
+|---|---|
+| `Binder` | 从签名推出 `ApiFunction`(参数、种类、返回的值转换、例子、注意、相关),只抛上面那几条硬错误 |
+| `ApiRegistry` | 登记表:组、函数、名字空间;给脚本的目录(`ScriptCatalog`) |
+| `LuaCodecs` / `Codec` | 值转换,连同签名里写成什么;record、枚举、列表、表现造,别的登记 |
+| `Dispatcher` | 一次调用:脚本里的调用读成参数(读不成当场 `bad_argument`)、服务端或客户端执行、按种类交回(`ApiReply`)、受理活并记下重启后再跑的那一行 |
+| `ApiDocs` | `<api>` 索引、`numen.api.help`、用法、LuaLS 存根、元数据,全从登记表生成 |
+| `ApiTester` | 进程里跑一段程序看回执(`run`)、lint 报告 |
+| `ProgramPort` / `ServerPrograms` | 同一个进程里跑程序的执行口:`/numen drive`、重启后再跑、GameTest 与单测都经它 |
+
+线上的样子只在 `agent` 的 `ApiReply` 一处:`{"ok": true, "value": …}`、`{"ok": true, "job": "t12"}`、
+`{"ok": false, "error": {kind, message, hint, data}}`,等到的值与收尾另带 `account`。
+
+### 三个例子
+
+**查询**(当场交回,不碰世界):
+
+```java
+public record Located(boolean found, Optional<Place> pos, Optional<String> direction,
+                      Optional<Integer> horizontalDistance, Optional<Integer> searched, String dimension) {}
+
+@Fn("Find the nearest biome of a type: its column, compass direction and distance.")
+@Example("numen.locate.biome(\"#minecraft:is_forest\")")
+public static Pending<Located> biome(ServerCall call, Biome args) {
+    return call.sync(new LocateBiomeTaskRecord(call, deadline(call), args.biome()));   // 按刻分片的搜索
+}
+```
+
+**占身体的活**(进任务槽,程序等它收尾;重启后再跑的那一行写目标的 UUID,不写只在这一次开服有效的运行期编号):
+
+```java
+public record Attack(@Doc("The entity to fight: an Entity from numen.scan.entities, or its id.") EntityRef entity) {}
+
+@Fn("Attack one entity until it is dead, lost or out of reach.")
+@Example("numen.fight.attack(184)")
+public static Job<Fought> attack(ServerCall call, Attack args) {
+    Entity target = call.entity(args.entity());
+    AttackTaskRecord record = new AttackTaskRecord(call.fn(), call.callId(), ..., List.of(target.getId()), false);
+    return Job.<Fought>of(record).replayedAs(new Attack(EntityRef.of(target)));
+}
+```
+
+**插件的函数**(车万女仆:用一只女仆是 `call.use`,判据留在车万女仆自己的包里,调完读回):
+
+```java
+NumenPlugins.register("tlm", numen -> numen.api("maid", "Touhou Little Maid: the maids you keep.", MaidApi.class));
+
+@Fn("Switch one of your maids to another work mode, like a click in her task list.")
+@Example("tlm.maid.task(\"touhou_little_maid:farm\", {maid = 812})")
+public static Pending<Switched> task(ServerCall call, Task args) {
+    Entity maid = args.maid().isPresent() ? maid(call, args.maid().get()) : yoursWithinReach(call);
+    return call.use(maid, GUI, still -> {
+        Maids.switchTask(call.her(), still, args.task());
+        String now = Maids.task(still);
+        if (!now.equals(args.task().toString())) {
+            throw refused(call.her(), still, args.task(), "...", new Switched(still.getId(), now));
+        }
+        return new Switched(still.getId(), now);
+    });
+}
+```
+
+脚本里:`tlm.maid.task("touhou_little_maid:farm", {maid = m})` 交回 `{maid = 812, task = "touhou_little_maid:farm"}`;离得远是
+`out_of_reach`,`err.hint` 是 `numen.move.to({x = …}, {arrive = "near", range = 2})`。
+
+### 重启后接着做、`/numen drive`
+
+- 受理一件活时,把这次调用写成一行 Lua 记下(`Call.of`,活换过参数的用 `Job.replayedAs` 那一份);重启后经 `ServerPrograms` 再跑这一行,
+  和她写的程序同一个入口。没受理(读不通、当场失败、准备没过)就是没接回来,她收到一条 task_finished 说为什么。**旧存档不兼容**:旧版本
+  按一行命令记下的活读进来只为说清它没接回来(日志与 task_finished 都说这一版不再跑它),不做转接。
+- `/numen drive <同伴> <程序>`(OP)是一段 Lua 程序,经同一个入口跑,整张回执说给发令人。`/numen permission …`、`/numen consent …`
+  照旧。
+- `/help` 那一套挖 Brigadier 的帮助只留给 `numen.mc.run("help give")`:原版与模组的指令在原版的指令树上解析、执行,写不通附用法与最接近
+  的候选。
+
+### 评测按函数统计
+
+程序里的每次 API 调用有了结局(成了、哪种失败,参数读不成的也算一次)都报给循环(`ScriptCall.Called` → `ToolPort.Sink.called` →
+`LoopEvent.ApiCalled`);评测的 `Meter` 按函数记:调了几次、失败的各是哪一种(尤其 `bad_argument`)、第一次调它之前 `numen.api.help`
+查过几次它(或它的组、名字空间)、和之前一字不差又失败了几次。每次运行写进 `runs.jsonl` 的 `functions`;`summary.md` 有"每个函数"
+一张表,`Compare` 把前后两份按函数并排(调用、失败率、参数错率、查帮助/调用)。插件作者给自己的函数打分:用 `Bench.suite` 登记自己的
+场景,看这张表。
