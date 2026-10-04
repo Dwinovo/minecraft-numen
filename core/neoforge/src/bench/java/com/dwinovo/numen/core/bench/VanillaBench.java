@@ -24,8 +24,6 @@ public final class VanillaBench {
                         .add(WalledChest::new)
                         .add(GuardOwner::new)
                         .add(BuildWall::new)
-                        .add(ImpossibleRequest::new)
-                        .add(BuildHut::new)
                         .add(IronPickaxeChain::new)
                         .add(HarvestAndBread::new));
     }

@@ -266,7 +266,6 @@ final class Attempt {
         boolean passed = end != EndReason.HARNESS_ERROR;
         Map<String, Double> metrics = Map.of();
         if (scene != null) {
-            scene.finished(end, meter == null ? 0 : meter.toolCalls);
             List<Check> all = new ArrayList<>(scenario.checks());
             all.add(Check.guard("她没死", s -> s.assertTrue(!s.died(), "她死了")));
             for (Check check : all) {
