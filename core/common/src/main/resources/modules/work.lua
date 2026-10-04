@@ -1,26 +1,37 @@
 -- Picking up and digging out: walk onto the dropped items lying around, dig out a cluster.
 local M = {}
 
----Pick up the dropped items around you, nearest first, walking onto each with numen.move.to. A fresh drop cannot be
----picked up for a few ticks (its pickup_delay): standing on it, it walks onto it again until it is taken. An item
----with no way to it (numen.move.to fails with no_path) is passed over and the rest are picked up; at the end the ones
----passed over raise no_path, with them in err.data.left. An item still there after walking onto it with no delay
----left (a full pack, or a spot you cannot stand in) raises failed; any other error of a walk stops here as it is.
----@param opts? table radius = how far to look (default 8); the rest is the description for the walks (costs = {dig = true, place = true} lets it dig and pillar to drops in a pit).
+---Pick up the dropped items around you, nearest first, walking onto each with numen.move.to. Given items (the drops
+---numen.work.dig returned), it goes only after those of them still lying around. A fresh drop cannot be picked up for
+---a few ticks (its pickup_delay): standing on it, it walks onto it again until it is taken. An item with no way to it
+---(numen.move.to fails with no_path) is passed over and the rest are picked up; at the end the ones passed over raise
+---no_path, with them in err.data.left. An item still there after walking onto it with no delay left (a full pack, or
+---a spot you cannot stand in) raises failed; any other error of a walk stops here as it is.
+---@param opts? table items = only these (anything with an id: the drops of numen.work.dig, Items of numen.scan.entities); radius = how far to look (default 8, or 64 with items); the rest is the description for the walks (costs = {dig = true, place = true} lets it dig and pillar to drops in a pit).
 ---@return integer picked How many items it walked onto that are gone now.
 function M.collect(opts)
   local walk = {}
   for k, v in pairs(opts or {}) do
     walk[k] = v
   end
-  local radius = walk.radius or 8
+  local wanted = nil
+  if walk.items then
+    wanted = {}
+    for _, item in ipairs(walk.items) do
+      if item.id then
+        wanted[item.id] = true
+      end
+    end
+  end
+  local radius = walk.radius or (wanted and 64 or 8)
   walk.radius = nil
+  walk.items = nil
   local walked = {}
   local unreachable = {}
   while true do
     local items = {}
     for _, item in ipairs(numen.scan.entities("item", {radius = radius})) do
-      if not unreachable[item.id] then
+      if not unreachable[item.id] and (wanted == nil or wanted[item.id]) then
         items[#items + 1] = item
       end
     end
@@ -64,8 +75,8 @@ end
 
 ---Dig out one cluster, walking first: walk within reach of it (numen.move.to with arrive "dig": where your hand reaches
 ---the most of what is left of it, digging and pillaring on the way but keeping away from cells needing your owner's
----consent), dig what is in reach (numen.work.dig), pick up the drops (numen.work.collect), and again until none of it is
----left. A round that digs nothing raises failed with what is left; any other failing step (a walk with no way there,
+---consent), dig what is in reach (numen.work.dig), pick up what that dig dropped and still lies around
+---(numen.work.collect with its drops), and again until none of it is left. A round that digs nothing raises failed with what is left; any other failing step (a walk with no way there,
 ---a dig refused) raises its error as it is.
 ---@param cluster Cluster|Cells What to dig: a cluster numen.scan.blocks found, as it is (or Cells, or a list of Blocks).
 ---@return integer dug How many cells it dug.
@@ -76,7 +87,7 @@ function M.mine(cluster)
     numen.move.to(cluster, {arrive = "dig", costs = costs})
     local r = numen.work.dig(cluster)
     dug = dug + r.dug
-    M.collect({costs = costs})
+    M.collect({items = r.drops, costs = costs})
     if r.left == 0 then
       return dug
     end

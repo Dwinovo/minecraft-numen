@@ -504,9 +504,17 @@ local plan = numen.route.plan({stops = {{to = {x = 10, y = 64, z = 5}, type = "t
 - **一团与一串格进描述**:`to`、`avoid`、`avoid_break/place/step` 收扫描交回的 Cluster 与 `numen.shape` 画的 Cells,读法见上;
   §十一里"带 `cells` 的表"那种写法没有了。两个 Pos 写成一项仍是一个盒子(整片交给寻路、不逐格展开),两个 Block 是两格。
 - **`numen.work.mine(cluster)` 先走后挖**:`numen.move.to(cluster, {arrive = "dig", costs = {dig, place, consent = false}})`
-  走到够得着那一团最多格的地方,`numen.work.dig(cluster)` 挖手边的,`numen.work.collect` 捡,一轮一轮直到那一团不剩
-  (`left == 0`);一轮一格也没挖到抛 `failed`。`numen.work.dig` 收一团就是收它的每一格。GameTest 的挖矿辅助
-  (`GameTestKit.mine`)与评测 `mine_iron` 的标准解是同一个流程拆成原子调用。
+  走到够得着那一团最多格的地方,`numen.work.dig(cluster)` 挖手边的,`numen.work.collect({items = r.drops})` 捡这一挖还落在地上
+  的,一轮一轮直到那一团不剩(`left == 0`);一轮一格也没挖到抛 `failed`。`numen.work.dig` 收一团就是收它的每一格。GameTest 的挖矿
+  辅助(`GameTestKit.mine`)与评测 `mine_iron` 的标准解是同一个流程拆成原子调用。
+- **挖的结果写明掉落物去了哪**(10-04):真机上她挖了岩浆上方的黑曜石,掉落物掉进岩浆烧掉,没有一句话告诉她。`numen.work.dig`
+  收工前等这一挖的掉落物落定,最多 40 刻(2 秒:从被挖那一格弹起再落到底下约 10 刻、在地上滑停约 7 刻,岩浆两刻、火与仙人掌五刻
+  毁掉一件,四十刻自由落体能掉二十来格;漂在水里的永远不着地,到上限就照此刻在哪说)。认领在生成那一刻:她的手挖掉一格
+  (`ServerPlayerGameMode.destroyBlock`)那一段里进世界的掉落物记进这一挖的账,连带碎掉的(火把、箱子里的东西)也算;去向只在
+  `core/act/Drops` 一处判——落地(原版判"不在动"的那条线)、被谁捡起(`LivingEntity.take`)、被什么毁掉(`ItemEntity.hurt`)、
+  掉进虚空、被别的收走、到上限还在动;并堆跟着件数走。落定之后的事不归它。回执那一句(`Drops: 1 obsidian fell into lava and
+  burned up at {x = …}`)与数据 `drops`(一笔一项 `{item, count, fate, pos, by?, cause?, id?}`)出自同一份记录。
+  `numen.work.collect({items = …})` 只追给它的那几件(按 `id`),`numen.work.mine` 把挖的 `drops` 交给它,不再挖完另扫一遍。
 - `numen.inv.*`、`numen.build.raise`、`numen.work.collect` 等模块里的走路一律是 `numen.move.to`,`alter` 换成
   `costs = {dig = true, place = true, consent = false}`(只改自然地形,要问的格绕开),`near` 换成 `range`、`arrive = "reach"`
   换成 `"place"`;`throwaway` 清单删了,垫路料用每一趟的 `materials`(不写是标签 `#numen:throwaway`)。

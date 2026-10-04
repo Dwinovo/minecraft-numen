@@ -23,9 +23,10 @@ import net.minecraft.resources.ResourceLocation;
  * {@code work}:采集类的活——挖方块、钓鱼。两个动作都站在原地干,占身体,交任务槽:受理即回执,收尾走 task_finished;开始不了的
  * (手够得着的一格都没有、站的地方抛不进水……)受理之前就当场拒绝,判据在各自的任务里。
  *
- * <p>{@code dig} 只挖她站在原地手够得着的格,挡在前面的一并挖开,不走动、不捡({@link DigCompanionTask});{@code fish} 只钓,
- * 不走去岸边、不追战果。走到够得着的地方是 {@code numen.move.to(…, {arrive = "dig"})} 的事;捡是库里的 {@code numen.work.collect}:
- * 原版玩家走近掉落物就捡起来,所以捡就是扫掉落物、走到它跟前。组合交给脚本。
+ * <p>{@code dig} 只挖她站在原地手够得着的格,挡在前面的一并挖开,不走动、不捡,收工前等这一挖的掉落物落定、说清各去了哪
+ * ({@link DigCompanionTask});{@code fish} 只钓,不走去岸边、不追战果。走到够得着的地方是 {@code numen.move.to(…, {arrive = "dig"})}
+ * 的事;捡是库里的 {@code numen.work.collect}:原版玩家走近掉落物就捡起来,所以捡就是走到掉落物跟前——挖完捡的是挖的结果里还落在
+ * 地上的那几件。组合交给脚本。
  */
 public final class WorkCommands {
 
@@ -39,6 +40,23 @@ public final class WorkCommands {
             ArgType.integer(1, BlockActionOps.MAX_DIG_COUNT), "How many cells to dig at most.")
             .whenOmitted("dig every cell of it within reach");
 
+    /** 挖下来的一份掉落物去了哪,{@code numen.work.dig} 的结果里一笔一项(数据由 {@code Drops.data} 写出)。 */
+    static final ScriptType.Class DROP = new ScriptType.Class("Drop", "Where some of what a dig dropped went.", null,
+            List.of(ScriptType.field("item", ScriptType.STRING, "The item id, minecraft:cobblestone."),
+                    ScriptType.field("count", ScriptType.INTEGER, "How many."),
+                    ScriptType.field("fate", ScriptType.STRING, "landed (lies on the ground), picked_up, destroyed "
+                            + "(burned in lava or fire, broken on a cactus …), void (fell out of the world), gone (taken "
+                            + "by something that is no creature, a hopper …) or moving (still falling or drifting when "
+                            + "the dig stopped waiting)."),
+                    ScriptType.field("pos", Shapes.POS.type(), "The cell it landed in, was destroyed or picked up "
+                            + "in, or was in when the dig stopped waiting."),
+                    ScriptType.optional("by", ScriptType.STRING, "Who picked it up: you, a player's name, or a "
+                            + "creature's type id."),
+                    ScriptType.optional("cause", ScriptType.STRING, "What destroyed it: the damage type id, "
+                            + "minecraft:lava."),
+                    ScriptType.optional("id", ScriptType.INTEGER, "The entity id of the item still lying there "
+                            + "(landed or moving), as numen.scan.entities gives it.")));
+
     private WorkCommands() {}
 
     public static void install(NumenApi numen) {
@@ -47,6 +65,7 @@ public final class WorkCommands {
     }
 
     private static void actions(CommandGroup work) {
+        work.declare(DROP);
         work.server("dig", "Dig the given blocks that are within reach of where you stand.", WorkCommands::dig,
                         DIG_TARGETS, DIG_COUNT)
                 .returns(ScriptType.table(
@@ -54,7 +73,9 @@ public final class WorkCommands {
                         ScriptType.field("left", ScriptType.INTEGER, "Cells of what you gave still to dig."),
                         ScriptType.field("out_of_reach", ScriptType.INTEGER, "Of those, how many your hand does not "
                                 + "reach from where you stand."),
-                        ScriptType.optional("nearest", Shapes.POS.type(), "The nearest of those out of reach.")))
+                        ScriptType.optional("nearest", Shapes.POS.type(), "The nearest of those out of reach."),
+                        ScriptType.field("drops", ScriptType.listOf(DROP.type()), "Where what it dug dropped "
+                                + "went.")))
                 .example("numen.work.dig({{name = \"iron_ore\", pos = {x = 120, y = 12, z = -35}}, "
                         + "{name = \"iron_ore\", pos = {x = 121, y = 12, z = -35}}})")
                 .example("numen.work.dig({x = 120, y = 12, z = -35})")
@@ -63,8 +84,14 @@ public final class WorkCommands {
                 .note("A cluster from `numen.scan.blocks` or a Block from `numen.scan.block` goes in as it is.")
                 .note("Digs only what your hand reaches from where you stand: it never walks and never picks up. Get "
                         + "within reach first with `numen.move.to(cluster, {arrive = \"dig\"})` (it picks the spot that "
-                        + "reaches the most cells), dig, and pick the drops up with `numen.work.collect()`; "
+                        + "reaches the most cells), dig, and pick up what it dropped: "
+                        + "`local r = numen.work.dig({x = 120, y = 12, z = -35}); "
+                        + "numen.work.collect({items = r.drops})`; "
                         + "`numen.work.mine(cluster)` does all three until the cluster is gone.")
+                .note("Before it returns it waits up to " + com.dwinovo.numen.core.act.Drops.SETTLE_TICKS / 20
+                        + " seconds for what this dig dropped to settle, and says where each went: landed (and where), "
+                        + "picked up (and by whom), destroyed (lava, fire, a cactus …), fallen into the void, or "
+                        + "still moving. Only what it dropped is followed, and only until it settles.")
                 .note("Background work: before it starts it checks something within reach can be dug, harvested "
                         + "with your tools and is allowed; when nothing is, it fails with kind out_of_reach (or denied, "
                         + "failed) and a hint with the numen.move.to call to copy — no task starts and whatever you were "

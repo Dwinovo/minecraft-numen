@@ -445,14 +445,15 @@ public class DigGameTests {
 
     /**
      * 挖一格:点名它的坐标。一捆干草块在她手边,{@code numen.work.dig x y z} 当场挖掉;受理回执说手够得着几格,收场说挖了
-     * 1 格、掉落物在地上,捡是 {@code numen.work.collect} 的事。她一步没动(落在脚边的,原版照样会吸进包里,那不是挖的一方去捡)。
+     * 1 格、掉下来的那一捆落在了哪一格——回执那句话与数据的 {@code drops} 说的是同一件:落地、在被挖那一格(或滑到隔壁一格)、
+     * 还躺在那儿的那一件的编号。她一步没动。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_dig")
     public static void dig_one_cell_by_its_coordinates(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos hay = helper.absolutePos(new BlockPos(9, 2, 5));
         level.setBlockAndUpdate(hay, Blocks.HAY_BLOCK.defaultBlockState());
-        NumenPlayer companion = spawnAt(helper, "gametest_one_cell", new BlockPos(7, 2, 5), false);
+        NumenPlayer companion = spawnAt(helper, "gametest_one_cell", new BlockPos(6, 2, 5), false);
         BlockPos stand = companion.blockPosition();
         ToolRun dig = lua(companion, "numen.work.dig(" + xyz(hay) + ")");
 
@@ -461,13 +462,68 @@ public class DigGameTests {
                             + " are within my reach where I stand"),
                     "the acceptance does not say how many cells are within reach: " + dig.reply());
             helper.assertTrue(dig.done(), "work dig has not finished");
-            helper.assertTrue(dig.succeeded() && dig.outcome().startsWith("dug 1 cell(s) of hay_block")
-                            && dig.outcome().contains("`numen.work.collect()` picks it up"),
+            helper.assertTrue(dig.succeeded() && dig.outcome().startsWith("dug 1 cell(s) of hay_block"),
                     "the cell was not dug: " + dig.outcome());
+            com.google.gson.JsonObject drop = onlyDrop(dig);
+            BlockPos landed = new BlockPos(drop.getAsJsonObject("pos").get("x").getAsInt(),
+                    drop.getAsJsonObject("pos").get("y").getAsInt(), drop.getAsJsonObject("pos").get("z").getAsInt());
+            helper.assertTrue(drop.get("fate").getAsString().equals("landed") && drop.get("count").getAsInt() == 1
+                            && landed.getY() == hay.getY() && Math.abs(landed.getX() - hay.getX()) <= 1
+                            && Math.abs(landed.getZ() - hay.getZ()) <= 1,
+                    "the drop did not land by the dug cell: " + drop);
+            helper.assertTrue(dig.outcome().contains("Drops: 1 hay_block landed at " + xyz(landed) + "."),
+                    "the reply does not say where the drop landed: " + dig.outcome());
+            helper.assertTrue(level.getEntity(drop.get("id").getAsInt())
+                            instanceof net.minecraft.world.entity.item.ItemEntity item && item.getItem().is(Items.HAY_BLOCK),
+                    "the id given is not the hay lying there: " + drop);
             helper.assertTrue(level.getBlockState(hay).isAir(), "the hay is still there");
             helper.assertTrue(companion.blockPosition().equals(stand), "she moved to dig a cell within her reach");
             CompanionFactory.despawn(level.getServer(), companion);
         });
+    }
+
+    /**
+     * 挖岩浆上方的方块:黑曜石压在一池岩浆上,她站在池边够得着的地方挖。黑曜石掉下来落进岩浆烧掉了——挖的结果说清楚:回执那一句
+     * 说它掉进岩浆烧掉了,数据里那一笔是 destroyed、毁它的是 minecraft:lava,没有一件落在地上。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_dig")
+    public static void digging_above_lava_says_the_drop_burned(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        // 三乘三的一池岩浆嵌在地面里,底下垫石头;正中上面压一块黑曜石
+        for (int x = 8; x <= 10; x++) {
+            for (int z = 4; z <= 6; z++) {
+                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, 0, z)), Blocks.STONE.defaultBlockState());
+                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, 1, z)), Blocks.LAVA.defaultBlockState());
+            }
+        }
+        BlockPos obsidian = helper.absolutePos(new BlockPos(9, 2, 5));
+        level.setBlockAndUpdate(obsidian, Blocks.OBSIDIAN.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_over_lava", new BlockPos(5, 2, 5), false);
+        companion.getInventory().add(new ItemStack(Items.DIAMOND_PICKAXE));
+        ToolRun dig = lua(companion, "numen.work.dig(" + xyz(obsidian) + ")");
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(dig.done(), "work dig has not finished");
+            helper.assertTrue(dig.succeeded() && dig.outcome().startsWith("dug 1 cell(s) of obsidian"),
+                    "the obsidian was not dug: " + dig.outcome());
+            com.google.gson.JsonObject drop = onlyDrop(dig);
+            helper.assertTrue(drop.get("fate").getAsString().equals("destroyed")
+                            && drop.get("cause").getAsString().equals("minecraft:lava")
+                            && drop.get("item").getAsString().equals("minecraft:obsidian") && !drop.has("id"),
+                    "the drop is not told as burned in the lava: " + drop);
+            helper.assertTrue(dig.outcome().contains("Drops: 1 obsidian fell into lava and burned up at "),
+                    "the reply does not say the drop burned in the lava: " + dig.outcome());
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 这一挖的结果里只有一笔掉落物去向,交回它。 */
+    private static com.google.gson.JsonObject onlyDrop(ToolRun dig) {
+        var drops = (com.google.gson.JsonArray) dig.task().getResult().data().get("drops");
+        if (drops == null || drops.size() != 1) {
+            throw new net.minecraft.gametest.framework.GameTestAssertException("expected one drop: " + drops);
+        }
+        return drops.get(0).getAsJsonObject();
     }
 
     /**

@@ -7,6 +7,7 @@ import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.core.act.BlockDigger;
+import com.dwinovo.numen.core.act.Drops;
 import com.dwinovo.numen.core.nav.DigQuote;
 import com.dwinovo.numen.core.nav.Feet;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
@@ -44,7 +45,8 @@ import java.util.Set;
  *   <li>挡在前面的格一并挖开:挖掘器朝隔着的格都清得掉、挡得最少的那一点看过去,准星落在的那一格先挖({@link BlockDigger})。清不清得掉
  *       按 {@link DigTaskRecord#SPEC} 问({@link DigQuote#clearing}):天然地形挖开,要主人同意的、规则不许的不挖,如实说是哪一格、
  *       为什么({@link DigQuote#walledIn});</li>
- *   <li>不走动、不捡:掉落物留在地上,{@code numen.work.collect} 去捡。</li>
+ *   <li>不走动、不捡:收工之前等这一挖的掉落物落定({@link Drops}:落地、被捡起、被毁、掉进虚空,最多
+ *       {@link Drops#SETTLE_TICKS} 刻),结果里写明各去向的件数与位置;落在地上的由 {@code numen.work.collect} 去捡。</li>
  * </ul>
  * 每一格都经她的手(原版挖掘循环外套权限层),用工具、有掉落、进实际账。点名的目标格本身要主人同意时,动手之前问({@link #permit}):
  * 要问就站着等主人点头,不许就带着理由收场。
@@ -83,6 +85,15 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
     private BlockPos digTarget;
     private BlockPos noShotPos;
     private int noShotTicks;
+
+    /** 这一挖的掉落物记在这本账上:开工时开,收尾时收。 */
+    private Drops drops;
+    /** 活干完了、在等掉落物落定:等完收在这个终态上;还在干是 null。 */
+    private TaskState ending;
+    /** 等完之后收场要做的(失败时记下那句话);没有是 null。 */
+    private Runnable endWith;
+    /** 已经等了几刻。 */
+    private int settleTicks;
 
     public DigCompanionTask(NumenPlayer player, DigTaskRecord record) {
         super(player, record);
@@ -150,13 +161,18 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
     protected void onStart() {
         com.dwinovo.numen.core.Constants.LOG.info("[numen-task] dig start targets={} count={} what={} feet={}",
                 r.label, r.count, r.what, player.blockPosition().toShortString());
+        drops = Drops.open(player);
     }
 
     @Override
     protected TaskState onTick() {
+        drops.tick();
+        if (ending != null) {
+            return settle();
+        }
         r.setDug(dug.size());
         if (r.count != DigTaskRecord.ALL && dug.size() >= r.count) {
-            return TaskState.SUCCESS;
+            return end(TaskState.SUCCESS, null);
         }
         quote();
         Level level = player.level();
@@ -175,12 +191,13 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
         BlockPos target = next();
         if (target == null) {
             if (dug.isEmpty()) {
-                BlockPos near = nearestBeyond();
-                fail(nothingHere(false), FailureType.OUT_OF_REACH, near == null ? null
-                        : DigTaskRecord.reachLine(r.named, near));
-                return TaskState.FAILED;
+                return end(TaskState.FAILED, () -> {
+                    BlockPos near = nearestBeyond();
+                    fail(nothingHere(false) + dropsLine(), FailureType.OUT_OF_REACH, near == null ? null
+                            : DigTaskRecord.reachLine(r.named, near));
+                });
             }
-            return TaskState.SUCCESS;
+            return end(TaskState.SUCCESS, null);
         }
         // 动手之前:这一格交给权限层。要问就站着等主人,不许就带着理由收场
         Permit permit = permit(Action.breakBlock(target, level.getBlockState(target)));
@@ -189,10 +206,39 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
             return TaskState.RUNNING;
         }
         if (permit.state() == PermitState.REFUSED) {
-            fail("did not dig " + Listing.coords(target) + ": " + permit.refusal() + "; " + tally(), FailureType.REFUSED);
-            return TaskState.FAILED;
+            String why = "did not dig " + Listing.coords(target) + ": " + permit.refusal() + "; ";
+            return end(TaskState.FAILED, () -> fail(why + tally() + "." + dropsLine(), FailureType.REFUSED));
         }
         return digProgress(target);
+    }
+
+    // ---- 收工:等这一挖的掉落物落定 ----
+
+    /**
+     * 活干完了:松手站住,等这一挖的掉落物落定再以 {@code state} 收场;{@code then} 在收场那一刻做(失败时记下那句话,掉落物的去向
+     * 那时才齐)。
+     */
+    private TaskState end(TaskState state, Runnable then) {
+        digger.cancel();
+        ending = state;
+        endWith = then;
+        return settle();
+    }
+
+    /**
+     * 等的这一刻:都落定了、或等满 {@link Drops#SETTLE_TICKS} 刻,就收账收场——先收账,还在动的记成还在动,失败那句话与收尾的
+     * 数据读的是同一份记录。
+     */
+    private TaskState settle() {
+        player.controls().stop();
+        if (!drops.settled() && settleTicks++ < Drops.SETTLE_TICKS) {
+            return TaskState.RUNNING;
+        }
+        drops.close();
+        if (endWith != null) {
+            endWith.run();
+        }
+        return ending;
     }
 
     // ---- 挑哪一格 ----
@@ -317,10 +363,8 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
             }
             case REFUSED -> {
                 // 动手前放行之后世界变了,或挡在前面的遮挡物不许挖:权限层的拒绝就是这件活的结果
-                digger.cancel();
-                fail("did not dig " + Listing.coords(pos) + ": " + digger.refusal().reason() + "; " + tally(),
-                        FailureType.REFUSED);
-                return TaskState.FAILED;
+                String why = "did not dig " + Listing.coords(pos) + ": " + digger.refusal().reason() + "; ";
+                return end(TaskState.FAILED, () -> fail(why + tally() + "." + dropsLine(), FailureType.REFUSED));
             }
             case NO_SHOT -> {
                 if (pos.equals(noShotPos)) {
@@ -450,19 +494,35 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
         return "dug " + dug.size() + " cell(s) of " + r.label;
     }
 
+    /**
+     * 掉落物去了哪那一句(以空格起头):各去向的件数与位置({@link Drops#sentence});挖掉了格却什么都没掉也说一句;一格没挖、什么都
+     * 没记是空串。
+     */
+    private String dropsLine() {
+        if (drops == null || !drops.any()) {
+            return dug.isEmpty() ? "" : " Nothing dropped.";
+        }
+        return " " + drops.sentence();
+    }
+
     @Override
     protected void cleanup() {
         super.cleanup();
         digger.cancel();
+        if (drops != null) {
+            drops.close();
+        }
     }
 
     /**
-     * 挖了几格、点名的里还剩几格要挖、其中几格站在这儿够不着、够不着里最近的那一格(Pos,没有就不给)。
+     * 挖了几格、点名的里还剩几格要挖、其中几格站在这儿够不着、够不着里最近的那一格(Pos,没有就不给)、掉落物各去了哪
+     * ({@link Drops#data},和回执那一句同一份记录)。
      */
     @Override
     protected Map<String, Object> resultData() {
         Map<String, Object> data = new HashMap<>();
         data.put("dug", dug.size());
+        data.put("drops", drops == null ? new com.google.gson.JsonArray() : drops.data());
         Feet here = Feet.of(player);
         List<BlockPos> left = wanted();
         data.put("left", left.size());
@@ -483,23 +543,21 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
         return data;
     }
 
-    /** 收工:挖了几格;手边还能挖却因为 {@code count} 停下的说一句;够不着的在哪、怎么去;掉落物留在地上,{@code numen.work.collect} 去捡。 */
+    /** 收工:挖了几格;手边还能挖却因为 {@code count} 停下的说一句;够不着的在哪、怎么去;掉落物各去了哪。 */
     @Override
     protected String successMessage() {
         String stopped = r.count != DigTaskRecord.ALL && dug.size() >= r.count ? " (the count " + r.count
                 + " I was given)" : "";
-        return tally() + stopped + outOfReach(true) + leftovers() + "."
-                + (WorkProfile.of(player).dropsLoot() ? " What I dug dropped on the ground: `numen.work.collect()` picks it "
-                        + "up." : "");
+        return tally() + stopped + outOfReach(true) + leftovers() + "." + dropsLine();
     }
 
     @Override
     protected String timeoutMessage() {
-        return "timed out after I " + tally() + outOfReach(true);
+        return "timed out after I " + tally() + outOfReach(true) + "." + dropsLine();
     }
 
     @Override
     protected String cancelledMessage() {
-        return "interrupted after I " + tally();
+        return "interrupted after I " + tally() + "." + dropsLine();
     }
 }

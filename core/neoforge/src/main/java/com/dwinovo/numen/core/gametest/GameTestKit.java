@@ -233,8 +233,8 @@ public final class GameTestKit {
     /**
      * 当场就挖 {@code blocks}(一团,或一串 Block 或 Pos 的 Lua 写法),和库里的 {@code numen.work.mine} 同一个流程、拆成原子调用一轮轮
      * 组合:先走——{@code numen.move.to(blocks, {arrive = "dig", costs = …})} 走到一次够得着最多格的地方,再挖——
-     * {@code numen.work.dig(blocks, {count = 还差几格})} 挖手够得着的,{@code numen.work.collect} 许挖许放地捡掉落;那一团还有没挖的
-     * 格,就再来一轮。每一步是一段一行的程序,方块每次原样写进去;挖了几格读那件活的收尾数据,脚本里拿不到它。
+     * {@code numen.work.dig(blocks, {count = 还差几格})} 挖手够得着的,{@code numen.work.collect} 许挖许放地捡这一挖还落在地上的
+     * 掉落物(挖的结果里的 {@code drops});那一团还有没挖的格,就再来一轮。每一步是一段一行的程序,方块每次原样写进去;挖了几格读那件活的收尾数据,脚本里拿不到它。
      * 不另挂每刻的回调,每次问 {@link Mining#done} 时往下推一步。
      *
      * <p>哪一步(走、挖)失败,这次挖矿就以那一步的结论收场;挖够了、那一团不剩了,或一轮一格也没挖到,以最后一次挖的结论收场。
@@ -254,10 +254,7 @@ public final class GameTestKit {
         /** 一团最多走几轮:每轮至少挖掉一格,轮数到了还没挖完就以最后一次挖的结论收场。 */
         private static final int MAX_ROUNDS = 16;
 
-        /** 挖完等掉落物落定最多几刻:模型读完回执再写下一行要好几秒,掉落物早落地了。 */
-        private static final int SETTLE_TICKS = 40;
-
-        private enum Step { BEFORE, GOTO, DIG, SETTLE, COLLECT }
+        private enum Step { BEFORE, GOTO, DIG, COLLECT }
 
         private final NumenPlayer companion;
         /** 挖的那些方块的 Lua 写法;先扫再挖的,扫的回执到了才有。 */
@@ -271,7 +268,6 @@ public final class GameTestKit {
         private int dug;
         private int dugThisRound;
         private int rounds;
-        private int settling;
 
         /** 许挖许放、要问主人的格当墙:走去挖、走去捡都按它。 */
         private static final String COSTS = "costs = {dig = true, place = true, consent = false}";
@@ -287,12 +283,6 @@ public final class GameTestKit {
         }
 
         private void tick() {
-            if (step == Step.SETTLE) {
-                if (dropsSettled() || ++settling >= SETTLE_TICKS) {
-                    run(Step.COLLECT, "numen.work.collect({" + COSTS + "})");
-                }
-                return;
-            }
             if (last != null || !current.done()) {
                 return;
             }
@@ -317,8 +307,7 @@ public final class GameTestKit {
                     lastDig = current;
                     dugThisRound = ((Number) current.task().getResult().data().get("dug")).intValue();
                     dug += dugThisRound;
-                    step = Step.SETTLE;
-                    settling = 0;
+                    run(Step.COLLECT, "numen.work.collect({items = " + dropIds(current) + ", " + COSTS + "})");
                 }
                 // 捡的库函数改地形走到每一件跟前;捡不到的(走不到、包满)不算挖矿失败,接着下一轮
                 case COLLECT -> nextRound();
@@ -335,11 +324,16 @@ public final class GameTestKit {
             }
         }
 
-        /** 捡的库函数看得见的掉落物都落定了(着地或在水里):半径同 {@code numen.work.collect} 的默认 8 格。 */
-        private boolean dropsSettled() {
-            return companion.level().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
-                            companion.getBoundingBox().inflate(8))
-                    .stream().allMatch(e -> e.onGround() || e.isInWater());
+        /** 那一挖还在世界里的掉落物({@code drops} 里带 {@code id} 的),写成 Lua 的一张表:{@code {{id = 12}, {id = 15}}}。 */
+        private static String dropIds(ToolRun dig) {
+            List<String> ids = new ArrayList<>();
+            for (var drop : (JsonArray) dig.task().getResult().data().get("drops")) {
+                JsonObject o = drop.getAsJsonObject();
+                if (o.has("id")) {
+                    ids.add("{id = " + o.get("id").getAsInt() + "}");
+                }
+            }
+            return "{" + String.join(", ", ids) + "}";
         }
 
         private void run(Step next, String code) {
