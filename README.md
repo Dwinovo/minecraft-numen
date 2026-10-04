@@ -19,7 +19,7 @@
 
 ## 安装
 
-言出法随已发布在 CurseForge，在你常用的 Minecraft 启动器中搜索 "Numen" 即可下载。
+言出法随已发布在 CurseForge，在你常用的 Minecraft 启动器中搜索 "Numen" 模组下载即可。目前支持如下版本和加载器：
 
 | Minecraft 版本 | 加载器 | Java |
 |---|---|---|
@@ -33,13 +33,7 @@
 2. **召唤智能体。** 在面板中召唤一个智能体，为它起一个名字。
 3. **开始交流。** 像与任何智能体交流一样，用自然语言告诉它你想做的事。
 
-言出法随原生支持 OpenAI 与 Anthropic 两种接口协议，并内置了以下模型服务的预设。对于未列出的服务，只要它兼容其中一种协议，填入地址即可使用。
-
-| 类别 | 内置预设 |
-|---|---|
-| 海外 | OpenAI、Anthropic、Gemini、Grok、OpenRouter |
-| 国内 | DeepSeek、Kimi、智谱 GLM、豆包、Qwen、MiniMax、硅基流动 |
-| 本地部署 | Ollama、LM Studio、vLLM |
+言出法随原生支持 OpenAI 与 Anthropic 两种接口协议，并内置了以下模型服务的预设：OpenAI、Anthropic、Gemini、Grok、OpenRouter、DeepSeek、Kimi、智谱 GLM、豆包、Qwen、MiniMax、硅基流动、Ollama、LM Studio、vLLM。对于未列出的服务，只要它兼容其中一种协议，填入地址即可使用。
 
 ### 外接大脑
 
