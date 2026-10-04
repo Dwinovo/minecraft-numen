@@ -9,7 +9,7 @@ This file covers the project's original art instead, collectively the "Assets":
     `api/common/src/main/resources/assets/numen_api/textures/`;
   - the mod icons `api/common/src/main/resources/numen_api.png` and
     `core/common/src/main/resources/numen.png`;
-  - the logos and branding images under `docs/branding/` and
+  - the logos and branding images under `assets/branding/` and
     `api/docs/branding/`;
   - the source artwork the textures are made from, i.e. the image files
     under `tools/ui-textures/` and `api/tools/ui-textures/`.

@@ -18,7 +18,7 @@
 </div>
 
 <p align="center">
-  <img src="docs/numen-demo.gif" alt="Numen 实机演示：砍树 · 挖矿 · 合成 · 战斗 · 联动 Mekanism" width="640">
+  <img src="assets/numen-demo.gif" alt="Numen 实机演示：砍树 · 挖矿 · 合成 · 战斗 · 联动 Mekanism" width="640">
 </p>
 
 ---
@@ -57,12 +57,12 @@ Numen： 拿到 64 个粗铁——要我熔了吗？
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/showcase/plan.png" width="100%"><br><b>🧠 详细规划</b> · 逐步拆解任务</td>
-    <td width="50%"><img src="docs/showcase/pathfinding.png" width="100%"><br><b>🔭 感知与寻路</b></td>
+    <td width="50%"><img src="assets/showcase/plan.png" width="100%"><br><b>🧠 详细规划</b> · 逐步拆解任务</td>
+    <td width="50%"><img src="assets/showcase/pathfinding.png" width="100%"><br><b>🔭 感知与寻路</b></td>
   </tr>
   <tr>
-    <td><img src="docs/showcase/combat.png" width="100%"><br><b>⚔️ 原生战斗</b></td>
-    <td><img src="docs/showcase/interact.png" width="100%"><br><b>🧩 模组兼容</b> · 图中为 Mekanism</td>
+    <td><img src="assets/showcase/combat.png" width="100%"><br><b>⚔️ 原生战斗</b></td>
+    <td><img src="assets/showcase/interact.png" width="100%"><br><b>🧩 模组兼容</b> · 图中为 Mekanism</td>
   </tr>
 </table>
 

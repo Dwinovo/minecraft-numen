@@ -18,7 +18,7 @@
 </div>
 
 <p align="center">
-  <img src="docs/numen-demo.gif" alt="Numen in action: chopping, mining, crafting, fighting, driving Mekanism machines" width="640">
+  <img src="assets/numen-demo.gif" alt="Numen in action: chopping, mining, crafting, fighting, driving Mekanism machines" width="640">
 </p>
 
 ---
@@ -57,12 +57,12 @@ Numen:  Got 64 raw iron — want me to smelt it?
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/showcase/plan.png" width="100%"><br><b>🧠 Planning</b> · decomposes a goal step by step</td>
-    <td width="50%"><img src="docs/showcase/pathfinding.png" width="100%"><br><b>🔭 Perception & pathfinding</b></td>
+    <td width="50%"><img src="assets/showcase/plan.png" width="100%"><br><b>🧠 Planning</b> · decomposes a goal step by step</td>
+    <td width="50%"><img src="assets/showcase/pathfinding.png" width="100%"><br><b>🔭 Perception & pathfinding</b></td>
   </tr>
   <tr>
-    <td><img src="docs/showcase/combat.png" width="100%"><br><b>⚔️ Native combat</b></td>
-    <td><img src="docs/showcase/interact.png" width="100%"><br><b>🧩 Mod compatibility</b> · Mekanism shown</td>
+    <td><img src="assets/showcase/combat.png" width="100%"><br><b>⚔️ Native combat</b></td>
+    <td><img src="assets/showcase/interact.png" width="100%"><br><b>🧩 Mod compatibility</b> · Mekanism shown</td>
   </tr>
 </table>
 
