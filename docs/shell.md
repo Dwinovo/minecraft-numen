@@ -243,7 +243,7 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
 
 ## 七、只有 lua 一个工具,API 原子化(10-03)
 
-- **一个入口**:模型的工具只剩 `lua`;`command` 与各组的快捷工具删了,`todowrite` 成了 `todo.write`。Lua 的对象与选项
+- **一个入口**:模型在世界里做事的工具只剩 `lua`;`command` 与各组的快捷工具删了,`todowrite` 成了 `todo.write`。Lua 的对象与选项
   直接按参数类型读成值交给处理函数,不经命令行字符串。外接大脑(MCP)的 `lua` 调用交给她自己的派发器跑
   (`AgentLoop.runAside`):同一套等收尾、上限、回执;程序跑着的时候到达的事件转给它,不另起一轮对话。
 - **原子化**:`build.at` 只放站在原地够得着的格,一格都够不着就当场拒并说怎么走过去;施工绕外圈、清场(`ClearSiteTask`)、
@@ -251,6 +251,9 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
   `work.collect` 变成库函数(扫掉落物、走上去),新增掉落物的 `pickup_delay`;`fight.attack` 只收一只,"打一片"是
   `fight.clear`。
 - **回执**:每次 API 调用一行;出错带行号与那次调用的 `error:`/`usage:`/`hint:`;返回值与 `print` 在后面。
+- **技能是另一个工具,不是 API**(10-04):照 Claude Code 的 Skill 工具,`skill` 工具收技能名(附属文件 `file`、页码 `page`
+  可选),技能正文就是这次调用的结果;系统提示的 `<available_skills>` 是索引。`numen.skill.load` 删了:程序回执里每次调用只露
+  结果的第一行,正文没 `return` 出来她就读不到,真机上她连着三轮在程序里装同一份技能。外接大脑调的是同一个工具。
 - **测试**:GameTest 全部从 Lua 入口调(`GameTestKit.lua`);库函数各有端到端的 GameTest(`mine`、`work.collect`、
   `fight.clear`、`build.raise`),到达方式 `reach`、`build.left`、够不着时 `build.at` 的拒绝各有一条。
 

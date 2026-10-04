@@ -44,7 +44,7 @@ The room has a lava pool under the frame and a **silverfish spawner** on the sta
 
 ## Before dropping in
 
-- `numen.skill.load("dragon_combat")` **now**, not after jumping — the fight needs a plan.
+- Load the `dragon_combat` skill **now**, not after jumping — the fight needs a plan.
 - Verify the dragon packlist and **tell your owner the portal is active and where it is.** They may want to set their respawn nearby and come watch — entering the End is one-way until the dragon dies.
 
 ## What to load next

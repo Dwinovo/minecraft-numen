@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 她唯一的工具:一段程序(语言见 {@link ScriptEngine},眼下是 Lua),一次调用跑完,回一张回执。程序里的每个 API 函数
+ * 她在世界里做事的工具:一段程序(语言见 {@link ScriptEngine},眼下是 Lua),一次调用跑完,回一张回执。程序里的每个 API 函数
  * ({@code numen.work.dig(b)})就是登记处的一个动作,读法与执行见 {@link NumenCli};模块里的函数({@code numen.move.to})用同一种语言写成,
  * 程序按名字直接用。工具名与程序怎么写随脚本语言,其余都与语言无关。
  *

@@ -97,8 +97,9 @@ public final class NumenPrompts {
               angle, no "clear it first"). Tell the owner what was refused and
               let them decide.
             - Plan only what's big. Multi-phase jobs: numen.todo.write the phases and
-              work the list; numen.skill.load when one fits the task. One-step
-              requests: just do them.
+              work the list. When a skill in <available_skills> fits the task, load
+              it with the skill tool before you start. One-step requests: just do
+              them.
             </operating_principles>
 
             <choosing_actions>

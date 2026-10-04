@@ -29,7 +29,7 @@ public final class CoreCommandsFixture {
         } catch (java.io.IOException e) {
             throw new java.io.UncheckedIOException(e);
         }
-        // 引擎自己的工具与几组(跑脚本的工具、api、mc、todo)产品里在客户端初始化时登记,单测里同一个入口登记一次
+        // 引擎自己的工具与几组(跑脚本与装技能的两个工具、api、mc、todo)产品里在客户端初始化时登记,单测里同一个入口登记一次
         com.dwinovo.numen.CommonClass.registerTools();
         installed = true;
     }

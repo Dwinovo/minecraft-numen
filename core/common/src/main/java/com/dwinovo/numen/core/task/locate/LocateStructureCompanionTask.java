@@ -212,7 +212,7 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
                             ? " — did you mean " + suggestion + "?"
                             : " — use a structure id like minecraft:fortress / "
                                     + "minecraft:stronghold, or a tag like #minecraft:village; "
-                                    + "skill_load(world_atlas) lists every id");
+                                    + "the world_atlas skill lists every id");
             return null;
         }
         out.add(holder.get());

@@ -38,7 +38,7 @@ import java.util.concurrent.TimeoutException;
  *
  * <h2>Tool surface</h2>
  * Every engine tool (from {@link ToolRegistry}, minus the config's hidden set) —
- * the script tool, plus the tools of remote MCP servers the owner connected — is
+ * the script tool, the skill tool, plus the tools of remote MCP servers the owner connected — is
  * advertised with an extra {@code companion} argument, and calls route to
  * {@link NumenActuator#invoke}: a program runs through the companion's own
  * dispatcher and the call returns its receipt when it ends. Three management tools — {@code list_companions},
@@ -91,7 +91,9 @@ public final class McpServer {
             call, what it returned and printed. It waits for each body task it starts to finish, so a long \
             job returns when it is done; each task's own account also arrives in get_events as a \
             task_finished event. Every call takes a 'companion' argument (name or id), so each call targets \
-            one companion; just drive it, there is no take-control step.
+            one companion; just drive it, there is no take-control step. The %s tool loads one of the \
+            companion's skills — the workflow guide for one kind of task — and returns its text; a name it \
+            does not know answers with the list of installed skills.
 
             Rules: survival mode — the API does only what a real player can (mine to get stone; there is no \
             give or setblock). You are blind between calls, so perceive before and after acting. %s You can \
@@ -109,7 +111,8 @@ public final class McpServer {
             and voice. Keep your own conversation history — the game stores none for you; between \
             get_events calls nothing is lost (events queue up). Raise wait_seconds (up to 50) only when \
             you deliberately want to park and wait for the owner to speak.""".formatted(
-            com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.toolName(), ONE_BODY);
+            com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.toolName(), com.dwinovo.numen.cli.SkillTool.NAME,
+            ONE_BODY);
 
     private final McpConfig config;
     private final Gson gson = new Gson();
