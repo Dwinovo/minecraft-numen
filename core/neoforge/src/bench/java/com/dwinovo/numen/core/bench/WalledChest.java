@@ -5,25 +5,25 @@ import com.dwinovo.numen.bench.Scenario;
 import com.dwinovo.numen.bench.Scene;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
-import net.minecraft.world.phys.AABB;
 
 import java.util.List;
 
 /**
  * 墙里只露一面的箱子:一堵三格厚的石墙,箱子嵌在墙根,只有朝她的那一面露在外面(头顶一格玻璃——实心方块压着箱子就打不开),
  * 里面 5 颗钻石。主人只说把箱子里的钻石拿给他。要成事得找到箱子、站到那一面够得着的地方、打开、把钻石拿出来。
- * 成功 = 钻石在她包里,或者交到了主人手里(主人包里,或者丢在主人脚边——模拟主人不走动、不捡东西)。
+ * 成功 = 钻石在她包里,或者交到了主人手里(主人包里,或者丢在主人五格以内的地上——模拟主人不走动、不捡东西)。
  */
 public final class WalledChest implements Scenario {
 
     private static final BlockPos CHEST = new BlockPos(10, 1, 12);
     private static final int DIAMONDS = 5;
+    /** 掉在主人碰撞箱外扩这么远以内,算交到了主人手里。 */
+    private static final double HANDOVER = 5;
 
     @Override
     public String id() {
@@ -71,16 +71,9 @@ public final class WalledChest implements Scenario {
                         "箱子里还有 " + inChest(s) + " 颗")));
     }
 
-    /** 她包里、主人包里、主人脚边地上的钻石。 */
+    /** 她包里、主人包里、主人碰撞箱外扩 {@value #HANDOVER} 格以内地上的钻石。 */
     private static int delivered(Scene scene) {
-        int n = scene.her().getInventory().countItem(Items.DIAMOND)
-                + scene.owner().getInventory().countItem(Items.DIAMOND);
-        AABB feet = scene.owner().getBoundingBox().inflate(2.5);
-        for (ItemEntity drop : scene.level().getEntitiesOfClass(ItemEntity.class, feet,
-                e -> e.getItem().is(Items.DIAMOND))) {
-            n += drop.getItem().getCount();
-        }
-        return n;
+        return Tally.handedOver(scene, Items.DIAMOND, HANDOVER);
     }
 
     private static int inChest(Scene scene) {

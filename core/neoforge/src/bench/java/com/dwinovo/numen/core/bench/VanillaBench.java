@@ -15,17 +15,18 @@ public final class VanillaBench {
 
     @GameTestGenerator
     public static Collection<TestFunction> scenarios() {
-        return Bench.suite("vanilla", "Vanilla Minecraft: gathering and the basics, no other mods.",
+        return Bench.suite("vanilla",
+                "Vanilla Minecraft: gathering, crafting chains, building, fighting and farming, no other mods.",
+                // 回归集在前,能力集在后
                 suite -> suite.add(MineIron::new)
-                        .add(MineIron::byScript)
+                        .add(CraftStonePickaxe::new)
                         .add(DeepDiamond::new)
-                        .add(OreBehindHouse::denied)
-                        .add(OreBehindHouse::allowedOnce)
                         .add(WalledChest::new)
-                        .add(BuildHut::new)
-                        .add(CraftPickaxe::new)
                         .add(GuardOwner::new)
-                        .add(PickUpDrops::new)
-                        .add(FarPillar::new));
+                        .add(BuildWall::new)
+                        .add(ImpossibleRequest::new)
+                        .add(BuildHut::new)
+                        .add(IronPickaxeChain::new)
+                        .add(HarvestAndBread::new));
     }
 }
