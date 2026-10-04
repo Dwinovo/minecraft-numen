@@ -17,6 +17,8 @@
 
 言出法随是一个运行在 Minecraft 内部的具身智能体，作为模组直接存在于游戏之中，它能够不断探索 Minecraft 世界，自主决策并采取行动完成任务。
 
+详情请见 [numen.dwinovo.cn](https://numen.dwinovo.cn)。
+
 ## 安装
 
 言出法随已发布在 [CurseForge](https://www.curseforge.com/projects/1581109)，在你常用的 Minecraft 启动器中搜索 "Numen" 模组下载即可。目前支持如下版本和加载器：
