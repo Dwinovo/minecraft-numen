@@ -1191,7 +1191,7 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
 ## 附录 H:包的上限与输出预算(09-26)
 
 真机事故:主人让她建田园小屋,她写了一份 43 步的设计后执行 `build show tianyuan_cottage`,回执 19899 字符;
-`TaskResultPayload` 用 `stringUtf8(16384)`,netty 编码时抛 `EncoderException: String too big (was 19899 characters, max
+当时的 `TaskResultPayload` 用 `stringUtf8(16384)`,netty 编码时抛 `EncoderException: String too big (was 19899 characters, max
 16384)`,连接断开,单人世界的房主掉线,服务器随之停止。两层根因:网络层的上限是随手定的数、发送前没人查、上游也不保证
 不超;`build show` 把每一步完整列出,长度随设计增长,又不分页。
 
@@ -1213,14 +1213,15 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
 - **字段**:长度不由包自己定的文字一律用 `Wire.X.text()`——编码不另拦(整包由上面那一步量,字段再拦就是第二个判据),
   解码以整包上限为防线。保留的语义上限只有两个,都由发送方先守:召唤的名字 16(原版的玩家名规则)、征询的附言 512
   (答复框截断)。
-- **上行的工具调用**不能换一个包送:`ServerToolTransport.ship` 先量,装不下不送,就地给模型一条失败——服务端根本不知道这次
-  调用,不会有结果回来。
+- **上行的程序**不能换一个包送:`ProgramUplink` 先量,装不下不送,就地给模型一条失败——服务端根本不知道这段程序,不会有结果回来。
+  下行的回执(`ProgramResultPayload`)是内容有界的包:回执在生成处就按 `ScriptLimits` 有界(见 `docs/shell.md` §十四),装不下就是代码错,
+  当场抛,不再缩。
 
 逐个载荷的处理:
 
 | 载荷 | 方向 | 内容 | 装不下时 |
 |---|---|---|---|
-| `TaskResultPayload` | 下行 | 工具回执 | 换成同一次调用的一条失败回执 |
+| `ProgramResultPayload` | 下行 | 程序的回执与每次调用的结局 | 有界(`ScriptLimits`),装不下当场抛 |
 | `NumenEventPayload` | 下行 | 一批事件(实时一条,离线补发至多 200 条) | 从正文最长的一条起换成一句说明,种类、时刻、急不急都留着 |
 | `NumenStatePayload` | 下行 | 背包、效果、骑乘、身体状态片段(插件给) | 先把身体状态换成说明;还装不下,背包也不带,说明里交代"空格子不是你的背包" |
 | `CurrentTaskPayload` | 下行 | 任务名与描述(插件的任务也在内) | 描述换成一句说明 |
@@ -1230,7 +1231,9 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
 | `NumenLocationsPayload` | 下行 | 定位(至多 16 只) | 有界 |
 | `PathDebugPayload` | 下行 | 调试路径(寻路一段的格数) | 有界 |
 | `ClientUiActionPayload` | 下行 | 一个枚举 | 有界 |
-| `ExecuteToolPayload` | 上行 | 工具名、调用 id、参数 JSON | 不送,客户端就地回失败 |
+| `RunProgramPayload` | 上行 | 程序编号、程序、模块清单与没送过的正文 | 不送,客户端就地回失败 |
+| `ClientCallPayload`、`ClientCallResultPayload` | 下行、上行 | 反向请求与它的答复(答复可带新模块清单) | 请求装不下当场回失败;答复装不下换成失败 |
+| `StopProgramPayload` | 上行 | 程序编号、怎么停、原因 | 有界 |
 | `SummonRequestPayload`、`ChangeSkinPayload` | 上行 | 名字(16)、Mojang 签名的皮肤(约 1KB + 700B) | 有界 |
 | `ConsentReplyPayload` | 上行 | 答复与附言(512) | 有界 |
 | 其余上行(`CancelTasks`、`SpeakingState`、`LocateNumen` 至多 16、`RequestState`、`DismissRequest`、`SetGameMode`) | 上行 | UUID 与几个标量 | 有界 |

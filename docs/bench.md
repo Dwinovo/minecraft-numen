@@ -57,12 +57,13 @@ GameTest 服务器(runs/bench)
 
 - **大脑**:循环内核 `AgentLoop` 原样,四个端口在服务端进程里接上(`Brain`)。请求由产品的
   `AgentRequestContext.turn` 组装——系统提示(`SystemPromptComposer`)、运行期状态(`RuntimeState`)、工具表
-  只有那一份;札记索引是 `MemoryPreamble`,整理记忆是 `Compactor`,派工具的顺序与等待是 `SerialCalls`。
+  只有那一份;札记索引是 `MemoryPreamble`,整理记忆是 `Compactor`,派工具的顺序是 `SerialCalls`(程序整段在服务端跑)。
   和主人客户端不同的只有:人设用内置默认人设,主动性用默认档位,插件在客户端现算的状态片段没有(没有客户端)。
-- **上行**:工具照产品的路走到 `ServerToolTransport`,它的上行出口 `uplink` 在评测里直接交给服务端真实入口
-  `ExecuteActionPayload.handle`,发送者是模拟主人。
+- **上行**:整段程序照产品的路走到 `ProgramUplink`,它的上行出口 `ProgramUplink.wire` 在评测里直接交给服务端真实入口
+  (`RunProgramPayload.handle`,停止与客户端函数的答复同样),发送者是模拟主人,上行的包按网络的样子编解码一遍。
 - **模拟主人**:一个在线的 `ServerPlayer`,连接是 `OwnerConnection`。发给主人的模组载荷截下来,按网络的样子
-  编解码一遍,照主人客户端的做法交给大脑:回执给传输层,当前任务与身体状态给运行期状态,世界事件进收件箱,
+  编解码一遍,照主人客户端的做法交给大脑:程序的回执(与每次调用的结局)给上行部件,服务端要客户端执行的函数交给 `ClientEndpoint`,
+  当前任务与身体状态给运行期状态,世界事件进收件箱,
   征询按剧本经 `ConsentDesk.reply` 答复,死亡切断循环。
   下行包过得了 NeoForge 的频道检查,是因为连接用 NeoForge 给 GameTest 的 `NetworkRegistry.configureMockConnection`
   写上了协商好的频道表(同伴的 `FakeConnection` 不需要:numen 的 mixin 在检查之前就把发给它的包丢了)。

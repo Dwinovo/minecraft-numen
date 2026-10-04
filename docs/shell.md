@@ -1,7 +1,7 @@
 # 命令行与脚本:原子命令 + Lua 脚本
 
 状态:10-01 设计,10-03 改成只有 `lua` 一个工具(§七),10-04 模块统一成库、存在主人客户端(§九),同日 API 第二版:全名、
-值带方法、无名词增删改查(§十);路线是一张描述、越界才问(§十一),两版合在一起(§十二)。总纲与五层见
+值带方法、无名词增删改查(§十);路线是一张描述、越界才问(§十一),两版合在一起(§十二);10-05 程序整段在服务端跑、客户端想服务端做(§十四)。总纲与五层见
 `docs/architecture-mind-model.md` §零。
 
 ## 一、为什么
@@ -124,23 +124,20 @@
   `In a script: 组.名字_(...).`,`lua` 工具的说明里也写了这一条。规则只在 `ScriptEngine.functionName` 一处,登记处的
   目录、回执里的函数名、帮助都从它来;沙箱不收撞名的宿主函数,登记时就抛出。
 
-### 放在哪:`agent` 模块,和 `SerialCalls` 同一层
+### 放在哪:`agent` 模块,程序在服务端跑
 
-- 语言(`agent.script.ScriptEngine` 与实现)、一次运行(`ScriptRun`)、一次调用里的脚本(`ScriptCall`)、上限(`ScriptLimits`)
-  是纯 JVM,和派发器 `SerialCalls` 在同一个模块。理由:等身体收尾、急件打断等待的那处机制就在 `SerialCalls`,脚本每调
-  一个函数要的正是它;放进 api 要么另造一份等待,要么让 api 的工具反过来伸进派发器。
-- `lua` 模块由 `agent` 依赖;发行 jar 里和 `ai`、`agent` 一样平铺进引擎(`api-loader` 约定插件),许可随 jar 带
-  `LICENSE_numen-lua`。
-- 派发器经端口 `SerialCalls.Port`(继承 `ScriptCall.Host`)要这几样:执行一个调用、认出跑程序的那个工具调用里的程序、
-  task_finished 的认法、函数目录与换算、记战绩、墙钟。主人客户端与评测大脑用 `CompanionToolPort`,`/numen drive`、重启后再跑、
-  GameTest 与单测用同一个进程里的 `ProgramPort`(服务端函数直接交派发,战绩直接记)。
+- 语言(`agent.script.ScriptEngine` 与实现)、一次运行(`ScriptRun`)、一次调用里的脚本(`ScriptCall`)、一段程序从头到回执
+  (`Program`)、上限(`ScriptLimits`)是纯 JVM,放在 `agent` 模块;`lua` 模块由 `agent` 依赖;发行 jar 里和 `ai`、`agent` 一样平铺进引擎
+  (`api-loader` 约定插件),许可随 jar 带 `LICENSE_numen-lua`。
+- **程序整段在服务端跑**(§十四):客户端只送程序文本、她的模块清单与服务端还没有的模块正文,服务端在身体与数据旁边跑完,回一张
+  回执。客户端的 `SerialCalls` 只管一批调用的顺序,不认识程序里的 API 调用。
 
-### 运行:一个脚本一个虚拟线程
+### 运行:一个程序两条虚拟线程,服务端主线程不等脚本
 
-- 每次运行一个新的虚拟机(`Globals`),跑在它自己的虚拟线程上;模块用到时才从磁盘或 jar 读此刻的正文(§九),所以改了文件下一段
-  程序就用新的。命令函数是宿主函数:收参数、把调用请求
-  (`ScriptRun.Call`:行号、组、动作、对象、选项)交给驱动方,然后在原地阻塞等结局,拿到后从调用处接着跑。驱动方只在
-  两次调命令之间等它算完(指令预算管着);等身体干活时谁都不等它,脚本线程停着不占平台线程。
+- 每次运行一个新的虚拟机(`Globals`),跑在它自己的虚拟线程上;驱动它的是这段程序自己的执行体(`SerialExecutor`,同一时刻只跑
+  一个任务、也是虚拟线程),它在两次调用之间等脚本算完(指令预算管着),**服务端主线程永远不等脚本**。模块用到时才从这段程序握着的
+  清单里取正文(§九、§十四)。命令函数是宿主函数:收参数、把调用请求(`ScriptRun.Call`:行号、组、动作、对象、选项)交给驱动方,
+  然后在原地阻塞等结局,拿到后从调用处接着跑;等结果、等身体干活时脚本线程停着不占平台线程。
 - 不装 `coroutine` 库,命令只有脚本本身调得到。
 
 ### 沙箱与上限
@@ -160,14 +157,15 @@
 
 ### 打断:停在命令之间
 
-复用"同一轮里等 task_finished"的那处(`SerialCalls`)与它的口径:
+打断由服务端负责,急不急只有一条规则(`EventQueue.isUrgent`,收件箱与程序共用同一份代码):
 
-- 等某件身体活收尾时来了急件(主人说话、急事):不再等,脚本停,回执写 `your owner spoke; t8 keeps running`
-  (那件活照常跑);这一批余下的调用照旧各回"没执行"。
-- 一行命令在跑时来了急件:这一行的回执到了就停,停在命令之间。
-- 主人按停止(以及死亡、登出、外接接管、遣散):内核 `halt` 先收工具口再作废这次 run,在跑的脚本这时交出回执
-  `this turn was cut off; t8 was stopped too`(停止键叫停身体)或 `keeps running`,作为它那个调用的结果进历史,
-  切断点随后记下原因;所以模型看到的是真实的停处,而不是笼统的"被打断"。
+- 等某件身体活收尾时服务端发出了急件(她饿了、背包满了、主人挨打……):不再等,程序停,回执写 `an urgent hungry event arrived; t8 keeps running`
+  (那件活照常跑)。一次调用在跑时来了急件:这一次的结果到了就停,停在调用之间。
+- 主人说话、按停止、外接大脑接管、断线这类客户端那边的事,客户端上行一个"停止程序"(`StopProgramPayload`):说话与急件是"停在调用之间"
+  (原因是 `your owner spoke`),切断(停止键、死亡、登出、接管)是"当场停下"(`this turn was cut off; t8 was stopped too` 或 `keeps running`,
+  身体叫停与否照实写)。停止键叫停身体另发 `CancelTasksPayload`。
+- 程序是被叫停的,服务端交回的结局里带**结构化的原因**(`Outcome.stoppedFor`):客户端据此给这一批里还没派的调用各写一条"没执行",
+  不去读回执的文字。切断时客户端不等回执,这一批的调用作废、切断点由内核记下。
 - 程序被停下,它用到的每个模块也记一次战绩(没跑完、停在哪一行、为什么)。
 
 ### 回执
@@ -597,7 +595,7 @@ public final class LocateApi {                         // 一组:一个公开类
 | `Dispatcher` | 一次调用:脚本里的调用读成参数(读不成当场 `bad_argument`)、服务端或客户端执行、按种类交回(`ApiReply`)、受理活并记下重启后再跑的那一行 |
 | `ApiDocs` | `<api>` 索引、`numen.api.help`、用法、LuaLS 存根、元数据,全从登记表生成 |
 | `ApiTester` | 进程里跑一段程序看回执(`run`)、lint 报告 |
-| `ProgramPort` / `ServerPrograms` | 同一个进程里跑程序的执行口:`/numen drive`、重启后再跑、GameTest 与单测都经它 |
+| `program.ServerPrograms` | 服务端跑程序的唯一入口(§十四):客户端送来的程序、`/numen drive`、重启后再跑、GameTest、评测与单测都经它 |
 
 线上的样子只在 `agent` 的 `ApiReply` 一处:`{"ok": true, "value": …}`、`{"ok": true, "job": "t12"}`、
 `{"ok": false, "error": {kind, message, hint, data}}`,等到的值与收尾另带 `account`。
@@ -666,8 +664,57 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 
 ### 评测按函数统计
 
-程序里的每次 API 调用有了结局(成了、哪种失败,参数读不成的也算一次)都报给循环(`ScriptCall.Called` → `ToolPort.Sink.called` →
-`LoopEvent.ApiCalled`);评测的 `Meter` 按函数记:调了几次、失败的各是哪一种(尤其 `bad_argument`)、第一次调它之前 `numen.api.help`
+程序里的每次 API 调用有了结局(成了、哪种失败,参数读不成的也算一次)都随回执从服务端送回(`Program.Outcome.calls`,每次调用只带写成的
+文字——长过 `ScriptLimits.CALL_TEXT_CHARS` 的留头部加摘要——第一个文字对象与失败的种类),经 `ScriptCall.Called` → `ToolPort.Sink.called` →
+`LoopEvent.ApiCalled` 报给循环;评测的 `Meter` 按函数记:调了几次、失败的各是哪一种(尤其 `bad_argument`)、第一次调它之前 `numen.api.help`
 查过几次它(或它的组、名字空间)、和之前一字不差又失败了几次。每次运行写进 `runs.jsonl` 的 `functions`;`summary.md` 有"每个函数"
 一张表,`Compare` 把前后两份按函数并排(调用、失败率、参数错率、查帮助/调用)。插件作者给自己的函数打分:用 `Bench.suite` 登记自己的
 场景,看这张表。
+
+## 十四、程序整段在服务端跑,客户端想、服务端做(10-05)
+
+此前模型写的 Lua 在主人客户端跑,程序里每调一次服务端函数就经网络往返一次(一轮评测 36 次运行共 4469 次调用,98% 是服务端函数)。
+现在倒过来:**程序整段在服务端、身体与数据旁边执行**,客户端只把"程序文本 + 她的模块清单 + 这个连接还没送过的模块正文"发上去,
+服务端跑完回一份回执。函数仍然两端都有(`ServerCall` 在服务端、`ClientCall` 在主人客户端,按第一个参数定端):程序在服务端遇到
+服务端函数就进程内执行,遇到客户端函数就向主人客户端发**反向请求**,Lua 线程挂着等客户端用 `Dispatcher.client` 执行完答回来
+(同 MCP 的 sampling、LSP 的 workspace/configuration);对 API 作者完全透明。
+
+### 部件(`api/common/.../program` 与 `agent.script`)
+
+| 部件 | 做什么 |
+|---|---|
+| `Program`(agent) | 一段程序从头到回执,状态只在自己的执行体(`SerialExecutor`)上;派调用、等结果、等活收尾、急件与叫停 |
+| `ServerPrograms` | 唯一入口:登记在跑的程序(每只同伴一段,每位主人 8 段、全服 64 段,`ProgramLimits`)、准入、把服务端事件交给程序、停止、主人断线与关服清理 |
+| `ProgramCalls`:`ServerCalls` / `ClientCalls` / `RoutedCalls` / `ObservedCalls` | 一次调用在哪一端执行:进程内排进主线程车道、向客户端发反向请求、按函数的端分流、套一层给 GameTest 看每次调用;分流的逻辑只在 `RoutedCalls` |
+| `MainQueue` | 程序的服务端调用排队等主线程。每段程序一条车道,每刻开头 `ServerPrograms.tick()` 在预算里取:全部 10 ms、每段 5 ms(取 CC: Tweaked 的 `max_main_global_time` / `max_main_computer_time`),起点每刻轮一段;主线程只执行,从不等程序 |
+| `ClientTransport`:`NetworkTransport` / `LoopbackTransport` | 反向请求的传输端口。产品是网络;没有真客户端的地方(GameTest、单测)是同样过一遍包编解码的回环 |
+| `ModuleSet` / `ModuleSync` / `ModuleCache` / `RunModules` | 她的模块:清单(名字 → `Modules.fingerprint`)加没送过的正文。客户端 `ModuleSync` 记这个连接送过哪些;服务端 `ModuleCache` 按主人按指纹缓存(每位主人 4 MB,最久没用的先丢,主人断线清掉,不落盘);`RunModules` 是一段程序握着的那份 |
+| `ProgramUplink` / `ClientEndpoint` | 客户端:送程序、停止、收回执(服务端说缺正文就带上重发)、记模块战绩;替服务端执行客户端函数并答回 |
+| `LoopbackClient` | 在本进程里扮主人客户端(GameTest、评测之外的单测),用的就是上面那些部件 |
+
+### 包
+
+`RunProgramPayload`(上行:程序编号、程序、`ModuleSet`)→ `ProgramResultPayload`(下行:一段 JSON,要么 `{missing:[指纹]}`,要么 `{receipt, calls, used, stopped_for}`);
+`StopProgramPayload`(上行:停在调用之间或当场停下);`ClientCallPayload` / `ClientCallResultPayload`(反向请求与它的答复,答复里在函数改了
+她的模块时带上新清单与新正文)。上行与下行的整包上限同为 1 MB(`Wire`,见 `docs/cli.md` 附录 H)。
+
+### 她的模块:真源只有一个
+
+真源仍是主人客户端 `config/numen/lua/<主人>/` 里的文件。服务端缓存只是内容的副本(指纹就是内容的名字,存入时核对),一段程序开跑时
+就把清单里每个指纹的正文握在手里。程序里 `numen.module.save/delete/reset` 是客户端函数:`Modules.revision()` 变了,说明这次调用改了文件,
+答复里带上客户端此刻的全清单和新正文,服务端先换进这段程序的 `RunModules` 再让程序往下走,所以同一段程序往后用到的就是新的;
+已经装进虚拟机的那份不变。服务端缺某些正文(缓存丢了)时回 `Missing`,客户端清掉"已送过"、带上重发一次。
+
+### 回执:给模型读的,按构造有界
+
+回执在生成它的地方就有界(`ScriptLimits`):调用行合起来 `RECEIPT_LINES_CHARS`,每件身体活的整段实际账至多 `ACCOUNT_CHARS`(超出的整行省略并写
+"另外 N 行"),`return` 的值至多 `RETURNED_CHARS`(写明原来多长),`print` 至多 `PRINTED_CHARS`;每次调用的结局只带写成的文字(超长的头部加摘要)。
+所以一张回执远小于下行 1 MB,`ProgramResultPayload` 是内容有界的包:装不下就是代码错,当场抛,不再有"装不下缩成失败"。
+身体活的账本身在生成处也已归堆计数(`NavText`:同类方块合并成"N 个 + 几处例子")。
+
+### 线程
+
+服务端函数的调用在程序线程上排进车道,主线程每刻在预算里取;一次调用至少等一个服务器刻(和 CC: Tweaked 的一次外设调用一样)。
+程序等她派的活收尾:这件活的收尾事件在发出的那一刻、主线程上就判归谁(`NumenEvents.Watcher`)——归程序的写进回执、不再另送主人的大脑
+(一件活的收尾只说一次);程序停下之后才到的收尾由程序转交出去,不会丢。管理员的 `/numen drive` 与重启后再跑的那一行没有模型读回执,它们派的活的
+收尾照常发给她。
