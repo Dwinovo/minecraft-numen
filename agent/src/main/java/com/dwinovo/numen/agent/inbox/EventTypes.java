@@ -70,7 +70,9 @@ public final class EventTypes {
      */
     public static final String INVENTORY_FULL = "inventory_full";
     /**
-     * 她达成了一个进度,奖励的物品或经验进了她的背包。不是她哪次调用要的结果,所以发事件;不急:东西已经在她身上,攒着搭车就够。
+     * 她达成了一个进度,奖励的物品或经验进了她的背包。不是她哪次调用要的结果,所以发事件。
+     *
+     * <p>走 {@link Delivery#AMBIENT}——不叫醒她:东西已经在她身上,不知道也不会做错事,随下一次调模型捎上就够。不进聊天流。
      */
     public static final String ADVANCEMENT_REWARD = "advancement_reward";
     /** 主人挨打了(只报实体攻击)。急不急由发送方按主人血线分档。 */
@@ -256,7 +258,7 @@ public final class EventTypes {
         register(event(DEATH, true));
         register(event(HUNGRY, true));
         register(event(INVENTORY_FULL, true));
-        register(event(ADVANCEMENT_REWARD, false));
+        register(new Type(ADVANCEMENT_REWARD, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
         register(event(OWNER_HURT, false));
         register(event(TIMER, true));
         register(event(WOKE, true));
