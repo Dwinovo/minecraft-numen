@@ -96,6 +96,14 @@ public final class EventTypes {
      * 她自己执行的指令说的话在那条指令的回执里,玩家聊天另走群聊,都不是这一种。
      */
     public static final String SERVER_MESSAGE = "server_message";
+    /**
+     * 她的一段程序被切断(主人按停止、外接接管、遣散……)、这一批已经作废之后,服务端为它交出的那份回执:程序切断前做了什么、停在哪。
+     * 正文就是服务端写的那份有界回执本身。
+     *
+     * <p>走 {@link Delivery#AMBIENT}——她没要求这份回执,但身体做了的事必须让她知道:随下一次调模型捎带。不叫醒她:切断本来就是主人
+     * 的决定(停止键之后停牌要等主人再开口),为一份"你刚才被打断时做了什么"多开一轮没有意义。不进聊天流:对话里主人已经看见自己按了停止。
+     */
+    public static final String PROGRAM_STOPPED = "program_stopped";
     /** 队列满了丢掉了几条——丢弃可以,无声消失不行。 */
     public static final String DROPPED = "dropped";
     /**
@@ -270,6 +278,8 @@ public final class EventTypes {
         register(new Type(LEFT, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
         // 服务端对她说的话:同一行,捎带投递,随下一次调模型交出去,自己不开一轮。
         register(new Type(SERVER_MESSAGE, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
+        // 被切断的程序交出的回执:同一行,捎带投递
+        register(new Type(PROGRAM_STOPPED, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
     }
 
     private EventTypes() {}

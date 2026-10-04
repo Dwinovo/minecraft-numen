@@ -603,7 +603,7 @@ public final class GameTestKit {
     private static final java.util.Map<UUID, com.dwinovo.numen.program.LoopbackClient> CLIENTS =
             new java.util.concurrent.ConcurrentHashMap<>();
 
-    private static com.dwinovo.numen.program.LoopbackClient client(NumenPlayer body) {
+    static com.dwinovo.numen.program.LoopbackClient client(NumenPlayer body) {
         net.minecraft.server.MinecraftServer server = body.getServer();
         return CLIENTS.computeIfAbsent(body.getUUID(), uuid -> new com.dwinovo.numen.program.LoopbackClient(
                 id -> NumenPlayer.findByUuid(server, id), com.dwinovo.numen.script.Modules::of));

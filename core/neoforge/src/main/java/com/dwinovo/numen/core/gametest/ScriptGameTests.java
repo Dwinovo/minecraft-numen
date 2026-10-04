@@ -588,4 +588,62 @@ public class ScriptGameTests {
                 })
                 .thenSucceed();
     }
+
+    /**
+     * 停止键切断一段已经挖了几格的程序:这一批作废,模型当场读不到它的回执;服务端上的程序当场停下、照常交出回执,晚到的回执作为一条
+     * {@code program_stopped} 事件进她的收件箱(客户端的工具口做的),正文就是服务端写的那份回执——写明切断了、已经挖了什么、后面的没挖。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_scripts")
+    public static void a_program_cut_off_by_the_stop_button_leaves_its_receipt_in_her_inbox(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer her = spawnAt(helper, "gametest_lua_cut", new BlockPos(2, 2, 2), true);
+        List<BlockPos> cells = new java.util.ArrayList<>();
+        for (int x = 3; x <= 8; x++) {
+            BlockPos cell = helper.absolutePos(new BlockPos(x, 2, 2));
+            level.setBlockAndUpdate(cell, Blocks.STONE.defaultBlockState());
+            cells.add(cell);
+        }
+        StringBuilder code = new StringBuilder();
+        cells.forEach(cell -> code.append("numen.work.dig(").append(xyz(cell)).append(")\n"));
+        List<String> afterwards = new java.util.ArrayList<>();
+        com.dwinovo.numen.agent.tool.CompanionToolPort port = new com.dwinovo.numen.agent.tool.CompanionToolPort(
+                her.getUUID(), () -> () -> her.getUUID(), client(her).uplink(), (program, receipt) ->
+                        afterwards.add(com.dwinovo.numen.program.RunResult.messageOf(receipt)));
+        List<String> handedToTheModel = new java.util.ArrayList<>();
+        port.run(List.of(programCall(code.toString())), new com.dwinovo.numen.agent.loop.ToolPort.Sink() {
+            @Override
+            public void started(LlmToolCall call) {
+            }
+
+            @Override
+            public void finished(LlmToolCall call, String resultJson) {
+                handedToTheModel.add(resultJson);
+            }
+
+            @Override
+            public void settled() {
+            }
+        });
+
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(level.getBlockState(cells.get(1)).isAir(),
+                        "she has not dug the first two cells"))
+                .thenExecute(() -> port.cancel(true))
+                .thenWaitUntil(() -> helper.assertTrue(!afterwards.isEmpty(), "the cut-off program's receipt has not come"))
+                .thenExecute(() -> {
+                    String receipt = afterwards.get(0);
+                    helper.assertTrue(handedToTheModel.isEmpty(), "the void batch was handed a result: " + handedToTheModel);
+                    helper.assertTrue(receipt.contains("this turn was cut off"), receipt);
+                    helper.assertTrue(receipt.matches("(?s).*line \\d+ numen\\.work\\.dig: ok — .*"),
+                            "the receipt does not say what was dug: " + receipt);
+                    helper.assertTrue(level.getBlockState(cells.get(cells.size() - 1)).is(Blocks.STONE),
+                            "the cut-off program kept digging");
+                    var entry = com.dwinovo.numen.event.NumenEvents.programStopped(0L, "p", receipt, 1L);
+                    helper.assertTrue(entry.type().equals(com.dwinovo.numen.agent.inbox.EventTypes.PROGRAM_STOPPED)
+                            && entry.text().contains("this turn was cut off") && !entry.urgent(),
+                            "the receipt does not become her event: " + entry);
+                    CompanionFactory.despawn(level.getServer(), her);
+                })
+                .thenSucceed();
+    }
 }

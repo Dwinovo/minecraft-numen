@@ -152,6 +152,17 @@ public final class NumenEvents {
                 com.dwinovo.numen.sdk.Dispatcher.ended(result, fn));
     }
 
+    /**
+     * 一段被切断的程序在服务端交出的回执,作为一条事件交给她:事件正文就是那份回执的文字,不另写一份。主人客户端在收到一份已经作废的
+     * 那一批的程序结果时造它。
+     *
+     * @param program 程序的编号
+     * @param receipt 回执的文字(服务端写的那一份)
+     */
+    public static EventQueue.Entry programStopped(long dayTime, String program, String receipt, long now) {
+        return entry(dayTime, EventTypes.PROGRAM_STOPPED, Map.of("program", program), receipt, now, false);
+    }
+
     /** 服务端发出的每一条事件先交给它们:在服务端跑的程序等它派的活的收尾、也据此判断要不要停({@code ServerPrograms})。 */
     private static final List<Watcher> WATCHERS = new java.util.concurrent.CopyOnWriteArrayList<>();
 

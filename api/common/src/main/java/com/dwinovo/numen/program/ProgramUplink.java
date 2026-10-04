@@ -92,6 +92,14 @@ public final class ProgramUplink {
         w.done().accept(result);
     }
 
+    /**
+     * 这段程序所在的那一批作废了(切断),但程序在服务端照常停下、交出回执:晚到的结果交给 {@code late},而不是原来等的那一方。
+     * 已经回来或根本没送出的,不做什么。
+     */
+    public void afterwards(String programId, Consumer<RunResult> late) {
+        waiting.computeIfPresent(programId, (id, w) -> new Waiting(w.companion(), w.code(), late, w.retried()));
+    }
+
     /** 不再等这段程序的答复(客户端放弃了):晚到的答复不理。 */
     public void forget(String programId) {
         waiting.remove(programId);

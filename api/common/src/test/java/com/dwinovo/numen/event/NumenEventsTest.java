@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -162,5 +163,19 @@ class NumenEventsTest {
     @Test
     void nullTextIsEmptyNotTheWordNull() {
         assertEquals("", NumenEvents.escape(null));
+    }
+
+    /** 被切断的程序交出的回执作为事件交给她:正文就是回执的文字,种类是登记过的世界的事,不叫醒她。 */
+    @Test
+    void aCutOffProgramsReceiptIsAnEventWhoseBodyIsTheReceiptItself() {
+        EventQueue.Entry e = NumenEvents.programStopped(0L, "call_7", "The script stopped at line 2: this turn was cut off",
+                5L);
+        assertEquals(EventTypes.PROGRAM_STOPPED, e.type());
+        assertTrue(e.text().contains("program=\"call_7\""), e.text());
+        assertTrue(e.text().contains("The script stopped at line 2: this turn was cut off"), e.text());
+        assertFalse(e.urgent());
+        assertFalse(EventTypes.get(EventTypes.PROGRAM_STOPPED).delivery().wakes(), "she did not ask for it and is not woken");
+        assertEquals(EventTypes.Delivery.Joins.ANY_CALL, EventTypes.get(EventTypes.PROGRAM_STOPPED).delivery().joins(),
+                "but it rides along with the next call");
     }
 }

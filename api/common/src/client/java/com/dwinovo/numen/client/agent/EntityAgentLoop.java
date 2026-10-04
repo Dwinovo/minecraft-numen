@@ -158,7 +158,7 @@ public final class EntityAgentLoop {
                 () -> com.dwinovo.numen.client.data.ClientNumenState.get(entityUuid).orElse(null));
         this.queue = new EventQueue(JsonlJournal.atFile(CompanionHome.inbox(entityUuid)));
         this.providerEntryId = CompanionHome.binding(entityUuid).providerId();
-        this.dispatcher = new ToolDispatcher(entityUuid, this::resolveEntity);
+        this.dispatcher = new ToolDispatcher(entityUuid, this::resolveEntity, this::receiptAfterCut);
         this.presenter = new TurnPresenter(entityUuid, this::status, this::personaName);
         this.tokens = new TokenLedger(entityUuid);
         this.model = new Model();
@@ -709,6 +709,13 @@ public final class EntityAgentLoop {
 
 
     /** 事件时间戳用的游戏内时刻;身体不在客户端视野里时记 0。 */
+    /** 切断后服务端交出的程序回执:这一批已经作废,她仍必须知道切断前做了什么,所以作为一条事件进收件箱。 */
+    private void receiptAfterCut(String program, String receipt) {
+        Minecraft.getInstance().execute(() -> loop.push(List.of(com.dwinovo.numen.event.NumenEvents.programStopped(
+                gameDayTime(), program, com.dwinovo.numen.program.RunResult.messageOf(receipt),
+                System.currentTimeMillis()))));
+    }
+
     private long gameDayTime() {
         AbstractClientPlayer body = resolveEntity();
         return body != null ? body.level().getDayTime() : 0L;

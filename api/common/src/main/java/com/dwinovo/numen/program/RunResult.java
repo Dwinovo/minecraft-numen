@@ -28,6 +28,11 @@ public sealed interface RunResult {
         return new Ended(new Program.Outcome(ToolOutcome.failure(why), List.of(), List.of(), null));
     }
 
+    /** 一张回执(服务端写的那一份 JSON)的文字,模型读的就是它。 */
+    static String messageOf(String receiptJson) {
+        return JsonParser.parseString(receiptJson).getAsJsonObject().get("message").getAsString();
+    }
+
     default String toJson() {
         JsonObject out = new JsonObject();
         switch (this) {

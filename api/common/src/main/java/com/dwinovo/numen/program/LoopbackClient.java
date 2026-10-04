@@ -52,6 +52,11 @@ public final class LoopbackClient {
         });
     }
 
+    /** 这个"客户端"的上行部件:用例拿它造客户端的工具口。 */
+    public ProgramUplink uplink() {
+        return uplink;
+    }
+
     /** 主人开口、客户端那边来了急件:让这段程序停在调用之间。 */
     public void interrupt(UUID companion, String programId, String why) {
         uplink.interrupt(companion, programId, why);
@@ -80,6 +85,12 @@ public final class LoopbackClient {
                     ServerPrograms.cutOff(sent.entityUuid(), sent.programId(), sent.stopBody());
                 } else {
                     ServerPrograms.interrupt(sent.entityUuid(), sent.programId(), sent.why());
+                }
+            }
+            case com.dwinovo.numen.network.payload.CancelTasksPayload cancel -> {
+                NumenPlayer body = bodies.apply(cancel.entityUuid());
+                if (body != null) {
+                    com.dwinovo.numen.task.CompanionTickDispatcher.cancelFor(body);
                 }
             }
             default -> throw new IllegalArgumentException("the loopback client does not send " + payload.type().id());

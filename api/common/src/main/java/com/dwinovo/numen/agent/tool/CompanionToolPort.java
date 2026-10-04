@@ -21,7 +21,8 @@ import java.util.function.Supplier;
  * <p>顺序与等待——一次一个、程序在服务端跑的时候后面的等着、来了急件叫服务端让程序停在调用之间——是 {@link SerialCalls} 的。这里只管
  * 一个调用怎么执行:跑 Lua 的那个工具({@link ScriptTool})的调用是一整段程序,整段送去服务端({@link ProgramUplink}),服务端在
  * 身体与数据旁边跑完,回一张回执(连同每次 API 调用的结局);别的工具(装技能、记计划、记札记、接进来的 MCP 工具)按名字取出来,
- * 在这里就地执行,结果之后从任何线程经 {@link ToolCall#complete} 回来。
+ * 在这里就地执行,结果之后从任何线程经 {@link ToolCall#complete} 回来。切断时在服务端跑着的程序照常停下、交出回执,晚到的回执经
+ * {@link AfterCut} 交出去。
  */
 public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
 
@@ -29,20 +30,32 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
     /** 每个调用派出那一刻取一次:客户端上它带着此刻看得见的那具身体(出了视距是 null)。 */
     private final Supplier<? extends ToolAnchor> anchor;
     private final ProgramUplink uplink;
+    private final AfterCut afterCut;
     private final SerialCalls calls;
 
     /** 在飞的那一个的回报口,供 {@link #failInFlight} 用;没有在飞的是 null。 */
     private java.util.function.Consumer<SerialCalls.Settled> inFlightDone;
 
-    public CompanionToolPort(UUID companion, Supplier<? extends ToolAnchor> anchor) {
-        this(companion, anchor, ProgramUplink.CONNECTION);
+    /**
+     * 被切断的程序在服务端交出回执之后,这里把它转给收件的人:程序编号与回执的文字。切断时这一批已经作废,模型读不到这份回执,
+     * 但程序切断前做了什么必须让她知道——收件的人把它作为一条事件({@code NumenEvents.programStopped})放进她的收件箱。
+     */
+    @FunctionalInterface
+    public interface AfterCut {
+        void receipt(String programId, String receipt);
+    }
+
+    public CompanionToolPort(UUID companion, Supplier<? extends ToolAnchor> anchor, AfterCut afterCut) {
+        this(companion, anchor, ProgramUplink.CONNECTION, afterCut);
     }
 
     /** @param uplink 程序送去哪里:主人客户端上是这个连接的那一份,评测给它自己的 */
-    public CompanionToolPort(UUID companion, Supplier<? extends ToolAnchor> anchor, ProgramUplink uplink) {
+    public CompanionToolPort(UUID companion, Supplier<? extends ToolAnchor> anchor, ProgramUplink uplink,
+                             AfterCut afterCut) {
         this.companion = companion;
         this.anchor = anchor;
         this.uplink = uplink;
+        this.afterCut = afterCut;
         this.calls = new SerialCalls(this);
     }
 
@@ -65,9 +78,18 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
      */
     @Override
     public List<String> cancel(boolean stopBody) {
+        LlmToolCall flying = calls.inFlight();
+        String program = flying != null && isProgram(flying) ? flying.id() : null;
         List<String> ids = calls.cancel(stopBody);
         inFlightDone = null;
-        ids.forEach(uplink::forget);
+        for (String id : ids) {
+            if (id.equals(program)) {
+                // 这一批作废了,程序在服务端照常停下并交出回执:晚到的那份作为一条事件交给她
+                uplink.afterwards(id, result -> afterCut.receipt(id, ((RunResult.Ended) result).outcome().receipt()));
+            } else {
+                uplink.forget(id);
+            }
+        }
         if (stopBody) {
             uplink.stopBody(companion);
             CompanionEvents.fire(CompanionEvent.ABORT, companion);   // 内容包据此停掉自己那边的活

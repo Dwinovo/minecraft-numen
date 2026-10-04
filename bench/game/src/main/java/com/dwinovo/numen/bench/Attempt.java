@@ -170,7 +170,7 @@ final class Attempt {
         int window = ProviderRegistry.contextWindow(ProviderRegistry.canonicalId(settings.provider()),
                 settings.model());
         brain = new Brain(her.getUUID(), mind, home.resolve("chat.jsonl"), window, mail,
-                () -> meter.turns <= scenario.budget().turns());
+                () -> meter.turns <= scenario.budget().turns(), level::getDayTime);
         brain.subscribe(meter);
         brain.subscribe(this::onLoopEvent);
         ProgramUplink.wire = this::uplink;

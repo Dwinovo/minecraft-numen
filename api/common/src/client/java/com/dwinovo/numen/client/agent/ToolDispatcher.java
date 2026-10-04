@@ -38,9 +38,9 @@ public final class ToolDispatcher implements ToolPort {
     private long deadlineMillis = 0;
 
     /** @param entity the live client-side body (for client-run tools); may resolve to null when out of view */
-    public ToolDispatcher(UUID entityUuid, Supplier<AbstractClientPlayer> entity) {
+    public ToolDispatcher(UUID entityUuid, Supplier<AbstractClientPlayer> entity, CompanionToolPort.AfterCut afterCut) {
         this.entityUuid = entityUuid;
-        this.tools = new CompanionToolPort(entityUuid, () -> new ClientToolContext(entity.get(), entityUuid));
+        this.tools = new CompanionToolPort(entityUuid, () -> new ClientToolContext(entity.get(), entityUuid), afterCut);
     }
 
     /** Is this call still outstanding (in flight or still queued), i.e. can its result still arrive? */
