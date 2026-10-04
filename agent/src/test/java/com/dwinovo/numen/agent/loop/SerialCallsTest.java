@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 一轮里的调用按顺序执行:一个做完才派下一个,后台身体活等它收尾;等的时候来了急件,余下的逐条回"没执行"。
+ * 一轮里的调用按顺序执行:一个做完才派下一个,脚本里的身体活等它收尾;等的时候来了急件,余下的逐条回"没执行"。
  *
  * <p>假的执行口把派出去的调用停在 {@link #pending} 里等测试替它回结果。结果写成 {@code running tN} 表示受理了一件会自己
  * 收尾的后台活 tN;队列里 task_finished 的正文就是收尾的那件的编号(后面可以跟收尾状态与它交代的话)。两个读法都是测试自己的约定,真的写法在 api
@@ -179,49 +179,9 @@ class SerialCallsTest {
     }
 
     @Test
-    void aBackgroundJobHoldsTheRestUntilItsOwnEndArrives() {
-        calls.run(List.of(call("a"), call("b")), sink);
-        answer("a", "running t3");
-        assertEquals("running t3", results.get("a"), "受理回执照常是 a 的结果");
-        assertEquals(List.of("a"), dispatched, "t3 还没做完,b 不派");
-
-        calls.arrived(finished("t2"), false);
-        calls.arrived(new EventQueue.Entry(EventTypes.REFLEX, "<event>换了口气</event>", 0, false), false);
-        assertEquals(List.of("a"), dispatched, "别的活收尾、不急的事都不算");
-
-        calls.arrived(finished("t3"), true);
-        assertEquals(List.of("a", "b"), dispatched, "t3 做完了才派 b");
-        answer("b", "{\"success\":true}");
-        assertEquals(1, settles);
-    }
-
-    @Test
-    void aJobThatNeverEndsDoesNotHoldAnything() {
-        calls.run(List.of(call("follow"), call("look")), sink);
-        answer("follow", "{\"success\":true,\"data\":{\"standing\":true}}");
-        assertEquals(List.of("follow", "look"), dispatched, "常驻的活没有收尾,不等");
-    }
-
-    @Test
-    void theOwnerSpeakingWhileWaitingLeavesTheRestUnrunAndSaysWhy() {
-        calls.run(List.of(call("a"), call("b"), call("c")), sink);
-        answer("a", "running t3");
-
-        calls.arrived(ownerWords("先停一下"), true);
-
-        assertEquals(List.of("a"), dispatched, "余下的一个都没派");
-        assertEquals(1, settles, "这一批结算,模型下一次调用读到主人的话");
-        String why = ToolOutcome.failure("Not run: while you were waiting for t3 to finish, your owner spoke. "
-                + "t3 keeps running; read it, then decide what to do next.");
-        assertEquals(why, results.get("b"));
-        assertEquals(why, results.get("c"));
-        assertEquals(3, results.size(), "每个调用恰好一个结果");
-    }
-
-    @Test
-    void anUrgentEventWhileWaitingNamesItsKind() {
-        calls.run(List.of(call("a"), call("b")), sink);
-        answer("a", "running t3");
+    void anUrgentEventWhileTheScriptWaitsNamesItsKind() {
+        calls.run(List.of(lua("a", "work.dig(\"ores\")"), call("b")), sink);
+        answer(dispatched.get(0), "running t3");
 
         calls.arrived(new EventQueue.Entry(EventTypes.OWNER_HURT, "<event>主人危险</event>", 0, true), true);
 
@@ -239,17 +199,6 @@ class SerialCallsTest {
 
         answer("a", "{\"success\":true}");
         assertEquals(List.of("a", "b"), dispatched);
-    }
-
-    /** 后面没有调用在等它:这一批当场结算,活在后台做,她照常说话、想事。 */
-    @Test
-    void aJobAtTheEndOfTheReplyLeavesHerFreeAtOnce() {
-        calls.run(List.of(call("a")), sink);
-        answer("a", "running t3");
-        assertEquals(1, settles);
-
-        calls.arrived(ownerWords("挖得怎么样了"), true);
-        assertEquals(1, results.size(), "没有在等,输入不碰任何调用");
     }
 
     @Test
