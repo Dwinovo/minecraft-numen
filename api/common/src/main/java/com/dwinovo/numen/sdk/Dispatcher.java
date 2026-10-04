@@ -9,8 +9,6 @@ import com.dwinovo.numen.agent.script.JsonValues;
 import com.dwinovo.numen.agent.script.ScriptCatalog;
 import com.dwinovo.numen.agent.script.ScriptEngine;
 import com.dwinovo.numen.agent.script.ScriptRun;
-import com.dwinovo.numen.agent.tool.ServerToolTransport;
-import com.dwinovo.numen.agent.tool.ToolCall;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskDispatch;
 import com.dwinovo.numen.task.TaskRecord;
@@ -26,13 +24,13 @@ import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
- * 一次调用从脚本到函数再回来:读参数、按端路由、按种类交回。
+ * 一次调用从脚本到函数再回来:读参数、按端执行、按种类交回。
  *
  * <ol>
  *   <li>{@link #invocation}(跑程序的一侧):按顺序的对象与选项表按函数的参数表读成参数 record,读不成在调用处报
  *       {@code bad_argument}(哪个参数、要什么、给了什么;看得出想写什么时下一步是改好的那一整行),不派出去;读好的参数写回规范的脚本值,
  *       就是这次调用的 {@link Invocation}。</li>
- *   <li>{@link #call}(主人客户端或评测的大脑):客户端函数当场执行;服务端函数原样送去服务端({@link ServerToolTransport})。</li>
+ *   <li>{@link #client}(主人客户端,程序在服务端跑时由反向请求送来):客户端函数在那里执行。</li>
  *   <li>{@link #serve}(服务端):同一张参数表、同一套值转换再读一遍,交给函数。</li>
  * </ol>
  * 交回按函数的返回类型(登记时定):当场的值、等到的值({@link Pending})、占身体的活({@link Job},受理回活的编号,收尾经
@@ -101,18 +99,6 @@ public final class Dispatcher {
     /** 这次调用是不是在服务端执行。 */
     public static boolean runsOnServer(Invocation invocation) {
         return function(invocation).side() == ApiFunction.Side.SERVER;
-    }
-
-    /**
-     * 主人客户端(或评测的大脑)执行一次调用:客户端函数当场执行;服务端函数把这次调用送去服务端({@link ServerToolTransport},名字是
-     * 函数的全名、参数是读好的 JSON),由 {@link #serve} 执行。结果经 {@code call} 恰好回一次。
-     */
-    public static void call(Invocation invocation, ToolCall call) {
-        if (runsOnServer(invocation)) {
-            ServerToolTransport.ship(call);
-            return;
-        }
-        client(invocation.function(), invocation.args(), call.ctx().entityUuid(), call::complete);
     }
 
     /**

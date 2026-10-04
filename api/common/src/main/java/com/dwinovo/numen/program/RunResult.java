@@ -1,7 +1,6 @@
 package com.dwinovo.numen.program;
 
 import com.dwinovo.numen.agent.llm.ToolOutcome;
-import com.dwinovo.numen.agent.script.JsonValues;
 import com.dwinovo.numen.agent.script.Program;
 import com.dwinovo.numen.agent.script.ScriptCall;
 import com.google.gson.JsonArray;
@@ -10,9 +9,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 服务端对"跑这段程序"的答复:跑完了({@link Ended},整张回执加每次调用的结局和用到的模块),或者没跑——清单里有些模块的正文服务端
@@ -28,7 +25,7 @@ public sealed interface RunResult {
 
     /** 一段没能开跑的程序的结果:一张失败的回执,没有调用,没有模块。 */
     static RunResult refused(String why) {
-        return new Ended(new Program.Outcome(ToolOutcome.failure(why), List.of(), List.of()));
+        return new Ended(new Program.Outcome(ToolOutcome.failure(why), List.of(), List.of(), null));
     }
 
     default String toJson() {
@@ -46,14 +43,19 @@ public sealed interface RunResult {
                 for (ScriptCall.Called called : outcome.calls()) {
                     JsonObject c = new JsonObject();
                     c.addProperty("function", called.function());
-                    c.add("args", JsonValues.toJson(called.args()));
-                    c.add("options", JsonValues.toJson(called.options()));
+                    c.addProperty("call", called.call());
+                    if (called.first() != null) {
+                        c.addProperty("first", called.first());
+                    }
                     if (called.kind() != null) {
                         c.addProperty("kind", called.kind());
                     }
                     calls.add(c);
                 }
                 out.add("calls", calls);
+                if (outcome.stoppedFor() != null) {
+                    out.addProperty("stopped_for", outcome.stoppedFor());
+                }
                 JsonArray used = new JsonArray();
                 for (Program.Used u : outcome.used()) {
                     JsonObject m = new JsonObject();
@@ -87,13 +89,8 @@ public sealed interface RunResult {
         List<ScriptCall.Called> calls = new ArrayList<>();
         for (JsonElement element : in.getAsJsonArray("calls")) {
             JsonObject c = element.getAsJsonObject();
-            @SuppressWarnings("unchecked")
-            List<Object> args = (List<Object>) JsonValues.toJava(c.get("args"));
-            Map<String, Object> options = new LinkedHashMap<>();
-            if (JsonValues.toJava(c.get("options")) instanceof Map<?, ?> map) {
-                map.forEach((k, v) -> options.put(String.valueOf(k), v));
-            }
-            calls.add(new ScriptCall.Called(c.get("function").getAsString(), args, options,
+            calls.add(new ScriptCall.Called(c.get("function").getAsString(), c.get("call").getAsString(),
+                    c.has("first") ? c.get("first").getAsString() : null,
                     c.has("kind") ? c.get("kind").getAsString() : null));
         }
         List<Program.Used> used = new ArrayList<>();
@@ -102,6 +99,7 @@ public sealed interface RunResult {
             used.add(new Program.Used(m.get("module").getAsString(), new ScriptCall.Tally(m.get("ok").getAsBoolean(),
                     m.get("line").getAsInt(), m.has("error") ? m.get("error").getAsString() : null)));
         }
-        return new Ended(new Program.Outcome(in.get("receipt").getAsString(), List.copyOf(calls), List.copyOf(used)));
+        return new Ended(new Program.Outcome(in.get("receipt").getAsString(), List.copyOf(calls), List.copyOf(used),
+                in.has("stopped_for") ? in.get("stopped_for").getAsString() : null));
     }
 }

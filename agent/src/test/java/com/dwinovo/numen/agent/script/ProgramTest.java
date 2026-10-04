@@ -290,6 +290,42 @@ class ProgramTest {
         assertEquals(1, lines.size());
         assertTrue(message().startsWith("The script stopped at line 1 (move.go) after 1 call: your owner spoke; t1 "
                 + "keeps running. Nothing after that ran."), message());
+        assertEquals("your owner spoke; t1 keeps running", outcome.stoppedFor(), "结局里结构化地带着为什么停");
+    }
+
+    @Test
+    void aProgramThatEndsOnItsOwnWasNotStoppedForAnything() {
+        run("return 1");
+        assertNull(outcome.stoppedFor());
+    }
+
+    @Test
+    void aReceiptIsBoundedHoweverMuchTheCallsAndTheirAccountsSay() {
+        Program program = run("""
+                for i = 1, 150 do work.dig("ores") end
+                return string.rep("x", 100000)
+                """);
+        String account = ("a long account of what was done, one line of it\n").repeat(400);
+        for (int i = 1; i <= 150; i++) {
+            answerLast(job("t" + i));
+            program.taskFinished(finished("t" + i + " done " + account));
+        }
+        assertTrue(receipt().get("success").getAsBoolean(), outcome.receipt());
+        assertTrue(outcome.receipt().length() < ScriptLimits.RECEIPT_LINES_CHARS + ScriptLimits.RETURNED_CHARS
+                + ScriptLimits.PRINTED_CHARS + 2_000, "receipt is " + outcome.receipt().length());
+        assertTrue(message().contains("more line(s) of this account left out]"), "a job's account is cut at whole lines");
+        assertTrue(message().contains("more call line(s) left out"), "the call lines are cut at the budget");
+        assertTrue(message().contains("[returned value cut at " + ScriptLimits.RETURNED_CHARS + " characters; it was 100000]"));
+        assertEquals(150, outcome.calls().size());
+    }
+
+    @Test
+    void aCallsOutcomeStaysSmallHoweverBigItsArguments() {
+        run("work.dig(string.rep('x', 50000))");
+        answerLast(value(true));
+        ScriptCall.Called called = outcome.calls().get(0);
+        assertTrue(called.call().length() < ScriptLimits.CALL_TEXT_CHARS + 40, called.call().length() + "");
+        assertTrue(called.first().length() <= ScriptLimits.CALL_TEXT_CHARS);
     }
 
     @Test

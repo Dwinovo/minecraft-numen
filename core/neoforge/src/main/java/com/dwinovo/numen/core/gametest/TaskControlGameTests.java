@@ -541,7 +541,7 @@ public class TaskControlGameTests {
                     for (LlmToolCall skipped : List.of(look, around)) {
                         String result = round.result(skipped);
                         helper.assertTrue(result != null && result.contains("Not run")
-                                        && result.contains("was stopped"),
+                                        && result.contains("your owner spoke") && result.contains("keeps running"),
                                 "a call left unrun does not say why: " + result);
                     }
                     TaskRecord now = CompanionTickDispatcher.currentTaskFor(companion.getUUID());

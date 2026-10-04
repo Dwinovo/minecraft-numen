@@ -2,7 +2,6 @@ package com.dwinovo.numen.program;
 
 import com.dwinovo.numen.agent.script.ApiReply;
 import com.dwinovo.numen.agent.script.ErrorKind;
-import com.dwinovo.numen.network.NumenNetwork;
 import com.dwinovo.numen.network.Wire;
 import com.dwinovo.numen.network.payload.ClientCallPayload;
 import com.dwinovo.numen.network.payload.ClientCallResultPayload;
@@ -27,7 +26,7 @@ public final class ClientEndpoint {
 
     /** 主人客户端上这个连接的那一份:和 {@link ProgramUplink#CONNECTION} 共用同一份"送过哪些正文"。 */
     public static final ClientEndpoint CONNECTION = new ClientEndpoint(ProgramUplink.CONNECTION.sync(),
-            NumenNetwork::sendToServer, Modules::of);
+            payload -> ProgramUplink.wire.accept(payload), Modules::of);
 
     private final ModuleSync sync;
     private final Consumer<CustomPacketPayload> uplink;

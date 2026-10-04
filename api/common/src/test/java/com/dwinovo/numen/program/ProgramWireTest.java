@@ -70,13 +70,14 @@ class ProgramWireTest {
     @Test
     void theReceiptComesDownWithEveryCallsOutcomeAndTheModulesUsed() {
         Program.Outcome outcome = new Program.Outcome("{\"success\":true,\"message\":\"The script ran to the end\"}",
-                List.of(new ScriptCall.Called("numen.work.dig", List.of(7L, "x"), Map.of("count", 2L), null),
-                        new ScriptCall.Called("numen.move.go", List.of(), Map.of(), "no_path")),
-                List.of(new Program.Used("numen.work", new ScriptCall.Tally(false, 3, "boom"))));
+                List.of(new ScriptCall.Called("numen.work.dig", "numen.work.dig(7, \"x\", {count = 2})", null, null),
+                        new ScriptCall.Called("numen.api.help", "numen.api.help(\"numen.work\")", "numen.work", "no_path")),
+                List.of(new Program.Used("numen.work", new ScriptCall.Tally(false, 3, "boom"))),
+                "your owner spoke; t4 keeps running");
         ProgramResultPayload down = new ProgramResultPayload(A, "call_1", new RunResult.Ended(outcome).toJson());
         ProgramResultPayload back = wire(ProgramResultPayload.STREAM_CODEC, down);
         assertEquals(new RunResult.Ended(outcome), RunResult.fromJson(back.resultJson()),
-                "the outcomes keep their arguments as the program wrote them: numbers stay numbers");
+                "each call keeps its recorded text, its first name and its kind; the stop keeps its reason");
     }
 
     @Test
@@ -85,16 +86,24 @@ class ProgramWireTest {
         assertEquals(missing, RunResult.fromJson(missing.toJson()));
     }
 
+    /** 按构造有界:最坏的一段(两百次调用,每次一整行,带着最长的调用文字,几件活的账写满)远小于一个下行包。 */
     @Test
-    void aReceiptTooBigForOneDownwardPayloadBecomesAFailureForTheSameProgram() {
-        String huge = new RunResult.Ended(new Program.Outcome("{\"success\":true,\"message\":\""
-                + "y".repeat(Wire.TO_CLIENT.bytes() + 10) + "\"}", List.of(), List.of())).toJson();
-        ProgramResultPayload sent = Wire.TO_CLIENT.fit(ProgramResultPayload.STREAM_CODEC,
-                new ProgramResultPayload(A, "call_9", huge), Unpooled::buffer);
-        assertEquals("call_9", sent.programId());
-        String receipt = ((RunResult.Ended) RunResult.fromJson(sent.resultJson())).outcome().receipt();
-        assertTrue(receipt.contains("The receipt of this program came to "), receipt);
-        assertTrue(receipt.contains("Have the program return or print less"), receipt);
+    void theWorstReceiptThatCanBeWrittenIsFarUnderOneDownwardPayload() {
+        String longest = "x".repeat(com.dwinovo.numen.agent.script.ScriptLimits.CALL_TEXT_CHARS + 20);
+        List<ScriptCall.Called> calls = new java.util.ArrayList<>();
+        for (int i = 0; i < com.dwinovo.numen.agent.script.ScriptLimits.COMMANDS; i++) {
+            calls.add(new ScriptCall.Called("numen.build.place", longest, longest, "bad_argument"));
+        }
+        String receipt = "y".repeat(com.dwinovo.numen.agent.script.ScriptLimits.RECEIPT_LINES_CHARS
+                + com.dwinovo.numen.agent.script.ScriptLimits.RETURNED_CHARS
+                + com.dwinovo.numen.agent.script.ScriptLimits.PRINTED_CHARS);
+        ProgramResultPayload worst = new ProgramResultPayload(A, "call_9", new RunResult.Ended(
+                new Program.Outcome(receipt, calls, List.of(new Program.Used("numen.work",
+                        new ScriptCall.Tally(false, 3, "boom"))), "your owner spoke; t1 keeps running")).toJson());
+        int size = Wire.size(ProgramResultPayload.STREAM_CODEC, worst, Unpooled::buffer);
+        assertTrue(size < Wire.TO_CLIENT.bytes() / 4, "the worst receipt is " + size + " bytes");
+        assertEquals(worst, Wire.TO_CLIENT.fit(ProgramResultPayload.STREAM_CODEC, worst, Unpooled::buffer),
+                "goes out untouched: there is no shrinking, it is bounded where it is written");
     }
 
     @Test

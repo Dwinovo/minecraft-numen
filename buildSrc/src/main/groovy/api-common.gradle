@@ -161,8 +161,7 @@ tasks.register('apiJar', Jar) {
     // 协议文本随成品 jar 进来(见上面 jar 块),瘦 jar 发给第三方开发者,一样要带
     include 'LICENSE*'
     include 'COPYING*'
-    // 已知债:调试通道的两个 payload 被 numen-core 的 debug 侧直用;它们连同
-    // ServerToolTransport 本该迁去 core 自己的网络层,迁移前先如实纳入契约
+    // 已知债:调试通道的两个 payload 被 numen-core 的 debug 侧直用;它们本该迁去 core 自己的网络层,迁移前先如实纳入契约
     include 'com/dwinovo/numen/network/payload/PathDebugPayload*.class'
     include 'com/dwinovo/numen/network/payload/ClientUiActionPayload*.class'
     // drop the @Internal stragglers sitting inside those API packages

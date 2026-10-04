@@ -66,8 +66,10 @@ public final class Program {
      * @param receipt 整张回执({@code success}、{@code message}、{@code data})
      * @param calls   每次 API 调用的结局,按先后
      * @param used    用到的每个模块和这段程序的结局
+     * @param stoppedFor 程序是被叫停的(主人开口、急件、切断)时,为什么停,一句话,含等着的那件活怎样了("your owner spoke; t8 keeps
+     *                   running");别的结局是 null。客户端据此给同一批里没执行的调用写原因,不去读回执的文字
      */
-    public record Outcome(String receipt, List<ScriptCall.Called> calls, List<Used> used) {}
+    public record Outcome(String receipt, List<ScriptCall.Called> calls, List<Used> used, String stoppedFor) {}
 
     private final String id;
     private final String code;
@@ -156,7 +158,8 @@ public final class Program {
             String body = awaiting == null ? "" : "; " + awaiting + (stopBody ? " was stopped too" : " keeps running");
             inFlight = null;
             awaiting = null;
-            end(script.stop("this turn was cut off" + body));
+            String why = "this turn was cut off" + body;
+            end(script.stop(why), why);
         });
     }
 
@@ -189,7 +192,7 @@ public final class Program {
                 if (!done) {
                     done = true;
                     ended.accept(new Outcome(ToolOutcome.failure("the program could not be run: " + broke),
-                            List.copyOf(calls), List.copyOf(used)));
+                            List.copyOf(calls), List.copyOf(used), null));
                 }
             } finally {
                 outstanding.decrementAndGet();
@@ -232,7 +235,7 @@ public final class Program {
             interruptedBy = null;
             ApiReply.Parsed reply = ApiReply.parse(resultJson);
             String body = reply.ok() && reply.job() != null ? "; " + reply.job() + " keeps running" : "";
-            end(script.stop(why + body));
+            end(script.stop(why + body), why + body);
         } else {
             next = script.result(resultJson);
             collect();
@@ -245,16 +248,21 @@ public final class Program {
         if (awaiting != null) {
             String waited = awaiting;
             awaiting = null;
-            end(script.stop(why + "; " + waited + " keeps running"));
+            String stopped = why + "; " + waited + " keeps running";
+            end(script.stop(stopped), stopped);
         } else if (inFlight != null && interruptedBy == null) {
             interruptedBy = why;
         }
     }
 
     private void end(String receipt) {
+        end(receipt, null);
+    }
+
+    private void end(String receipt, String stoppedFor) {
         collect();
         done = true;
-        ended.accept(new Outcome(receipt, List.copyOf(calls), List.copyOf(used)));
+        ended.accept(new Outcome(receipt, List.copyOf(calls), List.copyOf(used), stoppedFor));
     }
 
     /**

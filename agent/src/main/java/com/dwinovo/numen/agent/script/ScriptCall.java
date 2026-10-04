@@ -76,9 +76,12 @@ public final class ScriptCall {
      * 一次 API 调用的结局,按调用记(评测按函数统计用):调了哪个函数、怎么写的、成了还是哪一种失败。参数读不成、没有这个函数,当场失败的
      * 也算一次。
      *
-     * @param kind 失败的种类({@link ErrorKind#wire});成了是 null
+     * @param call  这次调用写成的文字({@link ScriptEngine#call});长过 {@link ScriptLimits#CALL_TEXT_CHARS} 的,头部留下、尾部换成整段
+     *              文字的摘要,同样的调用得到同样的文字
+     * @param first 第一个对象是一段文字时的它(查帮助查的是谁);不是是 null
+     * @param kind  失败的种类({@link ErrorKind#wire});成了是 null
      */
-    public record Called(String function, List<Object> args, java.util.Map<String, Object> options, String kind) {}
+    public record Called(String function, String call, String first, String kind) {}
 
     /** 回执数据里程序 {@code return} 的那个值。 */
     public static final String RETURNED = "returned";
@@ -208,7 +211,7 @@ public final class ScriptCall {
             } catch (ApiError wrong) {
                 log.add(where(call.line()) + " " + call.function() + ": " + wrong.kind().wire() + " — "
                         + firstLine(wrong.getMessage()));
-                called.add(new Called(call.function(), call.args(), call.options(), wrong.kind().wire()));
+                called.add(called(call, wrong.kind().wire()));
                 step = run.refuse(wrong);
                 continue;
             }
@@ -243,16 +246,54 @@ public final class ScriptCall {
                 + (said.isEmpty() ? "" : " — " + said));
     }
 
-    /** 一件身体活收尾的那一行:整段交代原样写上,第二行起缩进两格,读得出还是这一行。 */
+    /**
+     * 一件身体活收尾的那一行:整段交代原样写上,第二行起缩进两格,读得出还是这一行。交代长过 {@link ScriptLimits#ACCOUNT_CHARS}
+     * 的,留下放得下的整行,其余写明"另外 N 行省略"。
+     */
     private void logWhole(Pending p, String kind, String text) {
         settled(p, kind);
         log.add(where(p.call.line()) + " " + p.call.function() + ": " + (kind == null ? "ok" : kind) + " — "
-                + text.replace("\n", "\n  "));
+                + bounded(text).replace("\n", "\n  "));
+    }
+
+    /** 按整行留下 {@link ScriptLimits#ACCOUNT_CHARS} 以内的部分(第一行总留),其余的行数写出来。 */
+    private static String bounded(String text) {
+        if (text.length() <= ScriptLimits.ACCOUNT_CHARS) {
+            return text;
+        }
+        String[] lines = text.split("\n", -1);
+        StringBuilder kept = new StringBuilder(lines[0]);
+        int shown = 1;
+        while (shown < lines.length && kept.length() + 1 + lines[shown].length() <= ScriptLimits.ACCOUNT_CHARS) {
+            kept.append('\n').append(lines[shown++]);
+        }
+        return kept + "\n[" + (lines.length - shown) + " more line(s) of this account left out]";
     }
 
     /** 交出去的那一次有了结局。 */
     private void settled(Pending p, String kind) {
-        called.add(new Called(p.call.function(), p.call.args(), p.call.options(), kind));
+        called.add(called(p.call, kind));
+    }
+
+    /** 一次调用的结局记录:调用写成的文字太长就留头部加摘要。 */
+    private static Called called(ScriptRun.Call call, String kind) {
+        String text = ScriptEngine.IN_USE.call(call.function(), call.args(), call.options());
+        if (text.length() > ScriptLimits.CALL_TEXT_CHARS) {
+            text = text.substring(0, ScriptLimits.CALL_TEXT_CHARS) + "…#" + digest(text);
+        }
+        String first = call.args().isEmpty() || !(call.args().get(0) instanceof String name) ? null
+                : name.length() <= ScriptLimits.CALL_TEXT_CHARS ? name : name.substring(0, ScriptLimits.CALL_TEXT_CHARS);
+        return new Called(call.function(), text, first, kind);
+    }
+
+    private static String digest(String text) {
+        try {
+            byte[] sum = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(sum, 0, 6);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     /** 上次取走之后有了结局的调用,按先后;取走就清空。 */
@@ -287,12 +328,30 @@ public final class ScriptCall {
     private String receipt(String status, String head, Object returned, java.util.Map<String, Object> failure) {
         boolean ok = "ok".equals(status);
         StringBuilder msg = new StringBuilder(head);
-        log.forEach(line -> msg.append('\n').append(line));
+        int spent = 0;
+        int cut = 0;
+        for (String line : log) {
+            if (spent + line.length() + 1 > ScriptLimits.RECEIPT_LINES_CHARS) {
+                cut++;
+                continue;
+            }
+            spent += line.length() + 1;
+            msg.append('\n').append(line);
+        }
+        if (cut > 0) {
+            msg.append("\n[").append(cut).append(" more call line(s) left out: the receipt keeps the first ")
+                    .append(ScriptLimits.RECEIPT_LINES_CHARS).append(" characters of them]");
+        }
         JsonElement value = returned == null ? null : GSON.toJsonTree(returned);
         if (value != null) {
-            // 一段文字原样写,别的值写成脚本里的样子,和 print 一样
-            msg.append("\nreturned: ").append(returned instanceof String text ? text
-                    : ScriptEngine.IN_USE.value(returned));
+            // 一段文字原样写,别的值写成脚本里的样子,和 print 一样;太长的截掉并说明
+            String shown = returned instanceof String text ? text : ScriptEngine.IN_USE.value(returned);
+            if (shown.length() > ScriptLimits.RETURNED_CHARS) {
+                shown = shown.substring(0, ScriptLimits.RETURNED_CHARS) + "\n[returned value cut at "
+                        + ScriptLimits.RETURNED_CHARS + " characters; it was " + shown.length() + "]";
+                value = new com.google.gson.JsonPrimitive(shown);
+            }
+            msg.append("\nreturned: ").append(shown);
         }
         if (!printed.isEmpty()) {
             msg.append("\nprinted:\n").append(printed.toString().stripTrailing());

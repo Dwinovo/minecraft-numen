@@ -93,12 +93,6 @@ public final class NumenNetwork {
     }
 
     public static void register() {
-        // C→S: the client agent loop decided to run a body-bound tool on its companion.
-        toServer(
-                com.dwinovo.numen.network.payload.ExecuteActionPayload.TYPE,
-                com.dwinovo.numen.network.payload.ExecuteActionPayload.STREAM_CODEC,
-                com.dwinovo.numen.network.payload.ExecuteActionPayload::handle);
-
         // C→S: run this whole program on my companion; S→C: its one receipt (or the module texts still missing).
         toServer(
                 com.dwinovo.numen.network.payload.RunProgramPayload.TYPE,
@@ -124,12 +118,6 @@ public final class NumenNetwork {
                 com.dwinovo.numen.network.payload.ClientCallResultPayload.TYPE,
                 com.dwinovo.numen.network.payload.ClientCallResultPayload.STREAM_CODEC,
                 com.dwinovo.numen.network.payload.ClientCallResultPayload::handle);
-
-        // S→C: a body-bound tool's result (or an async dispatch receipt) coming home.
-        toClient(
-                com.dwinovo.numen.network.payload.TaskResultPayload.TYPE,
-                com.dwinovo.numen.network.payload.TaskResultPayload.STREAM_CODEC,
-                com.dwinovo.numen.network.payload.TaskResultPayload::handle);
 
         // S→C: 她此刻在做什么 —— 「她在做什么」的唯一真源。槽一变就推，
         // 派发/重放/顶替/干完走同一个出口（见 CurrentTaskPayload）。

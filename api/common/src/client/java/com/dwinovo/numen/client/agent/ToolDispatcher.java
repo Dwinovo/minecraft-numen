@@ -22,10 +22,13 @@ import java.util.function.Supplier;
 public final class ToolDispatcher implements ToolPort {
 
     /**
-     * Wall-clock backstop for the single in-flight call. Only rescues a dead-server / never-replying tool —
-     * deliberately generous, so a core tool (always answered by the server) never trips it.
+     * Wall-clock backstop for the single in-flight call: the longest a program may run
+     * ({@link com.dwinovo.numen.agent.script.ScriptLimits#WALL_MILLIS}, which the server enforces itself) plus five
+     * minutes of slack. It only rescues a result that was lost — a server that died, a connection that dropped — so
+     * a program that is merely long never trips it.
      */
-    private static final long TOOL_BACKSTOP_MILLIS = 15 * 60 * 1000L;
+    private static final long TOOL_BACKSTOP_MILLIS =
+            com.dwinovo.numen.agent.script.ScriptLimits.WALL_MILLIS + 5 * 60 * 1000L;
 
     private final UUID entityUuid;
     private final CompanionToolPort tools;
@@ -54,11 +57,6 @@ public final class ToolDispatcher implements ToolPort {
     @Override
     public void run(List<LlmToolCall> batch, Sink sink) {
         tools.run(batch, sink);
-    }
-
-    @Override
-    public boolean awaits(EventQueue.Entry entry) {
-        return tools.awaits(entry);
     }
 
     @Override

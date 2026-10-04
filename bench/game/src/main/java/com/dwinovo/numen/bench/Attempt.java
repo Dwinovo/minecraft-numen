@@ -8,7 +8,6 @@ import com.dwinovo.numen.agent.prompt.NumenPrompts;
 import com.dwinovo.numen.agent.provider.ProviderRegistry;
 import com.dwinovo.numen.agent.request.BodySnapshot;
 import com.dwinovo.numen.agent.request.SystemPromptComposer;
-import com.dwinovo.numen.agent.tool.ServerToolTransport;
 import com.dwinovo.numen.bench.report.EndReason;
 import com.dwinovo.numen.bench.report.FailureTag;
 import com.dwinovo.numen.bench.report.Pricing;
@@ -20,11 +19,15 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.network.payload.CancelTasksPayload;
 import com.dwinovo.numen.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.network.payload.CurrentTaskPayload;
-import com.dwinovo.numen.network.payload.ExecuteActionPayload;
+import com.dwinovo.numen.network.payload.ClientCallPayload;
+import com.dwinovo.numen.network.payload.ClientCallResultPayload;
 import com.dwinovo.numen.network.payload.NumenDeathPayload;
 import com.dwinovo.numen.network.payload.NumenEventPayload;
 import com.dwinovo.numen.network.payload.NumenStatePayload;
-import com.dwinovo.numen.network.payload.TaskResultPayload;
+import com.dwinovo.numen.network.payload.ProgramResultPayload;
+import com.dwinovo.numen.network.payload.RunProgramPayload;
+import com.dwinovo.numen.network.payload.StopProgramPayload;
+import com.dwinovo.numen.program.ProgramUplink;
 import com.dwinovo.numen.permission.ConsentDesk;
 import io.netty.buffer.Unpooled;
 import net.minecraft.core.BlockPos;
@@ -71,9 +74,10 @@ import java.util.stream.Stream;
  * 最后一种是她自己收工;收工前最后一个失败的结果是主人拒绝或规则不许,记作权限被拒。
  *
  * <h2>上行与下行</h2>
- * 工具调用经 {@link ServerToolTransport#uplink} 直接交给服务端真实入口 {@link ExecuteActionPayload#handle},发送者是模拟
- * 主人;发给主人的模组载荷由 {@link OwnerConnection} 截下,按网络上的样子编解码一遍,再照主人客户端的处理方式交给大脑:
- * 回执给传输层、当前任务与身体状态给运行期状态、世界事件进收件箱、征询由剧本答复、死亡切断循环。
+ * 整段程序经 {@link ProgramUplink#wire} 直接交给服务端真实入口 {@link RunProgramPayload#handle}(停止、客户端函数的答复同样),发送者是
+ * 模拟主人,上行的包按网络上的样子编解码一遍;发给主人的模组载荷由 {@link OwnerConnection} 截下,也编解码一遍,再照主人客户端的
+ * 处理方式交给大脑:程序的回执与每次调用的结局给上行部件、服务端要客户端执行的函数交给客户端执行体、当前任务与身体状态给运行期状态、
+ * 世界事件进收件箱、征询由剧本答复、死亡切断循环。
  */
 final class Attempt {
 
@@ -169,7 +173,7 @@ final class Attempt {
                 () -> meter.turns <= scenario.budget().turns());
         brain.subscribe(meter);
         brain.subscribe(this::onLoopEvent);
-        ServerToolTransport.uplink = this::uplink;
+        ProgramUplink.wire = this::uplink;
         promptHash = sha256(SystemPromptComposer.compose(NumenPrompts.DEFAULT_PERSONA,
                 com.dwinovo.numen.script.Modules.of(her.getUUID()))).substring(0, 12);
     }
@@ -312,9 +316,10 @@ final class Attempt {
     /** 她、主人、掉在地上的东西、场地本身,一样不留;临时目录删掉。 */
     private void cleanUp() {
         MinecraftServer server = level.getServer();
-        ServerToolTransport.uplink = payload -> {
+        ProgramUplink.wire = payload -> {
             throw new IllegalStateException("没有在跑的评测,不该有上行:" + payload.type().id());
         };
+        ProgramUplink.CONNECTION.disconnected();
         if (her != null) {
             CompanionFactory.despawn(server, her);
             EventOutbox.get(server).forget(her.getUUID());
@@ -378,10 +383,12 @@ final class Attempt {
 
     private void uplink(CustomPacketPayload payload) {
         switch (payload) {
-            case ExecuteActionPayload p -> ExecuteActionPayload.handle(wire(ExecuteActionPayload.STREAM_CODEC, p),
-                    owner);
+            case RunProgramPayload p -> RunProgramPayload.handle(wire(RunProgramPayload.STREAM_CODEC, p), owner);
+            case StopProgramPayload p -> StopProgramPayload.handle(wire(StopProgramPayload.STREAM_CODEC, p), owner);
+            case ClientCallResultPayload p ->
+                    ClientCallResultPayload.handle(wire(ClientCallResultPayload.STREAM_CODEC, p), owner);
             case CancelTasksPayload p -> CancelTasksPayload.handle(wire(CancelTasksPayload.STREAM_CODEC, p), owner);
-            default -> throw new IllegalStateException("评测的上行只有工具调用与叫停,来了 "
+            default -> throw new IllegalStateException("评测的上行只有程序、叫停、客户端函数的答复,来了 "
                     + payload.type().id());
         }
     }
@@ -390,7 +397,10 @@ final class Attempt {
     private void downlink(CustomPacketPayload payload) {
         UUID uuid = her.getUUID();
         switch (payload) {
-            case TaskResultPayload p -> TaskResultPayload.handle(wire(TaskResultPayload.STREAM_CODEC, p));
+            case ProgramResultPayload p when p.entityUuid().equals(uuid) ->
+                    ProgramResultPayload.handle(wire(ProgramResultPayload.STREAM_CODEC, p));
+            case ClientCallPayload p when p.entityUuid().equals(uuid) ->
+                    ClientCallPayload.handle(wire(ClientCallPayload.STREAM_CODEC, p));
             case CurrentTaskPayload p when p.entityUuid().equals(uuid) ->
                     brain.runtime.onCurrentTask(wire(CurrentTaskPayload.STREAM_CODEC, p));
             case NumenStatePayload p when p.uuid().equals(uuid) ->

@@ -41,9 +41,6 @@ public class CommonClass {
         com.dwinovo.numen.entity.CompanionEvents.subscribe(
                 com.dwinovo.numen.api.CompanionEvent.REMOVE,
                 com.dwinovo.numen.task.CompanionTickDispatcher::onCompanionRemoved);
-        com.dwinovo.numen.entity.CompanionEvents.subscribe(
-                com.dwinovo.numen.api.CompanionEvent.ABORT,
-                com.dwinovo.numen.agent.tool.ServerToolTransport::abort);
         // 引擎自带姿态链的名册文书:提示词总览里的一行。
         com.dwinovo.numen.task.reflex.ReflexRegistry.register(
                 new com.dwinovo.numen.task.chain.SpeakingLookChain());

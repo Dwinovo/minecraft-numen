@@ -3,50 +3,46 @@ package com.dwinovo.numen.agent.tool;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.dwinovo.numen.agent.llm.ToolOutcome;
-import com.dwinovo.numen.agent.script.ApiReply;
-import com.dwinovo.numen.agent.script.ErrorKind;
-import com.dwinovo.numen.agent.script.Invocation;
-import com.dwinovo.numen.agent.script.ScriptCatalog;
-import com.dwinovo.numen.agent.script.ScriptRun;
-import com.dwinovo.numen.agent.script.ScriptCall;
 import com.dwinovo.numen.agent.loop.SerialCalls;
 import com.dwinovo.numen.agent.loop.ToolPort;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.CompanionEvent;
 import com.dwinovo.numen.entity.CompanionEvents;
-import com.dwinovo.numen.event.NumenEvents;
-import com.dwinovo.numen.script.Modules;
-import com.dwinovo.numen.sdk.ApiRegistry;
-import com.dwinovo.numen.sdk.Dispatcher;
+import com.dwinovo.numen.program.ProgramUplink;
+import com.dwinovo.numen.program.RunResult;
 
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
  * 一只同伴的工具口:循环内核把模型一次回复里的调用交给它,它逐个执行、把结果报回。主人客户端的派发器与评测大脑都用这一份。
  *
- * <p>顺序与等待——一次一个、脚本里留下身体活的等它收尾再往下走、等的时候来了急件怎么办、脚本怎么逐条派——是
- * {@link SerialCalls} 的;task_finished 按 {@link NumenEvents#finishOf} 认,和写它的地方挨着。这里只管一个调用怎么执行:模型的调用
- * 按名字取工具({@link #invoke});脚本里的一次 API 调用交给派发({@link Dispatcher}),客户端函数当场执行,服务端函数送去服务端
- * ({@link ServerToolTransport})。结果之后从任何线程经 {@link ToolCall#complete} 回来。
+ * <p>顺序与等待——一次一个、程序在服务端跑的时候后面的等着、来了急件叫服务端让程序停在调用之间——是 {@link SerialCalls} 的。这里只管
+ * 一个调用怎么执行:跑 Lua 的那个工具({@link ScriptTool})的调用是一整段程序,整段送去服务端({@link ProgramUplink}),服务端在
+ * 身体与数据旁边跑完,回一张回执(连同每次 API 调用的结局);别的工具(装技能、记计划、记札记、接进来的 MCP 工具)按名字取出来,
+ * 在这里就地执行,结果之后从任何线程经 {@link ToolCall#complete} 回来。
  */
 public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
 
     private final UUID companion;
     /** 每个调用派出那一刻取一次:客户端上它带着此刻看得见的那具身体(出了视距是 null)。 */
     private final Supplier<? extends ToolAnchor> anchor;
+    private final ProgramUplink uplink;
     private final SerialCalls calls;
 
     /** 在飞的那一个的回报口,供 {@link #failInFlight} 用;没有在飞的是 null。 */
-    private Consumer<String> inFlightDone;
-    /** 在飞的那一个是脚本里的一次 API 调用(它的结果是 {@link ApiReply} 的样子),不是一个工具。 */
-    private boolean inFlightLine;
+    private java.util.function.Consumer<SerialCalls.Settled> inFlightDone;
 
     public CompanionToolPort(UUID companion, Supplier<? extends ToolAnchor> anchor) {
+        this(companion, anchor, ProgramUplink.CONNECTION);
+    }
+
+    /** @param uplink 程序送去哪里:主人客户端上是这个连接的那一份,评测给它自己的 */
+    public CompanionToolPort(UUID companion, Supplier<? extends ToolAnchor> anchor, ProgramUplink uplink) {
         this.companion = companion;
         this.anchor = anchor;
+        this.uplink = uplink;
         this.calls = new SerialCalls(this);
     }
 
@@ -57,18 +53,13 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
     }
 
     @Override
-    public boolean awaits(EventQueue.Entry entry) {
-        return calls.awaits(entry);
-    }
-
-    @Override
     public void arrived(EventQueue.Entry entry, boolean urgent) {
         calls.arrived(entry, urgent);
     }
 
     /**
-     * 收掉这批所有未决调用(在飞 + 排着),返回它们的 id。停在传输层的这几个按 id 忘掉:结果回来也没人要了。只清自己派的,
-     * 外接模型挂在同一只同伴身上的调用不动。
+     * 收掉这批所有未决调用(在飞 + 排着),返回它们的 id。在飞的是程序的话,服务端上的它当场停下;只清自己派的,外接模型挂在同一只
+     * 同伴身上的调用不动。
      *
      * @param stopBody 要不要连身体一起叫停:主人按停止要,他要她立刻住手;死亡、登出、外接接管、遣散、收场不要
      */
@@ -76,8 +67,9 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
     public List<String> cancel(boolean stopBody) {
         List<String> ids = calls.cancel(stopBody);
         inFlightDone = null;
-        ServerToolTransport.forget(ids);
+        ids.forEach(uplink::forget);
         if (stopBody) {
+            uplink.stopBody(companion);
             CompanionEvents.fire(CompanionEvent.ABORT, companion);   // 内容包据此停掉自己那边的活
         }
         return ids;
@@ -99,94 +91,84 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
         return call == null ? null : call.name();
     }
 
-    /** 在飞的那一个就此以一条失败结算,{@code why} 是给模型的原因;没有在飞的什么都不做。 */
+    /** 在飞的那一个就此以一条失败结算,{@code why} 是给模型的原因;没有在飞的什么都不做。在飞的是程序的话,服务端上的它一并叫停。 */
     public void failInFlight(String why) {
+        LlmToolCall call = calls.inFlight();
+        if (call != null && isProgram(call)) {
+            uplink.forget(call.id());
+            uplink.cutOff(companion, call.id(), false);
+        }
         if (inFlightDone != null) {
-            inFlightDone.accept(inFlightLine ? ApiReply.error(ErrorKind.FAILED, why, null, null).toString()
-                    : ToolOutcome.failure(why));
+            inFlightDone.accept(SerialCalls.Settled.of(ToolOutcome.failure(why)));
         }
     }
 
     // ---- SerialCalls.Port ----
 
     @Override
-    public String scriptOf(LlmToolCall call) {
-        return ToolRegistry.resolve(call.name()) instanceof ScriptTool ? ScriptTool.code(call.arguments()) : null;
+    public boolean isProgram(LlmToolCall call) {
+        return ToolRegistry.resolve(call.name()) instanceof ScriptTool;
     }
 
     @Override
-    public void dispatch(LlmToolCall call, Invocation invocation, Consumer<String> done) {
-        Consumer<String> landed = landing(call, done);
-        inFlightLine = true;
-        ToolCall handle = new ToolCall(call.id(), invocation.function(), invocation.args().toString(),
-                anchor.get(), landed);
-        Constants.LOG.info("[numen-dispatch#{}] call {} id={} args={}", companion, call.name(), call.id(),
-                truncate(call.arguments()));
-        Dispatcher.call(invocation, handle);
+    public void interrupt(LlmToolCall program, String why) {
+        uplink.interrupt(companion, program.id(), why);
     }
 
     @Override
-    public ScriptCall.Finish finish(EventQueue.Entry entry) {
-        return NumenEvents.finishOf(entry);
-    }
-
-    @Override
-    public ScriptCatalog catalog() {
-        return ApiRegistry.catalog(Modules.of(companion));
-    }
-
-    @Override
-    public Invocation invocation(ScriptRun.Call call) {
-        return Dispatcher.invocation(call);
-    }
-
-    @Override
-    public void tally(String module, ScriptCall.Tally tally) {
-        Modules.of(companion).tally(module, tally.ok(), tally.line(), tally.error(), now());
-    }
-
-    @Override
-    public long now() {
-        return System.currentTimeMillis();
+    public void cutOff(LlmToolCall program, boolean stopBody) {
+        uplink.cutOff(companion, program.id(), stopBody);
     }
 
     /**
-     * 执行一个调用:按名字取工具,交给它一个绑着这只同伴的 {@link ToolCall}。没有这个工具、工具抛出,都当场回一条失败。
+     * 执行一个调用:程序整段送去服务端;别的按名字取工具,交给它一个绑着这只同伴的 {@link ToolCall}。没有这个工具、参数写错、
+     * 工具抛出,都当场回一条失败。
      */
     @Override
-    public void invoke(LlmToolCall call, Consumer<String> done) {
+    public void invoke(LlmToolCall call, java.util.function.Consumer<SerialCalls.Settled> done) {
         NumenTool tool = ToolRegistry.resolve(call.name());
         if (tool == null) {
             Constants.LOG.warn("[numen-dispatch#{}] LLM called unknown tool '{}' (id={})",
                     companion, call.name(), call.id());
-            done.accept(ToolOutcome.failure("unknown tool: " + call.name()));
+            done.accept(SerialCalls.Settled.of(ToolOutcome.failure("unknown tool: " + call.name())));
             return;
         }
-        Consumer<String> landed = landing(call, done);
-        inFlightLine = false;
-        // 带规范名(tool.name())而不是 LLM 写的那个:大小写宽松只在 resolve 这一步,
-        // 服务端工具经 ServerToolTransport 原样带名字过去,那边按注册名严格查。
-        ToolCall handle = new ToolCall(call.id(), tool.name(), call.arguments(), anchor.get(), landed);
+        java.util.function.Consumer<SerialCalls.Settled> landed = landing(call, done);
         Constants.LOG.info("[numen-dispatch#{}] dispatch tool={} id={} args={}",
                 companion, call.name(), call.id(), truncate(call.arguments()));
         try {
-            tool.invoke(handle);
+            if (tool instanceof ScriptTool) {
+                uplink.run(companion, call.id(), ScriptTool.code(call.arguments()), result -> landed.accept(settled(result)));
+                return;
+            }
+            // 带规范名(tool.name())而不是 LLM 写的那个:大小写宽松只在 resolve 这一步
+            tool.invoke(new ToolCall(call.id(), tool.name(), call.arguments(), anchor.get(),
+                    json -> landed.accept(SerialCalls.Settled.of(json))));
+        } catch (IllegalArgumentException invalid) {
+            landed.accept(SerialCalls.Settled.of(ToolOutcome.failure("invalid arguments: " + invalid.getMessage())));
         } catch (RuntimeException ex) {
             Constants.LOG.warn("[numen-dispatch#{}] tool {} threw (id={}): {}",
                     companion, call.name(), call.id(), ex.getMessage());
-            landed.accept(ToolOutcome.failure(ex.getMessage()));
+            landed.accept(SerialCalls.Settled.of(ToolOutcome.failure(ex.getMessage())));
         }
     }
 
+    /** 服务端交回的程序结局:回执、每次调用的结局、是不是被叫停的。 */
+    private static SerialCalls.Settled settled(RunResult result) {
+        RunResult.Ended ended = (RunResult.Ended) result;
+        return new SerialCalls.Settled(ended.outcome().receipt(), ended.outcome().calls(), ended.outcome().stoppedFor());
+    }
+
     /** 一个调用的回报口:记一笔,交给 {@code done};在飞时它也是 {@link #failInFlight} 用的那一个。 */
-    private Consumer<String> landing(LlmToolCall call, Consumer<String> done) {
-        Consumer<String> landed = json -> {
+    private java.util.function.Consumer<SerialCalls.Settled> landing(LlmToolCall call,
+                                                                     java.util.function.Consumer<SerialCalls.Settled> done) {
+        java.util.function.Consumer<SerialCalls.Settled> landed = settled -> {
             if (inFlightDone != null && call == calls.inFlight()) {
                 inFlightDone = null;
             }
             Constants.LOG.info("[numen-dispatch#{}] result id={} {} → {}",
-                    companion, call.id(), call.name(), truncate(json));
-            done.accept(json);
+                    companion, call.id(), call.name(), truncate(settled.result()));
+            done.accept(settled);
         };
         inFlightDone = landed;
         return landed;

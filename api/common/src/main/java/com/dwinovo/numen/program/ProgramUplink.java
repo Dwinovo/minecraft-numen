@@ -3,6 +3,7 @@ package com.dwinovo.numen.program;
 import com.dwinovo.numen.agent.script.Program;
 import com.dwinovo.numen.network.NumenNetwork;
 import com.dwinovo.numen.network.Wire;
+import com.dwinovo.numen.network.payload.CancelTasksPayload;
 import com.dwinovo.numen.network.payload.RunProgramPayload;
 import com.dwinovo.numen.network.payload.StopProgramPayload;
 import com.dwinovo.numen.script.Modules;
@@ -23,8 +24,14 @@ import java.util.function.Function;
  */
 public final class ProgramUplink {
 
+    /**
+     * 上行的出口:主人客户端上是网络({@link NumenNetwork#sendToServer})。没有主人客户端的进程(评测)换成把包交给服务端真实入口的
+     * 那一个,同样经过包的编解码。写法同下行的 {@code ClientPayloadSink}:主源码集里一个静态挂点。
+     */
+    public static volatile Consumer<CustomPacketPayload> wire = NumenNetwork::sendToServer;
+
     /** 主人客户端上这个连接的那一份。 */
-    public static final ProgramUplink CONNECTION = new ProgramUplink(new ModuleSync(), NumenNetwork::sendToServer,
+    public static final ProgramUplink CONNECTION = new ProgramUplink(new ModuleSync(), payload -> wire.accept(payload),
             Modules::of);
 
     private record Waiting(UUID companion, String code, Consumer<RunResult> done, boolean retried) {}
@@ -104,6 +111,11 @@ public final class ProgramUplink {
      */
     public void cutOff(UUID companion, String programId, boolean stopBody) {
         uplink.accept(new StopProgramPayload(companion, programId, true, stopBody, ""));
+    }
+
+    /** 主人按停止:叫停她身体上在跑的活(程序另用 {@link #cutOff})。 */
+    public void stopBody(UUID companion) {
+        uplink.accept(new CancelTasksPayload(companion));
     }
 
     /** 连接断了:服务端按主人断线清掉了缓存,送过的记录作废;等着答复的不会再来了。 */

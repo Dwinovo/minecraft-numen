@@ -22,10 +22,9 @@ import java.util.UUID;
  * to stop a companion that has wandered far away. Cancelling is the one action
  * that is always safe to allow from anywhere.
  *
- * <p>The server-side {@code CANCELLED} results this produces are shipped back
- * via {@link TaskResultPayload} as usual; the client agent loop has already
- * abandoned those tool-call ids (recording the cut as a Halt) and drops the real
- * ones as late arrivals. This payload's job is purely the body stop.
+ * <p>A program the owner sent is stopped by {@link StopProgramPayload}; the task's
+ * own end comes as a task_finished event (or in the receipt of a program still
+ * waiting for it). This payload's job is purely the body stop.
  */
 public record CancelTasksPayload(UUID entityUuid) implements CustomPacketPayload {
 

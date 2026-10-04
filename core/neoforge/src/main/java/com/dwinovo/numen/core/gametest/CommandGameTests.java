@@ -214,38 +214,49 @@ public class CommandGameTests {
     }
 
     /**
-     * 真机事故那一类:回执比一个下行包大。从网络入口进来({@code ExecuteActionPayload.handle},和主人的客户端发来的一样),
-     * 回执经 {@code NumenNetwork} 送主人:整条路不抛异常、不断开;送出去的是同一次调用的一条失败,说清多大、上限多少、
-     * 怎么要少一点,而且编得进一个包。
+     * 真机事故那一类:一次调用交回的值比一个下行包大。程序跑在服务端,值只在服务端里传,不上线;回执是给模型读的,按构造有界——
+     * 返回值在回执里截到上限并写明原来多长。整张回执经 {@code OwnerLine} 走主人的连接送出去(服务端的 {@code RunProgramPayload}
+     * 处理函数,和主人客户端发来的一样),一路不抛异常、不断开,而且编得进一个包。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_command")
-    public static void an_oversized_result_reaches_the_owner_as_a_failure_not_a_disconnect(GameTestHelper helper) {
+    public static void an_oversized_value_reaches_the_owner_as_a_bounded_receipt_not_a_disconnect(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_flooder", new BlockPos(2, 2, 2), false);
         net.minecraft.server.level.ServerPlayer owner = presentOwner(helper, companion, "gametest_flood_owner");
         ServerLevel level = helper.getLevel();
+        java.util.concurrent.atomic.AtomicReference<com.dwinovo.numen.program.RunResult> result =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        com.dwinovo.numen.program.ProgramUplink uplink = new com.dwinovo.numen.program.ProgramUplink(
+                new com.dwinovo.numen.program.ModuleSync(), payload ->
+                        com.dwinovo.numen.network.payload.RunProgramPayload.handle(
+                                (com.dwinovo.numen.network.payload.RunProgramPayload) payload, owner),
+                com.dwinovo.numen.script.Modules::of);
+        uplink.run(companion.getUUID(), "gt-flood", "return gt.gt_wire.flood()", result::set);
 
-        com.dwinovo.numen.network.payload.ExecuteActionPayload.handle(
-                new com.dwinovo.numen.network.payload.ExecuteActionPayload(companion.getUUID(), "gt-flood",
-                        "gt.gt_wire.flood", "{}"), owner);
-
-        ToolRun run = lua(companion, "gt.gt_wire.flood()");
-        var sent = com.dwinovo.numen.network.Wire.TO_CLIENT.fit(
-                com.dwinovo.numen.network.payload.TaskResultPayload.STREAM_CODEC,
-                new com.dwinovo.numen.network.payload.TaskResultPayload(companion.getUUID(), "gt-flood", run.reply()),
-                () -> new net.minecraft.network.RegistryFriendlyByteBuf(io.netty.buffer.Unpooled.buffer(),
-                        level.registryAccess()));
-        JsonObject result = JsonParser.parseString(sent.resultJson()).getAsJsonObject();
-        JsonObject error = result.getAsJsonObject("error");
-        helper.assertTrue("gt-flood".equals(sent.toolCallId()) && !result.get("ok").getAsBoolean()
-                        && error.get("message").getAsString().startsWith("The result of this call came to ")
-                        && error.get("message").getAsString().contains("Ask for less of it at a time"),
-                "the oversized result is not replaced by a failure that says so: " + sent.resultJson());
-        helper.assertTrue(error.getAsJsonObject("data").get("limit_bytes").getAsInt()
-                        == com.dwinovo.numen.network.Wire.TO_CLIENT.bytes(),
-                "the failure does not name the limit: " + sent.resultJson());
-        CompanionFactory.despawn(level.getServer(), companion);
-        leave(owner);
-        helper.succeed();
+        steps(helper)
+                .thenWaitUntil(() -> {
+                    for (var payload : received(owner)) {
+                        if (payload instanceof com.dwinovo.numen.network.payload.ProgramResultPayload answer) {
+                            uplink.deliver(answer.programId(),
+                                    com.dwinovo.numen.program.RunResult.fromJson(answer.resultJson()));
+                        }
+                    }
+                    helper.assertTrue(result.get() != null, "the receipt has not come back");
+                })
+                .thenExecute(() -> {
+                    String receipt = ((com.dwinovo.numen.program.RunResult.Ended) result.get()).outcome().receipt();
+                    JsonObject data = JsonParser.parseString(receipt).getAsJsonObject();
+                    helper.assertTrue(data.get("success").getAsBoolean(), "the program failed: " + receipt);
+                    helper.assertTrue(receipt.length() < com.dwinovo.numen.agent.script.ScriptLimits.RETURNED_CHARS
+                                    + com.dwinovo.numen.agent.script.ScriptLimits.RECEIPT_LINES_CHARS,
+                            "the receipt is not bounded: " + receipt.length() + " characters");
+                    helper.assertTrue(data.get("message").getAsString().contains("[returned value cut at "
+                                    + com.dwinovo.numen.agent.script.ScriptLimits.RETURNED_CHARS + " characters; it was "
+                                    + (com.dwinovo.numen.network.Wire.TO_CLIENT.bytes() + 1) + "]"),
+                            "the receipt does not say the value was cut: " + receipt.substring(0, Math.min(400, receipt.length())));
+                    CompanionFactory.despawn(level.getServer(), companion);
+                    leave(owner);
+                })
+                .thenSucceed();
     }
 
     /** 服务器不让她用:没有 OP 时 give 当场如实失败,说清是服务器不让;不问主人,背包不变。 */

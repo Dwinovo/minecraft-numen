@@ -20,9 +20,9 @@ public final class ScriptLimits {
     public static final long WALL_MILLIS = 20L * 60L * 1000L;
 
     /**
-     * 两次 API 调用之间最多执行多少条脚本指令。脚本跑在自己的虚拟线程上,但两次调用之间大脑的线程(主人客户端的主线程、
-     * 评测时服务端的主线程)等它算完;正常的脚本在两次调用之间只做几十上百条指令的判断与拼接,一百万条约是几十毫秒,
-     * 再多就是死循环,中断它,不让游戏卡住。
+     * 两次 API 调用之间最多执行多少条脚本指令。脚本跑在自己的虚拟线程上,两次调用之间驱动它的那条线程(服务端上这段程序自己的执行体,
+     * 不是主线程)等它算完;正常的脚本在两次调用之间只做几十上百条指令的判断与拼接,一百万条约是几十毫秒,
+     * 再多就是死循环,中断它。
      */
     public static final int INSTRUCTIONS_PER_SLICE = 1_000_000;
 
@@ -43,4 +43,24 @@ public final class ScriptLimits {
      * ({@code numen.api.help("numen.build")})与一页查询结果要装得下,再多就该在脚本里筛过再打。
      */
     public static final int PRINTED_CHARS = 6_000;
+
+    /**
+     * 回执里每次调用那一行以外的部分的预算(字符):所有调用行(一件占身体的活收尾的那一行带它的整段实际账)合起来最多这么多,
+     * 超出的调用行在回执里按先后保留头部、写明"另外 N 行省略",回执第一行(结局)、返回值、打印的字不省。回执是给模型读的——
+     * 它进模型的上下文,所以预算按模型读得下定,不是按线能送多大;六万字约一万五千个词元,够 200 次调用各一行再加几件活的账。
+     * 回执因此按构造远小于一个下行包({@code Wire}),不靠"装不下再缩"。
+     */
+    public static final int RECEIPT_LINES_CHARS = 60_000;
+
+    /** 一件占身体的活的整段实际账在回执里最多多少字:超出的整行丢掉,写明"另外 N 行省略"。 */
+    public static final int ACCOUNT_CHARS = 4_000;
+
+    /** 回执里 {@code return} 的值写成文字最多多少字,超出的截掉并说明;数据里的 {@code returned} 同样是截过的这一份。 */
+    public static final int RETURNED_CHARS = 6_000;
+
+    /**
+     * 评测按函数统计时,每次调用写成的文字最多多少字:超出的头部留下、尾部换成整段文字的摘要,所以"和之前一字不差"照样认得出,
+     * 而一次带上千格参数的调用不会让每次调用的结局跟着变大。
+     */
+    public static final int CALL_TEXT_CHARS = 240;
 }

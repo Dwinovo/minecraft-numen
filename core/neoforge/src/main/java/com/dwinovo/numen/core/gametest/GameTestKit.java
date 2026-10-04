@@ -621,7 +621,7 @@ public final class GameTestKit {
      */
     static ToolRun lua(NumenPlayer body, String code) {
         ToolRun run = new ToolRun(code);
-        runProgram(body, "gametest-" + UUID.randomUUID(), code, run, () -> { });
+        runProgram(body, "gametest-" + UUID.randomUUID(), code, run, outcome -> { });
         settle(body, run);
         return run;
     }
@@ -654,7 +654,8 @@ public final class GameTestKit {
      * 一段程序送去跑,整段回执记在 {@code run} 里,跑完调 {@code then}。服务端一只同伴同一刻只跑一段,模型的工具调用也本来是一个接一个:
      * 同伴手上已有一段,这一段排在它后面;那一段若正等着它派的活(走路、挖),主人就是那时再开口的,叫它停在调用之间,活照常跑。
      */
-    private static void runProgram(NumenPlayer body, String programId, String code, ToolRun run, Runnable then) {
+    private static void runProgram(NumenPlayer body, String programId, String code, ToolRun run,
+                                   java.util.function.Consumer<com.dwinovo.numen.agent.script.Program.Outcome> then) {
         Live live = new Live(body, run, new java.util.concurrent.atomic.AtomicBoolean());
         LIVE.add(live);
         java.util.Deque<Runnable> backlog = BACKLOGS.computeIfAbsent(body.getUUID(),
@@ -662,10 +663,12 @@ public final class GameTestKit {
         Runnable send = () -> {
             ACTIVE.put(body.getUUID(), new Active(programId, run));
             client(body).run(body.getUUID(), programId, code, new Watch(body, run), result -> {
-                run.receipt.set(((com.dwinovo.numen.program.RunResult.Ended) result).outcome().receipt());
+                com.dwinovo.numen.agent.script.Program.Outcome outcome =
+                        ((com.dwinovo.numen.program.RunResult.Ended) result).outcome();
+                run.receipt.set(outcome.receipt());
                 live.ended().set(true);
                 ACTIVE.remove(body.getUUID());
-                then.run();
+                then.accept(outcome);
                 Runnable following = backlog.poll();
                 if (following != null) {
                     following.run();
@@ -760,75 +763,79 @@ public final class GameTestKit {
     }
 
     /**
-     * 一轮调用的现场:一段一段送去服务端跑,每条的结果、送出那一刻她站在哪、这一轮结算没有。余下的调用在程序被叫停时
-     * 各回一条"没执行",和主人客户端上一样。
+     * 一轮调用的现场:和主人客户端同一个顺序({@link com.dwinovo.numen.agent.loop.SerialCalls})一段一段送去服务端跑,每条的结果、送出那一刻
+     * 她站在哪、这一轮结算没有。主人开口、按停止时做的事也是客户端的:急件叫服务端让程序停在调用之间,切断叫它当场停下,
+     * 余下的调用各回一条"没执行"。
      */
-    static final class Round {
+    static final class Round implements com.dwinovo.numen.agent.loop.ToolPort.Sink,
+            com.dwinovo.numen.agent.loop.SerialCalls.Port {
 
         private final NumenPlayer body;
         private final ToolRun run = new ToolRun("");
-        private final java.util.Deque<LlmToolCall> queue = new java.util.ArrayDeque<>();
+        private final com.dwinovo.numen.agent.loop.SerialCalls calls = new com.dwinovo.numen.agent.loop.SerialCalls(this);
         /** 她的收件箱:进来的话急不急由它的规则算,和主人客户端上同一条。 */
         private final EventQueue inbox = new EventQueue(EventQueue.Journal.NONE);
         private final java.util.Map<String, String> results = new java.util.concurrent.ConcurrentHashMap<>();
         private final java.util.Map<String, Vec3> startedAt = new java.util.concurrent.ConcurrentHashMap<>();
-        /** 在跑的那一段的编号;没有是 null。 */
-        private volatile String running;
         private volatile boolean settled;
 
-        private Round(NumenPlayer body, LlmToolCall... calls) {
+        private Round(NumenPlayer body, LlmToolCall... batch) {
             this.body = body;
-            queue.addAll(List.of(calls));
-            next();
+            calls.run(List.of(batch), this);
         }
 
-        private void next() {
-            LlmToolCall call = queue.poll();
-            if (call == null) {
-                settled = true;
-                return;
-            }
-            startedAt.put(call.id(), body.position());
-            running = call.id();
-            runProgram(body, call.id(), com.dwinovo.numen.agent.tool.ScriptTool.code(call.arguments()), run, () -> {
-                running = null;
-                String receipt = run.receipt.get();
-                results.put(call.id(), receipt);
-                if (JsonParser.parseString(receipt).getAsJsonObject().getAsJsonObject("data").get("status").getAsString()
-                        .equals("stopped")) {
-                    dropRest("your program was stopped before it ended; read what stopped it, then decide what to do "
-                            + "next");
-                } else {
-                    next();
-                }
-            });
+        // ---- 客户端这一侧要做的 ----
+
+        @Override
+        public void invoke(LlmToolCall call, java.util.function.Consumer<com.dwinovo.numen.agent.loop.SerialCalls.Settled> done) {
+            runProgram(body, call.id(), com.dwinovo.numen.agent.tool.ScriptTool.code(call.arguments()), run,
+                    outcome -> done.accept(new com.dwinovo.numen.agent.loop.SerialCalls.Settled(outcome.receipt(),
+                            outcome.calls(), outcome.stoppedFor())));
         }
 
-        /** 这一段被叫停了:余下没送的各回一条"没执行",这一轮结算。 */
-        private void dropRest(String why) {
-            for (LlmToolCall call; (call = queue.poll()) != null; ) {
-                results.put(call.id(), com.dwinovo.numen.agent.llm.ToolOutcome.failure("Not run: " + why));
-            }
-            settled = true;
+        @Override
+        public boolean isProgram(LlmToolCall call) {
+            return true;
+        }
+
+        @Override
+        public void interrupt(LlmToolCall program, String why) {
+            client(body).interrupt(body.getUUID(), program.id(), why);
+        }
+
+        @Override
+        public void cutOff(LlmToolCall program, boolean stopBody) {
+            client(body).cutOff(body.getUUID(), program.id(), stopBody);
         }
 
         /** 主人开口说一句,和他在聊天框里说的一样进她的收件箱;是急件、而一段程序在跑,客户端叫它停在调用之间。 */
         void ownerSays(String words) {
             EventQueue.Entry entry = new EventQueue.Entry(com.dwinovo.numen.agent.inbox.EventTypes.QUERY,
                     EventQueue.query(words), System.currentTimeMillis(), false);
-            String id = running;
-            if (inbox.push(entry.type(), entry.text(), entry.ts(), entry.urgent()) && id != null) {
-                client(body).interrupt(body.getUUID(), id, com.dwinovo.numen.agent.script.Program.what(entry));
-            }
+            calls.arrived(entry, inbox.push(entry.type(), entry.text(), entry.ts(), entry.urgent()));
         }
 
-        /** 主人按停止,和主人客户端上同一个顺序:先叫服务端上的程序当场停下,再叫停身体。 */
+        /** 主人按停止,和主人客户端上同一个顺序:先收这一轮(服务端上的程序当场停下),再叫停身体。 */
         void ownerStops() {
-            String id = running;
-            if (id != null) {
-                client(body).cutOff(body.getUUID(), id, true);
-            }
+            calls.cancel(true);
             CompanionTickDispatcher.cancelFor(body);
+        }
+
+        // ---- 结算 ----
+
+        @Override
+        public void started(LlmToolCall call) {
+            startedAt.put(call.id(), body.position());
+        }
+
+        @Override
+        public void finished(LlmToolCall call, String resultJson) {
+            results.put(call.id(), resultJson);
+        }
+
+        @Override
+        public void settled() {
+            settled = true;
         }
 
         /** 这条调用的结果;还没有是 null。 */
@@ -844,6 +851,14 @@ public final class GameTestKit {
         /** 这一轮结算了:每条调用都有了结果。 */
         boolean hasSettled() {
             return settled;
+        }
+
+        /**
+         * 服务端上最近那段程序交出的回执,不论客户端还收不收:切断时客户端放弃了这一批,模型读不到它,服务端上的程序照样当场停下、
+         * 交出停在哪一行的回执(用例看它,验证停的是对的地方)。还没有是 null。
+         */
+        String programReceipt() {
+            return run.receipt.get();
         }
     }
 

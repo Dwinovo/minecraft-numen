@@ -18,20 +18,14 @@ public interface ToolPort {
     void run(List<LlmToolCall> calls, Sink sink);
 
     /**
-     * 这一批还没结算时,这条输入是不是在跑的程序等着的那件身体活的收尾:是就归程序(内核不把它放进队列,随后经 {@link #arrived}
-     * 交来),它的账写进程序的回执,只说这一次。
-     */
-    boolean awaits(EventQueue.Entry entry);
-
-    /**
-     * 这一批还没结算时,一条输入到了(内核在入队之后逐条转来;程序等着的收尾不入队,先于同一批的别的条目转来)。{@code urgent} 是队列的急件规则算出来的:它要不要
-     * 立刻叫醒她。这一批正等着某件身体任务收尾时,它是那件的收尾就接着派下一个,它是急件就不再等。
+     * 这一批还没结算时,一条输入到了(内核在入队之后逐条转来)。{@code urgent} 是队列的急件规则算出来的:它要不要立刻叫醒她。
+     * 这一批里有一段程序在服务端跑着时,它是急件就让程序停在调用之间。
      */
     void arrived(EventQueue.Entry entry, boolean urgent);
 
     /**
-     * 放弃这批里还没结果的调用,只按它们自己的调用 id 收拾——外接模型挂着的调用不是这批的,不动。在跑的脚本不放弃:
-     * 它在返回之前经 {@link Sink#finished} 交出停在哪一行的回执,所以内核在作废这次 run 之前调它。
+     * 放弃这批里还没结果的调用,只按它们自己的调用 id 收拾——外接模型挂着的调用不是这批的,不动。在服务端跑着的程序先叫它当场停下,
+     * 它的 id 也在放弃的里面。
      *
      * @param stopBody 要不要连身体一起叫停(由切断原因决定,见 {@link HaltReason#stopsBody})
      * @return 被放弃的调用 id
@@ -46,7 +40,7 @@ public interface ToolPort {
 
         void settled();
 
-        /** 程序 {@code program} 里的一次 API 调用有了结局(评测按函数统计用);不看就不管。 */
+        /** 程序 {@code program} 里的一次 API 调用有了结局(服务端把每次调用的结局随回执送回来;评测按函数统计用);不看就不管。 */
         default void called(LlmToolCall program, com.dwinovo.numen.agent.script.ScriptCall.Called called) {
         }
     }

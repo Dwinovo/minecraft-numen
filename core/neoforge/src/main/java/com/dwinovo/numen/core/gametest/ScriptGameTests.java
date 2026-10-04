@@ -151,9 +151,13 @@ public class ScriptGameTests {
                 })
                 .thenWaitUntil(() -> helper.assertTrue(CompanionTickDispatcher.currentTaskFor(her.getUUID()) == null,
                         "her body is still busy after the stop"))
-                .thenWaitUntil(() -> helper.assertTrue(round.hasSettled(), "the script has not handed in its receipt"))
+                .thenWaitUntil(() -> helper.assertTrue(round.programReceipt() != null,
+                        "the program has not handed in its receipt"))
                 .thenExecute(() -> {
-                    String msg = message(round, script);
+                    // 切断时客户端放弃了这一批(模型从历史里的切断点知道);服务端上的程序当场停下,它的回执写明停在哪
+                    helper.assertTrue(round.result(script) == null, "the cut-off turn was handed a result");
+                    String msg = JsonParser.parseString(round.programReceipt()).getAsJsonObject().get("message")
+                            .getAsString();
                     helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.go\\) after 2 calls: "
                             + "this turn was cut off; t\\d+ was stopped too\\. Nothing after that ran\\..*"), msg);
                     helper.assertTrue(level.getBlockState(kept).is(Blocks.STONE), "the line after the stop ran");

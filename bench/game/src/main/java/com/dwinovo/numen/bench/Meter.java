@@ -114,12 +114,12 @@ final class Meter implements Consumer<LoopEvent> {
         use.calls++;
         if (called.kind() != null) {
             use.failures.merge(called.kind(), 1, Integer::sum);
-            if (!failedApiCalls.add(fn + " " + called.args() + " " + called.options())) {
+            if (!failedApiCalls.add(called.call())) {
                 use.repeated++;
             }
         }
-        if (fn.equals(HELP) && !called.args().isEmpty() && called.args().get(0) instanceof String name) {
-            helped.add(name);
+        if (fn.equals(HELP) && called.first() != null) {
+            helped.add(called.first());
         }
     }
 

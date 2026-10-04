@@ -2,14 +2,10 @@ package com.dwinovo.numen.network;
 
 import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.dwinovo.numen.agent.inbox.EventTypes;
-import com.dwinovo.numen.agent.tool.ServerToolTransport;
-import com.dwinovo.numen.agent.tool.ToolCall;
 import com.dwinovo.numen.network.payload.CompanionListPayload;
 import com.dwinovo.numen.network.payload.CurrentTaskPayload;
-import com.dwinovo.numen.network.payload.ExecuteActionPayload;
 import com.dwinovo.numen.network.payload.NumenDeathPayload;
 import com.dwinovo.numen.network.payload.NumenEventPayload;
-import com.dwinovo.numen.network.payload.TaskResultPayload;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.netty.buffer.ByteBuf;
@@ -25,7 +21,6 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -85,43 +80,6 @@ class WireTest {
     }
 
     @Test
-    void aResultThatFitsGoesOutUntouched() {
-        TaskResultPayload small = new TaskResultPayload(A, "call-1", value("done"));
-        assertSame(small, fit(small));
-    }
-
-    /** 事故那一种:回执比一个下行包大。换成同一次调用的一条失败,说清多大、上限多少、怎么要少一点。 */
-    @Test
-    void aResultTooBigForOnePayloadBecomesAFailureForTheSameCall() {
-        String huge = value("x".repeat(Wire.TO_CLIENT.bytes() + 10));
-        TaskResultPayload sent = fit(new TaskResultPayload(A, "call-7", huge));
-
-        assertEquals("call-7", sent.toolCallId(), "回给的还是那一次调用");
-        JsonObject result = JsonParser.parseString(sent.resultJson()).getAsJsonObject();
-        assertFalse(result.get("ok").getAsBoolean());
-        JsonObject error = result.getAsJsonObject("error");
-        assertEquals("failed", error.get("kind").getAsString());
-        String message = error.get("message").getAsString();
-        assertTrue(message.startsWith("The result of this call came to "), message);
-        assertTrue(message.contains("more than the 1048576 bytes one message to your client can carry, so it was "
-                + "not delivered."), message);
-        assertTrue(message.contains("Ask for less of it at a time"), "说怎么要少一点: " + message);
-        int bytes = error.getAsJsonObject("data").get("result_bytes").getAsInt();
-        assertTrue(bytes > Wire.TO_CLIENT.bytes(), "报的是整包的真实大小: " + bytes);
-        assertEquals(Wire.TO_CLIENT.bytes(), error.getAsJsonObject("data").get("limit_bytes").getAsInt());
-        encodes(TaskResultPayload.STREAM_CODEC, sent);
-    }
-
-    /** 多字节的字也按字节算:一万个汉字不到上限的字符数,字节数早就超了。 */
-    @Test
-    void theBudgetCountsEncodedBytesNotCharacters() {
-        String chinese = "字".repeat(Wire.TO_CLIENT.bytes() / 3 + 100);
-        assertTrue(chinese.length() < Wire.TO_CLIENT.bytes());
-        TaskResultPayload sent = fit(new TaskResultPayload(A, "call-8", value(chinese)));
-        assertFalse(JsonParser.parseString(sent.resultJson()).getAsJsonObject().get("ok").getAsBoolean());
-    }
-
-    @Test
     void aBatchOfEventsTooBigLosesItsLongestTextsFirstAndKeepsTheRest() {
         String big = "y".repeat(Wire.TO_CLIENT.bytes() / 2);
         List<EventQueue.Entry> entries = new ArrayList<>();
@@ -166,32 +124,6 @@ class WireTest {
         assertTrue(e.getMessage().startsWith("numen_api:companion_list came to "), e.getMessage());
     }
 
-    /** 上行的工具调用装不下:不送,就地回给模型一条失败——服务端根本不知道这次调用,不会有结果回来。 */
-    @Test
-    void aToolCallTooBigForTheServerIsAnsweredOnTheClientAndNotSent() {
-        AtomicReference<String> completed = new AtomicReference<>();
-        String args = "{\"grid\":[\"" + "#".repeat(Wire.TO_SERVER.bytes()) + "\"]}";
-        ServerToolTransport.ship(new ToolCall("call-9", "build layer", args, () -> A, completed::set));
-
-        JsonObject result = JsonParser.parseString(completed.get()).getAsJsonObject();
-        assertFalse(result.get("ok").getAsBoolean());
-        String message = result.getAsJsonObject("error").get("message").getAsString();
-        assertTrue(message.startsWith("This call came to "), message);
-        assertTrue(message.contains("more than the 1048576 bytes one message to the server can carry, so it was not "
-                + "sent."), message);
-        assertTrue(message.contains("several shorter calls"), message);
-    }
-
-    @Test
-    void aToolCallThatFitsTheServerRoundTrips() {
-        String args = "{\"grid\":[\"" + "#".repeat(20_000) + "\"]}";
-        ExecuteActionPayload call = new ExecuteActionPayload(A, "call-10", "build layer", args);
-        ByteBuf buf = Unpooled.buffer();
-        ExecuteActionPayload.STREAM_CODEC.encode(buf, call);
-        assertTrue(Wire.TO_SERVER.holds(buf.readableBytes()));
-        assertEquals(call, ExecuteActionPayload.STREAM_CODEC.decode(buf), "按整包的字节算");
-    }
-
     /** 收的一方以整包上限为防线:一个字段比整包还长,那不是 Numen 发的。 */
     @Test
     void aReceivedTextLongerThanTheWholeBudgetIsRejected() {
@@ -200,16 +132,10 @@ class WireTest {
         assertThrows(DecoderException.class, () -> Wire.TO_SERVER.text().decode(buf));
     }
 
-    /** 一次调用交回一段文字的那份结果。 */
-    private static String value(String text) {
-        return com.dwinovo.numen.agent.script.ApiReply.value(new com.google.gson.JsonPrimitive(text)).toString();
-    }
-
     private static <T extends net.minecraft.network.protocol.common.custom.CustomPacketPayload> T fit(T payload) {
         @SuppressWarnings("unchecked")
         net.minecraft.network.codec.StreamCodec<ByteBuf, T> codec = (net.minecraft.network.codec.StreamCodec<ByteBuf, T>)
                 (Object) switch (payload) {
-                    case TaskResultPayload p -> TaskResultPayload.STREAM_CODEC;
                     case NumenEventPayload p -> NumenEventPayload.STREAM_CODEC;
                     case CurrentTaskPayload p -> CurrentTaskPayload.STREAM_CODEC;
                     case NumenDeathPayload p -> NumenDeathPayload.STREAM_CODEC;

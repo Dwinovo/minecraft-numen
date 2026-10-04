@@ -87,6 +87,8 @@ public final class AgentLoopRegistry {
         for (EntityAgentLoop loop : ENTITY_LOOPS.values()) {
             loop.quiesce();
         }
+        // 服务端按主人断线清掉了他的模块缓存:这个连接上送过哪些正文的记录作废
+        com.dwinovo.numen.program.ProgramUplink.CONNECTION.disconnected();
     }
 
     /**
