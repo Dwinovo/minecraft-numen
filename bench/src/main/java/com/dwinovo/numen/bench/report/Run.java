@@ -1,6 +1,7 @@
 package com.dwinovo.numen.bench.report;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 一次评测的全部记录,{@code runs.jsonl} 里的一行。报告与对比只读它,不回头看游戏。
@@ -36,6 +37,7 @@ import java.util.List;
  * @param finalWords   她最后对主人说的话;一句都没说是空串
  * @param transcript   这次的记录文件,相对结果目录
  * @param error        评测出错或 API 出错时的原话;其余为 null
+ * @param metrics      场景自己记的数(如收场时主人剩多少血),只是指标、不决定成败;更早的记录里没有这一项,读进来是空表
  * @param functions    她的程序用到的每个 API 函数用得怎样,按函数名;更早的记录里没有这一项,读进来是空表
  */
 public record Run(String suite, String scenario, String variant, int attempt, String commit, String promptHash,
@@ -43,10 +45,11 @@ public record Run(String suite, String scenario, String variant, int attempt, St
                   int turns, int toolCalls, int toolErrors, int repeatedFailures, int consents,
                   long tokensMiss, long tokensHit, long tokensOut, Double cost, String currency,
                   long wallMs, long gameTicks, boolean claimedDone, String tag, String finalWords,
-                  String transcript, String error, List<FunctionUse> functions) {
+                  String transcript, String error, Map<String, Double> metrics, List<FunctionUse> functions) {
 
     public Run {
         functions = functions == null ? List.of() : List.copyOf(functions);
+        metrics = metrics == null ? Map.of() : Map.copyOf(metrics);
     }
 
     /**

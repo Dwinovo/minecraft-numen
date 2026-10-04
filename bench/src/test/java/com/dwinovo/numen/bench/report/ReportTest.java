@@ -28,7 +28,7 @@ class ReportTest {
                 subgoals, end.name(), 6, 4, passed ? 0 : 2, passed ? 0 : 1, 0, 12000, 30000, 800,
                 cost, cost == null ? null : "CNY", 42000, 840, !passed && end == EndReason.DONE, tag,
                 "挖好了|给你", "transcripts/" + scenario + "-" + variant.id() + "-" + attempt + ".jsonl", null,
-                variant == Variant.LIVE ? List.of(new FunctionUse("numen.work.dig", 2,
+                Map.of(), variant == Variant.LIVE ? List.of(new FunctionUse("numen.work.dig", 2,
                         passed ? Map.of() : Map.of("bad_argument", 1), 1, 0)) : List.of());
     }
 
@@ -55,7 +55,7 @@ class ReportTest {
                 r.promptHash(), r.model(), r.passed(), r.checks(), r.subgoals(), r.end(), r.turns(), r.toolCalls(),
                 r.toolErrors(), r.repeatedFailures(), r.consents(), r.tokensMiss(), r.tokensHit(), r.tokensOut(),
                 r.cost(), r.currency(), r.wallMs(), r.gameTicks(), r.claimedDone(), r.tag(), r.finalWords(),
-                r.transcript(), r.error(), List.of(new FunctionUse("numen.work.dig", 1, Map.of(), 0, 0))) : r);
+                r.transcript(), r.error(), r.metrics(), List.of(new FunctionUse("numen.work.dig", 1, Map.of(), 0, 0))) : r);
         String md = Compare.markdown("before", runs, "after", after);
         assertTrue(md.contains("| numen.work.dig | 6 | 3 | 17% | 0% | 17% | 0% | 50% | 0% |"), md);
     }

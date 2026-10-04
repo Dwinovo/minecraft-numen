@@ -18,7 +18,7 @@ import java.util.function.Consumer;
  *     @GameTestGenerator
  *     public static Collection<TestFunction> scenarios() {
  *         return Bench.suite("tlm", "Touhou Little Maid: taming and keeping maids.",
- *                 suite -> suite.add(TameWildMaid::new));
+ *                 suite -> suite.add(MaidFarmhand::new));
  *     }
  * }
  * }</pre>

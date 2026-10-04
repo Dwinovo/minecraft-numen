@@ -3,6 +3,7 @@ package com.dwinovo.numen.bench;
 import net.minecraft.core.BlockPos;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 一个评测场景:搭什么场景、主人开场说什么、模拟主人怎么答、怎么算成功、标准解是什么。
@@ -48,6 +49,11 @@ public interface Scenario {
 
     /** 成功断言、负面断言、子目标。"她没死"每个场景都有,不用写。 */
     List<Check> checks();
+
+    /** 收场时场景要记的数(指标,不决定成败),名字到数值;默认没有。 */
+    default Map<String, Double> metrics(Scene scene) {
+        return Map.of();
+    }
 
     /**
      * 标准解:一段 Lua 程序(和她调 {@code lua} 工具写的一样),跑完这个场景必须成功。它证明场景可解;空操作必须失败,

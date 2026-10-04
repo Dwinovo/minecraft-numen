@@ -1,5 +1,6 @@
 package com.dwinovo.numen.bench;
 
+import com.dwinovo.numen.bench.report.EndReason;
 import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestAssertException;
@@ -18,6 +19,8 @@ public final class Scene {
     private final NumenPlayer her;
     private final ServerPlayer owner;
     private boolean died;
+    private EndReason end;
+    private int toolCalls;
 
     Scene(ServerLevel level, BlockPos origin, NumenPlayer her, ServerPlayer owner) {
         this.level = level;
@@ -65,6 +68,21 @@ public final class Scene {
 
     void markDied() {
         died = true;
+    }
+
+    /** 这一次怎么收场的;只有收场判断言的时候才有。 */
+    public EndReason end() {
+        return end;
+    }
+
+    /** 这一次她派了几个工具调用;只有收场判断言的时候才有。 */
+    public int toolCalls() {
+        return toolCalls;
+    }
+
+    void finished(EndReason end, int toolCalls) {
+        this.end = end;
+        this.toolCalls = toolCalls;
     }
 
     /** 断言,写法同 GameTest:不成立就抛出,{@code message} 说看到了什么。 */

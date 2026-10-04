@@ -54,6 +54,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -183,11 +184,19 @@ final class Attempt {
             return;
         }
         if (spokeAt < 0) {
-            if (ticks >= WARMUP_TICKS && brain.hasBody()) {
+            if (!brain.hasBody()) {
+                if (ticks > WARMUP_LIMIT) {
+                    end(EndReason.HARNESS_ERROR, "她的身体状态 " + WARMUP_LIMIT + " 刻里一直没推给主人");
+                }
+                return;
+            }
+            // 搭场景时发生的事(一只女仆死了)会在主人开口前就叫醒她:她的那一轮先跑完,主人再开口
+            brain.loop.tick();
+            if (ticks >= WARMUP_TICKS && brain.idle()) {
                 spokeAt = ticks;
                 ownerSays(scenario.opening());
-            } else if (ticks > WARMUP_LIMIT) {
-                end(EndReason.HARNESS_ERROR, "她的身体状态 " + WARMUP_LIMIT + " 刻里一直没推给主人");
+            } else if (ticks > scenario.budget().ticks()) {
+                end(EndReason.TICK_LIMIT, null);
             }
             return;
         }
@@ -255,7 +264,9 @@ final class Attempt {
         List<Run.Check> checks = new ArrayList<>();
         List<Run.Check> subgoals = new ArrayList<>();
         boolean passed = end != EndReason.HARNESS_ERROR;
+        Map<String, Double> metrics = Map.of();
         if (scene != null) {
+            scene.finished(end, meter == null ? 0 : meter.toolCalls);
             List<Check> all = new ArrayList<>(scenario.checks());
             all.add(Check.guard("她没死", s -> s.assertTrue(!s.died(), "她死了")));
             for (Check check : all) {
@@ -263,6 +274,7 @@ final class Attempt {
                 (check.kind() == Check.Kind.SUBGOAL ? subgoals : checks).add(result);
                 passed &= check.kind() == Check.Kind.SUBGOAL || result.passed();
             }
+            metrics = scenario.metrics(scene);
         }
         boolean live = variant == Variant.LIVE;
         Pricing.Price price = live ? settings.pricing().of(settings.modelLabel()) : null;
@@ -279,7 +291,7 @@ final class Attempt {
                 meter == null ? "" : meter.finalWords,
                 transcript == null ? "" : Results.get().dir().relativize(transcript.file()).toString()
                         .replace('\\', '/'),
-                error, meter == null ? List.of() : meter.functions());
+                error, metrics, meter == null ? List.of() : meter.functions());
         if (transcript != null) {
             transcript.write("end", "end", end.name(), "passed", String.valueOf(passed));
         }
