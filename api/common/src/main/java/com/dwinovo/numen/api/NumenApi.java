@@ -118,7 +118,7 @@ public interface NumenApi {
 
     /**
      * {@code config/numen/} ——引擎和插件共用的配置目录。你的持久数据放这儿,
-     * 文件名带上自己的 mod id(如 {@code numen_tlm-wardrobe.json})。
+     * 文件名带上自己的 mod id(如 {@code numen_<mod id>-<名字>.json})。
      *
      * <p>别自己从游戏目录往下拼:客户端、专用服务器、开发环境三种情况下拼法不同,
      * 每个插件各拼一遍就是每个插件一种答案。目录<b>不保证已存在</b>,写之前
