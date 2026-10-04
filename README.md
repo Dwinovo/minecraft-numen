@@ -2,8 +2,6 @@
 
 # 言出法随
 
-### 运行在 Minecraft 内部的具身智能体
-
 [English](README_EN.md) · [**简体中文**](README.md)
 
 ![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1%20~%2026.2-62B47A?style=flat-square)
