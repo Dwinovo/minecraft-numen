@@ -216,6 +216,6 @@ gh workflow run publish.yml --ref 1.21.1 -f channel=beta
 
 - **源代码 —— [LGPL-3.0](../LICENSE)。** 你分发的修改版必须以同协议继续开源。
 - **插件与兼容模组可以采用任何协议。** 单独发布、通过 API 使用 Numen 的作品不受 LGPL 约束，商业闭源项目也可以。
-- **美术与资源 —— [保留所有权利](../LICENSE-ASSETS)。** "Numen" / "言出法随" 名称亦予保留。
+- **美术与资源 —— [保留所有权利](../licenses/ASSETS.txt)。** "Numen" / "言出法随" 名称亦予保留。
 
 基于 [MultiLoader Template](https://github.com/jaredlll08/MultiLoader-Template) 构建。

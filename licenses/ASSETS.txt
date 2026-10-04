@@ -2,7 +2,8 @@ Numen — Art & Assets license (All Rights Reserved)
 
 Copyright (c) 2026 Dwinovo. All rights reserved.
 
-The source code of Numen is licensed under LGPL-3.0 (see LICENSE and COPYING).
+The source code of Numen is licensed under LGPL-3.0 (see LICENSE, and
+licenses/GPL-3.0.txt for the GNU GPL it builds on).
 This file covers the project's original art instead, collectively the "Assets":
 
   - the in-game textures under
@@ -13,6 +14,21 @@ This file covers the project's original art instead, collectively the "Assets":
     `api/docs/branding/`;
   - the source artwork the textures are made from, i.e. the image files
     under `tools/ui-textures/` and `api/tools/ui-textures/`.
+
+Screenshots, demo and diagrams (CC BY 4.0, NOT covered by the reservation below)
+-------------------------------------------------------------------------------
+
+These files may be shared and adapted, including commercially, under the
+Creative Commons Attribution 4.0 International license
+(https://creativecommons.org/licenses/by/4.0/), with attribution to
+"Numen (言出法随) by Dwinovo, https://github.com/Dwinovo/minecraft-numen":
+
+  - the screenshots under `assets/showcase/`;
+  - the demo animation `assets/numen-demo.gif`;
+  - the diagrams under `assets/diagrams/`.
+
+This covers the project's own rights only. Minecraft content shown in the
+screenshots and the demo remains subject to Mojang's and Microsoft's terms.
 
 Third-party art (NOT covered by the reservation below)
 ------------------------------------------------------

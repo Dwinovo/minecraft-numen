@@ -14,7 +14,7 @@ import java.util.function.Supplier;
  * <p><b>为什么是贴图不是代码里的形状</b>:图标形状该由画图标的人来画。这里的几枚取自
  * pixelarticons(MIT),用 {@code api/tools/ui-textures/pixelarticons.py} 转成本项目的
  * png——它本来就是按 12×12 的像素格画的,转换不做重采样,拿到的就是作者那张稿子。
- * 授权与出处见仓库根的 {@code LICENSE-ASSETS}。
+ * 授权与出处见仓库的 {@code licenses/ASSETS.txt}。
  *
  * <p><b>为什么图存白色</b>:白色乘以任何颜色就是那个颜色。常态、悬停、置灰、危险各是一次
  * 着色,不用为每种状态各存一张图。

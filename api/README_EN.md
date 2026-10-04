@@ -216,6 +216,6 @@ As for **handing the controls to an outside brain** (any external agent driving 
 
 - **Source code — [LGPL-3.0](../LICENSE).** Forks you distribute must stay open under the same license.
 - **Plugins and compatibility mods may use any license.** Work distributed separately that uses Numen through its API is not bound by the LGPL, including proprietary projects.
-- **Art & assets — [All Rights Reserved](../LICENSE-ASSETS).** The names "Numen" / "言出法随" are reserved.
+- **Art & assets — [All Rights Reserved](../licenses/ASSETS.txt).** The names "Numen" / "言出法随" are reserved.
 
 Built on the [MultiLoader Template](https://github.com/jaredlll08/MultiLoader-Template).

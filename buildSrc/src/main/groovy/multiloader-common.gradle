@@ -52,16 +52,20 @@ repositories {
     }
 }
 
+// 协议文本随 jar 发出:根目录的 LICENSE(LGPL-3.0),licenses/ 下 LGPL 所依托的 GPL 全文与美术资源的授权;
+// jar 里沿用 LICENSE、COPYING、LICENSE-ASSETS 这三个惯用名,后缀标明是哪个 mod 的
+def licenseTexts = copySpec {
+    from(rootProject.file('LICENSE')) { rename { "LICENSE_${mod_name}" } }
+    from(rootProject.file('licenses/GPL-3.0.txt')) { rename { "COPYING_${mod_name}" } }
+    from(rootProject.file('licenses/ASSETS.txt')) { rename { "LICENSE-ASSETS_${mod_name}" } }
+}
+
 sourcesJar {
-    from(rootProject.files('LICENSE', 'COPYING', 'LICENSE-ASSETS')) {
-        rename { "${it}_${mod_name}" }
-    }
+    with licenseTexts
 }
 
 jar {
-    from(rootProject.files('LICENSE', 'COPYING', 'LICENSE-ASSETS')) {
-        rename { "${it}_${mod_name}" }
-    }
+    with licenseTexts
 
     manifest {
         attributes([
