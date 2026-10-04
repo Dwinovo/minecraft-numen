@@ -69,6 +69,10 @@ public final class EventTypes {
      * 一轮满只发一次,背包又有空格才复位。
      */
     public static final String INVENTORY_FULL = "inventory_full";
+    /**
+     * 她达成了一个进度,奖励的物品或经验进了她的背包。不是她哪次调用要的结果,所以发事件;不急:东西已经在她身上,攒着搭车就够。
+     */
+    public static final String ADVANCEMENT_REWARD = "advancement_reward";
     /** 主人挨打了(只报实体攻击)。急不急由发送方按主人血线分档。 */
     public static final String OWNER_HURT = "owner_hurt";
     /** 她自己定的表到点了。恒为急件:提醒而已,不代表那件事完成了。 */
@@ -252,6 +256,7 @@ public final class EventTypes {
         register(event(DEATH, true));
         register(event(HUNGRY, true));
         register(event(INVENTORY_FULL, true));
+        register(event(ADVANCEMENT_REWARD, false));
         register(event(OWNER_HURT, false));
         register(event(TIMER, true));
         register(event(WOKE, true));

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.gametest;
 
+import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -7,6 +8,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.Difficulty;
@@ -18,6 +20,8 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+
+import java.util.List;
 
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
@@ -141,6 +145,29 @@ public class BodyReportGameTests {
                     "the reply does not say the sword broke: " + hit.outcome());
             sample("sword breaks in a hit", hit);
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 她达成一个带经验奖励的进度:没有哪次调用要这个结果,所以来一条事件,写明背包与经验实际的变化。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_body_report")
+    public static void an_advancement_reward_arrives_as_an_event(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_achiever", new BlockPos(4, 2, 4), false);
+        var holder = level.getServer().getAdvancements().get(ResourceLocation.parse("minecraft:adventure/blowback"));
+        var advancements = companion.getAdvancements();
+        List<String> remaining = new java.util.ArrayList<>();
+        advancements.getOrStartProgress(holder).getRemainingCriteria().forEach(remaining::add);
+        remaining.forEach(criterion -> advancements.award(holder, criterion));
+
+        succeedWhen(helper, () -> {
+            List<String> told = com.dwinovo.numen.entity.EventOutbox.get(companion.getServer())
+                    .peek(companion.getUUID()).entries().stream()
+                    .filter(e -> EventTypes.ADVANCEMENT_REWARD.equals(e.type()))
+                    .map(com.dwinovo.numen.agent.inbox.EventQueue.Entry::text).toList();
+            helper.assertTrue(told.size() == 1 && told.get(0).contains("experience +40 points"),
+                    "not one advancement_reward event with the experience: " + told);
+            Constants.LOG.info("[numen-sample] advancement reward event -> {}", told.get(0));
+            CompanionFactory.despawn(level.getServer(), companion);
         });
     }
 }

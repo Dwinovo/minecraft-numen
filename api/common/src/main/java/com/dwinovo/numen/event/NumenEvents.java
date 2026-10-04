@@ -82,6 +82,15 @@ public final class NumenEvents {
     }
 
     /**
+     * 她达成了一个进度,奖励进了她的身上。不急:东西已经在她背包里,她下次开口自然带上。{@code change} 是同一刻里她背包与经验实际的变化
+     * ({@code Belongings}),不是从进度配置推算的——战利品表每次抽的不一样。
+     */
+    public static void advancementReward(NumenPlayer companion, String id, String title, String change) {
+        emit(companion, EventTypes.ADVANCEMENT_REWARD, Map.of("id", id),
+                "you completed the advancement \"" + title + "\" and its reward reached you: " + change, false);
+    }
+
+    /**
      * 某个本能替身体做了一件事。{@code reflex} 属性写的是它在本能名册里的登记名({@link Reflex#id}),
      * 不另起一套名字。永远不急:身体已经自己应对过了,这条是让她和翻聊天流的主人看得懂刚才发生了什么,
      * 攒着搭下一轮的车就够。
