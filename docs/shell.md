@@ -96,10 +96,9 @@
 
 ### 工具面
 
-- 模型只有一个工具 `ScriptTool`(名字随语言,眼下是 `lua`):一段程序(参数 `code`),一次调用跑完,回一张回执。一次调用
+- 模型在世界里做事的工具只有一个 `ScriptTool`(名字随语言,眼下是 `lua`):一段程序(参数 `code`),一次调用跑完,回一张回执。一次调用
   就是一行程序:`status.self()`。外接 MCP 服务器的工具照旧挂着(`RemoteMcpTool`),不在这一套里。
-- 计划清单也是一个函数 `todo.write({"[x] …", "[>] …", "[ ] …"})`(主人客户端执行),它的参数原样记进回执的
-  `data.echoed`,聊天里的计划清单从那里画。
+- 计划清单是另一个工具 `todo`(见 §七),不是函数;聊天里的计划清单从这次调用的参数画。
 - 系统提示的 `<api>` 索引、工具说明、`api.help` 都从登记处生成;提示词与技能里的例子全是 Lua,防漂移测试经脚本的前端读一遍。
 - 人在聊天框里敲的命令行(`/numen drive`)是第二个前端,读的是同一张登记表、同一个处理函数。
 
@@ -180,7 +179,7 @@
 编号、结局与整段实际账(`NavText` 一处写成),这件活的收尾只在这里说,不另发事件;程序停下时还在跑的活,收尾才是一条
 task_finished 事件。数据里有 `status`(ok / error / stopped)、
 `calls`、`returned`(返回值本身,是表就是 JSON 对象)、出错时的 `error`(`kind`、`message`、`hint`、`fn`),按名字跑的有
-`script`,回显的调用(`todo.write`)在 `echoed`。例:
+`script`。例:
 
 ```
 The script stopped at line 3 after 2 calls: work.dig: bad_argument — argument 'place': a position is one table with named fields; got {120, 12, -35}
@@ -244,7 +243,7 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
 
 ## 七、只有 lua 一个工具,API 原子化(10-03)
 
-- **一个入口**:模型在世界里做事的工具只剩 `lua`;`command` 与各组的快捷工具删了,`todowrite` 成了 `todo.write`。Lua 的对象与选项
+- **一个入口**:模型在世界里做事的工具只剩 `lua`;`command` 与各组的快捷工具删了。Lua 的对象与选项
   直接按参数类型读成值交给处理函数,不经命令行字符串。外接大脑(MCP)的 `lua` 调用交给她自己的派发器跑
   (`AgentLoop.runAside`):同一套等收尾、上限、回执;程序跑着的时候到达的事件转给它,不另起一轮对话。
 - **原子化**:`build.at` 只放站在原地够得着的格,一格都够不着就当场拒并说怎么走过去;施工绕外圈、清场(`ClearSiteTask`)、
@@ -255,6 +254,10 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
 - **技能是另一个工具,不是 API**(10-04):照 Claude Code 的 Skill 工具,`skill` 工具收技能名(附属文件 `file`、页码 `page`
   可选),技能正文就是这次调用的结果;系统提示的 `<available_skills>` 是索引。`numen.skill.load` 删了:程序回执里每次调用只露
   结果的第一行,正文没 `return` 出来她就读不到,真机上她连着三轮在程序里装同一份技能。外接大脑调的是同一个工具。
+- **计划也是另一个工具,不是 API**(10-04):判据是工具只放管大脑自己的事、不碰世界的(技能、计划),作用于世界的一律是
+  Lua API。照 Claude Code 的 TodoWrite,`todo` 工具收整份计划(`items`,一项一个带记号的字符串),每次替换上一份,主人客户端
+  当场答;聊天里的清单从成功的这次调用的参数读(`PlanChecklist`,一项的写法只在 `TodoTool.Item.parse`)。`numen.todo.write`
+  与只为它存在的回执回显(`data.echoed`)删了。模型的工具表是 `[lua, skill, todo]`,外接大脑经 `ToolRegistry` 拿到同一套。
 - **测试**:GameTest 全部从 Lua 入口调(`GameTestKit.lua`);库函数各有端到端的 GameTest(`mine`、`work.collect`、
   `fight.clear`、`build.raise`),到达方式 `reach`、`build.left`、够不着时 `build.at` 的拒绝各有一条。
 

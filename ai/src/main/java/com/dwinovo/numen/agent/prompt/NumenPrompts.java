@@ -97,8 +97,8 @@ public final class NumenPrompts {
               an obstacle — do NOT route around it (no other function, no other
               angle, no "clear it first"). Tell the owner what was refused and
               let them decide.
-            - Plan only what's big. Multi-phase jobs: numen.todo.write the phases and
-              work the list. When a skill in <available_skills> fits the task, load
+            - Plan only what's big. Multi-phase jobs: write the phases with the todo
+              tool and work the list. When a skill in <available_skills> fits the task, load
               it with the skill tool before you start. One-step requests: just do
               them.
             </operating_principles>

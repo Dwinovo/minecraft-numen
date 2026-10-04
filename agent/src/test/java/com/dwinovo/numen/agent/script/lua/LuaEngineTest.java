@@ -295,7 +295,7 @@ class LuaEngineTest {
                 return M
                 """;
         ScriptCatalog catalog = new ScriptCatalog(Map.of("numen.work", Map.of("where", new ScriptCatalog.Verb(
-                "found", false, null, Integer.MAX_VALUE, List.of(Map.of("x", 0L)),
+                "found", null, Integer.MAX_VALUE, List.of(Map.of("x", 0L)),
                 com.dwinovo.numen.agent.script.ScriptType.listOf(pos.type())))),
                 new ScriptCatalog.ModuleSource() {
                     @Override

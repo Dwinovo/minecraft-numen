@@ -56,7 +56,7 @@ import java.util.UUID;
  * A scrollable transcript that takes the full width, from the name band down to a dim status line
  * above the input (pi's footer + working indicator in one): spinner while she works, context percent
  * on the right. Her long-term goal is pinned under the header (click to unfold its details, × hides
- * it for this session); her plan ({@code todowrite}) is a checklist message in the transcript. Tool calls
+ * it for this session); her plan (the {@code todo} tool) is a checklist message in the transcript. Tool calls
  * show a spinner while running and a green check once their result lands — the raw
  * tool-result JSON is NOT shown (it only flips the call to done), keeping the chat
  * readable.

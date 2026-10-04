@@ -252,7 +252,7 @@ public final class FabricNumenConfig implements INumenConfig {
         public String sttBaseUrl = "";
         public String sttModel = "FunAudioLLM/SenseVoiceSmall";
         public String sttMicrophone = "";
-        // Deliberately short. The planning behaviour (use todowrite for
+        // Deliberately short. The planning behaviour (the todo tool for
         // multi-step tasks, the skill tool to fetch detailed workflows) emerges
         // entirely from those tools' own descriptions plus the runtime-injected
         // <available_skills> XML block — adding rules here just dilutes

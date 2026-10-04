@@ -77,8 +77,6 @@ public final class Action {
     private String returns;
     /** 脚本里它的函数返回什么类型;登记时必须声明({@link #returns(ScriptType)})。 */
     private ScriptType returnType;
-    /** 成功的调用的参数原样留在脚本回执里。 */
-    private boolean echoed;
 
     Action(CommandGroup group, String name, String summary, List<Param<?>> params,
            OnServer onServer, OnClient onClient) {
@@ -128,16 +126,6 @@ public final class Action {
             throw new IllegalArgumentException(path() + " 声明的返回项是空的");
         }
         this.returns = key;
-        return this;
-    }
-
-    /**
-     * 这个动作成功的调用,参数原样留在脚本回执的数据里(见 {@code ScriptCall.ECHOED}):对话流按它画出这次写下的东西,比如她的
-     * 计划清单({@code numen.todo.write})。
-     */
-    public Action echoed() {
-        group.requireOpen();
-        this.echoed = true;
         return this;
     }
 
@@ -349,7 +337,7 @@ public final class Action {
                 positions = Integer.MAX_VALUE;
             }
         }
-        return new ScriptCatalog.Verb(returns, echoed, options, positions,
+        return new ScriptCatalog.Verb(returns, options, positions,
                 returnType == null ? null : ScriptType.sample(returnType, NumenCli::classNamed), returnType);
     }
 

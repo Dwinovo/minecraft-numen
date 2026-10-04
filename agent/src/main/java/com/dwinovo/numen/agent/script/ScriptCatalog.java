@@ -49,7 +49,6 @@ public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource 
      *
      * @param returns   动作登记时声明的回值:回执 {@code data} 里的这个键直接作函数的返回值(查询拿来就能循环);
      *                  没声明是 null,成功返回回执数据、失败抛错
-     * @param echoed    它成功的调用的参数原样留在脚本回执的 {@code data} 里({@link ScriptCall#ECHOED}):对话流据此画它
      * @param options   它的选项名:写在最后的一张表,键全是这些名字时才是选项表,否则它是一个对象(一个 Pos、一只实体);
      *                  不知道参数表的(只说返回项的那种)是 null,写在最后的名字表都当选项表
      * @param positions 按顺序的对象最多几个;最后一个收一串的是 {@link Integer#MAX_VALUE}
@@ -57,7 +56,7 @@ public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource 
      *                  照样读得通;没有是 null
      * @param type      它返回的值的类型(声明了返回项的,是那一项的类型);没声明是 null
      */
-    public record Verb(String returns, boolean echoed, java.util.Set<String> options, int positions, Object sample,
+    public record Verb(String returns, java.util.Set<String> options, int positions, Object sample,
                        ScriptType type) {
 
         public Verb {
@@ -66,7 +65,7 @@ public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource 
 
         /** 只说返回项的那种(不知道参数表):写在最后的名字表都是选项表。 */
         public Verb(String returns) {
-            this(returns, false, null, Integer.MAX_VALUE, null, null);
+            this(returns, null, Integer.MAX_VALUE, null, null);
         }
 
         /**

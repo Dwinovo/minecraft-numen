@@ -61,7 +61,7 @@ This is a long fight. Between every fight: `numen.status.self()`; **HP ≤ 10 �
 
 - The exit portal (bedrock fountain, centre) returns you to the overworld spawn — `numen.move.to` into it when your owner is ready.
 - The dragon egg on the fountain is a trophy your owner may want; it teleports when punched, so leave its extraction to them.
-- Mark the entire endgame plan `completed` in `numen.todo.write`.
+- Mark the entire endgame plan `[x]` with the `todo` tool.
 
 ## If you die
 

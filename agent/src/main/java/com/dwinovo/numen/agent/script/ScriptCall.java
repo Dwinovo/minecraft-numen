@@ -2,7 +2,6 @@ package com.dwinovo.numen.agent.script;
 
 import com.dwinovo.numen.agent.llm.ToolOutcome;
 import com.google.gson.Gson;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -78,11 +77,6 @@ public final class ScriptCall {
 
     /** 回执数据里程序 {@code return} 的那个值。 */
     public static final String RETURNED = "returned";
-    /**
-     * 回执数据里留下参数的那几次调用(动作登记时声明了 {@code echoed}),按先后,每次 {@code {"function": …, "args": {…}}}:
-     * 对话流读它画出这次运行写下的东西(她的计划清单)。
-     */
-    public static final String ECHOED = "echoed";
 
     private static final int SAID = 160;
     private static final Gson GSON = new Gson();
@@ -92,8 +86,6 @@ public final class ScriptCall {
     private final ScriptRun run;
     /** 每次 API 调用一行,按先后。 */
     private final List<String> log = new ArrayList<>();
-    /** 留下参数的那几次成功的调用,见 {@link #ECHOED}。 */
-    private final JsonArray echoed = new JsonArray();
     private final StringBuilder printed = new StringBuilder();
     private boolean printedCut;
     private int calls;
@@ -133,15 +125,6 @@ public final class ScriptCall {
         JsonObject parsed = objectOf(resultJson);
         String kind = ok ? null : failureKind(parsed);
         log(p, ok ? null : kind, text);
-        if (ok && p.invocation != null) {
-            ScriptCatalog.Verb verb = host.catalog().verb(p.invocation.group(), p.invocation.verb());
-            if (verb != null && verb.echoed()) {
-                JsonObject echo = new JsonObject();
-                echo.addProperty("function", p.invocation.function());
-                echo.add("args", p.invocation.args());
-                echoed.add(echo);
-            }
-        }
         return advance(run.resume(new ScriptRun.Result(ok, text, dataOf(resultJson), kind,
                 ok ? null : hintOf(parsed))));
     }
@@ -215,7 +198,6 @@ public final class ScriptCall {
             }
             calls++;
             pending = new Pending(call);
-            pending.invocation = invocation;
             return new Next.Dispatch(invocation);
         }
     }
@@ -287,9 +269,6 @@ public final class ScriptCall {
         data.addProperty("calls", calls);
         if (value != null) {
             data.add(RETURNED, value);
-        }
-        if (!echoed.isEmpty()) {
-            data.add(ECHOED, echoed);
         }
         if (failure != null) {
             data.add("error", GSON.toJsonTree(failure));
@@ -363,8 +342,6 @@ public final class ScriptCall {
 
     private static final class Pending {
         final ScriptRun.Call call;
-        /** 交出去的那个动作;停在调用之前(到了上限)的是 null。 */
-        Invocation invocation;
 
         Pending(ScriptRun.Call call) {
             this.call = call;

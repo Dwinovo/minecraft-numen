@@ -49,11 +49,11 @@ class WorkCommandGroupsTest {
     }
 
     @Test
-    void theToolsAreTheOneThatRunsAProgramAndTheOneThatLoadsASkill() {
+    void theToolsRunAProgramLoadASkillAndWriteThePlan() {
         assertEquals(List.of(com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.toolName(),
-                        com.dwinovo.numen.cli.SkillTool.NAME),
+                        com.dwinovo.numen.cli.SkillTool.NAME, com.dwinovo.numen.cli.TodoTool.NAME),
                 ToolRegistry.all().stream().map(t -> t.name()).toList());
-        for (String gone : List.of("move_goto", "work_dig", "status_self", "scan_blocks", "skill_load", "todowrite",
+        for (String gone : List.of("move_goto", "work_dig", "status_self", "scan_blocks", "skill_load",
                 "task_stop", "command", "work_mine", "follow", "plan_route", "collect_items", "fish", "attack",
                 "blueprint", "blueprint_read", "scaffold_materials", "build", "transfer")) {
             assertNull(ToolRegistry.get(gone), gone + " 是脚本里的函数,不是工具");
@@ -141,7 +141,7 @@ class WorkCommandGroupsTest {
                 "numen.build.place({name = \"oak_planks\", pos = {x = 0, y = 1, z = 0}})",
                 "numen.build.blueprint(\"house\", {x = 100, y = 64, z = -20}, {rotation = 90})",
                 "numen.build.diff({blueprint = \"house\", origin = {x = 100, y = 64, z = -20}, rotation = 0})",
-                "numen.memory.remember(\"main base -340,68,120\")", "numen.todo.write({\"[>] dig\"})")) {
+                "numen.memory.remember(\"main base -340,68,120\")")) {
             var reading = com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.calls("t", code,
                     com.dwinovo.numen.cli.NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.factory()));
             assertNull(reading.error(), code + ": " + reading.error());

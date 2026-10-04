@@ -11,7 +11,7 @@ Your owner has asked you to **defeat the Ender Dragon** — the canonical end-ga
 
 The full path from "fresh world" to "dead dragon" spans dozens of actions across three dimensions. Don't plan it all in one turn:
 
-1. **Use `numen.todo.write`** to write the 6 mainline phases as a top-level todo list, phase 1 `in_progress`.
+1. **Use the `todo` tool** to write the 6 mainline phases as a top-level plan, phase 1 `[>]`.
 2. **Load the matching skill** with the skill tool only when you actually start that phase — loading all skills up front wastes tokens.
 3. **Verify each phase's "done when" with `numen.status.self`** before marking it `completed` — never assume an item is in your inventory.
 4. Keep exactly one phase `in_progress` at a time.

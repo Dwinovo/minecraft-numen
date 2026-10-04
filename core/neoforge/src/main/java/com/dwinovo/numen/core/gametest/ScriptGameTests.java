@@ -397,29 +397,6 @@ public class ScriptGameTests {
     }
 
     /**
-     * 计划写进回执:{@code numen.todo.write} 收下整份计划,回执的数据里原样留着这次调用的参数,对话流从那里读出清单;做着的不止一项
-     * 被拒,说清只能有一项在做。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_scripts")
-    public static void a_written_plan_is_echoed_on_the_receipt(GameTestHelper helper) {
-        NumenPlayer her = spawnAt(helper, "gametest_lua_planner", new BlockPos(2, 2, 2), false);
-        ToolRun plan = lua(her, "numen.todo.write({\"[x] walk to the mine\", \"[>] dig the iron\", \"[ ] smelt it\"})");
-        helper.assertTrue(plan.ranToTheEnd(), "the plan was not written: " + plan.receipt());
-        JsonObject data = JsonParser.parseString(plan.receipt()).getAsJsonObject().getAsJsonObject("data");
-        var echoed = data.getAsJsonArray("echoed");
-        helper.assertTrue(echoed != null && echoed.size() == 1
-                        && echoed.get(0).getAsJsonObject().get("function").getAsString().equals("numen.todo.write")
-                        && echoed.get(0).getAsJsonObject().getAsJsonObject("args").getAsJsonArray("items").size() == 3,
-                "the plan is not echoed on the receipt: " + plan.receipt());
-        helper.assertTrue(plan.receipt().contains("plan written: 1/3 done; doing now: dig the iron"), plan.receipt());
-        ToolRun two = lua(her, "numen.todo.write({\"[>] dig\", \"[>] smelt\"})");
-        helper.assertTrue(!two.ranToTheEnd() && two.receipt().contains("exactly one step is [>]"),
-                "a plan with two steps in progress was taken: " + two.receipt());
-        CompanionFactory.despawn(helper.getLevel().getServer(), her);
-        helper.succeed();
-    }
-
-    /**
      * 查到的东西原样交给动作:{@code numen.scan.blocks} 一团的最近一格、{@code numen.scan.block} 读到的一块,都直接进 {@code numen.work.dig};两格都挖掉,
      * 程序拿到的是两份数据({@code dug} 各一格),不是话。
      */
