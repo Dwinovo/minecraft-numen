@@ -84,7 +84,8 @@ GameTest 服务器(runs/bench)
 3. 用例本身的成败只说评测靠不靠得住:自检全对、没有评测出错、没被余额不足打断就通过。模型成不成功只进报告。
 
 一次运行:搭场地 → 主人上线 → 召出她 → 搭场景 → 等服务端把她的身体状态推过来(第一次请求里就有背包)→
-主人开口 → 每刻推循环、看收不收场。
+主人开口 → 每刻推循环、看收不收场。搭场景时发生的事(如她的女仆死了、急件)会在主人开口前就叫醒她:她的那一轮先跑完、闲下来,
+主人再开口(等不到闲下来,到预算的游戏刻就按超游戏刻收场)。
 
 评测按真实游戏**每秒 20 刻**走:GameTest 服务器本来不等下一刻、有多快跑多快(每秒上千刻),那样她等模型回话的
 几秒里世界已经过了好几分钟,活干多久、事件什么时候到、游戏刻预算都不对。评测每刻补足 50 毫秒。
@@ -106,7 +107,7 @@ public final class TlmBench {
     @GameTestGenerator
     public static Collection<TestFunction> scenarios() {
         return Bench.suite("tlm", "Touhou Little Maid: taming and keeping maids.",
-                suite -> suite.add(TameWildMaid::new));
+                suite -> suite.add(MaidFarmhand::new).add(ReviveMaid::new));
     }
 }
 ```
@@ -118,9 +119,10 @@ public final class TlmBench {
 | `id()` | 场景名,`bench.scenarios` 按它选 |
 | `setup(Scene)` | 搭场景:她与主人已在场地里。放方块、给物品、生成实体 |
 | `opening()` | 主人开场说的话 |
-| `checks()` | `Check.success`(成功断言)、`Check.guard`(负面断言)、`Check.subgoal`(子目标);写法同 GameTest,不成立就 `scene.assertTrue(false, "看到了什么")`。"她没死"每个场景都有 |
+| `checks()` | `Check.success`(成功断言)、`Check.guard`(负面断言)、`Check.subgoal`(子目标);写法同 GameTest,不成立就 `scene.assertTrue(false, "看到了什么")`。"她没死"每个场景都有。收场时的断言里 `scene.end()` 是怎么收场的、`scene.toolCalls()` 是她派了几个工具调用 |
+| `metrics(Scene)` | 可选:收场时记一组数(名字到数值)进结果的 `metrics`,只是指标、不决定成败 |
 | `solution(Scene)` | 标准解:一段 Lua 程序,和她调 `lua` 工具写的一样 |
-| `arena()`、`budget()`、`start()`、`ownerAt()`、`owner()` | 可选:场地大小、预算(默认 30 轮、10 分钟)、她和主人站哪、模拟主人的剧本(默认允许一次、不回话) |
+| `arena()`、`budget()`、`start()`、`ownerAt()`、`owner()` | 可选:场地大小、预算(默认 30 轮、10 分钟;长链条的场景自己给,如 `iron_pickaxe_chain` 是 60 轮、20 分钟)、她和主人站哪、模拟主人的剧本(默认允许一次、不回话) |
 
 每次运行造一个新实例(`suite.add` 收构造器),这一次生成的东西(一只女仆)放在场景自己的字段里。坐标相对场地:
 地板在 y=0,站在地板上是 y=1。
@@ -162,7 +164,8 @@ public final class TlmBench {
   `promptHash`(系统提示 SHA-256 前 12 位)、`model`、`passed`、`checks` 与 `subgoals`(每条的名字、种类、过没过、
   说明)、`end`(结束原因)、`turns`、`toolCalls`、`toolErrors`、`repeatedFailures`、`consents`、`tokensMiss`、
   `tokensHit`、`tokensOut`、`cost`、`currency`、`wallMs`、`gameTicks`、`claimedDone`、`tag`(失败分类)、
-  `finalWords`(她最后说的话)、`transcript`(记录文件)、`error`、`functions`(她的程序用到的每个 API 函数:`function`、
+  `finalWords`(她最后说的话)、`transcript`(记录文件)、`error`、`metrics`(场景自己记的指标,如 `guard_owner` 收场时主人剩的血
+  `owner_health`;更早的记录没有这一项)、`functions`(她的程序用到的每个 API 函数:`function`、
   `calls`、按种类的 `failures`、第一次调它之前查帮助的 `helpLookups`、`repeatedFailures`;更早的记录没有这一项)。
 - `summary.md`:自检表、每个场景一行的汇总、每个函数一行(调用、失败率、参数错、其他失败、调用前查帮助、重复失败)、失败分布与
   每次失败的去处。`:bench:compare` 的对比也按函数并排前后两份。
@@ -197,37 +200,41 @@ API 错、超上下文、死亡、评测出错。
 
 ## 八、场景
 
-| 组 | 场景 | 搭了什么 | 主人说 | 成功 | 负面 | 标准解 |
+bench **只测智能能力**:采集、合成链、深处挖掘、取物交付、战斗、建造、判断可行性、长链条、种植加工。权限、征询、打断这类机制由
+GameTest 管,不在这里测。场景分三集:**回归集**每次改动都跑,**能力集**阶段性跑,**插件集**挂着目标模组单开一次。
+
+| 集 | 场景 | 搭了什么 | 主人说 | 成功 | 负面 | 标准解 |
 |---|---|---|---|---|---|---|
-| vanilla | `mine_iron` | 七乘七、四层的石堆里埋 12 块铁矿,包里一把石镐 | 帮我挖 10 个铁回来。 | 粗铁 ≥ 10 | 没死 | `local found = numen.scan.blocks("iron_ore", {radius = 12})`,`while #found > 0` 循环先走后挖:`numen.move.to(found[1], {arrive = "dig", costs = {dig = true, place = true, consent = false}})`、`numen.work.dig(found[1])`、再扫一次;再站进挖空的芯 `numen.move.to(<芯>, {costs = {dig = true, place = true, consent = false}})`、`numen.work.collect()` |
-| vanilla | `mine_iron_script` | 同 `mine_iron` | 同上 | 同上 | 没死 | `numen.work.mine(numen.scan.blocks("iron_ore", {radius = 12})[1])`(内置模块函数:先走到够得着那一团、再挖、捡,挖完为止),再同上站进挖空的芯、`numen.work.collect()` |
-| vanilla | `dig_deep_diamond` | 十四层实心石头,钻石矿埋在她正下方 12 格(手够不着),包里一把铁镐 | 我们脚底下深处埋着钻石,去挖上来。 | 包里有钻石 | 没死 | `numen.move.to(<矿>, {arrive = "dig", costs = {dig = true, place = true, consent = false}})`、`numen.work.dig(<矿>)`、`numen.work.collect()` |
-| vanilla | `ore_behind_house_denied` | 主人的木屋从屏障墙顶到屏障墙(每格记成主人放的),屋后地上一块铁矿,包里一把石镐;主人对征询一律拒绝 | 我屋子后面有块铁矿,去帮我挖回来。 | 包里有粗铁 | 没死、屋子一格不少 | `numen.move.to(<矿后一格>, {costs = {dig = true, place = true, consent = false}})`(从屋子底下的天然石头里走)、`numen.work.dig(<矿>)`、`numen.work.collect()` |
-| vanilla | `ore_behind_house_allowed_once` | 同上;主人第一张征询允许一次,之后拒绝 | 同上 | 包里有粗铁 | 没死、屋子少的格全是那一张里点过头的 | `numen.move.to(<矿后一格>, {costs = {dig = true, place = true}, avoid_break = "minecraft:stone"})`(只能穿墙,走到墙跟前问一次)、`numen.work.dig(<矿>)`、`numen.work.collect()` |
-| vanilla | `chest_in_wall` | 三格厚的石墙,箱子嵌在墙根只露朝她的一面(头顶一格玻璃),里面 5 颗钻石 | 把箱子里的钻石拿给我。 | 5 颗钻石在她包里、主人包里或主人脚边地上 | 没死 | `numen.move.to(<箱子>, {arrive = "use"})`、`numen.use.block(<箱子>)`、`numen.gui.quick(0)`、`numen.gui.close()` |
-| vanilla | `build_hut` | 空地,她站在正中,包里两组橡木板、一扇橡木门 | 在这儿给我盖个能住的小屋吧。 | 有一扇门:门里侧人不开门走不出去(窗洞不算漏)、至少 4 格站得住且头顶四格内都有遮挡,门外侧走得到外面 | 没死 | `numen.move.to(<屋子正中>)`,`numen.shape.layer` 画留门洞的墙、整圈、屋顶再并成一串格,加上门,`numen.build.place` 放一遍 |
-| vanilla | `craft_table_and_pickaxe` | 空地,包里 3 块橡木原木(刚好够) | 用包里的原木做个工作台,再做把木镐。 | 包里有木镐,她做的工作台放在场地里或在包里 | 没死 | `numen.inv.make` 木板、工作台、木棍,`numen.build.place({{name = "crafting_table", pos = …}})`,`numen.inv.make("wooden_pickaxe")` |
-| vanilla | `guard_owner` | 夜里、简单难度;主人生存模式、60 点血站在场地当中,三只僵尸在他身边五六格外;她在另一头(十几格,防御本能不替她出手),包里一把铁剑 | 保护我! | 三只僵尸全死 | 没死、主人活着 | 三行 `numen.fight.attack(<一只>)` |
-| vanilla | `pick_up_drops` | 她身边两圈共 20 个不会过期的掉落物 | 把地上的东西都捡起来。 | 场地里一个掉落物都不剩 | 没死 | `numen.work.collect()` |
-| vanilla | `walk_to_far_pillar` | 110 格见方的平地,正东约 100 格一根十格高的圆石柱,半路一条五格宽、三格深、横贯场地的河 | 往东一直走,走到那根高高的石柱跟前去。 | 离石柱水平四格以内 | 没死 | `numen.move.to({x = <柱西两格的 x>, z = <z>})` |
-| tlm | `tame_wild_maid` | 一只野生女仆,包里一块蛋糕 | 那边有只野生女仆,你去把她驯服了。 | 女仆的主人是她 | 没死、女仆活着 | `numen.move.to(<女仆>, {arrive = "near", range = 2})`、`numen.use.entity(<女仆>, {item = "minecraft:cake"})` |
+| 回归 | `mine_iron` | 七乘七、四层的石堆里埋 12 块铁矿,包里一把石镐 | 帮我挖 10 个铁回来。 | 粗铁 ≥ 10 | 没死 | `numen.scan.blocks("iron_ore", {radius = 12})`,`while #found > 0` 循环先 `numen.move.to(found[1], {arrive = "dig", costs = {dig = true, place = true, consent = false}})` 后 `numen.work.dig(found[1])`、再扫一次;再站进挖空的芯、`numen.work.collect()` |
+| 回归 | `craft_stone_pickaxe` | 空地,包里 3 块橡木原木,旁边一堆三乘三、两层的露天石头 | 给我做把石镐。 | 包里有石镐(子目标按里程碑:工作台、木镐、圆石) | 没死 | `numen.inv.make` 木板、工作台、木棍,`numen.build.place` 放工作台,`numen.inv.make("wooden_pickaxe")`,`numen.move.to` 石堆边、`numen.work.dig` 上层三块、`numen.work.collect()`,`numen.inv.make("stone_pickaxe")` |
+| 回归 | `dig_deep_diamond` | 十四层实心石头,钻石矿埋在她正下方 12 格(手够不着),包里一把铁镐 | 我们脚底下深处埋着钻石,去挖上来。 | 包里有钻石 | 没死 | `numen.move.to(<矿>, {arrive = "dig", costs = {dig = true, place = true, consent = false}})`、`numen.work.dig(<矿>)`、`numen.work.collect()` |
+| 回归 | `chest_in_wall` | 三格厚的石墙,箱子嵌在墙根只露朝她的一面(头顶一格玻璃),里面 5 颗钻石 | 把箱子里的钻石拿给我。 | 5 颗钻石在她包里、主人包里,或掉在主人碰撞箱外扩 5 格以内 | 没死 | `numen.move.to(<箱子>, {arrive = "use"})`、`numen.use.block(<箱子>)`、`numen.gui.quick(0)`、`numen.gui.close()` |
+| 回归 | `guard_owner` | 夜里、简单难度;主人生存模式、60 点血站在场地当中,三只僵尸在他身边五六格外;她在另一头(十几格,防御本能不替她出手),包里一把铁剑 | 保护我! | 三只僵尸全死 | 没死、主人活着 | 三行 `numen.fight.attack(<一只>)`。指标 `owner_health`:收场时主人剩的血,不作判据 |
+| 回归 | `build_wall_between_posts` | 两根三格高的栅栏柱相距 5 格(之间 4 格空位),包里正好 12 块圆石 | 在那两根柱子之间砌一堵三格高的圆石墙。 | 目标墙格(两柱之间 4×3)的 F1 ≥ 0.9:目标格与场地里实际圆石格的交集,精确率 = 交集 ÷ 实际圆石格,召回率 = 交集 ÷ 目标格(照 IGLU) | 没死、两根柱子还在 | `numen.move.to` 墙南两格,`numen.build.raise(numen.shape.box(<墙左下>, <墙右上>, "cobblestone"))` |
+| 回归 | `impossible_request` | 平地,没有矿,包里 4 块橡木原木;预算 5 轮 | 给我做一把钻石镐。 | 自己收工(超过 5 轮就是超轮数)、场地里方块一格不变、她的背包不变、至少派过一个工具调用 | 没死 | `numen.inv.recipes("minecraft:diamond_pickaxe")`(只查,不动) |
+| 能力 | `build_hut` | 空地,她站在正中,包里两组橡木板、一扇橡木门 | 在这儿给我盖个能住的小屋吧。 | 有一扇门:门里侧人不开门走不出去(窗洞不算漏)、至少 4 格站得住且头顶四格内都有遮挡,门外侧走得到外面 | 没死 | `numen.move.to(<屋子正中>)`,`numen.shape.layer` 画留门洞的墙、整圈、屋顶再并成一串格,加上门,`numen.build.place` 放一遍 |
+| 能力 | `iron_pickaxe_chain` | 三棵树(各四格原木)、一堆四乘三两层的露天石头、两乘二的露天铁矿、两块露天煤矿,她空手;预算 60 轮、20 分钟 | 给我做一把铁镐。 | 包里有铁镐(子目标按里程碑:工作台、木镐、石镐、熔炉、铁锭、铁镐) | 没死 | `numen.work.mine` 一棵树,`numen.inv.make` 木板、工作台、木棍、木镐,`numen.work.mine` 石堆,`numen.inv.make("stone_pickaxe")`,`numen.work.mine` 煤矿与铁矿,`numen.inv.make("furnace")`、`numen.build.place` 放熔炉、`numen.inv.smelt(<熔炉>, "raw_iron", 3)`、`numen.inv.make("iron_pickaxe")` |
+| 能力 | `harvest_and_bread` | 六乘四的麦田,中间一排水,一侧两排麦子熟了(12 株)、另一侧两排没熟(12 株),田和麦子都记成主人放的;场地里一张工作台,她空手 | 把田里熟了的麦子收了,做几个面包给我。 | 面包 ≥ 3(在她包里、主人包里,或掉在主人碰撞箱外扩 5 格以内) | 没死、没熟的麦子一株没拆 | `numen.work.dig` 熟的两排、`numen.work.collect()`、`numen.inv.make("bread", 3)`、拿着种子 `numen.use.block` 补种、`numen.inv.give` 面包给主人;子目标:收了熟的、补种 |
+| 车万女仆 | `maid_farmhand` | 一只野生女仆,三乘三的湿耕地(旁边一格水),她包里一块蛋糕和 16 颗小麦种子 | 把那只女仆收了,让她帮我种这块地。 | 女仆归她、女仆当前工作是种地、女仆格子里有种子 | 没死、女仆活着 | `numen.move.to(<女仆>, {arrive = "near", range = 2})`、`numen.use.entity(<女仆>, {item = "minecraft:cake"})`、`tlm.maid.open`、`numen.gui.put("minecraft:wheat_seeds")`、`numen.gui.close()`、`tlm.maid.task("touhou_little_maid:farm")`、`tlm.maid.config({home = true})`;子目标:驯服、交种子、切模式、家模式开着且家在耕地附近 |
+| 车万女仆 | `revive_maid` | 她的一只女仆搭场景时就已死(墓碑里有她的东西和胶片,maid_died 急件先到),车万女仆的祭坛用代码搭好,她包里有青金石、金锭、红石、铁锭、煤各一(`altar_recipe/reborn_maid`),P 点满 | 把女仆救回来,别用神社。 | 场地里有一只活着、归她的女仆,墓碑没了 | 没死 | 走到墓碑旁 `numen.use.entity(<墓碑>)` 取胶片,再逐根走到祭坛的六根柱子旁 `numen.gear.hold(<一样>)`、`numen.use.block(<柱顶>)`,放齐就复活 |
 
 世界:和平、正午且不走时间、晴天、不刷怪,每次运行开场都拨回这个样子;场景要别的就在搭场景时改,只管这一次
 (`guard_owner` 改成夜里、简单难度)。
 
-模拟主人是一个不走动的玩家:他不捡地上的东西,所以"交给主人"算上他脚边地上的;挨打会掉血、会死。
+模拟主人是一个不走动的玩家:他不捡地上的东西,所以"交给主人"算上他碰撞箱外扩 5 格以内的地上;挨打会掉血、会死。
 
 各场景的取舍:
 
-- 挖深处、屋后的矿、墙里的箱子、去远处都把目标放在手够不着或看不见的地方,量的是先看、再开路、再干活这一串
-  能不能接上;去远处不给坐标(场地原点每次不同),只给方向和一个显眼的东西。
-- 屋后的矿有两条路:穿墙要主人点头,从屋子底下的天然石头里挖过去不用问。两个变体只差主人怎么答,量的是被拒之后换不换路、
-  点过头之后拆不拆多。
+- 挖深处、墙里的箱子都把目标放在手够不着或看不见的地方,量的是先看、再开路、再干活这一串能不能接上。
 - 盖屋子只判"能住"(门、人走不出去、有顶),不判样子、不限材料;围合按人走的样子判(平走、上一格、下落三格以内),
   所以留窗洞不算漏。子目标给门、墙、顶的完成度。
-- 做木镐的原木刚好够:做错一步(多做了东西)就不够了;木镐要工作台,工作台放在场地里或收回包里都算。
+- 砌墙判的是形状:目标格与实际圆石格的 F1,多放或少放都扣分,柱子拆了不算。
+- 做石镐的原木刚好够:3 块原木 = 12 块板,工作台 4、木棍 4、木镐 3,余 3 块;工作台放在地上就行,不用挖回。
+  铁镐链条的树只有三棵,原料有余量,但每一步做错了都补不回来。
 - 护主的主人 60 点血(模拟主人不走自己的那一刻,穿甲不算护甲值,20 点血十几秒就没了):给她从开口到赶过去的时间;僵尸在主人身边、离她十几格,她的防御本能(只管四格以内)不会替模型出手。
-- 捡东西的掉落物不会过期:否则什么都不做,等五分钟也"捡干净"了。
+- 办不到的请求,聪明的是查清楚就收工:什么都不查就收工的空操作也满足前三条,所以成功还要求至少派过一个工具调用,断言才不被它骗过。
+- 麦田的田和麦子记成主人放的,但判据不涉及权限:只看面包数、没熟的有没有被拆、熟田有没有补种。面包要三乘三的格子,所以场地里立着一张工作台。
+- 复活用的祭坛是车万女仆自己的多方块:模板按它的结构摆好、再经它的 `MultiBlockAltar.build` 变成祭坛方块,和玩家用博丽御币搭出来的是同一份。
 
 ---
 

@@ -236,8 +236,6 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
   `LuaEngineTest`(交出与接着跑、直接返回与抛错、声明的返回项、撞名)、`SerialCallsTest`(顺序、等收尾、分支、开口与急件、
   切断时的回执、按名字跑与嵌套、两种上限)、`ScriptLineTest`、`ScriptStoreTest`、`GateTest`;GameTest:`ScriptGameTests`
   (顺序、按失败分支、主人停止与开口、`for` 走 `area.parts`、`script run mine` 挖空埋在石头里的矿、存读跑删)。
-- 评测:`mine_iron_script` 和 `mine_iron` 同一个场景,标准解的挖矿交给 `script run mine ores`;一格高的矿洞里的掉落物
-  `work collect` 走不进去(它不改地形),两份标准解最后都站进挖空的芯再捡。
 - 外接大脑(MCP)当时直接调工具、没有派发器;10-03 起它的 `lua` 调用经她自己的派发器跑(§七)。
 
 ## 七、只有 lua 一个工具,API 原子化(10-03)
