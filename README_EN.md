@@ -91,4 +91,4 @@ The source code is released under [LGPL-3.0](LICENSE); plugins that use the proj
 
 ## Acknowledgements
 
-Thanks to everyone who follows, downloads, and uses Numen.
+Thanks to every player who follows, downloads and uses Numen, and to every [contributor](https://github.com/Dwinovo/minecraft-numen/graphs/contributors) who reports issues or sends code. For the open-source projects and research that Numen builds on, see the [website](https://numen.dwinovo.cn).

@@ -91,4 +91,4 @@
 
 ## 致谢
 
-感谢每一位关注、下载和使用言出法随的人。
+感谢每一位关注、下载与使用言出法随的玩家，以及提交问题与代码的[贡献者](https://github.com/Dwinovo/minecraft-numen/graphs/contributors)。言出法随所借鉴的开源项目与研究工作，详情请见[网站](https://numen.dwinovo.cn)。
