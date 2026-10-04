@@ -144,6 +144,8 @@ tasks.register('apiJar', Jar) {
     include 'com/dwinovo/numen/permission/**'      // 唯一判定"身体可不可以动世界"的地方 —— 插件自己的任务同样得过它
     include 'com/dwinovo/numen/entity/NumenPlayer*.class'   // the body a tool acts on
     include 'com/dwinovo/numen/entity/InputDriver*.class'   // ...its own facing, looking and boat steering
+    include 'com/dwinovo/numen/entity/BodyDelta*.class'     // what an action changed on the body: carried items, health, riding, broken gear
+    include 'com/dwinovo/numen/entity/Belongings*.class'    // ...and the carried-items/experience snapshot it is made of
     include 'com/dwinovo/numen/entity/package-info.class'
     include 'com/dwinovo/numen/agent/skill/SkillRegistry*.class' // ship-skills-with-your-jar entry
     include 'com/dwinovo/numen/agent/skill/SkillInfo*.class'

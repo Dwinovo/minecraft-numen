@@ -1,5 +1,6 @@
 package com.dwinovo.numen.plugins.ftbquests;
 
+import com.dwinovo.numen.entity.Belongings;
 import com.dwinovo.numen.entity.NumenPlayer;
 import dev.architectury.event.EventResult;
 import dev.ftb.mods.ftbquests.api.FTBQuestsAPI;
@@ -175,9 +176,7 @@ final class QuestWatch {
         }
 
         static Ledger of(NumenPlayer her, long now) {
-            Belongings before = new Belongings(her.getInventory().getContainerSize());
-            before.copyFrom(her);
-            return new Ledger(before, now);
+            return new Ledger(Belongings.of(her), now);
         }
 
         boolean isNew(long claimedAt, long rewardId) {

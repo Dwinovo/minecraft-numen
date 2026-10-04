@@ -2,6 +2,7 @@ package com.dwinovo.numen.plugins.ftbquests;
 
 import com.dwinovo.numen.agent.script.ApiError;
 import com.dwinovo.numen.agent.script.ErrorKind;
+import com.dwinovo.numen.entity.Belongings;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.sdk.Call;
 import dev.ftb.mods.ftbquests.quest.Quest;
@@ -78,8 +79,7 @@ final class QuestSubmit {
                     new FtbqApi.Submitted(quest.getCodeString(), List.of(), skipped, "", false));
         }
 
-        Belongings before = new Belongings(her.getInventory().getContainerSize());
-        before.copyFrom(her);
+        Belongings before = Belongings.of(her);
         boolean moved = false;
         List<FtbqApi.Handed> handed = new ArrayList<>();
         for (Task task : toHandIn) {

@@ -1,7 +1,7 @@
-package com.dwinovo.numen.plugins.ftbquests;
+package com.dwinovo.numen.entity;
 
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 
@@ -15,37 +15,58 @@ import java.util.Map;
  *
  * <p>只认"什么物品、几个"——耐久、附魔等组件不比。每刻都要记一次,所以就地覆盖两个数组,不分配。
  */
-final class Belongings {
+public final class Belongings {
 
     private final Item[] items;
     private final int[] counts;
     private int level;
     private int points;
 
-    Belongings(int slots) {
+    public Belongings(int slots) {
         items = new Item[slots];
         counts = new int[slots];
     }
 
-    void copyFrom(Player body) {
-        Inventory inv = body.getInventory();
-        for (int i = 0; i < items.length; i++) {
-            items[i] = inv.getItem(i).getItem();
-            counts[i] = inv.getItem(i).getCount();
-        }
+    /** 此刻的她。 */
+    public static Belongings of(Player body) {
+        Belongings now = new Belongings(body.getInventory().getContainerSize());
+        now.copyFrom(body);
+        return now;
+    }
+
+    public void copyFrom(Player body) {
+        copyItems(body.getInventory());
         level = body.experienceLevel;
         points = body.totalExperience;
     }
 
+    /** 只记物品那一半(经验不在容器里)。 */
+    void copyItems(Container inv) {
+        for (int i = 0; i < items.length; i++) {
+            items[i] = inv.getItem(i).getItem();
+            counts[i] = inv.getItem(i).getCount();
+        }
+    }
+
     /** 从记下的那一刻到现在的变化,形如 {@code +3 minecraft:diamond, -1 minecraft:apple; experience +100 points};没变是空串。 */
-    String changeTo(Player body) {
+    public String changeTo(Player body) {
+        String items = itemChange(body);
+        String xp = experienceChange(body);
+        return xp.isEmpty() ? items : items.isEmpty() ? xp : items + "; " + xp;
+    }
+
+    /** 背包(含穿戴与副手)里物品的增减,形如 {@code +3 minecraft:diamond, -1 minecraft:apple};没变是空串。 */
+    public String itemChange(Player body) {
+        return itemChange(body.getInventory());
+    }
+
+    String itemChange(Container now) {
         Map<Item, Integer> delta = new LinkedHashMap<>();
         for (int i = 0; i < items.length; i++) {
             delta.merge(items[i], -counts[i], Integer::sum);
         }
-        Inventory inv = body.getInventory();
         for (int i = 0; i < items.length; i++) {
-            delta.merge(inv.getItem(i).getItem(), inv.getItem(i).getCount(), Integer::sum);
+            delta.merge(now.getItem(i).getItem(), now.getItem(i).getCount(), Integer::sum);
         }
         List<String> parts = new ArrayList<>();
         delta.forEach((item, n) -> {
@@ -53,7 +74,11 @@ final class Belongings {
                 parts.add(signed(n) + " " + BuiltInRegistries.ITEM.getKey(item));
             }
         });
-        String text = String.join(", ", parts);
+        return String.join(", ", parts);
+    }
+
+    /** 经验的变化,形如 {@code experience +100 points, level 3 -> 4};没变是空串。 */
+    public String experienceChange(Player body) {
         List<String> xp = new ArrayList<>();
         if (body.totalExperience != points) {
             xp.add(signed(body.totalExperience - points) + " points");
@@ -61,10 +86,7 @@ final class Belongings {
         if (body.experienceLevel != level) {
             xp.add("level " + level + " -> " + body.experienceLevel);
         }
-        if (!xp.isEmpty()) {
-            text += (text.isEmpty() ? "" : "; ") + "experience " + String.join(", ", xp);
-        }
-        return text;
+        return xp.isEmpty() ? "" : "experience " + String.join(", ", xp);
     }
 
     private static String signed(int n) {
