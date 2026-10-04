@@ -2,7 +2,7 @@ package com.dwinovo.numen.core.task.move;
 
 import java.util.List;
 
-import com.dwinovo.numen.cli.Place;
+import com.dwinovo.numen.sdk.Place;
 import com.dwinovo.numen.core.nav.NavText;
 import com.dwinovo.numen.permission.Listing;
 
@@ -77,7 +77,7 @@ public final class GotoReminders {
         Cover nearest = covers.get(0);
         return sb.append(". Dig one of them open — the ").append(nearest.face()).append(" one is nearest me: ")
                 .append(call(nearest.at(), "arrive = \"dig\"")).append(", then `numen.work.dig(")
-                .append(Place.cell(nearest.at()).literal()).append(")` — then ").append(call(pos, "arrive = \"use\""))
+                .append(com.dwinovo.numen.sdk.LuaCodecs.literal(nearest.at())).append(")` — then ").append(call(pos, "arrive = \"use\""))
                 .append(" again.").toString();
     }
 

@@ -11,9 +11,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * {@code inv drop} on the player body — toss items forward, natively. One tick when the permission
@@ -90,13 +88,12 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
     @Override
     protected void cleanup() {}
 
+    /** 丢了几件、还剩几件:{@code numen.inv.drop} 交回的值。 */
+    public record Dropped(String item, int dropped, int remainingInInventory) {}
+
     @Override
-    protected Map<String, Object> resultData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("item", r.label);
-        data.put("dropped", dropped);
-        data.put("remaining_in_inventory", PlayerInv.count(player.getInventory(), r.item));
-        return data;
+    protected Dropped value() {
+        return new Dropped(r.label, dropped, PlayerInv.count(player.getInventory(), r.item));
     }
 
     @Override

@@ -23,8 +23,8 @@ public final class NumenKaleidoscope {
 
     /** 由 {@code Builtin} 在确认森罗在场后调用。 */
     public static void install(Path skillsRoot) {
-        NumenPlugins.register(KaleidoscopeCommands.NAMESPACE, numen -> {
-            KaleidoscopeCommands.install(numen);
+        NumenPlugins.register(KaleidoscopeApi.NAMESPACE, numen -> {
+            KaleidoscopeApi.install(numen);
 
             // kaleidoscope.pot 的每一步派下来的记录由谁来跑
             TaskFactory.register(PotActRecord.class, (player, record) -> new PotActTask(record));

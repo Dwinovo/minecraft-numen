@@ -1,9 +1,8 @@
 package com.dwinovo.numen.core.act;
 
-import com.dwinovo.numen.cli.Shapes;
+import com.dwinovo.numen.sdk.Doc;
+import com.dwinovo.numen.sdk.LuaCodecs;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerPlayer;
@@ -24,6 +23,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -57,18 +57,8 @@ public final class Drops {
     /** 原版掉落物判"着了地不在动"的水平速度平方上限({@code ItemEntity.tick})。 */
     private static final double STILL = 1.0E-5;
 
-    /** 去向。 */
-    public enum Fate {
-        LANDED("landed"), PICKED_UP("picked_up"), DESTROYED("destroyed"), VOID("void"), GONE("gone"),
-        MOVING("moving");
-
-        /** 数据里的写法。 */
-        public final String wire;
-
-        Fate(String wire) {
-            this.wire = wire;
-        }
-    }
+    /** 去向;数据里写成小写的名字。 */
+    public enum Fate { LANDED, PICKED_UP, DESTROYED, VOID, GONE, MOVING }
 
     /**
      * 一笔去向。
@@ -284,23 +274,25 @@ public final class Drops {
         OPEN.remove(her, this);
     }
 
-    /**
-     * 交给程序的那一份:一笔一项 {@code {item, count, fate, pos, by?, cause?, id?}}。
-     */
-    public JsonArray data() {
-        JsonArray out = new JsonArray();
-        for (Record r : records) {
-            JsonObject o = new JsonObject();
-            o.addProperty("item", r.item());
-            o.addProperty("count", r.count());
-            o.addProperty("fate", r.fate().wire);
-            o.add("pos", Shapes.pos(r.pos()));
-            if (r.by() != null) o.addProperty("by", r.by());
-            if (r.cause() != null) o.addProperty("cause", r.cause());
-            if (r.id() != null) o.addProperty("id", r.id());
-            out.add(o);
-        }
-        return out;
+    /** 交给程序的一笔去向。 */
+    @Doc("Where some of what a dig dropped went.")
+    public record Drop(@Doc("The item id, minecraft:cobblestone.") String item,
+                       @Doc("How many.") int count,
+                       @Doc("landed (lies on the ground), picked_up, destroyed (burned in lava or fire, broken on a "
+                               + "cactus …), void (fell out of the world), gone (taken by something that is no creature, "
+                               + "a hopper …) or moving (still falling or drifting when the dig stopped waiting).")
+                       Fate fate,
+                       @Doc("The cell it landed in, was destroyed or picked up in, or was in when the dig stopped "
+                               + "waiting.") BlockPos pos,
+                       @Doc("Who picked it up: you, a player's name, or a creature's type id.") Optional<String> by,
+                       @Doc("What destroyed it: the damage type id, minecraft:lava.") Optional<String> cause,
+                       @Doc("The entity id of the item still lying there (landed or moving), as numen.scan.entities "
+                               + "gives it.") Optional<Integer> id) {}
+
+    /** 交给程序的那一份:一笔一项。 */
+    public List<Drop> data() {
+        return records.stream().map(r -> new Drop(r.item(), r.count(), r.fate(), r.pos(), Optional.ofNullable(r.by()),
+                Optional.ofNullable(r.cause()), Optional.ofNullable(r.id()))).toList();
     }
 
     /**
@@ -366,7 +358,7 @@ public final class Drops {
                 if (shown.size() == 3) {
                     break;
                 }
-                shown.add(Shapes.literal(cell));
+                shown.add(LuaCodecs.literal(cell));
             }
             int more = cells.size() - shown.size();
             if (more > 0) {

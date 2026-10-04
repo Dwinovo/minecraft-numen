@@ -1,7 +1,6 @@
 package com.dwinovo.numen.plugins.kaleidoscope;
 
 import com.dwinovo.numen.agent.script.ErrorKind;
-import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.permission.Action;
@@ -11,6 +10,7 @@ import com.dwinovo.numen.permission.ConsentItem;
 import com.dwinovo.numen.permission.Gate;
 import com.dwinovo.numen.permission.Permission;
 import com.dwinovo.numen.permission.Verdict;
+import com.dwinovo.numen.sdk.Call;
 import com.dwinovo.numen.task.Preparation;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.task.TaskResult;
@@ -21,9 +21,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 在一格锅上做一步({@link PotAct})。
@@ -61,7 +61,7 @@ final class PotActTask implements Task {
 
     @Override
     public String name() {
-        return KaleidoscopeCommands.NAMESPACE + " " + KaleidoscopeCommands.GROUP + " " + r.act.word;
+        return r.getToolName();
     }
 
     /**
@@ -75,7 +75,7 @@ final class PotActTask implements Task {
                 return null;
             }
             TaskResult why = blocker(cook);
-            return why == null ? Preparation.Readiness.ready(null) : Preparation.Readiness.refused(why);
+            return why == null ? Preparation.Readiness.READY : Preparation.Readiness.refused(why);
         };
     }
 
@@ -103,9 +103,8 @@ final class PotActTask implements Task {
             // arrive = "use" 站到看得见、点得到锅的地方
             return TaskResult.fail(ErrorKind.OUT_OF_REACH, "the " + cooker.kind().id() + " at "
                     + Cooker.where(r.pos) + " is " + String.format("%.1f", away) + " blocks away — out of working "
-                    + "reach; walk there first, then call " + KaleidoscopeCommands.line(r.act.word) + " again",
-                    "numen.move.to(" + Shapes.literal(r.pos) + ", {arrive = \"use\"})",
-                    Map.of("pos", Shapes.pos(r.pos)));
+                    + "reach; walk there first, then call " + r.getToolName() + " again",
+                    Call.of("numen.move.to", r.pos, Map.of("arrive", "use")), Map.of("pos", r.pos));
         }
         return null;
     }
@@ -116,9 +115,8 @@ final class PotActTask implements Task {
         if (ordered == null) {
             String path = r.recipe.getPath();
             return TaskResult.fail(ErrorKind.NOT_FOUND, "no pot or stockpot recipe has id " + r.recipe
-                    + " — take the exact id from " + KaleidoscopeCommands.line(KaleidoscopeCommands.RECIPES)
-                    + ", do not guess it", KaleidoscopeCommands.line(KaleidoscopeCommands.RECIPES) + "(\""
-                    + cookware.id() + "\", {name = \"" + path.substring(path.lastIndexOf('/') + 1) + "\"})");
+                    + " — take the exact id from kaleidoscope.pot.recipes, do not guess it",
+                    Call.of("kaleidoscope.pot.recipes", cookware, Map.of("name", path.substring(path.lastIndexOf('/') + 1))));
         }
         if (ordered.cookware() != cookware) {
             return TaskResult.fail(ErrorKind.BAD_ARGUMENT, r.recipe + " is a " + ordered.cookware().id()
@@ -128,7 +126,7 @@ final class PotActTask implements Task {
         if (want == null) {
             return TaskResult.fail(ErrorKind.FAILED, r.recipe + " is a flex recipe and no mix that fits the pot's "
                     + "9 slots grades SUPERB on this world, so there is no ratio to cook to — "
-                    + KaleidoscopeCommands.line(KaleidoscopeCommands.RECIPES) + " says the same", null);
+                    + "kaleidoscope.pot.recipes says the same", null);
         }
         dish = ordered;
         portions = want;
@@ -237,11 +235,8 @@ final class PotActTask implements Task {
 
     @Override
     public TaskResult result(TaskState terminal) {
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("pos", Shapes.pos(r.pos));
-        if (!plated.isEmpty()) {
-            data.put("plated", Dish.idOf(plated.getItem()));
-        }
+        KaleidoscopeApi.Done data = new KaleidoscopeApi.Done(r.pos,
+                plated.isEmpty() ? Optional.empty() : Optional.of(Dish.idOf(plated.getItem())));
         String tail = allowance.isEmpty() ? "" : " " + allowance + ".";
         return switch (terminal) {
             case SUCCESS -> TaskResult.ok(outcome + tail, data);

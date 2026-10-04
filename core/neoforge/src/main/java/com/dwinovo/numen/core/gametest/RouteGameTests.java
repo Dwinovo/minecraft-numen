@@ -49,7 +49,7 @@ public class RouteGameTests {
 
     /** 整段程序返回的那个值(表)。 */
     private static JsonObject returned(ToolRun run) {
-        JsonElement value = dataIn(run.receipt()).get("returned");
+        JsonElement value = receiptData(run.receipt()).get("returned");
         return value != null && value.isJsonObject() ? value.getAsJsonObject() : new JsonObject();
     }
 
@@ -66,7 +66,7 @@ public class RouteGameTests {
     }
 
     /**
-     * 规划不动身体:关在木板屋里,描述许挖。计划列出要挖的木板,数据里没有一步步的路(读得到,不进回执);她一步没动,墙一块不少。
+     * 规划不动身体:关在木板屋里,描述许挖。计划列出要挖的木板,一步步的路读得到、不进回执;她一步没动,墙一块不少。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = BATCH)
     public static void planning_a_route_moves_nothing_and_lists_the_digs(GameTestHelper helper) {
@@ -87,8 +87,8 @@ public class RouteGameTests {
                             && leg.getAsJsonArray("breaks").toString().contains("oak_planks"),
                     "the plan does not list the planks it would break: " + p);
             helper.assertTrue(!leg.has("path"), "the path is printed with the plan: " + leg);
-            helper.assertTrue(plan.receipt().contains("walk") && plan.reply().contains("`numen.move.go(plan)` walks it"),
-                    "the path is not there to read, or the plan does not say what walks it: " + plan.receipt());
+            helper.assertTrue(plan.receipt().contains("printed:\\n") && plan.receipt().contains("\\twalk"),
+                    "the path is not there to read: " + plan.receipt());
             helper.assertTrue(companion.blockPosition().equals(start), "planning moved the body");
             helper.assertTrue(plankCount(helper, 7, 7) == planksBefore, "planning altered the wall");
             CompanionFactory.despawn(level.getServer(), companion);
@@ -491,7 +491,7 @@ public class RouteGameTests {
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(plan.done(), "route plan has not replied"))
                 .thenExecute(() -> {
-                    String id = dataIn(plan.receipt()).get("returned").getAsString();
+                    String id = receiptData(plan.receipt()).get("returned").getAsString();
                     walk[0] = lua(companion, "numen.move.go({id = \"" + id + "\"})");
                 })
                 .thenWaitUntil(() -> helper.assertTrue(walk[0].done(), "move go has not replied"))

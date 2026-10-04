@@ -2,7 +2,7 @@ package com.dwinovo.numen.task;
 
 /**
  * 受理之前的准备:这件活此刻真能开始吗。任务交出它({@link Task#prepare}),{@link TaskDispatch} 在服务端线程上每刻问一次
- * {@link #poll},直到给出结论——就绪才受理、才换进槽里、才回"已受理";不成就当场回错误结果,没有任务编号、没有
+ * {@link #poll},直到给出结论——就绪才受理、才换进槽里、才回活的编号;不成就当场回错误结果,没有任务编号、没有
  * {@code task_finished},她手上原来那件活一点不受影响。
  *
  * <p>判的顺序:参数的写法在处理函数里就判过了(写错当场提醒);这里判世界事实(东西在不在、身上有没有、够不够得着),再做
@@ -21,14 +21,8 @@ public interface Preparation {
     default void cancel() {
     }
 
-    /** 当场就能开始,没有要交代的事实。 */
-    Preparation READY = ready(null);
-
-    /** 当场就能开始;{@code facts} 接在受理回执后面,没有为 null。 */
-    static Preparation ready(String facts) {
-        Readiness readiness = Readiness.ready(facts);
-        return () -> readiness;
-    }
+    /** 当场就能开始。 */
+    Preparation READY = () -> Readiness.READY;
 
     /** 当场就知道开始不了:{@code why} 就是这次调用的错误结果(种类、那句话、下一步、数据)。 */
     static Preparation refused(TaskResult why) {
@@ -39,24 +33,19 @@ public interface Preparation {
     /**
      * 准备的结论。
      *
-     * @param ready   能开始
-     * @param words   能开始时要接在受理回执后面的事实;没有、或开始不了时为 null
      * @param refusal 开始不了时这次调用的错误结果;能开始时为 null
      */
-    record Readiness(boolean ready, String words, TaskResult refusal) {
+    record Readiness(TaskResult refusal) {
 
-        public Readiness {
-            if (ready == (refusal != null)) {
-                throw new IllegalArgumentException("ready, or refused with a result — exactly one");
-            }
-        }
-
-        public static Readiness ready(String facts) {
-            return new Readiness(true, facts, null);
-        }
+        /** 能开始。 */
+        public static final Readiness READY = new Readiness(null);
 
         public static Readiness refused(TaskResult why) {
-            return new Readiness(false, null, why);
+            return new Readiness(why);
+        }
+
+        public boolean ready() {
+            return refusal == null;
         }
     }
 }

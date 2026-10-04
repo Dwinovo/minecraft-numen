@@ -1,8 +1,8 @@
 package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.api.gear.GearSource;
-import com.dwinovo.numen.cli.CommandGroup;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.sdk.Codec;
 
 import java.nio.file.Path;
 import java.util.Map;
@@ -15,7 +15,7 @@ import java.util.function.Function;
  *
  * <pre>{@code
  * NumenPlugins.register("mymod", numen -> {
- *     numen.registerCommands("machine", "What your mod lets her do.", group -> { ... });
+ *     numen.api("machine", "What your mod lets her do.", MachineApi.class);
  *     numen.bundleSkills(myJarSkillsRoot());
  *     numen.on(CompanionEvent.SPAWN, body -> ...);
  * });
@@ -43,35 +43,40 @@ public interface NumenApi {
     <T> void on(CompanionEvent<T> event, Consumer<T> handler);
 
     /**
-     * 登记一组动作:她的 API 里的一张表 {@code <名字空间>.<组>.<动作>(...)}。名字空间由登记者给出——你在
-     * {@link NumenPlugins#register(String, NumenPlugin)} 时写的那个 id,引擎自己的是 {@code numen}——这里只写组名。模型只有一个工具——
-     * 跑一段脚本——脚本里每个 API 函数就是一个动作,所以加动作不加工具;系统提示里的 API 索引与每个函数的帮助都由这份登记生成。服务端的
-     * 动作在服务端执行,客户端的动作留在主人客户端。人(OP)也能经 {@code /numen drive} 写一行命令
-     * {@code <名字空间> <组> <动作> …} 调同一批动作。
+     * 登记一组 API 函数:她的程序里的一张表 {@code <名字空间>.<组>.<函数>(...)}。名字空间由登记者给出——你在
+     * {@link NumenPlugins#register(String, NumenPlugin)} 时写的那个 id,引擎自己的是 {@code numen}——这里只写组名。{@code functions}
+     * 里每个 {@link com.dwinovo.numen.sdk.Fn} 静态方法是一个函数,签名就是契约(见 {@code Fn}):第一个参数说在哪执行,参数 record 是它的
+     * 参数,返回类型说它怎么交回。系统提示里的 API 索引与每个函数的帮助都由这份登记生成。
      *
      * <pre>{@code
-     * numen.registerCommands("machine", "What your mod lets her do, in one sentence.", cmds -> {
-     *     cmds.server("status", "Read the machine she is looking at.", MyCommands::status)
-     *         .example("mymod.machine.status()");
-     *     cmds.server("start", "Start a machine by its id.", MyCommands::start, MACHINE_ID)
-     *         .example("mymod.machine.start(\"m1\")");
-     *     cmds.client("recipes", "List recipes in the owner's language.", MyCommands::recipes)
-     *         .example("mymod.machine.recipes()");
-     * });
+     * public final class MachineApi {
+     *     public record Start(@Doc("The machine's id.") String id) {}
+     *     public record Started(@Doc("Its id.") String id, @Doc("Its state now.") String state) {}
+     *
+     *     @Fn("Start a machine by its id.")
+     *     @Example("mymod.machine.start(\"m1\")")
+     *     public static Started start(ServerCall call, Start args) { ... }
+     * }
+     * numen.api("machine", "What your mod lets her do, in one sentence.", MachineApi.class);
      * }</pre>
      *
-     * <p>一个组名在名字空间里只能登记一次,你只能往自己名字空间的组里加动作——引擎自带的组和别的插件的组都够不着。每个动作选一侧执行:
-     * {@code server}(动身体、读世界)或 {@code client}(只有主人客户端才有的数据)。命令树在两侧都登记,所以
-     * <b>在 {@code NumenPlugins.register} 的块里直接调</b>,别放进 {@link #onClient}。动作默认以她自己的权威执行;包装你的模组管理指令
-     * 的服务端动作可以声明 {@code .authority(Authority.SERVER_ON_HER)},借服务器的权威、只对她执行(见
-     * {@link com.dwinovo.numen.cli.Authority})。
+     * <p>一个组名在名字空间里只能登记一次,你只能往自己名字空间的组里加函数——引擎自带的组和别的插件的组都够不着。登记在两侧都跑,所以
+     * <b>在 {@code NumenPlugins.register} 的块里直接调</b>,别放进 {@link #onClient}。只拦会破坏系统的(见
+     * {@link com.dwinovo.numen.sdk.Binder});写法上的问题看 {@link com.dwinovo.numen.sdk.ApiTester#lint} 的报告。
      *
-     * @param group   组名,小写英文:领域名词({@code maid}、{@code quest})
-     * @param summary 一句话说明,进系统提示里的命令索引和 {@code help}
-     * @param actions 往这一组里加动作;它返回后这一组就封口
-     * @throws IllegalArgumentException 组名已被占、名字不合规、动作或参数写错、例子读不通
+     * @param group     组名,小写英文:领域名词({@code maid}、{@code quest})
+     * @param summary   一句话说明,进系统提示里的 API 索引和帮助
+     * @param functions 写着这一组函数的类
+     * @throws IllegalArgumentException 组名已被占、名字写不出来、有函数绑定不了
      */
-    void registerCommands(String group, String summary, Consumer<CommandGroup> actions);
+    void api(String group, String summary, Class<?> functions);
+
+    /**
+     * 给你的一种类型登记它与脚本的值怎么互转,连同它在签名里写成什么。record、枚举、列表与 {@code Map<String, T>} 不用登记。
+     *
+     * @throws IllegalArgumentException 这个类型已经有了,或它声明的类名被占了
+     */
+    <T> void codec(Class<T> type, Codec<T> codec);
 
     /**
      * 把一个目录里的技能交给引擎。就地读,不复制:你的 jar 一卸载技能跟着消失。
@@ -85,13 +90,13 @@ public interface NumenApi {
      * 把一个目录里的 Lua 模块交给引擎:每个 {@code <组名><扩展名>} 是一个随模组发布的模块,用脚本语言写成(扩展名随语言,眼下是
      * {@code .lua}),模块名是你的名字空间加文件名({@code farm.lua} 是 {@code mymod.farm})。模块返回一张函数表
      * ({@code local M = {} … function M.harvest(field) … end … return M}),她的程序以模块名直接用({@code mymod.farm.harvest("wheat")},
-     * 第一次用到才装);和你的命令组同名的模块给那一组加函数,把几个原子动作组合成一件事。系统提示的 API 索引列出每个模块与它的函数,
+     * 第一次用到才装);和你的组同名的模块给那一组加函数,把几个原子函数组合成一件事。系统提示的 API 索引列出每个模块与它的函数,
      * 说明是开头那行注释与每个函数上面的几行注释;{@code numen.module.show(<名字>)} 读全文。
      *
-     * <p>登记那一刻把关:名字合模块名的规矩、读得通、开头一行注释说它做什么、每个函数上面都写了注释;装出来是一张表、不换掉任何命令组
-     * 的动作(登记处第一次被用时查)。两侧都登记,所以<b>在 {@code NumenPlugins.register} 的块里直接调</b>,别放进 {@link #onClient}。
+     * <p>登记那一刻只拦名字不合规矩、撞名、读不通;没写说明、装出来不是一张表这类写法问题在 {@code ApiTester.lint} 的报告里。两侧都
+     * 登记,所以<b>在 {@code NumenPlugins.register} 的块里直接调</b>,别放进 {@link #onClient}。
      *
-     * @throws IllegalArgumentException 名字不合规矩、已有同名的、正文读不通、开头没写说明、一个函数都没有或有函数没写注释
+     * @throws IllegalArgumentException 名字不合规矩、已有同名的、正文读不通
      */
     void bundleModules(Path modulesRoot);
 

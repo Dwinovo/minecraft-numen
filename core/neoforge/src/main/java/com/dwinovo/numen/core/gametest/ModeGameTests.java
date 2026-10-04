@@ -92,7 +92,7 @@ public class ModeGameTests {
         }
         var ctx = TaskDispatch.ctx("gametest-cbuild", companion);
         TaskDispatch.setTask(companion, buildJob(ctx.toolCallId(),
-                ctx.deadline(3600L), targets, false, false), reply -> {});
+                ctx.deadline(3600L), targets, false, false));
         succeedWhen(helper, () -> {
             for (BuildTaskRecord.Target t : targets) {
                 helper.assertTrue(level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),
@@ -117,18 +117,18 @@ public class ModeGameTests {
         var ctx = TaskDispatch.ctx("gametest-sbuild-broke", companion);
         // 盘料是受理之前的准备:料不齐,这次调用当场回错误,活不进槽、没有任务编号
         BuildTaskRecord record = buildJob(ctx.toolCallId(), ctx.deadline(3600L), targets, true, false);
-        java.util.concurrent.atomic.AtomicReference<String> replied = new java.util.concurrent.atomic.AtomicReference<>();
-        TaskDispatch.setTask(companion, record, replied::set);
+        java.util.concurrent.atomic.AtomicReference<com.dwinovo.numen.task.TaskResult> refused =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        boolean[] accepted = new boolean[1];
+        TaskDispatch.setTask(companion, record, null, refused::set, () -> accepted[0] = true);
         succeedWhen(helper, () -> {
-            String reply = replied.get();
-            helper.assertTrue(reply != null, "the build has not replied");
-            var result = com.google.gson.JsonParser.parseString(reply).getAsJsonObject();
-            helper.assertTrue(!result.get("success").getAsBoolean()
-                            && result.get("message").getAsString().contains("not enough materials"),
-                    "expected an itemized missing-materials refusal, got: " + reply);
-            helper.assertTrue(record.getResult() == null && !result.has("data")
+            com.dwinovo.numen.task.TaskResult result = refused.get();
+            helper.assertTrue(result != null || accepted[0], "the build has not replied");
+            helper.assertTrue(result != null && !result.success() && result.message().contains("not enough materials"),
+                    "expected an itemized missing-materials refusal, got: " + result);
+            helper.assertTrue(!accepted[0] && record.getResult() == null
                             && com.dwinovo.numen.task.CompanionTickDispatcher.currentTaskFor(companion.getUUID()) == null,
-                    "a build without materials was accepted instead of refused at once: " + reply);
+                    "a build without materials was accepted instead of refused at once: " + result);
             for (BuildTaskRecord.Target t : targets) {
                 helper.assertTrue(!level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),
                         "must not build anything without materials");
@@ -334,7 +334,7 @@ public class ModeGameTests {
                         + "return {mode = mode, dug = r.dug, drops = #r.drops}");
             }
             helper.assertTrue(runs[0].done(), "the creative dig has not finished");
-            com.google.gson.JsonObject creative = dataIn(runs[0].receipt()).getAsJsonObject("returned");
+            com.google.gson.JsonObject creative = receiptData(runs[0].receipt()).getAsJsonObject("returned");
             helper.assertTrue(creative.get("mode").getAsString().equals("creative")
                             && creative.get("dug").getAsInt() == 1 && creative.get("drops").getAsInt() == 0
                             && level.getBlockState(first).isAir(),
@@ -348,7 +348,7 @@ public class ModeGameTests {
                         + "return {mode = mode, dug = ok, why = ok and \"\" or err.message}");
             }
             helper.assertTrue(runs[1].done(), "the survival dig has not finished");
-            com.google.gson.JsonObject survival = dataIn(runs[1].receipt()).getAsJsonObject("returned");
+            com.google.gson.JsonObject survival = receiptData(runs[1].receipt()).getAsJsonObject("returned");
             helper.assertTrue(survival.get("mode").getAsString().equals("survival")
                             && !survival.get("dug").getAsBoolean()
                             && survival.get("why").getAsString().contains("my tools can't harvest")
@@ -365,7 +365,7 @@ public class ModeGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_conjure", new BlockPos(2, 2, 2), true);
         ToolRun reply = lua(companion, "numen.creative.give(\"minecraft:diamond\", {count = 100})");
         succeedWhen(helper, () -> {
-            helper.assertTrue(reply.reply() != null && reply.reply().contains("\"success\":true"),
+            helper.assertTrue(reply.succeeded(),
                     "creative give should succeed in creative, got: " + reply.reply());
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 100,
                     "expected 100 diamonds in inventory");
@@ -380,7 +380,7 @@ public class ModeGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_honest", new BlockPos(2, 2, 2), false);
         ToolRun reply = lua(companion, "numen.creative.give(\"minecraft:diamond\", {count = 10})");
         succeedWhen(helper, () -> {
-            helper.assertTrue(reply.reply() != null && reply.reply().contains("\"success\":false"),
+            helper.assertTrue(reply.refused(),
                     "creative give must refuse in survival, got: " + reply.reply());
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0,
                     "survival refusal must not add items");
@@ -401,7 +401,7 @@ public class ModeGameTests {
         }
         var ctx = TaskDispatch.ctx("gametest-sbuild", companion);
         TaskDispatch.setTask(companion, buildJob(ctx.toolCallId(),
-                ctx.deadline(3600L), targets, true, false), reply -> {});
+                ctx.deadline(3600L), targets, true, false));
         succeedWhen(helper, () -> {
             for (BuildTaskRecord.Target t : targets) {
                 helper.assertTrue(level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),

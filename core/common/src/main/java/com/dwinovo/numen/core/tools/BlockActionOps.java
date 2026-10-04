@@ -2,17 +2,16 @@ package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.script.ApiError;
 import com.dwinovo.numen.agent.script.ErrorKind;
-import com.dwinovo.numen.agent.tool.ToolArgs;
 import com.dwinovo.numen.area.Cells;
-import com.dwinovo.numen.cli.ServerSource;
-import com.dwinovo.numen.cli.Target;
+import com.dwinovo.numen.sdk.Call;
+import com.dwinovo.numen.sdk.ServerCall;
+import com.dwinovo.numen.sdk.Target;
 import com.dwinovo.numen.core.task.MouseButton;
 import com.dwinovo.numen.core.task.dig.DigCompanionTask;
 import com.dwinovo.numen.core.task.dig.DigTaskRecord;
 import com.dwinovo.numen.core.task.interact.InteractAtTaskRecord;
 import com.dwinovo.numen.core.task.interact.InteractEntityTaskRecord;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.Item;
@@ -28,10 +27,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Block-action implementations — the business half of {@code work dig} and of
- * {@code use block} / {@code use item} / {@code use entity} ({@code UseCommands}). Each method validates its
- * args and builds a {@link TaskRecord}, which takes its name, call id and deadline basis from the call's
- * {@link ServerSource}.
+ * 按键与挖的活:{@code numen.work.dig} 与 {@code numen.use.block/item/entity/hit} 各自认参数、造一件活,活的名字、调用 id 与期限的起点
+ * 取自那次调用({@link ServerCall})。
  */
 public final class BlockActionOps {
 
@@ -45,8 +42,8 @@ public final class BlockActionOps {
      *
      * @param targets 点名的几格
      */
-    public TaskRecord dig(ServerSource src, List<Target> targets, Integer count) {
-        NumenPlayer her = src.companion();
+    public static DigTaskRecord dig(ServerCall src, List<Target> targets, Integer count) {
+        NumenPlayer her = src.her();
         Level level = her.level();
         List<BlockPos> plain = new ArrayList<>();
         Map<BlockPos, BlockState> named = new LinkedHashMap<>();
@@ -58,7 +55,8 @@ public final class BlockActionOps {
             }
         }
         Cells cells = Cells.of(plain).union(Cells.seen(named, level.getGameTime()));
-        String what = targets.size() == 1 ? targets.get(0).written() : "the " + targets.size() + " given";
+        String what = targets.size() == 1 ? com.dwinovo.numen.sdk.LuaCodecs.literal(targets.get(0))
+                : "the " + targets.size() + " given";
         Set<Block> kinds = new LinkedHashSet<>();
         Set<Block> scannedKinds = new LinkedHashSet<>();
         cells.forEach((x, y, z, seen) -> {
@@ -74,7 +72,7 @@ public final class BlockActionOps {
         if (kinds.isEmpty()) {
             if (!scannedKinds.isEmpty()) {
                 throw new ApiError(ErrorKind.NOT_FOUND, "the blocks given are all gone or have changed since they were "
-                        + "seen, so I did not start", "numen.scan.blocks(" + ids(scannedKinds) + ")");
+                        + "seen, so I did not start", Call.of("numen.scan.blocks", ids(scannedKinds).toArray()));
             }
             throw new ApiError(ErrorKind.NOT_FOUND, "the " + cells.size() + " cell(s) given hold nothing to dig — air "
                     + "or fluid — so I did not start", null);
@@ -83,9 +81,9 @@ public final class BlockActionOps {
         return new DigTaskRecord(src, level.getGameTime(), cells, targets, kinds, until, labelFor(kinds), what);
     }
 
-    /** 方块 id,空格隔开。 */
-    private static String ids(Set<Block> blocks) {
-        return String.join(", ", blocks.stream().map(b -> "\"" + BuiltInRegistries.BLOCK.getKey(b) + "\"").toList());
+    /** 方块 id。 */
+    private static List<String> ids(Set<Block> blocks) {
+        return blocks.stream().map(b -> BuiltInRegistries.BLOCK.getKey(b).toString()).toList();
     }
 
     /** Short label for messages: the first target's path (e.g. "iron_ore"), "+N" if more. */
@@ -99,23 +97,21 @@ public final class BlockActionOps {
      * {@code use block}({@code aim} 是那一格)与 {@code use item}({@code aim} 为 null,朝她此刻面对的方向)。
      *
      * @param holdTicks 按住几刻;0 是按一下
-     * @param itemId    先拿到手上的物品;用手上的为 null
+     * @param item      先拿到手上的物品;用手上的为 null
      * @param sneak     按住潜行再点
      */
-    public TaskRecord interactAt(ServerSource source, MouseButton button, BlockPos aim, int holdTicks,
-                                 String itemId, boolean sneak) {
-        Item item = itemId == null ? null : ToolArgs.parseItem(itemId);
+    public static InteractAtTaskRecord interactAt(ServerCall source, MouseButton button, BlockPos aim, int holdTicks,
+                                                  Item item, boolean sneak) {
         String bodyBound = InteractAtTaskRecord.bodyBoundReason(item);
         if (bodyBound != null) {
-            throw new IllegalArgumentException(bodyBound);
+            throw new ApiError(ErrorKind.BAD_ARGUMENT, bodyBound, null);
         }
         return new InteractAtTaskRecord(source, button, aim, holdTicks, item, sneak);
     }
 
     /** {@code use entity}:参数同 {@link #interactAt},按的是那一只实体。 */
-    public TaskRecord interactEntity(ServerSource source, MouseButton button, int entityId, int holdTicks,
-                                     String itemId, boolean sneak) {
-        return new InteractEntityTaskRecord(source, button, entityId, holdTicks,
-                itemId == null ? null : ToolArgs.parseItem(itemId), sneak);
+    public static InteractEntityTaskRecord interactEntity(ServerCall source, MouseButton button, int entityId,
+                                                          int holdTicks, Item item, boolean sneak) {
+        return new InteractEntityTaskRecord(source, button, entityId, holdTicks, item, sneak);
     }
 }

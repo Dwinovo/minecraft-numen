@@ -23,8 +23,6 @@ import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeSource;
 import net.minecraft.world.level.biome.Climate;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.function.Predicate;
 
 /**
@@ -207,22 +205,10 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
     protected void cleanup() {}
 
     @Override
-    protected Map<String, Object> resultData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("biome", r.biome);
-        if (best != null) {
-            BlockPos me = player.blockPosition();
-            int dx = best.getX() - me.getX();
-            int dz = best.getZ() - me.getZ();
-            int dist = (int) Math.sqrt((double) dx * dx + (double) dz * dz);
-            data.put("found", true);
-            data.put("pos", java.util.Map.of("x", best.getX(), "z", best.getZ()));
-            data.put("direction", CompassUtil.compass(dx, dz));
-            data.put("horizontal_distance", dist);
-        } else {
-            data.put("found", false);
-        }
-        return data;
+    protected Located value() {
+        String dim = player.level().dimension().location().toString();
+        return best != null ? Located.at(best, player.blockPosition(), dim)
+                : Located.none(Math.min(ring, SEARCH_RADIUS_RINGS) * SAMPLE_STEP_BLOCKS, dim);
     }
 
     @Override
@@ -236,7 +222,7 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
             return "nearest " + r.biome + " around " + best.getX() + ","
                     + best.getY() + "," + best.getZ() + " (" + dir + ", ~" + dist
                     + " blocks; accurate to ~" + SAMPLE_STEP_BLOCKS + "). " + com.dwinovo.numen.core.nav.NavText.gotoCall(
-                    new com.dwinovo.numen.cli.Place(best.getX(), null, best.getZ()), "") + " goes there (it finds the height on its own), then confirm with "
+                    new com.dwinovo.numen.sdk.Place(best.getX(), null, best.getZ()), "") + " goes there (it finds the height on its own), then confirm with "
                     + "`numen.scan.blocks` or `numen.scan.entities`.";
         }
         String dim = player.level().dimension().location().getPath();

@@ -4,7 +4,6 @@ import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskState;
 
-import java.util.Map;
 
 /**
  * {@code time wait} on the body: stand where she is, hands off the keys, until the time is up. It holds the task slot
@@ -39,8 +38,8 @@ public final class WaitCompanionTask extends AbstractCompanionTask<WaitTaskRecor
     }
 
     @Override
-    protected Map<String, Object> resultData() {
-        return Map.of("waited", waited());
+    protected Double value() {
+        return waited();
     }
 
     /** No nav / overlay to release. */

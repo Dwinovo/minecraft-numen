@@ -34,9 +34,6 @@ public final class MaidCatalog {
 
     private MaidCatalog() {}
 
-    /** 一条目录项。 */
-    public record Entry(String id, String name, String pack) {}
-
     /**
      * {@code {some.lang.key}} → 翻好的名字。翻不出来就原样返回:吞掉信息比
      * 显示一个键更糟,至少键还看得出是哪个模型。
@@ -77,24 +74,21 @@ public final class MaidCatalog {
     }
 
     /** 全部条目,按包的顺序。 */
-    public static List<Entry> all() {
-        List<Entry> out = new ArrayList<>();
+    public static List<SkinApi.Model> all() {
+        List<SkinApi.Model> out = new ArrayList<>();
         for (CustomModelPack<MaidModelInfo> pack : Tlm.packs()) {
             String packName = display(pack.getPackName());
             for (MaidModelInfo info : pack.getModelList()) {
                 String id = info.getModelId().toString();
-                out.add(new Entry(id, display(info.getName()), packName));
+                out.add(new SkinApi.Model(id, display(info.getName()), packName));
             }
         }
         return out;
     }
 
-    /** 包级摘要里的一个包:包名、几个模型、举的几个名字。 */
-    public record Pack(String pack, int count, List<String> examples) {}
-
     /** 包级摘要,按包的顺序。不带关键词时给这个。 */
-    public static List<Pack> summary() {
-        List<Pack> out = new ArrayList<>();
+    public static List<SkinApi.Pack> summary() {
+        List<SkinApi.Pack> out = new ArrayList<>();
         for (CustomModelPack<MaidModelInfo> pack : Tlm.packs()) {
             List<MaidModelInfo> list = pack.getModelList();
             if (list.isEmpty()) continue;
@@ -102,16 +96,16 @@ public final class MaidCatalog {
             for (int i = 0; i < Math.min(SAMPLES, list.size()); i++) {
                 samples.add(display(list.get(i).getName()));
             }
-            out.add(new Pack(display(pack.getPackName()), list.size(), samples));
+            out.add(new SkinApi.Pack(display(pack.getPackName()), list.size(), samples));
         }
         return out;
     }
 
     /** 按关键词找,名字、id 与包名都匹配。 */
-    public static List<Entry> search(String query) {
+    public static List<SkinApi.Model> search(String query) {
         String q = query.toLowerCase(Locale.ROOT);
-        List<Entry> hits = new ArrayList<>();
-        for (Entry e : all()) {
+        List<SkinApi.Model> hits = new ArrayList<>();
+        for (SkinApi.Model e : all()) {
             boolean m = e.id().toLowerCase(Locale.ROOT).contains(q)
                     || (e.name() != null && e.name().toLowerCase(Locale.ROOT).contains(q))
                     || (e.pack() != null && e.pack().toLowerCase(Locale.ROOT).contains(q));

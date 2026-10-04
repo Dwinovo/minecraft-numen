@@ -21,14 +21,4 @@ public enum Cookware {
     public String id() {
         return id;
     }
-
-    /** 工具参数里的词 → 种类;认不出返回 null。 */
-    public static Cookware byId(String id) {
-        for (Cookware c : values()) {
-            if (c.id.equals(id)) {
-                return c;
-            }
-        }
-        return null;
-    }
 }

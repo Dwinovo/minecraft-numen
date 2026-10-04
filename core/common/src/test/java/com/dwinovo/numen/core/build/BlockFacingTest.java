@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.build;
 
-import com.dwinovo.numen.core.CoreCommandsFixture;
+import com.dwinovo.numen.core.CoreApiFixture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.EmptyBlockGetter;
@@ -25,7 +25,7 @@ class BlockFacingTest {
 
     @BeforeAll
     static void install() {
-        CoreCommandsFixture.install();
+        CoreApiFixture.install();
     }
 
     /** 这一格里 (x, y, z) 那一点是不是实心(方块自己的形状,0..1)。 */

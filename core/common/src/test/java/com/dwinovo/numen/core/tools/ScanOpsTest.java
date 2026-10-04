@@ -2,7 +2,7 @@ package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.core.scan.BlockGroups;
 import com.dwinovo.numen.core.scan.BlockSearch;
-import com.google.gson.JsonObject;
+import com.dwinovo.numen.sdk.BlockAt;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Blocks;
 import org.junit.jupiter.api.BeforeAll;
@@ -110,22 +110,18 @@ class ScanOpsTest {
         List<BlockGroups.Group> grouped = groups.grouped(center);
         assertEquals(2, grouped.size());
 
-        JsonObject small = ScanOps.clusterJson(grouped.get(0));
-        assertEquals(12, small.get("count").getAsInt());
-        assertEquals(12, small.getAsJsonArray("blocks").size());
-        JsonObject first = small.getAsJsonArray("blocks").get(0).getAsJsonObject();
-        assertEquals("minecraft:end_portal_frame", first.get("name").getAsString());
-        assertEquals(com.dwinovo.numen.cli.Shapes.pos(new BlockPos(4, 64, 4)), first.get("pos"), "近的在前,每格是 Block");
-        assertEquals("minecraft:end_portal_frame", small.getAsJsonObject("nearest").get("name").getAsString(),
+        ScanOps.Cluster small = ScanOps.cluster(grouped.get(0));
+        assertEquals(12, small.count());
+        assertEquals(12, small.blocks().size());
+        BlockAt first = small.blocks().get(0);
+        assertEquals("minecraft:end_portal_frame", first.name());
+        assertEquals(new BlockPos(4, 64, 4), first.pos(), "近的在前,每格是 Block");
+        assertEquals(new BlockAt("minecraft:end_portal_frame", new BlockPos(4, 64, 4)), small.nearest(),
                 "最近一格带着看到的方块与它的 pos,原样能交给 numen.work.dig");
-        assertEquals(com.dwinovo.numen.cli.Shapes.pos(new BlockPos(4, 64, 4)),
-                small.getAsJsonObject("nearest").get("pos"));
-        assertFalse(small.has("permission"), "看只是看:许不许是动手那一刻权限层的事");
 
-        JsonObject big = ScanOps.clusterJson(grouped.get(1));
-        assertEquals(200, big.get("count").getAsInt());
-        assertEquals(200, big.getAsJsonArray("blocks").size(), "大团也一格不少");
-        assertEquals(com.dwinovo.numen.cli.Shapes.pos(new BlockPos(-40, 70, 0)),
-                big.getAsJsonObject("nearest").get("pos"));
+        ScanOps.Cluster big = ScanOps.cluster(grouped.get(1));
+        assertEquals(200, big.count());
+        assertEquals(200, big.blocks().size(), "大团也一格不少");
+        assertEquals(new BlockPos(-40, 70, 0), big.nearest().pos());
     }
 }

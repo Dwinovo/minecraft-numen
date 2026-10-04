@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task.inventory;
 
-import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.sdk.ServerCall;
 import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.world.item.Item;
 
@@ -16,8 +16,8 @@ public final class DropItemsTaskRecord extends TaskRecord {
     public final int count;
     public final String label;
 
-    public DropItemsTaskRecord(ServerSource source, Item item, int count, String label) {
-        super(source, source.companion().level().getGameTime() + TIMEOUT_TICKS);
+    public DropItemsTaskRecord(ServerCall source, Item item, int count, String label) {
+        super(source, source.her().level().getGameTime() + TIMEOUT_TICKS);
         this.item = item;
         this.count = count;
         this.label = label;

@@ -15,7 +15,6 @@ import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.task.Preparation;
 import com.dwinovo.numen.task.TaskState;
 import net.minecraft.core.BlockPos;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
@@ -28,9 +27,7 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * {@code numen.work.fish}:站在原地用钓竿抛一竿——对准、抛竿、等咬钩、收线,钓上来就收工,回执说钓上来的是什么。它不走动:站的地方
@@ -114,8 +111,7 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
         }
         stance = here;
         target = water;
-        return Preparation.ready("I fish from where I stand, casting into the water at " + target.toShortString()
-                + ".");
+        return Preparation.READY;
     }
 
     /** 站的地方不干时说的那句话。 */
@@ -430,11 +426,10 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
         super.cleanup();
     }
 
+    /** 钓上来的,{@code minecraft:cod x1}:{@code numen.work.fish} 交回的值。 */
     @Override
-    protected Map<String, Object> resultData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("caught", List.copyOf(caught));
-        return data;
+    protected List<String> value() {
+        return List.copyOf(caught);
     }
 
     @Override

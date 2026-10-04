@@ -3,7 +3,10 @@ package com.dwinovo.numen.core.route;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.dwinovo.numen.agent.script.ScriptType;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.sdk.BadValue;
+import com.dwinovo.numen.sdk.Codec;
 
 /**
  * 她手里的计划:只在算出它们的那一段程序里有效。一段程序({@code lua} 工具的一次调用)里的每次 API 调用带着同一个前缀的调用 id
@@ -20,6 +23,36 @@ public final class Plans {
 
     public static Plans of(NumenPlayer her) {
         return her.state(Plans.class, Plans::new);
+    }
+
+    /**
+     * 点名一份计划:{@code numen.move.go} 收 {@code numen.route.plan} 交回的那张表,认的只是它的 {@code id}。
+     *
+     * @param id 这一段程序里计划的编号
+     */
+    public record Ref(String id) {
+
+        /** 带 {@code id} 的那张表读成它;写回去是 {@code {id = …}}。 */
+        public static final Codec<Ref> CODEC = new Codec<>() {
+            @Override
+            public ScriptType type() {
+                return new ScriptType.Named("Plan");
+            }
+
+            @Override
+            public Ref decode(Object value) {
+                if (value instanceof Map<?, ?> t && t.get("id") instanceof String id) {
+                    return new Ref(id);
+                }
+                throw new BadValue("expected the Plan numen.route.plan returned (it has an id); got "
+                        + BadValue.given(value));
+            }
+
+            @Override
+            public Object encode(Ref value) {
+                return Map.of("id", value.id);
+            }
+        };
     }
 
     /** 一次调用属于哪一段程序:调用 id 里 {@code #} 前面那一截;不是程序里的调用(一行命令)就是它自己。 */

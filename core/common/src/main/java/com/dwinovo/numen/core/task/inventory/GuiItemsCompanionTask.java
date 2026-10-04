@@ -13,8 +13,6 @@ import net.minecraft.world.inventory.ResultSlot;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * 在她打开的界面里按种类搬东西:一刻一步,和 {@code gui move}/{@code gui quick} 同一种搬法({@link ContainerOps}),整叠够数就
@@ -143,11 +141,10 @@ public final class GuiItemsCompanionTask extends AbstractCompanionTask<GuiItemsT
         return BuiltInRegistries.ITEM.getKey(r.item).getPath();
     }
 
+    /** 搬了几件:{@code numen.gui.put}、{@code numen.gui.take} 交回的值。 */
     @Override
-    protected Map<String, Object> resultData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("moved", moved);
-        return data;
+    protected Integer value() {
+        return moved;
     }
 
     /** No nav / overlay to release. */

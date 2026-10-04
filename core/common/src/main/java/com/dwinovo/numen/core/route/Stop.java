@@ -1,11 +1,14 @@
 package com.dwinovo.numen.core.route;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 import com.dwinovo.numen.agent.script.ScriptType;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
+import com.dwinovo.numen.sdk.BadValue;
+import com.dwinovo.numen.sdk.Codec;
 
 /**
  * 路线描述里的一站:去哪儿({@link Target})、怎样算到了({@link Arrive})、到了停不停(途经点可以路过)。最后一站是终点,总要停下。
@@ -43,24 +46,12 @@ public record Stop(Target to, Arrive arrive, int range, boolean through) {
         }
     }
 
-    /** 选项 {@code arrive} 能写的几个。 */
-    public static final String[] ARRIVE_WORDS = {"at", "near", "use", "dig", "place", "away"};
     /** {@code arrive = "near"} 不写 {@code range} 时停在几格内:3 格大致是"就在旁边"。 */
     public static final int DEFAULT_NEAR = 3;
     /** {@code arrive = "away"} 不写 {@code range} 时至少离开几格:8 格出了近战与苦力怕的引爆范围,也够看清它在干什么。 */
     public static final int DEFAULT_AWAY = 8;
     /** {@code range} 最多几格。 */
     public static final int MAX_RANGE = 64;
-
-    /** 一站在脚本里的样子({@code stops} 的一项)。 */
-    public static final ScriptType.Class CLASS = new ScriptType.Class("Stop",
-            "One stop on the way, before the destination.", null, java.util.List.of(
-                    ScriptType.field("to", Target.SCRIPT, "Where: the same kinds of place the destination takes."),
-                    ScriptType.optional("type", ScriptType.choice(java.util.List.of("through", "stop")),
-                            "through: pass it without stopping (the default); stop: come to rest there first."),
-                    ScriptType.optional("arrive", ScriptType.choice(java.util.List.of(ARRIVE_WORDS)),
-                            "What counts as there, as for the destination; default at."),
-                    ScriptType.optional("range", ScriptType.INTEGER, "With near or away, as for the destination.")));
 
     public Stop {
         if (to instanceof Target.Height && arrive != Arrive.AT) {
@@ -79,70 +70,103 @@ public record Stop(Target to, Arrive arrive, int range, boolean through) {
      *
      * @throws IllegalArgumentException 形状不成立
      */
-    public static Stop of(Target to, String arriveWord, Integer range, boolean through) {
-        Arrive arrive = arriveWord == null ? Arrive.AT : Arrive.valueOf(arriveWord.toUpperCase(Locale.ROOT));
-        if (range != null && arrive != Arrive.NEAR && arrive != Arrive.AWAY) {
+    public static Stop of(Target to, Arrive arrive, Integer range, boolean through) {
+        Arrive how = arrive == null ? Arrive.AT : arrive;
+        if (range != null && how != Arrive.NEAR && how != Arrive.AWAY) {
             throw new IllegalArgumentException("range = " + range + " only goes with arrive = \"near\" (stop within it) "
                     + "or arrive = \"away\" (get at least that far); without them arrival is exact");
         }
         if (range != null && (range < 1 || range > MAX_RANGE)) {
             throw new IllegalArgumentException("range must be 1 to " + MAX_RANGE + ", got " + range);
         }
-        int r = range != null ? range : arrive == Arrive.NEAR ? DEFAULT_NEAR : arrive == Arrive.AWAY ? DEFAULT_AWAY : 0;
-        return new Stop(to, arrive, r, through);
+        int r = range != null ? range : how == Arrive.NEAR ? DEFAULT_NEAR : how == Arrive.AWAY ? DEFAULT_AWAY : 0;
+        return new Stop(to, how, r, through);
     }
 
-    /**
-     * {@code stops} 的一项:{@code {to = …, type = "through"|"stop", arrive = …, range = …}}。
-     *
-     * @throws IllegalArgumentException 不是这个样子:缺 {@code to}、多了别的键、值写错
-     */
-    static Stop read(JsonElement value) {
-        if (value == null || !value.isJsonObject()) {
-            throw new IllegalArgumentException("each stop is a table {to = …, type = \"through\"|\"stop\", arrive = …, "
-                    + "range = …}");
-        }
-        JsonObject o = value.getAsJsonObject();
-        for (String key : o.keySet()) {
-            if (!Set.of("to", "type", "arrive", "range").contains(key)) {
-                throw new IllegalArgumentException("a stop takes to, type, arrive and range; '" + key + "' is not one "
-                        + "of them");
-            }
-        }
-        if (!o.has("to")) {
-            throw new IllegalArgumentException("a stop needs to = the place it goes through");
-        }
-        String type = o.has("type") ? o.get("type").getAsString() : "through";
-        if (!type.equals("through") && !type.equals("stop")) {
-            throw new IllegalArgumentException("a stop's type is \"through\" or \"stop\", got \"" + type + "\"");
-        }
-        String arrive = o.has("arrive") ? o.get("arrive").getAsString() : null;
-        if (arrive != null && !Set.of(ARRIVE_WORDS).contains(arrive)) {
-            throw new IllegalArgumentException("a stop's arrive is one of " + String.join(", ", ARRIVE_WORDS)
-                    + ", got \"" + arrive + "\"");
-        }
-        Integer range = null;
-        if (o.has("range")) {
-            JsonElement r = o.get("range");
-            if (!r.isJsonPrimitive() || !r.getAsJsonPrimitive().isNumber() || r.getAsDouble() != Math.rint(r.getAsDouble())) {
-                throw new IllegalArgumentException("a stop's range is a whole number of blocks, got " + r);
-            }
-            range = r.getAsInt();
-        }
-        return of(Target.read(o.get("to")), arrive, range, type.equals("through"));
-    }
+    /** 怎样算到了的那几个写法。 */
+    private static final List<String> ARRIVE_WORDS = java.util.Arrays.stream(Arrive.values()).map(Arrive::word).toList();
 
-    /** 写回脚本给的样子({@code stops} 的一项)。 */
-    JsonObject json() {
-        JsonObject o = new JsonObject();
-        o.add("to", to.json());
-        o.addProperty("type", through ? "through" : "stop");
-        o.addProperty("arrive", arrive.word());
-        if (arrive == Arrive.NEAR || arrive == Arrive.AWAY) {
-            o.addProperty("range", range);
+    /** 一站在脚本里的样子({@code stops} 的一项)。 */
+    private static final ScriptType.Class CLASS = new ScriptType.Class("Stop",
+            "One stop on the way, before the destination.", null, List.of(
+                    ScriptType.field("to", Target.CODEC.type(), "Where: the same kinds of place the destination takes."),
+                    ScriptType.optional("type", ScriptType.choice(List.of("through", "stop")),
+                            "through: pass it without stopping (the default); stop: come to rest there first."),
+                    ScriptType.optional("arrive", ScriptType.choice(ARRIVE_WORDS),
+                            "What counts as there, as for the destination; default at."),
+                    ScriptType.optional("range", ScriptType.INTEGER, "With near or away, as for the destination.")));
+
+    /** {@code stops} 的一项:{@code {to = …, type = "through"|"stop", arrive = …, range = …}};写回去是同一个样子。 */
+    public static final Codec<Stop> CODEC = new Codec<>() {
+        @Override
+        public ScriptType type() {
+            return new ScriptType.Named(CLASS.name());
         }
-        return o;
-    }
+
+        @Override
+        public List<ScriptType.Class> classes() {
+            return List.of(CLASS);
+        }
+
+        @Override
+        public Stop decode(Object value) {
+            if (!(value instanceof Map<?, ?> o)) {
+                throw new BadValue("each stop is a table {to = …, type = \"through\"|\"stop\", arrive = …, range = …}; "
+                        + "got " + BadValue.given(value));
+            }
+            for (Object key : o.keySet()) {
+                if (!Set.of("to", "type", "arrive", "range").contains(String.valueOf(key))) {
+                    throw new BadValue("a stop takes to, type, arrive and range; '" + key + "' is not one of them");
+                }
+            }
+            if (o.get("to") == null) {
+                throw new BadValue("a stop needs to = the place it goes through");
+            }
+            Object type = o.get("type") == null ? "through" : o.get("type");
+            if (!"through".equals(type) && !"stop".equals(type)) {
+                throw new BadValue("a stop's type is \"through\" or \"stop\"; got " + BadValue.given(type));
+            }
+            Arrive arrive = null;
+            if (o.get("arrive") != null) {
+                int at = ARRIVE_WORDS.indexOf(String.valueOf(o.get("arrive")));
+                if (!(o.get("arrive") instanceof String) || at < 0) {
+                    throw new BadValue("a stop's arrive is one of " + String.join(", ", ARRIVE_WORDS) + "; got "
+                            + BadValue.given(o.get("arrive")));
+                }
+                arrive = Arrive.values()[at];
+            }
+            Integer range = null;
+            if (o.get("range") != null) {
+                if (!(o.get("range") instanceof Long r)) {
+                    throw new BadValue("a stop's range is a whole number of blocks; got " + BadValue.given(o.get("range")));
+                }
+                range = r.intValue();
+            }
+            Target to;
+            try {
+                to = Target.CODEC.decode(o.get("to"));
+            } catch (BadValue bad) {
+                throw bad.in("the stop's to");
+            }
+            try {
+                return of(to, arrive, range, type.equals("through"));
+            } catch (IllegalArgumentException wrong) {
+                throw new BadValue(wrong.getMessage());
+            }
+        }
+
+        @Override
+        public Object encode(Stop value) {
+            Map<String, Object> o = new LinkedHashMap<>();
+            o.put("to", Target.CODEC.encode(value.to));
+            o.put("type", value.through ? "through" : "stop");
+            o.put("arrive", value.arrive.word());
+            if (value.arrive == Arrive.NEAR || value.arrive == Arrive.AWAY) {
+                o.put("range", (long) value.range);
+            }
+            return o;
+        }
+    };
 
     /** 给模型看的一截:那一处,不是 at 时接上怎样算到了。 */
     public String words() {

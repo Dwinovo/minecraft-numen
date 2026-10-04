@@ -49,13 +49,20 @@ class NumenPluginsTest {
                 "登记成恒急的,发送方没标也是急件");
     }
 
-    /** 一组登记不合规矩,登记那一刻就抛出,那句话说是哪个名字空间、哪一组、哪个动作:不记一行日志了事、让这一组悄悄缺席。 */
+    /** 一组绑定不了,登记那一刻就抛出,那句话说是哪个函数、哪一条:不记一行日志了事、让这一组悄悄缺席。 */
     @Test
-    void aGroupThatBreaksARuleFailsTheRegistrationNamingIt() {
+    void aGroupThatCannotBindFailsTheRegistrationNamingIt() {
         IllegalArgumentException broken = assertThrows(IllegalArgumentException.class, () ->
-                NumenPlugins.register("gt", numen -> numen.registerCommands("gt_broken", "Test fixture.", g ->
-                        g.server("act", "Does nothing.", (src, args) -> { }))));
-        assertTrue(broken.getMessage().contains("gt gt_broken act"), broken.getMessage());
+                NumenPlugins.register("gt", numen -> numen.api("gt_broken", "Test fixture.", Broken.class)));
+        assertTrue(broken.getMessage().contains("gt.gt_broken.act"), broken.getMessage());
+    }
+
+    /** 绑定不了的一组:函数的第一个参数不是调用。 */
+    public static final class Broken {
+
+        @com.dwinovo.numen.sdk.Fn("Does nothing.")
+        public static void act(String notACall) {
+        }
     }
 
     @Test

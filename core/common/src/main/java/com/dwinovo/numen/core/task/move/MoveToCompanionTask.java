@@ -1,15 +1,13 @@
 package com.dwinovo.numen.core.task.move;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
-import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.nav.BoatNav;
 import com.dwinovo.numen.core.nav.Feet;
 import com.dwinovo.numen.core.nav.NavText;
 import com.dwinovo.numen.core.nav.Trip;
+import com.dwinovo.numen.core.route.Description;
 import com.dwinovo.numen.core.route.Plan;
 import com.dwinovo.numen.core.route.Planning;
 import com.dwinovo.numen.core.route.RouteText;
@@ -114,8 +112,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 }
                 Blocked blocked = hold(fresh);
                 return blocked != null ? Preparation.Readiness.refused(TaskResult.fail(blocked.type().kind(),
-                        blocked.why(), blocked.hint(), resultData()))
-                        : Preparation.Readiness.ready("Planned again from here: " + RouteText.text(fresh));
+                        blocked.why(), blocked.hint(), value())) : Preparation.Readiness.READY;
             }
 
             @Override
@@ -319,19 +316,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
      */
     @Override
     protected String refusedHint(List<ConsentItem> refused) {
-        Map<String, Object> spec = new java.util.LinkedHashMap<>(promise.description().written());
-        List<Object> avoid = new java.util.ArrayList<>();
-        Object had = spec.get("avoid");
-        if (had instanceof List<?> list && !(list.size() == 2 && list.stream().allMatch(i -> i instanceof Map<?, ?> m
-                && !m.containsKey("cells")))) {
-            avoid.addAll(list);
-        } else if (had != null) {
-            // 一个盒子是一项,不拆成两格
-            avoid.add(had);
-        }
-        refused.forEach(item -> avoid.add(Shapes.value(item.pos())));
-        spec.put("avoid", avoid);
-        return "numen.move.go(numen.route.plan(" + com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.value(spec) + "))";
+        com.dwinovo.numen.core.route.Description d = promise.description();
+        Description.Places avoid = d.avoid().plus(refused.stream().map(ConsentItem::pos).toList());
+        return "numen.move.go(" + com.dwinovo.numen.sdk.Call.of("numen.route.plan", d.written().avoiding(avoid)) + ")";
     }
 
     /** "第 2 段(共 3 段)"的英文:只有一段就说这一趟。 */
@@ -379,13 +366,16 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         return Math.sqrt(player.distanceToSqr(Vec3.atBottomCenterOf(toward)));
     }
 
-    /** 走完(或停下)时她在哪(Pos,小数)、离终点还有多远。 */
+    /** {@code numen.move.go} 交回的值。 */
+    @com.dwinovo.numen.sdk.Doc("Where a walk ended.")
+    public record Walked(@com.dwinovo.numen.sdk.Doc("Where you stand now (decimals).") Vec3 pos,
+                        @com.dwinovo.numen.sdk.Doc("Blocks from the destination; 0 or so when there.")
+                        double distanceLeft) {}
+
+    /** 走完(或停下)时她在哪、离终点还有多远。 */
     @Override
-    protected Map<String, Object> resultData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("pos", Shapes.pos(player.position()));
-        data.put("distance_left", Math.round(repDistance() * 10.0) / 10.0);
-        return data;
+    protected Walked value() {
+        return new Walked(player.position(), Math.round(repDistance() * 10.0) / 10.0);
     }
 
     /** Success copy — always names the real position so the model learns the terrain. */
@@ -406,7 +396,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             case USE -> "standing at " + here(gy) + ", with " + used() + " in sight and in reach — use it from here";
             case DIG -> d.to() instanceof Target.Cell c
                     ? "standing at " + here(gy) + ", with the " + NavText.name(player.level().getBlockState(c.pos()))
-                            + " at " + Listing.coords(c.pos()) + " within reach — `numen.work.dig(" + Shapes.literal(c.pos())
+                            + " at " + Listing.coords(c.pos()) + " within reach — `numen.work.dig(" + com.dwinovo.numen.sdk.LuaCodecs.literal(c.pos())
                             + ")` digs it from here"
                     : "standing at " + here(gy) + ", within reach of " + where + " — `numen.work.dig` digs what is in reach "
                             + "from here";

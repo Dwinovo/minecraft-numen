@@ -29,7 +29,7 @@ public final class JsonValues {
         private final Map<String, Object> shown;
         private final Map<String, Object> folded;
 
-        Folded(Map<String, Object> shown, Map<String, Object> folded) {
+        public Folded(Map<String, Object> shown, Map<String, Object> folded) {
             this.shown = shown;
             this.folded = folded;
         }
@@ -42,6 +42,37 @@ public final class JsonValues {
         public java.util.Set<Entry<String, Object>> entrySet() {
             return shown.entrySet();
         }
+    }
+
+    /**
+     * 一个脚本的值写成 JSON,{@link #toJava} 读回来是同一个值:表是对象、列表是数组、nil 是 JSON null;{@link Folded} 收起来的字段放进
+     * {@link #FOLDED} 下。
+     *
+     * @throws IllegalArgumentException 不是脚本的值(Java 对象、函数)
+     */
+    public static JsonElement toJson(Object value) {
+        return switch (value) {
+            case null -> com.google.gson.JsonNull.INSTANCE;
+            case String s -> new JsonPrimitive(s);
+            case Boolean b -> new JsonPrimitive(b);
+            case Number n -> new JsonPrimitive(n);
+            case List<?> list -> {
+                JsonArray array = new JsonArray();
+                list.forEach(v -> array.add(toJson(v)));
+                yield array;
+            }
+            case Folded folded -> {
+                JsonObject o = (JsonObject) toJson(new LinkedHashMap<>(folded));
+                o.add(FOLDED, toJson(folded.folded()));
+                yield o;
+            }
+            case Map<?, ?> map -> {
+                JsonObject o = new JsonObject();
+                map.forEach((k, v) -> o.add(String.valueOf(k), toJson(v)));
+                yield o;
+            }
+            default -> throw new IllegalArgumentException("not a script value: " + value.getClass().getName());
+        };
     }
 
     public static Object toJava(JsonElement e) {

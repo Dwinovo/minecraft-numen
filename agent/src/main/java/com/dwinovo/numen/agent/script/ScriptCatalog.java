@@ -5,20 +5,25 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * 脚本里能调的:API 登记处的每个动作一个宿主函数 {@code 名字空间.组.动词}(第 ① 层,{@code numen.work.dig}),加上模块(用脚本语言写的
- * 库,按名字直接用:{@code my.lumber.chop(…)};和组同名的模块给那一组加函数)。目录由命令层现算交来(见 api 的
- * {@code NumenCli.scriptCatalog}),这里不另记一份动作表——脚本调一个函数,背后就是那一个动作。
+ * 脚本里能调的:API 登记处的每个函数一个宿主函数 {@code 名字空间.组.函数}(第 ① 层,{@code numen.work.dig}),加上模块(用脚本语言写的
+ * 库,按名字直接用:{@code my.lumber.chop(…)};和组同名的模块给那一组加函数)。目录由登记处现算交来(api 的 {@code ApiRegistry}),
+ * 这里不另记一份函数表。
  *
- * @param groups  组的全名({@code numen.work})→ 动词名 → 这个动词的函数怎么交回结果
+ * @param groups  组的全名({@code numen.work})→ 函数名 → 这个函数在脚本这一侧要知道的
  * @param modules 模块从哪来:用到时才问,所以每次运行读到的是此刻的正文
  * @param classes 声明了的类,按名字:返回值里哪些是带方法的值({@link ScriptType.Class#home})由它们说
  */
-public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource modules,
+public record ScriptCatalog(Map<String, Map<String, Function>> groups, ModuleSource modules,
                             Map<String, ScriptType.Class> classes) {
 
-    /** 没有声明任何类的目录。 */
-    public ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource modules) {
-        this(groups, modules, Map.of());
+    /** 一次调用怎么交回:当场的值、等了一会儿的值、占身体的活收尾才交回的值。登记时由函数的返回类型定。 */
+    public enum Kind {
+        /** 当场返回。 */
+        VALUE,
+        /** 等主人答复或下一刻才返回;不占任务槽。 */
+        PENDING,
+        /** 占身体、进任务槽:受理回执带活的编号,程序等它的 task_finished。 */
+        JOB
     }
 
     /** 模块从哪来。两个方法都可能在脚本的线程上被调。 */
@@ -45,27 +50,19 @@ public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource 
     }
 
     /**
-     * 一个动词的函数。
+     * 一个函数在脚本这一侧要知道的。
      *
-     * @param returns   动作登记时声明的回值:回执 {@code data} 里的这个键直接作函数的返回值(查询拿来就能循环);
-     *                  没声明是 null,成功返回回执数据、失败抛错
-     * @param options   它的选项名:写在最后的一张表,键全是这些名字时才是选项表,否则它是一个对象(一个 Pos、一只实体);
-     *                  不知道参数表的(只说返回项的那种)是 null,写在最后的名字表都当选项表
-     * @param positions 按顺序的对象最多几个;最后一个收一串的是 {@link Integer#MAX_VALUE}
-     * @param sample    它返回值的样子(按声明的返回类型现造,数都是 0、列表都是空的):只读不跑一段正文时,调用返回它,取字段的写法
-     *                  照样读得通;没有是 null
-     * @param type      它返回的值的类型(声明了返回项的,是那一项的类型);没声明是 null
+     * @param positions 按顺序的对象最多几个;最后一个收余下全部的是 {@link Integer#MAX_VALUE}
+     * @param options   选项表里能写的名字:写在最后的一张表,键全是这些名字时才是选项表,否则它是一个对象(一个 Pos、一只实体)
+     * @param kind      它怎么交回
+     * @param returns   它返回的值的类型
+     * @param sample    它返回值的样子(按返回类型现造,数都是 0、列表里一项):只读不跑一段正文时,调用返回它,取字段的写法照样读得通
      */
-    public record Verb(String returns, java.util.Set<String> options, int positions, Object sample,
-                       ScriptType type) {
+    public record Function(int positions, java.util.Set<String> options, Kind kind, ScriptType returns,
+                           Object sample) {
 
-        public Verb {
-            options = options == null ? null : java.util.Set.copyOf(options);
-        }
-
-        /** 只说返回项的那种(不知道参数表):写在最后的名字表都是选项表。 */
-        public Verb(String returns) {
-            this(returns, null, Integer.MAX_VALUE, null, null);
+        public Function {
+            options = java.util.Set.copyOf(options);
         }
 
         /**
@@ -73,24 +70,21 @@ public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource 
          * 的,读参数那一处会说是哪个。别的(一个 Pos、一个方块、一只实体)是一个对象。
          */
         public boolean optionsTable(java.util.Map<?, ?> table, int objectsBefore) {
-            if (options == null) {
-                return true;
-            }
             return table.isEmpty() || objectsBefore >= positions
                     || table.keySet().stream().allMatch(k -> options.contains(String.valueOf(k)));
         }
     }
 
     public ScriptCatalog {
-        TreeMap<String, Map<String, Verb>> copy = new TreeMap<>();
-        groups.forEach((group, verbs) -> copy.put(group, Collections.unmodifiableMap(new TreeMap<>(verbs))));
+        TreeMap<String, Map<String, Function>> copy = new TreeMap<>();
+        groups.forEach((group, functions) -> copy.put(group, Collections.unmodifiableMap(new TreeMap<>(functions))));
         groups = Collections.unmodifiableMap(copy);
         classes = Map.copyOf(classes);
     }
 
     /**
      * 一个返回值按它的类型标出带方法的值:类型里遇到方法写在模块里的类({@link ScriptType.Class#home}),那一处的值包成
-     * {@code wrap.apply(类, 值)};列表与表照类型往里走。认不出的值(类型与值对不上)原样留着。
+     * {@code wrap.apply(类, 值)};列表与表照类型往里走。
      */
     public Object mark(Object value, ScriptType type, java.util.function.BiFunction<ScriptType.Class, Object, Object> wrap) {
         if (value == null || type == null) {
@@ -112,6 +106,7 @@ public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource 
             }
             case ScriptType.ListOf l -> value instanceof java.util.List<?> list
                     ? list.stream().map(v -> mark(v, l.item(), wrap)).toList() : value;
+            case ScriptType.MapOf m -> value instanceof Map<?, ?> map ? values(map, m.value(), wrap) : value;
             case ScriptType.Table t -> value instanceof Map<?, ?> map ? fields(map, t.fields(), wrap) : value;
             case ScriptType.Union u -> {
                 for (ScriptType option : u.options()) {
@@ -149,6 +144,13 @@ public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource 
         return map instanceof JsonValues.Folded f ? new JsonValues.Folded(out, fields(f.folded(), fields, wrap)) : out;
     }
 
+    private Map<String, Object> values(Map<?, ?> map, ScriptType value,
+                                       java.util.function.BiFunction<ScriptType.Class, Object, Object> wrap) {
+        Map<String, Object> out = new java.util.LinkedHashMap<>();
+        map.forEach((k, v) -> out.put(String.valueOf(k), mark(v, value, wrap)));
+        return out;
+    }
+
     /** 几种之一里这一种对不对得上这个值:列表对列表,表对表(类的必有字段都在),字符串、数、布尔对各自的。 */
     private boolean fits(Object value, ScriptType type) {
         return switch (type) {
@@ -161,6 +163,7 @@ public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource 
                         .allMatch(f -> f.optional() || map.containsKey(f.name())));
             }
             case ScriptType.ListOf l -> value instanceof java.util.List<?>;
+            case ScriptType.MapOf m -> value instanceof Map<?, ?>;
             case ScriptType.Table t -> value instanceof Map<?, ?>;
             case ScriptType.Union u -> u.options().stream().anyMatch(o -> fits(value, o));
             case ScriptType.Choice c -> value instanceof String;
@@ -173,9 +176,9 @@ public record ScriptCatalog(Map<String, Map<String, Verb>> groups, ModuleSource 
         };
     }
 
-    /** 这个动词;没有是 null。 */
-    public Verb verb(String group, String verb) {
-        Map<String, Verb> verbs = groups.get(group);
-        return verbs == null ? null : verbs.get(verb);
+    /** 这个函数;没有是 null。 */
+    public Function function(String group, String name) {
+        Map<String, Function> functions = groups.get(group);
+        return functions == null ? null : functions.get(name);
     }
 }

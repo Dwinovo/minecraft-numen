@@ -2,6 +2,9 @@ package com.dwinovo.numen.agent.tool;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.inbox.EventQueue;
+import com.dwinovo.numen.agent.llm.ToolOutcome;
+import com.dwinovo.numen.agent.script.ApiReply;
+import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.agent.script.Invocation;
 import com.dwinovo.numen.agent.script.ScriptCatalog;
 import com.dwinovo.numen.agent.script.ScriptRun;
@@ -10,13 +13,11 @@ import com.dwinovo.numen.agent.loop.SerialCalls;
 import com.dwinovo.numen.agent.loop.ToolPort;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.api.CompanionEvent;
-import com.dwinovo.numen.cli.ScriptTool;
-import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.entity.CompanionEvents;
 import com.dwinovo.numen.event.NumenEvents;
 import com.dwinovo.numen.script.Modules;
-import com.dwinovo.numen.task.TaskDispatch;
-import com.dwinovo.numen.task.TaskResult;
+import com.dwinovo.numen.sdk.ApiRegistry;
+import com.dwinovo.numen.sdk.Dispatcher;
 
 import java.util.List;
 import java.util.UUID;
@@ -27,10 +28,9 @@ import java.util.function.Supplier;
  * 一只同伴的工具口:循环内核把模型一次回复里的调用交给它,它逐个执行、把结果报回。主人客户端的派发器与评测大脑都用这一份。
  *
  * <p>顺序与等待——一次一个、脚本里留下身体活的等它收尾再往下走、等的时候来了急件怎么办、脚本怎么逐条派——是
- * {@link SerialCalls} 的;身体活的受理回执与 task_finished 按 {@link TaskDispatch#runningTaskOf}、{@link NumenEvents#finishOf}
- * 认,和写它们的地方挨着。这里只管一个调用怎么执行:模型的调用按名字取工具({@link #invoke});脚本里的一次 API 调用交给登记处
- * ({@link #dispatch}),客户端动作当场执行,服务端动作送去服务端({@link ServerToolTransport})。结果之后从任何线程经
- * {@link ToolCall#complete} 回来;脚本里的调用怎么读成动作、能调哪些函数问登记处({@link NumenCli})。
+ * {@link SerialCalls} 的;task_finished 按 {@link NumenEvents#finishOf} 认,和写它的地方挨着。这里只管一个调用怎么执行:模型的调用
+ * 按名字取工具({@link #invoke});脚本里的一次 API 调用交给派发({@link Dispatcher}),客户端函数当场执行,服务端函数送去服务端
+ * ({@link ServerToolTransport})。结果之后从任何线程经 {@link ToolCall#complete} 回来。
  */
 public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
 
@@ -41,6 +41,8 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
 
     /** 在飞的那一个的回报口,供 {@link #failInFlight} 用;没有在飞的是 null。 */
     private Consumer<String> inFlightDone;
+    /** 在飞的那一个是脚本里的一次 API 调用(它的结果是 {@link ApiReply} 的样子),不是一个工具。 */
+    private boolean inFlightLine;
 
     public CompanionToolPort(UUID companion, Supplier<? extends ToolAnchor> anchor) {
         this.companion = companion;
@@ -100,7 +102,8 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
     /** 在飞的那一个就此以一条失败结算,{@code why} 是给模型的原因;没有在飞的什么都不做。 */
     public void failInFlight(String why) {
         if (inFlightDone != null) {
-            inFlightDone.accept(TaskResult.fail(why).toJson());
+            inFlightDone.accept(inFlightLine ? ApiReply.error(ErrorKind.FAILED, why, null, null).toString()
+                    : ToolOutcome.failure(why));
         }
     }
 
@@ -114,16 +117,12 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
     @Override
     public void dispatch(LlmToolCall call, Invocation invocation, Consumer<String> done) {
         Consumer<String> landed = landing(call, done);
-        ToolCall handle = new ToolCall(call.id(), NumenCli.pathOf(invocation), invocation.args().toString(),
+        inFlightLine = true;
+        ToolCall handle = new ToolCall(call.id(), invocation.function(), invocation.args().toString(),
                 anchor.get(), landed);
         Constants.LOG.info("[numen-dispatch#{}] call {} id={} args={}", companion, call.name(), call.id(),
                 truncate(call.arguments()));
-        NumenCli.call(invocation, handle);
-    }
-
-    @Override
-    public String leftRunning(String resultJson) {
-        return TaskDispatch.runningTaskOf(resultJson);
+        Dispatcher.call(invocation, handle);
     }
 
     @Override
@@ -133,12 +132,12 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
 
     @Override
     public ScriptCatalog catalog() {
-        return NumenCli.scriptCatalog(Modules.of(companion));
+        return ApiRegistry.catalog(Modules.of(companion));
     }
 
     @Override
     public Invocation invocation(ScriptRun.Call call) {
-        return NumenCli.invocation(call);
+        return Dispatcher.invocation(call);
     }
 
     @Override
@@ -160,10 +159,11 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
         if (tool == null) {
             Constants.LOG.warn("[numen-dispatch#{}] LLM called unknown tool '{}' (id={})",
                     companion, call.name(), call.id());
-            done.accept(TaskResult.fail("unknown tool: " + call.name()).toJson());
+            done.accept(ToolOutcome.failure("unknown tool: " + call.name()));
             return;
         }
         Consumer<String> landed = landing(call, done);
+        inFlightLine = false;
         // 带规范名(tool.name())而不是 LLM 写的那个:大小写宽松只在 resolve 这一步,
         // 服务端工具经 ServerToolTransport 原样带名字过去,那边按注册名严格查。
         ToolCall handle = new ToolCall(call.id(), tool.name(), call.arguments(), anchor.get(), landed);
@@ -174,7 +174,7 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
         } catch (RuntimeException ex) {
             Constants.LOG.warn("[numen-dispatch#{}] tool {} threw (id={}): {}",
                     companion, call.name(), call.id(), ex.getMessage());
-            landed.accept(TaskResult.fail(ex.getMessage()).toJson());
+            landed.accept(ToolOutcome.failure(ex.getMessage()));
         }
     }
 

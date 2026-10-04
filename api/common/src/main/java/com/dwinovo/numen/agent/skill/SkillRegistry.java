@@ -321,7 +321,7 @@ public final class SkillRegistry {
 
         StringBuilder sb = new StringBuilder(256);
         sb.append("Skills provide specialized instructions and workflows for specific tasks.\n");
-        sb.append("Use the ").append(com.dwinovo.numen.cli.SkillTool.NAME)
+        sb.append("Use the ").append(com.dwinovo.numen.agent.tool.SkillTool.NAME)
                 .append(" tool to load a skill when a task matches its description.\n");
         sb.append("<available_skills>\n");
         for (SkillInfo s : described) {

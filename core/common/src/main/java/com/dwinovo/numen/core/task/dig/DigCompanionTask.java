@@ -3,7 +3,6 @@ package com.dwinovo.numen.core.task.dig;
 import com.dwinovo.numen.task.TaskResult;
 import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.area.Cells;
-import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.core.act.BlockDigger;
@@ -17,7 +16,6 @@ import com.dwinovo.numen.pathing.body.Snapshots;
 import com.dwinovo.numen.pathing.drive.LiveWorld;
 import com.dwinovo.numen.pathing.search.Goal;
 import com.dwinovo.numen.pathing.search.Goals;
-import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.permission.Listing;
 import com.dwinovo.numen.permission.Verdict;
@@ -30,11 +28,9 @@ import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -121,12 +117,11 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
     protected Preparation preparation() {
         quote();
         if (next() != null) {
-            return Preparation.ready(inReach() + " cell(s) of " + r.what + " are within my reach where I stand"
-                    + outOfReach(false) + ".");
+            return Preparation.READY;
         }
         BlockPos near = nearestBeyond();
         return Preparation.refused(TaskResult.fail(nothingHereKind(), nothingHere(true), near == null ? null
-                : DigTaskRecord.reachLine(r.named, near), resultData()));
+                : DigTaskRecord.reachLine(r.named, near), value()));
     }
 
     /** 手边没有可挖的那一刻是哪一类失败:被不许挖的挡着、目标本身不许挖是 denied,工具不对、挖不成是 failed,其余是够不着。 */
@@ -401,11 +396,6 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
 
     // ---- 回执 ----
 
-    /** 此刻手够得着的要挖的格数。 */
-    private int inReach() {
-        return wantedInReach(Feet.of(player)).size();
-    }
-
     /**
      * 够不着的那一截(以 {@code "; "} 起头):还剩几格够不着、最近一格在哪、能照抄的下一步;都够得着是空串。
      *
@@ -514,18 +504,23 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
         }
     }
 
+    /** {@code numen.work.dig} 交回的值。 */
+    @com.dwinovo.numen.sdk.Doc("What a dig did.")
+    public record Dug(@com.dwinovo.numen.sdk.Doc("Cells it dug.") int dug,
+                      @com.dwinovo.numen.sdk.Doc("Cells of what you gave still to dig.") int left,
+                      @com.dwinovo.numen.sdk.Doc("Of those, how many your hand does not reach from where you stand.")
+                      int outOfReach,
+                      @com.dwinovo.numen.sdk.Doc("The nearest of those out of reach.") java.util.Optional<BlockPos> nearest,
+                      @com.dwinovo.numen.sdk.Doc("Where what it dug dropped went.") List<Drops.Drop> drops) {}
+
     /**
-     * 挖了几格、点名的里还剩几格要挖、其中几格站在这儿够不着、够不着里最近的那一格(Pos,没有就不给)、掉落物各去了哪
-     * ({@link Drops#data},和回执那一句同一份记录)。
+     * 挖了几格、点名的里还剩几格要挖、其中几格站在这儿够不着、够不着里最近的那一格、掉落物各去了哪({@link Drops#data},和回执那一句
+     * 同一份记录)。
      */
     @Override
-    protected Map<String, Object> resultData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("dug", dug.size());
-        data.put("drops", drops == null ? new com.google.gson.JsonArray() : drops.data());
+    protected Dug value() {
         Feet here = Feet.of(player);
         List<BlockPos> left = wanted();
-        data.put("left", left.size());
         BlockPos near = null;
         int beyond = 0;
         for (BlockPos cell : left) {
@@ -536,11 +531,8 @@ public final class DigCompanionTask extends AbstractCompanionTask<DigTaskRecord>
                 }
             }
         }
-        data.put("out_of_reach", beyond);
-        if (near != null) {
-            data.put("nearest", Shapes.pos(near));
-        }
-        return data;
+        return new Dug(dug.size(), left.size(), beyond, java.util.Optional.ofNullable(near),
+                drops == null ? List.of() : drops.data());
     }
 
     /** 收工:挖了几格;手边还能挖却因为 {@code count} 停下的说一句;够不着的在哪、怎么去;掉落物各去了哪。 */

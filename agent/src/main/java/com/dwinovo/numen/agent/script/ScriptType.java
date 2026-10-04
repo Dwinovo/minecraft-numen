@@ -25,6 +25,9 @@ public sealed interface ScriptType {
     /** 一串同一种的值。 */
     record ListOf(ScriptType item) implements ScriptType {}
 
+    /** 名字到同一种值的表({@code table<string, T>}):键不固定的,如方块状态。 */
+    record MapOf(ScriptType value) implements ScriptType {}
+
     /** 几种之一。 */
     record Union(List<ScriptType> options) implements ScriptType {}
 
@@ -109,6 +112,7 @@ public sealed interface ScriptType {
                 Object item = sample(l.item(), classes);
                 yield item == null ? java.util.List.of() : java.util.List.of(item);
             }
+            case MapOf m -> new java.util.LinkedHashMap<String, Object>();
             case Union u -> sample(u.options().get(0), classes);
             case Choice c -> c.values().get(0);
             case Table t -> {
@@ -125,6 +129,10 @@ public sealed interface ScriptType {
 
     static ScriptType listOf(ScriptType item) {
         return new ListOf(item);
+    }
+
+    static ScriptType mapOf(ScriptType value) {
+        return new MapOf(value);
     }
 
     static ScriptType union(ScriptType... options) {

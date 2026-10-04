@@ -23,9 +23,6 @@ import java.util.Map;
  */
 final class BuildBill {
 
-    /** 一句话概览里点名几种,其余只报个数——完整清单在 data 里,那才是拿去采集的。 */
-    private static final int NAMED_IN_HEADLINE = 5;
-
     private BuildBill() {}
 
     /** 这些格要花的料,每种几件。{@code skip} 里的格另有料单,不进普通清单,否则同一面旗帜会被索要两次。 */
@@ -40,46 +37,18 @@ final class BuildBill {
         return cost;
     }
 
-    static int sum(Map<Item, Integer> m) {
-        int n = 0;
-        for (int v : m.values()) {
-            n += v;
-        }
-        return n;
-    }
-
     /**
-     * 按数量降序<b>列全</b>——这张单子是拿去采集的,截断了就没法用。全量列出来几 KB,而这是她<b>建之前主动调、只调一次</b>的
-     * 查询,正是该花这点 token 的地方;真正该截断的是施工中途不请自来、反复出现的缺料回执。
+     * 每种几件,按数量降序<b>列全</b>——这张单子是拿去采集的,截断了就没法用。全量列出来几 KB,而这是她<b>建之前主动调、只调一次</b>
+     * 的查询,正是该花这点 token 的地方;真正该截断的是施工中途不请自来、反复出现的缺料回执。
      */
-    static Map<String, Object> summarize(Map<Item, Integer> counts) {
+    static Map<String, Integer> items(Map<Item, Integer> counts) {
         List<Map.Entry<Item, Integer>> sorted = new ArrayList<>(counts.entrySet());
         sorted.sort(Map.Entry.<Item, Integer>comparingByValue().reversed());
-        Map<String, Object> out = new LinkedHashMap<>();
         Map<String, Integer> all = new LinkedHashMap<>();
         for (var e : sorted) {
             all.put(label(e.getKey()), e.getValue());
         }
-        out.put("items", all);
-        out.put("total_items", sum(counts));
-        out.put("total_kinds", counts.size());
-        return out;
-    }
-
-    /** 数量最多的几种,一行。 */
-    static String topLine(Map<Item, Integer> counts) {
-        if (counts.isEmpty()) {
-            return "no materials";
-        }
-        List<Map.Entry<Item, Integer>> sorted = new ArrayList<>(counts.entrySet());
-        sorted.sort(Map.Entry.<Item, Integer>comparingByValue().reversed());
-        List<String> parts = new ArrayList<>();
-        int listed = Math.min(NAMED_IN_HEADLINE, sorted.size());
-        for (int i = 0; i < listed; i++) {
-            parts.add(label(sorted.get(i).getKey()) + " x" + sorted.get(i).getValue());
-        }
-        String head = String.join(", ", parts);
-        return sorted.size() > listed ? head + " and " + (sorted.size() - listed) + " more kinds" : head;
+        return all;
     }
 
     /**

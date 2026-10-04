@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task.inventory;
 
-import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.sdk.ServerCall;
 import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.world.item.Item;
 
@@ -19,8 +19,8 @@ public final class UnequipTaskRecord extends TaskRecord {
     /** Human-readable label for messages / debug overlay:槽名或物品名。 */
     public final String label;
 
-    public UnequipTaskRecord(ServerSource source, String slot, Item item, String label) {
-        super(source, source.companion().level().getGameTime() + EquipTaskRecord.TIMEOUT_TICKS);
+    public UnequipTaskRecord(ServerCall source, String slot, Item item, String label) {
+        super(source, source.her().level().getGameTime() + EquipTaskRecord.TIMEOUT_TICKS);
         this.slot = slot;
         this.item = item;
         this.label = label;

@@ -1,11 +1,8 @@
 package com.dwinovo.numen.plugins.ftbquests;
 
+import com.dwinovo.numen.agent.script.ApiError;
 import com.dwinovo.numen.agent.script.ErrorKind;
-import com.dwinovo.numen.cli.CommandArgs;
-import com.dwinovo.numen.cli.Listing;
-import com.dwinovo.numen.task.TaskResult;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
+import com.dwinovo.numen.sdk.Call;
 import dev.ftb.mods.ftbquests.quest.BaseQuestFile;
 import dev.ftb.mods.ftbquests.quest.Quest;
 import dev.ftb.mods.ftbquests.quest.QuestObjectBase;
@@ -22,10 +19,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
- * 一本任务书在一个队伍眼里的样子:{@code list} 与 {@code show} 给她看的文字,与同样这些事实的数据。
+ * 一本任务书在一个队伍眼里的样子:{@code list} 与 {@code show} 交回的值。
  *
  * <p>读的是主人客户端上的那本({@link ClientBook} 交进来):标题、描述要按主人的语言解析,只有客户端做得到;
  * 进度是主人所在队伍的。这里只认 {@link BaseQuestFile} 与 {@link TeamData},不碰任何客户端类——
@@ -68,60 +66,38 @@ final class QuestBook {
                 .toList();
     }
 
-    /**
-     * {@code list}:能做的任务一行一个,头上说这是谁的书,末尾是钉住的、待领的与怎么看详情;数据是同样这些
-     * ({@link FtbqCommands} 里 list 声明的那张表)。
-     */
-    TaskResult list(CommandArgs args) {
-        List<Quest> quests = workable();
-        List<String> rows = new ArrayList<>();
-        JsonArray listed = new JsonArray();
-        for (Quest quest : quests) {
-            JsonObject o = row(quest);
-            listed.add(o);
-            rows.add("  " + rowText(o));
+    /** {@code list}:能做的任务,这是谁的书、钉住的、待领的。 */
+    FtbqApi.Book list() {
+        List<FtbqApi.Workable> listed = new ArrayList<>();
+        for (Quest quest : workable()) {
+            listed.add(row(quest));
         }
-        String head = whose() + "\n" + (quests.isEmpty()
-                ? "Nothing to work on right now: every quest in the book is done or still waiting on others."
-                : "Quests you can work on now (" + quests.size() + "):");
-        JsonArray pinnedQuests = pinnedQuests();
-        long unclaimed = unclaimed();
-        String foot = pinnedLine(pinnedQuests) + "\n"
-                + "Completed quests with rewards your owner has not claimed yet: " + unclaimed + ".\n"
-                + FtbqCommands.SHOW + "(<quest id or title>) shows one quest in full.";
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("team", team.getName());
-        data.put("in_team", herInTeam);
-        data.put("quests", listed);
-        data.put("pinned", pinnedQuests);
-        data.put("unclaimed", unclaimed);
-        return new Listing(head, rows, foot).result(args, data);
+        return new FtbqApi.Book(team.getName(), herInTeam, listed, pinnedQuests(), unclaimed());
     }
 
     /** {@code show}:按编号或标题找一个书里找得到的任务,把它摊开。 */
-    TaskResult show(String asked) {
+    FtbqApi.Quest show(String asked) {
         String wanted = asked.strip();
         List<Quest> found = named(wanted);
         if (found.isEmpty()) {
-            return TaskResult.fail(ErrorKind.NOT_FOUND, "No quest in your owner's book has the id or title \""
-                    + wanted + "\"; " + FtbqCommands.LIST + " shows the ones you can work on.",
-                    FtbqCommands.LIST + "()");
+            throw new ApiError(ErrorKind.NOT_FOUND, "No quest in your owner's book has the id or title \""
+                    + wanted + "\"; ftbquests.quest.list shows the ones you can work on.",
+                    Call.of("ftbquests.quest.list"));
         }
         if (found.size() > 1) {
             List<String> which = new ArrayList<>();
-            JsonArray candidates = new JsonArray();
+            List<Map<String, Object>> candidates = new ArrayList<>();
             for (Quest quest : found) {
                 which.add(quest.getCodeString() + " (chapter " + text(quest.getChapter().getTitle()) + ")");
-                JsonObject o = new JsonObject();
-                o.addProperty("id", quest.getCodeString());
-                o.addProperty("chapter", text(quest.getChapter().getTitle()));
+                Map<String, Object> o = new LinkedHashMap<>();
+                o.put("id", quest.getCodeString());
+                o.put("chapter", text(quest.getChapter().getTitle()));
                 candidates.add(o);
             }
-            return TaskResult.fail(ErrorKind.BAD_ARGUMENT, "Several quests are titled \"" + wanted + "\": "
+            throw new ApiError(ErrorKind.BAD_ARGUMENT, "Several quests are titled \"" + wanted + "\": "
                     + String.join(", ", which) + ". Name one by its id.", null, Map.of("candidates", candidates));
         }
-        JsonObject data = new JsonObject();
-        return TaskResult.ok(detail(found.get(0), data), data);
+        return detail(found.get(0));
     }
 
     /** 编号认 FTB 的十六进制编号;不是编号的按标题整句比(不分大小写)。只在书里找得到的任务里找。 */
@@ -137,128 +113,54 @@ final class QuestBook {
                 .toList();
     }
 
-    /** 一个任务摊开的那段话;同样这些事实写进 {@code data}(show 声明的那张表)。 */
-    private String detail(Quest quest, JsonObject data) {
-        data.addProperty("id", quest.getCodeString());
-        data.addProperty("title", text(quest.getTitle()));
-        data.addProperty("chapter", text(quest.getChapter().getTitle()));
-        data.addProperty("team", team.getName());
-        data.addProperty("in_team", herInTeam);
-        StringBuilder sb = new StringBuilder(quest.getCodeString()).append(" · ").append(text(quest.getTitle()))
-                .append(" · chapter ").append(text(quest.getChapter().getTitle()));
-        sb.append('\n').append(whose());
+    /** 一个任务摊开:书把详情藏到能开始的,只给到前置任务为止。 */
+    private FtbqApi.Quest detail(Quest quest) {
         String subtitle = parsed(quest, quest.getRawSubtitle());
-        if (!subtitle.isBlank()) {
-            sb.append("\nSubtitle: ").append(subtitle);
-            data.addProperty("subtitle", subtitle);
-        }
         boolean canStart = team.canStartTasks(quest);
-        if (team.isCompleted(quest)) {
-            sb.append("\nStatus: completed");
-            data.addProperty("status", "completed");
-        } else if (canStart) {
-            sb.append("\nStatus: can be worked on now");
-            data.addProperty("status", "workable");
-        } else {
-            String reason = text(team.getCannotStartReason(quest));
-            sb.append("\nStatus: cannot start yet (").append(reason).append(")");
-            data.addProperty("status", "cannot_start");
-            data.addProperty("cannot_start", reason);
-        }
-        JsonArray dependencies = new JsonArray();
+        FtbqApi.Status status = team.isCompleted(quest) ? FtbqApi.Status.COMPLETED
+                : canStart ? FtbqApi.Status.WORKABLE : FtbqApi.Status.CANNOT_START;
+        Optional<String> cannotStart = status == FtbqApi.Status.CANNOT_START
+                ? Optional.of(text(team.getCannotStartReason(quest))) : Optional.empty();
+        List<FtbqApi.Dependency> dependencies = new ArrayList<>();
         if (quest.hasDependencies()) {
-            List<String> deps = new ArrayList<>();
-            quest.streamDependencies().forEach(dep -> {
-                boolean done = team.isCompleted(dep);
-                deps.add(text(dep.getTitle()) + " (" + dep.getCodeString() + ", "
-                        + (done ? "completed" : "not completed") + ")");
-                JsonObject o = new JsonObject();
-                o.addProperty("id", dep.getCodeString());
-                o.addProperty("title", text(dep.getTitle()));
-                o.addProperty("completed", done);
-                dependencies.add(o);
-            });
-            sb.append("\nDepends on: ").append(String.join("; ", deps));
+            quest.streamDependencies().forEach(dep -> dependencies.add(new FtbqApi.Dependency(dep.getCodeString(),
+                    text(dep.getTitle()), team.isCompleted(dep))));
         }
-        data.add("dependencies", dependencies);
-        if (!canStart && quest.hideDetailsUntilStartable()) {
-            return sb.append("\nThe book keeps the rest of this quest hidden until it can be started.").toString();
-        }
-        sb.append('\n').append(description(quest, data));
+        boolean hidden = !canStart && quest.hideDetailsUntilStartable();
+        List<FtbqApi.QuestTask> tasks = new ArrayList<>();
         List<Task> shown = shownTasks(quest);
-        sb.append(shown.isEmpty() ? "\nTasks: none." : "\nTasks:");
-        JsonArray tasks = new JsonArray();
-        for (Task task : shown) {
-            JsonObject o = task(task);
-            tasks.add(o);
-            sb.append("\n  ").append(text(task.getTitle()))
-                    .append(" — ").append(team.isCompleted(task) ? "done" : progress(task))
-                    .append(" — ").append(TaskRole.of(task).label());
-        }
-        data.add("tasks", tasks);
-        if (shown.size() < quest.getTasks().size()) {
-            int more = quest.getTasks().size() - shown.size();
-            sb.append("\n  (").append(more).append(" more show up one at a time: this quest's tasks go in order)");
-            data.addProperty("more_tasks", more);
-        }
-        List<String> rewardLines = new ArrayList<>();
-        JsonArray rewards = new JsonArray();
+        shown.forEach(task -> tasks.add(task(task)));
+        int more = quest.getTasks().size() - shown.size();
+        List<FtbqApi.Reward> rewards = new ArrayList<>();
         for (Reward reward : quest.getRewards()) {
             if (!team.isRewardBlocked(reward) && reward.getAutoClaimType() != RewardAutoClaim.INVISIBLE) {
-                rewardLines.add(reward(reward, rewards));
+                rewards.add(reward(reward));
             }
         }
-        data.add("rewards", rewards);
-        if (!rewardLines.isEmpty()) {
-            sb.append("\nRewards:");
-            for (String line : rewardLines) {
-                sb.append("\n  ").append(line);
-            }
-        }
-        return sb.toString();
+        return new FtbqApi.Quest(quest.getCodeString(), text(quest.getTitle()), text(quest.getChapter().getTitle()),
+                team.getName(), herInTeam, subtitle.isBlank() ? Optional.empty() : Optional.of(subtitle), status,
+                cannotStart, dependencies, hidden ? Optional.empty() : description(quest),
+                hidden ? Optional.empty() : Optional.of(tasks),
+                hidden || more <= 0 ? Optional.empty() : Optional.of(more),
+                hidden ? Optional.empty() : Optional.of(rewards));
     }
 
     /** 列表的一项:编号、标题、章节、钉没钉住、还差的每个条件。 */
-    private JsonObject row(Quest quest) {
-        JsonObject o = new JsonObject();
-        o.addProperty("id", quest.getCodeString());
-        o.addProperty("title", text(quest.getTitle()));
-        o.addProperty("chapter", text(quest.getChapter().getTitle()));
-        o.addProperty("pinned", pinned.contains(quest.id));
-        JsonArray left = new JsonArray();
+    private FtbqApi.Workable row(Quest quest) {
+        List<FtbqApi.QuestTask> left = new ArrayList<>();
         for (Task task : shownTasks(quest)) {
             if (!team.isCompleted(task)) {
                 left.add(task(task));
             }
         }
-        o.add("left", left);
-        return o;
-    }
-
-    /** 列表的一行,从 {@link #row} 那一项写:编号 · 标题 · 章节 · 还差的每个条件(进度,谁来完成)。 */
-    private static String rowText(JsonObject row) {
-        List<String> left = new ArrayList<>();
-        for (var element : row.getAsJsonArray("left")) {
-            JsonObject t = element.getAsJsonObject();
-            left.add(t.get("title").getAsString() + " " + (t.has("progress") ? t.get("progress").getAsString()
-                    : "not done") + " (" + TaskRole.valueOf(t.get("role").getAsString().toUpperCase(Locale.ROOT))
-                    .label() + ")");
-        }
-        String text = row.get("id").getAsString() + " · " + row.get("title").getAsString() + " · "
-                + row.get("chapter").getAsString() + " · " + String.join("; ", left);
-        return row.get("pinned").getAsBoolean() ? text + " [pinned]" : text;
+        return new FtbqApi.Workable(quest.getCodeString(), text(quest.getTitle()), text(quest.getChapter().getTitle()),
+                pinned.contains(quest.id), left);
     }
 
     /** 一个条件:标题、做完没有、进度(只有"做没做"两态的没有)、谁来完成。 */
-    private JsonObject task(Task task) {
-        JsonObject o = new JsonObject();
-        o.addProperty("title", text(task.getTitle()));
-        o.addProperty("done", team.isCompleted(task));
-        if (!task.hideProgressNumbers()) {
-            o.addProperty("progress", progress(task));
-        }
-        o.addProperty("role", TaskRole.of(task).word());
-        return o;
+    private FtbqApi.QuestTask task(Task task) {
+        return new FtbqApi.QuestTask(text(task.getTitle()), team.isCompleted(task),
+                task.hideProgressNumbers() ? Optional.empty() : Optional.of(progress(task)), TaskRole.of(task));
     }
 
     /** 任务书界面露出来的条件:依次完成的任务只露到第一个没完成的(含),其余全露。 */
@@ -286,14 +188,14 @@ final class QuestBook {
     }
 
     /**
-     * 正文:跳过分页记号与空行,连成一段,整段给出——她点名要看的就是这一个任务,正文里常有怎么做的说明;长度随这一个
-     * 任务的定义有界。设了"完成前隐藏正文"的照做,数据里就没有 {@code description}。
+     * 正文:跳过分页记号与空行,连成一段,整段给出——她点名要看的就是这一个任务,正文里常有怎么做的说明;长度随这一个任务的定义有界。
+     * 设了"完成前隐藏正文"的照做,没有正文。
      */
-    private String description(Quest quest, JsonObject data) {
+    private Optional<String> description(Quest quest) {
         boolean hidden = quest.getHideTextUntilComplete().get(quest.getChapter().isHideTextUntilComplete())
                 && !team.isCompleted(quest);
         if (hidden) {
-            return "Description: hidden in the book until the quest is completed.";
+            return Optional.empty();
         }
         List<String> kept = new ArrayList<>();
         for (String raw : quest.getRawDescription()) {
@@ -302,66 +204,30 @@ final class QuestBook {
                 kept.add(line);
             }
         }
-        String text = String.join(" ", kept);
-        data.addProperty("description", text);
-        return kept.isEmpty() ? "Description: none." : "Description: " + text;
+        return Optional.of(String.join(" ", kept));
     }
 
-    /** 一个奖励:个人还是队伍的、自动领还是要在书里点、领了没有;数据加进 {@code into}。 */
-    private String reward(Reward reward, JsonArray into) {
+    /** 一个奖励:个人还是队伍的、自动领还是要在书里点、领了没有。 */
+    private FtbqApi.Reward reward(Reward reward) {
         boolean auto = reward.getAutoClaimType() != RewardAutoClaim.DISABLED;
-        JsonObject o = new JsonObject();
-        o.addProperty("title", text(reward.getTitle()));
-        o.addProperty("team", reward.isTeamReward());
-        o.addProperty("auto", auto);
-        String claimed;
         if (reward.isTeamReward()) {
-            boolean teamClaimed = team.isRewardClaimed(owner, reward);
-            o.addProperty("claimed", teamClaimed);
-            claimed = teamClaimed ? "the team has claimed it" : "not claimed yet";
-        } else {
-            boolean you = team.isRewardClaimed(her, reward);
-            boolean yours = team.isRewardClaimed(owner, reward);
-            o.addProperty("you_claimed", you);
-            o.addProperty("owner_claimed", yours);
-            claimed = "you: " + (you ? "claimed" : "not claimed")
-                    + ", your owner: " + (yours ? "claimed" : "not claimed");
+            return new FtbqApi.Reward(text(reward.getTitle()), true, auto,
+                    Optional.of(team.isRewardClaimed(owner, reward)), Optional.empty(), Optional.empty());
         }
-        into.add(o);
-        return text(reward.getTitle()) + " — " + (reward.isTeamReward() ? "team" : "personal") + ", "
-                + (auto ? "claimed automatically" : "claimed by hand in the book") + " — " + claimed;
-    }
-
-    /** 这是谁的书:队伍名;她不在这个队伍里时先说清她做的不算。 */
-    private String whose() {
-        String line = "Your owner's quest book, team \"" + team.getName() + "\".";
-        return herInTeam ? line + " You are in this team."
-                : line + " You are NOT in this team, so what you do does not count toward these quests.";
+        return new FtbqApi.Reward(text(reward.getTitle()), false, auto, Optional.empty(),
+                Optional.of(team.isRewardClaimed(her, reward)), Optional.of(team.isRewardClaimed(owner, reward)));
     }
 
     /** 主人钉住的任务:编号与标题。 */
-    private JsonArray pinnedQuests() {
-        JsonArray out = new JsonArray();
+    private List<FtbqApi.QuestRef> pinnedQuests() {
+        List<FtbqApi.QuestRef> out = new ArrayList<>();
         pinned.forEach((long id) -> {
             Quest quest = file.getQuest(id);
             if (quest != null) {
-                JsonObject o = new JsonObject();
-                o.addProperty("id", quest.getCodeString());
-                o.addProperty("title", text(quest.getTitle()));
-                out.add(o);
+                out.add(new FtbqApi.QuestRef(quest.getCodeString(), text(quest.getTitle())));
             }
         });
         return out;
-    }
-
-    private static String pinnedLine(JsonArray pinnedQuests) {
-        List<String> titles = new ArrayList<>();
-        for (var element : pinnedQuests) {
-            JsonObject o = element.getAsJsonObject();
-            titles.add(o.get("title").getAsString() + " (" + o.get("id").getAsString() + ")");
-        }
-        return titles.isEmpty() ? "Pinned by your owner: none."
-                : "Pinned by your owner: " + String.join(", ", titles) + ".";
     }
 
     /** 完成了、主人还有奖励没领的任务有几个。 */

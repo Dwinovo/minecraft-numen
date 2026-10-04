@@ -4,7 +4,6 @@ import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskRecord;
-import java.util.List;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
@@ -207,10 +206,10 @@ public class MovementGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_seated", new BlockPos(7, 2, 4), true);
         helper.runAfterDelay(2, () -> {
             companion.startRiding(boat, true);
-            TaskRecord press = lua(companion, "numen.use.entity(" + boat.getId() + ")").task();
+            lua(companion, "numen.use.entity(" + boat.getId() + ")");
         });
         helper.runAfterDelay(30, () -> {
-            TaskRecord dig = lua(companion, "numen.use.hit(" + xyz(stone) + ")").task();
+            lua(companion, "numen.use.hit(" + xyz(stone) + ")");
         });
 
         succeedWhen(helper, () -> {
@@ -323,8 +322,8 @@ public class MovementGameTests {
     }
 
     /**
-     * 重启后接不回来的活不许让调度 tick 抛出去:存下的参数重放时已经不成立(dig 点名的那块铁矿已经不在了,
-     * 工具当场拒收),新身体照样起来,她收到一条 task_finished 说清这件活没接回来,记录清掉。
+     * 重启后接不回来的活不许让调度 tick 抛出去:记下的那一行 Lua 再跑时已经不成立(dig 点名的那块铁矿已经不在了,
+     * 函数当场失败),新身体照样起来,她收到一条 task_finished 说清这件活没接回来,记录清掉。
      */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_terrain")
     public static void a_restored_task_whose_args_no_longer_hold_is_reported(GameTestHelper helper) {
@@ -337,19 +336,19 @@ public class MovementGameTests {
         com.dwinovo.numen.entity.Companions.dormant(server, first);
         var registry = com.dwinovo.numen.entity.CompanionRegistry.get(server);
         BlockPos gone = helper.absolutePos(new BlockPos(8, 2, 6));
-        registry.put(uuid, registry.find(uuid).doing("work_dig", "work_dig",
-                "{\"blocks\":[{\"name\":\"minecraft:iron_ore\",\"pos\":{\"x\":" + gone.getX() + ",\"y\":" + gone.getY()
-                        + ",\"z\":" + gone.getZ() + "}}],\"count\":1}"));
+        registry.put(uuid, registry.find(uuid).doing("numen.work.dig", "numen.work.dig({name = \"minecraft:iron_ore\", "
+                + "pos = " + xyz(gone) + "}, {count = 1})"));
         NumenPlayer second = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
         helper.assertTrue(second != null, "the body was not rebuilt");
         StringBuilder told = new StringBuilder();
         succeedWhen(helper, () -> {
-            helper.assertTrue(registry.find(uuid).taskTool().isBlank(), "the task that cannot be replayed is still on record");
+            helper.assertTrue(registry.find(uuid).taskName().isBlank(), "the task that cannot be replayed is still on record");
             for (var entry : com.dwinovo.numen.entity.EventOutbox.get(server).peek(uuid)
                     .takeEntries(System.currentTimeMillis())) {
                 told.append(entry.text());
             }
-            helper.assertTrue(told.toString().contains("task_finished") && told.toString().contains("没能接回来"),
+            helper.assertTrue(told.toString().contains("task_finished")
+                            && told.toString().contains("could not be resumed after the restart"),
                     "she was not told the task could not be restored: " + told);
             com.dwinovo.numen.entity.Companions.dismiss(server, second);
         });
@@ -644,7 +643,7 @@ public class MovementGameTests {
     }
 
     /**
-     * 跟着一只点名的实体,重启后接回来认的还是那一只:落盘的重放那一行写的是它的 UUID,不是只在这一次开服里有效的
+     * 跟着一只点名的实体,重启后接回来认的还是那一只:落盘的那一行 Lua 写的是它的 UUID,不是只在这一次开服里有效的
      * 运行期编号(重启后同一个号会发给别的东西)。重启用"休眠 + 把落盘的那条记录放回去 + 复活"来演。
      */
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_terrain")
@@ -670,12 +669,11 @@ public class MovementGameTests {
                 .thenExecute(() -> {
                     helper.assertTrue(follow.task() != null, "follow was not accepted: " + follow.reply());
                     var recorded = registry.find(uuid);
-                    helper.assertTrue(recorded.taskArgs().contains("move follow " + pig.getUUID())
-                                    && !recorded.taskArgs().contains("move follow " + pig.getId() + " "),
-                            "the replay recipe names the pig by its runtime id, not its UUID: " + recorded.taskArgs());
+                    helper.assertTrue(recorded.taskLua().equals("numen.move.follow(\"" + pig.getUUID()
+                                    + "\", {distance = 3})"),
+                            "the replayed line does not name the pig by its UUID: " + recorded.taskLua());
                     com.dwinovo.numen.entity.Companions.dormant(server, first);
-                    registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskTool(),
-                            recorded.taskArgs()));
+                    registry.put(uuid, registry.find(uuid).doing(recorded.taskName(), recorded.taskLua()));
                     second[0] = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
                     helper.assertTrue(second[0] != null, "the body was not rebuilt");
                 })
@@ -700,8 +698,9 @@ public class MovementGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(follow.done(), "follow has not replied");
-            helper.assertTrue(!follow.succeeded() && follow.outcome().contains("no entity with id 999999"),
-                    "the failure does not name the missing id: " + follow.outcome());
+            helper.assertTrue(!follow.succeeded() && follow.outcome().contains("no entity 999999")
+                            && "numen.scan.entities()".equals(follow.hint()),
+                    "the failure does not name the missing id and the scan: " + follow.outcome() + " / " + follow.hint());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -738,7 +737,7 @@ public class MovementGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(plan.done(), "route plan has not replied");
-            com.google.gson.JsonObject p = dataIn(plan.receipt()).getAsJsonObject("returned");
+            com.google.gson.JsonObject p = receiptData(plan.receipt()).getAsJsonObject("returned");
             helper.assertTrue(plan.ranToTheEnd() && !p.get("ok").getAsBoolean()
                             && p.get("why").getAsString().contains("place = true"),
                     "the plan does not point at the knob that opens a way: " + plan.receipt());
@@ -758,7 +757,7 @@ public class MovementGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(plan.done(), "route plan has not replied");
-            com.google.gson.JsonObject p = dataIn(plan.receipt()).getAsJsonObject("returned");
+            com.google.gson.JsonObject p = receiptData(plan.receipt()).getAsJsonObject("returned");
             helper.assertTrue(!p.get("ok").getAsBoolean() && p.get("why").getAsString().contains("max_changes = 1")
                             && p.get("why").getAsString().contains("costs = {max_changes = "),
                     "the plan does not say the limit ruled the routes out: " + plan.receipt());

@@ -10,7 +10,6 @@ import com.dwinovo.numen.agent.conversation.Transcript;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
-import com.dwinovo.numen.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.client.agent.Conversations;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.agent.KnownSkins;
@@ -662,7 +661,7 @@ public final class ChatView {
      * 下面一项一行(长的折行),前面一个方格。{@code items} 留着比"是不是同一份";{@code rows} 是按这一刻的宽度
      * 折好的行;{@code time}、{@code entry} 是第一次出现时的——同一份计划原地更新,不改它是哪一条。
      */
-    private record Checklist(UUID who, String label, List<com.dwinovo.numen.cli.TodoTool.Item> items, String header,
+    private record Checklist(UUID who, String label, List<com.dwinovo.numen.agent.tool.TodoTool.Item> items, String header,
                              List<CheckRow> rows, int maxLineW, String time, boolean timeInline, int entry,
                              boolean runEnd) implements Block {
         Checklist withRunEnd(boolean on) {
@@ -671,7 +670,7 @@ public final class ChatView {
     }
 
     /** 清单里的一项:状态(画方格用)和折好的行。 */
-    private record CheckRow(com.dwinovo.numen.cli.TodoTool.Status state, List<FormattedCharSequence> lines) {}
+    private record CheckRow(com.dwinovo.numen.agent.tool.TodoTool.Status state, List<FormattedCharSequence> lines) {}
 
     /** 打勾的过渡:方格从中间往外填满,满了再出勾。 */
     private static final int TICK_MS = 220;
@@ -1035,7 +1034,7 @@ public final class ChatView {
                     for (LlmToolCall tc : turn.toolCalls()) {
                         addPiece(f, who, msgIndex, new Piece(null, false, tc));
                         // 这次调用写下的计划是她的一条清单消息,画在这次调用之后
-                        List<com.dwinovo.numen.cli.TodoTool.Item> plan = PlanChecklist.of(tc, results.get(tc.id()));
+                        List<com.dwinovo.numen.agent.tool.TodoTool.Item> plan = PlanChecklist.of(tc, results.get(tc.id()));
                         if (plan != null) {
                             checklist(f, who, msgIndex, entry.ts(), plan, innerW, done, failed, bubbleMaxW);
                         }
@@ -1112,7 +1111,7 @@ public final class ChatView {
             if (!(b instanceof Checklist c)) continue;
             for (int i = 0; i < c.items().size(); i++) {
                 String key = tickKey(c, i);
-                if (c.items().get(i).status() == com.dwinovo.numen.cli.TodoTool.Status.COMPLETED) {
+                if (c.items().get(i).status() == com.dwinovo.numen.agent.tool.TodoTool.Status.COMPLETED) {
                     ticked.computeIfAbsent(key, k -> opening ? 0L : frameNow);
                 } else {
                     ticked.remove(key);
@@ -1175,7 +1174,7 @@ public final class ChatView {
      * 她写下一份计划:和她最近那条清单是同一份(内容一样、只是状态变了)就在那一条上原地更新,
      * 不往下挪;内容变了才是她新说的一条——先把攒着的过程收口,再接在后面。
      */
-    private void checklist(Feed f, UUID who, int entry, long ts, List<com.dwinovo.numen.cli.TodoTool.Item> items, int innerW,
+    private void checklist(Feed f, UUID who, int entry, long ts, List<com.dwinovo.numen.agent.tool.TodoTool.Item> items, int innerW,
                            Set<String> done, Set<String> failed, int bubbleMaxW) {
         Integer at = f.plans.get(who);
         if (at != null) {
@@ -1193,14 +1192,14 @@ public final class ChatView {
     }
 
     /** 折好一份清单:做完的和划掉的字退成气泡里的淡字、加删除线,还要做的照常。 */
-    private Checklist checklist(UUID who, String label, List<com.dwinovo.numen.cli.TodoTool.Item> items, int innerW,
+    private Checklist checklist(UUID who, String label, List<com.dwinovo.numen.agent.tool.TodoTool.Item> items, int innerW,
                                 String time, int entry) {
         String header = I18n.get("numen.chat.plan", PlanChecklist.done(items), items.size());
         int maxW = font.width(header);
         List<CheckRow> rows = new ArrayList<>(items.size());
         int textW = innerW - BOX_COL;
-        for (com.dwinovo.numen.cli.TodoTool.Item it : items) {
-            boolean off = it.status() == com.dwinovo.numen.cli.TodoTool.Status.COMPLETED || it.status() == com.dwinovo.numen.cli.TodoTool.Status.CANCELLED;
+        for (com.dwinovo.numen.agent.tool.TodoTool.Item it : items) {
+            boolean off = it.status() == com.dwinovo.numen.agent.tool.TodoTool.Status.COMPLETED || it.status() == com.dwinovo.numen.agent.tool.TodoTool.Status.CANCELLED;
             Component text = off
                     ? Nb.colored(it.content(), IN_META).copy().withStyle(net.minecraft.ChatFormatting.STRIKETHROUGH)
                     : Nb.colored(it.content(), TXT);
@@ -1567,7 +1566,7 @@ public final class ChatView {
      * 做完实心成功色、里面一枚白勾——刚勾上的({@code tickedAt} 非 0)先从中间往外填满,满了才出勾;
      * 划掉的空心,字已经划了线。
      */
-    private void checkBox(GuiGraphics g, com.dwinovo.numen.cli.TodoTool.Status state, long tickedAt, int x, int y) {
+    private void checkBox(GuiGraphics g, com.dwinovo.numen.agent.tool.TodoTool.Status state, long tickedAt, int x, int y) {
         switch (state) {
             case COMPLETED -> {
                 float e = tickedAt == 0L ? 1f : Anim.easeOutCubic((frameNow - tickedAt) / (float) TICK_MS);

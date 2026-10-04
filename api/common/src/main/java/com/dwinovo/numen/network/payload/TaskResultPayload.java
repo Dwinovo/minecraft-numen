@@ -3,14 +3,12 @@ package com.dwinovo.numen.network.payload;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.tool.ServerToolTransport;
 import com.dwinovo.numen.network.Wire;
-import com.dwinovo.numen.task.TaskResult;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
-import java.util.Map;
 import java.util.UUID;
 import java.util.function.Predicate;
 
@@ -27,9 +25,8 @@ import java.util.function.Predicate;
  * threads request→execution→reply through the network boundary.
  *
  * <h2>Result body</h2>
- * Pre-serialised JSON string ({@link com.dwinovo.numen.task.TaskResult#toJson}).
- * Server-side decisions about field shape live in {@code TaskResult}; the
- * network layer just shuttles bytes.
+ * Pre-serialised JSON string ({@link com.dwinovo.numen.agent.script.ApiReply}). The shape is decided there;
+ * the network layer just shuttles bytes.
  *
  * <h2>Too big for one payload</h2>
  * A result's length is not the payload's to bound, so it is {@link Wire#text()}
@@ -54,10 +51,13 @@ public record TaskResultPayload(UUID entityUuid,
     /** 装不下的结果换成同一次调用的一条失败:说清多大、上限多少、怎么要少一点。 */
     @Override
     public TaskResultPayload shrunk(Predicate<TaskResultPayload> fits, int bytes, int budget) {
-        return new TaskResultPayload(entityUuid, toolCallId, TaskResult.fail(
-                Wire.TO_CLIENT.tooBig("The result of this call", bytes) + ", so it was not delivered. Ask for less of "
-                        + "it at a time: a narrower range, or one page of a list ({page = N}).",
-                Map.of("result_bytes", bytes, "limit_bytes", budget)).toJson());
+        com.google.gson.JsonObject data = new com.google.gson.JsonObject();
+        data.addProperty("result_bytes", bytes);
+        data.addProperty("limit_bytes", budget);
+        return new TaskResultPayload(entityUuid, toolCallId, com.dwinovo.numen.agent.script.ApiReply.error(
+                com.dwinovo.numen.agent.script.ErrorKind.FAILED, Wire.TO_CLIENT.tooBig("The result of this call", bytes)
+                        + ", so it was not delivered. Ask for less of it at a time: a narrower range or fewer things.",
+                null, data).toString());
     }
 
     @Override

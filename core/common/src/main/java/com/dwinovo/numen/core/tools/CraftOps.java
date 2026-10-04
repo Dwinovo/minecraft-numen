@@ -1,11 +1,10 @@
 package com.dwinovo.numen.core.tools;
 
+import com.dwinovo.numen.agent.script.ApiError;
 import com.dwinovo.numen.agent.script.ErrorKind;
-import com.dwinovo.numen.cli.CommandArgs;
-import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.core.PlayerInv;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.task.TaskResult;
+import com.dwinovo.numen.sdk.Doc;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -57,47 +56,52 @@ public final class CraftOps {
     /** The clickable geometry of an open crafting surface. */
     private record Grid(int w, int h, int[] cells, int result) {}
 
+    /** 合了一次:合出几件、现在背着几件、用掉什么、还回来什么(牛奶桶还回空桶这类),背着的料够不够再合。 */
+    @Doc("What one craft made.")
+    public record Crafted(@Doc("How many it made.") int crafted,
+                          @Doc("How many you carry now.") int carrying,
+                          @Doc("What it used, 3x oak_planks.") List<String> used,
+                          @Doc("What came back, a bucket from milk.") List<String> gotBack,
+                          @Doc("Whether what you carry crafts more of it: call again for the rest.") boolean more) {}
+
     /** {@code numen.inv.craft}:在开着的格里照 {@code id} 那条配方合一次,至多合到 {@code count} 件。 */
-    public String craft(ResourceLocation id, Integer count, NumenPlayer self) {
-        if (!(self.level() instanceof ServerLevel level)) {
-            return TaskResult.fail("crafting needs a server level.").toJson();
-        }
+    public static Crafted craft(ResourceLocation id, int want, NumenPlayer self) {
+        ServerLevel level = self.serverLevel();
         RecipeHolder<?> found = level.getRecipeManager().byKey(id).orElse(null);
         if (found == null || !(found.value() instanceof CraftingRecipe recipe) || recipe.isSpecial()
                 || ingredientsOf(recipe).isEmpty()) {
-            return TaskResult.fail(ErrorKind.NOT_FOUND, "no crafting recipe " + id,
-                    "numen.inv.recipes(item) lists every recipe that makes an item, each with its id").toJson();
+            throw new ApiError(ErrorKind.NOT_FOUND, "no crafting recipe " + id,
+                    "numen.inv.recipes(item) lists every recipe that makes an item, each with its id");
         }
         @SuppressWarnings("unchecked")
         RecipeHolder<CraftingRecipe> holder = (RecipeHolder<CraftingRecipe>) found;
         ItemStack result = RecipeProbe.resultOf(recipe, level.registryAccess());
         Item target = result.getItem();
         String name = BuiltInRegistries.ITEM.getKey(target).getPath();
-        int want = count == null ? 1 : Math.max(1, count);
 
         AbstractContainerMenu menu = self.containerMenu;
         Grid grid = findGrid(menu);
         if (grid == null) {
-            return TaskResult.fail("the open window (" + menu.getClass().getSimpleName() + ") has no crafting grid "
-                    + "— numen.gui.close() it to craft in your own 2x2, or numen.use.block a crafting table").toJson();
+            throw new ApiError(ErrorKind.FAILED, "the open window (" + menu.getClass().getSimpleName() + ") has no "
+                    + "crafting grid — numen.gui.close() it to craft in your own 2x2, or numen.use.block a crafting "
+                    + "table", null);
         }
         // 先把搁在格子里的收回来,再数料
         sweepGrid(menu, self, grid);
         List<Ingredient> ings = ingredientsOf(recipe);
         Map<Item, Integer> pool = poolOf(menu, self);
         if (feasibleBatch(ings, pool, 1) == 0) {
-            return TaskResult.fail(ErrorKind.NO_MATERIAL, "not enough materials for " + name + " — missing: "
-                    + String.join(", ", missingFor(ings, pool)), null,
-                    Map.of("missing", missingFor(ings, pool))).toJson();
+            throw new ApiError(ErrorKind.NO_MATERIAL, "not enough materials for " + name + " — missing: "
+                    + String.join(", ", missingFor(ings, pool)), null, Map.of("missing", missingFor(ings, pool)));
         }
         if (!fits(recipe, grid.w(), grid.h())) {
-            return TaskResult.fail(name + " needs a " + gridOf(recipe) + "x" + gridOf(recipe) + " grid; the open one is "
-                    + grid.w() + "x" + grid.h() + " — numen.use.block a crafting table, then craft again "
-                    + "(numen.inv.make finds one and opens it)").toJson();
+            throw new ApiError(ErrorKind.FAILED, name + " needs a " + gridOf(recipe) + "x" + gridOf(recipe) + " grid; "
+                    + "the open one is " + grid.w() + "x" + grid.h() + " — numen.use.block a crafting table, then "
+                    + "craft again (numen.inv.make finds one and opens it)", null);
         }
         if (!settleCarried(menu, self)) {
-            return TaskResult.fail("the cursor is holding items and no inventory slot is free to put "
-                    + "them down — free a slot first (numen.inv.drop).").toJson();
+            throw new ApiError(ErrorKind.FAILED, "the cursor is holding items and no inventory slot is free to put "
+                    + "them down — free a slot first (numen.inv.drop).", null);
         }
 
         Map<Item, Integer> before = poolOf(menu, self);
@@ -110,8 +114,8 @@ public final class CraftOps {
             int cellIdx = pick == null ? -1 : grid.cells()[pl.gridPos()];
             if (cellIdx < 0 || placeIntoCell(menu, self, cellIdx, pick, pl.ing(), batch) < batch) {
                 sweepGrid(menu, self, grid);
-                return TaskResult.fail("couldn't lay " + name + " out in the grid: a cell took fewer items than the "
-                        + "recipe needs").toJson();
+                throw new ApiError(ErrorKind.FAILED, "couldn't lay " + name + " out in the grid: a cell took fewer "
+                        + "items than the recipe needs", null);
             }
             sim.merge(pick, -batch, Integer::sum);
         }
@@ -121,8 +125,8 @@ public final class CraftOps {
         recompute(menu, grid, self, holder);
         if (menu.slots.get(grid.result()).getItem().isEmpty()) {
             sweepGrid(menu, self, grid);
-            return TaskResult.fail("the laid-out grid doesn't form " + name + " (another mod overrides this "
-                    + "grid?)").toJson();
+            throw new ApiError(ErrorKind.FAILED, "the laid-out grid doesn't form " + name + " (another mod overrides "
+                    + "this grid?)", null);
         }
         int have0 = PlayerInv.count(self.getInventory(), target);
         menu.clicked(grid.result(), 0, ClickType.QUICK_MOVE, self);   // vanilla mass-craft + onTake
@@ -130,7 +134,8 @@ public final class CraftOps {
         sweepGrid(menu, self, grid);
         int crafted = PlayerInv.count(self.getInventory(), target) - have0;
         if (crafted <= 0) {
-            return TaskResult.fail("crafted nothing — your inventory is full and the result doesn't fit.").toJson();
+            throw new ApiError(ErrorKind.FAILED, "crafted nothing — your inventory is full and the result doesn't "
+                    + "fit.", null);
         }
 
         // Report material flow as inventory deltas (covers remainders like buckets coming back).
@@ -146,31 +151,15 @@ public final class CraftOps {
                 back.add(delta + "x " + path);
             }
         }
-        int carrying = PlayerInv.count(self.getInventory(), target);
-        StringBuilder msg = new StringBuilder("crafted " + crafted + "x " + name);
-        if (crafted < want) {
-            msg.append(" (wanted ").append(want).append(feasibleBatch(ings, after, 1) > 0
-                    ? " — one call crafts up to a stack per cell; call again for the rest)"
-                    : " — the materials ran out)");
-        }
-        if (!used.isEmpty()) {
-            msg.append(" — used ").append(String.join(", ", used));
-        }
-        if (!back.isEmpty()) {
-            msg.append("; got back ").append(String.join(", ", back));
-        }
-        msg.append(". Now carrying ").append(carrying).append("x ").append(name).append(".");
-        return TaskResult.ok(msg.toString(), Map.of("crafted", crafted, "carrying", carrying)).toJson();
+        return new Crafted(crafted, PlayerInv.count(self.getInventory(), target), used, back,
+                feasibleBatch(ings, after, 1) > 0);
     }
 
-    /** {@code numen.inv.craftable}:她背着的料现在合得出的每一条合成配方,一条一行,按输出预算分页。 */
-    public String craftable(NumenPlayer self, CommandArgs args) {
-        if (!(self.level() instanceof ServerLevel level)) {
-            return TaskResult.fail("crafting needs a server level.").toJson();
-        }
+    /** {@code numen.inv.craftable}:她背着的料现在合得出的每一条合成配方。 */
+    public static List<Recipe> craftable(NumenPlayer self) {
+        ServerLevel level = self.serverLevel();
         Map<Item, Integer> pool = poolOf(self.inventoryMenu, self);
-        List<String> lines = new ArrayList<>();
-        List<Map<String, Object>> recipes = new ArrayList<>();
+        List<Recipe> recipes = new ArrayList<>();
         for (RecipeHolder<CraftingRecipe> holder : level.getRecipeManager().getAllRecipesFor(RecipeType.CRAFTING)) {
             try {
                 CraftingRecipe recipe = holder.value();
@@ -180,44 +169,28 @@ public final class CraftOps {
                         || feasibleBatch(ingredientsOf(recipe), pool, 1) == 0) {
                     continue;
                 }
-                Map<String, Object> data = recipeData(holder, recipe, result, self);
-                recipes.add(data);
-                lines.add(BuiltInRegistries.ITEM.getKey(result.getItem()).getPath() + " x" + result.getCount()
-                        + " — " + gridOf(recipe) + "x" + gridOf(recipe) + " grid, id " + holder.id());
+                recipes.add(recipe(holder, recipe, result, self));
             } catch (RuntimeException broken) {
                 // 坏一条丢一条,记下 id 方便去上游反馈;绝不让它杀掉整个调用
                 com.dwinovo.numen.core.Constants.LOG.debug(
                         "[numen-craft] 配方 {} 坏了,跳过: {}", holder.id(), broken.toString());
             }
         }
-        if (recipes.isEmpty()) {
-            return TaskResult.ok("nothing is craftable from what you carry.", Map.of("recipes", recipes)).toJson();
-        }
-        return new Listing(recipes.size() + " recipe(s) you can craft from what you carry:", lines,
-                "numen.inv.craft(id) crafts one in the open grid (a 3x3 one needs a crafting table open); "
-                        + "numen.inv.make(item) picks the recipe and the table for you.")
-                .result(args, Map.of("recipes", recipes)).toJson();
+        return recipes;
     }
 
     /**
-     * 一条合成配方给脚本的那张表:编号、合出几件、每格的料、装得下的最小的格,以及照她背着的合一次还缺什么(不缺时没有)。
+     * 一条合成配方:编号、合出几件、每格的料、装得下的最小的格,以及照她背着的合一次还缺什么(不缺时没有)。
      * {@code numen.inv.recipes} 与 {@code numen.inv.craftable} 共用这一份。
      */
-    static Map<String, Object> recipeData(RecipeHolder<?> holder, CraftingRecipe recipe, ItemStack result,
-                                          NumenPlayer self) {
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("id", holder.id().toString());
-        out.put("station", "crafting");
-        out.put("item", BuiltInRegistries.ITEM.getKey(result.getItem()).toString());
-        out.put("makes", result.getCount());
-        out.put("ingredients", ingredientsOf(recipe).stream().map(QueryExtraOps::describeIngredient).toList());
-        out.put("grid", gridOf(recipe));
+    static Recipe recipe(RecipeHolder<?> holder, CraftingRecipe recipe, ItemStack result, NumenPlayer self) {
         List<Ingredient> ings = ingredientsOf(recipe);
         Map<Item, Integer> pool = poolOf(self.inventoryMenu, self);
-        if (feasibleBatch(ings, pool, 1) == 0) {
-            out.put("missing", missingFor(ings, pool));
-        }
-        return out;
+        return new Recipe(holder.id().toString(), Recipe.Station.CRAFTING,
+                BuiltInRegistries.ITEM.getKey(result.getItem()).toString(), result.getCount(),
+                ings.stream().map(RecipeBook::describeIngredient).toList(), java.util.Optional.of(gridOf(recipe)),
+                feasibleBatch(ings, pool, 1) == 0 ? java.util.Optional.of(missingFor(ings, pool))
+                        : java.util.Optional.empty(), java.util.Optional.empty());
     }
 
     /** 这条合成配方装得下的最小的格:2(她自己的)、3(工作台);更大的(模组工位)是 0。 */
@@ -336,7 +309,7 @@ public final class CraftOps {
         Map<String, int[]> tally = new LinkedHashMap<>();       // desc -> [need]
         Map<String, Ingredient> rep = new LinkedHashMap<>();
         for (Ingredient ing : ings) {
-            String desc = QueryExtraOps.describeIngredient(ing);
+            String desc = RecipeBook.describeIngredient(ing);
             tally.computeIfAbsent(desc, k -> new int[1])[0]++;
             rep.putIfAbsent(desc, ing);
         }

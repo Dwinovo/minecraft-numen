@@ -1,6 +1,6 @@
 package com.dwinovo.numen.plugins.ysm;
 
-import com.dwinovo.numen.cli.OnHer;
+import com.dwinovo.numen.sdk.OnHer;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.ChatFormatting;
 import net.minecraft.nbt.CompoundTag;

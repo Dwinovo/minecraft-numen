@@ -140,7 +140,7 @@ tasks.register('apiJar', Jar) {
     include 'com/dwinovo/numen/agent/tool/api/**'  // per-call tool context
     include 'com/dwinovo/numen/agent/tool/**'      // tool contract + registration + Schema/ToolArgs
     include 'com/dwinovo/numen/task/**'            // task contract + the registration points a pack drives
-    include 'com/dwinovo/numen/cli/**'             // 命令组、动作、参数类型——插件经 registerCommands 登记命令
+    include 'com/dwinovo/numen/sdk/**'             // API 函数的写法:@Fn、值转换、调用的原语——插件经 NumenApi.api 登记
     include 'com/dwinovo/numen/permission/**'      // 唯一判定"身体可不可以动世界"的地方 —— 插件自己的任务同样得过它
     include 'com/dwinovo/numen/entity/NumenPlayer*.class'   // the body a tool acts on
     include 'com/dwinovo/numen/entity/InputDriver*.class'   // ...its own facing, looking and boat steering
@@ -166,6 +166,11 @@ tasks.register('apiJar', Jar) {
     // drop the @Internal stragglers sitting inside those API packages
     exclude 'com/dwinovo/numen/agent/tool/ToolInvocation*.class'
     exclude 'com/dwinovo/numen/agent/tool/ClientToolContext*.class'
+    // API 的派发与程序的执行:引擎内部,插件只写函数
+    exclude 'com/dwinovo/numen/sdk/Dispatcher*.class'
+    exclude 'com/dwinovo/numen/sdk/ServerPrograms*.class'
+    exclude 'com/dwinovo/numen/sdk/ProgramPort*.class'
+    exclude 'com/dwinovo/numen/sdk/Consents*.class'
     // scheduler internals: implementation of the task machine, not its contract
     exclude 'com/dwinovo/numen/task/TaskQueue*.class'
     exclude 'com/dwinovo/numen/task/UnsupportedCompanionTask*.class'

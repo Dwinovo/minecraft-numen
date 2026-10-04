@@ -1,6 +1,5 @@
 package com.dwinovo.numen.plugins.kaleidoscope;
 
-import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.body.Controls;
 import com.github.ysbbbbbb.kaleidoscopecookery.api.blockentity.IPot;
@@ -16,9 +15,8 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.Ingredient;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 
 /**
  * 炒锅。四档:下料(0)→ 炒(1)→ 出锅(2)→ 糊(3)。
@@ -72,19 +70,13 @@ final class PotCooker implements Cooker {
     }
 
     @Override
-    public Map<String, Object> report() {
+    public KaleidoscopeApi.PotState report() {
         boolean heat = pot.hasHeatSource(level);
         int status = pot.getStatus();
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("cookware", kind().id());
-        out.put("pos", Shapes.pos(pos));
-        out.put("stage", stage(status));
-        out.put("has_heat_source", heat);
-        out.put("has_oil", hasOil());
-        out.put("in_the_pot", contents().stream().map(s -> Dish.idOf(s.getItem())).toList());
-        if (status != IPot.PUT_INGREDIENT) {
-            out.put("dish_being_made", Dish.idOf(pot.getResult().getItem()));
-        }
+        Integer autoStarts = null;
+        Integer done = null;
+        Integer burns = null;
+        Integer clears = null;
         List<String> needs = new ArrayList<>();
         if (!heat) {
             needs.add("light the block under it — with no heat source nothing moves, not even the countdowns");
@@ -94,7 +86,7 @@ final class PotCooker implements Cooker {
                 if (!hasOil()) {
                     needs.add("pour oil (tag kaleidoscope_cookery:oil) to open the ingredient window");
                 } else {
-                    out.put("auto_starts_in_ticks", pot.getCurrentTick());
+                    autoStarts = pot.getCurrentTick();
                     needs.add("add the ingredients, then hit it once with a kitchen shovel to start");
                 }
                 if (contents().isEmpty() && hasOil()) {
@@ -102,23 +94,26 @@ final class PotCooker implements Cooker {
                 }
             }
             case IPot.COOKING -> {
-                out.put("done_in_ticks", pot.getCurrentTick());
+                done = pot.getCurrentTick();
                 needs.add("keep hitting it with a kitchen shovel — a dish short of its stir-fry count"
                         + " comes out as a mystery dish");
             }
             case IPot.FINISHED -> {
-                out.put("burns_in_ticks", pot.getCurrentTick());
+                burns = pot.getCurrentTick();
                 needs.add("take it out now" + (pot.hasCarrier() ? " with the right carrier in hand"
                         : " while crouching, with a kitchen shovel in hand"));
             }
             case IPot.BURNT -> {
-                out.put("clears_in_ticks", pot.getCurrentTick());
+                clears = pot.getCurrentTick();
                 needs.add("already burnt — whatever comes out is dark cuisine; if left alone it turns to charcoal");
             }
             default -> needs.add("unknown stage " + status);
         }
-        out.put("needs", needs);
-        return out;
+        return new KaleidoscopeApi.PotState(kind(), pos, stage(status), heat, Optional.of(hasOil()), Optional.empty(),
+                Optional.empty(), contents().stream().map(s -> Dish.idOf(s.getItem())).toList(),
+                status != IPot.PUT_INGREDIENT ? Optional.of(Dish.idOf(pot.getResult().getItem())) : Optional.empty(),
+                Optional.ofNullable(autoStarts), Optional.ofNullable(done), Optional.ofNullable(burns),
+                Optional.ofNullable(clears), Optional.empty(), needs);
     }
 
     private static String stage(int status) {
@@ -179,8 +174,7 @@ final class PotCooker implements Cooker {
                     + " — ingredients go in before it starts cooking");
         }
         if (!hasOil()) {
-            return Step.blocked("the pot takes no ingredients before oil: " + KaleidoscopeCommands.line(
-                    KaleidoscopeCommands.OIL) + " it first");
+            return Step.blocked("the pot takes no ingredients before oil: " + "kaleidoscope.pot.oil it first");
         }
         int[] need = dish.stillNeeded(pot.getInputs(), portions);
         for (int i = 0; i < need.length; i++) {

@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task.dig;
 
-import com.dwinovo.numen.cli.Target;
+import com.dwinovo.numen.sdk.Target;
 
 import net.minecraft.core.BlockPos;
 

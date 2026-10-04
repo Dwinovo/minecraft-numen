@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.sdk.ServerCall;
 import com.dwinovo.numen.core.act.MenuOrigin;
 import com.dwinovo.numen.core.task.inventory.TransferTaskRecord;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -35,8 +35,8 @@ public final class ContainerOps {
     public record Move(int from, Integer to, Integer count) {}
 
     /** 这一步交任务槽的那件活:点击通常一刻就完,期限只为等主人点头之外的意外留着。 */
-    public static TaskRecord transfer(ServerSource source, Move move) {
-        return new TransferTaskRecord(source, source.companion().level().getGameTime() + TRANSFER_TIMEOUT_TICKS, move);
+    public static TaskRecord transfer(ServerCall source, Move move) {
+        return new TransferTaskRecord(source, source.her().level().getGameTime() + TRANSFER_TIMEOUT_TICKS, move);
     }
 
     /**

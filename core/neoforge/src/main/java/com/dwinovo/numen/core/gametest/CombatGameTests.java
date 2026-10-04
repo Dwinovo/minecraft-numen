@@ -262,14 +262,13 @@ public class CombatGameTests {
                         spawn.getZ() + 0.5));
         ToolRun nobody = lua(companion, "numen.fight.attack(999998)");
         ToolRun attack = lua(companion, "numen.fight.attack(" + pig.getId() + ")");
-        String recorded = com.dwinovo.numen.entity.CompanionRegistry.get(server).find(companion.getUUID()).taskArgs();
+        String recorded = com.dwinovo.numen.entity.CompanionRegistry.get(server).find(companion.getUUID()).taskLua();
 
         succeedWhen(helper, () -> {
             helper.assertTrue(nobody.done() && !nobody.succeeded() && nobody.outcome().contains("999998"),
                     "naming only missing entities did not fail on the spot: " + nobody.reply());
             helper.assertTrue(attack.task() != null, "the attack was not accepted: " + attack.reply());
-            helper.assertTrue(recorded.contains("fight attack " + pig.getUUID())
-                            && !recorded.contains("attack " + pig.getId()),
+            helper.assertTrue(recorded.equals("numen.fight.attack(\"" + pig.getUUID() + "\")"),
                     "the replay recipe does not name exactly the pig by its UUID: " + recorded);
             com.dwinovo.numen.entity.Companions.dismiss(server, companion);
             pig.discard();

@@ -113,8 +113,8 @@ public final class McpServer {
             and voice. Keep your own conversation history — the game stores none for you; between \
             get_events calls nothing is lost (events queue up). Raise wait_seconds (up to 50) only when \
             you deliberately want to park and wait for the owner to speak.""".formatted(
-            com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.toolName(), com.dwinovo.numen.cli.SkillTool.NAME,
-            com.dwinovo.numen.cli.TodoTool.NAME, com.dwinovo.numen.cli.MemoryTool.NAME, ONE_BODY);
+            com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.toolName(), com.dwinovo.numen.agent.tool.SkillTool.NAME,
+            com.dwinovo.numen.agent.tool.TodoTool.NAME, com.dwinovo.numen.agent.tool.MemoryTool.NAME, ONE_BODY);
 
     private final McpConfig config;
     private final Gson gson = new Gson();

@@ -1,23 +1,21 @@
 package com.dwinovo.numen.plugins.ftbquests;
 
+import com.dwinovo.numen.agent.script.ApiError;
 import com.dwinovo.numen.agent.script.ErrorKind;
-import com.dwinovo.numen.cli.CommandArgs;
-import com.dwinovo.numen.cli.ServerSource;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.task.TaskResult;
+import com.dwinovo.numen.sdk.Call;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import dev.ftb.mods.ftbteams.api.Team;
 import dev.ftb.mods.ftbteams.data.PartyTeam;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * {@code ftbquests join}:替她点邀请消息里的"接受"。
+ * {@code ftbquests.quest.join}:替她点邀请消息里的"接受"。
  *
  * <p>接受哪一个只看 {@link InviteWatch#pending}——告诉她"有人邀请你"的也是那一处。只挂着一个邀请时不必点名;
- * 挂着几个时用 {@code --team} 点名那个队伍的短名(FTB 自己的写法,{@code team_invite} 事件的 {@code party}
+ * 挂着几个时用 {@code team} 点名那个队伍的短名(FTB 自己的写法,{@code team_invite} 事件的 {@code party}
  * 与 {@code /ftbteams party join} 用的都是它),点的必须是她挂着的邀请之一。入队本身交给 FTB Teams 的
  * {@link PartyTeam#join},也就是 {@code /ftbteams party join} 在认过邀请之后调的那一个:满员、没命了、
  * 已经在别的队伍里,都由它判、由它拒,拒绝的原话照实转给她。不经那条命令,是因为命令的结果只会作为聊天消息
@@ -33,48 +31,33 @@ final class PartyJoin {
 
     private PartyJoin() {}
 
-    static void join(ServerSource src, CommandArgs args) {
-        NumenPlayer her = src.companion();
+    /** @param wanted 点名的队伍短名;没点名为 null */
+    static FtbqApi.Joined join(NumenPlayer her, String wanted) {
         List<Team> invites = InviteWatch.pending(her.getUUID());
         if (invites.isEmpty()) {
-            src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, "No party has a pending invitation for you.", null)
-                    .toJson());
-            return;
+            throw new ApiError(ErrorKind.NOT_FOUND, "No party has a pending invitation for you.", null);
         }
-        String wanted = args.get(FtbqCommands.TEAM);
         List<Team> chosen = wanted == null ? invites
                 : invites.stream().filter(team -> team.getShortName().equals(wanted)).toList();
         Map<String, Object> pending = Map.of("pending", invites.stream().map(Team::getShortName).toList());
         if (chosen.isEmpty()) {
-            src.reply(TaskResult.fail(ErrorKind.NOT_FOUND, "No pending invitation for you is from the party " + wanted
+            throw new ApiError(ErrorKind.NOT_FOUND, "No pending invitation for you is from the party " + wanted
                     + ". Your pending invitations: " + listed(invites) + ".",
-                    invites.size() == 1 ? FtbqCommands.FULL + ".join()" : null, pending).toJson());
-            return;
+                    invites.size() == 1 ? Call.of("ftbquests.quest.join") : null, pending);
         }
         if (chosen.size() > 1) {
-            src.reply(TaskResult.fail(ErrorKind.FAILED, "Several parties have invited you: " + listed(chosen)
-                    + ". Ask your owner which party to join, then name it with {team = <short name>}.", null,
-                    pending).toJson());
-            return;
+            throw new ApiError(ErrorKind.FAILED, "Several parties have invited you: " + listed(chosen)
+                    + ". Ask your owner which party to join, then name it with {team = <short name>}.", null, pending);
         }
         Team party = chosen.get(0);
         try {
             ((PartyTeam) party).join(her);
         } catch (CommandSyntaxException e) {
-            src.reply(TaskResult.fail(ErrorKind.DENIED, "FTB Teams did not let you join " + named(party) + ": "
-                    + e.getMessage(), null).toJson());
-            return;
+            throw new ApiError(ErrorKind.DENIED, "FTB Teams did not let you join " + named(party) + ": "
+                    + e.getMessage(), null);
         }
         boolean ownerInside = her.getOwnerUuid() != null && party.getMembers().contains(her.getOwnerUuid());
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("party", party.getShortName());
-        data.put("name", party.getName().getString());
-        data.put("owner_inside", ownerInside);
-        src.reply(TaskResult.ok("You joined the party " + named(party)
-                + (ownerInside ? ", your owner's party." : "; your owner is not in it.")
-                + " FTB merged the quest progress you had into the party's: each task keeps the larger count, "
-                + "and quests either side completed stay completed. From now on what you do counts for this party.",
-                data).toJson());
+        return new FtbqApi.Joined(party.getShortName(), party.getName().getString(), ownerInside);
     }
 
     private static String listed(List<Team> parties) {

@@ -2,7 +2,6 @@ package com.dwinovo.numen.mcp.client;
 
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolCall;
-import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import net.minecraft.client.Minecraft;
@@ -24,7 +23,7 @@ import java.util.Set;
  * completes the {@link ToolCall} when the reply lands — marshalled back onto the
  * game main thread, because completion drives conversation state and the next
  * LLM turn (the dispatcher's completion path is not thread-safe off-main). Any
- * error/timeout comes back as a {@code TaskResult.fail} JSON so the agent loop
+ * error/timeout comes back as a {@code ToolOutcome.failure} JSON so the agent loop
  * never wedges.
  */
 public final class RemoteMcpTool implements NumenTool {
@@ -71,12 +70,12 @@ public final class RemoteMcpTool implements NumenTool {
         try {
             args = call.args();
         } catch (IllegalArgumentException ex) {
-            call.complete(TaskResult.fail(ex.getMessage()).toJson());
+            call.complete(com.dwinovo.numen.agent.llm.ToolOutcome.failure(ex.getMessage()));
             return;
         }
         client.callTool(remoteName, args, callTimeoutMs).whenComplete((result, err) -> {
             String out = err != null
-                    ? TaskResult.fail("mcp tool '" + qualifiedName + "' failed: " + rootMessage(err)).toJson()
+                    ? com.dwinovo.numen.agent.llm.ToolOutcome.failure("mcp tool '" + qualifiedName + "' failed: " + rootMessage(err))
                     : result;
             // Hop to the main thread: completing the call records the result and may
             // start the next LLM turn, which is not safe off the client thread.

@@ -3,7 +3,7 @@ package com.dwinovo.numen.plugins.tlm.bench;
 import com.dwinovo.numen.bench.Check;
 import com.dwinovo.numen.bench.Scenario;
 import com.dwinovo.numen.bench.Scene;
-import com.dwinovo.numen.cli.Shapes;
+import com.dwinovo.numen.sdk.Positions;
 import com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.ItemStack;
@@ -58,7 +58,7 @@ public final class TameWildMaid implements Scenario {
     public String solution(Scene scene) {
         // numen.use.entity 不走动:先走到她两格内
         BlockPos at = maid.blockPosition();
-        return "numen.move.to(" + Shapes.literal(at) + ", {arrive = \"near\", range = 2})\n"
+        return "numen.move.to(" + Positions.literal(at) + ", {arrive = \"near\", range = 2})\n"
                 + "numen.use.entity(" + maid.getId() + ", {item = \"minecraft:cake\"})";
     }
 }

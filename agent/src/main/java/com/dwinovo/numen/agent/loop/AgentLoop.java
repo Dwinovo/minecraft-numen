@@ -419,6 +419,13 @@ public final class AgentLoop {
                     turn(true);   // 工具结果等着回应
                 }
             }
+
+            @Override
+            public void called(LlmToolCall program, com.dwinovo.numen.agent.script.ScriptCall.Called called) {
+                if (current(id)) {
+                    emit(new LoopEvent.ApiCalled(id, program, called));
+                }
+            }
         };
     }
 

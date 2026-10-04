@@ -3,6 +3,7 @@ package com.dwinovo.numen.agent.loop;
 import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.agent.llm.ToolOutcome;
+import com.dwinovo.numen.agent.script.ApiReply;
 import com.dwinovo.numen.agent.script.Invocation;
 import com.dwinovo.numen.agent.script.ScriptCatalog;
 import com.dwinovo.numen.agent.script.ScriptRun;
@@ -24,9 +25,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * 一轮里的调用按顺序执行:一个做完才派下一个,脚本里的身体活等它收尾;等的时候来了急件,余下的逐条回"没执行"。
  *
- * <p>假的执行口把派出去的调用停在 {@link #pending} 里等测试替它回结果。结果写成 {@code running tN} 表示受理了一件会自己
- * 收尾的后台活 tN;队列里 task_finished 的正文就是收尾的那件的编号(后面可以跟收尾状态与它交代的话)。两个读法都是测试自己的约定,真的写法在 api
- * ({@code TaskDispatch}、{@code NumenEvents})。
+ * <p>假的执行口把派出去的调用停在 {@link #pending} 里等测试替它回结果:脚本里的 API 调用回 {@link ApiReply} 的那一份
+ * ({@link #job} 是受理了一件会自己收尾的后台活);队列里 task_finished 的正文就是收尾的那件的编号(后面可以跟收尾状态与它交代的话),
+ * 这一条读法是测试自己的约定,真的写法在 api({@code NumenEvents})。
  */
 class SerialCallsTest {
 
@@ -64,11 +65,6 @@ class SerialCallsTest {
         }
 
         @Override
-        public String leftRunning(String result) {
-            return result.startsWith("running ") ? result.substring("running ".length()) : null;
-        }
-
-        @Override
         public ScriptCall.Finish finish(EventQueue.Entry entry) {
             if (!EventTypes.TASK_FINISHED.equals(entry.type())) {
                 return null;
@@ -94,7 +90,7 @@ class SerialCallsTest {
             call.args().forEach(a -> objects.add(String.valueOf(a)));
             args.add("objects", objects);
             call.options().forEach((k, v) -> args.addProperty(k, String.valueOf(v)));
-            return new Invocation(call.group(), call.verb(), call.function(), args);
+            return new Invocation(call.group(), call.name(), call.function(), args);
         }
 
         @Override
@@ -108,10 +104,16 @@ class SerialCallsTest {
         }
     }
 
+    /** 一个测试用的函数:选项名是 {@code arrive} 与 {@code bad},按顺序的对象不限。 */
+    private static ScriptCatalog.Function fn(ScriptCatalog.Kind kind) {
+        return new ScriptCatalog.Function(Integer.MAX_VALUE, java.util.Set.of("arrive", "bad"), kind,
+                com.dwinovo.numen.agent.script.ScriptType.NOTHING, null);
+    }
+
     private static final ScriptCatalog CATALOG = new ScriptCatalog(java.util.Map.of(
-            "work", java.util.Map.of("dig", new ScriptCatalog.Verb(null), "collect", new ScriptCatalog.Verb(null)),
-            "move", java.util.Map.of("go", new ScriptCatalog.Verb(null)),
-            "area", java.util.Map.of("has", new ScriptCatalog.Verb("has"))), new ScriptCatalog.ModuleSource() {
+            "work", java.util.Map.of("dig", fn(ScriptCatalog.Kind.JOB), "collect", fn(ScriptCatalog.Kind.JOB)),
+            "move", java.util.Map.of("go", fn(ScriptCatalog.Kind.JOB)),
+            "area", java.util.Map.of("has", fn(ScriptCatalog.Kind.VALUE))), new ScriptCatalog.ModuleSource() {
                 /** 一个模块:挖一处、交回 3。 */
                 @Override
                 public String code(String name) {
@@ -123,7 +125,22 @@ class SerialCallsTest {
                 public List<String> names() {
                     return List.of("pit");
                 }
-            });
+            }, java.util.Map.of());
+
+    /** 受理了后台活 {@code task}。 */
+    private static String job(String task) {
+        return ApiReply.job(task).toString();
+    }
+
+    /** 当场的值。 */
+    private static String value(Object value) {
+        return ApiReply.value(new com.google.gson.Gson().toJsonTree(value)).toString();
+    }
+
+    /** 失败。 */
+    private static String error(String message) {
+        return ApiReply.error(com.dwinovo.numen.agent.script.ErrorKind.FAILED, message, null, null).toString();
+    }
 
     private final FakePort port = new FakePort((call, done) -> {
         dispatched.add(call.id());
@@ -181,7 +198,7 @@ class SerialCallsTest {
     @Test
     void anUrgentEventWhileTheScriptWaitsNamesItsKind() {
         calls.run(List.of(lua("a", "work.dig(\"ores\")"), call("b")), sink);
-        answer(dispatched.get(0), "running t3");
+        answer(dispatched.get(0), job("t3"));
 
         calls.arrived(new EventQueue.Entry(EventTypes.OWNER_HURT, "<event>主人危险</event>", 0, true), true);
 
@@ -298,14 +315,14 @@ class SerialCallsTest {
                 """)), sink);
         assertEquals(List.of("move.go ores --arrive dig"), lines);
 
-        answerLast("running t1");
+        answerLast(job("t1"));
         assertEquals(1, lines.size(), "t1 还没收尾,下一次调用不派");
         scripts.arrived(finished("t1"), true);
         assertEquals("work.dig ores", lines.get(1));
 
-        answerLast("{\"success\":true,\"message\":\"dug 4 blocks\"}");
+        answerLast(value(java.util.Map.of("dug", 4)));
         assertEquals("work.collect", lines.get(2));
-        answerLast("running t2");
+        answerLast(job("t2"));
         assertTrue(results.isEmpty(), "脚本里的最后一件也等收尾");
         scripts.arrived(finished("t2"), true);
 
@@ -313,22 +330,21 @@ class SerialCallsTest {
         assertTrue(receipt.get("success").getAsBoolean(), receipt.toString());
         String msg = receipt.get("message").getAsString();
         assertTrue(msg.startsWith("The script ran to the end: 3 calls"), msg);
-        assertTrue(msg.contains("\nline 1 move.go: ok — t1 done\nline 2 work.dig: ok — dug 4 blocks\n"
-                + "line 3 work.collect: ok — t2 done\nreturned: all done"), "每次调用一行,按先后: " + msg);
+        assertTrue(msg.contains("\nline 1 move.go: ok — t1 done\nline 2 work.dig: ok — {dug = 4}\n"
+                + "line 3 work.collect: ok — t2 done\nreturned: all done"), "每次调用一行,按先后,值写成字面量: " + msg);
         assertEquals("all done", receipt.getAsJsonObject("data").get("returned").getAsString());
         assertEquals(3, receipt.getAsJsonObject("data").get("calls").getAsInt());
         assertEquals(1, settles);
     }
 
-    /** 一次调用的回执数据(status.self 这类):程序拿到的是读成的表,不是回执那句话,也不是一串 JSON 文字。 */
+    /** 一次调用的值(status.self 这类):程序拿到的是读成的表,不是一串 JSON 文字。 */
     @Test
-    void aCallsDataComesBackAsATable() {
+    void aCallsValueComesBackAsATable() {
         scripts.run(List.of(lua("s", """
-                local me = work.dig("ores")
+                local me = area.has("ores")
                 return me.pos.y
                 """)), sink);
-        answerLast("{\"success\":true,\"message\":\"Aria at 1.5,64,-3\",\"data\":{\"name\":\"Aria\","
-                + "\"pos\":{\"x\":1.5,\"y\":64,\"z\":-3}}}");
+        answerLast(value(java.util.Map.of("name", "Aria", "pos", java.util.Map.of("x", 1.5, "y", 64, "z", -3))));
         com.google.gson.JsonObject receipt = json(results.get("s"));
         assertTrue(receipt.get("success").getAsBoolean(), receipt.toString());
         assertEquals(64, receipt.getAsJsonObject("data").get("returned").getAsInt());
@@ -342,7 +358,8 @@ class SerialCallsTest {
                 work.dig("ores")
                 """)), sink);
         assertEquals(List.of("work.dig ores"), lines, "读不成的那次没派出去");
-        answerLast("{\"success\":true,\"message\":\"dug\"}");
+        answerLast(job("t1"));
+        scripts.arrived(finished("t1"), true);
         String msg = json(results.get("s")).get("message").getAsString();
         assertTrue(msg.startsWith("The script ran to the end: 1 call"), "没派出去的不算一次调用: " + msg);
         assertTrue(msg.contains("line 1 work.dig: bad_argument — there is no option bad; usage: work.dig(place)"),
@@ -358,7 +375,7 @@ class SerialCallsTest {
                 if not ok then error("could not dig: " .. err) end
                 work.collect()
                 """), call("after")), sink);
-        answerLast("{\"success\":false,\"message\":\"error: out of reach\\nusage: work.dig(place)\\nhint: walk\"}");
+        answerLast(error("error: out of reach\nusage: work.dig(place)\nhint: walk"));
 
         assertEquals(List.of("work.dig ores", "mcp_tool"), lines, "collect 没派;脚本结束后照常派下一个调用");
         com.google.gson.JsonObject receipt = json(results.get("s"));
@@ -382,12 +399,12 @@ class SerialCallsTest {
                 move.go("ores")
                 work.dig("ores")
                 """)), sink);
-        answerLast("running t1");
+        answerLast(job("t1"));
         assertTrue(scripts.awaits(finished("t1")), "等着的那件的收尾不归程序");
         assertFalse(scripts.awaits(finished("t9")), "别的活的收尾归了程序");
         scripts.arrived(new EventQueue.Entry(EventTypes.TASK_FINISHED, "t1 done walked there\nbroke 2 stone on the way",
                 0, true), false);
-        answerLast("running t2");
+        answerLast(job("t2"));
         scripts.arrived(ownerWords("先停一下"), true);
 
         String msg = json(results.get("s")).get("message").getAsString();
@@ -401,7 +418,7 @@ class SerialCallsTest {
                 move.go("ores")
                 work.dig("ores")
                 """), call("after")), sink);
-        answerLast("running t1");
+        answerLast(job("t1"));
         scripts.arrived(ownerWords("先停一下"), true);
 
         assertEquals(1, lines.size(), "停在调用之间,第二次没派");
@@ -422,7 +439,7 @@ class SerialCallsTest {
                 """)), sink);
         scripts.arrived(ownerWords("等等"), true);
         assertTrue(results.isEmpty(), "那一行本身不打断");
-        answerLast("{\"success\":true,\"message\":\"yes\",\"data\":{\"has\":true}}");
+        answerLast(value(true));
 
         assertEquals(1, lines.size());
         String msg = json(results.get("s")).get("message").getAsString();
@@ -435,7 +452,7 @@ class SerialCallsTest {
                 move.go("ores")
                 work.dig("ores")
                 """)), sink);
-        answerLast("running t1");
+        answerLast(job("t1"));
         List<String> abandoned = scripts.cancel(true);
 
         assertTrue(abandoned.isEmpty(), "脚本交出了自己的回执,不算放弃: " + abandoned);
@@ -452,11 +469,12 @@ class SerialCallsTest {
                 return n + 1
                 """)), sink);
         assertEquals(List.of("work.dig ores"), lines);
-        answerLast("{\"success\":true,\"message\":\"dug\"}");
+        answerLast(job("t1"));
+        scripts.arrived(new EventQueue.Entry(EventTypes.TASK_FINISHED, "t1 done dug", 0, true), false);
         com.google.gson.JsonObject receipt = json(results.get("s"));
         assertTrue(receipt.get("success").getAsBoolean(), receipt.toString());
         assertEquals(4, receipt.getAsJsonObject("data").get("returned").getAsInt());
-        assertTrue(receipt.get("message").getAsString().contains("line 1 work.dig: ok — dug"), receipt.toString());
+        assertTrue(receipt.get("message").getAsString().contains("line 1 work.dig: ok — t1 done: dug"), receipt.toString());
         assertEquals(List.of("pit ok"), linePort.tallies);
     }
 
@@ -466,7 +484,7 @@ class SerialCallsTest {
                 local x = 1
                 pit.out("ores")
                 """)), sink);
-        answerLast("{\"success\":false,\"message\":\"out of reach\"}");
+        answerLast(error("out of reach"));
         String msg = json(results.get("s")).get("message").getAsString();
         assertTrue(msg.startsWith("The script stopped at line 2"), msg);
         assertEquals(List.of("pit line 2"), linePort.tallies);
@@ -482,8 +500,7 @@ class SerialCallsTest {
         int sent = 0;
         while (results.isEmpty()) {
             String line = lines.get(lines.size() - 1);
-            answerLast(line.startsWith("area.has") ? "{\"success\":true,\"data\":{\"has\":true}}"
-                    : "{\"success\":true,\"message\":\"dug nothing new\"}");
+            answerLast(line.startsWith("area.has") ? value(true) : value("dug nothing new"));
             sent++;
         }
         assertEquals(com.dwinovo.numen.agent.script.ScriptLimits.COMMANDS, sent);
@@ -491,7 +508,7 @@ class SerialCallsTest {
         assertTrue(msg.contains("it reached the limit of " + com.dwinovo.numen.agent.script.ScriptLimits.COMMANDS
                 + " calls per run"), msg);
         assertEquals(com.dwinovo.numen.agent.script.ScriptLimits.COMMANDS / 2,
-                msg.lines().filter(l -> l.equals("line 2 work.dig: ok — dug nothing new")).count(), msg);
+                msg.lines().filter(l -> l.equals("line 2 work.dig: ok — \"dug nothing new\"")).count(), msg);
     }
 
     @Test
@@ -501,7 +518,8 @@ class SerialCallsTest {
                 work.dig("ores")
                 """)), sink);
         linePort.now = com.dwinovo.numen.agent.script.ScriptLimits.WALL_MILLIS + 1;
-        answerLast("{\"success\":true}");
+        answerLast(job("t1"));
+        scripts.arrived(finished("t1"), true);
         assertEquals(1, lines.size());
         String msg = json(results.get("s")).get("message").getAsString();
         assertTrue(msg.contains("stopped at line 2 (work.dig)") && msg.contains("minutes per run"), msg);

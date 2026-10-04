@@ -26,7 +26,6 @@ import net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStruct
 import net.minecraft.world.level.levelgen.structure.placement.StructurePlacement;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -309,22 +308,9 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
     protected void cleanup() {}
 
     @Override
-    protected Map<String, Object> resultData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("structure", r.structure);
-        if (best != null) {
-            BlockPos me = player.blockPosition();
-            int dx = best.getX() - me.getX();
-            int dz = best.getZ() - me.getZ();
-            int dist = (int) Math.sqrt((double) dx * dx + (double) dz * dz);
-            data.put("found", true);
-            data.put("pos", java.util.Map.of("x", best.getX(), "z", best.getZ()));
-            data.put("direction", CompassUtil.compass(dx, dz));
-            data.put("horizontal_distance", dist);
-        } else {
-            data.put("found", false);
-        }
-        return data;
+    protected Located value() {
+        String dim = player.level().dimension().location().toString();
+        return best != null ? Located.at(best, player.blockPosition(), dim) : Located.none(searchedRadiusBlocks(), dim);
     }
 
     @Override
@@ -337,7 +323,7 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
             String dir = CompassUtil.compass(dx, dz);
             return "nearest " + r.structure + " at " + best.getX() + ","
                     + best.getY() + "," + best.getZ() + " (" + dir + ", ~" + dist
-                    + " blocks). " + com.dwinovo.numen.core.nav.NavText.gotoCall(new com.dwinovo.numen.cli.Place(best.getX(), null,
+                    + " blocks). " + com.dwinovo.numen.core.nav.NavText.gotoCall(new com.dwinovo.numen.sdk.Place(best.getX(), null,
                     best.getZ()), "") + " goes there (it finds the "
                     + "height on its own), then `numen.scan.blocks` finds its actual blocks.";
         }

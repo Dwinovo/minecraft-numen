@@ -1,6 +1,5 @@
 package com.dwinovo.numen.entity;
 
-import com.dwinovo.numen.cli.CommandRunner;
 import com.dwinovo.numen.data.ModLanguageData.Keys;
 import com.dwinovo.numen.network.payload.ClientUiActionPayload;
 import com.dwinovo.numen.permission.ConsentAnswer;
@@ -34,13 +33,11 @@ import net.minecraft.server.level.ServerPlayer;
 
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-import java.util.UUID;
 import java.util.function.Predicate;
 
 /**
- * The server-side {@code /numen} command tree: the players' verbs that manage companions. Her own commands are
- * not here — they live in Numen's own command layer ({@code cli.NumenCli}), off the MC command tree. The two
+ * The server-side {@code /numen} command tree: the players' verbs that manage companions. Her own functions are
+ * not here — they are the Lua API ({@code sdk.ApiRegistry}), off the MC command tree. The two
  * inherently client-local player verbs ({@code settings}, {@code reset}) act on the caller's own client by firing
  * a {@link ClientUiActionPayload} back at them.
  *
@@ -49,7 +46,7 @@ import java.util.function.Predicate;
  *   /numen player despawn &lt;name&gt;   permanently dismiss the named companion (gone for good)
  *   /numen settings                  open the settings GUI on the caller's client
  *   /numen reset                     clear the caller's conversation loops
- *   /numen drive &lt;companion&gt; &lt;line&gt;   (op) run one line through her command entry, as her command tool does;
+ *   /numen drive &lt;companion&gt; &lt;program&gt; (op) run a Lua program as her, through the same entry as her own;
  *                                    a name with spaces or non-ASCII letters goes in quotes
  *
  *   /numen permission mode &lt;name&gt; [ask|bypass|observe]     show or set a companion's permission mode
@@ -111,7 +108,7 @@ public final class NumenCommands {
                 .then(Commands.argument("companion", StringArgumentType.string())
                         .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(companionsHere(ctx.getSource())
                                 .map(body -> StringArgumentType.escapeIfRequired(body.getName().getString())), builder))
-                        .then(Commands.argument("line", StringArgumentType.greedyString())
+                        .then(Commands.argument("program", StringArgumentType.greedyString())
                                 .executes(NumenCommands::drive))));
     }
 
@@ -133,11 +130,11 @@ public final class NumenCommands {
     }
 
     /**
-     * {@code /numen drive <同伴> <一行指令>}:把这一行交给她的执行入口,和 {@code command} 工具是同一个入口——解析、
-     * 权限层、执行、回执都一样,回执说给发指令的人听。
+     * {@code /numen drive <同伴> <Lua 程序>}:管理员以她的身份在服务端跑一段 Lua 程序,和她自己写的程序同一个入口
+     * ({@link com.dwinovo.numen.sdk.ServerPrograms})——读参数、权限层、执行、等她派的活收尾、回执都一样,回执说给发指令的人听。
      *
-     * <p>这条 drive 自己正在执行:原版把一条指令执行当中调起的另一条排到它之后,她的那一行要是在这里执行,入口返回时它
-     * 还没跑,回显无从收起。所以交给服务器的任务队列,等这条 drive 执行完再以她的身份执行。
+     * <p>这条 drive 自己正在执行:原版把一条指令执行当中调起的另一条排到它之后,程序要是在这里执行,它里面的原版指令要等这条
+     * drive 跑完才跑。所以交给服务器的任务队列,等这条 drive 执行完再跑。
      */
     private static int drive(CommandContext<CommandSourceStack> ctx) {
         CommandSourceStack caller = ctx.getSource();
@@ -149,11 +146,10 @@ public final class NumenCommands {
             return 0;
         }
         NumenPlayer her = named.get(0);
-        String line = StringArgumentType.getString(ctx, "line");
+        String program = StringArgumentType.getString(ctx, "program");
         MinecraftServer server = caller.getServer();
-        String callId = "drive-" + UUID.randomUUID();
-        server.tell(new TickTask(server.getTickCount(),
-                () -> CommandRunner.run(her, callId, line, result -> report(caller, her, result))));
+        server.tell(new TickTask(server.getTickCount(), () -> com.dwinovo.numen.sdk.ServerPrograms.run(her, "drive",
+                program, com.dwinovo.numen.sdk.ProgramPort.NONE, receipt -> report(caller, her, receipt))));
         return 1;
     }
 
@@ -167,7 +163,7 @@ public final class NumenCommands {
                 .map(player -> (NumenPlayer) player);
     }
 
-    /** 她那一行的回执,说给发 drive 的人听。 */
+    /** 那段程序的回执,说给发 drive 的人听。 */
     private static void report(CommandSourceStack caller, NumenPlayer her, String resultJson) {
         JsonObject result = JsonParser.parseString(resultJson).getAsJsonObject();
         Component said = Component.literal(her.getName().getString() + ": " + result.get("message").getAsString());

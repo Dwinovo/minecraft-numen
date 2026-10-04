@@ -18,10 +18,8 @@ import java.util.stream.Stream;
  * (扩展名随脚本语言,{@link ScriptEngine#extension}),模块名是登记者的名字空间加组名({@code numen.work})。模块返回一张函数表,程序里
  * 以模块名直接用({@code numen.work.collect()});和第 ① 层的组同名的模块给那一组加函数。
  *
- * <p>登记那一刻把关,和动作登记同一种做法:名字合模块名的规矩(规矩只在 {@link Modules} 一处)、正文读得通(和运行时
- * 同一个编译器)、开头一行注释说它做什么、至少定义一个函数而且每个函数上面都写了注释(帮助与索引里它的说明就是那几行)。返回的是不是
- * 一张表、有没有给第 ① 层的名字赋值,要等各组到齐才查得全,在登记处第一次被用时查({@code NumenCli})。任何一条不过当场抛出,模组起
- * 不来,不会带着坏模块发出去。名字谁先登记归谁,撞了也当场抛出。
+ * <p>登记那一刻只拦会坏事的:名字合模块名的规矩(规矩只在 {@link Modules} 一处)、正文读得通(和运行时同一个编译器)、名字谁先
+ * 登记归谁。不过当场抛出,模组起不来。开头那行说明、每个函数上面的注释是写法,缺了交给 {@code ApiTester} 的 lint 报告。
  *
  * <p>两侧都登记:大脑在主人客户端(评测与 GameTest 在服务端)跑程序,公共代码在每个进程里各跑一遍。
  */
@@ -31,7 +29,7 @@ public final class BuiltinModules {
      * 一个内置模块。
      *
      * @param code    正文
-     * @param summary 一句话说明(正文开头那行注释)
+     * @param summary 一句话说明(正文开头那行注释);没写是 null
      */
     public record Builtin(String code, String summary) {}
 
@@ -66,7 +64,7 @@ public final class BuiltinModules {
     /**
      * 登记一个。
      *
-     * @throws IllegalArgumentException 名字不合规矩、已有同名的、正文读不通、开头没写说明、一个函数都没定义,或有函数没写注释
+     * @throws IllegalArgumentException 名字不合规矩、已有同名的、正文读不通
      */
     public static synchronized void register(String name, String code) {
         ScriptEngine engine = ScriptEngine.IN_USE;
@@ -82,21 +80,7 @@ public final class BuiltinModules {
         if (problem != null) {
             throw new IllegalArgumentException(what + " 读不通: " + problem);
         }
-        String summary = engine.summary(code);
-        if (summary == null) {
-            throw new IllegalArgumentException(what + " 开头没写一行注释说它做什么(" + engine.comment("...") + ")");
-        }
-        List<ScriptEngine.Defined> functions = engine.functions(name, code);
-        if (functions.isEmpty()) {
-            throw new IllegalArgumentException(what + " 一个函数都没定义");
-        }
-        for (ScriptEngine.Defined fn : functions) {
-            if (engine.summaryOf(fn).isEmpty()) {
-                throw new IllegalArgumentException(what + " 的函数 " + fn.name() + " 上面没写注释——帮助与索引里它的说明"
-                        + "就是这几行");
-            }
-        }
-        MODULES.put(name, new Builtin(code, summary));
+        MODULES.put(name, new Builtin(code, engine.summary(code)));
     }
 
     /** 叫这个名字的内置模块;没有是 null。 */

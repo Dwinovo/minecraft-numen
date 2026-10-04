@@ -9,8 +9,6 @@ import com.github.tartaricacid.touhoulittlemaid.entity.ai.brain.MaidSchedule;
 import com.github.tartaricacid.touhoulittlemaid.entity.passive.EntityMaid;
 import com.github.tartaricacid.touhoulittlemaid.inventory.container.AbstractMaidContainer;
 import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
@@ -93,7 +91,7 @@ public class TlmGameTests {
         ToolRun config = lua(her, "tlm.maid.config(" + maid.getId() + ", {schedule = \"night\"})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(detail.succeeded() && message(detail).contains("\"task\":\"" + FARM + "\""),
+            helper.assertTrue(detail.succeeded() && detail.reply().contains("\"task\":\"" + FARM + "\""),
                     "tlm maid does not list the farm work mode: " + detail.reply());
             helper.assertTrue(task.succeeded() && maid.getTask().getUid().equals(FARM),
                     "she is not farming — tlm task said: " + task.reply());
@@ -131,7 +129,7 @@ public class TlmGameTests {
                         }
                     }
                     helper.assertTrue(from >= 0 && to >= 0, "no seed slot or no maid slot 0 in the open GUI");
-                    moved.set(lua(her, "numen.gui.move(\"" + from + "\", \"" + to + "\")"));
+                    moved.set(lua(her, "numen.gui.move(" + from + ", " + to + ")"));
                 })
                 .thenWaitUntil(() -> helper.assertTrue(maid.getMaidInv().getStackInSlot(0).is(Items.WHEAT_SEEDS),
                         "the seeds did not go into her slot — gui move said: "
@@ -152,10 +150,10 @@ public class TlmGameTests {
         ToolRun task = lua(her, "tlm.maid.task(\"" + FARM + "\", {maid = " + maid.getId() + "})");
 
         succeedWhen(helper, () -> {
-            JsonObject reply = task.reply() == null ? null : JsonParser.parseString(task.reply()).getAsJsonObject();
-            helper.assertTrue(reply != null && !task.succeeded() && "out_of_reach".equals(reply.get("kind").getAsString())
-                            && reply.has("hint") && reply.get("hint").getAsString().startsWith("numen.move.to({x = ")
-                            && reply.get("hint").getAsString().endsWith("{arrive = \"near\", range = 2})"),
+            String hint = task.hint();
+            helper.assertTrue(task.refused() && "out_of_reach".equals(task.kind())
+                            && hint != null && hint.startsWith("numen.move.to({x = ")
+                            && hint.endsWith("{arrive = \"near\", range = 2})"),
                     "far away, tlm task did not fail out of reach with the walk to copy: " + task.reply());
             helper.assertTrue(!maid.getTask().getUid().equals(FARM), "her task changed from out of reach");
             leave(helper, her, maid);
@@ -196,7 +194,7 @@ public class TlmGameTests {
             helper.assertTrue(died.size() == 1 && died.get(0).urgent() && died.get(0).text().contains("tombstone=\""),
                     "no urgent maid_died event with a tombstone: " + outbox(her).peek(her.getUUID()).entries());
             ToolRun listed = lua(her, "tlm.maid.list()");
-            helper.assertTrue(listed.succeeded() && message(listed).contains("\"kind\":\"tombstone\""),
+            helper.assertTrue(listed.succeeded() && dataIn(listed.reply()).getAsJsonArray("tombstones").size() == 1,
                     "tlm maids does not list the tombstone: " + listed.reply());
             leave(helper, her, maid);
         });
@@ -246,11 +244,6 @@ public class TlmGameTests {
     private static boolean outboxHas(NumenPlayer her, String type, int maid) {
         return outbox(her).peek(her.getUUID()).entries().stream()
                 .anyMatch(e -> e.type().equals(type) && (maid < 0 || e.text().contains("maid=\"" + maid + "\"")));
-    }
-
-    /** 回执里给模型读的那段话(回执本身是 JSON,话里的引号在那一层是转义过的)。 */
-    private static String message(ToolRun run) {
-        return com.google.gson.JsonParser.parseString(run.reply()).getAsJsonObject().get("message").getAsString();
     }
 
     /** 清单这一页里有编号为 {@code id} 的那一行。 */

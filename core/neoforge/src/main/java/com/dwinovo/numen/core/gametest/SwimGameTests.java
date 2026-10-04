@@ -153,8 +153,11 @@ public class SwimGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(plan.done(), "route plan has not replied");
-            helper.assertTrue(plan.succeeded() && plan.reply().contains("under water once:")
-                            && plan.reply().contains("without a breath") && plan.reply().contains("of air left"),
+            helper.assertTrue(plan.succeeded(), "route plan failed: " + plan.reply());
+            var leg = valueIn(plan.reply()).getAsJsonObject().getAsJsonArray("legs").get(0).getAsJsonObject();
+            helper.assertTrue(leg.has("dives") && leg.getAsJsonArray("dives").size() == 1
+                            && leg.getAsJsonArray("dives").get(0).getAsJsonObject().get("seconds").getAsDouble() > 0
+                            && leg.getAsJsonArray("dives").get(0).getAsJsonObject().has("spare"),
                     "the plan does not tell the dive: " + plan.reply());
             helper.assertTrue(companion.blockPosition().equals(start), "planning moved the body");
             CompanionFactory.despawn(level.getServer(), companion);

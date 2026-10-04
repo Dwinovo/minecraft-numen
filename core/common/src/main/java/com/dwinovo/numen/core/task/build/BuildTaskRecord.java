@@ -3,7 +3,7 @@ import com.dwinovo.numen.core.build.BuildValidity;
 import com.dwinovo.numen.core.build.Built;
 import com.dwinovo.numen.core.build.Layout;
 
-import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.sdk.ServerCall;
 import com.dwinovo.numen.task.TaskRecord;
 
 import net.minecraft.core.BlockPos;
@@ -96,10 +96,10 @@ public final class BuildTaskRecord extends TaskRecord {
     // 顺序 + 分遍补漏"之后,层高不再有任何裁决作用,留着就是个调了不起作用
     // 的旋钮——比缺一个功能更糟,故一并撤除。
 
-    /** 命令派的活:名字与调用 id 取自那次调用({@code build at}、当场执行的原语)。 */
-    public BuildTaskRecord(ServerSource source, long deadlineGameTime, Layout layout, boolean consumeMaterials,
+    /** 一次调用派的活:名字与调用 id 取自那次调用。 */
+    public BuildTaskRecord(ServerCall call, long deadlineGameTime, Layout layout, boolean consumeMaterials,
                            boolean allowPartial, Built.Site site) {
-        this(source.taskName(), source.toolCallId(), deadlineGameTime, layout, consumeMaterials, allowPartial, site);
+        this(call.fn(), call.callId(), deadlineGameTime, layout, consumeMaterials, allowPartial, site);
     }
 
     /**

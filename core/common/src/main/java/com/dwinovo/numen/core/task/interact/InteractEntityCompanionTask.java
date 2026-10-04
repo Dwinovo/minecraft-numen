@@ -19,9 +19,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * {@code numen.use.entity} on the player body: the entity-aimed native interaction. It does not travel: the entity must be within
@@ -211,14 +209,10 @@ public final class InteractEntityCompanionTask extends InReachTask<InteractEntit
     }
 
     @Override
-    protected Map<String, Object> resultData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("button", r.button == MouseButton.LEFT ? "left" : "right");
-        data.put("entity_id", r.entityId);
-        if (!changes.isEmpty()) {
-            data.put("changes", changes);
-        }
-        return data;
+    protected com.dwinovo.numen.core.tools.Clicks.EntityClicked value() {
+        return new com.dwinovo.numen.core.tools.Clicks.EntityClicked(r.button == MouseButton.LEFT
+                ? com.dwinovo.numen.core.tools.Clicks.Button.LEFT : com.dwinovo.numen.core.tools.Clicks.Button.RIGHT,
+                r.entityId, java.util.List.copyOf(changes));
     }
 
     @Override

@@ -176,10 +176,6 @@ class ModulesTest {
         assertTrue(twice.getMessage().contains("登记了两次"), twice.getMessage());
         assertTrue(assertThrows(IllegalArgumentException.class, () -> BuiltinModules.register("gt.broken_b",
                 "-- Broken.\nlocal x = = 1")).getMessage().contains("gt.broken_b:2:"));
-        assertTrue(assertThrows(IllegalArgumentException.class, () -> BuiltinModules.register("gt.silent",
-                "local M = {}\n---One.\nfunction M.one() end\nreturn M")).getMessage().contains("注释"));
-        assertTrue(assertThrows(IllegalArgumentException.class, () -> BuiltinModules.register("gt.bare",
-                "-- Bare.\nlocal M = {}\nfunction M.one() end\nreturn M")).getMessage().contains("上面没写注释"));
         assertTrue(assertThrows(IllegalArgumentException.class, () -> BuiltinModules.register("gt.dash-x", BASE))
                 .getMessage().contains("名字不行"));
         assertTrue(assertThrows(IllegalArgumentException.class, () -> BuiltinModules.register("string.x", BASE))

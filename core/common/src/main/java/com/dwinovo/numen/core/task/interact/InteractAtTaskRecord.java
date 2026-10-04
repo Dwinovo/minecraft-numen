@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.task.interact;
 import com.dwinovo.numen.core.task.MouseButton;
 
-import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.sdk.ServerCall;
 import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
@@ -38,9 +38,9 @@ public final class InteractAtTaskRecord extends TaskRecord {
     public final Item item;        // null → use whatever is already in hand; else equip this first
     public final boolean sneak;
 
-    public InteractAtTaskRecord(ServerSource source, MouseButton button, BlockPos aim, int holdTicks, Item item,
+    public InteractAtTaskRecord(ServerCall source, MouseButton button, BlockPos aim, int holdTicks, Item item,
                                 boolean sneak) {
-        super(source, source.companion().level().getGameTime() + TIMEOUT_TICKS);
+        super(source, source.her().level().getGameTime() + TIMEOUT_TICKS);
         this.button = button;
         this.aim = aim != null ? aim.immutable() : null;
         this.holdTicks = holdTicks;

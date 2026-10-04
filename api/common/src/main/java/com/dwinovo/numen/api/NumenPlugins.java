@@ -4,8 +4,6 @@ import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.api.gear.GearSlot;
 import com.dwinovo.numen.api.gear.GearSource;
-import com.dwinovo.numen.cli.CommandGroup;
-import com.dwinovo.numen.cli.NumenCli;
 import com.dwinovo.numen.entity.CompanionEvents;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.event.NumenEvents;
@@ -59,14 +57,14 @@ public final class NumenPlugins {
     /**
      * 登记一个插件。可在任何时候调用,通常在你模组的构造期。
      *
-     * <p>登记里有一条不合规矩(例子读不通、没声明返回、相关动作指向不存在的函数……),异常原样抛出,启动就此失败;那句话写着是
-     * 哪个名字空间、哪一组的哪个动作、哪条规矩。一组登记不全就不让它上线,模型看到的组永远是登记完整的那些。
+     * <p>登记里有一处会破坏系统(名字写不出来、组已经有主、函数绑定不了……),异常原样抛出,启动就此失败;那句话写着是哪个函数、
+     * 哪一条。写法上的问题不拦,看 {@code ApiTester.lint} 的报告。
      *
      * @param namespace 你的名字空间:小写字母开头,只含 [a-z0-9_];她的程序里你的函数都写成 {@code <namespace>.<组>.<动作>}
      */
     public static void register(String namespace, NumenPlugin plugin) {
         if (plugin == null) return;
-        com.dwinovo.numen.cli.NumenCli.checkNamespace(namespace);
+        com.dwinovo.numen.sdk.ApiRegistry.checkNamespace(namespace);
         plugin.setup(new Impl(namespace));
     }
 
@@ -233,8 +231,13 @@ public final class NumenPlugins {
         }
 
         @Override
-        public void registerCommands(String group, String summary, Consumer<CommandGroup> actions) {
-            NumenCli.register(namespace, group, summary, actions);
+        public void api(String group, String summary, Class<?> functions) {
+            com.dwinovo.numen.sdk.ApiRegistry.register(namespace, group, summary, functions);
+        }
+
+        @Override
+        public <T> void codec(Class<T> type, com.dwinovo.numen.sdk.Codec<T> codec) {
+            com.dwinovo.numen.sdk.LuaCodecs.register(type, codec);
         }
 
         @Override

@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task.move;
 
-import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.sdk.ServerCall;
 import com.dwinovo.numen.task.TaskRecord;
 
 import java.util.UUID;
@@ -42,8 +42,8 @@ public final class FollowTaskRecord extends TaskRecord {
     /** 期限比时长多留的那一截:到点收场的是任务自己。 */
     private static final long GRACE_TICKS = 5 * 20;
 
-    public FollowTaskRecord(ServerSource source, double keepWithin, UUID target, String targetName, long forTicks) {
-        super(source, source.companion().level().getGameTime() + forTicks + GRACE_TICKS);
+    public FollowTaskRecord(ServerCall source, double keepWithin, UUID target, String targetName, long forTicks) {
+        super(source, source.her().level().getGameTime() + forTicks + GRACE_TICKS);
         if (forTicks <= 0) {
             throw new IllegalArgumentException("跟随总有时长:" + forTicks);
         }

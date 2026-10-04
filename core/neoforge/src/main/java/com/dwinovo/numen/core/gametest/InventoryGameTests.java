@@ -3,7 +3,6 @@ package com.dwinovo.numen.core.gametest;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.task.TaskRecord;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
@@ -51,12 +50,12 @@ public class InventoryGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_dresser", new BlockPos(4, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.DIAMOND_HELMET));
-        TaskRecord record = lua(companion, "numen.gear.wear(\"minecraft:diamond_helmet\")").task();
+        ToolRun wear = lua(companion, "numen.gear.wear(\"minecraft:diamond_helmet\")");
 
         succeedWhen(helper, () -> {
             helper.assertTrue(companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
                     .is(Items.DIAMOND_HELMET), "the helmet is not on her head");
-            String said = record.getResult() == null ? null : record.getResult().message();
+            String said = wear.done() ? wear.outcome() : null;
             helper.assertTrue(said != null && said.contains("in head"),
                     "the reply must say where it went, got: " + said);
             CompanionFactory.despawn(level.getServer(), companion);
@@ -79,7 +78,7 @@ public class InventoryGameTests {
         companion.getInventory().add(pick);
         // 这条测的是丢出去的是不是原物;丢东西要不要问主人另有用例,这里让主人选"全放行"
         com.dwinovo.numen.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
-        TaskRecord record = lua(companion, "numen.inv.drop(\"minecraft:diamond_pickaxe\", {count = 1})").task();
+        lua(companion, "numen.inv.drop(\"minecraft:diamond_pickaxe\", {count = 1})");
 
         succeedWhen(helper, () -> {
             var drops = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
@@ -136,7 +135,7 @@ public class InventoryGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(craft.done(), "inv craft has not replied");
-            helper.assertTrue(craft.succeeded() && craft.outcome().contains("crafted 8x oak_planks"),
+            helper.assertTrue(craft.succeeded() && Long.valueOf(8).equals(craft.field("crafted")),
                     "inv craft did not report 8 planks: " + craft.outcome());
             helper.assertTrue(companion.getInventory().countItem(Items.OAK_PLANKS) == 8
                             && companion.getInventory().countItem(Items.OAK_LOG) == 0,

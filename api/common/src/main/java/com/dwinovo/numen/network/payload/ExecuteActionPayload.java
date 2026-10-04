@@ -1,10 +1,11 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.cli.NumenCli;
+import com.dwinovo.numen.agent.script.ApiReply;
+import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.network.NumenNetwork;
 import com.dwinovo.numen.network.Wire;
-import com.dwinovo.numen.task.TaskResult;
+import com.dwinovo.numen.sdk.Dispatcher;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.netty.buffer.ByteBuf;
@@ -18,9 +19,9 @@ import java.util.UUID;
 
 /**
  * Client-to-server payload: "a script running in the brain on my client called this API function — please execute it on
- * my companion". The action is named by its path ({@code work dig}), the arguments are the JSON the script's call was read
- * into ({@link NumenCli#invocation}); the server reads them again with the same parameter types before running the action
- * ({@link NumenCli#serve(String, JsonObject, com.dwinovo.numen.entity.NumenPlayer, String, java.util.function.Consumer)}).
+ * my companion". The function is named in full ({@code numen.work.dig}), the arguments are the script values the call was
+ * read into ({@link Dispatcher#invocation}); the server reads them again with the same codecs before running the function
+ * ({@link Dispatcher#serve}).
  *
  * <h2>Trust model</h2>
  * The server treats this as unvalidated input. Validation chain:
@@ -37,7 +38,7 @@ import java.util.UUID;
  * — owner distance grants nothing exploitable. (Ownership is the auth.)
  *
  * <p>Any failure path emits an immediate
- * {@link TaskResultPayload} with {@code success:false} back to the sender so
+ * {@link TaskResultPayload} with {@code ok:false} back to the sender so
  * the script waiting on the call gets its result — silently dropping a call
  * would leave it waiting forever.
  *
@@ -66,9 +67,12 @@ public record ExecuteActionPayload(UUID entityUuid,
      * 这次调用编码后是 {@code bytes} 字节,一个上行的包装不下:不送,就地回给脚本的那条失败。说清多大、上限多少、怎么办。
      */
     public static String tooBig(int bytes) {
-        return TaskResult.fail(Wire.TO_SERVER.tooBig("This call", bytes) + ", so it was not sent. Split the work "
-                        + "into several shorter calls: a long grid or list goes in as several steps.",
-                java.util.Map.of("call_bytes", bytes, "limit_bytes", Wire.TO_SERVER.bytes())).toJson();
+        JsonObject data = new JsonObject();
+        data.addProperty("call_bytes", bytes);
+        data.addProperty("limit_bytes", Wire.TO_SERVER.bytes());
+        return ApiReply.error(ErrorKind.FAILED, Wire.TO_SERVER.tooBig("This call", bytes) + ", so it was not sent. "
+                + "Split the work into several shorter calls: a long grid or list goes in as several steps.", null,
+                data).toString();
     }
 
     @Override
@@ -112,8 +116,8 @@ public record ExecuteActionPayload(UUID entityUuid,
             replyError(player, p, "invalid arguments JSON: " + ex.getMessage());
             return;
         }
-        // 查询当场回;改世界的动作派活,结果随任务的生命周期回来
-        NumenCli.serve(p.action(), args, companion, p.callId(), json ->
+        // 当场的当场回;等的、占身体的,结果随等到的那一刻、活的受理回来
+        Dispatcher.serve(p.action(), args, companion, p.callId(), json ->
                 NumenNetwork.sendToPlayer(player, new TaskResultPayload(p.entityUuid(), p.callId(), json)));
     }
 
@@ -124,7 +128,7 @@ public record ExecuteActionPayload(UUID entityUuid,
     public static void replyError(ServerPlayer player, ExecuteActionPayload p, String message) {
         Constants.LOG.warn("[numen-net] ✗ execute_action rejected from {}: action={} id={} reason={} args={}",
                 player.getName().getString(), p.action(), p.callId(), message, p.argumentsJson());
-        String json = TaskResult.fail(message).toJson();
+        String json = ApiReply.error(ErrorKind.FAILED, message, null, null).toString();
         NumenNetwork.sendToPlayer(player, new TaskResultPayload(p.entityUuid(), p.callId(), json));
     }
 }

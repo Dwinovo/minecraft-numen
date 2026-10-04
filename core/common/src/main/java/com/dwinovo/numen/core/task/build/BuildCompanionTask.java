@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.task.build;
 
-import com.dwinovo.numen.cli.Shapes;
+import com.dwinovo.numen.sdk.Call;
+import com.dwinovo.numen.sdk.LuaCodecs;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.core.build.Built;
@@ -24,10 +25,10 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 多格建造任务:站在原地,把施工图里手够得着的格一批一批落进世界,每一格轮到一次就收场。
@@ -178,8 +179,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                     + "holds them there.", FailureType.NO_SUPPORT);
         }
         String hint = !tally.far().isEmpty()
-                ? "numen.move.to(" + Shapes.literal(tally.far().get(0)) + ", {arrive = \"place\"})"
-                : !tally.dig().isEmpty() ? "numen.work.dig(" + Shapes.literal(tally.dig().get(0)) + ")" : null;
+                ? Call.of("numen.move.to", tally.far().get(0), Map.of("arrive", "place"))
+                : !tally.dig().isEmpty() ? Call.of("numen.work.dig", tally.dig().get(0)) : null;
         return new Precondition.Failure("nothing of it to place within reach of where you stand. " + remaining(tally),
                 FailureType.OUT_OF_REACH, hint);
     }
@@ -221,7 +222,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     private static String lua(BlockPos pos) {
-        return Shapes.literal(pos);
+        return LuaCodecs.literal(pos);
     }
 
     /**
@@ -1075,37 +1076,43 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * <p>只陈述事实。她要不要跟玩家提、怎么提、用什么语言,是她的事。
      */
     @Override
-    protected Map<String, Object> resultData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("requested", r.targets.size());
-        data.put("left", r.targets.size() - r.completed() - skippedCells);
-        data.put("completed", r.completed());
-        data.put("placed", r.placed());
-        data.put("replaced", r.replaced());
-        data.put("cleared", r.broken());
-        data.put("removed", r.removed());
-        String building = building();
-        if (building != null) {
-            data.put("building", building);
-        }
-        if (siteMin != null) {
-            data.put("site", List.of(Shapes.pos(siteMin), Shapes.pos(siteMax)));
-        }
-        if (damagedCells > 0) {
-            // 施工期间被外力拆毁又补回去的格数。她盖得慢或反复返工,原因在这儿。
-            data.put("destroyed_while_building", damagedCells);
-        }
-        if (r.settledAway() > 0) {
-            // 整份放完、世界落定一次之后与图纸不同的格:原版的裁决,再放一遍还是这样
-            data.put("settled_away", r.settledAway());
-        }
-        if (r.consumeMaterials) {
-            Map<Item, Integer> shortfall = ledger.shortfallAgainstInventory(ledger.remainingNeed());
-            if (!shortfall.isEmpty()) {
-                data.put("still_short", BuildLedger.summarizeShortfall(shortfall));
-            }
-        }
-        return data;
+    protected Placed value() {
+        Map<Item, Integer> shortfall = r.consumeMaterials
+                ? ledger.shortfallAgainstInventory(ledger.remainingNeed()) : Map.of();
+        return new Placed(r.targets.size(), r.targets.size() - r.completed() - skippedCells, r.completed(), r.placed(),
+                r.replaced(), r.broken(), r.removed(), Optional.ofNullable(building()),
+                siteMin == null ? Optional.empty() : Optional.of(List.of(siteMin, siteMax)),
+                // 施工期间被外力拆毁又补回去的格数:她盖得慢或反复返工,原因在这儿
+                damagedCells > 0 ? Optional.of(damagedCells) : Optional.empty(),
+                // 整份放完、世界落定一次之后与图纸不同的格:原版的裁决,再放一遍还是这样
+                r.settledAway() > 0 ? Optional.of(r.settledAway()) : Optional.empty(),
+                shortfall.isEmpty() ? Optional.empty() : Optional.of(BuildLedger.summarizeShortfall(shortfall)));
+    }
+
+    /** {@code numen.build.place} 交回的值。 */
+    @com.dwinovo.numen.sdk.Doc("What one numen.build.place did.")
+    public record Placed(@com.dwinovo.numen.sdk.Doc("Cells it was given to do.") int requested,
+                         @com.dwinovo.numen.sdk.Doc("Cells still to do.") int left,
+                         @com.dwinovo.numen.sdk.Doc("Cells that now match.") int completed,
+                         @com.dwinovo.numen.sdk.Doc("Blocks placed.") int placed,
+                         @com.dwinovo.numen.sdk.Doc("Blocks that stood there and were swapped for the right one.")
+                         int replaced,
+                         @com.dwinovo.numen.sdk.Doc("Blocks broken to clear a cell that should be empty.") int cleared,
+                         @com.dwinovo.numen.sdk.Doc("Blocks you placed there before that the file no longer has, "
+                                 + "taken away.") int removed,
+                         @com.dwinovo.numen.sdk.Doc("The building's name, house#1, for a blueprint.")
+                         Optional<String> building,
+                         @com.dwinovo.numen.sdk.Doc("Two corners of the site.") Optional<List<BlockPos>> site,
+                         @com.dwinovo.numen.sdk.Doc("Cells something else broke while you built, put back.")
+                         Optional<Integer> destroyedWhileBuilding,
+                         @com.dwinovo.numen.sdk.Doc("When the last cell went in: cells that changed once the world "
+                                 + "settled (vanilla would not hold them as drawn, or their neighbours reshape them).")
+                         Optional<Integer> settledAway,
+                         @com.dwinovo.numen.sdk.Doc("What you are short of.") Optional<String> stillShort) {
+
+        /** 要的样子已经立着,什么都没放。 */
+        public static final Placed NOTHING = new Placed(0, 0, 0, 0, 0, 0, 0, Optional.empty(), Optional.empty(),
+                Optional.empty(), Optional.empty(), Optional.empty());
     }
 
     /**

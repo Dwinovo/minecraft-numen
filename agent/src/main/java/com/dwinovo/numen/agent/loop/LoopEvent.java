@@ -31,6 +31,10 @@ public sealed interface LoopEvent {
     /** 一个工具调用结算了,结果已进历史。 */
     record ToolFinished(long runId, LlmToolCall call, String resultJson) implements LoopEvent {}
 
+    /** 程序 {@code program} 里的一次 API 调用有了结局。 */
+    record ApiCalled(long runId, LlmToolCall program, com.dwinovo.numen.agent.script.ScriptCall.Called called)
+            implements LoopEvent {}
+
     record RunEnded(long runId, RunEnd end) implements LoopEvent {}
 
     /** 调用失败而且不再重试——该让主人看见了。 */

@@ -35,8 +35,8 @@ import java.util.regex.Pattern;
  * 几十毫秒以内),等身体干活的时候它不等,谁都不阻塞。
  *
  * <h2>返回什么</h2>
- * 成功直接返回数据:回执的数据换成 Lua 的表(声明了返回项的,{@link ScriptCatalog.Verb#returns},是数据里的那一项),没有数据是 nil。
- * 回执那句话不交给脚本,只进整段程序的回执。失败在调用处抛一个错误值:一张表 {@code {kind, message, hint, fn, data}}
+ * 成功直接返回函数的值(不返回值的是 nil),带方法的类的值挂上它的元表({@link ScriptCatalog#mark})。失败在调用处抛一个错误值:
+ * 一张表 {@code {kind, message, hint, fn, data}}
  * ({@link ScriptRun#failure}),带着错误元表,{@code tostring(err)} 是一段可读的文字({@link #render}),{@code pcall} 接住后按
  * {@code err.kind} 分支。全局函数 {@code raise(kind, message, hint)} 抛同一种错误值,库与脚本自己的失败也这样说。
  */
@@ -318,9 +318,12 @@ public final class LuaEngine implements ScriptEngine {
         return List.copyOf(out);
     }
 
-    /** 一个返回值里带方法的值:换成 Lua 值时带上它的类的元表。 */
+    /**
+     * 一个返回值里带方法的值:换成 Lua 值时带上它的类的元表——模块里与类同名的那张表,按类名的最后一段认({@code numen.Cluster} 的方法写在
+     * {@code M.Cluster} 上)。
+     */
     private static Object instance(ScriptType.Class type, Object value) {
-        return new LuaSandbox.Instance(type.name(), type.home(), value);
+        return new LuaSandbox.Instance(type.name().substring(type.name().lastIndexOf('.') + 1), type.home(), value);
     }
 
     // ---- 签名:LuaLS 的类型注解 ----
@@ -332,6 +335,7 @@ public final class LuaEngine implements ScriptEngine {
             case ScriptType.Named n -> n.name();
             case ScriptType.ListOf l -> (l.item() instanceof ScriptType.Union ? "(" + typeText(l.item()) + ")"
                     : typeText(l.item())) + "[]";
+            case ScriptType.MapOf m -> "table<string, " + typeText(m.value()) + ">";
             case ScriptType.Union u -> String.join("|", u.options().stream().map(this::typeText).toList());
             case ScriptType.Choice c -> String.join("|", c.values().stream().map(LuaEngine::literal).toList());
             case ScriptType.Table t -> "{" + String.join(", ", t.fields().stream()
@@ -673,10 +677,10 @@ public final class LuaEngine implements ScriptEngine {
         LuaSandbox.Builder sandbox = LuaSandbox.builder(LIMITS).missing(LuaEngine::missing).errors(LuaEngine::render)
                 .redefined(redefined).unknown(LuaEngine::unknown).function(RAISE, LuaEngine::raise)
                 .function(REQUIRE, LuaEngine::require);
-        catalog.groups().forEach((group, verbs) -> verbs.forEach((verb, declared) ->
-                sandbox.function(pathName(group), functionName(verb), in -> {
-                    seen.add(call(group, verb, in, declared));
-                    return catalog.mark(declared.sample(), declared.type(), LuaEngine::instance);
+        catalog.groups().forEach((group, functions) -> functions.forEach((name, declared) ->
+                sandbox.function(pathName(group), functionName(name), in -> {
+                    seen.add(call(group, name, in, declared));
+                    return catalog.mark(declared.sample(), declared.returns(), LuaEngine::instance);
                 })));
         // 只读不跑时模块不放上路径(它们的函数只记下调用),带方法的值从各自的模块另装一份取元表
         return sandbox.classes(source(catalog.modules()));
@@ -695,7 +699,7 @@ public final class LuaEngine implements ScriptEngine {
      * 一次调用的参数:按顺序的对象,最后一个是名字到值的表就是选项。选项表只能在最后。最后一个是空表 {@code {}} 时它是没写选项的
      * 选项表:空表分不出是列表还是名字表,而写在最后的那张表就是选项的位置。
      */
-    private static ScriptRun.Call call(String group, String verb, List<Object> in, ScriptCatalog.Verb declared) {
+    private static ScriptRun.Call call(String group, String name, List<Object> in, ScriptCatalog.Function declared) {
         List<Object> objects = new ArrayList<>(in);
         Map<String, Object> options = Map.of();
         Object last = objects.isEmpty() ? null : objects.get(objects.size() - 1);
@@ -710,7 +714,7 @@ public final class LuaEngine implements ScriptEngine {
             objects.remove(objects.size() - 1);
         }
         // nil 照样交过去(位置要对得上),由读参数的那一处说是哪一个值是 nil
-        return new ScriptRun.Call(LuaSandbox.currentLine(), group, verb, java.util.Collections.unmodifiableList(objects),
+        return new ScriptRun.Call(LuaSandbox.currentLine(), group, name, java.util.Collections.unmodifiableList(objects),
                 options);
     }
 
@@ -756,8 +760,8 @@ public final class LuaEngine implements ScriptEngine {
                     .redefined(LuaEngine::redefined).unknown(LuaEngine::unknown).errors(LuaEngine::render)
                     .show(LuaEngine::literal).function(RAISE, LuaEngine::raise).function(REQUIRE, LuaEngine::require)
                     .modules(source(catalog.modules()));
-            catalog.groups().forEach((group, verbs) -> verbs.keySet().forEach(verb ->
-                    sandbox.function(pathName(group), functionName(verb), in -> ask(group, verb, in))));
+            catalog.groups().forEach((group, functions) -> functions.keySet().forEach(name ->
+                    sandbox.function(pathName(group), functionName(name), in -> ask(group, name, in))));
             running = sandbox.build().start(name, code, List.of(), outcome -> events.add(new Ended(outcome)));
             return next();
         }
@@ -767,15 +771,16 @@ public final class LuaEngine implements ScriptEngine {
             Call call = pending;
             pending = null;
             if (!result.ok()) {
-                return answer(new Answer(null, ScriptRun.failure(result.kind(), result.text(), result.hint(),
-                        call.function(), result.data().size() > 0 ? lua(JsonValues.toJava(result.data())) : null)));
+                Map<String, Object> error = new LinkedHashMap<>(result.error());
+                error.put(ScriptRun.FN, call.function());
+                if (error.get(ScriptRun.DATA) != null) {
+                    error.put(ScriptRun.DATA, lua(error.get(ScriptRun.DATA)));
+                }
+                return answer(new Answer(null, error));
             }
-            ScriptCatalog.Verb verb = catalog.verb(call.group(), call.verb());
-            String key = verb == null ? null : verb.returns();
-            Object value = key != null ? JsonValues.toJava(result.data().get(key))
-                    : result.data().size() > 0 ? JsonValues.toJava(result.data()) : null;
-            return answer(new Answer(lua(catalog.mark(value, verb == null ? null : verb.type(), LuaEngine::instance)),
-                    null));
+            ScriptCatalog.Function fn = catalog.function(call.group(), call.name());
+            return answer(new Answer(lua(catalog.mark(result.value(), fn == null ? null : fn.returns(),
+                    LuaEngine::instance)), null));
         }
 
         /**
@@ -803,7 +808,7 @@ public final class LuaEngine implements ScriptEngine {
             Call call = pending;
             pending = null;
             return answer(new Answer(null, ScriptRun.failure(why.kind().wire(), why.getMessage(), why.hint(),
-                    call.function(), null)));
+                    call.function(), lua(why.data()))));
         }
 
         @Override
@@ -866,8 +871,8 @@ public final class LuaEngine implements ScriptEngine {
         }
 
         /** 脚本线程上:一个 API 函数被调了。交给驱动方,等它交回结局。 */
-        private Object ask(String group, String verb, List<Object> in) throws InterruptedException {
-            events.add(new Asked(call(group, verb, in, catalog.verb(group, verb))));
+        private Object ask(String group, String name, List<Object> in) throws InterruptedException {
+            events.add(new Asked(call(group, name, in, catalog.function(group, name))));
             Answer answer = answers.take();
             if (answer.raise() != null) {
                 throw new LuaSandbox.ScriptError(answer.raise());

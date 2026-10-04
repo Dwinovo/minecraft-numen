@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task.inventory;
 
-import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.sdk.ServerCall;
 import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.world.item.Item;
 
@@ -20,8 +20,8 @@ public final class EatItemTaskRecord extends TaskRecord {
     /** Human-readable label for messages / debug overlay (e.g. "golden_apple"). */
     public final String label;
 
-    public EatItemTaskRecord(ServerSource source, Item item, String label) {
-        super(source, source.companion().level().getGameTime() + TIMEOUT_TICKS);
+    public EatItemTaskRecord(ServerCall source, Item item, String label) {
+        super(source, source.her().level().getGameTime() + TIMEOUT_TICKS);
         this.item = item;
         this.label = label;
     }

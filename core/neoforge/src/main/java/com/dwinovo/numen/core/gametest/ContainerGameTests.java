@@ -50,8 +50,8 @@ public class ContainerGameTests {
                                 && companion.containerMenu instanceof ChestMenu,
                         "the chest did not open: " + step.get().outcome()))
                 .thenExecute(() -> step.set(lua(companion, "numen.gui.view()")))
-                .thenWaitUntil(() -> helper.assertTrue(step.get().succeeded() && step.get().reply().contains("0: ")
-                                && step.get().reply().contains("diamond"),
+                .thenWaitUntil(() -> helper.assertTrue(step.get().succeeded()
+                                && step.get().reply().contains("{\"index\":0,\"side\":\"container\",\"item\":\"minecraft:diamond\",\"count\":5}"),
                         "gui view does not show the diamonds in slot 0: " + step.get().reply()))
                 .thenExecute(() -> step.set(lua(companion, "numen.gui.quick(0)")))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
@@ -82,14 +82,14 @@ public class ContainerGameTests {
         });
     }
 
-    /** 没开着任何方块界面时关界面:不算错,回执如实说没有开着的方块界面。 */
+    /** 没开着任何方块界面时关界面:不算错,交回 false——没有开着的界面可关。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_container")
     public static void close_gui_with_nothing_open_says_so(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_tidy", new BlockPos(3, 2, 3), false);
         ToolRun close = lua(companion, "numen.gui.close()");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(close.succeeded() && close.reply().contains("no block GUI was open"),
+            helper.assertTrue(close.succeeded() && Boolean.FALSE.equals(close.value()),
                     "the reply does not say nothing was open: " + close.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -116,7 +116,7 @@ public class ContainerGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,
                         "the chest did not open: " + step.get().outcome()))
-                .thenExecute(() -> step.set(lua(companion, "numen.gui.quick(\"" + menuSlotOf(companion, Items.DIAMOND) + "\")")))
+                .thenExecute(() -> step.set(lua(companion, "numen.gui.quick(" + menuSlotOf(companion, Items.DIAMOND) + ")")))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done()
                                 && step.get().outcome().contains("didn't move"),
                         "the reply does not say the diamonds stayed: " + step.get().outcome()))
@@ -142,7 +142,7 @@ public class ContainerGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && companion.containerMenu instanceof ChestMenu,
                         "the chest did not open: " + step.get().outcome()))
-                .thenExecute(() -> step.set(lua(companion, "numen.gui.move(0, \"" + menuSlotOf(companion, Items.AIR) + "\", {count = 2})")))
+                .thenExecute(() -> step.set(lua(companion, "numen.gui.move(0, " + menuSlotOf(companion, Items.AIR) + ", {count = 2})")))
                 .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
                                 && step.get().outcome().contains("moved 2 diamond"),
                         "the reply does not say two diamonds moved: " + step.get().outcome()))

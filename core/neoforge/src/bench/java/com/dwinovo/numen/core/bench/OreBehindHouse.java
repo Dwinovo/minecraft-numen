@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.bench;
 
-import com.dwinovo.numen.cli.Shapes;
+import com.dwinovo.numen.sdk.Positions;
 import com.dwinovo.numen.bench.Check;
 import com.dwinovo.numen.bench.OwnerScript;
 import com.dwinovo.numen.bench.Scenario;
@@ -140,7 +140,7 @@ public final class OreBehindHouse implements Scenario {
         // 只能穿墙,问一次——证明征询、点头、只拆点过头的格这条路走得通
         String walk = allowOnce ? "costs = {dig = true, place = true}, avoid_break = \"minecraft:stone\""
                 : "costs = {dig = true, place = true, consent = false}";
-        return "numen.move.to(" + Shapes.literal(ore.south()) + ", {" + walk + "})\n"
+        return "numen.move.to(" + Positions.literal(ore.south()) + ", {" + walk + "})\n"
                 + "numen.work.dig({x = " + ore.getX() + ", y = " + ore.getY() + ", z = " + ore.getZ() + "})\n"
                 + "numen.work.collect()";
     }

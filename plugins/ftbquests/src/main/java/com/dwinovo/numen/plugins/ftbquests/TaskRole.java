@@ -16,9 +16,6 @@ import dev.ftb.mods.ftbquests.quest.task.StructureTask;
 import dev.ftb.mods.ftbquests.quest.task.Task;
 import dev.ftb.mods.ftbquests.quest.task.XPTask;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Locale;
 
 /**
  * 一个任务条件由谁、怎么完成——list、show 给她看的"谁来完成",submit 决定交哪几个,都只问这一处。
@@ -36,18 +33,7 @@ import java.util.Locale;
  */
 enum TaskRole {
 
-    COUNTS("you can do it too"),
-    SUBMIT("hand in with submit"),
-    CRAFTED("counts only items at the moment they are crafted"),
-    OBSERVE("observation, not supported for you yet"),
-    SCREEN("handed in through a task screen block"),
-    EXTERNAL("decided by the modpack's scripts or another mod");
-
-    private final String label;
-
-    TaskRole(String label) {
-        this.label = label;
-    }
+    COUNTS, SUBMIT, CRAFTED, OBSERVE, SCREEN, EXTERNAL;
 
     static TaskRole of(Task task) {
         return switch (task) {
@@ -70,20 +56,5 @@ enum TaskRole {
             case StageTask ignored -> COUNTS;
             default -> EXTERNAL;
         };
-    }
-
-    /** 列表与详情里跟在条件后面的那几个词。 */
-    String label() {
-        return label;
-    }
-
-    /** 数据里的写法:{@code submit}、{@code counts}。 */
-    String word() {
-        return name().toLowerCase(Locale.ROOT);
-    }
-
-    /** 数据里全部的写法,按声明顺序。 */
-    static List<String> words() {
-        return Arrays.stream(values()).map(TaskRole::word).toList();
     }
 }

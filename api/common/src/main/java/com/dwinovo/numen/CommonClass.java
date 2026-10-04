@@ -20,6 +20,7 @@ public class CommonClass {
         com.dwinovo.numen.config.ConfigMigrations.run(numenDir);
 
         registerTools();
+        registerApi();
         wireTaskMachine();
     }
 
@@ -49,18 +50,32 @@ public class CommonClass {
     }
 
     /**
-     * 引擎自己登记她的三个工具——跑一段脚本(名字随脚本语言)、装技能、记计划——和两组属于 API 本身的动作:{@code api}(帮助)、
-     * {@code mc}(原版与模组的指令)。作用于世界的是脚本里的函数:别的动作组是内容,由 {@code numen-core} 与插件经
-     * {@code NumenApi.registerCommands} 登记,不加工具;只管大脑自己的事、不碰世界的(技能、计划)才是工具。这些由引擎登记,是因为
-     * 插件的动作与技能只依赖引擎——谁登记了动作,谁都指望这个入口与帮助在。
+     * 引擎自己登记她的四个工具:跑一段程序(名字随脚本语言)、装技能、记计划、记札记。作用于世界的是程序里的 API 函数,不加工具;只管
+     * 大脑自己的事、不碰世界的才是工具。
      */
     public static void registerTools() {
-        ToolRegistry.register(new com.dwinovo.numen.cli.ScriptTool());
-        ToolRegistry.register(new com.dwinovo.numen.cli.SkillTool());
-        ToolRegistry.register(new com.dwinovo.numen.cli.TodoTool());
-        ToolRegistry.register(new com.dwinovo.numen.cli.MemoryTool());
-        com.dwinovo.numen.cli.HelpCommands.install();
-        com.dwinovo.numen.cli.McCommands.install();
+        ToolRegistry.register(new com.dwinovo.numen.agent.tool.ScriptTool());
+        ToolRegistry.register(new com.dwinovo.numen.agent.tool.SkillTool());
+        ToolRegistry.register(new com.dwinovo.numen.agent.tool.TodoTool());
+        ToolRegistry.register(new com.dwinovo.numen.agent.tool.MemoryTool());
         Constants.LOG.info("[numen] registered {} tool(s)", ToolRegistry.size());
+    }
+
+    /**
+     * 引擎自己的几组 API 函数,和 core 与插件走同一扇门({@code NumenPlugins.register}):{@code api}(帮助)、{@code mc}(原版与模组的
+     * 指令)、{@code task}(手上的活与表)、{@code module}(Lua 模块)。它们属于引擎:谁登记了函数,谁都指望帮助与这几样在。
+     */
+    public static void registerApi() {
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen -> {
+            numen.api("api", "The API itself: the typed signatures of a group's or a module's functions, or one "
+                    + "function in full.", com.dwinovo.numen.sdk.HelpApi.class);
+            numen.api("mc", "Minecraft and mod commands, as a player types them in chat, with your own permission "
+                    + "level.", com.dwinovo.numen.mc.McApi.class);
+            numen.api("task", "The background task and your pending timers.", com.dwinovo.numen.task.TaskApi.class);
+            numen.api(com.dwinovo.numen.script.ModuleApi.GROUP, "Modules — functions written in "
+                    + com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.language() + " that programs use by name, kept "
+                    + "as files on your owner's computer (numen/work.lua is numen.work): the built-in ones, your own, "
+                    + "and how the programs that used them went.", com.dwinovo.numen.script.ModuleApi.class);
+        });
     }
 }

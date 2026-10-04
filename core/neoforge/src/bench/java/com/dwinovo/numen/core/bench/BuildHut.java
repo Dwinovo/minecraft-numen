@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.bench;
 
-import com.dwinovo.numen.cli.Shapes;
+import com.dwinovo.numen.sdk.Positions;
 import com.dwinovo.numen.bench.Check;
 import com.dwinovo.numen.bench.Scenario;
 import com.dwinovo.numen.bench.Scene;
@@ -233,6 +233,6 @@ public final class BuildHut implements Scenario {
                 hut = hut:union(S.layer(o:offset(0, 2, 0), {"#####", "#...#", "#...#", "#...#", "#####"}, planks))
                 hut = hut:union(S.layer(o:offset(0, 3, 0), {"#####", "#####", "#####", "#####", "#####"}, planks))
                 numen.build.place(hut:union({{name = "oak_door[facing=south]", pos = %s}}))
-                """.formatted(Shapes.literal(middle), x, y, z, Shapes.literal(door));
+                """.formatted(Positions.literal(middle), x, y, z, Positions.literal(door));
     }
 }

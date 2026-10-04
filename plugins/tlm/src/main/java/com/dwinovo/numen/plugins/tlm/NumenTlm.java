@@ -29,8 +29,8 @@ public final class NumenTlm {
     /** 由 {@code Builtin} 在确认车万女仆在场后调用。 */
     public static void install(IEventBus modBus, Path skillsRoot) {
         NumenPlugins.register(NAMESPACE, numen -> {
-            // 命令树两侧都登记(帮助要它的说明);穿模型的在主人客户端跑,管女仆的在服务端跑
-            TlmCommands.install(numen);
+            // 两组 API 两侧都登记(帮助要它们的说明);穿模型的在主人客户端跑,管女仆的在服务端跑
+            SkinApi.install(numen);
 
             // 女仆身上的事件两侧都登记(服务端的发出口靠它挡,主人客户端的队列靠它投递),所以不放进 onClient
             MaidEvents.bind(numen);

@@ -32,7 +32,7 @@ public final class MaidLook {
         // 一点都露不出来。不说的话,她换了别的外观会照样回报"换好了",而主人画面上
         // 什么都没发生——命令确实成功了,只是被盖着。
         sb.append("这套模型盖住了你的整个身体,别的外观(比如 YSM 的模型)在它底下看不见;"
-                + "要露出别的外观,得先用 " + TlmCommands.line(TlmCommands.REMOVE) + "() 把它脱下来。");
+                + "要露出别的外观,得先用 tlm.skin.remove() 把它脱下来。");
 
         return sb.append("</maid_look>").toString();
     }

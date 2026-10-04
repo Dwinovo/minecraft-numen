@@ -2,7 +2,7 @@ package com.dwinovo.numen.client.screen.chat;
 
 import com.dwinovo.numen.agent.llm.ToolOutcome;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
-import com.dwinovo.numen.cli.TodoTool;
+import com.dwinovo.numen.agent.tool.TodoTool;
 
 import java.util.List;
 

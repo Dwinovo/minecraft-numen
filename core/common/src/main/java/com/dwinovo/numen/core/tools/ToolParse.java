@@ -14,8 +14,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 工具入口共享的参数解析件:方块 id 与标签展开成方块集。
- * 物品 id 解析用引擎的 {@code ToolArgs.parseItem},不在此重复。
+ * 工具入口共享的参数解析件:方块 id 与标签展开成方块集。物品 id 由 SDK 的值转换读。
  */
 public final class ToolParse {
 

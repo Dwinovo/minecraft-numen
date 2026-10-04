@@ -37,6 +37,16 @@ public class ScriptGameTests {
         return JsonParser.parseString(round.result(call)).getAsJsonObject();
     }
 
+    /** {@code numen.module.list} 交回的清单里叫 {@code name} 的那一份;没有是 null。 */
+    private static JsonObject module(ToolRun list, String name) {
+        for (var row : valueIn(list.reply()).getAsJsonArray()) {
+            if (row.getAsJsonObject().get("name").getAsString().equals(name)) {
+                return row.getAsJsonObject();
+            }
+        }
+        return null;
+    }
+
     private static String message(Round round, LlmToolCall call) {
         return receipt(round, call).get("message").getAsString();
     }
@@ -284,19 +294,20 @@ public class ScriptGameTests {
                 """);
         helper.assertTrue(changed.ranToTheEnd() && changed.receipt().contains("returned: 8"),
                 "her change was not used: " + changed.receipt());
-        String listed = lua(her, "numen.module.list()").reply();
-        helper.assertTrue(listed.contains(COPIED + " — Test fixture") && listed.contains("[built in, changed]"), listed);
+        JsonObject listed = module(lua(her, "numen.module.list()"), COPIED);
+        helper.assertTrue(listed != null && listed.get("summary").getAsString().startsWith("Test fixture")
+                && listed.get("whose").getAsString().equals("built in, changed"), "the list: " + listed);
         helper.assertTrue(lua(her, "return numen.module.show(\"" + COPIED + "\", {factory = true}).code").receipt()
                         .contains("function M.version()") && !lua(her, "return numen.module.show(\"" + COPIED
                         + "\", {factory = true}).code").receipt().contains("gt_marker"), "the factory text is gone");
         ToolRun deleted = lua(her, "numen.module.delete(\"" + COPIED + "\")");
-        helper.assertTrue(deleted.succeeded() && deleted.reply().contains("it stays deleted until numen.module.reset"),
-                deleted.reply());
-        ToolRun gone = lua(her, "return gt.copied.version()");
-        helper.assertTrue(!gone.ranToTheEnd() && gone.receipt().contains("no_function"),
-                "a deleted module is still used: " + gone.receipt());
-        helper.assertTrue(lua(her, "numen.module.list()").outcome().contains("[built in, deleted; "
-                + "numen.module.reset(\"" + COPIED + "\") brings it back]"), "the list does not say it was deleted");
+        helper.assertTrue(deleted.succeeded(), deleted.reply());
+        ToolRun unused = lua(her, "return gt.copied.version()");
+        helper.assertTrue(!unused.ranToTheEnd() && unused.receipt().contains("no_function"),
+                "a deleted module is still used: " + unused.receipt());
+        JsonObject gone = module(lua(her, "numen.module.list()"), COPIED);
+        helper.assertTrue(gone != null && gone.get("whose").getAsString().equals("built in, deleted; "
+                + "numen.module.reset(\"" + COPIED + "\") brings it back"), "the list does not say it was deleted: " + gone);
         ToolRun reset = lua(her, "numen.module.reset(\"" + COPIED + "\")");
         helper.assertTrue(reset.succeeded(), reset.reply());
         ToolRun back = lua(her, "return gt.copied.version(), type(gt.copied.gt_marker)");
@@ -336,13 +347,14 @@ public class ScriptGameTests {
 
         ToolRun saved = lua(her, "numen.module.save(\"-- Clearing cells.\\nlocal M = {}\\n---Clear one cell.\\n"
                 + "function M.cell(p)\\n  numen.build.place({{name = 'air', pos = p}})\\nend\\nreturn M\", {name = \"my.gt_clear\"})");
-        helper.assertTrue(saved.succeeded() && saved.reply().contains("Saved module my.gt_clear"), saved.reply());
+        helper.assertTrue(saved.succeeded() && "my.gt_clear".equals(saved.field("name")) && "new".equals(saved.field("how")),
+                saved.reply());
         ToolRun shown = lua(her, "numen.module.show(\"my.gt_clear\")");
-        helper.assertTrue(shown.succeeded() && shown.reply().contains("(yours)")
-                && shown.reply().contains("function M.cell(p)") && shown.reply().contains("No program used it yet."),
-                shown.reply());
+        helper.assertTrue(shown.succeeded() && "yours".equals(shown.field("whose"))
+                && String.valueOf(shown.field("code")).contains("function M.cell(p)")
+                && Long.valueOf(0).equals(shown.field("runs")), shown.reply());
 
-        String at = com.dwinovo.numen.cli.Shapes.literal(cell);
+        String at = com.dwinovo.numen.sdk.Positions.literal(cell);
         LlmToolCall run = programCall("my.gt_clear.cell(" + at + ")");
         Round first = round(helper, her, run);
 
@@ -361,10 +373,13 @@ public class ScriptGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(level.getBlockState(cell).isAir(),
                         "the second program did not clear the cell"))
                 .thenWaitUntil(() -> {
-                    String listed = lua(her, "numen.module.list()").reply();
-                    helper.assertTrue(listed.contains("my.gt_clear — Clearing cells. [yours] Programs that used it: 2, "
-                            + "ran to the end: 2"), "the record does not add up: " + listed);
-                    helper.assertTrue(listed.contains("numen.work — ") && listed.contains("[built in]"), listed);
+                    ToolRun list = lua(her, "numen.module.list()");
+                    JsonObject mine = module(list, "my.gt_clear");
+                    helper.assertTrue(mine != null && mine.get("summary").getAsString().equals("Clearing cells.")
+                                    && mine.get("whose").getAsString().equals("yours") && mine.get("runs").getAsInt() == 2
+                                    && mine.get("finished").getAsInt() == 2, "the record does not add up: " + mine);
+                    JsonObject work = module(list, "numen.work");
+                    helper.assertTrue(work != null && work.get("whose").getAsString().equals("built in"), list.reply());
                 })
                 .thenExecute(() -> {
                     // 主人拿编辑器改了文件:不重启,下一段程序就用新的

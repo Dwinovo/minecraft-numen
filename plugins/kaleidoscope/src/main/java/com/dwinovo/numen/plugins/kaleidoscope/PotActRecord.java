@@ -1,6 +1,6 @@
 package com.dwinovo.numen.plugins.kaleidoscope;
 
-import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.sdk.ServerCall;
 import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
@@ -18,8 +18,8 @@ public final class PotActRecord extends TaskRecord {
     final PotAct act;
     final ResourceLocation recipe;
 
-    PotActRecord(ServerSource source, BlockPos pos, PotAct act, ResourceLocation recipe) {
-        super(source, source.companion().level().getGameTime() + (act == PotAct.STIR ? STIR_TICKS : STEP_TICKS));
+    PotActRecord(ServerCall source, BlockPos pos, PotAct act, ResourceLocation recipe) {
+        super(source, source.her().level().getGameTime() + (act == PotAct.STIR ? STIR_TICKS : STEP_TICKS));
         this.pos = pos.immutable();
         this.act = act;
         this.recipe = recipe;

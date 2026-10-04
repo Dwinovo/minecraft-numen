@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.task.interact;
 import com.dwinovo.numen.core.task.MouseButton;
 
-import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.sdk.ServerCall;
 import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.Item;
@@ -33,9 +33,9 @@ public final class InteractEntityTaskRecord extends TaskRecord {
     public final Item item;        // null → use whatever is in hand; else equip this first (food / shears / weapon)
     public final boolean sneak;
 
-    public InteractEntityTaskRecord(ServerSource source, MouseButton button, int entityId, int holdTicks, Item item,
+    public InteractEntityTaskRecord(ServerCall source, MouseButton button, int entityId, int holdTicks, Item item,
                                     boolean sneak) {
-        super(source, source.companion().level().getGameTime() + TIMEOUT_TICKS);
+        super(source, source.her().level().getGameTime() + TIMEOUT_TICKS);
         this.button = button;
         this.entityId = entityId;
         this.holdTicks = holdTicks;

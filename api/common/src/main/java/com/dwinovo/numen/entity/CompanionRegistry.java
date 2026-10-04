@@ -8,7 +8,6 @@ import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.Level;
@@ -18,7 +17,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -41,41 +39,41 @@ public final class CompanionRegistry extends SavedData {
      *  空串 = 无皮肤,客户端回落原版默认皮肤(按 UUID 哈希抽取)。 */
     public record Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos,
                         String deathCause, long diedAt, String skinValue, String skinSig,
-                        String taskName, String taskTool, String taskArgs) {
+                        String taskName, String taskLua, String taskOld) {
         /** A live companion (not dead), no borrowed skin, idle. */
         public Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos) {
             this(name, owner, dimension, pos, "", 0L, "", "", "", "", "");
         }
 
         /**
-         * 她现在在做什么:这件活给模型看的名字、派它的动作的路径({@code taskTool})、重放它的那一行命令({@code taskArgs});
-         * 空串 = 闲着,只有名字 = 在做、但接不回来。见 {@code TaskPersistence}。
+         * 她现在在做什么:这件活给模型看的名字(派它的函数的全名)与重启后再跑的那一行 Lua({@code taskLua});空串 = 闲着,只有名字 =
+         * 在做、但接不回来。见 {@code TaskPersistence}。{@code taskOld} 只是读进来的:旧版本按一行命令记下的活,这一版不再跑它。
          */
-        public Entry doing(String task, String tool, String args) {
+        public Entry doing(String task, String lua) {
             return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,
-                    task == null ? "" : task, tool == null ? "" : tool, args == null ? "" : args);
+                    task == null ? "" : task, lua == null ? "" : lua, "");
         }
 
         /** 刷新落点(休眠/移动时的 respawn 提示),皮肤与死亡状态原样保留。 */
         public Entry movedTo(ResourceKey<Level> dimension, BlockPos pos) {
             return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,
-                    taskName, taskTool, taskArgs);
+                    taskName, taskLua, taskOld);
         }
 
         /** 换上 Mojang 签名的皮肤数据(value+signature)。 */
         public Entry withSkin(String value, String sig) {
             return new Entry(name, owner, dimension, pos, deathCause, diedAt,
-                    value == null ? "" : value, sig == null ? "" : sig, taskName, taskTool, taskArgs);
+                    value == null ? "" : value, sig == null ? "" : sig, taskName, taskLua, taskOld);
         }
 
         Entry dead(String cause, long at) {
             return new Entry(name, owner, dimension, pos, cause, at, skinValue, skinSig,
-                    taskName, taskTool, taskArgs);
+                    taskName, taskLua, taskOld);
         }
 
         Entry alive() {
             return new Entry(name, owner, dimension, pos, "", 0L, skinValue, skinSig,
-                    taskName, taskTool, taskArgs);
+                    taskName, taskLua, taskOld);
         }
 
         static final Codec<Entry> CODEC = RecordCodecBuilder.create(i -> i.group(
@@ -87,14 +85,11 @@ public final class CompanionRegistry extends SavedData {
                 Codec.LONG.optionalFieldOf("diedAt", 0L).forGetter(Entry::diedAt),
                 Codec.STRING.optionalFieldOf("skinValue", "").forGetter(Entry::skinValue),
                 Codec.STRING.optionalFieldOf("skinSig", "").forGetter(Entry::skinSig),
-                Codec.STRING.optionalFieldOf("taskName").forGetter(e -> Optional.of(e.taskName())),
-                Codec.STRING.optionalFieldOf("taskTool", "").forGetter(Entry::taskTool),
-                Codec.STRING.optionalFieldOf("taskArgs", "").forGetter(Entry::taskArgs)
-        ).apply(i, (name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig, taskName, taskTool,
-                    taskArgs) ->
-                // 这个字段出现之前,落盘的只有重放用的调用,没有记名字;那时的活由工具派下,名字就是工具名
-                new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,
-                        taskName.orElse(taskTool), taskTool, taskArgs)));
+                Codec.STRING.optionalFieldOf("taskName", "").forGetter(Entry::taskName),
+                Codec.STRING.optionalFieldOf("taskLua", "").forGetter(Entry::taskLua),
+                // 旧版本记的那一行命令:读进来只为如实说它接不回来,写回去它已经清掉了
+                Codec.STRING.optionalFieldOf("taskArgs", "").forGetter(Entry::taskOld)
+        ).apply(i, Entry::new));
     }
 
     private static final Codec<CompanionRegistry> CODEC = RecordCodecBuilder.create(i -> i.group(

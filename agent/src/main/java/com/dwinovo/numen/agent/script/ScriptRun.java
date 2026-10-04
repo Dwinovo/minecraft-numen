@@ -1,7 +1,5 @@
 package com.dwinovo.numen.agent.script;
 
-import com.google.gson.JsonObject;
-
 import java.util.List;
 import java.util.Map;
 
@@ -17,12 +15,12 @@ public interface ScriptRun {
     Step start();
 
     /**
-     * 交回上一次 API 调用的结局,接着跑到下一次调用或结束。成功返回回执的数据:声明了返回项的({@link ScriptCatalog.Verb#returns})
-     * 是数据里的这一项,没有数据是 nil;失败在调用处抛出错误值({@link #failure})。回执那句话不交给脚本,它只进整段的回执。
+     * 交回上一次 API 调用的结局,接着跑到下一次调用或结束。成功返回它的值(不返回值的函数是 nil);失败在调用处抛出错误值
+     * ({@link #failure})。
      */
     Step resume(Result result);
 
-    /** 让交出去的那次调用在调用处失败,不执行它(参数对不上这个动作的参数表):抛给脚本的就是这个错误。 */
+    /** 让交出去的那次调用在调用处失败,不执行它(参数对不上这个函数的参数表):抛给脚本的就是这个错误,{@code data} 是 Lua 值。 */
     Step refuse(ApiError why);
 
     /**
@@ -38,18 +36,18 @@ public interface ScriptRun {
     sealed interface Step permits Call, Done {}
 
     /**
-     * 脚本调了一个 API 函数:执行这个动作,结局经 {@link #resume} 交回。
+     * 脚本调了一个 API 函数:执行它,结局经 {@link #resume} 交回。
      *
      * @param line    脚本里调用所在的行(经库函数调到的,是脚本里调那个库函数的那一行)
      * @param args    按顺序的对象(字符串、整数、小数、布尔、列表)
      * @param options 选项,名字到值;没有是空表
      */
-    record Call(int line, String group, String verb, List<Object> args, Map<String, Object> options)
+    record Call(int line, String group, String name, List<Object> args, Map<String, Object> options)
             implements Step {
 
         /** 脚本里写的函数名,{@code numen.work.dig}、{@code numen.move.go}(改写规则在 {@link ScriptEngine#functionName})。 */
         public String function() {
-            return ScriptEngine.IN_USE.function(group, verb);
+            return ScriptEngine.IN_USE.function(group, name);
         }
     }
 
@@ -67,17 +65,20 @@ public interface ScriptRun {
     /**
      * 一次 API 调用的结局。
      *
-     * @param ok   成没成
-     * @param text 回执那句话:进整段的回执,也是失败时错误值的 {@code message}
-     * @param data 回执里的数据,没有是空对象
-     * @param kind 失败是哪一类({@link ErrorKind#wire});成功是 null
-     * @param hint 失败时能照抄的下一步;没有是 null
+     * @param ok    成没成
+     * @param value 成功时的值(Lua 值);没有是 null
+     * @param error 失败时的错误值({@link #failure} 的字段,{@code fn} 由运行补上);成功是 null
      */
-    record Result(boolean ok, String text, JsonObject data, String kind, String hint) {
+    record Result(boolean ok, Object value, Map<String, Object> error) {
 
         /** 成功的结局。 */
-        public static Result ok(String text, JsonObject data) {
-            return new Result(true, text, data, null, null);
+        public static Result ok(Object value) {
+            return new Result(true, value, null);
+        }
+
+        /** 失败的结局。 */
+        public static Result failed(Map<String, Object> error) {
+            return new Result(false, null, error);
         }
     }
 

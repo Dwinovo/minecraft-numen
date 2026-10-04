@@ -178,7 +178,7 @@ public class BuildGameTests {
         var ctx = TaskDispatch.ctx("gametest-tallgrass", companion);
         TaskDispatch.setTask(companion, buildJob(ctx.toolCallId(), ctx.deadline(4000L),
                 List.of(new BuildTaskRecord.Target(Blocks.CRAFTING_TABLE, Items.CRAFTING_TABLE,
-                        lower, "crafting_table")), true, true), reply -> {});
+                        lower, "crafting_table")), true, true));
         succeedWhen(helper, () -> {
             helper.assertTrue(level.getBlockState(lower).is(Blocks.CRAFTING_TABLE), "工作台没放上");
             helper.assertTrue(!level.getBlockState(lower.above()).is(Blocks.TALL_GRASS),
@@ -216,7 +216,7 @@ public class BuildGameTests {
         companion.getInventory().add(new ItemStack(Items.OAK_FENCE, 3));
         var ctx = TaskDispatch.ctx("gametest-fence-row", companion);
         TaskDispatch.setTask(companion, buildJob(ctx.toolCallId(), ctx.deadline(4000L),
-                targets, true, true), reply -> {});
+                targets, true, true));
         BlockPos mid = helper.absolutePos(new BlockPos(7, 2, 8));
         BlockPos west = helper.absolutePos(new BlockPos(6, 2, 8));
         BlockPos east = helper.absolutePos(new BlockPos(8, 2, 8));
@@ -247,7 +247,7 @@ public class BuildGameTests {
         companion.getInventory().add(new ItemStack(Items.OAK_FENCE, 1));
         var ctx = TaskDispatch.ctx("gametest-fence-edge", companion);
         TaskDispatch.setTask(companion, buildJob(ctx.toolCallId(), ctx.deadline(4000L),
-                targets, true, true), reply -> {});
+                targets, true, true));
         succeedWhen(helper, () -> {
             BlockState built = level.getBlockState(newPos);
             BlockState old = level.getBlockState(oldPos);
@@ -284,7 +284,7 @@ public class BuildGameTests {
         BuildTaskRecord record = buildJob(ctx.toolCallId(), ctx.deadline(4000L), targets, true, true);
         helper.assertTrue(record.targets.get(0).itemPlace(), "素面格(工作台)没升格成原生放置");
         helper.assertFalse(record.targets.get(1).itemPlace(), "带属性格(栅栏)不该升格");
-        TaskDispatch.setTask(companion, record, reply -> {});
+        TaskDispatch.setTask(companion, record);
         succeedWhen(helper, () -> {
             helper.assertTrue(level.getBlockState(tablePos).is(Blocks.CRAFTING_TABLE),
                     "工作台没放出来");
@@ -312,7 +312,7 @@ public class BuildGameTests {
         java.util.function.Consumer<String> go = tag -> {
             var ctx = TaskDispatch.ctx(tag, companion);
             TaskDispatch.setTask(companion, buildJob(ctx.toolCallId(),
-                    ctx.deadline(4000L), targets, true, true), reply -> {});
+                    ctx.deadline(4000L), targets, true, true));
         };
         go.accept("gametest-resume-1");
 
@@ -516,7 +516,7 @@ public class BuildGameTests {
         TaskDispatch.setTask(companion, buildJob(ctx.toolCallId(), ctx.deadline(4000L),
                 new com.dwinovo.numen.core.build.Layout(targets, net.minecraft.core.Vec3i.ZERO,
                         java.util.Map.of(at.asLong(), bannerData), List.of(), java.util.Map.of(), 0),
-                false, false), reply -> {});
+                false, false));
 
         succeedWhen(helper, () -> {
             helper.assertTrue(level.getBlockState(at).is(Blocks.WHITE_BANNER),
@@ -805,7 +805,7 @@ public class BuildGameTests {
         // 免耗材同伴不付料,所以框里那颗钻石照放——收什么放什么,这一档收的是零
         NumenPlayer companion = spawnAt(helper, "gametest_hanger", new BlockPos(3, 2, 5), true);
         var ctx = TaskDispatch.ctx("gametest-fixtures", companion);
-        TaskDispatch.setTask(companion, buildJob(ctx.toolCallId(), ctx.deadline(1000L), loaded, false, true), reply -> {});
+        TaskDispatch.setTask(companion, buildJob(ctx.toolCallId(), ctx.deadline(1000L), loaded, false, true));
 
         Vec3 want = new Vec3(anchor.getX() + 1.5, anchor.getY() + 0.5, anchor.getZ() + 2.5);
         net.minecraft.world.phys.AABB near = new net.minecraft.world.phys.AABB(
@@ -1184,7 +1184,7 @@ public class BuildGameTests {
 
         var ctx = TaskDispatch.ctx("gametest-twice-1", companion);
         var first = buildJob(ctx.toolCallId(), ctx.deadline(3000L), loaded, true, true);
-        TaskDispatch.setTask(companion, first, reply -> {});
+        TaskDispatch.setTask(companion, first);
 
         var second = new BuildTaskRecord[1];
         net.minecraft.world.phys.AABB site = new net.minecraft.world.phys.AABB(
@@ -1221,7 +1221,7 @@ public class BuildGameTests {
                 .thenExecute(() -> {
                     var ctx2 = TaskDispatch.ctx("gametest-twice-2", companion);
                     second[0] = buildJob(ctx2.toolCallId(), ctx2.deadline(3000L), loaded, true, true);
-                    TaskDispatch.setTask(companion, second[0], reply -> {});
+                    TaskDispatch.setTask(companion, second[0]);
                 })
                 .thenIdle(60)
                 .thenExecute(() -> {
@@ -1297,7 +1297,7 @@ public class BuildGameTests {
         var first = buildJob(ctx.toolCallId(), ctx.deadline(6000L), loaded, true, true);
         // 注:dispatchAsync 的 reply 是<b>派发受理</b>回执("已受理,后台执行中"),不是
         // 最终结果——拿它当完工信号会立刻通过而什么都没等到。用进度本身当信号。
-        TaskDispatch.setTask(companion, first, reply -> {});
+        TaskDispatch.setTask(companion, first);
 
         var second = new BuildTaskRecord[1];
         net.minecraft.world.phys.AABB site = new net.minecraft.world.phys.AABB(
@@ -1339,7 +1339,7 @@ public class BuildGameTests {
                     companion.getInventory().add(new ItemStack(Items.DIAMOND, 1 + 1));
                     var ctx2 = TaskDispatch.ctx("gametest-restock-2", companion);
                     second[0] = buildJob(ctx2.toolCallId(), ctx2.deadline(6000L), loaded, true, true);
-                    TaskDispatch.setTask(companion, second[0], reply -> {});
+                    TaskDispatch.setTask(companion, second[0]);
                 })
                 // 第二遍把剩下的补齐
                 .thenWaitUntil(() -> {
@@ -1448,7 +1448,7 @@ public class BuildGameTests {
 
         var ctx = TaskDispatch.ctx("gametest-starve", companion);
         var rec = buildJob(ctx.toolCallId(), ctx.deadline(6000L), loaded, true, true);
-        TaskDispatch.setTask(companion, rec, reply -> {});
+        TaskDispatch.setTask(companion, rec);
 
         long[] startTick = {level.getGameTime()};
         steps(helper)
@@ -2325,7 +2325,7 @@ public class BuildGameTests {
                             .getAsJsonObject("data").getAsJsonObject("returned");
                     helper.assertTrue(got.get("left").getAsInt() == 2 && got.get("reach").getAsInt() == 0
                                     && got.get("unheld").getAsInt() == 1
-                                    && got.get("next").equals(com.dwinovo.numen.cli.Shapes.pos(support)),
+                                    && got.get("next").equals(posJson(support)),
                             "numen.build.diff does not hold the carpet back until the stone under it is in: " + got);
                     at.set(lua(companion, "numen.build.place(" + cells + ")"));
                 })
@@ -2364,7 +2364,7 @@ public class BuildGameTests {
         });
     }
 
-    /** 要盖的样子已经立在那儿就不是一件活:{@code numen.build.place} 当场说已经是那个样子,不派活。 */
+    /** 要盖的样子已经立在那儿就不是一件活:{@code numen.build.place} 不派活,当场交回一份全是零的账(要盖零格、还差零格)。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void placing_what_already_stands_dispatches_nothing(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_idle_builder", new BlockPos(2, 2, 2), false);
@@ -2374,8 +2374,9 @@ public class BuildGameTests {
 
         succeedWhen(helper, () -> {
             helper.assertTrue(build.done() && build.task() == null, "a building that already stands was dispatched");
-            helper.assertTrue(build.succeeded() && build.outcome().contains("already stands like that"),
-                    "the reply does not say it already stands like that: " + build.outcome());
+            helper.assertTrue(build.succeeded() && Long.valueOf(0).equals(build.field("requested"))
+                            && Long.valueOf(0).equals(build.field("left")) && Long.valueOf(0).equals(build.field("placed")),
+                    "the reply does not say nothing is left to build: " + build.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -2594,9 +2595,8 @@ public class BuildGameTests {
                             "the block someone else put in place of hers was removed");
                     helper.assertTrue(level.getBlockState(o.offset(0, 1, 0)).is(Blocks.GOLD_BLOCK),
                             "the gold block someone else placed was removed");
-                    var data = run.get().task().getResult().data();
-                    helper.assertTrue(Integer.valueOf(2).equals(data.get("removed"))
-                                    && Integer.valueOf(1).equals(data.get("replaced")),
+                    var placed = run.get().result(com.dwinovo.numen.core.task.build.BuildCompanionTask.Placed.class);
+                    helper.assertTrue(placed.removed() == 2 && placed.replaced() == 1,
                             "the receipt does not count 2 removed and 1 replaced: " + run.get().outcome());
                     var building = com.dwinovo.numen.core.build.Built.of(level.getServer())
                             .at(new com.dwinovo.numen.core.build.Built.Site("gt_shed", level.dimension().location(), o, 0));
@@ -2613,7 +2613,7 @@ public class BuildGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(run.get().done(), "the third build has not answered"))
                 .thenExecute(() -> {
                     helper.assertTrue(run.get().task() == null && run.get().succeeded()
-                                    && run.get().reply().contains("already stands like that"),
+                                    && Long.valueOf(0).equals(run.get().field("requested")),
                             "a spot that already matches the file was built again: " + run.get().reply());
                     helper.assertTrue(!asked[0], "changing her own building asked the owner");
                     CompanionFactory.despawn(level.getServer(), companion);
@@ -2773,7 +2773,7 @@ public class BuildGameTests {
                     .getAsJsonObject("returned");
             helper.assertTrue(file.ranToTheEnd() && got.get("cells").getAsInt() == cells
                             && got.get("blueprint").getAsString().equals("fixture_read")
-                            && got.get("origin").equals(com.dwinovo.numen.cli.Shapes.pos(at))
+                            && got.get("origin").equals(posJson(at))
                             && got.getAsJsonObject("materials").get("stone").getAsInt() == 3
                             && got.getAsJsonObject("short_of").get("stone").getAsInt() == 3,
                     "the blueprint handle does not price the file: " + file.receipt());

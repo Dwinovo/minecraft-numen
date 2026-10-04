@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task.locate;
 
-import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.sdk.ServerCall;
 import com.dwinovo.numen.task.TaskRecord;
 
 /**
@@ -14,7 +14,7 @@ public final class LocateBiomeTaskRecord extends TaskRecord {
     /** Raw biome argument as the LLM gave it: an id, or a {@code #}-prefixed tag. */
     public final String biome;
 
-    public LocateBiomeTaskRecord(ServerSource source, long deadlineGameTime, String biome) {
+    public LocateBiomeTaskRecord(ServerCall source, long deadlineGameTime, String biome) {
         super(source, deadlineGameTime);
         this.biome = biome;
     }

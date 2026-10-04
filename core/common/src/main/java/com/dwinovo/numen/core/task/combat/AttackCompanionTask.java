@@ -28,27 +28,18 @@ import com.dwinovo.numen.task.Preparation;
 import com.dwinovo.numen.task.TaskState;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.function.BooleanSupplier;
-import java.util.function.Supplier;
 
 /**
  * {@code attack}:打掉指定的实体,<b>近战还是远程由身体判,不由模型判</b>。
@@ -882,24 +873,17 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * 点名清单是空的,只列它会把整场战果吞掉。
      */
     @Override
-    protected Map<String, Object> resultData() {
+    protected Fought value() {
         java.util.Set<Integer> touched = new java.util.LinkedHashSet<>(r.entityIds);
         touched.addAll(r.defeated());
         touched.addAll(r.lost());
         touched.addAll(r.unreachable());
         touched.addAll(r.refused().keySet());
-        List<Map<String, Object>> fought = new java.util.ArrayList<>();
+        List<Fought.Foe> fought = new java.util.ArrayList<>();
         for (int id : touched) {
-            Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put("id", id);
-            entry.put("status", r.status(id));
-            entry.put("strikes", r.strikes(id));
-            fought.add(entry);
+            fought.add(new Fought.Foe(id, r.status(id), r.strikes(id)));
         }
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("fought", fought);
-        data.put("strikes", r.strikes());
-        return data;
+        return new Fought(fought, r.strikes());
     }
 
     private String tally() {

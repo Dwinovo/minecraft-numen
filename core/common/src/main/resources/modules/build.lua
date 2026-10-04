@@ -61,8 +61,8 @@ function M.raise(building, opts)
       numen.work.dig(left.dig)
     elseif left.next then
       to(left.next, "place")
-    elseif left.short > 0 then
-      raise("no_material", left.short .. " cell(s) of " .. name .. " hold another block and you carry nothing to put "
+    elseif left.no_stock > 0 then
+      raise("no_material", left.no_stock .. " cell(s) of " .. name .. " hold another block and you carry nothing to put "
           .. "there", nil)
     else
       raise("failed", left.unheld .. " cell(s) of " .. name .. " would not stay where they go: nothing holds them "

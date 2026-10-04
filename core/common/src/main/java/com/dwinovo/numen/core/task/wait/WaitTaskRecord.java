@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task.wait;
 
-import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.sdk.ServerCall;
 import com.dwinovo.numen.task.TaskRecord;
 
 /**
@@ -13,10 +13,10 @@ public final class WaitTaskRecord extends TaskRecord {
     /** 要等的秒数,回执里照写。 */
     public final double seconds;
 
-    public WaitTaskRecord(ServerSource source, double seconds) {
-        super(source, source.companion().level().getGameTime() + ticks(seconds) + 20);
+    public WaitTaskRecord(ServerCall call, double seconds) {
+        super(call, call.her().level().getGameTime() + ticks(seconds) + 20);
         this.seconds = seconds;
-        this.until = source.companion().level().getGameTime() + ticks(seconds);
+        this.until = call.her().level().getGameTime() + ticks(seconds);
     }
 
     /** 秒折成刻,至少一刻。 */

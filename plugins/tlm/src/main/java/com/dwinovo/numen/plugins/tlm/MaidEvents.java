@@ -41,7 +41,7 @@ public final class MaidEvents {
         Map<String, String> attrs = attrs(maid);
         numen.emit(her, TAMED, attrs, "you tamed " + Maids.label(maid) + " at " + Maids.where(maid.blockPosition())
                 + "; she is yours now, and TLM counts " + Maids.counted(her) + " maid(s) as yours. `"
-                + MaidCommands.line(MaidCommands.MAID) + "(" + maid.getId() + ")` shows her.", false);
+                + "tlm.maid.info(" + maid.getId() + ")` shows her.", false);
     }
 
     static void died(NumenPlayer her, LivingEntity maid, Entity tombstone) {

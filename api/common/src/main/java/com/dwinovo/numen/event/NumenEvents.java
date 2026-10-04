@@ -74,7 +74,7 @@ public final class NumenEvents {
         String item = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(left.stack().getItem()).toString();
         emit(companion, EventTypes.INVENTORY_FULL, Map.of("item", item),
                 "your backpack is full: " + item + " x" + left.stack().getCount() + " at "
-                        + com.dwinovo.numen.cli.Shapes.literal(left.pos()) + " did not fit and stayed on the ground, "
+                        + com.dwinovo.numen.sdk.Positions.literal(left.pos()) + " did not fit and stayed on the ground, "
                         + "and anything else that does not stack onto what you carry stays on the ground too. Make room "
                         + "with numen.inv.drop (what you can spare) or by putting things into a chest (numen.use.block "
                         + "opens it, w:put fills it); then numen.work.collect picks up what is still on the ground.",
@@ -130,15 +130,26 @@ public final class NumenEvents {
     /** 异步任务收尾。{@code status} ∈ done / failed / timeout / stopped / interrupted。
      *  <p>done/failed/timeout 是急的:她派出去的活有了结果,该当场决定下一步。
      *  stopped 是主人自己按的停止,他知道,不必吵他。
-     *  <p>她读到的是结果那句话;整份结果(数据、失败的种类与下一步)随条目一起到,给等这件活的程序。 */
+     *  <p>她读到的是它的实际账;整份结果(值、失败的种类与下一步)随条目一起到,给等这件活的程序。
+     *
+     *  @param fn 派它的 API 函数,值按它的返回类型写;不出自 API 函数的是 null */
     public static void taskFinished(NumenPlayer companion, String taskId, String tool,
-                                    String status, TaskResult result) {
+                                    String status, TaskResult result, com.dwinovo.numen.sdk.ApiFunction fn) {
         Map<String, String> attrs = new LinkedHashMap<>();
         attrs.put(TASK_ID, taskId);
         attrs.put("task", tool);
         attrs.put(STATUS, status);
         emit(companion, EventTypes.TASK_FINISHED, attrs, result.message(), !"stopped".equals(status),
-                com.google.gson.JsonParser.parseString(result.toJson()).getAsJsonObject());
+                com.dwinovo.numen.sdk.Dispatcher.ended(result, fn));
+    }
+
+    /** 服务端发出的每一条事件也交给它们:在服务端跑的程序等它派的活的收尾({@code ServerPrograms})。 */
+    private static final List<java.util.function.BiConsumer<UUID, EventQueue.Entry>> WATCHERS =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** 看着服务端发出的每一条事件,按同伴。 */
+    public static void watch(java.util.function.BiConsumer<UUID, EventQueue.Entry> watcher) {
+        WATCHERS.add(watcher);
     }
 
     /** task_finished 里写着是哪件活、收尾成什么样的属性:{@link #taskFinished} 按它写,{@link #finishOf} 按它读。 */
@@ -198,6 +209,7 @@ public final class NumenEvents {
                 System.currentTimeMillis(), urgent);
         EventQueue.Entry entry = new EventQueue.Entry(plain.type(), plain.text(), plain.ts(), plain.urgent(), result);
         UUID uuid = companion.getUUID();
+        WATCHERS.forEach(w -> w.accept(uuid, entry));
         ServerPlayer owner = companion.resolveOwnerPlayer();
         route(uuid, entry,
                 owner == null ? null : payload -> {

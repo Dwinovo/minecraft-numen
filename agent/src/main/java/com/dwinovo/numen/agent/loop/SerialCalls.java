@@ -3,6 +3,7 @@ package com.dwinovo.numen.agent.loop;
 import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.agent.llm.ToolOutcome;
+import com.dwinovo.numen.agent.script.ApiReply;
 import com.dwinovo.numen.agent.script.Invocation;
 import com.dwinovo.numen.agent.script.ScriptCall;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
@@ -51,15 +52,13 @@ public final class SerialCalls {
         String scriptOf(LlmToolCall call);
 
         /**
-         * 执行脚本里的一次 API 调用。结果经 {@code done} 恰好交回一次,当场或之后都行。
+         * 执行脚本里的一次 API 调用。结果({@link com.dwinovo.numen.agent.script.ApiReply} 写的那一份)经 {@code done} 恰好交回一次,
+         * 当场或之后都行。
          *
          * @param call       这次调用的编号与写法(函数名、参数 JSON),在飞时它就是手上的那一个
-         * @param invocation 读好的动作与参数
+         * @param invocation 读好的函数与参数
          */
         void dispatch(LlmToolCall call, Invocation invocation, Consumer<String> done);
-
-        /** 脚本里一次 API 调用的结果留下的、还在跑且会自己收尾的身体任务的编号;没有是 null。 */
-        String leftRunning(String resultJson);
 
         /** 一条输入是哪件身体任务的收尾;不是收尾是 null。 */
         ScriptCall.Finish finish(EventQueue.Entry entry);
@@ -125,6 +124,7 @@ public final class SerialCalls {
         if (finish != null && awaiting.equals(finish.task())) {
             awaiting = null;
             next = script.finished(finish);
+            reportCalled();
             advance();
             return;
         }
@@ -240,6 +240,14 @@ public final class SerialCalls {
         scriptCall = call;
         callSeq = 0;
         next = started.begin();
+        reportCalled();
+    }
+
+    /** 脚本里有了结局的调用逐个报出去(评测按函数统计)。 */
+    private void reportCalled() {
+        for (ScriptCall.Called c : script.drainCalled()) {
+            sink.called(scriptCall, c);
+        }
     }
 
     /** 脚本的下一步:派一次 API 调用、等一件活,或者脚本结束、交出这个调用的结果。 */
@@ -264,21 +272,23 @@ public final class SerialCalls {
             return;   // 已经被放弃,或者重复、迟到的结果
         }
         inFlight = null;
-        String running = port.leftRunning(resultJson);
         if (interruptedBy != null) {
             EventQueue.Entry by = interruptedBy;
             interruptedBy = null;
-            String body = running == null ? "" : "; " + running + " keeps running";
+            ApiReply.Parsed reply = ApiReply.parse(resultJson);
+            String body = reply.ok() && reply.job() != null ? "; " + reply.job() + " keeps running" : "";
             endScript(script.stop(what(by) + body));
             dropRest(notRun("while your script was running, " + what(by)));
         } else {
-            next = script.result(resultJson, running);
+            next = script.result(resultJson);
+            reportCalled();
         }
         advance();
     }
 
     /** 脚本结束:它的回执是那个调用的结果。 */
     private void endScript(String receipt) {
+        reportCalled();
         LlmToolCall call = scriptCall;
         script = null;
         scriptCall = null;

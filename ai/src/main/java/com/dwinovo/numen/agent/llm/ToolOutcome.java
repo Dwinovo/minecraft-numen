@@ -25,6 +25,14 @@ public final class ToolOutcome {
 
     private ToolOutcome() {}
 
+    /** 一条成功结果 {@code {"success":true,"message":…}}:只管大脑自己的事的工具(技能、计划、札记)回的就是这个形状。 */
+    public static String success(String message) {
+        JsonObject result = new JsonObject();
+        result.addProperty("success", true);
+        result.addProperty("message", message);
+        return result.toString();
+    }
+
     /** 一条失败结果 {@code {"success":false,"message":…}}:不是工具自己回的、由循环替它写下的结果都是这个形状。 */
     public static String failure(String message) {
         JsonObject result = new JsonObject();

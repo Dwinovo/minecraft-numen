@@ -10,7 +10,6 @@ import com.dwinovo.numen.network.payload.ExecuteActionPayload;
 import com.dwinovo.numen.network.payload.NumenDeathPayload;
 import com.dwinovo.numen.network.payload.NumenEventPayload;
 import com.dwinovo.numen.network.payload.TaskResultPayload;
-import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.netty.buffer.ByteBuf;
@@ -75,27 +74,29 @@ class WireTest {
 
     @Test
     void aResultThatFitsGoesOutUntouched() {
-        TaskResultPayload small = new TaskResultPayload(A, "call-1", TaskResult.ok("done").toJson());
+        TaskResultPayload small = new TaskResultPayload(A, "call-1", value("done"));
         assertSame(small, fit(small));
     }
 
     /** 事故那一种:回执比一个下行包大。换成同一次调用的一条失败,说清多大、上限多少、怎么要少一点。 */
     @Test
     void aResultTooBigForOnePayloadBecomesAFailureForTheSameCall() {
-        String huge = TaskResult.ok("x".repeat(Wire.TO_CLIENT.bytes() + 10)).toJson();
+        String huge = value("x".repeat(Wire.TO_CLIENT.bytes() + 10));
         TaskResultPayload sent = fit(new TaskResultPayload(A, "call-7", huge));
 
         assertEquals("call-7", sent.toolCallId(), "回给的还是那一次调用");
         JsonObject result = JsonParser.parseString(sent.resultJson()).getAsJsonObject();
-        assertFalse(result.get("success").getAsBoolean());
-        String message = result.get("message").getAsString();
+        assertFalse(result.get("ok").getAsBoolean());
+        JsonObject error = result.getAsJsonObject("error");
+        assertEquals("failed", error.get("kind").getAsString());
+        String message = error.get("message").getAsString();
         assertTrue(message.startsWith("The result of this call came to "), message);
         assertTrue(message.contains("more than the 1048576 bytes one message to your client can carry, so it was "
                 + "not delivered."), message);
-        assertTrue(message.contains("{page = N}"), "说怎么要少一点: " + message);
-        int bytes = result.getAsJsonObject("data").get("result_bytes").getAsInt();
+        assertTrue(message.contains("Ask for less of it at a time"), "说怎么要少一点: " + message);
+        int bytes = error.getAsJsonObject("data").get("result_bytes").getAsInt();
         assertTrue(bytes > Wire.TO_CLIENT.bytes(), "报的是整包的真实大小: " + bytes);
-        assertEquals(Wire.TO_CLIENT.bytes(), result.getAsJsonObject("data").get("limit_bytes").getAsInt());
+        assertEquals(Wire.TO_CLIENT.bytes(), error.getAsJsonObject("data").get("limit_bytes").getAsInt());
         encodes(TaskResultPayload.STREAM_CODEC, sent);
     }
 
@@ -104,8 +105,8 @@ class WireTest {
     void theBudgetCountsEncodedBytesNotCharacters() {
         String chinese = "字".repeat(Wire.TO_CLIENT.bytes() / 3 + 100);
         assertTrue(chinese.length() < Wire.TO_CLIENT.bytes());
-        TaskResultPayload sent = fit(new TaskResultPayload(A, "call-8", TaskResult.ok(chinese).toJson()));
-        assertFalse(JsonParser.parseString(sent.resultJson()).getAsJsonObject().get("success").getAsBoolean());
+        TaskResultPayload sent = fit(new TaskResultPayload(A, "call-8", value(chinese)));
+        assertFalse(JsonParser.parseString(sent.resultJson()).getAsJsonObject().get("ok").getAsBoolean());
     }
 
     @Test
@@ -161,8 +162,8 @@ class WireTest {
         ServerToolTransport.ship(new ToolCall("call-9", "build layer", args, () -> A, completed::set));
 
         JsonObject result = JsonParser.parseString(completed.get()).getAsJsonObject();
-        assertFalse(result.get("success").getAsBoolean());
-        String message = result.get("message").getAsString();
+        assertFalse(result.get("ok").getAsBoolean());
+        String message = result.getAsJsonObject("error").get("message").getAsString();
         assertTrue(message.startsWith("This call came to "), message);
         assertTrue(message.contains("more than the 32767 bytes one message to the server can carry, so it was not "
                 + "sent."), message);
@@ -185,6 +186,11 @@ class WireTest {
         ByteBuf buf = Unpooled.buffer();
         Wire.TO_SERVER.text().encode(buf, "q".repeat(Wire.TO_SERVER.bytes() + 1));
         assertThrows(DecoderException.class, () -> Wire.TO_SERVER.text().decode(buf));
+    }
+
+    /** 一次调用交回一段文字的那份结果。 */
+    private static String value(String text) {
+        return com.dwinovo.numen.agent.script.ApiReply.value(new com.google.gson.JsonPrimitive(text)).toString();
     }
 
     private static <T extends net.minecraft.network.protocol.common.custom.CustomPacketPayload> T fit(T payload) {

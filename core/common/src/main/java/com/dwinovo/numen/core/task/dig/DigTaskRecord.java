@@ -1,10 +1,9 @@
 package com.dwinovo.numen.core.task.dig;
 
 import com.dwinovo.numen.area.Cells;
-import com.dwinovo.numen.cli.Place;
-import com.dwinovo.numen.cli.ServerSource;
-import com.dwinovo.numen.cli.Target;
-import com.dwinovo.numen.core.nav.NavText;
+import com.dwinovo.numen.sdk.Call;
+import com.dwinovo.numen.sdk.ServerCall;
+import com.dwinovo.numen.sdk.Target;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.task.TaskRecord;
 
@@ -16,7 +15,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.Map;
 
 /**
  * {@code numen.work.dig} 这件活的记录:点名的几格里要挖的,她站在原地手够得着的那些挖掉。要挖的格由点名的方式定,不另设开关
@@ -61,7 +60,7 @@ public final class DigTaskRecord extends TaskRecord {
     /** 进度:挖掉的格数。任务每刻写。 */
     private int dug = 0;
 
-    public DigTaskRecord(ServerSource source, long now, Cells cells, List<Target> named, Set<Block> targets,
+    public DigTaskRecord(ServerCall source, long now, Cells cells, List<Target> named, Set<Block> targets,
                          int count, String label, String what) {
         super(source, now + timeoutTicks(count == ALL ? (int) Math.min(cells.size(), 64) : count));
         this.cells = cells;
@@ -128,13 +127,11 @@ public final class DigTaskRecord extends TaskRecord {
 
     /** 走过去的那一次调用,与(写得全时)挖的那一次调用。 */
     private static List<String> reach(List<Target> named, BlockPos nearest) {
-        String walk = "numen.move.to(" + Place.cell(nearest).literal() + ", {arrive = \"dig\"})";
+        String walk = Call.of("numen.move.to", nearest, Map.of("arrive", "dig"));
         if (named.size() > WRITTEN_OUT) {
             return List.of(walk);
         }
-        return List.of(walk, "numen.work.dig(" + named.stream()
-                .map(t -> com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.value(t.value()))
-                .collect(Collectors.joining(", ")) + ")");
+        return List.of(walk, Call.of("numen.work.dig", named.toArray()));
     }
 
     public int getDug() {

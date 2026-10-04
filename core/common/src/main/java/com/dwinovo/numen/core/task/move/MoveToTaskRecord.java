@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task.move;
 
-import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.sdk.ServerCall;
 import com.dwinovo.numen.core.route.Plan;
 import com.dwinovo.numen.task.TaskRecord;
 
@@ -18,8 +18,8 @@ public final class MoveToTaskRecord extends TaskRecord {
     /** 走哪一份计划。 */
     public final Plan plan;
 
-    public MoveToTaskRecord(ServerSource source, Plan plan) {
-        super(source, source.companion().level().getGameTime() + BUDGET_TICKS);
+    public MoveToTaskRecord(ServerCall source, Plan plan) {
+        super(source, source.her().level().getGameTime() + BUDGET_TICKS);
         this.plan = plan;
     }
 

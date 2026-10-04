@@ -3,7 +3,6 @@ package com.dwinovo.numen.core.gametest;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
@@ -243,15 +242,15 @@ public class InteractGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_porter", new BlockPos(4, 2, 4), false);
         java.util.function.BooleanSupplier open = () -> helper.getLevel().getBlockState(lower)
                 .getValue(net.minecraft.world.level.block.DoorBlock.OPEN);
-        java.util.concurrent.atomic.AtomicReference<TaskRecord> click = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<ToolRun> click = new java.util.concurrent.atomic.AtomicReference<>();
 
         steps(helper)
                 .thenExecute(() -> click.set(click(helper, companion, "right", new BlockPos(6, 2, 4))))
-                .thenWaitUntil(() -> helper.assertTrue(click.get().getResult() != null && open.getAsBoolean(),
-                        "the door did not open: " + click.get().getResult()))
+                .thenWaitUntil(() -> helper.assertTrue(click.get().done() && open.getAsBoolean(),
+                        "the door did not open: " + click.get().outcome()))
                 .thenExecute(() -> click.set(click(helper, companion, "right", new BlockPos(6, 2, 4))))
-                .thenWaitUntil(() -> helper.assertTrue(click.get().getResult() != null && !open.getAsBoolean(),
-                        "the door did not close again: " + click.get().getResult()))
+                .thenWaitUntil(() -> helper.assertTrue(click.get().done() && !open.getAsBoolean(),
+                        "the door did not close again: " + click.get().outcome()))
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
                 .thenSucceed();
     }
@@ -264,13 +263,13 @@ public class InteractGameTests {
                 .setValue(net.minecraft.world.level.block.LeverBlock.FACE,
                         net.minecraft.world.level.block.state.properties.AttachFace.FLOOR));
         NumenPlayer companion = spawnAt(helper, "gametest_switcher", new BlockPos(4, 2, 8), false);
-        TaskRecord flip = click(helper, companion, "right", new BlockPos(6, 2, 8));
+        ToolRun flip = click(helper, companion, "right", new BlockPos(6, 2, 8));
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(flip.getResult() != null, "use block has not finished");
-            helper.assertTrue(flip.getResult().success() && helper.getLevel().getBlockState(lever)
+            helper.assertTrue(flip.done(), "use block has not finished");
+            helper.assertTrue(flip.succeeded() && helper.getLevel().getBlockState(lever)
                             .getValue(net.minecraft.world.level.block.LeverBlock.POWERED),
-                    "the lever was not flipped: " + flip.getResult().message());
+                    "the lever was not flipped: " + flip.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

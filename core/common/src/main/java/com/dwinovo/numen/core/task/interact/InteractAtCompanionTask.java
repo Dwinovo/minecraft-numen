@@ -1,5 +1,4 @@
 package com.dwinovo.numen.core.task.interact;
-import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.core.task.MouseButton;
 import com.dwinovo.numen.core.PlayerInv;
 
@@ -22,9 +21,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * {@code numen.use.block} / {@code use item} on the player body — the point-aimed native interaction (BLOCK + AIR).
@@ -229,7 +226,7 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
             String landed = NavText.name(player.level().getBlockState(pos)) + " at " + pos.getX() + "," + pos.getY()
                     + "," + pos.getZ() + " — the crosshair landed there, not on " + aimLabel();
             return button() == Interaction.Button.ATTACK ? landed
-                    : landed + ". To click " + aimLabel() + ": `numen.work.dig(" + Shapes.literal(pos)
+                    : landed + ". To click " + aimLabel() + ": `numen.work.dig(" + com.dwinovo.numen.sdk.LuaCodecs.literal(pos)
                             + ")` clears it out of the way, or "
                             + GotoReminders.call(r.aim, "arrive = \"use\"")
                             + " stands where another face of it is in sight";
@@ -267,30 +264,18 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
      * 别的点击交回按了哪个键、瞄哪一格、变了什么。
      */
     @Override
-    protected Map<String, Object> resultData() {
-        Map<String, Object> data = new HashMap<>();
+    protected com.dwinovo.numen.core.tools.Clicks.Pressed value() {
+        // 点开的那个工位(与它确切的位置,比瞄的那一格准):她只记得住我们告诉过她的地方
+        java.util.Optional<com.dwinovo.numen.sdk.BlockAt> station = activatedBlock == null ? java.util.Optional.empty()
+                : java.util.Optional.of(new com.dwinovo.numen.sdk.BlockAt(activatedBlockId, activatedBlock));
         boolean opened = r.button == MouseButton.RIGHT && player.containerMenu != player.inventoryMenu;
         if (opened) {
-            data.putAll(com.dwinovo.numen.core.tools.GuiOps.window(player).data());
-        } else {
-            data.put("button", r.button == MouseButton.LEFT ? "left" : "right");
-            if (r.aim != null) {
-                data.put("aim", Shapes.pos(r.aim));
-            }
-            if (!changes.isEmpty()) {
-                data.put("changes", changes);
-            }
+            com.dwinovo.numen.core.tools.GuiOps.Window window = com.dwinovo.numen.core.tools.GuiOps.window(player);
+            return station.map(window::openedAt).orElse(window);
         }
-        // Report the activated station (and its exact position, authoritative over the
-        // raw aim): she can only note a place we told her about.
-        if (activatedBlock != null) {
-            com.google.gson.JsonObject block = Shapes.pos(activatedBlock);
-            com.google.gson.JsonObject station = new com.google.gson.JsonObject();
-            station.addProperty("name", activatedBlockId);
-            station.add("pos", block);
-            data.put("block", station);
-        }
-        return data;
+        return new com.dwinovo.numen.core.tools.Clicks.Clicked(r.button == MouseButton.LEFT
+                ? com.dwinovo.numen.core.tools.Clicks.Button.LEFT : com.dwinovo.numen.core.tools.Clicks.Button.RIGHT,
+                java.util.Optional.ofNullable(r.aim), station, java.util.List.copyOf(changes));
     }
 
     @Override

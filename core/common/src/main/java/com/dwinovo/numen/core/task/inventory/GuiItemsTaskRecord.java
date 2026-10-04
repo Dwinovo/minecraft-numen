@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task.inventory;
 
-import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.sdk.ServerCall;
 import com.dwinovo.numen.task.TaskRecord;
 
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -19,7 +19,7 @@ public final class GuiItemsTaskRecord extends TaskRecord {
     /** 从她的背包放进界面那一侧;false 是从界面那一侧拿进她的背包。 */
     public final boolean put;
 
-    public GuiItemsTaskRecord(ServerSource source, long deadlineGameTime, Item item, Integer count, boolean put) {
+    public GuiItemsTaskRecord(ServerCall source, long deadlineGameTime, Item item, Integer count, boolean put) {
         super(source, deadlineGameTime);
         this.item = item;
         this.count = count;

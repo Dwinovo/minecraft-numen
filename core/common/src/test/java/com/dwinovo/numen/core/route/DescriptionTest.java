@@ -1,14 +1,16 @@
 package com.dwinovo.numen.core.route;
 
-import com.dwinovo.numen.api.NumenApi;
-import com.dwinovo.numen.api.NumenPlugins;
-import com.dwinovo.numen.cli.Param;
-import com.dwinovo.numen.core.CoreScripts;
+import com.dwinovo.numen.core.CoreApiFixture;
 import com.dwinovo.numen.pathing.spec.BlockBans;
 import com.dwinovo.numen.pathing.spec.PositionCosts.Use;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.pathing.world.Semantics.Kind;
-import com.dwinovo.numen.task.TaskResult;
+import com.dwinovo.numen.sdk.ApiRegistry;
+import com.dwinovo.numen.sdk.ApiTester;
+import com.dwinovo.numen.sdk.Example;
+import com.dwinovo.numen.sdk.Fn;
+import com.dwinovo.numen.sdk.LuaCodecs;
+import com.dwinovo.numen.sdk.ServerCall;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Blocks;
@@ -17,6 +19,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -37,23 +40,27 @@ class DescriptionTest {
 
     private static final AtomicReference<Description> LAST = new AtomicReference<>();
 
+    /** 夹具组:只把描述读出来,不规划。 */
+    public static final class Reader {
+
+        private Reader() {}
+
+        @Fn("Read the description.")
+        @Example("numen.gt_route.plan({to = {x = 1, y = 2, z = 3}, costs = {dig = true}})")
+        public static void plan(ServerCall call, Description.Directions directions) {
+            LAST.set(Description.of(directions));
+        }
+    }
+
     @BeforeAll
     static void boot() {
-        com.dwinovo.numen.core.CoreCommandsFixture.install();
-        AtomicReference<NumenApi> door = new AtomicReference<>();
-        NumenPlugins.register(NumenPlugins.NUMEN, door::set);
-        door.get().registerCommands("gt_route", "Test fixture: a route description read.", g ->
-                g.server("plan", "Read the description.", (src, args) -> {
-                    LAST.set(Description.of(args));
-                    src.reply(TaskResult.ok("read").toJson());
-                }, Description.PARAMS.toArray(Param<?>[]::new))
-                        .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
-                        .example("numen.gt_route.plan({to = {x = 1, y = 2, z = 3}, costs = {dig = true}})"));
+        CoreApiFixture.install();
+        ApiRegistry.register("numen", "gt_route", "Test fixture: a route description read.", Reader.class);
     }
 
     /** 描述交给这一组的函数,和她写的一样;跑完返回读出的描述。 */
     private static Description read(String options) {
-        CoreScripts.Run run = run(options);
+        ApiTester.Run run = run(options);
         assertTrue(run.ok(), run.message());
         return LAST.get();
     }
@@ -64,7 +71,7 @@ class DescriptionTest {
 
     /** 描述写错了:程序停在那一行,返回那次调用的报错。 */
     private static String error(String options) {
-        CoreScripts.Run run = run(options);
+        ApiTester.Run run = run(options);
         assertFalse(run.ok(), options + " should fail");
         String message = run.message();
         String error = message.substring(message.indexOf("numen.gt_route.plan: ") + "numen.gt_route.plan: ".length());
@@ -72,9 +79,9 @@ class DescriptionTest {
         return error.substring("bad_argument — ".length());
     }
 
-    private static CoreScripts.Run run(String options) {
+    private static ApiTester.Run run(String options) {
         LAST.set(null);
-        return CoreScripts.run(UUID.randomUUID(), "numen.gt_route.plan({" + options + "})");
+        return ApiTester.run(null, UUID.randomUUID(), "numen.gt_route.plan({" + options + "})");
     }
 
     private static final String TO = "to = {x = 1, y = 2, z = 3}";
@@ -106,7 +113,7 @@ class DescriptionTest {
     @Test
     void everyKnobLandsOnItsField() {
         RouteSpec s = spec(TO + ", costs = {dig = 7.5, place = 5, consent = 4, jump = 9, swim = 0, fall = 6, "
-                + "parkour = true, max_changes = 4}, avoid = {\"water\", \"door\"}, allow = \"trigger\"");
+                + "parkour = true, max_changes = 4}, avoid = {\"water\", \"door\"}, allow = {\"trigger\"}");
         assertTrue(s.dig() && s.place() && s.consent());
         assertEquals(7.5, s.breakPenalty());
         assertEquals(5.0, s.placeCost());
@@ -244,7 +251,7 @@ class DescriptionTest {
         assertTrue(error(TO + ", costs = {fall = -2}").contains("costs.fall must be 0 to"));
         assertTrue(error(TO + ", costs = {parkour = \"yes\"}").contains("costs.parkour is true or false"));
         assertTrue(error(TO + ", avoid = \"swamp\"").contains("'swamp' is not a cell type"));
-        assertTrue(error(TO + ", allow = \"lava\"").contains("expected one of flowing_water, trigger, fragile"),
+        assertTrue(error(TO + ", allow = {\"lava\"}").contains("expected one of flowing_water, trigger, fragile"),
                 "伤身的种类放不开");
         assertTrue(error(TO + ", range = 3").contains("range = 3 only goes with arrive = \"near\""));
         assertTrue(error("to = {y = 30}, arrive = \"use\"").contains("a height {y = …} is a level"));
@@ -254,7 +261,7 @@ class DescriptionTest {
         assertTrue(error("to = \"ores\"").contains("a place is a table"), "区域名不是去处");
         assertTrue(error(TO + ", stops = {{at = {x = 1, y = 2, z = 3}}}").contains("'at' is not one of them"));
         assertTrue(error(TO + ", mode = \"boat\", arrive = \"use\"").contains("mode = \"boat\" sails"));
-        assertTrue(error(TO + ", materials = \"minecraft:diamond\"").contains("'minecraft:diamond' is not a block"));
+        assertTrue(error(TO + ", materials = {\"minecraft:diamond\"}").contains("'minecraft:diamond' is not a block"));
     }
 
     @Test
@@ -268,6 +275,6 @@ class DescriptionTest {
     @Test
     void theDescriptionIsHandedBackAsWritten() {
         Description d = read(TO + ", costs = {dig = true}, avoid = {\"water\"}");
-        assertEquals(Set.of("to", "costs", "avoid"), d.written().keySet());
+        assertEquals(Set.of("to", "costs", "avoid"), ((Map<?, ?>) LuaCodecs.encode(d.written())).keySet());
     }
 }

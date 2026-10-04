@@ -2,7 +2,6 @@ package com.dwinovo.numen.agent.request;
 
 import com.dwinovo.numen.agent.prompt.NumenPrompts;
 import com.dwinovo.numen.agent.skill.SkillRegistry;
-import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.platform.Services;
 
 /**
@@ -41,7 +40,7 @@ public final class SystemPromptComposer {
         }
         // API 索引:装了哪些组,一组一句,再是模块(内置的在前,她的在后),她不必先 help 就知道去哪找。只随组与模块的增减变、
         // 按名字排好,是稳定前缀的一部分(她存一个模块,前缀变一次);各组的动作与语法只在帮助里。
-        String commands = com.dwinovo.numen.cli.NumenCli.index(modules);
+        String commands = com.dwinovo.numen.sdk.ApiDocs.index(modules);
         if (!commands.isEmpty()) {
             sb.append("\n\n").append(commands);
         }

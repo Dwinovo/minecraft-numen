@@ -97,6 +97,7 @@ final class TurnPresenter {
             case LoopEvent.RunStarted ignored -> { }
             case LoopEvent.ToolStarted ignored -> { }
             case LoopEvent.ToolFinished ignored -> { }
+            case LoopEvent.ApiCalled ignored -> { }
             case LoopEvent.ModelUsed ignored -> { }
             case LoopEvent.TranscriptBoundary ignored -> { }
         }

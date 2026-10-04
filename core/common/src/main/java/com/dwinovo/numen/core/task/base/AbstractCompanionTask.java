@@ -20,9 +20,7 @@ import com.dwinovo.numen.task.TaskResult;
 import net.minecraft.core.BlockPos;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * The shared skeleton every reactive companion task grows on — the single place
@@ -397,10 +395,10 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     /** 收场的回执:按终态取那一句,后面接上 {@code tail}。 */
     private TaskResult outcome(TaskState finalState, String tail) {
         return switch (finalState) {
-            case SUCCESS   -> TaskResult.ok(successMessage() + tail, resultData());
-            case TIMEOUT   -> TaskResult.timeout(timeoutMessage() + tail, resultData());
-            case CANCELLED -> TaskResult.cancelled(cancelledMessage() + tail, resultData());
-            default        -> TaskResult.fail(failType.kind(), doneReason + tail, failHint, resultData());
+            case SUCCESS   -> TaskResult.ok(successMessage() + tail, value());
+            case TIMEOUT   -> TaskResult.timeout(timeoutMessage() + tail, value());
+            case CANCELLED -> TaskResult.cancelled(cancelledMessage() + tail, value());
+            default        -> TaskResult.fail(failType.kind(), doneReason + tail, failHint, value());
         };
     }
 
@@ -448,9 +446,12 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
         stopNav();
     }
 
-    /** Structured payload for the result envelope. Default: a fresh empty (mutable) map. */
-    protected Map<String, Object> resultData() {
-        return new HashMap<>();
+    /**
+     * 交给程序的值:类型是派它的 API 函数声明的返回类型({@code Job<R>} 的 {@code R});失败时它是错误值的 {@code data}(做到了哪)。
+     * 不交回值是 null(默认)。
+     */
+    protected Object value() {
+        return null;
     }
 
     /** Message for a SUCCESS result. */

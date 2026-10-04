@@ -45,11 +45,20 @@ class LuaEngineTest {
     private static final Map<String, String> MODULES = new java.util.concurrent.ConcurrentHashMap<>(Map.of(
             "numen.move", WALK, "my.greet", "-- Greetings.\nlocal M = {}\nfunction M.hi() return 'hi' end\nreturn M"));
 
+    /** 一个测试用的函数:按顺序的对象不限,{@code options} 是选项表里能写的名字,返回 {@code returns}。 */
+    private static ScriptCatalog.Function fn(com.dwinovo.numen.agent.script.ScriptType returns, String... options) {
+        return new ScriptCatalog.Function(Integer.MAX_VALUE, java.util.Set.of(options), ScriptCatalog.Kind.VALUE,
+                returns, null);
+    }
+
+    private static final com.dwinovo.numen.agent.script.ScriptType ANY =
+            new com.dwinovo.numen.agent.script.ScriptType.Simple("table");
+
     private static final ScriptCatalog CATALOG = new ScriptCatalog(Map.of(
-            "numen.work", Map.of("dig", new ScriptCatalog.Verb(null), "collect", new ScriptCatalog.Verb(null)),
-            "numen.move", Map.of("go", new ScriptCatalog.Verb(null)),
-            "numen.route", Map.of("plan", new ScriptCatalog.Verb(null)),
-            "numen.scan", Map.of("blocks", new ScriptCatalog.Verb("clusters"), "sight", new ScriptCatalog.Verb("visible"))),
+            "numen.work", Map.of("dig", fn(ANY, "count"), "collect", fn(ANY)),
+            "numen.move", Map.of("go", fn(ANY)),
+            "numen.route", Map.of("plan", fn(ANY, "arrive", "range")),
+            "numen.scan", Map.of("blocks", fn(ANY), "sight", fn(com.dwinovo.numen.agent.script.ScriptType.BOOLEAN))),
             new ScriptCatalog.ModuleSource() {
                 @Override
                 public String code(String name) {
@@ -60,7 +69,7 @@ class LuaEngineTest {
                 public List<String> names() {
                     return MODULES.keySet().stream().sorted().toList();
                 }
-            });
+            }, Map.of());
 
     private static final LuaEngine LUA = new LuaEngine();
 
@@ -70,18 +79,25 @@ class LuaEngineTest {
         return LUA.start("t", code, CATALOG, printed::add);
     }
 
-    private static ScriptRun.Result ok(String text) {
-        return ScriptRun.Result.ok(text, new JsonObject());
+    /** 不返回值的成功。 */
+    private static ScriptRun.Result ok() {
+        return ScriptRun.Result.ok(null);
     }
 
-    private static ScriptRun.Result failed(String text) {
-        return new ScriptRun.Result(false, text, new JsonObject(), "failed", null);
+    private static ScriptRun.Result failed(String message) {
+        return ScriptRun.Result.failed(ScriptRun.failure("failed", message, null, null, null));
     }
 
-    private static ScriptRun.Result data(String key, com.google.gson.JsonElement value) {
-        JsonObject data = new JsonObject();
-        data.add(key, value);
-        return ScriptRun.Result.ok("", data);
+    /** 返回这个值的成功(JSON 写成 Lua 的值,和线上读回来的一样)。 */
+    private static ScriptRun.Result value(com.google.gson.JsonElement value) {
+        return ScriptRun.Result.ok(com.dwinovo.numen.agent.script.JsonValues.toJava(value));
+    }
+
+    /** 返回一张只有一个字段的表的成功。 */
+    private static ScriptRun.Result table(String key, com.google.gson.JsonElement value) {
+        JsonObject table = new JsonObject();
+        table.add(key, value);
+        return value(table);
     }
 
     @Test
@@ -97,14 +113,14 @@ class LuaEngineTest {
         assertEquals(List.of("ores/g3"), first.args());
         assertTrue(first.options().isEmpty());
 
-        ScriptRun.Call second = assertInstanceOf(ScriptRun.Call.class, run.resume(data("dug", new JsonPrimitive(4))));
+        ScriptRun.Call second = assertInstanceOf(ScriptRun.Call.class, run.resume(table("dug", new JsonPrimitive(4))));
         assertEquals(List.of("dug: 4"), printed, "脚本拿到的是数据,不是回执那句话");
         assertEquals("numen.route.plan", second.function());
         assertEquals(3, second.line());
         assertEquals(List.of(Map.of("x", 120L, "y", 64L, "z", -35L)), second.args());
         assertEquals(Map.of("arrive", "dig", "range", 2L), second.options());
 
-        assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(ok("arrived"))).ok());
+        assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(ok())).ok());
     }
 
     @Test
@@ -117,10 +133,10 @@ class LuaEngineTest {
         ScriptRun.Call plan = assertInstanceOf(ScriptRun.Call.class, run.start());
         assertEquals("numen.route.plan", plan.function());
         assertEquals(2, plan.line(), "模块函数里的调用记在脚本里调它的那一行");
-        ScriptRun.Call go = assertInstanceOf(ScriptRun.Call.class, run.resume(ok("planned")));
+        ScriptRun.Call go = assertInstanceOf(ScriptRun.Call.class, run.resume(ok()));
         assertEquals("numen.move.go", go.function());
         assertEquals(2, go.line());
-        ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(data("route", new JsonPrimitive("home"))));
+        ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(table("route", new JsonPrimitive("home"))));
         assertTrue(done.ok());
         assertEquals(Map.of("walked", Map.of("route", "home")), done.value(), "跑完交出 return 的值");
         assertEquals(List.of("numen.move"), run.modules(), "用到的模块,记战绩用");
@@ -147,7 +163,7 @@ class LuaEngineTest {
         assertEquals("numen.work.dig", calls.get(0).function());
         assertEquals(Map.of("count", 2L), calls.get(0).options());
         assertEquals("numen.move", calls.get(1).group(), "模块函数记成它自己的那一次调用,不进它的正文");
-        assertEquals("to", calls.get(1).verb());
+        assertEquals("to", calls.get(1).name());
         assertEquals(List.of(Map.of("x", 1L, "y", 2L, "z", 3L)), calls.get(1).args());
         assertThrows(IllegalArgumentException.class, () -> LUA.calls("example", "numen.work.dig(", CATALOG),
                 "语法错读不通");
@@ -177,7 +193,7 @@ class LuaEngineTest {
         kinds.add("raw_iron");
         kinds.add("cobblestone");
         picked.add("kinds", kinds);
-        run.resume(ScriptRun.Result.ok("picked up 3", picked));
+        run.resume(value(picked));
         run.resume(failed("out of reach"));
         ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(failed("out of reach")));
         assertEquals(List.of("3\tcobblestone", "false\tfailed\tnumen.work.dig\tnumen.work.dig: failed — out of reach"), printed);
@@ -210,7 +226,7 @@ class LuaEngineTest {
         JsonObject data = new JsonObject();
         data.addProperty("picked", 3);
         data.add(com.dwinovo.numen.agent.script.JsonValues.FOLDED, folded);
-        ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(ScriptRun.Result.ok("", data)));
+        ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(value(data)));
         assertTrue(done.ok(), done.error());
         assertEquals(List.of("1\twalk\t1"), printed);
         assertEquals(Map.of("picked", 3L), done.value(), "返回出去的只有表自己的字段");
@@ -229,18 +245,19 @@ class LuaEngineTest {
         nearest.addProperty("x", 7);
         JsonObject data = new JsonObject();
         data.add("nearest", nearest);
-        assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(new ScriptRun.Result(false, "too far", data,
-                "out_of_reach", "numen.move.to({x = 7, y = 12, z = 3}, {arrive = \"dig\"})"))).ok());
+        assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(ScriptRun.Result.failed(ScriptRun.failure(
+                "out_of_reach", "too far", "numen.move.to({x = 7, y = 12, z = 3}, {arrive = \"dig\"})", null,
+                com.dwinovo.numen.agent.script.JsonValues.toJava(data))))).ok());
         assertEquals(List.of("numen.move.to({x = 7, y = 12, z = 3}, {arrive = \"dig\"})\t7",
                 "numen.work.dig: out_of_reach — too far\nhint: numen.move.to({x = 7, y = 12, z = 3}, {arrive = \"dig\"})"), printed);
     }
 
-    /** 没有数据的成功返回 nil,不返回那句话。 */
+    /** 不返回值的成功是 nil。 */
     @Test
-    void aCallWithoutDataReturnsNil() {
+    void aCallWithoutAValueReturnsNil() {
         ScriptRun run = run("print(numen.work.collect() == nil)");
         run.start();
-        assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(ok("collected"))).ok());
+        assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(ok())).ok());
         assertEquals(List.of("true"), printed);
     }
 
@@ -294,9 +311,9 @@ class LuaEngineTest {
                 function M.pos(x) return setmetatable({x = x}, M.Pos) end
                 return M
                 """;
-        ScriptCatalog catalog = new ScriptCatalog(Map.of("numen.work", Map.of("where", new ScriptCatalog.Verb(
-                "found", null, Integer.MAX_VALUE, List.of(Map.of("x", 0L)),
-                com.dwinovo.numen.agent.script.ScriptType.listOf(pos.type())))),
+        ScriptCatalog catalog = new ScriptCatalog(Map.of("numen.work", Map.of("where", new ScriptCatalog.Function(
+                Integer.MAX_VALUE, java.util.Set.of(), ScriptCatalog.Kind.VALUE,
+                com.dwinovo.numen.agent.script.ScriptType.listOf(pos.type()), List.of(Map.of("x", 0L))))),
                 new ScriptCatalog.ModuleSource() {
                     @Override
                     public String code(String name) {
@@ -317,7 +334,7 @@ class LuaEngineTest {
         two.addProperty("x", 5);
         found.add(one);
         found.add(two);
-        assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(data("found", found))).ok());
+        assertTrue(assertInstanceOf(ScriptRun.Done.class, run.resume(value(found))).ok());
         assertEquals(List.of("10"), printed);
         assertNull(LUA.calls("example", "print(numen.work.where()[1]:twice())", catalog).error(),
                 "只读不跑时,样子也带着方法");
@@ -336,11 +353,11 @@ class LuaEngineTest {
         JsonArray clusters = new JsonArray();
         clusters.add("ores/g1");
         clusters.add("ores/g2");
-        assertInstanceOf(ScriptRun.Call.class, run.resume(data("clusters", clusters)));
-        assertInstanceOf(ScriptRun.Call.class, run.resume(data("visible", new JsonPrimitive(true))));
-        assertInstanceOf(ScriptRun.Call.class, run.resume(ok("dug")));
+        assertInstanceOf(ScriptRun.Call.class, run.resume(value(clusters)));
+        assertInstanceOf(ScriptRun.Call.class, run.resume(value(new JsonPrimitive(true))));
+        assertInstanceOf(ScriptRun.Call.class, run.resume(ok()));
         assertTrue(assertInstanceOf(ScriptRun.Done.class,
-                run.resume(data("visible", new JsonPrimitive(false)))).ok(), "没剩是 false,不是报错");
+                run.resume(value(new JsonPrimitive(false)))).ok(), "没剩是 false,不是报错");
         assertEquals(List.of("ores/g1", "ores/g2", "done"), printed);
     }
 
@@ -348,8 +365,8 @@ class LuaEngineTest {
     void aFailedValueQueryRaises() {
         ScriptRun run = run("numen.scan.sight('nope')");
         run.start();
-        ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(new ScriptRun.Result(false,
-                "there is nothing named nope", new JsonObject(), "not_found", "numen.scan.entities()")));
+        ScriptRun.Done done = assertInstanceOf(ScriptRun.Done.class, run.resume(ScriptRun.Result.failed(
+                ScriptRun.failure("not_found", "there is nothing named nope", "numen.scan.entities()", null, null))));
         assertFalse(done.ok());
         assertEquals("numen.scan.sight: not_found — there is nothing named nope\nhint: numen.scan.entities()",
                 done.error());

@@ -8,10 +8,9 @@ import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.client.agent.NumenRoster;
-import com.dwinovo.numen.cli.ScriptTool;
+import com.dwinovo.numen.agent.tool.ScriptTool;
 import com.dwinovo.numen.network.payload.DismissRequestPayload;
 import com.dwinovo.numen.network.payload.SummonRequestPayload;
-import com.dwinovo.numen.task.TaskResult;
 import com.dwinovo.numen.network.NumenNetwork;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
@@ -248,8 +247,8 @@ public final class NumenActuator {
      *
      * <p>不需要先取得控制权:内置大脑要么被「外接大脑」模式整体挂起,要么和这次调用
      * 一起受"一具身体一件活"闸门约束(身体忙时收到带话术的拒绝)。The future carries
-     * the tool's result as a {@link TaskResult} JSON string; failures (unknown tool,
-     * bad args, a thrown tool) come back as a {@code TaskResult.fail} JSON, never an
+     * the tool's result as a {@code ToolOutcome} JSON string; failures (unknown tool,
+     * bad args, a thrown tool) come back as a {@code ToolOutcome.failure} JSON, never an
      * exceptional future.
      *
      * @param companion the body to act with
@@ -259,14 +258,14 @@ public final class NumenActuator {
     public static CompletableFuture<String> invoke(UUID companion, String toolName, String argsJson) {
         CompletableFuture<String> f = new CompletableFuture<>();
         if (companion == null || toolName == null || toolName.isBlank()) {
-            f.complete(TaskResult.fail("companion and toolName are required").toJson());
+            f.complete(com.dwinovo.numen.agent.llm.ToolOutcome.failure("companion and toolName are required"));
             return f;
         }
         Minecraft.getInstance().execute(() -> {
             try {
                 NumenTool tool = ToolRegistry.resolve(toolName);
                 if (tool == null) {
-                    f.complete(TaskResult.fail("unknown tool: " + toolName).toJson());
+                    f.complete(com.dwinovo.numen.agent.llm.ToolOutcome.failure("unknown tool: " + toolName));
                     return;
                 }
                 String args = (argsJson == null || argsJson.isBlank()) ? "{}" : argsJson;
@@ -274,8 +273,8 @@ public final class NumenActuator {
                     ScriptTool.code(args);   // 参数写错当场回失败,不占工具口
                     LlmToolCall program = new LlmToolCall(PROGRAM_PREFIX + SEQ.incrementAndGet(), tool.name(), args);
                     if (!AgentLoopRegistry.getOrCreate(companion).runExternal(program, f::complete)) {
-                        f.complete(TaskResult.fail("a program is already running for this companion, or its "
-                                + "built-in brain is acting; wait for it to end").toJson());
+                        f.complete(com.dwinovo.numen.agent.llm.ToolOutcome.failure("a program is already running for this companion, or its "
+                                + "built-in brain is acting; wait for it to end"));
                     }
                     return;
                 }
@@ -286,7 +285,7 @@ public final class NumenActuator {
                         f::complete);
                 tool.invoke(call);
             } catch (RuntimeException ex) {
-                f.complete(TaskResult.fail(ex.getMessage()).toJson());
+                f.complete(com.dwinovo.numen.agent.llm.ToolOutcome.failure(ex.getMessage()));
             }
         });
         return f;

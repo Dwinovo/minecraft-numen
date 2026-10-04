@@ -5,7 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.dwinovo.numen.cli.Place;
+import com.dwinovo.numen.sdk.Place;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.api.Outcome;
@@ -18,7 +18,6 @@ import com.dwinovo.numen.pathing.plan.Edit;
 import com.dwinovo.numen.pathing.plan.MoveKind;
 import com.dwinovo.numen.pathing.plan.Permit;
 import com.dwinovo.numen.pathing.plan.Reason;
-import com.dwinovo.numen.pathing.search.Route;
 import com.dwinovo.numen.pathing.spec.RouteSpec;
 import com.dwinovo.numen.permission.ConsentItem;
 import com.dwinovo.numen.permission.Listing;
@@ -92,10 +91,10 @@ public final class NavText {
                     + " pillar or bridge with)." + ThrowawayBlocks.shortageAdvice(player, materials);
             case Outcome.Denied denied -> "had to stop: changing " + Listing.coords(denied.cell()) + " is refused ("
                     + reason(denied.reason()) + "); that is not mine to get around, so plan a way that keeps out of it"
-                    + " (avoid = {" + Place.cell(denied.cell()).literal() + "}) or ask your owner";
+                    + " (avoid = {" + com.dwinovo.numen.sdk.LuaCodecs.literal(denied.cell()) + "}) or ask your owner";
             case Outcome.Stranded stranded -> "can't set off: I can't stand where I am (" + name(stranded.block())
                     + " at " + Listing.coords(stranded.cell()) + "); free me first (break that block: `numen.work.dig("
-                    + Place.cell(stranded.cell()).literal() + ")`) or wait until I land";
+                    + com.dwinovo.numen.sdk.LuaCodecs.literal(stranded.cell()) + ")`) or wait until I land";
             case Outcome.Blocked blocked -> "gave up: " + blockage(blocked.blockage())
                     + "; try again, and pick another destination if it keeps failing";
             case Outcome.NoLineOfSight sight -> "arrived, but " + Listing.coords(sight.target())
@@ -330,13 +329,6 @@ public final class NavText {
 
     // ==================== 预算账 ====================
 
-    /**
-     * 受理之前规划好的一段路,回执里怎么说:几步,要动的格与计划同一种写法。例如
-     * {@code 12 steps away (break 1 stone (3,64,5))}、{@code 0 steps away (no terrain change)}。
-     */
-    public static String ahead(Route route) {
-        return route.legs().size() + " steps away (" + planned(route.edits()) + ")";
-    }
 
     /**
      * 计划要动什么(预算账),与实际账同一种写法:要挖的格按方块归堆,要问主人的缀上为什么问;要放的格按方块归堆。例如
@@ -441,7 +433,7 @@ public final class NavText {
      * 可以为空。
      */
     public static String gotoCall(Place to, String options) {
-        return "`numen.move.to(" + to.literal() + (options.isEmpty() ? "" : ", {" + options + "}") + ")`";
+        return "`numen.move.to(" + com.dwinovo.numen.sdk.LuaCodecs.literal(to) + (options.isEmpty() ? "" : ", {" + options + "}") + ")`";
     }
 
     public static String name(BlockState state) {

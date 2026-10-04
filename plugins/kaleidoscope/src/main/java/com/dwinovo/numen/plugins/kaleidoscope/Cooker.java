@@ -8,7 +8,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
-import java.util.Map;
 
 /**
  * 世界上的一格炊具。{@code kaleidoscope.pot.inspect} 读它,{@code kaleidoscope.pot} 的几个动作各推它一步。
@@ -24,7 +23,7 @@ public interface Cooker {
     BlockPos pos();
 
     /** {@code kaleidoscope.pot.inspect} 的答案:这一格此刻是什么样子。 */
-    Map<String, Object> report();
+    KaleidoscopeApi.PotState report();
 
     /** 倒油(炒锅):开出下料窗口。 */
     Step oil(NumenPlayer cook);

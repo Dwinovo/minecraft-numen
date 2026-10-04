@@ -14,9 +14,7 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * {@code inv eat} on the player body — a thin wrapper over the native held use. Hold the food and
@@ -110,13 +108,12 @@ public final class EatCompanionTask extends AbstractCompanionTask<EatItemTaskRec
         }
     }
 
+    /** 吃了什么、吃完血量与饥饿:{@code numen.inv.eat} 交回的值。 */
+    public record Ate(String item, double hp, int hunger) {}
+
     @Override
-    protected Map<String, Object> resultData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("item", r.label);
-        data.put("hp", player.getHealth());
-        data.put("hunger", player.getFoodData().getFoodLevel());
-        return data;
+    protected Ate value() {
+        return new Ate(r.label, player.getHealth(), player.getFoodData().getFoodLevel());
     }
 
     @Override

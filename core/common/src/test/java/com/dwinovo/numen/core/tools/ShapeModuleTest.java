@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.core.CoreCommandsFixture;
-import com.dwinovo.numen.core.CoreScripts;
+import com.dwinovo.numen.core.CoreApiFixture;
+import com.dwinovo.numen.sdk.ApiTester;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -19,12 +19,12 @@ class ShapeModuleTest {
 
     @BeforeAll
     static void install() {
-        CoreCommandsFixture.install();
+        CoreApiFixture.install();
     }
 
     /** 跑一段程序,它打印的那几行。 */
     private static String printed(String code) {
-        CoreScripts.Run run = CoreScripts.run(UUID.randomUUID(), code);
+        ApiTester.Run run = ApiTester.run(null, UUID.randomUUID(), code);
         assertTrue(run.ok(), run.message());
         String message = run.message();
         return message.substring(message.indexOf("printed:\n") + "printed:\n".length());
@@ -82,7 +82,7 @@ class ShapeModuleTest {
                 print(#l, l[1].pos.x, l[2].name, l[2].pos.x, l[2].pos.z)
                 """);
         assertTrue(out.startsWith("2\t5\toak_stairs\t6\t6"), out);
-        CoreScripts.Run missing = CoreScripts.run(UUID.randomUUID(),
+        ApiTester.Run missing = ApiTester.run(null, UUID.randomUUID(),
                 "numen.shape.layer({x = 0, y = 0, z = 0}, {\"#\"}, {})");
         assertFalse(missing.ok());
         assertTrue(missing.message().contains("which the legend does not name"), missing.message());

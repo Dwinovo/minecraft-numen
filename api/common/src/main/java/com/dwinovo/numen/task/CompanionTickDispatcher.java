@@ -152,7 +152,7 @@ public final class CompanionTickDispatcher {
                 // 等主人点头的那条征询:主人下线或到点就按拒绝收尾,发起的任务下一刻读到结论。
                 com.dwinovo.numen.permission.ConsentDesk.of(ap).tick();
                 // 等主人点头的指令这一刻就读结论:允许的接着执行,拒绝的回执。
-                com.dwinovo.numen.cli.PendingCommands.tick(ap);
+                com.dwinovo.numen.sdk.Consents.tick(ap);
                 CompanionBrain brain = brainFor(ap.getUUID());
                 if (!brain.boundTo(ap) && !brain.boundBodyGone()) {
                     // 同一个 UUID 同时有两具身体:上一具还在世界里,来的这具是重影。
@@ -191,7 +191,7 @@ public final class CompanionTickDispatcher {
     public static void clearActiveTask(NumenPlayer player) {
         CompanionBrain brain = BRAINS.get(player.getUUID());   // never create: a late death
         if (brain != null) brain.dropActiveNoResult(player);   // event must not leak a brain
-        com.dwinovo.numen.cli.PendingCommands.drop(player);
+        com.dwinovo.numen.sdk.Consents.drop(player);
     }
 
     /** 她现在在做的那件事,null = 槽空(她站着)。task status 用。 */
@@ -230,7 +230,7 @@ public final class CompanionTickDispatcher {
      *  the explicit-hold session dies with the task it served (constitution §5). */
     public static void cancelFor(NumenPlayer player) {
         // 等主人点头的指令不在槽里,同一下叫停(撤掉征询,回执说被主人叫停)。
-        com.dwinovo.numen.cli.PendingCommands.stop(player, TaskRecord.StopCause.OWNER);
+        com.dwinovo.numen.sdk.Consents.stop(player, TaskRecord.StopCause.OWNER);
         CompanionBrain brain = BRAINS.get(player.getUUID());   // never create: a late cancel
         if (brain == null) return;                             // packet must not leak a brain
         // 还在准备、没受理的那次调用同一下作罢,回执说被主人叫停、没有开始
@@ -253,7 +253,8 @@ public final class CompanionTickDispatcher {
         if (brain != null) {
             brain.finalizeActive(player);
         }
-        com.dwinovo.numen.cli.PendingCommands.stop(player, TaskRecord.StopCause.BODY_LEFT);
+        com.dwinovo.numen.sdk.Consents.stop(player, TaskRecord.StopCause.BODY_LEFT);
+        com.dwinovo.numen.sdk.ServerPrograms.stop(player);
         BRAINS.remove(id);   // the body is gone; don't leak its brain
     }
 }

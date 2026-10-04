@@ -1,6 +1,5 @@
 package com.dwinovo.numen.core.task.move;
 
-import java.util.Map;
 import com.dwinovo.numen.task.TaskResult;
 import com.dwinovo.numen.core.nav.Feet;
 import com.dwinovo.numen.core.nav.NavText;
@@ -115,13 +114,12 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
                 Survey.Found leg = found.get(0);
                 if (leg.reached()) {
                     seed = leg.route();
-                    return Preparation.Readiness.ready("The way to " + target.getName().getString() + " is "
-                            + NavText.ahead(seed) + ".");
+                    return Preparation.Readiness.READY;
                 }
                 return Preparation.Readiness.refused(TaskResult.fail(com.dwinovo.numen.agent.script.ErrorKind.NO_PATH,
                         "can't keep up: " + NavText.failure(leg.outcome(), player, Feet.cell(player), anchor, TERRAIN,
                                 ThrowawayBlocks.factory()),
-                        null, resultData()));
+                        null, value()));
             }
 
             @Override
@@ -222,12 +220,14 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
         return Terrain.of(player).settle(target.blockPosition());
     }
 
+    /** {@code numen.move.follow} 交回的值。 */
+    @com.dwinovo.numen.sdk.Doc("Where a follow ended.")
+    public record Followed(@com.dwinovo.numen.sdk.Doc("Where you stand at the end.") net.minecraft.world.phys.Vec3 pos) {}
+
     /** 收尾时她站在哪。 */
     @Override
-    protected Map<String, Object> resultData() {
-        Map<String, Object> data = new java.util.HashMap<>();
-        data.put("pos", com.dwinovo.numen.cli.Shapes.pos(player.position()));
-        return data;
+    protected Followed value() {
+        return new Followed(player.position());
     }
 
     @Override

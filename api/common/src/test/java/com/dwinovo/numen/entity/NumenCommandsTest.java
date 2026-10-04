@@ -1,9 +1,5 @@
 package com.dwinovo.numen.entity;
 
-import com.dwinovo.numen.api.NumenPlugins;
-import com.dwinovo.numen.cli.ArgType;
-import com.dwinovo.numen.cli.Param;
-import com.dwinovo.numen.task.TaskResult;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.ParseResults;
 import com.mojang.brigadier.context.CommandContextBuilder;
@@ -31,15 +27,11 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * {@code /numen} 这棵树的形状与观众:玩家的管理指令(权限、征询、drive……)每条都解析到有执行体的节点、参数取得到,
- * 写错的解析不通;整个根只给不是她的来源,她一条都解析不通。她的命令组不在 MC 的指令树上。执行与鉴权(只认主人)、
- * 真服务器发给玩家的指令树,在 GameTest 里钉。
+ * 写错的解析不通;整个根只给不是她的来源,她一条都解析不通。执行与鉴权(只认主人)、真服务器发给玩家的指令树,在 GameTest
+ * 里钉。
  */
 @Tag("mc")
 class NumenCommandsTest {
-
-    private static final Param<Integer> COUNT = Param.required("count", ArgType.integer(1, 64), "How many.");
-    private static final Param<String> FROM = Param.optional("from", ArgType.word(), "Where from.")
-            .whenOmitted("take any");
 
     private static boolean booted;
     private CommandDispatcher<CommandSourceStack> dispatcher;
@@ -56,15 +48,6 @@ class NumenCommandsTest {
             booted = true;
         } catch (Throwable t) {
             booted = false;
-        }
-        if (booted) {
-            NumenPlugins.register("gt", numen -> numen.registerCommands("gt_tree", "A group that stays off the MC tree.", g -> {
-                g.server("take", "Take some.", (src, args) -> src.reply(TaskResult.ok("took").toJson()), COUNT, FROM)
-                        .returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING)
-                        .example("gt.gt_tree.take(3, {from = \"chest\"})");
-                g.client("jot", "Jot on the owner's client.", (src, args) -> src.reply(TaskResult.ok("jot").toJson()),
-                        COUNT).returns(com.dwinovo.numen.agent.script.ScriptType.NOTHING).example("gt.gt_tree.jot(2)");
-            }));
         }
     }
 
@@ -154,31 +137,18 @@ class NumenCommandsTest {
     }
 
     @Test
-    void driveTakesACompanionAndTheRestOfTheLine() {
-        assertEquals("give @s minecraft:diamond 2",
-                runs("numen drive Aria give @s minecraft:diamond 2").get("line").getResult());
-        assertTrue(fails("numen drive Aria"), "a line is required");
-        assertTrue(fails("numen drive Aria task status", source(null).withPermission(0)), "drive is for ops");
-    }
-
-    /** 她的命令组不在 MC 的指令树上:谁都解析不到,谁的用法里都没有。 */
-    @Test
-    void herGroupsAreNotOnTheMcTree() {
-        for (CommandSourceStack source : new CommandSourceStack[]{console, her}) {
-            assertTrue(fails("numen gt_tree take 3 --from chest", source));
-            assertTrue(fails("numen help", source));
-            assertTrue(fails("gt gt_tree take 3", source));
-            assertTrue(dispatcher.getSmartUsage(dispatcher.getRoot(), source).values().stream()
-                    .noneMatch(usage -> usage.contains("gt_tree")), "a usage lists her group");
-        }
-        assertTrue(dispatcher.getRoot().getChild("gt_tree") == null, "her group is a root of the MC tree");
+    void driveTakesACompanionAndTheRestOfTheLineAsAProgram() {
+        assertEquals("numen.mc.run(\"give @s minecraft:diamond 2\")",
+                runs("numen drive Aria numen.mc.run(\"give @s minecraft:diamond 2\")").get("program").getResult());
+        assertTrue(fails("numen drive Aria"), "a program is required");
+        assertTrue(fails("numen drive Aria numen.task.status()", source(null).withPermission(0)), "drive is for ops");
     }
 
     /** 管理同伴的指令只给玩家:她召唤不了同伴、改不了权限、答不了征询、drive 不了别人。 */
     @Test
     void thePlayersVerbsAreNotHers() {
         for (String line : new String[]{"numen player summon Aria", "numen permission rules list",
-                "numen consent allow 42", "numen settings", "numen drive Aria help"}) {
+                "numen consent allow 42", "numen settings", "numen drive Aria numen.task.status()"}) {
             runs(line, console);
             assertTrue(fails(line, her), "she can reach " + line);
         }

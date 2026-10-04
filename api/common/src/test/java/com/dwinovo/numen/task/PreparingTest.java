@@ -28,7 +28,7 @@ class PreparingTest {
         return new Preparing.Call(preparation, readiness -> {
             if (readiness.ready()) {
                 slot.set(job);
-                replies.add(job + " accepted" + (readiness.words() == null ? "" : ": " + readiness.words()));
+                replies.add(job + " accepted");
             } else {
                 replies.add(job + " refused: " + readiness.refusal().message());
             }
@@ -56,8 +56,8 @@ class PreparingTest {
     @Test
     void aCallThatNeedsNoSearchIsAnsweredOnTheSpot() {
         Preparing preparing = new Preparing();
-        preparing.begin(call("walk", Preparation.ready("3 steps away")));
-        assertEquals(List.of("walk accepted: 3 steps away"), replies);
+        preparing.begin(call("walk", Preparation.READY));
+        assertEquals(List.of("walk accepted"), replies);
         assertEquals("walk", slot.get());
     }
 
@@ -71,7 +71,7 @@ class PreparingTest {
         assertTrue(replies.isEmpty(), "answered before the search concluded: " + replies);
         assertEquals("digging", slot.get(), "the work in hand was replaced before the new one was accepted");
 
-        search.answer = Preparation.Readiness.ready(null);
+        search.answer = Preparation.Readiness.READY;
         preparing.tick();
         int polled = search.polls;
         preparing.tick();
@@ -111,8 +111,8 @@ class PreparingTest {
         assertEquals(List.of("walk refused: not started: a newer body action came in before it was ready"), replies);
         assertEquals("digging", slot.get());
 
-        first.answer = Preparation.Readiness.ready(null);
-        second.answer = Preparation.Readiness.ready(null);
+        first.answer = Preparation.Readiness.READY;
+        second.answer = Preparation.Readiness.READY;
         preparing.tick();
         assertEquals("dig", slot.get());
         assertEquals(2, replies.size(), "a withdrawn call was answered twice");
@@ -136,7 +136,7 @@ class PreparingTest {
         Searching search = new Searching();
         preparing.begin(call("walk", search));
         preparing.drop();
-        search.answer = Preparation.Readiness.ready(null);
+        search.answer = Preparation.Readiness.READY;
         preparing.tick();
         assertTrue(search.cancelled);
         assertTrue(replies.isEmpty(), "a dropped call was answered: " + replies);

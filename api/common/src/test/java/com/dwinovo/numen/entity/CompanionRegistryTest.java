@@ -72,29 +72,32 @@ class CompanionRegistryTest {
 
     @Test
     void whatSheIsDoingSurvivesUnderItsName() {
-        // 命令派的活名字是"组 动作",重放用的工具是 numen:两样都得活过读档,接不回来时才说得出她受理的是什么
+        // 活的名字是派它的函数,重启后再跑的是那一行 Lua:两样都得活过读档,接不回来时才说得出她受理的是什么
         CompanionRegistry reg = new CompanionRegistry();
-        reg.put(A, entry("小焰", OWNER).doing("kaleidoscope cook", "numen",
-                "{\"command\":\"kaleidoscope cook 1 2 3 x\"}"));
+        reg.put(A, entry("小焰", OWNER).doing("kaleidoscope.pot.stir", "kaleidoscope.pot.stir({x = 1, y = 2, z = 3})"));
 
         CompanionRegistry.Entry back = roundTrip(reg).find(A);
 
-        assertEquals("kaleidoscope cook", back.taskName());
-        assertEquals("numen", back.taskTool());
-        assertEquals("{\"command\":\"kaleidoscope cook 1 2 3 x\"}", back.taskArgs());
+        assertEquals("kaleidoscope.pot.stir", back.taskName());
+        assertEquals("kaleidoscope.pot.stir({x = 1, y = 2, z = 3})", back.taskLua());
+        assertEquals("", back.taskOld());
     }
 
     @Test
-    void aTaskSavedBeforeItsNameWasRecordedIsNamedAfterItsTool() {
+    void aTaskSavedAsACommandLineByAnOlderVersionIsReadButNotAsLua() {
+        // 旧版本按一行命令记下的活(taskArgs):照原样读进来,只为说清它没接回来,不当成一行 Lua
         CompanionRegistry reg = new CompanionRegistry();
-        reg.put(A, entry("小焰", OWNER).doing("mine", "mine", "{}"));
+        reg.put(A, entry("小焰", OWNER).doing("kaleidoscope cook", "kaleidoscope.pot.stir({x = 1, y = 2, z = 3})"));
         CompoundTag tag = reg.save(new CompoundTag(), null);
-        tag.getCompound("companions").getCompound(A.toString()).remove("taskName");
+        CompoundTag saved = tag.getCompound("companions").getCompound(A.toString());
+        saved.remove("taskLua");
+        saved.putString("taskArgs", "{\"command\":\"kaleidoscope cook 1 2 3 x\"}");
 
         CompanionRegistry.Entry back = CompanionRegistry.load(tag, null).find(A);
 
-        assertEquals("mine", back.taskName(), "那时的活由工具派下,名字就是工具名");
-        assertEquals("mine", back.taskTool());
+        assertEquals("kaleidoscope cook", back.taskName());
+        assertEquals("", back.taskLua(), "an old command line is not a line of Lua");
+        assertEquals("{\"command\":\"kaleidoscope cook 1 2 3 x\"}", back.taskOld());
     }
 
     @Test

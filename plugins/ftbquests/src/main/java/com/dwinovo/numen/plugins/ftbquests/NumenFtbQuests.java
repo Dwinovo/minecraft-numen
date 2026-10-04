@@ -18,7 +18,7 @@ import java.nio.file.Path;
  * {@code ArchitecturyPlayerHooksMixin}),她的击杀、持物、到场由此进了 FTB 自己的判定,算给谁由 FTB 的
  * 队伍规则决定。这个联动做的是另一半:FTB 那边因此发生在她身上的事——队伍完成了任务、奖励发到了她身上、
  * 有人邀请她入队——一件件告诉她;她自己点不了的任务书与组队按钮,经 {@code ftbquests} 的几个动作走按钮
- * 背后的同一个入口(见 {@link FtbqCommands})。
+ * 背后的同一个入口(见 {@link FtbqApi})。
  *
  * <p>它不是 {@code @Mod} 入口:装没装 FTB Quests 由 {@code Builtin} 那道闸判断,为真才调 {@link #install}。
  * 不在的话这个类一次都不会被加载——它直接引用 FTB 的类。读任务书在主人的客户端上,其余都在服务端。
@@ -29,11 +29,11 @@ public final class NumenFtbQuests {
 
     /** 由 {@code Builtin} 在确认 FTB Quests 在场后调用。 */
     public static void install(Path skillsRoot) {
-        NumenPlugins.register(FtbqCommands.NAMESPACE, numen -> {
+        NumenPlugins.register(FtbqApi.NAMESPACE, numen -> {
             // 事件两侧都要登记(服务端的发出口靠它挡,主人客户端的队列靠它投递),所以直接调,不放进 onClient
             FtbqEvents.bind(numen);
-            // 命令树两侧都要有:客户端当场解析、执行读书的动作,服务端执行提交与入队
-            FtbqCommands.install(numen);
+            // 两侧都登记:读书的函数在主人客户端上执行,提交与入队在服务端执行
+            FtbqApi.install(numen);
 
             ObjectCompletedEvent.QUEST.register(QuestWatch::onCompleted);
             ObjectCompletedEvent.CHAPTER.register(QuestWatch::onCompleted);

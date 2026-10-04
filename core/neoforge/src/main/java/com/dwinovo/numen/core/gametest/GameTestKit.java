@@ -4,9 +4,13 @@ import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.dwinovo.numen.agent.loop.SerialCalls;
 import com.dwinovo.numen.agent.loop.ToolPort;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
+import com.dwinovo.numen.agent.script.ApiReply;
 import com.dwinovo.numen.agent.script.Invocation;
-import com.dwinovo.numen.agent.tool.ToolCall;
-import com.dwinovo.numen.cli.NumenCli;
+import com.dwinovo.numen.agent.script.JsonValues;
+import com.dwinovo.numen.agent.script.ScriptEngine;
+import com.dwinovo.numen.core.task.dig.DigCompanionTask;
+import com.dwinovo.numen.sdk.Positions;
+import com.dwinovo.numen.sdk.ProgramPort;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -305,7 +309,7 @@ public final class GameTestKit {
                         return;
                     }
                     lastDig = current;
-                    dugThisRound = ((Number) current.task().getResult().data().get("dug")).intValue();
+                    dugThisRound = current.result(DigCompanionTask.Dug.class).dug();
                     dug += dugThisRound;
                     run(Step.COLLECT, "numen.work.collect({items = " + dropIds(current) + ", " + COSTS + "})");
                 }
@@ -316,7 +320,7 @@ public final class GameTestKit {
 
         /** 挖够了、那一团不剩了,或这一轮一格也没挖到,就以最后一次挖的结论收场;否则再走一轮。 */
         private void nextRound() {
-            long left = ((Number) lastDig.task().getResult().data().get("left")).longValue();
+            long left = lastDig.result(DigCompanionTask.Dug.class).left();
             if ((count > 0 && dug >= count) || left == 0 || dugThisRound == 0 || ++rounds >= MAX_ROUNDS) {
                 last = lastDig;
             } else {
@@ -327,11 +331,8 @@ public final class GameTestKit {
         /** 那一挖还在世界里的掉落物({@code drops} 里带 {@code id} 的),写成 Lua 的一张表:{@code {{id = 12}, {id = 15}}}。 */
         private static String dropIds(ToolRun dig) {
             List<String> ids = new ArrayList<>();
-            for (var drop : (JsonArray) dig.task().getResult().data().get("drops")) {
-                JsonObject o = drop.getAsJsonObject();
-                if (o.has("id")) {
-                    ids.add("{id = " + o.get("id").getAsInt() + "}");
-                }
+            for (var drop : dig.result(DigCompanionTask.Dug.class).drops()) {
+                drop.id().ifPresent(id -> ids.add("{id = " + id + "}"));
             }
             return "{" + String.join(", ", ids) + "}";
         }
@@ -381,9 +382,9 @@ public final class GameTestKit {
         }
     }
 
-    /** {@code numen.scan.blocks} 回执数据里的团,近的在前。 */
+    /** {@code numen.scan.blocks} 交回的团,近的在前。 */
     static com.google.gson.JsonArray clustersIn(String reply) {
-        return dataIn(reply).getAsJsonArray("clusters");
+        return valueIn(reply).getAsJsonArray();
     }
 
     /** 一团的方块写成 Lua 的一串 Block,和程序把扫描结果原样交出去一样。 */
@@ -410,15 +411,28 @@ public final class GameTestKit {
         return "{" + String.join(", ", all) + "}";
     }
 
-    /** 回执里交给脚本的数据;没带数据是空表。 */
-    static com.google.gson.JsonObject dataIn(String reply) {
-        com.google.gson.JsonObject o = com.google.gson.JsonParser.parseString(reply).getAsJsonObject();
+    /** 一次调用交回的值(JSON);失败时是错误值的 {@code data};都没有是 JSON 的 null。 */
+    static JsonElement valueIn(String reply) {
+        ApiReply.Parsed parsed = ApiReply.parse(reply);
+        Object value = parsed.ok() ? parsed.value() : parsed.error().get("data");
+        return value == null ? com.google.gson.JsonNull.INSTANCE : JsonValues.toJson(value);
+    }
+
+    /** 一段程序回执里的数据({@code status}、{@code calls}、{@code returned}、{@code error});没带是空表。 */
+    static com.google.gson.JsonObject receiptData(String receipt) {
+        com.google.gson.JsonObject o = JsonParser.parseString(receipt).getAsJsonObject();
         return o.has("data") ? o.getAsJsonObject("data") : new com.google.gson.JsonObject();
+    }
+
+    /** 一次调用交回的那张表,见 {@link #valueIn};不是一张表是空表。 */
+    static com.google.gson.JsonObject dataIn(String reply) {
+        JsonElement value = valueIn(reply);
+        return value.isJsonObject() ? value.getAsJsonObject() : new com.google.gson.JsonObject();
     }
 
     /** 有 {@code cell} 这一格的那一团(它的方块里有一块的 pos 是这一格);没有为 null。 */
     static com.google.gson.JsonObject clusterHolding(com.google.gson.JsonArray clusters, BlockPos cell) {
-        com.google.gson.JsonObject wanted = com.dwinovo.numen.cli.Shapes.pos(cell);
+        JsonElement wanted = JsonValues.toJson(Positions.value(cell));
         for (var element : clusters) {
             var cluster = element.getAsJsonObject();
             for (var block : cluster.getAsJsonArray("blocks")) {
@@ -431,9 +445,8 @@ public final class GameTestKit {
     }
 
     /** 对着 {@code rel} 那一格按一下,同步调用:左键是 {@code numen.use.hit},右键是 {@code numen.use.block}。 */
-    static TaskRecord click(GameTestHelper helper, NumenPlayer companion, String button, BlockPos rel) {
-        return lua(companion, ("left".equals(button) ? "numen.use.hit(" : "numen.use.block(") + at(helper, rel) + ")")
-                .task();
+    static ToolRun click(GameTestHelper helper, NumenPlayer companion, String button, BlockPos rel) {
+        return lua(companion, ("left".equals(button) ? "numen.use.hit(" : "numen.use.block(") + at(helper, rel) + ")");
     }
 
     /** {@code rel} 那一格的绝对坐标,写成脚本里的一格 Pos。 */
@@ -441,14 +454,19 @@ public final class GameTestKit {
         return xyz(helper.absolutePos(rel));
     }
 
+    /** 一格写成交回的值里的样子(JSON):和程序拿到的一个 Pos 比对时用。 */
+    static JsonElement posJson(BlockPos pos) {
+        return JsonValues.toJson(Positions.value(pos));
+    }
+
     /** 一格的坐标照回执里说一处地方的写法:{@code x y z}。 */
     static String words(BlockPos pos) {
         return pos.getX() + " " + pos.getY() + " " + pos.getZ();
     }
 
-    /** 一格的坐标写成脚本里的一格 Pos({@link com.dwinovo.numen.cli.Shapes#literal})。 */
+    /** 一格的坐标写成脚本里的一格 Pos({@link Positions#literal})。 */
     static String xyz(BlockPos pos) {
-        return com.dwinovo.numen.cli.Shapes.literal(pos);
+        return Positions.literal(pos);
     }
 
 
@@ -568,8 +586,8 @@ public final class GameTestKit {
     }
 
     /**
-     * 按模型的样子跑一段程序:交给内脑派发的同一个顺序({@link SerialCalls}),经同一个脚本入口逐个派 API 调用——读成动作与
-     * 参数({@link NumenCli#invocation})、服务端动作走 {@link NumenCli#serve}、客户端动作当场执行,和产品里同样那几处。程序等它派的
+     * 按模型的样子跑一段程序:交给内脑派发的同一个顺序({@link SerialCalls}),经同一个执行口逐个派 API 调用({@link ProgramPort}:
+     * 服务端函数走派发、客户端函数当场在这里答),和产品里同样那几处。程序等它派的
      * 每件身体活收尾:主人不在线,收尾的事件进出箱,每个服务器刻把新到的条目按收件箱的急件规则交给这段程序({@link #LIVE});
      * 主人在场时事件直送他的连接,{@link OwnerLine} 照主人客户端那样交给这段程序。
      *
@@ -638,73 +656,27 @@ public final class GameTestKit {
     static LlmToolCall programCall(String code) {
         String tool = com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.toolName();
         return new LlmToolCall("gametest-" + tool + "-" + UUID.randomUUID(), tool,
-                com.dwinovo.numen.cli.ScriptTool.args(code).toString());
+                com.dwinovo.numen.agent.tool.ScriptTool.args(code).toString());
     }
 
-    /**
-     * 一段程序在服务端怎么执行:脚本里的每次 API 调用读成动作({@link NumenCli#invocation}),服务端动作交 {@link NumenCli#serve}
-     * (没有主人客户端,不经网络),客户端动作经 {@link NumenCli#call} 当场执行;受理回执与收尾怎么认,问的都是产品里同样那几处;
-     * 程序用到的模块记战绩,和产品里同一处({@code Modules})。每次调用的回执与它派下的活记进 {@code run}。
-     */
-    private record ServerPort(NumenPlayer body, ToolRun run) implements SerialCalls.Port {
+    /** 看着一段程序的每次调用:派出时记一笔,回来时记下回执与它派下的活(调度器按调用 id 认得出)。 */
+    private record Watch(NumenPlayer body, ToolRun run) implements ProgramPort.Observer {
 
         @Override
-        public void invoke(LlmToolCall call, java.util.function.Consumer<String> done) {
-            done.accept(com.dwinovo.numen.task.TaskResult.fail("only programs run here, not " + call.name()).toJson());
+        public void dispatched(LlmToolCall line, Invocation invocation) {
+            run.dispatched(line.id(), invocation.function());
         }
 
         @Override
-        public String scriptOf(LlmToolCall call) {
-            return com.dwinovo.numen.cli.ScriptTool.code(call.arguments());
+        public void sent(LlmToolCall line) {
+            run.call(line.id()).look(body);
         }
 
         @Override
-        public void dispatch(LlmToolCall call, Invocation invocation, java.util.function.Consumer<String> done) {
-            ToolRun.Call record = run.dispatched(invocation.function());
-            java.util.function.Consumer<String> landed = json -> {
-                record.taken.compareAndSet(null, CompanionTickDispatcher.taskOf(body.getUUID(), call.id()));
-                record.replied.set(json);
-                done.accept(json);
-            };
-            String path = NumenCli.pathOf(invocation);
-            if (NumenCli.runsOnServer(invocation)) {
-                NumenCli.serve(path, invocation.args(), body, call.id(), landed);
-            } else {
-                NumenCli.call(invocation, new ToolCall(call.id(), path, invocation.args().toString(), body::getUUID,
-                        landed));
-            }
-            record.taken.compareAndSet(null, CompanionTickDispatcher.taskOf(body.getUUID(), call.id()));
-        }
-
-        @Override
-        public String leftRunning(String resultJson) {
-            return com.dwinovo.numen.task.TaskDispatch.runningTaskOf(resultJson);
-        }
-
-        @Override
-        public com.dwinovo.numen.agent.script.ScriptCall.Finish finish(EventQueue.Entry entry) {
-            return com.dwinovo.numen.event.NumenEvents.finishOf(entry);
-        }
-
-        @Override
-        public com.dwinovo.numen.agent.script.ScriptCatalog catalog() {
-            return NumenCli.scriptCatalog(com.dwinovo.numen.script.Modules.of(body.getUUID()));
-        }
-
-        @Override
-        public Invocation invocation(com.dwinovo.numen.agent.script.ScriptRun.Call call) {
-            return NumenCli.invocation(call);
-        }
-
-        @Override
-        public void tally(String module, com.dwinovo.numen.agent.script.ScriptCall.Tally tally) {
-            com.dwinovo.numen.script.Modules.of(body.getUUID()).tally(module, tally.ok(), tally.line(), tally.error(),
-                    now());
-        }
-
-        @Override
-        public long now() {
-            return System.currentTimeMillis();
+        public void replied(LlmToolCall line, String reply) {
+            ToolRun.Call call = run.call(line.id());
+            call.look(body);
+            call.replied.set(reply);
         }
     }
 
@@ -729,7 +701,8 @@ public final class GameTestKit {
         private Round(NumenPlayer body, ToolRun run) {
             this.body = body;
             this.run = run;
-            this.calls = new SerialCalls(new ServerPort(body, run));
+            this.calls = new SerialCalls(new ProgramPort(body, body.getUUID(),
+                    com.dwinovo.numen.script.Modules.of(body.getUUID()), true, new Watch(body, run)));
             seen.addAll(outbox(body));
         }
 
@@ -737,8 +710,9 @@ public final class GameTestKit {
             return com.dwinovo.numen.entity.EventOutbox.get(body.getServer()).peek(body.getUUID()).entries();
         }
 
-        /** 出箱里新到的事件交给这一轮。 */
+        /** 出箱里新到的事件交给这一轮;还没回的调用看一眼它派下的活(等主人点头之后才派的短活在这时出现)。 */
         private void feed() {
+            run.lookAll(body);
             for (EventQueue.Entry entry : outbox(body)) {
                 if (seen.add(entry)) {
                     arrive(entry);
@@ -844,12 +818,21 @@ public final class GameTestKit {
 
         /** 派出过的一次 API 调用。 */
         static final class Call {
+            final String id;
             final String function;
             final AtomicReference<String> replied = new AtomicReference<>();
             final AtomicReference<TaskRecord> taken = new AtomicReference<>();
 
-            private Call(String function) {
+            private Call(String id, String function) {
+                this.id = id;
                 this.function = function;
+            }
+
+            /** 调度器此刻认得出它派下的活就记下:受理的、正在做的短活,或等主人点头之后才派的那件。 */
+            void look(NumenPlayer body) {
+                if (taken.get() == null) {
+                    taken.compareAndSet(null, CompanionTickDispatcher.taskOf(body.getUUID(), id));
+                }
             }
         }
 
@@ -861,14 +844,30 @@ public final class GameTestKit {
             this.code = code;
         }
 
-        private Call dispatched(String function) {
-            Call call = new Call(function);
-            calls.add(call);
-            return call;
+        private void dispatched(String id, String function) {
+            calls.add(new Call(id, function));
+        }
+
+        private Call call(String id) {
+            for (Call call : calls) {
+                if (call.id.equals(id)) {
+                    return call;
+                }
+            }
+            throw new IllegalStateException("no call " + id + " was dispatched");
         }
 
         private Call last() {
             return calls.isEmpty() ? null : calls.get(calls.size() - 1);
+        }
+
+        /** 还没回的每次调用看一眼它派下的活。 */
+        private void lookAll(NumenPlayer body) {
+            for (Call call : calls) {
+                if (call.replied.get() == null) {
+                    call.look(body);
+                }
+            }
         }
 
         /** 这段程序。 */
@@ -876,10 +875,34 @@ public final class GameTestKit {
             return code;
         }
 
-        /** 最后一次调用当场的回执;一次都没派出时是程序的回执;都还没有是 null。 */
+        /** 最后一次调用当场的回执({@link ApiReply} 写的那一份);一次都没派出时是程序的回执;都还没有是 null。 */
         String reply() {
             Call last = last();
             return last != null ? last.replied.get() : receipt.get();
+        }
+
+        /** 最后一次调用的回执读成的样子;没派出、或还没回是 null。 */
+        private ApiReply.Parsed parsed() {
+            Call last = last();
+            String r = last == null ? null : last.replied.get();
+            return r == null ? null : ApiReply.parse(r);
+        }
+
+        /** 最后一次调用交回的值(脚本里的值:null、布尔、数、字符串、列表、表);占身体的活看 {@link #result}。 */
+        Object value() {
+            ApiReply.Parsed p = parsed();
+            return p == null || !p.ok() ? null : p.value();
+        }
+
+        /** 最后一次调用交回的那张表的一个字段;不是表、没有这个字段是 null。 */
+        Object field(String name) {
+            return value() instanceof java.util.Map<?, ?> table ? table.get(name) : null;
+        }
+
+        /** 最后一次调用派下去的那件活收尾时的值(它的函数声明的返回类型);还没收尾是 null。 */
+        <T> T result(Class<T> type) {
+            TaskRecord task = task();
+            return task == null || task.getResult() == null ? null : type.cast(task.getResult().value());
         }
 
         /** 最后一次调用派下去的那件活;还没回执、或没派活是 null。 */
@@ -910,16 +933,16 @@ public final class GameTestKit {
             return r != null && JsonParser.parseString(r).getAsJsonObject().get("success").getAsBoolean();
         }
 
-        /** 受理了:回执到了,而且派下了一件活。 */
+        /** 受理了:回执到了,是一件占身体的活的任务编号。 */
         boolean accepted() {
-            return task() != null;
+            ApiReply.Parsed p = parsed();
+            return p != null && p.job() != null;
         }
 
-        /** 当场拒绝:回执到了,是失败,没有派活——没有任务编号,也不会有 task_finished。 */
+        /** 当场失败:回执到了,是失败——没有任务编号,也不会有 task_finished。 */
         boolean refused() {
-            String r = reply();
-            return r != null && task() == null
-                    && !JsonParser.parseString(r).getAsJsonObject().get("success").getAsBoolean();
+            ApiReply.Parsed p = parsed();
+            return p != null && !p.ok();
         }
 
         /**
@@ -939,26 +962,34 @@ public final class GameTestKit {
         }
 
         /**
-         * 结论的原话:派了活的是收尾时交给模型的那句话,没派活的是回执里那句话(回执不带话就是整张回执)。还没有结论是 null。
+         * 结论的原话,模型读到的那一句:受理了一件占身体的活的是收尾时那段实际账;别的调用,失败是错误的那句话,成功是等的这段时间里
+         * 身体做了什么(短活的账、主人允许了什么),什么都没做就是交回的值写成脚本里的样子。一次都没派出时是程序回执里的那段话。还没有
+         * 结论是 null。
          */
         String outcome() {
-            TaskRecord task = task();
-            if (task != null) {
-                return task.getResult() == null ? null : task.getResult().message();
+            if (last() == null) {
+                String r = receipt.get();
+                return r == null ? null : JsonParser.parseString(r).getAsJsonObject().get("message").getAsString();
             }
-            String r = reply();
-            if (r == null) {
+            ApiReply.Parsed p = parsed();
+            if (p == null) {
                 return null;
             }
-            JsonObject o = JsonParser.parseString(r).getAsJsonObject();
-            return o.has("message") ? o.get("message").getAsString() : r;
+            if (p.job() != null) {
+                TaskRecord task = task();
+                return task == null || task.getResult() == null ? null : task.getResult().message();
+            }
+            if (!p.ok()) {
+                return String.valueOf(p.error().get("message"));
+            }
+            return p.account() != null && !p.account().isBlank() ? p.account() : ScriptEngine.IN_USE.value(p.value());
         }
 
-        /** 失败的种类({@code out_of_reach}…):派了活的是收尾结果的,没派活的是回执里的;成功或还没结论是 null。 */
+        /** 失败的种类({@code out_of_reach}…):受理了活的是收尾结果的,别的是回执里的;成功或还没结论是 null。 */
         String kind() {
-            TaskRecord task = task();
-            if (task != null) {
-                return task.getResult() == null || task.getResult().kind() == null ? null
+            if (accepted()) {
+                TaskRecord task = task();
+                return task == null || task.getResult() == null || task.getResult().kind() == null ? null
                         : task.getResult().kind().wire();
             }
             return failure("kind");
@@ -966,42 +997,37 @@ public final class GameTestKit {
 
         /** 失败时能照抄的下一步,取法同 {@link #kind};没有是 null。 */
         String hint() {
-            TaskRecord task = task();
-            if (task != null) {
-                return task.getResult() == null ? null : task.getResult().hint();
+            if (accepted()) {
+                TaskRecord task = task();
+                return task == null || task.getResult() == null ? null : task.getResult().hint();
             }
             return failure("hint");
         }
 
-        /**
-         * 没派活时失败的一项:一次调用的回执把它写在顶层,整段程序的回执(一次都没派出,参数就读不成)写在 {@code data.error} 里。
-         */
+        /** 没派活时失败的一项:一次调用的错误值里的;一次都没派出(脚本写错)时是整段程序回执的 {@code data.error} 里的。 */
         private String failure(String key) {
-            String r = reply();
+            ApiReply.Parsed p = parsed();
+            if (p != null) {
+                return p.ok() || p.error().get(key) == null ? null : String.valueOf(p.error().get(key));
+            }
+            String r = receipt.get();
             if (r == null) {
                 return null;
             }
             JsonObject o = JsonParser.parseString(r).getAsJsonObject();
-            if (o.has(key)) {
-                return o.get(key).getAsString();
-            }
             JsonObject data = o.has("data") ? o.getAsJsonObject("data") : null;
             JsonObject error = data != null && data.has("error") ? data.getAsJsonObject("error") : null;
             return error != null && error.has(key) ? error.get(key).getAsString() : null;
         }
 
-        /** 结论是成功。回执不带 success 的查询(直接回一份数据)回了就算成功。 */
+        /** 结论是成功:受理了活的看收尾,别的看回执。 */
         boolean succeeded() {
-            TaskRecord task = task();
-            if (task != null) {
-                return task.getResult() != null && task.getResult().success();
+            if (accepted()) {
+                TaskRecord task = task();
+                return task != null && task.getResult() != null && task.getResult().success();
             }
-            String r = reply();
-            if (r == null) {
-                return false;
-            }
-            JsonObject o = JsonParser.parseString(r).getAsJsonObject();
-            return !o.has("success") || o.get("success").getAsBoolean();
+            ApiReply.Parsed p = parsed();
+            return p != null && p.ok();
         }
     }
 }

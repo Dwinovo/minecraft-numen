@@ -5,7 +5,6 @@ import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskState;
 
-import java.util.Map;
 
 /**
  * {@code gear remove} on the player body:在身体的任务槽里跑 {@link Wardrobe#remove}。
@@ -40,8 +39,8 @@ public final class UnequipCompanionTask extends AbstractCompanionTask<UnequipTas
     protected void cleanup() {}
 
     @Override
-    protected Map<String, Object> resultData() {
-        return outcome == null ? super.resultData() : outcome.data();
+    protected com.dwinovo.numen.core.gear.Wardrobe.Change value() {
+        return outcome == null ? null : outcome.change();
     }
 
     @Override

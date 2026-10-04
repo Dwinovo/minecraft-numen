@@ -1,9 +1,9 @@
 package com.dwinovo.numen.client.screen.chat;
 
 import com.dwinovo.numen.agent.provider.LlmToolCall;
-import com.dwinovo.numen.cli.TodoTool;
-import com.dwinovo.numen.cli.TodoTool.Item;
-import com.dwinovo.numen.cli.TodoTool.Status;
+import com.dwinovo.numen.agent.tool.TodoTool;
+import com.dwinovo.numen.agent.tool.TodoTool.Item;
+import com.dwinovo.numen.agent.tool.TodoTool.Status;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import org.junit.jupiter.api.Test;

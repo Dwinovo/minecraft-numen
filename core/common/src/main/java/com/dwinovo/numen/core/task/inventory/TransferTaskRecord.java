@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task.inventory;
 
-import com.dwinovo.numen.cli.ServerSource;
+import com.dwinovo.numen.sdk.ServerCall;
 import com.dwinovo.numen.core.tools.ContainerOps;
 import com.dwinovo.numen.task.TaskRecord;
 
@@ -12,7 +12,7 @@ public final class TransferTaskRecord extends TaskRecord {
 
     public final ContainerOps.Move move;
 
-    public TransferTaskRecord(ServerSource source, long deadlineGameTime, ContainerOps.Move move) {
+    public TransferTaskRecord(ServerCall source, long deadlineGameTime, ContainerOps.Move move) {
         super(source, deadlineGameTime);
         this.move = move;
     }

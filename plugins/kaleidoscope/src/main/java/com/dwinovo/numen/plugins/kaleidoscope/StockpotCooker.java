@@ -1,6 +1,5 @@
 package com.dwinovo.numen.plugins.kaleidoscope;
 
-import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.body.Hotbar;
 import com.github.ysbbbbbb.kaleidoscopecookery.api.blockentity.IStockpot;
@@ -17,9 +16,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 
 /**
  * 汤锅。四档:放汤底(0)→ 下料(1)→ 炖(2)→ 盛出(3)。
@@ -61,23 +59,11 @@ final class StockpotCooker implements Cooker {
     }
 
     @Override
-    public Map<String, Object> report() {
+    public KaleidoscopeApi.PotState report() {
         boolean heat = stockpot.hasHeatSource(level);
         boolean lid = stockpot.hasLid();
         int status = stockpot.getStatus();
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("cookware", kind().id());
-        out.put("pos", Shapes.pos(pos));
-        out.put("stage", stage(status));
-        out.put("has_heat_source", heat);
-        out.put("has_lid", lid);
-        if (status != IStockpot.PUT_SOUP_BASE) {
-            out.put("soup_base", stockpot.getSoupBaseId().toString());
-        }
-        out.put("in_the_pot", contents().stream().map(s -> Dish.idOf(s.getItem())).toList());
-        if (status == IStockpot.COOKING || status == IStockpot.FINISHED) {
-            out.put("dish_being_made", Dish.idOf(stockpot.getResult().getItem()));
-        }
+        Integer servings = null;
         List<String> needs = new ArrayList<>();
         if (!heat) {
             needs.add("light the block under it — with no heat source nothing moves");
@@ -99,13 +85,18 @@ final class StockpotCooker implements Cooker {
             }
             case IStockpot.COOKING -> needs.add("simmering, wait — it never burns");
             case IStockpot.FINISHED -> {
-                out.put("servings_left", stockpot.getTakeoutCount());
+                servings = stockpot.getTakeoutCount();
                 needs.add("take the lid off, then ladle it out with the carrier in hand");
             }
             default -> needs.add("unknown stage " + status);
         }
-        out.put("needs", needs);
-        return out;
+        return new KaleidoscopeApi.PotState(kind(), pos, stage(status), heat, Optional.empty(), Optional.of(lid),
+                status != IStockpot.PUT_SOUP_BASE ? Optional.of(stockpot.getSoupBaseId().toString()) : Optional.empty(),
+                contents().stream().map(s -> Dish.idOf(s.getItem())).toList(),
+                status == IStockpot.COOKING || status == IStockpot.FINISHED
+                        ? Optional.of(Dish.idOf(stockpot.getResult().getItem())) : Optional.empty(),
+                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.ofNullable(servings),
+                needs);
     }
 
     private static String stage(int status) {
@@ -127,7 +118,7 @@ final class StockpotCooker implements Cooker {
     /** 盖着盖子什么都放不进也盛不出。 */
     private Step lidOn(String what) {
         return stockpot.hasLid() ? Step.blocked("the lid is on the stockpot at " + Cooker.where(pos) + " — take it off "
-                + "with " + KaleidoscopeCommands.line(KaleidoscopeCommands.LID) + " " + what) : null;
+                + "with kaleidoscope.pot.lid " + what) : null;
     }
 
     @Override
@@ -172,7 +163,7 @@ final class StockpotCooker implements Cooker {
         if (stockpot.getStatus() != IStockpot.PUT_INGREDIENT) {
             return Step.blocked("the stockpot at " + Cooker.where(pos) + " is " + stage(stockpot.getStatus())
                     + (stockpot.getStatus() == IStockpot.PUT_SOUP_BASE ? " — pour the soup base in first ("
-                    + KaleidoscopeCommands.line(KaleidoscopeCommands.BASE) + ")" : ""));
+                    + "kaleidoscope.pot.base)" : ""));
         }
         int[] need = dish.stillNeeded(stockpot.getInputs(), portions);
         for (int i = 0; i < need.length; i++) {

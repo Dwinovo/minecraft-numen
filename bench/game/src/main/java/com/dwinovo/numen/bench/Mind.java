@@ -10,7 +10,7 @@ import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.agent.provider.Usage;
 import com.dwinovo.numen.agent.script.ScriptEngine;
-import com.dwinovo.numen.cli.ScriptTool;
+import com.dwinovo.numen.agent.tool.ScriptTool;
 
 import java.util.List;
 import java.util.UUID;

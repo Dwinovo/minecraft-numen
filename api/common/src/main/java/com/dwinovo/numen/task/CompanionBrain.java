@@ -3,7 +3,6 @@ package com.dwinovo.numen.task;
 import com.dwinovo.numen.entity.NumenPlayer;
 
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 
@@ -338,10 +337,10 @@ final class CompanionBrain {
                     default -> "failed";
                 };
                 com.dwinovo.numen.event.NumenEvents.taskFinished(
-                        companion, rec.publicId(), rec.getToolName(), status, result);
+                        companion, rec.publicId(), rec.getToolName(), status, result, rec.function());
                 continue;
             }
-            rec.reply().accept(result.toJson());
+            rec.reply().accept(result);
         }
     }
 }

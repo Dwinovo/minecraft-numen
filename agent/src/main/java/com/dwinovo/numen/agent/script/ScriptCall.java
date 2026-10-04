@@ -1,25 +1,23 @@
 package com.dwinovo.numen.agent.script;
 
-import com.dwinovo.numen.agent.llm.ToolOutcome;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 一次调用里跑的一段程序:她这一轮写的那段 {@code code}。程序每调一个 API 函数,这里把它换成一次动作调用({@link Invocation})交给
- * 派发的一方({@link Next.Dispatch}),那次调用的回执、要等的身体活的收尾再交回来,程序从调用处接着跑;跑完、出错、到了上限或被打断时
- * 写成一张回执。派发、等待与打断的时机在 {@code SerialCalls},这里只管程序走到哪、回执怎么写。模块里的函数是程序的一部分,它们的
- * API 调用照样一次一次地交出来;程序结束时,用到的每个模块记一次战绩。
+ * 一次调用里跑的一段程序:她这一轮写的那段 {@code code}。程序每调一个 API 函数,这里把它换成一次调用({@link Invocation})交给
+ * 派发的一方({@link Next.Dispatch}),那次调用的结果({@link ApiReply})、要等的身体活的收尾再交回来,程序从调用处接着跑;跑完、出错、到了
+ * 上限或被打断时写成一张回执。派发、等待与打断的时机在 {@code SerialCalls},这里只管程序走到哪、回执怎么写。模块里的函数是程序的一部分,
+ * 它们的 API 调用照样一次一次地交出来;程序结束时,用到的每个模块记一次战绩。
  *
  * <h2>回执</h2>
  * 第一行一句话说结局(跑完、出错在哪一行与那个错误值的文字、停在哪一行为什么);之后每次 API 调用一行——在哪一行、哪个函数、
- * {@code ok} 或失败的种类、回执那句话的第一行;再是脚本 {@code return} 的值;最后是 {@code print} 写的字。脚本拿到的是数据,给她看的
- * 文字只在这里,由同一张回执写成。程序等着收尾的身体活,那一行是它的编号、结局与整段交代(路上挖了、放了什么的实际账)——这件活的
- * 收尾只在这里说,不另发事件。出错时数据里的 {@code error} 是那个错误值({@code kind}、{@code message}……)。
+ * {@code ok} 与它返回的值写成的字面量(截断),或失败的种类与错误的第一行;再是脚本 {@code return} 的值;最后是 {@code print} 写的字。
+ * 脚本拿到的是值,给她看的那一行由同一个值写成,没有第二份文字。程序等着收尾的身体活,那一行是它的编号、结局与整段实际账(路上挖了、
+ * 放了什么)——这件活的收尾只在这里说,不另发事件。出错时数据里的 {@code error} 是那个错误值({@code kind}、{@code message}……)。
  */
 public final class ScriptCall {
 
@@ -58,14 +56,13 @@ public final class ScriptCall {
      * @param task   编号
      * @param status {@code done}、{@code failed}、{@code timeout}、{@code stopped}、{@code interrupted}
      * @param words  它交代的话
-     * @param result 它的结果({@code success}、{@code message}、失败时的 {@code kind} 与 {@code hint}、{@code data}),随事件一起到;
-     *               没带(重启前派的活补发的收尾)是 null
+     * @param result 它的结果({@link ApiReply#ended} 写的那一份),随事件一起到;没带(重启前派的活补发的收尾)是 null
      */
     public record Finish(String task, String status, String words, JsonObject result) {}
 
     /** 接下来该做什么。 */
     public sealed interface Next {
-        /** 执行这次 API 调用,把回执交回 {@link #result}。 */
+        /** 执行这次 API 调用,把结果交回 {@link #result}。 */
         record Dispatch(Invocation invocation) implements Next {}
 
         /** 那次调用留下了一件还在跑的身体活:等它的收尾,交回 {@link #finished}。 */
@@ -74,6 +71,14 @@ public final class ScriptCall {
         /** 脚本结束了,这是这次调用的结果。 */
         record Done(String receipt) implements Next {}
     }
+
+    /**
+     * 一次 API 调用的结局,按调用记(评测按函数统计用):调了哪个函数、怎么写的、成了还是哪一种失败。参数读不成、没有这个函数,当场失败的
+     * 也算一次。
+     *
+     * @param kind 失败的种类({@link ErrorKind#wire});成了是 null
+     */
+    public record Called(String function, List<Object> args, java.util.Map<String, Object> options, String kind) {}
 
     /** 回执数据里程序 {@code return} 的那个值。 */
     public static final String RETURNED = "returned";
@@ -91,6 +96,8 @@ public final class ScriptCall {
     private int calls;
     /** 交出去、还没有结局的那一次。 */
     private Pending pending;
+    /** 有了结局、还没被取走的调用,按先后。 */
+    private final List<Called> called = new ArrayList<>();
 
     private ScriptCall(Host host, String code) {
         this.host = host;
@@ -110,45 +117,53 @@ public final class ScriptCall {
     }
 
     /**
-     * 交出去的那次调用有了回执。
-     *
-     * @param runningTask 回执说它留下了一件会自己收尾的身体活:那件的编号;没有是 null
+     * 交出去的那次调用有了结果({@link ApiReply} 写的那一份)。受理了一件占身体的活({@code job}),程序接着等它的收尾;否则结果交回程序。
      */
-    public Next result(String resultJson, String runningTask) {
-        if (runningTask != null) {
-            return new Next.Await(runningTask);
+    public Next result(String replyJson) {
+        ApiReply.Parsed reply = ApiReply.parse(replyJson);
+        if (reply.ok() && reply.job() != null) {
+            return new Next.Await(reply.job());
         }
         Pending p = pending;
         pending = null;
-        boolean ok = !ToolOutcome.failed(resultJson);
-        String text = messageOf(resultJson);
-        JsonObject parsed = objectOf(resultJson);
-        String kind = ok ? null : failureKind(parsed);
-        log(p, ok ? null : kind, text);
-        return advance(run.resume(new ScriptRun.Result(ok, text, dataOf(resultJson), kind,
-                ok ? null : hintOf(parsed))));
+        if (reply.ok()) {
+            // 等的这段时间里身体做了什么,整段写进这一行;没做什么的,写交回的值
+            if (reply.account() != null && !reply.account().isBlank()) {
+                logWhole(p, null, reply.account().strip());
+            } else {
+                log(p, null, reply.value() == null ? "" : ScriptEngine.IN_USE.value(reply.value()));
+            }
+            return advance(run.resume(ScriptRun.Result.ok(reply.value())));
+        }
+        log(p, (String) reply.error().get(ScriptRun.KIND), String.valueOf(reply.error().get(ScriptRun.MESSAGE)));
+        return advance(run.resume(ScriptRun.Result.failed(reply.error())));
     }
 
     /**
-     * 等的那件身体活收尾了:{@code done} 算成功。脚本拿到的是它结果里的数据;失败的种类是结果说的那一种,被叫停是
-     * {@link ErrorKind#INTERRUPTED}、到了期限是 {@link ErrorKind#TIMEOUT}。
+     * 等的那件身体活收尾了:{@code done} 算成功,程序拿到它的值;失败的种类是结果说的那一种,被叫停是 {@link ErrorKind#INTERRUPTED}、
+     * 到了期限是 {@link ErrorKind#TIMEOUT}。整段实际账写进这一行:这件活的收尾只在这张回执里说。
      */
     public Next finished(Finish finish) {
         Pending p = pending;
         pending = null;
+        ApiReply.Parsed reply = finish.result() == null ? null : ApiReply.parse(finish.result());
         boolean ok = "done".equals(finish.status());
-        JsonObject result = finish.result() == null ? new JsonObject() : finish.result();
         String kind = ok ? null : switch (finish.status()) {
             case "timeout" -> ErrorKind.TIMEOUT.wire();
             case "stopped", "interrupted" -> ErrorKind.INTERRUPTED.wire();
-            default -> failureKind(result);
+            default -> reply != null && !reply.ok() ? (String) reply.error().get(ScriptRun.KIND)
+                    : ErrorKind.FAILED.wire();
         };
-        // 整段交代都写进这一行:这件活的收尾只在这张回执里说
         logWhole(p, kind, finish.task() + " " + finish.status()
                 + (finish.words().isBlank() ? "" : ": " + finish.words().strip()));
-        JsonObject data = result.get("data") instanceof JsonObject d ? d : new JsonObject();
-        return advance(run.resume(new ScriptRun.Result(ok, finish.words(), data, kind,
-                ok ? null : hintOf(result))));
+        if (ok) {
+            return advance(run.resume(ScriptRun.Result.ok(reply == null ? null : reply.value())));
+        }
+        java.util.Map<String, Object> error = reply != null && !reply.ok()
+                ? new java.util.LinkedHashMap<>(reply.error())
+                : ScriptRun.failure(kind, finish.words(), null, null, null);
+        error.put(ScriptRun.KIND, kind);
+        return advance(run.resume(ScriptRun.Result.failed(error)));
     }
 
     /**
@@ -193,6 +208,7 @@ public final class ScriptCall {
             } catch (ApiError wrong) {
                 log.add(where(call.line()) + " " + call.function() + ": " + wrong.kind().wire() + " — "
                         + firstLine(wrong.getMessage()));
+                called.add(new Called(call.function(), call.args(), call.options(), wrong.kind().wire()));
                 step = run.refuse(wrong);
                 continue;
             }
@@ -216,8 +232,12 @@ public final class ScriptCall {
 
     // ---- 记录与回执 ----
 
-    /** 一次调用的那一行:{@code kind} 是失败的种类,成功是 null(写 {@code ok})。 */
+    /**
+     * 一次调用的那一行:{@code kind} 是失败的种类,成功是 null(写 {@code ok});{@code text} 是返回值的字面量或错误的话,只留第一行、
+     * 截断。
+     */
     private void log(Pending p, String kind, String text) {
+        settled(p, kind);
         String said = firstLine(text);
         log.add(where(p.call.line()) + " " + p.call.function() + ": " + (kind == null ? "ok" : kind)
                 + (said.isEmpty() ? "" : " — " + said));
@@ -225,8 +245,21 @@ public final class ScriptCall {
 
     /** 一件身体活收尾的那一行:整段交代原样写上,第二行起缩进两格,读得出还是这一行。 */
     private void logWhole(Pending p, String kind, String text) {
+        settled(p, kind);
         log.add(where(p.call.line()) + " " + p.call.function() + ": " + (kind == null ? "ok" : kind) + " — "
                 + text.replace("\n", "\n  "));
+    }
+
+    /** 交出去的那一次有了结局。 */
+    private void settled(Pending p, String kind) {
+        called.add(new Called(p.call.function(), p.call.args(), p.call.options(), kind));
+    }
+
+    /** 上次取走之后有了结局的调用,按先后;取走就清空。 */
+    public List<Called> drainCalled() {
+        List<Called> out = List.copyOf(called);
+        called.clear();
+        return out;
     }
 
     private String finalReceipt(ScriptRun.Done done) {
@@ -296,46 +329,6 @@ public final class ScriptCall {
     private static String firstLine(String text) {
         String line = text == null ? "" : text.strip().split("\n", 2)[0];
         return line.length() <= SAID ? line : line.substring(0, SAID) + "...";
-    }
-
-    /** 结果整个读成 JSON 对象;不是对象是空对象。 */
-    private static JsonObject objectOf(String resultJson) {
-        try {
-            JsonElement parsed = JsonParser.parseString(resultJson);
-            return parsed.isJsonObject() ? parsed.getAsJsonObject() : new JsonObject();
-        } catch (RuntimeException notJson) {
-            return new JsonObject();
-        }
-    }
-
-    /** 失败的结果说的种类;没说(接进来的外部工具的结果这类)是 {@link ErrorKind#FAILED}。 */
-    private static String failureKind(JsonObject result) {
-        return result.get("kind") instanceof JsonElement k && k.isJsonPrimitive() ? k.getAsString()
-                : ErrorKind.FAILED.wire();
-    }
-
-    /** 失败的结果给的下一步;没有是 null。 */
-    private static String hintOf(JsonObject result) {
-        return result.get("hint") instanceof JsonElement h && h.isJsonPrimitive() ? h.getAsString() : null;
-    }
-
-    /** 回执里交给脚本的数据({@code data});没有是空对象。 */
-    private static JsonObject dataOf(String resultJson) {
-        return objectOf(resultJson).get("data") instanceof JsonObject data ? data : new JsonObject();
-    }
-
-    /** 回执那句话:{@code TaskResult} 的 message;不是这个形状的结果整段就是那句话。 */
-    private static String messageOf(String resultJson) {
-        try {
-            JsonElement parsed = JsonParser.parseString(resultJson);
-            if (parsed.isJsonObject() && parsed.getAsJsonObject().get("message") instanceof JsonElement m
-                    && m.isJsonPrimitive()) {
-                return m.getAsString();
-            }
-        } catch (RuntimeException notJson) {
-            // 原文就是那句话
-        }
-        return resultJson;
     }
 
     // ---- 小件 ----

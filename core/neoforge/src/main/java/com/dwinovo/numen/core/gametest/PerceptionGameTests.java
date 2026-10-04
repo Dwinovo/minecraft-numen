@@ -101,11 +101,11 @@ public class PerceptionGameTests {
                     viaCommand.set(lua(companion, "numen.scan.map()"));
                 })
                 .thenWaitUntil(() -> {
-                    String m = map.get().outcome();
+                    String m = rows(map.get());
                     helper.assertTrue(cell(m, 2, 0) == '#', "the wall two east is not #: \n" + m);
                     helper.assertTrue(cell(m, 0, -2) == '^', "the step two north is not ^: \n" + m);
                     helper.assertTrue(cell(m, -2, 0) == '~', "the water two west is not ~: \n" + m);
-                    helper.assertTrue(m.equals(viaCommand.get().outcome()),
+                    helper.assertTrue(m.equals(rows(viaCommand.get())),
                             "two numen.scan.map calls draw differently: \n" + m + "\n" + viaCommand.get().reply());
                 })
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
@@ -144,7 +144,7 @@ public class PerceptionGameTests {
 
     /** {@code numen.scan.entities} 的这一页里这只实体的那一行;没列出为 null。 */
     private static com.google.gson.JsonObject rowOf(ToolRun scan, net.minecraft.world.entity.Entity entity) {
-        for (var row : dataIn(scan.reply()).getAsJsonArray("entities")) {
+        for (var row : valueIn(scan.reply()).getAsJsonArray()) {
             if (row.getAsJsonObject().get("id").getAsInt() == entity.getId()) {
                 return row.getAsJsonObject();
             }
@@ -261,11 +261,9 @@ public class PerceptionGameTests {
         ToolRun recipe = lua(companion, "numen.inv.recipes(\"minecraft:iron_ingot\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(recipe.succeeded() && recipe.reply().contains("[smelting")
-                            && recipe.reply().contains("[crafting]"),
-                    "iron ingot's smelting and crafting recipes are not both listed: " + recipe.reply());
+            helper.assertTrue(recipe.succeeded(), "the recipes were not read: " + recipe.reply());
             java.util.Set<String> stations = new java.util.HashSet<>();
-            for (var one : dataIn(recipe.reply()).getAsJsonArray("recipes")) {
+            for (var one : valueIn(recipe.reply()).getAsJsonArray()) {
                 var r = one.getAsJsonObject();
                 helper.assertTrue(r.get("id").getAsString().contains(":")
                                 && r.get("item").getAsString().equals("minecraft:iron_ingot"),
@@ -321,6 +319,12 @@ public class PerceptionGameTests {
         return dataIn(run.reply());
     }
 
+    /** {@code numen.scan.map} 交回的图,一行一行。 */
+    private static String rows(ToolRun map) {
+        return map.field("rows") instanceof List<?> rows
+                ? String.join("\n", rows.stream().map(String::valueOf).toList()) : "";
+    }
+
     /**
      * 俯视图里离她 {@code (dx, dz)} 的那一格:东为 +x、南为 +z。图的每一行格子之间隔一个空格,{@code @} 所在的
      * 那一行、那一列就是她。
@@ -340,7 +344,7 @@ public class PerceptionGameTests {
         return rows.get(row + dz).charAt(col + 2 * dx);
     }
 
-    /** 读一块石头和一格空气的存储:石头如实说没有存储;空气直接失败,说那儿什么都没有。 */
+    /** 读一块石头和一格空气的存储:石头交回一个空的存储表;空气直接失败,说那儿什么都没有。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void inspect_block_storage_on_stone_and_on_air(GameTestHelper helper) {
         BlockPos stone = helper.absolutePos(new BlockPos(5, 2, 3));
@@ -351,7 +355,7 @@ public class PerceptionGameTests {
         ToolRun onAir = lua(companion, "numen.scan.container({x = " + air.getX() + ", y = " + air.getY() + ", z = " + air.getZ() + "})");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(onStone.succeeded() && onStone.reply().contains("exposes no item/fluid/energy storage"),
+            helper.assertTrue(onStone.succeeded() && List.of().equals(onStone.field("storage")),
                     "stone was not reported as holding nothing: " + onStone.reply());
             helper.assertTrue(!onAir.succeeded() && onAir.reply().contains("is air"),
                     "air was not reported as nothing to read: " + onAir.reply());
@@ -408,15 +412,15 @@ public class PerceptionGameTests {
         });
     }
 
-    /** 查一样合成、烧炼都做不出来的东西(末影珍珠):回执说没有配方,要靠别的途径得到。 */
+    /** 查一样合成、烧炼都做不出来的东西(末影珍珠):交回空表,没有配方。 */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
     public static void lookup_recipe_for_something_not_made_says_so(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_curious", new BlockPos(3, 2, 3), false);
         ToolRun recipe = lua(companion, "numen.inv.recipes(\"minecraft:ender_pearl\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(recipe.succeeded() && recipe.reply().contains("no recipe for ender_pearl"),
-                    "the reply does not say ender pearls have no recipe: " + recipe.reply());
+            helper.assertTrue(recipe.succeeded() && List.of().equals(recipe.value()),
+                    "ender pearls are given a recipe: " + recipe.reply());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
@@ -428,7 +432,7 @@ public class PerceptionGameTests {
         ToolRun recipe = lua(companion, "numen.inv.recipes(\"minecraft:no_such_item\")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(!recipe.succeeded() && recipe.outcome().contains("unknown item: minecraft:no_such_item")
+            helper.assertTrue(!recipe.succeeded() && recipe.outcome().contains("there is no item minecraft:no_such_item")
                             && recipe.outcome().contains("\nusage: numen.inv.recipes("),
                     "the unknown id was not rejected by name: " + recipe.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);

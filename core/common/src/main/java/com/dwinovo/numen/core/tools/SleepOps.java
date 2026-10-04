@@ -1,11 +1,11 @@
 package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.task.TaskResult;
+import com.dwinovo.numen.agent.script.ApiError;
+import com.dwinovo.numen.agent.script.ErrorKind;
 import com.mojang.datafixers.util.Either;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.util.Unit;
 import net.minecraft.world.entity.player.Player;
@@ -16,8 +16,6 @@ import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 /**
  * {@code use sleep} 的业务半边:<b>上床,然后确认她真的睡着了</b>。
@@ -41,12 +39,18 @@ public final class SleepOps {
     private static final int REACH_H = 3;
     private static final int REACH_V = 2;
 
-    /** @param at 指定哪张床;为 null 时用手边够得着的那张 */
-    public String sleep(BlockPos at, NumenPlayer self) {
+    /** 躺下了没有、在哪张床。 */
+    public record Slept(@com.dwinovo.numen.sdk.Doc("The bed's head.") BlockPos bed, boolean sleeping) {}
+
+    /**
+     * @param at 指定哪张床;为 null 时用手边够得着的那张
+     * @throws ApiError 没有床({@code not_found});原版拒绝或没真躺下({@code failed},数据里是那张床)
+     */
+    public static Slept sleep(BlockPos at, NumenPlayer self) {
         boolean given = at != null;
         BlockPos bedHead = given ? headOf(self.level(), at) : nearestBedHeadInReach(self);
         if (bedHead == null) {
-            return noBed(self, given);
+            throw noBed(self, given);
         }
 
         Either<Player.BedSleepingProblem, Unit> result = self.startSleepInBed(bedHead);
@@ -54,19 +58,15 @@ public final class SleepOps {
 
         // 这三条的顺序就是判据本身:先看原版拒没拒,再看她是不是真躺下了。
         if (rejection != null) {
-            return TaskResult.fail(explain(rejection) + " (bed at " + pretty(bedHead) + ")",
-                    data(bedHead, false)).toJson();
+            throw new ApiError(ErrorKind.FAILED, explain(rejection) + " (bed at " + pretty(bedHead) + ")", null,
+                    new Slept(bedHead, false));
         }
         if (!self.isSleeping()) {
-            return TaskResult.fail(
-                    "the sleep request was accepted but you did not actually enter sleep — "
-                            + "something cancelled it in the same tick; look around before assuming you rested",
-                    data(bedHead, false)).toJson();
+            throw new ApiError(ErrorKind.FAILED, "the sleep request was accepted but you did not actually enter sleep "
+                    + "— something cancelled it in the same tick; look around before assuming you rested", null,
+                    new Slept(bedHead, false));
         }
-        return TaskResult.ok(
-                "you are in the bed at " + pretty(bedHead) + " and the server confirms you are sleeping. "
-                        + "Night passes on its own; you do not need to wait on a tool for that.",
-                data(bedHead, true)).toJson();
+        return new Slept(bedHead, true);
     }
 
     /**
@@ -126,7 +126,7 @@ public final class SleepOps {
     }
 
     /** 没床时把下一步递到她面前——包括"你自己身上就带着一张"。 */
-    private String noBed(NumenPlayer self, boolean coordsGiven) {
+    private static ApiError noBed(NumenPlayer self, boolean coordsGiven) {
         String carried = carriedBed(self);
         String base = coordsGiven
                 ? "there is no bed at those coordinates"
@@ -135,7 +135,7 @@ public final class SleepOps {
                 ? " You are carrying " + carried + " — place it on flat ground and try again."
                 : " `numen.scan.blocks(\"#minecraft:beds\")` finds one; `numen.move.to(bed, {arrive = \"use\"})` with "
                         + "its pos, then `numen.use.sleep()` again.";
-        return TaskResult.fail(com.dwinovo.numen.agent.script.ErrorKind.NOT_FOUND, base + "." + next, null).toJson();
+        return new ApiError(ErrorKind.NOT_FOUND, base + "." + next, null);
     }
 
     /** 背包里的第一张床;没有则 null。 */
@@ -152,12 +152,7 @@ public final class SleepOps {
         return null;
     }
 
-    private static Map<String, Object> data(BlockPos bed, boolean sleeping) {
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("bed", com.dwinovo.numen.cli.Shapes.pos(bed));
-        out.put("sleeping", sleeping);
-        return out;
-    }
+
 
     private static String pretty(BlockPos p) {
         return p.getX() + "," + p.getY() + "," + p.getZ();

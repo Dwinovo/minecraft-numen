@@ -45,5 +45,9 @@ public interface ToolPort {
         void finished(LlmToolCall call, String resultJson);
 
         void settled();
+
+        /** 程序 {@code program} 里的一次 API 调用有了结局(评测按函数统计用);不看就不管。 */
+        default void called(LlmToolCall program, com.dwinovo.numen.agent.script.ScriptCall.Called called) {
+        }
     }
 }

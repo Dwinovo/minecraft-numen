@@ -1,7 +1,7 @@
 package com.dwinovo.numen.plugins.tlm;
 
-import com.dwinovo.numen.cli.Shapes;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.sdk.EntityInfo;
 import com.github.tartaricacid.touhoulittlemaid.api.event.MaidTamedEvent;
 import com.github.tartaricacid.touhoulittlemaid.api.event.MaidTaskEnableEvent;
 import com.github.tartaricacid.touhoulittlemaid.api.event.MaidTombstoneEvent;
@@ -19,7 +19,6 @@ import com.github.tartaricacid.touhoulittlemaid.network.message.MaidTaskPackage;
 import com.github.tartaricacid.touhoulittlemaid.network.message.ToggleTabPackage;
 import com.github.tartaricacid.touhoulittlemaid.world.data.MaidInfo;
 import com.github.tartaricacid.touhoulittlemaid.world.data.MaidWorldData;
-import com.google.gson.JsonObject;
 import com.mojang.datafixers.util.Pair;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -41,6 +40,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Predicate;
 
@@ -74,31 +74,17 @@ final class Maids {
 
     private Maids() {}
 
-    /** 界面的一页:{@code tlm open} 能打开的那几页,和车万女仆界面边上的页签是同一组编号({@link TabIndex})。 */
-    enum Tab {
-        BACKPACK(TabIndex.MAIN), BAUBLE(TabIndex.BAUBLE), CURIOS(TabIndex.CURIOS);
-
-        private final int index;
-
-        Tab(int index) {
-            this.index = index;
-        }
-
-        /** 命令行上的写法。 */
-        String word() {
-            return name().toLowerCase(Locale.ROOT);
-        }
-
-        static Tab byWord(String word) {
-            return valueOf(word.toUpperCase(Locale.ROOT));
-        }
+    /** 界面的一页在车万女仆界面边上的页签编号({@link TabIndex})。 */
+    private static int tabIndex(MaidApi.Tab tab) {
+        return switch (tab) {
+            case BACKPACK -> TabIndex.MAIN;
+            case BAUBLE -> TabIndex.BAUBLE;
+            case CURIOS -> TabIndex.CURIOS;
+        };
     }
 
-    /**
-     * 一只女仆在设置页上的四样:家模式、拾取、骑乘、日程。日程写成命令行上的小写词({@code day}/{@code night}/{@code all}),
-     * 就是 {@link MaidSchedule} 的名字。
-     */
-    record Settings(boolean home, boolean pickup, boolean ride, String schedule) {}
+    /** 一只女仆在设置页上的四样:家模式、拾取、骑乘、日程。日程的三种就是 {@link MaidSchedule} 的名字。 */
+    record Settings(boolean home, boolean pickup, boolean ride, MaidApi.Schedule schedule) {}
 
     static boolean is(Entity entity) {
         return entity instanceof EntityMaid;
@@ -143,111 +129,77 @@ final class Maids {
      * 她名下、待在没加载的区块里的女仆:车万女仆在女仆离开世界时记下的最后位置。它的存档({@code MaidWorldData})挂在主世界上,
      * 服务器开着主世界就在。
      */
-    static List<JsonObject> away(ServerPlayer her) {
+    static List<MaidApi.LastSeen> away(ServerPlayer her) {
         return records(MaidWorldData.get(her.level()).getInfos(her.getUUID()));
     }
 
     /** 她的女仆死后留下、还没被取空的墓碑,记在同一份存档里。 */
-    static List<JsonObject> tombstones(ServerPlayer her) {
+    static List<MaidApi.LastSeen> tombstones(ServerPlayer her) {
         return records(MaidWorldData.get(her.level()).getTombstones(her.getUUID()));
     }
 
-    /** 存档里记着的那几条({@code MaidCommands.RECORD}):名字、位置、维度;这个主人一条都没记过时车万女仆给 null。 */
-    private static List<JsonObject> records(List<MaidInfo> infos) {
-        List<JsonObject> rows = new ArrayList<>();
+    /** 存档里记着的那几条:名字、位置、维度;这个主人一条都没记过时车万女仆给 null。 */
+    private static List<MaidApi.LastSeen> records(List<MaidInfo> infos) {
+        List<MaidApi.LastSeen> rows = new ArrayList<>();
         if (infos == null) {
             return rows;
         }
         for (MaidInfo info : infos) {
-            JsonObject row = new JsonObject();
-            row.addProperty("name", info.getName().getString());
-            row.add("pos", Shapes.pos(info.getChunkPos()));
-            row.addProperty("dimension", info.getDimension());
-            rows.add(row);
+            rows.add(new MaidApi.LastSeen(info.getName().getString(), info.getChunkPos().immutable(),
+                    info.getDimension()));
         }
         return rows;
     }
 
     /**
-     * 一只加载着的女仆此刻的样子({@code MaidCommands.MAID_CLASS}):一只实体(主人照 {@code numen.scan.entities} 的说法),加上她的模型、
-     * 工作、设置与好感等级。
+     * 一只加载着的女仆此刻的样子:一只实体(主人照 {@code numen.scan.entities} 的说法),加上她的模型、工作、设置与好感等级。
      */
-    static JsonObject row(Entity entity, NumenPlayer her) {
+    static MaidApi.Maid row(Entity entity, NumenPlayer her) {
         EntityMaid maid = (EntityMaid) entity;
-        JsonObject row = Shapes.entity(maid);
-        row.addProperty("model", maid.getModelId());
-        row.addProperty("task", maid.getTask().getUid().toString());
-        row.addProperty("schedule", schedule(maid.getSchedule()));
-        row.addProperty("home", maid.isHomeModeEnable());
-        row.addProperty("hp", tenth(maid.getHealth()));
-        row.addProperty("max_hp", tenth(maid.getMaxHealth()));
-        row.addProperty("favorability_level", maid.getFavorabilityManager().getLevel());
-        row.addProperty("sitting", maid.isMaidInSittingPose());
-        if (maid.level() == her.level()) {
-            row.addProperty("distance", tenth(her.distanceTo(maid)));
-        } else {
-            row.addProperty("dimension", maid.level().dimension().location().toString());
-        }
+        boolean here = maid.level() == her.level();
         UUID owner = maid.getOwnerUUID();
-        if (owner != null) {
-            row.addProperty("owner", owner.equals(her.getUUID()) ? "you"
-                    : her.isOwnedByPlayer(owner) ? "your owner" : owner(entity));
-        }
-        return row;
+        EntityInfo seen = EntityInfo.of(maid).seen(Optional.empty(),
+                here ? Optional.of(tenth(her.distanceTo(maid))) : Optional.empty(),
+                Optional.of(tenth(maid.getHealth())), Optional.of(tenth(maid.getMaxHealth())),
+                owner == null ? Optional.empty() : Optional.of(owner.equals(her.getUUID()) ? "you"
+                        : her.isOwnedByPlayer(owner) ? "your owner" : owner(entity)));
+        return new MaidApi.Maid(seen, maid.getModelId(), maid.getTask().getUid().toString(),
+                schedule(maid.getSchedule()), maid.isHomeModeEnable(), maid.getFavorabilityManager().getLevel(),
+                maid.isMaidInSittingPose(),
+                here ? Optional.empty() : Optional.of(maid.level().dimension().location().toString()));
     }
 
     /**
-     * 一只女仆的详情({@code tlm.maid.info} 的数据,不含工作模式):清单里的她({@link #row}),加上设置页的其余几样、好感、背包、
-     * 日程点。
+     * 一只女仆的详情({@code tlm.maid.info}):清单里的她({@link #row}),加上设置页的其余几样、好感、背包、日程点与每一个工作模式。
      */
-    static JsonObject detail(Entity entity, NumenPlayer her) {
+    static MaidApi.Detail detail(Entity entity, NumenPlayer her) {
         EntityMaid maid = (EntityMaid) entity;
-        JsonObject out = new JsonObject();
-        out.add("maid", row(entity, her));
-        out.addProperty("pickup", maid.isPickup());
-        out.addProperty("ride", maid.isRideable());
-        out.addProperty("favorability", maid.getFavorability());
-        out.addProperty("favorability_to_next_level", maid.getFavorabilityManager().nextLevelPoint());
-        out.addProperty("backpack", maid.getMaidBackpackType().getId().toString());
-        if (maid.isHomeModeEnable()) {
-            out.add("home_center", Shapes.pos(maid.getRestrictCenter()));
-            out.addProperty("home_radius", tenth(maid.getRestrictRadius()));
-        }
+        boolean home = maid.isHomeModeEnable();
         SchedulePos points = maid.getSchedulePos();
-        if (points.isConfigured()) {
-            JsonObject at = new JsonObject();
-            at.add("work", Shapes.pos(points.getWorkPos()));
-            at.add("idle", Shapes.pos(points.getIdlePos()));
-            at.add("sleep", Shapes.pos(points.getSleepPos()));
-            at.addProperty("dimension", points.getDimension().toString());
-            out.add("schedule_points", at);
-        }
-        return out;
+        return new MaidApi.Detail(row(entity, her), maid.isPickup(), maid.isRideable(), maid.getFavorability(),
+                maid.getFavorabilityManager().nextLevelPoint(), maid.getMaidBackpackType().getId().toString(),
+                home ? Optional.of(maid.getRestrictCenter().immutable()) : Optional.empty(),
+                home ? Optional.of(tenth(maid.getRestrictRadius())) : Optional.empty(),
+                points.isConfigured() ? Optional.of(new MaidApi.SchedulePoints(points.getWorkPos().immutable(),
+                        points.getIdlePos().immutable(), points.getSleepPos().immutable(),
+                        points.getDimension().toString())) : Optional.empty(),
+                tasks(maid));
     }
 
     /**
-     * 界面任务列表上的每一个工作模式(不含隐藏的),各一行:能不能切过去,以及车万女仆给这个模式列的条件此刻满没满足。
+     * 界面任务列表上的每一个工作模式(不含隐藏的),各一项:能不能切过去,以及车万女仆给这个模式列的条件此刻满没满足。
      * "能不能切"问的是车万女仆的任务列表给每个按钮问的同一组问题,见 {@link #switchable}。
      */
-    static List<Map<String, Object>> tasks(Entity entity) {
-        EntityMaid maid = (EntityMaid) entity;
-        List<Map<String, Object>> rows = new ArrayList<>();
+    private static List<MaidApi.WorkMode> tasks(EntityMaid maid) {
+        List<MaidApi.WorkMode> rows = new ArrayList<>();
         for (IMaidTask task : TaskManager.getNotHiddenTaskList(maid)) {
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("task", task.getUid().toString());
-            if (task.getUid().equals(maid.getTask().getUid())) {
-                row.put("current", true);
-            }
             List<Pair<String, Predicate<EntityMaid>>> toEnable = new ArrayList<>();
-            row.put("can_switch", switchable(task, maid, toEnable));
-            if (!toEnable.isEmpty()) {
-                row.put("to_enable", met(toEnable, maid));
-            }
+            boolean canSwitch = switchable(task, maid, toEnable);
             List<Pair<String, Predicate<EntityMaid>>> conditions = task.getConditionDescription(maid);
-            if (!conditions.isEmpty()) {
-                row.put("works_with", met(conditions, maid));
-            }
-            rows.add(row);
+            rows.add(new MaidApi.WorkMode(task.getUid().toString(),
+                    task.getUid().equals(maid.getTask().getUid()) ? Optional.of(true) : Optional.empty(), canSwitch,
+                    toEnable.isEmpty() ? Optional.empty() : Optional.of(met(toEnable, maid)),
+                    conditions.isEmpty() ? Optional.empty() : Optional.of(met(conditions, maid))));
         }
         return rows;
     }
@@ -336,12 +288,12 @@ final class Maids {
     /** 改设置页上的四样,和在设置页上点了"完成"一样:包里是整份设置,没改的照现在的填。 */
     static void configure(ServerPlayer her, Entity maid, Settings wanted) {
         MaidConfigPackage.handle(new MaidConfigPackage(maid.getId(), wanted.home(), wanted.pickup(), wanted.ride(),
-                MaidSchedule.valueOf(wanted.schedule().toUpperCase(Locale.ROOT))), from(her, MaidConfigPackage.TYPE));
+                MaidSchedule.valueOf(wanted.schedule().name())), from(her, MaidConfigPackage.TYPE));
     }
 
     /** 打开界面的一页,和点边上的页签一样。 */
-    static void open(ServerPlayer her, Entity maid, Tab tab) {
-        ToggleTabPackage.handle(new ToggleTabPackage(maid.getId(), tab.index), from(her, ToggleTabPackage.TYPE));
+    static void open(ServerPlayer her, Entity maid, MaidApi.Tab tab) {
+        ToggleTabPackage.handle(new ToggleTabPackage(maid.getId(), tabIndex(tab)), from(her, ToggleTabPackage.TYPE));
     }
 
     /** 这个包由她发来时 NeoForge 会交给 {@code handle} 的那个上下文,理由见类注释。 */
@@ -397,8 +349,8 @@ final class Maids {
         return pos.getX() + "," + pos.getY() + "," + pos.getZ();
     }
 
-    private static String schedule(MaidSchedule schedule) {
-        return schedule.name().toLowerCase(Locale.ROOT);
+    private static MaidApi.Schedule schedule(MaidSchedule schedule) {
+        return MaidApi.Schedule.valueOf(schedule.name());
     }
 
     private static double tenth(double value) {

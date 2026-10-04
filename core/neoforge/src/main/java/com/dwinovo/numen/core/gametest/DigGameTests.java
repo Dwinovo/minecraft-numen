@@ -444,9 +444,8 @@ public class DigGameTests {
     // ==================== 挖点名的格 ====================
 
     /**
-     * 挖一格:点名它的坐标。一捆干草块在她手边,{@code numen.work.dig x y z} 当场挖掉;受理回执说手够得着几格,收场说挖了
-     * 1 格、掉下来的那一捆落在了哪一格——回执那句话与数据的 {@code drops} 说的是同一件:落地、在被挖那一格(或滑到隔壁一格)、
-     * 还躺在那儿的那一件的编号。她一步没动。
+     * 挖一格:点名它的坐标。一捆干草块在她手边,{@code numen.work.dig(pos)} 当场挖掉;收场说挖了 1 格、掉下来的那一捆落在了哪一格
+     * ——那段账与交回的 {@code drops} 说的是同一件:落地、在被挖那一格(或滑到隔壁一格)、还躺在那儿的那一件的编号。她一步没动。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_dig")
     public static void dig_one_cell_by_its_coordinates(GameTestHelper helper) {
@@ -458,22 +457,18 @@ public class DigGameTests {
         ToolRun dig = lua(companion, "numen.work.dig(" + xyz(hay) + ")");
 
         succeedWhen(helper, () -> {
-            helper.assertTrue(dig.reply() != null && dig.reply().contains("1 cell(s) of " + words(hay)
-                            + " are within my reach where I stand"),
-                    "the acceptance does not say how many cells are within reach: " + dig.reply());
             helper.assertTrue(dig.done(), "work dig has not finished");
             helper.assertTrue(dig.succeeded() && dig.outcome().startsWith("dug 1 cell(s) of hay_block"),
                     "the cell was not dug: " + dig.outcome());
-            com.google.gson.JsonObject drop = onlyDrop(dig);
-            BlockPos landed = new BlockPos(drop.getAsJsonObject("pos").get("x").getAsInt(),
-                    drop.getAsJsonObject("pos").get("y").getAsInt(), drop.getAsJsonObject("pos").get("z").getAsInt());
-            helper.assertTrue(drop.get("fate").getAsString().equals("landed") && drop.get("count").getAsInt() == 1
+            var drop = onlyDrop(dig);
+            BlockPos landed = drop.pos();
+            helper.assertTrue(drop.fate() == com.dwinovo.numen.core.act.Drops.Fate.LANDED && drop.count() == 1
                             && landed.getY() == hay.getY() && Math.abs(landed.getX() - hay.getX()) <= 1
                             && Math.abs(landed.getZ() - hay.getZ()) <= 1,
                     "the drop did not land by the dug cell: " + drop);
             helper.assertTrue(dig.outcome().contains("Drops: 1 hay_block landed at " + xyz(landed) + "."),
                     "the reply does not say where the drop landed: " + dig.outcome());
-            helper.assertTrue(level.getEntity(drop.get("id").getAsInt())
+            helper.assertTrue(drop.id().isPresent() && level.getEntity(drop.id().get())
                             instanceof net.minecraft.world.entity.item.ItemEntity item && item.getItem().is(Items.HAY_BLOCK),
                     "the id given is not the hay lying there: " + drop);
             helper.assertTrue(level.getBlockState(hay).isAir(), "the hay is still there");
@@ -506,10 +501,10 @@ public class DigGameTests {
             helper.assertTrue(dig.done(), "work dig has not finished");
             helper.assertTrue(dig.succeeded() && dig.outcome().startsWith("dug 1 cell(s) of obsidian"),
                     "the obsidian was not dug: " + dig.outcome());
-            com.google.gson.JsonObject drop = onlyDrop(dig);
-            helper.assertTrue(drop.get("fate").getAsString().equals("destroyed")
-                            && drop.get("cause").getAsString().equals("minecraft:lava")
-                            && drop.get("item").getAsString().equals("minecraft:obsidian") && !drop.has("id"),
+            var drop = onlyDrop(dig);
+            helper.assertTrue(drop.fate() == com.dwinovo.numen.core.act.Drops.Fate.DESTROYED
+                            && drop.cause().equals(java.util.Optional.of("minecraft:lava"))
+                            && drop.item().equals("minecraft:obsidian") && drop.id().isEmpty(),
                     "the drop is not told as burned in the lava: " + drop);
             helper.assertTrue(dig.outcome().contains("Drops: 1 obsidian fell into lava and burned up at "),
                     "the reply does not say the drop burned in the lava: " + dig.outcome());
@@ -518,12 +513,12 @@ public class DigGameTests {
     }
 
     /** 这一挖的结果里只有一笔掉落物去向,交回它。 */
-    private static com.google.gson.JsonObject onlyDrop(ToolRun dig) {
-        var drops = (com.google.gson.JsonArray) dig.task().getResult().data().get("drops");
-        if (drops == null || drops.size() != 1) {
+    private static com.dwinovo.numen.core.act.Drops.Drop onlyDrop(ToolRun dig) {
+        var drops = dig.result(com.dwinovo.numen.core.task.dig.DigCompanionTask.Dug.class).drops();
+        if (drops.size() != 1) {
             throw new net.minecraft.gametest.framework.GameTestAssertException("expected one drop: " + drops);
         }
-        return drops.get(0).getAsJsonObject();
+        return drops.get(0);
     }
 
     /**
