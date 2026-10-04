@@ -85,6 +85,13 @@ Numen itself is **open source and free**. Calls to the large language model use 
 **Does the persona still apply in External Brain mode?**
 **No.** In External Brain mode, an external agent takes over Numen. Numen does not hand the persona to it, and the conversation context is not saved inside Numen. *To keep a persona, write it into the external agent's own prompt.*
 
+## License
+
+- **Source code** is licensed under [LGPL-3.0](LICENSE); modified versions you distribute must stay open under the same license. The full text of the GPL that the LGPL builds on is in [licenses/GPL-3.0.txt](licenses/GPL-3.0.txt).
+- **Plugins and compatibility mods** that are distributed separately and use Numen through its API *may use any license, including proprietary*.
+- **Screenshots, the demo animation and diagrams** are licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/): share and adapt them freely with attribution.
+- **Logos, promotional images and in-game art** are all rights reserved, as are the names "Numen" and "言出法随". See [licenses/ASSETS.txt](licenses/ASSETS.txt).
+
 ## Acknowledgements
 
 Thanks to everyone who follows, downloads, and uses Numen.
