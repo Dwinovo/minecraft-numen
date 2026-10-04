@@ -19,6 +19,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -200,6 +201,40 @@ public final class NumenPlayer extends ServerPlayer implements Body {
             fullReported = false;
             leftBehind = null;
         }
+    }
+
+    /** 一件在她身上用坏的装备:是什么、坏在哪个装备位。 */
+    public record BrokenGear(Item item, EquipmentSlot slot) {}
+
+    /** 最近用坏的装备,按先后;只留最近 {@link #BROKEN_KEPT} 件。 */
+    private final java.util.ArrayList<BrokenGear> brokenGear = new java.util.ArrayList<>();
+    /** 到现在一共用坏过几件:{@link #brokenGearMark} 读它,{@link #brokenGearSince} 拿它算新坏的是哪几件。 */
+    private long brokenGearTotal;
+    private static final int BROKEN_KEPT = 16;
+
+    /**
+     * 原版装备耐久耗尽、碎掉的那一刻(挖掘、打击、盾挡、鞘翅……都经 {@code ItemStack.hurtAndBreak} 到这里)。记下来,
+     * 干活的人事后用 {@link BodyDelta} 说给她听;这里只记流水,不替谁下结论。
+     */
+    @Override
+    public void onEquippedItemBroken(Item item, EquipmentSlot slot) {
+        super.onEquippedItemBroken(item, slot);
+        if (brokenGear.size() == BROKEN_KEPT) {
+            brokenGear.remove(0);
+        }
+        brokenGear.add(new BrokenGear(item, slot));
+        brokenGearTotal++;
+    }
+
+    /** 此刻用坏过几件的读数;之后问 {@link #brokenGearSince} 就是这个读数以来新坏的。 */
+    public long brokenGearMark() {
+        return brokenGearTotal;
+    }
+
+    /** 读数 {@code mark} 以来用坏的装备,按先后。 */
+    public List<BrokenGear> brokenGearSince(long mark) {
+        int fresh = (int) Math.min(brokenGearTotal - mark, brokenGear.size());
+        return List.copyOf(brokenGear.subList(brokenGear.size() - fresh, brokenGear.size()));
     }
 
     /** 主人血量的看护(纯判定在 {@link OwnerHurtWatch},便于无头单测)。 */

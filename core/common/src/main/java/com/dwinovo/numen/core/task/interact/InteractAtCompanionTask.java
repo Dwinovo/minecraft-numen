@@ -246,8 +246,8 @@ public final class InteractAtCompanionTask extends InReachTask<InteractAtTaskRec
     private String settle() {
         changes = receipt == null ? List.of() : receipt.diff(player);
         if (changes.isEmpty()) {
-            return " — but nothing visibly changed (hands, aimed block, nearby entities all "
-                    + "as before). If you expected an effect, reposition or rethink.";
+            return " — but nothing visibly changed (inventory, health, riding, aimed block, nearby "
+                    + "entities all as before). If you expected an effect, reposition or rethink.";
         }
         return " — " + String.join("; ", changes);
     }

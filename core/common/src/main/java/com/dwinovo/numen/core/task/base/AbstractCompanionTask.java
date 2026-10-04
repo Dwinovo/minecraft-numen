@@ -9,6 +9,7 @@ import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.task.TaskState;
+import com.dwinovo.numen.entity.BodyDelta;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.permission.ConsentAnswer;
@@ -101,6 +102,9 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     /** 主人点头的那几次,回执末尾交代。 */
     private final List<String> allowances = new ArrayList<>();
 
+    /** 开工那一刻的身体;收场时据此说这件活里有没有装备用坏。没开过工是 null。 */
+    private BodyDelta bodyAtStart;
+
     /** 受理之前准备过,见 {@link #prepare}。 */
     private boolean prepared;
 
@@ -151,6 +155,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
             r.setState(TaskState.FAILED);   // same-tick finalization (old dispatcher semantics)
             return;
         }
+        bodyAtStart = BodyDelta.open(player);
         try {
             onStart();
         } catch (RuntimeException e) {
@@ -387,8 +392,10 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
         cleanup();
         // 路上真动过的地形跟着每一种收场走:成功也好失败也罢,挖了什么、放了什么就说什么;主人点过头的也说
         String travelled = journey.describe();
+        String broken = bodyAtStart == null ? "" : bodyAtStart.broken(player);
         String enRoute = (travelled.isEmpty() ? "" : " " + travelled)
-                + (allowances.isEmpty() ? "" : " " + String.join("; ", allowances) + ".");
+                + (allowances.isEmpty() ? "" : " " + String.join("; ", allowances) + ".")
+                + (broken.isEmpty() ? "" : " " + broken);
         return outcome(finalState, enRoute);
     }
 

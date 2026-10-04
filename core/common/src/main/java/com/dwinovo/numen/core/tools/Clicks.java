@@ -29,7 +29,7 @@ public final class Clicks {
     public record Clicked(Button button,
                           @Doc("The cell aimed at.") Optional<BlockPos> aim,
                           @Doc("The block the click used, when it opened or worked a station.") Optional<BlockAt> block,
-                          @Doc("What changed: hands, the block, new entities; empty means the click did nothing.")
+                          @Doc("What changed: your inventory, health and riding, the block, new entities; empty means the click did nothing.")
                           List<String> changes) implements Pressed, Hit {}
 
     /** 点一只实体的结果。 */
