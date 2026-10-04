@@ -17,7 +17,7 @@
 
 Numen is an **embodied agent that runs inside Minecraft**. *It lives in the game as a mod*, continually explores the Minecraft world, **makes its own decisions, and takes action to get tasks done**.
 
-Learn more at [numen.dwinovo.cn](https://numen.dwinovo.cn).
+Learn more on the [website](https://numen.dwinovo.cn).
 
 ## Installation
 
