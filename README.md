@@ -69,7 +69,7 @@
 
 ## 插件
 
-基于上述架构，任何开发者都可以通过插件向言出法随注册新的 Lua API，供模型调用，从而让智能体学会使用其他模组。本仓库的 `plugins` 目录已经为[是，史蒂夫模型](https://github.com/YesSteveModel/YesSteveModel)、[车万女仆](https://github.com/TartaricAcid/TouhouLittleMaid)等模组提供了插件，例如模型可以通过"是，史蒂夫模型"的 Lua API 切换自己的皮肤，也可以通过"车万女仆"的 Lua API 驯服女仆。这些插件可以作为编写插件的参考模板，完整的开发者文档见 [numen.dwinovo.cn](https://numen.dwinovo.cn)。
+基于上述架构，任何开发者都可以通过插件向言出法随注册新的 Lua API，供模型调用，从而让智能体学会使用其他模组。本仓库的 `plugins` 目录已经为[是，史蒂夫模型](https://github.com/YesSteveModel/YesSteveModel)、[车万女仆](https://github.com/TartaricAcid/TouhouLittleMaid)等模组提供了插件，例如模型可以通过"是，史蒂夫模型"的 Lua API 切换自己的皮肤，也可以通过"车万女仆"的 Lua API 驯服女仆。这些插件可以作为编写插件的参考模板，完整的开发者文档见[网站](https://numen.dwinovo.cn)。
 
 ## 常见问题
 
