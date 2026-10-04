@@ -1,6 +1,6 @@
 <div align="center">
 
-# Numen · 言出法随
+# 言出法随
 
 ### 运行在 Minecraft 内部的具身智能体
 
