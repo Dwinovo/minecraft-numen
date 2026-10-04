@@ -38,7 +38,7 @@ description: 主人提到车万女仆、要你驯服或照顾女仆、给女仆�
 
 背包是穿上去的,不是放进格子:拿着背包右键她,例如
 `numen.use.entity(812, {item = "touhou_little_maid:maid_backpack_small"})`。换下背包用剪刀右键她:
-`numen.use.entity(812, {item = "minecraft:shears"})`,旧背包和里面的东西回到你手上。
+`numen.use.entity(812, {item = "minecraft:shears"})`,旧背包回到你手上,背包里的东西掉在女仆脚下。
 
 ## 让她坐下、站起
 
