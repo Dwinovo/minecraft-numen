@@ -18,7 +18,8 @@ public final class TlmBench {
 
     @GameTestGenerator
     public static Collection<TestFunction> scenarios() {
-        return Bench.suite("tlm", "Touhou Little Maid: taming and keeping maids.",
-                suite -> suite.add(TameWildMaid::new));
+        return Bench.suite("tlm", "Touhou Little Maid: taming, keeping and reviving maids.",
+                suite -> suite.add(MaidFarmhand::new)
+                        .add(ReviveMaid::new));
     }
 }
