@@ -156,6 +156,14 @@ public final class EventQueue {
         return kind.delivery().wakes() && (kind.alwaysUrgent() || asSent);
     }
 
+    /**
+     * 一条 {@code type} 类型、发送方标了 {@code asSent} 的输入,生效后急不急:队列、在服务端跑的程序判"要不要停在调用之间"
+     * 都用这一条。
+     */
+    public static boolean isUrgent(String type, boolean asSent) {
+        return urgent(EventTypes.get(type), asSent);
+    }
+
     // ---- 急件叫醒 ----
 
     /** 登记急件叫醒(叫"来问吧",不递事件)。 */
