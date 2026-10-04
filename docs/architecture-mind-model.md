@@ -129,7 +129,8 @@ CONTROL   否      不插进 run,等闲下来执行            开不了 run 时
 - **注入一次取光**,拼成一条 user 消息:现场块在前 → 世界的事按时间排进 `<events>` → 主人的话垫底。
   躺超过 10 分钟的条目标注年龄(跨会话恢复的旧闻尤其要紧)。
 - **进行中的请求永不因输入掐断**;主人的停止键是 `halt(OWNER_STOP)`,不是一条输入。
-- **事件的种类就是类型表的一行**:`task_finished`、`death`、`hungry`、`owner_hurt`、`timer`、`woke`、
+- **事件的种类就是类型表的一行**:`task_finished`、`death`、`hungry`、`inventory_full`(背包一格空的都没有、碰到的东西放不下
+  留在了地上;一轮满只发一次,又有空格才复位,判据只在身体上一处,挖、捡这些活不各自判)、`owner_hurt`、`timer`、`woke`、
   `dimension_change`、`reflex`(本能做了什么,带上是哪个本能)、`server_message`(服务端对她说的系统聊天与动作栏,
   捎带投递不叫醒她;聊天栏同一句刷屏折叠,动作栏当一格、最新的为准)、`dropped`。服务端只有一个发出口
   `NumenEvents.emit`:主人在线直送,离线进出箱,重连时整批打成一个包补发。

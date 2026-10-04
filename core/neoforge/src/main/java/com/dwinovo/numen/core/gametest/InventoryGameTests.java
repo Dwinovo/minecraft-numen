@@ -793,4 +793,54 @@ public class InventoryGameTests {
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
+
+    /**
+     * 背包满了说一次:36 格塞满石头,脚边一块泥土、一块沙子都放不下——一条 inventory_full,说的是留在地上的那一件;再等一秒也
+     * 不多一条。腾出一格,她捡起其中一件把那格占上,另一件又放不下——再满一次,再来一条。没有派任何活。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void a_full_backpack_is_told_once_each_time_it_fills(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_packrat", new BlockPos(4, 2, 4), false);
+        for (int slot = 0; slot < 36; slot++) {
+            companion.getInventory().setItem(slot, new ItemStack(Items.STONE, 64));
+        }
+        Vec3 feet = companion.position();
+        for (var item : java.util.List.of(Items.DIRT, Items.SAND)) {
+            var drop = new net.minecraft.world.entity.item.ItemEntity(level, feet.x, feet.y, feet.z, new ItemStack(item));
+            drop.setNoPickUpDelay();
+            drop.setDeltaMovement(Vec3.ZERO);
+            level.addFreshEntity(drop);
+        }
+
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(fullEvents(companion).size() == 1,
+                        "not one inventory_full event: " + fullEvents(companion)))
+                .thenIdle(20)
+                .thenExecute(() -> {
+                    java.util.List<String> told = fullEvents(companion);
+                    helper.assertTrue(told.size() == 1 && told.get(0).contains("your backpack is full")
+                                    && told.get(0).contains("stayed on the ground"),
+                            "a full backpack was told more than once, or not as it is: " + told);
+                    companion.getInventory().setItem(0, ItemStack.EMPTY);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(fullEvents(companion).size() == 2,
+                        "filling up again is not told again: " + fullEvents(companion)))
+                .thenExecute(() -> {
+                    ItemStack picked = companion.getInventory().getItem(0);
+                    helper.assertTrue(picked.is(Items.DIRT) || picked.is(Items.SAND),
+                            "the freed slot did not take what lay at her feet: " + picked);
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
+    /** 主人不在线,她的事件都在出箱里:其中 inventory_full 的原文。 */
+    private static java.util.List<String> fullEvents(NumenPlayer companion) {
+        return com.dwinovo.numen.entity.EventOutbox.get(companion.getServer()).peek(companion.getUUID()).entries()
+                .stream()
+                .filter(e -> com.dwinovo.numen.agent.inbox.EventTypes.INVENTORY_FULL.equals(e.type()))
+                .map(com.dwinovo.numen.agent.inbox.EventQueue.Entry::text)
+                .toList();
+    }
 }

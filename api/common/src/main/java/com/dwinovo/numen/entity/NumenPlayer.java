@@ -6,6 +6,7 @@ import com.dwinovo.numen.pathing.body.Controls;
 import com.dwinovo.numen.pathing.body.Physics;
 
 import com.mojang.authlib.GameProfile;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
@@ -13,6 +14,8 @@ import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
@@ -144,6 +147,59 @@ public final class NumenPlayer extends ServerPlayer implements Body {
         }
         hungerReported = true;
         return true;
+    }
+
+    /**
+     * 这一轮"背包满了"已经说过了。背包满是持续状态,掉落物每刻都在碰她——不去抖就是每刻一条;背包里又有空格了才重新武装。
+     */
+    private boolean fullReported;
+
+    /** 因背包放不下而留在地上、还没说出去的那一件;没有是 null。 */
+    private LeftBehind leftBehind;
+
+    /** 一件因背包放不下而留在地上的东西:是什么、几个、在哪一格。 */
+    public record LeftBehind(ItemStack stack, BlockPos pos) {}
+
+    /**
+     * 一件掉落物碰到了她,原版正要往背包里放(由 {@code ItemEntityTouchMixin} 交来)。放不放得下照原版背包找格子的两步:有一格还能
+     * 叠上它({@code getSlotWithRemainingSpace}),或者有空格({@code getFreeSlot});创造模式什么都收。放不下的记下来,由
+     * {@link #pollInventoryFull} 交出去。"满了"只在这里判:挖、捡、合成这些活不各自判。
+     */
+    public void touchedItem(ItemEntity item) {
+        if (fullReported || leftBehind != null || hasInfiniteMaterials()) {
+            return;
+        }
+        Inventory inventory = getInventory();
+        ItemStack stack = item.getItem();
+        if (inventory.getSlotWithRemainingSpace(stack) != -1 || inventory.getFreeSlot() != -1) {
+            return;
+        }
+        leftBehind = new LeftBehind(stack.copy(), item.blockPosition());
+    }
+
+    /**
+     * 这一刻该不该跟主人说"背包满了、东西留在了地上"。每服务端 tick 问一次(见 {@code CompanionTickDispatcher})。<b>一轮只说
+     * 一次</b>,复位见 {@link #rearmInventoryFull}。
+     */
+    public LeftBehind pollInventoryFull() {
+        if (leftBehind == null) {
+            return null;
+        }
+        LeftBehind told = leftBehind;
+        leftBehind = null;
+        fullReported = true;
+        return told;
+    }
+
+    /**
+     * 背包里又有了空格就重新武装:有空格就什么都放得下,下一回再满、再有东西放不下时再说;还没说出去的那一件也作废。在自己的
+     * 实体刻里、捡东西之前看——腾出的那一格要是这一刻就被捡起的东西占上,事后再看就看不见它空过。
+     */
+    private void rearmInventoryFull() {
+        if (getInventory().getFreeSlot() != -1) {
+            fullReported = false;
+            leftBehind = null;
+        }
     }
 
     /** 主人血量的看护(纯判定在 {@link OwnerHurtWatch},便于无头单测)。 */
@@ -352,6 +408,7 @@ public final class NumenPlayer extends ServerPlayer implements Body {
             Companions.onDeath(this);
             return;
         }
+        rearmInventoryFull();
         try {
             super.tick();
         } catch (RuntimeException ex) {

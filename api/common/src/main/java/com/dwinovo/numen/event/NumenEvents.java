@@ -67,6 +67,21 @@ public final class NumenEvents {
     }
 
     /**
+     * 她的背包一格空的都没有了,碰到的一件东西放不下、留在了地上。<b>急</b>——她不知道就会接着挖、接着捡,东西都落在地上。
+     * 判据与去抖在 {@code NumenPlayer.touchedItem} 与 {@code pollInventoryFull}:一轮满只发一条,背包又有空格才复位。
+     */
+    public static void inventoryFull(NumenPlayer companion, NumenPlayer.LeftBehind left) {
+        String item = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(left.stack().getItem()).toString();
+        emit(companion, EventTypes.INVENTORY_FULL, Map.of("item", item),
+                "your backpack is full: " + item + " x" + left.stack().getCount() + " at "
+                        + com.dwinovo.numen.cli.Shapes.literal(left.pos()) + " did not fit and stayed on the ground, "
+                        + "and anything else that does not stack onto what you carry stays on the ground too. Make room "
+                        + "with numen.inv.drop (what you can spare) or by putting things into a chest (numen.use.block "
+                        + "opens it, w:put fills it); then numen.work.collect picks up what is still on the ground.",
+                true);
+    }
+
+    /**
      * 某个本能替身体做了一件事。{@code reflex} 属性写的是它在本能名册里的登记名({@link Reflex#id}),
      * 不另起一套名字。永远不急:身体已经自己应对过了,这条是让她和翻聊天流的主人看得懂刚才发生了什么,
      * 攒着搭下一轮的车就够。
