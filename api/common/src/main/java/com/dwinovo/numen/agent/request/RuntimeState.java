@@ -241,6 +241,8 @@ public final class RuntimeState {
             if (items.length() > 0) items.append(", ");
             items.append(id).append(" x").append(count);
         });
+        // 总数看不出占了几格,空格数照实写上:一格都不空时,不叠在已有那堆上的东西就捡不起来。
+        long empty = snapshot.items().stream().filter(net.minecraft.world.item.ItemStack::isEmpty).count();
         // 手上那份不带数量,是刻意的:它本来就是 carrying 里的一堆,写上数量她会当成另一堆
         // 加起来(实测她把主手 64 个熔炉和清单里同一批数成了 128)。总数只有一处,手只指
         // 向它,结构上就没什么可重复计的。
@@ -248,6 +250,7 @@ public final class RuntimeState {
                 + "slots — trust it and do not spend a call on numen.status.self() to rediscover it. "
                 + "Call numen.gui.view() only when exact slots matter. A newer result wins over this."
                 + "\ncarrying=" + (items.length() == 0 ? "nothing" : items)
+                + "\nempty slots=" + empty + " of " + snapshot.items().size()
                 + "\nholding (already counted above)=main " + describe(snapshot.mainHand())
                 + ", off " + describe(snapshot.offhand())
                 + "</inventory>";

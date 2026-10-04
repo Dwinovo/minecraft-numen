@@ -464,6 +464,24 @@ class AgentLoopTest extends LoopHarness {
             assertEquals(3, tools.arrivals.size(), "这批结算之后不再转");
         }
 
+        /**
+         * 一件活的收尾只说一次:在跑的程序等着的那件,收尾归程序(账进程序的回执),不进她的收件箱;没有程序等的那件(程序停下时
+         * 还在跑的),收尾进收件箱,是一条事件。
+         */
+        @Test
+        void theEndOfAJobGoesToTheProgramWaitingForItOrElseOnceToHer() {
+            ownerSays("去挖矿");
+            model.last().callTools(tool("c1"));
+            tools.awaitedText = "<event>t1 挖完了</event>";
+            worldEvent("t1 挖完了", true);
+            assertEquals(0, inbox.count(EventTypes.TASK_FINISHED), "程序等着的收尾进了收件箱");
+            assertEquals(List.of(EventTypes.TASK_FINISHED), tools.arrivals, "程序等着的收尾没交给程序");
+
+            tools.awaitedText = null;
+            worldEvent("t2 挖完了", true);
+            assertEquals(1, inbox.count(EventTypes.TASK_FINISHED), "没有程序等的收尾不是恰好一条事件");
+        }
+
         @Test
         void aContinuationTurnDoesNotCountAsTheOwnerSpeaking() {
             ownerSays("去挖矿");

@@ -18,18 +18,17 @@ import java.util.function.Consumer;
  * {@link Port},顺序与等待都在这里。
  *
  * <h2>做完是什么意思</h2>
- * 一个调用的结果回来就交给内核进历史。结果说它留下了一件还在跑、会自己收尾的身体任务(受理回执),而后面还有调用时,
- * 身体动作要做完才往下走:这件任务的收尾进了队列,才派下一个。所以同一轮里写的几件身体动作一件接一件做完,不会让后一件
- * 顶掉前一件;常驻的活(跟随)没有收尾,不等;最后一件受理了这一批就结算,活在后台做、她照常说话。判据是确定的事实——
- * 那件任务的收尾到没到——不猜"是不是同一批"。
+ * 一个调用的结果回来就交给内核进历史,再派下一个。身体活只经程序派:程序里的每件活在程序里等它收尾(见下),所以一个调用
+ * 结果回来时,它派的活已经做完了;别的工具(装技能、接进来的 MCP 工具)不派身体活。
  *
  * <h2>脚本</h2>
  * 一个调用是一段程序(跑脚本的那个工具),这个调用就是一段脚本({@link ScriptCall}):脚本每调一个 API 函数,这里把那次调用派出去
- * ({@link Port#dispatch}),等它的回执;留下了身体活就用同一个等法等它收尾,再让脚本从调用处接着跑。脚本跑完,它的回执才是这个
- * 调用的结果。脚本里的调用都要等收尾:脚本要按它的结局往下走。
+ * ({@link Port#dispatch}),等它的回执;留下了身体活就等它收尾,再让脚本从调用处接着跑。脚本跑完,它的回执才是这个
+ * 调用的结果。脚本里的调用都要等收尾:脚本要按它的结局往下走。脚本等着的那件活的收尾归脚本({@link #awaits}):结局交给程序,账写进
+ * 回执,不进队列;脚本停下时还在跑的活,收尾进队列成一条事件。
  *
  * <h2>等的时候来了急件</h2>
- * 等身体收尾期间进来一条要立刻叫醒她的输入(主人说话、急事):不再等,还没派出去的调用各回一条"没执行"的结果写明原因,
+ * 脚本等身体收尾期间进来一条要立刻叫醒她的输入(主人说话、急事):不再等,脚本停下,还没派出去的调用各回一条"没执行"的结果写明原因,
  * 这一批结算,每个调用恰好一个结果。模型下一次调用时读到那条输入和这些结果,重新决定;等的那件活照常跑。
  * 单个工具在跑的时候不看输入:它们有界短,结算之后输入跟下一次调用走(队列的插话档)。脚本不一样,它由许多次 API 调用组成:
  * 一次调用在跑时来了急件,它的回执到了就停,停在调用之间,回执写明停在哪一行、哪些做了。
@@ -59,7 +58,7 @@ public final class SerialCalls {
          */
         void dispatch(LlmToolCall call, Invocation invocation, Consumer<String> done);
 
-        /** 一个调用的结果留下的、还在跑且会自己收尾的身体任务的编号;没有是 null。 */
+        /** 脚本里一次 API 调用的结果留下的、还在跑且会自己收尾的身体任务的编号;没有是 null。 */
         String leftRunning(String resultJson);
 
         /** 一条输入是哪件身体任务的收尾;不是收尾是 null。 */
@@ -72,7 +71,7 @@ public final class SerialCalls {
     private final Deque<LlmToolCall> queue = new ArrayDeque<>();
     /** 派出去、结果还没回来的那一个(脚本里的一次 API 调用也是);没有是 null。 */
     private LlmToolCall inFlight;
-    /** 正在等哪件身体任务收尾;不在等是 null。 */
+    /** 脚本正在等哪件身体任务收尾;不在等是 null。 */
     private String awaiting;
     /** 正在跑的脚本与它所属的那个调用;没有是 null。 */
     private ScriptCall script;
@@ -100,7 +99,19 @@ public final class SerialCalls {
     }
 
     /**
-     * 一条输入进了队列,{@code urgent} 是它要不要立刻叫醒她(队列的急件规则算出来的)。等身体收尾时:它是那件的收尾就接着走;
+     * 这条输入是不是正在跑的程序等着的那件身体活的收尾。是就归这段程序:它的结局交给程序、它的账写进程序的回执,内核不再把它
+     * 放进队列——一件活的收尾只说一次。程序停下之后还在跑的活没有程序等它,它的收尾照常进队列,是一条事件。
+     */
+    public boolean awaits(EventQueue.Entry entry) {
+        if (awaiting == null) {
+            return false;
+        }
+        ScriptCall.Finish finish = port.finish(entry);
+        return finish != null && awaiting.equals(finish.task());
+    }
+
+    /**
+     * 一条输入到了,{@code urgent} 是它要不要立刻叫醒她(队列的急件规则算出来的)。等身体收尾时:它是那件的收尾就接着走;
      * 它是急件就不再等。脚本里一次调用在跑时来了急件:记下,它的回执到了就停。
      */
     public void arrived(EventQueue.Entry entry, boolean urgent) {
@@ -113,18 +124,14 @@ public final class SerialCalls {
         ScriptCall.Finish finish = port.finish(entry);
         if (finish != null && awaiting.equals(finish.task())) {
             awaiting = null;
-            if (script != null) {
-                next = script.finished(finish);
-            }
+            next = script.finished(finish);
             advance();
             return;
         }
         if (urgent) {
             String waited = awaiting;
             awaiting = null;
-            if (script != null) {
-                endScript(script.stop(what(entry) + "; " + waited + " keeps running"));
-            }
+            endScript(script.stop(what(entry) + "; " + waited + " keeps running"));
             dropRest(notRun("while you were waiting for " + waited + " to finish, " + what(entry) + ". " + waited
                     + " keeps running"));
             advance();
@@ -270,7 +277,7 @@ public final class SerialCalls {
         advance();
     }
 
-    /** 脚本结束:它的回执是那个调用的结果;和别的调用一样,后面还有调用而它留下了身体活,就等那件收尾。 */
+    /** 脚本结束:它的回执是那个调用的结果。 */
     private void endScript(String receipt) {
         LlmToolCall call = scriptCall;
         script = null;
@@ -278,7 +285,6 @@ public final class SerialCalls {
         next = null;
         interruptedBy = null;
         sink.finished(call, receipt);
-        awaiting = queue.isEmpty() ? null : port.leftRunning(receipt);
     }
 
     private void finish(LlmToolCall call, String resultJson) {
@@ -287,8 +293,6 @@ public final class SerialCalls {
         }
         inFlight = null;
         sink.finished(call, resultJson);
-        // 后面还有调用才等:最后一件受理了,这一批就结算,活在后台做、她照常说话
-        awaiting = queue.isEmpty() ? null : port.leftRunning(resultJson);
         advance();
     }
 

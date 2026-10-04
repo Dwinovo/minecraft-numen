@@ -15,8 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 主人客户端的两组函数,从模型的入口调:一段程序里的 {@code memory.*} 与 {@code numen.skill.load}。札记落在临时目录里,技能表是空的
- * (没装任何技能),所以装技能走的是"没有这份技能"那一支——同一个处理函数、同一份回执才是这里要钉的。
+ * 主人客户端的札记函数,从模型的入口调:一段程序里的 {@code memory.*}。札记落在临时目录里。
  */
 class AgentCommandsTest {
 
@@ -72,14 +71,5 @@ class AgentCommandsTest {
         CoreScripts.Run missing = CoreScripts.run(HER, "numen.memory.recall()");
         assertFalse(missing.ok());
         assertTrue(missing.message().contains("numen.memory.recall(name"), missing.message());
-    }
-
-    /** 没有这份技能:失败,说出名字;技能是脚本里的一个函数,不是工具。 */
-    @Test
-    void loadingAnUnknownSkillSaysSo() {
-        CoreScripts.Run run = CoreScripts.run(HER, "return numen.skill.load(\"no_such_skill\")");
-        assertFalse(run.ok(), run.message());
-        assertTrue(run.message().contains("numen.skill.load: not_found — unknown skill: no_such_skill"), run.message());
-        assertTrue(com.dwinovo.numen.agent.tool.ToolRegistry.get("skill_load") == null, "skill_load is still a tool");
     }
 }

@@ -19,8 +19,8 @@ import java.util.List;
  * <h2>回执</h2>
  * 第一行一句话说结局(跑完、出错在哪一行与那个错误值的文字、停在哪一行为什么);之后每次 API 调用一行——在哪一行、哪个函数、
  * {@code ok} 或失败的种类、回执那句话的第一行;再是脚本 {@code return} 的值;最后是 {@code print} 写的字。脚本拿到的是数据,给她看的
- * 文字只在这里,由同一张回执写成。身体活的实际账照旧在它自己的 task_finished 里说一次,这里只点它的编号与结局。出错时数据里的
- * {@code error} 是那个错误值({@code kind}、{@code message}……)。
+ * 文字只在这里,由同一张回执写成。程序等着收尾的身体活,那一行是它的编号、结局与整段交代(路上挖了、放了什么的实际账)——这件活的
+ * 收尾只在这里说,不另发事件。出错时数据里的 {@code error} 是那个错误值({@code kind}、{@code message}……)。
  */
 public final class ScriptCall {
 
@@ -160,7 +160,9 @@ public final class ScriptCall {
             case "stopped", "interrupted" -> ErrorKind.INTERRUPTED.wire();
             default -> failureKind(result);
         };
-        log(p, kind, finish.task() + " " + finish.status() + (finish.words().isBlank() ? "" : ": " + finish.words()));
+        // 整段交代都写进这一行:这件活的收尾只在这张回执里说
+        logWhole(p, kind, finish.task() + " " + finish.status()
+                + (finish.words().isBlank() ? "" : ": " + finish.words().strip()));
         JsonObject data = result.get("data") instanceof JsonObject d ? d : new JsonObject();
         return advance(run.resume(new ScriptRun.Result(ok, finish.words(), data, kind,
                 ok ? null : hintOf(result))));
@@ -237,6 +239,12 @@ public final class ScriptCall {
         String said = firstLine(text);
         log.add(where(p.call.line()) + " " + p.call.function() + ": " + (kind == null ? "ok" : kind)
                 + (said.isEmpty() ? "" : " — " + said));
+    }
+
+    /** 一件身体活收尾的那一行:整段交代原样写上,第二行起缩进两格,读得出还是这一行。 */
+    private void logWhole(Pending p, String kind, String text) {
+        log.add(where(p.call.line()) + " " + p.call.function() + ": " + (kind == null ? "ok" : kind) + " — "
+                + text.replace("\n", "\n  "));
     }
 
     private String finalReceipt(ScriptRun.Done done) {

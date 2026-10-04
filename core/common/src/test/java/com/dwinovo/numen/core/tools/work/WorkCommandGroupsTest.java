@@ -49,8 +49,9 @@ class WorkCommandGroupsTest {
     }
 
     @Test
-    void theOnlyToolIsTheOneThatRunsAProgram() {
-        assertEquals(List.of(com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.toolName()),
+    void theToolsAreTheOneThatRunsAProgramAndTheOneThatLoadsASkill() {
+        assertEquals(List.of(com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.toolName(),
+                        com.dwinovo.numen.cli.SkillTool.NAME),
                 ToolRegistry.all().stream().map(t -> t.name()).toList());
         for (String gone : List.of("move_goto", "work_dig", "status_self", "scan_blocks", "skill_load", "todowrite",
                 "task_stop", "command", "work_mine", "follow", "plan_route", "collect_items", "fish", "attack",

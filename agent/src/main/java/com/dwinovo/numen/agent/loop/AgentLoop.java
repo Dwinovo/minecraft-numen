@@ -110,7 +110,9 @@ public final class AgentLoop {
      * 只带走已经到的那几条。
      *
      * <p>一批工具调用还没结算时,入了队的每一条都转给工具口({@link ToolPort#arrived}),带着队列的急件规则算出的急不急:
-     * 它在等身体收尾时,收尾让它接着派下一个,急件让它不再等。
+     * 它在等身体收尾时,收尾让它接着派下一个,急件让它不再等。在跑的程序等着的那件活的收尾({@link ToolPort#awaits})不入队:
+     * 它归那段程序,账写进程序的回执,只说这一次;它先于同一批的别的条目转过去——那件活确实做完了,同一批里的急件再让程序停在
+     * 下一个调用之前。
      *
      * <p>来自主人的插话解开 {@link Hold.Release#OWNER_SPOKE} 那几种停牌,急件解开 FAILED。死着、外接驾驶时也照收:
      * 条目盖着真实时间戳,之后模型看得出哪些是那期间发生的。
@@ -120,8 +122,15 @@ public final class AgentLoop {
         boolean ownerSpoke = false;
         boolean urgent = false;
         List<Queued> queued = new ArrayList<>();
+        List<EventQueue.Entry> awaited = new ArrayList<>();
         for (EventQueue.Entry e : entries) {
             if (e.text() == null || e.text().isBlank()) {
+                continue;
+            }
+            if (toolsRunning() && tools.awaits(e)) {
+                AiLog.LOG.info("[numen-entity#{}] {} goes to the program waiting for it: {}", name, e.type(),
+                        brief(e.text(), 120));
+                awaited.add(e);
                 continue;
             }
             boolean asUrgent = inbox.push(e.type(), e.text(), e.ts() > 0 ? e.ts() : now, e.urgent());
@@ -132,7 +141,10 @@ public final class AgentLoop {
             ownerSpoke |= EventTypes.get(e.type()).ownerWords();
         }
         // 转给工具口可能让这一批当场结算、调下一次模型,那之后就不是它的事了
-        for (int i = 0; i < queued.size() && ((run != null && run.phase == Phase.TOOLS) || aside != null); i++) {
+        for (int i = 0; i < awaited.size() && toolsRunning(); i++) {
+            tools.arrived(awaited.get(i), false);
+        }
+        for (int i = 0; i < queued.size() && toolsRunning(); i++) {
             tools.arrived(queued.get(i).entry(), queued.get(i).urgent());
         }
         if (ownerSpoke) {
@@ -143,6 +155,11 @@ public final class AgentLoop {
         }
         announceHold(null);
         pump();
+    }
+
+    /** 工具口手上有一批没结算的调用:内脑这一轮的,或外接大脑借用的那一个。 */
+    private boolean toolsRunning() {
+        return (run != null && run.phase == Phase.TOOLS) || aside != null;
     }
 
     /**

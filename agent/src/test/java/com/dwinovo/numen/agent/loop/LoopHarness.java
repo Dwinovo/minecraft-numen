@@ -118,6 +118,8 @@ public abstract class LoopHarness {
         public final List<Boolean> cancels = new ArrayList<>();
         /** 转来的输入,依次:条目类型与它急不急。 */
         public final List<String> arrivals = new ArrayList<>();
+        /** 在跑的程序等着收尾的那件活:正文是它的条目归程序;没有在等是 null。 */
+        public String awaitedText;
         public Sink sink;
 
         @Override
@@ -128,6 +130,11 @@ public abstract class LoopHarness {
                 parked.add(call.id());
                 sink.started(call);
             }
+        }
+
+        @Override
+        public boolean awaits(EventQueue.Entry entry) {
+            return entry.text().equals(awaitedText);
         }
 
         @Override

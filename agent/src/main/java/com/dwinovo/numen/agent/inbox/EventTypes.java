@@ -64,6 +64,11 @@ public final class EventTypes {
     public static final String DEATH = "death";
     /** 饿了 —— 她不会自己吃,得主人给或者叫她去弄。恒为急件。 */
     public static final String HUNGRY = "hungry";
+    /**
+     * 背包一格空的都没有了,碰到的东西放不下、留在了地上。恒为急件:她不知道的话,接着挖、接着捡,东西都落在地上。
+     * 一轮满只发一次,背包又有空格才复位。
+     */
+    public static final String INVENTORY_FULL = "inventory_full";
     /** 主人挨打了(只报实体攻击)。急不急由发送方按主人血线分档。 */
     public static final String OWNER_HURT = "owner_hurt";
     /** 她自己定的表到点了。恒为急件:提醒而已,不代表那件事完成了。 */
@@ -246,6 +251,7 @@ public final class EventTypes {
         register(event(TASK_FINISHED, false));
         register(event(DEATH, true));
         register(event(HUNGRY, true));
+        register(event(INVENTORY_FULL, true));
         register(event(OWNER_HURT, false));
         register(event(TIMER, true));
         register(event(WOKE, true));

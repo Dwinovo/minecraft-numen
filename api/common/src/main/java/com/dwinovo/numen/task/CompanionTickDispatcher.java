@@ -138,6 +138,11 @@ public final class CompanionTickDispatcher {
                     com.dwinovo.numen.event.NumenEvents.gotHungry(
                             ap, ap.getFoodData().getFoodLevel());
                 }
+                // 背包满了、东西留在了地上说一声:判据只在身体上一处,挖、捡、合成这些活不各自判。
+                NumenPlayer.LeftBehind leftBehind = ap.pollInventoryFull();
+                if (leftBehind != null) {
+                    com.dwinovo.numen.event.NumenEvents.inventoryFull(ap, leftBehind);
+                }
                 // 主人挨打了说一声——通知不接管,去不去救是她的决定。
                 NumenPlayer.OwnerHurt hurt = ap.pollOwnerHurt(ownerPlayer, server.getTickCount());
                 if (hurt != null) {

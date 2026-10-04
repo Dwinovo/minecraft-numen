@@ -58,4 +58,4 @@ You cannot operate an enchanting table (GUI block). If your owner offers to ench
 
 ## What to load next
 
-Checklist verified → mark phase 1 `completed` in `numen.todo.write`, then `numen.skill.load("nether_entry")`.
+Checklist verified → mark phase 1 `completed` in `numen.todo.write`, then load the `nether_entry` skill.

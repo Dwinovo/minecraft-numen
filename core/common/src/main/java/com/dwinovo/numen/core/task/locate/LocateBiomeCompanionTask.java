@@ -136,7 +136,7 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
                             ? " — did you mean " + suggestion + "?"
                             : " — use a biome id like minecraft:warped_forest / "
                                     + "minecraft:desert, or a tag like #minecraft:is_forest; "
-                                    + "skill_load(world_atlas) lists every id");
+                                    + "the world_atlas skill lists every id");
             return null;
         }
         ResourceKey<Biome> key = ResourceKey.create(Registries.BIOME, id);

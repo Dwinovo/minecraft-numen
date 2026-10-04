@@ -43,4 +43,4 @@ Piglins drop ender pearls for gold ingots at ~2% per barter (~47 ingots per pear
 
 ## What to load next
 
-≥12 pearls → mark phase 4 `completed`, then `numen.skill.load("stronghold_finding")`. The endgame is two skills away.
+≥12 pearls → mark phase 4 `completed`, then load the `stronghold_finding` skill. The endgame is two skills away.

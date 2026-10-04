@@ -64,5 +64,5 @@ Notes:
 
 ## What to load next
 
-Standing in the Nether, packlist intact → mark phase 2 `completed`, `numen.skill.load("blaze_rods")`. Load `combat_basics` too if you haven't — blazes are the first real combat test.
+Standing in the Nether, packlist intact → mark phase 2 `completed`, load the `blaze_rods` skill. Load `combat_basics` too if you haven't — blazes are the first real combat test.
 

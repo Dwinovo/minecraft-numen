@@ -38,7 +38,7 @@ import java.util.concurrent.TimeoutException;
  *
  * <h2>Tool surface</h2>
  * Every engine tool (from {@link ToolRegistry}, minus the config's hidden set) —
- * the script tool, plus the tools of remote MCP servers the owner connected — is
+ * the script tool, the skill tool, plus the tools of remote MCP servers the owner connected — is
  * advertised with an extra {@code companion} argument, and calls route to
  * {@link NumenActuator#invoke}: a program runs through the companion's own
  * dispatcher and the call returns its receipt when it ends. Three management tools — {@code list_companions},
@@ -89,9 +89,10 @@ public final class McpServer {
             numen.inv.craft(...), …; numen.api.help("numen.work") lists a group's functions and numen.api.help("numen.work.dig") gives one \
             function's full help. A program returns one receipt when it ends: how it ended, one line per API \
             call, what it returned and printed. It waits for each body task it starts to finish, so a long \
-            job returns when it is done; each task's own account also arrives in get_events as a \
-            task_finished event. Every call takes a 'companion' argument (name or id), so each call targets \
-            one companion; just drive it, there is no take-control step.
+            job returns when it is done, with the task's account of what it changed in its line. Every call takes a 'companion' argument (name or id), so each call targets \
+            one companion; just drive it, there is no take-control step. The %s tool loads one of the \
+            companion's skills — the workflow guide for one kind of task — and returns its text; a name it \
+            does not know answers with the list of installed skills.
 
             Rules: survival mode — the API does only what a real player can (mine to get stone; there is no \
             give or setblock). You are blind between calls, so perceive before and after acting. %s You can \
@@ -102,14 +103,15 @@ public final class McpServer {
             seconds while you drive it. It waits 2 seconds by default and returns instantly the moment \
             something urgent lands, so you get the wheel back every couple of seconds and can act on \
             your own initiative instead of only reacting. The owner speaking to the companion (in-game \
-            chat or voice) arrives as a <query> and stops a running program between two calls; world \
-            happenings arrive as <event>s, the task_finished of every task your programs started among \
-            them. Reply with \
+            chat or voice) arrives as a <query> and stops a running program between two calls; the task \
+            it was waiting for keeps running, and its end arrives as a task_finished <event> among the \
+            world happenings. Reply with \
             say(companion, text): the words appear in-game as the companion's chat line, speech bubble, \
             and voice. Keep your own conversation history — the game stores none for you; between \
             get_events calls nothing is lost (events queue up). Raise wait_seconds (up to 50) only when \
             you deliberately want to park and wait for the owner to speak.""".formatted(
-            com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.toolName(), ONE_BODY);
+            com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.toolName(), com.dwinovo.numen.cli.SkillTool.NAME,
+            ONE_BODY);
 
     private final McpConfig config;
     private final Gson gson = new Gson();

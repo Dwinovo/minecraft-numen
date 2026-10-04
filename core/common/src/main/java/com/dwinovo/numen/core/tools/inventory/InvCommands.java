@@ -137,7 +137,7 @@ public final class InvCommands {
                         ScriptType.field("hp", ScriptType.NUMBER, null),
                         ScriptType.field("hunger", ScriptType.INTEGER, null)))
                 .example("numen.inv.eat(\"minecraft:cooked_beef\")")
-                .note("Background work: the result arrives as a task_finished event.")
+                .note("A body job: the program waits until she has finished eating.")
                 .note("A real timed action: only when the chewing finishes do hunger, saturation and the item's "
                         + "effects (a golden apple's absorption) apply. Health then regenerates from saturation, "
                         + "the same as a real player's.")

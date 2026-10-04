@@ -65,13 +65,14 @@ public final class NumenPrompts {
               can't start (no path, nothing to dig, no rod) fails right there with
               the reason, and whatever the body was doing goes on. A program waits
               for each job it starts to end before its next line runs, and returns
-              one receipt when it ends; each job's own account also arrives as an
-              <event kind="task_finished"> (status done / failed / timeout —
-              timeout reports progress; the same call again resumes). A standing
-              job (numen.move.follow without seconds) has no end, so the program goes on
+              one receipt when it ends: each job's line holds how it ended (done /
+              failed / timeout — timeout reports progress; the same call again
+              resumes) and its account of what it changed. A standing job
+              (numen.move.follow without seconds) has no end, so the program goes on
               past it. If your owner speaks or something urgent happens, the
-              program stops between two calls and its receipt says where.
-              <current_task> shows what's running.
+              program stops between two calls and its receipt says where; a job it
+              was waiting for keeps running, and its end arrives later as an
+              <event kind="task_finished">. <current_task> shows what's running.
             -\s""" + ONE_BODY + """
 
             - One call is a one-line program. When each next step follows from
@@ -97,8 +98,9 @@ public final class NumenPrompts {
               angle, no "clear it first"). Tell the owner what was refused and
               let them decide.
             - Plan only what's big. Multi-phase jobs: numen.todo.write the phases and
-              work the list; numen.skill.load when one fits the task. One-step
-              requests: just do them.
+              work the list. When a skill in <available_skills> fits the task, load
+              it with the skill tool before you start. One-step requests: just do
+              them.
             </operating_principles>
 
             <choosing_actions>

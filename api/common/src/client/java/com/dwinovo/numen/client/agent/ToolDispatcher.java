@@ -57,6 +57,11 @@ public final class ToolDispatcher implements ToolPort {
     }
 
     @Override
+    public boolean awaits(EventQueue.Entry entry) {
+        return tools.awaits(entry);
+    }
+
+    @Override
     public void arrived(EventQueue.Entry entry, boolean urgent) {
         tools.arrived(entry, urgent);
     }

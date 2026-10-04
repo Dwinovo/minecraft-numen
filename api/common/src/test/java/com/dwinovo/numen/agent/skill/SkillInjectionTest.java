@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 技能正文的成型口。钉住它是因为有<b>两个</b>扳机会走这儿——模型自己 {@code skill_load},
+ * 技能正文的成型口。钉住它是因为有<b>两个</b>扳机会走这儿——模型自己调 {@code skill} 工具,
  * 主人打斜杠命令——两边进上下文的东西必须一模一样。差异只在其中一条路上出问题,极难查。
  */
 class SkillInjectionTest {
@@ -16,12 +16,13 @@ class SkillInjectionTest {
         return new SkillInfo(name, "desc", content, null);
     }
 
+    /** 名字只在属性上:标题是正文自己写的,这里再加一行就成了两个标题。 */
     @Test
-    void bodyWrapsContentWithTheSkillNameAndHeading() {
-        String out = SkillInjection.body(skill("build", "盖房子的步骤"), null);
+    void bodyWrapsContentWithTheSkillName() {
+        String out = SkillInjection.body(skill("build", "# 盖房子\n\n盖房子的步骤"), null);
         assertEquals("""
                 <skill_content name="build">
-                # Skill: build
+                # 盖房子
 
                 盖房子的步骤
                 </skill_content>""", out);

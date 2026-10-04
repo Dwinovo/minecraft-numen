@@ -7,6 +7,7 @@
     "BlockItemPlaceMixin",
     "BoatAccessor",
     "ChunkMapCompanionMixin",
+    "ItemEntityTouchMixin",
     "MenuDataSlotsAccessor",
     "MixinEntityVehicleControl",
     "MixinServerCommonPacketListener"

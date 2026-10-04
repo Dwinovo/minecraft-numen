@@ -42,4 +42,4 @@ Phase 3 of the dragon route. Eyes of ender need blaze powder; `numen.locate.stru
 
 ## What to load next
 
-≥7 rods banked → mark phase 3 `completed`, then `numen.skill.load("ender_pearls")`. Warped forests (teal trees, dense endermen) are worth noting on your way out — phase 4 can use them.
+≥7 rods banked → mark phase 3 `completed`, then load the `ender_pearls` skill. Warped forests (teal trees, dense endermen) are worth noting on your way out — phase 4 can use them.

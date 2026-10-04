@@ -26,7 +26,7 @@ import java.util.function.Supplier;
 /**
  * 一只同伴的工具口:循环内核把模型一次回复里的调用交给它,它逐个执行、把结果报回。主人客户端的派发器与评测大脑都用这一份。
  *
- * <p>顺序与等待——一次一个、留下后台身体活的等它收尾再派下一个、等的时候来了急件怎么办、脚本怎么逐条派——是
+ * <p>顺序与等待——一次一个、脚本里留下身体活的等它收尾再往下走、等的时候来了急件怎么办、脚本怎么逐条派——是
  * {@link SerialCalls} 的;身体活的受理回执与 task_finished 按 {@link TaskDispatch#runningTaskOf}、{@link NumenEvents#finishOf}
  * 认,和写它们的地方挨着。这里只管一个调用怎么执行:模型的调用按名字取工具({@link #invoke});脚本里的一次 API 调用交给登记处
  * ({@link #dispatch}),客户端动作当场执行,服务端动作送去服务端({@link ServerToolTransport})。结果之后从任何线程经
@@ -52,6 +52,11 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
     @Override
     public void run(List<LlmToolCall> batch, Sink sink) {
         calls.run(batch, sink);
+    }
+
+    @Override
+    public boolean awaits(EventQueue.Entry entry) {
+        return calls.awaits(entry);
     }
 
     @Override

@@ -1,9 +1,6 @@
 package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.memory.NoteBook;
-import com.dwinovo.numen.agent.skill.SkillInfo;
-import com.dwinovo.numen.agent.skill.SkillInjection;
-import com.dwinovo.numen.agent.skill.SkillRegistry;
 import com.dwinovo.numen.cli.CommandArgs;
 import com.dwinovo.numen.cli.Listing;
 import com.dwinovo.numen.task.TaskResult;
@@ -14,45 +11,10 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Agent-side (client-local) tool implementations — the business half of
- * {@code numen.skill.load} ({@code SkillCommands}) and {@code memory} ({@code MemoryCommands}). These run on
- * the agent thread with no server body and return their result directly.
+ * Agent-side (client-local) tool implementations — the business half of {@code memory} ({@code MemoryCommands}).
+ * These run on the agent thread with no server body and return their result directly.
  */
 public final class AgentOps {
-
-    /**
-     * 技能正文或它的附属文件,按输出预算一页一页给(一行一条,{@link Listing});正文成型交给 {@link SkillInjection},和主人
-     * 打斜杠命令同一个样子。
-     *
-     */
-    public String loadSkill(String name, String file, CommandArgs args) {
-        SkillRegistry registry = SkillRegistry.instance();
-        if (file != null && !file.isBlank()) {
-            // 三级披露:正文引用的附属文件按需拉取
-            try {
-                String text = registry.readSupportFile(name, file);
-                return page(SkillInjection.supportFile(name, file, text), args);
-            } catch (IllegalArgumentException ex) {
-                return TaskResult.fail(com.dwinovo.numen.agent.script.ErrorKind.NOT_FOUND, ex.getMessage(), null)
-                        .toJson();
-            }
-        }
-        var maybe = registry.get(name);
-        if (maybe.isEmpty()) {
-            String available = registry.all().stream().map(SkillInfo::name).collect(Collectors.joining(", "));
-            return TaskResult.fail(com.dwinovo.numen.agent.script.ErrorKind.NOT_FOUND, "unknown skill: " + name
-                    + "; the skills are: " + (available.isEmpty() ? "(none installed)" : available), null).toJson();
-        }
-
-        // 成型交给 SkillInjection:主人打斜杠命令走的是另一条路,进上下文的东西必须一样。
-        return page(SkillInjection.body(maybe.get(), null), args);
-    }
-
-    /** 一段文字按输出预算取这一页,一行一条;要的那一页不存在是一条失败。数据里是全文:脚本里 numen.skill.load 返回它。 */
-    private static String page(String text, CommandArgs args) {
-        return new Listing("", List.of(text.split("\n", -1)), "").result(args, Map.of("text", text)).toJson();
-    }
-
 
     // ---- 札记 ----
 

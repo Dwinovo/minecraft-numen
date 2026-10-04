@@ -49,12 +49,13 @@ public class CommonClass {
     }
 
     /**
-     * 引擎自己登记她唯一的工具——跑一段脚本(名字随脚本语言),和两组属于 API 本身的动作:{@code api}(帮助)、{@code mc}(原版与模组的
-     * 指令)。别的动作组是内容,由 {@code numen-core} 与插件经 {@code NumenApi.registerCommands} 登记,都成为脚本里的函数,不加工具。
-     * 这些由引擎登记,是因为插件的动作只依赖引擎——谁登记了动作,谁都指望这个入口与帮助在。
+     * 引擎自己登记她的两个工具——跑一段脚本(名字随脚本语言)与装技能——和两组属于 API 本身的动作:{@code api}(帮助)、{@code mc}
+     * (原版与模组的指令)。别的动作组是内容,由 {@code numen-core} 与插件经 {@code NumenApi.registerCommands} 登记,都成为脚本里的
+     * 函数,不加工具。这些由引擎登记,是因为插件的动作与技能只依赖引擎——谁登记了动作,谁都指望这个入口与帮助在。
      */
     public static void registerTools() {
         ToolRegistry.register(new com.dwinovo.numen.cli.ScriptTool());
+        ToolRegistry.register(new com.dwinovo.numen.cli.SkillTool());
         com.dwinovo.numen.cli.HelpCommands.install();
         com.dwinovo.numen.cli.McCommands.install();
         com.dwinovo.numen.cli.TodoCommands.install();

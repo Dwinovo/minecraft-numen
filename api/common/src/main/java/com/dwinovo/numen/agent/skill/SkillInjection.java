@@ -4,7 +4,7 @@ package com.dwinovo.numen.agent.skill;
  * 技能正文进对话时长什么样——<b>唯一</b>的成型口。
  *
  * <h2>为什么要单独一个类</h2>
- * 技能有两个扳机:模型自己判断该用({@code skill_load} 工具),主人直接指定(聊天框里的
+ * 技能有两个扳机:模型自己判断该用({@code skill} 工具),主人直接指定(聊天框里的
  * {@code /skill})。扳机不同,但进上下文的东西必须一模一样——否则模型读到的"同一个技能"
  * 会因为来路不同而长得不一样,而这种差异只在其中一条路上出问题,极难查。
  *
@@ -17,7 +17,7 @@ public final class SkillInjection {
     private SkillInjection() {}
 
     /**
-     * 技能正文。
+     * 技能正文,包在 {@code <skill_content name="…">} 里:名字在属性上,标题是 SKILL.md 正文自己写的那一行,这里不另加。
      *
      * @param arguments 主人随命令捎带的要求;空则不缀。缀在正文<b>尾部、同一条里</b>——
      *                  拆成两条的话,模型读完长长的正文容易忘了主人到底要什么
@@ -25,7 +25,6 @@ public final class SkillInjection {
     public static String body(SkillInfo info, String arguments) {
         StringBuilder out = new StringBuilder(info.content().length() + 160);
         out.append("<skill_content name=\"").append(escapeXmlAttr(info.name())).append("\">\n");
-        out.append("# Skill: ").append(info.name()).append("\n\n");
         out.append(info.content().trim());
         out.append("\n</skill_content>");
         if (arguments != null && !arguments.isBlank()) {

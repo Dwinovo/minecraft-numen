@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 她唯一的工具:一段程序(语言见 {@link ScriptEngine},眼下是 Lua),一次调用跑完,回一张回执。程序里的每个 API 函数
+ * 她在世界里做事的工具:一段程序(语言见 {@link ScriptEngine},眼下是 Lua),一次调用跑完,回一张回执。程序里的每个 API 函数
  * ({@code numen.work.dig(b)})就是登记处的一个动作,读法与执行见 {@link NumenCli};模块里的函数({@code numen.move.to})用同一种语言写成,
  * 程序按名字直接用。工具名与程序怎么写随脚本语言,其余都与语言无关。
  *
@@ -39,11 +39,13 @@ public final class ScriptTool implements NumenTool {
                 + "first failure — write the steps as one program.\n"
                 + "- The receipt says how the program ended (on an error: the line and the call's error, usage and "
                 + "hint), then one line per API call (where, which function, ok or failed, the first line of its "
-                + "reply), what it returned and what it printed. Each task's account of what it changed still "
-                + "arrives as its own task_finished event.\n"
+                + "reply; for a body job, its whole account of what it changed), what it returned and what it "
+                + "printed.\n"
                 + "- A run stops at " + ScriptLimits.COMMANDS + " API calls or " + ScriptLimits.WALL_MILLIS / 60_000
                 + " minutes, and when it runs " + ScriptLimits.INSTRUCTIONS_PER_SLICE + " instructions without "
-                + "calling one. Your owner speaking, an urgent event or the stop button stops it between calls.\n"
+                + "calling one. Your owner speaking, an urgent event or the stop button stops it between calls; a body "
+                + "job it was waiting for then keeps running (the stop button stops it too), and its end arrives as "
+                + "a task_finished event.\n"
                 + "- Modules (listed in <api>) are functions written in " + engine.language() + " that a program uses "
                 + "by name, with no require: `numen.work.collect()`. `numen.module.show(\"numen.work\")` prints one; "
                 + "numen.module.save keeps a module you wrote (its text: functions put in a table, and the table "

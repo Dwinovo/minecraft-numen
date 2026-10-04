@@ -508,7 +508,7 @@ and wide with lifted corners"; translating that into courses, materials, an
 overhang and a corner lift is yours to do, and doing it differently on two
 buildings of the same style is the point, not a mistake.
 
-Load one with `numen.skill.load("building_design", {file = "references/baroque.md"})` (any style file name below).
+Load one with the skill tool: skill `building_design`, file `references/baroque.md` (any style file name below).
 
 ### East Asia
 `japanese_minka` 和风民居 · `japanese_shrine` 神社 · `japanese_castle` 天守 ·

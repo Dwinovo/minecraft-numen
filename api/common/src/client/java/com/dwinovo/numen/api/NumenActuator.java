@@ -241,9 +241,10 @@ public final class NumenActuator {
      * <p>The script tool runs a program through the companion's own dispatcher
      * ({@code EntityAgentLoop#runExternal}): the same one the built-in brain uses, so
      * it waits for each body task to finish, stops between calls on an urgent event,
-     * and the future completes with the program's receipt when it ends. Its tasks send
-     * their task_finished events as usual (they land in get_events too). Other tools
-     * (tools of remote MCP servers) are invoked as they are.
+     * and the future completes with the program's receipt when it ends. A task's end goes
+     * to the program that waits for it and into that receipt; a task left running when the
+     * program stops ends as a task_finished event in get_events. Other tools
+     * (the skill tool, tools of remote MCP servers) are invoked as they are.
      *
      * <p>不需要先取得控制权:内置大脑要么被「外接大脑」模式整体挂起,要么和这次调用
      * 一起受"一具身体一件活"闸门约束(身体忙时收到带话术的拒绝)。The future carries

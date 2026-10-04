@@ -88,8 +88,9 @@ final class McpAccessPrompt {
                 when a next step depends on what a call returned, write the steps as one program \
                 (`for _, c in ipairs(numen.scan.blocks("iron_ore")) do numen.work.mine(c) end`).
                 - A program waits for each body task it starts and returns one receipt when it ends: how \
-                it ended (on an error: the line, the call's error, usage and hint), one line per API call, \
-                what it returned and printed. Each task's own account also arrives in `get_events` as a \
+                it ended (on an error: the line, the call's error, usage and hint), one line per API call \
+                (a body task's line holds its account of what it changed), what it returned and printed. A \
+                program stopped while a task runs leaves it running; that task's end arrives in `get_events` as a \
                 task_finished event. `numen.task.stop()` cancels the body's task.
                 - %s
                 - You're blind between calls: perceive with `numen.status.self()` / `numen.scan.blocks` / \
