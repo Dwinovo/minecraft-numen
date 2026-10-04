@@ -87,10 +87,7 @@
 
 ## 许可
 
-- **源代码**采用 [LGPL-3.0](LICENSE) 协议，你分发的修改版需以同一协议继续开源。LGPL 所依托的 GPL 全文见 [licenses/GPL-3.0.txt](licenses/GPL-3.0.txt)。
-- **插件与兼容模组**只要单独发布、通过 API 使用言出法随，*可以采用任何协议，包括闭源*。
-- **截图、演示动图与架构图**采用 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 协议，注明出处即可自由转载与改编。
-- **logo、宣传图与游戏内美术**保留所有权利，"Numen" 与 "言出法随" 的名称亦予保留。详见 [licenses/ASSETS.txt](licenses/ASSETS.txt)。
+本项目源代码以 [LGPL-3.0](LICENSE) 协议发布，通过 API 使用本项目的插件不受此限。截图、演示动图与架构图以 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 协议发布，其余美术资源保留所有权利，详见 [licenses/ASSETS.txt](licenses/ASSETS.txt)。
 
 ## 致谢
 

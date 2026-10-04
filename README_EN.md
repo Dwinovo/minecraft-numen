@@ -87,10 +87,7 @@ Numen itself is **open source and free**. Calls to the large language model use 
 
 ## License
 
-- **Source code** is licensed under [LGPL-3.0](LICENSE); modified versions you distribute must stay open under the same license. The full text of the GPL that the LGPL builds on is in [licenses/GPL-3.0.txt](licenses/GPL-3.0.txt).
-- **Plugins and compatibility mods** that are distributed separately and use Numen through its API *may use any license, including proprietary*.
-- **Screenshots, the demo animation and diagrams** are licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/): share and adapt them freely with attribution.
-- **Logos, promotional images and in-game art** are all rights reserved, as are the names "Numen" and "言出法随". See [licenses/ASSETS.txt](licenses/ASSETS.txt).
+The source code is released under [LGPL-3.0](LICENSE); plugins that use the project through its API are not bound by it. Screenshots, the demo animation and diagrams are released under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), and all other art is reserved. See [licenses/ASSETS.txt](licenses/ASSETS.txt) for details.
 
 ## Acknowledgements
 
