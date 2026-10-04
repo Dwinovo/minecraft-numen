@@ -1197,13 +1197,14 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
 
 ### 线上的上限:`Wire`
 
-- **唯一来源** `network.Wire`,按方向:下行(服务端 → 客户端)1048576 字节,上行 32767 字节。
-- **数从哪来**(对着 1.21.1 的源码核过):这是原版 `ClientboundCustomPayloadPacket` 与 `ServerboundCustomPayloadPacket` 的
-  私有常量 `MAX_PAYLOAD_SIZE`,单测(`WireTest`)反射读它们,改了版本先红。原版只拿它们卡认不出的载荷
-  (`DiscardedPayload`);登记过的载荷,Fabric(networking-api 4.3.0)与 NeoForge(21.1.233)都不另设上限。真正的硬顶是帧:
-  `Varint21FrameDecoder` 的三字节长度前缀,一帧至多 2097151 字节;压缩时解压后至多 8388608 字节(`CompressionDecoder`)。
+- **唯一来源** `network.Wire`,按方向:两个方向都是 1048576 字节。
+- **数从哪来**(对着 1.21.1 的源码核过):下行的数是原版 `ClientboundCustomPayloadPacket` 的私有常量 `MAX_PAYLOAD_SIZE`,
+  单测(`WireTest`)反射读它,改了版本先红;原版上行同名常量是 32767,只拿来卡认不出的载荷(`DiscardedPayload`);登记过的
+  载荷,Fabric(networking-api 4.3.0)与 NeoForge(21.1.233)都不另设上限。真正的硬顶是帧:`Varint21FrameDecoder` 的
+  三字节长度前缀,一帧至多 2097151 字节(`Wire.FRAME_BYTES`);压缩时解压后至多 8388608 字节(`CompressionDecoder`)。
   NeoForge 的 `GenericPacketSplitter` 超过帧就拆包,Fabric 不拆、直接断开。字符串字段由 `Utf8String.write` 先按字符数拦,
-  事故就是在这一步。取原版的方向上限,因为它们都在帧以内:哪个加载器、压不压缩、单人还是联机都成立。
+  事故就是在这一步。**判据:每个方向的整包上限加上包头仍在一帧以内**(`WireTest` 测它):哪个加载器、压不压缩、单人还是联机
+  都成立。上行也取 1 MB,因为她的一整段程序(带上这个连接还没送过的模块原文)作为一个包上行。
 - **送出只有一条路** `NumenNetwork.sendToPlayer` / `sendToServer`:用包自己的编解码器编一遍量字节(下行带着那位玩家的
   注册表)。装得下照发;内容随数据长的包实现 `Wire.Oversized`,缩成它自己给的、装得下的样子,如实说明原来多大、上限多少;
   别的包内容本来有界,装不下是填它的代码错了,当场抛 `IllegalStateException`,不交给 netty 去断开连接。登记时每种包的
@@ -1239,7 +1240,7 @@ move goto [--x <integer>] [--y <integer>] [--z <integer>] [--block <id>] [--rout
 ```
 {"success":false,"message":"The result of this call came to N bytes, more than the 1048576 bytes one message to your client can carry, so it was not delivered. Ask for less of it at a time: a narrower range, or one page of a list with --page.","data":{"result_bytes":N,"limit_bytes":1048576}}
 
-{"success":false,"message":"This call came to N bytes, more than the 32767 bytes one message to the server can carry, so it was not sent. Split the work into several shorter calls: a long grid or list goes in as several steps.","data":{"call_bytes":N,"limit_bytes":32767}}
+{"success":false,"message":"This call came to N bytes, more than the 1048576 bytes one message to the server can carry, so it was not sent. Split the work into several shorter calls: a long grid or list goes in as several steps.","data":{"call_bytes":N,"limit_bytes":1048576}}
 ```
 
 ### 输出预算的落地

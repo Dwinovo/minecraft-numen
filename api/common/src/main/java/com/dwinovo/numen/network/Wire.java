@@ -13,23 +13,26 @@ import java.util.function.Supplier;
  * 长度不由包自己定的文字字段都用它的 {@link #text()}。
  *
  * <h2>数从哪来</h2>
- * 原版给自定义载荷定的方向上限:下行 {@code ClientboundCustomPayloadPacket.MAX_PAYLOAD_SIZE} 是 1048576 字节,上行
- * {@code ServerboundCustomPayloadPacket.MAX_PAYLOAD_SIZE} 是 32767 字节(两处都是私有常量,单测对着原版核这两个数)。
- * 原版只拿它们卡认不出的载荷;登记过的载荷 Fabric 与 NeoForge 都不另设上限,真正的硬顶是帧——三字节的长度前缀,一帧
- * 至多 2097151 字节,NeoForge 超过时拆包,Fabric 不拆、连接断开。取原版的方向上限,因为它们都在帧以内:哪个加载器、
- * 压不压缩、单人还是联机都成立,一个包送不送得出去不随环境变。
+ * 两个方向各一个整包上限,都是 1048576 字节(原版给下行自定义载荷定的 {@code ClientboundCustomPayloadPacket.MAX_PAYLOAD_SIZE}
+ * 就是它;原版上行的 32767 只用来卡认不出的载荷,登记过的载荷 Fabric 与 NeoForge 都不另设上限)。真正的硬顶是帧:三字节的
+ * 长度前缀,一帧至多 {@link #FRAME_BYTES} 字节,NeoForge 超过时拆包,Fabric 不拆、连接断开。所以判据是"上限加上包头(包的 id 与
+ * 各字段的长度前缀)仍在一帧以内",哪个加载器、压不压缩、单人还是联机都成立,一个包送不送得出去不随环境变。上行取 1 MB 是因为
+ * 她的一整段程序(带上这个连接还没送过的模块原文)作为一个包上行。
  *
  * <h2>装不下怎么办</h2>
  * 发送方在编码之前就量({@link #fit}):装得下照发;内容随数据长的包({@link Oversized})缩成它自己给的那个装得下的样子,
  * 如实说明原来多大、上限多少;别的包内容本来有界,装不下是填它的代码错了,当场抛出,不交给网络去断开连接。上行的工具
- * 调用不能换一个包送,由发送方在客户端先量({@code ServerToolTransport}),装不下不送,就地给模型一条失败。
+ * 程序不能换一个包送,由发送方在客户端先量,装不下不送,就地给模型一条失败。
  */
 public enum Wire {
 
     /** 服务端 → 客户端。 */
     TO_CLIENT(1_048_576, "your client"),
     /** 客户端 → 服务端。 */
-    TO_SERVER(32_767, "the server");
+    TO_SERVER(1_048_576, "the server");
+
+    /** 三字节长度前缀能写的最大帧:2^21 - 1。 */
+    public static final int FRAME_BYTES = (1 << 21) - 1;
 
     /**
      * 文字字段编码时不设字符上限:一整个包装不装得下由 {@link #fit} 量,字段自己不再另拦——另拦就是第二个判据,

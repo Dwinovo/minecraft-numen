@@ -16,7 +16,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.DecoderException;
 import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
-import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -59,17 +58,30 @@ class WireTest {
         com.mojang.brigadier.exceptions.CommandSyntaxException.BUILT_IN_EXCEPTIONS = brigadierWords;
     }
 
-    /** 两个数对着原版核:原版把它们写成私有常量,改了版本这里先红。 */
+    /** 下行的数就是原版给自定义载荷定的那个;改了版本这里先红。 */
     @Test
-    void theBudgetsAreVanillasOwnCustomPayloadLimitsPerDirection() throws ReflectiveOperationException {
-        assertEquals(vanilla(ClientboundCustomPayloadPacket.class), Wire.TO_CLIENT.bytes());
-        assertEquals(vanilla(ServerboundCustomPayloadPacket.class), Wire.TO_SERVER.bytes());
+    void theDownlinkBudgetIsVanillasCustomPayloadLimit() throws ReflectiveOperationException {
+        Field field = ClientboundCustomPayloadPacket.class.getDeclaredField("MAX_PAYLOAD_SIZE");
+        field.setAccessible(true);
+        assertEquals(field.getInt(null), Wire.TO_CLIENT.bytes());
     }
 
-    private static int vanilla(Class<?> packet) throws ReflectiveOperationException {
-        Field field = packet.getDeclaredField("MAX_PAYLOAD_SIZE");
-        field.setAccessible(true);
-        return field.getInt(null);
+    /**
+     * 判据:每个方向的整包上限加上包头(包 id 与各字段的长度前缀,留 1 KB)仍在三字节长度前缀能写的一帧以内,
+     * NeoForge 才不拆包、Fabric 才不断开。
+     */
+    @Test
+    void everyDirectionsBudgetPlusItsHeaderFitsOneFrame() {
+        int header = 1024;
+        for (Wire wire : Wire.values()) {
+            assertTrue(wire.bytes() + header <= Wire.FRAME_BYTES, wire + " " + wire.bytes());
+        }
+        ByteBuf length = Unpooled.buffer();
+        net.minecraft.network.VarInt.write(length, Wire.FRAME_BYTES);
+        assertEquals(3, length.readableBytes(), "一帧的最大长度正好写满三字节的前缀");
+        ByteBuf over = Unpooled.buffer();
+        net.minecraft.network.VarInt.write(over, Wire.FRAME_BYTES + 1);
+        assertEquals(4, over.readableBytes());
     }
 
     @Test
@@ -165,7 +177,7 @@ class WireTest {
         assertFalse(result.get("ok").getAsBoolean());
         String message = result.getAsJsonObject("error").get("message").getAsString();
         assertTrue(message.startsWith("This call came to "), message);
-        assertTrue(message.contains("more than the 32767 bytes one message to the server can carry, so it was not "
+        assertTrue(message.contains("more than the 1048576 bytes one message to the server can carry, so it was not "
                 + "sent."), message);
         assertTrue(message.contains("several shorter calls"), message);
     }
@@ -177,7 +189,7 @@ class WireTest {
         ByteBuf buf = Unpooled.buffer();
         ExecuteActionPayload.STREAM_CODEC.encode(buf, call);
         assertTrue(Wire.TO_SERVER.holds(buf.readableBytes()));
-        assertEquals(call, ExecuteActionPayload.STREAM_CODEC.decode(buf), "从前 16384 字符就拦下,现在按整包的字节算");
+        assertEquals(call, ExecuteActionPayload.STREAM_CODEC.decode(buf), "按整包的字节算");
     }
 
     /** 收的一方以整包上限为防线:一个字段比整包还长,那不是 Numen 发的。 */
