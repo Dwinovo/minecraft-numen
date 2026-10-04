@@ -1,10 +1,12 @@
 package com.dwinovo.numen.core.gametest;
 
 import com.dwinovo.numen.entity.CompanionFactory;
+import com.dwinovo.numen.entity.Companions;
 import com.dwinovo.numen.entity.EventOutbox;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.permission.Mode;
 import com.dwinovo.numen.permission.Permission;
+import com.dwinovo.numen.plugins.tlm.Outfit;
 import com.github.tartaricacid.touhoulittlemaid.entity.ai.brain.MaidSchedule;
 import com.github.tartaricacid.touhoulittlemaid.entity.info.ServerCustomPackLoader;
 import com.github.tartaricacid.touhoulittlemaid.entity.misc.MonsterType;
@@ -27,6 +29,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import net.neoforged.neoforge.items.SlotItemHandler;
@@ -241,6 +244,64 @@ public class TlmGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(change.get().succeeded() && other.equals(maid.getModelId()),
                         "her model did not change to " + other + ": " + change.get().reply()))
                 .thenExecute(() -> leave(helper, her, maid))
+                .thenSucceed();
+    }
+
+    /**
+     * 她自己穿女仆模型:穿上,身体上记的就是它;脱下,记的就清空。穿的是服务端登记的某个模型,服务端没有的 id 当场说没有,
+     * 并给出照抄就能去搜的那一行,身上的不变。渲染要真机看,这里只验身体上的事实(同步给客户端的就是它)。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = BATCH)
+    public static void she_wears_a_maid_model_and_takes_it_off(GameTestHelper helper) {
+        NumenPlayer her = keeper(helper, "gametest_tlm_model", new BlockPos(3, 2, 3));
+        String model = ServerCustomPackLoader.SERVER_MAID_MODELS.getModelIdSet().stream().findFirst().orElseThrow();
+        AtomicReference<ToolRun> missing = new AtomicReference<>();
+        AtomicReference<ToolRun> off = new AtomicReference<>();
+
+        ToolRun wear = lua(her, "tlm.skin.wear(\"" + model + "\")");
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(wear.succeeded() && model.equals(Outfit.worn(her)),
+                        "she does not wear " + model + ": " + wear.reply()))
+                .thenExecute(() -> missing.set(lua(her, "tlm.skin.wear(\"touhou_little_maid:no_such_model\")")))
+                .thenWaitUntil(() -> {
+                    ToolRun run = missing.get();
+                    helper.assertTrue(run.refused() && "not_found".equals(run.kind())
+                                    && run.hint() != null && run.hint().startsWith("tlm.skin.list("),
+                            "an unknown model was not refused with the search to copy: " + run.reply());
+                    helper.assertTrue(model.equals(Outfit.worn(her)), "the refused call changed what she wears");
+                })
+                .thenExecute(() -> off.set(lua(her, "tlm.skin.remove()")))
+                .thenWaitUntil(() -> helper.assertTrue(off.get().succeeded() && Outfit.worn(her) == null,
+                        "she still wears a model after remove: " + off.get().reply()))
+                .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), her))
+                .thenSucceed();
+    }
+
+    /** 穿着的模型跟着身体走:休眠存盘、再按名册重建之后,新身体上还是那一套。 */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = BATCH)
+    public static void the_model_she_wears_survives_a_save_and_rebuild(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        BlockPos spawn = helper.absolutePos(new BlockPos(4, 2, 4));
+        NumenPlayer first = Companions.summon(server, UUID.randomUUID(), "gametest_tlm_wardrobe", level,
+                new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
+        UUID uuid = first.getUUID();
+        String model = ServerCustomPackLoader.SERVER_MAID_MODELS.getModelIdSet().stream().findFirst().orElseThrow();
+
+        ToolRun wear = lua(first, "tlm.skin.wear(\"" + model + "\")");
+        steps(helper)
+                .thenWaitUntil(() -> helper.assertTrue(wear.succeeded(), "tlm.skin.wear failed: " + wear.reply()))
+                .thenExecute(() -> {
+                    Companions.dormant(server, first);
+                    Companions.respawn(server, uuid);
+                })
+                .thenWaitUntil(() -> {
+                    NumenPlayer live = NumenPlayer.findByUuid(server, uuid);
+                    helper.assertTrue(live != null, "the body did not come back");
+                    helper.assertTrue(model.equals(Outfit.worn(live)),
+                            "the model she wore did not come back with her: " + Outfit.worn(live));
+                    Companions.dismiss(server, live);
+                })
                 .thenSucceed();
     }
 

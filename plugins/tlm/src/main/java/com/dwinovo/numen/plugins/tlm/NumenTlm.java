@@ -16,8 +16,9 @@ import java.nio.file.Path;
  * {@link #install}。它不在的话,这个类<b>一次都不会被加载</b>,而这一点是必须的:
  * 本联动直接编译依赖车万女仆的类({@code BedrockModel} 等),类加载了就会去找那些类。
  *
- * <p>穿模型全在客户端——模型包是主人自己装的,只有这一侧知道装了哪些。养女仆在服务端——女仆是世界里的实体,
- * 驯服、切工作模式、开她的界面都是对她做的事,P 点与女仆数记在她身上。
+ * <p>穿什么模型是她身体的属性,在服务端({@link Outfit}),同步给每个看到她的客户端去渲染;查模型名册在主人客户端——
+ * 显示名与中文搜索靠客户端的语言表。养女仆在服务端——女仆是世界里的实体,驯服、切工作模式、开她的界面都是对她做的事,
+ * P 点与女仆数记在她身上。
  */
 public final class NumenTlm {
 
@@ -28,8 +29,9 @@ public final class NumenTlm {
 
     /** 由 {@code Builtin} 在确认车万女仆在场后调用。 */
     public static void install(IEventBus modBus, Path skillsRoot) {
+        Outfit.register(modBus);
         NumenPlugins.register(NAMESPACE, numen -> {
-            // 几组 API 两侧都登记(帮助要它们的说明);穿模型的在主人客户端跑,管女仆与祭坛的在服务端跑
+            // 几组 API 两侧都登记(帮助要它们的说明);查模型名册的在主人客户端跑,穿脱模型、管女仆与祭坛的在服务端跑
             SkinApi.install(numen);
 
             // 女仆身上的事件两侧都登记(服务端的发出口靠它挡,主人客户端的队列靠它投递),所以不放进 onClient
@@ -39,9 +41,6 @@ public final class NumenTlm {
             numen.contributeBodyState(Maids::bodyState);
 
             numen.onClient(() -> {
-                Wardrobe.bind(numen.configDir());
-                Wardrobe.load();
-
                 // 每轮都告诉她现在穿的是谁,而不是只在换装那一轮
                 numen.contributeState(MaidLook::describe);
 

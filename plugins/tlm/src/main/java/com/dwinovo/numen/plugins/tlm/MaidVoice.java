@@ -58,12 +58,12 @@ public final class MaidVoice {
 
     /** 真的播出去了返回 true。没穿模型、包里没这条、人不在视距内都返回 false。 */
     private static boolean play(UUID companion, String sound) {
-        String pack = pack(companion);
+        AbstractClientPlayer body = MaidBody.player(companion);
+        if (body == null) return false;
+
+        String pack = pack(body);
         if (pack == null) return false;
         if (Tlm.voice(pack, sound).isEmpty()) return false;
-
-        AbstractClientPlayer body = body(companion);
-        if (body == null) return false;
 
         Minecraft.getInstance().getSoundManager().play(new MaidSoundInstanceAtPos(
                 SoundEvents.EMPTY, pack + ":" + sound,
@@ -73,22 +73,13 @@ public final class MaidVoice {
     }
 
     /**
-     * 这只同伴此刻的音效包 id。<b>就是模型 id 的命名空间</b>——同一个包同时提供
+     * 这具身体此刻的音效包 id。<b>就是模型 id 的命名空间</b>——同一个包同时提供
      * 模型和声音,所以不需要另存一份"她用哪个音效包"。没穿模型返回 null。
      */
-    private static String pack(UUID companion) {
-        String modelId = Wardrobe.worn(companion);
+    private static String pack(AbstractClientPlayer body) {
+        String modelId = Outfit.worn(body);
         if (modelId == null) return null;
         int colon = modelId.indexOf(':');
         return colon > 0 ? modelId.substring(0, colon) : null;
-    }
-
-    private static AbstractClientPlayer body(UUID companion) {
-        var level = Minecraft.getInstance().level;
-        if (level == null) return null;
-        for (var p : level.players()) {
-            if (p.getUUID().equals(companion)) return p;
-        }
-        return null;
     }
 }

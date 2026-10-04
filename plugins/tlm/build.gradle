@@ -61,6 +61,8 @@ neoForge {
 
 dependencies {
     gametestCompileOnly files({ coreNeoForge.sourceSets.main.output })
+    // 用例直接读她身上的外观附件(Outfit),不绕客户端
+    gametestCompileOnly sourceSets.main.output
     // 整个引擎(不是瘦 api jar):用例拉起同伴、按模型的样子调工具,和 core 的用例一样;运行时它就是 numen_api 那个模组
     gametestImplementation project(':api:neoforge')
     gametestImplementation "maven.modrinth:touhou-little-maid:${tlm_version}"

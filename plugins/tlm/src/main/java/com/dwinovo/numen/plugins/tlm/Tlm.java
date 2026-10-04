@@ -19,7 +19,7 @@ import java.util.Optional;
  * <h2>两条渲染线</h2>
  * 车万女仆的模型分 Bedrock 与 GeckoLib 两种({@code maid_model.json} 里的
  * {@code is_gecko})。{@code EntityMaidRenderer} 内部自己分流,本插件不必区分——
- * 但"模型在不在"的判据必须用元信息表,见 {@link #exists}。
+ * 但"模型在不在"的判据必须用元信息表({@code idInfoMap}),不能问只装 Bedrock 模型的 {@code idModelMap}。
  *
  * <h2>模型是拿到了,动画为什么还要绕一圈</h2>
  * 它的 {@code BedrockModel.setupAnim} 里有这么一句:
@@ -34,23 +34,6 @@ import java.util.Optional;
 public final class Tlm {
 
     private Tlm() {}
-
-    /**
-     * 这个模型在不在——"存在"的<b>唯一</b>判据。
-     *
-     * <p>必须问元信息表({@code idInfoMap},{@code getInfo}/{@code getModelIdSet} 读的
-     * 都是它),不能问 {@code getModel}。后者读的是 {@code idModelMap},<b>只装
-     * Bedrock 模型</b>;标了 {@code is_gecko} 的包走 GeckoLib 那条线,在那张表里
-     * 永远查不到。拿它当判据的话,gecko 模型会被判成"不存在"而放弃接管渲染,
-     * 表现是同伴露出原皮。
-     */
-    public static boolean exists(String modelId) {
-        try {
-            return CustomPackLoader.MAID_MODELS.getInfo(modelId).isPresent();
-        } catch (Throwable ignored) {
-            return false;   // 模组没装 / 资源还没加载
-        }
-    }
 
     /** 装了哪些模型包。清单按包分组给大模型看,见 {@link MaidCatalog}。 */
     public static List<CustomModelPack<MaidModelInfo>> packs() {

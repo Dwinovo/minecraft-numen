@@ -19,8 +19,8 @@ public final class MaidLook {
 
     /** 交给引擎的现算片段;没穿女仆模型就什么也不说。 */
     public static String describe(UUID companion) {
-        String id = Wardrobe.worn(companion);
-        if (id == null || !Tlm.exists(id)) return "";
+        String id = MaidBody.worn(companion);
+        if (id == null) return "";
 
         String name = MaidCatalog.nameOf(id);
         String desc = MaidCatalog.descOf(id);

@@ -11,6 +11,7 @@ import com.dwinovo.numen.sdk.Fn;
 import com.dwinovo.numen.sdk.Note;
 import com.dwinovo.numen.sdk.Omitted;
 import com.dwinovo.numen.sdk.SeeAlso;
+import com.dwinovo.numen.sdk.ServerCall;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
@@ -21,9 +22,10 @@ import java.util.Optional;
  * {@code tlm.skin}:她自己穿哪套女仆模型({@code list}、{@code wear}、{@code remove})。她养的女仆是另一组 {@code tlm.maid}
  * (见 {@link MaidApi})。
  *
- * <h2>为什么穿模型的三个在主人客户端</h2>
- * 模型包只有客户端知道({@code CustomPackLoader} 是客户端类),穿什么也记在主人这边({@link Wardrobe}),发去服务端问,服务端也答
- * 不上来。两侧都登记(帮助要它),函数只在客户端跑:第一个参数是 {@link ClientCall}。女仆是世界里的实体,管女仆的那几个在服务端。
+ * <h2>穿什么在服务端,查名册在客户端</h2>
+ * 穿什么是她身体的属性({@link Outfit}):{@code wear}、{@code remove} 在服务端跑,按服务端的模型登记表核对 id,
+ * 存在身体上、同步给每个看到她的客户端。{@code list} 在主人客户端跑:模型的显示名是翻译键,中文名搜索都要客户端的语言表,
+ * 服务端答不上来;它读"现在穿的"读的是同步到客户端的那份。两侧都登记(帮助要它),函数在哪一侧跑看第一个参数。
  */
 public final class SkinApi {
 
@@ -65,12 +67,13 @@ public final class SkinApi {
     @Fn("Your own look: which maid model you wear now, and which are installed.")
     @Example("tlm.skin.list()")
     @Example("tlm.skin.list({search = \"灵梦\"})")
-    @Note("Read-only. Runs on your owner's client, where the model packs are.")
+    @Note("Read-only. Runs on your owner's client, where the models' names are. What you wear shows only while your "
+            + "owner's client has you in view.")
     @Note("Without search every pack, with search every model found.")
     @SeeAlso("tlm.skin.wear")
     public static Looks list(ClientCall call, Search args) {
         present();
-        String worn = Wardrobe.worn(call.companion());
+        String worn = MaidBody.worn(call.companion());
         Optional<String> current = Optional.ofNullable(worn);
         Optional<String> name = current.map(MaidCatalog::nameOf);
         String q = args.search().map(String::trim).orElse("");
@@ -88,34 +91,33 @@ public final class SkinApi {
 
     /** 穿上的。 */
     @Doc("The maid model you now wear.")
-    public record Worn(String currentModel, String currentName) {}
+    public record Worn(String currentModel) {}
 
     /**
      * 只认清单里真实存在的 id。模型不存在时直接失败并指回清单——比默默换成一个空模型好:她会知道自己刚才那句没生效,下一轮能自己改口。
      */
     @Fn("Your own look: put on a maid model.")
     @Example("tlm.skin.wear(\"touhou_little_maid:hakurei_reimu\")")
-    @Note("It covers your whole body: a YSM model or your own skin stops showing until you take it off.")
+    @Note("It covers your whole body: a YSM model or your own skin stops showing until you take it off. Everyone who "
+            + "sees you sees the model, as long as their game has its model pack.")
     @Note("It does not ask your owner; tell them what you changed into.")
     @SeeAlso({"tlm.skin.list", "tlm.skin.remove"})
-    public static Worn wear(ClientCall call, Wear args) {
-        present();
+    public static Worn wear(ServerCall call, Wear args) {
         String model = args.model().toString();
-        if (!Tlm.exists(model)) {
+        if (!Maids.hasModel(model)) {
             // 不把全量清单塞回去(两百多个,一次两万 token),指回清单去搜
             throw new ApiError(ErrorKind.NOT_FOUND, "没有叫 " + model + " 的模型;搜一下正确的 id",
                     Call.of("tlm.skin.list", Map.of("search", args.model().getPath())));
         }
-        Wardrobe.wear(call.companion(), model);
-        return new Worn(model, MaidCatalog.nameOf(model));
+        Outfit.wear(call.her(), model);
+        return new Worn(model);
     }
 
     @Fn("Your own look: take the maid model off; your other look shows again.")
     @Example("tlm.skin.remove()")
     @SeeAlso("tlm.skin.wear")
-    public static void remove(ClientCall call) {
-        present();
-        Wardrobe.wear(call.companion(), null);
+    public static void remove(ServerCall call) {
+        Outfit.wear(call.her(), null);
     }
 
     private static void present() {
