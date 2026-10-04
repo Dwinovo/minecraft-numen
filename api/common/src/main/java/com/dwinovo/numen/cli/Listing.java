@@ -70,7 +70,15 @@ public record Listing(String head, List<String> entries, String foot, int maxByt
      * 它的大小不随条目数长。
      */
     public TaskResult result(CommandArgs args, Map<String, Object> data) {
-        int page = pageIn(args);
+        return result(pageIn(args), data);
+    }
+
+    /** 第 {@code page} 页(从 1 数);没有这一页是一条失败,说有几页。 */
+    public TaskResult result(int page) {
+        return result(page, Map.of());
+    }
+
+    private TaskResult result(int page, Map<String, Object> data) {
         List<int[]> pages = pages();
         return has(pages, page) ? TaskResult.ok(render(pages, page), data) : TaskResult.fail(noSuchPage(pages, page));
     }

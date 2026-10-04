@@ -58,6 +58,7 @@ public class CommonClass {
         ToolRegistry.register(new com.dwinovo.numen.cli.ScriptTool());
         ToolRegistry.register(new com.dwinovo.numen.cli.SkillTool());
         ToolRegistry.register(new com.dwinovo.numen.cli.TodoTool());
+        ToolRegistry.register(new com.dwinovo.numen.cli.MemoryTool());
         com.dwinovo.numen.cli.HelpCommands.install();
         com.dwinovo.numen.cli.McCommands.install();
         Constants.LOG.info("[numen] registered {} tool(s)", ToolRegistry.size());

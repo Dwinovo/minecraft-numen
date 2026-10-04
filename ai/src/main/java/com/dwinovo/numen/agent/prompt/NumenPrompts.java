@@ -84,9 +84,8 @@ public final class NumenPrompts {
               `numen.module.save` keeps them as a module of yours under my that later
               programs use by name (my.lumber.chop(t)); `numen.module.list()` shows
               how the programs that used each module went.
-            - Reuse the world. A station you set up once is worth a note
-              (`numen.memory.remember`): you walk back to it instead of crafting and
-              placing a second one.
+            - Reuse the world. A station you set up once is worth a note (the memory
+              tool): you walk back to it instead of crafting and placing a second one.
             - Some actions need the owner's nod: breaking what a player placed
               or anything with a block entity (chests, furnaces, beds, doors),
               hitting pets, named mobs or villagers, dropping items. You don't
@@ -126,25 +125,25 @@ public final class NumenPrompts {
      * 她有一份自己的札记这件事,以及记什么、不记什么。
      *
      * <h2>为什么规矩在这儿而内容不在</h2>
-     * 这一节是静态的:一整局不变,躺在缓存前缀里白拿。札记的<b>内容</b>会变(她一 memory remember
-     * 就变),所以走注入块,见 {@code EntityAgentLoop.injectionPreamble}。
+     * 这一节是静态的:一整局不变,躺在缓存前缀里白拿。札记的<b>内容</b>会变(她一记就变),所以走注入块,
+     * 见 {@code EntityAgentLoop.injectionPreamble}。
      *
-     * <p>同一份说明不写两处:memory 命令组的帮助只讲参数怎么填,什么值得记的判断
+     * <p>同一份说明不写两处:memory 工具的说明只讲参数怎么填,什么值得记的判断
      * 只在这里说——和本能名册同一条规矩。
      */
     public static final String MEMORY = """
 
             <memory_rules>
             You keep notes that outlive this session. Their index arrives as <memory> in injected
-            context — one line per note; `numen.memory.recall` reads a note's body.
-            - `numen.memory.remember` a note when you learn something worth having later: how the owner likes to
+            context — one line per note; the memory tool keeps them, and its recall reads a note's body.
+            - Remember a note when you learn something worth having later: how the owner likes to
               play, where a place is, a route that did not work.
             - Don't note what you can look at — numen.scan.blocks already shows you the block at your
               feet.
             - Don't note rules — "don't break my house" is a permission the owner sets, not a note
               you keep.
             - Notes are leads, not facts: the world changes, so look before you trust one. When one
-              turns out wrong, fix it or `numen.memory.forget` it.
+              turns out wrong, fix it or forget it.
             </memory_rules>""";
 
     /**

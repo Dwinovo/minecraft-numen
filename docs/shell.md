@@ -257,7 +257,10 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
 - **计划也是另一个工具,不是 API**(10-04):判据是工具只放管大脑自己的事、不碰世界的(技能、计划),作用于世界的一律是
   Lua API。照 Claude Code 的 TodoWrite,`todo` 工具收整份计划(`items`,一项一个带记号的字符串),每次替换上一份,主人客户端
   当场答;聊天里的清单从成功的这次调用的参数读(`PlanChecklist`,一项的写法只在 `TodoTool.Item.parse`)。`numen.todo.write`
-  与只为它存在的回执回显(`data.echoed`)删了。模型的工具表是 `[lua, skill, todo]`,外接大脑经 `ToolRegistry` 拿到同一套。
+  与只为它存在的回执回显(`data.echoed`)删了。模型的工具表是 `[lua, skill, todo, memory]`,外接大脑经 `ToolRegistry` 拿到同一套。
+- **札记也是另一个工具,不是 API**(10-04):同一判据,札记本落在主人客户端、管她自己的事。照 Anthropic 的 memory 工具,一个
+  `memory` 工具带 `command`(`remember`、`recall`、`forget`),三件事作用于同一本札记、参数大半共用,不拆成三个工具。札记索引照旧
+  每轮作为 `<memory>` 注入。`numen.memory.*` 删了。
 - **测试**:GameTest 全部从 Lua 入口调(`GameTestKit.lua`);库函数各有端到端的 GameTest(`mine`、`work.collect`、
   `fight.clear`、`build.raise`),到达方式 `reach`、`build.left`、够不着时 `build.at` 的拒绝各有一条。
 
@@ -371,7 +374,7 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
 - 脚本里一律写全名:引擎与 core 的是 `numen.<组>.<函数>`(`numen.work.dig`),插件的是 `<模组 id>.<组>.<函数>`
   (`tlm.maid.task`、`kaleidoscope.pot.fill`)。名字空间由登记者定(`NumenPlugins.register(名字空间, …)`),路线、移动等组
   不改登记代码就落在 `numen.*` 下。模块按名字空间与组放(§九),和同名的组合在一起。
-- 没有名词的增删改查。Lua 不留状态,世界就是状态:区域、设计、存下来的扫描结果都删了;要记住的东西只走 `numen.memory`。
+- 没有名词的增删改查。Lua 不留状态,世界就是状态:区域、设计、存下来的扫描结果都删了;要记住的东西只走 memory 工具。
 
 ### 值带方法(照 mineflayer)
 

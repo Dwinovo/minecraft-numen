@@ -94,7 +94,8 @@ public final class McpServer {
             companion's skills — the workflow guide for one kind of task — and returns its text; a name it \
             does not know answers with the list of the skills it can use. The %s tool writes down your plan for \
             work of several phases (the whole plan each call, replacing the last one); the owner sees it as a \
-            checklist.
+            checklist. The %s tool keeps the companion's own notes (remember, recall, forget); their index \
+            comes with every turn of its own brain.
 
             Rules: survival mode — the API does only what a real player can (mine to get stone; there is no \
             give or setblock). You are blind between calls, so perceive before and after acting. %s You can \
@@ -113,7 +114,7 @@ public final class McpServer {
             get_events calls nothing is lost (events queue up). Raise wait_seconds (up to 50) only when \
             you deliberately want to park and wait for the owner to speak.""".formatted(
             com.dwinovo.numen.agent.script.ScriptEngine.IN_USE.toolName(), com.dwinovo.numen.cli.SkillTool.NAME,
-            com.dwinovo.numen.cli.TodoTool.NAME, ONE_BODY);
+            com.dwinovo.numen.cli.TodoTool.NAME, com.dwinovo.numen.cli.MemoryTool.NAME, ONE_BODY);
 
     private final McpConfig config;
     private final Gson gson = new Gson();
