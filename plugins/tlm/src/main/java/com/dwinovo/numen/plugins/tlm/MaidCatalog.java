@@ -2,7 +2,7 @@ package com.dwinovo.numen.plugins.tlm;
 
 import com.github.tartaricacid.touhoulittlemaid.client.resource.pojo.CustomModelPack;
 import com.github.tartaricacid.touhoulittlemaid.client.resource.pojo.MaidModelInfo;
-import net.minecraft.client.resources.language.I18n;
+import net.minecraft.locale.Language;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +24,7 @@ import java.util.Locale;
  * <h2>名字从哪来</h2>
  * 每个模型都有正经名字,只是以 {@code {model.<命名空间>.<路径>.name}} 的形式存着
  * ——{@code MaidModelInfo.getName()} 在包里没写 name 时会自动拼出这个键。车万女仆
- * 用 {@code LanguageMixin} 把各模型包的 lang 灌进了香草语言表,所以 {@link I18n}
+ * 用 {@code LanguageMixin} 把各模型包的 lang 灌进了香草语言表,所以 {@link Language}
  * 直接查得到。不用自己维护映射表。
  */
 public final class MaidCatalog {
@@ -43,15 +43,15 @@ public final class MaidCatalog {
         String t = raw.trim();
         if (t.length() > 2 && t.charAt(0) == '{' && t.charAt(t.length() - 1) == '}') {
             String key = t.substring(1, t.length() - 1);
-            String v = I18n.get(key);
+            String v = Language.getInstance().getOrDefault(key);
             return v.equals(key) ? t : v;
         }
         return t;
     }
 
-    /** 这个模型的显示名;查不到就退回 id。 */
+    /** 这个模型的显示名,来自服务端的模型登记表;查不到就退回 id。 */
     public static String nameOf(String modelId) {
-        return Tlm.info(modelId).map(i -> display(i.getName())).orElse(modelId);
+        return Maids.modelInfo(modelId).map(i -> display(i.getName())).orElse(modelId);
     }
 
     /**
@@ -59,7 +59,7 @@ public final class MaidCatalog {
      * 颜色码只会占 token。查不到返回空串。
      */
     public static String descOf(String modelId) {
-        return Tlm.info(modelId).map(i -> {
+        return Maids.modelInfo(modelId).map(i -> {
             List<String> raw = i.getDescription();
             if (raw == null || raw.isEmpty()) return "";
             StringBuilder sb = new StringBuilder();

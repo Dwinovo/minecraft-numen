@@ -44,15 +44,6 @@ public final class Tlm {
         }
     }
 
-    /** 模型的元信息:显示名、贴图、缩放。 */
-    public static Optional<MaidModelInfo> info(String modelId) {
-        try {
-            return CustomPackLoader.MAID_MODELS.getInfo(modelId);
-        } catch (Throwable ignored) {
-            return Optional.empty();
-        }
-    }
-
     /**
      * 取一条语音的音频缓冲。同名多变体(hurt1..hurt4)由它自己随机挑一条。
      *

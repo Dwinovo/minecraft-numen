@@ -16,8 +16,8 @@ import java.nio.file.Path;
  * {@link #install}。它不在的话,这个类<b>一次都不会被加载</b>,而这一点是必须的:
  * 本联动直接编译依赖车万女仆的类({@code BedrockModel} 等),类加载了就会去找那些类。
  *
- * <p>穿什么模型是她身体的属性,在服务端({@link Outfit}),同步给每个看到她的客户端去渲染;查模型名册在主人客户端——
- * 显示名与中文搜索靠客户端的语言表。养女仆在服务端——女仆是世界里的实体,驯服、切工作模式、开她的界面都是对她做的事,
+ * <p>穿什么模型是她身体的属性,在服务端({@link Outfit}),同步给每个看到她的客户端去渲染;查装了哪些模型在主人客户端——
+ * 按名字搜靠客户端的语言表。养女仆在服务端——女仆是世界里的实体,驯服、切工作模式、开她的界面都是对她做的事,
  * P 点与女仆数记在她身上。
  */
 public final class NumenTlm {
@@ -39,11 +39,10 @@ public final class NumenTlm {
             Maids.listen();
             // 每轮都告诉她身上的 P 点、车万女仆给她记的女仆数
             numen.contributeBodyState(Maids::bodyState);
+            // 她穿着哪套是身体的事实,每轮都在,不看她在不在主人的视野里
+            numen.contributeBodyState(MaidLook::describe);
 
             numen.onClient(() -> {
-                // 每轮都告诉她现在穿的是谁,而不是只在换装那一轮
-                numen.contributeState(MaidLook::describe);
-
                 // 受伤和死亡自动出声:情绪最强、频率天然低,不会变成噪音。
                 // 其余时刻由她自己用 make_sound 决定——理由见 MaidVoice。
                 numen.on(com.dwinovo.numen.api.CompanionEvent.HURT,

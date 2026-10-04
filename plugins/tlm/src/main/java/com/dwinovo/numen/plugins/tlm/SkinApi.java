@@ -25,7 +25,7 @@ import java.util.Optional;
  * <h2>穿什么在服务端,查名册在客户端</h2>
  * 穿什么是她身体的属性({@link Outfit}):{@code wear}、{@code remove} 在服务端跑,按服务端的模型登记表核对 id,
  * 存在身体上、同步给每个看到她的客户端。{@code list} 在主人客户端跑:模型的显示名是翻译键,中文名搜索都要客户端的语言表,
- * 服务端答不上来;它读"现在穿的"读的是同步到客户端的那份。两侧都登记(帮助要它),函数在哪一侧跑看第一个参数。
+ * 服务端答不上来。她现在穿的是哪套,由 {@link MaidLook} 随时写进提示词。两侧都登记(帮助要它),函数在哪一侧跑看第一个参数。
  */
 public final class SkinApi {
 
@@ -47,12 +47,9 @@ public final class SkinApi {
     @Doc("A model pack: its name, how many models, a few of their names.")
     public record Pack(String pack, int count, List<String> examples) {}
 
-    /** 穿着的与装着的。 */
-    @Doc("Which maid model you wear, and which are installed.")
-    public record Looks(@Doc("The model you wear now; none when you wear your own look.")
-                           Optional<String> currentModel,
-                           Optional<String> currentName,
-                           @Doc("Without search: how many models in all.") Optional<Integer> total,
+    /** 装着的。 */
+    @Doc("Which maid models are installed.")
+    public record Looks(@Doc("Without search: how many models in all.") Optional<Integer> total,
                            @Doc("Without search: every pack.") Optional<List<Pack>> packs,
                            @Doc("With search: every model found.") Optional<List<Model>> models) {}
 
@@ -64,25 +61,21 @@ public final class SkinApi {
      * 不带关键词只给包级摘要,带关键词才展开具体条目——这台机器上有两百多个模型,全量倒出去一次吃掉两万多 token,而且给的是一堆哈希
      * id,模型拿到了也讲不清哪个是哪个(理由见 {@link MaidCatalog})。
      */
-    @Fn("Your own look: which maid model you wear now, and which are installed.")
+    @Fn("Your own look: which maid models are installed.")
     @Example("tlm.skin.list()")
     @Example("tlm.skin.list({search = \"灵梦\"})")
-    @Note("Read-only. Runs on your owner's client, where the models' names are. What you wear shows only while your "
-            + "owner's client has you in view.")
+    @Note("Read-only. Runs on your owner's client, where the models' names are.")
     @Note("Without search every pack, with search every model found.")
-    @SeeAlso("tlm.skin.wear")
+    @SeeAlso({"tlm.skin.wear", "tlm.skin.remove"})
     public static Looks list(ClientCall call, Search args) {
         present();
-        String worn = MaidBody.worn(call.companion());
-        Optional<String> current = Optional.ofNullable(worn);
-        Optional<String> name = current.map(MaidCatalog::nameOf);
         String q = args.search().map(String::trim).orElse("");
         if (q.isEmpty()) {
             List<Pack> packs = MaidCatalog.summary();
             int total = packs.stream().mapToInt(Pack::count).sum();
-            return new Looks(current, name, Optional.of(total), Optional.of(packs), Optional.empty());
+            return new Looks(Optional.of(total), Optional.of(packs), Optional.empty());
         }
-        return new Looks(current, name, Optional.empty(), Optional.empty(), Optional.of(MaidCatalog.search(q)));
+        return new Looks(Optional.empty(), Optional.empty(), Optional.of(MaidCatalog.search(q)));
     }
 
     /** 穿哪一个。 */

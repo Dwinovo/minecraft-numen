@@ -9,6 +9,7 @@ import com.github.tartaricacid.touhoulittlemaid.api.event.MaidTaskEnableEvent;
 import com.github.tartaricacid.touhoulittlemaid.api.event.MaidTombstoneEvent;
 import com.github.tartaricacid.touhoulittlemaid.api.task.IMaidTask;
 import com.github.tartaricacid.touhoulittlemaid.data.MaidNumAttachment;
+import com.github.tartaricacid.touhoulittlemaid.client.resource.pojo.MaidModelInfo;
 import com.github.tartaricacid.touhoulittlemaid.crafting.AltarRecipe;
 import com.github.tartaricacid.touhoulittlemaid.entity.ai.brain.MaidSchedule;
 import com.github.tartaricacid.touhoulittlemaid.entity.data.inner.AttackListData;
@@ -347,6 +348,11 @@ final class Maids {
     /** 她穿的模型。 */
     static String model(Entity maid) {
         return ((EntityMaid) maid).getModelId();
+    }
+
+    /** 这个服务器登记的这个模型的元信息:显示名、介绍。 */
+    static Optional<MaidModelInfo> modelInfo(String model) {
+        return ServerCustomPackLoader.SERVER_MAID_MODELS.getInfo(model);
     }
 
     /** 这个服务器的车万女仆装没装这个模型。 */

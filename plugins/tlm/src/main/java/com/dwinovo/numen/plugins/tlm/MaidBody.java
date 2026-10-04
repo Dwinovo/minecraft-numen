@@ -78,12 +78,6 @@ public final class MaidBody {
         return null;
     }
 
-    /** 这只同伴身上同步来的模型 id;没穿、或她不在这个客户端的视野里返回 null。 */
-    static String worn(UUID companion) {
-        AbstractClientPlayer body = player(companion);
-        return body == null ? null : Outfit.worn(body);
-    }
-
     /**
      * 玩家渲染的入口。不是同伴、或这只同伴没穿女仆模型,就原样放行——
      * 一次附件查询,对所有真人玩家几乎零开销。穿的模型这个客户端没有时,车万女仆的渲染器自己怎么处理就怎么处理。

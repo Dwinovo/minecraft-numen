@@ -6,6 +6,7 @@ import com.dwinovo.numen.entity.EventOutbox;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.permission.Mode;
 import com.dwinovo.numen.permission.Permission;
+import com.dwinovo.numen.plugins.tlm.MaidLook;
 import com.dwinovo.numen.plugins.tlm.Outfit;
 import com.github.tartaricacid.touhoulittlemaid.entity.ai.brain.MaidSchedule;
 import com.github.tartaricacid.touhoulittlemaid.entity.info.ServerCustomPackLoader;
@@ -260,8 +261,12 @@ public class TlmGameTests {
 
         ToolRun wear = lua(her, "tlm.skin.wear(\"" + model + "\")");
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(wear.succeeded() && model.equals(Outfit.worn(her)),
-                        "she does not wear " + model + ": " + wear.reply()))
+                .thenWaitUntil(() -> {
+                    helper.assertTrue(wear.succeeded() && model.equals(Outfit.worn(her)),
+                            "she does not wear " + model + ": " + wear.reply());
+                    helper.assertTrue(MaidLook.describe(her).startsWith("<maid_look>"),
+                            "what she wears is not in her prompt: " + MaidLook.describe(her));
+                })
                 .thenExecute(() -> missing.set(lua(her, "tlm.skin.wear(\"touhou_little_maid:no_such_model\")")))
                 .thenWaitUntil(() -> {
                     ToolRun run = missing.get();
@@ -271,8 +276,11 @@ public class TlmGameTests {
                     helper.assertTrue(model.equals(Outfit.worn(her)), "the refused call changed what she wears");
                 })
                 .thenExecute(() -> off.set(lua(her, "tlm.skin.remove()")))
-                .thenWaitUntil(() -> helper.assertTrue(off.get().succeeded() && Outfit.worn(her) == null,
-                        "she still wears a model after remove: " + off.get().reply()))
+                .thenWaitUntil(() -> {
+                    helper.assertTrue(off.get().succeeded() && Outfit.worn(her) == null,
+                            "she still wears a model after remove: " + off.get().reply());
+                    helper.assertTrue(MaidLook.describe(her).isEmpty(), "her prompt still says she wears a model");
+                })
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), her))
                 .thenSucceed();
     }
