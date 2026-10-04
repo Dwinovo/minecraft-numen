@@ -81,7 +81,7 @@ public final class Hotbar {
         if (body.getOffhandItem().is(item)) {
             return new Grip(InteractionHand.MAIN_HAND, hold(body, OFFHAND).orElse(null));
         }
-        if (body.getAbilities().instabuild) {
+        if (body.gameMode.isCreative()) {
             inventory.setPickedItem(new ItemStack(item));
             return new Grip(InteractionHand.MAIN_HAND, new BodyAction.Conjured(item, inventory.selected));
         }

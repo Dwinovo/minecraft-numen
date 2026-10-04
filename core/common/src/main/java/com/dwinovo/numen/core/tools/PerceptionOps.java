@@ -4,6 +4,7 @@ import com.dwinovo.numen.agent.script.ApiError;
 import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.cli.CellOrEntity;
 import com.dwinovo.numen.cli.Shapes;
+import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.pathing.world.Sight;
 import com.dwinovo.numen.task.TaskResult;
@@ -35,7 +36,7 @@ public final class PerceptionOps {
         JsonObject root = new JsonObject();
         root.addProperty("id", self.getId());
         root.addProperty("name", self.getName().getString());
-        root.addProperty("game_mode", self.gameMode.getGameModeForPlayer().getName());
+        root.addProperty("game_mode", WorkProfile.mode(self).getName());
         root.addProperty("hp", self.getHealth());
         root.addProperty("max_hp", self.getMaxHealth());
         root.addProperty("hunger", self.getFoodData().getFoodLevel());

@@ -160,7 +160,7 @@ final class Trial {
                     return Optional.of(block);
                 }
             }
-            return body.getAbilities().instabuild && list.length > 0 ? Optional.of(list[0]) : Optional.empty();
+            return body.gameMode.isCreative() && list.length > 0 ? Optional.of(list[0]) : Optional.empty();
         };
     }
 

@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.task.build;
 
 import com.dwinovo.numen.core.PlayerInv;
+import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
@@ -44,7 +45,7 @@ final class BuildInventory {
 
     /** 从背包扣掉一件满足这一笔要求的东西。 */
     void consumeMatching(BuildTaskRecord.CellNeed need) {
-        if (player.hasInfiniteMaterials()) {
+        if (WorkProfile.of(player).freeMaterials()) {
             return;
         }
         Inventory inventory = player.getInventory();
@@ -60,7 +61,7 @@ final class BuildInventory {
 
     /** 从背包扣掉一个该物品。 */
     void consumeOne(Item item) {
-        if (player.hasInfiniteMaterials()) {
+        if (WorkProfile.of(player).freeMaterials()) {
             return;   // 任务中途被切成免耗材画像:记账即刻停手,别扣真方块
         }
         Inventory inventory = player.getInventory();
@@ -95,7 +96,7 @@ final class BuildInventory {
 
     /** 从背包扣掉一件和这一叠完全一样的东西。 */
     boolean consumeStrict(ItemStack want) {
-        if (player.hasInfiniteMaterials()) {
+        if (WorkProfile.of(player).freeMaterials()) {
             return true;
         }
         Inventory inventory = player.getInventory();

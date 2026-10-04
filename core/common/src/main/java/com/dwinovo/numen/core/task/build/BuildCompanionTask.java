@@ -631,8 +631,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * <p>图纸格照图直写是对的——精确落位是它的语义;而没提任何摆放要求的单格 set
      * 要的是"放一个工作台",那是玩家动作:朝向随她的视线,模组钩在物品放置流程上的
      * 转换(换方块、造方块实体)照常发生,放置事件可被领地类模组取消——她放不了的
-     * 地方,主人亲手也放不了。扣料也交给原版从手上的那叠扣,与
-     * {@code BuildInventory.consumeOne} 同一判据(都按 {@code hasInfiniteMaterials})。
+     * 地方,主人亲手也放不了。扣料也交给原版从手上的那叠扣:原版创造模式下不扣,
+     * 与 {@code BuildInventory.consumeOne} 按 {@code WorkProfile.freeMaterials} 不扣是同一个模式。
      *
      * <p>只按主手,不走 {@code Interaction} 的双手按键:那是准星语义(主手没吃掉就轮
      * 副手),在这里副手若拿着别的方块,会把错的东西放进格子。

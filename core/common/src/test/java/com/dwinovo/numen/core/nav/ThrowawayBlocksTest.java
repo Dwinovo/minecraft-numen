@@ -1,6 +1,8 @@
 package com.dwinovo.numen.core.nav;
 
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.ServerPlayerGameMode;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.entity.player.Abilities;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -115,11 +117,11 @@ class ThrowawayBlocksTest {
     @Test
     void creativeHasTheFirstBlockOnTheList() {
         clear();
-        player.getAbilities().instabuild = true;
+        mode(GameType.CREATIVE);
         try {
             assertEquals(Optional.of(Blocks.DIRT), ThrowawayBlocks.next(player, ThrowawayBlocks.factory()));
         } finally {
-            player.getAbilities().instabuild = false;
+            mode(GameType.SURVIVAL);
         }
     }
 
@@ -133,7 +135,18 @@ class ThrowawayBlocksTest {
         }
     }
 
-    // ==================== 夹具:一个只有背包、饱食与能力的空壳玩家 ====================
+    /** 把空壳玩家的游戏模式直接记成 {@code mode}(原版的切换要发包,空壳没有连接)。 */
+    private static void mode(GameType mode) {
+        try {
+            Field field = ServerPlayerGameMode.class.getDeclaredField("gameModeForPlayer");
+            field.setAccessible(true);
+            field.set(player.gameMode, mode);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    // ==================== 夹具:一个只有背包、饱食、能力与游戏模式的空壳玩家 ====================
 
     private static ServerPlayer allocatePlayer() throws Exception {
         Field theUnsafe = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
@@ -146,6 +159,9 @@ class ThrowawayBlocksTest {
         Field abilities = Player.class.getDeclaredField("abilities");
         abilities.setAccessible(true);
         abilities.set(p, new Abilities());   // 默认生存画像
+        Field gameMode = ServerPlayer.class.getDeclaredField("gameMode");
+        gameMode.setAccessible(true);
+        gameMode.set(p, new ServerPlayerGameMode(p));   // 默认生存模式
         return p;
     }
 }

@@ -15,6 +15,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -309,6 +310,52 @@ public class ModeGameTests {
                         .BuildStates.isSecondaryHalf(t.desiredState())),
                 "a bed head must never be its own target cell");
         helper.succeed();
+    }
+
+    /**
+     * 游戏模式切换之后,{@code numen.status.self} 报的模式与挖掘的做法是同一份:切到创造,她报 creative,空手挖黑曜石一下就碎、什么都
+     * 不掉;切回生存,她报 survival,空手挖另一块黑曜石当场被拒(手里没有收得到它的工具),那一块原样。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_mode")
+    public static void status_and_digging_follow_a_game_mode_switch(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos first = helper.absolutePos(new BlockPos(8, 2, 5));
+        BlockPos second = helper.absolutePos(new BlockPos(8, 2, 7));
+        level.setBlockAndUpdate(first, Blocks.OBSIDIAN.defaultBlockState());
+        level.setBlockAndUpdate(second, Blocks.OBSIDIAN.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_mode_switch", new BlockPos(6, 2, 6), false);
+        ToolRun[] runs = new ToolRun[2];
+
+        succeedWhen(helper, () -> {
+            if (runs[0] == null) {
+                companion.setGameMode(GameType.CREATIVE);
+                runs[0] = lua(companion, "local mode = numen.status.self().game_mode\n"
+                        + "local r = numen.work.dig(" + xyz(first) + ")\n"
+                        + "return {mode = mode, dug = r.dug, drops = #r.drops}");
+            }
+            helper.assertTrue(runs[0].done(), "the creative dig has not finished");
+            com.google.gson.JsonObject creative = dataIn(runs[0].receipt()).getAsJsonObject("returned");
+            helper.assertTrue(creative.get("mode").getAsString().equals("creative")
+                            && creative.get("dug").getAsInt() == 1 && creative.get("drops").getAsInt() == 0
+                            && level.getBlockState(first).isAir(),
+                    "in creative the status and the dig disagree: " + runs[0].receipt());
+            helper.assertTrue(runs[0].receipt().contains("Nothing dropped."),
+                    "the creative dig does not say nothing dropped: " + runs[0].receipt());
+            if (runs[1] == null) {
+                companion.setGameMode(GameType.SURVIVAL);
+                runs[1] = lua(companion, "local mode = numen.status.self().game_mode\n"
+                        + "local ok, err = pcall(numen.work.dig, " + xyz(second) + ")\n"
+                        + "return {mode = mode, dug = ok, why = ok and \"\" or err.message}");
+            }
+            helper.assertTrue(runs[1].done(), "the survival dig has not finished");
+            com.google.gson.JsonObject survival = dataIn(runs[1].receipt()).getAsJsonObject("returned");
+            helper.assertTrue(survival.get("mode").getAsString().equals("survival")
+                            && !survival.get("dug").getAsBoolean()
+                            && survival.get("why").getAsString().contains("my tools can't harvest")
+                            && level.getBlockState(second).is(Blocks.OBSIDIAN),
+                    "in survival the status and the dig disagree: " + runs[1].receipt());
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
     }
 
     /** 创造取物:numen.creative.give 凭空取 100 钻石入背包(创造物品栏 GUI 的假体)。 */
