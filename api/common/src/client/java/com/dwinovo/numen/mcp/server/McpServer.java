@@ -386,7 +386,7 @@ public final class McpServer {
         JsonObject schema = objectSchema("companion", true);
         JsonObject text = new JsonObject();
         text.addProperty("type", "string");
-        text.addProperty("description", "What the companion says, in its own voice/persona.");
+        text.addProperty("description", "What the companion says out loud.");
         schema.getAsJsonObject("properties").add("text", text);
         schema.getAsJsonArray("required").add("text");
         return schema;
