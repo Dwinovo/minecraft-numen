@@ -520,10 +520,10 @@ public class CommandGameTests {
             helper.assertTrue(id.equals(run.task().publicId())
                             && run.task().getToolName().equals("gt.gt_long.linger"),
                     "the reply names another task: " + run.reply());
-            helper.assertTrue(outbox.peek(companion.getUUID()).entries().stream()
-                            .anyMatch(e -> e.type().equals("task_finished") && e.text().contains(id)
-                                    && e.text().contains("task=\"gt.gt_long.linger\"")),
-                    "task_finished does not answer the reply: " + outbox.peek(companion.getUUID()).entries());
+            // 程序等着的这件活的收尾写在它的回执里(编号就是受理时回的那个),不另发事件
+            helper.assertTrue(run.receipt() != null
+                            && run.receipt().contains("gt.gt_long.linger: ok — " + id + " done"),
+                    "the receipt does not answer the reply with the task's end: " + run.receipt());
             outbox.forget(companion.getUUID());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
@@ -541,11 +541,16 @@ public class CommandGameTests {
                 "numen.mc.run(\"gvie @s stone\")");
         List<String> heard = new ArrayList<>();
         CommandSourceStack console = console(server, heard);
-        for (String program : programs) {
-            server.getCommands().performPrefixedCommand(console, "/numen drive gametest_mc_driven " + program);
+        // 一只同伴同一刻只跑一段:一段的回执说完,才敲下一段
+        Steps sequence = steps(helper);
+        for (int i = 0; i < programs.size(); i++) {
+            int n = i;
+            sequence = sequence
+                    .thenExecute(() -> server.getCommands().performPrefixedCommand(console,
+                            "/numen drive gametest_mc_driven " + programs.get(n)))
+                    .thenWaitUntil(() -> helper.assertTrue(heard.size() > n, "drive has not answered " + programs.get(n)));
         }
-
-        succeedWhen(helper, () -> {
+        sequence.thenExecute(() -> {
             String name = companion.getName().getString();
             helper.assertTrue(heard.size() == programs.size(), "drive did not answer every program: " + heard);
             for (int i : new int[]{0, 2}) {
@@ -560,7 +565,7 @@ public class CommandGameTests {
                             && heard.get(3).contains("bad_argument") && heard.get(3).contains("/gvie"),
                     "drive did not say which command it could not read: " + heard.get(3));
             CompanionFactory.despawn(server, companion);
-        });
+        }).thenSucceed();
     }
 
     /** 控制台那样的发令人:她那一段的回执说给它听,一句一条记进 {@code heard}。 */

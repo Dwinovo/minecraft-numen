@@ -1,8 +1,6 @@
 package com.dwinovo.numen.core.gametest;
 
 import com.dwinovo.numen.agent.inbox.EventQueue;
-import com.dwinovo.numen.agent.loop.SerialCalls;
-import com.dwinovo.numen.agent.loop.ToolPort;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.agent.script.ApiReply;
 import com.dwinovo.numen.agent.script.Invocation;
@@ -10,7 +8,6 @@ import com.dwinovo.numen.agent.script.JsonValues;
 import com.dwinovo.numen.agent.script.ScriptEngine;
 import com.dwinovo.numen.core.task.dig.DigCompanionTask;
 import com.dwinovo.numen.sdk.Positions;
-import com.dwinovo.numen.sdk.ProgramPort;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -503,7 +500,9 @@ public final class GameTestKit {
         com.mojang.authlib.GameProfile profile = new com.mojang.authlib.GameProfile(UUID.randomUUID(), name);
         var player = new net.minecraft.server.level.ServerPlayer(server, level, profile,
                 net.minecraft.server.level.ClientInformation.createDefault());
-        server.getPlayerList().placeNewPlayer(new OwnerLine(), player,
+        OwnerLine line = new OwnerLine();
+        LINES.put(profile.getId(), line);
+        server.getPlayerList().placeNewPlayer(line, player,
                 net.minecraft.server.network.CommonListenerCookie.createInitial(profile, false));
         if (companion != null) {
             companion.setOwnerUuid(player.getUUID());
@@ -511,9 +510,25 @@ public final class GameTestKit {
         return player;
     }
 
+    /** 在场主人的连接,按玩家。 */
+    private static final java.util.Map<UUID, OwnerLine> LINES = new java.util.concurrent.ConcurrentHashMap<>();
+
     /**
-     * 在场主人的连接:没有客户端。主人在线时她的世界事件({@code NumenEventPayload})直送主人客户端、不进出箱,主人客户端把它们
-     * 交给在跑的那段程序——收尾事件就是这样让程序接着跑的;这里照做,交给她那几轮({@link #LIVE})。别的下行包没人要,丢掉。
+     * 服务端发给这位在场主人的 Numen 包,按先后,取走就清空:用例扮这位主人的客户端,把它们交给客户端的部件,答复再直接交给服务端的
+     * 处理函数——服务端从包进包出的整条路(量大小、认身体、反向请求、答复)都真走一遍,只是没有网线。
+     */
+    static List<net.minecraft.network.protocol.common.custom.CustomPacketPayload> received(
+            net.minecraft.server.level.ServerPlayer owner) {
+        OwnerLine line = LINES.get(owner.getUUID());
+        List<net.minecraft.network.protocol.common.custom.CustomPacketPayload> out = new ArrayList<>();
+        for (net.minecraft.network.protocol.common.custom.CustomPacketPayload p; (p = line.sent.poll()) != null; ) {
+            out.add(p);
+        }
+        return out;
+    }
+
+    /**
+     * 在场主人的连接:没有客户端,下行的 Numen 包记下来({@link #received}),别的丢掉。她的程序跑在服务端({@link #lua}),世界事件直接交给它们,不经这条连接。
      * 和评测的模拟主人同一个做法:内存通道、回环地址、不跑心跳、不断线;{@code configureMockConnection} 给它一张频道表,下行的
      * 模组载荷过得了 NeoForge 的频道检查。
      */
@@ -533,16 +548,14 @@ public final class GameTestKit {
             return LOOPBACK;
         }
 
+        final java.util.Queue<net.minecraft.network.protocol.common.custom.CustomPacketPayload> sent =
+                new java.util.concurrent.ConcurrentLinkedQueue<>();
+
         @Override
         public void send(net.minecraft.network.protocol.Packet<?> packet, net.minecraft.network.PacketSendListener listener,
                          boolean flush) {
-            if (packet instanceof net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket custom
-                    && custom.payload() instanceof com.dwinovo.numen.network.payload.NumenEventPayload events) {
-                for (Round round : LIVE) {
-                    if (round.body.getUUID().equals(events.entityUuid())) {
-                        events.entries().forEach(round::arrive);
-                    }
-                }
+            if (packet instanceof net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket custom) {
+                sent.add(custom.payload());
             }
         }
 
@@ -582,29 +595,98 @@ public final class GameTestKit {
 
     /** {@link #presentPlayer} 请来的玩家离开服务器。 */
     static void leave(net.minecraft.server.level.ServerPlayer player) {
+        LINES.remove(player.getUUID());
         player.getServer().getPlayerList().remove(player);
     }
 
+    /** 每只同伴一个扮主人客户端的"客户端"(各有各的"送过哪些模块正文"):程序、停止、反向请求都经它,走产品里同一批部件。 */
+    private static final java.util.Map<UUID, com.dwinovo.numen.program.LoopbackClient> CLIENTS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static com.dwinovo.numen.program.LoopbackClient client(NumenPlayer body) {
+        net.minecraft.server.MinecraftServer server = body.getServer();
+        return CLIENTS.computeIfAbsent(body.getUUID(), uuid -> new com.dwinovo.numen.program.LoopbackClient(
+                id -> NumenPlayer.findByUuid(server, id), com.dwinovo.numen.script.Modules::of));
+    }
+
     /**
-     * 按模型的样子跑一段程序:交给内脑派发的同一个顺序({@link SerialCalls}),经同一个执行口逐个派 API 调用({@link ProgramPort}:
-     * 服务端函数走派发、客户端函数当场在这里答),和产品里同样那几处。程序等它派的
-     * 每件身体活收尾:主人不在线,收尾的事件进出箱,每个服务器刻把新到的条目按收件箱的急件规则交给这段程序({@link #LIVE});
-     * 主人在场时事件直送他的连接,{@link OwnerLine} 照主人客户端那样交给这段程序。
+     * 按模型的样子跑一段程序:和主人客户端一样,整段送去服务端的入口({@link com.dwinovo.numen.program.ServerPrograms}),服务端函数
+     * 在服务端主线程排队执行、客户端函数经回环传输答;她派的活的收尾归这段程序,写进回执。
+     *
+     * <p>程序在自己的线程上跑,每次调用在服务端主线程轮到它时执行。产品里主线程不等程序;用例的这一步要在同一刻读到查询类程序的回执,
+     * 所以送出之后替服务端推进车道({@link #settle}),直到程序跑完、或停稳在等外面的事上。
      *
      * <p>返回的 {@link ToolRun} 看的是程序里最后一次派出的 API 调用(一行的程序就是那一次)——它当场的回执、它派下的活——和整段
      * 程序的回执。
      */
     static ToolRun lua(NumenPlayer body, String code) {
         ToolRun run = new ToolRun(code);
-        Round round = new Round(body, run);
-        LIVE.add(round);
-        LlmToolCall program = programCall(code);
-        round.calls.run(List.of(program), round);
+        runProgram(body, "gametest-" + UUID.randomUUID(), code, run, () -> { });
+        settle(body, run);
         return run;
     }
 
-    /** 在跑的程序:每个服务器刻把出箱里新到的事件交给它们,结算了的摘掉。 */
-    private static final List<Round> LIVE = new java.util.concurrent.CopyOnWriteArrayList<>();
+    /**
+     * 用例所在的线程就是服务端主线程:替服务端推进程序排着的调用,直到 {@code run} 的程序跑完、或停稳在等外面的事上(她派的活收尾、
+     * 主人点头)。先看程序闲不闲、再推:闲着又没有调用可执行,才没有谁还会放新的调用进来。
+     */
+    private static void settle(NumenPlayer body, ToolRun run) {
+        while (run.receipt.get() == null) {
+            boolean idle = com.dwinovo.numen.program.ServerPrograms.idle(body.getUUID());
+            int ran = com.dwinovo.numen.program.ServerPrograms.pump();
+            if (idle && ran == 0) {
+                return;
+            }
+            Thread.onSpinWait();
+        }
+    }
+
+    /** 此刻在跑的程序,按同伴:它的编号与记录。 */
+    private record Active(String programId, ToolRun run) {}
+
+    private static final java.util.Map<UUID, Active> ACTIVE = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** 每只同伴排着等送的程序。 */
+    private static final java.util.Map<UUID, java.util.Deque<Runnable>> BACKLOGS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * 一段程序送去跑,整段回执记在 {@code run} 里,跑完调 {@code then}。服务端一只同伴同一刻只跑一段,模型的工具调用也本来是一个接一个:
+     * 同伴手上已有一段,这一段排在它后面;那一段若正等着它派的活(走路、挖),主人就是那时再开口的,叫它停在调用之间,活照常跑。
+     */
+    private static void runProgram(NumenPlayer body, String programId, String code, ToolRun run, Runnable then) {
+        Live live = new Live(body, run, new java.util.concurrent.atomic.AtomicBoolean());
+        LIVE.add(live);
+        java.util.Deque<Runnable> backlog = BACKLOGS.computeIfAbsent(body.getUUID(),
+                uuid -> new java.util.concurrent.ConcurrentLinkedDeque<>());
+        Runnable send = () -> {
+            ACTIVE.put(body.getUUID(), new Active(programId, run));
+            client(body).run(body.getUUID(), programId, code, new Watch(body, run), result -> {
+                run.receipt.set(((com.dwinovo.numen.program.RunResult.Ended) result).outcome().receipt());
+                live.ended().set(true);
+                ACTIVE.remove(body.getUUID());
+                then.run();
+                Runnable following = backlog.poll();
+                if (following != null) {
+                    following.run();
+                }
+            });
+        };
+        Active current = ACTIVE.get(body.getUUID());
+        if (current == null) {
+            send.run();
+            return;
+        }
+        backlog.add(send);
+        if (current.run().awaitingJob()) {
+            client(body).interrupt(body.getUUID(), current.programId(), "your owner spoke");
+        }
+    }
+
+    /** 在跑的程序:每个服务器刻让还没回的调用看一眼它派下的活,有了回执的摘掉。 */
+    private record Live(NumenPlayer body, ToolRun run, java.util.concurrent.atomic.AtomicBoolean ended) {}
+
+    private static final List<Live> LIVE = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     static {
         // 她的 Lua 模块落在这一次 GameTest 运行专用的空目录里:只用内置原版,不读主人目录里的
@@ -616,10 +698,10 @@ public final class GameTestKit {
         }
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
                 (net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) -> {
-                    for (Round round : LIVE) {
-                        round.feed();
-                        if (round.hasSettled()) {
-                            LIVE.remove(round);
+                    for (Live live : LIVE) {
+                        live.run().lookAll(live.body());
+                        if (live.ended().get()) {
+                            LIVE.remove(live);
                         }
                     }
                 });
@@ -642,14 +724,11 @@ public final class GameTestKit {
     }
 
     /**
-     * 按模型的样子派一轮调用:模型一次回复里写了这几段程序,交给内脑派发的同一个顺序({@link SerialCalls})——一段跑完才派下一段。
-     * 收尾的事件照 {@link #lua} 每刻交给这一轮。
+     * 按模型的样子派一轮调用:模型一次回复里写了这几段程序,客户端一段跑完才送下一段。主人开口、按停止时客户端做的事——叫服务端上的
+     * 程序停下、余下没送的各回一条"没执行"——由 {@link Round#ownerSays}、{@link Round#ownerStops} 照做。
      */
     static Round round(GameTestHelper helper, NumenPlayer body, LlmToolCall... calls) {
-        Round round = new Round(body, new ToolRun(""));
-        LIVE.add(round);
-        round.calls.run(List.of(calls), round);
-        return round;
+        return new Round(body, calls);
     }
 
     /** 一轮里的一段程序:一条跑脚本的工具调用。 */
@@ -660,99 +739,96 @@ public final class GameTestKit {
     }
 
     /** 看着一段程序的每次调用:派出时记一笔,回来时记下回执与它派下的活(调度器按调用 id 认得出)。 */
-    private record Watch(NumenPlayer body, ToolRun run) implements ProgramPort.Observer {
+    private record Watch(NumenPlayer body, ToolRun run) implements com.dwinovo.numen.program.CallObserver {
 
         @Override
-        public void dispatched(LlmToolCall line, Invocation invocation) {
-            run.dispatched(line.id(), invocation.function());
+        public void dispatched(String callId, Invocation invocation) {
+            run.dispatched(callId, invocation.function());
         }
 
         @Override
-        public void sent(LlmToolCall line) {
-            run.call(line.id()).look(body);
+        public void sent(String callId) {
+            run.call(callId).look(body);
         }
 
         @Override
-        public void replied(LlmToolCall line, String reply) {
-            ToolRun.Call call = run.call(line.id());
+        public void replied(String callId, String reply) {
+            ToolRun.Call call = run.call(callId);
             call.look(body);
             call.replied.set(reply);
         }
     }
 
-    /** 一轮调用的现场:每条的结果、派出那一刻她站在哪、这一轮结算没有。 */
-    static final class Round implements ToolPort.Sink {
+    /**
+     * 一轮调用的现场:一段一段送去服务端跑,每条的结果、送出那一刻她站在哪、这一轮结算没有。余下的调用在程序被叫停时
+     * 各回一条"没执行",和主人客户端上一样。
+     */
+    static final class Round {
 
         private final NumenPlayer body;
-        private final ToolRun run;
-        /** 她的收件箱:进来的条目急不急由它的规则算,和主人客户端上同一条。 */
+        private final ToolRun run = new ToolRun("");
+        private final java.util.Deque<LlmToolCall> queue = new java.util.ArrayDeque<>();
+        /** 她的收件箱:进来的话急不急由它的规则算,和主人客户端上同一条。 */
         private final EventQueue inbox = new EventQueue(EventQueue.Journal.NONE);
-        private final SerialCalls calls;
-        private final java.util.Map<String, String> results = new java.util.HashMap<>();
-        private final java.util.Map<String, Vec3> startedAt = new java.util.HashMap<>();
-        /**
-         * 出箱里这一轮已经见过的条目(按对象认):开跑那一刻已在出箱里的不是它的。不按下标数:出箱有上限,攒满了旧的被挤掉,
-         * 条数不再变,新来的照样要交给它——跑几百次调用的长程序就是这样攒满的。
-         */
-        private final java.util.Set<EventQueue.Entry> seen =
-                java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-        private boolean settled;
+        private final java.util.Map<String, String> results = new java.util.concurrent.ConcurrentHashMap<>();
+        private final java.util.Map<String, Vec3> startedAt = new java.util.concurrent.ConcurrentHashMap<>();
+        /** 在跑的那一段的编号;没有是 null。 */
+        private volatile String running;
+        private volatile boolean settled;
 
-        private Round(NumenPlayer body, ToolRun run) {
+        private Round(NumenPlayer body, LlmToolCall... calls) {
             this.body = body;
-            this.run = run;
-            this.calls = new SerialCalls(new ProgramPort(body, body.getUUID(),
-                    com.dwinovo.numen.script.Modules.of(body.getUUID()), true, new Watch(body, run)));
-            seen.addAll(outbox(body));
+            queue.addAll(List.of(calls));
+            next();
         }
 
-        private static List<EventQueue.Entry> outbox(NumenPlayer body) {
-            return com.dwinovo.numen.entity.EventOutbox.get(body.getServer()).peek(body.getUUID()).entries();
-        }
-
-        /** 出箱里新到的事件交给这一轮;还没回的调用看一眼它派下的活(等主人点头之后才派的短活在这时出现)。 */
-        private void feed() {
-            run.lookAll(body);
-            for (EventQueue.Entry entry : outbox(body)) {
-                if (seen.add(entry)) {
-                    arrive(entry);
+        private void next() {
+            LlmToolCall call = queue.poll();
+            if (call == null) {
+                settled = true;
+                return;
+            }
+            startedAt.put(call.id(), body.position());
+            running = call.id();
+            runProgram(body, call.id(), com.dwinovo.numen.agent.tool.ScriptTool.code(call.arguments()), run, () -> {
+                running = null;
+                String receipt = run.receipt.get();
+                results.put(call.id(), receipt);
+                if (JsonParser.parseString(receipt).getAsJsonObject().getAsJsonObject("data").get("status").getAsString()
+                        .equals("stopped")) {
+                    dropRest("your program was stopped before it ended; read what stopped it, then decide what to do "
+                            + "next");
+                } else {
+                    next();
                 }
+            });
+        }
+
+        /** 这一段被叫停了:余下没送的各回一条"没执行",这一轮结算。 */
+        private void dropRest(String why) {
+            for (LlmToolCall call; (call = queue.poll()) != null; ) {
+                results.put(call.id(), com.dwinovo.numen.agent.llm.ToolOutcome.failure("Not run: " + why));
+            }
+            settled = true;
+        }
+
+        /** 主人开口说一句,和他在聊天框里说的一样进她的收件箱;是急件、而一段程序在跑,客户端叫它停在调用之间。 */
+        void ownerSays(String words) {
+            EventQueue.Entry entry = new EventQueue.Entry(com.dwinovo.numen.agent.inbox.EventTypes.QUERY,
+                    EventQueue.query(words), System.currentTimeMillis(), false);
+            String id = running;
+            if (inbox.push(entry.type(), entry.text(), entry.ts(), entry.urgent()) && id != null) {
+                client(body).interrupt(body.getUUID(), id, com.dwinovo.numen.agent.script.Program.what(entry));
             }
         }
 
-        /** 主人开口说一句,和他在聊天框里说的一样进她的收件箱。 */
-        void ownerSays(String words) {
-            arrive(new EventQueue.Entry(com.dwinovo.numen.agent.inbox.EventTypes.QUERY,
-                    EventQueue.query(words), System.currentTimeMillis(), false));
-        }
-
-        /**
-         * 主人按停止,和主人客户端上同一个顺序:先收这一轮(在跑的脚本交出停在哪一行的回执),再叫停身体(主人客户端经
-         * {@code CancelTasksPayload} 叫停的就是这一处)。
-         */
+        /** 主人按停止,和主人客户端上同一个顺序:先叫服务端上的程序当场停下,再叫停身体。 */
         void ownerStops() {
-            calls.cancel(true);
+            String id = running;
+            if (id != null) {
+                client(body).cutOff(body.getUUID(), id, true);
+            }
             CompanionTickDispatcher.cancelFor(body);
-        }
-
-        private void arrive(EventQueue.Entry entry) {
-            calls.arrived(entry, inbox.push(entry.type(), entry.text(), entry.ts(), entry.urgent()));
-        }
-
-        @Override
-        public void started(LlmToolCall call) {
-            startedAt.put(call.id(), body.position());
-        }
-
-        @Override
-        public void finished(LlmToolCall call, String resultJson) {
-            results.put(call.id(), resultJson);
-            run.receipt.set(resultJson);
-        }
-
-        @Override
-        public void settled() {
-            settled = true;
         }
 
         /** 这条调用的结果;还没有是 null。 */
@@ -760,7 +836,7 @@ public final class GameTestKit {
             return results.get(call.id());
         }
 
-        /** 这条调用派出那一刻她站在哪;还没派出是 null。 */
+        /** 这条调用送出那一刻她站在哪;还没送出是 null。 */
         Vec3 startedAt(LlmToolCall call) {
             return startedAt.get(call.id());
         }
@@ -920,6 +996,13 @@ public final class GameTestKit {
                 }
             }
             return out;
+        }
+
+        /** 程序最后一次调用受理了一件占身体的活、程序正等着它收尾。 */
+        boolean awaitingJob() {
+            Call last = last();
+            String r = receipt.get() != null || last == null ? null : last.replied.get();
+            return r != null && ApiReply.parse(r).job() != null;
         }
 
         /** 整段程序的回执(跑完、出错或被停下);还在跑是 null。 */

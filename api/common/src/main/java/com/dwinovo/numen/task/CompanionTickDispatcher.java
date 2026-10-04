@@ -103,6 +103,8 @@ public final class CompanionTickDispatcher {
         // 登录时只记了一笔,恢复放在这儿做——那时 placeNewPlayer 早已返回,同伴出什么事
         // 都落不到主人的入场流程上。见 Companions.scheduleRestoreFor。
         Companions.restorePending(server);
+        // 她们的程序排着的服务端调用:在预算里执行,主线程不等任何程序
+        com.dwinovo.numen.program.ServerPrograms.tick();
         Companions.tickRespawns(server);   // timed death recoveries
         TimerRegistry.tick(server);        // 她自己定的表,到点发事件
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
@@ -254,7 +256,7 @@ public final class CompanionTickDispatcher {
             brain.finalizeActive(player);
         }
         com.dwinovo.numen.sdk.Consents.stop(player, TaskRecord.StopCause.BODY_LEFT);
-        com.dwinovo.numen.sdk.ServerPrograms.stop(player);
+        com.dwinovo.numen.program.ServerPrograms.stop(player);
         BRAINS.remove(id);   // the body is gone; don't leak its brain
     }
 }

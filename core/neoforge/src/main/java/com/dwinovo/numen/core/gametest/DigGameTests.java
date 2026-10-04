@@ -853,4 +853,44 @@ public class DigGameTests {
     private static String withoutNumbers(String reply) {
         return reply.replaceAll("-?\\d+", "#");
     }
+
+    /**
+     * 上千格的一团交给服务端的函数:一层 32 x 32 的蛙明灯,{@code numen.scan.blocks} 交回的几团(每团一百多格,合起来上千)先摊成一串格,
+     * 再整串作为 {@code avoid} 交给 {@code numen.route.plan}。程序跑在服务端,团不经网线,不受一个上行包的大小管(从前的 32 KB 上限
+     * 一团就装不下)。
+     */
+    @GameTest(template = "floor52", timeoutTicks = 4000, batch = "numen_dig_far")
+    public static void a_scanned_field_of_a_thousand_cells_goes_into_a_server_function_whole(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        int cells = 0;
+        for (int x = 10; x < 42; x++) {
+            for (int z = 10; z < 42; z++) {
+                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, 2, z)),
+                        Blocks.VERDANT_FROGLIGHT.defaultBlockState());
+                cells++;
+            }
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_thousand", new BlockPos(3, 2, 3), false);
+        BlockPos to = helper.absolutePos(new BlockPos(3, 2, 20));
+        ToolRun run = lua(companion, """
+                local all = {}
+                for _, group in ipairs(numen.scan.blocks("minecraft:verdant_froglight", {radius = 60})) do
+                  for _, block in ipairs(group.blocks) do
+                    all[#all + 1] = block.pos
+                  end
+                end
+                numen.route.plan({to = %s, avoid = all})
+                return #all
+                """.formatted(xyz(to)));
+        int expected = cells;
+
+        succeedWhen(helper, () -> {
+            helper.assertTrue(run.done(), "the program has not ended");
+            helper.assertTrue(run.ranToTheEnd(), "the program failed: " + run.receipt());
+            helper.assertTrue(com.google.gson.JsonParser.parseString(run.receipt()).getAsJsonObject()
+                    .getAsJsonObject("data").get("returned").getAsInt() == expected,
+                    "the scan did not hand over every cell: " + run.receipt());
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
 }

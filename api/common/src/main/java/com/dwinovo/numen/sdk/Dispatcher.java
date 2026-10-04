@@ -112,17 +112,25 @@ public final class Dispatcher {
             ServerToolTransport.ship(call);
             return;
         }
-        client(invocation, call.ctx().entityUuid(), call::complete);
+        client(invocation.function(), invocation.args(), call.ctx().entityUuid(), call::complete);
     }
 
-    /** 主人客户端当场执行一个客户端函数。 */
-    public static void client(Invocation invocation, UUID companion, Consumer<String> reply) {
-        ApiFunction fn = function(invocation);
-        Record args = decodeOrReply(fn, invocation.args(), reply);
-        if (args == null && fn.argsType() != null) {
+    /**
+     * 主人客户端执行一个客户端函数:{@code function} 是函数的全名,{@code args} 是读好的参数。没有这个客户端函数、参数读不成,都是一条
+     * 失败。结果经 {@code reply} 恰好回一次。
+     */
+    public static void client(String function, JsonObject args, UUID companion, Consumer<String> reply) {
+        ApiFunction fn = ApiRegistry.function(function);
+        if (fn == null || fn.side() != ApiFunction.Side.CLIENT) {
+            reply.accept(ApiReply.error(ErrorKind.NO_FUNCTION, "there is no API function " + function
+                    + " on the client", null, null).toString());
             return;
         }
-        run(fn, () -> fn.invoke(new ClientCall(companion, fn, args), args), null, null, null, reply);
+        Record values = decodeOrReply(fn, args, reply);
+        if (values == null && fn.argsType() != null) {
+            return;
+        }
+        run(fn, () -> fn.invoke(new ClientCall(companion, fn, values), values), null, null, null, reply);
     }
 
     /**

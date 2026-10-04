@@ -73,6 +73,8 @@ public class BuildGameTests {
 
         private static final String AT_THE_LIMIT = "it reached the limit of "
                 + com.dwinovo.numen.agent.script.ScriptLimits.COMMANDS + " calls per run";
+        /** 回执写满了每件活的整段实际账,比一个下行包还大时换成的失败:不知道停在哪,同一段再交一次(每一轮现问现盖)。 */
+        private static final String TOO_BIG = "bytes, more than the ";
 
         private final NumenPlayer body;
         private final String code;
@@ -87,7 +89,7 @@ public class BuildGameTests {
 
         private void tick() {
             ToolRun last = last();
-            if (last.receipt() != null && !last.ranToTheEnd() && last.receipt().contains(AT_THE_LIMIT)) {
+            if (last.receipt() != null && !last.ranToTheEnd() && resumable(last)) {
                 runs.add(lua(body, code));
             }
         }
@@ -100,7 +102,11 @@ public class BuildGameTests {
         /** 收场了:最近那一段跑完了,或停在调用上限以外的原因上。 */
         boolean done() {
             ToolRun last = last();
-            return last.receipt() != null && (last.ranToTheEnd() || !last.receipt().contains(AT_THE_LIMIT));
+            return last.receipt() != null && (last.ranToTheEnd() || !resumable(last));
+        }
+
+        private static boolean resumable(ToolRun run) {
+            return run.receipt().contains(AT_THE_LIMIT) || run.receipt().contains(TOO_BIG);
         }
 
         /** 各段里调 {@code function} 派下的活,按先后。 */

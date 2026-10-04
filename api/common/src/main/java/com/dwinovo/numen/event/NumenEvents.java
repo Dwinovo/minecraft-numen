@@ -152,12 +152,23 @@ public final class NumenEvents {
                 com.dwinovo.numen.sdk.Dispatcher.ended(result, fn));
     }
 
-    /** 服务端发出的每一条事件也交给它们:在服务端跑的程序等它派的活的收尾({@code ServerPrograms})。 */
-    private static final List<java.util.function.BiConsumer<UUID, EventQueue.Entry>> WATCHERS =
-            new java.util.concurrent.CopyOnWriteArrayList<>();
+    /** 服务端发出的每一条事件先交给它们:在服务端跑的程序等它派的活的收尾、也据此判断要不要停({@code ServerPrograms})。 */
+    private static final List<Watcher> WATCHERS = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     /** 看着服务端发出的每一条事件,按同伴。 */
-    public static void watch(java.util.function.BiConsumer<UUID, EventQueue.Entry> watcher) {
+    @FunctionalInterface
+    public interface Watcher {
+
+        /**
+         * 一条事件发出了。
+         *
+         * @return 这条事件归了看着它的一方(程序等着的那件活的收尾,账写进了程序的回执):不再送给主人的大脑,一件活的收尾只说一次
+         */
+        boolean takes(UUID companion, EventQueue.Entry entry);
+    }
+
+    /** 看着服务端发出的每一条事件。 */
+    public static void watch(Watcher watcher) {
         WATCHERS.add(watcher);
     }
 
@@ -218,7 +229,23 @@ public final class NumenEvents {
                 System.currentTimeMillis(), urgent);
         EventQueue.Entry entry = new EventQueue.Entry(plain.type(), plain.text(), plain.ts(), plain.urgent(), result);
         UUID uuid = companion.getUUID();
-        WATCHERS.forEach(w -> w.accept(uuid, entry));
+        boolean taken = false;
+        for (Watcher watcher : WATCHERS) {
+            taken |= watcher.takes(uuid, entry);
+        }
+        if (!taken) {
+            deliver(companion, entry);
+        }
+    }
+
+    /**
+     * 一条造好的事件送给主人的大脑:主人在线直接送达,离线进出箱等他回来。归了在跑的程序、之后程序却没能用上的收尾也经这里。
+     */
+    public static void deliver(NumenPlayer companion, EventQueue.Entry entry) {
+        MinecraftServer server = companion.level().getServer();
+        UUID uuid = companion.getUUID();
+        String type = entry.type();
+        boolean urgent = entry.urgent();
         ServerPlayer owner = companion.resolveOwnerPlayer();
         route(uuid, entry,
                 owner == null ? null : payload -> {

@@ -1,14 +1,14 @@
 package com.dwinovo.numen.sdk;
 
-import com.dwinovo.numen.agent.loop.SerialCalls;
-import com.dwinovo.numen.agent.loop.ToolPort;
-import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.agent.script.ApiError;
 import com.dwinovo.numen.agent.script.ScriptCatalog;
 import com.dwinovo.numen.agent.script.ScriptEngine;
 import com.dwinovo.numen.agent.script.ScriptRun;
-import com.dwinovo.numen.agent.tool.ScriptTool;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.program.CallObserver;
+import com.dwinovo.numen.program.LoopbackClient;
+import com.dwinovo.numen.program.RunResult;
+import com.dwinovo.numen.program.ServerPrograms;
 import com.dwinovo.numen.script.BuiltinModules;
 import com.dwinovo.numen.script.Modules;
 import com.google.gson.JsonObject;
@@ -260,39 +260,39 @@ public final class ApiTester {
     }
 
     /**
-     * 在这个进程里跑一段程序,当场跑完的才有回执:服务端函数在这里执行({@code her} 是她的身体,没有世界的单测给 null),客户端函数也在
-     * 这里答,模块只有出厂那一套。占身体的活要世界一刻一刻地走,不在这里等:那样的程序用 GameTest。
+     * 在这个进程里跑一段程序,当场跑完的才有回执:程序走产品里的入口({@link ServerPrograms}),服务端函数排进主线程的车道、由这里推进
+     * ({@code her} 是她的身体,没有世界的单测给 null),客户端函数经回环传输(编码、解码再执行)答,模块只有出厂那一套。占身体的活
+     * 要世界一刻一刻地走,不在这里等:那样的程序用 GameTest。
      *
      * @throws IllegalStateException 程序没在当场跑完(在等身体的活或主人的答复)
      */
     public static Run run(NumenPlayer her, UUID companion, String code) {
-        List<String> replies = new ArrayList<>();
-        ProgramPort port = new ProgramPort(her, companion, Modules.factory(), true, new ProgramPort.Observer() {
+        return run(her, companion, code, uuid -> Modules.factory());
+    }
+
+    /** 同上,她的模块是 {@code modules} 给的(如 {@code Modules::of},程序里存的模块落在那个目录里,下一段程序读得到)。 */
+    public static Run run(NumenPlayer her, UUID companion, String code, java.util.function.Function<UUID, Modules> modules) {
+        List<String> replies = new java.util.concurrent.CopyOnWriteArrayList<>();
+        java.util.concurrent.atomic.AtomicReference<RunResult> result = new java.util.concurrent.atomic.AtomicReference<>();
+        new LoopbackClient(uuid -> her, modules).run(companion, "test-" + UUID.randomUUID(), code, new CallObserver() {
             @Override
-            public void replied(LlmToolCall line, String reply) {
+            public void replied(String callId, String reply) {
                 replies.add(reply);
             }
-        });
-        String[] receipt = new String[1];
-        new SerialCalls(port).run(List.of(new LlmToolCall("test-" + UUID.randomUUID(),
-                ScriptEngine.IN_USE.toolName(), ScriptTool.args(code).toString())), new ToolPort.Sink() {
-            @Override
-            public void started(LlmToolCall call) {
+        }, result::set);
+        // 程序在自己的线程上跑,调用在这里推进;闲着又没有调用可执行,就是停在等身体的活或主人的答复上了
+        while (result.get() == null) {
+            boolean idle = ServerPrograms.idle(companion);
+            int ran = ServerPrograms.pump();
+            if (idle && ran == 0 && result.get() == null) {
+                break;
             }
-
-            @Override
-            public void finished(LlmToolCall call, String result) {
-                receipt[0] = result;
-            }
-
-            @Override
-            public void settled() {
-            }
-        });
-        if (receipt[0] == null) {
+            Thread.onSpinWait();
+        }
+        if (!(result.get() instanceof RunResult.Ended ended)) {
             throw new IllegalStateException("the program did not end at once: it waits for a body job or an answer; "
                     + "run it in a GameTest");
         }
-        return new Run(JsonParser.parseString(receipt[0]).getAsJsonObject(), List.copyOf(replies));
+        return new Run(JsonParser.parseString(ended.outcome().receipt()).getAsJsonObject(), List.copyOf(replies));
     }
 }

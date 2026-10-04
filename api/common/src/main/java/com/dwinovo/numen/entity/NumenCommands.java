@@ -131,7 +131,7 @@ public final class NumenCommands {
 
     /**
      * {@code /numen drive <同伴> <Lua 程序>}:管理员以她的身份在服务端跑一段 Lua 程序,和她自己写的程序同一个入口
-     * ({@link com.dwinovo.numen.sdk.ServerPrograms})——读参数、权限层、执行、等她派的活收尾、回执都一样,回执说给发指令的人听。
+     * ({@link com.dwinovo.numen.program.ServerPrograms})——读参数、权限层、执行、等她派的活收尾、回执都一样,回执说给发指令的人听。
      *
      * <p>这条 drive 自己正在执行:原版把一条指令执行当中调起的另一条排到它之后,程序要是在这里执行,它里面的原版指令要等这条
      * drive 跑完才跑。所以交给服务器的任务队列,等这条 drive 执行完再跑。
@@ -148,8 +148,8 @@ public final class NumenCommands {
         NumenPlayer her = named.get(0);
         String program = StringArgumentType.getString(ctx, "program");
         MinecraftServer server = caller.getServer();
-        server.tell(new TickTask(server.getTickCount(), () -> com.dwinovo.numen.sdk.ServerPrograms.run(her, "drive",
-                program, com.dwinovo.numen.sdk.ProgramPort.NONE, receipt -> report(caller, her, receipt))));
+        server.tell(new TickTask(server.getTickCount(), () -> com.dwinovo.numen.program.ServerPrograms.launch(her,
+                "drive", program, com.dwinovo.numen.program.CallObserver.NONE, receipt -> report(caller, her, receipt))));
         return 1;
     }
 

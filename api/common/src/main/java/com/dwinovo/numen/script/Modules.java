@@ -26,6 +26,7 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -105,6 +106,9 @@ public final class Modules implements ScriptCatalog.ModuleSource {
     private static final Object LOCK = new Object();
     /** 这个进程里已经装过的目录。 */
     private static final Set<Path> INSTALLED = ConcurrentHashMap.newKeySet();
+
+    /** 模块被存、删、还原的次数,这个进程里一共:变了,说明跑着的程序之后读到的模块可能不是它开跑时的那一份。 */
+    private static final AtomicLong REVISION = new AtomicLong();
 
     /** 每只同伴的模块目录(同一主人的同伴是同一个);由大脑所在的那一侧注入,见 {@link #init}。 */
     private static Function<UUID, Path> dirs;
@@ -250,6 +254,29 @@ public final class Modules implements ScriptCatalog.ModuleSource {
         return List.copyOf(all().keySet());
     }
 
+    /** 见 {@link #REVISION}。 */
+    public static long revision() {
+        return REVISION.get();
+    }
+
+    /**
+     * 每个模块此刻的正文,按名字排:程序开跑时连同指纹一起交给服务端。只有出厂那一套时是出厂的。
+     */
+    public SortedMap<String, String> sources() {
+        SortedMap<String, String> out = new TreeMap<>();
+        if (dir == null) {
+            BuiltinModules.all().forEach((name, builtin) -> out.put(name, builtin.code()));
+            return out;
+        }
+        for (String name : onDisk()) {
+            String code = read(file(name));
+            if (code != null) {
+                out.put(name, code);
+            }
+        }
+        return out;
+    }
+
     /** 全部的,按名字排:目录里每个 {@code <名字空间>/<组>.lua};只有出厂那一套时是出厂的。 */
     public SortedMap<String, Module> all() {
         SortedMap<String, Module> out = new TreeMap<>();
@@ -316,6 +343,7 @@ public final class Modules implements ScriptCatalog.ModuleSource {
             clearStats(entry);
             ledger.add(name, entry);
             writeLedger(ledger);
+            REVISION.incrementAndGet();
             return BuiltinModules.get(name) != null && entry.has(FACTORY) ? Saved.CHANGED
                     : existed ? Saved.REPLACED : Saved.NEW;
         }
@@ -345,6 +373,7 @@ public final class Modules implements ScriptCatalog.ModuleSource {
                 ledger.remove(name);
             }
             writeLedger(ledger);
+            REVISION.incrementAndGet();
             return before;
         }
     }
@@ -367,6 +396,7 @@ public final class Modules implements ScriptCatalog.ModuleSource {
             entry.addProperty(FACTORY, fingerprint(builtin.code()));
             ledger.add(name, entry);
             writeLedger(ledger);
+            REVISION.incrementAndGet();
             return builtin.code();
         }
     }
@@ -479,8 +509,11 @@ public final class Modules implements ScriptCatalog.ModuleSource {
         write(dir.resolve(LEDGER), GSON.toJson(ledger));
     }
 
-    /** 一份正文的指纹:SHA-256 的前 12 位十六进制。 */
-    static String fingerprint(String code) {
+    /**
+     * 一份正文的指纹:SHA-256 的前 12 位十六进制。账本记的出厂指纹、服务端按内容缓存模块时的键都是它。缓存按主人分、里面只有主人
+     * 自己送来的正文,没有谁要伪造冲突;48 位对一个主人的几百份正文,偶然撞上的概率可以忽略,所以不为缓存另造一个更长的哈希。
+     */
+    public static String fingerprint(String code) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(code.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(digest).substring(0, 12);

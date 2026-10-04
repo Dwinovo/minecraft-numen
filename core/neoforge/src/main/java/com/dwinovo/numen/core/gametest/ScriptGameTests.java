@@ -5,6 +5,15 @@ import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.EventOutbox;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.network.payload.ClientCallPayload;
+import com.dwinovo.numen.network.payload.ClientCallResultPayload;
+import com.dwinovo.numen.network.payload.ProgramResultPayload;
+import com.dwinovo.numen.network.payload.RunProgramPayload;
+import com.dwinovo.numen.program.ClientEndpoint;
+import com.dwinovo.numen.program.ModuleSync;
+import com.dwinovo.numen.program.ProgramUplink;
+import com.dwinovo.numen.program.RunResult;
+import com.dwinovo.numen.script.Modules;
 import com.dwinovo.numen.task.CompanionTickDispatcher;
 import com.dwinovo.numen.task.TaskRecord;
 import com.google.gson.JsonObject;
@@ -12,7 +21,9 @@ import com.google.gson.JsonParser;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
@@ -20,6 +31,8 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
@@ -138,6 +151,7 @@ public class ScriptGameTests {
                 })
                 .thenWaitUntil(() -> helper.assertTrue(CompanionTickDispatcher.currentTaskFor(her.getUUID()) == null,
                         "her body is still busy after the stop"))
+                .thenWaitUntil(() -> helper.assertTrue(round.hasSettled(), "the script has not handed in its receipt"))
                 .thenExecute(() -> {
                     String msg = message(round, script);
                     helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.go\\) after 2 calls: "
@@ -166,6 +180,7 @@ public class ScriptGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(CompanionTickDispatcher.currentTaskFor(her.getUUID()) != null,
                         "the walk has not started"))
                 .thenExecute(() -> round.ownerSays("wait, come back"))
+                .thenWaitUntil(() -> helper.assertTrue(round.hasSettled(), "the script did not stop when the owner spoke"))
                 .thenExecute(() -> {
                     String msg = message(round, script);
                     helper.assertTrue(msg.matches("(?s)The script stopped at line 1 \\(numen\\.move\\.go\\) after 2 calls: "
@@ -357,6 +372,7 @@ public class ScriptGameTests {
         String at = com.dwinovo.numen.sdk.Positions.literal(cell);
         LlmToolCall run = programCall("my.gt_clear.cell(" + at + ")");
         Round first = round(helper, her, run);
+        Round[] second = new Round[1];
 
         steps(helper)
                 .thenWaitUntil(() -> helper.assertTrue(first.hasSettled(), "the first program has not finished"))
@@ -369,9 +385,9 @@ public class ScriptGameTests {
                     // 第一次的收尾事件已经读过;下一轮从空出箱读起,和主人客户端上取走即清一样
                     outbox.forget(her.getUUID());
                 })
-                .thenExecute(() -> round(helper, her, programCall("my.gt_clear.cell(" + at + ")")))
-                .thenWaitUntil(() -> helper.assertTrue(level.getBlockState(cell).isAir(),
-                        "the second program did not clear the cell"))
+                .thenExecute(() -> second[0] = round(helper, her, programCall("my.gt_clear.cell(" + at + ")")))
+                .thenWaitUntil(() -> helper.assertTrue(second[0].hasSettled() && level.getBlockState(cell).isAir(),
+                        "the second program did not clear the cell and end"))
                 .thenWaitUntil(() -> {
                     ToolRun list = lua(her, "numen.module.list()");
                     JsonObject mine = module(list, "my.gt_clear");
@@ -520,5 +536,52 @@ public class ScriptGameTests {
                     && level.getBlockState(near).is(Blocks.OCHRE_FROGLIGHT), "a refused call dug a block");
             CompanionFactory.despawn(level.getServer(), her);
         });
+    }
+
+    /**
+     * 整段程序经线上的包送进来:主人的连接是 {@code OwnerLine}(没有客户端),服务端认身体、跑程序;程序里的客户端函数向主人发
+     * {@code ClientCallPayload},这里扮他的客户端答({@code ClientEndpoint}),整张回执作为 {@code ProgramResultPayload} 回来。
+     * 服务端从包进到包出的路——认主人、量大小、反向请求、答复——都真走一遍,只是没有网线。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_scripts")
+    public static void a_program_sent_as_a_packet_runs_and_the_clients_functions_are_asked_over_the_wire(
+            GameTestHelper helper) {
+        NumenPlayer her = spawnAt(helper, "gametest_wire", new BlockPos(2, 2, 2), false);
+        ServerPlayer owner = presentOwner(helper, her, "gametest_wire_owner");
+        ModuleSync sync = new ModuleSync();
+        ClientEndpoint endpoint = new ClientEndpoint(sync,
+                payload -> ClientCallResultPayload.handle((ClientCallResultPayload) payload, owner), Modules::of);
+        AtomicReference<RunResult> result = new AtomicReference<>();
+        ProgramUplink uplink = new ProgramUplink(sync, payload -> RunProgramPayload.handle((RunProgramPayload) payload,
+                owner), Modules::of);
+        uplink.run(her.getUUID(), "wire-" + UUID.randomUUID(), """
+                local me = numen.status.self()
+                local words = numen.api.help("numen.status")
+                return me.name .. ":" .. (#words > 0 and "help" or "none")
+                """, result::set);
+
+        steps(helper)
+                .thenWaitUntil(() -> {
+                    for (CustomPacketPayload payload : received(owner)) {
+                        if (payload instanceof ClientCallPayload call) {
+                            endpoint.handle(call);
+                        } else if (payload instanceof ProgramResultPayload answer) {
+                            uplink.deliver(answer.programId(), RunResult.fromJson(answer.resultJson()));
+                        }
+                    }
+                    helper.assertTrue(result.get() != null, "the receipt has not come back");
+                })
+                .thenExecute(() -> {
+                    String receipt = ((RunResult.Ended) result.get()).outcome().receipt();
+                    JsonObject data = JsonParser.parseString(receipt).getAsJsonObject();
+                    helper.assertTrue(data.get("success").getAsBoolean()
+                                    && data.getAsJsonObject("data").get("returned").getAsString()
+                                    .equals("gametest_wire:help"), "the program did not run over the wire: " + receipt);
+                    helper.assertTrue(((RunResult.Ended) result.get()).outcome().calls().size() == 2,
+                            "the calls' outcomes did not come back: " + receipt);
+                    leave(owner);
+                    CompanionFactory.despawn(helper.getLevel().getServer(), her);
+                })
+                .thenSucceed();
     }
 }

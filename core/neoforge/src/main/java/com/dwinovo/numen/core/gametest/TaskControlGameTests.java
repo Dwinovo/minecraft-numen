@@ -128,13 +128,15 @@ public class TaskControlGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_busy", new BlockPos(2, 2, 2), false);
         BlockPos far = helper.absolutePos(new BlockPos(14, 2, 14));
         ToolRun walk = lua(companion, "numen.move.to(" + xyz(far) + ")");
-        ToolRun timer = lua(companion, "numen.task.timer(\"check the furnace\", {after = 600})");
+        AtomicReference<ToolRun> timer = new AtomicReference<>();
         AtomicReference<ToolRun> status = new AtomicReference<>();
 
-        // goto 规划过、受理了才在走:那之后再查
+        // goto 规划过、受理了才在走:那之后再定表(她手上的程序一次只有一段,走路那一段停在调用之间,活照常跑)、再查
         steps(helper)
-                .thenWaitUntil(() -> helper.assertTrue(walk.accepted() && timer.succeeded(),
-                        "goto or the timer did not go through: " + walk.reply() + " / " + timer.reply()))
+                .thenWaitUntil(() -> helper.assertTrue(walk.accepted(), "goto did not go through: " + walk.reply()))
+                .thenExecute(() -> timer.set(lua(companion, "numen.task.timer(\"check the furnace\", {after = 600})")))
+                .thenWaitUntil(() -> helper.assertTrue(timer.get().succeeded(),
+                        "the timer did not go through: " + timer.get().reply()))
                 .thenExecute(() -> status.set(lua(companion, "numen.task.status()")))
                 .thenExecute(() -> {
                     helper.assertTrue(status.get().succeeded()
@@ -303,8 +305,10 @@ public class TaskControlGameTests {
                     "the replayed line is not the call itself: " + recorded.taskLua());
             helper.assertTrue(recorded.taskName().equals("gt.gt_long.linger"),
                     "the task is recorded under another name: " + recorded.taskName());
-            helper.assertTrue(finishedAs(outbox, body, "gt.gt_long.linger"),
-                    "task_finished does not name the task: " + outbox.peek(body.getUUID()).entries());
+            // 程序等着的这件活的收尾写在它的回执里,不另发事件
+            helper.assertTrue(linger.receipt() != null && linger.receipt().contains("gt.gt_long.linger: ok — "
+                            + linger.task().publicId() + " done"),
+                    "the receipt does not name the task's end: " + linger.receipt());
             outbox.forget(body.getUUID());
             Companions.dismiss(server, body);
         });
@@ -532,12 +536,12 @@ public class TaskControlGameTests {
                             "the query did not wait for the walk: " + round.result(look));
                     round.ownerSays("wait, come back");
                 })
+                .thenWaitUntil(() -> helper.assertTrue(round.hasSettled(), "the round did not settle when the owner spoke"))
                 .thenExecute(() -> {
-                    helper.assertTrue(round.hasSettled(), "the round did not settle when the owner spoke");
                     for (LlmToolCall skipped : List.of(look, around)) {
                         String result = round.result(skipped);
                         helper.assertTrue(result != null && result.contains("Not run")
-                                        && result.contains("your owner spoke") && result.contains("keeps running"),
+                                        && result.contains("was stopped"),
                                 "a call left unrun does not say why: " + result);
                     }
                     TaskRecord now = CompanionTickDispatcher.currentTaskFor(companion.getUUID());

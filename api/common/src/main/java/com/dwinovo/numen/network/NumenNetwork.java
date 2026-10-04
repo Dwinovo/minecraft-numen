@@ -99,6 +99,32 @@ public final class NumenNetwork {
                 com.dwinovo.numen.network.payload.ExecuteActionPayload.STREAM_CODEC,
                 com.dwinovo.numen.network.payload.ExecuteActionPayload::handle);
 
+        // C→S: run this whole program on my companion; S→C: its one receipt (or the module texts still missing).
+        toServer(
+                com.dwinovo.numen.network.payload.RunProgramPayload.TYPE,
+                com.dwinovo.numen.network.payload.RunProgramPayload.STREAM_CODEC,
+                com.dwinovo.numen.network.payload.RunProgramPayload::handle);
+        toClient(
+                com.dwinovo.numen.network.payload.ProgramResultPayload.TYPE,
+                com.dwinovo.numen.network.payload.ProgramResultPayload.STREAM_CODEC,
+                com.dwinovo.numen.network.payload.ProgramResultPayload::handle);
+
+        // C→S: stop the program I sent (the owner spoke, the stop button, an external brain took over).
+        toServer(
+                com.dwinovo.numen.network.payload.StopProgramPayload.TYPE,
+                com.dwinovo.numen.network.payload.StopProgramPayload.STREAM_CODEC,
+                com.dwinovo.numen.network.payload.StopProgramPayload::handle);
+
+        // S→C: a running program calls a function only the owner's client can answer; C→S: the answer.
+        toClient(
+                com.dwinovo.numen.network.payload.ClientCallPayload.TYPE,
+                com.dwinovo.numen.network.payload.ClientCallPayload.STREAM_CODEC,
+                com.dwinovo.numen.network.payload.ClientCallPayload::handle);
+        toServer(
+                com.dwinovo.numen.network.payload.ClientCallResultPayload.TYPE,
+                com.dwinovo.numen.network.payload.ClientCallResultPayload.STREAM_CODEC,
+                com.dwinovo.numen.network.payload.ClientCallResultPayload::handle);
+
         // S→C: a body-bound tool's result (or an async dispatch receipt) coming home.
         toClient(
                 com.dwinovo.numen.network.payload.TaskResultPayload.TYPE,

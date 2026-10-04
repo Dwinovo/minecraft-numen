@@ -5,9 +5,8 @@ import com.dwinovo.numen.agent.script.ApiReply;
 import com.dwinovo.numen.entity.CompanionRegistry;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.event.NumenEvents;
-import com.dwinovo.numen.agent.provider.LlmToolCall;
-import com.dwinovo.numen.sdk.ProgramPort;
-import com.dwinovo.numen.sdk.ServerPrograms;
+import com.dwinovo.numen.program.CallObserver;
+import com.dwinovo.numen.program.ServerPrograms;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.server.MinecraftServer;
@@ -108,9 +107,9 @@ public final class TaskPersistence {
         // 再跑,和她写的程序走同一个入口。受理了,它干完时的 task_finished 照常送到她手里;没受理(读不通、调用被拒、准备没过)就是
         // 这件活没接回来,程序的回执说为什么
         boolean[] accepted = {false};
-        ServerPrograms.run(companion, REPLAY_CALL_ID + "-" + taskName, left.lua(), new ProgramPort.Observer() {
+        ServerPrograms.launch(companion, REPLAY_CALL_ID + "-" + taskName, left.lua(), new CallObserver() {
             @Override
-            public void replied(LlmToolCall line, String reply) {
+            public void replied(String callId, String reply) {
                 ApiReply.Parsed parsed = ApiReply.parse(reply);
                 accepted[0] |= parsed.ok() && parsed.job() != null;
             }

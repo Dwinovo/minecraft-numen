@@ -179,6 +179,7 @@ public class PermissionGameTests {
             String reply = record.getResult() == null ? null : record.getResult().message();
             helper.assertTrue(reply != null, "the walk has not finished");
             helper.assertTrue(record.getResult().success(), "the walk failed after the owner allowed it: " + reply);
+            helper.assertTrue(walk.receipt() != null, "the program has not handed in its receipt");
             helper.assertTrue(walk.receipt().contains("asks=" + listed[0]) && listed[0] >= 2,
                     "the request did not list every cell of the plan the yes lets through (" + listed[0] + "): "
                             + walk.receipt());

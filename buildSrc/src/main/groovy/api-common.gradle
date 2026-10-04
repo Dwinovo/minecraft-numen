@@ -170,8 +170,6 @@ tasks.register('apiJar', Jar) {
     exclude 'com/dwinovo/numen/agent/tool/ClientToolContext*.class'
     // API 的派发与程序的执行:引擎内部,插件只写函数
     exclude 'com/dwinovo/numen/sdk/Dispatcher*.class'
-    exclude 'com/dwinovo/numen/sdk/ServerPrograms*.class'
-    exclude 'com/dwinovo/numen/sdk/ProgramPort*.class'
     exclude 'com/dwinovo/numen/sdk/Consents*.class'
     // scheduler internals: implementation of the task machine, not its contract
     exclude 'com/dwinovo/numen/task/TaskQueue*.class'
