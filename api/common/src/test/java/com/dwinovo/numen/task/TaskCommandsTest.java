@@ -67,7 +67,8 @@ class TaskCommandsTest {
                 --   Returns at once and never occupies your body; your owner is told when and why.
                 --   For what the world will not announce on its own: a furnace finishing, crops growing, daybreak. \
                 When it fires, look: the reminder is not proof the thing happened.
-                --   It only reminds you. Work you dispatched sends its own task_finished; don't set a timer to watch it.
+                --   It only reminds you. Work you dispatched reports its own end (to the program waiting for it, or \
+                as a task_finished event); don't set a timer to watch it.
                 --   At most 8 pending. World time stops while a single-player world is paused.
                 -- See also: numen.task.status, numen.task.stop""", help("numen task timer --help"));
         assertEquals("""

@@ -18,7 +18,13 @@ public interface ToolPort {
     void run(List<LlmToolCall> calls, Sink sink);
 
     /**
-     * 这一批还没结算时,一条输入进了队列(内核在入队之后逐条转来)。{@code urgent} 是队列的急件规则算出来的:它要不要
+     * 这一批还没结算时,这条输入是不是在跑的程序等着的那件身体活的收尾:是就归程序(内核不把它放进队列,随后经 {@link #arrived}
+     * 交来),它的账写进程序的回执,只说这一次。
+     */
+    boolean awaits(EventQueue.Entry entry);
+
+    /**
+     * 这一批还没结算时,一条输入到了(内核在入队之后逐条转来;程序等着的收尾不入队,先于同一批的别的条目转来)。{@code urgent} 是队列的急件规则算出来的:它要不要
      * 立刻叫醒她。这一批正等着某件身体任务收尾时,它是那件的收尾就接着派下一个,它是急件就不再等。
      */
     void arrived(EventQueue.Entry entry, boolean urgent);

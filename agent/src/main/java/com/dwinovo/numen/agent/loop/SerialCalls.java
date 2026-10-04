@@ -26,7 +26,8 @@ import java.util.function.Consumer;
  * <h2>脚本</h2>
  * 一个调用是一段程序(跑脚本的那个工具),这个调用就是一段脚本({@link ScriptCall}):脚本每调一个 API 函数,这里把那次调用派出去
  * ({@link Port#dispatch}),等它的回执;留下了身体活就用同一个等法等它收尾,再让脚本从调用处接着跑。脚本跑完,它的回执才是这个
- * 调用的结果。脚本里的调用都要等收尾:脚本要按它的结局往下走。
+ * 调用的结果。脚本里的调用都要等收尾:脚本要按它的结局往下走。脚本等着的那件活的收尾归脚本({@link #awaits}):结局交给程序,账写进
+ * 回执,不进队列;脚本停下时还在跑的活,收尾进队列成一条事件。
  *
  * <h2>等的时候来了急件</h2>
  * 等身体收尾期间进来一条要立刻叫醒她的输入(主人说话、急事):不再等,还没派出去的调用各回一条"没执行"的结果写明原因,
@@ -100,7 +101,19 @@ public final class SerialCalls {
     }
 
     /**
-     * 一条输入进了队列,{@code urgent} 是它要不要立刻叫醒她(队列的急件规则算出来的)。等身体收尾时:它是那件的收尾就接着走;
+     * 这条输入是不是正在跑的程序等着的那件身体活的收尾。是就归这段程序:它的结局交给程序、它的账写进程序的回执,内核不再把它
+     * 放进队列——一件活的收尾只说一次。程序停下之后还在跑的活没有程序等它,它的收尾照常进队列,是一条事件。
+     */
+    public boolean awaits(EventQueue.Entry entry) {
+        if (script == null || awaiting == null) {
+            return false;
+        }
+        ScriptCall.Finish finish = port.finish(entry);
+        return finish != null && awaiting.equals(finish.task());
+    }
+
+    /**
+     * 一条输入到了,{@code urgent} 是它要不要立刻叫醒她(队列的急件规则算出来的)。等身体收尾时:它是那件的收尾就接着走;
      * 它是急件就不再等。脚本里一次调用在跑时来了急件:记下,它的回执到了就停。
      */
     public void arrived(EventQueue.Entry entry, boolean urgent) {

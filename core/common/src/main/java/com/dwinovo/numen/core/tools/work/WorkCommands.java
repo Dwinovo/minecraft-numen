@@ -85,9 +85,9 @@ public final class WorkCommands {
                 .returns("caught", ScriptType.listOf(ScriptType.STRING))
                 .example("numen.work.fish()")
                 .example("for i = 1, 5 do numen.work.fish() end")
-                .note("Background work: refused with the reason when she carries no fishing rod, does not stand on "
-                        + "dry ground, or has no open water to cast into from where she stands — no task id, no "
-                        + "task_finished. Otherwise it returns what came up on the line, minecraft:cod x1.")
+                .note("A body job: refused with the reason when she carries no fishing rod, does not stand on "
+                        + "dry ground, or has no open water to cast into from where she stands. Otherwise it returns "
+                        + "what came up on the line, minecraft:cod x1.")
                 .note("One cast per call: a cast that misses the water, hooks an entity or gets no bite in a minute "
                         + "fails and says why; cast again by calling it again.")
                 .note("It never walks: stand on the shore first. The reel throws each catch to her; one that lands "

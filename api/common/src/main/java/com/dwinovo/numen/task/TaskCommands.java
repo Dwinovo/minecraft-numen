@@ -71,7 +71,8 @@ public final class TaskCommands {
                         ScriptType.field("timers", ScriptType.listOf(TIMER), "Your pending timers.")))
                 .example("numen.task.status()")
                 .note("Instant and read-only; it does not touch your body.")
-                .note("Usually not needed: a task ends with its own task_finished event and a timer fires on its own.")
+                .note("Usually not needed: a program waits for each task it starts, a task left running when a "
+                        + "program stopped ends with a task_finished event, and a timer fires on its own.")
                 .seeAlso("task stop");
         task.server("stop", "Cancel the background task, or a task or timer by its id.",
                 TaskCommands::stop, TASK_ID)
@@ -91,8 +92,8 @@ public final class TaskCommands {
                 .note("Returns at once and never occupies your body; your owner is told when and why.")
                 .note("For what the world will not announce on its own: a furnace finishing, crops growing, "
                         + "daybreak. When it fires, look: the reminder is not proof the thing happened.")
-                .note("It only reminds you. Work you dispatched sends its own task_finished; don't set a timer "
-                        + "to watch it.")
+                .note("It only reminds you. Work you dispatched reports its own end (to the program waiting for "
+                        + "it, or as a task_finished event); don't set a timer to watch it.")
                 .note("At most " + TimerRegistry.MAX_PER_COMPANION + " pending. World time stops while a "
                         + "single-player world is paused.")
                 .seeAlso("task status", "task stop");

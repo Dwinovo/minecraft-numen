@@ -55,6 +55,11 @@ public final class CompanionToolPort implements ToolPort, SerialCalls.Port {
     }
 
     @Override
+    public boolean awaits(EventQueue.Entry entry) {
+        return calls.awaits(entry);
+    }
+
+    @Override
     public void arrived(EventQueue.Entry entry, boolean urgent) {
         calls.arrived(entry, urgent);
     }

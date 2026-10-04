@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 一轮里的调用按顺序执行:一个做完才派下一个,后台身体活等它收尾;等的时候来了急件,余下的逐条回"没执行"。
  *
  * <p>假的执行口把派出去的调用停在 {@link #pending} 里等测试替它回结果。结果写成 {@code running tN} 表示受理了一件会自己
- * 收尾的后台活 tN;队列里 task_finished 的正文就是收尾的那件的编号。两个读法都是测试自己的约定,真的写法在 api
+ * 收尾的后台活 tN;队列里 task_finished 的正文就是收尾的那件的编号(后面可以跟收尾状态与它交代的话)。两个读法都是测试自己的约定,真的写法在 api
  * ({@code TaskDispatch}、{@code NumenEvents})。
  */
 class SerialCallsTest {
@@ -73,8 +73,9 @@ class SerialCallsTest {
             if (!EventTypes.TASK_FINISHED.equals(entry.type())) {
                 return null;
             }
-            String[] parts = entry.text().split(" ", 2);
-            return new ScriptCall.Finish(parts[0], parts.length > 1 ? parts[1] : "done", "", null);
+            String[] parts = entry.text().split(" ", 3);
+            return new ScriptCall.Finish(parts[0], parts.length > 1 ? parts[1] : "done", parts.length > 2 ? parts[2] : "",
+                    null);
         }
 
         @Override
@@ -420,6 +421,29 @@ class SerialCallsTest {
         assertTrue(msg.contains("line 1 work.dig: failed — error: out of reach"), msg);
         assertEquals("runtime", receipt.getAsJsonObject("data").getAsJsonObject("error").get("kind").getAsString(),
                 "程序自己 error 的一句话是 runtime");
+    }
+
+    /**
+     * 程序等着的那件活的收尾归程序:它交代的整段话写进回执里那件活的那一行(第二行起缩进),只说这一次;程序停下之后还在跑的那件,
+     * 收尾不再归程序。
+     */
+    @Test
+    void theJobAProgramWaitsForEndsInItsReceiptWithItsWholeAccount() {
+        scripts.run(List.of(lua("s", """
+                move.go("ores")
+                work.dig("ores")
+                """)), sink);
+        answerLast("running t1");
+        assertTrue(scripts.awaits(finished("t1")), "等着的那件的收尾不归程序");
+        assertFalse(scripts.awaits(finished("t9")), "别的活的收尾归了程序");
+        scripts.arrived(new EventQueue.Entry(EventTypes.TASK_FINISHED, "t1 done walked there\nbroke 2 stone on the way",
+                0, true), false);
+        answerLast("running t2");
+        scripts.arrived(ownerWords("先停一下"), true);
+
+        String msg = json(results.get("s")).get("message").getAsString();
+        assertTrue(msg.contains("\nline 1 move.go: ok — t1 done: walked there\n  broke 2 stone on the way"), msg);
+        assertFalse(scripts.awaits(finished("t2")), "程序停下了,还在跑的那件的收尾不归它");
     }
 
     @Test

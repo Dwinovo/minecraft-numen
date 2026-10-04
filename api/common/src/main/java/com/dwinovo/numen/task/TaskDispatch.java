@@ -127,15 +127,15 @@ public final class TaskDispatch {
         CompanionTickDispatcher.assign(companion, record, runner);
         // 记下"她现在在做什么",服务器重启后照着重放一遍(见 TaskPersistence)。
         TaskPersistence.remember(companion, record.getToolName(), action, replayLine);
-        // 有终点的活收尾时发 task_finished,派它的程序等的就是这一条(内脑与外接大脑的程序同一个等法)。
+        // 有终点的活收尾时发 task_finished,派它的程序等的就是这一条(内脑与外接大脑的程序同一个等法):程序在等,它就归程序、账进
+        // 程序的回执,不进她的收件箱(SerialCalls.awaits);程序停下时还在跑,它才是她收到的一条事件。
         // 常驻的活没有终点,也就永远不会发 task_finished —— 回执必须说清楚:程序不等它,接着往下走。
         boolean standing = record.getDeadlineGameTime() >= TaskRecord.NO_DEADLINE;
         StringBuilder note = new StringBuilder();
         if (standing) {
-            note.append("Accepted; it has no finish line, so it never ends on its own and never sends task_finished.");
+            note.append("Accepted; it has no finish line and never ends on its own, so a program goes on past it.");
         } else {
-            note.append("Accepted as ").append(record.publicId()).append("; its end arrives as a task_finished "
-                    + "event.");
+            note.append("Accepted as ").append(record.publicId()).append("; a program waits for its end.");
         }
         String told = record.acceptNote();
         if (told != null) {
