@@ -162,8 +162,10 @@ public final class TlmBench {
   `promptHash`(系统提示 SHA-256 前 12 位)、`model`、`passed`、`checks` 与 `subgoals`(每条的名字、种类、过没过、
   说明)、`end`(结束原因)、`turns`、`toolCalls`、`toolErrors`、`repeatedFailures`、`consents`、`tokensMiss`、
   `tokensHit`、`tokensOut`、`cost`、`currency`、`wallMs`、`gameTicks`、`claimedDone`、`tag`(失败分类)、
-  `finalWords`(她最后说的话)、`transcript`(记录文件)、`error`。
-- `summary.md`:自检表、每个场景一行的汇总、失败分布与每次失败的去处。
+  `finalWords`(她最后说的话)、`transcript`(记录文件)、`error`、`functions`(她的程序用到的每个 API 函数:`function`、
+  `calls`、按种类的 `failures`、第一次调它之前查帮助的 `helpLookups`、`repeatedFailures`;更早的记录没有这一项)。
+- `summary.md`:自检表、每个场景一行的汇总、每个函数一行(调用、失败率、参数错、其他失败、调用前查帮助、重复失败)、失败分布与
+  每次失败的去处。`:bench:compare` 的对比也按函数并排前后两份。
 - `transcripts/<组>-<场景>-<变体>-<第几次>.jsonl`:一行一件事——主人的话、她的话、每个工具调用(她写的整段程序)与它的整张回执
   (失败的带 `error_class` 与 `error_kind`,都带这段程序做了几次 API 调用 `calls`)、
   进收件箱的世界事件、征询与答复、收场。

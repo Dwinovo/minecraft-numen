@@ -279,7 +279,7 @@ final class Attempt {
                 meter == null ? "" : meter.finalWords,
                 transcript == null ? "" : Results.get().dir().relativize(transcript.file()).toString()
                         .replace('\\', '/'),
-                error);
+                error, meter == null ? List.of() : meter.functions());
         if (transcript != null) {
             transcript.write("end", "end", end.name(), "passed", String.valueOf(passed));
         }

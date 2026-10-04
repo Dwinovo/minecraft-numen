@@ -82,7 +82,49 @@ public final class Compare {
         if (!onlyOne.isEmpty()) {
             md.append("- 没配上对的场景:").append(String.join("、", onlyOne)).append('\n');
         }
+        functions(md, live(before), live(after));
         return md.toString();
+    }
+
+    /** 每个 API 函数前后用得怎样:调用、失败率、参数错率、调用前查帮助的次数;只在一边出现的那一边记为 —。 */
+    private static void functions(StringBuilder md, List<Run> before, List<Run> after) {
+        Map<String, FunctionUse> a = byFunction(before);
+        Map<String, FunctionUse> b = byFunction(after);
+        Set<String> names = new java.util.TreeSet<>(a.keySet());
+        names.addAll(b.keySet());
+        if (names.isEmpty()) {
+            return;
+        }
+        md.append("\n## 每个函数\n\n| 函数 | 前 调用 | 后 调用 | 前 失败率 | 后 失败率 | 前 参数错率 | 后 参数错率 "
+                + "| 前 查帮助/调用 | 后 查帮助/调用 |\n|---|---|---|---|---|---|---|---|---|\n");
+        for (String name : names) {
+            FunctionUse x = a.get(name);
+            FunctionUse y = b.get(name);
+            md.append("| ").append(String.join(" | ", List.of(name, calls(x), calls(y),
+                    ratio(x, x == null ? 0 : x.failed()), ratio(y, y == null ? 0 : y.failed()),
+                    ratio(x, x == null ? 0 : x.failed("bad_argument")), ratio(y, y == null ? 0 : y.failed("bad_argument")),
+                    ratio(x, x == null ? 0 : x.helpLookups()), ratio(y, y == null ? 0 : y.helpLookups()))))
+                    .append(" |\n");
+        }
+    }
+
+    private static List<Run> live(List<Run> runs) {
+        return runs.stream().filter(Run::live).toList();
+    }
+
+    private static Map<String, FunctionUse> byFunction(List<Run> runs) {
+        Map<String, FunctionUse> out = new LinkedHashMap<>();
+        FunctionUse.total(runs).forEach(use -> out.put(use.function(), use));
+        return out;
+    }
+
+    private static String calls(FunctionUse use) {
+        return use == null ? "—" : String.valueOf(use.calls());
+    }
+
+    /** 这一项摊到每次调用上。 */
+    private static String ratio(FunctionUse use, int count) {
+        return use == null || use.calls() == 0 ? "—" : Summary.pct(count / (double) use.calls());
     }
 
     private static Map<String, List<Run>> liveByScenario(List<Run> runs) {

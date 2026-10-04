@@ -10,12 +10,21 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 
+import com.dwinovo.numen.agent.script.ScriptCall;
+import com.dwinovo.numen.bench.report.FunctionUse;
+
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Consumer;
 
 /**
- * 订阅循环内核的事件记账:调了几次模型、几个工具调用、几个失败、同一个失败的调用重复了几次、用量三项,以及她说的话。
+ * 订阅循环内核的事件记账:调了几次模型、几个工具调用、几个失败、同一个失败的调用重复了几次、用量三项,以及她说的话;程序里的每次
+ * API 调用按函数记一笔({@link #functions}:调了几次、失败的各是哪种、调用前查过几次帮助、重复失败几次)。
  * 同时把这些写进这次的 {@link Transcript}:她写的程序与回执整段落下(诊断只读这两样),每个失败的程序记下回执里错误值的种类
  * ({@link #errorKind})并按它归一类({@link #errorClass})。流式增量({@code ModelDelta})一概不看——思考流不落。
  */
@@ -41,6 +50,21 @@ final class Meter implements Consumer<LoopEvent> {
 
     private final Set<String> failedCalls = new HashSet<>();
 
+    /** 按函数记的账,按第一次调用的先后。 */
+    private final Map<String, Use> uses = new LinkedHashMap<>();
+    /** {@code numen.api.help} 查过的名字,按先后。 */
+    private final List<String> helped = new ArrayList<>();
+    /** 失败过的 API 调用的写法。 */
+    private final Set<String> failedApiCalls = new HashSet<>();
+
+    /** 一个函数的账。 */
+    private static final class Use {
+        int calls;
+        final Map<String, Integer> failures = new TreeMap<>();
+        int helpLookups;
+        int repeated;
+    }
+
     Meter(Transcript transcript) {
         this.transcript = transcript;
     }
@@ -62,6 +86,7 @@ final class Meter implements Consumer<LoopEvent> {
                 transcript.write("tool_call", "tool", started.call().name(), "args", started.call().arguments());
             }
             case LoopEvent.ToolFinished finished -> finished(finished.call(), finished.resultJson());
+            case LoopEvent.ApiCalled api -> called(api.called());
             case LoopEvent.TurnFailed failed -> {
                 apiFailure = failed.words();
                 transcript.write("turn_failed", "words", failed.words());
@@ -75,6 +100,36 @@ final class Meter implements Consumer<LoopEvent> {
             case LoopEvent.RunEnded ended -> transcript.write("run_end", "end", String.valueOf(ended.end()));
             default -> { }
         }
+    }
+
+    /** 程序里的一次 API 调用有了结局:记进它那个函数的账。第一次调它时,数一数之前查过几次它(或它的组、名字空间)的帮助。 */
+    private void called(ScriptCall.Called called) {
+        String fn = called.function();
+        Use use = uses.get(fn);
+        if (use == null) {
+            use = new Use();
+            use.helpLookups = (int) helped.stream().filter(name -> fn.equals(name) || fn.startsWith(name + ".")).count();
+            uses.put(fn, use);
+        }
+        use.calls++;
+        if (called.kind() != null) {
+            use.failures.merge(called.kind(), 1, Integer::sum);
+            if (!failedApiCalls.add(fn + " " + called.args() + " " + called.options())) {
+                use.repeated++;
+            }
+        }
+        if (fn.equals(HELP) && !called.args().isEmpty() && called.args().get(0) instanceof String name) {
+            helped.add(name);
+        }
+    }
+
+    /** 查帮助的那个函数。 */
+    private static final String HELP = "numen.api.help";
+
+    /** 按函数的账,按函数名。 */
+    List<FunctionUse> functions() {
+        return uses.entrySet().stream().sorted(Map.Entry.comparingByKey()).map(e -> new FunctionUse(e.getKey(),
+                e.getValue().calls, e.getValue().failures, e.getValue().helpLookups, e.getValue().repeated)).toList();
     }
 
     private void add(Usage usage) {

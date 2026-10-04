@@ -36,13 +36,18 @@ import java.util.List;
  * @param finalWords   她最后对主人说的话;一句都没说是空串
  * @param transcript   这次的记录文件,相对结果目录
  * @param error        评测出错或 API 出错时的原话;其余为 null
+ * @param functions    她的程序用到的每个 API 函数用得怎样,按函数名;更早的记录里没有这一项,读进来是空表
  */
 public record Run(String suite, String scenario, String variant, int attempt, String commit, String promptHash,
                   String model, boolean passed, List<Check> checks, List<Check> subgoals, String end,
                   int turns, int toolCalls, int toolErrors, int repeatedFailures, int consents,
                   long tokensMiss, long tokensHit, long tokensOut, Double cost, String currency,
                   long wallMs, long gameTicks, boolean claimedDone, String tag, String finalWords,
-                  String transcript, String error) {
+                  String transcript, String error, List<FunctionUse> functions) {
+
+    public Run {
+        functions = functions == null ? List.of() : List.copyOf(functions);
+    }
 
     /**
      * 一条断言或一个子目标的结论。

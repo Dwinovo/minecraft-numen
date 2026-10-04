@@ -6,6 +6,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -26,7 +27,37 @@ class ReportTest {
         return new Run("vanilla", scenario, variant.id(), attempt, "abc1234", "0123456789ab", model, passed, checks,
                 subgoals, end.name(), 6, 4, passed ? 0 : 2, passed ? 0 : 1, 0, 12000, 30000, 800,
                 cost, cost == null ? null : "CNY", 42000, 840, !passed && end == EndReason.DONE, tag,
-                "挖好了|给你", "transcripts/" + scenario + "-" + variant.id() + "-" + attempt + ".jsonl", null);
+                "挖好了|给你", "transcripts/" + scenario + "-" + variant.id() + "-" + attempt + ".jsonl", null,
+                variant == Variant.LIVE ? List.of(new FunctionUse("numen.work.dig", 2,
+                        passed ? Map.of() : Map.of("bad_argument", 1), 1, 0)) : List.of());
+    }
+
+    /** 每个函数的账随记录读写;更早的记录没有这一项,读进来是空表。 */
+    @Test
+    void functionUseSurvivesTheRoundTripAndOlderLinesHaveNone() {
+        Run live = run("mine_iron", Variant.LIVE, 2, false, EndReason.DONE, 0.02, null);
+        Run back = Runs.fromJson(Runs.toJson(live));
+        assertEquals(live.functions(), back.functions());
+        assertEquals(1, back.functions().get(0).failed("bad_argument"));
+        String older = Runs.toJson(live).replaceFirst(",\"functions\":\\[.*]}$", "}");
+        assertFalse(older.contains("functions"), older);
+        assertEquals(List.of(), Runs.fromJson(older).functions());
+    }
+
+    /** 汇总按函数加总真实模型的几次:调用、失败率、参数错、调用前查帮助;对比把前后两份按函数并排。 */
+    @Test
+    void summaryAndCompareListEveryFunction() {
+        List<Run> runs = sample();
+        assertTrue(Summary.markdown("t", runs).contains("| numen.work.dig | 6 | 17% | 1 | — | 3 | 0 |"),
+                Summary.markdown("t", runs));
+        List<Run> after = new ArrayList<>(runs);
+        after.replaceAll(r -> r.live() ? new Run(r.suite(), r.scenario(), r.variant(), r.attempt(), r.commit(),
+                r.promptHash(), r.model(), r.passed(), r.checks(), r.subgoals(), r.end(), r.turns(), r.toolCalls(),
+                r.toolErrors(), r.repeatedFailures(), r.consents(), r.tokensMiss(), r.tokensHit(), r.tokensOut(),
+                r.cost(), r.currency(), r.wallMs(), r.gameTicks(), r.claimedDone(), r.tag(), r.finalWords(),
+                r.transcript(), r.error(), List.of(new FunctionUse("numen.work.dig", 1, Map.of(), 0, 0))) : r);
+        String md = Compare.markdown("before", runs, "after", after);
+        assertTrue(md.contains("| numen.work.dig | 6 | 3 | 17% | 0% | 17% | 0% | 50% | 0% |"), md);
     }
 
     private static List<Run> sample() {

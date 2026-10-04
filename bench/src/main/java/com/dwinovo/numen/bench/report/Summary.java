@@ -35,8 +35,41 @@ public final class Summary {
         Map<String, List<Run>> byScenario = group(runs, r -> r.suite() + "/" + r.scenario());
         selfCheck(md, byScenario);
         live(md, byScenario);
+        functions(md, runs.stream().filter(Run::live).toList());
         failures(md, runs.stream().filter(Run::live).toList());
         return md.toString();
+    }
+
+    /**
+     * 每个 API 函数在真实模型的运行里用得怎样,调得多的在前:失败率与参数错率说签名与说明写清没有,调用前查帮助说索引里那一行够不够,
+     * 重复失败说她有没有从回执里学到。
+     */
+    private static void functions(StringBuilder md, List<Run> live) {
+        List<FunctionUse> uses = new ArrayList<>(FunctionUse.total(live));
+        md.append("## 每个函数(真实模型)\n\n");
+        if (uses.isEmpty()) {
+            md.append("没有 API 调用的记录。\n\n");
+            return;
+        }
+        uses.sort(java.util.Comparator.comparingInt(FunctionUse::calls).reversed()
+                .thenComparing(FunctionUse::function));
+        md.append("| 函数 | 调用 | 失败率 | 参数错 | 其他失败 | 调用前查帮助 | 重复失败 |\n|---|---|---|---|---|---|---|\n");
+        for (FunctionUse use : uses) {
+            md.append(functionRow(use)).append('\n');
+        }
+        md.append('\n');
+    }
+
+    /** 一个函数的那一行。 */
+    static String functionRow(FunctionUse use) {
+        Map<String, Integer> others = new java.util.TreeMap<>(use.failures());
+        others.remove("bad_argument");
+        String other = others.isEmpty() ? "—" : others.entrySet().stream().map(e -> e.getKey() + "×" + e.getValue())
+                .collect(Collectors.joining(", "));
+        return "| " + String.join(" | ", List.of(use.function(), String.valueOf(use.calls()),
+                pct(use.calls() == 0 ? Double.NaN : use.failed() / (double) use.calls()),
+                String.valueOf(use.failed("bad_argument")), other, String.valueOf(use.helpLookups()),
+                String.valueOf(use.repeatedFailures()))) + " |";
     }
 
     /** 两种基线:标准解必须全过、空操作必须全挂,否则这个场景的结论不可信。 */
