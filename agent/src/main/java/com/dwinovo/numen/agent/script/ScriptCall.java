@@ -344,12 +344,18 @@ public final class ScriptCall {
         }
         JsonElement value = returned == null ? null : GSON.toJsonTree(returned);
         if (value != null) {
-            // 一段文字原样写,别的值写成脚本里的样子,和 print 一样;太长的截掉并说明
+            // 一段文字原样写,别的值写成脚本里的样子,和 print 一样;太长的截掉并说明。数据里的 returned 是给程序读的原值,
+            // 另有一个大得多的上限
             String shown = returned instanceof String text ? text : ScriptEngine.IN_USE.value(returned);
-            if (shown.length() > ScriptLimits.RETURNED_CHARS) {
+            int whole = shown.length();
+            if (value.toString().length() > ScriptLimits.RETURNED_DATA_CHARS) {
+                value = new com.google.gson.JsonPrimitive(shown.substring(0, Math.min(whole,
+                        ScriptLimits.RETURNED_DATA_CHARS)) + "\n[returned value cut at "
+                        + ScriptLimits.RETURNED_DATA_CHARS + " characters; it was " + whole + "]");
+            }
+            if (whole > ScriptLimits.RETURNED_CHARS) {
                 shown = shown.substring(0, ScriptLimits.RETURNED_CHARS) + "\n[returned value cut at "
-                        + ScriptLimits.RETURNED_CHARS + " characters; it was " + shown.length() + "]";
-                value = new com.google.gson.JsonPrimitive(shown);
+                        + ScriptLimits.RETURNED_CHARS + " characters; it was " + whole + "]";
             }
             msg.append("\nreturned: ").append(shown);
         }

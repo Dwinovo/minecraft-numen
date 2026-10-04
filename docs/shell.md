@@ -708,7 +708,7 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 ### 回执:给模型读的,按构造有界
 
 回执在生成它的地方就有界(`ScriptLimits`):调用行合起来 `RECEIPT_LINES_CHARS`,每件身体活的整段实际账至多 `ACCOUNT_CHARS`(超出的整行省略并写
-"另外 N 行"),`return` 的值至多 `RETURNED_CHARS`(写明原来多长),`print` 至多 `PRINTED_CHARS`;每次调用的结局只带写成的文字(超长的头部加摘要)。
+"另外 N 行"),`return` 的值在回执文字里至多 `RETURNED_CHARS`(写明原来多长)、在数据里(给程序和评测读的原值)至多 `RETURNED_DATA_CHARS`,`print` 至多 `PRINTED_CHARS`;每次调用的结局只带写成的文字(超长的头部加摘要)。
 所以一张回执远小于下行 1 MB,`ProgramResultPayload` 是内容有界的包:装不下就是代码错,当场抛,不再有"装不下缩成失败"。
 身体活的账本身在生成处也已归堆计数(`NavText`:同类方块合并成"N 个 + 几处例子")。
 

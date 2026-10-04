@@ -312,6 +312,7 @@ class ProgramTest {
         }
         assertTrue(receipt().get("success").getAsBoolean(), outcome.receipt());
         assertTrue(outcome.receipt().length() < ScriptLimits.RECEIPT_LINES_CHARS + ScriptLimits.RETURNED_CHARS
+                + ScriptLimits.RETURNED_DATA_CHARS
                 + ScriptLimits.PRINTED_CHARS + 2_000, "receipt is " + outcome.receipt().length());
         assertTrue(message().contains("more line(s) of this account left out]"), "a job's account is cut at whole lines");
         assertTrue(message().contains("more call line(s) left out"), "the call lines are cut at the budget");

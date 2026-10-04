@@ -88,7 +88,7 @@ class ProgramWireTest {
 
     /** 按构造有界:最坏的一段(两百次调用,每次一整行,带着最长的调用文字,几件活的账写满)远小于一个下行包。 */
     @Test
-    void theWorstReceiptThatCanBeWrittenIsFarUnderOneDownwardPayload() {
+    void theWorstReceiptThatCanBeWrittenIsUnderHalfOfOneDownwardPayload() {
         String longest = "x".repeat(com.dwinovo.numen.agent.script.ScriptLimits.CALL_TEXT_CHARS + 20);
         List<ScriptCall.Called> calls = new java.util.ArrayList<>();
         for (int i = 0; i < com.dwinovo.numen.agent.script.ScriptLimits.COMMANDS; i++) {
@@ -96,12 +96,13 @@ class ProgramWireTest {
         }
         String receipt = "y".repeat(com.dwinovo.numen.agent.script.ScriptLimits.RECEIPT_LINES_CHARS
                 + com.dwinovo.numen.agent.script.ScriptLimits.RETURNED_CHARS
+                + com.dwinovo.numen.agent.script.ScriptLimits.RETURNED_DATA_CHARS
                 + com.dwinovo.numen.agent.script.ScriptLimits.PRINTED_CHARS);
         ProgramResultPayload worst = new ProgramResultPayload(A, "call_9", new RunResult.Ended(
                 new Program.Outcome(receipt, calls, List.of(new Program.Used("numen.work",
                         new ScriptCall.Tally(false, 3, "boom"))), "your owner spoke; t1 keeps running")).toJson());
         int size = Wire.size(ProgramResultPayload.STREAM_CODEC, worst, Unpooled::buffer);
-        assertTrue(size < Wire.TO_CLIENT.bytes() / 4, "the worst receipt is " + size + " bytes");
+        assertTrue(size < Wire.TO_CLIENT.bytes() / 2, "the worst receipt is " + size + " bytes");
         assertEquals(worst, Wire.TO_CLIENT.fit(ProgramResultPayload.STREAM_CODEC, worst, Unpooled::buffer),
                 "goes out untouched: there is no shrinking, it is bounded where it is written");
     }
