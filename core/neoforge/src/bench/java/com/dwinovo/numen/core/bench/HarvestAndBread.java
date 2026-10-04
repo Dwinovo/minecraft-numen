@@ -23,7 +23,6 @@ import java.util.List;
 public final class HarvestAndBread implements Scenario {
 
     private static final int BREAD = 3;
-    private static final double HANDOVER = 5;
     private static final int X_LO = 8;
     private static final int X_HI = 13;
     /** 熟的两排、水、没熟的两排(都在 y=1,田在 y=0)。 */
@@ -72,9 +71,9 @@ public final class HarvestAndBread implements Scenario {
     public List<Check> checks() {
         return List.of(
                 Check.success("面包不少于 " + BREAD + " 个", s -> s.assertTrue(
-                        Tally.handedOver(s, Items.BREAD, HANDOVER) >= BREAD,
+                        Tally.handedOver(s, Items.BREAD) >= BREAD,
                         "她包里 " + s.her().getInventory().countItem(Items.BREAD) + " 个,主人那里 "
-                                + (Tally.handedOver(s, Items.BREAD, HANDOVER)
+                                + (Tally.handedOver(s, Items.BREAD)
                                 - s.her().getInventory().countItem(Items.BREAD)) + " 个")),
                 Check.guard("没熟的麦子没拆", s -> s.assertTrue(greenStanding(s) == greenTotal(),
                         "没熟的 " + greenTotal() + " 株只剩 " + greenStanding(s) + " 株")),

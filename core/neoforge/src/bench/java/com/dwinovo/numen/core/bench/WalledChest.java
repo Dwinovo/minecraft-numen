@@ -22,8 +22,6 @@ public final class WalledChest implements Scenario {
 
     private static final BlockPos CHEST = new BlockPos(10, 1, 12);
     private static final int DIAMONDS = 5;
-    /** 掉在主人碰撞箱外扩这么远以内,算交到了主人手里。 */
-    private static final double HANDOVER = 5;
 
     @Override
     public String id() {
@@ -71,9 +69,9 @@ public final class WalledChest implements Scenario {
                         "箱子里还有 " + inChest(s) + " 颗")));
     }
 
-    /** 她包里、主人包里、主人碰撞箱外扩 {@value #HANDOVER} 格以内地上的钻石。 */
+    /** 她包里、主人包里、交到主人身边的钻石。 */
     private static int delivered(Scene scene) {
-        return Tally.handedOver(scene, Items.DIAMOND, HANDOVER);
+        return Tally.handedOver(scene, Items.DIAMOND);
     }
 
     private static int inChest(Scene scene) {

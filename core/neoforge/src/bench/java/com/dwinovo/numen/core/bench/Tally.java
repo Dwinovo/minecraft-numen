@@ -7,8 +7,11 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.phys.AABB;
 
-/** 场景断言共用的数数:场地里立着几个某种方块、地上落着几个某种物品。 */
+/** 场景断言共用的数数:场地里立着几个某种方块、某种物品交到了主人手里几个。 */
 final class Tally {
+
+    /** 掉在主人碰撞箱外扩这么远以内,算交到了主人手里。 */
+    static final double HANDOVER = 5;
 
     private Tally() {}
 
@@ -25,10 +28,10 @@ final class Tally {
         return n;
     }
 
-    /** 她包里、主人包里、主人碰撞箱外扩 {@code reach} 格以内地上的 {@code item} 总数。 */
-    static int handedOver(Scene scene, Item item, double reach) {
+    /** 她包里、主人包里、主人碰撞箱外扩 {@value #HANDOVER} 格以内地上的 {@code item} 总数。 */
+    static int handedOver(Scene scene, Item item) {
         int n = scene.her().getInventory().countItem(item) + scene.owner().getInventory().countItem(item);
-        AABB near = scene.owner().getBoundingBox().inflate(reach);
+        AABB near = scene.owner().getBoundingBox().inflate(HANDOVER);
         for (ItemEntity drop : scene.level().getEntitiesOfClass(ItemEntity.class, near,
                 e -> e.getItem().is(item))) {
             n += drop.getItem().getCount();

@@ -13,7 +13,8 @@ import java.util.List;
 
 /**
  * 挖深处的钻石:整块场地是十四层实心石头,她和主人站在顶上;一块钻石矿埋在她正下方 12 格,包里一把铁镐。钻石在她手够不着
- * 的地方,得先往下开路到够得着的地方(挖路、垫脚),再挖、再捡。成功 = 背包里有钻石且她活着。
+ * 的地方,得先往下开路到够得着的地方(挖路、垫脚),再挖、再捡。成功 = 钻石挖上来了:在她包里,或者交到了主人手里(主人包里,
+ * 或者丢在主人身边的地上)。
  */
 public final class DeepDiamond implements Scenario {
 
@@ -64,7 +65,8 @@ public final class DeepDiamond implements Scenario {
     @Override
     public List<Check> checks() {
         return List.of(
-                Check.success("包里有钻石", s -> s.assertTrue(diamonds(s) >= 1, "背包里没有钻石")),
+                Check.success("钻石挖上来了", s -> s.assertTrue(Tally.handedOver(s, Items.DIAMOND) >= 1,
+                        "她包里、主人包里、主人身边的地上都没有钻石")),
                 Check.subgoal("往下开了一半的路", s -> s.assertTrue(dugAbove(s) >= (TOP - ORE.getY()) / 2,
                         "矿上方只挖开了 " + dugAbove(s) + " 格")),
                 Check.subgoal("矿挖掉了", s -> s.assertTrue(
@@ -84,10 +86,6 @@ public final class DeepDiamond implements Scenario {
             layers += open ? 1 : 0;
         }
         return layers;
-    }
-
-    private static int diamonds(Scene scene) {
-        return scene.her().getInventory().countItem(Items.DIAMOND);
     }
 
     @Override
