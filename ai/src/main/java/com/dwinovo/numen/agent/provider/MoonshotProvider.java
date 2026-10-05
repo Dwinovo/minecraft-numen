@@ -11,7 +11,7 @@ import com.google.gson.JsonObject;
  *   <li><b>{@code reasoning_content} 兜底:</b>Moonshot 推理模型
  *       (kimi-thinking-preview 与 kimi-k2.5 家族)拒绝带 {@code tool_calls}
  *       却缺 {@code reasoning_content} 字段的 assistant 消息;缺失时注入
- *       单个空格(API 接受的最小值),见 {@link #assistantToRequestMessage}。</li>
+ *       单个空格(API 接受的最小值),见 {@link #assistantMessage}。</li>
  * </ol>
  *
  * <h2>有意不做</h2>
@@ -42,12 +42,12 @@ public final class MoonshotProvider extends OpenAIProvider {
     /**
      * {@code reasoning_content} 兜底:Moonshot 推理模型要求每条含
      * {@code tool_calls} 的 assistant 消息都带该字段。父类的
-     * {@code assistantToRequestMessage} 已回显捕获到的 extras;本覆写只在
+     * {@code assistantMessage} 已回显捕获到的 extras;本覆写只在
      * 字段缺失时补(例如上一轮的分块流里没有携带它)。
      */
     @Override
-    public JsonObject assistantToRequestMessage(AssistantTurn turn) {
-        JsonObject m = super.assistantToRequestMessage(turn);
+    protected JsonObject assistantMessage(AssistantTurn turn) {
+        JsonObject m = super.assistantMessage(turn);
         if (m.has("tool_calls") && !m.has("reasoning_content")) {
             m.addProperty("reasoning_content", " ");
         }

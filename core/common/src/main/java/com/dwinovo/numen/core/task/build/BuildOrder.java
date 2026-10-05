@@ -9,8 +9,8 @@ import java.util.Comparator;
 
 /**
  * 施工顺序与节奏的<b>唯一定义</b>:先后(比较器与它的两个判据)与快慢
- * (速率公式与时长估计)。全是无状态纯函数——派发方(BuildTool 的时限
- * 公式)、测试与施工任务共用同一份,不许各拍各的。
+ * (速率公式、时长估计与时限)。全是无状态纯函数——派发方({@link #deadlineTicks})、
+ * 测试与施工任务共用同一份,不许各拍各的。
  */
 public final class BuildOrder {
 
@@ -26,7 +26,22 @@ public final class BuildOrder {
     static final double SURVIVAL_MIN_RATE = 2.0 / 20.0;    // 每秒 2 格,慢的那一头
     static final double SURVIVAL_TARGET_TICKS = 12 * 60 * 20;   // 再大也不超过 12 分钟
     static final double FREE_MAX_RATE = 100.0 / 20.0;      // 创造快,但不瞬移
-    static final double FREE_TARGET_TICKS = 25 * 20;       // 再小也演满 25 秒
+    static final double FREE_TARGET_TICKS = 25 * 20;       // 一段施工至少演 25 秒
+
+    /** 单刻落位硬上限:再快也不能一刻塞几百格,那是卡顿不是建造。 */
+    public static final int MAX_CELLS_PER_TICK = 8;
+
+    /**
+     * 这件活是一个动作,不是一段施工:整件活装得进一刻的落位上限({@link #MAX_CELLS_PER_TICK}),就一刻放完、放完收工,
+     * 不绕着工地走,也没有最短时长。
+     *
+     * <p>判据取这条上限而不是另定一个"几格",因为速率模型里只有它回答"多少格可以同时出现":上限之内的格在同一刻落下
+     * 不算卡顿,把它们摊进二十五秒的演出,只是让一次右键排队。超过上限的活怎么排都要分几刻放,那才是一段有先后、
+     * 值得看的施工,按 {@link #paceFor} 的节奏走。
+     */
+    public static boolean instant(int cellCount) {
+        return cellCount <= MAX_CELLS_PER_TICK;
+    }
 
     /** 施工顺序的唯一定义(公开是为了让测试直接钉住它,而不是靠副作用间接猜)。 */
     public static final Comparator<BuildTaskRecord.Target> BUILD_ORDER = Comparator
@@ -86,9 +101,13 @@ public final class BuildOrder {
      *
      * <p>目标时长封顶、速率由格数除出来:小工程走下限速率,自然比封顶短;大工程
      * 一开始就更快,总时长收敛到封顶值。不是"越盖越快",也没有到点强制收工。
+     * 一个动作({@link #instant})不走这条:整件活在第一刻落下。
      */
     public static double paceFor(int cellCount, boolean consumeMaterials) {
         int cells = Math.max(1, cellCount);
+        if (instant(cells)) {
+            return cells;
+        }
         return consumeMaterials
                 ? Math.max(SURVIVAL_MIN_RATE, cells / SURVIVAL_TARGET_TICKS)
                 : Math.min(FREE_MAX_RATE, cells / FREE_TARGET_TICKS);
@@ -104,5 +123,19 @@ public final class BuildOrder {
      */
     public static long estimatedTicks(int cellCount, boolean consumeMaterials) {
         return (long) Math.ceil(Math.max(1, cellCount) / paceFor(cellCount, consumeMaterials));
+    }
+
+    private static final long MIN_DEADLINE_TICKS = 60 * 20;
+    private static final long TRAVEL_ALLOWANCE_TICKS = 40 * 20;
+    /** 施工预计时长之上再留的余量(零进展重试吃这笔)。 */
+    private static final double DEADLINE_SLACK = 1.6;
+
+    /**
+     * 施工时限:走到工地外圈的行程 + 施工预计时长再留一截余量。预计时长就是 {@link #estimatedTicks}——时限若另估一套,
+     * 生存最慢档每格十刻的真实开销会被低估,五百格的房子盖到一半就被判超时。
+     */
+    public static long deadlineTicks(int cellCount, boolean consumeMaterials) {
+        return Math.max(MIN_DEADLINE_TICKS,
+                TRAVEL_ALLOWANCE_TICKS + (long) (estimatedTicks(cellCount, consumeMaterials) * DEADLINE_SLACK));
     }
 }

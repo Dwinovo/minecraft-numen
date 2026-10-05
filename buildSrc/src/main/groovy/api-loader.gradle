@@ -19,9 +19,16 @@ dependencies {
     // loader 模块)需要看见 ai 的类型。发行 jar 已把 ai 的类平铺进来(见下方
     // jar 块),运行时自含,这条声明只服务编译期与 pom 的如实陈述。
     api project(':ai')
+    // 大脑本身(纯 JVM,输入队列与长期目标)同理:发行 jar 里的类由下方 jar 块平铺进来。
+    api project(':agent')
+    // 沙箱 Lua(纯 JVM,agent 的脚本跑在它里面)同理:发行 jar 里的类由下方 jar 块平铺进来。包名是本仓自己的
+    // com.dwinovo.lua,不会和别的模组带的 LuaJ(org.luaj)撞包。
+    api project(':lua')
     // UI 组件库(纯 JVM)同理:屏幕组装层引用 widget/令牌类型,编译期要看得见;
     // 发行 jar 里的类由下方 jar 块平铺进来。
     api project(':ui')
+    // 寻路同理:同伴的身体机制在它里面,core 的适配层经它接入;发行 jar 里的类由下方 jar 块平铺进来。
+    api project(':pathing')
     compileOnly(project(':api:common')) {
         def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
         attributes {
@@ -63,12 +70,23 @@ tasks.named('sourcesJar', Jar) {
     dependsOn(configurations.commonResources)
     from(configurations.commonResources)
     from({ project(':ai').sourceSets.main.allSource })
+    from({ project(':agent').sourceSets.main.allSource })
+    from({ project(':lua').sourceSets.main.allSource })
     from({ project(':ui').sourceSets.main.allSource })
+    from({ project(':pathing').sourceSets.main.allSource })
 }
 
 // numen-ai 的类平铺进加载器发行 jar——http/prompt 从 common 源码集迁去 ai
 // 模块后,加载器不再从源码把它们编进来,这里补回,发行 jar 内容与拆分前一致。
+// numen-agent 同理:队列与目标从 common 迁去 agent 模块,类在这里平铺回来。
+// 寻路模块对着原版的 Mojang 名编译,与本模块同一套命名:Fabric 上随后由 remapJar 连同本模块的类一起换成
+// intermediary 名,NeoForge 上原样发出。
 tasks.named('jar', Jar) {
     from({ project(':ai').sourceSets.main.output })
+    from({ project(':agent').sourceSets.main.output })
+    from({ project(':lua').sourceSets.main.output })
+    // 沙箱 Lua 的底子是 LuaJ(MIT):它的许可证随平铺进来的类一起发
+    from(project(':lua').file('LICENSE')) { rename { 'LICENSE_numen-lua' } }
     from({ project(':ui').sourceSets.main.output })
+    from({ project(':pathing').sourceSets.main.output })
 }

@@ -1,0 +1,80 @@
+// numen-lua:沙箱里的 Lua 5.2,纯 JVM——零 Minecraft 依赖、零 Numen 依赖,别的模组也能拿去嵌。
+// 以上游 LuaJ(github.com/luaj/luaj master daf3da9,MIT)为底、源码入库自己维护,包名改到 com.dwinovo.lua.vm;
+// 只留解析、编译到 LuaJ 字节码、解释执行与安全的标准库。来源、改动与沙箱口径见 lua/README.md。
+//
+// 现住户:虚拟机 com.dwinovo.lua.vm(改过的 LuaJ)、对外的沙箱 com.dwinovo.lua(LuaSandbox:预算、虚拟线程、打断、
+// 宿主函数、值互转)。
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+// 版本号不在这里出现:全树锁步,唯一出处是 gradle.properties 的 version。
+group = 'com.dwinovo.numen'
+
+// 可复现构建:同一份源码重复构建应得到同样的字节。
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
+base {
+    archivesName = 'numen-lua'
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version)
+    withSourcesJar()
+    withJavadocJar()
+}
+
+tasks.withType(Javadoc).configureEach {
+    options.addStringOption('Xdoclint:none', '-quiet')
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs.add('-parameters')
+    // 每段脚本跑在一个虚拟线程上:要 Java 21
+    options.release = 21
+}
+
+// 源码与发行 jar 都带上上游的许可证
+tasks.named('jar', Jar) {
+    from('LICENSE') { rename { 'LICENSE_numen-lua' } }
+}
+tasks.named('sourcesJar', Jar) {
+    from('LICENSE') { rename { 'LICENSE_numen-lua' } }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            // 带 MC 版本后缀,理由同 ui/build.gradle:各分支上的这份源码可能不同,共用坐标会互相覆盖
+            artifactId = "numen-lua-${minecraft_version}"
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            name = 'localNumen'
+            // 发布目标的唯一出处是 gradle.properties 的 local_maven_url;这里不写兜底默认值
+            url = rootProject.uri(providers.gradleProperty('local_maven_url').get())
+        }
+    }
+}

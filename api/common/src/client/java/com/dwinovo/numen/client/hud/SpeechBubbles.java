@@ -15,8 +15,8 @@ import java.util.UUID;
  * 说话和干活是同时发生的两件事,凭什么互相遮挡:
  * <ul>
  *   <li><b>正文行</b>:她说的最后一句,有自己的生命周期(按字数),到点消失。</li>
- *   <li><b>状态行</b>:此刻在干什么——有工具在跑就是「正在 xxx」,只是在等
- *       模型回复就是「正在思考中」,都没有就没有这一行。</li>
+ *   <li><b>状态行</b>:此刻在干什么——在等主人点头就是「等你点头」(手上的活正停着等这一句),
+ *       有工具在跑就是「正在 xxx」,只是在等模型回复就是「正在思考中」,都没有就没有这一行。</li>
  * </ul>
  * 两条线独立:话还在时来了工具,气泡就是"话 + 正在挖矿";话过期了工具还没完,
  * 只剩状态行;工具先完而话还没过期,状态行消失、话继续待着。两条都空 = 不显示。
@@ -34,22 +34,28 @@ public final class SpeechBubbles {
     private static final long TEXT_LIFE_BASE_MS = 7_000;
     private static final long TEXT_LIFE_PER_CHAR_MS = 55;
     private static final long TEXT_LIFE_MAX_MS = 22_000;
+    /** 正文淡入(Telegram 的快动效)与到点前的淡出。 */
+    private static final long TEXT_FADE_IN_MS = 150;
+    private static final long TEXT_FADE_OUT_MS = 300;
 
     /**
      * 渲染方要画的东西——两条线可同时在场。
      *
      * @param text     未过期的正文;null = 这会儿没话
+     * @param textIn   正文刚说出口的淡入进度 0..1(换了一句从头来)
+     * @param textOut  正文快到点时的淡出 1..0(没到最后那一小段一直是 1)
+     * @param asking   她挂着一条征询在等主人点头——画「等你点头」,压过下面两种
      * @param activity 正在执行的工具名;null = 没有工具在跑
      * @param waiting  在等模型回复(且没有工具在跑)——画「正在思考中」
      */
-    public record View(String text, String activity, boolean waiting) {
+    public record View(String text, float textIn, float textOut, boolean asking, String activity, boolean waiting) {
         public boolean hasText() {
             return text != null && !text.isEmpty();
         }
 
-        /** 有状态行要画吗(正在 xxx / 正在思考中)。 */
+        /** 有状态行要画吗(等你点头 / 正在 xxx / 正在思考中)。 */
         public boolean hasStatus() {
-            return activity != null || waiting;
+            return asking || activity != null || waiting;
         }
     }
 
@@ -98,27 +104,34 @@ public final class SpeechBubbles {
 
         // 第一条线:正文(到点自己消失,与在不在忙无关)
         String text = null;
+        float textIn = 0f, textOut = 0f;
         Said said = SAID.get(entityUuid);
         if (said != null) {
-            if (said.expired(System.currentTimeMillis())) {
+            long now = System.currentTimeMillis();
+            if (said.expired(now)) {
                 SAID.remove(entityUuid);
             } else {
                 text = said.text();
+                textIn = Math.min(1f, (now - said.bornMs()) / (float) TEXT_FADE_IN_MS);
+                textOut = Math.min(1f, (said.bornMs() + said.lifeMs() - now) / (float) TEXT_FADE_OUT_MS);
             }
         }
 
-        // 第二条线:此刻在干什么(工具优先于"在等回复"——具体的事比笼统的忙有信息量)
+        // 第二条线:此刻在干什么。等主人点头压过一切——活正停着等他;工具优先于"在等回复"——
+        // 具体的事比笼统的忙有信息量
+        boolean asking = com.dwinovo.numen.client.consent.ConsentCards.pending(entityUuid) != null;
         String activity = null;
         boolean waiting = false;
         var loop = AgentLoopRegistry.get(entityUuid).orElse(null);
         if (loop != null) {
-            activity = loop.currentActivity();
-            waiting = activity == null && loop.isBusy();
+            var status = loop.status();
+            activity = status.activity();
+            waiting = activity == null && status.busy();
         }
 
-        if (text == null && activity == null && !waiting) {
+        if (text == null && !asking && activity == null && !waiting) {
             return null;   // 话说完了、活干完了:头顶就该干净
         }
-        return new View(text, activity, waiting);
+        return new View(text, textIn, textOut, asking, activity, waiting);
     }
 }

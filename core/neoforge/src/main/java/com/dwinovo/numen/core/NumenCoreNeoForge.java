@@ -1,16 +1,12 @@
 package com.dwinovo.numen.core;
 
-import com.dwinovo.numen.agent.skill.SkillRegistry;
 import com.dwinovo.numen.core.debug.DebugCommands;
 import com.dwinovo.numen.core.debug.PathDebugRenderer;
-import com.dwinovo.numen.core.pathing.cache.PathCaches;
 import com.dwinovo.numen.task.CompanionTickDispatcher;
 import com.dwinovo.numen.core.scan.BlockSearch;
-import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
@@ -29,48 +25,48 @@ public class NumenCoreNeoForge {
     public NumenCoreNeoForge(IEventBus eventBus, ModContainer container) {
         NumenCore.init();
 
+        // 内嵌的联动模组:装了目标模组才接上,没装当不存在。见 plugins.Builtin。
+        com.dwinovo.numen.plugins.Builtin.registerAll();
+
         NeoForge.EVENT_BUS.addListener(NumenCoreNeoForge::onServerTickPost);
         // Debug verbs merged into the /numen root registered by the engine mod.
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.RegisterCommandsEvent e) ->
                 DebugCommands.register(e.getDispatcher()));
 
-        // 游戏内用例的登记。1.21.5 起 gametest 不再有注解入口,用例要主动注册成
-        // test_instance 条目;注册本身只在开了 gametest 的开发环境里生效(引擎侧
-        // RegisterGameTestsEvent 自己把关),正式环境不会有任何动作。
-        com.dwinovo.numen.core.gametest.NumenGameTests.register(eventBus);
-
-        // Client-only: declare core's built-in skills, read in place from the
-        // skills/ dir bundled in this jar. Skills feed the client-side LLM, so
-        // this never runs on a dedicated server.
-        if (FMLLoader.getCurrent().getDist() == Dist.CLIENT) {
-            declareBundledSkills();
-        }
+        // core 的自带技能和联动的一样经插件那扇门交出去,原地读 jar 里的 skills/ 目录。技能喂的是主人客户端上的
+        // 大脑,门在客户端接上时才声明(NumenPlugins.bindClient);专用服务器上没人接,它就一直攒着。
+        declareBundledSkills();
+        declareBundledModules();
 
         Constants.LOG.info("numen-core initialised on NeoForge.");
     }
 
     private static void declareBundledSkills() {
-        // Resolve the jar-internal skills/ dir via the classloader (loader-agnostic and stable
-        // across MC versions, unlike NeoForge's shifting IModFile API): the resource URL maps to a
-        // Path on the mod's (union) filesystem, which the engine reads in place.
-        try {
-            java.net.URL url = NumenCoreNeoForge.class.getResource("/skills");
-            if (url != null) {
-                SkillRegistry.instance().declareBundled(Path.of(url.toURI()));
-                return;
-            }
-        } catch (Exception ex) {
-            Constants.LOG.warn("[numen-core] failed to resolve bundled skills/: {}", ex.toString());
+        Path root = ModJar.find("skills");
+        if (root != null) {
+            com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen -> numen.bundleSkills(root));
+        } else {
+            Constants.LOG.warn("[numen-core] no bundled skills/ dir found in jar");
         }
-        Constants.LOG.warn("[numen-core] no bundled skills/ dir found in jar");
+    }
+
+    /**
+     * core 的内置 Lua 模块同样经插件那扇门交出去,原地读 jar 里的 modules/ 目录。跑程序的大脑在哪一侧都要它们(主人客户端;评测与
+     * GameTest 在服务端),所以直接登记,不等客户端。
+     */
+    private static void declareBundledModules() {
+        Path root = ModJar.find("modules");
+        if (root == null) {
+            throw new IllegalStateException("[numen-core] no bundled modules/ dir found in jar");
+        }
+        com.dwinovo.numen.api.NumenPlugins.register(com.dwinovo.numen.api.NumenPlugins.NUMEN, numen -> numen.bundleModules(root));
     }
 
     private static void onServerTickPost(ServerTickEvent.Post event) {
         // 排程机器的心跳随机器归了 numen-api;core 只 tick 自己的工具配套。
         BlockSearch.tick(event.getServer());
-        PathCaches.serverTick(event.getServer());
-        // Periodic eviction sweep for the target-block index (entries of unloaded chunks).
-        com.dwinovo.numen.core.scan.TargetIndex.serverTick(event.getServer());
+        // Route plans (route plan): poll finished searches and reply.
+        com.dwinovo.numen.core.nav.RouteQueries.serverTick(event.getServer());
         // Debug particles for pathing state, sent only to players with debug on.
         PathDebugRenderer.serverTick(event.getServer());
     }

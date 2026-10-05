@@ -1,20 +1,21 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.agent.tool.ToolArgs;
+import com.dwinovo.numen.agent.script.ApiError;
+import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.core.PlayerInv;
-import com.dwinovo.numen.core.act.Interaction;
-import com.dwinovo.numen.core.scan.BlockScanner;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.task.TaskResult;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
+import com.dwinovo.numen.sdk.Doc;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.MenuProvider;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.CraftingContainer;
+import net.minecraft.world.inventory.ResultContainer;
 import net.minecraft.world.inventory.ResultSlot;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
@@ -22,12 +23,9 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeHolder;
-import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.item.crafting.ShapedRecipe;
-import net.minecraft.world.level.block.CraftingTableBlock;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.Vec3;
+
+import com.dwinovo.numen.core.mixin.CraftingMenuAccessor;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -38,30 +36,20 @@ import java.util.Map;
 import java.util.TreeSet;
 
 /**
- * The {@code craft} tool: the whole craft flow in one call — pick a recipe whose
- * materials the inventory can feed, lay the ingredients into a REAL crafting grid
- * via menu clicks, and shift-take the result. Everything runs through the vanilla
- * container path ({@code menu.clicked} on a live {@code CraftingMenu} /
- * {@code InventoryMenu}), so recipe-unlock, stats, ingredient remainders (bucket
- * back from milk) and container-observing mods all see a normal player crafting —
- * items never appear out of thin air.
+ * The {@code inv craft} command: one craft in the crafting grid that is open — lay one batch of a named recipe
+ * (up to a stack per cell) into the REAL grid via menu clicks and shift-take the result once. Everything runs
+ * through the vanilla container path ({@code menu.clicked} on a live {@code CraftingMenu} / {@code InventoryMenu}),
+ * so recipe-unlock, stats, ingredient remainders (bucket back from milk) and container-observing mods all see a
+ * normal player crafting — items never appear out of thin air.
  *
- * <p>Grid choice: an already-open grid that fits &gt; the body's own 2x2 &gt; a
- * crafting table within reach (right-clicked open, closed after). No table in
- * reach is a refusal with the nearest table's coordinates (or "place one") — going
- * there is the planner's move, not this tool's.
+ * <p>The grid is the one open now: her own 2x2 when nothing else is. Which recipe to use, and finding, opening and
+ * closing a crafting table, are the Lua module {@code numen.inv.make}'s; the recipe facts it decides with (the
+ * smallest grid a recipe fits, what she is short of) are read here, the same as the craft checks them.
  */
 public final class CraftOps {
 
-    /** Eye-to-block-center reach for using a crafting table without walking. */
-    private static final double REACH = 4.5;
-    /** "Where IS one" hint scan when no table is in reach (horizontal / vertical). */
-    private static final int HINT_H = 16, HINT_V = 6;
-    /** Rounds of fill-grid + shift-take; each round crafts up to a full stack per cell. */
-    private static final int MAX_ROUNDS = 16;
-
-    /** A crafting recipe candidate with its (input-independent) output count. */
-    private record Cand(CraftingRecipe recipe, int outCount) {}
+    /** One call crafts at most this many times per cell: a full stack. */
+    private static final int MAX_BATCH = 64;
 
     /** One grid cell to fill: row-major position in the target grid + what goes there. */
     private record Placement(int gridPos, Ingredient ing) {}
@@ -69,206 +57,86 @@ public final class CraftOps {
     /** The clickable geometry of an open crafting surface. */
     private record Grid(int w, int h, int[] cells, int result) {}
 
-    public String craft(String item_id, Integer count, NumenPlayer self) {
-        Item target = ToolArgs.parseItem(item_id);
-        int want = count == null ? 1 : Math.clamp(count, 1, 256);
-        if (!(self.level() instanceof ServerLevel level)) {
-            return TaskResult.fail("crafting needs a server level.").toJson();
+    /** 合了一次:合出几件、现在背着几件、用掉什么、还回来什么(牛奶桶还回空桶这类),背着的料够不够再合。 */
+    @Doc("What one craft made.")
+    public record Crafted(@Doc("How many it made.") int crafted,
+                          @Doc("How many you carry now.") int carrying,
+                          @Doc("What it used, 3x oak_planks.") List<String> used,
+                          @Doc("What came back, a bucket from milk.") List<String> gotBack,
+                          @Doc("Whether what you carry crafts more of it: call again for the rest.") boolean more) {}
+
+    /** {@code numen.inv.craft}:在开着的格里照 {@code id} 那条配方合一次,至多合到 {@code count} 件。 */
+    public static Crafted craft(Identifier id, int want, NumenPlayer self) {
+        ServerLevel level = self.level();
+        RecipeHolder<?> found = level.recipeAccess().byKey(ResourceKey.create(Registries.RECIPE, id)).orElse(null);
+        if (found == null || !(found.value() instanceof CraftingRecipe recipe) || recipe.isSpecial()
+                || ingredientsOf(recipe).isEmpty()) {
+            throw new ApiError(ErrorKind.NOT_FOUND, "no crafting recipe " + id,
+                    "numen.inv.recipes(item) lists every recipe that makes an item, each with its id");
         }
+        @SuppressWarnings("unchecked")
+        RecipeHolder<CraftingRecipe> holder = (RecipeHolder<CraftingRecipe>) found;
+        ItemStack result = RecipeProbe.resultOf(recipe, level.registryAccess());
+        Item target = result.getItem();
         String name = BuiltInRegistries.ITEM.getKey(target).getPath();
 
-        List<Cand> candidates = candidatesFor(level, target);
-        if (candidates.isEmpty()) {
-            return TaskResult.fail("no crafting recipe makes " + name + " — check lookup_recipe: it may "
-                    + "be smelted, stonecut, smithed, mined or traded instead.").toJson();
+        AbstractContainerMenu menu = self.containerMenu;
+        Grid grid = findGrid(menu);
+        if (grid == null) {
+            throw new ApiError(ErrorKind.FAILED, "the open window (" + menu.getClass().getSimpleName() + ") has no "
+                    + "crafting grid — numen.gui.close() it to craft in your own 2x2, or numen.use.block a crafting "
+                    + "table", null);
         }
-
-        // Reclaim anything stranded in an already-open grid before counting materials.
-        Grid pre = findGrid(self.containerMenu);
-        if (pre != null) {
-            sweepGrid(self.containerMenu, self, pre);
+        // 先把搁在格子里的收回来,再数料
+        sweepGrid(menu, self, grid);
+        List<Ingredient> ings = ingredientsOf(recipe);
+        Map<Item, Integer> pool = poolOf(menu, self);
+        if (feasibleBatch(ings, pool, 1) == 0) {
+            throw new ApiError(ErrorKind.NO_MATERIAL, "not enough materials for " + name + " — missing: "
+                    + String.join(", ", missingFor(ings, pool)), null, Map.of("missing", missingFor(ings, pool)));
         }
-
-        // Materials gate: keep recipes the inventory can feed at least once; remember the
-        // closest miss for the refusal message.
-        Map<Item, Integer> pool = poolOf(self.containerMenu, self);
-        List<Cand> satisfiable = new ArrayList<>();
-        List<String> bestMissing = null;
-        for (Cand c : candidates) {
-            List<Ingredient> ings = ingredientsOf(c.recipe());
-            if (feasibleBatch(ings, pool, 1) == 1) {
-                satisfiable.add(c);
-            } else {
-                List<String> missing = missingFor(ings, pool);
-                if (bestMissing == null || missing.size() < bestMissing.size()) {
-                    bestMissing = missing;
-                }
-            }
+        if (!fits(recipe, grid.w(), grid.h())) {
+            throw new ApiError(ErrorKind.FAILED, name + " needs a " + gridOf(recipe) + "x" + gridOf(recipe) + " grid; "
+                    + "the open one is " + grid.w() + "x" + grid.h() + " — numen.use.block a crafting table, then "
+                    + "craft again (numen.inv.make finds one and opens it)", null);
         }
-        if (satisfiable.isEmpty()) {
-            return TaskResult.fail("not enough materials for " + name + " — missing: "
-                    + String.join(", ", bestMissing)
-                    + ". Collect or craft those first, then craft again.").toJson();
-        }
-
-        // Pick the crafting surface: the open grid if a satisfiable recipe fits it, else the
-        // body's own 2x2, else a crafting table within reach.
-        AbstractContainerMenu menu = null;
-        Grid grid = null;
-        Cand chosen = null;
-        boolean openedTable = false;
-        String station = null;
-
-        Grid cur = findGrid(self.containerMenu);
-        if (cur != null) {
-            for (Cand c : satisfiable) {
-                if (fits(c.recipe(), cur.w(), cur.h())) {
-                    menu = self.containerMenu;
-                    grid = cur;
-                    chosen = c;
-                    station = (menu == self.inventoryMenu)
-                            ? "Used your own 2x2 grid." : "Used the already-open grid.";
-                    break;
-                }
-            }
-        }
-        if (chosen == null) {
-            for (Cand c : satisfiable) {
-                if (fits(c.recipe(), 2, 2)) {
-                    chosen = c;
-                    break;
-                }
-            }
-            if (chosen != null) {
-                if (self.containerMenu != self.inventoryMenu) {
-                    self.closeContainer();   // a gridless GUI (chest, furnace) was open — put it away
-                }
-                menu = self.inventoryMenu;
-                grid = findGrid(menu);
-                station = "Used your own 2x2 grid.";
-            }
-        }
-        if (chosen == null) {
-            for (Cand c : satisfiable) {
-                if (fits(c.recipe(), 3, 3)) {
-                    chosen = c;
-                    break;
-                }
-            }
-            if (chosen == null) {
-                return TaskResult.fail(name + "'s recipe needs a grid larger than 3x3 (modded station) — "
-                        + "interact_at that station and use inspect_gui + transfer instead.").toJson();
-            }
-            CraftingRecipe recipe = chosen.recipe();
-            BlockPos table = BlockScanner.nearestBlock(level, self.blockPosition(),
-                    self.getEyePosition(), (int) Math.ceil(REACH), 3, REACH,
-                    (pos, state) -> state.getBlock() instanceof CraftingTableBlock);
-            if (table == null) {
-                // 类型认不出 ≠ 没有:有模组在放置时把工作台原地换成自家方块实体实现,
-                // 注册名、方块类、标签全变了,只有行为没变——所以第二遍问行为。
-                table = BlockScanner.nearestBlock(level, self.blockPosition(),
-                        self.getEyePosition(), (int) Math.ceil(REACH), 3, REACH,
-                        (pos, state) -> opensFittingGrid(level, pos, state, self, recipe));
-            }
-            if (table == null) {
-                BlockPos hintPos = BlockScanner.nearestBlock(level, self.blockPosition(),
-                        self.getEyePosition(), HINT_H, HINT_V, Double.MAX_VALUE,
-                        (pos, state) -> state.getBlock() instanceof CraftingTableBlock);
-                return TaskResult.fail(name + " is a 3x3 recipe — it needs a crafting table within reach "
-                        + "(~4 blocks). " + (hintPos != null
-                                ? "Nearest one is at " + hintPos.getX() + "," + hintPos.getY() + ","
-                                        + hintPos.getZ() + " — goto it, then craft again."
-                                : "None within " + HINT_H + " blocks — craft a crafting_table (4 planks, "
-                                        + "fits your own 2x2) and build it (op `set`), then craft "
-                                        + "again.")).toJson();
-            }
-            // 开台走 act 的按键原语:看向、右键、挥手都是身体动作,不归工具层手搓。
-            // 预解析命中(不走射线)保持既有语义——门禁是"够得着",不是"看得见"。
-            Interaction.useBlock(self,
-                    new BlockHitResult(Vec3.atCenterOf(table), Direction.UP, table, false),
-                    InteractionHand.MAIN_HAND).tick();
-            Grid opened = findGrid(self.containerMenu);
-            if (self.containerMenu == self.inventoryMenu || opened == null
-                    || !fits(chosen.recipe(), opened.w(), opened.h())) {
-                return TaskResult.fail("right-clicked the crafting table at " + table.getX() + ","
-                        + table.getY() + "," + table.getZ()
-                        + " but no crafting menu opened (blocked, or another mod overrides it).").toJson();
-            }
-            menu = self.containerMenu;
-            grid = opened;
-            openedTable = true;
-            station = "Used the crafting table at " + table.getX() + "," + table.getY() + ","
-                    + table.getZ() + ".";
-        }
-
-        try {
-            return doCraft(menu, grid, chosen, target, want, name, station, self);
-        } finally {
-            sweepGrid(menu, self, grid);
-            if (openedTable) {
-                self.closeContainer();
-            }
-        }
-    }
-
-    // ---- the fill / take loop ----
-
-    private static String doCraft(AbstractContainerMenu menu, Grid grid, Cand chosen, Item target,
-                                  int want, String name, String station, NumenPlayer self) {
         if (!settleCarried(menu, self)) {
-            return TaskResult.fail("the cursor is holding items and no inventory slot is free to put "
-                    + "them down — free a slot first (drop_items).").toJson();
+            throw new ApiError(ErrorKind.FAILED, "the cursor is holding items and no inventory slot is free to put "
+                    + "them down — free a slot first (numen.inv.drop).", null);
         }
+
         Map<Item, Integer> before = poolOf(menu, self);
-        List<Ingredient> ings = ingredientsOf(chosen.recipe());
-        int output = Math.max(1, chosen.outCount());
-        int crafted = 0;
-        String stopped = null;
-
-        for (int round = 0; round < MAX_ROUNDS && crafted < want; round++) {
-            int craftsLeft = Math.ceilDiv(want - crafted, output);
-            int batch = feasibleBatch(ings, poolOf(menu, self), Math.min(craftsLeft, 64));
-            if (batch <= 0) {
-                stopped = "ran out of materials";
-                break;
-            }
-            // Lay out this batch: per cell, the matching inventory item with the deepest supply.
-            Map<Item, Integer> sim = new HashMap<>(poolOf(menu, self));
-            boolean laidOut = true;
-            for (Placement pl : placements(chosen.recipe(), grid.w())) {
-                Item pick = pickItem(pl.ing(), sim);
-                int cellIdx = pick == null ? -1 : grid.cells()[pl.gridPos()];
-                if (cellIdx < 0 || placeIntoCell(menu, self, cellIdx, pick, pl.ing(), batch) < batch) {
-                    laidOut = false;
-                    break;
-                }
-                sim.merge(pick, -batch, Integer::sum);
-            }
-            if (!laidOut) {
+        int output = Math.max(1, result.getCount());
+        int batch = feasibleBatch(ings, before, Math.min(Math.ceilDiv(want, output), MAX_BATCH));
+        // Lay out the batch: per cell, the matching inventory item with the deepest supply.
+        Map<Item, Integer> sim = new HashMap<>(before);
+        for (Placement pl : placements(recipe, grid.w())) {
+            Item pick = pickItem(pl.ing(), sim);
+            int cellIdx = pick == null ? -1 : grid.cells()[pl.gridPos()];
+            if (cellIdx < 0 || placeIntoCell(menu, self, cellIdx, pick, pl.ing(), batch) < batch) {
                 sweepGrid(menu, self, grid);
-                stopped = "couldn't lay out the grid (materials changed mid-craft?)";
-                break;
+                throw new ApiError(ErrorKind.FAILED, "couldn't lay " + name + " out in the grid: a cell took fewer "
+                        + "items than the recipe needs", null);
             }
-            if (menu.slots.get(grid.result()).getItem().isEmpty()) {
-                sweepGrid(menu, self, grid);
-                stopped = "the laid-out grid doesn't form this recipe (unexpected — mod interference?)";
-                break;
-            }
-            int have0 = PlayerInv.count(self.getInventory(), target);
-            menu.clicked(grid.result(), 0, ClickType.QUICK_MOVE, self);   // vanilla mass-craft + onTake
-            self.swing(InteractionHand.MAIN_HAND);
-            sweepGrid(menu, self, grid);
-            int gained = PlayerInv.count(self.getInventory(), target) - have0;
-            if (gained <= 0) {
-                stopped = "inventory is full — the result doesn't fit";
-                break;
-            }
-            crafted += gained;
+            sim.merge(pick, -batch, Integer::sum);
         }
-
+        // 摆完就自己要一次重算,不等 slotsChanged。那是个可被覆写的触发器:把重算推迟到
+        // 之后 server tick 的模组覆写的正是它,于是这一刻读到的结果槽还是空的(#110)。
+        // 结果槽只有原版那一趟写,这里直接要它算,对原版和那类模组都成立。
+        recompute(menu, grid, self, holder);
+        if (menu.slots.get(grid.result()).getItem().isEmpty()) {
+            sweepGrid(menu, self, grid);
+            throw new ApiError(ErrorKind.FAILED, "the laid-out grid doesn't form " + name + " (another mod overrides "
+                    + "this grid?)", null);
+        }
+        int have0 = PlayerInv.count(self.getInventory(), target);
+        menu.clicked(grid.result(), 0, ClickType.QUICK_MOVE, self);   // vanilla mass-craft + onTake
+        self.swing(InteractionHand.MAIN_HAND);
+        sweepGrid(menu, self, grid);
+        int crafted = PlayerInv.count(self.getInventory(), target) - have0;
         if (crafted <= 0) {
-            return TaskResult.fail("crafted nothing — "
-                    + (stopped == null ? "unknown reason" : stopped) + ".").toJson();
+            throw new ApiError(ErrorKind.FAILED, "crafted nothing — your inventory is full and the result doesn't "
+                    + "fit.", null);
         }
 
         // Report material flow as inventory deltas (covers remainders like buckets coming back).
@@ -284,21 +152,70 @@ public final class CraftOps {
                 back.add(delta + "x " + path);
             }
         }
+        return new Crafted(crafted, PlayerInv.count(self.getInventory(), target), used, back,
+                feasibleBatch(ings, after, 1) > 0);
+    }
 
-        int carrying = PlayerInv.count(self.getInventory(), target);
-        StringBuilder msg = new StringBuilder("crafted " + crafted + "x " + name);
-        if (crafted < want) {
-            msg.append(" (wanted ").append(want).append(" — stopped: ").append(stopped).append(")");
+    /** {@code numen.inv.craftable}:她背着的料现在合得出的每一条合成配方。 */
+    public static List<Recipe> craftable(NumenPlayer self) {
+        ServerLevel level = self.level();
+        Map<Item, Integer> pool = poolOf(self.inventoryMenu, self);
+        List<Recipe> recipes = new ArrayList<>();
+        // 服务端没有按类型取配方表的公开口:全量遍历再筛合成配方
+        for (RecipeHolder<?> holder : level.recipeAccess().getRecipes()) {
+            try {
+                if (!(holder.value() instanceof CraftingRecipe recipe)) {
+                    continue;
+                }
+                ItemStack result = RecipeProbe.resultOf(recipe, level.registryAccess());
+                if (recipe.isSpecial() || result.isEmpty() || !RecipeProbe.usableIngredients(recipe)
+                        || ingredientsOf(recipe).isEmpty() || gridOf(recipe) == 0
+                        || feasibleBatch(ingredientsOf(recipe), pool, 1) == 0) {
+                    continue;
+                }
+                recipes.add(recipe(holder, recipe, result, self));
+            } catch (RuntimeException broken) {
+                // 坏一条丢一条,记下 id 方便去上游反馈;绝不让它杀掉整个调用
+                com.dwinovo.numen.core.Constants.LOG.debug(
+                        "[numen-craft] 配方 {} 坏了,跳过: {}", holder.id(), broken.toString());
+            }
         }
-        if (!used.isEmpty()) {
-            msg.append(" — used ").append(String.join(", ", used));
+        return recipes;
+    }
+
+    /**
+     * 一条合成配方:编号、合出几件、每格的料、装得下的最小的格,以及照她背着的合一次还缺什么(不缺时没有)。
+     * {@code numen.inv.recipes} 与 {@code numen.inv.craftable} 共用这一份。
+     */
+    static Recipe recipe(RecipeHolder<?> holder, CraftingRecipe recipe, ItemStack result, NumenPlayer self) {
+        List<Ingredient> ings = ingredientsOf(recipe);
+        Map<Item, Integer> pool = poolOf(self.inventoryMenu, self);
+        return new Recipe(holder.id().identifier().toString(), Recipe.Station.CRAFTING,
+                BuiltInRegistries.ITEM.getKey(result.getItem()).toString(), result.getCount(),
+                ings.stream().map(RecipeBook::describeIngredient).toList(), java.util.Optional.of(gridOf(recipe)),
+                feasibleBatch(ings, pool, 1) == 0 ? java.util.Optional.of(missingFor(ings, pool))
+                        : java.util.Optional.empty(), java.util.Optional.empty());
+    }
+
+    /** 这条合成配方装得下的最小的格:2(她自己的)、3(工作台);更大的(模组工位)是 0。 */
+    static int gridOf(CraftingRecipe recipe) {
+        return fits(recipe, 2, 2) ? 2 : fits(recipe, 3, 3) ? 3 : 0;
+    }
+
+    /**
+     * 按当前格局重算结果槽。容器从菜单自己的槽位上取({@code Slot.container}),所以
+     * 工作台和她自己的 2×2 走同一条;拿不到原版那两种容器的(模组自定义合成台)就不动。
+     */
+    private static void recompute(AbstractContainerMenu menu, Grid grid, NumenPlayer self,
+                                  RecipeHolder<CraftingRecipe> hint) {
+        if (!(self.level() instanceof ServerLevel level)) {
+            return;
         }
-        if (!back.isEmpty()) {
-            msg.append("; got back ").append(String.join(", ", back));
+        Container cells = menu.slots.get(grid.cells()[0]).container;
+        Container out = menu.slots.get(grid.result()).container;
+        if (cells instanceof CraftingContainer craft && out instanceof ResultContainer result) {
+            CraftingMenuAccessor.numen$recompute(menu, level, self, craft, result, hint);
         }
-        msg.append(". ").append(station).append(" Now carrying ").append(carrying).append("x ")
-                .append(name).append(".");
-        return TaskResult.ok(msg.toString(), Map.of("crafted", crafted, "carrying", carrying)).toJson();
     }
 
     private static TreeSet<Item> union(Map<Item, Integer> a, Map<Item, Integer> b) {
@@ -309,39 +226,7 @@ public final class CraftOps {
         return keys;
     }
 
-    // ---- recipe lookup / feasibility ----
-
-    private static List<Cand> candidatesFor(ServerLevel level, Item target) {
-        List<Cand> out = new ArrayList<>();
-        // 1.21.2+ 服务端没有按类型取表的公开口(recipeMap 不公开),全量遍历、只认
-        // 合成配方——执行层本来就只会往标准合成格里摆料,机器配方在这里被跳过。
-        for (RecipeHolder<?> holder : level.recipeAccess().getRecipes()) {
-            if (!(holder.value() instanceof CraftingRecipe cr)) {
-                continue;
-            }
-            try {
-                // 产出依赖输入的配方(烟花、镶零件的装备)静态匹配答不了——模组
-                // 自己标的 isSpecial 就是这句话,原版合成书同样不列它们。
-                if (cr.isSpecial()) {
-                    continue;
-                }
-                ItemStack result = RecipeProbe.resultOf(cr, level.registryAccess());
-                if (result.isEmpty() || result.getItem() != target
-                        || !RecipeProbe.usableIngredients(cr)) {
-                    continue;
-                }
-                if (ingredientsOf(cr).isEmpty()) {
-                    continue;   // 没有实际输入的配方摆不进格子
-                }
-                out.add(new Cand(cr, result.getCount()));
-            } catch (RuntimeException broken) {
-                // 坏一条丢一条,记下 id 方便去上游反馈;绝不让它杀掉整个调用
-                com.dwinovo.numen.core.Constants.LOG.debug(
-                        "[numen-craft] 配方 {} 坏了,跳过: {}", holder.id(), broken.toString());
-            }
-        }
-        return out;
-    }
+    // ---- recipe feasibility ----
 
     /** The recipe's non-empty ingredients — the per-craft shopping list. */
     private static List<Ingredient> ingredientsOf(CraftingRecipe recipe) {
@@ -430,7 +315,7 @@ public final class CraftOps {
         Map<String, int[]> tally = new LinkedHashMap<>();       // desc -> [need]
         Map<String, Ingredient> rep = new LinkedHashMap<>();
         for (Ingredient ing : ings) {
-            String desc = QueryExtraOps.describeIngredient(ing);
+            String desc = RecipeBook.describeIngredient(ing);
             tally.computeIfAbsent(desc, k -> new int[1])[0]++;
             rep.putIfAbsent(desc, ing);
         }
@@ -449,34 +334,6 @@ public final class CraftOps {
     }
 
     // ---- menu plumbing ----
-
-    /**
-     * 这一格右键能不能开出装得下这张配方的合成格——第二遍找台的判据只有这一条,
-     * 问的是行为不是类型。把它的菜单按标准生命周期造出来问一句格子多大,问完立刻
-     * 走 {@code removed} 收掉:构造时有副作用的(箱子把盖子计数加一)也就当场退掉,
-     * 世界里什么都没发生。菜单不按套路造的(构造即抛),当它不是工作台。
-     */
-    private static boolean opensFittingGrid(ServerLevel level, BlockPos pos, BlockState state,
-                                            NumenPlayer self, CraftingRecipe recipe) {
-        MenuProvider provider = state.getMenuProvider(level, pos);
-        if (provider == null) {
-            return false;
-        }
-        try {
-            AbstractContainerMenu menu = provider.createMenu(0, self.getInventory(), self);
-            if (menu == null) {
-                return false;
-            }
-            try {
-                Grid grid = findGrid(menu);
-                return grid != null && fits(recipe, grid.w(), grid.h());
-            } finally {
-                menu.removed(self);
-            }
-        } catch (RuntimeException e) {
-            return false;
-        }
-    }
 
     /** Detect a crafting surface generically: CraftingContainer-backed slots + the ResultSlot. */
     private static Grid findGrid(AbstractContainerMenu menu) {
@@ -585,5 +442,4 @@ public final class CraftOps {
         }
         return false;
     }
-
 }

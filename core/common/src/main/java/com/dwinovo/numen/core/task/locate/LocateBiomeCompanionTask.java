@@ -23,12 +23,10 @@ import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeSource;
 import net.minecraft.world.level.biome.Climate;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.function.Predicate;
 
 /**
- * Goal for {@code locate_biome}: find the nearest instance of a biome (by id)
+ * Goal for {@code locate biome}: find the nearest instance of a biome (by id)
  * or biome family (by {@code #tag}) in the entity's CURRENT dimension —
  * vanilla {@code /locate biome} semantics, time-sliced across ticks.
  *
@@ -49,7 +47,10 @@ import java.util.function.Predicate;
  * Coverage: {@value #SEARCH_RADIUS_RINGS} rings × {@value #SAMPLE_STEP_BLOCKS}
  * blocks = 6400 blocks, exactly vanilla /locate biome's radius; NC's default
  * reach is 10k with the same 64-block grid. Worst-case full miss ≈ 40k samples
- * ≈ 160 budgeted ticks ≈ 8s, far under the task deadline.
+ * ≈ 160 budgeted ticks ≈ 8s.
+ *
+ * <p>收工看环数,不看时间:身体从头到尾站着等这次搜索({@link #awaitSearch}),任务期限不走,
+ * 机器慢只是答案晚几刻,不会变成"搜到一半超时"。
  */
 public final class LocateBiomeCompanionTask extends AbstractCompanionTask<LocateBiomeTaskRecord> {
 
@@ -111,8 +112,8 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
             TagKey<Biome> tag = TagKey.create(Registries.BIOME, tagId);
             if (registry.get(tag).isEmpty()) {
                 failReason = isStructureTag(sl, tagId)
-                        ? arg + " is a STRUCTURE tag, not a biome tag — call "
-                                + "locate_structure(structure=\"" + arg + "\") instead"
+                        ? arg + " is a STRUCTURE tag, not a biome tag — use "
+                                + "locate structure " + arg + " instead"
                         : "unknown biome tag: " + arg + " — try a biome id like "
                                 + "minecraft:warped_forest, or tags like #minecraft:is_forest";
                 return null;
@@ -122,8 +123,8 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
         Identifier id = Identifier.tryParse(arg);
         if (id == null || registry.get(ResourceKey.create(Registries.BIOME, id)).isEmpty()) {
             if (id != null && isStructureId(sl, id)) {
-                failReason = arg + " is a STRUCTURE, not a biome — call "
-                        + "locate_structure(structure=\"" + arg + "\") instead";
+                failReason = arg + " is a STRUCTURE, not a biome — use "
+                        + "locate structure " + arg + " instead";
                 return null;
             }
             String suggestion = IdSuggest.closest(
@@ -133,7 +134,7 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
                             ? " — did you mean " + suggestion + "?"
                             : " — use a biome id like minecraft:warped_forest / "
                                     + "minecraft:desert, or a tag like #minecraft:is_forest; "
-                                    + "load_skill(world_atlas) lists every id");
+                                    + "the world_atlas skill lists every id");
             return null;
         }
         ResourceKey<Biome> key = ResourceKey.create(Registries.BIOME, id);
@@ -156,18 +157,20 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
             fail("not on a server level", FailureType.UNKNOWN);
             return TaskState.FAILED;
         }
-        SearchBudget.refresh(sl.getServer());
-        while (true) {
-            if (exhausted) {
-                return TaskState.SUCCESS;   // best == null → "not found"
-            }
-            if (!SearchBudget.tryBiomeSample()) {
-                return TaskState.RUNNING;    // pool drained — resume next tick
-            }
-            BlockPos hit = sampleNext();
-            if (hit != null) {
-                best = hit;                  // ring order ⇒ first hit ≈ nearest
-                return TaskState.SUCCESS;
+        try (SearchBudget.Slice slice = SearchBudget.slice(sl.getServer())) {
+            while (true) {
+                if (exhausted) {
+                    return TaskState.SUCCESS;   // best == null → "not found"
+                }
+                if (!SearchBudget.tryBiomeSample()) {
+                    awaitSearch();
+                    return TaskState.RUNNING;    // pool drained — resume next tick
+                }
+                BlockPos hit = sampleNext();
+                if (hit != null) {
+                    best = hit;                  // ring order ⇒ first hit ≈ nearest
+                    return TaskState.SUCCESS;
+                }
             }
         }
     }
@@ -202,24 +205,10 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
     protected void cleanup() {}
 
     @Override
-    protected Map<String, Object> resultData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("biome", r.biome);
-        if (best != null) {
-            BlockPos me = player.blockPosition();
-            int dx = best.getX() - me.getX();
-            int dz = best.getZ() - me.getZ();
-            int dist = (int) Math.sqrt((double) dx * dx + (double) dz * dz);
-            data.put("found", true);
-            data.put("x", best.getX());
-            data.put("y", best.getY());
-            data.put("z", best.getZ());
-            data.put("direction", CompassUtil.compass(dx, dz));
-            data.put("horizontal_distance", dist);
-        } else {
-            data.put("found", false);
-        }
-        return data;
+    protected Located value() {
+        String dim = player.level().dimension().identifier().toString();
+        return best != null ? Located.at(best, player.blockPosition(), dim)
+                : Located.none(Math.min(ring, SEARCH_RADIUS_RINGS) * SAMPLE_STEP_BLOCKS, dim);
     }
 
     @Override
@@ -232,9 +221,9 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
             String dir = CompassUtil.compass(dx, dz);
             return "nearest " + r.biome + " around " + best.getX() + ","
                     + best.getY() + "," + best.getZ() + " (" + dir + ", ~" + dist
-                    + " blocks; accurate to ~" + SAMPLE_STEP_BLOCKS + "). goto the "
-                    + "x/z (pick a sensible y for the terrain), then confirm with "
-                    + "scan_blocks or scan_nearby_entities.";
+                    + " blocks; accurate to ~" + SAMPLE_STEP_BLOCKS + "). " + com.dwinovo.numen.core.nav.NavText.gotoCall(
+                    new com.dwinovo.numen.sdk.Place(best.getX(), null, best.getZ()), "") + " goes there (it finds the height on its own), then confirm with "
+                    + "`numen.scan.blocks` or `numen.scan.entities`.";
         }
         String dim = player.level().dimension().identifier().getPath();
         int searched = Math.min(ring, SEARCH_RADIUS_RINGS) * SAMPLE_STEP_BLOCKS;
@@ -245,15 +234,7 @@ public final class LocateBiomeCompanionTask extends AbstractCompanionTask<Locate
     }
 
     @Override
-    protected String timeoutMessage() {
-        int searched = Math.min(ring, SEARCH_RADIUS_RINGS) * SAMPLE_STEP_BLOCKS;
-        return "biome search deadline hit after ~"
-                + searched + " blocks with no " + r.biome
-                + " — retrying immediately is fine, or travel first";
-    }
-
-    @Override
     protected String cancelledMessage() {
-        return "locate_biome interrupted";
+        return r.getToolName() + " interrupted";
     }
 }

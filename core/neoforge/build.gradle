@@ -6,6 +6,7 @@ plugins {
 dependencies {
     // The numen-api engine, now a sibling moddev project in this build.
     // NeoForge is Mojang-mapped natively, so no remap step is needed.
+    //
     // api 而非 implementation:引擎的类型出现在 core 的公开签名里
     // (AbstractCompanionTask<R extends TaskRecord> 等),消费者编译期必须看得见;
     // implementation 在 POM 里落成 runtime,想扩展 core 的人拿得到 jar 却编译不了。
@@ -14,6 +15,22 @@ dependencies {
     api project(':api:neoforge')
     // Bundle it into core's jar (Jar-in-Jar) so players install one file and get both mods.
     jarJar(project(':api:neoforge'))
+    // 用例类上的注解:只编译期要,运行时由开发运行配置里的模组 numen 带进来(见 gametest/build.gradle)
+    compileOnly project(':gametest')
+
+    // 内嵌的联动模块。compileOnly:只有 Builtin 那道闸要看见它们的 install 入口,
+    // 类与资源由下面的 jar 块平铺进发行 jar,不作为独立依赖出现在 POM 里
+    // (它们不发布——没人需要依赖我们的联动代码)。
+    compileOnly project(':plugins:curios')
+}
+
+// GameTest 的结构模板:本模组的在 gameteststructures/,寻路模块的在它自己的 src/gametest/structures/。原版只认一个
+// 模板目录,运行前把两处同步进构建目录里的一处,运行配置指向它。
+def gameTestStructures = layout.buildDirectory.dir('gameteststructures')
+def syncGameTestStructures = tasks.register('syncGameTestStructures', Sync) {
+    from 'gameteststructures'
+    from project(':pathing').file('src/gametest/structures')
+    into gameTestStructures
 }
 
 neoForge {
@@ -26,9 +43,9 @@ neoForge {
     runs {
         configureEach {
             systemProperty('neoforge.enabledGameTestNamespaces', mod_id)
-            // 所有运行配置都指向仓库内的 SNBT 模板目录:无头跑批用,开发客户端里
-            // /test run <用例> 现场围观也用(见 CompanionGameTests 静态块)。
-            systemProperty('numen.gametest.structures', file('gameteststructures').absolutePath)
+            // 所有运行配置都指向同步好的 SNBT 模板目录(见上面 syncGameTestStructures):无头跑批用,开发客户端里
+            // /test run <用例> 现场围观也用(见 GameTestKit 静态块)。
+            systemProperty('numen.gametest.structures', gameTestStructures.get().asFile.absolutePath)
             ideName = "NeoForge ${it.name.capitalize()} (${project.path})" // Unify the run config names with fabric
         }
         client {
@@ -55,8 +72,16 @@ neoForge {
     mods {
         "${mod_id}" {
             sourceSet sourceSets.main
+            // 寻路模块本身随 numen-api 来(api 依赖它);这里只挂它自己的 GameTest 用例
+            sourceSet project(':pathing').sourceSets.gametest
+            sourceSet project(':gametest').sourceSets.main
         }
     }
+}
+
+tasks.matching { it.name ==~ /run[A-Z].*/ }.configureEach {
+    dependsOn syncGameTestStructures
+    dependsOn ':pathing:gametestClasses', ':gametest:classes'
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
@@ -79,3 +104,13 @@ sourceSets.configureEach {
         }
     }
 }
+
+// 联动模组的类与资源平铺进发行 jar——它们本质是独立模组,只是跟车一起发。
+// 目标模组不在时它们一个类都不会被加载,见 com.dwinovo.numen.plugins.Builtin。
+tasks.named('jar', Jar) {
+    from({ project(':plugins:curios').sourceSets.main.output })
+}
+
+// 真模型评测:原版的场景在 src/bench,:core:neoforge:runBench 跑它们(见 buildSrc 的 numen-bench.gradle 与 docs/bench.md)。
+// 放在末尾:它要用到上面定义好的模组 numen。
+apply plugin: 'numen-bench'

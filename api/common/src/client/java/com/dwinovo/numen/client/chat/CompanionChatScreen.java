@@ -1,15 +1,21 @@
 package com.dwinovo.numen.client.chat;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData.Keys;
+import com.dwinovo.numen.agent.conversation.Conversation;
 import com.dwinovo.numen.api.Delivery;
 import com.dwinovo.numen.api.NumenGateway;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
+import com.dwinovo.numen.client.agent.Conversations;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.agent.NumenRoster;
+import com.dwinovo.numen.client.consent.ConsentCards;
+import com.dwinovo.numen.client.consent.ConsentMessage;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.client.screen.chat.ChatInputBar;
 import com.dwinovo.numen.client.screen.settings.HostThemeColors;
-import com.dwinovo.numen.client.ui.RoundRect;
+import com.dwinovo.numen.client.skin.ConversationFaces;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -27,31 +33,46 @@ import java.util.UUID;
 /**
  * 快捷对话:按对话键(默认 Y,入口在 {@code NumenKeys})对「当前交互
  * 对象」弹出这一条极简输入行——就一行,回车说出去立刻关屏,回复会浮
- * 在它头顶的气泡里。收件人由 {@code SelectedCompanion} 解析:准星指着
- * 谁优先谁,否则是轮盘选中的那位。屏只是输入法,不是对话窗口;历史与
- * 长文在 G 面板。准星提示见 {@code TalkHint}。
+ * 在它头顶的气泡里。收件人是一个会话,由 {@code SelectedCompanion} 解析:准星指着
+ * 谁就是跟她一个人说,否则是转盘选中的那个(可能是多人会话)。屏只是输入法,不是对话窗口;
+ * 历史与长文在 G 面板。准星提示见 {@code TalkHint}。
  *
  * <p>输入行与 G 面板是<b>同一条</b>({@link ChatInputBar}):斜杠补全弹层、
  * {@code /skills} 这类面板、回车先补后发,两处一模一样,不另写一套。不带麦克风键
  * ——快捷语音有自己的按住说话键。命令跑完的回话走准星提示层闪一下,屏照关。
  *
- * <p>与 {@code @名字} 路由是同一条管线({@link NumenGateway#enqueue}),
+ * <p>与 {@code @名字} 路由是同一条管线({@link NumenGateway#emit}),
  * 对应两种社交距离:@ 是远程喊话,这里是走到跟前说话。
+ *
+ * <p>样子照 Telegram 的输入区:窗口底色的一条、浮起的细描边;左端是说给谁——会话头像(群是群头像)加名字,
+ * 一道分隔线隔开输入框。开屏时整条自下浮起 {@link #OPEN_MS},不硬切。
+ *
+ * <p>有征询挂着时按对话键先答征询(对象是最早在等的那位,见 {@code NumenKeys}):她问的那条(问话 + 内联按钮,
+ * 见 {@link ConsentMessage})浮在输入卡上面,点按钮、"说一句再拒绝"后打字回车都和 G 面板一样;答完
+ * 还有别的同伴在等就换到她,都答完且输入框是空的就关屏——和说完一句一样。
  */
 public class CompanionChatScreen extends Screen {
 
     private static final int INPUT_W = 300;
     /** 与 G 面板输入行同高。 */
     private static final int INPUT_H = 18;
+    /** 名字牌里的会话头像:输入行里上下各留 2。 */
+    private static final int FACE = INPUT_H - 4;
+    /** 开屏浮起:Telegram 的快动效时长,浮起的高度。 */
+    private static final long OPEN_MS = 150;
+    private static final int OPEN_RISE = 8;
 
-    private final UUID companionUuid;
+    private final Conversation conv;
     private final String companionName;
     private ChatInputBar inputBar;
+    private final long openedAtMs = net.minecraft.util.Util.getMillis();
+    /** 这一帧征询那排按钮画在哪(点的时候照它认);没画是 0 宽。 */
+    private int keysX, keysY, keysW;
 
-    public CompanionChatScreen(UUID companionUuid, String companionName) {
-        super(Component.literal("Numen face-to-face chat"));
-        this.companionUuid = companionUuid;
-        this.companionName = companionName == null ? "?" : companionName;
+    public CompanionChatScreen(Conversation conv) {
+        super(Component.translatable(Keys.CHAT_SCREEN_TITLE));
+        this.conv = conv;
+        this.companionName = conv.displayName(NumenRoster.instance()::name);
     }
 
     /**
@@ -71,13 +92,15 @@ public class CompanionChatScreen extends Screen {
         return null;
     }
 
+    /** 就他俩那只的大脑(补全、征询);会话没有单一的主时 null。 */
     private EntityAgentLoop loop() {
-        return AgentLoopRegistry.getOrCreate(companionUuid);
+        UUID her = Conversations.instance().soloOf(conv);
+        return her == null ? null : AgentLoopRegistry.getOrCreate(her);
     }
 
-    /** 名字牌(说给谁)的宽度:它和输入行同排,占掉输入卡最左边这一截。 */
+    /** 名字牌(说给谁:头像 + 名字)的宽度:它和输入行同排,占掉输入卡最左边这一截。 */
     private int tagW() {
-        return this.font.width(companionName) + 12;
+        return FACE + 4 + this.font.width(companionName) + 4;
     }
 
     @Override
@@ -90,31 +113,41 @@ public class CompanionChatScreen extends Screen {
         int y = this.height - 44;
         inputBar = new ChatInputBar(new BarHost(), EnumSet.of(ChatInputBar.Key.SEND, ChatInputBar.Key.STOP));
         int lead = tagW() + 6;
-        inputBar.build(x + lead, y, INPUT_W - lead, INPUT_H);
+        inputBar.build(x, y, INPUT_W, INPUT_H, lead);
         if (!kept.isEmpty()) inputBar.setText(kept);
     }
 
     /** 输入行的宿主:说话走 Gateway 然后关屏;命令的回话闪在准星提示层,屏也关。 */
     private final class BarHost implements ChatInputBar.Host {
         @Override public void onSend(String text) {
-            Delivery sent = NumenGateway.enqueue(companionUuid, text);
-            if (sent != Delivery.REJECTED) {
+            if (Conversations.instance().say(conv, text).reached()) {
                 ChatLines.owner(companionName, text, false);
             } else {
-                com.dwinovo.numen.client.hud.TalkHint.flash(companionName + " 没能收到——它可能不在线", 3000);
+                com.dwinovo.numen.client.hud.TalkHint.flash(I18n.get(Keys.CHAT_NOT_RECEIVED, companionName), 3000);
             }
             onClose();
         }
 
-        @Override public void onAbort() { loop().abort(); }
+        @Override public void onAbort() { Conversations.instance().abort(conv); }   // 停止停全体
 
-        @Override public boolean canAbort() { return loop().canInterrupt(); }
+        @Override public boolean canAbort() { return Conversations.instance().canAbort(conv); }
 
         @Override public String hint() {
-            return "想说什么…(回车说出去,Esc 算了)";
+            return I18n.get(Keys.CHAT_INPUT_HINT);
         }
 
         @Override public EntityAgentLoop loop() { return CompanionChatScreen.this.loop(); }
+
+        @Override public Conversation conversation() { return conv; }
+
+        @Override public void onConsentSettled() {
+            var next = com.dwinovo.numen.client.consent.ConsentCards.first();
+            if (next != null) {
+                minecraft.setScreen(new CompanionChatScreen(Conversations.instance().of(next.companion())));
+            } else if (inputBar.text().isEmpty()) {
+                onClose();
+            }
+        }
 
         /** 只注册事件,不进 renderables——画面归 NumenUI。见 {@code McTextInput}。 */
         @Override public void onCommandReply(String reply) {
@@ -139,23 +172,57 @@ public class CompanionChatScreen extends Screen {
         UiTheme th = UiTheme.current();
         int x = (this.width - INPUT_W) / 2;
         int y = this.height - 44;
+        long now = net.minecraft.util.Util.getMillis();
 
-        // 输入卡:与 G 面板同方言的浅底粗边卡片;输入行(含弹层/面板)画在它上面
-        RoundRect.card(g, x - 8, y - 6, x + INPUT_W + 8, y + INPUT_H + 4, 4,
-                th.aiFill(), th.border());
+        // 开屏浮起:只挪画面,点击区不跟着挪——150ms 里差几个像素,点不偏
+        float rise = 1f - com.dwinovo.numen.client.ui.Anim.easeOutCubic((now - openedAtMs) / (float) OPEN_MS);
+        g.pose().pushMatrix();
+        g.pose().translate(0, Math.round(OPEN_RISE * rise));
+        var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, this.font);
+        // 输入卡:Telegram 输入区是窗口底色,浮在世界上用浮起的描边;输入行(含弹层/面板)画在它上面。
+        // 输入行往上长(多行、引用栏、"说一句再拒绝"的提示栏)时卡片跟着长,底边不动
+        int grown = inputBar.height() - INPUT_H;
+        com.dwinovo.numen.client.ui.NumenStyle.box(surface, x - 8, y - 6 - grown, INPUT_W + 16, INPUT_H + 10 + grown,
+                th.band(), th.aiBorder());
         // 名字牌:与输入行同排、占卡片最左一截,标明这句话说给谁。不放输入框上方——
         // 斜杠补全弹层和 /skills 面板都贴着输入框往上长,上面那块地是它们的
-        int tagW = tagW();
-        RoundRect.card(g, x - 4, y + 1, x - 4 + tagW, y + INPUT_H - 1, 3, th.band(), th.border());
-        Nb.text(g, this.font, companionName, x + 2, y + (INPUT_H - this.font.lineHeight) / 2 + 1,
+        ConversationFaces.draw(g, conv, x, y + (INPUT_H - FACE) / 2, FACE);
+        Nb.text(g, this.font, companionName, x + FACE + 4, y + (INPUT_H - this.font.lineHeight) / 2 + 1,
                 th.onBand());
-        inputBar.render(g, mouseX, mouseY, net.minecraft.util.Util.getMillis(), HostThemeColors.current());
+        int div = x + tagW() + 2;
+        g.fill(div, y + 1, div + 1, y + INPUT_H - 1, th.surfaceBorder());
+        renderConsent(g, surface, th, x - 8, y - 6 - grown, mouseX, mouseY);
+        inputBar.render(g, mouseX, mouseY, now, HostThemeColors.current());
+        g.pose().popMatrix();
 
         String tip = inputBar.tooltipAt(mouseX, mouseY);
         if (tip != null) {
             g.setTooltipForNextFrame(this.font, Component.literal(tip), mouseX, mouseY);
         }
         super.render(g, mouseX, mouseY, partialTicks);
+    }
+
+    /**
+     * 她挂着的征询浮在输入卡上面:同一套框,里面是清单与内联按钮;顶边一道缩短的线是剩下的时间(撤不回时是警示色)。
+     */
+    private void renderConsent(GuiGraphics g, com.dwinovo.numen.client.ui.mc.McDrawSurface surface, UiTheme th,
+                               int cardX, int cardTop, int mouseX, int mouseY) {
+        ConsentCards.Card card = ConsentCards.pending(Conversations.instance().soloOf(conv));
+        keysW = 0;
+        if (card == null) return;
+        int w = INPUT_W + 16;
+        int listH = ConsentMessage.listHeight(card);
+        int innerW = w - 8;
+        int h = 4 + listH + ConsentMessage.GAP + ConsentMessage.keyboardHeight(this.font, innerW) + 4;
+        int top = cardTop - 4 - h;
+        com.dwinovo.numen.client.ui.NumenStyle.box(surface, cardX, top, w, h, th.band(), th.aiBorder());
+        g.fill(cardX + 1, top + 1, cardX + 1 + Math.round((w - 2) * ConsentMessage.timeLeft(card)), top + 2,
+                ConsentMessage.tone(card));
+        ConsentMessage.drawList(g, this.font, card, cardX + 4, top + 4, innerW);
+        keysX = cardX + 4;
+        keysY = top + 4 + listH + ConsentMessage.GAP;
+        keysW = innerW;
+        ConsentMessage.drawKeyboard(g, this.font, card, keysX, keysY, keysW, mouseX, mouseY);
     }
 
     @Override
@@ -178,10 +245,31 @@ public class CompanionChatScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        ConsentCards.Card card = ConsentCards.pending(Conversations.instance().soloOf(conv));
+        if (card != null && keysW > 0
+                && ConsentMessage.click(this.font, card, keysX, keysY, keysW, event.x(), event.y())) {
+            return true;
+        }
         if (inputBar != null && inputBar.mouseClicked(event.x(), event.y(), event.button())) {
             return true;
         }
         return super.mouseClicked(event, doubleClick);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        // 写满五行的输入框在框里翻
+        if (inputBar != null && scrollY != 0 && inputBar.mouseScrolled(mouseX, mouseY, scrollY)) {
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+    }
+
+    @Override
+    public void tick() {
+        if (inputBar != null) {
+            inputBar.tick();
+        }
     }
 
     @Override

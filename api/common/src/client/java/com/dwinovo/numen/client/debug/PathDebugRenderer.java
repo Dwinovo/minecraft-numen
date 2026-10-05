@@ -26,6 +26,8 @@ public final class PathDebugRenderer {
     private static final float[] BLUE = {0.25f, 0.45f, 1.0f};
     private static final float[] GREEN = {0.15f, 1.0f, 0.15f};
 
+    private static final float ALPHA = 0.9f;
+
     private PathDebugRenderer() {}
 
     /** 世界渲染钩子入口(半透明方块阶段之后;poseStack 为世界空间)。 */
@@ -85,45 +87,16 @@ public final class PathDebugRenderer {
         }
     }
 
-    /** 线框盒:12 条棱走 {@link #seg}(1.21.11 起 ShapeRenderer 不再提供 renderLineBox)。 */
     private static void drawBox(PoseStack poseStack, VertexConsumer vc, long packed, float[] color) {
         BlockPos pos = BlockPos.of(packed);
-        PoseStack.Pose pose = poseStack.last();
-        double x0 = pos.getX() + 0.02, y0 = pos.getY() + 0.02, z0 = pos.getZ() + 0.02;
-        double x1 = pos.getX() + 0.98, y1 = pos.getY() + 0.98, z1 = pos.getZ() + 0.98;
-        seg(vc, pose, x0, y0, z0, x1, y0, z0, color);
-        seg(vc, pose, x1, y0, z0, x1, y0, z1, color);
-        seg(vc, pose, x1, y0, z1, x0, y0, z1, color);
-        seg(vc, pose, x0, y0, z1, x0, y0, z0, color);
-        seg(vc, pose, x0, y1, z0, x1, y1, z0, color);
-        seg(vc, pose, x1, y1, z0, x1, y1, z1, color);
-        seg(vc, pose, x1, y1, z1, x0, y1, z1, color);
-        seg(vc, pose, x0, y1, z1, x0, y1, z0, color);
-        seg(vc, pose, x0, y0, z0, x0, y1, z0, color);
-        seg(vc, pose, x1, y0, z0, x1, y1, z0, color);
-        seg(vc, pose, x1, y0, z1, x1, y1, z1, color);
-        seg(vc, pose, x0, y0, z1, x0, y1, z1, color);
+        LineBox.draw(vc, poseStack.last(),
+                pos.getX() + 0.02, pos.getY() + 0.02, pos.getZ() + 0.02,
+                pos.getX() + 0.98, pos.getY() + 0.98, pos.getZ() + 0.98,
+                color[0], color[1], color[2], ALPHA);
     }
 
-    /** 一条线段(法线取线段方向,lines 渲染管线要求)。 */
     private static void seg(VertexConsumer vc, PoseStack.Pose pose,
-                            double x1, double y1, double z1,
-                            double x2, double y2, double z2, float[] color) {
-        float dx = (float) (x2 - x1);
-        float dy = (float) (y2 - y1);
-        float dz = (float) (z2 - z1);
-        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (len < 1.0e-5f) {
-            return;
-        }
-        float nx = dx / len;
-        float ny = dy / len;
-        float nz = dz / len;
-        vc.addVertex(pose, (float) x1, (float) y1, (float) z1)
-                .setColor(color[0], color[1], color[2], 0.9f)
-                .setNormal(pose, nx, ny, nz);
-        vc.addVertex(pose, (float) x2, (float) y2, (float) z2)
-                .setColor(color[0], color[1], color[2], 0.9f)
-                .setNormal(pose, nx, ny, nz);
+                            double x1, double y1, double z1, double x2, double y2, double z2, float[] color) {
+        LineBox.seg(vc, pose, x1, y1, z1, x2, y2, z2, color[0], color[1], color[2], ALPHA);
     }
 }
