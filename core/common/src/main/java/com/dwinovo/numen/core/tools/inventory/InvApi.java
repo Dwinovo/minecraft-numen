@@ -52,7 +52,7 @@ public final class InvApi {
 
     /** 背包 36 格里的东西按种类合起来,先见先列。 */
     @Fn("What you carry in your backpack, one entry per kind of item.")
-    @Example("for _, s in ipairs(numen.inv.getNonEquipmentItems()()) do print(s.item, s.count) end")
+    @Example("for _, s in ipairs(numen.inv.items()) do print(s.item, s.count) end")
     @Note("Instant and read-only. Only the backpack (hotbar included): what you wear and hold in the off hand is in "
             + "<worn>. Empty means an empty table.")
     @SeeAlso("numen.inv.count")
@@ -76,7 +76,7 @@ public final class InvApi {
     @Fn("How many of one item you carry in your backpack.")
     @Example("if numen.inv.count(\"minecraft:coal\") < 8 then print(\"low on coal\") end")
     @Note("Instant and read-only; 0 when you carry none.")
-    @SeeAlso("numen.inv.getNonEquipmentItems()")
+    @SeeAlso("numen.inv.items")
     public static int count(ServerCall call, Count args) {
         return PlayerInv.carriedCount(call.her().getInventory(), args.item());
     }
