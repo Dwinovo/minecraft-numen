@@ -401,6 +401,6 @@ Thread.ofVirtual().name(n).start(r)    →  守护平台线程:new Thread(r, n) 
   不能在里面跑真实游戏逻辑。
 - **mixin**:这一代 Fabric Loader 0.15.3 自带的 MixinExtras 没有 `@WrapMethod`(要 ≥ 0.4,更旧的静默不生效);同 1.20.1,四处都是 `@Inject` 成对写法,源码里没有 `@WrapMethod`,
   成品不内嵌 MixinExtras。`MixinPlayerInfo` 在仓库任何分支的历史里都不存在,没有可保留的。`numen_api.fabric.architectury.mixins.json` 的 Fabric 一份照旧。
-- **联动**:ysm 三个加载器都在;curios(Forge,Curios 7.4.3+1.20.4)与 ftbquests(Forge,FTB Quests 2004.2.3、Library 2004.2.5、Teams 2004.1.2、Architectury 11.1.17)只在 Forge。
+- **联动**:YSM 没有 1.20.4 的构建(Modrinth 只有 1.20/1.20.1/1.21/1.21.1/26.1.2),不带;Fabric 侧的联动只有它,`core/fabric` 的 `Builtin` 一并去掉。curios(Forge,Curios 7.4.3+1.20.4)与 ftbquests(Forge,FTB Quests 2004.2.3、Library 2004.2.5、Teams 2004.1.2、Architectury 11.1.17)只在 Forge。
   这一代的 FTB Quests 没有 `Quest.isSearchable` 与 `TeamData.getCannotStartReason`:看不看得见改用 `Quest.isVisible(team)`,"为什么还不能开始"由插件自己点名还没完成的前置任务
   (`QuestBook.cannotStartReason`)。车万女仆、森罗厨房没有这一版(只有 1.20.1 与 1.21.1),不接;Fabric 上 Curios/FTB Quests 同 1.21.1 不接。

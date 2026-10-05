@@ -121,7 +121,6 @@ jarJar.enable()
 dependencies {
     // 内嵌的联动模组。compileOnly:只有 Builtin 那道闸要看见它们的 install 入口,
     // 类与资源由下面的 jar 块平铺进发行 jar。
-    compileOnly project(':plugins:ysm')
     compileOnly project(':plugins:curios')
     compileOnly project(':plugins:ftbquests')
 
@@ -158,7 +157,7 @@ dependencies {
 
 // 跟车发的联动,它们的防漂移测试(技能与命令说明按命令树读一遍)随本模块的 check 一起跑:构建发行 jar 就查过它带上的文字
 tasks.named('check') {
-    dependsOn(':plugins:ysm:test', ':plugins:ftbquests:test')
+    dependsOn(':plugins:ftbquests:test')
 }
 
 jar.finalizedBy('reobfJar')
@@ -225,7 +224,6 @@ tasks.named("jar", Jar) {
 // META-INF/jarjar/),而它<b>不继承 jar 的内容配置</b>。只加在 jar 上的话,-all 里
 // 一个联动 class 都没有——装上去就是"工具凭空少了几个",还不报错。
 tasks.matching { it.name == 'jar' || it.name == 'jarJar' }.configureEach {
-    it.from({ project(':plugins:ysm').sourceSets.main.output })
     it.from({ project(':plugins:curios').sourceSets.main.output })
     it.from({ project(':plugins:ftbquests').sourceSets.main.output })
 }
