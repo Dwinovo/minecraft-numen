@@ -116,6 +116,30 @@ class ToolDisclosureTest {
         assertEquals("", ToolDisclosure.catalog(List.of()));
     }
 
+    @Test
+    void visibleToolsAddsExpandedDeferredDefinitions() {
+        Spec resident = new Spec("find_tools", "Load tool definitions.");
+        Spec deferred = new Spec("follow", "Follow the owner.");
+        String expanded = ToolDisclosure.render(List.of(deferred));
+
+        List<IToolSpec> visible = ToolDisclosure.visibleTools(
+                List.of(resident), List.of(deferred), List.of(toolMsg(expanded)));
+
+        assertEquals(List.of(resident, deferred), visible);
+    }
+
+    @Test
+    void visibleToolsDoesNotDuplicateResidentNames() {
+        Spec resident = new Spec("same", "Resident definition.");
+        Spec deferred = new Spec("same", "Deferred definition.");
+
+        List<IToolSpec> visible = ToolDisclosure.visibleTools(
+                List.of(resident), List.of(deferred),
+                List.of(toolMsg(ToolDisclosure.render(List.of(deferred)))));
+
+        assertEquals(List.of(resident), visible);
+    }
+
     // ---- 摘要 ----
 
     @Test
