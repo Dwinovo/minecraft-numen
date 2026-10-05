@@ -99,7 +99,7 @@ public class BudgetGameTests {
             if (!(plan.outcome() instanceof Outcome.OutOfBudget)) {
                 throw new TestFailure("一次搜索应当搜不到头:" + plan.outcome() + " " + plan.candidates().size());
             }
-            t.go(body, request).within(6800).paced(2).arrives().then(r -> {
+            t.go(body, request).within(6800).arrives().then(r -> {
                 if (r.report.bill().digs().size() < 2 * 88) {
                     throw new TestFailure("没挖出隧道:" + r.report.bill().digs().size() + " 格");
                 }
@@ -125,7 +125,7 @@ public class BudgetGameTests {
         t.materials = Trial.carried(body, Blocks.COBBLESTONE);
         var start = body.position();
         boolean[] moving = {false};
-        t.go(body, Goals.at(t.at(164, 5, 12)), NATURAL).within(6800)
+        t.go(body, Goals.at(t.at(164, 5, 12)), NATURAL).within(6800).realTime()
                 .during(r -> {
                     try {
                         Thread.sleep(moving[0] ? 5 : 50);
@@ -180,7 +180,7 @@ public class BudgetGameTests {
         int[] pausedAt = {-1};
         boolean[] resumed = {false};
         int[] resumedAt = {-1};
-        t.go(body, Goals.at(t.at(4, 1, 11)), RouteSpec.defaults()).within(700)
+        t.go(body, Goals.at(t.at(4, 1, 11)), RouteSpec.defaults()).within(700).realTime()
                 .during(r -> {
                     double x = r.body.getX() - t.origin.getX();
                     double z = r.body.getZ() - t.origin.getZ();
