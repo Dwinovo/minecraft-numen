@@ -1,6 +1,7 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.network.Wire;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -12,12 +13,13 @@ import net.minecraft.world.item.ItemStack;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
  * Server → Client: a companion's 36 main backpack slots. Sent both as the answer to
  * {@link RequestStatePayload} (the Items tab asking) and unprompted whenever her
  * inventory actually changes, so the agent loop can state what she carries without
- * spending a turn on {@code get_self_status}. {@code loaded=false} means the body is
+ * spending a turn on {@code status_self}. {@code loaded=false} means the body is
  * asleep in unloaded chunks (or not the requester's) — no contents.
  *
  * <p>{@code selectedSlot} and {@code offhand} ride along rather than being read off the
@@ -29,20 +31,27 @@ import java.util.UUID;
  * 饱食度、选中槽、副手早就在里面了 —— 它一直是<b>这具身体此刻的样子</b>,只是原来叫背包。
  * 身上的效果同理:模型每一轮都要读它才知道自己中没中毒、有没有抗性,而这类东西<b>一进对话
  * 历史就永远不会过期</b>,只能每次现挂。同一条通道、同一份快照,不必为每样状态另开一路。
- * 骑乘同理:她坐没坐在船上决定了"再点一次船"是不是废话、goto 会驾船还是走路,
+ * 骑乘同理:她坐没坐在船上决定了"再点一次船"是不是废话、numen.move.go 会驾船还是走路,
  * 模型必须实时看见。{@code vehicleType} 空串 = 没骑任何东西,{@code vehicleId} 相应为 -1。
+ * 身体状态片段({@code bodyState}:打头的 {@code <worn>} 与插件经 {@code NumenApi.contributeBodyState} 读的)同理:
+ * 身体上的事实,同一份快照带过去;空串 = 没有插件要说什么。
+ *
+ * <h2>装不下一个包时</h2>
+ * 身体状态片段是插件给的,物品带着任意的组件(写满的书、装满的潜影盒),长短都不归这个包定。整包装不下时
+ * ({@link #shrunk})先把身体状态换成一句说明;还装不下,背包也不带,说明里一并交代——她读到的是"这次没送到",
+ * 不是一个空背包。
  */
 public record NumenStatePayload(UUID uuid, boolean loaded, List<ItemStack> items,
                                 List<ItemStack> craft, int foodLevel, float saturation,
                                 int selectedSlot, ItemStack offhand,
                                 List<MobEffectInstance> effects,
-                                String vehicleType, int vehicleId)
-        implements CustomPacketPayload {
+                                String vehicleType, int vehicleId, String bodyState)
+        implements CustomPacketPayload, Wire.Oversized<NumenStatePayload> {
 
     public static final Type<NumenStatePayload> TYPE = new Type<>(
             new ResourceLocation(Constants.MOD_ID, "numen_state"));
 
-    /** 手写而不是 {@code composite}:后者最多拼 6 个分量,这里有九个。 */
+    /** 手写而不是 {@code composite}:后者最多拼 6 个分量,这里有十二个。 */
     public static final StreamCodec<RegistryFriendlyByteBuf, NumenStatePayload> STREAM_CODEC =
             StreamCodec.of(NumenStatePayload::write, NumenStatePayload::read);
 
@@ -56,8 +65,9 @@ public record NumenStatePayload(UUID uuid, boolean loaded, List<ItemStack> items
         ByteBufCodecs.VAR_INT.encode(buf, p.selectedSlot());
         ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, p.offhand());
         MobEffectInstance.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buf, p.effects());
-        ByteBufCodecs.STRING_UTF8.encode(buf, p.vehicleType());
+        Wire.TO_CLIENT.text().encode(buf, p.vehicleType());
         ByteBufCodecs.VAR_INT.encode(buf, p.vehicleId());
+        Wire.TO_CLIENT.text().encode(buf, p.bodyState());
     }
 
     private static NumenStatePayload read(RegistryFriendlyByteBuf buf) {
@@ -71,10 +81,27 @@ public record NumenStatePayload(UUID uuid, boolean loaded, List<ItemStack> items
         ItemStack offhand = ItemStack.OPTIONAL_STREAM_CODEC.decode(buf);
         List<MobEffectInstance> effects =
                 MobEffectInstance.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buf);
-        String vehicleType = ByteBufCodecs.STRING_UTF8.decode(buf);
+        String vehicleType = Wire.TO_CLIENT.text().decode(buf);
         int vehicleId = ByteBufCodecs.VAR_INT.decode(buf);
+        String bodyState = Wire.TO_CLIENT.text().decode(buf);
         return new NumenStatePayload(uuid, loaded, items, craft, foodLevel, saturation,
-                selectedSlot, offhand, effects, vehicleType, vehicleId);
+                selectedSlot, offhand, effects, vehicleType, vehicleId, bodyState);
+    }
+
+    @Override
+    public NumenStatePayload shrunk(Predicate<NumenStatePayload> fits, int bytes, int budget) {
+        NumenStatePayload lighter = new NumenStatePayload(uuid, loaded, items, craft, foodLevel, saturation,
+                selectedSlot, offhand, effects, vehicleType, vehicleId, "<not_delivered>"
+                + Wire.TO_CLIENT.tooBig("Your body state", bytes) + ", so it is left out this time.</not_delivered>");
+        if (fits.test(lighter)) {
+            return lighter;
+        }
+        List<ItemStack> none = java.util.Collections.nCopies(items.size(), ItemStack.EMPTY);
+        return new NumenStatePayload(uuid, loaded, none, java.util.Collections.nCopies(craft.size(), ItemStack.EMPTY),
+                foodLevel, saturation, selectedSlot, ItemStack.EMPTY, effects, vehicleType, vehicleId,
+                "<not_delivered>" + Wire.TO_CLIENT.tooBig("Your body state with your inventory", bytes)
+                        + ", so both are left out this time: the empty slots here are not your inventory."
+                        + "</not_delivered>");
     }
 
     @Override

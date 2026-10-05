@@ -21,7 +21,7 @@ public final class NumenPaths {
      * 写之前自己 {@code createDirectories}。
      *
      * <p>插件的持久数据也放这儿,文件名带上自己的 mod id(如
-     * {@code numen_tlm-wardrobe.json})。玩家找 Numen 相关的东西只需要看这一个目录。
+     * {@code numen_<mod id>-<名字>.json})。玩家找 Numen 相关的东西只需要看这一个目录。
      */
     public static Path config() {
         return Services.PLATFORM.getConfigDir().resolve(Constants.CONFIG_ROOT);

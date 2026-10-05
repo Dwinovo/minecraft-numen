@@ -161,10 +161,10 @@ final class BuildFixtures {
      * 不知道世界变了</b>:在湖里砌一道墙,两侧的水停在过期状态;把水下的一块石头
      * 清掉,那个洞不会自己被水填上。踢一脚只需要在外壳上做,内部全是刚放好的方块。
      *
-     * <p>只在"连带清空"那档做:低档位不清场,挖不出会漏水的空腔。
+     * <p>只在有格子是"连带清空"那档时做:低档位不清场,挖不出会漏水的空腔。
      */
     void nudgeSurroundingWater(BlockPos siteMin, BlockPos siteMax) {
-        if (r.replaceMode != ReplaceMode.REPLACE_EMPTY
+        if (r.targets.stream().noneMatch(t -> t.mode() == ReplaceMode.REPLACE_EMPTY)
                 || !(player.level() instanceof ServerLevel level)) {
             return;
         }

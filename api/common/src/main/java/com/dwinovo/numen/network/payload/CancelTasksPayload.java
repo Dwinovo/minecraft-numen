@@ -2,8 +2,8 @@ package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.NumenPlayer;
+import io.netty.buffer.ByteBuf;
 import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -22,17 +22,16 @@ import java.util.UUID;
  * to stop a companion that has wandered far away. Cancelling is the one action
  * that is always safe to allow from anywhere.
  *
- * <p>The server-side {@code CANCELLED} results this produces are shipped back
- * via {@link TaskResultPayload} as usual; the client agent loop has already
- * synthesized "interrupted by owner" results for those tool-call ids and drops
- * the real ones as late arrivals. This payload's job is purely the body stop.
+ * <p>A program the owner sent is stopped by {@link StopProgramPayload}; the task's
+ * own end comes as a task_finished event (or in the receipt of a program still
+ * waiting for it). This payload's job is purely the body stop.
  */
 public record CancelTasksPayload(UUID entityUuid) implements CustomPacketPayload {
 
     public static final Type<CancelTasksPayload> TYPE = new Type<>(
             new ResourceLocation(Constants.MOD_ID, "cancel_tasks"));
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, CancelTasksPayload> STREAM_CODEC =
+    public static final StreamCodec<ByteBuf, CancelTasksPayload> STREAM_CODEC =
             StreamCodec.composite(
                     UUIDUtil.STREAM_CODEC, CancelTasksPayload::entityUuid,
                     CancelTasksPayload::new);

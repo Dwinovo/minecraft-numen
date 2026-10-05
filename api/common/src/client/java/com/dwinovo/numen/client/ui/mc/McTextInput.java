@@ -119,6 +119,13 @@ public final class McTextInput implements TextInput {
     }
 
     @Override
+    public void setCursor(int pos) {
+        int at = Math.max(0, Math.min(pos, box.getValue().length()));
+        box.setCursorPosition(at);
+        box.setHighlightPos(at);
+    }
+
+    @Override
     public boolean focused() {
         return box.isFocused();
     }

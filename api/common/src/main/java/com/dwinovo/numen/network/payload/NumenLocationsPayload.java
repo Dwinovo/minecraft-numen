@@ -1,6 +1,7 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.network.Wire;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -53,7 +54,7 @@ public record NumenLocationsPayload(List<Snapshot> snapshots) implements CustomP
                             buf.writeDouble(s.x());
                             buf.writeDouble(s.y());
                             buf.writeDouble(s.z());
-                            buf.writeUtf(s.dimension(), 256);
+                            Wire.TO_CLIENT.text().encode(buf, s.dimension());
                             buf.writeFloat(s.hp());
                             buf.writeFloat(s.maxHp());
                         },
@@ -61,7 +62,7 @@ public record NumenLocationsPayload(List<Snapshot> snapshots) implements CustomP
                                 UUIDUtil.STREAM_CODEC.decode(buf),
                                 buf.readBoolean(), buf.readBoolean(),
                                 buf.readDouble(), buf.readDouble(), buf.readDouble(),
-                                buf.readUtf(256),
+                                Wire.TO_CLIENT.text().decode(buf),
                                 buf.readFloat(), buf.readFloat()));
     }
 

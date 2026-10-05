@@ -1,5 +1,7 @@
 package com.dwinovo.numen.mcp.client;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData;
 import com.dwinovo.numen.Constants;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -235,6 +237,12 @@ final class McpOAuth {
 
     private record Callback(HttpServer server, int port, CompletableFuture<String[]> future) {}
 
+    /** 回调页:浏览器里给主人看的一句话,按他的语言;转义了才放进 HTML(失败原因来自授权服务器)。 */
+    private static String page(String words) {
+        String escaped = words.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+        return "<html><body style='font-family:sans-serif'>" + escaped + "</body></html>";
+    }
+
     private static Callback startCallbackServer() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         CompletableFuture<String[]> future = new CompletableFuture<>();
@@ -243,11 +251,11 @@ final class McpOAuth {
             String html;
             if (q.containsKey("code")) {
                 future.complete(new String[]{q.get("code"), q.getOrDefault("state", "")});
-                html = "<html><body style='font-family:sans-serif'>Numen 授权成功，可以关闭此页面。</body></html>";
+                html = page(I18n.get(ModLanguageData.Keys.MCP_OAUTH_OK));
             } else {
                 future.completeExceptionally(new IllegalStateException("authorization denied: "
                         + q.getOrDefault("error", "no code")));
-                html = "<html><body style='font-family:sans-serif'>授权失败：" + q.getOrDefault("error", "") + "</body></html>";
+                html = page(I18n.get(ModLanguageData.Keys.MCP_OAUTH_FAILED, q.getOrDefault("error", "")));
             }
             byte[] out = html.getBytes(StandardCharsets.UTF_8);
             ex.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
