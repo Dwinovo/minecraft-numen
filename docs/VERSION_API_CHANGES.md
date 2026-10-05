@@ -180,6 +180,42 @@ registryAccess().registryOrThrow(Registries.STRUCTURE)  → registryAccess().loo
   方块/物品名无需改。
 - 验收数字：单测 867 全绿（0 跳过）,gametest 65/65 连续 3 轮全绿。
 
+### 1.21.4 二次对齐(0.1.3 → 1.21.1@7a3d3e251)
+
+整树对齐新增 agent/lua/pathing/bench/插件框架之后,新代码碰到的 1.21.2+ 差异(上面没有的),逐条:
+
+**注册表与配方**
+- `Registry.asLookup()` 没了:注册表自己就是 `HolderLookup`,直接传 `BuiltInRegistries.BLOCK`。`registryAccess().registryOrThrow` → `lookupOrThrow`,`getHolderOrThrow` → `getOrThrow`。
+- 配方:`level.getRecipeManager()` → `level.recipeAccess()`;`byKey` 吃 `ResourceKey<Recipe<?>>`(`ResourceKey.create(Registries.RECIPE, id)`);**`RecipeHolder.id()` 现在是 ResourceKey,取原来的字符串要 `.id().location()`**(直接 `toString()` 编得过、值错);静态配料清单走 `placementInfo()`,`Ingredient.items()` 是 `Stream<Holder<Item>>`,熔炼/切石 `input()`/`cookingTime()`。
+- `CraftingMenu.slotChangedCraftingGrid` 的 level 参数是 `ServerLevel`(CraftingMenuAccessor 的 @Invoker 描述符要跟)。
+
+**玩家与服务端**
+- ❗ **`ServerPlayer.hasClientLoaded()`**:为假时服务端不收任何动作包(挖/放/用)且玩家不受伤;原版靠客户端发 `ServerboundPlayerLoadedPacket`,60 刻后兜底。假玩家走真包路径的操作(寻路模块的 `PlayerHands`)头 60 刻会被静默吞掉(症状是挖掘全报"服务端没让挖")。FakeClient 在收到下行 `ClientboundGameEventPacket.LEVEL_CHUNKS_LOAD_START` 时晚一刻替她回 `handleAcceptPlayerLoad`,与回传送编号同一套。
+- `ClientboundPlayerPositionPacket.getId()` → `id()`;`MinecraftServer.tell` → `schedule`;`Item.getDescription()` → `getName()`;`ServerPlayer.shouldInformAdmins()` 不再对外(玩家的指令来源恒为 true,McApi 直接传 true);`isInvulnerableTo(ServerLevel, DamageSource)`;`teleportTo(level, x,y,z, yaw, pitch)` → `teleportTo(level, x,y,z, Set<Relative>, yaw, pitch, setCamera)`;`changeDimension(DimensionTransition)` → `teleport(TeleportTransition)`。
+- 背包:`ServerboundPickItemPacket` 拆成按方块/按实体两个包,背包深处换进快捷栏改直接 `inventory.pickSlot(slot)` + `ClientboundSetHeldSlotPacket` + `inventoryMenu.broadcastChanges()`(与原版 `tryPickItem` 收尾同三步);`setPickedItem` → `addAndPickItem`。
+- `InteractionResult` 成密封接口:`shouldSwing()` → `result instanceof Success s && s.swingSource() == SwingSource.SERVER`。
+- 高度:`LevelHeightAccessor.getMinBuildHeight()` 抽象方法换成 `getMinY()`(自家 `WorldView`/`SearchView` 的实现与单测夹具一并改);`getMaxBuildHeight()`(不含端)→ `getMaxY()`(含端),要保持"上界不含端"的写成 `getMaxY() + 1`;`getMinSection` → `getMinSectionY`。
+- `Direction`:`getNormal` → `getUnitVec3i`;`getNearest(double×3)` → `getApproximateNearest`(同一套点积算法);`getNearest(int×3)` 补兜底参 `Direction.NORTH`;`fromDelta` 没了,同样走 `getNearest(..., NORTH)`。
+
+**mixin(无头测不到,逐个对源码核过签名)**
+- `ItemEntity.hurt` → `hurtServer(ServerLevel, DamageSource, float)`(ItemEntityDropsMixin)。
+- 船族上移 `AbstractBoat`;`EntityType.BOAT` → `OAK_BOAT`,`NavText` 报"下了 oak_boat"(单测断言跟随)。`MoveToCompanionTask`/`Planning` 里的 `instanceof Boat` 必须改 `AbstractBoat`,否则木筏/箱船静默漏判。
+- 气泡 mixin 沿用 `MixinLivingEntityRenderer`,挂载点改 HEAD(与 1.21.1 的理由一致:接管渲染的插件取消渲染前置事件时 TAIL 不会跑)。
+- `ToastComponent` → `ToastManager`,`getToasts()` → `getToastManager()`(ToastComponentAccessor 的目标随之换,类名未动)。
+- MixinExtras `@WrapMethod` 要 ≥ 0.4:NeoForge 21.4.123 自带 0.4.1(GameTest 日志 `MixinExtrasServiceImpl(version=0.4.1` 实证),Fabric loader 0.18.1 自带 0.5.0(jar 内 `META-INF/jars/mixinextras-fabric-0.5.0.jar` 实证,Fabric 侧无头测不到)。够用,不内嵌。
+
+**客户端渲染**
+- 1.21.2+ `GuiGraphics` 没有 `setColor`,画下去的东西先攒进缓冲、`flush()` 才真画,画的那一刻用 `RenderSystem` 着色器颜色。整块画面的不透明度走 `GuiAlpha.set(g, alpha)`(先 flush 再设着色器颜色);`Sprites.draw` 的着色走 `blitSprite(RenderType::guiTextured, …, argb)` 的顶点色并在贴完 flush,与 1.21.1 "tint 覆盖着色器颜色、贴完复位"同语义。
+- `LevelRenderer.renderLineBox` → `ShapeRenderer.renderLineBox`;`blitSprite` 补 `RenderType::guiTextured`。NumenUI 的圆角 shader 已随 1.21.1 删除,本分支不再有 shader 注册。
+
+**GameTest / 单测夹具**
+- `EntityType.create(level)` 补 `EntitySpawnReason.STRUCTURE`;`new Boat(...)`/`new Minecart(...)` → `create` + `setInitialPos`。
+- 冻结注册表拒绝直写标签:`MappedRegistry.bindTags` 夹具(RuleTest、GateTerrainTest、ThrowawayTagTestSupport、pathing 的 Vanilla)改走 `Registry#prepareTagReload(new TagLoader.LoadResult<>(key, tags)).apply()`,它会整体换掉标签集,所以"清空"也写成空 map。
+- 模板垫底(`floor16/20/52`):size y+1、data 整体 y+1、原 y0 层复刻为新底层。pathing 的三个空模板只有尺寸,不用垫。
+- 寻路 StrideControl:脚已经不比落点低就不再起跳。1.21.4 上日式小屋用例稳定复现:开着的活板门(整高薄板)后面是半砖,她跳过薄板落在板顶,落点比板顶低,原逻辑落地后又 `onGround && 前沿贴近` 地再跳,一路蹦过落点,再回头走又被"落回前一步起点"判为 FELL_BACK,三次后整段收场。1.21.1 上同一用例过,是因为两版施工的先后在第 1491 条规划起出现平局分歧、没走到这一处;这是共用代码里的缺口,不是 1.21.4 的物理差异(逐刻轨迹的起跳、落地与 1.21.1 的原版公式一致)。
+
+**插件**:1.21.4 NeoForge 上只有 Curios(Maven `10.0.x+1.21.4`)。车万女仆、YSM、森罗物语在 Modrinth 上只有 1.21/1.21.1 版;FTB Quests 的 maven 里只有 2004/2100/2101/2111/26.1.2 五档(没有 1.21.4)。故 `plugins/` 只留 curios,Builtin 只列它,Fabric 侧没有联动(Curios 只有 NeoForge 版),不建 `core/fabric` 的 Builtin。
+
 ---
 
 ## 1.21.4 → 1.21.5 ✓（已验证，双 loader 编译 + 出包通过）
@@ -267,18 +303,21 @@ MobEffects.DIG_SLOWDOWN → MobEffects.MINING_FATIGUE
 `@GameTest` / `@BeforeBatch` / `net.neoforged.neoforge.gametest.@GameTestHolder` /
 `@PrefixGameTestTemplate` 都没了。用例改成 `minecraft:test_instance` 注册表里的条目
 （结构、超时、环境收进 `TestData`），批次前置改成"测试环境"`TestEnvironmentDefinition.setup`。
-移植办法（见 `core/gametest/` 四个新文件）：
+移植办法（登记层是独立模块 `:gametest`，核心、寻路模块、评测的用例共用，不发布、不进发行 jar）：
 ```
-自带 @NumenTest(template/timeoutTicks/batch) 注解  ← 与旧 @GameTest 同形状，用例方法一字不改
-NumenTestInstance extends GameTestInstance         ← 直接持有方法引用
-NumenTestEnvironment implements TestEnvironmentDefinition  ← 旧 @BeforeBatch 的"和平+正午"
-NumenGameTests：反射扫注解 → NeoForge 的 RegisterGameTestsEvent 登记实例与环境
+@NumenTestHolder(命名空间) / @NumenTest(template/timeoutTicks/batch) / @BeforeBatch / @AfterBatch
+                                                   ← 与旧注解同形状，用例方法体不动
+@NumenTestGenerator + TestCase                     ← 评测按选中的场景现算用例（旧 @GameTestGenerator）
+NumenTestInstance extends GameTestInstance         ← 按用例名到名册取回方法体
+NumenTestEnvironment implements TestEnvironmentDefinition
+                                                   ← 一个批次一个环境：setup 跑 @BeforeBatch，teardown 跑 @AfterBatch
+GameTests（@EventBusSubscriber）：ModList 扫 @NumenTestHolder → RegisterGameTestsEvent 登记实例与环境
 ```
 坑一：**不能用原版 `FunctionGameTestInstance`**——它按 `Registries.TEST_FUNCTION` 取用例体，
 而该注册表在 `BuiltInRegistries` 引导时（`BuiltinTestFunctions::bootstrap` 一次跑完所有
 loader）就冻结了，模组加载轮不上。
 坑二：`TEST_INSTANCE` / `TEST_ENVIRONMENT` 在 `SYNCHRONIZED_REGISTRIES` 里，自定义实例
-类型与环境类型的 `MapCodec` 必须经 `DeferredRegister` 注册进 `TEST_INSTANCE_TYPE` /
+类型与环境类型的 `MapCodec` 必须经 `RegisterEvent` 注册进 `TEST_INSTANCE_TYPE` /
 `TEST_ENVIRONMENT_DEFINITION_TYPE`，否则同步给客户端时找不到类型。
 坑三：`GameTestHelper` 的断言/失败消息由 `String` 改成 `Component`
 （`assertTrue(boolean, Component)`、`fail(Component)`）；`StructureUtils.testStructuresDir`
@@ -343,7 +382,7 @@ run_command 的参数  value → command
 `getStyle().getClickEvent()` 返回 null。于是"带点击事件的牌子必须拒收"这条用例
 **以"没检测到威胁"的形式变红**；判据本身（读的是解析后的 `Style`）一行都不用改。
 
-**随机刻必须停摆** ❗（`build_japanese_cottage`，本代新加）——把
+**随机刻必须停摆** ❗（`build_japanese_cottage`、`does_not_jump_onto_farmland`）——批次环境把
 `RULE_RANDOMTICKING` 设为 0，与"和平 + 正午"同属排除环境随机性：
 日式小屋图纸里有 163 格草方块，盖上屋顶后随机刻把它们退化成泥土，而验收要的是
 「5857 格<b>同时</b>就位」的那一瞬——先落的草在最后一格落定前就已退化，那一瞬
@@ -385,13 +424,8 @@ save()/load() 重写删除后,单测的往返改为直接对包内可见的 CODE
 1.21.4 的手写 StreamCodec 改回 `StreamCodec.composite`(上限回到 9);线格式与手写
 逐字段一致(同序同码,`writeUtf(256)` ≡ `stringUtf8(256)`),不破协议。
 
-**gametest 总数会多 1**:vanilla 在 `TEST_INSTANCE` 注册表引导时自注册
-`minecraft:always_pass`,GameTestServer 报 `66 GAME TESTS`= 本仓 65 + 它 1,不是账错。
-
-**批次环境口径**(并仓树 14 个批次):旧代带 `@BeforeBatch` 的七个批次
-(mine/build/build_cottage/build_heavy/blueprint/mode/cottage_jp)挂"和平+正午+
-随机刻停摆"环境;其余七个(combat/interact/inventory/smoke/survival/terrain/vehicle)
-旧代就没有前置,挂空环境,语义逐字保持。
+**批次环境口径**：每个批次一个 `NumenTestEnvironment`，`setup` 先停随机刻再跑这一批的 `@BeforeBatch`，
+`teardown` 跑 `@AfterBatch`；全部批次一视同仁（原版默认环境是空的，不管随机刻）。
 
 **同构负结果**(查过、确认不用动):`GameTestHelper` 除 assertTrue/fail 外
 succeedWhen/runAfterDelay/startSequence/succeed 签名全部未变;圆角 GLSL 与 api 仓
@@ -403,6 +437,39 @@ gson 仍为 2.11.0;其余七只 mixin(skipPlayer/applyChunkTrackingView/send/pla
 controlBoat/dataSlots/allMessages+refreshTrimmedMessages/nibble)目标逐一对过
 1.21.5 字节码,全部还在。
 
+
+### 1.21.5 二次对齐(align-1.21.4 → 1.21.5)
+
+底是 `align-1.21.4`(它又是 1.21.1@7a3d3e251 的整树对齐),上面各节的 1.21.5 差异按新树重放一遍;新树新碰到的、上面没有的:
+
+**存档与数据**
+- `SavedData` 全部改成 codec 化的 `SavedDataType`:`CompanionRegistry`、`EventOutbox`、`PermissionStore`、`PlacedBlocks`、`TimerRegistry`、`Built`。`save()/load()` 重写没了,单测对包内可见的 `CODEC` 往返(测的就是生产在用的那条路),`Built.CODEC` 公开给 GameTest 按存档的形状往返。读档失败的兜底在原版存储层,codec 只许返回 error、不许抛。
+- `CompoundTag`/`ListTag` 读取全部 Optional 化(`getIntOr`、`getCompoundOrEmpty`、`getListOrEmpty`、`keySet`、`asString()` 返 Optional;`contains(k, TAG_X)` 没了,改判 `getX(k).isPresent()`)。图纸格式、`BlueprintStore`、`Built`、单测夹具与 GameTest 里读 NBT 的地方一并改。**坑**:`getListOrEmpty` 不筛元素类型,旧写法直接强转会 CCE。
+
+**玩家、背包与实体**
+- `Inventory` 的 `items`/`selected`/`offhand` 私有化:`getNonEquipmentItems()`、`getSelectedSlot()/setSelectedSlot()`、副手 `setItem(Inventory.SLOT_OFFHAND, …)`(寻路的 `Hotbar`/`Snapshots`、`PlayerInv`、`Wardrobe`、`InvApi`)。装备在 `EntityEquipment` 里:**`LivingEntity.equipment` 与 `Inventory` 共用同一份**,单测里空壳玩家(`Unsafe.allocateInstance`)要把同一个 `EntityEquipment` 同时塞给两处,否则 `getOffhandItem()` 空指针。
+- `Entity.moveTo` → `snapTo`;`ServerLevel.onBlockStateChange` → `updatePOIOnBlockStateChange`(mixin 只在运行期炸,datagen 能抓到);`Level.isDay/isNight` → `isBrightOutside/isDarkOutside`。
+- `Wolf`/`Sheep` 挪进 `animal.wolf`/`animal.sheep` 子包;宠物主人 `setOwnerUUID` → `setOwnerReference(new EntityReference<>(uuid))`;猪鞍不再是 `equipSaddle`,是装备槽 `EquipmentSlot.SADDLE`。`EntityCollisionContext` 构造多一个布尔参(寻路单测夹具)。
+
+**客户端**
+- `ClickEvent` 成接口(`new ClickEvent.OpenUrl(URI)`),点击事件的 JSON 形状也换了:`clickEvent` → `click_event`,`run_command` 的 `value` → `command`(旧形状不会解码失败,只是事件当未知字段被丢掉,"带点击事件的牌子必须拒收"的用例以"没检测到威胁"的形式变红)。
+- `RenderSystem.enableBlend` 没了(渲染管线代码定义化)。**GuiAlpha 靠 `RenderSystem.setShaderColor` 给整块画面调不透明度,这一条无头 GameTest 照不出,要真机看淡入淡出。**
+
+**GameTest 登记层(本代最大的一刀)**
+- 原版不再有 `@GameTest`/`@BeforeBatch`/`@GameTestHolder`,用例成了 `minecraft:test_instance` 注册表里的数据条目。新树的用例分在核心(27 个类)、寻路模块(约 15 个类)、评测(`Bench.suite`)三处,所以登记层是独立模块 `:gametest`(`GameTests`:`@EventBusSubscriber` + `ModList` 扫 `@NumenTestHolder` → `RegisterGameTestsEvent`),不发布、不进发行 jar;核心经 `compileOnly` 看见它,运行时靠 `mods.numen` 挂上。注解与旧代同形状:`@NumenTestHolder(命名空间)`、`@NumenTest`、`@BeforeBatch`/`@AfterBatch`(批次环境的 `setup`/`teardown`)、`@NumenTestGenerator` + `TestCase`(评测按选中的场景现算用例)。结构模板目录由登记层统一指到 `numen.gametest.structures`(`StructureUtils.testStructuresDir` 成了 `Path`)。
+- `GameTestHelper` 的断言/失败消息要 `Component`:`assertTrue(boolean, Component)`、`fail(Component)`,`GameTestAssertException(Component, int tick)`。用例里一律 `text("...")` 包一层;没有 `helper` 的地方(步骤、轮询辅助类)抛 `TestFailure`(只带一句话,不带"第几刻")。
+- `:gametest` 对着 NeoForge 编译(同 `:bench:game`),不能对着 NeoForm:NeoForm 的依赖把 asm 严格钉在 9.6,FML 的 `loader` 要 9.7,解析不过。
+- **原版的 GameTest 世界换了**:1.21.4 以前 `GameTestServer` 开服就关了随机刻和火刻(并关了刷怪、天气循环);1.21.5 的默认环境是空的,只剩后两样。于是耕地失水(`does_not_jump_onto_farmland`)、草皮退化成泥土(日式小屋 5857 格同时就位永远等不到)、火蔓延与变老(`passes_cactus_fire_berries_and_magma_unhurt`)全冒出来。批次环境 `setup` 把这两条补回,一视同仁加给所有批次。
+- **NeoForge 21.5 的 `ConfigSync.syncPendingConfigs` 对"非内存连接上的真玩家"要求配置阶段登记过一张待同步表,没有就抛**(`GameTestPlayer` 子类放行)。GameTest 里的在场主人 `OwnerLine` 与评测的模拟主人 `OwnerConnection` 都是没走配置阶段的 mock 连接,会在下一刻服务端刻崩服;两处都覆写 `isMemoryConnection()` 为真(没有网线,正是"和自己同步"那一支)。
+- 总数 564 = 本仓 563 + 原版自注册的 `minecraft:always_pass`。
+
+**MixinExtras**:`@WrapMethod` 要 ≥ 0.4。NeoForge 21.5.97 自带 0.5.3(datagen 日志 `MixinExtrasServiceImpl(version=0.5.3` 实证),Fabric loader 0.18.1 自带 0.5.0(同 1.21.4)。不内嵌。
+
+**插件**:1.21.5 NeoForge 上只有 Curios(`11.0.1+1.21.5`,`gradle.properties` 的 `curios_version`)。车万女仆、YSM、森罗物语只有 1.21/1.21.1 版,FTB Quests 的 maven 没有 1.21.5 档(同 1.21.4 一节查的那几份清单),故 `plugins/` 只留 curios,Fabric 侧没有联动。
+
+**真机要看的**(无头测不到):`GuiAlpha` 淡入淡出与 `Sprites` 着色、`MixinLivingEntityRenderer` 的气泡、`ToastComponentAccessor`、聊天里的链接点击(`ClickEvent.OpenUrl`)、`FakeClient` 的 `hasClientLoaded` 握手(真连接上)。
+
+---
 
 ## 1.21.5 → 1.21.8
 <!-- 约 24 文件 -->
