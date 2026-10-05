@@ -131,7 +131,7 @@ public final class SelectPanel extends Popup {
 
     @Override
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
-        NumenStyle.fieldCard(s, x, y, w, h, c.panelBg(), c.accent());
+        NumenStyle.box(s, x, y, w, h, c.panelBg(), c.accent());
 
         int iy = y + PAD;
         String title = page.title();
@@ -151,7 +151,7 @@ public final class SelectPanel extends Popup {
     private void drawRow(IDrawSurface s, NumenTheme.Colors c, Row row, boolean picked,
                          int rx, int ry, int rw) {
         if (picked) {
-            s.fillRoundRect(rx - 2, ry - 1, rw + 4, ROW_H, NumenStyle.RADIUS_SMALL, c.selected());
+            s.fillRect(rx - 2, ry - 1, rw + 4, ROW_H, c.selected());
         }
         int textY = ry + (ROW_H - s.lineHeight()) / 2;
         int left = rx;

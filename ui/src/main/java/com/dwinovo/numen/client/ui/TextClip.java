@@ -20,11 +20,16 @@ public final class TextClip {
      * ——没量过尺寸的控件保持旧行为,不无声吞字。
      */
     public static String fit(IDrawSurface s, String text, int maxWidth) {
+        return fit(s::textWidth, text, maxWidth);
+    }
+
+    /** 同上,量宽交给调用方给的函数——手里只有字体、没有画布的地方(MC 屏幕层)用这个。 */
+    public static String fit(java.util.function.ToIntFunction<String> width, String text, int maxWidth) {
         String t = text == null ? "" : text;
-        if (maxWidth <= 0 || s.textWidth(t) <= maxWidth) {
+        if (maxWidth <= 0 || width.applyAsInt(t) <= maxWidth) {
             return t;
         }
-        int room = maxWidth - s.textWidth(ELLIPSIS);
+        int room = maxWidth - width.applyAsInt(ELLIPSIS);
         if (room <= 0) {
             return "";
         }
@@ -33,7 +38,7 @@ public final class TextClip {
         int hi = t.codePointCount(0, t.length());
         while (lo < hi) {
             int mid = (lo + hi + 1) >>> 1;
-            if (s.textWidth(t.substring(0, t.offsetByCodePoints(0, mid))) <= room) {
+            if (width.applyAsInt(t.substring(0, t.offsetByCodePoints(0, mid))) <= room) {
                 lo = mid;
             } else {
                 hi = mid - 1;

@@ -74,8 +74,22 @@ final class TokenLedger {
         return o.has(key) && o.get(key).isJsonPrimitive() ? Math.max(0, o.get(key).getAsLong()) : 0;
     }
 
+    /**
+     * 内核的事件里台账要接的:每一次模型调用的用量(对话、整理、目标评估都经 {@code ModelUsed} 这一条路来),
+     * 以及历史换了之后缓存诊断清零——前缀本来就换了,下一轮的未命中不算"白付"。
+     */
+    void on(com.dwinovo.numen.agent.loop.LoopEvent event) {
+        if (event instanceof com.dwinovo.numen.agent.loop.LoopEvent.ModelUsed used) {
+            add(used.usage());
+        } else if (event instanceof com.dwinovo.numen.agent.loop.LoopEvent.TranscriptBoundary boundary) {
+            if (boundary.kind() != com.dwinovo.numen.agent.loop.LoopEvent.Boundary.HALT) {
+                waste.reset();
+            }
+        }
+    }
+
     /** 累加一次请求的用量并写穿到 stats 文件(文件极小,每回合一写)。 */
-    void add(Usage u) {
+    private void add(Usage u) {
         if (u == null) return;
         latest = u;
         waste.observe(u);

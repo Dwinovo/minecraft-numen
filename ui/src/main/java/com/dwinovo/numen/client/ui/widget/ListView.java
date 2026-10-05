@@ -105,15 +105,15 @@ public final class ListView<T> extends Widget {
         if (hoverT <= 0f && hoveredRow < 0) hoverRow = -1;
         for (int i = range[0]; i <= range[1]; i++) {
             int rowY = y + i * rowHeight - (int) scrollY;
-            // 选中底与悬停底同一几何(全行高、同圆角)——两层错位会露边,看起来像
+            // 选中底与悬停底同一几何(全行高、同宽)——两层错位会露边,看起来像
             // "选中和悬停混在一起"(真机教训);渲染回调只画内容。
             if (i == selectedIndex) {
-                s.fillRoundRect(x, rowY, w, rowHeight, NumenStyle.RADIUS_CONTROL, c.selected());
+                s.fillRect(x, rowY, w, rowHeight, c.selected());
             }
             if (i == hoverRow && hoverT > 0.01f) {
                 int overlay = ((int) (((c.hover() >>> 24) & 0xFF) * hoverT) << 24)
                         | (c.hover() & 0xFFFFFF);
-                s.fillRoundRect(x, rowY, w, rowHeight, NumenStyle.RADIUS_CONTROL, overlay);
+                s.fillRect(x, rowY, w, rowHeight, overlay);
             }
             renderer.render(s, c, items.get(i), i, x, rowY, w, rowHeight,
                     i == selectedIndex, i == hoveredRow);
@@ -124,7 +124,7 @@ public final class ListView<T> extends Widget {
         if (max > 0) {   // 滚动条:轨道隐形,只画拇指
             int barH = Math.max(10, (int) ((double) h * h / (items.size() * rowHeight)));
             int barY = y + (int) ((h - barH) * (scrollY / max));
-            s.fillRoundRect(x + w - NumenStyle.SCROLLBAR_W, barY, NumenStyle.SCROLLBAR_W, barH, NumenStyle.RADIUS_SMALL, c.divider());
+            s.fillRect(x + w - NumenStyle.SCROLLBAR_W, barY, NumenStyle.SCROLLBAR_W, barH, c.divider());
         }
     }
 

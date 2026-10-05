@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.task.interact;
 import com.dwinovo.numen.core.task.MouseButton;
 
+import com.dwinovo.numen.sdk.ServerCall;
 import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -8,9 +9,9 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 
 /**
- * Typed descriptor for {@code interact_at} — the point-aimed half of the native
+ * Typed descriptor for {@code use block} and {@code use item} — the point-aimed half of the native
  * crosshair interaction (the BLOCK and AIR columns of vanilla's
- * {@code startAttack}/{@code startUseItem}; the ENTITY column is {@code interact_entity}).
+ * {@code startAttack}/{@code startUseItem}; the ENTITY column is {@code use entity}).
  *
  * <p>Aim at a world point and press a mouse button; the native raytrace resolves whatever
  * is actually under the aim:
@@ -20,26 +21,30 @@ import net.minecraft.world.item.Items;
  *       — when the aim is clear air — use the held item in that direction (throw an ender
  *       pearl, eat, draw a bow).</li>
  * </ul>
- * {@code aim} null = use the body's CURRENT facing (in-air use with no target, e.g. eating).
+ * {@code aim} null ({@code use item}) = use the body's CURRENT facing (in-air use with no target).
  * {@code holdTicks}: 0 = a single press; &gt;0 = hold that many ticks (modded crank / bow draw);
  * -1 = hold until the action self-completes or the task times out.
+ * {@code sneak}: hold sneak while pressing ({@code --sneak}).
  */
 public final class InteractAtTaskRecord extends TaskRecord {
 
-    public static final String TOOL_NAME = "interact_at";
+    /** Covers walking to the aim. */
+    private static final long TIMEOUT_TICKS = 30 * 20;
 
     public final MouseButton button;
     public final BlockPos aim;     // null → current facing (in-air use)
     public final int holdTicks;
     public final Item item;        // null → use whatever is already in hand; else equip this first
+    public final boolean sneak;
 
-    public InteractAtTaskRecord(String toolCallId, long deadlineGameTime,
-                                MouseButton button, BlockPos aim, int holdTicks, Item item) {
-        super(TOOL_NAME, toolCallId, deadlineGameTime);
+    public InteractAtTaskRecord(ServerCall source, MouseButton button, BlockPos aim, int holdTicks, Item item,
+                                boolean sneak) {
+        super(source, source.her().level().getGameTime() + TIMEOUT_TICKS);
         this.button = button;
         this.aim = aim != null ? aim.immutable() : null;
         this.holdTicks = holdTicks;
         this.item = item;
+        this.sneak = sneak;
     }
 
     /**
@@ -53,20 +58,20 @@ public final class InteractAtTaskRecord extends TaskRecord {
         }
         if (item.getFoodProperties() != null) {   // 1.20.1:食物属性在 Item 上,不是组件
             return BuiltInRegistries.ITEM.getKey(item).getPath()
-                    + " is a consumable — use eat (using it through the world body wouldn't heal you).";
+                    + " is a consumable — use numen.inv.eat (using it through the world body wouldn't heal you).";
         }
         if (item == Items.ENDER_PEARL) {
-            return "ender_pearl teleportation is body-bound and not supported — to travel use goto, "
-                    + "to find a stronghold use locate_structure(\"minecraft:stronghold\").";
+            return "ender_pearl teleportation is body-bound and not supported — to travel use numen.move.to, "
+                    + "to find a stronghold use numen.locate.structure(\"minecraft:stronghold\").";
         }
         return null;
     }
 
     @Override
     public String describe() {
-        return TOOL_NAME + " " + (button == MouseButton.LEFT ? "left" : "right")
+        return getToolName() + " " + (button == MouseButton.LEFT ? "left" : "right")
                 + (item != null ? " " + BuiltInRegistries.ITEM.getKey(item).getPath() : "")
                 + (aim != null ? " @" + aim.getX() + "," + aim.getY() + "," + aim.getZ() : " (forward)")
-                + (holdTicks != 0 ? " hold=" + holdTicks : "");
+                + (holdTicks != 0 ? " hold=" + holdTicks : "") + (sneak ? " sneak" : "");
     }
 }

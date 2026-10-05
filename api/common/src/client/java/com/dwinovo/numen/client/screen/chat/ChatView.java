@@ -3,43 +3,56 @@ package com.dwinovo.numen.client.screen.chat;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.llm.ConvoLog;
 import com.dwinovo.numen.agent.llm.ConvoState;
+import com.dwinovo.numen.agent.conversation.Conversation;
+import com.dwinovo.numen.agent.conversation.Mentions;
+import com.dwinovo.numen.agent.conversation.Quote;
+import com.dwinovo.numen.agent.conversation.Transcript;
+import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
-import com.dwinovo.numen.client.agent.ClientNumenLookup;
+import com.dwinovo.numen.client.agent.Conversations;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
+import com.dwinovo.numen.client.agent.KnownSkins;
+import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.client.chat.ChatDisplayModes;
+import com.dwinovo.numen.client.consent.ConsentCards;
+import com.dwinovo.numen.client.consent.ConsentMessage;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.client.ui.Anim;
 import com.dwinovo.numen.client.ui.NumenStyle;
-import com.dwinovo.numen.client.ui.RoundRect;
 import com.dwinovo.numen.mcp.server.McpMode;
 import com.dwinovo.numen.mcp.server.McpTranscript;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import com.dwinovo.numen.client.skin.CompanionFace;
-import net.minecraft.client.gui.components.PlayerFaceRenderer;
-import net.minecraft.client.player.AbstractClientPlayer;
-import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.client.resources.language.I18n;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 import net.minecraft.util.Mth;
+import com.dwinovo.numen.client.screen.GuiCompat;
 
 /**
  * The chat transcript as a conversation: the owner's messages are right-aligned
  * bubbles, the companion's replies left-aligned bubbles — both with their real
- * skin avatar — and a run of consecutive tool calls folds into one rounded chip
- * (click to expand once done). System notes (persona change / compaction / empty
- * hint) sit centred and faint. Scrolling is eased ({@link Anim#approach}) and
+ * skin avatar — and a run of consecutive tool calls folds into one chip
+ * (click to expand once done). Date chips, the unread bar and system notes (persona change /
+ * compaction / empty hint) are Telegram service messages: a centred translucent box, white text. Scrolling is eased ({@link Anim#approach}) and
  * pins to the bottom while the owner hasn't scrolled away.
  *
  * <p>Blocks are rebuilt every frame from the loop's PHYSICAL transcript (exactly
@@ -52,17 +65,26 @@ public final class ChatView {
     // ---- metrics ----
     private static final int LINE_H = 10;
     private static final int LABEL_H = 9;       // companion name line above its bubble
+    /** 时间戳放不进最后一行右侧时,单独占的一行(小字)。 */
+    private static final int TIME_H = 8;
+    /** 新消息飞入:从下面 8px 淡入,220ms easeOut——Telegram 那种"升上来"。 */
+    private static final int ENTER_MS = 220;
+    private static final int ENTER_DY = 8;
     private static final int AV = 18;           // avatar face size
     private static final int AV_GAP = 5;        // avatar ↔ bubble
+    /** 气泡尾巴自底向上每一行伸出多长;最长那行就是尾巴的宽 {@code TAIL},比脸和气泡之间的缝窄。 */
+    private static final int[] TAIL_STEPS = {4, 2, 1};
+    private static final int TAIL = 4;
     private static final int PAD_H = 5;         // bubble text inset
     private static final int PAD_V = 4;         // 1 line → 18px bubble = exactly the avatar height
+    /** 块与块之间:换了人、日期牌、提示行前后拉开 {@code BLOCK_GAP};同一个人接连的块只隔 {@code RUN_GAP}。 */
     private static final int BLOCK_GAP = 6;
+    private static final int RUN_GAP = 2;
     private static final int TOP_PAD = 2;
     private static final int BOT_PAD = 2;
     private static final int SB_W = 4;          // scrollbar width
     private static final int EDGE = 2;          // left inset so the avatar FRAME (-2px) clears the scissor
     private static final int OPP_MARGIN = 24;   // kept clear on the far side of a bubble
-    private static final int RADIUS = 4;
     private static final int ICON_W = 11;       // chip status-icon column
     private static final int TOOL_ARG_CHARS = 44;
     private static final float SCROLL_RATE = 14f;
@@ -70,14 +92,24 @@ public final class ChatView {
     private static final float REVEAL_CPS = 80f;
     private static final int REVEAL_MAX_LAG = 120;
     private static final String[] SPIN = {"|", "/", "-", "\\"};
+    /** 连发合并里代表主人的那一格——主人不是同伴,没有 UUID。 */
+    private static final UUID OWNER = net.minecraft.Util.NIL_UUID;
 
     // ---- palette: re-read from the CURRENT theme each frame (loadPalette), so the
     // Settings picker recolours the transcript live. Field names keep the constant
     // convention — they behave as constants within a frame. ----
     private int TOOL, MUTED, FAINT, OK, RUN, FAIL, TXT;
-    private int AI_FILL, AI_BORDER, OWN_FILL, OWN_BORDER, QUEUED_FILL, QUEUED_BORDER, CHIP_FILL;
+    private int AI_FILL, AI_BORDER, OWN_FILL, QUEUED_FILL, CHIP_FILL;
     /** 机器行的左缘竖线色(工具/思考过程共用)。 */
     private int TRACE_BAR;
+    /** 主人话里 @ 到的名字。 */
+    private int MENTION;
+    /** 气泡里的时间:她的、主人的(Telegram 的 msgInDateFg / msgOutDateFg)。 */
+    private int IN_META, OUT_META;
+    /** 未读角标上的数字色。 */
+    private int ON_CTA;
+    /** 服务消息(日期牌、未读消息、提示行)的半透明底与字(Telegram 的 msgServiceBg / msgServiceFg)。 */
+    private int SERVICE_BG, SERVICE_FG;
 
     private void loadPalette() {
         UiTheme t = UiTheme.current();
@@ -91,57 +123,222 @@ public final class ChatView {
         AI_FILL = t.aiFill();
         AI_BORDER = t.aiBorder();
         OWN_FILL = t.ownFill();
-        OWN_BORDER = t.ownBorder();
         QUEUED_FILL = t.queuedFill();
-        QUEUED_BORDER = t.queuedBorder();
         CHIP_FILL = t.chipFill();
         TRACE_BAR = t.surfaceBorder();
+        MENTION = t.accent();
+        IN_META = t.inMeta();
+        OUT_META = t.outMeta();
+        ON_CTA = t.onCta();
+        SERVICE_BG = t.serviceBg();
+        SERVICE_FG = t.serviceFg();
     }
 
     private static ResourceLocation spr(String n) {
         return new ResourceLocation(Constants.MOD_ID, n);
     }
-    private static final ResourceLocation SCROLL_TRACK = spr("scroll_track");
     private static final ResourceLocation SCROLL_THUMB = spr("scroll_thumb");
+    private static final ResourceLocation CHEVRON_DOWN = spr("chevron_down");
+    /**
+     * 回到最新的浮钮(Telegram 翻上去时右下角那枚):边长、离右缘和底边的距离,
+     * 以及露出的进度 0..1(趋近)——它从底边下面滑上来,被对话流裁掉,不是原地淡入。
+     */
+    private static final int JUMP = 18, JUMP_INSET = 6;
+    private float jumpShown;
+    private int jumpX, jumpY;
+    /** 滚动条只在滚动时和指针在对话流上时出现(Telegram),淡入淡出按趋近走。 */
+    private float barShown;
+    private long lastScrollMs;
+    /** 滑块贴哪条右缘(宿主给正文区的右缘,不是气泡区的);-1 = 气泡区自己的右缘。 */
+    private int barRight = -1;
+    /** 正拖着滑块;{@code barGrab} 是按下时指针离滑块顶边多远,拖的时候保持这个差。 */
+    private boolean barDragging;
+    private int barGrab;
+
+    public void scrollbarRight(int x) {
+        barRight = x;
+    }
+
+    private int barX() {
+        return (barRight > 0 ? barRight : gx + gw) - SB_W;
+    }
+
+    private int thumbH() {
+        return Math.max(12, gh * gh / (gh + lastMaxScroll));
+    }
+
+    private int thumbY() {
+        return gy + Math.round((gh - thumbH()) * (scrollPos / Math.max(1, lastMaxScroll)));
+    }
+
+    /** 直接跳到某个滚动位置(拖滑块、点槽):不走趋近,手在哪滑块就在哪。 */
+    private void scrollTo(float target) {
+        scrollTarget = Mth.clamp(Math.round(target), 0, lastMaxScroll);
+        scrollPos = scrollTarget;
+        pinBottom = scrollTarget >= lastMaxScroll;
+        lastScrollMs = System.currentTimeMillis();
+    }
+
+    /** 拖滑块:按下时按住的那一点相对滑块的位置不变。 */
+    public boolean mouseDragged(double mx, double my) {
+        if (!barDragging) return false;
+        int th = thumbH();
+        float span = Math.max(1, gh - th);
+        scrollTo((float) (my - barGrab - gy) / span * lastMaxScroll);
+        return true;
+    }
+
+    public boolean mouseReleased() {
+        if (!barDragging) return false;
+        barDragging = false;
+        return true;
+    }
 
     private final Font font;
-    private final Supplier<EntityAgentLoop> loop;
-    private final Supplier<String> name;
-    private final Supplier<UUID> uuid;
+    private final Supplier<Conversation> conv;
 
     // ---- scroll + fold state ----
     private float scrollPos;
     private int scrollTarget;
     private boolean pinBottom = true;
     private int lastMaxScroll;
+    /** 刚切进来的第一帧直接落到最底(Telegram 打开会话就停在最新一条),不从顶上滚下来;之后再平滑。 */
+    private boolean snapNext;
     private long lastFrameMs;
-    /** Typewriter state: how much of the live partial is revealed, and the string
-     *  (text + blinking caret) the current frame shows — build() reads the cache so
-     *  click-time rebuilds see the same geometry. */
-    private float revealed;
-    private String liveShown = "";
+    /** 打字机:每个成员在飞的回复各自露出多少、这一帧显示成什么(正文 + 闪烁光标)。
+     *  build() 读的是缓存,点击时的重建和渲染看到同一份几何。 */
+    private final java.util.Map<UUID, Live> live = new java.util.LinkedHashMap<>();
+
+    private static final class Live {
+        float revealed;
+        String shown = "";
+    }
     /** Completed tool-call groups the user clicked open (keyed by the group's first call id). */
     private final Set<String> expandedGroups = new HashSet<>();
+    /**
+     * 排版缓存:同一段字、同一宽度只 split 一次。块每帧重建是为了活着的东西(转圈、在飞的字)不用另设
+     * 失效,但 font.split 是这一路里最贵的一步——历史消息每帧重排一遍,思考一长整个界面就卡。
+     * 键是带样式的文本 + 宽度,主人的话里 @ 亮不亮、主题换没换色都在键里。访问序 LRU,上限一千段。
+     */
+    private final java.util.Map<SplitKey, List<FormattedCharSequence>> splits =
+            new java.util.LinkedHashMap<>(256, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(java.util.Map.Entry<SplitKey, List<FormattedCharSequence>> e) {
+                    return size() > 1024;
+                }
+            };
+    /** 思考正文压成一行的缓存(正则 + 拷贝,每帧对几 KB 的思考跑一遍也不便宜)。同样 LRU。 */
+    private final java.util.Map<String, String> flattened =
+            new java.util.LinkedHashMap<>(64, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(java.util.Map.Entry<String, String> e) {
+                    return size() > 256;
+                }
+            };
+
+    private record SplitKey(Component text, int width) {}
+
+    private List<FormattedCharSequence> split(Component text, int width) {
+        return splits.computeIfAbsent(new SplitKey(text, width), k -> font.split(k.text(), k.width()));
+    }
     // geometry of the last render, for click / wheel hit-testing
     private int gx, gy, gw, gh;
+    /** 这一帧画出来的脸(气泡旁、工具行旁):点哪张开哪只的资料页(Telegram 点消息头像看资料)。 */
+    private record Face(UUID who, int x, int y) {}
+    private final List<Face> faces = new ArrayList<>();
+    /** 这一帧画的是不是群:只有群里画别人的脸和名字(Telegram 私聊两边都不画)。 */
+    private boolean group;
+    private int hoverX = -1, hoverY = -1;
+    /** 每条记录第一次被看见的时刻(与归并后的记录同序);0 = 打开时就有的历史,不飞入。 */
+    private final List<Long> born = new ArrayList<>();
+    private long frameNow;
 
-    public ChatView(Font font, Supplier<EntityAgentLoop> loop, Supplier<String> name, Supplier<UUID> uuid) {
+    public ChatView(Font font, Supplier<Conversation> conv) {
         this.font = font;
-        this.loop = loop;
-        this.name = name;
-        this.uuid = uuid;
+        this.conv = conv;
+    }
+
+    /** 就他俩时是她;否则 null。 */
+    private UUID solo() {
+        return Conversations.instance().soloOf(conv.get());
     }
 
     /** Forget scroll + fold state (companion or tab switch). */
+    /**
+     * 换了会话(或面板不再对着任何会话):上一个会话的一切连同它这一帧画出来的样子都忘掉——点击、滚轮、拖滑块按的是画出来的
+     * 几何,下一帧画了新会话才有新的;空面板不画对话,这里就什么也点不中。
+     */
     public void reset() {
+        gx = gy = gw = gh = 0;
+        hits.clear();
+        faces.clear();
+        lastMaxScroll = 0;
+        jumpShown = 0f;
+        barDragging = false;
+        unreadSince = -1;
         scrollPos = 0;
         scrollTarget = 0;
         pinBottom = true;
+        snapNext = true;
         lastFrameMs = 0;
-        revealed = 0;
-        liveShown = "";
+        live.clear();
         expandedGroups.clear();
+        ticked.clear();
+        splits.clear();
+        flattened.clear();
+        born.clear();
     }
+
+    /**
+     * 打开这个会话那一刻主人看到哪了:之后她说的第一句前面横一条"未读消息",打开时停在那儿,不停在最底。
+     * 这次看的时候那条一直在(Telegram 也是离开才消)。-1 = 下一帧现取;{@link Long#MAX_VALUE} = 打开时没有未读。
+     */
+    private long unreadSince = -1;
+    /** 对话里搜(Ctrl+F):小写的查询词,null = 没在搜。 */
+    private String query;
+    /** 这一帧命中的块:下标和离内容顶多远,从上到下。 */
+    private final List<Integer> matchBlocks = new ArrayList<>();
+    private final List<Integer> matchOffsets = new ArrayList<>();
+    /** 停在第几个命中上,从最新那个数起(0 = 最新);-1 = 还没跳。 */
+    private int matchAt = -1;
+    /** 刚改了查询词:下一帧算出命中就跳到最新那个(Telegram 边打边跳)。 */
+    private boolean jumpPending;
+
+    /** 换查询词;空 = 不搜了。 */
+    public void search(String q) {
+        query = q == null || q.isBlank() ? null : q.strip().toLowerCase(java.util.Locale.ROOT);
+        matchAt = -1;
+        jumpPending = query != null;
+    }
+
+    public int matchCount() {
+        return matchOffsets.size();
+    }
+
+    /** 停在第几个命中上(从最新数起,0 起);-1 = 还没跳。 */
+    public int matchAt() {
+        return matchAt;
+    }
+
+    /** 跳到下一个命中:{@code +1} 往旧的,{@code -1} 往新的;命中的那条停在对话流上三分之一处。 */
+    public void jumpMatch(int dir) {
+        int n = matchOffsets.size();
+        if (n == 0) return;
+        matchAt = Mth.clamp(matchAt + dir, 0, n - 1);
+        int off = matchOffsets.get(n - 1 - matchAt);
+        scrollTarget = Mth.clamp(off - gh / 3, 0, lastMaxScroll);
+        pinBottom = scrollTarget >= lastMaxScroll;
+        lastScrollMs = System.currentTimeMillis();
+    }
+
+    private boolean matches(Block b) {
+        return query != null && b instanceof Bubble bb && bb.raw() != null
+                && bb.raw().toLowerCase(java.util.Locale.ROOT).contains(query);
+    }
+
+    /** 顶上浮着的日期牌:露出多少(0..1)、写的哪天(淡出的时候还要画它)。 */
+    private float dayShown;
+    private String floatingDay;
 
     /** Re-pin to the bottom (a message was just sent). */
     public void pinToBottom() {
@@ -150,38 +347,134 @@ public final class ChatView {
 
     // ---- render ----
 
-    public void render(GuiGraphics g, int x, int y, int w, int h) {
+    public void render(GuiGraphics g, int x, int y, int w, int h, int mouseX, int mouseY) {
         loadPalette();
+        group = solo() == null;
+        hoverX = mouseX;
+        hoverY = mouseY;
+        faces.clear();
         long now = System.currentTimeMillis();
         float dt = lastFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastFrameMs) / 1000f);
         lastFrameMs = now;
+        frameNow = now;
         updateLive(dt, now);
+        if (unreadSince < 0) {
+            Conversation opened = conv.get();
+            long seen = Conversations.instance().lastSeen(opened);
+            unreadSince = ConversationPreview.unread(opened, seen) > 0 ? seen : Long.MAX_VALUE;
+        }
         renderBlocks(g, x, y, w, h, build(bubbleMaxW(w)), dt);
+        // 看过 = 视图停在底部时的最后一条;翻上去后来的话算未读,挂在"回到最新"钮上,左栏角标也据此消
+        Conversation c = conv.get();
+        var latest = ConversationPreview.last(c);
+        if (pinBottom && latest != null) Conversations.instance().markSeen(c, latest.ts());
+        renderJump(g, x, y, h, dt, ConversationPreview.unread(c, Conversations.instance().lastSeen(c)));
+    }
+
+    /** "回到最新"钮:翻上去超过半屏、或底下有没看过的话就浮出;从底边滑上来,顶上压一枚未读数。 */
+    private void renderJump(GuiGraphics g, int x, int y, int h, float dt, int unread) {
+        boolean want = lastMaxScroll - scrollTarget > h / 2 || unread > 0;
+        jumpShown = Anim.approach(jumpShown, want ? 1f : 0f, 16f, dt);
+        if (jumpShown <= 0.02f) return;
+        int right = barX() + SB_W;
+        jumpX = right - JUMP_INSET - JUMP;
+        jumpY = y + h - Math.round(jumpShown * (JUMP + JUMP_INSET));
+        g.enableScissor(x, y, right, y + h);
+        NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), jumpX, jumpY, JUMP, JUMP,
+                AI_FILL, AI_BORDER);
+        GuiCompat.blitSprite(g, CHEVRON_DOWN, jumpX + (JUMP - 11) / 2, jumpY + (JUMP - 6) / 2, 11, 6);
+        if (unread > 0) {
+            String n = UnreadBadge.label(unread);
+            int bw = UnreadBadge.width(font, n);
+            UnreadBadge.draw(g, font, n, jumpX + (JUMP - bw) / 2, jumpY - UnreadBadge.H / 2, MENTION, ON_CTA);
+        }
+        g.disableScissor();
     }
 
     /** 滚动 + 裁剪 + 逐块绘制——对话视图与外脑现场视图共用的那台机器。 */
     private void renderBlocks(GuiGraphics g, int x, int y, int w, int h, List<Block> blocks, float dt) {
         gx = x; gy = y; gw = w; gh = h;
+        hits.clear();
         int content = totalHeight(blocks);
         lastMaxScroll = Math.max(0, content - h);
         if (pinBottom) scrollTarget = lastMaxScroll;
         scrollTarget = Mth.clamp(scrollTarget, 0, lastMaxScroll);
+        if (snapNext) {
+            // 有未读:停在"未读消息"那条上(上面留一点),不停在最底
+            int bar = unreadBarOffset(blocks);
+            if (bar >= 0) {
+                scrollTarget = Mth.clamp(bar - 6, 0, lastMaxScroll);
+                pinBottom = scrollTarget >= lastMaxScroll;
+            }
+            scrollPos = scrollTarget;
+            snapNext = false;
+        }
         scrollPos = Anim.approach(scrollPos, scrollTarget, SCROLL_RATE, dt);
 
+        // 搜索命中:先过一遍记下是哪几块、在哪;刚换了词就跳到最新那个
+        matchBlocks.clear();
+        matchOffsets.clear();
+        if (query != null) {
+            int off = TOP_PAD;
+            for (int i = 0; i < blocks.size(); i++) {
+                if (matches(blocks.get(i))) {
+                    matchBlocks.add(i);
+                    matchOffsets.add(off);
+                }
+                off += heightOf(blocks.get(i)) + gapAfter(blocks, i);
+            }
+            if (matchAt >= matchBlocks.size()) matchAt = matchBlocks.size() - 1;
+            if (jumpPending && !matchBlocks.isEmpty()) {
+                jumpPending = false;
+                jumpMatch(1);
+            }
+        }
+        int current = matchAt >= 0 ? matchBlocks.get(matchBlocks.size() - 1 - matchAt) : -1;
         g.enableScissor(x, y, x + w, y + h);
         int cy = y + TOP_PAD - Math.round(scrollPos);
-        for (Block b : blocks) {
+        String floatDay = null;
+        for (int i = 0; i < blocks.size(); i++) {
+            Block b = blocks.get(i);
             int bh = heightOf(b);
-            if (cy + bh > y && cy < y + h) drawBlock(g, b, x, cy, w);
-            cy += bh + BLOCK_GAP;
+            if (b instanceof Divider d && cy < y) floatDay = d.text();   // 已经翻过顶的最近那枚日期牌
+            if (cy + bh > y && cy < y + h) {
+                int drawn = hits.size();
+                drawingIndex = i;
+                drawBlock(g, b, x, cy, w);
+                if (i == current && hits.size() > drawn) {
+                    // 停在的那个命中:气泡外描一圈强调色
+                    Hit hit = hits.get(hits.size() - 1);
+                    Nb.border(g, hit.x() - 1, hit.y() - 1, hit.w() + 2, hit.h() + 2, 1, MENTION);
+                }
+                long since = frameNow - flashAt;
+                if (i == flashIndex && since < FLASH_MS && hits.size() > drawn) {
+                    // 刚跳到的那句:盖一层强调色,先亮后退
+                    Hit hit = hits.get(hits.size() - 1);
+                    int a = Math.round(0x60 * (1f - since / (float) FLASH_MS));
+                    g.fill(hit.x(), hit.y(), hit.x() + hit.w(), hit.y() + hit.h(), (MENTION & 0xFFFFFF) | (a << 24));
+                }
+            }
+            cy += bh + gapAfter(blocks, i);
+        }
+        // 翻的时候顶上浮一枚眼前这一屏是哪天(Telegram),停下来一会儿淡出
+        boolean scrolling = frameNow - lastScrollMs < 900 || barDragging || Math.abs(scrollPos - scrollTarget) > 0.5f;
+        dayShown = Mth.clamp(dayShown + (scrolling && floatDay != null ? dt : -dt) * 6f, 0f, 1f);
+        if (floatDay != null) floatingDay = floatDay;
+        if (dayShown > 0.02f && floatingDay != null) {
+            g.setColor(1f, 1f, 1f, dayShown);
+            drawDayChip(g, floatingDay, x, y + 3, w);
+            g.setColor(1f, 1f, 1f, 1f);
         }
         g.disableScissor();
 
-        if (lastMaxScroll > 0) {
-            int thumbH = Math.max(12, h * h / (h + lastMaxScroll));
-            int thumbY = y + Math.round((h - thumbH) * (scrollPos / lastMaxScroll));
-            com.dwinovo.numen.client.screen.GuiCompat.blitSprite(g, SCROLL_TRACK, x + w - SB_W, y, SB_W, h);
-            com.dwinovo.numen.client.screen.GuiCompat.blitSprite(g, SCROLL_THUMB, x + w - SB_W, thumbY, SB_W, thumbH);
+        boolean overBody = hoverX >= x && hoverX < barX() + SB_W && hoverY >= y && hoverY < y + h;
+        boolean wantBar = lastMaxScroll > 0
+                && (overBody || barDragging || frameNow - lastScrollMs < 800 || Math.abs(scrollPos - scrollTarget) > 0.5f);
+        barShown = Anim.approach(barShown, wantBar ? 8f : 0f, 14f, dt);
+        if (barShown > 0.5f && lastMaxScroll > 0) {
+            g.setColor(1f, 1f, 1f, barShown / 8f);
+            GuiCompat.blitSprite(g, SCROLL_THUMB, barX(), thumbY(), SB_W, thumbH());   // 只有滑块,没有槽,贴正文区右缘(Telegram)
+            g.setColor(1f, 1f, 1f, 1f);
         }
     }
 
@@ -197,7 +490,9 @@ public final class ChatView {
      */
     public void renderExternal(GuiGraphics g, int x, int y, int w, int h) {
         loadPalette();
+        group = false;   // 外脑现场只有她一个
         long now = System.currentTimeMillis();
+        frameNow = now;
         float dt = lastFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastFrameMs) / 1000f);
         lastFrameMs = now;
         McpMode mcp = McpMode.instance();
@@ -212,12 +507,13 @@ public final class ChatView {
                 cx, y + 14, who == null ? FAINT : OK);
         g.fill(cx, y + 26, cx + cw, y + 27, CHIP_FILL);
 
-        UUID id = uuid.get();
+        UUID id = solo();
         if (McpTranscript.isEmpty(id)) {
             renderConsoleGuide(g, mcp, cx, y + EXT_HEADER_H + 2, cw, who != null);
             return;
         }
         renderBlocks(g, x, y + EXT_HEADER_H, w, h - EXT_HEADER_H, buildExternal(id, bubbleMaxW(w)), dt);
+        renderJump(g, x, y + EXT_HEADER_H, h - EXT_HEADER_H, dt, 0);   // 现场缓冲没有未读一说
     }
 
     /** 现场缓冲 → 可画的块。与 {@link #build} 同一套 Block 词汇,只是来源不同。 */
@@ -225,26 +521,31 @@ public final class ChatView {
         List<Block> out = new ArrayList<>();
         int innerW = bubbleMaxW - PAD_H * 2;
         int chipTextW = bubbleMaxW - PAD_H * 2 - ICON_W;
-        Boolean lastSide = null;
+        UUID last = null;
         for (McpTranscript.Line ln : McpTranscript.view(id)) {
             switch (ln.kind()) {
                 case OWNER -> {
-                    boolean first = lastSide == null || !lastSide;
-                    out.add(bubble(true, null, ln.text(), TXT, OWN_FILL, OWN_BORDER, innerW, first));
-                    lastSide = true;
+                    out.add(bubble(true, null, rich(ln.text(), List.of()), OWN_FILL,
+                            innerW, null, null, -1, ln.text(), null));
+                    last = OWNER;
                 }
                 case SAY -> {
-                    boolean first = lastSide == null || lastSide;
-                    out.add(bubble(false, first ? name.get() : null, ln.text(),
-                            TXT, AI_FILL, AI_BORDER, innerW, first));
-                    lastSide = false;
+                    boolean first = !id.equals(last);
+                    out.add(bubble(false, first ? label(id) : null, rich(ln.text(), List.of()),
+                            AI_FILL, innerW, id, null, -1, ln.text(), null));
+                    last = id;
                 }
-                case TOOL -> out.add(new Chip(List.of(new ChipRow(
-                        ln.error() ? "✗" : "✔", ln.error() ? FAIL : OK,
-                        Nb.colored(fitOneLine(ln.text(), chipTextW), ln.error() ? FAIL : TOOL)
-                                .getVisualOrderText())), null));
+                case TOOL -> {
+                    boolean first = !id.equals(last);
+                    out.add(new Chip(List.of(new ChipRow(
+                            ln.error() ? "✗" : "✔", ln.error() ? FAIL : OK,
+                            Nb.colored(Nb.clip(font, ln.text(), chipTextW), ln.error() ? FAIL : TOOL)
+                                    .getVisualOrderText())), null, first ? label(id) : null, id, -1, false));
+                    last = id;
+                }
             }
         }
+        settleRuns(out);
         return out;
     }
 
@@ -278,6 +579,7 @@ public final class ChatView {
 
     /** Wheel anywhere on the chat tab scrolls the transcript (parity with the old list). */
     public boolean mouseScrolled(double sy) {
+        lastScrollMs = System.currentTimeMillis();
         scrollTarget = (int) Math.max(0L, Math.min((long) lastMaxScroll, (long) (scrollTarget - sy * LINE_H * 3)));
         pinBottom = scrollTarget >= lastMaxScroll;
         return true;
@@ -285,60 +587,312 @@ public final class ChatView {
 
     /** Toggle the fold of a completed tool chip under the mouse. */
     public boolean mouseClicked(double mx, double my) {
+        // 钮连同顶上的角标一起算点中
+        if (jumpShown > 0.5f && mx >= jumpX && mx < jumpX + JUMP
+                && my >= jumpY - UnreadBadge.H / 2 && my < jumpY + JUMP && my < gy + gh) {
+            pinToBottom();
+            return true;
+        }
+        // 滚动条那一列:按在滑块上开始拖;按在空处滑块先跳到指针下再开始拖(Telegram)
+        if (lastMaxScroll > 0 && mx >= barX() - 2 && mx < barX() + SB_W + 2 && my >= gy && my < gy + gh) {
+            int th = thumbH();
+            int ty = thumbY();
+            if (my < ty || my >= ty + th) {
+                scrollTo((float) (my - gy - th / 2.0) / Math.max(1, gh - th) * lastMaxScroll);
+                ty = thumbY();
+            }
+            barGrab = (int) my - ty;
+            barDragging = true;
+            lastScrollMs = System.currentTimeMillis();
+            return true;
+        }
+        net.minecraft.network.chat.Style link = linkAt(mx, my);
+        if (link != null) {
+            // 点链接走原版聊天那一套:看"聊天链接"选项、按需先弹确认框,确认完回到这个面板
+            net.minecraft.client.Minecraft.getInstance().screen.handleComponentClicked(link);
+            return true;
+        }
         if (McpMode.instance().driving()) return false;   // 现场视图没有可折叠的块
         if (gw == 0 || mx < gx || mx >= gx + gw || my < gy || my >= gy + gh) return false;
+        for (Hit h : hits) {
+            // 点在气泡顶上的引用条上:跳回被引的那句
+            Quote q = h.b().quote();
+            if (q != null && mx >= h.x() && mx < h.x() + h.w() && my >= h.y() && my < h.y() + PAD_V + QUOTE_H) {
+                jumpToQuoted(h.index(), q);
+                return true;
+            }
+        }
         loadPalette();
         int cy = gy + TOP_PAD - Math.round(scrollPos);
-        for (Block b : build(bubbleMaxW(gw))) {
+        List<Block> blocks = build(bubbleMaxW(gw));
+        for (int i = 0; i < blocks.size(); i++) {
+            Block b = blocks.get(i);
             int bh = heightOf(b);
+            if (b instanceof Consent c && my >= cy && my < cy + bh) {
+                return ConsentMessage.click(font, c.card(), gx + EDGE + faceCol(), consentKeysTop(c, cy), c.w(), mx, my);
+            }
             if (b instanceof Chip c && c.foldKey() != null && my >= cy && my < cy + bh) {
                 if (!expandedGroups.add(c.foldKey())) expandedGroups.remove(c.foldKey());
                 return true;
             }
-            cy += bh + BLOCK_GAP;
+            cy += bh + gapAfter(blocks, i);
         }
         return false;
     }
 
     // ---- blocks ----
 
-    private sealed interface Block permits Bubble, Chip, Notice {}
+    private sealed interface Block permits Bubble, Checklist, Chip, Notice, Divider, UnreadBar, Consent {}
 
     /** One spoken message. {@code label} non-null = companion side (name above the bubble);
-     *  {@code showAvatar} false = a consecutive message from the same side (head hidden). */
+     *  {@code runEnd} = 这一块是这个人连发的最后一块(群里脸贴它旁边,气泡带尾巴);
+     *  {@code who} = the companion whose face goes on it (null on the owner's side);
+     *  {@code time} = 时间戳贴在气泡右下角(Telegram),放得进最后一行右侧就 {@code timeInline},
+     *  放不进单独占一小行;{@code entry} = 归并后的记录序号,新来的按它飞入(-1 = 不飞)。 */
     private record Bubble(boolean own, String label, List<FormattedCharSequence> lines,
-                          int maxLineW, int textColor, int fill, int border,
-                          boolean showAvatar) implements Block {}
+                          int maxLineW, int fill,
+                          boolean runEnd, UUID who, String time, boolean timeInline, int entry,
+                          String raw, Quote quote) implements Block {
+        Bubble withRunEnd(boolean on) {
+            return new Bubble(own, label, lines, maxLineW, fill, on, who, time, timeInline, entry, raw, quote);
+        }
+    }
 
-    /** A run of tool calls. {@code foldKey} non-null = finished group, clickable to expand/fold. */
-    private record Chip(List<ChipRow> rows, String foldKey) implements Block {}
+    /**
+     * 她的一份计划,画成她说的一条清单消息(Telegram 的清单消息):她的气泡底色,抬头一行强调色"计划 2/5",
+     * 下面一项一行(长的折行),前面一个方格。{@code items} 留着比"是不是同一份";{@code rows} 是按这一刻的宽度
+     * 折好的行;{@code time}、{@code entry} 是第一次出现时的——同一份计划原地更新,不改它是哪一条。
+     */
+    private record Checklist(UUID who, String label, List<com.dwinovo.numen.agent.tool.TodoTool.Item> items, String header,
+                             List<CheckRow> rows, int maxLineW, String time, boolean timeInline, int entry,
+                             boolean runEnd) implements Block {
+        Checklist withRunEnd(boolean on) {
+            return new Checklist(who, label, items, header, rows, maxLineW, time, timeInline, entry, on);
+        }
+    }
+
+    /** 清单里的一项:状态(画方格用)和折好的行。 */
+    private record CheckRow(com.dwinovo.numen.agent.tool.TodoTool.Status state, List<FormattedCharSequence> lines) {}
+
+    /** 打勾的过渡:方格从中间往外填满,满了再出勾。 */
+    private static final int TICK_MS = 220;
+    /**
+     * 清单里每项第一次被看见打上勾的时刻,键见 {@link #tickKey};0 = 打开面板时就已经勾上,不播过渡。
+     * 勾又被取消就删掉,再勾上重新播。只按归并完的最终那份记({@link #settleTicks}),同一份计划前后几版不来回翻。
+     */
+    private final java.util.Map<String, Long> ticked = new java.util.HashMap<>();
+
+    /** 清单的方格边长,和方格那一列的宽(方格 + 离字的缝)。 */
+    private static final int BOX = 7;
+    private static final int BOX_COL = BOX + 4;
+
+    /** 气泡顶上的引用条:两行(谁、那句),左缘一道竖线;{@code QUOTE_IN} 是字离竖线多远。 */
+    private static final int QUOTE_H = 20;
+    /** 服务消息里字离底边的距离:左右、上下(Telegram 的 msgServicePadding 按这里的字号缩)。 */
+    private static final int SERVICE_PAD_H = 5;
+    private static final int SERVICE_PAD_V = 2;
+    private static final int QUOTE_IN = 6;
+
+    /** 这一帧画出来的气泡在哪、是哪条:右键按它认点中的是哪句。 */
+    private record Hit(int x, int y, int w, int h, Bubble b, int index) {}
+
+    /** 正在画第几块:记进 {@link Hit},点引用条时知道从哪一块往回找。 */
+    private int drawingIndex;
+    /** 刚跳到的那一块闪一下(Telegram 点回复条跳过去,那条亮一下再退):哪一块、什么时候开始闪。 */
+    private int flashIndex = -1;
+    private long flashAt;
+    private static final int FLASH_MS = 1200;
+    private final List<Hit> hits = new ArrayList<>();
+
+    /** 右键点中的那句:谁说的(主人自己是 null)、原文(引用条不算在内)。 */
+    public record Picked(UUID who, String text) {}
+
+    /** 主人在这个会话里上一句说的话(引的那句不算);没说过是 null。 */
+    public String lastOwnText() {
+        List<Transcript.Entry> source = transcript();
+        for (int i = source.size() - 1; i >= 0; i--) {
+            if (source.get(i).msg() instanceof ConvoState.Msg.User u) {
+                String c = u.content();
+                if (ConvoLog.PERSONA_DIVIDER.equals(c) || ConvoLog.COMPACT_DIVIDER.equals(c)
+                        || ConvoLog.CLEAR_DIVIDER.equals(c)) {
+                    continue;
+                }
+                String shown = Quote.parse(ownerText(c)).body();
+                if (!shown.isBlank()) return shown;
+            }
+        }
+        return null;
+    }
+
+    /** 指针下那个链接的样式(带着打开网址的点击事件);不在链接上是 null。只认对话流可见区里的气泡正文。 */
+    private net.minecraft.network.chat.Style linkAt(double mx, double my) {
+        if (mx < gx || mx >= gx + gw || my < gy || my >= gy + gh) return null;
+        for (Hit h : hits) {
+            Bubble b = h.b();
+            int textTop = h.y() + PAD_V + 1 + (b.quote() != null ? QUOTE_H : 0);
+            if (mx < h.x() + PAD_H || mx >= h.x() + h.w() || my < textTop) continue;
+            int row = (int) ((my - textTop) / LINE_H);
+            if (row >= b.lines().size()) continue;
+            var st = font.getSplitter().componentStyleAtWidth(b.lines().get(row), (int) (mx - h.x() - PAD_H));
+            if (st != null && st.getClickEvent() != null
+                    && st.getClickEvent().getAction() == net.minecraft.network.chat.ClickEvent.Action.OPEN_URL) {
+                return st;
+            }
+        }
+        return null;
+    }
+
+    /** 指针下那个气泡;不在气泡上是 null。只认对话流可见区里的。 */
+    public Picked bubbleAt(double mx, double my) {
+        if (mx < gx || mx >= gx + gw || my < gy || my >= gy + gh) return null;
+        for (Hit h : hits) {
+            if (h.b().raw() != null && mx >= h.x() && mx < h.x() + h.w() && my >= h.y() && my < h.y() + h.h()) {
+                return new Picked(h.b().own() ? null : h.b().who(), h.b().raw());
+            }
+        }
+        return null;
+    }
+
+    /** A run of tool calls (or a reasoning block). {@code foldKey} non-null = finished group,
+     *  clickable to expand/fold. {@code who} = 干这些活的那只;{@code label} non-null = 她这一轮连发
+     *  的第一块,名字画在它上面——多人会话里工具行也得认得出是谁的;{@code runEnd} = 连发的最后一块,群里脸贴它旁边。 */
+    private record Chip(List<ChipRow> rows, String foldKey, String label, UUID who, int entry,
+                        boolean runEnd) implements Block {
+        Chip withRunEnd(boolean on) { return new Chip(rows, foldKey, label, who, entry, on); }
+    }
+
+    /** 日期分隔:一天的第一条上面一枚居中的服务消息(今天 / 昨天 / 几月几日)。 */
+    private record Divider(String text) implements Block {}
+
+    /** "未读消息"那一条服务消息:打开时还没看过的第一句上面。 */
+    private record UnreadBar() implements Block {}
+
+    /**
+     * 她的征询(Telegram 带内联按钮的消息):她那一侧的气泡里是清单,下面挂按钮,答完再挂一条结果。它不是对话记录
+     * 里的一条,按到的时刻排进时间线,算在她的连发里;清单、按钮与结果条的画法和点法归 {@link ConsentMessage}。
+     * {@code w} 是气泡与键盘共用的宽(Telegram 的键盘与气泡同宽,气泡被键盘撑宽);{@code label}、{@code runEnd}
+     * 与话的气泡同义;{@code timeInline} = 右下角那一小行放得进正文最后一行右侧(和话的气泡一样)。
+     */
+    private record Consent(ConsentCards.Card card, String label, int w, boolean runEnd, boolean timeInline)
+            implements Block {
+        Consent withRunEnd(boolean on) { return new Consent(card, label, w, on, timeInline); }
+    }
 
     private record ChipRow(String icon, int iconColor, FormattedCharSequence text) {}
 
-    /** A centred, faint system note. */
-    private record Notice(FormattedCharSequence text) implements Block {}
+    /** 居中的提示(整理过记忆、换了人设、清空、中断之类)画成服务消息;长的按气泡宽折行,{@code lines} 是折好的。 */
+    private record Notice(List<FormattedCharSequence> lines) implements Block {}
 
     private int bubbleMaxW(int w) {
-        return w - EDGE - AV - AV_GAP - OPP_MARGIN - SB_W - 3;
+        return w - EDGE - faceCol() - OPP_MARGIN - SB_W - 3;
     }
 
     private int heightOf(Block b) {
-        // Java 17:类型模式 switch 是预览特性,改 if/else instanceof(密封层级不变)
         if (b instanceof Bubble bb) {
-            return (bb.label() != null ? LABEL_H : 0) + bb.lines().size() * LINE_H + PAD_V * 2;
+            return (bb.label() != null ? LABEL_H : 0) + (bb.quote() != null ? QUOTE_H : 0)
+                    + bb.lines().size() * LINE_H + PAD_V * 2
+                    + (bb.time() != null && !bb.timeInline() ? TIME_H : 0);
+        } else if (b instanceof Checklist c) {
+            return (c.label() != null ? LABEL_H : 0) + checklistH(c);
+        } else if (b instanceof Chip c) {
+            return (c.label() != null ? LABEL_H : 0) + c.rows().size() * LINE_H + PAD_V * 2;
+        } else if (b instanceof Notice n) {
+            return n.lines().size() * LINE_H + SERVICE_PAD_V * 2;
+        } else if (b instanceof Divider) {
+            return LINE_H + SERVICE_PAD_V * 2;
+        } else if (b instanceof UnreadBar) {
+            return LINE_H + SERVICE_PAD_V * 2;
+        } else {
+            Consent c = (Consent) b;
+            return (c.label() != null ? LABEL_H : 0) + consentBubbleH(c) + ConsentMessage.GAP
+                    + ConsentMessage.keyboardHeight(font, c.w()) + consentResultH(c.card());
         }
-        if (b instanceof Chip c) {
-            return c.rows().size() * LINE_H + PAD_V * 2;
-        }
-        return LINE_H;
+    }
+
+    /** 清单气泡本身多高(不含上面的名字):抬头一行、每项折出的行、放不进最后一行的时间。 */
+    private static int checklistH(Checklist c) {
+        int lines = 1;
+        for (CheckRow r : c.rows()) lines += r.lines().size();
+        return lines * LINE_H + PAD_V * 2 + (c.time() != null && !c.timeInline() ? TIME_H : 0);
+    }
+
+    /** 征询那条的气泡本身多高(不含上面的名字):清单,下面一小行是剩下的秒数(收起后是到的时刻)。 */
+    private static int consentBubbleH(Consent c) {
+        return PAD_V * 2 + ConsentMessage.listHeight(c.card()) + (c.timeInline() ? 0 : TIME_H);
+    }
+
+    /** 征询收起后键盘下面那条服务消息(连同上面的缝)此刻多高:收起的那一刻从零长出来。 */
+    private static int consentResultH(ConsentCards.Card card) {
+        return Math.round((ConsentMessage.GAP + LINE_H + SERVICE_PAD_V * 2) * ConsentMessage.reveal(card));
+    }
+
+    /** 征询气泡右下角那一小行:挂着时是还剩几秒,收起后和别的气泡一样是时刻。 */
+    private static String consentMeta(ConsentCards.Card card) {
+        return card.waiting() ? ConsentMessage.countdown(card) : clock(card.arrivedAt());
+    }
+
+    /** 她的一条征询接进她的连发:连发的第一块才带名字。 */
+    private void consent(Feed f, ConsentCards.Card card, int bubbleMaxW) {
+        UUID who = card.companion();
+        f.out.add(consent(card, who.equals(f.last) ? null : label(who), bubbleMaxW));
+        f.last = who;
+    }
+
+    private Consent consent(ConsentCards.Card card, String label, int bubbleMaxW) {
+        // 右下角那一小行挤在正文最后一行右侧(Telegram):放得下就同一行,放不下自己占一小行
+        int tw = font.width(consentMeta(card)) + 6;
+        int last = ConsentMessage.lastRowWidth(font, card);
+        int text = Math.max(ConsentMessage.listWidth(font, card), last + tw);
+        int w = Math.min(bubbleMaxW, Math.max(text + PAD_H * 2, ConsentMessage.keyboardWidth(font)));
+        return new Consent(card, label, w, false, last + tw <= w - PAD_H * 2);
     }
 
     private int totalHeight(List<Block> blocks) {
         int sum = TOP_PAD + BOT_PAD;
         for (int i = 0; i < blocks.size(); i++) {
-            sum += heightOf(blocks.get(i)) + (i > 0 ? BLOCK_GAP : 0);
+            sum += heightOf(blocks.get(i)) + (i > 0 ? gapAfter(blocks, i - 1) : 0);
         }
         return sum;
+    }
+
+    /**
+     * 从第 {@code from} 块往回找被引的那句(说话的人对得上、原文以引的那截开头),找到就把它滚到对话流上三分之一处、
+     * 闪一下。引的那截是压成一行、截短过的,所以比的是开头。找不到(那句已经在视图之外)就不动。
+     */
+    private void jumpToQuoted(int from, Quote q) {
+        List<Block> blocks = build(bubbleMaxW(gw));
+        String head = q.snippet().endsWith("…") ? q.snippet().substring(0, q.snippet().length() - 1) : q.snippet();
+        for (int j = Math.min(from, blocks.size()) - 1; j >= 0; j--) {
+            if (!(blocks.get(j) instanceof Bubble bb) || bb.raw() == null) continue;
+            String speaker = bb.own() ? net.minecraft.client.Minecraft.getInstance().getUser().getName() : speaker(bb.who());
+            String flat = bb.raw().replace('\r', ' ').replace('\n', ' ').strip();
+            if (!q.who().equals(speaker) || !flat.startsWith(head)) continue;
+            int y = TOP_PAD;
+            for (int k = 0; k < j; k++) y += heightOf(blocks.get(k)) + gapAfter(blocks, k);
+            scrollTarget = Mth.clamp(y - gh / 3, 0, lastMaxScroll);
+            pinBottom = scrollTarget >= lastMaxScroll;
+            lastScrollMs = System.currentTimeMillis();
+            flashIndex = j;
+            flashAt = System.currentTimeMillis();
+            return;
+        }
+    }
+
+    /** "未读消息"那条的顶边离内容顶多远;没有那条是 -1。 */
+    private int unreadBarOffset(List<Block> blocks) {
+        int y = TOP_PAD;
+        for (int i = 0; i < blocks.size(); i++) {
+            if (blocks.get(i) instanceof UnreadBar) return y;
+            y += heightOf(blocks.get(i)) + gapAfter(blocks, i);
+        }
+        return -1;
+    }
+
+    /** 第 {@code i} 块下面留多宽:同一个人接着说(Telegram 连发几乎贴着)是窄缝,否则拉开。 */
+    private static int gapAfter(List<Block> blocks, int i) {
+        if (i + 1 >= blocks.size()) return BLOCK_GAP;
+        UUID a = speakerOf(blocks.get(i));
+        return a != null && a.equals(speakerOf(blocks.get(i + 1))) ? RUN_GAP : BLOCK_GAP;
     }
 
     /**
@@ -351,121 +905,396 @@ public final class ChatView {
      * ——请求里临时挂载、从未入过记录的东西(如 {@code <current_task>})混进来的话,
      * 画出来的会是一条<b>从未存在过</b>的消息。
      */
+    /** 过程里的一段:一次思考({@code live} = 还在往外流),或一次工具调用。 */
+    private record Piece(String thought, boolean live, LlmToolCall call) {}
+
+    /** 一次 build 的手头:输出、她攒着的这一段过程与它的主人、连发的上一位。 */
+    private static final class Feed {
+        final List<Block> out = new ArrayList<>();
+        /** 她连着的思考和工具调用,中间没开口说话:收口时合成一行。 */
+        final List<Piece> process = new ArrayList<>();
+        UUID processWho;
+        int processEntry = -1;
+        UUID last;
+        boolean unreadPlaced;
+        /** 每只她最近那条清单消息在 {@code out} 里的位置:同一份计划改了状态就换掉那一块。 */
+        final java.util.Map<UUID, Integer> plans = new java.util.HashMap<>();
+    }
+
+    private static void addPiece(Feed f, UUID who, int entry, Piece p) {
+        if (f.process.isEmpty()) {
+            f.processWho = who;
+            f.processEntry = entry;
+        }
+        f.process.add(p);
+    }
+
     private List<Block> build(int bubbleMaxW) {
-        List<Block> out = new ArrayList<>();
-        EntityAgentLoop lp = loop.get();
-        List<ConvoState.Msg> source = lp.display();
+        Feed f = new Feed();
+        List<Block> out = f.out;
+        List<Transcript.Entry> source = transcript();
         Set<String> done = new HashSet<>();
         Set<String> failed = new HashSet<>();
-        for (ConvoState.Msg m : source) {
-            if (m instanceof ConvoState.Msg.Tool t) {
+        Map<String, String> results = new HashMap<>();
+        for (Transcript.Entry e : source) {
+            if (e.msg() instanceof ConvoState.Msg.Tool t) {
                 done.add(t.toolCallId());
+                results.put(t.toolCallId(), t.content());
                 // 成败判据的单一真源(展示层不猜字符串)。
                 if (com.dwinovo.numen.agent.llm.ToolOutcome.failed(t.content())) {
                     failed.add(t.toolCallId());
                 }
             }
         }
-        int innerW = bubbleMaxW - PAD_H * 2;
-        List<LlmToolCall> group = new ArrayList<>();
-        // Consecutive same-side messages group like a chat app: avatar + name only on
-        // the first of a run. Chips don't break a run; notices do. null = run broken.
-        Boolean lastSide = null;
-        int msgIndex = -1;
-        for (ConvoState.Msg msg : source) {
-            msgIndex++;
-            // Java 17:类型模式 switch 是预览特性,改 if/else instanceof
-            if (msg instanceof ConvoState.Msg.User u) {
-                    flushTools(out, group, done, failed, bubbleMaxW);
-                    if (ConvoLog.PERSONA_DIVIDER.equals(u.content())) {
-                        notice(out, I18n.get("numen.chat.persona_changed"));
-                        lastSide = null;
-                        continue;
+        // 没有结果、派发器也不再攥着的调用永远等不到结果了(被打断、死了、游戏关掉时还在跑):
+        // 按失败画,不能一直转圈。"还在跑"只问派发器,不从历史长什么样去猜。
+        for (Transcript.Entry e : source) {
+            if (e.msg() instanceof ConvoState.Msg.Assistant a) {
+                for (LlmToolCall tc : a.turn().toolCalls()) {
+                    if (!done.contains(tc.id()) && !outstanding(e.companion(), tc.id())) {
+                        done.add(tc.id());
+                        failed.add(tc.id());
                     }
-                    if (ConvoLog.COMPACT_DIVIDER.equals(u.content())) {
-                        notice(out, I18n.get("numen.chat.compacted"));
-                        lastSide = null;
-                        continue;
-                    }
-                    if (ConvoLog.CLEAR_DIVIDER.equals(u.content())) {
-                        notice(out, I18n.get("numen.chat.cleared"));
-                        lastSide = null;
-                        continue;
-                    }
-                    String shown = ownerText(u.content());   // owner's words only, never injected content
-                    if (shown.isEmpty()) continue;
-                    boolean first = lastSide == null || !lastSide;
-                    out.add(bubble(true, null, shown, TXT, OWN_FILL, OWN_BORDER, innerW, first));
-                    lastSide = true;
-            } else if (msg instanceof ConvoState.Msg.Assistant a) {
-                    AssistantTurn turn = a.turn();
-                    // 思考在说话之前:落库的思考默认折叠(它是过程不是结论,想看再展开)。
-                    String reasoned = turn.reasoning();
-                    if (reasoned != null && !reasoned.isBlank()) {
-                        flushTools(out, group, done, failed, bubbleMaxW);
-                        out.add(reasoningChip(reasoned, "reason#" + msgIndex, innerW, false));
-                    }
-                    String spoken = ChatDisplayModes.current().assistantText(turn.content());
-                    if (!spoken.isBlank()) {
-                        flushTools(out, group, done, failed, bubbleMaxW);   // spoken reply breaks the fold
-                        boolean first = lastSide == null || lastSide;
-                        out.add(bubble(false, first ? name.get() : null, spoken,
-                                TXT, AI_FILL, AI_BORDER, innerW, first));
-                        lastSide = false;
-                    }
-                    group.addAll(turn.toolCalls());
+                }
             }
-            // Tool 消息不画块:它驱动 done/fail 状态,不产出气泡
         }
-        flushTools(out, group, done, failed, bubbleMaxW);
-        // 在飞的思考流:展开着实时长(它正在发生,折起来就看不见了);回合落库后
-        // 由上面那条 committed 的思考块接管,永不双份。
-        String liveReasoning = lp.liveReasoning();
-        if (!liveReasoning.isBlank()) {
-            out.add(reasoningChip(liveReasoning, null, innerW, true));
+        int innerW = bubbleMaxW - PAD_H * 2;
+        // 新来的记录记下第一次被看见的时刻,画的时候按它飞入;打开面板时就在的历史不飞
+        if (born.size() > source.size()) born.clear();   // 记录被清了(/clear):从头记
+        boolean opening = born.isEmpty();
+        while (born.size() < source.size()) born.add(opening ? 0L : frameNow);
+        // 连发合并(聊天软件的惯例):同一个人接连的话和活只在第一块画头像和名字。多人会话里
+        // "同一个人"按那只算,不按左右哪一侧——换了一只就得重新亮名字。工具行是她的活,
+        // 算在她的连发里;提示行打断。f.last == null = 连发已断。
+        int msgIndex = -1;
+        LocalDate lastDay = null;
+        // 她的征询按到的时刻排进时间线。只在和她的私聊里:征询问的是她的身体
+        List<ConsentCards.Card> asks = ConsentCards.history(solo());
+        int asked = 0;
+        for (Transcript.Entry entry : source) {
+            msgIndex++;
+            ConvoState.Msg msg = entry.msg();
+            while (asked < asks.size() && entry.ts() > 0 && asks.get(asked).arrivedAt() <= entry.ts()) {
+                flushProcess(f, done, failed, bubbleMaxW);
+                consent(f, asks.get(asked++), bubbleMaxW);
+            }
+            // 日期分隔:换了一天,先收口、插一枚日期小牌、连发断开
+            if (entry.ts() > 0) {
+                LocalDate day = Instant.ofEpochMilli(entry.ts()).atZone(ZoneId.systemDefault()).toLocalDate();
+                if (!day.equals(lastDay)) {
+                    flushProcess(f, done, failed, bubbleMaxW);
+                    out.add(new Divider(dayLabel(day)));
+                    f.last = null;
+                    lastDay = day;
+                }
+            }
+            if (msg instanceof ConvoState.Msg.User u) {
+                flushProcess(f, done, failed, bubbleMaxW);
+                if (ConvoLog.PERSONA_DIVIDER.equals(u.content())) {
+                    notice(out, I18n.get("numen.chat.persona_changed"), bubbleMaxW);
+                    f.last = null;
+                    continue;
+                }
+                if (ConvoLog.COMPACT_DIVIDER.equals(u.content())) {
+                    notice(out, I18n.get("numen.chat.compacted"), bubbleMaxW);
+                    f.last = null;
+                    continue;
+                }
+                if (ConvoLog.CLEAR_DIVIDER.equals(u.content())) {
+                    notice(out, I18n.get("numen.chat.cleared"), bubbleMaxW);
+                    f.last = null;
+                    f.plans.clear();   // 清空之后她不记得之前那份计划,再写就是新的一条
+                    continue;
+                }
+                String shown = ownerText(u.content());   // owner's words only, never injected content
+                if (shown.isEmpty()) continue;
+                Quote q = Quote.parse(shown);   // 引用回复:第一行画成气泡顶上的引用条
+                out.add(bubble(true, null,
+                        rich(q.body(), Mentions.spans(q.body(), Conversations.instance().named(conv.get()))),
+                        OWN_FILL, innerW, null,
+                        clock(entry.ts()), msgIndex, q.body(), q.quoted() ? q : null));
+                f.last = OWNER;
+            } else if (msg instanceof ConvoState.Msg.Assistant a) {
+                UUID who = entry.companion();
+                // 换了一只:前一只攒着的过程先收口,两只的活不折进同一行
+                if (!who.equals(f.processWho)) flushProcess(f, done, failed, bubbleMaxW);
+                AssistantTurn turn = a.turn();
+                // 思考在说话之前;它和前后的工具调用同属"她在干活",并进同一段过程
+                String reasoned = turn.reasoning();
+                if (reasoned != null && !reasoned.isBlank()) {
+                    addPiece(f, who, msgIndex, new Piece(reasoned, false, null));
+                }
+                String spoken = ChatDisplayModes.current().assistantText(turn.content());
+                if (!spoken.isBlank()) {
+                    flushProcess(f, done, failed, bubbleMaxW);   // 开口说话把过程收口
+                    if (!f.unreadPlaced && entry.ts() > unreadSince) {
+                        out.add(new UnreadBar());   // 打开时还没看过的第一句
+                        f.unreadPlaced = true;
+                        f.last = null;
+                    }
+                    boolean first = !who.equals(f.last);
+                    out.add(bubble(false, first ? label(who) : null,
+                            rich(spoken, List.of()), AI_FILL, innerW, who,
+                            clock(entry.ts()), msgIndex, spoken, null));
+                    f.last = who;
+                }
+                for (LlmToolCall tc : turn.toolCalls()) {
+                    addPiece(f, who, msgIndex, new Piece(null, false, tc));
+                    // 这次调用写下的计划是她的一条清单消息,画在这次调用之后
+                    List<com.dwinovo.numen.agent.tool.TodoTool.Item> plan = PlanChecklist.of(tc, results.get(tc.id()));
+                    if (plan != null) {
+                        checklist(f, who, msgIndex, entry.ts(), plan, innerW, done, failed, bubbleMaxW);
+                    }
+                }
+            } else if (msg instanceof ConvoState.Msg.Tool) {
+/* result drives done/fail, not a block */
+            } else if (msg instanceof ConvoState.Msg.Halt h) {
+                flushProcess(f, done, failed, bubbleMaxW);
+                notice(out, I18n.get("numen.chat.halted", h.reason()), bubbleMaxW);
+                f.last = null;
+            }
         }
-        // The in-flight reply, typed out live (chunk stream → EntityAgentLoop.livePartial).
-        if (!liveShown.isEmpty()) {
-            boolean first = lastSide == null || lastSide;
-            out.add(bubble(false, first ? name.get() : null, liveShown,
-                    TXT, AI_FILL, AI_BORDER, innerW, first));
-            lastSide = false;
+        // 最后一段过程先不收口:她正在想的那段接在它后面,并成同一行
+        // 在飞的状态按成员各自的循环取:单成员就是她一个,多人各画各的。
+        // 只画她此刻所在的会话里的:她在群里想着,私聊页不该也看见——和落库的行同一条印的规矩。
+        String tag = Conversations.instance().tagOf(conv.get());
+        java.util.Set<String> queued = new java.util.LinkedHashSet<>();
+        boolean compacting = false;
+        for (UUID her : Conversations.instance().membersAlive(conv.get())) {
+            EntityAgentLoop lp = AgentLoopRegistry.get(her).orElse(null);
+            if (lp == null || !java.util.Objects.equals(lp.conversation(), tag)) continue;
+            if (!her.equals(f.processWho)) flushProcess(f, done, failed, bubbleMaxW);
+            // 在飞的思考流接在她这段过程末尾;回合落库后由落库的那段接管,永不双份。
+            String liveReasoning = lp.liveReasoning();
+            if (!liveReasoning.isBlank()) addPiece(f, her, -1, new Piece(liveReasoning, true, null));
+            // The in-flight reply, typed out live (chunk stream → EntityAgentLoop.livePartial).
+            Live l = live.get(her);
+            if (l != null && !l.shown.isEmpty()) {
+                flushProcess(f, done, failed, bubbleMaxW);
+                boolean first = !her.equals(f.last);
+                out.add(bubble(false, first ? label(her) : null, Nb.colored(l.shown, TXT),
+                        AI_FILL, innerW, her, null, -1, l.shown, null));
+                f.last = her;
+            }
+            // 排着的话:主人一句话复制进每个醒着的成员的队列,按原文去重,画一次
+            var status = lp.status();
+            for (String q : status.queuedPreview()) {
+                String shown = ownerText(q);
+                if (!shown.isEmpty()) queued.add(shown);
+            }
+            compacting |= status.phase() == com.dwinovo.numen.agent.loop.Phase.COMPACT;
+        }
+        flushProcess(f, done, failed, bubbleMaxW);
+        // 挂着的那条(和记录里最后一条之后才到的)排在她这段过程后面
+        while (asked < asks.size()) {
+            consent(f, asks.get(asked++), bubbleMaxW);
         }
         // Prompts still waiting for a protocol-valid splice point — visible immediately
         // so a queued message never feels swallowed.
-        for (String queued : lp.queuedPrompts()) {
-            String shown = ownerText(queued);
-            if (shown.isEmpty()) continue;
-            boolean first = lastSide == null || !lastSide;
-            out.add(bubble(true, null, "⌛ " + shown, FAINT, QUEUED_FILL, QUEUED_BORDER, innerW, first));
-            lastSide = true;
+        for (String shown : queued) {
+            String body = Quote.parse(shown).body();
+            out.add(bubble(true, null, Nb.colored("⌛ " + body, FAINT), QUEUED_FILL,
+                    innerW, null, null, -1, body, null));
+            f.last = OWNER;
         }
-        if (lp.isCompacting()) notice(out, I18n.get("numen.chat.compacting"));
-        if (out.isEmpty()) notice(out, I18n.get("numen.chat.empty", name.get()));
+        if (compacting) notice(out, I18n.get("numen.chat.compacting"), bubbleMaxW);
+        if (out.isEmpty()) {
+            notice(out, I18n.get("numen.chat.empty", conv.get().displayName(NumenRoster.instance()::name)), bubbleMaxW);
+        }
+        settleRuns(out);
+        settleTicks(out, opening);
         return out;
     }
 
-    private Bubble bubble(boolean own, String label, String text, int color, int fill, int border,
-                          int innerW, boolean showAvatar) {
-        List<FormattedCharSequence> lines = font.split(Nb.colored(text, color), innerW);
+    /** 清单里这一项的勾记在哪个键下:她、哪一条清单(第一次出现的记录序号)、第几项、内容。 */
+    private static String tickKey(Checklist c, int i) {
+        return c.who() + "#" + c.entry() + "#" + i + "#" + c.items().get(i).content();
+    }
+
+    /** 按这一遍的最终清单记下每项什么时候打上的勾;{@code opening} 时已经勾上的算历史,不播。 */
+    private void settleTicks(List<Block> out, boolean opening) {
+        for (Block b : out) {
+            if (!(b instanceof Checklist c)) continue;
+            for (int i = 0; i < c.items().size(); i++) {
+                String key = tickKey(c, i);
+                if (c.items().get(i).status() == com.dwinovo.numen.agent.tool.TodoTool.Status.COMPLETED) {
+                    ticked.computeIfAbsent(key, k -> opening ? 0L : frameNow);
+                } else {
+                    ticked.remove(key);
+                }
+            }
+        }
+    }
+
+    /**
+     * Telegram 的排法:群里别人的名字在这一组的第一块上面,脸贴在这一组的<b>最后一块</b>旁边(底部对齐),
+     * 最后一块气泡还带一条小尾巴。建块时只知道"是不是第一块",所以"最后一块"在这儿补:同一个人连着的块算一组,
+     * 提示行、日期牌把组断开。
+     */
+    private void settleRuns(List<Block> out) {
+        for (int i = 0; i < out.size(); i++) {
+            UUID who = speakerOf(out.get(i));
+            if (who == null) continue;
+            boolean end = i + 1 >= out.size() || !who.equals(speakerOf(out.get(i + 1)));
+            Block b = out.get(i);
+            if (b instanceof Bubble bb && bb.runEnd() != end) out.set(i, bb.withRunEnd(end));
+            else if (b instanceof Checklist c && c.runEnd() != end) out.set(i, c.withRunEnd(end));
+            else if (b instanceof Chip c && c.runEnd() != end) out.set(i, c.withRunEnd(end));
+            else if (b instanceof Consent c && c.runEnd() != end) out.set(i, c.withRunEnd(end));
+        }
+    }
+
+    /** 这一块是谁的:主人用 {@link #OWNER} 代表;提示行、日期牌不是谁的。 */
+    private static UUID speakerOf(Block b) {
+        if (b instanceof Bubble bb) {
+            return bb.own() ? OWNER : bb.who();
+        } else if (b instanceof Checklist c) {
+            return c.who();
+        } else if (b instanceof Chip c) {
+            return c.who();
+        } else if (b instanceof Consent c) {
+            return c.card().companion();
+        } else {
+            return null;
+        }
+    }
+
+    private Bubble bubble(boolean own, String label, Component body, int fill,
+                          int innerW, UUID who, String time, int entry,
+                          String raw, Quote quote) {
+        List<FormattedCharSequence> lines = split(body, innerW);
         int maxW = 0;
         for (FormattedCharSequence l : lines) maxW = Math.max(maxW, font.width(l));
-        return new Bubble(own, label, lines, maxW, color, fill, border, showAvatar);
+        if (quote != null) {
+            maxW = Math.max(maxW, Math.min(innerW,
+                    QUOTE_IN + Math.max(font.width(quote.who()), font.width(quote.snippet()))));
+        }
+        boolean inline = false;
+        if (time != null) {
+            // 时间戳挤在最后一行右侧(Telegram):放得下就同一行,放不下自己占一小行
+            int tw = font.width(time) + 6;
+            int last = lines.isEmpty() ? 0 : font.width(lines.get(lines.size() - 1));
+            inline = last + tw <= innerW;
+            maxW = Math.max(maxW, inline ? last + tw : tw);
+        }
+        return new Bubble(own, label, lines, maxW, fill, false, who, time, inline, entry, raw, quote);
+    }
+
+    /**
+     * 她写下一份计划:和她最近那条清单是同一份(内容一样、只是状态变了)就在那一条上原地更新,
+     * 不往下挪;内容变了才是她新说的一条——先把攒着的过程收口,再接在后面。
+     */
+    private void checklist(Feed f, UUID who, int entry, long ts, List<com.dwinovo.numen.agent.tool.TodoTool.Item> items, int innerW,
+                           Set<String> done, Set<String> failed, int bubbleMaxW) {
+        Integer at = f.plans.get(who);
+        if (at != null) {
+            Checklist prev = (Checklist) f.out.get(at);
+            if (PlanChecklist.sameItems(prev.items(), items)) {
+                f.out.set(at, checklist(who, prev.label(), items, innerW, prev.time(), prev.entry()));
+                return;
+            }
+        }
+        flushProcess(f, done, failed, bubbleMaxW);
+        boolean first = !who.equals(f.last);
+        f.out.add(checklist(who, first ? label(who) : null, items, innerW, clock(ts), entry));
+        f.plans.put(who, f.out.size() - 1);
+        f.last = who;
+    }
+
+    /** 折好一份清单:做完的和划掉的字退成气泡里的淡字、加删除线,还要做的照常。 */
+    private Checklist checklist(UUID who, String label, List<com.dwinovo.numen.agent.tool.TodoTool.Item> items, int innerW,
+                                String time, int entry) {
+        String header = I18n.get("numen.chat.plan", PlanChecklist.done(items), items.size());
+        int maxW = font.width(header);
+        List<CheckRow> rows = new ArrayList<>(items.size());
+        int textW = innerW - BOX_COL;
+        for (com.dwinovo.numen.agent.tool.TodoTool.Item it : items) {
+            boolean off = it.status() == com.dwinovo.numen.agent.tool.TodoTool.Status.COMPLETED || it.status() == com.dwinovo.numen.agent.tool.TodoTool.Status.CANCELLED;
+            Component text = off
+                    ? Nb.colored(it.content(), IN_META).copy().withStyle(net.minecraft.ChatFormatting.STRIKETHROUGH)
+                    : Nb.colored(it.content(), TXT);
+            List<FormattedCharSequence> lines = split(text, textW);
+            for (FormattedCharSequence l : lines) maxW = Math.max(maxW, BOX_COL + font.width(l));
+            rows.add(new CheckRow(it.status(), lines));
+        }
+        boolean inline = false;
+        if (time != null) {
+            // 时间和气泡一样贴右下角:放得进最后一项的右侧就同一行
+            int tw = font.width(time) + 6;
+            List<FormattedCharSequence> lastRow = rows.get(rows.size() - 1).lines();
+            int last = BOX_COL + (lastRow.isEmpty() ? 0 : font.width(lastRow.get(lastRow.size() - 1)));
+            inline = last + tw <= innerW;
+            maxW = Math.max(maxW, inline ? last + tw : tw);
+        }
+        return new Checklist(who, label, items, header, List.copyOf(rows), maxW, time, inline, entry, false);
+    }
+
+    /** {@code HH:mm},本机时区;没有时间戳的旧记录不标。 */
+    private static String clock(long ts) {
+        if (ts <= 0) return null;
+        LocalTime t = Instant.ofEpochMilli(ts).atZone(ZoneId.systemDefault()).toLocalTime();
+        return String.format("%02d:%02d", t.getHour(), t.getMinute());
+    }
+
+    /** 日期小牌上的字:今天、昨天,再往前是几月几日,跨年带年。 */
+    private static String dayLabel(LocalDate day) {
+        LocalDate today = LocalDate.now(ZoneId.systemDefault());
+        if (day.equals(today)) return I18n.get(com.dwinovo.numen.data.ModLanguageData.Keys.CHAT_TODAY);
+        if (day.equals(today.minusDays(1))) return I18n.get(com.dwinovo.numen.data.ModLanguageData.Keys.CHAT_YESTERDAY);
+        if (day.getYear() == today.getYear()) {
+            return I18n.get(com.dwinovo.numen.data.ModLanguageData.Keys.CHAT_DATE_MD, day.getMonthValue(), day.getDayOfMonth());
+        }
+        return I18n.get(com.dwinovo.numen.data.ModLanguageData.Keys.CHAT_DATE_YMD, day.getYear(), day.getMonthValue(), day.getDayOfMonth());
+    }
+
+    /**
+     * 气泡正文:http/https 链接({@link ChatLinks})画成强调色加下划线,带着原版的打开网址点击事件,
+     * 点了由 {@link #mouseClicked} 交给原版确认打开;主人的话里 {@code @} 到的名字画亮——{@code mentions}
+     * 用的是路由那一份匹配({@link Mentions#spans}),所以亮的正好是会醒的,不是"长得像名字";名字按此刻名册,
+     * 改过名之后旧记录里的不亮。两样重叠时算链接。
+     */
+    private Component rich(String text, List<Mentions.Span> mentions) {
+        List<ChatLinks.Span> links = ChatLinks.find(text);
+        if (links.isEmpty() && mentions.isEmpty()) return Nb.colored(text, TXT);
+        // 每个字属于哪一段:0 正文,-1 @ 到的名字,k + 1 第 k 个链接
+        int[] mark = new int[text.length()];
+        for (Mentions.Span m : mentions) java.util.Arrays.fill(mark, m.start(), m.end(), -1);
+        for (int k = 0; k < links.size(); k++) java.util.Arrays.fill(mark, links.get(k).start(), links.get(k).end(), k + 1);
+        MutableComponent out = Component.empty();
+        for (int i = 0; i < mark.length; ) {
+            int j = i;
+            while (j < mark.length && mark[j] == mark[i]) j++;
+            String part = text.substring(i, j);
+            if (mark[i] > 0) {
+                var click = new net.minecraft.network.chat.ClickEvent(
+                        net.minecraft.network.chat.ClickEvent.Action.OPEN_URL, links.get(mark[i] - 1).url());
+                out.append(Nb.colored(part, MENTION).copy().withStyle(st -> st.withUnderlined(true).withClickEvent(click)));
+            } else {
+                out.append(Nb.colored(part, mark[i] < 0 ? MENTION : TXT));
+            }
+            i = j;
+        }
+        return out;
     }
 
     /** Advance the typewriter: filter the live partial, ease the reveal toward the
      *  full length, and cache "revealed text + blinking caret". */
     private void updateLive(float dt, long now) {
-        String full = ChatDisplayModes.current().assistantText(loop.get().livePartial());
-        if (full.isEmpty()) {
-            revealed = 0;
-            liveShown = "";
-            return;
+        List<UUID> members = Conversations.instance().membersAlive(conv.get());
+        live.keySet().retainAll(members);
+        for (UUID her : members) {
+            EntityAgentLoop lp = AgentLoopRegistry.get(her).orElse(null);
+            String full = lp == null ? "" : ChatDisplayModes.current().assistantText(lp.livePartial());
+            if (full.isEmpty()) {
+                live.remove(her);
+                continue;
+            }
+            Live l = live.computeIfAbsent(her, k -> new Live());
+            if (l.revealed > full.length()) l.revealed = full.length();
+            if (full.length() - l.revealed > REVEAL_MAX_LAG) l.revealed = full.length() - REVEAL_MAX_LAG;
+            l.revealed = Math.min(full.length(), l.revealed + dt * REVEAL_CPS);
+            l.shown = cut(full, (int) l.revealed) + (((now / 500) & 1) == 0 ? "_" : "");
         }
-        if (revealed > full.length()) revealed = full.length();
-        if (full.length() - revealed > REVEAL_MAX_LAG) revealed = full.length() - REVEAL_MAX_LAG;
-        revealed = Math.min(full.length(), revealed + dt * REVEAL_CPS);
-        liveShown = cut(full, (int) revealed) + (((now / 500) & 1) == 0 ? "_" : "");
     }
 
     /** Cut at {@code n} chars without splitting a surrogate pair. */
@@ -475,70 +1304,81 @@ public final class ChatView {
         return s.substring(0, n);
     }
 
-    private void notice(List<Block> out, String text) {
-        out.add(new Notice(Nb.colored(text, FAINT).getVisualOrderText()));
-    }
-
-    /** Emit the chip for a run of consecutive tool calls. A single call is one unfoldable chip;
-     *  a run stays EXPANDED while any call still runs (live spinners) and auto-folds to a
-     *  "N steps · names" summary once done — unless clicked open ({@link #expandedGroups}). */
-    private void flushTools(List<Block> out, List<LlmToolCall> group,
-                            Set<String> done, Set<String> failed, int chipMaxW) {
-        if (group.isEmpty()) return;
-        int textW = chipMaxW - PAD_H * 2 - ICON_W;
-        long t = System.currentTimeMillis();
-        List<ChipRow> rows = new ArrayList<>();
-        String foldKey = null;
-        if (group.size() == 1) {
-            rows.add(toolRow(group.get(0), done, failed, t, textW));
-        } else {
-            String key = group.get(0).id();
-            boolean running = group.stream().anyMatch(tc -> !done.contains(tc.id()));
-            if (!running) foldKey = key;
-            if (running || expandedGroups.contains(key)) {
-                if (!running) {
-                    rows.add(new ChipRow("▾", MUTED,
-                            Nb.colored(I18n.get("numen.chat.steps", group.size()), MUTED).getVisualOrderText()));
-                }
-                for (LlmToolCall tc : group) rows.add(toolRow(tc, done, failed, t, textW));
-            } else {
-                List<String> names = new ArrayList<>();
-                for (LlmToolCall tc : group) {
-                    String label = toolLabel(tc.name());
-                    if (!names.contains(label)) names.add(label);
-                }
-                boolean anyFail = group.stream().anyMatch(tc -> failed.contains(tc.id()));
-                String summary = I18n.get("numen.chat.steps", group.size())
-                        + " · " + String.join(" · ", names) + " ▸";
-                rows.add(new ChipRow(anyFail ? "✗" : "✔", anyFail ? FAIL : OK,
-                        Nb.colored(fitOneLine(summary, textW), anyFail ? FAIL : TOOL).getVisualOrderText()));
-            }
-        }
-        out.add(new Chip(List.copyOf(rows), foldKey));
-        group.clear();
+    private void notice(List<Block> out, String text, int maxW) {
+        out.add(new Notice(split(Nb.colored(text, SERVICE_FG), maxW - SERVICE_PAD_H * 2)));
     }
 
     /**
-     * 思考块:与工具 chip 同一形制(同样的行、同样的折叠交互),只是内容是
-     * 推理文本。{@code live}=在飞,展开着实时长且不可折(正在发生的事折起来
-     * 就看不见);已落库的默认折叠成一行摘要,点开看全文——它是过程不是结论。
+     * 收口她这一段过程(连着的思考和工具调用,中间没开口):合成<b>一行</b>,点开才看每一步。
+     * 过程是旁白不是话,一轮干活只占一行,正文留给她说的话。在跑时这一行是转圈 + 眼下在干什么;
+     * 干完是"思考过程 · N 步 · 用了哪些",有一步失败整行标失败色。只有一次调用、没有思考时
+     * 那一行就是调用本身,没什么可展开的。
      */
-    private Chip reasoningChip(String text, String foldKey, int innerW, boolean live) {
-        String flat = text.replaceAll("\\s+", " ").trim();
+    private void flushProcess(Feed f, Set<String> done, Set<String> failed, int chipMaxW) {
+        List<Piece> ps = f.process;
+        if (ps.isEmpty()) return;
+        int textW = chipMaxW - PAD_H * 2 - ICON_W;
+        long t = System.currentTimeMillis();
+        List<LlmToolCall> calls = new ArrayList<>();
+        boolean thought = false;
+        for (Piece pc : ps) {
+            if (pc.call() != null) calls.add(pc.call());
+            else thought = true;
+        }
+        boolean liveThought = ps.get(ps.size() - 1).live();
+        LlmToolCall runningCall = null;
+        for (LlmToolCall tc : calls) {
+            if (!done.contains(tc.id())) { runningCall = tc; break; }
+        }
         List<ChipRow> rows = new ArrayList<>();
-        boolean expanded = live || (foldKey != null && expandedGroups.contains(foldKey));
-        if (!expanded) {
-            // 不报字数:中英混排的 length() 一半是字一半是字符,数出来没有意义。
-            rows.add(new ChipRow("▸", MUTED,
-                    Nb.colored(I18n.get("numen.chat.reasoning") + " ▸", MUTED).getVisualOrderText()));
-            return new Chip(List.copyOf(rows), foldKey);
+        String foldKey = null;
+        if (!thought && calls.size() == 1) {
+            rows.add(toolRow(calls.get(0), done, failed, t, textW));
+        } else {
+            foldKey = "proc#" + f.processWho + "#" + f.processEntry;
+            boolean open = expandedGroups.contains(foldKey);
+            boolean running = liveThought || runningCall != null;
+            // 收起时的颜色跟这段过程最后一步走:中途失败、后来改对了的一段不算失败;哪一步失败了,展开逐行各有 ✗ / ✔
+            boolean lastFail = !calls.isEmpty() && failed.contains(calls.get(calls.size() - 1).id());
+            String head = running
+                    ? (liveThought ? I18n.get("numen.chat.reasoning_now") : toolLine(runningCall))
+                    : processSummary(thought, calls);
+            rows.add(new ChipRow(running ? SPIN[(int) ((t / 120) % 4)] : (open ? "▾" : "▸"), running ? RUN : MUTED,
+                    Nb.colored(Nb.clip(font, head, textW), lastFail && !running ? FAIL : TOOL).getVisualOrderText()));
+            if (open) {
+                for (Piece pc : ps) {
+                    if (pc.call() != null) {
+                        rows.add(toolRow(pc.call(), done, failed, t, textW));
+                        continue;
+                    }
+                    String flat = flattened.computeIfAbsent(pc.thought(), s -> s.replaceAll("\\s+", " ").trim());
+                    for (FormattedCharSequence line : split(Nb.colored(flat, FAINT), textW)) {
+                        rows.add(new ChipRow(" ", MUTED, line));
+                    }
+                }
+            }
         }
-        rows.add(new ChipRow(live ? SPIN[(int) ((System.currentTimeMillis() / 120) % 4)] : "▾", MUTED,
-                Nb.colored(I18n.get("numen.chat.reasoning"), MUTED).getVisualOrderText()));
-        for (FormattedCharSequence line : font.split(Nb.colored(flat, FAINT), innerW - ICON_W)) {
-            rows.add(new ChipRow(" ", MUTED, line));
+        boolean first = !f.processWho.equals(f.last);
+        f.out.add(new Chip(List.copyOf(rows), foldKey, first ? label(f.processWho) : null,
+                f.processWho, f.processEntry, false));
+        f.last = f.processWho;
+        ps.clear();
+        f.processWho = null;
+        f.processEntry = -1;
+    }
+
+    /** 干完的一段过程的摘要:"思考过程 · N 步 · 用了哪些",没有的那半不写。 */
+    private String processSummary(boolean thought, List<LlmToolCall> calls) {
+        List<String> parts = new ArrayList<>();
+        if (thought) parts.add(I18n.get("numen.chat.reasoning"));
+        if (!calls.isEmpty()) {
+            parts.add(I18n.get("numen.chat.steps", calls.size()));
+            for (LlmToolCall tc : calls) {
+                String name = toolLabel(tc.name());
+                if (!parts.contains(name)) parts.add(name);
+            }
         }
-        return new Chip(List.copyOf(rows), foldKey);
+        return String.join(" · ", parts);
     }
 
     private ChipRow toolRow(LlmToolCall tc, Set<String> done, Set<String> failed, long t, int textW) {
@@ -547,71 +1387,255 @@ public final class ChatView {
         String icon = running ? SPIN[(int) ((t / 120) % 4)] : (fail ? "✗" : "✔");
         int ic = running ? RUN : (fail ? FAIL : OK);
         return new ChipRow(icon, ic,
-                Nb.colored(fitOneLine(toolLine(tc), textW), fail ? FAIL : TOOL).getVisualOrderText());
+                Nb.colored(Nb.clip(font, toolLine(tc), textW), fail ? FAIL : TOOL).getVisualOrderText());
     }
 
     // ---- drawing ----
 
     private void drawBlock(GuiGraphics g, Block b, int x, int y, int w) {
-        // Java 17:类型模式 switch 是预览特性,改 if/else instanceof
-        if (b instanceof Notice n) {
-            int tw = font.width(n.text());
-            draw(g, n.text(), x + (w - SB_W - tw) / 2, y);
+        // 新来的块飞入:从下面 8px 升上来、同时淡入。整块一起动——框、脸、字用同一个透明度
+        int entry;
+        if (b instanceof Bubble bb) {
+            entry = bb.entry();
+        } else if (b instanceof Checklist c) {
+            entry = c.entry();
+        } else if (b instanceof Chip c) {
+            entry = c.entry();
+        } else {
+            entry = -1;
+        }
+        // 征询不是记录里的一条:按它到的时刻飞入
+        long bornAt = b instanceof Consent c ? c.card().arrivedAt()
+                : entry >= 0 && entry < born.size() ? born.get(entry) : 0L;
+        float e = 1f;
+        if (bornAt > 0) {
+            long age = frameNow - bornAt;
+            if (age < ENTER_MS) e = Anim.easeOutCubic(age / (float) ENTER_MS);
+        }
+        if (e < 1f) {
+            g.pose().pushPose();
+            g.pose().translate(0, Math.round(ENTER_DY * (1f - e)), 0);
+            g.setColor(1f, 1f, 1f, Math.max(0.05f, e));
+        }
+        drawBlockBody(g, b, x, y, w);
+        if (e < 1f) {
+            g.setColor(1f, 1f, 1f, 1f);
+            g.pose().popPose();
+        }
+    }
+
+    private void drawBlockBody(GuiGraphics g, Block b, int x, int y, int w) {
+        if (b instanceof Divider d) {
+            drawDayChip(g, d.text(), x, y, w);
+        } else if (b instanceof Notice n) {
+            drawService(g, n.lines(), x, y, w);
+        } else if (b instanceof UnreadBar) {
+            drawDayChip(g, I18n.get("numen.chat.unread_bar"), x, y, w);
         } else if (b instanceof Bubble bb) {
             drawBubble(g, bb, x, y, w);
+        } else if (b instanceof Checklist c) {
+            drawChecklist(g, c, x, y);
         } else if (b instanceof Chip c) {
             drawChip(g, c, x, y);
+        } else if (b instanceof Consent c) {
+            drawConsent(g, c, x, y, w);
+        }
+    }
+
+    /**
+     * 征询那条:和话、清单同一份气泡外形(名字、脸、底色、尾巴),里面是问话与右下角的秒数,挂着时底边一道缩短的线;
+     * 气泡下面贴着内联按钮(Telegram 的键盘挂在气泡外面、与气泡同宽),收起后再下面一条服务消息写结果。
+     */
+    private void drawConsent(GuiGraphics g, Consent c, int x, int y, int w) {
+        ConsentCards.Card card = c.card();
+        int bx = x + EDGE + faceCol();
+        int bh = consentBubbleH(c);
+        int bubTop = y + (c.label() != null ? LABEL_H : 0);
+        bubbleFrame(g, false, c.label(), card.companion(), c.runEnd(), x, y, bx, c.w(), bh, AI_FILL);
+        ConsentMessage.drawList(g, font, card, bx + PAD_H, bubTop + PAD_V, c.w() - PAD_H * 2);
+        String meta = consentMeta(card);
+        int metaY = c.timeInline() ? ConsentMessage.lastRowTextY(font, card, bubTop + PAD_V)
+                : bubTop + PAD_V + ConsentMessage.listHeight(card);
+        draw(g, Nb.colored(meta, IN_META).getVisualOrderText(), bx + c.w() - PAD_H - font.width(meta), metaY);
+        if (card.waiting()) {
+            g.fill(bx, bubTop + bh - 1, bx + Math.round(c.w() * ConsentMessage.timeLeft(card)), bubTop + bh,
+                    ConsentMessage.tone(card));
+        }
+        int ky = consentKeysTop(c, y);
+        ConsentMessage.drawKeyboard(g, font, card, bx, ky, c.w(), hoverX, hoverY);
+        float shown = ConsentMessage.reveal(card);
+        if (shown > 0f) {
+            // 收起后键盘下面一条服务消息写结果,随收起淡入;透明度乘在飞入的透明度上
+            float base = com.mojang.blaze3d.systems.RenderSystem.getShaderColor()[3];
+            String text = Nb.clip(font, ConsentMessage.result(card), w - SB_W - SERVICE_PAD_H * 2);
+            g.setColor(1f, 1f, 1f, base * shown);
+            drawService(g, List.of(Nb.colored(text, SERVICE_FG).getVisualOrderText()), x,
+                    ky + ConsentMessage.keyboardHeight(font, c.w()) + ConsentMessage.GAP, w);
+            g.setColor(1f, 1f, 1f, base);
+        }
+    }
+
+    /** 征询那条的按钮从哪一行起:名字、气泡下面隔一道缝。画和点都照它。 */
+    private static int consentKeysTop(Consent c, int y) {
+        return y + (c.label() != null ? LABEL_H : 0) + consentBubbleH(c) + ConsentMessage.GAP;
+    }
+
+    /** 一行的服务消息(日期牌、未读消息)。对话里的日期牌和翻页时浮在顶上的是同一枚。 */
+    private void drawDayChip(GuiGraphics g, String text, int x, int y, int w) {
+        drawService(g, List.of(Nb.colored(text, SERVICE_FG).getVisualOrderText()), x, y, w);
+    }
+
+    /**
+     * 服务消息(Telegram 的 service message):在对话流里居中的一块半透明底、白字,不是谁说的话。
+     * 几行各自居中;底贴最宽那行,四周留 {@code SERVICE_PAD_*}。方角,不画圆角。
+     */
+    private void drawService(GuiGraphics g, List<FormattedCharSequence> lines, int x, int y, int w) {
+        int maxW = 0;
+        for (FormattedCharSequence l : lines) maxW = Math.max(maxW, font.width(l));
+        int mid = x + (w - SB_W) / 2;
+        int bx = mid - maxW / 2 - SERVICE_PAD_H;
+        g.fill(bx, y, bx + maxW + SERVICE_PAD_H * 2, y + lines.size() * LINE_H + SERVICE_PAD_V * 2, SERVICE_BG);
+        int ty = y + SERVICE_PAD_V + 1;
+        for (FormattedCharSequence l : lines) {
+            draw(g, l, mid - font.width(l) / 2, ty);
+            ty += LINE_H;
         }
     }
 
     private void drawBubble(GuiGraphics g, Bubble b, int x, int y, int w) {
         int bw = b.maxLineW() + PAD_H * 2;
-        int bh = b.lines().size() * LINE_H + PAD_V * 2;
+        boolean timeLine = b.time() != null && !b.timeInline();
+        int qh = b.quote() != null ? QUOTE_H : 0;
+        int bh = qh + b.lines().size() * LINE_H + PAD_V * 2 + (timeLine ? TIME_H : 0);
         int bubTop = y + (b.label() != null ? LABEL_H : 0);
-        int avX, bx;
-        if (b.own()) {
-            avX = x + w - SB_W - 3 - AV;
-            bx = avX - AV_GAP - bw;
-        } else {
-            avX = x + EDGE;
-            bx = x + EDGE + AV + AV_GAP;
+        // 自己的贴右缘(留出尾巴的宽);别人的在脸那一列右边(私聊那一列只有尾巴宽)
+        int bx = b.own() ? x + w - TAIL - bw : x + EDGE + faceCol();
+        bubbleFrame(g, b.own(), b.label(), b.who(), b.runEnd(), x, y, bx, bw, bh, b.fill());
+        hits.add(new Hit(bx, bubTop, bw, bh, b, drawingIndex));
+        if (b.quote() != null) {
+            // 引用条(Telegram 回复的样子):一道强调色竖线、谁(强调色)、那句(和时间同一档淡字)
+            int qx = bx + PAD_H, qy = bubTop + PAD_V;
+            int ink = MENTION;
+            int dim = b.own() ? OUT_META : IN_META;
+            g.fill(qx, qy, qx + 2, qy + QUOTE_H - 3, ink);
+            int room = bw - PAD_H * 2 - QUOTE_IN;
+            draw(g, Nb.colored(Nb.clip(font, b.quote().who(), room), ink).getVisualOrderText(), qx + QUOTE_IN, qy);
+            draw(g, Nb.colored(Nb.clip(font, b.quote().snippet(), room), dim).getVisualOrderText(), qx + QUOTE_IN, qy + 9);
         }
-        if (b.label() != null) {
-            draw(g, Nb.colored(b.label(), MUTED).getVisualOrderText(), bx + 2, y);
-        }
-        if (b.showAvatar()) {
-            // 头像框纯代码绘制,继承所在气泡的配色——AI/主人两侧色调天然分明,且跟主题走。
-            RoundRect.card(g, avX - 2, bubTop - 2, avX + AV + 2, bubTop + AV + 2, 3,
-                    b.fill(), b.border());
-            // 主人自己那侧画的是玩家本人,不是同伴——改外观的插件不该接管它
-            if (b.own()) {
-                PlayerFaceRenderer.draw(g, skin(true), avX, bubTop, AV);
-            } else {
-                CompanionFace.draw(g, uuid.get(), skin(false), avX, bubTop, AV);
-            }
-        }
-        RoundRect.card(g, bx, bubTop, bx + bw, bubTop + bh, RADIUS, b.fill(), b.border());
-        int ty = bubTop + PAD_V + 1;
+        int ty = bubTop + PAD_V + 1 + qh;
         for (FormattedCharSequence l : b.lines()) {
             draw(g, l, bx + PAD_H, ty);
             ty += LINE_H;
+        }
+        if (b.time() != null) {
+            // 时间戳贴右下角:同一行就压在最后一行的右侧,否则在下面自己一小行
+            int tx = bx + bw - PAD_H - font.width(b.time());
+            int tyy = b.timeInline() ? ty - LINE_H + 1 : ty - 1;
+            // 时间戳用气泡自己那一档淡色(Telegram 出向、入向各一色)
+            draw(g, Nb.colored(b.time(), b.own() ? OUT_META : IN_META).getVisualOrderText(), tx, tyy);
+        }
+    }
+
+    /**
+     * 一块气泡的外形,话和清单共用:群里的名字在上(从 {@code y} 起占一行)、群里别人连发最后一块旁边贴脸
+     * (和气泡齐底)、底色、连发最后一块靠脸那侧的尾巴。气泡只有底色、没有描边(Telegram):和地面分开靠色块,
+     * 不靠框线。{@code bh} 是气泡本身的高,不含名字那一行。
+     */
+    private void bubbleFrame(GuiGraphics g, boolean own, String label, UUID who, boolean runEnd,
+                             int x, int y, int bx, int bw, int bh, int fill) {
+        int bubTop = y + (label != null ? LABEL_H : 0);
+        if (label != null) {
+            draw(g, Nb.colored(label, nameColor(who)).getVisualOrderText(), bx + 2, y);
+        }
+        if (group && !own && runEnd) {
+            int avX = x + EDGE, avY = bubTop + bh - AV;
+            CompanionFace.draw(g, who, KnownSkins.of(who), avX, avY, AV);
+            face(g, who, avX, avY);
+        }
+        g.fill(bx, bubTop, bx + bw, bubTop + bh, fill);
+        if (runEnd) tail(g, own, own ? bx + bw : bx, bubTop + bh, fill);
+    }
+
+    /** 清单消息:她的气泡,抬头强调色"计划 2/5",下面一项一行,方格在每项第一行前面。 */
+    private void drawChecklist(GuiGraphics g, Checklist c, int x, int y) {
+        int bw = c.maxLineW() + PAD_H * 2;
+        int bh = checklistH(c);
+        int bubTop = y + (c.label() != null ? LABEL_H : 0);
+        int bx = x + EDGE + faceCol();
+        bubbleFrame(g, false, c.label(), c.who(), c.runEnd(), x, y, bx, bw, bh, AI_FILL);
+        int tx = bx + PAD_H;
+        int ty = bubTop + PAD_V + 1;
+        draw(g, Nb.colored(c.header(), MENTION).getVisualOrderText(), tx, ty);
+        ty += LINE_H;
+        for (int i = 0; i < c.rows().size(); i++) {
+            CheckRow r = c.rows().get(i);
+            checkBox(g, r.state(), ticked.getOrDefault(tickKey(c, i), 0L), tx, ty);
+            for (FormattedCharSequence l : r.lines()) {
+                draw(g, l, tx + BOX_COL, ty);
+                ty += LINE_H;
+            }
+        }
+        if (c.time() != null) {
+            int tyy = c.timeInline() ? ty - LINE_H + 1 : ty - 1;
+            draw(g, Nb.colored(c.time(), IN_META).getVisualOrderText(), bx + bw - PAD_H - font.width(c.time()), tyy);
+        }
+    }
+
+    /**
+     * 一项前面的方格(贴着字的第一行,与字同高):没做空心,正在做的边框呼吸(透明度来回,"正在做"是活的),
+     * 做完实心成功色、里面一枚白勾——刚勾上的({@code tickedAt} 非 0)先从中间往外填满,满了才出勾;
+     * 划掉的空心,字已经划了线。
+     */
+    private void checkBox(GuiGraphics g, com.dwinovo.numen.agent.tool.TodoTool.Status state, long tickedAt, int x, int y) {
+        switch (state) {
+            case COMPLETED -> {
+                float e = tickedAt == 0L ? 1f : Anim.easeOutCubic((frameNow - tickedAt) / (float) TICK_MS);
+                if (e < 1f) {
+                    int size = 1 + 2 * Math.round((BOX - 1) / 2f * e);   // 奇数边长,始终居中
+                    int in = (BOX - size) / 2;
+                    Nb.border(g, x, y, BOX, BOX, 1, OK);
+                    g.fill(x + in, y + in, x + in + size, y + in + size, OK);
+                    return;
+                }
+                g.fill(x, y, x + BOX, y + BOX, OK);
+                // 像素勾:短边两格往右下,长边三格往右上
+                int[][] tick = {{1, 3}, {2, 4}, {3, 3}, {4, 2}, {5, 1}};
+                for (int[] p : tick) g.fill(x + p[0], y + p[1], x + p[0] + 1, y + p[1] + 1, ON_CTA);
+            }
+            case IN_PROGRESS -> {
+                int a = 0x90 + (int) (0x6F * (0.5 + 0.5 * Math.sin(frameNow / 250.0)));
+                Nb.border(g, x, y, BOX, BOX, 1, (RUN & 0xFFFFFF) | (a << 24));
+            }
+            case PENDING, CANCELLED -> Nb.border(g, x, y, BOX, BOX, 1, IN_META);
         }
     }
 
     /**
      * 机器行(工具调用 / 思考过程)——刻意长得<b>不像对话</b>:左缘一条竖线 +
-     * 极淡底,没有气泡的实底、圆角与头像。过程与话分得开,读者才不会把旁白
+     * 极淡底,没有气泡的实底、描边与头像。过程与话分得开,读者才不会把旁白
      * 当成模型的输出。几何取自 {@link NumenStyle} 的 TRACE_* 令牌。
      */
     private void drawChip(GuiGraphics g, Chip c, int x, int y) {
         int maxW = 0;
         for (ChipRow r : c.rows()) maxW = Math.max(maxW, font.width(r.text()));
-        int cx = x + EDGE + AV + AV_GAP;
+        int cx = x + EDGE + faceCol();
+        if (c.label() != null) {
+            // 她这一组的第一块:名字在上——和气泡同一套,谁在干活一眼认得出
+            draw(g, Nb.colored(c.label(), nameColor(c.who())).getVisualOrderText(), cx + 2, y);
+            y += LABEL_H;
+        }
+        if (group && c.runEnd()) {
+            // 这一组的最后一块:脸贴在它的底部
+            int ch0 = c.rows().size() * LINE_H + PAD_V * 2;
+            int avX = x + EDGE, avY = y + ch0 - AV;
+            CompanionFace.draw(g, c.who(), KnownSkins.of(c.who()), avX, avY, AV);
+            face(g, c.who(), avX, avY);
+        }
         int cw = NumenStyle.TRACE_INDENT + ICON_W + maxW + PAD_H;
         int ch = c.rows().size() * LINE_H + PAD_V * 2;
         // 极淡底衬出块的范围(半透明再减半),左缘竖线是"这是过程"的记号
         int faintFill = (CHIP_FILL & 0xFFFFFF) | (((CHIP_FILL >>> 24) / 2) << 24);
-        RoundRect.fill(g, cx, y, cx + cw, y + ch, NumenStyle.TRACE_RADIUS, faintFill);
+        g.fill(cx, y, cx + cw, y + ch, faintFill);
         g.fill(cx, y, cx + NumenStyle.TRACE_BAR_W, y + ch, TRACE_BAR);
         int ty = y + PAD_V + 1;
         for (ChipRow r : c.rows()) {
@@ -622,19 +1646,39 @@ public final class ChatView {
         }
     }
 
+    /**
+     * 气泡的小尾巴(Telegram 连发只有最后一条有):贴在靠脸那一侧的底角往外伸,自底向上一级比一级短,
+     * 方角像素台阶,不画弧。{@code right} = 主人的,伸向右下;{@code edgeX} 是气泡那一侧的边。
+     */
+    private static void tail(GuiGraphics g, boolean right, int edgeX, int bottom, int fill) {
+        for (int k = 0; k < TAIL_STEPS.length; k++) {
+            int y = bottom - 1 - k;
+            int len = TAIL_STEPS[k];
+            if (right) g.fill(edgeX, y, edgeX + len, y + 1, fill);
+            else g.fill(edgeX - len, y, edgeX, y + 1, fill);
+        }
+    }
+
+    /** 记下这张脸能点;指针在它上面时贴着脸描一圈强调色边,像个能点的东西。 */
+    private void face(GuiGraphics g, UUID who, int x, int y) {
+        faces.add(new Face(who, x, y));
+        if (hoverX >= x - 2 && hoverX < x + AV + 2 && hoverY >= y - 2 && hoverY < y + AV + 2) {
+            Nb.border(g, x - 1, y - 1, AV + 2, AV + 2, 1, MENTION);   // 只描边,脸照样看得见
+        }
+    }
+
+    /** 指针下那张脸是谁的;不在脸上是 null。只认对话流可见区里的。 */
+    public UUID faceAt(double mx, double my) {
+        if (mx < gx || mx >= gx + gw || my < gy || my >= gy + gh) return null;
+        for (Face f : faces) {
+            if (mx >= f.x() - 2 && mx < f.x() + AV + 2 && my >= f.y() - 2 && my < f.y() + AV + 2) return f.who();
+        }
+        return null;
+    }
+
     /** Shadowless draw — the colour is baked into the sequence's Style (see {@link Nb}). */
     private void draw(GuiGraphics g, FormattedCharSequence seq, int x, int y) {
         Nb.text(g, font, seq, x, y);
-    }
-
-    private ResourceLocation skin(boolean own) {
-        // 1.20.1:皮肤就是贴图位置(PlayerSkin 记录是 1.20.2+ 的)
-        if (own) {
-            AbstractClientPlayer p = Minecraft.getInstance().player;
-            if (p != null) return p.getSkinTextureLocation();
-            return DefaultPlayerSkin.getDefaultSkin(uuid.get());
-        }
-        return com.dwinovo.numen.client.agent.KnownSkins.of(uuid.get());
     }
 
     // ---- text helpers ----
@@ -643,10 +1687,43 @@ public final class ChatView {
         return ChatDisplayModes.current().userText(s);
     }
 
-    private String fitOneLine(String s, int pxWidth) {
-        if (font.width(s) <= pxWidth) return s;
-        while (s.length() > 1 && font.width(s + "…") > pxWidth) s = s.substring(0, s.length() - 1);
-        return s + "…";
+    /**
+     * 这个面板画的会话:成员各自的日志按会话印归并成一条时间线。单成员时就是她一本日志——
+     * 同一条路,没有"单聊另一条路"。循环还没起来的成员这一刻没有记录可读,跳过。
+     */
+    private List<Transcript.Entry> transcript() {
+        Conversations convos = Conversations.instance();
+        Conversation c = conv.get();
+        java.util.Map<UUID, List<ConvoLog.Line>> logs = new java.util.LinkedHashMap<>();
+        for (UUID member : convos.membersAlive(c)) {
+            AgentLoopRegistry.get(member).ifPresent(l -> logs.put(member, l.display()));
+        }
+        return Transcript.merge(convos.tagOf(c), logs);
+    }
+
+    /** 这次调用还在她那条循环的派发器手里没有——"还在跑"只问派发器,不从历史长什么样去猜。 */
+    private static boolean outstanding(UUID companion, String callId) {
+        return AgentLoopRegistry.get(companion).map(l -> l.isToolCallOutstanding(callId)).orElse(false);
+    }
+
+    /** 气泡上的名字:名册名。多人会话里每条回复各标各的说话人。 */
+    private static String speaker(UUID companion) {
+        return NumenRoster.instance().name(companion);
+    }
+
+    /** 连发第一块上面的名字:只有群里标——私聊里对面是谁抬头已经写了(Telegram 私聊不标名字)。 */
+    private String label(UUID companion) {
+        return group ? speaker(companion) : null;
+    }
+
+    /** 她在群里的名字色:按 UUID 取模挑七色之一,同一只永远同一色。 */
+    private static int nameColor(UUID companion) {
+        return UiTheme.current().peerName(companion.hashCode());
+    }
+
+    /** 气泡左边留的那一列:群里放脸(尾巴伸在脸和气泡之间的缝里);私聊和外脑现场不画脸,只留尾巴那几像素。 */
+    private int faceCol() {
+        return group ? AV + AV_GAP : TAIL;
     }
 
     private static String toolLine(LlmToolCall tc) {

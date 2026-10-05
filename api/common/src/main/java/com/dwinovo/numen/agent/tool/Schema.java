@@ -65,6 +65,12 @@ public final class Schema {
             return this;
         }
 
+        /** Optional integer with no bounds — dropped from {@code required}. */
+        public Builder optionalInteger(String name, String desc) {
+            props.put(name, base("integer", desc));
+            return this;
+        }
+
         /** Optional bounded integer — dropped from {@code required}. */
         public Builder optionalInteger(String name, String desc, int min, int max) {
             Map<String, Object> p = base("integer", desc);
@@ -173,6 +179,33 @@ public final class Schema {
             arr.put("items", items);
             props.put(name, arr);
             required.add(name);
+            return this;
+        }
+
+        /**
+         * An optional nested object built by {@code fields} — the same shape {@link #objectArray}
+         * gives one array item, sitting directly under this key. Dropped from {@code required},
+         * so a missing value binds as null.
+         */
+        public Builder optionalObject(String name, String desc, java.util.function.Consumer<Builder> fields) {
+            Builder ib = new Builder();
+            fields.accept(ib);
+            Map<String, Object> obj = new LinkedHashMap<>();
+            obj.put("type", "object");
+            obj.put("description", desc);
+            obj.put("properties", ib.props);
+            obj.put("required", List.copyOf(ib.required));
+            obj.put("additionalProperties", false);
+            props.put(name, obj);
+            return this;
+        }
+
+        /** Optional bounded number — dropped from {@code required}. */
+        public Builder optionalNumber(String name, String desc, double min, double max) {
+            Map<String, Object> p = base("number", desc);
+            p.put("minimum", min);
+            p.put("maximum", max);
+            props.put(name, p);
             return this;
         }
 

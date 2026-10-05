@@ -7,8 +7,12 @@ import com.dwinovo.numen.client.ui.NumenTheme;
 /** 按钮。Style 选语义色:普通/强调(主操作)/危险(删除类)。 */
 public final class Button extends Widget {
 
-    /** GHOST = 幽灵钮(图标类):平时无底,悬停浮现浅底——主流模态 ✕ 的标准形态。 */
-    public enum Style { NORMAL, ACCENT, DANGER, GHOST }
+    /**
+     * GHOST = 幽灵钮(图标类):平时无底,悬停浮现浅底——主流模态 ✕ 的标准形态。
+     * LINK = 对话框底部的纯字钮(Telegram 对话框的"取消""保存"):强调色的字,悬停浮出浅底。
+     * LINK_DANGER = 同一种纯字钮,红字(删除、遣散这类回不去的确定,Telegram 的 attentionBoxButton)。
+     */
+    public enum Style { NORMAL, ACCENT, DANGER, GHOST, LINK, LINK_DANGER }
 
     /**
      * 图标绘制回调:组件库不认识贴图(那是每版本适配层的事),宿主注入一段
@@ -32,6 +36,8 @@ public final class Button extends Widget {
     }
 
     public void setLabel(String label) { this.label = label; }
+
+    public String label() { return label; }
 
     /** 图标钮:图标居中替代文字(label 退为无障碍/tooltip 文案)。 */
     public Button icon(int size, IconDrawer drawer) {
@@ -60,29 +66,35 @@ public final class Button extends Widget {
         hoverT = NumenStyle.hoverStep(hoverT, hovered, dt);
         float t = enabled ? hoverT : 0f;
 
-        if (style == Style.GHOST) {
+        if (style == Style.GHOST || style == Style.LINK || style == Style.LINK_DANGER) {
             if (t > 0.01f) {   // 浮现的浅底:半透明 hover 色按进度收放透明度
                 int bg = ((int) (((c.hover() >>> 24) & 0xFF) * t) << 24) | (c.hover() & 0xFFFFFF);
-                s.fillRoundRect(x, y, w, h, NumenStyle.RADIUS_CONTROL, bg);
+                s.fillRect(x, y, w, h, bg);
             }
             int ghostColor = !enabled ? c.textMuted()
+                    : style == Style.LINK ? c.accent()
+                    : style == Style.LINK_DANGER ? c.danger()
                     : NumenStyle.mixColor(c.textSecondary(), c.textPrimary(), t);
+            if (icon != null) {   // 图标钮(复制、重新生成这类):图标居中替代文字
+                icon.draw(s, x + (w - iconSize) / 2, y + (h - iconSize) / 2, iconSize, ghostColor);
+                return;
+            }
             String ghostShown = com.dwinovo.numen.client.ui.TextClip.fit(s, label, w - 6);
             s.drawText(ghostShown, x + (w - s.textWidth(ghostShown)) / 2,
                     y + (h - s.lineHeight()) / 2 + 1, ghostColor, false);
             return;
         }
         if (style == Style.NORMAL) {
-            s.fillRoundRect(x, y, w, h, NumenStyle.RADIUS_CONTROL, c.sectionBg());
+            s.fillRect(x, y, w, h, c.sectionBg());
             if (t > 0.01f) {   // hover 是叠加色:铺在底上,透明度随进度
                 int overlay = ((int) (((c.hover() >>> 24) & 0xFF) * t) << 24) | (c.hover() & 0xFFFFFF);
-                s.fillRoundRect(x, y, w, h, NumenStyle.RADIUS_CONTROL, overlay);
+                s.fillRect(x, y, w, h, overlay);
             }
         } else {
             int base = style == Style.ACCENT ? c.accent() : c.danger();
             int bg = !enabled ? c.sectionBg()
                     : NumenStyle.mixColor(base, NumenStyle.hoverBrighten(base), t);
-            s.fillRoundRect(x, y, w, h, NumenStyle.RADIUS_CONTROL, bg);
+            s.fillRect(x, y, w, h, bg);
         }
         int textColor = !enabled ? c.textMuted()
                 : style == Style.NORMAL ? c.textPrimary() : 0xFFFFFFFF;

@@ -1,10 +1,11 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.network.NumenPayload;
 import com.dwinovo.numen.entity.CompanionRegistry;
 import com.dwinovo.numen.entity.Companions;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.network.NumenPayload;
+import com.dwinovo.numen.network.Wire;
 
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
@@ -26,8 +27,7 @@ import java.util.UUID;
 public record ChangeSkinPayload(UUID uuid, String skinValue, String skinSig)
         implements NumenPayload {
 
-    public static final ResourceLocation ID =
-            new ResourceLocation(Constants.MOD_ID, "change_skin");
+    public static final ResourceLocation ID = new ResourceLocation(Constants.MOD_ID, "change_skin");
 
     @Override
     public ResourceLocation id() {
@@ -37,14 +37,12 @@ public record ChangeSkinPayload(UUID uuid, String skinValue, String skinSig)
     @Override
     public void write(FriendlyByteBuf buf) {
         buf.writeUUID(uuid);
-        buf.writeUtf(skinValue == null ? "" : skinValue, SummonRequestPayload.MAX_SKIN_VALUE);
-        buf.writeUtf(skinSig == null ? "" : skinSig, SummonRequestPayload.MAX_SKIN_SIG);
+        Wire.writeText(buf, skinValue);
+        Wire.writeText(buf, skinSig);
     }
 
     public static ChangeSkinPayload read(FriendlyByteBuf buf) {
-        return new ChangeSkinPayload(buf.readUUID(),
-                buf.readUtf(SummonRequestPayload.MAX_SKIN_VALUE),
-                buf.readUtf(SummonRequestPayload.MAX_SKIN_SIG));
+        return new ChangeSkinPayload(buf.readUUID(), Wire.readText(buf), Wire.readText(buf));
     }
 
     public static void handle(ChangeSkinPayload p, ServerPlayer owner) {

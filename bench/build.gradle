@@ -1,0 +1,48 @@
+// numen-bench:真模型评测的记录、统计、报告与对比(设计与用法见 docs/bench.md)。纯 JVM——零 Minecraft 依赖,由编译器保证,
+// 所以统计与报告可以单测、可以拿去别处用。游戏里那一半(场景接口、运行器、评测大脑、模拟主人)在 :bench:game。
+// 都不发布、不进发行 jar。
+plugins {
+    id 'java-library'
+}
+
+group = 'com.dwinovo.numen'
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version)
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs.add('-parameters')
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // 与游戏运行时同版(同 ai 模块):评测在游戏进程里写记录,用的就是那一份
+    implementation 'com.google.code.gson:gson:2.10.1'
+
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+/** 对比两份结果:{@code ./gradlew :bench:compare -Pbefore=<结果目录> -Pafter=<结果目录>},路径相对仓库根,报告打到标准输出。 */
+tasks.register('compare', JavaExec) {
+    group = 'verification'
+    description = '对比两份评测结果(见 docs/bench.md)'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.dwinovo.numen.bench.report.Compare'
+    workingDir = rootProject.projectDir
+    // 报告是 UTF-8 的 Markdown;不跟着系统默认编码走(中文 Windows 上是 GBK)
+    jvmArgs '-Dstdout.encoding=UTF-8'
+    doFirst {
+        args(project.property('before'), project.property('after'))
+    }
+}

@@ -1,9 +1,9 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.network.NumenPayload;
 import com.dwinovo.numen.entity.Companions;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.network.NumenPayload;
 
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
@@ -20,8 +20,7 @@ import java.util.UUID;
  */
 public record SetGameModePayload(UUID uuid, boolean creative) implements NumenPayload {
 
-    public static final ResourceLocation ID =
-            new ResourceLocation(Constants.MOD_ID, "set_game_mode");
+    public static final ResourceLocation ID = new ResourceLocation(Constants.MOD_ID, "set_game_mode");
 
     @Override
     public ResourceLocation id() {

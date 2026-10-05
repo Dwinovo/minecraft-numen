@@ -38,7 +38,7 @@ class AttackPlanTest {
     }
 
     private static Battlefield field(boolean melee, boolean ranged, Foe... foes) {
-        return new Battlefield(HEALTHY, REACH, melee, ranged, false, List.of(foes));
+        return new Battlefield(HEALTHY, REACH, melee, ranged, List.of(foes));
     }
 
     // ==================== 够不够得着 ====================
@@ -103,9 +103,9 @@ class AttackPlanTest {
     /**
      * 挑不出目标但还有东西在追她 —— <b>照样走位,不是逃跑</b>。
      *
-     * <p>这里曾经判 DISENGAGE:场上只剩一只点着的爬行者(她没弓打不了),拿着下界合金剑的
-     * 满血玩家直接跑三十二格,明明退七格引信就倒退了。顶层只判「打不过」:血量撑不住,
-     * 或者手上没有任何武器 —— "眼前这只暂时不能打"不属于那两条。
+     * <p>场上只剩一只点着的爬行者(她没弓打不了)时,拿着下界合金剑的满血玩家退七格引信就倒退了,用不着跑三十二格。
+     * 跑只看「打不过」({@link AttackPlan#breakOff}):血量撑不住,或者手上没有任何武器 —— "眼前这只暂时不能打"
+     * 不属于那两条。
      */
     @Test
     void nothingWorthHittingIsStillNotAReasonToRun() {
@@ -209,8 +209,7 @@ class AttackPlanTest {
     /** 两条路都没有,而对方会还手:退开。赤手对上僵尸不是一条出路。 */
     @Test
     void barehandedAgainstSomethingThatFightsBackMeansBreakingOff() {
-        assertEquals(Action.DISENGAGE,
-                AttackPlan.decide(field(false, false, mob(1, 3.0)), null).action());
+        assertTrue(AttackPlan.breakOff(HEALTHY, false, true));
     }
 
     /** 但赤手打一只不还手的东西是正当的(模型点名让她去打一只鸡)。 */
@@ -226,8 +225,7 @@ class AttackPlanTest {
     /** 扛不住就脱离,哪怕近在眼前、哪怕手里有武器。 */
     @Test
     void tooHurtMeansBreakOffEvenWithTheTargetInReach() {
-        Battlefield b = new Battlefield(4.0, REACH, true, true, false, List.of(mob(1, 3.0)));
-        assertEquals(Action.DISENGAGE, AttackPlan.decide(b, null).action());
+        assertTrue(AttackPlan.breakOff(4.0, true, true));
     }
 
     /**
@@ -240,31 +238,28 @@ class AttackPlanTest {
         assertFalse(AttackPlan.outmatched(8.0 * 5), "同样 8 点血,重甲折算后能扛五倍:打");
     }
 
-    /** 扛不住排在一切前面,包括躲爆炸——两者都是退,但脱离退得更彻底。 */
+    /** 扛不住就跑,不论对面是什么、手上有什么——满血有武器才谈得上怎么打。 */
     @Test
     void breakingOffOutranksEverything() {
-        Battlefield b = new Battlefield(4.0, REACH, true, true, false, List.of(creeper(1, 3.0)));
-        assertEquals(Action.DISENGAGE, AttackPlan.decide(b, null).action());
+        assertTrue(AttackPlan.breakOff(4.0, true, true));
+        assertTrue(AttackPlan.breakOff(4.0, true, false), "扛不住与有没有东西在追无关");
+        assertFalse(AttackPlan.breakOff(HEALTHY, true, true));
     }
 
     /**
-     * <b>退不掉就打。</b>站着挨打是确定的死,背水一战至少有机会。这一维与 {@code reachable}
-     * 对称:一个说"走得到吗"(该不该走过去打),一个说"退得掉吗"(该不该退)。
-     *
-     * <p>它替掉的是链子那个 5 秒冷却 —— 那个冷却只是把死循环放慢,期间新来的危险她一动不动,
-     * 实测四次重伤都发生在那个窗口里。
+     * <b>退不掉就打。</b>站着挨打是确定的死,背水一战至少有机会。判据自己从不跑:扛不住时跑的是逃跑本能,跑不掉它让出
+     * 身体,这里交出来的就是怎么打。
      */
     @Test
     void corneredMeansFightingInsteadOfStandingStill() {
-        Battlefield trapped = new Battlefield(4.0, REACH, true, true, true, List.of(mob(1, 3.0)));
+        Battlefield trapped = new Battlefield(4.0, REACH, true, true, List.of(mob(1, 3.0)));
         assertEquals(Action.SKIRMISH, AttackPlan.decide(trapped, null).action());
     }
 
-    /** 退得掉就还是退 —— cornered 只在真被围住时才改判。 */
+    /** 有路可退也一样是跑——跑不跑只看打不打得过,和退不退得掉无关;退不掉是逃跑本能自己发现的。 */
     @Test
     void withAWayOutSheStillBreaksOff() {
-        Battlefield b = new Battlefield(4.0, REACH, true, true, false, List.of(mob(1, 3.0)));
-        assertEquals(Action.DISENGAGE, AttackPlan.decide(b, null).action());
+        assertTrue(AttackPlan.breakOff(4.0, true, true));
     }
 
     // ==================== 收场 ====================
@@ -311,7 +306,7 @@ class AttackPlanTest {
     /** 退无可退时不许再退 —— 站着挨打是确定的死,打至少有机会。 */
     @Test
     void corneredSheFightsAnyway() {
-        var boxedIn = new Battlefield(HEALTHY, REACH, true, true, true,
+        var boxedIn = new Battlefield(HEALTHY, REACH, true, true,
                 List.of(mob(1, 2.0), mob(2, 2.0)));
         assertEquals(Action.SKIRMISH, AttackPlan.decide(boxedIn, null).action());
     }
@@ -326,23 +321,18 @@ class AttackPlanTest {
     // ==================== 空手 ====================
 
     /**
-     * 空手时进了危险半径要判 <b>DISENGAGE 而不是 AVOID</b>。
-     *
-     * <p>AVOID 的意思是"还想打,只是不能在这儿打" —— 她根本打不了,这句是假的。两条判据
-     * 先后触发的结果是:怪进半径出 AVOID、退半步出 DISENGAGE,在那条线上来回换,而两个
-     * 动作在执行层走不同分支、各自重建导航。实测空手时 35 次对 30 次,几乎 1:1。
+     * 空手时有东西追她就是<b>跑,不是换个地方打</b>:"还想打,只是不能在这儿打"——她根本打不了,这句是假的。跑不跑
+     * 不看距离,所以不会在危险半径那条线上跑一下、打一下来回换。
      */
     @Test
     void barehandedInsideTheRadiusIsAnEscapeNotAReposition() {
-        assertEquals(Action.DISENGAGE,
-                AttackPlan.decide(field(false, false, mob(1, 2.0)), null).action());
+        assertTrue(AttackPlan.breakOff(HEALTHY, false, true));
     }
 
-    /** 出了半径也一样 —— 空手就该一路走脱离这一条支,不该跟着半径线换动作。 */
+    /** 没有东西追她,空手也不用跑——赤手打一只鸡是正当的。 */
     @Test
-    void barehandedOutsideTheRadiusIsStillAnEscape() {
-        assertEquals(Action.DISENGAGE,
-                AttackPlan.decide(field(false, false, mob(1, 4.0)), null).action());
+    void barehandedWithNothingChasingHerNeedNotRun() {
+        assertFalse(AttackPlan.breakOff(HEALTHY, false, false));
     }
 
     /** 有武器才谈得上"换个地方打"。 */

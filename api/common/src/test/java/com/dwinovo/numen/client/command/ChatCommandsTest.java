@@ -1,5 +1,7 @@
 package com.dwinovo.numen.client.command;
 
+import net.minecraft.client.resources.language.NumenTestLanguage;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -14,6 +16,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 认不认识一条命令、怎么拆参数,跟她在干什么无关。
  */
 class ChatCommandsTest {
+
+    /** 回主人的话按语言键写,单测里装上英文才读得到它说了什么。 */
+    @BeforeAll
+    static void english() {
+        NumenTestLanguage.install();
+    }
 
     @Test
     void onlyASlashMakesItACommand() {

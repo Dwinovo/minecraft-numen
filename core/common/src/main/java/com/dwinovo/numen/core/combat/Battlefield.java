@@ -16,16 +16,12 @@ import java.util.List;
  * @param meleeReach      她这一刻够得着多远
  * @param hasMelee        背包里有近战武器(拳头不算——赤手对上会还手的东西不是一条出路)
  * @param hasRanged       有能立刻用的弓弩(带箭,或已上弦的弩)
- * @param cornered        <b>退不掉</b>:退避的寻路连续失败。与 {@code Foe.reachable} 对称
- *                        ——一个说"走得到吗"(决定该不该走过去打),一个说"退得掉吗"
- *                        (决定该不该退)。退不掉时站着挨打是确定的死,背水一战至少有机会。
  * @param foes            场上的敌对生物,顺序不重要
  */
 public record Battlefield(double effectiveHealth,
                           double meleeReach,
                           boolean hasMelee,
                           boolean hasRanged,
-                          boolean cornered,
                           List<Foe> foes) {
 
     /**

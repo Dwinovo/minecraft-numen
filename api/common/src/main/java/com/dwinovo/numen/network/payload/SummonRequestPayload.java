@@ -1,8 +1,9 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.entity.Companions;
 import com.dwinovo.numen.network.NumenPayload;
+import com.dwinovo.numen.entity.Companions;
+import com.dwinovo.numen.network.Wire;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -22,13 +23,8 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
         implements NumenPayload {
 
     public static final int MAX_NAME = 16;
-    /** Mojang 签名 textures 的尺寸上限:value 是带皮肤/披风 URL 的 base64 JSON,
-     *  实测 1KB 上下,8KB 已是十倍余量;signature 固定 ~700B。 */
-    public static final int MAX_SKIN_VALUE = 8192;
-    public static final int MAX_SKIN_SIG = 2048;
 
-    public static final ResourceLocation ID =
-            new ResourceLocation(Constants.MOD_ID, "summon_request");
+    public static final ResourceLocation ID = new ResourceLocation(Constants.MOD_ID, "summon_request");
 
     @Override
     public ResourceLocation id() {
@@ -38,14 +34,18 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
     @Override
     public void write(FriendlyByteBuf buf) {
         buf.writeUtf(name, MAX_NAME);
-        buf.writeUtf(skinValue, MAX_SKIN_VALUE);
-        buf.writeUtf(skinSig, MAX_SKIN_SIG);
+        // Mojang 签名的 textures(带皮肤/披风 URL 的 base64 JSON,实测 1KB 上下;签名约 700B):长度是 Mojang 的,
+        // 不是这个包的,整包的大小由 Wire 量
+        Wire.writeText(buf, skinValue);
+        Wire.writeText(buf, skinSig);
         buf.writeBoolean(creative);
     }
 
     public static SummonRequestPayload read(FriendlyByteBuf buf) {
-        return new SummonRequestPayload(buf.readUtf(MAX_NAME), buf.readUtf(MAX_SKIN_VALUE),
-                buf.readUtf(MAX_SKIN_SIG), buf.readBoolean());
+        return new SummonRequestPayload(buf.readUtf(MAX_NAME),
+                Wire.readText(buf),
+                Wire.readText(buf),
+                buf.readBoolean());
     }
 
     /** 正在异步召唤中的 owner/name 键——皮肤查询窗口内吃掉重复请求,防双击造重。 */
@@ -63,8 +63,8 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
         boolean ownSameName = online instanceof com.dwinovo.numen.entity.NumenPlayer np
                 && np.isOwnedByPlayer(owner.getUUID());
         if (online != null && !ownSameName) {
-            owner.sendSystemMessage(net.minecraft.network.chat.Component.literal(
-                    "[Numen] 名字「" + name + "」已被在线玩家占用,换一个吧"));
+            owner.sendSystemMessage(net.minecraft.network.chat.Component.translatable(
+                    com.dwinovo.numen.data.ModLanguageData.Keys.NOTICE_NAME_TAKEN, name));
             return;
         }
         // 登录中闸:异步皮肤查询窗口内(几秒)重复点击不许再召。

@@ -8,6 +8,7 @@ import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
 import net.minecraftforge.client.event.RegisterGuiOverlaysEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
+import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -59,7 +60,7 @@ public final class NumenForgeClient {
         // 不必让每个插件自己去问一遍加载器"我在哪一侧"。
         com.dwinovo.numen.api.NumenPlugins.bindClient(
                 root -> com.dwinovo.numen.agent.skill.SkillRegistry.instance().declareBundled(root),
-                com.dwinovo.numen.api.NumenGateway::enqueue);
+                com.dwinovo.numen.api.NumenGateway::emit);
 
         // 读回上次选择的 GUI 主题(config/numen/ui.json)。
         com.dwinovo.numen.client.screen.UiTheme.init(
@@ -69,11 +70,12 @@ public final class NumenForgeClient {
         modBus.addListener(NumenForgeClient::registerKeyMappings);
         modBus.addListener(NumenForgeClient::registerGuiOverlays);
         modBus.addListener(NumenForgeClient::registerReloadListeners);
-        modBus.addListener(NumenForgeClient::registerShaders);
         // Game bus — per-tick / world-render / disconnect.
         MinecraftForge.EVENT_BUS.addListener(NumenForgeClient::onClientTick);
         MinecraftForge.EVENT_BUS.addListener(NumenForgeClient::onLoggingOut);
         MinecraftForge.EVENT_BUS.addListener(NumenForgeClient::onRenderLevel);
+        MinecraftForge.EVENT_BUS.addListener(NumenForgeClient::onScreenRendered);
+        MinecraftForge.EVENT_BUS.addListener(NumenForgeClient::onScreenMousePressed);
     }
 
     static void onRenderLevel(net.minecraftforge.client.event.RenderLevelStageEvent event) {
@@ -84,20 +86,8 @@ public final class NumenForgeClient {
                 .AFTER_TRANSLUCENT_BLOCKS) {
             com.dwinovo.numen.client.debug.PathDebugRenderer.render(
                     event.getPoseStack(), event.getCamera());
-        }
-    }
-
-    static void registerShaders(net.minecraftforge.client.event.RegisterShadersEvent event) {
-        // GUI 圆角 SDF shader;加载失败仅告警——RoundRect 会自动降级成方角 fill。
-        try {
-            event.registerShader(new net.minecraft.client.renderer.ShaderInstance(
-                            event.getResourceProvider(),
-                            new net.minecraft.resources.ResourceLocation(
-                                    Constants.MOD_ID, "rendertype_round_rect"),
-                            com.mojang.blaze3d.vertex.DefaultVertexFormat.POSITION_COLOR),
-                    com.dwinovo.numen.client.ui.RoundRect::setShader);
-        } catch (Exception e) {
-            Constants.LOG.warn("round rect shader failed to load, falling back to square corners", e);
+            com.dwinovo.numen.client.consent.ConsentOutlines.render(
+                    event.getPoseStack(), event.getCamera());
         }
     }
 
@@ -125,12 +115,12 @@ public final class NumenForgeClient {
         com.dwinovo.numen.client.data.ClientNumenState.clear();
         com.dwinovo.numen.client.agent.KnownSkins.clear();
         com.dwinovo.numen.client.hud.SpeechBubbles.clear();
-        com.dwinovo.numen.client.chat.SelectedCompanion.clear();
         com.dwinovo.numen.client.chat.QuickVoice.clear();
         com.dwinovo.numen.client.chat.ChatLines.clearLive();
         com.dwinovo.numen.client.agent.NumenRoster.instance().clear();
         com.dwinovo.numen.client.agent.CompanionHome.onDisconnect();
         com.dwinovo.numen.client.debug.PathDebugState.clear();
+        com.dwinovo.numen.client.consent.ConsentCards.clear();
     }
 
     static void registerGuiOverlays(RegisterGuiOverlaysEvent event) {
@@ -142,6 +132,23 @@ public final class NumenForgeClient {
         event.registerAboveAll("numen_toasts",
                 (gui, g, partialTick, screenWidth, screenHeight) ->
                         com.dwinovo.numen.client.hud.NumenHudToasts.render(g));
+        event.registerAboveAll("message_notices",
+                (gui, g, partialTick, screenWidth, screenHeight) ->
+                        com.dwinovo.numen.client.notify.MessageNotices.renderHud(g));
+    }
+
+    /** 消息通知开着界面时画在界面上面。 */
+    static void onScreenRendered(ScreenEvent.Render.Post event) {
+        com.dwinovo.numen.client.notify.MessageNotices.renderOver(
+                event.getGuiGraphics(), event.getMouseX(), event.getMouseY());
+    }
+
+    /** 点在消息通知上的那一下归通知,界面不再处理。 */
+    static void onScreenMousePressed(ScreenEvent.MouseButtonPressed.Pre event) {
+        if (com.dwinovo.numen.client.notify.MessageNotices.click(
+                event.getMouseX(), event.getMouseY(), event.getButton())) {
+            event.setCanceled(true);
+        }
     }
 
     static void registerReloadListeners(RegisterClientReloadListenersEvent event) {

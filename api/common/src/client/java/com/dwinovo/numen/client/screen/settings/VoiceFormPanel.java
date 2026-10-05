@@ -1,12 +1,13 @@
 package com.dwinovo.numen.client.screen.settings;
 
+import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
-import com.dwinovo.numen.client.ui.widget.Button;
 import com.dwinovo.numen.client.ui.widget.Dropdown;
 import com.dwinovo.numen.client.ui.widget.InlineAlert;
 import com.dwinovo.numen.client.ui.widget.Label;
+import com.dwinovo.numen.client.ui.widget.ScrollBox;
 import com.dwinovo.numen.client.ui.widget.Slider;
 import com.dwinovo.numen.client.ui.widget.TextField;
 import com.dwinovo.numen.client.ui.widget.UiRoot;
@@ -77,24 +78,19 @@ public final class VoiceFormPanel {
             VoiceLibrary.BACKEND_MINIMAX, VoiceLibrary.BACKEND_FISH,
             VoiceLibrary.BACKEND_DASHSCOPE, VoiceLibrary.BACKEND_MIMO,
             VoiceLibrary.BACKEND_DOUBAO);
-    private static final String TEST_SENTENCE = "你好,我是你的同伴,这是我的声音。";
 
-    /** 滚动根:表单行(进裁剪区,可上下滚);固定根:✕/结果胶囊/按钮行(不动)。 */
+    /** 滚动根:表单行(进裁剪区,可上下滚);固定根:结果胶囊/按钮行(不动)。 */
     private final UiRoot ui = new UiRoot();
     private final UiRoot fixedUi = new UiRoot();
     private final Consumer<Draft> onSave;
     private final Runnable onCancel;
 
-    private final java.util.Map<com.dwinovo.numen.client.ui.widget.Widget, Integer> baseYs =
-            new java.util.HashMap<>();
-    private int scrollY;
-    private int contentH;
-    private int viewH;
+    /** 表单行装不下卡片时整体上下位移(记账在 {@link ScrollBox})。 */
+    private final ScrollBox scroll = new ScrollBox();
     private int formX, formY, formW, formH, viewportBottom;
 
     private Draft draft = new Draft();
     private TextField nameField;
-    private Button testButton;
     private InlineAlert resultAlert;
     /** 在途试听的作废闸:表单关闭/又点一次都 ++,迟到的回调对不上号就丢弃。 */
     private int testGen;
@@ -129,13 +125,12 @@ public final class VoiceFormPanel {
         this.viewportBottom = viewportBottom;
         ui.clear();
         fixedUi.clear();
-        baseYs.clear();
         ui.setViewportHeight(viewportBottom);
 
         int ry = y;
         Label nameLabel = labelWidget(x, ry, ModLanguageData.Keys.VOICE_FORM_NAME);
         ry += NumenStyle.LABEL_PITCH;
-        nameField = ui.add(new TextField(draft.name, v -> draft.name = v).withLabel(nameLabel));
+        nameField = ui.add(new TextField(draft.name, v -> draft.name = v).underlined(true).withLabel(nameLabel));
         nameField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
@@ -154,7 +149,7 @@ public final class VoiceFormPanel {
 
         ry = label(x, ry, ModLanguageData.Keys.VOICE_FORM_URL);
         TextField urlField = ui.add(new TextField(draft.url, v -> draft.url = v)
-                .placeholder(defaultUrl(draft.backend)));
+                .placeholder(defaultUrl(draft.backend)).underlined(true));
         urlField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
@@ -182,7 +177,8 @@ public final class VoiceFormPanel {
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_KEY_FISH,
                         "sk-…", true, draft.apiKey, v -> draft.apiKey = v);
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_REFERENCE,
-                        "fish.audio/m/… 或纯 ID", false, draft.voice, v -> draft.voice = v);
+                        I18n.get(ModLanguageData.Keys.VOICE_FISH_REF_PLACEHOLDER), false, draft.voice,
+                        v -> draft.voice = v);
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_FISH_MODEL,
                         "s1 / s2.1-pro-free", false, draft.model, v -> draft.model = v);
             }
@@ -231,54 +227,25 @@ public final class VoiceFormPanel {
                 v -> String.valueOf(Math.round(v))));
         volume.setBounds(x, ry, w - 24, NumenStyle.CONTROL_H);
 
-        // ---- 滚动记账:内容高、视口高(按钮行之上),各行基线快照 ----
-        contentH = (ry + NumenStyle.CONTROL_H) - y;
-        viewH = h - 20;
-        scrollY = Math.min(scrollY, maxScroll());
-        for (com.dwinovo.numen.client.ui.widget.Widget rw : ui.widgetsView()) {
-            baseYs.put(rw, rw.y());
-        }
-        reposition();
+        // ---- 滚动记账:视口到收尾行上方为止,内容高按最后一行的底边算 ----
+        scroll.measure(ui, x, y, w,
+                NumenStyle.footerTop(y, h) - NumenStyle.HEADER_GAP - y,
+                (ry + NumenStyle.CONTROL_H) - y);
 
-        // ---- 固定层:✕(卡片右上角落)/结果胶囊/按钮行——不随滚动 ----
-        Button close = fixedUi.add(new Button("✕", Button.Style.GHOST, onCancel));
-        close.setBounds(x + w - 8, y - 14, 14, 14);
-
-        int by = y + h - 16;
+        // ---- 固定层:结果胶囊/按钮行——不随滚动 ----
         resultAlert = fixedUi.add(new InlineAlert());
         resultAlert.setBounds(x, y + 2, w, 24);
-        testButton = fixedUi.add(new Button(t(ModLanguageData.Keys.VOICE_TEST),
-                Button.Style.NORMAL, this::runVoiceTest));
-        testButton.setBounds(x + w - 54 - 58, by, 54, 15);
-        Button save = fixedUi.add(new Button(t("numen.gui.settings.save"),
-                Button.Style.ACCENT, this::save));
-        save.setBounds(x + w - 54, by, 54, 15);
-    }
-
-    private int maxScroll() {
-        return Math.max(0, contentH - viewH);
-    }
-
-    /** 滚动=全部行控件按基线整体位移(布局账只算一次,滚动只挪 y)。 */
-    private void reposition() {
-        for (var e : baseYs.entrySet()) {
-            var rw = e.getKey();
-            rw.setBounds(rw.x(), e.getValue() - scrollY, rw.w(), rw.h());
-        }
+        DialogButtons.left(fixedUi, x, y, h, this::runVoiceTest, t(ModLanguageData.Keys.VOICE_TEST));
+        DialogButtons.cancelSave(fixedUi, x, y, w, h, onCancel, this::save);
     }
 
     // ---- 宿主转发面 ----
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
-        s.pushScissor(formX, formY, formW + 2, viewH);
+        scroll.beginClip(s);
         ui.renderContent(s, c, mouseX, mouseY, nowMs);
-        s.popScissor();
-        if (maxScroll() > 0) {
-            int thumbH = Math.max(10, viewH * viewH / contentH);
-            int thumbY = formY + (viewH - thumbH) * scrollY / maxScroll();
-            s.fillRoundRect(formX + formW, thumbY, NumenStyle.SCROLLBAR_W, thumbH,
-                    NumenStyle.RADIUS_SMALL, c.divider());
-        }
+        scroll.endClip(s);
+        scroll.renderThumb(s, c);
         fixedUi.render(s, c, mouseX, mouseY, nowMs);
         ui.renderOverlayLayer(s, c, mouseX, mouseY, nowMs);
     }
@@ -286,10 +253,7 @@ public final class VoiceFormPanel {
     public boolean mouseClicked(double mx, double my, int button) {
         if (ui.hasOverlay()) return ui.mouseClicked(mx, my, button);   // 弹层优先(可越出视口)
         if (fixedUi.mouseClicked(mx, my, button)) return true;
-        if (my >= formY && my < formY + viewH) {
-            return ui.mouseClicked(mx, my, button);
-        }
-        return false;
+        return scroll.inside(my) && ui.mouseClicked(mx, my, button);
     }
 
     public boolean mouseDragged(double mx, double my, double dx, double dy) {
@@ -302,12 +266,7 @@ public final class VoiceFormPanel {
 
     public boolean mouseScrolled(double mx, double my, double delta) {
         if (ui.mouseScrolled(mx, my, delta)) return true;
-        if (maxScroll() > 0 && my >= formY && my < formY + viewH) {
-            scrollY = Math.max(0, Math.min(maxScroll(), scrollY - (int) (delta * 14)));
-            reposition();
-            return true;
-        }
-        return false;
+        return scroll.scrolled(my, delta);
     }
 
     public boolean keyPressed(int keyCode, int modifiers) {
@@ -340,7 +299,7 @@ public final class VoiceFormPanel {
     private int textRow(int x, int ry, int w, String labelKey, String placeholder,
                         boolean masked, String initial, Consumer<String> onChange) {
         ry = label(x, ry, labelKey);
-        TextField f = ui.add(new TextField(initial, onChange).masked(masked));
+        TextField f = ui.add(new TextField(initial, onChange).masked(masked).underlined(true));
         if (!placeholder.isEmpty()) f.placeholder(placeholder);
         f.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         return ry + NumenStyle.ROW_PITCH;
@@ -354,7 +313,7 @@ public final class VoiceFormPanel {
             draft.url = defaultUrl(sel);
         }
         draft.backend = sel;
-        scrollY = 0;
+        scroll.toTop();
         build(formX, formY, formW, formH, viewportBottom);
     }
 
@@ -383,7 +342,7 @@ public final class VoiceFormPanel {
         final com.dwinovo.numen.client.voice.TtsBackend backend;
         try {
             backend = probe.createBackend();
-            synth = backend.synthesize(TEST_SENTENCE);
+            synth = backend.synthesize(I18n.get(ModLanguageData.Keys.VOICE_TEST_SENTENCE));
         } catch (Exception ex) {
             String why = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
             com.dwinovo.numen.Constants.LOG.warn("[numen-voice] 试音失败(同步): {}", why);

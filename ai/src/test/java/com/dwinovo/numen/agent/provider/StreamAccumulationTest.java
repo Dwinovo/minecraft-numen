@@ -70,7 +70,7 @@ class StreamAccumulationTest {
         p.accumulateChunk(chunk("{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,"
                 + "\"id\":\"c1\",\"function\":{\"name\":\"goto\",\"arguments\":\"{\\\"x\\\":\"}}]}}]}"), acc);
 
-        JsonObject msg = p.assistantToRequestMessage(p.finalizeStream(acc));
+        JsonObject msg = p.assistantToRequestItems(p.finalizeStream(acc)).get(0);
         String wire = msg.getAsJsonArray("tool_calls").get(0).getAsJsonObject()
                 .getAsJsonObject("function").get("arguments").getAsString();
         assertEquals(LlmToolCall.NO_ARGS, wire);
@@ -94,13 +94,13 @@ class StreamAccumulationTest {
         MoonshotProvider p = new MoonshotProvider();
         AssistantTurn bare = new AssistantTurn("", java.util.List.of(
                 new LlmToolCall("id1", "look", "{}")), null);
-        assertEquals(" ", p.assistantToRequestMessage(bare).get("reasoning_content").getAsString());
+        assertEquals(" ", p.assistantToRequestItems(bare).get(0).get("reasoning_content").getAsString());
 
         JsonObject extras = new JsonObject();
         extras.addProperty("reasoning_content", "已有");
         AssistantTurn kept = new AssistantTurn("", java.util.List.of(
                 new LlmToolCall("id1", "look", "{}")), extras);
-        assertEquals("已有", p.assistantToRequestMessage(kept).get("reasoning_content").getAsString());
+        assertEquals("已有", p.assistantToRequestItems(kept).get(0).get("reasoning_content").getAsString());
     }
 
     @Test

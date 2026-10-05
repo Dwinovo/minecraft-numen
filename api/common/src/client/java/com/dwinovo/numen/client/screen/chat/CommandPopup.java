@@ -48,7 +48,7 @@ final class CommandPopup {
         }
         int h = height(total);
         int y = bottom - h;
-        NumenStyle.fieldCard(s, x, y, w, h, c.panelBg(), c.inputBorder());
+        NumenStyle.box(s, x, y, w, h, c.panelBg(), c.inputBorder());
 
         int first = windowStart(selected, total, shown);
         for (int i = 0; i < shown; i++) {
@@ -69,7 +69,7 @@ final class CommandPopup {
     private static void drawRow(IDrawSurface s, NumenTheme.Colors c, Completion row,
                                 boolean picked, int x, int y, int w) {
         if (picked) {
-            s.fillRoundRect(x - 1, y - 1, w + 2, ROW_H, NumenStyle.RADIUS_SMALL, c.selected());
+            s.fillRect(x - 1, y - 1, w + 2, ROW_H, c.selected());
         }
         int textY = y + (ROW_H - s.lineHeight()) / 2;
         int left = x;
@@ -92,19 +92,8 @@ final class CommandPopup {
         if (room <= 0) {
             return;
         }
-        String clipped = clip(s, note, room);
+        String clipped = com.dwinovo.numen.client.ui.TextClip.fit(s, note, room);
         s.drawText(clipped, x + w - s.textWidth(clipped), textY,
                 row.enabled() ? c.textMuted() : c.danger(), false);
-    }
-
-    private static String clip(IDrawSurface s, String text, int maxW) {
-        if (s.textWidth(text) <= maxW) {
-            return text;
-        }
-        String out = text;
-        while (out.length() > 1 && s.textWidth(out + "…") > maxW) {
-            out = out.substring(0, out.length() - 1);
-        }
-        return out + "…";
     }
 }

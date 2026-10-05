@@ -1,5 +1,7 @@
 package com.dwinovo.numen.mcp.client;
 
+import net.minecraft.client.resources.language.I18n;
+import com.dwinovo.numen.data.ModLanguageData;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.mcp.client.McpClientConfig.ServerSpec;
@@ -21,9 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * connects to every enabled server on a background thread, and registers the
  * tools it exposes into the global {@link ToolRegistry} — after which the
  * built-in brain sees those tools automatically ({@code EntityAgentLoop} feeds
- * the registry to every LLM turn (resident tools in full, the rest as one catalogue
- * line each — see {@code ToolDisclosure}), so late registration/removal is
- * fine).
+ * the whole registry to every LLM turn, so late registration/removal is fine).
  *
  * <h2>Live toggles</h2>
  * The companion panel calls {@link #enableServer}/{@link #disableServer} at
@@ -214,7 +214,7 @@ public final class McpClientManager {
                 authTried = true;
                 if (handle != null) {
                     handle.status = Status.CONNECTING;
-                    handle.error = "等待浏览器授权…";
+                    handle.error = I18n.get(ModLanguageData.Keys.MCP_WAITING_BROWSER);
                 }
                 Constants.LOG.info("[numen-mcp-client] '{}' requires OAuth — launching browser flow", spec.name());
                 try {

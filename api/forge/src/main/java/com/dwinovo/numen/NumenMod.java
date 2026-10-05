@@ -41,6 +41,7 @@ public class NumenMod {
                 com.dwinovo.numen.entity.NumenCommands.register(e.getDispatcher()));
         // When an owner logs in, bring their dormant companions back.
         MinecraftForge.EVENT_BUS.addListener(NumenMod::onPlayerLoggedIn);
+        MinecraftForge.EVENT_BUS.addListener(NumenMod::onPlayerLoggedOut);
         MinecraftForge.EVENT_BUS.addListener(NumenMod::onPlayerChangedDimension);
         // 排程机器的心跳:每 tick 驱动全部同伴的竞价/任务/收尾。
         // 挂 START(实体更新之前):任务→导航→执行器落下的移动/按键输入由
@@ -77,6 +78,13 @@ public class NumenMod {
             // 都会打断主人的入场,客户端只看到"无效的玩家数据"。
             com.dwinovo.numen.entity.Companions.scheduleRestoreFor(player.getUUID());
             com.dwinovo.numen.entity.Companions.syncRosterToOwner(server, player);
+        }
+    }
+
+    /** 主人断线:他名下在服务端跑着的程序收掉,等他答复的反向请求失败,他的模块缓存清掉。 */
+    private static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player && !(player instanceof com.dwinovo.numen.entity.NumenPlayer)) {
+            com.dwinovo.numen.program.ServerPrograms.ownerLeft(player.getUUID());
         }
     }
 

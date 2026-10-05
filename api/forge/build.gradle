@@ -32,7 +32,10 @@ minecraft {
                 modClientRun {
                     source sourceSets.main
                     source project(':ai').sourceSets.main
+                    source project(':agent').sourceSets.main
+                    source project(':lua').sourceSets.main
                     source project(':ui').sourceSets.main
+                    source project(':pathing').sourceSets.main
                 }
             }
         }
@@ -44,7 +47,10 @@ minecraft {
                 modServerRun {
                     source sourceSets.main
                     source project(':ai').sourceSets.main
+                    source project(':agent').sourceSets.main
+                    source project(':lua').sourceSets.main
                     source project(':ui').sourceSets.main
+                    source project(':pathing').sourceSets.main
                 }
             }
         }
@@ -57,7 +63,10 @@ minecraft {
                 modDataRun {
                     source sourceSets.main
                     source project(':ai').sourceSets.main
+                    source project(':agent').sourceSets.main
+                    source project(':lua').sourceSets.main
                     source project(':ui').sourceSets.main
+                    source project(':pathing').sourceSets.main
                 }
             }
         }

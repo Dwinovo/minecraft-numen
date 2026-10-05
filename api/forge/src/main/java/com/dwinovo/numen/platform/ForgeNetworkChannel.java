@@ -6,6 +6,7 @@ import io.netty.buffer.Unpooled;
 import net.minecraft.network.FriendlyByteBuf;
 import com.dwinovo.numen.network.NumenPayload;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.network.protocol.game.ClientboundCustomPayloadPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.NetworkRegistry;
@@ -45,8 +46,10 @@ public final class ForgeNetworkChannel implements INetworkChannel {
 
     private static final String PROTOCOL_VERSION = "1";
 
+    private static final ResourceLocation CHANNEL_ID = new ResourceLocation(Constants.MOD_ID, "main");
+
     private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
-            new ResourceLocation(Constants.MOD_ID, "main"),
+            CHANNEL_ID,
             () -> PROTOCOL_VERSION,
             PROTOCOL_VERSION::equals,
             PROTOCOL_VERSION::equals);
@@ -114,6 +117,21 @@ public final class ForgeNetworkChannel implements INetworkChannel {
     public void sendToPlayer(ServerPlayer player, NumenPayload payload) {
         // Classic API: target first, message second; PLAYER.with takes a Supplier<ServerPlayer>.
         CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new Envelope(payload.id(), serialise(payload)));
+    }
+
+    /**
+     * 下行的一个包里装的 Numen 载荷;不是这条通道发的就是 null。没有真网线的地方(GameTest 里扮主人客户端的连接)用它读下行的包,
+     * 与客户端收包走同一张解码表。
+     */
+    public NumenPayload payloadOf(net.minecraft.network.protocol.Packet<?> packet) {
+        if (!(packet instanceof ClientboundCustomPayloadPacket custom) || !custom.getIdentifier().equals(CHANNEL_ID)) {
+            return null;
+        }
+        FriendlyByteBuf data = custom.getData();
+        data.readByte();   // SimpleChannel 的消息序号
+        Envelope env = decodeEnvelope(data);
+        S2C<?> reg = s2c.get(env.id());
+        return reg == null ? null : reg.decoder().apply(reader(env.data()));
     }
 
     // ---- receiving (already on the main thread) ----

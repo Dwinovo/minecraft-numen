@@ -2,33 +2,47 @@ package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.network.NumenPayload;
+import com.dwinovo.numen.agent.inbox.EventQueue;
+import com.dwinovo.numen.event.NumenEvents;
+import com.dwinovo.numen.network.Wire;
+import io.netty.buffer.ByteBufUtil;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
- * Server → Client: 一条进同伴输入队列的条目。
+ * Server → Client: 一只同伴的一批输入条目,进她的输入队列。
  *
- * <p>它就是 {@code EventQueue.Entry} 的线上形状——四个字段一个不少:
+ * <p>实时发生的事是一批里一条,主人登录时离线补发的是攒下的整批——<b>同一种包</b>。整批一次
+ * 送达,客户端先全部入队再问一次熟没熟;逐条发的话第一条急件一到就开轮,只带走已经到的那几条。
+ *
+ * <p>每一条就是 {@code EventQueue.Entry} 的线上形状——四个字段一个不少:
  *
  * <ul>
- *   <li>{@code entryType} —— 查类型表(拼给模型的样子、进不进聊天流、打断时清不清)。
+ *   <li>{@code type} —— 查类型表(拼给模型的样子、进不进聊天流、打断时清不清)。
  *       第三方内容包注册了新类型,这条通道不用改;</li>
  *   <li>{@code ts} —— <b>事发的真实时刻</b>,不是收到的时刻。主人离线期间攒下的事
  *       补发时,少了它她会把三小时前的事当成刚发生的;</li>
  *   <li>{@code urgent} —— 她不知道就会做错事。到了队列会立刻带走攒的一切开一轮
- *       (除非队列锁着)。</li>
+ *       (除非循环停着牌,比如她死着)。</li>
  * </ul>
  *
  * <p>消费时机<b>不由发送方决定</b>:队列按自己的规则(急件 / 攒够条数 / 攒够时长)
  * 说了算。
+ *
+ * <p>条目的种类名与正文都不归这个包定长短(插件登记的种类、任务收尾时说的话),用 {@link Wire#text()};整批装不下一个
+ * 下行包时({@link #shrunk}),从最长的那条起把正文换成一句说明,直到装得下——开头的种类、时刻、编号与急不急都留着,她知道漏了哪件事,等这件活的派发器也认得出它。
  */
-public record NumenEventPayload(UUID entityUuid, String entryType, String text, long ts, boolean urgent)
-        implements NumenPayload {
+public record NumenEventPayload(UUID entityUuid, List<EventQueue.Entry> entries)
+        implements NumenPayload, Wire.Oversized<NumenEventPayload> {
 
-    public static final ResourceLocation ID =
-            new ResourceLocation(Constants.MOD_ID, "numen_event");
+    public static final ResourceLocation ID = new ResourceLocation(Constants.MOD_ID, "numen_event");
 
     @Override
     public ResourceLocation id() {
@@ -38,15 +52,55 @@ public record NumenEventPayload(UUID entityUuid, String entryType, String text, 
     @Override
     public void write(FriendlyByteBuf buf) {
         buf.writeUUID(entityUuid);
-        buf.writeUtf(entryType, 64);
-        buf.writeUtf(text);
-        buf.writeVarLong(ts);
-        buf.writeBoolean(urgent);
+        buf.writeCollection(entries, NumenEventPayload::writeEntry);
     }
 
     public static NumenEventPayload read(FriendlyByteBuf buf) {
-        return new NumenEventPayload(buf.readUUID(), buf.readUtf(64), buf.readUtf(),
-                buf.readVarLong(), buf.readBoolean());
+        return new NumenEventPayload(buf.readUUID(), buf.readList(NumenEventPayload::readEntry));
+    }
+
+    /** 一条的线上形状:种类、正文、事发时刻、急不急,以及(任务收尾带的)结果。 */
+    private static void writeEntry(FriendlyByteBuf buf, EventQueue.Entry e) {
+        Wire.writeText(buf, e.type());
+        Wire.writeText(buf, e.text());
+        buf.writeVarLong(e.ts());
+        buf.writeBoolean(e.urgent());
+        buf.writeOptional(Optional.ofNullable(e.result()).map(com.google.gson.JsonObject::toString), Wire::writeText);
+    }
+
+    private static EventQueue.Entry readEntry(FriendlyByteBuf buf) {
+        String type = Wire.readText(buf);
+        String text = Wire.readText(buf);
+        long ts = buf.readVarLong();
+        boolean urgent = buf.readBoolean();
+        Optional<String> result = buf.readOptional(Wire::readText);
+        return new EventQueue.Entry(type, text, ts, urgent,
+                result.map(r -> com.google.gson.JsonParser.parseString(r).getAsJsonObject()).orElse(null));
+    }
+
+    /** 从正文最长的那条起,一条条换成说明,直到整批装得下。 */
+    @Override
+    public NumenEventPayload shrunk(Predicate<NumenEventPayload> fits, int bytes, int budget) {
+        List<Integer> longestFirst = new ArrayList<>();
+        for (int i = 0; i < entries.size(); i++) {
+            longestFirst.add(i);
+        }
+        longestFirst.sort(Comparator.comparingInt((Integer i) -> ByteBufUtil.utf8Bytes(entries.get(i).text()))
+                .reversed());
+        List<EventQueue.Entry> out = new ArrayList<>(entries);
+        NumenEventPayload candidate = this;
+        for (int i : longestFirst) {
+            EventQueue.Entry e = entries.get(i);
+            out.set(i, new EventQueue.Entry(e.type(), NumenEvents.withBody(e.text(),
+                    Wire.TO_CLIENT.tooBig("A " + e.type() + " event", ByteBufUtil.utf8Bytes(e.text()))
+                            + " together with the rest, so its text was not delivered."),
+                    e.ts(), e.urgent(), e.result()));
+            candidate = new NumenEventPayload(entityUuid, List.copyOf(out));
+            if (fits.test(candidate)) {
+                return candidate;
+            }
+        }
+        return candidate;
     }
 
     /** Client-side handler. Runs on the client main thread (network layer arranges that). */

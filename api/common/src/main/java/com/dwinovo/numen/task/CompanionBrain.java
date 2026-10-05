@@ -3,7 +3,6 @@ package com.dwinovo.numen.task;
 import com.dwinovo.numen.entity.NumenPlayer;
 
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 
@@ -45,13 +44,18 @@ final class CompanionBrain {
     final TaskSlot sync = new TaskSlot(outbox::addLast);
     /** 她现在在做的事:钓鱼、跟随、挖 64 块——常驻还是一次性只看 tick 返不返终态。 */
     final TaskSlot current = new TaskSlot(outbox::addLast);
+    /** 受理之前在准备的那一次调用:结论出来才受理进 {@link #current},见 {@link Preparation}。 */
+    final Preparing preparing = new Preparing();
 
     private final List<Task> reflexes;
     /** 空闲姿态:没别的事做时才轮到,连身体都不算真正占用。 */
     private final List<Task> idlePoses;
 
-    /** 重启后的活接回来没有(每具身体只接一次)。 */
-    boolean restored;
+    /**
+     * 重启前留下、还没接回来的那件活:身体进世界那一刻从落盘记录接手,第一次 tick 时取走重放;那之前派下新活
+     * 就被新活顶替。null = 没有,或者已经取走。见 {@link TaskPersistence}。
+     */
+    private TaskPersistence.LeftOver leftOver;
 
     /** 这个大脑伺候的那具身体。首次 tick 时认下，以后不换。 */
     private NumenPlayer body;
@@ -100,8 +104,34 @@ final class CompanionBrain {
         return body == null || body.isRemoved();
     }
 
+    /** 身体进世界那一刻:接手重启前留下的那件活。 */
+    void inherit(TaskPersistence.LeftOver left) {
+        leftOver = left;
+    }
+
+    /** 取走重启前留下的那件活(只有一次);没有就是 null。 */
+    TaskPersistence.LeftOver takeLeftOver() {
+        TaskPersistence.LeftOver left = leftOver;
+        leftOver = null;
+        return left;
+    }
+
+    /**
+     * 往当前任务槽派一件新活({@code runner} 是跑它的任务,准备过的就是准备它的那一个)——派活只有这一个入口。重启前留下、
+     * 还没接回来的那件由它顶替,和槽里原有的活被换掉一样告诉她。
+     */
+    void assign(NumenPlayer companion, TaskRecord record, Task runner) {
+        TaskPersistence.LeftOver superseded = takeLeftOver();
+        if (superseded != null) {
+            TaskPersistence.superseded(companion, superseded);
+        }
+        current.put(companion, record, runner);
+    }
+
     void tick(NumenPlayer companion) {
         body = companion;
+        // 准备不占身体:先问它有没有结论,就绪的这一刻受理进槽,接着和槽里的活一样参加这一刻的选择
+        preparing.tick();
         // 任务结束边沿(宪法 §5):两个槽都空过了宽限窗口,显式占用的会话就结束了,
         // 手还给反射。护甲的占用不动(它的生命是 §5 的四个自然终点),只有主手是任务作用域的。
         if (handPinRelease.tick(!sync.isEmpty() || !current.isEmpty())) {
@@ -134,8 +164,8 @@ final class CompanionBrain {
 
         // 每刻结算:主人按停止会在带外把记录标成终态,而客户端串行的派发器会一直
         // 卡到那一个结果送出——不能等这个槽下次赢了才结算。
-        sync.settleIfTerminal();
-        current.settleIfTerminal();
+        sync.settleIfTerminal(companion);
+        current.settleIfTerminal(companion);
         // 手上的活干完了就把记录抹掉,免得重启后凭空捡回一件早就完成的活。
         if (current.isEmpty() && !wasIdle) {
             TaskPersistence.forget(companion);
@@ -195,14 +225,16 @@ final class CompanionBrain {
                     companion.getUUID(), id, rec.getToolName(), desc,
                     rec.getDeadlineGameTime() >= TaskRecord.NO_DEADLINE, elapsedMs);
         }
-        com.dwinovo.numen.platform.Services.NETWORK.sendToPlayer(owner, msg);
+        com.dwinovo.numen.network.NumenNetwork.sendToPlayer(owner, msg);
     }
 
     /** 上一刻当前任务槽是不是空的——用来只在"刚变空"那一刻清记录,不必每刻写盘。 */
     private boolean wasIdle = true;
 
-    /** 死亡:丢掉在跑的任务,并结束任务作用域的手部占用。 */
+    /** 死亡:丢掉在跑的任务与在准备的调用,并结束任务作用域的手部占用。 */
     void dropActiveNoResult(NumenPlayer companion) {
+        // 在准备的那次调用也不回结果:客户端按死因结算了在飞的调用
+        preparing.drop();
         TaskSessionHooks.fireSessionEnd(companion);
         sync.dropNoResult(companion);
         current.dropNoResult(companion);
@@ -216,10 +248,11 @@ final class CompanionBrain {
         syncCurrentTask(companion);
     }
 
-    /** 身体离开世界:两个槽就地结算(它们不会再被 tick),结果照送。 */
+    /** 身体离开世界:在准备的调用回一条没开始的结果,两个槽就地结算(它们不会再被 tick),结果照送。 */
     void finalizeActive(NumenPlayer companion) {
-        sync.finalizeInline();
-        current.finalizeInline();
+        preparing.withdraw(TaskRecord.StopCause.BODY_LEFT.words());
+        sync.finalizeInline(companion);
+        current.finalizeInline(companion);
         holder = null;
         // 同 tick():状态先归位再宣布结果 —— 结果一到就同步开轮,那一刻会读 <current_task>。
         syncCurrentTask(companion);
@@ -269,47 +302,45 @@ final class CompanionBrain {
         }
     }
 
+    /** 这次调用派下来的那件活:两个槽里在跑的,或者已经结算、还排着没送出去的;都没有是 null。 */
+    TaskRecord recordOf(String toolCallId) {
+        for (TaskRecord r : new TaskRecord[] {sync.record(), current.record()}) {
+            if (r != null && toolCallId.equals(r.getToolCallId())) {
+                return r;
+            }
+        }
+        for (TaskRecord r : outbox) {
+            if (toolCallId.equals(r.getToolCallId())) {
+                return r;
+            }
+        }
+        return null;
+    }
+
     /**
-     * 把结算好的记录送回主人。
+     * 把结算好的记录送出去。
      *
-     * <p>主人离线时<b>异步任务的收尾照发</b>——它走 {@link com.dwinovo.numen.event.NumenEvents},
-     * 自己会进出箱等主人回来。只有同步 tool_call 的结果没处送(那条调用属于一个
-     * 随客户端一起消失的回合),重登时由 {@code unansweredToolCallIds} 收口。
+     * <p>异步任务的收尾走 {@link com.dwinovo.numen.event.NumenEvents}:主人离线时<b>照发</b>,它自己会进出箱等主人
+     * 回来。同步动作的结果交回派它的那次调用自己的回信口({@link TaskDispatch#runSync} 绑在记录上):模型的调用由
+     * 网络入口回给发来它的主人客户端——主人已经下线时那条调用属于一个随客户端一起消失的回合,重登后发请求时由
+     * {@code ProtocolView} 给它补上失败结果;{@code /numen drive} 派的回给发令人。
      */
     private void shipResults(NumenPlayer companion) {
-        if (outbox.isEmpty()) {
-            return;
-        }
-        net.minecraft.server.level.ServerPlayer owner = companion.resolveOwnerPlayer();
         while (!outbox.isEmpty()) {
             TaskRecord rec = outbox.pollFirst();
             TaskResult result = rec.getResult();
             if (rec.isAsync()) {
-                // 外部(MCP)派的异步任务不投 task_finished:那条事件会唤醒并没有派它的
-                // 内置大脑。外部驱动靠 task_status 轮询 + 感知确认闭环。
-                if (rec.isExternalCall()) {
-                    continue;
-                }
                 String status = switch (rec.getState()) {
                     case SUCCESS -> "done";
                     case TIMEOUT -> "timeout";
                     case CANCELLED -> "stopped";
                     default -> "failed";
                 };
-                String msg = result == null ? "no result produced" : result.message();
                 com.dwinovo.numen.event.NumenEvents.taskFinished(
-                        companion, rec.publicId(), rec.getToolName(), status, msg);
+                        companion, rec.publicId(), rec.getToolName(), status, result, rec.function());
                 continue;
             }
-            if (owner == null) {
-                continue;
-            }
-            String json = result == null
-                    ? "{\"success\":false,\"message\":\"no result produced\"}"
-                    : result.toJson();
-            com.dwinovo.numen.platform.Services.NETWORK.sendToPlayer(owner,
-                    new com.dwinovo.numen.network.payload.TaskResultPayload(
-                            companion.getUUID(), rec.getToolCallId(), json));
+            rec.reply().accept(result);
         }
     }
 }

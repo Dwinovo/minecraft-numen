@@ -1,8 +1,8 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.entity.CompanionSpeech;
 import com.dwinovo.numen.network.NumenPayload;
+import com.dwinovo.numen.entity.CompanionSpeech;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -16,8 +16,7 @@ import java.util.UUID;
  */
 public record SpeakingStatePayload(UUID entityUuid, boolean speaking) implements NumenPayload {
 
-    public static final ResourceLocation ID =
-            new ResourceLocation(Constants.MOD_ID, "speaking_state");
+    public static final ResourceLocation ID = new ResourceLocation(Constants.MOD_ID, "speaking_state");
 
     @Override
     public ResourceLocation id() {

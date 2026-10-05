@@ -1,5 +1,6 @@
 package com.dwinovo.numen.client.screen.settings;
 
+import net.minecraft.client.resources.language.I18n;
 import com.dwinovo.numen.client.stt.MicrophoneManager;
 import com.dwinovo.numen.client.stt.SttProviders;
 import com.dwinovo.numen.client.ui.IDrawSurface;
@@ -8,7 +9,6 @@ import com.dwinovo.numen.client.ui.NumenTheme;
 import com.dwinovo.numen.client.ui.widget.Button;
 import com.dwinovo.numen.client.ui.widget.Dropdown;
 import com.dwinovo.numen.client.ui.widget.InlineAlert;
-import com.dwinovo.numen.client.ui.widget.Label;
 import com.dwinovo.numen.client.ui.widget.TextField;
 import com.dwinovo.numen.client.ui.widget.UiRoot;
 import com.dwinovo.numen.data.ModLanguageData;
@@ -26,6 +26,9 @@ import net.minecraft.util.Mth;
  * 掩码 Key、模型双态(预设下拉+自定义…↔输入框+▾ 回预设,与模型配置表单
  * 同款)、麦克风下拉、保存落配置并弹"已保存"回执。无列表无模态,
  * 直接躺在分区里;进分区时从配置重播种。
+ *
+ * <p>版式照 Telegram 设置行({@link SettingsRows}):一行一项,左标签右控件;
+ * 识别服务那四行一组,麦克风自成一组,中间一道宽缝。
  */
 public final class SttPanel {
 
@@ -82,11 +85,11 @@ public final class SttPanel {
         SttProviders.Option opt = SttProviders.byId(provider);
         provider = opt.id();
 
-        Label title = ui.add(new Label(t(ModLanguageData.Keys.STT_TITLE), Label.Role.PRIMARY));
-        title.setBounds(x, y, w, 9);
-
-        int ry = y + 16;
-        ry = label(x, ry, ModLanguageData.Keys.GUI_SETTINGS_PROVIDER);
+        // 右侧控件一律右对齐到行尾,左缘同一条竖线
+        int cw = SettingsRows.controlW(w);
+        int cx = x + w - cw;
+        int ry = y;   // 这一页叫什么在面板抬头上,没有标题行
+        label(x, ry, cx, ModLanguageData.Keys.GUI_SETTINGS_PROVIDER);
         providerIds = new ArrayList<>();
         List<String> providerNames = new ArrayList<>();
         for (SttProviders.Option o : SttProviders.all()) {
@@ -95,21 +98,20 @@ public final class SttPanel {
         }
         Dropdown providerPick = ui.add(new Dropdown(providerNames,
                 Math.max(0, providerIds.indexOf(provider)), this::onProviderPicked));
-        providerPick.setBounds(x, ry, w, NumenStyle.CONTROL_H);
-        ry += NumenStyle.ROW_PITCH;
+        providerPick.setBounds(cx, SettingsRows.controlY(ry, NumenStyle.CONTROL_H), cw, NumenStyle.CONTROL_H);
+        ry += SettingsRows.ROW_H;
 
-        ry = label(x, ry, ModLanguageData.Keys.GUI_SETTINGS_API_KEY);
-        keyField = ui.add(new TextField(key, v -> key = v).masked(true)
+        label(x, ry, cx, ModLanguageData.Keys.GUI_SETTINGS_API_KEY);
+        keyField = ui.add(new TextField(key, v -> key = v).masked(true).underlined(true)
                 .placeholder(SttProviders.BACKEND_DOUBAO.equals(opt.backend())
-                        ? "API Key(旧版控制台填 appid:access_token)" : ""));
-        keyField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
-        ry += NumenStyle.ROW_PITCH;
+                        ? I18n.get(ModLanguageData.Keys.STT_DOUBAO_KEY_PLACEHOLDER) : ""));
+        keyField.setBounds(cx, SettingsRows.controlY(ry, NumenStyle.CONTROL_H), cw, NumenStyle.CONTROL_H);
+        ry += SettingsRows.ROW_H;
 
         // 模型双态:预设下拉(+自定义…) ↔ 输入框(+▾ 回预设);无预设纯输入框。
         // 名字由服务商自己说——豆包那一栏装的是资源档,叫"模型"读着就不对。
-        ry = opt.hasModelLabel()
-                ? labelText(x, ry, opt.modelLabel())
-                : label(x, ry, ModLanguageData.Keys.GUI_SETTINGS_MODEL);
+        int cy = SettingsRows.controlY(ry, NumenStyle.CONTROL_H);
+        labelText(x, ry, cx, opt.hasModelLabel() ? opt.modelLabel() : t(ModLanguageData.Keys.GUI_SETTINGS_MODEL));
         modelIds = new ArrayList<>(opt.models());
         boolean hasPresets = !modelIds.isEmpty();
         if (hasPresets && !customModel) {
@@ -117,25 +119,29 @@ public final class SttPanel {
             items.add(t("numen.settings.custom_model"));
             int sel = Math.max(0, modelIds.indexOf(model));
             modelPick = ui.add(new Dropdown(items, sel, this::onModelPicked));
-            modelPick.setBounds(x, ry, w, NumenStyle.CONTROL_H);
+            modelPick.setBounds(cx, cy, cw, NumenStyle.CONTROL_H);
             model = modelIds.get(sel);
         } else {
-            modelField = ui.add(new TextField(model, v -> model = v));
-            modelField.setBounds(x, ry, hasPresets ? w - 17 : w, NumenStyle.CONTROL_H);
+            modelField = ui.add(new TextField(model, v -> model = v).underlined(true));
+            modelField.setBounds(cx, cy, hasPresets ? cw - 17 : cw, NumenStyle.CONTROL_H);
             if (hasPresets) {
                 modelBackBtn = ui.add(new Button("▾", Button.Style.NORMAL, this::onModelBackToPresets));
-                modelBackBtn.setBounds(x + w - 15, ry, 15, NumenStyle.CONTROL_H);
+                modelBackBtn.setBounds(x + w - 15, cy, 15, NumenStyle.CONTROL_H);
             }
         }
-        ry += NumenStyle.ROW_PITCH;
+        ry += SettingsRows.ROW_H;
 
-        ry = label(x, ry, ModLanguageData.Keys.GUI_SETTINGS_BASE_URL);
-        baseUrlField = ui.add(new TextField(baseUrl, v -> baseUrl = v)
+        label(x, ry, cx, ModLanguageData.Keys.GUI_SETTINGS_BASE_URL);
+        baseUrlField = ui.add(new TextField(baseUrl, v -> baseUrl = v).underlined(true)
                 .placeholder(opt.defaultBaseUrl()));
-        baseUrlField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
-        ry += NumenStyle.ROW_PITCH;
+        baseUrlField.setBounds(cx, SettingsRows.controlY(ry, NumenStyle.CONTROL_H), cw, NumenStyle.CONTROL_H);
+        ry += SettingsRows.ROW_H;
 
-        ry = label(x, ry, ModLanguageData.Keys.STT_MICROPHONE);
+        // 识别服务与本机麦克风是两件事:中间一道宽缝
+        SettingsRows.gap(ui, x, ry, w);
+        ry += SettingsRows.GAP_H;
+
+        label(x, ry, cx, ModLanguageData.Keys.STT_MICROPHONE);
         micIds = new ArrayList<>();
         List<String> micNames = new ArrayList<>();
         micIds.add("");
@@ -147,13 +153,13 @@ public final class SttPanel {
         Dropdown micPick = ui.add(new Dropdown(micNames,
                 Math.max(0, micIds.indexOf(mic)),
                 i -> mic = micIds.get(Mth.clamp(i, 0, micIds.size() - 1))));
-        micPick.setBounds(x, ry, w, NumenStyle.CONTROL_H);
+        micPick.setBounds(cx, SettingsRows.controlY(ry, NumenStyle.CONTROL_H), cw, NumenStyle.CONTROL_H);
 
         saved = ui.add(new InlineAlert());
-        saved.setBounds(x, y + 16, w, 24);
+        saved.setBounds(x, NumenStyle.bodyTop(y), w, 24);
         Button save = ui.add(new Button(t("numen.gui.settings.save"),
                 Button.Style.ACCENT, this::save));
-        save.setBounds(x + w - 54, y + h - 16, 54, 15);
+        save.setBounds(x + w - 54, NumenStyle.footerTop(y, h), 54, NumenStyle.CONTROL_H);
     }
 
     // ---- 宿主转发面 ----
@@ -180,15 +186,14 @@ public final class SttPanel {
 
     // ---- 内部 ----
 
-    private int label(int lx, int ly, String labelKey) {
-        return labelText(lx, ly, t(labelKey));
+    /** 行左端的标签,宽到右侧控件 {@code controlX} 前为止。 */
+    private void label(int lx, int rowY, int controlX, String labelKey) {
+        labelText(lx, rowY, controlX, t(labelKey));
     }
 
     /** 现成的文字(服务商自带的字段名),不过语言表。 */
-    private int labelText(int lx, int ly, String text) {
-        Label l = ui.add(new Label(text, Label.Role.MUTED));
-        l.setBounds(lx, ly, 140, 9);
-        return ly + NumenStyle.LABEL_PITCH;
+    private void labelText(int lx, int rowY, int controlX, String text) {
+        SettingsRows.label(ui, text, lx, rowY, controlX - lx - 6);
     }
 
     /** 换服务商:模型/基址跟着换成该商预设(仍可改);自定义商直接自由输入。 */

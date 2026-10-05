@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core;
 
+import com.dwinovo.numen.agent.script.ErrorKind;
 import com.dwinovo.numen.task.TaskState;
 
 /**
@@ -35,7 +36,9 @@ public enum FailureType {
     /** No free inventory slot to stow into (unequipped gear, picked-up loot). Kick to
      *  LLM: dropping or depositing something first is a strategic call. */
     NO_SPACE,
-    /** Nothing solid to place against at/around the target. In-ladder: try another support face. */
+    /** Nothing solid to place against at/around the target, or nothing vanilla lets the block stand on there (a
+     *  flower on stone, a torch on air): the block will not hold at that spot. In-ladder when another support face
+     *  exists; when the spot itself cannot hold the block, kick to LLM — only changing the plan or the ground helps. */
     NO_SUPPORT,
     /** A living/building-blocking entity occupies the target cell — vanilla refuses every
      *  press until it moves. Kick to LLM: waiting, luring it away, or picking another cell
@@ -47,24 +50,30 @@ public enum FailureType {
     BOXED_IN,
     /** A* returned nothing to the target. In-ladder: try a looser goal (near/adjacent). */
     NO_PATH,
-    /** No route WITHOUT altering terrain, but one exists if she may dig / bridge / pillar —
-     *  the reason lists exactly which blocks that route would break or place. In-ladder like
-     *  NO_PATH (a looser stance may still avoid it); the final verdict hands the list to the
-     *  LLM, which decides whether to re-send with consent. */
+    /** No route within what the walk may change: none without altering terrain while a digging /
+     *  bridging / pillaring one exists, or the way on needs cells beyond the plan she agreed to.
+     *  The reason says how many blocks it would take and what in the walk's description allows it
+     *  ({@code costs = {dig = true, place = true}}, then {@code numen.route.plan} again). Approach tasks
+     *  treat it in-ladder like NO_PATH (a looser stance may still avoid it); a route walk does not
+     *  loosen anything on it — whether to allow more is the LLM's call. */
     TERRAIN_BLOCKED,
     /** Never got within interaction reach of the target. In-ladder: reposition. */
     OUT_OF_REACH,
-    /** The search's goal membership IS satisfied at the feet, but the task's richer
-     *  arrival (reach / line of sight / on-ground) still isn't — the stance the graph
-     *  chose is a dud for the actual work. In-ladder: reposition, or blacklist the
-     *  composite member that produced it. */
-    STANCE_DUD,
     /** Can't harvest/attack effectively with the current inventory. Prerequisite — kick to LLM. */
     WRONG_TOOL,
     /** The entity/block target is gone, dead, or moved out of the bounded search. Kick to LLM. */
     TARGET_LOST,
     /** No more matching targets within the bounded scan radius. Kick to LLM (widen? stop?). */
     MINED_OUT,
+    /** The permission layer refused the action (owner's rule, observe mode, or a consent that was
+     *  not given). Kick to LLM: the model must not route around it — the owner decides. */
+    REFUSED,
+    /** The block went in but did not stay, or the world would not take it: another mod cancelled the placement, the
+     *  game refused the write, or something outside the job kept breaking the finished work. Not the permission
+     *  layer ({@link #REFUSED}), not a spot that cannot hold it ({@link #NO_SUPPORT}), not a body in the way
+     *  ({@link #ENTITY_BLOCKED}) — each of those has its own remedy. Kick to LLM: trying again the same way changes
+     *  nothing; what keeps undoing it has to be found first. */
+    NOT_KEPT,
     /** A fluid/lava/void hazard blocks the safe execution. In-ladder: route around, else give up. */
     HAZARD,
     /** Pre-empted or cancelled (owner stop, death). Not a real failure — terminal housekeeping. */
@@ -83,4 +92,22 @@ public enum FailureType {
     INTERNAL,
     /** Cause not classified. */
     UNKNOWN;
+
+    /**
+     * 这一类失败交给脚本时是哪一种错误值({@link ErrorKind}):脚本按它分支,所以只分到她下一步做法不同的那几种——路不通、
+     * 够不着、被拒、东西没了、缺料、被叫停、超时;其余是 {@link ErrorKind#FAILED}。
+     */
+    public ErrorKind kind() {
+        return switch (this) {
+            case NO_PATH, BOXED_IN, TERRAIN_BLOCKED, HAZARD -> ErrorKind.NO_PATH;
+            case OUT_OF_REACH, OCCLUDED -> ErrorKind.OUT_OF_REACH;
+            case REFUSED -> ErrorKind.DENIED;
+            case TARGET_LOST, MINED_OUT -> ErrorKind.NOT_FOUND;
+            case NO_MATERIAL -> ErrorKind.NO_MATERIAL;
+            case INTERRUPTED -> ErrorKind.INTERRUPTED;
+            case TIMED_OUT -> ErrorKind.TIMEOUT;
+            case NO_SPACE, NO_SUPPORT, ENTITY_BLOCKED, NOT_KEPT, WRONG_TOOL, UNSUPPORTED, INTERNAL, UNKNOWN ->
+                    ErrorKind.FAILED;
+        };
+    }
 }

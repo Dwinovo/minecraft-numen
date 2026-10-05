@@ -3,6 +3,7 @@ import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.core.PlayerInv;
 import com.dwinovo.numen.core.FailureType;
 
+import com.dwinovo.numen.pathing.body.Hotbar;
 import com.dwinovo.numen.task.TaskState;
 
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -12,12 +13,10 @@ import com.dwinovo.numen.core.task.base.Precondition;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
- * {@code eat} on the player body — a thin wrapper over the native held use. Hold the food and
+ * {@code inv eat} on the player body — a thin wrapper over the native held use. Hold the food and
  * run {@link Interaction#useInAir} on a {@code hold()} timing: that fires {@code gameMode.useItem},
  * and the body's own {@code aiStep} (ticked via {@code doTick}) drives the real eat to completion —
  * chewing animation/particles/sound, hunger + saturation + consume-effects on finish, modded foods,
@@ -60,10 +59,11 @@ public final class EatCompanionTask extends AbstractCompanionTask<EatItemTaskRec
         beforeCount = PlayerInv.count(player.getInventory(), r.item);
         beforeHp = player.getHealth();
         beforeFood = player.getFoodData().getFoodLevel();
-        // Equip the food, then start a native held use. The use() call decides whether eating begins
-        // (e.g. full hunger on non-always-eat food won't start) — we read the outcome on completion.
-        player.holdInHand(PlayerInv.findSlot(player.getInventory(), r.item));
-        eat = Interaction.useInAir(player, InteractionHand.MAIN_HAND, Interaction.Timing.hold());
+        // Take the food in hand (the precondition guarantees she carries it), then start a native held use with
+        // that hand. The use() call decides whether eating begins (e.g. full hunger on non-always-eat food won't
+        // start) — we read the outcome on completion.
+        InteractionHand hand = Hotbar.grip(player, r.item).hand();
+        eat = Interaction.useInAir(player, hand, Interaction.Timing.hold());
     }
 
     @Override
@@ -107,13 +107,12 @@ public final class EatCompanionTask extends AbstractCompanionTask<EatItemTaskRec
         }
     }
 
+    /** 吃了什么、吃完血量与饥饿:{@code numen.inv.eat} 交回的值。 */
+    public record Ate(String item, double hp, int hunger) {}
+
     @Override
-    protected Map<String, Object> resultData() {
-        Map<String, Object> data = new HashMap<>();
-        data.put("item", r.label);
-        data.put("hp", player.getHealth());
-        data.put("hunger", player.getFoodData().getFoodLevel());
-        return data;
+    protected Ate value() {
+        return new Ate(r.label, player.getHealth(), player.getFoodData().getFoodLevel());
     }
 
     @Override
