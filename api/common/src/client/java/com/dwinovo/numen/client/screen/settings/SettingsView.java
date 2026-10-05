@@ -889,7 +889,7 @@ public final class SettingsView {
     private static void openSkillsFolder() {
         try {
             java.nio.file.Path dir = Minecraft.getInstance().gameDirectory.toPath()
-                    .resolve("config").resolve(com.dwinovo.numen.Constants.MOD_ID).resolve("skills");
+                    .resolve("config").resolve(com.dwinovo.numen.Constants.CONFIG_ROOT).resolve("skills");
             java.nio.file.Files.createDirectories(dir);
             net.minecraft.Util.getPlatform().openUri(dir.toUri());
         } catch (Exception ex) {
