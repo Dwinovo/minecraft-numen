@@ -117,7 +117,7 @@
 - **成功返回值,失败抛错误值。** 占身体的函数等它的 task_finished 再返回,task_finished 带着那件活的值。返回什么由函数的
   返回类型说(§十三):`inv.count` 是一个整数,`scan.blocks` 是团的列表,`work.dig` 是 `{dug, left, out_of_reach, nearest,
   drops}`,`void` 的是 nil。身体做了什么的账只进回执,不进程序。失败抛的错误值 `pcall` 接得住,接住了就按 `err.kind` 分支。
-- `print(...)` 写进回执(至多 6000 字;表按 Lua 的写法印出来)。
+- `print(...)` 写进回执的 stdout(至多 6000 字,超出的写明少了多少;表按 Lua 的写法印出来,大表缩略,见"回执")。
   `raise(kind, message, hint)` 以一个错误值失败,`error("why", 0)` 是程序自己的运行错(`runtime`)。
 - **名字的改写只有一条**:组名或动作名撞上 Lua 的保留字(`goto`、`end`……)或沙箱自带的全局名(`string`、`table`、
   `print`……)的,后面加 `_`:`until_`。命令名本身不变,只是脚本里的写法;帮助里这样的动作多一行
@@ -171,31 +171,55 @@
 切断本来是主人的决定，停止键之后停牌要等主人再开口，为这份回执多开一轮没有意义；也不进聊天流。主人断线导致的切断，回执无处可送，不下发。
 - 程序被停下,它用到的每个模块也记一次战绩(没跑完、停在哪一行、为什么)。
 
-### 回执
+### 回执:标准管道加结局
 
-第一行一句话说结局(跑完用了几次调用几秒;出错停在哪一行、那个错误值写出来的样子;被停下停在哪、为什么);之后每次 API
-调用一行(在哪一段的哪一行、哪个函数、`ok` 或错误的种类、它那句话的第一行),然后是返回值(照 Lua 的写法)与 `print`
-写的字。回执里的话由各次调用自己的那句话拼成,数据由同一份结果给程序,两样出自同一处。程序等着收尾的身体活,那一行是它的
-编号、结局与整段实际账(`NavText` 一处写成),这件活的收尾只在这里说,不另发事件;程序停下时还在跑的活,收尾才是一条
-task_finished 事件。数据里有 `status`(ok / error / stopped)、
-`calls`、`returned`(返回值本身,是表就是 JSON 对象)、出错时的 `error`(`kind`、`message`、`hint`、`fn`),按名字跑的有
-`script`。例:
+回执像一个进程的输出:一个结局,三条管道。逐次调用的流水没有了——此前每次 API 调用记一行("line 5 numen.inv.count: ok — 0"),循环里查
+一百遍背包就是一百行,真机上一次 52 轮的会话里工具结果占去约 9 万词元,大半是这些行。标准环境里没有这种流水。
+
+- **结局**(第一行,像退出状态):跑完是 `ok · 3 calls · 2 s`;出错写停在哪一行、错误值写出来的样子(种类、消息、`usage:`、`hint:`);被停下写停在
+  哪一行、为什么。
+- **stderr**:API 与运行时**主动报告**的事,写不写、写什么由各 API 自己定,像命令行工具自己往 stderr 写:身体做了什么(一件占身体的活的整段
+  实际账——`NavText` 一处写成,`BodyDelta` 写出的身体变化与装备用坏、主人点头允许了什么、权限拦下了什么都在里面;一件短活的账)、一次
+  查询没看全哪里,以及**每一次 API 调用的失败**——她用 `pcall` 接住了也写,同 Unix:失败的程序照样往 stderr 写,处不处理是调用方的事。
+  每条带行号与函数名:`line 5 numen.fight.attack: killed minecraft:cow …`;失败的是 `line 5 numen.work.dig: out_of_reach — 原因`。**只返回值、
+  没什么可报告的调用什么也不写**。连续相同的条合并成一条加 `(×N)`。程序等着收尾的身体活,它的账就是一条 stderr,这件活的收尾只在这里说,
+  不另发事件;程序停下时还在跑的活,收尾才是一条 task_finished 事件。
+- **returned**:`return` 的值。
+- **stdout**:她 `print` 的字。
+
+框架不判断哪个函数是只读的、哪个是动作:一个函数有没有话要说,是它自己的事(§十三)。每次调用的完整记录(`ScriptCall.Called`:写成的调用、
+哪个函数、失败的种类)照样留在结构化数据里,评测按函数统计和调试日志读它,不进给模型的文字。数据里有 `status`(ok / error / stopped)、
+`calls`、`returned`(返回值本身,是表就是 JSON 对象,给程序和评测读的原值)、出错时的 `error`(`kind`、`message`、`hint`、`fn`),按名字跑的有
+`script`。
+
+**有界,缩略从不静默**(数值都在 `ScriptLimits`):stderr 一条至多 `STDERR_RECORD_CHARS`,整栏至多 `STDERR_CHARS`,超出的写明还有多少字、
+多少条没显示;stdout 至多 `PRINTED_CHARS`,超出的写明少了多少字。`print`、`return`、错误值里出现的表都经同一个渲染器
+(`ScriptEngine.display`,`LuaDisplay`),判据只有这一处,照 NumPy 的 printoptions(`threshold`、`edgeitems`)与 pandas 的 `max_rows`:
+列表或表超过 `DISPLAY_THRESHOLD` 项只显示首尾各 `DISPLAY_EDGE_ITEMS` 项,中间写 `…(950 items in all; index one with t[i], or filter in the
+program before you print)`;嵌套超过 `DISPLAY_DEPTH` 层的写 `{...}`(末尾补一句怎么看里面);表里一段超过 `DISPLAY_STRING_CHARS` 字的文字留开头并写明
+总长。小的值原样,和 `ScriptEngine.value`(提示里"改好的那一行"用的精确写法)一样。例:
 
 ```
 The script stopped at line 3 after 2 calls: work.dig: bad_argument — argument 'place': a position is one table with named fields; got {120, 12, -35}
 usage: work.dig(place..., {count=…})
 hint: work.dig({x = 120, y = 12, z = -35})
-line 1 scan.blocks: ok — 1 group(s) within 32 blocks of …
-line 2 route.plan: ok — planned from …
-line 3 work.dig: bad_argument — argument 'place': a position is one table with named fields; …
+stderr:
+line 3 work.dig: bad_argument — argument 'place': a position is one table with named fields; got {120, 12, -35}
+```
+
+```
+ok · 3 calls · 12 s
+stderr:
+line 2 numen.move.go: walked to {x = 120, y = 64, z = -35} … broke 2 minecraft:stone on the way
+line 3 numen.work.dig: dug 4 minecraft:iron_ore …
+returned: 4
 ```
 
 ```
 The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keeps running. Nothing after that ran.
 ```
 
-(停在第 1 行时那件活还没收尾,那一行没有结局可记,回执只有第一句。)
-
+(停在第 1 行时那件活还没收尾,回执里没有它的 stderr 条目。)
 ### 模块:`module` 组
 
 见 §九。模块是唯一一种存下来的 Lua:一个文件返回一张函数表,程序按名字直接用;唯一从头跑的程序是 `lua` 工具这一轮的 `code`。
@@ -248,7 +272,7 @@ The script stopped at line 1 (move.go) after 2 calls: your owner spoke; t12 keep
   垫块记账(`DropTracker`)都删了。走与挖由 `build.raise` 这段库函数组合。新增 `build.left`(查询)与到达方式 `reach`。
   `work.collect` 变成库函数(扫掉落物、走上去),新增掉落物的 `pickup_delay`;`fight.attack` 只收一只,"打一片"是
   `fight.clear`。
-- **回执**:每次 API 调用一行;出错带行号与那次调用的 `error:`/`usage:`/`hint:`;返回值与 `print` 在后面。
+- **回执**:结局一行,再是 stderr、返回值与 stdout 三栏(§四"回执");出错带行号与那次调用的 `error:`/`usage:`/`hint:`。
 - **技能是另一个工具,不是 API**(10-04):照 Claude Code 的 Skill 工具,`skill` 工具收技能名(附属文件 `file`、页码 `page`
   可选),技能正文就是这次调用的结果;系统提示的 `<available_skills>` 是索引。`numen.skill.load` 删了:程序回执里每次调用只露
   结果的第一行,正文没 `return` 出来她就读不到,真机上她连着三轮在程序里装同一份技能。外接大脑调的是同一个工具。
@@ -573,8 +597,10 @@ public final class LocateApi {                         // 一组:一个公开类
   量够不够得着(够不着是 `out_of_reach`,`hint` 是走过去的那一行),`call.use(entity, reach, deed)` 是这三样加上权限层的
   `use_entity`,放行之后按同一个编号再认一次、再量一次才做 `deed`;`call.authorize(action)` 直接问权限层。许不许只在原语执行的那一刻
   由权限层裁决,`@Fn` 上没有任何许可字段。模组的管理指令经 `call.onHer()` 以服务器的权威、只对她执行。
-- **身体做了什么都要说**:一件短活的实际账、主人点头允许了什么、一次扫描没看全哪里,随等到的值交回(`Pending.report`),写进程序回执的
-  那一行;占身体的活的账照旧在收尾那一行。
+- **身体做了什么都要说,往 stderr 说**:API 作者"报告一句"只有一个入口——`Pending.report(words)`(一件短活的实际账、主人点头允许了什么、一次
+  扫描没看全哪里),随等到的值交回,写进程序回执的 stderr 一栏;占身体的活(`Job`)的账是任务收尾的那段话,同样写进 stderr。约定:**返回值
+  是给程序用的;stderr 是告诉她身体做了什么、出了什么事**。只读的查询通常什么都不报告(查到的东西在值里),没看全才说;动了身体、改了
+  世界的函数说它做了什么。框架不替函数判断自己是只读还是动作,要说什么由函数自己定。失败不用报告:抛 `ApiError`,运行时替它写进 stderr。
 
 ### 只拦会破坏系统的
 
@@ -605,7 +631,7 @@ public final class LocateApi {                         // 一组:一个公开类
 | `program.ServerPrograms` | 服务端跑程序的唯一入口(§十四):客户端送来的程序、`/numen drive`、重启后再跑、GameTest、评测与单测都经它 |
 
 线上的样子只在 `agent` 的 `ApiReply` 一处:`{"ok": true, "value": …}`、`{"ok": true, "job": "t12"}`、
-`{"ok": false, "error": {kind, message, hint, data}}`,等到的值与收尾另带 `account`。
+`{"ok": false, "error": {kind, message, hint, data}}`,等到的值另带 `stderr`(API 报告的话)。
 
 ### 三个例子
 
@@ -727,8 +753,9 @@ public static Pending<Switched> task(ServerCall call, Task args) {
 
 ### 回执:给模型读的,按构造有界
 
-回执在生成它的地方就有界(`ScriptLimits`):调用行合起来 `RECEIPT_LINES_CHARS`,每件身体活的整段实际账至多 `ACCOUNT_CHARS`(超出的整行省略并写
-"另外 N 行"),`return` 的值在回执文字里至多 `RETURNED_CHARS`(写明原来多长)、在数据里(给程序和评测读的原值)至多 `RETURNED_DATA_CHARS`,`print` 至多 `PRINTED_CHARS`;每次调用的结局只带写成的文字(超长的头部加摘要)。
+回执在生成它的地方就有界(`ScriptLimits`):stderr 一条至多 `STDERR_RECORD_CHARS`(超出的整行省略并写明还有多少字)、整栏至多 `STDERR_CHARS`(超出的写明
+另外几条、几个字),`return` 的值在回执文字里至多 `RETURNED_CHARS`(写明原来多长)、在数据里(给程序和评测读的原值)至多 `RETURNED_DATA_CHARS`,stdout 至多 `PRINTED_CHARS`(写明少了
+多少字);大表在进这些栏之前先经渲染器缩略(§四"回执");每次调用的结局只带写成的文字(超长的头部加摘要)。
 所以一张回执远小于下行 1 MB,`ProgramResultPayload` 是内容有界的包:装不下就是代码错,当场抛,不再有"装不下缩成失败"。
 身体活的账本身在生成处也已归堆计数(`NavText`:同类方块合并成"N 个 + 几处例子")。
 
