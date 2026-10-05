@@ -36,22 +36,38 @@ public final class Aim {
 
     /** 转过去看 {@code point}。 */
     public static void look(ServerPlayer body, Vec3 point) {
-        Vec3 eye = body.getEyePosition();
+        rotate(body, toward(body, body.getEyePosition(), point));
+    }
+
+    /** 转到朝 {@code yaw}、俯仰 {@code pitch}(按鼠标像素取整)。 */
+    public static void turn(ServerPlayer body, float yaw, float pitch) {
+        rotate(body, turned(body.getYRot(), body.getXRot(), yaw, pitch));
+    }
+
+    private static void rotate(ServerPlayer body, Rotation to) {
+        body.setYRot(to.yaw());
+        body.setYHeadRot(to.yaw());
+        body.setYBodyRot(to.yaw());
+        body.setXRot(to.pitch());
+    }
+
+    /** 从 {@code eye} 转向 {@code point} 之后身体的朝向(按鼠标像素取整)。 */
+    private static Rotation toward(ServerPlayer body, Vec3 eye, Vec3 point) {
         double dx = point.x - eye.x;
         double dy = point.y - eye.y;
         double dz = point.z - eye.z;
         float yaw = (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0);
         float pitch = (float) -Math.toDegrees(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)));
-        turn(body, yaw, pitch);
+        return turned(body.getYRot(), body.getXRot(), yaw, pitch);
     }
 
-    /** 转到朝 {@code yaw}、俯仰 {@code pitch}(按鼠标像素取整)。 */
-    public static void turn(ServerPlayer body, float yaw, float pitch) {
-        Rotation to = turned(body.getYRot(), body.getXRot(), yaw, pitch);
-        body.setYRot(to.yaw());
-        body.setYHeadRot(to.yaw());
-        body.setYBodyRot(to.yaw());
-        body.setXRot(to.pitch());
+    /**
+     * 转向 {@code point} 之后视线真正落在的那一点(与 {@code point} 离眼睛一样远):转头取整到鼠标像素,这条线与到 {@code point}
+     * 的直线差不到半个像素。视线擦着挡路方块的棱而过时,碰没碰上就由差的这一点点决定,所以判看不看得见要照这条线。
+     */
+    private static Vec3 landing(ServerPlayer body, Vec3 eye, Vec3 point) {
+        Rotation to = toward(body, eye, point);
+        return eye.add(Vec3.directionFromRotation(to.pitch(), to.yaw()).scale(point.distanceTo(eye)));
     }
 
     /** 一个朝向:水平朝向 {@code yaw} 与俯仰 {@code pitch},度。 */
@@ -83,12 +99,13 @@ public final class Aim {
     /**
      * 挖 {@code pos} 这一格时看它身上的哪一点:它的轮廓中心,不行就是轮廓各个朝着眼睛的面的中心,再不行是这些面上离眼睛最近的
      * 一点(离棱留一点边),取第一个看得见、够得着的;都看不见为 null。最后那一档与第 0 层 {@link Reach} 量的是同一个距离
-     * ——眼睛到方块最近的一点——所以 {@code Reach} 说够得着、那一点又没被挡着,这里就交得出瞄点。
+     * ——眼睛到方块最近的一点——所以 {@code Reach} 说够得着、那一点又没被挡着,这里就交得出瞄点。有没有被挡着照转过去之后视线
+     * 实际落的那条线判({@link #landing})。
      */
     public static Vec3 point(ServerPlayer body, BlockPos pos) {
         Vec3 eye = body.getEyePosition();
         for (Vec3 candidate : digPoints(body, pos)) {
-            if (hits(body, eye, candidate, pos, null)) {
+            if (hits(body, eye, landing(body, eye, candidate), pos, null)) {
                 return candidate;
             }
         }
